@@ -854,6 +854,121 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // (j2)/(j3) TỔNG QUÁT HOÁ (10/2026, "Item 6" đợt golive): cơ chế thử-lại-1-lần-sau-409 ở (i)/(j) trên
+  //     TRƯỚC ĐÂY chỉ áp dụng riêng cho "users" (retryUsersSaveAfterConflict()) — nay tách lõi dùng
+  //     chung retryArraySaveAfterConflict()/syncStorageOnce() cho MỌI collection dạng mảng object có
+  //     field `id`, và savePermGroup()/deletePermGroup()/applyPermMatrixImport() (module-admin-
+  //     permgroups.js) đã được nối vào (`syncStorage('permGroups', {baseline})`) vì "permGroups" chịu
+  //     ĐÚNG cùng triệu chứng 409 giả (nhiều admin cùng sửa các nhóm KHÁC nhau gần như đồng thời). Gọi
+  //     thẳng `syncStorage('permGroups', {baseline})` (không qua form UI đầy đủ của savePermGroup() —
+  //     phần cần kiểm ở đây là chính cơ chế dùng chung, không phải khâu đọc form) để mirror ĐÚNG cách
+  //     module-admin-permgroups.js gọi, cùng khuôn kịch bản (i)/(j) ở trên.
+  // ==========================================================================
+  await scenario('(j2) permGroups: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công qua đúng cơ chế dùng chung', async () => {
+    const r = await page.evaluate(async () => {
+      let serverGroups = [
+        { id: 'grp_a', name: 'Nhóm A', description: '', perms: { admin: false } },
+        { id: 'grp_b', name: 'Nhóm B (không liên quan)', description: '', perms: { admin: false } },
+      ];
+      let serverVersion = 7000;
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/permGroups' && method === 'GET') {
+          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverGroups)) };
+        }
+        if (url === '/api/data/permGroups' && method === 'POST') {
+          const ifMatch = opts.headers['If-Match'];
+          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
+            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
+          }
+          serverGroups = JSON.parse(opts.body);
+          serverVersion++;
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      DB.permGroups = JSON.parse(JSON.stringify(serverGroups));
+      DB._versions.permGroups = String(serverVersion);
+      const baseline = JSON.parse(JSON.stringify(DB.permGroups));
+
+      // Admin khác sửa Nhóm B (không liên quan) ở nơi khác, bump version.
+      serverGroups = serverGroups.map(g => g.id === 'grp_b' ? { ...g, description: 'Đổi bởi admin khác' } : g);
+      serverVersion++;
+
+      // Client A sửa Nhóm A (đúng bản ghi mình đang cầm baseline).
+      DB.permGroups = DB.permGroups.map(g => g.id === 'grp_a' ? { ...g, description: 'Client A sửa' } : g);
+      const saved = await syncStorage('permGroups', { baseline });
+
+      return {
+        saved,
+        groupAOnClient: DB.permGroups.find(g => g.id === 'grp_a')?.description,
+        groupBPreserved: DB.permGroups.find(g => g.id === 'grp_b')?.description,
+        clientVersionSynced: DB._versions.permGroups === String(serverVersion),
+      };
+    });
+    record('(j2) syncStorage() trả về true (lưu thành công sau khi tự retry)', r.saved === true, JSON.stringify(r));
+    record('(j2) thay đổi CỦA MÌNH (Nhóm A) được lưu thành công sau khi tự retry',
+      r.groupAOnClient === 'Client A sửa', JSON.stringify(r));
+    record('(j2) thay đổi CỦA NGƯỜI KHÁC (Nhóm B, không liên quan) KHÔNG bị ghi đè mất',
+      r.groupBPreserved === 'Đổi bởi admin khác', JSON.stringify(r));
+    record('(j2) DB._versions.permGroups được đồng bộ đúng version mới nhất sau retry',
+      r.clientVersionSynced, JSON.stringify(r));
+  });
+
+  await scenario('(j3) permGroups: 409 do CHÍNH nhóm đang sửa bị đổi ở nơi khác (conflict thật) -> KHÔNG tự ý ghi đè', async () => {
+    const r = await page.evaluate(async () => {
+      let serverGroups = [
+        { id: 'grp_c', name: 'Nhóm C', description: '', perms: { admin: false } },
+      ];
+      let serverVersion = 7100;
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/permGroups' && method === 'GET') {
+          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverGroups)) };
+        }
+        if (url === '/api/data/permGroups' && method === 'POST') {
+          const ifMatch = opts.headers['If-Match'];
+          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
+            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
+          }
+          serverGroups = JSON.parse(opts.body);
+          serverVersion++;
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      DB.permGroups = JSON.parse(JSON.stringify(serverGroups));
+      DB._versions.permGroups = String(serverVersion);
+      const baseline = JSON.parse(JSON.stringify(DB.permGroups));
+
+      // Admin khác đổi ĐÚNG "Nhóm C" (conflict thật).
+      serverGroups = serverGroups.map(g => g.id === 'grp_c' ? { ...g, name: 'Nhóm C (đã đổi tên nơi khác)' } : g);
+      serverVersion++;
+
+      window.__alerts.length = 0;
+      DB.permGroups = DB.permGroups.map(g => g.id === 'grp_c' ? { ...g, description: 'Client A muốn lưu' } : g);
+      const saved = await syncStorage('permGroups', { baseline });
+
+      window.fetch = savedFetch;
+      return {
+        saved,
+        alerts: window.__alerts.slice(),
+        serverName: serverGroups.find(g => g.id === 'grp_c')?.name,
+        serverDescription: serverGroups.find(g => g.id === 'grp_c')?.description,
+      };
+    });
+    record('(j3) syncStorage() trả về false (không tự ý ghi đè conflict thật)', r.saved === false, JSON.stringify(r));
+    record('(j3) báo đúng 1 alert "conflict thật", nêu rõ tên collection',
+      r.alerts.length === 1 && r.alerts[0].includes('⚠️') && r.alerts[0].includes('permGroups'), JSON.stringify(r));
+    record('(j3) KHÔNG tự ý ghi đè lên server — tên/mô tả trên server vẫn giữ nguyên của người khác vừa đổi',
+      r.serverName === 'Nhóm C (đã đổi tên nơi khác)' && r.serverDescription === '', JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // (k)/(l)/(m) BUG THẬT đã sửa: import Excel gán id kiểu SỐ THẬP PHÂN (`Date.now() + Math.random()`)
   //     cho mỗi user import — khác hẳn MỌI đường tạo user khác trong hệ thống (số NGUYÊN). cspCoerceArg()
   //     (core.js) chỉ ép chuỗi SỐ NGUYÊN (`/^-?\d+$/`) sang Number khi đọc `data-arg0="${user.id}"` trên

@@ -479,6 +479,17 @@ hồ: Hỗ Trợ IT - Duyệt Giá hiện đúng "Duyệt giá Bán Buôn"/"Duy�
 Tại Siêu Thị" (theo `orderLocationType`), kể cả mục "Chờ Nhập Hàng" và "Từ
 chối khẩn cấp" của 2 module này.
 
+**10/2026 — mở rộng "tự làm mới" sang badge số Thông Báo (🔔)**: cùng cơ chế
+polling nhẹ như Hộp Thư Phê Duyệt ở trên, số badge chưa đọc trên chuông 🔔 góc
+màn hình nay cũng tự cập nhật định kỳ (không cần bấm F5/tự mở chuông mới thấy
+số mới) — nếu đang mở sẵn khung thông báo, danh sách bên trong cũng tự vẽ lại
+theo dữ liệu mới nhất. Đồng thời, cơ chế "409 vừa bị người khác thay đổi → tự
+tải lại + áp lại đúng phần mình vừa sửa + lưu lại 1 lần" (tránh mất nội dung
+đang sửa dở khi nhiều người cùng thao tác gần như đồng thời, trước đây chỉ có
+ở màn Người Dùng) nay áp dụng thêm cho **Nhóm Phân Quyền** (Hệ Thống → Người
+Dùng & Phân Quyền → Nhóm Phân Quyền) — nhiều admin cùng sửa các nhóm khác
+nhau gần như đồng thời sẽ không còn bị báo lỗi xung đột giả nữa.
+
 ### 3.5. Ví dụ cấu hình cụ thể
 
 **Yêu cầu**: "Trưởng phòng Pháp Chế duyệt bước 2 của quy trình Hợp Đồng."

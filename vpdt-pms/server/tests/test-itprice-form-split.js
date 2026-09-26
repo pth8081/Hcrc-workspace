@@ -1,11 +1,18 @@
 // server/tests/test-itprice-form-split.js
 //
-// Regression test cho đợt tách biểu mẫu Phê Duyệt Giá Bán Buôn/Bán Lẻ (9/2026, theo yêu cầu người
-// dùng — dùng chung 1 form cho cả 2 loại giá "nguy hiểm"): Bán Lẻ bỏ hẳn 3 trường "Siêu Thị Áp Dụng"/
-// "Ngày Áp Dụng"/"Ngày Hết Hiệu Lực" (chỉ còn Bán Buôn dùng), và vá lỗi chặn tạo đề xuất khi danh mục
-// "Vùng Giá Áp Dụng" (DB.priceZones) đang rỗng. Dùng REAL clicks (page.click()) thay vì gọi thẳng hàm
-// qua page.evaluate() — bài học từ vụ Nghiệp Vụ click không phản hồi (bindCspDelegation thiếu đăng ký)
-// chỉ lộ ra khi test click thật, không lộ khi gọi hàm trực tiếp.
+// Regression test cho đợt tách biểu mẫu Phê Duyệt Giá Bán Buôn/Bán Lẻ:
+//   - 9/2026: ban đầu dùng CHUNG 1 form (Hỗ Trợ IT) cho cả 2 loại giá, chỉ khác nhau ở việc ẩn/hiện 3
+//     trường "Siêu Thị Áp Dụng"/"Ngày Áp Dụng"/"Ngày Hết Hiệu Lực" (chỉ Bán Buôn dùng) + vá lỗi chặn tạo
+//     đề xuất khi danh mục "Vùng Giá Áp Dụng" (DB.priceZones) đang rỗng.
+//   - 10/2026: TÁCH HẲN thành 2 module RIÊNG theo yêu cầu người dùng ("Quy trình Phê duyệt giá bán buôn
+//     và giá bán lẻ trong tab quy trình và phê duyệt tách riêng") — đề xuất Bán Lẻ giờ tạo ở Mua Hàng >
+//     Phê Duyệt Giá Bán Lẻ (module-muahang.js, ids mh*), đề xuất Bán Buôn tạo ở Vận Hành > Phê Duyệt Giá
+//     Bán Buôn (module-itsupport-price.js/module-vanhanh.js, ids GIỮ NGUYÊN itPrice* — chỉ đổi nơi
+//     sống). Hỗ Trợ IT giờ CHỈ còn danh sách/xử lý, không còn form tạo nào. 2 form giờ KHÔNG còn toggle
+//     ẩn/hiện chung 1 chỗ nữa (mỗi loại là 1 trang riêng, tự nhiên không có field của loại kia).
+// Dùng REAL clicks (page.click()) thay vì gọi thẳng hàm qua page.evaluate() — bài học từ vụ Nghiệp Vụ
+// click không phản hồi (bindCspDelegation/OP_CLICK_ACTIONS thiếu đăng ký) chỉ lộ ra khi test click
+// thật, không lộ khi gọi hàm trực tiếp.
 //
 // Chạy: node server/tests/test-itprice-form-split.js
 const {
@@ -43,7 +50,24 @@ async function loginAs(page, user) {
   }, user);
 }
 
-function seedPendingFile(page, suffix) {
+// mhItPricePendingFile (form Bán Lẻ, Mua Hàng) và itPricePendingFile (form Bán Buôn, Vận Hành) là 2
+// biến toàn cục khai báo bằng `let` ở top-level script — KHÔNG đi qua window.xxx (khác `var`, top-level
+// `let` không tự thành property của window), nên phải gán bằng identifier trần đúng tên biến (JS tự
+// resolve qua scope chain) thay vì window[tênBiến]=... (silently no-op, không lỗi nhưng cũng không gán
+// đúng biến mà submitMhItPriceApproval()/submitItPriceApproval() thực sự đọc).
+function seedMhItPricePendingFile(page, suffix) {
+  return page.evaluate((s) => {
+    mhItPricePendingFile = {
+      fileUrl: `/uploads/gia-${s}.xlsx`, fileName: `gia-${s}.xlsx`,
+      items: [{ values: { code: 'MK001', name: 'Sản phẩm MKT', oldPrice: '900', newPrice: '1000' } }],
+      columnLabels: [
+        { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+        { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
+      ]
+    };
+  }, suffix);
+}
+function seedItPricePendingFile(page, suffix) {
   return page.evaluate((s) => {
     itPricePendingFile = {
       fileUrl: `/uploads/gia-${s}.xlsx`, fileName: `gia-${s}.xlsx`,
@@ -62,32 +86,33 @@ async function main() {
   const run = createRunner();
 
   try {
-    await run.run('Real click "Bán Buôn": ẩn hẳn khối Vùng Giá Áp Dụng, hiện khối Siêu Thị Đề Xuất/Ngày Áp Dụng/Ngày Hết Hiệu Lực', async () => {
+    await run.run('Tách vật lý: form Bán Lẻ (Mua Hàng) không nằm trong cùng khối DOM với form Bán Buôn (Vận Hành) và ngược lại (2 trang riêng, không còn toggle chung 1 chỗ)', async () => {
       await loginAs(page, STAFF_MKT);
-      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
-      await page.waitForTimeout(150);
-
-      await page.click('#btnItPriceSubWholesale');
-      await page.waitForTimeout(150);
-
-      const retailZoneVisible = await page.evaluate(() => !document.getElementById('itPriceRetailZoneWrap').classList.contains('hidden'));
-      const wholesaleBlockVisible = await page.evaluate(() => !document.getElementById('itPriceWholesaleScopeDateWrap').classList.contains('hidden'));
-      assertEqual(retailZoneVisible, false, 'Bán Buôn: khối Vùng Giá Áp Dụng (chỉ Bán Lẻ) phải ẩn');
-      assertEqual(wholesaleBlockVisible, true, 'Bán Buôn: khối Siêu Thị Đề Xuất/Ngày Áp Dụng/Ngày Hết Hiệu Lực phải hiện');
+      // Lưu ý: TẤT CẢ section đều được nạp sẵn (không lazy) và chỉ ẩn/hiện qua class "hidden" ở CẤP
+      // SECTION (xem switchTab() ở core.js) — nên document.getElementById() tìm thấy field của module
+      // KHÁC vẫn hoàn toàn bình thường (nằm trong section đang ẩn), không phải bằng chứng "chưa tách".
+      // Bằng chứng tách đúng là: field Bán Buôn nằm bên TRONG #vanHanhItPriceWrap, field Bán Lẻ nằm bên
+      // TRONG #mhSubItprice — 2 gốc DOM khác hẳn nhau, không lồng vào nhau.
+      const separation = await page.evaluate(() => {
+        const wholesaleWrap = document.getElementById('vanHanhItPriceWrap');
+        const retailWrap = document.getElementById('mhSubItprice');
+        return {
+          wholesaleFieldsInsideWholesaleWrap: !!wholesaleWrap?.querySelector('#itPriceTier, #itPriceWholesaleApplyUnit, #itPriceStoreScopeStoresMultiSelect'),
+          wholesaleFieldsInsideRetailWrap: !!retailWrap?.querySelector('#itPriceTier, #itPriceWholesaleApplyUnit, #itPriceStoreScopeStoresMultiSelect'),
+          retailFieldInsideRetailWrap: !!retailWrap?.querySelector('#mhItPriceRetailZone'),
+          retailFieldInsideWholesaleWrap: !!wholesaleWrap?.querySelector('#mhItPriceRetailZone')
+        };
+      });
+      assert(separation.wholesaleFieldsInsideWholesaleWrap, 'Field Bán Buôn (Mức Margin/Đơn Vị Áp Dụng/Siêu Thị Đề Xuất) phải nằm trong #vanHanhItPriceWrap (Vận Hành)');
+      assertEqual(separation.wholesaleFieldsInsideRetailWrap, false, 'Field Bán Buôn KHÔNG được lẫn vào #mhSubItprice (Mua Hàng)');
+      assert(separation.retailFieldInsideRetailWrap, 'Field Vùng Giá Áp Dụng (Bán Lẻ) phải nằm trong #mhSubItprice (Mua Hàng)');
+      assertEqual(separation.retailFieldInsideWholesaleWrap, false, 'Field Vùng Giá Áp Dụng KHÔNG được lẫn vào #vanHanhItPriceWrap (Vận Hành)');
     });
 
-    await run.run('Real click "Bán Lẻ": ẩn hẳn khối Siêu Thị Đề Xuất/Ngày Áp Dụng/Ngày Hết Hiệu Lực, hiện khối Vùng Giá Áp Dụng', async () => {
-      await page.click('#btnItPriceSubRetail');
+    await run.run('Danh mục Vùng Giá Áp Dụng rỗng (Bán Lẻ, Mua Hàng): hiện gợi ý + (admin) nút thêm nhanh ngay trong form', async () => {
+      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
-
-      const retailZoneVisible = await page.evaluate(() => !document.getElementById('itPriceRetailZoneWrap').classList.contains('hidden'));
-      const wholesaleBlockVisible = await page.evaluate(() => !document.getElementById('itPriceWholesaleScopeDateWrap').classList.contains('hidden'));
-      assertEqual(retailZoneVisible, true, 'Bán Lẻ: khối Vùng Giá Áp Dụng phải hiện');
-      assertEqual(wholesaleBlockVisible, false, 'Bán Lẻ: khối Siêu Thị Đề Xuất/Ngày Áp Dụng/Ngày Hết Hiệu Lực (chỉ Bán Buôn) phải ẩn');
-    });
-
-    await run.run('Danh mục Vùng Giá Áp Dụng rỗng: hiện gợi ý + (admin) nút thêm nhanh ngay trong form', async () => {
-      const hintText = await page.evaluate(() => document.getElementById('itPriceRetailZoneEmptyHint').innerText);
+      const hintText = await page.evaluate(() => document.getElementById('mhItPriceRetailZoneEmptyHint').innerText);
       assert(hintText.includes('Chưa có Vùng Giá'), 'Phải hiện gợi ý rõ ràng khi danh mục rỗng, không để form trống trơn không giải thích');
       // staff_mkt (KHÔNG phải admin) -> KHÔNG có nút thêm nhanh.
       const hasQuickAddBtn = await page.$('[data-op="quickAddPriceZoneFromItPriceForm"]');
@@ -95,11 +120,11 @@ async function main() {
     });
 
     await run.run('Real click Gửi (Bán Lẻ, danh mục Vùng Giá rỗng): "Vùng Giá Áp Dụng" không bắt buộc, vẫn tạo được hồ sơ', async () => {
-      await page.selectOption('#itPriceMasterListSelect', '1');
-      await page.fill('#itPriceReason', 'Test retail — chưa có vùng giá');
-      await seedPendingFile(page, 'retail-empty-zone');
+      await page.selectOption('#mhItPriceMasterListSelect', '1');
+      await page.fill('#mhItPriceReason', 'Test retail — chưa có vùng giá');
+      await seedMhItPricePendingFile(page, 'retail-empty-zone');
       await page.evaluate(() => { window.__alerts = []; });
-      await page.click('#itPriceCreateForm button[type="submit"]');
+      await page.click('#mhItPriceCreateForm button[type="submit"]');
       await page.waitForTimeout(200);
       const alerts = await page.evaluate(() => window.__alerts);
       assert(!alerts.some(a => a.includes('Vùng Giá Áp Dụng')), 'Không được báo lỗi thiếu Vùng Giá — trường này không bắt buộc');
@@ -107,9 +132,9 @@ async function main() {
       assertEqual(state.itPriceApprovals[0].priceZone, null, 'priceZone phải là null khi không chọn');
     });
 
-    await run.run('Admin: real click "+ Thêm ngay tại đây" tạo Vùng Giá mới NGAY trong form Phê Duyệt Giá (không cần rời sang Quản Lý Danh Mục)', async () => {
+    await run.run('Admin: real click "+ Thêm ngay tại đây" tạo Vùng Giá mới NGAY trong form Phê Duyệt Giá Bán Lẻ (Mua Hàng, không cần rời sang Quản Lý Danh Mục)', async () => {
       await loginAs(page, ADMIN);
-      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('RETAIL'); });
+      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
 
       const hasQuickAddBtn = await page.$('[data-op="quickAddPriceZoneFromItPriceForm"]');
@@ -121,18 +146,18 @@ async function main() {
 
       const zones = await page.evaluate(() => DB.priceZones);
       assert(zones.includes('Miền Bắc'), 'Vùng giá mới phải được lưu vào DB.priceZones (đồng bộ server)');
-      const selectedValue = await page.evaluate(() => document.getElementById('itPriceRetailZone').value);
+      const selectedValue = await page.evaluate(() => document.getElementById('mhItPriceRetailZone').value);
       assertEqual(selectedValue, 'Miền Bắc', 'Sau khi thêm nhanh, dropdown phải tự chọn ĐÚNG vùng giá vừa thêm');
-      const hintHidden = await page.evaluate(() => document.getElementById('itPriceRetailZoneEmptyHint').classList.contains('hidden'));
+      const hintHidden = await page.evaluate(() => document.getElementById('mhItPriceRetailZoneEmptyHint').classList.contains('hidden'));
       assertEqual(hintHidden, true, 'Gợi ý danh mục rỗng phải tự ẩn ngay sau khi đã có ít nhất 1 vùng giá');
     });
 
     await run.run('Real click Gửi (Bán Lẻ, đã có Vùng Giá): tạo thành công, tự gắn effectiveDate=hôm nay/expiryMode=PERMANENT/storeScope=ALL', async () => {
-      await page.selectOption('#itPriceMasterListSelect', '1');
-      await page.fill('#itPriceReason', 'Test retail — đã có vùng giá');
-      await seedPendingFile(page, 'retail-ok');
+      await page.selectOption('#mhItPriceMasterListSelect', '1');
+      await page.fill('#mhItPriceReason', 'Test retail — đã có vùng giá');
+      await seedMhItPricePendingFile(page, 'retail-ok');
       await page.evaluate(() => { window.__alerts = []; });
-      await page.click('#itPriceCreateForm button[type="submit"]');
+      await page.click('#mhItPriceCreateForm button[type="submit"]');
       await page.waitForTimeout(300);
 
       const alerts = await page.evaluate(() => window.__alerts);
@@ -146,8 +171,9 @@ async function main() {
       assertEqual(created.effectiveDate, today, 'Bán Lẻ tự gắn effectiveDate=hôm nay (không hỏi lại)');
     });
 
-    await run.run('Real click Gửi (Bán Buôn, điền đủ trường): tạo thành công với đúng storeScope/ngày do người dùng chọn', async () => {
-      await page.click('#btnItPriceSubWholesale');
+    await run.run('Real click Gửi (Bán Buôn, Vận Hành, điền đủ trường): tạo thành công với đúng storeScope/ngày do người dùng chọn', async () => {
+      await loginAs(page, STAFF_MKT);
+      await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
       await page.selectOption('#itPriceMasterListSelect', '1');
       await page.fill('#itPriceReason', 'Test wholesale');
@@ -159,7 +185,7 @@ async function main() {
       await storeInput.type('Demo');
       await page.waitForTimeout(150);
       await page.click('#itPriceStoreScopeStoresMultiSelect [data-op="gmsAdd"]');
-      await seedPendingFile(page, 'wholesale-ok');
+      await seedItPricePendingFile(page, 'wholesale-ok');
       await page.evaluate(() => { window.__alerts = []; });
       await page.click('#itPriceCreateForm button[type="submit"]');
       await page.waitForTimeout(300);
@@ -173,33 +199,32 @@ async function main() {
       assert(created.storeScope.stores.includes('Siêu thị Demo'), 'Phải lưu đúng siêu thị đã chọn');
     });
 
-    // ===== "Trường Bổ Sung" (dynamic custom fields) giờ TÁCH RIÊNG theo modKey IT_PRICE_RETAIL/
-    // IT_PRICE_WHOLESALE (trước đây dùng chung 1 modKey 'IT_PRICE') — xem itPriceDynamicModKey() ở
-    // module-itsupport-price.js. Field admin thêm riêng cho 1 sub-tab KHÔNG được lộ sang sub-tab kia. =====
-    await run.run('"Trường Bổ Sung" tách riêng: field thêm cho Bán Lẻ KHÔNG hiện ở Bán Buôn và ngược lại', async () => {
+    // ===== "Trường Bổ Sung" (dynamic custom fields) TÁCH RIÊNG theo modKey IT_PRICE_RETAIL/
+    // IT_PRICE_WHOLESALE, giờ hiển thị ở 2 CONTAINER trên 2 TRANG RIÊNG hẳn (không còn toggle chung 1
+    // chỗ như trước 10/2026): dynamicFieldsContainer_IT_PRICE_RETAIL_MH (Mua Hàng) vs
+    // dynamicFieldsContainer_IT_PRICE (Vận Hành) — xem enterMuaHangItPriceForm()/renderDynamicInputsForModule()
+    // ở module-muahang.js và itPriceDynamicModKey() ở module-itsupport-price.js. =====
+    await run.run('"Trường Bổ Sung" tách riêng: field thêm cho Bán Lẻ (Mua Hàng) KHÔNG hiện ở Bán Buôn (Vận Hành) và ngược lại', async () => {
       await page.evaluate(() => {
         DB.formTemplates.IT_PRICE_RETAIL = [{ id: 'f_cust_retail1', label: 'Ghi chú riêng Bán Lẻ', type: 'text', options: [], required: false, isDefault: false }];
         DB.formTemplates.IT_PRICE_WHOLESALE = [{ id: 'f_cust_wholesale1', label: 'Ghi chú riêng Bán Buôn', type: 'text', options: [], required: false, isDefault: false }];
       });
-      await page.click('#btnItPriceSubRetail');
+      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
-      let html = await page.evaluate(() => document.getElementById('dynamicFieldsContainer_IT_PRICE').innerHTML);
+      let html = await page.evaluate(() => document.getElementById('dynamicFieldsContainer_IT_PRICE_RETAIL_MH').innerHTML);
       assert(html.includes('Ghi chú riêng Bán Lẻ'), 'Bán Lẻ phải thấy đúng field Trường Bổ Sung của mình');
       assert(!html.includes('Ghi chú riêng Bán Buôn'), 'Bán Lẻ KHÔNG được thấy field Trường Bổ Sung của Bán Buôn');
 
-      await page.click('#btnItPriceSubWholesale');
+      await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
       html = await page.evaluate(() => document.getElementById('dynamicFieldsContainer_IT_PRICE').innerHTML);
       assert(html.includes('Ghi chú riêng Bán Buôn'), 'Bán Buôn phải thấy đúng field Trường Bổ Sung của mình');
       assert(!html.includes('Ghi chú riêng Bán Lẻ'), 'Bán Buôn KHÔNG được thấy field Trường Bổ Sung của Bán Lẻ');
-
-      await page.click('#btnItPriceSubRetail');
-      await page.waitForTimeout(150);
     });
 
-    // ===== Migration: dữ liệu formTemplates cũ (1 modKey 'IT_PRICE' chung, từ TRƯỚC đợt tách) phải tự
-    // chuyển sang CẢ 2 modKey mới khi tải lại — không mất cấu hình admin đã có, xem
-    // migrateItPriceFormTemplatesKeys() ở core.js. =====
+    // ===== Migration: dữ liệu formTemplates cũ (1 modKey 'IT_PRICE' chung, từ TRƯỚC đợt tách 9/2026)
+    // phải tự chuyển sang CẢ 2 modKey mới khi tải lại — không mất cấu hình admin đã có, xem
+    // migrateItPriceFormTemplatesKeys() ở core.js. Hàm thuần (không phụ thuộc DOM/trang đang mở). =====
     await run.run('migrateItPriceFormTemplatesKeys(): dữ liệu cũ IT_PRICE (chung) tự tách sang CẢ 2 modKey mới', async () => {
       const result = await page.evaluate(() => migrateItPriceFormTemplatesKeys({
         IT_PRICE: [{ id: 'f_old1', label: 'Trường bổ sung cũ', type: 'text', options: [], required: false }],

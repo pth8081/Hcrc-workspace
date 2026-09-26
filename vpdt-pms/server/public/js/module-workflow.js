@@ -28,26 +28,35 @@ const WF_MODULE_CONFIG = {
   // không "types" lồng), thay cho quyền phẳng paymentManage/admin cũ. Xem lib/workflowEngine.js
   // MODULE_CONFIGS.paymentRequests.
   PAYMENT: { dbKey: 'paymentDeptWorkflows', label: 'Thanh Toán', title: '💰 Cấu Hình Quy Trình Phê Duyệt Đề Nghị Thanh Toán Theo Phòng Ban' },
-  // "Hỗ Trợ IT" > "Phê Duyệt Giá" — cấu hình LỒNG theo LOẠI GIÁ (RETAIL/WHOLESALE) rồi mới tới phòng ban,
-  // NGƯỢC THỨ TỰ với Văn bản trình (hasTypes thường: {loại: {phòng ban: config}}) — ở đây là {phòng ban:
-  // {loại: config}} (khớp defaults.js/lib/workflowEngine.js::resolveItPriceDeptWorkflowConfig(), vì
-  // itPriceDeptWorkflows CŨ vốn đã phẳng {phòng ban: config} và cần tương thích ngược ngay tại field
-  // `dept`, không có field `legacyDbKey` riêng như Văn bản trình). `priceTypeNested: true` đánh dấu
-  // nhánh xử lý riêng này ở renderWorkflowTab()/writeDeptWorkflowConfig() bên dưới — KHÔNG dùng chung
-  // đường hasTypes thường (thứ tự lồng khác nhau). Bước "IT áp giá + xác nhận hoàn thành" sau khi
-  // APPROVED KHÔNG thuộc màn này (không phải 1 bước duyệt).
-  ITPRICE: {
+  // "Quy Trình Phê Duyệt Giá Bán Lẻ"/"...Bán Buôn" — 10/2026, TÁCH THÀNH 2 TAB RIÊNG (yêu cầu người
+  // dùng: "Quy trình Phê duyệt giá bán buôn và giá bán lẻ trong tab quy trình và phê duyệt tách riêng"),
+  // không còn 1 entry 'ITPRICE' gộp chung + priceTypeNested + wfSubmissionTypeTabs switcher như trước.
+  // Đề xuất TẠO MỚI đã chuyển khỏi Hỗ Trợ IT sang Vận Hành (Bán Buôn)/Mua Hàng (Bán Lẻ) — xem
+  // module-vanhanh.js/module-muahang.js — nhưng CẤU TRÚC DỮ LIỆU DUYỆT (itPriceDeptWorkflows/
+  // itPriceTierWorkflows) GIỮ NGUYÊN 100%, không migrate gì — chỉ đổi CÁCH ADMIN NHÌN THẤY 2 cấu hình
+  // này (2 tab riêng thay vì 1 tab có switcher con), nên resolveItPriceDeptWorkflowConfigClient()/
+  // lib/workflowEngine.js phía server KHÔNG cần sửa gì.
+  //
+  // ITPRICE_RETAIL: vẫn dbKey itPriceDeptWorkflows (theo PHÒNG BAN), nhưng fixedTypes chỉ còn ĐÚNG 1
+  // phần tử — renderWorkflowTab()/switchWfModule() (module-ngansach.js) tự ẩn hàng tab con
+  // (wfSubmissionTypeTabs) khi types.length <= 1 (đã sửa ở đó), nên KHÔNG hiện switcher thừa dù vẫn đi
+  // qua đúng nhánh `priceTypeNested` cũ (an toàn tối đa — không đổi field/logic đọc-ghi nào).
+  ITPRICE_RETAIL: {
     dbKey: 'itPriceDeptWorkflows', hasTypes: true, priceTypeNested: true,
-    fixedTypes: [{ key: 'RETAIL', label: '🏷️ Bán Lẻ' }, { key: 'WHOLESALE', label: '🏪 Bán Buôn' }],
-    // Bán Buôn KHÔNG còn theo phòng ban (mục B kế hoạch) — tierDbKeyForWholesale trỏ collection MỚI
-    // (itPriceTierWorkflows, phẳng {tierKey: config}), fixedTiers liệt kê 4 mức cố định. RETAIL vẫn dùng
-    // dbKey ở trên (itPriceDeptWorkflows) hoàn toàn không đổi.
+    fixedTypes: [{ key: 'RETAIL', label: '🏷️ Bán Lẻ' }],
+    label: 'Phê Duyệt Giá Bán Lẻ', title: '🏷️ Cấu Hình Quy Trình Phê Duyệt Giá Bán Lẻ Theo Phòng Ban'
+  },
+  // ITPRICE_WHOLESALE: pureTier y hệt OPERATION_ORDER_STORE/HO bên dưới (Bán Buôn KHÔNG theo phòng ban,
+  // duyệt theo 4 mức Margin/Chiết Khấu cố định) — mirror ĐÚNG code path đã chạy ổn định, chỉ đổi
+  // label/title, KHÔNG đổi dbKey (itPriceTierWorkflows) nên dữ liệu đã cấu hình trước đây giữ nguyên.
+  ITPRICE_WHOLESALE: {
+    pureTier: true,
     tierDbKeyForWholesale: 'itPriceTierWorkflows',
     fixedTiers: [
       { key: 'MARGIN_LT5', label: 'Margin < 5%' }, { key: 'MARGIN_GTE5', label: 'Margin ≥ 5%' },
       { key: 'DISCOUNT_LTE5', label: 'Chiết khấu ≤ 5%' }, { key: 'DISCOUNT_GT5', label: 'Chiết khấu > 5%' }
     ],
-    label: 'Hỗ Trợ IT - Duyệt giá', title: '🏷️ Cấu Hình Quy Trình Phê Duyệt Giá Bán (Hỗ Trợ IT) Theo Phòng Ban × Loại Giá'
+    label: 'Phê Duyệt Giá Bán Buôn', title: '🏪 Cấu Hình Quy Trình Phê Duyệt Giá Bán Buôn Theo Mức Margin/Chiết Khấu'
   },
   // "Ngân Sách" (BUDGET) — ĐÃ BỎ (v23.0, thiết kế lại module Ngân Sách theo tài liệu "Ngân sách 2.0",
   // xem module-ngansach.js) — budgetLines KHÔNG dùng workflowEngine.js/dept-workflow nữa, chỉ còn 1 cấp
@@ -149,7 +158,13 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
     });
     return { workflowId, approvers: {}, approverMode: finalMode, approversByPosition: finalPositions };
   };
-  const scopeKeys = (moduleKeys && moduleKeys.length) ? new Set(moduleKeys) : null;
+  // Tương thích ngược (10/2026, đợt tách ITPRICE thành ITPRICE_RETAIL/ITPRICE_WHOLESALE): cấu hình Áp
+  // Dụng Nhanh đã lưu TỪ TRƯỚC có thể còn chứa khoá 'ITPRICE' cũ (không còn tồn tại trong
+  // WF_MODULE_CONFIG) — nếu không dịch lại, các cấu hình đó sẽ ÂM THẦM không áp dụng gì cho Phê Duyệt
+  // Giá nữa (Set.has() không khớp). Dịch tại điểm đọc DUY NHẤT này (không cần script migrate dữ liệu đã
+  // lưu) — 'ITPRICE' cũ bao gồm CẢ Bán Lẻ lẫn Bán Buôn nên mở rộng thành cả 2 khoá mới.
+  const expandedModuleKeys = (moduleKeys || []).flatMap(k => k === 'ITPRICE' ? ['ITPRICE_RETAIL', 'ITPRICE_WHOLESALE'] : [k]);
+  const scopeKeys = expandedModuleKeys.length ? new Set(expandedModuleKeys) : null;
 
   Object.entries(WF_MODULE_CONFIG).forEach(([modKey, cfg]) => {
     if (scopeKeys && !scopeKeys.has(modKey)) return;
@@ -168,28 +183,22 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
     }
 
     if (cfg.priceTypeNested) {
-      // Hỗ Trợ IT > Phê Duyệt Giá — RETAIL lồng theo dept ở cfg.dbKey (dept -> {RETAIL,WHOLESALE} HOẶC
-      // cấu hình phẳng cũ = coi như RETAIL, xem resolveItPriceDeptWorkflowConfigClient() ở core.js —
-      // dùng LẠI đúng hàm resolve THẬT thay vì tự viết logic "đã cấu hình chưa" riêng, để không lệch
-      // với cách mọi nơi khác trong app đọc cấu hình này). WHOLESALE tách hẳn sang
-      // cfg.tierDbKeyForWholesale (phẳng theo tierKey).
+      // ITPRICE_RETAIL (Mua Hàng > Phê Duyệt Giá Bán Lẻ) — lồng theo dept ở cfg.dbKey (dept ->
+      // {RETAIL,...} HOẶC cấu hình phẳng cũ = coi như RETAIL, xem resolveItPriceDeptWorkflowConfigClient()
+      // ở core.js — dùng LẠI đúng hàm resolve THẬT thay vì tự viết logic "đã cấu hình chưa" riêng, để
+      // không lệch với cách mọi nơi khác trong app đọc cấu hình này). Từ 10/2026 (tách ITPRICE thành
+      // ITPRICE_RETAIL/ITPRICE_WHOLESALE), phần Bán Buôn KHÔNG còn nằm trong nhánh này nữa — đã có entry
+      // ITPRICE_WHOLESALE riêng (cfg.pureTier) tự đi qua nhánh `cfg.pureTier` ở trên, nên không đụng
+      // cfg.fixedTiers/cfg.tierDbKeyForWholesale ở đây nữa (ITPRICE_RETAIL không còn 2 field này).
       const deptMap = DB[cfg.dbKey] || (DB[cfg.dbKey] = {});
       depts.forEach(dept => {
         if (resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL')) return;
         targets.push({
-          label: `${cfg.label} (Bán Lẻ) — ${dept}`, dbKey: cfg.dbKey,
+          label: `${cfg.label} — ${dept}`, dbKey: cfg.dbKey,
           apply: (workflowId, approverMode, approversByPosition) => {
             if (!deptMap[dept] || typeof deptMap[dept] !== 'object') deptMap[dept] = {};
             deptMap[dept].RETAIL = emptyConfig(workflowId, approverMode, approversByPosition, dept);
           }
-        });
-      });
-      const tierMap = DB[cfg.tierDbKeyForWholesale] || (DB[cfg.tierDbKeyForWholesale] = {});
-      cfg.fixedTiers.forEach(tier => {
-        if (tierMap[tier.key]) return;
-        targets.push({
-          label: `${cfg.label} (Bán Buôn) — ${tier.label}`, dbKey: cfg.tierDbKeyForWholesale,
-          apply: (workflowId, approverMode, approversByPosition) => { tierMap[tier.key] = emptyConfig(workflowId, approverMode, approversByPosition, null); }
         });
       });
       return;

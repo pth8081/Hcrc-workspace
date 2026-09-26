@@ -246,25 +246,29 @@ async function main() {
   // budgetManage), nên không còn nút "Xem Trước Quy Trình" nào cho Ngân Sách — WF_MODULE_CONFIG.BUDGET
   // cũng đã bỏ (module-workflow.js). Kịch bản này xoá khỏi bộ test.
 
-  // ===== 8+9) Phê Duyệt Giá (Bán Lẻ + Bán Buôn dùng chung 1 nút) =====
-  await gotoTab('#btnItSupportTab', 'button[data-op-seq*="setItSupportSubTab(PRICE)"]');
-  await page.evaluate(() => document.getElementById('btnItPriceSubRetail')?.click());
+  // ===== 8+9) Phê Duyệt Giá (Bán Lẻ + Bán Buôn) — 10/2026, TÁCH KHỎI Hỗ Trợ IT: đề xuất Bán Lẻ giờ tạo
+  // ở Mua Hàng (nút previewMhItPriceWorkflow riêng, id mhItPricePreviewWfBtn), đề xuất Bán Buôn tạo ở
+  // Vận Hành (nút previewItPriceWorkflow GIỮ NGUYÊN, id itPricePreviewWfBtn không đổi — chỉ đổi trang
+  // sống). Hỗ Trợ IT giờ CHỈ còn danh sách/xử lý, không còn nút "Xem Quy Trình" nào ở đó nữa.
+  await gotoTab('#btnMuaHangTab', '#btnMuaHangBasNav');
+  await page.evaluate(() => document.getElementById('btnMhSubItPrice')?.click());
   await page.waitForTimeout(80);
-  await page.evaluate((fn) => window.ensureFnReady ? ensureFnReady(fn) : null, 'previewItPriceWorkflow');
-  await page.evaluate(() => document.getElementById('itPricePreviewWfBtn')?.click());
+  await page.evaluate((fn) => window.ensureFnReady ? ensureFnReady(fn) : null, 'previewMhItPriceWorkflow');
+  await page.evaluate(() => document.getElementById('mhItPricePreviewWfBtn')?.click());
   await page.waitForTimeout(400);
   modal = await readModal();
-  record('Phê Duyệt Giá (Bán Lẻ): modal hiện đúng người duyệt "itretail1"', !modal.hidden && modal.content.includes('Người Duyệt Giá Bán Lẻ'), JSON.stringify(modal));
+  record('Phê Duyệt Giá (Bán Lẻ, Mua Hàng): modal hiện đúng người duyệt "itretail1"', !modal.hidden && modal.content.includes('Người Duyệt Giá Bán Lẻ'), JSON.stringify(modal));
   await closeModalAndClearAlerts();
 
-  await page.evaluate(() => document.getElementById('btnItPriceSubWholesale')?.click());
+  await gotoTab('#btnVanHanhTab', '#btnOperationOrderNav');
+  await page.evaluate(() => document.getElementById('btnVanHanhSubItPrice')?.click());
   await page.waitForTimeout(80);
   await page.evaluate(() => { const t = document.getElementById('itPriceTier'); if (t) t.value = 'MARGIN_LT5'; });
   await page.evaluate((fn) => window.ensureFnReady ? ensureFnReady(fn) : null, 'previewItPriceWorkflow');
   await page.evaluate(() => document.getElementById('itPricePreviewWfBtn')?.click());
   await page.waitForTimeout(400);
   modal = await readModal();
-  record('Phê Duyệt Giá (Bán Buôn): modal hiện đúng người duyệt "itwholesale1" (KHÁC nhánh Bán Lẻ)', !modal.hidden && modal.content.includes('Người Duyệt Giá Bán Buôn'), JSON.stringify(modal));
+  record('Phê Duyệt Giá (Bán Buôn, Vận Hành): modal hiện đúng người duyệt "itwholesale1" (KHÁC nhánh Bán Lẻ)', !modal.hidden && modal.content.includes('Người Duyệt Giá Bán Buôn'), JSON.stringify(modal));
   await closeModalAndClearAlerts();
 
   // ===== 10) Vận Hành - Đặt Hàng (tier suy ra từ tổng giá trị đơn hàng đang nhập dở) =====

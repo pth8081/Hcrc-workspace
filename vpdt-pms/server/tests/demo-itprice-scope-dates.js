@@ -1,13 +1,15 @@
 // server/tests/demo-itprice-scope-dates.js
 //
 // DEMO thật (không phải bộ hồi quy tự động — xem tests/test-itprice-scope-dates.js cho phần đó) cho 2
-// trường mới ở form "Phê Duyệt Giá" (Bán Lẻ + Bán Buôn dùng CHUNG 1 form):
-//   - "🏬 Siêu Thị Áp Dụng" (Bán Lẻ) — mặc định "Toàn bộ siêu thị, cửa hàng", chọn "Khác" hiện ô
-//     multi-select tìm-kiếm-gõ-chọn (renderMultiSelectDropdown(), lấy từ danh mục DB.stores). Bán Buôn
-//     đổi nhãn "🏬 Siêu Thị Đề Xuất" — KHÔNG có khái niệm "Toàn bộ", ô multi-select LUÔN hiện sẵn và
-//     LUÔN bắt buộc chọn (mục 2 đợt sau, xem applyItPriceStoreScopeUIForSubTab() ở module-itsupport-price.js).
-//   - "📅 Ngày Áp Dụng" (luôn bắt buộc) + "⏳ Ngày Hết Hiệu Lực" (mặc định "Vĩnh viễn", chọn "Khác" hiện
-//     ô nhập ngày thật) — áp dụng chung cho cả 2 loại giá, không đổi theo sub-tab.
+// trường "🏬 Siêu Thị Đề Xuất" + "📅 Ngày Áp Dụng"/"⏳ Ngày Hết Hiệu Lực" ở form "Phê Duyệt Giá Bán Buôn".
+//   - 10/2026 (đợt tách Phê Duyệt Giá khỏi Hỗ Trợ IT): Bán Lẻ chuyển hẳn sang module Mua Hàng
+//     (module-muahang.js, form rút gọn — TỰ GẮN storeScope=ALL/ngày áp dụng=hôm nay/hết hiệu lực=Vĩnh
+//     viễn, KHÔNG còn 3 field này trên UI nữa, xem submitMhItPriceApproval()) — demo cho phần này giờ
+//     chỉ còn 1 bước nộp đơn giản, không có gì để "chụp ảnh minh hoạ" thêm về scope/dates.
+//   - Bán Buôn chuyển sang module Vận Hành (module-vanhanh.js/module-itsupport-price.js, ids GIỮ NGUYÊN
+//     itPrice* — chỉ đổi trang sống) — 3 field này VẪN giữ nguyên hành vi cũ (KHÔNG có "Toàn bộ", ô
+//     multi-select LUÔN hiện sẵn + LUÔN bắt buộc chọn, "Ngày Áp Dụng" luôn bắt buộc, "Ngày Hết Hiệu Lực"
+//     mặc định "Vĩnh viễn" chọn "Khác" hiện ô nhập ngày thật) — trọng tâm demo này giờ dồn hết vào đây.
 // Chụp ảnh thật từng bước bằng Chromium (Playwright) mở ĐÚNG public/index.html + public/js/*.js thật,
 // dùng lại hạ tầng mock backend của tests/testHarness.js (sandbox không có SQL Server thật).
 //
@@ -48,68 +50,59 @@ async function main() {
 
   try {
     await loginAs(page, STAFF_KD);
-    await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
-    await page.locator('#itPriceCreateForm').scrollIntoViewIfNeeded();
 
-    console.log('01: form mặc định — "Toàn bộ siêu thị, cửa hàng" + "Vĩnh viễn", 2 khối "Khác" đang ẩn.');
-    await shot(page, '01-form-mac-dinh');
+    // ===== Bán Lẻ (Mua Hàng, 10/2026) — form rút gọn, KHÔNG còn store-scope/date để cấu hình. =====
+    console.log('01: form Bán Lẻ (Mua Hàng) — rút gọn, không còn Siêu Thị Áp Dụng/Ngày Áp Dụng/Ngày Hết Hiệu Lực (tự gắn mặc định ALL/hôm nay/Vĩnh viễn).');
+    await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
+    await page.locator('#mhItPriceCreateForm').scrollIntoViewIfNeeded();
+    await shot(page, '01-ban-le-form-rut-gon');
 
-    console.log('02: chọn "Khác" ở Siêu Thị Áp Dụng -> hiện ô multi-select tìm-kiếm-gõ-chọn.');
-    await page.selectOption('#itPriceStoreScopeMode', 'OTHER');
-    await shot(page, '02-sieu-thi-khac-hien-o-chon');
-
-    console.log('03: gõ tìm + chọn 2 siêu thị cụ thể (chip hiện ra).');
-    await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-search]');
-    await page.fill('#itPriceStoreScopeStoresMultiSelect [data-pms-search]', 'Quận');
-    await page.waitForTimeout(100);
-    await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-dropdown] div:has-text("Siêu thị Quận 1")');
-    await page.fill('#itPriceStoreScopeStoresMultiSelect [data-pms-search]', 'Thủ Đức');
-    await page.waitForTimeout(100);
-    await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-dropdown] div:has-text("Cửa hàng Thủ Đức")');
-    await shot(page, '03-da-chon-2-sieu-thi');
-
-    console.log('04: chọn "Khác" ở Ngày Hết Hiệu Lực -> hiện ô nhập ngày thật.');
-    await page.selectOption('#itPriceExpiryMode', 'OTHER');
-    await page.fill('#itPriceEffectiveDate', '2026-09-15');
-    await page.fill('#itPriceExpiryDate', '2027-03-15');
-    await shot(page, '04-ngay-het-hieu-luc-khac');
-
-    console.log('05: điền nốt form + gửi đề xuất thật, mở lại modal chi tiết xem thông tin đã lưu đúng chưa.');
-    await page.fill('#itPriceReason', 'Điều chỉnh giá theo chương trình khuyến mãi Quý 4');
-    await page.selectOption('#itPriceRetailZone', 'Miền Bắc');
+    await page.fill('#mhItPriceReason', 'Điều chỉnh giá theo chương trình khuyến mãi Quý 4');
+    await page.selectOption('#mhItPriceRetailZone', 'Miền Bắc');
     await page.evaluate(() => {
-      itPricePendingFile = {
+      mhItPricePendingFile = {
         fileUrl: '/uploads/gia-de-xuat-demo.xlsx', fileName: 'gia-de-xuat-demo.xlsx',
         items: [{ values: { code: 'SP001', name: 'Mì gói Hảo Hảo', price: '5500' } }],
         columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'price', label: 'Giá bán' }]
       };
     });
     const createdId = await page.evaluate(async () => {
-      await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+      await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
       return DB.itPriceApprovals[0].id;
     });
     await page.evaluate((id) => openItPriceModal(id), createdId);
     await page.waitForTimeout(150);
-    await shot(page, '05-modal-chi-tiet-sau-khi-gui');
+    await shot(page, '02-ban-le-modal-chi-tiet-sau-khi-gui');
 
     const saved = await page.evaluate(() => DB.itPriceApprovals[0]);
-    console.log('\nDữ liệu thật đã lưu (payload đi qua server thật, không phải chỉ hiển thị):');
+    console.log('\nDữ liệu Bán Lẻ thật đã lưu (storeScope/effectiveDate/expiryMode TỰ GẮN mặc định, payload đi qua server thật):');
     console.log(JSON.stringify({ storeScope: saved.storeScope, effectiveDate: saved.effectiveDate, expiryMode: saved.expiryMode, expiryDate: saved.expiryDate }, null, 2));
 
-    // ===== Đợt sau (mục 2): Bán Buôn đổi tên "Siêu Thị Đề Xuất", KHÔNG có "Toàn bộ" =====
-    console.log('\n06: chuyển sang sub-tab "Bán Buôn" — nhãn đổi thành "Siêu Thị Đề Xuất", KHÔNG còn lựa chọn Toàn bộ/Khác, ô multi-select LUÔN hiện sẵn.');
-    await page.evaluate(() => { closeItPriceModal(); resetItPriceForm(); setItPriceSubTab('WHOLESALE'); });
+    // ===== Bán Buôn (Vận Hành) — vẫn giữ nguyên "Siêu Thị Đề Xuất" (KHÔNG có Toàn bộ) + Ngày Áp Dụng/
+    // Ngày Hết Hiệu Lực đầy đủ như trước. =====
+    console.log('\n03: form Bán Buôn (Vận Hành) — "🏬 Siêu Thị Đề Xuất" LUÔN hiện sẵn + LUÔN bắt buộc chọn, KHÔNG có "Toàn bộ".');
+    await closeItPriceModalSafe(page);
+    await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
     await page.locator('#itPriceCreateForm').scrollIntoViewIfNeeded();
-    await shot(page, '06-ban-buon-sieu-thi-de-xuat');
+    await shot(page, '03-ban-buon-sieu-thi-de-xuat');
 
-    console.log('07: gõ tìm + chọn 1 siêu thị đề xuất, điền Mức Margin/Chiết Khấu, gửi đề xuất Bán Buôn thật, xem modal chi tiết.');
+    console.log('04: gõ tìm + chọn 2 siêu thị đề xuất (chip hiện ra).');
     await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-search]');
+    await page.fill('#itPriceStoreScopeStoresMultiSelect [data-pms-search]', 'Quận');
+    await page.waitForTimeout(100);
+    await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-dropdown] div:has-text("Siêu thị Quận 1")');
     await page.fill('#itPriceStoreScopeStoresMultiSelect [data-pms-search]', 'Biên Hòa');
     await page.waitForTimeout(100);
     await page.click('#itPriceStoreScopeStoresMultiSelect [data-pms-dropdown] div:has-text("Cửa hàng Biên Hòa")');
-    await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+    await shot(page, '04-da-chon-2-sieu-thi-de-xuat');
+
+    console.log('05: chọn "Khác" ở Ngày Hết Hiệu Lực -> hiện ô nhập ngày thật, điền nốt form + gửi đề xuất Bán Buôn thật.');
+    await page.selectOption('#itPriceExpiryMode', 'OTHER');
     await page.fill('#itPriceEffectiveDate', '2026-10-01');
-    await page.fill('#itPriceReason', 'Đề xuất giá bán buôn riêng cho cửa hàng Biên Hòa');
+    await page.fill('#itPriceExpiryDate', '2027-04-01');
+    await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+    await page.fill('#itPriceWholesaleApplyUnit', 'Công ty TNHH ABC');
+    await page.fill('#itPriceReason', 'Đề xuất giá bán buôn riêng cho 2 siêu thị vừa chọn');
     await page.evaluate(() => {
       itPricePendingFile = {
         fileUrl: '/uploads/gia-buon-demo.xlsx', fileName: 'gia-buon-demo.xlsx',
@@ -123,15 +116,19 @@ async function main() {
     });
     await page.evaluate((id) => openItPriceModal(id), wholesaleId);
     await page.waitForTimeout(150);
-    await shot(page, '07-ban-buon-modal-chi-tiet');
+    await shot(page, '05-ban-buon-modal-chi-tiet');
 
     const savedWholesale = await page.evaluate(() => DB.itPriceApprovals[0]);
     console.log('\nDữ liệu Bán Buôn thật đã lưu (storeScope.mode LUÔN là OTHER, không có ALL):');
-    console.log(JSON.stringify({ priceType: savedWholesale.priceType, storeScope: savedWholesale.storeScope }, null, 2));
+    console.log(JSON.stringify({ priceType: savedWholesale.priceType, storeScope: savedWholesale.storeScope, effectiveDate: savedWholesale.effectiveDate, expiryMode: savedWholesale.expiryMode, expiryDate: savedWholesale.expiryDate }, null, 2));
   } finally {
     await browser.close();
     server.close();
   }
+}
+
+async function closeItPriceModalSafe(page) {
+  await page.evaluate(() => { if (typeof closeItPriceModal === 'function') closeItPriceModal(); });
 }
 
 main().then(() => process.exit(0)).catch((err) => { console.error(err); process.exit(1); });

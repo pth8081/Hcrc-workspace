@@ -25,22 +25,11 @@ function setItSupportSubTab(subTab) {
   document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canManageItRenewalClient(currentUser) ? '' : ' hidden');
 
   if (subTab === 'PRICE') {
-    const canCreate = canProposeItPriceType(currentUser, activeItPriceSubTab);
-    document.getElementById('itPriceCreateForm').classList.toggle('hidden', !canCreate);
-    document.getElementById('itPriceNoCreatePermNote').classList.toggle('hidden', canCreate);
+    // Form tạo đề xuất (Bán Buôn/Bán Lẻ) ĐÃ CHUYỂN khỏi Hỗ Trợ IT (10/2026) sang module-vanhanh.js/
+    // module-muahang.js — tab này giờ CHỈ còn xem danh sách + xử lý (Duyệt/Từ chối/Nhận xử lý/Áp giá),
+    // không còn khởi tạo form nào ở đây nữa (xem chú thích đầu itSupportSection.html).
     document.getElementById('itPriceMasterListAdminWrap').classList.toggle('hidden', !currentUser.perms?.admin);
     if (currentUser.perms?.admin) renderItPriceMasterListAdmin();
-    if (canCreate) {
-      document.getElementById('itPriceCode').value = generateItPriceCode();
-      document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
-      itPricePendingFile = null;
-      document.getElementById('itPriceFileStatus').innerText = '';
-      document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
-      const fileInput = document.getElementById('itPriceFileInput');
-      if (fileInput) fileInput.value = '';
-      renderItPriceMasterListSelect();
-    }
-    renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
     renderItPriceApprovals();
   }
   if (subTab === 'TICKET') {
@@ -530,9 +519,10 @@ async function submitItPriceApproval(e) {
   if (activeItPriceSubTab === 'WHOLESALE' && !wholesaleApplyUnit) {
     return alert('⛔ Vui lòng nhập Đơn Vị Áp Dụng Giá Bán Buôn.');
   }
-  // "Vùng Giá Áp Dụng" — không bắt buộc cho Bán Lẻ (theo yêu cầu người dùng); nếu có chọn thì server vẫn
-  // đối chiếu với danh mục hệ thống ở itPriceApprovals.extraValidate.
-  const priceZone = document.getElementById('itPriceRetailZone').value;
+  // "Vùng Giá Áp Dụng" — CHỈ còn ở form Bán Lẻ RIÊNG của Mua Hàng (module-muahang.js, #mhItPriceRetailZone,
+  // submitMhItPriceApproval() — 10/2026, đợt tách khỏi Hỗ Trợ IT). Hàm này giờ CHỈ còn chạy cho Bán Buôn
+  // (Vận Hành), nên #itPriceRetailZone không còn tồn tại ở đây — optional-chain để không vỡ nếu lỡ gọi.
+  const priceZone = document.getElementById('itPriceRetailZone')?.value || '';
   // "Siêu thị đề xuất"/"Ngày áp dụng"/"Ngày hết hiệu lực" — CHỈ còn áp dụng cho Bán Buôn (đợt 9/2026,
   // tách biểu mẫu theo yêu cầu người dùng: Bán Lẻ đã có "Vùng Giá Áp Dụng" đủ khoanh phạm vi, không cần
   // chọn thêm). Bán Lẻ tự gắn mặc định storeScope=ALL/ngày áp dụng=hôm nay/hết hiệu lực=Vĩnh viễn, KHÔNG
@@ -667,7 +657,9 @@ function resetItPriceForm() {
   document.getElementById('itPriceDeptDisplay').value = currentUser.dept;
   document.getElementById('itPriceTier').value = '';
   document.getElementById('itPriceWholesaleApplyUnit').value = '';
-  document.getElementById('itPriceRetailZone').value = '';
+  // #itPriceRetailZone không còn tồn tại ở đây (chỉ Bán Buôn, xem chú thích ở submitItPriceApproval()).
+  const retailZoneEl = document.getElementById('itPriceRetailZone');
+  if (retailZoneEl) retailZoneEl.value = '';
   renderItPriceMasterListSelect();
   clearSingleFileInput('itPriceFileInput', 'itPriceFileChip');
   clearMultiFileInput('itPriceExtraFiles', 'itPriceExtraFilesChip');
@@ -737,7 +729,28 @@ function filterItPriceByCard(status) {
 // theo priceType VÀ gắn đúng priceType cho form tạo mới (KHÔNG có dropdown chọn tay, xem
 // submitItPriceApproval()). Class active/inactive của 2 nút được cập nhật lại trong renderItPriceApprovals()
 // (chạy mỗi lần render danh sách) để không cần gọi riêng ở đây.
+// Điểm vào form "Phê Duyệt Giá Bán Buôn" ở module Vận Hành (10/2026) — gọi từ setVanHanhSubTab('ITPRICE').
+// Khoá cứng WHOLESALE (không có switcher ở đây) + khởi tạo các field mà setItPriceSubTab() không tự làm
+// (mã tự sinh/phòng ban hiển thị — trước đây do setItSupportSubTab('PRICE') đảm nhiệm, xem chú thích ở
+// hàm đó, nay chỉ chạy ở đây vì form đã chuyển khỏi Hỗ Trợ IT).
+function enterVanHanhItPriceForm() {
+  setItPriceSubTab('WHOLESALE');
+  const codeEl = document.getElementById('itPriceCode');
+  if (codeEl) codeEl.value = generateItPriceCode();
+  const deptEl = document.getElementById('itPriceDeptDisplay');
+  if (deptEl) deptEl.value = currentUser.dept;
+}
+
 let activeItPriceSubTab = 'RETAIL';
+// setItPriceSubTab() giờ dùng CHUNG cho 2 bối cảnh khác hẳn nhau (10/2026, đợt tách Phê Duyệt Giá khỏi
+// Hỗ Trợ IT — xem chú thích đầu itSupportSection.html):
+//  1. Hỗ Trợ IT (nút btnItPriceSubRetail/btnItPriceSubWholesale, itSupportSection.html) — CHỈ lọc lại
+//     danh sách theo priceType, KHÔNG còn form tạo nào ở đó nữa.
+//  2. module-vanhanh.js — khoá cứng 'WHOLESALE' lúc vào tab, có form tạo (#itPriceCreateForm, ids GIỮ
+//     NGUYÊN, chỉ chuyển sang sống trong vanHanhSection.html).
+// Toàn bộ lookup DOM liên quan tới FORM (tierWrap/applyUnitWrap/retailZoneWrap/itPriceCreateForm/
+// itPriceNoCreatePermNote/Mẫu Giá select) đều PHẢI có null-guard vì các id này không tồn tại khi hàm
+// chạy từ bối cảnh (1) — bỏ sót 1 chỗ sẽ vỡ luôn nút lọc Bán Lẻ/Bán Buôn ở Hỗ Trợ IT.
 function setItPriceSubTab(subTab) {
   activeItPriceSubTab = subTab === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL';
   // Mục B: trường Mức Margin/Chiết Khấu chỉ hiện + bắt buộc khi đang ở sub-tab Bán Buôn.
@@ -746,26 +759,34 @@ function setItPriceSubTab(subTab) {
   // "Đơn Vị Áp Dụng Giá Bán Buôn" — cùng điều kiện hiện/ẩn với tierWrap ở trên (chỉ Bán Buôn).
   const applyUnitWrap = document.getElementById('itPriceWholesaleApplyUnitWrap');
   if (applyUnitWrap) applyUnitWrap.classList.toggle('hidden', activeItPriceSubTab !== 'WHOLESALE');
-  // "Vùng Giá Áp Dụng" — đối xứng applyUnitWrap ở trên, chỉ hiện + bắt buộc khi Bán Lẻ.
+  // "Vùng Giá Áp Dụng" — đối xứng applyUnitWrap ở trên, chỉ hiện + bắt buộc khi Bán Lẻ. Từ 10/2026 field
+  // này chỉ còn tồn tại trong form Bán Lẻ CỦA MUA HÀNG (id riêng #mhItPriceRetailZone, xem module-muahang.js)
+  // — id CŨ #itPriceRetailZoneWrap không còn ở đâu cả, nhánh này giờ luôn no-op nhưng giữ lại để hàm vẫn
+  // đúng ngữ nghĩa nếu sau này Vận Hành cũng cần hiện field tương tự.
   const retailZoneWrap = document.getElementById('itPriceRetailZoneWrap');
   if (retailZoneWrap) retailZoneWrap.classList.toggle('hidden', activeItPriceSubTab !== 'RETAIL');
-  applyItPriceStoreScopeUIForSubTab();
-  checkItPriceMarginConsistency(); // rời khỏi Bán Buôn -> tự ẩn cảnh báo (hàm tự kiểm tra activeItPriceSubTab).
-  // "Trường Bổ Sung" giờ khác nhau giữa Bán Lẻ/Bán Buôn (2 modKey riêng, xem itPriceDynamicModKey()) —
-  // phải vẽ lại đúng bộ field của sub-tab vừa chuyển tới, không còn dùng chung 1 bộ như trước.
-  renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
-  // Quyền đề xuất giờ tách riêng theo priceType (itPriceProposeCreateWholesale/Retail, 10/2026) — một
-  // người có thể chỉ được đề xuất 1 trong 2 loại, nên form tạo phải ẩn/hiện lại MỖI LẦN đổi sub-tab,
-  // không chỉ 1 lần lúc vào tab PRICE như trước (lúc đó còn dùng chung 1 flag).
-  const canCreateSub = canProposeItPriceType(currentUser, activeItPriceSubTab);
-  document.getElementById('itPriceCreateForm').classList.toggle('hidden', !canCreateSub);
-  document.getElementById('itPriceNoCreatePermNote').classList.toggle('hidden', canCreateSub);
+  const createForm = document.getElementById('itPriceCreateForm');
+  if (createForm) {
+    applyItPriceStoreScopeUIForSubTab();
+    checkItPriceMarginConsistency(); // rời khỏi Bán Buôn -> tự ẩn cảnh báo (hàm tự kiểm tra activeItPriceSubTab).
+    // "Trường Bổ Sung" giờ khác nhau giữa Bán Lẻ/Bán Buôn (2 modKey riêng, xem itPriceDynamicModKey()) —
+    // phải vẽ lại đúng bộ field của sub-tab vừa chuyển tới, không còn dùng chung 1 bộ như trước.
+    renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
+    // Quyền đề xuất giờ tách riêng theo priceType (itPriceProposeCreateWholesale/Retail, 10/2026) — một
+    // người có thể chỉ được đề xuất 1 trong 2 loại, nên form tạo phải ẩn/hiện lại MỖI LẦN đổi sub-tab,
+    // không chỉ 1 lần lúc vào tab PRICE như trước (lúc đó còn dùng chung 1 flag).
+    const canCreateSub = canProposeItPriceType(currentUser, activeItPriceSubTab);
+    createForm.classList.toggle('hidden', !canCreateSub);
+    const noPermNote = document.getElementById('itPriceNoCreatePermNote');
+    if (noPermNote) noPermNote.classList.toggle('hidden', canCreateSub);
+    renderItPriceMasterListSelect();
+  }
   resetListPage('itPrice');
   renderItPriceApprovals();
   // Mẫu Giá giờ lọc theo priceType (mục 1 kế hoạch) -> phải vẽ lại panel quản trị + dropdown chọn mẫu
-  // mỗi lần đổi kênh, không chỉ 1 lần lúc vào tab PRICE như trước.
+  // mỗi lần đổi kênh, không chỉ 1 lần lúc vào tab PRICE như trước. Panel quản trị (#itPriceMasterListAdminWrap)
+  // vẫn sống ở Hỗ Trợ IT, không cần null-guard thêm vì renderItPriceMasterListAdmin() tự guard.
   if (currentUser.perms?.admin) renderItPriceMasterListAdmin();
-  renderItPriceMasterListSelect();
 }
 
 // "File đã phê duyệt" — MIRROR ĐÚNG resolveApprovedFileId()/resolveApprovedFileUrl() ở

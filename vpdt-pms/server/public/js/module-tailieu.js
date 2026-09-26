@@ -147,7 +147,15 @@ function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, getD
 // Đặt Phòng Họp có #meetingDept chọn tự do (trong scope meetingBookScope) — cùng lý do subDept/carDept.
 function generateMeetingCode() { return generateHcrcCode(DB.meetings, getDeptAbbr(document.getElementById('meetingDept').value), 'DPH'); }
 // Phê Duyệt Giá IT forceOwnDept: true (chỉ hiện readonly #itPriceDeptDisplay = currentUser.dept).
-function generateItPriceCode() { return generateHcrcCode(DB.itPriceApprovals, getDeptAbbr(currentUser.dept), 'ITPG'); }
+// Hậu tố BB/BL (10/2026, yêu cầu người dùng — tách Phê Duyệt Giá Bán Buôn/Bán Lẻ khỏi Hỗ Trợ IT) — nằm
+// NGAY TRONG moduleAbbr nên mỗi kênh tự có dãy số riêng (computeNextHcrcSeq() đếm theo TOÀN BỘ prefix
+// `HCRC-<dept>-<moduleAbbr>-`, không cần sửa thuật toán đếm). Đọc activeItPriceSubTab (module-itsupport-price.js)
+// — mọi điểm gọi hàm này (Hỗ Trợ IT list-filter, enterVanHanhItPriceForm(), enterMuaHangItPriceForm())
+// ĐỀU set biến này ĐÚNG giá trị trước khi gọi, xem chú thích ở 2 hàm entry đó.
+function generateItPriceCode() {
+  const suffix = activeItPriceSubTab === 'WHOLESALE' ? 'BB' : 'BL';
+  return generateHcrcCode(DB.itPriceApprovals, getDeptAbbr(currentUser.dept), `ITPG-${suffix}`);
+}
 // Ticket Hỗ Trợ IT forceOwnDept: true, không có ô chọn phòng ban nào trên form.
 function generateItTicketCode() { return generateHcrcCode(DB.itSupportTickets, getDeptAbbr(currentUser.dept), 'ITHT'); }
 

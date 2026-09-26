@@ -602,9 +602,14 @@ function switchWfModule(mod) {
   const typeTabsEl = document.getElementById('wfSubmissionTypeTabs');
   const types = getWfModuleTypes(mod);
   const hasTypes = !!(types && types.length);
+  // ITPRICE_RETAIL (10/2026, đợt tách Phê Duyệt Giá) — fixedTypes giờ chỉ còn ĐÚNG 1 phần tử (trước
+  // đây 2: Bán Lẻ/Bán Buôn) vì Bán Buôn đã tách hẳn thành module ITPRICE_WHOLESALE riêng (pureTier) —
+  // hàng tab con chỉ có nghĩa khi có ≥2 lựa chọn thật để chuyển đổi, 1 lựa chọn duy nhất thì ẩn hẳn
+  // (tránh hiện 1 nút bấm luôn active, không làm gì).
+  const showTypeTabs = hasTypes && types.length > 1;
   if (typeTabsEl) {
-    typeTabsEl.classList.toggle('hidden', !hasTypes);
-    typeTabsEl.classList.toggle('flex', hasTypes);
+    typeTabsEl.classList.toggle('hidden', !showTypeTabs);
+    typeTabsEl.classList.toggle('flex', showTypeTabs);
   }
   if (hasTypes) {
     activeWfSubmissionType = types[0].key;

@@ -104,7 +104,7 @@ async function runClientTests(run) {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(() => switchTab('itSupport'));
+    await page.evaluate(async () => { await switchTab('itSupport'); });
     await page.waitForTimeout(150);
     await page.evaluate(() => setItSupportSubTab('PRICE'));
     await page.waitForTimeout(150);
@@ -112,8 +112,25 @@ async function runClientTests(run) {
     async function adminTableText() {
       return page.evaluate(() => document.getElementById('itPriceMasterListTableBody').innerText);
     }
-    async function selectOptionTexts() {
-      return page.evaluate(() => Array.from(document.getElementById('itPriceMasterListSelect').options).map(o => o.text));
+    // 10/2026 (đợt tách Phê Duyệt Giá khỏi Hỗ Trợ IT): dropdown chọn mẫu ở form TẠO ĐỀ XUẤT giờ sống ở
+    // 2 TRANG KHÁC HẲN NHAU (không còn cùng 1 form với panel quản trị itPriceMasterListTableBody, vốn
+    // vẫn ở lại Hỗ Trợ IT) — RETAIL: #mhItPriceMasterListSelect (Mua Hàng), WHOLESALE:
+    // #itPriceMasterListSelect (Vận Hành, id GIỮ NGUYÊN — chỉ đổi trang sống).
+    async function retailSelectOptionTexts() {
+      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
+      await page.waitForTimeout(150);
+      const texts = await page.evaluate(() => Array.from(document.getElementById('mhItPriceMasterListSelect').options).map(o => o.text));
+      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
+      await page.waitForTimeout(150);
+      return texts;
+    }
+    async function wholesaleSelectOptionTexts() {
+      await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
+      await page.waitForTimeout(150);
+      const texts = await page.evaluate(() => Array.from(document.getElementById('itPriceMasterListSelect').options).map(o => o.text));
+      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
+      await page.waitForTimeout(150);
+      return texts;
     }
 
     await run.run('Mặc định mở Bán Lẻ: panel quản trị CHỈ hiện mẫu Bán Lẻ + mẫu cũ, KHÔNG hiện mẫu Bán Buôn', async () => {
@@ -123,23 +140,24 @@ async function runClientTests(run) {
       assert(!txt.includes('Mẫu Bán Buôn'), 'LỖI ĐÃ VÁ: Bán Lẻ không được thấy mẫu của Bán Buôn');
     });
 
-    await run.run('Dropdown chọn mẫu ở form tạo đề xuất cũng lọc đúng như panel quản trị', async () => {
-      const texts = await selectOptionTexts();
+    await run.run('Dropdown chọn mẫu ở form tạo đề xuất Bán Lẻ (Mua Hàng) cũng lọc đúng như panel quản trị', async () => {
+      const texts = await retailSelectOptionTexts();
       const joined = texts.join('|');
       assert(joined.includes('Mẫu Bán Lẻ'), 'Dropdown phải có Mẫu Bán Lẻ');
       assert(joined.includes('Mẫu Cũ Chưa Gắn Kênh'), 'Dropdown phải có mẫu cũ');
       assert(!joined.includes('Mẫu Bán Buôn'), 'Dropdown không được có mẫu của kênh khác');
     });
 
-    await run.run('Chuyển sang sub-tab Bán Buôn: panel quản trị + dropdown tự vẽ lại, giờ hiện mẫu Bán Buôn + mẫu cũ, ẩn mẫu Bán Lẻ', async () => {
+    await run.run('Chuyển sang sub-tab Bán Buôn: panel quản trị (Hỗ Trợ IT) + dropdown form tạo đề xuất (Vận Hành) tự vẽ lại, giờ hiện mẫu Bán Buôn + mẫu cũ, ẩn mẫu Bán Lẻ', async () => {
       await page.click('#btnItPriceSubWholesale');
       await page.waitForTimeout(150);
       const txt = await adminTableText();
       assert(txt.includes('Mẫu Bán Buôn'), 'Bán Buôn phải thấy đúng mẫu của mình');
       assert(txt.includes('Mẫu Cũ Chưa Gắn Kênh'), 'Mẫu cũ vẫn hiện ở kênh này');
       assert(!txt.includes('Mẫu Bán Lẻ'), 'LỖI ĐÃ VÁ: Bán Buôn không được thấy mẫu của Bán Lẻ');
-      const texts = await selectOptionTexts();
+      const texts = await wholesaleSelectOptionTexts();
       assert(!texts.join('|').includes('Mẫu Bán Lẻ'), 'Dropdown Bán Buôn không được có mẫu Bán Lẻ');
+      assert(texts.join('|').includes('Mẫu Bán Buôn'), 'Dropdown Bán Buôn phải có đúng mẫu của mình');
     });
 
     await run.run('LỖI ĐÃ VÁ ("xoá giá mẫu là xoá hết"): xoá mẫu Bán Buôn (id=2) đang xem KHÔNG đụng tới mẫu Bán Lẻ (id=1) trong DB.itPriceMasterLists', async () => {

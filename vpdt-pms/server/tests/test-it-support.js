@@ -117,12 +117,14 @@ async function main() {
     // còn autoApproved), gắn đúng columnLabels snapshot theo Mẫu Giá đã chọn lúc nộp =====
     await run.run('Phê Duyệt Giá: tạo đề xuất mới ở PENDING (không còn tự động duyệt), gắn đúng columnLabels theo Mẫu Giá đã chọn', async () => {
       await loginAs(page, STAFF_KD);
+      // Đề xuất Bán Lẻ (10/2026, tách khỏi Hỗ Trợ IT) giờ tạo ở module Mua Hàng > Phê Duyệt Giá Bán Lẻ
+      // (module-muahang.js, ids mh*) — Hỗ Trợ IT chỉ còn danh sách/xử lý, KHÔNG còn form tạo nào nữa.
       const result = await page.evaluate(async () => {
-        switchTab('itSupport');
-        setItSupportSubTab('PRICE');
-        document.getElementById('itPriceMasterListSelect').value = String(1);
-        document.getElementById('itPriceReason').value = 'Điều chỉnh giá theo chương trình khuyến mãi';
-        itPricePendingFile = {
+        await switchTab('muaHang');
+        setPurchasingSubTab('ITPRICE');
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá theo chương trình khuyến mãi';
+        mhItPricePendingFile = {
           fileUrl: '/uploads/gia-de-xuat.xlsx',
           fileName: 'gia-de-xuat.xlsx',
           items: [{ values: { code: 'SP001', name: 'Mì gói Hảo Hảo', oldPrice: '5000', newPrice: '5500' } }],
@@ -133,12 +135,8 @@ async function main() {
             { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
-        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
-        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const p = DB.itPriceApprovals[0];
         return { alerts: window.__alerts, item: p };
       });
@@ -172,14 +170,10 @@ async function main() {
       const before = await page.evaluate(() => DB.itPriceApprovals.length);
       const result = await page.evaluate(async () => {
         window.__resetCapture();
-        document.getElementById('itPriceCode').value = generateItPriceCode();
-        itPricePendingFile = null;
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
-        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
-        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        document.getElementById('mhItPriceCode').value = generateItPriceCode();
+        mhItPricePendingFile = null;
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return { alerts: window.__alerts, count: DB.itPriceApprovals.length };
       });
       assertIncludes(result.alerts, 'Vui lòng chọn tệp bảng giá', 'Phải cảnh báo thiếu tệp bảng giá');
@@ -451,12 +445,12 @@ async function main() {
       await loginAs(page, STAFF_KD);
       const created = await page.evaluate(async () => {
         window.__resetCapture();
-        switchTab('itSupport');
-        setItSupportSubTab('PRICE');
-        document.getElementById('itPriceCode').value = generateItPriceCode();
-        document.getElementById('itPriceMasterListSelect').value = String(1);
-        document.getElementById('itPriceReason').value = 'Điều chỉnh giá đợt 2';
-        itPricePendingFile = {
+        await switchTab('muaHang');
+        setPurchasingSubTab('ITPRICE');
+        document.getElementById('mhItPriceCode').value = generateItPriceCode();
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá đợt 2';
+        mhItPricePendingFile = {
           fileUrl: '/uploads/gia-de-xuat-2.xlsx', fileName: 'gia-de-xuat-2.xlsx',
           items: [{ values: { code: 'SP002', name: 'Bánh Chocopie', oldPrice: '10000', newPrice: '11000' } }],
           columnLabels: [
@@ -464,12 +458,8 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
-        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
-        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return DB.itPriceApprovals[0].id;
       });
       emergencyPriceApprovalId = created;
@@ -577,13 +567,12 @@ async function main() {
     await run.run('Sub-tab Bán Lẻ/Bán Buôn: tạo đúng priceType theo sub-tab đang mở, lọc đúng danh sách theo sub-tab, Bán Buôn gắn đúng priceTier', async () => {
       await loginAs(page, STAFF_MKT);
       const created = await page.evaluate(async () => {
-        switchTab('itSupport');
-        setItSupportSubTab('PRICE');
-
-        setItPriceSubTab('RETAIL');
-        document.getElementById('itPriceMasterListSelect').value = String(1);
-        document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán lẻ Marketing';
-        itPricePendingFile = {
+        // Bán Lẻ (10/2026, tách khỏi Hỗ Trợ IT) tạo ở Mua Hàng > Phê Duyệt Giá Bán Lẻ (mh* ids).
+        await switchTab('muaHang');
+        setPurchasingSubTab('ITPRICE');
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá bán lẻ Marketing';
+        mhItPricePendingFile = {
           fileUrl: '/uploads/gia-mkt-retail.xlsx', fileName: 'gia-mkt-retail.xlsx',
           items: [{ values: { code: 'MK001', name: 'Sản phẩm MKT', oldPrice: '1000', newPrice: '1200' } }],
           columnLabels: [
@@ -591,15 +580,14 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
-        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
-        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const retailItem = DB.itPriceApprovals[0];
 
-        setItPriceSubTab('WHOLESALE');
+        // Bán Buôn (10/2026, tách khỏi Hỗ Trợ IT) tạo ở Vận Hành > Phê Duyệt Giá Bán Buôn (ids GIỮ
+        // NGUYÊN itPrice* — chỉ đổi nơi sống, xem enterVanHanhItPriceForm()/setItPriceSubTab()).
+        await switchTab('vanHanh');
+        setVanHanhSubTab('ITPRICE');
         // "Siêu Thị Đề Xuất" (đợt 9/2026) — Bán Buôn KHÔNG có "Toàn bộ", bắt buộc chọn >=1 siêu thị
         // (setItPriceSubTab() ở trên đã tự render sẵn ô multi-select rỗng qua
         // applyItPriceStoreScopeUIForSubTab(), gmsAdd() mô phỏng đúng thao tác click chọn 1 gợi ý).
@@ -619,15 +607,17 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
+        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc cho Bán Buôn — form Vận Hành có sẵn field
+        // này (khác Bán Lẻ ở Mua Hàng, tự gắn mặc định "hôm nay" không cần chọn tay).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const wholesaleItem = DB.itPriceApprovals[0];
 
-        // Đang ở sub-tab WHOLESALE -> danh sách chỉ hiện hồ sơ WHOLESALE.
+        // Đang ở sub-tab WHOLESALE (Vận Hành) -> danh sách chỉ hiện hồ sơ WHOLESALE. Danh sách/lọc theo
+        // priceType vẫn sống DUY NHẤT ở Hỗ Trợ IT > Phê Duyệt Giá (itPriceTableBody) — chuyển qua đó để
+        // kiểm tra đúng hành vi lọc sub-tab Bán Lẻ/Bán Buôn (không đụng gì tới 2 hồ sơ vừa tạo).
+        switchTab('itSupport');
+        setItSupportSubTab('PRICE');
         setItPriceSubTab('WHOLESALE');
         const wholesaleTabCodes = Array.from(document.querySelectorAll('#itPriceTableBody tr')).map(tr => tr.querySelector('td')?.innerText);
         setItPriceSubTab('RETAIL');
@@ -653,7 +643,7 @@ async function main() {
       await loginAs(page, STAFF_MKT);
       const clientBlocked = await page.evaluate(async () => {
         window.__resetCapture();
-        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE');
+        await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE');
         document.getElementById('itPriceCode').value = generateItPriceCode();
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceTier').value = ''; // cố tình không chọn mức
@@ -663,11 +653,7 @@ async function main() {
           columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }]
         };
         const before = DB.itPriceApprovals.length;
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return { alerts: window.__alerts.slice(), count: DB.itPriceApprovals.length, before };
       });
@@ -697,7 +683,7 @@ async function main() {
     await run.run('Bán Buôn theo tier: tạo thêm 1 hồ sơ ở mức Chiết khấu > 5% (tier khác hồ sơ kịch bản 10)', async () => {
       await loginAs(page, STAFF_MKT);
       const created = await page.evaluate(async () => {
-        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE');
+        await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE');
         gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
@@ -711,11 +697,7 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
         document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
         await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         return DB.itPriceApprovals[0];
       });
@@ -868,10 +850,10 @@ async function main() {
     await run.run('Tài liệu bổ sung liên quan: chọn nhiều tệp lúc tạo -> lưu đúng vào item.extraFiles, hiện đúng trong modal chi tiết', async () => {
       await loginAs(page, STAFF_KD);
       const created = await page.evaluate(async () => {
-        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('RETAIL');
-        document.getElementById('itPriceMasterListSelect').value = String(1);
-        document.getElementById('itPriceReason').value = 'Điều chỉnh giá kèm tài liệu bổ sung';
-        itPricePendingFile = {
+        await switchTab('muaHang'); setPurchasingSubTab('ITPRICE');
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá kèm tài liệu bổ sung';
+        mhItPricePendingFile = {
           fileUrl: '/uploads/gia-co-extra.xlsx', fileName: 'gia-co-extra.xlsx',
           items: [{ values: { code: 'SP009', name: 'Sản phẩm test extra', oldPrice: '1000', newPrice: '1100' } }],
           columnLabels: [
@@ -879,18 +861,14 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // Chọn 2 tệp cùng lúc cho #itPriceExtraFiles (mirror cách test-submission.js gán File qua DataTransfer).
+        // Chọn 2 tệp cùng lúc cho #mhItPriceExtraFiles (mirror cách test-submission.js gán File qua DataTransfer).
         const dt = new DataTransfer();
         dt.items.add(new File(['bao cao khao sat gia'], 'khao-sat-gia.pdf', { type: 'application/pdf' }));
         dt.items.add(new File(['bang bao gia nha cung cap'], 'bao-gia-ncc.pdf', { type: 'application/pdf' }));
-        document.getElementById('itPriceExtraFiles').files = dt.files;
+        document.getElementById('mhItPriceExtraFiles').files = dt.files;
 
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
-        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
-        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const item = DB.itPriceApprovals[0];
 
         openItPriceModal(item.id);
@@ -909,13 +887,13 @@ async function main() {
     await run.run('Tài liệu bổ sung liên quan: KHÔNG chọn tệp nào vẫn tạo được bình thường (hoàn toàn tuỳ chọn) — khối modal ẨN', async () => {
       await loginAs(page, STAFF_KD);
       const created = await page.evaluate(async () => {
-        switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('RETAIL');
-        document.getElementById('itPriceMasterListSelect').value = String(1);
-        document.getElementById('itPriceReason').value = 'Điều chỉnh giá không kèm tài liệu bổ sung';
-        // Dọn lại #itPriceExtraFiles còn sót từ kịch bản trước — fake event.target.reset() ở test này
+        await switchTab('muaHang'); setPurchasingSubTab('ITPRICE');
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá không kèm tài liệu bổ sung';
+        // Dọn lại #mhItPriceExtraFiles còn sót từ kịch bản trước — fake event.target.reset() ở test này
         // KHÔNG chạm DOM thật (khác form.reset() thật của trình duyệt khi submit thật), nên phải dọn tay.
-        document.getElementById('itPriceExtraFiles').files = new DataTransfer().files;
-        itPricePendingFile = {
+        document.getElementById('mhItPriceExtraFiles').files = new DataTransfer().files;
+        mhItPricePendingFile = {
           fileUrl: '/uploads/gia-khong-extra.xlsx', fileName: 'gia-khong-extra.xlsx',
           items: [{ values: { code: 'SP010', name: 'Sản phẩm test không extra', oldPrice: '500', newPrice: '550' } }],
           columnLabels: [
@@ -923,12 +901,8 @@ async function main() {
             { key: 'oldPrice', label: 'Giá cũ' }, { key: 'newPrice', label: 'Giá mới' }
           ]
         };
-        // itPriceEffectiveDate (đợt 9/2026) giờ LUÔN bắt buộc — mirror giá trị 1 lần cho mọi lượt gọi
-        // submitItPriceApproval() trong file này (storeScope/expiryMode giữ mặc định ALL/PERMANENT, chưa
-        // phải trọng tâm của các kịch bản ở file này — xem tests/test-itprice-scope-dates.js riêng).
-        document.getElementById('itPriceEffectiveDate').value = '2026-09-01';
-        document.getElementById('itPriceRetailZone').value = 'Miền Bắc';
-        await submitItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
         const item = DB.itPriceApprovals[0];
         openItPriceModal(item.id);
         const wrapHidden = document.getElementById('itPriceModalExtraFilesWrap').classList.contains('hidden');

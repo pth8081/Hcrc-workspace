@@ -214,7 +214,11 @@ async function savePermGroup(e) {
     membersUpdated++;
   });
 
-  const savedGroups = await syncStorage('permGroups');
+  // baseline: permGroupsSnapshot — cùng cơ chế thử-lại-1-lần-sau-409 vốn chỉ có ở "users" (10/2026, "Item
+  // 6" đợt golive: tổng quát hoá retryArraySaveAfterConflict() sang "permGroups" — nhiều admin cùng sửa
+  // các nhóm KHÁC nhau gần như đồng thời trước đây vẫn bị 409 giả vì cùng 1 version dùng chung cho cả
+  // collection, y hệt triệu chứng "users" đã vá — xem syncStorageOnce()/core.js).
+  const savedGroups = await syncStorage('permGroups', { baseline: permGroupsSnapshot });
   const savedUsers = membersUpdated > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
   if (!savedGroups || !savedUsers) {
     DB.permGroups = permGroupsSnapshot;
@@ -252,7 +256,7 @@ async function deletePermGroup(id) {
   });
   DB.permGroups = DB.permGroups.filter(g => g.id !== id);
 
-  const savedGroups = await syncStorage('permGroups');
+  const savedGroups = await syncStorage('permGroups', { baseline: permGroupsSnapshot });
   const savedUsers = memberCount > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
   if (!savedGroups || !savedUsers) {
     DB.permGroups = permGroupsSnapshot;
@@ -770,7 +774,7 @@ async function confirmPermMatrixImport() {
     });
   }
 
-  const savedGroups = permMatrixImportKind === 'groups' ? await syncStorage('permGroups') : true;
+  const savedGroups = permMatrixImportKind === 'groups' ? await syncStorage('permGroups', { baseline: groupsSnapshot }) : true;
   const savedUsers = (permMatrixImportKind === 'users' || usersTouched) ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
   if (!savedGroups || !savedUsers) {
     DB.users = usersSnapshot;

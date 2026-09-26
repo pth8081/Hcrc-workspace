@@ -41,7 +41,7 @@
 // (dữ liệu HTML thuần, không phải script bị THỰC THI) để không bị scriptSrc chi phối gì cả.
 window.__ASSET_VERSION__ = document.querySelector('meta[name="app-version"]')?.content || null;
 
-const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash","dangkyxe","phonghop"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]},"checklist":{"files":["module-checklist.js"],"deps":["formbuilder-nav"]},"muahang":{"files":["module-muahang.js"],"deps":["formbuilder-nav"]},"nghiepvu":{"files":["module-nghiepvu.js"],"deps":[]}};
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","formbuilder-nav","itsupport-tier","logsystem-trash","dangkyxe","phonghop"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav","itsupport-price"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]},"checklist":{"files":["module-checklist.js"],"deps":["formbuilder-nav"]},"muahang":{"files":["module-muahang.js"],"deps":["formbuilder-nav"]},"nghiepvu":{"files":["module-nghiepvu.js"],"deps":[]}};
 
 // MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
 // duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
@@ -51,7 +51,7 @@ const MODULE_FN_GROUP = {"toggleUserPermFormMode":"admin-permgroups","updatePerm
 // TAB_MODULE_GROUPS: tabName (switchTab()) -> cac cum PHAI nap TRUOC KHI goi ham render/setXSubTab
 // tuong ung cua tab do (chi liet ke cum THAM CHIEU TRUC TIEP - loadModuleGroup() tu lo phan deps
 // bac cao hon). Tab khong co trong bang (approvalHub/dashboard) khong can nap gi them.
-const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrReport":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"muaHang":["muahang"],"nghiepVu":["nghiepvu"]};
+const TAB_MODULE_GROUPS = {"approvalHub":[],"doc":["formbuilder-nav"],"task":["congviec"],"internal":["internalcomms-nhipsong"],"submission":["formbuilder-nav","vanbantrinh"],"contract":["hopdong"],"meeting":["formbuilder-nav","phonghop"],"minutes":["bienbanhop","formbuilder-nav"],"car":["dangkyxe"],"vpp":["vpp"],"uniform":["dongphuc"],"license":["formbuilder-nav"],"periodicReport":["baocaodinhky-nhap"],"office":["hopdong"],"reports":["baocaoquantri-preview"],"hr":["hcrcdonghanh"],"orgChart":["orgchart-v2"],"hrLifecycle":["hrlifecycle"],"hrProfile":["hrprofile"],"hrReport":["hrprofile"],"hrContract":["hopdonglaodong"],"hrAttendance":["conghop"],"hrPayroll":["luong"],"budget":["itsupport-tier"],"vanHanh":["vanhanh","itsupport-price"],"dashboard":[],"system":["hethong-tabs"],"itSupport":["itsupport-price"],"checklist":["checklist"],"muaHang":["muahang"],"nghiepVu":["nghiepvu"]};
 
 const _loadedModuleGroups = {}; // groupKey -> Promise (cache, dam bao idempotent - goi lai khong nap lai)
 // _settledModuleGroups: groupKey da THUC SU nap xong (Promise cua no đa resolve), khong chi "da bat dau
@@ -696,18 +696,13 @@ const CORE_FIELD_MANIFEST = {
     { id: 'licenseIssuingAuthority', label: 'Cơ Quan Cấp Phép', required: true },
     { id: 'licenseFile', label: 'Tệp Đính Kèm Giấy Phép', required: true }
   ],
-  // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE: #itPriceCreateForm (Hỗ Trợ IT > Đề Xuất Duyệt Giá Bán) — TRƯỚC
-  // ĐÂY 1 coreKey 'IT_PRICE' DUY NHẤT liệt kê LẪN LỘN mọi field (kể cả field chỉ áp dụng riêng Bán Lẻ/
-  // Bán Buôn) trong CÙNG 1 danh sách phẳng ở màn Biểu Mẫu, dễ nhầm lẫn (phản hồi người dùng đợt 9/2026:
-  // "cần tách 2 mẫu giá bán lẻ và giá bán buôn ra vì dùng chung dễ dẫn đến nhầm lẫn") — giờ tách THẬT
-  // thành 2 coreKey/2 tab riêng trong FORM_TABS (đối xứng CONTRACT_APPROVAL/CONTRACT_MANAGE, KHÁC ở chỗ
-  // 2 tab đó dùng CHUNG 1 coreKey vì field TRÙNG HỆT nhau, còn ở đây field CHỦ YẾU khác nhau nên phải 2
-  // coreKey riêng — applyCoreFieldCustomizations() set thẳng input.required/label theo id DOM, nếu 1 id
-  // xuất hiện ở CẢ 2 coreKey thì override của bên chạy SAU sẽ đè mất override bên chạy trước, dữ liệu vẫn
-  // đúng nhưng khó lường). QUY ƯỚC: 6 field DÙNG CHUNG thật (Mã/Phòng Ban/Mẫu Giá/Tệp bảng giá/Lý do/Tài
-  // liệu bổ sung — cùng 1 input DOM bất kể sub-tab nào) chỉ khai báo ở IT_PRICE_RETAIL (sửa nhãn/bắt buộc
-  // các field này thì vào tab "Bán Lẻ"), IT_PRICE_WHOLESALE CHỈ liệt kê field RIÊNG của Bán Buôn — tránh
-  // hẳn tình huống 1 id có mặt ở 2 manifest. itPriceMasterListSelect/itPriceTier KHÔNG có optionsKey —
+  // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE — 10/2026: Phê Duyệt Giá Bán Buôn/Bán Lẻ chuyển khỏi Hỗ Trợ IT
+  // (Bán Buôn -> #vhItPriceCreateForm... KHÔNG, GIỮ NGUYÊN ids cũ #itPriceCreateForm/#itPriceCode/... —
+  // chỉ đổi NƠI SỐNG (nay ở vanHanhSection.html, module-vanhanh.js); Bán Lẻ -> form MỚI HOÀN TOÀN riêng
+  // trong muaHangSection.html với id tiền tố "mh" (#mhItPriceCreateForm/#mhItPriceCode/...), xem
+  // module-muahang.js). Từ đây 2 sub-tab KHÔNG còn dùng chung 1 DOM nữa (trước 9/2026 còn chung 1 form,
+  // toggle field theo activeItPriceSubTab) — 2 coreKey giờ trỏ 2 bộ id THẬT SỰ KHÁC NHAU, không còn rủi
+  // ro 1 id trùng ở cả 2 manifest như trước. itPriceMasterListSelect/itPriceTier KHÔNG có optionsKey —
   // mẫu giá (itPriceMasterLists) đã có màn quản trị riêng (chọn KHUÔN CỘT, không phải nhãn thuần), còn
   // itPriceTier (Margin/Chiết Khấu) là 4 mức CỐ ĐỊNH gắn trực tiếp với cấu hình quy trình duyệt riêng
   // theo mức (itPriceTierWorkflows) — đổi khoá ở đây sẽ làm mồ côi cấu hình duyệt đã gán, nên KHÔNG đưa
@@ -720,15 +715,21 @@ const CORE_FIELD_MANIFEST = {
   // kiện, không tĩnh) — required ở đây chỉ là mặc định ban đầu, đặt false cho đúng bản chất; validate
   // điều kiện thật nằm ở submitItPriceApproval()/itPriceApprovals.extraValidate (lib/createValidation.js).
   IT_PRICE_RETAIL: [
+    { id: 'mhItPriceCode', label: 'Mã Đề Xuất', required: false },
+    { id: 'mhItPriceDeptDisplay', label: 'Phòng Ban Đề Xuất', required: false },
+    { id: 'mhItPriceMasterListSelect', label: 'Mẫu Giá Phê Duyệt', required: false },
+    { id: 'mhItPriceRetailZone', label: 'Vùng Giá Áp Dụng', required: false },
+    { id: 'mhItPriceFileInput', label: 'Tệp Bảng Giá (.xlsx)', required: false },
+    { id: 'mhItPriceReason', label: 'Lý Do Điều Chỉnh Giá', required: false },
+    { id: 'mhItPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false }
+  ],
+  IT_PRICE_WHOLESALE: [
     { id: 'itPriceCode', label: 'Mã Đề Xuất', required: false },
     { id: 'itPriceDeptDisplay', label: 'Phòng Ban Đề Xuất', required: false },
     { id: 'itPriceMasterListSelect', label: 'Mẫu Giá Phê Duyệt', required: false },
-    { id: 'itPriceRetailZone', label: 'Vùng Giá Áp Dụng', required: false },
     { id: 'itPriceFileInput', label: 'Tệp Bảng Giá (.xlsx)', required: false },
     { id: 'itPriceReason', label: 'Lý Do Điều Chỉnh Giá', required: false },
-    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false }
-  ],
-  IT_PRICE_WHOLESALE: [
+    { id: 'itPriceExtraFiles', label: 'Tài Liệu Bổ Sung Liên Quan', required: false },
     { id: 'itPriceTier', label: 'Mức Margin / Chiết Khấu', required: false },
     // itPriceWholesaleApplyUnit: bắt buộc khi Bán Buôn — required ở đây là mặc định ban đầu, validate
     // điều kiện thật nằm ở submitItPriceApproval()/itPriceApprovals.extraValidate.
@@ -1260,13 +1261,14 @@ const FORM_TABS = [
   { key: 'TASK', coreKey: 'TASK', group: 'TASK', label: 'Công Việc - Giao Việc', icon: '📌', short: 'Công Việc' },
   { key: 'VPP', coreKey: 'VPP', group: 'VPP', label: 'Văn Phòng Phẩm - Tạo Kỳ Đăng Ký', icon: '🖇️', short: 'VPP' },
   { key: 'LICENSE', coreKey: 'LICENSE', group: 'LICENSE', label: 'Giấy Phép', icon: '📜', short: 'Giấy Phép' },
-  // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE (đợt 9/2026, tách khỏi 1 tab 'IT_PRICE' chung trước đây — xem chú
-  // thích đầy đủ ở CORE_FIELD_MANIFEST.IT_PRICE_RETAIL/IT_PRICE_WHOLESALE): 2 tab RIÊNG (không TRÙNG
-  // coreKey như đa số entry Đợt 1 khác) vì Bán Lẻ/Bán Buôn có field bắt buộc và cấu hình duyệt khác hẳn
-  // nhau — modKey "Trường Bổ Sung" (renderDynamicInputsForModule()/collectDynamicFieldsData()) cũng tách
-  // theo đúng 2 key này, xem setItPriceSubTab()/submitItPriceApproval() ở module-itsupport-price.js.
-  { key: 'IT_PRICE_RETAIL', coreKey: 'IT_PRICE_RETAIL', group: 'IT', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá (Bán Lẻ)', icon: '🏷️', short: 'IT - Duyệt Giá (Bán Lẻ)' },
-  { key: 'IT_PRICE_WHOLESALE', coreKey: 'IT_PRICE_WHOLESALE', group: 'IT', label: 'Hỗ Trợ IT - Đề Xuất Duyệt Giá (Bán Buôn)', icon: '🏷️', short: 'IT - Duyệt Giá (Bán Buôn)' },
+  // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE: 2 tab RIÊNG (không TRÙNG coreKey như đa số entry Đợt 1 khác) vì
+  // Bán Lẻ/Bán Buôn có field bắt buộc và cấu hình duyệt khác hẳn nhau — modKey "Trường Bổ Sung"
+  // (renderDynamicInputsForModule()/collectDynamicFieldsData()) cũng tách theo đúng 2 key này, xem
+  // submitItPriceApproval()/submitMhItPriceApproval(). 10/2026: đề xuất TẠO MỚI đã chuyển khỏi Hỗ Trợ IT
+  // (Bán Buôn -> Vận Hành, Bán Lẻ -> Mua Hàng — xem chú thích đầy đủ ở CORE_FIELD_MANIFEST cùng tên);
+  // label/group đổi theo đúng module mới, group/label CŨ "Hỗ Trợ IT" không còn đúng nữa.
+  { key: 'IT_PRICE_RETAIL', coreKey: 'IT_PRICE_RETAIL', group: 'MUAHANG', label: 'Mua Hàng - Đề Xuất Duyệt Giá Bán Lẻ', icon: '🏷️', short: 'Mua Hàng - Duyệt Giá (Bán Lẻ)' },
+  { key: 'IT_PRICE_WHOLESALE', coreKey: 'IT_PRICE_WHOLESALE', group: 'VANHANH', label: 'Vận Hành - Đề Xuất Duyệt Giá Bán Buôn', icon: '🏷️', short: 'Vận Hành - Duyệt Giá (Bán Buôn)' },
   { key: 'IT_TICKET', coreKey: 'IT_TICKET', group: 'IT', label: 'Hỗ Trợ IT - Yêu Cầu Hỗ Trợ', icon: '🎫', short: 'IT - Yêu Cầu' },
   // Đợt 2 (mở rộng Biểu Mẫu ra thêm Thanh Toán/Ngân Sách/Báo Cáo Định Kỳ/Đồng Phục) — mỗi tab key riêng
   // TRÙNG coreKey (như Đợt 1), trừ Đồng Phục có 5 form thật riêng biệt nên 5 coreKey/tab riêng.
@@ -1357,6 +1359,13 @@ const FORM_GROUPS = [
   { key: 'REPORT', label: 'Báo Cáo Định Kỳ', icon: '📈' },
   { key: 'UNIFORM', label: 'Đồng Phục', icon: '👕' },
   { key: 'OPERATION', label: 'Vận Hành', icon: '🛠️' },
+  // MUAHANG/VANHANH (10/2026, đợt tách Phê Duyệt Giá Bán Lẻ/Bán Buôn khỏi Hỗ Trợ IT) — 2 group MỚI,
+  // KHÔNG gộp vào 'OPERATION' dù VANHANH cùng sống trong module Vận Hành, để giữ đúng group riêng đã
+  // gán ở FORM_TABS.IT_PRICE_RETAIL/IT_PRICE_WHOLESALE (group: 'MUAHANG'/'VANHANH') — thiếu 2 dòng này
+  // sẽ khiến #formTabsBar không bao giờ vẽ nút cấp 1 cho 2 tab đó (getFormTabsInGroup() vẫn lọc đúng,
+  // nhưng renderFormGroupsBar() chỉ lặp qua FORM_GROUPS nên nhóm không khai báo ở đây sẽ không có nút).
+  { key: 'MUAHANG', label: 'Mua Hàng', icon: '🛍️' },
+  { key: 'VANHANH', label: 'Vận Hành - Phê Duyệt Giá', icon: '🏷️' },
   { key: 'TRAINING', label: 'Đào Tạo', icon: '🎓' },
   { key: 'RECRUITMENT', label: 'Tuyển Dụng', icon: '💼' },
   { key: 'HR_FEEDBACK', label: 'HCRC Đồng Hành', icon: '🤝' },
@@ -2804,6 +2813,14 @@ function canAccessItSupportModule(user) {
   if (!user) return false;
   return hasModuleAccess(user, 'itSupport');
 }
+// canViewItPriceApprovalNVDoc() — BUG THẬT vừa vá (10/2026, "Item 2" golive): NV_KEY_ACCESS_FN.itPriceApproval
+// (module-nghiepvu.js) trước đây gác THẲNG theo canAccessItSupportModule() — đúng lúc form TẠO đề xuất
+// Bán Lẻ/Bán Buôn còn nằm trong Hỗ Trợ IT, nhưng SAU KHI 2 form này chuyển sang Mua Hàng/Vận Hành, 1 tài
+// khoản CHỈ có itPriceProposeCreateRetail/Wholesale (không có bất kỳ quyền Hỗ Trợ IT nào khác) sẽ hoàn
+// toàn KHÔNG THẤY được tài liệu hướng dẫn cho đúng nghiệp vụ họ đang dùng — OR thêm 2 module đích mới.
+function canViewItPriceApprovalNVDoc(user) {
+  return canAccessItSupportModule(user) || canAccessPurchasingModule(user) || canAccessOperationModule(user);
+}
 // Hỗ Trợ IT (10/2026, chia nhỏ theo yêu cầu người dùng) — mirror ĐÚNG lib/recordActions.js/
 // lib/createValidation.js phía server, sửa 1 bên PHẢI sửa cả 2 bên. itPriceProposeCreate/
 // itPriceEmergencyRejectApprove cũ tách riêng Bán Buôn/Bán Lẻ (priceType); itManage GIỮ NGUYÊN tên
@@ -3638,6 +3655,11 @@ async function initDatabase(loggingInUser, opts) {
 
     DB.depts = data.depts || [];
     DB.stores = data.stores || [];
+    // BUG THẬT đã vá (10/2026, đúng khuôn lặp lại ≥4 lần trước với quickApplyConfigs/carVehicleTypes/
+    // workflowParticipatingPositions/contractApprovalGroups): server lưu storeTypes đúng, nhưng thiếu
+    // dòng đọc lại đây khiến F5 xong mất phân loại ST/CH, và sửa tiếp sau đó ghi đè xoá sạch dữ liệu cũ
+    // (setStoreType() ở module-admin.js dùng DB.storeTypes||{} làm nền rồi POST đè toàn bộ object).
+    DB.storeTypes = data.storeTypes || {};
     DB.cats = data.cats || [];
     DB.deptAbbrs = data.deptAbbrs || {};
     // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, xem defaults.js.
@@ -3860,6 +3882,11 @@ async function initDatabase(loggingInUser, opts) {
     // GIÁ TRỊ, TÁCH RIÊNG Siêu Thị/HO (xem resolveOperationOrderWorkflowConfigForItemClient() bên dưới).
     DB.operationOrderStoreTierWorkflows = data.operationOrderStoreTierWorkflows || {};
     DB.operationOrderHOTierWorkflows = data.operationOrderHOTierWorkflows || {};
+    // BUG THẬT đã vá (10/2026, cùng khuôn lỗi với storeTypes ở trên) — thiếu dòng đọc lại khiến
+    // renderMixedApprovalSection() (module-workflow.js) hiện rỗng sau F5 dù server đã có cấu hình, và
+    // "+ Thêm Dòng" tiếp theo ghi đè xoá sạch rule cũ của luồng duyệt Đặt Hàng Tại Siêu Thị.
+    DB.operationOrderStoreMixedApprovalRules = Array.isArray(data.operationOrderStoreMixedApprovalRules)
+      ? data.operationOrderStoreMixedApprovalRules : [];
     // DB.operationStoreOpenDeptWorkflows/DB.operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người
     // dùng — 2 luồng "Siêu Thị" không có bước phê duyệt nào ở module Vận Hành cả, xem chú thích ở
     // WF_MODULE_CONFIG, module-workflow.js) — OPERATION_KIND_META.wfMap() (module-vanhanh.js) đã tự
@@ -4032,6 +4059,107 @@ async function downloadMultiSheetXlsxFromServer(fileName, sheets) {
   } catch (e) {
     alert('⛔ Không thể kết nối tới máy chủ: ' + e.message);
   }
+}
+
+// SIMPLE_CATALOG_EXCEL_CONFIG — "registry chung" Tải Mẫu/Nhập/Xuất Excel (10/2026, đợt chuẩn hoá theo
+// yêu cầu người dùng: audit toàn bộ danh mục ở tab "🗂️ Quản Lý Danh Mục", đảm bảo mọi danh mục đều có đủ
+// 3 thao tác Excel khớp đúng schema) — CHỈ áp dụng cho danh mục dạng mảng CHUỖI PHẲNG đơn giản (DB.<key>
+// là string[], mỗi phần tử đúng 1 dòng/1 cột khi xuất). Thêm 1 danh mục MỚI dạng này chỉ cần thêm 1 dòng
+// ở đây + chèn `renderSimpleCatalogExcelToolsHtml('<key>')` vào đúng khối HTML của danh mục đó — không
+// cần viết riêng 3 hàm Tải Mẫu/Nhập/Xuất cho từng màn nữa. Danh mục dạng OBJECT (nhiều field, VD
+// carVehicleTypes/positionTypes/meetingRooms/uniformCatalog...) KHÔNG dùng registry này — cột Excel cần
+// khớp đúng field riêng của từng loại, xử lý riêng từng nơi.
+// renderFn: tên hàm vẽ lại <ul>/<li> của danh mục đó (gọi lại sau khi nhập Excel xong) — đặt tên CHUỖI
+// (không phải tham chiếu hàm trực tiếp) vì lúc khai báo mảng này (core.js nạp sớm nhất) các hàm render
+// nằm ở module-admin.js/module-dangkyxe.js/module-itsupport-price.js/module-itsupport-renewal.js/
+// module-tailieu.js CÓ THỂ CHƯA nạp xong (nạp lười theo cụm) — tra qua window[renderFn] tại thời điểm
+// GỌI (sau khi màn Quản Lý Danh Mục đã hiện, chắc chắn cụm liên quan đã nạp) mới an toàn.
+const SIMPLE_CATALOG_EXCEL_CONFIG = {
+  depts: { label: 'Phòng Ban', colLabel: 'Tên Phòng Ban', sample: 'Phòng Kinh Doanh', renderFn: 'renderDeptList' },
+  licenseTypes: { label: 'Các Loại Giấy Phép', colLabel: 'Tên Loại Giấy Phép', sample: 'Giấy phép kinh doanh', renderFn: 'renderLicenseTypeList' },
+  carTaxiCompanies: { label: 'Hãng Taxi', colLabel: 'Tên Hãng Taxi', sample: 'Mai Linh', renderFn: 'renderCarTaxiCompanyList' },
+  carEvaluationIssues: { label: 'Lý Do Đánh Giá Chuyến Xe', colLabel: 'Lý Do', sample: 'Tài xế đến trễ hẹn', renderFn: 'renderCarEvaluationIssueList' },
+  priceZones: { label: 'Vùng Giá Áp Dụng', colLabel: 'Tên Vùng Giá', sample: 'Miền Bắc', renderFn: 'renderPriceZoneList' },
+  itRenewalCategories: { label: 'Loại Dịch Vụ (Gia Hạn CNTT)', colLabel: 'Tên Loại Dịch Vụ', sample: 'Bản quyền phần mềm', renderFn: 'renderItRenewalCategoryList' },
+  cats: { label: 'Phân Loại Tài Liệu', colLabel: 'Tên Phân Loại', sample: 'Quy chế', renderFn: 'renderCatList' },
+  contractTypes: { label: 'Loại Hợp Đồng', colLabel: 'Tên Loại Hợp Đồng', sample: 'Hợp đồng thử việc', renderFn: 'renderContractTypeAbbrList' },
+  jobTitles: { label: 'Chức Danh (Khối VP/HO)', colLabel: 'Tên Chức Danh', sample: 'Nhân Viên Kinh Doanh', renderFn: 'renderJobTitleList' },
+  trainingCategories: { label: 'Loại Đào Tạo', colLabel: 'Tên Loại Đào Tạo', sample: 'Đào tạo hội nhập', renderFn: 'renderTrainingCategoryList' }
+};
+
+function renderSimpleCatalogExcelToolsHtml(catalogKey) {
+  return `<div class="border-t pt-2 mt-2 flex items-center gap-2 flex-wrap text-[11px]">
+    <button type="button" data-op="downloadSimpleCatalogTemplate" data-arg0="${escapeHtml(catalogKey)}" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
+    <button type="button" data-op="exportSimpleCatalogExcel" data-arg0="${escapeHtml(catalogKey)}" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
+    <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input type="file" accept=".xlsx,.xls" class="hidden" data-op-change="onSimpleCatalogImportFileChange" data-arg0="${escapeHtml(catalogKey)}" data-arg-event="1"></label>
+    <span id="simpleCatalogImportStatus_${escapeHtml(catalogKey)}" class="text-gray-500"></span>
+  </div>`;
+}
+
+async function downloadSimpleCatalogTemplate(catalogKey) {
+  const cfg = SIMPLE_CATALOG_EXCEL_CONFIG[catalogKey];
+  if (!cfg) return;
+  await downloadXlsxFromServer(`Mau_${catalogKey}.xlsx`, cfg.label, [{ key: 'name', header: cfg.colLabel }], [{ name: cfg.sample }]);
+}
+
+async function exportSimpleCatalogExcel(catalogKey) {
+  const cfg = SIMPLE_CATALOG_EXCEL_CONFIG[catalogKey];
+  if (!cfg) return;
+  const rows = (DB[catalogKey] || []).map(v => ({ name: v }));
+  await downloadXlsxFromServer(`${catalogKey}.xlsx`, cfg.label, [{ key: 'name', header: cfg.colLabel }], rows);
+}
+
+async function onSimpleCatalogImportFileChange(catalogKey, event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // cho phép chọn lại đúng cùng 1 file lần sau nếu cần import lại
+  const cfg = SIMPLE_CATALOG_EXCEL_CONFIG[catalogKey];
+  const statusEl = document.getElementById(`simpleCatalogImportStatus_${catalogKey}`);
+  if (!file || !cfg) return;
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  let values;
+  try {
+    const res = await fetch('/api/admin/catalog/import-xlsx', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { if (statusEl) statusEl.innerText = `⛔ ${body.error || 'Không đọc được file Excel'}`; return; }
+    values = body.values;
+  } catch (e) {
+    if (statusEl) statusEl.innerText = `⛔ Không thể kết nối tới máy chủ: ${e.message}`;
+    return;
+  }
+  // Lọc trùng với danh mục hiện có (không phân biệt hoa/thường) NGAY TRÊN CLIENT — route
+  // /api/admin/catalog/import-xlsx không biết đây là danh mục nào nên không tự lọc được.
+  const existing = new Set((DB[catalogKey] || []).map(v => String(v).trim().toLowerCase()));
+  const seen = new Set();
+  const toAdd = (values || []).map(v => String(v).trim()).filter(Boolean).filter(v => {
+    const k = v.toLowerCase();
+    if (existing.has(k) || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  if (!toAdd.length) { if (statusEl) statusEl.innerText = `ℹ️ Không có mục mới nào (tất cả ${(values || []).length} dòng đã có sẵn trong danh mục).`; return; }
+  const before = DB[catalogKey] || [];
+  DB[catalogKey] = [...before, ...toAdd];
+  const ok = await syncStorage(catalogKey);
+  if (!ok) { DB[catalogKey] = before; if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.'; return; }
+  logSystemAction('USER_MGM', 'IMPORT_CATALOG', `Nhập Excel thêm ${toAdd.length} mục mới vào danh mục "${cfg.label}"`, 'SUCCESS', catalogKey);
+  if (statusEl) statusEl.innerText = `✅ Đã thêm ${toAdd.length}/${(values || []).length} mục mới.`;
+  if (typeof window[cfg.renderFn] === 'function') window[cfg.renderFn]();
+  populateDropdowns();
+}
+
+// initSimpleCatalogExcelToolsAll() — bơm renderSimpleCatalogExcelToolsHtml() vào ĐÚNG placeholder
+// #simpleCatalogExcelTools_<key> của từng danh mục (khớp systemSection.html) — gọi 1 lần mỗi khi vào
+// tab "🗂️ Quản Lý Danh Mục" (setSystemSubTab('ADMIN'), module-hethong-tabs.js) vì danh sách render lại
+// (renderDeptList()...) có thể xoá mất khối này nếu nó nằm LỒNG bên trong <ul>/<div> bị vẽ lại — đặt ở
+// placeholder RIÊNG ngay sau mỗi <ul> nên không bị ảnh hưởng, nhưng vẫn gọi lại mỗi lần vào tab cho chắc.
+function initSimpleCatalogExcelToolsAll() {
+  Object.keys(SIMPLE_CATALOG_EXCEL_CONFIG).forEach(key => {
+    const el = document.getElementById(`simpleCatalogExcelTools_${key}`);
+    if (el) el.innerHTML = renderSimpleCatalogExcelToolsHtml(key);
+  });
 }
 
 // scopeFromForm() — Đọc 1 nhóm quyền theo phòng ban ({all, depts}) từ cặp checkbox ALL + danh sách
@@ -4252,6 +4380,17 @@ const syncStorageQueues = {};
 // LẦN (không lặp vô hạn — nếu vẫn 409 sau khi đã thử lại 1 lần thì rơi về hành vi cũ). Nếu bản ghi admin
 // đang sửa THẬT SỰ bị đổi ở nơi khác (trùng ĐÚNG bản ghi) thì mới là conflict thật — báo rõ khả năng cao
 // là do 1 hoạt động khác (không phải "ai đó đang cạnh tranh sửa cùng 1 người dùng"), đề nghị tải lại.
+//
+// TỔNG QUÁT HOÁ (10/2026, "Item 6" đợt golive): cơ chế trên vốn viết RIÊNG cho "users" — nhưng
+// "permGroups" (Nhóm Phân Quyền, savePermGroup()/deletePermGroup()/applyPermMatrixImport() ở
+// module-admin-permgroups.js) chịu ĐÚNG cùng triệu chứng — nhiều admin cùng sửa các nhóm KHÁC nhau gần
+// như đồng thời vẫn bị 409 giả vì cùng 1 version dùng chung cho cả collection. Tách phần lõi (diff theo
+// id + refetch + so khớp + áp lại) thành `diffArrayForConflictRetry()`/`retryArraySaveAfterConflict()`
+// DÙNG CHUNG cho MỌI collection dạng mảng object có field `id` — `retryUsersSaveAfterConflict()` giờ chỉ
+// còn là 1 lớp mỏng gọi hàm chung + thêm đúng 1 luật riêng của "users" (trùng username với người MỚI ai
+// đó vừa tạo). Nơi gọi `syncStorage(key, {baseline})` (tên MỚI, tổng quát — `usersBaseline` cũ vẫn còn
+// hoạt động y hệt, chỉ là 1 alias, xem syncStorage()) sẽ TỰ ĐỘNG được hưởng cơ chế thử lại này, không
+// cần sửa gì thêm ở syncStorageOnce().
 
 // So sánh sâu 2 giá trị JSON (object/array/scalar), KHÔNG phụ thuộc thứ tự field như JSON.stringify() —
 // dùng để phân biệt "bản ghi NÀY thực sự đổi nội dung" khỏi "chỉ đổi vị trí field do server/client dựng
@@ -4270,70 +4409,82 @@ function deepEqualJson(a, b) {
 }
 
 // So khớp theo "id" giữa bản ĐÃ ĐỌC trước khi sửa (baseline) và bản admin MUỐN lưu (desired, chính là
-// DB.users tại thời điểm gọi) -> phân loại thêm mới/sửa/xoá — CHỈ dựa trên id, không quan tâm field nào
-// đổi (đơn vị "1 thay đổi" ở màn Người Dùng luôn là NGUYÊN 1 bản ghi, khớp đúng cách saveUser() ghi đè
-// cả object user chứ không sửa từng field rời).
-function diffUsersForConflictRetry(baseline, desired) {
-  const baseById = new Map((baseline || []).map(u => [u.id, u]));
-  const desiredById = new Map((desired || []).map(u => [u.id, u]));
-  const added = (desired || []).filter(u => !baseById.has(u.id));
+// DB.<key> tại thời điểm gọi) -> phân loại thêm mới/sửa/xoá — CHỈ dựa trên id, không quan tâm field nào
+// đổi (đơn vị "1 thay đổi" luôn là NGUYÊN 1 bản ghi, khớp đúng cách saveUser()/savePermGroup() ghi đè cả
+// object chứ không sửa từng field rời). DÙNG CHUNG cho mọi collection dạng mảng object có field `id`
+// (users, permGroups...) — xem khối chú thích "TỔNG QUÁT HOÁ" phía trên.
+function diffArrayForConflictRetry(baseline, desired) {
+  const baseById = new Map((baseline || []).map(x => [x.id, x]));
+  const desiredById = new Map((desired || []).map(x => [x.id, x]));
+  const added = (desired || []).filter(x => !baseById.has(x.id));
   const removedIds = [...baseById.keys()].filter(id => !desiredById.has(id));
-  const modified = (desired || []).filter(u => baseById.has(u.id) && !deepEqualJson(u, baseById.get(u.id)));
+  const modified = (desired || []).filter(x => baseById.has(x.id) && !deepEqualJson(x, baseById.get(x.id)));
   return { added, removedIds, modified };
 }
 
 // Thực hiện đúng bước (1)+(2) mô tả ở khối chú thích trên — trả {retried:true, merged, freshVersion}
 // nếu áp lại thành công (gọi nơi dùng tự lưu lại), {retried:false, genuineConflict:true} nếu bản ghi
-// admin đang sửa thật sự bị đổi/trùng username với người MỚI ai đó vừa tạo, hoặc {retried:false} đơn
-// thuần nếu không tải lại được (mất mạng...) -> nơi gọi rơi về thông báo 409 mặc định như cũ.
-async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
-  const { added, removedIds, modified } = diffUsersForConflictRetry(usersBaseline, desiredUsers);
-  const touchedIds = new Set([...removedIds, ...modified.map(u => u.id)]);
+// đang sửa thật sự bị đổi ở nơi khác (hoặc vi phạm 1 ràng buộc riêng của `key` — xem `extraConflictCheck`),
+// hoặc {retried:false} đơn thuần nếu không tải lại được (mất mạng...) -> nơi gọi rơi về thông báo 409
+// mặc định như cũ. `opts.extraConflictCheck(freshArray, added)` (tuỳ chọn): ràng buộc riêng của từng
+// collection ngoài "đúng bản ghi mình đụng vào có đổi không" (VD "users" cần kiểm thêm trùng username
+// với người MỚI ai đó vừa tạo — xem retryUsersSaveAfterConflict() ngay dưới).
+async function retryArraySaveAfterConflict(key, baseline, desired, opts) {
+  const extraConflictCheck = opts?.extraConflictCheck || null;
+  const { added, removedIds, modified } = diffArrayForConflictRetry(baseline, desired);
+  const touchedIds = new Set([...removedIds, ...modified.map(x => x.id)]);
   // Không có gì để áp lại (lý thuyết không nên xảy ra — 409 nghĩa là mình VỪA gửi 1 thay đổi nào đó).
   if (touchedIds.size === 0 && added.length === 0) return { retried: false };
 
   let res;
   try {
-    res = await fetch('/api/data/users');
+    res = await fetch(`/api/data/${key}`);
   } catch (e) {
     return { retried: false }; // mất mạng lúc tải lại — rơi về thông báo 409 mặc định
   }
   if (!res.ok) return { retried: false };
   const freshVersion = res.headers.get('ETag');
-  const freshUsers = await res.json().catch(() => null);
-  if (!freshVersion || !Array.isArray(freshUsers)) return { retried: false };
+  const freshArray = await res.json().catch(() => null);
+  if (!freshVersion || !Array.isArray(freshArray)) return { retried: false };
 
-  const freshById = new Map(freshUsers.map(u => [u.id, u]));
-  const baseById = new Map(usersBaseline.map(u => [u.id, u]));
+  const freshById = new Map(freshArray.map(x => [x.id, x]));
+  const baseById = new Map(baseline.map(x => [x.id, x]));
 
   // Conflict THẬT: đúng bản ghi mình vừa sửa/xoá đã khác so với lúc mình đọc trước khi sửa (ai đó khác
-  // đổi/xoá ĐÚNG người này) — không tự ý chọn "ai thắng", rơi về báo lỗi cho admin tự quyết định.
+  // đổi/xoá ĐÚNG bản ghi này) — không tự ý chọn "ai thắng", rơi về báo lỗi cho người dùng tự quyết định.
   for (const id of touchedIds) {
     if (!deepEqualJson(freshById.get(id) || null, baseById.get(id) || null)) {
       return { retried: false, genuineConflict: true };
     }
   }
-  // Trùng username với người MỚI ai đó vừa tạo ở nơi khác cũng là conflict thật (2 người cùng đăng ký 1
-  // username gần như đồng thời) — chỉ cần kiểm cho bản ghi MỚI THÊM (added), bản sửa/xoá đã kiểm ở trên.
-  for (const u of added) {
-    if (freshUsers.some(x => x.username === u.username && x.id !== u.id)) {
-      return { retried: false, genuineConflict: true };
-    }
+  if (extraConflictCheck && extraConflictCheck(freshArray, added)) {
+    return { retried: false, genuineConflict: true };
   }
 
   // Không đụng đúng bản ghi nào của mình -> áp lại đúng phần thêm/sửa/xoá lên bản MỚI NHẤT từ server
-  // (giữ nguyên mọi thay đổi KHÔNG LIÊN QUAN mà nơi khác vừa ghi, VD username khác vừa đổi mật khẩu).
+  // (giữ nguyên mọi thay đổi KHÔNG LIÊN QUAN mà nơi khác vừa ghi, VD bản ghi khác vừa bị admin khác sửa).
   const removedSet = new Set(removedIds);
-  const modifiedById = new Map(modified.map(u => [u.id, u]));
-  const merged = freshUsers
-    .filter(u => !removedSet.has(u.id))
-    .map(u => modifiedById.has(u.id) ? modifiedById.get(u.id) : u)
+  const modifiedById = new Map(modified.map(x => [x.id, x]));
+  const merged = freshArray
+    .filter(x => !removedSet.has(x.id))
+    .map(x => modifiedById.has(x.id) ? modifiedById.get(x.id) : x)
     .concat(added);
 
   return { retried: true, merged, freshVersion };
 }
 
-async function syncStorageOnce(key, silent, usersBaseline) {
+// Lớp mỏng riêng cho "users" — giữ NGUYÊN hành vi cũ (đã có test bao phủ, xem
+// tests/test-admin-users-permgroups.js kịch bản (i)/(j)): thêm đúng 1 ràng buộc riêng ngoài phần chung —
+// trùng username với người MỚI ai đó vừa tạo ở nơi khác cũng là conflict thật (2 người cùng đăng ký 1
+// username gần như đồng thời), chỉ cần kiểm cho bản ghi MỚI THÊM (bản sửa/xoá đã kiểm ở phần chung).
+async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
+  return retryArraySaveAfterConflict('users', usersBaseline, desiredUsers, {
+    extraConflictCheck: (freshUsers, added) =>
+      added.some(u => freshUsers.some(x => x.username === u.username && x.id !== u.id))
+  });
+}
+
+async function syncStorageOnce(key, silent, baseline) {
   // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
   // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
   // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
@@ -4371,22 +4522,28 @@ async function syncStorageOnce(key, silent, usersBaseline) {
     if (res.status === 409) {
       const body = await res.json().catch(() => ({}));
 
-      // "users": trước khi báo lỗi/đề nghị tải lại trang NGAY (mất nội dung admin đang gõ dở), thử tự
-      // áp lại đúng phần mình vừa thêm/sửa/xoá lên bản mới nhất rồi lưu lại 1 lần — xem giải thích đầy
-      // đủ ở khối chú thích trên đầu file (retryUsersSaveAfterConflict()). silent=true (lưu ngầm tự
-      // động, không phải admin chủ động bấm nút) KHÔNG áp dụng nhánh này — giữ nguyên "im lặng bỏ qua"
-      // như trước, không nên tự ý ghi thêm 1 lượt nữa mà người dùng không biết.
-      if (key === 'users' && usersBaseline && !silent) {
-        const retryResult = await retryUsersSaveAfterConflict(usersBaseline, DB.users);
+      // Trước khi báo lỗi/đề nghị tải lại trang NGAY (mất nội dung đang gõ dở), thử tự áp lại đúng phần
+      // vừa thêm/sửa/xoá lên bản mới nhất rồi lưu lại 1 lần — xem giải thích đầy đủ ở khối chú thích
+      // "TỔNG QUÁT HOÁ" trên đầu file (retryArraySaveAfterConflict()/retryUsersSaveAfterConflict()).
+      // Nhánh này chạy cho MỌI key miễn nơi gọi có truyền `baseline` (bản chụp TRƯỚC khi sửa, xem
+      // syncStorage()) — KHÔNG còn giới hạn riêng "users" như trước 10/2026. silent=true (lưu ngầm tự
+      // động, không phải người dùng chủ động bấm nút) KHÔNG áp dụng nhánh này — giữ nguyên "im lặng bỏ
+      // qua" như trước, không nên tự ý ghi thêm 1 lượt nữa mà người dùng không biết.
+      if (baseline && !silent) {
+        const retryResult = key === 'users'
+          ? await retryUsersSaveAfterConflict(baseline, DB.users)
+          : await retryArraySaveAfterConflict(key, baseline, DB[key]);
         if (retryResult.retried) {
-          DB.users = retryResult.merged;
-          DB._versions.users = retryResult.freshVersion;
-          // usersBaseline=null ở lượt gọi lại -> KHÔNG retry thêm lần 2 nếu vẫn tiếp tục 409 (rất hiếm,
-          // nghĩa là "users" đang bị ghi liên tục dồn dập) — đúng 1 lần thử lại như đã hứa ở comment trên.
+          DB[key] = retryResult.merged;
+          DB._versions[key] = retryResult.freshVersion;
+          // baseline=null ở lượt gọi lại -> KHÔNG retry thêm lần 2 nếu vẫn tiếp tục 409 (rất hiếm, nghĩa
+          // là "${key}" đang bị ghi liên tục dồn dập) — đúng 1 lần thử lại như đã hứa ở comment trên.
           return syncStorageOnce(key, silent, null);
         }
         if (retryResult.genuineConflict) {
-          alert('⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác (1 admin khác, hoặc chính người đó vừa tự đổi mật khẩu/thiết bị đăng nhập) — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.');
+          alert(key === 'users'
+            ? '⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác (1 admin khác, hoặc chính người đó vừa tự đổi mật khẩu/thiết bị đăng nhập) — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.'
+            : `⚠️ Đúng bản ghi bạn đang sửa trong "${key}" vừa bị thay đổi/xoá ở nơi khác — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.`);
           return false;
         }
         // retried=false && !genuineConflict (VD mất mạng lúc tải lại bản mới) -> rơi xuống thông báo mặc định bên dưới.
@@ -4426,20 +4583,24 @@ async function syncStorageOnce(key, silent, usersBaseline) {
 // Trả về Promise<boolean> (đã lưu thành công hay chưa) — chỉ để tiện await ở các thao tác cần biết
 // chắc chắn đã lưu xong mới báo thành công/cập nhật giao diện (VD saveUser()/deleteUser()); các chỗ
 // gọi "bắn và quên" khác trong file này không cần quan tâm giá trị trả về, vẫn hoạt động như cũ.
-// opts.usersBaseline (chỉ có ý nghĩa khi key === 'users'): bản chụp DB.users TRƯỚC khi sửa — mỗi nơi
-// gọi (saveUser()/deleteUser()/toggleUserActive()/commitPendingNewUsers()/importUsersExcel()/
-// savePermGroup()/deletePermGroup()) vốn ĐÃ tự chụp snapshot này để phục hồi khi lưu thất bại, nay
-// truyền thêm vào đây để syncStorageOnce() dùng cho cơ chế "refetch + áp lại + thử lưu lại 1 lần" khi
-// gặp 409 (xem retryUsersSaveAfterConflict() ngay phía trên syncStorageOnce()). Không truyền = giữ
-// nguyên hành vi cũ (báo lỗi + đề nghị tải lại trang ngay khi 409), dùng cho các key khác/silent.
+// opts.baseline: bản chụp DB[key] TRƯỚC khi sửa — mỗi nơi gọi (saveUser()/deleteUser()/
+// toggleUserActive()/commitPendingNewUsers()/importUsersExcel()/savePermGroup()/deletePermGroup()/...)
+// vốn ĐÃ tự chụp snapshot này để phục hồi khi lưu thất bại, truyền thêm vào đây để syncStorageOnce()
+// dùng cho cơ chế "refetch + áp lại + thử lưu lại 1 lần" khi gặp 409 (xem
+// retryArraySaveAfterConflict()/retryUsersSaveAfterConflict() + khối chú thích "TỔNG QUÁT HOÁ" phía
+// trên) — áp dụng cho MỌI collection dạng mảng object có field `id`, không riêng "users". Không truyền
+// = giữ nguyên hành vi cũ (báo lỗi + đề nghị tải lại trang ngay khi 409), dùng cho các key khác/silent.
+// opts.usersBaseline: tên THAM SỐ CŨ (trước 10/2026, khi cơ chế này chỉ áp dụng cho "users") — vẫn nhận
+// y hệt `opts.baseline` để KHÔNG phải sửa lại 7 nơi gọi hiện có (module-admin-userstaging.js/
+// module-admin-submissiongroups.js), chỉ 1 alias, không phải 2 cơ chế song song.
 function syncStorage(key, opts) {
   const silent = !!opts?.silent;
-  const usersBaseline = opts?.usersBaseline || null;
+  const baseline = opts?.baseline || opts?.usersBaseline || null;
   try {
     const previous = syncStorageQueues[key] || Promise.resolve();
     // .then(fn, fn): chạy lượt kế tiếp dù lượt trước lỗi/bị 409 — 1 lần lỗi không được phép chặn mãi
     // mãi các lượt lưu sau của cùng key.
-    const next = previous.then(() => syncStorageOnce(key, silent, usersBaseline), () => syncStorageOnce(key, silent, usersBaseline));
+    const next = previous.then(() => syncStorageOnce(key, silent, baseline), () => syncStorageOnce(key, silent, baseline));
     syncStorageQueues[key] = next;
     return next;
   } catch (e) {
@@ -6542,6 +6703,7 @@ function finishLogin(user) {
   refreshNotifBadge();
   startSessionKeepAlive();
   startApprovalPolling();
+  startNotifBadgePolling();
   openTakeTestFromQueryParam();
   applyPwaShortcutParam();
 }
@@ -6647,6 +6809,39 @@ function stopApprovalPolling() {
   }
 }
 
+// MỞ RỘNG poll nhẹ (10/2026, "Item 6" đợt golive): badge số thông báo chưa đọc (🔔, notifDropdownPanel)
+// TRƯỚC ĐÂY chỉ tải ĐÚNG 1 LẦN lúc đăng nhập (refreshNotifBadge() ở finishLogin()) — ai đó gửi thông báo
+// mới (VD hồ sơ bị từ chối, nhắc hạn hợp đồng...) trong lúc mình đang đứng nguyên 1 màn hình sẽ KHÔNG
+// thấy số badge tăng lên cho tới khi F5 hoặc tự bấm mở chuông, đúng cùng triệu chứng "phải F5 mới thấy"
+// đã vá cho Hộp Thư Phê Duyệt ở trên — cùng khuôn: poll NHẸ (GET /api/notifications, đã có sẵn, KHÔNG
+// phải route mới) mỗi NOTIF_BADGE_POLL_INTERVAL_MS. Không cần cơ chế so khoá phức tạp như
+// runApprovalPollTick() (badge chỉ là 1 số + danh sách đọc-thuần, không có nguy cơ mất nội dung đang
+// gõ dở như initDatabase()+render lại toàn Hub) — nếu dropdown ĐANG MỞ thì tải lại nguyên danh sách
+// (loadAndRenderNotifDropdown()) để không lộ danh sách cũ trong lúc đang xem, còn lại chỉ cập nhật badge.
+let notifBadgePollTimer = null;
+const NOTIF_BADGE_POLL_INTERVAL_MS = 30 * 1000;
+function startNotifBadgePolling() {
+  stopNotifBadgePolling();
+  notifBadgePollTimer = setInterval(runNotifBadgePollTick, NOTIF_BADGE_POLL_INTERVAL_MS);
+}
+function stopNotifBadgePolling() {
+  if (notifBadgePollTimer) {
+    clearInterval(notifBadgePollTimer);
+    notifBadgePollTimer = null;
+  }
+}
+async function runNotifBadgePollTick() {
+  // Đăng xuất giữa chừng nhưng timer chưa kịp dừng (an toàn kép, logout() đã tự stopNotifBadgePolling()
+  // ngay lập tức nên đây gần như không bao giờ xảy ra) — bỏ qua lượt này thay vì gọi API bằng phiên rỗng.
+  if (!currentUser) return;
+  const panel = document.getElementById('notifDropdownPanel');
+  if (panel && !panel.classList.contains('hidden')) {
+    await loadAndRenderNotifDropdown();
+  } else {
+    await refreshNotifBadge();
+  }
+}
+
 // Modal đang mở hay không — dùng lại ĐÚNG quy ước đã có sẵn của toàn hệ thống thay vì bày thêm 1 class
 // "modal" mới chỉ để phục vụ hàm này: mọi modal trong index.html là 1 phần tử id KẾT THÚC bằng "Modal",
 // mặc định luôn mang class "hidden" lúc đóng (khớp CLAUDE.md — searchable picker/mọi #xxxModal khác đều
@@ -6731,6 +6926,7 @@ async function runApprovalPollTick() {
 function logout() {
   stopSessionKeepAlive();
   stopApprovalPolling();
+  stopNotifBadgePolling();
   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   currentUser = null;
   dataReady = false;
@@ -7717,8 +7913,12 @@ function canAccessPurchasingModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'muaHang')) return false;
+  // itPriceProposeCreateRetail (10/2026, đợt tách Phê Duyệt Giá Bán Lẻ sang Mua Hàng) — người chỉ có
+  // quyền đề xuất giá bán lẻ (VD nhân viên Kinh Doanh/Marketing, KHÔNG có bất kỳ quyền BAS/rebate nào)
+  // vẫn phải vào được tab này để thấy sub-tab "Phê Duyệt Giá Bán Lẻ", nếu không sẽ bị chặn hẳn ở
+  // switchTab() (alert "Bạn không có quyền truy cập Module Mua Hàng!") dù có quyền đề xuất hợp lệ.
   return !!(user.perms?.rebateTermManage || user.perms?.rebateTermActivate || user.perms?.rebateReconcile
-    || user.perms?.rebateApprove || user.perms?.rebateViewReport);
+    || user.perms?.rebateApprove || user.perms?.rebateViewReport || user.perms?.itPriceProposeCreateRetail);
 }
 function canAccessOperationModule(user) {
   if (!user) return false;
@@ -7726,7 +7926,11 @@ function canAccessOperationModule(user) {
   if (!hasModuleAccess(user, 'vanHanh')) return false;
   if (user.perms?.operationOrderCreate || user.perms?.operationStoreOpenCreate || user.perms?.operationRepairCreate
     || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll
-    || user.perms?.operationOrderReportView || user.perms?.operationStoreReportView) return true;
+    || user.perms?.operationOrderReportView || user.perms?.operationStoreReportView
+    // itPriceProposeCreateWholesale (10/2026, đợt tách Phê Duyệt Giá Bán Buôn sang Vận Hành) — người chỉ
+    // có quyền đề xuất giá bán buôn (VD nhân viên Marketing, KHÔNG có bất kỳ quyền Đơn Hàng/Mở Mới/Sửa
+    // Chữa Siêu Thị nào) vẫn phải vào được tab để thấy sub-tab "Phê Duyệt Giá Bán Buôn".
+    || user.perms?.itPriceProposeCreateWholesale) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ
@@ -8020,8 +8224,12 @@ function populateCarTaxiCompanySelect() {
 // xem DB.priceZones/defaults.js) — danh sách phẳng thuần, value chính là tên vùng (mirror
 // populateCarTaxiCompanySelect() ở trên). Gọi lại mỗi khi DB.priceZones đổi (populateDropdowns() sau
 // initDatabase()/sau khi admin lưu danh mục ở màn Quản Lý Danh Mục).
-function populateItPriceRetailZoneSelect() {
-  const sel = document.getElementById('itPriceRetailZone');
+// Đổi id (10/2026, đợt tách Phê Duyệt Giá Bán Lẻ khỏi Hỗ Trợ IT sang Mua Hàng): #itPriceRetailZone/
+// #itPriceRetailZoneEmptyHint CŨ không còn tồn tại ở đâu (form Bán Lẻ nay sống hẳn trong
+// muaHangSection.html, xem module-muahang.js) — đổi thẳng sang id MỚI #mhItPriceRetailZone thay vì giữ
+// tên cũ gây hiểu nhầm vẫn còn ở Hỗ Trợ IT.
+function populateMhItPriceRetailZoneSelect() {
+  const sel = document.getElementById('mhItPriceRetailZone');
   if (!sel) return;
   const current = sel.value;
   const list = DB.priceZones || [];
@@ -8031,7 +8239,7 @@ function populateItPriceRetailZoneSelect() {
   // Danh mục rỗng -> trước đây người đề xuất bị chặn gửi với alert mơ hồ không rõ vì sao không chọn
   // được gì. priceZones chỉ Admin mới ghi được (xem routes/data.js ADMIN_ONLY_KEYS) nên admin thấy nút
   // thêm nhanh ngay tại đây, người khác chỉ thấy hướng dẫn nhờ admin thêm trước.
-  const hint = document.getElementById('itPriceRetailZoneEmptyHint');
+  const hint = document.getElementById('mhItPriceRetailZoneEmptyHint');
   if (hint) {
     hint.classList.toggle('hidden', list.length > 0);
     if (!list.length) {
@@ -8042,8 +8250,8 @@ function populateItPriceRetailZoneSelect() {
   }
 }
 
-// Thêm nhanh 1 "Vùng Giá Áp Dụng" NGAY từ form tạo đề xuất (Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ)
-// khi danh mục đang rỗng — chỉ admin thấy nút này (xem populateItPriceRetailZoneSelect()), mirror ĐÚNG
+// Thêm nhanh 1 "Vùng Giá Áp Dụng" NGAY từ form tạo đề xuất (Mua Hàng > Phê Duyệt Giá Bán Lẻ, từ 10/2026)
+// khi danh mục đang rỗng — chỉ admin thấy nút này (xem populateMhItPriceRetailZoneSelect()), mirror ĐÚNG
 // logic savePriceZone() ở module-itsupport-price.js (màn Quản Lý Danh Mục) để 2 nơi luôn nhất quán,
 // không tạo hàm dùng chung vì savePriceZone() đọc trực tiếp từ 1 <form> khác (submit event riêng).
 async function quickAddPriceZoneFromItPriceForm() {
@@ -8053,10 +8261,10 @@ async function quickAddPriceZoneFromItPriceForm() {
   DB.priceZones.push(name);
   const ok = await syncStorage('priceZones');
   if (!ok) { DB.priceZones = DB.priceZones.filter(x => x !== name); return; }
-  logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}] (từ form Phê Duyệt Giá)`, 'SUCCESS', name);
+  logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}] (từ form Phê Duyệt Giá Bán Lẻ)`, 'SUCCESS', name);
   if (typeof renderPriceZoneList === 'function') renderPriceZoneList();
-  populateItPriceRetailZoneSelect();
-  document.getElementById('itPriceRetailZone').value = name;
+  populateMhItPriceRetailZoneSelect();
+  document.getElementById('mhItPriceRetailZone').value = name;
 }
 
 // Đổ danh sách "Chủ Đề" cho #hrFeedbackCategory (HCRC Đồng Hành, xem CORE_FIELD_MANIFEST.HR_FEEDBACK.
@@ -8264,7 +8472,7 @@ function populateDropdowns() {
   populateCarPurposeSelect();
   populateCarAssignedVehicleTypeSelect();
   populateCarTaxiCompanySelect();
-  populateItPriceRetailZoneSelect();
+  populateMhItPriceRetailZoneSelect();
 
   // Danh Mục Yêu Cầu Hỗ Trợ IT — cùng khuôn subType/contractType/carType ở trên (2 nơi: form tạo +
   // dropdown lọc, xem chú thích ở populateItTicketCategoryFilterSelect()).

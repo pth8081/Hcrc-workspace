@@ -14,7 +14,7 @@ const express = require('express');
 const multer = require('multer');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx } = require('../lib/adminExport');
+const { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, parseGenericSingleColumnXlsx } = require('../lib/adminExport');
 const { parseGenericMultiSheetMatrixXlsx } = require('../lib/permMatrixExcel');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
@@ -112,6 +112,38 @@ router.post('/users/import-xlsx', (req, res) => {
       res.json({ rows });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/admin/users/import-xlsx');
+    }
+  });
+});
+
+// POST /api/admin/catalog/import-xlsx — "registry chung" Nhập Excel cho MỌI danh mục đơn giản dạng mảng
+// chuỗi phẳng ở tab "🗂️ Quản Lý Danh Mục" (Phòng Ban, Vùng Giá Áp Dụng, Loại Giấy Phép, Hãng Taxi, Lý Do
+// Đánh Giá Chuyến Xe, Loại Dịch Vụ Gia Hạn CNTT, Phân Loại Tài Liệu, Loại Hợp Đồng, Chức Danh, Loại Đào
+// Tạo — xem SIMPLE_CATALOG_EXCEL_CONFIG ở module-admin.js) — 10/2026, đợt chuẩn hoá theo yêu cầu người
+// dùng. CHỈ đọc/trả về JSON (mảng chuỗi), KHÔNG tự ghi gì vào CSDL — client tự lọc trùng với DB.<key>
+// hiện có rồi mới thật sự ghi qua syncStorage(key) (đã ADMIN_ONLY ở POST /api/data/<key>, xem
+// ADMIN_ONLY_KEYS ở routes/data.js — mọi key trong SIMPLE_CATALOG_EXCEL_CONFIG đều đã có trong danh sách
+// đó), cùng khuôn 2 pha "đọc trước - ghi sau" như POST /api/admin/users/import-xlsx ở trên.
+router.post('/catalog/import-xlsx', (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được import danh mục' });
+  }
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/admin/catalog/import-xlsx');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
+
+    try {
+      const check = await verifyFileSignature(req.file.buffer, '.xlsx');
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const values = await parseGenericSingleColumnXlsx(req.file.buffer);
+      res.json({ values });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/admin/catalog/import-xlsx');
     }
   });
 });

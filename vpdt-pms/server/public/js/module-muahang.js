@@ -74,8 +74,11 @@ async function renderPurchasingModule() {
 
 function setPurchasingSubTab(tab) {
   mhSubTab = tab;
-  ['BAS', 'REPORT'].forEach(t => {
-    document.getElementById(`mhSub${t.charAt(0) + t.slice(1).toLowerCase()}`).classList.toggle('hidden', t !== tab);
+  // "ITPRICE" (Phê Duyệt Giá Bán Lẻ, 10/2026) thêm vào chung vòng lặp ẩn/hiện panel + tô màu nút —
+  // #mhSubItprice khớp đúng khuôn dựng id `mhSub${Titlecase}` (ITPRICE -> "Itprice") của 2 mục cũ.
+  ['BAS', 'REPORT', 'ITPRICE'].forEach(t => {
+    const wrap = document.getElementById(`mhSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
+    if (wrap) wrap.classList.toggle('hidden', t !== tab);
     const btn = document.getElementById(`btnMhSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
     if (btn) {
       btn.classList.toggle('bg-emerald-700', t === tab);
@@ -85,7 +88,8 @@ function setPurchasingSubTab(tab) {
     }
   });
   if (tab === 'BAS') renderMhBasTab();
-  else renderMhReportTab();
+  else if (tab === 'REPORT') renderMhReportTab();
+  else if (tab === 'ITPRICE') enterMuaHangItPriceForm();
 }
 
 // ===================== BAS tab =====================
@@ -529,4 +533,209 @@ function renderMhReportTab() {
       <td class="p-2">${escapeHtml(c.calculatedByName || c.calculatedBy || '')}</td>
       <td class="p-2 whitespace-nowrap">${c.id ? new Date(c.id).toLocaleString('vi-VN') : ''}</td>
     </tr>`).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có số liệu ước tính nào khớp bộ lọc.</div>';
+}
+
+// ===== "💲 Phê Duyệt Giá Bán Lẻ" (itPriceApprovals, priceType=RETAIL) — 10/2026, chuyển từ Hỗ Trợ IT
+// sang Mua Hàng theo yêu cầu người dùng. Form nhỏ hơn hẳn Bán Buôn (module-vanhanh.js) — không tier/đơn
+// vị áp dụng/siêu thị đề xuất/ngày hiệu lực, tự gắn storeScope=ALL + ngày áp dụng=hôm nay + hết hiệu
+// lực=Vĩnh viễn (mirror ĐÚNG nhánh RETAIL cũ của submitItPriceApproval() ở module-itsupport-price.js).
+// Danh sách đầy đủ/Duyệt/Từ chối/Nhận xử lý/Áp giá GIỮ NGUYÊN ở Hỗ Trợ IT (không nhân bản ở đây).
+let mhItPricePendingFile = null;
+
+// Bắt buộc set activeItPriceSubTab='RETAIL' TRƯỚC khi generateItPriceCode() (module-tailieu.js) — biến
+// này DÙNG CHUNG với Hỗ Trợ IT (list-filter)/Vận Hành (form Bán Buôn), nếu không set lại ở đây mã tự
+// sinh có thể mang hậu tố sai (BB) nếu người dùng vừa ghé qua 1 trong 2 nơi kia trước đó cùng phiên.
+function enterMuaHangItPriceForm() {
+  activeItPriceSubTab = 'RETAIL';
+  const canCreate = canProposeItPriceType(currentUser, 'RETAIL');
+  const formEl = document.getElementById('mhItPriceCreateForm');
+  if (formEl) formEl.classList.toggle('hidden', !canCreate);
+  const noPermNote = document.getElementById('mhItPriceNoCreatePermNote');
+  if (noPermNote) noPermNote.classList.toggle('hidden', canCreate);
+  if (canCreate) {
+    const codeEl = document.getElementById('mhItPriceCode');
+    if (codeEl) codeEl.value = generateItPriceCode();
+    const deptEl = document.getElementById('mhItPriceDeptDisplay');
+    if (deptEl) deptEl.value = currentUser.dept;
+    mhItPricePendingFile = null;
+    document.getElementById('mhItPriceFileStatus').innerText = '';
+    document.getElementById('mhItPriceFilePreviewWrap').classList.add('hidden');
+    populateMhItPriceRetailZoneSelect();
+    renderMhItPriceMasterListSelect();
+  }
+  renderDynamicInputsForModule('IT_PRICE_RETAIL', 'dynamicFieldsContainer_IT_PRICE_RETAIL_MH');
+}
+
+function renderMhItPriceMasterListSelect() {
+  const wrap = document.getElementById('mhItPriceMasterListSelectWrap');
+  const select = document.getElementById('mhItPriceMasterListSelect');
+  if (!wrap || !select) return;
+  const lists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === 'RETAIL');
+  wrap.classList.toggle('hidden', lists.length === 0);
+  if (!lists.length) return;
+  const prevValue = select.value;
+  select.innerHTML = `<option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>` +
+    lists.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${(m.columns || []).length} cột)</option>`).join('');
+  if (lists.some(m => String(m.id) === prevValue)) select.value = prevValue;
+  updateMhItPriceMasterListDownloadLink();
+}
+
+function updateMhItPriceMasterListDownloadLink() {
+  const link = document.getElementById('mhItPriceMasterListDownloadLink');
+  if (!link) return;
+  const masterListId = document.getElementById('mhItPriceMasterListSelect')?.value;
+  const list = masterListId ? (DB.itPriceMasterLists || []).find(m => String(m.id) === masterListId) : null;
+  if (!list) { link.classList.add('hidden'); return; }
+  link.href = attachmentDownloadUrl(list.fileUrl, null, list.fileName);
+  link.classList.remove('hidden');
+}
+
+async function parseMhItPriceFileForPreview(file) {
+  const statusEl = document.getElementById('mhItPriceFileStatus');
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  const masterListId = document.getElementById('mhItPriceMasterListSelect')?.value;
+  if (masterListId) formData.append('masterListId', masterListId);
+  try {
+    const res = await fetch('/api/it-price/parse-file', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    mhItPricePendingFile = data;
+    statusEl.innerText = `✅ Đọc thành công ${data.items.length} dòng giá từ file "${data.fileName}".`;
+    renderMhItPriceFilePreview(data);
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+  }
+}
+
+function renderMhItPriceFilePreview(data) {
+  const columnLabels = data.columnLabels && data.columnLabels.length ? data.columnLabels : [{ key: 'c0', label: 'Dữ liệu' }];
+  document.getElementById('mhItPriceFilePreviewCount').innerText = data.items.length;
+  document.getElementById('mhItPriceFilePreviewHead').innerHTML = `<tr>${columnLabels.map(col =>
+    `<th class="border p-1">${escapeHtml(col.label)}</th>`
+  ).join('')}</tr>`;
+  document.getElementById('mhItPriceFilePreviewBody').innerHTML = data.items.map(it => `<tr>${columnLabels.map(col =>
+    `<td class="border p-1">${escapeHtml(it.values?.[col.key] || '')}</td>`
+  ).join('')}</tr>`).join('');
+  document.getElementById('mhItPriceFilePreviewWrap').classList.remove('hidden');
+}
+
+async function onMhItPriceFileChange(event) {
+  onSingleFileChosen(event.target, 'mhItPriceFileChip');
+  const file = event.target.files[0];
+  mhItPricePendingFile = null;
+  document.getElementById('mhItPriceFilePreviewWrap').classList.add('hidden');
+  const statusEl = document.getElementById('mhItPriceFileStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  await parseMhItPriceFileForPreview(file);
+  if (!mhItPricePendingFile) clearSingleFileInput('mhItPriceFileInput', 'mhItPriceFileChip');
+}
+
+async function onMhItPriceMasterListChange() {
+  updateMhItPriceMasterListDownloadLink();
+  const fileInput = document.getElementById('mhItPriceFileInput');
+  const file = fileInput?.files?.[0];
+  if (!file) return;
+  await parseMhItPriceFileForPreview(file);
+}
+
+async function submitMhItPriceApproval(e) {
+  e.preventDefault();
+  activeItPriceSubTab = 'RETAIL';
+  const code = document.getElementById('mhItPriceCode').value.trim();
+  if (DB.itPriceApprovals.some(p => p.code === code)) return alert('Mã đề xuất đã tồn tại!');
+  if (!mhItPricePendingFile) return alert('Vui lòng chọn tệp bảng giá (.xlsx) cần duyệt!');
+  const masterListId = document.getElementById('mhItPriceMasterListSelect')?.value || null;
+  if ((DB.itPriceMasterLists || []).length && !masterListId) {
+    return alert('⛔ Vui lòng chọn Mẫu Giá Phê Duyệt trước khi gửi đề xuất.');
+  }
+  const priceZone = document.getElementById('mhItPriceRetailZone').value;
+  const extraFilesInput = document.getElementById('mhItPriceExtraFiles');
+  let extraFiles = [];
+  if (extraFilesInput.files && extraFilesInput.files.length > 0) {
+    try {
+      extraFiles = await Promise.all(Array.from(extraFilesInput.files).map(f => uploadFileToServer(f, 'itPrice')));
+    } catch (err) {
+      return alert(`⛔ Tải tài liệu bổ sung thất bại: ${err.message}`);
+    }
+  }
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('IT_PRICE_RETAIL');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+  const payload = {
+    code,
+    priceType: 'RETAIL',
+    priceTier: null,
+    wholesaleApplyUnit: null,
+    priceZone: priceZone || null,
+    masterListId: masterListId ? Number(masterListId) : null,
+    files: [{
+      fileUrl: mhItPricePendingFile.fileUrl, fileName: mhItPricePendingFile.fileName,
+      items: mhItPricePendingFile.items, columnLabels: mhItPricePendingFile.columnLabels
+    }],
+    extraFiles,
+    reason: document.getElementById('mhItPriceReason').value.trim(),
+    storeScope: { mode: 'ALL', stores: [] },
+    effectiveDate: new Date().toLocaleDateString('en-CA'),
+    expiryMode: 'PERMANENT',
+    expiryDate: null,
+    createdAt: new Date().toLocaleString('vi-VN'),
+    customData
+  };
+
+  let newItem;
+  try {
+    const result = await callCreateAction('itPriceApprovals', payload);
+    newItem = result.item;
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  DB.itPriceApprovals.unshift(newItem);
+  logSystemAction('IT_SUPPORT', 'CREATE_IT_PRICE_APPROVAL', `Tạo đề xuất duyệt giá [${code}]`, 'SUCCESS', code);
+
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(newItem);
+  const firstStepApprovers = resolveEffectiveStepApprovers(wfConfig, 1);
+  if (firstStepApprovers.length) {
+    notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
+      `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
+      `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
+  }
+  alert('✅ Đã gửi đề xuất duyệt giá thành công!');
+  resetMhItPriceForm();
+}
+
+// "🔍 Xem Quy Trình" cho form Bán Lẻ (Mua Hàng, 10/2026) — mirror ĐÚNG nhánh RETAIL của
+// previewItPriceWorkflow() ở module-itsupport-price.js (dùng chung
+// resolveItPriceDeptWorkflowConfigClient()/openGenericWorkflowPreviewModal(), không viết logic riêng),
+// chỉ đổi id đọc field (mhItPriceDeptDisplay thay vì itPriceDeptDisplay chung cũ).
+function previewMhItPriceWorkflow() {
+  const dept = document.getElementById('mhItPriceDeptDisplay').value;
+  if (!dept) return alert('Tài khoản của bạn chưa được gán phòng ban nên chưa xác định được quy trình phê duyệt!');
+  openGenericWorkflowPreviewModal(
+    '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Lẻ',
+    `Phòng ban: ${dept}`,
+    resolveItPriceDeptWorkflowConfigClient(dept, 'RETAIL'),
+    `Phòng ban "${dept}" chưa được cấu hình quy trình phê duyệt giá Bán Lẻ.`
+  );
+}
+
+function resetMhItPriceForm() {
+  const formEl = document.getElementById('mhItPriceCreateForm');
+  if (!formEl) return;
+  formEl.reset();
+  activeItPriceSubTab = 'RETAIL';
+  mhItPricePendingFile = null;
+  document.getElementById('mhItPriceFileStatus').innerText = '';
+  document.getElementById('mhItPriceFilePreviewWrap').classList.add('hidden');
+  document.getElementById('mhItPriceCode').value = generateItPriceCode();
+  document.getElementById('mhItPriceDeptDisplay').value = currentUser.dept;
+  document.getElementById('mhItPriceRetailZone').value = '';
+  renderMhItPriceMasterListSelect();
+  clearSingleFileInput('mhItPriceFileInput', 'mhItPriceFileChip');
+  clearMultiFileInput('mhItPriceExtraFiles', 'mhItPriceExtraFilesChip');
 }

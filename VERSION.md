@@ -1,8 +1,76 @@
 # Phiên bản hiện tại
 
-**24.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.17 (2026-09-26): Đợt "golive" — 6 việc: fix dữ liệu mất sau F5, tách Phê Duyệt Giá Bán Buôn/Bán Lẻ, chuẩn hoá Excel danh mục, fix import Excel User, tách mã ST/HO, mở rộng poll nhẹ
+
+Chuẩn bị golive — 6 yêu cầu gộp 1 đợt xác nhận trước, triển khai và merge
+luôn (không chờ demo, đúng quy trình chuẩn ở CLAUDE.md):
+
+1. **Vá lỗi thật**: `initDatabase()` (core.js) thiếu đọc lại 2 key `storeTypes`/
+   `operationOrderStoreMixedApprovalRules` từ server — 2 danh mục này tự
+   "biến mất" ngay sau khi F5 dù đã lưu thành công (chỉ còn đúng trong
+   session cũ trên RAM, chưa bao giờ đọc lại khi tải trang). Đã thêm dòng gán
+   còn thiếu + viết `test-initdatabase-key-coverage.js` (đối chiếu MỌI key
+   `DB.<x>` được gán trong `initDatabase()` khớp đủ với danh sách trả về của
+   `GET /api/data`, tránh lặp lại đúng lớp lỗi này với key khác trong tương
+   lai).
+2. **Tách Phê Duyệt Giá Bán Buôn (Vận Hành)/Bán Lẻ (Mua Hàng) khỏi Hỗ Trợ
+   IT**: 2 sub-module con trước đây gộp chung 1 màn "Hỗ Trợ IT → Phê Duyệt
+   Giá" (chỉ phân biệt qua sub-tab Bán Buôn/Bán Lẻ) nay tách hẳn thành 2 màn
+   tạo hồ sơ riêng — Bán Buôn chuyển vào **Vận Hành**, Bán Lẻ chuyển vào
+   **Mua Hàng** (mã tự sinh thêm hậu tố `-BB`/`-BL`, 2 dãy số độc lập, cùng
+   khuôn `-ST`/`-HO` của Đơn Hàng). Hỗ Trợ IT giữ nguyên màn xem/xử lý danh
+   sách chung (đọc gộp cả 2 nguồn), chỉ bỏ form tạo mới. 2 tab riêng dưới
+   "Quy Trình & Phê Duyệt" (thay 1 tab gộp cũ) + 2 group mới trong Biểu Mẫu
+   (`MUAHANG`/`VANHANH`) + tự hiện trong "Nghiệp Vụ Nâng Cao". Đã vá kèm 5
+   lỗi thật phát hiện qua kiểm thử Playwright sâu trong lúc làm (không phải
+   review tĩnh phát hiện được): thiếu quyền mới trong
+   `canAccessPurchasingModule()`/`canAccessOperationModule()`; thiếu đăng ký
+   `gmsAdd/gmsRemove/gmsFilter` trong CSP delegation riêng của
+   module-vanhanh.js; thiếu phụ thuộc nạp cụm JS `itsupport-price` cho tab
+   Vận Hành (crash nếu vào thẳng Vận Hành mà chưa từng mở Hỗ Trợ IT); thiếu 2
+   entry `FORM_GROUPS`; và loạt lỗi race-condition tiềm ẩn ở chính test suite
+   (gọi `switchTab()` — hàm `async` — mà không `await`, sửa ở 5 file test).
+3. **Chuẩn hoá Tải Mẫu/Import/Export Excel cho danh mục** — audit toàn bộ tab
+   "🗂️ Quản Lý Danh Mục" phát hiện 18 danh mục hoàn toàn không có 3 thao tác
+   Excel này. Đợt này vá xong 10 danh mục dạng mảng chuỗi phẳng đơn giản
+   (Phòng Ban, Loại Giấy Phép, Hãng Taxi, Lý Do Đánh Giá Chuyến Xe, Vùng Giá
+   Áp Dụng, Loại Dịch Vụ Gia Hạn CNTT, Phân Loại Tài Liệu, Loại Hợp Đồng,
+   Chức Danh, Loại Đào Tạo) qua 1 "registry chung" dùng lại được
+   (`SIMPLE_CATALOG_EXCEL_CONFIG`, core.js + route
+   `POST /api/admin/catalog/import-xlsx` dùng chung, `parseGenericSingleColumnXlsx()`
+   ở `lib/adminExport.js`) — thêm 1 danh mục dạng này mới chỉ cần thêm 1 dòng
+   cấu hình, không viết riêng 3 hàm nữa. **Còn lại 8 danh mục dạng object
+   nhiều field** (Loại Xe Cụ Thể, Chức Danh Siêu Thị, Vị Trí Làm Việc, Từ
+   Khoá Nhạy Cảm, Phòng Họp, Danh Mục Đồng Phục, Ngày Lễ, Khối/Ban) CHƯA làm
+   ở đợt này — cần thiết kế cột Excel riêng khớp đúng field từng loại, để lại
+   làm đợt sau.
+4. **Fix lỗi thật + tính năng**: import Excel User bị lỗi đăng nhập sau khi
+   tạo (đã vá ở đợt trước, nay xác nhận lại) + thêm cột "Khối/Ban" vào
+   Tải Mẫu/Nhập Excel User (khớp field `khoiBan` mới thêm ở v24.16).
+5. **Tách mã Đặt Hàng Siêu Thị/Đặt Hàng HO** — 2 luồng con của module Vận
+   Hành > Đơn Hàng trước đây dùng chung 1 dãy số tự sinh, nay thêm hậu tố
+   `-ST`/`-HO` vào `moduleAbbr` TRƯỚC KHI tính số thứ tự, cho mỗi kênh 1 dãy
+   số độc lập hoàn toàn (tránh trùng mã dù cùng phòng ban đề xuất) — cùng
+   khuôn đã dùng cho `-BB`/`-BL` ở mục 2.
+6. **Mở rộng poll nhẹ + tổng quát hoá cơ chế thử-lại-sau-409**: badge số
+   Thông Báo (🔔) trước đây chỉ tải đúng 1 lần lúc đăng nhập, nay tự làm mới
+   định kỳ (30s, `startNotifBadgePolling()`) cùng khuôn Hộp Thư Phê Duyệt đã
+   có — không cần F5/tự mở chuông mới thấy số mới; dropdown đang mở cũng tự
+   vẽ lại danh sách. Đồng thời tách lõi cơ chế "409 vừa bị người khác thay
+   đổi → tự tải lại + áp lại đúng phần mình vừa sửa + lưu lại 1 lần" (trước
+   đây viết CỨNG riêng cho "users") thành `retryArraySaveAfterConflict()`
+   dùng chung cho MỌI collection dạng mảng object có field `id`, và áp dụng
+   thêm cho **Nhóm Phân Quyền** (`permGroups`) — nhiều admin cùng sửa các
+   nhóm khác nhau gần như đồng thời không còn bị báo lỗi xung đột giả nữa.
+
+**Triển khai**: chỉ code ứng dụng (client + `lib/adminExport.js` +
+`routes/adminExport.js`, route Excel mới tái dùng `multer`/`exceljs` đã có
+sẵn) — không đổi `schema.sql`, không thêm biến `.env`, không thêm gói npm
+mới. Copy code + `pm2 restart` là đủ.
 
 ## v24.16 (2026-09-25): Khối/Ban (nhóm cha Phòng Ban) + Form Người Dùng/Phân Quyền lọc theo Khối + gợi ý Ngày Vào Làm Việc từ Onboarding
 

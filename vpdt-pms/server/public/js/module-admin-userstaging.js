@@ -569,22 +569,37 @@ function renderUsers() {
 // NGẶT với danh mục thật khi nhập lại, chặn cứng dòng nào không khớp (theo yêu cầu trực tiếp người
 // dùng), nên cột thứ tự ở đây khớp đúng USER_IMPORT_COLUMNS (lib/adminExport.js) để cơ chế đọc theo VỊ
 // TRÍ vẫn đúng nếu ai đó lỡ xoá dòng tiêu đề.
+// numFmt: '@' (Định Dạng Văn Bản) cho cột username/pass — LỖI ĐÃ VÁ (10/2026): nếu admin/nhân viên gõ
+// tài khoản/mật khẩu là chuỗi TOÀN SỐ có số 0 ở đầu (VD SĐT "0987654321" hoặc mật khẩu tạm kiểu ngày
+// sinh "080199") vào ô đang định dạng "General"/"Number", Excel TỰ HIỂU đó là số và CẮT MẤT số 0 đứng
+// đầu ngay khi gõ (lưu thành 987654321) — nhân viên vẫn đăng nhập bằng chuỗi gốc "0987654321" như đã
+// gõ, hệ thống báo sai tài khoản/mật khẩu dù họ gõ đúng. Ép 2 cột này thành Văn Bản NGAY TỪ FILE MẪU để
+// chặn từ gốc (Excel không tự động chuyển đổi số trong ô đã định dạng Văn Bản) — xem buildGenericWorkbook()
+// (lib/adminExport.js). Không khắc phục được cho file KHÔNG xuất phát từ mẫu này (số 0 đã mất ngay tại
+// Excel, không phải lỗi khi hệ thống đọc lại) — xem thêm cảnh báo lúc xem trước ở
+// renderUsersImportPreview().
 function downloadUserTemplate() {
   downloadXlsxFromServer('user_template.xlsx', 'Mẫu Người Dùng',
     [
-      { header: 'username', key: 'username', width: 16 },
-      { header: 'pass', key: 'pass', width: 14 },
+      { header: 'username', key: 'username', width: 16, numFmt: '@' },
+      { header: 'pass', key: 'pass', width: 14, numFmt: '@' },
       { header: 'name', key: 'name', width: 22 },
       { header: 'email', key: 'email', width: 24 },
       { header: 'phone', key: 'phone', width: 14 },
       { header: 'dept', key: 'dept', width: 20 },
       { header: 'jobtitle', key: 'jobtitle', width: 20 },
       { header: 'postype', key: 'postype', width: 12 },
-      { header: 'startdate', key: 'startdate', width: 14 }
+      { header: 'startdate', key: 'startdate', width: 14 },
+      // khoiban (10/2026, Khối/Ban — v24.16) — CHỈ áp dụng khi postype=HO, để trống với Siêu Thị/vị trí
+      // tự thêm (khớp đúng readUserFormState()/populateUserKhoiBanOptions() ở module-admin-submissiongroups.js).
+      { header: 'khoiban', key: 'khoiban', width: 18 }
     ],
     [
-      { username: 'user1', pass: '123456', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su', jobtitle: 'Nhan vien', postype: 'HO', startdate: '2024-01-15' },
-      { username: 'user2', pass: '123456', name: 'Tran Thi Two', email: 'user2@company.com', phone: '0909876543', dept: 'Sieu Thi Quan 1', jobtitle: '', postype: 'STORE', startdate: '' }
+      // Mật khẩu mẫu ĐỔI khỏi "123456" (thuần số, LUÔN bị validatePasswordStrength() từ chối — làm hỏng cả
+      // batch import nếu admin dùng nguyên dòng mẫu) sang mẫu hợp lệ theo đúng chính sách hiện hành (tối
+      // thiểu 8 ký tự, đủ chữ+số+ký tự đặc biệt — xem lib/passwordPolicy.js).
+      { username: 'user1', pass: 'MatKhau@2024', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su', jobtitle: 'Nhan vien', postype: 'HO', startdate: '2024-01-15', khoiban: '' },
+      { username: 'user2', pass: 'MatKhau@2024', name: 'Tran Thi Two', email: 'user2@company.com', phone: '0909876543', dept: 'Sieu Thi Quan 1', jobtitle: '', postype: 'STORE', startdate: '', khoiban: '' }
     ]
   );
 }
@@ -598,9 +613,17 @@ function exportUsersExcel() {
     { header: 'email', key: 'email', width: 24 },
     { header: 'phone', key: 'phone', width: 14 },
     { header: 'dept', key: 'dept', width: 20 },
-    { header: 'jobTitle', key: 'jobTitle', width: 20 }
+    { header: 'jobTitle', key: 'jobTitle', width: 20 },
+    // khoiBan (10/2026, v24.16) — tên Khối/Ban (không phải id) để đọc trực tiếp được, khớp cách
+    // downloadUserTemplate()/parseUsersImportXlsx() đọc/ghi cột "khoiban" bằng TÊN.
+    { header: 'khoiBan', key: 'khoiBan', width: 18 }
   ];
-  const rows = DB.users.map(u => ({ username: u.username, name: u.name, email: u.email || '', phone: u.phone || '', dept: u.dept, jobTitle: u.jobTitle || '' }));
+  const rows = DB.users.map(u => {
+    // u.khoiBan lưu id (xem populateUserKhoiBanOptions()/module-admin-submissiongroups.js) — export ra
+    // TÊN cho dễ đọc/khớp cách nhập lại (parseUsersImportXlsx() đọc "khoiban" bằng TÊN, tự dò lại id).
+    const group = (DB.deptGroups || []).find(g => String(g.id) === String(u.khoiBan || ''));
+    return { username: u.username, name: u.name, email: u.email || '', phone: u.phone || '', dept: u.dept, jobTitle: u.jobTitle || '', khoiBan: group ? group.name : '' };
+  });
   downloadXlsxFromServer('dms_users_export.xlsx', 'Người Dùng', columns, rows);
 }
 
@@ -654,6 +677,19 @@ function validateImportedUserRow(r) {
     const match = catalog.find(t => String(t).trim().toLowerCase() === jobTitleRaw.toLowerCase());
     if (match) normalized.jobTitle = match;
     else errors.push(`Chức Danh "${jobTitleRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
+  }
+
+  // Khối/Ban (10/2026, v24.16) — CHỈ áp dụng khi Vị Trí Làm Việc = HO (khớp readUserFormState()/
+  // onUserPosTypeChange() ở module-admin-submissiongroups.js: Siêu Thị/vị trí tự thêm luôn khoiBan=''),
+  // TUỲ CHỌN kể cả khi HO (để trống hợp lệ). Cột Excel ghi TÊN Khối/Ban (dễ đọc/tự tay gõ), tự dò lại
+  // đúng id lưu trên user.khoiBan (xem populateUserKhoiBanOptions(), option value=id).
+  const khoiBanRaw = String(r.khoiBan || '').trim();
+  if (!khoiBanRaw || normalized.posType !== 'HO') {
+    normalized.khoiBan = '';
+  } else {
+    const match = (DB.deptGroups || []).find(g => String(g.name).trim().toLowerCase() === khoiBanRaw.toLowerCase());
+    if (match) normalized.khoiBan = String(match.id);
+    else errors.push(`Khối/Ban "${khoiBanRaw}" không có trong danh mục (chỉ áp dụng khi Vị Trí Làm Việc = HO)`);
   }
 
   // Ngày Vào Làm Việc — TUỲ CHỌN (khớp uStartDate "Để trống hợp lệ" ở form tay), chỉ chặn khi CÓ điền mà
@@ -791,19 +827,21 @@ async function confirmUsersImport() {
       username, pass, name, email, phone,
       dept: normalized.dept, jobTitle: normalized.jobTitle || null,
       posType: normalized.posType, startDate: normalized.startDate || '',
+      khoiBan: normalized.khoiBan || '',
       perms: defaultNewUserPerms()
     });
     addCount++;
   });
-  // Ghi đè: CHỈ họ tên/email/SĐT/phòng ban/chức danh/vị trí/ngày vào làm việc — KHÔNG BAO GIỜ đụng
-  // username/pass/perms/groupIds của tài khoản đã có (tránh 1 file Excel vô tình/cố ý reset mật khẩu
-  // hay quyền hạn người khác).
+  // Ghi đè: CHỈ họ tên/email/SĐT/phòng ban/chức danh/vị trí/Khối-Ban/ngày vào làm việc — KHÔNG BAO GIỜ
+  // đụng username/pass/perms/groupIds của tài khoản đã có (tránh 1 file Excel vô tình/cố ý reset mật
+  // khẩu hay quyền hạn người khác).
   toOverwrite.forEach(({ username, name, email, phone, normalized }) => {
     const existing = DB.users.find(u => String(u.username).trim().toLowerCase() === String(username).trim().toLowerCase());
     if (!existing) return;
     existing.name = name; existing.email = email; existing.phone = phone;
     existing.dept = normalized.dept; existing.jobTitle = normalized.jobTitle || null;
     existing.posType = normalized.posType; existing.startDate = normalized.startDate || '';
+    existing.khoiBan = normalized.khoiBan || '';
     overwriteCount++;
   });
 

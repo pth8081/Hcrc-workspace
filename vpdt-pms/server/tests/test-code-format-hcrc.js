@@ -27,7 +27,7 @@ function stripVnDiacritics(str) {
   return (str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
-function makeSandbox({ DB, currentUser, fieldValues, activeOfficeSubTab }) {
+function makeSandbox({ DB, currentUser, fieldValues, activeOfficeSubTab, activeItPriceSubTab }) {
   const elements = fieldValues || {};
   const ctx = {
     console,
@@ -39,6 +39,10 @@ function makeSandbox({ DB, currentUser, fieldValues, activeOfficeSubTab }) {
     }, DB || {}),
     currentUser: currentUser || { dept: 'Phòng Công Nghệ Thông Tin' },
     activeOfficeSubTab: activeOfficeSubTab || 'MUA_BAN',
+    // activeItPriceSubTab — 10/2026 (đợt tách Phê Duyệt Giá Bán Lẻ/Bán Buôn): generateItPriceCode() ở
+    // module-tailieu.js giờ đọc biến này (định nghĩa THẬT ở module-itsupport-price.js, không nạp vào
+    // sandbox này) để gắn hậu tố -BB/-BL — mirror ĐÚNG cách activeOfficeSubTab đã được shim ở trên.
+    activeItPriceSubTab: activeItPriceSubTab || 'RETAIL',
     document: {
       getElementById: (id) => elements[id] !== undefined ? { value: elements[id] } : { value: '' }
     }
@@ -100,10 +104,20 @@ check('Đặt Phòng Họp (generateMeetingCode) — mã phòng theo #meetingDep
   assert.strictEqual(code, 'HCRC-KD-DPH-001');
 });
 
-check('Phê Duyệt Giá IT (generateItPriceCode) — forceOwnDept -> currentUser.dept', () => {
+check('Phê Duyệt Giá IT (generateItPriceCode) — forceOwnDept -> currentUser.dept, mặc định Bán Lẻ -> hậu tố -BL', () => {
   const ctx = makeSandbox({ currentUser: { dept: 'Phòng Công Nghệ Thông Tin' } });
   const code = call(ctx, 'generateItPriceCode()');
-  assert.strictEqual(code, 'HCRC-CNTT-ITPG-001');
+  assert.strictEqual(code, 'HCRC-CNTT-ITPG-BL-001');
+});
+
+// LỖI ĐÃ VÁ (10/2026, đợt tách Phê Duyệt Giá Bán Lẻ/Bán Buôn khỏi Hỗ Trợ IT): mã tự sinh giờ gắn thêm
+// hậu tố -BB (Bán Buôn, Vận Hành)/-BL (Bán Lẻ, Mua Hàng) vào moduleAbbr TRƯỚC KHI tính số thứ tự — cho
+// MỖI kênh 1 dãy số ĐỘC LẬP hoàn toàn (giống hệt cơ chế -ST/-HO của Đặt Hàng Siêu Thị/HO), tránh trùng
+// mã giữa 2 kênh dù cùng phòng ban đề xuất.
+check('Phê Duyệt Giá IT (generateItPriceCode) — Bán Buôn -> hậu tố -BB, dãy số ĐỘC LẬP với Bán Lẻ', () => {
+  const ctx = makeSandbox({ currentUser: { dept: 'Phòng Công Nghệ Thông Tin' }, activeItPriceSubTab: 'WHOLESALE' });
+  const code = call(ctx, 'generateItPriceCode()');
+  assert.strictEqual(code, 'HCRC-CNTT-ITPG-BB-001');
 });
 
 check('Ticket Hỗ Trợ IT (generateItTicketCode) — forceOwnDept -> currentUser.dept', () => {

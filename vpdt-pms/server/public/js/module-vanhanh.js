@@ -89,6 +89,11 @@ function setOperationOrderSubTab(tab) {
     if (badge) badge.innerText = OPERATION_ORDER_SUBTAB_LABELS[tab] || '';
     resetListPage('operationOrder');
     renderOperationOrderList();
+    // Tách mã ST/HO (10/2026) — mã sinh sẵn phụ thuộc activeOperationOrderSubTab (xem
+    // generateOperationOrderCode() bên dưới), nên phải sinh lại NGAY khi đổi sub-tab, nếu không mã hiện
+    // trên form vẫn mang hậu tố của tab CŨ trong khi orderLocationType submit lên lại là tab MỚI.
+    const codeEl = document.getElementById('voCode');
+    if (codeEl) codeEl.value = generateOperationOrderCode();
   } else if (tab === 'REPORT') {
     renderOperationOrderReport();
   } else if (tab === 'RECEIPT') {
@@ -106,7 +111,9 @@ function setVanHanhSubTab(subTab) {
   activeVanHanhSubTab = subTab;
   const tabs = [
     ['ORDERS', 'vanHanhOrdersWrap', 'btnVanHanhSubOrders'],
-    ['STORE', 'vanHanhStoreWrap', 'btnVanHanhSubStore']
+    ['STORE', 'vanHanhStoreWrap', 'btnVanHanhSubStore'],
+    // "Phê Duyệt Giá Bán Buôn" (10/2026) — chỉ form tạo đề xuất, xem chú thích ở vanHanhItPriceWrap.
+    ['ITPRICE', 'vanHanhItPriceWrap', 'btnVanHanhSubItPrice']
   ];
   tabs.forEach(([key, wrapId, btnId]) => {
     const isActive = key === subTab;
@@ -132,6 +139,8 @@ function setVanHanhSubTab(subTab) {
     // quyền hiện/ẩn từng nút sub-tab thật sự lên DOM.
     updateOperationStoreSubTabVisibility(currentUser);
     setOperationStoreSubTab(activeOperationStoreSubTab);
+  } else if (subTab === 'ITPRICE') {
+    enterVanHanhItPriceForm();
   }
 }
 
@@ -399,7 +408,15 @@ function renderOperationOrderItemsTable() {
 // generateHcrcCode() giờ cần thêm mã phòng (định dạng thống nhất HCRC-<mã phòng>-<abbr>-<số thứ tự>,
 // xem module-tailieu.js) — cả 3 module Vận Hành đều forceOwnDept: true (lib/createValidation.js), không
 // có ô chọn phòng ban riêng trên form -> luôn dùng currentUser.dept.
-function generateOperationOrderCode() { return generateHcrcCode(DB.operationOrders, getDeptAbbr(currentUser.dept), OPERATION_KIND_META.operationOrders.codeAbbr); }
+// Tách mã ST/HO (10/2026, yêu cầu người dùng — 2 kênh trước đây dùng CHUNG 1 dãy số DH-001, DH-002...
+// không phân biệt được đơn Siêu Thị hay HO chỉ nhìn vào mã). Hậu tố nằm NGAY trong moduleAbbr truyền cho
+// generateHcrcCode() nên mỗi kênh tự có dãy số riêng (computeNextHcrcSeq() đếm theo TOÀN BỘ prefix
+// `HCRC-<dept>-<moduleAbbr>-`) — không cần sửa thuật toán đếm. Mặc định 'ST' khi activeOperationOrderSubTab
+// không phải 'HO' (bao gồm cả lúc mở tab con REPORT/RECEIPT — vô hại vì form tạo đơn ẩn ở 2 tab đó).
+function generateOperationOrderCode() {
+  const suffix = activeOperationOrderSubTab === 'HO' ? 'HO' : 'ST';
+  return generateHcrcCode(DB.operationOrders, getDeptAbbr(currentUser.dept), `${OPERATION_KIND_META.operationOrders.codeAbbr}-${suffix}`);
+}
 function generateOperationStoreOpenCode() { return generateHcrcCode(DB.operationStoreOpenings, getDeptAbbr(currentUser.dept), OPERATION_KIND_META.operationStoreOpenings.codeAbbr); }
 function generateOperationRepairCode() { return generateHcrcCode(DB.operationRepairs, getDeptAbbr(currentUser.dept), OPERATION_KIND_META.operationRepairs.codeAbbr); }
 
@@ -3789,6 +3806,12 @@ const OP_CLICK_ACTIONS = {
   // người phụ trách trong picker sẽ IM LẶNG không hoạt động.
   pmsAdd: el => pmsAdd(el.dataset.arg0, el.dataset.arg1),
   pmsRemove: el => pmsRemove(el.dataset.arg0, el.dataset.arg1),
+  // Phê Duyệt Giá Bán Buôn (10/2026, đợt chuyển form sang sống ở Vận Hành) — "Siêu Thị Đề Xuất" dùng
+  // widget tìm-kiếm-gõ-chọn đa lựa chọn dùng chung gmsAdd/gmsRemove/gmsFilter (core.js, khuôn generic
+  // multi-select — khác pmsAdd/pmsRemove ở trên vốn dành riêng cho renderPeopleMultiSelect()) — cùng lý
+  // do phải khai tường minh ở đây, nếu không ô tìm siêu thị sẽ IM LẶNG không gợi ý/thêm được gì.
+  gmsAdd: el => gmsAdd(el.dataset.arg0, el.dataset.arg1),
+  gmsRemove: el => gmsRemove(el.dataset.arg0, el.dataset.arg1),
   // Đợt E (UX rollout — nút "↺ Làm Mới"/chip "✕ Xoá file" cho 3 form Tạo Mới của module này) — cùng lý
   // do pmsAdd/pmsRemove ở trên: 2 hạ tầng dùng chung ở core.js (confirmAndResetForm()/clearSingleFileInput(),
   // vốn giả định bindCspDelegation() dùng chung window[fnName]) PHẢI khai báo tường minh ở đây, nếu
@@ -3823,7 +3846,14 @@ const OP_CLICK_ACTIONS = {
   confirmOperationWorkItemImport: () => confirmOperationWorkItemImport(),
   // Tệp đính kèm "danh mục lớn" (Danh Mục Đầu Tư) — xem 3 hàm ngay dưới viewOperationAttachment().
   viewOperationEstimateAttachment: (el, e) => { e.preventDefault(); viewOperationEstimateAttachment(Number(el.dataset.idx), Number(el.dataset.attIdx)); },
-  removeOperationEstimateAttachment: el => removeOperationEstimateAttachment(Number(el.dataset.idx), Number(el.dataset.attIdx))
+  removeOperationEstimateAttachment: el => removeOperationEstimateAttachment(Number(el.dataset.idx), Number(el.dataset.attIdx)),
+  // "💲 Phê Duyệt Giá Bán Buôn" (10/2026, form chuyển từ Hỗ Trợ IT sang đây) — registry riêng của Vận
+  // Hành không tự soi window[fnName]/data-op-seq như bindCspDelegation() chung, PHẢI khai tường minh mọi
+  // data-op mà form (module-itsupport-price.js) dùng, nếu không toàn bộ nút trong form sẽ IM LẶNG không
+  // hoạt động — đúng lớp lỗi mọi chú thích phía trên đã ghi.
+  previewItPriceWorkflow: () => previewItPriceWorkflow(),
+  goToItPriceListWholesale: () => goToItPriceListWholesale(),
+  removeOneFileFromMultiInput: el => removeOneFileFromMultiInput(el.dataset.arg0, el.dataset.arg1, el.dataset.arg2)
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -3868,7 +3898,13 @@ const OP_CHANGE_ACTIONS = {
   changeOperationEstimateItemParent: el => changeOperationEstimateItemParent(Number(el.dataset.idx), el.value),
   // Input file "+ Thêm tệp" của cột Tệp Đính Kèm (danh mục lớn) — el CHÍNH LÀ input file đã đổi (mirror
   // onSingleFileChosen ngay trên, không cần data-arg-el).
-  onOperationEstimateAttachmentFileChange: el => onOperationEstimateAttachmentFileChange(el, Number(el.dataset.idx))
+  onOperationEstimateAttachmentFileChange: el => onOperationEstimateAttachmentFileChange(el, Number(el.dataset.idx)),
+  // "💲 Phê Duyệt Giá Bán Buôn" — cùng lý do OP_CLICK_ACTIONS ở trên.
+  onItPriceFileChange: (el, e) => onItPriceFileChange(e),
+  onItPriceMasterListChange: () => onItPriceMasterListChange(),
+  checkItPriceMarginConsistency: () => checkItPriceMarginConsistency(),
+  onItPriceExpiryModeChange: () => onItPriceExpiryModeChange(),
+  onMultiFileChosen: el => onMultiFileChosen(el, el.dataset.arg1)
 };
 const OP_INPUT_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -3879,14 +3915,28 @@ const OP_INPUT_ACTIONS = {
   updateOperationEstimateItemField: el => updateOperationEstimateItemField(Number(el.dataset.idx), el.dataset.field, el.value),
   // Mục E — cùng lý do pmsAdd/pmsRemove ở OP_CLICK_ACTIONS: ô tìm người trong owiAssignedToPicker dùng
   // data-op-input="pmsFilter" (khuôn renderPeopleMultiSelect() có sẵn), phải khai báo tường minh ở đây.
-  pmsFilter: el => pmsFilter(el.dataset.arg0, el.value)
+  pmsFilter: el => pmsFilter(el.dataset.arg0, el.value),
+  // Phê Duyệt Giá Bán Buôn — cùng lý do gmsAdd/gmsRemove ở OP_CLICK_ACTIONS: ô tìm siêu thị đề xuất dùng
+  // data-op-input="gmsFilter" (khuôn generic multi-select ở core.js), phải khai báo tường minh ở đây.
+  gmsFilter: el => gmsFilter(el.dataset.arg0, el.value)
 };
 const OP_SUBMIT_ACTIONS = {
   submitOperationOrder: e => submitOperationOrder(e),
   submitOperationStoreOpening: e => submitOperationStoreOpening(e),
   submitOperationRepair: e => submitOperationRepair(e),
-  submitOperationWorkItemForm: e => submitOperationWorkItemForm(e)
+  submitOperationWorkItemForm: e => submitOperationWorkItemForm(e),
+  // "💲 Phê Duyệt Giá Bán Buôn" — cùng lý do OP_CLICK_ACTIONS ở trên.
+  submitItPriceApproval: e => submitItPriceApproval(e)
 };
+// Điểm vào "📋 Xem danh sách đầy đủ" của form Phê Duyệt Giá Bán Buôn — registry riêng của Vận Hành
+// KHÔNG hỗ trợ data-op-seq (chỉ bindCspDelegation() dùng chung mới hiểu cú pháp đó), nên gom 3 lệnh gọi
+// (switchTab/setItSupportSubTab/setItPriceSubTab) vào đúng 1 hàm rồi khai data-op="goToItPriceListWholesale"
+// như bình thường.
+async function goToItPriceListWholesale() {
+  await switchTab('itSupport');
+  setItSupportSubTab('PRICE');
+  setItPriceSubTab('WHOLESALE');
+}
 function bindOperationDelegation(rootId) {
   const root = document.getElementById(rootId);
   if (!root) return;

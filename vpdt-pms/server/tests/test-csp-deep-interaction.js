@@ -369,8 +369,12 @@ async function main() {
     DB.users.push(adminUser);
     finishLogin(adminUser);
     // Dừng ngay nhịp poll 20s tự khởi động trong finishLogin() — xem chú thích đầu file (phần "Phát hiện
-    // phụ") để biết lý do bắt buộc phải làm bước này TRƯỚC khi bắt đầu rà soát.
+    // phụ") để biết lý do bắt buộc phải làm bước này TRƯỚC khi bắt đầu rà soát. stopNotifBadgePolling()
+    // (10/2026, "Item 6" — mở rộng poll nhẹ sang badge thông báo, nhịp 30s) an toàn hơn (chỉ đọc, không
+    // tự initDatabase()/ghi đè DB.*) nhưng dừng luôn cho gọn, tránh log CONSOLE ERROR thừa nếu trình
+    // duyệt đóng giữa lúc nhịp đang chạy.
     if (typeof stopApprovalPolling === 'function') stopApprovalPolling();
+    if (typeof stopNotifBadgePolling === 'function') stopNotifBadgePolling();
     return {
       loginOk: document.getElementById('loginSection').classList.contains('hidden'),
       headerShown: !document.getElementById('userHeader').classList.contains('hidden')

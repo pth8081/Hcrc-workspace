@@ -70,9 +70,11 @@ async function main() {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, STAFF);
-    await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
-    await page.waitForTimeout(150);
-    await page.click('#btnItPriceSubWholesale');
+    // 10/2026 (đợt tách Phê Duyệt Giá khỏi Hỗ Trợ IT): cảnh báo Margin/Chiết Khấu CHỈ còn tồn tại ở form
+    // Bán Buôn (Vận Hành, module-itsupport-price.js/module-vanhanh.js) — không còn sub-tab switcher
+    // Bán Lẻ/Bán Buôn chung 1 form nữa, nên KHÔNG cần bấm btnItPriceSubWholesale (luôn là Bán Buôn khi
+    // vào tab này).
+    await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
     await page.waitForTimeout(150);
 
     await run.run('Chưa chọn Mẫu Giá nào -> cảnh báo LUÔN ẩn dù tải file có cột margin', async () => {
@@ -151,11 +153,11 @@ async function main() {
       assertEqual(s.hidden, false, 'Giá trị "1.234,5%" phải đọc đúng thành 1234.5 (>=5%, sai phía MARGIN_LT5) -> cảnh báo PHẢI HIỆN; nếu ẩn nghĩa là parse ra NaN rồi bị lọc mất (lỗi CŨ chưa vá)');
     });
 
-    await run.run('Chuyển sang sub-tab Bán Lẻ (RETAIL) -> cảnh báo LUÔN ẩn (chỉ áp dụng Bán Buôn)', async () => {
-      await page.click('#btnItPriceSubRetail');
+    await run.run('Form Bán Lẻ (Mua Hàng) không có khối cảnh báo margin nào (chỉ áp dụng Bán Buôn, 2 form giờ tách vật lý)', async () => {
+      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
-      const s = await warningState(page);
-      assertEqual(s.hidden, true, 'Sub-tab Bán Lẻ: cảnh báo margin (chỉ dành Bán Buôn) phải luôn ẩn');
+      const noTierField = await page.evaluate(() => !document.getElementById('mhSubItprice')?.querySelector('#itPriceTier, #itPriceMarginWarningWrap'));
+      assert(noTierField, 'Form Bán Lẻ (Mua Hàng) không được có field Mức Margin/Chiết Khấu hay khối cảnh báo margin nào (chỉ Bán Buôn mới có)');
     });
   } finally {
     await browser.close();

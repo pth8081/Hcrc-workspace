@@ -1030,8 +1030,12 @@ const NGHIEP_VU_DOCS = {
   // mức Margin/Chiết Khấu cho Bán Buôn) — xem CREATE_MODULE_CONFIGS.itPriceApprovals.extraValidate ở
   // lib/createValidation.js. Cây phân quyền "Hỗ Trợ IT" (10/2026) đã tách nhỏ từ 3 quyền gộp thành 7 quyền
   // riêng biệt — xem "Cây phân quyền" ở footer bên dưới cho đầy đủ ánh xạ cũ→mới.
+  // ĐỢT SAU (10/2026, "Item 2" golive): tách hẳn form TẠO đề xuất ra khỏi Hỗ Trợ IT — Bán Lẻ chuyển
+  // sang module Mua Hàng, Bán Buôn chuyển sang module Vận Hành (mã tự sinh thêm hậu tố -BL/-BB, 2 dãy số
+  // độc lập). Hỗ Trợ IT CHỈ còn giữ màn xem/xử lý danh sách chung (đọc gộp cả 2 nguồn, không có form tạo
+  // mới nữa) — cập nhật lại 2 bước đầu (steps) cho đúng đường dẫn click MỚI, các bước duyệt/áp giá không đổi.
   itPriceApproval: {
-    icon: '🏷️', title: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)', badge: 'Hỗ Trợ IT',
+    icon: '🏷️', title: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)', badge: 'Mua Hàng / Vận Hành / Hỗ Trợ IT',
     desc: 'Đề xuất duyệt bảng giá bán (tải lên tệp Excel nhiều dòng/mặt hàng) — Bán Lẻ và Bán Buôn là 2 QUY TRÌNH KHÁC NHAU thật sự (khác field bắt buộc, khác cấu hình luồng duyệt), không phải cùng 1 luồng dùng chung.',
     flow: { ariaLabel: 'Quy trình Phê Duyệt Giá Bán: Bán Lẻ theo phòng ban, Bán Buôn theo mức Margin/Chiết Khấu', chain: [
       { label: 'Tạo đề xuất', sub: 'Tải tệp bảng giá (.xlsx) + Lý do' },
@@ -1040,9 +1044,10 @@ const NGHIEP_VU_DOCS = {
       { label: 'Hoàn tất', sub: '' },
     ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
     steps: [
-      { role: 'Người đề xuất', text: 'vào <b>🖥️ Hỗ Trợ IT → 🏷️ Phê Duyệt Giá</b> (sidebar) → chọn tab <b>"🏷️ Bán Lẻ"</b> hoặc <b>"🏪 Bán Buôn"</b> (2 quy trình khác nhau thật sự) → tải lên tệp bảng giá (.xlsx, khớp đúng Mẫu Giá nếu hệ thống đã có mẫu) + Lý do → Bán Buôn phải chọn thêm Mức Margin/Chiết Khấu, Đơn Vị Áp Dụng, ít nhất 1 siêu thị/cửa hàng đề xuất, Ngày Áp Dụng → bấm <b>"Gửi phê duyệt"</b>.' },
+      { role: 'Người đề xuất (Bán Lẻ)', text: 'vào <b>🔗 Mua Hàng</b> (sidebar) → chọn tab <b>"💲 Phê Duyệt Giá Bán Lẻ"</b> → tải lên tệp bảng giá (.xlsx, khớp đúng Mẫu Giá nếu hệ thống đã có mẫu) + Lý do → bấm <b>"Gửi phê duyệt"</b>.' },
+      { role: 'Người đề xuất (Bán Buôn)', text: 'vào <b>⚙️ Vận Hành</b> (sidebar) → chọn tab <b>"💲 Phê Duyệt Giá Bán Buôn"</b> → tải lên tệp bảng giá (.xlsx) + Lý do + BẮT BUỘC chọn thêm Mức Margin/Chiết Khấu, Đơn Vị Áp Dụng, ít nhất 1 siêu thị/cửa hàng đề xuất, Ngày Áp Dụng → bấm <b>"Gửi phê duyệt"</b>.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ đang chờ (Bán Lẻ duyệt theo phòng ban, Bán Buôn duyệt theo đúng mức Margin/Chiết Khấu đã chọn — không duyệt lẫn được) → bấm Duyệt, Từ chối, hoặc Yêu Cầu Bổ Sung (khoá áp giá tới khi có tệp bổ sung mới).' },
-      { role: 'Đội Hỗ Trợ IT (quyền itPriceSupport)', text: 'sau khi duyệt, mở hồ sơ → áp giá thật vào hệ thống → đánh dấu hoàn tất.' },
+      { role: 'Đội Hỗ Trợ IT (quyền itPriceSupport)', text: 'vào <b>🖥️ Hỗ Trợ IT → 🏷️ Phê Duyệt Giá</b> (sidebar, xem gộp cả 2 nguồn Bán Lẻ/Bán Buôn — KHÔNG còn form tạo mới ở đây) → sau khi duyệt, mở hồ sơ → áp giá thật vào hệ thống → đánh dấu hoàn tất.' },
     ],
     footer: { left: [
       { label: 'Bán Lẻ', text: 'chọn "Vùng Giá Áp Dụng" (không bắt buộc, từ danh mục hệ thống) — không có Margin/Chiết Khấu/Đơn Vị Áp Dụng. Tự gắn Ngày Áp Dụng = hôm nay, Vĩnh viễn, áp dụng Toàn bộ siêu thị (không hỏi lại).' },
@@ -1715,7 +1720,10 @@ const NV_KEY_ACCESS_FN = {
   orgChart: 'canAccessOrgChartModule', hrLifecycle: 'canAccessHrLifecycleModule', hrProfile: 'canAccessHrProfileModule',
   hrContract: 'canAccessHrContractModule', hrReport: 'hrpfCanViewReports', hrAttendance: 'canAccessHrAttendanceModule',
   hrPayroll: 'canAccessHrPayrollModule', hr: 'canAccessHrModule',
-  itSupport: 'canAccessItSupportModule', itPriceApproval: 'canAccessItSupportModule',
+  // itPriceApproval: KHÔNG còn dùng thẳng canAccessItSupportModule() — form tạo đề xuất đã chuyển sang
+  // Mua Hàng (Bán Lẻ)/Vận Hành (Bán Buôn) (10/2026, "Item 2" golive), xem canViewItPriceApprovalNVDoc()
+  // (core.js) OR cả 3 module đích.
+  itSupport: 'canAccessItSupportModule', itPriceApproval: 'canViewItPriceApprovalNVDoc',
   // LỖI ĐÃ VÁ (rà soát chuyên sâu theo yêu cầu người dùng, 9/2026): mục "muaHang" (Mua Hàng > BAS) thiếu
   // hẳn entry ở đây — canViewNVItem() bên dưới fallback về `true` (hiện MẶC ĐỊNH cho MỌI người) khi
   // không tìm thấy hàm tương ứng, nên ai cũng xem được tài liệu nghiệp vụ BAS dù không có bất kỳ quyền

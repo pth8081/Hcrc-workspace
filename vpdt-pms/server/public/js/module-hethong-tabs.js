@@ -51,6 +51,11 @@ function setSystemSubTab(subTab) {
 
   if (subTab === 'ADMIN') {
     renderDeptGroupList(); renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderCarEvaluationIssueList(); renderPriceZoneList(); renderItRenewalCategoryList(); renderMeetingRoomCatalogList(); renderPositionTypeList();
+    // initSimpleCatalogExcelToolsAll() (core.js) — bơm 3 nút Tải Mẫu/Nhập/Xuất Excel vào TỪNG khối
+    // #simpleCatalogExcelTools_<key> đặt sẵn trong 10 khối danh mục dạng mảng chuỗi phẳng (10/2026, đợt
+    // chuẩn hoá Excel toàn hệ thống) — gọi LẶP LẠI mỗi lần vào tab ADMIN vẫn an toàn (chỉ gán lại đúng
+    // innerHTML tĩnh, không có state gì mất khi vẽ lại).
+    initSimpleCatalogExcelToolsAll();
     setAdminSubTab(activeAdminSubTab);
     positionAdminSubTabBar();
   }

@@ -216,11 +216,11 @@ async function main() {
   record('Áp dụng Cấu Hình A (phạm vi CHỈ [CAR]): ITPRICE WHOLESALE MARGIN_GTE5 VẪN CHƯA được điền (ngoài phạm vi)', afterApplyA.tierMarginGte5 === undefined);
   record('Áp dụng Cấu Hình A (phạm vi CHỈ [CAR]): OPERATION_ORDER_STORE LT10M VẪN CHƯA được điền (ngoài phạm vi)', afterApplyA.opOrderStoreLT10M === undefined);
 
-  // ===== D: tạo Cấu Hình B — mẫu WF_1STEP, phạm vi SUBMISSION + ITPRICE + OPERATION_ORDER_STORE =====
+  // ===== D: tạo Cấu Hình B — mẫu WF_1STEP, phạm vi SUBMISSION + ITPRICE_RETAIL + ITPRICE_WHOLESALE + OPERATION_ORDER_STORE =====
   await page.evaluate(() => {
     document.getElementById('qaTplSelect').value = 'WF_1STEP';
     document.querySelectorAll('.qaModuleCheck').forEach(el => {
-      el.checked = ['SUBMISSION', 'ITPRICE', 'OPERATION_ORDER_STORE'].includes(el.value);
+      el.checked = ['SUBMISSION', 'ITPRICE_RETAIL', 'ITPRICE_WHOLESALE', 'OPERATION_ORDER_STORE'].includes(el.value);
     });
     saveQuickApplyConfig({ preventDefault() {} });
   });

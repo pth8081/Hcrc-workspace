@@ -41,10 +41,13 @@ function sanitizeRowForFormulaInjection(row) {
   return safe;
 }
 
+// c.numFmt (tuỳ chọn, 10/2026) — ĐỊNH DẠNG CỘT dạng Văn Bản ('@') cho các cột dễ mất số 0 đứng đầu khi
+// Excel tự hiểu nhầm thành số (VD Tài Khoản/Mật Khẩu ở downloadUserTemplate() — xem chú thích ở đó).
+// Không set thì cột giữ định dạng "General" như trước, không đổi hành vi mọi lời gọi khác.
 function buildGenericWorkbook(sheetName, columns, rows) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet(String(sheetName || 'Sheet1').slice(0, 31)); // Excel giới hạn tên sheet 31 ký tự
-  sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18 }));
+  sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18, style: c.numFmt ? { numFmt: String(c.numFmt) } : undefined }));
   styleHeaderRow(sheet.getRow(1));
   rows.forEach(r => sheet.addRow(sanitizeRowForFormulaInjection(r)));
   return wb;
@@ -92,7 +95,8 @@ function buildMultiSheetWorkbook(sheets) {
 // postype/startdate thêm vào CUỐI mảng (10/2026, đồng nhất với form Sửa Người Dùng — trước đây import
 // hàng loạt thiếu hẳn "Vị Trí"/"Ngày Vào Làm Việc" dù form tạo tay có đủ cả) — ĐẶT Ở CUỐI để không đổi vị
 // trí cột 1-6 cũ, giữ đúng hành vi "usePositional" (dò theo vị trí khi mất dòng tiêu đề) cho file cũ.
-const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle', 'postype', 'startdate'];
+// khoiban (10/2026, v24.16 — Khối/Ban) — CŨNG thêm ở CUỐI cùng lý do trên (không xáo trộn vị trí cột cũ).
+const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle', 'postype', 'startdate', 'khoiban'];
 
 // Trần số dòng người dùng đọc trong 1 lần import — cùng tinh thần giới hạn 500/1000/2000 dòng của 6
 // luồng import Excel còn lại, và nay chặn NGAY TRONG LÚC đọc (xem streamFirstSheetRows) chứ không phải
@@ -157,7 +161,10 @@ async function parseUsersImportXlsx(buffer) {
       // hoá + chặn dòng sai, khớp triết lý "server chỉ đổi định dạng, không có logic nghiệp vụ" đã áp
       // dụng cho Ma Trận Phân Quyền.
       posType: get(cells, 'postype'),
-      startDate: getDate(cells)
+      startDate: getDate(cells),
+      // khoiBan (10/2026, v24.16) — TÊN Khối/Ban (không phải id), client tự dò lại id khớp DB.deptGroups
+      // (chỉ client mới có sẵn danh mục này) — xem validateImportedUserRow() ở module-admin-userstaging.js.
+      khoiBan: get(cells, 'khoiban')
     });
   };
 
@@ -195,9 +202,37 @@ async function parseUsersImportXlsx(buffer) {
   return markDuplicateItems(rows, r => normalizeDedupKey(r.username), []);
 }
 
+const MAX_SIMPLE_CATALOG_IMPORT_ROWS = 2000;
+// parseGenericSingleColumnXlsx() — "registry chung" cho Tải Mẫu/Nhập Excel của MỌI danh mục ĐƠN GIẢN
+// dạng mảng chuỗi phẳng (Phòng Ban, Vùng Giá Áp Dụng, Loại Giấy Phép, Hãng Taxi...) — 10/2026, đợt chuẩn
+// hoá theo yêu cầu người dùng ("audit toàn bộ danh mục admin, đảm bảo Tải Mẫu/Import/Export khớp đúng
+// schema"). CHỈ đọc CỘT ĐẦU TIÊN (bỏ qua dòng tiêu đề đầu tiên nếu có) — khớp đúng khuôn Tải Mẫu 1 cột do
+// buildGenericWorkbook() sinh ra ở downloadSimpleCatalogTemplate() (module-admin.js). Không có business
+// logic gì ở đây (không biết đây là danh mục nào) — client tự lọc trùng với DB.<key> hiện có, tự
+// syncStorage(), giữ đúng triết lý "route generic không đọc/ghi CSDL" như buildGenericWorkbook().
+async function parseGenericSingleColumnXlsx(buffer) {
+  const values = [];
+  let rowIdx = 0;
+  let overLimit = false;
+  await streamFirstSheetRows(buffer, (cells) => {
+    rowIdx += 1;
+    const raw = cells[0];
+    const v = raw == null ? '' : String(raw).trim();
+    // Dòng 1 THƯỜNG là tiêu đề — bỏ qua CHỈ KHI nó không giống 1 giá trị danh mục thật (không lẫn số),
+    // mirror cách parseUsersImportXlsx() dò tiêu đề nhưng đơn giản hơn nhiều (chỉ 1 cột, không cần khớp
+    // tên cột theo tiếng Anh) — nếu dòng 1 trống thì chắc chắn là hàng canh cột, luôn bỏ qua.
+    if (rowIdx === 1 && (!v || /^(tên|ten|name)/i.test(v))) return true;
+    if (v) values.push(v);
+    if (values.length > MAX_SIMPLE_CATALOG_IMPORT_ROWS) { overLimit = true; return false; }
+    return true;
+  }, { raw: true });
+  if (overLimit) throw new HttpError(400, `File quá nhiều dòng (tối đa ${MAX_SIMPLE_CATALOG_IMPORT_ROWS} dòng/lần)`);
+  return values;
+}
+
 // excelFormulaGuard/sanitizeRowForFormulaInjection export thêm ở đợt audit chuyên sâu lần 2 — trước đây
 // CHỈ buildGenericWorkbook() (dùng nội bộ file này) áp dụng được luật chống Excel Formula Injection ở
 // trên; các hàm dựng workbook RIÊNG của module khác (lib/employeeProfileImport.js, lib/vppExport.js) tự
 // gọi sheet.addRow() trực tiếp, không đi qua buildGenericWorkbook() nên KHÔNG được bảo vệ — export ra để
 // những nơi đó gọi lại đúng 1 luật chung thay vì viết trùng.
-module.exports = { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection };
+module.exports = { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection, parseGenericSingleColumnXlsx };

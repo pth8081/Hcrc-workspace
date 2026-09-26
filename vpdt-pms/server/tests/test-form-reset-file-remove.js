@@ -1027,11 +1027,13 @@ async function main() {
       }
     );
 
-    // ================= 23) Hỗ Trợ IT > Phê Duyệt Giá (itPriceCreateForm) =================
+    // ================= 23) Vận Hành > Phê Duyệt Giá Bán Buôn (itPriceCreateForm) =================
+    // 10/2026: form chuyển từ Hỗ Trợ IT sang Vận Hành (ids GIỮ NGUYÊN), khoá cứng WHOLESALE — xem
+    // enterVanHanhItPriceForm() (module-itsupport-price.js) + setVanHanhSubTab('ITPRICE') (module-vanhanh.js).
     await check(
       'Phê Duyệt Giá: chip file đơn (bảng giá, ĐÃ có data-op-change riêng đọc file) + chip file nhiều (tài liệu bổ sung, xoá đúng 1 file), Mức Margin/Chiết Khấu (Bán Buôn) bị xoá giá trị nhưng KHÔNG tự chuyển lại sub-tab Bán Lẻ, mã đề xuất/phòng ban sinh lại đúng',
       async () => {
-        await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); setItPriceSubTab('WHOLESALE'); });
+        await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
         await page.selectOption('#itPriceTier', 'MARGIN_LT5');
         await page.fill('#itPriceReason', 'Lý do kiểm thử reset form');
 
@@ -1086,7 +1088,7 @@ async function main() {
         assertTrue(state.itPriceTier === '', `Mức Margin/Chiết Khấu phải về rỗng sau Làm Mới, thực tế "${state.itPriceTier}"`);
         assertTrue(state.activeSubTab === 'WHOLESALE', `Sub-tab Bán Buôn KHÔNG được tự đổi lại Bán Lẻ khi Làm Mới (chỉ xoá giá trị đã chọn), thực tế "${state.activeSubTab}"`);
         assertTrue(state.tierWrapHidden === false, 'Khối Mức Margin/Chiết Khấu vẫn phải HIỆN (đang ở Bán Buôn) — chỉ giá trị bị xoá, không ẩn khối');
-        assertTrue(/^HCRC-[^-]+-ITPG-/.test(state.itPriceCode), `itPriceCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-ITPG-..., thực tế "${state.itPriceCode}"`);
+        assertTrue(/^HCRC-[^-]+-ITPG-BB-/.test(state.itPriceCode), `itPriceCode phải được sinh lại đúng khuôn HCRC-<mã phòng>-ITPG-BB-... (Bán Buôn), thực tế "${state.itPriceCode}"`);
         assertTrue(state.itPriceDeptDisplay === 'Ban Giám Đốc', `itPriceDeptDisplay phải về đúng phòng ban hiện tại, thực tế "${state.itPriceDeptDisplay}"`);
         assertTrue(state.itPriceFileValue === '', 'itPriceFileInput phải về rỗng');
         assertTrue(state.itPriceFileChip === '', 'Chip itPriceFileInput phải biến mất sau Làm Mới');
@@ -1329,6 +1331,9 @@ async function main() {
         await page.evaluate(() => {
           DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
           switchTab('vanHanh');
+          // Nêu rõ sub-tab thay vì trông cậy mặc định activeVanHanhSubTab — kịch bản trước đó (Phê Duyệt
+          // Giá Bán Buôn) đã đổi biến này sang 'ITPRICE', không tự về lại 'ORDERS' giữa các kịch bản.
+          setVanHanhSubTab('ORDERS');
         });
         await page.fill('#voTitle', 'Đặt hàng kiểm thử reset form');
         await page.fill('#voSupplier', 'Công ty TNHH Kiểm Thử');

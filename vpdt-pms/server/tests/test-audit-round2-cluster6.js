@@ -525,9 +525,12 @@ async function main() {
     // module-admin-userstaging.js): thêm posType/startDate (rỗng khi file không có 2 cột này, như file
     // mẫu cũ ở test này) — client (validateImportedUserRow()) mới là nơi chặn cứng khi 2 trường + dept/
     // jobTitle không khớp danh mục, parser ở đây vẫn CHỈ đọc thô không có logic nghiệp vụ gì.
+    // ĐỔI HÀNH VI CÓ CHỦ ĐÍCH (10/2026, đợt Khối/Ban v24.16): thêm khoiBan (rỗng khi file không có cột
+    // "khoiban", như file mẫu cũ ở test này) — cùng lý do posType/startDate ở trên, parser vẫn chỉ đọc
+    // thô, validateImportedUserRow() (client) mới đối chiếu tên Khối/Ban với DB.deptGroups.
     assert.deepStrictEqual(rows[0], {
       username: 'nv01', pass: 'Matkhau@123', name: 'Nguyễn Văn A', email: 'a@cty.vn',
-      phone: '0900000001', dept: DEPT_A, jobTitle: 'Nhân viên', posType: '', startDate: '',
+      phone: '0900000001', dept: DEPT_A, jobTitle: 'Nhân viên', posType: '', startDate: '', khoiBan: '',
       duplicateInFile: false, duplicateExisting: false
     });
     assert.strictEqual(rows[1].username, 'nv02');

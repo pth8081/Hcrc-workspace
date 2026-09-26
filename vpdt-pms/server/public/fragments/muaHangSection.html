@@ -2,6 +2,10 @@
     <div class="flex flex-wrap gap-2 border-b pb-2">
       <button type="button" data-op="setPurchasingSubTab" data-arg0="BAS" id="btnMhSubBas" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white">🧮 BAS</button>
       <button type="button" data-op="setPurchasingSubTab" data-arg0="REPORT" id="btnMhSubReport" class="hidden px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Báo Cáo</button>
+      <!-- "Phê Duyệt Giá Bán Lẻ" (10/2026, yêu cầu người dùng — tách khỏi Hỗ Trợ IT) — quyền tạo tự gác
+           BÊN TRONG form (canProposeItPriceType(..., 'RETAIL')) đúng khuôn nút "🏷️ Phê Duyệt Giá" cũ ở
+           Hỗ Trợ IT, nên nút này KHÔNG cần ẩn/hiện theo quyền như BAS/REPORT ở trên. -->
+      <button type="button" data-op="setPurchasingSubTab" data-arg0="ITPRICE" id="btnMhSubItPrice" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💲 Phê Duyệt Giá Bán Lẻ</button>
     </div>
 
     <!-- Sub-tab: BAS (rebateTermManage/rebateTermActivate) — quản lý NCC/Điều Khoản, đồng bộ DSmart, tính ước tính.
@@ -213,5 +217,81 @@
         </div>
         <div id="mhReportSummaryWrap" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
         <div id="mhReportTableWrap" class="overflow-x-auto"></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab: Phê Duyệt Giá Bán Lẻ (itPriceApprovals, priceType=RETAIL) — 10/2026, chuyển từ Hỗ Trợ
+         IT sang đây. Form nhỏ hơn Bán Buôn (không có tier/đơn vị áp dụng/siêu thị đề xuất/ngày hiệu lực —
+         Bán Lẻ tự gắn storeScope=ALL/ngày áp dụng=hôm nay/hết hiệu lực=Vĩnh viễn, xem
+         submitMhItPriceApproval()). Danh sách đầy đủ + Duyệt/Từ chối/Nhận xử lý/Áp giá vẫn ở Hỗ Trợ IT >
+         Phê Duyệt Giá (nút "Xem danh sách đầy đủ" bên dưới). -->
+    <div id="mhSubItprice" class="hidden space-y-4">
+      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">💲 Đề Xuất Duyệt Giá Bán Lẻ</h3>
+        <p class="text-xs text-emerald-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành.</p>
+        <div id="mhItPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá bán lẻ.</div>
+        <form id="mhItPriceCreateForm" data-op-submit="submitMhItPriceApproval" class="hidden bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label>
+              <input id="mhItPriceCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Phòng Ban Đề Xuất</label>
+              <input id="mhItPriceDeptDisplay" readonly class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed">
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">🗺️ Vùng Giá Áp Dụng <span class="text-gray-400 font-normal">(Không bắt buộc)</span></label>
+            <select id="mhItPriceRetailZone" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn Vùng Giá Áp Dụng --</option>
+            </select>
+            <p id="mhItPriceRetailZoneEmptyHint" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-1"></p>
+          </div>
+          <div id="mhItPriceMasterListSelectWrap" class="hidden">
+            <label class="block font-semibold text-gray-600 mb-1">📐 Mẫu Giá Phê Duyệt <span class="text-red-500">*</span></label>
+            <select id="mhItPriceMasterListSelect" data-op-change="onMhItPriceMasterListChange" class="w-full border p-1.5 rounded bg-white">
+              <option value="">-- Chọn Mẫu Giá Phê Duyệt --</option>
+            </select>
+            <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mẫu áp dụng cho bảng giá của bạn — tệp bảng giá tải lên bên dưới phải có đúng tên cột theo mẫu đã chọn, sai/thiếu cột sẽ bị chặn gửi.</p>
+            <a id="mhItPriceMasterListDownloadLink" href="#" target="_blank" class="hidden inline-block mt-1 text-emerald-600 hover:underline font-semibold">📥 Tải Mẫu Giá này về để làm theo</a>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>
+            <input id="mhItPriceFileInput" type="file" accept=".xlsx,.xls" data-op-change="onMhItPriceFileChange" data-arg-event="0" class="w-full border p-1.5 rounded bg-white">
+            <div id="mhItPriceFileChip" class="mt-1 flex flex-wrap gap-1"></div>
+            <p id="mhItPriceFileStatus" class="text-gray-500 mt-1"></p>
+            <p class="text-gray-400 mt-1">Tệp phải có ĐÚNG các cột (tên, không phân biệt hoa/thường/dấu) theo Mẫu Giá đã chọn ở trên — không thiếu, không thừa cột nào (thứ tự cột không quan trọng).</p>
+          </div>
+          <div id="mhItPriceFilePreviewWrap" class="hidden">
+            <p class="font-semibold text-gray-600 mb-1">Xem trước nội dung tệp (<span id="mhItPriceFilePreviewCount">0</span> dòng)</p>
+            <div class="overflow-x-auto max-h-48 overflow-y-auto border rounded">
+              <table class="w-full border-collapse text-xs bg-white">
+                <thead id="mhItPriceFilePreviewHead" class="bg-gray-100 text-left text-gray-700"></thead>
+                <tbody id="mhItPriceFilePreviewBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Lý Do Điều Chỉnh Giá</label>
+            <textarea id="mhItPriceReason" placeholder="VD: Giá nhập tăng theo nhà cung cấp, điều chỉnh theo mặt bằng thị trường..." class="w-full border p-1.5 rounded h-16"></textarea>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">📎 Tài liệu bổ sung liên quan</label>
+            <input id="mhItPriceExtraFiles" type="file" multiple data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="mhItPriceExtraFilesChip" class="w-full border p-1.5 rounded bg-white">
+            <div id="mhItPriceExtraFilesChip" class="mt-1 flex flex-wrap gap-1"></div>
+            <p class="text-gray-400 mt-1">Tuỳ chọn — các tài liệu liên quan khác (không phải bảng giá), có thể chọn nhiều tệp cùng lúc.</p>
+          </div>
+          <div id="dynamicFieldsContainer_IT_PRICE_RETAIL_MH" class="contents"></div>
+          <div class="flex justify-end gap-2">
+            <button type="button" id="mhItPricePreviewWfBtn" data-op="previewMhItPriceWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
+            <button type="button" data-op="confirmAndResetForm" data-arg0="mhItPriceCreateForm" data-arg1="resetMhItPriceForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
+            <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>
+          </div>
+        </form>
+      </div>
+      <div class="bg-gray-50 p-3 rounded border text-xs text-gray-600">
+        📋 Xem danh sách đầy đủ + trạng thái duyệt tại
+        <button type="button" data-op-seq="switchTab(itSupport)|setItSupportSubTab(PRICE)|setItPriceSubTab(RETAIL)" class="text-emerald-700 font-bold hover:underline">Hỗ Trợ IT &gt; Phê Duyệt Giá &gt; Bán Lẻ</button>.
       </div>
     </div>
