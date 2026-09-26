@@ -1546,6 +1546,43 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     quan Phân Quyền) cũng tự xem được hồ sơ, không cần cấp quyền gì thêm —
     cùng cơ chế áp dụng cho **Tài Liệu** (mục 4.1) và **Thanh Toán** ngay
     dưới đây.
+- **"🖊️ Nhóm Phê Duyệt Cuối" — Cấp Phê Duyệt Cuối Cùng + Nhóm Phê Duyệt cho 10
+  quy trình khác** (10/2026): copy ĐÚNG cơ chế "Cấp Phê Duyệt Cuối Cùng + Nhóm
+  Phê Duyệt" của Hợp Đồng/Văn Bản Trình ở trên, nhưng là **tính năng RIÊNG
+  BIỆT hoàn toàn** (bảng dữ liệu, màn cấu hình, engine ghép bước — tất cả tách
+  biệt) — **LOẠI TRỪ Hợp Đồng và Văn Bản Trình** (2 quy trình đó đã có sẵn cơ
+  chế Nhóm Phê Duyệt Trình/HĐ riêng ở trên, không đổi gì) — áp dụng cho **10
+  quy trình KHÁC**: 📂 Tài Liệu, 🚗 Đăng Ký Xe, 🛒 Mua Bán VP, 🔧 Sửa Chữa VP,
+  🖇️ Văn Phòng Phẩm, 💰 Thanh Toán, 🏷️ Phê Duyệt Giá Bán Lẻ, 🏪 Phê Duyệt Giá
+  Bán Buôn, 📦 Vận Hành - Đặt Hàng Tại Siêu Thị, 📦 Vận Hành - Đặt Hàng Tại HO.
+  - **Cấu hình** (admin): **Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → 🖊️ Nhóm Phê
+    Duyệt Cuối** (sub-tab thứ 5, cạnh 🖋️ Nhóm Phê Duyệt Trình/HĐ) — chọn 1
+    trong 10 quy trình ở dropdown đầu màn, mỗi quy trình có bảng **"Nhóm"**
+    (vai trò + thành viên gán sẵn, cờ **"Chỉ 1 người?"**) và bảng **"Cấp Phê
+    Duyệt Cuối Cùng"** (mỗi cấp gán "Nhóm Được Chọn"/"Nhóm Bắt Buộc") **HOÀN
+    TOÀN riêng cho từng quy trình** — sửa cấu hình của 1 quy trình (VD Tài
+    Liệu) không ảnh hưởng 9 quy trình còn lại (VD Đăng Ký Xe), thao tác y hệt
+    "🖋️ Nhóm Phê Duyệt Trình/HĐ".
+  - **Quy trình nào CHƯA cấu hình đủ cả 2 bảng (Nhóm + Cấp) thì form tạo hồ sơ
+    của đúng quy trình đó KHÔNG hiện gì thêm** — an toàn tuyệt đối, giữ nguyên
+    hành vi tạo hồ sơ như trước khi có tính năng này cho tới khi admin cấu
+    hình đủ.
+  - **Ở form tạo hồ sơ** (khi quy trình đã cấu hình đủ): người tạo chọn 1
+    **Cấp Phê Duyệt Cuối Cùng**, các Nhóm **Bắt Buộc** của cấp đó tự tick sẵn
+    (khoá, không bỏ tick được), tick thêm Nhóm **Được Chọn** nếu cần. Nhóm chỉ
+    **đúng 1 người** → tự dùng người đó; nhóm có **nhiều hơn 1 người** (không
+    bật "Chỉ 1 người") → hiện thêm hộp chọn bắt buộc **đúng 1 người cụ thể**
+    trong nhóm (cùng luật chọn người như Hợp Đồng/Văn Bản Trình ở trên).
+  - **Vị trí bước — LUÔN nối SAU CÙNG quy trình phòng ban gốc**: khác Hợp
+    Đồng/Văn Bản Trình (đông cứng TOÀN BỘ quy trình ngay lúc tạo), 10 quy trình
+    dùng "🖊️ Nhóm Phê Duyệt Cuối" **không snapshot quy trình** — chúng đọc lại
+    cấu hình duyệt phòng ban MỚI NHẤT mỗi lần có người bấm Duyệt/Từ chối. Vì
+    vậy hệ thống chỉ đông cứng **lựa chọn** (Cấp + người phê duyệt cụ thể của
+    từng Nhóm đã chọn) ngay lúc tạo hồ sơ, còn **vị trí bước** thì tính lại
+    mỗi lần: nếu sau đó admin sửa quy trình phòng ban gốc (thêm/bớt bước), các
+    bước Nhóm Phê Duyệt Cuối tự trượt theo, luôn nối đúng **SAU CÙNG** quy
+    trình gốc mới nhất — không kẹt cứng ở 1 vị trí cố định, không đè lên bước
+    phòng ban mới.
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
   **"🚫 Hủy Đề Xuất" khi chưa ai duyệt (từ 9/2026)** — cùng cơ chế đã có ở
@@ -1754,9 +1791,10 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") giờ **CHỈ còn quyết
     định SỐ BƯỚC** (theo mức giá trị 3 tier ở trên) — **NGƯỜI DUYỆT từng bước
     chuyển hẳn sang cấu hình ở sub-tab riêng "🏬 Quy Trình Đặt Hàng Siêu Thị"**
-    (Hệ Thống → 🔀 Quy Trình Nâng Cao — từ v23.65 gộp chung với "⚡ Áp Dụng
+    (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao — từ v23.65 gộp chung với "⚡ Áp Dụng
     Nhanh"/"🖋️ Nhóm Phê Duyệt Trình/HĐ"/"🧩 Nhóm Quyền Đặc Biệt" thành 4
-    sub-tab của 1 tab lớn; trước đó "⚙️ Quy Trình Hỗn Hợp" (tên cũ) là tab
+    sub-tab của 1 tab lớn (10/2026 thêm sub-tab thứ 5 "🖊️ Nhóm Phê Duyệt Cuối",
+    xem mục 4.2); trước đó "⚙️ Quy Trình Hỗn Hợp" (tên cũ) là tab
     ngang hàng cạnh "🔄 Quy Trình & Phê Duyệt"). Màn này là **1 bảng duy
     nhất**, mỗi dòng gồm:
     - **Bước**: 1/2/3... (khớp đúng số bước của tier đơn hàng rơi vào — 1 bước

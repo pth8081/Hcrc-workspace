@@ -94,6 +94,9 @@ function setOperationOrderSubTab(tab) {
     // trên form vẫn mang hậu tố của tab CŨ trong khi orderLocationType submit lên lại là tab MỚI.
     const codeEl = document.getElementById('voCode');
     if (codeEl) codeEl.value = generateOperationOrderCode();
+    // "Nhóm Phê Duyệt Cuối" (10/2026) — vẽ lại đúng moduleKey khớp sub-tab STORE/HO đang mở, mỗi bên 1
+    // bộ nhóm/cấp độc lập.
+    renderExtraApprovalMount(`OPERATION_ORDER_${tab}`, 'extraApprovalMount_OPERATION_ORDER');
   } else if (tab === 'REPORT') {
     renderOperationOrderReport();
   } else if (tab === 'RECEIPT') {
@@ -131,7 +134,8 @@ function setVanHanhSubTab(subTab) {
     // Cấp lồng thứ 2 MỚI (đợt "Báo Cáo + Nhập Hàng") — 2 sub-tab "📋 Danh Sách"/"📊 Báo Cáo" bên trong
     // chính tab Đơn Hàng, xem setOperationOrderSubTab() ở trên.
     setOperationOrderSubTab(activeOperationOrderSubTab);
-  } else if (subTab === 'STORE') {
+  }
+  if (subTab === 'STORE') {
     // updateOperationStoreSubTabVisibility() (v23.10): gọi LẠI ở đây (không chỉ ở finishLogin()) — từ khi
     // khung HTML của vanHanhSection tải lười, lần gọi ĐẦU (finishLogin(), core.js) chạy TRƯỚC KHI các nút
     // này có mặt trong DOM nên phải bỏ qua phần tô ẩn/hiện (xem chú thích tại hàm đó); gọi lại đúng lúc
@@ -730,6 +734,11 @@ async function handleOperationOrderMultiFilePdfUpload(event) {
   if (chipEl) chipEl.innerHTML = `<span class="inline-flex items-center gap-1 bg-gray-100 border rounded px-2 py-0.5 text-[11px]">📎 Đã chọn ${files.length} file — sẽ tự tạo hàng loạt</span>`;
 
   const orderLocationType = activeOperationOrderSubTab;
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — nhánh nhập hàng loạt KHÔNG có form riêng cho từng đơn để người
+  // dùng tự chọn Cấp/Nhóm — dùng ĐÚNG 1 lựa chọn đang chọn sẵn ở form 1-file (cùng mount, cùng sub-tab)
+  // áp dụng CHUNG cho mọi đơn parse ra trong đợt này (nếu quy trình STORE/HO này chưa cấu hình đủ,
+  // approvalLevel vẫn là null và không đụng gì tới payload, y hệt nhánh 1 file).
+  const extraApproval = readSelectedExtraApprovalLayers(`OPERATION_ORDER_${orderLocationType}`);
   if (orderLocationType !== 'STORE' && orderLocationType !== 'HO') {
     return alert('⛔ Vui lòng chọn đúng sub-tab "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" trước khi tạo đơn!');
   }
@@ -769,6 +778,11 @@ async function handleOperationOrderMultiFilePdfUpload(event) {
         discountAmount: f.discountAmount || 0, vatAmount: f.vatAmount || 0,
         afterDiscountAmount: f.afterDiscountAmount || 0, paymentTotalAmount: f.paymentTotalAmount || 0
       };
+      if (extraApproval.approvalLevel !== null) {
+        payload.approvalLevel = extraApproval.approvalLevel;
+        payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+        payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+      }
       const result = await callCreateAction('operationOrders', payload);
       DB.operationOrders.unshift(result.item);
       logSystemAction(OPERATION_KIND_META.operationOrders.logModule, 'CREATE', `Tạo đơn hàng [${result.item.code} - ${title}] (${OPERATION_ORDER_SUBTAB_LABELS[orderLocationType]}) — nhập hàng loạt`, 'SUCCESS', result.item.code);
@@ -859,6 +873,15 @@ async function submitOperationOrder(e) {
     discountAmount, vatAmount, afterDiscountAmount, paymentTotalAmount,
     customData
   };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng sub-tab đang mở (STORE -> OPERATION_ORDER_STORE,
+  // HO -> OPERATION_ORDER_HO, mỗi bên 1 bộ nhóm/cấp độc lập).
+  const extraApprovalModuleKey = `OPERATION_ORDER_${orderLocationType}`;
+  const extraApproval = readSelectedExtraApprovalLayers(extraApprovalModuleKey);
+  if (extraApproval.approvalLevel !== null) {
+    payload.approvalLevel = extraApproval.approvalLevel;
+    payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
   let newItem, warning;
   try {
     const result = await callCreateAction('operationOrders', payload);

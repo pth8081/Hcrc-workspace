@@ -586,6 +586,13 @@ async function submitItPriceApproval(e) {
     createdAt: new Date().toLocaleString('vi-VN'),
     customData
   };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — form này chỉ còn chạy cho Bán Buôn (ITPRICE_WHOLESALE).
+  const extraApproval = readSelectedExtraApprovalLayers('ITPRICE_WHOLESALE');
+  if (extraApproval.approvalLevel !== null) {
+    payload.approvalLevel = extraApproval.approvalLevel;
+    payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
 
   let newItem;
   try {
@@ -745,6 +752,7 @@ function enterVanHanhItPriceForm() {
   // renderVanHanhItPriceList() — danh sách đề xuất Bán Buôn CỦA TÔI/tôi cần duyệt, hiện NGAY tại đây
   // (10/2026, yêu cầu người dùng) — gọi lại mỗi lần vào tab để chắc chắn khớp dữ liệu mới nhất.
   renderVanHanhItPriceList();
+  renderExtraApprovalMount('ITPRICE_WHOLESALE', 'extraApprovalMount_ITPRICE_WHOLESALE');
 }
 
 let activeItPriceSubTab = 'RETAIL';

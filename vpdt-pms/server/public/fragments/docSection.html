@@ -58,6 +58,10 @@
         <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
         <div id="dynamicFieldsContainer_DOC" class="contents"></div>
 
+        <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — renderExtraApprovalMount('DOC', ...) tự ẩn hẳn nếu quy
+             trình DOC chưa được admin cấu hình đủ ở Hệ Thống → Nghiệp Vụ Nâng Cao → Nhóm Phê Duyệt Cuối. -->
+        <div id="extraApprovalMount_DOC" class="md:col-span-3"></div>
+
         <div class="md:col-span-3 flex justify-end gap-2">
           <button type="button" data-op="confirmAndResetForm" data-arg0="docForm" data-arg1="resetDocUploadForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">↺ Làm Mới</button>
           <button type="button" id="docPreviewWfBtn" data-op="previewDocWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">🔍 Xem Quy Trình</button>

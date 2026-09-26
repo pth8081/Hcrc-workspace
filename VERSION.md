@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**24.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.23 (2026-09-26): Nhóm Phê Duyệt Cuối — cơ chế Cấp Phê Duyệt Cuối Cùng/Nhóm Phê Duyệt cho 10 quy trình khác
+
+Tính năng mới theo yêu cầu người dùng: copy ĐÚNG cơ chế "Cấp Phê Duyệt Cuối
+Cùng + Nhóm Phê Duyệt" đã có ở Hợp Đồng/Văn Bản Trình, nhưng làm thành **tính
+năng RIÊNG BIỆT hoàn toàn** — áp dụng cho **10 quy trình KHÁC** (Tài Liệu,
+Đăng Ký Xe, Mua Bán VP, Sửa Chữa VP, Văn Phòng Phẩm, Thanh Toán, Phê Duyệt Giá
+Bán Lẻ, Phê Duyệt Giá Bán Buôn, Vận Hành - Đặt Hàng Tại Siêu Thị, Vận Hành -
+Đặt Hàng Tại HO), **loại trừ Hợp Đồng và Văn Bản Trình** (2 quy trình đó giữ
+nguyên cơ chế cũ, không đổi gì).
+
+**Khác biệt kiến trúc quan trọng so với Hợp Đồng/Văn Bản Trình**: 2 quy trình
+đó snapshot TOÀN BỘ quy trình hiệu lực (`effectiveSteps`/`effectiveApprovers`)
+ngay lúc tạo hồ sơ, còn 10 quy trình ở đây đọc lại cấu hình duyệt phòng ban
+**MỚI NHẤT** mỗi lần xử lý (`resolveWfConfig()`, `lib/workflowEngine.js`) —
+nên chỉ đông cứng **lựa chọn** (Cấp + người phê duyệt cụ thể của từng Nhóm đã
+chọn, lưu ở `item.extraApprovalLevel`/`extraApprovalLayers`) ngay lúc tạo hồ
+sơ, còn **vị trí bước** thì ghép lại mỗi lần resolve (`appendExtraApprovalLayers()`)
+— nếu sau đó admin sửa số bước quy trình phòng ban gốc, các bước Nhóm Phê
+Duyệt Cuối tự trượt theo, luôn nối đúng SAU CÙNG.
+
+**Dữ liệu**: 20 khoá AppData phẳng `extraApprovalGroups_<MODULEKEY>`/
+`extraApprovalLevels_<MODULEKEY>` (10 moduleKey độc lập hoàn toàn — DOC, CAR,
+OFFICE_BUY, OFFICE_FIX, VPP, PAYMENT, ITPRICE_RETAIL, ITPRICE_WHOLESALE,
+OPERATION_ORDER_STORE, OPERATION_ORDER_HO), tái dùng 100% engine bảng Nhóm/
+Cấp + guard tham chiếu chéo đã có sẵn của Nhóm Phê Duyệt Trình/HĐ — không
+viết logic admin UI/validate mới song song.
+
+**Cấu hình** (admin): Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → sub-tab thứ 5 mới
+"🖊️ Nhóm Phê Duyệt Cuối" — chọn 1 trong 10 quy trình ở dropdown, mỗi quy trình
+1 bộ Nhóm/Cấp riêng. Quy trình nào CHƯA cấu hình đủ cả 2 bảng thì form tạo hồ
+sơ của quy trình đó KHÔNG hiện gì thêm (an toàn tuyệt đối, không đổi hành vi
+tạo hồ sơ cho tới khi admin cấu hình đủ).
+
+Viết mới `tests/test-extra-approval-groups.js` (22 kịch bản) — đơn vị
+`prepareExtraApprovalSelectionForCreate()`/`appendExtraApprovalLayers()` +
+tích hợp qua `validateAndPrepareCreate()` xác nhận mapping đúng moduleKey cho
+3 module tách theo field split (officeReqs/subType, itPriceApprovals/
+priceType, operationOrders/orderLocationType). Chạy lại các test liên quan 7
+module đã wiring (docs/carRegs/officeReqs/vppRegistrations/paymentRequests/
+itPriceApprovals + `test-initdatabase-key-coverage.js`) — không phát hiện hồi
+quy.
+
+Cập nhật `SYSTEM_DOCS.sysAdvWorkflow` (module Hướng Dẫn → tab Hệ Thống) +
+`deploy/Huong-dan-nghiep-vu.md` (mục Hợp Đồng, ngay trước "Tổng Hợp").
+
+Không đổi schema/route/`.env`/dependency — chỉ copy code + `pm2 restart`.
 
 ## v24.22 (2026-09-26): Khối/Ban — bộ lọc Phân Quyền cập nhật NGAY, không cần rời tab
 

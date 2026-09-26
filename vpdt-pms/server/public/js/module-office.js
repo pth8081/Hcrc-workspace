@@ -111,6 +111,15 @@ async function submitOfficeReq(e) {
     currentStep: 1,
     history: []
   };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng sub-tab đang mở (MUA_BAN -> OFFICE_BUY,
+  // SUA_CHUA -> OFFICE_FIX, mỗi bên 1 bộ nhóm/cấp độc lập).
+  const extraApprovalModuleKey = activeOfficeSubTab === 'SUA_CHUA' ? 'OFFICE_FIX' : 'OFFICE_BUY';
+  const extraApproval = readSelectedExtraApprovalLayers(extraApprovalModuleKey);
+  if (extraApproval.approvalLevel !== null) {
+    officePayload.approvalLevel = extraApproval.approvalLevel;
+    officePayload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    officePayload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
 
   let newOff;
   try {

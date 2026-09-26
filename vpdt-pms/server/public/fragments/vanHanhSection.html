@@ -98,6 +98,8 @@
           <div><label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label><textarea id="voNote" class="w-full border p-1.5 rounded h-16" placeholder="Ghi chú thêm (nếu có)..."></textarea></div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_OPERATION_ORDER" class="contents"></div>
+          <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — xem chú thích tại #extraApprovalMount_DOC (docSection.html). -->
+          <div id="extraApprovalMount_OPERATION_ORDER"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="operationOrderForm" data-arg1="resetOperationOrderForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <!-- Quy trình duyệt đơn hàng theo MỨC GIÁ TRỊ (không theo phòng ban) — mức suy ra từ tổng
@@ -686,6 +688,8 @@
             <p class="text-gray-400 mt-1">Tuỳ chọn — các tài liệu liên quan khác (không phải bảng giá), có thể chọn nhiều tệp cùng lúc.</p>
           </div>
           <div id="dynamicFieldsContainer_IT_PRICE" class="contents"></div>
+          <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — xem chú thích tại #extraApprovalMount_DOC (docSection.html). -->
+          <div id="extraApprovalMount_ITPRICE_WHOLESALE"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="itPriceCreateForm" data-arg1="resetItPriceForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="button" id="itPricePreviewWfBtn" data-op="previewItPriceWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>

@@ -232,7 +232,7 @@ function setVppSubTab(subTab) {
   document.getElementById('btnVppSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canManageVpp(currentUser) ? '' : ' hidden');
   document.getElementById('btnVppSubReports').className = (subTab === 'REPORTS' ? activeCls : inactiveCls) + (canSeeReports ? '' : ' hidden');
 
-  if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); }
+  if (subTab === 'REGISTER') { renderVppRegPeriodOptions(); renderVppRegistrations(); renderExtraApprovalMount('VPP', 'extraApprovalMount_VPP'); }
   if (subTab === 'PERIODS') { renderVppPeriods(); renderVppDeptHeadcountTable(); renderDynamicInputsForModule('VPP', 'dynamicFieldsContainer_VPP'); }
   if (subTab === 'REPORTS') { renderVppReportPeriodOptions(); renderVppReports(); }
 }
@@ -427,6 +427,13 @@ async function saveVppRegDraft() {
         code: `DK-VPP-${period.code || period.id}-${currentUser.username}-${Date.now()}`,
         periodId, items, createdAt: new Date().toLocaleString('vi-VN')
       };
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ gửi kèm nếu quy trình VPP đã được admin cấu hình đủ.
+      const extraApproval = readSelectedExtraApprovalLayers('VPP');
+      if (extraApproval.approvalLevel !== null) {
+        payload.approvalLevel = extraApproval.approvalLevel;
+        payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+        payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+      }
       const result = await callCreateAction('vppRegistrations', payload);
       savedReg = result.item;
     }

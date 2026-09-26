@@ -144,6 +144,11 @@ function onPaymentSourceTypeChange() {
   document.getElementById('paymentSourceRecord').value = '';
   document.getElementById('paymentTitle').value = '';
   renderPaymentCreateInstallmentsList([]);
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — CHỈ áp dụng cho đề nghị Thủ công (xem chú thích ở
+  // submitManualPaymentRequest()) — ẩn hẳn khối UI khi đang chọn nguồn Hợp Đồng/Mua Bán/Sửa Chữa.
+  const mount = document.getElementById('extraApprovalMount_PAYMENT');
+  if (mount) mount.innerHTML = '';
+  if (sourceType === 'MANUAL') renderExtraApprovalMount('PAYMENT', 'extraApprovalMount_PAYMENT');
 }
 
 function onPaymentSourceRecordChange() {
@@ -206,6 +211,16 @@ async function submitManualPaymentRequest(e) {
     }
   }
 
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — CHỈ áp dụng cho đề nghị tạo THỦ CÔNG (sourceType MANUAL, đi qua
+  // /api/create/paymentRequests) — đề nghị tự sinh từ Hợp Đồng/Mua Bán/Sửa Chữa (startContractPayment()/
+  // startOfficePayment() ở lib/recordActions.js) đi đường tạo KHÁC, chưa áp dụng tính năng này.
+  const extraApproval = sourceType === 'MANUAL' ? readSelectedExtraApprovalLayers('PAYMENT') : { approvalLevel: null };
+  const extraApprovalFields = extraApproval.approvalLevel !== null ? {
+    approvalLevel: extraApproval.approvalLevel,
+    selectedExtraApprovalLayerKeys: extraApproval.selectedLayerKeys,
+    selectedExtraApprovalLayerMembers: extraApproval.selectedLayerMembers
+  } : {};
+
   let newPrs = [];
   let updatedSourceItem = null;
   try {
@@ -221,7 +236,7 @@ async function submitManualPaymentRequest(e) {
           const result = await callCreateAction('paymentRequests', {
             dept, title, installments: [installments[i]], requestFiles: [],
             cycleGroupId, cycleIndex: i + 1, cycleTotal: installments.length,
-            customData
+            customData, ...extraApprovalFields
           });
           newPrs.push(result.item);
         }
@@ -229,7 +244,7 @@ async function submitManualPaymentRequest(e) {
           alert('ℹ️ Đề nghị thanh toán theo đợt: mỗi đợt cần đính kèm "Hồ Sơ Đề Nghị Thanh Toán" RIÊNG — tệp vừa chọn chưa được gắn vào đợt nào, vui lòng đính kèm cho từng đợt ở "🗂️ Quản Lý Thanh Toán".');
         }
       } else {
-        const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles, customData });
+        const result = await callCreateAction('paymentRequests', { dept, title, installments, requestFiles, customData, ...extraApprovalFields });
         newPrs = [result.item];
       }
     } else {

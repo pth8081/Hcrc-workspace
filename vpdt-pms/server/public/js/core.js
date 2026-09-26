@@ -2233,6 +2233,252 @@ function getContractApprovalLevelRule(levelKey) {
     { visible: groups.map(g => g.id), locked: [] };
 }
 
+// ===== "Nhóm Phê Duyệt Cuối" (10/2026) — cùng khuôn getContractApprovalLayers()/Levels()/LevelRule() ở
+// trên nhưng TÁCH RIÊNG hoàn toàn khỏi Hợp Đồng/Văn Bản Trình (DB.extraApprovalGroups/
+// DB.extraApprovalLevels — 2 MAP theo moduleKey, mỗi quy trình 1 bộ ĐỘC LẬP), và GENERIC theo moduleKey
+// thay vì viết riêng cho từng module như Văn Bản Trình/Hợp Đồng đã làm — 10 module dùng CHUNG đúng 1 bộ
+// hàm dưới đây (thay vì copy-paste 10 lần), chỉ khác nhau ở tham số moduleKey (khớp key trong
+// WF_MODULE_CONFIG ở module-workflow.js, TRỪ SUBMISSION/CONTRACT_APPROVAL/CONTRACT_MANAGE — 2 quy trình
+// đó giữ nguyên cơ chế riêng, không dùng bộ hàm này). Khớp đúng buildEffectiveExtraApprovalStepsServer()
+// ở lib/createValidation.js (LƯU Ý BẢO TRÌ — đổi luật ở 1 bên thì sửa luôn bên kia).
+// DB.extraApprovalGroups_<moduleKey>/DB.extraApprovalLevels_<moduleKey> — 10 CẶP KEY PHẲNG (không lồng
+// theo moduleKey), y hệt shape contractApprovalGroups/contractApprovalLevels lặp lại cho từng quy
+// trình — xem defaults.js.
+function getExtraApprovalLayers(moduleKey) {
+  return [...(DB[`extraApprovalGroups_${moduleKey}`] || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(g => ({ key: g.id, label: g.label, singleApprover: !!g.singleApprover, actionLabel: g.actionLabel || null }));
+}
+function getExtraApprovalLevels(moduleKey) {
+  return [...(DB[`extraApprovalLevels_${moduleKey}`] || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(l => ({ key: l.id, label: l.label, isSystemDefault: !!l.isSystemDefault }));
+}
+function getExtraApprovalLevelRule(moduleKey, levelKey) {
+  const levels = DB[`extraApprovalLevels_${moduleKey}`] || [];
+  const groups = DB[`extraApprovalGroups_${moduleKey}`] || [];
+  return resolveApprovalLevelRuleClient(levels, levelKey, groups) ||
+    resolveApprovalLevelRuleClient(levels, levels.find(l => l.isSystemDefault)?.id, groups) ||
+    { visible: groups.map(g => g.id), locked: [] };
+}
+// moduleKey chưa được admin cấu hình ĐỦ groups (>=1) VÀ levels (>=1) ở màn "🖊️ Nhóm Phê Duyệt Cuối" =
+// tính năng CHƯA BẬT cho quy trình đó — dùng để quyết định có mount UI vào form tạo hồ sơ hay không.
+function isExtraApprovalEnabledFor(moduleKey) {
+  return getExtraApprovalLayers(moduleKey).length > 0 && getExtraApprovalLevels(moduleKey).length > 0;
+}
+
+// Gắn (mount) TOÀN BỘ khối UI "Cấp Phê Duyệt Cuối Cùng" + "Phê Duyệt Thêm" vào 1 <div id="mountId"></div>
+// trống có sẵn trong fragment HTML của module gọi hàm này (đặt ngay trước nút submit) — mỗi module chỉ
+// cần thêm ĐÚNG 1 dòng `<div id="extraApprovalMount_MODULEKEY"></div>` vào fragment của mình + gọi hàm
+// này ở đúng chỗ render lại form tạo mới, KHÔNG cần tự viết lại toàn bộ markup dropdown/checkbox như
+// Văn Bản Trình/Hợp Đồng đã làm thủ công trước đây. Rỗng hẳn (không hiện gì, kể cả tiêu đề) nếu module
+// chưa được cấu hình đủ (xem isExtraApprovalEnabledFor()) — an toàn tuyệt đối, form giữ nguyên như cũ.
+function renderExtraApprovalMount(moduleKey, mountId) {
+  const mount = document.getElementById(mountId);
+  if (!mount) return;
+  if (!isExtraApprovalEnabledFor(moduleKey)) { mount.innerHTML = ''; return; }
+  const levels = getExtraApprovalLevels(moduleKey);
+  mount.innerHTML = `
+    <div class="border-t pt-3 mt-3">
+      <label class="block text-xs font-semibold text-gray-600 mb-1">🧭 Cấp Phê Duyệt Cuối Cùng</label>
+      <select id="extraApprovalLevel_${escapeHtml(moduleKey)}" class="w-full border rounded p-1.5 text-sm mb-2"
+        data-op-change="onExtraApprovalLevelChange" data-arg0="${escapeHtml(moduleKey)}">
+        ${levels.map(l => `<option value="${escapeHtml(l.key)}">${escapeHtml(l.label)}</option>`).join('')}
+      </select>
+      <label class="block text-xs font-semibold text-gray-600 mb-1">✅ Phê Duyệt Thêm</label>
+      <div class="relative">
+        <button type="button" id="extraApprovalDropdownBtn_${escapeHtml(moduleKey)}"
+          class="w-full border rounded p-1.5 text-sm text-left bg-white"
+          data-op="toggleExtraApprovalDropdown" data-arg0="${escapeHtml(moduleKey)}">
+          <span id="extraApprovalDropdownLabel_${escapeHtml(moduleKey)}" class="text-gray-500 truncate">-- Chọn cấp phê duyệt --</span>
+        </button>
+        <div id="extraApprovalDropdownPanel_${escapeHtml(moduleKey)}" class="hidden absolute z-20 bg-white border rounded shadow p-1 w-full max-h-48 overflow-auto"></div>
+      </div>
+      <div id="extraApprovalLayersSection_${escapeHtml(moduleKey)}" class="hidden mt-2 flex flex-wrap gap-2" data-role="layers-section">
+        <div id="extraApprovalLayersContainer_${escapeHtml(moduleKey)}" class="flex flex-wrap gap-2 w-full"></div>
+      </div>
+    </div>
+  `;
+  renderExtraApprovalLayerCheckboxes(moduleKey);
+}
+
+function onExtraApprovalLevelChange(moduleKey) { renderExtraApprovalLayerCheckboxes(moduleKey); }
+
+// Cùng khuôn renderContractApprovalLayerCheckboxes() (module-vanbantrinh.js) nhưng generic theo
+// moduleKey — mọi id/class DOM đều gắn hậu tố "_<moduleKey>" để nhiều mục "Nhóm Phê Duyệt Cuối" (VD
+// Đăng Ký Xe và Thanh Toán) không đụng độ nếu lỡ cùng hiện trên 1 trang.
+function renderExtraApprovalLayerCheckboxes(moduleKey) {
+  const panel = document.getElementById(`extraApprovalDropdownPanel_${moduleKey}`);
+  if (!panel) return;
+  const levelKey = document.getElementById(`extraApprovalLevel_${moduleKey}`)?.value;
+  const rule = getExtraApprovalLevelRule(moduleKey, levelKey);
+  const visibleLayers = getExtraApprovalLayers(moduleKey).filter(l => rule.visible.includes(l.key));
+  const groupsArr = DB[`extraApprovalGroups_${moduleKey}`] || [];
+
+  panel.innerHTML = visibleLayers.map(layer => {
+    const groupUsers = (groupsArr.find(g => g.id === layer.key)?.members || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean);
+    const locked = rule.locked.includes(layer.key);
+    const disabled = locked || groupUsers.length === 0;
+    const lockedNote = locked
+      ? (groupUsers.length === 1
+          ? `<span class="block text-[10px] text-emerald-600">Người duyệt: ${escapeHtml(groupUsers[0].name)} (tự động — chỉ có 1 người được cấu hình).</span>`
+          : (groupUsers.length > 1 ? `<span class="block text-[10px] text-sky-600">⚠️ Có ${groupUsers.length} người được cấu hình — chọn cụ thể ở khối bên dưới.</span>` : ''))
+      : '';
+
+    return `
+      <label class="flex items-start gap-1.5 text-xs p-1 rounded ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-indigo-50'}">
+        <input type="checkbox" class="extra-layer-toggle_${escapeHtml(moduleKey)} mt-0.5" value="${escapeHtml(layer.key)}"
+          ${locked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
+          data-op-change="onExtraApprovalLayerToggle" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${escapeHtml(layer.key)}">
+        <span>
+          <span class="font-semibold text-gray-700">${escapeHtml(layer.label)}</span>
+          ${locked ? `<span class="block text-[10px] text-amber-600 italic">Bắt buộc theo cấp phê duyệt đã chọn.</span>${lockedNote}`
+            : (disabled ? `<span class="block text-[10px] text-gray-400 italic">Admin chưa gán thành viên nào cho nhóm này.</span>` : '')}
+        </span>
+      </label>
+    `;
+  }).join('');
+
+  const section = document.getElementById(`extraApprovalLayersSection_${moduleKey}`);
+  const container = document.getElementById(`extraApprovalLayersContainer_${moduleKey}`);
+  if (section) section.classList.add('hidden');
+  if (container) container.innerHTML = '';
+  rule.locked.forEach(layerKey => {
+    const layer = visibleLayers.find(l => l.key === layerKey);
+    if (!layer) return;
+    const groupUsers = (groupsArr.find(g => g.id === layerKey)?.members || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean)
+      .filter(u => u.active !== false);
+    if (groupUsers.length > 1) {
+      renderLockedLayerSingleApproverCard(`extraApprovalLayersContainer_${moduleKey}`, layerKey, layer.label, groupUsers, `extra-layer-single-approver_${moduleKey}`, 'bg-indigo-50/60');
+    }
+  });
+  if (section) section.classList.toggle('hidden', container.children.length === 0);
+  updateExtraApprovalDropdownLabel(moduleKey);
+}
+
+function toggleExtraApprovalDropdown(moduleKey, e) {
+  e.stopPropagation();
+  document.getElementById(`extraApprovalDropdownPanel_${moduleKey}`)?.classList.toggle('hidden');
+}
+// 1 listener CHUNG cho MỌI moduleKey đã mount (thay vì đăng ký riêng từng module) — quét mọi panel đang
+// mở, đóng lại panel nào bị click ra ngoài (kể cả ngoài nút bấm của đúng panel đó).
+document.addEventListener('click', (ev) => {
+  document.querySelectorAll('[id^="extraApprovalDropdownPanel_"]').forEach(panel => {
+    if (panel.classList.contains('hidden')) return;
+    const moduleKey = panel.id.slice('extraApprovalDropdownPanel_'.length);
+    const btn = document.getElementById(`extraApprovalDropdownBtn_${moduleKey}`);
+    if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
+  });
+});
+
+function updateExtraApprovalDropdownLabel(moduleKey) {
+  const labelEl = document.getElementById(`extraApprovalDropdownLabel_${moduleKey}`);
+  if (!labelEl) return;
+  const checked = [...document.querySelectorAll(`#extraApprovalDropdownPanel_${moduleKey} input.extra-layer-toggle_${moduleKey}:checked`)];
+  if (checked.length === 0) {
+    labelEl.textContent = '-- Chọn cấp phê duyệt --';
+    labelEl.className = 'text-gray-500 truncate';
+  } else {
+    const labels = checked.map(cb => getExtraApprovalLayers(moduleKey).find(l => l.key === cb.value)?.label || cb.value);
+    labelEl.textContent = checked.length <= 2 ? labels.join(', ') : `Đã chọn ${checked.length} lớp`;
+    labelEl.className = 'text-gray-800 font-semibold truncate';
+  }
+}
+
+function onExtraApprovalLayerToggle(moduleKey, layerKey) {
+  const toggle = document.querySelector(`.extra-layer-toggle_${moduleKey}[value="${layerKey}"]`);
+  const checked = !!toggle?.checked;
+  const layer = getExtraApprovalLayers(moduleKey).find(l => l.key === layerKey);
+  const container = document.getElementById(`extraApprovalLayersContainer_${moduleKey}`);
+  const section = document.getElementById(`extraApprovalLayersSection_${moduleKey}`);
+  const groupsArr = DB[`extraApprovalGroups_${moduleKey}`] || [];
+
+  if (checked) {
+    const groupUsers = (groupsArr.find(g => g.id === layerKey)?.members || [])
+      .map(un => DB.users.find(u => u.username === un))
+      .filter(Boolean)
+      .filter(u => u.active !== false);
+    const card = document.createElement('div');
+    card.id = `extraLayerCard_${moduleKey}_${layerKey}`;
+    card.className = 'border rounded p-2 bg-indigo-50/60 min-w-[220px]';
+    card.innerHTML = `
+      <div class="font-semibold text-gray-700 mb-1">${escapeHtml(layer?.label || layerKey)}</div>
+      <div id="extraLayerMemberPicker_${escapeHtml(moduleKey)}_${escapeHtml(layerKey)}"></div>
+    `;
+    container.appendChild(card);
+    renderPeopleMultiSelect(`extraLayerMemberPicker_${moduleKey}_${layerKey}`, groupUsers, [], `extra-layer-member_${moduleKey}`, { 'data-layer': layerKey });
+  } else {
+    pmsClear(`extraLayerMemberPicker_${moduleKey}_${layerKey}`);
+    document.getElementById(`extraLayerCard_${moduleKey}_${layerKey}`)?.remove();
+  }
+  if (section) section.classList.toggle('hidden', container.children.length === 0);
+  updateExtraApprovalDropdownLabel(moduleKey);
+}
+
+// Đọc lại đúng cấp + lớp phê duyệt cuối bổ sung + người đã chọn TỪ FORM HIỆN TẠI (bất kỳ module nào đã
+// renderExtraApprovalMount()) — cùng khuôn readSelectedContractLayers() (module-vanbantrinh.js) nhưng
+// generic theo moduleKey và trả kèm luôn `approvalLevel`. Module CHƯA bật tính năng này (mount rỗng, xem
+// isExtraApprovalEnabledFor()) trả selectedLayerKeys/selectedLayerMembers rỗng + approvalLevel null —
+// nơi gọi (submit form) chỉ gửi các field này lên server khi approvalLevel khác null, giữ nguyên payload
+// cũ 100% cho module chưa cấu hình.
+function readSelectedExtraApprovalLayers(moduleKey) {
+  const levelEl = document.getElementById(`extraApprovalLevel_${moduleKey}`);
+  if (!levelEl) return { approvalLevel: null, selectedLayerKeys: [], selectedLayerMembers: {} };
+  const selectedLayerKeys = [...document.querySelectorAll(`#extraApprovalDropdownPanel_${moduleKey} input.extra-layer-toggle_${moduleKey}:checked`)].map(cb => cb.value);
+  const selectedLayerMembers = {};
+  for (const layerKey of selectedLayerKeys) {
+    const singleSelect = document.querySelector(`select.extra-layer-single-approver_${moduleKey}[data-layer="${layerKey}"]`);
+    selectedLayerMembers[layerKey] = singleSelect
+      ? (singleSelect.value ? [singleSelect.value] : [])
+      : [...document.querySelectorAll(`input.extra-layer-member_${moduleKey}[data-layer="${layerKey}"]:checked`)].map(cb => cb.value);
+  }
+  return { approvalLevel: levelEl.value, selectedLayerKeys, selectedLayerMembers };
+}
+
+// Mirror ĐÚNG appendExtraApprovalLayers() ở lib/workflowEngine.js — dùng cho nút "🔍 Xem Quy Trình"
+// (preview, KHÔNG gọi server) của 7 module áp dụng "Nhóm Phê Duyệt Cuối". LƯU Ý BẢO TRÌ: sửa 1 bên PHẢI
+// sửa cả 2 bên. `item` là hồ sơ ĐANG XEM (đã có item.extraApprovalLayers nếu tính năng áp dụng cho hồ sơ
+// đó) — với preview lúc TẠO MỚI (chưa có item thật), gọi appendExtraApprovalLayersForPreview() bên dưới
+// thay vì hàm này (dùng lựa chọn hiện tại trên form thay vì field đã đông cứng trên item).
+function appendExtraApprovalLayersClient(resolved, item) {
+  const layers = item?.extraApprovalLayers;
+  if (!Array.isArray(layers) || !layers.length) return resolved;
+  const steps = (resolved.steps || []).map(s => ({ ...s }));
+  const approvers = { ...(resolved.approvers || {}) };
+  layers.forEach(layer => {
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.layerKey, actionLabel: layer.actionLabel || null });
+    approvers[stepOrder] = layer.approvers || [];
+  });
+  return { steps, approvers };
+}
+
+// Xem trước quy trình NGAY LÚC ĐANG TẠO hồ sơ (chưa có item.extraApprovalLayers thật vì hồ sơ chưa được
+// tạo) — đọc thẳng lựa chọn HIỆN TẠI trên form qua readSelectedExtraApprovalLayers(moduleKey) rồi áp
+// cùng luật hiển thị (không xác thực lại locked/visible ở đây — đây chỉ là xem trước tham khảo, server
+// luôn xác thực thật lúc submit, xem prepareExtraApprovalSelectionForCreate() ở lib/createValidation.js).
+function appendExtraApprovalLayersForPreview(resolved, moduleKey) {
+  if (!isExtraApprovalEnabledFor(moduleKey)) return resolved;
+  const { selectedLayerKeys, selectedLayerMembers } = readSelectedExtraApprovalLayers(moduleKey);
+  if (!selectedLayerKeys.length) return resolved;
+  const groupsArr = DB[`extraApprovalGroups_${moduleKey}`] || [];
+  const steps = (resolved.steps || []).map(s => ({ ...s }));
+  const approvers = { ...(resolved.approvers || {}) };
+  const canonicalOrder = groupsArr.map(g => g.id);
+  [...selectedLayerKeys].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b)).forEach(layerKey => {
+    const layer = groupsArr.find(g => g.id === layerKey);
+    if (!layer) return;
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.id, actionLabel: layer.actionLabel || null });
+    approvers[stepOrder] = selectedLayerMembers[layerKey] || [];
+  });
+  return { steps, approvers };
+}
+
 // Di chuyển "Trường Bổ Sung"/thứ tự trường/override trường mặc định đã cấu hình dưới 1 modKey 'IT_PRICE'
 // CHUNG (trước đợt 9/2026, lúc Biểu Mẫu IT_PRICE chưa tách Bán Lẻ/Bán Buôn) sang CẢ 2 modKey mới
 // ('IT_PRICE_RETAIL'/'IT_PRICE_WHOLESALE') — không suy luận được field nào admin từng thêm chỉ dành
@@ -3869,6 +4115,29 @@ async function initDatabase(loggingInUser, opts) {
     DB.contractApprovalLevels = Array.isArray(data.contractApprovalLevels) ? data.contractApprovalLevels : [];
     DB.contractApprovalDeptWorkflows = data.contractApprovalDeptWorkflows || {};
     DB.contractManageDeptWorkflows = data.contractManageDeptWorkflows || {};
+    // "Nhóm Phê Duyệt Cuối" (10/2026) — 10 cặp key PHẲNG (xem defaults.js), cùng khuôn
+    // contractApprovalGroups/Levels ở trên — viết tường minh từng dòng (thay vì vòng lặp DB[`...`]) để
+    // tests/test-initdatabase-key-coverage.js dò được bằng regex tĩnh `DB\.<key>\s*=`.
+    DB.extraApprovalGroups_DOC = Array.isArray(data.extraApprovalGroups_DOC) ? data.extraApprovalGroups_DOC : [];
+    DB.extraApprovalLevels_DOC = Array.isArray(data.extraApprovalLevels_DOC) ? data.extraApprovalLevels_DOC : [];
+    DB.extraApprovalGroups_CAR = Array.isArray(data.extraApprovalGroups_CAR) ? data.extraApprovalGroups_CAR : [];
+    DB.extraApprovalLevels_CAR = Array.isArray(data.extraApprovalLevels_CAR) ? data.extraApprovalLevels_CAR : [];
+    DB.extraApprovalGroups_OFFICE_BUY = Array.isArray(data.extraApprovalGroups_OFFICE_BUY) ? data.extraApprovalGroups_OFFICE_BUY : [];
+    DB.extraApprovalLevels_OFFICE_BUY = Array.isArray(data.extraApprovalLevels_OFFICE_BUY) ? data.extraApprovalLevels_OFFICE_BUY : [];
+    DB.extraApprovalGroups_OFFICE_FIX = Array.isArray(data.extraApprovalGroups_OFFICE_FIX) ? data.extraApprovalGroups_OFFICE_FIX : [];
+    DB.extraApprovalLevels_OFFICE_FIX = Array.isArray(data.extraApprovalLevels_OFFICE_FIX) ? data.extraApprovalLevels_OFFICE_FIX : [];
+    DB.extraApprovalGroups_VPP = Array.isArray(data.extraApprovalGroups_VPP) ? data.extraApprovalGroups_VPP : [];
+    DB.extraApprovalLevels_VPP = Array.isArray(data.extraApprovalLevels_VPP) ? data.extraApprovalLevels_VPP : [];
+    DB.extraApprovalGroups_PAYMENT = Array.isArray(data.extraApprovalGroups_PAYMENT) ? data.extraApprovalGroups_PAYMENT : [];
+    DB.extraApprovalLevels_PAYMENT = Array.isArray(data.extraApprovalLevels_PAYMENT) ? data.extraApprovalLevels_PAYMENT : [];
+    DB.extraApprovalGroups_ITPRICE_RETAIL = Array.isArray(data.extraApprovalGroups_ITPRICE_RETAIL) ? data.extraApprovalGroups_ITPRICE_RETAIL : [];
+    DB.extraApprovalLevels_ITPRICE_RETAIL = Array.isArray(data.extraApprovalLevels_ITPRICE_RETAIL) ? data.extraApprovalLevels_ITPRICE_RETAIL : [];
+    DB.extraApprovalGroups_ITPRICE_WHOLESALE = Array.isArray(data.extraApprovalGroups_ITPRICE_WHOLESALE) ? data.extraApprovalGroups_ITPRICE_WHOLESALE : [];
+    DB.extraApprovalLevels_ITPRICE_WHOLESALE = Array.isArray(data.extraApprovalLevels_ITPRICE_WHOLESALE) ? data.extraApprovalLevels_ITPRICE_WHOLESALE : [];
+    DB.extraApprovalGroups_OPERATION_ORDER_STORE = Array.isArray(data.extraApprovalGroups_OPERATION_ORDER_STORE) ? data.extraApprovalGroups_OPERATION_ORDER_STORE : [];
+    DB.extraApprovalLevels_OPERATION_ORDER_STORE = Array.isArray(data.extraApprovalLevels_OPERATION_ORDER_STORE) ? data.extraApprovalLevels_OPERATION_ORDER_STORE : [];
+    DB.extraApprovalGroups_OPERATION_ORDER_HO = Array.isArray(data.extraApprovalGroups_OPERATION_ORDER_HO) ? data.extraApprovalGroups_OPERATION_ORDER_HO : [];
+    DB.extraApprovalLevels_OPERATION_ORDER_HO = Array.isArray(data.extraApprovalLevels_OPERATION_ORDER_HO) ? data.extraApprovalLevels_OPERATION_ORDER_HO : [];
 
     DB.vppPeriods = data.vppPeriods || [];
     DB.vppRegistrations = data.vppRegistrations || [];
@@ -7546,6 +7815,7 @@ function _dispatchTabRender(tabName) {
     renderDynamicInputsForModule('DOC', 'dynamicFieldsContainer_DOC'); renderDocs(); updateUploadDeptDropdown();
     document.getElementById('docOpMode').value = 'NEW';
     onDocOpModeChange();
+    renderExtraApprovalMount('DOC', 'extraApprovalMount_DOC');
   }
   if (tabName === 'submission') { renderDynamicInputsForModule('SUBMISSION', 'dynamicFieldsContainer_SUBMISSION'); renderSubmissionApprovalLayerCheckboxes(); renderSubmissionReqs(); document.getElementById('subCode').value = generateSubCode(); }
   if (tabName === 'task') {
@@ -8122,6 +8392,10 @@ function setOfficeSubTab(subTab) {
   renderDynamicInputsForModule(subTab, 'dynamicFieldsContainer_OFFICE');
   renderOfficeReqs();
   document.getElementById('offCode').value = generateOfficeCode(); // viết tắt mã đổi theo subTab (MB/SC/DT)
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — 1 mount div DÙNG CHUNG cho cả 2 sub-tab (form officeReqs vốn dùng
+  // chung 1 form) — vẽ lại đúng moduleKey khớp sub-tab đang mở (OFFICE_BUY/OFFICE_FIX, mỗi bên 1 bộ
+  // nhóm/cấp độc lập) mỗi lần đổi sub-tab.
+  renderExtraApprovalMount(subTab === 'SUA_CHUA' ? 'OFFICE_FIX' : 'OFFICE_BUY', 'extraApprovalMount_OFFICE');
 }
 
 // Đổ danh sách "Chuyên đề" cho 2 <select> riêng của #internalPostForm (internalPostCategory cho NEWS,

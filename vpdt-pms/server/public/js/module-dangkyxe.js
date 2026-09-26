@@ -59,6 +59,13 @@ async function submitCarReq(e) {
     assignedPlate: '',
     assignedTaxiCompany: ''
   };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ gửi kèm nếu quy trình CAR đã được admin cấu hình đủ.
+  const extraApproval = readSelectedExtraApprovalLayers('CAR');
+  if (extraApproval.approvalLevel !== null) {
+    carPayload.approvalLevel = extraApproval.approvalLevel;
+    carPayload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    carPayload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
 
   let newCar;
   try {
@@ -171,6 +178,7 @@ function setCarSubTab(subTab) {
     renderCarRegs();
     document.getElementById('carCode').value = generateCarCode();
     if (!carRoutePoints.length) resetCarRoutePoints(); else renderCarRoutePoints();
+    renderExtraApprovalMount('CAR', 'extraApprovalMount_CAR');
   }
   if (subTab === 'CALENDAR') {
     renderCarScheduleCalendar();      // vẽ ngay bằng dữ liệu đang có (không để màn trắng khi chờ mạng)

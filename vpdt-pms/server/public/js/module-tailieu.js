@@ -582,6 +582,15 @@ async function uploadDoc(e) {
       }
     ]
   };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ gửi kèm nếu quy trình DOC thực sự đã được admin cấu hình đủ
+  // (renderExtraApprovalMount('DOC', ...) tự ẩn hẳn khối UI này nếu chưa cấu hình, approvalLevel khi đó
+  // là null — không đụng payload, server cũng bỏ qua hoàn toàn cho tới khi cấu hình đủ).
+  const extraApproval = readSelectedExtraApprovalLayers('DOC');
+  if (extraApproval.approvalLevel !== null) {
+    docPayload.approvalLevel = extraApproval.approvalLevel;
+    docPayload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    docPayload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
 
   let newDoc;
   try {

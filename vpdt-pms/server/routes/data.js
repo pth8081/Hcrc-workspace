@@ -108,6 +108,20 @@ const ADMIN_ONLY_KEYS = new Set([
   // qua POST /api/data/operationOrderApiConfig và tự đổi Base URL/header trỏ tới máy chủ khác).
   'operationOrderApiConfig',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractApprovalLevels', 'contractManageDeptWorkflows',
+  // extraApprovalGroups_<moduleKey>/extraApprovalLevels_<moduleKey> ("Nhóm Phê Duyệt Cuối", 10/2026 — 10
+  // quy trình × 2 key, xem defaults.js/EXTRA_APPROVAL_MODULE_KEYS): cùng lý do bảo mật với
+  // contractApprovalGroups/contractApprovalLevels ở trên — không cho user thường tự ghi thẳng qua POST
+  // /api/data/<key> và tự phong mình làm approver ở bất kỳ quy trình nào trong 10 quy trình này.
+  'extraApprovalGroups_DOC', 'extraApprovalLevels_DOC',
+  'extraApprovalGroups_CAR', 'extraApprovalLevels_CAR',
+  'extraApprovalGroups_OFFICE_BUY', 'extraApprovalLevels_OFFICE_BUY',
+  'extraApprovalGroups_OFFICE_FIX', 'extraApprovalLevels_OFFICE_FIX',
+  'extraApprovalGroups_VPP', 'extraApprovalLevels_VPP',
+  'extraApprovalGroups_PAYMENT', 'extraApprovalLevels_PAYMENT',
+  'extraApprovalGroups_ITPRICE_RETAIL', 'extraApprovalLevels_ITPRICE_RETAIL',
+  'extraApprovalGroups_ITPRICE_WHOLESALE', 'extraApprovalLevels_ITPRICE_WHOLESALE',
+  'extraApprovalGroups_OPERATION_ORDER_STORE', 'extraApprovalLevels_OPERATION_ORDER_STORE',
+  'extraApprovalGroups_OPERATION_ORDER_HO', 'extraApprovalLevels_OPERATION_ORDER_HO',
   // paymentDeptWorkflows: cấu hình người duyệt theo BƯỚC quy trình phòng ban cho đề nghị thanh toán
   // (thay cho quyền phẳng paymentManage khi "Chuyển Xác Nhận Thanh Toán") — cùng lý do bảo mật với
   // contractManageDeptWorkflows ở trên: không cho user thường tự ghi thẳng qua POST
@@ -810,6 +824,24 @@ async function syncApprovalLevelsWithGroupsChange(groupsKey, newGroups) {
   }
   await withLockedAppDataValue(levelsKey, (levels) => sanitizeApprovalLevelsAgainstGroups(levels, newGroups));
 }
+
+// "Nhóm Phê Duyệt Cuối" (10/2026, xem defaults.js) — 10 quy trình × 2 key (groups/levels) PHẲNG, cùng
+// khuôn contractApprovalGroups/contractApprovalLevels — tái dùng NGUYÊN VẸN toàn bộ cơ chế toàn vẹn
+// tham chiếu ở trên bằng cách đăng ký thêm 10 cặp vào chính 2 map dùng chung đó, không viết lại logic gì
+// mới. EXTRA_APPROVAL_MODULE_KEYS khớp đúng danh sách moduleKey ở WF_MODULE_CONFIG (module-workflow.js)
+// TRỪ SUBMISSION/CONTRACT_APPROVAL/CONTRACT_MANAGE.
+const EXTRA_APPROVAL_MODULE_KEYS = [
+  'DOC', 'CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'VPP', 'PAYMENT',
+  'ITPRICE_RETAIL', 'ITPRICE_WHOLESALE', 'OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'
+];
+const EXTRA_APPROVAL_GROUPS_KEYS = new Set();
+EXTRA_APPROVAL_MODULE_KEYS.forEach(mk => {
+  const groupsKey = `extraApprovalGroups_${mk}`;
+  const levelsKey = `extraApprovalLevels_${mk}`;
+  APPROVAL_GROUPS_TO_LEVELS_KEY[groupsKey] = levelsKey;
+  APPROVAL_LEVELS_TO_GROUPS_KEY[levelsKey] = groupsKey;
+  EXTRA_APPROVAL_GROUPS_KEYS.add(groupsKey);
+});
 
 // Mật khẩu SMTP là write-only ở giao diện (ô luôn hiện trống, xem index.html) — client gửi lên field
 // tạm "smtpPassPlain" (chỉ có giá trị khi admin thực sự gõ mật khẩu mới), KHÔNG BAO GIỜ gửi lại
@@ -1768,9 +1800,13 @@ router.post('/:key', async (req, res) => {
     // (module-admin-submissiongroups.js) nhưng đây mới là chốt chặn thật, phòng request tự soạn bỏ qua UI.
     if (key === 'submissionApprovalGroups') assertApprovalGroupsSingleApproverCaps(value, 'mục 11 — Nhóm Phê Duyệt Trình');
     if (key === 'contractApprovalGroups') assertApprovalGroupsSingleApproverCaps(value, 'mục 14 — Nhóm Phê Duyệt HĐ');
+    // Nhóm Phê Duyệt Cuối (10 key extraApprovalGroups_<moduleKey>) — cùng lý do trên, generic theo Set
+    // đã đăng ký ở EXTRA_APPROVAL_GROUPS_KEYS thay vì liệt kê tay 10 dòng if.
+    if (EXTRA_APPROVAL_GROUPS_KEYS.has(key)) assertApprovalGroupsSingleApproverCaps(value, `Nhóm Phê Duyệt Cuối — ${key.replace('extraApprovalGroups_', '')}`);
     // Cấp Phê Duyệt Cuối Cùng: tự loại id nhóm KHÔNG còn tồn tại + bắt buộc lockedGroupIds ⊆
     // visibleGroupIds ngay tại server (xem sanitizeApprovalLevelsAgainstGroups()/
-    // assertApprovalLevelsLockedWithinVisible() ở trên).
+    // assertApprovalLevelsLockedWithinVisible() ở trên) — APPROVAL_LEVELS_TO_GROUPS_KEY đã có sẵn 10
+    // entry của "Nhóm Phê Duyệt Cuối" (đăng ký ở trên) nên nhánh này tự áp dụng, không cần thêm gì.
     if (APPROVAL_LEVELS_TO_GROUPS_KEY[key]) value = await prepareApprovalLevelsForSave(key, value);
 
     const ifMatch = req.get('If-Match');

@@ -409,6 +409,88 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
   return { steps, approvers, layerKeys };
 }
 
+// "Nhóm Phê Duyệt Cuối" (10/2026) — cơ chế TÁCH RIÊNG hoàn toàn khỏi Hợp Đồng/Văn Bản Trình (xem
+// defaults.js extraApprovalGroups/extraApprovalLevels), áp dụng cho 10 quy trình KHÁC ở "Quy Trình & Phê
+// Duyệt" (WF_MODULE_CONFIG trừ SUBMISSION/CONTRACT_APPROVAL/CONTRACT_MANAGE). KHÁC Hợp Đồng/Văn Bản
+// Trình 1 điểm KIẾN TRÚC quan trọng: 7 collection dùng tính năng này (docs/carRegs/officeReqs/
+// vppRegistrations/paymentRequests/itPriceApprovals/operationOrders) KHÔNG snapshot effectiveSteps/
+// effectiveApprovers — MODULE_CONFIGS.<key>.resolveWfConfig() (lib/workflowEngine.js) tự tính lại
+// steps/approvers MỚI NHẤT mỗi lần có hành động duyệt (đọc thẳng appData.*DeptWorkflows/*TierWorkflows
+// hiện tại), khác hẳn contracts/submissions (có field effectiveSteps/effectiveApprovers đông cứng lúc
+// tạo). Vì vậy hàm dưới đây KHÔNG tự dựng lại steps/approvers đầy đủ — chỉ làm ĐÚNG 1 việc: xác thực lựa
+// chọn (approvalLevel + selectedExtraApprovalLayerKeys/Members) client gửi lúc TẠO hồ sơ theo đúng luật
+// (giống hệt buildEffectiveContractApprovalWorkflowServer() ở trên: cấp hợp lệ -> lớp đúng phạm vi
+// visible/locked -> mỗi lớp chọn phải là tập con thành viên đã gán), rồi trả về phần "đã đông cứng" DUY
+// NHẤT của cơ chế này — danh sách lớp đã chọn kèm ĐÚNG người phê duyệt cụ thể (`approvers`) của từng lớp
+// (ổn định vĩnh viễn từ lúc tạo, không đổi theo sau dù admin có sửa members của nhóm — cùng lý do ổn định
+// "ai phải duyệt hồ sơ này" như effectiveApprovers của Hợp Đồng/Văn Bản Trình) — KHÔNG đông cứng `order`
+// (vị trí bước sẽ tính lại mỗi lần, xem appendExtraApprovalLayers() ở lib/workflowEngine.js, vì số bước
+// GỐC của hồ sơ vẫn có thể đổi sau nếu admin sửa quy trình phòng ban/mức, đúng tinh thần "luôn đọc cấu
+// hình admin mới nhất" của 7 module này). Field trả về ({extraApprovalLevel, extraApprovalLayers}) được
+// gắn thẳng vào payload ngay tại extraValidate() của mỗi module (lib/createValidation.js CREATE_MODULE_CONFIGS),
+// null nếu moduleKey chưa được cấu hình đủ groups+levels (tính năng CHƯA BẬT cho quy trình đó — an toàn
+// tuyệt đối, bỏ qua HOÀN TOÀN mọi field client gửi, không đổi hành vi tạo hồ sơ).
+function prepareExtraApprovalSelectionForCreate(moduleKey, payload, appData) {
+  const groups = (appData[`extraApprovalGroups_${moduleKey}`] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const levels = appData[`extraApprovalLevels_${moduleKey}`] || [];
+  if (!groups.length || !levels.length) return null;
+
+  const approvalLevel = payload.approvalLevel;
+  const rule = resolveApprovalLevelRule(levels, approvalLevel, groups);
+  if (!rule) {
+    throw new CreateError(400, `Cấp phê duyệt cuối cùng không hợp lệ: ${approvalLevel}`);
+  }
+  const layerKeysInput = Array.isArray(payload.selectedExtraApprovalLayerKeys) ? [...new Set(payload.selectedExtraApprovalLayerKeys)] : [];
+  const outOfScope = layerKeysInput.filter(k => !rule.visible.includes(k));
+  if (outOfScope.length) {
+    throw new CreateError(403, `Nhóm phê duyệt không thuộc phạm vi cấp "${approvalLevel}": ${outOfScope.join(', ')}`);
+  }
+  const missingLocked = rule.locked.filter(k => !layerKeysInput.includes(k));
+  if (missingLocked.length) {
+    throw new CreateError(400, `Thiếu nhóm phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
+  }
+  const canonicalOrder = groups.map(g => g.id);
+  const layerKeys = [...layerKeysInput].sort((a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b));
+  const selectedLayerMembers = payload.selectedExtraApprovalLayerMembers || {};
+
+  const extraApprovalLayers = layerKeys.map(layerKey => {
+    const layer = groups.find(g => g.id === layerKey);
+    if (!layer) throw new CreateError(400, `Nhóm không hợp lệ: ${layerKey}`);
+    const groupMembers = layer.members || [];
+    const isLocked = rule.locked.includes(layerKey);
+    let chosen;
+    if (isLocked) {
+      if (groupMembers.length === 0) {
+        throw new CreateError(400, `Chưa gán thành viên nào cho nhóm bắt buộc "${layer.label}"`);
+      }
+      if (groupMembers.length === 1) {
+        chosen = [...groupMembers];
+      } else {
+        chosen = Array.isArray(selectedLayerMembers[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+        if (chosen.length !== 1) {
+          throw new CreateError(400, `Vai trò bắt buộc "${layer.label}" đang có ${groupMembers.length} người được cấu hình — vui lòng chọn ĐÚNG 1 người phê duyệt cụ thể`);
+        }
+        const invalid = chosen.filter(u => !groupMembers.includes(u));
+        if (invalid.length) {
+          throw new CreateError(403, `Người được chọn cho nhóm "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+        }
+      }
+    } else {
+      chosen = Array.isArray(selectedLayerMembers[layerKey]) ? [...new Set(selectedLayerMembers[layerKey])] : [];
+      if (chosen.length === 0) {
+        throw new CreateError(400, `Chưa chọn người cho nhóm "${layer.label}"`);
+      }
+      const invalid = chosen.filter(u => !groupMembers.includes(u));
+      if (invalid.length) {
+        throw new CreateError(403, `Người được chọn cho nhóm "${layer.label}" không thuộc nhóm được admin gán: ${invalid.join(', ')}`);
+      }
+    }
+    return { layerKey: layer.id, label: layer.label, actionLabel: layer.actionLabel || null, approvers: chosen };
+  });
+
+  return { extraApprovalLevel: approvalLevel, extraApprovalLayers };
+}
+
 // Ép "chỉ 1 người" cho BẤT KỲ nhóm nào admin đánh dấu `singleApprover:true` (đợt "Nhóm Phê Duyệt Trình
 // tự cấu hình", 10/2026 — TRƯỚC ĐÂY hardcode CỐ ĐỊNH riêng cho khoá "TGD"/Tổng Giám Đốc, nay là CỜ
 // admin tự gán được cho nhóm bất kỳ, xem defaults.js) khi lưu Nhóm Phê Duyệt Trình (mục 11, key
@@ -835,6 +917,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — xem chú thích đầy đủ ở docs.extraValidate() phía trên.
+      const extraApproval = prepareExtraApprovalSelectionForCreate('CAR', payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   officeReqs: {
@@ -888,6 +976,15 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'PENDING';
       payload.currentStep = 1;
       payload.history = [];
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng field split payload.subType (MUA_BAN ->
+      // OFFICE_BUY, SUA_CHUA -> OFFICE_FIX, xem OFFICE_SUBTYPE_TO_PERM_FLAG ở trên) — mỗi subType có bộ
+      // nhóm/cấp ĐỘC LẬP hoàn toàn (khác nhau). Xem chú thích đầy đủ ở docs.extraValidate() phía trên.
+      const extraApprovalModuleKey = payload.subType === 'SUA_CHUA' ? 'OFFICE_FIX' : 'OFFICE_BUY';
+      const extraApproval = prepareExtraApprovalSelectionForCreate(extraApprovalModuleKey, payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   // ===== VẬN HÀNH — 3 luồng ĐỘC LẬP (khác officeReqs: không dùng chung 1 collection theo subType, mỗi
@@ -1017,6 +1114,15 @@ const CREATE_MODULE_CONFIGS = {
       payload.currentStep = 1;
       payload.history = [];
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'OPERATION_ORDER');
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng orderLocationType (STORE ->
+      // OPERATION_ORDER_STORE, HO -> OPERATION_ORDER_HO, mỗi bên 1 bộ nhóm/cấp độc lập). Xem chú thích
+      // đầy đủ ở docs.extraValidate() phía trên.
+      const extraApprovalModuleKey = orderLocationType === 'STORE' ? 'OPERATION_ORDER_STORE' : 'OPERATION_ORDER_HO';
+      const extraApproval = prepareExtraApprovalSelectionForCreate(extraApprovalModuleKey, payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   operationStoreOpenings: {
@@ -1263,6 +1369,16 @@ const CREATE_MODULE_CONFIGS = {
         action: 'UPLOADED',
         time: new Date().toLocaleString('vi-VN')
       }];
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — xác thực + đông cứng lựa chọn (nếu quy trình DOC đã được admin
+      // cấu hình đủ groups+levels ở extraApprovalGroups_DOC/extraApprovalLevels_DOC) — trả null (không
+      // gắn field gì) nếu chưa cấu hình, giữ nguyên hành vi cũ 100%. Xem appendExtraApprovalLayers() ở
+      // lib/workflowEngine.js (MODULE_CONFIGS.docs.resolveWfConfig) — nơi append các bước này vào cuối
+      // quy trình phòng ban mỗi lần cần tra steps/approvers (docs KHÔNG snapshot effectiveSteps).
+      const extraApproval = prepareExtraApprovalSelectionForCreate('DOC', payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   // Tin nội bộ (Bước 2b): KHÔNG có khái niệm phòng ban để chọn — dept trong hồ sơ chỉ là thông tin
@@ -1467,6 +1583,16 @@ const CREATE_MODULE_CONFIGS = {
       payload.requestFiles = requestFiles
         .filter(f => f && typeof f === 'object' && f.fileUrl && f.fileName)
         .map(f => ({ fileUrl: String(f.fileUrl), fileName: String(f.fileName).slice(0, 200), fileType: f.fileType ? String(f.fileType).slice(0, 100) : null }));
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — xác thực + đông cứng NGAY LÚC TẠO NHÁP (paymentRequests không
+      // có "extraValidate" riêng nào chạy lại lúc submitPaymentRequest() DRAFT->PENDING — đơn giản hơn
+      // xác thực lại lần 2 ở đó, đánh đổi: nếu admin đổi cấu hình nhóm trong lúc hồ sơ còn NHÁP, lựa chọn
+      // đã đông cứng từ lúc tạo vẫn giữ nguyên, không tự cập nhật theo — chấp nhận được vì NHÁP thường
+      // chuyển sang PENDING ngay). Xem chú thích đầy đủ ở docs.extraValidate() phía trên.
+      const extraApproval = prepareExtraApprovalSelectionForCreate('PAYMENT', payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   // Văn phòng phẩm — "kỳ đăng ký": KHÔNG có khái niệm phòng ban để chọn (dùng chung toàn công ty),
@@ -1593,6 +1719,14 @@ const CREATE_MODULE_CONFIGS = {
       payload.status = 'DRAFT';
       payload.currentStep = 0;
       payload.history = [];
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — đông cứng NGAY LÚC TẠO NHÁP (cùng đánh đổi đã nêu ở
+      // paymentRequests.extraValidate() phía trên — submitVppRegistration() DRAFT->PENDING không xác
+      // thực lại lựa chọn này). Xem chú thích đầy đủ ở docs.extraValidate() phía trên.
+      const extraApproval = prepareExtraApprovalSelectionForCreate('VPP', payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   // ===== BÁO CÁO ĐỊNH KỲ (module con "Điều Hành", thường dùng cho báo cáo tuần) =====
@@ -1865,6 +1999,15 @@ const CREATE_MODULE_CONFIGS = {
       // không còn dùng chung 'IT_PRICE' — xem renderDynamicInputsForModule()/collectDynamicFieldsData()
       // ở module-itsupport-price.js.
       validateRequiredCustomData(payload.customData, appData?.formTemplates, priceType === 'WHOLESALE' ? 'IT_PRICE_WHOLESALE' : 'IT_PRICE_RETAIL');
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — moduleKey khớp đúng priceType (RETAIL -> ITPRICE_RETAIL,
+      // WHOLESALE -> ITPRICE_WHOLESALE, mỗi bên 1 bộ nhóm/cấp độc lập). Xem chú thích đầy đủ ở
+      // docs.extraValidate() phía trên.
+      const extraApprovalModuleKey = priceType === 'WHOLESALE' ? 'ITPRICE_WHOLESALE' : 'ITPRICE_RETAIL';
+      const extraApproval = prepareExtraApprovalSelectionForCreate(extraApprovalModuleKey, payload, appData);
+      if (extraApproval) {
+        payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
+        payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
+      }
     }
   },
   // 2) "Hỗ Trợ Yêu Cầu" (itSupportTickets): ticket helpdesk IT nội bộ — MỞ CHO TOÀN BỘ NHÂN VIÊN, không
@@ -4051,6 +4194,10 @@ module.exports = {
   // export sẵn phòng khi module khác cần tra lại luật visible/locked của 1 cấp mà không muốn tự dựng cả
   // effective workflow.
   buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule,
+  // Export cho tích hợp "Nhóm Phê Duyệt Cuối" (10/2026) ở extraValidate() của 7 collection (docs/carRegs/
+  // officeReqs/vppRegistrations/paymentRequests/itPriceApprovals/operationOrders) — xem defaults.js
+  // extraApprovalGroups/extraApprovalLevels + appendExtraApprovalLayers() ở lib/workflowEngine.js.
+  prepareExtraApprovalSelectionForCreate,
   // Export cho editSubmissionDraft() (lib/recordActions.js) — nhánh SỬA NHÁP phải áp ĐÚNG luật
   // type/priority/title/content như nhánh TẠO, xem normalizeSubmissionCoreFields() ở đầu file.
   normalizeSubmissionCoreFields, SUBMISSION_TITLE_MAX, SUBMISSION_CONTENT_MAX,

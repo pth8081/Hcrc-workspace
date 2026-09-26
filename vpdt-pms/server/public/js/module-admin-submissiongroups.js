@@ -29,6 +29,46 @@ const APPROVAL_GROUPS_ADMIN_CONFIG = {
   }
 };
 
+// ===== "🖊️ Nhóm Phê Duyệt Cuối" (10/2026) — TÁCH RIÊNG hoàn toàn khỏi Văn Bản Trình/Hợp Đồng ở trên,
+// dùng LẠI đúng engine renderApprovalGroupsTable()/renderApprovalLevelsTable() (moduleKind = 1 trong 10
+// moduleKey dưới đây thay vì 'submission'/'contract'), nhưng CHIA SẺ 1 CẶP wrap div DUY NHẤT (chỉ 1
+// trong 10 quy trình được xem/sửa tại 1 thời điểm, chọn qua dropdown — xem renderExtraApprovalAdminSection())
+// thay vì render cứng 10 cặp bảng cùng lúc (đỡ tải cả 10 bảng khi chỉ xem 1). Nhãn hiển thị dropdown
+// LẶP LẠI (không import) đúng `label` của từng entry tương ứng trong WF_MODULE_CONFIG
+// (module-workflow.js) — đổi nhãn ở 1 bên nhớ đổi bên kia cho khớp.
+const EXTRA_APPROVAL_MODULE_LABELS = {
+  DOC: '📂 Tài Liệu', CAR: '🚗 Đăng Ký Xe', OFFICE_BUY: '🛒 Mua Bán VP', OFFICE_FIX: '🔧 Sửa Chữa VP',
+  VPP: '🖇️ Văn Phòng Phẩm', PAYMENT: '💰 Thanh Toán',
+  ITPRICE_RETAIL: '🏷️ Phê Duyệt Giá Bán Lẻ', ITPRICE_WHOLESALE: '🏪 Phê Duyệt Giá Bán Buôn',
+  OPERATION_ORDER_STORE: '📦 Vận Hành - Đặt Hàng Tại Siêu Thị', OPERATION_ORDER_HO: '📦 Vận Hành - Đặt Hàng Tại HO'
+};
+Object.keys(EXTRA_APPROVAL_MODULE_LABELS).forEach(moduleKey => {
+  APPROVAL_GROUPS_ADMIN_CONFIG[moduleKey] = {
+    groupsKey: `extraApprovalGroups_${moduleKey}`, levelsKey: `extraApprovalLevels_${moduleKey}`,
+    groupsWrapId: 'extraApprovalGroupsAdminWrap', levelsWrapId: 'extraApprovalLevelsAdminWrap',
+    hasBlocking: false, hasFileReplacement: false, logTag: `EXTRA_APPROVAL_${moduleKey}`,
+    groupIdPrefix: `exgrp_${moduleKey.toLowerCase()}`, levelIdPrefix: `exlvl_${moduleKey.toLowerCase()}`
+  };
+});
+
+let activeExtraApprovalModuleKey = 'DOC';
+function setExtraApprovalModuleKey(moduleKey) {
+  activeExtraApprovalModuleKey = moduleKey;
+  renderApprovalGroupsTable(moduleKey);
+  renderApprovalLevelsTable(moduleKey);
+}
+// Gọi khi vào sub-tab (setAdvWorkflowSubTab(), module-hethong-tabs.js) — vẽ đúng quy trình đang chọn
+// trong dropdown (mặc định 'DOC' lần đầu).
+function renderExtraApprovalAdminSection() {
+  const sel = document.getElementById('extraApprovalModuleKeySelect');
+  if (sel && !sel.options.length) {
+    sel.innerHTML = Object.entries(EXTRA_APPROVAL_MODULE_LABELS).map(([k, label]) => `<option value="${k}">${escapeHtml(label)}</option>`).join('');
+    sel.value = activeExtraApprovalModuleKey;
+  }
+  renderApprovalGroupsTable(activeExtraApprovalModuleKey);
+  renderApprovalLevelsTable(activeExtraApprovalModuleKey);
+}
+
 function approvalGroupsGenId(prefix) {
   return `${prefix}_${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`;
 }

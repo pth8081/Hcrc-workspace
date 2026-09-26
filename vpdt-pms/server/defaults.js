@@ -684,6 +684,34 @@ const DEFAULTS = {
   // trên) — admin cấu hình ở tab "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán".
   paymentDeptWorkflows: {},
 
+  // Nhóm Phê Duyệt Cuối (10/2026) — cơ chế TÁCH RIÊNG hoàn toàn khỏi Hợp Đồng/Văn Bản Trình, áp dụng cho
+  // 10 quy trình KHÁC ở "Quy Trình & Phê Duyệt" (WF_MODULE_CONFIG ở module-workflow.js TRỪ SUBMISSION/
+  // CONTRACT_APPROVAL/CONTRACT_MANAGE — 2 quy trình đó giữ nguyên cơ chế riêng
+  // submissionApprovalGroups+Levels/contractApprovalGroups+Levels ở trên, không đụng tới). Dùng ĐÚNG
+  // khuôn dữ liệu contractApprovalGroups/contractApprovalLevels (groups/levels, không có
+  // blocking/allowFileReplacementProposal — mọi nhóm đều là 1 bước duyệt, không có khái niệm "Xin ý
+  // kiến" không-chặn), nhưng MỖI quy trình có 1 CẶP KEY PHẲNG riêng (`extraApprovalGroups_<moduleKey>`/
+  // `extraApprovalLevels_<moduleKey>`) thay vì gộp chung 1 map — cố ý làm PHẲNG (không lồng theo
+  // moduleKey) để tái dùng NGUYÊN VẸN cơ chế admin UI + guard toàn vẹn tham chiếu đã có sẵn cho
+  // contractApprovalGroups/Levels (APPROVAL_GROUPS_ADMIN_CONFIG ở module-admin-submissiongroups.js,
+  // APPROVAL_GROUPS_TO_LEVELS_KEY/APPROVAL_LEVELS_TO_GROUPS_KEY ở routes/data.js) — chỉ cần thêm entry
+  // vào các map đó, không cần viết lại logic map-theo-key riêng. Mỗi quy trình có bộ nhóm+cấp ĐỘC LẬP
+  // hoàn toàn (khác nhau, không dùng chung), y hệt cách Hợp Đồng và Văn Bản Trình vốn đã tách 2 bộ riêng.
+  // moduleKey nào có mảng nhóm HOẶC mảng cấp rỗng (0 phần tử) = tính năng CHƯA BẬT cho quy trình đó —
+  // form tạo hồ sơ KHÔNG hiện gì, server KHÔNG đòi hỏi approvalLevel/selectedLayerKeys gì cả (an toàn
+  // tuyệt đối, không đổi hành vi cho tới khi admin chủ động cấu hình đủ groups+levels cho đúng moduleKey
+  // đó). Xem prepareExtraApprovalSelectionForCreate() ở lib/createValidation.js.
+  extraApprovalGroups_DOC: [], extraApprovalLevels_DOC: [],
+  extraApprovalGroups_CAR: [], extraApprovalLevels_CAR: [],
+  extraApprovalGroups_OFFICE_BUY: [], extraApprovalLevels_OFFICE_BUY: [],
+  extraApprovalGroups_OFFICE_FIX: [], extraApprovalLevels_OFFICE_FIX: [],
+  extraApprovalGroups_VPP: [], extraApprovalLevels_VPP: [],
+  extraApprovalGroups_PAYMENT: [], extraApprovalLevels_PAYMENT: [],
+  extraApprovalGroups_ITPRICE_RETAIL: [], extraApprovalLevels_ITPRICE_RETAIL: [],
+  extraApprovalGroups_ITPRICE_WHOLESALE: [], extraApprovalLevels_ITPRICE_WHOLESALE: [],
+  extraApprovalGroups_OPERATION_ORDER_STORE: [], extraApprovalLevels_OPERATION_ORDER_STORE: [],
+  extraApprovalGroups_OPERATION_ORDER_HO: [], extraApprovalLevels_OPERATION_ORDER_HO: [],
+
   // Nhân Sự > Cơ Cấu Tổ Chức v2 (cây có VERSIONING) + Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí — thay
   // HẲN bản v1 (cây suy ra trực tiếp từ user.managerUsername, không lưu ở đây + kpiEvaluatorConfig map
   // phẳng dept×jobTitle, đã gỡ) theo tài liệu thiết kế mới. Mỗi phần tử là 1 "version" cây tổ chức —

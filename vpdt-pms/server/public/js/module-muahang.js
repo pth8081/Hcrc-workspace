@@ -571,6 +571,7 @@ function enterMuaHangItPriceForm() {
   // hiện NGAY tại đây (10/2026, yêu cầu người dùng) — gọi lại mỗi lần vào tab để chắc chắn khớp dữ liệu
   // mới nhất, dù hàm này cũng tự chạy theo mọi thay đổi itPriceApprovals (xem renderItPriceApprovals()).
   renderMhItPriceList();
+  if (canCreate) renderExtraApprovalMount('ITPRICE_RETAIL', 'extraApprovalMount_ITPRICE_RETAIL');
 }
 
 function renderMhItPriceMasterListSelect() {
@@ -693,6 +694,13 @@ async function submitMhItPriceApproval(e) {
     createdAt: new Date().toLocaleString('vi-VN'),
     customData
   };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ gửi kèm nếu quy trình ITPRICE_RETAIL đã được admin cấu hình đủ.
+  const extraApproval = readSelectedExtraApprovalLayers('ITPRICE_RETAIL');
+  if (extraApproval.approvalLevel !== null) {
+    payload.approvalLevel = extraApproval.approvalLevel;
+    payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
+    payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
+  }
 
   let newItem;
   try {

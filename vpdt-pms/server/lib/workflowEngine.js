@@ -330,9 +330,9 @@ function resolveOperationOrderWorkflow(item, appData) {
   if (locationType === 'STORE') {
     const stepOrders = resolved.steps.map(s => s.order);
     const approvers = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, item.dept, appData.users, stepOrders);
-    return { steps: resolved.steps, approvers };
+    return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
   }
-  return resolved;
+  return appendExtraApprovalLayers(resolved, item);
 }
 
 // ===== Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi contracts (khớp index.html) =====
@@ -358,6 +358,33 @@ function resolveContractManageWorkflow(item, appData) {
   return flatWorkflowConfigToSteps(appData.contractManageDeptWorkflows?.[item.dept], appData);
 }
 
+// ===== "Nhóm Phê Duyệt Cuối" (10/2026) — append các bước phê duyệt cuối TUỲ CHỌN vào SAU CÙNG quy
+// trình gốc của 7 module (docs/carRegs/officeReqs/vppRegistrations/paymentRequests/itPriceApprovals/
+// operationOrders) — xem defaults.js extraApprovalGroups/extraApprovalLevels + chú thích đầy đủ tại
+// prepareExtraApprovalSelectionForCreate() ở lib/createValidation.js (hàm đó xác thực + đông cứng lựa
+// chọn NGAY LÚC TẠO thành item.extraApprovalLayers — hàm này chỉ đọc lại field đã đông cứng đó, KHÔNG
+// đọc appData.extraApprovalGroups/Levels nữa, vì AI phải duyệt (approvers) đã chốt từ lúc tạo, chỉ VỊ TRÍ
+// bước (order) là tính lại mỗi lần cho khớp số bước GỐC hiện tại — số bước gốc của 7 module này vốn
+// KHÔNG snapshot, có thể đổi nếu admin sửa quy trình phòng ban/mức sau khi hồ sơ đã tạo).
+// resolved: {steps, approvers} đã resolve XONG quy trình gốc (dept/tier workflow) của 1 hồ sơ cụ thể.
+// item: bản ghi hồ sơ (đọc item.extraApprovalLayers — mảng rỗng/không có = tính năng không áp dụng cho
+// hồ sơ này, GIỮ NGUYÊN resolved, không đổi gì — hồ sơ tạo trước khi admin bật tính năng, hoặc quy trình
+// chưa từng được cấu hình đủ groups+levels lúc tạo hồ sơ này).
+// LƯU Ý BẢO TRÌ: mirror ĐÚNG bản client appendExtraApprovalLayersClient() ở public/js/core.js (dùng cho
+// nút "🔍 Xem Quy Trình" preview) — sửa 1 bên PHẢI sửa cả 2 bên.
+function appendExtraApprovalLayers(resolved, item) {
+  const layers = item?.extraApprovalLayers;
+  if (!Array.isArray(layers) || !layers.length) return resolved;
+  const steps = (resolved.steps || []).map(s => ({ ...s }));
+  const approvers = { ...(resolved.approvers || {}) };
+  layers.forEach(layer => {
+    const stepOrder = steps.length + 1;
+    steps.push({ order: stepOrder, name: layer.label, layerKey: layer.layerKey, actionLabel: layer.actionLabel || null });
+    approvers[stepOrder] = layer.approvers || [];
+  });
+  return { steps, approvers };
+}
+
 // Cấu hình từng module — CHỈ những gì khác nhau: khoá collection AppData và cách tra ra {steps,
 // approvers} của 1 hồ sơ cụ thể. Phần logic chuyển bước/duyệt/từ chối dùng chung applyWorkflowAction().
 // statusField/currentStepField/historyField mặc định 'status'/'currentStep'/'history' — chỉ hợp đồng
@@ -374,7 +401,7 @@ const MODULE_CONFIGS = {
   // NÀY GIỮ NGUYÊN, không đổi gì).
   docs: {
     dbKey: 'docs',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.deptWorkflows?.[item.dept], appData),
+    resolveWfConfig: (item, appData) => appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData.deptWorkflows?.[item.dept], appData), item),
     supportsRequestChanges: true
   },
   submissions: {
@@ -389,7 +416,7 @@ const MODULE_CONFIGS = {
   },
   carRegs: {
     dbKey: 'carRegs',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.carDeptWorkflows?.[item.dept], appData),
+    resolveWfConfig: (item, appData) => appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData.carDeptWorkflows?.[item.dept], appData), item),
     // assignedDriver KHÔNG còn nằm trong danh sách này — lái xe giờ bắt buộc là 1 tài khoản hệ thống có
     // thật (xem xử lý riêng ở applyWorkflowAction() bên dưới), server tự tra display name từ user thay
     // vì tin bất kỳ text nào client gửi kèm.
@@ -400,13 +427,13 @@ const MODULE_CONFIGS = {
     dbKey: 'officeReqs',
     resolveWfConfig: (item, appData) => {
       const mapKey = OFFICE_SUBTYPE_TO_DBKEY[item.subType] || 'officeBuyDeptWorkflows';
-      return flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData);
+      return appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData), item);
     },
     supportsRequestChanges: true
   },
   vppRegistrations: {
     dbKey: 'vppRegistrations',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData),
+    resolveWfConfig: (item, appData) => appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData.vppDeptWorkflows?.[item.dept], appData), item),
     supportsRequestChanges: true
   },
   contracts: {
@@ -457,13 +484,13 @@ const MODULE_CONFIGS = {
     // vi cũ 100% (nhánh này giờ chỉ còn chạy khi priceType chắc chắn là RETAIL).
     resolveWfConfig: (item, appData) => {
       if ((item.priceType || 'RETAIL') === 'WHOLESALE') {
-        return flatWorkflowConfigToSteps(
+        return appendExtraApprovalLayers(flatWorkflowConfigToSteps(
           resolveItPriceTierWorkflowConfig(appData.itPriceTierWorkflows, item.priceTier), appData
-        );
+        ), item);
       }
-      return flatWorkflowConfigToSteps(
+      return appendExtraApprovalLayers(flatWorkflowConfigToSteps(
         resolveItPriceDeptWorkflowConfig(appData.itPriceDeptWorkflows, item.dept, 'RETAIL'), appData
-      );
+      ), item);
     },
     // Người duyệt phòng ban ở bước hiện tại có thể yêu cầu bổ sung (vd file có dòng giá bất thường) mà
     // KHÔNG từ chối hẳn — ghi vào item.infoRequests dùng CHUNG với yêu cầu bổ sung của đội Hỗ Trợ IT sau
@@ -529,6 +556,8 @@ const MODULE_CONFIGS = {
   // defaults.js/routes/data.js ADMIN_ONLY_KEYS — không còn màn admin nào cấu hình được nữa.
   operationOrders: {
     dbKey: 'operationOrders',
+    // appendExtraApprovalLayers() đã gọi BÊN TRONG resolveOperationOrderWorkflow() (cả nhánh STORE lẫn
+    // HO) — không gọi lại ở đây, tránh append 2 lần.
     resolveWfConfig: (item, appData) => resolveOperationOrderWorkflow(item, appData),
     supportsRequestChanges: true
   },
@@ -542,7 +571,7 @@ const MODULE_CONFIGS = {
   // lib/recordActions.js, KHÔNG đổi) — quyết định đã chốt với người dùng.
   paymentRequests: {
     dbKey: 'paymentRequests',
-    resolveWfConfig: (item, appData) => flatWorkflowConfigToSteps(appData.paymentDeptWorkflows?.[item.dept], appData),
+    resolveWfConfig: (item, appData) => appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData.paymentDeptWorkflows?.[item.dept], appData), item),
     disallowReject: true,
     // NGOẠI LỆ đã CHỐT với người dùng từ trước (xác nhận qua bộ test tests/test-payment.js, kịch bản
     // 10/18 — "ketoan1 (approver bước 1 dept 'Phòng Kế Toán') duyệt được đề nghị thủ công của chính
@@ -1100,6 +1129,9 @@ module.exports = {
   resolveItPriceTierWorkflowConfig,
   resolveOperationOrderWorkflow,
   resolveOperationOrderStoreMixedApprovers,
+  // Export cho tests + reuse ở nơi khác nếu cần đọc lại đúng luật "Nhóm Phê Duyệt Cuối" append vào cuối
+  // quy trình gốc (xem defaults.js extraApprovalGroups/extraApprovalLevels).
+  appendExtraApprovalLayers,
   findCarPlateConflict,
   findCarDriverConflict,
   assertValidCarAssignmentCatalogs,

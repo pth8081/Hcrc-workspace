@@ -104,6 +104,7 @@ function setAdvWorkflowSubTab(subTab) {
   document.getElementById('quickApplySection').classList.toggle('hidden', subTab !== 'QUICKAPPLY');
   document.getElementById('advWorkflowSubGroups').classList.toggle('hidden', subTab !== 'GROUPS');
   document.getElementById('advWorkflowSubSpecialPerm').classList.toggle('hidden', subTab !== 'SPECIALPERM');
+  document.getElementById('advWorkflowSubExtraApproval').classList.toggle('hidden', subTab !== 'EXTRAAPPROVAL');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -111,6 +112,7 @@ function setAdvWorkflowSubTab(subTab) {
   document.getElementById('btnAdvWorkflowSubQuickApply').className = subTab === 'QUICKAPPLY' ? activeCls : inactiveCls;
   document.getElementById('btnAdvWorkflowSubGroups').className = subTab === 'GROUPS' ? activeCls : inactiveCls;
   document.getElementById('btnAdvWorkflowSubSpecialPerm').className = subTab === 'SPECIALPERM' ? activeCls : inactiveCls;
+  document.getElementById('btnAdvWorkflowSubExtraApproval').className = subTab === 'EXTRAAPPROVAL' ? activeCls : inactiveCls;
 
   // MIXED: "🏬 Quy Trình Đặt Hàng Siêu Thị" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu Thị" (xem
   // module-workflow.js renderMixedApprovalSection()), thay hẳn cơ chế tự khớp dept cũ.
@@ -123,6 +125,9 @@ function setAdvWorkflowSubTab(subTab) {
   if (subTab === 'GROUPS') { renderSubmissionApprovalGroups(); renderContractApprovalGroups(); }
   // SPECIALPERM: 3 widget module-admin-specialperm.js — cấu hình CHUNG toàn hệ thống, không gắn user nào.
   if (subTab === 'SPECIALPERM') { renderWorkflowParticipatingDeptGroupsWidget(); renderVppExcludedJobTitlesWidget(); renderWorkflowParticipatingPositionsWidget(); }
+  // EXTRAAPPROVAL: renderExtraApprovalAdminSection() (module-admin-submissiongroups.js) — dropdown chọn
+  // 1 trong 10 quy trình rồi vẽ bảng Nhóm/Cấp của ĐÚNG quy trình đó (mỗi quy trình 1 bộ dữ liệu riêng).
+  if (subTab === 'EXTRAAPPROVAL') { renderExtraApprovalAdminSection(); }
 }
 
 // 3 module con của "⚙️ Quản Trị" (mục Hệ Thống): Cấu Hình Email / Quản Lý Danh Mục / Phân Quyền

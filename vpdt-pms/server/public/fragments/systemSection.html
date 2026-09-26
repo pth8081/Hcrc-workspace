@@ -207,6 +207,7 @@
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="QUICKAPPLY" id="btnAdvWorkflowSubQuickApply" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚡ Áp Dụng Nhanh</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="GROUPS" id="btnAdvWorkflowSubGroups" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖋️ Nhóm Phê Duyệt Trình/HĐ</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="SPECIALPERM" id="btnAdvWorkflowSubSpecialPerm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Nhóm Quyền Đặc Biệt</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="EXTRAAPPROVAL" id="btnAdvWorkflowSubExtraApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖊️ Nhóm Phê Duyệt Cuối</button>
     </div>
 
   <!-- Màn hình 3c: "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/data-op
@@ -366,6 +367,34 @@
         <div class="flex justify-end mt-2">
           <button type="button" data-op="saveWorkflowParticipatingPositions" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Vị Trí Tham Gia Quy Trình</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🖊️ Nhóm Phê Duyệt Cuối (10/2026) — TÁCH RIÊNG hoàn toàn khỏi "Nhóm Phê Duyệt Trình/HĐ" ở trên
+       (2 cơ chế dữ liệu độc lập, không dùng chung nhóm/cấp nào) — áp dụng cho 10 quy trình KHÁC ở "Quy
+       Trình & Phê Duyệt" (Tài Liệu/Đăng Ký Xe/Mua Bán VP/Sửa Chữa VP/Văn Phòng Phẩm/Thanh Toán/Phê Duyệt
+       Giá Bán Lẻ/Phê Duyệt Giá Bán Buôn/Vận Hành ST/Vận Hành HO) — trừ Hợp Đồng và Văn Bản Trình đã có
+       cơ chế riêng. Dùng CHUNG 1 cặp bảng (renderApprovalGroupsTable()/renderApprovalLevelsTable() ở
+       module-admin-submissiongroups.js, xem EXTRA_APPROVAL_MODULE_LABELS) — chọn quy trình cần xem/sửa
+       ở dropdown, mỗi quy trình có bộ nhóm+cấp ĐỘC LẬP hoàn toàn với nhau (đổi quy trình trong dropdown
+       thì vẽ lại đúng dữ liệu của quy trình đó, không mất/lẫn dữ liệu quy trình khác). -->
+  <div id="advWorkflowSubExtraApproval" class="hidden space-y-4">
+    <div class="bg-white p-4 rounded border space-y-3">
+      <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">🖊️ Nhóm Phê Duyệt Cuối</h3>
+      <p class="text-[11px] text-gray-500 italic">Cơ chế giống hệt "Nhóm Phê Duyệt HĐ" (Hợp Đồng) nhưng TÁCH RIÊNG hoàn toàn — áp dụng được cho 10 quy trình khác nhau, mỗi quy trình 1 bộ nhóm/cấp độc lập. Quy trình nào CHƯA cấu hình đủ (thiếu Nhóm hoặc thiếu Cấp) thì form tạo hồ sơ của quy trình đó KHÔNG hiện gì thêm — an toàn tuyệt đối, không đổi hành vi cho tới khi cấu hình đủ cả 2 bảng bên dưới.</p>
+      <div>
+        <label class="block text-[11px] font-bold text-gray-600 mb-1">Chọn quy trình để xem/sửa</label>
+        <select id="extraApprovalModuleKeySelect" data-op-change="setExtraApprovalModuleKey" data-arg-value="0" class="w-full sm:w-auto border rounded p-1.5 text-xs font-semibold"></select>
+      </div>
+    </div>
+    <div class="bg-white p-4 rounded border space-y-4">
+      <h4 class="font-bold text-gray-700 text-xs">✅ Phê Duyệt (Nhóm)</h4>
+      <div id="extraApprovalGroupsAdminWrap"></div>
+      <div class="border-t pt-3">
+        <p class="font-bold text-gray-700 text-[11px] mb-1">🧭 Cấp Phê Duyệt Cuối Cùng</p>
+        <p class="text-[11px] text-gray-500 italic mb-2">Người tạo hồ sơ chọn 1 trong các cấp dưới đây — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn.</p>
+        <div id="extraApprovalLevelsAdminWrap"></div>
       </div>
     </div>
   </div>

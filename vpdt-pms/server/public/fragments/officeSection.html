@@ -80,6 +80,9 @@
             <div class="font-bold text-rose-600">Tổng Dự Toán (chưa VAT): <span id="officeItemsTotalDisplay">0</span> VNĐ</div>
           </div>
         </div>
+        <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — 1 mount DÙNG CHUNG cho cả 2 sub-tab MUA_BAN/SUA_CHUA, vẽ
+             lại đúng moduleKey mỗi lần đổi sub-tab (xem setOfficeSubTab(), core.js). -->
+        <div id="extraApprovalMount_OFFICE"></div>
         <div class="flex justify-end gap-2">
           <button type="button" data-op="confirmAndResetForm" data-arg0="officeForm" data-arg1="resetOfficeReqForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="button" id="officePreviewWfBtn" data-op="previewOfficeWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
@@ -199,6 +202,9 @@
           </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_PAYMENT" class="contents"></div>
+          <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — CHỈ hiện khi nguồn = Thủ công (xem onPaymentSourceTypeChange(),
+               module-thanhtoan.js) — đề nghị tự sinh từ Hợp Đồng/Mua Bán/Sửa Chữa chưa áp dụng tính năng này. -->
+          <div id="extraApprovalMount_PAYMENT"></div>
           <div class="flex justify-end gap-2">
             <button type="button" data-op="confirmAndResetForm" data-arg0="paymentCreateForm" data-arg1="resetPaymentCreateForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="button" id="paymentPreviewWfBtn" data-op="previewPaymentWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
