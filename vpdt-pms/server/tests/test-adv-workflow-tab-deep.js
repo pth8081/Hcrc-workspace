@@ -433,6 +433,99 @@ async function main() {
   await page.waitForTimeout(80);
 
   // =====================================================================================
+  // C8) 🖊️ Nhóm Phê Duyệt Cuối (EXTRAAPPROVAL) — sub-tab thứ 5 (10/2026), dùng chung ĐÚNG engine
+  // renderApprovalGroupsTable()/renderApprovalLevelsTable() vừa xác nhận ở C1-C7 (Văn Bản Trình/Hợp
+  // Đồng), nay áp cho 10 moduleKey khác (DOC/CAR/OFFICE_BUY/OFFICE_FIX/VPP/PAYMENT/ITPRICE_RETAIL/
+  // ITPRICE_WHOLESALE/OPERATION_ORDER_STORE/OPERATION_ORDER_HO). Xác nhận đúng yêu cầu người dùng:
+  // (1) cột "Nhãn Phê Duyệt" có mặt, (2) cờ "Chỉ 1 Người?" khoá cứng 1 người/cho chọn nhiều người
+  // GIỐNG HỆT Hợp Đồng, (3) mỗi quy trình (moduleKey) có bộ dữ liệu ĐỘC LẬP hoàn toàn.
+  // =====================================================================================
+  await page.click('#btnAdvWorkflowSubExtraApproval');
+  await page.waitForSelector('#advWorkflowSubExtraApproval', { state: 'visible' });
+  await page.waitForTimeout(50);
+
+  const exDefaultModuleKey = await page.locator('#extraApprovalModuleKeySelect').inputValue();
+  record('C8.0. EXTRAAPPROVAL: dropdown mặc định chọn "DOC" (Tài Liệu)', exDefaultModuleKey === 'DOC', exDefaultModuleKey);
+
+  // C8.1: thêm nhóm phê duyệt cho DOC
+  await page.evaluate(() => { window.prompt = () => 'Nhóm Thẩm Định Tài Liệu'; });
+  await page.click('button[data-op="addApprovalGroup"][data-arg0="DOC"]');
+  await page.waitForTimeout(80);
+  const docGroupsAfterC8_1 = await page.evaluate(() => DB.extraApprovalGroups_DOC);
+  record('C8.1. EXTRAAPPROVAL (DOC): thêm nhóm mới qua UI -> DB.extraApprovalGroups_DOC có đúng 1 nhóm',
+    docGroupsAfterC8_1.length === 1 && docGroupsAfterC8_1[0].label === 'Nhóm Thẩm Định Tài Liệu', JSON.stringify(docGroupsAfterC8_1));
+  record('C8.1b. EXTRAAPPROVAL (DOC): nhóm mới KHÔNG có field "blocking" (hasBlocking:false, giống cấu hình Hợp Đồng)',
+    docGroupsAfterC8_1[0].blocking === undefined, JSON.stringify(docGroupsAfterC8_1[0]));
+  const docGroupId = docGroupsAfterC8_1[0].id;
+
+  // C8.2: cột "Nhãn Phê Duyệt" — có mặt trên bảng + gán được, giống Hợp Đồng/Văn Bản Trình
+  const exHeaderText = await page.locator('#extraApprovalGroupsAdminWrap thead').innerText();
+  record('C8.2. EXTRAAPPROVAL: bảng Nhóm có cột "Nhãn Phê Duyệt" và "Chỉ 1 Người?" (đúng yêu cầu giống Hợp Đồng)',
+    exHeaderText.includes('Nhãn Phê Duyệt') && exHeaderText.includes('Chỉ 1 Người?'), exHeaderText);
+
+  const exActionLabelInput = page.locator(`input[data-op-change="updateApprovalGroupActionLabel"][data-arg0="DOC"][data-arg1="${docGroupId}"]`);
+  await exActionLabelInput.fill('Thẩm Định');
+  await exActionLabelInput.dispatchEvent('change');
+  await page.waitForTimeout(60);
+  const docGroupsAfterC8_2 = await page.evaluate(() => DB.extraApprovalGroups_DOC);
+  record('C8.2b. EXTRAAPPROVAL (DOC): gán "Nhãn Phê Duyệt" = "Thẩm Định" -> DB.actionLabel cập nhật đúng',
+    docGroupsAfterC8_2[0].actionLabel === 'Thẩm Định', JSON.stringify(docGroupsAfterC8_2));
+
+  // C8.3: gán 1 thành viên rồi bật "Chỉ 1 Người?" — khoá cứng còn đúng 1 người (giống Hợp Đồng)
+  const docPickerId = `apgMemberPicker_DOC_${docGroupId}`;
+  await multiSelectPick(page, docPickerId, 'Trưởng Phòng CNTT', 'Trưởng Phòng CNTT');
+  await page.click(`button[data-op="saveApprovalGroupMembers"][data-arg0="DOC"][data-arg1="${docGroupId}"]`);
+  await page.waitForTimeout(80);
+  const docGroupsAfterC8_3 = await page.evaluate(() => DB.extraApprovalGroups_DOC);
+  record('C8.3. EXTRAAPPROVAL (DOC): gán thành viên "tp.cntt" (chưa khoá "Chỉ 1 Người") -> DB.members đúng',
+    JSON.stringify(docGroupsAfterC8_3[0].members) === JSON.stringify(['tp.cntt']), JSON.stringify(docGroupsAfterC8_3));
+
+  const singleApproverCheckbox = page.locator(`input[data-op-change="toggleApprovalGroupFlag"][data-arg0="DOC"][data-arg1="${docGroupId}"][data-arg2="singleApprover"]`);
+  await singleApproverCheckbox.check();
+  await page.waitForTimeout(80);
+  const docGroupsAfterC8_4 = await page.evaluate(() => DB.extraApprovalGroups_DOC);
+  record('C8.4. EXTRAAPPROVAL (DOC): bật "Chỉ 1 Người?" -> DB.singleApprover = true (khoá cứng 1 người, giống Hợp Đồng)',
+    docGroupsAfterC8_4[0].singleApprover === true, JSON.stringify(docGroupsAfterC8_4));
+  const singleSelectExists = await page.locator(`#${docPickerId} select.apg-single-select`).count();
+  record('C8.4b. EXTRAAPPROVAL (DOC): bật "Chỉ 1 Người?" -> ô chọn thành viên đổi sang select ĐÚNG 1 người (khác widget chọn nhiều)',
+    singleSelectExists === 1, String(singleSelectExists));
+
+  // C8.5: thêm Cấp Phê Duyệt Cuối Cùng cho DOC
+  await page.evaluate(() => { window.prompt = () => 'Cấp Đặc Biệt DOC'; });
+  await page.click('button[data-op="addApprovalLevel"][data-arg0="DOC"]');
+  await page.waitForTimeout(80);
+  const docLevelsAfterC8_5 = await page.evaluate(() => DB.extraApprovalLevels_DOC);
+  record('C8.5. EXTRAAPPROVAL (DOC): thêm Cấp Phê Duyệt Cuối Cùng mới qua UI -> DB có đúng 1 cấp',
+    docLevelsAfterC8_5.length === 1 && docLevelsAfterC8_5[0].label === 'Cấp Đặc Biệt DOC', JSON.stringify(docLevelsAfterC8_5));
+
+  // C8.6: đổi dropdown sang moduleKey khác (CAR) — xác nhận dữ liệu 10 quy trình ĐỘC LẬP hoàn toàn,
+  // không lẫn/ảnh hưởng lẫn nhau (đúng yêu cầu "mỗi quy trình có nhóm phê duyệt và cấp phê duyệt khác nhau").
+  await page.selectOption('#extraApprovalModuleKeySelect', 'CAR');
+  await page.waitForTimeout(80);
+  const carGroupsBeforeAdd = await page.evaluate(() => DB.extraApprovalGroups_CAR);
+  record('C8.6. EXTRAAPPROVAL: chuyển sang moduleKey "CAR" -> DB.extraApprovalGroups_CAR RỖNG (chưa cấu hình, không lẫn dữ liệu của DOC)',
+    !carGroupsBeforeAdd || carGroupsBeforeAdd.length === 0, JSON.stringify(carGroupsBeforeAdd));
+  const carHeaderText = await page.locator('#extraApprovalGroupsAdminWrap').innerText();
+  record('C8.6b. EXTRAAPPROVAL: bảng CAR hiện trống ("Chưa có nhóm nào")',
+    /Chưa có nhóm nào/.test(carHeaderText), carHeaderText);
+
+  await page.evaluate(() => { window.prompt = () => 'Nhóm Duyệt Xe Cấp Cao'; });
+  await page.click('button[data-op="addApprovalGroup"][data-arg0="CAR"]');
+  await page.waitForTimeout(80);
+  const carGroupsAfterAdd = await page.evaluate(() => DB.extraApprovalGroups_CAR);
+  const docGroupsStillIntact = await page.evaluate(() => DB.extraApprovalGroups_DOC);
+  record('C8.7. EXTRAAPPROVAL: thêm nhóm cho "CAR" KHÔNG ảnh hưởng dữ liệu "DOC" đã cấu hình ở trên (10 quy trình độc lập)',
+    carGroupsAfterAdd.length === 1 && carGroupsAfterAdd[0].label === 'Nhóm Duyệt Xe Cấp Cao' &&
+    docGroupsStillIntact.length === 1 && docGroupsStillIntact[0].label === 'Nhóm Thẩm Định Tài Liệu' && docGroupsStillIntact[0].singleApprover === true,
+    JSON.stringify({ carGroupsAfterAdd, docGroupsStillIntact }));
+
+  // Dọn dẹp nhóm CAR vừa tạo (không cần thiết cho phần còn lại của bài test)
+  const carGroupId = carGroupsAfterAdd[0].id;
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.click(`button[data-op="deleteApprovalGroup"][data-arg0="CAR"][data-arg1="${carGroupId}"]`);
+  await page.waitForTimeout(80);
+
+  // =====================================================================================
   // D) 🧩 Nhóm Quyền Đặc Biệt (SPECIALPERM)
   // =====================================================================================
   await page.click('#btnAdvWorkflowSubSpecialPerm');
