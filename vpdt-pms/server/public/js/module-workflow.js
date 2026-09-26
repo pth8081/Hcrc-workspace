@@ -124,7 +124,12 @@ const WF_MODULE_CONFIG = {
 // giữ để nơi khác/test có thể xem tổng số mục thiếu cấu hình trên cả hệ thống nếu cần).
 function collectQuickApplyUnconfiguredTargets(moduleKeys) {
   const targets = [];
-  const depts = getWorkflowParticipatingDepts();
+  // depts KHÔNG còn tính 1 LẦN DUY NHẤT ở đây nữa (10/2026, "Đơn Vị Tham Gia Quy Trình" đổi sang NHIỀU
+  // NHÓM — mỗi nhóm tự chọn "Quy Trình Áp Dụng" riêng, xem getWorkflowParticipatingDepts(moduleKey) ở
+  // module-admin-specialperm.js): 1 lượt "⚡ Áp Dụng Nhanh" có thể quét NHIỀU modKey khác nhau cùng lúc
+  // (moduleKeys), mỗi modKey giờ có thể thuộc 1 nhóm KHÁC nhau (danh sách phòng ban khác nhau) — phải
+  // gọi lại getWorkflowParticipatingDepts(modKey) NGAY BÊN TRONG vòng lặp Object.entries(WF_MODULE_CONFIG)
+  // bên dưới, đúng modKey đang xét, thay vì dùng chung 1 biến `depts` tính trước vòng lặp.
   // approverMode/approversByPosition (tuỳ chọn, xem qaEditingApproverMode ở trên): khi 1 cấu hình Áp
   // Dụng Nhanh có gán "Theo Chức Danh" cho 1/nhiều bước, mọi mục ĐANG THIẾU cấu hình được set NGAY người
   // duyệt theo đúng chức danh đó (không còn approvers rỗng như trước) — bước KHÔNG bật "Theo Chức Danh"
@@ -168,6 +173,9 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
 
   Object.entries(WF_MODULE_CONFIG).forEach(([modKey, cfg]) => {
     if (scopeKeys && !scopeKeys.has(modKey)) return;
+    // Tính LẠI đúng phạm vi phòng ban của RIÊNG modKey đang xét (xem chú thích ở khai báo `targets` phía
+    // trên) — modKey nào chưa nhóm nào claim vẫn trả về DB.depts như hành vi cũ.
+    const depts = getWorkflowParticipatingDepts(modKey);
 
     if (cfg.pureTier) {
       // Vận Hành > Đặt Hàng Tại Siêu Thị/HO — chỉ có tier, không có dept.

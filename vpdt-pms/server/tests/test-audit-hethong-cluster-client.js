@@ -121,6 +121,7 @@ async function scenario(name, fn) {
     DB.permGroups = [];
     DB.systemLogs = [];
     DB.workflowParticipatingDepts = [];
+    DB.workflowParticipatingDeptGroups = [];
     DB.workflowParticipatingPositions = [];
     DB.users = [
       { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '0900000000',
@@ -320,7 +321,7 @@ async function scenario(name, fn) {
       DB.quickApplyConfigs = [{ id: 1, workflowId: 'WF_2STEP', modules: ['DOC', 'CAR'] }];
       DB.deptWorkflows = {};
       DB.carDeptWorkflows = {};
-      DB.workflowParticipatingDepts = ['Kế Toán'];
+      DB.workflowParticipatingDeptGroups = [{ id: 'g1', name: 'Nhóm Test', depts: ['Kế Toán'], moduleKeys: ['DOC', 'CAR'] }];
       DB.systemLogs = [];
       window.__alerts.length = 0;
       window.__confirmAnswer = true;
@@ -346,7 +347,7 @@ async function scenario(name, fn) {
       DB.workflows = [{ id: 'WF_2STEP', name: '2 bước', steps: [{ order: 1, name: 'B1' }, { order: 2, name: 'B2' }] }];
       DB.quickApplyConfigs = [{ id: 1, workflowId: 'WF_2STEP', modules: ['DOC'] }];
       DB.deptWorkflows = {};
-      DB.workflowParticipatingDepts = ['Kế Toán'];
+      DB.workflowParticipatingDeptGroups = [{ id: 'g1', name: 'Nhóm Test', depts: ['Kế Toán'], moduleKeys: ['DOC'] }];
       DB.systemLogs = [];
       window.__alerts.length = 0;
       window.__failKeys = [];

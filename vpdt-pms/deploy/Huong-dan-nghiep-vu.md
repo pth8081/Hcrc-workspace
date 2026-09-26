@@ -379,9 +379,16 @@ vì đây là cấu hình CHUNG toàn hệ thống, không gắn với riêng t�
 3 danh mục dùng ô "chọn nhiều thật" (gõ tìm, bấm chọn, chip xoá được ngay
 trong ô):
 
-1. **Đơn vị tham gia quy trình** (`workflowParticipatingDepts`) — lọc bớt danh
-   sách phòng ban hiển thị ở màn Quy Trình & Phê Duyệt (để trống = hiện đầy đủ
-   mọi phòng ban như mặc định).
+1. **Đơn vị tham gia quy trình** (`workflowParticipatingDeptGroups`, đổi từ
+   1 danh sách phẳng `workflowParticipatingDepts` sang **NHIỀU NHÓM** từ
+   10/2026) — mỗi nhóm gồm 1 danh sách **Phòng Ban Trong Nhóm** + 1 danh sách
+   **Quy Trình Áp Dụng** (chọn từ các mục ở màn Quy Trình & Phê Duyệt) riêng
+   biệt. Quy trình nào ĐÃ được 1 nhóm chọn thì màn cấu hình quy trình đó CHỈ
+   hiện đúng Phòng Ban của nhóm; quy trình nào CHƯA nhóm nào chọn vẫn hiện
+   đầy đủ mọi phòng ban như mặc định. Bấm **"➕ Thêm Nhóm Đơn Vị Mới"** để tạo
+   nhóm, đặt tên + chọn 2 danh sách trên, xong bấm **"💾 Lưu Cấu Hình"** 1 lần
+   cho toàn bộ mọi nhóm — hệ thống chặn lưu nếu phát hiện 1 quy trình bị chọn
+   trùng ở 2 nhóm khác nhau (mỗi quy trình chỉ nên thuộc đúng 1 nhóm).
 2. **Chức danh bị loại khỏi VPP** (`vppExcludedJobTitles`) — chức danh không
    được cấp Văn Phòng Phẩm (không tính vào đầu người/ngân sách VPP của phòng).
 3. **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`) — danh

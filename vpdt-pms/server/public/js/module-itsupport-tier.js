@@ -364,7 +364,7 @@ async function resetDeptWorkflowConfig(dept) {
 // hình". Phòng ban đang hiện giá trị mặc định tạm (chưa từng cấu hình thật) tự động bị loại khỏi danh
 // sách xoá (isDeptWorkflowConfigured() lọc), không có gì để xoá nên không hiện trong xác nhận.
 async function resetAllDeptWorkflowConfigs() {
-  const targetDepts = getWorkflowParticipatingDepts().filter(isDeptWorkflowConfigured);
+  const targetDepts = getWorkflowParticipatingDepts(activeWfMod).filter(isDeptWorkflowConfigured);
   if (!targetDepts.length) return alert('✅ Không có phòng ban nào đang có cấu hình thật trong phạm vi hiện tại để xoá.');
   if (!confirm(`⚠️ Xoá HẲN cấu hình quy trình (số bước + người duyệt) của ${targetDepts.length} phòng ban:\n- ${targetDepts.join('\n- ')}\n\nĐưa TẤT CẢ về trạng thái CHƯA CẤU HÌNH — "⚡ Áp Dụng Nhanh" sẽ có thể áp dụng lại cho các phòng ban này. Hành động này KHÔNG hoàn tác được. Tiếp tục?`)) return;
 
@@ -421,7 +421,7 @@ async function saveDeptWorkflowConfig(dept) {
 // LỖI ĐÃ VÁ — cùng phát hiện/lý do với saveDeptWorkflowConfig() ở trên (await + snapshot/rollback).
 async function saveAllDeptWorkflowConfigs() {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
-  const collected = getWorkflowParticipatingDepts().map(dept => ({ dept, ...collectDeptWorkflowConfig(dept) })).filter(r => r.config);
+  const collected = getWorkflowParticipatingDepts(activeWfMod).map(dept => ({ dept, ...collectDeptWorkflowConfig(dept) })).filter(r => r.config);
   if (!collected.length) return;
 
   const deptsWithEmptySteps = collected.filter(r => r.emptySteps.length > 0);

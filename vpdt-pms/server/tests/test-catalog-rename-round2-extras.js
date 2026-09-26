@@ -46,6 +46,7 @@ function resetState() {
       'Phòng Nhân Sự': [{ name: 'Anh B', email: 'b@hcrc.vn' }]
     },
     workflowParticipatingDepts: ['Phòng IT', 'Phòng Nhân Sự', 'Siêu Thị A'],
+    workflowParticipatingDeptGroups: [{ id: 'g1', name: 'Nhóm 1', depts: ['Phòng IT', 'Phòng Nhân Sự', 'Siêu Thị A'], moduleKeys: ['DOC'] }],
     // *DeptWorkflows/positionPairs/orgChart/employeeProfiles/users... không cần cho phạm vi test này —
     // các hàm cascade tương ứng tự no-op nếu key/danh sách rỗng, không throw.
     deptWorkflows: {}, submissionDeptWorkflows: {}, contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
@@ -149,6 +150,21 @@ async function run(name, fn) {
     const res = await renameApi('stores', 'Siêu Thị A', 'Siêu Thị A Mới');
     assert.strictEqual(res.status, 200, JSON.stringify(res.body));
     assert.deepStrictEqual(APP_DATA.workflowParticipatingDepts, ['Phòng IT', 'Phòng Nhân Sự', 'Siêu Thị A Mới']);
+  });
+
+  await run('#7b depts: đổi tên -> cập nhật GIÁ TRỊ trong workflowParticipatingDeptGroups[].depts (bản NHIỀU NHÓM mới), giữ nguyên moduleKeys', async () => {
+    resetState();
+    const res = await renameApi('depts', 'Phòng IT', 'Phòng Công Nghệ Thông Tin');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(APP_DATA.workflowParticipatingDeptGroups[0].depts, ['Phòng Công Nghệ Thông Tin', 'Phòng Nhân Sự', 'Siêu Thị A']);
+    assert.deepStrictEqual(APP_DATA.workflowParticipatingDeptGroups[0].moduleKeys, ['DOC'], 'moduleKeys không liên quan tới rename, phải giữ nguyên');
+  });
+
+  await run('#7b stores: đổi tên siêu thị cũng cập nhật đúng giá trị trong workflowParticipatingDeptGroups[].depts', async () => {
+    resetState();
+    const res = await renameApi('stores', 'Siêu Thị A', 'Siêu Thị A Mới');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.deepStrictEqual(APP_DATA.workflowParticipatingDeptGroups[0].depts, ['Phòng IT', 'Phòng Nhân Sự', 'Siêu Thị A Mới']);
   });
 
   await run('[GỘP] budgetLines: đổi tên PHÒNG BAN (HO) -> chỉ field "dept" đổi, "location" GIỮ NGUYÊN "HO"', async () => {

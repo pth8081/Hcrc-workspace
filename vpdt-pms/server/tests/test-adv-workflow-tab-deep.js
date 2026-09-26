@@ -116,7 +116,7 @@ async function main() {
       operationOrderStoreMixedApprovalRules: [],
       submissionApprovalGroups: [], submissionApprovalLevels: [],
       contractApprovalGroups: [], contractApprovalLevels: [],
-      workflowParticipatingDepts: [], vppExcludedJobTitles: [], workflowParticipatingPositions: [],
+      workflowParticipatingDepts: [], workflowParticipatingDeptGroups: [], vppExcludedJobTitles: [], workflowParticipatingPositions: [],
       quickApplyConfigs: [],
       deptAbbrs: {}, docCatAbbrs: {}, itPriceApprovals: [], itSupportTickets: [], itPriceMasterLists: [],
       itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, itServiceRenewals: [],
@@ -439,16 +439,25 @@ async function main() {
   await page.waitForSelector('#advWorkflowSubSpecialPerm', { state: 'visible' });
   await page.waitForTimeout(50);
 
-  // D1: Đơn Vị Tham Gia Quy Trình — thêm "Phòng CNTT", bấm Lưu
-  await multiSelectPick(page, 'workflowParticipatingDeptsMultiSelect', 'Phòng CNTT', 'Phòng CNTT');
-  await page.click('button[data-op="saveWorkflowParticipatingDepts"]');
+  // D1: Đơn Vị Tham Gia Quy Trình (NHIỀU NHÓM) — thêm 1 nhóm, chọn "Phòng CNTT" + module "Tài liệu", bấm Lưu
+  await page.click('[data-op="addWorkflowParticipatingDeptGroup"]');
+  await page.waitForTimeout(50);
+  const grpId = await page.evaluate(() => _wfDeptGroupsDraft[0].id);
+  await multiSelectPick(page, `wfDeptGroupDepts_${grpId}`, 'Phòng CNTT', 'Phòng CNTT');
+  await multiSelectPick(page, `wfDeptGroupModules_${grpId}`, 'Tài liệu', 'Tài liệu');
+  await page.click('button[data-op="saveWorkflowParticipatingDeptGroups"]');
   await page.waitForTimeout(80);
-  const deptsAfterD1 = await page.evaluate(() => DB.workflowParticipatingDepts);
-  record('D1. SPECIALPERM: thêm "Phòng CNTT" vào Đơn Vị Tham Gia Quy Trình qua UI + Lưu -> DB đúng',
-    JSON.stringify(deptsAfterD1) === JSON.stringify(['Phòng CNTT']), JSON.stringify(deptsAfterD1));
-  const getDeptsCheck = await page.evaluate(() => typeof getWorkflowParticipatingDepts === 'function' ? getWorkflowParticipatingDepts() : null);
-  record('D1b. SPECIALPERM business logic: getWorkflowParticipatingDepts() (nguồn màn Quy Trình & Phê Duyệt) trả ĐÚNG danh sách đã lọc',
-    JSON.stringify(getDeptsCheck) === JSON.stringify(['Phòng CNTT']), JSON.stringify(getDeptsCheck));
+  const groupsAfterD1 = await page.evaluate(() => DB.workflowParticipatingDeptGroups);
+  record('D1. SPECIALPERM: thêm nhóm mới (Phòng CNTT + module DOC) qua UI + Lưu -> DB đúng',
+    Array.isArray(groupsAfterD1) && groupsAfterD1.length === 1 &&
+    JSON.stringify(groupsAfterD1[0].depts) === JSON.stringify(['Phòng CNTT']) &&
+    JSON.stringify(groupsAfterD1[0].moduleKeys) === JSON.stringify(['DOC']), JSON.stringify(groupsAfterD1));
+  const getDeptsCheck = await page.evaluate(() => typeof getWorkflowParticipatingDepts === 'function'
+    ? { claimed: getWorkflowParticipatingDepts('DOC'), unclaimed: getWorkflowParticipatingDepts('CAR') }
+    : null);
+  record('D1b. SPECIALPERM business logic: getWorkflowParticipatingDepts(moduleKey) — module ĐÃ claim (DOC) trả ĐÚNG danh sách nhóm, module CHƯA claim (CAR) vẫn hiện đủ DB.depts',
+    getDeptsCheck && JSON.stringify(getDeptsCheck.claimed) === JSON.stringify(['Phòng CNTT']) &&
+    Array.isArray(getDeptsCheck.unclaimed) && getDeptsCheck.unclaimed.length > 1, JSON.stringify(getDeptsCheck));
 
   // D2: Nhóm Không Cấp VPP — thêm "Trưởng Phòng" (đúng chức danh của tp.cntt), bấm Lưu
   await multiSelectPick(page, 'vppExcludedJobTitlesMultiSelect', 'Trưởng Phòng', 'Trưởng Phòng');

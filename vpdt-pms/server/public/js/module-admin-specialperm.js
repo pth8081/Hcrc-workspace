@@ -6,8 +6,13 @@
 // (gõ tìm, bấm chọn, hiện ngay dạng chip xoá được TRONG CÙNG 1 Ô) + 1 nút "Lưu" — THAY cho khuôn cũ (ô
 // tìm-kiếm-chọn-1 (sdd) + nút "Thêm" riêng + danh sách chip riêng bên dưới), vẫn giữ 1 nút "Lưu" duy nhất
 // cho từng danh mục:
-// 1) workflowParticipatingDepts — lọc bớt danh sách phòng ban hiển thị ở màn "Quy Trình & Phê Duyệt"
-//    (renderWorkflowTab()).
+// 1) workflowParticipatingDepts — ĐÃ THAY bằng workflowParticipatingDeptGroups (10/2026, NHIỀU NHÓM,
+//    xem getWorkflowParticipatingDepts(moduleKey) + renderWorkflowParticipatingDeptGroupsWidget() ngay
+//    dưới) — mỗi nhóm tự chọn 1 danh sách Phòng Ban RIÊNG + 1 danh sách "Quy Trình Áp Dụng" RIÊNG (module
+//    nào chưa nhóm nào chọn vẫn hiện đầy đủ Phòng Ban ở màn "Quy Trình & Phê Duyệt" như hành vi cũ). KHÁC
+//    2 danh mục còn lại — dùng 2 widget renderMultiSelectDropdown() lồng bên trong MỖI nhóm (không phải
+//    1 widget DUY NHẤT), nên có thêm nút "➕ Thêm Nhóm Đơn Vị Mới" + trạng thái NHÁP cấp danh sách nhóm
+//    (_wfDeptGroupsDraft) — vẫn giữ đúng 1 nút "💾 Lưu Cấu Hình" DUY NHẤT cho TOÀN BỘ mọi nhóm.
 // 2) vppExcludedJobTitles — danh sách CHỨC DANH không được cấp Văn Phòng Phẩm; user có jobTitle HIỆN
 //    TẠI nằm trong danh sách này bị loại khỏi đăng ký + đầu người tính ngân sách VPP (xem
 //    isUserVppExcluded() bên dưới). TRƯỚC ĐÂY đây là vppExcludeGroups[] (nhiều nhóm đặt tên tự do, mỗi
@@ -71,8 +76,20 @@ function wfPositionPairLabel(pair) {
   return pair.dept ? `${pair.jobTitle} — ${pair.dept}` : pair.jobTitle;
 }
 
-function getWorkflowParticipatingDepts() {
-  return (DB.workflowParticipatingDepts && DB.workflowParticipatingDepts.length) ? DB.workflowParticipatingDepts : DB.depts;
+// getWorkflowParticipatingDepts(moduleKey) — 10/2026, đổi từ 1 danh sách phẳng
+// (DB.workflowParticipatingDepts, đã NGỪNG đọc) sang NHIỀU NHÓM (DB.workflowParticipatingDeptGroups,
+// xem defaults.js): mỗi nhóm mang 1 danh sách Phòng Ban RIÊNG + 1 danh sách "Quy Trình Áp Dụng" RIÊNG
+// (`moduleKeys`, khớp key của WF_MODULE_CONFIG — module-workflow.js). `moduleKey` là module ĐANG XEM ở
+// màn "Quy Trình & Phê Duyệt"/"⚡ Áp Dụng Nhanh" (4 điểm gọi: module-itsupport-tier.js x2,
+// module-ngansach.js, module-workflow.js collectQuickApplyUnconfiguredTargets() — đều đã có sẵn đúng
+// module đang xét trong tay). Module NÀO đã được 1 nhóm claim (moduleKeys chứa đúng key đó) -> CHỈ hiện
+// depts của nhóm đó; module CHƯA nhóm nào claim (kể cả khi không truyền moduleKey) -> hiện đầy đủ
+// DB.depts như hành vi cũ, không đổi gì. saveWorkflowParticipatingDeptGroups() (bên dưới) đã chặn lưu
+// nếu 1 module bị 2 nhóm cùng chọn nên .find() ở đây luôn khớp tối đa 1 nhóm.
+function getWorkflowParticipatingDepts(moduleKey) {
+  const groups = DB.workflowParticipatingDeptGroups || [];
+  const group = moduleKey ? groups.find(g => (g.moduleKeys || []).includes(moduleKey)) : null;
+  return group ? (group.depts || []) : DB.depts;
 }
 
 // Danh mục "Vị Trí Tham Gia Quy Trình" (mảng {jobTitle,dept}) — nguồn cho ô chọn "Theo vị trí" ở màn
@@ -81,26 +98,115 @@ function getWorkflowParticipatingPositions() {
   return DB.workflowParticipatingPositions || [];
 }
 
-// ============ Đơn Vị Tham Gia Quy Trình (workflowParticipatingDepts) ============
-function renderWorkflowParticipatingDeptsWidget() {
-  renderMultiSelectDropdown('workflowParticipatingDeptsMultiSelect', DB.depts, DB.workflowParticipatingDepts || [], {
-    placeholder: '🔍 Tìm phòng ban để thêm...',
-    emptyText: 'Chưa thêm đơn vị nào — để trống thì màn Quy Trình & Phê Duyệt hiện đầy đủ mọi phòng ban.'
+// ============ Đơn Vị Tham Gia Quy Trình (workflowParticipatingDeptGroups, NHIỀU NHÓM) ============
+// Mỗi nhóm = 1 thẻ trong #workflowParticipatingDeptGroupsWrap, mang 2 widget renderMultiSelectDropdown()
+// riêng (Phòng Ban + Quy Trình Áp Dụng) + 1 ô nhập tên. _wfDeptGroupsDraft là bản NHÁP đang sửa (tách
+// khỏi DB.workflowParticipatingDeptGroups) để Thêm/Xoá nhóm không đụng dữ liệu gốc cho tới khi bấm
+// "💾 Lưu Cấu Hình" — CHỈ 1 nút Lưu DUY NHẤT cho TOÀN BỘ mọi nhóm (đúng yêu cầu người dùng), khác các
+// khối 17 sibling (mỗi cái chỉ 1 mảng phẳng, không cần khái niệm "nháp cấp danh sách nhóm").
+let _wfDeptGroupsDraft = null;
+let _wfDeptGroupIdSeq = 0;
+
+function wfModuleKeyOptions() {
+  return Object.entries(WF_MODULE_CONFIG).map(([key, cfg]) => ({ value: key, label: cfg.label }));
+}
+
+function renderWorkflowParticipatingDeptGroupsWidget() {
+  _wfDeptGroupsDraft = (DB.workflowParticipatingDeptGroups || []).map(g => ({
+    id: g.id, name: g.name || '', depts: [...(g.depts || [])], moduleKeys: [...(g.moduleKeys || [])]
+  }));
+  renderWfDeptGroupsList();
+}
+
+function renderWfDeptGroupsList() {
+  const wrap = document.getElementById('workflowParticipatingDeptGroupsWrap');
+  if (!wrap) return;
+  if (!_wfDeptGroupsDraft.length) {
+    wrap.innerHTML = '<p class="text-[11px] text-gray-400 italic mb-2">Chưa có nhóm đơn vị nào — mọi quy trình ở màn "Quy Trình & Phê Duyệt" đang hiện đầy đủ Danh Mục Phòng Ban.</p>';
+    return;
+  }
+  wrap.innerHTML = _wfDeptGroupsDraft.map(g => `
+    <div class="border rounded-lg p-3 bg-white mb-3">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <input type="text" value="${escapeHtml(g.name)}" placeholder="Tên nhóm..." data-op-input="wfDeptGroupSetName" data-arg0="${escapeHtml(g.id)}" data-arg-value="1"
+          class="font-bold text-sm border-b border-dashed flex-1 px-1 py-0.5 focus:outline-none focus:border-emerald-500">
+        <button type="button" data-op="wfDeptGroupRemove" data-arg0="${escapeHtml(g.id)}" class="text-red-500 text-[11px] font-bold hover:text-red-700 whitespace-nowrap">🗑️ Xoá Nhóm</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <div class="text-[10px] font-semibold text-gray-500 mb-1">📌 Phòng Ban Trong Nhóm</div>
+          <div id="wfDeptGroupDepts_${escapeHtml(g.id)}" class="border rounded p-2 bg-gray-50"></div>
+        </div>
+        <div>
+          <div class="text-[10px] font-semibold text-gray-500 mb-1">⚙️ Quy Trình Áp Dụng</div>
+          <div id="wfDeptGroupModules_${escapeHtml(g.id)}" class="border rounded p-2 bg-gray-50"></div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  _wfDeptGroupsDraft.forEach(g => {
+    renderMultiSelectDropdown(`wfDeptGroupDepts_${g.id}`, DB.depts, g.depts, {
+      placeholder: '🔍 Tìm phòng ban để thêm...',
+      emptyText: 'Chưa thêm phòng ban nào cho nhóm này.'
+    });
+    renderMultiSelectDropdown(`wfDeptGroupModules_${g.id}`, wfModuleKeyOptions(), g.moduleKeys, {
+      placeholder: '🔍 Tìm quy trình để thêm...',
+      emptyText: 'Chưa chọn quy trình nào — nhóm này chưa áp dụng cho quy trình nào ở màn Quy Trình & Phê Duyệt.',
+      chipClass: 'bg-violet-100 text-violet-700', hoverClass: 'hover:bg-violet-50'
+    });
   });
 }
 
-async function saveWorkflowParticipatingDepts() {
-  const next = getMultiSelectValues('workflowParticipatingDeptsMultiSelect');
-  const snapshot = [...(DB.workflowParticipatingDepts || [])];
-  DB.workflowParticipatingDepts = next;
-  const saved = await syncStorage('workflowParticipatingDepts');
+function wfDeptGroupSetName(groupId, name) {
+  const g = (_wfDeptGroupsDraft || []).find(x => x.id === groupId);
+  if (g) g.name = name;
+}
+
+function addWorkflowParticipatingDeptGroup() {
+  if (!_wfDeptGroupsDraft) _wfDeptGroupsDraft = [];
+  _wfDeptGroupsDraft.push({ id: `local_${Date.now()}_${_wfDeptGroupIdSeq++}`, name: `Nhóm ${_wfDeptGroupsDraft.length + 1}`, depts: [], moduleKeys: [] });
+  renderWfDeptGroupsList();
+}
+
+function wfDeptGroupRemove(groupId) {
+  if (!confirm('⚠️ Xoá nhóm này khỏi bản nháp đang sửa? Bấm "💾 Lưu Cấu Hình" mới thực sự ghi lại — huỷ ngang (đổi tab/F5) trước khi lưu sẽ KHÔNG mất gì.')) return;
+  _wfDeptGroupsDraft = _wfDeptGroupsDraft.filter(g => g.id !== groupId);
+  renderWfDeptGroupsList();
+}
+
+async function saveWorkflowParticipatingDeptGroups() {
+  const next = (_wfDeptGroupsDraft || []).map(g => ({
+    id: g.id,
+    name: (g.name || '').trim() || 'Nhóm chưa đặt tên',
+    depts: getMultiSelectValues(`wfDeptGroupDepts_${g.id}`),
+    moduleKeys: getMultiSelectValues(`wfDeptGroupModules_${g.id}`)
+  }));
+
+  // Validation: 1 quy trình CHỈ được thuộc đúng 1 nhóm — chặn lưu nếu phát hiện trùng (nhóm nào đứng
+  // TRƯỚC trong mảng sẽ thắng ở getWorkflowParticipatingDepts() nếu để lọt, rất dễ gây nhầm lẫn cho
+  // admin vì UI không có cách nào thể hiện rõ "nhóm nào thắng").
+  const seenAt = new Map();
+  for (const g of next) {
+    for (const mk of g.moduleKeys) {
+      if (seenAt.has(mk)) {
+        const label = (WF_MODULE_CONFIG[mk] || {}).label || mk;
+        return alert(`⛔ Quy trình "${label}" đang được chọn ở CẢ 2 nhóm ("${seenAt.get(mk)}" và "${g.name}") — mỗi quy trình chỉ được thuộc đúng 1 nhóm. Vui lòng bỏ bớt ở 1 trong 2 nhóm rồi lưu lại.`);
+      }
+      seenAt.set(mk, g.name);
+    }
+  }
+
+  const snapshot = JSON.parse(JSON.stringify(DB.workflowParticipatingDeptGroups || []));
+  DB.workflowParticipatingDeptGroups = next;
+  const saved = await syncStorage('workflowParticipatingDeptGroups');
   if (!saved) {
-    DB.workflowParticipatingDepts = snapshot;
-    renderWorkflowParticipatingDeptsWidget();
+    DB.workflowParticipatingDeptGroups = snapshot;
+    renderWorkflowParticipatingDeptGroupsWidget();
     return;
   }
-  logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPTS', `Cập nhật danh sách phòng ban tham gia quy trình (${next.length} phòng)`, 'SUCCESS');
+  logSystemAction('USER_MGM', 'SAVE_WORKFLOW_DEPT_GROUPS', `Cập nhật ${next.length} nhóm Đơn Vị Tham Gia Quy Trình`, 'SUCCESS');
   alert('✅ Đã lưu Đơn Vị Tham Gia Quy Trình.');
+  renderWorkflowParticipatingDeptGroupsWidget();
 }
 
 // ============ Phím Tắt PWA (DB.pwaShortcutModules) ============

@@ -172,6 +172,13 @@ async function cascadeNestedDeptWorkflowMaps(oldValue, newValue) {
 async function cascadeWorkflowParticipatingDepts(oldValue, newValue) {
   await withLockedAppDataValue('workflowParticipatingDepts', (list) =>
     (Array.isArray(list) ? list.map(d => (d === oldValue ? newValue : d)) : list));
+  // workflowParticipatingDeptGroups (10/2026, thay thế danh sách phẳng ở trên bằng NHIỀU NHÓM — xem
+  // defaults.js): mỗi nhóm mang 1 mảng `depts` CÙNG khuôn (mảng chuỗi tên phòng ban) — cascade y hệt,
+  // chỉ khác đi vào ĐÚNG field `depts` của TỪNG phần tử thay vì cả mảng phẳng.
+  await withLockedAppDataValue('workflowParticipatingDeptGroups', (groups) =>
+    (Array.isArray(groups) ? groups.map(g => (g && Array.isArray(g.depts) && g.depts.includes(oldValue))
+      ? { ...g, depts: g.depts.map(d => (d === oldValue ? newValue : d)) }
+      : g) : groups));
 }
 
 // ===== CẶP (jobTitle, dept) LỒNG BÊN TRONG cấu hình quy trình — "Theo vị trí" (POSITION mode) =====

@@ -707,7 +707,7 @@ function renderWorkflowTab() {
   // rồi render widget thật SAU KHI container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()).
   const wfPickersToRender = [];
   const wfPositionPickersToRender = [];
-  container.innerHTML = getWorkflowParticipatingDepts().map(dept => {
+  container.innerHTML = getWorkflowParticipatingDepts(activeWfMod).map(dept => {
     const savedConfig = modConfig.priceTypeNested
       ? (resolveItPriceDeptWorkflowConfigClient(dept, activeWfSubmissionType) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } })
       : (deptWfMap[dept] || legacyMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } });

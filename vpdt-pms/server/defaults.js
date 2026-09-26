@@ -452,8 +452,24 @@ const DEFAULTS = {
   // Danh sách phòng ban "tham gia quy trình" — lọc bớt danh sách phòng ban hiển thị ở màn "Hệ Thống →
   // Quy Trình & Phê Duyệt" (renderWorkflowTab() ở index.html), tránh liệt kê TOÀN BỘ DB.depts khi công
   // ty có nhiều phòng ban/siêu thị không cần cấu hình quy trình riêng. Mảng RỖNG (mặc định, chưa ai
-  // cấu hình) = giữ nguyên hành vi cũ, hiện đủ toàn bộ DB.depts (xem getWorkflowParticipatingDepts()).
+  // cấu hình) = giữ nguyên hành vi cũ, hiện đủ toàn bộ DB.depts.
+  // ĐÃ THAY bằng workflowParticipatingDeptGroups (10/2026, ngay dưới) — key này KHÔNG còn được
+  // getWorkflowParticipatingDepts() đọc nữa (chỉ còn migrateWorkflowParticipatingDeptGroups() ở
+  // seedDefaults.js đọc 1 LẦN DUY NHẤT để di trú CSDL cũ), giữ nguyên key/dữ liệu cũ trong CSDL (không
+  // xoá) cho lịch sử, cùng tinh thần vppExcludeGroups (xem module-admin-specialperm.js).
   workflowParticipatingDepts: [],
+
+  // "Đơn Vị Tham Gia Quy Trình" — NHIỀU NHÓM (10/2026, thay cho workflowParticipatingDepts phẳng ở
+  // trên): mỗi phần tử { id, name, depts: [...], moduleKeys: [...] } — depts là danh sách phòng ban
+  // CỦA RIÊNG nhóm này, moduleKeys là danh sách khoá WF_MODULE_CONFIG (public/js/module-workflow.js,
+  // VD "DOC"/"CAR"/"ITPRICE_RETAIL"...) mà nhóm này ÁP DỤNG. getWorkflowParticipatingDepts(moduleKey)
+  // (module-admin-specialperm.js): module NÀO đã được 1 nhóm chọn (moduleKeys chứa đúng key đó) thì màn
+  // "Quy Trình & Phê Duyệt" của module đó CHỈ hiện đúng depts của nhóm; module CHƯA được nhóm nào chọn
+  // vẫn hiện đầy đủ DB.depts như hành vi cũ (mảng RỖNG = giữ nguyên hành vi cũ cho MỌI module). 1 module
+  // CHỈ nên thuộc đúng 1 nhóm — saveWorkflowParticipatingDeptGroups() (client) chặn lưu nếu phát hiện
+  // trùng. Migration 1 lần từ CSDL cũ (đã có dữ liệu workflowParticipatingDepts phẳng): xem
+  // migrateWorkflowParticipatingDeptGroups() ở seedDefaults.js.
+  workflowParticipatingDeptGroups: [],
 
   // "Vị Trí Tham Gia Quy Trình" (khối 17 cây phân quyền, cùng nhóm với workflowParticipatingDepts/
   // vppExcludedJobTitles ở trên) — danh mục CẶP (jobTitle, dept) admin tự dựng thủ công (ĐỘC LẬP hoàn

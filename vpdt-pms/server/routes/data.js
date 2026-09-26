@@ -173,7 +173,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // chỉ sửa được ở màn Phân Quyền (admin) — xem defaults.js.
   // workflowParticipatingPositions ("Vị Trí Tham Gia Quy Trình", cùng khối 17 — xem defaults.js): danh
   // mục cặp (jobTitle,dept) độc lập dùng cho bước duyệt "Theo vị trí" — cùng độ mở với 2 key ngay trên.
+  // workflowParticipatingDeptGroups: bản THAY THẾ nhiều-nhóm của workflowParticipatingDepts (10/2026) —
+  // cùng độ mở, chỉ sửa được ở màn Phân Quyền (admin).
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
+  'workflowParticipatingDeptGroups',
   // pwaShortcutModules: cấu hình "Phím Tắt PWA", chỉ admin sửa được ở màn Hệ Thống → Quản Trị — xem
   // defaults.js + routes/pwaManifest.js.
   'pwaShortcutModules',
@@ -263,7 +266,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows', 'operationOrderStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
   'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'externalApiKeys', 'attendanceClockApiKeys',
-  'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions',
+  'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions', 'workflowParticipatingDeptGroups',
   // Cấu hình ảnh hưởng toàn hệ thống (tệp tải lên/lương/chính sách kiểm duyệt)
   'uploadFileTypeConfig', 'uploadSizeLimitConfig', 'payrollRateConfig', 'sensitiveKeywords'
 ]);

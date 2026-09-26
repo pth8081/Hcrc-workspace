@@ -1,8 +1,62 @@
 # Phiên bản hiện tại
 
-**24.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.20 (2026-09-26): "Đơn Vị Tham Gia Quy Trình" — đổi từ 1 danh sách phẳng sang NHIỀU NHÓM theo quy trình
+
+Theo yêu cầu người dùng ("Nhóm Quyền Đặc Biệt" → "Đơn Vị Tham Gia Quy Trình"
+cho phép add thêm các nhóm đơn vị + chọn quy trình áp dụng riêng cho từng
+nhóm). Trước đây `workflowParticipatingDepts` là 1 mảng phẳng DUY NHẤT, áp
+dụng CHUNG cho MỌI module ở màn "🔄 Quy Trình & Phê Duyệt" — không có cách
+nào giới hạn danh sách phòng ban RIÊNG cho từng quy trình.
+
+Thiết kế mới (đã gửi mockup demo + được xác nhận trước khi triển khai):
+
+- **`DB.workflowParticipatingDeptGroups`** (mới, thay thế
+  `workflowParticipatingDepts` — key cũ giữ nguyên trong CSDL, không xoá,
+  chỉ không còn được đọc): mảng `{ id, name, depts: [...], moduleKeys: [...] }`
+  — mỗi nhóm mang 1 danh sách Phòng Ban RIÊNG + 1 danh sách "Quy Trình Áp
+  Dụng" RIÊNG (khoá `WF_MODULE_CONFIG`, module-workflow.js).
+- **`getWorkflowParticipatingDepts(moduleKey)`** (module-admin-specialperm.js,
+  đổi từ không tham số): module ĐÃ được 1 nhóm claim (moduleKeys chứa đúng
+  key đó) → chỉ hiện đúng Phòng Ban của nhóm; module CHƯA nhóm nào claim →
+  vẫn hiện đầy đủ `DB.depts` như hành vi cũ (không đổi gì, kể cả CSDL chưa
+  từng cấu hình gì). Cập nhật cả 4 điểm gọi: `module-itsupport-tier.js` (x2),
+  `module-ngansach.js`, và `collectQuickApplyUnconfiguredTargets()`
+  (`module-workflow.js`, tính lại đúng phạm vi phòng ban theo TỪNG modKey
+  BÊN TRONG vòng lặp — trước đây tính 1 lần dùng chung cho mọi module trong
+  1 lượt "⚡ Áp Dụng Nhanh" quét nhiều module cùng lúc).
+- **UI mới** (`systemSection.html` + `module-admin-specialperm.js`): nhiều
+  thẻ nhóm, mỗi thẻ có ô đổi tên + 2 widget "chọn nhiều thật"
+  (`renderMultiSelectDropdown()`) cho Phòng Ban/Quy Trình Áp Dụng + nút xoá
+  nhóm; nút "➕ Thêm Nhóm Đơn Vị Mới" + đúng 1 nút "💾 Lưu Cấu Hình" DUY NHẤT
+  cho TOÀN BỘ mọi nhóm (await + snapshot/rollback nếu lưu thất bại).
+- **Validation**: 1 quy trình chỉ nên thuộc đúng 1 nhóm —
+  `saveWorkflowParticipatingDeptGroups()` chặn lưu (alert rõ tên quy trình +
+  2 nhóm xung đột) nếu phát hiện cùng 1 `moduleKey` bị chọn ở 2 nhóm.
+- **Di trú 1 lần** (`migrateWorkflowParticipatingDeptGroups()`,
+  `seedDefaults.js`): CSDL nào đã có dữ liệu thật ở
+  `workflowParticipatingDepts` (phẳng, cũ) được tự động gói thành ĐÚNG 1 nhóm
+  mặc định claim TOÀN BỘ module đang có trong `WF_MODULE_CONFIG` tại thời
+  điểm nâng cấp — giữ nguyên hành vi cũ 100% cho tới khi admin chủ động vào
+  màn mới tách nhóm ra. Idempotent (bỏ qua nếu đã có nhóm hoặc danh sách cũ
+  rỗng).
+- **Cascade đổi tên** (`lib/catalogRename.js`
+  `cascadeWorkflowParticipatingDepts()`): đổi tên Phòng Ban/Siêu Thị giờ cập
+  nhật CẢ danh sách phẳng cũ LẪN `depts[]` bên trong từng nhóm mới.
+- Gate ghi (`ADMIN_ONLY_KEYS`/`ADMIN_SENSITIVE_KEYS`, `routes/data.js`): thêm
+  `workflowParticipatingDeptGroups`, cùng độ mở admin-only như key cũ.
+
+Viết mới `tests/test-migrate-workflow-dept-groups.js` (4 kịch bản di trú) +
+cập nhật `tests/test-catalog-rename-round2-extras.js` (thêm 2 kịch bản
+cascade nhóm mới), `tests/test-adv-workflow-tab-deep.js`/
+`test-admin-users-permgroups.js`/`test-audit-hethong-cluster-client.js`
+(chuyển từ UI/fixture cũ sang khuôn nhiều nhóm). Cập nhật `NGHIEP_VU_DOCS`
+(`sysAdvWorkflow`, module-nghiepvu.js) mô tả thao tác thêm nhóm + validation
+trùng quy trình. Không đổi schema SQL/route mới nào khác — chỉ copy code +
+`pm2 restart`.
 
 ## v24.19 (2026-09-26): Checklist — bỏ bắt buộc ngày hoàn thành (VSATTP) + bắt buộc ảnh khi Không đạt (siêu thị)
 

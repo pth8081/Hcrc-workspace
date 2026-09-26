@@ -344,10 +344,11 @@
     <div class="bg-white p-4 rounded border space-y-4">
       <div class="border-b pb-3">
         <h5 class="font-bold text-gray-700 text-xs mb-1">🏢 Đơn Vị Tham Gia Quy Trình</h5>
-        <p class="text-[11px] text-gray-500 italic mb-2">Gõ tìm rồi bấm chọn 1 hoặc nhiều phòng ban ngay trong ô bên dưới để đưa vào danh sách đơn vị tham gia — màn "Hệ Thống → Quy Trình & Phê Duyệt" sẽ CHỈ hiện đúng các đơn vị đã thêm ở đây thay vì liệt kê toàn bộ danh sách phòng ban. Không thêm đơn vị nào (để trống) thì màn đó vẫn hiện đầy đủ như trước, không ảnh hưởng gì. Chọn xong thì bấm "Lưu" 1 lần.</p>
-        <div id="workflowParticipatingDeptsMultiSelect" class="border rounded p-2 bg-gray-50"></div>
-        <div class="flex justify-end mt-2">
-          <button type="button" data-op="saveWorkflowParticipatingDepts" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Đơn Vị Tham Gia Quy Trình</button>
+        <p class="text-[11px] text-gray-500 italic mb-2">Tạo 1 hoặc nhiều <b>Nhóm Đơn Vị</b> — mỗi nhóm gồm 1 danh sách Phòng Ban + 1 danh sách "Quy Trình Áp Dụng" (các mục ở màn "Quy Trình & Phê Duyệt"). Quy trình nào ĐÃ được 1 nhóm chọn thì màn "Quy Trình & Phê Duyệt" của quy trình đó CHỈ hiện đúng Phòng Ban trong nhóm; quy trình nào CHƯA được nhóm nào chọn thì vẫn hiện đầy đủ mọi Phòng Ban trong Danh Mục như trước, không ảnh hưởng gì. Mỗi quy trình chỉ nên thuộc đúng 1 nhóm. Chọn xong bấm "Lưu Cấu Hình" 1 lần cho toàn bộ.</p>
+        <div id="workflowParticipatingDeptGroupsWrap"></div>
+        <div class="flex justify-between items-center mt-2">
+          <button type="button" data-op="addWorkflowParticipatingDeptGroup" class="text-emerald-700 font-bold text-xs hover:text-emerald-900">➕ Thêm Nhóm Đơn Vị Mới</button>
+          <button type="button" data-op="saveWorkflowParticipatingDeptGroups" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Cấu Hình</button>
         </div>
       </div>
       <div class="border-b pb-3">

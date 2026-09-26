@@ -168,6 +168,7 @@ async function scenario(name, fn) {
     DB.vppExcludeGroups = [];
     DB.vppExcludedJobTitles = [];
     DB.workflowParticipatingDepts = [];
+    DB.workflowParticipatingDeptGroups = [];
 
     // Nhóm A: được duyệt Hợp Đồng + xác thực WEBAUTHN (mức cao nhất) + docDownload chỉ phòng Kế Toán.
     const groupAPerms = { ...defaultNewUserPerms(), contractApprove: true, paymentManage: false,
@@ -517,11 +518,12 @@ async function scenario(name, fn) {
   //     đơn giản là KHÔNG CÓ dòng nào để bấm (dropdown hiện "Không tìm thấy.") — không còn khái niệm
   //     "gõ tự do rồi bị chặn báo lỗi" như khuôn input+datalist+nút "Thêm" cũ nữa.
   // ==========================================================================
-  await scenario('(e) Đơn Vị Tham Gia Quy Trình: ô chọn-nhiều-thật thêm/lọc đúng', async () => {
+  await scenario('(e) Đơn Vị Tham Gia Quy Trình: ô chọn-nhiều-thật thêm/lọc đúng (trong 1 nhóm)', async () => {
     const r = await page.evaluate(() => {
       switchTab('system'); setSystemSubTab('ADMIN');
-      renderWorkflowParticipatingDeptsWidget();
-      const containerId = 'workflowParticipatingDeptsMultiSelect';
+      renderWorkflowParticipatingDeptGroupsWidget();
+      addWorkflowParticipatingDeptGroup();
+      const containerId = `wfDeptGroupDepts_${_wfDeptGroupsDraft[0].id}`;
       const container = document.getElementById(containerId);
       const search = container.querySelector('[data-pms-search]');
       function typeQuery(q) {

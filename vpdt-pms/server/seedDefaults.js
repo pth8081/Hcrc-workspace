@@ -49,6 +49,7 @@ async function seedDefaults() {
   await migrateOperationOrdersDefaultLocationType();
   await migratePaymentRequestsMissingCurrentStep();
   await migrateApprovalGroupsToConfigurable();
+  await migrateWorkflowParticipatingDeptGroups();
   await seedVsattpChecklistTemplateIfMissing();
   await seedStoreSelfDailyChecklistTemplateIfMissing();
   await warnIfOperationWorkItemsSchemaOutdated(pool);
@@ -449,6 +450,36 @@ async function migrateApprovalGroupsToConfigurable() {
   }
 }
 
+// "Đơn Vị Tham Gia Quy Trình" đổi từ 1 danh sách phẳng workflowParticipatingDepts[] (áp dụng CHUNG cho
+// MỌI module ở màn "Quy Trình & Phê Duyệt") sang NHIỀU NHÓM workflowParticipatingDeptGroups[] (mỗi nhóm
+// tự chọn "Quy Trình Áp Dụng" riêng, xem defaults.js + getWorkflowParticipatingDepts(moduleKey) ở
+// module-admin-specialperm.js). Di trú 1 LẦN: CSDL nào đã có dữ liệu thật ở danh sách phẳng cũ (admin đã
+// từng cấu hình) được gói lại thành ĐÚNG 1 nhóm mặc định, claim TOÀN BỘ module đang tồn tại ở
+// WF_MODULE_CONFIG tại thời điểm nâng cấp — giữ NGUYÊN hành vi cũ 100% (mọi module vẫn hiện đúng danh
+// sách phòng ban đã cấu hình, không đổi gì) cho tới khi admin chủ động vào màn mới tách nhóm ra. Khoá
+// LẠI danh sách module bằng snapshot cứng (không import được WF_MODULE_CONFIG — hằng số client, không
+// phải CommonJS) — module mới thêm SAU đợt nâng cấp này tự rơi vào diện "chưa nhóm nào claim" (hiện đủ
+// DB.depts), chấp nhận được vì đó cũng chính là hành vi mặc định an toàn cho mọi module mới từ trước
+// tới nay. Idempotent — bỏ qua nếu workflowParticipatingDeptGroups đã có dữ liệu (admin đã tự cấu hình
+// nhóm mới) hoặc danh sách phẳng cũ rỗng (không có gì để di trú).
+const WF_MODULE_KEYS_AT_DEPT_GROUPS_MIGRATION = [
+  'DOC', 'SUBMISSION', 'CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'VPP', 'CONTRACT_APPROVAL', 'CONTRACT_MANAGE',
+  'PAYMENT', 'ITPRICE_RETAIL', 'ITPRICE_WHOLESALE', 'OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'
+];
+async function migrateWorkflowParticipatingDeptGroups() {
+  const groups = await getAppDataValue('workflowParticipatingDeptGroups');
+  if (Array.isArray(groups) && groups.length) return;
+  const legacy = await getAppDataValue('workflowParticipatingDepts');
+  if (!Array.isArray(legacy) || !legacy.length) return;
+  await setAppDataValue('workflowParticipatingDeptGroups', [{
+    id: 'grp_migrated_default',
+    name: 'Nhóm Mặc Định (di trú từ cấu hình cũ)',
+    depts: [...legacy],
+    moduleKeys: [...WF_MODULE_KEYS_AT_DEPT_GROUPS_MIGRATION]
+  }]);
+  console.log('   ↳ Đã di trú "Đơn Vị Tham Gia Quy Trình" (workflowParticipatingDepts phẳng) sang 1 nhóm mặc định trong workflowParticipatingDeptGroups, áp dụng cho toàn bộ quy trình hiện có.');
+}
+
 // paymentRequests — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đổi hẳn từ quyền phẳng
 // canManagePaymentRequests() sang quy trình duyệt THEO BƯỚC/PHÒNG BAN (paymentDeptWorkflows, xem
 // lib/workflowEngine.js MODULE_CONFIGS.paymentRequests + applyWorkflowAction()) — engine này đọc
@@ -533,6 +564,7 @@ module.exports = {
   seedDefaults, migrateStuckOperationApprovalStatuses, migrateApprovedOperationOrdersToAwaitingReceipt,
   migrateOperationOrdersDefaultLocationType, migratePaymentRequestsMissingCurrentStep,
   migrateApprovalGroupsToConfigurable,
+  migrateWorkflowParticipatingDeptGroups,
   seedVsattpChecklistTemplateIfMissing,
   seedStoreSelfDailyChecklistTemplateIfMissing
 };

@@ -1291,11 +1291,13 @@ const SYSTEM_DOCS = {
       { role: 'Quản trị viên', text: 'trên sidebar, "🔀 Nghiệp Vụ Nâng Cao" là 1 trong 5 mục ở dropdown "🛠️ Hệ Thống ▾" (⚙️ Quản Trị/📋 Biểu Mẫu/🔄 Quy Trình & Phê Duyệt/🔀 Nghiệp Vụ Nâng Cao/📎 Quản Lý Tệp File/📊 Log) — bấm thẳng mục đó để vào ĐÚNG màn Hệ Thống, đã mở sẵn tab "🔀 Nghiệp Vụ Nâng Cao" (giữ nguyên sub-tab đang mở dở lần gần nhất trong phiên, mặc định "🏬 Quy Trình Đặt Hàng Siêu Thị" nếu chưa từng mở).' },
       { role: 'Quản trị viên', text: 'ở THANH TAB TRÊN CÙNG (dính khi cuộn) ngay bên trong màn Hệ Thống, chọn 1 trong 4 sub-tab: <b>🏬 Quy Trình Đặt Hàng Siêu Thị</b> (ai duyệt từng bước đơn "Đặt Hàng Tại Siêu Thị", số bước vẫn cấu hình ở "Quy Trình & Phê Duyệt"), <b>⚡ Áp Dụng Nhanh</b> (set nhanh số bước cho nhiều module cùng lúc), <b>🖋️ Nhóm Phê Duyệt Trình/HĐ</b> (nhóm phê duyệt tuỳ chọn cho Văn Bản Trình + Hợp Đồng), hoặc <b>🧩 Nhóm Quyền Đặc Biệt</b> (Đơn Vị Tham Gia Quy Trình/Nhóm Không Cấp VPP/Vị Trí Tham Gia Quy Trình).' },
       { role: 'Quản trị viên', text: 'mỗi sub-tab có nút <b>"💾 Lưu"</b> RIÊNG cho đúng phần đang sửa — không có nút Lưu chung cho cả 4 mục, đổi 1 mục không ảnh hưởng 3 mục còn lại.' },
+      { role: 'Quản trị viên', text: '<b>"🧩 Nhóm Quyền Đặc Biệt" → "🏢 Đơn Vị Tham Gia Quy Trình"</b> (10/2026, đổi từ 1 danh sách phẳng sang NHIỀU NHÓM): bấm <b>"➕ Thêm Nhóm Đơn Vị Mới"</b>, đặt tên nhóm, chọn <b>Phòng Ban Trong Nhóm</b> + chọn <b>Quy Trình Áp Dụng</b> (các mục ở màn "🔄 Quy Trình & Phê Duyệt") — quy trình nào ĐÃ được 1 nhóm chọn thì màn cấu hình quy trình đó CHỈ hiện đúng Phòng Ban của nhóm; quy trình nào CHƯA nhóm nào chọn vẫn hiện đầy đủ Danh Mục Phòng Ban như trước. Mỗi quy trình chỉ nên thuộc 1 nhóm — bấm <b>"💾 Lưu Cấu Hình"</b> sẽ chặn lưu nếu phát hiện 1 quy trình bị chọn trùng ở 2 nhóm.' },
     ],
     footer: { left: [
       { label: 'Không phải 1 nhóm quyền', text: '4 mục này KHÔNG liên quan tới nhau về mặt dữ liệu (mỗi mục 1 bảng AppData riêng) — gom chung 1 tab chỉ vì cùng thuộc phạm trù "cấu hình quy trình/duyệt nâng cao", giúp dễ tìm hơn so với trước.' },
     ], right: [
       { label: 'Đã dời khỏi Phân Quyền', text: '"Nhóm Phê Duyệt Trình/HĐ" (khối 11/14 cũ) và "Nhóm Quyền Đặc Biệt" (khối 17 cũ) không còn nằm trong cây quyền của form Sửa Người Dùng nữa — mở nhanh hơn, không cần mở form sửa 1 tài khoản bất kỳ chỉ để đụng tới cấu hình chung.' },
+      { label: 'Đơn Vị Tham Gia Quy Trình — nâng cấp lên nhiều nhóm', text: 'trước 10/2026 chỉ có 1 danh sách phòng ban DUY NHẤT áp dụng cho MỌI quy trình cùng lúc — CSDL nào đã cấu hình từ trước được tự động gói thành 1 nhóm mặc định claim đủ mọi quy trình đang có, giữ nguyên hành vi cũ 100% cho tới khi admin chủ động tách nhóm.' },
     ] },
   },
   sysCatalog: {
