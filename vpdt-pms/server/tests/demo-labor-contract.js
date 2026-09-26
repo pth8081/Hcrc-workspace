@@ -100,8 +100,18 @@ async function main() {
 
   const seedUsers = await page.evaluate(() => DB.users.map(u => ({ username: u.username, name: u.name, dept: u.dept, jobTitle: u.jobTitle, email: u.email, perms: u.perms, active: true })));
   // Bảo đảm tài khoản demo có hrContractManage — đợt này chưa xây tầng tự xem của nhân viên (HR-only).
+  // BUG THẬT đã sửa: seedUsers ở trên là 1 bản SAO đã qua page.evaluate() (JSON serialize ra Node), patch
+  // .perms ngay trên biến này KHÔNG hề đụng tới DB.users THẬT trong trình duyệt — loginAs() (harness) lại
+  // tự đọc LẠI DB.users tươi trong browser để gọi finishLogin(), nên currentUser.perms phía client vẫn
+  // thiếu hrContractManage dù server API giả lập (dùng thẳng mảng seedUsers Node) đã có đủ quyền — khiến
+  // canAccessHrContractModule() phía client luôn false, switchTab('hrContract') bị chặn ngay từ đầu (alert
+  // + return, không kịp toggle hidden của #hrContractSection). Phải patch CẢ 2 phía.
   const hrUser = seedUsers.find(u => u.username === 'kd1') || seedUsers[0];
   hrUser.perms = Object.assign({}, hrUser.perms, { hrContractManage: true });
+  await page.evaluate((username) => {
+    const u = DB.users.find(x => x.username === username);
+    if (u) u.perms = Object.assign({}, u.perms, { hrContractManage: true });
+  }, hrUser.username);
 
   const lcServer = await startLaborContractServer(seedUsers);
 

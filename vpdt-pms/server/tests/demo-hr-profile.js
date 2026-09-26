@@ -77,6 +77,19 @@ async function main() {
   // lập ở trên (cùng 1 username/dept y hệt DB.users phía trình duyệt).
   const seedUsers = await page.evaluate(() => DB.users.map(u => ({ username: u.username, name: u.name, dept: u.dept, jobTitle: u.jobTitle, email: u.email, phone: u.phone, perms: u.perms, active: true })));
 
+  // Cấp hrProfileManage cho 'admin' để xem được "Quản Lý Hồ Sơ" — Hồ Sơ Nhân Sự là module CỰC nhạy cảm,
+  // perms.admin KHÔNG tự động bypass ở đây (xem canFullViewProfiles()/lib/employeeProfile.js + quyết
+  // định đã chốt + kiểm chứng riêng ở tests/test-hr-profile.js). Phải patch CẢ 2 phía: mảng seedUsers
+  // Node bên dưới (dùng cho server /api/hr-profile giả lập) VÀ DB.users THẬT trong trình duyệt (dùng
+  // bởi finishLogin() khi loginAs() gọi ngay sau đây) — chỉ patch 1 phía thì currentUser.perms phía
+  // client vẫn thiếu, mọi điều kiện hrpfCanFullView() vẫn false dù server đã cho phép gọi API.
+  const adminSeed = seedUsers.find(u => u.username === 'admin');
+  if (adminSeed) adminSeed.perms = Object.assign({}, adminSeed.perms, { hrProfileManage: true });
+  await page.evaluate(() => {
+    const u = DB.users.find(x => x.username === 'admin');
+    if (u) u.perms = Object.assign({}, u.perms, { hrProfileManage: true });
+  });
+
   const epServer = await startEmployeeProfileServer(seedUsers);
   const { employeeProfile } = epServer;
 

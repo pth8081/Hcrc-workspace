@@ -299,17 +299,20 @@ async function main() {
       assertEqual(res.status, 200, 'Phải xuất thành công cho loại DEDUCTION');
       const sheet = res.workbook.getWorksheet('Siêu thị A');
       const summaryRow = findRowTexts(sheet, 2);
-      assertEqual(summaryRow[7], 'Tổng điểm: 24/30 (80.0%)', 'Dòng tổng kết đầu mỗi bài phải đúng điểm/%.');
+      // Cột thứ 3 (index 2) là "Mẫu Checklist" (thêm ở đợt Dashboard VSATTP, commit 826023b) — dòng tổng
+      // kết/cây tiêu chí đều lùi thêm 1 cột so với bản gốc v21.1, index bên dưới đã cập nhật theo đúng
+      // layout hiện tại (xem addDeductionStoreSheet() ở lib/checklistReportExport.js).
+      assertEqual(summaryRow[8], 'Tổng điểm: 24/30 (80.0%)', 'Dòng tổng kết đầu mỗi bài phải đúng điểm/%.');
       const critRow = findRowTexts(sheet, 3);
-      assertEqual(critRow[2], 'CHẤT LƯỢNG SẢN PHẨM', 'Cột Hạng Mục Lớn phải đúng');
-      assertEqual(critRow[3], 'Chất lượng cảm quan', 'Cột Hạng Mục Con phải đúng');
-      assertEqual(critRow[4], 'Bao bì không nguyên vẹn', 'Cột Tiêu Chí phải đúng');
-      assertEqual(critRow[5], 30, 'Điểm Tối Đa phải dùng trần hạng mục lớn (hạng mục con để trống trần riêng)');
-      assertEqual(critRow[6], 6, 'Điểm Trừ Thực Tế phải đúng deductedPoints đã nộp');
-      assertEqual(critRow[7], 'Rách bao bì 3 sản phẩm', 'Mô tả nội dung không phù hợp phải đúng');
-      assertEqual(critRow[8], 'B', 'Mức độ rủi ro phải đúng');
-      assertEqual(critRow[9], '20/09/2026', 'Thời hạn hoàn thành phải đúng');
-      assertEqual(critRow[10], 'Đã nhắc nhở', 'Ghi chú phải đúng');
+      assertEqual(critRow[3], 'CHẤT LƯỢNG SẢN PHẨM', 'Cột Hạng Mục Lớn phải đúng');
+      assertEqual(critRow[4], 'Chất lượng cảm quan', 'Cột Hạng Mục Con phải đúng');
+      assertEqual(critRow[5], 'Bao bì không nguyên vẹn', 'Cột Tiêu Chí phải đúng');
+      assertEqual(critRow[6], 30, 'Điểm Tối Đa phải dùng trần hạng mục lớn (hạng mục con để trống trần riêng)');
+      assertEqual(critRow[7], 6, 'Điểm Trừ Thực Tế phải đúng deductedPoints đã nộp');
+      assertEqual(critRow[8], 'Rách bao bì 3 sản phẩm', 'Mô tả nội dung không phù hợp phải đúng');
+      assertEqual(critRow[9], 'B', 'Mức độ rủi ro phải đúng');
+      assertEqual(critRow[10], '20/09/2026', 'Thời hạn hoàn thành phải đúng');
+      assertEqual(critRow[11], 'Đã nhắc nhở', 'Ghi chú phải đúng');
     });
 
     await run.run('export-report: admin (không cần checklistReportView riêng) vẫn xuất được', async () => {
