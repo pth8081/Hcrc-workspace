@@ -1378,6 +1378,53 @@ async function scenario(name, fn) {
       JSON.stringify(r.depts) === JSON.stringify(['Kinh Doanh']), JSON.stringify(r));
   });
 
+  // LỖI ĐÃ VÁ (phát hiện qua rà soát CSP 9/2026, mức Thấp — UX): saveDeptGroup()/renameDeptGroup()/
+  // deleteDeptGroup()/saveDeptGroupChildren() trước đây KHÔNG cập nhật lại ngay ô lọc
+  // #permDeptKhoiBanFilter lẫn data-dept-group của các <tr> trong bảng Phân Quyền — phải rời tab "⚙️ Quản
+  // Trị" rồi vào lại (setSystemSubTab('ADMIN') gọi renderDeptCheckboxes()) mới thấy đúng. Kịch bản này CỐ
+  // Ý KHÔNG gọi lại renderDeptCheckboxes()/setSystemSubTab() sau (p)/(p2) — mirror đúng luồng thật admin
+  // đứng nguyên tab thao tác Khối/Ban rồi bấm thẳng qua Phân Quyền trong cùng 1 lượt.
+  await scenario('(p3) Khối/Ban: tạo/gán xong KHÔNG cần rời tab — ô lọc Phân Quyền + data-dept-group cập nhật NGAY (không gọi lại renderDeptCheckboxes())', async () => {
+    if (khoiKinhDoanhId == null) { record('(p3) refresh ngay sau Khối/Ban đổi', false, 'skipped: (p) did not produce a group id'); return; }
+    const r = await page.evaluate(async (khoiId) => {
+      const idxKinhDoanh = DB.depts.indexOf('Kinh Doanh');
+      const filterOptionsAfterCreate = [...document.getElementById('permDeptKhoiBanFilter').options].map(o => o.value);
+      const rowGroupAfterAssign = document.querySelector(`#pDocDeptTableBody tr:nth-child(${idxKinhDoanh + 1})`).getAttribute('data-dept-group');
+      // Xoá hẳn Khối vừa tạo — filter option phải mất theo NGAY, và <tr> vừa mang data-dept-group của nó
+      // phải trở về rỗng (không còn group nào) — vẫn KHÔNG gọi lại renderDeptCheckboxes(). deleteDeptGroup()
+      // là hàm async (await syncStorage() bên trong) nên PHẢI await ở đây mới đọc đúng state sau khi lưu xong.
+      await deleteDeptGroup(khoiId);
+      const filterOptionsAfterDelete = [...document.getElementById('permDeptKhoiBanFilter').options].map(o => o.value);
+      const rowGroupAfterDelete = document.querySelector(`#pDocDeptTableBody tr:nth-child(${idxKinhDoanh + 1})`).getAttribute('data-dept-group');
+      return { filterOptionsAfterCreate, rowGroupAfterAssign, filterOptionsAfterDelete, rowGroupAfterDelete };
+    }, khoiKinhDoanhId);
+    record('(p3) Ô lọc #permDeptKhoiBanFilter đã có option 2 Khối/Ban vừa tạo NGAY (không cần rời tab)',
+      r.filterOptionsAfterCreate.includes(String(khoiKinhDoanhId)), JSON.stringify(r));
+    record('(p3) <tr> Phòng Ban "Kinh Doanh" mang ĐÚNG data-dept-group của Khối vừa gán NGAY sau saveDeptGroupChildren()',
+      r.rowGroupAfterAssign === String(khoiKinhDoanhId), JSON.stringify(r));
+    record('(p3) Xoá Khối/Ban -> option biến mất khỏi ô lọc NGAY LẬP TỨC',
+      !r.filterOptionsAfterDelete.includes(String(khoiKinhDoanhId)), JSON.stringify(r));
+    record('(p3) Xoá Khối/Ban -> data-dept-group của dòng "Kinh Doanh" trở về rỗng NGAY (không còn "ma")',
+      r.rowGroupAfterDelete === '', JSON.stringify(r));
+  });
+
+  // (p) tạo lại 2 Khối/Ban + (p2) gán "Kinh Doanh" — (p3) vừa XOÁ hẳn Khối "Kinh Doanh" để kiểm tra
+  // refresh-ngay, nên tạo/gán lại đúng trạng thái mà (q)/(t)/(v)/... phía dưới đang cần (khoiKinhDoanhId
+  // MỚI, khác id cũ đã xoá).
+  await scenario('(p4) setup lại: tái tạo Khối "Khối Kinh Doanh" + gán "Kinh Doanh" (sau khi (p3) đã xoá để test refresh)', async () => {
+    const r = await page.evaluate(async () => {
+      document.getElementById('txtDeptGroupName').value = 'Khối Kinh Doanh';
+      await saveDeptGroup({ preventDefault() {} });
+      const g = DB.deptGroups.find(x => x.name === 'Khối Kinh Doanh');
+      gmsAdd(`deptGroupChildren_${g.id}`, 'Kinh Doanh');
+      await saveDeptGroupChildren(g.id);
+      return { id: g.id, depts: DB.deptGroups.find(x => x.id === g.id).depts };
+    });
+    record('(p4) tái tạo Khối Kinh Doanh + gán lại "Kinh Doanh" thành công',
+      JSON.stringify(r.depts) === JSON.stringify(['Kinh Doanh']), JSON.stringify(r));
+    khoiKinhDoanhId = r.id;
+  });
+
   await scenario('(q) Form Người Dùng: chọn Khối/Ban LỌC đúng Phòng Ban con; để trống hiện đầy đủ như cũ', async () => {
     const r = await page.evaluate((khoiId) => {
       resetUserForm();

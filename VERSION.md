@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**24.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.22 (2026-09-26): Khối/Ban — bộ lọc Phân Quyền cập nhật NGAY, không cần rời tab
+
+Vá nốt 1 phát hiện Thấp (UX, không phải CSP) từ đợt rà soát CSP độc lập v24.16→v24.20: thêm/xoá/đổi tên
+Khối/Ban hoặc gán lại Phòng Ban con (tab "⚙️ Quản Trị") trước đây KHÔNG cập nhật ngay ô lọc
+`#permDeptKhoiBanFilter` lẫn thuộc tính `data-dept-group` của từng dòng trong 6 bảng "phạm vi theo phòng
+ban" ở Phân Quyền — cả 2 chỉ được nạp lại đúng 1 lần lúc vào tab (`setSystemSubTab('ADMIN')` gọi
+`renderDeptCheckboxes()`), nên đứng nguyên tab thao tác Khối/Ban xong vẫn thấy dữ liệu cũ, phải rời tab
+rồi vào lại mới đúng.
+
+Thêm hàm riêng `refreshPermDeptGroupFilterAfterKhoiBanChange()` (`module-admin.js`) — chỉ cập nhật đúng
+phần bị ảnh hưởng (options của ô lọc + `data-dept-group` trên các `<tr>` đã có sẵn), KHÔNG gọi lại
+`renderDeptCheckboxes()` (hàm đó dựng lại toàn bộ `<tr>` từ đầu, sẽ xoá mất trạng thái tick checkbox
+đang dở của form Sửa Người Dùng nếu đang mở) — gọi lại đúng 4 điểm: `saveDeptGroup()`,
+`renameDeptGroup()`, `deleteDeptGroup()`, `saveDeptGroupChildren()`.
+
+Thêm 4 kịch bản mới (p3) vào `tests/test-admin-users-permgroups.js` — CỐ Ý không gọi lại
+`renderDeptCheckboxes()`/`setSystemSubTab()` sau khi tạo/gán/xoá Khối/Ban, xác nhận ô lọc + data-dept-
+group đã đúng ngay lập tức.
+
+Không đổi schema/route — chỉ copy code + `pm2 restart`.
 
 ## v24.21 (2026-09-26): Rà soát độc lập v24.16→v24.20 (2 agent song song: test + CSP) — vá 1 lỗi Cao
 

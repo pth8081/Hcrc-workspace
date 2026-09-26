@@ -122,6 +122,7 @@ async function saveDeptGroup(e) {
   document.getElementById('txtDeptGroupName').value = '';
   renderDeptGroupList();
   populateDropdowns();
+  refreshPermDeptGroupFilterAfterKhoiBanChange();
 }
 
 async function renameDeptGroup(id) {
@@ -137,6 +138,7 @@ async function renameDeptGroup(id) {
   logSystemAction('USER_MGM', 'RENAME_DEPT_GROUP', `Đổi tên Khối/Ban → [${newName}]`, 'SUCCESS', newName);
   renderDeptGroupList();
   populateDropdowns();
+  refreshPermDeptGroupFilterAfterKhoiBanChange();
 }
 
 async function deleteDeptGroup(id) {
@@ -150,6 +152,7 @@ async function deleteDeptGroup(id) {
   logSystemAction('USER_MGM', 'DELETE_DEPT_GROUP', `Xóa Khối/Ban [${g.name}]`, 'SUCCESS', g.name);
   renderDeptGroupList();
   populateDropdowns();
+  refreshPermDeptGroupFilterAfterKhoiBanChange();
 }
 
 // Đổi danh sách Phòng Ban con của 1 Khối/Ban — đọc giá trị hiện có trong widget renderMultiSelectDropdown()
@@ -166,6 +169,7 @@ async function saveDeptGroupChildren(id) {
   if (!saved) { g.depts = prevDepts; return; }
   logSystemAction('USER_MGM', 'UPDATE_DEPT_GROUP_CHILDREN', `Cập nhật Phòng Ban con của Khối/Ban [${g.name}]: ${g.depts.join(', ') || '(rỗng)'}`, 'SUCCESS', g.name);
   populateDropdowns();
+  refreshPermDeptGroupFilterAfterKhoiBanChange();
   alert(`✅ Đã lưu ${g.depts.length} Phòng Ban thuộc Khối/Ban "${g.name}".`);
 }
 
@@ -1025,6 +1029,29 @@ function renderDeptCheckboxes() {
   // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
   // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
   populatePermDeptKhoiBanFilterOptions();
+  filterPermDeptTablesByKhoiBan();
+}
+
+// LỖI ĐÃ VÁ (phát hiện qua rà soát CSP 9/2026, mức Thấp — UX, không phải CSP): thêm/xoá/đổi tên Khối/Ban
+// hoặc gán lại Phòng Ban con (renderDeptGroupList()) trước đây KHÔNG cập nhật lại ngay ô lọc
+// #permDeptKhoiBanFilter lẫn thuộc tính data-dept-group của từng dòng Phòng Ban trong bảng Phân Quyền —
+// cả 2 đều CHỈ được nạp 1 LẦN DUY NHẤT lúc setSystemSubTab('ADMIN') gọi renderDeptCheckboxes() ngay lúc
+// vào tab, nên đứng nguyên tab "⚙️ Quản Trị" thao tác Khối/Ban xong thì ô lọc/bảng vẫn thấy dữ liệu CŨ,
+// phải rời tab rồi vào lại mới thấy đúng. Hàm RIÊNG này chỉ cập nhật lại đúng phần bị ảnh hưởng (options
+// của ô lọc + thuộc tính data-dept-group trên từng <tr> đã có sẵn) — KHÔNG gọi lại renderDeptCheckboxes()
+// (hàm đó dựng lại TOÀN BỘ <tr> từ đầu, sẽ xoá mất trạng thái tick checkbox đang dở của form Sửa Người
+// Dùng nếu đang mở), nên an toàn gọi lại bất cứ lúc nào ngay sau khi Khối/Ban đổi.
+function refreshPermDeptGroupFilterAfterKhoiBanChange() {
+  populatePermDeptKhoiBanFilterOptions();
+  PERM_DEPT_TABLES.forEach(t => {
+    const el = document.getElementById(t.tbody);
+    if (!el) return;
+    el.querySelectorAll('tr').forEach(tr => {
+      const cb = tr.querySelector('input[type="checkbox"]');
+      if (!cb) return;
+      tr.setAttribute('data-dept-group', deptGroupIdOf(cb.value));
+    });
+  });
   filterPermDeptTablesByKhoiBan();
 }
 
