@@ -323,6 +323,12 @@ async function onVppRegPeriodChange() {
 
   vppFormDraftId = existing ? existing.id : null; // existing (nếu có) chắc chắn đang DRAFT ở nhánh này
   const savedQtyByName = new Map((existing?.items || []).map(it => [it.name, it.qty]));
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình):
+  // dựng lại mount MỖI LẦN đổi kỳ (mount trước đây chỉ dựng 1 lần lúc vào tab, giữ nguyên trạng thái cũ
+  // khi đổi qua kỳ khác) rồi tô sẵn ĐÚNG lựa chọn đã đông cứng của nháp đang sửa (nếu có) — tránh hiện
+  // trắng/mặc định đánh lừa người dùng khi mở lại nháp đã chọn từ trước.
+  renderExtraApprovalMount('VPP', 'extraApprovalMount_VPP');
+  if (existing) prefillExtraApprovalMountFromItem('VPP', existing);
 
   document.getElementById('vppRegItemsTableBody').innerHTML = period.catalogItems.map((it, idx) => `
     <tr data-vpp-item-name="${escapeHtml(vppStripAccents(it.name))}">
@@ -417,23 +423,29 @@ async function saveVppRegDraft() {
   const items = collectVppRegFormItems(period);
   if (!items.length) return alert('Vui lòng nhập số lượng cho ít nhất 1 mặt hàng!');
 
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung
+  // bình): nhánh CẬP NHẬT nháp trước đây chỉ gửi {items}, bỏ sót hoàn toàn lựa chọn Cấp/Nhóm phê duyệt
+  // cuối — người dùng đổi lựa chọn ở nháp đã có rồi bấm Lưu vẫn bị ÂM THẦM bỏ qua. Gộp chung điều kiện
+  // gửi kèm với nhánh TẠO MỚI ngay dưới (chỉ gửi khi mount thật sự có lựa chọn — module chưa cấu hình
+  // đủ vẫn giữ nguyên payload cũ 100%).
+  const extraApproval = readSelectedExtraApprovalLayers('VPP');
+  const extraApprovalFields = extraApproval.approvalLevel !== null ? {
+    approvalLevel: extraApproval.approvalLevel,
+    selectedExtraApprovalLayerKeys: extraApproval.selectedLayerKeys,
+    selectedExtraApprovalLayerMembers: extraApproval.selectedLayerMembers
+  } : {};
+
   let savedReg;
   try {
     if (vppFormDraftId) {
-      const result = await callRecordAction('vppRegistrations', vppFormDraftId, 'update', { items });
+      const result = await callRecordAction('vppRegistrations', vppFormDraftId, 'update', { items, ...extraApprovalFields });
       savedReg = result.item;
     } else {
       const payload = {
         code: `DK-VPP-${period.code || period.id}-${currentUser.username}-${Date.now()}`,
-        periodId, items, createdAt: new Date().toLocaleString('vi-VN')
+        periodId, items, createdAt: new Date().toLocaleString('vi-VN'),
+        ...extraApprovalFields
       };
-      // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ gửi kèm nếu quy trình VPP đã được admin cấu hình đủ.
-      const extraApproval = readSelectedExtraApprovalLayers('VPP');
-      if (extraApproval.approvalLevel !== null) {
-        payload.approvalLevel = extraApproval.approvalLevel;
-        payload.selectedExtraApprovalLayerKeys = extraApproval.selectedLayerKeys;
-        payload.selectedExtraApprovalLayerMembers = extraApproval.selectedLayerMembers;
-      }
       const result = await callCreateAction('vppRegistrations', payload);
       savedReg = result.item;
     }
@@ -545,7 +557,7 @@ function renderVppRegistrations() {
   const canManage = canManageVpp(currentUser);
   const statusFilter = document.getElementById('filterStatusVpp')?.value || '';
   const scopedVppRegs = DB.vppRegistrations.filter(r =>
-    canManage || r.creator === currentUser.username || isApproverForDeptWorkflow(DB.vppDeptWorkflows[r.dept], currentUser.username));
+    canManage || r.creator === currentUser.username || isApproverForDeptWorkflow(resolveVppWorkflowConfigForItemClient(r), currentUser.username));
 
   const vppDashCards = [
     { key: '', label: 'Tổng Đăng Ký', count: scopedVppRegs.length, colorClass: 'border-l-blue-500' },
@@ -568,7 +580,7 @@ function renderVppRegistrations() {
   }
 
   tbody.innerHTML = page.map(r => {
-    const wfConfig = DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+    const wfConfig = resolveVppWorkflowConfigForItemClient(r);
     const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, r.currentStep);
     const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);
     const isOwnDraft = r.status === 'DRAFT' && r.creator === currentUser.username;
@@ -660,8 +672,8 @@ function openVppRegModal(regId) {
   const r = DB.vppRegistrations.find(item => item.id === regId);
   if (!r) return;
 
-  const wfConfig = DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+  const wfConfig = resolveVppWorkflowConfigForItemClient(r);
+  const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
   document.getElementById('vppRegModalTitle').innerText = `🖇️ Xử Lý Đăng Ký Văn Phòng Phẩm: ${r.code}`;
   document.getElementById('vppRegModalSub').innerText = `Kỳ: ${r.periodName} | Phòng ban: ${r.dept} | Người đăng ký: ${r.creatorName}`;
@@ -729,8 +741,8 @@ function confirmProcessVppReg(actionType) {
   if (actionType === 'REJECT' && !comment) return alert('Vui lòng nhập lý do từ chối!');
   if (actionType === 'REQUEST_CHANGES' && !comment) return alert('Vui lòng nhập lý do cần bổ sung/chỉnh sửa!');
   const r = DB.vppRegistrations.find(item => item.id === currentProcessingVppRegId);
-  const wfConfigForLabel = r ? (DB.vppDeptWorkflows[r.dept] || { workflowId: 'WF_1STEP' }) : {};
-  const wfForLabel = DB.workflows.find(w => w.id === wfConfigForLabel.workflowId) || { steps: [] };
+  const wfConfigForLabel = r ? resolveVppWorkflowConfigForItemClient(r) : {};
+  const wfForLabel = { steps: wfConfigForLabel.steps || [] };
   const approveLabel = r ? resolveStepActionLabel(wfForLabel, r.currentStep) : 'Phê Duyệt';
   const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
   const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };
@@ -1075,9 +1087,8 @@ function renderVppReports() {
 // Dựng HTML "Phiếu Phê Duyệt Đề Xuất Văn Phòng" — dùng lại khung chung buildApprovalSlipShellHTML()
 // giống hệt pattern đã áp dụng cho Đăng Ký Xe và Văn Bản Trình.
 function buildOfficeApprovalSlipHTML(o) {
-  const wfMap = getOfficeWorkflowMap(o.subType);
-  const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP' };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const wfConfig = resolveOfficeWorkflowConfigForItemClient(o);
+  const wf = { steps: wfConfig.steps || [{ order: 1, name: 'Duyệt' }] };
   const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, o.history)).join('');
 
   let extraFieldsHTML = '';

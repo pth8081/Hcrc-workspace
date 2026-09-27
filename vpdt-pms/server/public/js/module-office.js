@@ -204,11 +204,10 @@ function renderOfficeReqs() {
   const keyword = (document.getElementById('filterKeywordOffice')?.value || '').trim();
 
   // CẬP NHẬT: lọc theo phạm vi Xem (officeView) thay vì hiển thị đề xuất của mọi phòng ban.
-  const wfMapForFilter = getOfficeWorkflowMap(activeOfficeSubTab);
   const canViewOfficeReq = o => o.subType === activeOfficeSubTab && (
     scopeAllows(currentUser, currentUser.perms?.officeView, o.dept) ||
     o.creator === currentUser.username ||
-    isApproverForDeptWorkflow(wfMapForFilter[o.dept], currentUser.username)
+    isApproverForDeptWorkflow(resolveOfficeWorkflowConfigForItemClient(o), currentUser.username)
   );
 
   const scopedOfficeReqs = DB.officeReqs.filter(canViewOfficeReq);
@@ -241,9 +240,8 @@ function renderOfficeReqs() {
   }
 
   tbody.innerHTML = pageList.map(o => {
-    const wfMap = getOfficeWorkflowMap(o.subType);
-    const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+    const wfConfig = resolveOfficeWorkflowConfigForItemClient(o);
+    const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
     const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
     const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
@@ -373,9 +371,8 @@ function openOfficeProcessModal(officeId) {
   const o = DB.officeReqs.find(item => item.id === officeId);
   if (!o) return;
 
-  const wfMap = getOfficeWorkflowMap(o.subType);
-  const wfConfig = wfMap[o.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+  const wfConfig = resolveOfficeWorkflowConfigForItemClient(o);
+  const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
   document.getElementById('officeModalTitle').innerText = `🏢 Xử Lý Đề Xuất Văn Phòng: ${o.title} (${o.code})`;
   document.getElementById('officeModalSub').innerText = `Phân hệ: ${o.subType} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`;
@@ -476,9 +473,8 @@ function confirmProcessOfficeReq(actionType) {
   }
   const isApprove = actionType === 'APPROVE';
   const o = DB.officeReqs.find(item => item.id === currentProcessingOfficeId);
-  const wfMapForLabel = o ? getOfficeWorkflowMap(o.subType) : {};
-  const wfConfigForLabel = o ? (wfMapForLabel[o.dept] || { workflowId: 'WF_1STEP' }) : {};
-  const wfForLabel = DB.workflows.find(w => w.id === wfConfigForLabel.workflowId) || { steps: [] };
+  const wfConfigForLabel = o ? resolveOfficeWorkflowConfigForItemClient(o) : {};
+  const wfForLabel = { steps: wfConfigForLabel.steps || [] };
   const approveLabel = o ? resolveStepActionLabel(wfForLabel, o.currentStep) : 'Phê Duyệt';
   const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
   const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };

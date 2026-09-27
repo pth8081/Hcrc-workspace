@@ -2302,6 +2302,37 @@ function renderExtraApprovalMount(moduleKey, mountId) {
   renderExtraApprovalLayerCheckboxes(moduleKey);
 }
 
+// Tô sẵn lựa chọn "Nhóm Phê Duyệt Cuối" ĐÃ ĐÔNG CỨNG trên 1 hồ sơ NHÁP đã có (mở lại để sửa tiếp) — LỖI
+// ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): trước đây mount luôn hiện trạng thái
+// TRẮNG/mặc định mỗi lần mở lại nháp, đánh lừa người dùng tưởng đang xem đúng lựa chọn hiện tại. Gọi hàm
+// này NGAY SAU renderExtraApprovalMount() (mount đã dựng xong DOM) khi mở 1 nháp đã có sẵn lựa chọn —
+// không làm gì nếu hồ sơ chưa từng chọn (extraApprovalLevel null/undefined: tạo trước khi tính năng bật,
+// hoặc module chưa cấu hình đủ groups+levels — mount rỗng, không có gì để tô).
+function prefillExtraApprovalMountFromItem(moduleKey, item) {
+  const levelSel = document.getElementById(`extraApprovalLevel_${moduleKey}`);
+  if (!levelSel || !item?.extraApprovalLevel) return;
+  if ([...levelSel.options].some(o => o.value === item.extraApprovalLevel)) {
+    levelSel.value = item.extraApprovalLevel;
+  }
+  renderExtraApprovalLayerCheckboxes(moduleKey);
+  const layers = Array.isArray(item.extraApprovalLayers) ? item.extraApprovalLayers : [];
+  layers.forEach(layer => {
+    const layerKey = layer.layerKey;
+    const toggle = document.querySelector(`.extra-layer-toggle_${moduleKey}[value="${layerKey}"]`);
+    if (toggle && !toggle.checked && !toggle.disabled) {
+      toggle.checked = true;
+      onExtraApprovalLayerToggle(moduleKey, layerKey);
+    }
+    const singleSelect = document.querySelector(`select.extra-layer-single-approver_${moduleKey}[data-layer="${layerKey}"]`);
+    if (singleSelect && layer.approvers?.[0]) { singleSelect.value = layer.approvers[0]; return; }
+    (layer.approvers || []).forEach(un => {
+      const cb = document.querySelector(`input.extra-layer-member_${moduleKey}[data-layer="${layerKey}"][value="${un}"]`);
+      if (cb) cb.checked = true;
+    });
+  });
+  updateExtraApprovalDropdownLabel(moduleKey);
+}
+
 function onExtraApprovalLevelChange(moduleKey) { renderExtraApprovalLayerCheckboxes(moduleKey); }
 
 // Cùng khuôn renderContractApprovalLayerCheckboxes() (module-vanbantrinh.js) nhưng generic theo
@@ -2454,14 +2485,79 @@ function readSelectedExtraApprovalLayers(moduleKey) {
 function appendExtraApprovalLayersClient(resolved, item) {
   const layers = item?.extraApprovalLayers;
   if (!Array.isArray(layers) || !layers.length) return resolved;
-  const steps = (resolved.steps || []).map(s => ({ ...s }));
-  const approvers = { ...(resolved.approvers || {}) };
+  const base = resolved || { steps: [{ order: 1, name: 'Duyệt' }], approvers: {} };
+  const steps = (base.steps || []).map(s => ({ ...s }));
+  const approvers = { ...(base.approvers || {}) };
   layers.forEach(layer => {
     const stepOrder = steps.length + 1;
     steps.push({ order: stepOrder, name: layer.label, layerKey: layer.layerKey, actionLabel: layer.actionLabel || null });
     approvers[stepOrder] = layer.approvers || [];
   });
-  return { steps, approvers };
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, phát hiện TRƯỚC KHI hàm này từng được gọi ở đâu —
+  // dead code cho tới đợt vá này): bản cũ trả về `{ steps, approvers }` TRẦN, làm RỚT MẤT mọi field khác
+  // của `resolved` (quan trọng nhất: `approverMode`/`approversByPosition` — bước "Theo vị trí" của quy
+  // trình GỐC, xem resolveEffectiveStepApprovers() ngay trên) mỗi khi hồ sơ ĐÃ có extraApprovalLayers —
+  // khiến bước "Theo vị trí" của quy trình gốc bị coi như không có ai duyệt ngay khi tính năng "Nhóm Phê
+  // Duyệt Cuối" áp dụng cho hồ sơ đó. Nay giữ NGUYÊN mọi field khác qua {...base}, chỉ ghi đè
+  // steps/approvers — approverMode/approversByPosition của các bước GỐC (số thứ tự không đổi) vẫn được
+  // resolveEffectiveStepApprovers() tra đúng như cũ; các bước MỚI thêm (lớp phê duyệt cuối) luôn là
+  // danh sách người cụ thể (PEOPLE mode) nên không cần approverMode riêng.
+  return { ...base, steps, approvers };
+}
+
+// Chuẩn hoá 1 cấu hình quy trình phòng ban/mức THÔ (DB.xxxDeptWorkflows[dept] hay tương đương, dạng
+// phẳng {workflowId,approvers,...}, CHƯA có `.steps`) thành dạng có `.steps` (tra DB.workflows) — PHỤC
+// VỤ appendExtraApprovalLayersClient() ngay trên (hàm đó cần biết ĐÚNG số bước GỐC để đánh số lớp phê
+// duyệt thêm tiếp theo, KHÔNG tự tra ngược qua workflowId như resolveWfStepsForHub()/
+// buildGenericDeptWorkflowPreviewHTML()). Mirror đúng fallback "WF mặc định 1 bước 'Duyệt'" của
+// flatWorkflowConfigToSteps() (server, lib/workflowEngine.js) khi wfConfig rỗng/mức chưa cấu hình — để
+// lớp phê duyệt thêm vẫn được gắn đúng làm bước 2 dù quy trình gốc trống, khớp hành vi server.
+function withWfStepsClient(wfConfig) {
+  if (wfConfig && Array.isArray(wfConfig.steps)) return wfConfig;
+  const wf = (DB.workflows || []).find(w => w.id === wfConfig?.workflowId);
+  return { ...(wfConfig || {}), steps: wf ? wf.steps : [{ order: 1, name: 'Duyệt' }] };
+}
+
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): "Nhóm Phê Duyệt Cuối" đã đúng ở lúc TẠO
+// hồ sơ (extraValidate) + preview (appendExtraApprovalLayersForPreview) từ đợt trước, nhưng chưa hề áp
+// dụng khi XEM/DUYỆT hồ sơ ĐÃ TỒN TẠI — mọi nơi tính "ai được duyệt bước hiện tại" của Tài liệu/Đăng ký
+// xe/Văn phòng tổng hợp/VPP vẫn đọc THẲNG DB.xxxDeptWorkflows[dept] (raw, không cộng lớp phê duyệt
+// thêm), khiến approver CHỈ có mặt ở lớp phê duyệt thêm (VD Tổng Giám Đốc, không thuộc bất kỳ phòng ban
+// nào) không bao giờ thấy nút Duyệt dù server vẫn cho phép họ duyệt — hồ sơ treo vĩnh viễn ở bước cuối.
+// 4 hàm dưới đây là ĐIỂM CHUNG DUY NHẤT nên gọi cho 4 module (khớp tinh thần
+// resolveItPriceWorkflowConfigForItemClient()/resolvePaymentApprovalWorkflow()/
+// resolveOperationOrderWorkflowConfigForItemClient() đã có sẵn cho 3 module còn lại) — mọi nơi cần
+// wfConfig của 1 hồ sơ CỤ THỂ (không phải xem trước lúc tạo) phải gọi qua đây thay vì tự tra
+// DB.xxxDeptWorkflows[dept] rải rác.
+function resolveDocWorkflowConfigForItemClient(doc) {
+  return appendExtraApprovalLayersClient(withWfStepsClient(DB.deptWorkflows?.[doc.dept]), doc);
+}
+function resolveCarWorkflowConfigForItemClient(c) {
+  return appendExtraApprovalLayersClient(withWfStepsClient(DB.carDeptWorkflows?.[c.dept]), c);
+}
+function resolveVppWorkflowConfigForItemClient(r) {
+  return appendExtraApprovalLayersClient(withWfStepsClient(DB.vppDeptWorkflows?.[r.dept]), r);
+}
+function resolveOfficeWorkflowConfigForItemClient(o) {
+  const wfMap = getOfficeWorkflowMap(o.subType);
+  return appendExtraApprovalLayersClient(withWfStepsClient((wfMap || {})[o.dept]), o);
+}
+
+// Mirror ĐÚNG EXTRA_APPROVAL_MODULE_KEYS (server, routes/data.js) — 10 moduleKey dùng "Nhóm Phê Duyệt
+// Cuối". Người CHỈ có mặt trong extraApprovalGroups_<moduleKey> (không thuộc bất kỳ *DeptWorkflows[dept]
+// nào) trước đây không lọt qua được các cổng canAccessXxxModule()/canAccessApprovalHub() dựa thuần trên
+// isApproverInWorkflowMap() — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao), xem
+// isExtraApprovalLayerApprover() (server, routes/data.js) cho lý do đầy đủ.
+const EXTRA_APPROVAL_MODULE_KEYS_CLIENT = [
+  'DOC', 'CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'VPP', 'PAYMENT',
+  'ITPRICE_RETAIL', 'ITPRICE_WHOLESALE', 'OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'
+];
+function isMemberOfAnyExtraApprovalGroup(user, moduleKeys) {
+  if (!user?.username) return false;
+  return moduleKeys.some(mk => {
+    const groups = DB[`extraApprovalGroups_${mk}`];
+    return Array.isArray(groups) && groups.some(g => Array.isArray(g?.members) && g.members.includes(user.username));
+  });
 }
 
 // Xem trước quy trình NGAY LÚC ĐANG TẠO hồ sơ (chưa có item.extraApprovalLayers thật vì hồ sơ chưa được
@@ -2708,8 +2804,13 @@ function isApproverInItPriceTierWorkflowMap(wfTierMap, username) {
 // item.priceTier (4 mức cố định), RETAIL tra theo item.dept như cũ 100%. Gộp về 1 hàm để không bỏ sót
 // chỗ nào khi thêm mới (bug mục B dễ bỏ sót nhất trong cả đợt vì rải rác nhiều nơi).
 function resolveItPriceWorkflowConfigForItemClient(p) {
-  if ((p.priceType || 'RETAIL') === 'WHOLESALE') return resolveItPriceTierWorkflowConfigClient(p.priceTier);
-  return resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
+  const raw = (p.priceType || 'RETAIL') === 'WHOLESALE'
+    ? resolveItPriceTierWorkflowConfigClient(p.priceTier)
+    : resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao) — xem chú thích đầy đủ ở
+  // appendExtraApprovalLayersClient()/withWfStepsClient() (cùng file): trước đây hàm này trả THẲNG cấu
+  // hình phòng ban/mức, không cộng "Nhóm Phê Duyệt Cuối" (ITPRICE_RETAIL/ITPRICE_WHOLESALE).
+  return appendExtraApprovalLayersClient(withWfStepsClient(raw), p);
 }
 
 // Nhãn hiển thị cho 4 mức Margin/Chiết Khấu cố định — khớp options của #itPriceTier + fixedTiers ở
@@ -2805,7 +2906,19 @@ function resolveOperationOrderWorkflowConfigForItemClient(o) {
   // RỖNG (không có nguồn người duyệt nào khác cho HO), nên phía client null hay "1 bước không ai duyệt"
   // cho ra CÙNG kết quả quyền, mà null còn giữ được cảnh báo "⚠️ Chưa cấu hình duyệt" (buildOperationRowHTML(),
   // module-vanhanh.js) + thông điệp "Mức ... chưa được cấu hình" ở modal Xem Trước.
-  if (locationType !== 'STORE') return tierCfg;
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao) — xem chú thích đầy đủ ở
+  // appendExtraApprovalLayersClient()/withWfStepsClient() (cùng file): trước đây nhánh HO trả thẳng
+  // tierCfg (hoặc null), không cộng "Nhóm Phê Duyệt Cuối" (OPERATION_ORDER_HO). CHỈ wrap qua
+  // withWfStepsClient() (biến null thành WF mặc định 1 bước) khi hồ sơ THẬT SỰ có extraApprovalLayers cần
+  // cộng thêm — nếu không, giữ nguyên `tierCfg` (kể cả null) như hành vi cũ, đúng như chú thích ở dòng
+  // trên: null hay "1 bước không ai duyệt" cho CÙNG kết quả quyền, nhưng null mới giữ được cảnh báo "⚠️
+  // Chưa cấu hình duyệt". Gọi thẳng withWfStepsClient() vô điều kiện (bản vá lần đầu) làm MẤT null ngay
+  // cả khi hồ sơ không có lớp phê duyệt thêm nào — lộ ra qua test-mixed-approval-delete-warning-ui.js.
+  if (locationType !== 'STORE') {
+    const layers = o?.extraApprovalLayers;
+    if (!Array.isArray(layers) || !layers.length) return tierCfg;
+    return appendExtraApprovalLayersClient(withWfStepsClient(tierCfg), o);
+  }
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình): STORE trước đây cũng `return null` khi mức
   // chưa cấu hình — LỆCH HẲN với server: flatWorkflowConfigToSteps(null) (lib/workflowEngine.js) dựng WF
   // MẶC ĐỊNH 1 bước "Duyệt" rồi resolveOperationOrderWorkflow() vẫn tra người duyệt bước 1 từ Quy Trình
@@ -2814,11 +2927,14 @@ function resolveOperationOrderWorkflowConfigForItemClient(o) {
   // người được quyền duyệt nó. Nay mirror y hệt server: WF mặc định 1 bước + approvers tra như thường,
   // kèm cờ tierConfigMissing để vẫn giữ được cảnh báo "⚠️ Chưa cấu hình duyệt" ở danh sách.
   const baseWf = (tierCfg ? (DB.workflows || []).find(w => w.id === tierCfg.workflowId) : null) || { steps: [{ order: 1, name: 'Duyệt' }] };
-  return {
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao) — cộng thêm "Nhóm Phê Duyệt Cuối"
+  // (OPERATION_ORDER_STORE), xem chú thích đầy đủ ở appendExtraApprovalLayersClient() (cùng file).
+  return appendExtraApprovalLayersClient({
     workflowId: tierCfg ? tierCfg.workflowId : null,
     tierConfigMissing: !tierCfg,
+    steps: baseWf.steps,
     approvers: computeOperationOrderStoreMixedApproversClient(o.dept, baseWf.steps.map(s => s.order))
-  };
+  }, o);
 }
 // operationOrderStoreApproverFilterFor() — TRƯỚC ĐÂY lọc lại approvers theo dept của đơn (mirror
 // filterOperationOrderStoreApprovers() cũ). ĐỢT "Quy Trình Hỗn Hợp": việc lọc theo siêu thị giờ nằm
@@ -2958,7 +3074,10 @@ function resolvePaymentApprovalWorkflow(pr) {
   const baseWf = DB.workflows.find(w => w.id === wfConfig?.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
   const approvers = {};
   baseWf.steps.forEach(s => { approvers[s.order] = resolveEffectiveStepApprovers(wfConfig, s.order); });
-  return { steps: baseWf.steps, approvers };
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao) — xem chú thích đầy đủ ở
+  // appendExtraApprovalLayersClient() (cùng file): trước đây hàm này không cộng "Nhóm Phê Duyệt Cuối"
+  // (PAYMENT) khi tính bước hiện tại cần duyệt.
+  return appendExtraApprovalLayersClient({ steps: baseWf.steps, approvers }, pr);
 }
 // Người dùng có được duyệt ĐÚNG bước hiện tại của 1 đề nghị thanh toán PENDING hay không — dùng để
 // gate nút "✅ Xác nhận" ở renderPaymentRequests()/getMyPendingApprovals() (KHÔNG còn dùng flat
@@ -3287,7 +3406,7 @@ function canAccessCarModule(user) {
   // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
   const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
   return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere
-    || !!user.perms?.carReportView;
+    || !!user.perms?.carReportView || isMemberOfAnyExtraApprovalGroup(user, ['CAR']);
 }
 
 // "📊 Báo Cáo" (sub-tab riêng trong module Đăng Ký Xe) — CHỈ hiện cho người quản lý: admin, người có
@@ -3378,6 +3497,7 @@ function canAccessApprovalHub(user) {
   if (Object.values(DB.contractApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
   if (isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)) return true;
   if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)) return true;
+  if (isMemberOfAnyExtraApprovalGroup(user, EXTRA_APPROVAL_MODULE_KEYS_CLIENT)) return true;
   return false;
 }
 
@@ -9034,8 +9154,10 @@ function buildApprovalSlipShellHTML(opts) {
 // Dựng HTML "Phiếu Phê Duyệt Đăng Ký Xe" — theo đúng bố cục Mẫu Oto01 (đăng ký + phần Phòng Hành
 // Chính) do người dùng cung cấp, ghép vào khung dùng chung buildApprovalSlipShellHTML().
 function buildCarApprovalSlipHTML(car) {
-  const wfConfig = DB.carDeptWorkflows[car.dept] || { workflowId: 'WF_1STEP' };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song): trước đây phiếu chỉ vẽ đúng bước GỐC theo phòng
+  // ban, không có cột ký cho "Nhóm Phê Duyệt Cuối" nếu hồ sơ có dùng tính năng này.
+  const wfConfig = resolveCarWorkflowConfigForItemClient(car);
+  const wf = { steps: wfConfig.steps || [{ order: 1, name: 'Duyệt' }] };
   const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, car.history)).join('');
 
   const bodyHTML = `

@@ -1583,6 +1583,17 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     bước Nhóm Phê Duyệt Cuối tự trượt theo, luôn nối đúng **SAU CÙNG** quy
     trình gốc mới nhất — không kẹt cứng ở 1 vị trí cố định, không đè lên bước
     phòng ban mới.
+  - **Riêng 💰 Thanh Toán — áp dụng cho CẢ 3 lối tạo đề nghị (9/2026)**: đề
+    nghị thanh toán không chỉ tạo thủ công ("➕ Tạo Mới") mà còn tự sinh khi
+    bấm "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán" từ Hợp Đồng/Mua Sắm/Sửa
+    Chữa (xem "🗂️ Quản Lý Thanh Toán" ngay dưới) — cả 3 lối đều PHẢI đi qua
+    bước chọn Cấp/Nhóm Phê Duyệt Cuối khi tính năng đang bật cho PAYMENT.
+    Vì 2 nút "🧾 Lập Thanh Toán" (từ Hợp Đồng)/"Chuyển Sang Thanh Toán" (từ
+    Mua Sắm/Sửa Chữa) là thao tác 1-click, không có form để chọn — khi tính
+    năng ĐANG bật, bấm 2 nút này sẽ bị chặn kèm thông báo điều hướng sang
+    "➕ Tạo Mới" (module Thanh Toán, chọn đúng Loại Đề Nghị tương ứng) để
+    chọn Cấp/Nhóm trước khi tạo đề nghị; nếu tính năng ĐANG TẮT cho PAYMENT
+    thì 2 nút này hoạt động y hệt như trước (không đổi gì).
 - **Tổng Hợp** — module cha gồm 2 luồng Mua Sắm/Sửa Chữa văn phòng (mẫu
   BM-TS01) qua quy trình duyệt theo phòng ban, cộng 2 module con:
   **"🚫 Hủy Đề Xuất" khi chưa ai duyệt (từ 9/2026)** — cùng cơ chế đã có ở

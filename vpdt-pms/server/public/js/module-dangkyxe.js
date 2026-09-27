@@ -872,7 +872,7 @@ function renderCarRegs() {
   // CẬP NHẬT: lọc theo phạm vi Xem (carView) thay vì hiển thị đăng ký xe của mọi phòng ban.
   const canViewCar = c => scopeAllows(currentUser, currentUser.perms?.carView, c.dept) ||
     c.creator === currentUser.username ||
-    isApproverForDeptWorkflow(DB.carDeptWorkflows[c.dept], currentUser.username);
+    isApproverForDeptWorkflow(resolveCarWorkflowConfigForItemClient(c), currentUser.username);
 
   const scopedCarRegs = DB.carRegs.filter(canViewCar);
   const carDashCards = [
@@ -913,8 +913,8 @@ function renderCarRegs() {
   }
 
   tbody.innerHTML = pageCarRegs.map(c => {
-    const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-    const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+    const wfConfig = resolveCarWorkflowConfigForItemClient(c);
+    const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
     const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
     const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);
@@ -1294,8 +1294,8 @@ function openCarProcessModal(carId) {
   const c = DB.carRegs.find(item => item.id === carId);
   if (!c) return;
 
-  const wfConfig = DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+  const wfConfig = resolveCarWorkflowConfigForItemClient(c);
+  const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
   document.getElementById('carModalTitle').innerText = `🚗 Xử Lý Đăng Ký Xe: ${c.code}`;
   document.getElementById('carModalSub').innerText = `Đơn vị: ${c.dept} | Người đăng ký: ${c.creatorName} | Lộ trình: ${c.destination}`;
@@ -1404,8 +1404,8 @@ function confirmProcessCarReg(actionType) {
   // Nhãn hành động của APPROVE ăn theo cấu hình riêng của ĐÚNG bước hiện tại (resolveStepActionLabel() —
   // mặc định "Phê Duyệt" nếu bước chưa cấu hình riêng) — REJECT/REQUEST_CHANGES luôn giữ nguyên nhãn cũ.
   const c = DB.carRegs.find(item => item.id === currentProcessingCarId);
-  const wfConfig = c ? (DB.carDeptWorkflows[c.dept] || { workflowId: 'WF_1STEP' }) : {};
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
+  const wfConfig = c ? resolveCarWorkflowConfigForItemClient(c) : {};
+  const wf = { steps: wfConfig.steps || [] };
   const approveLabel = c ? resolveStepActionLabel(wf, c.currentStep) : 'Phê Duyệt';
   const titleMap = { APPROVE: `✅ Xác Nhận ${approveLabel}`, REJECT: '❌ Xác Nhận Từ Chối', REQUEST_CHANGES: '🔄 Xác Nhận Yêu Cầu Bổ Sung' };
   const labelMap = { APPROVE: approveLabel, REJECT: 'Từ Chối', REQUEST_CHANGES: 'Yêu Cầu Bổ Sung' };

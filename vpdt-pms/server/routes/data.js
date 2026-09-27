@@ -37,7 +37,8 @@ const {
   filterLeaveRequestsForUser, filterShiftRosterForUser, filterShiftSwapRequestsForUser,
   filterPayrollPeriodsForUser, filterPayslipsForUser,
   filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
-  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
+  canAccessItPriceApprovalModuleServer
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { cascadeMeetingRoomRename, diffMeetingRoomRenames } = require('../lib/catalogRename');
@@ -956,6 +957,24 @@ function isApproverForAnyOperationOrderTier(user, data) {
 // loadCarRegsScoped() ở trên: gộp {phòng ban mình} ∪ {phòng ban mình đang là approver theo
 // paymentDeptWorkflows} rồi tải riêng từng phòng ban trong tập đó, admin/paymentManage vẫn tải
 // company-wide như cũ.
+// "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, cùng tinh thần
+// isApproverForAnyOperationOrderTier()/isApproverForAnyItPriceWholesaleTier() ở trên): approver CHỈ
+// xuất hiện trong extraApprovalGroups_<moduleKey> (lớp phê duyệt thêm, VD Tổng Giám Đốc — thường KHÔNG
+// nằm trong bất kỳ *DeptWorkflows[dept] nào) trước đây KHÔNG BAO GIỜ có hồ sơ tải về máy họ (dù
+// canView*()/resolveWfConfig() phía dưới đã tính đúng extraApprovalLayers) vì tập "phòng ban cần tải"
+// ở các hàm computeXxxApproverDepts() bên dưới chỉ quét *DeptWorkflows HIỆN TẠI, không biết gì về lớp
+// duyệt thêm này. Cùng tinh thần "an toàn khi tải THỪA" như 2 hàm approver-theo-tier ở trên: nếu
+// username xuất hiện trong BẤT KỲ nhóm nào của BẤT KỲ moduleKey nào truyền vào (1-2 moduleKey ứng với
+// 1 collection), tải company-wide luôn cho collection đó thay vì cố tính "đúng phòng ban nào" (approver
+// lớp thêm không gắn với 1 phòng ban cụ thể) — canView*() vẫn lọc lại ĐÚNG sau đó, an toàn.
+function isExtraApprovalLayerApprover(user, data, moduleKeys) {
+  if (!user?.username) return false;
+  return moduleKeys.some(mk => {
+    const groups = data[`extraApprovalGroups_${mk}`];
+    return Array.isArray(groups) && groups.some(g => Array.isArray(g?.members) && g.members.includes(user.username));
+  });
+}
+
 function computePaymentRequestsApproverDepts(user, data) {
   const depts = [];
   for (const [dept, wfConfig] of Object.entries(data.paymentDeptWorkflows || {})) {
@@ -967,7 +986,7 @@ function computePaymentRequestsApproverDepts(user, data) {
   return depts;
 }
 async function loadPaymentRequestsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.paymentManage) {
+  if (user?.perms?.admin || user?.perms?.paymentManage || isExtraApprovalLayerApprover(user, data, ['PAYMENT'])) {
     return getAllForCollectionCached('paymentRequests');
   }
   const depts = new Set();
@@ -993,7 +1012,7 @@ function computeCarRegsApproverDepts(user, data) {
   return depts;
 }
 async function loadCarRegsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.carView?.all) {
+  if (user?.perms?.admin || user?.perms?.carView?.all || isExtraApprovalLayerApprover(user, data, ['CAR'])) {
     return getAllForCollectionCached('carRegs');
   }
   const depts = new Set();
@@ -1032,7 +1051,7 @@ function computeOfficeReqsApproverDepts(user, data) {
   return depts;
 }
 async function loadOfficeReqsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.officeView?.all) {
+  if (user?.perms?.admin || user?.perms?.officeView?.all || isExtraApprovalLayerApprover(user, data, ['OFFICE_BUY', 'OFFICE_FIX'])) {
     return getAllForCollectionCached('officeReqs');
   }
   const depts = new Set();
@@ -1086,7 +1105,8 @@ function computeItPriceApprovalsApproverDepts(user, data) {
 async function loadItPriceApprovalsScoped(user, data) {
   const canSeeAll = !!(user?.perms?.admin || user?.perms?.itPriceSupport
     || user?.perms?.itPriceEmergencyRejectApproveWholesale || user?.perms?.itPriceEmergencyRejectApproveRetail
-    || isApproverForAnyItPriceWholesaleTier(user, data));
+    || isApproverForAnyItPriceWholesaleTier(user, data)
+    || isExtraApprovalLayerApprover(user, data, ['ITPRICE_RETAIL', 'ITPRICE_WHOLESALE']));
   if (canSeeAll) return getAllForCollectionCached('itPriceApprovals');
 
   const depts = new Set(computeItPriceApprovalsApproverDepts(user, data));
@@ -1115,7 +1135,7 @@ function computeVppRegistrationsApproverDepts(user, data) {
   return depts;
 }
 async function loadVppRegistrationsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.vppManage) {
+  if (user?.perms?.admin || user?.perms?.vppManage || isExtraApprovalLayerApprover(user, data, ['VPP'])) {
     return getAllForCollectionCached('vppRegistrations');
   }
   const depts = new Set(computeVppRegistrationsApproverDepts(user, data));
@@ -1161,10 +1181,21 @@ async function loadBudgetEntriesScoped(user, data) {
 
 // budgetLines (Ngân Sách 2.0, v23.0) — canViewBudgetLine() (lib/recordViewScope.js) đơn giản hơn hẳn
 // loadBudgetEntriesScoped() ở trên (KHÔNG có approver theo phòng ban — chỉ 1 cấp gác permission phẳng,
-// xem lib/recordActions.js): admin/budgetManage/budgetAggregate tải company-wide, còn lại tải đúng 1
-// lượt theo Dept (= "Khối Phòng Ban") của chính mình.
+// xem lib/recordActions.js): admin/budgetManage/budgetAggregate/budgetReportView tải company-wide, còn
+// lại tải đúng 1 lượt theo Dept (= "Khối Phòng Ban") của chính mình.
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình, cùng nhánh với canViewBudgetLine()):
+// (1) budgetReportView trước đây KHÔNG có mặt ở đây dù canViewBudgetLine() coi là "xem hết" — 1 tài
+// khoản chỉ có budgetReportView (không kèm budgetManage/budgetAggregate) từng chỉ tải được đúng dòng
+// theo Dept của chính họ, không khớp quyền "xem báo cáo toàn công ty" đã cấp. (2) budgetLines KHÔNG có
+// cột CreatedBy riêng ở SQL (chỉ nằm trong Payload JSON, xem sql/schema.sql) nên không tải riêng theo
+// "createdBy" được như officeReqs/itPriceApprovals/vppRegistrations (getForCollectionByColumnCached) —
+// người có budgetCreate (không cần budgetManage) tạo được dòng cho Khối Phòng Ban KHÁC phòng ban mình
+// (thiết kế MỚI, xem CREATE_MODULE_CONFIGS.budgetLines ở lib/createValidation.js) sẽ mất quyền xem lại
+// chính dòng mình vừa tạo nếu chỉ tải hẹp theo dept — tải company-wide an toàn cho họ (canViewBudgetLine()
+// vẫn lọc lại đúng phạm vi thật sau đó), còn lại (không budgetCreate/budgetManage/budgetAggregate/
+// budgetReportView/admin) vẫn tải hẹp theo dept như cũ.
 function loadBudgetLinesScoped(user) {
-  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate) {
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView || user?.perms?.budgetCreate) {
     return getAllForCollectionCached('budgetLines');
   }
   if (!user?.dept) return [];
@@ -1191,7 +1222,7 @@ function computeDocsApproverDepts(user, data) {
   return depts;
 }
 async function loadDocsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.viewDraftAll || user?.perms?.viewApprovedAll) {
+  if (user?.perms?.admin || user?.perms?.viewDraftAll || user?.perms?.viewApprovedAll || isExtraApprovalLayerApprover(user, data, ['DOC'])) {
     return getAllForCollectionCached('docs');
   }
   const depts = new Set();
@@ -1370,7 +1401,8 @@ router.get('/', async (req, res) => {
     // public/js/core.js), không còn đi qua vòng tải chung ở đây nữa.
     const migratedList = [...MIGRATED_COLLECTIONS].filter(c => !LAZY_DATA_GROUP_COLLECTION_KEYS.has(c) && c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'docs' && c !== 'submissions' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations' && c !== 'notifications');
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
-    const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data);
+    const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data)
+      || isExtraApprovalLayerApprover(req.freshUser, data, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO']);
     const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, docsResult, submissionsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
@@ -1543,6 +1575,17 @@ router.get('/', async (req, res) => {
         // Bộ cho 1 tài khoản dù họ có đủ moduleAccess.hr + nhanSuManage — dùng gate OR riêng (xem
         // canAccessHrFeedbackModuleServer()) thay vì zero vô điều kiện.
         if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
+        // itPriceApprovals — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): mảng này gộp CẢ
+        // 2 priceType (RETAIL/WHOLESALE) nhưng module 'itSupport' giờ không còn là cổng DUY NHẤT (RETAIL
+        // đi qua 'muaHang', WHOLESALE đi qua 'vanHanh', xem canAccessItPriceApprovalModuleServer() ở
+        // lib/recordViewScope.js) — zero CẢ MẢNG khi chỉ tắt 'itSupport' xoá nhầm cả phần hồ sơ mà user
+        // vẫn đủ quyền xem qua 'muaHang'/'vanHanh'. Lọc THEO TỪNG PHẦN TỬ thay vì zero vô điều kiện.
+        if (col === 'itPriceApprovals') {
+          if (Array.isArray(data.itPriceApprovals)) {
+            data.itPriceApprovals = data.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType));
+          }
+          continue;
+        }
         if (data[col]) data[col] = [];
       }
     }
@@ -1699,6 +1742,13 @@ router.get('/lazy/:groupKey', async (req, res) => {
       if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
       for (const col of collections) {
         if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
+        // itPriceApprovals — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
+        if (col === 'itPriceApprovals') {
+          if (Array.isArray(result.itPriceApprovals)) {
+            result.itPriceApprovals = result.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType));
+          }
+          continue;
+        }
         if (result[col]) result[col] = [];
       }
     }

@@ -314,7 +314,7 @@ function renderDocs() {
     // Quản lý (trực tiếp/gián tiếp, theo Cơ Cấu Tổ Chức) của người tải lên — mục 3 kế hoạch 10/2026,
     // mirror ĐÚNG canViewDoc() server (lib/recordViewScope.js).
     isManagerOf(currentUser.username, doc.uploader, DB.users) ||
-    isApproverForDeptWorkflow(DB.deptWorkflows[doc.dept], currentUser.username);
+    isApproverForDeptWorkflow(resolveDocWorkflowConfigForItemClient(doc), currentUser.username);
 
   // Thẻ dashboard — đếm khớp CHÍNH XÁC những gì sẽ hiện ra khi bấm từng thẻ (xem filterDocByCard()).
   // "Tổng/Đã duyệt/Từ chối" đếm trên tài liệu GỐC (đúng những gì list hiện mặc định); "Chờ duyệt: Cập
@@ -393,8 +393,8 @@ function toggleDocFamily(rootId) {
 // biệt trực quan với tài liệu không có version nào). Mỗi version có Thao Tác RIÊNG vì mỗi version là
 // 1 lượt phê duyệt độc lập (status/currentStep/history của chính nó, không dùng chung với bản gốc).
 function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = false } = {}) {
-  const wfConfig = DB.deptWorkflows[doc.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Sếp duyệt' }] };
+  const wfConfig = resolveDocWorkflowConfigForItemClient(doc);
+  const wf = { steps: wfConfig.steps || [{ name: 'Sếp duyệt' }] };
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, doc.currentStep);
   const canApprove = (doc.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, doc.history, doc.currentStep);

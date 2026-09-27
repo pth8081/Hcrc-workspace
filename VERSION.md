@@ -1,8 +1,97 @@
 # Phiên bản hiện tại
 
-**24.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.25 (2026-09-27): Vá 11 lỗi từ đợt rà soát chuyên sâu 8-agent song song (4 Cao + 6 Trung bình + 1 Thấp)
+
+Theo yêu cầu người dùng "sửa tất cả, test kĩ đảm bảo không lỗi, các phê duyệt
+quan trọng lắm" — vá toàn bộ 11 phát hiện của đợt rà soát chuyên sâu 8-agent
+song song (xem entry trước liệt kê phạm vi rà soát). Ưu tiên các lỗi liên
+quan trực tiếp tới quyền DUYỆT hồ sơ vì đây là nghiệp vụ cốt lõi của hệ
+thống.
+
+**4 lỗi mức Cao:**
+
+1. **Người CHỈ thuộc "Nhóm Phê Duyệt Cuối" không thấy được hồ sơ cần duyệt**
+   (7 module: Tài Liệu/Đăng Ký Xe/Mua Bán VP/Sửa Chữa VP/VPP/Vận Hành Đặt
+   Hàng ST/HO) — mọi điểm tính "ai duyệt được hồ sơ này" (danh sách hiển thị,
+   nút Xử Lý/Duyệt, Approval Hub, Dashboard, phiếu duyệt) trước đây chỉ đọc
+   cấu hình quy trình phòng ban/mức GỐC, chưa cộng thêm lớp "Nhóm Phê Duyệt
+   Cuối" — người CHỈ có mặt ở lớp thêm (VD Tổng Giám Đốc không thuộc phòng
+   ban nào trong quy trình gốc) không bao giờ thấy hồ sơ dù server vẫn chấp
+   nhận đúng lượt duyệt của họ, khiến hồ sơ "treo" ở bước cuối. Thêm 4 hàm
+   `resolveDocWorkflowConfigForItemClient()`/`resolveCarWorkflowConfigForItemClient()`/
+   `resolveVppWorkflowConfigForItemClient()`/`resolveOfficeWorkflowConfigForItemClient()`
+   (client, `core.js`) làm điểm tra duy nhất, đều cộng lớp phê duyệt thêm qua
+   `appendExtraApprovalLayersClient()` (đã có sẵn nhưng chưa từng được gọi ở
+   đâu — dead code); đồng thời vá 1 lỗi sâu hơn trong chính hàm đó (bản cũ
+   trả `{steps,approvers}` trần làm rớt mất `approverMode`/`approversByPosition`
+   của quy trình gốc). Phía server, thêm `isExtraApprovalLayerApprover()`
+   (`routes/data.js`) để 7 hàm `loadXxxScoped()` nạp đúng hồ sơ cho nhóm
+   người dùng này.
+2. **Đề nghị thanh toán tự động sinh (từ Hợp Đồng/Mua Sắm/thủ công 1-click)
+   bỏ qua "Nhóm Phê Duyệt Cuối"** — chỉ lối tạo thủ công đầy đủ ("➕ Tạo Mới"
+   trong module Thanh Toán) có bước chọn Cấp/Nhóm phê duyệt cuối; 3 lối tạo
+   còn lại (`start-payment` từ Hợp Đồng, từ Mua Sắm, và nút tắt 1-click) tạo
+   thẳng đề nghị PENDING mà không hề áp dụng lớp phê duyệt thêm dù tính năng
+   đang bật cho module PAYMENT — hồ sơ đi qua ít bước duyệt hơn cấu hình.
+   Vá: `startContractPayment()`/`startOfficePayment()` (lib/recordActions.js)
+   nhận thêm `appData`, gọi `applyExtraApprovalSelectionForPaymentStart()`
+   (hàm mới) — 2 lối tạo có sẵn form ("➕ Tạo Mới") giữ nguyên UI, chỉ mở
+   rộng form đó cho mọi sourceType; 2 nút tắt 1-click bị chặn cứng kèm thông
+   báo điều hướng sang "➕ Tạo Mới" NẾU tính năng đang thật sự được cấu hình
+   cho PAYMENT (không đổi hành vi khi tính năng tắt).
+3. **`reportPeriods/:id/compilation` thiếu kiểm tra quyền sở hữu file** — lỗ
+   hổng lộ file người dùng khác (rò rỉ dữ liệu) do bỏ sót
+   `assertPayloadFileUrlsOwnedByUser()` — đã bổ sung, khớp khuôn ~20 route
+   khác cùng loại.
+4. **`itPriceApprovals` gác "Khối 0" (moduleAccess) chưa tách theo
+   Bán Lẻ/Bán Buôn** sau đợt tách module Retail (Mua Hàng)/Wholesale (Vận
+   Hành) trước đây — người chỉ có quyền module Bán Lẻ có thể thao tác được
+   hồ sơ Bán Buôn (và ngược lại) ở 3 lớp (tạo/đọc/duyệt). Thêm
+   `canAccessItPriceApprovalModuleServer()` (mirror `canAccessHrFeedbackModuleServer()`),
+   áp dụng ở `routes/create.js`/`routes/data.js`/`routes/workflow.js`.
+
+**6 lỗi mức Trung bình:**
+
+5. Hợp đồng lao động — race condition ở bước kích hoạt (2 request kích hoạt
+   đồng thời có thể cùng qua được kiểm tra).
+6. Offboarding — gán người kế nhiệm KHÔNG cascade đúng khi đổi người kế
+   nhiệm lần thứ 2 trở đi (vẫn đồng bộ theo người kế nhiệm CŨ ở 1 số nơi).
+7. Vận Hành — race condition khi xoá công việc (work item) do bước đọc-kiểm
+   tra-xoá không cùng 1 giao dịch khoá; thêm `withLockedWorkItemByIdForDelete()`.
+8. VPP — sửa bản nháp âm thầm xoá mất lựa chọn "Nhóm Phê Duyệt Cuối" đã chọn
+   trước đó (không đọc lại state cũ khi lưu); đồng thời modal sửa giờ tự
+   điền lại đúng lựa chọn cũ khi mở lại nháp.
+9. Mua Sắm (officeReqs) — có thể lách qua bước xác nhận số tiền khi mảng
+   `items` để rỗng (bỏ qua nhánh validate dựa trên tổng `items`).
+10. `canViewBudgetLine()` thiếu nhánh `createdBy` — người tạo dòng Ngân Sách
+    không thuộc phòng ban/quyền quản lý liên quan có thể không tự xem lại
+    được đúng dòng mình vừa tạo; đồng thời phát hiện thêm `loadBudgetLinesScoped()`
+    (routes/data.js) cũng thiếu `budgetReportView`/`budgetCreate` trong điều
+    kiện nạp toàn công ty (cùng gốc, vá luôn trong đợt này).
+
+**1 lỗi mức Thấp:**
+
+11. `budgetLines` route `/child-update` và `/child-delete` chưa bọc
+    `withAppLock('budget_line_used_parent:<id cha>')` như 3 route anh em
+    (`/children`, `/used-parent-delete`) cùng chạm 1 dòng cha — thiếu nhất
+    quán, có thể usageStatus tính sai tạm thời nếu 2 thao tác con cùng dòng
+    cha chạm gần như đồng thời.
+
+**Regression**: chạy lại toàn bộ 311 file test hiện có (`tests/test-*.js`)
+sau khi vá — phát hiện + sửa luôn 2 test cần cập nhật theo đúng thay đổi
+hành vi (không phải lỗi mới): `test-mixed-approval-delete-warning-ui.js`
+(bản vá #1 lúc đầu vô tình làm mất nhánh "HO chưa cấu hình mức vẫn trả
+`null`" cho hồ sơ KHÔNG có lớp phê duyệt thêm — sửa lại `resolveOperationOrderWorkflowConfigForItemClient()`
+chỉ áp dụng lớp thêm khi hồ sơ THẬT SỰ có `extraApprovalLayers`) và
+`test-payment-source-race.js` (thiếu stub `lib/appData` sau khi bản vá #2
+thêm lời gọi `getAllAppData()` vào route `start-payment`). Không có thay đổi
+`schema.sql`/`.env.example`/`package.json` dependencies nào trong đợt này —
+chỉ sửa logic code hiện có, không cần thao tác thủ công gì thêm ngoài copy
+code + `pm2 restart`.
 
 ## v24.24 (2026-09-26): Nhóm Phê Duyệt Cuối — vá 2 lỗi ở nút "🔍 Xem Quy Trình" (rà soát từng quy trình theo yêu cầu người dùng)
 

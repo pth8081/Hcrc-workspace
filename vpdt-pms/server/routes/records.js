@@ -11,7 +11,7 @@ const laborContract = require('../lib/laborContract');
 const attendance = require('../lib/attendance');
 const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
-const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
+const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, withLockedWorkItemByIdForDelete, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
 const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
@@ -202,12 +202,13 @@ router.post('/contracts/:id/start-payment', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     let result = null;
     const paymentRequests = await withAppLock(`payment_source:CONTRACT:${itemId}`, async () => {
       const allPaymentRequests = await getAllForCollection('paymentRequests');
       let draft = null;
       result = await withLockedRecordForCollection('contracts', itemId, (item) => {
-        draft = recordActions.startContractPayment(freshUser, item, undefined, allPaymentRequests);
+        draft = recordActions.startContractPayment(freshUser, item, undefined, allPaymentRequests, appData);
         return item;
       });
       return createPaymentRequestsFromDraft(draft);
@@ -261,12 +262,13 @@ router.post('/officeReqs/:id/start-payment', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     let result = null;
     const paymentRequests = await withAppLock(`payment_source:OFFICE:${itemId}`, async () => {
       const allPaymentRequests = await getAllForCollection('paymentRequests');
       let draft = null;
       result = await withLockedRecordForCollection('officeReqs', itemId, (item) => {
-        draft = recordActions.startOfficePayment(freshUser, item, undefined, allPaymentRequests);
+        draft = recordActions.startOfficePayment(freshUser, item, undefined, allPaymentRequests, appData);
         return item;
       });
       return createPaymentRequestsFromDraft(draft);
@@ -291,6 +293,7 @@ router.post('/paymentRequests/from-source', async (req, res) => {
     if (!recordActions.canManagePaymentRequests(freshUser)) {
       return res.status(403).json({ error: 'Bạn không có quyền tạo đề nghị thanh toán' });
     }
+    const appData = await getAllAppData();
     const sourceModule = String(req.body?.sourceModule || '');
     const sourceId = Number(req.body?.sourceId);
     if (!Number.isFinite(sourceId)) return res.status(400).json({ error: 'sourceId không hợp lệ' });
@@ -303,7 +306,13 @@ router.post('/paymentRequests/from-source', async (req, res) => {
       installments: req.body?.installments,
       requestFiles: req.body?.requestFiles,
       customData: req.body?.customData,
-      skipManageGate: true
+      skipManageGate: true,
+      // "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song): lựa chọn
+      // client gửi từ "➕ Tạo Mới" (module Thanh Toán, chọn Loại Đề Nghị có nguồn) — xem
+      // applyExtraApprovalSelectionForPaymentStart() ở lib/recordActions.js.
+      approvalLevel: req.body?.approvalLevel,
+      selectedExtraApprovalLayerKeys: req.body?.selectedExtraApprovalLayerKeys,
+      selectedExtraApprovalLayerMembers: req.body?.selectedExtraApprovalLayerMembers
     };
 
     if (sourceModule !== 'CONTRACT' && !['MUA_BAN', 'SUA_CHUA'].includes(sourceModule)) {
@@ -331,13 +340,13 @@ router.post('/paymentRequests/from-source', async (req, res) => {
       // luôn là (các) bản ghi MỚI, chưa có tệp cũ nào cần giữ nguyên.
       if (sourceModule === 'CONTRACT') {
         result = await withLockedRecordForCollection('contracts', sourceId, async (item) => {
-          draft = recordActions.startContractPayment(freshUser, item, overrides, allPaymentRequests);
+          draft = recordActions.startContractPayment(freshUser, item, overrides, allPaymentRequests, appData);
           await assertPayloadFileUrlsOwnedByUser(draft, freshUser);
           return item;
         });
       } else {
         result = await withLockedRecordForCollection('officeReqs', sourceId, async (item) => {
-          draft = recordActions.startOfficePayment(freshUser, item, overrides, allPaymentRequests);
+          draft = recordActions.startOfficePayment(freshUser, item, overrides, allPaymentRequests, appData);
           await assertPayloadFileUrlsOwnedByUser(draft, freshUser);
           return item;
         });
@@ -2338,9 +2347,13 @@ router.post('/vppRegistrations/:id/update', async (req, res) => {
     // vppExcludedJobTitles: kiểm lại quyền đăng ký + "Nhóm Không Cấp VPP" ngay lúc SỬA nháp (LỖI ĐÃ VÁ
     // 10/2026) — mirror route .../submit ở trên.
     const excludedJobTitles = await getAppDataValue('vppExcludedJobTitles');
+    // appData — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): updateVppRegistrationDraft()
+    // giờ cũng xử lý lại lựa chọn "Nhóm Phê Duyệt Cuối" (approvalLevel/selectedExtraApprovalLayerKeys/
+    // selectedExtraApprovalLayerMembers) khi sửa nháp, cần appData để gọi prepareExtraApprovalSelectionForCreate().
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) => {
       const period = periods.find(p => p.id === item.periodId);
-      return recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period, excludedJobTitles);
+      return recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period, excludedJobTitles, appData);
     });
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -2423,14 +2436,28 @@ router.post('/reportPeriods/:id/mergeByTasks', async (req, res) => {
 // POST /api/records/reportPeriods/:id/compilation — sửa slide (nội dung/thứ tự) khi bản tổng hợp còn
 // đang MERGED (chưa phát hành). Body: { slides: [{kind, title, ...}, ...] } theo đúng thứ tự — field
 // theo từng kind xem updateReportCompilation() ở lib/recordActions.js.
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): route này TRƯỚC ĐÂY là route SỬA DUY NHẤT
+// nhận fileUrl từ client (slides[].fileUrl, kind NUMBERS/OTHER/FILE) mà KHÔNG có assertPayloadFileUrlsOwnedByUser()
+// như 20+ route sửa khác cùng lớp (xem lib/uploadedFiles.js) — 1 tài khoản chỉ có quyền reportAggregate
+// (không phải admin/HR) có thể gắn fileUrl của BẤT KỲ hồ sơ nhạy cảm nào (HĐLĐ, chứng từ thanh toán, ảnh
+// checklist, CV ứng viên...) vào slide rồi Phát Hành kỳ báo cáo — canSeeReportCompilation() (lib/
+// recordViewScope.js) cho phép MỌI tài khoản đã đăng nhập xem 1 khi compilation.status==='PUBLISHED', và
+// findOwningRecord() (lib/fileAuthz.js) nhận nhầm file đó "thuộc về" reportPeriods (đứng trước nhiều
+// checker nhạy cảm hơn trong mảng checkers) — biến file riêng tư thành công khai toàn công ty. exemptFileUrls
+// giữ nguyên các fileUrl ĐÃ CÓ trước khi sửa (đọc TRƯỚC khi gọi updateReportCompilation(), vì hàm đó mutate
+// thẳng item.compilation.slides).
 router.post('/reportPeriods/:id/compilation', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
-      recordActions.updateReportCompilation(freshUser, item, req.body?.slides)
-    );
+    const result = await withLockedRecordForCollection('reportPeriods', itemId, async (item) => {
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(item.compilation?.slides, exemptFileUrls);
+      const updated = recordActions.updateReportCompilation(freshUser, item, req.body?.slides);
+      await assertPayloadFileUrlsOwnedByUser({ slides: updated.compilation.slides }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `reportPeriods/${req.params.id}/compilation`, err);
@@ -2818,6 +2845,12 @@ router.post('/budgetLines/:id/children', async (req, res) => {
 // POST /api/records/budgetLines/:id/child-update — sửa 1 mục con Sử Dụng (:id = id mục con), tính lại
 // usageStatus dòng cha sau khi sửa (đọc lại danh sách con từ DB trong CÙNG giao dịch khoá cha, xem chú
 // thích ở route /children ngay trên).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026): trước đây route này KHÔNG bọc withAppLock, trong khi
+// /children và /used-parent-delete cùng chạm dòng cha ĐÃ bọc — 1 request sửa/xoá mục con có thể chen
+// giữa lúc /used-parent-delete đang xoá dòng cha (giữa bước kiểm tra hasChildren và bước xoá thật), khiến
+// mục con vừa sửa xong trỏ vào 1 dòng cha vừa biến mất. Tra `parent.id` xong mới lấy khoá (khác /children
+// vốn đã biết sẵn id cha từ params) rồi bọc TOÀN BỘ đọc-kiểm tra-sửa bằng cùng khoá
+// `budget_line_used_parent:<id cha>` để luôn tuần tự với 3 route kia.
 router.post('/budgetLines/:id/child-update', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2826,12 +2859,17 @@ router.post('/budgetLines/:id/child-update', async (req, res) => {
     const all = await getAllForCollection('budgetLines');
     const child = all.find(l => l.id === itemId);
     if (!child || child.parentId == null) throw new HttpError(404, 'Không tìm thấy mục sử dụng');
-    const parent = all.find(l => l.id === child.parentId);
-    if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
-    const updated = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.updateBudgetLineChild(freshUser, item, parent, req.body));
-    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item, children) =>
-      recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
+    const parentId = child.parentId;
+    const { updated, parentAfter } = await withAppLock(`budget_line_used_parent:${parentId}`, async () => {
+      const allLocked = await getAllForCollection('budgetLines');
+      const parent = allLocked.find(l => l.id === parentId);
+      if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
+      const updatedItem = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+        recordActions.updateBudgetLineChild(freshUser, item, parent, req.body));
+      const parentItem = await withLockedRecordForCollection('budgetLines', parent.id, (item, children) =>
+        recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
+      return { updated: updatedItem, parentAfter: parentItem };
+    });
     res.json({ ok: true, item: updated, parentItem: parentAfter });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/child-update`, err); }
 });
@@ -2839,6 +2877,8 @@ router.post('/budgetLines/:id/child-update', async (req, res) => {
 // POST /api/records/budgetLines/:id/child-delete — xoá 1 mục con Sử Dụng (:id = id mục con), tính lại
 // usageStatus dòng cha sau khi xoá (đọc lại danh sách con từ DB trong CÙNG giao dịch khoá cha, xem chú
 // thích ở route /children ngay trên).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026): cùng lỗi thiếu khoá như /child-update ở trên — bọc lại theo
+// cùng khoá `budget_line_used_parent:<id cha>`.
 router.post('/budgetLines/:id/child-delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -2847,13 +2887,17 @@ router.post('/budgetLines/:id/child-delete', async (req, res) => {
     const all = await getAllForCollection('budgetLines');
     const child = all.find(l => l.id === itemId);
     if (!child || child.parentId == null) throw new HttpError(404, 'Không tìm thấy mục sử dụng');
-    const parent = all.find(l => l.id === child.parentId);
-    if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
-    await deleteRecordForCollection('budgetLines', itemId,
-      (item) => recordActions.assertCanDeleteBudgetLineChild(freshUser, item, parent),
-      { username: freshUser.username, name: freshUser.name });
-    const parentAfter = await withLockedRecordForCollection('budgetLines', parent.id, (item, children) =>
-      recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
+    const parentId = child.parentId;
+    const parentAfter = await withAppLock(`budget_line_used_parent:${parentId}`, async () => {
+      const allLocked = await getAllForCollection('budgetLines');
+      const parent = allLocked.find(l => l.id === parentId);
+      if (!parent) throw new HttpError(404, 'Không tìm thấy dòng Sử Dụng cha');
+      await deleteRecordForCollection('budgetLines', itemId,
+        (item) => recordActions.assertCanDeleteBudgetLineChild(freshUser, item, parent),
+        { username: freshUser.username, name: freshUser.name });
+      return withLockedRecordForCollection('budgetLines', parent.id, (item, children) =>
+        recordActions.recomputeBudgetLineUsageStatus(item, children), { childrenByColumn: 'ParentId' });
+    });
     res.json({ ok: true, parentItem: parentAfter });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/child-delete`, err); }
 });
@@ -3217,23 +3261,28 @@ router.post('/operationWorkItems/:id/accept', async (req, res) => {
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/accept`, err); }
 });
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): trước đây route này đọc item qua
+// getAllWorkItems() THƯỜNG (không khoá) rồi mới xác thực + DELETE ở 2 bước tách rời, khác /progress và
+// /accept (đều khoá xuyên suốt qua withLockedWorkItemById()) — 1 yêu cầu "Nghiệm thu" commit đúng lúc
+// giữa 2 bước có thể khiến công việc ĐÃ NGHIỆM THU XONG vẫn bị xoá. Nay dùng withLockedWorkItemByIdForDelete()
+// (lib/operationWorkItemStore.js) — khoá UPDLOCK/HOLDLOCK dòng gốc, đọc lại descendantIds/sourceRecord
+// MỚI NHẤT bên trong, rồi DELETE cả nhánh NGAY TRONG CÙNG 1 giao dịch với bước đọc-kiểm tra.
 router.post('/operationWorkItems/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const all = await getAllWorkItems();
-    const item = all.find(w => w.id === itemId);
-    if (!item) return res.status(404).json({ error: 'Không tìm thấy công việc' });
-    const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
-    const sourceRecord = await getOperationWorkItemSourceRecord(item);
-    const idsToDelete = recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecord);
-    // 1 câu DELETE...WHERE Id IN (...) duy nhất (atomic) thay vì vòng lặp nhiều câu DELETE riêng lẻ —
-    // xem giải thích đầy đủ ở deleteWorkItemsByIds() (lib/operationWorkItemStore.js).
-    await deleteWorkItemsByIds(idsToDelete);
+    let capturedItem = null;
+    const { idsDeleted } = await withLockedWorkItemByIdForDelete(itemId, async (item) => {
+      capturedItem = item;
+      const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
+      const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
+      const sourceRecord = await getOperationWorkItemSourceRecord(item);
+      return recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecord);
+    });
     // VHST-5: dọn sạch dependsOnWorkItemIds[] ở các công việc KHÁC còn lại có trỏ tới (nhánh) vừa xoá.
-    await cleanupOperationWorkItemDependenciesOnDelete(idsToDelete, item.sourceType, item.sourceId);
-    await syncOperationWorkItemAncestors(item.parentWorkItemId, item.sourceType, item.sourceId);
+    await cleanupOperationWorkItemDependenciesOnDelete(idsDeleted, capturedItem.sourceType, capturedItem.sourceId);
+    await syncOperationWorkItemAncestors(capturedItem.parentWorkItemId, capturedItem.sourceType, capturedItem.sourceId);
     res.json({ ok: true });
   } catch (err) { handleError(res, `operationWorkItems/${req.params.id}/delete`, err); }
 });
@@ -3801,6 +3850,13 @@ async function syncOffboardingToAttendanceAndLeave(hrProcessItem, routeLabel) {
 async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel) {
   if (!hrProcessItem || hrProcessItem.processType !== 'OFFBOARDING' || !hrProcessItem.successorUsername) return;
   try {
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): TRƯỚC ĐÂY chỉ chuyển giao cấp
+    // dưới đang có managerUsername === employeeUsername — gán lại người kế nhiệm LẦN 2 (sửa lựa chọn sai)
+    // không cascade được cho cấp dưới đã bị chuyển sang NGƯỜI KẾ NHIỆM ĐẦU TIÊN ở lần gán trước (không
+    // còn === employeeUsername nữa). Mirror ĐÚNG item.priorSuccessorUsernames vừa ghi ở assignHrSuccessor()
+    // (lib/recordActions.js) — chuyển giao BẤT KỲ cấp dưới nào đang trỏ về employeeUsername GỐC hoặc BẤT
+    // KỲ successor cũ nào đã từng gán trước đó.
+    const staleManagerUsernames = new Set([hrProcessItem.employeeUsername, ...(hrProcessItem.priorSuccessorUsernames || [])]);
     await withLockedAppDataValue('users', (list) => {
       let changed = false;
       const updated = (list || []).map(u => {
@@ -3810,7 +3866,7 @@ async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel)
         // dò vòng lặp phức tạp hơn sau khi đổi hàng loạt — khớp đúng cách lib/orgChart.js đã dùng hàm đó
         // sau applyManagerUsernameUpdates(). Loại trừ successor khỏi diện bị đổi managerUsername + xác
         // thực lại TOÀN BỘ danh sách sau khi đổi.
-        if (u.active !== false && u.username !== hrProcessItem.successorUsername && u.managerUsername === hrProcessItem.employeeUsername) {
+        if (u.active !== false && u.username !== hrProcessItem.successorUsername && staleManagerUsernames.has(u.managerUsername)) {
           changed = true;
           return { ...u, managerUsername: hrProcessItem.successorUsername };
         }
@@ -4487,27 +4543,42 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
   }
 });
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): bước "kích hoạt" + bước "đóng hợp
+// đồng ACTIVE KHÁC của CÙNG nhân viên" TRƯỚC ĐÂY là 2 lượt khoá bản ghi TÁCH RỜI (khoá-rồi-nhả, đọc lại
+// toàn bộ collection, khoá tiếp) — không có khoá nào bọc quanh TOÀN BỘ chuỗi "đọc-kiểm tra-ghi" như
+// car_plate:/meeting_room:/payment_source: đã áp dụng ở nơi khác. Kích hoạt gần như đồng thời 2 hợp đồng
+// DRAFT khác nhau của CÙNG 1 nhân viên (VD nhân viên có 2 hợp đồng nháp do soạn nhầm) khiến mỗi request
+// đọc snapshot "hợp đồng KIA vừa active xong" ở bước 2 của MÌNH rồi đóng NHẦM nó thành SUPERSEDED — có
+// thể kết thúc với CẢ HAI hợp đồng đều SUPERSEDED, nhân viên mất hợp đồng ACTIVE (vỡ payroll/self-view).
+// Bọc cả 2 bước trong 1 withAppLock() theo employeeCode để tuần tự hoá hoàn toàn giữa các lượt kích hoạt
+// của cùng 1 nhân viên — đọc trước employeeCode (không cần khoá) chỉ để dựng đúng tên khoá.
 router.post('/laborContracts/:id/activate', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     assertContractManage(freshUser);
-    const result = await withLockedRecordForCollection('laborContracts', itemId, (item) =>
-      laborContract.applyActivateManual(item, freshUser.username));
-    // Đóng hợp đồng ACTIVE KHÁC (nếu có, VD hợp đồng tạo tay hoàn toàn ngoài luồng Onboarding) của CÙNG
-    // nhân viên thành SUPERSEDED — đảm bảo bất biến "chỉ 1 hợp đồng ACTIVE/nhân viên" cho cron cảnh báo
-    // hết hạn (jobs/laborContractExpiryReminder.js) không bị nhầm lẫn nhiều hợp đồng active cùng lúc.
-    const allContracts = await getAllForCollection('laborContracts');
-    const otherActive = allContracts.find(c => c.id !== itemId && c.employeeCode === result.employeeCode && c.status === 'ACTIVE');
-    if (otherActive) {
-      await withLockedRecordForCollection('laborContracts', otherActive.id, (item) => {
-        item.status = 'SUPERSEDED';
-        item.history.push({ action: 'SUPERSEDED', by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN'), detail: `Tự đóng do hợp đồng ${result.code} được kích hoạt` });
-        item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
-        return item;
-      });
-    }
+    const peekList = await getAllForCollection('laborContracts');
+    const peekTarget = peekList.find(c => c.id === itemId);
+    if (!peekTarget) throw new HttpError(404, 'Không tìm thấy hợp đồng lao động');
+    const result = await withAppLock(`labor_contract_activate:${peekTarget.employeeCode}`, async () => {
+      const activated = await withLockedRecordForCollection('laborContracts', itemId, (item) =>
+        laborContract.applyActivateManual(item, freshUser.username));
+      // Đóng hợp đồng ACTIVE KHÁC (nếu có, VD hợp đồng tạo tay hoàn toàn ngoài luồng Onboarding) của CÙNG
+      // nhân viên thành SUPERSEDED — đảm bảo bất biến "chỉ 1 hợp đồng ACTIVE/nhân viên" cho cron cảnh báo
+      // hết hạn (jobs/laborContractExpiryReminder.js) không bị nhầm lẫn nhiều hợp đồng active cùng lúc.
+      const allContracts = await getAllForCollection('laborContracts');
+      const otherActive = allContracts.find(c => c.id !== itemId && c.employeeCode === activated.employeeCode && c.status === 'ACTIVE');
+      if (otherActive) {
+        await withLockedRecordForCollection('laborContracts', otherActive.id, (item) => {
+          item.status = 'SUPERSEDED';
+          item.history.push({ action: 'SUPERSEDED', by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN'), detail: `Tự đóng do hợp đồng ${activated.code} được kích hoạt` });
+          item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
+          return item;
+        });
+      }
+      return activated;
+    });
     logLaborContractAction(req, freshUser, 'ACTIVATE', result.code || String(itemId), `Kích hoạt hợp đồng lao động [${result.code || itemId}]`);
     res.json({ ok: true, item: result });
   } catch (err) {

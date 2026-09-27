@@ -8,7 +8,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 const employeeProfile = require('../lib/employeeProfile');
-const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS } = require('../lib/recordViewScope');
+const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
 const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS } = require('../lib/workflowEngine');
 const { insertSystemLog } = require('../lib/systemLogStore');
 // assertPayloadFileUrlsOwnedByUser() — vá lỗ hổng giả mạo quyền sở hữu file (rà soát bảo mật 9/2026,
@@ -104,8 +104,16 @@ router.post('/:module', async (req, res) => {
 
     // Khối 0: chặn TẠO MỚI nếu module này đang bị tắt moduleAccess cho user — xem chú thích
     // COLLECTION_TO_MODULE_ACCESS_KEY ở đầu file.
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): itPriceApprovals vẫn tra CỨNG theo
+    // 'itSupport' bất kể priceType — người chỉ có moduleAccess.muaHang (Bán Lẻ)/vanHanh (Bán Buôn), đúng
+    // thiết kế MỚI sau đợt tách Item2, bị chặn tạo mới dù đủ quyền chi tiết itPriceProposeCreateRetail/
+    // Wholesale. Mirror ĐÚNG khuôn canAccessHrFeedbackModuleServer() — xem canAccessItPriceApprovalModuleServer()
+    // (lib/recordViewScope.js).
     const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[moduleKey];
-    if (moduleAccessKey && !hasModuleAccessServer(freshUser, moduleAccessKey)) {
+    const moduleAccessOk = moduleKey === 'itPriceApprovals'
+      ? canAccessItPriceApprovalModuleServer(freshUser, req.body?.priceType)
+      : (!moduleAccessKey || hasModuleAccessServer(freshUser, moduleAccessKey));
+    if (!moduleAccessOk) {
       return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
     }
 

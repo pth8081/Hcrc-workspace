@@ -949,6 +949,16 @@ const CREATE_MODULE_CONFIGS = {
       // amount khống (số lớn hơn nhiều, hoặc âm) vẫn được lưu y nguyên. Tính lại từ items ở đây (không
       // tin số amount client gửi) khi có items; luôn chặn amount âm cho cả 2 nhánh (Mua Sắm/Sửa Chữa-
       // Đầu Tư, nhánh sau nhập tay 1 ô số nên parseFloat vẫn cho ra số âm bình thường).
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình-Cao): cơ chế "tính lại amount
+      // từ items, không tin số client gửi" ngay dưới đây trước đây CHỈ áp dụng khi payload.items là mảng
+      // KHÔNG RỖNG — không có nhánh nào bắt buộc subType==='MUA_BAN' phải có items, khác hẳn operationOrders
+      // (module rất giống, cùng đợt vá) đã bắt buộc validItems.length>0 ở trên. Gửi thẳng items:[] (hoặc
+      // bỏ hẳn field) kèm subType 'MUA_BAN' vẫn lọt qua nhánh else, tin nguyên payload.amount client gửi —
+      // y hệt lỗ hổng "tin amount client gửi" mà chính đoạn code này tuyên bố đã vá. Bắt buộc >=1 hạng mục
+      // hợp lệ cho ĐÚNG subType 'MUA_BAN' (Sửa Chữa/Đầu Tư không có bảng hạng mục, giữ nguyên nhánh else).
+      if (payload.subType === 'MUA_BAN' && (!Array.isArray(payload.items) || !payload.items.length)) {
+        throw new CreateError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ');
+      }
       if (Array.isArray(payload.items) && payload.items.length) {
         payload.items = payload.items.map(it => {
           const qty = Number(it?.qty) || 0;

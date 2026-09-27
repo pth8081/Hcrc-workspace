@@ -162,6 +162,49 @@ async function withLockedWorkItemById(id, mutatorFn) {
   }
 }
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): POST /operationWorkItems/:id/delete
+// (routes/records.js) trước đây đọc item qua SELECT thường (không khoá) rồi xác thực + DELETE ở 2 bước
+// TÁCH RỜI, không giống /progress và /accept (đều đi qua withLockedWorkItemById() ở trên, UPDLOCK/HOLDLOCK
+// suốt cả bước đọc-kiểm tra-ghi). Nếu 1 yêu cầu "Nghiệm thu" (nghiệm thu -> DA_NGHIEM_THU) commit ĐÚNG
+// LÚC giữa bước đọc và bước DELETE của route xoá, 1 công việc ĐÃ NGHIỆM THU XONG (bất biến "không xoá
+// được") vẫn có thể bị xoá. Hàm dưới đây khoá + đọc lại ĐÚNG dòng gốc (UPDLOCK/HOLDLOCK, cùng khuôn
+// withLockedWorkItemById()) rồi DELETE cả nhánh (gốc + toàn bộ con cháu) NGAY TRONG CÙNG 1 giao dịch —
+// `computeIdsToDeleteFn(item)` (async, có thể throw HttpError nếu không hợp lệ) nhận item GỐC vừa đọc lại
+// mới nhất để tự quyết định danh sách id cần xoá (bao gồm cả tra descendant/quyền — logic nghiệp vụ vẫn ở
+// lib/recordActions.js deleteOperationWorkItem(), hàm này chỉ lo đúng phần khoá+xoá atomic).
+async function withLockedWorkItemByIdForDelete(rootId, computeIdsToDeleteFn) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq
+      .input('id', sql.BigInt, rootId)
+      .query('SELECT Payload FROM dbo.OperationWorkItems WITH (UPDLOCK, HOLDLOCK) WHERE Id = @id');
+    if (readResult.recordset.length === 0) {
+      throw new HttpError(404, 'Không tìm thấy công việc');
+    }
+    const item = toWorkItem(readResult.recordset[0]);
+    const idsToDelete = await computeIdsToDeleteFn(item);
+    const list = Array.from(new Set((idsToDelete || []).map(Number).filter(Number.isFinite)));
+    if (list.length) {
+      const delReq = new sql.Request(tx);
+      const params = list.map((id, i) => {
+        const p = `id${i}`;
+        delReq.input(p, sql.BigInt, id);
+        return `@${p}`;
+      });
+      await delReq.query(`DELETE FROM dbo.OperationWorkItems WHERE Id IN (${params.join(',')})`);
+    }
+    await tx.commit();
+    invalidateWorkItemsCache();
+    return { item, idsDeleted: list };
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 // Xoá 1 work item — KHÔNG cascade ở đây (cascade cả cây con là quyết định nghiệp vụ, xử lý ở
 // lib/recordActions.js deleteOperationWorkItem() nơi có đủ ngữ cảnh quyền/toàn bộ cây).
 async function deleteWorkItemById(id) {
@@ -192,7 +235,7 @@ async function deleteWorkItemsByIds(ids) {
 
 module.exports = {
   getAllWorkItems, getAllWorkItemsCached, getWorkItemsBySource,
-  insertWorkItem, withLockedWorkItemById, deleteWorkItemById, deleteWorkItemsByIds, invalidateWorkItemsCache,
+  insertWorkItem, withLockedWorkItemById, withLockedWorkItemByIdForDelete, deleteWorkItemById, deleteWorkItemsByIds, invalidateWorkItemsCache,
   // Export riêng cho seedDefaults.js gọi 1 LẦN lúc khởi động — in cảnh báo RÕ RÀNG ra console ngay khi
   // server bật lên (cùng khuôn cảnh báo DB_ENCRYPT/LOG_ENCRYPTION_KEY ở db.js) thay vì phải đợi 1 người
   // dùng thật bấm "Lưu Công Việc" rồi mới lộ ra qua toast lỗi.

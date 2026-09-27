@@ -99,6 +99,18 @@ stubModule('lib/recordStore', {
   },
   withAppLock: async (key, fn) => withFakeAppLock(key, fn)
 });
+// LỖI ĐÃ VÁ (đợt vá 11 lỗi rà soát 8-agent, 9/2026): /contracts/:id/start-payment và
+// /officeReqs/:id/start-payment nay đọc thêm getAllAppData() (Fix #2 — áp dụng "Nhóm Phê Duyệt Cuối"
+// PAYMENT cho cả 3 lối tạo đề nghị thanh toán tự động, không chỉ lối tạo thủ công) — KHÔNG stub thì
+// getAllAppData() rơi về bản thật (lib/appData.js), cố kết nối SQL Server thật và luôn lỗi 500 trong môi
+// trường test không có DB — mirror stub `lib/appData` như test-labor-contract-code-race.js/
+// test-operation-order-po-race.js. Rỗng extraApprovalGroups_PAYMENT/extraApprovalLevels_PAYMENT là ĐỦ để
+// applyExtraApprovalSelectionForPaymentStart() (lib/recordActions.js) tự return sớm, giữ nguyên hành vi
+// race-condition đang test ở đây (không liên quan Nhóm Phê Duyệt Cuối).
+stubModule('lib/appData', {
+  getAllAppData: async () => ({ users: USERS }),
+  withLockedAppDataValue: async (key, fn) => fn([])
+});
 stubModule('lib/auth', {
   requireAuth: (req, res, next) => {
     const username = req.headers['x-test-user'];

@@ -90,7 +90,7 @@ function getMyPendingApprovals(user) {
     });
   }
 
-  addDeptWorkflowItems(DB.docs, doc => DB.deptWorkflows[doc.dept], {
+  addDeptWorkflowItems(DB.docs, doc => resolveDocWorkflowConfigForItemClient(doc), {
     type: 'doc', typeLabel: '📂 Tài liệu',
     codeOf: r => r.displayCode || r.code, titleOf: r => r.title,
     actionsOf: r => [
@@ -105,7 +105,7 @@ function getMyPendingApprovals(user) {
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openProcessSubmissionModal', args: [r.id], primary: true }]
   });
 
-  addDeptWorkflowItems(DB.carRegs, c => DB.carDeptWorkflows[c.dept], {
+  addDeptWorkflowItems(DB.carRegs, c => resolveCarWorkflowConfigForItemClient(c), {
     type: 'car', typeLabel: '🚗 Đăng ký xe',
     codeOf: r => r.code, titleOf: r => r.destination,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openCarProcessModal', args: [r.id], primary: true }]
@@ -115,15 +115,14 @@ function getMyPendingApprovals(user) {
     { subType: 'MUA_BAN', type: 'officeBuy', typeLabel: '🛒 Mua Bán' },
     { subType: 'SUA_CHUA', type: 'officeFix', typeLabel: '🔧 Sửa Chữa' }
   ].forEach(({ subType, type, typeLabel }) => {
-    const wfMap = getOfficeWorkflowMap(subType);
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
-    addDeptWorkflowItems(subTypeReqs, o => wfMap[o.dept], {
+    addDeptWorkflowItems(subTypeReqs, o => resolveOfficeWorkflowConfigForItemClient(o), {
       type, typeLabel, codeOf: r => r.code, titleOf: r => r.title,
       actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openOfficeProcessModal', args: [r.id], primary: true }]
     });
   });
 
-  addDeptWorkflowItems(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], {
+  addDeptWorkflowItems(DB.vppRegistrations, r => resolveVppWorkflowConfigForItemClient(r), {
     type: 'vpp', typeLabel: '🖇️ Văn phòng phẩm',
     codeOf: r => r.code, titleOf: r => r.periodName || r.code,
     actionsOf: r => [{ label: '✍️ Xử lý / Duyệt', fn: 'openVppRegModal', args: [r.id], primary: true }]
@@ -370,7 +369,7 @@ function findPendingApprovalsForUsername(username) {
     });
   }
 
-  scan(DB.docs, doc => DB.deptWorkflows[doc.dept], {
+  scan(DB.docs, doc => resolveDocWorkflowConfigForItemClient(doc), {
     typeLabel: '📂 Tài liệu', codeOf: r => r.displayCode || r.code, titleOf: r => r.title
   });
 
@@ -378,7 +377,7 @@ function findPendingApprovalsForUsername(username) {
     typeLabel: '📜 Văn bản trình', codeOf: r => r.code, titleOf: r => r.title
   });
 
-  scan(DB.carRegs, c => DB.carDeptWorkflows[c.dept], {
+  scan(DB.carRegs, c => resolveCarWorkflowConfigForItemClient(c), {
     typeLabel: '🚗 Đăng ký xe', codeOf: r => r.code, titleOf: r => r.destination
   });
 
@@ -386,12 +385,11 @@ function findPendingApprovalsForUsername(username) {
     { subType: 'MUA_BAN', typeLabel: '🛒 Văn Phòng Tổng Hợp - Mua Bán' },
     { subType: 'SUA_CHUA', typeLabel: '🔧 Văn Phòng Tổng Hợp - Sửa Chữa' }
   ].forEach(({ subType, typeLabel }) => {
-    const wfMap = getOfficeWorkflowMap(subType);
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
-    scan(subTypeReqs, o => wfMap[o.dept], { typeLabel, codeOf: r => r.code, titleOf: r => r.title });
+    scan(subTypeReqs, o => resolveOfficeWorkflowConfigForItemClient(o), { typeLabel, codeOf: r => r.code, titleOf: r => r.title });
   });
 
-  scan(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], {
+  scan(DB.vppRegistrations, r => resolveVppWorkflowConfigForItemClient(r), {
     typeLabel: '🖇️ Văn phòng phẩm', codeOf: r => r.code, titleOf: r => r.periodName || r.code
   });
 

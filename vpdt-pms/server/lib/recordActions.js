@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -602,6 +602,10 @@ function editOfficeReqDraft(payload, user, item, appData) {
   // Khớp đúng luật tính lại amount từ items ở createValidation.js CREATE_MODULE_CONFIGS.officeReqs
   // (không tin amount client tự tính) — chỉ áp dụng nhánh "Mua Sắm" (có items), nhánh Sửa Chữa/Đầu Tư
   // nhập tay 1 ô số vẫn phải chặn âm.
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình-Cao): cùng lỗ hổng vừa vá ở lúc TẠO
+  // (createValidation.js CREATE_MODULE_CONFIGS.officeReqs) — sửa & gửi lại (REQUEST_CHANGES) trước đây
+  // cho phép xoá hết items rồi gửi thẳng payload.amount (nhánh else) hoặc gửi items:[] rỗng, tin nguyên
+  // số tiền client tự khai cho 1 phiếu "Mua Sắm" (subType MUA_BAN) vốn LUÔN phải tính từ items.
   if (payload.items !== undefined) {
     const validItems = (Array.isArray(payload.items) ? payload.items : []).map(it => {
       const qty = Number(it?.qty) || 0;
@@ -609,9 +613,15 @@ function editOfficeReqDraft(payload, user, item, appData) {
       if (qty < 0 || unitPrice < 0) throw new HttpError(400, `Hạng mục "${it?.name || ''}": Số lượng/Đơn giá không được là số âm`);
       return { ...it, qty, unitPrice, amount: qty * unitPrice };
     });
+    if (item.subType === 'MUA_BAN' && !validItems.length) {
+      throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ');
+    }
     item.items = validItems;
     item.amount = validItems.reduce((sum, it) => sum + it.amount, 0);
   } else if (payload.amount !== undefined) {
+    if (item.subType === 'MUA_BAN') {
+      throw new HttpError(400, 'Vui lòng nhập ít nhất 1 hạng mục hợp lệ');
+    }
     item.amount = Number(payload.amount) || 0;
   }
   if (item.amount < 0) throw new HttpError(400, 'Dự toán/Tổng chi phí không được là số âm');
@@ -1925,7 +1935,38 @@ function normalizePaymentRequestFiles(raw) {
 // nghị ở trạng thái DRAFT (số tiền từng đợt CHƯA bắt buộc — chỉ bắt buộc khi bấm "Chuyển Xác Nhận Thanh
 // Toán", xem submitPaymentRequest() bên dưới), rồi điều hướng người dùng sang sub-tab "🗂️ Quản Lý Thanh
 // Toán" để tự lập/sửa các đợt thanh toán trước khi gửi duyệt.
-function startContractPayment(user, contract, overrides, allPaymentRequests) {
+// "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): đề nghị
+// thanh toán TỰ SINH từ Hợp đồng/Mua Bán/Sửa Chữa (startContractPayment()/startOfficePayment() bên dưới)
+// tạo thẳng qua createForCollection() (routes/records.js createPaymentRequestsFromDraft()), KHÔNG đi qua
+// CREATE_MODULE_CONFIGS.paymentRequests.extraValidate() (lib/createValidation.js — chỉ chạy cho nhánh tạo
+// THỦ CÔNG qua POST /api/create/paymentRequests) nên trước đây KHÔNG BAO GIỜ có extraApprovalLevel/
+// extraApprovalLayers dù admin đã cấu hình "Nhóm Phê Duyệt Cuối" cho PAYMENT — tính năng coi như "chết"
+// với đúng use-case chính (executive cấp cao, thường không nằm trong bất kỳ paymentDeptWorkflows[dept]
+// nào). `overrides` giờ CÓ THỂ mang thêm approvalLevel/selectedExtraApprovalLayerKeys/
+// selectedExtraApprovalLayerMembers (client gửi từ "➕ Tạo Mới" > module Thanh Toán, chọn Loại Đề Nghị có
+// nguồn — xem module-thanhtoan.js submitManualPaymentRequest(), route /paymentRequests/from-source) — xử
+// lý CHUNG cho cả 2 nguồn (Hợp đồng/officeReqs) ở đây, tránh trùng lặp logic.
+//
+// 2 nút TẮT ("🧾 Lập Thanh Toán"/"💰 Chuyển Sang Thanh Toán" ngay tại Hợp đồng/officeReqs, không đi qua
+// form nào) KHÔNG có cách nào thu thập lựa chọn — nếu tính năng đang BẬT cho PAYMENT, chặn hẳn 2 nút này
+// (thay vì âm thầm bỏ qua như trước) và hướng người dùng sang "➕ Tạo Mới" (đã có đủ UI chọn lựa) thay vì
+// cho tạo NHÁP thiếu lựa chọn rồi không có chỗ nào để bổ sung lại.
+function applyExtraApprovalSelectionForPaymentStart(base, overrides, appData) {
+  if (!appData) return;
+  const groups = appData.extraApprovalGroups_PAYMENT || [];
+  const levels = appData.extraApprovalLevels_PAYMENT || [];
+  if (!groups.length || !levels.length) return;
+  if (!overrides?.approvalLevel) {
+    throw new HttpError(409, 'Quy trình Thanh Toán đang bật "Nhóm Phê Duyệt Cuối" — vui lòng dùng "➕ Tạo Mới" trong module Thanh Toán (chọn đúng Loại Đề Nghị) để chọn Cấp/Nhóm phê duyệt cuối cùng trước khi chuyển sang thanh toán, thay vì bấm nút này.');
+  }
+  const extraApproval = prepareExtraApprovalSelectionForCreate('PAYMENT', overrides, appData);
+  if (extraApproval) {
+    base.extraApprovalLevel = extraApproval.extraApprovalLevel;
+    base.extraApprovalLayers = extraApproval.extraApprovalLayers;
+  }
+}
+
+function startContractPayment(user, contract, overrides, allPaymentRequests, appData) {
   // Phụ lục có thể phát sinh thanh toán riêng (VD bổ sung khối lượng/giá trị) — chuyển sang thanh toán
   // độc lập với hợp đồng gốc, sourceId/sourceCode dưới đây luôn theo ĐÚNG bản ghi (gốc hay phụ lục)
   // đang gọi hàm này, nên "Xác nhận đề nghị thanh toán" hiện đúng 2 dòng tách biệt khi cả 2 cùng có đợt
@@ -1978,6 +2019,7 @@ function startContractPayment(user, contract, overrides, allPaymentRequests) {
     customData: overrides?.customData || null,
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
+  applyExtraApprovalSelectionForPaymentStart(base, overrides, appData);
   // "Thanh toán 1 lần" (ONE_TIME) — GIỮ NGUYÊN 100% hành vi cũ: 1 bản ghi duy nhất, 1 bộ "Hồ Sơ Đề Nghị
   // Thanh Toán" chung, xác nhận lump-sum 1 lần cho toàn bộ các đợt (xem confirmPaymentRequestLumpSum()).
   if (base.sourcePaymentType === 'ONE_TIME') {
@@ -2082,7 +2124,7 @@ function uploadOfficeSignedFile(payload, user, item, allPaymentRequests) {
 }
 
 // overrides — cùng ý nghĩa như startContractPayment() ở trên (skipManageGate bỏ qua canManageOfficePayment()).
-function startOfficePayment(user, item, overrides, allPaymentRequests) {
+function startOfficePayment(user, item, overrides, allPaymentRequests, appData) {
   if (!overrides?.skipManageGate && !canManageOfficePayment(user, item)) throw new HttpError(403, 'Bạn không có quyền chuyển đề xuất này sang thanh toán');
   if (!item.signedFileUrl) throw new HttpError(409, 'Cần tải lên Tài liệu ký trước khi chuyển sang thanh toán');
   // v15.8: paymentStatus giờ chỉ đổi SAU khi duyệt xong (không còn ngay lúc tạo NHÁP ở dưới) — thêm điều
@@ -2108,6 +2150,7 @@ function startOfficePayment(user, item, overrides, allPaymentRequests) {
     customData: overrides?.customData || null,
     createdBy: user.username, createdByName: user.name, createdAt: nowVN()
   };
+  applyExtraApprovalSelectionForPaymentStart(base, overrides, appData);
   return splitPaymentDraftsByInstallment(base, installments);
 }
 
@@ -3897,7 +3940,7 @@ function cancelVppRegistration(user, item, payload) {
 
 // period: bản ghi kỳ đăng ký tương ứng item.periodId — CALLER (routes/records.js) tự đọc trước rồi
 // truyền vào (hàm này không tự đọc DB, giữ đúng nguyên tắc chung — xem đầu file lib/createValidation.js).
-function updateVppRegistrationDraft(user, item, payload, period, excludedJobTitles) {
+function updateVppRegistrationDraft(user, item, payload, period, excludedJobTitles, appData) {
   if (item.creator !== user.username) throw new HttpError(403, 'Chỉ người tạo đăng ký mới được sửa hồ sơ này');
   // Cùng 2 điều kiện với lúc TẠO/GỬI — xem assertCanStillRegisterVpp() ở trên (LỖI ĐÃ VÁ 10/2026).
   assertCanStillRegisterVpp(user, excludedJobTitles);
@@ -3909,6 +3952,19 @@ function updateVppRegistrationDraft(user, item, payload, period, excludedJobTitl
     throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc, không thể sửa đăng ký nữa');
   }
   item.items = validateVppRegItems(payload.items, period.catalogItems);
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung
+  // bình): sửa NHÁP trước đây chỉ đụng item.items — đổi lựa chọn Cấp/Nhóm phê duyệt cuối ở nháp đã có
+  // (VD bật tính năng sau khi nháp đã tạo, hoặc đổi ý muốn thêm/bớt lớp duyệt) bị ÂM THẦM BỎ QUA. Xử lý
+  // giống hệt lúc TẠO — chỉ ghi đè khi payload thật sự gửi approvalLevel (client gửi field này khi mount
+  // hiện lựa chọn, xem readSelectedExtraApprovalLayers() ở public/js/core.js); không đụng gì nếu module
+  // chưa cấu hình đủ (prepareExtraApprovalSelectionForCreate trả null, giữ nguyên field cũ 100%).
+  if (payload.approvalLevel !== undefined && appData) {
+    const extraApproval = prepareExtraApprovalSelectionForCreate('VPP', payload, appData);
+    if (extraApproval) {
+      item.extraApprovalLevel = extraApproval.extraApprovalLevel;
+      item.extraApprovalLayers = extraApproval.extraApprovalLayers;
+    }
+  }
   return item;
 }
 
@@ -6209,6 +6265,17 @@ function assignHrSuccessor(user, item, body, usersList) {
   if (successorUsername === item.employeeUsername) throw new HttpError(400, 'Người kế nhiệm không thể là chính nhân viên đang nghỉ việc');
   const successor = (usersList || []).find(u => u.username === successorUsername && u.active !== false);
   if (!successor) throw new HttpError(400, 'Không tìm thấy tài khoản người kế nhiệm này (hoặc đã bị khoá)');
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): gán lại người kế nhiệm LẦN 2 (sửa
+  // lựa chọn sai) trước đây chỉ ghi đè item.successorUsername — syncManagerUsernameOnSuccessorAssigned()
+  // (routes/records.js) chỉ chuyển giao cấp dưới đang có managerUsername === employeeUsername, nhưng SAU
+  // LẦN GÁN ĐẦU, cấp dưới đã có managerUsername = NGƯỜI KẾ NHIỆM ĐẦU TIÊN rồi (không còn === employeeUsername
+  // nữa) nên lần gán thứ 2 không cascade được — cấp dưới vẫn báo cáo về người kế nhiệm SAI. Lưu lại MỌI
+  // successorUsername đã từng gán (kể cả bị thay) để lần gán sau vẫn nhận diện được cấp dưới đang trỏ về
+  // BẤT KỲ successor cũ nào, không chỉ employeeUsername gốc.
+  const priorSuccessor = item.successorUsername;
+  if (priorSuccessor && priorSuccessor !== successor.username) {
+    item.priorSuccessorUsernames = [...new Set([...(item.priorSuccessorUsernames || []), priorSuccessor])];
+  }
   item.successorUsername = successor.username;
   item.successorName = successor.name || successor.username;
   item.history.push({

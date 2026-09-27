@@ -144,11 +144,13 @@ function onPaymentSourceTypeChange() {
   document.getElementById('paymentSourceRecord').value = '';
   document.getElementById('paymentTitle').value = '';
   renderPaymentCreateInstallmentsList([]);
-  // "Nhóm Phê Duyệt Cuối" (10/2026) — CHỈ áp dụng cho đề nghị Thủ công (xem chú thích ở
-  // submitManualPaymentRequest()) — ẩn hẳn khối UI khi đang chọn nguồn Hợp Đồng/Mua Bán/Sửa Chữa.
-  const mount = document.getElementById('extraApprovalMount_PAYMENT');
-  if (mount) mount.innerHTML = '';
-  if (sourceType === 'MANUAL') renderExtraApprovalMount('PAYMENT', 'extraApprovalMount_PAYMENT');
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): TRƯỚC
+  // ĐÂY chỉ hiện cho đề nghị Thủ công — đề nghị có nguồn (Hợp Đồng/Mua Bán/Sửa Chữa) tạo qua "➕ Tạo Mới"
+  // không có cách nào chọn Cấp/Nhóm phê duyệt cuối cùng dù admin đã bật tính năng, khiến field này KHÔNG
+  // BAO GIỜ được đông cứng cho các đề nghị có nguồn tạo qua form này. Nay hiện mount cho MỌI sourceType —
+  // isExtraApprovalEnabledFor('PAYMENT') (bên trong renderExtraApprovalMount()) tự no-op an toàn nếu admin
+  // chưa cấu hình đủ groups+levels, không đổi hành vi khi tính năng chưa bật.
+  renderExtraApprovalMount('PAYMENT', 'extraApprovalMount_PAYMENT');
 }
 
 function onPaymentSourceRecordChange() {
@@ -211,10 +213,12 @@ async function submitManualPaymentRequest(e) {
     }
   }
 
-  // "Nhóm Phê Duyệt Cuối" (10/2026) — CHỈ áp dụng cho đề nghị tạo THỦ CÔNG (sourceType MANUAL, đi qua
-  // /api/create/paymentRequests) — đề nghị tự sinh từ Hợp Đồng/Mua Bán/Sửa Chữa (startContractPayment()/
-  // startOfficePayment() ở lib/recordActions.js) đi đường tạo KHÁC, chưa áp dụng tính năng này.
-  const extraApproval = sourceType === 'MANUAL' ? readSelectedExtraApprovalLayers('PAYMENT') : { approvalLevel: null };
+  // "Nhóm Phê Duyệt Cuối" (10/2026) — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): trước
+  // đây CHỈ áp dụng cho đề nghị tạo THỦ CÔNG — đề nghị có nguồn (Hợp Đồng/Mua Bán/Sửa Chữa, tạo qua
+  // /api/records/paymentRequests/from-source) đi đường tạo KHÁC, KHÔNG hề gửi lựa chọn lên dù mount đã
+  // hiện (xem onPaymentSourceTypeChange()) — nay đọc chung cho MỌI sourceType, server
+  // (applyExtraApprovalSelectionForPaymentStart(), lib/recordActions.js) tự xử lý đúng theo route.
+  const extraApproval = readSelectedExtraApprovalLayers('PAYMENT');
   const extraApprovalFields = extraApproval.approvalLevel !== null ? {
     approvalLevel: extraApproval.approvalLevel,
     selectedExtraApprovalLayerKeys: extraApproval.selectedLayerKeys,
@@ -248,7 +252,7 @@ async function submitManualPaymentRequest(e) {
         newPrs = [result.item];
       }
     } else {
-      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments, requestFiles, customData });
+      const result = await callCreatePaymentRequestFromSource({ sourceModule: sourceType, sourceId, title, installments, requestFiles, customData, ...extraApprovalFields });
       newPrs = result.paymentRequests || (result.paymentRequest ? [result.paymentRequest] : []);
       updatedSourceItem = result.item;
     }

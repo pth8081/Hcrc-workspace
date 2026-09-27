@@ -549,6 +549,14 @@ function filterBudgetEntriesForUser(entries, user, appData) {
 function canViewBudgetLine(user, item) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate || user.perms?.budgetReportView) return true;
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): thiếu nhánh "chính người tạo" mà
+  // MỌI hàm canView* chị em khác đều có (canViewOfficeReq/canViewCarReg/canViewVppRegistration/...).
+  // Ngân Sách 2.0 (budgetLines) đã CỐ Ý bỏ forceOwnDept so với budgetEntries cũ (xem
+  // CREATE_MODULE_CONFIGS.budgetLines ở lib/createValidation.js — "Khối Phòng Ban là 1 LỰA CHỌN nghiệp
+  // vụ tự do") nên bất kỳ ai có budgetCreate đều tạo được dòng với dept KHÁC phòng ban của chính mình —
+  // hàm này vẫn mang giả định CŨ (dept luôn trùng người tạo) nên người tạo mất quyền xem lại chính dòng
+  // mình vừa tạo ngay khi chọn Khối Phòng Ban khác phòng ban mình.
+  if (item.createdBy === user.username) return true;
   return item.dept === user.dept;
 }
 function filterBudgetLinesForUser(items, user) {
@@ -1252,6 +1260,22 @@ function canAccessHrFeedbackModuleServer(user) {
   return hasModuleAccessServer(user, 'hr') && !!user.perms?.nhanSuManage;
 }
 
+// itPriceApprovals — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): MODULE_ACCESS_GATED_COLLECTIONS.itSupport
+// vẫn gán TOÀN BỘ collection (cả priceType RETAIL lẫn WHOLESALE) vào đúng 1 cổng "Khối 0" duy nhất
+// (moduleAccess.itSupport) — nhưng nghiệp vụ tạo/duyệt Bán Lẻ đã chuyển hẳn sang module Mua Hàng
+// (moduleAccess.muaHang) và Bán Buôn sang Vận Hành (moduleAccess.vanHanh) từ đợt tách Item2 (10/2026,
+// xem module-muahang.js/module-itsupport-price.js) — 2 module hoàn toàn khác 'itSupport'. Người chỉ có
+// moduleAccess.muaHang/vanHanh (không có itSupport, hợp lý vì họ không liên quan Hỗ Trợ IT/ticket) vẫn
+// cần tạo/xem/duyệt được đúng nhánh giá của mình — mirror ĐÚNG khuôn canAccessHrFeedbackModuleServer()
+// ở trên: OR thêm nhánh theo module MỚI, không thay 'itSupport' ra khỏi MODULE_ACCESS_GATED_COLLECTIONS
+// (vẫn đúng cho các tài khoản Hỗ Trợ IT thuần, xem đủ cả 2 nhánh giá).
+function canAccessItPriceApprovalModuleServer(user, priceType) {
+  if (!user) return false;
+  if (hasModuleAccessServer(user, 'itSupport')) return true;
+  if (priceType === 'WHOLESALE') return hasModuleAccessServer(user, 'vanHanh');
+  return hasModuleAccessServer(user, 'muaHang');
+}
+
 module.exports = {
   isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
@@ -1307,5 +1331,6 @@ module.exports = {
   filterRebateCalculationsForReportView,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile,
-  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
+  canAccessItPriceApprovalModuleServer
 };

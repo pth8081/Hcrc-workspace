@@ -22,7 +22,7 @@ const { consumeApprovalGrant } = require('../lib/approvalAuth');
 // hàm kiểm DB bất đồng bộ này từ bên trong nó — kiểm NGAY TẠI ROUTE, trước khi vào lock/ghi, đúng khuôn
 // 14 route sửa/tạo khác đã áp dụng (xem routes/create.js:192, routes/records.js).
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
-const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { hasModuleAccessServer, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -39,10 +39,23 @@ router.use(requireAuth, blockIfMustChangePassword);
 const WORKFLOW_MODULE_ACCESS_KEYS = {
   docs: 'doc', submissions: 'submission', carRegs: 'car', officeReqs: 'office',
   vppRegistrations: 'vpp', contracts: 'contract', contractsSignedFile: 'contract',
-  itPriceApprovals: 'itSupport', budgetEntries: 'budget', operationOrders: 'vanHanh',
+  budgetEntries: 'budget', operationOrders: 'vanHanh',
   paymentRequests: 'office'
+  // itPriceApprovals CỐ Ý không có mặt ở đây nữa — xem nhánh riêng trong assertWorkflowModuleAccess()
+  // ngay dưới (LỖI ĐÃ VÁ, đợt audit chuyên sâu 8-agent song song, mức Cao).
 };
-function assertWorkflowModuleAccess(user, moduleKey) {
+// itPriceApprovals — trước đây tra CỨNG theo 'itSupport' bất kể priceType, chặn nhầm người chỉ có
+// moduleAccess.muaHang (Bán Lẻ)/vanHanh (Bán Buôn) dù đủ quyền chi tiết duyệt (đúng thiết kế MỚI sau đợt
+// tách Item2) — mirror ĐÚNG canAccessItPriceApprovalModuleServer() (lib/recordViewScope.js). `priceType`
+// chỉ có khi đã tải được bản ghi (item.priceType) — nơi gọi cho module này PHẢI gọi lại hàm này SAU KHI
+// đã khoá+đọc được item (xem runApprove() bên dưới), không gọi ở đầu route như các module khác.
+function assertWorkflowModuleAccess(user, moduleKey, priceType) {
+  if (moduleKey === 'itPriceApprovals') {
+    if (!canAccessItPriceApprovalModuleServer(user, priceType)) {
+      throw new WorkflowError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
+    }
+    return;
+  }
   const accessKey = WORKFLOW_MODULE_ACCESS_KEYS[moduleKey];
   if (accessKey && !hasModuleAccessServer(user, accessKey)) {
     throw new WorkflowError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
@@ -142,7 +155,8 @@ router.post('/:module/:id/:action', async (req, res) => {
     // tại từ DB (kể cả trạng thái active) và gắn sẵn vào req.freshUser, không cần đọc lại lần nữa.
     const appData = await getAllAppData();
     const freshUser = req.freshUser;
-    assertWorkflowModuleAccess(freshUser, moduleKey);
+    // itPriceApprovals: kiểm SAU KHI đã tải được item (cần item.priceType) — xem runApprove() bên dưới.
+    if (moduleKey !== 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey);
 
     // Trước đây "xác thực lại mật khẩu/OTP/PIN trước khi Duyệt" (withApprovalAuth() ở index.html) chỉ
     // là lớp UI thuần JS — xác thực xong rồi mới GỌI HÀM duyệt thật ở trình duyệt, nhưng route này
@@ -196,6 +210,7 @@ router.post('/:module/:id/:action', async (req, res) => {
     const runApprove = async () => {
       const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
       return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+        if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType);
         const outcome = applyWorkflowAction({
           moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection, users: req.allUsers
         });

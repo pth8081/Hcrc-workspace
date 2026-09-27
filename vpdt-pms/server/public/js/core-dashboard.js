@@ -101,7 +101,7 @@ function buildDashboardCards(user) {
   // module-*.js chua tung mo trong phien) - MOI action() ben duoi PHAI await switchTab() truoc khi goi
   // setXSubTab()/applyPendingStatusFilter() ngay sau (ca 2 co the dinh nghia trong CHINH cum vua nap).
 
-  const docCount = countDeptWorkflowPending(DB.docs, doc => DB.deptWorkflows[doc.dept], user);
+  const docCount = countDeptWorkflowPending(DB.docs, doc => resolveDocWorkflowConfigForItemClient(doc), user);
   addCard({ key: 'doc', icon: '📂', label: 'Tài liệu chờ duyệt', count: docCount, show: docCount > 0,
     action: async () => { await switchTab('doc'); applyPendingStatusFilter('filterStatus', onFilterChange); } });
 
@@ -118,7 +118,7 @@ function buildDashboardCards(user) {
   addCard({ key: 'meeting', icon: '📅', label: 'Đặt phòng họp chờ duyệt', count: meetingCount, show: meetingCanApprove,
     action: async () => { await switchTab('meeting'); applyPendingStatusFilter('filterStatusMeeting', onMeetingFilterChange); } });
 
-  const carCount = countDeptWorkflowPending(DB.carRegs, c => DB.carDeptWorkflows[c.dept], user);
+  const carCount = countDeptWorkflowPending(DB.carRegs, c => resolveCarWorkflowConfigForItemClient(c), user);
   addCard({ key: 'car', icon: '🚗', label: 'Đăng ký xe chờ duyệt', count: carCount, show: carCount > 0,
     action: async () => { await switchTab('car'); applyPendingStatusFilter('filterStatusCar', onCarFilterChange); } });
 
@@ -126,9 +126,8 @@ function buildDashboardCards(user) {
     { key: 'officeBuy', subType: 'MUA_BAN', icon: '🛒', label: 'Mua Bán chờ duyệt' },
     { key: 'officeFix', subType: 'SUA_CHUA', icon: '🔧', label: 'Sửa Chữa chờ duyệt' }
   ].forEach(({ key, subType, icon, label }) => {
-    const wfMap = getOfficeWorkflowMap(subType);
     const subTypeReqs = (DB.officeReqs || []).filter(o => o.subType === subType);
-    const count = countDeptWorkflowPending(subTypeReqs, o => wfMap[o.dept], user);
+    const count = countDeptWorkflowPending(subTypeReqs, o => resolveOfficeWorkflowConfigForItemClient(o), user);
     addCard({ key, icon, label, count, show: count > 0,
       action: async () => { await switchTab('office'); setOfficeSubTab(subType); applyPendingStatusFilter('filterStatusOffice', onOfficeFilterChange); } });
   });
@@ -138,7 +137,7 @@ function buildDashboardCards(user) {
   addCard({ key: 'payment', icon: '💰', label: 'Thanh toán chờ duyệt', count: paymentCount, show: paymentCanManage,
     action: async () => { await switchTab('office'); setOfficeSubTab('PAYMENT'); } });
 
-  const vppCount = countDeptWorkflowPending(DB.vppRegistrations, r => DB.vppDeptWorkflows[r.dept], user);
+  const vppCount = countDeptWorkflowPending(DB.vppRegistrations, r => resolveVppWorkflowConfigForItemClient(r), user);
   addCard({ key: 'vpp', icon: '🖇️', label: 'Văn phòng phẩm chờ duyệt', count: vppCount, show: vppCount > 0,
     action: async () => { await switchTab('vpp'); setVppSubTab('REGISTER'); } });
 
