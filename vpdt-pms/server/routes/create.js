@@ -11,6 +11,17 @@ const employeeProfile = require('../lib/employeeProfile');
 const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
 const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS } = require('../lib/workflowEngine');
 const { insertSystemLog } = require('../lib/systemLogStore');
+// Nhãn hiển thị cho cảnh báo "chưa có người duyệt" generic (xem khối kiểm tra ngay trước res.json() ở
+// dưới) — CHỈ liệt kê module dept/tier-workflow tạo qua route này mà resolveWfConfig() trả đúng khuôn
+// {steps, approvers} (docs/carRegs/officeReqs/vppRegistrations/itPriceApprovals/budgetEntries).
+// operationOrders có khối riêng ở trên (thông điệp phân biệt STORE/HO), KHÔNG lặp lại ở đây.
+// paymentRequests dùng khuôn tương tự nhưng KHÔNG tạo qua route này (đi qua submitPaymentRequest() ở
+// lib/recordActions.js, route riêng POST /api/paymentRequests/:id/submit) — cảnh báo cho module đó xem
+// chú thích tại chỗ gọi submitPaymentRequest() ở routes/records.js.
+const GENERIC_APPROVER_WARNING_LABELS = {
+  docs: 'Tài liệu', carRegs: 'Đăng ký xe', officeReqs: 'Đề xuất',
+  vppRegistrations: 'Đăng ký VPP', itPriceApprovals: 'Đề xuất giá', budgetEntries: 'Bản ngân sách'
+};
 // assertPayloadFileUrlsOwnedByUser() — vá lỗ hổng giả mạo quyền sở hữu file (rà soát bảo mật 9/2026,
 // mức Cao): xem chú thích đầy đủ ở lib/uploadedFiles.js + sql/schema.sql (bảng UploadedFiles).
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
@@ -109,18 +120,19 @@ router.post('/:module', async (req, res) => {
     // thiết kế MỚI sau đợt tách Item2, bị chặn tạo mới dù đủ quyền chi tiết itPriceProposeCreateRetail/
     // Wholesale. Mirror ĐÚNG khuôn canAccessHrFeedbackModuleServer() — xem canAccessItPriceApprovalModuleServer()
     // (lib/recordViewScope.js).
+    // Đọc kèm toàn bộ AppData (quy trình phòng ban, nhóm phê duyệt trình...) — chỉ module submissions
+    // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác
+    // bỏ qua tham số này. Đọc SỚM hơn (trước moduleAccessOk, khác thứ tự cũ) vì itPriceApprovals giờ cần
+    // appData để tính nhánh Nhóm Phê Duyệt Cuối ITPRICE_RETAIL/WHOLESALE ngay dưới đây (đợt rà soát
+    // chuyên sâu 9/2026, mức Cao — xem canAccessItPriceApprovalModuleServer()).
+    const appData = await getAllAppData();
     const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[moduleKey];
     const moduleAccessOk = moduleKey === 'itPriceApprovals'
-      ? canAccessItPriceApprovalModuleServer(freshUser, req.body?.priceType)
+      ? canAccessItPriceApprovalModuleServer(freshUser, req.body?.priceType, appData)
       : (!moduleAccessKey || hasModuleAccessServer(freshUser, moduleAccessKey));
     if (!moduleAccessOk) {
       return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
     }
-
-    // Đọc kèm toàn bộ AppData (quy trình phòng ban, nhóm phê duyệt trình...) — chỉ module submissions
-    // dùng tới (dựng lại quy trình hiệu lực server-side, xem lib/createValidation.js), các module khác
-    // bỏ qua tham số này.
-    const appData = await getAllAppData();
     // vppRegistrations cần tra cứu chéo sang collection vppPeriods (kỳ đăng ký còn mở/danh mục mặt
     // hàng hợp lệ) — vppPeriods đã chuyển sang dbo.Records (không còn trong AppData) nên gộp thêm vào
     // đây, CALLER đọc sẵn rồi truyền vào (khớp đúng nguyên tắc appData ở lib/createValidation.js — file
@@ -376,6 +388,33 @@ router.post('/:module', async (req, res) => {
         await insertSystemLog({
           username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
           module: 'OPERATION_ORDER', actionType: 'CREATE_NO_APPROVER_WARNING',
+          targetObject: record.code || String(record.id),
+          description: warning, status: 'WARNING'
+        });
+      }
+    }
+
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Cao — phát hiện #2 "Vận Hành/Mua Hàng/Đăng Ký Xe"):
+    // cảnh báo "chưa có người duyệt" ở trên CHỈ áp dụng cho operationOrders — 6 module dept-workflow khác
+    // cũng tạo qua route này (docs/carRegs/officeReqs/vppRegistrations/itPriceApprovals/budgetEntries) có
+    // thể rơi vào ĐÚNG tình huống approvers[bước] rỗng (dept/tier chưa cấu hình, hoặc phòng ban vừa đổi
+    // tên/xoá) mà không hề cảnh báo — hồ sơ vào PENDING, "kẹt" vô thời hạn không ai thấy để duyệt (chỉ
+    // admin bypass mới duyệt được) cho tới khi admin tình cờ phát hiện. Đăng Ký Xe là ví dụ cụ thể đã xác
+    // nhận qua audit: dept chưa khai carDeptWorkflows -> phiếu xe không ai duyệt được, không 1 dòng log
+    // nào. Dùng chung 1 khối kiểm tra generic (KHÁC operationOrders — giữ nguyên thông điệp phân biệt
+    // STORE/HO ở khối trên vì người dùng đã quen).
+    if (!warning && GENERIC_APPROVER_WARNING_LABELS[moduleKey]) {
+      const cfg = WORKFLOW_MODULE_CONFIGS[moduleKey];
+      const resolved = cfg ? cfg.resolveWfConfig(record, appData) : null;
+      const emptySteps = (resolved?.steps || []).filter(s => !((resolved?.approvers?.[s.order]) || []).length);
+      if (emptySteps.length) {
+        const stepsLabel = emptySteps.map(s => `Bước ${s.order}${s.name ? ` (${s.name})` : ''}`).join(', ');
+        const label = GENERIC_APPROVER_WARNING_LABELS[moduleKey];
+        const identifier = record.code || record.title || String(record.id);
+        warning = `${label} "${identifier}" đã tạo thành công nhưng CHƯA có người duyệt nào được cấu hình ở ${stepsLabel} — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
+        await insertSystemLog({
+          username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
+          module: moduleKey.toUpperCase(), actionType: 'CREATE_NO_APPROVER_WARNING',
           targetObject: record.code || String(record.id),
           description: warning, status: 'WARNING'
         });

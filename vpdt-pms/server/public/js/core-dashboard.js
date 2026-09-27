@@ -113,7 +113,14 @@ function buildDashboardCards(user) {
   addCard({ key: 'submission', icon: '📜', label: 'Văn bản trình chờ duyệt', count: subCount, show: subCount > 0,
     action: async () => { await switchTab('submission'); applyPendingStatusFilter('filterStatusSub', onSubFilterChange); } });
 
-  const contractCount = countDeptWorkflowPending((DB.contracts || []).filter(c => !c.isAddendum), c => resolveContractApprovalWorkflow(c), user, 'approvalStatus');
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Cao — cùng loại lỗi vừa vá ở thẻ Thanh Toán): trước đây
+  // loại bỏ HẲN phụ lục (`.filter(c => !c.isAddendum)`) khỏi đếm, dù phụ lục đi qua ĐÚNG quy trình phê
+  // duyệt theo bước y hệt hợp đồng gốc (cùng approvalStatus/effectiveSteps/effectiveApprovers, xem
+  // buildEffectiveContractApprovalWorkflowServer() — lib/createValidation.js) — approver hợp lệ của MỘT
+  // PHỤ LỤC đang chờ duyệt không bao giờ thấy thẻ này sáng lên trên Dashboard dù hồ sơ thật sự cần họ xử
+  // lý. Bỏ hẳn bộ lọc loại trừ, đếm CẢ hợp đồng gốc lẫn phụ lục (khớp đúng cách module Hợp Đồng tự tính
+  // thẻ nội bộ của nó — pendingRoots + pendingAddenda — ở module-hopdong.js).
+  const contractCount = countDeptWorkflowPending(DB.contracts, c => resolveContractApprovalWorkflow(c), user, 'approvalStatus');
   addCard({ key: 'contract', icon: '📄', label: 'Hợp đồng chờ duyệt', count: contractCount, show: contractCount > 0,
     action: async () => { await switchTab('contract'); setContractSubTab('APPROVAL'); } });
 

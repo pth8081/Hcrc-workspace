@@ -88,7 +88,20 @@ const REPORT_NAV_TREE = [
   { key: 'task', label: '✅ Công Việc' },
   { key: 'contract', label: '📄 Hợp Đồng' },
   { key: 'minutes', label: '📝 Biên Bản Họp' },
-  { key: 'itSupport', label: '🖥️ Hỗ Trợ IT' },
+  // Gap-fill (đợt rà soát chuyên sâu 9/2026, mức Trung bình): itPriceApproval/itServiceRenewal CÓ luồng
+  // tạo/duyệt hồ sơ thật (itPriceApprovals/itServiceRenewals) nhưng trước đây hoàn toàn vắng mặt ở Báo
+  // Cáo dù đúng quy tắc CLAUDE.md phải thêm. Đổi node lá 'itSupport' cũ thành node cha có 3 con — 2 key
+  // mới (itPriceApproval/itServiceRenewal) KHÔNG có trong BUSINESS_MODULES (không có checkbox module-
+  // access riêng), cùng khuôn 'payment'/'budget' dưới node 'office' — an toàn vì dữ liệu client nhận
+  // được (REPORT_QUERY_CONFIGS.itPriceApprovals/itServiceRenewals, routes/reports.js) đã lọc đúng phạm
+  // vi xem THẬT (canViewItPriceApproval()/filterItServiceRenewalsForUser()) trước khi tới đây.
+  {
+    key: 'itSupportGroup', label: '🖥️ Hỗ Trợ IT', children: [
+      { key: 'itSupport', label: '🖥️ Phiếu Hỗ Trợ' },
+      { key: 'itPriceApproval', label: '💲 Phê Duyệt Giá' },
+      { key: 'itServiceRenewal', label: '🔄 Gia Hạn Dịch Vụ' }
+    ]
+  },
   { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ' },
   { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
   {
@@ -508,6 +521,20 @@ const REPORT_MODULE_CONFIGS = {
     title: '📅 Báo Cáo Định Kỳ (Kỳ Báo Cáo)',
     getRecords: (dept, from, to) => fetchReportRecords('reportPeriods', dept, from, to,
       () => DB.reportPeriods.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
+  },
+  // Gap-fill (đợt rà soát chuyên sâu 9/2026, mức Trung bình) — xem chú thích đầy đủ ở entry
+  // 'itSupportGroup' trong REPORT_NAV_TREE.
+  itPriceApproval: {
+    title: '💲 Báo Cáo Phê Duyệt Giá',
+    getRecords: (dept, from, to) => fetchReportRecords('itPriceApprovals', dept, from, to,
+      () => DB.itPriceApprovals.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
+    statusOf: r => r.status,
+    statusBuckets: [['PENDING', 'Chờ duyệt', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
+  },
+  itServiceRenewal: {
+    title: '🔄 Báo Cáo Gia Hạn Dịch Vụ CNTT',
+    getRecords: (dept, from, to) => fetchReportRecords('itServiceRenewals', dept, from, to,
+      () => DB.itServiceRenewals.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
   },
   // Gap-fill (rà soát "module còn thiếu trong Báo Cáo", Nhóm B — CHỈ 3 phần dữ liệu không thuộc nhóm
   // cực nhạy cảm, xem chú thích ở REPORT_NAV_TREE). Cả 4 config dưới đây dùng field "dept" chuẩn

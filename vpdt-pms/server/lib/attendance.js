@@ -454,11 +454,17 @@ function refundLeaveBalance(balance, daysCount) {
 // nghỉ đã duyệt — GHI ĐÈ bản ghi WORK (nếu máy chấm công đã lỡ ghi ngày đó) vì đơn đã duyệt là nguồn sự
 // thật cao hơn; KHÔNG ghi đè nếu ngày đó đã có bản ghi nghỉ phép khác (tránh đơn chồng đơn).
 // publicHolidays (LỖI ĐÃ VÁ, rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — tham số MỚI, optional để
-// không phá vỡ lời gọi cũ/test cũ): với ANNUAL/UNPAID, KHÔNG sinh bản ghi cho Thứ 7/CN/ngày lễ — payroll
-// (lib/payroll.js) đếm THẲNG số bản ghi LEAVE_UNPAID để trừ lương (`unpaidDays = records.filter(...).length`),
-// nên sinh dư bản ghi cho ngày vốn không phải đi làm sẽ trừ lương sai (trừ luôn cả ngày nghỉ cuối tuần).
-// SICK/PERSONAL giữ nguyên sinh đủ theo ngày lịch (ngoài phạm vi đợt vá này, xem chú thích ở
-// assertValidLeaveRequest()).
+// không phá vỡ lời gọi cũ/test cũ): với ANNUAL/UNPAID/PERSONAL, KHÔNG sinh bản ghi cho Thứ 7/CN/ngày lễ
+// — payroll (lib/payroll.js) đếm THẲNG số bản ghi LEAVE_UNPAID/LEAVE_PERSONAL để trừ lương (`unpaidDays
+// = records.filter(...).length`), nên sinh dư bản ghi cho ngày vốn không phải đi làm sẽ trừ lương sai
+// (trừ luôn cả ngày nghỉ cuối tuần).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): PERSONAL trước đây CỐ Ý sinh đủ theo ngày
+// lịch (như comment cũ ghi "ngoài phạm vi đợt vá này") vì lúc đó payroll.js CHƯA gộp LEAVE_PERSONAL vào
+// cùng nhóm khấu trừ với LEAVE_UNPAID — nay lib/payroll.js đã gộp chung (`unpaidDays = records.filter(r
+// => ['LEAVE_UNPAID', 'LEAVE_PERSONAL'].includes(r.recordType)).length`), nên PERSONAL phải áp ĐÚNG quy
+// tắc loại cuối tuần/lễ y hệt UNPAID, nếu không 1 đơn "Nghỉ việc riêng" trùm cuối tuần sẽ bị trừ lương dư
+// (VD Thứ Sáu→Thứ Hai: 4 ngày lịch nhưng chỉ 2 ngày công thật). SICK giữ nguyên sinh đủ theo ngày lịch
+// (không bị payroll khấu trừ theo nhóm này, xem addDetail() khác ở lib/payroll.js).
 function buildLeaveAttendanceRecords(request, existingList, publicHolidays) {
   // HOURLY (nghỉ theo giờ) không sinh bản ghi chấm công riêng — xem ghi chú tại ATTENDANCE_RECORD_TYPES.
   if (request.leaveType === 'HOURLY') return [];
@@ -467,7 +473,7 @@ function buildLeaveAttendanceRecords(request, existingList, publicHolidays) {
     : request.leaveType === 'PERSONAL' ? 'LEAVE_PERSONAL'
     : 'LEAVE_PAID';
   let dates = listDatesInRange(request.fromDate, request.toDate);
-  if (request.leaveType === 'ANNUAL' || request.leaveType === 'UNPAID') {
+  if (request.leaveType === 'ANNUAL' || request.leaveType === 'UNPAID' || request.leaveType === 'PERSONAL') {
     dates = dates.filter(d => !isWeekendDate(d) && !isHolidayDate(d, publicHolidays));
   }
   const results = [];

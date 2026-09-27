@@ -49,8 +49,13 @@ const {
   // như 5 collection ngay trên, phát hiện cùng đợt rà soát nhưng ưu tiên Trung bình (phạm vi hẹp theo
   // siêu thị/phòng ban, không phải dữ liệu cá nhân riêng tư như hrFeedback).
   canViewUniformPeriod, canViewUniformIssuance, canViewUniformTransfer,
-  canViewLeaveRequest, canViewShiftRoster, canViewShiftSwapRequest, canViewEmployeeAttendanceRecord
+  canViewLeaveRequest, canViewShiftRoster, canViewShiftSwapRequest, canViewEmployeeAttendanceRecord,
+  canViewOperationWorkItem
 } = require('./recordViewScope');
+// getAllWorkItemsCached() — operationWorkItems KHÔNG nằm ở dbo.Records/dbo.AppData như mọi collection
+// khác trong file này, mà có store riêng (xem lib/operationWorkItemStore.js) — không dùng được
+// getAllForCollectionCached() chung.
+const { getAllWorkItemsCached } = require('./operationWorkItemStore');
 // resolveApprovedFileUrl() — nguồn sự thật DUY NHẤT cho "file đã phê duyệt" của itPriceApprovals, dùng
 // chung với routes/priceFile.js (route đánh dấu cột) — xem chú thích đầy đủ ở lib/recordActions.js.
 const { resolveApprovedFileUrl } = require('./recordActions');
@@ -115,7 +120,7 @@ function customDataHasFileUrl(record, fileUrl) {
 // lib/recordStore.js) — nhiều request /uploads liên tiếp trong cùng TTL dùng chung 1 lượt đọc, độ trễ tối
 // đa lệch vài giây (vô hại, cùng tinh thần getAllTrashItemsCached()).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords, operationWorkItems] = await Promise.all([
     getAllForCollectionCached('docs'),
     getAllForCollectionCached('submissions'),
     getAllForCollectionCached('contracts'),
@@ -166,7 +171,12 @@ async function findOwningRecord(fileUrl) {
     getAllForCollectionCached('leaveRequests'),
     getAllForCollectionCached('shiftRoster'),
     getAllForCollectionCached('shiftSwapRequests'),
-    getAllForCollectionCached('attendanceRecords')
+    getAllForCollectionCached('attendanceRecords'),
+    // operationWorkItems (cây công việc Thực hiện/Nghiệm thu Vận Hành) — PHÁT HIỆN THIẾU ở đợt rà soát
+    // chuyên sâu 9/2026 (mức Cao): collection này KHÔNG có customData của CHÍNH NÓ hiển nhiên (chỉ mang
+    // file qua "Trường Bổ Sung" OPERATION_WORK_ITEM), nhưng trước đây HOÀN TOÀN vắng mặt ở đây nên rơi
+    // thẳng vào FAIL-OPEN — xem checker + dispatch tương ứng bên dưới (canViewOperationWorkItem()).
+    getAllWorkItemsCached()
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp (xem
   // validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG owning-info như khi khớp field
@@ -281,7 +291,10 @@ async function findOwningRecord(fileUrl) {
     { records: leaveRequests, fixed: () => false, build: r => ({ leaveRequest: true, item: r }) },
     { records: shiftRoster, fixed: () => false, build: r => ({ shiftRoster: true, item: r }) },
     { records: shiftSwapRequests, fixed: () => false, build: s => ({ shiftSwapRequest: true, item: s }) },
-    { records: attendanceRecords, fixed: () => false, build: a => ({ attendanceRecord: true, item: a }) }
+    { records: attendanceRecords, fixed: () => false, build: a => ({ attendanceRecord: true, item: a }) },
+    // operationWorkItems (Vận Hành — Thực hiện/Nghiệm thu): xem chú thích đầy đủ ở khai báo
+    // getAllWorkItemsCached() phía trên + canViewOperationWorkItem() (lib/recordViewScope.js).
+    { records: operationWorkItems, fixed: () => false, build: w => ({ operationWorkItem: true, item: w }) }
     // recruitmentJobs.bannerUrl (banner/ảnh tin tuyển dụng) — CỐ Ý KHÔNG có checker riêng ở đây, rơi
     // thẳng vào nhánh FAIL-OPEN chung (coi như ảnh đại diện/logo, xem chú thích ở đầu file) — banner tin
     // tuyển dụng vốn dùng để QUẢNG BÁ (thu hút ứng viên), không phải dữ liệu nội bộ nhạy cảm, nên cho mọi
@@ -465,6 +478,19 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     return canViewShiftSwapRequest(user, owning.item, { ...appData, shiftRoster: await getAllForCollection('shiftRoster') });
   }
   if (owning.attendanceRecord) return canViewEmployeeAttendanceRecord(user, owning.item, await getAllAppData());
+  // operationWorkItem — cần thêm operationStoreOpenings/operationRepairs/operationWorkItems (KHÔNG có
+  // trong getAllAppData(), đều là collection dbo.Records/store riêng) để canViewOperationWorkItem() tra
+  // đúng hồ sơ nguồn + hasOwnWorkItemInSource(), mirror cách shiftSwapRequest tự gắn thêm shiftRoster ở
+  // trên.
+  if (owning.operationWorkItem) {
+    const [appData, operationStoreOpenings, operationRepairs, operationWorkItems] = await Promise.all([
+      getAllAppData(),
+      getAllForCollectionCached('operationStoreOpenings'),
+      getAllForCollectionCached('operationRepairs'),
+      getAllWorkItemsCached()
+    ]);
+    return canViewOperationWorkItem(user, owning.item, { ...appData, operationStoreOpenings, operationRepairs, operationWorkItems });
+  }
   // employeeProfile (Quyết định gán/đổi chức vụ): CHỈ chính chủ hồ sơ/hrProfileManage/admin xem được —
   // cùng khuôn canViewFullProfile() dùng cho chính màn Hồ Sơ Nhân Sự (không dùng canViewLimitedProfile,
   // vốn còn mở cho quản lý trực tiếp xem — Quyết định lương/chức vụ là dữ liệu nhạy cảm hơn, giới hạn

@@ -49,9 +49,9 @@ const WORKFLOW_MODULE_ACCESS_KEYS = {
 // tách Item2) — mirror ĐÚNG canAccessItPriceApprovalModuleServer() (lib/recordViewScope.js). `priceType`
 // chỉ có khi đã tải được bản ghi (item.priceType) — nơi gọi cho module này PHẢI gọi lại hàm này SAU KHI
 // đã khoá+đọc được item (xem runApprove() bên dưới), không gọi ở đầu route như các module khác.
-function assertWorkflowModuleAccess(user, moduleKey, priceType) {
+function assertWorkflowModuleAccess(user, moduleKey, priceType, appData) {
   if (moduleKey === 'itPriceApprovals') {
-    if (!canAccessItPriceApprovalModuleServer(user, priceType)) {
+    if (!canAccessItPriceApprovalModuleServer(user, priceType, appData)) {
       throw new WorkflowError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
     }
     return;
@@ -210,7 +210,7 @@ router.post('/:module/:id/:action', async (req, res) => {
     const runApprove = async () => {
       const existingCollection = moduleKey === 'carRegs' ? await getAllForCollection('carRegs') : null;
       return withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
-        if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType);
+        if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType, appData);
         const outcome = applyWorkflowAction({
           moduleKey, item, action, user: freshUser, comment, extraFields, appData, existingCollection, users: req.allUsers
         });

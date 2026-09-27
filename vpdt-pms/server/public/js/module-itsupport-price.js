@@ -1943,7 +1943,14 @@ let showItTicketEscalateForm = false;
 // 2 hàm bọc cho onclick="showItTicketEscalateForm = true/false; renderItTicketModal();" cũ (gán biến +
 // gọi hàm, không map được vào 1 lệnh gọi hàm đơn cho data-op) — xem CSP data-op ở bindCspDelegation().
 function openItTicketEscalateForm() { showItTicketEscalateForm = true; renderItTicketModal(); }
-function closeItTicketEscalateForm() { showItTicketEscalateForm = false; renderItTicketModal(); }
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): mở form "Gửi Yêu Cầu Phê Duyệt" ghi đè
+// (poison) div#systemUsersDatalist DÙNG CHUNG cho ~20 ô tìm-kiếm-gõ-chọn khác trên toàn hệ thống (Đăng
+// Ký Xe/Giao Việc/Đào Tạo/Cơ Cấu Tổ Chức/Hồ Sơ Nhân Sự...) bằng danh sách ĐÃ LỌC (loại currentUser) mà
+// không hoàn trả lại danh sách đầy đủ khi đóng form — nhiều module khác đã phải tự thêm lệnh gọi phòng
+// vệ populateSystemUsersDatalist() trước khi dùng ô của chính mình chính vì từng bị lỗi tương tự (xem
+// chú thích tại populateSystemUsersDatalist(), core.js) — module này lại không hoàn trả. Gọi lại đúng
+// hàm đó khi đóng form để trả dropdown dùng chung về đúng trạng thái đầy đủ.
+function closeItTicketEscalateForm() { showItTicketEscalateForm = false; renderItTicketModal(); populateSystemUsersDatalist(); }
 
 // Nhãn trạng thái leo thang phê duyệt (xem escalateItTicket() ở lib/recordActions.js) — tách biệt hoàn
 // toàn khỏi IT_TICKET_STATUS_BADGES (t.status: TODO/DOING/DONE/CANCELLED).
@@ -2119,6 +2126,8 @@ async function escalateItTicketAction() {
   showItTicketEscalateForm = false;
   renderItTickets();
   renderItTicketModal();
+  // Hoàn trả dropdown dùng chung — xem chú thích đầy đủ ở closeItTicketEscalateForm().
+  populateSystemUsersDatalist();
   alert(`✅ Đã gửi yêu cầu phê duyệt tới ${updated.approvalApproverName}.`);
 }
 

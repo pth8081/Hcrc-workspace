@@ -51,6 +51,18 @@ function setSystemSubTab(subTab) {
 
   if (subTab === 'ADMIN') {
     renderDeptGroupList(); renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderCarEvaluationIssueList(); renderPriceZoneList(); renderItRenewalCategoryList(); renderMeetingRoomCatalogList(); renderPositionTypeList();
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): renderDeptCheckboxes() ngay trên gọi kèm
+    // renderChecklistReportViewScopeCheckboxes()/renderChecklistStoreSelfExecuteScopeCheckboxes() đọc
+    // DB.checklistTemplates — collection này thuộc nhóm tải lười 'checklist' (TAB_DATA_GROUPS, Lớp 3a),
+    // CHỈ được nạp khi switchTab('checklist') từng chạy trong phiên. Tab "⚙️ Hệ Thống" không nằm trong
+    // TAB_DATA_GROUPS nên nếu admin vào cấu hình quyền TRƯỚC KHI từng mở tab Checklist thật, DB.checklistTemplates
+    // vẫn rỗng -> 2 ô chọn phạm vi theo mẫu checklist hiện RỖNG dù hệ thống có mẫu, dễ hiểu nhầm "chưa có
+    // mẫu nào". loadDataGroup() tự cache theo Promise (gọi lại vô hại nếu đã nạp) — nạp xong thì vẽ lại
+    // ĐÚNG 2 ô này (không cần vẽ lại cả renderDeptCheckboxes(), tránh mất trạng thái checkbox khác đang chọn dở).
+    loadDataGroup('checklist').then(() => {
+      renderChecklistReportViewScopeCheckboxes();
+      renderChecklistStoreSelfExecuteScopeCheckboxes();
+    });
     // initSimpleCatalogExcelToolsAll() (core.js) — bơm 3 nút Tải Mẫu/Nhập/Xuất Excel vào TỪNG khối
     // #simpleCatalogExcelTools_<key> đặt sẵn trong 10 khối danh mục dạng mảng chuỗi phẳng (10/2026, đợt
     // chuẩn hoá Excel toàn hệ thống) — gọi LẶP LẠI mỗi lần vào tab ADMIN vẫn an toàn (chỉ gán lại đúng

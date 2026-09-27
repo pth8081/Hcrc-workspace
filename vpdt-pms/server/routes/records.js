@@ -1046,6 +1046,19 @@ router.post('/officeReqs/:id/delete', async (req, res) => {
     handleError(res, `officeReqs/${req.params.id}/delete`, err);
   }
 });
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): TOÀN BỘ route /carRegs/... bên dưới (busy-
+// slots, confirm-driver, end-trip, evaluate, cancel, reassign, change-route, update, submit) trước đây
+// KHÔNG gác hasModuleAccessServer() ("Khối 0") — admin tắt hẳn module "Xe" cho 1 tài khoản chỉ ẩn được
+// tab ở giao diện, gọi thẳng API vẫn thao tác/xem được dữ liệu chiếm chỗ (busy-slots không đòi bất kỳ
+// quyền nào ngoài requireAuth, lộ lịch trình/tên tài khoản lái xe xuyên phòng ban cho BẤT KỲ ai đã đăng
+// nhập, kể cả tài khoản đã bị khoá module này). Mirror ĐÚNG khuôn router.use('/budgetLines', ...) đã vá
+// trước đó — 1 middleware DUY NHẤT chặn TRƯỚC TIÊN cho cả khối /carRegs, khớp mọi route bên dưới.
+router.use('/carRegs', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'car')) {
+    return res.status(403).json({ error: 'Module Đăng Ký Xe đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 // GET /api/records/carRegs/busy-slots — LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính", mức Trung
 // bình): lưới "Lịch Xe" (computeCarDaySummary()/renderCarScheduleCalendarDayView() ở
 // public/js/module-dangkyxe.js, cả view Ngày/Tuần/Tháng) trước đây đọc THẲNG DB.carRegs — vốn đã bị GET
@@ -4710,40 +4723,66 @@ router.post('/leaveRequests/:id/approve', async (req, res) => {
     const { freshUser, users } = await getFreshUser(req);
     const profileList = (await getAppDataValue('employeeProfiles')) || [];
 
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026): kiểm tra SỚM (đọc không khoá) quỹ phép còn lại nếu là
-    // ANNUAL — chặn TRƯỚC KHI chuyển đơn sang APPROVED, tránh trạng thái dở dang (đơn đã APPROVED nhưng
-    // quỹ phép không trừ được) ở đúng trường hợp phổ biến nhất (2 đơn không trùng ngày, duyệt TUẦN TỰ).
-    // Điểm chặn THẬT SỰ đáng tin cậy (atomic, phòng trường hợp duyệt gần như đồng thời hiếm gặp mà lượt
-    // kiểm tra sơ bộ này bỏ lọt) vẫn là deductLeaveBalance() bên dưới, chạy bên trong khoá bản ghi
-    // leaveBalances.
     const pendingList = await getAllForCollection('leaveRequests');
     const pendingItem = pendingList.find(r => r.id === itemId);
-    if (pendingItem?.leaveType === 'ANNUAL') {
-      const year = new Date(pendingItem.fromDate).getFullYear();
-      const balancePre = (await getAllForCollection('leaveBalances'))
-        .find(b => b.employeeCode === pendingItem.employeeCode && b.year === year);
-      if (balancePre) attendance.deductLeaveBalance(Object.assign({}, balancePre), pendingItem.daysCount);
-    }
+    if (!pendingItem) throw new HttpError(404, 'Không tìm thấy đơn nghỉ phép');
+
+    // Kiểm tra quyền duyệt SỚM (trước khi đụng tới leaveBalances) — tránh trừ quỹ phép rồi mới phát
+    // hiện không có quyền, phải hoàn tác vô ích.
+    const empUsernameForCheck = employeeProfile.findProfile(profileList, pendingItem.employeeCode)?.username;
+    assertLeaveApprover(freshUser, empUsernameForCheck, users);
+
     // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Trung bình): duyệt đơn nghỉ ghi LEAVE_PAID/
     // LEAVE_UNPAID/SICK_LEAVE vào attendanceRecords cho từng ngày trong khoảng nghỉ (xem
     // buildLeaveAttendanceRecords() bên dưới) — TRƯỚC ĐÂY không hề kiểm kỳ lương đã Chốt/Công bố, khác
     // hẳn API máy chấm công vật lý đã kiểm đúng việc này. Chặn SỚM (trước khi chuyển đơn sang APPROVED)
     // nếu BẤT KỲ ngày nào trong khoảng nghỉ rơi vào kỳ lương đã khoá.
-    if (pendingItem && pendingItem.leaveType !== 'HOURLY') {
+    if (pendingItem.leaveType !== 'HOURLY') {
       const lockedForLeave = findLockedPayrollPeriodInRange(await getAllForCollection('payrollPeriods'), pendingItem.fromDate, pendingItem.toDate);
       if (lockedForLeave) {
         throw new HttpError(409, `Khoảng nghỉ (${pendingItem.fromDate} → ${pendingItem.toDate}) rơi vào kỳ lương "${lockedForLeave.periodName}" đã ${lockedForLeave.status === 'PUBLISHED' ? 'CÔNG BỐ' : 'CHỐT'} — không thể duyệt đơn ghi thêm dữ liệu chấm công cho kỳ đã khoá (liên hệ Kế Toán nếu cần mở lại kỳ lương)`);
       }
     }
 
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình — race condition không atomic): trước đây
+    // bước trừ quỹ phép năm (ANNUAL, deductLeaveBalance()) chạy SAU KHI leaveRequests đã commit sang
+    // APPROVED + shiftRoster liên quan đã bị huỷ (xem khối bên dưới) — chỉ có 1 lượt kiểm tra SỚM không
+    // khoá (đọc snapshot, không ghi) chạy trước đó. Nếu 2 đơn ANNUAL không trùng ngày của CÙNG nhân viên
+    // được duyệt gần như đồng thời, đơn thứ 2 có thể đã commit APPROVED + huỷ roster xong xuôi, nhưng
+    // bước trừ quỹ phép CUỐI CÙNG lại throw 409 (do đơn 1 vừa trừ trước, đọc snapshot cũ) — status
+    // APPROVED "kẹt" vĩnh viễn với quỹ phép SAI (chưa từng bị trừ), và huỷ đơn sau đó sẽ hoàn NHẦM đúng
+    // số ngày chưa từng bị trừ (tự nới quỹ phép qua mỗi vòng duyệt-huỷ). Nay trừ quỹ phép TRƯỚC KHI
+    // chuyển đơn sang APPROVED — đây mới là điểm chặn ATOMIC thật sự (bên trong khoá bản ghi
+    // leaveBalances) — nếu bước này throw (vượt quỹ), leaveRequests CÒN NGUYÊN PENDING, không có gì phải
+    // hoàn tác. Nếu bước duyệt (bên dưới) thất bại SAU KHI đã trừ thành công (race khác: đơn vừa bị từ
+    // chối/huỷ bởi người khác ngay trước khi khoá được bản ghi) — hoàn lại đúng số đã trừ.
+    let deductedBalance = null;
+    if (pendingItem.leaveType === 'ANNUAL') {
+      const year = new Date(pendingItem.fromDate).getFullYear();
+      const balanceList = await getAllForCollection('leaveBalances');
+      const balance = balanceList.find(b => b.employeeCode === pendingItem.employeeCode && b.year === year);
+      if (balance) {
+        await withLockedRecordForCollection('leaveBalances', balance.id, (item) => attendance.deductLeaveBalance(item, pendingItem.daysCount));
+        deductedBalance = { id: balance.id, daysCount: pendingItem.daysCount };
+      }
+    }
+
     let affectedRosterIds = [];
-    const result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
-      const empUsername = employeeProfile.findProfile(profileList, item.employeeCode)?.username;
-      assertLeaveApprover(freshUser, empUsername, users);
-      const rosterListForCheck = []; // affectedRosterIds tính lại đầy đủ ngay dưới bằng dữ liệu thật
-      const { updated } = attendance.applyApproveLeaveRequest(item, freshUser.username, freshUser.name, rosterListForCheck);
-      return updated;
-    });
+    let result;
+    try {
+      result = await withLockedRecordForCollection('leaveRequests', itemId, (item) => {
+        const empUsername = employeeProfile.findProfile(profileList, item.employeeCode)?.username;
+        assertLeaveApprover(freshUser, empUsername, users);
+        const rosterListForCheck = []; // affectedRosterIds tính lại đầy đủ ngay dưới bằng dữ liệu thật
+        const { updated } = attendance.applyApproveLeaveRequest(item, freshUser.username, freshUser.name, rosterListForCheck);
+        return updated;
+      });
+    } catch (approveErr) {
+      if (deductedBalance) {
+        await withLockedRecordForCollection('leaveBalances', deductedBalance.id, (item) => attendance.refundLeaveBalance(item, deductedBalance.daysCount));
+      }
+      throw approveErr;
+    }
     if (result.workModel === 'SHIFT_BASED') {
       const rosterList = await getAllForCollection('shiftRoster');
       affectedRosterIds = rosterList.filter(r => r.employeeCode === result.employeeCode && r.status !== 'CANCELLED'
@@ -4764,24 +4803,9 @@ router.post('/leaveRequests/:id/approve', async (req, res) => {
         }
       }
     }
-    // Trừ LeaveBalance (chỉ ANNUAL) + ghi AttendanceRecords LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho từng
-    // ngày trong khoảng nghỉ — xem lib/attendance.js buildLeaveAttendanceRecords()/deductLeaveBalance().
-    // BUG THẬT vừa sửa: leaveBalances là collection dbo.Records (MIGRATED_COLLECTIONS, xem
-    // lib/recordStore.js), KHÔNG PHẢI dbo.AppData — dòng cũ gọi withLockedAppDataValue('leaveBalances', ...)
-    // đọc/ghi nhầm bảng dbo.AppData (key "leaveBalances" không hề tồn tại ở đó), khiến MỌI lượt duyệt đơn
-    // phép năm ANNUAL ném lỗi "Key không tồn tại trong AppData" ngay tại đây — phép năm KHÔNG BAO GIỜ
-    // được trừ dù response vẫn báo lỗi 500 sau khi đơn đã chuyển APPROVED (do dòng cập nhật item.status
-    // ở withLockedRecordForCollection('leaveRequests', ...) phía trên ĐÃ commit xong trước khi chạy tới
-    // đây) — phát hiện khi viết test hồi quy (tests/test-attendance-leave.js). Sửa đúng bằng
-    // withLockedRecordForCollection('leaveBalances', id, ...), cùng khuôn leaveBalances/:id/adjust ở dưới.
-    if (result.leaveType === 'ANNUAL') {
-      const year = new Date(result.fromDate).getFullYear();
-      const balanceList = await getAllForCollection('leaveBalances');
-      const balance = balanceList.find(b => b.employeeCode === result.employeeCode && b.year === year);
-      if (balance) {
-        await withLockedRecordForCollection('leaveBalances', balance.id, (item) => attendance.deductLeaveBalance(item, result.daysCount));
-      }
-    }
+    // Trừ LeaveBalance (chỉ ANNUAL) giờ đã chạy TRƯỚC (xem khối deductedBalance phía trên, đợt rà soát
+    // chuyên sâu 9/2026) — chỉ còn lại bước ghi AttendanceRecords LEAVE_PAID/LEAVE_UNPAID/SICK_LEAVE cho
+    // từng ngày trong khoảng nghỉ (xem lib/attendance.js buildLeaveAttendanceRecords()).
     const attendanceList = await getAllForCollection('attendanceRecords');
     const publicHolidays = (await getAppDataValue('publicHolidays')) || [];
     const toApply = attendance.buildLeaveAttendanceRecords(result, attendanceList, publicHolidays);

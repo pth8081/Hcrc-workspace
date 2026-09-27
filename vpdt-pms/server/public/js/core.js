@@ -2560,6 +2560,21 @@ function isMemberOfAnyExtraApprovalGroup(user, moduleKeys) {
   });
 }
 
+// Có mặt trong bất kỳ nhóm nào của mảng "Nhóm Phê Duyệt Trình/HĐ" (DB.submissionApprovalGroups/
+// DB.contractApprovalGroups, mảng {id,label,order,members:[...]}) hay không — KHÁC hẳn
+// extraApprovalGroups_<moduleKey> ở trên (đó là map theo moduleKey, đây là 1 mảng nhóm duy nhất).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Nghiêm trọng): 2 chỗ dùng trước đây viết
+// `Object.values(DB.submissionApprovalGroups || {}).some(list => Array.isArray(list) && ...)` — vì
+// DB.submissionApprovalGroups là MẢNG (không phải map), Object.values() trên 1 mảng trả về chính các
+// phần tử (object nhóm), không phải mảng, nên `Array.isArray(list)` luôn false — biểu thức là dead code,
+// không bao giờ trả true dù username có mặt trong members. Người được cấu hình đúng làm người duyệt
+// cuối (VD TGD/PTGD) do đó không lọt qua được canAccessApprovalHub()/canAccessSubmissionModule()/
+// canAccessContractModule(), bị switchTab() chặn cứng, không có cách nào vào module để duyệt.
+function isMemberOfApprovalGroupsArray(groups, username) {
+  if (!username || !Array.isArray(groups)) return false;
+  return groups.some(g => Array.isArray(g?.members) && g.members.includes(username));
+}
+
 // Xem trước quy trình NGAY LÚC ĐANG TẠO hồ sơ (chưa có item.extraApprovalLayers thật vì hồ sơ chưa được
 // tạo) — đọc thẳng lựa chọn HIỆN TẠI trên form qua readSelectedExtraApprovalLayers(moduleKey) rồi áp
 // cùng luật hiển thị (không xác thực lại locked/visible ở đây — đây chỉ là xem trước tham khảo, server
@@ -3321,14 +3336,30 @@ function canAccessSubmissionModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'submission')) return false;
-  return scopeHasAny(user, user.perms?.submissionView) || isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username);
+  if (scopeHasAny(user, user.perms?.submissionView)) return true;
+  if (isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username)) return true;
+  if (Object.values(DB.submissionTypeDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Nghiêm trọng): trước đây hàm này KHÔNG hề kiểm tra
+  // submissionTypeDeptWorkflows (map THẬT đang dùng theo từng loại tờ trình) lẫn thành viên
+  // submissionApprovalGroups — người CHỈ được cấu hình làm người duyệt cuối (không thuộc bất kỳ dept-
+  // workflow nào, không có submissionView) bị chặn cứng khỏi tab "Văn Bản Trình" dù server chấp nhận họ
+  // duyệt (canViewSubmission() ở lib/recordViewScope.js đã tính đúng nhánh này từ trước).
+  return isMemberOfApprovalGroupsArray(DB.submissionApprovalGroups, user.username);
 }
 
 function canAccessContractModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'contract')) return false;
-  return scopeHasAny(user, user.perms?.contractView);
+  if (scopeHasAny(user, user.perms?.contractView)) return true;
+  if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
+  if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Nghiêm trọng): trước đây hàm này CHỈ dựa vào
+  // contractView — hoàn toàn không tính người đang là approver theo 2 quy trình Phê Duyệt gốc/Quản Lý
+  // HĐ hay thành viên contractApprovalGroups (Nhóm Phê Duyệt Trình/HĐ), khác hẳn các module đã vá đúng
+  // khuôn khác (canAccessOfficeModule/canAccessPaymentModule...). Người chỉ duyệt bước cuối (TGD/PTGD,
+  // không cần contractView) không vào được tab "Hợp Đồng" dù server chấp nhận duyệt (canViewContract()).
+  return isMemberOfApprovalGroupsArray(DB.contractApprovalGroups, user.username);
 }
 
 // Người dùng có được duyệt hợp đồng này ở ĐÚNG bước hiện tại của quy trình Phê Duyệt HĐ hay không —
@@ -3487,14 +3518,14 @@ function canAccessApprovalHub(user) {
   if (isApproverInWorkflowMap(DB.deptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username)) return true;
   if (Object.values(DB.submissionTypeDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
-  if (Object.values(DB.submissionApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
+  if (isMemberOfApprovalGroupsArray(DB.submissionApprovalGroups, user.username)) return true;
   if (isApproverInWorkflowMap(DB.carDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.officeBuyDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.officeFixDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.vppDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
-  if (Object.values(DB.contractApprovalGroups || {}).some(list => Array.isArray(list) && list.includes(user.username))) return true;
+  if (isMemberOfApprovalGroupsArray(DB.contractApprovalGroups, user.username)) return true;
   if (isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)) return true;
   if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)) return true;
   if (isMemberOfAnyExtraApprovalGroup(user, EXTRA_APPROVAL_MODULE_KEYS_CLIENT)) return true;
@@ -8401,8 +8432,13 @@ function canAccessPurchasingModule(user) {
   // HẲN khỏi tab này (switchTab() alert), nên KHÔNG BAO GIỜ vào được để thấy nút Duyệt/Từ chối/Từ Chối
   // Khẩn dù các nút đó đã chuyển hẳn về đây (renderItPriceModalControls() context='APPROVAL') — chỉ còn
   // thấy được qua Approval Hub (không đúng ý người dùng: phiếu phải "sống" tại đúng 2 tab này).
-  return isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)
-    || canApproveItPriceEmergencyRejectClient(user, 'RETAIL');
+  if (isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)
+    || canApproveItPriceEmergencyRejectClient(user, 'RETAIL')) return true;
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): thiếu nhánh này — người CHỈ thuộc "Nhóm
+  // Phê Duyệt Cuối" ITPRICE_RETAIL bị switchTab() chặn cứng khỏi tab Mua Hàng, dù họ vẫn là approver hợp
+  // lệ ở lớp cuối (đối xứng với canAccessOperationModule() đã có bypass ITPRICE_WHOLESALE ngay dưới đây
+  // — 2 hàm CÙNG một họ, trước đây bất đối xứng nhau).
+  return isMemberOfAnyExtraApprovalGroup(user, ['ITPRICE_RETAIL']);
 }
 function canAccessOperationModule(user) {
   if (!user) return false;
@@ -8424,7 +8460,7 @@ function canAccessOperationModule(user) {
   // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu nhánh này — người CHỈ thuộc "Nhóm
   // Phê Duyệt Cuối" OPERATION_ORDER_STORE/OPERATION_ORDER_HO không vào được module Vận Hành để xem lại
   // hồ sơ đơn hàng đã xử lý, dù GET /api/data đã trả đúng dữ liệu cho họ từ Fix#1 (đợt vá trước).
-  if (isMemberOfAnyExtraApprovalGroup(user, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'])) return true;
+  if (isMemberOfAnyExtraApprovalGroup(user, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO', 'ITPRICE_WHOLESALE'])) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ

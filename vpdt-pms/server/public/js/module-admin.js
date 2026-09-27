@@ -1122,7 +1122,12 @@ function toggleOperationOrderReceiptScopeGroup() {
 function setOperationOrderReceiptScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pOperationOrderReceiptDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi...',
-    emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu áp dụng mọi siêu thị).'
+    emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu áp dụng mọi siêu thị).',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Thấp): trước đây không truyền resolveMissingLabel —
+    // nếu siêu thị đã XOÁ hẳn (không phải đổi tên, đổi tên đã cascade đúng qua renameDeptInUserPerms())
+    // khỏi danh mục nhưng vẫn còn trong quyền đã cấp, chip hiện thẳng tên cũ không có dấu hiệu cảnh báo
+    // "không còn tồn tại" như các nơi khác trong hệ thống đã làm (VD badge tài khoản bị khoá).
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }
 
@@ -1150,7 +1155,9 @@ function setChecklistAuditScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pChecklistAuditScopeDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi kiểm soát...',
     emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu kiểm soát mọi siêu thị).',
-    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50',
+    // Xem chú thích đầy đủ ở setOperationOrderReceiptScopeCheckboxes() (đợt rà soát chuyên sâu 9/2026, mức Thấp).
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }
 
@@ -1185,7 +1192,11 @@ function setChecklistReportViewScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pChecklistReportViewScopeDeptContainer', checklistTemplateScopeItems('REPORT'), Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm mẫu checklist để thêm vào phạm vi xem báo cáo...',
     emptyText: 'Chưa chọn mẫu nào (tick "ALL" nếu xem báo cáo mọi mẫu).',
-    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Thấp): value ở đây là templateId (ép chuỗi) — nếu
+    // không truyền resolveMissingLabel, mẫu đã bị xoá hiện thẳng 1 con số vô nghĩa thay vì tên mẫu,
+    // không có dấu hiệu cảnh báo "mục này không còn tồn tại".
+    resolveMissingLabel: (v) => `⛔ Mẫu đã xoá (ID: ${v})`
   });
 }
 function renderChecklistStoreSelfExecuteScopeCheckboxes() {
@@ -1204,7 +1215,9 @@ function setChecklistStoreSelfExecuteScopeCheckboxes(scopeKeyList) {
   renderMultiSelectDropdown('pChecklistStoreSelfExecuteScopeDeptContainer', checklistTemplateScopeItems('SELF'), Array.isArray(scopeKeyList) ? scopeKeyList : [], {
     placeholder: '🔍 Tìm mẫu checklist để giới hạn Tự Đánh Giá...',
     emptyText: 'Chưa chọn mẫu nào (tick "ALL" nếu Tự Đánh Giá được mọi mẫu).',
-    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50'
+    chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50',
+    // Xem chú thích đầy đủ ở setChecklistReportViewScopeCheckboxes() (đợt rà soát chuyên sâu 9/2026, mức Thấp).
+    resolveMissingLabel: (v) => `⛔ Mẫu đã xoá (ID: ${v})`
   });
 }
 

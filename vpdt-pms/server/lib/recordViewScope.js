@@ -701,6 +701,24 @@ function filterOperationExecutionPeriodsForUser(items, user, appData) {
   return (items || []).filter(p => canViewOperationExecutionPeriod(user, p, appData));
 }
 
+// operationWorkItems (cây công việc Thực hiện/Nghiệm thu của Vận Hành, xem lib/operationWorkItemStore.js)
+// — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Cao, cụm file upload): collection này KHÔNG có phạm vi
+// xem độc lập, mà LỒNG theo hồ sơ NGUỒN (sourceType/sourceId trỏ về operationStoreOpenings/
+// operationRepairs, xem gate tương ứng ở routes/data.js) — mirror ĐÚNG canViewOperationExecutionPeriod()
+// ngay trên (cùng shape sourceType/sourceId). Trước đây findOwningRecord() (lib/fileAuthz.js) hoàn toàn
+// vắng mặt collection này, khiến file đính kèm qua "Trường Bổ Sung" (Tải tệp/Tải nhiều tệp,
+// OPERATION_WORK_ITEM) rơi vào FAIL-OPEN — lộ tên/mô tả/người phụ trách công việc nội bộ siêu thị khác
+// phòng ban cho bất kỳ ai đã đăng nhập.
+function canViewOperationWorkItem(user, item, appData) {
+  if (!user) return false;
+  const sourceList = item.sourceType === 'OPERATION_REPAIR' ? appData?.operationRepairs : appData?.operationStoreOpenings;
+  const sourceRecord = (sourceList || []).find(r => r.id === item.sourceId);
+  if (!sourceRecord) return false;
+  return item.sourceType === 'OPERATION_REPAIR'
+    ? canViewOperationRepair(user, sourceRecord, appData)
+    : canViewOperationStoreOpening(user, sourceRecord, appData);
+}
+
 // Ticket helpdesk IT nội bộ có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ đội Hỗ Trợ IT
 // (itManage/admin) và chính người tạo được xem, KHÔNG mở rộng theo phòng ban (khớp canViewItTicket()
 // ở public/index.html — phạm vi hẹp hơn hẳn các module dept-workflow khác ở trên). Ngoại lệ DUY NHẤT:
@@ -791,13 +809,20 @@ function filterTasksForUser(tasks, user, appData) {
 // chỉ được biết phần phân bổ CỦA SIÊU THỊ MÌNH trong 1 kỳ — không chỉ ẩn nguyên cả kỳ, mà lọc bớt
 // allocations[] xuống còn ĐÚNG 1 phần tử của họ (các siêu thị khác trong cùng kỳ không liên quan gì tới
 // họ, không cần thấy số lượng phân bổ của siêu thị khác). Kỳ không còn phần tử nào khớp thì ẩn hẳn.
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): trước đây hàm này chỉ kiểm cờ quyền THÔ
+// (uniformStoreManage → true ngay, không xét item), LỎNG HƠN HẲN filterUniformPeriodsForUser() ngay dưới
+// (bộ lọc THẬT dùng ở GET /api/data) — bộ lọc đó với uniformStoreManage (không kèm uniformManage/
+// uniformApprove) chỉ cho thấy kỳ approvalStatus APPROVED (hoặc chưa có field) VÀ có allocations khớp
+// đúng dept của họ. Vì lib/fileAuthz.js dispatch file đính kèm "Trường Bổ Sung" của uniformPeriods qua
+// ĐÚNG hàm này, 1 Giám Đốc Siêu Thị đoán/biết đúng URL file của 1 kỳ CHƯA duyệt hoặc chỉ có allocations
+// của siêu thị KHÁC vẫn xem/tải được — dù kỳ đó không bao giờ hiện trong danh sách họ thấy qua GET
+// /api/data. Nay soi ĐÚNG per-item, mirror 1:1 logic filterUniformPeriodsForUser().
 function canViewUniformPeriod(user, item) {
   if (!user) return false;
-  // uniformApprove: người CHỈ có quyền duyệt (không kèm uniformManage/uniformStoreManage) — thiếu nhánh
-  // này khiến canApproveUniform() (lib/recordActions.js, admin||uniformApprove||uniformManage) cho họ
-  // duyệt được kỳ cấp phát, nhưng GET /api/data lại lọc sạch uniformPeriods nên họ không thấy bất kỳ kỳ
-  // nào để mà duyệt — "duyệt được nhưng danh sách rỗng", cùng lớp lỗi đã sửa ở canViewOperationStoreOpening().
-  return !!(user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformStoreManage || user.perms?.uniformApprove);
+  if (user.perms?.admin || user.perms?.uniformManage || user.perms?.uniformApprove) return true;
+  if (!user.perms?.uniformStoreManage) return false;
+  if (item?.approvalStatus && item.approvalStatus !== 'APPROVED') return false;
+  return (item?.allocations || []).some(a => a.dept === user.dept);
 }
 
 // approvalStatus (Phase 2): kỳ CHƯA được duyệt (PENDING_APPROVAL) hoặc đã REJECTED thì Giám Đốc Siêu
@@ -1215,22 +1240,33 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
     'hrFeedback'
   ],
   contract: ['contracts'], itSupport: ['itSupportTickets', 'itPriceApprovals'],
-  // Đợt test chuyên sâu 9/2026 (PQ, mục Phân Quyền): hrProfile/hrPayroll KHÔNG có mặt ở GET /api/data
-  // chung (employeeProfiles/payslips đi qua route riêng, xem routes/employeeProfile.js/routes/payroll.js
-  // — không cần mirror ở đây). hrAttendance thì CÓ 3 collection sau đi qua GET /api/data chung (tự xem
-  // chấm công/phép năm/đơn nghỉ phép CHÍNH MÌNH không cần quyền chi tiết nào khác) nên phải mirror như 6
-  // module gốc ở trên — trước đây tắt moduleAccess.hrAttendance cho 1 user KHÔNG cản được họ vẫn thấy dữ
-  // liệu Công & Phép của chính mình qua GET /api/data.
-  hrAttendance: ['attendanceRecords', 'leaveBalances', 'leaveRequests']
+  // Đợt test chuyên sâu 9/2026 (PQ, mục Phân Quyền): hrProfile KHÔNG có mặt ở GET /api/data chung
+  // (employeeProfiles đi qua route riêng, xem routes/employeeProfile.js — không cần mirror ở đây).
+  // hrAttendance thì CÓ 5 collection sau đi qua GET /api/data.../lazy chung (tự xem chấm công/phép
+  // năm/đơn nghỉ phép/lịch phân ca/đổi ca CHÍNH MÌNH không cần quyền chi tiết nào khác) nên phải mirror
+  // như 6 module gốc ở trên — trước đây tắt moduleAccess.hrAttendance cho 1 user KHÔNG cản được họ vẫn
+  // thấy dữ liệu Công & Phép của chính mình qua GET /api/data.
+  hrAttendance: ['attendanceRecords', 'leaveBalances', 'leaveRequests', 'shiftRoster', 'shiftSwapRequests'],
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Cao): 2 module con này (payrollPeriods/payslips/
+  // laborContracts) đã có gate riêng đúng ở route CHUYÊN BIỆT (routes/payroll.js/routes/
+  // employeeProfile.js gọi hasModuleAccessServer(user,'hrPayroll'/'hrContract') trước khi trả dữ liệu),
+  // nhưng route DÙNG CHUNG `GET /api/data/lazy/:groupKey` (nhóm payroll/laborContract, xem
+  // LAZY_DATA_GROUPS ở routes/data.js) lại KHÔNG đi qua MODULE_ACCESS_GATED_COLLECTIONS (2 key này
+  // trước đây vắng mặt ở đây) — chỉ lọc bằng permission thuần (filterPayslipsForUser()/
+  // filterLaborContractsForUser(), không kiểm moduleAccess) nên tài khoản bị admin tắt hẳn module
+  // "Lương"/"Hợp Đồng Lao Động" nhưng còn giữ quyền hrPayrollManage/hrContractManage vẫn tải được toàn
+  // bộ payslips/laborContracts mọi nhân viên qua route lazy — khác hẳn route riêng đã chặn đúng.
+  hrPayroll: ['payrollPeriods', 'payslips'],
+  hrContract: ['laborContracts']
 };
-// hrProfile/hrAttendance/hrPayroll đều là module con (parent: 'hr', xem BUSINESS_MODULES ở
+// hrProfile/hrAttendance/hrPayroll/hrContract đều là module con (parent: 'hr', xem BUSINESS_MODULES ở
 // public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này TRƯỚC ĐÂY không mirror
 // đúng quy tắc đó (chỉ so sánh đúng moduleKey được truyền vào), nên tắt riêng module cha "hr" sẽ không
-// chặn được các route tự phục vụ của 3 module con này ở server dù client đã ẩn tab đúng. Chỉ cần khai 3
+// chặn được các route tự phục vụ của 4 module con này ở server dù client đã ẩn tab đúng. Chỉ cần khai 4
 // module con hiện đang được enforce ở server tại đây — không cần liệt kê đủ mọi cặp cha/con của
-// BUSINESS_MODULES vì các module con còn lại (car/meeting/vpp/budget/orgChart/hrLifecycle/hrContract)
-// đã có quyền chi tiết riêng chặn đúng ở server rồi, không đi qua hasModuleAccessServer().
-const MODULE_ACCESS_PARENTS = { hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr' };
+// BUSINESS_MODULES vì các module con còn lại (car/meeting/vpp/budget/orgChart/hrLifecycle) đã có quyền
+// chi tiết riêng chặn đúng ở server rồi, không đi qua hasModuleAccessServer().
+const MODULE_ACCESS_PARENTS = { hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr', hrContract: 'hr' };
 function hasModuleAccessServer(user, moduleKey) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -1269,11 +1305,28 @@ function canAccessHrFeedbackModuleServer(user) {
 // cần tạo/xem/duyệt được đúng nhánh giá của mình — mirror ĐÚNG khuôn canAccessHrFeedbackModuleServer()
 // ở trên: OR thêm nhánh theo module MỚI, không thay 'itSupport' ra khỏi MODULE_ACCESS_GATED_COLLECTIONS
 // (vẫn đúng cho các tài khoản Hỗ Trợ IT thuần, xem đủ cả 2 nhánh giá).
-function canAccessItPriceApprovalModuleServer(user, priceType) {
+// `data` (tham số thứ 3, optional): appData/snapshot GET /api/data hiện có (chỉ cần đọc đúng key
+// extraApprovalGroups_ITPRICE_RETAIL/WHOLESALE) — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Cao):
+// hàm này trước đây KHÔNG hề tính người CHỈ là thành viên "Nhóm Phê Duyệt Cuối" ITPRICE_RETAIL/WHOLESALE
+// (isExtraApprovalLayerApprover(), routes/data.js) — loadItPriceApprovalsScoped() (routes/data.js) đã
+// tải đúng dữ liệu cho họ qua nhánh đó, nhưng vòng lặp "Khối 0" gọi lại ĐÚNG hàm này để lọc/zero ngay
+// sau đó lại xoá sạch nếu admin tắt 'itSupport'/'muaHang'/'vanHanh' cho đúng tài khoản "duyệt cấp cao"
+// đó (hợp lý nghiệp vụ — họ không dùng module đó thường xuyên), làm hồ sơ kẹt vĩnh viễn nếu họ là
+// approver DUY NHẤT của lớp đó — mirror ĐÚNG khuôn docs (isExtraApprovalLayerApprover 'DOC') đã vá cùng
+// đợt. Tham số `data` optional (không phải mọi nơi gọi hàm này đều có appData sẵn) — bỏ qua nhánh này
+// nếu không truyền, giữ nguyên hành vi cũ.
+function canAccessItPriceApprovalModuleServer(user, priceType, data) {
   if (!user) return false;
   if (hasModuleAccessServer(user, 'itSupport')) return true;
-  if (priceType === 'WHOLESALE') return hasModuleAccessServer(user, 'vanHanh');
-  return hasModuleAccessServer(user, 'muaHang');
+  if (priceType === 'WHOLESALE') {
+    if (hasModuleAccessServer(user, 'vanHanh')) return true;
+  } else if (hasModuleAccessServer(user, 'muaHang')) {
+    return true;
+  }
+  if (!data || !user.username) return false;
+  const groupsKey = priceType === 'WHOLESALE' ? 'extraApprovalGroups_ITPRICE_WHOLESALE' : 'extraApprovalGroups_ITPRICE_RETAIL';
+  const groups = data[groupsKey];
+  return Array.isArray(groups) && groups.some(g => Array.isArray(g?.members) && g.members.includes(user.username));
 }
 
 module.exports = {
@@ -1307,7 +1360,7 @@ module.exports = {
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
   redactOperationEstimateItemsToOwnedScope,
-  canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser,
+  canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,
   canViewOnboardingProgress, filterOnboardingProgressForUser,
   canViewLicense, filterLicensesForUser,
   canViewHrFeedback, filterHrFeedbackForUser,

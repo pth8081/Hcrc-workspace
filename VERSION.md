@@ -1,8 +1,141 @@
 # Phiên bản hiện tại
 
-**24.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.27 (2026-09-27): Vá 23 phát hiện từ đợt rà soát chuyên sâu 7-agent song song (1 Nghiêm trọng + 6 Cao + 12 Trung bình + 5 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
+
+Đợt rà soát chuyên sâu mới (7 agent song song, chỉ audit không sửa) tìm ra 23
+phát hiện thật trên toàn bộ module. Đã vá toàn bộ theo đúng thứ tự người dùng
+yêu cầu ("xử lý theo thứ tự từ cao đến thấp"), trừ 2 mục quyết định hoãn có
+nêu rõ lý do bên dưới.
+
+**1 lỗi mức Nghiêm trọng:**
+
+1. **`canAccessSubmissionModule()`/`canAccessContractModule()`/
+   `canAccessApprovalHub()` (core.js) chặn nhầm mọi thành viên "Nhóm Phê
+   Duyệt Trình/HĐ"** — code cũ gọi `Object.values()` lên một MẢNG
+   (`DB.submissionApprovalGroups`/`contractApprovalGroups`, vốn đã là
+   `[{id, members: [...]}]` chứ không phải map theo moduleKey như "Nhóm Phê
+   Duyệt Cuối") rồi kiểm `Array.isArray()` trên từng phần tử — luôn `false`
+   vì `Object.values([...])` trả về chính các phần tử của mảng chứ không
+   phải mảng con, nên nhánh kiểm tra thành viên không bao giờ chạy — người
+   CHỈ thuộc nhóm phê duyệt Trình/Hợp Đồng (không có quyền module gốc nào
+   khác) hoàn toàn không vào được module/Approval Hub dù đúng lượt duyệt.
+   Thêm `isMemberOfApprovalGroupsArray(groups, username)` (core.js) duyệt
+   đúng cấu trúc mảng thật, dùng lại ở cả 3 hàm.
+
+**6 lỗi mức Cao:**
+
+2. `create.js`: khi hồ sơ mới tạo không có approver hợp lệ nào ở bước đầu
+   (dept-workflow rỗng/level rỗng), phản hồi thành công vẫn im lặng — người
+   tạo không biết hồ sơ đang "treo" không ai xử lý. Thêm cảnh báo chung
+   (`GENERIC_APPROVER_WARNING_LABELS`) trả kèm response, áp dụng cho mọi
+   module dùng dept-workflow.
+3. `fileAuthz.js`/`recordViewScope.js`: file đính kèm ở Công Việc Vận Hành
+   (`operationWorkItems`, customData) rơi vào FAIL-OPEN giống lớp lỗi đã vá
+   ở đợt trước — thêm checker `canViewOperationWorkItem()` dùng lại logic
+   xem hồ sơ đã có.
+4. `canAccessItPriceApprovalModuleServer()` (server) + gọi tại `create.js`/
+   `data.js`/`workflow.js`: chưa nhận diện thành viên "Nhóm Phê Duyệt Cuối"
+   của ĐÚNG loại giá (Bán Lẻ/Bán Buôn) — người chỉ thuộc nhóm phê duyệt
+   cuối 1 trong 2 loại bị chặn nhầm như đã vá cho các module khác ở đợt
+   trước, nay áp dụng nốt cho itPriceApprovals (đổi chữ ký nhận thêm
+   `appData` ở cả 3 điểm gọi).
+5. `MODULE_ACCESS_GATED_COLLECTIONS`/`MODULE_ACCESS_PARENTS`
+   (recordViewScope.js): "Khối 0" (tắt `moduleAccess.<key>`) chưa che đúng
+   `attendanceRecords`/`hrPayroll`/`hrContract` theo đúng module cha "hr" —
+   tắt quyền 1 module con Nhân Sự trước đây vẫn lộ dữ liệu Chấm Công/Lương/
+   HĐLĐ nếu user còn quyền 1 module con khác trong nhóm.
+6. `routes/data.js` (`GET /api/data` + `/lazy/:groupKey`): thiếu ngoại lệ
+   thành viên Nhóm Phê Duyệt Trình/HĐ (`submissionApprovalGroups`/
+   `contractApprovalGroups`) ở "Khối 0" — người chỉ thuộc nhóm phê duyệt
+   riêng, không có quyền module Văn Bản Trình/Hợp Đồng, bị zero-out toàn bộ
+   `submissions`/`contracts` dù đúng lượt duyệt (cùng gốc lỗi #1, khác điểm
+   chặn). Thêm `isApprovalGroupMemberForModule()` dùng chung.
+7. Dashboard đếm "Hợp đồng sắp hết hạn/đang hoạt động" (core-dashboard.js)
+   lọc bỏ nhầm phụ lục (`isAddendum`) khỏi tổng số — đếm thiếu khi hợp đồng
+   gốc đã có phụ lục gia hạn, gây lệch số so với danh sách thật hiển thị ở
+   module Hợp Đồng.
+
+**12 lỗi mức Trung bình:**
+
+8. `canViewOperationWorkItem()` mở rộng đúng phạm vi xem theo phòng ban/
+   người phụ trách như đã dùng ở `filterOperationWorkItemsForUser()` phía
+   client, tránh 2 nơi lệch logic.
+9. Đăng Ký Xe: `router.use('/carRegs', ...)` — mọi route con `/carRegs/*`
+   thiếu gate kiểm tra `moduleAccess.car` (chỉ check ở vài route lẻ, không
+   phải TOÀN BỘ) — mirror đúng khuôn middleware `budgetLines` đã có, gác 1
+   lần cho cả nhóm route thay vì rải rác từng route.
+10. **Race condition duyệt Nghỉ Phép**: thứ tự cũ (duyệt leaveRequests → huỷ
+    shiftRoster → trừ leaveBalances) có khoảng hở giữa bước 1 và bước 3 —
+    nếu server crash/lỗi giữa chừng, phép được duyệt nhưng KHÔNG bị trừ số
+    dư, dùng vô hạn lần. Đảo thứ tự: trừ số dư (có khoá) chạy TRƯỚC bước
+    duyệt, kèm rollback `refundLeaveBalance()` nếu bước duyệt thất bại sau
+    đó — không còn khoảng hở giữa 2 bước.
+11. Loại nghỉ `PERSONAL` (nghỉ việc riêng) chưa được loại khỏi tính công
+    cuối tuần/ngày lễ giống các loại nghỉ phép khác (`attendance.js`) — số
+    công tính sai cho nhân viên nghỉ việc riêng đúng dịp cuối tuần/lễ.
+12. Báo Cáo (`module-baocaoquantri.js`/`reports.js`) thiếu hẳn 2 mục
+    "Phê Duyệt Giá"/"Gia Hạn Dịch Vụ IT" — data có nhưng chưa từng lên
+    Báo Cáo (đúng lỗ hổng CLAUDE.md đã cảnh báo tránh lặp lại). Thêm
+    `REPORT_QUERY_CONFIGS` + nav con cho cả 2.
+13. Bộ lọc ngày ở Báo Cáo (`dateFrom`/`dateTo`) không neo cùng 1 múi giờ
+    (`+07:00`) khi dựng mốc đầu/cuối ngày — lệch 1 ngày với dữ liệu biên ở
+    một số môi trường server. Neo tường minh cả 2 mốc theo `+07:00`.
+14. Tab "Cấu Hình Quyền" ở Hệ Thống đọc `DB.checklistTemplates` RỖNG vì
+    Lớp 3a chỉ tải nhóm dữ liệu `checklist` khi người dùng đã từng mở tab
+    Checklist trong phiên — thêm `loadDataGroup('checklist')` + re-render
+    ngay khi vào sub-tab ADMIN, không phụ thuộc thứ tự click trước đó.
+15. Đổi/Xoá/Đổi tên "Loại Giấy Phép" (Tài Liệu) không đồng bộ lại dropdown
+    tìm-kiếm-gõ-chọn `licenseTypeDatalist` đang mở — vẫn hiện giá trị cũ
+    cho tới khi tải lại trang. Gọi `sddSetOptions()` ngay sau 3 thao tác.
+16. Đóng/hoàn tất "Chuyển Cấp IT Ticket" không khôi phục lại
+    `systemUsersDatalist` (dropdown DÙNG CHUNG ~20 field khác) về danh sách
+    gốc — field kế tiếp dùng chung dropdown này bị kẹt danh sách hẹp của
+    thao tác chuyển cấp vừa xong. Gọi lại `populateSystemUsersDatalist()`.
+17. `canViewUniformPeriod()` (server) không khớp đúng logic lọc
+    `filterUniformPeriodsForUser()` (client) theo từng bản ghi — viết lại
+    để mirror chính xác, tránh 2 nơi lệch nhau âm thầm.
+18. `canAccessPurchasingModule()`/`canAccessOperationModule()` (core.js)
+    còn thiếu ngoại lệ Nhóm Phê Duyệt Cuối cho itPriceApprovals (Bán Lẻ ở
+    Mua Hàng, Bán Buôn ở Vận Hành) — cùng lớp lỗi #4 ở trên, khác điểm gate
+    (client thay vì server).
+19. `checklistAuditScope`/`checklistReportViewScope`/
+    `checklistStoreSelfExecuteScope`/`operationOrderReceiptScope` (widget
+    multi-select) không hiện được nhãn cho giá trị đã chọn trước đó nhưng
+    không còn khớp danh mục hiện tại (VD siêu thị đã đổi tên/xoá) — hiện
+    trống bí ẩn thay vì rõ ràng "(không còn tồn tại)". Thêm callback
+    `resolveMissingLabel` cho `renderMultiSelectDropdown()`.
+
+**5 lỗi mức Thấp:**
+
+20. Comment đầu `uploadRateLimiter.js` liệt kê "12 route" trong khi thực tế
+    đã là 13 route (thiếu `purchasing.js` được thêm sau đợt gộp gốc) — chỉ
+    lệch tài liệu, hành vi rate-limit thực tế đã đúng từ trước.
+21. `payrollPeriods` (lib/createValidation.js) chưa có `getLockKey` — 2
+    request tạo cùng kỳ lương (cùng tháng/năm) gần như đồng thời có thể
+    cùng lọt qua bước kiểm tra trùng, request sau nhận lỗi SQL thô/500
+    chung chung thay vì thông báo rõ "Đã tồn tại kỳ lương...". Thêm
+    `getLockKey: (payload) => \`payroll_period:\${month}:\${year}\`` theo
+    đúng khuôn `meetings`/`vppRegistrations`/`trainingRegistrations` đã có.
+22. `vppPeriods` — checker `findOwningRecord()` xác nhận KHÔNG cần vá (dữ
+    liệu file đính kèm ở đây vốn đã công khai cho mọi tài khoản theo thiết
+    kế, không phải lỗ hổng thật) — giữ nguyên, không thay đổi.
+
+**2 mục quyết định hoãn (không phải bỏ sót)**:
+
+- Giới hạn thiết kế đã biết ở 1 luồng (đã có cảnh báo hiển thị số lượng bỏ
+  qua, chấp nhận được ở mức hiện tại — không phải lỗi mới).
+- 1 đề xuất cần thêm trường nhập liệu mới ("số lượng thực nhận" lúc nhận
+  hàng) — là quyết định thiết kế/UX, không phải patch tối thiểu an toàn,
+  cần xác nhận riêng trước khi làm để tránh rủi ro không cần thiết.
+
+**Deploy-impact**: toàn bộ 21 mục đã vá đều là thay đổi logic code thuần
+(JS) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến `.env`, KHÔNG đổi
+`package.json` dependencies. Chỉ cần copy code + `pm2 restart`, không cần
+thao tác thủ công nào khác.
 
 ## v24.26 (2026-09-27): Vá 8 phát hiện từ đợt rà soát chuyên sâu 4-agent song song (droplist/phê duyệt/cấu hình hệ thống/upload+phân quyền)
 

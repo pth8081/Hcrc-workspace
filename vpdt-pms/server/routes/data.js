@@ -975,6 +975,22 @@ function isExtraApprovalLayerApprover(user, data, moduleKeys) {
   });
 }
 
+// Biến thể của isExtraApprovalLayerApprover() ở trên cho "Nhóm Phê Duyệt Trình/HĐ"
+// (submissionApprovalGroups/contractApprovalGroups) — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức
+// Cao): 2 collection này KHÔNG dùng khuôn extraApprovalGroups_<moduleKey> (chỉ có ĐÚNG 1 mảng nhóm dùng
+// chung, không tách theo moduleKey — xem module-admin-submissiongroups.js), nên KHÔNG khớp hàm trên. Gate
+// "Khối 0" (vòng lặp MODULE_ACCESS_GATED_COLLECTIONS bên dưới) trước đây zero cứng data.submissions/
+// data.contracts khi tắt moduleAccess.submission/contract, KHÔNG loại trừ người CHỈ là thành viên nhóm
+// phê duyệt cuối này (TGD/PTGD, thường không dùng module Văn Bản Trình/Hợp Đồng thường xuyên) — hồ sơ ở
+// đúng lớp phê duyệt cuối của họ biến mất khỏi GET /api/data dù canViewSubmission()/canViewContract() đã
+// tính đúng nhánh approver này, có thể kẹt vĩnh viễn nếu họ là approver DUY NHẤT (cùng lớp lỗi với N1 ở
+// public/js/core.js — canAccessSubmissionModule()/canAccessContractModule() vừa được vá).
+function isApprovalGroupMemberForModule(user, data, groupsKey) {
+  if (!user?.username) return false;
+  const groups = data?.[groupsKey];
+  return Array.isArray(groups) && groups.some(g => Array.isArray(g?.members) && g.members.includes(user.username));
+}
+
 function computePaymentRequestsApproverDepts(user, data) {
   const depts = [];
   for (const [dept, wfConfig] of Object.entries(data.paymentDeptWorkflows || {})) {
@@ -1583,6 +1599,9 @@ router.get('/', async (req, res) => {
         // vĩnh viễn ở bước họ phụ trách nếu họ là approver DUY NHẤT của lớp đó. Mirror ĐÚNG khuôn
         // hrFeedback ở trên: nới gate bằng OR thay vì zero vô điều kiện.
         if (col === 'docs' && isExtraApprovalLayerApprover(req.freshUser, data, ['DOC'])) continue;
+        // submissions/contracts — xem chú thích đầy đủ ở isApprovalGroupMemberForModule() phía trên.
+        if (col === 'submissions' && isApprovalGroupMemberForModule(req.freshUser, data, 'submissionApprovalGroups')) continue;
+        if (col === 'contracts' && isApprovalGroupMemberForModule(req.freshUser, data, 'contractApprovalGroups')) continue;
         // itPriceApprovals — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): mảng này gộp CẢ
         // 2 priceType (RETAIL/WHOLESALE) nhưng module 'itSupport' giờ không còn là cổng DUY NHẤT (RETAIL
         // đi qua 'muaHang', WHOLESALE đi qua 'vanHanh', xem canAccessItPriceApprovalModuleServer() ở
@@ -1590,7 +1609,7 @@ router.get('/', async (req, res) => {
         // vẫn đủ quyền xem qua 'muaHang'/'vanHanh'. Lọc THEO TỪNG PHẦN TỬ thay vì zero vô điều kiện.
         if (col === 'itPriceApprovals') {
           if (Array.isArray(data.itPriceApprovals)) {
-            data.itPriceApprovals = data.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType));
+            data.itPriceApprovals = data.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, data));
           }
           continue;
         }
@@ -1752,10 +1771,15 @@ router.get('/lazy/:groupKey', async (req, res) => {
         if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
         // docs — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
         if (col === 'docs' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['DOC'])) continue;
+        // submissions/contracts — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính
+        // phía trên (hiện KHÔNG thuộc bất kỳ LAZY_DATA_GROUPS nào, giữ nhánh này để an toàn nếu sau này
+        // đổi sang lazy-load, tránh lặp lại đúng lỗi đã vá).
+        if (col === 'submissions' && isApprovalGroupMemberForModule(req.freshUser, groupAppData, 'submissionApprovalGroups')) continue;
+        if (col === 'contracts' && isApprovalGroupMemberForModule(req.freshUser, groupAppData, 'contractApprovalGroups')) continue;
         // itPriceApprovals — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
         if (col === 'itPriceApprovals') {
           if (Array.isArray(result.itPriceApprovals)) {
-            result.itPriceApprovals = result.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType));
+            result.itPriceApprovals = result.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, groupAppData));
           }
           continue;
         }

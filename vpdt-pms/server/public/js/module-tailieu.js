@@ -1321,6 +1321,13 @@ async function saveLicenseType(e) {
   logSystemAction('LICENSE', 'ADD_LICENSE_TYPE', `Thêm loại giấy phép mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtLicenseTypeName').value = '';
   renderLicenseTypeList();
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): 3 hàm CRUD danh mục này trước đây chỉ gọi
+  // renderLicenseTypeList() (vẽ lại danh sách ở tab Hệ Thống > Quản Lý Danh Mục), KHÔNG gọi lại
+  // sddSetOptions('licenseTypeDatalist', ...) — nếu người dùng đang mở sẵn tab Giấy Phép (dropdown đã
+  // nạp lúc renderLicenses() chạy), dropdown gợi ý ở ô "Tên giấy phép/Loại giấy phép" vẫn giữ danh sách
+  // CŨ cho tới khi chuyển tab đi rồi quay lại. Đối chiếu itRenewalCategories (cùng khuôn CRUD) đã gọi
+  // lại renderItServiceRenewals() ngay sau khi lưu — đây là thiếu sót cụ thể, không phải chủ đích.
+  sddSetOptions('licenseTypeDatalist', DB.licenseTypes || []);
 }
 async function deleteLicenseType(name) {
   if (!confirm(`Xóa loại giấy phép "${name}" khỏi danh mục?`)) return;
@@ -1330,6 +1337,7 @@ async function deleteLicenseType(name) {
   if (!saved) { DB.licenseTypes = prevList; renderLicenseTypeList(); return; }
   logSystemAction('LICENSE', 'DELETE_LICENSE_TYPE', `Xóa loại giấy phép [${name}]`, 'SUCCESS', name);
   renderLicenseTypeList();
+  sddSetOptions('licenseTypeDatalist', DB.licenseTypes || []);
 }
 function renderLicenseTypeList() {
   const ul = document.getElementById('licenseTypeList');
@@ -1344,7 +1352,7 @@ function renderLicenseTypeList() {
 }
 async function renameLicenseType(name) {
   const ok = await renameCatalogEntryClient('licenseTypes', name, 'Các Loại Giấy Phép');
-  if (ok) renderLicenseTypeList();
+  if (ok) { renderLicenseTypeList(); sddSetOptions('licenseTypeDatalist', DB.licenseTypes || []); }
 }
 
 // Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }. moduleKey

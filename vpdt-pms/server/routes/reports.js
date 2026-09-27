@@ -30,7 +30,8 @@ const {
   filterHrProcessesForUser, sanitizeReportPeriodsForUser, filterVppRegistrationsForUser,
   filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
   filterChecklistSubmissionsForReportCrossView, filterRebateCalculationsForReportView,
-  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
+  canViewItPriceApproval, filterItServiceRenewalsForUser
 } = require('../lib/recordViewScope');
 
 // PQ-01 mirror cho Báo Cáo — PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu
@@ -104,6 +105,16 @@ const REPORT_QUERY_CONFIGS = {
     postFilter: items => items.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED')
   },
   itSupportTickets: { filterFn: filterItSupportTicketsForUser, needsAppData: false },
+  // itPriceApprovals/itServiceRenewals — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): 2
+  // module CÓ luồng tạo/duyệt hồ sơ thật (đúng quy tắc CLAUDE.md "module mới có tạo hồ sơ phải thêm vào
+  // Báo Cáo") nhưng trước đây hoàn toàn vắng mặt ở đây — thêm entry mirror khuôn hàm canView*() thật của
+  // module đó (không phát minh logic quyền mới). canViewItPriceApproval() cần appData (nhánh approver
+  // theo itPriceDeptWorkflows/itPriceTierWorkflows).
+  itPriceApprovals: {
+    filterFn: (items, user, appData) => (items || []).filter(p => canViewItPriceApproval(user, p, appData)),
+    needsAppData: true
+  },
+  itServiceRenewals: { filterFn: filterItServiceRenewalsForUser, needsAppData: false },
   // Báo Cáo Giấy Phép chỉ đếm bản ghi GỐC, không đếm bản gia hạn/sửa đổi con — đúng y hệt getRecords() cũ.
   licenses: {
     filterFn: filterLicensesForUser, needsAppData: false,
@@ -178,11 +189,24 @@ router.get('/:collection', async (req, res) => {
     // "to" PHẢI hiểu là HẾT NGÀY đó (23:59:59.999), khớp đúng isInDateRange() phía client
     // (core.js: `d > new Date(toDate + 'T23:59:59')`) — "to" chỉ có phần ngày (YYYY-MM-DD), nếu để
     // nguyên new Date(to) sẽ hiểu là 00:00:00 UTC, LOẠI NHẦM mọi bản ghi tạo sau nửa đêm cùng ngày đó.
-    const dateTo = to ? `${to}T23:59:59.999` : undefined;
+    //
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình–Cao): "from"/"to" trước đây dùng 2 QUY TẮC
+    // KHÁC NHAU khi new Date() diễn giải chuỗi — "from" (chỉ có ngày, VD "2026-09-01") theo đặc tả
+    // ECMA-262 LUÔN là UTC 00:00:00 cố định; "to" (có giờ nhưng KHÔNG có hậu tố Z/offset,
+    // "2026-09-01T23:59:59.999") lại được hiểu theo GIỜ LOCAL của tiến trình Node đang chạy (phụ thuộc
+    // cấu hình timezone hệ điều hành server, không có TZ= nào được đặt trong .env.example). CreatedAt ở
+    // SQL Server luôn là UTC thật (SYSUTCDATETIME()) — 2 biên bị lệch nhau tuỳ server đặt timezone gì,
+    // ảnh hưởng MỌI báo cáo dùng bộ lọc from/to (20+ collection ở REPORT_QUERY_CONFIGS) lẫn export Excel
+    // gọi lại đúng nguồn này. Neo CẢ HAI biên vào offset CỐ ĐỊNH +07:00 (giờ Việt Nam, không có DST) —
+    // "from"/"to" vốn LÀ ngày lịch theo cảm nhận người dùng VN (chọn qua input type="date" ở giao diện),
+    // nên đây mới là quy đổi ĐÚNG ý nghĩa nghiệp vụ, không phụ thuộc server đặt TZ gì, và 2 biên nay dùng
+    // CHUNG 1 quy tắc diễn giải.
+    const dateFrom = from ? `${from}T00:00:00.000+07:00` : undefined;
+    const dateTo = to ? `${to}T23:59:59.999+07:00` : undefined;
 
     const { items } = collection === 'tasks'
-      ? await queryTasksInRange({ dateFrom: from || undefined, dateTo })
-      : await queryDedicatedRecords(collection, { where, dateFrom: from || undefined, dateTo });
+      ? await queryTasksInRange({ dateFrom, dateTo })
+      : await queryDedicatedRecords(collection, { where, dateFrom, dateTo });
 
     const postFiltered = config.postFilter ? config.postFilter(items, dept) : items;
 

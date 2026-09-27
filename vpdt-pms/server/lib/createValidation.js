@@ -3572,6 +3572,16 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Thấp): trước đây collection này KHÔNG có
+    // getLockKey nên đi qua createForCollection() thường (không khoá gì) — 2 request tạo cùng
+    // kỳ lương (cùng periodMonth/periodYear) gần như đồng thời đều đọc `collection` TRƯỚC khi
+    // request kia kịp ghi, `assertValidNewPeriod()` không thấy trùng ở CẢ 2 request, cả 2 đều
+    // chui lọt qua rồi cùng ghi — request thứ 2 chạm ràng buộc UNIQUE thật ở CSDL (nếu có) và
+    // nhận lỗi SQL thô/500 chung chung thay vì thông báo rõ ràng "Đã tồn tại kỳ lương...". Thêm
+    // getLockKey theo đúng khuôn meetings/vppRegistrations/trainingRegistrations ở trên: request
+    // thứ 2 phải đợi request thứ 1 ghi xong committed data mới được đọc lại `collection` (đã có
+    // kỳ lương mới) rồi mới chạy assertValidNewPeriod(), nên sẽ thấy trùng và bị chặn đúng nghĩa.
+    getLockKey: (payload) => `payroll_period:${Number(payload?.periodMonth) || 0}:${Number(payload?.periodYear) || 0}`,
     extraValidate: (payload, collection, user) => {
       const payroll = require('./payroll');
       if (!payroll.canManagePayroll(user)) throw new CreateError(403, 'Bạn không có quyền tạo kỳ lương');
