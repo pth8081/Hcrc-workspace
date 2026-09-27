@@ -134,6 +134,11 @@ resetAppData();
 stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(Object.keys(defaultRecords())),
   getAllForCollection: async (c) => (RECORDS[c] || []).slice(),
+  // isUniqueConstraintViolation: dùng bởi withCodeRegenRetry() (routes/records.js, vá race trùng mã ở
+  // đợt rà soát chuyên sâu mới) cho 3 route contracts/docs/submissions "edit"/"update" test file này gọi
+  // tới — mock luôn trả false (kịch bản test không giả lập đụng độ mã ở tầng DB) để lỗi thật (403 ownership
+  // check) đi qua nguyên vẹn thay vì bị nuốt bởi retry.
+  isUniqueConstraintViolation: () => false,
   withLockedRecordForCollection: async (c, id, mutatorFn) => {
     const list = RECORDS[c] || [];
     const idx = list.findIndex(x => x.id === Number(id));
