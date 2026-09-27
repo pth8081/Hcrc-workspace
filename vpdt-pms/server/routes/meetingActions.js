@@ -15,8 +15,22 @@ const { withLockedRecordForCollection, getAllForCollection, withAppLock } = requ
 const { findMeetingConflict, validateRequiredCustomData, scopeAllows } = require('../lib/createValidation');
 const { getAllAppData } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): file router RIÊNG này (mount độc lập tại
+// app.use('/api/meetings', ...), xem server.js) hoàn toàn KHÔNG gác Module Access Gate — khác
+// routes/records.js đã tự bổ sung router.use('/carRegs'|'/budgetLines'|..., ...) cho các module con
+// tương tự. Route TẠO MỚI lịch họp (POST /api/create/meetings) đã được vá đúng (EXTRA_CREATE_MODULE_ACCESS_KEY,
+// routes/create.js) nhưng route HÀNH ĐỘNG ở ĐÂY (duyệt/huỷ/sửa) lại nằm ở file khác nên "đã tự bổ sung ở
+// routes/records.js" không hề áp dụng — tắt moduleAccess.meeting cho 1 tài khoản (còn giữ
+// meetingApprove/meetingCancel) vẫn duyệt/huỷ/sửa được lịch họp của MỌI phòng ban qua API trực tiếp.
+router.use((req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'meeting')) {
+    return res.status(403).json({ error: 'Module Đặt Phòng Họp đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 
 const ACTIONS = {
   approve: { perm: 'meetingApprove', status: 'APPROVED' },

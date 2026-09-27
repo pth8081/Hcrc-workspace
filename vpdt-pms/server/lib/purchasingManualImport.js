@@ -186,7 +186,11 @@ async function parsePurchaseTransactionImportXlsx(buffer) {
 
 // Xuất lại dữ liệu ĐANG CÓ (dùng để admin tải về, chỉnh sửa/bổ sung rồi tải lên lại qua Nhập File —
 // đúng tinh thần "mẫu = đúng khuôn cột sẽ export ra" như lib/operationImport.js).
-async function buildPurchaseTransactionExportWorkbook(transactions) {
+// truncated (tuỳ chọn, mặc định false — LỖI ĐÃ VÁ đợt audit chuyên sâu mới, mức Thấp: trước đây khi
+// đạt đúng EXPORT_MAX_ROWS, file xuất ra ÂM THẦM thiếu dữ liệu không cảnh báo gì): true khi số dòng
+// truy vấn được đã chạm giới hạn EXPORT_MAX_ROWS (routes/purchasing.js truyền vào) — thêm sheet ghi chú
+// RIÊNG (không chèn vào sheet dữ liệu chính để không phá cấu trúc cột dùng để Nhập File lại).
+async function buildPurchaseTransactionExportWorkbook(transactions, truncated = false) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Giao Dịch Mua Hàng');
   sheet.columns = TX_COLUMNS.map(c => ({ header: c.header, key: c.key, width: c.width }));
@@ -198,6 +202,16 @@ async function buildPurchaseTransactionExportWorkbook(transactions) {
       isReturn: t.isReturn ? 'Có' : 'Không'
     });
   });
+  if (truncated) {
+    const noteSheet = wb.addWorksheet('Ghi Chú');
+    noteSheet.columns = [{ width: 100 }];
+    const row = noteSheet.addRow([
+      `⚠️ Dữ liệu đã bị CẮT BỚT: khoảng ngày đã chọn có nhiều hơn ${transactions.length} giao dịch, ` +
+      `file chỉ chứa ${transactions.length} dòng mới nhất. Vui lòng thu hẹp khoảng ngày để xuất đầy đủ.`
+    ]);
+    row.font = { bold: true, color: { argb: 'FFCC0000' } };
+    row.alignment = { wrapText: true };
+  }
   return wb;
 }
 

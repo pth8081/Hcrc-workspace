@@ -125,9 +125,15 @@ router.post('/contracts/:id/edit', async (req, res) => {
           // file"): trước đây route này chỉ xác minh ĐÚNG KHUÔN URL (assertUploadedFileUrl trong
           // editContract()), không xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới
           // lên hay không.
-          const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+          // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): chỉ kiểm `fileUrl` — customData ("Trường Bổ
+          // Sung" kiểu Tải Tệp, admin cấu hình được cho BẤT KỲ modKey nào qua validateRequiredCustomData(),
+          // xem lib/createValidation.js) bị BỎ SÓT, cho phép "mượn" fileUrl người khác đã tải lên gắn vào
+          // customData của hồ sơ mình đang sửa nếu module này có cấu hình field Tải Tệp. Mirror ĐÚNG khuôn
+          // carRegs/officeReqs/meetings đã vá: giữ nguyên URL customData CŨ trong exemptFileUrls.
+          const exemptFileUrls = new Set(item.fileUrl ? [item.fileUrl] : []);
+          collectFileUrlsDeep(item.customData, exemptFileUrls);
           const updated = recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept, allContracts);
-          await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+          await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, customData: updated.customData }, freshUser, { exemptFileUrls });
           return updated;
         });
       }
@@ -1295,7 +1301,30 @@ router.post('/vppPeriods/:id/delete', async (req, res) => {
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
-router.post('/budgetPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetPeriods'));
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ
+// ĐIỀU KIỆN 1 kỳ ngân sách dù đang có budgetEntries trỏ periodId vào nó — không chỉ mồ côi dữ liệu (hồ sơ
+// NHÁP không còn tra ra được kỳ, kẹt vĩnh viễn ở submit/update/manager-edit), mà còn NGHIÊM TRỌNG HƠN:
+// blockApproveIf() (lib/workflowEngine.js) tính `period && isBudgetPeriodClosed(period)` — khi period đã
+// bị xoá (undefined), biểu thức short-circuit về falsy, KHÔNG chặn duyệt nữa — xoá hẳn kỳ còn "mở khoá"
+// việc duyệt hơn cả việc "đóng kỳ" (đúng lỗ hổng đóng kỳ vốn phải chặn). Mirror ĐÚNG khuôn vppPeriods/
+// budgetTemplates ở trên.
+router.post('/budgetPeriods/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const entries = await getAllForCollection('budgetEntries');
+    const referencing = entries.filter(e => e.periodId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa kỳ ngân sách này vì còn ${referencing.length} đề xuất ngân sách gắn với nó. Vui lòng xử lý/xoá các đề xuất đó trước.`);
+    }
+    await deleteRecordForCollection('budgetPeriods', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `budgetPeriods/${req.params.id}/delete`, err);
+  }
+});
 router.post('/budgetEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'budgetEntries'));
 // Không dùng deleteAdminOnly() chung — chặn xoá mẫu ngân sách còn đang được 1 kỳ ngân sách tham chiếu
 // (budgetPeriod.templateId). Trước đây xoá được vô điều kiện: getBudgetTemplateCustomFields() (xem
@@ -2368,9 +2397,13 @@ router.post('/docs/:id/update', async (req, res) => {
     const result = await withCodeRegenRetry(
       () => getAllForCollection('docs'),
       (allDocs) => withLockedRecordForCollection('docs', itemId, async (item) => {
-        const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+        // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData"):
+        // chỉ kiểm fileUrl, bỏ sót customData (Trường Bổ Sung kiểu Tải Tệp, admin cấu hình được cho MỌI
+        // modKey) — mirror ĐÚNG khuôn carRegs/officeReqs/meetings đã vá.
+        const exemptFileUrls = new Set(item.fileUrl ? [item.fileUrl] : []);
+        collectFileUrlsDeep(item.customData, exemptFileUrls);
         const updated = recordActions.editDocDraft(req.body, freshUser, item, appData, allDocs);
-        await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+        await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, customData: updated.customData }, freshUser, { exemptFileUrls });
         return updated;
       })
     );
@@ -2471,12 +2504,16 @@ router.post('/submissions/:id/update', async (req, res) => {
     const result = await withCodeRegenRetry(
       () => getAllForCollection('submissions'),
       (existingCollection) => withLockedRecordForCollection('submissions', itemId, async (item) => {
-        const exemptFileUrls = [
+        // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData"):
+        // chỉ kiểm fileUrl/extraFiles, bỏ sót customData (Trường Bổ Sung kiểu Tải Tệp) — mirror ĐÚNG
+        // khuôn carRegs/officeReqs/meetings đã vá.
+        const exemptFileUrls = new Set([
           ...(item.fileUrl ? [item.fileUrl] : []),
           ...((item.extraFiles || []).map(f => f?.fileUrl).filter(Boolean)),
-        ];
+        ]);
+        collectFileUrlsDeep(item.customData, exemptFileUrls);
         const updated = recordActions.editSubmissionDraft(req.body, freshUser, item, appData, existingCollection);
-        await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, extraFiles: updated.extraFiles }, freshUser, { exemptFileUrls });
+        await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, extraFiles: updated.extraFiles, customData: updated.customData }, freshUser, { exemptFileUrls });
         return updated;
       })
     );
@@ -2784,6 +2821,18 @@ router.post('/reportEntries/:id/update', async (req, res) => {
 
 // ===================== NGÂN SÁCH =====================
 
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình): module Ngân Sách "1.0" cũ (budgetEntries/
+// budgetPeriods/budgetTemplates — đã ngưng dùng trên UI, chỉ còn là dữ liệu lịch sử, xem
+// public/js/module-ngansach.js) hoàn toàn thiếu Khối 0 ở tầng hành động, khác hẳn budgetLines (khối
+// router.use('/budgetLines', ...) ngay bên dưới đã vá đúng) — tắt moduleAccess.budget cho 1 tài khoản
+// còn giữ budgetManage/budgetCreate vẫn đóng/mở lại kỳ, sửa/gửi/quản lý trực tiếp qua API. Mirror ĐÚNG
+// khuôn router.use('/budgetLines', ...).
+router.use(['/budgetPeriods', '/budgetEntries', '/budgetTemplates'], (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'budget')) {
+    return res.status(403).json({ error: 'Module Ngân Sách đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 // POST /api/records/budgetPeriods/:id/close — người quản lý (budgetManage/admin) tự đóng kỳ sớm.
 router.post('/budgetPeriods/:id/close', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -3171,7 +3220,7 @@ router.post('/operationOrders/:id/receive-goods', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     if (!hasModuleAccessServer(freshUser, 'vanHanh')) throw new HttpError(403, 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.receiveOperationOrderGoods(freshUser, item, appData));
+    const result = await withLockedRecordForCollection('operationOrders', itemId, (item) => recordActions.receiveOperationOrderGoods(freshUser, item, req.body, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `operationOrders/${req.params.id}/receive-goods`, err); }
 });
@@ -4504,16 +4553,20 @@ router.post('/uniformStockAdjustments/create', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền thao tác này' });
     }
     const result = await withAppLock(`uniform_store:${freshUser.dept}`, async () => {
-      const [allPeriods, allIssuances, allAdjustments, allTransfers] = await Promise.all([
+      const [allPeriods, allIssuances, allAdjustments, allTransfers, formTemplates] = await Promise.all([
         getAllForCollection('uniformPeriods'),
         getAllForCollection('uniformIssuances'),
         getAllForCollection('uniformStockAdjustments'),
-        getAllForCollection('uniformTransfers')
+        getAllForCollection('uniformTransfers'),
+        getAppDataValue('formTemplates')
       ]);
       const storeIssuances = allIssuances.filter(x => x.dept === freshUser.dept);
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
-      const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers);
+      const record = recordActions.buildUniformStockAdjustment(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers, formTemplates);
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình — "Trường Bổ Sung" cấu hình được nhưng dead
+      // config): route tạo mới này KHÔNG đi qua routes/create.js (không thừa hưởng check chung ở đó).
+      await assertPayloadFileUrlsOwnedByUser({ customData: record.customData }, freshUser);
       return insertRecord('uniformStockAdjustments', record);
     });
     res.json({ ok: true, item: result });

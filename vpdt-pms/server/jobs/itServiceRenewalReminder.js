@@ -162,8 +162,16 @@ async function checkItServiceRenewalReminders() {
       }
 
       if (itemChanged) {
+        // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình — lost update, cùng lớp lỗi đã vá ở
+        // jobs/itApprovalDeadlineReminder.js): trước đây ghi đè NGUYÊN mảng bằng SNAPSHOT
+        // (item.notifiedThresholds, đọc TRƯỚC khi gửi mail — có thể mất vài giây) — nếu nhân viên IT
+        // sửa/gia hạn ĐÚNG dịch vụ này (editItServiceRenewal()/renewItServiceRenewal(), cả 2 đều chủ
+        // động reset notifiedThresholds=[] khi expiryDate đổi) xong TRƯỚC khi job ghi xong, ghi đè của
+        // job sẽ đè [] MỚI về lại mảng ngưỡng CŨ — hệ thống tưởng "đã nhắc rồi" cho ngưỡng không còn
+        // khớp ngày hết hạn MỚI, bỏ lỡ nhắc hạn thật sau khi đã gia hạn. Nay hợp nhất (Set) với mảng
+        // MỚI NHẤT đọc lại bên trong khoá, không ghi đè.
         await withLockedRecordById('itServiceRenewals', item.id, (record) => {
-          record.notifiedThresholds = item.notifiedThresholds;
+          record.notifiedThresholds = Array.from(new Set([...(record.notifiedThresholds || []), ...newlyCrossedThresholds]));
           return record;
         });
       }

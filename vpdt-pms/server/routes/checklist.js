@@ -65,11 +65,22 @@ router.post('/templates/:id/edit', requireManage, async (req, res) => {
   const templateId = Number(req.params.id);
   if (!Number.isFinite(templateId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    const updated = await withLockedRecordForCollection('checklistTemplates', templateId, (template) => {
+    const updated = await withLockedRecordForCollection('checklistTemplates', templateId, async (template) => {
       if (template.status !== 'DRAFT') {
         throw new HttpError(409, 'Chỉ sửa được checklist đang ở trạng thái Nháp — checklist đã Kích Hoạt/Lưu Trữ phải Nhân Bản thành bản mới để sửa');
       }
       const core = checklist.assertTemplateCoreFields(req.body);
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): assertTemplateCoreFields() chỉ validate định dạng
+      // templateCode, KHÔNG đối chiếu trùng với mã của template khác — khác hẳn luồng TẠO MỚI (đã chặn
+      // đúng ở lib/createValidation.js). Vì templateCode được cơ chế Kích Hoạt (routes/checklist.js
+      // /templates/:id/activate) tin tưởng là bất biến để tự ARCHIVE mọi bản ACTIVE khác CÙNG mã, 1 người
+      // có checklistTemplateManage (không cần admin) có thể tạo 1 template DRAFT bất kỳ, sửa templateCode
+      // trùng với 1 checklist ACTIVE khác đang có hàng loạt bài nộp, rồi Kích Hoạt — vô tình/cố ý ARCHIVE
+      // hồ sơ thật của người/phòng ban khác mà không cảnh báo gì. Coi templateCode là BẤT BIẾN sau khi tạo,
+      // đúng khuôn templateKind ngay bên dưới.
+      if (core.templateCode !== template.templateCode) {
+        throw new HttpError(400, 'Không thể đổi Mã checklist sau khi đã tạo — vui lòng tạo mẫu mới nếu cần đổi mã');
+      }
       // templateKind BẤT BIẾN sau khi tạo (v21.0, xem lib/checklist.js) — template cũ trước v21.0 không
       // có field này, mặc định coi là QA để so sánh không bị lệch oan.
       const existingKind = template.templateKind || 'QA';

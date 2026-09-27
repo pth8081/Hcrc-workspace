@@ -2584,7 +2584,10 @@ const CREATE_MODULE_CONFIGS = {
         ? cls.sessionState === 'ENDED'
         : !!(cls.endTime && new Date() > new Date(cls.endTime));
       if (classEnded) throw new CreateError(409, 'Lớp học này đã kết thúc, không thể đăng ký');
-      const todayStr = new Date().toISOString().slice(0, 10);
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): `new Date().toISOString().slice(0,10)` trả về
+      // NGÀY THEO GIỜ UTC — trong khung 00:00-06:59 sáng giờ VN, so sánh sai khiến vẫn đăng ký được dù đã
+      // thật sự quá registerDeadline (giờ local). Mirror ĐÚNG bulkRegisterTrainingClass() (lib/recordActions.js).
+      const todayStr = require('./attendance').localDateStr(new Date());
       if (cls.registerDeadline && todayStr > cls.registerDeadline) {
         throw new CreateError(409, 'Đã hết hạn đăng ký lớp học này');
       }

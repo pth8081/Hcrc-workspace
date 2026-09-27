@@ -24,7 +24,7 @@ const vendorRebate = require('../lib/vendorRebate');
 const { fetchAllPurchases } = require('../lib/dsmartApiClient');
 const {
   bulkInsertPurchaseTransactions, queryPurchaseTransactionsForVendor, queryPurchaseTransactionsForExport,
-  insertPurchaseSyncLog, getRecentPurchaseSyncLogs, getLastSuccessfulSyncStart
+  insertPurchaseSyncLog, getRecentPurchaseSyncLogs, getLastSuccessfulSyncStart, EXPORT_MAX_ROWS
 } = require('../lib/vendorPurchaseStore');
 const {
   buildPurchaseTransactionTemplateWorkbook, parsePurchaseTransactionImportXlsx, buildPurchaseTransactionExportWorkbook
@@ -577,7 +577,10 @@ router.get('/manual-import-export', requireManageTerms, async (req, res) => {
   try {
     const sourceSystem = req.query.sourceSystem ? String(req.query.sourceSystem).trim() : null;
     const transactions = await queryPurchaseTransactionsForExport({ from, to, sourceSystem });
-    const wb = await buildPurchaseTransactionExportWorkbook(transactions);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): trước đây đạt đúng EXPORT_MAX_ROWS thì file xuất
+    // ra âm thầm thiếu dữ liệu, không cảnh báo gì cho người dùng.
+    const truncated = transactions.length >= EXPORT_MAX_ROWS;
+    const wb = await buildPurchaseTransactionExportWorkbook(transactions, truncated);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Giao_Dich_Mua_Hang_${from}_${to}.xlsx"`);
     await wb.xlsx.write(res);

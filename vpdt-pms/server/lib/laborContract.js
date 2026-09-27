@@ -31,12 +31,16 @@
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
 const { assertUploadedFileUrl } = require('./createValidation');
+const { localDateStr } = require('./attendance');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
 }
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): xem chú thích đầy đủ tại todayISO() ở
+// lib/employeeProfile.js — cùng lỗi giờ UTC thay vì giờ local, ảnh hưởng terminationDate/startDate mặc
+// định khi HR không tự nhập ngày (đóng hợp đồng, kích hoạt hợp đồng chính thức, hoàn tất Offboarding).
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
 }
 
 const CONTRACT_TYPES = new Set(['PROBATION', 'FIXED_TERM', 'INDEFINITE']);

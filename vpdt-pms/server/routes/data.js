@@ -25,7 +25,7 @@ const {
   filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser, filterTrainingDocumentProgressForUser,
   sanitizeTrainingClassesForUser,
   filterRecruitmentReferralsForUser, filterItPriceApprovalsForUser, filterItSupportTicketsForUser,
-  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser, filterBudgetLinesForUser,
+  filterUniformPeriodsForUser, filterUniformIssuancesForUser, filterUniformStockAdjustmentsForUser, filterUniformTransfersForUser, filterBudgetEntriesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
   filterOperationExecutionPeriodsForUser,
   filterVppRegistrationsForUser, filterLicensesForUser, filterHrFeedbackForUser, filterCareerPathConfirmationsForUser,
@@ -1708,12 +1708,16 @@ const LAZY_DATA_GROUPS = {
     ]
   },
   budget: {
-    // budgetPeriods/budgetTemplates: CỐ Ý không lọc, giống hệt hành vi hiện tại ở GET /api/data chính
-    // (danh mục chung, không nhạy cảm theo phòng ban) — filterBudgetPeriodsForUser() có tồn tại (dùng ở
-    // routes/reports.js) nhưng CHƯA từng được áp cho GET /api/data, giữ nguyên đúng hành vi đó ở đây.
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Nghiêm trọng): trước đây comment ở đây coi
+    // budgetPeriods/budgetTemplates là "cùng 1 loại danh mục chung, không nhạy cảm theo phòng ban" — SAI
+    // với budgetPeriods (có deptScope/endTime/status theo TỪNG phòng ban, y hệt budgetEntries/budgetLines),
+    // chỉ budgetTemplates mới thật sự là catalog dùng chung. filterBudgetPeriodsForUser() (đã có sẵn, dùng
+    // đúng ở routes/reports.js) bị bỏ sót ở đây khiến MỌI tài khoản đã đăng nhập đọc được TOÀN BỘ kỳ ngân
+    // sách của mọi phòng ban/siêu thị qua route lười này (nguồn dữ liệu DUY NHẤT cho budgetPeriods từ khi
+    // chuyển sang lazy-load). budgetTemplates giữ nguyên không lọc (đúng là catalog chung).
     collections: [
       { key: 'budgetTemplates' },
-      { key: 'budgetPeriods' },
+      { key: 'budgetPeriods', filter: filterBudgetPeriodsForUser },
       { key: 'budgetLines', loader: (user) => loadBudgetLinesScoped(user), filter: filterBudgetLinesForUser }
     ]
   },

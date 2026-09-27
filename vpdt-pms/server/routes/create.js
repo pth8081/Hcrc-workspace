@@ -63,8 +63,19 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // 6 được nêu ở comment trên nhưng trước đây bị bỏ sót khỏi map này — tắt moduleAccess.hrLifecycle cho 1
 // tài khoản (còn giữ hrOnboardingManage/hrOffboardingManage) vẫn POST /api/create/hrProcesses tạo mới
 // quy trình Onboarding/Offboarding cho bất kỳ nhân viên nào qua API trực tiếp.
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): paymentRequests/officeReqs KHÔNG có mặt ở
+// COLLECTION_TO_MODULE_ACCESS_KEY (module "office"/"Tổng Hợp" chưa từng được thêm vào
+// MODULE_ACCESS_GATED_COLLECTIONS — 2 collection này chỉ gác đúng Khối 0 ở tầng HÀNH ĐỘNG qua
+// `router.use('/paymentRequests'|'/officeReqs', ...)` ở routes/records.js) nên tắt moduleAccess.office
+// cho 1 tài khoản (còn giữ paymentManage/officeReqManage) vẫn TẠO MỚI được đề nghị thanh toán/mua sắm
+// thủ công qua route CHUNG này — dù mọi thao tác SỬA/GỬI/DUYỆT sau đó đã bị chặn đúng.
+// budgetTemplates: cùng module "budget" như budgetLines/budgetEntries/budgetPeriods (nay đã tự động có
+// mặt ở COLLECTION_TO_MODULE_ACCESS_KEY qua MODULE_ACCESS_GATED_COLLECTIONS.budget, xem lib/recordViewScope.js)
+// nhưng budgetTemplates CỐ Ý không nằm trong danh sách đó (catalog dùng chung, không lọc theo phòng ban)
+// — vẫn cần Khối 0 riêng ở khâu TẠO nên liệt kê ở đây.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
-  budgetLines: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle'
+  budgetTemplates: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
+  paymentRequests: 'office', officeReqs: 'office'
 };
 
 router.use(requireAuth, blockIfMustChangePassword);

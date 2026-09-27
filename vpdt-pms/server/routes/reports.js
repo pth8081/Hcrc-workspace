@@ -249,9 +249,16 @@ router.get('/:collection', async (req, res) => {
     // X) sẽ lọt/thiếu sai khoảng ngày khi lọc theo Báo Cáo chung, khác kết quả với chính module Checklist.
     // Bỏ qua lọc ngày ở SQL cho riêng collection này, áp lại đúng field submittedAt||startedAt ở JS.
     const isChecklistSubmissions = collection === 'checklistSubmissions';
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình — cùng lớp lỗi vừa vá cho checklistSubmissions):
+    // rebateCalculations lọc ngày ở SQL theo CreatedAt (thời điểm bản ghi được TẠO), khác hẳn field
+    // nghiệp vụ thật `periodStart` (kỳ chiết khấu người dùng CHỌN lúc "Tính Ước Tính", có thể là kỳ quá
+    // khứ/tương lai so với lúc tạo) mà chính client (module-baocaoquantri.js, isInDateRange(r.periodStart,
+    // from, to)) dùng để lọc — báo cáo BAS thiếu/lẫn bản ghi so với đúng khoảng kỳ người dùng chọn.
+    const isRebateCalculations = collection === 'rebateCalculations';
+    const skipSqlDateFilter = isChecklistSubmissions || isRebateCalculations;
     const { items } = collection === 'tasks'
       ? await queryTasksInRange({ dateFrom, dateTo })
-      : await queryDedicatedRecords(collection, { where, dateFrom: isChecklistSubmissions ? undefined : dateFrom, dateTo: isChecklistSubmissions ? undefined : dateTo });
+      : await queryDedicatedRecords(collection, { where, dateFrom: skipSqlDateFilter ? undefined : dateFrom, dateTo: skipSqlDateFilter ? undefined : dateTo });
 
     let postFiltered = config.postFilter ? config.postFilter(items, dept) : items;
     if (isChecklistSubmissions && (dateFrom || dateTo)) {
@@ -261,6 +268,15 @@ router.get('/:collection', async (req, res) => {
         const t = r.submittedAt || r.startedAt;
         if (!t) return false;
         const ms = new Date(t).getTime();
+        return Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
+      });
+    }
+    if (isRebateCalculations && (dateFrom || dateTo)) {
+      const fromMs = dateFrom ? new Date(dateFrom).getTime() : -Infinity;
+      const toMs = dateTo ? new Date(dateTo).getTime() : Infinity;
+      postFiltered = postFiltered.filter(r => {
+        if (!r.periodStart) return false;
+        const ms = new Date(r.periodStart).getTime();
         return Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
       });
     }

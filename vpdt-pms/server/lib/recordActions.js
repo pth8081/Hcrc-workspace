@@ -9,6 +9,7 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
+const { localDateStr } = require('./attendance');
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
@@ -758,12 +759,27 @@ function isApproverForOperationOrderReceipt(user, item) {
   if (scope?.all) return true;
   return !!(Array.isArray(scope?.depts) && scope.depts.includes(item.dept));
 }
-function receiveOperationOrderGoods(user, item, appData) {
+// payload (tham số MỚI, tuỳ chọn — LỖI ĐÃ VÁ đợt audit chuyên sâu mới, mức Trung bình): "Thực Nhận"
+// (qtyReceived) trước đây CHỈ sửa được qua editOperationOrderDraft() lúc đơn còn DRAFT ("Yêu Cầu Bổ
+// Sung", TRƯỚC khi hàng thật về) — route "Nhập Hàng" (chính xác lúc hàng về kho thật) trước đây không
+// nhận payload nào, chỉ đổi status/receivedAt, khiến số Thực Nhận không bao giờ phản ánh đúng số lượng
+// hàng về thực tế nếu khác số đặt (giao thiếu/thừa). Nay cho phép payload.items (mảng song song đúng
+// thứ tự/độ dài item.items hiện có, chỉ gửi field cần đổi) cập nhật lại qtyReceived NGAY tại bước này.
+function receiveOperationOrderGoods(user, item, payload, appData) {
   if (item.status !== 'AWAITING_RECEIPT') {
     throw new HttpError(409, 'Đơn hàng không ở trạng thái chờ nhập hàng, không thể xác nhận nhập hàng (có thể đã xử lý ở nơi khác)');
   }
   if (!isApproverForOperationOrderReceipt(user, item, appData)) {
     throw new HttpError(403, 'Bạn không có quyền xác nhận nhập hàng cho đơn hàng này');
+  }
+  if (Array.isArray(payload?.items) && Array.isArray(item.items) && payload.items.length === item.items.length) {
+    item.items = item.items.map((it, idx) => {
+      const raw = payload.items[idx]?.qtyReceived;
+      if (raw === undefined) return it;
+      const hasQty = raw !== null && raw !== '';
+      const qtyReceived = hasQty ? Math.max(0, Number(raw) || 0) : null;
+      return { ...it, qtyReceived };
+    });
   }
   item.status = 'RECEIVED';
   item.receivedAt = new Date().toISOString();
@@ -3062,8 +3078,19 @@ function canApproveInternalPost(user) {
   return !!(user.perms?.admin || user.perms?.internalPostApprove);
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình — "tự duyệt bài đăng do chính mình tạo"): mirror
+// ĐÚNG tinh thần assertNotSelfDecidingLicense() ở trên — admin KHÔNG bị chặn, áp cho MỌI quyết định
+// (duyệt/từ chối/yêu cầu bổ sung).
+function assertNotSelfDecidingInternalPost(user, post) {
+  if (user?.perms?.admin) return;
+  if (post && post.author === user?.username) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối bài đăng do chính mình tạo');
+  }
+}
+
 function approveInternalPost(user, post) {
   if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền phê duyệt bài đăng này');
+  assertNotSelfDecidingInternalPost(user, post);
   if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
   post.status = 'APPROVED';
   post.approvedBy = user.username;
@@ -3074,6 +3101,7 @@ function approveInternalPost(user, post) {
 
 function rejectInternalPost(payload, user, post) {
   if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền từ chối bài đăng này');
+  assertNotSelfDecidingInternalPost(user, post);
   if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
   const reason = (payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
@@ -3091,6 +3119,7 @@ function rejectInternalPost(payload, user, post) {
 // chỉ nhận status PENDING, không cần sửa gì thêm).
 function requestInternalPostInfo(payload, user, post) {
   if (!canApproveInternalPost(user)) throw new HttpError(403, 'Bạn không có quyền yêu cầu bổ sung');
+  assertNotSelfDecidingInternalPost(user, post);
   if (post.type !== 'SHARE') throw new HttpError(400, 'Chỉ áp dụng cho bài đăng Góc Chia Sẻ');
   if (post.status !== 'PENDING') throw new HttpError(409, 'Bài đăng không ở trạng thái chờ duyệt');
   const comment = (payload?.comment || '').trim();
@@ -4792,7 +4821,11 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
     ? cls.sessionState === 'ENDED'
     : !!(cls.endTime && new Date() > new Date(cls.endTime));
   if (classEnded) throw new HttpError(409, 'Lớp học này đã kết thúc, không thể thêm học viên');
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): `new Date().toISOString().slice(0,10)` trả về NGÀY
+  // THEO GIỜ UTC — trong khung 00:00-06:59 sáng giờ VN, so sánh sai khiến vẫn thêm được học viên dù đã
+  // thật sự quá `registerDeadline` (giờ local). Dùng localDateStr() (lib/attendance.js) như đã áp dụng
+  // cho mọi field "ngày local" khác trong hệ thống.
+  const todayStr = localDateStr(new Date());
   if (cls.registerDeadline && todayStr > cls.registerDeadline) {
     throw new HttpError(409, 'Đã hết hạn đăng ký lớp học này');
   }
@@ -5744,7 +5777,7 @@ function requestPriceInfoFromIt(user, item, payload) {
   assertNotSelfHandlingItPriceApply(user, item);
   if (hasUnresolvedPriceInfoRequest(item)) throw new HttpError(409, 'Đã có 1 yêu cầu bổ sung đang chờ xử lý');
   if (hasPendingItPriceEmergencyReject(item)) throw new HttpError(409, 'Đang có yêu cầu từ chối khẩn cấp chờ xử lý, chưa thể yêu cầu bổ sung');
-  const reason = (payload?.reason || '').trim();
+  const reason = (payload?.reason || '').trim().slice(0, 1000);
   if (!reason) throw new HttpError(400, 'Vui lòng nhập nội dung cần bổ sung');
   item.infoRequests = item.infoRequests || [];
   item.infoRequests.push({
@@ -5804,7 +5837,7 @@ function requestItPriceEmergencyReject(user, item, payload) {
     throw new HttpError(403, 'Chỉ người đã duyệt bước cuối cùng (hoặc Quản Trị Viên) mới gửi được yêu cầu từ chối khẩn cấp');
   }
   if (item.emergencyRejectStatus === 'PENDING') throw new HttpError(409, 'Đã có 1 yêu cầu từ chối khẩn cấp đang chờ xử lý');
-  const reason = (payload?.reason || '').trim();
+  const reason = (payload?.reason || '').trim().slice(0, 1000);
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do từ chối khẩn cấp');
   item.emergencyRejectStatus = 'PENDING';
   item.emergencyRejectReason = reason;
@@ -5845,7 +5878,7 @@ function approveItPriceEmergencyReject(user, item) {
 function denyItPriceEmergencyReject(user, item, payload) {
   if (!canApproveItPriceEmergencyReject(user, item.priceType)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
   if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
-  const comment = (payload?.comment || '').trim();
+  const comment = (payload?.comment || '').trim().slice(0, 1000);
   if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối yêu cầu này');
   item.emergencyRejectStatus = 'DENIED';
   item.emergencyRejectDecidedBy = user.username;
@@ -5971,7 +6004,7 @@ function updateItTicketStatus(user, ticket, payload) {
     throw new HttpError(409, 'Đang chờ hoặc chưa được phê duyệt — gửi lại yêu cầu phê duyệt hoặc hủy yêu cầu này trước khi cập nhật tiến độ');
   }
   ticket.status = status;
-  if (payload?.resolutionNote != null) ticket.resolutionNote = String(payload.resolutionNote).trim();
+  if (payload?.resolutionNote != null) ticket.resolutionNote = String(payload.resolutionNote).trim().slice(0, 2000);
   return ticket;
 }
 
@@ -5979,7 +6012,7 @@ function updateItTicketStatus(user, ticket, payload) {
 // riêng đội IT — giống cơ chế bình luận Góc chia sẻ, nhưng phạm vi hẹp: chỉ tác giả + đội IT + người
 // được chỉ định phê duyệt (đúng ticket đó, xem escalateItTicket() bên dưới).
 function addItTicketComment(user, ticket, payload) {
-  const content = (payload?.content || '').trim();
+  const content = (payload?.content || '').trim().slice(0, 2000);
   if (!content) throw new HttpError(400, 'Vui lòng nhập nội dung bình luận');
   if (!canManageItSupport(user) && ticket.creator !== user.username && ticket.approvalApprover !== user.username) {
     throw new HttpError(403, 'Bạn không có quyền bình luận ở yêu cầu này');
@@ -6004,12 +6037,19 @@ function escalateItTicket(user, ticket, payload, usersList) {
   if (!canManageItSupport(user)) throw new HttpError(403, 'Bạn không có quyền gửi yêu cầu phê duyệt ở đây');
   if (ticket.status !== 'TODO' && ticket.status !== 'DOING') throw new HttpError(409, 'Yêu cầu này đã kết thúc, không thể gửi yêu cầu phê duyệt');
   if (ticket.approvalStatus === 'PENDING') throw new HttpError(409, 'Đã có 1 yêu cầu phê duyệt đang chờ xử lý');
-  const reason = (payload?.reason || '').trim();
+  const reason = (payload?.reason || '').trim().slice(0, 1000);
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do cần phê duyệt');
   const approverUsername = payload?.approverUsername;
   const approver = (usersList || []).find(u => u.username === approverUsername && u.active !== false);
   if (!approver) throw new HttpError(400, 'Không tìm thấy người được chọn phê duyệt (hoặc tài khoản đã bị khoá)');
   if (approver.username === user.username) throw new HttpError(400, 'Không thể tự chọn chính mình làm người phê duyệt');
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình): chỉ chặn approver === NGƯỜI ĐANG GỬI yêu cầu
+  // (đúng người xử lý ticket), KHÔNG chặn approver === ticket.creator (người TẠO ticket, thường KHÁC
+  // người xử lý) — vô hiệu hoá đúng mục đích "xin ý kiến người có trách nhiệm CỤ THỂ trước khi tiếp tục
+  // xử lý": nếu chọn nhầm/cố ý chọn đúng người tạo, người tạo tự duyệt/từ chối yêu cầu của chính mình
+  // (approveItTicketEscalation()/denyItTicketEscalation() bên dưới chỉ kiểm approvalApprover===user, không
+  // loại trừ creator).
+  if (approver.username === ticket.creator) throw new HttpError(400, 'Không thể chọn người tạo yêu cầu này làm người phê duyệt');
   ticket.approvalStatus = 'PENDING';
   ticket.approvalApprover = approver.username;
   ticket.approvalApproverName = approver.name;
@@ -6043,7 +6083,7 @@ function approveItTicketEscalation(user, ticket) {
 function denyItTicketEscalation(user, ticket, payload) {
   if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
-  const comment = (payload?.comment || '').trim();
+  const comment = (payload?.comment || '').trim().slice(0, 1000);
   if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
   ticket.approvalStatus = 'REJECTED';
   ticket.approvalComment = comment;
@@ -6411,6 +6451,17 @@ const HR_LIFECYCLE_TICKET_SOURCE_COLLECTION = {
 function applyItTicketCompletionToHrProcessTask(user, item, ticket, users) {
   const task = (item.tasks || []).find(t => t.taskId === ticket.sourceTaskId);
   if (!task || task.status === 'DONE' || task.status === 'SKIPPED') return item;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): task nhãn IT có thể đã bị "giao riêng"
+  // (task.assignedToUsername khác null, xem reassign-task + chú thích canActOnHrTask() ở trên — "Task đã
+  // GIAO RIÊNG -> CHỈ đúng người đó") cho 1 nhân sự IT cụ thể, nhưng trước đây BẤT KỲ ai có itManage đóng
+  // được ticket (canManageItSupport() ở updateItTicketStatus()) đều tự động hoàn tất luôn task đó, bỏ qua
+  // hoàn toàn ràng buộc "giao riêng". Chỉ tự động hoàn tất khi người đóng ticket ĐỦ quyền hành động trên
+  // ĐÚNG task này (canActOnHrTask) — nếu không, bỏ qua (KHÔNG throw, ticket đã đóng thành công rồi, xem
+  // chú thích "lỗi ở bước ghi ngược" ngay trên function này), để người được giao riêng tự hoàn tất task.
+  if (!canActOnHrTask(user, item, task)) {
+    console.warn(`applyItTicketCompletionToHrProcessTask: ${user.username} đóng ticket ${ticket.id} nhưng không đủ quyền hoàn tất task ${task.taskId} (đã giao riêng cho ${task.assignedToUsername || '(chưa giao riêng)'}) — bỏ qua tự động hoàn tất`);
+    return item;
+  }
   task.status = 'DONE';
   task.completedBy = user.username; task.completedByName = user.name; task.completedAt = nowVN();
   if (ticket.resolutionNote) task.note = String(ticket.resolutionNote).trim().slice(0, 500);
@@ -6838,7 +6889,11 @@ function acknowledgeUniformIssuance(user, item, usersList) {
 // (canManageUniformStore) thực hiện, PHẠM VI CHÍNH SIÊU THỊ MÌNH — cùng khoá 'uniform_store:'+user.dept
 // với buildUniformIssuance() để 2 thao tác gần như đồng thời không cùng vượt tồn/vượt số đang giữ.
 // Lý do (reason) BẮT BUỘC theo yêu cầu nghiệp vụ (không cho để trống).
-function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList, allApprovedTransfers) {
+// formTemplates (tham số MỚI, tuỳ chọn — LỖI ĐÃ VÁ đợt audit chuyên sâu mới, mức Trung bình): "Trường Bổ
+// Sung" cấu hình được cho UNIFORM_ADJUST_STOCK/UNIFORM_ADJUST_EMPLOYEE ở màn admin 📋 Biểu Mẫu nhưng
+// trước đây hàm này không đọc/validate/lưu payload.customData — dead config, mirror ĐÚNG khuôn
+// buildUniformIssuance()/buildUniformTransfer() ở trên.
+function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfStore, allAdjustmentsOfStore, usersList, allApprovedTransfers, formTemplates) {
   if (!canManageUniformStore(user)) throw new HttpError(403, 'Bạn không có quyền thao tác này');
 
   const source = String(payload?.source || '').trim().toUpperCase();
@@ -6859,11 +6914,16 @@ function buildUniformStockAdjustment(user, payload, allPeriods, allIssuancesOfSt
   const reason = String(payload?.reason || '').trim().slice(0, 500);
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do');
 
+  const modKey = source === 'EMPLOYEE' ? 'UNIFORM_ADJUST_EMPLOYEE' : 'UNIFORM_ADJUST_STOCK';
+  validateRequiredCustomData(payload?.customData, formTemplates, modKey);
+  const customData = payload?.customData && typeof payload.customData === 'object' ? payload.customData : {};
+
   const record = {
     id: Date.now(),
     dept: user.dept, deptName: user.dept,
     creator: user.username, creatorName: user.name,
     source, outcome, itemName, size, qty, reason,
+    customData,
     createdAt: nowVN()
   };
 

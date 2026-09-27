@@ -1299,7 +1299,15 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // route TẠO MỚI + GET /api/data zero-out đúng (đã dời thứ tự lọc operationWorkItems/
   // operationExecutionPeriods sang SAU vòng lặp Khối 0 ở routes/data.js để không dùng nhầm
   // operationStoreOpenings/operationRepairs snapshot CHƯA bị zero).
-  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods']
+  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods'],
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
+  // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
+  // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
+  // itSupport/vanHang/muaHang ở trên), nên phải mirror y hệt: tắt moduleAccess.budget cho 1 tài khoản vẫn
+  // đọc được budgetEntries (kể cả bản NHÁP)/budgetLines/budgetPeriods qua GET /api/data(/lazy) VÀ
+  // GET /api/reports/* nếu còn quyền chi tiết (budgetManage/budgetCreate...). budgetTemplates KHÔNG liệt
+  // kê ở đây — đó là catalog dùng chung thật sự (không có dept/deptScope), không cần gác theo module.
+  budget: ['budgetEntries', 'budgetLines', 'budgetPeriods']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này

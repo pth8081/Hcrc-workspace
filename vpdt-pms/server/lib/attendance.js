@@ -260,7 +260,13 @@ function computeAnnualLeaveDays(startDateStr, year, referenceDate) {
   if (start <= yearStart) {
     return Math.round((BASE_ANNUAL_DAYS + seniorityBonus) * 10) / 10;
   }
-  if (start.getUTCFullYear() > year) return 0;
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình): `start` dựng bằng giờ LOCAL (không hậu tố Z,
+  // dòng trên) — so sánh đúng phải dùng getFullYear() (local) như phần còn lại của hàm, không phải
+  // getUTCFullYear(). Trên máy chủ giờ VN (UTC+7), mốc "<năm sau>-01-01T00:00:00" local ứng với
+  // "<năm sau -1>-12-31T17:00:00Z" UTC — getUTCFullYear() trả về NĂM TRƯỚC, khiến điều kiện chặn không
+  // kích hoạt cho đúng trường hợp cần chặn nhất (startDate = 1/1 năm sau, tính quỹ phép năm TRƯỚC khi
+  // nhân viên còn chưa đi làm) — hàm rơi vào nhánh pro-rate và trả về BASE_ANNUAL_DAYS đầy đủ thay vì 0.
+  if (start.getFullYear() > year) return 0;
   const monthsRemaining = 12 - start.getMonth();
   const proRated = Math.round((BASE_ANNUAL_DAYS / 12) * monthsRemaining * 10) / 10;
   return Math.round((proRated + seniorityBonus) * 10) / 10;

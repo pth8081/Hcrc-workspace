@@ -1,8 +1,148 @@
 # Phiên bản hiện tại
 
-**24.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.31 (2026-09-27): Vá ~20 phát hiện từ đợt rà soát chuyên sâu 8-agent song song mới nhất (1 Nghiêm trọng + 6 Cao + 10 Trung bình + 3 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
+
+Đợt rà soát chuyên sâu 8-agent song song mới nhất (audit-only, không sửa)
+tìm ra gần 20 phát hiện thật, phủ toàn bộ ứng dụng. Đã vá toàn bộ theo đúng
+thứ tự người dùng yêu cầu ("xử lý theo thứ tự từ cao đến thấp", "xử lý như
+đợt trước").
+
+**1 lỗi mức Nghiêm trọng:**
+
+1. **`budgetPeriods` (Ngân Sách) hoàn toàn thiếu "Khối 0"** — kỳ ngân sách
+   chưa từng được thêm vào `MODULE_ACCESS_GATED_COLLECTIONS.budget`
+   (`lib/recordViewScope.js`), khiến tài khoản bị khoá quyền module Ngân
+   Sách vẫn xem được toàn bộ danh sách kỳ ngân sách qua
+   `GET /api/data/lazy/budget` (2 vòng lặp zero-out chung ở `routes/data.js`
+   đọc `MODULE_ACCESS_GATED_COLLECTIONS` một cách tổng quát, chỉ cần thêm
+   đúng entry là tự động áp dụng cho cả 2 tầng). Thêm `budgetPeriods` vào
+   entry `budget` (giữ `budgetTemplates` NGOÀI danh sách này vì là danh mục
+   dùng chung thật sự), và gắn `filterBudgetPeriodsForUser` vào group lazy
+   tương ứng.
+
+**6 lỗi mức Cao:**
+
+2. **`EXTRA_CREATE_MODULE_ACCESS_KEY` thiếu 3 module ở tầng Tạo** —
+   `budgetTemplates`/`paymentRequests`/`officeReqs` chưa được map trong
+   `routes/create.js`, cho phép tạo mới các bản ghi này qua API trực tiếp
+   dù tài khoản đã bị khoá quyền module tương ứng (view đã gác đúng, riêng
+   tầng tạo bị bỏ sót).
+3. **`budgetPeriods` xoá không kiểm tra `budgetEntries` còn tham chiếu** —
+   route xoá kỳ ngân sách thiếu bước kiểm tra TOCTOU-safe (đọc → lọc theo
+   khoá ngoại → 409 nếu còn tham chiếu → xoá), có thể xoá 1 kỳ đang có phát
+   sinh ngân sách thật, để lại dữ liệu mồ côi. Vá theo đúng khuôn đã dùng
+   cho `vppPeriods`/`budgetTemplates`.
+4. **Giả mạo quyền sở hữu file qua `customData` ở `contracts`/`docs`/
+   `submissions` sửa** — 3 route Sửa xây `exemptFileUrls` chỉ từ field
+   file chính, bỏ sót các URL file cũ nằm trong `customData` (Trường Bổ
+   Sung) — sửa hồ sơ có thể vô tình bị chặn nhầm hoặc (tệ hơn) 1 URL file
+   người khác đã tải lên bị coi là "cũ, không cần kiểm" nếu trùng vị trí
+   trong `customData`. Đổi `exemptFileUrls` sang `Set`, gọi thêm
+   `collectFileUrlsDeep(item.customData, exemptFileUrls)` trước khi assert.
+5. **Module Phòng Họp (`routes/meetingActions.js`) thiếu "Khối 0" toàn bộ**
+   — kể cả `GET /busy-slots` — tài khoản bị khoá quyền module Phòng Họp vẫn
+   thao tác được mọi route trong file này qua API trực tiếp. Thêm 1
+   middleware `hasModuleAccessServer(user, 'meeting')` áp cho cả file, đặt
+   ngay sau `requireAuth`.
+6. **`escalateItTicket()` cho chọn chính người TẠO ticket làm người phê
+   duyệt** — chỉ chặn approver trùng người ĐANG GỬI yêu cầu (người xử lý),
+   bỏ sót trường hợp approver === `ticket.creator` (thường là người khác) —
+   vô hiệu hoá mục đích "xin ý kiến người có trách nhiệm cụ thể trước khi
+   tiếp tục xử lý" nếu chọn nhầm/cố ý chọn đúng người tạo (người tạo tự
+   duyệt/từ chối yêu cầu của chính mình). Thêm chặn `approver.username ===
+   ticket.creator`.
+7. **IT xác nhận hoàn tất ticket tự động hoàn tất luôn task Onboarding/
+   Offboarding đã "giao riêng"** — `applyItTicketCompletionToHrProcessTask()`
+   hoàn tất task ngay khi ticket liên kết chuyển DONE, KHÔNG đối chiếu lại
+   `canActOnHrTask()` — nếu task đã được giao riêng
+   (`task.assignedToUsername` khác null, tính năng "giao lại task" đã có)
+   cho 1 nhân sự IT cụ thể, bất kỳ ai có `itManage` khác đóng được ticket
+   đều vô tình hoàn tất thay, bỏ qua hoàn toàn ràng buộc giao riêng. Chỉ tự
+   động hoàn tất khi người đóng ticket đủ quyền hành động trên đúng task
+   (nếu không, bỏ qua — không throw, ticket đã đóng thành công rồi — để
+   người được giao tự hoàn tất thủ công).
+
+**10 lỗi mức Trung bình:**
+
+8. **`operationOrders/:id/receive-goods` chưa ghi nhận số lượng thực nhận**
+   — route/hàm xử lý chưa nhận `payload.items[].qtyReceived`, không phân
+   biệt được nhận đủ/thiếu/thừa so với đặt hàng. Thêm tham số payload cho
+   `receiveOperationOrderGoods()` (`lib/recordActions.js`) và cập nhật
+   route tương ứng.
+9. **Checklist: `templateCode` đổi được sau khi mẫu đã tạo** — mirror đúng
+   khuôn bất biến `templateKind` đã có sẵn trong cùng route sửa — chặn đổi
+   `templateCode` sau khi tạo (chỉ validate không đổi), tránh phá vỡ liên
+   kết dữ liệu các bản ghi submission cũ đang tham chiếu theo mã.
+10. **`jobs/itServiceRenewalReminder.js` mất dữ liệu do lost-update** —
+    job ghi đè thẳng `record.notifiedThresholds` bằng snapshot cũ trong
+    vòng lặp, có thể mất threshold do 1 lần chạy khác/thao tác khác vừa ghi
+    thêm. Đổi sang merge
+    `Array.from(new Set([...(record.notifiedThresholds||[]), ...newlyCrossedThresholds]))`,
+    mirror đúng bản vá tương tự đã áp dụng cho
+    `jobs/itApprovalDeadlineReminder.js`.
+11. **`routes/reports.js`: `rebateCalculations` bị lọc nhầm theo
+    `createdAt` thay vì `periodStart`** — báo cáo Mua Hàng BAS áp bộ lọc
+    `dateFrom`/`dateTo` theo field ngày TẠO bản ghi thay vì kỳ tính chiết
+    khấu thật, cho kết quả sai lệch. Thêm `skipSqlDateFilter` + hậu lọc
+    riêng theo `r.periodStart`.
+12. **UTC vs giờ VN sai lệch ngày ở 4 điểm** — `new
+    Date().toISOString().slice(0,10)` trả về ngày lịch UTC, sai với giờ VN
+    (UTC+7) suốt khung 00:00–06:59 giờ địa phương. Sửa
+    `computeAnnualLeaveDays()` (`lib/attendance.js`, dùng `getFullYear()`
+    thay `getUTCFullYear()`), `todayISO()` ở cả `lib/employeeProfile.js`
+    và `lib/laborContract.js` (đổi sang `localDateStr()` đã có sẵn), và so
+    sánh `registerDeadline` ở cả `bulkRegisterTrainingClass()`
+    (`lib/recordActions.js`) lẫn `extraValidate` của trainingRegistrations
+    (`lib/createValidation.js`).
+13. **Đồng Phục: "Trường Bổ Sung" cấu hình được cho 2 form Báo Hỏng/Hủy +
+    Thu Hồi nhưng dead config** — admin cấu hình được field tuỳ chỉnh cho
+    `UNIFORM_ADJUST_STOCK`/`UNIFORM_ADJUST_EMPLOYEE` ở 📋 Biểu Mẫu (2 modKey
+    đã nằm trong `FORM_TABS` để phục vụ tuỳ biến nhãn field lõi), nhưng
+    form thật không hề gọi `renderDynamicInputsForModule()`/
+    `collectDynamicFieldsData()`, và server không validate/lưu
+    `customData` — cấu hình admin nhập vào hoàn toàn không có tác dụng.
+    Nối đầy đủ: HTML container 2 form (`uniformSection.html`), gọi
+    render/collect ở `module-dongphuc.js`, thêm tham số `formTemplates` +
+    `validateRequiredCustomData()` + lưu `customData` vào
+    `buildUniformStockAdjustment()` (`lib/recordActions.js`), và
+    `assertPayloadFileUrlsOwnedByUser()` ở route tạo (route này không đi
+    qua `routes/create.js` nên không thừa hưởng check chung).
+14. **Góc Chia Sẻ (`internalPosts`) thiếu chặn tự duyệt bài đăng do chính
+    mình tạo** — `approveInternalPost()`/`rejectInternalPost()`/
+    `requestInternalPostInfo()` chỉ kiểm quyền `internalPostApprove`,
+    không đối chiếu `post.author`. Thêm
+    `assertNotSelfDecidingInternalPost()`, mirror đúng khuôn
+    `assertNotSelfDecidingLicense()` (admin không bị chặn).
+
+**3 lỗi mức Thấp:**
+
+15. **Xuất Excel Mua Hàng > BAS cắt bớt dữ liệu không cảnh báo** —
+    `queryPurchaseTransactionsForExport()` giới hạn `EXPORT_MAX_ROWS=5000`,
+    đạt đúng giới hạn thì file xuất ra âm thầm thiếu dữ liệu. Thêm sheet
+    "Ghi Chú" cảnh báo rõ khi số dòng chạm giới hạn (tách sheet riêng, không
+    chèn vào sheet dữ liệu chính để không phá cấu trúc cột dùng để Nhập File
+    lại).
+16. **Thiếu giới hạn độ dài ở 7 trường tự do nhóm Hỗ Trợ IT** —
+    `addItTicketComment()`/`escalateItTicket()`/`denyItTicketEscalation()`/
+    `updateItTicketStatus()` (resolutionNote)/`requestPriceInfoFromIt()`/
+    `requestItPriceEmergencyReject()`/`denyItPriceEmergencyReject()` thiếu
+    `.slice(0, N)` trên payload text tự do. Thêm giới hạn 1000-2000 ký tự
+    tuỳ field.
+17. **`resolvePositionOccupants()` không loại tài khoản đã khoá ở nhánh
+    fallback theo `positionKey`** — nhánh chính (theo `dept`/`jobTitle`) đã
+    lọc `active===false`, nhánh fallback dò theo hồ sơ Nhân Sự đã gán vị
+    trí (`positionKey`) lại bỏ sót, khiến 1 vị trí do tài khoản đã khoá giữ
+    (theo hồ sơ) vẫn báo "đang có người giữ", chặn nhầm việc xoá node cơ
+    cấu tổ chức dù thực tế không còn ai giữ.
+
+**Deploy-impact**: chỉ sửa logic JS/HTML thuần — không đổi
+`server/sql/schema.sql`, không thêm biến môi trường mới ở
+`server/.env.example`, không thêm/đổi dependency ở `server/package.json`.
+Chỉ cần copy code + `pm2 restart`, không cần thao tác gì thêm.
 
 ## v24.30 (2026-09-27): Vá 17 phát hiện từ đợt rà soát chuyên sâu 8-agent song song mới nhất (5 Cao + 8 Trung bình + 4 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
 

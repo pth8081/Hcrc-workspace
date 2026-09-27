@@ -231,5 +231,5 @@ async function getLastSuccessfulSyncStart(sourceSystem) {
 
 module.exports = {
   bulkInsertPurchaseTransactions, queryPurchaseTransactionsForVendor, queryPurchaseTransactionsForExport,
-  insertPurchaseSyncLog, getRecentPurchaseSyncLogs, getLastSuccessfulSyncStart
+  insertPurchaseSyncLog, getRecentPurchaseSyncLogs, getLastSuccessfulSyncStart, EXPORT_MAX_ROWS
 };

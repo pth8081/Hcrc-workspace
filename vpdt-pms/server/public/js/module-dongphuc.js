@@ -73,6 +73,11 @@ function setUniformSubTab(subTab) {
     resetUniformTransferForm(); renderUniformTransferApprovalQueue(); renderUniformTransferCancelQueue(); renderUniformTransferReceiveQueue(); renderUniformTransfersTable();
     renderDynamicInputsForModule('UNIFORM_ISSUE', 'dynamicFieldsContainer_UNIFORM_ISSUE');
     renderDynamicInputsForModule('UNIFORM_TRANSFER', 'dynamicFieldsContainer_UNIFORM_TRANSFER');
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình): "Trường Bổ Sung" cấu hình được cho 2 modKey
+    // này ở màn admin 📋 Biểu Mẫu nhưng trước đây form thật không hề render/thu thập — dead config, admin
+    // đánh dấu bắt buộc mà nhân viên không bao giờ thấy field đó. Mirror ĐÚNG khuôn UNIFORM_ISSUE/TRANSFER.
+    renderDynamicInputsForModule('UNIFORM_ADJUST_STOCK', 'dynamicFieldsContainer_UNIFORM_ADJUST_STOCK');
+    renderDynamicInputsForModule('UNIFORM_ADJUST_EMPLOYEE', 'dynamicFieldsContainer_UNIFORM_ADJUST_EMPLOYEE');
   }
   if (subTab === 'STOCK') { renderUniformStockStoreFilterOptions(); renderUniformStock(); }
   if (subTab === 'DASHBOARD') { renderUniformDashboard(); }
@@ -1095,7 +1100,18 @@ async function submitUniformStockAdjustment(source) {
   if (!qty || qty <= 0) return alert('Vui lòng nhập số lượng hợp lệ (> 0)!');
   if (!reason) return alert('Vui lòng nhập lý do (bắt buộc)!');
 
-  const payload = { source, outcome, itemName, size, qty, reason };
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình): thu thập "Trường Bổ Sung" đã cấu hình cho đúng
+  // modKey của nguồn (STOCK/EMPLOYEE) — trước đây không hề gọi collectDynamicFieldsData(), field admin
+  // cấu hình bắt buộc không bao giờ được thu thập dù nhân viên đã nhập (vì chưa từng hiện ra để nhập).
+  const modKey = source === 'EMPLOYEE' ? 'UNIFORM_ADJUST_EMPLOYEE' : 'UNIFORM_ADJUST_STOCK';
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData(modKey);
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const payload = { source, outcome, itemName, size, qty, reason, customData };
   if (source === 'EMPLOYEE') {
     const employeeUsername = document.getElementById('uniformAdjEmpEmployeeUsername').value;
     if (!employeeUsername) return alert('Vui lòng chọn nhân viên!');

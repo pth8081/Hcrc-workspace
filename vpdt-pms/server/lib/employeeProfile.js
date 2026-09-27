@@ -31,12 +31,18 @@
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
 const { isManagerOf } = require('./recordViewScope');
+const { localDateStr } = require('./attendance');
 
 function nowVN() {
   return new Date().toLocaleString('vi-VN');
 }
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): `new Date().toISOString().slice(0,10)` trả về NGÀY
+// THEO GIỜ UTC, không phải giờ local máy chủ (VN, UTC+7) — cùng lớp lỗi đã được vá bằng localDateStr() ở
+// lib/attendance.js (xem chú thích đầy đủ tại đó). Trong khung 00:00-06:59 sáng giờ VN mỗi ngày, hàm này
+// trả về NGÀY HÔM TRƯỚC — applyPositionAssignment() dùng làm effectiveDate mặc định khi không nhập tay
+// sẽ lưu sai lùi 1 ngày trong khung giờ đó.
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
 }
 
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);

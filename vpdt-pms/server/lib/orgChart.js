@@ -141,6 +141,10 @@ function resolvePositionOccupants(version, node, users, employeeProfiles) {
       if (!p || p.positionKey !== node.positionKey || p.status === 'INACTIVE') continue;
       if (p.username && seenUsernames.has(p.username)) continue;
       const linkedUser = p.username ? (users || []).find(u => u.username === p.username) : null;
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): nhánh fallback theo positionKey này KHÔNG lọc
+      // linkedUser.active===false như nhánh users.dept/jobTitle chính ở trên — tài khoản đã bị khoá vẫn
+      // hiện là đang giữ vị trí, chặn nhầm việc xoá node dù thực tế không còn ai giữ.
+      if (linkedUser && linkedUser.active === false) continue;
       occupants.push({ username: p.username || null, name: linkedUser?.name || p.employeeCode || p.username || '(hồ sơ chưa có tài khoản)' });
       if (p.username) seenUsernames.add(p.username);
     }
