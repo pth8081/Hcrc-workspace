@@ -176,6 +176,11 @@
       <div id="mhManualImportWrap" class="hidden bg-white rounded border p-4 space-y-3">
         <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📤 Nhập/Xuất Dữ Liệu Thủ Công</h3>
         <p class="text-xs text-gray-500">Dùng khi chưa/không đồng bộ được DSmart — tải file mẫu, điền tay rồi nhập lên, hoặc xuất lại dữ liệu Thủ Công đang có để chỉnh sửa/bổ sung rồi nhập lại. <b>Lưu ý:</b> "📊 Xuất File" bên dưới CHỈ xuất đúng dữ liệu nguồn Thủ Công (không kèm dữ liệu 🔄 Đồng Bộ DSmart) — xuất rồi nhập lại đúng luồng này để tránh nhân đôi giao dịch; muốn xem/báo cáo TOÀN BỘ dữ liệu (cả 2 nguồn) hãy dùng bảng Nhật Ký Đồng Bộ hoặc màn 📊 Báo Cáo.</p>
+        <!-- LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): Xuất File -> sửa Số Tiền -> Nhập lại KHÔNG
+             thay thế dòng cũ (khoá dedup của dòng Thủ Công tính theo CẢ số tiền — sửa số tiền tạo ra 1
+             khoá khác hẳn), mà TẠO THÊM 1 dòng mới, dòng sai cũ vẫn còn -> chiết khấu tính nhân đôi.
+             Cảnh báo rõ ràng ngay tại đây để người dùng không hiểu nhầm đây là luồng "sửa" 1 dòng đã có. -->
+        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">⚠️ Xuất File → Nhập lại chỉ dùng để BỔ SUNG dòng còn thiếu — KHÔNG dùng để sửa Số Tiền của 1 dòng đã nhập (sửa Số Tiền sẽ tạo thêm 1 dòng MỚI, dòng cũ vẫn còn nguyên và bị tính nhân đôi). Nếu gõ sai Số Tiền, liên hệ admin để xoá dòng sai trước khi nhập lại.</p>
         <div class="flex flex-wrap items-center gap-2">
           <a href="/api/purchasing/manual-import-template" target="_blank" class="bg-gray-100 text-gray-700 border px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-200">📥 Tải File Mẫu</a>
           <label class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 cursor-pointer">📤 Nhập File<input id="mhManualImportFileInput" type="file" accept=".xlsx" data-op-change="onMhManualImportFileChange" data-arg-event="0" class="hidden"></label>

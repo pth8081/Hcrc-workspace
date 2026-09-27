@@ -1257,7 +1257,17 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // "Lương"/"Hợp Đồng Lao Động" nhưng còn giữ quyền hrPayrollManage/hrContractManage vẫn tải được toàn
   // bộ payslips/laborContracts mọi nhân viên qua route lazy — khác hẳn route riêng đã chặn đúng.
   hrPayroll: ['payrollPeriods', 'payslips'],
-  hrContract: ['laborContracts']
+  hrContract: ['laborContracts'],
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): vendors/rebateTerms/rebateCalculations (Mua Hàng >
+  // BAS) bị loại khỏi vòng phát GET /api/data (đọc/ghi đều đi qua routes/purchasing.js riêng) nên trước
+  // đây KHÔNG được liệt kê ở đây — nhưng routes/purchasing.js lại chỉ gác bằng 5 quyền chi tiết
+  // (rebateTermManage/rebateTermActivate/rebateViewReport/rebateReconcile/rebateApprove), hoàn toàn độc
+  // lập với `moduleAccess.muaHang`. Admin tắt module Mua Hàng cho 1 tài khoản (VD chuyển phòng ban) mà
+  // quên gỡ luôn quyền chi tiết vẫn để lọt request gọi thẳng API đọc/ghi dữ liệu chiết khấu NCC. Liệt kê ở
+  // đây để (a) COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js) tự gác đúng route TẠO MỚI vendors/
+  // rebateTerms, và (b) routes/purchasing.js gọi thẳng hasModuleAccessServer(user,'muaHang') cho mọi route
+  // còn lại (xem requireAnyPurchasingAccess()).
+  muaHang: ['vendors', 'rebateTerms', 'rebateCalculations']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract đều là module con (parent: 'hr', xem BUSINESS_MODULES ở
 // public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này TRƯỚC ĐÂY không mirror
@@ -1347,7 +1357,7 @@ module.exports = {
   canViewMeetingMinutes, filterMeetingMinutesForUser,
   canViewTaskRecord, filterTasksForUser,
   canViewItPriceApproval, filterItPriceApprovalsForUser,
-  canViewVppRegistration, filterVppRegistrationsForUser,
+  canManageVpp, canViewVppRegistration, filterVppRegistrationsForUser,
   canViewItSupportTicket, filterItSupportTicketsForUser,
   canViewUniformPeriod, filterUniformPeriodsForUser,
   canViewUniformIssuance, filterUniformIssuancesForUser,

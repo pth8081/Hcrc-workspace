@@ -166,7 +166,14 @@ router.put('/:id', async (req, res) => {
     // Đối chiếu ĐÚNG các luật như lúc TẠO (createValidation.js meetings.extraValidate) — dept đổi được
     // (cùng field chọn tự do trong phạm vi meetingBookScope như form Đăng Ký) vẫn phải re-check scope,
     // phòng phải có trong danh mục thật, giờ phải hợp lệ.
-    if (!scopeAllows(freshUser, freshUser.perms?.meetingBookScope, payload.dept)) {
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): kiểm tra meetingBookScope TRƯỚC ĐÂY chạy
+    // VÔ ĐIỀU KIỆN, kể cả với `canManage` (admin/meetingCancel) — trong khi nhánh Hủy thật sự
+    // (POST /:id/cancel) hoàn toàn KHÔNG kiểm tra scope, chỉ cần hasPerm. Route Sửa này được viết ra để
+    // THAY THẾ hẳn quy trình Hủy+Tạo-lại cho đúng nhóm người có `meetingCancel` (thường có ý nghĩa "quản
+    // lý toàn công ty", không nhất thiết có meetingBookScope bao trùm mọi phòng ban) — chặn nhầm nhóm này
+    // đúng bằng quy trình mà route này được sinh ra để loại bỏ. Chỉ áp scope khi người gọi là CHÍNH
+    // creator tự sửa (không phải canManage).
+    if (!canManage && !scopeAllows(freshUser, freshUser.perms?.meetingBookScope, payload.dept)) {
       return res.status(403).json({ error: 'Bạn không có quyền đặt lịch cho phòng ban này' });
     }
     const appData = await getAllAppData();

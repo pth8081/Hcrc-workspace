@@ -31,7 +31,14 @@ const {
   filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
   filterChecklistSubmissionsForReportCrossView, filterRebateCalculationsForReportView,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
-  canViewItPriceApproval, filterItServiceRenewalsForUser
+  canViewItPriceApproval, filterItServiceRenewalsForUser,
+  // Gap-fill (đợt rà soát chuyên sâu mới, mức Trung bình): Đào Tạo/Tuyển Dụng/Thăng Tiến hoàn toàn vắng
+  // mặt ở Báo Cáo dù đúng quy tắc CLAUDE.md "module có tạo hồ sơ riêng phải thêm vào Báo Cáo" — mirror
+  // ĐÚNG hàm filter*ForUser() thật của từng collection (không phát minh logic quyền mới), xem thêm chú
+  // thích ở REPORT_QUERY_CONFIGS bên dưới.
+  sanitizeTrainingClassesForUser, filterTrainingRegistrationsForUser, sanitizeTrainingTestsForUser,
+  filterTrainingTestSubmissionsForUser, filterCareerPathConfirmationsForUser,
+  filterRecruitmentReferralsForUser, filterOnboardingProgressForUser
 } = require('../lib/recordViewScope');
 
 // PQ-01 mirror cho Báo Cáo — PHÁT HIỆN mức Cao (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu
@@ -152,7 +159,30 @@ const REPORT_QUERY_CONFIGS = {
   // (filterRebateCalculationsForReportView) cho phép xem chéo qua reportViewAll/reportExtraKeys mà KHÔNG
   // cấp quyền vào module Mua Hàng thật (canAccessPurchasingModule() ở client không đổi). Bảng
   // RebateCalculations không có cột Dept (xem sql/schema.sql) nên where.Dept tự bỏ qua.
-  rebateCalculations: { filterFn: filterRebateCalculationsForReportView, needsAppData: false }
+  rebateCalculations: { filterFn: filterRebateCalculationsForReportView, needsAppData: false },
+  // Gap-fill Đào Tạo/Tuyển Dụng/Thăng Tiến (đợt rà soát chuyên sâu mới, mức Trung bình) — 12 collection
+  // dưới đây thuộc module con "internal" (Truyền Thông Nội Bộ, xem MODULE_ACCESS_GATED_COLLECTIONS) có
+  // luồng tạo/duyệt hồ sơ thật nhưng trước đây hoàn toàn vắng mặt ở Báo Cáo. Mỗi entry mirror ĐÚNG hàm
+  // filter*ForUser() thật của collection đó (không phát minh logic quyền mới) — 5 collection KHÔNG có
+  // filterFn (trainingTests dùng sanitize thay vì filter — vẫn liệt kê danh sách công khai, chỉ ẩn đáp
+  // án đúng; trainingCourses/trainingPlans/careerPaths/onboardingPaths là danh mục/kế hoạch công khai
+  // toàn công ty theo đúng thiết kế, không có khái niệm "chủ sở hữu" — filterFn: null passthrough, an
+  // toàn vì không phải dữ liệu cá nhân riêng tư, cùng khuôn internalPosts/trainingClasses).
+  trainingClasses: { filterFn: sanitizeTrainingClassesForUser, needsAppData: false, ignoreDept: true },
+  trainingRegistrations: { filterFn: filterTrainingRegistrationsForUser, needsAppData: true, ignoreDept: true },
+  trainingTests: { filterFn: sanitizeTrainingTestsForUser, needsAppData: false, ignoreDept: true },
+  trainingTestSubmissions: { filterFn: filterTrainingTestSubmissionsForUser, needsAppData: true, ignoreDept: true },
+  trainingCourses: { filterFn: null, needsAppData: false, ignoreDept: true },
+  trainingPlans: { filterFn: null, needsAppData: false, ignoreDept: true },
+  careerPaths: { filterFn: null, needsAppData: false, ignoreDept: true },
+  // careerPathConfirmations/recruitmentReferrals CÓ cột Dept thật (xem sql/schema.sql) nhưng ý nghĩa
+  // phân quyền chính là "chính chủ" (username), không phải phòng ban — vẫn để where.Dept tự áp dụng ở
+  // SQL (client hiện không truyền dept cho 2 module này nên vô hại) rồi lọc thêm đúng theo filterFn.
+  careerPathConfirmations: { filterFn: filterCareerPathConfirmationsForUser, needsAppData: false },
+  recruitmentJobs: { filterFn: null, needsAppData: false, ignoreDept: true },
+  recruitmentReferrals: { filterFn: filterRecruitmentReferralsForUser, needsAppData: false },
+  onboardingPaths: { filterFn: null, needsAppData: false, ignoreDept: true },
+  onboardingProgress: { filterFn: filterOnboardingProgressForUser, needsAppData: true, ignoreDept: true }
 };
 
 router.get('/:collection', async (req, res) => {

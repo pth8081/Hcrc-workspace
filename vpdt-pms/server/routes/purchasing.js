@@ -31,6 +31,7 @@ const {
 } = require('../lib/purchasingManualImport');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -57,6 +58,14 @@ function requireActivateTerm(req, res, next) {
 // quản lý/kích hoạt.
 function requireAnyPurchasingAccess(req, res, next) {
   const u = req.freshUser;
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): trước đây hàm này CHỈ kiểm 5 quyền chi tiết, hoàn
+  // toàn độc lập với "Khối 0" (moduleAccess.muaHang) — admin tắt module Mua Hàng cho 1 tài khoản (VD
+  // chuyển phòng ban) mà quên gỡ luôn quyền chi tiết vẫn để lọt request gọi thẳng mọi route bên dưới
+  // (đọc/ghi Vendors/RebateTerms, đồng bộ DSmart, import thủ công). Thêm gate Khối 0 TRƯỚC, mirror đúng
+  // khuôn `router.use('/budgetLines', ...)`/`router.use('/carRegs', ...)` đã áp dụng ở routes/records.js.
+  if (!hasModuleAccessServer(u, 'muaHang')) {
+    return res.status(403).json({ error: 'Module Mua Hàng đã bị khoá cho tài khoản của bạn — liên hệ admin nếu cần dùng lại.' });
+  }
   const ok = vendorRebate.canManageVendors(u) || vendorRebate.canManageTerms(u) || vendorRebate.canActivateTerm(u)
     || vendorRebate.canViewReport(u) || vendorRebate.canReconcile(u) || vendorRebate.canApprove(u);
   if (!ok) return res.status(403).json({ error: 'Bạn không có quyền truy cập module Mua Hàng' });

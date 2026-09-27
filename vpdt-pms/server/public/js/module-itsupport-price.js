@@ -2078,6 +2078,12 @@ function renderItTicketModal() {
 function closeItTicketModal() {
   document.getElementById('itTicketModal').classList.add('hidden');
   currentItTicketModalId = null;
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): bấm "✕"/"Đóng" của MODAL (đường thứ 3, khác
+  // closeItTicketEscalateForm()/escalateItTicketAction() đã tự hoàn trả) trước đây KHÔNG gọi lại
+  // populateSystemUsersDatalist() — nếu đang mở dở form "Chuyển Cấp" (đã lọc/đổi định dạng nhãn dropdown
+  // dùng chung systemUsersDatalist), dropdown này còn ở trạng thái lọc dở khi người dùng mở ô tìm-kiếm-
+  // gõ-chọn khác dùng chung nó ngay sau đó.
+  if (showItTicketEscalateForm) populateSystemUsersDatalist();
   showItTicketEscalateForm = false;
 }
 

@@ -767,6 +767,18 @@ async function insertDedicatedRecord(collection, record) {
         record.id = Date.now() + Math.floor(Math.random() * 1000);
         continue;
       }
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Thấp): 2 collection dưới đây không có Code (cfg.hasCode
+      // false) nhưng CÓ UNIQUE INDEX thật ở tầng DB chặn trùng theo cặp nghiệp vụ (attendanceRecords: 1
+      // nhân viên/1 ngày; leaveBalances: 1 nhân viên/1 năm) — trước đây rơi thẳng vào `if (!cfg.hasCode)
+      // throw err` bên dưới, ném NGUYÊN lỗi SQL Server thô ra ngoài (VD HR double-click "Bổ sung công
+      // tay"/"Tạo phép năm" cho cùng nhân viên+ngày/năm) thay vì thông báo nghiệp vụ rõ ràng. Dữ liệu vẫn
+      // toàn vẹn nhờ UNIQUE INDEX (đây thuần là vấn đề trải nghiệm/độ rõ ràng của lỗi, không phải lỗ hổng).
+      if (collection === 'attendanceRecords' && String(err.message || '').includes('UX_AttendanceRecords_Employee_Date')) {
+        throw new HttpError(409, `Đã có bản ghi công cho nhân viên "${record.employeeCode}" ngày ${record.workDate} — vui lòng sửa bản ghi hiện có thay vì tạo mới.`);
+      }
+      if (collection === 'leaveBalances' && String(err.message || '').includes('UX_LeaveBalances_Employee_Year')) {
+        throw new HttpError(409, `Đã có bảng phép năm ${record.year} cho nhân viên "${record.employeeCode}" — vui lòng sửa bản ghi hiện có thay vì tạo mới.`);
+      }
       // Trùng Code (chỉ những bảng có cfg.hasCode=true mới có cột này, xem DEDICATED_TABLES ở trên) —
       // cùng logic tự sinh mã mới rồi thử lại như insertRecord().
       if (!cfg.hasCode) throw err;

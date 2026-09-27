@@ -1602,6 +1602,18 @@ router.get('/', async (req, res) => {
         // submissions/contracts — xem chú thích đầy đủ ở isApprovalGroupMemberForModule() phía trên.
         if (col === 'submissions' && isApprovalGroupMemberForModule(req.freshUser, data, 'submissionApprovalGroups')) continue;
         if (col === 'contracts' && isApprovalGroupMemberForModule(req.freshUser, data, 'contractApprovalGroups')) continue;
+        // submissions — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): "Xin ý kiến"
+        // (opinionRequestees) là tính năng gán tay 1 người CỤ THỂ cho ĐÚNG 1 tờ trình, thường nhắm tới
+        // đúng nhóm người KHÔNG dùng module Văn Bản Trình thường xuyên (nên admin mới tắt moduleAccess.
+        // submission cho họ) — canViewSubmission() đã tính đúng nhánh này nhưng vòng lặp Khối 0 lại zero
+        // CẢ MẢNG trước khi họ kịp thấy. Lọc THEO TỪNG PHẦN TỬ (chỉ giữ đúng tờ trình họ được xin ý kiến),
+        // KHÔNG cấp quyền xem TOÀN BỘ submissions như nhánh isApprovalGroupMemberForModule ở trên.
+        if (col === 'submissions') {
+          if (Array.isArray(data.submissions)) {
+            data.submissions = data.submissions.filter(s => (s.opinionRequestees || []).includes(req.freshUser.username));
+          }
+          continue;
+        }
         // itPriceApprovals — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): mảng này gộp CẢ
         // 2 priceType (RETAIL/WHOLESALE) nhưng module 'itSupport' giờ không còn là cổng DUY NHẤT (RETAIL
         // đi qua 'muaHang', WHOLESALE đi qua 'vanHanh', xem canAccessItPriceApprovalModuleServer() ở
@@ -1776,6 +1788,14 @@ router.get('/lazy/:groupKey', async (req, res) => {
         // đổi sang lazy-load, tránh lặp lại đúng lỗi đã vá).
         if (col === 'submissions' && isApprovalGroupMemberForModule(req.freshUser, groupAppData, 'submissionApprovalGroups')) continue;
         if (col === 'contracts' && isApprovalGroupMemberForModule(req.freshUser, groupAppData, 'contractApprovalGroups')) continue;
+        // submissions (opinionRequestees) — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data
+        // chính phía trên.
+        if (col === 'submissions') {
+          if (Array.isArray(result.submissions)) {
+            result.submissions = result.submissions.filter(s => (s.opinionRequestees || []).includes(req.freshUser.username));
+          }
+          continue;
+        }
         // itPriceApprovals — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
         if (col === 'itPriceApprovals') {
           if (Array.isArray(result.itPriceApprovals)) {

@@ -50,7 +50,13 @@ const {
   // siêu thị/phòng ban, không phải dữ liệu cá nhân riêng tư như hrFeedback).
   canViewUniformPeriod, canViewUniformIssuance, canViewUniformTransfer,
   canViewLeaveRequest, canViewShiftRoster, canViewShiftSwapRequest, canViewEmployeeAttendanceRecord,
-  canViewOperationWorkItem
+  canViewOperationWorkItem,
+  // vppPeriods/vppRegistrations — PHÁT HIỆN THIẾU ở đợt rà soát chuyên sâu mới, mức Cao: cả 2 collection
+  // này CHỈ mang file qua "Trường Bổ Sung" (customData, modKey 'VPP' hợp lệ để admin gắn field kiểu Tải
+  // tệp/Tải nhiều tệp — xem CORE_FIELD_MANIFEST ở public/js/core.js) nhưng trước đây HOÀN TOÀN vắng mặt ở
+  // findOwningRecord(), rơi thẳng vào FAIL-OPEN chung — bất kỳ ai đã đăng nhập cũng tải được chứng từ/
+  // biên bản kiểm kê đính kèm Kỳ Cấp Phát VPP dù dữ liệu gốc bị giới hạn xem theo vppManage/phòng ban.
+  canManageVpp, canViewVppRegistration
 } = require('./recordViewScope');
 // getAllWorkItemsCached() — operationWorkItems KHÔNG nằm ở dbo.Records/dbo.AppData như mọi collection
 // khác trong file này, mà có store riêng (xem lib/operationWorkItemStore.js) — không dùng được
@@ -120,7 +126,7 @@ function customDataHasFileUrl(record, fileUrl) {
 // lib/recordStore.js) — nhiều request /uploads liên tiếp trong cùng TTL dùng chung 1 lượt đọc, độ trễ tối
 // đa lệch vài giây (vô hại, cùng tinh thần getAllTrashItemsCached()).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords, operationWorkItems] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords, operationWorkItems, vppPeriods, vppRegistrations] = await Promise.all([
     getAllForCollectionCached('docs'),
     getAllForCollectionCached('submissions'),
     getAllForCollectionCached('contracts'),
@@ -176,7 +182,11 @@ async function findOwningRecord(fileUrl) {
     // chuyên sâu 9/2026 (mức Cao): collection này KHÔNG có customData của CHÍNH NÓ hiển nhiên (chỉ mang
     // file qua "Trường Bổ Sung" OPERATION_WORK_ITEM), nhưng trước đây HOÀN TOÀN vắng mặt ở đây nên rơi
     // thẳng vào FAIL-OPEN — xem checker + dispatch tương ứng bên dưới (canViewOperationWorkItem()).
-    getAllWorkItemsCached()
+    getAllWorkItemsCached(),
+    // vppPeriods/vppRegistrations — xem chú thích đầy đủ ở khai báo import canManageVpp/canViewVppRegistration
+    // phía trên. Chỉ mang file qua customData nên checker bên dưới dùng `fixed: () => false`.
+    getAllForCollectionCached('vppPeriods'),
+    getAllForCollectionCached('vppRegistrations')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp (xem
   // validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG owning-info như khi khớp field
@@ -294,7 +304,10 @@ async function findOwningRecord(fileUrl) {
     { records: attendanceRecords, fixed: () => false, build: a => ({ attendanceRecord: true, item: a }) },
     // operationWorkItems (Vận Hành — Thực hiện/Nghiệm thu): xem chú thích đầy đủ ở khai báo
     // getAllWorkItemsCached() phía trên + canViewOperationWorkItem() (lib/recordViewScope.js).
-    { records: operationWorkItems, fixed: () => false, build: w => ({ operationWorkItem: true, item: w }) }
+    { records: operationWorkItems, fixed: () => false, build: w => ({ operationWorkItem: true, item: w }) },
+    // vppPeriods/vppRegistrations — xem chú thích đầy đủ ở khai báo import canManageVpp/canViewVppRegistration.
+    { records: vppPeriods, fixed: () => false, build: p => ({ vppPeriod: true, item: p }) },
+    { records: vppRegistrations, fixed: () => false, build: r => ({ vppRegistration: true, item: r }) }
     // recruitmentJobs.bannerUrl (banner/ảnh tin tuyển dụng) — CỐ Ý KHÔNG có checker riêng ở đây, rơi
     // thẳng vào nhánh FAIL-OPEN chung (coi như ảnh đại diện/logo, xem chú thích ở đầu file) — banner tin
     // tuyển dụng vốn dùng để QUẢNG BÁ (thu hút ứng viên), không phải dữ liệu nội bộ nhạy cảm, nên cho mọi
@@ -491,6 +504,11 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     ]);
     return canViewOperationWorkItem(user, owning.item, { ...appData, operationStoreOpenings, operationRepairs, operationWorkItems });
   }
+  // vppPeriods (Kỳ Cấp Phát VPP) — chỉ canManageVpp (admin/vppManage) quản lý, không có khái niệm "chủ
+  // hồ sơ" khác (dữ liệu của CẢ ĐƠN VỊ, không phải cá nhân) — cùng khuôn licenses/itServiceRenewals.
+  if (owning.vppPeriod) return canManageVpp(user);
+  // vppRegistrations (Đăng Ký VPP) — dùng thẳng canViewVppRegistration() đã có, cần appData (resolveWfConfig).
+  if (owning.vppRegistration) return canViewVppRegistration(user, owning.item, await getAllAppData());
   // employeeProfile (Quyết định gán/đổi chức vụ): CHỈ chính chủ hồ sơ/hrProfileManage/admin xem được —
   // cùng khuôn canViewFullProfile() dùng cho chính màn Hồ Sơ Nhân Sự (không dùng canViewLimitedProfile,
   // vốn còn mở cho quản lý trực tiếp xem — Quyết định lương/chức vụ là dữ liệu nhạy cảm hơn, giới hạn

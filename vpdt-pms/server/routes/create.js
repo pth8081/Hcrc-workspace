@@ -48,6 +48,20 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
     return acc;
   }, {}
 );
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): 6 module con (car/meeting/vpp/budget/orgChart/
+// hrLifecycle) TRƯỚC ĐÂY được coi là "đã có quyền chi tiết riêng chặn đúng ở server rồi, không cần Khối
+// 0" (xem chú thích tại MODULE_ACCESS_GATED_COLLECTIONS, lib/recordViewScope.js) — đúng cho các route
+// HÀNH ĐỘNG (đã tự bổ sung `router.use('/budgetLines', ...)`/`router.use('/carRegs', ...)` ở
+// routes/records.js), nhưng route TẠO MỚI dùng CHUNG handler ở đây lại chưa từng được áp lại: tắt
+// moduleAccess.vanHanh/budget/car/meeting/vpp cho 1 tài khoản (còn giữ quyền chi tiết) vẫn tạo được hồ sơ
+// mới qua route này — nghiêm trọng nhất với operationStoreOpenings/operationRepairs vì 2 collection này
+// APPROVED NGAY lúc tạo, không qua bước duyệt nào khác để chặn lần 2. Dùng map RIÊNG (không gộp vào
+// MODULE_ACCESS_GATED_COLLECTIONS) để KHÔNG ảnh hưởng vòng zero-out của GET /api/data (routes/data.js) —
+// các collection này vốn đã có quyền chi tiết lọc đúng ở đó, chỉ thiếu đúng 1 lớp Khối 0 ở khâu TẠO.
+const EXTRA_CREATE_MODULE_ACCESS_KEY = {
+  operationOrders: 'vanHanh', operationStoreOpenings: 'vanHanh', operationRepairs: 'vanHanh',
+  budgetLines: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp'
+};
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -126,7 +140,7 @@ router.post('/:module', async (req, res) => {
     // appData để tính nhánh Nhóm Phê Duyệt Cuối ITPRICE_RETAIL/WHOLESALE ngay dưới đây (đợt rà soát
     // chuyên sâu 9/2026, mức Cao — xem canAccessItPriceApprovalModuleServer()).
     const appData = await getAllAppData();
-    const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[moduleKey];
+    const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[moduleKey] || EXTRA_CREATE_MODULE_ACCESS_KEY[moduleKey];
     const moduleAccessOk = moduleKey === 'itPriceApprovals'
       ? canAccessItPriceApprovalModuleServer(freshUser, req.body?.priceType, appData)
       : (!moduleAccessKey || hasModuleAccessServer(freshUser, moduleAccessKey));

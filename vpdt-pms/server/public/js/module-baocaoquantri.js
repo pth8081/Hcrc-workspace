@@ -104,6 +104,38 @@ const REPORT_NAV_TREE = [
   },
   { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ' },
   { key: 'internal', label: '📣 Truyền Thông Nội Bộ' },
+  // Gap-fill Đào Tạo/Tuyển Dụng/Thăng Tiến (đợt rà soát chuyên sâu mới, mức Trung bình): 3 nhóm dưới đây
+  // đều thuộc module con "internal" (Truyền Thông Nội Bộ, cùng moduleAccess key với leaf "internal" ngay
+  // trên) — có luồng tạo/duyệt hồ sơ thật (đã tồn tại lâu ở module-internalcomms-daotao.js) nhưng trước
+  // đây hoàn toàn vắng mặt ở Báo Cáo dù đúng quy tắc CLAUDE.md phải thêm. 12 collection tách thành 3
+  // nhóm nav theo đúng 3 sub-tab thật của module Truyền Thông Nội Bộ (Đào Tạo/Tuyển Dụng/Thăng Tiến+Hội
+  // Nhập) — mỗi leaf key KHÔNG có trong BUSINESS_MODULES (không có checkbox module-access riêng, cùng
+  // khuôn 'payment'/'budget' dưới node 'office'), dữ liệu client nhận được đã lọc đúng phạm vi xem THẬT
+  // (REPORT_QUERY_CONFIGS tương ứng ở routes/reports.js) trước khi tới đây.
+  {
+    key: 'trainingGroup', label: '🎓 Đào Tạo', children: [
+      { key: 'trainingClasses', label: '📚 Lớp Học' },
+      { key: 'trainingRegistrations', label: '📝 Đăng Ký Lớp' },
+      { key: 'trainingTests', label: '❓ Ngân Hàng Câu Hỏi' },
+      { key: 'trainingTestSubmissions', label: '✅ Bài Làm / Kết Quả' },
+      { key: 'trainingCourses', label: '📘 Chương Trình Đào Tạo' },
+      { key: 'trainingPlans', label: '🗓️ Kế Hoạch Đào Tạo' }
+    ]
+  },
+  {
+    key: 'recruitmentGroup', label: '📢 Tuyển Dụng', children: [
+      { key: 'recruitmentJobs', label: '📋 Tin Tuyển Dụng' },
+      { key: 'recruitmentReferrals', label: '🤝 Giới Thiệu Ứng Viên' }
+    ]
+  },
+  {
+    key: 'careerGroup', label: '🚀 Thăng Tiến & Hội Nhập', children: [
+      { key: 'careerPaths', label: '🪜 Lộ Trình Thăng Tiến (Danh Mục)' },
+      { key: 'careerPathConfirmations', label: '✔️ Xác Nhận Hoàn Thành' },
+      { key: 'onboardingPaths', label: '🆕 Lộ Trình Tân Binh (Danh Mục)' },
+      { key: 'onboardingProgress', label: '📈 Tiến Độ Tân Binh' }
+    ]
+  },
   {
     key: 'hanhchinh', label: '🏢 Hành Chính', children: [
       { key: 'meeting', label: '📅 Phòng Họp' },
@@ -448,6 +480,93 @@ const REPORT_MODULE_CONFIGS = {
       () => DB.internalPosts.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED' && isInDateRange(r.createdAt, from, to))),
     deptBreakdown: false,
     renderExtra: renderInternalReportExtra
+  },
+  // Gap-fill Đào Tạo/Tuyển Dụng/Thăng Tiến (đợt rà soát chuyên sâu mới, mức Trung bình) — xem chú thích
+  // đầy đủ ở REPORT_NAV_TREE. Cả 12 entry đều KHÔNG có "dept" thật (trainingClasses/trainingRegistrations/
+  // trainingTests/trainingTestSubmissions/trainingCourses/trainingPlans/careerPaths/recruitmentJobs/
+  // onboardingPaths/onboardingProgress công khai toàn công ty hoặc gác quyền phẳng theo username, không
+  // theo phòng ban) NGOẠI TRỪ careerPathConfirmations/recruitmentReferrals (có field "dept" thật, dùng
+  // lọc bình thường) — nên đa số dùng deptBreakdown:false, khớp đúng field dept THẬT của server
+  // (REPORT_QUERY_CONFIGS, routes/reports.js).
+  trainingClasses: {
+    title: '📚 Báo Cáo Lớp Học',
+    getRecords: (dept, from, to) => fetchReportRecords('trainingClasses', dept, from, to,
+      () => DB.trainingClasses.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false,
+    statusOf: r => r.status,
+    statusBuckets: [['OPEN', 'Đang mở', 'bg-green-500'], ['CLOSED', 'Đã đóng', 'bg-gray-500']]
+  },
+  trainingRegistrations: {
+    title: '📝 Báo Cáo Đăng Ký Lớp',
+    getRecords: (dept, from, to) => fetchReportRecords('trainingRegistrations', dept, from, to,
+      () => DB.trainingRegistrations.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false,
+    statusOf: r => r.result,
+    statusBuckets: [['REGISTERED', 'Đã đăng ký', 'bg-blue-500'], ['PASSED', 'Đạt', 'bg-green-500'], ['FAILED', 'Không đạt', 'bg-red-500'], ['CANCELLED', 'Đã huỷ', 'bg-gray-500']]
+  },
+  trainingTests: {
+    title: '❓ Báo Cáo Ngân Hàng Câu Hỏi',
+    getRecords: (dept, from, to) => fetchReportRecords('trainingTests', dept, from, to,
+      () => DB.trainingTests.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false
+  },
+  trainingTestSubmissions: {
+    title: '✅ Báo Cáo Bài Làm / Kết Quả',
+    getRecords: (dept, from, to) => fetchReportRecords('trainingTestSubmissions', dept, from, to,
+      () => DB.trainingTestSubmissions.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false,
+    statusOf: r => r.gradingStatus,
+    statusBuckets: [['COMPLETE', 'Đã chấm xong', 'bg-green-500'], ['PENDING_ESSAY_GRADING', 'Chờ chấm Nghị Luận', 'bg-yellow-500']]
+  },
+  trainingCourses: {
+    title: '📘 Báo Cáo Chương Trình Đào Tạo',
+    getRecords: (dept, from, to) => fetchReportRecords('trainingCourses', dept, from, to,
+      () => DB.trainingCourses.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false
+  },
+  trainingPlans: {
+    title: '🗓️ Báo Cáo Kế Hoạch Đào Tạo',
+    getRecords: (dept, from, to) => fetchReportRecords('trainingPlans', dept, from, to,
+      () => DB.trainingPlans.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false
+  },
+  recruitmentJobs: {
+    title: '📋 Báo Cáo Tin Tuyển Dụng',
+    getRecords: (dept, from, to) => fetchReportRecords('recruitmentJobs', dept, from, to,
+      () => DB.recruitmentJobs.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false,
+    statusOf: r => r.status,
+    statusBuckets: [['OPEN', 'Đang tuyển', 'bg-green-500'], ['FILLED', 'Đã tuyển đủ', 'bg-blue-500'], ['CLOSED', 'Đã đóng', 'bg-gray-500']]
+  },
+  recruitmentReferrals: {
+    title: '🤝 Báo Cáo Giới Thiệu Ứng Viên',
+    getRecords: (dept, from, to) => fetchReportRecords('recruitmentReferrals', dept, from, to,
+      () => DB.recruitmentReferrals.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to))),
+    statusOf: r => r.status,
+    statusBuckets: [['NEW', 'Mới', 'bg-gray-500'], ['CONTACTED', 'Đã liên hệ', 'bg-yellow-500'], ['HIRED', 'Đã tuyển', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
+  },
+  careerPaths: {
+    title: '🪜 Báo Cáo Lộ Trình Thăng Tiến (Danh Mục)',
+    getRecords: (dept, from, to) => fetchReportRecords('careerPaths', dept, from, to,
+      () => DB.careerPaths.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false
+  },
+  careerPathConfirmations: {
+    title: '✔️ Báo Cáo Xác Nhận Hoàn Thành Lộ Trình',
+    getRecords: (dept, from, to) => fetchReportRecords('careerPathConfirmations', dept, from, to,
+      () => DB.careerPathConfirmations.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
+  },
+  onboardingPaths: {
+    title: '🆕 Báo Cáo Lộ Trình Tân Binh (Danh Mục)',
+    getRecords: (dept, from, to) => fetchReportRecords('onboardingPaths', dept, from, to,
+      () => DB.onboardingPaths.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false
+  },
+  onboardingProgress: {
+    title: '📈 Báo Cáo Tiến Độ Tân Binh',
+    getRecords: (dept, from, to) => fetchReportRecords('onboardingProgress', dept, from, to,
+      () => DB.onboardingProgress.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false
   },
   uniform: {
     title: '👕 Báo Cáo Đồng Phục',

@@ -99,11 +99,15 @@ router.post('/submissions/:id/give-opinion', async (req, res) => {
 
   try {
     const freshUser = req.freshUser;
-    assertWorkflowModuleAccess(freshUser, 'submissions');
-
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): assertWorkflowModuleAccess() TRƯỚC ĐÂY chạy
+    // TRƯỚC khi biết người gọi có phải opinionRequestee hợp lệ hay không — chặn cứng ngay cả người ĐÚNG
+    // được xin ý kiến (thường là người KHÔNG dùng module Văn Bản Trình thường xuyên, đúng lý do admin tắt
+    // moduleAccess.submission cho họ). Đọc bản ghi TRƯỚC (trong khoá), chỉ áp Khối 0 khi KHÔNG phải
+    // opinionRequestee hợp lệ — giữ nguyên chặn cho mọi trường hợp khác.
     const resultItem = await withLockedRecordForCollection('submissions', itemId, (sub) => {
       const requestees = sub.opinionRequestees || [];
       if (!requestees.includes(freshUser.username)) {
+        assertWorkflowModuleAccess(freshUser, 'submissions');
         throw new WorkflowError(403, 'Bạn không thuộc danh sách được xin ý kiến ở tờ trình này');
       }
       if (!sub.opinionResponses) sub.opinionResponses = [];

@@ -63,7 +63,16 @@ const DEPT_FIELD_COLLECTIONS = [
   // Dụng được, hoặc bị từ chối vì location không còn khớp DB.stores. Cơ chế `fields` (mảng) ở đây VỐN ĐÃ
   // hỗ trợ nhiều field/collection (xem contracts ở trên: ['dept','custodianDept']) nên chỉ cần khai thêm
   // đúng 1 dòng, không cần sửa renameSimpleFields()/renameFieldValueInCollection().
-  { collection: 'budgetLines', fields: ['dept', 'location'] }
+  { collection: 'budgetLines', fields: ['dept', 'location'] },
+  // checklistSubmissions/shiftRoster: PHÁT HIỆN THIẾU ở đợt rà soát chuyên sâu mới, mức Cao — cả 2 đều
+  // lưu "storeCode" (chuỗi TÊN siêu thị thô, lấy từ CÙNG danh mục "stores") nhưng bị bỏ sót khỏi danh
+  // sách này. canViewChecklistSubmission()/canViewShiftRoster() (lib/recordViewScope.js) xét quyền xem
+  // bằng so khớp thô `item.storeCode === user.dept` — đổi tên 1 siêu thị mà không cascade 2 field này sẽ
+  // làm nhân viên/Giám Đốc Siêu Thị mất quyền xem dữ liệu CŨ của chính siêu thị mình (storeCode cũ không
+  // còn khớp user.dept mới), dữ liệu lặng lẽ "biến mất" khỏi màn hình mà không có lỗi/cảnh báo nào —
+  // cùng lớp lỗ hổng đã vá nhiều lần ở file này (operationOrders.dept/uniformPeriods.dept/budgetLines.dept).
+  { collection: 'checklistSubmissions', fields: ['storeCode'] },
+  { collection: 'shiftRoster', fields: ['storeCode'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá

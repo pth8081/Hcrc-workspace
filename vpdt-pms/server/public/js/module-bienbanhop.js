@@ -984,7 +984,7 @@ function buildMeetingMinutesCoreHTML(m, { interactive }) {
         // ĐÚNG NHƯ nút "Giao việc" hàng loạt ở danh sách đã làm — không phải hành vi mới.
         statusCell = m.tasksAssigned
           ? '<span class="md-empty-note">Chưa giao việc</span>'
-          : (canManageTasks(currentUser) ? `<button data-op="confirmAssignMinutesTasks" data-arg0="${m.id}" class="md-assign-btn">📌 Giao việc</button>` : '<span class="md-empty-note">Chưa giao việc</span>');
+          : (canEditMeetingMinutesRecord(currentUser, m) ? `<button data-op="confirmAssignMinutesTasks" data-arg0="${m.id}" class="md-assign-btn">📌 Giao việc</button>` : '<span class="md-empty-note">Chưa giao việc</span>');
       } else {
         statusCell = '<span class="md-empty-note">Chưa gán</span>';
       }

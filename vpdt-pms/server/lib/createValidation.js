@@ -1737,6 +1737,14 @@ const CREATE_MODULE_CONFIGS = {
         payload.extraApprovalLevel = extraApproval.extraApprovalLevel;
         payload.extraApprovalLayers = extraApproval.extraApprovalLayers;
       }
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): vppRegistrations là collection DUY NHẤT
+      // có formTemplates-eligible modKey nhưng KHÔNG BAO GIỜ gọi validateRequiredCustomData() — payload
+      // spread nguyên vào bản ghi (dòng `const record = { ...payload, ... }` ở validateAndPrepareCreate())
+      // không hề lọc/whitelist customData như mọi module khác. Dùng modKey RIÊNG 'VPP_REGISTRATION' (khác
+      // 'VPP' — đó là form Tạo Kỳ Đăng Ký của vppPeriods, không phải form đăng ký này) — an toàn ngay cả
+      // khi chưa admin nào cấu hình field nào cho modKey này (fields rỗng -> customData bị xoá sạch,
+      // đúng ý whitelist "không cho phép key lạ" thay vì tin nguyên client gửi).
+      validateRequiredCustomData(payload.customData, appData?.formTemplates, 'VPP_REGISTRATION');
     }
   },
   // ===== BÁO CÁO ĐỊNH KỲ (module con "Điều Hành", thường dùng cho báo cáo tuần) =====
@@ -2341,6 +2349,14 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'createdBy',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): route TẠO MỚI trước đây KHÔNG có
+    // getLockKey nên đi qua createForCollection() thường (không khoá) — sql/schema.sql chỉ có UNIQUE
+    // INDEX cho VendorCode, KHÔNG có cho TaxCode (field optional). 2 request tạo NCC MỚI khác nhau nhưng
+    // trùng TaxCode gần như đồng thời đều đọc "chưa NCC nào có MST này" trước khi cái nào kịp ghi -> cả 2
+    // đều tạo thành công, vi phạm bất biến "1 MST = 1 doanh nghiệp thật". Dùng ĐÚNG khoá tên
+    // 'vendors_write' đã áp dụng cho route Sửa (routes/purchasing.js) — cùng 1 khoá dùng chung cho cả
+    // Tạo lẫn Sửa mới thực sự chặn được race giữa 2 đường.
+    getLockKey: () => 'vendors_write',
     extraValidate: (payload, collection, user) => {
       if (!canManageVendors(user)) throw new CreateError(403, 'Bạn không có quyền quản lý Nhà Cung Cấp');
       const err = validateVendorPayload(payload, collection, null);
@@ -3530,6 +3546,13 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'createdBy', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): trước đây KHÔNG có getLockKey nên đi qua
+    // createForCollection() thường (không khoá) — assertNoRosterConflict() kiểm tra trên 1 snapshot đọc
+    // TRƯỚC khi ghi, 2 request phân ca gần như đồng thời cho CÙNG 1 nhân viên/ngày (double-click, hoặc 2
+    // quản lý cùng thao tác) đều đọc "chưa trùng lịch" trước khi cái nào kịp ghi -> cả 2 cùng tạo thành
+    // công -> double-booking thật (1 nhân viên bị gán 2 ca cùng ngày). Cùng khuôn meetings/vppRegistrations
+    // đã có ở trên.
+    getLockKey: (payload) => `shift_roster:${String(payload?.employeeCode || '').trim()}:${String(payload?.workDate || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
       const attendance = require('./attendance');
       if (!user.perms?.admin && !user.perms?.hrShiftRosterManage && !user.perms?.hrAttendanceManage) {
@@ -3551,13 +3574,21 @@ const CREATE_MODULE_CONFIGS = {
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
       const attendance = require('./attendance');
-      const { findProfileByUsername } = require('./employeeProfile');
+      const { findProfileByUsername, findProfile } = require('./employeeProfile');
       const profile = findProfileByUsername(appData.employeeProfiles, user.username);
       if (!profile || profile.status !== 'ACTIVE') throw new CreateError(400, 'Không tìm thấy hồ sơ nhân sự đang hoạt động liên kết với tài khoản của bạn');
       const built = attendance.defaultShiftSwapRequest(payload, profile.employeeCode);
       const roster = (appData.shiftRoster || []).find(r => r.id === built.requesterRosterId);
       if (!roster || roster.employeeCode !== profile.employeeCode) throw new CreateError(404, 'Không tìm thấy ca làm việc của bạn cần đổi');
       if (roster.status === 'CANCELLED') throw new CreateError(400, 'Ca làm việc này đã bị huỷ, không thể xin đổi');
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): targetEmployeeCode TRƯỚC ĐÂY không hề được đối
+      // chiếu với employeeProfiles — gõ nhầm mã (không tồn tại) hoặc chọn đúng mã 1 người ĐÃ NGHỈ VIỆC
+      // vẫn tạo được đơn, và khi duyệt applyApproveShiftSwap() gán thẳng ca cho mã đó, khiến 1 ca trực
+      // "biến mất" (không ai thực sự đứng ca). Bắt buộc targetEmployeeCode phải trỏ đúng 1 hồ sơ ACTIVE.
+      const targetProfile = findProfile(appData.employeeProfiles, built.targetEmployeeCode);
+      if (!targetProfile || targetProfile.status !== 'ACTIVE') {
+        throw new CreateError(400, `Không tìm thấy nhân viên đang hoạt động với mã "${built.targetEmployeeCode}" — vui lòng chọn lại người nhận ca`);
+      }
       Object.assign(payload, built);
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'HAC_SWAP_REQUEST');
     }

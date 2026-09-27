@@ -1413,6 +1413,24 @@ router.post('/trainingTests/:id/edit', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): sửa bài test TRƯỚC ĐÂY không hề kiểm tra bài test
+    // này có đang gán cho lớp nào (trainingClasses.testId) hoặc đã có bài nộp nào (trainingTestSubmissions,
+    // kể cả đang PENDING_ESSAY_GRADING chờ chấm Nghị Luận) hay không — sửa cấu trúc câu hỏi/điểm/đáp án
+    // đúng giữa lúc đang có bài nộp có thể làm route grade-essay không còn thấy câu ESSAY nào (kẹt vĩnh
+    // viễn ở PENDING_ESSAY_GRADING) hoặc tính sai % điểm (totalPoints cũ không khớp cấu trúc câu hỏi mới).
+    // Mirror ĐÚNG khuôn route XOÁ cùng collection (chặn khi còn lớp gán) + mở rộng thêm điều kiện bài nộp.
+    const [trainingClasses, trainingTestSubmissions] = await Promise.all([
+      getAllForCollection('trainingClasses'),
+      getAllForCollection('trainingTestSubmissions')
+    ]);
+    const referencingClasses = trainingClasses.filter(c => c.testId === itemId);
+    if (referencingClasses.length) {
+      throw new HttpError(409, `Không thể sửa bài test này vì còn ${referencingClasses.length} lớp học đang gán nó. Vui lòng gỡ bài test khỏi các lớp đó trước (sửa lớp).`);
+    }
+    const referencingSubmissions = trainingTestSubmissions.filter(s => s.testId === itemId);
+    if (referencingSubmissions.length) {
+      throw new HttpError(409, `Không thể sửa bài test này vì đã có ${referencingSubmissions.length} bài nộp gắn với nó (có thể đang chờ chấm Nghị Luận). Sửa cấu trúc câu hỏi lúc này có thể làm sai lệch kết quả đã nộp.`);
+    }
     const result = await withLockedRecordForCollection('trainingTests', itemId, (item) =>
       recordActions.editTrainingTest(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
@@ -4916,16 +4934,40 @@ router.post('/shiftSwapRequests/:id/approve', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const rosterList = await getAllForCollection('shiftRoster');
-    let updatedRosterId = null, updatedRosterPatch = null;
-    const result = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
-      const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
-      assertShiftSwapApprover(freshUser, targetRoster);
-      const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(item, targetRoster, rosterList, freshUser.username, freshUser.name);
-      updatedRosterId = updatedRoster.id; updatedRosterPatch = updatedRoster;
-      return updatedSwap;
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình — race TOCTOU): rosterList TRƯỚC ĐÂY được
+    // đọc 1 LẦN duy nhất trước khi vào withLockedRecordForCollection('shiftSwapRequests', ...) — khoá đó
+    // chỉ khoá ĐÚNG 1 dòng shiftSwapRequests theo id, không khoá gì theo targetEmployeeCode. 2 đơn đổi ca
+    // KHÁC NHAU nhưng cùng chọn 1 targetEmployeeCode cho cùng ngày, duyệt gần như đồng thời, đều đọc cùng
+    // 1 snapshot rosterList "chưa trùng lịch" trước khi cái nào kịp ghi -> cả 2 cùng gán ca cho người đó,
+    // double-booking dù assertNoRosterConflict() đã tồn tại. Bọc toàn bộ chuỗi đọc-kiểm tra-ghi trong
+    // withAppLock theo targetEmployeeCode (đọc peek KHÔNG khoá chỉ để lấy targetEmployeeCode — field này
+    // không đổi sau khi tạo đơn nên an toàn dùng làm khoá trước khi vào lock thật) — cùng khuôn
+    // labor_contract_activate/car_plate đã áp dụng cho các trường hợp tương tự.
+    const swapRequestsPeek = await getAllForCollection('shiftSwapRequests');
+    const peekItem = swapRequestsPeek.find(s => s.id === itemId);
+    if (!peekItem) return res.status(404).json({ error: 'Không tìm thấy yêu cầu đổi ca' });
+    const result = await withAppLock(`shift_target:${peekItem.targetEmployeeCode}`, async () => {
+      const rosterList = await getAllForCollection('shiftRoster');
+      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): duyệt đổi ca TRƯỚC ĐÂY không đối chiếu lại
+      // targetEmployeeCode với employeeProfiles — nếu người nhận ca đã NGHỈ VIỆC (offboarding) SAU khi
+      // đơn được tạo nhưng TRƯỚC khi được duyệt, ca vẫn bị gán cho mã đó, khiến ca "biến mất" (không ai
+      // đứng ca). Đối chiếu lại NGAY LÚC DUYỆT, không chỉ lúc tạo.
+      const employeeProfiles = await getAllForCollection('employeeProfiles');
+      let updatedRosterId = null, updatedRosterPatch = null;
+      const swapResult = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
+        const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
+        assertShiftSwapApprover(freshUser, targetRoster);
+        const targetProfile = employeeProfiles.find(p => p.employeeCode === item.targetEmployeeCode);
+        if (!targetProfile || targetProfile.status !== 'ACTIVE') {
+          throw new HttpError(400, `Nhân viên nhận ca (mã "${item.targetEmployeeCode}") không còn đang hoạt động — không thể duyệt đổi ca này`);
+        }
+        const { updatedSwap, updatedRoster } = attendance.applyApproveShiftSwap(item, targetRoster, rosterList, freshUser.username, freshUser.name);
+        updatedRosterId = updatedRoster.id; updatedRosterPatch = updatedRoster;
+        return updatedSwap;
+      });
+      if (updatedRosterId) await withLockedRecordForCollection('shiftRoster', updatedRosterId, () => updatedRosterPatch);
+      return swapResult;
     });
-    if (updatedRosterId) await withLockedRecordForCollection('shiftRoster', updatedRosterId, () => updatedRosterPatch);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `shiftSwapRequests/${req.params.id}/approve`, err);
