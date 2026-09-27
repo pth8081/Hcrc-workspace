@@ -1,7 +1,7 @@
 // server/tests/test-hr-profile-field-visibility.js
 //
 // Regression test cho yêu cầu người dùng (9/2026): "Trường Xem Của Tôi" (self, mới) + mở rộng "Trường
-// Xem Của Quản Lý Trực Tiếp" (đã có) sang ĐỦ 15 field nhạy cảm, theo nguyên tắc OPT-IN — KHÔNG field nào
+// Xem Của Quản Lý Trực Tiếp" (đã có) sang ĐỦ field nhạy cảm (19 từ 10/2026), theo nguyên tắc OPT-IN — KHÔNG field nào
 // hiển thị (kể cả field vốn "luôn thấy" trước đây như ngày sinh/giới tính) cho tới khi HR/admin chủ động
 // tick chọn ở màn cấu hình riêng.
 //
@@ -133,7 +133,7 @@ async function main() {
     await page.waitForSelector('#hrpfSelfFieldConfigModal:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(150);
     const selfCbCount = await page.evaluate(() => document.querySelectorAll('.hrpf-self-field-config-cb').length);
-    check('Modal "Trường Xem Của Tôi" liệt kê đủ 15 field nhạy cảm', selfCbCount === 15);
+    check('Modal "Trường Xem Của Tôi" liệt kê đủ 19 field nhạy cảm', selfCbCount === 19);
     await page.check('.hrpf-self-field-config-cb[value="dateOfBirth"]');
     await page.click('#hrpfSelfFieldConfigModal [data-op="saveHrpfSelfFieldConfig"]');
     await page.waitForTimeout(200);
@@ -145,7 +145,7 @@ async function main() {
     await page.waitForSelector('#hrpfFieldConfigModal:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(150);
     const mgrCbCount = await page.evaluate(() => document.querySelectorAll('.hrpf-field-config-cb').length);
-    check('Modal "Trường Xem Của Quản Lý Trực Tiếp" liệt kê đủ 15 field (đã mở rộng 9/2026)', mgrCbCount === 15);
+    check('Modal "Trường Xem Của Quản Lý Trực Tiếp" liệt kê đủ 19 field (đã mở rộng 10/2026)', mgrCbCount === 19);
     await page.check('.hrpf-field-config-cb[value="dependents"]');
     await page.click('#hrpfFieldConfigModal [data-op="saveHrpfFieldConfig"]');
     await page.waitForTimeout(200);

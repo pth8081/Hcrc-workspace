@@ -106,11 +106,28 @@ function generateContractCode(list, employeeCode) {
   return code;
 }
 
+// ALLOWANCE_FIELDS (GĐ1, 10/2026 — đối chiếu cột "THÔNG TIN THU NHẬP THEO THỎA THUẬN" ở file Excel quản
+// lý thủ công của Nhân Sự, theo yêu cầu người dùng) — TÁCH RIÊNG từng khoản phụ cấp thay vì gộp chung
+// vào 1 con số baseSalary như trước — mỗi khoản 1 field số riêng, CÙNG khuôn validate/sửa như baseSalary
+// (xem applyManualEdit() bên dưới), KHÔNG tính tổng/lưu "Tổng thu nhập" thành field riêng (tính khi hiển
+// thị ở client, tránh 1 nguồn dữ liệu dư thừa có thể lệch nếu quên cập nhật lại sau khi sửa 1 khoản).
+const ALLOWANCE_FIELDS = [
+  'responsibilityAllowance', 'concurrentAllowance', 'hazardAllowance',
+  'lunchAllowance', 'transportAllowance', 'phoneAllowance', 'otherAllowance'
+];
+const ALLOWANCE_FIELD_LABELS = {
+  responsibilityAllowance: 'Phụ cấp trách nhiệm', concurrentAllowance: 'Phụ cấp kiêm nhiệm',
+  hazardAllowance: 'Phụ cấp độc hại nặng nhọc', lunchAllowance: 'Phụ cấp ăn trưa',
+  transportAllowance: 'Hỗ trợ đi lại', phoneAllowance: 'Hỗ trợ điện thoại', otherAllowance: 'Phụ cấp/Hỗ trợ khác'
+};
+
 function defaultContract(overrides) {
   return Object.assign({
     code: null, employeeCode: null, employeeUsername: null, hrProcessId: null,
     contractType: 'PROBATION', renewalIndex: 0,
     startDate: null, endDate: null, baseSalary: null,
+    responsibilityAllowance: null, concurrentAllowance: null, hazardAllowance: null,
+    lunchAllowance: null, transportAllowance: null, phoneAllowance: null, otherAllowance: null,
     status: 'DRAFT',
     terminationDate: null, terminationReason: null,
     fileUrl: null, fileName: null,
@@ -241,7 +258,7 @@ function applyOffboardingTermination(contract, hrProcessItem) {
 // Trường HR sửa tay được (tạo mới thủ công/sửa hợp đồng đã có) — KHÔNG gồm code/employeeCode/
 // hrProcessId/status/renewalIndex/history/amendments/notifiedThresholds (đổi qua các hàm riêng ở trên/
 // dưới, không cho ghi đè tự do qua đây).
-const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSalary', 'fileUrl', 'fileName', 'dept'];
+const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSalary', ...ALLOWANCE_FIELDS, 'fileUrl', 'fileName', 'dept'];
 
 // Nhãn hiển thị cho từng field sửa tay — dùng để ghi dòng lịch sử "MANUAL_EDIT" bên dưới (VD HR tăng
 // lương trực tiếp trên hợp đồng đang hiệu lực thay vì tạo hẳn hợp đồng mới/thêm phụ lục — trước đây
@@ -249,7 +266,8 @@ const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSal
 // nếu HR chọn sửa thẳng — xem yêu cầu "Lịch Sử Nhân Sự xuyên suốt" đã xác nhận với người dùng).
 const MANUAL_EDIT_FIELD_LABELS = {
   contractType: 'Loại hợp đồng', startDate: 'Ngày hiệu lực', endDate: 'Ngày hết hạn',
-  baseSalary: 'Lương cơ bản', fileUrl: 'Tệp hợp đồng', fileName: 'Tên tệp', dept: 'Phòng ban'
+  baseSalary: 'Lương cơ bản', ...ALLOWANCE_FIELD_LABELS,
+  fileUrl: 'Tệp hợp đồng', fileName: 'Tên tệp', dept: 'Phòng ban'
 };
 function applyManualEdit(contract, payload, actorUsername, actorName) {
   const body = payload || {};
@@ -263,9 +281,11 @@ function applyManualEdit(contract, payload, actorUsername, actorName) {
         if (!CONTRACT_TYPES.has(val)) throw new HttpError(400, 'Loại hợp đồng không hợp lệ');
         newVal = val;
         break;
-      case 'baseSalary': {
+      case 'baseSalary':
+      case 'responsibilityAllowance': case 'concurrentAllowance': case 'hazardAllowance':
+      case 'lunchAllowance': case 'transportAllowance': case 'phoneAllowance': case 'otherAllowance': {
         const n = val === '' || val === null || val === undefined ? null : Number(val);
-        if (n !== null && (!Number.isFinite(n) || n < 0)) throw new HttpError(400, 'Lương cơ bản không hợp lệ');
+        if (n !== null && (!Number.isFinite(n) || n < 0)) throw new HttpError(400, `${MANUAL_EDIT_FIELD_LABELS[field]} không hợp lệ`);
         newVal = n;
         break;
       }
@@ -395,7 +415,7 @@ function assertValidManualStatusTransition(currentStatus, nextStatus) {
 }
 
 module.exports = {
-  CONTRACT_TYPES, STATUSES, POST_PROBATION_DECISIONS, MANUAL_EDITABLE_FIELDS,
+  CONTRACT_TYPES, STATUSES, POST_PROBATION_DECISIONS, MANUAL_EDITABLE_FIELDS, ALLOWANCE_FIELDS, ALLOWANCE_FIELD_LABELS,
   canManageContracts, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
   generateContractCode, defaultContract,
   buildProbationDraftPayload, applyActivateProbation, applyPostProbationDecision, applyOffboardingTermination,

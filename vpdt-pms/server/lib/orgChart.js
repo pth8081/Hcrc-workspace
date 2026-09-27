@@ -166,7 +166,7 @@ function findPositionNodeForUser(version, user) {
 
 // ===== CRUD node (chỉ khi version.status==='DRAFT') =====
 
-function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, displayOrder }) {
+function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, displayOrder }) {
   requireDraft(version);
   if (!NODE_TYPES.has(nodeType)) throw new HttpError(400, 'Loại node không hợp lệ');
   const isRoot = parentNodeId == null;
@@ -190,6 +190,11 @@ function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, job
     jobTitle: nodeType === 'POSITION' ? jobTitle.trim() : null,
     requiresDept: nodeType === 'POSITION' ? (requiresDept !== false) : null,
     posType: nodeType === 'POSITION' ? (POS_TYPES.has(posType) ? posType : null) : null,
+    // jobGrade (GĐ1, 10/2026 — đối chiếu cột "Cấp bậc Tập đoàn" ở file Excel quản lý thủ công của Nhân
+    // Sự, theo yêu cầu người dùng) — CÙNG cơ chế TUỲ CHỌN như posType (chuỗi tự do, VD "L7.2", KHÔNG
+    // dựng danh mục riêng vì mỗi vị trí luôn cùng 1 cấp bậc, không cần chọn lại mỗi lần) — snapshot
+    // xuống hồ sơ khi gán chức vụ (xem applyPositionAssignment(), lib/employeeProfile.js).
+    jobGrade: nodeType === 'POSITION' ? (jobGrade ? String(jobGrade).trim().slice(0, 20) : null) : null,
     nodeName: nodeType === 'POSITION' ? null : nodeName.trim(),
     positionKey: nodeType === 'POSITION' ? randomUUID() : null,
     displayOrder: Number.isFinite(displayOrder) ? displayOrder : (version.nodes || []).length
@@ -233,6 +238,9 @@ function editNode(version, nodeId, patch) {
     if (patch.posType !== undefined) {
       if (patch.posType !== null && !POS_TYPES.has(patch.posType)) throw new HttpError(400, 'Vị Trí Làm Việc (posType) không hợp lệ — chỉ nhận HO hoặc STORE');
       node.posType = patch.posType || null;
+    }
+    if (patch.jobGrade !== undefined) {
+      node.jobGrade = patch.jobGrade ? String(patch.jobGrade).trim().slice(0, 20) : null;
     }
   } else if (patch.nodeName !== undefined) {
     if (!patch.nodeName || !patch.nodeName.trim()) throw new HttpError(400, 'Tên không được để trống');

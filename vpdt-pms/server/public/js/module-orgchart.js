@@ -569,6 +569,7 @@ function openOrgChartAddNodeModal(parentNodeId) {
   document.getElementById('orgChartNodeJobTitleInput').value = '';
   document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = true;
   document.getElementById('orgChartNodePosTypeSelect').value = '';
+  document.getElementById('orgChartNodeJobGradeInput').value = '';
   ocPopulateNodeDeptRefSelect('');
   ocPopulateJobTitleDatalist();
   onOrgChartNodeTypeChange();
@@ -588,6 +589,7 @@ function openOrgChartEditNodeModal(nodeId) {
     document.getElementById('orgChartNodeJobTitleInput').value = node.jobTitle || '';
     document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = node.requiresDept !== false;
     document.getElementById('orgChartNodePosTypeSelect').value = node.posType || '';
+    document.getElementById('orgChartNodeJobGradeInput').value = node.jobGrade || '';
     ocPopulateJobTitleDatalist(node.posType || ''); // SAU KHI đã biết posType — lọc đúng danh mục ngay khi mở
   } else {
     ocPopulateJobTitleDatalist();
@@ -609,6 +611,7 @@ async function saveOrgChartNodeClick() {
     payload.jobTitle = document.getElementById('orgChartNodeJobTitleInput').value.trim();
     payload.requiresDept = document.getElementById('orgChartNodeRequiresDeptCheckbox').checked;
     payload.posType = document.getElementById('orgChartNodePosTypeSelect').value || null;
+    payload.jobGrade = document.getElementById('orgChartNodeJobGradeInput').value.trim() || null;
     if (!payload.jobTitle) return alert('⛔ Vui lòng nhập Chức Danh.');
   } else {
     payload.nodeName = document.getElementById('orgChartNodeNameInput').value.trim();

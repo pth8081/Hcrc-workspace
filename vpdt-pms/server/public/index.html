@@ -1418,6 +1418,20 @@
           <label class="block font-semibold text-gray-600 mb-1">Lương Cơ Bản (đ)</label>
           <input type="text" id="hrcNewBaseSalary" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input">
         </div>
+        <!-- Phụ cấp/Hỗ trợ (GĐ1, đối chiếu Excel quản lý thủ công Nhân Sự) — THÔNG TIN THAM KHẢO, KHÔNG
+             đưa vào tính Lương hàng tháng (chỉ Lương Cơ Bản ở trên mới ảnh hưởng lib/payroll.js). -->
+        <details class="border rounded p-2">
+          <summary class="font-semibold text-gray-600 cursor-pointer">Phụ Cấp / Hỗ Trợ (tuỳ chọn, tham khảo)</summary>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div><label class="block text-gray-500 mb-0.5">Phụ cấp trách nhiệm</label><input type="text" id="hrcNewResponsibilityAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+            <div><label class="block text-gray-500 mb-0.5">Phụ cấp kiêm nhiệm</label><input type="text" id="hrcNewConcurrentAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+            <div><label class="block text-gray-500 mb-0.5">Phụ cấp độc hại nặng nhọc</label><input type="text" id="hrcNewHazardAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+            <div><label class="block text-gray-500 mb-0.5">Phụ cấp ăn trưa</label><input type="text" id="hrcNewLunchAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+            <div><label class="block text-gray-500 mb-0.5">Hỗ trợ đi lại</label><input type="text" id="hrcNewTransportAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+            <div><label class="block text-gray-500 mb-0.5">Hỗ trợ điện thoại</label><input type="text" id="hrcNewPhoneAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+            <div class="col-span-2"><label class="block text-gray-500 mb-0.5">Phụ cấp/Hỗ trợ khác</label><input type="text" id="hrcNewOtherAllowance" inputmode="numeric" class="w-full border p-1.5 rounded bg-white money-input"></div>
+          </div>
+        </details>
         <div>
           <label class="block font-semibold text-gray-600 mb-1">Tệp Hợp Đồng (nếu có sẵn)</label>
           <input type="file" id="hrcNewFile" accept=".pdf,.docx,.xlsx" class="w-full border p-1.5 rounded bg-white">
@@ -1878,6 +1892,11 @@
               <option value="STORE">🏪 Siêu Thị</option>
             </select>
             <p class="text-[11px] text-gray-400 mt-1">Dùng để tự đồng bộ mô hình chấm công (Công &amp; Phép) khi HR gán/đổi chức vụ này cho nhân viên ở Hồ Sơ Nhân Sự — để trống nếu chưa cần dùng.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Cấp Bậc (tuỳ chọn)</label>
+            <input id="orgChartNodeJobGradeInput" placeholder="VD: L7.2" maxlength="20" class="w-full border p-1.5 rounded text-sm">
+            <p class="text-[11px] text-gray-400 mt-1">Tự động ghi vào hồ sơ nhân sự khi HR gán/đổi chức vụ này — để trống nếu chưa cần dùng.</p>
           </div>
         </div>
       </div>

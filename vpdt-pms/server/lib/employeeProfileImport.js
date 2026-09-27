@@ -15,6 +15,7 @@ const { HttpError } = require('./httpErrors');
 const { sanitizeRowForFormulaInjection } = require('./adminExport');
 
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
+const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
 
 function styleHeaderRow(row) {
   row.font = { bold: true };
@@ -39,7 +40,18 @@ const COLUMNS = [
   { header: 'Số Tài Khoản Ngân Hàng', key: 'bankAccountNo', width: 18 },
   { header: 'Ngân Hàng', key: 'bankName', width: 18 },
   { header: 'Số Sổ BHXH', key: 'socialInsuranceNo', width: 14 },
-  { header: 'Mã Số Thuế TNCN', key: 'taxCode', width: 14 }
+  { header: 'Mã Số Thuế TNCN', key: 'taxCode', width: 14 },
+  // GĐ1 (10/2026, đối chiếu Excel quản lý thủ công Nhân Sự) — jobGrade/concurrentTitle KHÔNG đưa vào
+  // đây (jobGrade snapshot theo Cơ Cấu Tổ Chức khi gán chức vụ, concurrentTitle sống ở DB.users.
+  // secondaryPositions — xem chú thích lib/employeeProfile.js), chỉ 7 field flat còn lại thu thập được
+  // qua applyProfileEdit()/SELF_EDITABLE_FIELDS+HR_ONLY_EDITABLE_FIELDS.
+  { header: 'Quốc Tịch', key: 'nationality', width: 14 },
+  { header: 'Tình Trạng Hôn Nhân', key: 'maritalStatus', width: 16 },
+  { header: 'Ngày Cấp CCCD/CMND (YYYY-MM-DD)', key: 'nationalIdIssueDate', width: 20 },
+  { header: 'Nơi Cấp CCCD/CMND', key: 'nationalIdIssuePlace', width: 20 },
+  { header: 'Vị Trí Bàn Làm Việc', key: 'deskLocation', width: 16 },
+  { header: 'Ngày Nghỉ Hưu Dự Kiến (YYYY-MM-DD)', key: 'retirementDate', width: 20 },
+  { header: 'BHXH Tại Đơn Vị Này (Có/Không)', key: 'socialInsuranceAtThisUnit', width: 18 }
 ];
 
 async function buildImportTemplateWorkbook() {
@@ -52,7 +64,10 @@ async function buildImportTemplateWorkbook() {
     nationalId: '079095001234', permanentAddress: '123 Đường ABC, Q.1, TP.HCM', currentAddress: '',
     personalEmail: 'nguyenvana@gmail.com', emergencyContactName: 'Nguyễn Thị B', emergencyContactPhone: '0909123456',
     emergencyContactRelationship: 'Vợ/Chồng', bankAccountNo: '0071001234567', bankName: 'Vietcombank',
-    socialInsuranceNo: '0123456789', taxCode: '8012345678'
+    socialInsuranceNo: '0123456789', taxCode: '8012345678',
+    nationality: 'Việt Nam', maritalStatus: 'Độc thân', nationalIdIssueDate: '2020-01-15',
+    nationalIdIssuePlace: 'Cục Cảnh sát QLHC về TTXH', deskLocation: 'Tầng 3 - Bàn 12',
+    retirementDate: '', socialInsuranceAtThisUnit: 'Có'
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   const noteSheet = wb.addWorksheet('Ghi Chú');
@@ -60,6 +75,7 @@ async function buildImportTemplateWorkbook() {
   noteSheet.addRow(['"Mã Nhân Viên" bắt buộc — trùng với hồ sơ đã có hoặc trùng ngay trong file sẽ được CẢNH BÁO ở bước xem trước, HR tự chọn Ghi đè thông tin/Bỏ qua từng dòng, không tự động chặn.']);
   noteSheet.addRow(['"Tài Khoản VPDT" tuỳ chọn — nếu điền, phải khớp ĐÚNG 1 tài khoản đang hoạt động đã có sẵn trong hệ thống; để trống nếu chưa biết, liên kết sau qua nút "🔗 Liên Kết Tài Khoản VPDT" ở Chi tiết hồ sơ.']);
   noteSheet.addRow(['Chưa hỗ trợ nhập "Người phụ thuộc"/"Học vấn" qua Excel — bổ sung sau khi import xong, qua Chi tiết từng hồ sơ.']);
+  noteSheet.addRow(['"Cấp Bậc"/"Kiêm nhiệm chức danh" KHÔNG nhập qua Excel này — Cấp Bậc tự lấy theo Chức Vụ khi HR gán ở Chi tiết hồ sơ (Cơ Cấu Tổ Chức), Kiêm nhiệm chức danh cấu hình ở Quản Lý Người Dùng.']);
   noteSheet.eachRow(row => { row.font = { italic: true, color: { argb: 'FFDC2626' } }; });
   return wb;
 }
@@ -84,7 +100,14 @@ const HEADER_HINTS = {
   bankAccountNo: ['so tai khoan ngan hang'],
   bankName: ['ngan hang'],
   socialInsuranceNo: ['so so bhxh', 'so bhxh'],
-  taxCode: ['ma so thue tncn', 'ma so thue']
+  taxCode: ['ma so thue tncn', 'ma so thue'],
+  nationality: ['quoc tich'],
+  maritalStatus: ['tinh trang hon nhan'],
+  nationalIdIssueDate: ['ngay cap cccd/cmnd (yyyy-mm-dd)', 'ngay cap cccd/cmnd', 'ngay cap'],
+  nationalIdIssuePlace: ['noi cap cccd/cmnd', 'noi cap'],
+  deskLocation: ['vi tri ban lam viec'],
+  retirementDate: ['ngay nghi huu du kien (yyyy-mm-dd)', 'ngay nghi huu du kien', 'ngay nghi huu'],
+  socialInsuranceAtThisUnit: ['bhxh tai don vi nay (co/khong)', 'bhxh tai don vi nay']
 };
 
 function detectColumns(headerCells) {
@@ -140,6 +163,18 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
   if (dateOfBirth && Number.isNaN(new Date(dateOfBirth).getTime())) errors.push('Ngày sinh không hợp lệ');
   if (gender && !GENDERS.has(gender)) errors.push('Giới tính không hợp lệ (chỉ nhận Nam/Nữ/Khác)');
 
+  const maritalStatus = String(get('maritalStatus') || '').trim() || null;
+  if (maritalStatus && !MARITAL_STATUSES.has(maritalStatus)) errors.push('Tình trạng hôn nhân không hợp lệ (chỉ nhận Độc thân/Đã kết hôn/Đã ly hôn)');
+  const nationalIdIssueDate = parseDateCell(get('nationalIdIssueDate')) || null;
+  if (nationalIdIssueDate && Number.isNaN(new Date(nationalIdIssueDate).getTime())) errors.push('Ngày cấp CCCD/CMND không hợp lệ');
+  const retirementDate = parseDateCell(get('retirementDate')) || null;
+  if (retirementDate && Number.isNaN(new Date(retirementDate).getTime())) errors.push('Ngày nghỉ hưu dự kiến không hợp lệ');
+  const siauRaw = normalizeHeader(get('socialInsuranceAtThisUnit'));
+  let socialInsuranceAtThisUnit = null;
+  if (siauRaw === 'co') socialInsuranceAtThisUnit = true;
+  else if (siauRaw === 'khong') socialInsuranceAtThisUnit = false;
+  else if (siauRaw) errors.push('"BHXH Tại Đơn Vị Này" không hợp lệ (chỉ nhận Có/Không, để trống nếu chưa rõ)');
+
   return {
     employeeCode, username, dateOfBirth, gender,
     nationalId: String(get('nationalId') || '').trim() || null,
@@ -153,6 +188,11 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
     bankName: String(get('bankName') || '').trim() || null,
     socialInsuranceNo: String(get('socialInsuranceNo') || '').trim() || null,
     taxCode: String(get('taxCode') || '').trim() || null,
+    nationality: String(get('nationality') || '').trim() || null,
+    maritalStatus, nationalIdIssueDate,
+    nationalIdIssuePlace: String(get('nationalIdIssuePlace') || '').trim() || null,
+    deskLocation: String(get('deskLocation') || '').trim() || null,
+    retirementDate, socialInsuranceAtThisUnit,
     duplicateExisting, duplicateInFile,
     valid: errors.length === 0,
     errors
@@ -229,6 +269,14 @@ async function buildExportWorkbook(profiles, users, hrProcesses) {
     { header: 'SĐT Khẩn Cấp', key: 'emergencyContactPhone', width: 16 },
     { header: 'Số Sổ BHXH', key: 'socialInsuranceNo', width: 14 },
     { header: 'Mã Số Thuế TNCN', key: 'taxCode', width: 14 },
+    { header: 'Quốc Tịch', key: 'nationality', width: 14 },
+    { header: 'Tình Trạng Hôn Nhân', key: 'maritalStatus', width: 16 },
+    { header: 'Ngày Cấp CCCD/CMND', key: 'nationalIdIssueDate', width: 16 },
+    { header: 'Nơi Cấp CCCD/CMND', key: 'nationalIdIssuePlace', width: 20 },
+    { header: 'Cấp Bậc', key: 'jobGrade', width: 12 },
+    { header: 'Vị Trí Bàn Làm Việc', key: 'deskLocation', width: 16 },
+    { header: 'Ngày Nghỉ Hưu Dự Kiến', key: 'retirementDate', width: 18 },
+    { header: 'BHXH Tại Đơn Vị Này', key: 'socialInsuranceAtThisUnitLabel', width: 16 },
     { header: 'Cập Nhật Lần Cuối', key: 'updatedAt', width: 20 }
   ];
   styleHeaderRow(sheet.getRow(1));
@@ -244,7 +292,12 @@ async function buildExportWorkbook(profiles, users, hrProcesses) {
       dateOfBirth: p.dateOfBirth || '', gender: p.gender || '', nationalId: p.nationalId || '',
       permanentAddress: p.permanentAddress || '', currentAddress: p.currentAddress || '',
       personalEmail: p.personalEmail || '', emergencyContactPhone: p.emergencyContactPhone || '',
-      socialInsuranceNo: p.socialInsuranceNo || '', taxCode: p.taxCode || '', updatedAt: p.updatedAt || ''
+      socialInsuranceNo: p.socialInsuranceNo || '', taxCode: p.taxCode || '',
+      nationality: p.nationality || '', maritalStatus: p.maritalStatus || '',
+      nationalIdIssueDate: p.nationalIdIssueDate || '', nationalIdIssuePlace: p.nationalIdIssuePlace || '',
+      jobGrade: p.jobGrade || '', deskLocation: p.deskLocation || '', retirementDate: p.retirementDate || '',
+      socialInsuranceAtThisUnitLabel: p.socialInsuranceAtThisUnit == null ? '' : (p.socialInsuranceAtThisUnit ? 'Có' : 'Không'),
+      updatedAt: p.updatedAt || ''
     }));
   }
   return wb;

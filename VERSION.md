@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**24.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.32 (2026-09-27): GĐ1 — Hồ Sơ Nhân Sự + Hợp Đồng Lao Động đối chiếu file Excel quản lý thủ công của bộ phận Nhân Sự
+
+Người dùng gửi 1 file Excel bộ phận Nhân Sự đang quản lý thủ công, yêu cầu
+phân tích xem Hồ Sơ Nhân Sự/Hợp Đồng Lao Động hiện có quản lý gần giống được
+không. Đã phân tích + xác nhận phương án 3 giai đoạn, GĐ1 (bổ sung field còn
+thiếu) hoàn tất trong đợt này:
+
+- **Hồ Sơ Nhân Sự** — thêm 7 field mới:
+  - 4 field nhạy cảm (theo cơ chế "mở trường xem" đã có — SENSITIVE_FIELDS
+    tăng từ 15 lên 19): Quốc tịch, Tình trạng hôn nhân, Ngày cấp CCCD/CMND,
+    Nơi cấp CCCD/CMND.
+  - 3 field hành chính (luôn hiển thị, chỉ HR sửa): Vị trí bàn làm việc,
+    Ngày nghỉ hưu dự kiến, BHXH tại đơn vị này (Có/Không/chưa rõ).
+  - Cấp Bậc: gắn thêm vào node Vị Trí của Cơ Cấu Tổ Chức, tự snapshot xuống
+    hồ sơ khi HR gán/đổi Chức Vụ (cùng cơ chế snapshot như posType).
+  - Thâm niên: tự tính từ "Ngày Vào Làm Việc" của tài khoản liên kết, không
+    lưu thành field riêng (tránh 2 nguồn dữ liệu lệch nhau).
+  - Kiêm nhiệm chức danh: hiển thị lại đúng "Vị Trí Kiêm Nhiệm" đã có sẵn
+    trên tài khoản Người Dùng (không tạo field trùng lặp).
+  - Excel Nhập/Xuất hàng loạt: thêm đủ 7 cột tương ứng (trừ Cấp Bậc/Kiêm
+    nhiệm — 2 field snapshot/tham chiếu, không nhập qua Excel).
+- **Hợp Đồng Lao Động** — thêm 7 khoản Phụ Cấp/Hỗ Trợ (trách nhiệm, kiêm
+  nhiệm, độc hại nặng nhọc, ăn trưa, đi lại, điện thoại, khác) — nhập lúc
+  tạo, sửa được ở Chi tiết hợp đồng, **THÔNG TIN THAM KHẢO — không ảnh hưởng
+  tính Lương hàng tháng** (module Lương chỉ đọc "Lương cơ bản" như trước).
+- Đã rà soát regression toàn bộ ~340 file test (bao gồm sửa lại 2 test cũ
+  hardcode "15 trường nhạy cảm" → 19, thêm 3 file test mới cho các field vừa
+  thêm) — xác nhận KHÔNG ảnh hưởng module khác (Công & Phép, Lương, quy trình
+  phê duyệt theo chức danh kiêm nhiệm, Cơ Cấu Tổ Chức...).
+- **Không cần đổi `schema.sql`/`.env.example`/`package.json` (dependencies)**
+  — employeeProfiles là AppData JSON, laborContracts/orgChartVersions dùng hạ
+  tầng `dbo.Records`/AppData sẵn có, không thêm bảng/cột SQL mới.
 
 ## v24.31 (2026-09-27): Vá ~20 phát hiện từ đợt rà soát chuyên sâu 8-agent song song mới nhất (1 Nghiêm trọng + 6 Cao + 10 Trung bình + 3 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
 

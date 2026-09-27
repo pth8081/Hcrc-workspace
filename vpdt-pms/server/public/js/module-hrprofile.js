@@ -21,6 +21,8 @@ let _hrpfManageDetailReadOnly = false; // true = đang mở #hrpfDetailModal ở
   // KHÔNG phải 1 tầng quyền mới — cùng quyền hrProfileManage như "✏️ Sửa", chỉ khác cách hiển thị)
 
 const HRPF_GENDERS = ['Nam', 'Nữ', 'Khác'];
+// Mirror MARITAL_STATUSES (lib/employeeProfile.js) — GĐ1, 10/2026.
+const HRPF_MARITAL_STATUSES = ['Độc thân', 'Đã kết hôn', 'Đã ly hôn'];
 // Mirror ĐÚNG SENSITIVE_FIELD_LABELS (lib/employeeProfile.js) — dùng để render động
 // renderHrpfProfileReadOnly() (xem "quản lý trực tiếp xem giới hạn" bên dưới) theo đúng field admin đã mở
 // qua managerVisibleFields (server trả kèm, xem GET /by-code|/by-username), KHÔNG hardcode cứng 8 field
@@ -796,6 +798,19 @@ async function confirmHrpfImport() {
 // scope 'ME': chính chủ tự sửa — chỉ SELF_EDITABLE_FIELDS (xem lib/employeeProfile.js), không đổi được
 // nationalId/socialInsuranceNo/taxCode/status/username.
 // scope 'MANAGE': HR/admin — sửa thêm được HR_ONLY_EDITABLE_FIELDS + đổi trạng thái tay + liên kết TK.
+// Thâm niên (GĐ1, 10/2026) — tính TRỰC TIẾP client-side từ user.startDate ("Ngày Vào Làm Việc", field
+// đã có sẵn trên DB.users — KHÔNG lưu thêm field mới ở employeeProfile để tránh 2 nguồn dữ liệu lệch
+// nhau, xem computeTenureYears() ở lib/employeeProfile.js cho bản dùng phía server/báo cáo). Chỉ hiển
+// thị tham khảo, không phải field lưu trữ.
+function hrpfTenureDisplay(profile) {
+  const u = profile.username ? (DB.users || []).find(x => x.username === profile.username) : null;
+  const start = u?.startDate ? new Date(u.startDate) : null;
+  if (!start || Number.isNaN(start.getTime())) return '—';
+  const years = (Date.now() - start.getTime()) / (365.25 * 86400000);
+  if (years < 0) return '—';
+  return `${Math.round(years * 10) / 10} năm`;
+}
+
 function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } = {}) {
   const idn = hrpfIdentitySnapshot(profile);
   // readOnly: chế độ "👁️ Xem" ở "Quản Lý Hồ Sơ" (KHÁC hẳn scope — scope vẫn là 'MANAGE', chỉ đổi cách
@@ -832,6 +847,32 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     ${roField('Số điện thoại', idn.phone)}
     <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Trạng Thái</label>
       <p>${HRPF_STATUS_BADGES[profile.status] || profile.status}</p></div>
+  </div>`;
+
+  // Cấp bậc/Thâm niên/Vị trí kiêm nhiệm/hành chính (GĐ1, 10/2026 — đối chiếu Excel quản lý thủ công Nhân
+  // Sự) — KHÔNG thuộc SENSITIVE_FIELDS nên luôn hiển thị (không qua canSee()), chỉ HR/admin (editableHrOnly)
+  // sửa được deskLocation/retirementDate/socialInsuranceAtThisUnit. jobGrade/Kiêm nhiệm LUÔN chỉ đọc (snapshot
+  // theo Cơ Cấu Tổ Chức/secondaryPositions trên DB.users — xem chú thích applyPositionAssignment()).
+  const secondaryPositionsUser = profile.username ? (DB.users || []).find(x => x.username === profile.username) : null;
+  const secondaryPositionsText = (secondaryPositionsUser?.secondaryPositions || [])
+    .map(sp => `${sp.jobTitle || ''}${sp.dept ? ' — ' + sp.dept : ''}`.trim()).filter(Boolean).join('; ');
+  const siauValue = profile.socialInsuranceAtThisUnit;
+  const adminInfoBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
+    ${roField('Cấp bậc', profile.jobGrade)}
+    ${roField('Thâm niên', hrpfTenureDisplay(profile))}
+    ${roField('Kiêm nhiệm chức danh', secondaryPositionsText)}
+    ${editableHrOnly
+      ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Vị trí bàn làm việc</label>${textInput('hrpfF_deskLocation', profile.deskLocation)}</div>`
+      : roField('Vị trí bàn làm việc', profile.deskLocation)}
+    ${editableHrOnly ? dateField('Ngày nghỉ hưu (dự kiến)', 'hrpfF_retirementDate', profile.retirementDate) : roField('Ngày nghỉ hưu (dự kiến)', (profile.retirementDate || '').slice(0, 10))}
+    ${editableHrOnly
+      ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">BHXH tại đơn vị này</label>
+        <select id="hrpfF_socialInsuranceAtThisUnit" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="" ${siauValue == null ? 'selected' : ''}>-- Chưa rõ --</option>
+          <option value="1" ${siauValue === true ? 'selected' : ''}>Có</option>
+          <option value="0" ${siauValue === false ? 'selected' : ''}>Không</option>
+        </select></div>`
+      : roField('BHXH tại đơn vị này', siauValue == null ? '' : (siauValue ? 'Có' : 'Không'))}
   </div>`;
 
   const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
@@ -890,12 +931,20 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     ${canSee('emergencyContactRelationship') ? textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship) : ''}
     ${canSee('bankAccountNo') ? textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo) : ''}
     ${canSee('bankName') ? textField('Ngân hàng', 'hrpfF_bankName', profile.bankName) : ''}
+    ${canSee('nationality') ? textField('Quốc tịch', 'hrpfF_nationality', profile.nationality) : ''}
+    ${canSee('maritalStatus') ? (isReadOnly ? roField('Tình trạng hôn nhân', profile.maritalStatus) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng hôn nhân</label>
+      <select id="hrpfF_maritalStatus" class="w-full border p-1.5 rounded text-sm bg-white">
+        <option value="">-- Chọn --</option>
+        ${HRPF_MARITAL_STATUSES.map(m => `<option value="${m}" ${profile.maritalStatus === m ? 'selected' : ''}>${m}</option>`).join('')}
+      </select></div>`) : ''}
   </div>`;
 
   const hrOnlyFieldsHtml = [
     canSee('nationalId') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>${editableHrOnly ? textInput('hrpfF_nationalId', profile.nationalId) : roField('', profile.nationalId)}</div>` : '',
     canSee('socialInsuranceNo') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số Sổ BHXH</label>${editableHrOnly ? textInput('hrpfF_socialInsuranceNo', profile.socialInsuranceNo) : roField('', profile.socialInsuranceNo)}</div>` : '',
-    canSee('taxCode') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>` : ''
+    canSee('taxCode') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>` : '',
+    canSee('nationalIdIssueDate') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày cấp CCCD/CMND</label>${editableHrOnly ? dateInput('hrpfF_nationalIdIssueDate', profile.nationalIdIssueDate) : roField('', (profile.nationalIdIssueDate || '').slice(0, 10))}</div>` : '',
+    canSee('nationalIdIssuePlace') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Nơi cấp CCCD/CMND</label>${editableHrOnly ? textInput('hrpfF_nationalIdIssuePlace', profile.nationalIdIssuePlace) : roField('', profile.nationalIdIssuePlace)}</div>` : ''
   ].filter(Boolean).join('');
   const hrOnlyBlock = !hrOnlyFieldsHtml ? '' : `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t">${hrOnlyFieldsHtml}</div>`;
 
@@ -936,7 +985,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${historyBlock}`;
 }
 
@@ -1016,6 +1065,8 @@ function collectHrpfProfileFormValues(scope) {
   if (document.getElementById('hrpfF_emergencyContactRelationship')) payload.emergencyContactRelationship = val('hrpfF_emergencyContactRelationship') || null;
   if (document.getElementById('hrpfF_bankAccountNo')) payload.bankAccountNo = val('hrpfF_bankAccountNo') || null;
   if (document.getElementById('hrpfF_bankName')) payload.bankName = val('hrpfF_bankName') || null;
+  if (document.getElementById('hrpfF_nationality')) payload.nationality = val('hrpfF_nationality') || null;
+  if (document.getElementById('hrpfF_maritalStatus')) payload.maritalStatus = val('hrpfF_maritalStatus') || null;
   if (document.getElementById('hrpfDependentsRows')) {
     payload.dependents = Array.from(document.querySelectorAll('.hrpf-dependent-row')).map(row => ({
       id: row.dataset.id || undefined,
@@ -1038,6 +1089,14 @@ function collectHrpfProfileFormValues(scope) {
     if (document.getElementById('hrpfF_nationalId')) payload.nationalId = val('hrpfF_nationalId') || null;
     if (document.getElementById('hrpfF_socialInsuranceNo')) payload.socialInsuranceNo = val('hrpfF_socialInsuranceNo') || null;
     if (document.getElementById('hrpfF_taxCode')) payload.taxCode = val('hrpfF_taxCode') || null;
+    if (document.getElementById('hrpfF_nationalIdIssueDate')) payload.nationalIdIssueDate = val('hrpfF_nationalIdIssueDate') || null;
+    if (document.getElementById('hrpfF_nationalIdIssuePlace')) payload.nationalIdIssuePlace = val('hrpfF_nationalIdIssuePlace') || null;
+    if (document.getElementById('hrpfF_deskLocation')) payload.deskLocation = val('hrpfF_deskLocation') || null;
+    if (document.getElementById('hrpfF_retirementDate')) payload.retirementDate = val('hrpfF_retirementDate') || null;
+    if (document.getElementById('hrpfF_socialInsuranceAtThisUnit')) {
+      const raw = val('hrpfF_socialInsuranceAtThisUnit');
+      payload.socialInsuranceAtThisUnit = raw === '' ? null : raw === '1';
+    }
   }
   return payload;
 }

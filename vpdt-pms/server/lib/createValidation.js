@@ -3319,7 +3319,7 @@ const CREATE_MODULE_CONFIGS = {
     // chạy TRONG withLockedRecordForCollection('hrProcesses', ...) của caller nên vốn đã tuần tự.
     getLockKey: (payload) => `labor_contract_code:${String(payload?.employeeCode || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
-      const { canManageContracts, CONTRACT_TYPES, generateContractCode } = require('./laborContract');
+      const { canManageContracts, CONTRACT_TYPES, generateContractCode, ALLOWANCE_FIELDS, ALLOWANCE_FIELD_LABELS } = require('./laborContract');
       const { findProfile } = require('./employeeProfile');
       if (!canManageContracts(user)) throw new CreateError(403, 'Bạn không có quyền tạo/quản lý hợp đồng lao động');
       if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
@@ -3358,6 +3358,14 @@ const CREATE_MODULE_CONFIGS = {
       const salary = payload.baseSalary === '' || payload.baseSalary == null ? null : Number(payload.baseSalary);
       if (salary !== null && (!Number.isFinite(salary) || salary < 0)) throw new CreateError(400, 'Lương cơ bản không hợp lệ');
       payload.baseSalary = salary;
+      // ALLOWANCE_FIELDS (GĐ1, 10/2026 — đối chiếu Excel quản lý thủ công Nhân Sự) — CÙNG khuôn validate
+      // như baseSalary ở trên, THÔNG TIN THAM KHẢO (KHÔNG đọc bởi lib/payroll.js, xem chú thích
+      // ALLOWANCE_FIELDS ở lib/laborContract.js).
+      for (const f of ALLOWANCE_FIELDS) {
+        const n = payload[f] === '' || payload[f] == null ? null : Number(payload[f]);
+        if (n !== null && (!Number.isFinite(n) || n < 0)) throw new CreateError(400, `${ALLOWANCE_FIELD_LABELS[f]} không hợp lệ`);
+        payload[f] = n;
+      }
       payload.dept = payload.dept ? String(payload.dept).trim().slice(0, 100) : null;
       payload.hrProcessId = null; // tạo tay ngoài luồng Onboarding -> không gắn với quy trình nào
       payload.renewalIndex = payload.contractType === 'PROBATION' ? 0 : (Number(payload.renewalIndex) || 1);

@@ -47,6 +47,9 @@ function todayISO() {
 
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
+// MARITAL_STATUSES (mới, GĐ1 "đối chiếu file Excel quản lý thủ công của Nhân Sự", theo yêu cầu người
+// dùng — xem VERSION.md) — khớp đúng 3 lựa chọn cột "Tình trạng hôn nhân" ở file Excel gốc.
+const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
 
 // Trường nhạy cảm/cá nhân — chỉ chính chủ (username đã liên kết) / hrProfileManage / admin xem được
 // MẶC ĐỊNH; quản lý trực tiếp (view-only theo hrProfileView) KHÔNG được xem dù có quyền xem hồ sơ nói
@@ -59,11 +62,17 @@ const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 // lý trực tiếp xem hồ sơ người khác như trước. Field ĐỊNH DANH/HỆ THỐNG (employeeCode/status/positionKey/
 // jobTitle/dept/positionLabel/posType/positionHistory/username) KHÔNG nằm trong danh sách này — luôn hiện
 // (cần thiết để biết đang xem hồ sơ CỦA AI, không có ý nghĩa "ẩn/hiện tuỳ chọn").
+// nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace (GĐ1, 10/2026) — thêm CUỐI mảng
+// (không chen giữa) để không đổi thứ tự các field cũ, tránh phá vỡ bất kỳ chỗ nào đang dựa vào thứ tự
+// (hiện chưa thấy chỗ nào dựa vào thứ tự, nhưng giữ quy ước phòng hờ). 2 field CCCD mới đứng CẠNH
+// nationalId là chủ đích (cùng nhóm dữ liệu định danh) nhưng vẫn là 2 CHECKBOX RIÊNG ở màn cấu hình
+// admin — mirror đúng tiền lệ bankAccountNo/bankName đã có (2 field liên quan nhưng KHÔNG gộp 1 cờ).
 const SENSITIVE_FIELDS = [
   'dateOfBirth', 'gender', 'personalEmail',
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
   'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName',
-  'socialInsuranceNo', 'taxCode', 'dependents', 'education'
+  'socialInsuranceNo', 'taxCode', 'dependents', 'education',
+  'nationality', 'maritalStatus', 'nationalIdIssueDate', 'nationalIdIssuePlace'
 ];
 // Nhãn hiển thị tiếng Việt cho từng trường — dùng cho màn cấu hình admin (checkbox chọn trường nào mở
 // cho quản lý trực tiếp/chính chủ) lẫn client hiển thị danh sách trường đang cấu hình. Khớp ĐÚNG
@@ -74,7 +83,9 @@ const SENSITIVE_FIELD_LABELS = {
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
   bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
-  taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn'
+  taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn',
+  nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
+  nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND'
 };
 // Lọc input admin gửi lên chỉ giữ đúng các field NẰM TRONG SENSITIVE_FIELDS (chặn gửi field lạ/field
 // định danh-hệ thống — không có ý nghĩa gì để "mở thêm" vì các field đó vốn đã luôn hiện sẵn).
@@ -161,10 +172,22 @@ function defaultProfile(employeeCode) {
     bankAccountNo: null, bankName: null,
     socialInsuranceNo: null, taxCode: null,
     dependents: [], education: [],
+    // nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace (GĐ1, 10/2026 — đối chiếu file
+    // Excel quản lý thủ công của Nhân Sự, theo yêu cầu người dùng) — tự phục vụ/HR sửa qua
+    // SELF_EDITABLE_FIELDS/HR_ONLY_EDITABLE_FIELDS bên dưới, cùng khuôn field cá nhân/định danh đã có.
+    nationality: null, maritalStatus: null,
+    nationalIdIssueDate: null, nationalIdIssuePlace: null,
+    // deskLocation/retirementDate/socialInsuranceAtThisUnit (GĐ1) — dữ liệu HÀNH CHÍNH (KHÔNG đưa vào
+    // SENSITIVE_FIELDS — luôn hiển thị như dept/positionLabel, không qua cơ chế "mở trường xem" vì không
+    // phải thông tin riêng tư cá nhân), CHỈ HR sửa được (HR_ONLY_EDITABLE_FIELDS).
+    deskLocation: null, retirementDate: null, socialInsuranceAtThisUnit: null,
     // Chức vụ hiện tại — LUÔN chọn từ 1 node POSITION của bản Cơ Cấu Tổ Chức đang áp dụng (KHÔNG gõ tự
     // do), xem applyPositionAssignment(). positionLabel là tên hiển thị đã ghép sẵn (VD "Trưởng Phòng
     // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
-    positionKey: null, jobTitle: null, dept: null, positionLabel: null, posType: null,
+    // jobGrade (GĐ1, 10/2026) — snapshot "Cấp bậc" của node vị trí (xem lib/orgChart.js), CÙNG cơ chế
+    // snapshot như posType/positionLabel — KHÔNG sửa trực tiếp qua applyProfileEdit(), chỉ đổi khi
+    // gán/đổi chức vụ (applyPositionAssignment() bên dưới).
+    positionKey: null, jobTitle: null, dept: null, positionLabel: null, posType: null, jobGrade: null,
     positionHistory: [],
     // profileEditHistory — "Lịch Sử Thay Đổi & Chỉnh Sửa Hồ Sơ" (9/2026, theo yêu cầu người dùng) — ghi
     // lại MỌI lần tạo mới (type CREATE) + sửa (type EDIT, chỉ khi THỰC SỰ có field đổi giá trị — xem
@@ -462,6 +485,9 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   const label = buildNodeDisplayName(orgChartVersion, node);
   const jobTitle = node.jobTitle;
   const posType = (node.posType === 'HO' || node.posType === 'STORE') ? node.posType : null;
+  // jobGrade (GĐ1, 10/2026) — snapshot "Cấp bậc" của node vị trí, CÙNG cơ chế snapshot như posType/
+  // positionLabel ở trên (node.jobGrade rỗng nếu HR chưa gán ở Cơ Cấu Tổ Chức, xem lib/orgChart.js).
+  const jobGrade = node.jobGrade || null;
   let dept = null;
   if (node.requiresDept !== false) {
     const deptNode = findNearestDeptAncestor(orgChartVersion, node);
@@ -474,8 +500,8 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
   const entry = {
     id: randomUUID(),
     effectiveDate: effectiveDate || todayISO(),
-    oldPositionKey: profile.positionKey, oldJobTitle: profile.jobTitle, oldDept: profile.dept, oldPositionLabel: profile.positionLabel, oldPosType: profile.posType,
-    newPositionKey: positionKey, newJobTitle: jobTitle, newDept: dept, newPositionLabel: label, newPosType: posType,
+    oldPositionKey: profile.positionKey, oldJobTitle: profile.jobTitle, oldDept: profile.dept, oldPositionLabel: profile.positionLabel, oldPosType: profile.posType, oldJobGrade: profile.jobGrade,
+    newPositionKey: positionKey, newJobTitle: jobTitle, newDept: dept, newPositionLabel: label, newPosType: posType, newJobGrade: jobGrade,
     changedBy: actorUsername, changedByName: actorName || actorUsername,
     note: note ? String(note).trim().slice(0, 500) : null,
     fileUrl: fileUrl ? String(fileUrl).trim().slice(0, 500) : null,
@@ -483,7 +509,7 @@ function applyPositionAssignment(profile, orgChartVersion, positionKey, effectiv
     createdAt: nowStr
   };
   profile.positionHistory = [...(profile.positionHistory || []), entry];
-  profile.positionKey = positionKey; profile.jobTitle = jobTitle; profile.dept = dept; profile.positionLabel = label; profile.posType = posType;
+  profile.positionKey = positionKey; profile.jobTitle = jobTitle; profile.dept = dept; profile.positionLabel = label; profile.posType = posType; profile.jobGrade = jobGrade;
   profile.updatedAt = nowStr; profile.updatedBy = actorUsername;
   return { jobTitle, dept, posType };
 }
@@ -523,10 +549,14 @@ function getProfileForViewer(profile, viewer, allUsers, managerVisibleFields) {
 const SELF_EDITABLE_FIELDS = [
   'dateOfBirth', 'gender', 'permanentAddress', 'currentAddress', 'personalEmail',
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
-  'bankAccountNo', 'bankName', 'dependents', 'education'
+  'bankAccountNo', 'bankName', 'dependents', 'education',
+  'nationality', 'maritalStatus'
 ];
-// HR (hrProfileManage/admin) sửa thêm được cả trường định danh pháp lý.
-const HR_ONLY_EDITABLE_FIELDS = ['nationalId', 'socialInsuranceNo', 'taxCode'];
+// HR (hrProfileManage/admin) sửa thêm được cả trường định danh pháp lý + trường hành chính (GĐ1).
+const HR_ONLY_EDITABLE_FIELDS = [
+  'nationalId', 'socialInsuranceNo', 'taxCode',
+  'nationalIdIssueDate', 'nationalIdIssuePlace', 'deskLocation', 'retirementDate', 'socialInsuranceAtThisUnit'
+];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
 const PROFILE_FIELD_LABELS = {
@@ -536,7 +566,11 @@ const PROFILE_FIELD_LABELS = {
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng',
   dependents: 'Người phụ thuộc', education: 'Học vấn',
-  nationalId: 'CCCD/CMND', socialInsuranceNo: 'Số BHXH', taxCode: 'Mã số thuế'
+  nationalId: 'CCCD/CMND', socialInsuranceNo: 'Số BHXH', taxCode: 'Mã số thuế',
+  nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
+  nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
+  deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
+  socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị'
 };
 
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): 2 hàm dưới đây trước đây CHỈ kiểm
@@ -601,6 +635,17 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
       case 'gender':
         if (val != null && !GENDERS.has(val)) throw new HttpError(400, 'Giới tính không hợp lệ');
         profile.gender = val || null;
+        break;
+      case 'maritalStatus':
+        if (val != null && val !== '' && !MARITAL_STATUSES.has(val)) throw new HttpError(400, 'Tình trạng hôn nhân không hợp lệ');
+        profile.maritalStatus = val || null;
+        break;
+      case 'nationalIdIssueDate': case 'retirementDate':
+        if (val != null && val !== '' && isNaN(new Date(val).getTime())) throw new HttpError(400, `${PROFILE_FIELD_LABELS[field]} không hợp lệ`);
+        profile[field] = val || null;
+        break;
+      case 'socialInsuranceAtThisUnit':
+        profile.socialInsuranceAtThisUnit = val == null || val === '' ? null : !!val;
         break;
       case 'dependents': {
         if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách người phụ thuộc không hợp lệ');
@@ -702,6 +747,25 @@ function isSalaryAmendmentType(amendmentType) {
   return String(amendmentType || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes('luong');
 }
 
+// computeTenureYears() (GĐ1, 10/2026 — đối chiếu cột "Thâm niên" ở file Excel quản lý thủ công của
+// Nhân Sự, theo yêu cầu người dùng) — TÍNH KHI HIỂN THỊ, KHÔNG lưu thành field riêng trên hồ sơ (đã xác
+// nhận từ trước — xem chú thích ở reactivateForRehire(): "tính thâm niên theo Ngày hiệu lực hợp đồng lao
+// động MỚI sẽ tạo, không phải field riêng"). Bản pure, tự chứa (KHÔNG require lib/attendance.js — hàm
+// tương tự ở đó (computeAnnualLeaveDays()) gắn liền logic tính ngày phép, không tách riêng được thành
+// tiện ích dùng chung mà không đụng tới code phép năm đang hoạt động ổn định — viết bản riêng ở đây để
+// tuyệt đối không ảnh hưởng module Công & Phép). startDate: chuỗi "YYYY-MM-DD" (thường là ngày hiệu lực
+// hợp đồng ĐẦU TIÊN của nhân viên, do caller tự chọn đúng bản ghi truyền vào). referenceDate: mặc định
+// hôm nay (localDateStr(new Date())) nếu không truyền.
+function computeTenureYears(startDate, referenceDate) {
+  if (!startDate) return null;
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return null;
+  const ref = referenceDate ? new Date(referenceDate) : new Date(todayISO());
+  if (Number.isNaN(ref.getTime()) || ref < start) return null;
+  const years = (ref.getTime() - start.getTime()) / (365.25 * 86400000);
+  return Math.round(years * 10) / 10;
+}
+
 // Gộp employeeProfiles + laborContracts thành các chỉ số thống kê cơ bản người dùng yêu cầu: nhân sự
 // vào làm/nghỉ việc, tăng lương, thay đổi HĐLĐ khác, hợp đồng mới/gia hạn/sắp hết hạn, thăng chức/đổi
 // chức danh — lọc theo khoảng thời gian [from, to] (chuỗi "YYYY-MM-DD", bỏ trống 1 hoặc cả 2 = không
@@ -773,7 +837,7 @@ function computeHrReportSummary(profiles, contracts, filters) {
 }
 
 module.exports = {
-  STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  STATUSES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
@@ -781,5 +845,5 @@ module.exports = {
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
-  computeHrReportSummary
+  computeHrReportSummary, computeTenureYears
 };

@@ -174,6 +174,13 @@ async function submitHrContractCreate(e) {
   const endDate = document.getElementById('hrcNewEndDate').value || null;
   if (contractType !== 'INDEFINITE' && !endDate) return alert('⛔ Vui lòng nhập Ngày hết hạn (chỉ hợp đồng Vô thời hạn mới bỏ trống được).');
   const baseSalary = getMoneyValue(document.getElementById('hrcNewBaseSalary'));
+  const responsibilityAllowance = getMoneyValue(document.getElementById('hrcNewResponsibilityAllowance'));
+  const concurrentAllowance = getMoneyValue(document.getElementById('hrcNewConcurrentAllowance'));
+  const hazardAllowance = getMoneyValue(document.getElementById('hrcNewHazardAllowance'));
+  const lunchAllowance = getMoneyValue(document.getElementById('hrcNewLunchAllowance'));
+  const transportAllowance = getMoneyValue(document.getElementById('hrcNewTransportAllowance'));
+  const phoneAllowance = getMoneyValue(document.getElementById('hrcNewPhoneAllowance'));
+  const otherAllowance = getMoneyValue(document.getElementById('hrcNewOtherAllowance'));
 
   let fileUrl = null, fileName = null;
   const fileInput = document.getElementById('hrcNewFile');
@@ -194,7 +201,12 @@ async function submitHrContractCreate(e) {
   }
 
   try {
-    const result = await callCreateAction('laborContracts', { employeeCode, useExternalCode, contractType, startDate, endDate, baseSalary, fileUrl, fileName, customData });
+    const result = await callCreateAction('laborContracts', {
+      employeeCode, useExternalCode, contractType, startDate, endDate, baseSalary,
+      responsibilityAllowance, concurrentAllowance, hazardAllowance, lunchAllowance,
+      transportAllowance, phoneAllowance, otherAllowance,
+      fileUrl, fileName, customData
+    });
     hrcApplyUpdate(result.item);
     closeHrContractCreateModal();
     alert('✅ Đã tạo hợp đồng lao động.');
@@ -218,6 +230,18 @@ function closeHrContractDetailModal() {
   document.getElementById('hrContractDetailModal').classList.add('hidden');
 }
 
+const HRC_ALLOWANCE_FIELDS = [
+  ['responsibilityAllowance', 'Phụ cấp trách nhiệm'],
+  ['concurrentAllowance', 'Phụ cấp kiêm nhiệm'],
+  ['hazardAllowance', 'Phụ cấp độc hại nặng nhọc'],
+  ['lunchAllowance', 'Phụ cấp ăn trưa'],
+  ['transportAllowance', 'Hỗ trợ đi lại'],
+  ['phoneAllowance', 'Hỗ trợ điện thoại'],
+  ['otherAllowance', 'Phụ cấp/Hỗ trợ khác']
+];
+// Map field -> id ô sửa dùng chung cho khối DRAFT lẫn ACTIVE (saveHrContractEdit() đọc theo id này).
+const HRC_ALLOWANCE_EDIT_ID_PREFIX = 'hrcEditAllowance_';
+
 function buildHrContractDetailHTML(c) {
   const fileRow = c.fileUrl
     ? `<a href="${attachmentDownloadUrl(c.fileUrl, null, c.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(c.fileName || 'Tệp hợp đồng')}</a>`
@@ -238,6 +262,29 @@ function buildHrContractDetailHTML(c) {
         </div>
       `).join('')
     : '<p class="text-gray-400">Chưa có thay đổi nào.</p>';
+
+  // Phụ cấp/Hỗ trợ (GĐ1, 10/2026 — đối chiếu Excel quản lý thủ công Nhân Sự): THÔNG TIN THAM KHẢO,
+  // KHÔNG dùng để tính Lương (xem lib/payroll.js chỉ đọc contract.baseSalary) — chỉ hiện khi có ít
+  // nhất 1 giá trị để tránh rối màn với hợp đồng cũ chưa dùng tính năng này.
+  const allowanceRows = HRC_ALLOWANCE_FIELDS.filter(([f]) => c[f] != null);
+  const allowancesSummaryHTML = allowanceRows.length ? `
+    <div class="col-span-2 border-t pt-2 mt-1">
+      <div class="text-gray-500 text-[11px] mb-1">Phụ cấp/Hỗ trợ (tham khảo, không tính vào Lương):</div>
+      <div class="grid grid-cols-2 gap-1">
+        ${allowanceRows.map(([f, label]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> ${formatMoneyDisplay(c[f])}đ</div>`).join('')}
+      </div>
+    </div>` : '';
+  const allowancesEditHTML = `
+    <details class="mt-2">
+      <summary class="text-[11px] text-gray-600 cursor-pointer select-none">➕/✏️ Phụ Cấp / Hỗ Trợ (tuỳ chọn, tham khảo — không ảnh hưởng tính Lương)</summary>
+      <div class="grid grid-cols-2 gap-2 mt-1.5">
+        ${HRC_ALLOWANCE_FIELDS.map(([f, label]) => `
+          <div>
+            <label class="block text-[11px] text-gray-500 mb-0.5">${escapeHtml(label)} (đ)</label>
+            <input type="text" inputmode="numeric" id="${HRC_ALLOWANCE_EDIT_ID_PREFIX}${f}" value="${c[f] != null ? formatMoneyDisplay(c[f]) : ''}" class="w-full border p-1.5 rounded money-input text-[12px]">
+          </div>`).join('')}
+      </div>
+    </details>`;
 
   const activateBtn = c.status === 'DRAFT'
     ? `<button type="button" data-op="activateHrContract" data-arg0="${c.id}" class="bg-teal-600 text-white px-3 py-1.5 rounded font-semibold hover:bg-teal-700">✅ Kích Hoạt Hợp Đồng</button>`
@@ -260,6 +307,7 @@ function buildHrContractDetailHTML(c) {
       <div><span class="text-gray-500">Lương cơ bản:</span> ${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) + 'đ' : '(chưa điền)'}</div>
       <div><span class="text-gray-500">Tệp:</span> ${fileRow}</div>
       ${c.status === 'TERMINATED' ? `<div class="col-span-2"><span class="text-gray-500">Lý do chấm dứt:</span> ${escapeHtml(c.terminationReason || '')} (${escapeHtml(c.terminationDate || '')})</div>` : ''}
+      ${allowancesSummaryHTML}
     </div>
 
     ${c.status === 'DRAFT' ? `
@@ -269,6 +317,7 @@ function buildHrContractDetailHTML(c) {
         <div><label class="block text-gray-600 mb-1">Ngày hết hạn</label><input type="date" id="hrcEditEndDate" value="${escapeHtml(c.endDate || '')}" class="w-full border p-1.5 rounded"></div>
         <div><label class="block text-gray-600 mb-1">Lương cơ bản (đ)</label><input type="text" inputmode="numeric" id="hrcEditBaseSalary" value="${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) : ''}" class="w-full border p-1.5 rounded money-input"></div>
       </div>
+      ${allowancesEditHTML}
       <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Thay Đổi</button>
     </div>` : ''}
 
@@ -285,6 +334,7 @@ function buildHrContractDetailHTML(c) {
       <div class="font-semibold mb-1 text-blue-900">💰 Cập Nhật Lương Cơ Bản</div>
       <p class="text-[11px] text-blue-800 mb-1.5">Đây là cách DUY NHẤT thay đổi số tiền hệ thống dùng để tính Lương hàng tháng — mục "➕ Thêm Thay Đổi" bên dưới chỉ ghi lại lịch sử/văn bản, KHÔNG tự cập nhật số này.</p>
       <div><label class="block text-gray-600 mb-1">Lương cơ bản mới (đ)</label><input type="text" inputmode="numeric" id="hrcEditBaseSalary" value="${c.baseSalary != null ? formatMoneyDisplay(c.baseSalary) : ''}" class="w-full border p-1.5 rounded money-input"></div>
+      ${allowancesEditHTML}
       <button type="button" data-op="saveHrContractEdit" data-arg0="${c.id}" class="mt-2 bg-blue-600 text-white px-3 py-1.5 rounded text-[11px] font-semibold hover:bg-blue-700">💾 Lưu Lương Cơ Bản</button>
     </div>` : ''}
 
@@ -334,6 +384,10 @@ async function saveHrContractEdit(id) {
   if (endDateEl) payload.endDate = endDateEl.value || null;
   const baseSalaryEl = document.getElementById('hrcEditBaseSalary');
   if (baseSalaryEl) payload.baseSalary = getMoneyValue(baseSalaryEl);
+  for (const [f] of HRC_ALLOWANCE_FIELDS) {
+    const el = document.getElementById(HRC_ALLOWANCE_EDIT_ID_PREFIX + f);
+    if (el) payload[f] = getMoneyValue(el);
+  }
   try {
     const result = await callRecordAction('laborContracts', id, 'edit', payload);
     hrcApplyUpdate(result.item);

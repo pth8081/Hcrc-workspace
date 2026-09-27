@@ -2331,9 +2331,11 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   `hrProfileEdit`) xem/sửa đủ mọi trường KHÔNG bị giới hạn; **chính chủ** (đã
   liên kết, mục "Hồ Sơ Của Tôi") và **quản lý trực tiếp** (**"👁️ Xem Hồ Sơ
   Nhân Sự Cấp Dưới"**, đi ngược cây Quản Lý Trực Tiếp — mục 4.5.1) đều CHỈ xem
-  được 15 trường nhạy cảm (ngày sinh, giới tính, email cá nhân, liên hệ khẩn
+  được 19 trường nhạy cảm (ngày sinh, giới tính, email cá nhân, liên hệ khẩn
   cấp, CCCD, địa chỉ, tài khoản ngân hàng, BHXH, mã số thuế, người phụ thuộc,
-  học vấn) khi HR/admin đã **chủ động mở từng trường** ở 2 màn cấu hình riêng
+  học vấn, quốc tịch, tình trạng hôn nhân, ngày/nơi cấp CCCD — 4 trường sau
+  thêm 10/2026, đối chiếu file Excel quản lý thủ công của bộ phận Nhân Sự) khi
+  HR/admin đã **chủ động mở từng trường** ở 2 màn cấu hình riêng
   (xem bên dưới) — **mặc định KHÔNG trường nào hiển thị** cho cả 2 vai trò
   này, kể cả trường vốn "luôn thấy" trước 9/2026 (ngày sinh/giới tính/email cá
   nhân); người không liên quan không tra được (kể cả báo lỗi cũng không phân
@@ -2363,7 +2365,10 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   Excel"** (tải mẫu → điền → xem trước → xác nhận nhập hàng loạt, dòng lỗi bị
   bỏ qua không ảnh hưởng dòng hợp lệ khác; chưa hỗ trợ nhập Người phụ thuộc/
   Học vấn qua Excel, bổ sung sau ở Chi tiết từng hồ sơ) cùng **"📊 Xuất Excel"**
-  (xuất toàn bộ danh sách).
+  (xuất toàn bộ danh sách). Từ 10/2026, mẫu nhập/xuất có thêm 7 cột: Quốc
+  Tịch, Tình Trạng Hôn Nhân, Ngày/Nơi Cấp CCCD, Vị Trí Bàn Làm Việc, Ngày Nghỉ
+  Hưu Dự Kiến, BHXH Tại Đơn Vị Này (Cấp Bậc/Kiêm nhiệm chức danh KHÔNG nhập
+  qua Excel này, xem 2 mục ngay trên).
 - **Mã Nhân Viên tự sinh** (9/2026): để trống khi tạo (tay/Onboarding) sẽ tự
   cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
   tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo
@@ -2405,10 +2410,11 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   **"⚙️ Trường Xem Của Quản Lý Trực Tiếp"** áp dụng cho quản lý xem hồ sơ CẤP
   DƯỚI, **"⚙️ Trường Xem Của Tôi"** áp dụng cho chính nhân viên tự xem hồ sơ
   MÌNH ở "Hồ Sơ Của Tôi" — 2 cấu hình HOÀN TOÀN ĐỘC LẬP (mở trường nào ở màn
-  này không tự động mở cho màn kia). Cả 2 liệt kê ĐỦ 15 trường nhạy cảm (ngày
+  này không tự động mở cho màn kia). Cả 2 liệt kê ĐỦ 19 trường nhạy cảm (ngày
   sinh, giới tính, email cá nhân, người liên hệ khẩn cấp + SĐT + quan hệ,
   CCCD, địa chỉ thường trú, địa chỉ hiện tại, số tài khoản ngân hàng, tên ngân
-  hàng, số BHXH, mã số thuế, người phụ thuộc, học vấn) để admin tick chọn mở
+  hàng, số BHXH, mã số thuế, người phụ thuộc, học vấn, quốc tịch, tình trạng
+  hôn nhân, ngày cấp CCCD, nơi cấp CCCD) để admin tick chọn mở
   từng trường, áp dụng chung toàn hệ thống. Trước 9/2026 chỉ có cấu hình quản
   lý trực tiếp (9 trường, mặc định vẫn hiện sẵn 1 số trường "cơ bản" như ngày
   sinh/giới tính/email cá nhân) — nay đổi hẳn sang opt-in triệt để cho CẢ 2
@@ -2455,6 +2461,23 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     theo (vẫn cần vào màn "Người Dùng" sửa tay như trước). Với các vị trí ĐÃ
     gắn "Vị Trí Làm Việc", đồng bộ diễn ra tự động cùng lúc với Phòng Ban/Chức
     Danh khi gán chức vụ.
+  - **"Cấp Bậc" (tuỳ chọn, 10/2026)**: mỗi vị trí (POSITION node) trong Cơ Cấu
+    Tổ Chức có thể gắn thêm "Cấp Bậc" (VD "L7.2", tối đa 20 ký tự — vào Cơ Cấu
+    Tổ Chức, mở Thêm/Sửa vị trí để gắn), tự snapshot xuống Hồ Sơ Nhân Sự (hiển
+    thị chỉ đọc, cạnh Chức Vụ) mỗi lần HR gán/đổi chức vụ cho vị trí đó — cùng
+    cơ chế snapshot như Phòng Ban/Chức Danh, không gõ tay trực tiếp trên hồ sơ.
+- **Thâm niên / Kiêm nhiệm chức danh (10/2026, chỉ đọc, tham khảo)**: Chi tiết
+  hồ sơ hiện thêm "Thâm niên" (tự tính từ "Ngày Vào Làm Việc" trên tài khoản
+  VPDT đã liên kết tới hiện tại, làm tròn 1 chữ số thập phân — không lưu
+  thành field riêng để tránh lệch dữ liệu nếu không tự cập nhật) và "Kiêm
+  nhiệm chức danh" (đọc lại đúng "Vị Trí Kiêm Nhiệm" đã cấu hình sẵn ở màn
+  Người Dùng — dùng CHUNG 1 nguồn dữ liệu với cơ chế định tuyến phê duyệt theo
+  chức danh kiêm nhiệm, không tạo thêm field trùng lặp).
+- **3 trường hành chính mới (10/2026, chỉ HR sửa, KHÔNG qua cơ chế "mở trường
+  xem" vì không phải dữ liệu riêng tư — luôn hiển thị như Phòng Ban/Chức
+  Danh)**: **Vị trí bàn làm việc**, **Ngày nghỉ hưu dự kiến**, **BHXH tại đơn
+  vị này (Có/Không/chưa rõ)** — đối chiếu 3 cột tương ứng trong file Excel
+  quản lý thủ công của bộ phận Nhân Sự trước đây.
 - **Lịch Sử Nhân Sự** (khối cuối Chi tiết hồ sơ, chỉ hiện ở chế độ "Quản Lý
   Hồ Sơ"): gộp hiển thị theo thời gian **5 nguồn** — lịch sử chức vụ (mục
   trên), **Lịch Sử Thay Đổi & Chỉnh Sửa Hồ Sơ** (9/2026 — mỗi lần tạo mới/sửa
@@ -2550,6 +2573,15 @@ còn tự động xoá được hợp đồng lao động nữa.
   đã tăng): hợp đồng **Đang hiệu lực** có thêm khối riêng **"💰 Cập Nhật Lương
   Cơ Bản"** — đây mới là cách DUY NHẤT đổi số tiền thật sự dùng để tính Lương
   (module 4.5.8), tách biệt hẳn với "➕ Thêm Thay Đổi" (chỉ ghi log).
+- **7 khoản Phụ Cấp/Hỗ Trợ (10/2026, tuỳ chọn, THAM KHẢO — đối chiếu file
+  Excel quản lý thủ công của bộ phận Nhân Sự)**: Phụ cấp trách nhiệm, Phụ cấp
+  kiêm nhiệm, Phụ cấp độc hại nặng nhọc, Phụ cấp ăn trưa, Hỗ trợ đi lại, Hỗ
+  trợ điện thoại, Phụ cấp/Hỗ trợ khác — nhập được ngay lúc tạo hợp đồng (khối
+  gấp "➕/✏️ Phụ Cấp / Hỗ Trợ"), xem/sửa lại ở Chi tiết hợp đồng (cả khối
+  "Hoàn thiện trước khi kích hoạt" và "💰 Cập Nhật Lương Cơ Bản"). **KHÔNG ảnh
+  hưởng tính Lương hàng tháng** — module Lương (4.5.8) CHỈ đọc "Lương cơ bản",
+  7 khoản này thuần tham khảo/đối chiếu, giao diện có ghi chú rõ để tránh HR
+  nhầm lẫn với "💰 Cập Nhật Lương Cơ Bản".
 - **Cảnh báo hết hạn màu sắc trên màn hình** (9/2026, khác hẳn job email
   60/45/30 ngày ở mục dưới — đây là badge hiển thị TRỰC TIẾP ở danh sách LẪN
   chi tiết hợp đồng): hợp đồng đang **Đang hiệu lực** còn **≤30 ngày** hiện
