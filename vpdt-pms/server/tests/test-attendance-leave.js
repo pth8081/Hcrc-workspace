@@ -319,7 +319,15 @@ async function partB() {
   // attendanceRecords ở routes/records.js/lib/createValidation.js giờ đều gọi
   // findLockedPayrollPeriodForDate()/findLockedPayrollPeriodInRange() (lib/payroll.js), cần đọc
   // collection payrollPeriods — thêm vào STORE để mock getAllForCollection('payrollPeriods') không vỡ.
-  const STORE = { attendanceRecords: [], leaveBalances: [], leaveRequests: [], shiftRoster: [], shiftSwapRequests: [], hrProcesses: [], payrollPeriods: [] };
+  // employeeProfiles KHÔNG phải dedicated table thật (đọc qua getAppDataValue ở production, xem
+  // lib/recordStore.js getAllForCollection() fallback) nhưng vẫn cần có mặt ở STORE để mock
+  // getAllForCollection('employeeProfiles') (đối chiếu ACTIVE lúc duyệt đổi ca, rà soát chuyên sâu mới,
+  // mức Cao) trả đúng dữ liệu thay vì undefined.
+  const EMPLOYEE_PROFILES = [
+    { employeeCode: 'NV1', username: 'staff1', status: 'ACTIVE' }, // OFFICE_HOURS (posType HO)
+    { employeeCode: 'NV2', username: 'store1', status: 'ACTIVE' }  // SHIFT_BASED (posType STORE)
+  ];
+  const STORE = { attendanceRecords: [], leaveBalances: [], leaveRequests: [], shiftRoster: [], shiftSwapRequests: [], hrProcesses: [], payrollPeriods: [], employeeProfiles: EMPLOYEE_PROFILES };
   let nextId = 1;
   function stubModule(relPath, exportsObj) {
     const full = require.resolve(path.join(__dirname, '..', relPath));
@@ -333,6 +341,15 @@ async function partB() {
     getTrashItems: async () => [],
     withAppLock: async (key, fn) => fn(),
     createForCollection: async (c, builderFn) => {
+      const draft = await builderFn(STORE[c].slice());
+      const item = Object.assign({ id: nextId++ }, draft);
+      STORE[c].push(item);
+      return item;
+    },
+    // shiftRoster nay khai báo getLockKey (rà soát chuyên sâu mới, mức Trung bình — chống race tạo trùng
+    // ca cùng nhân viên+ngày) nên routes/create.js đi đường createForCollectionSerialized() thay vì
+    // createForCollection() — mock đơn luồng (không cần khoá thật) vẫn phải có hàm này để không vỡ.
+    createForCollectionSerialized: async (c, lockKey, builderFn) => {
       const draft = await builderFn(STORE[c].slice());
       const item = Object.assign({ id: nextId++ }, draft);
       STORE[c].push(item);
@@ -353,10 +370,6 @@ async function partB() {
     }
   });
 
-  const EMPLOYEE_PROFILES = [
-    { employeeCode: 'NV1', username: 'staff1', status: 'ACTIVE' }, // OFFICE_HOURS (posType HO)
-    { employeeCode: 'NV2', username: 'store1', status: 'ACTIVE' }  // SHIFT_BASED (posType STORE)
-  ];
   const USERS = [
     { username: 'hr1', name: 'Nhân Sự Một', dept: 'Nhân Sự', posType: 'HO', perms: { hrAttendanceManage: true }, active: true },
     { username: 'staff1', name: 'Nhân Viên Văn Phòng', dept: 'Kinh Doanh', posType: 'HO', managerUsername: 'mgr1', perms: {}, active: true },
