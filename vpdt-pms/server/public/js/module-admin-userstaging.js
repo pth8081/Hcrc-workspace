@@ -592,14 +592,17 @@ function downloadUserTemplate() {
       { header: 'startdate', key: 'startdate', width: 14 },
       // khoiban (10/2026, Khối/Ban — v24.16) — CHỈ áp dụng khi postype=HO, để trống với Siêu Thị/vị trí
       // tự thêm (khớp đúng readUserFormState()/populateUserKhoiBanOptions() ở module-admin-submissiongroups.js).
-      { header: 'khoiban', key: 'khoiban', width: 18 }
+      { header: 'khoiban', key: 'khoiban', width: 18 },
+      // permgroups (9/2026) — TÊN Nhóm Phân Quyền (1 hoặc nhiều, phân tách ";"), TUỲ CHỌN — để trống =
+      // user mới không thuộc nhóm nào (giữ nguyên hành vi cũ, mặc định không quyền gì).
+      { header: 'permgroups', key: 'permgroups', width: 28 }
     ],
     [
       // Mật khẩu mẫu ĐỔI khỏi "123456" (thuần số, LUÔN bị validatePasswordStrength() từ chối — làm hỏng cả
       // batch import nếu admin dùng nguyên dòng mẫu) sang mẫu hợp lệ theo đúng chính sách hiện hành (tối
       // thiểu 8 ký tự, đủ chữ+số+ký tự đặc biệt — xem lib/passwordPolicy.js).
-      { username: 'user1', pass: 'MatKhau@2024', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su', jobtitle: 'Nhan vien', postype: 'HO', startdate: '2024-01-15', khoiban: '' },
-      { username: 'user2', pass: 'MatKhau@2024', name: 'Tran Thi Two', email: 'user2@company.com', phone: '0909876543', dept: 'Sieu Thi Quan 1', jobtitle: '', postype: 'STORE', startdate: '', khoiban: '' }
+      { username: 'user1', pass: 'MatKhau@2024', name: 'Nguyen Van One', email: 'user1@company.com', phone: '0901234567', dept: 'Phong Nhan Su', jobtitle: 'Nhan vien', postype: 'HO', startdate: '2024-01-15', khoiban: '', permgroups: '' },
+      { username: 'user2', pass: 'MatKhau@2024', name: 'Tran Thi Two', email: 'user2@company.com', phone: '0909876543', dept: 'Sieu Thi Quan 1', jobtitle: '', postype: 'STORE', startdate: '', khoiban: '', permgroups: '' }
     ]
   );
 }
@@ -705,6 +708,26 @@ function validateImportedUserRow(r) {
     const isRealDate = !!(m && d && !isNaN(d) && d.getUTCFullYear() === Number(m[1]) && (d.getUTCMonth() + 1) === Number(m[2]) && d.getUTCDate() === Number(m[3]));
     if (isRealDate) normalized.startDate = startDateRaw;
     else errors.push(`Ngày Vào Làm Việc "${startDateRaw}" không đúng định dạng ngày hợp lệ (YYYY-MM-DD)`);
+  }
+
+  // Nhóm Phân Quyền (9/2026, rà soát chuyên sâu 4-agent song song) — TUỲ CHỌN (để trống hợp lệ = không
+  // gán nhóm nào, khớp defaultNewUserPerms() ở confirmUsersImport() bên dưới). Chuỗi TÊN nhóm phân tách
+  // ";" (đổi tên hay đụng dấu phẩy trong tên nhóm — tên nhóm phân quyền vốn không chứa dấu phẩy nhưng có
+  // thể có dấu "/" như "Văn Phòng (Mua/Sửa)"), mỗi tên tự dò lại đúng id khớp DB.permGroups[].name, cùng
+  // khuôn Khối/Ban ở trên. Dòng nào có TÊN không khớp danh mục thì chặn cứng (errors), không âm thầm bỏ
+  // qua nhóm đó (tránh tạo user thiếu đúng quyền admin tưởng đã gán).
+  const permGroupsRaw = String(r.permGroups || '').trim();
+  if (!permGroupsRaw) {
+    normalized.groupIds = [];
+  } else {
+    const names = permGroupsRaw.split(';').map(n => n.trim()).filter(Boolean);
+    const groupIds = [];
+    names.forEach(n => {
+      const match = (DB.permGroups || []).find(g => String(g.name).trim().toLowerCase() === n.toLowerCase());
+      if (match) groupIds.push(match.id);
+      else errors.push(`Nhóm Phân Quyền "${n}" không có trong danh mục`);
+    });
+    normalized.groupIds = groupIds;
   }
 
   return { errors, normalized };
@@ -853,13 +876,21 @@ async function confirmUsersImport() {
   // === 0 nên normalized luôn có đủ field hợp lệ, khớp đúng field posType/startDate mà buildNewUserFromState()
   // gán khi tạo user qua form tay (module-admin-submissiongroups.js).
   toAdd.forEach(({ username, pass, name, email, phone, normalized }) => {
+    // Nhóm Phân Quyền (9/2026) — mirror ĐÚNG readUserFormState() (module-admin-submissiongroups.js): có
+    // gán nhóm thì perms = nền GỘP của các nhóm (mergeGroupsBasePerms), không có nhóm nào (mảng rỗng,
+    // hành vi cũ) thì giữ NGUYÊN defaultNewUserPerms() như trước — import Excel không có form riêng để
+    // tuỳ chỉnh thêm quyền lệch khỏi nhóm (permOverrides), nên user tạo qua import luôn đúng 100% quyền
+    // của (các) nhóm được gán, không có phần tuỳ biến riêng.
+    const groupIds = normalized.groupIds || [];
+    const groups = groupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
+    const perms = groups.length ? mergeGroupsBasePerms(groups.map(g => g.perms)) : defaultNewUserPerms();
     DB.users.push({
       id: Date.now() + addCount,
       username, pass, name, email, phone,
       dept: normalized.dept, jobTitle: normalized.jobTitle || null,
       posType: normalized.posType, startDate: normalized.startDate || '',
       khoiBan: normalized.khoiBan || '',
-      perms: defaultNewUserPerms()
+      groupIds, perms
     });
     addCount++;
   });

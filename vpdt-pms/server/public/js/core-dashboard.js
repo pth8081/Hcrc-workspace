@@ -70,10 +70,14 @@ function taskNeedsMyAction(t, user) {
 // Đếm số bản ghi PENDING mà user hiện tại được phép duyệt ở BƯỚC hiện tại — dùng chung cho các module
 // có quy trình duyệt theo phòng ban (Tài liệu/Đăng ký xe/Văn phòng/VPP), mirror đúng điều kiện
 // "canApprove" đang dùng để hiện nút Duyệt ở từng dòng của renderDocs()/renderCarRegs()/... .
-function countDeptWorkflowPending(records, wfConfigFor, user, statusField) {
+// matchStatuses (tuỳ chọn, mặc định ['PENDING']) — Thanh Toán CẦN override vì thẻ Dashboard cũ (đã vá,
+// xem canManagePaymentRequestsClient() bên dưới) còn đếm cả 'NEED_INFO' ("Cần bổ sung"), không chỉ
+// 'PENDING' như mọi module khác — mirror matchStatuses của addProcessedItems() (core-approvalhub.js).
+function countDeptWorkflowPending(records, wfConfigFor, user, statusField, matchStatuses) {
   const f = statusField || 'status';
+  const statuses = matchStatuses || ['PENDING'];
   return (records || []).filter(rec => {
-    if (rec[f] !== 'PENDING') return false;
+    if (!statuses.includes(rec[f])) return false;
     const wfConfig = wfConfigFor(rec) || {};
     const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, rec.currentStep);
     return canApproveStep(user, currentStepApprovers, rec.history, rec.currentStep);
@@ -132,9 +136,16 @@ function buildDashboardCards(user) {
       action: async () => { await switchTab('office'); setOfficeSubTab(subType); applyPendingStatusFilter('filterStatusOffice', onOfficeFilterChange); } });
   });
 
-  const paymentCanManage = canManagePaymentRequestsClient(user);
-  const paymentCount = paymentCanManage ? (DB.paymentRequests || []).filter(pr => pr.status === 'PENDING' || pr.status === 'NEED_INFO').length : 0;
-  addCard({ key: 'payment', icon: '💰', label: 'Thanh toán chờ duyệt', count: paymentCount, show: paymentCanManage,
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): trước đây thẻ này dùng
+  // canManagePaymentRequestsClient() (chỉ admin/paymentManage) làm gate + đếm PHẲNG mọi đề nghị PENDING/
+  // NEED_INFO — khác hẳn 4 thẻ module khác ngay trên (docCount/subCount/carCount/officeBuy/officeFix đều
+  // dùng countDeptWorkflowPending(), tính đúng theo BƯỚC hiện tại + approver thật, kể cả approver theo
+  // dept-workflow hoặc "Nhóm Phê Duyệt Cuối" PAYMENT không có paymentManage) — approver hợp lệ không có
+  // paymentManage không bao giờ thấy thẻ nhắc dù có hồ sơ cần họ xử lý thật sự. Đồng bộ dùng
+  // countDeptWorkflowPending() như mọi thẻ khác, giữ nguyên matchStatuses ['PENDING','NEED_INFO'] của
+  // hành vi cũ.
+  const paymentCount = countDeptWorkflowPending(DB.paymentRequests, pr => resolvePaymentApprovalWorkflow(pr), user, 'status', ['PENDING', 'NEED_INFO']);
+  addCard({ key: 'payment', icon: '💰', label: 'Thanh toán chờ duyệt', count: paymentCount, show: paymentCount > 0,
     action: async () => { await switchTab('office'); setOfficeSubTab('PAYMENT'); } });
 
   const vppCount = countDeptWorkflowPending(DB.vppRegistrations, r => resolveVppWorkflowConfigForItemClient(r), user);

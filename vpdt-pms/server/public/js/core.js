@@ -3588,16 +3588,21 @@ function getOfficeWorkflowMap(subType) {
 function canAccessOfficeSubTab(user, subType) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (subType === 'MUA_BAN' && !user.perms?.officeBuy) return false;
-  if (subType === 'SUA_CHUA' && !user.perms?.officeFix) return false;
-  return scopeHasAny(user, user.perms?.officeView) || isApproverInWorkflowMap(getOfficeWorkflowMap(subType), user.username);
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): 2 dòng hard-block dưới đây chặn đứng người
+  // CHỈ thuộc "Nhóm Phê Duyệt Cuối" OFFICE_BUY/OFFICE_FIX (không có quyền phẳng officeBuy/officeFix) —
+  // họ vẫn cần vào được sub-tab tương ứng để xem lại hồ sơ đã xử lý, mirror canAccessCarModule().
+  const extraKey = subType === 'MUA_BAN' ? 'OFFICE_BUY' : 'OFFICE_FIX';
+  const isExtraApprover = isMemberOfAnyExtraApprovalGroup(user, [extraKey]);
+  if (subType === 'MUA_BAN' && !user.perms?.officeBuy && !isExtraApprover) return false;
+  if (subType === 'SUA_CHUA' && !user.perms?.officeFix && !isExtraApprover) return false;
+  return scopeHasAny(user, user.perms?.officeView) || isApproverInWorkflowMap(getOfficeWorkflowMap(subType), user.username) || isExtraApprover;
 }
 
 function canAccessOfficeModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'office')) return false;
-  return !!(user.perms?.officeBuy || user.perms?.officeFix);
+  return !!(user.perms?.officeBuy || user.perms?.officeFix) || isMemberOfAnyExtraApprovalGroup(user, ['OFFICE_BUY', 'OFFICE_FIX']);
 }
 
 function getUserAllowedDepts(user) {
@@ -8042,6 +8047,11 @@ function canAccessPaymentModule(user) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.paymentManage) return true;
   if (isApproverInWorkflowMap(DB.paymentDeptWorkflows, user.username)) return true;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu nhánh này — người CHỈ thuộc "Nhóm
+  // Phê Duyệt Cuối" PAYMENT (VD TGD/PTGD, không có paymentManage/không thuộc paymentDeptWorkflows[dept]
+  // nào/chưa từng tự tạo đề nghị) không vào được module để xem lại hồ sơ đã xử lý qua Approval Hub, dù
+  // GET /api/data đã trả đúng dữ liệu cho họ từ Fix#1 (đợt vá 11 lỗi trước) — mirror canAccessCarModule().
+  if (isMemberOfAnyExtraApprovalGroup(user, ['PAYMENT'])) return true;
   return (DB.paymentRequests || []).some(pr => pr.createdBy === user.username);
 }
 
@@ -8411,6 +8421,10 @@ function canAccessOperationModule(user) {
   // thấy nút Duyệt/Từ chối/Từ Chối Khẩn tại "Phê Duyệt Giá Bán Buôn" (context='APPROVAL').
   if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)
     || canApproveItPriceEmergencyRejectClient(user, 'WHOLESALE')) return true;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu nhánh này — người CHỈ thuộc "Nhóm
+  // Phê Duyệt Cuối" OPERATION_ORDER_STORE/OPERATION_ORDER_HO không vào được module Vận Hành để xem lại
+  // hồ sơ đơn hàng đã xử lý, dù GET /api/data đã trả đúng dữ liệu cho họ từ Fix#1 (đợt vá trước).
+  if (isMemberOfAnyExtraApprovalGroup(user, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'])) return true;
   // Người được gán/chỉ định trực tiếp trên ít nhất 1 công việc (dù không giữ quyền rộng nào ở trên)
   // cũng cần vào được module để thao tác đúng việc của mình — khớp nhánh nới quyền ở
   // canAccessOperationSubTab() (EXECUTION/ACCEPTANCE) bên dưới. Trưởng phòng (đệ quy theo Cơ Cấu Tổ
@@ -8422,7 +8436,12 @@ function canAccessOperationModule(user) {
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (kind === 'ORDER') return !!user.perms?.operationOrderCreate;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu nhánh Nhóm Phê Duyệt Cuối — nút nav
+  // "🧾 Đơn Hàng" (btnOperationOrderNav) trước đây ẨN với người CHỈ thuộc Nhóm Phê Duyệt Cuối
+  // OPERATION_ORDER_STORE/HO dù canAccessOperationModule() đã cho vào module — họ không tự bấm vào lại
+  // sub-tab được (chỉ vào được gián tiếp qua nút "🔍 Xem" ở Approval Hub).
+  if (kind === 'ORDER') return !!user.perms?.operationOrderCreate
+    || isMemberOfAnyExtraApprovalGroup(user, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO']);
   if (kind === 'STORE_OPEN') return !!user.perms?.operationStoreOpenCreate;
   if (kind === 'REPAIR') return !!user.perms?.operationRepairCreate;
   // ESTIMATE/EXECUTION/ACCEPTANCE: 4 quyền tách riêng cũ (operationEstimateCreate/operationExecutionManage/

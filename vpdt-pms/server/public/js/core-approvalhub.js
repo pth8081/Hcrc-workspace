@@ -465,7 +465,10 @@ function getMyProcessedApprovals(user, status, sinceMs) {
         stepLabel: status === 'APPROVED' ? '✅ Bạn đã duyệt' : '❌ Bạn đã từ chối',
         createdAt: lastMine.time,
         statusBadge,
-        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: [cfg.type], primary: true }]
+        // rec.orderLocationType (STORE/HO) — CHỈ có ý nghĩa cho cfg.type==='operationOrders' (đơn hàng
+        // Vận Hành gộp chung 1 "kind" nhưng 2 sub-tab STORE/HO riêng, xem gotoApprovalHubOrigin() bên
+        // dưới); undefined ở mọi cfg.type khác, tham số dư bị bỏ qua vô hại.
+        actions: [{ label: '🔍 Xem', fn: 'gotoApprovalHubOrigin', args: [cfg.type, rec.orderLocationType], primary: true }]
       });
     });
   }
@@ -576,7 +579,7 @@ function getMyProcessedApprovals(user, status, sinceMs) {
 // module-*.js chua tung mo trong phien) - PHAI cho no nap XONG (await) TRUOC KHI goi setXSubTab()/
 // setStatus() ngay sau, neu khong cac ham do (dinh nghia trong CHINH cum vua await) co the chay truoc
 // khi cum kip nap xong, gay ReferenceError hoac chay tren DOM chua san sang.
-async function gotoApprovalHubOrigin(type) {
+async function gotoApprovalHubOrigin(type, orderLocationType) {
   const status = document.getElementById('approvalHubFilterStatus').value || 'APPROVED';
   const setStatus = (selectId, onChangeFn) => {
     const el = document.getElementById(selectId);
@@ -608,6 +611,25 @@ async function gotoApprovalHubOrigin(type) {
       case 'internalShare': await switchTab('internal'); setInternalSubTab('SHARE'); break;
       case 'payment': await switchTab('office'); setOfficeSubTab('PAYMENT'); break;
       case 'license': await switchTab('license'); setStatus('filterLicenseStatus', onLicenseFilterChange); break;
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu hẳn 3 case này khiến "🔍 Xem" cho
+      // BẤT KỲ hồ sơ Vận Hành nào (Đơn Hàng/Mở Mới Siêu Thị/Sửa Chữa Siêu Thị) đã Duyệt/Từ Chối ở Đã Xử Lý
+      // đều rơi vào default (chỉ mở lại Approval Hub) — link chết, 100% tái hiện với mọi người dùng.
+      // operationOrders gộp CHUNG 1 "kind" cho cả STORE/HO (khớp addProcessedItems(DB.operationOrders,...)
+      // ở trên) nên cần thêm tham số orderLocationType (đã truyền qua args[1], xem addProcessedItems())
+      // để mở đúng sub-tab STORE/HO thay vì luôn mặc định 1 bên.
+      case 'operationOrders':
+        await switchTab('vanHanh'); setVanHanhSubTab('ORDERS');
+        setOperationOrderSubTab(orderLocationType === 'HO' ? 'HO' : 'STORE');
+        setStatus('filterStatusOperationOrder', onOperationOrderFilterChange);
+        break;
+      case 'operationStoreOpenings':
+        await switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('OPEN');
+        setStatus('filterStatusOperationStoreOpen', onOperationStoreOpenFilterChange);
+        break;
+      case 'operationRepairs':
+        await switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('REPAIR');
+        setStatus('filterStatusOperationRepair', onOperationRepairFilterChange);
+        break;
       default: await switchTab('approvalHub');
     }
   } catch (err) {

@@ -38,7 +38,18 @@ const {
   canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
   canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq,
   canViewTrainingTestQuestionImage,
-  canViewLaborContract, canViewPaymentRequest, canViewHrProcess, canViewChecklistSubmission
+  canViewLaborContract, canViewPaymentRequest, canViewHrProcess, canViewChecklistSubmission,
+  // 5 collection PHÁT HIỆN THIẾU ở đợt rà soát chuyên sâu 4-agent song song (9/2026) — file đính kèm ở
+  // "Trường Bổ Sung" (Biểu Mẫu, field kiểu Tải tệp/Tải nhiều tệp) của Công Việc/Biên Bản Họp/Đặt Phòng
+  // Họp/IT Ticket/HR Feedback đều rơi vào FAIL-OPEN dù bản ghi đã bị giới hạn xem hẹp (xem checker mới ở
+  // findOwningRecord() + dispatch mới ở authorizeFileAccess() bên dưới) — mirror ĐÚNG khuôn laborContracts/
+  // hrProcesses đã vá trước đó.
+  canViewTaskRecord, canViewMeetingMinutes, canViewMeeting, canViewItSupportTicket, canViewHrFeedback,
+  // Đồng Phục (3 collection) + Công & Phép (4 collection) — cùng lớp lỗ hổng "Trường Bổ Sung" (customData)
+  // như 5 collection ngay trên, phát hiện cùng đợt rà soát nhưng ưu tiên Trung bình (phạm vi hẹp theo
+  // siêu thị/phòng ban, không phải dữ liệu cá nhân riêng tư như hrFeedback).
+  canViewUniformPeriod, canViewUniformIssuance, canViewUniformTransfer,
+  canViewLeaveRequest, canViewShiftRoster, canViewShiftSwapRequest, canViewEmployeeAttendanceRecord
 } = require('./recordViewScope');
 // resolveApprovedFileUrl() — nguồn sự thật DUY NHẤT cho "file đã phê duyệt" của itPriceApprovals, dùng
 // chung với routes/priceFile.js (route đánh dấu cột) — xem chú thích đầy đủ ở lib/recordActions.js.
@@ -104,7 +115,7 @@ function customDataHasFileUrl(record, fileUrl) {
 // lib/recordStore.js) — nhiều request /uploads liên tiếp trong cùng TTL dùng chung 1 lượt đọc, độ trễ tối
 // đa lệch vài giây (vô hại, cùng tinh thần getAllTrashItemsCached()).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords] = await Promise.all([
     getAllForCollectionCached('docs'),
     getAllForCollectionCached('submissions'),
     getAllForCollectionCached('contracts'),
@@ -137,7 +148,25 @@ async function findOwningRecord(fileUrl) {
     // Thêm vào đây cùng đợt bổ sung "Quyết định" đính kèm cho positionHistory[] (applyPositionAssignment())
     // — không có nhánh này, fileUrl của Quyết định gán/đổi chức vụ sẽ rơi vào FAIL-OPEN (đọc được bởi BẤT
     // KỲ ai đã đăng nhập) dù Hồ Sơ Nhân Sự vốn là dữ liệu nhạy cảm nhất hệ thống.
-    getAppDataValueCached('employeeProfiles')
+    getAppDataValueCached('employeeProfiles'),
+    // tasks/meetingMinutes/meetings/itSupportTickets/hrFeedback — 5 collection PHÁT HIỆN THIẾU ở đợt rà
+    // soát chuyên sâu 4-agent song song (9/2026, xem chú thích ở require() đầu file). CẢ 5 KHÔNG có field
+    // đính kèm CỐ ĐỊNH nào (chỉ có thể mang file qua "Trường Bổ Sung"/customData), nên chỉ tham gia Lượt
+    // 2 (customDataHasFileUrl) — checker bên dưới dùng `fixed: () => false`.
+    getAllForCollectionCached('tasks'),
+    getAllForCollectionCached('meetingMinutes'),
+    getAllForCollectionCached('meetings'),
+    getAllForCollectionCached('itSupportTickets'),
+    getAllForCollectionCached('hrFeedback'),
+    // Đồng Phục (3) + Công & Phép (4) — cùng lý do (chỉ mang file qua customData), xem chú thích ở
+    // require() đầu file + checker/dispatch tương ứng bên dưới.
+    getAllForCollectionCached('uniformPeriods'),
+    getAllForCollectionCached('uniformIssuances'),
+    getAllForCollectionCached('uniformTransfers'),
+    getAllForCollectionCached('leaveRequests'),
+    getAllForCollectionCached('shiftRoster'),
+    getAllForCollectionCached('shiftSwapRequests'),
+    getAllForCollectionCached('attendanceRecords')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp (xem
   // validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG owning-info như khi khớp field
@@ -231,7 +260,28 @@ async function findOwningRecord(fileUrl) {
     // lib/employeeProfile.js::applyPositionAssignment()) — không có customData, chỉ tham gia lượt 1
     // (fixed). getAppDataValue() (khác getAllForCollection() ở mọi checker khác) trả về GIÁ TRỊ THÔ của
     // key AppData — Array.isArray() phòng thân trường hợp key chưa từng seed/mock trả về không phải mảng.
-    { records: Array.isArray(employeeProfiles) ? employeeProfiles : [], fixed: p => (p.positionHistory || []).some(h => h.fileUrl === fileUrl), build: p => ({ employeeProfile: true, item: p }) }
+    { records: Array.isArray(employeeProfiles) ? employeeProfiles : [], fixed: p => (p.positionHistory || []).some(h => h.fileUrl === fileUrl), build: p => ({ employeeProfile: true, item: p }) },
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): 5 collection dưới đây KHÔNG có field đính
+    // kèm cố định nào — chỉ mang file qua "Trường Bổ Sung" (customData, xem collectDynamicFieldsData('TASK'/
+    // 'MEETING_MINUTES'/'MEETING_ROOM'/'IT_TICKET'/'HR_FEEDBACK') ở module-congviec.js/module-bienbanhop.js/
+    // module-phonghop.js/module-itsupport-price.js/module-hcrcdonghanh.js) — trước đây HOÀN TOÀN vắng mặt ở
+    // đây nên rơi thẳng vào FAIL-OPEN: bất kỳ ai đã đăng nhập cũng tải được, dù bản ghi gốc bị giới hạn xem
+    // hẹp (đặc biệt hrFeedback — câu hỏi/phản hồi riêng gửi HR). `fixed: () => false` vì không có field cố
+    // định nào để soi ở Lượt 1 — cả 5 chỉ khớp được ở Lượt 2 (customDataHasFileUrl).
+    { records: tasks, fixed: () => false, build: t => ({ task: true, item: t }) },
+    { records: meetingMinutes, fixed: () => false, build: m => ({ meetingMinutes: true, item: m }) },
+    { records: meetings, fixed: () => false, build: m => ({ meeting: true, item: m }) },
+    { records: itSupportTickets, fixed: () => false, build: t => ({ itSupportTicket: true, item: t }) },
+    { records: hrFeedback, fixed: () => false, build: q => ({ hrFeedback: true, item: q }) },
+    // Đồng Phục (3) + Công & Phép (4) — cùng lớp lỗ hổng, mức Trung bình (phạm vi hẹp theo siêu thị/
+    // phòng ban, không phải dữ liệu cá nhân riêng tư như hrFeedback). Cùng lý do `fixed: () => false`.
+    { records: uniformPeriods, fixed: () => false, build: p => ({ uniformPeriod: true, item: p }) },
+    { records: uniformIssuances, fixed: () => false, build: i => ({ uniformIssuance: true, item: i }) },
+    { records: uniformTransfers, fixed: () => false, build: t => ({ uniformTransfer: true, item: t }) },
+    { records: leaveRequests, fixed: () => false, build: r => ({ leaveRequest: true, item: r }) },
+    { records: shiftRoster, fixed: () => false, build: r => ({ shiftRoster: true, item: r }) },
+    { records: shiftSwapRequests, fixed: () => false, build: s => ({ shiftSwapRequest: true, item: s }) },
+    { records: attendanceRecords, fixed: () => false, build: a => ({ attendanceRecord: true, item: a }) }
     // recruitmentJobs.bannerUrl (banner/ảnh tin tuyển dụng) — CỐ Ý KHÔNG có checker riêng ở đây, rơi
     // thẳng vào nhánh FAIL-OPEN chung (coi như ảnh đại diện/logo, xem chú thích ở đầu file) — banner tin
     // tuyển dụng vốn dùng để QUẢNG BÁ (thu hút ứng viên), không phải dữ liệu nội bộ nhạy cảm, nên cho mọi
@@ -391,6 +441,30 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item, await getAllAppData());
   if (owning.hrProcess) return canViewHrProcess(user, owning.item);
   if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item);
+  // 5 collection mới vá (xem chú thích findOwningRecord()) — cùng khuôn hrProcess/checklistSubmission:
+  // dùng thẳng canView* đã có sẵn cho cả 2 mode (không có khái niệm quyền "tải riêng" tách khỏi "xem").
+  // canViewTaskRecord() cần appData (nhánh "trưởng phòng của người được giao", xem isManagerOf()).
+  if (owning.task) return canViewTaskRecord(user, owning.item, await getAllAppData());
+  if (owning.meetingMinutes) return canViewMeetingMinutes(user, owning.item);
+  if (owning.meeting) return canViewMeeting(user, owning.item);
+  if (owning.itSupportTicket) return canViewItSupportTicket(user, owning.item);
+  if (owning.hrFeedback) return canViewHrFeedback(user, owning.item);
+  // Đồng Phục — không cần appData (canViewUniformPeriod/Issuance/Transfer chỉ đọc user.perms + item).
+  if (owning.uniformPeriod) return canViewUniformPeriod(user, owning.item);
+  if (owning.uniformIssuance) return canViewUniformIssuance(user, owning.item);
+  if (owning.uniformTransfer) return canViewUniformTransfer(user, owning.item);
+  // Công & Phép — cần appData (tra employeeCode -> username qua appData.employeeProfiles, isManagerOf()
+  // qua appData.users). shiftSwapRequest cần THÊM appData.shiftRoster (canViewShiftSwapRequest() tra
+  // ngược dòng roster liên quan để xét quyền Quản Lý Siêu Thị) — KHÔNG có sẵn trong getAllAppData()
+  // (shiftRoster là collection dbo.Records, không phải dbo.AppData), mirror đúng cách routes/create.js
+  // tự gắn thêm field này trước khi gọi canViewShiftSwapRequest().
+  if (owning.leaveRequest) return canViewLeaveRequest(user, owning.item, await getAllAppData());
+  if (owning.shiftRoster) return canViewShiftRoster(user, owning.item, await getAllAppData());
+  if (owning.shiftSwapRequest) {
+    const appData = await getAllAppData();
+    return canViewShiftSwapRequest(user, owning.item, { ...appData, shiftRoster: await getAllForCollection('shiftRoster') });
+  }
+  if (owning.attendanceRecord) return canViewEmployeeAttendanceRecord(user, owning.item, await getAllAppData());
   // employeeProfile (Quyết định gán/đổi chức vụ): CHỈ chính chủ hồ sơ/hrProfileManage/admin xem được —
   // cùng khuôn canViewFullProfile() dùng cho chính màn Hồ Sơ Nhân Sự (không dùng canViewLimitedProfile,
   // vốn còn mở cho quản lý trực tiếp xem — Quyết định lương/chức vụ là dữ liệu nhạy cảm hơn, giới hạn

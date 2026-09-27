@@ -96,7 +96,13 @@ function buildMultiSheetWorkbook(sheets) {
 // hàng loạt thiếu hẳn "Vị Trí"/"Ngày Vào Làm Việc" dù form tạo tay có đủ cả) — ĐẶT Ở CUỐI để không đổi vị
 // trí cột 1-6 cũ, giữ đúng hành vi "usePositional" (dò theo vị trí khi mất dòng tiêu đề) cho file cũ.
 // khoiban (10/2026, v24.16 — Khối/Ban) — CŨNG thêm ở CUỐI cùng lý do trên (không xáo trộn vị trí cột cũ).
-const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle', 'postype', 'startdate', 'khoiban'];
+// permgroups (9/2026, rà soát chuyên sâu 4-agent song song) — CŨNG thêm ở CUỐI: trước đây import Excel
+// hàng loạt KHÔNG có cách nào gán Nhóm Phân Quyền (chỉ tạo tay từng người mới gán được, xem
+// readUserFormState() ở module-admin-submissiongroups.js), khiến MỌI user tạo qua import luôn rơi về
+// defaultNewUserPerms() (an toàn — không quyền gì — nhưng khác hẳn tạo tay, admin phải tự vào sửa lại
+// từng người sau khi import). Cột ghi TÊN nhóm (1 hoặc nhiều, phân tách bằng dấu phẩy ";"), tự dò lại id
+// khớp DB.permGroups ở validateImportedUserRow() (module-admin-userstaging.js), cùng khuôn "khoiban".
+const USER_IMPORT_COLUMNS = ['username', 'pass', 'name', 'email', 'phone', 'dept', 'jobtitle', 'postype', 'startdate', 'khoiban', 'permgroups'];
 
 // Trần số dòng người dùng đọc trong 1 lần import — cùng tinh thần giới hạn 500/1000/2000 dòng của 6
 // luồng import Excel còn lại, và nay chặn NGAY TRONG LÚC đọc (xem streamFirstSheetRows) chứ không phải
@@ -164,7 +170,10 @@ async function parseUsersImportXlsx(buffer) {
       startDate: getDate(cells),
       // khoiBan (10/2026, v24.16) — TÊN Khối/Ban (không phải id), client tự dò lại id khớp DB.deptGroups
       // (chỉ client mới có sẵn danh mục này) — xem validateImportedUserRow() ở module-admin-userstaging.js.
-      khoiBan: get(cells, 'khoiban')
+      khoiBan: get(cells, 'khoiban'),
+      // permGroups (9/2026) — chuỗi TÊN nhóm phân quyền thô (phân tách ";"), TUỲ CHỌN — client tự dò lại
+      // id khớp DB.permGroups (chỉ client mới có sẵn danh mục này), xem validateImportedUserRow().
+      permGroups: get(cells, 'permgroups')
     });
   };
 

@@ -34,6 +34,38 @@ const ExcelJS = require('exceljs');
 const JSZip = require('jszip');
 const { HttpError } = require('./httpErrors');
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): race condition CÓ THẬT bên trong chính
+// ExcelJS.stream.xlsx.WorkbookReader (node_modules/exceljs/lib/stream/xlsx/workbook-reader.js,
+// _parseWorksheet() đọc `this.model.sheets` trước khi `this.model` kịp gán xong — workbook.xml (nơi gán
+// this.model) luôn được exceljs parse SAU CÙNG trong 1 file .xlsx nhiều sheet, còn các sheet khác bị dồn
+// vào hàng đợi `waitingWorkSheets` xử lý lại SAU đó; đúng lúc xử lý lại hàng đợi này có thể chạm
+// this.model trước khi nó kịp gán xong) — ném TypeError "Cannot read properties of undefined (reading
+// 'sheets')". Đo thực tế: tỷ lệ lỗi tăng theo SỐ SHEET (không theo số dòng), ảnh hưởng trực tiếp Ma Trận
+// Phân Quyền (nhiều sheet, ~40-68% mỗi lượt) và cả Ngân Sách/Checklist/Hồ Sơ NV/Đào Tạo (mẫu tải về có
+// kèm sheet "Ghi Chú" thứ 2). Không sửa được tận gốc (lỗi nằm trong exceljs, không phải code ở đây) —
+// Bọc RETRY có giới hạn: gọi lại TOÀN BỘ 1 lượt đọc (buffer đã có sẵn trong RAM, đọc lại không tốn kém),
+// nhưng để KHÔNG gọi trùng onRow(...) của caller (rủi ro dòng đôi nếu lỗi rơi vào sheet thứ 2 trở đi, SAU
+// KHI sheet 1 đã phát hết dòng cho onRow ở lượt trước) — mỗi lượt đọc dồn kết quả vào 1 mảng nội bộ
+// TRƯỚC, chỉ phát lại cho onRow thật của caller đúng 1 LẦN DUY NHẤT sau khi cả lượt đọc đó thành công
+// trọn vẹn. Chỉ retry đúng lỗi TypeError này (giữ nguyên hành vi ném lỗi cho mọi lỗi khác, VD HttpError
+// zip bomb/file hỏng — không retry những lỗi đó).
+// 8 lượt (không phải 3): đo thực tế tỷ lệ lỗi/lượt có thể lên tới ~68% với file 5 sheet — 3 lượt vẫn còn
+// ~31% khả năng CẢ 3 cùng dính lỗi (0.68^3), 8 lượt kéo xuống còn ~2% (0.68^8), đủ an toàn cho Ma Trận
+// Phân Quyền (nơi đo được tỷ lệ lỗi/lượt cao nhất). Retry rẻ (chỉ đọc lại buffer đã có sẵn trong RAM).
+const EXCELJS_STREAM_RETRY_ATTEMPTS = 8;
+async function runExceljsStreamWithRetry(attemptFn) {
+  let lastErr;
+  for (let i = 0; i < EXCELJS_STREAM_RETRY_ATTEMPTS; i++) {
+    try {
+      return await attemptFn();
+    } catch (err) {
+      if (!(err instanceof TypeError) || i === EXCELJS_STREAM_RETRY_ATTEMPTS - 1) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 // Trần tổng dung lượng sau giải nén của TOÀN BỘ archive. Mọi luồng import ở đây đều chặn ở mức 500-2000
 // dòng dữ liệu, tức file hợp lệ "kịch trần" cũng chỉ cỡ trên dưới 10MB XML — 32MiB đã dư gấp mấy lần cho
 // file thật, trong khi vẫn giữ mức RAM/đĩa tệ nhất của 1 request ở mức chấp nhận được.
@@ -93,48 +125,56 @@ async function streamFirstSheetRows(buffer, onRow, options = {}) {
 
   await assertDecompressedSizeWithinBudget(buffer);
 
-  const input = Readable.from([buffer]);
-  const reader = new ExcelJS.stream.xlsx.WorkbookReader(input, {
-    worksheets: 'emit',
-    sharedStrings: 'cache', // cần để ô kiểu chuỗi dùng bảng sharedStrings đọc ra đúng nội dung
-    styles: 'cache',        // cần để ô định dạng ngày đọc ra Date đúng như workbook.xlsx.load() trước đây
-    hyperlinks: 'ignore',
-    entries: 'ignore'
+  // Đọc dồn vào mảng nội bộ `rows` bên trong 1 lượt thử (attemptFn) thay vì gọi thẳng onRow() của caller
+  // ngay trong lúc đọc — xem chú thích đầy đủ ở runExceljsStreamWithRetry() (đầu file): retry an toàn,
+  // không phát trùng dòng cho caller nếu phải thử lại.
+  const rows = await runExceljsStreamWithRetry(async () => {
+    const collected = [];
+    const input = Readable.from([buffer]);
+    const reader = new ExcelJS.stream.xlsx.WorkbookReader(input, {
+      worksheets: 'emit',
+      sharedStrings: 'cache', // cần để ô kiểu chuỗi dùng bảng sharedStrings đọc ra đúng nội dung
+      styles: 'cache',        // cần để ô định dạng ngày đọc ra Date đúng như workbook.xlsx.load() trước đây
+      hyperlinks: 'ignore',
+      entries: 'ignore'
+    });
+
+    let sawSheet = false;
+    let done = false;
+    try {
+      // KHÔNG `break` vòng lặp worksheet: exceljs dọn file tạm của từng sheet ngay sau khi caller xin sheet
+      // kế tiếp, thoát sớm sẽ để lại rác trong thư mục tạm sau MỖI lần import file nhiều sheet (mẫu Kế
+      // Hoạch Đào Tạo có sheet "Ghi Chú" đi kèm). Chỉ đọc dòng của sheet ĐẦU TIÊN, các sheet sau bỏ qua.
+      for await (const worksheet of reader) {
+        if (done) continue;
+        sawSheet = true;
+        let expected = 1;
+        for await (const row of worksheet) {
+          if (includeEmpty) {
+            while (expected < row.number) collected.push({ cells: [], rowNumber: expected++ });
+            expected = row.number + 1;
+          } else if (!row.hasValues) {
+            continue;
+          }
+          const cells = [];
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            cells.push(cell.value == null ? '' : (raw ? cell.value : String(cell.value)));
+          });
+          collected.push({ cells, rowNumber: row.number });
+        }
+        done = true;
+      }
+    } finally {
+      input.destroy();
+    }
+
+    if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
+    return collected;
   });
 
-  let sawSheet = false;
-  let done = false;
-  try {
-    // KHÔNG `break` vòng lặp worksheet: exceljs dọn file tạm của từng sheet ngay sau khi caller xin sheet
-    // kế tiếp, thoát sớm sẽ để lại rác trong thư mục tạm sau MỖI lần import file nhiều sheet (mẫu Kế
-    // Hoạch Đào Tạo có sheet "Ghi Chú" đi kèm). Chỉ đọc dòng của sheet ĐẦU TIÊN, các sheet sau bỏ qua.
-    for await (const worksheet of reader) {
-      if (done) continue;
-      sawSheet = true;
-      let expected = 1;
-      for await (const row of worksheet) {
-        if (includeEmpty) {
-          while (expected < row.number) {
-            if (onRow([], expected++) === false) { done = true; break; }
-          }
-          if (done) break;
-          expected = row.number + 1;
-        } else if (!row.hasValues) {
-          continue;
-        }
-        const cells = [];
-        row.eachCell({ includeEmpty: true }, (cell) => {
-          cells.push(cell.value == null ? '' : (raw ? cell.value : String(cell.value)));
-        });
-        if (onRow(cells, row.number) === false) { done = true; break; }
-      }
-      done = true;
-    }
-  } finally {
-    input.destroy();
+  for (const r of rows) {
+    if (onRow(r.cells, r.rowNumber) === false) break;
   }
-
-  if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
 }
 
 // streamAllSheetsRows(buffer, onRow, options)
@@ -154,45 +194,53 @@ async function streamAllSheetsRows(buffer, onRow, options = {}) {
 
   await assertDecompressedSizeWithinBudget(buffer);
 
-  const input = Readable.from([buffer]);
-  const reader = new ExcelJS.stream.xlsx.WorkbookReader(input, {
-    worksheets: 'emit',
-    sharedStrings: 'cache',
-    styles: 'cache',
-    hyperlinks: 'ignore',
-    entries: 'ignore'
+  // Đọc dồn vào mảng nội bộ trước khi phát cho onRow() thật của caller — cùng lý do/cơ chế retry an toàn
+  // đã áp dụng ở streamFirstSheetRows() (xem chú thích runExceljsStreamWithRetry() đầu file); module này
+  // (Ma Trận Phân Quyền, nhiều sheet) là nơi đo được tỷ lệ lỗi cao nhất (~40-68%).
+  const rows = await runExceljsStreamWithRetry(async () => {
+    const collected = [];
+    const input = Readable.from([buffer]);
+    const reader = new ExcelJS.stream.xlsx.WorkbookReader(input, {
+      worksheets: 'emit',
+      sharedStrings: 'cache',
+      styles: 'cache',
+      hyperlinks: 'ignore',
+      entries: 'ignore'
+    });
+
+    let sawSheet = false;
+    let done = false;
+    try {
+      for await (const worksheet of reader) {
+        if (done) continue; // KHÔNG break — xem chú thích ở streamFirstSheetRows() (dọn file tạm exceljs)
+        sawSheet = true;
+        const sheetName = worksheet.name || `Sheet${worksheet.id || ''}`;
+        let expected = 1;
+        for await (const row of worksheet) {
+          if (includeEmpty) {
+            while (expected < row.number) collected.push({ sheetName, cells: [], rowNumber: expected++ });
+            expected = row.number + 1;
+          } else if (!row.hasValues) {
+            continue;
+          }
+          const cells = [];
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            cells.push(cell.value == null ? '' : (raw ? cell.value : String(cell.value)));
+          });
+          collected.push({ sheetName, cells, rowNumber: row.number });
+        }
+      }
+    } finally {
+      input.destroy();
+    }
+
+    if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
+    return collected;
   });
 
-  let sawSheet = false;
-  let done = false;
-  try {
-    for await (const worksheet of reader) {
-      if (done) continue; // KHÔNG break — xem chú thích ở streamFirstSheetRows() (dọn file tạm exceljs)
-      sawSheet = true;
-      const sheetName = worksheet.name || `Sheet${worksheet.id || ''}`;
-      let expected = 1;
-      for await (const row of worksheet) {
-        if (includeEmpty) {
-          while (expected < row.number) {
-            if (onRow(sheetName, [], expected++) === false) { done = true; break; }
-          }
-          if (done) break;
-          expected = row.number + 1;
-        } else if (!row.hasValues) {
-          continue;
-        }
-        const cells = [];
-        row.eachCell({ includeEmpty: true }, (cell) => {
-          cells.push(cell.value == null ? '' : (raw ? cell.value : String(cell.value)));
-        });
-        if (onRow(sheetName, cells, row.number) === false) { done = true; break; }
-      }
-    }
-  } finally {
-    input.destroy();
+  for (const r of rows) {
+    if (onRow(r.sheetName, r.cells, r.rowNumber) === false) break;
   }
-
-  if (!sawSheet) throw new HttpError(400, 'File Excel không có sheet dữ liệu nào');
 }
 
 module.exports = { streamFirstSheetRows, streamAllSheetsRows, assertDecompressedSizeWithinBudget, MAX_UNCOMPRESSED_BYTES };

@@ -1575,6 +1575,14 @@ router.get('/', async (req, res) => {
         // Bộ cho 1 tài khoản dù họ có đủ moduleAccess.hr + nhanSuManage — dùng gate OR riêng (xem
         // canAccessHrFeedbackModuleServer()) thay vì zero vô điều kiện.
         if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
+        // docs — LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): zero cứng data.docs khi tắt
+        // moduleAccess.doc không loại trừ người CHỈ là approver "Nhóm Phê Duyệt Cuối" (DOC) —
+        // loadDocsScoped() (trên) đã tính đúng isExtraApprovalLayerApprover() để NẠP dữ liệu cho họ, vòng
+        // lặp này lại XOÁ SẠCH ngay sau đó nếu admin tắt module Tài Liệu cho đúng tài khoản "duyệt cấp
+        // cao" đó (hợp lý về nghiệp vụ — họ không dùng module Tài Liệu thường xuyên) — hồ sơ có thể kẹt
+        // vĩnh viễn ở bước họ phụ trách nếu họ là approver DUY NHẤT của lớp đó. Mirror ĐÚNG khuôn
+        // hrFeedback ở trên: nới gate bằng OR thay vì zero vô điều kiện.
+        if (col === 'docs' && isExtraApprovalLayerApprover(req.freshUser, data, ['DOC'])) continue;
         // itPriceApprovals — LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao): mảng này gộp CẢ
         // 2 priceType (RETAIL/WHOLESALE) nhưng module 'itSupport' giờ không còn là cổng DUY NHẤT (RETAIL
         // đi qua 'muaHang', WHOLESALE đi qua 'vanHanh', xem canAccessItPriceApprovalModuleServer() ở
@@ -1742,6 +1750,8 @@ router.get('/lazy/:groupKey', async (req, res) => {
       if (hasModuleAccessServer(req.freshUser, moduleKey)) continue;
       for (const col of collections) {
         if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
+        // docs — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
+        if (col === 'docs' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['DOC'])) continue;
         // itPriceApprovals — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
         if (col === 'itPriceApprovals') {
           if (Array.isArray(result.itPriceApprovals)) {

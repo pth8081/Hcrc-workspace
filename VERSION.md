@@ -1,8 +1,92 @@
 # Phiên bản hiện tại
 
-**24.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.26 (2026-09-27): Vá 8 phát hiện từ đợt rà soát chuyên sâu 4-agent song song (droplist/phê duyệt/cấu hình hệ thống/upload+phân quyền)
+
+Theo yêu cầu người dùng rà soát sâu 4 mảng ("droplist tìm-kiếm-gõ-chọn",
+"module phê duyệt", "cấu hình nghiệp vụ hệ thống", "upload cấu hình + tạo
+user + Ma Trận Phân Quyền") — 4 agent song song không tìm thấy lỗi Cao nào ở
+mảng droplist, nhưng phát hiện 8 lỗi thật (4 Cao + 4 Trung bình) ở 3 mảng còn
+lại. Đã vá toàn bộ + test chuyên sâu theo yêu cầu ("làm theo thứ tự, test
+chuyên sâu lại sau khi vá").
+
+**4 lỗi mức Cao:**
+
+1. **Link chết "🔍 Xem" cho Đơn Hàng Vận Hành (Siêu Thị/HO) đã xử lý ở
+   Approval Hub** — `gotoApprovalHubOrigin()` (core-approvalhub.js) thiếu
+   hẳn 3 `case` (`operationOrders`/`operationStoreOpenings`/
+   `operationRepairs`) nên bấm nút này luôn rơi về mở lại Approval Hub —
+   100% tái hiện với mọi người dùng, không cần điều kiện quyền gì. Thêm 3
+   case, điều hướng đúng sub-tab STORE/HO (dựa vào `orderLocationType`
+   truyền thêm qua action args).
+2. **4 hàm gate module thiếu check "Nhóm Phê Duyệt Cuối"** — đợt vá trước
+   (v24.25, Fix #1) mới cập nhật đúng `canAccessCarModule()`, còn
+   `canAccessPaymentModule()`/`canAccessOfficeSubTab()`/
+   `canAccessOfficeModule()`/`canAccessOperationModule()` (core.js) vẫn
+   thiếu `isMemberOfAnyExtraApprovalGroup(...)`. Người CHỈ thuộc "Nhóm Phê
+   Duyệt Cuối" của Thanh Toán/Mua Bán VP/Sửa Chữa VP/Vận Hành Đặt Hàng vẫn
+   duyệt được (nút Duyệt chính ở Approval Hub không qua gate này) nhưng
+   không xem lại được hồ sơ đã xử lý, không vào thẳng module được. Bổ sung
+   đúng nhánh OR còn thiếu ở cả 4 hàm (mirror `canAccessCarModule()`), kể cả
+   nút nav con "🧾 Đơn Hàng" (`canAccessOperationSubTab('ORDER')`).
+3. **Race condition CÓ THẬT trong ExcelJS.stream.xlsx.WorkbookReader** —
+   `_parseWorksheet()` đọc `this.model.sheets` trước khi `this.model` kịp
+   gán xong khi workbook có ≥2 sheet, ném `TypeError`. Đo được tỷ lệ lỗi
+   ~40-68%/lượt với file nhiều sheet thực tế — ảnh hưởng trực tiếp **Ma Trận
+   Phân Quyền** (nhiều sheet nhất) và cả Ngân Sách/Checklist/Hồ Sơ NV/Đào
+   Tạo (mẫu tải về kèm sheet "Ghi Chú"). Vá bằng retry có giới hạn (8 lần)
+   trong `streamFirstSheetRows()`/`streamAllSheetsRows()`
+   (lib/xlsxSafeRead.js) — mỗi lượt đọc dồn kết quả vào mảng nội bộ TRƯỚC,
+   chỉ phát cho `onRow()` thật của caller đúng 1 lần sau khi thành công
+   trọn vẹn (tránh nhân đôi dữ liệu nếu phải thử lại). Stress-test 20 lần
+   liên tiếp với file 5-sheet: 0 lỗi (trước đó ~68%/lượt).
+4. **`findOwningRecord()` (lib/fileAuthz.js) thiếu checker cho 5 collection
+   nhạy cảm nhất** — file đính kèm ở "Trường Bổ Sung" (customData) của Công
+   Việc/Biên Bản Họp/Đặt Phòng Họp/IT Ticket/**HR Feedback** rơi vào
+   FAIL-OPEN: bất kỳ ai đã đăng nhập cũng tải được nếu biết URL, dù bản ghi
+   gốc bị giới hạn xem hẹp (đặc biệt HR Feedback — câu hỏi riêng gửi HR).
+   Thêm checker + dispatch dùng đúng `canViewTaskRecord()`/
+   `canViewMeetingMinutes()`/`canViewMeeting()`/`canViewItSupportTicket()`/
+   `canViewHrFeedback()` đã có sẵn.
+
+**4 lỗi mức Trung bình:**
+
+5. `MODULE_ACCESS_GATED_COLLECTIONS.doc` (routes/data.js, cả GET /api/data
+   chính lẫn `/lazy/:groupKey`) thiếu ngoại lệ cho extra-layer DOC approver
+   — nếu admin tắt `moduleAccess.doc` cho 1 tài khoản duyệt cấp cao, hồ sơ
+   có thể kẹt vĩnh viễn ở bước họ phụ trách. Mirror đúng khuôn `hrFeedback`/
+   `itPriceApprovals` đã có (OR thêm `isExtraApprovalLayerApprover(...)`
+   thay vì zero vô điều kiện).
+6. Thẻ Dashboard "💰 Thanh toán chờ duyệt" dùng gate cũ
+   `canManagePaymentRequestsClient()` (chỉ admin/paymentManage), không đồng
+   bộ với 4 thẻ module khác (`countDeptWorkflowPending()`, tính đúng theo
+   BƯỚC hiện tại) — approver hợp lệ theo dept-workflow hoặc "Nhóm Phê Duyệt
+   Cuối" không có paymentManage không bao giờ thấy thẻ nhắc dù có hồ sơ cần
+   xử lý. Đồng bộ dùng `countDeptWorkflowPending()` (thêm tham số
+   `matchStatuses` để giữ đúng hành vi cũ đếm cả PENDING/NEED_INFO).
+7. Mở rộng `findOwningRecord()` thêm checker cho Đồng Phục (3 collection) +
+   Công & Phép (4 collection: nghỉ phép/đổi ca/lịch phân ca/chấm công) —
+   cùng lớp lỗ hổng #4 ở trên, mức Trung bình vì phạm vi hẹp theo siêu
+   thị/phòng ban chứ không phải dữ liệu cá nhân riêng tư.
+8. Bulk Excel import Người Dùng không có cách nào gán "Nhóm Phân Quyền"
+   (chỉ tạo tay từng người mới gán được) — mọi user tạo qua import luôn rơi
+   về `defaultNewUserPerms()` (an toàn nhưng khác hẳn tạo tay, admin phải
+   tự sửa lại từng người sau khi import). Thêm cột `permgroups` (TÊN nhóm,
+   phân tách ";") vào file mẫu/`USER_IMPORT_COLUMNS` (lib/adminExport.js),
+   tự dò tên → id khớp `DB.permGroups` ở `validateImportedUserRow()`, tính
+   `perms = mergeGroupsBasePerms(...)` giống hệt tạo tay khi có gán nhóm.
+
+**Test**: viết mới `tests/test-user-import-permgroups.js` (6 kịch bản cho
+mục #8) + chạy lại toàn bộ ~16-40 test liên quan cho từng mục (module-access
+gate, docs-scope, dashboard, fileAuthz/uploads-file-authz, uniform/
+attendance-leave, permMatrixExcel stress-test, user-import) + full regression
+312 file — không phát hiện thêm lỗi mới nào ngoài các mục đã liệt kê. Không
+có thay đổi `schema.sql`/`.env.example`/dependency nào trong đợt này — chỉ
+sửa/mở rộng logic code hiện có, không cần thao tác thủ công gì thêm ngoài
+copy code + `pm2 restart`.
 
 ## v24.25 (2026-09-27): Vá 11 lỗi từ đợt rà soát chuyên sâu 8-agent song song (4 Cao + 6 Trung bình + 1 Thấp)
 

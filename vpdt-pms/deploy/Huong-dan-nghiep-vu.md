@@ -4254,11 +4254,12 @@ khoản đã có) và báo rõ nếu có trùng; server sau đó tự băm mật
 thực lại toàn bộ trước khi ghi.
 
 **Tạo hàng loạt bằng Excel** (đợt lớn hơn, VD nhận hàng chục nhân viên mới
-cùng lúc): bấm **"📄 Tải File Mẫu (.xlsx)"** — file mẫu có đủ **9 cột khớp
+cùng lúc): bấm **"📄 Tải File Mẫu (.xlsx)"** — file mẫu có đủ **11 cột khớp
 ĐÚNG form tạo tay** (`username`/`pass`/`name`/`email`/`phone`/`dept`/
-`jobtitle`/`postype`/`startdate`, có 2 dòng mẫu minh hoạ cả trường hợp HO lẫn
-Siêu Thị), điền xong bấm **"📥 Import Excel"** để xem trước trước khi ghi
-(server chỉ đọc thô nội dung file, không tự ghi gì vào CSDL ở bước này).
+`jobtitle`/`postype`/`startdate`/`khoiban`/`permgroups`, có 2 dòng mẫu minh
+hoạ cả trường hợp HO lẫn Siêu Thị), điền xong bấm **"📥 Import Excel"** để
+xem trước trước khi ghi (server chỉ đọc thô nội dung file, không tự ghi gì
+vào CSDL ở bước này).
 
 Ở bảng xem trước, dòng nào có **Vị Trí/Phòng Ban (hoặc Siêu Thị)/Chức Danh/
 Ngày Vào Làm Việc không khớp đúng danh mục hiện có** sẽ bị **chặn cứng** —
@@ -4279,10 +4280,25 @@ lên lại. Quy tắc đối chiếu:
   Thị).
 - **Ngày Vào Làm Việc** (`startdate`) — tuỳ chọn, nếu có phải là ngày hợp lệ
   (ô Excel định dạng ngày thật hoặc chuỗi `YYYY-MM-DD`).
+- **Khối/Ban** (`khoiban`) — tuỳ chọn, CHỈ áp dụng khi Vị Trí = HO (để trống
+  hợp lệ ở Siêu Thị/Vị Trí tự thêm), ghi TÊN Khối/Ban (mục 7.2), tự dò lại
+  đúng danh mục khi ghi.
+- **Nhóm Phân Quyền** (`permgroups`, 9/2026) — tuỳ chọn, ghi TÊN 1 hoặc nhiều
+  **Nhóm Phân Quyền** (Quản Trị → Phân Quyền, đã tạo sẵn), phân tách bằng
+  dấu chấm phẩy (`;`) nếu gán nhiều nhóm cùng lúc (VD `Kế Toán;Quản Lý Kho`).
+  Tên không khớp danh mục hiện có cũng bị chặn cứng như các cột khác. **Để
+  trống = tài khoản mới KHÔNG có quyền gì** (giữ nguyên hành vi an toàn từ
+  trước — trước đây import Excel hoàn toàn không có cách nào gán nhóm, admin
+  phải tự vào sửa từng người sau khi import); có gán nhóm thì tài khoản
+  nhận đúng quyền GỘP của (các) nhóm đó, giống hệt chọn nhóm ở form tạo tay
+  (không có ô tuỳ chỉnh thêm/bớt quyền riêng như form tay — chỉ đúng 100%
+  quyền của nhóm).
 
 Dòng hợp lệ mới có ô tick "Nhập?" (hoặc chọn Bỏ qua/Ghi đè nếu username đã có
 tài khoản, giống hành vi trùng lặp trước đây) — bấm **"✅ Xác Nhận Import"**
-để tạo/ghi đè hàng loạt.
+để tạo/ghi đè hàng loạt. Ghi đè (username đã có tài khoản) **KHÔNG BAO GIỜ**
+đụng tới mật khẩu/Nhóm Phân Quyền/quyền hạn của tài khoản đã có — 2 cột
+`pass`/`permgroups` chỉ có tác dụng với dòng tạo MỚI thật.
 
 ### 7.8. Cấu Hình Email
 
