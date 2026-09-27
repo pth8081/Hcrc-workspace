@@ -9,7 +9,6 @@
 // họp thêm cờ minutesEdit (toàn công ty, không theo phòng ban) cho SỬA — riêng XÓA là quyền tối cao,
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
-const { localDateStr } = require('./attendance');
 const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
@@ -4824,8 +4823,13 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): `new Date().toISOString().slice(0,10)` trả về NGÀY
   // THEO GIỜ UTC — trong khung 00:00-06:59 sáng giờ VN, so sánh sai khiến vẫn thêm được học viên dù đã
   // thật sự quá `registerDeadline` (giờ local). Dùng localDateStr() (lib/attendance.js) như đã áp dụng
-  // cho mọi field "ngày local" khác trong hệ thống.
-  const todayStr = localDateStr(new Date());
+  // cho mọi field "ngày local" khác trong hệ thống. Require LAZY (không phải top-level) vì
+  // lib/recordViewScope.js đã require('./recordActions') ở top-level của NÓ — 1 require top-level
+  // ngược lại ở đây (recordActions -> attendance -> recordViewScope -> recordActions) tạo vòng lặp
+  // khiến recordViewScope.js nhận module.exports RỖNG của recordActions.js (canManageTraining và các
+  // hàm khác trở thành undefined) — mirror đúng khuôn lazy-require đã dùng cho ./laborContract ngay
+  // trên và cho ./attendance/./laborContract ở lib/createValidation.js.
+  const todayStr = require('./attendance').localDateStr(new Date());
   if (cls.registerDeadline && todayStr > cls.registerDeadline) {
     throw new HttpError(409, 'Đã hết hạn đăng ký lớp học này');
   }
