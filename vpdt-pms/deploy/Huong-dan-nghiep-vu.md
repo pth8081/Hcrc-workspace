@@ -3509,8 +3509,13 @@ liệu từ khoảng **19 module nghiệp vụ** khác (Tài Liệu/Văn Bản T
 Hợp Đồng/Biên Bản Họp/Hỗ Trợ IT/Báo Cáo Định Kỳ/Truyền Thông Nội Bộ/Phòng Họp/
 Đăng Ký Xe/Văn Phòng Phẩm/Đồng Phục/Giấy Phép/Mua Bán-Sửa Chữa/Thanh Toán/Ngân
 Sách/HCRC Đồng Hành/Onboarding-Offboarding/Vận Hành — 3 luồng Đơn Hàng/Mở Mới/
-Sửa Chữa tính riêng) — bản thân nó không tạo/lưu hồ sơ riêng nào (khác hẳn Báo
-Cáo Định Kỳ ở mục 4.6, vốn là 1 quy trình nghiệp vụ chủ động thật sự).
+Sửa Chữa tính riêng), cộng thêm **3 nhóm mới (v24.28)**: **🎓 Đào Tạo**
+(trainingClasses/trainingRegistrations/trainingTests/trainingTestSubmissions/
+trainingCourses/trainingPlans — 6 collection), **🧭 Thăng Tiến** (careerPaths/
+careerPathConfirmations — 2 collection) và **📢 Tuyển Dụng** (recruitmentJobs/
+recruitmentReferrals/onboardingPaths/onboardingProgress — 4 collection) — bản
+thân module này không tạo/lưu hồ sơ riêng nào (khác hẳn Báo Cáo Định Kỳ ở mục
+4.6, vốn là 1 quy trình nghiệp vụ chủ động thật sự).
 
 **Quy ước bắt buộc (v17.9+)**: module nghiệp vụ mới nào có tạo hồ sơ đều phải
 thêm vào đây NGAY trong cùng đợt merge (xem `CLAUDE.md`) — **trừ** nhóm dữ
@@ -3567,11 +3572,13 @@ Không cần cấu hình gì đặc biệt để dùng — mọi nhân viên có
 thì tự thấy đúng phần báo cáo tương ứng của module đó khi có quyền xem báo cáo
 (quyền riêng, không tự động theo quyền tạo hồ sơ).
 
-**Kỹ thuật (Bước 7d/7e/7h, v18.3-v18.6)**: TOÀN BỘ 21/21 module Báo Cáo (Tài
+**Kỹ thuật (Bước 7d/7e/7h, v18.3-v18.6; mở rộng thêm 12 collection Đào Tạo/
+Tuyển Dụng/Thăng Tiến ở v24.28)**: TOÀN BỘ 33/33 module Báo Cáo (Tài
 Liệu, Văn Bản Trình, Công Việc, 3 luồng Vận Hành — Đơn Hàng/Mở Mới/Sửa Chữa,
 Hợp Đồng, Đăng Ký Xe, Văn Phòng Tổng Hợp, Phòng Họp, Biên Bản Họp, Truyền
 Thông Nội Bộ, Hỗ Trợ IT, Giấy Phép, HCRC Đồng Hành, Onboarding/Offboarding,
-Định Kỳ, Ngân Sách, Văn Phòng Phẩm, Thanh Toán, Đồng Phục) giờ đọc qua
+Định Kỳ, Ngân Sách, Văn Phòng Phẩm, Thanh Toán, Đồng Phục, cộng 12 collection
+Đào Tạo/Tuyển Dụng/Thăng Tiến kể trên) giờ đọc qua
 `GET /api/reports/:collection` — lọc sẵn theo phòng ban/khoảng ngày ngay ở
 CSDL thay vì tải nguyên cả danh sách về trình duyệt rồi mới lọc — vẫn áp
 dụng ĐÚNG quyền xem như trước (không đổi ai thấy gì; các phần lọc nghiệp vụ

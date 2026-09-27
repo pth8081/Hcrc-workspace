@@ -1,8 +1,137 @@
 # Phiên bản hiện tại
 
-**24.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.28 (2026-09-27): Vá 18 phát hiện từ đợt rà soát chuyên sâu mới (7 Cao + 8 Trung bình + 3 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
+
+Đợt rà soát chuyên sâu 7-agent song song tiếp theo (chỉ audit, không sửa)
+tìm ra 18 phát hiện thật. Đã vá toàn bộ theo đúng thứ tự người dùng yêu cầu
+("xử lý theo thứ tự từ cao đến thấp"), trừ 1 mục hoá ra đã được vá từ đợt
+trước (Thấp-16, nêu rõ bên dưới).
+
+**7 lỗi mức Cao:**
+
+1. **Module Mua Hàng (vendors/rebateTerms/rebateCalculations) chưa nằm
+   trong "Khối 0"** (`MODULE_ACCESS_GATED_COLLECTIONS`) — admin khoá quyền
+   module `muaHang` của 1 tài khoản nhưng tài khoản đó vẫn gọi thẳng API
+   `/api/purchasing/*` bình thường (chỉ ẩn UI, không chặn server). Thêm
+   entry `muaHang` vào `MODULE_ACCESS_GATED_COLLECTIONS` +
+   `hasModuleAccessServer()` check ở đầu `requireAnyPurchasingAccess()`.
+2. **Nút "📊 Xuất File Thủ Công" (Mua Hàng) dễ bị hiểu nhầm dùng để SỬA số
+   liệu 1 dòng đã tồn tại** — chỉ là cảnh báo UX, thêm dòng chú thích màu
+   hổ phách ngay cạnh nút.
+3. **CREATE-time chưa gác Khối 0 cho 5 collection** (operationOrders/
+   operationStoreOpenings/operationRepairs → `vanHanh`, budgetLines →
+   `budget`, carRegs → `car`, meetings → `meeting`, vppRegistrations →
+   `vpp`) — GET đã chặn nhưng POST /api/create/* vẫn tạo được record mới
+   dù module đã bị khoá cho tài khoản. Thêm map
+   `EXTRA_CREATE_MODULE_ACCESS_KEY` (routes/create.js) áp dụng riêng cho
+   nhánh tạo mới, không ảnh hưởng GET /api/data.
+4. **Duyệt đổi ca (shiftSwapRequests) không đối chiếu lại `targetEmployeeCode`
+   còn ACTIVE hay không** — nhân viên nhận ca đã nghỉ việc sau khi đơn được
+   tạo nhưng trước khi duyệt, ca vẫn bị gán cho mã đã nghỉ, khiến ca "biến
+   mất". Đối chiếu lại `employeeProfiles` ngay lúc duyệt, chặn 400 nếu
+   không còn ACTIVE.
+5. **`fileAuthz.js` chưa có checker cho `vppPeriods`/`vppRegistrations`** —
+   file đính kèm 2 collection này rơi vào nhánh fail-open (owner check mặc
+   định), lộ khả năng người ngoài phạm vi tải được file VPP người khác. Bổ
+   sung 2 checker mới (`canManageVpp`/`canViewVppRegistration`) vào
+   `findOwningRecord()`.
+6. **Bài kiểm tra đào tạo (trainingTests) vẫn sửa/xoá được dù đã có lớp
+   học hoặc bài nộp tham chiếu** — sửa/xoá "mồ côi" phá vỡ liên kết dữ
+   liệu lịch sử. Route `POST /trainingTests/:id/edit` (và route xoá tương
+   ứng) nay kiểm tra `trainingClasses`/`trainingTestSubmissions` tham
+   chiếu trước, chặn 409 nếu còn liên kết.
+7. **`catalogRename.js` thiếu cascade cho `checklistSubmissions.storeCode`
+   và `shiftRoster.storeCode`** — đổi tên siêu thị ở Quản Lý Danh Mục không
+   lan toả tới 2 collection này, để lại tên siêu thị cũ "mồ côi" trong dữ
+   liệu lịch sử. Thêm 2 entry vào `DEPT_FIELD_COLLECTIONS`.
+
+**8 lỗi mức Trung bình:**
+
+8. **`submissions` bị zero-out cho người trong `opinionRequestees` nhưng
+   không phải thành viên nhóm phê duyệt** — GET /api/data (cả nhánh chính
+   lẫn lazy-group) và route "Cho Ý Kiến" chỉ xét quyền theo approval-group,
+   khiến người được xin ý kiến riêng lẻ không thấy được hồ sơ. Sửa cả 2
+   vòng lặp zero-out (routes/data.js) giữ lại record khi user nằm trong
+   `opinionRequestees`, và `assertWorkflowModuleAccess()`
+   (routes/workflow.js) chỉ chặn khi KHÔNG phải thành viên hợp lệ.
+9. **Tạo `shiftRoster` không khoá theo cặp (nhân viên, ngày)** — race
+   TOCTOU khi 2 request tạo phân ca cùng lúc cho cùng nhân viên/ngày có
+   thể lọt qua kiểm tra trùng lặp trong bộ nhớ. Thêm
+   `getLockKey: (payload) => \`shift_roster:${employeeCode}:${workDate}\``.
+10. **Duyệt đổi ca không khoá theo `targetEmployeeCode`** — 2 đơn đổi ca
+    khác nhau cùng chọn 1 người nhận ca cho cùng ngày, duyệt gần như đồng
+    thời, có thể double-booking dù đã có kiểm tra trùng lịch (đọc cùng 1
+    snapshot trước khi ghi). Bọc toàn bộ chuỗi đọc-kiểm tra-ghi trong
+    `withAppLock(\`shift_target:${targetEmployeeCode}\`, ...)`.
+11. **Đóng modal "Xử Lý IT Ticket" sau khi bật form leo thang không nạp lại
+    datalist người dùng hệ thống** — mở lại modal lần sau, ô chọn người xử
+    lý escalate trống. `closeItTicketModal()` nay gọi lại
+    `populateSystemUsersDatalist()` khi cờ `showItTicketEscalateForm` đang
+    bật trước khi reset.
+12. **Sửa Biên Bản Họp dùng sai điều kiện phạm vi** — route `PUT
+    /api/meetings/:id` chỉ kiểm `canManage`, bỏ sót nhánh
+    `scopeAllows(user, meetingBookScope, dept)` mà UI đã dùng để hiện nút
+    Sửa, khiến người có quyền theo phạm vi phòng ban bị chặn 403 dù nút đã
+    hiện ra.
+13. **Tạo/sửa `vppRegistrations` không whitelist `customData` theo form đã
+    cấu hình** — có thể spread nguyên payload tuỳ ý vào `customData`, khác
+    hành vi validate của các module khác. Gọi
+    `validateRequiredCustomData(payload.customData, formTemplates,
+    'VPP_REGISTRATION')` — dùng modKey riêng (không tái dùng `'VPP'` của
+    `vppPeriods`) để tránh đụng cấu hình 2 form khác nhau.
+14. **Tạo `vendors` không khoá theo mã (business key)** — race TOCTOU khi 2
+    request tạo cùng mã nhà cung cấp gần như đồng thời. Thêm `getLockKey:
+    () => 'vendors_write'` (tái dùng đúng tên khoá route Sửa đã có).
+15. **Đào Tạo/Tuyển Dụng/Thăng Tiến (12 collection: trainingClasses/
+    trainingRegistrations/trainingTests/trainingTestSubmissions/
+    trainingCourses/trainingPlans/careerPaths/careerPathConfirmations/
+    recruitmentJobs/recruitmentReferrals/onboardingPaths/
+    onboardingProgress) hoàn toàn vắng mặt ở 📊 Báo Cáo** — theo đúng quy
+    tắc bắt buộc trong `CLAUDE.md` ("module mới phải có mặt ở Báo Cáo"),
+    thêm đủ 12 entry vào `REPORT_QUERY_CONFIGS` (server) +
+    `REPORT_NAV_TREE`/`REPORT_MODULE_CONFIGS` (client), dùng đúng các hàm
+    lọc theo quyền đã có sẵn (`sanitizeTrainingClassesForUser`,
+    `filterTrainingRegistrationsForUser`, v.v.).
+
+**3 lỗi mức Thấp:**
+
+16. **Double-submit khi tạo Đăng Ký Xe/Mua Sắm Văn Phòng** — kiểm tra lại
+    thấy đã được vá từ đợt trước (cơ chế `runCspOp`/`data-op-in-flight`
+    dùng chung cho mọi `data-op-submit`, xem `core.js`) — không cần sửa gì
+    thêm, giữ nguyên để tránh trùng lặp.
+17. **Vi phạm UNIQUE INDEX (race condition) ở `attendanceRecords`/
+    `leaveBalances` lộ lỗi SQL thô** — kiểm tra trùng lặp trong bộ nhớ ở
+    tầng validate không bắt được race thật (2 request gần như đồng thời),
+    lúc đó DB tự chặn bằng UNIQUE INDEX nhưng lỗi ném ra là thông báo SQL
+    thô (`UX_AttendanceRecords_Employee_Date`/`UX_LeaveBalances_Employee_Year`).
+    `insertDedicatedRecord()` (lib/recordStore.js) nay bắt riêng 2 mã lỗi
+    này, trả về thông báo 409 thân thiện.
+18. **Nút "📌 Giao việc" ở danh sách Biên Bản Họp dùng khác điều kiện
+    quyền với modal chi tiết** — danh sách dùng `canManageTasks(user)`,
+    modal chi tiết dùng `canEditMeetingMinutesRecord(user, m)` (khớp đúng
+    gate thật `canEditMinutes` ở server) — người có quyền theo phạm vi
+    (không phải quyền quản lý công việc chung) thấy nút ở modal nhưng
+    không thấy ở danh sách. Đổi danh sách dùng đúng
+    `canEditMeetingMinutesRecord`.
+
+**Regression**: 330/342 file test pass. 12 file còn lại đã xác minh KHÔNG
+liên quan tới đợt vá này (so sánh trực tiếp với commit trước khi vá, chạy
+lại y hệt) — toàn bộ do giới hạn môi trường sandbox test (thiếu SQL Server
+thật ở `localhost:1433`, thiếu file PDF mẫu cố định, port test bị Chrome
+chặn, Playwright timeout) hoặc lỗi có sẵn từ trước (`test-audit-round2-
+cluster3.js`, `test-audit-cluster-vbt-hd-gp-tt-tl.js`, `demo-muahang-
+module.js`), cùng 1 lỗi mock test tự vá kèm theo (`test-attendance-leave.js`
+thiếu `createForCollectionSerialized`/`employeeProfiles` trong stub sau khi
+thêm khoá cho `shiftRoster`, đã sửa lại 72/72 pass).
+
+**Deploy-impact**: KHÔNG cần đổi `schema.sql` (không thêm bảng/cột/index
+mới), KHÔNG thêm biến `.env` mới, KHÔNG thêm/đổi dependency `package.json`
+(chỉ bump field `version`). Chỉ cần copy code + `pm2 restart` như bình
+thường.
 
 ## v24.27 (2026-09-27): Vá 23 phát hiện từ đợt rà soát chuyên sâu 7-agent song song (1 Nghiêm trọng + 6 Cao + 12 Trung bình + 5 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
 
