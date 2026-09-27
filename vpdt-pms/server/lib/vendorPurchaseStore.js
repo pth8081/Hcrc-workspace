@@ -72,9 +72,23 @@ async function bulkInsertPurchaseTransactions(rows) {
   const toInsert = [];
   const toUpdate = []; // { row, transId }
   let rowsSkippedDuplicate = 0;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): trước đây chỉ so trùng với `existingByRef` (dữ
+  // liệu ĐÃ CÓ SẴN trong DB, đọc 1 lần TRƯỚC vòng lặp) — không so trùng LẪN NHAU giữa các dòng trong
+  // CHÍNH lô `rows` đang xử lý. Nếu 2 dòng trong cùng 1 lần gọi trùng khoá nghiệp vụ (SourceSystem+
+  // SourceRefId) — người dùng lỡ copy-paste trùng 1 dòng trong file Excel nhập thủ công, hoặc 2 trang
+  // phân trang DSmart trả trùng 1 item — cả 2 đều tra `existingByRef` ra "chưa có" nên cùng bị đưa vào
+  // `toInsert`, rồi cùng gộp vào 1 câu INSERT nhiều dòng theo lô — SQL Server từ chối TOÀN BỘ câu đó do
+  // vi phạm UNIQUE INDEX (SourceSystem, SourceRefId), không chỉ đúng dòng trùng, khiến cả lô ~200 dòng
+  // (kể cả các dòng hợp lệ khác) không được ghi. Dedup NGAY TRONG `rows` bằng Set theo khoá nghiệp vụ
+  // trước khi group theo INSERT_CHUNK_SIZE — giữ dòng ĐẦU TIÊN gặp, các dòng trùng sau tính vào
+  // rowsSkippedDuplicate (cùng khuôn với trùng dữ liệu đã có sẵn trong DB).
+  const seenRefPairsInBatch = new Set();
   for (const r of rows) {
     if (!r.sourceRefId) { toInsert.push(r); continue; }
-    const existing = existingByRef.get(`${r.sourceSystem}|||${r.sourceRefId}`);
+    const refKey = `${r.sourceSystem}|||${r.sourceRefId}`;
+    if (seenRefPairsInBatch.has(refKey)) { rowsSkippedDuplicate++; continue; }
+    seenRefPairsInBatch.add(refKey);
+    const existing = existingByRef.get(refKey);
     if (!existing) { toInsert.push(r); continue; }
     if (purchaseTransactionChanged(r, existing)) toUpdate.push({ row: r, transId: existing.TransId });
     else rowsSkippedDuplicate++;

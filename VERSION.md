@@ -1,8 +1,120 @@
 # Phiên bản hiện tại
 
-**24.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.29 (2026-09-27): Vá 15 phát hiện từ đợt rà soát chuyên sâu 7-agent song song thứ 3 (2 Cao + 8 Trung bình + 5 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
+
+Đợt rà soát chuyên sâu 7-agent song song mới nhất (audit-only, không sửa)
+tìm ra 15 phát hiện thật. Đã vá toàn bộ theo đúng thứ tự người dùng yêu cầu
+("xử lý theo thứ tự từ cao đến thấp").
+
+**2 lỗi mức Cao:**
+
+1. **Tạo `leaveRequests` (đơn xin nghỉ phép) không khoá theo người nộp** —
+   race TOCTOU: 2 request tạo đơn gần như đồng thời cho CÙNG nhân viên có
+   thể cùng vượt qua kiểm tra trùng lịch/đủ quỹ phép (đọc trên 1 snapshot
+   không khoá), khi cả 2 được duyệt sẽ trừ quỹ phép năm 2 LẦN cho cùng 1 lần
+   nghỉ thực tế. Thêm `getLockKey: (payload, user) =>
+   \`leave_request:${user.username}\`` (`lib/createValidation.js`).
+2. **Vận Hành (operationOrders/operationStoreOpenings/operationRepairs/
+   operationWorkItems) chưa nằm trong "Khối 0" ở tầng route hành động** —
+   GET /api/data đã zero-out đúng theo `hasModuleAccessServer(user,
+   'vanHanh')` nhưng các route thao tác (duyệt/từ chối/sửa/xoá...) ở
+   `routes/records.js` không hề kiểm tra lại, khiến 1 tài khoản bị khoá
+   quyền module Vận Hành vẫn gọi thẳng API thao tác được. Thêm entry
+   `vanHanh` vào `MODULE_ACCESS_GATED_COLLECTIONS`
+   (`lib/recordViewScope.js`) + 4 khối `router.use('/operationOrders'|
+   '/operationStoreOpenings'|'/operationRepairs'|'/operationWorkItems',
+   ...)` gác đầu route (cùng khuôn budgetLines/carRegs đã có).
+
+**8 lỗi mức Trung bình:**
+
+3. **Duyệt đổi ca (shiftSwapRequests) không đối chiếu lại trạng thái thật
+   của phân ca đích ngay lúc duyệt** — chỉ kiểm tra CANCELLED, bỏ sót
+   trường hợp phân ca đích đã bị xử lý/đổi chủ bởi 1 luồng khác từ lúc đơn
+   được tạo tới lúc duyệt. `applyApproveShiftSwap()` (`lib/attendance.js`)
+   nay chặn 409 nếu `targetRoster.status !== 'SCHEDULED'` hoặc
+   `employeeCode` đã đổi khác `requesterEmployeeCode`.
+4. **itPriceApprovals (Phê Duyệt Giá) chưa gác đủ "Khối 0" ở tầng hành
+   động/tải file/báo cáo** — 8 route hành động (`routes/records.js`), route
+   tải file đã đánh dấu (`routes/priceFile.js`) và entry Báo Cáo
+   (`routes/reports.js`) chỉ kiểm `canViewItPriceApproval`/quyền tác vụ mà
+   chưa gọi `canAccessItPriceApprovalModuleServer()` (tách đúng gate
+   Bán Buôn/Bán Lẻ theo `priceType`). Bổ sung gọi hàm này ở cả 10 điểm.
+5. **`editSubmissionDraft()` (Sửa & Gửi Lại Văn Bản Trình) không sinh lại mã
+   khi đổi Phòng Ban** — khác 2 hàm chị em `editDocDraft()`/`editContract()`
+   đã vá đúng lỗi này từ đợt trước, mã HCRC-<phòng>-VBT-<số> vẫn giữ theo
+   phòng ban CŨ dù hồ sơ đã chuyển hẳn sang phòng ban khác. Thêm tham số
+   `existingCollection` + gọi `recordCodeGen.generateHcrcCode()` khi
+   `regenerateCode`.
+6. **`bulkInsertPurchaseTransactions()` (Mua Hàng BAS) không lọc trùng
+   TRONG CÙNG 1 lô import** — 2 dòng trùng (cùng cặp mã tham chiếu) trong
+   CÙNG file Excel đang import khiến toàn bộ chuỗi INSERT của lô đó thất
+   bại (chỉ có UNIQUE INDEX chặn trùng với dữ liệu ĐÃ có sẵn trong DB, không
+   chặn trùng nội bộ lô). Thêm `seenRefPairsInBatch` (Set) lọc trùng nội bộ
+   trước khi ghi (`lib/vendorPurchaseStore.js`).
+7. **`findOwningRecord()` (`lib/fileAuthz.js`) thiếu checker cho 6 collection
+   nhóm Đào Tạo/Thăng Tiến/Onboarding** (trainingClasses/trainingCourses/
+   trainingDocuments/trainingPlans/careerPaths/onboardingPaths) — file đính
+   kèm của các collection này rơi vào nhánh fail-open (bất kỳ ai đăng nhập
+   cũng tải được), do thiếu checker nên không dispatch được qua đúng
+   `hasModuleAccessServer(user, 'internal')`. Thêm 6 checker mới + nhánh
+   dispatch `internalTrainingGroup`.
+8. **Xác nhận mốc Lộ Trình Thăng Tiến (`careerPaths/:id/confirm`) đọc-kiểm
+   tra-ghi không khoá** — 2 request xác nhận cùng mốc cho cùng nhân viên gần
+   như đồng thời có thể cùng vượt qua kiểm tra "chưa xác nhận trước đó" (đọc
+   trên snapshot không khoá), tạo 2 bản ghi `careerPathConfirmations` trùng
+   cho cùng 1 mốc. Bọc toàn bộ chuỗi trong
+   `withAppLock(\`career_path_confirm:${itemId}:${targetUsername}:${stageIndex}\`,
+   ...)`.
+9. **`GET /api/reports/:collection` thiếu `appData.trainingClasses` cho
+   entry `trainingRegistrations`/`trainingTestSubmissions`** —
+   `trainingClasses` đã migrate sang bảng SQL riêng (không còn nằm ở
+   `dbo.AppData`) nên `getAllAppDataWithVersionsCached()` không mang theo
+   field này ở route Báo Cáo (khác `GET /api/data` đã truyền đúng), khiến
+   giảng viên (`trainingInstruct`, không phải `trainingManage`/admin) bị lọc
+   rỗng oan trên màn Báo Cáo dù đúng quyền xem (fail-closed, không lộ dữ
+   liệu, nhưng vẫn là lỗi thật). Bù thủ công `appDataCtx.trainingClasses`
+   cùng khuôn `operationWorkItems` đã có (`routes/reports.js`).
+10. **Chấm điểm Checklist (`computeChecklistScoring()`,
+    `lib/checklist.js`) chỉ chặn trần điểm cho câu MULTIPLE_CHOICE** — câu
+    SINGLE_CHOICE (dù chỉ chọn 1 lựa chọn) vẫn có thể vượt trần `maxScore`
+    của chính câu đó nếu người tạo mẫu lỡ nhập `scoreValue` của 1 lựa chọn
+    lớn hơn `maxScore` (không có validate chặn ở bước lưu mẫu). Áp dụng
+    `Math.min(rawQuestionScore, q.maxScore)` cho MỌI loại câu, không riêng
+    MULTIPLE_CHOICE.
+
+**5 lỗi mức Thấp:**
+
+11. **Tạo `leaveBalances`/`attendanceRecords` (bổ sung công tay) không khoá
+    theo cặp business-key** — cùng dạng race TOCTOU như Cao-1 nhưng ở 2
+    collection này (nhân viên+năm / nhân viên+ngày). Thêm `getLockKey`
+    tương ứng cho cả 2 entry (`lib/createValidation.js`) — DB đã có UNIQUE
+    INDEX chặn từ đợt trước (không mất toàn vẹn dữ liệu), khoá thêm giúp
+    tránh hẳn việc rơi vào đường lỗi 409 không cần thiết.
+12. **`POST /api/priceFile/:id/download-marked` thiếu rate-limit riêng** —
+    đã có `canViewItPriceApproval` nhưng thiếu `uploadRateLimiter` như các
+    route tải file khác. Thêm middleware.
+13. **3 route "Sửa & Gửi Lại" (contracts/docs/submissions) không tự phục
+    hồi khi đụng độ mã sau khi đổi Phòng Ban/Loại** — đọc snapshot
+    `existingCollection` trước khi khoá bản ghi (cố ý, tránh giữ khoá DB
+    trong lúc chờ I/O khác) rồi tự sinh mã mới theo prefix mới; 2 hồ sơ
+    KHÁC NHAU cùng đổi sang cùng dept/type gần như đồng thời có thể tính ra
+    trùng 1 mã, request xử lý sau bị UNIQUE INDEX tầng DB chặn (không mất
+    toàn vẹn dữ liệu) nhưng ném thẳng lỗi SQL thô thay vì tự phục hồi. Thêm
+    `withCodeRegenRetry()` (`routes/records.js`) + export
+    `isUniqueConstraintViolation` (`lib/recordStore.js`) — đọc lại snapshot
+    MỚI và thử lại 1 lần khi đụng độ.
+14. **Xoá `recruitmentJobs` (tin tuyển dụng) vô điều kiện, không kiểm
+    `recruitmentReferrals` tham chiếu** — mồ côi dữ liệu giới thiệu ứng
+    viên. Thêm kiểm tra cascade (chặn 409 nếu còn tham chiếu), cùng khuôn
+    các route xoá danh mục Đào Tạo/Lộ Trình đã có.
+15. **Xoá `vppPeriods` (kỳ Văn Phòng Phẩm) vô điều kiện, không kiểm
+    `vppRegistrations` tham chiếu** — mồ côi dữ liệu đơn đăng ký VPP. Thêm
+    kiểm tra cascade (chặn 409 nếu còn tham chiếu), cùng khuôn
+    `checklistTemplates/:id/delete`.
 
 ## v24.28 (2026-09-27): Vá 18 phát hiện từ đợt rà soát chuyên sâu mới (7 Cao + 8 Trung bình + 3 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
 

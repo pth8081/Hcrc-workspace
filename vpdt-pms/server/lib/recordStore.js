@@ -1653,7 +1653,7 @@ async function deleteRecordForCollection(collection, id, checkFn, actor) {
 
 module.exports = {
   MIGRATED_COLLECTIONS,
-  CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix,
+  CODE_SEQ_SUFFIX_RE, computeNextSeqForPrefix, isUniqueConstraintViolation,
   getAllRecords, insertRecord, withLockedRecordById, deleteRecordById, replaceRecordsInCollection,
   getAllForCollection, getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, invalidateCollectionCache, createForCollection, createForCollectionSerialized, withAppLock, withLockedRecordForCollection, deleteRecordForCollection,
   renameFieldValueInCollection,

@@ -588,6 +588,16 @@ function applyApproveShiftSwap(swapRequest, targetRoster, rosterList, actorUsern
   if (swapRequest.status !== 'PENDING') throw new HttpError(400, 'Yêu cầu đổi ca không còn ở trạng thái chờ duyệt');
   if (!targetRoster) throw new HttpError(404, 'Không tìm thấy dòng phân ca cần đổi (có thể đã bị huỷ)');
   if (targetRoster.status === 'CANCELLED') throw new HttpError(400, 'Dòng phân ca này đã bị huỷ, không thể đổi ca');
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): trước đây chỉ chặn targetRoster.status ===
+  // 'CANCELLED' — 1 nhân viên có thể tạo NHIỀU đơn đổi ca khác nhau cho CÙNG 1 dòng roster (VD đổi cho B,
+  // rồi lại gửi tiếp đơn đổi CHÍNH dòng đó cho C, cả 2 còn PENDING). Nếu đơn (A→B) được duyệt trước
+  // (roster.status chuyển 'SWAPPED', employeeCode=B), đơn còn lại (A→C) khi duyệt SAU đó vẫn lọt qua
+  // (status !== 'CANCELLED') — ghi đè employeeCode=C, âm thầm cướp lại ca vừa gán cho B dù đơn của B vẫn
+  // hiển thị APPROVED. Chặn khi roster không còn ở đúng trạng thái SCHEDULED (đã bị 1 đơn đổi ca khác xử
+  // lý) HOẶC không còn thuộc đúng người đã tạo đơn này (đã bị đổi qua tay người khác bằng đường khác).
+  if (targetRoster.status !== 'SCHEDULED' || targetRoster.employeeCode !== swapRequest.requesterEmployeeCode) {
+    throw new HttpError(409, 'Ca này đã được đổi bởi 1 yêu cầu khác hoặc không còn thuộc đúng người đã tạo đơn — vui lòng từ chối đơn này');
+  }
   assertNoRosterConflict(rosterList, swapRequest.targetEmployeeCode, targetRoster.workDate, targetRoster.id);
   const updatedSwap = Object.assign({}, swapRequest, {
     status: 'APPROVED', approverUsername: actorUsername, approverName: actorName, decidedAt: nowVN(), updatedAt: nowVN()

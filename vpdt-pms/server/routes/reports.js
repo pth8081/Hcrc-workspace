@@ -16,7 +16,7 @@ const express = require('express');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { queryDedicatedRecords, DEDICATED_TABLES } = require('../lib/recordStore');
+const { queryDedicatedRecords, DEDICATED_TABLES, getAllForCollectionCached } = require('../lib/recordStore');
 const { queryTasksInRange } = require('../lib/taskStore');
 const { getAllAppDataWithVersionsCached } = require('../lib/appData');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
@@ -31,7 +31,7 @@ const {
   filterTasksForUser, filterUniformIssuancesForUser, filterBudgetLinesForUser, filterBudgetPeriodsForUser,
   filterChecklistSubmissionsForReportCrossView, filterRebateCalculationsForReportView,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
-  canViewItPriceApproval, filterItServiceRenewalsForUser,
+  canViewItPriceApproval, canAccessItPriceApprovalModuleServer, filterItServiceRenewalsForUser,
   // Gap-fill (đợt rà soát chuyên sâu mới, mức Trung bình): Đào Tạo/Tuyển Dụng/Thăng Tiến hoàn toàn vắng
   // mặt ở Báo Cáo dù đúng quy tắc CLAUDE.md "module có tạo hồ sơ riêng phải thêm vào Báo Cáo" — mirror
   // ĐÚNG hàm filter*ForUser() thật của từng collection (không phát minh logic quyền mới), xem thêm chú
@@ -117,8 +117,14 @@ const REPORT_QUERY_CONFIGS = {
   // Báo Cáo") nhưng trước đây hoàn toàn vắng mặt ở đây — thêm entry mirror khuôn hàm canView*() thật của
   // module đó (không phát minh logic quyền mới). canViewItPriceApproval() cần appData (nhánh approver
   // theo itPriceDeptWorkflows/itPriceTierWorkflows).
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): filterFn trước đây chỉ gọi
+  // canViewItPriceApproval() (thuần permission+dept), bỏ qua "Khối 0"
+  // (canAccessItPriceApprovalModuleServer(), phân biệt Bán Lẻ/Bán Buôn theo priceType) mà mọi route hành
+  // động khác của itPriceApprovals đã có — admin tắt module Mua Hàng/Vận Hành cho 1 tài khoản vẫn export
+  // được báo cáo đầy đủ hồ sơ Mẫu Giá qua route này.
   itPriceApprovals: {
-    filterFn: (items, user, appData) => (items || []).filter(p => canViewItPriceApproval(user, p, appData)),
+    filterFn: (items, user, appData) => (items || [])
+      .filter(p => canAccessItPriceApprovalModuleServer(user, p.priceType, appData) && canViewItPriceApproval(user, p, appData)),
     needsAppData: true
   },
   itServiceRenewals: { filterFn: filterItServiceRenewalsForUser, needsAppData: false },
@@ -244,6 +250,17 @@ router.get('/:collection', async (req, res) => {
     if (config.needsAppData) {
       const cached = await getAllAppDataWithVersionsCached();
       appDataCtx = { ...cached.data, operationWorkItems: await getAllWorkItemsCached() };
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): trainingClasses đã migrate sang bảng SQL
+      // riêng (DEDICATED_TABLES, KHÔNG còn nằm ở dbo.AppData) nên getAllAppDataWithVersionsCached() ở
+      // trên không mang theo field này — filterTrainingRegistrationsForUser()/
+      // filterTrainingTestSubmissionsForUser() (lib/recordViewScope.js) cần appData.trainingClasses để
+      // tính quyền giảng viên (trainingInstruct, qua canManageTrainingClass()), luôn đọc ra `undefined` ở
+      // route Báo Cáo này (khác GET /api/data, nơi trainingClasses được truyền đúng) — giảng viên không
+      // phải trainingManage/admin bị lọc rỗng oan trên màn Báo Cáo dù đúng quyền xem (fail-closed, không
+      // lộ dữ liệu, nhưng vẫn là lỗi thật). Bù thủ công cùng khuôn operationWorkItems ở trên.
+      if (collection === 'trainingRegistrations' || collection === 'trainingTestSubmissions') {
+        appDataCtx.trainingClasses = await getAllForCollectionCached('trainingClasses');
+      }
     }
 
     const filtered = config.filterFn ? await config.filterFn(postFiltered, req.freshUser, appDataCtx) : postFiltered;

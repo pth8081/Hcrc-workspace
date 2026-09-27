@@ -53,13 +53,13 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // 0" (xem chú thích tại MODULE_ACCESS_GATED_COLLECTIONS, lib/recordViewScope.js) — đúng cho các route
 // HÀNH ĐỘNG (đã tự bổ sung `router.use('/budgetLines', ...)`/`router.use('/carRegs', ...)` ở
 // routes/records.js), nhưng route TẠO MỚI dùng CHUNG handler ở đây lại chưa từng được áp lại: tắt
-// moduleAccess.vanHanh/budget/car/meeting/vpp cho 1 tài khoản (còn giữ quyền chi tiết) vẫn tạo được hồ sơ
-// mới qua route này — nghiêm trọng nhất với operationStoreOpenings/operationRepairs vì 2 collection này
-// APPROVED NGAY lúc tạo, không qua bước duyệt nào khác để chặn lần 2. Dùng map RIÊNG (không gộp vào
-// MODULE_ACCESS_GATED_COLLECTIONS) để KHÔNG ảnh hưởng vòng zero-out của GET /api/data (routes/data.js) —
-// các collection này vốn đã có quyền chi tiết lọc đúng ở đó, chỉ thiếu đúng 1 lớp Khối 0 ở khâu TẠO.
+// moduleAccess.budget/car/meeting/vpp cho 1 tài khoản (còn giữ quyền chi tiết) vẫn tạo được hồ sơ mới
+// qua route này. Dùng map RIÊNG (không gộp vào MODULE_ACCESS_GATED_COLLECTIONS) để KHÔNG ảnh hưởng vòng
+// zero-out của GET /api/data (routes/data.js) — các collection này vốn đã có quyền chi tiết lọc đúng ở
+// đó, chỉ thiếu đúng 1 lớp Khối 0 ở khâu TẠO. (operationOrders/operationStoreOpenings/operationRepairs
+// đã dời sang MODULE_ACCESS_GATED_COLLECTIONS.vanHanh thật — xem lib/recordViewScope.js — nên tự động có
+// mặt ở COLLECTION_TO_MODULE_ACCESS_KEY phía trên, không cần liệt kê lại ở đây nữa.)
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
-  operationOrders: 'vanHanh', operationStoreOpenings: 'vanHanh', operationRepairs: 'vanHanh',
   budgetLines: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp'
 };
 

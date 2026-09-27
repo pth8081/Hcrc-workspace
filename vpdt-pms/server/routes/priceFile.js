@@ -13,7 +13,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { parsePriceFile, parsePriceTemplateColumns, normalizeHeader } = require('../lib/priceFileParser');
 const { getAppDataValueCached, getAllAppData } = require('../lib/appData');
 const { getAllForCollection } = require('../lib/recordStore');
-const { canViewItPriceApproval } = require('../lib/recordViewScope');
+const { canViewItPriceApproval, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
 const { resolveApprovedFileUrl } = require('../lib/recordActions');
 const { parseUploadsFileUrl } = require('../lib/fileAuthz');
 const { assertDecompressedSizeWithinBudget } = require('../lib/xlsxSafeRead');
@@ -187,7 +187,14 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
 // quyền trước khi hiện nút) — cùng khuôn mọi route ghi/đọc dữ liệu nhạy cảm khác trong hệ thống.
 const MARK_COLUMN_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFDFF5' } };
 
-router.post('/:id/download-marked', async (req, res) => {
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình + Thấp): route này TRƯỚC ĐÂY chỉ kiểm
+// canViewItPriceApproval() (thuần permission+dept) — hoàn toàn bỏ qua "Khối 0"
+// (canAccessItPriceApprovalModuleServer(), xem lib/recordViewScope.js) mà mọi route hành động khác của
+// itPriceApprovals đã có (routes/records.js) — admin tắt module Mua Hàng/Vận Hành cho 1 tài khoản vẫn
+// tải được nguyên file bảng giá đã duyệt. Đồng thời route ĐỌC/GHI TOÀN BỘ workbook Excel vào bộ nhớ
+// (không streaming, tốn RAM hơn hẳn 2 route parse-file cùng file) nhưng lại KHÔNG có uploadRateLimiter
+// như 2 route đó — thêm rate-limit dùng chung để tránh bị spam gây tốn CPU/RAM.
+router.post('/:id/download-marked', uploadRateLimiter, async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
@@ -198,6 +205,9 @@ router.post('/:id/download-marked', async (req, res) => {
     const appData = await getAllAppData();
     if (!(await canViewItPriceApproval(req.freshUser, item, appData))) {
       return res.status(403).json({ error: 'Bạn không có quyền tải tệp của đề xuất này' });
+    }
+    if (!canAccessItPriceApprovalModuleServer(req.freshUser, item.priceType, appData)) {
+      return res.status(403).json({ error: 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
     }
 
     const approvedFileUrl = resolveApprovedFileUrl(item);

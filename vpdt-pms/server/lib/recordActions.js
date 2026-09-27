@@ -1698,7 +1698,7 @@ function computeOperationRecordStageStatus(record, items) {
 // không tin nguyên effectiveSteps/effectiveApprovers cũ nếu các lựa chọn này đổi.
 const SUBMISSION_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'title', 'priority', 'content', 'customData'];
 
-function editSubmissionDraft(payload, user, item, appData) {
+function editSubmissionDraft(payload, user, item, appData, existingCollection) {
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "hồ sơ NHÁP chỉ đúng người tạo sửa được, admin
   // cũng không → kẹt khi người tạo nghỉ việc"): mở lối thoát CHỈ cho ADMIN (không mở rộng cho người
   // khác), cùng khuôn CANCEL_FILE_PROPOSAL (lib/workflowEngine.js).
@@ -1713,11 +1713,22 @@ function editSubmissionDraft(payload, user, item, appData) {
   // Tệp tờ trình + từng tài liệu bổ sung — xem ghi chú chung ở editContract()/assertUploadedFileUrl().
   assertUploadedFileUrl(payload.fileUrl, 'Tệp tờ trình');
   assertUploadedFileUrlList(payload.extraFiles, 'Tài liệu bổ sung theo tờ trình');
-  if (payload.dept !== undefined && payload.dept !== item.dept) {
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): mã văn bản trình (HCRC-<mã phòng>-VBT-<số>, sinh
+  // 1 lần lúc TẠO theo đúng dept lúc đó — xem createValidation.js) trước đây KHÔNG được sinh lại khi đổi
+  // Phòng Ban lúc "Bổ Sung" — khác 2 hàm chị em editDocDraft()/editContract() đã vá đúng lỗi này. Hồ sơ
+  // chuyển hẳn sang phòng ban khác (quy trình duyệt/quyền xem đã dựng lại đúng theo dept mới) nhưng mã
+  // vẫn giữ nguyên phòng ban cũ — sai lệch vĩnh viễn giữa mã hiển thị và phòng ban thực tế.
+  const regenerateCode = payload.dept !== undefined && payload.dept !== item.dept;
+  if (regenerateCode) {
     assertDeptScopeAllowed(user, user.perms?.submissionCreate, payload.dept);
   }
   for (const f of SUBMISSION_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
+  }
+  if (regenerateCode) {
+    // submissions chỉ có field `code` (không có `displayCode` riêng như docs) — xem generateCode() ở
+    // createValidation.js lúc TẠO.
+    item.code = recordCodeGen.generateHcrcCode(existingCollection, appData, item.dept, 'VBT');
   }
   // type/priority/title/content — áp ĐÚNG luật của nhánh TẠO (xem normalizeSubmissionCoreFields() ở
   // lib/createValidation.js): trước đây nhánh SỬA nhận nguyên giá trị client gửi, nên toàn bộ lỗ hổng

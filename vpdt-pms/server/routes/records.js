@@ -12,13 +12,13 @@ const attendance = require('../lib/attendance');
 const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, withLockedWorkItemByIdForDelete, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
-const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
+const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock, isUniqueConstraintViolation } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
-const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer } = require('../lib/recordViewScope');
+const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 // MODULE_CONFIGS.operationOrders.resolveWfConfig: dùng LẠI đúng hàm resolveOperationOrderWorkflow() mà
 // routes/create.js đã dùng để cảnh báo "chưa có người duyệt" lúc TẠO — xem chú thích đầy đủ ở route
@@ -48,6 +48,22 @@ function handleError(res, action, err) {
   res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): 3 route "Sửa & Gửi Lại" bên dưới (contracts/docs/
+// submissions) cố ý đọc existingCollection TRƯỚC khi khoá bản ghi (không giữ khoá trong lúc chờ I/O
+// khác — xem chú thích tại từng route) rồi tự sinh lại mã mới theo prefix mới nếu đổi dept/type. Khi 2
+// hồ sơ KHÁC NHAU cùng đổi sang CÙNG dept/type gần như đồng thời, cả 2 có thể đọc cùng snapshot rồi
+// cùng tính ra TRÙNG 1 mã mới — request xử lý sau bị UNIQUE INDEX ở tầng DB chặn (UX_*_Code, xem
+// sql/schema.sql — không mất toàn vẹn dữ liệu) nhưng ném thẳng lỗi SQL thô ra ngoài thay vì tự phục
+// hồi. `runFn` nhận snapshot MỚI mỗi lần gọi nên tự tính lại đúng mã không trùng ở lần thử thứ 2.
+async function withCodeRegenRetry(fetchExisting, runFn) {
+  try {
+    return await runFn(await fetchExisting());
+  } catch (err) {
+    if (!isUniqueConstraintViolation(err)) throw err;
+    return await runFn(await fetchExisting());
+  }
+}
+
 // POST /api/records/contracts/:id/edit — contracts đã chuyển sang bảng dbo.Records (Bước 6g, xem
 // lib/recordStore.js), khoá đúng 1 dòng hợp đồng thay vì cả collection.
 router.post('/contracts/:id/edit', async (req, res) => {
@@ -55,27 +71,32 @@ router.post('/contracts/:id/edit', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const allContracts = await getAllForCollection('contracts');
-    const hasAddenda = allContracts.some(c => c.isAddendum && c.rootContractId === itemId);
-    const thisRecord = allContracts.find(c => c.id === itemId);
-    const rootRecord = (thisRecord && thisRecord.isAddendum)
-      ? allContracts.find(c => c.id === thisRecord.rootContractId)
-      : undefined;
-    const rootDept = rootRecord?.dept;
-    const rootCustodianDept = rootRecord?.custodianDept;
     // AppData dùng cho 2 việc trong editContract(): dựng lại effectiveSteps/effectiveApprovers khi đổi
     // dept (chỉ hợp đồng gốc mới đổi được) VÀ đối chiếu trường bắt buộc của Biểu Mẫu (formTemplates) —
     // việc thứ 2 áp dụng cho CẢ phụ lục nên KHÔNG còn bỏ qua lượt đọc này khi isAddendum như trước.
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('contracts', itemId, async (item) => {
-      // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file"):
-      // trước đây route này chỉ xác minh ĐÚNG KHUÔN URL (assertUploadedFileUrl trong editContract()),
-      // không xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới lên hay không.
-      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
-      const updated = recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept, allContracts);
-      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
-      return updated;
-    });
+    const result = await withCodeRegenRetry(
+      () => getAllForCollection('contracts'),
+      (allContracts) => {
+        const hasAddenda = allContracts.some(c => c.isAddendum && c.rootContractId === itemId);
+        const thisRecord = allContracts.find(c => c.id === itemId);
+        const rootRecord = (thisRecord && thisRecord.isAddendum)
+          ? allContracts.find(c => c.id === thisRecord.rootContractId)
+          : undefined;
+        const rootDept = rootRecord?.dept;
+        const rootCustodianDept = rootRecord?.custodianDept;
+        return withLockedRecordForCollection('contracts', itemId, async (item) => {
+          // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu
+          // file"): trước đây route này chỉ xác minh ĐÚNG KHUÔN URL (assertUploadedFileUrl trong
+          // editContract()), không xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới
+          // lên hay không.
+          const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+          const updated = recordActions.editContract(req.body, freshUser, item, hasAddenda, rootDept, appData, rootCustodianDept, allContracts);
+          await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+          return updated;
+        });
+      }
+    );
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `contracts/${req.params.id}/edit`, err);
@@ -1216,7 +1237,26 @@ router.post('/carRegs/:id/change-route', async (req, res) => {
     handleError(res, `carRegs/${req.params.id}/change-route`, err);
   }
 });
-router.post('/vppPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppPeriods'));
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ
+// ĐIỀU KIỆN 1 kỳ VPP dù đang có vppRegistrations trỏ periodId vào nó — mồ côi dữ liệu (đơn đăng ký cũ
+// không còn tra được kỳ/quỹ ngân sách gốc), cùng khuôn checklistTemplates/:id/delete (routes/checklist.js).
+router.post('/vppPeriods/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const registrations = await getAllForCollection('vppRegistrations');
+    const referencing = registrations.filter(r => r.periodId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa kỳ Văn Phòng Phẩm này vì còn ${referencing.length} đơn đăng ký gắn với nó. Vui lòng xử lý/xoá các đơn đăng ký đó trước.`);
+    }
+    await deleteRecordForCollection('vppPeriods', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `vppPeriods/${req.params.id}/delete`, err);
+  }
+});
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
@@ -1246,6 +1286,37 @@ router.post('/budgetTemplates/:id/delete', async (req, res) => {
 });
 
 // ===================== VẬN HÀNH (operationOrders / operationStoreOpenings / operationRepairs) =====================
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): "Khối 0" (moduleAccess.vanHanh) trước đây chỉ được kiểm ở
+// đúng 2 route (receive-goods/cancel-receipt) — toàn bộ phần còn lại (update/submit/estimate/confirm-use
+// và MỌI route operationWorkItems bên dưới) coi như Khối 0 không tồn tại: admin tắt module Vận Hành cho
+// 1 tài khoản (còn sót quyền chi tiết operationOrderCreate/operationRecordManageAll...) vẫn thao tác
+// được gần như toàn bộ nghiệp vụ Vận Hành qua API trực tiếp. Mirror ĐÚNG khuôn router.use('/budgetLines',
+// ...)/('/carRegs', ...) đã vá trước đó — 4 middleware chặn TRƯỚC TIÊN cho từng khối, khớp MỌI route bên
+// dưới (kể cả 2 route đã tự kiểm riêng — gọi lại hasModuleAccessServer() lần 2 vô hại).
+router.use('/operationOrders', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/operationStoreOpenings', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/operationRepairs', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/operationWorkItems', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'vanHanh')) {
+    return res.status(403).json({ error: 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #10): Không dùng deleteAdminOnly()
 // thẳng nữa — jobs/operationOrderApiSync.js CHỈ có đường GỬI/CẬP NHẬT đơn hàng ra hệ thống ngoài
 // "dsmart16" (POST baseUrl do admin cấu hình, không theo quy ước REST cố định — không có endpoint HỦY/
@@ -2088,7 +2159,28 @@ router.post('/trainingClasses/:classId/submissions/:submissionId/grade-essay', a
 });
 
 // ===================== TUYỂN DỤNG (thay thế mục "Khen Thưởng" cũ) =====================
-router.post('/recruitmentJobs/:id/delete', (req, res) => deleteAdminOnly(req, res, 'recruitmentJobs'));
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ
+// ĐIỀU KIỆN 1 tin tuyển dụng dù đang có recruitmentReferrals (giới thiệu ứng viên) trỏ jobId vào nó —
+// mồ côi dữ liệu (màn Tuyển Dụng không còn tra được tin gốc của các lượt giới thiệu đã có), cùng khuôn
+// các route xoá danh mục Đào Tạo/Lộ Trình ở trên (trainingCourses/trainingTests/trainingClasses/
+// careerPaths/onboardingPaths).
+router.post('/recruitmentJobs/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const referrals = await getAllForCollection('recruitmentReferrals');
+    const referencing = referrals.filter(r => r.jobId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa tin tuyển dụng này vì còn ${referencing.length} lượt giới thiệu ứng viên đang gắn với nó. Vui lòng xử lý/xoá các lượt giới thiệu đó trước.`);
+    }
+    await deleteRecordForCollection('recruitmentJobs', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/delete`, err);
+  }
+});
 
 // POST /api/records/recruitmentJobs/:id/edit — sửa nội dung 1 tin tuyển dụng đã đăng (tiêu đề, mô tả,
 // yêu cầu, số lượng, hạn nộp...), KHÔNG đụng status/filledBy (giữ nguyên vòng đời OPEN/FILLED/CLOSED
@@ -2156,18 +2248,31 @@ router.post('/careerPaths/:id/confirm', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser, users } = await getFreshUser(req);
-    const allRegs = await getAllForCollection('trainingRegistrations');
-    const existingConfirmations = await getAllForCollection('careerPathConfirmations');
-    // Cần tra cứu chéo classId -> courseId (stage.requiredCourseIds trỏ vào chương trình, không phải
-    // lớp cụ thể — xem confirmCareerPathForEmployee()).
-    const trainingClasses = await getAllForCollection('trainingClasses');
-    let draft = null;
-    const result = await withLockedRecordForCollection('careerPaths', itemId, (item) => {
-      draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users, trainingClasses);
-      return item;
+    const targetUsername = String(req.body?.username || '').trim();
+    const stageIndex = req.body?.stageIndex;
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): trước đây `existingConfirmations` đọc 1 LẦN
+    // TRƯỚC KHI khoá (chỉ `withLockedRecordForCollection('careerPaths', ...)` khoá đúng 1 dòng catalog —
+    // KHÔNG phải tài nguyên đang tranh chấp thật, đó là "đã xác nhận cấp này cho người này chưa" ở
+    // collection careerPathConfirmations KHÁC), và bước ghi (`createForCollection`) hoàn toàn không có
+    // lock key. 2 request "Xác nhận" gần như đồng thời cho CÙNG path+username+stageIndex đều đọc snapshot
+    // "chưa có xác nhận" rồi cùng ghi thành công — tạo 2 bản ghi xác nhận trùng nhau (không có UNIQUE
+    // INDEX nào ở DB chặn việc này). Bọc toàn bộ chuỗi đọc-kiểm tra-ghi trong withAppLock() theo đúng
+    // path+username+stageIndex, đọc lại existingConfirmations BÊN TRONG khoá.
+    const result = await withAppLock(`career_path_confirm:${itemId}:${targetUsername}:${stageIndex}`, async () => {
+      const allRegs = await getAllForCollection('trainingRegistrations');
+      const existingConfirmations = await getAllForCollection('careerPathConfirmations');
+      // Cần tra cứu chéo classId -> courseId (stage.requiredCourseIds trỏ vào chương trình, không phải
+      // lớp cụ thể — xem confirmCareerPathForEmployee()).
+      const trainingClasses = await getAllForCollection('trainingClasses');
+      let draft = null;
+      const item = await withLockedRecordForCollection('careerPaths', itemId, (item) => {
+        draft = recordActions.confirmCareerPathForEmployee(req.body, freshUser, item, allRegs, existingConfirmations, users, trainingClasses);
+        return item;
+      });
+      const confirmation = await createForCollection('careerPathConfirmations', () => ({ ...draft, id: Date.now() }));
+      return { item, confirmation };
     });
-    const confirmation = await createForCollection('careerPathConfirmations', () => ({ ...draft, id: Date.now() }));
-    res.json({ ok: true, item: result, confirmation });
+    res.json({ ok: true, item: result.item, confirmation: result.confirmation });
   } catch (err) {
     handleError(res, `careerPaths/${req.params.id}/confirm`, err);
   }
@@ -2223,14 +2328,17 @@ router.post('/docs/:id/update', async (req, res) => {
     // /submissions/:id/update bên dưới, không giữ khoá trong lúc chờ I/O khác).
     const appData = await getAllAppData();
     // allDocs — CHỈ dùng để sinh lại code/displayCode khi cat/dept của tài liệu GỐC đổi giá trị (xem
-    // chú thích regenerateCode ở editDocDraft(), lib/recordActions.js).
-    const allDocs = await getAllForCollection('docs');
-    const result = await withLockedRecordForCollection('docs', itemId, async (item) => {
-      const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
-      const updated = recordActions.editDocDraft(req.body, freshUser, item, appData, allDocs);
-      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
-      return updated;
-    });
+    // chú thích regenerateCode ở editDocDraft(), lib/recordActions.js). withCodeRegenRetry() đọc lại
+    // allDocs MỚI nếu lần thử đầu đụng độ mã (xem chú thích tại withCodeRegenRetry() ở đầu file).
+    const result = await withCodeRegenRetry(
+      () => getAllForCollection('docs'),
+      (allDocs) => withLockedRecordForCollection('docs', itemId, async (item) => {
+        const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
+        const updated = recordActions.editDocDraft(req.body, freshUser, item, appData, allDocs);
+        await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl }, freshUser, { exemptFileUrls });
+        return updated;
+      })
+    );
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `docs/${req.params.id}/update`, err); }
 });
@@ -2305,15 +2413,22 @@ router.post('/submissions/:id/update', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('submissions', itemId, async (item) => {
-      const exemptFileUrls = [
-        ...(item.fileUrl ? [item.fileUrl] : []),
-        ...((item.extraFiles || []).map(f => f?.fileUrl).filter(Boolean)),
-      ];
-      const updated = recordActions.editSubmissionDraft(req.body, freshUser, item, appData);
-      await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, extraFiles: updated.extraFiles }, freshUser, { exemptFileUrls });
-      return updated;
-    });
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): editSubmissionDraft() trước đây không sinh lại
+    // mã (HCRC-<mã phòng>-VBT-<số>) khi đổi Phòng Ban lúc "Bổ Sung" — khác 2 hàm chị em editDocDraft()/
+    // editContract() đã vá đúng lỗi này. Đọc existingCollection để tính lại số thứ tự theo prefix mới —
+    // withCodeRegenRetry() đọc lại MỚI nếu lần thử đầu đụng độ mã (xem chú thích withCodeRegenRetry()).
+    const result = await withCodeRegenRetry(
+      () => getAllForCollection('submissions'),
+      (existingCollection) => withLockedRecordForCollection('submissions', itemId, async (item) => {
+        const exemptFileUrls = [
+          ...(item.fileUrl ? [item.fileUrl] : []),
+          ...((item.extraFiles || []).map(f => f?.fileUrl).filter(Boolean)),
+        ];
+        const updated = recordActions.editSubmissionDraft(req.body, freshUser, item, appData, existingCollection);
+        await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.fileUrl, extraFiles: updated.extraFiles }, freshUser, { exemptFileUrls });
+        return updated;
+      })
+    );
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `submissions/${req.params.id}/update`, err); }
 });
@@ -3365,6 +3480,21 @@ router.post('/budgetTemplates/:id/update', async (req, res) => {
 // ===================== HỖ TRỢ IT =====================
 router.post('/itPriceApprovals/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itPriceApprovals'));
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): 7 route hành động itPriceApprovals bên dưới
+// (apply/claim-apply/release-apply-claim/request-info/submit-supplement/request-emergency-reject/
+// approve-emergency-reject/deny-emergency-reject) trước đây chỉ gác bằng quyền cờ phẳng
+// (itPriceSupport/itPriceEmergencyRejectApprove...), hoàn toàn bỏ qua "Khối 0"
+// (canAccessItPriceApprovalModuleServer() — phân biệt module Mua Hàng/Vận Hành theo priceType, xem
+// lib/recordViewScope.js) mà routes/workflow.js đã áp dụng đúng cho bước DUYỆT/TỪ CHỐI thường (xem
+// assertWorkflowModuleAccess()). Admin tắt module Mua Hàng/Vận Hành cho 1 tài khoản (còn sót quyền chi
+// tiết) vẫn thao tác được các route này qua API trực tiếp. Hàm dùng chung, gọi ngay SAU khi đã khoá+đọc
+// được item (cần item.priceType, chưa có sẵn ở đầu route như các module khác).
+function assertItPriceApprovalModuleAccess(user, item, appData) {
+  if (!canAccessItPriceApprovalModuleServer(user, item.priceType, appData)) {
+    throw new HttpError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
+  }
+}
+
 // "Xác nhận đã áp giá" — sau khi đề xuất đã APPROVED (qua POST /api/workflow/itPriceApprovals/:id/approve,
 // dùng chung engine với docs/carRegs), người Hỗ Trợ IT áp giá vào hệ thống bán hàng ngoài app rồi bấm
 // xác nhận NGAY TẠI ĐÂY — route riêng, không đi qua routes/workflow.js vì đây không phải 1 bước duyệt.
@@ -3373,8 +3503,11 @@ router.post('/itPriceApprovals/:id/apply', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.applyPriceApproval(freshUser, item));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.applyPriceApproval(freshUser, item);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/apply`, err);
@@ -3388,8 +3521,11 @@ router.post('/itPriceApprovals/:id/claim-apply', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.claimPriceApply(freshUser, item));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.claimPriceApply(freshUser, item);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/claim-apply`, err);
@@ -3403,8 +3539,11 @@ router.post('/itPriceApprovals/:id/release-apply-claim', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.releasePriceApplyClaim(freshUser, item));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.releasePriceApplyClaim(freshUser, item);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/release-apply-claim`, err);
@@ -3419,8 +3558,11 @@ router.post('/itPriceApprovals/:id/request-info', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.requestPriceInfoFromIt(freshUser, item, req.body));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.requestPriceInfoFromIt(freshUser, item, req.body);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/request-info`, err);
@@ -3434,7 +3576,9 @@ router.post('/itPriceApprovals/:id/submit-supplement', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('itPriceApprovals', itemId, async (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
       const exemptFileUrls = (item.files || []).map(f => f?.fileUrl).filter(Boolean);
       const updated = recordActions.submitPriceSupplementFile(freshUser, item, req.body);
       await assertPayloadFileUrlsOwnedByUser({ files: updated.files }, freshUser, { exemptFileUrls });
@@ -3456,8 +3600,11 @@ router.post('/itPriceApprovals/:id/request-emergency-reject', async (req, res) =
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.requestItPriceEmergencyReject(freshUser, item, req.body));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.requestItPriceEmergencyReject(freshUser, item, req.body);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/request-emergency-reject`, err);
@@ -3469,8 +3616,11 @@ router.post('/itPriceApprovals/:id/approve-emergency-reject', async (req, res) =
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.approveItPriceEmergencyReject(freshUser, item));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.approveItPriceEmergencyReject(freshUser, item);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/approve-emergency-reject`, err);
@@ -3482,8 +3632,11 @@ router.post('/itPriceApprovals/:id/deny-emergency-reject', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) =>
-      recordActions.denyItPriceEmergencyReject(freshUser, item, req.body));
+    const appData = await getAllAppData();
+    const result = await withLockedRecordForCollection('itPriceApprovals', itemId, (item) => {
+      assertItPriceApprovalModuleAccess(freshUser, item, appData);
+      return recordActions.denyItPriceEmergencyReject(freshUser, item, req.body);
+    });
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itPriceApprovals/${req.params.id}/deny-emergency-reject`, err);

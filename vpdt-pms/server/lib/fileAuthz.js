@@ -56,7 +56,14 @@ const {
   // tệp/Tải nhiều tệp — xem CORE_FIELD_MANIFEST ở public/js/core.js) nhưng trước đây HOÀN TOÀN vắng mặt ở
   // findOwningRecord(), rơi thẳng vào FAIL-OPEN chung — bất kỳ ai đã đăng nhập cũng tải được chứng từ/
   // biên bản kiểm kê đính kèm Kỳ Cấp Phát VPP dù dữ liệu gốc bị giới hạn xem theo vppManage/phòng ban.
-  canManageVpp, canViewVppRegistration
+  canManageVpp, canViewVppRegistration,
+  // 6 collection Đào Tạo/Thăng Tiến — PHÁT HIỆN THIẾU ở đợt rà soát chuyên sâu mới, mức Trung bình: đều
+  // thuộc nhóm MODULE_ACCESS_GATED_COLLECTIONS.internal (dữ liệu công khai toàn công ty theo thiết kế,
+  // không có filter*ForUser() riêng), nhưng admin có thể cấu hình "Trường Bổ Sung" (Biểu Mẫu) kiểu Tải
+  // tệp/Tải nhiều tệp cho các form này — file tải qua field đó trước đây HOÀN TOÀN vắng mặt ở
+  // findOwningRecord(), rơi thẳng vào FAIL-OPEN chung: tài khoản bị admin tắt hẳn moduleAccess.internal
+  // (không gọi được GET /api/data để thấy các collection này) vẫn xem/tải được file nếu biết đúng URL.
+  hasModuleAccessServer
 } = require('./recordViewScope');
 // getAllWorkItemsCached() — operationWorkItems KHÔNG nằm ở dbo.Records/dbo.AppData như mọi collection
 // khác trong file này, mà có store riêng (xem lib/operationWorkItemStore.js) — không dùng được
@@ -126,7 +133,7 @@ function customDataHasFileUrl(record, fileUrl) {
 // lib/recordStore.js) — nhiều request /uploads liên tiếp trong cùng TTL dùng chung 1 lượt đọc, độ trễ tối
 // đa lệch vài giây (vô hại, cùng tinh thần getAllTrashItemsCached()).
 async function findOwningRecord(fileUrl) {
-  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords, operationWorkItems, vppPeriods, vppRegistrations] = await Promise.all([
+  const [docs, submissions, contracts, carRegs, officeReqs, internalPosts, itPriceApprovals, reportEntries, reportPeriods, recruitmentReferrals, licenses, itServiceRenewals, operationOrders, operationStoreOpenings, operationRepairs, trainingTests, laborContracts, paymentRequests, hrProcesses, checklistSubmissions, employeeProfiles, tasks, meetingMinutes, meetings, itSupportTickets, hrFeedback, uniformPeriods, uniformIssuances, uniformTransfers, leaveRequests, shiftRoster, shiftSwapRequests, attendanceRecords, operationWorkItems, vppPeriods, vppRegistrations, trainingClasses, trainingCourses, trainingDocuments, trainingPlans, careerPaths, onboardingPaths] = await Promise.all([
     getAllForCollectionCached('docs'),
     getAllForCollectionCached('submissions'),
     getAllForCollectionCached('contracts'),
@@ -186,7 +193,15 @@ async function findOwningRecord(fileUrl) {
     // vppPeriods/vppRegistrations — xem chú thích đầy đủ ở khai báo import canManageVpp/canViewVppRegistration
     // phía trên. Chỉ mang file qua customData nên checker bên dưới dùng `fixed: () => false`.
     getAllForCollectionCached('vppPeriods'),
-    getAllForCollectionCached('vppRegistrations')
+    getAllForCollectionCached('vppRegistrations'),
+    // 6 collection Đào Tạo/Thăng Tiến — xem chú thích đầy đủ ở khai báo import hasModuleAccessServer
+    // phía trên. Chỉ mang file qua customData nên checker bên dưới cũng dùng `fixed: () => false`.
+    getAllForCollectionCached('trainingClasses'),
+    getAllForCollectionCached('trainingCourses'),
+    getAllForCollectionCached('trainingDocuments'),
+    getAllForCollectionCached('trainingPlans'),
+    getAllForCollectionCached('careerPaths'),
+    getAllForCollectionCached('onboardingPaths')
   ]);
   // customDataHasFileUrl() phủ thêm file của TRƯỜNG BỔ SUNG kiểu Tải tệp/Tải nhiều tệp (xem
   // validateRequiredCustomData() ở lib/createValidation.js) — trả về ĐÚNG owning-info như khi khớp field
@@ -307,7 +322,14 @@ async function findOwningRecord(fileUrl) {
     { records: operationWorkItems, fixed: () => false, build: w => ({ operationWorkItem: true, item: w }) },
     // vppPeriods/vppRegistrations — xem chú thích đầy đủ ở khai báo import canManageVpp/canViewVppRegistration.
     { records: vppPeriods, fixed: () => false, build: p => ({ vppPeriod: true, item: p }) },
-    { records: vppRegistrations, fixed: () => false, build: r => ({ vppRegistration: true, item: r }) }
+    { records: vppRegistrations, fixed: () => false, build: r => ({ vppRegistration: true, item: r }) },
+    // 6 collection Đào Tạo/Thăng Tiến — xem chú thích đầy đủ ở khai báo import hasModuleAccessServer.
+    { records: trainingClasses, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
+    { records: trainingCourses, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
+    { records: trainingDocuments, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
+    { records: trainingPlans, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
+    { records: careerPaths, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
+    { records: onboardingPaths, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) }
     // recruitmentJobs.bannerUrl (banner/ảnh tin tuyển dụng) — CỐ Ý KHÔNG có checker riêng ở đây, rơi
     // thẳng vào nhánh FAIL-OPEN chung (coi như ảnh đại diện/logo, xem chú thích ở đầu file) — banner tin
     // tuyển dụng vốn dùng để QUẢNG BÁ (thu hút ứng viên), không phải dữ liệu nội bộ nhạy cảm, nên cho mọi
@@ -509,6 +531,11 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   if (owning.vppPeriod) return canManageVpp(user);
   // vppRegistrations (Đăng Ký VPP) — dùng thẳng canViewVppRegistration() đã có, cần appData (resolveWfConfig).
   if (owning.vppRegistration) return canViewVppRegistration(user, owning.item, await getAllAppData());
+  // 6 collection Đào Tạo/Thăng Tiến (trainingClasses/trainingCourses/trainingDocuments/trainingPlans/
+  // careerPaths/onboardingPaths) — dữ liệu công khai toàn công ty theo thiết kế (MODULE_ACCESS_GATED_
+  // COLLECTIONS.internal, không có filter*ForUser() riêng theo phòng ban/quyền sở hữu), nên chỉ cần gác
+  // đúng "Khối 0" (moduleAccess.internal) — mirror ĐÚNG khuôn tasks/meetingMinutes/hrFeedback đã vá.
+  if (owning.internalTrainingGroup) return hasModuleAccessServer(user, 'internal');
   // employeeProfile (Quyết định gán/đổi chức vụ): CHỈ chính chủ hồ sơ/hrProfileManage/admin xem được —
   // cùng khuôn canViewFullProfile() dùng cho chính màn Hồ Sơ Nhân Sự (không dùng canViewLimitedProfile,
   // vốn còn mở cho quản lý trực tiếp xem — Quyết định lương/chức vụ là dữ liệu nhạy cảm hơn, giới hạn

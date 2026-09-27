@@ -539,8 +539,12 @@ function computeChecklistScoring(template, answers) {
     // NGAY TẠI ĐÂY (Math.min theo đúng q.maxScore của câu, không đụng tới sàn 0 patchĐã có) để không câu
     // nào vượt quá điểm tối đa của chính nó, dù vẫn cho phép sàn ÂM đi qua (1 số lựa chọn scoreValue âm
     // dùng để trừ điểm "yêu cầu vàng" — chỉ chặn TRẦN, không chặn sàn ở đây).
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): trước đây chỉ MULTIPLE_CHOICE bị chặn trần
+    // q.maxScore ở dòng dưới — SINGLE_CHOICE (dù optionIds.length=1) vẫn có thể vượt trần nếu người
+    // tạo mẫu lỡ nhập scoreValue của 1 lựa chọn lớn hơn maxScore của câu (không có validate nào chặn
+    // ở validateChecklistQuestions() khi lưu template). Áp Math.min() cho MỌI loại câu để nhất quán.
     const rawQuestionScore = selectedOptions.reduce((sum, o) => sum + o.scoreValue, 0);
-    totalScore += q.type === 'MULTIPLE_CHOICE' ? Math.min(rawQuestionScore, q.maxScore) : rawQuestionScore;
+    totalScore += Math.min(rawQuestionScore, q.maxScore);
     // CL-09 (đợt test chuyên sâu 9/2026): isPassing/isCriticalFail là 2 cờ ĐỘC LẬP trên 1 lựa chọn,
     // không có ràng buộc nào ở validateChecklistQuestions() bắt "Lỗi nghiêm trọng" phải kèm "Không đạt"
     // — người tạo mẫu lỡ để cả 2 cờ cùng true (builder mặc định isPassing:true khi thêm lựa chọn mới,

@@ -3397,6 +3397,11 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): cùng dạng race điều kiện với leaveRequests ở trên —
+    // 2 request bổ sung công tay gần như đồng thời cho CÙNG nhân viên + CÙNG ngày có thể cùng pass kiểm
+    // tra trùng bản ghi ở extraValidate() (đọc trên snapshot không khoá) rồi cùng tạo 2 bản ghi công cho
+    // 1 ngày. Khoá theo employeeCode+workDate (đã có sẵn nguyên văn trong payload, không cần suy ra).
+    getLockKey: (payload) => `attendance_manual:${String(payload.employeeCode || '').trim()}:${String(payload.workDate || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
       const attendance = require('./attendance');
       if (!user.perms?.admin && !user.perms?.hrAttendanceManage) throw new CreateError(403, 'Bạn không có quyền bổ sung bản ghi công tay');
@@ -3450,6 +3455,10 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): cùng dạng race điều kiện — 2 request tạo bảng phép
+    // năm gần như đồng thời cho CÙNG nhân viên+năm có thể cùng pass kiểm tra trùng ở extraValidate() rồi
+    // cùng tạo 2 bản ghi (Số dùng bị reset về 0 lần 2, mất dữ liệu đã dùng của bản ghi trước).
+    getLockKey: (payload) => `leave_balance:${String(payload.employeeCode || '').trim()}:${Number(payload.year)}`,
     extraValidate: (payload, collection, user) => {
       if (!user.perms?.admin && !user.perms?.hrAttendanceManage) throw new CreateError(403, 'Bạn không có quyền tạo/sửa phép năm');
       const employeeCode = String(payload.employeeCode || '').trim();
@@ -3472,6 +3481,14 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): trước đây KHÔNG có getLockKey nên đi qua
+    // createForCollection() không khoá — kiểm tra trùng lịch + đủ quỹ phép trong extraValidate() đọc
+    // trên 1 snapshot không khoá, 2 request tạo đơn gần như đồng thời cho CÙNG nhân viên có thể cùng
+    // pass kiểm tra rồi cùng tạo 2 đơn PENDING trùng khoảng ngày — khi cả 2 được duyệt, quỹ phép năm bị
+    // trừ 2 LẦN cho cùng 1 lần nghỉ thực tế. Khoá theo user.username (employeeCode chỉ suy ra ĐƯỢC BÊN
+    // TRONG extraValidate qua profile, chưa có sẵn ở payload lúc gọi getLockKey) — 1 tài khoản chỉ nộp
+    // đơn cho chính mình (forceOwnDept ở trên) nên khoá theo username là đủ tuần tự hoá đúng người.
+    getLockKey: (payload, user) => `leave_request:${user.username}`,
     extraValidate: (payload, collection, user, appData) => {
       const attendance = require('./attendance');
       const { findProfileByUsername } = require('./employeeProfile');

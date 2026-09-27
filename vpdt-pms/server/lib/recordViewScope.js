@@ -1267,7 +1267,21 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // đây để (a) COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js) tự gác đúng route TẠO MỚI vendors/
   // rebateTerms, và (b) routes/purchasing.js gọi thẳng hasModuleAccessServer(user,'muaHang') cho mọi route
   // còn lại (xem requireAnyPurchasingAccess()).
-  muaHang: ['vendors', 'rebateTerms', 'rebateCalculations']
+  muaHang: ['vendors', 'rebateTerms', 'rebateCalculations'],
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): module Vận Hành chưa từng có mặt ở đây — GET /api/data
+  // (cả 2 vòng lặp) chỉ lọc operationOrders/operationStoreOpenings/operationRepairs bằng permission +
+  // dept-scope thuần (filterOperation*ForUser()), không kiểm moduleAccess.vanHanh. Đồng thời hầu hết
+  // route thao tác ở routes/records.js (update/submit/estimate/confirm-use, toàn bộ CRUD
+  // operationWorkItems) cũng KHÔNG gọi hasModuleAccessServer(user,'vanHanh') — chỉ đúng 2 route
+  // (receive-goods/cancel-receipt) có kiểm. Admin tắt module Vận Hành cho 1 tài khoản (VD chuyển phòng
+  // ban) mà quên gỡ quyền chi tiết (operationOrderCreate/operationRecordManageAll...) vẫn để lọt gần như
+  // toàn bộ nghiệp vụ Vận Hành qua API trực tiếp. Liệt kê operationOrders/operationStoreOpenings/
+  // operationRepairs ở đây để (a) GET /api/data zero-out đúng, (b) COLLECTION_TO_MODULE_ACCESS_KEY
+  // (routes/create.js) tự gác đúng route TẠO MỚI, (c) fileAuthz.js (gọi lại hasModuleAccessServer gián
+  // tiếp qua các hàm canView* đã dùng entry này) — operationWorkItems không có phòng ban/module-access
+  // riêng (luôn đi kèm 1 operationStoreOpenings/operationRepairs cha, đã lọc theo ID cha hiển thị ở
+  // routes/data.js) nên không cần liệt kê thêm ở đây.
+  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract đều là module con (parent: 'hr', xem BUSINESS_MODULES ở
 // public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này TRƯỚC ĐÂY không mirror
