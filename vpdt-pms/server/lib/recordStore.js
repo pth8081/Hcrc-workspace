@@ -1528,52 +1528,63 @@ async function createForCollectionSerialized(collection, lockKey, builderFn) {
     throw new Error(`createForCollectionSerialized(): collection "${collection}" chưa có DEDICATED_TABLES entry (lib/recordStore.js) — dbo.Records dùng chung đã bị gỡ bỏ từ Bước 7g.`);
   }
   const pool = await getPool();
-  const tx = new sql.Transaction(pool);
-  await tx.begin();
-  let record;
-  try {
-    const lockReq = new sql.Request(tx);
-    lockReq.input('Resource', sql.NVarChar(255), lockKey);
-    lockReq.input('LockMode', sql.VarChar(32), 'Exclusive');
-    lockReq.input('LockOwner', sql.VarChar(32), 'Transaction');
-    lockReq.input('LockTimeout', sql.Int, 15000);
-    const lockResult = await lockReq.execute('sp_getapplock');
-    if (lockResult.returnValue < 0) {
-      throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
-    }
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): trước đây bất kỳ lỗi unique-constraint nào ở
+  // bước INSERT cũng bị quy thẳng thành "Mã ... đã tồn tại" — không phân biệt PK_${cfg.table} (đụng Id,
+  // Date.now() không có jitter — 2 request tạo ở 2 lockKey KHÁC NHAU (VD 2 phòng họp khác nhau) hoàn
+  // toàn không bị khoá lẫn nhau, vẫn có thể trúng cùng 1 mili-giây khi tải cao) với đụng độ Code thật.
+  // Với các collection hasCode:false, thông báo còn vô nghĩa hơn ("Mã "undefined" đã tồn tại") dù dữ
+  // liệu chưa hề trùng. Mirror ĐÚNG logic phân biệt + retry của insertDedicatedRecord(): đụng Id thì tự
+  // sinh Id mới rồi thử lại (yên lặng, tới INSERT_RECORD_MAX_ATTEMPTS lần), chỉ báo lỗi nghiệp vụ khi
+  // đúng là đụng độ cột Code.
+  for (let attempt = 1; attempt <= INSERT_RECORD_MAX_ATTEMPTS; attempt++) {
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    let record;
+    try {
+      const lockReq = new sql.Request(tx);
+      lockReq.input('Resource', sql.NVarChar(255), lockKey);
+      lockReq.input('LockMode', sql.VarChar(32), 'Exclusive');
+      lockReq.input('LockOwner', sql.VarChar(32), 'Transaction');
+      lockReq.input('LockTimeout', sql.Int, 15000);
+      const lockResult = await lockReq.execute('sp_getapplock');
+      if (lockResult.returnValue < 0) {
+        throw new HttpError(409, 'Hệ thống đang bận xử lý một yêu cầu trùng — vui lòng thử lại.');
+      }
 
-    // Bảng riêng Bước 7 (VD "meetings", khoá theo phòng họp — xem routes/create.js) — cùng cơ chế khoá
-    // nghiêm túc, chỉ khác nơi đọc/ghi (bảng riêng, không còn dbo.Records dùng chung từ Bước 7g).
-    const table = dedicatedTableName(collection);
-    const readReq = new sql.Request(tx);
-    const readResult = await readReq.query(`SELECT Payload FROM ${table} ORDER BY CreatedAt DESC, Id DESC`);
-    const existing = readResult.recordset.map(toRecord);
+      // Bảng riêng Bước 7 (VD "meetings", khoá theo phòng họp — xem routes/create.js) — cùng cơ chế khoá
+      // nghiêm túc, chỉ khác nơi đọc/ghi (bảng riêng, không còn dbo.Records dùng chung từ Bước 7g).
+      const table = dedicatedTableName(collection);
+      const readReq = new sql.Request(tx);
+      const readResult = await readReq.query(`SELECT Payload FROM ${table} ORDER BY CreatedAt DESC, Id DESC`);
+      const existing = readResult.recordset.map(toRecord);
 
-    record = await builderFn(existing);
+      record = await builderFn(existing);
 
-    const writeReq = new sql.Request(tx);
-    writeReq.input('id', sql.BigInt, record.id);
-    writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
-    const colNames = ['Id', 'Payload'];
-    const colParams = ['@id', '@payload'];
-    if (cfg.hasCode) {
-      writeReq.input('code', sql.NVarChar(100), record.code || null);
-      colNames.push('Code'); colParams.push('@code');
-    }
-    for (const { col, param } of bindExtractedColumns(writeReq, cfg, record)) {
-      colNames.push(col); colParams.push('@' + param);
-    }
-    await writeReq.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
+      const writeReq = new sql.Request(tx);
+      writeReq.input('id', sql.BigInt, record.id);
+      writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(record));
+      const colNames = ['Id', 'Payload'];
+      const colParams = ['@id', '@payload'];
+      if (cfg.hasCode) {
+        writeReq.input('code', sql.NVarChar(100), record.code || null);
+        colNames.push('Code'); colParams.push('@code');
+      }
+      for (const { col, param } of bindExtractedColumns(writeReq, cfg, record)) {
+        colNames.push(col); colParams.push('@' + param);
+      }
+      await writeReq.query(`INSERT INTO ${table} (${colNames.join(', ')}) VALUES (${colParams.join(', ')});`);
 
-    await tx.commit();
-    invalidateCollectionCache(collection);
-    return record;
-  } catch (err) {
-    await tx.rollback().catch(() => {});
-    if (isUniqueConstraintViolation(err)) {
+      await tx.commit();
+      invalidateCollectionCache(collection);
+      return record;
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      if (!isUniqueConstraintViolation(err)) throw err;
+      const isIdCollision = String(err.message || '').includes(`PK_${cfg.table}`);
+      if (isIdCollision && attempt < INSERT_RECORD_MAX_ATTEMPTS) continue;
+      if (isIdCollision) throw new HttpError(409, 'Hệ thống đang bận, vui lòng thử tạo lại.');
       throw new HttpError(409, `Mã "${record?.code}" đã tồn tại`);
     }
-    throw err;
   }
 }
 

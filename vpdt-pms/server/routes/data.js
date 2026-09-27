@@ -1505,22 +1505,12 @@ router.get('/', async (req, res) => {
     if (data.operationOrders) data.operationOrders = filterOperationOrdersForUser(data.operationOrders, req.freshUser, data);
     if (data.operationStoreOpenings) data.operationStoreOpenings = filterOperationStoreOpeningsForUser(data.operationStoreOpenings, req.freshUser, data);
     if (data.operationRepairs) data.operationRepairs = filterOperationRepairsForUser(data.operationRepairs, req.freshUser, data);
-    // operationExecutionPeriods: mirror phạm vi xem của hồ sơ nguồn (đã lọc ở 2 dòng trên) — xem
-    // lib/recordViewScope.js canViewOperationExecutionPeriod().
-    if (data.operationExecutionPeriods) data.operationExecutionPeriods = filterOperationExecutionPeriodsForUser(data.operationExecutionPeriods, req.freshUser, data);
-    // operationWorkItems: cây công việc Thực hiện/Nghiệm thu — không phải collection dept-workflow độc
-    // lập, mà LỒNG theo hồ sơ Mở mới/Sửa chữa (sourceType/sourceId) — lọc theo đúng phạm vi xem của hồ
-    // sơ nguồn (đã lọc ở 2 dòng trên), tránh lộ tên/mô tả/người phụ trách công việc nội bộ siêu thị khác
-    // phòng ban cho bất kỳ ai gọi thẳng GET /api/data.
-    if (data.operationWorkItems) {
-      const visibleStoreOpeningIds = new Set((data.operationStoreOpenings || []).map(o => o.id));
-      const visibleRepairIds = new Set((data.operationRepairs || []).map(o => o.id));
-      data.operationWorkItems = data.operationWorkItems.filter(w => {
-        if (w.sourceType === 'OPERATION_STORE_OPENING') return visibleStoreOpeningIds.has(w.sourceId);
-        if (w.sourceType === 'OPERATION_REPAIR') return visibleRepairIds.has(w.sourceId);
-        return false;
-      });
-    }
+    // operationExecutionPeriods/operationWorkItems: LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao) — dời
+    // xuống SAU vòng lặp Khối 0 (PQ-01, bên dưới), xem chú thích đầy đủ tại đó. TRƯỚC ĐÂY 2 khối này
+    // chạy Ở ĐÂY (trước Khối 0), tính visibleStoreOpeningIds/visibleRepairIds từ data.operationStoreOpenings/
+    // data.operationRepairs CHƯA bị zero — tắt moduleAccess.vanHanh cho 1 tài khoản vẫn còn nguyên
+    // operationWorkItems/operationExecutionPeriods (tên/mô tả/người phụ trách công việc nội bộ) dù 2
+    // collection cha đã bị Khối 0 zero đúng ngay sau đó.
     // vppRegistrations: cùng dạng lỗ hổng như itPriceApprovals/budgetEntries ở trên — collection DUY
     // NHẤT trong nhóm dept-workflow trước đây KHÔNG được lọc lại ở server (chỉ ẩn ở
     // renderVppRegistrations()), để lộ đăng ký/chi tiêu văn phòng phẩm (kể cả bản NHÁP) của MỌI phòng
@@ -1627,6 +1617,25 @@ router.get('/', async (req, res) => {
         }
         if (data[col]) data[col] = [];
       }
+    }
+    // operationExecutionPeriods: mirror phạm vi xem của hồ sơ nguồn (đã lọc + Khối 0 zero xong ở trên) —
+    // xem lib/recordViewScope.js canViewOperationExecutionPeriod(). Đã tự động zero khi vanHanh tắt (có
+    // mặt trong MODULE_ACCESS_GATED_COLLECTIONS.vanHanh) — dòng dưới chỉ còn lọc phạm vi theo dept/quyền
+    // chi tiết cho trường hợp module VẪN bật.
+    if (data.operationExecutionPeriods) data.operationExecutionPeriods = filterOperationExecutionPeriodsForUser(data.operationExecutionPeriods, req.freshUser, data);
+    // operationWorkItems: cây công việc Thực hiện/Nghiệm thu — không phải collection dept-workflow độc
+    // lập, mà LỒNG theo hồ sơ Mở mới/Sửa chữa (sourceType/sourceId) — lọc theo đúng phạm vi xem của hồ
+    // sơ nguồn (đã lọc + Khối 0 zero xong ở trên), tránh lộ tên/mô tả/người phụ trách công việc nội bộ
+    // siêu thị khác phòng ban (hoặc của tài khoản đã bị khoá module Vận Hành) cho bất kỳ ai gọi thẳng
+    // GET /api/data.
+    if (data.operationWorkItems) {
+      const visibleStoreOpeningIds = new Set((data.operationStoreOpenings || []).map(o => o.id));
+      const visibleRepairIds = new Set((data.operationRepairs || []).map(o => o.id));
+      data.operationWorkItems = data.operationWorkItems.filter(w => {
+        if (w.sourceType === 'OPERATION_STORE_OPENING') return visibleStoreOpeningIds.has(w.sourceId);
+        if (w.sourceType === 'OPERATION_REPAIR') return visibleRepairIds.has(w.sourceId);
+        return false;
+      });
     }
 
     data._versions = versions;

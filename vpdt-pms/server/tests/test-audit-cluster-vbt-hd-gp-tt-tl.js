@@ -221,9 +221,14 @@ async function main() {
     requestFiles: [{ fileUrl: '/uploads/a.pdf', fileName: 'a.pdf' }], amount: 1000
   });
   const KE_TOAN = { username: 'kt', name: 'Kế Toán', dept: DEPT_B, perms: { paymentManage: true } };
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình — TB-13): editPaymentRequest() nay đối chiếu lại
+  // người duyệt bước 1 của phòng ban MỚI khi deptChanged (mirror đúng submitPaymentRequest()) — 4a/4c cần
+  // paymentDeptWorkflows[DEPT_B] có cấu hình để không bị chặn 409 "không ai duyệt được" (khác 7a bên dưới,
+  // vốn CỐ Ý dùng APP_DATA gốc rỗng để kiểm đúng nhánh chặn đó cho submitPaymentRequest()).
+  const APP_DATA_PR_DEPT_B = { ...APP_DATA, paymentDeptWorkflows: { [DEPT_B]: { workflowId: 'WF_1STEP', approvers: { 1: ['sep1'] } } } };
   await run('4a. Đổi dept giữa chừng quy trình duyệt -> invalidate lịch sử APPROVED + reset currentStep=1 (trước vá: giữ nguyên bước 2)', async () => {
     const pr = basePr();
-    recordActions.editPaymentRequest({ dept: DEPT_B }, KE_TOAN, pr, APP_DATA);
+    recordActions.editPaymentRequest({ dept: DEPT_B }, KE_TOAN, pr, APP_DATA_PR_DEPT_B);
     assert.strictEqual(pr.dept, DEPT_B);
     assert.strictEqual(pr.currentStep, 1, 'currentStep phải reset về 1');
     assert.strictEqual(pr.history[0].invalidated, true, 'lượt APPROVED cũ phải bị đánh dấu invalidated');

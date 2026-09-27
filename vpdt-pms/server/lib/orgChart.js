@@ -122,13 +122,30 @@ function resolvePositionOccupants(version, node, users, employeeProfiles) {
   const inactiveProfileUsernames = employeeProfiles
     ? new Set((employeeProfiles || []).filter(p => p?.status === 'INACTIVE' && p.username).map(p => p.username))
     : null;
-  return (users || []).filter(u => {
+  const occupants = (users || []).filter(u => {
     if (u.active === false) return false;
     if (inactiveProfileUsernames && inactiveProfileUsernames.has(u.username)) return false;
     if (u.jobTitle !== node.jobTitle) return false;
     if (node.requiresDept !== false && deptRef && u.dept !== deptRef) return false;
     return true;
   }).map(u => ({ username: u.username, name: u.name }));
+  // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): 1 hồ sơ Hồ Sơ Nhân Sự có thể đã được GÁN ĐÚNG vị trí
+  // này (profile.positionKey === node.positionKey, xem applyPositionAssignment() ở lib/employeeProfile.js)
+  // trong khi CHƯA được liên kết tài khoản VPDT nào (profile.username null — VD nhân viên mới tuyển/tái
+  // tuyển chưa cấp tài khoản đăng nhập) -> quét theo users.dept/jobTitle ở trên bỏ sót hoàn toàn, cho phép
+  // xoá node dù thực tế đã có người giữ theo hồ sơ chính thức. Dò thêm theo positionKey, bỏ qua hồ sơ đã
+  // đếm qua username ở trên (tránh trùng) và hồ sơ INACTIVE (đã nghỉ việc).
+  if (employeeProfiles && node.positionKey) {
+    const seenUsernames = new Set(occupants.map(o => o.username));
+    for (const p of employeeProfiles) {
+      if (!p || p.positionKey !== node.positionKey || p.status === 'INACTIVE') continue;
+      if (p.username && seenUsernames.has(p.username)) continue;
+      const linkedUser = p.username ? (users || []).find(u => u.username === p.username) : null;
+      occupants.push({ username: p.username || null, name: linkedUser?.name || p.employeeCode || p.username || '(hồ sơ chưa có tài khoản)' });
+      if (p.username) seenUsernames.add(p.username);
+    }
+  }
+  return occupants;
 }
 
 // Vị trí (node POSITION) khớp đúng dept+jobTitle hiện tại của 1 user — ngược lại resolvePositionOccupants().

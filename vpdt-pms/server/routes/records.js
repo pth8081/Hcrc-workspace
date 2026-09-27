@@ -64,6 +64,41 @@ async function withCodeRegenRetry(fetchExisting, runFn) {
   }
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): route Duyệt/Từ chối chung (routes/workflow.js,
+// assertWorkflowModuleAccess()) đã gác hasModuleAccessServer() cho contracts/docs/submissions/
+// paymentRequests từ lâu — nhưng các route "tự sửa/tự xử lý hồ sơ CỦA CHÍNH MÌNH" ở FILE NÀY (edit/
+// upload-signed/request-payment-type-change/start-payment cho contracts; update/submit cho docs/
+// submissions; from-source/edit/submit/request-info/confirm-installment/confirm-lump-sum cho
+// paymentRequests) lại KHÔNG hề gác — chỉ kiểm quyền theo bản ghi (creator===self, canManage*()...), độc
+// lập với moduleAccess. Admin tắt hẳn 1 trong 4 module này cho 1 tài khoản (còn giữ creator/quyền chi
+// tiết ở hồ sơ cũ) vẫn tự sửa/gửi lại/tải tài liệu ký/chuyển thanh toán được qua API trực tiếp — vô hiệu
+// hoá đúng ý nghĩa "khoá cứng toàn module". 4 middleware DUY NHẤT chặn TRƯỚC TIÊN cho cả khối, mirror
+// ĐÚNG khuôn router.use('/carRegs', ...) — dùng chung key với WORKFLOW_MODULE_ACCESS_KEYS
+// (routes/workflow.js) để không lệch 2 nguồn cấu hình.
+router.use('/contracts', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'contract')) {
+    return res.status(403).json({ error: 'Module Hợp Đồng đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/docs', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'doc')) {
+    return res.status(403).json({ error: 'Module Tài Liệu đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/submissions', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'submission')) {
+    return res.status(403).json({ error: 'Module Văn Bản Trình đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/paymentRequests', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'office')) {
+    return res.status(403).json({ error: 'Module Thanh Toán đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 // POST /api/records/contracts/:id/edit — contracts đã chuyển sang bảng dbo.Records (Bước 6g, xem
 // lib/recordStore.js), khoá đúng 1 dòng hợp đồng thay vì cả collection.
 router.post('/contracts/:id/edit', async (req, res) => {
@@ -2358,7 +2393,16 @@ router.post('/carRegs/:id/update', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData(); // formTemplates — xem route /docs/:id/update ở trên
-    const result = await withLockedRecordForCollection('carRegs', itemId, (item) => recordActions.editCarRegDraft(req.body, freshUser, item, appData));
+    const result = await withLockedRecordForCollection('carRegs', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData"): admin
+      // có thể cấu hình Trường Bổ Sung kiểu file/multifile cho CAR — route này trước đây gán thẳng
+      // customData không đối chiếu quyền sở hữu fileUrl, khác 14 route khác đã vá.
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(item.customData, exemptFileUrls);
+      const updated = recordActions.editCarRegDraft(req.body, freshUser, item, appData);
+      await assertPayloadFileUrlsOwnedByUser({ customData: updated.customData }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `carRegs/${req.params.id}/update`, err); }
 });
@@ -2378,7 +2422,14 @@ router.post('/officeReqs/:id/update', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData(); // formTemplates — xem route /docs/:id/update ở trên
-    const result = await withLockedRecordForCollection('officeReqs', itemId, (item) => recordActions.editOfficeReqDraft(req.body, freshUser, item, appData));
+    const result = await withLockedRecordForCollection('officeReqs', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData").
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(item.customData, exemptFileUrls);
+      const updated = recordActions.editOfficeReqDraft(req.body, freshUser, item, appData);
+      await assertPayloadFileUrlsOwnedByUser({ customData: updated.customData }, freshUser, { exemptFileUrls });
+      return updated;
+    });
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `officeReqs/${req.params.id}/update`, err); }
 });
@@ -2497,9 +2548,14 @@ router.post('/vppRegistrations/:id/update', async (req, res) => {
     // giờ cũng xử lý lại lựa chọn "Nhóm Phê Duyệt Cuối" (approvalLevel/selectedExtraApprovalLayerKeys/
     // selectedExtraApprovalLayerMembers) khi sửa nháp, cần appData để gọi prepareExtraApprovalSelectionForCreate().
     const appData = await getAllAppData();
-    const result = await withLockedRecordForCollection('vppRegistrations', itemId, (item) => {
+    const result = await withLockedRecordForCollection('vppRegistrations', itemId, async (item) => {
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData").
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(item.customData, exemptFileUrls);
       const period = periods.find(p => p.id === item.periodId);
-      return recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period, excludedJobTitles, appData);
+      const updated = recordActions.updateVppRegistrationDraft(freshUser, item, req.body, period, excludedJobTitles, appData);
+      await assertPayloadFileUrlsOwnedByUser({ customData: updated.customData }, freshUser, { exemptFileUrls });
+      return updated;
     });
     res.json({ ok: true, item: result });
   } catch (err) {
@@ -3307,6 +3363,12 @@ router.post('/operationExecutionPeriods/:id/start', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): route này trước đây không gác hasModuleAccessServer()
+    // — tắt moduleAccess.vanHanh cho 1 tài khoản (còn giữ operationRecordManageAll) vẫn "Bắt Đầu" được
+    // Kỳ Thực Hiện qua API dù tab Vận Hành đã bị ẩn.
+    if (!hasModuleAccessServer(freshUser, 'vanHanh')) {
+      return res.status(403).json({ error: 'Module Vận Hành đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+    }
     // Cần đọc sẵn hồ sơ gốc (operationStoreOpenings/operationRepairs) để đối chiếu quyền "toàn quyền
     // quản lý hồ sơ" (assertCanManageOperationRecord() — creator + operationStoreOpenCreate/
     // operationRepairCreate, hoặc operationRecordManageAll/admin) — Kỳ Thực Hiện cũng có sẵn
@@ -3424,7 +3486,8 @@ router.post('/operationWorkItems/:id/delete', async (req, res) => {
       const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
       const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
       const sourceRecord = await getOperationWorkItemSourceRecord(item);
-      return recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecord);
+      const descendants = all.filter(w => descendantIds.includes(w.id));
+      return recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecord, descendants);
     });
     // VHST-5: dọn sạch dependsOnWorkItemIds[] ở các công việc KHÁC còn lại có trỏ tới (nhánh) vừa xoá.
     await cleanupOperationWorkItemDependenciesOnDelete(idsDeleted, capturedItem.sourceType, capturedItem.sourceId);
@@ -3643,7 +3706,44 @@ router.post('/itPriceApprovals/:id/deny-emergency-reject', async (req, res) => {
   }
 });
 
-router.post('/itSupportTickets/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itSupportTickets'));
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): 7 route hành động /itSupportTickets/... bên dưới
+// (claim/update-status/comment/cancel/escalate/approve-escalation/deny-escalation) trước đây KHÔNG gác
+// Khối 0 — khác itPriceApprovals ngay phía trên đã có assertItPriceApprovalModuleAccess(). Mirror ĐÚNG
+// khuôn router.use('/carRegs', ...).
+router.use('/itSupportTickets', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'itSupport')) {
+    return res.status(403).json({ error: 'Module Hỗ Trợ IT đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+// LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): ticket sinh ra từ 1 task nhãn IT trong quy trình Nhân
+// Sự (sourceType==='HR_PROCESS_TASK', xem createItTicketForHrTask() ở lib/recordActions.js) ghi
+// linkedTicketId lên ĐÚNG task đó để chặn tạo trùng ticket ("Việc này đã có ticket Hỗ Trợ IT liên kết
+// rồi") — nhưng xoá hẳn ticket (Thùng Rác) trước đây KHÔNG dọn lại linkedTicketId trên task, khiến task
+// vĩnh viễn không tạo lại ticket mới được dù ticket cũ đã không còn tồn tại. Dọn ngay sau khi xoá thành
+// công (không dọn TRƯỚC delete để tránh mất đồng bộ nếu delete thất bại giữa chừng).
+router.post('/itSupportTickets/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let deletedItem = null;
+    await deleteRecordForCollection('itSupportTickets', itemId, (item) => {
+      assertAdminForDelete(freshUser);
+      deletedItem = item;
+    }, { username: freshUser.username, name: freshUser.name });
+    if (deletedItem && deletedItem.sourceType === 'HR_PROCESS_TASK' && deletedItem.sourceId != null) {
+      await withLockedRecordForCollection('hrProcesses', deletedItem.sourceId, (process) => {
+        const task = (process.tasks || []).find(t => t.taskId === Number(deletedItem.sourceTaskId));
+        if (task && task.linkedTicketId === itemId) task.linkedTicketId = null;
+        return process;
+      }).catch(() => {}); // quy trình Nhân Sự nguồn có thể đã bị xoá/không còn — không chặn việc xoá ticket vì lý do này
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `itSupportTickets/${req.params.id}/delete`, err);
+  }
+});
 
 router.post('/itSupportTickets/:id/claim', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -4065,6 +4165,17 @@ async function syncManagerUsernameOnSuccessorAssigned(hrProcessItem, routeLabel)
   }
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): TOÀN BỘ 8 route hành động /hrProcesses/... bên dưới
+// (assign-successor/delete/complete-task/skip-task/reassign-task/cancel/attachments/create-it-ticket)
+// trước đây KHÔNG gác hasModuleAccessServer() ("Khối 0") — chỉ kiểm quyền chi tiết theo bản ghi
+// (canActOnHrTask()/canManageHrProcess()...), khác 5 module con anh em (car/meeting/vpp/budget/vanHanh)
+// đã có middleware này. Mirror ĐÚNG khuôn router.use('/carRegs', ...) ở trên.
+router.use('/hrProcesses', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'hrLifecycle')) {
+    return res.status(403).json({ error: 'Module Onboarding/Offboarding đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 router.post('/hrProcesses/:id/assign-successor', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -4352,6 +4463,9 @@ router.post('/uniformIssuances/create', async (req, res) => {
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
       const record = recordActions.buildUniformIssuance(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, users, approvedTransfers, formTemplates);
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData"): route
+      // tạo mới này KHÔNG đi qua routes/create.js (không thừa hưởng check chung ở đó).
+      await assertPayloadFileUrlsOwnedByUser({ customData: record.customData }, freshUser);
       return insertRecord('uniformIssuances', record);
     });
     res.json({ ok: true, item: result });
@@ -4431,6 +4545,9 @@ router.post('/uniformTransfers/create', async (req, res) => {
       const storeAdjustments = allAdjustments.filter(x => x.dept === freshUser.dept);
       const approvedTransfers = allTransfers.filter(t => t.status === 'APPROVED' || t.status === 'RECEIVED');
       const record = recordActions.buildUniformTransfer(freshUser, req.body, allPeriods, storeIssuances, storeAdjustments, approvedTransfers, formTemplates, stores);
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData"): route
+      // tạo mới này KHÔNG đi qua routes/create.js (không thừa hưởng check chung ở đó).
+      await assertPayloadFileUrlsOwnedByUser({ customData: record.customData }, freshUser);
       return insertRecord('uniformTransfers', record);
     });
     res.json({ ok: true, item: result });
@@ -4659,6 +4776,14 @@ router.post('/licenses/:id/unrevoke', async (req, res) => {
 
 // ===================== GIA HẠN DỊCH VỤ CNTT (module con của Hỗ Trợ IT — itServiceRenewalManage, 10/2026
 // tách khỏi itManage thành quyền riêng) =====================
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): itServiceRenewals hoàn toàn không gác Khối 0 ở
+// tầng route hành động — mirror ĐÚNG khuôn router.use('/carRegs', ...).
+router.use('/itServiceRenewals', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'itSupport')) {
+    return res.status(403).json({ error: 'Module Hỗ Trợ IT đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 router.post('/itServiceRenewals/:id/delete', (req, res) => deleteAdminOnly(req, res, 'itServiceRenewals'));
 
 router.post('/itServiceRenewals/:id/edit', async (req, res) => {

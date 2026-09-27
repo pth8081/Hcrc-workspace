@@ -192,14 +192,20 @@ router.post('/templates/:id/delete', async (req, res) => {
   const templateId = Number(req.params.id);
   if (!Number.isFinite(templateId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
-    // Đọc trước danh sách bài nộp — dùng để chặn xoá 1 template ACTIVE/ARCHIVED đã có ai nộp bài (mồ côi
-    // dữ liệu báo cáo cũ, checklistSubmissions.templateId không còn tra ra được câu hỏi/lựa chọn gốc).
-    // Template còn DRAFT thì chưa từng kích hoạt nên KHÔNG THỂ có bài nộp — khỏi cần kiểm tra thêm.
-    const submissions = await getAllForCollection('checklistSubmissions');
-    const hasSubmissions = submissions.some(s => s.templateId === templateId);
-    await deleteRecordForCollection('checklistTemplates', templateId, (template) => {
-      if (template.status !== 'DRAFT' && hasSubmissions) {
-        throw new HttpError(409, 'Checklist này đã có người nộp bài — không thể xoá (sẽ làm mất dữ liệu báo cáo cũ), hãy dùng "⏸️ Dừng" thay thế');
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp — TOCTOU): TRƯỚC ĐÂY đọc danh sách bài nộp NGAY TỪ
+    // ĐẦU route (trước khi khoá bản ghi template) — có 1 khe hở race hẹp: 1 bài nộp MỚI (checklistSubmissions)
+    // có thể được ai đó bắt đầu (POST /submissions/start) ĐÚNG lúc giữa thời điểm đọc và thời điểm khoá/xoá
+    // ở dưới, khiến hasSubmissions tính SAI (rỗng) dù thực tế đã có bài nộp mới. Dời việc đọc + kiểm tra
+    // vào NGAY TRONG checkFn (chạy sau khi đã giữ khoá UPDLOCK/HOLDLOCK trên chính bản ghi template) — thu
+    // hẹp tối đa cửa sổ race, khớp tinh thần các checkFn khác trong file này đều tự đọc dữ liệu cần đối
+    // chiếu ở bên trong, không đọc trước rồi truyền vào.
+    await deleteRecordForCollection('checklistTemplates', templateId, async (template) => {
+      if (template.status !== 'DRAFT') {
+        const submissions = await getAllForCollection('checklistSubmissions');
+        const hasSubmissions = submissions.some(s => s.templateId === templateId);
+        if (hasSubmissions) {
+          throw new HttpError(409, 'Checklist này đã có người nộp bài — không thể xoá (sẽ làm mất dữ liệu báo cáo cũ), hãy dùng "⏸️ Dừng" thay thế');
+        }
       }
     }, { username: req.freshUser.username, name: req.freshUser.name });
     res.json({ ok: true });

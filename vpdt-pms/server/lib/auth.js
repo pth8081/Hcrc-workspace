@@ -88,7 +88,7 @@ function clearAuthCookie(res) {
 }
 
 // Chặn mọi request chưa có cookie phiên hợp lệ. Xác minh xong chữ ký JWT rồi còn tra CƯ TRẠNG THÁI
-// HIỆN TẠI của tài khoản trong DB (không chỉ tin token) — vì token có hiệu lực tới 8h
+// HIỆN TẠI của tài khoản trong DB (không chỉ tin token) — vì token có hiệu lực tới 1h
 // (TOKEN_TTL), nếu chỉ dựa vào token thì 1 tài khoản admin vừa VÔ HIỆU HÓA (nhân viên nghỉ việc) vẫn
 // thao tác được bình thường suốt phiên đang mở cho tới khi token hết hạn — không đúng ý "vô hiệu hóa
 // là mất quyền NGAY LẬP TỨC". Gắn req.user = { username, admin } (giữ nguyên shape cũ, dùng khắp nơi),

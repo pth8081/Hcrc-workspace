@@ -214,6 +214,14 @@ router.post('/terms/:id/activate', requireActivateTerm, async (req, res) => {
     const preTerms = await getAllForCollection('rebateTerms');
     const preTarget = preTerms.find(t => t.id === termId);
     if (!preTarget) throw new HttpError(404, 'Không tìm thấy điều khoản');
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): createValidation.js chặn TẠO MỚI điều khoản
+    // cho NCC INACTIVE, nhưng route Kích Hoạt này trước đây không đối chiếu lại — 1 bản DRAFT tạo lúc
+    // NCC còn hoạt động vẫn kích hoạt được bình thường sau khi NCC bị ngừng hợp tác.
+    const preVendors = await getAllForCollection('vendors');
+    const preVendor = preVendors.find(v => v.id === preTarget.vendorId);
+    if (preVendor && preVendor.status !== 'ACTIVE') {
+      throw new HttpError(409, `Nhà cung cấp "${preVendor.name}" hiện không ở trạng thái Hoạt động — không thể kích hoạt điều khoản`);
+    }
     const updated = await withAppLock(`rebate_term_activate:${preTarget.vendorId}:${preTarget.termCode}`, async () => {
       const terms = await getAllForCollection('rebateTerms');
       const target = terms.find(t => t.id === termId);
@@ -311,6 +319,12 @@ router.post('/terms/:id/calculate', requireManageTerms, async (req, res) => {
     if (periodTypeErr) return res.status(400).json({ error: periodTypeErr });
     const vendor = vendors.find(v => v.id === term.vendorId);
     if (!vendor) return res.status(404).json({ error: 'Không tìm thấy NCC của điều khoản này' });
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): createValidation.js chặn TẠO MỚI điều khoản
+    // cho NCC INACTIVE, nhưng route Tính Ước Tính này trước đây không đối chiếu lại — 1 điều khoản
+    // ACTIVE tạo lúc NCC còn hoạt động vẫn tính được ước tính bình thường sau khi NCC bị ngừng hợp tác.
+    if (vendor.status !== 'ACTIVE') {
+      return res.status(409).json({ error: `Nhà cung cấp "${vendor.name}" hiện không ở trạng thái Hoạt động — không thể tính ước tính rebate` });
+    }
 
     const purchaseTransactions = await queryPurchaseTransactionsForVendor(vendor.vendorCode, periodStart, periodEnd);
     const result = vendorRebate.computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart, periodEnd });

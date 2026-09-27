@@ -59,8 +59,12 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // đó, chỉ thiếu đúng 1 lớp Khối 0 ở khâu TẠO. (operationOrders/operationStoreOpenings/operationRepairs
 // đã dời sang MODULE_ACCESS_GATED_COLLECTIONS.vanHanh thật — xem lib/recordViewScope.js — nên tự động có
 // mặt ở COLLECTION_TO_MODULE_ACCESS_KEY phía trên, không cần liệt kê lại ở đây nữa.)
+// LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): hrProcesses (Onboarding/Offboarding) là module con thứ
+// 6 được nêu ở comment trên nhưng trước đây bị bỏ sót khỏi map này — tắt moduleAccess.hrLifecycle cho 1
+// tài khoản (còn giữ hrOnboardingManage/hrOffboardingManage) vẫn POST /api/create/hrProcesses tạo mới
+// quy trình Onboarding/Offboarding cho bất kỳ nhân viên nào qua API trực tiếp.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
-  budgetLines: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp'
+  budgetLines: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle'
 };
 
 router.use(requireAuth, blockIfMustChangePassword);

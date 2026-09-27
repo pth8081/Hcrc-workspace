@@ -34,7 +34,7 @@ async function main() {
   console.log('== POST /api/purchasing/terms/:id/calculate phải đối chiếu kỳ tính với hiệu lực điều khoản ==');
 
   const STORE = {
-    vendors: [{ id: 1, vendorCode: 'NCC001', name: 'Nhà Cung Cấp Test' }],
+    vendors: [{ id: 1, vendorCode: 'NCC001', name: 'Nhà Cung Cấp Test', status: 'ACTIVE' }],
     rebateTerms: [
       // Điều khoản chỉ áp dụng Q1/2026 (01/01 -> 31/03).
       { id: 10, termCode: 'DK-001', vendorId: 1, status: 'ACTIVE', tierMode: 'PERCENT', tiers: [{ minAmount: 0, rate: 5 }], effectiveFrom: '2026-01-01', effectiveTo: '2026-03-31' },

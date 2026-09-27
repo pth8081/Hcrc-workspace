@@ -399,8 +399,14 @@ function sanitizeChecklistDeductions(rawDeductions, template, existingDeductions
       // Không cho trừ nhiều hơn trần của CẢ hạng mục lớn từ 1 dòng duy nhất — chặn nhập liệu vô lý (VD gõ
       // nhầm thừa số 0), KHÔNG phải luật nghiệp vụ thật (trần thật áp dụng lúc CỘNG DỒN, xem
       // computeDeductionScoring() bên dưới).
+      // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): `cat.maxDeduction || rawPoints` coi maxDeduction=0
+      // là "chưa đặt trần" (rơi về rawPoints, KHÔNG chặn gì) — nhưng validateChecklistCategories() (đầu
+      // file, dòng ~229) LUÔN gán cat.maxDeduction thành 1 số >= 0 THẬT (0 khi admin cố ý để trần bằng 0
+      // — "hạng mục này không được trừ điểm gì" — chứ không phải "chưa nhập"), nên 0 là giá trị hợp lệ
+      // cần CHẶN THẬT (rawPoints bị ép về 0), không phải bị bỏ qua. cat.maxDeduction luôn hữu hạn (đảm
+      // bảo bởi validateChecklistCategories) nên so trực tiếp, không cần fallback nữa.
       const rawPoints = Number(d.deductedPoints);
-      const deductedPoints = Number.isFinite(rawPoints) && rawPoints > 0 ? Math.min(rawPoints, cat.maxDeduction || rawPoints) : 0;
+      const deductedPoints = Number.isFinite(rawPoints) && rawPoints > 0 ? Math.min(rawPoints, cat.maxDeduction) : 0;
       return {
         criteriaId,
         deductedPoints,

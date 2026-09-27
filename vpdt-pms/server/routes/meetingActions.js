@@ -14,6 +14,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { findMeetingConflict, validateRequiredCustomData, scopeAllows } = require('../lib/createValidation');
 const { getAllAppData } = require('../lib/appData');
+const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -221,6 +222,13 @@ router.put('/:id', async (req, res) => {
       item.endTime = payload.endTime;
       item.equipment = String(payload.equipment || '').trim();
       item.agenda = String(payload.agenda || '').trim();
+      // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao — "giả mạo quyền sở hữu file qua customData"): admin
+      // có thể cấu hình Trường Bổ Sung kiểu file/multifile cho BẤT KỲ module nào (kể cả Đặt Phòng Họp) —
+      // trước đây route này gán thẳng customData không hề đối chiếu quyền sở hữu fileUrl, khác 14 route
+      // khác đã vá (xem lib/uploadedFiles.js). Creator tự sửa lịch của mình có thể nhét fileUrl thật của
+      // người khác vào customData rồi tự cấp cho mình quyền xem/tải vĩnh viễn (qua findOwningRecord()).
+      const exemptFileUrls = new Set();
+      collectFileUrlsDeep(item.customData, exemptFileUrls);
       item.customData = payload.customData;
       // Đang PENDING (chưa ai duyệt) -> giữ nguyên PENDING. Đang APPROVED -> quay lại PENDING (gửi phê
       // duyệt lại, đúng yêu cầu người dùng) — xoá luôn dấu vết duyệt cũ (đã không còn đúng nữa vì nội
@@ -231,6 +239,7 @@ router.put('/:id', async (req, res) => {
         item.approvedByName = null;
         item.approvedAt = null;
       }
+      await assertPayloadFileUrlsOwnedByUser({ customData: item.customData }, freshUser, { exemptFileUrls });
       return item;
     });
 

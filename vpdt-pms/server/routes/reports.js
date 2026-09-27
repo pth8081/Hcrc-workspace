@@ -240,11 +240,30 @@ router.get('/:collection', async (req, res) => {
     const dateFrom = from ? `${from}T00:00:00.000+07:00` : undefined;
     const dateTo = to ? `${to}T23:59:59.999+07:00` : undefined;
 
+    // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): checklistSubmissions lọc ngày ở SQL theo
+    // CreatedAt (mốc BẮT ĐẦU bài, ghi 1 lần lúc INSERT — cột này KHÔNG được UPDATE khi nộp bài thật, xem
+    // sql/schema.sql/lib/recordStore.js), khác hẳn field nghiệp vụ thật `submittedAt`/`startedAt` mà
+    // chính client (module-baocaoquantri.js, fallback isInDateRange(r.submittedAt || r.startedAt, ...))
+    // VÀ route xuất Excel riêng của module này (routes/checklist.js parseSubmittedAtDate(), luôn dùng
+    // submittedAt) đều dùng — 1 bài "resumable draft" BẮT ĐẦU ngày X nhưng NỘP ngày Y (Y có thể cách xa
+    // X) sẽ lọt/thiếu sai khoảng ngày khi lọc theo Báo Cáo chung, khác kết quả với chính module Checklist.
+    // Bỏ qua lọc ngày ở SQL cho riêng collection này, áp lại đúng field submittedAt||startedAt ở JS.
+    const isChecklistSubmissions = collection === 'checklistSubmissions';
     const { items } = collection === 'tasks'
       ? await queryTasksInRange({ dateFrom, dateTo })
-      : await queryDedicatedRecords(collection, { where, dateFrom, dateTo });
+      : await queryDedicatedRecords(collection, { where, dateFrom: isChecklistSubmissions ? undefined : dateFrom, dateTo: isChecklistSubmissions ? undefined : dateTo });
 
-    const postFiltered = config.postFilter ? config.postFilter(items, dept) : items;
+    let postFiltered = config.postFilter ? config.postFilter(items, dept) : items;
+    if (isChecklistSubmissions && (dateFrom || dateTo)) {
+      const fromMs = dateFrom ? new Date(dateFrom).getTime() : -Infinity;
+      const toMs = dateTo ? new Date(dateTo).getTime() : Infinity;
+      postFiltered = postFiltered.filter(r => {
+        const t = r.submittedAt || r.startedAt;
+        if (!t) return false;
+        const ms = new Date(t).getTime();
+        return Number.isFinite(ms) && ms >= fromMs && ms <= toMs;
+      });
+    }
 
     let appDataCtx;
     if (config.needsAppData) {

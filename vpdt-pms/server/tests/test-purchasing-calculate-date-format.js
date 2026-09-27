@@ -34,7 +34,7 @@ async function main() {
   console.log('== POST /api/purchasing/terms/:id/calculate phải ép định dạng YYYY-MM-DD cho periodStart/periodEnd ==');
 
   const STORE = {
-    vendors: [{ id: 1, vendorCode: 'NCC001', name: 'Nhà Cung Cấp Test' }],
+    vendors: [{ id: 1, vendorCode: 'NCC001', name: 'Nhà Cung Cấp Test', status: 'ACTIVE' }],
     rebateTerms: [
       { id: 10, termCode: 'DK-001', vendorId: 1, status: 'ACTIVE', tierMode: 'PERCENT', tiers: [{ minAmount: 0, rate: 5 }], effectiveFrom: '2026-01-01', effectiveTo: null }
     ],

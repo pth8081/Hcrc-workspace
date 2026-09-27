@@ -1,8 +1,140 @@
 # Phiên bản hiện tại
 
-**24.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.30 (2026-09-27): Vá 17 phát hiện từ đợt rà soát chuyên sâu 8-agent song song mới nhất (5 Cao + 8 Trung bình + 4 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
+
+Đợt rà soát chuyên sâu 8-agent song song mới nhất (audit-only, không sửa)
+tìm ra 17 phát hiện thật. Đã vá toàn bộ theo đúng thứ tự người dùng yêu cầu
+("xử lý theo thứ tự từ cao đến thấp").
+
+**5 lỗi mức Cao:**
+
+1. **Giả mạo quyền sở hữu file qua `customData` ở 5 route SỬA** — 3 route
+   Sửa nháp (carRegs/officeReqs/vppRegistrations) và 2 route Tạo
+   (uniformIssuances/uniformTransfers) ghi đè `customData`/`fileUrl` mà
+   không đối chiếu lại quyền sở hữu file mới gửi lên với người dùng đang
+   thao tác — 1 người dùng có thể "mượn" đường dẫn file người khác đã tải
+   lên (đoán/dò URL) rồi gắn vào hồ sơ của chính mình. Thêm
+   `assertPayloadFileUrlsOwnedByUser()` + `collectFileUrlsDeep()`
+   (`lib/uploadedFiles.js`) vào cả 5 route (`routes/records.js`,
+   `routes/meetingActions.js`), giữ nguyên các URL file CŨ đã có sẵn trong
+   `exemptFileUrls` để không chặn nhầm việc sửa các field khác.
+2. **`hrProcesses` (Onboarding/Offboarding) thiếu "Khối 0" ở cả tầng TẠO lẫn
+   tầng route hành động** — module con `hrLifecycle` chưa từng được thêm
+   vào `MODULE_ACCESS_GATED_COLLECTIONS`/`EXTRA_CREATE_MODULE_ACCESS_KEY`,
+   khiến tài khoản bị khoá quyền vẫn tạo/thao tác được hồ sơ Onboarding/
+   Offboarding qua API trực tiếp. Thêm entry `hrLifecycle` vào
+   `MODULE_ACCESS_PARENTS`/`canViewHrProcess()` (`lib/recordViewScope.js`),
+   `EXTRA_CREATE_MODULE_ACCESS_KEY` (`routes/create.js`) và
+   `router.use('/hrProcesses', ...)` (`routes/records.js`).
+3. **Xoá 1 `operationWorkItem` cha không kiểm tra TRẠNG THÁI CÁC CON cháu**
+   — chỉ kiểm `item.status`, bỏ sót trường hợp 1 công việc con (ở tầng sâu
+   hơn trong cây `parentWorkItemId`) đã `DA_NGHIEM_THU` trong khi cha vẫn
+   đọc là `DANG_THUC_HIEN` (do `computeParentWorkItemStatus()` tổng hợp từ
+   con trực tiếp) — xoá cha sẽ xoá cascade luôn công việc con đã nghiệm thu.
+   `deleteOperationWorkItem()` (`lib/recordActions.js`) nay nhận thêm danh
+   sách bản ghi con cháu đầy đủ, chặn nếu bất kỳ con nào đã
+   `DA_NGHIEM_THU`.
+4. **`operationExecutionPeriods/:id/start` không gác "Khối 0" theo module
+   Vận Hành** — sót lại 1 route hành động chưa kiểm
+   `hasModuleAccessServer(user, 'vanHanh')` dù GET /api/data đã zero-out
+   đúng. Đồng thời sửa lỗi thứ tự trong `routes/data.js`: lọc
+   `operationWorkItems`/`operationExecutionPeriods` theo
+   `visibleStoreOpeningIds`/`visibleRepairIds` chạy TRƯỚC vòng lặp Khối 0
+   chính (dùng snapshot CHƯA zero-out) — dời khối lọc xuống sau, và thêm
+   `operationExecutionPeriods` vào `MODULE_ACCESS_GATED_COLLECTIONS.vanHanh`.
+5. **4 route SỬA (contracts/docs/submissions/paymentRequests) thiếu "Khối
+   0" ở tầng hành động** — GET /api/data đã zero-out đúng theo
+   `hasModuleAccessServer` (key `contract`/`doc`/`submission`/`office`)
+   nhưng route hành động chưa gác lại. Thêm 4 khối
+   `router.use('/contracts'|'/docs'|'/submissions'|'/paymentRequests', ...)`
+   (`routes/records.js`) — verify kỹ hành vi đăng ký `router.use()` sớm
+   trong file vẫn gác đúng mọi route matching prefix dù khai báo xa phía
+   dưới (đã có tiền lệ `carRegs`).
+
+**8 lỗi mức Trung bình:**
+
+6. **`itServiceRenewals` chưa nằm trong "Khối 0" của module Hỗ Trợ IT** —
+   thêm vào `MODULE_ACCESS_GATED_COLLECTIONS.itSupport`
+   (`lib/recordViewScope.js`) + `router.use('/itServiceRenewals', ...)`
+   (`routes/records.js`).
+7. **`itSupportTickets` (route claim/update-status/comment/cancel/
+   escalate/approve-escalation/deny-escalation) chưa gác "Khối 0"** — thêm
+   vào cùng `MODULE_ACCESS_GATED_COLLECTIONS.itSupport` +
+   `router.use('/itSupportTickets', ...)`.
+8. **`bulkRegisterTrainingClass()` không kiểm hạn đăng ký/lớp đã kết thúc**
+   — khác `createValidation.js` trainingRegistrations.extraValidate đã có
+   2 kiểm tra này cho đăng ký lẻ, hàm đăng ký HÀNG LOẠT
+   (`lib/recordActions.js`) bỏ sót, cho phép đăng ký hộ nhân viên vào lớp
+   đã hết hạn đăng ký hoặc đã kết thúc.
+9. **`editTrainingClass()` không chặn đổi `courseId` khi lớp đã có người
+   đăng ký** — mirror đúng cơ chế bảo vệ đã có sẵn cho `testId` trong cùng
+   hàm, thêm chặn tương tự cho `courseId` (đổi khoá học giữa chừng làm sai
+   lệch nội dung đào tạo của người đã đăng ký từ trước).
+10. **`vendorRebate` (Mua Hàng BAS): kích hoạt/tính chiết khấu điều khoản
+    không đối chiếu trạng thái Nhà Cung Cấp** — `terms/:id/activate` và
+    `terms/:id/calculate` (`routes/purchasing.js`) thiếu kiểm tra
+    `vendor.status === 'ACTIVE'`, cho phép kích hoạt/tính chiết khấu cho 1
+    nhà cung cấp đã ngừng hợp tác.
+11. **`GET /api/reports/checklistSubmissions` lọc theo khoảng ngày dùng SAI
+    field** — `queryDedicatedRecords()` luôn lọc SQL theo cột `CreatedAt`
+    (thời điểm BẮT ĐẦU làm bài, ghi 1 lần lúc INSERT), trong khi nghiệp vụ
+    thật cần lọc theo `submittedAt`/`startedAt` (thời điểm NỘP bài thật) —
+    khiến báo cáo lọc theo khoảng ngày trả về sai lệch với cả fallback phía
+    client lẫn Excel xuất riêng của module. Thêm nhánh đặc cách bỏ qua lọc
+    SQL-level cho collection này, tự lọc lại phía JS theo
+    `submittedAt || startedAt` (`routes/reports.js`).
+12. **`createForCollectionSerialized()` không tự retry khi trùng ID tự sinh
+    (PK collision)** — khác `insertDedicatedRecord()` đã có cơ chế
+    retry-on-unique-violation tham chiếu, hàm này (dùng cho các collection
+    có bước tính toán phức tạp hơn 1 INSERT đơn) chỉ throw thẳng lỗi 409 khi
+    2 request tạo bản ghi gần như đồng thời cùng sinh trùng id
+    (`Date.now()`-based). Bọc lại toàn bộ giao dịch trong vòng lặp retry
+    (tối đa `INSERT_RECORD_MAX_ATTEMPTS = 5`), phân biệt đúng PK collision
+    (tự retry, đọc lại dữ liệu mới) với Code collision (báo lỗi nghiệp vụ
+    "Mã ... đã tồn tại") (`lib/recordStore.js`).
+13. **`editPaymentRequest()` đổi Phòng Ban giữa chừng không đối chiếu lại
+    người duyệt bước 1** — khác `submitPaymentRequest()` đã chặn gửi đi
+    khi bước 1 không resolve ra người duyệt nào, đổi `dept` NGAY LÚC đang
+    PENDING/NEED_INFO (tự reset về bước 1) lại không được kiểm tra lại,
+    có thể đẩy đề nghị vào ngõ cụt PENDING vĩnh viễn nếu đổi sang phòng ban
+    chưa cấu hình quy trình duyệt. Thêm cùng kiểm tra
+    `resolveWorkflowStepApprovers()` vào nhánh `deptChanged`
+    (`lib/recordActions.js`).
+
+**4 lỗi mức Thấp:**
+
+14. **Xoá node Cơ Cấu Tổ Chức không đối chiếu `employeeProfiles.positionKey`
+    cho hồ sơ CHƯA có tài khoản đăng nhập** — `resolvePositionOccupants()`
+    (`lib/orgChart.js`) trước đây chỉ quét `users` theo dept/jobTitle, bỏ
+    sót hồ sơ Hồ Sơ Nhân Sự đã được gán ĐÚNG vị trí (qua
+    `applyPositionAssignment()`) nhưng chưa cấp tài khoản VPDT (nhân viên
+    mới tuyển/tái tuyển), cho phép xoá node dù thực tế đã có người giữ theo
+    hồ sơ chính thức. Bổ sung dò thêm theo `positionKey`.
+15. **Xoá `itSupportTickets` sinh từ 1 task Nhân Sự để lại `linkedTicketId`
+    mồ côi** — `createItTicketForHrTask()` ghi `linkedTicketId` lên task
+    nguồn để chặn tạo trùng ticket, nhưng xoá hẳn ticket không dọn lại,
+    khiến task đó vĩnh viễn không tạo lại ticket mới được. Route xoá
+    (`routes/records.js`) nay dọn lại `linkedTicketId` trên đúng task sau
+    khi xoá thành công (bọc try/catch riêng — không chặn việc xoá ticket
+    nếu quy trình Nhân Sự nguồn đã không còn).
+16. **Comment sai lệch về hạn token đăng nhập** — `lib/auth.js` ghi "token
+    có hiệu lực tới 8h" trong khi hằng số `TOKEN_TTL` thực tế là `'1h'`
+    (đã đổi từ trước, chỉ sót lại comment cũ) — sửa lại đúng comment, không
+    đổi hành vi.
+17. **2 lỗi nhỏ ở module Checklist** (`routes/checklist.js`,
+    `lib/checklist.js`): (a) xoá mẫu checklist (`templates/:id/delete`)
+    đọc danh sách bài nộp để chặn xoá TRƯỚC khi khoá bản ghi (TOCTOU hẹp,
+    có thể bỏ sót 1 bài nộp mới bắt đầu đúng lúc) — dời việc đọc+kiểm tra
+    vào trong `checkFn` (chạy sau khi đã giữ khoá); (b)
+    `sanitizeChecklistDeductions()` dùng `cat.maxDeduction || rawPoints`
+    coi trần điểm trừ = 0 là "chưa đặt trần" (bỏ qua chặn) trong khi
+    `validateChecklistCategories()` luôn gán 1 số >= 0 thật (0 nghĩa là
+    "hạng mục này không được trừ điểm gì", một giá trị hợp lệ) — sửa so
+    trực tiếp `Math.min(rawPoints, cat.maxDeduction)`.
 
 ## v24.29 (2026-09-27): Vá 15 phát hiện từ đợt rà soát chuyên sâu 7-agent song song thứ 3 (2 Cao + 8 Trung bình + 5 Thấp — theo yêu cầu người dùng xử lý cao→thấp)
 

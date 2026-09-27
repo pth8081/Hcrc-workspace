@@ -936,6 +936,12 @@ function filterHrFeedbackForUser(items, user) {
 // giao việc riêng) — không chỉ người tạo. hrViewAll (thay cho nhanSuManage cứng trước đây) xem TOÀN BỘ.
 function canViewHrProcess(user, item) {
   if (!user) return false;
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): hrProcesses (Onboarding/Offboarding) trước đây hoàn
+  // toàn không gác Khối 0 — khác các module con "quyền chi tiết riêng" (car/meeting/vpp/budget/orgChart)
+  // hàm này CHƯA từng gọi hasModuleAccessServer(), nên tắt moduleAccess.hrLifecycle cho 1 tài khoản còn
+  // giữ hrOnboardingManage/hrOffboardingManage vẫn đọc được toàn bộ dữ liệu nhạy cảm (SĐT/email/ngày
+  // nghỉ việc/lý do...) qua GET /api/data.
+  if (!hasModuleAccessServer(user, 'hrLifecycle')) return false;
   if (user.perms?.admin || user.perms?.hrViewAll) return true;
   if (item.creator === user.username) return true;
   if (item.directManagerUsername && item.directManagerUsername === user.username) return true;
@@ -1239,7 +1245,12 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
     'onboardingPaths', 'onboardingProgress',
     'hrFeedback'
   ],
-  contract: ['contracts'], itSupport: ['itSupportTickets', 'itPriceApprovals'],
+  contract: ['contracts'],
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): itServiceRenewals (sub-tab thứ 3 "Gia Hạn Dịch
+  // Vụ" cùng module Hỗ Trợ IT, xem FORM_GROUPS.itSupport ở public/js/core.js) trước đây BỊ BỎ SÓT khỏi
+  // danh sách này — tắt moduleAccess.itSupport cho 1 tài khoản còn giữ itServiceRenewalManage vẫn
+  // tạo/sửa/gia hạn được qua API trực tiếp, và vẫn thấy đầy đủ dữ liệu qua GET /api/data/lazy/itSupport.
+  itSupport: ['itSupportTickets', 'itPriceApprovals', 'itServiceRenewals'],
   // Đợt test chuyên sâu 9/2026 (PQ, mục Phân Quyền): hrProfile KHÔNG có mặt ở GET /api/data chung
   // (employeeProfiles đi qua route riêng, xem routes/employeeProfile.js — không cần mirror ở đây).
   // hrAttendance thì CÓ 5 collection sau đi qua GET /api/data.../lazy chung (tự xem chấm công/phép
@@ -1281,16 +1292,23 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // tiếp qua các hàm canView* đã dùng entry này) — operationWorkItems không có phòng ban/module-access
   // riêng (luôn đi kèm 1 operationStoreOpenings/operationRepairs cha, đã lọc theo ID cha hiển thị ở
   // routes/data.js) nên không cần liệt kê thêm ở đây.
-  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs']
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Cao): operationExecutionPeriods trước đây bị BỎ SÓT khỏi
+  // danh sách này — tắt moduleAccess.vanHanh vẫn lộ dữ liệu "Kỳ Thực Hiện" qua GET /api/data VÀ vẫn
+  // tạo/"Bắt Đầu" được Kỳ Thực Hiện qua API (route /operationExecutionPeriods/:id/start cũng đã thêm
+  // check tương ứng, xem routes/records.js). Thêm vào đây để COLLECTION_TO_MODULE_ACCESS_KEY tự gác
+  // route TẠO MỚI + GET /api/data zero-out đúng (đã dời thứ tự lọc operationWorkItems/
+  // operationExecutionPeriods sang SAU vòng lặp Khối 0 ở routes/data.js để không dùng nhầm
+  // operationStoreOpenings/operationRepairs snapshot CHƯA bị zero).
+  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods']
 };
-// hrProfile/hrAttendance/hrPayroll/hrContract đều là module con (parent: 'hr', xem BUSINESS_MODULES ở
-// public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này TRƯỚC ĐÂY không mirror
-// đúng quy tắc đó (chỉ so sánh đúng moduleKey được truyền vào), nên tắt riêng module cha "hr" sẽ không
-// chặn được các route tự phục vụ của 4 module con này ở server dù client đã ẩn tab đúng. Chỉ cần khai 4
-// module con hiện đang được enforce ở server tại đây — không cần liệt kê đủ mọi cặp cha/con của
-// BUSINESS_MODULES vì các module con còn lại (car/meeting/vpp/budget/orgChart/hrLifecycle) đã có quyền
-// chi tiết riêng chặn đúng ở server rồi, không đi qua hasModuleAccessServer().
-const MODULE_ACCESS_PARENTS = { hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr', hrContract: 'hr' };
+// hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
+// BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này
+// TRƯỚC ĐÂY không mirror đúng quy tắc đó (chỉ so sánh đúng moduleKey được truyền vào), nên tắt riêng
+// module cha "hr" sẽ không chặn được các route tự phục vụ của 5 module con này ở server dù client đã ẩn
+// tab đúng. Chỉ cần khai các module con hiện đang được enforce ở server tại đây — không cần liệt kê đủ
+// mọi cặp cha/con của BUSINESS_MODULES vì các module con còn lại (car/meeting/vpp/budget/orgChart) đã
+// có quyền chi tiết riêng chặn đúng ở server rồi, không đi qua hasModuleAccessServer().
+const MODULE_ACCESS_PARENTS = { hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr', hrContract: 'hr', hrLifecycle: 'hr' };
 function hasModuleAccessServer(user, moduleKey) {
   if (!user) return false;
   if (user.perms?.admin) return true;

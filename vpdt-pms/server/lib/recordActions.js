@@ -1573,10 +1573,16 @@ function startOperationExecutionPeriod(user, period, sourceRecord) {
 
 // sourceRecord (route tự tra theo item.sourceType/sourceId trước khi gọi) — dùng cho
 // assertCanManageOperationRecord(), item.sourceType tự làm sourceType.
-function deleteOperationWorkItem(user, item, descendantIds, sourceRecord) {
+// descendants (route tự lọc all.filter(w => descendantIds.includes(w.id)) trước khi gọi) — LỖI ĐÃ VÁ
+// (rà soát chuyên sâu mới, mức Cao): trước đây hàm này CHỈ kiểm status của chính item bị xoá TRỰC TIẾP,
+// không kiểm bất kỳ con cháu nào trong descendantIds — computeParentWorkItemStatus() tính cha =
+// DANG_THUC_HIEN (không phải DA_NGHIEM_THU) MIỄN LÀ có ít nhất 1 con chưa xong, dù 1 con KHÁC trong cùng
+// nhánh đã DA_NGHIEM_THU thật (có hồ sơ nghiệm thu). Xoá cha (không tự nó DA_NGHIEM_THU) sẽ cascade xoá
+// theo cả con đã nghiệm thu xong đó — vòng qua đúng bất biến "không xoá được công việc đã nghiệm thu".
+function deleteOperationWorkItem(user, item, descendantIds, sourceRecord, descendants) {
   assertCanManageOperationRecord(user, sourceRecord, item.sourceType, 'Bạn không có quyền xoá công việc này');
-  if (item.status === 'DA_NGHIEM_THU') {
-    throw new HttpError(409, 'Công việc đã nghiệm thu xong, không thể xoá');
+  if (item.status === 'DA_NGHIEM_THU' || (descendants || []).some(d => d.status === 'DA_NGHIEM_THU')) {
+    throw new HttpError(409, 'Công việc (hoặc 1 công việc con trong nhánh) đã nghiệm thu xong, không thể xoá');
   }
   return [item.id, ...descendantIds];
 }
@@ -2230,6 +2236,18 @@ function editPaymentRequest(payload, user, pr, appData) {
     const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
     if (validDepts.size && !validDepts.has(payload.dept)) {
       throw new HttpError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
+    }
+    // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Trung bình): submitPaymentRequest() đã chặn gửi đi khi
+    // bước 1 không resolve ra người duyệt nào (xem khối kiểm tra ở hàm đó), nhưng đổi 'dept' NGAY LÚC
+    // ĐANG PENDING/NEED_INFO (đề nghị đã gửi đi từ trước, xem chú thích ở trên) lại không được kiểm tra
+    // lại — đổi sang 1 phòng ban CHƯA cấu hình quy trình duyệt sẽ đẩy đề nghị (đã tự reset currentStep=1
+    // ở khối bên dưới) vào ngõ cụt PENDING vĩnh viễn y hệt lỗ hổng submitPaymentRequest() từng có.
+    if (!isDraft && appData) {
+      const { resolveWorkflowStepApprovers } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+      const step1Approvers = resolveWorkflowStepApprovers('paymentRequests', { ...pr, dept: payload.dept }, appData, 1);
+      if (!step1Approvers.length) {
+        throw new HttpError(409, `Phòng ban "${payload.dept}" chưa được cấu hình quy trình duyệt Đề Nghị Thanh Toán (hoặc bước 1 không có người duyệt nào) — đổi sang phòng ban này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi đổi.`);
+      }
     }
   }
   for (const field of PAYMENT_EDITABLE_FIELDS) {
@@ -4765,6 +4783,19 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
     throw new HttpError(403, 'Bạn không có quyền thêm học viên vào lớp học này');
   }
   if (cls.status !== 'OPEN') throw new HttpError(409, 'Lớp học này đã đóng đăng ký');
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): mirror ĐÚNG 2 điều kiện chặn mà nhánh tự đăng ký
+  // đã có (trainingRegistrations.extraValidate, lib/createValidation.js) — trước đây bulk-register CHỈ
+  // kiểm status OPEN + sĩ số, bỏ sót "lớp đã kết thúc" và "đã hết hạn đăng ký", khiến HR/giảng viên có
+  // thể thêm hàng loạt học viên vào 1 lớp OFFLINE đã Kết Thúc rồi cho vào làm bài NGAY LẬP TỨC, né đúng
+  // nguyên tắc "học xong mới thi".
+  const classEnded = cls.mode === 'OFFLINE'
+    ? cls.sessionState === 'ENDED'
+    : !!(cls.endTime && new Date() > new Date(cls.endTime));
+  if (classEnded) throw new HttpError(409, 'Lớp học này đã kết thúc, không thể thêm học viên');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (cls.registerDeadline && todayStr > cls.registerDeadline) {
+    throw new HttpError(409, 'Đã hết hạn đăng ký lớp học này');
+  }
 
   const requested = Array.isArray(payload?.usernames) ? payload.usernames : [];
   const seen = new Set(); // chặn trùng NGAY TRONG 1 lượt gửi (client gửi trùng username 2 lần)
@@ -4830,6 +4861,22 @@ function editTrainingClass(payload, user, cls, tests, users, courses, existingRe
       const manuallyGraded = (existingRegs || []).filter(r => r.classId === cls.id && r.gradedManually === true);
       if (manuallyGraded.length) {
         throw new HttpError(409, `Lớp học này đã có ${manuallyGraded.length} đăng ký được chấm tay (chưa từng làm bài test) — không thể gán bài test mới vì sẽ hợp thức hoá kết quả chưa thi thật. Cần xử lý lại các kết quả chấm tay đó trước (huỷ đăng ký hoặc giữ nguyên không gán test).`);
+      }
+    }
+  }
+
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình): mirror ĐÚNG gate testId ở trên cho courseId —
+  // trước đây courseId đổi tự do dù lớp đã có học viên PASSED, trong khi confirmCareerPathForEmployee()/
+  // confirmOnboardingStage() (bên dưới) đọc SỐNG cls.courseId tại thời điểm XÁC NHẬN (không phải snapshot
+  // lúc PASSED) để tính "đã đạt chương trình bắt buộc" — đổi courseId SAU KHI đã có học viên Đạt thật có
+  // thể hợp thức hoá sai 1 mốc Thăng Tiến/Tân Binh không đúng thực chất (giảng viên trainingInstruct hẹp
+  // quyền hơn gián tiếp chi phối quyết định của trainingManage).
+  if (payload.courseId !== undefined) {
+    const newCourseId = payload.courseId === '' || payload.courseId == null ? null : Number(payload.courseId);
+    if (newCourseId !== (cls.courseId ?? null)) {
+      const passedRegs = (existingRegs || []).filter(r => r.classId === cls.id && r.result === 'PASSED');
+      if (passedRegs.length) {
+        throw new HttpError(409, `Lớp học này đã có ${passedRegs.length} học viên Đạt — không thể đổi Chương Trình vì sẽ làm sai lệch điều kiện xác nhận Lộ Trình Thăng Tiến/Tân Binh đang tham chiếu chương trình cũ.`);
       }
     }
   }
