@@ -2169,6 +2169,31 @@ theo đúng vị trí trong cây**.
   chọn đúng bản đó ở dropdown Phiên bản → bấm "🗑️ Xoá Bản Nháp Này" — CHỈ
   xoá được bản đang ở trạng thái Nháp (khôi phục được qua Thùng Rác nếu cần),
   bản Đã áp dụng/Lưu trữ không xoá được.
+- **Tải Mẫu/Nhập/Xuất Excel (10/2026, theo yêu cầu người dùng)** — bên cạnh
+  cách dựng cây bằng tay (Thêm/Sửa từng node), HR có thể chuẩn bị cả cây
+  trong 1 file Excel rồi nhập 1 lần: bấm **"📤 Nhập Excel (Bản Nháp Mới)"**
+  ở thanh Phiên bản → tải file mẫu (nút trong khung cảnh báo của màn nhập) →
+  điền, mỗi DÒNG là 1 node, dùng cột **"Mã Node"/"Mã Node Cha"** (mã ngắn tự
+  đặt trong file, VD "CT"/"PKD"/"PKD-TP" — KHÔNG phải mã nội bộ hệ thống) để
+  nối cây thay vì phải biết id thật → chọn file, xem trước kết quả đọc được
+  (từng dòng + lỗi nếu có) → đặt tên phiên bản → "Xác Nhận Nhập". **Khác hẳn
+  mọi Excel nhập khác trong hệ thống (VPP/Ngân Sách/Hồ Sơ Nhân Sự...) ở 2
+  điểm quan trọng**:
+  1. **LUÔN tạo 1 bản Nháp (DRAFT) HOÀN TOÀN MỚI** dựng lại từ nội dung file
+     — không bao giờ gộp/chèn vào bản nháp đang mở sẵn, dù đang xem bản nháp
+     nào ở dropdown. Muốn "sửa tiếp" 1 cây đã có, xuất Excel bản đó ra, sửa
+     trong file rồi nhập lại thành bản nháp mới, không mất bản cũ (vẫn còn
+     nguyên trong lịch sử phiên bản).
+  2. **Kiểm tra TẤT CẢ-HOẶC-KHÔNG-GÌ**: vì 1 dòng sai có thể làm hỏng cả cây
+     (mã cha trỏ sai, thiếu/thừa gốc, vòng lặp...), hệ thống validate TOÀN BỘ
+     file trước — còn bất kỳ lỗi nào (dù chỉ 1 dòng) thì KHÔNG tạo bản nháp
+     nào cả, phải sửa lại file và nhập lại từ đầu (khác hẳn Excel Hồ Sơ Nhân
+     Sự.../Ngân Sách... vốn "bỏ qua dòng lỗi, vẫn nhập dòng hợp lệ").
+  Xuất Excel bấm **"📊 Xuất Excel (Bản Đang Xem)"** — xuất đúng bản đang chọn
+  ở dropdown (Nháp/Đang áp dụng/Lưu trữ đều xuất được), theo đúng layout file
+  mẫu nên có thể tải về, sửa, nhập lại thành vòng lặp tải-sửa-nhập. Cả 2 nút
+  chỉ hiện với quyền `orgChartManage`/admin (xem, xuất mở rộng hơn theo
+  `requireView`), giống các quyền thao tác cây khác ở mục này.
 - **Cây gồm 3 loại node**: **Công ty** (gốc, duy nhất), **Phòng Ban** (tên tự
   gõ, có thể gắn với 1 phòng ban/siêu thị thật có sẵn trong hệ thống để dùng
   làm căn cứ so khớp — không bắt buộc), **Vị Trí** (chức danh — tên hiển thị

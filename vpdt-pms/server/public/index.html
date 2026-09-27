@@ -1907,6 +1907,42 @@
     </div>
   </div>
 
+  <!-- Modal "Nhập Cơ Cấu Tổ Chức Từ Excel" (10/2026) — KHÁC hẳn hrpfImportModal: đây là CÂY, không phải
+       danh sách phẳng, nên xác nhận là TẤT-CẢ-HOẶC-KHÔNG-GÌ (còn 1 dòng lỗi thì KHÔNG cho xác nhận) và
+       LUÔN tạo 1 bản Nháp MỚI (không có khái niệm "chọn dòng để nhập" như Hồ Sơ Nhân Sự) — xem
+       lib/orgChartImport.js đầu file cho lý do thiết kế. -->
+  <div id="orgChartImportModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">📤 Nhập Cơ Cấu Tổ Chức Từ Excel (Tạo Bản Nháp Mới)</h3>
+        <button type="button" data-op="closeOrgChartImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+        ℹ️ Nhập file này LUÔN tạo 1 bản Nháp HOÀN TOÀN MỚI dựng lại từ nội dung file — KHÔNG gộp/chèn vào bản nháp đang có. Còn BẤT KỲ dòng nào lỗi thì KHÔNG tạo bản nháp nào cả.</p>
+      <div class="flex flex-wrap items-center gap-3 mb-2">
+        <a href="/api/org-chart/import-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+        <input id="orgChartImportFileInput" type="file" accept=".xlsx,.xls" data-op-change="onOrgChartImportFileChange" data-arg-event="0" class="text-xs">
+      </div>
+      <p id="orgChartImportStatus" class="text-xs text-gray-500 mb-2"></p>
+      <div id="orgChartImportFileErrorsWrap" class="hidden bg-red-50 border border-red-200 rounded p-2 mb-2">
+        <p class="text-xs font-bold text-red-700 mb-1">⛔ Lỗi cấu trúc cây:</p>
+        <ul id="orgChartImportFileErrorsList" class="text-xs text-red-700 list-disc list-inside"></ul>
+      </div>
+      <div id="orgChartImportPreviewWrap" class="hidden border rounded max-h-64 overflow-y-auto mb-2">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-100 text-left sticky top-0"><tr>
+            <th class="p-1">Mã Node</th><th class="p-1">Mã Node Cha</th><th class="p-1">Loại Node</th><th class="p-1">Tên / Chức Danh</th><th class="p-1">Trạng Thái</th>
+          </tr></thead>
+          <tbody id="orgChartImportPreviewBody"></tbody>
+        </table>
+      </div>
+      <div id="orgChartImportConfirmWrap" class="hidden flex flex-wrap items-center gap-2">
+        <input id="orgChartImportVersionNameInput" placeholder="Tên bản nháp mới, VD: Cơ cấu tổ chức Q3/2026 (nhập từ Excel)" class="border p-1.5 rounded text-xs flex-1 min-w-[260px]">
+        <button type="button" id="orgChartImportConfirmBtn" data-op="confirmOrgChartImport" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Tạo Bản Nháp Mới Từ File</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal kết quả sau khi "Áp dụng phiên bản" — hiện danh sách nhân viên KHÔNG tự xác định được quản
        lý trực tiếp mới (0 hoặc >1 người khớp vị trí cấp trên), cần admin kiểm tra tay. Xem
        applyOrgChartVersionClick() (module-orgchart.js). -->

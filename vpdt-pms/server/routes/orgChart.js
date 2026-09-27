@@ -8,11 +8,18 @@
 // được sửa cây tổ chức). SỬA CÂY (node/version lifecycle) chỉ orgChartManage/admin. SỬA LUỒNG KPI
 // (thêm/bớt quan hệ đánh giá) orgChartManage/kpiFlowConfigManage/admin.
 const express = require('express');
+const multer = require('multer');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const uploadRateLimiter = require('../lib/uploadRateLimiter');
+const { verifyFileSignature } = require('../lib/fileSignature');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { HttpError } = require('../lib/httpErrors');
 const { sendServerError, sendCatchError } = require('../lib/errorResponse');
 const orgChart = require('../lib/orgChart');
+const orgChartImport = require('../lib/orgChartImport');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
 const router = express.Router();
@@ -179,6 +186,115 @@ router.delete('/versions/:id/nodes/:nodeId', async (req, res) => {
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, 'DELETE /api/org-chart/versions/:id/nodes/:nodeId', 'Không thể xoá node');
+  }
+});
+
+// ===== Tải Mẫu / Nhập / Xuất Excel (10/2026, theo yêu cầu người dùng) =====
+// KHÁC hẳn mọi Excel Nhập khác trong hệ thống — xem chú thích đầu lib/orgChartImport.js: Cơ Cấu Tổ
+// Chức là CÂY, Nhập Excel LUÔN tạo 1 bản Nháp MỚI (không gộp vào bản đang có), tất-cả-hoặc-không-gì.
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const ALLOWED_EXT = new Set(['.xlsx', '.xls']);
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ALLOWED_EXT.has(ext) ? ext : ''}`);
+    }
+  }),
+  limits: { fileSize: MAX_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) return cb(new HttpError(400, `Chỉ chấp nhận file Excel (.xlsx/.xls), không hỗ trợ: ${ext || '(không rõ)'}`));
+    cb(null, true);
+  }
+});
+
+// GET /api/org-chart/import-template — mẫu Excel để HR điền cả cây tổ chức (hoặc 1 nhánh lớn) rồi nhập
+// hàng loạt, thay vì bấm "+ Thêm" từng node một.
+router.get('/import-template', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    const wb = await orgChartImport.buildImportTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Co_Cau_To_Chuc.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/org-chart/import-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /api/org-chart/parse-import — đọc file đã điền, trả về xem trước (từng dòng + lỗi cấu trúc cây
+// tổng thể) — CHƯA tạo gì. HR xác nhận nhập thật ở POST /import-confirm.
+router.post('/parse-import', uploadRateLimiter, (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/org-chart/parse-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp Cơ Cấu Tổ Chức cần tải lên' });
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+      const result = await orgChartImport.parseImportExcelBuffer(buffer);
+      res.json(Object.assign({ fileName: req.file.originalname }, result));
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/org-chart/parse-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
+// POST /api/org-chart/import-confirm — xác nhận nhập thật: tạo 1 bản Nháp MỚI dựng lại từ "items" đã
+// nhận ở /parse-import (client echo lại nguyên vẹn, server LUÔN re-validate — xem chú thích
+// buildDraftVersionFromRows() ở lib/orgChartImport.js). Body: { items: [...], versionName }.
+router.post('/import-confirm', async (req, res) => {
+  if (!requireManageTree(req, res)) return;
+  try {
+    let created;
+    await withLockedAppDataValue('orgChartVersions', (list) => {
+      created = orgChartImport.buildDraftVersionFromRows(list, req.body?.items, req.body?.versionName, req.freshUser.username);
+      return [...list, created];
+    });
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'ORGCHART_IMPORT_EXCEL',
+      targetObject: `orgChartVersions#${created.id}`,
+      description: `Nhập Excel Cơ Cấu Tổ Chức — tạo bản nháp mới [${created.id}] "${created.versionName}" với ${created.nodes.length} node`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (nhập Excel Cơ Cấu Tổ Chức):', e.message));
+    res.json({ ok: true, version: created });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/import-confirm', 'Không thể tạo bản nháp từ file');
+  }
+});
+
+// GET /api/org-chart/versions/:id/export-xlsx — xuất cây tổ chức của 1 version (DRAFT/APPLIED/ARCHIVED
+// bất kỳ) ra ĐÚNG layout Excel Nhập ở trên, để tải về sửa rồi nhập lại (vòng tròn tải-sửa-nhập).
+router.get('/versions/:id/export-xlsx', async (req, res) => {
+  if (!requireView(req, res)) return;
+  try {
+    const list = (await getAppDataValue('orgChartVersions')) || [];
+    const version = orgChart.requireVersion(list, Number(req.params.id));
+    const wb = orgChartImport.buildExportWorkbook(version);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Co_Cau_To_Chuc_${version.id}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('GET /api/org-chart/versions/:id/export-xlsx lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xuất file' });
   }
 });
 

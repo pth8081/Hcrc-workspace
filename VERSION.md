@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**24.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.33 (2026-09-27): Cơ Cấu Tổ Chức — Tải Mẫu/Nhập/Xuất Excel (luôn tạo Bản Nháp mới)
+
+Theo yêu cầu người dùng: thêm khả năng tải file mẫu, nhập và xuất Excel cho
+Cơ Cấu Tổ Chức — trước đây chỉ dựng được cây bằng tay (Thêm/Sửa từng node).
+
+- **Khác hẳn mọi Excel Nhập khác trong hệ thống** (VPP/Ngân Sách/Hồ Sơ Nhân
+  Sự... đều "bỏ qua dòng lỗi, vẫn nhập dòng hợp lệ"): vì Cơ Cấu Tổ Chức là
+  CÂY chứ không phải danh sách phẳng, 1 dòng lỗi có thể làm hỏng cả cây — nên
+  Nhập Excel ở đây validate TOÀN BỘ file trước, còn bất kỳ lỗi nào (dù chỉ 1
+  dòng) thì KHÔNG tạo gì cả.
+- **Quyết định thiết kế đã xác nhận với người dùng** (qua AskUserQuestion, vì
+  đây là điểm khác biệt kiến trúc thật, không phải chi tiết vụn): Nhập Excel
+  LUÔN tạo 1 bản Nháp (DRAFT) HOÀN TOÀN MỚI dựng lại từ file — không bao giờ
+  gộp/chèn vào bản nháp đang mở sẵn.
+- Excel dùng cột "Mã Node"/"Mã Node Cha" (mã ngắn tự đặt trong file) để nối
+  cây thay vì phải biết `nodeId` nội bộ — server tự đối chiếu ngược lại
+  thành `nodeId` thật khi tạo node (tái dùng `orgChart.addNode()`, không viết
+  lại logic tạo/validate node).
+- Xuất Excel theo đúng layout file mẫu — tải về, sửa, nhập lại thành 1 bản
+  nháp mới (vòng lặp tải-sửa-nhập), áp dụng cho bản Nháp/Đang áp dụng/Lưu
+  trữ bất kỳ đang xem ở dropdown.
+- File mới: `lib/orgChartImport.js` (logic chính) + 4 route mới trong
+  `routes/orgChart.js` (`import-template`/`parse-import`/`import-confirm`/
+  `export-xlsx`, đều gác quyền `orgChartManage`/admin). Thêm 19 test mới
+  (`tests/test-orgchart-import-export.js`) — template, happy-path round-trip,
+  7 lỗi cấu trúc cây, 5 lỗi cấp-dòng, re-validate khi xác nhận, xuất-nhập
+  vòng tròn.
+- Regression toàn bộ ~346 file test: 11 file fail — đã xác nhận qua
+  `git stash` so sánh với code CŨ (fail y hệt, không liên quan Cơ Cấu Tổ
+  Chức) là lỗi có sẵn từ trước, không phải do đợt này gây ra.
+- **Không cần đổi `schema.sql`/`.env.example`/`package.json` (dependencies)**
+  — `orgChartVersions` vẫn là AppData JSON, chỉ dùng lại `exceljs`/`multer`
+  đã có sẵn.
 
 ## v24.32 (2026-09-27): GĐ1 — Hồ Sơ Nhân Sự + Hợp Đồng Lao Động đối chiếu file Excel quản lý thủ công của bộ phận Nhân Sự
 

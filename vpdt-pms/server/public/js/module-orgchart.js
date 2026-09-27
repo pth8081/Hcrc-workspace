@@ -124,6 +124,10 @@ async function loadOrgChartCurrentVersion(id) {
   // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây không có cách nào xoá bản nháp không dùng
   // nữa — chỉ hiện với DRAFT (khớp deleteVersion() ở lib/orgChart.js, APPLIED/ARCHIVED phải giữ lịch sử).
   document.getElementById('btnOrgChartDeleteVersion').classList.toggle('hidden', !(isDraft && canManageTree));
+  // Xuất Excel (10/2026) — luôn hiện cho ai xem được version (requireView() phía server), xuất ĐÚNG
+  // version đang mở ở dropdown (không chỉ APPLIED). Nhập Excel chỉ HR/admin quản lý cây (canManageTree).
+  document.getElementById('btnOrgChartExportXlsx').href = `/api/org-chart/versions/${id}/export-xlsx`;
+  document.getElementById('btnOrgChartImportExcel').classList.toggle('hidden', !canManageTree);
   document.getElementById('btnOrgChartCompareVersion').classList.toggle('hidden', !(isArchived && _ocAppliedVersion));
   // Đợt 4 (vá gap #2 Phần A/B) — chỉ hiện khi đang xem ĐÚNG version APPLIED (nút thao tác trên chính
   // version đang xem, cùng logic isDraft/isArchived ở trên).
@@ -420,6 +424,80 @@ async function cloneOrgChartVersionClick() {
   document.getElementById('orgChartVersionSelect').value = String(result.version.id);
   await onOrgChartVersionSelectChange();
 }
+// ===== Nhập Excel (10/2026, theo yêu cầu người dùng) — LUÔN tạo 1 bản Nháp MỚI, xem
+// lib/orgChartImport.js đầu file cho lý do "tất-cả-hoặc-không-gì" khác hẳn các Excel Nhập khác. =====
+let _ocImportParsed = null; // { items, fileErrors, valid } — kết quả /parse-import gần nhất
+function openOrgChartImportModal() {
+  _ocImportParsed = null;
+  document.getElementById('orgChartImportFileInput').value = '';
+  document.getElementById('orgChartImportStatus').innerText = '';
+  document.getElementById('orgChartImportFileErrorsWrap').classList.add('hidden');
+  document.getElementById('orgChartImportPreviewWrap').classList.add('hidden');
+  document.getElementById('orgChartImportConfirmWrap').classList.add('hidden');
+  document.getElementById('orgChartImportVersionNameInput').value = '';
+  document.getElementById('orgChartImportModal').classList.remove('hidden');
+}
+function closeOrgChartImportModal() {
+  document.getElementById('orgChartImportModal').classList.add('hidden');
+}
+async function onOrgChartImportFileChange(event) {
+  const file = event.target.files[0];
+  _ocImportParsed = null;
+  document.getElementById('orgChartImportFileErrorsWrap').classList.add('hidden');
+  document.getElementById('orgChartImportPreviewWrap').classList.add('hidden');
+  document.getElementById('orgChartImportConfirmWrap').classList.add('hidden');
+  const statusEl = document.getElementById('orgChartImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/org-chart/parse-import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    _ocImportParsed = data;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${data.items.length} node, ${data.valid ? 'TẤT CẢ hợp lệ' : 'CÒN LỖI (xem bên dưới) — chưa tạo được bản nháp'}.`;
+    const fileErrorsEl = document.getElementById('orgChartImportFileErrorsWrap');
+    if (data.fileErrors.length) {
+      document.getElementById('orgChartImportFileErrorsList').innerHTML = data.fileErrors.map(e => `<li>${escapeHtml(e)}</li>`).join('');
+      fileErrorsEl.classList.remove('hidden');
+    } else {
+      fileErrorsEl.classList.add('hidden');
+    }
+    document.getElementById('orgChartImportPreviewBody').innerHTML = data.items.map(it => {
+      const statusCell = it.valid ? '<span class="text-emerald-600">✅ Hợp lệ</span>' : `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
+      const nameOrTitle = it.nodeType === 'POSITION' ? it.jobTitle : it.nodeName;
+      return `<tr class="${it.valid ? '' : 'bg-red-50'}">
+        <td class="p-1 font-mono">${escapeHtml(it.nodeKey)}</td>
+        <td class="p-1 font-mono">${escapeHtml(it.parentKey || '')}</td>
+        <td class="p-1">${escapeHtml(it.nodeTypeLabel || '')}</td>
+        <td class="p-1">${escapeHtml(nameOrTitle || '')}</td>
+        <td class="p-1">${statusCell}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('orgChartImportPreviewWrap').classList.remove('hidden');
+    document.getElementById('orgChartImportConfirmWrap').classList.toggle('hidden', !data.valid);
+    if (data.valid) document.getElementById('orgChartImportVersionNameInput').value = `Cơ cấu tổ chức (nhập từ ${data.fileName})`;
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+async function confirmOrgChartImport() {
+  if (!_ocImportParsed || !_ocImportParsed.valid) return alert('Chưa có file hợp lệ để nhập.');
+  const versionName = document.getElementById('orgChartImportVersionNameInput').value.trim();
+  try {
+    const result = await orgChartApiCall('POST', '/api/org-chart/import-confirm', { items: _ocImportParsed.items, versionName });
+    alert(`✅ Đã tạo bản nháp mới "${result.version.versionName}" với ${result.version.nodes.length} node.`);
+    closeOrgChartImportModal();
+    await renderOrgChartModule();
+    document.getElementById('orgChartVersionSelect').value = String(result.version.id);
+    await onOrgChartVersionSelectChange();
+  } catch (err) {
+    alert(`⛔ ${err.message}`);
+  }
+}
+
 // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): xoá hẳn 1 bản nháp (DRAFT) không dùng nữa (tạo thử/
 // nhân bản nhầm) — server (deleteVersion(), lib/orgChart.js) tự chặn xoá APPLIED/ARCHIVED.
 async function deleteOrgChartVersionClick() {
