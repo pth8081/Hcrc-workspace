@@ -486,7 +486,7 @@ const DB = {
   tasks: [],
   internalPosts: [],
   // "Chuyên đề" cho Nhịp Sống HCRC (NEWS) / Góc Chia Sẻ (SHARE) — {key,label}[] admin tự thêm/bớt ở màn
-  // Biểu Mẫu (xem CORE_FIELD_MANIFEST.INTERNAL_POST), cùng khuôn DB.submissionTypes.
+  // Biểu Mẫu (xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE), cùng khuôn DB.submissionTypes.
   internalNewsCategories: [], internalShareCategories: [],
   trainingCategories: [], trainingDocuments: [], trainingClasses: [], trainingRegistrations: [],
   careerPaths: [], careerPathConfirmations: [],
@@ -609,14 +609,29 @@ const CORE_FIELD_MANIFEST = {
     { id: 'carEndTime', label: 'Thời Gian Dự Kiến Về', required: true },
     { id: 'carDestination', label: 'Lộ Trình Di Chuyển', required: true }
   ],
-  OFFICE: [
+  // OFFICE TÁCH 2 (10/2026, rà soát "biểu mẫu không dùng chung" theo yêu cầu người dùng): Mua Sắm
+  // (MUA_BAN) và Sửa Chữa (SUA_CHUA) dùng chung 1 DOM form #officeForm, nhưng offQty/offAmount/
+  // offSupplier CHỈ hiện+bắt buộc ở Sửa Chữa còn offUsageTime CHỈ hiện ở Mua Sắm (xem setOfficeSubTab()
+  // ở dưới) — trước đây gộp cả 7 field vào 1 coreKey 'OFFICE' khiến admin đổi nhãn/bắt buộc ở tab này vô
+  // tình áp lên cả field không hề hiện ở tab kia. offCode/offDept/offTitle dùng chung THẬT (luôn hiện cả
+  // 2 tab, không toggle) nên lặp lại y hệt ở cả 2 key — cùng khuôn CONTRACT_APPROVAL/CONTRACT_MANAGE
+  // (field chung dùng chung 1 coreKey) nhưng ở đây có thêm field RIÊNG mỗi bên nên cần 2 coreKey khác
+  // nhau. applyAllCoreFieldCustomizations() áp cả 2 lần lượt lên cùng 3 field chung DOM này lúc đăng
+  // nhập — không sao vì override label/required của field chung thường giống nhau ở cả 2 phía; nếu admin
+  // cố tình đặt khác nhau thì key khai SAU trong CORE_FIELD_MANIFEST (OFFICE_REPAIR) thắng.
+  OFFICE_PROCUREMENT: [
+    { id: 'offCode', label: 'Mã Yêu Cầu', required: true },
+    { id: 'offDept', label: 'Phòng Ban Trình', required: true },
+    { id: 'offTitle', label: 'Tên Hạng Mục / Nội Dung Trình', required: true },
+    { id: 'offUsageTime', label: 'Thời Gian Cần Sử Dụng', required: false }
+  ],
+  OFFICE_REPAIR: [
     { id: 'offCode', label: 'Mã Yêu Cầu', required: true },
     { id: 'offDept', label: 'Phòng Ban Trình', required: true },
     { id: 'offTitle', label: 'Tên Hạng Mục / Nội Dung Trình', required: true },
     { id: 'offQty', label: 'Số Lượng / Quy Mô', required: true },
     { id: 'offAmount', label: 'Dự Toán / Tổng Chi Phí (VNĐ)', required: true },
-    { id: 'offSupplier', label: 'Đối Tác / Nhà Cung Cấp', required: false },
-    { id: 'offUsageTime', label: 'Thời Gian Cần Sử Dụng', required: false }
+    { id: 'offSupplier', label: 'Đối Tác / Nhà Cung Cấp', required: false }
   ],
   DOC: [
     { id: 'docCode', label: 'Mã Tài Liệu', required: true },
@@ -646,13 +661,18 @@ const CORE_FIELD_MANIFEST = {
     { id: 'meetingEquipment', label: 'Thiết Bị Hỗ Trợ Yêu Cầu', required: false },
     { id: 'meetingAgenda', label: 'Nội Dung / Chương Trình Họp Chi Tiết', required: true }
   ],
-  // Truyền Thông Nội Bộ (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — 2 trường "Chuyên đề" thật sự tồn tại trong
-  // #internalPostForm (id khớp đúng <select> tương ứng, ẩn/hiện theo activeInternalSubTab — xem
-  // setInternalSubTab()), optionsKey trỏ DB.internalNewsCategories/internalShareCategories
-  // (defaults.js, ADMIN_ONLY_KEYS ở routes/data.js) — cùng khuôn subType ở trên (optionsIsKeyLabel:true
-  // để GIỮ NGUYÊN key ổn định, tránh mồ côi postCategory đã lưu trên các bài viết cũ khi admin đổi nhãn).
-  INTERNAL_POST: [
-    { id: 'internalPostCategory', label: 'Chuyên Đề Nhịp Sống HCRC', required: true, optionsKey: 'internalNewsCategories', optionsIsKeyLabel: true },
+  // Truyền Thông Nội Bộ TÁCH 2 (10/2026, rà soát "biểu mẫu không dùng chung" theo yêu cầu người dùng) —
+  // trước đây Nhịp Sống HCRC (NEWS) và Góc Chia Sẻ (SHARE) gộp chung 1 coreKey 'INTERNAL_POST' dù mỗi
+  // loại có field "Chuyên đề" RIÊNG (chỉ 1 trong 2 hiện tại 1 thời điểm theo activeInternalSubTab, xem
+  // setInternalSubTab()) — tách hẳn 2 coreKey để đảm bảo không dùng chung, dù vẫn cùng nằm trong 1 DOM
+  // #internalPostForm (đúng khuôn OFFICE_PROCUREMENT/OFFICE_REPAIR ngay trên). optionsKey trỏ
+  // DB.internalNewsCategories/internalShareCategories (defaults.js, ADMIN_ONLY_KEYS ở routes/data.js) —
+  // optionsIsKeyLabel:true để GIỮ NGUYÊN key ổn định, tránh mồ côi postCategory đã lưu trên bài viết cũ
+  // khi admin đổi nhãn.
+  INTERNAL_POST_NEWS: [
+    { id: 'internalPostCategory', label: 'Chuyên Đề Nhịp Sống HCRC', required: true, optionsKey: 'internalNewsCategories', optionsIsKeyLabel: true }
+  ],
+  INTERNAL_POST_SHARE: [
     { id: 'internalPostCategoryShare', label: 'Chuyên Đề Góc Chia Sẻ', required: true, optionsKey: 'internalShareCategories', optionsIsKeyLabel: true }
   ],
   // ===== Biểu Mẫu Đợt 1 (Công Việc/VPP/Giấy Phép/Hỗ Trợ IT) =====
@@ -1250,12 +1270,18 @@ const FORM_TABS = [
   { key: 'CONTRACT_APPROVAL', coreKey: 'CONTRACT', group: 'CONTRACT', label: 'Hợp Đồng - Phê Duyệt', icon: '📄', short: 'HĐ - Phê Duyệt' },
   { key: 'CONTRACT_MANAGE', coreKey: 'CONTRACT', group: 'CONTRACT', label: 'Hợp Đồng - Quản Lý HĐ & Giấy Phép', icon: '📋', short: 'HĐ - Quản Lý' },
   { key: 'CAR', coreKey: 'CAR', group: 'CAR', label: 'Đăng Ký Xe', icon: '🚗', short: 'Đăng Ký Xe' },
-  { key: 'MUA_BAN', coreKey: 'OFFICE', group: 'OFFICE', label: 'Văn Phòng - Mua Bán', icon: '🛒', short: 'Mua Bán' },
-  { key: 'SUA_CHUA', coreKey: 'OFFICE', group: 'OFFICE', label: 'Văn Phòng - Sửa Chữa', icon: '🔧', short: 'Sửa Chữa' },
+  // MUA_BAN/SUA_CHUA đổi coreKey riêng (10/2026, xem CORE_FIELD_MANIFEST.OFFICE_PROCUREMENT/
+  // OFFICE_REPAIR) — trước đó cả 2 tab TRÙNG coreKey 'OFFICE' dù có field riêng mỗi bên.
+  { key: 'MUA_BAN', coreKey: 'OFFICE_PROCUREMENT', group: 'OFFICE', label: 'Văn Phòng - Mua Bán', icon: '🛒', short: 'Mua Bán' },
+  { key: 'SUA_CHUA', coreKey: 'OFFICE_REPAIR', group: 'OFFICE', label: 'Văn Phòng - Sửa Chữa', icon: '🔧', short: 'Sửa Chữa' },
   { key: 'DOC', coreKey: 'DOC', group: 'DOC', label: 'Tài Liệu', icon: '📁', short: 'Tài Liệu' },
   { key: 'MEETING_MINUTES', coreKey: 'MEETING_MINUTES', group: 'MEETING_MINUTES', label: 'Biên Bản Họp', icon: '📝', short: 'Biên Bản Họp' },
   { key: 'MEETING_ROOM', coreKey: 'MEETING_ROOM', group: 'MEETING_ROOM', label: 'Đặt Phòng Họp', icon: '📅', short: 'Đặt Phòng' },
-  { key: 'INTERNAL_POST', coreKey: 'INTERNAL_POST', group: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Chuyên Đề', icon: '📣', short: 'Chuyên Đề TTNB' },
+  // INTERNAL_POST TÁCH 2 tab (10/2026, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE)
+  // — modKey của tab (dùng cho "Trường Bổ Sung", renderDynamicInputsForModule()/collectDynamicFieldsData()
+  // ở module-internalcomms-nhipsong.js) giờ cũng tách riêng theo đúng 2 key này, không còn dùng chung.
+  { key: 'INTERNAL_POST_NEWS', coreKey: 'INTERNAL_POST_NEWS', group: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Nhịp Sống HCRC', icon: '📣', short: 'Nhịp Sống HCRC' },
+  { key: 'INTERNAL_POST_SHARE', coreKey: 'INTERNAL_POST_SHARE', group: 'INTERNAL_POST', label: 'Truyền Thông Nội Bộ - Góc Chia Sẻ', icon: '💬', short: 'Góc Chia Sẻ' },
   // Đợt 1 (mở rộng Biểu Mẫu ra thêm Công Việc/VPP/Giấy Phép/Hỗ Trợ IT) — mỗi tab key riêng TRÙNG coreKey
   // (module chỉ có 1 bộ trường mặc định/1 form, không tách theo sub-tab như CONTRACT/OFFICE ở trên).
   { key: 'TASK', coreKey: 'TASK', group: 'TASK', label: 'Công Việc - Giao Việc', icon: '📌', short: 'Công Việc' },
@@ -2607,28 +2633,37 @@ function appendExtraApprovalLayersForPreview(resolved, moduleKey) {
   return { ...resolved, extraSteps: [...(resolved.extraSteps || []), ...extraSteps] };
 }
 
-// Di chuyển "Trường Bổ Sung"/thứ tự trường/override trường mặc định đã cấu hình dưới 1 modKey 'IT_PRICE'
-// CHUNG (trước đợt 9/2026, lúc Biểu Mẫu IT_PRICE chưa tách Bán Lẻ/Bán Buôn) sang CẢ 2 modKey mới
-// ('IT_PRICE_RETAIL'/'IT_PRICE_WHOLESALE') — không suy luận được field nào admin từng thêm chỉ dành
-// riêng cho sub-tab nào, nên sao chép nguyên vẹn sang CẢ 2 bên (an toàn hơn làm rơi mất cấu hình cũ);
-// admin có thể xoá bớt ở tab không cần sau khi thấy trùng lặp. CHỈ chạy 1 lần (bỏ qua nếu đã có key mới)
-// — thuần trong bộ nhớ, chỉ thật sự lưu lại khi admin thao tác gì đó trên màn Biểu Mẫu (gọi
-// syncStorage('formTemplates')).
-function migrateItPriceFormTemplatesKeys(formTemplates) {
+// Di chuyển "Trường Bổ Sung"/thứ tự trường/override trường mặc định đã cấu hình dưới 1 modKey CHUNG
+// (từ TRƯỚC 1 đợt tách Biểu Mẫu) sang NHIỀU modKey MỚI — không suy luận được field nào admin từng thêm
+// chỉ dành riêng cho sub-tab nào, nên sao chép nguyên vẹn sang MỌI bên (an toàn hơn làm rơi mất cấu hình
+// cũ); admin có thể xoá bớt ở tab không cần sau khi thấy trùng lặp. CHỈ chạy 1 lần (bỏ qua nếu đã có BẤT
+// KỲ key mới nào) — thuần trong bộ nhớ, chỉ thật sự lưu lại khi admin thao tác gì đó trên màn Biểu Mẫu
+// (gọi syncStorage('formTemplates')). Dùng chung cho mọi đợt tách Biểu Mẫu (IT_PRICE 9/2026, INTERNAL_POST/
+// OFFICE 10/2026...) — xem 3 hàm mỏng gọi hàm này ngay dưới.
+function migrateSplitFormTemplatesKeys(formTemplates, oldKey, newKeys) {
   const migrated = { ...(formTemplates || {}) };
-  const hasNewKeys = ('IT_PRICE_RETAIL' in migrated) || ('IT_PRICE_WHOLESALE' in migrated)
-    || ('__core__IT_PRICE_RETAIL' in migrated) || ('__core__IT_PRICE_WHOLESALE' in migrated);
+  const hasNewKeys = newKeys.some(k => (k in migrated) || (('__core__' + k) in migrated));
   if (hasNewKeys) return migrated;
   ['', '__core__', '__order__'].forEach((prefix) => {
-    const oldKey = prefix + 'IT_PRICE';
-    if (!(oldKey in migrated)) return;
-    // Clone RIÊNG cho mỗi bên (JSON an toàn với dữ liệu thuần chuỗi/số/mảng ở đây) — tránh 2 khoá mới
-    // cùng trỏ 1 mảng/object, admin sửa bên này vô tình đổi luôn bên kia.
-    migrated[prefix + 'IT_PRICE_RETAIL'] = JSON.parse(JSON.stringify(migrated[oldKey]));
-    migrated[prefix + 'IT_PRICE_WHOLESALE'] = JSON.parse(JSON.stringify(migrated[oldKey]));
-    delete migrated[oldKey];
+    const fullOldKey = prefix + oldKey;
+    if (!(fullOldKey in migrated)) return;
+    // Clone RIÊNG cho mỗi bên (JSON an toàn với dữ liệu thuần chuỗi/số/mảng ở đây) — tránh nhiều khoá
+    // mới cùng trỏ 1 mảng/object, admin sửa bên này vô tình đổi luôn bên kia.
+    newKeys.forEach(k => { migrated[prefix + k] = JSON.parse(JSON.stringify(migrated[fullOldKey])); });
+    delete migrated[fullOldKey];
   });
   return migrated;
+}
+function migrateItPriceFormTemplatesKeys(formTemplates) {
+  return migrateSplitFormTemplatesKeys(formTemplates, 'IT_PRICE', ['IT_PRICE_RETAIL', 'IT_PRICE_WHOLESALE']);
+}
+// INTERNAL_POST/OFFICE (10/2026) — xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE và
+// OFFICE_PROCUREMENT/OFFICE_REPAIR cho lý do tách.
+function migrateInternalPostFormTemplatesKeys(formTemplates) {
+  return migrateSplitFormTemplatesKeys(formTemplates, 'INTERNAL_POST', ['INTERNAL_POST_NEWS', 'INTERNAL_POST_SHARE']);
+}
+function migrateOfficeFormTemplatesKeys(formTemplates) {
+  return migrateSplitFormTemplatesKeys(formTemplates, 'OFFICE', ['OFFICE_PROCUREMENT', 'OFFICE_REPAIR']);
 }
 
 // Vị trí lớp `layerKey` có nằm SAU nhóm blocking:false ĐẦU TIÊN (kiểu "Xin ý kiến") trong thứ tự
@@ -4242,7 +4277,7 @@ async function initDatabase(loggingInUser, opts) {
     // bug laborContracts/carVehicleTypes/workflowParticipatingPositions đã từng phát hiện. Server đã lưu
     // và trả về đúng (routes/data.js), chỉ riêng client chưa từng đọc vào.
     DB.quickApplyConfigs = data.quickApplyConfigs || [];
-    DB.formTemplates = migrateItPriceFormTemplatesKeys(data.formTemplates || {});
+    DB.formTemplates = migrateOfficeFormTemplatesKeys(migrateInternalPostFormTemplatesKeys(migrateItPriceFormTemplatesKeys(data.formTemplates || {})));
     DB.permGroups = data.permGroups || [];
     DB.vppExcludedJobTitles = data.vppExcludedJobTitles || [];
     DB.workflowParticipatingDepts = data.workflowParticipatingDepts || [];
@@ -7185,8 +7220,10 @@ function finishLogin(user) {
   document.getElementById('btnOperationOrderNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'ORDER'));
   document.getElementById('btnOperationStoreNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'STORE'));
   document.getElementById('btnChecklistNav').classList.toggle('hidden', !canAccessChecklistModule(user));
+  document.getElementById('btnVanHanhItPriceNav').classList.toggle('hidden', !canAccessVanHanhItPriceNav(user));
   updateVanHanhNavVisibility();
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
+  document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
   updateOperationStoreSubTabVisibility(user);
   document.getElementById('btnHrFeedbackNav').classList.toggle('hidden', !canAccessHrModule(user));
   document.getElementById('btnOrgChartNav').classList.toggle('hidden', !canAccessOrgChartModule(user));
@@ -7594,7 +7631,8 @@ function updateVanHanhNavVisibility() {
   const orderVisible = !document.getElementById('btnOperationOrderNav').classList.contains('hidden');
   const storeVisible = !document.getElementById('btnOperationStoreNav').classList.contains('hidden');
   const checklistVisible = !document.getElementById('btnChecklistNav').classList.contains('hidden');
-  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible);
+  const itPriceVisible = !document.getElementById('btnVanHanhItPriceNav').classList.contains('hidden');
+  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible);
 }
 function toggleVanHanhDropdown(e) {
   e.stopPropagation();
@@ -8440,6 +8478,31 @@ function canAccessPurchasingModule(user) {
   // — 2 hàm CÙNG một họ, trước đây bất đối xứng nhau).
   return isMemberOfAnyExtraApprovalGroup(user, ['ITPRICE_RETAIL']);
 }
+// "💲 Phê Duyệt Giá Bán Buôn" — điều kiện hiện nút SHORTCUT sidebar (btnVanHanhItPriceNav, index.html)
+// tới đúng sub-tab ITPRICE đã có sẵn trong module Vận Hành (setVanHanhSubTab('ITPRICE')) — BUG THẬT vừa
+// vá (10/2026, người dùng báo "đã yêu cầu tách tab Bán Buôn/Bán Lẻ ra sidebar Vận Hành/Mua Hàng nhưng
+// chưa thấy": sub-tab nội bộ đã tồn tại từ đợt tách trước, chỉ thiếu link tắt trên sidebar). Mirror ĐÚNG
+// nhánh itPriceProposeCreateWholesale/approver/Từ Chối Khẩn/Nhóm Phê Duyệt Cuối trong
+// canAccessOperationModule() ngay dưới đây — ai vào được sub-tab thật thì mới thấy nút, không hiện rộng
+// hơn cho người chỉ có quyền Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị (không liên quan Phê Duyệt Giá).
+function canAccessVanHanhItPriceNav(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.itPriceProposeCreateWholesale
+    || isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)
+    || canApproveItPriceEmergencyRejectClient(user, 'WHOLESALE')
+    || isMemberOfAnyExtraApprovalGroup(user, ['ITPRICE_WHOLESALE']);
+}
+// "💲 Phê Duyệt Giá Bán Lẻ" — đối xứng canAccessVanHanhItPriceNav() ở trên, cho sub-tab ITPRICE trong
+// module Mua Hàng (setPurchasingSubTab('ITPRICE')).
+function canAccessMuaHangItPriceNav(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  return !!user.perms?.itPriceProposeCreateRetail
+    || isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)
+    || canApproveItPriceEmergencyRejectClient(user, 'RETAIL')
+    || isMemberOfAnyExtraApprovalGroup(user, ['ITPRICE_RETAIL']);
+}
 function canAccessOperationModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -8606,7 +8669,7 @@ function setOfficeSubTab(subTab) {
 }
 
 // Đổ danh sách "Chuyên đề" cho 2 <select> riêng của #internalPostForm (internalPostCategory cho NEWS,
-// internalPostCategoryShare cho SHARE — xem CORE_FIELD_MANIFEST.INTERNAL_POST) — value là KEY (khớp
+// internalPostCategoryShare cho SHARE — xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE) — value là KEY (khớp
 // payload.postCategory server yêu cầu, xem lib/createValidation.js), giữ lại lựa chọn hiện tại nếu còn
 // hợp lệ (cùng khuôn subTypeSel ở populateDropdowns()). Gọi lại mỗi khi DB.internalNewsCategories/
 // internalShareCategories đổi (populateDropdowns() sau initDatabase()/sau khi admin lưu danh sách ở màn

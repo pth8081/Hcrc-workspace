@@ -1,8 +1,67 @@
 # Phiên bản hiện tại
 
-**24.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.36 (2026-09-28): Vá lỗi Nghiêm trọng — Nhịp Sống HCRC/Góc Chia Sẻ không đăng được bài + tách Biểu Mẫu + link tắt Phê Duyệt Giá
+
+Người dùng báo cáo trực tiếp kèm ảnh chụp màn hình: ở "Nhịp Sống HCRC" không
+đăng được bài, các nút thao tác không có phản ứng gì, ảnh chọn được nhưng
+vẫn không đăng bài được; đồng thời yêu cầu tách "Biểu Mẫu" của Nhịp Sống
+HCRC/Góc Chia Sẻ ra riêng (đang dùng chung) và rà soát toàn hệ thống các
+Dashboard/Biểu Mẫu khác xem có bị tương tự không.
+
+**Nguyên nhân CHÍNH (Nghiêm trọng) — form bị trình duyệt âm thầm chặn submit**:
+`#internalPostCategory` (Nhịp Sống HCRC) và `#internalPostCategoryShare`
+(Góc Chia Sẻ) đều khai `required` trong HTML, nhưng chỉ 1 trong 2 hiện ra
+tại 1 thời điểm (cái còn lại bị ẩn bằng class `hidden`, xem
+`setInternalSubTab()`). Thuộc tính `required` KHÔNG tự mất hiệu lực chỉ vì
+phần tử bị ẩn bằng CSS `display:none` (theo đặc tả HTML5, chỉ
+`input[type=hidden]`/`disabled`/`readonly` mới được trình duyệt loại khỏi
+constraint validation) — nên form bị trình duyệt chặn submit ngay từ lần
+đăng bài ĐẦU TIÊN trong phiên (chưa từng chạm vào tab kia bao giờ), không
+alert, không lỗi console, không log gì cả — khớp chính xác "bấm nút Đăng
+Ngay/Lưu Nháp không có phản ứng gì". Đã sửa: `setInternalSubTab()` giờ tự
+đổi `.required` của 2 field này theo đúng tab đang mở (cùng khuôn
+`offQty`/`offAmount` đã làm đúng ở `setOfficeSubTab()`).
+
+**Nguyên nhân PHỤ (Trung bình) — "ảnh chọn được nhưng không đăng bài được"**:
+`#internalFile` (Nhịp Sống HCRC/Góc Chia Sẻ) dùng CHUNG 1 ô cho cả tệp văn
+bản LẪN ảnh bìa bài viết, nhưng luôn gửi cứng `moduleKey='internal'` lên
+`/api/upload`. Nếu admin đã cấu hình "Quản Lý Tệp File" cho `internal` chỉ
+gồm `.pdf/.docx/.xlsx` (đúng như nhãn gợi ý), mọi ảnh bìa bị server từ chối
+— cùng lỗi đã vá cho banner tuyển dụng (`internalImage`) nhưng bỏ sót ở ô
+này vì nó dùng chung cho cả 2 loại tệp. Đã sửa: client tự nhận diện qua
+`file.type` để chọn đúng `moduleKey` (ảnh → `internalImage`, còn lại →
+`internal` như cũ).
+
+**Tách Biểu Mẫu (theo yêu cầu "không dùng chung")**:
+- `CORE_FIELD_MANIFEST.INTERNAL_POST` (1 coreKey chung Nhịp Sống HCRC + Góc
+  Chia Sẻ) → tách thành `INTERNAL_POST_NEWS`/`INTERNAL_POST_SHARE`, mỗi loại
+  1 coreKey + 1 modKey "Trường Bổ Sung" riêng (server (`lib/createValidation.js`/
+  `lib/recordActions.js`) cũng đổi theo, tránh bỏ sót validate trường bắt buộc).
+- Rà soát toàn hệ thống phát hiện thêm 1 vi phạm cùng dạng:
+  `CORE_FIELD_MANIFEST.OFFICE` (Mua Sắm + Sửa Chữa dùng chung) → tách thành
+  `OFFICE_PROCUREMENT`/`OFFICE_REPAIR` (field dùng chung thật `offCode`/
+  `offDept`/`offTitle` lặp lại ở cả 2, field riêng `offQty`/`offAmount`/
+  `offSupplier`/`offUsageTime` chỉ còn đúng 1 bên).
+- Dữ liệu admin đã cấu hình trước đây (nhãn/bắt buộc/Trường Bổ Sung) tự động
+  copy sang CẢ 2 modKey mới khi tải lại (`migrateInternalPostFormTemplatesKeys()`/
+  `migrateOfficeFormTemplatesKeys()`, core.js) — không mất cấu hình cũ.
+- Rà soát toàn bộ CORE_FIELD_MANIFEST còn lại (~50 module) — không phát hiện
+  vi phạm nào khác ngoài 2 trường hợp trên.
+
+**Rà soát Dashboard toàn hệ thống (theo yêu cầu)**: 4 thẻ thống kê "Tổng Bài
+Đăng/Đang Chờ Duyệt/Đã Duyệt/Từ Chối" hiện chỉ tồn tại ở tab Góc Chia Sẻ
+(chưa từng có ở Nhịp Sống HCRC — không phải lỗi mới phát sinh, là khoảng
+trống tính năng từ trước). Rà soát 13 module khác có kiểu Dashboard bấm-thẻ-
+để-lọc tương tự — tất cả đều đúng, không phát hiện lỗi cùng dạng.
+
+**Bổ sung (theo phản ánh riêng trong đợt này)**: thêm 2 nút shortcut sidebar
+còn thiếu — "💲 Phê Duyệt Giá Bán Buôn" (Vận Hành) và "💲 Phê Duyệt Giá Bán
+Lẻ" (Mua Hàng) — trỏ tới đúng sub-tab ITPRICE đã tồn tại sẵn từ đợt tách
+trước (chỉ thiếu link tắt trên sidebar).
 
 ## v24.35 (2026-09-28): Vá lỗi Nghiêm trọng — chọn gợi ý tài khoản ở Biên Bản Họp bị ghi đè thành chữ "name"
 

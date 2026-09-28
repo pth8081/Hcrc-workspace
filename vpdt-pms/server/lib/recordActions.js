@@ -3205,7 +3205,11 @@ function editInternalPost(payload, user, post, appData) {
   // internalPosts.extraValidate làm cả 2 việc này), khiến 1 request sửa thẳng có thể đặt postCategory
   // thành chuỗi không nằm trong danh mục hoặc bỏ trống trường bắt buộc.
   if (post.type === 'NEWS' || post.type === 'SHARE') {
-    validateRequiredCustomData(post.customData, appData?.formTemplates, 'INTERNAL_POST');
+    // modKey tách riêng theo type (10/2026, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE
+    // ở core.js) — PHẢI khớp đúng modKey client dùng để thu thập/lưu "Trường Bổ Sung"
+    // (collectDynamicFieldsData() ở module-internalcomms-nhipsong.js), nếu không sẽ đọc nhầm danh sách
+    // trường bắt buộc của loại bài KHÁC (hoặc key rỗng sau khi migrate, bỏ sót validate).
+    validateRequiredCustomData(post.customData, appData?.formTemplates, post.type === 'SHARE' ? 'INTERNAL_POST_SHARE' : 'INTERNAL_POST_NEWS');
     const catList = post.type === 'NEWS' ? (appData?.internalNewsCategories || []) : (appData?.internalShareCategories || []);
     const catKey = (post.postCategory || '').trim();
     if (!catKey || !catList.some(c => c.key === catKey)) {

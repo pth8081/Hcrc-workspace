@@ -54,10 +54,12 @@ check('Tạo mới (post.training chưa có sẵn registeredUsers) vẫn hoạt 
 });
 
 // ---- 2. NEWS/SHARE postCategory + customData re-validation ----
+// formTemplates.INTERNAL_POST_NEWS (10/2026, tách khỏi 1 modKey 'INTERNAL_POST' chung — xem
+// CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE ở core.js) — mọi post ở đây đều type NEWS.
 const appData = {
   internalNewsCategories: [{ key: 'TIN_TUC', label: 'Tin Tức' }],
   internalShareCategories: [{ key: 'CHIA_SE', label: 'Chia Sẻ' }],
-  formTemplates: { INTERNAL_POST: [{ label: 'Ghi chú', required: true, type: 'text' }] }
+  formTemplates: { INTERNAL_POST_NEWS: [{ label: 'Ghi chú', required: true, type: 'text' }] }
 };
 
 check('Sửa bài NEWS với postCategory rác (không nằm trong danh mục) -> bị chặn', () => {

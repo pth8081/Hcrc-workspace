@@ -1444,10 +1444,12 @@ const CREATE_MODULE_CONFIGS = {
       // Tệp đính kèm (tuỳ chọn) — chặn scheme "javascript:" trước khi lưu, xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
 
-      // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Chuyên Đề) — chỉ NEWS/SHARE còn hiện
-      // #dynamicFieldsContainer_INTERNAL_POST ở client (xem CORE_FIELD_MANIFEST.INTERNAL_POST).
+      // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Nhịp Sống HCRC/Góc Chia Sẻ, tách riêng 10/2026)
+      // — chỉ NEWS/SHARE còn hiện #dynamicFieldsContainer_INTERNAL_POST ở client (xem
+      // CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE). modKey PHẢI khớp đúng modKey client
+      // dùng để thu thập (collectDynamicFieldsData() ở module-internalcomms-nhipsong.js).
       if (type === 'NEWS' || type === 'SHARE') {
-        validateRequiredCustomData(payload.customData, appData?.formTemplates, 'INTERNAL_POST');
+        validateRequiredCustomData(payload.customData, appData?.formTemplates, type === 'SHARE' ? 'INTERNAL_POST_SHARE' : 'INTERNAL_POST_NEWS');
       }
 
       // postCategory ("chuyên đề") — chỉ NEWS (Nhịp Sống HCRC) và SHARE (Góc Chia Sẻ) có, dùng CHUNG

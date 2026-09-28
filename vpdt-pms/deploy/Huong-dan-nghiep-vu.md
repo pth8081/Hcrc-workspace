@@ -4175,6 +4175,16 @@ do với Ngân Hàng Câu Hỏi Đào Tạo]). Field tự thêm lưu trong `DB.f
 hiện thêm ngay dưới các field mặc định của đúng form đó — không ảnh hưởng hồ
 sơ cũ đã tạo trước khi thêm field.
 
+**Vá lỗi "dùng chung" (10/2026, rà soát theo yêu cầu người dùng)**: Truyền
+Thông Nội Bộ (📰 Nhịp Sống HCRC / 💬 Góc Chia Sẻ) và Văn Phòng (🛒 Mua Bán /
+🔧 Sửa Chữa) trước đây mỗi cặp dùng CHUNG 1 mục cấu hình dù có field riêng
+mỗi bên — sửa nhãn/bắt buộc ở tab này vô tình áp cả field không hề hiện ở
+tab kia. Nay mỗi tab con trong 2 module này có mục cấu hình RIÊNG hẳn (vẫn
+gộp chung trong cùng 1 nhóm module ở màn Biểu Mẫu, chỉ khác nhau ở "Trường
+Bổ Sung"/nhãn field mặc định thấy khi bấm vào từng tab con) — cấu hình đã
+lưu trước đó tự động copy sang cả 2 tab con khi tải lại, admin xoá bớt ở
+tab không cần nếu thấy trùng lặp thừa.
+
 ### 7.4. Quản Lý Tệp File
 
 **📎 Quản Lý Tệp File** — cấu hình 2 việc riêng theo TỪNG module có upload tệp:

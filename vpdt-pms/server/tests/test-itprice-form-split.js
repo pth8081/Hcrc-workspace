@@ -22,6 +22,9 @@ const {
 
 const PORT = 8993;
 const STAFF_MKT = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true }, active: true };
+// Không giữ BẤT KỲ quyền nào liên quan Vận Hành/Mua Hàng/Phê Duyệt Giá — dùng để xác nhận 2 nút sidebar
+// mới (btnVanHanhItPriceNav/btnMuaHangItPriceNav) không hiện tràn lan cho người không liên quan.
+const STAFF_NOPERM = { username: 'staff_noperm', name: 'Nhân Viên Không Quyền', dept: 'Marketing', perms: {}, active: true };
 // totpEnabled:true để bỏ qua "tường chặn" bắt thiết lập 2FA (totpSetupWallModal, xem core.js:5698) —
 // không phải trọng tâm bài test này, chỉ cần admin vào được thẳng màn hệ thống.
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true, totpEnabled: true };
@@ -37,7 +40,7 @@ const MASTER_LIST = {
 };
 
 const state = createMockState({
-  users: [STAFF_MKT, ADMIN],
+  users: [STAFF_MKT, ADMIN, STAFF_NOPERM],
   itPriceMasterLists: [MASTER_LIST],
   priceZones: [], // cố ý RỖNG — đúng kịch bản lỗi người dùng báo cáo
   stores: ['Siêu thị Demo']
@@ -86,6 +89,50 @@ async function main() {
   const run = createRunner();
 
   try {
+    // ===== BUG THẬT vừa vá (10/2026, người dùng báo "đã yêu cầu tách tab Bán Buôn/Bán Lẻ ra sidebar Vận
+    // Hành/Mua Hàng nhưng chưa thấy") — 2 sub-tab nội bộ ITPRICE đã tồn tại sẵn từ đợt tách trước (xem
+    // các test bên dưới) nhưng chưa từng có link tắt trên sidebar (#btnVanHanhItPriceNav/
+    // #btnMuaHangItPriceNav, xem canAccessVanHanhItPriceNav()/canAccessMuaHangItPriceNav() ở core.js). =====
+    await run.run('Sidebar: người có quyền itPriceProposeCreateWholesale/Retail thấy CẢ 2 nút shortcut "💲 Phê Duyệt Giá Bán Buôn"(Vận Hành)/"💲 Phê Duyệt Giá Bán Lẻ"(Mua Hàng)', async () => {
+      await loginAs(page, STAFF_MKT);
+      const visibility = await page.evaluate(() => ({
+        wholesaleHidden: document.getElementById('btnVanHanhItPriceNav').classList.contains('hidden'),
+        retailHidden: document.getElementById('btnMuaHangItPriceNav').classList.contains('hidden')
+      }));
+      assertEqual(visibility.wholesaleHidden, false, 'btnVanHanhItPriceNav phải HIỆN cho người có itPriceProposeCreateWholesale');
+      assertEqual(visibility.retailHidden, false, 'btnMuaHangItPriceNav phải HIỆN cho người có itPriceProposeCreateRetail');
+    });
+
+    await run.run('Sidebar: real click nút shortcut Vận Hành mở đúng sub-tab "Phê Duyệt Giá Bán Buôn"', async () => {
+      await page.click('#btnVanHanhTab');
+      await page.click('#btnVanHanhItPriceNav');
+      await page.waitForTimeout(150);
+      const activeSubTab = await page.evaluate(() => activeVanHanhSubTab);
+      assertEqual(activeSubTab, 'ITPRICE', 'Bấm nút sidebar phải chuyển đúng activeVanHanhSubTab=ITPRICE');
+      const wrapVisible = await page.evaluate(() => !document.getElementById('vanHanhItPriceWrap').classList.contains('hidden'));
+      assert(wrapVisible, 'Khung form Phê Duyệt Giá Bán Buôn phải hiện ra sau khi bấm nút sidebar');
+    });
+
+    await run.run('Sidebar: real click nút shortcut Mua Hàng mở đúng sub-tab "Phê Duyệt Giá Bán Lẻ"', async () => {
+      await page.click('#btnMuaHangTab');
+      await page.click('#btnMuaHangItPriceNav');
+      await page.waitForTimeout(150);
+      const activeSubTab = await page.evaluate(() => mhSubTab);
+      assertEqual(activeSubTab, 'ITPRICE', 'Bấm nút sidebar phải chuyển đúng mhSubTab=ITPRICE');
+      const wrapVisible = await page.evaluate(() => !document.getElementById('mhSubItprice').classList.contains('hidden'));
+      assert(wrapVisible, 'Khung form Phê Duyệt Giá Bán Lẻ phải hiện ra sau khi bấm nút sidebar');
+    });
+
+    await run.run('Sidebar: người KHÔNG có bất kỳ quyền Vận Hành/Mua Hàng/Phê Duyệt Giá nào không thấy 2 nút shortcut (không hiện tràn lan)', async () => {
+      await loginAs(page, STAFF_NOPERM);
+      const visibility = await page.evaluate(() => ({
+        wholesaleHidden: document.getElementById('btnVanHanhItPriceNav').classList.contains('hidden'),
+        retailHidden: document.getElementById('btnMuaHangItPriceNav').classList.contains('hidden')
+      }));
+      assertEqual(visibility.wholesaleHidden, true, 'btnVanHanhItPriceNav KHÔNG được hiện cho người không có quyền liên quan');
+      assertEqual(visibility.retailHidden, true, 'btnMuaHangItPriceNav KHÔNG được hiện cho người không có quyền liên quan');
+    });
+
     await run.run('Tách vật lý: form Bán Lẻ (Mua Hàng) không nằm trong cùng khối DOM với form Bán Buôn (Vận Hành) và ngược lại (2 trang riêng, không còn toggle chung 1 chỗ)', async () => {
       await loginAs(page, STAFF_MKT);
       // Lưu ý: TẤT CẢ section đều được nạp sẵn (không lazy) và chỉ ẩn/hiện qua class "hidden" ở CẤP

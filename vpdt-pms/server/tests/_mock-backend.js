@@ -1420,6 +1420,12 @@ window.fetch = async function (url, opts) {
       // Khuôn URL phải khớp routes/upload.js ("/uploads/<tên-phẳng>", chỉ [A-Za-z0-9._-]) — server nay
       // từ chối fileUrl lệch khuôn ở mọi đường ghi (xem assertUploadedFileUrl() ở lib/createValidation.js).
       const safeName = String(name).replace(/[^A-Za-z0-9._-]/g, '_');
+      // Ghi lại moduleKey ("module" field của FormData) — test nào cần xác nhận uploadFileToServer() gửi
+      // đúng moduleKey (VD BUG THẬT đã vá 10/2026: #internalFile Nhịp Sống HCRC/Góc Chia Sẻ tự chọn
+      // 'internalImage' cho ảnh, 'internal' cho văn bản) đọc lại qua window.__uploadModuleKeys.
+      const moduleKey = opts.body && typeof opts.body.get === 'function' ? opts.body.get('module') : null;
+      window.__uploadModuleKeys = window.__uploadModuleKeys || [];
+      window.__uploadModuleKeys.push(moduleKey);
       return __mockOkRes({ fileUrl: `/uploads/${Date.now()}-mock-${safeName}`, fileName: name, fileType: type });
     }
 

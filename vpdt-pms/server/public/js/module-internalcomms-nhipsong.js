@@ -69,13 +69,28 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalResendEmailField').classList.add('hidden');
   document.getElementById('internalResendEmailCheckbox').checked = false;
 
-  // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST) + Lịch đăng (chỉ NEWS) — chỉ 2 tab
+  // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE) + Lịch đăng (chỉ NEWS) — chỉ 2 tab
   // này còn dùng #internalPostForm (Đào tạo/Tuyển dụng đã return sớm ở trên với form riêng).
   document.getElementById('internalCategoryNewsField').classList.toggle('hidden', subTab !== 'NEWS');
   document.getElementById('internalCategoryShareField').classList.toggle('hidden', subTab !== 'SHARE');
   document.getElementById('internalPublishAtField').classList.toggle('hidden', subTab !== 'NEWS');
+  // BUG THẬT NGHIÊM TRỌNG đã vá (10/2026, nguyên nhân CHÍNH của "Nhịp Sống HCRC ko đăng được bài, các nút
+  // thao tác ko sử dụng được"): #internalPostCategory/#internalPostCategoryShare đều khai required trong
+  // HTML, nhưng chỉ 1 trong 2 hiện tại 1 thời điểm (còn lại bị ẩn qua class "hidden" ở trên) — thuộc tính
+  // required KHÔNG tự mất hiệu lực chỉ vì phần tử bị ẩn bằng CSS (chỉ input[type=hidden]/disabled/readonly
+  // mới được trình duyệt loại khỏi constraint validation, xem HTML5 spec — CSS "display:none" không đủ).
+  // Kết quả: submit form (native HTML5 validation) bị trình duyệt ÂM THẦM CHẶN LẠI mỗi khi field ẩn còn
+  // rỗng — đúng như vậy ngay ở lần đăng bài ĐẦU TIÊN trong phiên (chưa từng nhập ô kia bao giờ), khớp
+  // "bấm nút Đăng Ngay/Lưu Nháp không có phản ứng gì" người dùng báo. Cùng khuôn offQty/offAmount đã tự
+  // đổi required theo isMuaSam ở setOfficeSubTab() — áp dụng y hệt ở đây, đổi theo đúng subTab đang mở.
+  document.getElementById('internalPostCategory').required = subTab === 'NEWS';
+  document.getElementById('internalPostCategoryShare').required = subTab === 'SHARE';
   populateInternalPostCategorySelects();
-  renderDynamicInputsForModule('INTERNAL_POST', 'dynamicFieldsContainer_INTERNAL_POST');
+  // Biểu Mẫu tách 2 (10/2026, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE ở core.js) —
+  // "Trường Bổ Sung" của Nhịp Sống HCRC/Góc Chia Sẻ giờ đọc/ghi RIÊNG theo đúng modKey của tab đang mở,
+  // không còn dùng chung 1 modKey 'INTERNAL_POST' như trước (container DOM vẫn dùng chung 1 id, chỉ modKey
+  // để tra đúng danh sách "Trường Bổ Sung" đổi theo tab).
+  renderDynamicInputsForModule(subTab === 'SHARE' ? 'INTERNAL_POST_SHARE' : 'INTERNAL_POST_NEWS', 'dynamicFieldsContainer_INTERNAL_POST');
 
   const icons = { NEWS: '📰', TRAINING: '🎓', SHARE: '💬' };
   document.getElementById('internalFormTitle').innerText = `📝 Đăng ${INTERNAL_TYPE_LABELS[subTab]} Mới`;
@@ -136,7 +151,7 @@ async function submitInternalPost(e) {
     };
   }
 
-  // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST) — 2 <select> riêng theo type, server
+  // Chuyên đề (NEWS/SHARE, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE) — 2 <select> riêng theo type, server
   // tự kiểm tra lại key có hợp lệ không (extraValidate), client chỉ đọc đúng ô đang hiện.
   let postCategory;
   if (type === 'NEWS') postCategory = document.getElementById('internalPostCategory')?.value || '';
@@ -150,8 +165,19 @@ async function submitInternalPost(e) {
   const fileInput = document.getElementById('internalFile');
   let attachment;
   if (fileInput?.files[0]) {
+    // BUG THẬT đã vá (10/2026, người dùng báo "ảnh chọn được nhưng ko đăng bài được"): #internalFile
+    // dùng CHUNG cho cả tệp văn bản LẪN ảnh bìa bài viết (xem isInternalImageAttachment(), coverHTML ở
+    // renderInternalNewsCard()/renderInternalPostCard() phía dưới) nhưng luôn gửi cứng moduleKey
+    // 'internal' — moduleKey này ở "Quản Lý Tệp File" (routes/upload.js) mặc định CHỈ cho .pdf/.docx/.xlsx
+    // (đúng như accept= của input), không có ảnh; nếu admin đã cấu hình đúng như nhãn "Truyền Thông Nội
+    // Bộ" gợi ý thì mọi ảnh bìa bị server từ chối. Cùng lỗi đã vá cho banner tuyển dụng (rjBannerFile,
+    // luôn dùng 'internalImage' — xem submitRecruitmentJob()) nhưng bỏ sót ở đây vì field này dùng
+    // CHUNG cho cả 2 loại tệp. Tự nhận diện qua file.type (MIME type chuẩn của File API, không phải đoán
+    // theo đuôi file) để chọn đúng moduleKey — ảnh dùng 'internalImage', còn lại vẫn 'internal' như cũ.
+    const chosenFile = fileInput.files[0];
+    const uploadModuleKey = chosenFile.type.startsWith('image/') ? 'internalImage' : 'internal';
     try {
-      const uploaded = await uploadFileToServer(fileInput.files[0], 'internal');
+      const uploaded = await uploadFileToServer(chosenFile, uploadModuleKey);
       attachment = { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl };
     } catch (err) {
       return alert(`⛔ Tải tệp đính kèm thất bại: ${err.message}`);
@@ -163,11 +189,12 @@ async function submitInternalPost(e) {
   // payload gửi đi — editInternalPost() (lib/recordActions.js) chỉ ghi đè field CÓ MẶT trong payload,
   // undefined nghĩa là "giữ nguyên đính kèm cũ", không tự ý xoá đính kèm bài đã có.
 
-  // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Chuyên Đề) — chỉ NEWS/SHARE còn hiện
-  // #dynamicFieldsContainer_INTERNAL_POST (TRAINING/RECRUITMENT return sớm ở trên với form riêng).
+  // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Nhịp Sống HCRC/Góc Chia Sẻ, tách riêng 10/2026) —
+  // chỉ NEWS/SHARE còn hiện #dynamicFieldsContainer_INTERNAL_POST (TRAINING/RECRUITMENT return sớm ở
+  // trên với form riêng). modKey PHẢI khớp đúng modKey đã dùng để render ở setInternalSubTab() ngay trên.
   let customData;
   try {
-    customData = await collectDynamicFieldsData('INTERNAL_POST');
+    customData = await collectDynamicFieldsData(type === 'SHARE' ? 'INTERNAL_POST_SHARE' : 'INTERNAL_POST_NEWS', 'dynamicFieldsContainer_INTERNAL_POST');
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }

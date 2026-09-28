@@ -231,6 +231,10 @@
           <button id="btnOperationOrderNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(ORDERS)" class="hidden sidebar-subitem">📦 Phê Duyệt Đơn Hàng</button>
           <button id="btnOperationStoreNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(STORE)" class="hidden sidebar-subitem">🏬 QLDA</button>
           <button id="btnChecklistNav" data-op-seq="closeVanHanhDropdown()|switchTab(checklist)" class="hidden sidebar-subitem">✅ Checklist Đánh Giá</button>
+          <!-- BUG THẬT vừa vá (10/2026, người dùng báo "đã yêu cầu tách tab Bán Buôn ra sidebar Vận Hành
+               nhưng chưa thấy") — sub-tab ITPRICE (setVanHanhSubTab('ITPRICE')) đã tồn tại sẵn trong
+               module Vận Hành từ đợt tách Phê Duyệt Giá trước, chỉ thiếu link tắt trên sidebar. -->
+          <button id="btnVanHanhItPriceNav" data-op-seq="closeVanHanhDropdown()|switchTab(vanHanh)|setVanHanhSubTab(ITPRICE)" class="hidden sidebar-subitem">💲 Phê Duyệt Giá Bán Buôn</button>
         </div>
       </div>
 
@@ -249,6 +253,10 @@
         </button>
         <div id="muaHangDropdownPanel" class="hidden pl-7 space-y-0.5 sidebar-label">
           <button id="btnMuaHangBasNav" data-op-seq="closeMuaHangDropdown()|switchTab(muaHang)|setPurchasingSubTab(BAS)" class="sidebar-subitem">🧮 BAS</button>
+          <!-- BUG THẬT vừa vá (10/2026, người dùng báo "đã yêu cầu tách tab Bán Lẻ ra sidebar Mua Hàng
+               nhưng chưa thấy") — sub-tab ITPRICE (setPurchasingSubTab('ITPRICE')) đã tồn tại sẵn trong
+               module Mua Hàng từ đợt tách Phê Duyệt Giá trước, chỉ thiếu link tắt trên sidebar. -->
+          <button id="btnMuaHangItPriceNav" data-op-seq="closeMuaHangDropdown()|switchTab(muaHang)|setPurchasingSubTab(ITPRICE)" class="hidden sidebar-subitem">💲 Phê Duyệt Giá Bán Lẻ</button>
           <button id="btnMuaHangReportNav" data-op-seq="closeMuaHangDropdown()|switchTab(muaHang)|setPurchasingSubTab(REPORT)" class="sidebar-subitem">📊 Báo Cáo</button>
         </div>
       </div>

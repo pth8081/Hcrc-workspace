@@ -1383,7 +1383,11 @@ async function uploadFileToServer(file, moduleKey) {
 const UPLOAD_MODULE_KEY_MAP = {
   DOC: 'doc', SUBMISSION: 'submission', CONTRACT_APPROVAL: 'contract', CONTRACT_MANAGE: 'contract',
   MEETING_ROOM: 'meeting', MEETING_MINUTES: 'minutes', CAR: 'car',
-  MUA_BAN: 'office', SUA_CHUA: 'office', INTERNAL_POST: 'internal',
+  MUA_BAN: 'office', SUA_CHUA: 'office',
+  // INTERNAL_POST_NEWS/INTERNAL_POST_SHARE (10/2026, tách khỏi 1 tab key 'INTERNAL_POST' chung — xem
+  // CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE ở core.js) — "Trường Bổ Sung" kiểu Tải
+  // tệp của Nhịp Sống HCRC/Góc Chia Sẻ vẫn cùng phạm vi cấu hình "Loại Tệp Cho Phép" 'internal' như cũ.
+  INTERNAL_POST_NEWS: 'internal', INTERNAL_POST_SHARE: 'internal',
   // IT_PRICE_RETAIL/IT_PRICE_WHOLESALE (đợt 9/2026, tách khỏi 1 modKey 'IT_PRICE' chung) — cùng 1 phạm
   // vi cấu hình "Loại Tệp Cho Phép" (chưa từng đăng ký riêng trong UPLOAD_MODULE_LIST), giữ chung khoá
   // 'it_price' để không tự phát sinh 2 mục cấu hình tách biệt cho cùng 1 khái niệm.
