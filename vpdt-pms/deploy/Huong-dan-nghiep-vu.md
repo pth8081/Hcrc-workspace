@@ -799,6 +799,16 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   nhiều lượt; danh sách "Chủ Đề" admin tự thêm/bớt/đổi nhãn ở màn Biểu Mẫu).
   Bình luận/thả tim/ghi nhận đã xem mở cho mọi người; chỉ việc **đăng bài**
   mới cần quyền riêng theo từng loại.
+  - **Góc Chia Sẻ dùng chung khung "kiểu Facebook" với Nhịp Sống HCRC (từ
+    9/2026)** — bình luận/thả tim ngay trên thẻ bài (không cần mở "Chi
+    tiết"), top 5 bình luận nổi bật (2 mới nhất + 3 nhiều thích nhất), nút
+    "🕐 Mới nhất"/"🔥 Tương tác nhiều" (bài nhiều bình luận+thích lên đầu, lựa
+    chọn sắp xếp của Góc Chia Sẻ và Nhịp Sống HCRC tách riêng, không ảnh
+    hưởng nhau), người có quyền duyệt (internalPostApprove/Admin) thấy khung
+    kiểm duyệt bình luận bị gắn cờ nhạy cảm VÀ nút Duyệt/Từ chối/Yêu Cầu Bổ
+    Sung ngay trên thẻ (trước đây chỉ có ở khung liệt kê tĩnh của Góc Chia
+    Sẻ, nay áp dụng chung cho cả Nhịp Sống HCRC). Dashboard 4 thẻ + ô lọc
+    trạng thái của Góc Chia Sẻ không đổi.
   - **Bắt buộc tiêu đề/nội dung + trần độ dài (rà soát chuyên sâu vòng 2,
     9/2026)** — bài đăng nay bắt buộc có tiêu đề (tối đa 300 ký tự) và nội
     dung (tối đa 20.000 ký tự) ở CẢ lúc tạo lẫn lúc sửa (không còn tạo/sửa

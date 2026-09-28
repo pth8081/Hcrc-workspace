@@ -12,6 +12,15 @@ function setInternalSubTab(subTab) {
   resetListPage('internalNews');
   activeInternalSubTab = subTab;
 
+  // Vá lỗi "tab không có Dashboard vẫn thấy Dashboard cũ" (Đợt E, 9/2026): trước đây #internalDashboardCards
+  // chỉ được xoá/dựng lại BÊN TRONG renderInternalPosts()/renderInternalFeedStyle() — nhưng NEWS/TRAINING/
+  // RECRUITMENT/QNA đều return SỚM (usesOwnSection hoặc nhánh riêng) TRƯỚC KHI chạm tới đoạn dọn dashboard
+  // đó, nên đổi từ Góc Chia Sẻ (có dashboard) sang tab khác vẫn thấy 4 thẻ dashboard cũ còn sót lại trên
+  // màn hình — trông như tab đó "có Dashboard" dù thiết kế không có, gây hiểu lầm là bug. Dọn NGAY TẠI ĐÂY,
+  // chạy TRƯỚC mọi nhánh return sớm bên dưới, đảm bảo luôn đúng bất kể tab kế tiếp là gì; renderInternalFeedStyle('SHARE')
+  // sẽ tự dựng lại dashboard ngay sau đó nếu tab mới đúng là Góc Chia Sẻ.
+  document.getElementById('internalDashboardCards')?.replaceChildren();
+
   // Đổi tab con luôn thoát chế độ Sửa (nếu có) — form trắng, quay lại chế độ Đăng bài mới. Cùng khuôn
   // cancelEditCustomField() ở Biểu Mẫu (đổi tab = huỷ dở dang thao tác Sửa đang mở).
   editingInternalPostId = null;
@@ -916,19 +925,24 @@ function isInternalImageAttachment(att) {
   return !!(att && typeof att.fileType === 'string' && att.fileType.startsWith('image/'));
 }
 
-// "Tin tức" (NEWS) dùng khung hiển thị kiểu Facebook riêng (renderInternalNewsFeed) — bình luận/thích
-// ngay dưới bài, không cần mở "Chi tiết". 3 loại còn lại (Đào tạo/Khen thưởng/Góc chia sẻ) giữ nguyên
-// khung danh sách + phân trang cũ bên dưới.
-let internalNewsSortMode = 'recent'; // 'recent' | 'popular'
-function setInternalNewsSort(mode) {
-  internalNewsSortMode = mode;
-  resetListPage('internalNews');
+// "Tin tức" (NEWS) VÀ "Góc Chia Sẻ" (SHARE, từ Đợt E 9/2026) dùng chung khung hiển thị kiểu Facebook
+// (renderInternalFeedStyle) — bình luận/thích ngay dưới bài, không cần mở "Chi tiết". Đào tạo/Tuyển dụng/
+// HCRC Đồng Hành dùng khối riêng hẳn (usesOwnSection ở setInternalSubTab); phần còn lại của
+// renderInternalPosts() (Facebook comment gần cuối file) chỉ còn phục vụ loại bài cũ không có tab active
+// (VD REWARD còn sót trong dữ liệu cũ).
+// Đợt E (9/2026): Góc Chia Sẻ nay dùng chung khung "kiểu Facebook" với Nhịp Sống HCRC (xem
+// renderInternalFeedStyle() bên dưới) nên sắp xếp cũng tách riêng theo TỪNG loại (đổi "Tương tác nhiều"
+// ở Góc Chia Sẻ không ảnh hưởng lựa chọn đang xem ở Nhịp Sống HCRC và ngược lại).
+let internalFeedSortMode = { NEWS: 'recent', SHARE: 'recent' }; // 'recent' | 'popular'
+function setInternalFeedSort(type, mode) {
+  internalFeedSortMode[type] = mode;
+  resetListPage(type === 'SHARE' ? 'internal' : 'internalNews');
   renderInternalPosts();
 }
 
 // ===================== Trạng thái đặc biệt (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) =====================
-// Pill trạng thái dùng CHUNG cho danh sách thường (renderInternalPosts — Đào tạo/Khen thưởng/Góc chia
-// sẻ), khung Nhịp Sống HCRC kiểu Facebook (renderInternalNewsFeed/Card) và modal Chi tiết
+// Pill trạng thái dùng CHUNG cho danh sách thường (renderInternalPosts — Đào tạo/Khen thưởng), khung
+// kiểu Facebook của Nhịp Sống HCRC/Góc Chia Sẻ (renderInternalFeedStyle/renderInternalNewsCard) và modal Chi tiết
 // (viewInternalPostDetail) — PENDING/REJECTED đã có từ trước (Góc chia sẻ chờ/bị từ chối duyệt), bổ
 // sung DRAFT/NEED_INFO/HIDDEN + "Chờ đăng" (APPROVED nhưng publishAt còn ở tương lai, tính LIVE theo
 // Date.now(), KHÔNG cron — cùng cách pinExpiresAt đã tính ở renderDashboardNews()/render ở trên).
@@ -1117,7 +1131,11 @@ function renderInternalModerationQueueHTML(p) {
 }
 
 function renderInternalPosts() {
-  if (activeInternalSubTab === 'NEWS') return renderInternalNewsFeed();
+  // Đợt E (9/2026): Góc Chia Sẻ nay dùng chung khung "kiểu Facebook" với Nhịp Sống HCRC (bình luận/thích
+  // ngay trên bài, top 5 bình luận nổi bật, sắp theo tương tác, kiểm duyệt bình luận inline) thay vì chỉ
+  // liệt kê tĩnh như trước — xem renderInternalFeedStyle() bên dưới, giữ nguyên dashboard/lọc trạng thái
+  // riêng cho SHARE bên trong hàm đó.
+  if (activeInternalSubTab === 'NEWS' || activeInternalSubTab === 'SHARE') return renderInternalFeedStyle(activeInternalSubTab);
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
   // Khối phân trang riêng của Nhịp Sống HCRC ('internalNews') không dùng ở đây — dọn sạch nếu còn sót
@@ -1129,29 +1147,14 @@ function renderInternalPosts() {
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
   const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
 
-  // Chỉ loại bài "Góc Chia Sẻ" (SHARE) mới thực sự đi qua quy trình PENDING/APPROVED/REJECTED (xem
-  // canApproveInternalPost() ở lib/recordActions.js) — các loại khác (TRAINING/REWARD) luôn đã APPROVED
-  // ngay khi đăng, nên chỉ hiện ô lọc trạng thái + dashboard khi đang ở tab SHARE.
-  const isShareTab = activeInternalSubTab === 'SHARE';
-  const statusFilterWrap = document.getElementById('internalStatusFilterWrap');
-  if (statusFilterWrap) statusFilterWrap.classList.toggle('hidden', !isShareTab);
-  const statusFilter = isShareTab ? (document.getElementById('filterStatusInternal')?.value || '') : '';
-
+  // NEWS/SHARE đã chuyển sang renderInternalFeedStyle() ở trên (kể cả ô lọc trạng thái + dashboard riêng
+  // của SHARE) — nhánh còn lại của hàm này chỉ còn phục vụ loại bài KHÔNG có quy trình PENDING/APPROVED
+  // (VD REWARD còn sót trong dữ liệu cũ, hiện không còn nút tab tạo mới), nên luôn ẩn ô lọc trạng thái +
+  // dọn sạch dashboard.
+  document.getElementById('internalStatusFilterWrap')?.classList.add('hidden');
+  const statusFilter = '';
   const canApprove = canApproveInternalPost(currentUser);
-  const dashEl = document.getElementById('internalDashboardCards');
-  if (isShareTab) {
-    const scopedShare = DB.internalPosts.filter(p => p.type === 'SHARE' &&
-      (!p.status || p.status === 'APPROVED' || p.author === currentUser.username || canApprove));
-    const internalDashCards = [
-      { key: '', label: 'Tổng Bài Đăng', count: scopedShare.length, colorClass: 'border-l-blue-500' },
-      { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedShare.filter(p => p.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
-      { key: 'APPROVED', label: 'Đã Duyệt', count: scopedShare.filter(p => !p.status || p.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
-      { key: 'REJECTED', label: 'Từ Chối', count: scopedShare.filter(p => p.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
-    ];
-    if (dashEl) dashEl.innerHTML = buildDashboardCardsHTML(internalDashCards, statusFilter, 'filterInternalByCard');
-  } else if (dashEl) {
-    dashEl.innerHTML = '';
-  }
+  document.getElementById('internalDashboardCards')?.replaceChildren();
 
   const visible = DB.internalPosts.filter(p => {
     if (p.type !== activeInternalSubTab) return false;
@@ -1240,32 +1243,58 @@ function renderInternalPosts() {
 // (thích + bình luận). Mỗi bài có khung bình luận + nút thích NGAY DƯỚI bài — dùng lại nguyên các action
 // 'like'/'comment' đã có sẵn ở server (lib/recordActions.js), không cần đường API mới. "Chi tiết" (mở
 // modal đầy đủ) vẫn giữ nguyên, không đụng tới.
-function renderInternalNewsFeed() {
+function renderInternalFeedStyle(type) {
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
-  // Khối phân trang của renderInternalPosts ('internal') không dùng ở đây — dọn sạch nếu còn sót lại
-  // từ tab khác (Đào tạo/Khen thưởng/Góc chia sẻ đều dùng chung khối đó).
-  const paginationEl = document.getElementById('paginationContainer_internal');
-  if (paginationEl) paginationEl.innerHTML = '';
+  const isShare = type === 'SHARE';
+  // Góc Chia Sẻ tiếp tục dùng khối phân trang 'internal' (moduleKey + container id) đã có sẵn từ trước
+  // (không cần thêm gì ở HTML) — Nhịp Sống HCRC dùng khối 'internalNews' riêng. Dọn sạch khối KHÔNG dùng
+  // ở lượt render này (có thể còn sót lại từ tab kia, NEWS<->SHARE).
+  const paginationKey = isShare ? 'internal' : 'internalNews';
+  const paginationElId = isShare ? 'paginationContainer_internal' : 'paginationContainer_internalNews';
+  const otherPaginationEl = document.getElementById(isShare ? 'paginationContainer_internalNews' : 'paginationContainer_internal');
+  if (otherPaginationEl) otherPaginationEl.innerHTML = '';
 
   const fromDate = document.getElementById('filterFromDateInternal')?.value || '';
   const toDate = document.getElementById('filterToDateInternal')?.value || '';
   const keyword = (document.getElementById('filterKeywordInternal')?.value || '').trim();
 
+  // Chỉ Góc Chia Sẻ mới có ô lọc trạng thái + dashboard PENDING/APPROVED/REJECTED (giữ nguyên hành vi cũ
+  // của renderInternalPosts() trước Đợt E — Nhịp Sống HCRC không đổi UI, vẫn không có 2 khối này).
+  const statusFilterWrap = document.getElementById('internalStatusFilterWrap');
+  if (statusFilterWrap) statusFilterWrap.classList.toggle('hidden', !isShare);
+  const statusFilter = isShare ? (document.getElementById('filterStatusInternal')?.value || '') : '';
+
   const canApprove = canApproveInternalPost(currentUser);
+  const dashEl = document.getElementById('internalDashboardCards');
+  if (isShare) {
+    const scopedShare = DB.internalPosts.filter(p => p.type === 'SHARE' &&
+      (!p.status || p.status === 'APPROVED' || p.author === currentUser.username || canApprove));
+    const internalDashCards = [
+      { key: '', label: 'Tổng Bài Đăng', count: scopedShare.length, colorClass: 'border-l-blue-500' },
+      { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedShare.filter(p => p.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
+      { key: 'APPROVED', label: 'Đã Duyệt', count: scopedShare.filter(p => !p.status || p.status === 'APPROVED').length, colorClass: 'border-l-green-500' },
+      { key: 'REJECTED', label: 'Từ Chối', count: scopedShare.filter(p => p.status === 'REJECTED').length, colorClass: 'border-l-red-500' }
+    ];
+    if (dashEl) dashEl.innerHTML = buildDashboardCardsHTML(internalDashCards, statusFilter, 'filterInternalByCard');
+  } else if (dashEl) {
+    dashEl.innerHTML = '';
+  }
+
   let visible = DB.internalPosts.filter(p => {
-    if (p.type !== 'NEWS') return false;
-    // Bài KHÔNG phải APPROVED (Nháp/Yêu cầu bổ sung/Đã ẩn) chỉ hiện với chính tác giả/người có quyền
-    // duyệt — cùng khuôn renderInternalPosts() ở trên (server đã lọc trước, đây chỉ phòng hờ).
+    if (p.type !== type) return false;
+    // Bài KHÔNG phải APPROVED (Nháp/Chờ duyệt/Yêu cầu bổ sung/Đã ẩn/Bị từ chối) chỉ hiện với chính tác
+    // giả/người có quyền duyệt — cùng khuôn renderInternalPosts() (server đã lọc trước, đây chỉ phòng hờ).
     const isRestrictedStatus = p.status && p.status !== 'APPROVED';
     if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
+    if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
     return true;
   });
 
   visible = visible.slice().sort((a, b) => {
-    if (internalNewsSortMode === 'popular') {
+    if (internalFeedSortMode[type] === 'popular') {
       const scoreA = (a.likes?.length || 0) + (a.comments?.length || 0);
       const scoreB = (b.likes?.length || 0) + (b.comments?.length || 0);
       if (scoreB !== scoreA) return scoreB - scoreA;
@@ -1273,23 +1302,24 @@ function renderInternalNewsFeed() {
     return b.id - a.id; // mới nhất trước
   });
 
-  // TRƯỚC ĐÂY: cắt cứng 5 bài mới nhất (visible.slice(0, 5)), không phân trang — nay phân trang đầy đủ
-  // như mọi danh sách khác trong hệ thống (moduleKey 'internalNews' riêng, xem paginateList() dùng
-  // chung), sắp xếp (Mới nhất/Tương tác nhiều) áp dụng TRƯỚC khi cắt trang.
-  document.getElementById('paginationContainer_internalNews').innerHTML = buildPaginationBoxHTML('internalNews', 'renderInternalNewsFeed');
-  const pageItems = paginateList('internalNews', visible, 'renderInternalNewsFeed', 'bài viết');
+  // TRƯỚC ĐÂY (NEWS): cắt cứng 5 bài mới nhất, không phân trang — nay phân trang đầy đủ như mọi danh
+  // sách khác trong hệ thống, sắp xếp (Mới nhất/Tương tác nhiều) áp dụng TRƯỚC khi cắt trang. Nút phân
+  // trang gọi lại renderInternalPosts() (dispatcher chung) thay vì gọi thẳng hàm này — dispatcher tự xét
+  // đúng activeInternalSubTab hiện tại để redirect vào đây với đúng type.
+  document.getElementById(paginationElId).innerHTML = buildPaginationBoxHTML(paginationKey, 'renderInternalPosts');
+  const pageItems = paginateList(paginationKey, visible, 'renderInternalPosts', 'bài viết');
 
   const sortBarHTML = `
     <div class="flex items-center justify-between mb-3">
-      <div class="text-xs text-gray-500">Tổng ${visible.length} tin</div>
+      <div class="text-xs text-gray-500">Tổng ${visible.length} ${isShare ? 'bài' : 'tin'}</div>
       <div class="flex gap-1">
-        <button data-op="setInternalNewsSort" data-arg0="recent" class="px-2.5 py-1 rounded text-xs font-bold ${internalNewsSortMode === 'recent' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🕐 Mới nhất</button>
-        <button data-op="setInternalNewsSort" data-arg0="popular" class="px-2.5 py-1 rounded text-xs font-bold ${internalNewsSortMode === 'popular' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🔥 Tương tác nhiều</button>
+        <button data-op="setInternalFeedSort" data-arg0="${type}" data-arg1="recent" class="px-2.5 py-1 rounded text-xs font-bold ${internalFeedSortMode[type] === 'recent' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🕐 Mới nhất</button>
+        <button data-op="setInternalFeedSort" data-arg0="${type}" data-arg1="popular" class="px-2.5 py-1 rounded text-xs font-bold ${internalFeedSortMode[type] === 'popular' ? 'bg-fuchsia-700 text-white' : 'bg-gray-200 text-gray-700'}">🔥 Tương tác nhiều</button>
       </div>
     </div>`;
 
   if (pageItems.length === 0) {
-    container.innerHTML = sortBarHTML + `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có tin tức nào phù hợp.</div>`;
+    container.innerHTML = sortBarHTML + `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có ${isShare ? 'bài đăng' : 'tin tức'} nào phù hợp.</div>`;
     return;
   }
 
@@ -1325,6 +1355,23 @@ function renderInternalNewsCard(p) {
     ? `<button data-op="toggleInternalCommentsExpanded" data-arg0="${p.id}" class="text-xs text-fuchsia-700 font-bold hover:underline mb-2">Xem tất cả ${comments.length} bình luận →</button>`
     : (expanded && comments.length > 5 ? `<button data-op="toggleInternalCommentsExpanded" data-arg0="${p.id}" class="text-xs text-gray-500 hover:underline mb-2">Thu gọn bình luận</button>` : '');
   const statusBadgeHTML = internalPostStatusBadgeHTML(p);
+  // Duyệt/Từ chối/Yêu Cầu Bổ Sung NGAY TRÊN THẺ (Đợt E, 9/2026) — mượn nguyên khuôn banner đã có sẵn ở
+  // modal Chi tiết (viewInternalPostDetail()) để người duyệt không phải mở "Chi tiết" mới xử lý được bài
+  // đang chờ duyệt (trước đó Góc Chia Sẻ có Duyệt/Từ chối ngay trên thẻ nhưng Nhịp Sống HCRC thì không —
+  // nay cả 2 loại cùng chung 1 khuôn, tự ẩn nếu bài không PENDING hoặc người xem không có quyền duyệt).
+  const approveActionsHTML = (p.status === 'PENDING' && canApproveInternalPost(currentUser))
+    ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span class="text-xs text-amber-800">⏳ Bài đăng đang chờ phê duyệt để công khai.</span>
+        <div class="flex gap-2 flex-wrap flex-shrink-0">
+          <button data-op="approveInternalPostAction" data-arg0="${p.id}" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-emerald-700">✅ Duyệt</button>
+          <button data-op="rejectInternalPostAction" data-arg0="${p.id}" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-700">❌ Từ chối</button>
+          ${internalPostRequestInfoActionHTML(p)}
+        </div>
+      </div>`
+    : '';
+  const rejectReasonHTML = (p.status === 'REJECTED' && p.rejectReason)
+    ? `<div class="bg-red-50 border border-red-200 rounded p-2 mb-2 text-xs text-red-800"><b>Lý do từ chối:</b> ${escapeHtml(p.rejectReason)}</div>`
+    : '';
   const editHideActionsHTML = (internalPostEditButtonHTML(p) || internalPostHideActionHTML(p) || internalPostUnpinActionHTML(p) || internalPostDeleteActionHTML(p))
     ? `<div class="flex gap-2 flex-wrap mb-2">${internalPostEditButtonHTML(p)}${internalPostUnpinActionHTML(p)}${internalPostHideActionHTML(p)}${internalPostDeleteActionHTML(p)}</div>`
     : '';
@@ -1335,6 +1382,8 @@ function renderInternalNewsCard(p) {
       <div class="p-4">
         <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">${escapeHtml(p.title)}${statusBadgeHTML}</div>
         <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+        ${approveActionsHTML}
+        ${rejectReasonHTML}
         ${internalPostInfoRequestBannerHTML(p)}
         <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${(p.content || '').length > 300 ? '… ' : ' '}<span class="text-fuchsia-700 font-bold cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">Xem thêm</span></p>
         ${editHideActionsHTML}
@@ -1364,7 +1413,9 @@ function toggleInternalLikeInline(id) {
   const idx = p.likes.indexOf(currentUser.username);
   if (idx === -1) p.likes.push(currentUser.username); else p.likes.splice(idx, 1);
   callRecordAction('internalPosts', id, 'like', {}).catch(err => console.error('Lỗi cập nhật lượt thích:', err.message));
-  renderInternalNewsFeed();
+  // Gọi dispatcher chung (không gọi thẳng renderInternalFeedStyle('NEWS')) — nút Thích này dùng chung
+  // cho cả thẻ NEWS lẫn SHARE từ Đợt E, dispatcher tự redirect đúng type theo activeInternalSubTab.
+  renderInternalPosts();
 }
 
 async function addInternalCommentInline(id) {
@@ -1380,7 +1431,7 @@ async function addInternalCommentInline(id) {
   }
   const idx = DB.internalPosts.findIndex(x => x.id === id);
   if (idx !== -1) DB.internalPosts[idx] = updated;
-  renderInternalNewsFeed();
+  renderInternalPosts();
   // Bình luận vừa gửi có thể vừa bị hệ thống tự đánh dấu nghi vấn (xem
   // scanCommentForSensitiveContent() ở lib/recordActions.js) — cập nhật ngay badge/khung Phê Duyệt cho
   // người kiểm duyệt (vô hại/không đổi gì với người không có quyền, refreshApprovalSurfaces() tự chặn).

@@ -1,8 +1,65 @@
 # Phiên bản hiện tại
 
-**24.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.37 (2026-09-28): Góc Chia Sẻ có bình luận/thích/top-5/sắp xếp như Nhịp Sống HCRC + vá lỗi Dashboard cũ còn sót khi đổi tab
+
+Người dùng báo cáo trực tiếp kèm 2 ảnh chụp màn hình: (1) Góc Chia Sẻ chưa
+cho phép bình luận/thích ngay tại chỗ như Nhịp Sống HCRC (chỉ đếm số tĩnh,
+phải mở "Chi tiết" mới tương tác được), muốn có top 5 bình luận nổi bật, bài
+nhiều bình luận/thích lên đầu, và người quản trị kiểm soát phê duyệt bình
+luận giống Nhịp Sống HCRC; (2) đổi từ tab "Góc Chia Sẻ" quay lại "Nhịp Sống
+HCRC" vẫn thấy 4 thẻ Dashboard cũ của Góc Chia Sẻ còn sót trên màn hình, gây
+hiểu lầm là Nhịp Sống HCRC có Dashboard (không đúng thiết kế).
+
+**Tính năng — Góc Chia Sẻ dùng chung khung "kiểu Facebook" với Nhịp Sống
+HCRC** (`renderInternalFeedStyle()`, gộp từ `renderInternalNewsFeed()` cũ,
+`module-internalcomms-nhipsong.js`): Góc Chia Sẻ nay hiện bình luận/thích
+NGAY TRÊN THẺ (không cần mở "Chi tiết"), dùng lại nguyên các cơ chế đã có
+sẵn cho Nhịp Sống HCRC — không cần API mới:
+- Top 5 bình luận nổi bật (`pickHighlightedComments()`: 2 mới nhất + 3 nhiều
+  lượt thích nhất, khử trùng).
+- Nút "🕐 Mới nhất"/"🔥 Tương tác nhiều" — sắp theo tổng thích+bình luận, có
+  trạng thái RIÊNG cho từng loại (`internalFeedSortMode = {NEWS, SHARE}`),
+  đổi sắp xếp ở Góc Chia Sẻ không ảnh hưởng lựa chọn đang xem ở Nhịp Sống
+  HCRC và ngược lại.
+- Hàng đợi kiểm duyệt bình luận bị gắn cờ nhạy cảm hiện NGAY TRÊN THẺ
+  (`renderInternalModerationQueueHTML()`, vốn đã có sẵn cho Nhịp Sống HCRC).
+- Duyệt/Từ chối/Yêu Cầu Bổ Sung bài PENDING cũng hiện ngay trên thẻ dạng
+  banner (mượn khuôn đã có ở modal "Chi tiết") — nay áp dụng chung cho CẢ
+  Nhịp Sống HCRC lẫn Góc Chia Sẻ (trước đó chỉ Góc Chia Sẻ có, đặt ở khung
+  liệt kê tĩnh cũ); bài REJECTED cũng hiện banner "Lý do từ chối" ngay trên
+  thẻ thay vì chỉ thấy trong modal.
+- Dashboard 4 thẻ + ô lọc trạng thái của Góc Chia Sẻ giữ nguyên hành vi cũ
+  (không đổi UI, chỉ chuyển vào hàm mới).
+
+**Vá lỗi Trung bình — Dashboard cũ còn sót khi đổi tab (đúng ảnh 2 người
+dùng báo)**: nguyên nhân là `renderInternalPosts()` return SỚM cho tab NEWS
+(gọi thẳng hàm feed riêng) TRƯỚC KHI chạm tới đoạn dọn `#internalDashboardCards`
+— hàm xử lý NEWS trước đây chưa từng đụng tới phần tử này, nên Dashboard của
+Góc Chia Sẻ còn nguyên trên DOM khi chuyển sang Nhịp Sống HCRC. Đã sửa tận
+gốc: `setInternalSubTab()` (chạy ở MỌI lượt đổi tab con, trước mọi nhánh
+return sớm) nay tự dọn sạch `#internalDashboardCards` ngay khi bắt đầu đổi
+tab; tab nào có Dashboard (chỉ Góc Chia Sẻ) sẽ tự dựng lại ngay sau đó.
+
+**Rà soát toàn hệ thống (theo yêu cầu)**: tìm các module khác có cùng dạng
+lỗi — 1 khung DOM dùng chung bởi nhiều tab con, trong đó ít nhất 1 tab
+`return` sớm bỏ qua đoạn dọn khung dùng chung đó. Rà soát toàn bộ 17 điểm
+gọi `buildDashboardCardsHTML()` (12 module khác ngoài Truyền Thông Nội Bộ)
+— tất cả đều dùng ID Dashboard RIÊNG cho từng tab/loại dữ liệu (VD
+`uniformPeriodDashboardCards` khác `uniformTransferDashboardCards` ở Đồng
+Phục, mỗi `kind` ở Vận Hành có `meta.dashboardCards` riêng...), không có
+module nào khác dùng chung 1 khung Dashboard cho nhiều sub-tab như Truyền
+Thông Nội Bộ trước khi vá. Tìm thêm mọi hàm dạng `if (tab === 'X') return
+renderY();` (return sớm trước đoạn dọn khung chung) trong toàn bộ client —
+chỉ có đúng 1 chỗ này. Không phát hiện module nào khác cần vá thêm.
+
+Viết mới `tests/test-internal-share-feed-style.js` (12 kịch bản: bình luận/
+thích/top5/sắp xếp/kiểm duyệt/Duyệt-Từ chối inline cho Góc Chia Sẻ + 2 kịch
+bản xác nhận Dashboard được dọn sạch khi đổi sang Nhịp Sống HCRC và Đào Tạo).
+Chạy lại toàn bộ 348 file test hiện có, không phát hiện hồi quy nào.
 
 ## v24.36 (2026-09-28): Vá lỗi Nghiêm trọng — Nhịp Sống HCRC/Góc Chia Sẻ không đăng được bài + tách Biểu Mẫu + link tắt Phê Duyệt Giá
 
