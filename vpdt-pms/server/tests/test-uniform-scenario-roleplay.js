@@ -3,7 +3,10 @@
 // Đóng vai đầy đủ kịch bản nghiệp vụ người dùng yêu cầu cho module Đồng Phục, bấm THẬT qua DOM
 // (page.click()/page.fill()), không evaluate tắt qua logic nghiệp vụ ở các bước chính:
 //   1) Quản lý Hành Chính (HC) tạo kỳ cấp phát đồng phục cho Siêu Thị A.
-//   2) HC duyệt kỳ cấp phát.
+//   2) MỘT NGƯỜI KHÁC (HC2, giữ uniformApprove riêng) duyệt kỳ cấp phát — LỖI ĐÃ VÁ (rà soát chuyên sâu
+//      9/2026, phát hiện #1): HC (uniformManage) KHÔNG còn tự duyệt được ĐÚNG kỳ do chính mình tạo nữa
+//      (assertNotSelfDecidingUniformPeriod(), lib/recordActions.js) — cần ít nhất 2 người giữ
+//      uniformManage/uniformApprove để không kẹt kỳ.
 //   3) Giám đốc Siêu Thị A (GD_A) xác nhận đã nhận đồng phục (nhập kho ST A).
 //   4) GD_A cấp phát đồng phục cho 1 nhân viên (NV_A).
 //   5) NV_A tự xác nhận đã nhận đồng phục (qua "👕 Đồng Phục Của Tôi" trong Hồ Sơ Cá Nhân — không cần
@@ -36,6 +39,9 @@ const PORT = 8983;
 const STORES = ['Siêu Thị A', 'Siêu Thị B'];
 
 const HC = { username: 'hc_rp', name: 'Trần Thị Hành Chính', dept: 'Hành Chính', perms: { uniformManage: true }, active: true };
+// HC2 — người DUYỆT kỳ cấp phát, TÁCH RIÊNG khỏi HC (LỖI ĐÃ VÁ, xem chú thích đầu file) — chỉ giữ
+// uniformApprove (không uniformManage), mirror đúng khuôn "APPROVER" ở tests/test-uniform.js.
+const HC2 = { username: 'hc2_rp', name: 'Đỗ Thị Phó Hành Chính', dept: 'Hành Chính', perms: { uniformApprove: true }, active: true };
 const GD_A = { username: 'gd_a_rp', name: 'Nguyễn Văn A (GĐ Siêu Thị A)', dept: 'Siêu Thị A', perms: { uniformStoreManage: true }, active: true };
 const GD_B = { username: 'gd_b_rp', name: 'Lê Thị B (GĐ Siêu Thị B)', dept: 'Siêu Thị B', perms: { uniformStoreManage: true }, active: true };
 const NV_A = { username: 'nv_a_rp', name: 'Phạm Văn Nhân Viên A', dept: 'Siêu Thị A', perms: {}, active: true };
@@ -45,7 +51,7 @@ const OUTSIDER = { username: 'outsider_rp', name: 'Người Ngoài Cuộc', dept
 const state = createMockState({
   depts: ['Hành Chính'],
   stores: STORES,
-  users: [HC, GD_A, GD_B, NV_A, NV_B, OUTSIDER],
+  users: [HC, HC2, GD_A, GD_B, NV_A, NV_B, OUTSIDER],
   uniformCatalog: [{ id: 1, name: 'Áo đồng phục nam', sizes: ['L'] }]
 });
 
@@ -97,9 +103,11 @@ async function main() {
       assert(periodId, 'HC phải tạo được kỳ cấp phát');
     });
 
-    // ===== 2) HC duyệt kỳ (bấm nút "Duyệt" thật trên danh sách) =====
-    await run.run('2) Quản lý Hành Chính duyệt kỳ cấp phát (bấm nút thật)', async () => {
-      await page.evaluate(() => { renderUniformPeriodsList(); });
+    // ===== 2) HC2 (khác người tạo) duyệt kỳ (bấm nút "Duyệt" thật trên danh sách) — LỖI ĐÃ VÁ: HC KHÔNG
+    // còn tự duyệt được kỳ do chính mình tạo, xem chú thích đầu file =====
+    await run.run('2) Người khác (HC2, giữ uniformApprove riêng) duyệt kỳ cấp phát (bấm nút thật)', async () => {
+      await loginAs(page, HC2);
+      await page.evaluate(() => { switchTab('uniform'); renderUniformPeriodsList(); });
       await page.click(`button[data-op="approveUniformPeriodAction"][data-arg0="${periodId}"]`);
       // approveUniformPeriodAction() mở showConfirmModal() (modal xác nhận tuỳ biến của hệ thống, KHÔNG
       // phải window.confirm() gốc) — bấm nút "✔️ Duyệt" chỉ MỞ modal, phải "bấm" tiếp nút "Đồng Ý" trong
@@ -107,7 +115,7 @@ async function main() {
       await page.evaluate(() => window.__confirmPending());
       await page.waitForTimeout(120);
       const status = await page.evaluate((id) => DB.uniformPeriods.find(x => x.id === id).approvalStatus, periodId);
-      assertEqual(status, 'APPROVED', 'Kỳ phải chuyển APPROVED sau khi HC bấm Duyệt');
+      assertEqual(status, 'APPROVED', 'Kỳ phải chuyển APPROVED sau khi HC2 (khác người tạo) bấm Duyệt');
     });
 
     // ===== 3) Bảo mật: GD Siêu Thị B KHÔNG xác nhận được phân bổ của Siêu Thị A =====

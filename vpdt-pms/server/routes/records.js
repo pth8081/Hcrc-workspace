@@ -2962,13 +2962,16 @@ router.post('/budgetLines/:id/delete', async (req, res) => {
 });
 
 // POST /api/records/budgetLines/:id/approve-proposal — duyệt Đề Xuất TẠI CHỖ (không sinh gì thêm).
+// Cần appData (budgetDeptWorkflows/users/workflows) để canDecideBudgetLineProposal() tra đúng approver
+// theo phòng ban (xem lib/recordActions.js) — cùng khuôn approve/rejectContractPaymentTypeChange() ở trên.
 router.post('/budgetLines/:id/approve-proposal', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.approveBudgetLineProposal(freshUser, item));
+      recordActions.approveBudgetLineProposal(freshUser, item, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/approve-proposal`, err); }
 });
@@ -2978,8 +2981,9 @@ router.post('/budgetLines/:id/reject-proposal', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.rejectBudgetLineProposal(freshUser, item, req.body));
+      recordActions.rejectBudgetLineProposal(freshUser, item, req.body, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/reject-proposal`, err); }
 });

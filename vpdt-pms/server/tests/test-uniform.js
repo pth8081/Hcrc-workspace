@@ -152,11 +152,31 @@ async function main() {
       assertIncludes(result.errorMsg, 'chưa được duyệt', 'Server phải chặn xác nhận khi kỳ chưa được duyệt');
     });
 
-    // ===== 3c) uniformManage được GỘP năng lực uniformApprove — Hành Chính tự duyệt được kỳ mình tạo
-    // (quyết định người dùng thực tế: quy trình tách vai trò ban đầu gây kẹt kỳ khi không ai được cấp
-    // riêng uniformApprove sau khi tính năng ra mắt — xem canApproveUniform() ở lib/recordActions.js) =====
-    await run.run('uniformManage được gộp năng lực uniformApprove — Hành Chính tự duyệt kỳ mình tạo (happy path)', async () => {
+    // ===== 3c-0) LỖI ĐÃ VÁ (rà soát chuyên sâu 9/2026, phát hiện #1): uniformManage vẫn được GỘP năng
+    // lực uniformApprove (canApproveUniform() vẫn true), nhưng KHÔNG còn tự duyệt được ĐÚNG kỳ do chính
+    // mình tạo nữa — assertNotSelfDecidingUniformPeriod() (lib/recordActions.js) chặn tự tạo+tự duyệt
+    // không ai kiểm soát độc lập =====
+    await run.run('LỖI ĐÃ VÁ: Hành Chính (uniformManage) KHÔNG tự duyệt được kỳ do chính mình tạo', async () => {
       await loginAs(page, HC);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
+        try {
+          await callRecordAction('uniformPeriods', p.id, 'approve', {});
+          return { errorMsg: null };
+        } catch (err) {
+          return { errorMsg: err.message };
+        }
+      });
+      assertIncludes(result.errorMsg, 'tự duyệt', 'Server phải chặn Hành Chính tự duyệt kỳ do chính mình tạo');
+    });
+
+    // ===== 3c) uniformManage được GỘP năng lực uniformApprove — người KHÁC giữ uniformApprove/
+    // uniformManage duyệt được kỳ do Hành Chính tạo (happy path, quyết định người dùng thực tế: quy
+    // trình tách vai trò ban đầu gây kẹt kỳ khi không ai được cấp riêng uniformApprove sau khi tính năng
+    // ra mắt — xem canApproveUniform() ở lib/recordActions.js) =====
+    await run.run('uniformManage được gộp năng lực uniformApprove — người KHÁC duyệt kỳ do Hành Chính tạo (happy path)', async () => {
+      await loginAs(page, APPROVER);
       const result = await page.evaluate(async () => {
         window.__resetCapture();
         const p = DB.uniformPeriods.find(x => x.name === 'Đợt hè 2026');
@@ -165,8 +185,8 @@ async function main() {
         DB.uniformPeriods[idx] = r.item;
         return { approvalStatus: r.item.approvalStatus, approvedByName: r.item.approvedByName };
       });
-      assertEqual(result.approvalStatus, 'APPROVED', 'Kỳ phải chuyển APPROVED sau khi Hành Chính (uniformManage) tự duyệt');
-      assertEqual(result.approvedByName, HC.name, 'Phải ghi nhận đúng người duyệt');
+      assertEqual(result.approvalStatus, 'APPROVED', 'Kỳ phải chuyển APPROVED sau khi người khác duyệt');
+      assertEqual(result.approvedByName, APPROVER.name, 'Phải ghi nhận đúng người duyệt');
     });
 
     // ===== 3c-2) Người hoàn toàn không có quyền (không admin/uniformManage/uniformApprove) vẫn bị chặn =====
@@ -651,11 +671,12 @@ async function main() {
       assertIncludes(result.errorMsg, 'không hợp lệ cho', 'Server phải chặn size không thuộc mặt hàng đã chọn');
     });
 
-    // ===== 24) Tách Kho Mới/Cũ: HC tạo + tự duyệt (uniformManage gộp uniformApprove) kỳ mới, GD Hội An
+    // ===== 24) Tách Kho Mới/Cũ: HC tạo, APPROVER duyệt (uniformManage/uniformApprove gộp năng lực
+    // nhưng KHÔNG tự duyệt được kỳ do chính mình tạo — LỖI ĐÃ VÁ, xem kịch bản 3c-0 ở trên), GD Hội An
     // xác nhận, cấp phát, thu hồi TỐT rồi cấp tiếp — kiểm tra newStock/usedStock đúng chính sách ưu
     // tiên xài "đã sử dụng" trước (computeUniformStockBreakdownClient(), xem lib/recordActions.js
     // computeUniformStockBreakdown()) =====
-    await run.run('Chuẩn bị: HC tạo + tự duyệt kỳ riêng cho kịch bản tách kho Mới/Cũ', async () => {
+    await run.run('Chuẩn bị: HC tạo kỳ riêng cho kịch bản tách kho Mới/Cũ', async () => {
       await loginAs(page, HC);
       const result = await page.evaluate(async () => {
         window.__resetCapture();
@@ -668,12 +689,22 @@ async function main() {
         updateUniformAllocItemField(0, 0, 'qty', '10');
         await submitUniformPeriod();
         const p = DB.uniformPeriods.find(x => x.name === 'Kỳ Test Mới Cũ');
+        return { found: !!p };
+      });
+      assert(result.found, 'Kỳ "Kỳ Test Mới Cũ" phải được tạo thành công');
+    });
+
+    await run.run('Chuẩn bị: APPROVER duyệt kỳ riêng cho kịch bản tách kho Mới/Cũ (khác người tạo)', async () => {
+      await loginAs(page, APPROVER);
+      const result = await page.evaluate(async () => {
+        window.__resetCapture();
+        const p = DB.uniformPeriods.find(x => x.name === 'Kỳ Test Mới Cũ');
         const r = await callRecordAction('uniformPeriods', p.id, 'approve', {});
         const idx = DB.uniformPeriods.findIndex(x => x.id === p.id);
         DB.uniformPeriods[idx] = r.item;
         return { approvalStatus: r.item.approvalStatus };
       });
-      assertEqual(result.approvalStatus, 'APPROVED', 'HC (uniformManage) phải tự duyệt được kỳ mới này');
+      assertEqual(result.approvalStatus, 'APPROVED', 'APPROVER (khác người tạo) phải duyệt được kỳ mới này');
     });
 
     await run.run('Tách Kho Mới/Cũ: sau khi xác nhận, toàn bộ 10 áo phải là "Mới"', async () => {

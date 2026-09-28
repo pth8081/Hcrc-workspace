@@ -1,8 +1,81 @@
 # Phiên bản hiện tại
 
-**24.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.38 (2026-09-28): Vá 4 lỗ hổng "tạo hồ sơ ≠ duyệt hồ sơ" — Đồng Phục/Tuyển Dụng/Công Việc + Ngân Sách chuyển sang cấu hình phê duyệt theo phòng ban
+
+Rà soát chuyên sâu (6 agent song song) toàn bộ ~24 module nghiệp vụ có bước
+"tạo/đề xuất" và "duyệt", kiểm tra đúng nguyên tắc: quyền TẠO phải tách biệt
+quyền DUYỆT (qua cấu hình quy trình theo phòng ban, hoặc 1 quyền tĩnh thật sự
+khác biệt), và không ai tự duyệt được hồ sơ do chính mình tạo. Phát hiện 7
+điểm cần xem xét, người dùng xác nhận vá đúng 4 điểm sau (3 điểm còn lại giữ
+nguyên vì đã đúng thiết kế: Đặt Phòng Họp, Vận Hành Mở Mới/Sửa Chữa Siêu Thị
+không có bước duyệt theo chủ đích, HĐLĐ/Tái Tuyển/Offboarding do Nhân Sự toàn
+quyền theo chủ đích):
+
+1. **Đồng Phục (uniformPeriods)** — `uniformManage` vừa tạo kỳ cấp phát vừa
+   duyệt được, không ai kiểm soát độc lập. Thêm
+   `assertNotSelfDecidingUniformPeriod()` (`lib/recordActions.js`), áp dụng
+   cho cả Duyệt và Từ chối kỳ — admin vẫn luôn vượt qua được. `uniformManage`
+   vẫn giữ nguyên năng lực GỘP `uniformApprove` (không cần cấp quyền riêng),
+   chỉ không tự duyệt được ĐÚNG kỳ do chính mình tạo — cần ít nhất 2 người
+   giữ `uniformManage`/`uniformApprove`, hoặc dùng admin, để tránh kỳ bị kẹt
+   khi chỉ có đúng 1 người giữ quyền duyệt đồng phục.
+2. **Tuyển Dụng (recruitmentReferrals)** — giới thiệu ứng viên mở cho mọi
+   người có `internalRecruitmentCreate`, người giới thiệu có thể tự xử lý
+   luôn trạng thái ứng viên của chính mình giới thiệu. Thêm
+   `assertNotSelfDecidingRecruitmentReferral()`.
+3. **Công Việc (tasks)** — người có `taskEdit` tự giao việc cho bản thân
+   (`assignedBy === assignedTo`) vẫn tự duyệt được yêu cầu gia hạn/huỷ do
+   chính mình gửi. Thêm 1 điều kiện chặn trong `resolvePendingTaskAction()`
+   (dùng chung cho cả 4 action Duyệt/Từ chối Gia hạn/Huỷ).
+4. **Ngân Sách — bước "Đề Xuất" (budgetLines)** — trước đây BẤT KỲ ai có
+   `budgetCreate` đều "duyệt chéo" được Đề Xuất của BẤT KỲ phòng ban nào
+   (chỉ chặn tự duyệt đúng dòng mình tạo), không theo cấu hình phòng ban như
+   `itPriceApprovals`/`carRegs`/`officeReqs`/... — **đổi hẳn sang cấu hình
+   theo phòng ban**, tái sử dụng đúng cấu trúc dữ liệu `budgetDeptWorkflows`
+   đã có sẵn từ Ngân Sách 1.0 (chưa từng bị xoá, chỉ mất màn admin cấu hình).
+   `canDecideBudgetLineProposal()` (`lib/recordActions.js`) mới: `admin`/
+   `budgetManage` vẫn LUÔN quyết định được mọi dòng (nhất quán với việc họ
+   đã toàn quyền cả bước Phê Duyệt cuối); người CHỈ có `budgetCreate` giờ
+   phải là approver **bước 1** của ĐÚNG phòng ban `item.dept` (Ngân Sách
+   không có `currentStep` nhiều bước như các module đi qua
+   `applyWorkflowAction()` đầy đủ). **Phòng ban CHƯA được admin cấu hình gì
+   thì CHỈ `budgetManage`/`admin` xử lý được Đề Xuất của phòng ban đó** —
+   khác hành vi cũ "ai cũng duyệt chéo được".
+   - Khôi phục màn admin **Hệ Thống → Quy Trình & Phê Duyệt → "📊 QT Ngân
+     Sách - Đề Xuất"** (`module-workflow.js`/`systemSection.html`, dữ liệu
+     `budgetDeptWorkflows` chưa từng bị xoá khỏi client `DB`) để admin cấu
+     hình approver bước 1 theo từng phòng ban.
+   - **Cần thao tác ngay sau khi cập nhật code**: vào cấu hình từng phòng
+     ban tại màn trên (chọn quy trình + người duyệt bước 1) — phòng ban nào
+     chưa cấu hình thì người giữ `budgetCreate` (không có `budgetManage`)
+     tạm thời KHÔNG xử lý được Đề Xuất của phòng ban đó nữa cho tới khi được
+     cấu hình, phải nhờ người giữ `budgetManage`/admin xử lý tạm trong lúc
+     chờ cấu hình.
+
+Client (`module-ngansach.js`) đổi tương ứng: nút Duyệt/Từ chối ở tab "Đề
+Xuất" nay hiện theo đúng `canDecideBudgetLineProposalClient()` (mirror
+`canDecideBudgetLineProposal()`, dùng `resolveEffectiveStepApprovers()` sẵn
+có ở `core.js`) thay vì cứ có `budgetCreate` là hiện nút.
+
+**Test**: `tests/test-audit-createvsapprove-gaps.js` (19 kịch bản mới, gọi
+thẳng `lib/recordActions.js` không qua Playwright) + cập nhật
+`tests/test-uniform.js` (thêm kịch bản xác nhận chặn tự duyệt, đổi người
+duyệt "happy path" từ chính người tạo sang người khác) +
+`tests/test-budget-lines.js`/`tests/_seed.js`/`tests/_mockBackend.js` (seed
+thêm cấu hình `budgetDeptWorkflows` riêng cho kịch bản test, truyền `appData`
+qua mock backend giống route thật). Full regression toàn bộ test suite không
+phát hiện hồi quy nào khác ngoài 2 file trên (đã cập nhật theo đúng hành vi
+mới).
+
+**Deploy**: chỉ copy code + `pm2 restart`, không đổi `schema.sql`/
+`.env.example`/dependency `package.json`. Sau khi deploy, admin cần vào cấu
+hình "📊 QT Ngân Sách - Đề Xuất" cho từng phòng ban đang dùng Ngân Sách 2.0
+(xem mục 4 ở trên) để tránh gián đoạn quy trình Đề Xuất của người chỉ có
+`budgetCreate`.
 
 ## v24.37 (2026-09-28): Góc Chia Sẻ có bình luận/thích/top-5/sắp xếp như Nhịp Sống HCRC + vá lỗi Dashboard cũ còn sót khi đổi tab
 

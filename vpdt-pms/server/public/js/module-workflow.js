@@ -58,10 +58,16 @@ const WF_MODULE_CONFIG = {
     ],
     label: 'Phê Duyệt Giá Bán Buôn', title: '🏪 Cấu Hình Quy Trình Phê Duyệt Giá Bán Buôn Theo Mức Margin/Chiết Khấu'
   },
-  // "Ngân Sách" (BUDGET) — ĐÃ BỎ (v23.0, thiết kế lại module Ngân Sách theo tài liệu "Ngân sách 2.0",
-  // xem module-ngansach.js) — budgetLines KHÔNG dùng workflowEngine.js/dept-workflow nữa, chỉ còn 1 cấp
-  // gác permission phẳng (budgetCreate/budgetManage), nên cấu hình budgetDeptWorkflows không còn nơi nào
-  // đọc để áp dụng thật (nút "📊 QT Ngân Sách" vốn cũng chưa từng có trên UI tab list, xem index.html).
+  // "Ngân Sách" (BUDGET) — TỪNG BỊ BỎ ở v23.0 (thiết kế lại "Ngân sách 2.0", xem module-ngansach.js —
+  // budgetLines chỉ còn 1 cấp gác permission phẳng budgetCreate/budgetManage, "duyệt chéo" bất kỳ ai có
+  // budgetCreate). KHÔI PHỤC lại (rà soát chuyên sâu 9/2026, phát hiện #5 — bước "Đề Xuất" cần cấu hình
+  // theo phòng ban như itPriceApprovals/carRegs/... thay vì duyệt chéo phẳng): budgetDeptWorkflows nay
+  // ĐƯỢC ĐỌC LẠI thật ở canDecideBudgetLineProposal() (lib/recordActions.js) — chỉ dùng ĐÚNG approver
+  // BƯỚC 1 của quy trình cấu hình (budgetLines không có currentStep nhiều bước, khác các module đi qua
+  // applyWorkflowAction() đầy đủ — cấu hình nhiều bước ở đây chỉ bước 1 có tác dụng thật). budgetManage/
+  // admin vẫn LUÔN quyết định được mọi dòng bất kể cấu hình phòng ban (đã toàn quyền cả bước Phê Duyệt
+  // cuối). Phòng ban CHƯA cấu hình = chỉ budgetManage/admin xử lý được Đề Xuất của phòng ban đó.
+  BUDGET: { dbKey: 'budgetDeptWorkflows', label: 'Ngân Sách - Đề Xuất', title: '📊 Cấu Hình Quy Trình Duyệt Đề Xuất Ngân Sách Theo Phòng Ban' },
   // "Vận Hành" — Mở Mới/Sửa Chữa Siêu Thị vẫn theo phòng ban (mỗi luồng 1 map dept-workflow RIÊNG, cùng
   // khuôn OFFICE_BUY/OFFICE_FIX ở trên), KHÔNG liên quan gì tới module "Tổng Hợp" (2 module tách biệt
   // hoàn toàn, xem BUSINESS_MODULES).

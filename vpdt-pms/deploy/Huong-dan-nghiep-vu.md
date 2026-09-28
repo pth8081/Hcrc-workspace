@@ -266,17 +266,20 @@ nữa — không có bước phê duyệt nào cả, kể cả giai đoạn Dự
 Toán **không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì
 dùng "Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
 
-**Ngân Sách KHÔNG còn ở đây từ v23.0** — `WF_MODULE_CONFIG` đã bỏ hẳn entry
-BUDGET khi thiết kế lại module thành "Ngân Sách 2.0" (xem mục 6, `module-
-ngansach.js`): `budgetLines` (collection MỚI, dùng cho **mọi** màn nhập liệu
-hiện tại — Đề Xuất/Phê Duyệt/Sử Dụng) không đi qua `lib/workflowEngine.js`
-nữa, chỉ còn đúng 1 cấp gác quyền PHẲNG (`budgetCreate` tạo Đề Xuất,
-`budgetManage` nhập thẳng Phê Duyệt + quản lý toàn bộ) — **không còn màn cấu
-hình quy trình theo phòng ban nào trong "🔄 Quy Trình & Phê Duyệt" (mục 7.1)
-cho Ngân Sách nữa**. `budgetDeptWorkflows`/`budgetPeriods` (module CŨ, dựa
-trên `budgetEntries`) vẫn còn trong AppData/schema để **không mất dữ liệu ngân
-sách lịch sử** — nhưng chỉ còn hiệu lực cho dữ liệu `budgetEntries` kiểu cũ
-đã tạo trước v23.0, không còn màn nhập liệu mới nào ghi vào 2 bảng đó nữa.
+**Ngân Sách — KHÔI PHỤC một phần từ 9/2026** (rà soát chuyên sâu "tạo≠duyệt"
+phát hiện #5): `budgetLines` (collection Ngân Sách 2.0, dùng cho **mọi** màn
+nhập liệu hiện tại — Đề Xuất/Phê Duyệt/Sử Dụng) VẪN KHÔNG đi qua
+`lib/workflowEngine.js`/`applyWorkflowAction()` đầy đủ (không có nhiều bước
+tuần tự `currentStep` như các module khác ở mục này), nhưng bước **📝 Đề
+Xuất** nay ĐỌC LẠI `budgetDeptWorkflows` (chỉ dùng đúng approver **bước 1**
+của quy trình cấu hình — cấu hình nhiều bước cho Ngân Sách chỉ bước 1 có tác
+dụng thật) qua `canDecideBudgetLineProposal()` (`lib/recordActions.js`) —
+màn cấu hình **"📊 QT Ngân Sách - Đề Xuất"** đã ĐƯỢC KHÔI PHỤC lại trong "🔄
+Quy Trình & Phê Duyệt" (mục 7.1, xem chi tiết ở mục 6). Bước **✅ Phê Duyệt**
+vẫn giữ nguyên 1 cấp gác quyền PHẲNG như trước (chỉ `budgetManage`/admin —
+KHÔNG đi qua cấu hình phòng ban này). `budgetDeptWorkflows` là dữ liệu CHUNG
+với module Ngân Sách 1.0 cũ (`budgetEntries`) — cấu hình 1 phòng ban ở đây áp
+dụng cho CẢ 2 nơi đọc tới nó.
 
 Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 Quy Trình & Phê
 Duyệt** (mục 7) — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier
@@ -770,6 +773,15 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
   đổi người thực hiện, không chỉ lúc đang "Đang thực hiện" — người nhận việc
   gửi được Xin Gia Hạn/Xin Huỷ ngay khi việc còn "Cần làm", nên bản vá cũ (chỉ
   phủ nhánh Đang thực hiện) vẫn để lọt đúng bế tắc đó cho việc chưa nhận.
+  **Chặn tự duyệt việc tự giao cho bản thân (9/2026, rà soát chuyên sâu
+  "tạo≠duyệt")**: Duyệt/Từ chối yêu cầu Xin Gia Hạn/Xin Huỷ chỉ người GIAO
+  việc (`assignedBy`) mới thao tác được — nhưng người có `taskEdit` vẫn có
+  thể TỰ GIAO việc cho chính mình (`assignedBy === assignedTo`), khi đó họ
+  vừa là người nhận việc gửi yêu cầu vừa là người duyệt. Nay chặn: người giao
+  việc KHÔNG tự duyệt/từ chối được yêu cầu do CHÍNH MÌNH gửi (tức việc đó
+  đang tự giao cho bản thân) — kể cả admin không có ngoại lệ ở đây vì admin
+  hiếm khi tự giao việc cho mình, nhưng nếu có thì vẫn được vượt qua như mọi
+  quy tắc admin-bypass khác trong hệ thống.
 - **Biên Bản Họp** — lập biên bản, có thể chọn 1 lịch Đặt Phòng Họp có sẵn để
   tự điền thông tin cơ bản. **Xem/Tải/In khớp nội dung (từ 9/2026)** — trước
   đây màn "Xem" và file Tải/khung In dựng HTML riêng biệt, lệch cả nội dung
@@ -964,6 +976,13 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       chống trùng, hàng chờ xét của bộ phận tuyển dụng dễ bị loãng bởi các
       lượt giới thiệu lặp. Giới thiệu ứng viên đó cho 1 vị trí KHÁC vẫn bình
       thường (chỉ so trong cùng 1 tin).
+    - **Cập nhật trạng thái ứng viên** (Mới/Đã liên hệ/Đã tuyển/Từ chối) —
+      người giữ `internalRecruitmentCreate` cập nhật được cho MỌI lượt giới
+      thiệu (không riêng tin do mình đăng). **Chặn tự cập nhật ứng viên do
+      chính mình giới thiệu (9/2026, rà soát chuyên sâu "tạo≠duyệt")**: giới
+      thiệu ứng viên mở cho mọi người có `internalRecruitmentCreate`, nên
+      người TỰ giới thiệu 1 ứng viên KHÔNG được tự xử lý luôn trạng thái ứng
+      viên đó — phải nhờ đồng nghiệp khác cùng giữ quyền xử lý hộ.
 
 ### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
 
@@ -1284,6 +1303,15 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   bảng "Lịch Sử Cấp Phát" (từng phiếu) và "Đang Giữ" (gộp theo nhân viên×mặt
   hàng×size). Nhân viên thường xem + xác nhận được CHÍNH phiếu của mình qua
   mục **"👕 Đồng Phục Của Tôi"** trong "⚙️ Cá Nhân Hóa" (mục 2.3).
+  **Duyệt kỳ cấp phát — chặn tự duyệt (9/2026, rà soát chuyên sâu
+  "tạo≠duyệt")**: mỗi "kỳ cấp phát" (`uniformPeriods`) khởi tạo ở trạng thái
+  "⏳ Chờ duyệt" (`PENDING_APPROVAL`), cần người giữ quyền **"Duyệt Đồng
+  Phục"** (`uniformApprove`, hoặc `uniformManage`/admin — `uniformManage`
+  vẫn GỘP năng lực duyệt, không cần cấp riêng `uniformApprove`) bấm "✅
+  Duyệt" mới cho phân bổ xuống siêu thị. Người TẠO kỳ cấp phát KHÔNG tự duyệt
+  được đúng kỳ do chính mình tạo, kể cả khi họ giữ `uniformManage` — cần ít
+  nhất 2 người giữ `uniformManage`/`uniformApprove` (hoặc nhờ admin) để tránh
+  kỳ bị kẹt khi chỉ có đúng 1 người giữ quyền duyệt đồng phục.
   **Điều chuyển giữa 2 siêu thị — mô hình "hàng đang vận chuyển"**: Giám Đốc
   Siêu Thị A tạo yêu cầu điều chuyển → Hành Chính/người có quyền duyệt
   (`uniformManage`) duyệt (`APPROVED`) → **tồn kho siêu thị A trừ ngay lúc
@@ -1716,12 +1744,21 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     collection duy nhất `budgetLines` với **3 giai đoạn (Stage) tách biệt**,
     4 tab:
     - **📝 Đề Xuất** (`PROPOSED`) — người có quyền **"Tạo/Quản Lý Ngân Sách"**
-      (`budgetCreate`) tạo/sửa/xoá đề xuất của mình (trạng thái Chờ duyệt);
-      người có **"Quản Lý Ngân Sách Toàn Quyền"** (`budgetManage`) duyệt hoặc
-      từ chối — duyệt xong **tự sinh 1 dòng ✅ Phê Duyệt** tương ứng. Dòng bị
-      **Từ chối** (từ 9/2026) sửa được và tự chuyển lại về Chờ duyệt ngay khi
-      lưu (nút "Sửa & gửi lại", xoá lý do từ chối cũ) — không còn kẹt vĩnh
-      viễn phải tạo dòng mới.
+      (`budgetCreate`) tạo/sửa/xoá đề xuất của mình (trạng thái Chờ duyệt).
+      **Ai được Duyệt/Từ chối (đổi từ 9/2026, rà soát chuyên sâu "tạo≠duyệt"
+      phát hiện #5)**: người có **"Quản Lý Ngân Sách Toàn Quyền"**
+      (`budgetManage`, hoặc admin) LUÔN duyệt/từ chối được mọi dòng bất kể
+      phòng ban; người CHỈ có `budgetCreate` (không `budgetManage`) giờ PHẢI
+      là **approver bước 1** đã được admin cấu hình cho ĐÚNG Khối Phòng Ban
+      của dòng đó (Hệ Thống → Quy Trình & Phê Duyệt → "📊 QT Ngân Sách - Đề
+      Xuất") — không còn "duyệt chéo" tự do như trước. **Phòng ban CHƯA được
+      cấu hình = chỉ `budgetManage`/admin xử lý được Đề Xuất của phòng ban
+      đó**, người chỉ có `budgetCreate` phải chờ admin cấu hình trước. Không
+      ai tự duyệt/tự từ chối được đề xuất do chính mình tạo, kể cả khi được
+      cấu hình làm approver của chính phòng ban mình. Duyệt xong **tự sinh 1
+      dòng ✅ Phê Duyệt** tương ứng. Dòng bị **Từ chối** (từ 9/2026) sửa được
+      và tự chuyển lại về Chờ duyệt ngay khi lưu (nút "Sửa & gửi lại", xoá lý
+      do từ chối cũ) — không còn kẹt vĩnh viễn phải tạo dòng mới.
     - **✅ Phê Duyệt** (`APPROVED`) — người có `budgetManage` nhập trực tiếp
       (không cần qua Đề Xuất trước) hoặc duyệt/từ chối dòng chuyển từ Đề
       Xuất lên. Khi 1 dòng Phê Duyệt được duyệt, hệ thống **tự sinh 1 dòng

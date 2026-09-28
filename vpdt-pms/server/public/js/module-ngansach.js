@@ -28,6 +28,18 @@ let budgetLineEditingId = { Propose: null, Approve: null };
 
 function canManageBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage); }
 function canCreateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetCreate); }
+// Mirror CLIENT của canDecideBudgetLineProposal() (lib/recordActions.js) — khôi phục (rà soát chuyên sâu
+// 9/2026, phát hiện #5): bước "Đề Xuất" nay xử lý theo cấu hình phê duyệt riêng từng phòng ban
+// (DB.budgetDeptWorkflows[item.dept], giống itPriceApprovals/carRegs/...) thay vì mọi người có
+// budgetCreate đều duyệt chéo được nhau. CHỈ dùng để ẩn/hiện nút (UX) — server luôn tự xác minh lại qua
+// bản gốc trước khi ghi, không phải điểm bảo mật. Phòng ban chưa cấu hình -> approvers rỗng -> chỉ
+// budgetManage/admin quyết định được.
+function canDecideBudgetLineProposalClient(user, item) {
+  if (user?.perms?.admin || user?.perms?.budgetManage) return true;
+  if (!user?.perms?.budgetCreate) return false;
+  const wfConfig = DB.budgetDeptWorkflows?.[item.dept];
+  return resolveEffectiveStepApprovers(wfConfig, 1).includes(user.username);
+}
 function canAggregateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView); }
 
 // blId/blEl — khớp đúng khuôn bId/bEl của thiết kế cũ (2 form Đề Xuất/Phê Duyệt dùng CHUNG code, chỉ
@@ -200,7 +212,7 @@ function renderBudgetLineList(stage) {
   const canManage = canManageBudgetLineClient(currentUser);
   tbody.innerHTML = items.map(item => {
     const isOwner = item.createdBy === currentUser.username;
-    const canDecide = item.status === 'SUBMITTED' && !isOwner && (stage === 'APPROVED' ? canManage : canCreateBudgetLineClient(currentUser));
+    const canDecide = item.status === 'SUBMITTED' && !isOwner && (stage === 'APPROVED' ? canManage : canDecideBudgetLineProposalClient(currentUser, item));
     // LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây dòng REJECTED không có canEdit nào cả
     // (chỉ hiện "Đã xử lý bởi ...", không nút gì khác) — NGÕ CỤT VĨNH VIỄN, trái sơ đồ Nghiệp Vụ tự vẽ
     // "Bị từ chối -> Sửa & gửi lại". Server (updateBudgetLineDraft()) nay đã cho sửa cả khi REJECTED

@@ -268,11 +268,11 @@ function createMockApi(state) {
       }
       if (action === 'approve-proposal') {
         const item = findOr404(all, id);
-        return { item: recordActions.approveBudgetLineProposal(user, item) };
+        return { item: recordActions.approveBudgetLineProposal(user, item, state.appData) };
       }
       if (action === 'reject-proposal') {
         const item = findOr404(all, id);
-        return { item: recordActions.rejectBudgetLineProposal(user, item, payload) };
+        return { item: recordActions.rejectBudgetLineProposal(user, item, payload, state.appData) };
       }
       if (action === 'approve') {
         const item = findOr404(all, id);

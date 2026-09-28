@@ -8,6 +8,15 @@ const DEPTS = ['Phòng Kinh Doanh', 'Phòng Kế Toán', 'Ban Giám Đốc'];
 
 const WF_1STEP_KD = { workflowId: 'WF_1STEP', approvers: { 1: ['tp_kd'] } };
 
+// Riêng cho budgetDeptWorkflows (Ngân Sách — Đề Xuất, rà soát chuyên sâu 9/2026 phát hiện #5, KHÔNG dùng
+// chung WF_1STEP_KD ở trên vì object đó bị TÁI SỬ DỤNG cho nhiều dept-workflow khác (deptWorkflows/
+// officeBuy/Fix/Invest/contractApprovalDeptWorkflows) — đổi approvers của nó sẽ vô tình ảnh hưởng các
+// module đó). Có CẢ kd1 lẫn tp_kd làm approver bước 1 của "Phòng Kinh Doanh" — cần thiết để
+// test-budget-lines.js kiểm thử được ĐÚNG kịch bản "approver hợp lệ của phòng ban vẫn KHÔNG tự duyệt
+// được Đề Xuất do chính mình tạo" (assertNotSelfDecidingBudgetLine), không chỉ đơn thuần "không phải
+// approver nên bị chặn".
+const WF_1STEP_KD_BUDGET = { workflowId: 'WF_1STEP', approvers: { 1: ['kd1', 'tp_kd'] } };
+
 const USERS = [
   { id: 1, username: 'admin', pass: '123456', name: 'Quản Trị Viên', email: 'admin@company.com', phone: '0900000001', dept: 'Ban Giám Đốc', jobTitle: 'Chủ Tịch', perms: { admin: true } },
   {
@@ -130,7 +139,7 @@ function buildAppData() {
     officeInvestDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     vppDeptWorkflows: {},
     itPriceDeptWorkflows: {},
-    budgetDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
+    budgetDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD_BUDGET },
     contractApprovalDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     // Lớp phê duyệt bổ sung tuỳ chọn của Hợp Đồng — mỗi lớp 1 người phụ trách RIÊNG để bài test xác
     // minh đúng THỨ TỰ/ĐÚNG NGƯỜI từng bước, không dùng chung 1 người (che mất lỗi thứ tự nếu có). Shape

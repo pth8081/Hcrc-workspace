@@ -3857,6 +3857,14 @@ function resolvePendingTaskAction(kind, verb, user, task) {
   if (!(task.assignedBy === user.username || user.perms?.admin)) {
     throw new HttpError(403, config.resolveErrorMsg);
   }
+  // Chặn tự duyệt/tự từ chối yêu cầu do CHÍNH MÌNH gửi (rà soát chuyên sâu 9/2026, phát hiện #4 — việc TỰ
+  // GIAO cho bản thân khá phổ biến với người có taskEdit, khi đó assignedBy === assignedTo === chính họ,
+  // nên điều kiện assignedBy===user ở trên vẫn vô tình cho họ tự duyệt luôn yêu cầu gia hạn/huỷ do chính
+  // mình xin — task.assignedTo lúc này chính là người ĐÃ GỬI yêu cầu pending đang xét, xem
+  // requestExtension()/cancelOrRequestCancelTask() ở trên) — admin vẫn luôn vượt qua được.
+  if (!user.perms?.admin && task.assignedTo === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối yêu cầu do chính mình gửi (việc tự giao cho bản thân)');
+  }
   // Công việc có thể đã bị huỷ trực tiếp (isAssignerOrAdmin, xem cancelOrRequestCancelTask()) SAU khi
   // yêu cầu này được gửi nhưng TRƯỚC khi được duyệt/từ chối — trước đây không kiểm tra, cho phép duyệt
   // gia hạn (đổi deadline/tăng extensionCount) trên 1 công việc đã CANCELLED. Nhánh này thực ra hiếm khi
@@ -5624,8 +5632,21 @@ function confirmRecruitmentJobFilled(payload, user, job) {
 
 const RECRUITMENT_REFERRAL_STATUSES = new Set(['NEW', 'CONTACTED', 'HIRED', 'REJECTED']);
 
+// Chặn người TỰ giới thiệu ứng viên (referral.referrerUsername) rồi TỰ quyết định luôn trạng thái hồ sơ
+// đó (rà soát chuyên sâu 9/2026, phát hiện #3 — giới thiệu ứng viên mở cho mọi người, không cần quyền
+// riêng, nên 1 người có internalRecruitmentCreate hoàn toàn có thể tự giới thiệu rồi tự xử lý luôn ứng
+// viên của chính mình) — cùng khuôn assertNotSelfDecidingLicense()/assertNotSelfDecidingUniformPeriod(),
+// admin vẫn luôn vượt qua được.
+function assertNotSelfDecidingRecruitmentReferral(user, referral) {
+  if (user?.perms?.admin) return;
+  if (referral && referral.referrerUsername === user?.username) {
+    throw new HttpError(403, 'Bạn không thể tự cập nhật trạng thái ứng viên do chính mình giới thiệu');
+  }
+}
+
 function setRecruitmentReferralStatus(payload, user, referral) {
   if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền cập nhật trạng thái ứng viên');
+  assertNotSelfDecidingRecruitmentReferral(user, referral);
   const status = payload?.status;
   if (!RECRUITMENT_REFERRAL_STATUSES.has(status)) throw new HttpError(400, 'Trạng thái không hợp lệ');
   referral.status = status;
@@ -6702,6 +6723,17 @@ function canApproveUniform(user) {
   return !!(user?.perms?.admin || user?.perms?.uniformApprove || user?.perms?.uniformManage);
 }
 
+// Chặn tự duyệt/tự từ chối kỳ do CHÍNH MÌNH tạo (rà soát chuyên sâu 9/2026, phát hiện #1 — uniformManage
+// vừa tạo vừa duyệt được cùng 1 kỳ mà không ai kiểm soát độc lập) — cùng khuôn
+// assertNotSelfDecidingLicense()/assertNotSelfDecidingInternalPost() đã dùng cho các module tương tự,
+// admin vẫn luôn vượt qua được (đặc quyền nhất quán toàn hệ thống).
+function assertNotSelfDecidingUniformPeriod(user, period) {
+  if (user?.perms?.admin) return;
+  if (period && period.creator === user?.username) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối kỳ cấp phát đồng phục do chính mình tạo');
+  }
+}
+
 // Sửa tên/ghi chú 1 kỳ cấp phát đồng phục đã tạo (uniformPeriods, 10/2026 — trước đây chỉ Admin xoá
 // được, không sửa được tên kỳ/ghi chú sau khi tạo). CỐ Ý CHỈ cho sửa 2 field mô tả này — KHÔNG đụng
 // allocations[] (đã có confirmUniformAllocation() riêng theo từng siêu thị, sửa lại phân bổ sau khi 1
@@ -6717,6 +6749,7 @@ function editUniformPeriod(user, period, payload) {
 
 function approveUniformPeriod(user, period) {
   if (!canApproveUniform(user)) throw new HttpError(403, 'Bạn không có quyền duyệt kỳ cấp phát đồng phục');
+  assertNotSelfDecidingUniformPeriod(user, period);
   if (period.approvalStatus && period.approvalStatus !== 'PENDING_APPROVAL') {
     throw new HttpError(409, 'Kỳ cấp phát này đã được xử lý duyệt trước đó');
   }
@@ -6730,6 +6763,7 @@ function approveUniformPeriod(user, period) {
 
 function rejectUniformPeriod(user, period, payload) {
   if (!canApproveUniform(user)) throw new HttpError(403, 'Bạn không có quyền duyệt kỳ cấp phát đồng phục');
+  assertNotSelfDecidingUniformPeriod(user, period);
   if (period.approvalStatus && period.approvalStatus !== 'PENDING_APPROVAL') {
     throw new HttpError(409, 'Kỳ cấp phát này đã được xử lý duyệt trước đó');
   }
@@ -7272,15 +7306,13 @@ function updateBudgetTemplate(user, item, payload) {
 
 // ===================== NGÂN SÁCH 2.0 (budgetLines — v23.0, thay budgetEntries/budgetPeriods/
 // budgetTemplates cho MỌI màn nhập liệu mới, xem chú thích đầy đủ ở sql/schema.sql) =====
-// 3 giai đoạn ĐỘC LẬP (item.stage): 'PROPOSED' (Đề Xuất — duyệt/từ chối TẠI CHỖ, không sinh gì thêm),
-// 'APPROVED' (Phê Duyệt — duyệt xong tự sinh đúng 1 dòng 'USED' cha, xem buildBudgetLineUsedRow()),
-// 'USED' (dòng cha hệ thống tự sinh, parentId NULL — hoặc dòng con parentId trỏ về dòng cha, ghi nhận
-// từng lần sử dụng thực tế). KHÔNG dùng lib/workflowEngine.js (không có "bước duyệt theo phòng ban") —
-// chỉ 1 cấp gác bằng permission phẳng: budgetCreate lập Đề Xuất (đúng Khối Phòng Ban mình HOẶC bất kỳ,
-// xem lib/createValidation.js budgetLines.extraValidate — Khối Phòng Ban là lựa chọn nghiệp vụ tự do,
-// không phải điều kiện phân quyền), budgetManage/admin toàn quyền (bao gồm cả Phê Duyệt + Sử Dụng).
-// KHÔNG ai tự duyệt/tự từ chối được thứ do chính mình tạo (assertNotSelfDecidingBudgetLine bên dưới) —
-// đúng nguyên tắc mục 7 tài liệu gốc.
+// 3 giai đoạn ĐỘC LẬP (item.stage): 'PROPOSED' (Đề Xuất), 'APPROVED' (Phê Duyệt — duyệt xong tự sinh
+// đúng 1 dòng 'USED' cha, xem buildBudgetLineUsedRow()), 'USED' (dòng cha hệ thống tự sinh, parentId
+// NULL — hoặc dòng con parentId trỏ về dòng cha, ghi nhận từng lần sử dụng thực tế). budgetCreate lập
+// Đề Xuất (đúng Khối Phòng Ban mình HOẶC bất kỳ, xem lib/createValidation.js budgetLines.extraValidate
+// — Khối Phòng Ban là lựa chọn nghiệp vụ tự do, không phải điều kiện phân quyền), budgetManage/admin
+// toàn quyền (bao gồm cả Phê Duyệt + Sử Dụng). KHÔNG ai tự duyệt/tự từ chối được thứ do chính mình tạo
+// (assertNotSelfDecidingBudgetLine bên dưới) — đúng nguyên tắc mục 7 tài liệu gốc.
 
 function canCreateBudgetLine(user) {
   return !!(user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetCreate);
@@ -7292,11 +7324,31 @@ function assertNotSelfDecidingBudgetLine(user, item) {
   }
 }
 
-// Đề Xuất (PROPOSED) — budgetCreate/budgetManage/admin đều xử lý được (khác Phê Duyệt, xem
-// approveBudgetLine() bên dưới chỉ budgetManage/admin) — đúng tinh thần "Đề xuất" là bước sàng lọc nội
-// bộ nhẹ, không nhất thiết cần cấp quản lý.
-function approveBudgetLineProposal(user, item) {
-  if (!canCreateBudgetLine(user)) throw new HttpError(403, 'Bạn không có quyền xử lý đề xuất ngân sách');
+// Ai được QUYẾT ĐỊNH (Duyệt/Từ chối) 1 dòng Đề Xuất (PROPOSED) — rà soát chuyên sâu 9/2026, phát hiện
+// #5: trước đây BẤT KỲ ai có budgetCreate đều "duyệt chéo" được Đề Xuất của BẤT KỲ phòng ban nào (chỉ
+// chặn tự duyệt đúng dòng mình tạo), không theo cấu hình phòng ban như itPriceApprovals/carRegs/
+// officeReqs/... — đổi sang cấu hình theo phòng ban (budgetDeptWorkflows, TÁI SỬ DỤNG đúng cấu trúc dữ
+// liệu đã có sẵn từ Ngân Sách 1.0/budgetEntries cũ, xem MODULE_CONFIGS.budgetEntries ở
+// lib/workflowEngine.js và màn admin "Hệ Thống → Quy Trình & Phê Duyệt → Ngân Sách", module-workflow.js).
+// budgetManage/admin vẫn LUÔN quyết định được mọi dòng bất kể cấu hình (nhất quán với việc họ đã toàn
+// quyền cả bước Phê Duyệt cuối — approveBudgetLine() bên dưới — xiết riêng bước Đề Xuất sẽ không nhất
+// quán). Người CHỈ có budgetCreate (không budgetManage) giờ phải là approver BƯỚC 1 của ĐÚNG phòng ban
+// item.dept mới quyết định được — budgetLines không có currentStep nhiều bước như
+// lib/workflowEngine.js's applyWorkflowAction() (chỉ 1 cấp quyết định duy nhất), nên nếu admin lỡ cấu
+// hình quy trình nhiều bước cho Ngân Sách thì CHỈ bước 1 có tác dụng thật ở đây. Phòng ban CHƯA được
+// admin cấu hình gì = approvers rỗng = chỉ budgetManage/admin quyết định được (KHÔNG âm thầm rơi về
+// "ai cũng duyệt chéo được" như hành vi cũ) — admin cần vào cấu hình Ngân Sách theo phòng ban trước khi
+// người chỉ có budgetCreate có thể xử lý Đề Xuất của phòng ban đó.
+function canDecideBudgetLineProposal(user, item, appData) {
+  if (user.perms?.admin || user.perms?.budgetManage) return true;
+  if (!user.perms?.budgetCreate) return false;
+  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  const { approvers } = flatWorkflowConfigToSteps(appData?.budgetDeptWorkflows?.[item.dept], appData || {});
+  return (approvers[1] || []).includes(user.username);
+}
+
+function approveBudgetLineProposal(user, item, appData) {
+  if (!canDecideBudgetLineProposal(user, item, appData)) throw new HttpError(403, 'Bạn không có quyền xử lý đề xuất ngân sách của phòng ban này');
   if (item.stage !== 'PROPOSED') throw new HttpError(409, 'Dòng này không phải Đề Xuất');
   if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Đề xuất này đã được xử lý rồi');
   assertNotSelfDecidingBudgetLine(user, item);
@@ -7306,8 +7358,8 @@ function approveBudgetLineProposal(user, item) {
   item.decidedAt = nowVN();
   return item;
 }
-function rejectBudgetLineProposal(user, item, payload) {
-  if (!canCreateBudgetLine(user)) throw new HttpError(403, 'Bạn không có quyền xử lý đề xuất ngân sách');
+function rejectBudgetLineProposal(user, item, payload, appData) {
+  if (!canDecideBudgetLineProposal(user, item, appData)) throw new HttpError(403, 'Bạn không có quyền xử lý đề xuất ngân sách của phòng ban này');
   if (item.stage !== 'PROPOSED') throw new HttpError(409, 'Dòng này không phải Đề Xuất');
   if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Đề xuất này đã được xử lý rồi');
   assertNotSelfDecidingBudgetLine(user, item);
@@ -8237,7 +8289,7 @@ module.exports = {
   canCancelUniformTransfer, cancelUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
-  canCreateBudgetLine, approveBudgetLineProposal, rejectBudgetLineProposal, approveBudgetLine, rejectBudgetLine,
+  canCreateBudgetLine, canDecideBudgetLineProposal, approveBudgetLineProposal, rejectBudgetLineProposal, approveBudgetLine, rejectBudgetLine,
   updateBudgetLineDraft, assertCanDeleteBudgetLineDraft,
   buildBudgetLineUsedRow, updateBudgetLineUsedParent, addBudgetLineChild, updateBudgetLineChild,
   recomputeBudgetLineUsageStatus, assertCanDeleteBudgetLineUsedParent, assertCanDeleteBudgetLineChild,
