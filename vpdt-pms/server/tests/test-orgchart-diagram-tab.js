@@ -184,9 +184,15 @@ async function main() {
     svgHTML: document.getElementById('orgChartDiagramContainer').innerHTML
   }));
   record('Bấm sub-tab Sơ Đồ Trực Quan -> đúng view hiện (Cây/KPI ẩn)', diagramState.diagramVisible && diagramState.treeHidden && diagramState.kpiHidden);
-  record('SVG chứa tên MỌI Phòng Ban (kể cả Phòng Ban con lồng nhau)', diagramState.svgHTML.includes('Phòng Kinh Doanh') && diagramState.svgHTML.includes('Phòng IT') && diagramState.svgHTML.includes('Kinh Doanh Khu Vực 1'));
-  record('SVG chứa tên Công Ty (node gốc)', diagramState.svgHTML.includes('CÔNG TY TEST'));
-  record('SVG KHÔNG chứa bất kỳ Chức Danh/tên Vị Trí nào (đúng yêu cầu "chỉ cần cấp phòng")', !diagramState.svgHTML.includes('Tổng Giám Đốc') && !diagramState.svgHTML.includes('Trưởng Phòng Kinh Doanh'));
+  // LỖI ĐÃ VÁ (người dùng báo "chữ tràn ra ngoài ô") — tên Phòng Ban dài giờ có thể XUỐNG DÒNG (mỗi
+  // dòng là 1 thẻ <text> riêng, xem ocWrapLines()/module-orgchart.js), nên không còn chắc xuất hiện
+  // NGUYÊN VĂN liền mạch trong chuỗi svgHTML — gộp toàn bộ nội dung text (bỏ hết thẻ + khoảng trắng) rồi
+  // so khớp cũng bỏ khoảng trắng, để việc xuống dòng hợp lệ không làm test này báo sai.
+  const svgTextFlat = diagramState.svgHTML.replace(/<[^>]+>/g, ' ').replace(/\s+/g, '');
+  const hasFlat = (name) => svgTextFlat.includes(name.replace(/\s+/g, ''));
+  record('SVG chứa tên MỌI Phòng Ban (kể cả Phòng Ban con lồng nhau)', hasFlat('Phòng Kinh Doanh') && hasFlat('Phòng IT') && hasFlat('Kinh Doanh Khu Vực 1'));
+  record('SVG chứa tên Công Ty (node gốc)', hasFlat('CÔNG TY TEST'));
+  record('SVG KHÔNG chứa bất kỳ Chức Danh/tên Vị Trí nào (đúng yêu cầu "chỉ cần cấp phòng")', !hasFlat('Tổng Giám Đốc') && !hasFlat('Trưởng Phòng Kinh Doanh'));
 
   // ===== 3. 2 nút Tải Ảnh/Tải SVG tồn tại, bấm không lỗi JS =====
   const exportBtnsExist = await page.evaluate(() => !!document.getElementById('btnOrgChartDiagramPng') && !!document.getElementById('btnOrgChartDiagramSvg'));

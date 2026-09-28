@@ -1,10 +1,27 @@
 # Phiên bản hiện tại
 
-**24.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
 
-## v24.38 (2026-09-28): Vá 4 lỗ hổng "tạo hồ sơ ≠ duyệt hồ sơ" — Đồng Phục/Tuyển Dụng/Công Việc + Ngân Sách chuyển sang cấu hình phê duyệt theo phòng ban
+## v24.39 (2026-09-28): Vá lỗi chữ tràn ra ngoài ô ở Sơ Đồ Trực Quan (Cơ Cấu Tổ Chức)
+
+Người dùng báo tên Phòng/Ban dài (VD "BAN VẬN HÀNH KINH DOANH") bị tràn hẳn ra
+ngoài khung hình chữ nhật trên tab **🖼️ Sơ Đồ Trực Quan** (Nhân Sự → Cơ Cấu Tổ
+Chức) khi vẽ sơ đồ SVG. Nguyên nhân: tên luôn vẽ 1 dòng `text-anchor="middle"`
+không kiểm tra độ dài, trong khi khung `rect` có width cố định theo loại node.
+
+Vá bằng kỹ thuật xuống dòng theo SỐ KÝ TỰ ước lượng (không dùng
+`canvas.measureText()`, cùng nguyên lý `nvWrapLines()` đã dùng ở module
+Nghiệp Vụ nhưng viết riêng ở `module-orgchart.js` do 2 module tải lười theo
+nhóm khác nhau, không đảm bảo thứ tự nạp) — `ocWrapLines()`: tối đa 2 dòng,
+dòng 2 cắt bớt + "…" nếu vẫn còn quá dài. Khung `rect` giờ tự cao thêm theo
+số dòng thực tế của từng node (`node._h`, tính 1 lần ở bước quét trước khi
+vẽ), áp dụng luôn cho cả tính toán đường nối (connector) và tổng chiều cao
+SVG — không còn dùng chiều cao cố định `OC_DIAGRAM_BOX_H[type]` cho mọi node
+như trước. Đã kiểm chứng bằng ảnh demo dựng lại đúng tên trong ảnh chụp
+người dùng gửi (`tests/demo-orgchart-diagram-textfit.js`) và chạy lại đủ 5
+file test Cơ Cấu Tổ Chức hiện có (không phát sinh hồi quy).
 
 Rà soát chuyên sâu (6 agent song song) toàn bộ ~24 module nghiệp vụ có bước
 "tạo/đề xuất" và "duyệt", kiểm tra đúng nguyên tắc: quyền TẠO phải tách biệt

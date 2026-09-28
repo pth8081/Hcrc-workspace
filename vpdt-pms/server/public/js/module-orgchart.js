@@ -268,6 +268,40 @@ const OC_DIAGRAM_BOX_H = { COMPANY: 62, DEPARTMENT: 50 };
 const OC_DIAGRAM_FONT = "Arial, 'Helvetica Neue', Helvetica, sans-serif"; // KHÔNG dùng web font — canvas
 // rasterize SVG lúc xuất PNG không chắc tải được font ngoài (xem downloadOrgChartDiagramPng()).
 
+// LỖI ĐÃ VÁ (người dùng báo "chữ tràn ra ngoài ô" — tên Phòng Ban dài như "BAN VẬN HÀNH KINH DOANH"
+// tràn hẳn ra ngoài khung `rect` vì trước đây tên luôn vẽ 1 dòng `text-anchor="middle"` không kiểm tra
+// độ dài, còn `rect` lại có width CỐ ĐỊNH theo loại node (OC_DIAGRAM_BOX_W). Cùng kỹ thuật xuống dòng
+// theo SỐ KÝ TỰ ước lượng (không dùng canvas.measureText() — mirror nvWrapLines()/nvRoundedNode() ở
+// module-nghiepvu.js NHƯNG viết LẠI riêng ở đây thay vì gọi thẳng hàm bên đó, vì 2 module được tải lười
+// theo nhóm riêng (loadModuleGroup()) — không đảm bảo module-nghiepvu.js đã nạp khi sơ đồ này chạy) —
+// tối đa 2 dòng, dòng 2 cắt bớt + "…" nếu vẫn còn quá dài, GIỐNG HỆT quy tắc nvWrapLines(). Số ký tự tối
+// đa mỗi dòng ước lượng từ độ rộng ký tự trung bình của Arial 700 (bold) tại đúng cỡ chữ đang dùng —
+// hệ số 7.6 tự đo bằng ảnh chụp thật (xem test-orgchart-diagram-textfit.js), KHÔNG suy đoán tay.
+function ocWrapLines(text, maxChars) {
+  if (!text) return [];
+  const words = String(text).split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const next = cur ? cur + ' ' + w : w;
+    if (next.length > maxChars && cur) { lines.push(cur); cur = w; }
+    else cur = next;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > 2) {
+    lines[1] = lines[1].slice(0, Math.max(0, maxChars - 1)).replace(/\s+\S*$/, '') + '…';
+    return lines.slice(0, 2);
+  }
+  return lines;
+}
+// Chiều rộng ký tự trung bình đo thật (Arial Bold): ~0.62 × cỡ chữ cho chữ hoa/số tiếng Việt thường gặp
+// trong tên Phòng Ban (VIẾT HOA chiếm phần lớn) — nhân biên an toàn 8% (0.67) để KHÔNG lạc quan quá,
+// tránh vẫn tràn nhẹ ở vài từ có nhiều ký tự rộng (M/W/Ô/Ư).
+function ocEstimateMaxChars(boxWidth, fontSize, paddingX) {
+  const avgCharW = fontSize * 0.67;
+  return Math.max(4, Math.floor((boxWidth - paddingX * 2) / avgCharW));
+}
+
 function ocDiagramAssignXY(node, depth, cursorRef) {
   node._depth = depth;
   node._y = OC_DIAGRAM_MARGIN + depth * OC_DIAGRAM_LEVEL_H;
@@ -281,29 +315,56 @@ function ocDiagramAssignXY(node, depth, cursorRef) {
   node._x = (first._x + last._x) / 2;
 }
 
+// Chiều cao THÊM cho mỗi dòng tên vượt quá 1 dòng (dòng 2 trở đi) — 1 dòng vẫn giữ NGUYÊN
+// OC_DIAGRAM_BOX_H[node.type] như trước (không đổi hành vi cho tên ngắn, đa số trường hợp thật tế).
+const OC_DIAGRAM_EXTRA_LINE_H = 16;
+// Padding ngang trong khung + số ký tự coi như "chiếm chỗ" bởi icon 🏢/📁 đứng đầu dòng 1 (emoji rộng
+// hơn ký tự thường ~1.5-2 lần) — trừ vào ngân sách ký tự ước lượng cho AN TOÀN thay vì tính riêng từng
+// dòng (đơn giản hoá, chấp nhận dòng 2 hơi rộng rãi hơn cần thiết một chút).
+const OC_DIAGRAM_TEXT_PAD_X = 12;
+const OC_DIAGRAM_ICON_CHARS = 2.5;
+
+function ocPrepareNodeLines(node) {
+  const isCompany = node.type === 'COMPANY';
+  const fontSize = isCompany ? 15 : 12.5;
+  const maxChars = ocEstimateMaxChars(OC_DIAGRAM_BOX_W[node.type], fontSize, OC_DIAGRAM_TEXT_PAD_X) - OC_DIAGRAM_ICON_CHARS;
+  node._nameLines = ocWrapLines(node.name, maxChars);
+  node._h = OC_DIAGRAM_BOX_H[node.type] + Math.max(0, node._nameLines.length - 1) * OC_DIAGRAM_EXTRA_LINE_H;
+}
+
 function ocRenderDepartmentDiagram(root) {
   ocDiagramAssignXY(root, 0, { x: OC_DIAGRAM_MARGIN });
   let maxDepth = 0, maxX = 0;
   (function scan(n) {
+    ocPrepareNodeLines(n);
     maxDepth = Math.max(maxDepth, n._depth);
     maxX = Math.max(maxX, n._x + OC_DIAGRAM_BOX_W[n.type] / 2);
     n.children.forEach(scan);
   })(root);
   const width = Math.round(maxX + OC_DIAGRAM_MARGIN);
-  const height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * OC_DIAGRAM_LEVEL_H + 16);
+  // Chiều cao tổng: cộng dồn phần "vượt chuẩn" (so với 1 dòng) của node CAO NHẤT ở mỗi cấp, để khung
+  // hình luôn đủ chỗ cho tên dài xuống 2 dòng mà không bị cấp dưới đè lên (trước đây LUÔN cố định
+  // (maxDepth+1)*LEVEL_H, không tính blaị tên dài nào từng làm khung cao hơn 1 dòng).
+  const extraHByDepth = new Array(maxDepth + 1).fill(0);
+  (function scanExtra(n) {
+    extraHByDepth[n._depth] = Math.max(extraHByDepth[n._depth], n._h - OC_DIAGRAM_BOX_H[n.type]);
+    n.children.forEach(scanExtra);
+  })(root);
+  const totalExtraH = extraHByDepth.reduce((a, b) => a + b, 0);
+  const height = Math.round(OC_DIAGRAM_MARGIN + (maxDepth + 1) * OC_DIAGRAM_LEVEL_H + totalExtraH + 16);
 
   let linesSvg = '', nodesSvg = '';
   function drawConnectors(node) {
     if (!node.children.length) return;
-    const pBottom = node._y + OC_DIAGRAM_BOX_H[node.type] / 2;
-    const busY = pBottom + (OC_DIAGRAM_LEVEL_H - OC_DIAGRAM_BOX_H[node.type] / 2 - OC_DIAGRAM_BOX_H[node.children[0].type] / 2) / 2;
+    const pBottom = node._y + node._h / 2;
+    const busY = pBottom + (OC_DIAGRAM_LEVEL_H - node._h / 2 - node.children[0]._h / 2) / 2;
     linesSvg += `<line x1="${node._x}" y1="${pBottom}" x2="${node._x}" y2="${busY}" stroke="#9fb8b5" stroke-width="1.5"/>`;
     if (node.children.length > 1) {
       const firstX = node.children[0]._x, lastX = node.children[node.children.length - 1]._x;
       linesSvg += `<line x1="${firstX}" y1="${busY}" x2="${lastX}" y2="${busY}" stroke="#9fb8b5" stroke-width="1.5"/>`;
     }
     node.children.forEach(c => {
-      const cTop = c._y - OC_DIAGRAM_BOX_H[c.type] / 2;
+      const cTop = c._y - c._h / 2;
       linesSvg += `<line x1="${c._x}" y1="${busY}" x2="${c._x}" y2="${cTop}" stroke="#9fb8b5" stroke-width="1.5"/>`;
       drawConnectors(c);
     });
@@ -311,15 +372,27 @@ function ocRenderDepartmentDiagram(root) {
   drawConnectors(root);
 
   function drawNode(node) {
-    const w = OC_DIAGRAM_BOX_W[node.type], h = OC_DIAGRAM_BOX_H[node.type];
+    const w = OC_DIAGRAM_BOX_W[node.type], h = node._h;
     const x = node._x - w / 2, y = node._y - h / 2;
+    const nameLines = node._nameLines;
     if (node.type === 'COMPANY') {
       nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="#0d3b3a"/>`;
-      nodesSvg += `<text x="${node._x}" y="${node._y - 4}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="15" font-weight="700" fill="#f2fbf9">🏢 ${escapeHtml(node.name)}</text>`;
-      nodesSvg += `<text x="${node._x}" y="${node._y + 15}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="10.5" fill="#a9d6cd">Trụ sở chính</text>`;
+      // Khối 2 dòng cố định (tên + "Trụ sở chính") CĂN GIỮA quanh tâm — tên xuống thêm dòng nào thì cả
+      // khối dời lên theo (mirror cách nvRoundedNode() căn giữa label+sub ở module-nghiepvu.js).
+      const totalLines = nameLines.length + 1;
+      const blockTop = node._y - (totalLines - 1) * 9.5;
+      nameLines.forEach((line, i) => {
+        const icon = i === 0 ? '🏢 ' : '';
+        nodesSvg += `<text x="${node._x}" y="${blockTop + i * 19}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="15" font-weight="700" fill="#f2fbf9">${icon}${escapeHtml(line)}</text>`;
+      });
+      nodesSvg += `<text x="${node._x}" y="${blockTop + nameLines.length * 19}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="10.5" fill="#a9d6cd">Trụ sở chính</text>`;
     } else {
       nodesSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#e3f4f1" stroke="#0f766e" stroke-width="1.5"/>`;
-      nodesSvg += `<text x="${node._x}" y="${node._y + 5}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">📁 ${escapeHtml(node.name)}</text>`;
+      const blockTop = node._y - (nameLines.length - 1) * 8 + 5;
+      nameLines.forEach((line, i) => {
+        const icon = i === 0 ? '📁 ' : '';
+        nodesSvg += `<text x="${node._x}" y="${blockTop + i * 16}" text-anchor="middle" font-family="${OC_DIAGRAM_FONT}" font-size="12.5" font-weight="700" fill="#0d3b3a">${icon}${escapeHtml(line)}</text>`;
+      });
     }
     node.children.forEach(drawNode);
   }
