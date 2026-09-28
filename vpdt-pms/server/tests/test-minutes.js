@@ -566,6 +566,64 @@ async function main() {
     JSON.stringify(downloadCheck)
   );
 
+  // ===================== BUG THẬT ĐÃ VÁ (10/2026, người dùng báo cáo trực tiếp kèm ảnh chụp màn hình):
+  // ô "Họ Và Tên" ở CẢ 2 nơi (Thành Phần Tham Dự thật VÀ Mẫu Danh Sách Tham Dự) gắn cả data-op-input lẫn
+  // data-op-change trên CÙNG 1 <input> — trước đây dùng data-arg1="name" (chỉ dành cho updateAttendeeField)
+  // TRÙNG với 1 data-arg-value KHÁC (chỉ dành cho resolveAttendeeAccountInput) trên cùng phần tử, khiến
+  // cspCollectArgs() (đọc theo el.dataset CHUNG, không phân biệt được thuộc tính nào ứng với sự kiện nào —
+  // trình duyệt cũng chỉ giữ giá trị ĐẦU TIÊN khi HTML có thuộc tính trùng tên) truyền NHẦM chuỗi "name"
+  // (chữ) làm rawValue cho resolveAttendeeAccountInput() mỗi khi chọn 1 gợi ý từ danh sách — xem chú thích
+  // đầy đủ tại updateAttendeeNameOnInput()/updateTplRowNameOnInput() (module-bienbanhop.js). Test này BẮT
+  // BUỘC đi qua ĐÚNG luồng sự kiện DOM thật (dispatchEvent 'input' rồi 'change', giống hệt sddSetOptions()
+  // click-chọn-gợi-ý ở core.js) — gọi thẳng resolveAttendeeAccountInput()/resolveTplRowAccountInput() như
+  // các kịch bản khác trong file này đã làm sẽ KHÔNG bắt được lỗi này (đó chính xác là lý do lỗi lọt qua
+  // được review + regression suốt các đợt trước).
+  const domBug = await page.evaluate(({ directorFullLabel, directorName, directorUsername, tplName }) => {
+    // --- Nhánh 1: bảng Thành Phần Tham Dự thật (minutesSection) ---
+    minutesAttendeesRows = [];
+    addAttendeeRow();
+    toggleAttendeeHasAccount(0, 'YES');
+    renderAttendeesTable();
+    const attendeeInput = document.querySelector('#minutesAttendeesTableBody input[data-op-change="resolveAttendeeAccountInput"]');
+    attendeeInput.value = directorFullLabel;
+    attendeeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    attendeeInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // --- Nhánh 2: bảng Mẫu Danh Sách Tham Dự (attendeeTemplateManagerModal) ---
+    openAttendeeTemplateManagerModal();
+    openAttendeeTemplateEditor(null); // tạo mẫu mới, tplEditRows rỗng
+    document.getElementById('tplEditName').value = tplName;
+    addTplEditRow();
+    toggleTplRowHasAccount(0, 'YES');
+    renderTplEditRowsTable();
+    const tplInput = document.querySelector('#tplEditRowsTableBody input[data-op-change="resolveTplRowAccountInput"]');
+    tplInput.value = directorFullLabel;
+    tplInput.dispatchEvent(new Event('input', { bubbles: true }));
+    tplInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    return {
+      attendeeName: minutesAttendeesRows[0].name,
+      attendeeUsername: minutesAttendeesRows[0].username,
+      tplRowName: tplEditRows[0].name,
+      tplRowUsername: tplEditRows[0].username
+    };
+  }, {
+    directorFullLabel: `${directorUser.name} — ${directorUser.dept} (${directorUser.username})`,
+    directorName: directorUser.name,
+    directorUsername: directorUser.username,
+    tplName: 'Mẫu test bug chọn gợi ý'
+  });
+  record(
+    'BUG THẬT ĐÃ VÁ: chọn gợi ý ở "Thành Phần Tham Dự" qua ĐÚNG luồng sự kiện DOM (input+change) ghi đúng tên/username, không còn bị đè thành chữ "name"',
+    domBug.attendeeName === directorUser.name && domBug.attendeeUsername === directorUser.username,
+    JSON.stringify({ attendeeName: domBug.attendeeName, attendeeUsername: domBug.attendeeUsername })
+  );
+  record(
+    'BUG THẬT ĐÃ VÁ: chọn gợi ý ở "Quản Lý Mẫu Danh Sách Tham Dự" qua ĐÚNG luồng sự kiện DOM (input+change) ghi đúng tên/username, không còn bị đè thành chữ "name"',
+    domBug.tplRowName === directorUser.name && domBug.tplRowUsername === directorUser.username,
+    JSON.stringify({ tplRowName: domBug.tplRowName, tplRowUsername: domBug.tplRowUsername })
+  );
+
   await browser.close();
   server.close();
 

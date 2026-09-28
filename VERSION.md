@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**24.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.35 (2026-09-28): Vá lỗi Nghiêm trọng — chọn gợi ý tài khoản ở Biên Bản Họp bị ghi đè thành chữ "name"
+
+Người dùng báo cáo trực tiếp kèm ảnh chụp màn hình: ở "Thành Phần Tham Dự"
+(Biên Bản Họp) VÀ "Quản Lý Mẫu Danh Sách Tham Dự", khi bấm chọn 1 gợi ý tài
+khoản hệ thống từ danh sách gõ-để-tìm, ô "Họ Và Tên" hiện ra chữ "name" thay
+vì tên thật, đồng thời mất luôn liên kết tài khoản vừa chọn.
+
+**Nguyên nhân gốc**: 2 ô input này gắn cả `data-op-input` (cập nhật tên khi
+gõ) lẫn `data-op-change` (dò tài khoản khi rời ô) trên CÙNG 1 phần tử, mỗi
+cái có 1 bộ tham số riêng (`data-arg1="name"` cho cái này, `data-arg-value`
+khác cho cái kia) — nhưng cơ chế dispatch CSP (`cspCollectArgs()`, core.js)
+đọc tham số theo `el.dataset` DÙNG CHUNG cho cả phần tử, không phân biệt
+được thuộc tính nào ứng với sự kiện nào. Trình duyệt phân tích HTML cũng chỉ
+giữ giá trị ĐẦU TIÊN khi gặp thuộc tính trùng tên — khiến sự kiện `change`
+vô tình nhận nhầm chuỗi "name" (vốn chỉ dành cho sự kiện `input`) làm giá
+trị, ghi đè lại tên vừa chọn.
+
+- **Đã vá**: bỏ hẳn tham số `field` khỏi khai báo HTML — tạo 2 hàm nhỏ
+  `updateAttendeeNameOnInput()`/`updateTplRowNameOnInput()` cố định sẵn
+  `field='name'` trong JS, để cả 2 khai báo `data-op-input`/`data-op-change`
+  trên cùng input dùng chung ĐÚNG 1 hình dạng tham số — không còn gì để đè
+  lẫn nhau dù dataset có bị gộp.
+- **Đã rà soát toàn hệ thống** (quét tự động mọi phần tử có ≥2 thuộc tính
+  `data-op-*` trên `public/js/*.js` + `public/fragments/*.html` +
+  `public/index.html`) — xác nhận đây là **2 điểm DUY NHẤT** bị lỗi khuôn
+  này, không module nào khác dùng chung mẫu lỗi.
+- **Test mới**: 2 kịch bản trong `tests/test-minutes.js` đi qua ĐÚNG luồng
+  sự kiện DOM thật (`dispatchEvent('input')` rồi `'change'`, giống hệt thao
+  tác chọn gợi ý thật của người dùng) — xác nhận test FAIL trên code cũ
+  (tái hiện đúng lỗi) và PASS sau khi vá. Cách gọi thẳng hàm cũ (như các test
+  trước đó vẫn làm) sẽ KHÔNG bắt được lỗi này — đây chính là lý do lỗi lọt
+  qua được các đợt regression trước.
+- Regression 346 file: 11 fail giữ nguyên đúng danh sách pre-existing đã
+  xác nhận từ trước (không có fail mới) — 1 file test tưởng như "treo" giữa
+  chừng lúc chạy hoá ra chỉ là tranh chấp tài nguyên do chạy tuần tự 346 file
+  Playwright liên tục, chạy lại riêng lẻ có timeout xác nhận PASS 44/44 bình
+  thường.
+- **Không cần đổi `schema.sql`/`.env.example`/`package.json` (dependencies)**
+  — chỉ sửa logic client-side JS (`module-bienbanhop.js`).
 
 ## v24.34 (2026-09-28): Rà soát theo yêu cầu người dùng — Ma Trận Phân Quyền + Import Excel User
 

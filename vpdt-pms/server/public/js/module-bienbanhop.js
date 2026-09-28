@@ -210,6 +210,22 @@ function updateTplEditField(idx, field, value) {
   if (!tplEditRows[idx]) return;
   tplEditRows[idx][field] = value;
 }
+// updateTplRowNameOnInput(idx, value) — BUG THẬT ĐÃ VÁ (10/2026, người dùng báo cáo trực tiếp kèm ảnh
+// chụp màn hình): ô "Họ Và Tên" ở bảng Mẫu Danh Sách Tham Dự gắn CẢ data-op-input LẪN data-op-change
+// trên CÙNG 1 <input> để vừa cập nhật tên khi gõ (mỗi phím) vừa thử dò tài khoản hệ thống khi rời ô —
+// nhưng cspCollectArgs()/cspReadArgSlot() (core.js) đọc tham số theo `el.dataset` CHUNG cho CẢ phần tử,
+// không phân biệt được data-arg-value THUỘC data-op-input hay data-op-change. Khi trình duyệt phân tích
+// HTML, thuộc tính TRÙNG TÊN xuất hiện 2 lần (VD `data-arg-value="2" ... data-arg-value="1"`) chỉ giữ
+// lại giá trị ĐẦU TIÊN — nên cả 2 sự kiện input/change đều nhận ĐÚNG 1 bộ tham số giống hệt nhau, lẫn
+// luôn giá trị `data-arg1="name"` (vốn chỉ dành cho updateTplEditField) sang thành đối số cho
+// resolveTplRowAccountInput() — khiến hàm đó luôn nhận rawValue = chuỗi "name" (chữ, không phải văn bản
+// người dùng chọn), ghi đè lại a.name = "name" ngay sau khi vừa chọn đúng gợi ý. Sửa bằng cách KHÔNG
+// còn dùng data-arg1="name" nữa (loại bỏ hẳn tham số field khỏi phần khai báo HTML) — hàm nhỏ này cố
+// định field='name' ngay trong JS, để cả 2 khai báo data-op-input/data-op-change trên input đó dùng
+// CHUNG đúng 1 hình dạng tham số (idx, value) — không còn gì để đè lẫn nhau nữa dù dataset có bị gộp.
+function updateTplRowNameOnInput(idx, value) {
+  updateTplEditField(idx, 'name', value);
+}
 
 // Khớp đúng applyAttendeeSystemUser()/toggleAttendeeHasAccount()/resolveAttendeeAccountInput() ở bảng
 // Thành phần tham dự thật — chỉ khác thao tác trên tplEditRows/renderTplEditRowsTable() thay vì
@@ -259,7 +275,7 @@ function renderTplEditRowsTable() {
   tbody.innerHTML = tplEditRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
     const nameCell = hasAccount
-      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" data-op-change="resolveTplRowAccountInput" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="updateTplRowNameOnInput" data-op-change="resolveTplRowAccountInput" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
          ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
       : `<input value="${escapeHtml(a.name)}" data-op-input="updateTplEditField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
     return `
@@ -353,6 +369,13 @@ function updateAttendeeField(idx, field, value) {
   // phải làm mới lại dropdown ngay để luôn khớp với Thành phần tham dự hiện tại.
   if (field === 'name') renderMinutesDirectivesTable();
 }
+// updateAttendeeNameOnInput(idx, value) — cùng bản vá bug thật với updateTplRowNameOnInput() ở trên (xem
+// chú thích đầy đủ tại đó): ô "Họ Và Tên" bảng Thành Phần Tham Dự thật cũng gắn cả data-op-input lẫn
+// data-op-change trên cùng 1 input, cùng bị cspCollectArgs() gộp chung dataset khiến rawValue của
+// resolveAttendeeAccountInput() luôn là chuỗi "name" thay vì tên/gợi ý người dùng vừa chọn.
+function updateAttendeeNameOnInput(idx, value) {
+  updateAttendeeField(idx, 'name', value);
+}
 
 // Áp thông tin 1 tài khoản hệ thống vào dòng người tham dự thứ idx — chỉ điền vào Phòng/SĐT/Email khi
 // Ô ĐANG TRỐNG (ưu tiên dữ liệu đã nhập tay/dành riêng cho cuộc họp, ví dụ email liên hệ khác lúc họp
@@ -429,7 +452,7 @@ function renderAttendeesTable() {
   tbody.innerHTML = minutesAttendeesRows.map((a, idx) => {
     const hasAccount = a.hasAccount === 'YES';
     const nameCell = hasAccount
-      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" data-op-change="resolveAttendeeAccountInput" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
+      ? `<input value="${escapeHtml(a.name)}" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="updateAttendeeNameOnInput" data-op-change="resolveAttendeeAccountInput" data-arg0="${idx}" data-arg-value="1" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Gõ để tìm tài khoản hệ thống...">
          ${a.username ? `<div class="text-[10px] text-emerald-700 mt-0.5">✓ Đã liên kết tài khoản: ${escapeHtml(a.username)}</div>` : '<div class="text-[10px] text-amber-600 mt-0.5">Chưa liên kết — chọn từ gợi ý</div>'}`
       : `<input value="${escapeHtml(a.name)}" data-op-input="updateAttendeeField" data-arg0="${idx}" data-arg1="name" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none" placeholder="Họ và tên">`;
     return `
