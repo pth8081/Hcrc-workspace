@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**24.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.40 (2026-09-28): Ảnh 2 — Tab "🕐 Hồ Sơ Onboarding" (hàng đợi Xác Nhận/Hủy trước khi vào Quản Lý Hồ Sơ)
+
+Theo yêu cầu người dùng: hồ sơ Nháp vừa đặt chỗ lúc tạo Onboarding không còn
+hiện thẳng ở "📋 Quản Lý Hồ Sơ" (Nhân Sự → Hồ Sơ Nhân Sự) nữa mà vào 1 hàng
+đợi riêng ở tab mới **"🕐 Hồ Sơ Onboarding"**, gác quyền `hrOnboardingManage`
+(quyền đã có sẵn — TÁCH BIỆT hẳn khỏi `hrProfileManage`/`hrProfileEdit`/
+`hrProfileFullView`, người dùng xác nhận dùng đúng quyền này cho tab mới):
+
+- Trường mới `onboardingQueueStatus` (`employeeProfiles`, null/PENDING/
+  CANCELLED) — gán `PENDING` ngay khi tạo/gắn 1 quy trình Onboarding (cả
+  nhân viên mới lẫn Tái Tuyển qua "Kiểm Tra Nhân Sự Cũ").
+- **"✅ Xác Nhận"** — mở hồ sơ (đúng form "Quản Lý Hồ Sơ") điền tiếp thông
+  tin ứng viên; PATCH lưu thành công lúc đang PENDING tự "tốt nghiệp" khỏi
+  hàng đợi (`onboardingQueueStatus` → null), chuyển hẳn sang "Quản Lý Hồ Sơ".
+  Người CHỈ có `hrOnboardingManage` (không có quyền Hồ Sơ Nhân Sự nào) được
+  mở/lưu ĐÚNG hồ sơ đang PENDING này — ngoại lệ duy nhất, không mở rộng ra
+  sửa được hồ sơ khác.
+- **"✖ Hủy"** (bắt buộc lý do) — coi như không tuyển ứng viên: hồ sơ chuyển
+  `onboardingQueueStatus='CANCELLED'` và **GIỮ NGUYÊN, không xoá** (phục vụ
+  báo cáo "không nhận việc" sau này), cascade huỷ luôn quy trình Onboarding
+  đang gắn nếu còn `IN_PROGRESS` (tái dùng `cancelHrProcess()` có sẵn). Khác
+  hẳn nút "❌ Huỷ Quy Trình" đã có ở Nghiệp Vụ Nâng Cao (huỷ CẢ quy trình,
+  XOÁ HẲN hồ sơ Nháp mồ côi để giải phóng Mã Nhân Viên — hành vi CŨ, cố ý
+  giữ nguyên, có test riêng xác nhận) — 2 nút phục vụ 2 tình huống khác nhau.
+- Luôn sắp xếp **mới tạo trước** theo ngày tạo (route mới
+  `GET /api/hr-profile/onboarding-queue`).
+- `GET /api/hr-profile` (Quản Lý Hồ Sơ) nay lọc bỏ hồ sơ PENDING/CANCELLED.
+- Ảnh 1 (cùng đợt yêu cầu, đã merge riêng ở v24.39): vá lỗi chữ tràn ô ở Sơ
+  Đồ Trực Quan Cơ Cấu Tổ Chức.
 
 ## v24.39 (2026-09-28): Vá lỗi chữ tràn ra ngoài ô ở Sơ Đồ Trực Quan (Cơ Cấu Tổ Chức)
 

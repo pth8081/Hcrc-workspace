@@ -194,6 +194,19 @@ function defaultProfile(employeeCode) {
     // applyProfileEdit()) — gộp vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng, xem GET .../history.
     profileEditHistory: [],
     processId: null,
+    // onboardingQueueStatus (Ảnh 2, 9/2026, theo yêu cầu người dùng) — null/'PENDING'/'CANCELLED'. Hồ sơ
+    // nháp đặt chỗ lúc tạo Onboarding luôn vào "hàng đợi" PENDING (gán ở routes/create.js, đúng chỗ gán
+    // processId) — hiện ở tab riêng "🕐 Hồ Sơ Onboarding" (module-hrprofile.js), KHÔNG lẫn vào "Quản Lý Hồ
+    // Sơ" cho tới khi HR "Xác Nhận" (lưu hồ sơ thành công lúc đang PENDING -> null, xem PATCH
+    // /by-code/:employeeCode ở routes/employeeProfile.js) hoặc "Hủy" (-> CANCELLED, GIỮ LẠI hồ sơ — KHÔNG
+    // xoá — để phục vụ báo cáo "không nhận việc" sau này, xem cancelOnboardingQueueProfile() dưới đây).
+    // KHÁC HẲN nút "Hủy Quy Trình" có sẵn ở Nghiệp Vụ Nâng Cao (lib/recordActions.js::cancelHrProcess() +
+    // cleanupDraftProfileOnOnboardingClosed() ở routes/records.js) — nút đó XOÁ HẲN hồ sơ DRAFT mồ côi để
+    // giải phóng Mã Nhân Viên (hành vi đã có từ trước, có test riêng — test-audit-nhansu-onboarding-
+    // contract.js — cố ý GIỮ NGUYÊN không đổi), còn đây là hành động MỚI, RIÊNG, chỉ hủy đúng 1 ứng viên ở
+    // hàng đợi mà KHÔNG xoá gì.
+    onboardingQueueStatus: null,
+    onboardingQueueCancelReason: null, onboardingQueueCancelledAt: null, onboardingQueueCancelledBy: null,
     createdAt: nowVN(), createdBy: 'system',
     updatedAt: nowVN(), updatedBy: 'system'
   };
@@ -279,6 +292,38 @@ function applyProcessCompletion(list, hrProcessItem) {
   profile.status = hrProcessItem.processType === 'ONBOARDING' ? 'ACTIVE' : 'INACTIVE';
   profile.updatedAt = nowVN(); profile.updatedBy = 'system';
   return arr;
+}
+
+// Ảnh 2 (9/2026, theo yêu cầu người dùng) — "Hủy" 1 hồ sơ đang ở hàng đợi Onboarding (tab "🕐 Hồ Sơ
+// Onboarding", module-hrprofile.js): coi như KHÔNG tuyển ứng viên này. Hồ sơ VẪN Ở LẠI (không xoá) với
+// onboardingQueueStatus='CANCELLED' + lý do, để phục vụ báo cáo "không nhận việc" sau này — route gọi hàm
+// này (routes/employeeProfile.js) chịu trách nhiệm cascade huỷ luôn quy trình hrProcesses ONBOARDING đang
+// gắn (processId), tái dùng cancelHrProcess() (lib/recordActions.js) — KHÔNG đi qua
+// cleanupDraftProfileOnOnboardingClosed() (routes/records.js, hành vi XOÁ hẳn hồ sơ dành riêng cho nút
+// "Hủy Quy Trình" ở Nghiệp Vụ Nâng Cao, cố ý giữ nguyên, xem chú thích onboardingQueueStatus ở
+// defaultProfile()).
+function cancelOnboardingQueueProfile(list, employeeCode, reason, actorUsername, actorName) {
+  const arr = list || [];
+  const profile = findProfile(arr, employeeCode);
+  if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ nhân sự ứng với Mã Nhân Viên này');
+  if (profile.onboardingQueueStatus !== 'PENDING') {
+    throw new HttpError(400, 'Chỉ hủy được hồ sơ đang ở trạng thái "Chờ xác nhận" trong hàng đợi Onboarding');
+  }
+  const trimmedReason = String(reason || '').trim();
+  if (!trimmedReason) throw new HttpError(400, 'Vui lòng nhập lý do hủy');
+  profile.onboardingQueueStatus = 'CANCELLED';
+  profile.onboardingQueueCancelReason = trimmedReason.slice(0, 500);
+  profile.onboardingQueueCancelledAt = nowVN();
+  profile.onboardingQueueCancelledBy = actorUsername || 'system';
+  profile.profileEditHistory = profile.profileEditHistory || [];
+  profile.profileEditHistory.push({
+    id: randomUUID(), type: 'ONBOARDING_QUEUE_CANCEL', changedFields: [],
+    by: actorUsername || 'system', byName: actorName || actorUsername || 'system',
+    detail: `Hủy hồ sơ Onboarding (không tuyển) — Lý do: ${profile.onboardingQueueCancelReason}`,
+    createdAt: nowVN()
+  });
+  profile.updatedAt = nowVN(); profile.updatedBy = actorUsername || 'system';
+  return profile;
 }
 
 // HR/admin tạo tay 1 hồ sơ MỚI cho nhân viên đã có sẵn (đã đang làm việc thật, chỉ chưa có hồ sơ trong hệ
@@ -421,7 +466,11 @@ function reactivateForRehire(list, employeeCode, newStartDate, actorUsername, ac
 // lib/payroll.js::canManagePayroll()/canApprovePayroll() (2 module còn lại áp dụng cùng nguyên tắc).
 function canViewFullProfile(user, profile) {
   return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit
-    || (profile.username && user.username === profile.username));
+    || (profile.username && user.username === profile.username)
+    // Ảnh 2 (9/2026): người chỉ có hrOnboardingManage (KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn cần mở
+    // được ĐÚNG hồ sơ đang ở hàng đợi (PENDING) để bấm "Xác Nhận" -> sửa tiếp thông tin ứng viên — KHÔNG
+    // mở rộng thêm cho hồ sơ đã tốt nghiệp khỏi hàng đợi (onboardingQueueStatus null) hay đã CANCELLED.
+    || (profile.onboardingQueueStatus === 'PENDING' && !!user?.perms?.hrOnboardingManage));
 }
 function canViewLimitedProfile(user, profile, allUsers) {
   if (canViewFullProfile(user, profile)) return true;
@@ -841,6 +890,7 @@ module.exports = {
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
   canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,

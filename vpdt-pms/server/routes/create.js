@@ -378,7 +378,16 @@ router.post('/:module', async (req, res) => {
       await withLockedAppDataValue('employeeProfiles', (list) => {
         const arr = Array.isArray(list) ? list : [];
         const idx = arr.findIndex(p => p.employeeCode === record.employeeCode);
-        if (idx !== -1) arr[idx] = { ...arr[idx], processId: record.id };
+        // onboardingQueueStatus='PENDING' (Ảnh 2, 9/2026, theo yêu cầu người dùng): MỌI hồ sơ gắn 1 quy
+        // trình Onboarding mới tạo (nhân viên mới HOẶC tái tuyển qua "Kiểm Tra Nhân Sự Cũ" — cả 2 nhánh
+        // đều rơi đúng vào đây) đều vào "hàng đợi" tab "🕐 Hồ Sơ Onboarding" (module-hrprofile.js) trước,
+        // KHÔNG hiện ở "Quản Lý Hồ Sơ" cho tới khi HR "Xác Nhận" — xem chú thích đầy đủ tại
+        // onboardingQueueStatus ở lib/employeeProfile.js::defaultProfile(). 3 field cancel-* reset về null
+        // phòng trường hợp tái dùng lại 1 hồ sơ đã từng bị "Hủy" ở hàng đợi trước đó (reusableDraft path).
+        if (idx !== -1) arr[idx] = {
+          ...arr[idx], processId: record.id, onboardingQueueStatus: 'PENDING',
+          onboardingQueueCancelReason: null, onboardingQueueCancelledAt: null, onboardingQueueCancelledBy: null
+        };
         return arr;
       });
     }

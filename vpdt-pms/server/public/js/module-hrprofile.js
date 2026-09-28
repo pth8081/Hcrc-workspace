@@ -85,6 +85,10 @@ function hrpfIdentitySnapshot(profile) {
 function hrpfCanCreate() { return !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileCreate); }
 function hrpfCanEdit() { return !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileEdit); }
 function hrpfCanFullView() { return !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit); }
+// Ảnh 2 (9/2026, theo yêu cầu người dùng "dùng hrOnboardingManage cho tab mới") — tab "🕐 Hồ Sơ
+// Onboarding" gác RIÊNG quyền quản lý Onboarding, TÁCH BIỆT hẳn khỏi 3 quyền Hồ Sơ Nhân Sự ở trên (1
+// người có thể có quyền này mà KHÔNG có bất kỳ quyền nào phía trên, hoặc ngược lại).
+function hrpfCanManageOnboarding() { return !!currentUser.perms?.hrOnboardingManage; }
 
 // hrpfCanViewReports() ĐÃ DỜI sang core.js (9/2026, cùng đợt dời "Báo Cáo" ra module con riêng
 // "hrReport" — xem chú thích tại đó): finishLogin() cần gọi hàm này để hiện/ẩn nút điều hướng NGAY LÚC
@@ -92,7 +96,9 @@ function hrpfCanFullView() { return !!(currentUser.perms?.hrProfileManage || cur
 
 function renderHrProfileModule() {
   document.getElementById('btnHrpfViewManage').classList.toggle('hidden', !(hrpfCanCreate() || hrpfCanFullView()));
+  document.getElementById('btnHrpfViewOnboardingQueue').classList.toggle('hidden', !hrpfCanManageOnboarding());
   if (activeHrProfileView === 'MANAGE' && !(hrpfCanCreate() || hrpfCanFullView())) activeHrProfileView = 'ME';
+  if (activeHrProfileView === 'ONBOARDING_QUEUE' && !hrpfCanManageOnboarding()) activeHrProfileView = 'ME';
   // "Xem Hồ Sơ Nhân Viên (Quản Lý Trực Tiếp)" — riêng cho quyền hrProfileView (KHÔNG có hrProfileManage,
   // vốn đã thấy đủ toàn bộ hồ sơ qua "Quản Lý Hồ Sơ" rồi, không cần khối này) — hrProfileView là tầng
   // "quản lý trực tiếp xem giới hạn" của getProfileForViewer() (lib/employeeProfile.js), không tự tra được
@@ -100,6 +106,8 @@ function renderHrProfileModule() {
   // /api/hr-profile/by-username/:username (xem viewHrpfSubordinateProfile()).
   document.getElementById('hrpfSubordinateSearchWrap').classList.toggle('hidden',
     !(currentUser.perms?.hrProfileView && !hrpfCanFullView()));
+  // Nạp trước số lượng hàng đợi (badge trên tab) ngay khi mở module, không đợi bấm vào tab mới thấy.
+  if (hrpfCanManageOnboarding()) loadHrpfOnboardingQueue();
   populateSystemUsersDatalist();
   if (hrpfCanCreate() || hrpfCanEdit()) populateHrpfPositionDatalist();
   setHrProfileView(activeHrProfileView);
@@ -257,11 +265,14 @@ function setHrProfileView(view) {
   activeHrProfileView = view;
   document.getElementById('hrpfViewMe').classList.toggle('hidden', view !== 'ME');
   document.getElementById('hrpfViewManage').classList.toggle('hidden', view !== 'MANAGE');
+  document.getElementById('hrpfViewOnboardingQueue').classList.toggle('hidden', view !== 'ONBOARDING_QUEUE');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
   document.getElementById('btnHrpfViewMe').className = view === 'ME' ? activeCls : inactiveCls;
   document.getElementById('btnHrpfViewManage').className = view === 'MANAGE' ? activeCls : inactiveCls;
+  document.getElementById('btnHrpfViewOnboardingQueue').className = view === 'ONBOARDING_QUEUE' ? activeCls : inactiveCls;
   if (view === 'ME') { loadHrpfMyProfile(); return; }
+  if (view === 'ONBOARDING_QUEUE') { loadHrpfOnboardingQueue(); return; }
 
   // MANAGE: nút Tạo/Nhập Excel cần hrProfileCreate; Xuất Excel + xem DANH SÁCH cần hrProfileFullView (hoặc
   // Edit/Manage/admin, xem hrpfCanFullView()) — người CHỈ có hrProfileCreate không gọi GET / được (403).
@@ -274,6 +285,66 @@ function setHrProfileView(view) {
   document.getElementById('hrpfManageSearch').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageNoListMsg').classList.toggle('hidden', hrpfCanFullView());
   if (hrpfCanFullView()) loadHrProfileManageList();
+}
+
+// ===================== 🕐 Hồ Sơ Onboarding (Ảnh 2, 9/2026, theo yêu cầu người dùng) =====================
+// "Hàng đợi" hồ sơ nháp vừa đặt chỗ lúc tạo Onboarding — PENDING (chờ HR "Xác Nhận") hoặc CANCELLED (đã
+// "Hủy", coi như không tuyển, GIỮ LẠI để phục vụ báo cáo "không nhận việc" sau này). Luôn hiện MỚI TẠO
+// TRƯỚC (server đã sort sẵn theo createdAt giảm dần, xem GET /api/hr-profile/onboarding-queue). Gác riêng
+// hrOnboardingManage — KHÔNG dùng hrProfileManage/hrProfileFullView.
+let _hrpfOnboardingQueueList = [];
+const HRPF_ONBOARDING_QUEUE_BADGES = {
+  PENDING: '<span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-bold">⏳ Chờ xác nhận</span>',
+  CANCELLED: '<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold">🚫 Đã hủy</span>'
+};
+async function loadHrpfOnboardingQueue() {
+  if (!hrpfCanManageOnboarding()) return;
+  try {
+    const data = await hrProfileApiCall('GET', '/api/hr-profile/onboarding-queue');
+    _hrpfOnboardingQueueList = data.profiles || [];
+    renderHrpfOnboardingQueueList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+function renderHrpfOnboardingQueueList() {
+  const pendingCount = _hrpfOnboardingQueueList.filter(p => p.onboardingQueueStatus === 'PENDING').length;
+  const badge = document.getElementById('hrpfOnboardingQueueBadge');
+  if (badge) {
+    badge.textContent = String(pendingCount);
+    badge.classList.toggle('hidden', pendingCount === 0);
+  }
+  const tbody = document.getElementById('hrpfOnboardingQueueTableBody');
+  document.getElementById('hrpfOnboardingQueueEmpty').classList.toggle('hidden', _hrpfOnboardingQueueList.length > 0);
+  tbody.innerHTML = _hrpfOnboardingQueueList.map(p => {
+    const idn = hrpfIdentitySnapshot(p);
+    const isPending = p.onboardingQueueStatus === 'PENDING';
+    return `<tr class="border-t hover:bg-gray-50">
+      <td class="p-2 font-mono">${escapeHtml(p.employeeCode)}</td>
+      <td class="p-2">${escapeHtml(idn.fullName || '(chưa rõ)')}</td>
+      <td class="p-2">${escapeHtml(idn.dept)}${idn.jobTitle ? ' — ' + escapeHtml(idn.jobTitle) : ''}</td>
+      <td class="p-2 text-gray-500">${escapeHtml(p.createdAt || '')}</td>
+      <td class="p-2">${HRPF_ONBOARDING_QUEUE_BADGES[p.onboardingQueueStatus] || p.onboardingQueueStatus}
+        ${!isPending && p.onboardingQueueCancelReason ? `<div class="text-[11px] text-gray-500 mt-0.5">Lý do: ${escapeHtml(p.onboardingQueueCancelReason)}</div>` : ''}</td>
+      <td class="p-2 space-x-1 whitespace-nowrap">
+        ${isPending ? `<button type="button" data-op="hrpfCancelOnboardingQueue" data-arg0="${escapeHtml(p.employeeCode)}" class="px-2 py-1 rounded text-[11px] font-bold bg-red-600 text-white hover:bg-red-700">✖ Hủy</button>
+        <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✅ Xác Nhận</button>`
+        : '<span class="text-[11px] text-gray-400 italic">Không tuyển — lưu để báo cáo</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function hrpfCancelOnboardingQueue(employeeCode) {
+  const reason = prompt('Lý do không tuyển ứng viên này (hồ sơ sẽ ở lại đây với trạng thái "Đã hủy"):');
+  if (reason == null) return;
+  if (!reason.trim()) return alert('⛔ Vui lòng nhập lý do hủy!');
+  try {
+    await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}/onboarding-queue/cancel`, { reason: reason.trim() });
+    alert('✅ Đã hủy — hồ sơ vẫn ở lại đây với trạng thái "Đã hủy" để phục vụ báo cáo sau này.');
+    loadHrpfOnboardingQueue();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
 }
 
 // ===================== Hồ Sơ Của Tôi =====================
@@ -379,7 +450,11 @@ async function saveHrpfManageProfile() {
     const data = await hrProfileApiCall('PATCH', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}`, payload);
     alert('✅ Đã lưu Hồ Sơ Nhân Sự.');
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
-    loadHrProfileManageList();
+    // Ảnh 2: lưu thành công có thể chính là hành động "Xác Nhận" (hồ sơ vừa tốt nghiệp khỏi hàng đợi
+    // Onboarding) — chỉ gọi ĐÚNG list mà actor thật sự có quyền gọi (người CHỈ có hrOnboardingManage KHÔNG
+    // gọi được GET /api/hr-profile chung, 403), tránh alert lỗi giả sau 1 lượt lưu vừa thành công.
+    if (hrpfCanFullView()) loadHrProfileManageList();
+    if (hrpfCanManageOnboarding()) loadHrpfOnboardingQueue();
   } catch (err) {
     alert('⛔ ' + err.message);
   }

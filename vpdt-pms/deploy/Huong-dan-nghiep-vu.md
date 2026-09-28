@@ -2396,6 +2396,26 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   Onboarding có thêm nút **"👤 Xem Hồ Sơ"** (chỉ hiện với người có quyền xem/
   sửa toàn bộ Hồ Sơ Nhân Sự) để nhảy thẳng sang đúng hồ sơ này ở chế độ chỉ
   xem, không cần tự vào Quản Lý Hồ Sơ rồi gõ lại Mã Nhân Viên.
+- **Sub-tab "🕐 Hồ Sơ Onboarding" — hàng đợi chờ xác nhận (từ 10/2026, theo
+  yêu cầu người dùng)** — hồ sơ Nháp vừa đặt chỗ ở trên KHÔNG hiện ngay ở
+  "Quản Lý Hồ Sơ" nữa mà vào 1 **hàng đợi riêng**, gác quyền `hrOnboardingManage`
+  (TÁCH BIỆT hẳn khỏi `hrProfileManage`/`hrProfileEdit`/`hrProfileFullView` —
+  người chỉ phụ trách Onboarding không cần xin thêm quyền Hồ Sơ Nhân Sự để
+  xử lý bước này), luôn hiện **mới tạo trước** (theo ngày tạo). Mỗi dòng có 2
+  nút:
+  - **"✅ Xác Nhận"** — mở hồ sơ (form y hệt "Quản Lý Hồ Sơ") để điền tiếp
+    thông tin ứng viên; lưu thành công thì hồ sơ tự "tốt nghiệp" khỏi hàng
+    đợi, biến mất khỏi tab này và chuyển hẳn sang "Quản Lý Hồ Sơ" — người chỉ
+    có `hrOnboardingManage` được LƯU đúng hồ sơ đang ở hàng đợi này (ngoại lệ
+    duy nhất, không mở rộng ra sửa được hồ sơ khác).
+  - **"✖ Hủy"** — coi như KHÔNG tuyển ứng viên này (bắt buộc nhập lý do): hồ
+    sơ **VẪN Ở LẠI** hàng đợi với trạng thái "🚫 Đã hủy" (phục vụ báo cáo
+    "không nhận việc" sau này, KHÔNG xoá), đồng thời tự huỷ luôn quy trình
+    Onboarding (checklist) đang gắn nếu còn đang thực hiện. **Khác nút "❌
+    Huỷ Quy Trình" có sẵn ở Nghiệp Vụ Nâng Cao** (huỷ CẢ quy trình, XOÁ HẲN
+    hồ sơ Nháp mồ côi để giải phóng Mã Nhân Viên dùng lại — dành cho trường
+    hợp tạo nhầm/làm lại từ đầu) — 2 nút phục vụ 2 tình huống khác nhau, dùng
+    đúng nút theo đúng mục đích.
 - HR/admin (**"🗂️ Quản Lý Hồ Sơ Nhân Sự"**) **liên kết** hồ sơ với 1 tài khoản
   VPDT thật (thường ngay sau khi IT hoàn thành việc "Tạo tài khoản VPDT" ở
   Onboarding) — trước khi liên kết, hồ sơ chỉ HR mới tra cứu được.

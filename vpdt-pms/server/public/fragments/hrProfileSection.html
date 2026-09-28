@@ -2,6 +2,9 @@
     <div class="flex flex-wrap items-center gap-2">
       <button type="button" id="btnHrpfViewMe" data-op="setHrProfileView" data-arg0="ME" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">👤 Hồ Sơ Của Tôi</button>
       <button type="button" id="btnHrpfViewManage" data-op="setHrProfileView" data-arg0="MANAGE" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">📋 Quản Lý Hồ Sơ</button>
+      <!-- Ảnh 2 (9/2026, theo yêu cầu người dùng) — gác riêng hrOnboardingManage (toggle ở
+           renderHrProfileModule(), module-hrprofile.js), KHÔNG dùng chung 3 quyền Hồ Sơ Nhân Sự ở trên. -->
+      <button type="button" id="btnHrpfViewOnboardingQueue" data-op="setHrProfileView" data-arg0="ONBOARDING_QUEUE" class="hidden px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300">🕐 Hồ Sơ Onboarding <span id="hrpfOnboardingQueueBadge" class="hidden bg-white text-teal-700 rounded-full px-1.5 ml-1">0</span></button>
     </div>
 
     <!-- Hồ Sơ Của Tôi -->
@@ -62,5 +65,32 @@
           <tbody id="hrpfManageTableBody"></tbody>
         </table>
         <p id="hrpfManageEmpty" class="hidden text-center text-gray-400 text-xs py-4">Chưa có hồ sơ nào.</p>
+      </div>
+    </div>
+
+    <!-- 🕐 Hồ Sơ Onboarding — Ảnh 2 (9/2026, theo yêu cầu người dùng): hàng đợi hồ sơ nháp vừa đặt chỗ lúc
+         tạo Onboarding, gác riêng hrOnboardingManage (module-hrprofile.js). -->
+    <div id="hrpfViewOnboardingQueue" class="hidden space-y-3">
+      <div class="bg-teal-50 border border-teal-200 text-teal-800 text-[11px] rounded p-2.5">
+        💡 <b>Xác Nhận</b>: mở hồ sơ để cập nhật tiếp thông tin ứng viên — lưu xong hồ sơ tự chuyển sang tab
+        "📋 Quản Lý Hồ Sơ".<br>
+        💡 <b>Hủy</b>: coi như không tuyển ứng viên này — hồ sơ ở lại đây với trạng thái "Đã hủy" (phục vụ
+        báo cáo không nhận việc sau này). Luôn sắp xếp mới tạo trước.
+      </div>
+      <div class="overflow-x-auto bg-white border rounded-lg">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-2 text-left">Mã NV</th>
+              <th class="p-2 text-left">Họ Tên</th>
+              <th class="p-2 text-left">Phòng Ban / Chức Danh</th>
+              <th class="p-2 text-left">Ngày Tạo</th>
+              <th class="p-2 text-left">Trạng Thái</th>
+              <th class="p-2 text-left">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="hrpfOnboardingQueueTableBody"></tbody>
+        </table>
+        <p id="hrpfOnboardingQueueEmpty" class="hidden text-center text-gray-400 text-xs py-4">Không có hồ sơ nào trong hàng đợi Onboarding.</p>
       </div>
     </div>

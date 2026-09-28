@@ -20,7 +20,7 @@ const employeeProfileImport = require('../lib/employeeProfileImport');
 const { canManageContracts } = require('../lib/laborContract');
 const orgChart = require('../lib/orgChart');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
-const { parseVNDateTime } = require('../lib/recordActions');
+const { parseVNDateTime, cancelHrProcess } = require('../lib/recordActions');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 
@@ -156,10 +156,21 @@ const upload = multer({
   }
 });
 
+// LỖI ĐÃ VÁ (Ảnh 2, 9/2026): thiếu createdAt/dept/jobTitle/processId khiến renderHrProfileManageList()
+// (module-hrprofile.js, hrpfIdentitySnapshot()) KHÔNG BAO GIỜ suy được tên/phòng ban qua nhánh hrProcesses
+// như chú thích hàm đó mô tả — chỉ suy được khi hồ sơ ĐÃ liên kết username (đường DB.users). Với hồ sơ
+// hàng đợi Onboarding (GET .../onboarding-queue bên dưới, luôn username=null vì chưa qua Onboarding) đây
+// là đường DUY NHẤT có tên hiển thị — bổ sung để tính năng mới hoạt động, đồng thời khớp đúng ý định ban
+// đầu của hrpfIdentitySnapshot() cho cả danh sách "Quản Lý Hồ Sơ" cũ.
 function stripForList(profile) {
   return {
     employeeCode: profile.employeeCode, username: profile.username, status: profile.status,
-    updatedAt: profile.updatedAt
+    createdAt: profile.createdAt, updatedAt: profile.updatedAt,
+    dept: profile.dept, jobTitle: profile.jobTitle, positionLabel: profile.positionLabel,
+    processId: profile.processId,
+    onboardingQueueStatus: profile.onboardingQueueStatus || null,
+    onboardingQueueCancelReason: profile.onboardingQueueCancelReason || null,
+    onboardingQueueCancelledAt: profile.onboardingQueueCancelledAt || null
   };
 }
 
@@ -217,8 +228,59 @@ router.get('/', async (req, res) => {
   try {
     if (!employeeProfile.canFullViewProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền xem danh sách Hồ Sơ Nhân Sự' });
     const list = (await getAppDataValue('employeeProfiles')) || [];
-    res.json({ profiles: list.map(stripForList) });
+    // Ảnh 2 (9/2026): hồ sơ đang ở "hàng đợi" (PENDING chờ HR Xác Nhận, hoặc CANCELLED đã Hủy) KHÔNG hiện
+    // ở đây nữa — chỉ hiện ở tab riêng "🕐 Hồ Sơ Onboarding" (GET .../onboarding-queue bên dưới), cho tới
+    // khi HR "Xác Nhận" (PATCH .../by-code/:code graduate khỏi hàng đợi, xem chú thích tại route đó).
+    const managed = list.filter(p => p.onboardingQueueStatus !== 'PENDING' && p.onboardingQueueStatus !== 'CANCELLED');
+    res.json({ profiles: managed.map(stripForList) });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile'); }
+});
+
+// GET /api/hr-profile/onboarding-queue — Ảnh 2 (9/2026, theo yêu cầu người dùng): "hàng đợi" hồ sơ nháp
+// vừa đặt chỗ lúc tạo Onboarding (PENDING, chưa được HR mở ra "Xác Nhận"/cập nhật tiếp) + hồ sơ đã bị
+// "Hủy" (CANCELLED, coi như KHÔNG tuyển ứng viên này — GIỮ LẠI, không xoá, để phục vụ báo cáo "không nhận
+// việc" sau này). Luôn sắp xếp MỚI TẠO TRƯỚC (createdAt giảm dần, đúng yêu cầu người dùng). Gác RIÊNG
+// hrOnboardingManage — KHÔNG dùng hrProfileManage/hrProfileFullView (đã xác nhận với người dùng: tab mới
+// này tách biệt hẳn khỏi quyền Hồ Sơ Nhân Sự, dùng đúng quyền quản lý Onboarding đã có sẵn).
+router.get('/onboarding-queue', async (req, res) => {
+  try {
+    if (!req.freshUser?.perms?.hrOnboardingManage) return res.status(403).json({ error: 'Bạn không có quyền quản lý Onboarding' });
+    const list = (await getAppDataValue('employeeProfiles')) || [];
+    const queue = list
+      .filter(p => p.onboardingQueueStatus === 'PENDING' || p.onboardingQueueStatus === 'CANCELLED')
+      .map(stripForList)
+      .sort((a, b) => vnTime(b.createdAt) - vnTime(a.createdAt));
+    res.json({ profiles: queue });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/onboarding-queue'); }
+});
+
+// POST /api/hr-profile/by-code/:employeeCode/onboarding-queue/cancel — "Hủy" 1 hồ sơ đang ở hàng đợi
+// Onboarding (nút ✖ Hủy, tab "🕐 Hồ Sơ Onboarding"): coi như KHÔNG tuyển ứng viên này — hồ sơ VẪN Ở LẠI
+// (không xoá) với trạng thái Đã hủy, xem cancelOnboardingQueueProfile() (lib/employeeProfile.js). Cascade
+// huỷ luôn quy trình hrProcesses ONBOARDING đang gắn (processId) nếu còn IN_PROGRESS — tái dùng
+// cancelHrProcess() (lib/recordActions.js, CÙNG hàm nút "Hủy Quy Trình" ở Nghiệp Vụ Nâng Cao dùng) để chỉ
+// có 1 nguồn xử lý huỷ quy trình DUY NHẤT. KHÔNG gọi cleanupDraftProfileOnOnboardingClosed()
+// (routes/records.js) — hàm đó XOÁ HẲN hồ sơ DRAFT mồ côi, dành riêng cho nút "Hủy Quy Trình", cố ý GIỮ
+// NGUYÊN không đổi (xem chú thích onboardingQueueStatus ở lib/employeeProfile.js::defaultProfile()).
+router.post('/by-code/:employeeCode/onboarding-queue/cancel', async (req, res) => {
+  try {
+    if (!req.freshUser?.perms?.hrOnboardingManage) return res.status(403).json({ error: 'Bạn không có quyền quản lý Onboarding' });
+    let updated;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      updated = employeeProfile.cancelOnboardingQueueProfile(list, req.params.employeeCode, req.body?.reason, req.freshUser.username, req.freshUser.name);
+      return list;
+    });
+    if (updated.processId != null) {
+      await withLockedRecordForCollection('hrProcesses', updated.processId, (item) => {
+        if (item.status === 'IN_PROGRESS') {
+          cancelHrProcess(req.freshUser, item, { reason: `Không tuyển ứng viên (Hủy ở tab Hồ Sơ Onboarding) — ${updated.onboardingQueueCancelReason}` });
+        }
+        return item;
+      });
+    }
+    logHrProfileAction(req, 'ONBOARDING_QUEUE_CANCEL', req.params.employeeCode, `Hủy hồ sơ Onboarding (không tuyển) [${req.params.employeeCode}] — Lý do: ${updated.onboardingQueueCancelReason}`);
+    res.json({ ok: true, profile: updated });
+  } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/onboarding-queue/cancel`); }
 });
 
 // GET /api/hr-profile/employee-directory — danh sách CỰC nhẹ (chỉ employeeCode + tên hiển thị, KHÔNG
@@ -492,11 +554,19 @@ router.get('/by-username/:username', async (req, res) => {
 // PATCH /api/hr-profile/by-code/:employeeCode — HR/admin sửa TOÀN BỘ trường (kể cả HR_ONLY_EDITABLE_FIELDS).
 router.patch('/by-code/:employeeCode', async (req, res) => {
   try {
-    if (!employeeProfile.canEditProfiles(req.freshUser)) return res.status(403).json({ error: 'Chỉ HR/Admin mới sửa được hồ sơ người khác' });
     let updated;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      // Ảnh 2 (9/2026, theo yêu cầu người dùng "dùng hrOnboardingManage cho tab mới"): người CHỈ có
+      // hrOnboardingManage (không có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn lưu được ĐÚNG hồ sơ đang ở hàng
+      // đợi (PENDING) — đây chính là hành động "Xác Nhận" (mở hồ sơ, cập nhật tiếp thông tin ứng viên, lưu
+      // lại). KHÔNG mở rộng thêm cho hồ sơ đã tốt nghiệp khỏi hàng đợi hay hồ sơ CANCELLED — người này vẫn
+      // không sửa được hồ sơ ACTIVE/ON_LEAVE/INACTIVE thông thường nếu không có hrProfileManage/hrProfileEdit.
+      const canEditViaOnboardingQueue = profile.onboardingQueueStatus === 'PENDING' && !!req.freshUser?.perms?.hrOnboardingManage;
+      if (!employeeProfile.canEditProfiles(req.freshUser) && !canEditViaOnboardingQueue) {
+        throw new HttpError(403, 'Chỉ HR/Admin mới sửa được hồ sơ người khác');
+      }
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): đường sửa này đi vòng hoàn
       // toàn lớp chặn trùng CCCD/CMND vốn chỉ có ở lối TẠO (createManualProfile()) — xem
       // lib/employeeProfile.js::assertNationalIdNotDuplicated().
@@ -505,6 +575,9 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       }
       const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
       employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name);
+      // "Xác Nhận" (Ảnh 2): lưu thành công lúc đang PENDING = tốt nghiệp khỏi hàng đợi Onboarding, chuyển
+      // hẳn sang "Quản Lý Hồ Sơ" — chỉ đổi cờ hàng đợi, KHÔNG đụng tới profile.status.
+      if (profile.onboardingQueueStatus === 'PENDING') profile.onboardingQueueStatus = null;
       updated = profile;
       return list;
     });
