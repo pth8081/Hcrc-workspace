@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**24.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.34 (2026-09-28): Rà soát theo yêu cầu người dùng — Ma Trận Phân Quyền + Import Excel User
+
+Người dùng yêu cầu rà soát và đảm bảo: (1) Ma Trận Phân Quyền luôn cập nhật
+khi có quyền mới, (2) Import Excel Ma Trận Phân Quyền không lỗi, (3) Import
+Excel tạo User không lỗi và user tạo theo cách đó đăng nhập được. Đã rà soát
+sâu (2 agent song song) toàn bộ 3 luồng — không tìm thấy lỗi làm hỏng dữ liệu
+hay chặn đăng nhập, nhưng phát hiện + vá 4 điểm rủi ro thật:
+
+- **Import Ma Trận Phân Quyền: cảnh báo ô giá trị lạ** — trước đây ô Excel
+  ghi giá trị khác Y/N/TRUE/FALSE (gõ nhầm "Có"/"x"/"yes"...) bị ÂM THẦM quy
+  thành "N" (tắt quyền), không cảnh báo gì — dễ khiến admin tưởng đã tick
+  đúng trong khi vô tình tắt quyền. Nay: vẫn AN TOÀN coi là N, nhưng hiện rõ
+  cảnh báo "⚠️ N ô giá trị lạ" ở bảng xem trước VÀ dòng đó không tự tick sẵn
+  — bắt buộc admin tự kiểm tra rồi mới áp dụng.
+- **Ma Trận Phân Quyền luôn cập nhật khi có quyền mới — process fix**: xác
+  nhận cơ chế Ma Trận là "quét động" (không phải danh sách quyền tĩnh), quyền
+  mới chỉ tự hiện ra sau khi có checkbox + có ai được lưu qua form. Đã thêm
+  quy tắc bắt buộc vào `CLAUDE.md`: từ nay thêm quyền mới PHẢI thêm cả
+  checkbox (cây phân quyền) VÀ nhãn tiếng Việt (`PERM_KEY_VN_LABELS`) trong
+  CÙNG đợt merge.
+- **Import Excel tạo User: chuẩn hoá Unicode NFC/NFD khi so khớp tên** —
+  Phòng Ban/Chức Danh/Khối-Ban/Nhóm Phân Quyền trước đây so sánh strict
+  lowercase, không chuẩn hoá dạng tổ hợp Unicode — file Excel gõ/dán từ nguồn
+  khác có thể lưu tiếng Việt ở dạng NFD (dấu là ký tự riêng), khiến 2 chuỗi
+  NHÌN GIỐNG HỆT bị coi là khác nhau, chặn nhầm dòng hợp lệ. Đã thêm
+  `normalizeVnCompareKey()` (chuẩn hoá NFC trước khi so sánh) cho cả 4 điểm
+  so khớp.
+- **Test mới**: 3 kịch bản trong `tests/test-perm-matrix-client.js` (cảnh báo
+  ô lạ + không tự tick sẵn + không trùng nhãn tiếng Việt) và 1 kịch bản trong
+  `tests/test-user-import-permgroups.js` (tên NFD vẫn khớp đúng danh mục
+  NFC).
+- **Xác nhận lại (không phát hiện lỗi)**: Import Excel tạo User đã có test
+  end-to-end thật (bcrypt + gọi API login thật) xác nhận user tạo qua import
+  đăng nhập được bình thường, cùng 1 hàm hash password với tạo tay, gán
+  Permission Group đúng (đã vá đúng bản TB-4 trước đó, xác nhận còn nguyên).
+- Regression 346 file: 11 fail giữ nguyên đúng danh sách đã xác nhận pre-existing
+  ở lần chạy trước (v24.33), không có fail mới.
+- **Không cần đổi `schema.sql`/`.env.example`/`package.json` (dependencies)**
+  — chỉ sửa logic client-side JS, không đụng CSDL/hạ tầng.
 
 ## v24.33 (2026-09-27): Cơ Cấu Tổ Chức — Tải Mẫu/Nhập/Xuất Excel (luôn tạo Bản Nháp mới)
 

@@ -116,6 +116,35 @@ nhận không khớp gì trước khi báo cáo hoàn tất, đừng chỉ dựa
 "viết đúng khuôn". Việc này áp dụng cho MỌI module mới từ nay, không chỉ khi
 người dùng nhắc lại.
 
+## Quyền (permission key) MỚI → bắt buộc thêm checkbox + nhãn Ma Trận Phân Quyền ngay cùng đợt
+
+Phát hiện từ đợt rà soát (9/2026, theo yêu cầu người dùng "đảm bảo Ma Trận
+Phân Quyền luôn cập nhật khi có quyền mới"): Ma Trận Phân Quyền (Nhân Sự →
+Phân Quyền → Ma Trận, `public/js/module-admin-permgroups.js`) KHÔNG có danh
+sách quyền tĩnh — nó tự "quét" cột từ dữ liệu `perms` thật đang có trong
+`DB.users`/`DB.permGroups` (`collectPermMatrixColumns()`). Nghĩa là 1 quyền
+MỚI chỉ tự hiện ra trên Ma Trận SAU KHI: (1) đã có checkbox cho quyền đó ở
+cây phân quyền (`public/fragments/systemSection.html` +
+`collectPermsFromForm()`/`populatePermsForm()` ở `module-admin-permtree.js`),
+VÀ (2) có ít nhất 1 user/nhóm được lưu qua form có set giá trị quyền đó.
+
+**Vì vậy, bất kỳ khi nào thêm 1 quyền (permission key) MỚI vào hệ thống**
+(dù chỉ 1 dòng kiểm tra `req.freshUser?.perms?.quyenMoi` ở 1 route), PHẢI
+làm đủ CẢ 2 việc sau trong CÙNG đợt merge, không để dành "làm sau":
+
+1. Thêm checkbox tương ứng vào cây phân quyền (`systemSection.html` +
+   `collectPermsFromForm()`/`populatePermsForm()`) — thiếu bước này thì
+   không admin nào gán được quyền đó, và nó cũng KHÔNG BAO GIỜ tự xuất hiện
+   trên Ma Trận (không phải lỗi phần mềm — chỉ là chưa đủ điều kiện đầu
+   vào).
+2. Thêm 1 dòng nhãn tiếng Việt vào `PERM_KEY_VN_LABELS`
+   (`module-admin-permgroups.js`, khuôn `"<khoá>": "<Tên khối> — <mô tả>"`)
+   — nhãn PHẢI DUY NHẤT (không trùng với bất kỳ nhãn nào khác, xem test
+   "(k)" ở `tests/test-perm-matrix-client.js` tự động chặn trùng nhãn).
+   Thiếu bước này quyền vẫn hoạt động và vẫn hiện trên Ma Trận, chỉ hiện ở
+   dạng thô `Q_<khoá>` trong sheet "Khác (chưa có nhãn)" — không mất chức
+   năng nhưng khó đọc, cũng cần bổ sung càng sớm càng tốt.
+
 ## 3 file hướng dẫn trong `vpdt-pms/deploy/` — cập nhật liên tục
 
 Có 3 file hướng dẫn sống trong thư mục `vpdt-pms/deploy/`:

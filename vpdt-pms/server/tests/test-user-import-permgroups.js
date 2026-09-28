@@ -70,6 +70,23 @@ async function main() {
       assert(result.errors.some(e => e.includes('Nhóm Không Tồn Tại')), JSON.stringify(result.errors));
     });
 
+    // Rà soát 9/2026 (theo yêu cầu người dùng "đảm bảo import file tạo user không bị lỗi"): file Excel
+    // gõ/dán từ nguồn khác có thể lưu tiếng Việt ở dạng tổ hợp Unicode NFD (dấu là ký tự riêng) trong khi
+    // DB.permGroups/DB.depts luôn ở dạng NFC — trước đây so sánh strict lowercase sẽ coi 2 chuỗi NHÌN
+    // GIỐNG HỆT là KHÁC NHAU, chặn nhầm dòng hợp lệ. Test dựng chuỗi NFD ngay lúc chạy (.normalize('NFD'))
+    // thay vì hard-code byte tổ hợp, để rõ ràng đây là cùng 1 nội dung chỉ khác cách mã hoá.
+    await run.run('validateImportedUserRow(): tên Phòng Ban/Nhóm Phân Quyền ở dạng Unicode NFD vẫn khớp đúng danh mục NFC', async () => {
+      const result = await page.evaluate(() => validateImportedUserRow({
+        posType: 'HO',
+        dept: 'Phòng Kế Toán'.normalize('NFD'),
+        jobTitle: '', khoiBan: '', startDate: '',
+        permGroups: 'Kế Toán'.normalize('NFD') + ';' + 'Quản Lý Kho'.normalize('NFD')
+      }));
+      assertEqual(result.errors.length, 0, JSON.stringify(result.errors));
+      assertEqual(result.normalized.dept, 'Phòng Kế Toán', 'dept phải trả về đúng chuỗi NFC gốc trong danh mục');
+      assertEqual(JSON.stringify(result.normalized.groupIds.sort()), JSON.stringify([1, 2]));
+    });
+
     await run.run('confirmUsersImport(): user MỚI có gán nhóm -> perms = mergeGroupsBasePerms() của nhóm đó, groupIds lưu đúng', async () => {
       const pushedUser = await page.evaluate(async () => {
         usersImportPreviewItems = [{

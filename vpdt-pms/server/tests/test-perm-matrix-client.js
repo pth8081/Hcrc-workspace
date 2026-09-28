@@ -467,6 +467,69 @@ async function scenario(name, fn) {
       r.newAdmin === true && r.newContractApprove === false, JSON.stringify(r));
   });
 
+  // ==========================================================================
+  // (j) Rà soát 9/2026 (theo yêu cầu người dùng "đảm bảo không bị lỗi khi import file phân quyền"):
+  // ô Excel có giá trị LẠ (không phải Y/N/TRUE/FALSE/trống) trước đây bị ÂM THẦM quy thành N, không có
+  // cảnh báo gì — dễ khiến admin tưởng đã tick đúng trong khi gõ sai chính tả, vô tình tắt quyền mà
+  // không hay biết. Nay phải: (1) buildPermMatrixRowChanges() gắn cờ unrecognizedCells cho đúng ô lạ,
+  // (2) dòng đó KHÔNG được tự tick sẵn ở preview (include=false) dù có thay đổi thật.
+  // ==========================================================================
+  await scenario('(j) Giá trị ô lạ (không phải Y/N/TRUE/FALSE) bị gắn cờ cảnh báo, dòng không tự tick sẵn', async () => {
+    const r = await page.evaluate(async () => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'nv.z', name: 'Nhân Viên Z', dept: 'IT', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      const rowFromServer = {
+        Username: 'nv.z', HoTen: 'Nhân Viên Z', PhongBan: 'IT', NhomPhanQuyen: '', BaoCao_MucBoSung: '',
+        [permMatrixColumnHeader('admin')]: 'Y', // hợp lệ, không lạ
+        [permMatrixColumnHeader('contractApprove')]: 'Có', // gõ nhầm — KHÔNG phải Y/N/TRUE/FALSE
+        duplicateInFile: false, duplicateExisting: false,
+      };
+      const origFetch = window.fetch;
+      window.fetch = async () => ({ status: 200, ok: true, json: async () => ({ rows: [rowFromServer] }) });
+      try {
+        await onPermMatrixImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } }, 'users');
+      } finally { window.fetch = origFetch; }
+      const item = permMatrixImportRows.find(it => it.identifier === 'nv.z');
+      return {
+        unrecognizedCount: item?.diff?.unrecognizedCells?.length ?? null,
+        unrecognizedHeader: item?.diff?.unrecognizedCells?.[0]?.header ?? null,
+        expectedHeader: permMatrixColumnHeader('contractApprove'),
+        contractApproveNewVal: item?.diff?.newPerms?.contractApprove ?? null,
+        include: item?.include ?? null,
+      };
+    });
+    record('(j) đúng 1 ô lạ được phát hiện, đúng cột contractApprove',
+      r.unrecognizedCount === 1 && r.unrecognizedHeader === r.expectedHeader, JSON.stringify(r));
+    record('(j) giá trị lạ vẫn an toàn coi là N (không tự bật quyền từ giá trị lạ)',
+      r.contractApproveNewVal === false, JSON.stringify(r));
+    record('(j) dòng có ô lạ KHÔNG được tự tick sẵn ở preview (bắt admin tự kiểm tra trước khi áp dụng)',
+      r.include === false, JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (k) Rà soát 9/2026: PERM_KEY_VN_LABELS không được có 2 khoá quyền trùng nhãn tiếng Việt — nếu trùng,
+  // PERM_VN_LABEL_TO_KEY (bảng tra cứu ngược dùng để đọc cột lúc Import) sẽ bị khoá xuất hiện SAU đè lên
+  // khoá xuất hiện TRƯỚC, khiến Import đọc nhầm cột/mất dữ liệu của khoá bị đè. Test này KHÔNG kiểm tra 1
+  // giá trị cụ thể mà kiểm tra BẤT BIẾN của toàn bộ bảng — tự động bắt lỗi ngay nếu ai đó copy-paste nhầm
+  // nhãn khi thêm quyền mới, thay vì chỉ phát hiện khi có báo cáo thực tế.
+  // ==========================================================================
+  await scenario('(k) PERM_KEY_VN_LABELS: không có 2 quyền nào trùng nhãn tiếng Việt', async () => {
+    const r = await page.evaluate(() => {
+      const labels = Object.values(PERM_KEY_VN_LABELS);
+      const seen = new Map();
+      const dups = [];
+      Object.entries(PERM_KEY_VN_LABELS).forEach(([key, label]) => {
+        if (seen.has(label)) dups.push({ label, keys: [seen.get(label), key] });
+        else seen.set(label, key);
+      });
+      return { totalCount: labels.length, uniqueCount: new Set(labels).size, dups };
+    });
+    record('(k) mọi nhãn tiếng Việt trong PERM_KEY_VN_LABELS đều duy nhất (không trùng)',
+      r.totalCount === r.uniqueCount, JSON.stringify(r.dups));
+  });
+
   await browser.close();
   server.close();
 

@@ -646,6 +646,16 @@ let usersImportPreviewItems = [];
 // DB.positionTypes/DB.depts/DB.stores/DB.jobTitles/DB.storeJobTitles.
 // Vị Trí Làm Việc (10/2026) — danh mục MỞ, không còn giới hạn cứng HO/STORE: bất kỳ key nào đang có
 // trong DB.positionTypes đều hợp lệ (xem getPosType*() ở core.js), so KHÔNG phân biệt hoa/thường.
+// So khớp tên (Phòng Ban/Chức Danh/Khối-Ban/Nhóm Phân Quyền) KHÔNG phân biệt hoa/thường VÀ không phân
+// biệt dạng tổ hợp Unicode NFC/NFD (rà soát 9/2026: file Excel gõ/dán từ nguồn khác có thể lưu tiếng
+// Việt ở dạng NFD — dấu là ký tự tổ hợp riêng — trong khi danh mục hệ thống luôn ở dạng NFC; 2 chuỗi
+// NHÌN GIỐNG HỆT nhau nhưng so sánh strict sẽ RA KHÁC NHAU nếu không chuẩn hoá trước, khiến dòng bị chặn
+// nhầm "không có trong danh mục" dù người dùng gõ đúng — cùng tinh thần .normalize() mà các Excel import
+// khác trong hệ thống đã áp dụng, VD lib/vppCatalog.js normalizeHeader()).
+function normalizeVnCompareKey(s) {
+  return String(s || '').trim().normalize('NFC').toLowerCase();
+}
+
 function validateImportedUserRow(r) {
   const errors = [];
   const normalized = {};
@@ -665,7 +675,7 @@ function validateImportedUserRow(r) {
     errors.push('Thiếu Phòng Ban/Siêu Thị/Địa Điểm');
   } else if (normalized.posType) {
     const catalog = getPosTypeLocations(normalized.posType);
-    const match = catalog.find(d => String(d).trim().toLowerCase() === deptRaw.toLowerCase());
+    const match = catalog.find(d => normalizeVnCompareKey(d) === normalizeVnCompareKey(deptRaw));
     if (match) normalized.dept = match;
     else errors.push(`Phòng Ban/Địa Điểm "${deptRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
   }
@@ -677,7 +687,7 @@ function validateImportedUserRow(r) {
     normalized.jobTitle = '';
   } else if (normalized.posType) {
     const catalog = getPosTypeJobTitles(normalized.posType);
-    const match = catalog.find(t => String(t).trim().toLowerCase() === jobTitleRaw.toLowerCase());
+    const match = catalog.find(t => normalizeVnCompareKey(t) === normalizeVnCompareKey(jobTitleRaw));
     if (match) normalized.jobTitle = match;
     else errors.push(`Chức Danh "${jobTitleRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
   }
@@ -690,7 +700,7 @@ function validateImportedUserRow(r) {
   if (!khoiBanRaw || normalized.posType !== 'HO') {
     normalized.khoiBan = '';
   } else {
-    const match = (DB.deptGroups || []).find(g => String(g.name).trim().toLowerCase() === khoiBanRaw.toLowerCase());
+    const match = (DB.deptGroups || []).find(g => normalizeVnCompareKey(g.name) === normalizeVnCompareKey(khoiBanRaw));
     if (match) normalized.khoiBan = String(match.id);
     else errors.push(`Khối/Ban "${khoiBanRaw}" không có trong danh mục (chỉ áp dụng khi Vị Trí Làm Việc = HO)`);
   }
@@ -723,7 +733,7 @@ function validateImportedUserRow(r) {
     const names = permGroupsRaw.split(';').map(n => n.trim()).filter(Boolean);
     const groupIds = [];
     names.forEach(n => {
-      const match = (DB.permGroups || []).find(g => String(g.name).trim().toLowerCase() === n.toLowerCase());
+      const match = (DB.permGroups || []).find(g => normalizeVnCompareKey(g.name) === normalizeVnCompareKey(n));
       if (match) groupIds.push(match.id);
       else errors.push(`Nhóm Phân Quyền "${n}" không có trong danh mục`);
     });

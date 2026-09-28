@@ -611,13 +611,22 @@ function buildPermMatrixRowChanges(kind, target, row) {
   // formPerms: bản nháp phản ánh ĐÚNG literal từng cột Q_ trong dòng Excel (đè lên nền quyền hiện có,
   // các trường KHÔNG có trong ma trận như approverAuthLevel/docDownload.depts giữ nguyên).
   const formPerms = JSON.parse(JSON.stringify(target.perms || {}));
+  const unrecognizedCells = [];
   Object.keys(row).forEach(header => {
     const path = resolvePermMatrixColumnKey(header);
     if (path == null) return;
     // Chấp nhận cả 'Y' (chuẩn mới, xem buildPermMatrixSheets()) lẫn 'TRUE' (file export từ bản cũ trước
-    // khi đổi sang Y/N) để không làm hỏng việc nhập lại các file người dùng đã tải về trước đó.
+    // khi đổi sang Y/N) để không làm hỏng việc nhập lại các file người dùng đã tải về trước đó. Ô trống
+    // hợp lệ hiểu là N (không tick). Bất kỳ giá trị nào KHÁC 5 dạng này (gõ nhầm "x"/"Có"/"yes"...) vẫn
+    // được coi an toàn là N (không tự bật quyền từ giá trị lạ) NHƯNG phải gắn cờ cảnh báo để hiện rõ ở
+    // bảng xem trước — trước đây bị âm thầm quy thành N không có cảnh báo gì, dễ khiến admin tưởng nhầm
+    // đã tick "Y" trong khi gõ sai chính tả, vô tình tắt quyền mà không hay biết (theo yêu cầu người dùng
+    // "đảm bảo không bị lỗi khi import file phân quyền", 9/2026).
     const rawVal = String(row[header] || '').trim().toUpperCase();
     const newVal = rawVal === 'Y' || rawVal === 'TRUE';
+    if (rawVal && rawVal !== 'Y' && rawVal !== 'N' && rawVal !== 'TRUE' && rawVal !== 'FALSE') {
+      unrecognizedCells.push({ header, raw: row[header] });
+    }
     setPermMatrixDeep(formPerms, path, newVal);
   });
 
@@ -649,7 +658,7 @@ function buildPermMatrixRowChanges(kind, target, row) {
     newReportExtraKeys = keys;
   }
 
-  return { changes, newPerms, newPermOverrides, newGroupIds, newReportExtraKeys };
+  return { changes, newPerms, newPermOverrides, newGroupIds, newReportExtraKeys, unrecognizedCells };
 }
 
 let permMatrixImportKind = null; // 'users' | 'groups'
@@ -686,9 +695,13 @@ async function onPermMatrixImportFileChange(evt, kind) {
     // quyền tài khoản này qua Ma Trận) — báo rõ ngay ở bảng xem trước thay vì để checkbox tick sẵn
     // (trông như sẽ áp dụng) rồi lặng lẽ không có tác dụng gì lúc bấm Xác Nhận.
     const isProtectedAdmin = kind === 'users' && identifier.toLowerCase() === 'admin';
+    // Dòng có ô giá trị lạ (không phải Y/N/TRUE/FALSE/trống) KHÔNG được tự tick sẵn — bắt admin phải đọc
+    // rõ cảnh báo ở bảng xem trước rồi tự quyết định trước khi áp dụng, tránh vô tình tắt nhầm quyền chỉ
+    // vì gõ sai chính tả trong Excel (xem chú thích ở buildPermMatrixRowChanges()).
+    const hasUnrecognized = !!diff?.unrecognizedCells?.length;
     return {
       _idx: idx, identifier, found: !!target, duplicateInFile: !!r.duplicateInFile, diff, isProtectedAdmin,
-      include: !isProtectedAdmin && !!target && !r.duplicateInFile && !!diff?.changes.length,
+      include: !isProtectedAdmin && !!target && !r.duplicateInFile && !!diff?.changes.length && !hasUnrecognized,
     };
   });
   renderPermMatrixImportPreview();
@@ -701,12 +714,14 @@ function renderPermMatrixImportPreview() {
   document.getElementById('permMatrixImportStatus').innerText = `Đọc được ${items.length} dòng, ${applicable} dòng có thay đổi để áp dụng.`;
   document.getElementById('permMatrixImportPreviewBody').innerHTML = items.map(it => {
     const changeCount = it.diff ? it.diff.changes.length : 0;
+    const unrecognized = it.diff?.unrecognizedCells || [];
     let note;
     if (it.isProtectedAdmin) note = '⛔ Tài khoản admin gốc luôn giữ toàn quyền — bỏ qua';
     else if (!it.found) note = `⛔ Không tìm thấy ${idLabel} này trong hệ thống`;
     else if (it.duplicateInFile) note = '⚠️ Trùng dòng khác trong file này';
     else if (!changeCount) note = 'Không có thay đổi';
     else note = `${changeCount} thay đổi`;
+    if (unrecognized.length) note += `<br><span class="text-red-600">⚠️ ${unrecognized.length} ô giá trị lạ (coi là N) — tự kiểm tra kỹ trước khi tick áp dụng</span>`;
     const checkable = !it.isProtectedAdmin && it.found && !it.duplicateInFile && changeCount > 0;
     const detail = changeCount ? it.diff.changes.map(c => `${escapeHtml(c.label)}: ${escapeHtml(String(c.oldValue))} → ${escapeHtml(String(c.newValue))}`).join('<br>') : '';
     return `<tr class="border-t align-top${checkable ? '' : ' bg-gray-50 text-gray-400'}">

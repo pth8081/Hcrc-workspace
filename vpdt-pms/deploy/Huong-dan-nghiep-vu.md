@@ -3992,6 +3992,13 @@ Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
   lặp trong file bị báo rõ và không tick được. Bỏ tick dòng nào không muốn
   áp dụng, bấm **"✅ Xác Nhận Áp Dụng"** — quyền có hiệu lực ngay từ lượt
   tải lại trang/đăng nhập sau của người đó.
+- **Cảnh báo ô giá trị lạ (9/2026, rà soát theo yêu cầu người dùng)** — mỗi
+  ô quyền chỉ nhận đúng "Y"/"N" (hoặc "TRUE"/"FALSE" từ file cũ), để trống
+  hiểu là "N". Nếu gõ nhầm giá trị khác (VD "Có", "x", "yes"...), hệ thống
+  vẫn xử lý AN TOÀN như "N" (không tự bật nhầm quyền) nhưng **hiện rõ cảnh
+  báo "⚠️ N ô giá trị lạ" ngay ở bảng xem trước** và **KHÔNG tự tick sẵn**
+  dòng đó — bắt buộc admin phải đọc kỹ rồi tự quyết định tick áp dụng, tránh
+  trường hợp trước đây bị âm thầm quy thành "N" mà không hay biết.
 - **Sửa quyền 1 Nhóm Phân Quyền qua ma trận cũng cascade ngay** cho mọi
   thành viên hiện có của nhóm đó (giống hệt khi sửa tay ở khối "🗂️ Nhóm
   Phân Quyền"), giữ nguyên phần quyền tuỳ chỉnh riêng từng người.
