@@ -1002,14 +1002,13 @@ async function main() {
       async () => {
         await page.evaluate(() => { switchTab('office'); setOfficeSubTab('PAYMENT'); setPaymentSubTab('CREATE'); });
         await page.fill('#paymentTitle', 'Đề nghị kiểm thử reset form');
-        // LƯU Ý: #paymentSection nằm LỒNG BÊN TRONG #officeSection (khác Hợp Đồng — 1 gốc riêng) nên sự
-        // kiện click nổi bọt qua CẢ 2 root bindCspDelegation() (officeSection LẪN paymentSection), khiến
-        // addPaymentCreateInstallmentRow() chạy 2 LẦN/click (đã xác nhận đây là hành vi CÓ SẴN TỪ TRƯỚC,
-        // không phải lỗi phát sinh từ nút "↺ Làm Mới" mới thêm — không thuộc phạm vi đợt này, chỉ ghi
-        // nhận đúng số dòng THẬT SỰ quan sát được để bài test không giả định sai).
+        // 9/2026: ĐÃ VÁ lỗi double-dispatch — #paymentSection nằm LỒNG BÊN TRONG #officeSection (khác
+        // Hợp Đồng — 1 gốc riêng) từng có bindCspDelegation() riêng dư thừa cho #paymentSection khiến
+        // sự kiện click nổi bọt qua CẢ 2 root, addPaymentCreateInstallmentRow() chạy 2 LẦN/click. Đã gỡ
+        // bind dư thừa (xem core.js, NESTED_CSP_ROOTS_IN_FRAGMENT) nên giờ 1 click chỉ tạo ĐÚNG 1 dòng.
         await page.click('button[data-op="addPaymentCreateInstallmentRow"]');
         const rowsBefore = await page.locator('#paymentCreateInstallmentsList [data-installment-row]').count();
-        assertTrue(rowsBefore === 2, `1 click "+ Thêm Đợt" hiện tạo 2 dòng (bấm nổi bọt qua 2 root, hành vi có sẵn) trước khi Làm Mới, thực tế ${rowsBefore}`);
+        assertTrue(rowsBefore === 1, `1 click "+ Thêm Đợt" phải tạo ĐÚNG 1 dòng (đã vá double-dispatch) trước khi Làm Mới, thực tế ${rowsBefore}`);
         await page.fill('#paymentCreateInstallmentsList [data-installment-row="0"] .payment-installment-desc', 'Đợt 1 kiểm thử');
 
         await page.evaluate(() => { window.__confirmCalls = []; });
