@@ -646,21 +646,48 @@ function normalizeInternalPostContent(target) {
 // tệp đã tải lên hệ thống (assertUploadedFileUrl, chặn "javascript:"/URL ngoài) VÀ đúng nhóm đuôi (ảnh chỉ
 // .jpg/.jpeg/.png/.webp, video chỉ .mp4/.webm — tên tệp lưu trên đĩa do routes/upload.js sinh giữ nguyên đuôi
 // thật đã qua kiểm tra chữ ký). Vượt trần số lượng -> TỪ CHỐI (không âm thầm cắt bớt).
-function normalizeInternalPostFileList(raw, max, label, extRe) {
+//
+// Video nhúng YouTube (9/2026 — server ít dung lượng lưu trữ, cho dán link YouTube SONG SONG với tải tệp):
+// CHỈ bật khi gọi với opts.allowYoutube (danh sách videos[]; images[] KHÔNG bao giờ nhận YouTube). Khi bật,
+// mỗi phần tử có 2 dạng:
+//   - {type:'upload', fileUrl, fileName}  — tệp đã tải lên, validate y như trước.
+//   - {type:'youtube', youtubeUrl}        — CHỈ khi type === 'youtube' TƯỜNG MINH; youtubeUrl PHẢI qua
+//     isValidYoutubeUrl() (https: + đúng 4 tên miền YouTube), KHÔNG yêu cầu/không giữ fileUrl.
+// TƯƠNG THÍCH NGƯỢC: phần tử KHÔNG có type (bản ghi cũ) hoặc type khác 'youtube' -> LUÔN coi là 'upload'
+// (bắt buộc fileUrl hợp lệ như cũ) — tuyệt đối không đảo ngược thành mặc định youtube. Trần `max` tính GỘP
+// cả 2 dạng (INTERNAL_POST_MAX_VIDEOS = 2 cho tổng upload + youtube).
+const INTERNAL_POST_YOUTUBE_URL_MAX_LEN = 500;
+function normalizeInternalPostFileList(raw, max, label, extRe, opts) {
+  const allowYoutube = !!(opts && opts.allowYoutube);
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) throw new CreateError(400, `${label} không hợp lệ`);
   if (raw.length > max) throw new CreateError(400, `Mỗi bài chỉ được tối đa ${max} ${label.toLowerCase()}`);
   const seen = new Set();
   const out = [];
   raw.forEach((it, idx) => {
-    if (!it || typeof it !== 'object' || Array.isArray(it) || typeof it.fileUrl !== 'string' || !it.fileUrl || typeof it.fileName !== 'string') {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) {
+      throw new CreateError(400, `${label} #${idx + 1} không hợp lệ`);
+    }
+    if (allowYoutube && it.type === 'youtube') {
+      const url = typeof it.youtubeUrl === 'string' ? it.youtubeUrl.trim() : '';
+      if (!url || url.length > INTERNAL_POST_YOUTUBE_URL_MAX_LEN || !isValidYoutubeUrl(url)) {
+        throw new CreateError(400, `${label} #${idx + 1}: link YouTube không hợp lệ (phải là link https:// thuộc youtube.com hoặc youtu.be)`);
+      }
+      const key = 'yt:' + url;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ type: 'youtube', youtubeUrl: url });
+      return;
+    }
+    if (typeof it.fileUrl !== 'string' || !it.fileUrl || typeof it.fileName !== 'string') {
       throw new CreateError(400, `${label} #${idx + 1} không hợp lệ`);
     }
     assertUploadedFileUrl(it.fileUrl, `${label} #${idx + 1}`);
     if (!extRe.test(it.fileUrl)) throw new CreateError(400, `${label} #${idx + 1} sai định dạng cho phép`);
     if (seen.has(it.fileUrl)) return;
     seen.add(it.fileUrl);
-    out.push({ fileUrl: it.fileUrl, fileName: it.fileName.trim().slice(0, 200) });
+    const item = { fileUrl: it.fileUrl, fileName: it.fileName.trim().slice(0, 200) };
+    out.push(allowYoutube ? Object.assign({ type: 'upload' }, item) : item);
   });
   return out;
 }
@@ -671,7 +698,7 @@ function normalizeInternalPostFileList(raw, max, label, extRe) {
 // "ảnh chọn được nhưng ko đăng bài được" ở submitInternalPost(), client).
 function normalizeInternalPostMedia(target) {
   target.images = normalizeInternalPostFileList(target.images, INTERNAL_POST_MAX_IMAGES, 'Ảnh', INTERNAL_POST_IMAGE_URL_EXT_RE);
-  target.videos = normalizeInternalPostFileList(target.videos, INTERNAL_POST_MAX_VIDEOS, 'Video', INTERNAL_POST_VIDEO_URL_EXT_RE);
+  target.videos = normalizeInternalPostFileList(target.videos, INTERNAL_POST_MAX_VIDEOS, 'Video', INTERNAL_POST_VIDEO_URL_EXT_RE, { allowYoutube: true });
   const rawCover = target.coverImage;
   if (rawCover === undefined || rawCover === null || rawCover === '') {
     target.coverImage = target.images[0] || null;

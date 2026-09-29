@@ -1198,8 +1198,23 @@
           <div id="internalImagesPreview" class="flex flex-wrap gap-2 mt-1"></div>
         </div>
         <div>
-          <label class="block font-semibold text-gray-600 mb-1">🎬 Video (tối đa 2, .mp4/.webm, mỗi video ≤ 200MB)</label>
-          <input id="internalVideosInput" type="file" multiple accept=".mp4,.webm" data-op-change="onInternalVideosChosen" data-arg-el="0" class="w-full border p-1.5 rounded bg-white">
+          <label class="block font-semibold text-gray-600 mb-1">🎬 Video (tối đa 2 — gộp cả tải lên lẫn YouTube; tải lên .mp4/.webm ≤ 200MB)</label>
+          <!-- 2 cách thêm video (9/2026): tải tệp lên (như cũ) HOẶC dán link YouTube (không tốn dung lượng
+               server). Nút chuyển chế độ + nút "Thêm" đi qua data-op (setInternalVideoMode/addInternalYoutubeVideo,
+               module-internalcomms-nhipsong.js) — không inline handler. -->
+          <div id="internalVideoModeTabs" class="flex gap-1 mb-1 text-xs">
+            <button type="button" data-op="setInternalVideoMode" data-arg0="upload" data-video-mode="upload" class="internal-video-mode-btn px-2 py-1 rounded border bg-fuchsia-600 text-white font-semibold">⬆️ Tải video lên</button>
+            <button type="button" data-op="setInternalVideoMode" data-arg0="youtube" data-video-mode="youtube" class="internal-video-mode-btn px-2 py-1 rounded border bg-white text-gray-700 font-semibold">▶️ Dán link YouTube</button>
+          </div>
+          <div id="internalVideoUploadBox">
+            <input id="internalVideosInput" type="file" multiple accept=".mp4,.webm" data-op-change="onInternalVideosChosen" data-arg-el="0" class="w-full border p-1.5 rounded bg-white">
+          </div>
+          <div id="internalVideoYoutubeBox" class="hidden">
+            <div class="flex gap-1">
+              <input id="internalYoutubeUrlInput" type="url" inputmode="url" maxlength="500" placeholder="https://www.youtube.com/watch?v=... hoặc https://youtu.be/..." class="flex-1 min-w-0 border p-1.5 rounded bg-white">
+              <button type="button" data-op="addInternalYoutubeVideo" class="px-3 py-1.5 rounded bg-fuchsia-600 text-white font-semibold text-xs">➕ Thêm</button>
+            </div>
+          </div>
           <div id="internalVideosStatus" class="text-[11px] text-gray-500 mt-1"></div>
           <div id="internalVideosPreview" class="space-y-1 mt-1"></div>
         </div>

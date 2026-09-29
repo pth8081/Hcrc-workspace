@@ -154,6 +154,80 @@ async function main() {
     expectStatus(() => createNews({ images: [vid(1)] }), 400, /định dạng/i);
   });
 
+  // ===== videos[] — nhúng YouTube (9/2026): {type:'youtube', youtubeUrl} song song {type:'upload', ...} =====
+  const yt = (url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ') => ({ type: 'youtube', youtubeUrl: url });
+
+  await run('YouTube (a): 1 video YouTube hợp lệ được chấp nhận, lưu đúng dạng {type, youtubeUrl} (bỏ field lạ/fileUrl)', async () => {
+    const p = createNews({ videos: [Object.assign(yt('  https://youtu.be/dQw4w9WgXcQ  '), { fileUrl: '/uploads/1-x.mp4', evil: '<script>' })] });
+    assert.deepStrictEqual(p.videos, [{ type: 'youtube', youtubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }]);
+    for (const u of ['https://www.youtube.com/watch?v=abcDEF12345', 'https://m.youtube.com/watch?v=abcDEF12345', 'https://youtube.com/shorts/abcDEF12345']) {
+      assert.strictEqual(createNews({ videos: [yt(u)] }).videos[0].youtubeUrl, u);
+    }
+  });
+
+  await run('YouTube (b): link YouTube không hợp lệ bị từ chối 400 với thông báo rõ ràng', async () => {
+    const bad = ['http://www.youtube.com/watch?v=abc', 'javascript:alert(1)//youtube.com', 'https://youtube.com.evil.tld/watch?v=abc',
+      'https://vimeo.com/123', 'khong phai url', '', 'https://www.youtube.com/watch?v=' + 'a'.repeat(600)];
+    for (const u of bad) expectStatus(() => createNews({ videos: [yt(u)] }), 400, /link YouTube không hợp lệ/i);
+    expectStatus(() => createNews({ videos: [{ type: 'youtube' }] }), 400, /link YouTube không hợp lệ/i);
+    expectStatus(() => createNews({ videos: [{ type: 'youtube', youtubeUrl: 123 }] }), 400, /link YouTube không hợp lệ/i);
+    // images[] KHÔNG bao giờ nhận YouTube (chỉ videos[] mới bật nhánh này).
+    expectStatus(() => createNews({ images: [yt()] }), 400);
+  });
+
+  await run('YouTube (c): dữ liệu CŨ (videos[] không có type) vẫn là video tải lên — bắt buộc fileUrl như trước', async () => {
+    const p = createNews({ videos: [vid(1)] });
+    assert.deepStrictEqual(p.videos, [{ type: 'upload', fileUrl: vid(1).fileUrl, fileName: vid(1).fileName }]);
+    // Thiếu type + chỉ có youtubeUrl -> KHÔNG được coi là YouTube (không đảo mặc định), bị từ chối vì thiếu fileUrl.
+    expectStatus(() => createNews({ videos: [{ youtubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }] }), 400, /không hợp lệ/i);
+    // type lạ -> cũng đi nhánh upload.
+    expectStatus(() => createNews({ videos: [{ type: 'vimeo', youtubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }] }), 400, /không hợp lệ/i);
+    // type 'upload' tường minh vẫn validate tệp như cũ (đuôi/nguồn).
+    expectStatus(() => createNews({ videos: [{ type: 'upload', fileUrl: 'https://evil.example/a.mp4', fileName: 'a.mp4' }] }), 400);
+    expectStatus(() => createNews({ videos: [{ type: 'upload', fileUrl: '/uploads/1-x.png', fileName: 'x.png' }] }), 400, /định dạng/i);
+  });
+
+  await run('YouTube (d): 1 upload + 1 YouTube = 2 được nhận; thêm phần tử thứ 3 (loại nào cũng vậy) -> 400 trần 2', async () => {
+    const p = createNews({ videos: [vid(1), yt()] });
+    assert.deepStrictEqual(p.videos.map(v => v.type), ['upload', 'youtube']);
+    expectStatus(() => createNews({ videos: [vid(1), yt(), yt('https://youtu.be/abcDEF12345')] }), 400, /tối đa 2/i);
+    expectStatus(() => createNews({ videos: [vid(1), yt(), vid(2)] }), 400, /tối đa 2/i);
+    expectStatus(() => createNews({ videos: [yt(), yt('https://youtu.be/a1'), yt('https://youtu.be/a2')] }), 400, /tối đa 2/i);
+    // Trùng link YouTube -> gộp 1 (như trùng fileUrl).
+    assert.strictEqual(createNews({ videos: [yt(), yt()] }).videos.length, 1);
+  });
+
+  await run('YouTube (e): SỬA bài cũ có video YouTube (+ upload cũ không type) -> lưu lại giữ nguyên đúng dữ liệu', async () => {
+    const post = Object.assign(createNews({ draft: true, videos: [yt('https://youtu.be/dQw4w9WgXcQ')] }), { id: 11, author: 'admin1' });
+    assert.deepStrictEqual(post.videos, [{ type: 'youtube', youtubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }]);
+    // Sửa field khác, KHÔNG gửi videos -> vẫn giữ nguyên video YouTube.
+    ra.editInternalPost({ title: 'Tiêu đề mới', draft: true }, ADMIN, post, APP_DATA);
+    assert.deepStrictEqual(post.videos, [{ type: 'youtube', youtubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }]);
+    // Client gửi lại đúng danh sách đã nạp (YouTube + 1 upload CŨ không có type) -> giữ nguyên YouTube, upload gắn type.
+    ra.editInternalPost({ videos: [yt('https://youtu.be/dQw4w9WgXcQ'), vid(1)], draft: true }, ADMIN, post, APP_DATA);
+    assert.deepStrictEqual(post.videos, [
+      { type: 'youtube', youtubeUrl: 'https://youtu.be/dQw4w9WgXcQ' },
+      { type: 'upload', fileUrl: vid(1).fileUrl, fileName: vid(1).fileName }
+    ]);
+    // Bản ghi CŨ trong DB (videos không có type) sửa field khác -> vẫn hợp lệ, coi là upload.
+    const legacy = Object.assign(createNews({ draft: true }), { id: 12, author: 'admin1', videos: [vid(2)] });
+    ra.editInternalPost({ title: 'Sửa bài cũ', draft: true }, ADMIN, legacy, APP_DATA);
+    assert.deepStrictEqual(legacy.videos, [{ type: 'upload', fileUrl: vid(2).fileUrl, fileName: vid(2).fileName }]);
+    // SỬA mà gửi link YouTube hỏng -> 400, như lúc TẠO.
+    expectStatus(() => ra.editInternalPost({ videos: [yt('https://evil.example/watch?v=x')], draft: true }, ADMIN, post, APP_DATA), 400, /link YouTube không hợp lệ/i);
+  });
+
+  await run('fileAuthz: phần tử YouTube (không có fileUrl) không làm lỗi tra quyền tệp của bài', async () => {
+    const postWithYt = { id: 7002, type: 'SHARE', author: 'tac_gia', status: 'PENDING', videos: [yt(), { fileUrl: '/uploads/pending-video-2.mp4', fileName: 'v2.mp4' }] };
+    COLLECTIONS.internalPosts.push(postWithYt);
+    try {
+      assert.strictEqual(await authorizeFileAccess({ username: 'nguoi_ngoai', dept: 'X', perms: {} }, '/uploads/pending-video-2.mp4', 'view'), false);
+      assert.strictEqual(await authorizeFileAccess({ username: 'tac_gia', dept: 'X', perms: {} }, '/uploads/pending-video-2.mp4', 'view'), true);
+    } finally {
+      COLLECTIONS.internalPosts.pop();
+    }
+  });
+
   // ===== Đường SỬA (editInternalPost) dùng cùng luật =====
   await run('SỬA bài nháp: sanitize lại content HTML + validate images/coverImage/videos như lúc TẠO', async () => {
     const post = Object.assign(createNews({ draft: true }), { id: 1, author: 'admin1' });

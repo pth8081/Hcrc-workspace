@@ -275,16 +275,108 @@ async function setInternalEditorContent(p) {
   }
 }
 
+// ---- Video nhúng YouTube (9/2026) ----
+// videos[] có 2 dạng phần tử: {type:'upload', fileUrl, fileName} (tệp tải lên, như cũ) và
+// {type:'youtube', youtubeUrl} (dán link YouTube — không tốn dung lượng server). TƯƠNG THÍCH NGƯỢC: phần tử
+// KHÔNG có type (bài cũ) LUÔN coi là 'upload' — chỉ type === 'youtube' tường minh mới đi nhánh YouTube (khớp
+// normalizeInternalPostFileList() ở lib/createValidation.js, server là nơi xác thực cuối).
+// Tách videoId: bản gọn RIÊNG của module này (cùng luật với extractYoutubeVideoId() của Đào Tạo LMS, không
+// dùng chung để không đụng tới LMS), nhưng CHẶT hơn: bắt buộc https: + đúng 4 tên miền YouTube (khớp
+// isValidYoutubeUrl() ở server) và videoId chỉ gồm [A-Za-z0-9_-] — id đi thẳng vào src iframe nhúng.
+const INTERNAL_YOUTUBE_HOSTNAMES_CLIENT = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'];
+function isInternalYoutubeVideo(v) {
+  return !!v && v.type === 'youtube';
+}
+function internalYoutubeVideoId(url) {
+  if (!url) return null;
+  let u;
+  try { u = new URL(String(url).trim()); } catch (e) { return null; }
+  if (u.protocol !== 'https:') return null;
+  const host = u.hostname.toLowerCase();
+  if (!INTERNAL_YOUTUBE_HOSTNAMES_CLIENT.includes(host)) return null;
+  let id = null;
+  if (host === 'youtu.be') {
+    id = u.pathname.split('/')[1] || null;
+  } else {
+    id = u.searchParams.get('v');
+    if (!id) {
+      const m = u.pathname.match(/^\/(?:embed|shorts|live)\/([^/?#]+)/);
+      if (m) id = m[1];
+    }
+  }
+  return id && /^[A-Za-z0-9_-]{6,20}$/.test(id) ? id : null;
+}
+function internalYoutubeEmbedUrl(url) {
+  const id = internalYoutubeVideoId(url);
+  return id ? `https://www.youtube.com/embed/${id}` : null;
+}
+
 // ---- Ảnh/Video (bản nháp media của form) ----
 function resetInternalMediaDraft(p) {
   const pick = (arr) => (Array.isArray(arr) ? arr : []).filter(x => x && x.fileUrl).map(x => ({ fileUrl: x.fileUrl, fileName: x.fileName || '' }));
+  // videos[]: giữ đúng loại từng phần tử — bài cũ (không có type) hiện như video tải lên cũ.
+  const pickVideos = (arr) => (Array.isArray(arr) ? arr : []).map(x => {
+    if (!x) return null;
+    if (isInternalYoutubeVideo(x)) return x.youtubeUrl ? { type: 'youtube', youtubeUrl: String(x.youtubeUrl) } : null;
+    return x.fileUrl ? { type: 'upload', fileUrl: x.fileUrl, fileName: x.fileName || '' } : null;
+  }).filter(Boolean);
   internalMediaDraft = {
     images: pick(p?.images),
     coverUrl: p?.coverImage?.fileUrl || null,
-    videos: pick(p?.videos)
+    videos: pickVideos(p?.videos)
   };
-  ['internalImagesInput', 'internalVideosInput'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['internalImagesInput', 'internalVideosInput', 'internalYoutubeUrlInput'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   ['internalImagesStatus', 'internalVideosStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+  setInternalVideoMode('upload');
+  renderInternalMediaDraft();
+}
+
+// Chuyển chế độ thêm video: 'upload' (chọn tệp) / 'youtube' (dán link) — chỉ đổi ô nhập đang hiện, KHÔNG
+// đụng tới các video đã thêm vào bản nháp (2 loại dùng chung trần INTERNAL_POST_MAX_VIDEOS_CLIENT).
+function setInternalVideoMode(mode) {
+  const m = mode === 'youtube' ? 'youtube' : 'upload';
+  // Enter trong ô link = bấm "➕ Thêm" — chặn submit ngầm của form (vốn còn bị kiểm tra `required` của trình
+  // duyệt chặn trước khi tới submitInternalPost()). addEventListener qua JS (không phải thuộc tính on*=
+  // nội tuyến) nên hợp lệ CSP; gắn đúng 1 lần/phần tử (form nằm trong fragment tải lười).
+  const ytInput = document.getElementById('internalYoutubeUrlInput');
+  if (ytInput && !ytInput.dataset.ytEnterBound) {
+    ytInput.dataset.ytEnterBound = '1';
+    ytInput.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' || ev.isComposing) return;
+      ev.preventDefault();
+      addInternalYoutubeVideo();
+    });
+  }
+  document.getElementById('internalVideoUploadBox')?.classList.toggle('hidden', m !== 'upload');
+  document.getElementById('internalVideoYoutubeBox')?.classList.toggle('hidden', m !== 'youtube');
+  document.querySelectorAll('#internalVideoModeTabs .internal-video-mode-btn').forEach(btn => {
+    const on = btn.dataset.videoMode === m;
+    btn.classList.toggle('bg-fuchsia-600', on);
+    btn.classList.toggle('text-white', on);
+    btn.classList.toggle('bg-white', !on);
+    btn.classList.toggle('text-gray-700', !on);
+  });
+}
+
+// Nút "➕ Thêm" (data-op) — kiểm tra nhẹ phía client (link YouTube tách được videoId, chưa vượt trần 2 video
+// gộp, chưa trùng) rồi đưa vào bản nháp; server kiểm tra lại bằng isValidYoutubeUrl() lúc lưu.
+function addInternalYoutubeVideo() {
+  const input = document.getElementById('internalYoutubeUrlInput');
+  const status = document.getElementById('internalVideosStatus');
+  const url = String(input?.value || '').trim();
+  if (!url) return alert('⚠️ Vui lòng dán link YouTube trước khi bấm Thêm.');
+  if (internalMediaDraft.videos.length >= INTERNAL_POST_MAX_VIDEOS_CLIENT) {
+    return alert(`⛔ Mỗi bài chỉ được tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video (tính chung cả video tải lên và link YouTube).`);
+  }
+  if (!internalYoutubeVideoId(url)) {
+    return alert('⛔ Link YouTube không hợp lệ — dùng link https://www.youtube.com/watch?v=... hoặc https://youtu.be/... của 1 video cụ thể.');
+  }
+  if (internalMediaDraft.videos.some(v => isInternalYoutubeVideo(v) && v.youtubeUrl === url)) {
+    return alert('⚠️ Link YouTube này đã có trong bài.');
+  }
+  internalMediaDraft.videos.push({ type: 'youtube', youtubeUrl: url });
+  if (input) input.value = '';
+  if (status) status.textContent = '';
   renderInternalMediaDraft();
 }
 
@@ -305,8 +397,8 @@ function renderInternalMediaDraft() {
   }
   if (vidBox) {
     vidBox.innerHTML = internalMediaDraft.videos.map((v, idx) => `
-      <div class="internal-draft-video flex items-center justify-between gap-2 bg-gray-50 border rounded px-2 py-1">
-        <span class="truncate">🎬 ${escapeHtml(v.fileName || v.fileUrl)}</span>
+      <div class="internal-draft-video flex items-center justify-between gap-2 bg-gray-50 border rounded px-2 py-1" data-video-type="${isInternalYoutubeVideo(v) ? 'youtube' : 'upload'}">
+        <span class="truncate">${isInternalYoutubeVideo(v) ? `▶️ YouTube: ${escapeHtml(v.youtubeUrl)}` : `🎬 ${escapeHtml(v.fileName || v.fileUrl)}`}</span>
         <button type="button" data-op="removeInternalDraftVideo" data-arg0="${idx}" class="text-red-600 font-bold">× Bỏ</button>
       </div>`).join('');
   }
@@ -345,8 +437,8 @@ async function onInternalVideosChosen(input) {
   if (!files.length) return;
   const status = document.getElementById('internalVideosStatus');
   const room = INTERNAL_POST_MAX_VIDEOS_CLIENT - internalMediaDraft.videos.length;
-  if (room <= 0) return alert(`⛔ Mỗi bài chỉ được tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video.`);
-  if (files.length > room) alert(`⚠️ Chỉ thêm được ${room} video nữa (tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video/bài) — các video còn lại bị bỏ qua.`);
+  if (room <= 0) return alert(`⛔ Mỗi bài chỉ được tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video (tính chung cả video tải lên và link YouTube).`);
+  if (files.length > room) alert(`⚠️ Chỉ thêm được ${room} video nữa (tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video/bài, tính chung cả link YouTube) — các video còn lại bị bỏ qua.`);
   const errors = [];
   for (const file of files.slice(0, room)) {
     if (!/\.(mp4|webm)$/i.test(file.name)) { errors.push(`${file.name}: chỉ nhận .mp4/.webm`); continue; }
@@ -356,7 +448,7 @@ async function onInternalVideosChosen(input) {
     try {
       const up = await uploadFileToServer(file, 'internalVideo');
       if (internalMediaDraft.videos.length < INTERNAL_POST_MAX_VIDEOS_CLIENT) {
-        internalMediaDraft.videos.push({ fileUrl: up.fileUrl, fileName: up.fileName || file.name });
+        internalMediaDraft.videos.push({ type: 'upload', fileUrl: up.fileUrl, fileName: up.fileName || file.name });
       }
     } catch (err) {
       errors.push(`${file.name}: ${err.message}`);
@@ -395,11 +487,25 @@ function removeInternalDraftVideo(idx) {
 function buildInternalMediaPayload() {
   const images = internalMediaDraft.images.map(x => ({ fileUrl: x.fileUrl, fileName: x.fileName }));
   const cover = images.find(x => x.fileUrl === internalMediaDraft.coverUrl) || images[0] || null;
-  return { images, coverImage: cover, videos: internalMediaDraft.videos.map(x => ({ fileUrl: x.fileUrl, fileName: x.fileName })) };
+  // videos[]: đúng 2 dạng đã chốt — {type:'youtube', youtubeUrl} hoặc {type:'upload', fileUrl, fileName}.
+  const videos = internalMediaDraft.videos.map(x => (isInternalYoutubeVideo(x)
+    ? { type: 'youtube', youtubeUrl: x.youtubeUrl }
+    : { type: 'upload', fileUrl: x.fileUrl, fileName: x.fileName }));
+  return { images, coverImage: cover, videos };
 }
 
 async function submitInternalPost(e) {
   e.preventDefault();
+  // Nhấn Enter trong ô link YouTube = "Thêm" link đó (submit ngầm của form HTML), KHÔNG đăng bài.
+  if (document.activeElement && document.activeElement.id === 'internalYoutubeUrlInput') {
+    addInternalYoutubeVideo();
+    return;
+  }
+  // Đã dán link YouTube nhưng quên bấm "➕ Thêm" — nhắc thay vì âm thầm đăng bài thiếu video.
+  const pendingYoutube = String(document.getElementById('internalYoutubeUrlInput')?.value || '').trim();
+  if (pendingYoutube && !document.getElementById('internalVideoYoutubeBox')?.classList.contains('hidden')) {
+    return alert('⚠️ Bạn đã dán link YouTube nhưng chưa bấm "➕ Thêm" — bấm Thêm (hoặc xoá link) rồi đăng bài lại.');
+  }
   const type = activeInternalSubTab;
   const isEditing = !!editingInternalPostId;
   // 2 nút submit CÙNG form ("Lưu Nháp"/"Đăng Ngay-Gửi Duyệt") — phân biệt bằng nút NÀO thực sự kích
@@ -2072,14 +2178,37 @@ function stepInternalGallery(postId, delta) {
   showInternalGalleryImage(postId, Number(root.dataset.galleryIdx || 0) + Number(delta));
 }
 
+// Nhánh theo loại: 'youtube' (type tường minh) -> <iframe> nhúng www.youtube.com/embed/<videoId> (frameSrc
+// CSP đã mở sẵn cho https://www.youtube.com, xem lib/securityHeaders.js); còn lại (kể cả bài CŨ không có
+// type) -> <video> tệp tải lên như trước. referrerpolicy tường minh vì helmet mặc định gửi
+// Referrer-Policy: no-referrer cho cả trang, mà trình phát YouTube nhúng từ chối phát khi không có referrer.
+// Link YouTube không tách được videoId (hiếm, VD link kênh) -> chỉ hiện liên kết mở tab mới, và CHỈ khi link
+// đúng https + tên miền YouTube (không bao giờ đưa scheme lạ vào href).
 function buildInternalVideosHTML(p) {
-  const vids = (Array.isArray(p?.videos) ? p.videos : []).filter(x => x && x.fileUrl);
+  const vids = (Array.isArray(p?.videos) ? p.videos : []).filter(x => x && (isInternalYoutubeVideo(x) ? x.youtubeUrl : x.fileUrl));
   if (!vids.length) return '';
-  return `<div class="internal-videos mt-3 space-y-2">${vids.map(v => `
+  return `<div class="internal-videos mt-3 space-y-2">${vids.map(v => {
+    if (isInternalYoutubeVideo(v)) {
+      const embed = internalYoutubeEmbedUrl(v.youtubeUrl);
+      if (embed) {
+        return `
+    <div class="internal-video-youtube">
+      <iframe src="${escapeHtml(embed)}" title="Video YouTube" class="w-full h-72 md:h-96 bg-black rounded border-0" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+      <div class="text-[11px] text-gray-500 mt-0.5">▶️ YouTube</div>
+    </div>`;
+      }
+      let safeLink = false;
+      try { const u = new URL(String(v.youtubeUrl)); safeLink = u.protocol === 'https:' && INTERNAL_YOUTUBE_HOSTNAMES_CLIENT.includes(u.hostname.toLowerCase()); } catch (e) { safeLink = false; }
+      return safeLink
+        ? `<div class="internal-video-youtube text-sm">▶️ <a href="${escapeHtml(v.youtubeUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">Xem video trên YouTube</a></div>`
+        : '';
+    }
+    return `
     <div>
       <video controls preload="metadata" src="${escapeHtml(v.fileUrl)}" class="w-full max-h-96 bg-black rounded"></video>
       <div class="text-[11px] text-gray-500 mt-0.5">🎬 ${escapeHtml(v.fileName || '')}</div>
-    </div>`).join('')}</div>`;
+    </div>`;
+  }).join('')}</div>`;
 }
 
 // 5 hành động tương tác dưới đây (đánh dấu đã đọc/thích/bình luận/đăng ký đào tạo) đi qua
