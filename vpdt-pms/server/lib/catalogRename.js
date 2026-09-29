@@ -129,7 +129,14 @@ async function cascadeDeptWorkflowMaps(oldValue, newValue) {
 // cảnh báo nào hiện ra). Tách RIÊNG khỏi DEPT_WORKFLOW_MAP_KEYS (không phải map "duyệt" thật, không cần
 // bị cuốn theo cascadePositionPairs() quét approversByPosition bên trong — value ở đây chỉ là
 // {name,email}, không có field đó).
-const DEPT_KEYED_APPDATA_MAP_KEYS = ['contractExpiryDeptContacts'];
+// storeTypes: {[storeName]: 'ST'|'CH'|'WH'} — phân loại Siêu Thị/Cửa Hàng/Kho (khối "🏬 Quản Lý Danh Mục
+// Siêu Thị", xem setStoreType() ở module-admin.js) — CÙNG hình dạng {tên: value} (mảng KHOÁ này dùng
+// chung cho CẢ dept lẫn store rename, xem cascadeDeptKeyedAppDataMaps() gọi từ cascadeStoreRename() bên
+// dưới) nên tái dùng ĐÚNG renameTopLevelDeptKey(). PHÁT HIỆN (10/2026, theo yêu cầu người dùng): đổi tên
+// 1 siêu thị KHÔNG cascade map này — phân loại ST/CH/Kho đã gán ÂM THẦM MẤT sau khi đổi tên (tên siêu thị
+// MỚI không còn khớp key cũ trong storeTypes), ảnh hưởng Dashboard "🥗 Đánh Giá VSATTP" (tách Top 5/tỷ lệ
+// vi phạm theo ST/CH, xem splitChecklistVsattpStoresByType() ở module-checklist.js).
+const DEPT_KEYED_APPDATA_MAP_KEYS = ['contractExpiryDeptContacts', 'storeTypes'];
 
 async function cascadeDeptKeyedAppDataMaps(oldValue, newValue) {
   for (const mapKey of DEPT_KEYED_APPDATA_MAP_KEYS) {

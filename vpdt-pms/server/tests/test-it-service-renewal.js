@@ -258,7 +258,9 @@ async function main() {
       });
       assert(!result.boxExistsInOldLocation, '#itRenewalCategoryAdminBox (khối bọc cũ) đã bỏ hẳn khỏi DOM — khối này không còn "ẩn/hiện", nó nằm hẳn ở màn Quản Lý Danh Mục');
       assert(result.listHtml.includes('Phần mềm/Bản quyền') && result.listHtml.includes('Tên miền'), 'Danh sách phải hiện đủ 2 loại dịch vụ đã seed');
-      assertEqual(result.btnArg0, 'Phần mềm/Bản quyền', 'Nút "✏️ Sửa" đầu tiên phải mang đúng data-arg0 của mặt hàng tương ứng');
+      // data-arg0 nay bọc dấu nháy đơn ('...') — LỖI ĐÃ VÁ (10/2026): ép giữ nguyên kiểu chuỗi cho tên
+      // toàn chữ số, tránh cspCoerceArg() tự chuyển thành Number (xem core.js) — bóc lại để so sánh.
+      assertEqual(result.btnArg0, "'Phần mềm/Bản quyền'", 'Nút "✏️ Sửa" đầu tiên phải mang đúng data-arg0 của mặt hàng tương ứng (bọc trong dấu nháy đơn)');
       assert(result.hasRenameFn, 'renameItRenewalCategory() phải được định nghĩa (module đã nạp)');
     });
 

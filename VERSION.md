@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**24.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.42 (2026-09-29): Quản Lý Danh Mục — vá lỗi tên toàn số + chọn nhiều để xoá + Excel Siêu Thị
+
+Theo yêu cầu người dùng (báo cáo "danh mục Siêu Thị đặt tên toàn số không sửa/
+xoá được"):
+
+1. **LỖI ĐÃ VÁ (hệ thống, không riêng Siêu Thị)**: `cspCoerceArg()` (core.js) —
+   cơ chế điều hướng CSP dùng chung toàn ứng dụng — trước đây tự ép giá trị
+   toàn chữ số (VD siêu thị đặt tên "168") thành SỐ ngay cả khi đã bọc dấu
+   nháy đơn (`'168'`), khiến "✏️ Sửa"/"🗑️ Xoá" các dòng này báo lỗi hoặc âm
+   thầm không làm gì. Vá tận gốc: có dấu nháy bao ngoài thì LUÔN giữ chuỗi,
+   không ép số nữa — áp dụng cho 11 hàm render danh mục dạng mảng chuỗi
+   phẳng (Phòng Ban, Siêu Thị, Chức Danh, Loại Đào Tạo, Phân Loại Tài Liệu,
+   Loại Hợp Đồng, Giấy Phép, Loại Dịch Vụ CNTT, Hãng Taxi, Lý Do Đánh Giá
+   Chuyến Xe, Vùng Giá Áp Dụng).
+2. **Fix cascade phụ**: đổi tên 1 siêu thị trước đây làm MẤT "Loại" (ST/CH)
+   đã gán (`storeTypes` chưa nằm trong `DEPT_KEYED_APPDATA_MAP_KEYS`,
+   `lib/catalogRename.js`) — đã vá.
+3. **☑️ Chọn nhiều để xoá cùng lúc** (10 danh mục dạng danh sách tên đơn
+   giản — Phòng Ban, Siêu Thị, Giấy Phép, Hãng Taxi, Vùng Giá Áp Dụng, Loại
+   Dịch Vụ CNTT, Phân Loại Tài Liệu, Chức Danh, Loại Đào Tạo, Lý Do Đánh Giá
+   Chuyến Xe): checkbox mỗi dòng + "Chọn tất cả" + thanh "Đã chọn N mục" +
+   nút xoá cả loạt trong 1 lượt lưu (`SIMPLE_CATALOG_BULK_CONFIG`, core.js).
+   Danh mục dạng nhiều-field (Khối/Ban, Loại Xe Cụ Thể, Vị Trí Làm Việc...)
+   chưa có, để đợt sau.
+4. **Danh Mục Siêu Thị**: thêm "Loại: Kho" (bên cạnh Siêu Thị/Cửa Hàng) +
+   đủ 3 thao tác Tải Mẫu/Xuất Excel/Nhập Excel (trước đây chỉ Tải Mẫu 1
+   cột, chưa Xuất được) — file mẫu/xuất có 2 cột Tên + Loại; Nhập Excel vừa
+   thêm mới vừa cập nhật Loại cho CẢ siêu thị đã có sẵn.
+
+Test mới: `test-catalog-bulk-delete.js` (17 kịch bản), `test-store-catalog-excel.js`
+(9 kịch bản) — cùng cập nhật 2 test cũ theo quy ước data-arg0 bọc dấu nháy mới
+(`test-admin-store-type-ui.js`, `test-it-service-renewal.js`). Full regression
+358 kịch bản/26 test suite liên quan đều pass.
 
 ## v24.41 (2026-09-29): Cấu Hình Nghiệp Vụ (Mẫu Giá) + dời quyền Phê Duyệt Giá vào đúng module
 

@@ -81,13 +81,14 @@ async function updateDeptAbbr(name, value) {
 function renderDeptList() {
   const ul = document.getElementById('deptList');
   if (!ul) return;
-  ul.innerHTML = DB.depts.map(d => `
+  ul.innerHTML = renderCatalogBulkBarHtml('depts') + DB.depts.map(d => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('depts', d)}
       <span class="flex-1">${escapeHtml(d)}</span>
-      <input value="${escapeHtml(getDeptAbbr(d))}" data-op-change="updateDeptAbbr" data-arg0="${escapeHtml(d)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
-      <button data-op="renameDept" data-arg0="${escapeHtml(d)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="moveDeptToStore" data-arg0="${escapeHtml(d)}" title="Chuyển sang Danh Mục Siêu Thị" class="text-orange-600 font-bold hover:underline whitespace-nowrap">Chuyển</button>
-      <button data-op="deleteDept" data-arg0="${escapeHtml(d)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <input value="${escapeHtml(getDeptAbbr(d))}" data-op-change="updateDeptAbbr" data-arg0="'${escapeHtml(d)}'" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="renameDept" data-arg0="'${escapeHtml(d)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="moveDeptToStore" data-arg0="'${escapeHtml(d)}'" title="Chuyển sang Danh Mục Siêu Thị" class="text-orange-600 font-bold hover:underline whitespace-nowrap">Chuyển</button>
+      <button data-op="deleteDept" data-arg0="'${escapeHtml(d)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -258,16 +259,18 @@ function renderStoreList() {
   const ul = document.getElementById('storeList');
   if (!ul) return;
   const types = DB.storeTypes || {};
-  ul.innerHTML = DB.stores.map(s => `
+  ul.innerHTML = renderCatalogBulkBarHtml('stores') + DB.stores.map(s => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('stores', s)}
       <span class="flex-1">${escapeHtml(s)}</span>
-      <select data-op-change="setStoreType" data-arg0="${escapeHtml(s)}" data-arg-value="1" class="border rounded text-[11px] p-0.5">
+      <select data-op-change="setStoreType" data-arg0="'${escapeHtml(s)}'" data-arg-value="1" class="border rounded text-[11px] p-0.5">
         <option value="" ${!types[s] ? 'selected' : ''}>— Chưa phân loại —</option>
         <option value="ST" ${types[s] === 'ST' ? 'selected' : ''}>Siêu Thị</option>
         <option value="CH" ${types[s] === 'CH' ? 'selected' : ''}>Cửa Hàng</option>
+        <option value="WH" ${types[s] === 'WH' ? 'selected' : ''}>Kho</option>
       </select>
-      <button data-op="renameStore" data-arg0="${escapeHtml(s)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteStore" data-arg0="${escapeHtml(s)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameStore" data-arg0="'${escapeHtml(s)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteStore" data-arg0="'${escapeHtml(s)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -329,6 +332,20 @@ async function renameStore(name) {
 // "confirm add" riêng vì stores là mảng phẳng đơn giản. ----------
 let storeImportPreviewItems = []; // kết quả gần nhất từ /api/stores/parse-import
 
+const STORE_TYPE_LABEL_VI_CLIENT = { ST: 'Siêu Thị', CH: 'Cửa Hàng', WH: 'Kho' };
+
+// 📤 Xuất Excel Danh Mục Siêu Thị (10/2026, theo yêu cầu người dùng — trước đây panel này CHỈ có "⬇️ Tải
+// Mẫu"/"📥 Nhập Excel", chưa từng xuất được danh sách hiện có) — 2 cột Tên + Loại, dùng chung route
+// generic POST /api/admin/export-xlsx (không cần route riêng, xem downloadXlsxFromServer() ở core.js).
+async function exportStoreCatalogExcel() {
+  const types = DB.storeTypes || {};
+  const rows = (DB.stores || []).map(s => ({ name: s, type: STORE_TYPE_LABEL_VI_CLIENT[types[s]] || '' }));
+  await downloadXlsxFromServer('DanhSachSieuThi.xlsx', 'Danh Sách Siêu Thị', [
+    { key: 'name', header: 'Tên Siêu Thị' },
+    { key: 'type', header: 'Loại' }
+  ], rows);
+}
+
 async function onStoreImportFileChange(event) {
   const file = event.target.files[0];
   storeImportPreviewItems = [];
@@ -345,14 +362,20 @@ async function onStoreImportFileChange(event) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
     storeImportPreviewItems = data.items;
+    const types = DB.storeTypes || {};
     const newCount = data.items.filter(it => it.isNew).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${newCount}/${data.items.length} siêu thị MỚI (còn lại đã có sẵn trong danh mục).`;
+    // typeChangeCount — dòng có cột "Loại" điền khác giá trị đang lưu (kể cả siêu thị ĐÃ CÓ sẵn, theo
+    // yêu cầu người dùng "để có thể import luôn mục này" — không chỉ áp dụng cho siêu thị MỚI).
+    const typeChangeCount = data.items.filter(it => it.type && types[it.name] !== it.type).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${newCount}/${data.items.length} siêu thị MỚI` +
+      (typeChangeCount ? `, ${typeChangeCount} dòng sẽ cập nhật "Loại"` : '') + '.';
     document.getElementById('storeImportPreviewBody').innerHTML = data.items.map(it => `<tr>
       <td class="p-1">${escapeHtml(it.name)}</td>
+      <td class="p-1">${it.type ? escapeHtml(STORE_TYPE_LABEL_VI_CLIENT[it.type] || it.type) : '<span class="text-gray-400">—</span>'}</td>
       <td class="p-1">${it.isNew ? '<span class="text-emerald-600">✅ Mới</span>' : '<span class="text-gray-400">— Đã có</span>'}</td>
     </tr>`).join('');
     document.getElementById('storeImportPreviewWrap').classList.remove('hidden');
-    if (newCount > 0) document.getElementById('storeImportConfirmBtn').classList.remove('hidden');
+    if (newCount > 0 || typeChangeCount > 0) document.getElementById('storeImportConfirmBtn').classList.remove('hidden');
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
     event.target.value = '';
@@ -361,12 +384,23 @@ async function onStoreImportFileChange(event) {
 
 async function confirmStoreImport() {
   const newNames = storeImportPreviewItems.filter(it => it.isNew).map(it => it.name);
-  if (!newNames.length) return;
-  DB.stores = [...DB.stores, ...newNames];
-  const saved = await syncStorage('stores');
-  if (!saved) { DB.stores = DB.stores.filter(s => !newNames.includes(s)); return; }
-  logSystemAction('USER_MGM', 'IMPORT_STORES', `Import Excel: thêm ${newNames.length} siêu thị mới`, 'SUCCESS', String(newNames.length));
-  alert(`✅ Đã thêm ${newNames.length} siêu thị mới vào Danh Mục Siêu Thị.`);
+  const typeChanges = storeImportPreviewItems.filter(it => it.type && (DB.storeTypes || {})[it.name] !== it.type);
+  if (!newNames.length && !typeChanges.length) return;
+  const prevStores = [...DB.stores];
+  const prevTypes = { ...(DB.storeTypes || {}) };
+  if (newNames.length) DB.stores = [...DB.stores, ...newNames];
+  if (typeChanges.length) {
+    const nextTypes = { ...(DB.storeTypes || {}) };
+    typeChanges.forEach(it => { nextTypes[it.name] = it.type; });
+    DB.storeTypes = nextTypes;
+  }
+  const syncKeys = [];
+  if (newNames.length) syncKeys.push('stores');
+  if (typeChanges.length) syncKeys.push('storeTypes');
+  const results = await Promise.all(syncKeys.map(k => syncStorage(k)));
+  if (results.some(ok => !ok)) { DB.stores = prevStores; DB.storeTypes = prevTypes; return; }
+  logSystemAction('USER_MGM', 'IMPORT_STORES', `Import Excel: thêm ${newNames.length} siêu thị mới, cập nhật Loại cho ${typeChanges.length} dòng`, 'SUCCESS', String(newNames.length));
+  alert(`✅ Đã thêm ${newNames.length} siêu thị mới` + (typeChanges.length ? `, cập nhật "Loại" cho ${typeChanges.length} dòng` : '') + ' vào Danh Mục Siêu Thị.');
   storeImportPreviewItems = [];
   document.getElementById('storeImportFileInput').value = '';
   document.getElementById('storeImportStatus').innerText = '';
@@ -433,11 +467,12 @@ async function deleteJobTitle(name) {
 function renderJobTitleList() {
   const ul = document.getElementById('jobTitleList');
   if (!ul) return;
-  ul.innerHTML = DB.jobTitles.map(t => `
+  ul.innerHTML = renderCatalogBulkBarHtml('jobTitles') + DB.jobTitles.map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('jobTitles', t)}
       <span class="flex-1">${escapeHtml(t)}</span>
-      <button data-op="renameJobTitle" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteJobTitle" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameJobTitle" data-arg0="'${escapeHtml(t)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteJobTitle" data-arg0="'${escapeHtml(t)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -710,11 +745,12 @@ async function deleteTrainingCategory(name) {
 function renderTrainingCategoryList() {
   const ul = document.getElementById('trainingCategoryList');
   if (!ul) return;
-  ul.innerHTML = DB.trainingCategories.map(t => `
+  ul.innerHTML = renderCatalogBulkBarHtml('trainingCategories') + DB.trainingCategories.map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('trainingCategories', t)}
       <span class="flex-1">${escapeHtml(t)}</span>
-      <button data-op="renameTrainingCategory" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteTrainingCategory" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameTrainingCategory" data-arg0="'${escapeHtml(t)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteTrainingCategory" data-arg0="'${escapeHtml(t)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -846,12 +882,13 @@ async function updateCatAbbr(name, value) {
 function renderCatList() {
   const ul = document.getElementById('catList');
   if (!ul) return;
-  ul.innerHTML = DB.cats.map(c => `
+  ul.innerHTML = renderCatalogBulkBarHtml('cats') + DB.cats.map(c => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('cats', c)}
       <span class="flex-1">${escapeHtml(c)}</span>
-      <input value="${escapeHtml(getDocCatAbbr(c))}" data-op-change="updateCatAbbr" data-arg0="${escapeHtml(c)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
-      <button data-op="renameCat" data-arg0="${escapeHtml(c)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteCat" data-arg0="${escapeHtml(c)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <input value="${escapeHtml(getDocCatAbbr(c))}" data-op-change="updateCatAbbr" data-arg0="'${escapeHtml(c)}'" data-arg-value="1" title="Viết tắt (dùng sinh Mã Tài Liệu)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="renameCat" data-arg0="'${escapeHtml(c)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteCat" data-arg0="'${escapeHtml(c)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -895,8 +932,8 @@ function renderContractTypeAbbrList() {
   ul.innerHTML = DB.contractTypes.map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       <span class="flex-1">${escapeHtml(t)}</span>
-      <input value="${escapeHtml(getContractTypeAbbr(t))}" data-op-change="updateContractTypeAbbr" data-arg0="${escapeHtml(t)}" data-arg-value="1" title="Viết tắt (dùng sinh Mã Hợp Đồng)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
-      <button data-op="renameContractType" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <input value="${escapeHtml(getContractTypeAbbr(t))}" data-op-change="updateContractTypeAbbr" data-arg0="'${escapeHtml(t)}'" data-arg-value="1" title="Viết tắt (dùng sinh Mã Hợp Đồng)" class="w-16 border rounded px-1 py-0.5 text-center text-[11px] font-mono uppercase">
+      <button data-op="renameContractType" data-arg0="'${escapeHtml(t)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
     </li>
   `).join('');
 }

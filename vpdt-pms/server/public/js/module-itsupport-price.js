@@ -739,11 +739,12 @@ async function deletePriceZone(name) {
 function renderPriceZoneList() {
   const ul = document.getElementById('priceZoneList');
   if (!ul) return;
-  ul.innerHTML = (DB.priceZones || []).map(name => `
+  ul.innerHTML = renderCatalogBulkBarHtml('priceZones') + (DB.priceZones || []).map(name => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('priceZones', name)}
       <span class="flex-1">${escapeHtml(name)}</span>
-      <button data-op="renamePriceZone" data-arg0="${escapeHtml(name)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deletePriceZone" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renamePriceZone" data-arg0="'${escapeHtml(name)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deletePriceZone" data-arg0="'${escapeHtml(name)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }

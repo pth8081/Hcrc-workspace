@@ -731,16 +731,18 @@
         </div>
         <div class="border-t pt-2 space-y-1.5">
           <div class="flex items-center gap-2 flex-wrap text-[11px]">
-            <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">⬇️ Tải Mẫu Excel</a>
-            <input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onStoreImportFileChange" data-arg-event="0" class="text-[11px]">
+            <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">📄 Tải Mẫu</a>
+            <button type="button" data-op="exportStoreCatalogExcel" class="text-orange-700 font-bold hover:underline">📤 Xuất Excel</button>
+            <label class="text-orange-700 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onStoreImportFileChange" data-arg-event="0" class="hidden"></label>
           </div>
           <p id="storeImportStatus" class="text-[11px] text-gray-500"></p>
           <div id="storeImportPreviewWrap" class="hidden border rounded max-h-32 overflow-y-auto">
             <table class="w-full text-[11px]">
+              <thead><tr class="bg-gray-100 text-left"><th class="p-1">Tên Siêu Thị</th><th class="p-1">Loại</th><th class="p-1">Trạng Thái</th></tr></thead>
               <tbody id="storeImportPreviewBody"></tbody>
             </table>
           </div>
-          <button type="button" id="storeImportConfirmBtn" data-op="confirmStoreImport" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Thêm Siêu Thị Mới</button>
+          <button type="button" id="storeImportConfirmBtn" data-op="confirmStoreImport" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Nhập Excel</button>
         </div>
       </div>
 

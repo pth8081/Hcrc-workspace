@@ -65,11 +65,12 @@ function onItServiceRenewalFilterChange() {
 function renderItRenewalCategoryList() {
   const ul = document.getElementById('itRenewalCategoryList');
   if (!ul) return;
-  ul.innerHTML = (DB.itRenewalCategories || []).map(c => `
+  ul.innerHTML = renderCatalogBulkBarHtml('itRenewalCategories') + (DB.itRenewalCategories || []).map(c => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('itRenewalCategories', c)}
       <span class="flex-1">${escapeHtml(c)}</span>
-      <button data-op="renameItRenewalCategory" data-arg0="${escapeHtml(c)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteItRenewalCategory" data-arg0="${escapeHtml(c)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameItRenewalCategory" data-arg0="'${escapeHtml(c)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteItRenewalCategory" data-arg0="'${escapeHtml(c)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }

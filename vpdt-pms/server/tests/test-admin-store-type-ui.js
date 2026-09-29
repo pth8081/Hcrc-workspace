@@ -90,7 +90,11 @@ async function main() {
   await page.evaluate(() => renderStoreList());
   const initial = await page.evaluate(() => {
     const selects = Array.from(document.querySelectorAll('#storeList select[data-op-change="setStoreType"]'));
-    return selects.map(s => ({ store: s.getAttribute('data-arg0'), value: s.value }));
+    // data-arg0 nay bọc dấu nháy đơn ('...') — LỖI ĐÃ VÁ (10/2026): ép giữ nguyên kiểu chuỗi cho tên siêu
+    // thị toàn chữ số (VD "168"), tránh bị cspCoerceArg() tự chuyển thành Number — bóc lại dấu nháy ở đây
+    // để so sánh đúng tên gốc, mirror cspCoerceArg() thật ở core.js.
+    const unwrap = (raw) => (/^'(.*)'$/.test(raw) ? raw.slice(1, -1) : raw);
+    return selects.map(s => ({ store: unwrap(s.getAttribute('data-arg0')), value: s.value }));
   });
   record('Render đúng 3 dòng, mỗi dòng 1 select phân loại', initial.length === 3, JSON.stringify(initial));
   record('"Siêu Thị A" hiện sẵn giá trị "ST"', initial.find(x => x.store === 'Siêu Thị A')?.value === 'ST', JSON.stringify(initial));

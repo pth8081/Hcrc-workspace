@@ -4687,6 +4687,139 @@ function initSimpleCatalogExcelToolsAll() {
   });
 }
 
+// SIMPLE_CATALOG_BULK_CONFIG — "chọn nhiều để xoá cùng lúc" DÙNG CHUNG (10/2026, theo yêu cầu người
+// dùng "tất cả các danh mục có thể lựa chọn nhiều item để xoá cùng một lúc") — CHỈ áp dụng cho các danh
+// mục dạng mảng CHUỖI PHẲNG có nút "Xoá" đơn lẻ đã có sẵn (gần trùng SIMPLE_CATALOG_EXCEL_CONFIG, TRỪ
+// "contractTypes" — panel đó không có nút Xoá đơn lẻ nào, chỉ Thêm/Sửa viết tắt qua Biểu Mẫu — VÀ THÊM
+// "stores" — Siêu Thị KHÔNG nằm trong registry Excel phẳng vì cần thêm cột "Loại", nhưng vẫn là mảng
+// chuỗi phẳng nên áp dụng bulk-delete bình thường được). KHÔNG áp dụng danh mục dạng OBJECT nhiều field
+// (Khối/Ban, Loại Xe Cụ Thể, Chức Danh Siêu Thị, Vị Trí Làm Việc, Từ Khoá Nhạy Cảm, Phòng Họp...) — khác
+// cấu trúc dữ liệu/khoá định danh (id số, không phải chính chuỗi hiển thị), để đợt sau.
+// afterDelete: hook TUỲ CHỌN gọi lại đúng các hàm refresh phụ (dropdown/datalist) mà bản delete ĐƠN LẺ
+// của chính danh mục đó đã gọi (xem deleteDept()/deleteCat()/renameLicenseType()... làm mẫu).
+const SIMPLE_CATALOG_BULK_CONFIG = {
+  depts: { dbKey: 'depts', kindLabel: 'phòng ban', renderFn: 'renderDeptList' },
+  stores: { dbKey: 'stores', kindLabel: 'siêu thị', renderFn: 'renderStoreList' },
+  licenseTypes: { dbKey: 'licenseTypes', kindLabel: 'loại giấy phép', renderFn: 'renderLicenseTypeList',
+    afterDelete: () => { if (typeof sddSetOptions === 'function') sddSetOptions('licenseTypeDatalist', DB.licenseTypes || []); } },
+  carTaxiCompanies: { dbKey: 'carTaxiCompanies', kindLabel: 'hãng taxi', renderFn: 'renderCarTaxiCompanyList' },
+  carEvaluationIssues: { dbKey: 'carEvaluationIssues', kindLabel: 'lý do đánh giá chuyến xe', renderFn: 'renderCarEvaluationIssueList' },
+  priceZones: { dbKey: 'priceZones', kindLabel: 'vùng giá áp dụng', renderFn: 'renderPriceZoneList' },
+  itRenewalCategories: { dbKey: 'itRenewalCategories', kindLabel: 'loại dịch vụ CNTT', renderFn: 'renderItRenewalCategoryList',
+    afterDelete: () => { if (typeof renderItServiceRenewals === 'function') renderItServiceRenewals(); } },
+  cats: { dbKey: 'cats', kindLabel: 'phân loại tài liệu', renderFn: 'renderCatList', extraDbKey: 'docCatAbbrs' },
+  jobTitles: { dbKey: 'jobTitles', kindLabel: 'chức danh', renderFn: 'renderJobTitleList' },
+  trainingCategories: { dbKey: 'trainingCategories', kindLabel: 'loại đào tạo', renderFn: 'renderTrainingCategoryList',
+    afterDelete: () => { if (typeof syncTrainingCategorySelectsIfLoaded === 'function') syncTrainingCategorySelectsIfLoaded(); } }
+};
+
+const catalogBulkSelection = {}; // { [catalogKey]: Set<string> } — reset tự nhiên khi tải lại trang.
+function catalogBulkSelectedSet(catalogKey) {
+  if (!catalogBulkSelection[catalogKey]) catalogBulkSelection[catalogKey] = new Set();
+  return catalogBulkSelection[catalogKey];
+}
+function isCatalogItemBulkSelected(catalogKey, value) {
+  return catalogBulkSelectedSet(catalogKey).has(value);
+}
+function rerenderCatalogBulkList(catalogKey) {
+  const cfg = SIMPLE_CATALOG_BULK_CONFIG[catalogKey];
+  if (cfg && typeof window[cfg.renderFn] === 'function') window[cfg.renderFn]();
+}
+// data-arg-el nhận thẳng phần tử checkbox (cùng khuôn enforcePwaShortcutMax()) — đọc el.checked thay vì
+// el.value vì đây là trạng thái tick, không phải chuỗi nhập tay.
+function toggleCatalogBulkItem(catalogKey, value, el) {
+  const set = catalogBulkSelectedSet(catalogKey);
+  if (el.checked) set.add(value); else set.delete(value);
+  rerenderCatalogBulkList(catalogKey);
+}
+function toggleCatalogBulkAll(catalogKey, el) {
+  const cfg = SIMPLE_CATALOG_BULK_CONFIG[catalogKey];
+  if (!cfg) return;
+  const set = catalogBulkSelectedSet(catalogKey);
+  set.clear();
+  if (el.checked) (DB[cfg.dbKey] || []).forEach(v => set.add(v));
+  rerenderCatalogBulkList(catalogKey);
+}
+function clearCatalogBulkSelection(catalogKey) {
+  catalogBulkSelectedSet(catalogKey).clear();
+  rerenderCatalogBulkList(catalogKey);
+}
+// renderCatalogBulkBarHtml() — chèn NGAY ĐẦU <ul> (bên trong .innerHTML, dưới dạng <li> hợp lệ) của
+// từng danh mục — gồm thanh "Đã chọn N mục / Xoá" (chỉ hiện khi có tick) + dòng "Chọn tất cả".
+function renderCatalogBulkBarHtml(catalogKey) {
+  const cfg = SIMPLE_CATALOG_BULK_CONFIG[catalogKey];
+  if (!cfg) return '';
+  const items = DB[cfg.dbKey] || [];
+  const set = catalogBulkSelectedSet(catalogKey);
+  const allChecked = items.length > 0 && items.every(v => set.has(v));
+  let html = '';
+  if (set.size) {
+    html += `<li class="flex items-center justify-between bg-amber-50 border border-amber-300 rounded px-2.5 py-1.5 mb-1 text-[11px]">
+      <span class="font-semibold text-gray-700">Đã chọn ${set.size} ${escapeHtml(cfg.kindLabel)}</span>
+      <div class="flex items-center gap-2">
+        <button type="button" data-op="clearCatalogBulkSelection" data-arg0="'${escapeHtml(catalogKey)}'" class="text-gray-500 underline">Bỏ chọn</button>
+        <button type="button" data-op="bulkDeleteCatalogItems" data-arg0="'${escapeHtml(catalogKey)}'" class="bg-red-600 text-white px-2 py-1 rounded font-bold">🗑️ Xoá ${set.size} Mục Đã Chọn</button>
+      </div>
+    </li>`;
+  }
+  html += `<li class="flex items-center gap-2 px-2 py-1 text-[11px] text-gray-400 border-b">
+    <input type="checkbox" data-op-change="toggleCatalogBulkAll" data-arg0="'${escapeHtml(catalogKey)}'" data-arg-el="1" ${allChecked ? 'checked' : ''}>
+    <span class="italic">Chọn tất cả</span>
+  </li>`;
+  return html;
+}
+// checkbox mỗi dòng — gọi trong .map() của từng render<Xxx>List(), ĐẶT NGAY ĐẦU mỗi <li> (trước ✏️
+// Sửa/🗑️ Xoá hiện có).
+function renderCatalogBulkCheckboxHtml(catalogKey, value) {
+  return `<input type="checkbox" data-op-change="toggleCatalogBulkItem" data-arg0="'${escapeHtml(catalogKey)}'" data-arg1="'${escapeHtml(value)}'" data-arg-el="2" ${isCatalogItemBulkSelected(catalogKey, value) ? 'checked' : ''} class="w-3.5 h-3.5 shrink-0">`;
+}
+async function bulkDeleteCatalogItems(catalogKey) {
+  const cfg = SIMPLE_CATALOG_BULK_CONFIG[catalogKey];
+  if (!cfg) return;
+  const values = Array.from(catalogBulkSelectedSet(catalogKey));
+  if (!values.length) return;
+  const preview = values.slice(0, 8).join(', ') + (values.length > 8 ? `... (+${values.length - 8})` : '');
+  if (!confirm(`Xoá ${values.length} ${cfg.kindLabel} đã chọn?\n\n${preview}\n\n⚠️ Hệ thống KHÔNG kiểm tra được hết nơi đang dùng các giá trị này — hồ sơ/cấu hình liên quan (nếu có) vẫn giữ nguyên chuỗi cũ và sẽ thành tham chiếu treo, y hệt khi xoá từng mục một. Vẫn tiếp tục xoá?`)) return;
+
+  const removedSet = new Set(values);
+  const prevMain = [...(DB[cfg.dbKey] || [])];
+  DB[cfg.dbKey] = (DB[cfg.dbKey] || []).filter(v => !removedSet.has(v));
+  const syncKeys = [cfg.dbKey];
+
+  // Side-effect RIÊNG cho các danh mục có dữ liệu phụ gắn theo tên (mirror đúng logic deleteDept()/
+  // deleteCat() đơn lẻ, chỉ khác là áp dụng cho NHIỀU tên cùng lúc trong 1 lượt lưu).
+  let prevDeptAbbrs = null, prevDeptGroups = null, prevExtraMap = null;
+  if (catalogKey === 'depts') {
+    prevDeptAbbrs = { ...DB.deptAbbrs };
+    values.forEach(name => delete DB.deptAbbrs[name]);
+    syncKeys.push('deptAbbrs');
+    prevDeptGroups = DB.deptGroups.map(g => ({ ...g, depts: [...g.depts] }));
+    const affected = DB.deptGroups.filter(g => g.depts.some(d => removedSet.has(d)));
+    if (affected.length) { affected.forEach(g => { g.depts = g.depts.filter(d => !removedSet.has(d)); }); syncKeys.push('deptGroups'); }
+  } else if (cfg.extraDbKey) {
+    prevExtraMap = { ...(DB[cfg.extraDbKey] || {}) };
+    values.forEach(name => delete DB[cfg.extraDbKey][name]);
+    syncKeys.push(cfg.extraDbKey);
+  }
+
+  const results = await Promise.all(syncKeys.map(k => syncStorage(k)));
+  if (results.some(ok => !ok)) {
+    DB[cfg.dbKey] = prevMain;
+    if (prevDeptAbbrs) DB.deptAbbrs = prevDeptAbbrs;
+    if (prevDeptGroups) DB.deptGroups = prevDeptGroups;
+    if (prevExtraMap) DB[cfg.extraDbKey] = prevExtraMap;
+    rerenderCatalogBulkList(catalogKey);
+    if (catalogKey === 'depts' && typeof renderDeptGroupList === 'function') renderDeptGroupList();
+    return;
+  }
+  logSystemAction('USER_MGM', 'BULK_DELETE_CATALOG', `Xoá ${values.length} ${cfg.kindLabel}: ${values.join(', ')}`, 'SUCCESS', String(values.length));
+  catalogBulkSelectedSet(catalogKey).clear();
+  rerenderCatalogBulkList(catalogKey);
+  if (catalogKey === 'depts' && typeof renderDeptGroupList === 'function') renderDeptGroupList();
+  if (cfg.afterDelete) cfg.afterDelete();
+  if (typeof populateDropdowns === 'function') populateDropdowns();
+}
+
 // scopeFromForm() — Đọc 1 nhóm quyền theo phòng ban ({all, depts}) từ cặp checkbox ALL + danh sách
 // phòng ban trên form. CHUYỂN từ module-admin.js sang ĐÂY (core.js, luôn nạp EAGER) cùng đợt với
 // downloadXlsxFromServer() ở trên — cùng lý do hạ tầng nạp module theo cụm, dù bản thân hàm này không
@@ -9409,10 +9542,15 @@ function downloadCarApprovalSlip(carId) {
 // data-arg-event="0" ở trên để nhận đúng Event thật.
 function stopEventPropagation(e) { e.stopPropagation(); }
 function cspCoerceArg(raw) {
-  // Bo dau nhay bao ngoai neu co (vd data-op-seq="fn('literal')" — thay vi quy uoc thong thuong khong
-  // dau nhay "fn(literal)") — cac gia tri con lai (khong dau nhay) giu nguyen hanh vi cu, khong doi.
-  const unquoted = /^'(.*)'$/.test(raw) ? raw.slice(1, -1) : raw;
-  return /^-?\d+$/.test(unquoted) ? Number(unquoted) : unquoted;
+  // LỖI ĐÃ VÁ (10/2026, báo cáo thực tế "danh mục Siêu Thị đặt tên toàn chữ số không sửa/xoá được"):
+  // trước đây bỏ dấu nháy bao ngoài XONG VẪN ép số nếu phần còn lại toàn chữ số — khiến dấu nháy hoàn
+  // toàn không có tác dụng "ép giữ nguyên kiểu chuỗi" cho đúng trường hợp cần nhất (tên/mã danh mục toàn
+  // số, VD siêu thị đặt tên "168"). Nay: đã có dấu nháy bao ngoài ('...') thì LUÔN trả về chuỗi (bỏ dấu
+  // nháy, KHÔNG ép số nữa) — dùng cho mọi data-argN mang giá trị vốn dĩ LÀ 1 chuỗi định danh (tên/mã danh
+  // mục), dù nội dung trông giống số. Giá trị KHÔNG có dấu nháy giữ nguyên hành vi cũ (ép số nếu khớp
+  // /^-?\d+$/) — dùng cho các id số thật (VD id bản ghi) như trước giờ, không đổi.
+  if (/^'(.*)'$/.test(raw)) return raw.slice(1, -1);
+  return /^-?\d+$/.test(raw) ? Number(raw) : raw;
 }
 function cspReadArgSlot(el, i, evt) {
   if (el.dataset.argValue !== undefined && Number(el.dataset.argValue) === i) return el.value;

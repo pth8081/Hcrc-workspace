@@ -1342,11 +1342,12 @@ async function deleteLicenseType(name) {
 function renderLicenseTypeList() {
   const ul = document.getElementById('licenseTypeList');
   if (!ul) return;
-  ul.innerHTML = (DB.licenseTypes || []).map(t => `
+  ul.innerHTML = renderCatalogBulkBarHtml('licenseTypes') + (DB.licenseTypes || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('licenseTypes', t)}
       <span class="flex-1">${escapeHtml(t)}</span>
-      <button data-op="renameLicenseType" data-arg0="${escapeHtml(t)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteLicenseType" data-arg0="${escapeHtml(t)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameLicenseType" data-arg0="'${escapeHtml(t)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteLicenseType" data-arg0="'${escapeHtml(t)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }

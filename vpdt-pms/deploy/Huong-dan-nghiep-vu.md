@@ -4196,6 +4196,39 @@ dropdown), và nếu sau này tạo lại **đúng tên cũ** thì các cấu h�
 có hiệu lực trở lại. Hộp thoại xác nhận khi xoá nay nêu rõ điều này và nhắc
 dùng nút **✏️ Sửa** (đổi tên có cascade) nếu chỉ muốn sửa tên gõ sai.
 
+**☑️ Chọn nhiều để xoá cùng lúc (10/2026, theo yêu cầu người dùng)** — 10
+danh mục dạng danh sách tên đơn giản (Phòng Ban, Siêu Thị, Các Loại Giấy Phép,
+Hãng Taxi, Vùng Giá Áp Dụng, Loại Dịch Vụ CNTT, Phân Loại Tài Liệu, Chức Danh
+Khối VP/HO, Loại Đào Tạo, Lý Do Đánh Giá Chuyến Xe) nay có checkbox ở đầu mỗi
+dòng + dòng **"Chọn tất cả"** — tick xong, thanh **"Đã chọn N mục"** hiện ra
+kèm nút **🗑️ Xoá N Mục Đã Chọn** để xoá cả loạt trong 1 lượt lưu (thay vì phải
+bấm Xoá từng dòng). Cùng cảnh báo tham chiếu treo như xoá đơn lẻ ở trên.
+Riêng "Phòng Ban" xoá nhiều vẫn dọn đúng cả **Viết tắt** lẫn liên kết
+**Khối/Ban** của TỪNG tên bị xoá (như xoá đơn lẻ, chỉ khác là gộp vào đúng 1
+lượt lưu cho nhiều tên cùng lúc). Danh mục dạng nhiều-field (Khối/Ban, Loại
+Xe Cụ Thể, Vị Trí Làm Việc, Danh Mục Phòng Họp, Từ Khoá Nhạy Cảm...) CHƯA có
+tính năng này (để đợt sau).
+
+**LỖI ĐÃ VÁ (10/2026): đổi tên/xoá 1 giá trị danh mục TOÀN CHỮ SỐ** — cơ chế
+điều hướng dùng chung của toàn ứng dụng trước đây tự hiểu nhầm giá trị toàn
+chữ số (VD siêu thị đặt tên "168") thành SỐ thay vì CHUỖI, khiến nút "✏️ Sửa"/
+"🗑️ Xoá" báo lỗi hoặc âm thầm không làm gì cho đúng những dòng đó. Đã vá tận
+gốc cho **mọi danh mục** trong màn này (không riêng Siêu Thị).
+
+**🏬 Danh Mục Siêu Thị — "Loại" thêm "Kho" + Tải Mẫu/Xuất/Nhập Excel
+(10/2026)** — dropdown "Loại" mỗi dòng nay có thêm lựa chọn **"Kho"** (bên
+cạnh "Siêu Thị"/"Cửa Hàng"/"Chưa phân loại" đã có) — "Kho" hiện KHÔNG có
+nghiệp vụ VSATTP nên tự rơi vào nhóm "chưa phân loại" ở Dashboard "🥗 Đánh Giá
+VSATTP", không ảnh hưởng gì các tính năng khác. Khối này nay có đủ 3 thao tác
+**📄 Tải Mẫu/📤 Xuất Excel/📥 Nhập Excel** (trước đây chỉ có Tải Mẫu 1 cột tên,
+chưa xuất được) — file mẫu/xuất có 2 cột **"Tên Siêu Thị"** + **"Loại"** (gõ
+"Siêu Thị"/"Cửa Hàng"/"Kho", để trống = chưa phân loại — Excel có sẵn dropdown
+gợi ý đúng 3 giá trị). **Nhập Excel** vừa thêm siêu thị MỚI vừa CẬP NHẬT
+"Loại" cho CẢ siêu thị ĐÃ CÓ SẴN trong danh mục nếu file có ghi khác giá trị
+đang lưu (không chỉ áp dụng cho dòng mới) — vẫn phải bấm "✅ Xác Nhận" sau khi
+xem trước mới ghi thật. **Đổi tên (✏️) 1 siêu thị nay cũng cascade đúng "Loại"
+đã gán** (trước đây đổi tên làm mất luôn phân loại ST/CH/Kho của siêu thị đó).
+
 **🧭 Vị Trí Làm Việc (10/2026)** — danh mục MỞ thay cho 2 giá trị cứng
 "HO"/"Siêu Thị" trước đây quyết định ô "Vị Trí Làm Việc" ở form tạo/sửa
 Người Dùng (xem mục 7.7). Bấm **"Thêm"** để tạo 1 Vị Trí Làm Việc mới (VD

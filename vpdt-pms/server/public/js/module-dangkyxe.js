@@ -796,11 +796,12 @@ async function deleteCarTaxiCompany(name) {
 function renderCarTaxiCompanyList() {
   const ul = document.getElementById('carTaxiCompanyList');
   if (!ul) return;
-  ul.innerHTML = (DB.carTaxiCompanies || []).map(name => `
+  ul.innerHTML = renderCatalogBulkBarHtml('carTaxiCompanies') + (DB.carTaxiCompanies || []).map(name => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('carTaxiCompanies', name)}
       <span class="flex-1">${escapeHtml(name)}</span>
-      <button data-op="renameCarTaxiCompany" data-arg0="${escapeHtml(name)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteCarTaxiCompany" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameCarTaxiCompany" data-arg0="'${escapeHtml(name)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteCarTaxiCompany" data-arg0="'${escapeHtml(name)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
@@ -837,11 +838,12 @@ async function deleteCarEvaluationIssue(name) {
 function renderCarEvaluationIssueList() {
   const ul = document.getElementById('carEvaluationIssueList');
   if (!ul) return;
-  ul.innerHTML = (DB.carEvaluationIssues || []).map(name => `
+  ul.innerHTML = renderCatalogBulkBarHtml('carEvaluationIssues') + (DB.carEvaluationIssues || []).map(name => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml('carEvaluationIssues', name)}
       <span class="flex-1">${escapeHtml(name)}</span>
-      <button data-op="renameCarEvaluationIssue" data-arg0="${escapeHtml(name)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
-      <button data-op="deleteCarEvaluationIssue" data-arg0="${escapeHtml(name)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+      <button data-op="renameCarEvaluationIssue" data-arg0="'${escapeHtml(name)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteCarEvaluationIssue" data-arg0="'${escapeHtml(name)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
 }
