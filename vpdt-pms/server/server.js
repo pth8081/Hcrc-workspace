@@ -42,6 +42,7 @@ const orgChartRoutes = require('./routes/orgChart');
 const employeeProfileRoutes = require('./routes/employeeProfile');
 const adminCatalogRoutes = require('./routes/adminCatalog');
 const positionTypesRoutes = require('./routes/positionTypes');
+const objectCatalogImportRoutes = require('./routes/objectCatalogImport');
 const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
 const operationImportRoutes = require('./routes/operationImport');
 const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
@@ -183,6 +184,9 @@ app.use('/api/admin', adminExportRoutes);
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
+// objectCatalogImport: Tải Mẫu/đọc file Nhập Excel cho danh mục dạng object + Vị Trí Làm Việc (10/2026) —
+// mỗi route tự gắn requireAuth + gate quyền riêng, CHỈ parse/validate, không ghi CSDL.
+app.use('/api/admin', objectCatalogImportRoutes);
 app.use('/api/admin/position-types', positionTypesRoutes);
 app.use('/api/stores', storeCatalogImportRoutes);
 app.use('/api/operation', operationImportRoutes);

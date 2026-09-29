@@ -705,6 +705,7 @@
           <button type="submit" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Thêm</button>
         </form>
         <div id="deptGroupListWrap" class="max-h-72 overflow-y-auto space-y-2"></div>
+        <div id="objectCatalogExcelTools_deptGroups"></div>
       </div>
 
       <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
@@ -878,6 +879,7 @@
         <div class="max-h-32 overflow-y-auto bg-white rounded border">
           <ul id="storeJobTitleList" class="divide-y text-xs"></ul>
         </div>
+        <div id="objectCatalogExcelTools_storeJobTitles"></div>
       </div>
 
       <!-- Vị Trí Làm Việc (10/2026) — danh mục MỞ thay 2 giá trị cứng HO/Siêu Thị (xem defaults.js
@@ -893,6 +895,18 @@
           <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">Thêm</button>
         </form>
         <div id="positionTypeList" class="space-y-2"></div>
+        <!-- Excel Vị Trí Làm Việc — nhánh BESPOKE (không qua OBJECT_CATALOG_EXCEL_CONFIG): chỉ Vị Trí tự thêm,
+             loại trừ 2 mục mặc định HO/Siêu Thị; ghi qua routes/positionTypes.js (xem module-admin.js). -->
+        <div class="border-t pt-2 mt-2 space-y-1.5 text-[11px]">
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" data-op="downloadPositionTypesTemplate" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
+            <button type="button" data-op="exportPositionTypesExcel" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
+            <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input id="positionTypesImportFileInput" type="file" accept=".xlsx,.csv" class="hidden" data-op-change="onPositionTypesImportFileChange" data-arg-event="0"></label>
+            <span id="positionTypesImportStatus" class="text-gray-500"></span>
+          </div>
+          <p class="text-gray-500 italic">Excel chỉ gồm Vị Trí tự thêm (không gồm HO/Siêu Thị). Nhập Excel chỉ THÊM Vị Trí/Địa Điểm/Chức Danh mới và đổi tên hiển thị — không xoá gì.</p>
+          <div id="positionTypesImportPreview" class="hidden space-y-1.5"></div>
+        </div>
       </div>
 
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
