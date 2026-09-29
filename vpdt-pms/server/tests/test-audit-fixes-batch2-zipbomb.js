@@ -105,8 +105,10 @@ async function main() {
 
   await run('[storeCatalogImport] danh sách siêu thị đọc đúng, bỏ trùng', async () => {
     const buf = await buildXlsx([['Tên Siêu Thị'], ['Siêu Thị Q1'], ['Siêu Thị Q3'], ['Siêu Thị Q1']]);
-    const names = await parseStoreFile(buf, '.xlsx');
-    assertEqual(JSON.stringify(names), JSON.stringify(['Siêu Thị Q1', 'Siêu Thị Q3']), 'store parsing changed');
+    const items = await parseStoreFile(buf, '.xlsx');
+    // Từ v24.42: parseStoreFile() trả về mảng {name,type} (thêm cột Loại Siêu Thị/Cửa Hàng/Kho),
+    // không còn mảng string phẳng như trước — cập nhật assertion theo đúng khuôn mới.
+    assertEqual(JSON.stringify(items), JSON.stringify([{ name: 'Siêu Thị Q1', type: null }, { name: 'Siêu Thị Q3', type: null }]), 'store parsing changed');
   });
 
   await run('[trainingPlanImport] ô Tháng kiểu Date THẬT vẫn đọc ra "YYYY-MM" (giá trị ô không bị ép chuỗi sớm)', async () => {
@@ -243,8 +245,8 @@ async function main() {
   await run('[storeCatalogImport] đúng 500 siêu thị đọc được, 550 siêu thị bị từ chối (tối đa 500)', async () => {
     const header = ['Tên Siêu Thị'];
     const ok = [header, ...Array.from({ length: 500 }, (_, i) => [`Siêu Thị ${i}`])];
-    const names = await parseStoreFile(await buildXlsx(ok), '.xlsx');
-    assertEqual(names.length, 500, 'exactly-at-cap store list must still parse fully');
+    const items = await parseStoreFile(await buildXlsx(ok), '.xlsx');
+    assertEqual(items.length, 500, 'exactly-at-cap store list must still parse fully');
 
     const tooMany = [header, ...Array.from({ length: 550 }, (_, i) => [`Siêu Thị ${i}`])];
     const tooManyBuf = await buildXlsx(tooMany);

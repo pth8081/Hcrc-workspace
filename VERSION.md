@@ -1,8 +1,71 @@
 # Phiên bản hiện tại
 
-**24.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.43 (2026-09-29): Đào Tạo/Onboarding/Tuyển Dụng/Truyền Thông Nội Bộ — đợt yêu cầu lớn
+
+Theo loạt yêu cầu người dùng (video lớp học lệch/lỗi, Excel danh mục, form
+Onboarding, redesign Tuyển Dụng, bộ câu hỏi, Nhịp Sống HCRC/Trang Chủ).
+
+**Đào Tạo:**
+1. Vá lỗi video bài giảng bị lệch xuống dưới khung — `YT.Player` thay hẳn div
+   mount bằng `<iframe>` làm mất style giữ khung 16:9, nay bọc 1 wrapper
+   ngoài ổn định + div con rỗng cho YT.Player thay thế.
+2. Tự động mở popup bài test ngay khi học viên xem xong toàn bộ tài liệu bắt
+   buộc của lớp (trước đây phải tự tìm nút) — không đổi logic tự chấm điểm/
+   chờ giáo viên chấm bài luận vốn đã có sẵn.
+3. Vá lỗi không sửa được "Lộ Trình Đào Tạo Tân Binh" — route sửa thiếu 1
+   dòng nạp danh sách Chương Trình Đào Tạo (đã migrate sang bảng SQL riêng)
+   nên luôn báo "chương trình không hợp lệ".
+4. Bộ Câu Hỏi: cho phép SỬA dù bài test đã có người nộp bài, miễn không đổi
+   cấu trúc chấm điểm (số câu/loại câu/điểm/đáp án đúng) — trước đây chặn
+   cứng, phải xoá làm lại kể cả chỉ sửa chính tả.
+5. Nhập Kế Hoạch Đào Tạo từ Excel: làm rõ cảnh báo "chương trình chưa có
+   trong danh mục" KHÔNG chặn nhập (chỉ để trống liên kết) — đổi text bớt
+   gây hiểu lầm + thêm tuỳ chọn tự động thêm vào danh mục Chương Trình Đào
+   Tạo nếu tên chưa có (mặc định bật).
+
+**Onboarding:** vá lỗi Mã Nhân Viên để trống vẫn báo buộc điền (mâu thuẫn
+với placeholder "để trống để tự sinh") — 1 dòng cấu hình sai trong Biểu Mẫu;
+thêm 2 trường Địa Chỉ + Số CCCD (không bắt buộc) vào form "Tạo Quy Trình
+Onboarding", ghi thẳng vào hồ sơ nháp nếu có nhập (field đã có sẵn trong Hồ
+Sơ Nhân Sự, chỉ chưa thu thập ở bước tạo quy trình).
+
+**Tuyển Dụng:** thêm trường Thu Nhập; tính năng đẩy tin ưu tiên (nổi lên đầu
+danh sách chính, badge "🔥 Tin ưu tiên", quyền như người quản lý tin hiện
+có); bộ lọc theo Vị Trí Đang Tuyển; đổi bố cục thẻ sang 2 cột — ảnh vuông
+`object-contain` (không còn cắt méo ảnh) bên trái, các trường chính in đậm
+bên phải, Mô Tả/Yêu Cầu ẩn mặc định có nút "Xem chi tiết" mở/thu ngay tại
+thẻ.
+
+**Truyền Thông Nội Bộ:**
+- Trang Chủ: thêm thumbnail cạnh tiêu đề mỗi box tin, nút "Xem thêm" góc
+  dưới-phải, hiệu ứng hover đổi màu rõ nét hơn.
+- Nhịp Sống HCRC/Góc Chia Sẻ: đăng được NHIỀU ảnh (tối đa 8) + chọn ảnh đại
+  diện riêng, đăng VIDEO (tối đa 200MB/video, tối đa 2 video/bài, kiểm chữ
+  ký file chống giả mạo đuôi), soạn thảo Bold/Danh sách tối giản (không thư
+  viện ngoài), hiện badge chuyên đề + bộ lọc theo chuyên đề, màn chi tiết
+  xem được nhiều ảnh/video (gallery). Bài đăng CŨ hiển thị y nguyên như
+  trước, không bị ảnh hưởng.
+  - **Bảo mật**: nội dung bài viết giờ là HTML do người dùng soạn — thêm
+    lớp lọc HTML ở SERVER (dependency mới `sanitize-html`, chỉ giữ lại thẻ
+    `b/strong/i/em/ul/ol/li/br/p`, bỏ mọi thuộc tính) + DOMPurify ở client
+    làm lớp phòng thủ thứ 2, chặn triệt để chèn mã độc qua nội dung bài.
+
+**Phát hiện thêm (chưa sửa, để đợt sau xác nhận với người dùng)**: khu vực
+Tuyển Dụng có 2 lớp bắt sự kiện lồng nhau khiến các nút Đóng Tin/Xác Nhận
+Tuyển Đủ/Xoá hỏi xác nhận + gọi API 2 lần (nút mới thêm đợt này đã tự chặn
+lần gọi thứ 2, không bị ảnh hưởng).
+
+Test mới: 15+ file (auto-open test, sửa bộ câu hỏi có bài nộp, onboarding
+path edit, layout video, form onboarding, media Nhịp Sống HCRC server+client,
+đẩy ưu tiên Tuyển Dụng server+client, dashboard thumbnail...). Full regression
+359 file test hiện có đều pass, trừ 10 file fail do sandbox môi trường này
+thiếu SQL Server thật/thiếu file mẫu (đã xác nhận không phải do đợt này) và
+1 file test lỗi thời do thay đổi Excel Siêu Thị đợt trước (đã sửa lại theo
+đúng behavior mới).
 
 ## v24.42 (2026-09-29): Quản Lý Danh Mục — vá lỗi tên toàn số + chọn nhiều để xoá + Excel Siêu Thị
 

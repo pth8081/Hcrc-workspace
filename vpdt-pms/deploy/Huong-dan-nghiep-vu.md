@@ -3860,6 +3860,51 @@ làm được nay bị chặn:
 - Không xoá được **Lộ Trình** còn hồ sơ tiến độ đang tham chiếu (409, nêu rõ
   số hồ sơ) — xoá đi sẽ khiến các hồ sơ đó không xác nhận tiếp giai đoạn được.
 
+## 5d. Đợt cập nhật 9/2026: Đào Tạo/Onboarding/Tuyển Dụng/Truyền Thông Nội Bộ
+
+**Lớp Học (Đào Tạo)**
+- Sau khi học viên xem xong **toàn bộ tài liệu bắt buộc** của lớp (video đạt
+  ~95% thời lượng/PDF xem hết mọi trang), nếu lớp đã gán Bài Test, hệ thống
+  **tự động mở popup bài test** ngay — không cần tự tìm nút "📝 Vào Làm Bài
+  Test" nữa. Chỉ mở 1 lần/lượt xem, không lặp lại nếu học viên tự đóng hoặc
+  đã có kết quả.
+- **Bộ Câu Hỏi**: từ nay được **SỬA** dù bài test đã có người nộp, miễn không
+  đổi cấu trúc chấm điểm (số câu/loại câu/điểm/đáp án đúng/số đáp án) — hệ
+  thống tự so sánh câu hỏi cũ-mới, chỉ chặn (409) khi thay đổi thật sự ảnh
+  hưởng tới điểm đã chấm. Sửa chính tả/nội dung câu hỏi/đáp án/ảnh minh hoạ
+  luôn được phép, không cần xoá làm lại như trước.
+- **Nhập Kế Hoạch Đào Tạo từ Excel**: dòng có tên Chương Trình chưa khớp
+  danh mục hiện chỉ là **gợi ý** (không chặn nhập) — có thêm checkbox "Tự
+  động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có" (mặc định
+  bật) để tự tạo Chương Trình mới thay vì phải tạo tay trước.
+
+**Onboarding**
+- Form "Tạo Quy Trình Onboarding" có thêm 2 ô **Địa Chỉ** + **Số CCCD**
+  (không bắt buộc) — nhập lúc này sẽ ghi thẳng vào hồ sơ nháp tạo ra, đỡ
+  phải bổ sung lại ở Hồ Sơ Nhân Sự sau. Ô **Mã Nhân Viên** để trống nay đúng
+  nghĩa "để trống để tự sinh" (trước đây bị bắt buộc nhầm do cấu hình Biểu
+  Mẫu).
+
+**Tuyển Dụng**
+- Thêm trường **Thu Nhập** (nhập tự do, VD "8-10 triệu"/"Thoả thuận").
+- Người quản lý tin (quyền đăng tin) có thêm nút **"🔥 Đẩy ưu tiên"** — tin
+  được đẩy nổi lên **đầu danh sách chính**, có badge "🔥 Tin ưu tiên".
+- Thêm bộ lọc **"Vị trí đang tuyển"**.
+- Giao diện tin đổi sang thẻ 2 cột: ảnh vuông bên trái (hiển thị đủ ảnh,
+  không còn bị cắt méo), các thông tin chính (Thu nhập/Địa chỉ/Số lượng/
+  Thời hạn/Liên hệ) in đậm bên phải; Mô Tả/Yêu Cầu ẩn mặc định, bấm "Xem chi
+  tiết" để mở/thu ngay tại thẻ.
+
+**Trang Chủ & Nhịp Sống HCRC / Góc Chia Sẻ**
+- Box tin ở Trang Chủ có thêm ảnh thu nhỏ cạnh tiêu đề, nút "Xem thêm" góc
+  dưới-phải, hiệu ứng hover rõ hơn.
+- Bài Nhịp Sống HCRC/Góc Chia Sẻ giờ đăng được **nhiều ảnh** (tối đa 8, tự
+  chọn 1 ảnh làm đại diện) và **video** (tối đa 200MB/video, tối đa 2
+  video/bài), có nút **In đậm**/**Danh sách** khi soạn nội dung, hiện badge
+  **chuyên đề** + bộ lọc theo chuyên đề trên feed, màn xem chi tiết hiện
+  được nhiều ảnh/video dạng thư viện. Bài đăng cũ (chỉ 1 ảnh, không có các
+  trường mới) vẫn hiển thị y như trước, không bị ảnh hưởng.
+
 ---
 
 ## 6. Phân quyền (permission model)
