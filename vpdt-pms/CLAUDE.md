@@ -1,5 +1,30 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## Tính năng Báo Cáo/Xuất Excel mới: làm cẩn thận, test kỹ, không ảnh hưởng module khác
+
+Yêu cầu chuẩn của người dùng (10/2026) khi thêm bất kỳ màn "Xuất Excel"/báo
+cáo mới nào (kể cả khi chỉ đọc dữ liệu có sẵn, không sửa gì): làm CẨN THẬN,
+TEST KỸ trước khi báo cáo hoàn tất, và đặc biệt **không được ảnh hưởng tới
+bất kỳ chức năng/module nào khác đang hoạt động**. Cụ thể:
+
+- Ưu tiên tuyệt đối: CHỈ ĐỌC dữ liệu đã có (`DB.<collection>` phía client),
+  không đổi cấu trúc dữ liệu/route ghi hiện có của module gốc trừ khi người
+  dùng xác nhận rõ ràng là cần mở rộng nghiệp vụ (thêm field/luồng mới).
+- Tái dùng route xuất Excel DÙNG CHUNG đã có (`POST /api/admin/export-xlsx`,
+  hỗ trợ cả 1 sheet `{fileName, sheetName, columns, rows}` lẫn nhiều sheet
+  `{fileName, sheets:[{sheetName, columns, rows}]}` — xem
+  `routes/adminExport.js`) thay vì tự viết route mới, trừ khi cột dữ liệu
+  cần tính toán quá phức tạp phía server (hiếm khi cần cho báo cáo thuần).
+- Sau khi thêm nút "Xuất Excel" mới vào 1 màn Báo Cáo đã có, chạy lại ĐẦY ĐỦ
+  bộ test hiện có của đúng module đó (không chỉ test mới viết) để xác nhận
+  không có regression, và tự kiểm tra CSP chuẩn (`data-op`, không inline
+  onclick/style) như quy tắc chung đã nêu ở mục dưới.
+- Nếu yêu cầu báo cáo cần dữ liệu/field CHƯA từng có trong hệ thống (VD một
+  cột đòi hỏi 1 bước nghiệp vụ mới hoàn toàn chưa tồn tại), PHẢI nêu rõ gap
+  này với người dùng và xin xác nhận phương án (để trống cột đó cho điền tay
+  ngoài hệ thống, hay xây thêm luồng nghiệp vụ mới) — không tự ý chọn hộ.
+
+
 ## Quy trình làm việc chuẩn: phân tích → xác nhận → làm + merge luôn, không chờ demo
 
 Từ nay, với các yêu cầu nghiệp vụ/tính năng: nghiên cứu + phân tích sâu, đưa
