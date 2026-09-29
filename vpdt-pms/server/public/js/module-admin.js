@@ -702,6 +702,188 @@ function renderPositionTypeList() {
   }).join('');
 }
 
+// ---------- Excel Vị Trí Làm Việc (10/2026) — nhánh BESPOKE, KHÔNG qua OBJECT_CATALOG_EXCEL_CONFIG (core.js):
+// positionTypes có REST riêng (routes/positionTypes.js: server tự sinh key bất biến + kiểm trùng + chặn
+// builtin) chứ không ghi đè cả mảng như các danh mục object khác, và 2 mục mặc định HO/STORE (builtin)
+// phải bị LOẠI TRỪ khỏi cả Xuất lẫn Nhập. Tải Mẫu/parse: routes/objectCatalogImport.js +
+// lib/positionTypesImport.js (server gắn sẵn `action` cho từng dòng: create/rename/update/none).
+// Xác nhận Nhập: gọi TUẦN TỰ đúng endpoint hiện có (POST /api/admin/position-types tạo mới, PATCH /:key đổi
+// tên hiển thị) -> tải lại DB.positionTypes + version mới nhất -> gộp THÊM Địa Điểm/Chức Danh mới (không
+// xoá gì qua Excel) -> lưu ĐÚNG 1 LẦN qua syncStorage('positionTypes') như addPositionTypeEntry(). ----------
+let positionTypesImportPreviewState = null; // {fileName, items, errors, totalRows} — kết quả parse gần nhất
+
+const POSITION_TYPES_BUILTIN_KEYS_CLIENT = new Set(['HO', 'STORE']);
+
+// Rows Xuất Excel — CHỈ Vị Trí tự thêm (loại builtin), khớp buildPositionTypesExportRows() ở server.
+function buildPositionTypesExportRowsClient() {
+  return (DB.positionTypes || []).filter(t => t && !t.builtin && !POSITION_TYPES_BUILTIN_KEYS_CLIENT.has(t.key)).map(t => ({
+    label: t.label,
+    locations: (t.locations || []).join('; '),
+    jobTitles: (t.jobTitles || []).join('; ')
+  }));
+}
+
+async function exportPositionTypesExcel() {
+  await downloadXlsxFromServer('DanhMuc_ViTriLamViec.xlsx', 'Vị Trí Làm Việc', [
+    { key: 'label', header: 'Tên Vị Trí' },
+    { key: 'locations', header: 'Địa Điểm' },
+    { key: 'jobTitles', header: 'Chức Danh' }
+  ], buildPositionTypesExportRowsClient());
+}
+
+async function downloadPositionTypesTemplate() {
+  await downloadFileFromServerGet('/api/admin/position-types/import-template', 'Mau_Vi_Tri_Lam_Viec.xlsx');
+}
+
+function positionTypesImportActionHtml(it) {
+  const extra = [];
+  if (it.newLocations?.length) extra.push(`+${it.newLocations.length} địa điểm`);
+  if (it.newJobTitles?.length) extra.push(`+${it.newJobTitles.length} chức danh`);
+  const extraTxt = extra.length ? ` (${escapeHtml(extra.join(', '))})` : '';
+  if (it.action === 'create') return `<span class="text-emerald-600">✅ Tạo mới</span>${extraTxt}`;
+  if (it.action === 'rename') return `<span class="text-blue-600">✏️ Đổi tên từ "${escapeHtml(it.existingLabel || '')}"</span>${extraTxt}`;
+  if (it.action === 'update') return `<span class="text-blue-600">➕ Bổ sung</span>${extraTxt}`;
+  return '<span class="text-gray-400">— Không đổi</span>';
+}
+
+function renderPositionTypesImportPreview() {
+  const wrap = document.getElementById('positionTypesImportPreview');
+  if (!wrap) return;
+  const state = positionTypesImportPreviewState;
+  if (!state) { wrap.innerHTML = ''; wrap.classList.add('hidden'); return; }
+  const actionable = state.items.filter(it => it.action !== 'none').length;
+  const errorsHtml = state.errors.length
+    ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-28 overflow-y-auto"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — các dòng này sẽ KHÔNG được nhập:</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
+    : '';
+  const tableHtml = state.items.length
+    ? `<div class="border rounded max-h-40 overflow-auto bg-white"><table class="w-full text-[11px]"><thead><tr class="bg-gray-100 text-left"><th class="p-1">Tên Vị Trí</th><th class="p-1">Địa Điểm</th><th class="p-1">Chức Danh</th><th class="p-1">Thao Tác</th></tr></thead><tbody>${state.items.map(it => `<tr class="border-t">
+        <td class="p-1">${escapeHtml(it.label)}</td>
+        <td class="p-1">${escapeHtml((it.locations || []).join('; '))}</td>
+        <td class="p-1">${escapeHtml((it.jobTitles || []).join('; '))}</td>
+        <td class="p-1">${positionTypesImportActionHtml(it)}</td>
+      </tr>`).join('')}</tbody></table></div>`
+    : '';
+  wrap.innerHTML = `${errorsHtml}${tableHtml}
+    <div class="flex gap-2">
+      ${actionable ? `<button type="button" data-op="confirmPositionTypesImport" class="flex-1 bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">✅ Xác Nhận Nhập (${actionable} Vị Trí)</button>` : ''}
+      <button type="button" data-op="cancelPositionTypesImport" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+    </div>`;
+  wrap.classList.remove('hidden');
+}
+
+async function onPositionTypesImportFileChange(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  const statusEl = document.getElementById('positionTypesImportStatus');
+  positionTypesImportPreviewState = null;
+  renderPositionTypesImportPreview();
+  if (!file) { if (statusEl) statusEl.innerText = ''; return; }
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/admin/position-types/parse-import', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    positionTypesImportPreviewState = { fileName: data.fileName || file.name, items: data.items || [], errors: data.errors || [], totalRows: data.totalRows || 0 };
+    const count = (a) => positionTypesImportPreviewState.items.filter(it => it.action === a).length;
+    if (statusEl) {
+      statusEl.innerText = `📄 "${positionTypesImportPreviewState.fileName}": ${count('create')} tạo mới, ${count('rename')} đổi tên, ${count('update')} bổ sung, ${count('none')} không đổi` +
+        (positionTypesImportPreviewState.errors.length ? `, ${positionTypesImportPreviewState.errors.length} lỗi` : '') + ' — kiểm tra rồi bấm Xác Nhận.';
+    }
+    renderPositionTypesImportPreview();
+  } catch (err) {
+    if (statusEl) statusEl.innerText = `⛔ ${err.message}`;
+  }
+}
+
+function cancelPositionTypesImport() {
+  positionTypesImportPreviewState = null;
+  renderPositionTypesImportPreview();
+  const statusEl = document.getElementById('positionTypesImportStatus');
+  if (statusEl) statusEl.innerText = '';
+}
+
+async function positionTypesApiCall(url, method, payload) {
+  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  return body;
+}
+
+async function confirmPositionTypesImport() {
+  const state = positionTypesImportPreviewState;
+  const statusEl = document.getElementById('positionTypesImportStatus');
+  if (!state) return;
+  const todo = state.items.filter(it => it.action !== 'none');
+  if (!todo.length) return;
+  const failures = [];
+  const applied = []; // {key, locations, jobTitles} — dòng đã tạo/đổi tên thành công (hoặc chỉ bổ sung)
+  let created = 0, renamed = 0;
+  // 1) Tạo mới / đổi tên hiển thị — TUẦN TỰ qua đúng route hiện có (server tự kiểm trùng/chặn builtin).
+  for (const it of todo) {
+    try {
+      let key = it.existingKey;
+      if (it.action === 'create') {
+        const body = await positionTypesApiCall('/api/admin/position-types', 'POST', { label: it.label });
+        DB.positionTypes = body.positionTypes;
+        key = (body.positionTypes.find(t => t.key === it.key) || body.positionTypes.find(t => t.label === it.label))?.key || it.key;
+        created++;
+      } else if (it.action === 'rename') {
+        const body = await positionTypesApiCall(`/api/admin/position-types/${encodeURIComponent(it.existingKey)}`, 'PATCH', { label: it.label });
+        DB.positionTypes = body.positionTypes;
+        renamed++;
+      }
+      applied.push({ key, locations: it.locations || [], jobTitles: it.jobTitles || [] });
+    } catch (err) {
+      failures.push(`"${it.label}": ${err.message}`);
+    }
+  }
+  // 2) Tải lại bản mới nhất + version (các route trên vừa ghi positionTypes -> version cũ trong
+  // DB._versions đã lỗi thời, lưu tiếp bằng version cũ sẽ bị 409 giả).
+  try {
+    const res = await fetch('/api/data/positionTypes');
+    if (res.ok) {
+      const fresh = await res.json();
+      const etag = res.headers.get('ETag');
+      if (Array.isArray(fresh)) DB.positionTypes = fresh;
+      if (etag) DB._versions.positionTypes = etag;
+    }
+  } catch (e) { /* mất mạng — vẫn thử lưu với dữ liệu đang có, syncStorage() tự báo lỗi nếu xung đột */ }
+  // 3) Gộp THÊM địa điểm/chức danh mới (không xoá), lưu ĐÚNG 1 LẦN.
+  const prev = DB.positionTypes;
+  let addedEntries = 0;
+  // Builtin (HO/STORE) giữ NGUYÊN đối tượng — không thêm field locations/jobTitles vào 2 mục đó.
+  const next = (DB.positionTypes || []).map(t => (t.builtin ? t : { ...t, locations: [...(t.locations || [])], jobTitles: [...(t.jobTitles || [])] }));
+  applied.forEach(a => {
+    const t = next.find(x => x.key === a.key && !x.builtin);
+    if (!t) return;
+    ['locations', 'jobTitles'].forEach(field => {
+      const have = new Set(t[field].map(v => String(v).toLowerCase()));
+      a[field].forEach(v => {
+        if (have.has(String(v).toLowerCase())) return;
+        have.add(String(v).toLowerCase());
+        t[field].push(v);
+        addedEntries++;
+      });
+    });
+  });
+  if (addedEntries) {
+    DB.positionTypes = next;
+    const ok = await syncStorage('positionTypes');
+    if (!ok) { DB.positionTypes = prev; failures.push('Lưu Địa Điểm/Chức Danh mới thất bại'); addedEntries = 0; }
+  }
+  logSystemAction('USER_MGM', 'IMPORT_POSITION_TYPES', `Nhập Excel Vị Trí Làm Việc: tạo ${created}, đổi tên ${renamed}, thêm ${addedEntries} địa điểm/chức danh${failures.length ? `, ${failures.length} lỗi` : ''}`, failures.length ? 'WARNING' : 'SUCCESS', String(created));
+  positionTypesImportPreviewState = null;
+  renderPositionTypesImportPreview();
+  renderPositionTypeList();
+  populateUserPosTypeOptions();
+  populateDropdowns();
+  if (statusEl) statusEl.innerText = `✅ Đã tạo ${created}, đổi tên ${renamed} Vị Trí, thêm ${addedEntries} địa điểm/chức danh.` + (failures.length ? ` ⚠️ ${failures.length} lỗi.` : '');
+  if (failures.length) alert(`⚠️ Một số dòng không nhập được:\n- ${failures.join('\n- ')}`);
+}
+
 // Cập nhật lại các dropdown chọn "Loại đào tạo" bên module Đào Tạo (module-internalcomms-daotao.js,
 // cụm lazy-load RIÊNG, KHÔNG còn gộp chung cụm với admin.js — xem chú thích Hạ tầng: nạp module theo
 // cụm ở core.js) sau khi thêm/xoá danh mục ở màn "Quản Trị > Quản Lý Danh Mục" này. Màn hình NÀY (nút

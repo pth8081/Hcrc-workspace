@@ -26,6 +26,7 @@ const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { cascadeStoreRename, cascadeCustomPosTypeJobTitleRename } = require('../lib/catalogRename');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { slugifyKey } = require('../lib/positionTypesImport');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -39,14 +40,9 @@ async function requireAdmin(req) {
   if (!allowed) throw new HttpError(403, 'Chỉ Quản Trị Viên mới được quản lý Vị Trí Làm Việc');
 }
 
-// Sinh key ỔN ĐỊNH từ label (chữ hoa, bỏ dấu, chỉ giữ A-Z0-9_) — key là ĐỊNH DANH bất biến ghi vào
-// user.posType, khác label (chỉ để HIỂN THỊ, đổi tự do qua PATCH /:key không cascade gì).
-function slugifyKey(label) {
-  const noDiacritics = String(label || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/đ/gi, 'd');
-  return noDiacritics.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
-}
+// slugifyKey() — sinh key ỔN ĐỊNH từ label (chữ hoa, bỏ dấu, chỉ giữ A-Z0-9_). Key là ĐỊNH DANH bất biến ghi
+// vào user.posType, khác label (chỉ để HIỂN THỊ, đổi tự do qua PATCH /:key không cascade gì). DỜI sang
+// lib/positionTypesImport.js (10/2026) để bộ parse Nhập Excel dùng chung đúng 1 quy tắc với route tạo mới.
 
 async function loadTypes() {
   return (await getAppDataValue('positionTypes')) || [];

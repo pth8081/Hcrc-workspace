@@ -4281,6 +4281,29 @@ gợi ý đúng 3 giá trị). **Nhập Excel** vừa thêm siêu thị MỚI v�
 xem trước mới ghi thật. **Đổi tên (✏️) 1 siêu thị nay cũng cascade đúng "Loại"
 đã gán** (trước đây đổi tên làm mất luôn phân loại ST/CH/Kho của siêu thị đó).
 
+**📊 Tải Mẫu/Xuất/Nhập Excel cho danh mục NHIỀU CỘT (10/2026, nhóm "8 danh
+mục object")** — khác 10 danh mục 1 cột ở trên, các danh mục có nhiều thông
+tin/mục nay dùng 1 bộ Excel CHUNG (3 nút **⬇️ Tải Mẫu / 📤 Xuất Excel / 📥 Nhập
+Excel** ngay dưới danh sách). Đợt này đã có:
+
+- **🗂️ Khối/Ban** — 2 cột **"Tên Khối/Ban"** + **"Danh Sách Phòng Ban"** (các
+  Phòng Ban cách nhau dấu chấm phẩy `;`). Mỗi Phòng Ban PHẢI có sẵn trong Danh
+  Mục Phòng Ban (không phân biệt hoa/thường — tự sửa về đúng chính tả trong
+  danh mục); sai 1 tên là cả dòng bị báo lỗi, không nhập âm thầm thiếu. File
+  mẫu kèm sheet **"DS Phòng Ban"** liệt kê đúng các tên hợp lệ hiện có.
+- **🏪 Chức Danh (Siêu Thị)** — 1 cột **"Tên Chức Danh"**.
+- **🧭 Vị Trí Làm Việc** — 3 cột **"Tên Vị Trí"** + **"Địa Điểm"** +
+  **"Chức Danh"** (xem riêng ở mục Vị Trí Làm Việc ngay dưới).
+
+Quy tắc chung khi **Nhập Excel**: chọn file → bảng **xem trước** hiện trạng
+thái từng dòng (**✅ Mới / ✏️ Cập nhật / — Không đổi**) cùng danh sách **lỗi
+theo số dòng** (dòng lỗi KHÔNG được nhập) → chỉ khi bấm **"✅ Xác Nhận Nhập"**
+mới lưu thật (1 lượt lưu duy nhất, cùng quyền như sửa tay). Dòng trùng tên
+(không phân biệt hoa/thường) với mục đã có → **cập nhật** mục đó (giữ nguyên
+tên gốc); không trùng → **thêm mới**; 2 dòng trùng tên trong cùng file → dòng
+sau báo lỗi. Nhập Excel **không xoá** mục nào. Tối đa 500 dòng/lần, nhận file
+`.xlsx` hoặc `.csv`.
+
 **🧭 Vị Trí Làm Việc (10/2026)** — danh mục MỞ thay cho 2 giá trị cứng
 "HO"/"Siêu Thị" trước đây quyết định ô "Vị Trí Làm Việc" ở form tạo/sửa
 Người Dùng (xem mục 7.7). Bấm **"Thêm"** để tạo 1 Vị Trí Làm Việc mới (VD
@@ -4297,6 +4320,13 @@ Thị/Chức Danh phía trên, không phải ở khối này.
   báo trước khi xoá), bị **CHẶN CỨNG** nếu đang có ít nhất 1 tài khoản gán
   Vị Trí đó (xoá kéo theo mất luôn nhánh Địa Điểm/Chức Danh con) — phải đổi
   Vị Trí Làm Việc của họ trước.
+- **Tải Mẫu/Xuất/Nhập Excel (10/2026)** — CHỈ gồm Vị Trí TỰ THÊM: file Xuất
+  không có HO/Siêu Thị; dòng trùng tên hiển thị hoặc định danh với 2 mục mặc
+  định khi Nhập sẽ bị báo lỗi và bỏ qua. Nhập Excel: tên chưa có → **tạo Vị
+  Trí mới**; tên chỉ khác hoa/thường/dấu với 1 Vị Trí đã có (cùng định danh)
+  → **đổi tên hiển thị** Vị Trí đó; cột Địa Điểm/Chức Danh (cách nhau `;`)
+  chỉ **THÊM** giá trị mới, không xoá giá trị đang có (xoá vẫn làm tay từng
+  dòng để có cảnh báo tham chiếu treo).
 - **Phạm vi hiện tại**: Vị Trí Làm Việc TỰ THÊM (khác HO/Siêu Thị) áp dụng
   cho form Người Dùng, Import Excel Người Dùng, cascading Phòng Ban-Chức
   Danh, và Vị Trí Kiêm Nhiệm (mục 7.6). Các tính năng nghiệp vụ khác hiện
