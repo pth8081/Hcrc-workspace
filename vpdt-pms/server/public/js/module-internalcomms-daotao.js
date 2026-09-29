@@ -1347,6 +1347,7 @@ async function onTrainingPlanImportFileChange(event) {
   trainingPlanImportPreviewItems = [];
   document.getElementById('tpImportPreviewWrap').classList.add('hidden');
   document.getElementById('tpImportConfirmBtn').classList.add('hidden');
+  document.getElementById('tpImportAutoCreateCoursesWrap').classList.add('hidden');
   const statusEl = document.getElementById('tpImportStatus');
   if (!file) { statusEl.innerText = ''; return; }
 
@@ -1375,7 +1376,7 @@ async function onTrainingPlanImportFileChange(event) {
         ? `<input type="checkbox" data-op-change="toggleTrainingPlanImportRow" data-arg0="${it._idx}" ${it.include ? 'checked' : ''}>`
         : '<span class="text-red-600">⛔</span>'}</td>
       <td class="p-1">${escapeHtml(it.month)}</td>
-      <td class="p-1">${escapeHtml(it.courseName || '')}${it.courseName ? (it.courseMatched ? ' <span class="text-emerald-600">✅ khớp</span>' : ' <span class="text-amber-600">⚠️ không khớp</span>') : ''}</td>
+      <td class="p-1">${escapeHtml(it.courseName || '')}${it.courseName ? (it.courseMatched ? ' <span class="text-emerald-600">✅ khớp</span>' : ' <span class="text-sky-600">ℹ️ Chưa có trong danh mục — vẫn nhập được</span>') : ''}</td>
       <td class="p-1">${escapeHtml(it.targetDept || '')}</td>
       <td class="p-1">${escapeHtml(it.audience || '')}</td>
       <td class="p-1 text-center">${it.plannedClasses}</td>
@@ -1385,7 +1386,16 @@ async function onTrainingPlanImportFileChange(event) {
     </tr>`;
     }).join('');
     document.getElementById('tpImportPreviewWrap').classList.remove('hidden');
-    if (validCount > 0) document.getElementById('tpImportConfirmBtn').classList.remove('hidden');
+    if (validCount > 0) {
+      document.getElementById('tpImportConfirmBtn').classList.remove('hidden');
+      // Chỉ hiện checkbox "tự thêm danh mục" khi có ít nhất 1 dòng ĐANG chọn nhập mà courseName chưa
+      // khớp Chương Trình nào có sẵn (không có gì để tự thêm thì không cần hiện) — mặc định TICK sẵn mỗi
+      // lần đọc file mới, người dùng tự bỏ nếu không muốn.
+      const hasUnmatchedCourse = data.items.some(it => it.monthValid && it.courseName && !it.courseMatched);
+      const autoCreateWrap = document.getElementById('tpImportAutoCreateCoursesWrap');
+      autoCreateWrap.classList.toggle('hidden', !hasUnmatchedCourse);
+      document.getElementById('tpImportAutoCreateCourses').checked = true;
+    }
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
     event.target.value = '';
@@ -1403,6 +1413,37 @@ function toggleTrainingPlanImportRow(idxStr) {
 async function confirmTrainingPlanImport() {
   const validItems = trainingPlanImportPreviewItems.filter(it => it.monthValid && it.include);
   if (!validItems.length) return alert('Chưa chọn dòng nào để nhập.');
+
+  // Tuỳ chọn "Tự động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có" (mặc định TICK sẵn) — với
+  // MỌI dòng ĐANG được chọn nhập mà courseName gõ trong file KHÔNG khớp Chương Trình có sẵn nào
+  // (courseMatched=false, courseId vẫn null từ lúc xem trước), tự tạo thêm 1 bản ghi trainingCourses mới
+  // đúng tên đó TRƯỚC khi tạo trainingPlans — dedupe theo tên NGUYÊN VĂN trong CÙNG lượt nhập này (nhiều
+  // dòng gõ cùng 1 tên chưa có chỉ tạo 1 lần), rồi gắn courseId mới vừa tạo cho MỌI dòng cùng tên đó.
+  // Bỏ tick giữ NGUYÊN hành vi cũ (để trống liên kết courseId). category đặt cố định "Nhập từ Excel" (KHÔNG
+  // phụ thuộc danh mục Loại Đào Tạo đã cấu hình sẵn hay chưa — normalizeTrainingCourseFields() chỉ đòi
+  // non-empty, không đối chiếu catalog) để admin dễ nhận ra và tự phân loại lại sau nếu cần.
+  const autoCreateCourses = !!document.getElementById('tpImportAutoCreateCourses')?.checked;
+  const courseCreateFailed = [];
+  if (autoCreateCourses) {
+    const missingNames = [...new Set(validItems.filter(it => it.courseName && !it.courseMatched).map(it => it.courseName))];
+    for (let i = 0; i < missingNames.length; i++) {
+      const name = missingNames[i];
+      try {
+        const result = await callCreateAction('trainingCourses', {
+          code: `CT-${Date.now()}-${i}`,
+          name,
+          category: 'Nhập từ Excel',
+          description: 'Tự động tạo khi nhập Kế Hoạch Đào Tạo từ Excel (chưa có trong danh mục lúc nhập).'
+        });
+        DB.trainingCourses.unshift(result.item);
+        validItems.forEach(it => { if (it.courseName === name && !it.courseMatched) it.courseId = result.item.id; });
+      } catch (err) {
+        courseCreateFailed.push({ name, error: err.message });
+      }
+    }
+    if (missingNames.length) populateTrainingCourseSelects();
+  }
+
   let successCount = 0;
   const failed = [];
   for (const it of validItems) {
@@ -1419,6 +1460,9 @@ async function confirmTrainingPlanImport() {
   }
   logSystemAction('INTERNAL', 'IMPORT_TRAINING_PLAN', `Nhập ${successCount} dòng kế hoạch đào tạo từ Excel`, 'SUCCESS');
   let msg = `✅ Đã nhập ${successCount}/${validItems.length} dòng kế hoạch.`;
+  if (courseCreateFailed.length) {
+    msg += `\n\n⚠️ ${courseCreateFailed.length} Chương Trình không tự thêm được vào danh mục:\n` + courseCreateFailed.map(f => `- "${f.name}": ${f.error}`).join('\n');
+  }
   if (failed.length) {
     msg += `\n\n⛔ ${failed.length} dòng lỗi:\n` + failed.map(f => `- Tháng ${f.month}: ${f.error}`).join('\n');
   }
@@ -1426,6 +1470,7 @@ async function confirmTrainingPlanImport() {
   document.getElementById('tpImportFileInput').value = '';
   document.getElementById('tpImportPreviewWrap').classList.add('hidden');
   document.getElementById('tpImportConfirmBtn').classList.add('hidden');
+  document.getElementById('tpImportAutoCreateCoursesWrap').classList.add('hidden');
   document.getElementById('tpImportStatus').innerText = '';
   trainingPlanImportPreviewItems = [];
   renderTrainingLms();

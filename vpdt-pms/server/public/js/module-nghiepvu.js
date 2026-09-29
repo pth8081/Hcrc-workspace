@@ -1585,7 +1585,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { role: 'Quản lý đào tạo', text: 'vào tab <b>🏫 Lớp Học</b> → điền form "➕ Tạo Lớp Học Mới": Loại Đào Tạo, Tên Lớp Học, Chương Trình (tuỳ chọn — để trống nếu lớp không thuộc chương trình nào), Kiểu Lớp Học (Online/Offline), Thời Gian Bắt Đầu/Kết Thúc, Bài Test Gán Cho Lớp (tuỳ chọn, phải tạo sẵn ở tab Ngân Hàng Câu Hỏi), Giáo Trình Đọc Bắt Buộc (chọn từ Kho Tài Liệu, giữ Ctrl/Cmd để chọn nhiều) → bấm nút Tạo.' },
       { role: 'Quản lý đào tạo', text: 'muốn giới hạn ai được đăng ký: điền ô "Danh Sách Được Mời" ngay trên form tạo lớp (gõ tên/tài khoản từng người, hoặc tải mẫu Excel điền rồi upload lại) — để trống thì mọi người tự đăng ký được.' },
       { role: 'Học viên', text: 'vào tab <b>📝 Đăng Ký Của Tôi</b>, tìm đúng lớp cần học → bấm <b>"Đăng Ký"</b>.' },
-      { role: 'Học viên', text: 'lớp Online có tài liệu bắt buộc: bấm <b>"📚 Vào Lớp Học"</b> → xem hết từng tài liệu bắt buộc (video/PDF) — xem đủ hệ thống tự hiện nút "📝 Vào Làm Bài Test". Lớp Offline thì phải chờ giảng viên/quản lý đào tạo bấm <b>"⏹️ Kết Thúc Lớp"</b> mới hiện nút làm bài test.' },
+      { role: 'Học viên', text: 'lớp Online có tài liệu bắt buộc: bấm <b>"📚 Vào Lớp Học"</b> → xem hết từng tài liệu bắt buộc (video/PDF) — xem đủ HỆ THỐNG TỰ ĐỘNG MỞ LUÔN modal làm bài test (không cần tự tìm nút nữa, chỉ tự mở 1 lần/lớp/phiên — tự đóng lại thì vào tab "📝 Đăng Ký Của Tôi" bấm nút "📝 Vào Làm Bài Test" như trước để mở lại). Lớp Offline thì phải chờ giảng viên/quản lý đào tạo bấm <b>"⏹️ Kết Thúc Lớp"</b> mới hiện nút làm bài test.' },
       { role: 'Học viên', text: 'bấm <b>"📝 Vào Làm Bài Test"</b> → trả lời từng câu → nộp bài → có kết quả/điểm ngay (riêng câu Nghị Luận thì chờ giảng viên chấm tay, điểm cuối chốt sau khi chấm xong).' },
       { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận: vào tab Ngân Hàng Câu Hỏi, mục <b>"📝 Cần Chấm Nghị Luận"</b> → chấm điểm từng câu — chấm xong hệ thống tự cộng dồn và chốt Đạt/Không Đạt theo đúng Điểm Đạt Yêu Cầu TẠI THỜI ĐIỂM học viên nộp bài (từ 9/2026, không bị ảnh hưởng nếu quản lý đào tạo lỡ sửa Điểm Đạt của lớp trong lúc bài đang chờ chấm).' },
       { role: 'Quản lý đào tạo/Giảng viên', text: 'muốn DỪNG nhận đăng ký sớm (chưa tới hạn, chưa đủ sĩ số): bấm <b>"🔒 Đóng Đăng Ký"</b> ngay trên dòng lớp — học viên không tự đăng ký được nữa (Nhân Sự/giảng viên vẫn "➕ Thêm Học Viên" tay được), bấm <b>"🔓 Mở Lại Đăng Ký"</b> để mở lại.' },
@@ -1627,6 +1627,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
     steps: [
       { role: 'Quản lý đào tạo', text: 'vào tab <b>📋 Kế Hoạch Đào Tạo</b> → điền Tháng, Đơn Vị/Đối Tượng, Số Lớp/Số Học Viên/Số Giờ Dự Kiến → lưu; hoặc nhập hàng loạt từ file có sẵn thay vì gõ tay từng dòng.' },
+      { text: 'Nhập hàng loạt từ Excel: bấm <b>"⬇️ Tải Mẫu Excel"</b>, điền cột "Chương Trình" bằng đúng TÊN đã có trong danh mục (không bắt buộc) rồi chọn file ở ô nhập — dòng nào tên Chương Trình chưa có trong danh mục vẫn hiện <b>"✅ Hợp lệ"</b> (chỉ ghi chú <b>"ℹ️ Chưa có trong danh mục — vẫn nhập được"</b>, KHÔNG bị chặn nhập). Tick sẵn checkbox <b>"☑ Tự động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có"</b> (mặc định BẬT) để hệ thống TỰ tạo thêm các Chương Trình còn thiếu đó (nhiều dòng trùng tên chỉ tạo 1 lần) và tự gắn liên kết — bỏ tick nếu chỉ muốn nhập kế hoạch, để trống liên kết Chương Trình như trước.' },
       { text: 'Đối chiếu thực tế: xem danh sách Lớp Học đã mở thực sự (tab Lớp Học) so với kế hoạch đã lập.' },
     ],
     footer: { left: [], right: [] },
@@ -1653,7 +1654,7 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
     steps: [
       { role: 'Quản lý đào tạo', text: 'vào tab <b>🧪 Ngân Hàng Câu Hỏi</b> → điền Tiêu Đề bài test, Điểm Đạt Yêu Cầu → thêm từng câu hỏi (SINGLE/MULTI/ESSAY/IMAGE_DRAG_DROP) kèm đáp án đúng → lưu. Có thể tải file mẫu để nhập hàng loạt câu hỏi SINGLE/MULTI thay vì tạo tay từng câu (ESSAY/IMAGE_DRAG_DROP chỉ tạo được qua giao diện).' },
-      { text: 'Sửa 1 câu hỏi/đáp án sai sau khi đã lưu? Bấm <b>"Sửa"</b> ngay trên dòng bài test đó (10/2026) — Test Builder tự nạp lại đúng toàn bộ câu hỏi hiện có để sửa tại chỗ, KHÔNG cần xoá tạo lại cả bài (xoá-tạo-lại sẽ đổi id, phá liên kết trainingClasses đang gán bài test này).' },
+      { text: 'Sửa 1 câu hỏi/đáp án sai sau khi đã lưu? Bấm <b>"Sửa"</b> ngay trên dòng bài test đó (10/2026) — Test Builder tự nạp lại đúng toàn bộ câu hỏi hiện có để sửa tại chỗ, KHÔNG cần xoá tạo lại cả bài (xoá-tạo-lại sẽ đổi id, phá liên kết trainingClasses đang gán bài test này). Nếu bài test ĐÃ CÓ học viên nộp bài: vẫn sửa được chữ (nội dung câu hỏi/đáp án) và ảnh minh hoạ bình thường, nhưng hệ thống CHẶN nếu thay đổi làm sai lệch điểm đã chấm (đổi số lượng câu hỏi, loại câu hỏi, điểm số, số lượng đáp án, hoặc đáp án đúng của bất kỳ câu nào) — báo lỗi rõ ràng nếu bị chặn.' },
       { text: 'Gắn bài test vào 1 lớp cụ thể: khi tạo/sửa Lớp Học, chọn bài test ở ô "Bài Test Gán Cho Lớp".' },
       { role: 'Giảng viên', text: 'nếu bài test có câu Nghị Luận, vào mục "📝 Cần Chấm Nghị Luận" ngay trong tab này để chấm tay sau khi học viên nộp bài.' },
     ],
