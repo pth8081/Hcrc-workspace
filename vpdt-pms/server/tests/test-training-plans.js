@@ -270,10 +270,21 @@ async function main() {
       assert(statusText.includes('2/3'), `expected preview status to report 2/3 valid, got: ${statusText}`);
       const previewHTML = await page.evaluate(() => document.getElementById('tpImportPreviewBody').innerHTML);
       assert(previewHTML.includes('✅ khớp'), 'the matched course row should show a match indicator');
-      assert(previewHTML.includes('⚠️ không khớp'), 'the unmatched course row should show a mismatch indicator');
+      assert(previewHTML.includes('ℹ️ Chưa có trong danh mục — vẫn nhập được'), 'the unmatched course row should show the non-alarming "not yet in the catalog" note, not a scary mismatch warning');
+      assert(!previewHTML.includes('⚠️ không khớp'), 'the old alarming wording must be gone');
       assert(previewHTML.includes('⛔ Tháng không hợp lệ'), 'the invalid-month row should be flagged in the preview');
 
+      // Checkbox "tự động thêm vào danh mục" phải TỰ HIỆN (có dòng courseMatched=false) và TICK SẴN.
+      const autoCreateVisible = await page.evaluate(() => !document.getElementById('tpImportAutoCreateCoursesWrap').classList.contains('hidden'));
+      assert(autoCreateVisible, 'the auto-create-course checkbox should be visible when a row has an unmatched course name');
+      const autoCreateChecked = await page.evaluate(() => document.getElementById('tpImportAutoCreateCourses').checked);
+      assert(autoCreateChecked, 'the auto-create-course checkbox should be checked by default');
+      // Tắt cho kịch bản NÀY — kiểm tra ĐÚNG hành vi CŨ (bỏ tick = để trống liên kết) trước, kịch bản kế
+      // tiếp mới kiểm hành vi tự tạo (mặc định tick).
+      await page.evaluate(() => { document.getElementById('tpImportAutoCreateCourses').checked = false; });
+
       const countBefore = await page.evaluate(() => DB.trainingPlans.length);
+      const coursesCountBefore = await page.evaluate(() => DB.trainingCourses.length);
       await page.evaluate(() => confirmTrainingPlanImport());
       const plansAfter = await page.evaluate(() => DB.trainingPlans);
       assertEqual(plansAfter.length, countBefore + 2, 'only the 2 valid-month rows should have been created, the invalid one skipped');
@@ -282,10 +293,46 @@ async function main() {
       assert(nov, 'expected the November row to be imported');
       assert(dec, 'expected the December row to be imported');
       assertEqual(nov.courseId, courseId, 'matched course should carry its courseId through the confirm step');
-      assertEqual(dec.courseId, null, 'unmatched course name should import with courseId left null, not blocked');
+      assertEqual(dec.courseId, null, 'unmatched course name should import with courseId left null when the auto-create checkbox is UNCHECKED, not blocked');
       assert(!plansAfter.some((p) => p.month === 'sai-dinh-dang'), 'the invalid-month row must never reach the server');
+      const coursesCountAfter = await page.evaluate(() => DB.trainingCourses.length);
+      assertEqual(coursesCountAfter, coursesCountBefore, 'no new trainingCourses should be auto-created while the checkbox is unchecked');
       const alerts = await page.evaluate(() => window.__alerts.slice());
       assert(alerts.some((a) => a.includes('Đã nhập 2/2 dòng kế hoạch')), `expected an import summary alert, got ${JSON.stringify(alerts)}`);
+    });
+
+    await run('Nhập Kế Hoạch Từ Excel: checkbox "Tự động thêm vào danh mục" (mặc định TICK) tự tạo Chương Trình còn thiếu, dedupe theo tên trùng trong cùng lượt nhập, rồi gắn courseId mới', async () => {
+      await page.evaluate((cid) => {
+        window.__planImportParsePreset = [
+          { month: '2027-01', monthValid: true, courseName: 'Kỹ Năng Bán Hàng Cơ Bản', courseId: cid, courseMatched: true, targetDept: '', audience: '', plannedClasses: 1, plannedTrainees: 10, plannedHours: 4 },
+          { month: '2027-02', monthValid: true, courseName: 'Chương Trình Mới Chưa Có', courseId: null, courseMatched: false, targetDept: '', audience: '', plannedClasses: 1, plannedTrainees: 10, plannedHours: 4 },
+          { month: '2027-03', monthValid: true, courseName: 'Chương Trình Mới Chưa Có', courseId: null, courseMatched: false, targetDept: '', audience: '', plannedClasses: 2, plannedTrainees: 15, plannedHours: 6 }
+        ];
+      }, courseId);
+      const tmpPath = path.join(os.tmpdir(), 'plan-import-test-autocreate.xlsx');
+      fs.writeFileSync(tmpPath, 'dummy');
+      await page.setInputFiles('#tpImportFileInput', tmpPath);
+      await page.waitForFunction(() => document.getElementById('tpImportStatus').innerText.includes('Đọc file'));
+      const autoCreateChecked = await page.evaluate(() => document.getElementById('tpImportAutoCreateCourses').checked);
+      assert(autoCreateChecked, 'checkbox should default back to checked on a fresh file read');
+
+      const coursesCountBefore = await page.evaluate(() => DB.trainingCourses.length);
+      await page.evaluate(() => confirmTrainingPlanImport());
+
+      const coursesAfter = await page.evaluate(() => DB.trainingCourses);
+      assertEqual(coursesAfter.length, coursesCountBefore + 1, 'exactly 1 new course should be created — 2 rows shared the same unmatched name, deduped to 1 create call');
+      const newCourse = coursesAfter.find((c) => c.name === 'Chương Trình Mới Chưa Có');
+      assert(newCourse, 'expected the new course to be auto-created with the exact name typed in the file');
+      assertEqual(newCourse.category, 'Nhập từ Excel', 'auto-created courses get a recognizable placeholder category');
+
+      const plansAfter = await page.evaluate(() => DB.trainingPlans);
+      const feb = plansAfter.find((p) => p.month === '2027-02');
+      const mar = plansAfter.find((p) => p.month === '2027-03');
+      assert(feb && mar, 'both rows sharing the new course name should have been imported');
+      assertEqual(feb.courseId, newCourse.id, 'row should be linked to the newly auto-created course');
+      assertEqual(mar.courseId, newCourse.id, 'the OTHER row with the same unmatched name should link to the SAME auto-created course (deduped), not a second one');
+      const jan = plansAfter.find((p) => p.month === '2027-01');
+      assertEqual(jan.courseId, courseId, 'an already-matched row must keep going through its real matched courseId, untouched by the auto-create step');
     });
 
     // ===================== Theo Dõi Thực Hiện & Dashboard (kế hoạch vs số thật) =====================

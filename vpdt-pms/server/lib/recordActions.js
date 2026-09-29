@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -5048,15 +5048,26 @@ function editTrainingDocument(payload, user, doc, appData) {
 // vì cả khối câu hỏi luôn được gửi lại TOÀN BỘ từ Test Builder ở client, không có khái niệm "sửa từng
 // field riêng lẻ" cho 1 bài test — payload thiếu field nào thì normalizeTrainingTestFields() tự báo lỗi
 // rõ ràng, không âm thầm giữ giá trị cũ).
-function editTrainingTest(payload, user, test, appData) {
+//
+// hasSubmissions (bool, CALLER — routes/records.js — tự đọc trainingTestSubmissions trước khi gọi vào
+// đây) — 10/2026: trước đây route CHẶN CỨNG 409 mọi lần sửa nếu đã có ≥1 bài nộp, kể cả chỉ sửa lỗi
+// chính tả. Theo yêu cầu người dùng ("vẫn cho sửa dù đã có bài nộp, miễn là không đổi cấu trúc chấm
+// điểm"): khi true, chụp lại NGUYÊN VẸN bộ câu hỏi CŨ trước khi ghi đè, rồi sau khi
+// normalizeTrainingTestFields() chuẩn hoá xong bộ câu hỏi MỚI, so sánh 2 bộ qua
+// assertTrainingTestGradingStructureUnchanged() (lib/createValidation.js) — ném 409 nếu thay đổi làm
+// sai lệch điểm đã chấm (đổi số câu/type/points/số đáp án/đáp án đúng), cho qua nếu chỉ đổi chữ/ảnh.
+function editTrainingTest(payload, user, test, appData, hasSubmissions) {
   if (!user.perms?.admin && !user.perms?.trainingManage) throw new HttpError(403, 'Bạn không có quyền sửa bài test');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+  const oldQuestions = hasSubmissions && Array.isArray(test.questions)
+    ? JSON.parse(JSON.stringify(test.questions)) : null;
   test.title = payload.title;
   test.category = payload.category;
   test.passScore = payload.passScore;
   test.questions = payload.questions;
   test.customData = payload.customData;
   normalizeTrainingTestFields(test, appData);
+  if (hasSubmissions) assertTrainingTestGradingStructureUnchanged(oldQuestions, test.questions);
   return test;
 }
 

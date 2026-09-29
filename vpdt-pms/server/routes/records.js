@@ -1553,7 +1553,13 @@ router.post('/trainingTests/:id/edit', async (req, res) => {
     // kể cả đang PENDING_ESSAY_GRADING chờ chấm Nghị Luận) hay không — sửa cấu trúc câu hỏi/điểm/đáp án
     // đúng giữa lúc đang có bài nộp có thể làm route grade-essay không còn thấy câu ESSAY nào (kẹt vĩnh
     // viễn ở PENDING_ESSAY_GRADING) hoặc tính sai % điểm (totalPoints cũ không khớp cấu trúc câu hỏi mới).
-    // Mirror ĐÚNG khuôn route XOÁ cùng collection (chặn khi còn lớp gán) + mở rộng thêm điều kiện bài nộp.
+    // Mirror ĐÚNG khuôn route XOÁ cùng collection (chặn khi còn lớp gán).
+    //
+    // 10/2026 (theo yêu cầu người dùng): "đã có bài nộp" KHÔNG còn chặn cứng nữa — chỉ chặn khi thay đổi
+    // thật sự làm SAI LỆCH ĐIỂM ĐÃ CHẤM (xem editTrainingTest()/assertTrainingTestGradingStructureUnchanged(),
+    // hasSubmissions truyền xuống để hàm đó tự so sánh cấu trúc cũ/mới). "Còn lớp đang gán" (referencingClasses)
+    // VẪN chặn cứng như cũ (KHÔNG đổi) — lớp đang mở cho học viên đăng ký/tự học thì không sửa đề giữa
+    // chừng, khác hẳn bài nộp đã chốt điểm chỉ cần giữ nguyên cấu trúc chấm là an toàn.
     const [trainingClasses, trainingTestSubmissions] = await Promise.all([
       getAllForCollection('trainingClasses'),
       getAllForCollection('trainingTestSubmissions')
@@ -1562,12 +1568,9 @@ router.post('/trainingTests/:id/edit', async (req, res) => {
     if (referencingClasses.length) {
       throw new HttpError(409, `Không thể sửa bài test này vì còn ${referencingClasses.length} lớp học đang gán nó. Vui lòng gỡ bài test khỏi các lớp đó trước (sửa lớp).`);
     }
-    const referencingSubmissions = trainingTestSubmissions.filter(s => s.testId === itemId);
-    if (referencingSubmissions.length) {
-      throw new HttpError(409, `Không thể sửa bài test này vì đã có ${referencingSubmissions.length} bài nộp gắn với nó (có thể đang chờ chấm Nghị Luận). Sửa cấu trúc câu hỏi lúc này có thể làm sai lệch kết quả đã nộp.`);
-    }
+    const hasSubmissions = trainingTestSubmissions.some(s => s.testId === itemId);
     const result = await withLockedRecordForCollection('trainingTests', itemId, (item) =>
-      recordActions.editTrainingTest(req.body, freshUser, item, appData));
+      recordActions.editTrainingTest(req.body, freshUser, item, appData, hasSubmissions));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `trainingTests/${req.params.id}/edit`, err);
@@ -1667,16 +1670,23 @@ router.post('/trainingPlans/:id/edit', async (req, res) => {
 router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingPlans'));
 
 // ===================== ĐÀO TẠO TÂN BINH =====================
-// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. getAllAppData() đã đọc sẵn
-// trainingCourses (dùng để kiểm tra stage{1,2}RequiredCourseIds mới nếu có đổi, xem
-// normalizeOnboardingPathFields()) TRƯỚC khi khoá đúng 1 dòng onboardingPaths để sửa — cùng khuôn
-// trainingPlans/:id/edit ở trên.
+// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. trainingCourses (dùng để kiểm
+// tra stage{1,2}RequiredCourseIds mới nếu có đổi, xem normalizeOnboardingPathFields()) là MIGRATED_
+// COLLECTION (nằm ở bảng SQL riêng, KHÔNG có trong getAllAppData()) nên phải tự đọc thêm qua
+// getAllForCollection() rồi gắn vào appData TRƯỚC khi khoá đúng 1 dòng onboardingPaths để sửa — cùng
+// khuôn trainingPlans/:id/edit ở trên.
+//
+// LỖI ĐÃ VÁ (rà soát Đào Tạo, 9/2026): trước đây thiếu đúng dòng gắn appData.trainingCourses này ->
+// normalizeOnboardingPathFields() luôn thấy trainingCourses rỗng -> MỌI id trong
+// stage1RequiredCourseIds/stage2RequiredCourseIds (dù không đổi) đều bị coi không hợp lệ -> sửa Lộ
+// Trình luôn lỗi 400, kể cả khi chỉ đổi các field khác (VD tiêu chí Giai đoạn 3).
 router.post('/onboardingPaths/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
+    appData.trainingCourses = await getAllForCollection('trainingCourses');
     const result = await withLockedRecordForCollection('onboardingPaths', itemId, (item) =>
       recordActions.editOnboardingPath(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
