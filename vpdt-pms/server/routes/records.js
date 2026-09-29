@@ -1667,16 +1667,23 @@ router.post('/trainingPlans/:id/edit', async (req, res) => {
 router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingPlans'));
 
 // ===================== ĐÀO TẠO TÂN BINH =====================
-// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. getAllAppData() đã đọc sẵn
-// trainingCourses (dùng để kiểm tra stage{1,2}RequiredCourseIds mới nếu có đổi, xem
-// normalizeOnboardingPathFields()) TRƯỚC khi khoá đúng 1 dòng onboardingPaths để sửa — cùng khuôn
-// trainingPlans/:id/edit ở trên.
+// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. trainingCourses (dùng để kiểm
+// tra stage{1,2}RequiredCourseIds mới nếu có đổi, xem normalizeOnboardingPathFields()) là MIGRATED_
+// COLLECTION (nằm ở bảng SQL riêng, KHÔNG có trong getAllAppData()) nên phải tự đọc thêm qua
+// getAllForCollection() rồi gắn vào appData TRƯỚC khi khoá đúng 1 dòng onboardingPaths để sửa — cùng
+// khuôn trainingPlans/:id/edit ở trên.
+//
+// LỖI ĐÃ VÁ (rà soát Đào Tạo, 9/2026): trước đây thiếu đúng dòng gắn appData.trainingCourses này ->
+// normalizeOnboardingPathFields() luôn thấy trainingCourses rỗng -> MỌI id trong
+// stage1RequiredCourseIds/stage2RequiredCourseIds (dù không đổi) đều bị coi không hợp lệ -> sửa Lộ
+// Trình luôn lỗi 400, kể cả khi chỉ đổi các field khác (VD tiêu chí Giai đoạn 3).
 router.post('/onboardingPaths/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
+    appData.trainingCourses = await getAllForCollection('trainingCourses');
     const result = await withLockedRecordForCollection('onboardingPaths', itemId, (item) =>
       recordActions.editOnboardingPath(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
