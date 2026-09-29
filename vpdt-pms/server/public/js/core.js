@@ -219,12 +219,12 @@ const TAB_SECTION_FRAGMENT = {
   // chú thích entry 'hrReport' ở BUSINESS_MODULES.
   hrReport: 'hrReportSection',
   // Dot tach module 4 (v23.13) - 2 section PHUC TAP CON LAI, moi section co nhieu section con long ben
-  // trong (tach CA CUM vao 1 fragment duy nhat, giu 1 vo rong DUY NHAT o index.html cho chinh no - xem
-  // NESTED_CSP_ROOTS_IN_FRAGMENT ben duoi cho danh sach id con can bind lai rieng):
+  // trong (tach CA CUM vao 1 fragment duy nhat, giu 1 vo rong DUY NHAT o index.html cho chinh no):
   // - system: formSection/adminSection/workflowSection/quickApplySection/uploadTypeSection/logSection/
   //   trashSection (7 section con, KHONG co bindCspDelegation rieng - dung chung 1 goc systemSection).
-  // - internal: internalTrainingLmsSection/internalRecruitmentSection/internalQnaSection (3 section con,
-  //   2 cai dau CO bindCspDelegation rieng + 7 modal xu ly rieng cung can bind lai - xem danh sach duoi).
+  // - internal: internalTrainingLmsSection/internalRecruitmentSection/internalQnaSection + 8 modal xu ly
+  //   rieng (xem NESTED_CSP_ROOTS_IN_FRAGMENT ben duoi - LOI DA VA 9/2026: trươc day 8/10 id con nay CO
+  //   bindCspDelegation rieng, gay double-dispatch, da go het).
   system: 'systemSection', internal: 'internalSection',
   // muaHang (v23.30) — 1 section đơn giản, không section con lồng bên trong, cùng khuôn checklist ở trên.
   muaHang: 'muaHangSection'
@@ -233,28 +233,23 @@ const TAB_SECTION_FRAGMENT = {
 const _loadedSectionHtml = {}; // tabName -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
 const _settledSectionHtml = new Set(); // tabName co section HTML DA nap xong THUC SU (Promise da resolve)
 
-// tabName -> mang id CON nam LONG BEN TRONG fragment cua tabName do (khac voi chinh sectionId - div rong
-// da dat san trong index.html), can bindCspDelegation() lai dung 1 lan NGAY SAU KHI fragment vua duoc bom
-// vao DOM lan dau (xem loadTabSectionHtml()). Rieng #paymentSection long trong #officeSection (v23.11) -
-// moi dot tach module sau nay PHAI ra soat: id con nao duoc bindCspDelegation() rieng (grep
-// "bindCspDelegation('" trong file nay) ma KHONG con la div rong dat san trong index.html (tuc chi ton
-// tai ben trong 1 fragment) thi phai them vao day, neu khong se am tham mat 1 listener click/change/
-// input/submit cho ca phien, rat kho phat hien qua UI thuong (chi lo qua test hoi quy sau nay).
-// 'internal' (v23.13): internalTrainingLmsSection/internalRecruitmentSection (2 section con CO
-// bindCspDelegation rieng) + 7 modal xu ly rieng cua Dao Tao/Tuyen Dung (trainingResultsModal/
-// trainingRosterModal/trainingEditClassModal/trainingTakeTestModal/trainingClassQrModal/
-// trainingJoinClassModal/gradeEssayModal/recruitmentReferModal) - tat ca song "NGOAI section con nhung
-// TRONG #internalSection" (xem chu thich tung bindCspDelegation() o duoi file nay) nen deu bi anh huong
-// khi #internalSection tro thanh fragment. 'system' KHONG can entry rieng - 7 section con cua no
-// (formSection/adminSection/workflowSection/quickApplySection/uploadTypeSection/logSection/trashSection)
-// deu KHONG co bindCspDelegation rieng, chi dung chung goc #systemSection (van duoc bind dung vi chinh
-// no la div vo dat san trong index.html).
-const NESTED_CSP_ROOTS_IN_FRAGMENT = {
-  office: ['paymentSection'],
-  internal: ['internalTrainingLmsSection', 'internalRecruitmentSection', 'trainingResultsModal',
-    'trainingRosterModal', 'trainingEditClassModal', 'trainingTakeTestModal', 'trainingClassQrModal',
-    'trainingJoinClassModal', 'gradeEssayModal', 'recruitmentReferModal']
-};
+// LICH SU (v23.11 -> 9/2026, LOI DA VA): co gan mang id CON nam long ben trong fragment cua 1 tabName
+// (VD 'office' -> ['paymentSection'], 'internal' -> 8 id cua Dao Tao/Tuyen Dung) can bindCspDelegation()
+// lai NGAY SAU KHI fragment vua duoc bom vao DOM (loadTabSectionHtml() goi (NESTED_CSP_ROOTS_IN_FRAGMENT[tabName]
+// || []).forEach(bindCspDelegation)) - ly do ban dau (v23.11): cac id con nay KHONG ton tai luc trang vua
+// nap (chi la 1 phan cua fragment con lay-load), nen dong bindCspDelegation() TINH o dau file (chay 1 lan
+// luc script vua nap) la NO-OP (root=null). Nhung viec bind THEM 1 lan nua SAU KHI fragment da nap la THUA
+// - goc ngoai on dinh (VD #internalSection/#officeSection, la div rong dat san trong index.html tu dau,
+// KHONG bao gio bi thay the node, chi doi .innerHTML) DA TU DONG bat DU moi click/change/input/submit cua
+// MOI phan tu con them vao sau (kha nang bubbling chuan cua DOM, khong phu thuoc thoi diem gan). Bind THEM
+// 1 goc nua ngay tren chinh id con do khien 1 click bi bat 2 LAN (bubbling qua ca 2 goc long nhau) - PHAT
+// HIEN THUC te qua kich ban double-click o Tuyen Dung (nut "Dong Tin"/"Xoa" hoi xac nhan 2 lan + goi API 2
+// lan, xac nhan qua Playwright dem confirm()=2). Da go HET 9 id con nay (paymentSection +
+// internalTrainingLmsSection/internalRecruitmentSection + 7 modal Dao Tao/Tuyen Dung) khoi ca 2 noi: dong
+// bindCspDelegation() rieng (xem chu thich tung dong o duoi file nay) VA mang duoi day - gio la {} rong,
+// giu lai object + co che .forEach() o loadTabSectionHtml() (khong xoa han) phong khi co nhu cau THAT su
+// khac trong tuong lai (VD 1 id con nam NGOAI subtree cua sectionId cha - chua tung xay ra tu truoc gio).
+const NESTED_CSP_ROOTS_IN_FRAGMENT = {};
 
 // true neu section HTML cua tabName KHONG can nap (khong co trong TAB_SECTION_FRAGMENT - van nhung cung
 // nhu truoc) HOAC da nap xong THUC SU - dung CHUNG voi isTabModuleGroupsSettled() de switchTab() biet
@@ -9951,8 +9946,11 @@ bindCspDelegation('userHeader');
 bindCspDelegation('contractSection');
 // Thanh Toán — danh sách đề nghị (#paymentTableBody), form tạo/sửa (#paymentCreateForm) và các đợt
 // thanh toán (#paymentCreateInstallmentsList) đều render vào bên trong #paymentSection (openEditPaymentRequest()
-// chỉ chuyển sub-tab + đổ dữ liệu vào ĐÚNG form đã có trong section, không mở modal riêng) — 1 gốc là đủ.
-bindCspDelegation('paymentSection');
+// chỉ chuyển sub-tab + đổ dữ liệu vào ĐÚNG form đã có trong section, không mở modal riêng). LỖI ĐÃ VÁ
+// (9/2026, cùng cụm double-dispatch với Đào Tạo/Tuyển Dụng phía dưới): #paymentSection LỒNG bên trong
+// #officeSection (fragment officeSection.html) — bind riêng ở đây CỘNG THÊM gốc #officeSection (dòng dưới)
+// khiến click bị bắt 2 lần. #officeSection đã đủ 1 gốc qua bubbling, xoá hẳn dòng bind riêng này (không
+// rebind lại ở NESTED_CSP_ROOTS_IN_FRAGMENT.office nữa).
 // Xe — danh sách đăng ký (#carTableBody), form đăng ký + điểm lộ trình (#carRoutePointsWrap), tab
 // Lái Xe (#carDriverListWrap) đều render trong #carSection — nhưng modal Xử Lý Đăng Ký Xe
 // (#carProcessModal, nút Duyệt/Từ chối/Bổ sung trong #carModalActionBtns) sống NGOÀI section (giống
@@ -9971,18 +9969,16 @@ bindCspDelegation('meetingSection');
 bindCspDelegation('vppSection');
 bindCspDelegation('vppRegModal');
 // Đào Tạo (LMS) — 9 sub-tab (Dashboard/Lớp Học/Chương Trình/Kế Hoạch/Đăng Ký Của Tôi/Kho Tài Liệu/Lộ
-// Trình/Đào Tạo Tân Binh/Ngân Hàng Câu Hỏi) render hết trong #internalTrainingLmsSection — nhưng 7 modal
-// xử lý riêng (Kết Quả Lớp Học, Danh Sách Học Viên, Sửa Lớp Học, Làm Bài Test, Mã QR, Vào Lớp Học, Chấm
-// Nghị Luận — Đợt 10) đều sống NGOÀI section (giống Xe/Vận Hành) nên mỗi modal cần thêm 1 gốc riêng — 8
-// gốc tổng cộng.
-bindCspDelegation('internalTrainingLmsSection');
-bindCspDelegation('trainingResultsModal');
-bindCspDelegation('trainingRosterModal');
-bindCspDelegation('trainingEditClassModal');
-bindCspDelegation('trainingTakeTestModal');
-bindCspDelegation('trainingClassQrModal');
-bindCspDelegation('trainingJoinClassModal');
-bindCspDelegation('gradeEssayModal');
+// Trình/Đào Tạo Tân Binh/Ngân Hàng Câu Hỏi) + 7 modal xử lý riêng (Kết Quả Lớp Học, Danh Sách Học Viên,
+// Sửa Lớp Học, Làm Bài Test, Mã QR, Vào Lớp Học, Chấm Nghị Luận) đều là con LỒNG BÊN TRONG #internalSection
+// (cả cụm nằm chung trong fragment internalSection.html — KHÔNG phải "sống ngoài section" như ghi trước
+// đây). LỖI ĐÃ VÁ (rà soát 9/2026, phát hiện qua kịch bản double-click ở Tuyển Dụng, cùng nguyên nhân với
+// #internalRecruitmentSection bên dưới): trước đây bind CSP delegation RIÊNG cho 8 id này, CỘNG THÊM gốc
+// #internalSection (dòng dưới) — click bên trong bị bắt 2 LẦN (bubbling qua cả 2 gốc lồng nhau), khiến
+// nút xác nhận/xoá hỏi 2 lần + gọi API 2 lần. Đã xác nhận thực nghiệm qua Playwright (đếm confirm() = 2
+// trước khi vá). #internalSection đã có 1 gốc DUY NHẤT bắt ĐỦ mọi click/change/input/submit bên trong nhờ
+// bubbling chuẩn của DOM (không phụ thuộc thời điểm phần tử con được thêm vào qua .innerHTML) — 8 gốc
+// riêng này hoàn toàn dư thừa, xoá hẳn (không rebind lại ở NESTED_CSP_ROOTS_IN_FRAGMENT nữa).
 // Ngân Sách 2.0 (budgetLines) — 4 tab (Đề Xuất/Phê Duyệt/Sử Dụng/Báo Cáo) + mọi modal xử lý (thêm/sửa
 // dòng, Quản Lý Kỳ & Mẫu...) đều dùng chung #genericConfirmModal/showConfirmModal() (bind riêng ở dưới)
 // thay vì modal tĩnh riêng của module — 1 gốc #budgetSection là đủ. 2 dòng bindCspDelegation() cho
@@ -10112,12 +10108,13 @@ bindCspDelegation('uniformSection');
 bindCspDelegation('licenseSection');
 bindCspDelegation('licenseDetailModal');
 
-// Tuyển Dụng — 3 sub-tab (Tin Tuyển Dụng/Ứng Viên Tôi Giới Thiệu/Quản Lý Ứng Viên) đều render trong
-// #internalRecruitmentSection nên chỉ cần 1 gốc. Modal "Giới Thiệu Ứng Viên" (#recruitmentReferModal,
-// openRecruitmentReferModal()/submitRecruitmentReferral()) sống NGOÀI section (giống Xe/Vận Hành/Đào
-// Tạo/Đồng Phục/Giấy Phép) nên cần thêm 1 gốc riêng — 2 gốc tổng cộng.
-bindCspDelegation('internalRecruitmentSection');
-bindCspDelegation('recruitmentReferModal');
+// Tuyển Dụng — 3 sub-tab (Tin Tuyển Dụng/Ứng Viên Tôi Giới Thiệu/Quản Lý Ứng Viên) + modal "Giới Thiệu
+// Ứng Viên" (#recruitmentReferModal) đều LỒNG bên trong #internalSection (fragment internalSection.html)
+// — KHÔNG "sống ngoài section" như ghi trước đây. LỖI ĐÃ VÁ (9/2026, người dùng báo nút "Đóng Tin"/"Xác
+// Nhận Đã Tuyển Đủ"/"Xoá" hỏi xác nhận 2 lần + gọi API 2 lần): bind CSP delegation riêng cho 2 id này
+// CỘNG THÊM gốc #internalSection (dòng dưới) khiến click bị bắt 2 lần qua bubbling. Đã xác nhận thực
+// nghiệm (Playwright đếm confirm() = 2 trước khi vá, = 1 sau khi vá). Xoá hẳn 2 dòng bind riêng này,
+// #internalSection lo đủ.
 
 // Truyền Thông Nội Bộ — 5 sub-tab (Nhịp Sống HCRC/Đào Tạo/Tuyển Dụng/Góc Chia Sẻ/HCRC Đồng Hành,
 // setInternalSubTab()) đều render trong #internalSection nên chỉ cần 1 gốc — bao gồm form đăng bài
