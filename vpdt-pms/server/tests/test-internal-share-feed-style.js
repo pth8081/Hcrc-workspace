@@ -28,7 +28,7 @@ async function main() {
       for (const title of ['Bài chia sẻ số 1', 'Bài chia sẻ số 2', 'Bài chia sẻ sẽ bị từ chối']) {
         await page.evaluate((t) => {
           document.getElementById('internalTitle').value = t;
-          document.getElementById('internalContent').value = 'Nội dung chia sẻ nghiệp vụ hàng ngày.';
+          document.getElementById('internalContent').textContent = 'Nội dung chia sẻ nghiệp vụ hàng ngày.';
           document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
         }, title);
         await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));

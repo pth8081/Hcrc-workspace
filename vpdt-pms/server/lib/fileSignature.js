@@ -33,7 +33,13 @@ const SIGNATURE_MAP = {
   ppt: ['cfb'],
   docx: ['docx'],
   xlsx: ['xlsx'],
-  pptx: ['pptx']
+  pptx: ['pptx'],
+  // Video bài Nhịp Sống HCRC/Góc Chia Sẻ (9/2026, moduleKey 'internalVideo' ở routes/upload.js) — MP4 (ISO
+  // BMFF, hộp "ftyp" ở đầu tệp): file-type trả 'mp4' cho brand isom/mp41/mp42/avc1..., 'm4v' cho brand
+  // "M4V " (cùng định dạng MP4, trình duyệt phát bình thường) — KHÔNG nhận 'mov' (QuickTime) dù đổi đuôi.
+  // WebM: file-type đọc DocType trong header EBML để phân biệt 'webm' với 'mkv' (Matroska) — chỉ nhận 'webm'.
+  mp4: ['mp4', 'm4v'],
+  webm: ['webm']
 };
 
 const MAGIC_CHECKABLE_EXTS = new Set(Object.keys(SIGNATURE_MAP));

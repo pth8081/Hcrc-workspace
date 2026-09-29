@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -3168,7 +3168,10 @@ function unpinInternalPost(user, post) {
 // thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
 // luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
 // giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
-const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training', 'customData'];
+// images/coverImage/videos/contentFormat (9/2026 — nhiều ảnh + ảnh đại diện riêng + video + nội dung định
+// dạng Bold/Danh sách) — chuẩn hoá lại NGAY SAU vòng gộp field bên dưới bằng ĐÚNG 2 hàm đường TẠO dùng
+// (normalizeInternalPostContent()/normalizeInternalPostMedia(), lib/createValidation.js).
+const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'contentFormat', 'attachment', 'images', 'coverImage', 'videos', 'postCategory', 'publishAt', 'training', 'customData'];
 function editInternalPost(payload, user, post, appData) {
   if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
@@ -3198,8 +3201,10 @@ function editInternalPost(payload, user, post, appData) {
   // TẠO đã chặn.
   post.title = String(post.title || '').trim().slice(0, 300);
   if (!post.title) throw new HttpError(400, 'Vui lòng nhập tiêu đề bài viết');
-  post.content = String(post.content || '').trim().slice(0, 20000);
-  if (!post.content) throw new HttpError(400, 'Vui lòng nhập nội dung bài viết');
+  // content: bài contentFormat 'html' sanitize allowlist lại Ở SERVER (không tin client) — bài văn bản
+  // thuần giữ nguyên luật cũ (trim + trần 20.000 ký tự). Xem normalizeInternalPostContent().
+  normalizeInternalPostContent(post);
+  normalizeInternalPostMedia(post);
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: sửa bài NEWS/SHARE trước đây không đối chiếu lại postCategory
   // theo danh mục hiện có hay validate lại customData bắt buộc — khác đường TẠO (createValidation.js
   // internalPosts.extraValidate làm cả 2 việc này), khiến 1 request sửa thẳng có thể đặt postCategory

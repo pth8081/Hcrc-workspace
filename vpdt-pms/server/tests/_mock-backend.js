@@ -30,6 +30,38 @@ function __mockErrRes(status, message) {
 // lib/createValidation.js — SERVER sinh lại theo type, client (module-internalcomms-nhipsong.js) không
 // còn tự tính code nữa.
 const __MOCK_INTERNAL_TYPE_PREFIX = { NEWS: 'TN', TRAINING: 'DT', REWARD: 'KT', SHARE: 'CS' };
+// Nội dung định dạng + ảnh/ảnh đại diện/video (9/2026) — mirrors normalizeInternalPostContent()/
+// normalizeInternalPostMedia() ở lib/createValidation.js. Riêng bước SANITIZE HTML (sanitize-html, gói Node)
+// KHÔNG chạy được trong trình duyệt nên mock chỉ kiểm tra rỗng/độ dài — luật sanitize thật được test TRỰC
+// TIẾP trên code server ở tests/test-internal-media-server.js (require lib/createValidation.js).
+function __mockNormalizeInternalPostContentAndMedia(target) {
+  if (target.contentFormat === 'html') {
+    const text = String(target.content || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (!text) throw __mockHttpError(400, 'Vui lòng nhập nội dung bài viết');
+    if (String(target.content).length > 20000) throw __mockHttpError(400, 'Nội dung bài viết quá dài');
+  } else {
+    delete target.contentFormat;
+    target.content = String(target.content || '').trim().slice(0, 20000);
+    if (!target.content) throw __mockHttpError(400, 'Vui lòng nhập nội dung bài viết');
+  }
+  const norm = (raw, max, label, re) => {
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw)) throw __mockHttpError(400, `${label} không hợp lệ`);
+    if (raw.length > max) throw __mockHttpError(400, `Mỗi bài chỉ được tối đa ${max} ${label.toLowerCase()}`);
+    return raw.map((it, i) => {
+      if (!it || typeof it.fileUrl !== 'string' || typeof it.fileName !== 'string') throw __mockHttpError(400, `${label} #${i + 1} không hợp lệ`);
+      if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(it.fileUrl) || !re.test(it.fileUrl)) throw __mockHttpError(400, `${label} #${i + 1} sai định dạng cho phép`);
+      return { fileUrl: it.fileUrl, fileName: it.fileName };
+    });
+  };
+  target.images = norm(target.images, 8, 'Ảnh', /\.(jpe?g|png|webp)$/i);
+  target.videos = norm(target.videos, 2, 'Video', /\.(mp4|webm)$/i);
+  if (!target.coverImage) { target.coverImage = target.images[0] || null; return; }
+  const match = target.images.find((i) => i.fileUrl === target.coverImage.fileUrl);
+  if (!match) throw __mockHttpError(400, 'Ảnh đại diện phải là 1 trong các ảnh của bài viết');
+  target.coverImage = match;
+}
+
 function __mockValidateInternalPostCreate(payload, user) {
   const type = payload.type;
   payload.code = `${__MOCK_INTERNAL_TYPE_PREFIX[type] || 'BD'}-${Date.now()}`;
@@ -40,6 +72,7 @@ function __mockValidateInternalPostCreate(payload, user) {
     (type === 'REWARD' && user.perms?.internalRewardCreate)
   );
   if (!allowed) throw __mockHttpError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
+  __mockNormalizeInternalPostContentAndMedia(payload);
 
   // postCategory (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) — mirrors createValidation.js internalPosts.extraValidate.
   if (type === 'NEWS' || type === 'SHARE') {
@@ -128,11 +161,12 @@ function __mockRequestInternalPostInfo(payload, user, post) {
 }
 
 // Sửa bài Nháp/NEED_INFO rồi gửi lại — mirrors editInternalPost() ở lib/recordActions.js.
-const __MOCK_INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training'];
+const __MOCK_INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'contentFormat', 'attachment', 'images', 'coverImage', 'videos', 'postCategory', 'publishAt', 'training'];
 function __mockEditInternalPost(payload, user, post) {
   if (post.author !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw __mockHttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
   __MOCK_INTERNAL_POST_EDITABLE_FIELDS.forEach((field) => { if (payload[field] !== undefined) post[field] = payload[field]; });
+  __mockNormalizeInternalPostContentAndMedia(post);
   if (post.type === 'NEWS' && post.publishAt) {
     const ts = new Date(post.publishAt).getTime();
     if (!Number.isFinite(ts)) throw __mockHttpError(400, 'Thời gian đăng bài không hợp lệ');
@@ -1413,7 +1447,8 @@ window.fetch = async function (url, opts) {
       return __mockOkRes({ ok: true, item: result });
     }
 
-    if (u === '/api/upload' && method === 'POST') {
+    // '/api/upload?module=internalVideo' — "làn video" riêng (routes/upload.js, 9/2026), cùng xử lý mock.
+    if ((u === '/api/upload' || u.startsWith('/api/upload?')) && method === 'POST') {
       const file = opts.body && typeof opts.body.get === 'function' ? opts.body.get('file') : null;
       const name = file ? file.name : 'file.bin';
       const type = file ? file.type : 'application/octet-stream';
@@ -1426,7 +1461,9 @@ window.fetch = async function (url, opts) {
       const moduleKey = opts.body && typeof opts.body.get === 'function' ? opts.body.get('module') : null;
       window.__uploadModuleKeys = window.__uploadModuleKeys || [];
       window.__uploadModuleKeys.push(moduleKey);
-      return __mockOkRes({ fileUrl: `/uploads/${Date.now()}-mock-${safeName}`, fileName: name, fileType: type });
+      window.__uploadUrls = window.__uploadUrls || [];
+      window.__uploadUrls.push(u);
+      return __mockOkRes({ fileUrl: `/uploads/${Date.now()}-${__mockGenId()}-mock-${safeName}`, fileName: name, fileType: type });
     }
 
     if (u === '/api/training/parse-roster' && method === 'POST') {

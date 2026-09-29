@@ -21,6 +21,22 @@ const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB || '20', 10);
 
+// ===== Làn tải VIDEO (9/2026 — video bài Nhịp Sống HCRC/Góc Chia Sẻ) =====
+// Giới hạn RIÊNG mỗi video — hằng số đặt tên rõ ràng, đổi ở ĐÂY nếu cần nâng/hạ (client đọc cùng giá trị
+// qua INTERNAL_VIDEO_MAX_MB_CLIENT ở module-internalcomms-nhipsong.js chỉ để báo lỗi sớm, server vẫn là
+// nơi chặn thật). Vượt xa UPLOAD_MAX_MB chung (mặc định 20MB) nên KHÔNG thể đi chung 1 multer với mọi tệp
+// khác (multer.limits.fileSize cố định theo instance, và nới giới hạn chung lên 200MB sẽ mở cho MỌI module
+// khác tải tệp 200MB). Tách hẳn 1 instance multer riêng CHỈ nhận .mp4/.webm, chỉ dùng khi request tự khai
+// ?module=internalVideo trên URL (multer chưa parse body nên không đọc được field "module" trước khi chọn
+// instance) — field "module" trong body vẫn PHẢI khớp đúng 'internalVideo' (kiểm lại sau khi parse), không
+// cho mượn làn này để đẩy tệp khác. Triển khai sau Nginx: client_max_body_size cũng phải >= giá trị này.
+const INTERNAL_VIDEO_MODULE_KEY = 'internalVideo';
+const INTERNAL_VIDEO_MAX_MB = 200;
+const VIDEO_EXT = new Set(['.mp4', '.webm']);
+// Kiểm chữ ký nhị phân video chỉ cần phần đầu tệp (hộp "ftyp" của MP4 / header EBML của WebM) — KHÔNG đọc
+// nguyên tệp 200MB vào RAM như nhánh tài liệu/ảnh (vài MB) bên dưới.
+const VIDEO_SIGNATURE_HEAD_BYTES = 64 * 1024;
+
 // Mặc định SAN cho module MỚI khi admin CHƯA từng cấu hình riêng ở "Quản Lý Tệp File" (khác các module
 // cũ hơn — doc/submission/contract/...: KHÔNG cấu hình riêng thì rơi về ALLOWED_EXT chung, gồm cả
 // .pdf/.docx/.xlsx lẫn ảnh, vì các module đó vốn CHỈ tải lên tài liệu văn phòng). "trainingTestImage"
@@ -43,6 +59,10 @@ const MODULE_DEFAULT_ALLOWED_EXT = {
   // gợi ý (chỉ văn bản), mọi banner/ảnh tài liệu bị chặn tải lên dù đây là tính năng hợp lệ, KHÔNG hề
   // liên quan tới cấu hình loại tệp văn bản admin vừa chỉnh. Tách hẳn moduleKey riêng cho nhánh ảnh.
   internalImage: ['.jpg', '.jpeg', '.png', '.webp'],
+  // internalVideo (9/2026, video bài Nhịp Sống HCRC/Góc Chia Sẻ, tối đa 2 video/bài — trần số lượng kiểm ở
+  // lib/createValidation.js normalizeInternalPostMedia()) — CHỈ .mp4/.webm. Đi qua "làn video" RIÊNG (xem
+  // INTERNAL_VIDEO_MODULE_KEY bên dưới) vì dung lượng vượt xa giới hạn chung UPLOAD_MAX_MB.
+  internalVideo: ['.mp4', '.webm'],
   // operationEstimate (tệp đính kèm "danh mục lớn" của Danh Mục Đầu Tư, Vận Hành > QLDA) — theo đúng
   // yêu cầu người dùng "cho phép upload file dạng PDF, docx, xlsx" — CHỈ 3 định dạng này mặc định (admin
   // vẫn tự mở rộng được qua "Quản Lý Tệp File" nếu cần).
@@ -51,7 +71,8 @@ const MODULE_DEFAULT_ALLOWED_EXT = {
 const MODULE_DEFAULT_MAX_MB = {
   trainingTestImage: 5,
   checklistAnswerPhoto: 5,
-  internalImage: 5
+  internalImage: 5,
+  internalVideo: INTERNAL_VIDEO_MAX_MB
 };
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -62,34 +83,53 @@ const ALLOWED_EXT = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp'
 ]);
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeExt = ALLOWED_EXT.has(ext) ? ext : '';
-    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: MAX_MB * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (!ALLOWED_EXT.has(ext)) {
-      return cb(new HttpError(400, `Định dạng tệp không được hỗ trợ: ${ext || '(không rõ)'}`));
+// makeUploader(allowedExt, maxMb) — 1 instance multer cho 1 "làn" tải lên (làn chung ALLOWED_EXT/MAX_MB,
+// làn video VIDEO_EXT/INTERNAL_VIDEO_MAX_MB — xem chú thích INTERNAL_VIDEO_MODULE_KEY ở trên).
+function makeUploader(allowedExt, maxMb) {
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const safeExt = allowedExt.has(ext) ? ext : '';
+      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`);
     }
-    cb(null, true);
+  });
+  return multer({
+    storage,
+    limits: { fileSize: maxMb * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (!allowedExt.has(ext)) {
+        return cb(new HttpError(400, `Định dạng tệp không được hỗ trợ: ${ext || '(không rõ)'}`));
+      }
+      cb(null, true);
+    }
+  });
+}
+const upload = makeUploader(ALLOWED_EXT, MAX_MB);
+const uploadVideo = makeUploader(VIDEO_EXT, INTERNAL_VIDEO_MAX_MB);
+
+async function readFileHead(filePath, maxBytes) {
+  const fh = await fs.promises.open(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(maxBytes);
+    const { bytesRead } = await fh.read(buf, 0, maxBytes, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
   }
-});
+}
 
 // POST /api/upload  → nhận field "file" (+ field text "module" tuỳ chọn), trả về thông tin để lưu
 // vào collection JSON tương ứng
 router.post('/', uploadRateLimiter, (req, res) => {
-  upload.single('file')(req, res, async (err) => {
+  const isVideoLane = req.query && req.query.module === INTERNAL_VIDEO_MODULE_KEY;
+  const laneUploader = isVideoLane ? uploadVideo : upload;
+  const laneMaxMb = isVideoLane ? INTERNAL_VIDEO_MAX_MB : MAX_MB;
+  laneUploader.single('file')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+        return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${laneMaxMb}MB)` });
       }
       return res.status(400).json({ error: err.message });
     }
@@ -107,6 +147,12 @@ router.post('/', uploadRateLimiter, (req, res) => {
     // riêng (hoặc field "module" bỏ trống) thì coi như dùng nguyên danh sách tổng — không phá vỡ các
     // chỗ gọi /api/upload cũ chưa gửi kèm "module".
     const moduleKey = (req.body.module || '').trim();
+    // Làn video chỉ dành đúng cho moduleKey 'internalVideo' — khai ?module=internalVideo trên URL để được
+    // giới hạn 200MB nhưng body lại khai module khác (hoặc bỏ trống) thì TỪ CHỐI, không cho mượn làn.
+    if (isVideoLane && moduleKey !== INTERNAL_VIDEO_MODULE_KEY) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: 'Làn tải video chỉ dành cho video bài viết Truyền Thông Nội Bộ' });
+    }
     if (moduleKey) {
       try {
         const [config, sizeConfig] = await Promise.all([
@@ -143,7 +189,9 @@ router.post('/', uploadRateLimiter, (req, res) => {
     // ở multer.diskStorage phía trên).
     try {
       const declaredExt = path.extname(req.file.originalname).toLowerCase();
-      const buffer = await fs.promises.readFile(req.file.path);
+      const buffer = VIDEO_EXT.has(declaredExt)
+        ? await readFileHead(req.file.path, VIDEO_SIGNATURE_HEAD_BYTES)
+        : await fs.promises.readFile(req.file.path);
       const check = await verifyFileSignature(buffer, declaredExt);
       if (!check.ok) {
         fs.unlink(req.file.path, () => {});
@@ -175,3 +223,8 @@ router.post('/', uploadRateLimiter, (req, res) => {
 });
 
 module.exports = router;
+// Export phụ cho test (tests/test-internal-media-server.js) — không đổi cách server.js dùng router ở trên.
+module.exports.INTERNAL_VIDEO_MAX_MB = INTERNAL_VIDEO_MAX_MB;
+module.exports.INTERNAL_VIDEO_MODULE_KEY = INTERNAL_VIDEO_MODULE_KEY;
+module.exports.MODULE_DEFAULT_ALLOWED_EXT = MODULE_DEFAULT_ALLOWED_EXT;
+module.exports.MODULE_DEFAULT_MAX_MB = MODULE_DEFAULT_MAX_MB;

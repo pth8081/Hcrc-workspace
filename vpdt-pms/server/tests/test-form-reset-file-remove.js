@@ -978,7 +978,7 @@ async function main() {
         const state = await page.evaluate(() => ({
           internalTitle: document.getElementById('internalTitle').value,
           internalPostCategory: document.getElementById('internalPostCategory').value,
-          internalContent: document.getElementById('internalContent').value,
+          internalContent: document.getElementById('internalContent').textContent,
           internalFileValue: document.getElementById('internalFile').value,
           internalFileChip: document.getElementById('internalFileChip').innerHTML,
           pinChecked: document.getElementById('internalPinCheckbox').checked,

@@ -29,7 +29,7 @@ async function main() {
     await run('admin creates a NEWS post and it renders in the feed as APPROVED', async () => {
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Thông báo nghỉ lễ 2/9';
-        document.getElementById('internalContent').value = 'Công ty nghỉ lễ Quốc khánh từ ngày 1/9 đến 3/9.';
+        document.getElementById('internalContent').textContent = 'Công ty nghỉ lễ Quốc khánh từ ngày 1/9 đến 3/9.';
         document.getElementById('internalPostCategory').value = 'HOAT_DONG_CHUNG';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
@@ -53,7 +53,7 @@ async function main() {
       await page.evaluate(() => { window.__alerts.length = 0; });
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Bài viết không được phép';
-        document.getElementById('internalContent').value = 'Nội dung...';
+        document.getElementById('internalContent').textContent = 'Nội dung...';
       });
       const countBefore = await page.evaluate(() => DB.internalPosts.length);
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
