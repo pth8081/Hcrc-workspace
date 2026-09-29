@@ -216,6 +216,11 @@ async function submitHrpOnboarding(e) {
     phone: document.getElementById('hrpOnbPhone').value.trim(),
     startDate: document.getElementById('hrpOnbStartDate').value,
     directManagerUsername: document.getElementById('hrpOnbDirectManagerUsername').value || null,
+    // currentAddress/nationalId (10/2026, theo yêu cầu người dùng) — tuỳ chọn, ghi thẳng vào hồ sơ nháp
+    // employeeProfiles ngay khi tạo Onboarding nếu có nhập (xem hook ở routes/create.js + validate/trim ở
+    // hrProcesses.extraValidate, lib/createValidation.js). Để trống vẫn hợp lệ như cũ.
+    currentAddress: document.getElementById('hrpOnbAddress').value.trim(),
+    nationalId: document.getElementById('hrpOnbNationalId').value.trim(),
     note: document.getElementById('hrpOnbNote').value.trim(),
     customData
   };

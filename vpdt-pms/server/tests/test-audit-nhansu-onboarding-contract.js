@@ -209,6 +209,85 @@ async function main() {
       assert.strictEqual(profile.processId, r.json.item.id);
     });
 
+    console.log('\n== NEW — Địa Chỉ (currentAddress)/Số CCCD (nationalId) thu thập ngay ở form Onboarding ==');
+
+    await test('NEW để trống Mã NV -> tạo thành công, mã tự sinh đúng định dạng BL0001... (không regression từ đợt vá required)', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload());
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.ok(/^BL\d{4,}$/.test(r.json.item.employeeCode), `Mã tự sinh sai định dạng: ${r.json.item.employeeCode}`);
+    });
+
+    await test('NEW nhập Địa Chỉ + Số CCCD -> ghi đúng vào hồ sơ nháp employeeProfiles vừa tạo', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload({
+        currentAddress: '123 Đường ABC, Quận 1, TP.HCM', nationalId: '079099001234'
+      }));
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.ok(profile, 'Phải có hồ sơ nháp ứng với mã vừa tạo');
+      assert.strictEqual(profile.currentAddress, '123 Đường ABC, Quận 1, TP.HCM', 'Địa Chỉ phải ghi đúng vào hồ sơ nháp');
+      assert.strictEqual(profile.nationalId, '079099001234', 'Số CCCD phải ghi đúng vào hồ sơ nháp');
+      // profileEditHistory phải ghi nhận 1 lượt EDIT (đi qua applyProfileEdit(), cùng đường mọi lối ghi
+      // currentAddress/nationalId khác của hồ sơ) TIẾP THEO lượt CREATE ban đầu — không bỏ qua audit trail.
+      assert.ok(profile.profileEditHistory.some(h => h.type === 'EDIT'), 'Phải có 1 dòng lịch sử EDIT ghi nhận việc thêm Địa Chỉ/CCCD');
+    });
+
+    await test('NEW để trống CẢ HAI (Địa Chỉ/CCCD) -> hồ sơ nháp giữ nguyên null như cũ (không bị đụng vào)', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload());
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.strictEqual(profile.currentAddress, null, 'Để trống -> vẫn null như hành vi cũ');
+      assert.strictEqual(profile.nationalId, null, 'Để trống -> vẫn null như hành vi cũ');
+    });
+
+    await test('NEW chỉ nhập Địa Chỉ (để trống CCCD) -> CHỈ currentAddress được ghi, nationalId vẫn null (không bị ghi đè theo field còn lại)', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload({ currentAddress: '456 Đường XYZ' }));
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.strictEqual(profile.currentAddress, '456 Đường XYZ');
+      assert.strictEqual(profile.nationalId, null, 'Không nhập CCCD -> phải vẫn null, không bị ghi đè null->null gây nhầm lẫn field "đã sửa"');
+    });
+
+    await test('NEW Số CCCD trùng với hồ sơ nhân sự KHÁC đang có -> 409, KHÔNG tạo quy trình (chặn TRƯỚC khi tạo, tránh trạng thái nửa vời)', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      // Dùng đường "client gửi kèm employeeCode trỏ 1 hồ sơ DRAFT mồ côi có sẵn" (nhánh reusableDraft,
+      // xem routes/create.js) thay vì để trống Mã NV — nhánh để trống tự sinh mã + ĐẶT CHỖ hồ sơ DRAFT
+      // TRƯỚC KHI extraValidate chạy (side-effect CHỦ Ý đã có từ trước, xem test "#1 employeeCode KHÔNG
+      // tồn tại" ở trên/chú thích tại routes/create.js — mồ côi lúc validate field khác thất bại được
+      // chấp nhận), nên không dùng được để kiểm tra ĐÚNG bất biến "chặn trùng CCCD trước khi có side-effect".
+      APP_DATA.employeeProfiles = [
+        { employeeCode: 'BL0099', username: 'nv.cu', status: 'ACTIVE', nationalId: '079099009999', positionHistory: [], profileEditHistory: [] },
+        { employeeCode: 'BL0100', username: null, status: 'DRAFT', processId: null, nationalId: null, positionHistory: [], profileEditHistory: [] }
+      ];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload({ employeeCode: 'BL0100', nationalId: '079099009999' }));
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+      assert.ok(/CCCD/.test(r.json.error), JSON.stringify(r.json));
+      assert.strictEqual(STORE.hrProcesses.length, 0, 'Không được tạo quy trình Onboarding nào khi CCCD trùng');
+      assert.strictEqual(APP_DATA.employeeProfiles.length, 2, 'Không được đặt chỗ thêm hồ sơ DRAFT mồ côi nào ngoài 2 hồ sơ ban đầu');
+      assert.strictEqual(APP_DATA.employeeProfiles.find(p => p.employeeCode === 'BL0100').nationalId, null, 'Hồ sơ DRAFT tái dùng KHÔNG được ghi CCCD khi tạo quy trình thất bại giữa chừng');
+    });
+
+    await test('NEW Địa Chỉ/CCCD được trim khoảng trắng + giới hạn 300 ký tự (cùng khuôn field chung applyProfileEdit())', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const longAddress = 'X'.repeat(400);
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload({
+        currentAddress: `  ${longAddress}  `, nationalId: '  079099001234  '
+      }));
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.strictEqual(profile.currentAddress.length, 300, 'Địa Chỉ phải bị cắt tối đa 300 ký tự');
+      assert.strictEqual(profile.nationalId, '079099001234', 'Số CCCD phải được trim khoảng trắng 2 đầu');
+    });
+
     console.log('\n== #7 — Huỷ/xoá Onboarding phải giải phóng hồ sơ DRAFT đã đặt chỗ ==');
 
     await test('#7 huỷ quy trình Onboarding -> hồ sơ DRAFT liên kết bị xoá, Mã NV được dùng lại', async () => {

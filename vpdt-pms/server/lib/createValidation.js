@@ -3217,6 +3217,22 @@ const CREATE_MODULE_CONFIGS = {
         payload.employeeUsername = null;
         payload.isManagerialPosition = false;
         payload.successorUsername = null; payload.successorName = null;
+
+        // currentAddress/nationalId (10/2026, theo yêu cầu người dùng — form Onboarding trước đây KHÔNG
+        // thu thập được 2 field này, chỉ điền được SAU KHI hồ sơ tạo xong ở Hồ Sơ Nhân Sự). Cả 2 field
+        // KHÔNG bắt buộc (có thể bổ sung sau) — chỉ trim/giới hạn độ dài (cùng khuôn field chung mặc định
+        // của applyProfileEdit(), lib/employeeProfile.js — slice 300 ký tự), rồi ghi thẳng vào hồ sơ nháp
+        // employeeProfiles ngay sau khi hrProcesses tạo xong (xem hook "moduleKey === 'hrProcesses' &&
+        // record.processType === 'ONBOARDING'" ở routes/create.js). Chặn trùng CCCD/CMND với hồ sơ KHÁC
+        // (assertNationalIdNotDuplicated(), cùng luật đã áp cho mọi đường ghi CCCD khác — tạo tay/import
+        // Excel/sửa hồ sơ) NGAY TẠI ĐÂY, TRƯỚC KHI hrProcesses được tạo, để tránh trạng thái nửa vời (quy
+        // trình đã tạo xong nhưng field không ghi được vào hồ sơ do trùng CCCD).
+        payload.currentAddress = payload.currentAddress ? String(payload.currentAddress).trim().slice(0, 300) : '';
+        payload.nationalId = payload.nationalId ? String(payload.nationalId).trim().slice(0, 300) : '';
+        if (payload.nationalId) {
+          const { assertNationalIdNotDuplicated } = require('./employeeProfile');
+          assertNationalIdNotDuplicated(appData?.employeeProfiles, payload.nationalId, payload.employeeCode);
+        }
       } else {
         // OFFBOARDING — nhân viên đã có thật trong DB.users, snapshot NGAY LÚC TẠO (không đọc sống lại
         // sau) — đúng khuôn periodName/periodEndTime của budgetEntries hay dept/jobTitle snapshot của

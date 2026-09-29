@@ -105,6 +105,18 @@
               <input id="hrpOnbDirectManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpOnbDirectManagerInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
               <input id="hrpOnbDirectManagerUsername" type="hidden">
             </div>
+            <!-- Địa Chỉ/CCCD (10/2026, theo yêu cầu người dùng) — 2 field ĐÃ có sẵn trong Hồ Sơ Nhân Sự
+                 (currentAddress/nationalId, lib/employeeProfile.js) nhưng trước đây form Onboarding không
+                 thu thập, phải đợi HR bổ sung sau ở màn Hồ Sơ Nhân Sự. Cả 2 tuỳ chọn — có thể để trống,
+                 bổ sung sau như cũ. Xem submitHrpOnboarding() ở module-hrlifecycle.js. -->
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Địa Chỉ (tuỳ chọn)</label>
+              <input id="hrpOnbAddress" placeholder="Địa chỉ hiện tại" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Số CCCD (tuỳ chọn)</label>
+              <input id="hrpOnbNationalId" placeholder="Số CCCD/CMND" class="w-full border p-1.5 rounded text-xs">
+            </div>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi chú thêm (tuỳ chọn)</label>
