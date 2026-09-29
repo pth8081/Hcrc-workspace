@@ -918,12 +918,8 @@ function setRecruitmentReferralStatusUi(id, status) {
   }).catch(err => { alert(`⛔ ${err.message}`); renderRecruitmentManage(); });
 }
 
-// Ảnh đính kèm (theo mimetype trả về từ /api/upload) được hiển thị trực tiếp kiểu trang báo —
-// không cần mở qua Frame Protected Viewer như tài liệu/hợp đồng, vì nội dung Truyền thông không
-// phải hồ sơ mật. Tệp đính kèm không phải ảnh (PDF...) vẫn hiện link tải bình thường.
-function isInternalImageAttachment(att) {
-  return !!(att && typeof att.fileType === 'string' && att.fileType.startsWith('image/'));
-}
+// isInternalImageAttachment() đã CHUYỂN sang core.js (trang chủ cần gọi để hiện thumbnail tin — xem
+// renderDashboardNews() ở core-dashboard.js, luôn nạp sẵn), cạnh getInternalPostCoverImage().
 
 // "Tin tức" (NEWS) VÀ "Góc Chia Sẻ" (SHARE, từ Đợt E 9/2026) dùng chung khung hiển thị kiểu Facebook
 // (renderInternalFeedStyle) — bình luận/thích ngay dưới bài, không cần mở "Chi tiết". Đào tạo/Tuyển dụng/
