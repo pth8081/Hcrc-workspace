@@ -4726,6 +4726,20 @@ function initSimpleCatalogExcelToolsAll() {
 //   afterImportFns — (optional) mảng TÊN hàm gọi thêm sau khi lưu thành công (VD làm mới bộ lọc liên quan).
 // Thêm 1 danh mục: thêm entry ở đây + entry server + đặt <div id="objectCatalogExcelTools_<key>"></div> vào
 // đúng khối HTML (systemSection.html) — initObjectCatalogExcelToolsAll() tự bơm 3 nút.
+//
+// objectCatalogKeepIdMerge — beforeMerge dùng chung cho danh mục có idField: ghi đè field từ Excel, GIỮ
+// nguyên id cũ + mọi field khác Excel không có (computeObjectCatalogMerge() ở trên đã tự giữ idField khi
+// gộp, hàm này chỉ là lớp bảo hiểm thêm khi có field phụ khác).
+function objectCatalogKeepIdMerge(existingItem, importedItem) {
+  return { ...(existingItem || {}), ...(importedItem || {}), ...(existingItem && existingItem.id != null ? { id: existingItem.id } : {}) };
+}
+// objectCatalogToList — chuẩn hoá 1 giá trị cột type 'array' đã được server parse thành mảng (hoặc chuỗi
+// nối sep nếu vì lý do gì đó chưa tách) về mảng chuỗi đã trim/dedupe.
+function objectCatalogToList(v, sep = ',') {
+  const arr = Array.isArray(v) ? v : String(v ?? '').split(sep);
+  const seen = new Set();
+  return arr.map(s => String(s).trim()).filter(s => s && !seen.has(s) && seen.add(s));
+}
 const OBJECT_CATALOG_EXCEL_CONFIG = {
   deptGroups: {
     label: 'Khối/Ban',
@@ -4747,6 +4761,92 @@ const OBJECT_CATALOG_EXCEL_CONFIG = {
     columns: [
       { header: 'Tên Chức Danh', key: 'label', type: 'text', required: true }
     ]
+  },
+  carVehicleTypes: {
+    label: 'Loại Xe Cụ Thể',
+    dataKey: 'carVehicleTypes',
+    matchKey: 'name',
+    idField: 'id',
+    renderFn: 'renderCarVehicleTypeList',
+    columns: [
+      { header: 'Tên Loại Xe', key: 'name', type: 'text', required: true },
+      { header: 'Là Xe Taxi', key: 'isTaxi', type: 'bool' },
+      { header: 'Biển Số Cố Định', key: 'bienSo', type: 'text' }
+    ],
+    beforeMerge: (existingItem, importedItem) => {
+      const merged = objectCatalogKeepIdMerge(existingItem, importedItem);
+      if (merged.isTaxi) merged.bienSo = ''; // mirror saveCarVehicleType(): mục Taxi không có BKS cố định
+      return merged;
+    }
+  },
+  // DB.meetingRooms — catalogKey khác dataKey (tên màn "Danh Mục Phòng Họp").
+  meetingRoomCatalog: {
+    label: 'Phòng Họp',
+    dataKey: 'meetingRooms',
+    matchKey: 'name',
+    idField: 'id',
+    renderFn: 'renderMeetingRoomCatalogList',
+    columns: [
+      { header: 'Tên Phòng Họp Đầy Đủ', key: 'name', type: 'text', required: true },
+      { header: 'Tên Gọn', key: 'short', type: 'text', required: true }
+    ],
+    beforeMerge: objectCatalogKeepIdMerge
+  },
+  // QUAN TRỌNG: codesBySize (Mã SKU theo size, sinh lúc GĐST xác nhận nhận lần đầu — xem
+  // backfillUniformSkuCodes() ở lib/recordActions.js) KHÔNG có trong Excel -> beforeMerge PHẢI copy NGUYÊN
+  // codesBySize cũ sang, chỉ ghi đè name/sizes từ Excel. Mục mới (existingItem rỗng) -> codesBySize {}.
+  uniformCatalog: {
+    label: 'Đồng Phục',
+    dataKey: 'uniformCatalog',
+    matchKey: 'name',
+    idField: 'id',
+    renderFn: 'renderUniformCatalogList',
+    columns: [
+      { header: 'Tên Mặt Hàng', key: 'name', type: 'text', required: true },
+      { header: 'Danh Sách Size', key: 'sizes', type: 'array', sep: ',', required: true }
+    ],
+    beforeMerge: (existingItem, importedItem) => {
+      const e = existingItem || {};
+      const i = importedItem || {};
+      const merged = {
+        ...e,
+        name: i.name != null && String(i.name).trim() ? String(i.name).trim() : e.name,
+        sizes: i.sizes != null ? objectCatalogToList(i.sizes) : [...(e.sizes || [])],
+        codesBySize: { ...(e.codesBySize || {}) }
+      };
+      if (e.id != null) merged.id = e.id;
+      return merged;
+    }
+  },
+  // Ngày là khoá duy nhất tự nhiên (submitHacHoliday() đã chặn trùng ngày) -> matchKey 'date'.
+  publicHolidays: {
+    label: 'Ngày Nghỉ Lễ',
+    dataKey: 'publicHolidays',
+    matchKey: 'date',
+    renderFn: 'renderHacHolidayTable',
+    columns: [
+      { header: 'Ngày (dd/mm/yyyy)', key: 'date', type: 'date', required: true },
+      { header: 'Tên Ngày Lễ', key: 'name', type: 'text', required: true }
+    ],
+    beforeMerge: (existingItem, importedItem) => ({ ...(existingItem || {}), date: existingItem?.date ?? importedItem?.date, name: importedItem?.name ?? existingItem?.name })
+  },
+  shiftTemplates: {
+    label: 'Ca Làm Việc Siêu Thị',
+    dataKey: 'shiftTemplates',
+    matchKey: 'shiftCode',
+    idField: 'id',
+    renderFn: 'renderHacShiftTemplateTable',
+    columns: [
+      { header: 'Mã Ca', key: 'shiftCode', type: 'text', required: true },
+      { header: 'Tên Ca', key: 'shiftName', type: 'text', required: true },
+      { header: 'Giờ Bắt Đầu', key: 'startTime', type: 'time', required: true },
+      { header: 'Giờ Kết Thúc', key: 'endTime', type: 'time', required: true },
+      { header: 'Phút Nghỉ', key: 'breakMinutes', type: 'int' },
+      { header: 'Ca Đêm', key: 'isNightShift', type: 'bool' },
+      { header: 'Giờ Công Chuẩn', key: 'standardHours', type: 'number', required: true },
+      { header: 'Đang Dùng', key: 'isActive', type: 'bool' }
+    ],
+    beforeMerge: objectCatalogKeepIdMerge
   }
 };
 

@@ -62,6 +62,9 @@ function setUniformSubTab(subTab) {
 
   if (subTab === 'PERIODS') {
     renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList();
+    // Tải Mẫu/Xuất/Nhập Excel Danh Mục Đồng Phục (#objectCatalogExcelTools_uniformCatalog, xem
+    // OBJECT_CATALOG_EXCEL_CONFIG.uniformCatalog ở core.js) — ẩn/hiện theo quyền trong renderUniformCatalogList().
+    initObjectCatalogExcelToolsAll();
     // Form "Tạo Kỳ Cấp Phát" chỉ dành cho uniformManage/admin — approver-only vào tab này CHỈ để
     // duyệt/từ chối, không tạo kỳ mới được (server cũng chặn nếu cố gọi thẳng API).
     document.getElementById('uniformCreatePeriodBlock')?.classList.toggle('hidden', !canHc);
@@ -114,6 +117,9 @@ function renderUniformCatalogList() {
   if (!wrap) return;
   const canEdit = !!currentUser.perms?.admin || canManageUniform(currentUser);
   if (form) form.classList.toggle('hidden', !canEdit);
+  // Khối Excel (Tải Mẫu/Xuất/Nhập) cùng quyền với form Thêm/Sửa — gate ghi uniformCatalog ở
+  // routes/data.js cũng chỉ admin/uniformManage.
+  document.getElementById('objectCatalogExcelTools_uniformCatalog')?.classList.toggle('hidden', !canEdit);
   const catalog = DB.uniformCatalog || [];
   if (!catalog.length) {
     wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có mặt hàng nào trong danh mục.</div>`;

@@ -113,7 +113,14 @@ async function runServerTests(run) {
 
   await run.run('[Server] Parse: danh mục chưa cấu hình -> 501, danh mục lạ -> 404, vượt trần dòng -> 400', async () => {
     const buf = await buildXlsx([['Tên'], ['A']]);
-    await expectHttpError(() => parseObjectCatalogFile('carVehicleTypes', buf, '.xlsx'), 501);
+    // Cả 7 catalogKey trong OBJECT_CATALOG_IMPORT_CONFIG giờ đã điền đủ columns (không còn slot TODO rỗng
+    // để test tự nhiên nữa) — gắn tạm 1 entry columns:[] để kiểm đúng nhánh phòng thủ 501, xoá ngay sau.
+    OBJECT_CATALOG_IMPORT_CONFIG.__testUnconfigured = { label: 'Test Chưa Cấu Hình', columns: [], allow: () => true };
+    try {
+      await expectHttpError(() => parseObjectCatalogFile('__testUnconfigured', buf, '.xlsx'), 501);
+    } finally {
+      delete OBJECT_CATALOG_IMPORT_CONFIG.__testUnconfigured;
+    }
     await expectHttpError(() => parseObjectCatalogFile('positionTypes', buf, '.xlsx'), 404);
     const rows = [['Tên Chức Danh']];
     for (let i = 0; i <= MAX_IMPORT_ROWS; i++) rows.push([`Chức danh ${i}`]);

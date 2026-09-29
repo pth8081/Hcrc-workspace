@@ -29,10 +29,12 @@
 //                đó ở routes/data.js (ADMIN_ONLY_KEYS -> admin; NON_ADMIN_GATED_KEYS -> đúng hàm allow ở đó).
 //   columns    — [{header, key, type, required?, ...}] — type hỗ trợ (xem parseCellByType()):
 //                 'text'     — chuỗi (maxLength mặc định 200).
-//                 'bool'     — Có/Không (nhận thêm x/yes/true/1 và không/no/false/0; ô trống = false).
-//                                File mẫu tự gắn dropdown Có/Không.
-//                 'int'      — số nguyên (min/max optional). Ô trống = null (trừ khi required).
-//                 'number'   — số thực (min/max optional).
+//                 'bool'     — Có/Không (nhận thêm x/yes/true/1 và không/no/false/0; ô trống = false, trừ
+//                                khi cột khai `default: true` — VD "Đang Dùng" của shiftTemplates, khớp
+//                                mặc định `isActive: true` khi tạo mới thủ công). File mẫu tự gắn dropdown.
+//                 'int'      — số nguyên (min/max optional). Ô trống = null, trừ khi cột khai `default`
+//                                (VD "Phút Nghỉ" của shiftTemplates default 0).
+//                 'number'   — số thực (min/max optional). Cùng quy tắc `default` khi trống.
 //                 'time'     — giờ HH:mm (nhận cả ô kiểu Giờ thật của Excel).
 //                 'date'     — ngày, lưu 'YYYY-MM-DD' (nhận ô kiểu Ngày thật, 'dd/mm/yyyy', 'yyyy-mm-dd').
 //                 'enum'     — 1 giá trị trong options: [{value, label}] (so theo label hoặc value, không
@@ -93,45 +95,93 @@ const OBJECT_CATALOG_IMPORT_CONFIG = {
   // ─── 5 SLOT DƯỚI ĐÂY: TODO — nhánh song song điền `columns` + `sampleRows` (+ `matchKey` nếu khác 'name').
   // `allow` đã điền sẵn khớp đúng gate ghi hiện có ở routes/data.js — kiểm lại khi điền. Để `columns: []`
   // thì 2 route trả 501 "chưa hỗ trợ" (an toàn, không lỗi). ───────────────────────────────────────────────
+  // Loại Xe Cụ Thể — {id, name, bienSo, isTaxi} (module-dangkyxe.js saveCarVehicleType()). id do CLIENT
+  // tự sinh khi gộp (idField). Client (beforeMerge) tự xoá bienSo nếu isTaxi=true, mirror saveCarVehicleType().
   carVehicleTypes: {
     label: 'Loại Xe Cụ Thể',
     dataKey: 'carVehicleTypes',
     matchKey: 'name',
     allow: isAdmin, // ADMIN_ONLY_KEYS
-    columns: [], // TODO(nhánh song song): {id, name, bienSo, isTaxi} — xem saveCarVehicleType() ở module-dangkyxe.js
-    sampleRows: []
+    columns: [
+      { header: 'Tên Loại Xe', key: 'name', type: 'text', required: true, maxLength: 100, width: 28 },
+      { header: 'Là Xe Taxi', key: 'isTaxi', type: 'bool', width: 14 },
+      { header: 'Biển Số Cố Định', key: 'bienSo', type: 'text', maxLength: 20, width: 20,
+        note: 'Chỉ áp dụng cho xe KHÔNG phải Taxi — để trống nếu là Taxi hoặc không có biển cố định.' }
+    ],
+    sampleRows: [
+      { name: 'Xe 4 Chỗ', isTaxi: false, bienSo: '29A-123.45' },
+      { name: 'Taxi Mai Linh', isTaxi: true, bienSo: '' }
+    ]
   },
+  // DB.meetingRooms — {id, name, short} (module-phonghop.js). catalogKey 'meetingRoomCatalog' khác dataKey.
   meetingRoomCatalog: {
     label: 'Danh Mục Phòng Họp',
     dataKey: 'meetingRooms', // catalogKey 'meetingRoomCatalog' (tên khối UI) nhưng dữ liệu nằm ở AppData 'meetingRooms'
     matchKey: 'name',
-    allow: isAdmin, // TODO(nhánh song song): xác nhận lại gate ghi của key này ở routes/data.js
-    columns: [], // TODO(nhánh song song)
-    sampleRows: []
+    allow: isAdmin, // ADMIN_ONLY_KEYS
+    columns: [
+      { header: 'Tên Phòng Họp Đầy Đủ', key: 'name', type: 'text', required: true, maxLength: 100, width: 34 },
+      { header: 'Tên Gọn', key: 'short', type: 'text', required: true, maxLength: 30, width: 20 }
+    ],
+    sampleRows: [
+      { name: 'Phòng Họp Tầng 3', short: 'PH3' },
+      { name: 'Phòng Họp Ban Giám Đốc', short: 'PH BGĐ' }
+    ]
   },
+  // {id, name, sizes:[], codesBySize:{}} (module-dongphuc.js). codesBySize (Mã SKU theo size, sinh lúc GĐST
+  // xác nhận nhận lần đầu — backfillUniformSkuCodes() ở lib/recordActions.js) KHÔNG có trong Excel — client
+  // (beforeMerge) PHẢI giữ nguyên codesBySize cũ, chỉ ghi đè name/sizes.
   uniformCatalog: {
     label: 'Danh Mục Đồng Phục',
     dataKey: 'uniformCatalog',
     matchKey: 'name',
     allow: (perms) => !!(perms?.admin || perms?.uniformManage), // khớp isCurrentlyAdminOrUniformManage()
-    columns: [], // TODO(nhánh song song) — client dùng hook beforeMerge để giữ field phụ (SKU...) không có trong Excel
-    sampleRows: []
+    columns: [
+      { header: 'Tên Mặt Hàng', key: 'name', type: 'text', required: true, maxLength: 100, width: 30 },
+      { header: 'Danh Sách Size', key: 'sizes', type: 'array', sep: ',', required: true, width: 40,
+        note: 'Các size cách nhau bằng dấu phẩy ",", VD "S, M, L, XL". Mã SKU theo size KHÔNG chỉnh qua Excel.' }
+    ],
+    sampleRows: [
+      { name: 'Áo Đồng Phục Nam', sizes: ['S', 'M', 'L', 'XL'] },
+      { name: 'Quần Đồng Phục Nữ', sizes: ['S', 'M', 'L'] }
+    ]
   },
+  // {date:'YYYY-MM-DD', name} (module-conghop.js submitHacHoliday() đã chặn trùng ngày) — matchKey 'date'.
   publicHolidays: {
     label: 'Ngày Lễ',
     dataKey: 'publicHolidays',
     matchKey: 'date',
     allow: (perms) => !!(perms?.admin || perms?.hrAttendanceManage), // NON_ADMIN_GATED_KEYS['publicHolidays']
-    columns: [], // TODO(nhánh song song): {date:'YYYY-MM-DD', name} — type 'date' đã hỗ trợ sẵn
-    sampleRows: []
+    columns: [
+      { header: 'Ngày (dd/mm/yyyy)', key: 'date', type: 'date', required: true, width: 20 },
+      { header: 'Tên Ngày Lễ', key: 'name', type: 'text', required: true, maxLength: 100, width: 30 }
+    ],
+    sampleRows: [
+      { date: '2027-01-01', name: 'Tết Dương Lịch' },
+      { date: '2027-04-30', name: 'Ngày Giải Phóng Miền Nam' }
+    ]
   },
+  // {id, shiftCode, shiftName, startTime, endTime, breakMinutes, isNightShift, standardHours, isActive}
+  // (module-conghop.js) — matchKey 'shiftCode' (mã ca là khoá nghiệp vụ duy nhất).
   shiftTemplates: {
     label: 'Ca Làm Việc',
     dataKey: 'shiftTemplates',
     matchKey: 'shiftCode',
     allow: (perms) => !!(perms?.admin || perms?.hrAttendanceManage || perms?.hrShiftRosterManage), // NON_ADMIN_GATED_KEYS['shiftTemplates']
-    columns: [], // TODO(nhánh song song): {id, shiftCode, shiftName, startTime, endTime, ...} — type 'time' đã hỗ trợ sẵn
-    sampleRows: []
+    columns: [
+      { header: 'Mã Ca', key: 'shiftCode', type: 'text', required: true, maxLength: 20, width: 14 },
+      { header: 'Tên Ca', key: 'shiftName', type: 'text', required: true, maxLength: 60, width: 24 },
+      { header: 'Giờ Bắt Đầu', key: 'startTime', type: 'time', required: true, width: 14 },
+      { header: 'Giờ Kết Thúc', key: 'endTime', type: 'time', required: true, width: 14 },
+      { header: 'Phút Nghỉ', key: 'breakMinutes', type: 'int', min: 0, max: 480, default: 0, width: 14 },
+      { header: 'Ca Đêm', key: 'isNightShift', type: 'bool', width: 14 },
+      { header: 'Giờ Công Chuẩn', key: 'standardHours', type: 'number', required: true, min: 0, max: 24, width: 16 },
+      { header: 'Đang Dùng', key: 'isActive', type: 'bool', default: true, width: 14 }
+    ],
+    sampleRows: [
+      { shiftCode: 'CA1', shiftName: 'Ca Sáng', startTime: '06:00', endTime: '14:00', breakMinutes: 30, isNightShift: false, standardHours: 7.5, isActive: true },
+      { shiftCode: 'CA3', shiftName: 'Ca Đêm', startTime: '22:00', endTime: '06:00', breakMinutes: 30, isNightShift: true, standardHours: 7.5, isActive: true }
+    ]
   }
 };
 
@@ -223,7 +273,7 @@ function parseCellByType(col, rawCell, ctx) {
 
   switch (col.type) {
     case 'bool': {
-      if (empty) return { value: false };
+      if (empty) return { value: col.default !== undefined ? !!col.default : false };
       if (typeof raw === 'boolean') return { value: raw };
       const n = normalizeText(text);
       if (['co', 'x', 'yes', 'y', 'true', '1', 'dung'].includes(n)) return { value: true };
@@ -232,7 +282,7 @@ function parseCellByType(col, rawCell, ctx) {
     }
     case 'int':
     case 'number': {
-      if (empty) return { value: null };
+      if (empty) return { value: col.default !== undefined ? col.default : null };
       const num = typeof raw === 'number' ? raw : Number(text.replace(/\s/g, '').replace(',', '.'));
       if (!Number.isFinite(num)) return { error: `Cột "${col.header}" phải là số (đang là "${text}")` };
       if (col.type === 'int' && !Number.isInteger(num)) return { error: `Cột "${col.header}" phải là số nguyên (đang là "${text}")` };

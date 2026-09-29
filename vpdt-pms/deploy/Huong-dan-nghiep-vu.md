@@ -2825,7 +2825,9 @@ Cấu Hình) tự ẩn/hiện theo đúng quyền.
 - **Cấu Hình** (HR, quyền **"🕐 Quản Lý Chấm Công"**) — Giờ Hành Chính (giờ
   vào/ra chuẩn công ty, thời gian trễ được phép), **Ngày Lễ/Nghỉ Cố Định**
   (loại trừ khỏi tính đi muộn/tính tăng ca ngày lễ), **Mẫu Ca Làm Việc** (mã
-  ca, tên, giờ bắt đầu/kết thúc, số giờ chuẩn — dùng chung cho mọi siêu thị).
+  ca, tên, giờ bắt đầu/kết thúc, số giờ chuẩn — dùng chung cho mọi siêu thị;
+  sửa tại chỗ 1 ca đã tạo bằng nút **"✏️ Sửa"** — giữ nguyên id nên lịch phân
+  ca đã lập không bị ảnh hưởng, kể cả khi đổi Mã Ca).
 - **Phân quyền** (khối cây phân quyền Nhân Sự): **"🕐 Quản Lý Chấm Công"**
   (HR, toàn quyền — chấm công/phép năm/cấu hình toàn công ty), **"✅ Duyệt
   Nghỉ Phép"** (quản lý trực tiếp — CHỈ duyệt được đơn của nhân viên thực sự

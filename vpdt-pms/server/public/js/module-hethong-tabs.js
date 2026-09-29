@@ -71,7 +71,10 @@ function setSystemSubTab(subTab) {
     // innerHTML tĩnh, không có state gì mất khi vẽ lại).
     initSimpleCatalogExcelToolsAll();
     // initObjectCatalogExcelToolsAll() (core.js, 10/2026) — cùng vai trò cho danh mục dạng OBJECT (nhiều
-    // field) qua OBJECT_CATALOG_EXCEL_CONFIG, bơm vào #objectCatalogExcelTools_<key>.
+    // field) qua OBJECT_CATALOG_EXCEL_CONFIG, bơm vào #objectCatalogExcelTools_<key>. Ở tab này có
+    // #objectCatalogExcelTools_deptGroups/storeJobTitles/positionTypes/carVehicleTypes/meetingRoomCatalog.
+    // Các danh mục object ở module khác (Đồng Phục, Công & Phép) tự gọi lại hàm này trong luồng render
+    // tab của chính module đó.
     initObjectCatalogExcelToolsAll();
     setAdminSubTab(activeAdminSubTab);
     positionAdminSubTabBar();
