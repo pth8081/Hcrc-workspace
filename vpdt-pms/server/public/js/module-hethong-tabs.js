@@ -70,6 +70,11 @@ function setSystemSubTab(subTab) {
     // chuẩn hoá Excel toàn hệ thống) — gọi LẶP LẠI mỗi lần vào tab ADMIN vẫn an toàn (chỉ gán lại đúng
     // innerHTML tĩnh, không có state gì mất khi vẽ lại).
     initSimpleCatalogExcelToolsAll();
+    // initObjectCatalogExcelToolsAll() (core.js) — cùng vai trò cho danh mục dạng OBJECT (nhiều field) ở
+    // tab này: #objectCatalogExcelTools_carVehicleTypes / #objectCatalogExcelTools_meetingRoomCatalog
+    // (xem OBJECT_CATALOG_EXCEL_CONFIG). Các danh mục object ở module khác (Đồng Phục, Công & Phép) tự gọi
+    // lại hàm này trong luồng render tab của chính module đó.
+    initObjectCatalogExcelToolsAll();
     setAdminSubTab(activeAdminSubTab);
     positionAdminSubTabBar();
   }

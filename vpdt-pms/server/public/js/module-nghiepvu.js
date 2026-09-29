@@ -942,7 +942,7 @@ const NGHIEP_VU_DOCS = {
       { role: 'Nhân viên', text: 'vào <b>💼 Nhân Sự → ⏱️ Công &amp; Phép</b> (sidebar) → tab <b>"🙋 Của Tôi"</b> → bấm <b>"📝 Nộp Đơn Nghỉ Phép"</b> → chọn loại phép + số ngày/giờ → có thể bấm <b>"🔍 Xem Quy Trình"</b> để xem trước ai sẽ duyệt → gửi. Nhân viên chấm công theo ca (SHIFT_BASED) nộp đơn "Xin Đổi Ca" tương tự (cũng có nút Xem Quy Trình riêng).' },
       { role: 'Quản lý trực tiếp / Nhân Sự', text: 'tab <b>"✅ Duyệt Nghỉ Phép"</b> → tìm đơn đang chờ (của nhân viên thuộc quyền quản lý, đệ quy mọi cấp dưới) → Duyệt hoặc Từ chối — Duyệt Phép Năm mới trừ quỹ phép, các loại phép khác chỉ ghi nhận chấm công.' },
       { role: 'Quản lý siêu thị', text: 'phân ca cho nhân viên: tab <b>"📅 Phân Ca Siêu Thị"</b> → bấm <b>"➕ Phân Ca Mới"</b>.' },
-      { role: 'Nhân Sự', text: 'tab <b>"🛠️ Quản Lý & Cấu Hình"</b> để: bổ sung bản ghi công thủ công ("➕ Bổ Sung Bản Ghi Công"), tạo/sửa phép năm từng người ("➕ Tạo/Sửa Phép Năm"), cấu hình giờ hành chính, ngày lễ, mẫu ca làm việc, hoặc tạo API Key cho máy chấm công.' },
+      { role: 'Nhân Sự', text: 'tab <b>"🛠️ Quản Lý & Cấu Hình"</b> để: bổ sung bản ghi công thủ công ("➕ Bổ Sung Bản Ghi Công"), tạo/sửa phép năm từng người ("➕ Tạo/Sửa Phép Năm"), cấu hình giờ hành chính, ngày lễ, mẫu ca làm việc ("➕ Thêm Mẫu Ca", sửa 1 ca đã tạo bằng nút "✏️ Sửa" ở cột Thao Tác, "Ngừng dùng"/"Bật lại"), hoặc tạo API Key cho máy chấm công.' },
     ],
     footer: { left: [
       { label: 'Không hiện ở Báo Cáo chung', text: 'dữ liệu chấm công/phép không đưa vào báo cáo tổng hợp dùng chung, như các dữ liệu nhạy cảm khác của Nhân Sự.' },

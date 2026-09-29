@@ -449,6 +449,9 @@ function renderHacManageView() {
   renderHacHolidayTable();
   renderHacShiftTemplateTable();
   renderAttendanceClockApiKeysTable();
+  // Tải Mẫu/Xuất/Nhập Excel cho Ngày Lễ + Mẫu Ca (#objectCatalogExcelTools_publicHolidays/_shiftTemplates,
+  // xem OBJECT_CATALOG_EXCEL_CONFIG ở core.js).
+  initObjectCatalogExcelToolsAll();
 }
 
 function renderHacManageAttendanceTable() {
@@ -769,16 +772,52 @@ function renderHacShiftTemplateTable() {
       <td class="p-2">${escapeHtml(t.startTime)} - ${escapeHtml(t.endTime)}</td>
       <td class="p-2">${t.standardHours}</td>
       <td class="p-2">${t.isActive === false ? '<span class="text-gray-400 font-bold">Ngừng dùng</span>' : '<span class="text-green-700 font-bold">Đang dùng</span>'}</td>
-      <td class="p-2"><button type="button" data-op="toggleHacShiftTemplateActive" data-arg0="${t.id}" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-300">${t.isActive === false ? 'Bật lại' : 'Ngừng dùng'}</button></td>
+      <td class="p-2 whitespace-nowrap">
+        <button type="button" data-op="editHacShiftTemplate" data-arg0="${t.id}" class="text-indigo-600 hover:text-indigo-800 text-[11px] font-bold mr-2">✏️ Sửa</button>
+        <button type="button" data-op="toggleHacShiftTemplateActive" data-arg0="${t.id}" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-300">${t.isActive === false ? 'Bật lại' : 'Ngừng dùng'}</button>
+      </td>
     </tr>
   `).join('');
 }
 
+// editingHacShiftTemplateId — id mẫu ca đang SỬA qua modal dùng chung với "Thêm" (10/2026, thêm nút
+// "✏️ Sửa" — trước đây chỉ Thêm/Ngừng dùng, gõ sai giờ/tên/số giờ chuẩn không sửa tại chỗ được; cùng
+// khuôn editHacHoliday() ngay trên). null = đang ở chế độ THÊM MỚI. Sửa AN TOÀN kể cả đổi Mã Ca: lịch
+// phân ca (shiftRosters) tham chiếu mẫu ca theo shiftTemplateId (xem lib/attendance.js), không theo mã.
+let editingHacShiftTemplateId = null;
+
+function setHacShiftTemplateModalTitle(isEdit) {
+  const title = document.getElementById('hacShiftTemplateModalTitle');
+  if (title) title.textContent = isEdit ? '✏️ Sửa Mẫu Ca Làm Việc' : '🕒 Thêm Mẫu Ca Làm Việc';
+}
+
 function openHacShiftTemplateModal() {
+  editingHacShiftTemplateId = null;
   document.getElementById('hacShiftTemplateForm').reset();
+  setHacShiftTemplateModalTitle(false);
   document.getElementById('hacShiftTemplateModal').classList.remove('hidden');
 }
-function closeHacShiftTemplateModal() { document.getElementById('hacShiftTemplateModal').classList.add('hidden'); }
+
+function editHacShiftTemplate(id) {
+  const t = (DB.shiftTemplates || []).find(x => x.id === Number(id));
+  if (!t) return;
+  editingHacShiftTemplateId = t.id;
+  document.getElementById('hacShiftTemplateForm').reset();
+  document.getElementById('hacStShiftCode').value = t.shiftCode || '';
+  document.getElementById('hacStShiftName').value = t.shiftName || '';
+  document.getElementById('hacStStartTime').value = t.startTime || '';
+  document.getElementById('hacStEndTime').value = t.endTime || '';
+  document.getElementById('hacStBreakMinutes').value = t.breakMinutes ?? 0;
+  document.getElementById('hacStStandardHours').value = t.standardHours ?? '';
+  document.getElementById('hacStIsNightShift').checked = !!t.isNightShift;
+  setHacShiftTemplateModalTitle(true);
+  document.getElementById('hacShiftTemplateModal').classList.remove('hidden');
+}
+
+function closeHacShiftTemplateModal() {
+  editingHacShiftTemplateId = null;
+  document.getElementById('hacShiftTemplateModal').classList.add('hidden');
+}
 
 async function submitHacShiftTemplate(e) {
   e.preventDefault();
@@ -788,13 +827,33 @@ async function submitHacShiftTemplate(e) {
   const endTime = document.getElementById('hacStEndTime').value;
   const standardHours = Number(document.getElementById('hacStStandardHours').value);
   if (!shiftCode || !shiftName || !startTime || !endTime || !Number.isFinite(standardHours)) return alert('⛔ Vui lòng điền đủ thông tin.');
-  if ((DB.shiftTemplates || []).some(t => t.shiftCode === shiftCode)) return alert('⛔ Mã Ca này đã tồn tại.');
+  const isEdit = editingHacShiftTemplateId != null;
+  // Trùng Mã Ca: chặn khi trùng với mẫu ca KHÁC — riêng đang sửa thì mã GIỮ NGUYÊN của chính nó không
+  // tính là trùng (cho phép chỉ sửa giờ/tên mà không phải đổi mã).
+  if ((DB.shiftTemplates || []).some(t => t.shiftCode === shiftCode && t.id !== editingHacShiftTemplateId)) return alert('⛔ Mã Ca này đã tồn tại.');
   const breakMinutes = Number(document.getElementById('hacStBreakMinutes').value) || 0;
   const isNightShift = document.getElementById('hacStIsNightShift').checked;
-  const nextId = ((DB.shiftTemplates || []).reduce((m, t) => Math.max(m, Number(t.id) || 0), 0)) + 1;
-  DB.shiftTemplates = [...(DB.shiftTemplates || []), { id: nextId, shiftCode, shiftName, startTime, endTime, breakMinutes, isNightShift, standardHours, isActive: true }];
+  const prevList = DB.shiftTemplates || [];
+  if (isEdit) {
+    const idx = prevList.findIndex(t => t.id === editingHacShiftTemplateId);
+    if (idx === -1) {
+      alert('⚠️ Mẫu ca đang sửa không còn tồn tại (có thể vừa bị xoá) — huỷ sửa, vui lòng thêm lại nếu cần.');
+      closeHacShiftTemplateModal();
+      renderHacShiftTemplateTable();
+      return;
+    }
+    const next = [...prevList];
+    // Giữ nguyên id + isActive (bật/tắt qua nút "Ngừng dùng"/"Bật lại" riêng, form không có ô này).
+    next[idx] = { ...prevList[idx], shiftCode, shiftName, startTime, endTime, breakMinutes, isNightShift, standardHours };
+    DB.shiftTemplates = next;
+  } else {
+    const nextId = (prevList.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0)) + 1;
+    DB.shiftTemplates = [...prevList, { id: nextId, shiftCode, shiftName, startTime, endTime, breakMinutes, isNightShift, standardHours, isActive: true }];
+  }
   const ok = await syncStorage('shiftTemplates');
-  if (ok) { closeHacShiftTemplateModal(); renderHacShiftTemplateTable(); }
+  if (!ok) { DB.shiftTemplates = prevList; return; }
+  closeHacShiftTemplateModal();
+  renderHacShiftTemplateTable();
 }
 
 async function toggleHacShiftTemplateActive(id) {

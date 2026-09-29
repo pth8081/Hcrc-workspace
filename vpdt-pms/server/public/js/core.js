@@ -4694,6 +4694,138 @@ function initSimpleCatalogExcelToolsAll() {
   });
 }
 
+// OBJECT_CATALOG_EXCEL_CONFIG — "registry chung" Tải Mẫu/Xuất Excel/Nhập Excel cho danh mục dạng OBJECT
+// (nhiều field). Engine (render 3 nút + Tải Mẫu qua GET /api/admin/object-catalog/:key/import-template +
+// Xuất qua POST /api/admin/export-xlsx + Nhập qua POST /api/admin/object-catalog/:key/parse-import rồi
+// xem trước -> gộp theo matchKey -> syncStorage(dataKey) đúng 1 lần) do nhánh engine xây — cấu hình cột
+// ở server (lib/objectCatalogImport.js OBJECT_CATALOG_IMPORT_CONFIG) là NGUỒN XÁC THỰC, `columns` ở đây
+// CHỈ dùng để dựng cột Xuất Excel từ DB[dataKey] + bảng xem trước.
+//
+// ===== 5 ENTRY DƯỚI ĐÂY (nhánh wire Đăng Ký Xe/Phòng Họp/Đồng Phục/Công & Phép) — GIỮ LẠI KHI MERGE,
+// chép vào OBJECT_CATALOG_EXCEL_CONFIG của engine thật (cùng 2 helper objectCatalogKeepIdMerge/
+// objectCatalogToList ngay dưới). =====
+// Field mở rộng so với contract gốc (engine thật cần hỗ trợ hoặc điều chỉnh khi merge):
+//   - type 'list' (uniformCatalog.sizes — mảng chuỗi tự do nối bằng `sep`), 'date' (publicHolidays.date),
+//     'number' (shiftTemplates.standardHours — thập phân, bước 0.5).
+//   - idKey: 'id' — danh mục có id số tự tăng; mục MỚI cần engine cấp id = max(id)+1, mục TRÙNG giữ id cũ
+//     (beforeMerge của các entry có id cũng tự giữ id cũ phòng khi engine không làm).
+//   - renderFn: tên hàm vẽ lại danh sách sau khi nhập xong (tra window[renderFn] lúc gọi — cùng lý do
+//     SIMPLE_CATALOG_EXCEL_CONFIG ở trên: module chứa hàm render nạp lười).
+// objectCatalogKeepIdMerge — beforeMerge mặc định cho danh mục có id: ghi đè field từ Excel, GIỮ id cũ
+// (+ mọi field khác Excel không có).
+function objectCatalogKeepIdMerge(existingItem, importedItem) {
+  return { ...(existingItem || {}), ...(importedItem || {}), ...(existingItem && existingItem.id != null ? { id: existingItem.id } : {}) };
+}
+// objectCatalogToList — chịu được cả engine CÓ type 'list' (đã là mảng) lẫn KHÔNG có (chuỗi nối ",").
+function objectCatalogToList(v, sep = ',') {
+  const arr = Array.isArray(v) ? v : String(v ?? '').split(sep);
+  const seen = new Set();
+  return arr.map(s => String(s).trim()).filter(s => s && !seen.has(s) && seen.add(s));
+}
+const OBJECT_CATALOG_EXCEL_CONFIG = {
+  carVehicleTypes: {
+    label: 'Loại Xe Cụ Thể',
+    dataKey: 'carVehicleTypes',
+    matchKey: 'name',
+    idKey: 'id',
+    renderFn: 'renderCarVehicleTypeList',
+    columns: [
+      { header: 'Tên Loại Xe', key: 'name', type: 'text', required: true },
+      { header: 'Là Xe Taxi', key: 'isTaxi', type: 'bool' },
+      { header: 'Biển Số Cố Định', key: 'bienSo', type: 'text' }
+    ],
+    beforeMerge: (existingItem, importedItem) => {
+      const merged = objectCatalogKeepIdMerge(existingItem, importedItem);
+      if (merged.isTaxi) merged.bienSo = ''; // mirror saveCarVehicleType(): mục Taxi không có BKS cố định
+      return merged;
+    }
+  },
+  // DB.meetingRooms — catalogKey khác dataKey (tên màn "Danh Mục Phòng Họp").
+  meetingRoomCatalog: {
+    label: 'Phòng Họp',
+    dataKey: 'meetingRooms',
+    matchKey: 'name',
+    idKey: 'id',
+    renderFn: 'renderMeetingRoomCatalogList',
+    columns: [
+      { header: 'Tên Phòng Họp Đầy Đủ', key: 'name', type: 'text', required: true },
+      { header: 'Tên Gọn', key: 'short', type: 'text', required: true }
+    ],
+    beforeMerge: objectCatalogKeepIdMerge
+  },
+  // QUAN TRỌNG: codesBySize (Mã SKU theo size, sinh lúc GĐST xác nhận nhận lần đầu — xem
+  // backfillUniformSkuCodes() ở lib/recordActions.js) KHÔNG có trong Excel -> beforeMerge PHẢI copy NGUYÊN
+  // codesBySize cũ sang, chỉ ghi đè name/sizes từ Excel. Mục mới (existingItem rỗng) -> codesBySize {}.
+  uniformCatalog: {
+    label: 'Đồng Phục',
+    dataKey: 'uniformCatalog',
+    matchKey: 'name',
+    idKey: 'id',
+    renderFn: 'renderUniformCatalogList',
+    columns: [
+      { header: 'Tên Mặt Hàng', key: 'name', type: 'text', required: true },
+      { header: 'Danh Sách Size', key: 'sizes', type: 'list', sep: ',', required: true }
+    ],
+    beforeMerge: (existingItem, importedItem) => {
+      const e = existingItem || {};
+      const i = importedItem || {};
+      const merged = {
+        ...e,
+        name: i.name != null && String(i.name).trim() ? String(i.name).trim() : e.name,
+        sizes: i.sizes != null ? objectCatalogToList(i.sizes) : [...(e.sizes || [])],
+        codesBySize: { ...(e.codesBySize || {}) }
+      };
+      if (e.id != null) merged.id = e.id;
+      return merged;
+    }
+  },
+  // Ngày là khoá duy nhất tự nhiên (submitHacHoliday() đã chặn trùng ngày) -> matchKey 'date'.
+  publicHolidays: {
+    label: 'Ngày Nghỉ Lễ',
+    dataKey: 'publicHolidays',
+    matchKey: 'date',
+    renderFn: 'renderHacHolidayTable',
+    columns: [
+      { header: 'Ngày (YYYY-MM-DD)', key: 'date', type: 'date', required: true },
+      { header: 'Tên Ngày Lễ', key: 'name', type: 'text', required: true }
+    ],
+    beforeMerge: (existingItem, importedItem) => ({ ...(existingItem || {}), date: existingItem?.date ?? importedItem?.date, name: importedItem?.name ?? existingItem?.name })
+  },
+  shiftTemplates: {
+    label: 'Ca Làm Việc Siêu Thị',
+    dataKey: 'shiftTemplates',
+    matchKey: 'shiftCode',
+    idKey: 'id',
+    renderFn: 'renderHacShiftTemplateTable',
+    columns: [
+      { header: 'Mã Ca', key: 'shiftCode', type: 'text', required: true },
+      { header: 'Tên Ca', key: 'shiftName', type: 'text', required: true },
+      { header: 'Giờ Bắt Đầu', key: 'startTime', type: 'time', required: true },
+      { header: 'Giờ Kết Thúc', key: 'endTime', type: 'time', required: true },
+      { header: 'Phút Nghỉ', key: 'breakMinutes', type: 'int' },
+      { header: 'Ca Đêm', key: 'isNightShift', type: 'bool' },
+      { header: 'Giờ Công Chuẩn', key: 'standardHours', type: 'number', required: true },
+      { header: 'Đang Dùng', key: 'isActive', type: 'bool' }
+    ],
+    beforeMerge: objectCatalogKeepIdMerge
+  }
+};
+
+// STUB — sẽ bị engine thật thay thế khi merge (renderObjectCatalogExcelToolsHtml + initObjectCatalogExcelToolsAll).
+// Nhánh này KHÔNG xây engine — 2 hàm dưới chỉ giữ đúng chữ ký để placeholder #objectCatalogExcelTools_<key>
+// và các lời gọi initObjectCatalogExcelToolsAll() ở module chạy được mà không lỗi.
+function renderObjectCatalogExcelToolsHtml(catalogKey) { // STUB — sẽ bị engine thật thay thế khi merge
+  const cfg = OBJECT_CATALOG_EXCEL_CONFIG[catalogKey];
+  if (!cfg) return '';
+  return `<div class="border-t pt-2 mt-2 text-[11px] text-amber-700 italic" data-object-catalog-stub="${escapeHtml(catalogKey)}">⚠️ Excel danh mục "${escapeHtml(cfg.label)}": chưa merge engine (Tải Mẫu/Xuất/Nhập Excel sẽ có sau khi merge).</div>`;
+}
+function initObjectCatalogExcelToolsAll() { // STUB — sẽ bị engine thật thay thế khi merge
+  Object.keys(OBJECT_CATALOG_EXCEL_CONFIG).forEach(key => {
+    const el = document.getElementById(`objectCatalogExcelTools_${key}`);
+    if (el) el.innerHTML = renderObjectCatalogExcelToolsHtml(key);
+  });
+}
+
 // SIMPLE_CATALOG_BULK_CONFIG — "chọn nhiều để xoá cùng lúc" DÙNG CHUNG (10/2026, theo yêu cầu người
 // dùng "tất cả các danh mục có thể lựa chọn nhiều item để xoá cùng một lúc") — CHỈ áp dụng cho các danh
 // mục dạng mảng CHUỖI PHẲNG có nút "Xoá" đơn lẻ đã có sẵn (gần trùng SIMPLE_CATALOG_EXCEL_CONFIG, TRỪ

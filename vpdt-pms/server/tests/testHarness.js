@@ -559,6 +559,17 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/shiftTemplates — mirror ĐÚNG gate NON_ADMIN_GATED_KEYS['shiftTemplates'] ở
+      // routes/data.js (admin || hrAttendanceManage || hrShiftRosterManage) — dùng cho nút "✏️ Sửa" Mẫu Ca
+      // (test-conghop-shift-template-edit-ui.js), cùng lý do nhánh publicHolidays ở trên.
+      if (pathName === '/api/data/shiftTemplates' && method === 'POST') {
+        if (!(freshUser.perms?.admin || freshUser.perms?.hrAttendanceManage || freshUser.perms?.hrShiftRosterManage)) {
+          return { status: 403, body: { error: 'Chỉ người có quyền Quản Lý Chấm Công/Lịch Phân Ca mới được sửa danh mục ca làm việc' } };
+        }
+        state.shiftTemplates = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/data/priceZones — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (priceZones chỉ
       // Admin mới ghi được, xem chú thích tại đó) — cùng lý do KHÔNG mô phỏng toàn bộ generic
       // POST /api/data/:key như 2 nhánh uniformCatalog/hrTaskTemplates ở trên.

@@ -38,6 +38,7 @@ const trainingRosterRoutes = require('./routes/trainingRoster');
 const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const trainingTestImportRoutes = require('./routes/trainingTestImport');
 const adminExportRoutes = require('./routes/adminExport');
+const objectCatalogImportRoutes = require('./routes/objectCatalogImport'); // STUB — sẽ bị engine thật thay thế khi merge
 const orgChartRoutes = require('./routes/orgChart');
 const employeeProfileRoutes = require('./routes/employeeProfile');
 const adminCatalogRoutes = require('./routes/adminCatalog');
@@ -180,6 +181,7 @@ app.use('/api/training', trainingRosterRoutes);
 app.use('/api/training', trainingPlanImportRoutes);
 app.use('/api/training', trainingTestImportRoutes);
 app.use('/api/admin', adminExportRoutes);
+app.use('/api/admin', objectCatalogImportRoutes); // STUB — sẽ bị engine thật thay thế khi merge
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
