@@ -4088,6 +4088,48 @@ function normalizeTrainingTestFields(payload, appData) {
     ? suggestedPassScore : null;
 }
 
+// So sánh cấu trúc CHẤM ĐIỂM (không phải nội dung chữ) giữa bộ câu hỏi CŨ (đã lưu, đã có ≥1 bài nộp
+// trainingTestSubmissions dựa vào) và bộ câu hỏi MỚI (vừa sửa) của 1 Bài Test — dùng ở
+// editTrainingTest() (lib/recordActions.js) khi routes/records.js POST /trainingTests/:id/edit phát
+// hiện bài test đã có bài nộp (10/2026, theo yêu cầu người dùng: "vẫn cho sửa dù đã có bài nộp, miễn là
+// không đổi cấu trúc chấm điểm" — trước đây chặn cứng 409 MỌI lần sửa nếu đã có bài nộp, kể cả chỉ sửa
+// lỗi chính tả).
+//
+// CHO PHÉP (không chặn): sửa nội dung chữ câu hỏi (text), nội dung chữ từng đáp án (options[].text),
+// ảnh minh hoạ (imageUrl của câu hỏi lẫn options[].imageUrl ở loại IMAGE_DRAG_DROP) — các thay đổi này
+// KHÔNG ảnh hưởng tới cách tính điểm (gradeTrainingTestSubmission() chỉ so id/points/correctOptionIds).
+// CHẶN (409): đổi số lượng câu hỏi (thêm/bớt), hoặc với BẤT KỲ câu nào — đổi type/points/số lượng đáp
+// án (options.length)/tập hợp đáp án đúng (correctOptionIds) — mọi thay đổi này làm sai lệch điểm ĐÃ
+// CHẤM của các bài nộp cũ (score được server tính CỐ ĐỊNH lúc nộp bài, không tự tính lại khi sửa bài
+// test sau đó, xem applyAutoGradedTestResult()).
+//
+// LƯU Ý: cả oldQuestions lẫn newQuestions truyền vào đây đều đã qua normalizeTrainingTestFields() (id
+// của câu hỏi/đáp án luôn gán lại TUẦN TỰ theo đúng thứ tự trong mảng, xem hàm đó) — nên so theo INDEX
+// (vị trí trong mảng) là ĐÚNG và ĐỦ, không cần so theo id (id chỉ là số thứ tự, đổi thứ tự đáp án tức là
+// đổi luôn id — cũng đã bị chặn qua so sánh correctOptionIds theo vị trí ở dưới).
+function assertTrainingTestGradingStructureUnchanged(oldQuestions, newQuestions) {
+  const oldQs = Array.isArray(oldQuestions) ? oldQuestions : [];
+  const newQs = Array.isArray(newQuestions) ? newQuestions : [];
+  const CONFLICT = 'không thể sửa vì bài test này đã có bài nộp — thay đổi này sẽ làm sai lệch điểm đã chấm của các bài nộp cũ. Chỉ có thể sửa nội dung chữ câu hỏi/đáp án hoặc ảnh minh hoạ.';
+  if (oldQs.length !== newQs.length) {
+    throw new CreateError(409, `Không thể đổi số lượng câu hỏi (từ ${oldQs.length} thành ${newQs.length}) — ${CONFLICT}`);
+  }
+  for (let i = 0; i < oldQs.length; i++) {
+    const oq = oldQs[i] || {};
+    const nq = newQs[i] || {};
+    const label = `Câu hỏi số ${i + 1}`;
+    if (oq.type !== nq.type) throw new CreateError(409, `${label} đã đổi loại câu hỏi — ${CONFLICT}`);
+    if (Number(oq.points) !== Number(nq.points)) throw new CreateError(409, `${label} đã đổi điểm số — ${CONFLICT}`);
+    const oldOptCount = Array.isArray(oq.options) ? oq.options.length : 0;
+    const newOptCount = Array.isArray(nq.options) ? nq.options.length : 0;
+    if (oldOptCount !== newOptCount) throw new CreateError(409, `${label} đã đổi số lượng đáp án — ${CONFLICT}`);
+    const oldCorrect = (Array.isArray(oq.correctOptionIds) ? oq.correctOptionIds : []).map(Number).sort((a, b) => a - b);
+    const newCorrect = (Array.isArray(nq.correctOptionIds) ? nq.correctOptionIds : []).map(Number).sort((a, b) => a - b);
+    const sameCorrect = oldCorrect.length === newCorrect.length && oldCorrect.every((id, idx) => id === newCorrect[idx]);
+    if (!sameCorrect) throw new CreateError(409, `${label} đã đổi đáp án đúng — ${CONFLICT}`);
+  }
+}
+
 function normalizeTrainingPlanFields(payload, appData) {
   const month = String(payload.month || '').trim();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -4291,6 +4333,7 @@ module.exports = {
   canManageOperationRecord,
   normalizeTrainingCourseFields,
   normalizeTrainingTestFields,
+  assertTrainingTestGradingStructureUnchanged,
   normalizeTrainingPlanFields,
   normalizeOnboardingPathFields,
   normalizeCareerPathFields,

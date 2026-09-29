@@ -1553,7 +1553,13 @@ router.post('/trainingTests/:id/edit', async (req, res) => {
     // kể cả đang PENDING_ESSAY_GRADING chờ chấm Nghị Luận) hay không — sửa cấu trúc câu hỏi/điểm/đáp án
     // đúng giữa lúc đang có bài nộp có thể làm route grade-essay không còn thấy câu ESSAY nào (kẹt vĩnh
     // viễn ở PENDING_ESSAY_GRADING) hoặc tính sai % điểm (totalPoints cũ không khớp cấu trúc câu hỏi mới).
-    // Mirror ĐÚNG khuôn route XOÁ cùng collection (chặn khi còn lớp gán) + mở rộng thêm điều kiện bài nộp.
+    // Mirror ĐÚNG khuôn route XOÁ cùng collection (chặn khi còn lớp gán).
+    //
+    // 10/2026 (theo yêu cầu người dùng): "đã có bài nộp" KHÔNG còn chặn cứng nữa — chỉ chặn khi thay đổi
+    // thật sự làm SAI LỆCH ĐIỂM ĐÃ CHẤM (xem editTrainingTest()/assertTrainingTestGradingStructureUnchanged(),
+    // hasSubmissions truyền xuống để hàm đó tự so sánh cấu trúc cũ/mới). "Còn lớp đang gán" (referencingClasses)
+    // VẪN chặn cứng như cũ (KHÔNG đổi) — lớp đang mở cho học viên đăng ký/tự học thì không sửa đề giữa
+    // chừng, khác hẳn bài nộp đã chốt điểm chỉ cần giữ nguyên cấu trúc chấm là an toàn.
     const [trainingClasses, trainingTestSubmissions] = await Promise.all([
       getAllForCollection('trainingClasses'),
       getAllForCollection('trainingTestSubmissions')
@@ -1562,12 +1568,9 @@ router.post('/trainingTests/:id/edit', async (req, res) => {
     if (referencingClasses.length) {
       throw new HttpError(409, `Không thể sửa bài test này vì còn ${referencingClasses.length} lớp học đang gán nó. Vui lòng gỡ bài test khỏi các lớp đó trước (sửa lớp).`);
     }
-    const referencingSubmissions = trainingTestSubmissions.filter(s => s.testId === itemId);
-    if (referencingSubmissions.length) {
-      throw new HttpError(409, `Không thể sửa bài test này vì đã có ${referencingSubmissions.length} bài nộp gắn với nó (có thể đang chờ chấm Nghị Luận). Sửa cấu trúc câu hỏi lúc này có thể làm sai lệch kết quả đã nộp.`);
-    }
+    const hasSubmissions = trainingTestSubmissions.some(s => s.testId === itemId);
     const result = await withLockedRecordForCollection('trainingTests', itemId, (item) =>
-      recordActions.editTrainingTest(req.body, freshUser, item, appData));
+      recordActions.editTrainingTest(req.body, freshUser, item, appData, hasSubmissions));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `trainingTests/${req.params.id}/edit`, err);
