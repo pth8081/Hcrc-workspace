@@ -1490,6 +1490,24 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     được cấp sẵn CẢ 2 quyền từ chối khẩn cấp mới — chạy đúng 1 lần, admin có
     thể vào cây phân quyền thu hẹp lại sau nếu muốn tách đúng theo vai trò
     thực tế của từng người.
+  - **📐 Mẫu Giá dời sang Hệ Thống → Cấu Hình Nghiệp Vụ (10/2026)** — panel
+    quản trị Mẫu Giá (thêm/thay/đổi tên/gán cột Margin/xoá) không còn nằm ở
+    Hỗ Trợ IT nữa, đã dời sang màn MỚI **⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ**
+    (2 sub-tab **🏷️ Mẫu Giá Bán Lẻ**/**🏪 Mẫu Giá Bán Buôn**, dropdown "🛠️
+    Hệ Thống ▾" ở sidebar) — màn này thiết kế làm nơi tập trung các cấu hình
+    nghiệp vụ khác sẽ bổ sung về sau, không chỉ riêng Mẫu Giá. Tab "Hỗ Trợ IT
+    → Phê Duyệt Giá" chỉ còn xem danh sách + xử lý (Duyệt/Từ chối/Nhận xử
+    lý/Áp giá) — dropdown chọn mẫu ở form tạo đề xuất (Mua Hàng cho Bán Lẻ,
+    Vận Hành cho Bán Buôn) không đổi vị trí, chỉ panel quản trị đổi chỗ.
+  - **Cây phân quyền — 4 quyền Phê Duyệt Giá dời sang đúng module nghiệp vụ
+    (10/2026)** — **Đề xuất duyệt giá Bán Buôn**/**Phê duyệt từ chối khẩn cấp
+    Bán Buôn** dời từ "15. Hỗ Trợ IT" sang "22. Vận Hành"; **Đề xuất duyệt giá
+    Bán Lẻ**/**Phê duyệt từ chối khẩn cấp Bán Lẻ** dời sang mục MỚI "26. Mua
+    Hàng — Phê Duyệt Giá" (tách riêng khỏi "25. Mua Hàng > BAS" — 2 nghiệp vụ
+    độc lập, không liên quan chiết khấu NCC). Đây CHỈ là đổi vị trí hiển thị
+    trong cây phân quyền cho đúng module nghiệp vụ phụ trách — khoá quyền
+    (id checkbox) và hành vi gán/lưu quyền hoàn toàn không đổi, ai đã có
+    quyền từ trước vẫn giữ nguyên, không cần cấp lại.
 
 ### 4.3. Tài Chính & Hợp Đồng
 

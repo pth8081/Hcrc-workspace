@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**24.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.41 (2026-09-29): Cấu Hình Nghiệp Vụ (Mẫu Giá) + dời quyền Phê Duyệt Giá vào đúng module
+
+Theo yêu cầu người dùng, 2 việc:
+
+1. **Tab mới "⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ"** — nơi tập trung các cấu
+   hình nghiệp vụ (sẽ bổ sung thêm về sau), hiện có 2 sub-tab **🏷️ Mẫu Giá
+   Bán Lẻ**/**🏪 Mẫu Giá Bán Buôn** (dời từ "Hỗ Trợ IT → Phê Duyệt Giá" sang
+   — chỉ đổi vị trí điều hướng, giữ nguyên toàn bộ hành vi/dữ liệu). Dùng
+   biến trạng thái RIÊNG (`activeBizConfigPriceTab`) để không lẫn với sub-tab
+   Hỗ Trợ IT/Vận Hành/Mua Hàng đang dùng chung `activeItPriceSubTab`. Nhân
+   tiện dọn 1 nợ kỹ thuật cũ: modal "Gán vai trò cột" (`#colRoleModal`) nay
+   sống hẳn trong `#systemSection` (phục vụ cả Mẫu Ngân Sách lẫn Mẫu Giá),
+   không còn phụ thuộc chéo sang `#itSupportSection` như trước.
+2. **Cây phân quyền — 4 quyền Phê Duyệt Giá dời sang đúng module nghiệp
+   vụ** — Đề xuất/Phê duyệt từ chối khẩn cấp **Bán Buôn** dời từ "15. Hỗ Trợ
+   IT" sang "22. Vận Hành"; **Bán Lẻ** dời sang mục MỚI "26. Mua Hàng — Phê
+   Duyệt Giá" (tách riêng khỏi "25. Mua Hàng > BAS" — khác nghiệp vụ, không
+   liên quan chiết khấu NCC). Khoá quyền (`itPriceProposeCreateWholesale`/
+   `Retail`, `itPriceEmergencyRejectApproveWholesale`/`Retail`) và hành vi
+   gán/lưu quyền không đổi — server (`canAccessItPriceApprovalModuleServer`)
+   vốn đã gác đúng theo `moduleAccess.vanHanh`/`muaHang` từ trước, đợt này
+   thuần UI. Cập nhật `PERM_KEY_VN_LABELS` sang 2 sheet Excel Ma Trận Phân
+   Quyền tương ứng ("Vận Hành —"/"Mua Hàng —" thay vì "Hỗ Trợ IT —").
+
+Test mới: `test-itprice-permtree-move.js` (vị trí DOM đúng + saveUser() lưu
+đúng quyền qua form ở vị trí mới + badge đếm quyền tự cập nhật). Cập nhật
+navigation trong 2 test cũ (`test-itprice-mastertlist-channel-split.js`,
+`test-it-price-master-list-add.js`) theo đường dẫn mới. Full regression
+(adv-workflow-tab-deep, lazy-load-all-tabs, csp-full-audit, perm-matrix-
+client, itprice-approval-and-emergency, it-price-approvals-scope, nghiepvu)
+đều pass sau đợt này.
 
 ## v24.40 (2026-09-28): Ảnh 2 — Tab "🕐 Hồ Sơ Onboarding" (hàng đợi Xác Nhận/Hủy trước khi vào Quản Lý Hồ Sơ)
 

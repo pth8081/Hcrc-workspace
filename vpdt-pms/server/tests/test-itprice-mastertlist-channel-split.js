@@ -90,7 +90,7 @@ async function runServerTests(run) {
 
 // ===================== Phần client (UI thật qua Playwright) =====================
 async function runClientTests(run) {
-  const ADMIN = { username: 'admin', name: 'Quản Trị', dept: 'IT', perms: { admin: true }, active: true };
+  const ADMIN = { username: 'admin', name: 'Quản Trị', dept: 'IT', perms: { admin: true }, active: true, totpEnabled: true };
   const state = createMockState({
     users: [ADMIN],
     itPriceMasterLists: [
@@ -104,23 +104,24 @@ async function runClientTests(run) {
 
   try {
     await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
-    await page.evaluate(async () => { await switchTab('itSupport'); });
+    await page.evaluate(async () => { await switchTab('system'); });
     await page.waitForTimeout(150);
-    await page.evaluate(() => setItSupportSubTab('PRICE'));
+    await page.evaluate(() => setSystemSubTab('BIZCONFIG'));
     await page.waitForTimeout(150);
 
     async function adminTableText() {
       return page.evaluate(() => document.getElementById('itPriceMasterListTableBody').innerText);
     }
-    // 10/2026 (đợt tách Phê Duyệt Giá khỏi Hỗ Trợ IT): dropdown chọn mẫu ở form TẠO ĐỀ XUẤT giờ sống ở
-    // 2 TRANG KHÁC HẲN NHAU (không còn cùng 1 form với panel quản trị itPriceMasterListTableBody, vốn
-    // vẫn ở lại Hỗ Trợ IT) — RETAIL: #mhItPriceMasterListSelect (Mua Hàng), WHOLESALE:
-    // #itPriceMasterListSelect (Vận Hành, id GIỮ NGUYÊN — chỉ đổi trang sống).
+    // 10/2026 (đợt dời Mẫu Giá sang Hệ Thống > Cấu Hình Nghiệp Vụ): dropdown chọn mẫu ở form TẠO ĐỀ
+    // XUẤT vẫn sống ở 2 TRANG KHÁC HẲN VỚI panel quản trị (panel quản trị itPriceMasterListTableBody
+    // giờ nằm ở #businessConfigSection/setBizConfigPriceTab(), KHÔNG còn ở Hỗ Trợ IT nữa) — RETAIL:
+    // #mhItPriceMasterListSelect (Mua Hàng), WHOLESALE: #itPriceMasterListSelect (Vận Hành, id GIỮ
+    // NGUYÊN — chỉ đổi trang sống của panel quản trị).
     async function retailSelectOptionTexts() {
       await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
       const texts = await page.evaluate(() => Array.from(document.getElementById('mhItPriceMasterListSelect').options).map(o => o.text));
-      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
+      await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); });
       await page.waitForTimeout(150);
       return texts;
     }
@@ -128,7 +129,7 @@ async function runClientTests(run) {
       await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
       const texts = await page.evaluate(() => Array.from(document.getElementById('itPriceMasterListSelect').options).map(o => o.text));
-      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
+      await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); });
       await page.waitForTimeout(150);
       return texts;
     }
@@ -148,8 +149,8 @@ async function runClientTests(run) {
       assert(!joined.includes('Mẫu Bán Buôn'), 'Dropdown không được có mẫu của kênh khác');
     });
 
-    await run.run('Chuyển sang sub-tab Bán Buôn: panel quản trị (Hỗ Trợ IT) + dropdown form tạo đề xuất (Vận Hành) tự vẽ lại, giờ hiện mẫu Bán Buôn + mẫu cũ, ẩn mẫu Bán Lẻ', async () => {
-      await page.click('#btnItPriceSubWholesale');
+    await run.run('Chuyển sang sub-tab Bán Buôn: panel quản trị (Cấu Hình Nghiệp Vụ) + dropdown form tạo đề xuất (Vận Hành) tự vẽ lại, giờ hiện mẫu Bán Buôn + mẫu cũ, ẩn mẫu Bán Lẻ', async () => {
+      await page.click('#btnBizConfigPriceWholesale');
       await page.waitForTimeout(150);
       const txt = await adminTableText();
       assert(txt.includes('Mẫu Bán Buôn'), 'Bán Buôn phải thấy đúng mẫu của mình');
@@ -170,7 +171,7 @@ async function runClientTests(run) {
     });
 
     await run.run('Quay lại Bán Lẻ: mẫu Bán Lẻ (id=1) vẫn còn nguyên, không hề bị ảnh hưởng bởi việc xoá ở kênh Bán Buôn', async () => {
-      await page.click('#btnItPriceSubRetail');
+      await page.click('#btnBizConfigPriceRetail');
       await page.waitForTimeout(150);
       const txt = await adminTableText();
       assert(txt.includes('Mẫu Bán Lẻ'), 'Mẫu Bán Lẻ phải vẫn còn sau khi xoá 1 mẫu ở kênh Bán Buôn');

@@ -27,9 +27,10 @@ function setItSupportSubTab(subTab) {
   if (subTab === 'PRICE') {
     // Form tạo đề xuất (Bán Buôn/Bán Lẻ) ĐÃ CHUYỂN khỏi Hỗ Trợ IT (10/2026) sang module-vanhanh.js/
     // module-muahang.js — tab này giờ CHỈ còn xem danh sách + xử lý (Duyệt/Từ chối/Nhận xử lý/Áp giá),
-    // không còn khởi tạo form nào ở đây nữa (xem chú thích đầu itSupportSection.html).
-    document.getElementById('itPriceMasterListAdminWrap').classList.toggle('hidden', !currentUser.perms?.admin);
-    if (currentUser.perms?.admin) renderItPriceMasterListAdmin();
+    // không còn khởi tạo form nào ở đây nữa (xem chú thích đầu itSupportSection.html). Panel quản trị
+    // "📐 Mẫu Giá" ĐÃ CHUYỂN sang "⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ" (10/2026, theo yêu cầu người dùng —
+    // xem #businessConfigSection/setBizConfigPriceTab() ở systemSection.html/module-itsupport-price.js),
+    // KHÔNG còn render ở đây nữa.
     renderItPriceApprovals();
   }
   if (subTab === 'TICKET') {
@@ -252,19 +253,30 @@ function confirmColRoleModal() {
   closeColRoleModal({ picked, extraIdx });
 }
 
-// ============ Mẫu Giá (khuôn cột) — quản lý (chỉ admin, xem itPriceMasterListAdminWrap) ============
+// ============ Mẫu Giá (khuôn cột) — quản lý (chỉ admin, xem #businessConfigSection) ============
 // Mỗi thao tác (thêm/thay file/xoá) LƯU NGAY sau khi xong — khác kiểu draft-rồi-bấm-Lưu-1-lần của
 // "Nhóm Không Cấp Văn Phòng Phẩm" vì mỗi thao tác ở đây vốn đã là 1 round-trip server riêng (đọc/parse
 // file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu. Cột đọc được từ file mẫu LẤY NGUYÊN
 // VĂN, lưu thẳng — CHỈ riêng "Margin/Chiết Khấu" (marginColumnKey, từ 9/2026 task #82) là 1 gán vai trò
 // TUỲ CHỌN admin tự chọn thêm sau khi đọc cột xong (xem pickMarginColumnKey() bên dưới).
+//
+// Đợt "Cấu Hình Nghiệp Vụ" (10/2026, theo yêu cầu người dùng): màn quản trị này dời từ Hỗ Trợ IT sang
+// "⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ" (2 tab con thật "🏷️ Mẫu Giá Bán Lẻ"/"🏪 Mẫu Giá Bán Buôn", xem
+// setBizConfigPriceTab() bên dưới) — dùng activeBizConfigPriceTab RIÊNG, TÁCH BIỆT HẲN khỏi
+// activeItPriceSubTab (biến dùng ở Hỗ Trợ IT/Vận Hành/Mua Hàng cho danh sách đề xuất + form tạo) để
+// tránh rò rỉ trạng thái giữa 2 màn không liên quan khi người dùng chuyển qua lại trong cùng phiên (SPA,
+// không tải lại trang) — LỖI ĐÃ TRÁNH, không phải đã xảy ra: trước khi tách biến riêng này, mở "Cấu Hình
+// Nghiệp Vụ > Mẫu Giá Bán Buôn" rồi sang thẳng "Hỗ Trợ IT > Phê Duyệt Giá" (chưa từng bấm lại sub-tab ở
+// đó trong phiên) sẽ khiến danh sách đề xuất Bán Lẻ ở Hỗ Trợ IT hiện sai thành Bán Buôn do dùng chung 1
+// biến toàn cục.
+let activeBizConfigPriceTab = 'RETAIL';
 function renderItPriceMasterListAdmin() {
   const tbody = document.getElementById('itPriceMasterListTableBody');
   if (!tbody) return;
   // Lọc theo đúng kênh đang mở (Bán Lẻ/Bán Buôn, mục 1 kế hoạch tách Mẫu Giá) — mẫu CŨ chưa gắn
   // priceType (tạo trước khi tách kênh) vẫn hiện ở CẢ 2 kênh (không xác định được thuộc kênh nào,
   // an toàn hơn là ẩn hẳn khỏi 1 bên khiến mẫu đang dùng dở "biến mất").
-  const lists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === activeItPriceSubTab);
+  const lists = (DB.itPriceMasterLists || []).filter(m => !m.priceType || m.priceType === activeBizConfigPriceTab);
   if (!lists.length) {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
@@ -283,6 +295,17 @@ function renderItPriceMasterListAdmin() {
       </td>
     </tr>
   `).join('');
+}
+
+// 2 sub-tab con của "⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ" — gọi từ setSystemSubTab() (module-hethong-tabs.js)
+// khi vào tab BIZCONFIG lần đầu/mỗi lần quay lại, VÀ trực tiếp từ 2 nút bấm trong #businessConfigSection.
+function setBizConfigPriceTab(tab) {
+  activeBizConfigPriceTab = tab === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL';
+  const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  document.getElementById('btnBizConfigPriceRetail').className = activeBizConfigPriceTab === 'RETAIL' ? activeCls : inactiveCls;
+  document.getElementById('btnBizConfigPriceWholesale').className = activeBizConfigPriceTab === 'WHOLESALE' ? activeCls : inactiveCls;
+  renderItPriceMasterListAdmin();
 }
 
 // Cho admin chọn (TUỲ CHỌN) 1 cột trong "columns" đóng vai trò "Margin/Chiết Khấu (%)" — dùng lại modal
@@ -375,7 +398,7 @@ async function addItPriceMasterList() {
     fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey,
     // Gắn đúng kênh đang mở lúc tạo (mục 1 kế hoạch) — trước đây KHÔNG có field này nên 1 mẫu bị dùng
     // chung/xoá nhầm giữa Bán Lẻ và Bán Buôn.
-    priceType: activeItPriceSubTab,
+    priceType: activeBizConfigPriceTab,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
     uploadedAt: new Date().toLocaleString('vi-VN')
   };
@@ -800,10 +823,6 @@ function setItPriceSubTab(subTab) {
   }
   resetListPage('itPrice');
   renderItPriceApprovals();
-  // Mẫu Giá giờ lọc theo priceType (mục 1 kế hoạch) -> phải vẽ lại panel quản trị + dropdown chọn mẫu
-  // mỗi lần đổi kênh, không chỉ 1 lần lúc vào tab PRICE như trước. Panel quản trị (#itPriceMasterListAdminWrap)
-  // vẫn sống ở Hỗ Trợ IT, không cần null-guard thêm vì renderItPriceMasterListAdmin() tự guard.
-  if (currentUser.perms?.admin) renderItPriceMasterListAdmin();
 }
 
 // "File đã phê duyệt" — MIRROR ĐÚNG resolveApprovedFileId()/resolveApprovedFileUrl() ở

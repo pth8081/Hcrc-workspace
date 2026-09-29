@@ -58,7 +58,7 @@ async function main() {
   try {
     await run.run('Bấm "+ Thêm Mẫu Giá" mở đúng hộp thoại chọn file (chưa có Mẫu Giá nào)', async () => {
       await loginAs(page, ADMIN);
-      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); });
+      await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); });
       const [chooser] = await Promise.all([
         page.waitForEvent('filechooser', { timeout: 3000 }),
         page.click('[data-op="addItPriceMasterList"]'),
@@ -138,7 +138,7 @@ async function main() {
     });
 
     await run.run('"🔄 Thay mẫu" (replaceItPriceMasterListFile, dùng chung helper) cũng không bị khoá cứng khi Hủy hộp thoại', async () => {
-      await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('PRICE'); renderItPriceMasterListAdmin(); });
+      await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); renderItPriceMasterListAdmin(); });
       const listId = await page.evaluate(() => DB.itPriceMasterLists[0].id);
       const btnSel = `[data-op="replaceItPriceMasterListFile"][data-arg0="${listId}"]`;
       await page.waitForSelector(btnSel, { timeout: 3000 });

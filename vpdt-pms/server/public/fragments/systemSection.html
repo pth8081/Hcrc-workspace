@@ -22,6 +22,11 @@
            đều là cấu hình CHUNG toàn hệ thống không gắn user nào — theo yêu cầu người dùng, gom lại 1 chỗ
            dễ tìm, xem setAdvWorkflowSubTab() ở module-hethong-tabs.js). -->
       <button type="button" data-op="setSystemSubTab" data-arg0="ADVWORKFLOW" id="btnSystemSubAdvWorkflow" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔀 Nghiệp Vụ Nâng Cao</button>
+      <!-- ⚙️ Cấu Hình Nghiệp Vụ (MỚI, 10/2026, theo yêu cầu người dùng) — nơi tập trung các cấu hình
+           nghiệp vụ, sẽ tiếp tục bổ sung thêm ở đây. Bắt đầu với "📐 Mẫu Giá" dời từ Hỗ Trợ IT sang (2
+           tab con thật Bán Lẻ/Bán Buôn, xem #businessConfigSection bên dưới +
+           setBizConfigPriceTab()/module-itsupport-price.js). -->
+      <button type="button" data-op="setSystemSubTab" data-arg0="BIZCONFIG" id="btnSystemSubBizConfig" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚙️ Cấu Hình Nghiệp Vụ</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="UPLOAD" id="btnSystemSubUpload" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📎 Quản Lý Tệp File</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="LOG" id="btnSystemSubLog" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Log</button>
       <button type="button" data-op="setSystemSubTab" data-arg0="TRASH" id="btnSystemSubTrash" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🗑️ Thùng Rác</button>
@@ -1618,14 +1623,15 @@
             <span id="permTreeBadge_itSupport" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng — "Đội Hỗ Trợ IT" bên dưới chỉ kiểm soát ai NHẬN XỬ LÝ ticket đó. Đề xuất/Từ chối khẩn tách riêng Bán Buôn/Bán Lẻ (10/2026, theo yêu cầu chia nhỏ) — ai chỉ phụ trách 1 loại thì chỉ cần tick đúng quyền loại đó. Việc DUYỆT thật sự (không nằm ở đây) vẫn theo cấu hình phòng ban (Bán Lẻ)/mức Margin-Chiết Khấu (Bán Buôn) ở màn "Hệ Thống → Quy Trình & Phê Duyệt", không đổi.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Hỗ Trợ IT" ở mục 0 mới thấy được các màn dưới đây. "🎫 Hỗ Trợ Yêu Cầu" mở sẵn cho TOÀN BỘ nhân viên tạo ticket, không cần quyền riêng — "Đội Hỗ Trợ IT" bên dưới chỉ kiểm soát ai NHẬN XỬ LÝ ticket đó.</p>
+            <!-- Đề xuất/Phê duyệt từ chối khẩn cấp giá Bán Buôn/Bán Lẻ ĐÃ DỜI sang đúng module nghiệp vụ
+                 xử lý (10/2026, theo yêu cầu người dùng): Bán Buôn -> mục "22. Vận Hành"
+                 (pItPriceProposeCreateWholesale/pItPriceEmergencyRejectApproveWholesale), Bán Lẻ -> mục
+                 "26. Mua Hàng — Phê Duyệt Giá" (pItPriceProposeCreateRetail/
+                 pItPriceEmergencyRejectApproveRetail) — KHÔNG còn ở đây nữa. Việc DUYỆT thật sự vẫn theo
+                 cấu hình phòng ban (Bán Lẻ)/mức Margin-Chiết Khấu (Bán Buôn) ở màn "Hệ Thống → Quy Trình &
+                 Phê Duyệt", không đổi. -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItPriceProposeCreateWholesale"> 🏷️ Đề xuất duyệt giá Bán Buôn
-              </label>
-              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItPriceProposeCreateRetail"> 🏷️ Đề xuất duyệt giá Bán Lẻ
-              </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pItManage"> 🛠️ Đội Hỗ Trợ IT (nhận xử lý ticket Hỗ Trợ Yêu Cầu)
               </label>
@@ -1634,12 +1640,6 @@
               </label>
               <label class="flex items-center gap-2 text-violet-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pItServiceRenewalManage"> 🔔 Sử dụng Gia Hạn Dịch Vụ
-              </label>
-              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItPriceEmergencyRejectApproveWholesale"> 🚨 Phê duyệt từ chối khẩn cấp Bán Buôn
-              </label>
-              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
-                <input type="checkbox" id="pItPriceEmergencyRejectApproveRetail"> 🚨 Phê duyệt từ chối khẩn cấp Bán Lẻ
               </label>
             </div>
           </div>
@@ -1895,6 +1895,19 @@
               </div>
               <div id="pOperationOrderReceiptDeptContainer" class="pl-1"></div>
             </div>
+            <!-- pItPriceProposeCreateWholesale/pItPriceEmergencyRejectApproveWholesale (10/2026, dời từ
+                 mục "15. Hỗ Trợ IT" sang đây, theo yêu cầu người dùng — Phê Duyệt Giá Bán Buôn thuộc
+                 nghiệp vụ Vận Hành). Việc DUYỆT thật sự (không nằm ở đây) vẫn theo mức Margin-Chiết Khấu
+                 cấu hình ở "Hệ Thống → Quy Trình & Phê Duyệt", không đổi. -->
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">🏷️ Phê Duyệt Giá Bán Buôn (module "Hỗ Trợ IT > Phê Duyệt Giá", sub-tab Bán Buôn).</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceProposeCreateWholesale"> 🏷️ Đề xuất duyệt giá Bán Buôn
+              </label>
+              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceEmergencyRejectApproveWholesale"> 🚨 Phê duyệt từ chối khẩn cấp Bán Buôn
+              </label>
+            </div>
           </div>
         </details>
 
@@ -1984,6 +1997,28 @@
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pRebateViewReport"> 📊 Xem Báo Cáo Mua Hàng (tab Báo Cáo trong module này — cũng là điều kiện đủ để vào được module)
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <!-- 26. Mua Hàng — Phê Duyệt Giá: MỤC MỚI, TÁCH RIÊNG khỏi "25. Mua Hàng > BAS" ở trên (2 nghiệp
+             vụ độc lập, khác collection/quy trình duyệt hoàn toàn — BAS là chiết khấu NCC, còn đây là
+             Phê Duyệt Giá Bán Lẻ). pItPriceProposeCreateRetail/pItPriceEmergencyRejectApproveRetail
+             (10/2026, dời từ mục "15. Hỗ Trợ IT" sang đây, theo yêu cầu người dùng). -->
+        <details class="perm-tree-node bg-white rounded border text-xs">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
+            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🏷️ 26. Mua Hàng — Phê Duyệt Giá</span></span>
+            <span id="permTreeBadge_muahangItPrice" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
+          </summary>
+          <div class="p-3 pt-0 space-y-2">
+            <p class="text-[11px] text-gray-500 italic">Phê Duyệt Giá Bán Lẻ (module "Hỗ Trợ IT > Phê Duyệt Giá", sub-tab Bán Lẻ) — TÁCH RIÊNG khỏi "25. Mua Hàng > BAS" ở trên, không liên quan chiết khấu NCC. Việc DUYỆT thật sự (không nằm ở đây) vẫn theo cấu hình phòng ban ở "Hệ Thống → Quy Trình & Phê Duyệt", không đổi.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-sky-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceProposeCreateRetail"> 🏷️ Đề xuất duyệt giá Bán Lẻ
+              </label>
+              <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pItPriceEmergencyRejectApproveRetail"> 🚨 Phê duyệt từ chối khẩn cấp Bán Lẻ
               </label>
             </div>
           </div>
@@ -2231,6 +2266,75 @@
         </table>
       </div>
       <div id="paginationContainer_errorLog"></div>
+    </div>
+  </div>
+
+  <!-- Màn hình MỚI: "⚙️ Cấu Hình Nghiệp Vụ" (10/2026, theo yêu cầu người dùng) — nơi tập trung các
+       cấu hình nghiệp vụ, bắt đầu với "📐 Mẫu Giá" (dời từ Hỗ Trợ IT sang, tách 2 tab con thật Bán Lẻ/
+       Bán Buôn thay vì chỉ lọc theo sub-tab như trước — xem activeBizConfigPriceTab/
+       setBizConfigPriceTab() ở module-itsupport-price.js, TÁCH BIỆT HẲN khỏi activeItPriceSubTab dùng ở
+       Hỗ Trợ IT/Vận Hành/Mua Hàng để tránh rò rỉ trạng thái giữa 2 màn không liên quan khi chuyển tab
+       trong cùng phiên). Nội dung khối "📐 Mẫu Giá (khuôn cột)" bên dưới GIỮ NGUYÊN id/logic — chỉ
+       chuyển vị trí vật lý, xem module-itsupport-price.js. -->
+  <div id="businessConfigSection" class="hidden space-y-4">
+    <div class="bg-white p-3 rounded border">
+      <h3 class="font-bold text-gray-800 text-sm">⚙️ Cấu Hình Nghiệp Vụ</h3>
+      <p class="text-xs text-gray-500 mt-1">Nơi tập trung các cấu hình phục vụ nghiệp vụ — sẽ tiếp tục bổ sung thêm ở đây.</p>
+    </div>
+    <div id="bizConfigPriceSubTabBar" class="flex flex-wrap gap-2 border-b pb-2">
+      <button type="button" data-op="setBizConfigPriceTab" data-arg0="RETAIL" id="btnBizConfigPriceRetail" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white">🏷️ Mẫu Giá Bán Lẻ</button>
+      <button type="button" data-op="setBizConfigPriceTab" data-arg0="WHOLESALE" id="btnBizConfigPriceWholesale" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏪 Mẫu Giá Bán Buôn</button>
+    </div>
+    <!-- Nạp sẵn 1 hoặc nhiều Mẫu Giá (KHUÔN CỘT của bảng giá bên mua hàng gửi tại từng thời điểm) để
+         người đề xuất chọn đúng mẫu áp dụng khi nộp bảng giá (Vận Hành/Mua Hàng). Cột nào đọc được từ
+         dòng tiêu đề file mẫu được LẤY NGUYÊN VĂN, việc kiểm tra hợp lệ khi nộp bảng giá CHỈ còn là so
+         khớp tên cột file người đề xuất nộp với tên cột của Mẫu Giá đã chọn (xem rowsToPriceItems() ở
+         lib/priceFileParser.js). Có thể gán cột "Margin/Chiết Khấu (%)" (marginColumnKey,
+         setItPriceMasterListMarginColumn()) để hệ thống tự đối chiếu số liệu thật trong file với mức
+         Margin/Chiết Khấu người đề xuất TỰ CHỌN lúc nộp Bán Buôn — CHỈ hiện CẢNH BÁO nếu có vẻ không
+         khớp, KHÔNG chặn gửi và KHÔNG ràng buộc người duyệt. -->
+    <div id="itPriceMasterListAdminWrap" class="bg-white p-4 rounded border space-y-3">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h4 class="font-bold text-sm text-gray-800">📐 Mẫu Giá (khuôn cột)</h4>
+          <p class="text-[11px] text-gray-500 italic">Nạp file mẫu bên mua hàng gửi tại từng thời điểm — hệ thống CHỈ đọc dòng tiêu đề để lấy NGUYÊN VĂN tên cột (không giới hạn số cột/tên cột), KHÔNG lưu dữ liệu giá thật. Tạo được nhiều mẫu (VD theo ngành hàng/đợt cập nhật) — người đề xuất tự chọn đúng mẫu áp dụng lúc nộp bảng giá, hệ thống chỉ kiểm tra tên cột file nộp có khớp đúng với mẫu không (không phân biệt hoa/thường/dấu).</p>
+        </div>
+        <button type="button" data-op="addItPriceMasterList" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700 whitespace-nowrap">+ Thêm Mẫu Giá</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse border text-xs">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              <th class="border p-2">Tên Mẫu Giá</th>
+              <th class="border p-2">Các Cột Trong Mẫu</th>
+              <th class="border p-2">Nạp Bởi</th>
+              <th class="border p-2 text-center">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="itPriceMasterListTableBody"></tbody>
+        </table>
+      </div>
+      <input id="itPriceMasterListFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+    </div>
+  </div>
+
+  <!-- Modal dùng chung "Gán vai trò cột" — dùng cho Mẫu Ngân Sách (⚙️ Quản Trị, ngay trong tab Hệ Thống
+       này) khi cần biết cột nào đóng vai trò nghiệp vụ nào (Tên Hạng Mục/Số Tiền...), VÀ (từ 9/2026) dùng
+       lại cho Mẫu Giá ở TRÊN để admin tuỳ chọn gán cột "Margin/Chiết Khấu (%)" — xem
+       setItPriceMasterListMarginColumn()/openColumnRoleMappingModal() ở module-itsupport-price.js. Dời
+       từ itSupportSection.html sang đây (10/2026, đợt "Cấu Hình Nghiệp Vụ") — trước đó modal này nằm
+       VẬT LÝ trong module Hỗ Trợ IT dù dùng chung cho cả Mẫu Ngân Sách (đã ghi nhận là nợ kỹ thuật cần
+       dọn ở core.js), nay cả 2 nơi gọi modal này đều nằm chung trong #systemSection nên không còn vấn đề
+       "modal sống ở module không liên quan" nữa. -->
+  <div id="colRoleModal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg p-4 max-w-md w-full space-y-3 text-xs max-h-[90vh] overflow-y-auto">
+      <h3 id="colRoleModalTitle" class="font-bold text-sm text-gray-800"></h3>
+      <p id="colRoleModalHint" class="text-gray-500 italic"></p>
+      <div id="colRoleModalFields" class="space-y-2"></div>
+      <div class="flex justify-end gap-2 pt-2 border-t">
+        <button type="button" data-op="closeColRoleModal" data-arg0="null" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">Hủy</button>
+        <button type="button" data-op="confirmColRoleModal" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700">Xác nhận</button>
+      </div>
     </div>
   </div>
 

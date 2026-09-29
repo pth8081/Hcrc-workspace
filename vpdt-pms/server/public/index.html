@@ -338,6 +338,10 @@
                (setSystemSubTab(ADVWORKFLOW) tự nhớ đúng sub-tab đang mở dở lần trước, xem
                activeAdvWorkflowSubTab/setAdvWorkflowSubTab()). -->
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(ADVWORKFLOW)" class="sidebar-subitem">🔀 Nghiệp Vụ Nâng Cao</button>
+          <!-- ⚙️ Cấu Hình Nghiệp Vụ (MỚI, 10/2026, theo yêu cầu người dùng) — nơi tập trung các cấu hình
+               nghiệp vụ, bắt đầu với "📐 Mẫu Giá" dời từ Hỗ Trợ IT sang (xem #businessConfigSection/
+               setBizConfigPriceTab() ở systemSection.html/module-itsupport-price.js). -->
+          <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(BIZCONFIG)" class="sidebar-subitem">⚙️ Cấu Hình Nghiệp Vụ</button>
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(UPLOAD)" class="sidebar-subitem">📎 Quản Lý Tệp File</button>
           <button data-op-seq="closeHeThongDropdown()|switchTab(system)|setSystemSubTab(LOG)" class="sidebar-subitem">📊 Log</button>
         </div>

@@ -94,6 +94,7 @@ const SYSTEM_NAV = [
   { group: 'Cấu Hình Quy Trình', items: [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
     { key: 'sysAdvWorkflow', icon: '🔀', label: 'Nghiệp Vụ Nâng Cao' },
+    { key: 'sysBizConfig', icon: '⚙️', label: 'Cấu Hình Nghiệp Vụ' },
   ]},
   { group: 'Danh Mục & Biểu Mẫu', items: [
     { key: 'sysCatalog', icon: '🗂️', label: 'Quản Lý Danh Mục' },
@@ -1303,6 +1304,26 @@ const SYSTEM_DOCS = {
       { label: 'Đã dời khỏi Phân Quyền', text: '"Nhóm Phê Duyệt Trình/HĐ" (khối 11/14 cũ) và "Nhóm Quyền Đặc Biệt" (khối 17 cũ) không còn nằm trong cây quyền của form Sửa Người Dùng nữa — mở nhanh hơn, không cần mở form sửa 1 tài khoản bất kỳ chỉ để đụng tới cấu hình chung.' },
       { label: 'Đơn Vị Tham Gia Quy Trình — nâng cấp lên nhiều nhóm', text: 'trước 10/2026 chỉ có 1 danh sách phòng ban DUY NHẤT áp dụng cho MỌI quy trình cùng lúc — CSDL nào đã cấu hình từ trước được tự động gói thành 1 nhóm mặc định claim đủ mọi quy trình đang có, giữ nguyên hành vi cũ 100% cho tới khi admin chủ động tách nhóm.' },
       { label: 'Vị trí bước — luôn ở CUỐI, kể cả khi quy trình gốc đổi số bước', text: '"🖊️ Nhóm Phê Duyệt Cuối" ĐÔNG CỨNG lựa chọn (Cấp + người phê duyệt cụ thể của từng Nhóm đã chọn) ngay lúc tạo hồ sơ, nhưng KHÔNG đông cứng vị trí bước — nếu sau đó admin sửa quy trình phòng ban gốc (thêm/bớt bước), các bước Nhóm Phê Duyệt Cuối tự trượt theo, luôn nối ĐÚNG SAU CÙNG quy trình gốc mới nhất.' },
+    ] },
+  },
+  sysBizConfig: {
+    icon: '⚙️', title: 'Cấu Hình Nghiệp Vụ', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Màn MỚI (10/2026, theo yêu cầu người dùng) gom các cấu hình nghiệp vụ (khác cấu hình danh mục/quy trình duyệt đã có màn riêng) về 1 chỗ — hiện có 2 sub-tab "🏷️ Mẫu Giá Bán Lẻ"/"🏪 Mẫu Giá Bán Buôn" (dời từ Hỗ Trợ IT sang), sẽ tiếp tục bổ sung thêm mục khác vào đây về sau.',
+    flow: { ariaLabel: 'Quy trình quản lý Mẫu Giá', chain: [
+      { label: 'Chọn sub-tab Bán Lẻ/Bán Buôn', sub: 'Mỗi kênh 1 danh sách mẫu riêng' },
+      { label: 'Thêm/Thay/Đổi tên/Gán cột Margin/Xoá', sub: 'Chỉ tác động mẫu của đúng kênh đang mở' },
+      { label: 'Mẫu hiện ngay ở dropdown tạo đề xuất', sub: 'Mua Hàng (Bán Lẻ) / Vận Hành (Bán Buôn)', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Cấu Hình Nghiệp Vụ</b> (tab con, dropdown "🛠️ Hệ Thống ▾") → chọn đúng sub-tab <b>🏷️ Mẫu Giá Bán Lẻ</b> hoặc <b>🏪 Mẫu Giá Bán Buôn</b> — 2 kênh có danh sách mẫu giá HOÀN TOÀN riêng, không lẫn nhau.' },
+      { role: 'Quản trị viên', text: 'bấm <b>"+ Thêm Mẫu Giá"</b> để tải lên 1 file mẫu mới (đọc tên cột từ dòng đầu file), hoặc dùng <b>"🔄 Thay mẫu"</b>/<b>"✏️ Đổi tên"</b>/<b>"🗑️ Xoá"</b> ngay tại dòng mẫu đã có.' },
+      { role: 'Quản trị viên', text: 'tuỳ chọn gán <b>cột Margin/Chiết Khấu</b> cho mẫu (popup "Gán vai trò cột" hiện ra sau khi tải file) — dùng để tính cảnh báo margin bất thường khi tạo đề xuất Bán Buôn.' },
+      { role: 'Quản trị viên', text: 'mẫu vừa thêm/sửa hiện NGAY ở dropdown chọn mẫu của form tạo đề xuất tương ứng (Bán Lẻ ở module Mua Hàng, Bán Buôn ở module Vận Hành) — không cần tải lại trang.' },
+    ],
+    footer: { left: [
+      { label: 'Đã dời khỏi Hỗ Trợ IT', text: 'trước 10/2026, panel quản trị "Mẫu Giá" nằm trong "Hỗ Trợ IT → Phê Duyệt Giá" — nay dời hẳn sang đây theo yêu cầu người dùng, chỉ đổi VỊ TRÍ điều hướng, không đổi cách hoạt động/dữ liệu.' },
+    ], right: [
+      { label: 'Sẽ tiếp tục bổ sung', text: 'màn này thiết kế để làm nơi tập trung các cấu hình nghiệp vụ khác sẽ thêm về sau, không chỉ riêng Mẫu Giá.' },
     ] },
   },
   sysCatalog: {

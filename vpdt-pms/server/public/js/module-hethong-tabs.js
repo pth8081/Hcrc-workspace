@@ -35,6 +35,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('adminSection').classList.toggle('hidden', subTab !== 'ADMIN');
   document.getElementById('workflowSection').classList.toggle('hidden', subTab !== 'WORKFLOW');
   document.getElementById('advWorkflowSection').classList.toggle('hidden', subTab !== 'ADVWORKFLOW');
+  document.getElementById('businessConfigSection').classList.toggle('hidden', subTab !== 'BIZCONFIG');
   document.getElementById('uploadTypeSection').classList.toggle('hidden', subTab !== 'UPLOAD');
   document.getElementById('logSection').classList.toggle('hidden', subTab !== 'LOG');
   document.getElementById('trashSection').classList.toggle('hidden', subTab !== 'TRASH');
@@ -45,6 +46,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubForm').className = subTab === 'FORM' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubWorkflow').className = subTab === 'WORKFLOW' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubAdvWorkflow').className = subTab === 'ADVWORKFLOW' ? activeCls : inactiveCls;
+  document.getElementById('btnSystemSubBizConfig').className = subTab === 'BIZCONFIG' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubUpload').className = subTab === 'UPLOAD' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubLog').className = subTab === 'LOG' ? activeCls : inactiveCls;
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
@@ -81,6 +83,10 @@ function setSystemSubTab(subTab) {
   }
   // ADVWORKFLOW: "🔀 Nghiệp Vụ Nâng Cao" (từ v23.65) — xem setAdvWorkflowSubTab() ngay dưới.
   if (subTab === 'ADVWORKFLOW') { setAdvWorkflowSubTab(activeAdvWorkflowSubTab); }
+  // BIZCONFIG: "⚙️ Cấu Hình Nghiệp Vụ" (MỚI, 10/2026, theo yêu cầu người dùng) — hiện chỉ có "📐 Mẫu
+  // Giá" (dời từ Hỗ Trợ IT sang, xem setBizConfigPriceTab()/module-itsupport-price.js) — sẽ tiếp tục bổ
+  // sung thêm cấu hình nghiệp vụ khác vào đây về sau.
+  if (subTab === 'BIZCONFIG') { setBizConfigPriceTab(activeBizConfigPriceTab); }
   if (subTab === 'UPLOAD') { renderUploadTypeConfig(); }
   if (subTab === 'LOG') { setLogSubTab(activeLogSubTab); }
   if (subTab === 'TRASH') { loadTrashItems(); }

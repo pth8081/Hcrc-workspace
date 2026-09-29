@@ -9893,25 +9893,27 @@ bindCspDelegation('hacShiftTemplateModal');
 bindCspDelegation('reportsSection');
 bindCspDelegation('reportPreviewModal');
 
-// Quản Trị / Hệ Thống — cụm 6 màn con của tab "Hệ Thống" (Quản Trị #adminSection, Biểu Mẫu #formSection,
-// Quy Trình & Phê Duyệt #workflowSection, Quản Lý Tệp File #uploadTypeSection, Log #logSection, Thùng
-// Rác #trashSection) đều đã được chuyển thành CON TRỰC TIẾP của #systemSection (xem chú thích ở đầu
-// #systemSection trong HTML — sửa hồi trước để thanh tab con sticky hoạt động đúng), nên chỉ cần ĐÚNG 1
-// gốc duy nhất là bọc được toàn bộ, không cần 6 gốc riêng như dự kiến ban đầu. Không có modal nào của
-// cụm này sống ngoài section: modal dùng chung "Gán vai trò cột" (#colRoleModal, openColumnRoleMappingModal())
-// tuy được gọi từ Mẫu Ngân Sách/Biểu Mẫu nhưng lại nằm VẬT LÝ trong #itSupportSection (module Hỗ Trợ IT —
-// gốc riêng của module đó ở dưới cũng bọc luôn #colRoleModal); #genericConfirmModal dùng chung toàn hệ
-// thống (nhiều module khác cũng gọi), không riêng cụm này, để lại cho 1 đợt dọn hạ tầng dùng chung riêng
-// sau này.
+// Quản Trị / Hệ Thống — cụm 7 màn con của tab "Hệ Thống" (Quản Trị #adminSection, Biểu Mẫu #formSection,
+// Quy Trình & Phê Duyệt #workflowSection, Nghiệp Vụ Nâng Cao #advWorkflowSection, Cấu Hình Nghiệp Vụ
+// #businessConfigSection, Quản Lý Tệp File #uploadTypeSection, Log #logSection, Thùng Rác #trashSection)
+// đều đã được chuyển thành CON TRỰC TIẾP của #systemSection (xem chú thích ở đầu #systemSection trong
+// HTML — sửa hồi trước để thanh tab con sticky hoạt động đúng), nên chỉ cần ĐÚNG 1 gốc duy nhất là bọc
+// được toàn bộ, không cần từng gốc riêng cho mỗi màn con. Không có modal nào của cụm này sống ngoài
+// section: modal dùng chung "Gán vai trò cột" (#colRoleModal, openColumnRoleMappingModal()) dùng cho CẢ
+// Mẫu Ngân Sách (#adminSection) LẪN Mẫu Giá (#businessConfigSection, dời từ Hỗ Trợ IT sang 10/2026) — cả
+// 2 nơi gọi đều nằm trong #systemSection nên 1 gốc là đủ, không còn quirk "modal sống ở module không
+// liên quan" như trước (#colRoleModal trước đây nằm vật lý trong #itSupportSection dù dùng chung cho cả
+// Ngân Sách); #genericConfirmModal dùng chung toàn hệ thống (nhiều module khác cũng gọi), không riêng
+// cụm này, để lại cho 1 đợt dọn hạ tầng dùng chung riêng sau này.
 bindCspDelegation('systemSection');
 
 // Hỗ Trợ IT — 3 sub-tab (Phê Duyệt Giá/Hỗ Trợ Yêu Cầu/Gia Hạn Dịch Vụ CNTT) đều render trong
-// #itSupportSection, và modal dùng chung "Gán vai trò cột" (#colRoleModal, dùng cho Mẫu Ngân Sách) tuy
-// thuộc về module Ngân Sách nhưng nằm VẬT LÝ bên trong #itSupportSection nên cũng được bọc theo — 1 gốc
-// là đủ cho cả section. Nhưng có tới 4 modal xử lý/chi tiết sống NGOÀI section (giống Xe/Vận Hành/Đào
-// Tạo): #itTicketModal (chi tiết + xử lý Yêu Cầu Hỗ Trợ), #itPriceModal (chi tiết + xử lý Đề Xuất Duyệt
-// Giá) — cả 2 nằm chung khu modal với Ngân Sách phía dưới HTML — và #itRenewalRenewModal/#itRenewalEditModal
-// (Gia Hạn/Sửa dịch vụ CNTT ở sub-tab Gia Hạn Dịch Vụ) nên mỗi modal cần thêm 1 gốc riêng — 5 gốc tổng cộng.
+// #itSupportSection — 1 gốc là đủ cho cả section (modal dùng chung "Gán vai trò cột" #colRoleModal ĐÃ
+// DỜI sang #systemSection cùng panel quản trị Mẫu Giá, 10/2026, không còn nằm ở đây nữa). Nhưng có tới 4
+// modal xử lý/chi tiết sống NGOÀI section (giống Xe/Vận Hành/Đào Tạo): #itTicketModal (chi tiết + xử lý
+// Yêu Cầu Hỗ Trợ), #itPriceModal (chi tiết + xử lý Đề Xuất Duyệt Giá) — cả 2 nằm chung khu modal với
+// Ngân Sách phía dưới HTML — và #itRenewalRenewModal/#itRenewalEditModal (Gia Hạn/Sửa dịch vụ CNTT ở
+// sub-tab Gia Hạn Dịch Vụ) nên mỗi modal cần thêm 1 gốc riêng — 5 gốc tổng cộng.
 bindCspDelegation('itSupportSection');
 bindCspDelegation('itTicketModal');
 bindCspDelegation('itPriceModal');
