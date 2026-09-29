@@ -95,6 +95,12 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalPostCategory').required = subTab === 'NEWS';
   document.getElementById('internalPostCategoryShare').required = subTab === 'SHARE';
   populateInternalPostCategorySelects();
+  // Lọc theo chuyên đề (9/2026) + khởi tạo khung soạn thảo định dạng (1 lần) + dọn bản nháp ảnh/video của
+  // tab trước (đổi tab = huỷ dở dang, cùng tinh thần editingInternalPostId = null ở trên).
+  populateInternalCategoryFilter(subTab);
+  initInternalContentEditor();
+  setInternalEditorContent(null);
+  resetInternalMediaDraft(null);
   // Biểu Mẫu tách 2 (10/2026, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE ở core.js) —
   // "Trường Bổ Sung" của Nhịp Sống HCRC/Góc Chia Sẻ giờ đọc/ghi RIÊNG theo đúng modKey của tab đang mở,
   // không còn dùng chung 1 modKey 'INTERNAL_POST' như trước (container DOM vẫn dùng chung 1 id, chỉ modKey
@@ -131,6 +137,267 @@ function filterInternalByCard(status) {
 // editingCustomFieldId ở Biểu Mẫu.
 let editingInternalPostId = null;
 
+// ===== Nhịp Sống HCRC/Góc Chia Sẻ — nội dung định dạng + nhiều ảnh/ảnh đại diện/video (9/2026) =====
+// 3 field MỚI images[]/coverImage/videos[] TÁCH BIỆT hẳn khỏi `attachment` cũ (KHÔNG tái dùng/ghi đè — xem
+// chú thích BUG ở submitInternalPost() bên dưới về hậu quả của việc 1 field dùng lẫn lộn 2 mục đích).
+// Giới hạn khớp server (lib/createValidation.js INTERNAL_POST_MAX_IMAGES/_MAX_VIDEOS, routes/upload.js
+// INTERNAL_VIDEO_MAX_MB) — ở đây CHỈ để báo lỗi sớm, server mới là nơi chặn thật.
+const INTERNAL_POST_MAX_IMAGES_CLIENT = 8;
+const INTERNAL_POST_MAX_VIDEOS_CLIENT = 2;
+const INTERNAL_VIDEO_MAX_MB_CLIENT = 200;
+const INTERNAL_POST_CONTENT_MAX_LEN_CLIENT = 20000;
+// Allowlist hiển thị — khớp ĐÚNG allowlist sanitize-html ở server (INTERNAL_POST_ALLOWED_TAGS).
+const INTERNAL_RICH_ALLOWED_TAGS = ['b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'br', 'p'];
+// Class hiển thị danh sách/đoạn cho nội dung HTML (Tailwind preflight bỏ bullet mặc định của <ul>/<ol>).
+const INTERNAL_RICH_BODY_CLASSES = '[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-1';
+
+// Bản nháp media của form đang soạn (tạo mới hoặc Sửa) — mỗi tệp đã tải lên /api/upload NGAY khi chọn.
+let internalMediaDraft = { images: [], coverUrl: null, videos: [] };
+let internalMediaUploading = 0;
+
+function isInternalPostHtml(p) {
+  return !!p && p.contentFormat === 'html';
+}
+
+// Chữ thuần của nội dung bài (snippet feed, tìm kiếm từ khoá) — bài HTML parse qua DOMParser (tài liệu
+// "trơ": không chạy script, không tải ảnh), bài cũ trả nguyên văn bản.
+function internalPostPlainText(p) {
+  if (!p) return '';
+  if (!isInternalPostHtml(p)) return p.content || '';
+  const withBreaks = String(p.content || '').replace(/<(br|\/p|\/li)\b[^>]*>/gi, '$& ');
+  const doc = new DOMParser().parseFromString(withBreaks, 'text/html');
+  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+async function sanitizeInternalRichHtml(html) {
+  await loadVendorScript('/vendor/dompurify/purify.min.js');
+  return DOMPurify.sanitize(String(html || ''), { ALLOWED_TAGS: INTERNAL_RICH_ALLOWED_TAGS, ALLOWED_ATTR: [] });
+}
+
+// Thân bài ở modal Chi tiết: bài MỚI (contentFormat 'html') dựng khung rỗng rồi hydrateInternalRichBody()
+// gán innerHTML SAU KHI lọc DOMPurify (lớp phòng thủ thứ 2, server đã sanitize allowlist); bài CŨ giữ
+// NGUYÊN cách hiển thị cũ (escapeHtml + whitespace-pre-wrap) — không đổi dữ liệu lịch sử.
+function internalPostBodyHTML(p) {
+  if (isInternalPostHtml(p)) {
+    return `<div class="internal-rich-body text-gray-800 ${INTERNAL_RICH_BODY_CLASSES}"></div>`;
+  }
+  return `<div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>`;
+}
+
+async function hydrateInternalRichBody(root, p) {
+  const el = root?.querySelector('.internal-rich-body');
+  if (!el || !isInternalPostHtml(p)) return;
+  try {
+    el.innerHTML = await sanitizeInternalRichHtml(p.content);
+  } catch (err) {
+    el.textContent = internalPostPlainText(p); // không tải được DOMPurify -> hiện chữ thuần, KHÔNG gán HTML thô
+  }
+}
+
+// Chuyên đề (postCategory) — trước đây đã bắt buộc chọn nhưng CHƯA từng hiển thị cho người xem.
+function internalPostCategoryLabel(p) {
+  if (!p || !p.postCategory) return '';
+  const list = p.type === 'SHARE' ? DB.internalShareCategories : DB.internalNewsCategories;
+  const c = (list || []).find(x => x.key === p.postCategory);
+  return c ? c.label : p.postCategory;
+}
+function internalPostCategoryBadgeHTML(p) {
+  const label = internalPostCategoryLabel(p);
+  return label
+    ? `<span class="internal-cat-badge inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-700 align-middle">🏷️ ${escapeHtml(label)}</span>`
+    : '';
+}
+
+// Dropdown lọc theo chuyên đề — danh sách đổi theo tab (NEWS/SHARE), giữ lựa chọn hiện tại nếu vẫn hợp lệ.
+function populateInternalCategoryFilter(type) {
+  const wrap = document.getElementById('internalCategoryFilterWrap');
+  const sel = document.getElementById('filterCategoryInternal');
+  const isFeed = type === 'NEWS' || type === 'SHARE';
+  if (wrap) wrap.classList.toggle('hidden', !isFeed);
+  if (!sel) return;
+  const list = type === 'SHARE' ? (DB.internalShareCategories || []) : type === 'NEWS' ? (DB.internalNewsCategories || []) : [];
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Tất cả chuyên đề --</option>' +
+    list.map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('');
+  sel.value = list.some(c => c.key === current) ? current : '';
+}
+
+// ---- Khung soạn thảo contenteditable (Bold + Danh sách) ----
+let internalEditorSavedRange = null;
+function initInternalContentEditor() {
+  const ed = document.getElementById('internalContent');
+  if (!ed || ed.dataset.editorReady === '1') return;
+  ed.dataset.editorReady = '1';
+  // Enter sinh <p> thay vì <div> (server vẫn tự đổi div->p nếu trình duyệt không hỗ trợ lệnh này).
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (_) { /* không hỗ trợ -> bỏ qua */ }
+  // Dán luôn chèn CHỮ THUẦN — không mang theo định dạng/thẻ lạ từ Word/web (server cũng sẽ lọc bỏ).
+  ed.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData)?.getData('text/plain') || '';
+    document.execCommand('insertText', false, text);
+  });
+  // Nhớ vùng chọn cuối cùng bên trong khung soạn — bấm nút toolbar làm mất focus khỏi khung, khôi phục lại
+  // vùng chọn trước khi chạy lệnh để Bold/Danh sách áp đúng đoạn người dùng vừa bôi đen.
+  document.addEventListener('selectionchange', () => {
+    const sel = document.getSelection();
+    if (sel && sel.rangeCount && ed.contains(sel.anchorNode)) internalEditorSavedRange = sel.getRangeAt(0).cloneRange();
+  });
+}
+
+function internalEditorExec(cmd) {
+  if (cmd !== 'bold' && cmd !== 'insertUnorderedList') return; // chỉ 2 lệnh của bộ nút tối giản
+  const ed = document.getElementById('internalContent');
+  if (!ed) return;
+  ed.focus();
+  if (internalEditorSavedRange && ed.contains(internalEditorSavedRange.startContainer)) {
+    const sel = document.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(internalEditorSavedRange);
+  }
+  document.execCommand(cmd, false, null);
+}
+
+function getInternalEditorHtml() {
+  const ed = document.getElementById('internalContent');
+  if (!ed) return '';
+  const text = (ed.textContent || '').replace(/ /g, ' ').trim();
+  return text ? ed.innerHTML.trim() : '';
+}
+
+async function setInternalEditorContent(p) {
+  const ed = document.getElementById('internalContent');
+  if (!ed) return;
+  if (!p) { ed.innerHTML = ''; return; }
+  if (isInternalPostHtml(p)) {
+    try { ed.innerHTML = await sanitizeInternalRichHtml(p.content); } catch (_) { ed.textContent = internalPostPlainText(p); }
+  } else {
+    ed.innerText = p.content || ''; // bài cũ (văn bản thuần) -> innerText tự đổi xuống dòng thành <br>
+  }
+}
+
+// ---- Ảnh/Video (bản nháp media của form) ----
+function resetInternalMediaDraft(p) {
+  const pick = (arr) => (Array.isArray(arr) ? arr : []).filter(x => x && x.fileUrl).map(x => ({ fileUrl: x.fileUrl, fileName: x.fileName || '' }));
+  internalMediaDraft = {
+    images: pick(p?.images),
+    coverUrl: p?.coverImage?.fileUrl || null,
+    videos: pick(p?.videos)
+  };
+  ['internalImagesInput', 'internalVideosInput'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['internalImagesStatus', 'internalVideosStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+  renderInternalMediaDraft();
+}
+
+function renderInternalMediaDraft() {
+  const imgBox = document.getElementById('internalImagesPreview');
+  const vidBox = document.getElementById('internalVideosPreview');
+  const coverUrl = internalMediaDraft.coverUrl || internalMediaDraft.images[0]?.fileUrl || null;
+  if (imgBox) {
+    imgBox.innerHTML = internalMediaDraft.images.map((img, idx) => {
+      const isCover = img.fileUrl === coverUrl;
+      return `
+        <div class="internal-draft-image relative w-20 h-20 rounded border-2 ${isCover ? 'border-fuchsia-600' : 'border-gray-200'} bg-gray-50 overflow-hidden">
+          <img src="${escapeHtml(img.fileUrl)}" alt="${escapeHtml(img.fileName)}" title="Bấm để chọn làm ảnh đại diện" data-op="setInternalDraftCover" data-arg0="${idx}" class="w-full h-full object-cover cursor-pointer">
+          ${isCover ? '<span class="internal-draft-cover-badge absolute bottom-0 left-0 right-0 bg-fuchsia-600 text-white text-[9px] font-bold text-center">⭐ Đại diện</span>' : ''}
+          <button type="button" data-op="removeInternalDraftImage" data-arg0="${idx}" title="Bỏ ảnh này" class="absolute top-0 right-0 bg-white text-red-600 text-xs font-bold px-1 leading-none rounded-bl">×</button>
+        </div>`;
+    }).join('');
+  }
+  if (vidBox) {
+    vidBox.innerHTML = internalMediaDraft.videos.map((v, idx) => `
+      <div class="internal-draft-video flex items-center justify-between gap-2 bg-gray-50 border rounded px-2 py-1">
+        <span class="truncate">🎬 ${escapeHtml(v.fileName || v.fileUrl)}</span>
+        <button type="button" data-op="removeInternalDraftVideo" data-arg0="${idx}" class="text-red-600 font-bold">× Bỏ</button>
+      </div>`).join('');
+  }
+}
+
+async function onInternalImagesChosen(input) {
+  const files = Array.from(input?.files || []);
+  if (input) input.value = '';
+  if (!files.length) return;
+  const status = document.getElementById('internalImagesStatus');
+  const room = INTERNAL_POST_MAX_IMAGES_CLIENT - internalMediaDraft.images.length;
+  if (room <= 0) return alert(`⛔ Mỗi bài chỉ được tối đa ${INTERNAL_POST_MAX_IMAGES_CLIENT} ảnh.`);
+  if (files.length > room) alert(`⚠️ Chỉ thêm được ${room} ảnh nữa (tối đa ${INTERNAL_POST_MAX_IMAGES_CLIENT} ảnh/bài) — các ảnh còn lại bị bỏ qua.`);
+  const errors = [];
+  for (const file of files.slice(0, room)) {
+    internalMediaUploading++;
+    if (status) status.textContent = `⏳ Đang tải ảnh "${file.name}"...`;
+    try {
+      const up = await uploadFileToServer(file, 'internalImage');
+      if (internalMediaDraft.images.length < INTERNAL_POST_MAX_IMAGES_CLIENT) {
+        internalMediaDraft.images.push({ fileUrl: up.fileUrl, fileName: up.fileName || file.name });
+      }
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
+    } finally {
+      internalMediaUploading--;
+    }
+  }
+  if (status) status.textContent = errors.length ? `⛔ ${errors.join(' | ')}` : '';
+  renderInternalMediaDraft();
+}
+
+async function onInternalVideosChosen(input) {
+  const files = Array.from(input?.files || []);
+  if (input) input.value = '';
+  if (!files.length) return;
+  const status = document.getElementById('internalVideosStatus');
+  const room = INTERNAL_POST_MAX_VIDEOS_CLIENT - internalMediaDraft.videos.length;
+  if (room <= 0) return alert(`⛔ Mỗi bài chỉ được tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video.`);
+  if (files.length > room) alert(`⚠️ Chỉ thêm được ${room} video nữa (tối đa ${INTERNAL_POST_MAX_VIDEOS_CLIENT} video/bài) — các video còn lại bị bỏ qua.`);
+  const errors = [];
+  for (const file of files.slice(0, room)) {
+    if (!/\.(mp4|webm)$/i.test(file.name)) { errors.push(`${file.name}: chỉ nhận .mp4/.webm`); continue; }
+    if (file.size > INTERNAL_VIDEO_MAX_MB_CLIENT * 1024 * 1024) { errors.push(`${file.name}: vượt quá ${INTERNAL_VIDEO_MAX_MB_CLIENT}MB`); continue; }
+    internalMediaUploading++;
+    if (status) status.textContent = `⏳ Đang tải video "${file.name}" (tệp lớn có thể mất vài phút)...`;
+    try {
+      const up = await uploadFileToServer(file, 'internalVideo');
+      if (internalMediaDraft.videos.length < INTERNAL_POST_MAX_VIDEOS_CLIENT) {
+        internalMediaDraft.videos.push({ fileUrl: up.fileUrl, fileName: up.fileName || file.name });
+      }
+    } catch (err) {
+      errors.push(`${file.name}: ${err.message}`);
+    } finally {
+      internalMediaUploading--;
+    }
+  }
+  if (status) status.textContent = errors.length ? `⛔ ${errors.join(' | ')}` : '';
+  renderInternalMediaDraft();
+}
+
+function setInternalDraftCover(idx) {
+  const img = internalMediaDraft.images[Number(idx)];
+  if (!img) return;
+  internalMediaDraft.coverUrl = img.fileUrl;
+  renderInternalMediaDraft();
+}
+
+function removeInternalDraftImage(idx) {
+  const i = Number(idx);
+  const removed = internalMediaDraft.images[i];
+  if (!removed) return;
+  internalMediaDraft.images.splice(i, 1);
+  if (internalMediaDraft.coverUrl === removed.fileUrl) internalMediaDraft.coverUrl = null; // lùi về ảnh đầu
+  renderInternalMediaDraft();
+}
+
+function removeInternalDraftVideo(idx) {
+  const i = Number(idx);
+  if (!internalMediaDraft.videos[i]) return;
+  internalMediaDraft.videos.splice(i, 1);
+  renderInternalMediaDraft();
+}
+
+// Payload images/coverImage/videos gửi server — coverImage mặc định ảnh đầu tiên nếu tác giả chưa chọn.
+function buildInternalMediaPayload() {
+  const images = internalMediaDraft.images.map(x => ({ fileUrl: x.fileUrl, fileName: x.fileName }));
+  const cover = images.find(x => x.fileUrl === internalMediaDraft.coverUrl) || images[0] || null;
+  return { images, coverImage: cover, videos: internalMediaDraft.videos.map(x => ({ fileUrl: x.fileUrl, fileName: x.fileName })) };
+}
+
 async function submitInternalPost(e) {
   e.preventDefault();
   const type = activeInternalSubTab;
@@ -144,7 +411,13 @@ async function submitInternalPost(e) {
   }
 
   const title = document.getElementById('internalTitle').value.trim();
-  const content = document.getElementById('internalContent').value.trim();
+  // Nội dung định dạng (9/2026) — HTML từ khung contenteditable #internalContent (không còn là textarea),
+  // gửi kèm contentFormat:'html'; server sanitize allowlist lại (normalizeInternalPostContent()).
+  const content = getInternalEditorHtml();
+  if (!content) return alert('⛔ Vui lòng nhập nội dung bài viết!');
+  if (content.length > INTERNAL_POST_CONTENT_MAX_LEN_CLIENT) return alert(`⛔ Nội dung quá dài (tối đa ${INTERNAL_POST_CONTENT_MAX_LEN_CLIENT} ký tự kể cả định dạng).`);
+  if (internalMediaUploading > 0) return alert('⏳ Đang tải ảnh/video lên, vui lòng đợi tải xong rồi đăng bài.');
+  const media = buildInternalMediaPayload();
 
   let training = null;
   if (type === 'TRAINING') {
@@ -218,7 +491,7 @@ async function submitInternalPost(e) {
   }
 
   if (isEditing) {
-    const payload = { title, content, draft: isDraftSubmit, customData };
+    const payload = { title, content, contentFormat: 'html', draft: isDraftSubmit, customData, ...media };
     if (attachment !== undefined) payload.attachment = attachment;
     if (type === 'TRAINING') payload.training = training;
     if (type === 'NEWS' || type === 'SHARE') payload.postCategory = postCategory;
@@ -257,7 +530,11 @@ async function submitInternalPost(e) {
     // code (BỎ, phát hiện #14, rà soát chuyên sâu vòng 2, 9/2026): SERVER tự sinh theo TYPE
     // (createValidation.js internalPosts.generateCode) — không còn tin code client tự tính nữa.
     title, content,
+    contentFormat: 'html',
     attachment,
+    images: media.images,
+    coverImage: media.coverImage,
+    videos: media.videos,
     training,
     customData,
     createdAt: new Date().toLocaleString('vi-VN'),
@@ -320,7 +597,8 @@ async function editInternalPostUI(id) {
   editingInternalPostId = p.id;
 
   document.getElementById('internalTitle').value = p.title || '';
-  document.getElementById('internalContent').value = p.content || '';
+  await setInternalEditorContent(p);
+  resetInternalMediaDraft(p);
   if (p.type === 'TRAINING' && p.training) {
     document.getElementById('internalTrainingStart').value = p.training.startTime || '';
     document.getElementById('internalTrainingEnd').value = p.training.endTime || '';
@@ -357,6 +635,9 @@ async function editInternalPostUI(id) {
 function cancelEditInternalPost() {
   editingInternalPostId = null;
   document.getElementById('internalPostForm').reset();
+  // form.reset() không đụng tới div contenteditable/bản nháp ảnh-video (không phải form control) — tự dọn.
+  setInternalEditorContent(null);
+  resetInternalMediaDraft(null);
   document.getElementById('internalCancelEditBtn').classList.add('hidden');
   setInternalSubTab(activeInternalSubTab); // khôi phục tiêu đề/nhãn nút mặc định của tab hiện tại
 }
@@ -609,6 +890,7 @@ async function submitRecruitmentJob(e) {
     // phòng ban của người tạo (forceOwnDept, xem lib/createValidation.js), không phải đơn vị đăng tuyển.
     hiringDept: document.getElementById('rjDept').value,
     contactInfo: document.getElementById('rjContactInfo').value.trim(),
+    income: document.getElementById('rjIncome').value.trim(),
     bannerUrl, bannerFileName,
     customData
   };
@@ -657,6 +939,7 @@ function openEditRecruitmentJob(id) {
   document.getElementById('rjMonth').value = job.month || '';
   document.getElementById('rjDept').value = job.hiringDept || '';
   document.getElementById('rjContactInfo').value = job.contactInfo || '';
+  document.getElementById('rjIncome').value = job.income || '';
   clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
   document.getElementById('rjSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('rjCancelEditBtn').classList.remove('hidden');
@@ -677,6 +960,69 @@ function populateRecruitmentJobsMonthFilter() {
   if (months.includes(current)) sel.value = current;
 }
 
+// Vị trí đang tuyển (9/2026) — mirror ĐÚNG populateRecruitmentJobsMonthFilter() ngay trên: lấy các title
+// KHÁC NHAU đã có trong DB.recruitmentJobs (sắp A-Z theo tiếng Việt), giữ lựa chọn hiện tại nếu còn hợp lệ.
+function populateRecruitmentJobsTitleFilter() {
+  const sel = document.getElementById('rjFilterTitle');
+  if (!sel) return;
+  const current = sel.value;
+  const titles = [...new Set((DB.recruitmentJobs || []).map(j => (j.title || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  sel.innerHTML = '<option value="">-- Tất cả vị trí --</option>' + titles.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if (titles.includes(current)) sel.value = current;
+}
+
+// "🔥 Tin ưu tiên" — chỉ tính khi tin còn OPEN (xem pinRecruitmentJob() ở lib/recordActions.js).
+function isRecruitmentJobPriority(j) {
+  return !!(j && j.pinned && j.status === 'OPEN');
+}
+
+// Mô tả/Yêu cầu ẩn mặc định trên thẻ, mở/thu TẠI CHỖ (không modal) — nhớ id đang mở để render lại (lọc,
+// phân trang, đẩy ưu tiên...) không tự đóng lại.
+const expandedRecruitmentJobs = new Set();
+// #internalRecruitmentSection là gốc bindCspDelegation() LỒNG bên trong gốc #internalSection (xem
+// NESTED_CSP_ROOTS_IN_FRAGMENT ở core.js) nên 1 cú click trong danh sách tin được dispatch 2 LẦN (mỗi gốc 1
+// lần) — hàm đồng bộ kiểu bật/tắt sẽ tự huỷ nhau, hàm có confirm() sẽ hỏi 2 lần. 3 nút MỚI dưới đây nhận
+// kèm event (data-arg-event) và chỉ xử lý LẦN ĐẦU cho mỗi event — không đụng cơ chế dispatch chung.
+function claimRecruitmentUiEventOnce(evt) {
+  if (!evt) return true;
+  if (evt.__rjHandled) return false;
+  evt.__rjHandled = true;
+  return true;
+}
+function toggleRecruitmentJobDetail(id, evt) {
+  if (!claimRecruitmentUiEventOnce(evt)) return;
+  const jobId = Number(id);
+  if (expandedRecruitmentJobs.has(jobId)) expandedRecruitmentJobs.delete(jobId); else expandedRecruitmentJobs.add(jobId);
+  const card = document.querySelector(`#recruitmentJobsContainer .rj-card[data-job-id="${jobId}"]`);
+  if (!card) return;
+  const open = expandedRecruitmentJobs.has(jobId);
+  card.querySelector('.rj-detail')?.classList.toggle('hidden', !open);
+  const btn = card.querySelector('[data-op="toggleRecruitmentJobDetail"]');
+  if (btn) btn.textContent = open ? 'Thu gọn ▴' : 'Xem chi tiết ▾';
+}
+
+function pinRecruitmentJobUi(id, evt) {
+  if (!claimRecruitmentUiEventOnce(evt)) return;
+  if (!confirm('Đẩy ưu tiên tin tuyển dụng này? Tin sẽ nổi lên ĐẦU danh sách với nhãn "🔥 Tin ưu tiên".')) return;
+  callRecordAction('recruitmentJobs', id, 'pin', {}).then(result => {
+    const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
+    if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
+    logSystemAction('INTERNAL', 'PIN_RECRUITMENT_JOB', `Đẩy ưu tiên tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function unpinRecruitmentJobUi(id, evt) {
+  if (!claimRecruitmentUiEventOnce(evt)) return;
+  if (!confirm('Bỏ đẩy ưu tiên tin tuyển dụng này?')) return;
+  callRecordAction('recruitmentJobs', id, 'unpin', {}).then(result => {
+    const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
+    if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
+    logSystemAction('INTERNAL', 'UNPIN_RECRUITMENT_JOB', `Bỏ đẩy ưu tiên tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
 function onRecruitmentJobsFilterChange() {
   resetListPage('recruitmentJobs');
   renderRecruitmentJobs();
@@ -685,10 +1031,23 @@ function onRecruitmentJobsFilterChange() {
 function renderRecruitmentJobs() {
   const container = document.getElementById('recruitmentJobsContainer');
   populateRecruitmentJobsMonthFilter();
+  populateRecruitmentJobsTitleFilter();
+  const filterTitle = document.getElementById('rjFilterTitle')?.value || '';
   const filterMonth = document.getElementById('rjFilterMonth')?.value || '';
   const filterDept = document.getElementById('rjFilterDept')?.value || '';
   const filterKeyword = (document.getElementById('rjFilterKeyword')?.value || '').trim();
-  let list = (DB.recruitmentJobs || []).slice().sort((a, b) => b.id - a.id).filter(j => {
+  // Tin "🔥 ưu tiên" nổi lên ĐẦU danh sách chính (đã chốt với người dùng: không tách khu riêng) — giữa các
+  // tin ưu tiên, đẩy MỚI NHẤT (pinnedAt) đứng trước; phần còn lại giữ nguyên sort cũ theo id giảm dần.
+  let list = (DB.recruitmentJobs || []).slice().sort((a, b) => {
+    const pa = isRecruitmentJobPriority(a), pb = isRecruitmentJobPriority(b);
+    if (pa !== pb) return pa ? -1 : 1;
+    if (pa && pb) {
+      const diff = (new Date(b.pinnedAt).getTime() || 0) - (new Date(a.pinnedAt).getTime() || 0);
+      if (diff) return diff;
+    }
+    return b.id - a.id;
+  }).filter(j => {
+    if (filterTitle && (j.title || '').trim() !== filterTitle) return false;
     if (filterMonth && j.month !== filterMonth) return false;
     if (filterDept && j.hiringDept !== filterDept) return false;
     if (!matchesKeywordFields([j.title, j.location], filterKeyword)) return false;
@@ -707,7 +1066,28 @@ function renderRecruitmentJobs() {
     const isOpen = j.status === 'OPEN';
     const canClose = canManage && (j.status === 'OPEN' || j.status === 'FILLED');
     const statusBadge = recruitmentJobStatusBadgeHTML(j);
-    const bannerHTML = j.bannerUrl ? `<img src="${escapeHtml(j.bannerUrl)}" alt="" class="w-full h-32 object-cover rounded">` : '';
+    const isPriority = isRecruitmentJobPriority(j);
+    // Thẻ 2 cột (9/2026): TRÁI khung ảnh VUÔNG cố định, object-contain (không cắt méo banner như object-cover
+    // cũ), placeholder trung tính khi không có banner; PHẢI các field chính dạng nhãn-giá trị IN ĐẬM.
+    const thumbHTML = j.bannerUrl
+      ? `<img src="${escapeHtml(j.bannerUrl)}" alt="${escapeHtml(j.title || '')}" loading="lazy" class="w-full h-full object-contain">`
+      : `<span class="rj-thumb-placeholder text-3xl text-gray-300" aria-hidden="true">💼</span>`;
+    const addressText = [j.location, j.hiringDept].filter(Boolean).join(' — ');
+    const fieldRows = [
+      ['Thu nhập', j.income || 'Thoả thuận'],
+      ['Địa chỉ', addressText || '—'],
+      ['Số lượng', j.slots > 0 ? `${j.slots} người` : 'Không giới hạn'],
+      ['Thời hạn', j.deadline || 'Không thời hạn'],
+      ['Liên hệ', j.contactInfo || '—']
+    ];
+    if (j.month) fieldRows.push(['Đợt tuyển', j.month]);
+    const fieldsHTML = fieldRows.map(([label, value]) => `
+            <div class="rj-field flex gap-1.5 text-xs">
+              <dt class="rj-field-label text-gray-500 w-20 flex-shrink-0">${escapeHtml(label)}</dt>
+              <dd class="rj-field-value font-bold text-gray-800 break-words min-w-0">${escapeHtml(value)}</dd>
+            </div>`).join('');
+    const detailOpen = expandedRecruitmentJobs.has(j.id);
+    const hasDetail = !!(j.description || j.requirements);
     // Gợi ý "Đã tuyển đủ" khi referral HIRED đạt slots — CHỈ là banner gợi ý, nút xác nhận vẫn LUÔN bấm
     // được bất kể số này (HR có thể đã tuyển qua kênh ngoài hệ thống này không thấy được — đã chốt với
     // người yêu cầu tính năng, xem confirmRecruitmentJobFilled() ở lib/recordActions.js).
@@ -715,20 +1095,32 @@ function renderRecruitmentJobs() {
       ? `<p class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-1">💡 Đã có ${hiredCount}/${j.slots} referral được tuyển — xác nhận đã tuyển đủ?</p>`
       : '';
     return `
-      <div class="bg-white border rounded p-3 space-y-1.5">
-        ${bannerHTML}
-        <div class="flex justify-between items-start gap-2">
-          <h4 class="font-bold text-gray-800 text-sm">${escapeHtml(j.title)}</h4>
-          ${statusBadge}
+      <div class="rj-card bg-white border ${isPriority ? 'border-amber-400 ring-1 ring-amber-300' : ''} rounded p-3 space-y-2" data-job-id="${Number(j.id)}">
+        <div class="flex gap-3">
+          <div class="rj-thumb w-24 h-24 sm:w-28 sm:h-28 flex-shrink-0 rounded border bg-gray-50 flex items-center justify-center overflow-hidden">${thumbHTML}</div>
+          <div class="flex-1 min-w-0 space-y-1">
+            <div class="flex justify-between items-start gap-2">
+              <h4 class="font-bold text-gray-900 text-sm break-words">${escapeHtml(j.title)}</h4>
+              <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                ${isPriority ? '<span class="rj-priority-badge text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">🔥 Tin ưu tiên</span>' : ''}
+                ${statusBadge}
+              </div>
+            </div>
+            <dl class="space-y-0.5">${fieldsHTML}</dl>
+          </div>
         </div>
-        <p class="text-xs text-gray-500">${j.hiringDept ? '🏢 ' + escapeHtml(j.hiringDept) + ' · ' : ''}${j.location ? '📍 ' + escapeHtml(j.location) + ' · ' : ''}${j.slots > 0 ? 'Cần ' + j.slots + ' người' : 'Không giới hạn số lượng'}${j.deadline ? ' · Hạn: ' + escapeHtml(j.deadline) : ''}${j.month ? ' · Đợt: ' + escapeHtml(j.month) : ''}</p>
-        <p class="text-xs text-gray-700 whitespace-pre-wrap">${escapeHtml(j.description)}</p>
-        ${j.requirements ? `<p class="text-xs text-gray-500"><span class="font-semibold">Yêu cầu:</span> ${escapeHtml(j.requirements)}</p>` : ''}
-        ${j.contactInfo ? `<p class="text-xs text-gray-600"><span class="font-semibold">Liên hệ:</span> ${escapeHtml(j.contactInfo)}</p>` : ''}
+        ${hasDetail ? `
+        <div class="rj-detail ${detailOpen ? '' : 'hidden'} border-t pt-2 space-y-1.5">
+          ${j.description ? `<div class="text-xs"><div class="font-semibold text-gray-600">Mô tả công việc</div><p class="text-gray-700 whitespace-pre-wrap">${escapeHtml(j.description)}</p></div>` : ''}
+          ${j.requirements ? `<div class="text-xs"><div class="font-semibold text-gray-600">Yêu cầu ứng viên</div><p class="text-gray-700 whitespace-pre-wrap">${escapeHtml(j.requirements)}</p></div>` : ''}
+        </div>
+        <button type="button" data-op="toggleRecruitmentJobDetail" data-arg0="${Number(j.id)}" data-arg-event="1" class="text-xs font-bold text-amber-700 hover:underline">${detailOpen ? 'Thu gọn ▴' : 'Xem chi tiết ▾'}</button>` : ''}
         <p class="text-[11px] text-gray-400">Đăng bởi ${escapeHtml(j.creatorName || j.creator)} · ${referralCount} lượt giới thiệu</p>
         ${suggestFilledHTML}
         <div class="flex gap-2 pt-1 flex-wrap">
           ${isOpen ? `<button data-op="openRecruitmentReferModal" data-arg0="${j.id}" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
+          ${canManage && isOpen && !j.pinned ? `<button data-op="pinRecruitmentJobUi" data-arg0="${j.id}" data-arg-event="1" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded text-xs font-bold">🔥 Đẩy ưu tiên</button>` : ''}
+          ${canManage && j.pinned ? `<button data-op="unpinRecruitmentJobUi" data-arg0="${j.id}" data-arg-event="1" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs font-bold">Bỏ đẩy ưu tiên</button>` : ''}
           ${canManage && isOpen ? `<button data-op="confirmRecruitmentJobFilledUi" data-arg0="${j.id}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
           ${canManage ? `<button data-op="openEditRecruitmentJob" data-arg0="${j.id}" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded text-xs font-bold">✏️ Sửa</button>` : ''}
           ${canClose ? `<button data-op="closeRecruitmentJobUi" data-arg0="${j.id}" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
@@ -918,12 +1310,8 @@ function setRecruitmentReferralStatusUi(id, status) {
   }).catch(err => { alert(`⛔ ${err.message}`); renderRecruitmentManage(); });
 }
 
-// Ảnh đính kèm (theo mimetype trả về từ /api/upload) được hiển thị trực tiếp kiểu trang báo —
-// không cần mở qua Frame Protected Viewer như tài liệu/hợp đồng, vì nội dung Truyền thông không
-// phải hồ sơ mật. Tệp đính kèm không phải ảnh (PDF...) vẫn hiện link tải bình thường.
-function isInternalImageAttachment(att) {
-  return !!(att && typeof att.fileType === 'string' && att.fileType.startsWith('image/'));
-}
+// isInternalImageAttachment() đã CHUYỂN sang core.js (trang chủ cần gọi để hiện thumbnail tin — xem
+// renderDashboardNews() ở core-dashboard.js, luôn nạp sẵn), cạnh getInternalPostCoverImage().
 
 // "Tin tức" (NEWS) VÀ "Góc Chia Sẻ" (SHARE, từ Đợt E 9/2026) dùng chung khung hiển thị kiểu Facebook
 // (renderInternalFeedStyle) — bình luận/thích ngay dưới bài, không cần mở "Chi tiết". Đào tạo/Tuyển dụng/
@@ -1166,7 +1554,7 @@ function renderInternalPosts() {
     if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
     if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.dept], keyword)) return false;
     return true;
   });
 
@@ -1190,9 +1578,11 @@ function renderInternalPosts() {
     if (p.type === 'REWARD' && p.reward) {
       extraInfo = `<div class="text-xs text-amber-700 mt-1">🏆 ${escapeHtml(p.reward.period || '')} — ${escapeHtml(p.reward.recipients || '')}</div>`;
     }
-    const snippet = (p.content || '').slice(0, 200);
-    const coverThumbHTML = isInternalImageAttachment(p.attachment)
-      ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full sm:w-48 h-40 sm:h-auto object-cover cursor-pointer flex-shrink-0" data-op="viewInternalPostDetail" data-arg0="${p.id}">`
+    const plain = internalPostPlainText(p);
+    const snippet = plain.slice(0, 200);
+    const legacyCover = getInternalPostCoverImage(p);
+    const coverThumbHTML = legacyCover
+      ? `<img src="${escapeHtml(legacyCover.fileUrl)}" alt="" class="w-full sm:w-48 h-40 sm:h-auto object-cover cursor-pointer flex-shrink-0" data-op="viewInternalPostDetail" data-arg0="${p.id}">`
       : '';
     const statusBadgeHTML = internalPostStatusBadgeHTML(p);
     // Ghim lên trang chủ (Đợt E) — chỉ hiện badge khi CÒN hạn (pinExpiresAt tương lai), không hiện lại
@@ -1215,7 +1605,7 @@ function renderInternalPosts() {
           <div class="mt-1">${statusBadgeHTML}${pinBadgeHTML}</div>
           <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
           ${internalPostInfoRequestBannerHTML(p)}
-          <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${(p.content || '').length > 200 ? '…' : ''}</p>
+          <p class="text-sm text-gray-700 mt-2 flex-1">${escapeHtml(snippet)}${plain.length > 200 ? '…' : ''}</p>
           ${extraInfo}
           <div class="flex flex-wrap justify-between items-center gap-2 mt-3">
             <div class="flex gap-4 text-xs text-gray-500">
@@ -1264,6 +1654,8 @@ function renderInternalFeedStyle(type) {
   const statusFilterWrap = document.getElementById('internalStatusFilterWrap');
   if (statusFilterWrap) statusFilterWrap.classList.toggle('hidden', !isShare);
   const statusFilter = isShare ? (document.getElementById('filterStatusInternal')?.value || '') : '';
+  // Lọc theo chuyên đề (9/2026) — client-side trên DB.internalPosts đã tải, xem populateInternalCategoryFilter().
+  const categoryFilter = document.getElementById('filterCategoryInternal')?.value || '';
 
   const canApprove = canApproveInternalPost(currentUser);
   const dashEl = document.getElementById('internalDashboardCards');
@@ -1288,8 +1680,9 @@ function renderInternalFeedStyle(type) {
     const isRestrictedStatus = p.status && p.status !== 'APPROVED';
     if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
     if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
+    if (categoryFilter && p.postCategory !== categoryFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, p.content, p.authorName, p.dept], keyword)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.dept], keyword)) return false;
     return true;
   });
 
@@ -1336,10 +1729,19 @@ function renderInternalNewsCard(p) {
   const comments = (p.comments || []).filter(c => !c.pendingModeration);
   const expanded = expandedInternalComments.has(p.id);
   const shownComments = expanded ? comments : pickHighlightedComments(comments);
-  const coverHTML = isInternalImageAttachment(p.attachment)
-    ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-80 object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">`
+  // Ảnh bìa thẻ feed: getInternalPostCoverImage() (core.js) — coverImage/images[0] của bài mới, lùi về
+  // attachment ảnh của bài cũ (y hệt hành vi cũ). Bài có nhiều ảnh/video hiện thêm nhãn đếm nhỏ ở góc.
+  const cover = getInternalPostCoverImage(p);
+  const imageCount = Array.isArray(p.images) ? p.images.length : 0;
+  const videoCount = Array.isArray(p.videos) ? p.videos.length : 0;
+  const mediaCountHTML = (imageCount > 1 || videoCount > 0)
+    ? `<span class="internal-media-count absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-[11px] font-bold px-2 py-0.5 rounded">${imageCount > 1 ? `🖼️ ${imageCount}` : ''}${imageCount > 1 && videoCount ? ' · ' : ''}${videoCount ? `🎬 ${videoCount}` : ''}</span>`
     : '';
-  const snippet = (p.content || '').slice(0, 300);
+  const coverHTML = cover
+    ? `<div class="relative"><img src="${escapeHtml(cover.fileUrl)}" alt="" class="w-full max-h-80 object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">${mediaCountHTML}</div>`
+    : (videoCount ? `<div class="relative bg-gray-900 text-white text-sm text-center py-6 cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">🎬 Bài viết có ${videoCount} video — bấm để xem</div>` : '');
+  const plain = internalPostPlainText(p);
+  const snippet = plain.slice(0, 300);
   const commentsHTML = shownComments.length
     ? shownComments.map(c => `
         <div class="flex gap-2 text-sm">
@@ -1382,10 +1784,11 @@ function renderInternalNewsCard(p) {
       <div class="p-4">
         <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">${escapeHtml(p.title)}${statusBadgeHTML}</div>
         <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} (${escapeHtml(p.dept)}) — ${escapeHtml(p.createdAt)}</div>
+        ${internalPostCategoryBadgeHTML(p) ? `<div class="mt-1">${internalPostCategoryBadgeHTML(p)}</div>` : ''}
         ${approveActionsHTML}
         ${rejectReasonHTML}
         ${internalPostInfoRequestBannerHTML(p)}
-        <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${(p.content || '').length > 300 ? '… ' : ' '}<span class="text-fuchsia-700 font-bold cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">Xem thêm</span></p>
+        <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${plain.length > 300 ? '… ' : ' '}<span class="text-fuchsia-700 font-bold cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">Xem thêm</span></p>
         ${editHideActionsHTML}
         <div class="flex items-center justify-between border-t border-b py-1.5 my-2 text-xs text-gray-500">
           <span>❤️ ${likeCount} lượt thích</span>
@@ -1560,7 +1963,13 @@ function viewInternalPostDetail(id) {
     : (expandedDetail && allComments.length > 5 ? `<button data-op="toggleInternalCommentsExpandedAndView" data-arg0="${p.id}" class="text-xs text-gray-500 hover:underline">Thu gọn bình luận</button>` : '');
 
   const isImg = isInternalImageAttachment(p.attachment);
-  const coverHTML = isImg ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-96 object-cover">` : '';
+  // Bài MỚI có images[] -> thư viện ảnh (ảnh lớn + dải thumbnail + nút ‹ ›, buildInternalGalleryHTML());
+  // bài CŨ (không có images[]) giữ NGUYÊN 1 ảnh bìa từ attachment như trước. Video (nếu có) hiện ngay dưới.
+  const hasGallery = Array.isArray(p.images) && p.images.length > 0;
+  const coverHTML = hasGallery
+    ? buildInternalGalleryHTML(p)
+    : (isImg ? `<img src="${escapeHtml(p.attachment.fileUrl)}" alt="" class="w-full max-h-96 object-cover">` : '');
+  const videosHTML = buildInternalVideosHTML(p);
   // Đi qua attachmentDownloadUrl() (route /api/files/download) như mọi module khác — trước đây trỏ
   // thẳng p.attachment.fileUrl (route tĩnh /uploads/), bỏ qua bước đóng dấu watermark PDF mà mọi luồng
   // tải PDF khác trong hệ thống đều có (routes/download.js CHO PHÉP tải khi không tìm thấy bản ghi sở
@@ -1578,7 +1987,9 @@ function viewInternalPostDetail(id) {
       ${infoRequestBannerHTML}
       ${editHideActionsHTML}
       ${typeInfoHTML}
-      <div class="whitespace-pre-wrap text-gray-800">${escapeHtml(p.content)}</div>
+      ${internalPostCategoryBadgeHTML(p) ? `<div class="mb-2">${internalPostCategoryBadgeHTML(p)}</div>` : ''}
+      ${internalPostBodyHTML(p)}
+      ${videosHTML}
       ${attachmentLinkHTML}
 
       <div class="border-t mt-4 pt-3 flex items-center gap-3">
@@ -1599,6 +2010,76 @@ function viewInternalPostDetail(id) {
     </div>
   `;
   document.getElementById('internalArticleModal').classList.remove('hidden');
+  // Nội dung HTML (bài mới) gán SAU khi lọc DOMPurify — bất đồng bộ (nạp lười thư viện lần đầu).
+  hydrateInternalRichBody(document.getElementById('internalArticleContent'), p);
+}
+
+// ---- Thư viện ảnh ở modal Chi tiết (thuần JS/CSS, không thư viện ngoài) ----
+// Thứ tự: ảnh đại diện (coverImage) đứng ĐẦU, các ảnh còn lại theo thứ tự đã đăng.
+function getInternalGalleryImages(p) {
+  const imgs = (Array.isArray(p?.images) ? p.images : []).filter(x => x && x.fileUrl);
+  const coverUrl = p?.coverImage?.fileUrl;
+  const cover = imgs.find(x => x.fileUrl === coverUrl);
+  return cover ? [cover, ...imgs.filter(x => x !== cover)] : imgs;
+}
+
+function buildInternalGalleryHTML(p) {
+  const imgs = getInternalGalleryImages(p);
+  if (!imgs.length) return '';
+  const pid = Number(p.id);
+  const navHTML = imgs.length > 1
+    ? `<button type="button" data-op="stepInternalGallery" data-arg0="${pid}" data-arg1="-1" aria-label="Ảnh trước" class="internal-gallery-prev absolute left-2 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white w-8 h-8 rounded-full font-bold hover:bg-opacity-70">‹</button>
+       <button type="button" data-op="stepInternalGallery" data-arg0="${pid}" data-arg1="1" aria-label="Ảnh sau" class="internal-gallery-next absolute right-2 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white w-8 h-8 rounded-full font-bold hover:bg-opacity-70">›</button>
+       <span class="internal-gallery-counter absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-[11px] font-bold px-2 py-0.5 rounded">1/${imgs.length}</span>`
+    : '';
+  const thumbsHTML = imgs.length > 1
+    ? `<div class="internal-gallery-thumbs flex gap-1.5 overflow-x-auto p-2 bg-gray-50 border-b">${imgs.map((img, idx) => `
+        <img src="${escapeHtml(img.fileUrl)}" alt="${escapeHtml(img.fileName || '')}" data-op="showInternalGalleryImage" data-arg0="${pid}" data-arg1="${idx}" data-gallery-idx="${idx}" class="internal-gallery-thumb w-16 h-16 object-cover rounded cursor-pointer flex-shrink-0 border-2 ${idx === 0 ? 'border-fuchsia-600' : 'border-transparent'}">`).join('')}
+      </div>`
+    : '';
+  return `
+    <div class="internal-gallery" data-gallery-post="${pid}" data-gallery-idx="0">
+      <div class="relative bg-gray-100">
+        <img src="${escapeHtml(imgs[0].fileUrl)}" alt="${escapeHtml(imgs[0].fileName || '')}" class="internal-gallery-main w-full h-72 md:h-96 object-contain">
+        ${navHTML}
+      </div>
+      ${thumbsHTML}
+    </div>`;
+}
+
+function showInternalGalleryImage(postId, idx) {
+  const p = DB.internalPosts.find(x => x.id === Number(postId));
+  const imgs = getInternalGalleryImages(p);
+  if (!imgs.length) return;
+  const i = ((Number(idx) % imgs.length) + imgs.length) % imgs.length;
+  const root = document.querySelector(`#internalArticleContent .internal-gallery[data-gallery-post="${Number(postId)}"]`);
+  if (!root) return;
+  root.dataset.galleryIdx = String(i);
+  const main = root.querySelector('.internal-gallery-main');
+  if (main) { main.src = imgs[i].fileUrl; main.alt = imgs[i].fileName || ''; }
+  const counter = root.querySelector('.internal-gallery-counter');
+  if (counter) counter.textContent = `${i + 1}/${imgs.length}`;
+  root.querySelectorAll('.internal-gallery-thumb').forEach(t => {
+    const active = Number(t.dataset.galleryIdx) === i;
+    t.classList.toggle('border-fuchsia-600', active);
+    t.classList.toggle('border-transparent', !active);
+  });
+}
+
+function stepInternalGallery(postId, delta) {
+  const root = document.querySelector(`#internalArticleContent .internal-gallery[data-gallery-post="${Number(postId)}"]`);
+  if (!root) return;
+  showInternalGalleryImage(postId, Number(root.dataset.galleryIdx || 0) + Number(delta));
+}
+
+function buildInternalVideosHTML(p) {
+  const vids = (Array.isArray(p?.videos) ? p.videos : []).filter(x => x && x.fileUrl);
+  if (!vids.length) return '';
+  return `<div class="internal-videos mt-3 space-y-2">${vids.map(v => `
+    <div>
+      <video controls preload="metadata" src="${escapeHtml(v.fileUrl)}" class="w-full max-h-96 bg-black rounded"></video>
+      <div class="text-[11px] text-gray-500 mt-0.5">🎬 ${escapeHtml(v.fileName || '')}</div>
+    </div>`).join('')}</div>`;
 }
 
 // 5 hành động tương tác dưới đây (đánh dấu đã đọc/thích/bình luận/đăng ký đào tạo) đi qua

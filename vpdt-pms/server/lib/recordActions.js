@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -3168,7 +3168,10 @@ function unpinInternalPost(user, post) {
 // thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
 // luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
 // giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
-const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'attachment', 'postCategory', 'publishAt', 'training', 'customData'];
+// images/coverImage/videos/contentFormat (9/2026 — nhiều ảnh + ảnh đại diện riêng + video + nội dung định
+// dạng Bold/Danh sách) — chuẩn hoá lại NGAY SAU vòng gộp field bên dưới bằng ĐÚNG 2 hàm đường TẠO dùng
+// (normalizeInternalPostContent()/normalizeInternalPostMedia(), lib/createValidation.js).
+const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'contentFormat', 'attachment', 'images', 'coverImage', 'videos', 'postCategory', 'publishAt', 'training', 'customData'];
 function editInternalPost(payload, user, post, appData) {
   if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
@@ -3198,8 +3201,10 @@ function editInternalPost(payload, user, post, appData) {
   // TẠO đã chặn.
   post.title = String(post.title || '').trim().slice(0, 300);
   if (!post.title) throw new HttpError(400, 'Vui lòng nhập tiêu đề bài viết');
-  post.content = String(post.content || '').trim().slice(0, 20000);
-  if (!post.content) throw new HttpError(400, 'Vui lòng nhập nội dung bài viết');
+  // content: bài contentFormat 'html' sanitize allowlist lại Ở SERVER (không tin client) — bài văn bản
+  // thuần giữ nguyên luật cũ (trim + trần 20.000 ký tự). Xem normalizeInternalPostContent().
+  normalizeInternalPostContent(post);
+  normalizeInternalPostMedia(post);
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: sửa bài NEWS/SHARE trước đây không đối chiếu lại postCategory
   // theo danh mục hiện có hay validate lại customData bắt buộc — khác đường TẠO (createValidation.js
   // internalPosts.extraValidate làm cả 2 việc này), khiến 1 request sửa thẳng có thể đặt postCategory
@@ -5598,7 +5603,9 @@ function canManageRecruitment(user) {
 // xoá-tạo-lại đổi id mới) — chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO (xem
 // normalizeRecruitmentJobFields(), lib/createValidation.js), CỐ Ý không đụng status/filledBy/
 // filledByName/filledAt (đổi qua closeRecruitmentJob()/confirmRecruitmentJobFilled() riêng).
-const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'customData'];
+// income (Thu Nhập, 9/2026) sửa được như mọi field nội dung khác; pinned/pinnedBy/pinnedAt CỐ Ý KHÔNG có
+// ở đây — chỉ đổi qua pinRecruitmentJob()/unpinRecruitmentJob() bên dưới.
+const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income', 'customData'];
 function editRecruitmentJob(payload, user, job, appData) {
   if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
@@ -5606,6 +5613,32 @@ function editRecruitmentJob(payload, user, job, appData) {
     if (payload[field] !== undefined) job[field] = payload[field];
   }
   normalizeRecruitmentJobFields(job, appData);
+  return job;
+}
+
+// "🔥 Đẩy ưu tiên" tin tuyển dụng (9/2026) — mirror ĐÚNG khuôn ghim bài internalPosts (pinned/pinnedBy +
+// unpinInternalPost() ở trên), khác ở chỗ KHÔNG có hạn ghim (tin ưu tiên tới khi nhân sự tự bỏ). Quyền:
+// TÁI DÙNG canManageRecruitment() (admin||internalRecruitmentCreate) — KHÔNG có permission key mới.
+// pinnedAt (ISO, giờ server) dùng để sắp các tin ưu tiên: đẩy MỚI NHẤT đứng đầu (renderRecruitmentJobs()).
+// Chỉ đẩy được tin đang tuyển (OPEN) — tin đã đóng/đã tuyển đủ không còn nhận giới thiệu nên không có lý
+// do nổi lên đầu; client cũng chỉ coi tin là "ưu tiên" khi còn OPEN (pin cũ còn sót trên tin đã đóng không
+// làm tin đó nổi lên đầu, nhân sự vẫn bấm "Bỏ đẩy ưu tiên" để dọn được).
+function pinRecruitmentJob(user, job) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền đẩy ưu tiên tin tuyển dụng');
+  if (job.status !== 'OPEN') throw new HttpError(409, 'Chỉ đẩy ưu tiên được tin đang tuyển');
+  if (job.pinned) throw new HttpError(409, 'Tin tuyển dụng này đã được đẩy ưu tiên');
+  job.pinned = true;
+  job.pinnedBy = user.username;
+  job.pinnedAt = new Date().toISOString();
+  return job;
+}
+
+function unpinRecruitmentJob(user, job) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền bỏ đẩy ưu tiên tin tuyển dụng');
+  if (!job.pinned) throw new HttpError(409, 'Tin tuyển dụng này hiện không được đẩy ưu tiên');
+  job.pinned = false;
+  job.pinnedBy = null;
+  job.pinnedAt = null;
   return job;
 }
 
@@ -8279,7 +8312,7 @@ module.exports = {
   startTrainingTestAttempt, evaluateTrainingTestTiming,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3,
   reevaluateOnboardingStage3, issueOnboardingCertificate,
-  canManageRecruitment, closeRecruitmentJob, editRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
+  canManageRecruitment, closeRecruitmentJob, editRecruitmentJob, confirmRecruitmentJobFilled, pinRecruitmentJob, unpinRecruitmentJob, setRecruitmentReferralStatus,
   canManageItSupport, canSupportItPrice, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   resolveApprovedFileId, resolveApprovedFileUrl,

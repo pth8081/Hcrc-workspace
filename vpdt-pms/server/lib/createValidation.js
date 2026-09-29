@@ -583,6 +583,108 @@ function canCreateInternalPostType(user, type) {
   );
 }
 
+// ===== Nhịp Sống HCRC/Góc Chia Sẻ — nội dung định dạng (Bold + danh sách) + nhiều ảnh/ảnh đại diện/video =====
+// (9/2026) Dùng CHUNG cho đường TẠO (internalPosts.extraValidate bên dưới) lẫn đường SỬA (editInternalPost()
+// ở lib/recordActions.js) để 2 đường không lệch luật nhau.
+//
+// content: bài MỚI soạn bằng khung contenteditable (chỉ 2 nút Bold + Danh sách, KHÔNG thư viện ngoài) nên
+// `content` là HTML do chính người dùng tạo, hiển thị cho TOÀN CÔNG TY — SERVER PHẢI tự sanitize (không tin
+// client) bằng allowlist cực hẹp khớp đúng bộ nút tối giản: CHỈ <b>,<strong>,<i>,<em>,<ul>,<ol>,<li>,<br>,<p>,
+// bỏ MỌI thuộc tính (không href/src/style/on*). <div> (Chrome/Edge sinh ra khi nhấn Enter trong
+// contenteditable) đổi thành <p> để không mất xuống dòng. Client vẫn lọc thêm 1 lớp DOMPurify trước khi gán
+// innerHTML (phòng thủ song song, KHÔNG thay thế lớp này).
+// contentFormat: 'html' CHỈ đánh dấu bài mới — bài CŨ (không có field/khác 'html') giữ NGUYÊN là văn bản
+// thuần (client hiển thị escapeHtml()+pre-wrap như trước), KHÔNG chạy qua sanitizer (vốn đã an toàn nhờ
+// escape lúc hiển thị) để không làm đổi/mất ký tự "<"/">" của dữ liệu lịch sử.
+const sanitizeHtmlLib = require('sanitize-html');
+const INTERNAL_POST_CONTENT_MAX_LEN = 20000;
+const INTERNAL_POST_ALLOWED_TAGS = ['b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'br', 'p'];
+const INTERNAL_POST_MAX_IMAGES = 8;
+const INTERNAL_POST_MAX_VIDEOS = 2;
+const INTERNAL_POST_IMAGE_URL_EXT_RE = /\.(jpe?g|png|webp)$/i;
+const INTERNAL_POST_VIDEO_URL_EXT_RE = /\.(mp4|webm)$/i;
+
+function sanitizeInternalPostHtml(html) {
+  return sanitizeHtmlLib(String(html || ''), {
+    allowedTags: INTERNAL_POST_ALLOWED_TAGS,
+    allowedAttributes: {},
+    allowedSchemes: [],
+    allowProtocolRelative: false,
+    transformTags: { div: 'p' },
+    disallowedTagsMode: 'discard',
+    // Nội dung bên trong các thẻ này bị bỏ HẲN (không giữ lại dạng chữ) — mặc định của sanitize-html chỉ có
+    // script/style/textarea/option; thêm vài thẻ nhúng thường gặp khi dán từ nguồn ngoài.
+    nonTextTags: ['script', 'style', 'textarea', 'option', 'noscript', 'iframe', 'object', 'embed', 'template', 'title', 'head', 'svg', 'math']
+  }).trim();
+}
+
+// Chữ thuần của 1 đoạn HTML đã sanitize — chỉ dùng để kiểm tra "nội dung rỗng" (VD chỉ có <p><br></p>).
+function internalPostHtmlToPlainText(html) {
+  return sanitizeHtmlLib(String(html || ''), { allowedTags: [], allowedAttributes: {} })
+    .replace(/&nbsp;|&#160;| /g, ' ').trim();
+}
+
+// target = payload (TẠO) hoặc bản ghi post đã gộp field sửa (SỬA). Chuẩn hoá tại chỗ content/contentFormat.
+function normalizeInternalPostContent(target) {
+  if (target.contentFormat === 'html') {
+    const clean = sanitizeInternalPostHtml(target.content);
+    if (!internalPostHtmlToPlainText(clean)) throw new CreateError(400, 'Vui lòng nhập nội dung bài viết');
+    if (clean.length > INTERNAL_POST_CONTENT_MAX_LEN) {
+      throw new CreateError(400, `Nội dung bài viết quá dài (tối đa ${INTERNAL_POST_CONTENT_MAX_LEN} ký tự kể cả định dạng)`);
+    }
+    target.content = clean;
+  } else {
+    // Bài văn bản thuần (bài cũ / client cũ) — giữ nguyên luật cũ: trim + cắt 20.000 ký tự.
+    delete target.contentFormat;
+    const content = String(target.content || '').trim();
+    if (!content) throw new CreateError(400, 'Vui lòng nhập nội dung bài viết');
+    target.content = content.slice(0, INTERNAL_POST_CONTENT_MAX_LEN);
+  }
+}
+
+// Danh sách tệp ảnh/video của bài — mỗi phần tử PHẢI đúng dạng {fileUrl:string, fileName:string}, fileUrl là
+// tệp đã tải lên hệ thống (assertUploadedFileUrl, chặn "javascript:"/URL ngoài) VÀ đúng nhóm đuôi (ảnh chỉ
+// .jpg/.jpeg/.png/.webp, video chỉ .mp4/.webm — tên tệp lưu trên đĩa do routes/upload.js sinh giữ nguyên đuôi
+// thật đã qua kiểm tra chữ ký). Vượt trần số lượng -> TỪ CHỐI (không âm thầm cắt bớt).
+function normalizeInternalPostFileList(raw, max, label, extRe) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new CreateError(400, `${label} không hợp lệ`);
+  if (raw.length > max) throw new CreateError(400, `Mỗi bài chỉ được tối đa ${max} ${label.toLowerCase()}`);
+  const seen = new Set();
+  const out = [];
+  raw.forEach((it, idx) => {
+    if (!it || typeof it !== 'object' || Array.isArray(it) || typeof it.fileUrl !== 'string' || !it.fileUrl || typeof it.fileName !== 'string') {
+      throw new CreateError(400, `${label} #${idx + 1} không hợp lệ`);
+    }
+    assertUploadedFileUrl(it.fileUrl, `${label} #${idx + 1}`);
+    if (!extRe.test(it.fileUrl)) throw new CreateError(400, `${label} #${idx + 1} sai định dạng cho phép`);
+    if (seen.has(it.fileUrl)) return;
+    seen.add(it.fileUrl);
+    out.push({ fileUrl: it.fileUrl, fileName: it.fileName.trim().slice(0, 200) });
+  });
+  return out;
+}
+
+// images[] (tối đa 8) + coverImage (ảnh đại diện RIÊNG — mặc định images[0] nếu tác giả không chọn; nếu có
+// chọn thì PHẢI là 1 trong images[] của chính bài) + videos[] (tối đa 2) — 3 field MỚI, TÁCH BIỆT hẳn khỏi
+// `attachment` cũ (không gộp/ghi đè attachment — giữ nguyên cho tương thích ngược bài cũ, xem chú thích BUG
+// "ảnh chọn được nhưng ko đăng bài được" ở submitInternalPost(), client).
+function normalizeInternalPostMedia(target) {
+  target.images = normalizeInternalPostFileList(target.images, INTERNAL_POST_MAX_IMAGES, 'Ảnh', INTERNAL_POST_IMAGE_URL_EXT_RE);
+  target.videos = normalizeInternalPostFileList(target.videos, INTERNAL_POST_MAX_VIDEOS, 'Video', INTERNAL_POST_VIDEO_URL_EXT_RE);
+  const rawCover = target.coverImage;
+  if (rawCover === undefined || rawCover === null || rawCover === '') {
+    target.coverImage = target.images[0] || null;
+    return;
+  }
+  if (typeof rawCover !== 'object' || Array.isArray(rawCover) || typeof rawCover.fileUrl !== 'string') {
+    throw new CreateError(400, 'Ảnh đại diện không hợp lệ');
+  }
+  const match = target.images.find(img => img.fileUrl === rawCover.fileUrl);
+  if (!match) throw new CreateError(400, 'Ảnh đại diện phải là 1 trong các ảnh của bài viết');
+  target.coverImage = match;
+}
+
 // Mỗi module: khoá collection AppData, cách lấy phạm vi phòng ban được phép tạo ({all,depts}), tên
 // field ghi người tạo, và kiểm tra bổ sung riêng (nếu có) — phần logic chung (xác minh dept, chặn mã
 // trùng, gán người tạo) nằm ở validateAndPrepareCreate() bên dưới, dùng chung cho mọi module.
@@ -1424,9 +1526,10 @@ const CREATE_MODULE_CONFIGS = {
       const title = String(payload.title || '').trim();
       if (!title) throw new CreateError(400, 'Vui lòng nhập tiêu đề bài viết');
       payload.title = title.slice(0, 300);
-      const content = String(payload.content || '').trim();
-      if (!content) throw new CreateError(400, 'Vui lòng nhập nội dung bài viết');
-      payload.content = content.slice(0, 20000);
+      // content (+ contentFormat 'html' của bài mới, sanitize allowlist ở server) và images/coverImage/videos
+      // (9/2026) — xem normalizeInternalPostContent()/normalizeInternalPostMedia() ở đầu file.
+      normalizeInternalPostContent(payload);
+      normalizeInternalPostMedia(payload);
 
       // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Cao — cụm Truyền Thông Nội Bộ): 4 field "tương tác"
       // dưới đây trước đây đi thẳng từ payload client vào bản ghi (validateAndPrepareCreate() spread
@@ -2678,6 +2781,11 @@ const CREATE_MODULE_CONFIGS = {
       payload.filledBy = null;
       payload.filledByName = null;
       payload.filledAt = null;
+      // Đẩy ưu tiên (9/2026) — CHỈ đổi qua route /pin|/unpin riêng (pinRecruitmentJob()/unpinRecruitmentJob()
+      // ở lib/recordActions.js), không tin giá trị client tự gửi kèm lúc TẠO.
+      payload.pinned = false;
+      payload.pinnedBy = null;
+      payload.pinnedAt = null;
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'RECRUITMENT_JOB');
     }
   },
@@ -4215,6 +4323,8 @@ function normalizeRecruitmentJobFields(payload, appData) {
   payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
   assertUploadedFileUrl(payload.bannerUrl, 'Ảnh banner tin tuyển dụng');
   payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
+  // Thu Nhập (9/2026) — văn bản tự do (VD "8-10 triệu", "Thoả thuận"), tuỳ chọn, trần 200 ký tự.
+  payload.income = payload.income ? String(payload.income).trim().slice(0, 200) : '';
 }
 
 // Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Thăng Tiến (careerPaths) — dùng CHUNG cho cả TẠO
@@ -4322,6 +4432,9 @@ module.exports = {
   // Export cho lib/recordActions.js editInternalPost() — kiểm lại quyền đăng theo TỪNG type khi sửa bài
   // chuyển sang APPROVED, xem giải thích ở phát hiện #13 ngay phía trên hàm này.
   canCreateInternalPostType,
+  // Export cho editInternalPost() (lib/recordActions.js) + test — nội dung HTML (sanitize) + ảnh/video bài viết.
+  normalizeInternalPostContent, normalizeInternalPostMedia, sanitizeInternalPostHtml,
+  INTERNAL_POST_MAX_IMAGES, INTERNAL_POST_MAX_VIDEOS, INTERNAL_POST_CONTENT_MAX_LEN,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   buildEffectiveContractApprovalWorkflowServer,
   // Export thêm cho lib/recordActions.js editSubmissionDraft() (nút "Bổ Sung" -> sửa lại + gửi lại tờ

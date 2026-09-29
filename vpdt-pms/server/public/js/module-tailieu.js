@@ -1371,7 +1371,10 @@ async function uploadFileToServer(file, moduleKey) {
   const formData = new FormData();
   if (moduleKey) formData.append('module', moduleKey);
   formData.append('file', file);
-  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  // 'internalVideo' (video Nhịp Sống HCRC, ≤ 200MB) đi "làn video" riêng — server chọn instance multer
+  // giới hạn lớn qua ?module= trên URL TRƯỚC khi parse body (xem INTERNAL_VIDEO_MODULE_KEY ở routes/upload.js).
+  const uploadUrl = moduleKey === 'internalVideo' ? '/api/upload?module=internalVideo' : '/api/upload';
+  const res = await fetch(uploadUrl, { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
   return data;
@@ -1434,6 +1437,9 @@ const UPLOAD_MODULE_LIST = [
   // Nội Bộ (tdFile khi docType==='IMAGE') — mục cấu hình riêng để đổi loại tệp 'internal' (văn bản)
   // không còn vô tình chặn nhầm 2 nhánh ảnh này.
   { key: 'internalImage', label: '📣 Truyền Thông Nội Bộ (Ảnh/Banner)', extUniverse: UPLOAD_EXT_UNIVERSE_IMAGE },
+  // internalVideo (9/2026) — video bài Nhịp Sống HCRC/Góc Chia Sẻ. Giới hạn dung lượng ở màn này chỉ siết
+  // CHẶT hơn được, không vượt quá INTERNAL_VIDEO_MAX_MB (200MB) của "làn video" ở routes/upload.js.
+  { key: 'internalVideo', label: '📣 Truyền Thông Nội Bộ (Video Bài Viết)', extUniverse: ['.mp4', '.webm'] },
   // operationEstimate (Danh Mục Đầu Tư — tệp đính kèm "danh mục lớn", Vận Hành > QLDA) — mặc định CHỈ
   // .pdf/.docx/.xlsx (xem MODULE_DEFAULT_ALLOWED_EXT ở routes/upload.js), dùng đúng extUniverse chung
   // (UPLOAD_EXT_UNIVERSE, không phải ảnh) vì đây là tệp văn bản/hồ sơ.

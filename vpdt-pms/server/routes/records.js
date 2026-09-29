@@ -2286,6 +2286,35 @@ router.post('/recruitmentJobs/:id/close', async (req, res) => {
   }
 });
 
+// POST /api/records/recruitmentJobs/:id/pin | /unpin — "🔥 Đẩy ưu tiên"/"Bỏ đẩy ưu tiên" (9/2026), cùng
+// khuôn /close ở trên; quyền kiểm ở pinRecruitmentJob()/unpinRecruitmentJob() (canManageRecruitment —
+// admin||internalRecruitmentCreate, không có permission key mới). pinnedBy/pinnedAt do server gán.
+router.post('/recruitmentJobs/:id/pin', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.pinRecruitmentJob(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/pin`, err);
+  }
+});
+
+router.post('/recruitmentJobs/:id/unpin', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('recruitmentJobs', itemId, (item) =>
+      recordActions.unpinRecruitmentJob(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) {
+    handleError(res, `recruitmentJobs/${req.params.id}/unpin`, err);
+  }
+});
+
 // Đợt 2: Bản Tin Tuyển Dụng — "Xác Nhận Đã Tuyển Đủ" (OPEN -> FILLED), cùng khuôn /close ở trên.
 router.post('/recruitmentJobs/:id/confirm-filled', async (req, res) => {
   const itemId = Number(req.params.id);

@@ -240,7 +240,14 @@ async function findOwningRecord(fileUrl) {
     { records: contracts, fixed: c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl, build: c => ({ moduleKey: 'contract', dept: c.dept, custodianDept: c.custodianDept, ownerUsername: c.creator, record: c }) },
     { records: carRegs, fixed: c => c.fileUrl === fileUrl, build: c => ({ moduleKey: 'car', dept: c.dept, ownerUsername: c.creator, record: c }) },
     { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl, build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
-    { records: internalPosts, fixed: p => !!(p.attachment && p.attachment.fileUrl === fileUrl), build: p => ({ internal: true, post: p }) },
+    // images[]/coverImage/videos[] (9/2026, nhiều ảnh + ảnh đại diện + video Nhịp Sống HCRC/Góc Chia Sẻ) —
+    // PHẢI tra cả 3 field mới cạnh attachment cũ, nếu không ảnh/video của bài PENDING/REJECTED rơi vào
+    // nhánh FAIL-OPEN (ai đăng nhập cũng xem được) thay vì đi qua canViewInternalPost() như attachment.
+    { records: internalPosts, fixed: p => !!(p.attachment && p.attachment.fileUrl === fileUrl)
+        || (p.coverImage && p.coverImage.fileUrl === fileUrl)
+        || (Array.isArray(p.images) && p.images.some(i => i && i.fileUrl === fileUrl))
+        || (Array.isArray(p.videos) && p.videos.some(v => v && v.fileUrl === fileUrl)),
+      build: p => ({ internal: true, post: p }) },
     { records: itPriceApprovals, fixed: p => (p.files || []).some(f => f.fileUrl === fileUrl) || (p.extraFiles || []).some(f => f.fileUrl === fileUrl), build: p => ({ itPrice: true, item: p }) },
     { records: reportEntries, fixed: e => e.fileUrl === fileUrl, build: e => ({ reportEntry: true, entry: e }) },
     { records: reportPeriods, fixed: p => (p.compilation?.slides || []).some(s => s.fileUrl === fileUrl) || p.pdfCompilation?.publishedFileUrl === fileUrl, build: p => ({ reportPeriod: true, period: p }) },

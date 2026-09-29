@@ -274,7 +274,7 @@ async function main() {
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); });
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Cảm nhận sau 1 năm gắn bó với công ty';
-        document.getElementById('internalContent').value = 'Mình rất vui khi được làm việc cùng mọi người ở đây!';
+        document.getElementById('internalContent').textContent = 'Mình rất vui khi được làm việc cùng mọi người ở đây!';
         document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
@@ -302,7 +302,7 @@ async function main() {
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); });
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Bài chia sẻ thứ hai';
-        document.getElementById('internalContent').value = 'Nội dung bài chia sẻ thứ hai...';
+        document.getElementById('internalContent').textContent = 'Nội dung bài chia sẻ thứ hai...';
         document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
@@ -340,7 +340,7 @@ async function main() {
       assert(hiddenOnCreate, 'resend-email checkbox must stay hidden on the brand-new post creation form');
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Chia sẻ kinh nghiệm làm việc nhóm';
-        document.getElementById('internalContent').value = 'Nội dung ban đầu, cần bổ sung thêm ví dụ cụ thể.';
+        document.getElementById('internalContent').textContent = 'Nội dung ban đầu, cần bổ sung thêm ví dụ cụ thể.';
         document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
@@ -372,7 +372,7 @@ async function main() {
 
     await run('resubmitting with the checkbox left UNCHECKED does NOT resend the approval email, but still returns to PENDING', async () => {
       const code = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id).code, needInfoSharePostId);
-      await page.evaluate(() => { window.__alerts.length = 0; document.getElementById('internalContent').value = 'Nội dung đã bổ sung ví dụ cụ thể theo yêu cầu.'; });
+      await page.evaluate(() => { window.__alerts.length = 0; document.getElementById('internalContent').textContent = 'Nội dung đã bổ sung ví dụ cụ thể theo yêu cầu.'; });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
       const post = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id), needInfoSharePostId);
       assertEqual(post.status, 'PENDING', 'resubmitted post should go back to PENDING even without resending the email');
@@ -393,7 +393,7 @@ async function main() {
       await page.evaluate((id) => editInternalPostUI(id), needInfoSharePostId);
       const code = await page.evaluate((id) => DB.internalPosts.find((p) => p.id === id).code, needInfoSharePostId);
       await page.evaluate(() => {
-        document.getElementById('internalContent').value = 'Nội dung đã bổ sung phần kết luận.';
+        document.getElementById('internalContent').textContent = 'Nội dung đã bổ sung phần kết luận.';
         document.getElementById('internalResendEmailCheckbox').checked = true;
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
@@ -408,7 +408,7 @@ async function main() {
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); });
       await page.evaluate(() => {
         document.getElementById('internalTitle').value = 'Bản nháp không phải resubmit';
-        document.getElementById('internalContent').value = 'Nội dung nháp.';
+        document.getElementById('internalContent').textContent = 'Nội dung nháp.';
         document.getElementById('internalPostCategoryShare').value = 'CONG_VIEC';
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, submitter: { id: 'internalDraftBtn' }, target: { reset() {} } }));
