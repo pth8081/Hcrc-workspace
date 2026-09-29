@@ -890,6 +890,7 @@ async function submitRecruitmentJob(e) {
     // phòng ban của người tạo (forceOwnDept, xem lib/createValidation.js), không phải đơn vị đăng tuyển.
     hiringDept: document.getElementById('rjDept').value,
     contactInfo: document.getElementById('rjContactInfo').value.trim(),
+    income: document.getElementById('rjIncome').value.trim(),
     bannerUrl, bannerFileName,
     customData
   };
@@ -938,6 +939,7 @@ function openEditRecruitmentJob(id) {
   document.getElementById('rjMonth').value = job.month || '';
   document.getElementById('rjDept').value = job.hiringDept || '';
   document.getElementById('rjContactInfo').value = job.contactInfo || '';
+  document.getElementById('rjIncome').value = job.income || '';
   clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
   document.getElementById('rjSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('rjCancelEditBtn').classList.remove('hidden');
@@ -958,6 +960,69 @@ function populateRecruitmentJobsMonthFilter() {
   if (months.includes(current)) sel.value = current;
 }
 
+// Vị trí đang tuyển (9/2026) — mirror ĐÚNG populateRecruitmentJobsMonthFilter() ngay trên: lấy các title
+// KHÁC NHAU đã có trong DB.recruitmentJobs (sắp A-Z theo tiếng Việt), giữ lựa chọn hiện tại nếu còn hợp lệ.
+function populateRecruitmentJobsTitleFilter() {
+  const sel = document.getElementById('rjFilterTitle');
+  if (!sel) return;
+  const current = sel.value;
+  const titles = [...new Set((DB.recruitmentJobs || []).map(j => (j.title || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  sel.innerHTML = '<option value="">-- Tất cả vị trí --</option>' + titles.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  if (titles.includes(current)) sel.value = current;
+}
+
+// "🔥 Tin ưu tiên" — chỉ tính khi tin còn OPEN (xem pinRecruitmentJob() ở lib/recordActions.js).
+function isRecruitmentJobPriority(j) {
+  return !!(j && j.pinned && j.status === 'OPEN');
+}
+
+// Mô tả/Yêu cầu ẩn mặc định trên thẻ, mở/thu TẠI CHỖ (không modal) — nhớ id đang mở để render lại (lọc,
+// phân trang, đẩy ưu tiên...) không tự đóng lại.
+const expandedRecruitmentJobs = new Set();
+// #internalRecruitmentSection là gốc bindCspDelegation() LỒNG bên trong gốc #internalSection (xem
+// NESTED_CSP_ROOTS_IN_FRAGMENT ở core.js) nên 1 cú click trong danh sách tin được dispatch 2 LẦN (mỗi gốc 1
+// lần) — hàm đồng bộ kiểu bật/tắt sẽ tự huỷ nhau, hàm có confirm() sẽ hỏi 2 lần. 3 nút MỚI dưới đây nhận
+// kèm event (data-arg-event) và chỉ xử lý LẦN ĐẦU cho mỗi event — không đụng cơ chế dispatch chung.
+function claimRecruitmentUiEventOnce(evt) {
+  if (!evt) return true;
+  if (evt.__rjHandled) return false;
+  evt.__rjHandled = true;
+  return true;
+}
+function toggleRecruitmentJobDetail(id, evt) {
+  if (!claimRecruitmentUiEventOnce(evt)) return;
+  const jobId = Number(id);
+  if (expandedRecruitmentJobs.has(jobId)) expandedRecruitmentJobs.delete(jobId); else expandedRecruitmentJobs.add(jobId);
+  const card = document.querySelector(`#recruitmentJobsContainer .rj-card[data-job-id="${jobId}"]`);
+  if (!card) return;
+  const open = expandedRecruitmentJobs.has(jobId);
+  card.querySelector('.rj-detail')?.classList.toggle('hidden', !open);
+  const btn = card.querySelector('[data-op="toggleRecruitmentJobDetail"]');
+  if (btn) btn.textContent = open ? 'Thu gọn ▴' : 'Xem chi tiết ▾';
+}
+
+function pinRecruitmentJobUi(id, evt) {
+  if (!claimRecruitmentUiEventOnce(evt)) return;
+  if (!confirm('Đẩy ưu tiên tin tuyển dụng này? Tin sẽ nổi lên ĐẦU danh sách với nhãn "🔥 Tin ưu tiên".')) return;
+  callRecordAction('recruitmentJobs', id, 'pin', {}).then(result => {
+    const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
+    if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
+    logSystemAction('INTERNAL', 'PIN_RECRUITMENT_JOB', `Đẩy ưu tiên tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
+function unpinRecruitmentJobUi(id, evt) {
+  if (!claimRecruitmentUiEventOnce(evt)) return;
+  if (!confirm('Bỏ đẩy ưu tiên tin tuyển dụng này?')) return;
+  callRecordAction('recruitmentJobs', id, 'unpin', {}).then(result => {
+    const idx = DB.recruitmentJobs.findIndex(j => j.id === id);
+    if (idx >= 0) DB.recruitmentJobs[idx] = result.item;
+    logSystemAction('INTERNAL', 'UNPIN_RECRUITMENT_JOB', `Bỏ đẩy ưu tiên tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
+    renderRecruitmentJobs();
+  }).catch(err => alert(`⛔ ${err.message}`));
+}
+
 function onRecruitmentJobsFilterChange() {
   resetListPage('recruitmentJobs');
   renderRecruitmentJobs();
@@ -966,10 +1031,23 @@ function onRecruitmentJobsFilterChange() {
 function renderRecruitmentJobs() {
   const container = document.getElementById('recruitmentJobsContainer');
   populateRecruitmentJobsMonthFilter();
+  populateRecruitmentJobsTitleFilter();
+  const filterTitle = document.getElementById('rjFilterTitle')?.value || '';
   const filterMonth = document.getElementById('rjFilterMonth')?.value || '';
   const filterDept = document.getElementById('rjFilterDept')?.value || '';
   const filterKeyword = (document.getElementById('rjFilterKeyword')?.value || '').trim();
-  let list = (DB.recruitmentJobs || []).slice().sort((a, b) => b.id - a.id).filter(j => {
+  // Tin "🔥 ưu tiên" nổi lên ĐẦU danh sách chính (đã chốt với người dùng: không tách khu riêng) — giữa các
+  // tin ưu tiên, đẩy MỚI NHẤT (pinnedAt) đứng trước; phần còn lại giữ nguyên sort cũ theo id giảm dần.
+  let list = (DB.recruitmentJobs || []).slice().sort((a, b) => {
+    const pa = isRecruitmentJobPriority(a), pb = isRecruitmentJobPriority(b);
+    if (pa !== pb) return pa ? -1 : 1;
+    if (pa && pb) {
+      const diff = (new Date(b.pinnedAt).getTime() || 0) - (new Date(a.pinnedAt).getTime() || 0);
+      if (diff) return diff;
+    }
+    return b.id - a.id;
+  }).filter(j => {
+    if (filterTitle && (j.title || '').trim() !== filterTitle) return false;
     if (filterMonth && j.month !== filterMonth) return false;
     if (filterDept && j.hiringDept !== filterDept) return false;
     if (!matchesKeywordFields([j.title, j.location], filterKeyword)) return false;
@@ -988,7 +1066,28 @@ function renderRecruitmentJobs() {
     const isOpen = j.status === 'OPEN';
     const canClose = canManage && (j.status === 'OPEN' || j.status === 'FILLED');
     const statusBadge = recruitmentJobStatusBadgeHTML(j);
-    const bannerHTML = j.bannerUrl ? `<img src="${escapeHtml(j.bannerUrl)}" alt="" class="w-full h-32 object-cover rounded">` : '';
+    const isPriority = isRecruitmentJobPriority(j);
+    // Thẻ 2 cột (9/2026): TRÁI khung ảnh VUÔNG cố định, object-contain (không cắt méo banner như object-cover
+    // cũ), placeholder trung tính khi không có banner; PHẢI các field chính dạng nhãn-giá trị IN ĐẬM.
+    const thumbHTML = j.bannerUrl
+      ? `<img src="${escapeHtml(j.bannerUrl)}" alt="${escapeHtml(j.title || '')}" loading="lazy" class="w-full h-full object-contain">`
+      : `<span class="rj-thumb-placeholder text-3xl text-gray-300" aria-hidden="true">💼</span>`;
+    const addressText = [j.location, j.hiringDept].filter(Boolean).join(' — ');
+    const fieldRows = [
+      ['Thu nhập', j.income || 'Thoả thuận'],
+      ['Địa chỉ', addressText || '—'],
+      ['Số lượng', j.slots > 0 ? `${j.slots} người` : 'Không giới hạn'],
+      ['Thời hạn', j.deadline || 'Không thời hạn'],
+      ['Liên hệ', j.contactInfo || '—']
+    ];
+    if (j.month) fieldRows.push(['Đợt tuyển', j.month]);
+    const fieldsHTML = fieldRows.map(([label, value]) => `
+            <div class="rj-field flex gap-1.5 text-xs">
+              <dt class="rj-field-label text-gray-500 w-20 flex-shrink-0">${escapeHtml(label)}</dt>
+              <dd class="rj-field-value font-bold text-gray-800 break-words min-w-0">${escapeHtml(value)}</dd>
+            </div>`).join('');
+    const detailOpen = expandedRecruitmentJobs.has(j.id);
+    const hasDetail = !!(j.description || j.requirements);
     // Gợi ý "Đã tuyển đủ" khi referral HIRED đạt slots — CHỈ là banner gợi ý, nút xác nhận vẫn LUÔN bấm
     // được bất kể số này (HR có thể đã tuyển qua kênh ngoài hệ thống này không thấy được — đã chốt với
     // người yêu cầu tính năng, xem confirmRecruitmentJobFilled() ở lib/recordActions.js).
@@ -996,20 +1095,32 @@ function renderRecruitmentJobs() {
       ? `<p class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-1">💡 Đã có ${hiredCount}/${j.slots} referral được tuyển — xác nhận đã tuyển đủ?</p>`
       : '';
     return `
-      <div class="bg-white border rounded p-3 space-y-1.5">
-        ${bannerHTML}
-        <div class="flex justify-between items-start gap-2">
-          <h4 class="font-bold text-gray-800 text-sm">${escapeHtml(j.title)}</h4>
-          ${statusBadge}
+      <div class="rj-card bg-white border ${isPriority ? 'border-amber-400 ring-1 ring-amber-300' : ''} rounded p-3 space-y-2" data-job-id="${Number(j.id)}">
+        <div class="flex gap-3">
+          <div class="rj-thumb w-24 h-24 sm:w-28 sm:h-28 flex-shrink-0 rounded border bg-gray-50 flex items-center justify-center overflow-hidden">${thumbHTML}</div>
+          <div class="flex-1 min-w-0 space-y-1">
+            <div class="flex justify-between items-start gap-2">
+              <h4 class="font-bold text-gray-900 text-sm break-words">${escapeHtml(j.title)}</h4>
+              <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                ${isPriority ? '<span class="rj-priority-badge text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">🔥 Tin ưu tiên</span>' : ''}
+                ${statusBadge}
+              </div>
+            </div>
+            <dl class="space-y-0.5">${fieldsHTML}</dl>
+          </div>
         </div>
-        <p class="text-xs text-gray-500">${j.hiringDept ? '🏢 ' + escapeHtml(j.hiringDept) + ' · ' : ''}${j.location ? '📍 ' + escapeHtml(j.location) + ' · ' : ''}${j.slots > 0 ? 'Cần ' + j.slots + ' người' : 'Không giới hạn số lượng'}${j.deadline ? ' · Hạn: ' + escapeHtml(j.deadline) : ''}${j.month ? ' · Đợt: ' + escapeHtml(j.month) : ''}</p>
-        <p class="text-xs text-gray-700 whitespace-pre-wrap">${escapeHtml(j.description)}</p>
-        ${j.requirements ? `<p class="text-xs text-gray-500"><span class="font-semibold">Yêu cầu:</span> ${escapeHtml(j.requirements)}</p>` : ''}
-        ${j.contactInfo ? `<p class="text-xs text-gray-600"><span class="font-semibold">Liên hệ:</span> ${escapeHtml(j.contactInfo)}</p>` : ''}
+        ${hasDetail ? `
+        <div class="rj-detail ${detailOpen ? '' : 'hidden'} border-t pt-2 space-y-1.5">
+          ${j.description ? `<div class="text-xs"><div class="font-semibold text-gray-600">Mô tả công việc</div><p class="text-gray-700 whitespace-pre-wrap">${escapeHtml(j.description)}</p></div>` : ''}
+          ${j.requirements ? `<div class="text-xs"><div class="font-semibold text-gray-600">Yêu cầu ứng viên</div><p class="text-gray-700 whitespace-pre-wrap">${escapeHtml(j.requirements)}</p></div>` : ''}
+        </div>
+        <button type="button" data-op="toggleRecruitmentJobDetail" data-arg0="${Number(j.id)}" data-arg-event="1" class="text-xs font-bold text-amber-700 hover:underline">${detailOpen ? 'Thu gọn ▴' : 'Xem chi tiết ▾'}</button>` : ''}
         <p class="text-[11px] text-gray-400">Đăng bởi ${escapeHtml(j.creatorName || j.creator)} · ${referralCount} lượt giới thiệu</p>
         ${suggestFilledHTML}
         <div class="flex gap-2 pt-1 flex-wrap">
           ${isOpen ? `<button data-op="openRecruitmentReferModal" data-arg0="${j.id}" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-bold">🙋 Giới Thiệu Ứng Viên</button>` : ''}
+          ${canManage && isOpen && !j.pinned ? `<button data-op="pinRecruitmentJobUi" data-arg0="${j.id}" data-arg-event="1" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded text-xs font-bold">🔥 Đẩy ưu tiên</button>` : ''}
+          ${canManage && j.pinned ? `<button data-op="unpinRecruitmentJobUi" data-arg0="${j.id}" data-arg-event="1" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs font-bold">Bỏ đẩy ưu tiên</button>` : ''}
           ${canManage && isOpen ? `<button data-op="confirmRecruitmentJobFilledUi" data-arg0="${j.id}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
           ${canManage ? `<button data-op="openEditRecruitmentJob" data-arg0="${j.id}" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded text-xs font-bold">✏️ Sửa</button>` : ''}
           ${canClose ? `<button data-op="closeRecruitmentJobUi" data-arg0="${j.id}" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}

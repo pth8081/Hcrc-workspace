@@ -893,6 +893,8 @@ function __mockValidateRecruitmentJobCreate(payload, user) {
   payload.hiringDept = hiringDept;
   payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
   payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
+  payload.income = payload.income ? String(payload.income).trim().slice(0, 200) : '';
+  payload.pinned = false; payload.pinnedBy = null; payload.pinnedAt = null;
   payload.status = 'OPEN';
   payload.filledBy = null; payload.filledByName = null; payload.filledAt = null;
 }
@@ -900,7 +902,7 @@ function __mockValidateRecruitmentJobCreate(payload, user) {
 // description/contactInfo bắt buộc), CỐ Ý KHÔNG đụng status/filledBy/filledByName/filledAt.
 function __mockEditRecruitmentJob(payload, user, job) {
   if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
-  const EDITABLE = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName'];
+  const EDITABLE = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income'];
   for (const f of EDITABLE) if (payload[f] !== undefined) job[f] = payload[f];
   if (!job.title || !String(job.title).trim()) throw __mockHttpError(400, 'Thiếu tên vị trí tuyển dụng');
   if (!job.description || !String(job.description).trim()) throw __mockHttpError(400, 'Thiếu mô tả công việc');
@@ -921,6 +923,21 @@ function __mockEditRecruitmentJob(payload, user, job) {
   job.hiringDept = hiringDept;
   job.bannerUrl = job.bannerUrl ? String(job.bannerUrl).trim() : '';
   job.bannerFileName = job.bannerFileName ? String(job.bannerFileName).trim() : '';
+  job.income = job.income ? String(job.income).trim().slice(0, 200) : '';
+  return job;
+}
+// "🔥 Đẩy ưu tiên" (9/2026) — mirrors pinRecruitmentJob()/unpinRecruitmentJob() ở lib/recordActions.js.
+function __mockPinJob(user, job) {
+  if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền đẩy ưu tiên tin tuyển dụng');
+  if (job.status !== 'OPEN') throw __mockHttpError(409, 'Chỉ đẩy ưu tiên được tin đang tuyển');
+  if (job.pinned) throw __mockHttpError(409, 'Tin tuyển dụng này đã được đẩy ưu tiên');
+  job.pinned = true; job.pinnedBy = user.username; job.pinnedAt = new Date().toISOString();
+  return job;
+}
+function __mockUnpinJob(user, job) {
+  if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền bỏ đẩy ưu tiên tin tuyển dụng');
+  if (!job.pinned) throw __mockHttpError(409, 'Tin tuyển dụng này hiện không được đẩy ưu tiên');
+  job.pinned = false; job.pinnedBy = null; job.pinnedAt = null;
   return job;
 }
 function __mockValidateRecruitmentReferralCreate(payload, user) {
@@ -1390,6 +1407,8 @@ async function __mockHandleRecordAction(moduleKey, idStr, action, payload, user)
     const clone = JSON.parse(JSON.stringify(job));
     if (action === 'close') return __mockCloseJob(user, clone);
     if (action === 'confirm-filled') return __mockConfirmJobFilled(user, clone);
+    if (action === 'pin') return __mockPinJob(user, clone);
+    if (action === 'unpin') return __mockUnpinJob(user, clone);
     if (action === 'edit') { const r = __mockEditRecruitmentJob(payload, user, clone); Object.assign(job, r); return job; }
     if (action === 'delete') return { __deleted: true };
     throw __mockHttpError(400, 'Hành động không hợp lệ');

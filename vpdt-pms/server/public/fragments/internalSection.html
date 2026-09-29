@@ -669,6 +669,11 @@
               <label class="block font-semibold text-gray-600 mb-1">Hạn Nhận Hồ Sơ (tuỳ chọn)</label>
               <input id="rjDeadline" type="date" class="w-full border p-1.5 rounded">
             </div>
+            <!-- Thu Nhập (9/2026) — văn bản tự do, tuỳ chọn (CORE_FIELD_MANIFEST.RECRUITMENT_JOB rjIncome). -->
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Thu Nhập (tuỳ chọn)</label>
+              <input id="rjIncome" maxlength="200" placeholder="VD: 8-10 triệu, Thoả thuận..." class="w-full border p-1.5 rounded">
+            </div>
             <div class="md:col-span-2">
               <label class="block font-semibold text-gray-600 mb-1">Thông Tin Liên Hệ (SĐT/Email phụ trách)</label>
               <input id="rjContactInfo" class="w-full border p-1.5 rounded" required>
@@ -698,7 +703,13 @@
         <p id="recruitmentJobNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng tin tuyển dụng — mọi người đều xem được tin và giới thiệu ứng viên bên dưới.</p>
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">📋 Danh Sách Tin Tuyển Dụng</h3>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-gray-50 p-3 rounded border">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-gray-50 p-3 rounded border">
+            <!-- Vị trí đang tuyển (9/2026) — các giá trị title KHÁC NHAU đã có trong DB.recruitmentJobs, cùng khuôn
+                 rjFilterMonth (populateRecruitmentJobsTitleFilter()). -->
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí Đang Tuyển</label>
+              <select id="rjFilterTitle" data-op-change="onRecruitmentJobsFilterChange" class="w-full border p-1.5 rounded bg-white text-xs"></select>
+            </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đợt (Tháng)</label>
               <select id="rjFilterMonth" data-op-change="onRecruitmentJobsFilterChange" class="w-full border p-1.5 rounded bg-white text-xs"></select>

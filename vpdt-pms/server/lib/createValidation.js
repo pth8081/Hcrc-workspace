@@ -2781,6 +2781,11 @@ const CREATE_MODULE_CONFIGS = {
       payload.filledBy = null;
       payload.filledByName = null;
       payload.filledAt = null;
+      // Đẩy ưu tiên (9/2026) — CHỈ đổi qua route /pin|/unpin riêng (pinRecruitmentJob()/unpinRecruitmentJob()
+      // ở lib/recordActions.js), không tin giá trị client tự gửi kèm lúc TẠO.
+      payload.pinned = false;
+      payload.pinnedBy = null;
+      payload.pinnedAt = null;
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'RECRUITMENT_JOB');
     }
   },
@@ -4260,6 +4265,8 @@ function normalizeRecruitmentJobFields(payload, appData) {
   payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
   assertUploadedFileUrl(payload.bannerUrl, 'Ảnh banner tin tuyển dụng');
   payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
+  // Thu Nhập (9/2026) — văn bản tự do (VD "8-10 triệu", "Thoả thuận"), tuỳ chọn, trần 200 ký tự.
+  payload.income = payload.income ? String(payload.income).trim().slice(0, 200) : '';
 }
 
 // Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Thăng Tiến (careerPaths) — dùng CHUNG cho cả TẠO

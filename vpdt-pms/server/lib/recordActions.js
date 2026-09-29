@@ -5592,7 +5592,9 @@ function canManageRecruitment(user) {
 // xoá-tạo-lại đổi id mới) — chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO (xem
 // normalizeRecruitmentJobFields(), lib/createValidation.js), CỐ Ý không đụng status/filledBy/
 // filledByName/filledAt (đổi qua closeRecruitmentJob()/confirmRecruitmentJobFilled() riêng).
-const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'customData'];
+// income (Thu Nhập, 9/2026) sửa được như mọi field nội dung khác; pinned/pinnedBy/pinnedAt CỐ Ý KHÔNG có
+// ở đây — chỉ đổi qua pinRecruitmentJob()/unpinRecruitmentJob() bên dưới.
+const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income', 'customData'];
 function editRecruitmentJob(payload, user, job, appData) {
   if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
@@ -5600,6 +5602,32 @@ function editRecruitmentJob(payload, user, job, appData) {
     if (payload[field] !== undefined) job[field] = payload[field];
   }
   normalizeRecruitmentJobFields(job, appData);
+  return job;
+}
+
+// "🔥 Đẩy ưu tiên" tin tuyển dụng (9/2026) — mirror ĐÚNG khuôn ghim bài internalPosts (pinned/pinnedBy +
+// unpinInternalPost() ở trên), khác ở chỗ KHÔNG có hạn ghim (tin ưu tiên tới khi nhân sự tự bỏ). Quyền:
+// TÁI DÙNG canManageRecruitment() (admin||internalRecruitmentCreate) — KHÔNG có permission key mới.
+// pinnedAt (ISO, giờ server) dùng để sắp các tin ưu tiên: đẩy MỚI NHẤT đứng đầu (renderRecruitmentJobs()).
+// Chỉ đẩy được tin đang tuyển (OPEN) — tin đã đóng/đã tuyển đủ không còn nhận giới thiệu nên không có lý
+// do nổi lên đầu; client cũng chỉ coi tin là "ưu tiên" khi còn OPEN (pin cũ còn sót trên tin đã đóng không
+// làm tin đó nổi lên đầu, nhân sự vẫn bấm "Bỏ đẩy ưu tiên" để dọn được).
+function pinRecruitmentJob(user, job) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền đẩy ưu tiên tin tuyển dụng');
+  if (job.status !== 'OPEN') throw new HttpError(409, 'Chỉ đẩy ưu tiên được tin đang tuyển');
+  if (job.pinned) throw new HttpError(409, 'Tin tuyển dụng này đã được đẩy ưu tiên');
+  job.pinned = true;
+  job.pinnedBy = user.username;
+  job.pinnedAt = new Date().toISOString();
+  return job;
+}
+
+function unpinRecruitmentJob(user, job) {
+  if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền bỏ đẩy ưu tiên tin tuyển dụng');
+  if (!job.pinned) throw new HttpError(409, 'Tin tuyển dụng này hiện không được đẩy ưu tiên');
+  job.pinned = false;
+  job.pinnedBy = null;
+  job.pinnedAt = null;
   return job;
 }
 
@@ -8273,7 +8301,7 @@ module.exports = {
   startTrainingTestAttempt, evaluateTrainingTestTiming,
   editOnboardingPath, confirmOnboardingStage, canEvaluateOnboardingStage3, evaluateOnboardingStage3,
   reevaluateOnboardingStage3, issueOnboardingCertificate,
-  canManageRecruitment, closeRecruitmentJob, editRecruitmentJob, confirmRecruitmentJobFilled, setRecruitmentReferralStatus,
+  canManageRecruitment, closeRecruitmentJob, editRecruitmentJob, confirmRecruitmentJobFilled, pinRecruitmentJob, unpinRecruitmentJob, setRecruitmentReferralStatus,
   canManageItSupport, canSupportItPrice, applyPriceApproval, claimPriceApply, releasePriceApplyClaim, requestPriceInfoFromIt, submitPriceSupplementFile,
   canApproveItPriceEmergencyReject, requestItPriceEmergencyReject, approveItPriceEmergencyReject, denyItPriceEmergencyReject,
   resolveApprovedFileId, resolveApprovedFileUrl,

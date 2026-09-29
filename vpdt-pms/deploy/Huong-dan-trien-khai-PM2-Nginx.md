@@ -640,7 +640,30 @@ sudo nano /etc/nginx/sites-available/vpdt
 Nội dung — `client_max_body_size` PHẢI ≥ `UPLOAD_MAX_MB` trong `.env` (mặc
 định `UPLOAD_MAX_MB=20` nếu không đặt — xem `.env.example`), nếu không file
 người dùng tải lên nằm giữa 2 giới hạn này sẽ bị Nginx chặn với lỗi
-"413 Request Entity Too Large" mơ hồ thay vì thông báo rõ ràng của ứng dụng:
+"413 Request Entity Too Large" mơ hồ thay vì thông báo rõ ràng của ứng dụng.
+
+> **Video bài Nhịp Sống HCRC/Góc Chia Sẻ (9/2026)**: video đi "làn tải video" riêng
+> (`POST /api/upload?module=internalVideo`, giới hạn cứng `INTERNAL_VIDEO_MAX_MB = 200`
+> trong `server/routes/upload.js`, KHÔNG phụ thuộc `UPLOAD_MAX_MB`). Nếu muốn dùng tính
+> năng này sau Nginx, thêm 1 `location` RIÊNG cho `/api/upload` với
+> `client_max_body_size 200M;` (giữ nguyên `20M` cho phần còn lại) — thiếu bước này mọi
+> video > 20MB bị Nginx chặn 413:
+>
+> ```nginx
+>     location /api/upload {
+>         client_max_body_size 200M;
+>         proxy_request_buffering off;   # đẩy thẳng lên Node, không đệm nguyên tệp 200MB ra đĩa Nginx
+>         proxy_read_timeout 300s;
+>         proxy_send_timeout 300s;
+>         proxy_pass http://localhost:3000;
+>         proxy_set_header Host $host;
+>         proxy_set_header X-Real-IP $remote_addr;
+>         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+>         proxy_set_header X-Forwarded-Proto $scheme;
+>     }
+> ```
+
+Cấu hình chính:
 
 ```nginx
 server {
