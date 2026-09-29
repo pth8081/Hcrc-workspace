@@ -3906,6 +3906,13 @@ làm được nay bị chặn:
   **chuyên đề** + bộ lọc theo chuyên đề trên feed, màn xem chi tiết hiện
   được nhiều ảnh/video dạng thư viện. Bài đăng cũ (chỉ 1 ảnh, không có các
   trường mới) vẫn hiển thị y như trước, không bị ảnh hưởng.
+- **Nhúng video YouTube (10/2026)** — vì máy chủ không nhiều dung lượng lưu
+  trữ, video của bài Nhịp Sống HCRC giờ có thêm lựa chọn **dán link YouTube**
+  song song với tải video lên (2 nút chuyển "⬆️ Tải video lên" / "▶️ Dán
+  link YouTube" ngay khi soạn bài). Link YouTube không tốn dung lượng máy
+  chủ, hiển thị nhúng trực tiếp trong bài như video thường. Vẫn tối đa 2
+  video/bài, tính gộp cả 2 dạng (VD 1 video tải lên + 1 link YouTube = đủ
+  2, không thêm được nữa).
 
 **LỖI ĐÃ VÁ (9/2026): các nút hỏi xác nhận 2 lần**
 - Trước đây bấm "Đóng Tin"/"Xác Nhận Đã Tuyển Đủ"/"Xoá" (Tuyển Dụng), "Xoá"
@@ -4296,15 +4303,35 @@ Excel** ngay dưới danh sách). Đợt này đã có:
 - **🏪 Chức Danh (Siêu Thị)** — 1 cột **"Tên Chức Danh"**.
 - **🧭 Vị Trí Làm Việc** — 3 cột **"Tên Vị Trí"** + **"Địa Điểm"** +
   **"Chức Danh"** (xem riêng ở mục Vị Trí Làm Việc ngay dưới).
+- **🚗 Loại Xe Cụ Thể** (Đăng Ký Xe) — 3 cột **"Tên Loại Xe"** + **"Là Xe
+  Taxi"** (Có/Không) + **"Biển Số Cố Định"** — đánh dấu "Là Xe Taxi" = Có thì
+  Biển Số tự bị bỏ trống (Taxi không có biển cố định, khớp đúng quy tắc khi
+  thêm/sửa tay).
+- **🏢 Phòng Họp** (Đặt Phòng Họp) — 2 cột **"Tên Phòng Họp Đầy Đủ"** +
+  **"Tên Gọn"**.
+- **👔 Đồng Phục** — 2 cột **"Tên Mặt Hàng"** + **"Danh Sách Size"** (các
+  size cách nhau dấu phẩy `,`). **Mã SKU theo từng size** (sinh lúc Giám Đốc
+  Siêu Thị xác nhận nhận đợt đầu, xem mục Đồng Phục) KHÔNG có trong Excel và
+  luôn được **GIỮ NGUYÊN** sau khi Nhập — chỉ Tên/Size bị ghi đè theo file.
+- **📅 Ngày Nghỉ Lễ** (Công & Phép) — 2 cột **"Ngày (dd/mm/yyyy)"** +
+  **"Tên Ngày Lễ"** — khớp theo NGÀY (ngày trùng = cập nhật tên, ngày mới =
+  thêm), khác các danh mục khác khớp theo tên.
+- **⏰ Ca Làm Việc (Siêu Thị)** (Công & Phép) — 8 cột: Mã Ca/Tên Ca/Giờ Bắt
+  Đầu/Giờ Kết Thúc/Phút Nghỉ/Ca Đêm/Giờ Công Chuẩn/Đang Dùng — khớp theo
+  **Mã Ca** (giữ nguyên id nên lịch phân ca không bị ảnh hưởng). Bỏ trống ô
+  "Đang Dùng"/"Phút Nghỉ" khi tạo mới mặc định là "đang dùng"/0 phút, khớp
+  đúng mặc định khi tạo tay qua nút "➕ Thêm Mẫu Ca".
 
 Quy tắc chung khi **Nhập Excel**: chọn file → bảng **xem trước** hiện trạng
 thái từng dòng (**✅ Mới / ✏️ Cập nhật / — Không đổi**) cùng danh sách **lỗi
 theo số dòng** (dòng lỗi KHÔNG được nhập) → chỉ khi bấm **"✅ Xác Nhận Nhập"**
-mới lưu thật (1 lượt lưu duy nhất, cùng quyền như sửa tay). Dòng trùng tên
-(không phân biệt hoa/thường) với mục đã có → **cập nhật** mục đó (giữ nguyên
-tên gốc); không trùng → **thêm mới**; 2 dòng trùng tên trong cùng file → dòng
-sau báo lỗi. Nhập Excel **không xoá** mục nào. Tối đa 500 dòng/lần, nhận file
-`.xlsx` hoặc `.csv`.
+mới lưu thật (1 lượt lưu duy nhất, cùng quyền như sửa tay — riêng Đồng
+Phục/Ngày Nghỉ Lễ/Ca Làm Việc còn mở thêm cho đúng quyền quản lý module đó,
+không riêng admin). Dòng trùng khoá gộp (matchKey — mặc định là tên, riêng
+Ngày Nghỉ Lễ là ngày và Ca Làm Việc là Mã Ca, không phân biệt hoa/thường) với
+mục đã có → **cập nhật** mục đó (giữ nguyên tên gốc); không trùng → **thêm
+mới**; 2 dòng trùng khoá gộp trong cùng file → dòng sau báo lỗi. Nhập Excel
+**không xoá** mục nào. Tối đa 500 dòng/lần, nhận file `.xlsx` hoặc `.csv`.
 
 **🧭 Vị Trí Làm Việc (10/2026)** — danh mục MỞ thay cho 2 giá trị cứng
 "HO"/"Siêu Thị" trước đây quyết định ô "Vị Trí Làm Việc" ở form tạo/sửa

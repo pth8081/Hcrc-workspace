@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**24.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.45 (2026-09-29): Nhúng video YouTube (Nhịp Sống HCRC) + Excel cho 8 danh mục object còn lại
+
+Theo yêu cầu người dùng (video upload giới hạn dung lượng máy chủ, xử lý nốt
+8 danh mục object cho Excel), phân tích + demo trước rồi triển khai.
+
+**1. Nhúng video YouTube cho Nhịp Sống HCRC (song song upload có sẵn):**
+- Mỗi video trong 1 bài đăng giờ có 2 dạng: tải file lên (như cũ, tối đa
+  200MB/video) hoặc dán link YouTube (không tốn dung lượng máy chủ) — chọn
+  qua 2 nút chuyển "⬆️ Tải video lên" / "▶️ Dán link YouTube" ngay khi soạn
+  bài. Vẫn giữ tối đa 2 video/bài (tính gộp cả 2 dạng).
+- Dữ liệu cũ (bài đăng có sẵn trước bản này, chưa có khái niệm dạng video)
+  tự động coi là "tải lên" — không cần chỉnh sửa gì, không mất dữ liệu.
+- Tái dùng nguyên `isValidYoutubeUrl()` đã có sẵn (dùng chung với video bài
+  giảng Đào Tạo) để kiểm link hợp lệ.
+
+**2. Tải Mẫu/Xuất Excel/Nhập Excel cho 8 danh mục "object" còn lại** (khác
+danh mục 1 cột chuỗi phẳng đã chuẩn hoá từ trước — Item3, v24.x golive):
+Khối/Ban, Loại Xe Cụ Thể, Chức Danh (Siêu Thị), Vị Trí Làm Việc, Phòng Họp,
+Đồng Phục, Ngày Nghỉ Lễ, Ca Làm Việc (Siêu Thị). Mỗi danh mục có đủ 3 nút
+⬇️ Tải Mẫu / 📤 Xuất Excel / 📥 Nhập Excel ngay tại đúng màn quản lý của nó
+(Quản Lý Danh Mục, Đồng Phục, Công & Phép). Nhập Excel luôn hiện bảng xem
+trước (dòng nào mới/cập nhật/lỗi) trước khi admin bấm xác nhận lưu.
+- **Vị Trí Làm Việc**: xử lý riêng (bespoke) vì có 2 mục dựng sẵn không được
+  sửa/xoá qua Excel (HO/Siêu Thị) và đi qua API tạo/sửa riêng thay vì ghi đè
+  cả mảng.
+- **Đồng Phục**: Nhập Excel chỉ đổi Tên/Size — mã SKU theo từng size (sinh
+  lúc Giám Đốc Siêu Thị xác nhận nhận đợt đầu) luôn được GIỮ NGUYÊN, không
+  bao giờ bị Excel ghi đè.
+- **Ca Làm Việc (Siêu Thị)**: bổ sung nút "✏️ Sửa" còn thiếu ở màn quản lý
+  (trước đây chỉ có Thêm/Ngừng dùng) — làm trước, cần thiết để đối chiếu
+  đúng bản ghi khi Nhập Excel.
+- Ô "Đang Dùng"/"Phút Nghỉ" bỏ trống khi nhập Excel tạo mới mặc định là
+  "đang dùng"/0 phút — khớp đúng mặc định khi tạo tay qua form, tránh Excel
+  âm thầm tạo ca "Ngừng dùng" ngoài ý muốn.
+
+Kiến trúc: 1 engine dùng chung phía server (`lib/objectCatalogImport.js`,
+cấu hình cột là NGUỒN XÁC THỰC — client không gửi schema lên) + 1 registry
+dùng chung phía client (`OBJECT_CATALOG_EXCEL_CONFIG`, core.js) cho 7/8 danh
+mục, riêng Vị Trí Làm Việc tách hẳn (`lib/positionTypesImport.js`). Việc GHI
+sau khi xác nhận preview vẫn đi qua đúng route ghi hiện có của từng danh mục
+(`POST /api/data/<key>` hoặc API riêng của Vị Trí Làm Việc), không có route
+ghi mới — không thay đổi gì về gác quyền hiện có.
+
+Test mới: `test-object-catalog-excel.js` (21 kịch bản), `test-object-catalog-excel-wiring.js`
+(23 kịch bản), `test-conghop-shift-template-edit-ui.js` (7 kịch bản),
+`test-internal-media-server.js`/`test-internal-media-client.js` (mở rộng cho
+YouTube, 28+24 kịch bản). Full regression 336 file test: 329 pass, 7 lỗi còn
+lại xác nhận đã có sẵn từ trước (thiếu SQL Server/file mẫu thật trong sandbox
+CI, không phải regression của đợt này).
+
+Triển khai: không đổi `schema.sql`, không thêm biến `.env`, không thêm gói
+npm mới — chỉ cần copy code + `pm2 restart`.
 
 ## v24.44 (2026-09-29): Vá lỗi double-dispatch CSP (Tuyển Dụng/Đào Tạo/Thanh Toán) + rà soát fileAuthz.js
 
