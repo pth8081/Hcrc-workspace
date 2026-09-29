@@ -1130,7 +1130,12 @@ const CORE_FIELD_MANIFEST = {
   // xem module-hrlifecycle.js. hrpOnbEmail KHÔNG đưa vào cùng lý do bản cũ (nhãn/required bị
   // onHrpOnboardingPosTypeChange() tự ghi đè theo Vị Trí).
   HR_ONBOARDING: [
-    { id: 'hrpOnbEmployeeCode', label: 'Mã Nhân Viên', required: true },
+    // LỖI ĐÃ VÁ (báo lỗi "Please fill out this field" dù để trống): required TRƯỚC ĐÂY là true, mâu
+    // thuẫn với HTML gốc (hrLifecycleSection.html — input KHÔNG có `required`, placeholder ghi rõ "Để
+    // trống để tự sinh (BL0001, BL0002...)") — applyCoreFieldCustomizations() tự gán input.required=true
+    // lúc đăng nhập theo ĐÚNG giá trị manifest này, chặn submit bằng validate HTML5 dù nghiệp vụ cho phép
+    // để trống (server tự sinh mã, xem generateEmployeeCode() ở lib/employeeProfile.js).
+    { id: 'hrpOnbEmployeeCode', label: 'Mã Nhân Viên', required: false },
     { id: 'hrpOnbFullName', label: 'Họ và Tên', required: true },
     { id: 'hrpOnbPosType', label: 'Vị Trí', required: false },
     { id: 'hrpOnbDept', label: 'Phòng Ban', required: false },
@@ -1138,6 +1143,12 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpOnbJobTitle', label: 'Chức Danh', required: false },
     { id: 'hrpOnbPhone', label: 'Số Điện Thoại', required: true },
     { id: 'hrpOnbStartDate', label: 'Ngày Vào Làm Việc', required: true },
+    // Địa Chỉ (currentAddress)/Số CCCD (nationalId) — thêm mới (10/2026, theo yêu cầu người dùng): thu
+    // thập ngay ở form Onboarding thay vì chỉ điền được sau ở Hồ Sơ Nhân Sự. KHÔNG bắt buộc (có thể bổ
+    // sung sau) — xem submitHrpOnboarding() ở module-hrlifecycle.js + hook ghi vào hồ sơ nháp
+    // employeeProfiles ở routes/create.js.
+    { id: 'hrpOnbAddress', label: 'Địa Chỉ (tuỳ chọn)', required: false },
+    { id: 'hrpOnbNationalId', label: 'Số CCCD (tuỳ chọn)', required: false },
     { id: 'hrpOnbNote', label: 'Ghi Chú Thêm (tuỳ chọn)', required: false }
   ],
   HR_OFFBOARDING: [

@@ -388,6 +388,25 @@ router.post('/:module', async (req, res) => {
           ...arr[idx], processId: record.id, onboardingQueueStatus: 'PENDING',
           onboardingQueueCancelReason: null, onboardingQueueCancelledAt: null, onboardingQueueCancelledBy: null
         };
+        // Địa Chỉ (currentAddress)/CCCD (nationalId) — thu thập ngay ở form Onboarding (10/2026, theo yêu
+        // cầu người dùng), KHÔNG còn bắt buộc phải đợi HR điền sau ở Hồ Sơ Nhân Sự. Cả 2 field ĐÃ được
+        // trim/giới hạn độ dài + chặn trùng CCCD ở hrProcesses.extraValidate (lib/createValidation.js) —
+        // chỉ ghi thẳng vào hồ sơ nháp KHI client thực sự gửi giá trị không rỗng (để trống vẫn hợp lệ,
+        // "bổ sung sau ở Hồ Sơ Nhân Sự" như trước). Dùng applyProfileEdit() (không tự gán tay) để đi
+        // đúng cùng 1 đường xử lý field chung (trim/slice/ghi profileEditHistory) như mọi lối ghi
+        // currentAddress/nationalId khác của hồ sơ (PATCH by-code/import Excel/tạo hồ sơ tay).
+        if (idx !== -1 && (record.currentAddress || record.nationalId)) {
+          // CHỈ đưa vào payload đúng field client thực sự gửi khác rỗng — applyProfileEdit() coi field
+          // "có mặt trong payload" (kể cả giá trị rỗng/undefined) là "cần ghi đè", nên field còn lại
+          // (không nhập) PHẢI vắng mặt hẳn khỏi object này để giữ nguyên giá trị cũ, không bị ghi đè null.
+          const onboardingProfileEdits = {};
+          if (record.currentAddress) onboardingProfileEdits.currentAddress = record.currentAddress;
+          if (record.nationalId) onboardingProfileEdits.nationalId = record.nationalId;
+          employeeProfile.applyProfileEdit(
+            arr[idx], onboardingProfileEdits, Object.keys(onboardingProfileEdits),
+            freshUser.username, freshUser.name
+          );
+        }
         return arr;
       });
     }
