@@ -3905,6 +3905,13 @@ làm được nay bị chặn:
   được nhiều ảnh/video dạng thư viện. Bài đăng cũ (chỉ 1 ảnh, không có các
   trường mới) vẫn hiển thị y như trước, không bị ảnh hưởng.
 
+**LỖI ĐÃ VÁ (9/2026): các nút hỏi xác nhận 2 lần**
+- Trước đây bấm "Đóng Tin"/"Xác Nhận Đã Tuyển Đủ"/"Xoá" (Tuyển Dụng), "Xoá"
+  (Đào Tạo — Chương Trình/Lớp Học/Bài Test...), "Xoá" (Thanh Toán) đôi khi
+  hiện hộp thoại xác nhận 2 LẦN LIÊN TIẾP và có thể gọi API 2 lần (nguyên
+  nhân kỹ thuật: 1 sự kiện click bị bắt trùng bởi 2 lớp xử lý lồng nhau) —
+  đã vá tận gốc, giờ chỉ hỏi xác nhận đúng 1 lần.
+
 ---
 
 ## 6. Phân quyền (permission model)

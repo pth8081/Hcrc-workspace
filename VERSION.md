@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**24.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.44 (2026-09-29): Vá lỗi double-dispatch CSP (Tuyển Dụng/Đào Tạo/Thanh Toán) + rà soát fileAuthz.js
+
+Theo yêu cầu người dùng, sửa 2 phát hiện thêm nêu ở đợt merge v24.43:
+
+1. **LỖI ĐÃ VÁ (Cao — ảnh hưởng thao tác thật, không phải bảo mật)**: nút
+   "Đóng Tin"/"Xác Nhận Đã Tuyển Đủ"/"Xoá" (Tuyển Dụng), "Xoá" (Đào Tạo LMS
+   — Chương Trình/Lớp Học/Bài Test...), "Xoá" (Thanh Toán) và 8 modal xử lý
+   riêng của Đào Tạo/Tuyển Dụng đều hỏi xác nhận 2 lần + gọi API 2 lần.
+   Nguyên nhân gốc: `#internalRecruitmentSection`/`#internalTrainingLmsSection`/
+   `#paymentSection` + 8 modal LỒNG bên trong 1 gốc CSP delegation khác đã
+   bind sẵn (`#internalSection`/`#officeSection`) — bind CSP delegation THÊM
+   riêng cho các id con này (từ đợt tách module v23.11-23.13) khiến 1 click
+   bị bắt 2 lần qua bubbling. Gỡ 10 dòng bind dư thừa, xác nhận lại bằng
+   Playwright (đúng 1 lần dispatch, không phải 0 hay 2). Ảnh hưởng RỘNG hơn
+   báo cáo ban đầu (không chỉ Tuyển Dụng) — đã rà soát + vá triệt để cả
+   Đào Tạo LMS và Thanh Toán cùng lúc.
+2. **Rà soát `lib/fileAuthz.js` gọi `operationWorkItems` "vô điều kiện"**:
+   sau khi phân tích kỹ, đây KHÔNG phải bug — `findOwningRecord()` vốn đã
+   truy vấn song song ~15 collection khác (attendanceRecords/vppPeriods/
+   trainingClasses/...) cho MỌI lần kiểm quyền file theo đúng thiết kế
+   (không biết trước file thuộc collection nào), `operationWorkItems` chỉ là
+   1 trong số đó — không phải bất thường riêng, không sửa code. 10 file test
+   fail vì lý do này trong sandbox môi trường CI đều do thiếu SQL Server
+   thật ở đó, không phải lỗi ứng dụng.
+
+Test mới: `test-csp-nested-root-double-dispatch.js` (3 kịch bản khoá lại
+Tuyển Dụng/Đào Tạo LMS/Thanh Toán). Cập nhật `test-form-reset-file-remove.js`
+(1 assertion từng cố tình chấp nhận hành vi double-dispatch cũ). Full
+regression 365 file test: không có regression thật nào khác.
 
 ## v24.43 (2026-09-29): Đào Tạo/Onboarding/Tuyển Dụng/Truyền Thông Nội Bộ — đợt yêu cầu lớn
 
