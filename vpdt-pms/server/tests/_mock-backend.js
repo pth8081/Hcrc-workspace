@@ -44,18 +44,26 @@ function __mockNormalizeInternalPostContentAndMedia(target) {
     target.content = String(target.content || '').trim().slice(0, 20000);
     if (!target.content) throw __mockHttpError(400, 'Vui lòng nhập nội dung bài viết');
   }
-  const norm = (raw, max, label, re) => {
+  // allowYoutube: mirrors nhánh {type:'youtube', youtubeUrl} của normalizeInternalPostFileList() (chỉ videos[];
+  // phần tử thiếu type = 'upload' như bản ghi cũ).
+  const norm = (raw, max, label, re, allowYoutube) => {
     if (raw === undefined || raw === null) return [];
     if (!Array.isArray(raw)) throw __mockHttpError(400, `${label} không hợp lệ`);
     if (raw.length > max) throw __mockHttpError(400, `Mỗi bài chỉ được tối đa ${max} ${label.toLowerCase()}`);
     return raw.map((it, i) => {
+      if (allowYoutube && it && it.type === 'youtube') {
+        let ok = false;
+        try { const u = new URL(String(it.youtubeUrl || '').trim()); ok = u.protocol === 'https:' && ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(u.hostname.toLowerCase()); } catch (_) { ok = false; }
+        if (!ok) throw __mockHttpError(400, `${label} #${i + 1}: link YouTube không hợp lệ (phải là link https:// thuộc youtube.com hoặc youtu.be)`);
+        return { type: 'youtube', youtubeUrl: String(it.youtubeUrl).trim() };
+      }
       if (!it || typeof it.fileUrl !== 'string' || typeof it.fileName !== 'string') throw __mockHttpError(400, `${label} #${i + 1} không hợp lệ`);
       if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(it.fileUrl) || !re.test(it.fileUrl)) throw __mockHttpError(400, `${label} #${i + 1} sai định dạng cho phép`);
-      return { fileUrl: it.fileUrl, fileName: it.fileName };
+      return allowYoutube ? { type: 'upload', fileUrl: it.fileUrl, fileName: it.fileName } : { fileUrl: it.fileUrl, fileName: it.fileName };
     });
   };
   target.images = norm(target.images, 8, 'Ảnh', /\.(jpe?g|png|webp)$/i);
-  target.videos = norm(target.videos, 2, 'Video', /\.(mp4|webm)$/i);
+  target.videos = norm(target.videos, 2, 'Video', /\.(mp4|webm)$/i, true);
   if (!target.coverImage) { target.coverImage = target.images[0] || null; return; }
   const match = target.images.find((i) => i.fileUrl === target.coverImage.fileUrl);
   if (!match) throw __mockHttpError(400, 'Ảnh đại diện phải là 1 trong các ảnh của bài viết');

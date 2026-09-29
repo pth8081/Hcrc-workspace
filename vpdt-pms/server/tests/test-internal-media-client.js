@@ -239,6 +239,127 @@ async function main() {
       assertEqual(after.imgs, 0, 'Huỷ Sửa phải dọn bản nháp ảnh'); assertEqual(after.html, '', 'Huỷ Sửa phải dọn khung soạn thảo');
     });
 
+    // ===== Video nhúng YouTube (9/2026) — {type:'youtube', youtubeUrl} song song video tải lên =====
+    const YT_URL = 'https://youtu.be/dQw4w9WgXcQ';
+    await run('YouTube: nút "Dán link YouTube" (data-op) hiện ô nhập link + ẩn ô chọn tệp; "Tải video lên" đổi lại', async () => {
+      await page.click('#internalVideoModeTabs [data-video-mode="youtube"]');
+      let s = await page.evaluate(() => ({ up: document.getElementById('internalVideoUploadBox').classList.contains('hidden'), yt: document.getElementById('internalVideoYoutubeBox').classList.contains('hidden') }));
+      assert(s.up && !s.yt, `chế độ YouTube: ${JSON.stringify(s)}`);
+      await page.click('#internalVideoModeTabs [data-video-mode="upload"]');
+      s = await page.evaluate(() => ({ up: document.getElementById('internalVideoUploadBox').classList.contains('hidden'), yt: document.getElementById('internalVideoYoutubeBox').classList.contains('hidden') }));
+      assert(!s.up && s.yt, `chế độ tải lên: ${JSON.stringify(s)}`);
+    });
+
+    await run('YouTube: link không hợp lệ (http/tên miền lạ/không có videoId) bị chặn ở client, không thêm vào bản nháp', async () => {
+      await page.click('#internalVideoModeTabs [data-video-mode="youtube"]');
+      for (const bad of ['http://www.youtube.com/watch?v=dQw4w9WgXcQ', 'https://youtube.com.evil.tld/watch?v=dQw4w9WgXcQ', 'https://www.youtube.com/channel/abc', 'javascript:alert(1)']) {
+        await page.evaluate(() => { window.__alerts.length = 0; });
+        await page.fill('#internalYoutubeUrlInput', bad);
+        await page.click('[data-op="addInternalYoutubeVideo"]');
+        const r = await page.evaluate(() => ({ alerts: window.__alerts.slice(), n: internalMediaDraft.videos.length }));
+        assertEqual(r.n, 0, `không được thêm ${bad}`);
+        assert(r.alerts.some(a => a.includes('Link YouTube không hợp lệ')), `phải báo lỗi rõ ràng cho ${bad}: ${JSON.stringify(r.alerts)}`);
+      }
+      await page.fill('#internalYoutubeUrlInput', '');
+    });
+
+    await run('YouTube: Enter trong ô link = Thêm (không đăng bài); + 1 video tải lên = 2; thêm thứ 3 (YouTube/tệp) bị chặn', async () => {
+      const before = await page.evaluate(() => DB.internalPosts.length);
+      await page.fill('#internalYoutubeUrlInput', YT_URL);
+      await page.press('#internalYoutubeUrlInput', 'Enter');
+      await page.waitForFunction(() => internalMediaDraft.videos.length === 1);
+      const r1 = await page.evaluate(() => ({ n: DB.internalPosts.length, v: internalMediaDraft.videos.slice(), input: document.getElementById('internalYoutubeUrlInput').value,
+        rows: [...document.querySelectorAll('#internalVideosPreview .internal-draft-video')].map(d => d.dataset.videoType) }));
+      assertEqual(r1.n, before, 'Enter trong ô link YouTube không được đăng bài');
+      assertEqual(JSON.stringify(r1.v), JSON.stringify([{ type: 'youtube', youtubeUrl: YT_URL }]), 'bản nháp YouTube');
+      assertEqual(r1.input, '', 'ô link được dọn sau khi thêm');
+      assertEqual(JSON.stringify(r1.rows), JSON.stringify(['youtube']), 'preview hiện dòng YouTube');
+      await page.click('#internalVideoModeTabs [data-video-mode="upload"]');
+      await page.setInputFiles('#internalVideosInput', [{ name: 'kem.mp4', mimeType: 'video/mp4', buffer: MP4 }]);
+      await waitUploads(0, 2);
+      await page.evaluate(() => { window.__alerts.length = 0; window.__uploadModuleKeys = []; });
+      await page.click('#internalVideoModeTabs [data-video-mode="youtube"]');
+      await page.fill('#internalYoutubeUrlInput', 'https://www.youtube.com/watch?v=abcDEF12345');
+      await page.click('[data-op="addInternalYoutubeVideo"]');
+      await page.click('#internalVideoModeTabs [data-video-mode="upload"]');
+      await page.setInputFiles('#internalVideosInput', [{ name: 'thu3.mp4', mimeType: 'video/mp4', buffer: MP4 }]);
+      await page.waitForTimeout(200);
+      const r2 = await page.evaluate(() => ({ n: internalMediaDraft.videos.length, alerts: window.__alerts.slice(), keys: window.__uploadModuleKeys.slice() }));
+      assertEqual(r2.n, 2, 'vẫn đúng 2 video (trần gộp)');
+      assertEqual(r2.alerts.filter(a => a.includes('tối đa 2')).length, 2, `phải cảnh báo trần 2 cho cả YouTube lẫn tệp: ${JSON.stringify(r2.alerts)}`);
+      assertEqual(r2.keys.length, 0, 'không được tải tệp thứ 3 lên');
+      await page.evaluate(() => { document.getElementById('internalYoutubeUrlInput').value = ''; });
+    });
+
+    let ytPostId;
+    await run('YouTube: đăng bài -> videos[] đúng 2 dạng {type:youtube,youtubeUrl} + {type:upload,fileUrl,fileName}', async () => {
+      await page.evaluate(() => {
+        document.activeElement && document.activeElement.blur();
+        document.getElementById('internalTitle').value = 'Bài có YouTube';
+        document.getElementById('internalPostCategory').value = 'HOAT_DONG_CHUNG';
+        document.getElementById('internalContent').innerHTML = '<p>Xem video</p>';
+        window.__alerts.length = 0;
+      });
+      await page.evaluate(() => submitInternalPost({ preventDefault() {}, submitter: null }));
+      const p = await page.evaluate(() => DB.internalPosts.find(x => x.title === 'Bài có YouTube'));
+      assert(p, `bài phải được tạo: ${JSON.stringify(await page.evaluate(() => window.__alerts))}`);
+      ytPostId = p.id;
+      assertEqual(p.videos.length, 2, 'số video');
+      assertEqual(JSON.stringify(p.videos[0]), JSON.stringify({ type: 'youtube', youtubeUrl: YT_URL }), 'video YouTube');
+      assertEqual(p.videos[1].type, 'upload', 'video tải lên có type upload');
+      assert(/^\/uploads\//.test(p.videos[1].fileUrl) && p.videos[1].fileName, `video tải lên giữ fileUrl/fileName: ${JSON.stringify(p.videos[1])}`);
+    });
+
+    await run('YouTube: chi tiết bài hiện <iframe> nhúng youtube.com/embed/<id> (referrerpolicy, allowfullscreen) + <video> tệp tải lên', async () => {
+      await page.evaluate((id) => viewInternalPostDetail(id), ytPostId);
+      await page.waitForFunction(() => !!document.querySelector('#internalArticleContent .internal-videos'));
+      const r = await page.evaluate(() => {
+        const root = document.querySelector('#internalArticleContent .internal-videos');
+        const f = root.querySelector('iframe');
+        return { iframes: root.querySelectorAll('iframe').length, videos: root.querySelectorAll('video').length, src: f && f.getAttribute('src'),
+          ref: f && f.getAttribute('referrerpolicy'), fs: f && f.hasAttribute('allowfullscreen'), html: root.innerHTML };
+      });
+      assertEqual(r.iframes, 1, 'số iframe'); assertEqual(r.videos, 1, 'số video tệp');
+      assertEqual(r.src, 'https://www.youtube.com/embed/dQw4w9WgXcQ', 'embed URL');
+      assertEqual(r.ref, 'strict-origin-when-cross-origin', 'referrerpolicy');
+      assert(r.fs, 'allowfullscreen');
+      assert(!/\son[a-z]+="/i.test(r.html) && !/\sstyle="/i.test(r.html), `không inline handler/style: ${r.html}`);
+      await page.evaluate(() => closeInternalArticleModal());
+    });
+
+    await run('YouTube: link lưu trong dữ liệu có ký tự HTML/scheme lạ không lọt vào DOM (escape + chỉ nhúng videoId hợp lệ)', async () => {
+      await page.evaluate(() => {
+        DB.internalPosts.push({ id: 990004, type: 'NEWS', status: 'APPROVED', title: 'YT xấu', authorName: 'Z', dept: 'D', createdAt: '1/1/2026', code: 'TN-4',
+          content: 'x', likes: [], comments: [], readBy: [],
+          videos: [{ type: 'youtube', youtubeUrl: 'https://www.youtube.com/watch?v="><img src=x onerror=alert(1)>' }, { type: 'youtube', youtubeUrl: 'javascript:alert(1)//youtube.com' }] });
+      });
+      await page.evaluate(() => viewInternalPostDetail(990004));
+      const html = await page.evaluate(() => document.getElementById('internalArticleContent').innerHTML);
+      assert(!/<img[^>]*onerror|javascript:/i.test(html), `nội dung nguy hiểm lọt vào DOM: ${html}`);
+      assert(!/<iframe/i.test(html), 'không nhúng iframe khi không tách được videoId hợp lệ');
+      await page.evaluate(() => { closeInternalArticleModal(); DB.internalPosts = DB.internalPosts.filter(p => p.id !== 990004); });
+    });
+
+    await run('YouTube: SỬA bài nháp cũ (YouTube + video tải lên KHÔNG có type) -> nạp đúng loại, lưu lại giữ nguyên dữ liệu', async () => {
+      await page.evaluate(() => {
+        DB.internalPosts.push({ id: 990005, type: 'NEWS', status: 'DRAFT', author: 'admin1', title: 'Nháp YouTube', authorName: 'A', dept: 'D', createdAt: '1/1/2026', code: 'TN-5',
+          contentFormat: 'html', content: '<p>nháp yt</p>', postCategory: 'HOAT_DONG_CHUNG',
+          videos: [{ type: 'youtube', youtubeUrl: 'https://www.youtube.com/watch?v=abcDEF12345' }, { fileUrl: '/uploads/cu.mp4', fileName: 'cu.mp4' }], likes: [], comments: [], readBy: [] });
+      });
+      await page.evaluate(() => editInternalPostUI(990005));
+      await page.waitForFunction(() => document.getElementById('internalContent').innerHTML.includes('nháp yt'));
+      const d = await page.evaluate(() => ({ v: internalMediaDraft.videos.slice(), rows: [...document.querySelectorAll('#internalVideosPreview .internal-draft-video')].map(x => x.dataset.videoType), text: document.getElementById('internalVideosPreview').textContent }));
+      assertEqual(JSON.stringify(d.rows), JSON.stringify(['youtube', 'upload']), 'preview đúng loại từng video');
+      assert(d.text.includes('cu.mp4') && d.text.includes('abcDEF12345'), `preview hiện tên tệp/link: ${d.text}`);
+      await page.evaluate(() => { document.activeElement && document.activeElement.blur(); window.__alerts.length = 0; });
+      await page.evaluate(() => submitInternalPost({ preventDefault() {}, submitter: { id: 'internalDraftBtn' } }));
+      const p = await page.evaluate(() => DB.internalPosts.find(x => x.id === 990005));
+      assertEqual(JSON.stringify(p.videos), JSON.stringify([
+        { type: 'youtube', youtubeUrl: 'https://www.youtube.com/watch?v=abcDEF12345' },
+        { type: 'upload', fileUrl: '/uploads/cu.mp4', fileName: 'cu.mp4' }
+      ]), `videos sau khi lưu lại (alerts: ${JSON.stringify(await page.evaluate(() => window.__alerts))})`);
+    });
+
     // (Không quét cả #internalPostForm: core.js đặt el.style.order qua CSSOM — hợp lệ CSP, có từ trước —
     // nên innerHTML của form tự serialize ra style="order: 0;" không phải do HTML nội tuyến.)
     await run('không có on*=/style= nội tuyến trong HTML đã render (preview ảnh/video, feed, chi tiết)', async () => {
