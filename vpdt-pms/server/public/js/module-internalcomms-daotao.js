@@ -3213,6 +3213,52 @@ async function trackTrainingDocumentProgress(docId, payload) {
       renderTrainingJoinClassModalBody();
     }
     if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
+    // updatedRegistrations CHỈ khác rỗng đúng lượt server xác nhận vừa đạt "hoàn thành lần đầu"
+    // (completedNow, xem routes/records.js) — tức học viên VỪA xem đủ ngưỡng (95% video/hết mọi trang
+    // PDF) cho 1 tài liệu bắt buộc. Nhân tiện kiểm luôn: nếu nhờ đó lớp đã đủ TOÀN BỘ tài liệu bắt buộc
+    // + có bài test + đã tới giờ mở, tự mở luôn modal làm bài thay vì bắt học viên tự tìm nút.
+    maybeAutoOpenTrainingTestAfterDocsCompleted(result.updatedRegistrations);
+  }
+}
+
+// autoOpenedTestForClassIds — chặn KHÔNG tự mở lặp lại modal bài test cho CÙNG 1 lớp trong CÙNG 1 phiên
+// (VD học viên tự đóng modal lại, rồi xem nốt 1 tài liệu khác cũng vừa hoàn thành) — chỉ giữ trong bộ
+// nhớ phiên hiện tại (KHÔNG lưu DB/localStorage, tải lại trang thì reset), vì đây thuần là gợi ý UX,
+// không phải khoá nghiệp vụ (nghiệp vụ vẫn khoá đúng ở nút "📝 Vào Làm Bài Test" sẵn có + toàn bộ luồng
+// chấm điểm ở server, xem renderTrainingMyRegs()/applyAutoGradedTestResult()).
+const autoOpenedTestForClassIds = new Set();
+
+// Sau khi 1+ đăng ký (lớp ONLINE) vừa được server tự đánh dấu "đã xem" 1 tài liệu bắt buộc (completedNow,
+// xem trackTrainingDocumentProgress() ở trên) — kiểm từng lớp liên quan: nếu đã xem HẾT toàn bộ tài liệu
+// bắt buộc (cls.documentIds so với reg.viewedDocumentIds MỚI NHẤT vừa cập nhật) VÀ lớp có gán bài test
+// (cls.testId) VÀ đã đủ điều kiện mở (đúng ĐIỀU KIỆN hiện có ở renderTrainingMyRegs(): có endTime + đã
+// qua endTime) VÀ học viên CHƯA có bài nộp nào (mySubmission) VÀ CHƯA từng tự mở lớp này trong phiên này
+// — tự động gọi openTakeTestModal() thay vì bắt học viên tự bấm nút. Chỉ tự mở TỐI ĐA 1 bài/lượt gọi
+// (đóng gói cho hiếm khi 1 tài liệu dùng chung nhiều lớp cùng hoàn thành 1 lúc, tránh dồn nhiều modal).
+function maybeAutoOpenTrainingTestAfterDocsCompleted(updatedRegistrations) {
+  for (const reg of updatedRegistrations || []) {
+    if (reg.result !== 'REGISTERED') continue; // đã có kết quả (PASSED/FAILED) rồi thì thôi, không có gì để làm bài nữa
+    const cls = DB.trainingClasses.find(c => c.id === reg.classId);
+    if (!cls || cls.mode !== 'ONLINE' || cls.testId == null) continue;
+    if (autoOpenedTestForClassIds.has(cls.id)) continue;
+    if (!cls.endTime || new Date(cls.endTime) > new Date()) continue; // chưa tới giờ mở bài test
+    const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
+    const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
+    const allViewed = !requiredDocIds.length || requiredDocIds.every(id => viewedIds.includes(id));
+    if (!allViewed) continue;
+    const mySubmission = (DB.trainingTestSubmissions || []).find(s => s.classId === cls.id && s.username === currentUser.username);
+    if (mySubmission) continue;
+    autoOpenedTestForClassIds.add(cls.id);
+    // Đang xem video/đọc PDF trong modal riêng — đóng lại trước khi mở modal bài test đè lên cho gọn,
+    // thay vì để 2 modal chồng nhau.
+    if (document.getElementById('trainingVideoModal') && !document.getElementById('trainingVideoModal').classList.contains('hidden')) {
+      closeTrainingVideoModal();
+    }
+    if (document.getElementById('viewDocModal') && !document.getElementById('viewDocModal').classList.contains('hidden') && typeof closeViewDocModal === 'function') {
+      closeViewDocModal();
+    }
+    openTakeTestModal(cls.id);
+    break;
   }
 }
 
