@@ -30,6 +30,18 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return; // POST/PUT/DELETE... luôn đi thẳng network, không can thiệp
   const url = new URL(req.url);
+  // LỖI ĐÃ VÁ (10/2026, người dùng báo "vào lớp học không tải được video Youtube" + console báo
+  // "Fetch API cannot load https://www.youtube.com/iframe_api ... violates Content Security Policy"):
+  // trước đây MỌI request (kể cả tới domain KHÁC — youtube.com/iframe_api do <script src> tải, Google
+  // Fonts...) đều bị "can thiệp" bằng cách gọi lại fetch(req) NGAY TRONG service worker này (nhánh
+  // "!isCacheable" bên dưới). Chrome áp connect-src (KHÔNG phải script-src/font-src của request GỐC) cho
+  // MỌI lệnh gọi fetch() phát sinh TỪ BÊN TRONG service worker — nên 1 <script src="...youtube.com/
+  // iframe_api"> vốn được script-src cho phép (xem lib/securityHeaders.js) vẫn bị chặn khi SW tự fetch()
+  // lại nó, dù trang gốc chưa từng gọi fetch tới domain đó. Bỏ qua hẳn (KHÔNG gọi respondWith(), để trình
+  // duyệt tự xử lý y như không có service worker) với MỌI request KHÁC ORIGIN — chỉ còn can thiệp (để
+  // tắt cache/đi thẳng network hoặc stale-while-revalidate) cho tài nguyên CÙNG ORIGIN như thiết kế ban
+  // đầu (index.html/api/vendor/tailwind.css), đúng phạm vi ý định gốc của file này (xem chú thích đầu file).
+  if (url.origin !== self.location.origin) return;
   if (!isCacheable(url)) {
     event.respondWith(fetch(req));
     return;

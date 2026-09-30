@@ -821,6 +821,13 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     Sung ngay trên thẻ (trước đây chỉ có ở khung liệt kê tĩnh của Góc Chia
     Sẻ, nay áp dụng chung cho cả Nhịp Sống HCRC). Dashboard 4 thẻ + ô lọc
     trạng thái của Góc Chia Sẻ không đổi.
+  - **Góc Chia Sẻ: CHỈ nhúng link YouTube, KHÔNG tải file video lên (10/2026)**
+    — vẫn dùng chung khung soạn bài "Ảnh/Video" với Nhịp Sống HCRC, nhưng nút
+    "⬆️ Tải video lên" đã ẩn hẳn ở tab Góc Chia Sẻ, chỉ còn "▶️ Dán link
+    YouTube" (Nhịp Sống HCRC/NEWS giữ nguyên cả 2 cách). Server chặn lại y
+    hệt (không chỉ ẩn giao diện); bài Góc Chia Sẻ cũ lỡ có video tải lên từ
+    trước đợt này vẫn sửa/xoá/giữ nguyên được, chỉ chặn thêm video tải lên
+    MỚI.
   - **Bắt buộc tiêu đề/nội dung + trần độ dài (rà soát chuyên sâu vòng 2,
     9/2026)** — bài đăng nay bắt buộc có tiêu đề (tối đa 300 ký tự) và nội
     dung (tối đa 20.000 ký tự) ở CẢ lúc tạo lẫn lúc sửa (không còn tạo/sửa

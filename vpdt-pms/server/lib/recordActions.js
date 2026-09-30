@@ -3192,6 +3192,15 @@ function editInternalPost(payload, user, post, appData) {
       registeredUsers: Array.isArray(post.training?.registeredUsers) ? post.training.registeredUsers : []
     };
   }
+  // Góc Chia Sẻ (SHARE, 10/2026): CHỈ cho nhúng link YouTube, KHÔNG cho tải file video lên MỚI (xem chú
+  // thích đầy đủ ở createValidation.js internalPosts.extraValidate) — nhưng bài SHARE cũ lỡ đã có video
+  // TẢI LÊN từ TRƯỚC đợt siết này vẫn phải sửa được các trường khác (title/nội dung...) mà KHÔNG bị chặn
+  // oan chỉ vì còn giữ nguyên video cũ đó. Ghi lại danh sách fileUrl video-tải-lên ĐANG CÓ TRƯỚC khi vòng
+  // lặp dưới đây ghi đè `post.videos` — dùng để phân biệt "giữ/xoá video cũ" (luôn cho phép) với "thêm
+  // video-tải-lên MỚI" (chặn) ngay sau normalizeInternalPostMedia(post) bên dưới.
+  const prevUploadVideoUrls = new Set((Array.isArray(post.videos) ? post.videos : [])
+    .filter(v => v && v.type !== 'youtube' && v.fileUrl)
+    .map(v => v.fileUrl));
   for (const field of INTERNAL_POST_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) post[field] = payload[field];
   }
@@ -3205,6 +3214,9 @@ function editInternalPost(payload, user, post, appData) {
   // thuần giữ nguyên luật cũ (trim + trần 20.000 ký tự). Xem normalizeInternalPostContent().
   normalizeInternalPostContent(post);
   normalizeInternalPostMedia(post);
+  if (post.type === 'SHARE' && post.videos.some(v => v.type !== 'youtube' && !prevUploadVideoUrls.has(v.fileUrl))) {
+    throw new HttpError(400, 'Góc Chia Sẻ chỉ cho phép nhúng link YouTube, không cho tải file video lên.');
+  }
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: sửa bài NEWS/SHARE trước đây không đối chiếu lại postCategory
   // theo danh mục hiện có hay validate lại customData bắt buộc — khác đường TẠO (createValidation.js
   // internalPosts.extraValidate làm cả 2 việc này), khiến 1 request sửa thẳng có thể đặt postCategory

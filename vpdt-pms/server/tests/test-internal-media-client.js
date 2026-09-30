@@ -360,6 +360,50 @@ async function main() {
       ]), `videos sau khi lưu lại (alerts: ${JSON.stringify(await page.evaluate(() => window.__alerts))})`);
     });
 
+    // ===== Góc Chia Sẻ (SHARE, 10/2026): CHỈ cho nhúng link YouTube, KHÔNG cho tải file video lên =====
+    await run('Góc Chia Sẻ (SHARE): ẩn nút "Tải video lên", tự chuyển sang chế độ Dán link YouTube', async () => {
+      await page.evaluate(() => setInternalSubTab('SHARE'));
+      const s = await page.evaluate(() => ({
+        tabsHidden: document.getElementById('internalVideoModeTabs').classList.contains('hidden'),
+        uploadHidden: document.getElementById('internalVideoUploadBox').classList.contains('hidden'),
+        ytHidden: document.getElementById('internalVideoYoutubeBox').classList.contains('hidden')
+      }));
+      assert(s.tabsHidden, `phải ẩn nút chuyển chế độ ở tab SHARE: ${JSON.stringify(s)}`);
+      assert(s.uploadHidden && !s.ytHidden, `phải tự mở sẵn ô Dán link YouTube ở tab SHARE: ${JSON.stringify(s)}`);
+    });
+
+    await run('Góc Chia Sẻ (SHARE): dán link YouTube vẫn thêm được bình thường dù nút chuyển chế độ đang ẩn', async () => {
+      await page.fill('#internalYoutubeUrlInput', YT_URL);
+      await page.click('[data-op="addInternalYoutubeVideo"]');
+      await page.waitForFunction((url) => internalMediaDraft.videos.some(v => v.youtubeUrl === url), YT_URL);
+    });
+
+    await run('Đổi lại NEWS (Nhịp Sống HCRC): hiện lại nút "Tải video lên" như trước, không còn bị ẩn', async () => {
+      await page.evaluate(() => setInternalSubTab('NEWS'));
+      const s = await page.evaluate(() => ({
+        tabsHidden: document.getElementById('internalVideoModeTabs').classList.contains('hidden'),
+        uploadHidden: document.getElementById('internalVideoUploadBox').classList.contains('hidden')
+      }));
+      assert(!s.tabsHidden && !s.uploadHidden, `NEWS phải cho cả 2 cách như cũ: ${JSON.stringify(s)}`);
+    });
+
+    await run('Sửa lại bài SHARE cũ lỡ có video tải lên (dữ liệu TRƯỚC đợt siết) -> vẫn nạp/hiện đúng, không mất dữ liệu', async () => {
+      await page.evaluate(() => {
+        DB.internalPosts.push({ id: 990006, type: 'SHARE', status: 'DRAFT', author: 'admin1', title: 'Chia sẻ cũ có video tải lên', authorName: 'A', dept: 'D', createdAt: '1/1/2026', code: 'CS-6',
+          content: 'nội dung cũ', postCategory: 'HOAT_DONG_CHUNG', videos: [{ fileUrl: '/uploads/cu-share.mp4', fileName: 'cu-share.mp4' }], likes: [], comments: [], readBy: [] });
+      });
+      await page.evaluate(() => editInternalPostUI(990006));
+      const s = await page.evaluate(() => ({
+        vids: internalMediaDraft.videos.length,
+        tabsHidden: document.getElementById('internalVideoModeTabs').classList.contains('hidden'),
+        rows: [...document.querySelectorAll('#internalVideosPreview .internal-draft-video')].map(x => x.dataset.videoType)
+      }));
+      assertEqual(s.vids, 1, 'video cũ phải được nạp lại vào bản nháp');
+      assert(s.tabsHidden, 'vẫn ẩn nút chuyển chế độ dù bài cũ có video tải lên');
+      assertEqual(JSON.stringify(s.rows), JSON.stringify(['upload']), 'preview vẫn hiện đúng video cũ (được phép giữ/xoá, chỉ chặn thêm MỚI)');
+      await page.evaluate(() => cancelEditInternalPost());
+    });
+
     // (Không quét cả #internalPostForm: core.js đặt el.style.order qua CSSOM — hợp lệ CSP, có từ trước —
     // nên innerHTML của form tự serialize ra style="order: 0;" không phải do HTML nội tuyến.)
     await run('không có on*=/style= nội tuyến trong HTML đã render (preview ảnh/video, feed, chi tiết)', async () => {

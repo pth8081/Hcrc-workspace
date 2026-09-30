@@ -101,6 +101,12 @@ function setInternalSubTab(subTab) {
   initInternalContentEditor();
   setInternalEditorContent(null);
   resetInternalMediaDraft(null);
+  // Góc Chia Sẻ (SHARE, 10/2026 theo yêu cầu người dùng): CHỈ cho nhúng link YouTube, KHÔNG cho tải file
+  // video lên server (khác Nhịp Sống HCRC/NEWS vẫn cho cả 2 cách) — ẩn hẳn nút chuyển "⬆️ Tải video lên"
+  // (chế độ mặc định 'youtube' cho tab SHARE đã tự chọn đúng ngay trong resetInternalMediaDraft() ở trên,
+  // dựa vào activeInternalSubTab vừa gán ở đầu hàm này — xem chú thích ở đó). Server cũng chặn lại
+  // (normalizeInternalPostMedia(), lib/createValidation.js) phòng khi 1 request tự soạn né qua UI này.
+  document.getElementById('internalVideoModeTabs').classList.toggle('hidden', subTab === 'SHARE');
   // Biểu Mẫu tách 2 (10/2026, xem CORE_FIELD_MANIFEST.INTERNAL_POST_NEWS/INTERNAL_POST_SHARE ở core.js) —
   // "Trường Bổ Sung" của Nhịp Sống HCRC/Góc Chia Sẻ giờ đọc/ghi RIÊNG theo đúng modKey của tab đang mở,
   // không còn dùng chung 1 modKey 'INTERNAL_POST' như trước (container DOM vẫn dùng chung 1 id, chỉ modKey
@@ -327,7 +333,12 @@ function resetInternalMediaDraft(p) {
   };
   ['internalImagesInput', 'internalVideosInput', 'internalYoutubeUrlInput'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   ['internalImagesStatus', 'internalVideosStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
-  setInternalVideoMode('upload');
+  // Góc Chia Sẻ (SHARE, 10/2026): không có nút chuyển sang "Tải video lên" (ẩn ở setInternalSubTab()) nên
+  // PHẢI mở sẵn đúng ô "Dán link YouTube" ngay từ đầu, không thì người dùng sẽ thấy trống trơn (ô upload
+  // ẩn nhưng vẫn là mode mặc định 'upload' nếu không đổi ở đây). Dùng activeInternalSubTab (đã gán ở đầu
+  // setInternalSubTab(), CHẠY TRƯỚC lệnh gọi hàm này dù gọi từ setInternalSubTab() hay từ
+  // editInternalPostUI() gọi lại lần 2 với dữ liệu bài thật — cả 2 đường đều đã có đúng giá trị).
+  setInternalVideoMode(activeInternalSubTab === 'SHARE' ? 'youtube' : 'upload');
   renderInternalMediaDraft();
 }
 

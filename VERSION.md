@@ -1,8 +1,50 @@
 # Phiên bản hiện tại
 
-**24.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.49 (2026-09-30): Vá 3 lỗi Truyền Thông Nội Bộ — Góc Chia Sẻ/video Đào Tạo/YouTube trong Lớp Học
+
+Theo báo cáo người dùng (kèm ảnh chụp màn hình):
+
+1. **Góc Chia Sẻ dùng chung form với Nhịp Sống HCRC, vô tình cho tải file
+   video lên** — xác nhận đúng: 2 loại bài này dùng CHUNG 1 khối form
+   (`#internalPostForm`, đã có cơ chế ẩn/hiện field theo tab từ trước, VD ô
+   Chuyên Đề). Đã bổ sung theo đúng cơ chế đó: tab Góc Chia Sẻ (SHARE) giờ
+   **ẩn hẳn nút "⬆️ Tải video lên"**, chỉ còn "▶️ Dán link YouTube" — Nhịp
+   Sống HCRC (NEWS) giữ nguyên cả 2 cách như trước. Server (`lib/
+   createValidation.js`/`lib/recordActions.js`) cũng chặn lại y hệt (không
+   chỉ ẩn ở giao diện) để 1 request tự soạn không né qua được; bài Góc Chia
+   Sẻ CŨ lỡ có video tải lên từ trước đợt siết này vẫn sửa/xoá/giữ nguyên
+   được bình thường, chỉ chặn THÊM video tải lên MỚI.
+2. **Đào Tạo > Vào Lớp Học: bấm Xem Video, khung phát bị modal khác đè
+   lên** — modal Xem Video (`trainingVideoModal`) và modal Vào Lớp Học
+   (`trainingJoinClassModal`) cùng z-index 50 trong khi modal Vào Lớp Học
+   khai báo Ở SAU trong HTML — nên khi mở modal Video (nằm bên trong modal
+   Vào Lớp Học đang mở), nó bị modal Vào Lớp Học đè lên trên thay vì hiện
+   ra trước mặt. Nâng z-index modal Video lên 60 (đúng khuôn đã áp dụng
+   cho các trường hợp tương tự khác trong hệ thống) — giờ luôn nổi trên
+   cùng, xem được ngay.
+3. **Video YouTube trong Lớp Học không tải được** (lỗi đã báo từ đợt trước,
+   nay xử lý dứt điểm) — gốc rễ THẬT sự nằm ở `public/sw.js` (service
+   worker PWA): trước đây SW "can thiệp" (gọi lại `fetch()`) vào MỌI request,
+   kể cả tới domain ngoài như `youtube.com/iframe_api`/Google Fonts — trình
+   duyệt áp `connect-src` (không phải `script-src` của request gốc) cho MỌI
+   lệnh `fetch()` phát sinh TỪ BÊN TRONG service worker, nên bị CSP chặn dù
+   `script-src` đã cho phép domain đó từ trước. Sửa: SW chỉ còn can thiệp
+   với request CÙNG ORIGIN (đúng phạm vi ý định gốc — cache `/vendor/`+
+   `/tailwind.css`, network thẳng cho phần còn lại); request khác domain
+   giờ bỏ qua hẳn, để trình duyệt tự xử lý như không có service worker.
+   Link YouTube nhúng ở Nhịp Sống HCRC (chỉ `<iframe>` đơn thuần, không qua
+   SW) không bị ảnh hưởng nên đã luôn xem được — chỉ riêng Lớp Học (cần
+   nạp thêm YouTube IFrame Player API để chặn tua/theo dõi tiến độ xem)
+   mới gặp lỗi này.
+
+Viết test mới `test-internalpost-share-video-restriction.js` (10 kịch bản,
+cả đường tạo lẫn đường sửa) + bổ sung 4 kịch bản vào
+`test-internal-media-client.js` + chạy lại toàn bộ test liên quan Truyền
+Thông Nội Bộ/Đào Tạo hiện có — không regression.
 
 ## v24.48 (2026-09-30): Đăng nhập/Username KHÔNG phân biệt hoa/thường
 

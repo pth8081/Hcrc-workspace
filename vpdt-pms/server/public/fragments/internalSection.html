@@ -987,8 +987,15 @@
          tua vượt điểm đã xem xa nhất, xem viewTrainingVideoDoc() ở module-internalcomms-daotao.js. LƯU Ý
          GIỚI HẠN đã trao đổi với người dùng: đây là chế độ "phát hiện rồi sửa lại" (best-effort phía
          client), KHÔNG PHẢI khoá cứng tuyệt đối — giao diện trình phát gốc của Youtube (menu chuột phải
-         trên iframe) không thể bị trang nhúng gỡ bỏ tuỳ chọn, người rành kỹ thuật vẫn có đường lách. -->
-    <div id="trainingVideoModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+         trên iframe) không thể bị trang nhúng gỡ bỏ tuỳ chọn, người rành kỹ thuật vẫn có đường lách.
+         LỖI ĐÃ VÁ (10/2026, người dùng báo "vào lớp học, xem video thì frame lại ở bên dưới"): modal này
+         luôn được MỞ TỪ BÊN TRONG modal #trainingJoinClassModal đã mở sẵn (nút "▶️ Xem Video" nằm trong
+         danh sách tài liệu của modal đó) — 2 modal cùng z-50 + đứng SAU trong DOM (trainingJoinClassModal
+         khai báo Ở DƯỚI, ngay bên dưới) nên trainingJoinClassModal luôn đè lên TRÊN modal này theo thứ tự
+         DOM mặc định, dù mở sau — y hệt lý do bosungEditModal/genericConfirmModal phải dùng z-[60] (xem
+         chú thích tại đó, public/index.html) khi mở CHỒNG lên 1 modal z-50 đã có sẵn. Nâng z-50 -> z-[60]
+         để luôn nổi TRÊN modal Vào Lớp Học bất kể thứ tự DOM. -->
+    <div id="trainingVideoModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full">
         <div class="p-3 border-b flex justify-between items-center gap-2">
           <h3 id="trainingVideoModalTitle" class="font-bold text-gray-800 text-sm"></h3>

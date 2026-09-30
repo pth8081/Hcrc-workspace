@@ -1557,6 +1557,17 @@ const CREATE_MODULE_CONFIGS = {
       // (9/2026) — xem normalizeInternalPostContent()/normalizeInternalPostMedia() ở đầu file.
       normalizeInternalPostContent(payload);
       normalizeInternalPostMedia(payload);
+      // Góc Chia Sẻ (SHARE, 10/2026 theo yêu cầu người dùng: "góc chia sẻ hông cho phép up file video có
+      // thể nhúng link youtube") — CHỈ cho nhúng link YouTube, KHÔNG cho tải file video lên server (khác
+      // Nhịp Sống HCRC/NEWS vẫn cho cả 2 cách). Client đã ẩn nút "Tải video lên" cho tab này (module-
+      // internalcomms-nhipsong.js setInternalSubTab()) — chặn LẠI ở đây (không chỉ ẩn UI) vì 1 request tự
+      // soạn gửi thẳng {type:'upload',...} vẫn né được nếu chỉ chặn phía client. Đường TẠO luôn là bài
+      // MỚI (không có video cũ nào cần giữ lại) nên chặn thẳng, không cần "chỉ chặn video MỚI thêm vào"
+      // như đường SỬA (editInternalPost(), lib/recordActions.js — xem chú thích riêng ở đó về lý do khác
+      // nhau: bài SHARE cũ lỡ có video tải lên từ TRƯỚC đợt siết này vẫn phải sửa được các trường khác).
+      if (type === 'SHARE' && payload.videos.some(v => v.type !== 'youtube')) {
+        throw new CreateError(400, 'Góc Chia Sẻ chỉ cho phép nhúng link YouTube, không cho tải file video lên.');
+      }
 
       // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Cao — cụm Truyền Thông Nội Bộ): 4 field "tương tác"
       // dưới đây trước đây đi thẳng từ payload client vào bản ghi (validateAndPrepareCreate() spread
