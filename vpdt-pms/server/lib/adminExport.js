@@ -46,7 +46,13 @@ function sanitizeRowForFormulaInjection(row) {
 // Không set thì cột giữ định dạng "General" như trước, không đổi hành vi mọi lời gọi khác.
 function buildGenericWorkbook(sheetName, columns, rows) {
   const wb = new ExcelJS.Workbook();
-  const sheet = wb.addWorksheet(String(sheetName || 'Sheet1').slice(0, 31)); // Excel giới hạn tên sheet 31 ký tự
+  // LỖI THẬT đã vá (10/2026, người dùng báo "Xuất Excel Danh Sách Chức Danh (Khối VP/HO)" báo "Không thể
+  // tạo file Excel"): sheetName truyền vào đây trước giờ chỉ String()+cắt 31 ký tự, KHÔNG lọc 7 ký tự
+  // Excel cấm trong tên sheet (\ / ? * [ ] :) như buildMultiSheetWorkbook() bên dưới đã làm — nhãn
+  // "Chức Danh (Khối VP/HO)" (SIMPLE_CATALOG_EXCEL_CONFIG.jobTitles, module-admin.js) có dấu "/" khiến
+  // wb.addWorksheet() ném lỗi ngay, route chỉ log console rồi trả về thông báo chung chung. Dùng lại
+  // ĐÚNG sanitizeSheetNameBase() đã có sẵn (định nghĩa ngay dưới, hoisted) thay vì chỉ String()+cắt.
+  const sheet = wb.addWorksheet(sanitizeSheetNameBase(sheetName).slice(0, 31)); // Excel giới hạn tên sheet 31 ký tự
   sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18, style: c.numFmt ? { numFmt: String(c.numFmt) } : undefined }));
   styleHeaderRow(sheet.getRow(1));
   rows.forEach(r => sheet.addRow(sanitizeRowForFormulaInjection(r)));

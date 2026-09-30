@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**24.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.50 (2026-09-30): Vá lỗi "Không thể tạo file Excel" — Xuất Excel Danh Sách Chức Danh (Khối VP/HO)
+
+Theo báo cáo người dùng (kèm ảnh chụp màn hình): bấm "📤 Xuất Excel" ở Quản
+Lý Danh Sách Chức Danh (Khối Văn Phòng/HO) báo lỗi "Không thể tạo file
+Excel".
+
+**Nguyên nhân gốc**: nhãn danh mục "Chức Danh (Khối VP/HO)"
+(`SIMPLE_CATALOG_EXCEL_CONFIG.jobTitles`, `module-admin.js`) được dùng làm
+TÊN SHEET khi xuất Excel — nhãn này có dấu **"/"**, một trong 7 ký tự Excel
+CẤM dùng trong tên sheet (`\ / ? * [ ] :`). `buildGenericWorkbook()`
+(`lib/adminExport.js`, dùng chung cho MỌI màn "Xuất Excel"/"Tải Mẫu" 1-sheet
+trong toàn hệ thống) trước đây chỉ cắt tên sheet còn 31 ký tự, KHÔNG lọc 7
+ký tự cấm này như hàm `buildMultiSheetWorkbook()` (dùng cho Ma Trận Phân
+Quyền) bên cạnh đã làm từ trước — khiến `wb.addWorksheet()` ném lỗi ngay,
+route chỉ log ra console rồi trả về thông báo chung chung, không rõ nguyên
+nhân thật.
+
+Đã vá TẬN GỐC: `buildGenericWorkbook()` giờ dùng lại đúng
+`sanitizeSheetNameBase()` đã có sẵn — không chỉ sửa riêng nhãn "Chức Danh
+(Khối VP/HO)", mà bảo vệ luôn MỌI màn "Xuất Excel"/"Tải Mẫu" 1-sheet khác
+trong hệ thống khỏi cùng lỗi này (kể cả các danh mục/nhãn mới thêm sau
+này lỡ chứa 1 trong 7 ký tự cấm trên).
+
+Viết test mới `test-adminexport-sheetname-sanitize.js` — vừa unit test
+trực tiếp `buildGenericWorkbook()` với cả 7 ký tự cấm, vừa QUÉT TOÀN BỘ
+`SIMPLE_CATALOG_EXCEL_CONFIG` thật (đọc trực tiếp từ `core.js`, không
+hard-code lại danh sách) để bắt sớm nếu sau này có danh mục nào khác lỡ
+đặt nhãn chứa ký tự cấm. Chạy lại toàn bộ test Xuất/Nhập Excel hiện có —
+không regression.
 
 ## v24.49 (2026-09-30): Vá 3 lỗi Truyền Thông Nội Bộ — Góc Chia Sẻ/video Đào Tạo/YouTube trong Lớp Học
 
