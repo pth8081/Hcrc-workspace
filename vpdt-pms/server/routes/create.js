@@ -261,12 +261,24 @@ router.post('/:module', async (req, res) => {
       // là PDF THẬT sự (docType DOCUMENT + đuôi .pdf, cùng điều kiện isPdfTrainingDoc() ở client). Thất
       // bại đọc/parse file (hiếm — file lỗi) thì để pageCount=null (an toàn: track-progress không bao
       // giờ tự động hoàn thành khi chưa biết tổng số trang thật).
+      //
+      // LỖI THẬT đã vá (10/2026, người dùng báo "cuộn hết PDF không thấy báo hoàn thành"): PDFDocument.
+      // load() MẶC ĐỊNH ném EncryptedPDFError cho MỌI file có cờ /Encrypt trong PDF, KỂ CẢ file chỉ giới
+      // hạn quyền in/sửa (không cần mật khẩu để MỞ XEM — rất phổ biến với file xuất từ Word "Hạn chế
+      // chỉnh sửa"/scan-OCR/đặt bảo mật qua Adobe). Gặp file này nhánh catch() nuốt lỗi, pageCount giữ
+      // null VĨNH VIỄN cho đúng file đó — isTrainingPdfProgressComplete() (lib/recordActions.js) luôn trả
+      // về false khi pageCount<=0, nên KHÔNG BAO GIỜ báo hoàn thành dù xem hết 100% trang thật. Trong khi
+      // đó PDF.js (khung xem phía người đọc, window.renderPdfProtected ở core.js) vẫn mở/hiển thị các
+      // file này bình thường (không đòi mật khẩu để xem) — người xem cuộn hết cả file, không hề biết
+      // server đang "tịt" ở bước đếm trang. `ignoreEncryption: true` chỉ bỏ qua việc kiểm tra cờ mã hoá
+      // để ĐỌC CẤU TRÚC (đếm số trang) — không giải mã/ghi/đổi nội dung file gì cả, an toàn cho đúng mục
+      // đích thuần đếm trang ở đây.
       if (moduleKey === 'trainingDocuments' && record.docType === 'DOCUMENT' && /\.pdf$/i.test(record.fileName || '')) {
         try {
           const fname = parseUploadsFileUrl(record.fileUrl);
           if (fname) {
             const bytes = fs.readFileSync(path.join(UPLOAD_DIR, fname));
-            const pdfDoc = await PDFDocument.load(bytes);
+            const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
             record.pageCount = pdfDoc.getPageCount();
           }
         } catch (err) {

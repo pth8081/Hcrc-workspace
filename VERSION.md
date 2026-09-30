@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**24.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.51 (2026-09-30): Vá lỗi PDF mã hoá permission-only kẹt vĩnh viễn "chưa hoàn thành" — Đào Tạo
+
+Theo báo cáo người dùng: "làm bài kiểm tra xem hết video thì báo đã hoàn
+thành nhưng cuộn hết file PDF không thấy báo hoàn thành". Đã kiểm tra kỹ và
+xác nhận **KHÔNG phải** do ngưỡng hoàn thành PDF (100% số trang) quá khắt so
+với video (95%) như nghi ngờ ban đầu — người dùng xác nhận **giữ nguyên
+100%** sau khi xem phân tích, chỉ vá đúng lỗi thật bên dưới.
+
+**Nguyên nhân gốc thật**: `routes/create.js` (builderFn tạo `trainingDocuments`)
+tính `pageCount` THẬT của file PDF vừa tải lên bằng `pdf-lib`
+(`PDFDocument.load(bytes)`, không truyền tuỳ chọn nào) ngay lúc tạo hồ sơ —
+đây là mẫu số server dùng để xét "đã xem hết mọi trang" (`isTrainingPdfProgressComplete()`,
+`lib/recordActions.js`). `pdf-lib` MẶC ĐỊNH ném lỗi `EncryptedPDFError` cho
+BẤT KỲ file PDF nào có cờ `/Encrypt` trong cấu trúc, kể cả loại **chỉ giới
+hạn quyền in/sửa, KHÔNG cần mật khẩu để mở xem** — rất phổ biến với file
+xuất từ Word "Hạn chế chỉnh sửa", công cụ scan/OCR, hoặc đặt bảo mật qua
+Adobe. Gặp file này, nhánh `catch()` chỉ log cảnh báo rồi để `pageCount`
+giữ `null` **vĩnh viễn** cho đúng tài liệu đó → `isTrainingPdfProgressComplete()`
+luôn trả về `false` (vì kiểm tra `pageCount<=0` trước tiên) dù học viên đã
+cuộn xem hết 100% trang thật. Trong khi đó, khung xem PHÍA TRÌNH DUYỆT
+(PDF.js, `window.renderPdfProtected` ở `core.js`) vẫn mở/hiển thị các file
+này bình thường (không đòi mật khẩu) — học viên hoàn toàn không biết server
+đang "kẹt" ngầm ở bước đếm trang.
+
+Đã vá TẬN GỐC: `PDFDocument.load(bytes, { ignoreEncryption: true })` —
+tuỳ chọn này chỉ bỏ qua việc kiểm tra cờ mã hoá để ĐỌC CẤU TRÚC (đếm số
+trang), không giải mã/ghi/đổi nội dung file, an toàn cho đúng mục đích
+thuần đếm trang ở đây. Giữ nguyên ngưỡng hoàn thành PDF ở 100% số trang
+theo xác nhận của người dùng.
+
+Nhân dịp này cũng đã xác nhận (không có lỗi, hoạt động đúng thiết kế) 2 câu
+hỏi khác người dùng nêu cùng lúc: (1) lớp **ONLINE** — nút "🧪 Vào Làm Bài
+Test" tự động bật khi đã qua giờ kết thúc lớp (`endTime`) VÀ học viên đã
+xem hết mọi tài liệu bắt buộc, không cần thao tác gì thêm từ giảng viên;
+(2) lớp **OFFLINE** — sau khi giảng viên bấm "Kết Thúc Lớp", nút quét mã QR
+làm bài test tự chuyển từ "🔒 Chờ giảng viên bấm 'Kết Thúc Lớp'" sang
+"🧪 Quét mã QR tại lớp để làm bài".
+
+Viết test mới `test-trainingdocuments-encrypted-pdf-pagecount.js` — chạy
+thẳng route `POST /api/create/trainingDocuments` thật (không mock pdf-lib):
+(1) PDF mã hoá permission-only 3 trang (dựng bằng `pikepdf`, vì `pdf-lib`
+không tự mã hoá được) → `pageCount=3` sau khi vá; xác nhận test THẬT SỰ bắt
+được regression bằng cách tạm revert fix và thấy test FAIL đúng như dự
+kiến; (2) PDF thường (không mã hoá) vẫn hoạt động như cũ; (3) file `.pdf`
+hỏng/không parse được vẫn giữ `pageCount=null` (an toàn — không tự động
+hoàn thành khi chưa biết tổng số trang thật). Chạy lại toàn bộ test Đào Tạo/
+Truyền Thông Nội Bộ hiện có — không regression.
 
 ## v24.50 (2026-09-30): Vá lỗi "Không thể tạo file Excel" — Xuất Excel Danh Sách Chức Danh (Khối VP/HO)
 
