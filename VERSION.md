@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**24.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.52 (2026-09-30): Phân Quyền gọn/trực quan hơn — Sửa Nhanh Trên Web + Gán/Gỡ Nhóm hàng loạt
+
+Theo yêu cầu người dùng: phân quyền hiện phải "vào từng module mở ra" từng
+người một, muốn có cách "chọn dạng bảng nhanh hơn". Đã khảo sát kỹ kiến trúc
+hiện có trước khi làm: hệ thống đã có sẵn "🧮 Ma Trận Phân Quyền" đúng dạng
+bảng, nhưng chỉ hoạt động qua vòng Xuất Excel → sửa ngoài trình duyệt → Nhập
+lại. Bổ sung 2 tính năng SONG SONG với các đường cũ (không xoá/không đổi
+hành vi Excel hiện có):
+
+**1. 🖊️ Sửa Nhanh Trên Web** (nút mới ngay cạnh 4 nút Xuất/Import Excel,
+khối "🧮 Ma Trận Phân Quyền"): tick trực tiếp quyền Có/Không ngay trên trình
+duyệt, không cần tải/sửa/nhập lại Excel — chọn Người Dùng hoặc Nhóm Phân
+Quyền, chọn 1 "Khối quyền" (VD "Đăng Ký Xe", "Nhân Sự"...) tại 1 thời điểm
+để bảng đủ gọn hiện hết trên màn hình, tick ô rồi bấm "💾 Lưu Thay Đổi".
+Tái dùng NGUYÊN VẸN tầng đọc/diff/nhãn tiếng Việt đã có của Ma Trận Excel
+(`buildPermMatrixRowChanges()`, `PERM_KEY_VN_LABELS`...) — chỉ khác nguồn dữ
+liệu đọc từ checkbox thay vì từ file Excel, không đụng tới bất kỳ hàm Excel
+hiện có nào. Tài khoản "admin" gốc luôn bị khoá ô, không sửa được qua đây.
+
+**2. Gán/Gỡ Nhóm Phân Quyền hàng loạt từ danh sách Người Dùng**: tick chọn
+nhiều dòng trong danh sách Người Dùng (cột checkbox mới đầu bảng, không có
+ở dòng "admin"), chọn Nhóm Phân Quyền ở thanh hành động hiện ra, bấm
+"➕ Gán Vào Nhóm" hoặc "➖ Gỡ Khỏi Nhóm" — áp dụng cùng lúc cho mọi người đã
+chọn, tái dùng đúng công thức `mergeGroupsBasePerms()`/reset `permOverrides`
+mà `savePermGroup()` đã dùng khi thêm/bớt thành viên 1 nhóm. Chỉ áp dụng
+cho các dòng đang hiển thị trên trang hiện tại (đổi trang/lọc lại sẽ mất
+lựa chọn cũ — đã ghi rõ trong UI).
+
+Viết test mới `test-perm-matrix-quickedit-and-bulk-group.js` (Playwright,
+30 kịch bản): Sửa Nhanh Trên Web tick đúng/lưu đúng/không đụng quyền ngoài
+khối đang sửa/cascade đúng khi sửa Nhóm/admin bị khoá/không đổi gì thì
+không gọi lưu; Bulk gán/gỡ Nhóm áp dụng đúng người được chọn, không ảnh
+hưởng người không chọn, reset đúng permOverrides, admin không có checkbox,
+danh sách tự reset trạng thái chọn sau mỗi lần render lại. Đã chạy lại toàn
+bộ test Ma Trận Phân Quyền/Admin/User/Phân Quyền/CSP hiện có (test-perm-matrix-client.js,
+test-admin-users-permgroups.js, test-csp-full-audit.js, test-nghiepvu*.js
+và 12 file admin/user/permission khác) — không regression.
 
 ## v24.51 (2026-09-30): Vá lỗi PDF mã hoá permission-only kẹt vĩnh viễn "chưa hoàn thành" — Đào Tạo
 

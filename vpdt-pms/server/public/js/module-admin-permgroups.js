@@ -805,3 +805,270 @@ async function confirmPermMatrixImport() {
   renderPermGroupsList();
 }
 
+// ==========================================
+// MA TRẬN PHÂN QUYỀN — SỬA NHANH TRÊN WEB (10/2026, theo yêu cầu người dùng: "phải vào từng module mở
+// ra... có cách chọn dạng bảng nhanh hơn không, gọn và trực quan hơn"). Tái dùng NGUYÊN VẸN toàn bộ hạ
+// tầng Ma Trận đã có ở TRÊN (collectPermMatrixColumns()/permMatrixColumnGroup()/PERM_KEY_VN_LABELS/
+// buildPermMatrixRowChanges()) — CHỈ khác nguồn "row" đọc trực tiếp từ checkbox trên trang thay vì đọc
+// từ file Excel đã upload. KHÔNG sửa/đụng tới bất kỳ hàm Excel hiện có nào ở trên (downloadPermMatrixUsers/
+// Groups, onPermMatrixImportFileChange, confirmPermMatrixImport...) — 2 đường hoàn toàn độc lập, chỉ dùng
+// CHUNG tầng đọc/diff (buildPermMatrixRowChanges), khác hẳn tầng nguồn dữ liệu + tầng ghi, nên không có
+// rủi ro sửa đường này làm hỏng đường Excel đang hoạt động.
+//
+// PHẠM VI CỐ Ý THU HẸP so với Excel: chỉ tick được các cột quyền BOOLEAN thuộc ĐÚNG 1 "khối" quyền đang
+// chọn (permMatrixColumnGroup()) tại 1 thời điểm — KHÔNG đổi Nhóm Phân Quyền/Báo Cáo-Mục Bổ Sung qua bảng
+// này (2 việc đó vẫn làm qua form Sửa Người Dùng/Nhóm hoặc Excel như cũ). Giữ bảng đủ gọn để hiện hết
+// trên 1 màn hình, đúng tinh thần "gọn, trực quan" — không cố nhồi hết ~130-150 cột vào 1 bảng.
+let pmQuickEditKind = 'users'; // 'users' | 'groups'
+let pmQuickEditGroupKey = null; // tên "khối" quyền đang chọn (permMatrixColumnGroup())
+
+function pmQuickEditEntities() {
+  return pmQuickEditKind === 'users' ? DB.users : DB.permGroups;
+}
+
+function pmQuickEditAllGroupNames() {
+  const entities = pmQuickEditEntities();
+  const cols = collectPermMatrixColumns(entities.map(e => e.perms || {}));
+  const names = new Set();
+  cols.forEach(c => names.add(permMatrixColumnGroup(c)));
+  return [...names].sort((a, b) => {
+    if (a === PERM_MATRIX_UNLABELED_SHEET) return 1;
+    if (b === PERM_MATRIX_UNLABELED_SHEET) return -1;
+    return a.localeCompare(b, 'vi');
+  });
+}
+
+function togglePermMatrixQuickEdit() {
+  const wrap = document.getElementById('permMatrixQuickEditWrap');
+  if (!wrap) return;
+  const willShow = wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden');
+  if (!willShow) return;
+  pmQuickEditKind = 'users';
+  const kindUsersCb = document.getElementById('pmQuickEditKindUsers');
+  if (kindUsersCb) kindUsersCb.checked = true;
+  pmQuickEditGroupKey = null;
+  renderPmQuickEditGroupSelect();
+  renderPmQuickEditTable();
+}
+
+function setPmQuickEditKind(kind) {
+  pmQuickEditKind = kind === 'groups' ? 'groups' : 'users';
+  pmQuickEditGroupKey = null;
+  renderPmQuickEditGroupSelect();
+  renderPmQuickEditTable();
+}
+
+function renderPmQuickEditGroupSelect() {
+  const sel = document.getElementById('pmQuickEditGroupSelect');
+  if (!sel) return;
+  const groupNames = pmQuickEditAllGroupNames();
+  if (!pmQuickEditGroupKey || !groupNames.includes(pmQuickEditGroupKey)) pmQuickEditGroupKey = groupNames[0] || null;
+  sel.innerHTML = groupNames.length
+    ? groupNames.map(g => `<option value="${escapeHtml(g)}" ${g === pmQuickEditGroupKey ? 'selected' : ''}>${escapeHtml(g)}</option>`).join('')
+    : '<option value="">-- Chưa có quyền nào --</option>';
+}
+
+function onPmQuickEditGroupChange() {
+  pmQuickEditGroupKey = document.getElementById('pmQuickEditGroupSelect')?.value || null;
+  renderPmQuickEditTable();
+}
+
+function onPmQuickEditFilterChange() {
+  renderPmQuickEditTable();
+}
+
+// Cột quyền thuộc ĐÚNG khối đang chọn, sắp theo bảng chữ cái nhãn để dễ dò.
+function pmQuickEditColumnsForGroup() {
+  if (!pmQuickEditGroupKey) return [];
+  const entities = pmQuickEditEntities();
+  const cols = collectPermMatrixColumns(entities.map(e => e.perms || {}));
+  return cols.filter(c => permMatrixColumnGroup(c) === pmQuickEditGroupKey)
+    .sort((a, b) => permMatrixColumnHeader(a).localeCompare(permMatrixColumnHeader(b), 'vi'));
+}
+
+function renderPmQuickEditTable() {
+  const thead = document.getElementById('pmQuickEditTableHead');
+  const tbody = document.getElementById('pmQuickEditTableBody');
+  const status = document.getElementById('pmQuickEditStatus');
+  if (!thead || !tbody) return;
+  const cols = pmQuickEditColumnsForGroup();
+  if (!pmQuickEditGroupKey || !cols.length) {
+    thead.innerHTML = '';
+    tbody.innerHTML = `<tr><td class="p-2 text-gray-400 italic">Chưa có quyền dạng bật/tắt nào để sửa nhanh.</td></tr>`;
+    if (status) status.innerText = '';
+    return;
+  }
+  const keyword = (document.getElementById('pmQuickEditFilter')?.value || '').toLowerCase().trim();
+  const entities = pmQuickEditEntities().filter(e => {
+    if (!keyword) return true;
+    const hay = pmQuickEditKind === 'users' ? `${e.username} ${e.name || ''} ${e.dept || ''}` : `${e.name} ${e.description || ''}`;
+    return hay.toLowerCase().includes(keyword);
+  });
+
+  thead.innerHTML = `<tr class="bg-gray-100 text-left">
+    <th class="border p-1.5 sticky left-0 bg-gray-100 z-10">${pmQuickEditKind === 'users' ? 'Người Dùng' : 'Nhóm'}</th>
+    ${cols.map(c => `<th class="border p-1 text-center align-bottom whitespace-nowrap" data-style="writing-mode:vertical-rl">${escapeHtml(permMatrixColumnHeader(c))}</th>`).join('')}
+  </tr>`;
+
+  if (!entities.length) {
+    tbody.innerHTML = `<tr><td class="p-2 text-gray-400 italic" colspan="${cols.length + 1}">Không có ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} nào khớp tìm kiếm.</td></tr>`;
+  } else {
+    const flatByEntity = entities.map(e => flattenPermsForMatrix(e.perms || {}));
+    tbody.innerHTML = entities.map((e, idx) => {
+      const isProtectedAdmin = pmQuickEditKind === 'users' && e.username === 'admin';
+      const entityKey = pmQuickEditKind === 'users' ? e.username : e.name;
+      const label = pmQuickEditKind === 'users'
+        ? `<span class="font-mono font-bold text-purple-700">${escapeHtml(e.username)}</span><br><span class="text-gray-500">${escapeHtml(e.name || '')}</span>`
+        : `<span class="font-bold">${escapeHtml(e.name)}</span>`;
+      return `<tr class="border-t hover:bg-gray-50${isProtectedAdmin ? ' bg-gray-50 opacity-50' : ''}">
+        <td class="border p-1.5 sticky left-0 bg-white whitespace-nowrap">${label}${isProtectedAdmin ? '<br><span class="text-[10px] text-gray-400">⛔ Luôn toàn quyền</span>' : ''}</td>
+        ${cols.map(c => `<td class="border p-1 text-center"><input type="checkbox" data-pm-quick-cell data-entity="${escapeHtml(entityKey)}" data-key="${escapeHtml(c)}" ${flatByEntity[idx][c] === true ? 'checked' : ''} ${isProtectedAdmin ? 'disabled' : ''}></td>`).join('')}
+      </tr>`;
+    }).join('');
+  }
+  applyDataStyles(thead);
+  if (status) status.innerText = `${entities.length} ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} × ${cols.length} quyền trong khối "${pmQuickEditGroupKey}".`;
+}
+
+// Đọc lại toàn bộ ô đã tick trên bảng đang hiện -> dựng đúng cấu trúc "row" mà buildPermMatrixRowChanges()
+// (Excel) đã hiểu sẵn (header tiếng Việt -> 'Y'/'N'), rồi tái dùng NGUYÊN hàm đó để tính diff — không viết
+// lại logic diff/merge-nhóm/override 1 lần nữa ở đây (rủi ro lệch với đường Excel nếu viết tay 2 lần).
+async function savePmQuickEdit() {
+  if (!currentUser?.perms?.admin) return alert('⛔ Chỉ Quản Trị Viên mới được sửa Ma Trận Phân Quyền!');
+  const wrap = document.getElementById('permMatrixQuickEditWrap');
+  if (!wrap) return;
+  const cells = [...wrap.querySelectorAll('input[data-pm-quick-cell]')];
+  const byEntity = new Map();
+  cells.forEach(cb => {
+    const entityKey = cb.getAttribute('data-entity');
+    const permKey = cb.getAttribute('data-key');
+    if (!byEntity.has(entityKey)) byEntity.set(entityKey, {});
+    byEntity.get(entityKey)[permMatrixColumnHeader(permKey)] = cb.checked ? 'Y' : 'N';
+  });
+
+  const kind = pmQuickEditKind;
+  const entries = [];
+  byEntity.forEach((row, entityKey) => {
+    const target = kind === 'users' ? DB.users.find(u => u.username === entityKey) : DB.permGroups.find(g => g.name === entityKey);
+    if (!target || (kind === 'users' && target.username === 'admin')) return;
+    const diff = buildPermMatrixRowChanges(kind, target, row);
+    if (diff.changes.length) entries.push({ target, diff });
+  });
+
+  if (!entries.length) return alert('Không có thay đổi nào để lưu.');
+  const kindLabel = kind === 'users' ? 'người dùng' : 'nhóm phân quyền';
+  if (!confirm(`Xác nhận lưu thay đổi quyền cho ${entries.length} ${kindLabel}?`)) return;
+
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  const groupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
+  let usersTouched = false;
+
+  if (kind === 'users') {
+    entries.forEach(({ target, diff }) => {
+      target.perms = diff.newPerms;
+      target.permOverrides = diff.newPermOverrides;
+      usersTouched = true;
+    });
+  } else {
+    const changedGroupIds = new Set();
+    entries.forEach(({ target, diff }) => {
+      target.perms = diff.newPerms;
+      changedGroupIds.add(target.id);
+    });
+    // Cùng luật savePermGroup()/confirmPermMatrixImport(): sửa quyền NHÓM phải cập nhật NGAY cho mọi
+    // thành viên đang gán, giữ nguyên permOverrides riêng từng người trên nền mới.
+    DB.users.forEach(u => {
+      if (!(u.groupIds || []).some(gid => changedGroupIds.has(gid))) return;
+      const userGroups = (u.groupIds || []).map(gid => DB.permGroups.find(g => g.id === gid)).filter(Boolean);
+      if (userGroups.length) { u.perms = mergePerms(mergeGroupsBasePerms(userGroups.map(g => g.perms)), u.permOverrides); usersTouched = true; }
+    });
+  }
+
+  const savedGroups = kind === 'groups' ? await syncStorage('permGroups', { baseline: groupsSnapshot }) : true;
+  const savedUsers = (kind === 'users' || usersTouched) ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;
+  if (!savedGroups || !savedUsers) {
+    DB.users = usersSnapshot;
+    DB.permGroups = groupsSnapshot;
+    renderUsers();
+    renderPermGroupsList();
+    renderPmQuickEditTable();
+    return;
+  }
+  logSystemAction('USER_MGM', 'QUICK_EDIT_PERM_MATRIX', `Sửa nhanh Ma Trận Phân Quyền trên web (${kindLabel}, khối "${pmQuickEditGroupKey}") — ${entries.length} thay đổi`, 'SUCCESS');
+  alert(`✅ Đã lưu thay đổi cho ${entries.length} ${kindLabel}!`);
+  renderUsers();
+  renderPermGroupsList();
+  renderPmQuickEditTable();
+}
+
+// ==========================================
+// GÁN/GỠ NHÓM PHÂN QUYỀN HÀNG LOẠT từ danh sách Người Dùng (10/2026, theo yêu cầu người dùng "chọn
+// nhiều người rồi gán nhóm 1 lần" thay vì phải mở form từng người) — tái dùng ĐÚNG công thức
+// savePermGroup() dùng cho việc thêm/bớt thành viên NHÓM (mergeGroupsBasePerms() tính lại quyền nền,
+// permOverrides reset khi đổi tập nhóm — xem chú thích tại đó), chỉ khác chiều thao tác: ở đây chọn
+// NHIỀU NGƯỜI trước rồi mới chọn 1 NHÓM để áp, còn renderGroupMembersPicker() (màn Sửa Nhóm) chọn 1
+// NHÓM trước rồi chọn NHIỀU NGƯỜI.
+//
+// LƯU Ý PHẠM VI: lựa chọn (tick) chỉ tồn tại trong DOM của TRANG ĐANG HIỂN THỊ (renderUsers() phân
+// trang) — đổi trang/lọc lại sẽ mất lựa chọn cũ, đã nêu rõ ở dòng ghi chú trong systemSection.html.
+function toggleUserBulkSelectAll() {
+  const checked = !!document.getElementById('userBulkSelectAll')?.checked;
+  document.querySelectorAll('.user-bulk-select-cb').forEach(cb => { cb.checked = checked; });
+  onUserBulkSelectChange();
+}
+function onUserBulkSelectChange() {
+  const rowCbs = [...document.querySelectorAll('.user-bulk-select-cb')];
+  const count = rowCbs.filter(cb => cb.checked).length;
+  const bar = document.getElementById('userBulkActionBar');
+  if (bar) bar.classList.toggle('hidden', count === 0);
+  const label = document.getElementById('userBulkSelectedCount');
+  if (label) label.innerText = String(count);
+  const selectAllCb = document.getElementById('userBulkSelectAll');
+  if (selectAllCb) selectAllCb.checked = rowCbs.length > 0 && rowCbs.every(cb => cb.checked);
+}
+function renderUserBulkGroupSelect() {
+  const sel = document.getElementById('userBulkGroupSelect');
+  if (!sel) return;
+  sel.innerHTML = DB.permGroups.length
+    ? DB.permGroups.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('')
+    : '<option value="">-- Chưa có nhóm phân quyền nào --</option>';
+}
+
+async function applyUserBulkGroupAction(mode) { // mode: 'ADD' | 'REMOVE'
+  const ids = [...document.querySelectorAll('.user-bulk-select-cb:checked')].map(cb => Number(cb.value));
+  if (!ids.length) return alert('Chưa chọn người dùng nào.');
+  const groupId = document.getElementById('userBulkGroupSelect')?.value;
+  const group = DB.permGroups.find(g => g.id === groupId);
+  if (!group) return alert('Vui lòng chọn Nhóm Phân Quyền.');
+
+  const targets = DB.users.filter(u => ids.includes(u.id) && u.username !== 'admin');
+  const skippedAdmin = ids.length !== targets.length;
+  if (!targets.length) return alert('Không có người dùng hợp lệ để áp dụng (tài khoản admin gốc luôn được bỏ qua).');
+
+  const actionLabel = mode === 'ADD' ? `gán vào nhóm "${group.name}"` : `gỡ khỏi nhóm "${group.name}"`;
+  if (!confirm(`Xác nhận ${actionLabel} cho ${targets.length} người dùng đã chọn?${skippedAdmin ? '\n(Tài khoản admin gốc luôn được bỏ qua.)' : ''}`)) return;
+
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  let changed = 0;
+  targets.forEach(u => {
+    const currentGroupIds = u.groupIds || [];
+    const isMember = currentGroupIds.includes(group.id);
+    if (mode === 'ADD' && isMember) return;
+    if (mode === 'REMOVE' && !isMember) return;
+    u.groupIds = mode === 'ADD' ? [...currentGroupIds, group.id] : currentGroupIds.filter(gid => gid !== group.id);
+    u.permOverrides = null; // đổi tập nhóm -> reset override riêng, khớp đúng luật savePermGroup()
+    const userGroups = (u.groupIds || []).map(gid => DB.permGroups.find(g => g.id === gid)).filter(Boolean);
+    u.perms = userGroups.length ? mergeGroupsBasePerms(userGroups.map(g => g.perms)) : u.perms;
+    changed++;
+  });
+
+  if (!changed) return alert('Không có thay đổi nào (tất cả đã ở đúng trạng thái).');
+
+  const savedUsers = await syncStorage('users', { usersBaseline: usersSnapshot });
+  if (!savedUsers) { DB.users = usersSnapshot; renderUsers(); return; }
+  logSystemAction('USER_MGM', `BULK_${mode}_PERM_GROUP`, `${mode === 'ADD' ? 'Gán' : 'Gỡ'} nhóm phân quyền [${group.name}] hàng loạt — ${changed} người dùng`, 'SUCCESS', group.name);
+  alert(`✅ Đã ${mode === 'ADD' ? 'gán' : 'gỡ'} ${changed} người dùng ${mode === 'ADD' ? 'vào' : 'khỏi'} nhóm "${group.name}"!`);
+  renderUsers();
+}
+

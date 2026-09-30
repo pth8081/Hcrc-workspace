@@ -2130,6 +2130,29 @@
           <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
             📥 Import Nhóm Phân Quyền <input type="file" accept=".xlsx" data-op-change="onPermMatrixImportFileChange" data-arg-event="0" data-arg0="groups" class="hidden">
           </label>
+          <button type="button" data-op="togglePermMatrixQuickEdit" class="bg-purple-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-purple-700 transition">🖊️ Sửa Nhanh Trên Web (không cần Excel)</button>
+        </div>
+
+        <!-- Sửa Nhanh Trên Web (10/2026) — tick trực tiếp thay vì Xuất/Sửa Excel/Nhập lại. Chỉ 1 "khối"
+             quyền tại 1 thời điểm (chọn ở ô dưới) để bảng đủ gọn hiện hết trên 1 màn hình — đổi Nhóm Phân
+             Quyền/mở thêm tab Báo Cáo vẫn phải làm qua form Sửa Người Dùng/Nhóm hoặc Excel như cũ. -->
+        <div id="permMatrixQuickEditWrap" class="hidden border rounded p-2 bg-purple-50 space-y-2">
+          <div class="flex flex-wrap items-center gap-3 text-xs">
+            <label class="flex items-center gap-1 font-semibold"><input type="radio" name="pmQuickEditKind" id="pmQuickEditKindUsers" value="users" checked data-op-change="setPmQuickEditKind" data-arg-value="0"> Người Dùng</label>
+            <label class="flex items-center gap-1 font-semibold"><input type="radio" name="pmQuickEditKind" id="pmQuickEditKindGroups" value="groups" data-op-change="setPmQuickEditKind" data-arg-value="0"> Nhóm Phân Quyền</label>
+            <label class="flex items-center gap-1 font-semibold">Khối quyền:
+              <select id="pmQuickEditGroupSelect" data-op-change="onPmQuickEditGroupChange" class="border p-1.5 rounded bg-white font-semibold"></select>
+            </label>
+            <input id="pmQuickEditFilter" data-op-input="onPmQuickEditFilterChange" placeholder="🔍 Tìm người/nhóm..." class="border p-1.5 rounded flex-1 min-w-[160px]">
+          </div>
+          <div id="pmQuickEditStatus" class="text-[11px] text-gray-500"></div>
+          <div class="overflow-auto max-h-[420px] border rounded bg-white">
+            <table class="text-xs border-collapse w-full">
+              <thead id="pmQuickEditTableHead"></thead>
+              <tbody id="pmQuickEditTableBody"></tbody>
+            </table>
+          </div>
+          <button type="button" data-op="savePmQuickEdit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Thay Đổi</button>
         </div>
 
         <div id="permMatrixImportPreviewWrap" class="hidden border rounded p-2 bg-gray-50">
@@ -2154,10 +2177,21 @@
 
       <input id="filterUserKeyword" data-op-input="onUserFilterChange" placeholder="🔍 Tìm theo Username, Họ tên, hoặc Phòng ban..." class="w-full border p-2 rounded text-xs mb-2">
 
+      <!-- Gán/Gỡ Nhóm Phân Quyền hàng loạt (10/2026, theo yêu cầu người dùng "chọn nhiều người rồi gán
+           nhóm 1 lần") — chọn tick ở cột đầu bảng bên dưới, chỉ áp dụng cho DÒNG ĐANG HIỂN THỊ TRÊN
+           TRANG NÀY (đổi trang/lọc lại sẽ mất lựa chọn cũ) — xem applyUserBulkGroupAction() (module-admin-permgroups.js). -->
+      <div id="userBulkActionBar" class="hidden bg-purple-50 border border-purple-200 rounded p-2 mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <span class="font-bold text-purple-800">Đã chọn <span id="userBulkSelectedCount">0</span> người dùng (trên trang này):</span>
+        <select id="userBulkGroupSelect" class="border p-1.5 rounded bg-white font-semibold"></select>
+        <button type="button" data-op="applyUserBulkGroupAction" data-arg0="ADD" class="bg-purple-600 text-white px-2.5 py-1 rounded font-bold hover:bg-purple-700">➕ Gán Vào Nhóm</button>
+        <button type="button" data-op="applyUserBulkGroupAction" data-arg0="REMOVE" class="bg-gray-500 text-white px-2.5 py-1 rounded font-bold hover:bg-gray-600">➖ Gỡ Khỏi Nhóm</button>
+      </div>
+
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border bg-white text-xs">
           <thead>
             <tr class="bg-gray-100 text-left">
+              <th class="border p-2 text-center"><input type="checkbox" id="userBulkSelectAll" data-op-change="toggleUserBulkSelectAll" title="Chọn tất cả (trang này)"></th>
               <th class="border p-2">Username</th>
               <th class="border p-2">Họ Tên</th>
               <th class="border p-2">Liên Hệ</th>

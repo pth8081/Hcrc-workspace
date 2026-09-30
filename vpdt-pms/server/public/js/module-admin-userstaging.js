@@ -530,6 +530,7 @@ function renderUsers() {
     const isInactive = u.active === false;
     return `
     <tr id="userRow_${u.id}" class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
+      <td class="border p-2 text-center">${u.username === 'admin' ? '' : `<input type="checkbox" class="user-bulk-select-cb" value="${u.id}" data-op-change="onUserBulkSelectChange">`}</td>
       <td class="border p-2 font-bold font-mono text-purple-700">
         ${escapeHtml(u.username)}
         ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔒 Đã khóa</span>' : ''}
@@ -552,6 +553,14 @@ function renderUsers() {
     </tr>
   `;
   }).join('');
+
+  // Danh sách vừa render lại (đổi trang/lọc) -> mọi checkbox chọn hàng loạt cũ đã bị thay thế, thanh
+  // hành động phải ẩn lại và đếm về 0 (không giữ trạng thái "đã chọn" ảo cho các dòng không còn trong
+  // DOM) — xem applyUserBulkGroupAction() (module-admin-permgroups.js).
+  document.getElementById('userBulkActionBar')?.classList.add('hidden');
+  const selectAllCb = document.getElementById('userBulkSelectAll');
+  if (selectAllCb) selectAllCb.checked = false;
+  if (typeof renderUserBulkGroupSelect === 'function') renderUserBulkGroupSelect();
 }
 
 // downloadXlsxFromServer() — CHUYỂN sang public/js/core.js (file luôn nạp EAGER) — xem chú thích ở đó.
