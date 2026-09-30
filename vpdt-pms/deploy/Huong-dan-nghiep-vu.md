@@ -3929,6 +3929,26 @@ làm được nay bị chặn:
   phải bổ sung lại ở Hồ Sơ Nhân Sự sau. Ô **Mã Nhân Viên** để trống nay đúng
   nghĩa "để trống để tự sinh" (trước đây bị bắt buộc nhầm do cấu hình Biểu
   Mẫu).
+- **Đối chiếu file Excel "Trường Thông Tin Tạo Mã" (10/2026)** — panel gấp/mở
+  **"📋 Thông Tin Bổ Sung"** (tuỳ chọn, không bắt buộc, ghi thẳng vào hồ sơ
+  nháp tạo ra giống Địa Chỉ/CCCD ở trên) gồm 3 nhóm:
+  - **Cá nhân**: Giới tính, Ngày sinh, Hộ khẩu thường trú, Ngày/Nơi cấp CCCD,
+    **Hình Thức Làm Việc** + **Thời Gian Làm Việc** (2 ô droplist).
+  - **Học vấn**: Trình độ + Trường + Chuyên ngành — tạo sẵn 1 dòng học vấn
+    đầu tiên cho hồ sơ (nhập đủ Trình độ và Trường mới tạo dòng; HR bổ sung
+    thêm bằng cấp khác sau ở Hồ Sơ Nhân Sự).
+  - **Dự kiến HĐLĐ & Thu nhập**: Loại HĐLĐ/Ngày kết thúc dự kiến/Lương cơ
+    bản/7 khoản phụ cấp — **CHỈ để HR tham khảo lúc tạo Hợp Đồng Lao Động
+    thật sau này, KHÔNG tự tạo hợp đồng** (dữ liệu lưu trên chính bản ghi
+    Onboarding, không đụng tới module Hợp Đồng Lao Động).
+  - Modal **"➕ Tạo Hồ Sơ Nhân Sự Mới"** (Hồ Sơ Nhân Sự) cũng bổ sung
+    **Ngày/Nơi cấp CCCD** + **Hình Thức Làm Việc** + **Thời Gian Làm Việc**
+    ngay lúc tạo (trước đây 2 ô CCCD chỉ sửa được sau ở màn Chi tiết).
+  - **Hình Thức Làm Việc**/**Thời Gian Làm Việc** là 2 **danh mục admin tự
+    sửa được** (không phải danh sách cố định trong code) — vào **Hệ Thống →
+    Biểu Mẫu**, chọn đúng trường (ở tab Onboarding hoặc Hồ Sơ Nhân Sự), bấm
+    nút Sửa để thêm/bớt/đổi lựa chọn trong ô "Tùy Chọn" — áp dụng ngay cho cả
+    2 màn (dùng chung 1 danh mục).
 
 **Tuyển Dụng**
 - Thêm trường **Thu Nhập** (nhập tự do, VD "8-10 triệu"/"Thoả thuận").

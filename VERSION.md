@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**24.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.55 (2026-09-30): HR — đồng bộ field Onboarding/Hồ Sơ Nhân Sự theo file Excel "Trường Thông Tin Tạo Mã"
+
+Theo yêu cầu người dùng (gửi file Excel mẫu, yêu cầu phân tích + demo trước
+khi làm — khác quy trình mặc định "xác nhận phương án xong làm luôn"):
+
+1. **Form Onboarding** — thêm panel gấp/mở **"📋 Thông Tin Bổ Sung"** (tất cả
+   tuỳ chọn, ghi thẳng vào hồ sơ nháp `employeeProfiles` ngay khi tạo, cùng
+   cơ chế Địa Chỉ/CCCD đã có): Giới tính/Ngày sinh/Hộ khẩu thường trú/Ngày
+   &Nơi cấp CCCD/**Hình Thức Làm Việc**/**Thời Gian Làm Việc** (nhóm cá
+   nhân); Trình độ/Trường/Chuyên ngành (tạo sẵn 1 dòng học vấn đầu tiên);
+   Loại HĐLĐ/Ngày kết thúc/Lương cơ bản/7 khoản phụ cấp **dự kiến** (chỉ để
+   HR tham khảo lúc tạo Hợp Đồng Lao Động thật sau này, tái dùng đúng
+   `CONTRACT_TYPES`/`ALLOWANCE_FIELDS` đã có của module Hợp Đồng Lao Động,
+   KHÔNG tự tạo/đụng gì tới collection `laborContracts`).
+2. **Modal "➕ Tạo Hồ Sơ Nhân Sự Mới"** — bổ sung Ngày cấp CCCD/Nơi cấp
+   CCCD/Hình Thức Làm Việc/Thời Gian Làm Việc ngay lúc tạo (2 ô CCCD trước
+   đây chỉ sửa được sau ở màn Chi tiết).
+3. **Hình Thức Làm Việc**/**Thời Gian Làm Việc** thiết kế thành **danh mục
+   admin tự sửa được** (`employmentTypes`/`workSchedules`, `defaults.js`) —
+   KHÔNG còn danh sách cố định trong code, sửa/thêm/bớt lựa chọn qua màn
+   **Biểu Mẫu** (nút Sửa trường, ô "Tùy Chọn") — dùng chung `optionsKey`,
+   cùng khuôn `contractTypes`/`carTypes` đã có.
+4. **Mã nhân viên** — rà soát xác nhận logic chống trùng khi nhập tay (chặn
+   nếu không phải tái tuyển) và tự sinh mã (chống trùng khi tạo đồng thời)
+   đều đã hoạt động đúng từ trước, không cần sửa gì.
+
+Viết 22 test case mới (`test-hr-onboarding-excel-fields.js`), chạy full
+regression toàn bộ `tests/test-*.js` — phát hiện + vá 1 lỗi phụ trong lúc
+test: `DB` literal phía client (`core.js`) thiếu khai báo mặc định 2 key
+`employmentTypes`/`workSchedules` mới, khiến `populateDropdowns()` crash lúc
+đăng nhập ở MỌI màn có dropdown liên quan (lỗi chỉ xuất hiện khi test dựng
+`DB` tay không qua `GET /api/data` thật — đã bổ sung default rỗng `[]` đúng
+khuôn mọi danh mục khác).
 
 ## v24.54 (2026-09-30): Vá 2 lỗi test tiền tồn tại phát hiện ở đợt regression v24.53 — CHỈ sửa file test, KHÔNG đổi code production
 
