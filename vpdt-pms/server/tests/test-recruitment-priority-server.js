@@ -125,6 +125,25 @@ async function main() {
       assert(!r.body.item.pinned, 'edit không được bật pin');
     });
 
+    await run.run('workTime (10/2026): TẠO chuẩn hoá (trim, cắt 200 ký tự), bỏ trống = ""', async () => {
+      const p = { title: 'Thu ngân', description: 'Mô tả', contactInfo: '0900', workTime: '  Toàn thời gian  ' };
+      cv.CREATE_MODULE_CONFIGS.recruitmentJobs.extraValidate(p, [], HR, APP);
+      assertEqual(p.workTime, 'Toàn thời gian');
+      const p2 = { title: 'A', description: 'B', contactInfo: 'C', workTime: 'x'.repeat(500) };
+      cv.CREATE_MODULE_CONFIGS.recruitmentJobs.extraValidate(p2, [], HR, APP);
+      assertEqual(p2.workTime.length, 200, 'cắt 200 ký tự');
+      const p3 = { title: 'A', description: 'B', contactInfo: 'C' };
+      cv.CREATE_MODULE_CONFIGS.recruitmentJobs.extraValidate(p3, [], HR, APP);
+      assertEqual(p3.workTime, '');
+    });
+
+    await run.run('workTime: SỬA cập nhật được qua route thật', async () => {
+      resetRecords();
+      const r = await api('/api/records/recruitmentJobs/10/edit', { workTime: 'Ca sáng 7h-15h' }, HR);
+      assertEqual(r.status, 200, JSON.stringify(r.body));
+      assertEqual(r.body.item.workTime, 'Ca sáng 7h-15h');
+    });
+
     await run.run('pin: nhân sự (internalRecruitmentCreate) đẩy ưu tiên tin OPEN -> pinned/pinnedBy/pinnedAt do server gán', async () => {
       resetRecords();
       const before = Date.now();

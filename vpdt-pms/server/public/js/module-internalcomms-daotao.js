@@ -896,17 +896,33 @@ async function submitTrainingCourse(e) {
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền tạo chương trình đào tạo!');
   const category = document.getElementById('tccCategory').value;
   if (!category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
+  const isEdit = editingTrainingCourseId != null;
+  const editingCourse = isEdit ? DB.trainingCourses.find(c => c.id === editingTrainingCourseId) : null;
+  // Thumbnail (10/2026) — cùng khuôn banner Tuyển Dụng (submitRecruitmentJob(), moduleKey 'internalImage').
+  // Đang sửa mà không chọn ảnh mới -> giữ nguyên thumbnail cũ (KHÔNG xoá).
+  const thumbnailFile = document.getElementById('tccThumbnailFile').files[0];
+  let thumbnailUrl = editingCourse ? (editingCourse.thumbnailUrl || '') : '';
+  let thumbnailFileName = editingCourse ? (editingCourse.thumbnailFileName || '') : '';
+  if (thumbnailFile) {
+    try {
+      const uploaded = await uploadFileToServer(thumbnailFile, 'internalImage');
+      thumbnailUrl = uploaded.fileUrl;
+      thumbnailFileName = uploaded.fileName;
+    } catch (err) {
+      return alert(`⛔ Tải ảnh minh hoạ thất bại: ${err.message}`);
+    }
+  }
   let customData;
   try {
     customData = await collectDynamicFieldsData('TRAINING_COURSE');
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
-  const isEdit = editingTrainingCourseId != null;
   const payload = {
     name: document.getElementById('tccName').value.trim(),
     category,
     description: document.getElementById('tccDescription').value.trim(),
+    thumbnailUrl, thumbnailFileName,
     customData
   };
   if (!isEdit) payload.code = `CT-${Date.now()}`; // code chỉ sinh lúc TẠO, giữ nguyên khi sửa.
@@ -935,29 +951,41 @@ function resetTrainingCourseForm() {
   editingTrainingCourseId = null;
   const formEl = document.getElementById('trainingCourseForm');
   if (formEl) formEl.reset();
+  clearSingleFileInput('tccThumbnailFile', 'tccThumbnailFileChip');
   updateTrainingCourseFormSubmitUI();
 }
 
+// Dạng thẻ (10/2026, theo yêu cầu người dùng "bổ sung thumbnail cho các chương trình") — thay bảng cũ,
+// cùng khuôn renderRecruitmentJobs() (module-internalcomms-nhipsong.js): ảnh vuông object-contain +
+// placeholder khi không có thumbnail, tên/loại/mô tả + nút Sửa/Xoá.
 function renderTrainingCourses() {
-  const tbody = document.getElementById('trainingCoursesTableBody');
-  if (!tbody) return;
+  const container = document.getElementById('trainingCoursesContainer');
+  if (!container) return;
   const list = DB.trainingCourses.slice().sort((a, b) => b.id - a.id);
 
   document.getElementById('paginationContainer_trainingCourses').innerHTML = buildPaginationBoxHTML('trainingCourses', 'renderTrainingCourses');
   const pageItems = paginateList('trainingCourses', list, 'renderTrainingCourses', 'chương trình');
 
-  if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có chương trình nào.</td></tr>`; return; }
+  if (!pageItems.length) { container.innerHTML = `<p class="col-span-full text-center p-4 text-gray-400 italic">Chưa có chương trình nào.</p>`; return; }
   const canManage = canManageTrainingLocal(currentUser);
-  tbody.innerHTML = pageItems.map(c => `
-    <tr class="hover:bg-gray-50">
-      <td class="border p-2 font-bold text-gray-800">${escapeHtml(c.name)}</td>
-      <td class="border p-2">${escapeHtml(c.category)}</td>
-      <td class="border p-2 text-gray-600">${escapeHtml(c.description || '')}</td>
-      <td class="border p-2 text-center whitespace-nowrap">
-        ${canManage ? `<button data-op="editTrainingCourse" data-arg0="${c.id}" class="text-indigo-600 font-bold hover:underline text-xs mr-2">Sửa</button>` : ''}
-        ${currentUser.perms?.admin ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
-      </td>
-    </tr>`).join('');
+  container.innerHTML = pageItems.map(c => {
+    const thumbHTML = c.thumbnailUrl
+      ? `<img src="${escapeHtml(c.thumbnailUrl)}" alt="${escapeHtml(c.name || '')}" loading="lazy" class="w-full h-full object-contain">`
+      : `<div class="w-full h-full flex items-center justify-center text-3xl text-gray-300">🎓</div>`;
+    return `
+    <div class="bg-white border rounded-lg shadow-sm overflow-hidden flex flex-col" data-course-id="${c.id}">
+      <div class="w-full h-32 bg-gray-50 border-b flex items-center justify-center flex-shrink-0">${thumbHTML}</div>
+      <div class="p-3 flex flex-col gap-1 flex-1">
+        <h4 class="font-bold text-gray-800">${escapeHtml(c.name)}</h4>
+        <p class="text-xs text-gray-500">${escapeHtml(c.category)}</p>
+        ${c.description ? `<p class="text-xs text-gray-600 mt-1">${escapeHtml(c.description)}</p>` : ''}
+        <div class="mt-auto pt-2 flex justify-end gap-2">
+          ${canManage ? `<button data-op="editTrainingCourse" data-arg0="${c.id}" class="text-indigo-600 font-bold hover:underline text-xs">Sửa</button>` : ''}
+          ${currentUser.perms?.admin ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // editingTrainingCourseId — id chương trình đang SỬA qua form phía trên (10/2026, thêm nút "✏️ Sửa" —
@@ -972,6 +1000,7 @@ function editTrainingCourse(id) {
   document.getElementById('tccName').value = c.name;
   document.getElementById('tccCategory').value = c.category;
   document.getElementById('tccDescription').value = c.description || '';
+  clearSingleFileInput('tccThumbnailFile', 'tccThumbnailFileChip');
   updateTrainingCourseFormSubmitUI();
 }
 function cancelEditTrainingCourse() {

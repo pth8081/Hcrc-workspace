@@ -649,21 +649,28 @@ async function main() {
     );
 
     // ================= 11) Đào Tạo > Chương Trình =================
-    await check('Đào Tạo > Chương Trình: form đơn giản nhất đợt này — "Làm Mới" trắng form', async () => {
+    await check('Đào Tạo > Chương Trình: chip ảnh minh hoạ tccThumbnailFile (10/2026), "Làm Mới" trắng form', async () => {
       await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('COURSES'); });
       await page.fill('#tccName', 'Chương trình kiểm thử reset form');
       await page.fill('#tccDescription', 'Mô tả kiểm thử reset form.');
+      await page.setInputFiles('#tccThumbnailFile', fakeFile('thumb.png', 'noi dung', 'image/png'));
+      const chip = await page.locator('#tccThumbnailFileChip').innerText();
+      assertTrue(chip.includes('thumb.png'), `Chip tccThumbnailFile phải hiện tên file, thực tế: ${chip}`);
 
       await page.evaluate(() => { window.__confirmCalls = []; });
       await page.click('#trainingCourseForm button[data-arg1="resetTrainingCourseForm"]');
       const state = await page.evaluate(() => ({
         tccName: document.getElementById('tccName').value,
         tccDescription: document.getElementById('tccDescription').value,
+        tccThumbnailFileValue: document.getElementById('tccThumbnailFile').value,
+        tccThumbnailFileChip: document.getElementById('tccThumbnailFileChip').innerHTML,
         confirmCalls: window.__confirmCalls.length
       }));
       assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
       assertTrue(state.tccName === '', 'tccName phải về rỗng');
       assertTrue(state.tccDescription === '', 'tccDescription phải về rỗng');
+      assertTrue(state.tccThumbnailFileValue === '', 'tccThumbnailFile input phải về rỗng');
+      assertTrue(state.tccThumbnailFileChip === '', 'Chip tccThumbnailFile phải biến mất sau Làm Mới');
     });
 
     // ================= 12) Đào Tạo > Kế Hoạch Đào Tạo =================

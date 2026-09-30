@@ -368,6 +368,7 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
   // Dọn observer của lượt render TRƯỚC (nếu container này từng vẽ PDF khác) — tránh 2 observer cùng
   // gắn vào 1 phần tử <div> dùng lại nhiều lượt mở Khung Xem Bảo Vệ trong 1 phiên.
   if (container._pdfPageObserver) { container._pdfPageObserver.disconnect(); container._pdfPageObserver = null; }
+  if (container._pdfResizeObserver) { container._pdfResizeObserver.disconnect(); container._pdfResizeObserver = null; }
   try {
     await ensurePdfJsReady();
     const pdf = await window.pdfjsLib.getDocument(fileSrc).promise;
@@ -404,28 +405,23 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
       container._pdfPageObserver = observer;
     }
 
+    // Thu thập trang + dựng khung DOM CỐ ĐỊNH 1 LẦN (page/pageWrap/canvas) — renderAtWidth() bên dưới
+    // chỉ tính lại scale + vẽ lại canvas mỗi khi bề rộng container đổi (xoay màn hình/thu-phóng cửa sổ
+    // trên mobile), KHÔNG tạo lại DOM (giữ nguyên phần tử pageWrap đang được IntersectionObserver theo
+    // dõi ở trên, tránh mất trạng thái "đã xem" khi resize).
+    const pageEntries = [];
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
-      const containerWidth = container.clientWidth || 800;
-      const baseViewport = page.getViewport({ scale: 1 });
-      const scale = Math.max(0.5, Math.min(2.5, (containerWidth - 32) / baseViewport.width));
-      const viewport = page.getViewport({ scale });
 
       const pageWrap = document.createElement('div');
       pageWrap.className = 'relative bg-white shadow-md flex-shrink-0';
-      pageWrap.style.width = viewport.width + 'px';
-      pageWrap.style.height = viewport.height + 'px';
       pageWrap.oncontextmenu = () => false;
       pageWrap.dataset.pageNum = String(pageNum);
       if (observer) observer.observe(pageWrap);
 
       const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
       canvas.style.display = 'block';
       canvas.oncontextmenu = () => false;
-      const ctx = canvas.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport }).promise;
       pageWrap.appendChild(canvas);
 
       if (watermarkText) {
@@ -441,7 +437,45 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
 
       wrap.appendChild(pageWrap);
       wrap.appendChild(pageLabel);
+      pageEntries.push({ page, pageWrap, canvas });
     }
+
+    // renderAtWidth() — vẽ lại MỌI trang theo scale khớp bề rộng container HIỆN TẠI. renderToken huỷ các
+    // lượt vẽ cũ hơn nếu resize dồn dập (chỉ lượt gọi MỚI NHẤT được vẽ tới cùng). SÀN scale trước đây là
+    // 0.5 — đây chính là nguyên nhân PDF bị TRÀN NGANG trên điện thoại nhỏ (<400px): containerWidth hẹp
+    // đòi scale <0.5 để vừa khung, nhưng sàn cứng ép scale lên 0.5, khiến pageWrap rộng hơn màn hình.
+    // Bỏ sàn cứng (chỉ giữ mức tối thiểu 0.1 để tránh scale 0/âm khi containerWidth chưa kịp có, VD modal
+    // vừa mở) — trần 2.5 (không phóng quá to trên màn hình rộng) giữ nguyên như cũ.
+    let renderToken = 0;
+    async function renderAtWidth() {
+      const myToken = ++renderToken;
+      const containerWidth = container.clientWidth || 800;
+      for (const entry of pageEntries) {
+        if (myToken !== renderToken) return;
+        const baseViewport = entry.page.getViewport({ scale: 1 });
+        const scale = Math.max(0.1, Math.min(2.5, (containerWidth - 32) / baseViewport.width));
+        const viewport = entry.page.getViewport({ scale });
+        entry.pageWrap.style.width = viewport.width + 'px';
+        entry.pageWrap.style.height = viewport.height + 'px';
+        entry.canvas.width = viewport.width;
+        entry.canvas.height = viewport.height;
+        const ctx = entry.canvas.getContext('2d');
+        await entry.page.render({ canvasContext: ctx, viewport }).promise;
+      }
+    }
+
+    await renderAtWidth();
+
+    // Vẽ lại khi container đổi bề rộng — debounce ~200ms tránh vẽ liên tục lúc trình duyệt đang kéo dãn/
+    // bàn phím ảo mobile đóng-mở làm clientWidth nhấp nháy. Không disconnect ở đây — dọn ở đầu hàm (lượt
+    // render kế tiếp trên CÙNG container) như _pdfPageObserver, container vẫn còn dùng tới lúc đó.
+    let resizeTimer = null;
+    const resizeObserver = new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { renderAtWidth().catch(() => {}); }, 200);
+    });
+    resizeObserver.observe(container);
+    container._pdfResizeObserver = resizeObserver;
   } catch (err) {
     container.innerHTML = `<div class="p-6 text-center text-red-600 text-sm">⛔ Không tải được PDF để xem: ${err.message}</div>`;
   }
@@ -973,6 +1007,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'rjLocation', label: 'Địa Điểm Làm Việc', required: false },
     { id: 'rjDeadline', label: 'Hạn Nhận Hồ Sơ', required: false },
     { id: 'rjIncome', label: 'Thu Nhập', required: false },
+    { id: 'rjWorkTime', label: 'Thời Gian Làm Việc', required: false },
     { id: 'rjContactInfo', label: 'Thông Tin Liên Hệ', required: true },
     { id: 'rjBannerFile', label: 'Ảnh/Banner Tin Tuyển Dụng', required: false },
     { id: 'rjDescription', label: 'Mô Tả Công Việc', required: true },
@@ -1030,6 +1065,7 @@ const CORE_FIELD_MANIFEST = {
   TRAINING_COURSE: [
     { id: 'tccCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
     { id: 'tccName', label: 'Tên Chương Trình', required: true },
+    { id: 'tccThumbnailFile', label: 'Ảnh Minh Hoạ', required: false },
     { id: 'tccDescription', label: 'Mô Tả (tuỳ chọn)', required: false }
   ],
   // TRAINING_PLAN: #trainingPlanForm (Đào Tạo > Kế Hoạch Đào Tạo > Lập Kế Hoạch Đào Tạo Mới). tpCourseId/
@@ -7683,7 +7719,9 @@ function applyUploadAcceptAttrs() {
     // routes/upload.js): banner tin tuyển dụng, KHÔNG gồm tdFile (Truyền Thông Nội Bộ > Tài Liệu) vì
     // field đó ĐỘNG (dùng chung cho cả nhánh IMAGE lẫn văn bản tuỳ docType, không có 1 accept cố định).
     // internalImagesInput/internalVideosInput (9/2026) — ảnh/video bài Nhịp Sống HCRC/Góc Chia Sẻ.
-    internalImage: ['rjBannerFile', 'internalImagesInput'],
+    // tccThumbnailFile (10/2026) — ảnh minh hoạ Chương Trình đào tạo (thumbnailUrl, xem
+    // normalizeTrainingCourseFields() ở lib/createValidation.js).
+    internalImage: ['rjBannerFile', 'internalImagesInput', 'tccThumbnailFile'],
     internalVideo: ['internalVideosInput']
   };
   const config = DB.uploadFileTypeConfig || {};
