@@ -1777,13 +1777,16 @@
           <input type="date" id="hrpfCF_nationalIdIssueDate" class="w-full border p-1.5 rounded text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Nơi cấp CCCD/CMND</label>
           <input id="hrpfCF_nationalIdIssuePlace" class="w-full border p-1.5 rounded text-sm"></div>
+        <!-- employmentType/workSchedule: <option> nạp ĐỘNG từ DB.employmentTypes/DB.workSchedules qua
+             populateDropdowns() (public/js/core.js) — admin tự thêm/bớt lựa chọn qua nút Sửa trường mặc
+             định ở màn Biểu Mẫu (optionsKey, xem CORE_FIELD_MANIFEST.HR_PROFILE). -->
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Hình thức làm việc</label>
           <select id="hrpfCF_employmentType" class="w-full border p-1.5 rounded text-sm bg-white">
             <option value="">-- Chọn --</option>
-            <option value="Chính thức">Chính thức</option>
-            <option value="Thời vụ">Thời vụ</option>
-            <option value="Bán thời gian">Bán thời gian</option>
-            <option value="Cộng tác viên">Cộng tác viên</option>
+          </select></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Thời gian làm việc</label>
+          <select id="hrpfCF_workSchedule" class="w-full border p-1.5 rounded text-sm bg-white">
+            <option value="">-- Chọn --</option>
           </select></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ thường trú</label>
           <input id="hrpfCF_permanentAddress" class="w-full border p-1.5 rounded text-sm"></div>

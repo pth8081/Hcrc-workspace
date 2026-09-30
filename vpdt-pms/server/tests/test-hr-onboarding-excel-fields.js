@@ -77,7 +77,13 @@ function resetAppData() {
     storeJobTitles: [{ label: 'Nhân Viên Bán Hàng' }],
     hrTaskTemplates: [],
     formTemplates: [],
-    employeeProfiles: []
+    employeeProfiles: [],
+    // employmentTypes/workSchedules (đợt "cho sửa/thêm sau" 10/2026) — mirror ĐÚNG danh mục mặc định
+    // thật ở defaults.js, để extraValidate() (lib/createValidation.js) chặn NGAY giá trị lạ TRƯỚC KHI
+    // hrProcesses được tạo (không rơi vào guard "catalog rỗng -> bỏ qua", vốn chỉ dành cho lúc admin lỡ
+    // xoá trắng danh mục thật ngoài đời — xem test bên dưới xác nhận KHÔNG orphan hrProcesses).
+    employmentTypes: ['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên'],
+    workSchedules: ['Giờ hành chính', 'Ca sáng', 'Ca chiều', 'Ca tối', 'Theo ca xoay']
   };
 }
 resetAppData(); resetStore();
@@ -140,11 +146,12 @@ async function main() {
   try {
     console.log('\n== 1) Thông tin cá nhân bổ sung ghi thẳng vào hồ sơ nháp employeeProfiles ==');
 
-    await test('gender/dateOfBirth/permanentAddress/nationalIdIssueDate/nationalIdIssuePlace/employmentType đủ nhập -> ghi đúng vào hồ sơ', async () => {
+    await test('gender/dateOfBirth/permanentAddress/nationalIdIssueDate/nationalIdIssuePlace/employmentType/workSchedule đủ nhập -> ghi đúng vào hồ sơ', async () => {
       resetAppData(); resetStore();
       const r = await call('POST', '/api/create/hrProcesses', onboardingPayload({
         gender: 'Nữ', dateOfBirth: '1998-05-20', permanentAddress: 'Số 1, Hà Nội',
-        nationalIdIssueDate: '2015-01-10', nationalIdIssuePlace: 'CA Hà Nội', employmentType: 'Chính thức'
+        nationalIdIssueDate: '2015-01-10', nationalIdIssuePlace: 'CA Hà Nội', employmentType: 'Chính thức',
+        workSchedule: 'Giờ hành chính'
       }));
       assert.strictEqual(r.status, 200, JSON.stringify(r.json));
       const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
@@ -155,6 +162,7 @@ async function main() {
       assert.strictEqual(profile.nationalIdIssueDate, '2015-01-10');
       assert.strictEqual(profile.nationalIdIssuePlace, 'CA Hà Nội');
       assert.strictEqual(profile.employmentType, 'Chính thức');
+      assert.strictEqual(profile.workSchedule, 'Giờ hành chính');
     });
 
     await test('để trống toàn bộ field bổ sung -> vẫn tạo được bình thường (tuỳ chọn thật sự), hồ sơ giữ null như mặc định', async () => {
@@ -164,6 +172,7 @@ async function main() {
       const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
       assert.strictEqual(profile.gender, null);
       assert.strictEqual(profile.employmentType, null);
+      assert.strictEqual(profile.workSchedule, null);
     });
 
     await test('gender KHÔNG hợp lệ -> 400, KHÔNG tạo quy trình hrProcesses nào (hồ sơ DRAFT đặt chỗ trước đó trở thành mồ côi — hành vi đã có từ trước, không phải lỗi mới)', async () => {
@@ -173,10 +182,29 @@ async function main() {
       assert.strictEqual(STORE.hrProcesses.length, 0);
     });
 
-    await test('employmentType KHÔNG hợp lệ -> 400', async () => {
+    await test('employmentType KHÔNG hợp lệ -> 400, chặn NGAY TẠI extraValidate (đối chiếu appData.employmentTypes) TRƯỚC KHI hrProcesses được tạo', async () => {
       resetAppData(); resetStore();
       const r = await call('POST', '/api/create/hrProcesses', onboardingPayload({ employmentType: 'Không rõ' }));
       assert.strictEqual(r.status, 400, JSON.stringify(r.json));
+      assert.strictEqual(STORE.hrProcesses.length, 0);
+    });
+
+    await test('workSchedule KHÔNG hợp lệ -> 400, chặn NGAY TẠI extraValidate (đối chiếu appData.workSchedules) TRƯỚC KHI hrProcesses được tạo', async () => {
+      resetAppData(); resetStore();
+      const r = await call('POST', '/api/create/hrProcesses', onboardingPayload({ workSchedule: 'Ca đêm khuya (không có trong danh mục)' }));
+      assert.strictEqual(r.status, 400, JSON.stringify(r.json));
+      assert.strictEqual(STORE.hrProcesses.length, 0);
+    });
+
+    await test('employmentType/workSchedule: admin tự thêm giá trị MỚI vào appData.employmentTypes/workSchedules (màn Biểu Mẫu) -> value mới được chấp nhận ngay, không cần đổi code', async () => {
+      resetAppData(); resetStore();
+      APP_DATA.employmentTypes = [...APP_DATA.employmentTypes, 'Thực tập sinh'];
+      APP_DATA.workSchedules = [...APP_DATA.workSchedules, 'Làm từ xa'];
+      const r = await call('POST', '/api/create/hrProcesses', onboardingPayload({ employmentType: 'Thực tập sinh', workSchedule: 'Làm từ xa' }));
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.strictEqual(profile.employmentType, 'Thực tập sinh');
+      assert.strictEqual(profile.workSchedule, 'Làm từ xa');
     });
 
     console.log('\n== 2) Học vấn (Trình độ/Trường/Chuyên ngành) ==');
@@ -269,20 +297,42 @@ async function main() {
 
   console.log('\n== 5) employmentType — lối tạo trực tiếp "Quản Lý Hồ Sơ > + Tạo Hồ Sơ Mới" (createManualProfile, unit) ==');
 
-  await test('EMPLOYMENT_TYPES export đủ 4 lựa chọn cố định đã xác nhận với người dùng', () => {
+  await test('EMPLOYMENT_TYPES/WORK_SCHEDULES export đủ danh sách mặc định (giá trị FALLBACK khi caller không truyền catalogs qua options)', () => {
     assert.deepStrictEqual([...employeeProfile.EMPLOYMENT_TYPES].sort(),
       ['Bán thời gian', 'Chính thức', 'Cộng tác viên', 'Thời vụ'].sort());
+    assert.deepStrictEqual([...employeeProfile.WORK_SCHEDULES].sort(),
+      ['Ca chiều', 'Ca sáng', 'Ca tối', 'Giờ hành chính', 'Theo ca xoay'].sort());
   });
 
-  await test('createManualProfile(): nhận employmentType + nationalIdIssueDate/nationalIdIssuePlace hợp lệ', () => {
+  await test('createManualProfile(): nhận employmentType/workSchedule + nationalIdIssueDate/nationalIdIssuePlace hợp lệ', () => {
     const list = [];
     const created = employeeProfile.createManualProfile(list, {
-      employeeCode: 'BL9001', employmentType: 'Cộng tác viên',
+      employeeCode: 'BL9001', employmentType: 'Cộng tác viên', workSchedule: 'Ca sáng',
       nationalIdIssueDate: '2020-01-01', nationalIdIssuePlace: 'CA TP.HCM'
     }, 'admin', 'Quản Trị');
     assert.strictEqual(created.employmentType, 'Cộng tác viên');
+    assert.strictEqual(created.workSchedule, 'Ca sáng');
     assert.strictEqual(created.nationalIdIssueDate, '2020-01-01');
     assert.strictEqual(created.nationalIdIssuePlace, 'CA TP.HCM');
+  });
+
+  await test('createManualProfile(): truyền options.employmentTypes/workSchedules -> đối chiếu ĐÚNG danh mục truyền vào (không rơi về fallback mặc định)', () => {
+    const list = [];
+    const created = employeeProfile.createManualProfile(list, {
+      employeeCode: 'BL9001B', employmentType: 'Thực tập sinh', workSchedule: 'Làm từ xa'
+    }, 'admin', 'Quản Trị', { employmentTypes: ['Thực tập sinh'], workSchedules: ['Làm từ xa'] });
+    assert.strictEqual(created.employmentType, 'Thực tập sinh');
+    assert.strictEqual(created.workSchedule, 'Làm từ xa');
+    assert.throws(() => employeeProfile.createManualProfile(list, {
+      employeeCode: 'BL9001C', employmentType: 'Chính thức'
+    }, 'admin', 'Quản Trị', { employmentTypes: ['Thực tập sinh'] }), /Hình thức làm việc không hợp lệ/);
+  });
+
+  await test('createManualProfile(): workSchedule KHÔNG hợp lệ -> 400', () => {
+    const list = [];
+    assert.throws(() => employeeProfile.createManualProfile(list, {
+      employeeCode: 'BL9002B', workSchedule: 'Ca đêm khuya (không có trong danh mục)'
+    }, 'admin', 'Quản Trị'), /Thời gian làm việc không hợp lệ/);
   });
 
   await test('createManualProfile(): employmentType KHÔNG hợp lệ -> 400', () => {
@@ -292,8 +342,9 @@ async function main() {
     }, 'admin', 'Quản Trị'), /Hình thức làm việc không hợp lệ/);
   });
 
-  await test('HR_ONLY_EDITABLE_FIELDS chứa employmentType (PATCH /by-code sửa được field này)', () => {
+  await test('HR_ONLY_EDITABLE_FIELDS chứa employmentType/workSchedule (PATCH /by-code sửa được 2 field này)', () => {
     assert.ok(employeeProfile.HR_ONLY_EDITABLE_FIELDS.includes('employmentType'));
+    assert.ok(employeeProfile.HR_ONLY_EDITABLE_FIELDS.includes('workSchedule'));
   });
 
   // Nhắc lại (KHÔNG lặp test, chỉ xác nhận còn nguyên): logic chặn trùng Mã Nhân Viên khi nhập tay (không

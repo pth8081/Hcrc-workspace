@@ -3391,7 +3391,7 @@ const CREATE_MODULE_CONFIGS = {
         // CHỌN, ghi thẳng vào hồ sơ nháp employeeProfiles ngay sau khi hrProcesses tạo xong — xem hook ở
         // routes/create.js). require() trễ (dynamic) để tránh vòng lặp require: employeeProfile.js/
         // laborContract.js đều require('./createValidation') ở TOP LEVEL của chính chúng (assertUploadedFileUrl).
-        const { GENDERS, EMPLOYMENT_TYPES } = require('./employeeProfile');
+        const { GENDERS } = require('./employeeProfile');
         payload.gender = payload.gender ? String(payload.gender).trim() : '';
         if (payload.gender && !GENDERS.has(payload.gender)) throw new CreateError(400, 'Giới tính không hợp lệ');
         if (payload.dateOfBirth && Number.isNaN(new Date(payload.dateOfBirth).getTime())) throw new CreateError(400, 'Ngày sinh không hợp lệ');
@@ -3400,8 +3400,21 @@ const CREATE_MODULE_CONFIGS = {
         if (payload.nationalIdIssueDate && Number.isNaN(new Date(payload.nationalIdIssueDate).getTime())) throw new CreateError(400, 'Ngày cấp CCCD/CMND không hợp lệ');
         payload.nationalIdIssueDate = payload.nationalIdIssueDate ? String(payload.nationalIdIssueDate).trim() : '';
         payload.nationalIdIssuePlace = payload.nationalIdIssuePlace ? String(payload.nationalIdIssuePlace).trim().slice(0, 200) : '';
+        // employmentType/workSchedule (10/2026, theo yêu cầu người dùng "để sau này tôi có thể sửa, thêm
+        // thông tin") — đối chiếu appData.employmentTypes/appData.workSchedules (admin tự sửa qua màn
+        // Biểu Mẫu, defaults.js), KHÔNG còn Set cố định trong code — cùng khuôn validContractTypes ở
+        // extraValidate 'contracts' phía trên (.size && !has -> rỗng thì không chặn, tránh khoá cứng lúc
+        // admin lỡ xoá trắng danh mục).
         payload.employmentType = payload.employmentType ? String(payload.employmentType).trim() : '';
-        if (payload.employmentType && !EMPLOYMENT_TYPES.has(payload.employmentType)) throw new CreateError(400, 'Hình thức làm việc không hợp lệ');
+        const validEmploymentTypes = new Set(appData?.employmentTypes || []);
+        if (payload.employmentType && validEmploymentTypes.size && !validEmploymentTypes.has(payload.employmentType)) {
+          throw new CreateError(400, 'Hình thức làm việc không hợp lệ');
+        }
+        payload.workSchedule = payload.workSchedule ? String(payload.workSchedule).trim() : '';
+        const validWorkSchedules = new Set(appData?.workSchedules || []);
+        if (payload.workSchedule && validWorkSchedules.size && !validWorkSchedules.has(payload.workSchedule)) {
+          throw new CreateError(400, 'Thời gian làm việc không hợp lệ');
+        }
         // Học vấn (Trình độ/Trường/Chuyên ngành) — 3 ô đơn ở form Onboarding, khớp field degree/school/
         // major của employeeProfiles.education[] (lib/employeeProfile.js) — chỉ tạo 1 dòng học vấn ĐẦU
         // TIÊN nếu có nhập ít nhất 1 trong 3 ô, HR bổ sung thêm bằng cấp khác (nếu có) sau ở Hồ Sơ Nhân Sự.

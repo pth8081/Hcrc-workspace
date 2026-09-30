@@ -140,6 +140,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // PHẢI khoá lại đúng độ mở của màn đó — trước đây bị bỏ sót (coi nhầm là danh sách nhãn hiển thị
   // thuần như depts/cats), cho phép bất kỳ tài khoản nào đã đăng nhập tự đổi 2 danh sách này.
   'contractTypes', 'carTypes',
+  // employmentTypes/workSchedules: "Hình Thức Làm Việc"/"Thời Gian Làm Việc" (CORE_FIELD_MANIFEST.
+  // HR_ONBOARDING/HR_PROFILE, optionsKey) — cùng lý do contractTypes/carTypes ở trên: từ khi cho sửa
+  // danh sách lựa chọn qua màn Biểu Mẫu (chỉ Admin), ghi trực tiếp POST /api/data/<key> phải khoá lại
+  // đúng độ mở của màn đó, không mở cho mọi tài khoản đã đăng nhập.
+  'employmentTypes', 'workSchedules',
   // internalNewsCategories/internalShareCategories: "chuyên đề" cho Nhịp Sống HCRC/Góc Chia Sẻ (module
   // Truyền Thông Nội Bộ) — cùng lý do submissionTypes ở trên, quyết định trực tiếp giá trị postCategory
   // hợp lệ khi tạo bài (xem createValidation.js internalPosts.extraValidate).

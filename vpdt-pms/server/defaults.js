@@ -176,6 +176,14 @@ const DEFAULTS = {
   contractTypes: ['Hợp đồng kinh tế', 'Hợp đồng lao động', 'Giấy phép kinh doanh / Pháp lý', 'Thỏa thuận bảo mật (NDA)', 'Phụ lục hợp đồng'],
   carTypes: ['5 chỗ', '7 chỗ'],
 
+  // employmentTypes/workSchedules (đợt "Onboarding/Hồ Sơ theo Excel mẫu" 10/2026, theo yêu cầu người dùng
+  // "để sau này tôi có thể sửa, thêm thông tin Hình thức làm việc và Thời gian làm việc") — employmentTypes
+  // TRƯỚC ĐÂY là Set cố định trong code (lib/employeeProfile.js), workSchedules là field MỚI cùng đợt —
+  // cả 2 chuyển thành dữ liệu để admin tự thêm/bớt qua màn Biểu Mẫu (CORE_FIELD_MANIFEST.HR_ONBOARDING/
+  // HR_PROFILE, optionsKey 'employmentTypes'/'workSchedules'), cùng khuôn contractTypes/carTypes ở trên.
+  employmentTypes: ['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên'],
+  workSchedules: ['Giờ hành chính', 'Ca sáng', 'Ca chiều', 'Ca tối', 'Theo ca xoay'],
+
   // "Danh Mục" của ô Yêu Cầu Hỗ Trợ IT — TRƯỚC ĐÂY gõ cứng <option> trong index.html (IT_TICKET_CATEGORY_LABELS),
   // giờ chuyển thành dữ liệu để admin tự thêm/bớt/đổi nhãn tại màn Biểu Mẫu (CORE_FIELD_MANIFEST.IT_TICKET,
   // optionsKey 'itTicketCategories', optionsIsKeyLabel:true — GIỮ NGUYÊN đúng key hiện có để không mồ côi

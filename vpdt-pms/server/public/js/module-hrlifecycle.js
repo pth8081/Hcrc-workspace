@@ -246,6 +246,7 @@ async function submitHrpOnboarding(e) {
     nationalIdIssueDate: document.getElementById('hrpOnbNationalIdIssueDate').value,
     nationalIdIssuePlace: document.getElementById('hrpOnbNationalIdIssuePlace').value.trim(),
     employmentType: document.getElementById('hrpOnbEmploymentType').value,
+    workSchedule: document.getElementById('hrpOnbWorkSchedule').value,
     eduDegree: document.getElementById('hrpOnbEduDegree').value.trim(),
     eduSchool: document.getElementById('hrpOnbEduSchool').value.trim(),
     eduMajor: document.getElementById('hrpOnbEduMajor').value.trim(),

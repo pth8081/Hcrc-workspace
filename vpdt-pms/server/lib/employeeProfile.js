@@ -47,12 +47,17 @@ function todayISO() {
 
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
-// EMPLOYMENT_TYPES (GĐ2, 10/2026 — đối chiếu cột "Hình thức làm việc" ở file Excel "Trường Thông Tin
-// Tạo Mã" người dùng gửi) — khái niệm MỚI, chưa từng có ở bất kỳ đâu trong hệ thống trước đây (khác hẳn
-// workModel OFFICE_HOURS/SHIFT_BASED ở lib/attendance.js, vốn suy tự động theo posType HO/STORE để tính
-// công/ca — đây là thuộc tính nhập tay, ổn định theo nhân viên, không phải theo 1 hợp đồng cụ thể nên
-// đặt ở employeeProfiles, KHÔNG đặt ở laborContracts). Danh mục CỐ ĐỊNH theo xác nhận người dùng.
+// EMPLOYMENT_TYPES/WORK_SCHEDULES (GĐ2, 10/2026 — đối chiếu cột "Hình thức làm việc" ở file Excel "Trường
+// Thông Tin Tạo Mã" người dùng gửi; WORK_SCHEDULES thêm sau theo yêu cầu người dùng "Thời gian làm việc
+// cho dạng droplist giống Hình thức làm việc") — khái niệm MỚI, khác hẳn workModel OFFICE_HOURS/
+// SHIFT_BASED ở lib/attendance.js (vốn suy tự động theo posType HO/STORE để tính công/ca) — đây là thuộc
+// tính nhập tay, ổn định theo nhân viên, không phải theo 1 hợp đồng cụ thể nên đặt ở employeeProfiles,
+// KHÔNG đặt ở laborContracts). Nguồn THẬT giờ là appData.employmentTypes/appData.workSchedules (admin tự
+// sửa qua màn Biểu Mẫu, defaults.js) — 2 Set dưới đây chỉ còn là GIÁ TRỊ MẶC ĐỊNH dùng khi nơi gọi
+// applyProfileEdit()/createManualProfile() không truyền catalogs qua options (VD test cũ, hoặc lỡ sót 1
+// đường gọi) — xem options.employmentTypes/options.workSchedules ở applyProfileEdit() bên dưới.
 const EMPLOYMENT_TYPES = new Set(['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên']);
+const WORK_SCHEDULES = new Set(['Giờ hành chính', 'Ca sáng', 'Ca chiều', 'Ca tối', 'Theo ca xoay']);
 // MARITAL_STATUSES (mới, GĐ1 "đối chiếu file Excel quản lý thủ công của Nhân Sự", theo yêu cầu người
 // dùng — xem VERSION.md) — khớp đúng 3 lựa chọn cột "Tình trạng hôn nhân" ở file Excel gốc.
 const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
@@ -187,9 +192,9 @@ function defaultProfile(employeeCode) {
     // SENSITIVE_FIELDS — luôn hiển thị như dept/positionLabel, không qua cơ chế "mở trường xem" vì không
     // phải thông tin riêng tư cá nhân), CHỈ HR sửa được (HR_ONLY_EDITABLE_FIELDS).
     deskLocation: null, retirementDate: null, socialInsuranceAtThisUnit: null,
-    // employmentType (GĐ2, 10/2026) — cùng nhóm dữ liệu hành chính như 3 field ngay trên (không phải
-    // thông tin riêng tư cá nhân), xem EMPLOYMENT_TYPES ở trên.
-    employmentType: null,
+    // employmentType/workSchedule (GĐ2, 10/2026) — cùng nhóm dữ liệu hành chính như 3 field ngay trên
+    // (không phải thông tin riêng tư cá nhân), xem EMPLOYMENT_TYPES/WORK_SCHEDULES ở trên.
+    employmentType: null, workSchedule: null,
     // Chức vụ hiện tại — LUÔN chọn từ 1 node POSITION của bản Cơ Cấu Tổ Chức đang áp dụng (KHÔNG gõ tự
     // do), xem applyPositionAssignment(). positionLabel là tên hiển thị đã ghép sẵn (VD "Trưởng Phòng
     // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
@@ -363,7 +368,7 @@ function assertNationalIdNotDuplicated(list, rawNationalId, exceptEmployeeCode) 
   throw new HttpError(409, `CCCD/CMND "${nationalId}" đã có hồ sơ [${dup.employeeCode}]${dup.status === 'INACTIVE' ? ' (ĐÃ NGHỈ VIỆC — dùng chức năng "Kiểm Tra Nhân Sự Cũ"/Tái Tuyển thay vì tạo mới)' : ''} — vui lòng kiểm tra lại, mỗi người chỉ được có 1 hồ sơ nhân sự duy nhất`);
 }
 
-function createManualProfile(list, payload, actorUsername, actorName) {
+function createManualProfile(list, payload, actorUsername, actorName, options) {
   const arr = list || [];
   const rawEmployeeCode = String(payload?.employeeCode || '').trim();
   const employeeCode = rawEmployeeCode || generateEmployeeCode(arr);
@@ -391,7 +396,9 @@ function createManualProfile(list, payload, actorUsername, actorName) {
   profile.updatedBy = actorUsername || 'system';
   // skipHistory: true — điền dữ liệu payload ban đầu là 1 phần của "tạo mới" (ghi CREATE riêng ngay
   // dưới đây), không phải 1 lượt "sửa" cần liệt kê từng field trong profileEditHistory.
-  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, { skipHistory: true });
+  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, {
+    skipHistory: true, employmentTypes: options?.employmentTypes, workSchedules: options?.workSchedules
+  });
   profile.profileEditHistory = [{
     id: randomUUID(), type: 'CREATE', changedFields: [],
     by: actorUsername || 'system', byName: actorName || actorUsername || 'system',
@@ -614,7 +621,7 @@ const SELF_EDITABLE_FIELDS = [
 const HR_ONLY_EDITABLE_FIELDS = [
   'nationalId', 'socialInsuranceNo', 'taxCode',
   'nationalIdIssueDate', 'nationalIdIssuePlace', 'deskLocation', 'retirementDate', 'socialInsuranceAtThisUnit',
-  'employmentType'
+  'employmentType', 'workSchedule'
 ];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
@@ -629,7 +636,8 @@ const PROFILE_FIELD_LABELS = {
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
-  socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc'
+  socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
+  workSchedule: 'Thời gian làm việc'
 };
 
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): 2 hàm dưới đây trước đây CHỈ kiểm
@@ -706,10 +714,23 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
       case 'socialInsuranceAtThisUnit':
         profile.socialInsuranceAtThisUnit = val == null || val === '' ? null : !!val;
         break;
-      case 'employmentType':
-        if (val != null && val !== '' && !EMPLOYMENT_TYPES.has(val)) throw new HttpError(400, 'Hình thức làm việc không hợp lệ');
+      case 'employmentType': {
+        // options.employmentTypes (nếu caller truyền — xem routes/create.js/routes/employeeProfile.js)
+        // là danh mục THẬT appData.employmentTypes (admin tự sửa qua màn Biểu Mẫu); không truyền thì rơi
+        // về EMPLOYMENT_TYPES mặc định ở trên (VD test cũ).
+        const allowedEmploymentTypes = (options && Array.isArray(options.employmentTypes) && options.employmentTypes.length)
+          ? new Set(options.employmentTypes) : EMPLOYMENT_TYPES;
+        if (val != null && val !== '' && !allowedEmploymentTypes.has(val)) throw new HttpError(400, 'Hình thức làm việc không hợp lệ');
         profile.employmentType = val || null;
         break;
+      }
+      case 'workSchedule': {
+        const allowedWorkSchedules = (options && Array.isArray(options.workSchedules) && options.workSchedules.length)
+          ? new Set(options.workSchedules) : WORK_SCHEDULES;
+        if (val != null && val !== '' && !allowedWorkSchedules.has(val)) throw new HttpError(400, 'Thời gian làm việc không hợp lệ');
+        profile.workSchedule = val || null;
+        break;
+      }
       case 'dependents': {
         if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách người phụ thuộc không hợp lệ');
         const cleaned = val.slice(0, 20).map((d, i) => {
@@ -900,7 +921,7 @@ function computeHrReportSummary(profiles, contracts, filters) {
 }
 
 module.exports = {
-  STATUSES, GENDERS, EMPLOYMENT_TYPES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,

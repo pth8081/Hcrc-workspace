@@ -621,7 +621,7 @@ async function submitHrpfCreateProfile() {
     dateOfBirth: val('hrpfCF_dateOfBirth'), gender: val('hrpfCF_gender'),
     nationalId: val('hrpfCF_nationalId'), permanentAddress: val('hrpfCF_permanentAddress'),
     nationalIdIssueDate: val('hrpfCF_nationalIdIssueDate'), nationalIdIssuePlace: val('hrpfCF_nationalIdIssuePlace'),
-    employmentType: val('hrpfCF_employmentType'),
+    employmentType: val('hrpfCF_employmentType'), workSchedule: val('hrpfCF_workSchedule'),
     currentAddress: val('hrpfCF_currentAddress'), personalEmail: val('hrpfCF_personalEmail'),
     emergencyContactName: val('hrpfCF_emergencyContactName'), emergencyContactPhone: val('hrpfCF_emergencyContactPhone'),
     emergencyContactRelationship: val('hrpfCF_emergencyContactRelationship'),
@@ -934,9 +934,10 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
   const secondaryPositionsText = (secondaryPositionsUser?.secondaryPositions || [])
     .map(sp => `${sp.jobTitle || ''}${sp.dept ? ' — ' + sp.dept : ''}`.trim()).filter(Boolean).join('; ');
   const siauValue = profile.socialInsuranceAtThisUnit;
-  // employmentType (GĐ2, 10/2026 — đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG nhóm dữ liệu
-  // hành chính như deskLocation/retirementDate/socialInsuranceAtThisUnit (không thuộc SENSITIVE_FIELDS).
-  const EMPLOYMENT_TYPE_OPTIONS = ['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên'];
+  // employmentType/workSchedule (GĐ2, 10/2026 — đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG
+  // nhóm dữ liệu hành chính như deskLocation/retirementDate/socialInsuranceAtThisUnit (không thuộc
+  // SENSITIVE_FIELDS). Danh sách lựa chọn đọc TRỰC TIẾP DB.employmentTypes/DB.workSchedules (admin tự
+  // thêm/bớt qua màn Biểu Mẫu, KHÔNG còn mảng cố định gõ tay ở đây — xem CORE_FIELD_MANIFEST.HR_PROFILE).
   const adminInfoBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
     ${roField('Cấp bậc', profile.jobGrade)}
     ${roField('Thâm niên', hrpfTenureDisplay(profile))}
@@ -957,9 +958,16 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Hình thức làm việc</label>
         <select id="hrpfF_employmentType" class="w-full border p-1.5 rounded text-sm bg-white">
           <option value="">-- Chưa rõ --</option>
-          ${EMPLOYMENT_TYPE_OPTIONS.map(t => `<option value="${t}" ${profile.employmentType === t ? 'selected' : ''}>${t}</option>`).join('')}
+          ${(DB.employmentTypes || []).map(t => `<option value="${escapeHtml(t)}" ${profile.employmentType === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
         </select></div>`
       : roField('Hình thức làm việc', profile.employmentType)}
+    ${editableHrOnly
+      ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Thời gian làm việc</label>
+        <select id="hrpfF_workSchedule" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">-- Chưa rõ --</option>
+          ${(DB.workSchedules || []).map(t => `<option value="${escapeHtml(t)}" ${profile.workSchedule === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select></div>`
+      : roField('Thời gian làm việc', profile.workSchedule)}
   </div>`;
 
   const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
@@ -1181,6 +1189,7 @@ function collectHrpfProfileFormValues(scope) {
     if (document.getElementById('hrpfF_deskLocation')) payload.deskLocation = val('hrpfF_deskLocation') || null;
     if (document.getElementById('hrpfF_retirementDate')) payload.retirementDate = val('hrpfF_retirementDate') || null;
     if (document.getElementById('hrpfF_employmentType')) payload.employmentType = val('hrpfF_employmentType') || null;
+    if (document.getElementById('hrpfF_workSchedule')) payload.workSchedule = val('hrpfF_workSchedule') || null;
     if (document.getElementById('hrpfF_socialInsuranceAtThisUnit')) {
       const raw = val('hrpfF_socialInsuranceAtThisUnit');
       payload.socialInsuranceAtThisUnit = raw === '' ? null : raw === '1';

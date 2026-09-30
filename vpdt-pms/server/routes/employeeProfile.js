@@ -554,6 +554,10 @@ router.get('/by-username/:username', async (req, res) => {
 // PATCH /api/hr-profile/by-code/:employeeCode — HR/admin sửa TOÀN BỘ trường (kể cả HR_ONLY_EDITABLE_FIELDS).
 router.patch('/by-code/:employeeCode', async (req, res) => {
   try {
+    // employmentTypes/workSchedules: đọc trước ĐỂ NGOÀI khối khoá (employeeProfiles là collection khác,
+    // withLockedAppDataValue chỉ khoá đúng 1 collection truyền vào) — truyền vào applyProfileEdit() để
+    // đối chiếu đúng danh mục THẬT admin đang cấu hình (màn Biểu Mẫu), không rơi về Set mặc định cứng.
+    const catalogAppData = await getAllAppData();
     let updated;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
@@ -574,7 +578,9 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
         employeeProfile.assertNationalIdNotDuplicated(list, req.body.nationalId, profile.employeeCode);
       }
       const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
-      employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name);
+      employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name, {
+        employmentTypes: catalogAppData.employmentTypes, workSchedules: catalogAppData.workSchedules
+      });
       // "Xác Nhận" (Ảnh 2): lưu thành công lúc đang PENDING = tốt nghiệp khỏi hàng đợi Onboarding, chuyển
       // hẳn sang "Quản Lý Hồ Sơ" — chỉ đổi cờ hàng đợi, KHÔNG đụng tới profile.status.
       if (profile.onboardingQueueStatus === 'PENDING') profile.onboardingQueueStatus = null;
@@ -694,7 +700,9 @@ router.post('/', requireProfileCreate, async (req, res) => {
     const applied = positionKey ? orgChart.getAppliedVersion((await getAppDataValue('orgChartVersions')) || []) : null;
     let created, syncTarget = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
-      created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username, req.freshUser.name);
+      created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username, req.freshUser.name, {
+        employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules
+      });
       if (positionKey) {
         const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
         if (created.username) syncTarget = { username: created.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
@@ -834,7 +842,9 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
             const updated = employeeProfile.updateProfileFromImport(list, row.employeeCode, row, req.freshUser.username, req.freshUser.name);
             results.updated.push(updated.employeeCode);
           } else {
-            const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name);
+            const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name, {
+              employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules
+            });
             results.created.push(created.employeeCode);
           }
         } catch (rowErr) {

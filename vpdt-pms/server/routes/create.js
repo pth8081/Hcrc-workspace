@@ -411,7 +411,8 @@ router.post('/:module', async (req, res) => {
         // (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG cơ chế currentAddress/
         // nationalId ở trên, đã trim/validate đầy đủ ở hrProcesses.extraValidate (lib/createValidation.js).
         if (idx !== -1 && (record.currentAddress || record.nationalId || record.gender || record.dateOfBirth
-          || record.permanentAddress || record.nationalIdIssueDate || record.nationalIdIssuePlace || record.employmentType)) {
+          || record.permanentAddress || record.nationalIdIssueDate || record.nationalIdIssuePlace
+          || record.employmentType || record.workSchedule)) {
           // CHỈ đưa vào payload đúng field client thực sự gửi khác rỗng — applyProfileEdit() coi field
           // "có mặt trong payload" (kể cả giá trị rỗng/undefined) là "cần ghi đè", nên field còn lại
           // (không nhập) PHẢI vắng mặt hẳn khỏi object này để giữ nguyên giá trị cũ, không bị ghi đè null.
@@ -424,9 +425,15 @@ router.post('/:module', async (req, res) => {
           if (record.nationalIdIssueDate) onboardingProfileEdits.nationalIdIssueDate = record.nationalIdIssueDate;
           if (record.nationalIdIssuePlace) onboardingProfileEdits.nationalIdIssuePlace = record.nationalIdIssuePlace;
           if (record.employmentType) onboardingProfileEdits.employmentType = record.employmentType;
+          if (record.workSchedule) onboardingProfileEdits.workSchedule = record.workSchedule;
+          // employmentTypes/workSchedules: truyền đúng danh mục THẬT appData.employmentTypes/
+          // appData.workSchedules (admin tự sửa qua màn Biểu Mẫu) — appData đã đọc sẵn ở đầu handler
+          // (getAllAppData()), record.employmentType/record.workSchedule đã qua đối chiếu CÙNG danh mục
+          // này ở hrProcesses.extraValidate nên không thể lệch nhau giữa 2 bước.
           employeeProfile.applyProfileEdit(
             arr[idx], onboardingProfileEdits, Object.keys(onboardingProfileEdits),
-            freshUser.username, freshUser.name
+            freshUser.username, freshUser.name,
+            { employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules }
           );
         }
         // Học vấn (Trình độ/Trường/Chuyên ngành) — tạo dòng ĐẦU TIÊN của education[] nếu form Onboarding
