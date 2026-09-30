@@ -304,6 +304,9 @@ function __mockNormalizeTrainingCourseFields(payload) {
   payload.name = String(payload.name).trim();
   payload.category = String(payload.category).trim();
   payload.description = payload.description ? String(payload.description).trim() : '';
+  // Thumbnail (10/2026) — mirrors normalizeTrainingCourseFields() ở lib/createValidation.js.
+  payload.thumbnailUrl = payload.thumbnailUrl ? String(payload.thumbnailUrl).trim() : '';
+  payload.thumbnailFileName = payload.thumbnailFileName ? String(payload.thumbnailFileName).trim() : '';
 }
 function __mockValidateTrainingCourseCreate(payload, user) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền tạo chương trình đào tạo');
@@ -311,7 +314,7 @@ function __mockValidateTrainingCourseCreate(payload, user) {
 }
 function __mockEditTrainingCourse(payload, user, course) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa chương trình đào tạo');
-  ['name', 'category', 'description'].forEach((f) => { if (payload[f] !== undefined) course[f] = payload[f]; });
+  ['name', 'category', 'description', 'thumbnailUrl', 'thumbnailFileName'].forEach((f) => { if (payload[f] !== undefined) course[f] = payload[f]; });
   __mockNormalizeTrainingCourseFields(course);
   return course;
 }
@@ -902,6 +905,7 @@ function __mockValidateRecruitmentJobCreate(payload, user) {
   payload.bannerUrl = payload.bannerUrl ? String(payload.bannerUrl).trim() : '';
   payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
   payload.income = payload.income ? String(payload.income).trim().slice(0, 200) : '';
+  payload.workTime = payload.workTime ? String(payload.workTime).trim().slice(0, 200) : '';
   payload.pinned = false; payload.pinnedBy = null; payload.pinnedAt = null;
   payload.status = 'OPEN';
   payload.filledBy = null; payload.filledByName = null; payload.filledAt = null;
@@ -910,7 +914,7 @@ function __mockValidateRecruitmentJobCreate(payload, user) {
 // description/contactInfo bắt buộc), CỐ Ý KHÔNG đụng status/filledBy/filledByName/filledAt.
 function __mockEditRecruitmentJob(payload, user, job) {
   if (!(user.perms?.admin || user.perms?.internalRecruitmentCreate)) throw __mockHttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
-  const EDITABLE = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income'];
+  const EDITABLE = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income', 'workTime'];
   for (const f of EDITABLE) if (payload[f] !== undefined) job[f] = payload[f];
   if (!job.title || !String(job.title).trim()) throw __mockHttpError(400, 'Thiếu tên vị trí tuyển dụng');
   if (!job.description || !String(job.description).trim()) throw __mockHttpError(400, 'Thiếu mô tả công việc');
@@ -932,6 +936,7 @@ function __mockEditRecruitmentJob(payload, user, job) {
   job.bannerUrl = job.bannerUrl ? String(job.bannerUrl).trim() : '';
   job.bannerFileName = job.bannerFileName ? String(job.bannerFileName).trim() : '';
   job.income = job.income ? String(job.income).trim().slice(0, 200) : '';
+  job.workTime = job.workTime ? String(job.workTime).trim().slice(0, 200) : '';
   return job;
 }
 // "🔥 Đẩy ưu tiên" (9/2026) — mirrors pinRecruitmentJob()/unpinRecruitmentJob() ở lib/recordActions.js.

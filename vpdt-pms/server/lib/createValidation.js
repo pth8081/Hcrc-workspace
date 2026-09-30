@@ -1444,6 +1444,12 @@ const CREATE_MODULE_CONFIGS = {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
       // Tệp tài liệu (#docFile ở index.html) — xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu');
+      // Thumbnail (10/2026, theo yêu cầu người dùng "Mục kho tài liệu cần hiển thị thumbnail minh hoạ") —
+      // ảnh trang đầu THẬT do CLIENT tự vẽ từ PDF.js lúc tải lên rồi upload như 1 ảnh bình thường (xem
+      // generateDocThumbnail() ở module-tailieu.js), tuỳ chọn — tài liệu không phải PDF hoặc trình duyệt
+      // không vẽ được thì để trống, client tự rơi về icon theo loại tệp (getFileKind()).
+      payload.thumbnailUrl = payload.thumbnailUrl ? String(payload.thumbnailUrl).trim() : '';
+      assertUploadedFileUrl(payload.thumbnailUrl, 'Ảnh minh hoạ tài liệu');
       if (payload.rootDocId != null) {
         const rootId = Number(payload.rootDocId);
         const root = (collection || []).find(d => d.id === rootId && d.rootDocId == null);
@@ -4163,6 +4169,13 @@ function normalizeTrainingCourseFields(payload, appData) {
   payload.name = String(payload.name).trim();
   payload.category = String(payload.category).trim();
   payload.description = payload.description ? String(payload.description).trim() : '';
+  // Thumbnail (10/2026, theo yêu cầu người dùng "bổ sung thumbnail cho các chương trình") — cùng khuôn
+  // recruitmentJobs.bannerUrl (normalizeRecruitmentJobFields() ở trên): tuỳ chọn, xác minh URL upload
+  // thật qua assertUploadedFileUrl() (chặn scheme javascript:/URL ngoài hệ thống bị gán thẳng qua payload
+  // tự soạn) trước khi hiển thị lại thành <img src="...">.
+  payload.thumbnailUrl = payload.thumbnailUrl ? String(payload.thumbnailUrl).trim() : '';
+  assertUploadedFileUrl(payload.thumbnailUrl, 'Ảnh minh hoạ chương trình');
+  payload.thumbnailFileName = payload.thumbnailFileName ? String(payload.thumbnailFileName).trim() : '';
   validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_COURSE');
 }
 
@@ -4363,6 +4376,9 @@ function normalizeRecruitmentJobFields(payload, appData) {
   payload.bannerFileName = payload.bannerFileName ? String(payload.bannerFileName).trim() : '';
   // Thu Nhập (9/2026) — văn bản tự do (VD "8-10 triệu", "Thoả thuận"), tuỳ chọn, trần 200 ký tự.
   payload.income = payload.income ? String(payload.income).trim().slice(0, 200) : '';
+  // Thời Gian Làm Việc (10/2026, theo yêu cầu người dùng) — cùng khuôn income: văn bản tự do (VD
+  // "Toàn thời gian", "Bán thời gian, ca sáng"), tuỳ chọn, trần 200 ký tự.
+  payload.workTime = payload.workTime ? String(payload.workTime).trim().slice(0, 200) : '';
 }
 
 // Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Thăng Tiến (careerPaths) — dùng CHUNG cho cả TẠO

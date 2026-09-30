@@ -5005,7 +5005,7 @@ function editTrainingClass(payload, user, cls, tests, users, courses, existingRe
 // trainingPlans đã gắn courseId đó — khác hẳn Đồng Phục/Ngày Lễ..., đây là 1 catalog CÓ tham chiếu thật
 // từ nhiều collection khác nên xoá-tạo-lại luôn đổi cả id, phá liên kết). Tái dùng ĐÚNG 1 luật chuẩn hoá/
 // kiểm tra dùng chung với lúc TẠO (normalizeTrainingCourseFields(), lib/createValidation.js).
-const TRAINING_COURSE_EDITABLE_FIELDS = ['name', 'category', 'description', 'customData'];
+const TRAINING_COURSE_EDITABLE_FIELDS = ['name', 'category', 'description', 'thumbnailUrl', 'thumbnailFileName', 'customData'];
 function editTrainingCourse(payload, user, course, appData) {
   if (!user.perms?.admin && !user.perms?.trainingManage) throw new HttpError(403, 'Bạn không có quyền sửa chương trình đào tạo');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
@@ -5617,7 +5617,7 @@ function canManageRecruitment(user) {
 // filledByName/filledAt (đổi qua closeRecruitmentJob()/confirmRecruitmentJobFilled() riêng).
 // income (Thu Nhập, 9/2026) sửa được như mọi field nội dung khác; pinned/pinnedBy/pinnedAt CỐ Ý KHÔNG có
 // ở đây — chỉ đổi qua pinRecruitmentJob()/unpinRecruitmentJob() bên dưới.
-const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income', 'customData'];
+const RECRUITMENT_JOB_EDITABLE_FIELDS = ['title', 'description', 'requirements', 'location', 'contactInfo', 'slots', 'deadline', 'month', 'hiringDept', 'bannerUrl', 'bannerFileName', 'income', 'workTime', 'customData'];
 function editRecruitmentJob(payload, user, job, appData) {
   if (!canManageRecruitment(user)) throw new HttpError(403, 'Bạn không có quyền sửa tin tuyển dụng');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');

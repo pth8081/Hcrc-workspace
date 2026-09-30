@@ -1008,6 +1008,7 @@ async function submitRecruitmentJob(e) {
     hiringDept: document.getElementById('rjDept').value,
     contactInfo: document.getElementById('rjContactInfo').value.trim(),
     income: document.getElementById('rjIncome').value.trim(),
+    workTime: document.getElementById('rjWorkTime').value.trim(),
     bannerUrl, bannerFileName,
     customData
   };
@@ -1057,6 +1058,7 @@ function openEditRecruitmentJob(id) {
   document.getElementById('rjDept').value = job.hiringDept || '';
   document.getElementById('rjContactInfo').value = job.contactInfo || '';
   document.getElementById('rjIncome').value = job.income || '';
+  document.getElementById('rjWorkTime').value = job.workTime || '';
   clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
   document.getElementById('rjSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('rjCancelEditBtn').classList.remove('hidden');
@@ -1153,6 +1155,7 @@ function renderRecruitmentJobs() {
   const filterMonth = document.getElementById('rjFilterMonth')?.value || '';
   const filterDept = document.getElementById('rjFilterDept')?.value || '';
   const filterKeyword = (document.getElementById('rjFilterKeyword')?.value || '').trim();
+  const filterStatus = document.getElementById('rjFilterStatus')?.value || '';
   // Tin "🔥 ưu tiên" nổi lên ĐẦU danh sách chính (đã chốt với người dùng: không tách khu riêng) — giữa các
   // tin ưu tiên, đẩy MỚI NHẤT (pinnedAt) đứng trước; phần còn lại giữ nguyên sort cũ theo id giảm dần.
   let list = (DB.recruitmentJobs || []).slice().sort((a, b) => {
@@ -1167,6 +1170,7 @@ function renderRecruitmentJobs() {
     if (filterTitle && (j.title || '').trim() !== filterTitle) return false;
     if (filterMonth && j.month !== filterMonth) return false;
     if (filterDept && j.hiringDept !== filterDept) return false;
+    if (filterStatus && j.status !== filterStatus) return false;
     if (!matchesKeywordFields([j.title, j.location], filterKeyword)) return false;
     return true;
   });
@@ -1197,6 +1201,9 @@ function renderRecruitmentJobs() {
       ['Thời hạn', j.deadline || 'Không thời hạn'],
       ['Liên hệ', j.contactInfo || '—']
     ];
+    // Thời Gian Làm Việc (10/2026) — chỉ thêm dòng khi có nhập, tránh dư dòng "—" cho dữ liệu cũ trước
+    // khi có field này (khớp cách currentHTML xử lý j.month ngay dưới).
+    if (j.workTime) fieldRows.push(['Thời gian LV', j.workTime]);
     if (j.month) fieldRows.push(['Đợt tuyển', j.month]);
     const fieldsHTML = fieldRows.map(([label, value]) => `
             <div class="rj-field flex gap-1.5 text-xs">

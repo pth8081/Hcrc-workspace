@@ -426,8 +426,13 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
     <tr class="hover:bg-gray-50 transition border-b ${isChild ? 'bg-purple-50/40' : ''}">
       <td class="border p-2 font-mono font-bold text-blue-700">${codeCellHTML}</td>
       <td class="border p-2">
-        <div class="font-bold text-gray-800">${escapeHtml(doc.title)}</div>
-        <div class="text-xs text-gray-500 line-clamp-2 mt-0.5">${escapeHtml(doc.summary)}</div>
+        <div class="flex items-start gap-2">
+          ${docThumbHTML(doc)}
+          <div class="min-w-0">
+            <div class="font-bold text-gray-800">${escapeHtml(doc.title)}</div>
+            <div class="text-xs text-gray-500 line-clamp-2 mt-0.5">${escapeHtml(doc.summary)}</div>
+          </div>
+        </div>
       </td>
       <td class="border p-2 font-semibold text-gray-700">${escapeHtml(doc.dept)}</td>
       <td class="border p-2 text-gray-600">${escapeHtml(doc.cat)}</td>
@@ -554,6 +559,19 @@ async function uploadDoc(e) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
+  // Thumbnail (10/2026) — best-effort, KHÔNG chặn luồng tải lên nếu vẽ/tải ảnh thất bại (PDF hỏng, mạng
+  // chậm, trình duyệt không hỗ trợ...) — tài liệu vẫn lưu bình thường, chỉ thiếu ảnh minh hoạ (rơi về
+  // icon theo loại tệp như trước, xem docThumbHTML()).
+  let thumbnailUrl = '', thumbnailFileName = '';
+  try {
+    const thumbFile = await generateDocThumbnail(file);
+    if (thumbFile) {
+      const uploadedThumb = await uploadFileToServer(thumbFile, 'internalImage');
+      thumbnailUrl = uploadedThumb.fileUrl;
+      thumbnailFileName = uploadedThumb.fileName;
+    }
+  } catch (err) { /* best-effort, không chặn tải lên tài liệu */ }
+
   const docPayload = {
     code: code,
     displayCode: displayCode,
@@ -568,6 +586,7 @@ async function uploadDoc(e) {
     fileName: uploaded.fileName,
     fileType: uploaded.fileType,
     fileUrl: uploaded.fileUrl,
+    thumbnailUrl, thumbnailFileName,
     createdAt: new Date().toLocaleString('vi-VN'),
     status: 'PENDING',
     currentStep: 1,
@@ -1630,6 +1649,49 @@ function getFileKind(fileType, fileName) {
   if (ext === 'xlsx') return 'excel';
   if (['doc', 'xls', 'ppt', 'pptx'].includes(ext)) return 'office';
   return 'other';
+}
+
+// Sinh ảnh minh hoạ THẬT từ trang đầu tài liệu PDF lúc tải lên (10/2026, theo yêu cầu người dùng "Mục
+// kho tài liệu cần hiển thị thumbnail minh hoạ") — tái dùng PDF.js đã có sẵn cho renderPdfProtected()
+// (ensurePdfJsReady(), core.js), vẽ trang 1 vào <canvas> rồi nén PNG, upload như 1 ảnh bình thường (moduleKey
+// 'internalImage', cùng khuôn banner Tuyển Dụng/thumbnail Chương Trình). CHỈ áp dụng cho PDF — ảnh
+// (image/*) dùng THẲNG chính tệp gốc làm thumbnail ở docThumbHTML() bên dưới (không cần sinh riêng);
+// Word/Excel/khác không có cách vẽ trước trang nào rẻ ở client nên rơi về icon theo loại tệp. Lỗi vẽ (PDF
+// hỏng/mã hoá không đọc được trang 1, trình duyệt không hỗ trợ canvas.toBlob...) KHÔNG được chặn luồng
+// tải lên — trả về null, caller (uploadDoc()) coi như không có thumbnail, tài liệu vẫn lưu bình thường.
+async function generateDocThumbnail(file) {
+  if (!file || file.type !== 'application/pdf') return null;
+  try {
+    await ensurePdfJsReady();
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = 300 / baseViewport.width; // chiều rộng cố định 300px — đủ nét cho khung thumbnail nhỏ, không quá nặng.
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) return null;
+    return new File([blob], `thumb-${Date.now()}.png`, { type: 'image/png' });
+  } catch (err) {
+    console.warn('Không tạo được ảnh minh hoạ tài liệu:', err);
+    return null;
+  }
+}
+
+// Dựng khung thumbnail 1 tài liệu trong "Danh Sách Tài Liệu Trong Hệ Thống" — ưu tiên doc.thumbnailUrl
+// (ảnh trang đầu THẬT do generateDocThumbnail() sinh lúc tải PDF lên); tài liệu là ẢNH thì dùng THẲNG
+// chính tệp gốc (doc.fileUrl) làm thumbnail (không cần sinh riêng); còn lại rơi về icon theo loại tệp
+// (getFileKind()) — cùng tinh thần placeholder rj-thumb-placeholder (Tuyển Dụng)/thẻ Chương Trình.
+function docThumbHTML(doc) {
+  const kind = getFileKind(doc.fileType, doc.fileName);
+  const src = doc.thumbnailUrl || (kind === 'image' ? (doc.fileUrl || '') : '');
+  if (src) return `<img src="${escapeHtml(src)}" alt="" loading="lazy" class="w-10 h-10 object-cover rounded border flex-shrink-0 bg-white">`;
+  const icon = { pdf: '📕', word: '📄', excel: '📊', office: '🗂️', other: '📁' }[kind] || '📁';
+  return `<div class="w-10 h-10 flex items-center justify-center text-lg bg-gray-50 border rounded flex-shrink-0">${icon}</div>`;
 }
 
 // Chữ watermark DUY NHẤT hiển thị khi xem tệp đính kèm qua Protected View (áp dụng cho MỌI tệp — Tài
