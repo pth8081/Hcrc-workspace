@@ -782,10 +782,16 @@ async function onUsersImportFileChange(evt) {
   // duplicateExisting: tự tính ở client (đã có sẵn DB.users, không cần round-trip) — khớp ĐÚNG 1 tài
   // khoản đang có, cho phép chọn "Ghi đè thông tin" (chỉ họ tên/email/SĐT/phòng ban — KHÔNG bao giờ đụng
   // tới username/mật khẩu/quyền hạn của tài khoản đã có) thay vì chỉ bỏ qua.
-  const existingByUsername = new Map(DB.users.map(u => [String(u.username).trim().toLowerCase(), u]));
+  // LỖI THẬT đã vá (10/2026): trước đây chỉ .trim().toLowerCase() — KHÔNG chuẩn hoá Unicode NFC/NFD như
+  // normalizeVnCompareKey() đã áp dụng cho dept/jobTitle/khoiBan/permGroups ở validateImportedUserRow()
+  // ngay bên dưới — username có dấu tiếng Việt gõ/copy từ nguồn khác dạng NFD (VD macOS) không khớp được
+  // bản NFC đang lưu trong hệ thống, dòng đó rơi nhầm sang "add" (thêm mới) thay vì "overwrite" dù CÙNG 1
+  // người, để lộ khe hở tạo trùng tài khoản. Dùng chung đúng 1 hàm chuẩn hoá cho MỌI so khớp chuỗi tiếng
+  // Việt trong file này.
+  const existingByUsername = new Map(DB.users.map(u => [normalizeVnCompareKey(u.username), u]));
   usersImportPreviewItems = rows.map((r, idx) => {
     const { errors, normalized } = validateImportedUserRow(r);
-    const existing = existingByUsername.get(String(r.username).trim().toLowerCase());
+    const existing = existingByUsername.get(normalizeVnCompareKey(r.username));
     // Mật khẩu CHỈ có ý nghĩa với dòng THÊM MỚI thật (existing giữ nguyên mật khẩu cũ, xem
     // toOverwrite.forEach() — không bao giờ đụng pass) — không chặn oan dòng ghi đè chỉ vì cột pass để
     // trống/không đạt chuẩn (người nhập file có thể không biết/không cần quan tâm mật khẩu cũ).
@@ -908,7 +914,7 @@ async function confirmUsersImport() {
   // đụng username/pass/perms/groupIds của tài khoản đã có (tránh 1 file Excel vô tình/cố ý reset mật
   // khẩu hay quyền hạn người khác).
   toOverwrite.forEach(({ username, name, email, phone, normalized }) => {
-    const existing = DB.users.find(u => String(u.username).trim().toLowerCase() === String(username).trim().toLowerCase());
+    const existing = DB.users.find(u => normalizeVnCompareKey(u.username) === normalizeVnCompareKey(username));
     if (!existing) return;
     existing.name = name; existing.email = email; existing.phone = phone;
     existing.dept = normalized.dept; existing.jobTitle = normalized.jobTitle || null;

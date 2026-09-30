@@ -1009,11 +1009,21 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label>
-            <input id="uUsername" placeholder="username" class="w-full border p-1.5 rounded text-xs" required>
+            <!-- autocomplete/autocapitalize/spellcheck="off" (LỖI THẬT đã vá 10/2026): trình duyệt/bàn
+                 phím điện thoại (Samsung Keyboard/Gboard) TỰ VIẾT HOA chữ cái đầu hoặc gợi ý sửa nội
+                 dung ô này khi admin chạm nhầm vào lúc đang sửa CÁC Ô KHÁC — đăng nhập so username phân
+                 biệt HOA/thường tuyệt đối (routes/auth.js), nên chỉ cần lệch 1 ký tự là tài khoản không
+                 còn đăng nhập được nữa mà admin không hề chủ ý đổi tên đăng nhập. saveUser() (module-
+                 admin-submissiongroups.js) còn hỏi xác nhận rõ ràng nếu phát hiện tên đăng nhập bị đổi. -->
+            <input id="uUsername" placeholder="username" autocomplete="off" autocapitalize="off" spellcheck="false" class="w-full border p-1.5 rounded text-xs" required>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label>
-            <input id="uPassword" type="password" placeholder="Để trống = giữ nguyên mật khẩu hiện tại" class="w-full border p-1.5 rounded text-xs">
+            <!-- autocomplete="new-password" (cùng đợt vá trên): chặn trình duyệt/trình quản lý mật khẩu
+                 tự động ĐIỀN SẴN 1 mật khẩu đã lưu (của tài khoản BẤT KỲ) vào ô này khi mở form Sửa —
+                 admin không gõ gì nhưng ô vẫn có giá trị do trình duyệt tự điền, vô tình đổi mật khẩu
+                 người khác dù chỉ định sửa thông tin liên hệ. -->
+            <input id="uPassword" type="password" placeholder="Để trống = giữ nguyên mật khẩu hiện tại" autocomplete="new-password" class="w-full border p-1.5 rounded text-xs">
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>

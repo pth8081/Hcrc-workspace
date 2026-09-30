@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**24.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.47 (2026-09-30): Vá lỗi thật — sửa người dùng để cập nhật thông tin thì không đăng nhập được
+
+Theo báo cáo người dùng thật: "sửa 1 người dùng để cập nhật thông tin thì
+không đăng nhập được: sửa trực tiếp và sửa nhập file đều bị lỗi" — yêu cầu
+kiểm tra cẩn thận + xử lý + test kỹ.
+
+Rà soát sâu toàn bộ cơ chế "để trống mật khẩu/PIN khi sửa = giữ nguyên giá
+trị cũ" (`prepareUsersForSave()`, `routes/data.js`) qua test THẬT (server
+Express thật + bcrypt thật, không mock) xác nhận cơ chế này vẫn hoạt động
+đúng cho cả sửa trực tiếp lẫn Import Excel Ghi Đè. Nguyên nhân khả năng cao
+nhất khớp đúng triệu chứng báo cáo: ô **"Tên đăng nhập"** ở form Sửa Người
+Dùng hoàn toàn KHÔNG được bảo vệ — chỉ cần chạm nhầm/bàn phím điện thoại tự
+viết hoa 1 ký tự lúc admin đang cập nhật CÁC Ô KHÁC (SĐT, phòng ban...) là
+tên đăng nhập bị đổi ÂM THẦM (hệ thống so username phân biệt HOA/thường
+tuyệt đối) — nhân viên gõ đúng mật khẩu cũ vẫn bị báo "Tài khoản hoặc mật
+khẩu không chính xác" vì tài khoản tên cũ không còn tồn tại.
+
+Đã vá 3 điểm (`module-admin-submissiongroups.js`/`module-admin-userstaging.js`/
+`systemSection.html`):
+1. **Hỏi xác nhận rõ ràng khi ĐỔI TÊN ĐĂNG NHẬP lúc Sửa** — bấm "Lưu" khi
+   tên đăng nhập thật sự khác so với bản đang lưu sẽ hiện hộp thoại nêu rõ
+   tên CŨ/MỚI, Huỷ = không lưu gì (không đổi được số dòng fetch nào), OK =
+   thật sự muốn đổi. Không hỏi khi tạo mới/giữ nguyên/tài khoản "admin" bảo
+   vệ.
+2. **`autocomplete`/`autocapitalize`/`spellcheck="off"`** cho 2 ô "Tên đăng
+   nhập"/"Mật khẩu" — chặn bàn phím điện thoại/trình duyệt tự sửa hoặc tự
+   điền sẵn giá trị đã lưu (autofill sai tài khoản) vào 2 ô này.
+3. **Import Excel**: so khớp "username đã có tài khoản" (đề xuất Ghi đè)
+   nay chuẩn hoá Unicode NFC như dept/jobtitle/khoiban/permgroups đã áp
+   dụng, tránh username có dấu tiếng Việt dạng NFD rơi nhầm sang "Thêm mới"
+   (tạo trùng) thay vì "Ghi đè".
+
+Test mới: `test-user-edit-username-guard.js` (15 kịch bản — hỏi/không hỏi
+đúng lúc, Huỷ không lưu gì, OK lưu đúng tên mới, tài khoản admin không bị
+hỏi, NFC/NFD username khớp đúng). Đã chạy lại toàn bộ 13 file test liên quan
+tới quản lý Người Dùng/Phân Quyền (300+ kịch bản), không có regression.
 
 ## v24.46 (2026-09-30): Xuất Excel 3 báo cáo — Đăng Ký Xe / Đặt Phòng Họp / Văn Phòng Phẩm
 

@@ -671,6 +671,20 @@ async function saveUser(e) {
   if (editId) {
     const user = DB.users.find(u => u.id === parseInt(editId, 10));
     if (user) {
+      // LỖI THẬT đã vá (10/2026, theo báo cáo người dùng "sửa 1 người dùng để cập nhật thông tin thì
+      // không đăng nhập được"): #uUsername (ô "Tên đăng nhập") KHÔNG hề bị khoá khi đang SỬA người dùng
+      // đã có sẵn — khác PIN/mật khẩu ở dưới vốn "để trống = giữ nguyên", ô này LUÔN gửi thẳng giá trị
+      // đang gõ, nên chỉ cần chạm nhầm/bàn phím điện thoại tự sửa 1 ký tự (viết hoa chữ đầu...) trong lúc
+      // admin đang cập nhật CÁC Ô KHÁC (SĐT/phòng ban...) là tên đăng nhập bị đổi ÂM THẦM — server so
+      // đúng-sai username phân biệt HOA/thường tuyệt đối (routes/auth.js), nhân viên gõ đúng mật khẩu cũ
+      // vẫn bị báo "Tài khoản hoặc mật khẩu không chính xác" vì không còn tài khoản nào tên cũ nữa. Nay
+      // hỏi xác nhận rõ ràng nếu tên đăng nhập THẬT SỰ đổi so với bản đang lưu (không hỏi khi giữ nguyên,
+      // không làm phiền các lượt sửa thông tin bình thường) — admin có thể Huỷ để sửa lại đúng tên cũ nếu
+      // đây là chạm nhầm, hoặc OK nếu THẬT SỰ muốn đổi tên đăng nhập của người này.
+      if (user.username !== 'admin' && username !== user.username) {
+        const confirmed = confirm(`⚠️ Tên đăng nhập đang đổi từ "${user.username}" thành "${username}" — người dùng này sẽ phải dùng tên đăng nhập MỚI ("${username}") ở lần đăng nhập tiếp theo, tên cũ sẽ KHÔNG còn dùng được nữa.\n\nBấm OK nếu bạn THẬT SỰ muốn đổi tên đăng nhập, hoặc Huỷ để sửa lại đúng tên cũ (nếu chỉ là gõ nhầm).`);
+        if (!confirmed) return;
+      }
       // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): 3 dòng ép quyền bên
       // dưới trước đây so theo `username` — tức tên MỚI vừa gõ trong form — nên chỉ cần đổi tên tài
       // khoản admin gốc ngay trong CÙNG lượt lưu là bỏ qua được hoàn toàn lớp khoá này (và ngược lại,

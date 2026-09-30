@@ -4630,7 +4630,25 @@ Dòng hợp lệ mới có ô tick "Nhập?" (hoặc chọn Bỏ qua/Ghi đè n�
 tài khoản, giống hành vi trùng lặp trước đây) — bấm **"✅ Xác Nhận Import"**
 để tạo/ghi đè hàng loạt. Ghi đè (username đã có tài khoản) **KHÔNG BAO GIỜ**
 đụng tới mật khẩu/Nhóm Phân Quyền/quyền hạn của tài khoản đã có — 2 cột
-`pass`/`permgroups` chỉ có tác dụng với dòng tạo MỚI thật.
+`pass`/`permgroups` chỉ có tác dụng với dòng tạo MỚI thật. So khớp "username
+đã có tài khoản" (để đề xuất Ghi đè thay vì Thêm mới) nay chuẩn hoá Unicode
+NFC như các cột khác (dept/jobtitle/khoiban/permgroups) — username có dấu
+tiếng Việt gõ ở dạng tổ hợp khác (NFD) vẫn khớp đúng tài khoản đang có.
+
+**Xác nhận khi ĐỔI TÊN ĐĂNG NHẬP lúc Sửa người dùng (10/2026)** — LỖI THẬT đã
+vá theo báo cáo người dùng ("sửa 1 người dùng để cập nhật thông tin thì
+không đăng nhập được"): trước đây ô "Tên đăng nhập" ở form Sửa hoàn toàn
+không được bảo vệ — chỉ cần chạm nhầm/bàn phím điện thoại tự sửa 1 ký tự lúc
+đang cập nhật các ô khác (SĐT, phòng ban...) là tên đăng nhập bị đổi ÂM THẦM,
+người đó không còn đăng nhập được bằng tên cũ (hệ thống so tên đăng nhập
+phân biệt HOA/thường tuyệt đối). Nay bấm "Lưu" khi đang SỬA 1 người dùng đã
+có sẵn mà tên đăng nhập THẬT SỰ thay đổi so với bản đang lưu sẽ hiện hộp
+thoại xác nhận nêu rõ tên CŨ/tên MỚI — bấm Huỷ để giữ nguyên (không lưu gì
+cả) nếu chỉ là chạm/gõ nhầm, hoặc OK nếu THẬT SỰ muốn đổi tên đăng nhập của
+người đó. Không hỏi khi tạo mới hoặc khi tên đăng nhập giữ nguyên. Đồng thời
+2 ô "Tên đăng nhập"/"Mật khẩu" đã tắt gợi ý tự động của trình duyệt/bàn phím
+điện thoại (autocomplete/autocapitalize/spellcheck) để giảm rủi ro bị tự ý
+sửa nội dung ngoài ý muốn.
 
 ### 7.8. Cấu Hình Email
 
