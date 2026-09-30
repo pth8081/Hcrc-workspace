@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**24.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.54 (2026-09-30): Vá 2 lỗi test tiền tồn tại phát hiện ở đợt regression v24.53 — CHỈ sửa file test, KHÔNG đổi code production
+
+Theo yêu cầu người dùng ("lỗi nào cần có phương án xử lý"), đã điều tra sâu 2
+lỗi tiền tồn tại phát hiện lúc chạy full regression cho đợt v24.53 (xác nhận
+KHÔNG liên quan tới 4 việc của đợt đó, tái hiện y hệt trên baseline sạch
+trước đó). Cả 2 đều là **lỗi trong chính file test** (viết thiếu/thiếu cập
+nhật theo code production), KHÔNG phải lỗ hổng/lỗi thật ở code đang chạy —
+production không cần vá gì:
+
+1. **`test-extra-approval-groups.js`** — kịch bản "officeReqs: MUA_BAN đã
+   cấu hình, SUA_CHUA chưa" gửi request tạo `officeReqs` với `subType:
+   'MUA_BAN'` nhưng KHÔNG kèm `items`, trong khi validate production
+   (`CREATE_MODULE_CONFIGS.officeReqs.extraValidate`, vá từ đợt "Fix #9 [TB]:
+   Office Reqs amount bypass khi items rỗng") đã bắt buộc `items` cho đúng
+   subType này từ trước — kịch bản test được viết SAU đó nhưng không tính
+   tới ràng buộc này nên luôn bị chặn ở bước validate trước khi chạm tới
+   phần đang muốn kiểm (mapping subType→moduleKey Nhóm Phê Duyệt Cuối). Vá:
+   thêm `items` hợp lệ vào request test. 26/26 kịch bản pass.
+2. **`test-audit-cluster-vbt-hd-gp-tt-tl.js`** — 5 kịch bản gọi
+   `authorizeFileAccess()`/`findOwningRecord()` (lib/fileAuthz.js), hàm này
+   gọi KHÔNG điều kiện `getAllWorkItemsCached()` (lib/operationWorkItemStore
+   — collection `operationWorkItems`, thêm vào từ đợt vá FAIL-OPEN Vận Hành)
+   để tra ngược fileUrl thuộc bản ghi nào. File test này chỉ stub
+   `lib/recordStore`/`lib/appData`/`db`, thiếu stub cho
+   `lib/operationWorkItemStore` (bổ sung sau khi file test đã viết xong) nên
+   rơi vào gọi thật `db.getPool()` (bị stub chặn có chủ đích, ném lỗi) — lỗi
+   này làm `Promise.all` bên trong `findOwningRecord()` reject toàn bộ thay
+   vì trả `false` như mong đợi. Vá: thêm
+   `stubModule('lib/operationWorkItemStore', ...)`. 41/41 kịch bản pass.
+
+Đã chạy lại các test liên quan (`test-extra-approval-preview-fix.js`,
+`test-audit-cluster-license-cascade-download-limit.js`, `test-office-reqs-scope.js`,
+`test-payment*.js`) — không regression. Cũng xác nhận thêm 1 lỗi hạ tầng
+KHÔNG liên quan (`test-uploads-file-authz.js`, 26/27 fail cả trên baseline
+sạch — do sandbox không có SQL Server thật tại `localhost:1433`, test này
+cần server HTTP + DB thật) — không xử lý ở đợt này vì thuộc nhóm hạ tầng
+test, không phải lỗi code.
 
 ## v24.53 (2026-09-30): Tuyển Dụng (Thời Gian LV + lọc Trạng Thái), PDF mobile mượt hơn, Chương Trình dạng thẻ, Kho Tài Liệu thumbnail thật
 
