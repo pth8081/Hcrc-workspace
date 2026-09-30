@@ -4650,6 +4650,19 @@ người đó. Không hỏi khi tạo mới hoặc khi tên đăng nhập giữ 
 điện thoại (autocomplete/autocapitalize/spellcheck) để giảm rủi ro bị tự ý
 sửa nội dung ngoài ý muốn.
 
+**Tên đăng nhập KHÔNG phân biệt hoa/thường (10/2026)** — sau đợt vá lỗi trên,
+rà soát tiếp theo phát hiện gốc rễ sâu hơn: hệ thống trước đây so username
+PHÂN BIỆT tuyệt đối hoa/thường ở đăng nhập (mật khẩu/TOTP/vân tay), trong khi
+Import Excel Ghi Đè lại đã so KHÔNG phân biệt hoa/thường — 2 nơi lệch nhau
+chính là nguyên nhân sâu xa của lỗi "đổi 1 ký tự hoa/thường là mất đăng
+nhập". Đã đồng bộ: username giờ **KHÔNG phân biệt hoa/thường ở MỌI nơi** —
+gõ "NV001", "nv001" hay "Nv001" đều đăng nhập được vào CÙNG 1 tài khoản (áp
+dụng cho đăng nhập mật khẩu/TOTP bước 2/vân tay, lẫn API xác thực cho đối
+tác ngoài). Hệ quả đi kèm: khi tạo/sửa tài khoản (tay hoặc Excel), 2 username
+chỉ khác hoa/thường (VD "NV001" và "nv001") giờ bị coi là **TRÙNG** — hệ
+thống báo lỗi "đã bị trùng... (không phân biệt hoa/thường)" và không cho lưu
+cả 2 song song, tránh nhầm lẫn/lỗi đăng nhập tương tự về sau.
+
 ### 7.8. Cấu Hình Email
 
 **Hệ Thống → Quản Trị → Cấu Hình Email** — cấu hình **toàn bộ** trên web (Host/

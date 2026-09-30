@@ -4,7 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME } = require('../lib/auth');
+const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, findUserByUsernameCI } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
@@ -127,7 +127,14 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
   try {
     const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === username);
+    // Đăng nhập KHÔNG phân biệt hoa/thường (10/2026, xác nhận người dùng: "cho phép user chữ hoa và chữ
+    // thường như nhau") — findUserByUsernameCI() (lib/auth.js). canonicalUsername = ĐÚNG username đang
+    // lưu trong CSDL (giữ nguyên hoa/thường lúc tạo tài khoản, có thể khác hẳn "username" người dùng vừa
+    // gõ) — mọi thao tác ghi bên dưới (khoá tài khoản/tăng sessionVersion) PHẢI tra lại theo giá trị này,
+    // không dùng lại biến "username" thô, để không bị lệch hoa/thường giữa 2 lượt tra cứu trong CÙNG
+    // request (findIndex khớp CHÍNH XÁC theo chuỗi lưu trong CSDL).
+    const user = findUserByUsernameCI(users, username);
+    const canonicalUsername = user ? user.username : username;
 
     // Kiểm tra khoá tài khoản TRƯỚC KHI xác minh mật khẩu — tài khoản đã tự lộ diện qua chính hành vi
     // bị dò sai nhiều lần trước đó (không phải thông tin mới bị lộ thêm ở bước này), và không cần tốn
@@ -147,7 +154,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
         let justLocked = false;
         await withLockedAppDataValue('users', (collection) => {
           const list = Array.isArray(collection) ? collection : [];
-          const idx = list.findIndex(u => u.username === username);
+          const idx = list.findIndex(u => u.username === canonicalUsername);
           if (idx !== -1) {
             recordFailedLogin(list[idx]);
             justLocked = !!list[idx].lockedUntil;
@@ -176,7 +183,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     if (user.failedLoginAttempts) {
       await withLockedAppDataValue('users', (collection) => {
         const list = Array.isArray(collection) ? collection : [];
-        const idx = list.findIndex(u => u.username === username);
+        const idx = list.findIndex(u => u.username === canonicalUsername);
         if (idx !== -1) resetLoginAttempts(list[idx]);
         return list;
       });
@@ -211,7 +218,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     let sessionUser = user;
     await withLockedAppDataValue('users', (collection) => {
       const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(u => u.username === username);
+      const idx = list.findIndex(u => u.username === canonicalUsername);
       if (idx !== -1) {
         list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1;
         sessionUser = { ...list[idx] };
@@ -241,12 +248,15 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
   }
 
   try {
-    if (!(await totp.hasPendingTotpLogin(username))) {
+    const users = (await getAppDataValue('users')) || [];
+    // Đăng nhập KHÔNG phân biệt hoa/thường (10/2026) — cùng lý do/cơ chế như POST /login (xem chú thích
+    // đầy đủ ở đó). canonicalUsername dùng cho MỌI thao tác bên dưới (phiên chờ TOTP/ghi khoá tài khoản/
+    // tăng sessionVersion) thay vì "username" thô từ body.
+    const user = findUserByUsernameCI(users, username);
+    const canonicalUsername = user ? user.username : username;
+    if (!(await totp.hasPendingTotpLogin(canonicalUsername))) {
       return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại' });
     }
-
-    const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === username);
     if (!user || !user.totpEnabled) {
       return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại' });
     }
@@ -276,7 +286,7 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
     if (!ok) {
       await withLockedAppDataValue('users', (collection) => {
         const list = Array.isArray(collection) ? collection : [];
-        const idx = list.findIndex(u => u.username === username);
+        const idx = list.findIndex(u => u.username === canonicalUsername);
         if (idx !== -1) recordFailedLogin(list[idx]);
         return list;
       });
@@ -287,12 +297,12 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
       return res.status(401).json({ error: code ? 'Mã xác thực không đúng' : 'Mã khôi phục không đúng hoặc đã được dùng' });
     }
 
-    await totp.consumePendingTotpLogin(username);
+    await totp.consumePendingTotpLogin(canonicalUsername);
 
     let updatedUser = user;
     await withLockedAppDataValue('users', (collection) => {
       const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(u => u.username === username);
+      const idx = list.findIndex(u => u.username === canonicalUsername);
       if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
       updatedUser = { ...list[idx] };
       // Mã khôi phục dùng 1 lần — xoá khỏi danh sách ngay khi vừa dùng để không dùng lại được lần 2.
@@ -1132,7 +1142,8 @@ router.post('/webauthn/login-options', loginRateLimiter, async (req, res) => {
 
   try {
     const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === username) || null;
+    // Đăng nhập KHÔNG phân biệt hoa/thường (10/2026) — cùng lý do/cơ chế như POST /login.
+    const user = findUserByUsernameCI(users, username);
     const options = await webauthn.buildAuthenticationOptions(req, user);
     res.json(options);
   } catch (err) {
@@ -1151,7 +1162,10 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
 
   try {
     const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === username);
+    // Đăng nhập KHÔNG phân biệt hoa/thường (10/2026) — cùng lý do/cơ chế như POST /login (xem chú thích
+    // đầy đủ ở đó). canonicalUsername dùng cho mọi thao tác ghi bên dưới thay vì "username" thô từ body.
+    const user = findUserByUsernameCI(users, username);
+    const canonicalUsername = user ? user.username : username;
 
     const remainingLockMinutes = user ? getLockoutRemainingMinutes(user) : null;
     if (remainingLockMinutes !== null) {
@@ -1178,7 +1192,7 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
         let justLocked = false;
         await withLockedAppDataValue('users', (collection) => {
           const list = Array.isArray(collection) ? collection : [];
-          const idx = list.findIndex(u => u.username === username);
+          const idx = list.findIndex(u => u.username === canonicalUsername);
           if (idx !== -1) {
             recordFailedLogin(list[idx]);
             justLocked = !!list[idx].lockedUntil;
@@ -1207,7 +1221,7 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
     let updatedUser;
     await withLockedAppDataValue('users', (collection) => {
       const list = Array.isArray(collection) ? collection : [];
-      const idx = list.findIndex(u => u.username === username);
+      const idx = list.findIndex(u => u.username === canonicalUsername);
       if (idx === -1) throw new HttpError(401, 'Tài khoản không còn tồn tại');
       const creds = (list[idx].webauthnCredentials || []).map(c =>
         c.id === verifyResult.credentialId ? { ...c, counter: verifyResult.newCounter } : c

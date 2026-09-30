@@ -692,13 +692,18 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
   // username khiến routes/auth.js (mọi chỗ users.find(u => u.username === username)) LUÔN chỉ thấy tài
   // khoản đứng TRƯỚC trong mảng, tài khoản còn lại thành "ma" (không ai đăng nhập/đặt lại mật khẩu/khoá
   // được), và trật tự mảng có thể đổi qua các lần lưu khác nhau -> hành vi không dự đoán được.
+  // So trùng KHÔNG phân biệt hoa/thường (10/2026, xác nhận người dùng: "cho phép user chữ hoa và chữ
+  // thường như nhau") — usernameEquals()/tương đương .toLowerCase() (lib/auth.js): "User1" và "user1"
+  // giờ bị coi là CÙNG 1 tên đăng nhập, không cho phép tồn tại song song 2 tài khoản chỉ khác hoa/thường
+  // (khớp đúng cách routes/auth.js đăng nhập không phân biệt hoa/thường nữa).
   const seenUsernames = new Map();
   for (const u of prepared) {
     if (!u.username) continue;
-    if (seenUsernames.has(u.username)) {
-      throw new HttpError(400, `Tên đăng nhập "${u.username}" đã bị trùng giữa nhiều tài khoản — mỗi tài khoản phải có tên đăng nhập duy nhất.`);
+    const key = u.username.trim().toLowerCase();
+    if (seenUsernames.has(key)) {
+      throw new HttpError(400, `Tên đăng nhập "${u.username}" đã bị trùng với "${seenUsernames.get(key)}" (không phân biệt hoa/thường) — mỗi tài khoản phải có tên đăng nhập duy nhất.`);
     }
-    seenUsernames.set(u.username, true);
+    seenUsernames.set(key, u.username);
   }
 
   // USER-BULK-03 (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Thấp): "id" do CLIENT tự sinh

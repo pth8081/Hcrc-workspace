@@ -18,7 +18,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
-const { verifyPassword } = require('../lib/auth');
+const { verifyPassword, findUserByUsernameCI } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
 const { extractBearerToken, verifyApiKey, isIpAllowed } = require('../lib/externalAuth');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -101,7 +101,11 @@ router.post('/verify-credentials', async (req, res) => {
     }
 
     const users = (await getAppDataValue('users')) || [];
-    const user = users.find(u => u.username === username);
+    // Đăng nhập KHÔNG phân biệt hoa/thường (10/2026) — cùng lý do/cơ chế như routes/auth.js POST /login
+    // (xem chú thích đầy đủ ở đó). canonicalUsername dùng cho mọi thao tác ghi bên dưới thay vì
+    // "username" thô từ request đối tác ngoài.
+    const user = findUserByUsernameCI(users, username);
+    const canonicalUsername = user ? user.username : username;
 
     const remainingLockMinutes = user ? getLockoutRemainingMinutes(user) : null;
     if (remainingLockMinutes !== null) {
@@ -114,7 +118,7 @@ router.post('/verify-credentials', async (req, res) => {
       if (user) {
         await withLockedAppDataValue('users', (collection) => {
           const list = Array.isArray(collection) ? collection : [];
-          const idx = list.findIndex(u => u.username === username);
+          const idx = list.findIndex(u => u.username === canonicalUsername);
           if (idx !== -1) recordFailedLogin(list[idx]);
           return list;
         });
@@ -131,7 +135,7 @@ router.post('/verify-credentials', async (req, res) => {
     if (user.failedLoginAttempts) {
       await withLockedAppDataValue('users', (collection) => {
         const list = Array.isArray(collection) ? collection : [];
-        const idx = list.findIndex(u => u.username === username);
+        const idx = list.findIndex(u => u.username === canonicalUsername);
         if (idx !== -1) resetLoginAttempts(list[idx]);
         return list;
       });

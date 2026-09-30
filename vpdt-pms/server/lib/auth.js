@@ -43,6 +43,27 @@ async function verifyPassword(plain, hashOrPlain) {
   return plain === hashOrPlain;
 }
 
+// So khớp username KHÔNG phân biệt hoa/thường (theo xác nhận người dùng 10/2026: "cho phép user chữ
+// hoa và chữ thường như nhau") — DÙNG CHO MỌI lượt tra cứu username THÔ do người dùng/đối tác ngoài tự
+// gõ vào lúc xác thực (đăng nhập mật khẩu/TOTP/vân tay, API đối tác ngoài routes/externalAuthVerify.js)
+// và lượt kiểm tra TRÙNG LẶP khi tạo/sửa tài khoản (routes/data.js prepareUsersForSave() — "User1" và
+// "user1" giờ bị coi là CÙNG 1 tên đăng nhập, không cho phép tồn tại song song 2 tài khoản chỉ khác hoa/
+// thường). KHÔNG áp dụng cho các lượt so username NỘI BỘ đã có sẵn (VD req.user.username lấy từ JWT đối
+// chiếu lại với CHÍNH bản ghi đã tạo ra JWT đó) — các trường hợp đó luôn khớp tuyệt đối vì cùng 1 nguồn
+// gốc, không cần bao hàm hàm này.
+function usernameEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+// Tìm 1 user KHÔNG phân biệt hoa/thường trong mảng users — trả về đúng bản ghi (giữ nguyên hoa/thường
+// ĐÃ LƯU trong CSDL), không phải giá trị người dùng vừa gõ. Nơi gọi PHẢI dùng lại `user.username` (bản
+// ghi tìm được) cho các thao tác ghi tiếp theo trong CÙNG request (khoá tài khoản/tăng sessionVersion...)
+// thay vì tiếp tục dùng biến username thô ban đầu, tránh lệch hoa/thường giữa 2 lượt tra cứu.
+function findUserByUsernameCI(users, username) {
+  return (users || []).find(u => usernameEquals(u.username, username));
+}
+
 // Mã PIN (xác thực bổ sung khi Duyệt, perms.approverAuthLevel = 'PIN') — dãy số, tối thiểu 4 chữ số.
 // null = hợp lệ; string = lý do bị từ chối. Dùng chung cho cả admin đặt PIN cho người khác
 // (routes/data.js prepareUsersForSave) lẫn người dùng tự đổi PIN của chính mình
@@ -185,6 +206,8 @@ module.exports = {
   isBcryptHash,
   hashPassword,
   verifyPassword,
+  usernameEquals,
+  findUserByUsernameCI,
   validatePin,
   signToken,
   verifyToken,

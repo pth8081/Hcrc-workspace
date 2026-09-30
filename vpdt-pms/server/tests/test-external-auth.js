@@ -94,7 +94,13 @@ stubModule('lib/auth', {
     if (typeof hashOrPlain === 'string' && hashOrPlain.startsWith('hashed:')) return hashOrPlain === `hashed:${plain}`;
     return plain === hashOrPlain;
   },
-  hashPassword: async (plain) => bcrypt.hash(plain, 4)
+  hashPassword: async (plain) => bcrypt.hash(plain, 4),
+  // findUserByUsernameCI() (10/2026, "cho phép user chữ hoa và chữ thường như nhau") — routes/
+  // externalAuthVerify.js giờ gọi hàm này thay vì tự .find() thẳng; mock lại đúng ngữ nghĩa (không phân
+  // biệt hoa/thường) để route đó vẫn hoạt động dưới stub module này.
+  findUserByUsernameCI: (users, username) => (users || []).find(u =>
+    typeof u.username === 'string' && typeof username === 'string' &&
+    u.username.trim().toLowerCase() === username.trim().toLowerCase())
 });
 
 // ===================== 1) Require code THẬT (sau khi đã cắm bản giả lập) =====================

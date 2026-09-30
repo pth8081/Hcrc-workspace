@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**24.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.48 (2026-09-30): Đăng nhập/Username KHÔNG phân biệt hoa/thường
+
+Theo yêu cầu người dùng sau khi rà soát cơ chế Import Excel Ghi Đè: "cho
+phép user chữ hoa và chữ thường như nhau" — trước đây hệ thống so username
+PHÂN BIỆT tuyệt đối hoa/thường ở đăng nhập (mật khẩu/TOTP/vân tay/API đối
+tác ngoài) VÀ ở kiểm tra trùng username khi tạo/sửa tài khoản, trong khi
+Import Excel Ghi Đè lại đã so KHÔNG phân biệt hoa/thường từ trước — 2 nơi
+lệch nhau là gốc rễ đợt lỗi đăng nhập đã vá ở v24.47.
+
+Đã đồng bộ: từ nay username **KHÔNG phân biệt hoa/thường** ở MỌI nơi liên
+quan xác thực + tạo tài khoản (`server/lib/auth.js`: 2 hàm dùng chung mới
+`usernameEquals()`/`findUserByUsernameCI()`):
+- `POST /api/auth/login`, `/verify-totp-login`, `/webauthn/login-options`,
+  `/webauthn/login-verify` (`routes/auth.js`) — gõ "NV001", "nv001" hay
+  "Nv001" đều đăng nhập được vào CÙNG 1 tài khoản.
+- API xác thực cho đối tác ngoài `POST /verify-credentials`
+  (`routes/externalAuthVerify.js`).
+- Kiểm tra trùng username khi lưu (`prepareUsersForSave()`, `routes/data.js`)
+  — "NV001" và "nv001" giờ bị coi là 1 tên đăng nhập, không cho phép 2 tài
+  khoản tồn tại song song chỉ khác hoa/thường (tránh nhầm lẫn/lỗi đăng nhập
+  y hệt nguyên nhân v24.47).
+- Import Excel (Ghi Đè theo username) giữ nguyên hành vi cũ (đã đúng từ
+  trước, không đổi gì).
+
+Không đổi: các đối chiếu username NỘI BỘ đã có sẵn (JWT `req.user.username`
+đối chiếu lại đúng bản ghi đã tạo ra JWT đó, đồng bộ hồ sơ nhân sự, sơ đồ
+tổ chức...) — các trường hợp này luôn khớp tuyệt đối vì cùng 1 nguồn gốc,
+không cần so không-phân-biệt-hoa-thường.
+
+Viết mới `tests/test-username-case-insensitive.js` (9 kịch bản) + chạy lại
+toàn bộ 13 file test liên quan đăng nhập/username hiện có — không regression.
 
 ## v24.47 (2026-09-30): Vá lỗi thật — sửa người dùng để cập nhật thông tin thì không đăng nhập được
 

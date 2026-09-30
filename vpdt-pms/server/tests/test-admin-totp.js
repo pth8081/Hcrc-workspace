@@ -175,7 +175,13 @@ stubModule('lib/auth', {
   validatePin: () => null,
   signToken: () => 'fake-token',
   setAuthCookie: () => {},
-  clearAuthCookie: () => {}
+  clearAuthCookie: () => {},
+  // findUserByUsernameCI() (10/2026, "cho phép user chữ hoa và chữ thường như nhau") — routes/auth.js
+  // giờ gọi hàm này ở POST /login và /verify-totp-login thay vì tự .find() thẳng; mock lại đúng ngữ
+  // nghĩa (không phân biệt hoa/thường) để 2 route đó vẫn hoạt động dưới stub module này.
+  findUserByUsernameCI: (users, username) => (users || []).find(u =>
+    typeof u.username === 'string' && typeof username === 'string' &&
+    u.username.trim().toLowerCase() === username.trim().toLowerCase())
 });
 
 // ===================== 1) Require code THẬT (sau khi đã cắm bản giả lập) =====================
