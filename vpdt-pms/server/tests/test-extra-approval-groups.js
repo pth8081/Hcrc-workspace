@@ -254,8 +254,11 @@ async function main() {
       // extraApprovalGroups_OFFICE_FIX / extraApprovalLevels_OFFICE_FIX: KHÔNG cấu hình
     };
     const muaBanUser = { username: 'u1', name: 'NV Mua Sắm', dept: 'Hành Chính', perms: { admin: true } };
+    // MUA_BAN bắt buộc >=1 hạng mục hợp lệ (xem CREATE_MODULE_CONFIGS.officeReqs.extraValidate,
+    // lib/createValidation.js) — không liên quan tới field split đang test ở đây, chỉ cần có để qua bước
+    // validate trước đó.
     const recMuaBan = validateAndPrepareCreate('officeReqs',
-      { dept: 'Hành Chính', subType: 'MUA_BAN', amount: 5000000, approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'] },
+      { dept: 'Hành Chính', subType: 'MUA_BAN', amount: 5000000, items: [{ name: 'Bàn ghế văn phòng', qty: 2, unitPrice: 2500000 }], approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'] },
       muaBanUser, [], appData);
     assertEqual(recMuaBan.extraApprovalLevel, 'L1', 'MUA_BAN (OFFICE_BUY) đã cấu hình -> phải đông cứng đúng level');
 

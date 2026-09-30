@@ -74,6 +74,10 @@ const COLLECTIONS = {
 
 // db: lib/recordStore thật sẽ kéo theo lib/db (nối SQL Server) — chặn trước.
 stubModule('db', { getPool: async () => { throw new Error('không dùng DB trong test này'); }, sql: {} });
+// lib/fileAuthz.js -> findOwningRecord() gọi getAllWorkItemsCached() KHÔNG điều kiện (operationWorkItems
+// có store riêng, không đi qua lib/recordStore) — thiếu stub này thì mục 1/2 bên dưới (chỉ test
+// pendingFileProposal/installments, không liên quan operationWorkItems) vẫn rơi vào db.getPool() thật.
+stubModule('lib/operationWorkItemStore', { getAllWorkItemsCached: async () => [], getAllWorkItems: async () => [], getWorkItemsBySource: async () => [] });
 stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(Object.keys(COLLECTIONS)),
   getAllForCollection: async (name) => COLLECTIONS[name] || [],
