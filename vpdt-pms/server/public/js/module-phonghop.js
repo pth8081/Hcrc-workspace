@@ -365,6 +365,43 @@ function renderMeetingReportTab() {
   }
 }
 
+// Nhãn trạng thái riêng cho Xuất Excel — mirror ĐÚNG statusLabel dùng trong viewMeeting() (dòng ~683),
+// tách hằng số ở đây để không đụng chỗ cũ đang chạy tốt (10/2026, chỉ ADD không sửa).
+const MEETING_REPORT_EXPORT_STATUS_LABELS = { PENDING: 'Đang chờ duyệt', APPROVED: 'Đã duyệt', CANCELLED: 'Đã hủy' };
+
+// buildMeetingReportExportRows() — hàm thuần, tách riêng để test gọi trực tiếp; dùng ĐÚNG bộ lọc ngày
+// đang hiển thị trên tab Báo Cáo (2 ô #meetingReportFromDate/#meetingReportToDate).
+function buildMeetingReportExportRows() {
+  const fromDate = document.getElementById('meetingReportFromDate')?.value || '';
+  const toDate = document.getElementById('meetingReportToDate')?.value || '';
+  const filtered = (DB.meetings || []).filter(m => isInDateRange(m.startTime, fromDate, toDate));
+  return filtered.map(m => ({
+    code: m.code || '', dept: m.dept || '', room: m.room || '', title: m.title || '',
+    attendees: m.attendees ?? '', startTime: m.startTime || '', endTime: m.endTime || '',
+    equipment: m.equipment || '', status: MEETING_REPORT_EXPORT_STATUS_LABELS[m.status] || m.status || ''
+  }));
+}
+
+// downloadMeetingReportExcel() — xuất ĐÚNG tập lịch đang xem trên tab Báo Cáo ra Excel, tái dùng
+// downloadXlsxFromServer()/POST /api/admin/export-xlsx có sẵn (core.js) — không có route mới, không đụng
+// gì tới dữ liệu/luồng ghi hiện có (chỉ đọc DB.meetings client-side).
+async function downloadMeetingReportExcel() {
+  const rows = buildMeetingReportExportRows();
+  const columns = [
+    { key: 'code', header: 'Mã phiếu đặt phòng' },
+    { key: 'dept', header: 'Phòng Ban Đặt Lịch' },
+    { key: 'room', header: 'Phòng Họp đăng ký' },
+    { key: 'title', header: 'Chủ Đề Cuộc Họp' },
+    { key: 'attendees', header: 'Số Lượng Người Tham Dự' },
+    { key: 'startTime', header: 'Thời Gian Bắt Đầu' },
+    { key: 'endTime', header: 'Thời Gian Kết Thúc' },
+    { key: 'equipment', header: 'Thiết Bị Hỗ Trợ Yêu Cầu' },
+    { key: 'status', header: 'Tình trạng phê duyệt' }
+  ];
+  if (!rows.length) return alert('Không có lịch đặt phòng họp nào trong khoảng ngày đã lọc để xuất!');
+  await downloadXlsxFromServer('Bao_Cao_Dat_Phong_Hop.xlsx', 'Theo Doi Su Dung Phong Hop', columns, rows);
+}
+
 // Lưới xem nhanh phòng trống/bận theo ngày — bấm đơn 1 ô: ô trắng đặt nhanh 1 tiếng, ô đỏ xem thông
 // tin lịch đang chiếm chỗ. Ngoài ra hỗ trợ chọn NHIỀU ô liên tiếp trong CÙNG 1 cột phòng kiểu Outlook
 // (kéo chuột, hoặc bấm 1 ô rồi giữ Shift bấm ô thứ 2) để đổ sẵn đúng khoảng thời gian dài hơn sang tab

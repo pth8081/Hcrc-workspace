@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**24.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.46 (2026-09-30): Xuất Excel 3 báo cáo — Đăng Ký Xe / Đặt Phòng Họp / Văn Phòng Phẩm
+
+Theo yêu cầu người dùng (3 file mẫu Excel cung cấp sẵn), phân tích + demo +
+xác nhận phương án trước khi triển khai — quy tắc "làm cẩn thận, test kỹ,
+không ảnh hưởng module khác" đã ghi vào `CLAUDE.md` cho mọi tính năng Báo
+Cáo/Xuất Excel mới từ nay.
+
+Cả 3 đều là nút **"📤 Xuất Excel"** mới thêm vào tab Báo Cáo ĐÃ CÓ SẴN của
+từng module, CHỈ đọc dữ liệu client-side hiện có (`DB.carRegs`/`DB.meetings`/
+`DB.vppRegistrations`/`DB.vppPeriods`), tái dùng route xuất Excel dùng chung
+(`POST /api/admin/export-xlsx`, hỗ trợ cả 1 sheet lẫn nhiều sheet) — không
+route ghi mới, không đổi dữ liệu/luồng hiện có của module gốc:
+
+- **Đăng Ký Xe** (tab 📊 Báo Cáo): xuất `Bao_Cao_Dang_Ky_Su_Dung_Xe_Oto.xlsx`
+  (sheet "Theo Doi Su Dung Xe", 16 cột — mã phiếu, phòng ban, người đăng ký,
+  hành trình, tài xế/xe được gán, thời gian sử dụng thực tế, đánh giá...),
+  lọc theo đúng khoảng "Từ Ngày"/"Đến Ngày" đang chọn trên màn.
+- **Đặt Phòng Họp** (tab 📊 Báo Cáo): xuất `Bao_Cao_Dat_Phong_Hop.xlsx` (sheet
+  "Theo Doi Su Dung Phong Hop", 9 cột), cùng cơ chế lọc theo ngày.
+- **Văn Phòng Phẩm** (màn Báo Cáo Tổng Hợp, nút "📤 Xuất Báo Cáo Đăng Ký –
+  Cấp Phát"): chọn 1 kỳ đăng ký, xuất 2 sheet — "Danh_muc_dinh_muc" (Chi
+  phí/Định mức/Tỷ lệ theo phòng ban, tái dùng đúng công thức
+  `vppResolveDeptBudgetClient()` đang hiện trên màn để khớp 100% số liệu) và
+  "Dang_ky_cap_phat" (1 dòng/mặt hàng đăng ký, 21 cột). **6 cột thuộc quy
+  trình Đặt Hàng/Cấp Phát chưa từng có trong hệ thống** (Định mức được duyệt,
+  Ghi chú/Ngày điều chỉnh, SL điều chỉnh, SL đặt hàng thực tế, Đơn giá áp
+  dụng, Thành tiền thực tế, Ngày cấp phát) — đã nêu rõ gap này với người dùng
+  và xin xác nhận qua `AskUserQuestion` trước khi làm: chọn phương án để
+  TRỐNG các cột đó cho điền tay ngoài hệ thống thay vì xây thêm luồng nghiệp
+  vụ Đặt Hàng/Cấp Phát mới (ngoài phạm vi yêu cầu ban đầu).
+
+Test mới: `test-report-tab-excel-export.js` (10 kịch bản — map cột/nhãn
+đúng, lọc ngày đúng, bấm nút thật gửi đúng sheet/cột tới `export-xlsx`, VPP
+chưa chọn kỳ báo lỗi rõ ràng). Đã chạy lại full bộ test hiện có của cả 3
+module (Đăng Ký Xe, Đặt Phòng Họp, Văn Phòng Phẩm — 25 file test) xác nhận
+không có regression.
+
+Deploy-impact: không đổi `schema.sql`, không thêm biến `.env`, không thêm
+npm dependency — chỉ copy code (`public/fragments/*.html`,
+`public/js/*.js`) + `pm2 restart`.
 
 ## v24.45 (2026-09-29): Nhúng video YouTube (Nhịp Sống HCRC) + Excel cho 8 danh mục object còn lại
 

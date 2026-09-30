@@ -1734,3 +1734,66 @@ function renderCarReportTab() {
     `).join('') : `<tr><td colspan="5" class="text-center p-3 text-gray-400 italic">Chưa có lái xe nào xác nhận chuyến trong khoảng lọc này.</td></tr>`;
   }
 }
+
+// Nhãn trạng thái dùng riêng cho Xuất Excel — mirror ĐÚNG statusLabel trong viewCarReg() (dòng ~499),
+// tách thành hằng số ở đây để không đụng hàm cũ đang chạy tốt (theo đúng yêu cầu "không ảnh hưởng module
+// khác", 10/2026 — chỉ ADD, không sửa lại chỗ cũ).
+const CAR_REPORT_EXPORT_STATUS_LABELS = {
+  PENDING: 'Đang chờ duyệt', APPROVED: 'Đã phê duyệt', IN_PROGRESS: 'LX Đã Xác Nhận Chuyến',
+  DRAFT: 'Cần bổ sung — chờ sửa lại', AWAITING_EVALUATION: 'Chờ đánh giá', COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy chuyến', REJECTED: 'Từ chối'
+};
+
+// buildCarReportExportRows() — tách riêng khỏi downloadCarReportExcel() để test gọi trực tiếp (hàm
+// thuần, không đụng DOM ngoài 2 ô lọc ngày sẵn có của tab Báo Cáo).
+function buildCarReportExportRows() {
+  const fromDate = document.getElementById('carReportFromDate')?.value || '';
+  const toDate = document.getElementById('carReportToDate')?.value || '';
+  const filtered = DB.carRegs.filter(c => isInDateRange(c.startTime, fromDate, toDate));
+  return filtered.map(c => {
+    const usageStart = c.driverConfirmedAt || '';
+    const usageEnd = c.tripEndedAt || '';
+    const usageTime = (usageStart || usageEnd) ? `${usageStart} ➔ ${usageEnd}` : '';
+    let evalText = '';
+    if (c.evaluationRating) {
+      evalText = `${'★'.repeat(c.evaluationRating)}${'☆'.repeat(5 - c.evaluationRating)} (${CAR_EVAL_RATING_LABELS[c.evaluationRating] || ''})`;
+      if ((c.evaluationIssues || []).length) evalText += ` — ${c.evaluationIssues.join(', ')}`;
+      if (c.evaluationComment) evalText += ` — ${c.evaluationComment}`;
+    }
+    return {
+      code: c.code || '', status: CAR_REPORT_EXPORT_STATUS_LABELS[c.status] || c.status || '',
+      createdAt: c.createdAt || '', creatorName: c.creatorName || '', dept: c.dept || '',
+      passengers: c.passengers || '', directUser: c.directUser || '', purpose: c.purpose || '',
+      reason: c.reason || '', assignedDriver: c.assignedDriver || '', assignedVehicleType: c.assignedVehicleType || '',
+      assignedPlate: c.assignedPlate || '', destination: c.destination || '', usageTime,
+      actualKm: c.actualKm ?? c.driverReportedKm ?? '', evalText
+    };
+  });
+}
+
+// downloadCarReportExcel() — xuất ĐÚNG tập phiếu đang xem trên tab Báo Cáo (cùng bộ lọc ngày) ra Excel,
+// tái dùng downloadXlsxFromServer()/POST /api/admin/export-xlsx có sẵn (core.js) — KHÔNG có route mới,
+// không đụng gì tới dữ liệu/luồng ghi hiện có (chỉ đọc DB.carRegs client-side).
+async function downloadCarReportExcel() {
+  const rows = buildCarReportExportRows();
+  const columns = [
+    { key: 'code', header: 'Mã hồ sơ' },
+    { key: 'status', header: 'Trạng thái' },
+    { key: 'createdAt', header: 'Thời gian đăng ký' },
+    { key: 'creatorName', header: 'Người đăng ký' },
+    { key: 'dept', header: 'Đơn vị (Phòng/Ban/Bộ phận)' },
+    { key: 'passengers', header: 'Số người sử dụng' },
+    { key: 'directUser', header: 'Người sử dụng trực tiếp' },
+    { key: 'purpose', header: 'Mục đích sử dụng (được BLĐ phê duyệt)' },
+    { key: 'reason', header: 'Nội dung chi tiết' },
+    { key: 'assignedDriver', header: 'Lái xe được phân công' },
+    { key: 'assignedVehicleType', header: 'Loại xe cụ thể' },
+    { key: 'assignedPlate', header: 'Biển kiểm soát' },
+    { key: 'destination', header: 'Lộ trình di chuyển (Thực tế)' },
+    { key: 'usageTime', header: 'Thời gian sử dụng (Thực tế)' },
+    { key: 'actualKm', header: 'Tổng km thực tế' },
+    { key: 'evalText', header: 'Đánh giá Chuyến xe' }
+  ];
+  if (!rows.length) return alert('Không có phiếu đăng ký xe nào trong khoảng ngày đã lọc để xuất!');
+  await downloadXlsxFromServer('Bao_Cao_Dang_Ky_Su_Dung_Xe_Oto.xlsx', 'Theo Doi Su Dung Xe', columns, rows);
+}

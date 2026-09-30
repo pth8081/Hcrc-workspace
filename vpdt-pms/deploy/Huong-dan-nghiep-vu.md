@@ -1157,6 +1157,12 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   chú thích "số liệu theo PHẠM VI XEM của bạn" kèm tên phòng ban trong phạm vi —
   số liệu vốn đã được lọc theo quyền, trước đây trình bày như số liệu toàn công
   ty nên dễ hiểu nhầm là thiếu dữ liệu.
+  **Nút "📤 Xuất Excel" ở tab Báo Cáo (từ 10/2026)** — xuất đúng danh sách phiếu
+  đang lọc (theo khoảng ngày đi) ra file `Bao_Cao_Dang_Ky_Su_Dung_Xe_Oto.xlsx`
+  (sheet "Theo Doi Su Dung Xe", 16 cột: mã phiếu, phòng ban, người đăng ký,
+  hành trình, tài xế/xe được gán, thời gian sử dụng thực tế, đánh giá...) —
+  CHỈ đọc dữ liệu đã có, tái dùng route xuất Excel dùng chung
+  (`POST /api/admin/export-xlsx`), không thêm luồng nghiệp vụ mới.
   **Nút Xem/Tải Phiếu Phê Duyệt bị ẩn hẹp hơn ở GIAO DIỆN (từ 9/2026, CHƯA
   chặn ở server)** — trước đây nút "Xem"/"Tải" Phiếu Phê Duyệt hiện cho bất kỳ
   ai xem được dòng đăng ký (kể cả chỉ có quyền xem theo phòng ban, không liên
@@ -1212,6 +1218,11 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   phải ngày tạo phiếu), xem tổng số/đã duyệt/đang chờ/đã hủy + tổng giờ đã
   sử dụng, mức sử dụng theo từng phòng họp (kể cả phòng chưa có lịch nào,
   để thấy phòng đang "ế") và theo phòng ban, xu hướng sử dụng theo tháng.
+  **Nút "📤 Xuất Excel" (từ 10/2026)** — xuất đúng danh sách lịch đang lọc (theo
+  khoảng ngày sử dụng) ra file `Bao_Cao_Dat_Phong_Hop.xlsx` (sheet "Theo Doi Su
+  Dung Phong Hop", 9 cột: mã lịch, phòng ban, phòng họp, nội dung, số người dự,
+  thời gian, thiết bị, trạng thái) — CHỈ đọc dữ liệu đã có, tái dùng route xuất
+  Excel dùng chung.
   **Xem Lịch Họp — 3 chế độ Ngày/Tuần/Tháng**: chế độ **Ngày** (mặc định) giữ
   nguyên lưới giờ chi tiết 30 phút/phòng, kéo chuột hoặc giữ Shift bấm ô thứ 2
   để chọn nhiều khung giờ liên tiếp rồi đổ sẵn sang tab Đăng Ký. Chế độ **Tuần**/
@@ -1266,6 +1277,17 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   đã giữ chỗ cho người khác trong phòng dùng tiếp. Màn "Báo Cáo Tổng Hợp" (chỉ
   vppManage/admin) hiện cột "Còn Lại (Sau Chờ Duyệt)" đúng bằng số hệ thống
   dùng để chặn (trừ cả Chờ Duyệt, không chỉ Đã Duyệt).
+  **Nút "📤 Xuất Báo Cáo Đăng Ký – Cấp Phát" ở màn "Báo Cáo Tổng Hợp" (từ
+  10/2026)** — chọn 1 kỳ đăng ký rồi xuất ra file 2 sheet: sheet "Danh_muc_dinh_muc"
+  (Chi phí/Định mức/Tỷ lệ theo phòng ban, khớp đúng số hiện trên màn) và sheet
+  "Dang_ky_cap_phat" (1 dòng/mặt hàng đăng ký, đủ mã phiếu/phòng ban/mặt hàng/
+  số lượng/đơn giá/trạng thái/ghi chú xử lý gần nhất). **6 cột thuộc quy trình
+  Đặt Hàng/Cấp Phát chưa có trong hệ thống** (Định mức được duyệt, Ghi chú
+  điều chỉnh, Ngày điều chỉnh, SL điều chỉnh, SL đặt hàng thực tế, Đơn giá áp
+  dụng, Thành tiền thực tế, Ngày cấp phát) được để TRỐNG trong file xuất ra để
+  bộ phận hành chính điền tay ngoài hệ thống (theo xác nhận người dùng — hệ
+  thống hiện chưa có luồng Đặt Hàng/Cấp Phát riêng cho VPP). CHỈ đọc dữ liệu
+  đã có, tái dùng route xuất Excel nhiều sheet dùng chung.
   **Kiểm lại điều kiện đăng ký ở CẢ 3 mốc (từ 10/2026)** — 2 điều kiện "được
   đăng ký VPP" (có quyền **Người đăng ký VPP** `vppRegisterCreate` + chức danh
   KHÔNG nằm trong "Nhóm Không Cấp Văn Phòng Phẩm") trước đây chỉ kiểm lúc **tạo

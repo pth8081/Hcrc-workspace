@@ -1084,6 +1084,94 @@ function renderVppReports() {
     : `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">Chưa có mặt hàng nào được đăng ký.</td></tr>`;
 }
 
+// ===== Xuất Excel "Theo Dõi Đăng Ký – Đặt Hàng – Cấp Phát" (10/2026, theo mẫu người dùng cung cấp) =====
+// Khác 2 file "Tổng Hợp"/"Tổng Quát Theo Phòng Ban" đã có (lib/vppExport.js, chỉ tính đăng ký ĐÃ DUYỆT,
+// sinh ở SERVER) — báo cáo này dựng HOÀN TOÀN Ở CLIENT từ DB.vppRegistrations/DB.vppPeriods đã tải sẵn,
+// gồm MỌI trạng thái (không riêng đã duyệt) để phản ánh đúng tên file gốc "Theo Dõi Đăng Ký", rồi gọi
+// downloadMultiSheetXlsxFromServer() (core.js, POST /api/admin/export-xlsx sẵn có) — KHÔNG có route
+// mới, không đụng gì tới lib/vppExport.js hay luồng ghi hiện có.
+const VPP_TRACKING_EXPORT_STATUS_LABELS = { PENDING: 'Đang Chờ Duyệt', APPROVED: 'Đã Duyệt', REJECTED: 'Từ Chối', CANCELLED: 'Đã Hủy' };
+
+// Sheet "Danh_muc_dinh_muc" — mirror ĐÚNG công thức byDept đang tính trong renderVppReports() ở trên
+// (Chi phí = tiền đã duyệt, Định mức/kỳ = Ngân Sách Phòng Ban theo mức/người riêng của phòng), tách
+// thành hàm thuần để Xuất Excel và màn hình luôn khớp số nhau tuyệt đối.
+function buildVppReportByDeptExportRows(period) {
+  const regs = DB.vppRegistrations.filter(r => r.periodId === period.id);
+  const byDept = {};
+  regs.forEach(r => {
+    if (!byDept[r.dept]) byDept[r.dept] = { approvedMoney: 0 };
+    if (r.status === 'APPROVED') byDept[r.dept].approvedMoney += vppCalcItemsTotal(r.items);
+  });
+  return Object.entries(byDept).map(([dept, s]) => {
+    const { totalBudget } = vppResolveDeptBudgetClient(period, dept);
+    const deptBudget = totalBudget > 0 ? totalBudget : null;
+    const ratio = deptBudget != null ? `${Math.round((s.approvedMoney / deptBudget) * 1000) / 10}%` : '';
+    return { period: period.name, dept, cost: s.approvedMoney, quota: deptBudget ?? '', ratio };
+  });
+}
+
+// Sheet "Dang_ky_cap_phat" — 1 dòng = 1 mặt hàng của 1 đăng ký (MỌI trạng thái). 6 cột thuộc quy trình
+// Đặt Hàng/Cấp Phát (Ý kiến điều chỉnh/Ngày điều chỉnh/SL điều chỉnh/SL đặt hàng/Đơn giá áp dụng/Ngày
+// cấp phát) và "Định mức được duyệt" (theo TỪNG MẶT HÀNG — hệ thống hiện chỉ có định mức TIỀN theo
+// phòng ban/kỳ, không có định mức số lượng theo từng mặt hàng) ĐỂ TRỐNG — người dùng đã xác nhận xuất
+// trước, Hành Chính tự điền tay các cột này sau khi tải file (10/2026, xem CLAUDE.md mục "Tính năng Báo
+// Cáo/Xuất Excel mới").
+function buildVppReportTrackingExportRows(period) {
+  const regs = DB.vppRegistrations.filter(r => r.periodId === period.id)
+    .slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const rows = [];
+  regs.forEach(r => {
+    const lastNote = (r.history || []).slice(-1)[0]?.comment || '';
+    (r.items || []).forEach(it => {
+      rows.push({
+        period: period.name, createdAt: r.createdAt || '', code: r.code || '', dept: r.dept || '',
+        creator: r.creatorName || '', itemName: it.name || '', itemCode: it.code || '', unit: it.unit || '',
+        approvedQuota: '', qtyRegistered: it.qty ?? '', priceEstimate: it.price ?? '',
+        totalEstimate: it.price != null ? (Number(it.price) || 0) * (Number(it.qty) || 0) : '',
+        adjustNote: '', adjustDate: '', adjustQty: '', orderQty: '', appliedPrice: '', finalTotal: '', allocatedAt: '',
+        status: VPP_TRACKING_EXPORT_STATUS_LABELS[r.status] || r.status || '', note: lastNote
+      });
+    });
+  });
+  return rows;
+}
+
+async function downloadVppRegistrationTrackingExcel() {
+  const periodId = Number(document.getElementById('vppReportPeriodSelect')?.value);
+  const period = DB.vppPeriods.find(p => p.id === periodId);
+  if (!period) return alert('Vui lòng chọn kỳ đăng ký để tải báo cáo!');
+  const sheets = [
+    {
+      sheetName: 'Danh_muc_dinh_muc',
+      columns: [
+        { key: 'period', header: 'Kỳ đăng ký' }, { key: 'dept', header: 'Phòng ban' },
+        { key: 'cost', header: 'Chi phí' }, { key: 'quota', header: 'Định mức/kỳ' },
+        { key: 'ratio', header: 'Tỷ lệ sử dụng định mức' }
+      ],
+      rows: buildVppReportByDeptExportRows(period)
+    },
+    {
+      sheetName: 'Dang_ky_cap_phat',
+      columns: [
+        { key: 'period', header: 'Kỳ đăng ký' }, { key: 'createdAt', header: 'Ngày đăng ký' },
+        { key: 'code', header: 'Mã yêu cầu/phiếu' }, { key: 'dept', header: 'Phòng ban' },
+        { key: 'creator', header: 'Người đăng ký' }, { key: 'itemName', header: 'Tên văn phòng phẩm' },
+        { key: 'itemCode', header: 'Mã hàng' }, { key: 'unit', header: 'ĐVT' },
+        { key: 'approvedQuota', header: 'Định mức được duyệt' }, { key: 'qtyRegistered', header: 'SL đăng ký' },
+        { key: 'priceEstimate', header: 'Đơn giá tạm tính (VNĐ)' }, { key: 'totalEstimate', header: 'Thành tiền tạm tính(VNĐ)' },
+        { key: 'adjustNote', header: 'Ý kiến/yêu cầu điều chỉnh' }, { key: 'adjustDate', header: 'Ngày điều chỉnh' },
+        { key: 'adjustQty', header: 'SL điều chỉnh' }, { key: 'orderQty', header: 'SL đặt hàng' },
+        { key: 'appliedPrice', header: 'Đơn giá áp dụng (VNĐ)' }, { key: 'finalTotal', header: 'Thành tiền (VNĐ)' },
+        { key: 'allocatedAt', header: 'Ngày cấp phát' }, { key: 'status', header: 'Trạng thái quy trình' },
+        { key: 'note', header: 'Ghi chú' }
+      ],
+      rows: buildVppReportTrackingExportRows(period)
+    }
+  ];
+  if (!sheets[1].rows.length) return alert('Kỳ đăng ký này chưa có đăng ký nào để xuất!');
+  await downloadMultiSheetXlsxFromServer(`Bao_Cao_VPP_${period.name.replace(/[^\p{L}\p{N}]+/gu, '_')}.xlsx`, sheets);
+}
+
 // Dựng HTML "Phiếu Phê Duyệt Đề Xuất Văn Phòng" — dùng lại khung chung buildApprovalSlipShellHTML()
 // giống hệt pattern đã áp dụng cho Đăng Ký Xe và Văn Bản Trình.
 function buildOfficeApprovalSlipHTML(o) {
