@@ -1769,6 +1769,22 @@
           </select></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>
           <input id="hrpfCF_nationalId" class="w-full border p-1.5 rounded text-sm"></div>
+        <!-- nationalIdIssueDate/nationalIdIssuePlace/employmentType (10/2026, đối chiếu file Excel
+             "Trường Thông Tin Tạo Mã") — employmentType là khái niệm MỚI (xem EMPLOYMENT_TYPES,
+             lib/employeeProfile.js); 2 field CCCD còn lại ĐÃ có sẵn ở màn "Chi tiết" (Sửa hồ sơ) từ
+             trước, chỉ thiếu ở đúng modal Tạo Mới này. -->
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày cấp CCCD/CMND</label>
+          <input type="date" id="hrpfCF_nationalIdIssueDate" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Nơi cấp CCCD/CMND</label>
+          <input id="hrpfCF_nationalIdIssuePlace" class="w-full border p-1.5 rounded text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Hình thức làm việc</label>
+          <select id="hrpfCF_employmentType" class="w-full border p-1.5 rounded text-sm bg-white">
+            <option value="">-- Chọn --</option>
+            <option value="Chính thức">Chính thức</option>
+            <option value="Thời vụ">Thời vụ</option>
+            <option value="Bán thời gian">Bán thời gian</option>
+            <option value="Cộng tác viên">Cộng tác viên</option>
+          </select></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ thường trú</label>
           <input id="hrpfCF_permanentAddress" class="w-full border p-1.5 rounded text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ hiện tại</label>

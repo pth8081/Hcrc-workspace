@@ -407,16 +407,36 @@ router.post('/:module', async (req, res) => {
         // "bổ sung sau ở Hồ Sơ Nhân Sự" như trước). Dùng applyProfileEdit() (không tự gán tay) để đi
         // đúng cùng 1 đường xử lý field chung (trim/slice/ghi profileEditHistory) như mọi lối ghi
         // currentAddress/nationalId khác của hồ sơ (PATCH by-code/import Excel/tạo hồ sơ tay).
-        if (idx !== -1 && (record.currentAddress || record.nationalId)) {
+        // gender/dateOfBirth/permanentAddress/nationalIdIssueDate/nationalIdIssuePlace/employmentType
+        // (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG cơ chế currentAddress/
+        // nationalId ở trên, đã trim/validate đầy đủ ở hrProcesses.extraValidate (lib/createValidation.js).
+        if (idx !== -1 && (record.currentAddress || record.nationalId || record.gender || record.dateOfBirth
+          || record.permanentAddress || record.nationalIdIssueDate || record.nationalIdIssuePlace || record.employmentType)) {
           // CHỈ đưa vào payload đúng field client thực sự gửi khác rỗng — applyProfileEdit() coi field
           // "có mặt trong payload" (kể cả giá trị rỗng/undefined) là "cần ghi đè", nên field còn lại
           // (không nhập) PHẢI vắng mặt hẳn khỏi object này để giữ nguyên giá trị cũ, không bị ghi đè null.
           const onboardingProfileEdits = {};
           if (record.currentAddress) onboardingProfileEdits.currentAddress = record.currentAddress;
           if (record.nationalId) onboardingProfileEdits.nationalId = record.nationalId;
+          if (record.gender) onboardingProfileEdits.gender = record.gender;
+          if (record.dateOfBirth) onboardingProfileEdits.dateOfBirth = record.dateOfBirth;
+          if (record.permanentAddress) onboardingProfileEdits.permanentAddress = record.permanentAddress;
+          if (record.nationalIdIssueDate) onboardingProfileEdits.nationalIdIssueDate = record.nationalIdIssueDate;
+          if (record.nationalIdIssuePlace) onboardingProfileEdits.nationalIdIssuePlace = record.nationalIdIssuePlace;
+          if (record.employmentType) onboardingProfileEdits.employmentType = record.employmentType;
           employeeProfile.applyProfileEdit(
             arr[idx], onboardingProfileEdits, Object.keys(onboardingProfileEdits),
             freshUser.username, freshUser.name
+          );
+        }
+        // Học vấn (Trình độ/Trường/Chuyên ngành) — tạo dòng ĐẦU TIÊN của education[] nếu form Onboarding
+        // có nhập (educationEntry đã dựng sẵn ở hrProcesses.extraValidate). CHỈ áp dụng khi hồ sơ đang
+        // trống education[] (idx !== -1 && không có sẵn dòng nào) — tránh ghi đè/nhân đôi nếu hook này lỡ
+        // chạy lại cho cùng 1 employeeCode (VD Tái Tuyển dùng lại hồ sơ cũ đã có sẵn học vấn).
+        if (idx !== -1 && record.educationEntry && (!Array.isArray(arr[idx].education) || arr[idx].education.length === 0)) {
+          employeeProfile.applyProfileEdit(
+            arr[idx], { education: [{ id: require('crypto').randomUUID(), ...record.educationEntry, graduationYear: null }] },
+            ['education'], freshUser.username, freshUser.name
           );
         }
         return arr;

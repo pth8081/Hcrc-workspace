@@ -196,6 +196,23 @@ function pickHrpOnbRehireCandidate(employeeCode, fullName) {
   document.getElementById('hrpOnbRehirePanel')?.classList.add('hidden');
 }
 
+// "📋 Thông Tin Bổ Sung" (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — cùng khuôn
+// #hrpOnbRehirePanel ở trên, gấp/mở đơn giản không cần tải/tính toán gì thêm.
+function toggleHrpOnbExtraPanel() {
+  document.getElementById('hrpOnbExtraPanel')?.classList.toggle('hidden');
+}
+// Ẩn ô "Ngày Kết Thúc HĐ Dự Kiến" khi chọn "Không xác định thời hạn" — mirror ĐÚNG hành vi contractType
+// của Hợp Đồng Lao Động thật (module-hropcontract.js, endDate vô nghĩa với INDEFINITE).
+const ALLOWANCE_FIELD_IDS = [
+  'responsibilityAllowance', 'concurrentAllowance', 'hazardAllowance',
+  'lunchAllowance', 'transportAllowance', 'phoneAllowance', 'otherAllowance'
+];
+function onHrpOnbPlannedContractTypeChange() {
+  const type = document.getElementById('hrpOnbPlannedContractType').value;
+  document.getElementById('hrpOnbPlannedContractEndDateWrap').classList.toggle('hidden', type === 'INDEFINITE');
+  if (type === 'INDEFINITE') document.getElementById('hrpOnbPlannedContractEndDate').value = '';
+}
+
 async function submitHrpOnboarding(e) {
   e.preventDefault();
   const posType = document.getElementById('hrpOnbPosType').value;
@@ -221,6 +238,21 @@ async function submitHrpOnboarding(e) {
     // hrProcesses.extraValidate, lib/createValidation.js). Để trống vẫn hợp lệ như cũ.
     currentAddress: document.getElementById('hrpOnbAddress').value.trim(),
     nationalId: document.getElementById('hrpOnbNationalId').value.trim(),
+    // Thông Tin Bổ Sung (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — TẤT CẢ tuỳ chọn, xem
+    // chú thích đầy đủ ở hrProcesses.extraValidate (lib/createValidation.js) + hook ở routes/create.js.
+    gender: document.getElementById('hrpOnbGender').value,
+    dateOfBirth: document.getElementById('hrpOnbDateOfBirth').value,
+    permanentAddress: document.getElementById('hrpOnbPermanentAddress').value.trim(),
+    nationalIdIssueDate: document.getElementById('hrpOnbNationalIdIssueDate').value,
+    nationalIdIssuePlace: document.getElementById('hrpOnbNationalIdIssuePlace').value.trim(),
+    employmentType: document.getElementById('hrpOnbEmploymentType').value,
+    eduDegree: document.getElementById('hrpOnbEduDegree').value.trim(),
+    eduSchool: document.getElementById('hrpOnbEduSchool').value.trim(),
+    eduMajor: document.getElementById('hrpOnbEduMajor').value.trim(),
+    plannedContractType: document.getElementById('hrpOnbPlannedContractType').value,
+    plannedContractEndDate: document.getElementById('hrpOnbPlannedContractEndDate').value,
+    plannedBaseSalary: document.getElementById('hrpOnbPlannedBaseSalary').value,
+    plannedAllowances: Object.fromEntries(ALLOWANCE_FIELD_IDS.map(f => [f, document.getElementById(`hrpOnbPlanned_${f}`).value])),
     note: document.getElementById('hrpOnbNote').value.trim(),
     customData
   };
@@ -245,6 +277,8 @@ function resetHrpOnboardingForm() {
   formEl.reset();
   document.getElementById('hrpOnbPosType').value = 'HO';
   document.getElementById('hrpOnbDirectManagerUsername').value = '';
+  document.getElementById('hrpOnbExtraPanel')?.classList.add('hidden');
+  onHrpOnbPlannedContractTypeChange();
   onHrpOnboardingPosTypeChange();
 }
 

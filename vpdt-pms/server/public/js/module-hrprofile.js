@@ -620,6 +620,8 @@ async function submitHrpfCreateProfile() {
     employeeCode, username: val('hrpfCF_username'), positionKey: val('hrpfCF_positionKey'),
     dateOfBirth: val('hrpfCF_dateOfBirth'), gender: val('hrpfCF_gender'),
     nationalId: val('hrpfCF_nationalId'), permanentAddress: val('hrpfCF_permanentAddress'),
+    nationalIdIssueDate: val('hrpfCF_nationalIdIssueDate'), nationalIdIssuePlace: val('hrpfCF_nationalIdIssuePlace'),
+    employmentType: val('hrpfCF_employmentType'),
     currentAddress: val('hrpfCF_currentAddress'), personalEmail: val('hrpfCF_personalEmail'),
     emergencyContactName: val('hrpfCF_emergencyContactName'), emergencyContactPhone: val('hrpfCF_emergencyContactPhone'),
     emergencyContactRelationship: val('hrpfCF_emergencyContactRelationship'),
@@ -932,6 +934,9 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
   const secondaryPositionsText = (secondaryPositionsUser?.secondaryPositions || [])
     .map(sp => `${sp.jobTitle || ''}${sp.dept ? ' — ' + sp.dept : ''}`.trim()).filter(Boolean).join('; ');
   const siauValue = profile.socialInsuranceAtThisUnit;
+  // employmentType (GĐ2, 10/2026 — đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG nhóm dữ liệu
+  // hành chính như deskLocation/retirementDate/socialInsuranceAtThisUnit (không thuộc SENSITIVE_FIELDS).
+  const EMPLOYMENT_TYPE_OPTIONS = ['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên'];
   const adminInfoBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
     ${roField('Cấp bậc', profile.jobGrade)}
     ${roField('Thâm niên', hrpfTenureDisplay(profile))}
@@ -948,6 +953,13 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
           <option value="0" ${siauValue === false ? 'selected' : ''}>Không</option>
         </select></div>`
       : roField('BHXH tại đơn vị này', siauValue == null ? '' : (siauValue ? 'Có' : 'Không'))}
+    ${editableHrOnly
+      ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Hình thức làm việc</label>
+        <select id="hrpfF_employmentType" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">-- Chưa rõ --</option>
+          ${EMPLOYMENT_TYPE_OPTIONS.map(t => `<option value="${t}" ${profile.employmentType === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select></div>`
+      : roField('Hình thức làm việc', profile.employmentType)}
   </div>`;
 
   const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
@@ -1168,6 +1180,7 @@ function collectHrpfProfileFormValues(scope) {
     if (document.getElementById('hrpfF_nationalIdIssuePlace')) payload.nationalIdIssuePlace = val('hrpfF_nationalIdIssuePlace') || null;
     if (document.getElementById('hrpfF_deskLocation')) payload.deskLocation = val('hrpfF_deskLocation') || null;
     if (document.getElementById('hrpfF_retirementDate')) payload.retirementDate = val('hrpfF_retirementDate') || null;
+    if (document.getElementById('hrpfF_employmentType')) payload.employmentType = val('hrpfF_employmentType') || null;
     if (document.getElementById('hrpfF_socialInsuranceAtThisUnit')) {
       const raw = val('hrpfF_socialInsuranceAtThisUnit');
       payload.socialInsuranceAtThisUnit = raw === '' ? null : raw === '1';

@@ -3385,6 +3385,61 @@ const CREATE_MODULE_CONFIGS = {
           const { assertNationalIdNotDuplicated } = require('./employeeProfile');
           assertNationalIdNotDuplicated(appData?.employeeProfiles, payload.nationalId, payload.employeeCode);
         }
+
+        // Đối chiếu file Excel "Trường Thông Tin Tạo Mã" (10/2026, theo yêu cầu người dùng) — bổ sung các
+        // cột Excel CÒN THIẾU ở form Onboarding, cùng khuôn currentAddress/nationalId ở trên (đều TUỲ
+        // CHỌN, ghi thẳng vào hồ sơ nháp employeeProfiles ngay sau khi hrProcesses tạo xong — xem hook ở
+        // routes/create.js). require() trễ (dynamic) để tránh vòng lặp require: employeeProfile.js/
+        // laborContract.js đều require('./createValidation') ở TOP LEVEL của chính chúng (assertUploadedFileUrl).
+        const { GENDERS, EMPLOYMENT_TYPES } = require('./employeeProfile');
+        payload.gender = payload.gender ? String(payload.gender).trim() : '';
+        if (payload.gender && !GENDERS.has(payload.gender)) throw new CreateError(400, 'Giới tính không hợp lệ');
+        if (payload.dateOfBirth && Number.isNaN(new Date(payload.dateOfBirth).getTime())) throw new CreateError(400, 'Ngày sinh không hợp lệ');
+        payload.dateOfBirth = payload.dateOfBirth ? String(payload.dateOfBirth).trim() : '';
+        payload.permanentAddress = payload.permanentAddress ? String(payload.permanentAddress).trim().slice(0, 300) : '';
+        if (payload.nationalIdIssueDate && Number.isNaN(new Date(payload.nationalIdIssueDate).getTime())) throw new CreateError(400, 'Ngày cấp CCCD/CMND không hợp lệ');
+        payload.nationalIdIssueDate = payload.nationalIdIssueDate ? String(payload.nationalIdIssueDate).trim() : '';
+        payload.nationalIdIssuePlace = payload.nationalIdIssuePlace ? String(payload.nationalIdIssuePlace).trim().slice(0, 200) : '';
+        payload.employmentType = payload.employmentType ? String(payload.employmentType).trim() : '';
+        if (payload.employmentType && !EMPLOYMENT_TYPES.has(payload.employmentType)) throw new CreateError(400, 'Hình thức làm việc không hợp lệ');
+        // Học vấn (Trình độ/Trường/Chuyên ngành) — 3 ô đơn ở form Onboarding, khớp field degree/school/
+        // major của employeeProfiles.education[] (lib/employeeProfile.js) — chỉ tạo 1 dòng học vấn ĐẦU
+        // TIÊN nếu có nhập ít nhất 1 trong 3 ô, HR bổ sung thêm bằng cấp khác (nếu có) sau ở Hồ Sơ Nhân Sự.
+        const eduDegree = payload.eduDegree ? String(payload.eduDegree).trim().slice(0, 100) : '';
+        const eduSchool = payload.eduSchool ? String(payload.eduSchool).trim().slice(0, 200) : '';
+        const eduMajor = payload.eduMajor ? String(payload.eduMajor).trim().slice(0, 200) : '';
+        // assertValidEducation() (lib/employeeProfile.js) bắt buộc CẢ Bằng cấp lẫn Trường mới coi là 1
+        // dòng học vấn hợp lệ — chặn NGAY TẠI ĐÂY (trước khi hrProcesses được tạo) nếu chỉ nhập Chuyên
+        // ngành đơn lẻ, để không rơi vào trạng thái nửa vời (quy trình đã tạo xong nhưng dòng học vấn ghi
+        // vào hồ sơ thất bại — xem hook ở routes/create.js).
+        if ((eduDegree || eduSchool || eduMajor) && (!eduDegree || !eduSchool)) {
+          throw new CreateError(400, 'Đã nhập Học vấn: vui lòng nhập đủ cả Trình độ và Trường (Chuyên ngành có thể để trống)');
+        }
+        payload.educationEntry = (eduDegree && eduSchool) ? { degree: eduDegree, school: eduSchool, major: eduMajor || null } : null;
+        delete payload.eduDegree; delete payload.eduSchool; delete payload.eduMajor;
+
+        // Loại HĐLĐ/Thời gian/Thu nhập DỰ KIẾN (10/2026, theo yêu cầu người dùng) — CHỈ lưu tham khảo
+        // NGAY TRÊN bản ghi hrProcesses này (KHÔNG tự tạo/đổi gì ở collection laborContracts thật — HR vẫn
+        // phải vào Hợp Đồng Lao Động tạo hợp đồng THẬT như quy trình hiện có, dữ liệu ở đây chỉ để HR có
+        // sẵn tham khảo khi tạo hợp đồng, tránh phải hỏi lại ứng viên) — xem chú thích đầy đủ ở
+        // lib/laborContract.js (CONTRACT_TYPES/ALLOWANCE_FIELDS, TÁI DÙNG nguyên khuôn field/nhãn đã có,
+        // không phát minh field thu nhập mới để tránh 2 khái niệm khác nhau cho cùng 1 khoản tiền).
+        const { CONTRACT_TYPES, ALLOWANCE_FIELDS } = require('./laborContract');
+        payload.plannedContractType = payload.plannedContractType ? String(payload.plannedContractType).trim() : '';
+        if (payload.plannedContractType && !CONTRACT_TYPES.has(payload.plannedContractType)) throw new CreateError(400, 'Loại HĐLĐ dự kiến không hợp lệ');
+        if (payload.plannedContractEndDate && Number.isNaN(new Date(payload.plannedContractEndDate).getTime())) throw new CreateError(400, 'Ngày kết thúc HĐ dự kiến không hợp lệ');
+        payload.plannedContractEndDate = (payload.plannedContractType && payload.plannedContractType !== 'INDEFINITE' && payload.plannedContractEndDate)
+          ? String(payload.plannedContractEndDate).trim() : '';
+        const toPlannedMoney = (v) => {
+          if (v == null || v === '') return null;
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < 0) throw new CreateError(400, 'Số tiền thu nhập dự kiến không hợp lệ (phải là số >= 0)');
+          return n;
+        };
+        payload.plannedBaseSalary = toPlannedMoney(payload.plannedBaseSalary);
+        const rawPlannedAllowances = payload.plannedAllowances || {};
+        payload.plannedAllowances = {};
+        for (const f of ALLOWANCE_FIELDS) { payload.plannedAllowances[f] = toPlannedMoney(rawPlannedAllowances[f]); }
       } else {
         // OFFBOARDING — nhân viên đã có thật trong DB.users, snapshot NGAY LÚC TẠO (không đọc sống lại
         // sau) — đúng khuôn periodName/periodEndTime của budgetEntries hay dept/jobTitle snapshot của

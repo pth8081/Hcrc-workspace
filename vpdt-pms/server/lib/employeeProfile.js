@@ -47,6 +47,12 @@ function todayISO() {
 
 const STATUSES = new Set(['DRAFT', 'ACTIVE', 'ON_LEAVE', 'INACTIVE']);
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
+// EMPLOYMENT_TYPES (GĐ2, 10/2026 — đối chiếu cột "Hình thức làm việc" ở file Excel "Trường Thông Tin
+// Tạo Mã" người dùng gửi) — khái niệm MỚI, chưa từng có ở bất kỳ đâu trong hệ thống trước đây (khác hẳn
+// workModel OFFICE_HOURS/SHIFT_BASED ở lib/attendance.js, vốn suy tự động theo posType HO/STORE để tính
+// công/ca — đây là thuộc tính nhập tay, ổn định theo nhân viên, không phải theo 1 hợp đồng cụ thể nên
+// đặt ở employeeProfiles, KHÔNG đặt ở laborContracts). Danh mục CỐ ĐỊNH theo xác nhận người dùng.
+const EMPLOYMENT_TYPES = new Set(['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên']);
 // MARITAL_STATUSES (mới, GĐ1 "đối chiếu file Excel quản lý thủ công của Nhân Sự", theo yêu cầu người
 // dùng — xem VERSION.md) — khớp đúng 3 lựa chọn cột "Tình trạng hôn nhân" ở file Excel gốc.
 const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
@@ -181,6 +187,9 @@ function defaultProfile(employeeCode) {
     // SENSITIVE_FIELDS — luôn hiển thị như dept/positionLabel, không qua cơ chế "mở trường xem" vì không
     // phải thông tin riêng tư cá nhân), CHỈ HR sửa được (HR_ONLY_EDITABLE_FIELDS).
     deskLocation: null, retirementDate: null, socialInsuranceAtThisUnit: null,
+    // employmentType (GĐ2, 10/2026) — cùng nhóm dữ liệu hành chính như 3 field ngay trên (không phải
+    // thông tin riêng tư cá nhân), xem EMPLOYMENT_TYPES ở trên.
+    employmentType: null,
     // Chức vụ hiện tại — LUÔN chọn từ 1 node POSITION của bản Cơ Cấu Tổ Chức đang áp dụng (KHÔNG gõ tự
     // do), xem applyPositionAssignment(). positionLabel là tên hiển thị đã ghép sẵn (VD "Trưởng Phòng
     // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
@@ -604,7 +613,8 @@ const SELF_EDITABLE_FIELDS = [
 // HR (hrProfileManage/admin) sửa thêm được cả trường định danh pháp lý + trường hành chính (GĐ1).
 const HR_ONLY_EDITABLE_FIELDS = [
   'nationalId', 'socialInsuranceNo', 'taxCode',
-  'nationalIdIssueDate', 'nationalIdIssuePlace', 'deskLocation', 'retirementDate', 'socialInsuranceAtThisUnit'
+  'nationalIdIssueDate', 'nationalIdIssuePlace', 'deskLocation', 'retirementDate', 'socialInsuranceAtThisUnit',
+  'employmentType'
 ];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
@@ -619,7 +629,7 @@ const PROFILE_FIELD_LABELS = {
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
-  socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị'
+  socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc'
 };
 
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): 2 hàm dưới đây trước đây CHỈ kiểm
@@ -695,6 +705,10 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         break;
       case 'socialInsuranceAtThisUnit':
         profile.socialInsuranceAtThisUnit = val == null || val === '' ? null : !!val;
+        break;
+      case 'employmentType':
+        if (val != null && val !== '' && !EMPLOYMENT_TYPES.has(val)) throw new HttpError(400, 'Hình thức làm việc không hợp lệ');
+        profile.employmentType = val || null;
         break;
       case 'dependents': {
         if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách người phụ thuộc không hợp lệ');
@@ -886,7 +900,7 @@ function computeHrReportSummary(profiles, contracts, filters) {
 }
 
 module.exports = {
-  STATUSES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  STATUSES, GENDERS, EMPLOYMENT_TYPES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
