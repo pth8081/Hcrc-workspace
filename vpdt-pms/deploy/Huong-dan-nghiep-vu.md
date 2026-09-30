@@ -3908,6 +3908,20 @@ làm được nay bị chặn:
   danh mục hiện chỉ là **gợi ý** (không chặn nhập) — có thêm checkbox "Tự
   động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có" (mặc định
   bật) để tự tạo Chương Trình mới thay vì phải tạo tay trước.
+- **Xem PDF trên điện thoại mượt hơn (10/2026)** — trước đây PDF bài học có
+  thể bị tràn ngang trên màn hình điện thoại nhỏ; nay khung xem PDF tự tính
+  lại độ phóng theo đúng bề rộng màn hình mỗi khi xoay ngang/dọc hoặc đổi
+  kích thước cửa sổ, không còn tràn lề.
+- **Danh Sách Chương Trình đổi sang dạng thẻ + ảnh minh hoạ (10/2026)** —
+  form "Tạo Chương Trình Mới" có thêm ô **Ảnh Minh Hoạ** (tuỳ chọn); danh
+  sách hiển thị dạng thẻ (ảnh vuông + tên/loại đào tạo/mô tả) thay cho bảng
+  cũ, chương trình chưa có ảnh hiện icon 🎓 thay thế.
+- **Kho Tài Liệu — ảnh đại diện tự sinh từ trang đầu PDF (10/2026)** — khi tải
+  lên tài liệu dạng PDF, hệ thống tự chụp trang đầu tiên làm ảnh đại diện
+  hiển thị trong danh sách (không cần tự chọn ảnh); nếu tài liệu là ảnh thì
+  dùng luôn ảnh đó, các loại tệp khác vẫn hiện icon theo loại tệp như trước.
+  Việc tạo ảnh đại diện chạy ngầm, không tạo được (VD PDF lỗi) cũng không
+  chặn việc tải tài liệu lên.
 
 **Onboarding**
 - Form "Tạo Quy Trình Onboarding" có thêm 2 ô **Địa Chỉ** + **Số CCCD**
@@ -3925,6 +3939,11 @@ làm được nay bị chặn:
   không còn bị cắt méo), các thông tin chính (Thu nhập/Địa chỉ/Số lượng/
   Thời hạn/Liên hệ) in đậm bên phải; Mô Tả/Yêu Cầu ẩn mặc định, bấm "Xem chi
   tiết" để mở/thu ngay tại thẻ.
+- **Thời Gian Làm Việc + lọc Trạng Thái (10/2026)** — thêm trường **Thời
+  Gian Làm Việc** (nhập tự do, VD "Toàn thời gian"/"Bán thời gian, ca sáng
+  7h-15h") cùng khuôn Thu Nhập, hiện trên thẻ tin khi có nhập. Bộ lọc danh
+  sách có thêm **"Trạng Thái"** (Đang tuyển/Đã tuyển đủ/Đã đóng tuyển dụng —
+  đúng 3 trạng thái sẵn có, không thêm trạng thái mới).
 
 **Trang Chủ & Nhịp Sống HCRC / Góc Chia Sẻ**
 - Box tin ở Trang Chủ có thêm ảnh thu nhỏ cạnh tiêu đề, nút "Xem thêm" góc

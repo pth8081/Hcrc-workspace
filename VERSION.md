@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**24.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.53 (2026-09-30): Tuyển Dụng (Thời Gian LV + lọc Trạng Thái), PDF mobile mượt hơn, Chương Trình dạng thẻ, Kho Tài Liệu thumbnail thật
+
+4 việc nghiệp vụ độc lập (Task #329-#332), làm + test + demo trên server
+thật trước khi merge theo yêu cầu người dùng:
+
+**1. Tuyển Dụng — Thời Gian Làm Việc + lọc Trạng Thái**: thêm trường
+**Thời Gian Làm Việc** (nhập tự do, cùng khuôn field Thu Nhập đã có), hiện
+trên thẻ tin khi có nhập. Bộ lọc danh sách có thêm "Trạng Thái" (Đang
+tuyển/Đã tuyển đủ/Đã đóng tuyển dụng — dùng đúng 3 trạng thái sẵn có, không
+thêm trạng thái mới).
+
+**2. Đào Tạo — Xem PDF trên điện thoại mượt hơn**: sửa tận gốc lỗi PDF bài
+học bị tràn ngang trên màn hình nhỏ. Nguyên nhân: `renderPdfProtected()`
+(core.js) có sàn tỉ lệ phóng cứng 0.5 và không tính lại khi đổi kích thước
+màn hình. Đã tách phần dựng DOM 1 lần khỏi phần render-theo-bề-rộng, hạ sàn
+tỉ lệ xuống 0.1, và thêm `ResizeObserver` (debounce 200ms, có huỷ render cũ
+đang chạy dở) để PDF luôn khớp đúng bề rộng màn hình thật khi xoay ngang/
+dọc hoặc đổi cỡ cửa sổ.
+
+**3. Đào Tạo — Danh Sách Chương Trình đổi sang dạng thẻ + ảnh minh hoạ**:
+form "Tạo Chương Trình Mới" thêm ô **Ảnh Minh Hoạ** (tuỳ chọn, tái dùng
+moduleKey `internalImage`); danh sách chuyển từ bảng sang dạng thẻ (giống
+khuôn Tuyển Dụng đã có) — ảnh vuông + tên/loại đào tạo/mô tả, chương trình
+chưa có ảnh hiện icon 🎓 thay thế.
+
+**4. Kho Tài Liệu — ảnh đại diện tự sinh từ trang đầu PDF**: khi tải lên
+tài liệu PDF, client tự dựng ảnh đại diện từ trang đầu tiên (pdfjs-dist,
+canvas → PNG → upload qua đúng route/moduleKey ảnh nội bộ hiện có), hiển
+thị trong danh sách thay icon chung; tài liệu là ảnh thì dùng luôn ảnh gốc.
+Việc sinh ảnh chạy best-effort (try/catch riêng) — sinh lỗi (VD PDF hỏng)
+không chặn việc tải tài liệu lên.
+
+Viết 4 file test mới (`test-recruitment-worktime-filter.js`,
+`test-pdf-mobile-responsive.js`, `test-training-course-card-thumbnail.js`,
+`test-doc-thumbnail.js`) + cập nhật 2 file test liên quan
+(`test-recruitment-priority-server.js`, `test-form-reset-file-remove.js`).
+Đã chạy full regression 379 file test hiện có (chia 4 agent song song) —
+không phát sinh regression mới từ 4 việc trên. Phát hiện 2 lỗi TIỀN TỒN TẠI
+không liên quan (xác nhận bằng so sánh A/B trên baseline sạch trước khi có
+thay đổi của đợt này): `test-extra-approval-groups.js` (1 kịch bản officeReqs
+subType mapping) và `test-audit-cluster-vbt-hd-gp-tt-tl.js` (5 kịch bản
+phạm vi quyền xem file Thanh Toán) — đã báo người dùng, chưa xử lý trong PR
+này (ngoài phạm vi 4 việc được giao).
 
 ## v24.52 (2026-09-30): Phân Quyền gọn/trực quan hơn — Sửa Nhanh Trên Web + Gán/Gỡ Nhóm hàng loạt
 
