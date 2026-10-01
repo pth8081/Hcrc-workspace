@@ -200,10 +200,11 @@ lặp cong khi bị từ chối/làm lại), và khối **"Điểm Chặn Quan T
 **🎓 Đào Tạo** (module lớn nhất) có thêm 1 hàng pill chọn 8 khu vực con — mở
 đầu bằng **🧭 Tổng Quan** (sơ đồ QUAN HỆ dạng hub, khác kiểu chuỗi tuần tự:
 Lớp Học là trung tâm nhận Chương Trình/Kho Tài Liệu/Ngân Hàng Câu Hỏi/Giảng
-Viên và mời Học Viên, còn Lộ Trình Tân Binh/Lộ Trình Thăng Tiến đều xây từ
-nhiều Chương Trình), rồi tới Lớp Học/Chương Trình/Kế Hoạch Đào Tạo/Kho Tài
-Liệu/Ngân Hàng Câu Hỏi/Lộ Trình Tân Binh (nhân viên mới, có đánh giá GĐ3 +
-cấp chứng chỉ — khác Onboarding hành chính của Nhân Sự)/Lộ Trình Thăng Tiến.
+Viên và mời Học Viên; Lộ Trình Thăng Tiến xây từ nhiều Chương Trình, còn Lộ
+Trình Tân Binh (từ 10/2026) là nội dung nhập tay độc lập, không gắn Chương
+Trình nào), rồi tới Lớp Học/Chương Trình/Kế Hoạch Đào Tạo/Kho Tài Liệu/Ngân
+Hàng Câu Hỏi/Lộ Trình Tân Binh (nhân viên mới, có đánh giá GĐ3 + cấp chứng
+chỉ — khác Onboarding hành chính của Nhân Sự)/Lộ Trình Thăng Tiến.
 
 **Khối "🛠️ Cách Thao Tác" (từ v23.54)**: nằm giữa sơ đồ quy trình và khối
 "Lưu Ý/Mẹo" — hướng dẫn CLICK-BY-CLICK (bấm nút gì, tab nào, theo đúng thứ tự
@@ -3936,6 +3937,20 @@ làm được nay bị chặn:
   danh mục hiện chỉ là **gợi ý** (không chặn nhập) — có thêm checkbox "Tự
   động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có" (mặc định
   bật) để tự tạo Chương Trình mới thay vì phải tạo tay trước.
+- **Lộ Trình Tân Binh: bỏ hẳn tham chiếu Chương Trình (10/2026, theo phản ánh
+  người dùng)** — checkbox "Tự động thêm vào danh mục Chương Trình Đào Tạo"
+  ở trên vô tình tạo ra tác dụng phụ: mỗi dòng Kế Hoạch Đào Tạo nhập Excel
+  không khớp tên lại tự đẻ thêm 1 Chương Trình mới (gắn `category: "Nhập từ
+  Excel"`) vào đúng danh mục dùng CHUNG mà Lộ Trình Tân Binh dùng để chọn
+  "Chương Trình Học Bắt Buộc Giai Đoạn 1/2" — càng nhập Excel nhiều lần,
+  danh sách chọn của Lộ Trình Tân Binh càng ngập tràn lựa chọn không liên
+  quan, không có cách nào lọc bớt. Đã bỏ HẲN tham chiếu này: Giai đoạn 1/2
+  giờ là **Nội Dung Bắt Buộc** nhập tay (ô văn bản tự do, cùng khuôn Giai
+  đoạn 3 vốn đã luôn nhập tay) thay vì chọn Chương Trình — Nhân Sự tự theo
+  dõi thực tế rồi bấm "Xác Nhận" từng giai đoạn, không còn gắn với bất kỳ
+  Lớp Học/bài test nào để tự động tính "Đạt" nữa. Lộ trình đã tạo trước đó
+  cần vào Sửa và điền lại Nội Dung Bắt Buộc Giai Đoạn 1/2 (dữ liệu chọn
+  Chương Trình cũ không tự chuyển đổi được sang văn bản).
 - **Xem PDF trên điện thoại mượt hơn (10/2026)** — trước đây PDF bài học có
   thể bị tràn ngang trên màn hình điện thoại nhỏ; nay khung xem PDF tự tính
   lại độ phóng theo đúng bề rộng màn hình mỗi khi xoay ngang/dọc hoặc đổi

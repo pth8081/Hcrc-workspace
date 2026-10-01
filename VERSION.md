@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**24.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.60 (2026-10-01): Lộ Trình Tân Binh — bỏ hẳn tham chiếu Chương Trình, đổi sang nội dung nhập tay
+
+Theo phản ánh người dùng: "Lộ Trình Tân Binh ... tự lấy sang quá nhiều" —
+ô chọn "Chương Trình Học Bắt Buộc Giai Đoạn 1/2" ở Lộ Trình Tân Binh bị
+ngập tràn các lựa chọn "(Nhập từ Excel)" không liên quan. Root cause: tính
+năng "Nhập Kế Hoạch Đào Tạo từ Excel" có checkbox "Tự động thêm vào danh
+mục Chương Trình Đào Tạo nếu tên chưa có" (mặc định bật) — mỗi dòng kế
+hoạch không khớp tên Chương Trình có sẵn sẽ tự đẻ thêm 1 Chương Trình mới
+(`category: 'Nhập từ Excel'`) vào đúng danh mục dùng CHUNG mà Lộ Trình Tân
+Binh dùng để liệt kê lựa chọn — không có cơ chế lọc bớt.
+
+Đã quyết định fix tận gốc theo đúng tinh thần người dùng yêu cầu ("quản lý
+đào tạo tạo tay"): bỏ HẲN tham chiếu `trainingCourses` khỏi `onboardingPaths`
+thay vì chỉ lọc bớt danh sách hiển thị. Giai đoạn 1/2 (`stage1Criteria`/
+`stage2Criteria`) nay là NỘI DUNG NHẬP TAY (ô văn bản tự do, giống hệt
+Giai đoạn 3 `stage3Criteria` vốn đã luôn nhập tay) — không còn `<select
+multiple>` chọn Chương Trình, không còn tự động tính "Đạt" theo kết quả
+Lớp Học/bài test. Nhân Sự tự theo dõi thực tế rồi bấm "Xác Nhận" từng giai
+đoạn (chỉ còn gác theo thứ tự Giai đoạn 1 trước Giai đoạn 2 + quyền hạn,
+không còn điều kiện hoàn thành chương trình nào).
+
+Thay đổi trải khắp: `public/fragments/internalSection.html` (textarea thay
+select), `public/js/module-internalcomms-daotao.js` (submit/edit/render),
+`public/js/core.js` (CORE_FIELD_MANIFEST.ONBOARDING_PATH),
+`lib/createValidation.js` (`normalizeOnboardingPathFields()`),
+`lib/recordActions.js` (`ONBOARDING_PATH_EDITABLE_FIELDS`,
+`editOnboardingPath()`, `confirmOnboardingStage()` bỏ hẳn gating theo
+course), `routes/records.js` (3 route: xoá Chương Trình/sửa Lộ Trình/xác
+nhận giai đoạn — bỏ các lượt đọc `trainingCourses`/`trainingClasses`/
+`trainingRegistrations` không còn cần), `routes/create.js` (bỏ nhánh
+`onboardingPaths` fetch `trainingCourses`). Cập nhật sơ đồ quan hệ Đào Tạo
+(`renderNVDaotaoOverview()`, module-nghiepvu.js) bỏ cạnh "gồm nhiều" nối
+Lộ Trình Tân Binh → Chương Trình, cùng toàn bộ nội dung Nghiệp Vụ/steps
+liên quan.
+
+Viết lại `test-onboarding.js` (23 kịch bản), `test-onboarding-path-edit.js`
+(4 kịch bản), cập nhật `test-form-reset-file-remove.js`,
+`test-audit-round4-internal-data-gate.js`, `_mock-backend.js` cho đúng
+hành vi mới — chạy lại toàn bộ test Đào Tạo liên quan (career-paths/
+internal-training/training-plans/audit-round4-internal-training/nghiepvu),
+không phát sinh regression. Lộ Trình đã tạo trước bản này cần vào Sửa và
+điền lại Nội Dung Bắt Buộc Giai Đoạn 1/2 bằng tay (dữ liệu chọn Chương
+Trình cũ không tự chuyển đổi được sang văn bản).
 
 ## v24.59 (2026-10-01): Phân Quyền — đổi ô chọn người hàng loạt sang dropdown tìm-kiếm-gõ-chọn-nhiều-người
 

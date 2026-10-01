@@ -249,7 +249,7 @@ function renderNVFlow(spec) {
 function renderNVDaotaoOverview() {
   const W = 860, H = 460;
   const N = {
-    tanbinh:    { x: 16,  y: 16,  w: 176, h: 58, label: 'Lộ Trình Tân Binh', sub: 'Gồm nhiều Chương Trình', kind: 'normal' },
+    tanbinh:    { x: 16,  y: 16,  w: 176, h: 58, label: 'Lộ Trình Tân Binh', sub: 'Nội dung Giai đoạn 1/2/3 nhập tay', kind: 'normal' },
     thangtien:  { x: 232, y: 16,  w: 176, h: 58, label: 'Lộ Trình Thăng Tiến', sub: 'Mỗi bậc khoá theo Chương Trình', kind: 'normal' },
     chuongtrinh:{ x: 124, y: 128, w: 176, h: 58, label: 'Chương Trình', sub: 'Khung nội dung tái sử dụng', kind: 'normal' },
     khotl:      { x: 528, y: 16,  w: 176, h: 58, label: 'Kho Tài Liệu', sub: 'Giáo trình dùng chung', kind: 'reference' },
@@ -270,7 +270,9 @@ function renderNVDaotaoOverview() {
   // 1 gốc <svg> riêng, defs không dùng chung được giữa các lần gọi khác nhau). Bổ sung cho đủ.
   let svg = `<defs>${nvArrowMarker('nv-arrow', '#9ca3af')}${nvArrowMarker('nv-arrow-violet', '#7c3aed')}${nvArrowMarker('nv-arrow-amber', '#d97706')}${nvArrowMarker('nv-arrow-gray', '#9ca3af')}</defs>`;
 
-  svg += nvEdge(bottom('tanbinh').x, bottom('tanbinh').y, top('chuongtrinh').x - 30, top('chuongtrinh').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'gồm nhiều' });
+  // LỖI ĐÃ VÁ (10/2026): Lộ Trình Tân Binh KHÔNG còn tham chiếu Chương Trình nữa (Giai đoạn 1/2 đổi sang
+  // nội dung nhập tay) — đã bỏ hẳn cạnh "gồm nhiều" nối "tanbinh" -> "chuongtrinh" từng vẽ ở đây, chỉ còn
+  // Lộ Trình Thăng Tiến thật sự khoá theo Chương Trình.
   svg += nvEdge(bottom('thangtien').x, bottom('thangtien').y, top('chuongtrinh').x + 30, top('chuongtrinh').y, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'khoá theo bậc' });
   svg += nvEdge(side('chuongtrinh', 'r').x, side('chuongtrinh', 'r').y, side('lophoc', 'l').x, side('lophoc', 'l').y - 14, { color: '#7c3aed', marker: 'nv-arrow-violet', label: 'mở lớp theo' });
   svg += nvEdge(bottom('khotl').x, bottom('khotl').y, side('lophoc', 'r').x + 30, top('lophoc').y - 4, { color: '#9ca3af', marker: 'nv-arrow-gray', dashed: true, label: 'giáo trình' });
@@ -1558,13 +1560,13 @@ const NGHIEP_VU_DAOTAO_AREAS = [
 
 const NGHIEP_VU_DAOTAO_CONTENT = {
   overview: {
-    desc: 'Sơ đồ quan hệ tổng quan — các phần của Đào Tạo không đứng độc lập mà gắn kết với nhau: 2 loại Lộ Trình (Tân Binh/Thăng Tiến) đều được xây từ nhiều Chương Trình, Chương Trình là khung để mở Lớp Học, Lớp Học lấy giáo trình từ Kho Tài Liệu và đề kiểm tra từ Ngân Hàng Câu Hỏi, có Giảng Viên đứng lớp (nếu học Offline) và mời Học Viên tham gia.',
+    desc: 'Sơ đồ quan hệ tổng quan — các phần của Đào Tạo không đứng độc lập mà gắn kết với nhau: Lộ Trình Thăng Tiến được xây từ nhiều Chương Trình (mỗi bậc khoá theo 1 nhóm Chương Trình bắt buộc), còn Lộ Trình Tân Binh là nội dung nhập tay riêng (không gắn Chương Trình nào); Chương Trình là khung để mở Lớp Học, Lớp Học lấy giáo trình từ Kho Tài Liệu và đề kiểm tra từ Ngân Hàng Câu Hỏi, có Giảng Viên đứng lớp (nếu học Offline) và mời Học Viên tham gia.',
     isCustomFlow: true,
     footer: { left: [
       { label: 'Lớp Học là trung tâm vận hành', text: 'mọi phần khác (Chương Trình, Kho Tài Liệu, Ngân Hàng Câu Hỏi, Giảng Viên) đều tồn tại để phục vụ 1 Lớp Học cụ thể — không có Lớp Học thì các danh mục kia chỉ là dữ liệu chờ dùng.' },
       { label: 'Giảng Viên khác Học Viên', text: '"Giảng Viên" là vai trò được gán riêng cho từng lớp Offline, chỉ quản lý/chấm đúng lớp mình được gán; "Học Viên" không phải hồ sơ riêng — là bất kỳ nhân viên nào đăng ký hoặc được mời vào lớp.' },
     ], right: [
-      { label: '2 loại Lộ Trình khác nhau', text: 'Lộ Trình Tân Binh dành cho nhân viên mới (có đánh giá cuối kỳ và cấp chứng chỉ); Lộ Trình Thăng Tiến áp dụng xuyên suốt sự nghiệp, khoá theo từng bậc — cả 2 đều dùng chung danh mục Chương Trình, không phải 2 khái niệm trùng nhau.' },
+      { label: '2 loại Lộ Trình khác nhau', text: 'Lộ Trình Tân Binh dành cho nhân viên mới (Giai đoạn 1/2/3 đều là nội dung nhập tay, không gắn Chương Trình/Lớp Học nào, có đánh giá cuối kỳ và cấp chứng chỉ); Lộ Trình Thăng Tiến áp dụng xuyên suốt sự nghiệp, khoá theo từng bậc gắn với danh mục Chương Trình thật — 2 khái niệm không trùng nhau, không dùng chung cơ chế.' },
     ] },
   },
   dashboard: {
@@ -1671,22 +1673,22 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     footer: { left: [], right: [] },
   },
   newhire: {
-    desc: 'Lộ Trình Tân Binh — khác Lộ Trình Thăng Tiến ở chỗ áp dụng riêng cho nhân viên mới: 1 lộ trình gồm nhiều Chương Trình bắt buộc học, phân công cho từng người, kết thúc bằng đánh giá cuối kỳ và cấp chứng chỉ.',
+    desc: 'Lộ Trình Tân Binh — khác Lộ Trình Thăng Tiến ở chỗ áp dụng riêng cho nhân viên mới: cả 3 giai đoạn đều là NỘI DUNG NHẬP TAY (không gắn Chương Trình/Lớp Học nào), phân công cho từng người, Nhân Sự/quản lý trực tiếp tự theo dõi thực tế rồi xác nhận/đánh giá, kết thúc bằng cấp chứng chỉ.',
     flow: { ariaLabel: 'Quy trình Lộ Trình Tân Binh', chain: [
       { label: 'Phân công lộ trình', sub: 'Gán 1 lộ trình cho nhân viên mới' },
-      { label: 'Học theo Chương Trình', sub: 'Hoàn thành các Lớp Học liên quan' },
+      { label: 'Theo dõi thực tế', sub: 'Giai đoạn 1/2 — nội dung nhập tay' },
       { label: 'Đánh giá cuối kỳ', sub: '', kind: 'decision' },
       { label: 'Cấp Chứng Chỉ', sub: 'Hoàn tất lộ trình tân binh', kind: 'approved' },
-    ], decision: { atIndex: 2, approveLabel: 'Đạt', rejectLabel: 'Chưa đạt', rejectBox: { label: 'Học bổ sung', sub: 'Chưa đủ điều kiện' }, loopBackToIndex: 1, loopBackLabel: 'Tiếp tục học' } },
+    ], decision: { atIndex: 2, approveLabel: 'Đạt', rejectLabel: 'Chưa đạt', rejectBox: { label: 'Theo dõi tiếp', sub: 'Chưa đủ điều kiện' }, loopBackToIndex: 1, loopBackLabel: 'Tiếp tục theo dõi' } },
     steps: [
-      { role: 'Quản lý đào tạo', text: 'vào tab <b>🆕 Đào Tạo Tân Binh</b> → khối "🆕 Quản Lý Lộ Trình" → điền Tên Lộ Trình, chọn Chương Trình bắt buộc Giai Đoạn 1 (Ngày 1-7) và Giai Đoạn 2 (Ngày 8-21), nhập Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59) → bấm <b>"Tạo Lộ Trình"</b>.' },
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🆕 Đào Tạo Tân Binh</b> → khối "🆕 Quản Lý Lộ Trình" → điền Tên Lộ Trình, gõ tay Nội Dung Bắt Buộc Giai Đoạn 1 (Ngày 1-7) và Giai Đoạn 2 (Ngày 8-21), nhập Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59) → bấm <b>"Tạo Lộ Trình"</b>. Từ 10/2026 cả 3 giai đoạn đều là văn bản tự do, không còn chọn Chương Trình nào (tránh danh mục Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm lựa chọn không liên quan).' },
       { role: 'Quản lý đào tạo', text: 'khối "📋 Phân Công Lộ Trình Cho Nhân Viên Mới" → gõ tìm Nhân Viên, chọn Lộ Trình → bấm <b>"Phân Công"</b>.' },
-      { role: 'Nhân viên mới', text: 'tự đăng ký + học các lớp thuộc đúng Chương Trình được chọn (ở tab Lớp Học, lớp PHẢI gán bài test) — % hoàn thành Giai đoạn 1/2 tự động cập nhật theo kết quả làm bài.' },
-      { role: 'Nhân Sự', text: 'bấm <b>"Xác Nhận"</b> từng giai đoạn khi đã đủ điều kiện — Giai đoạn 3 do quản lý trực tiếp đánh giá theo tiêu chí đã khai, không có bài test.' },
+      { role: 'Nhân viên mới', text: 'tự thực hiện đúng nội dung Giai đoạn 1/2 đã ghi trong lộ trình ngoài thực tế (không có lớp học/bài test nào gắn kèm để tự động theo dõi).' },
+      { role: 'Nhân Sự', text: 'tự theo dõi thực tế rồi bấm <b>"Xác Nhận"</b> từng giai đoạn khi đã đủ điều kiện (thuần cảm quan, không có điều kiện tự động nào chặn ngoài thứ tự Giai đoạn 1 trước Giai đoạn 2) — Giai đoạn 3 do quản lý trực tiếp đánh giá theo tiêu chí đã khai, không có bài test.' },
       { role: 'Quản lý trực tiếp', text: 'nếu Giai đoạn 3 đã chấm <b>Không Đạt</b> mà nhân viên sau đó đã cải thiện (hoặc chấm nhầm): khối "Đánh Giá Giai Đoạn 3" hiện lại hồ sơ đó với 2 nút <b>"🔄 Đánh Giá Lại: Đạt / Không Đạt"</b> — bắt buộc nhập lý do, kết quả cũ được lưu vào lịch sử đánh giá. Hồ sơ đã cấp chứng chỉ thì không đánh giá lại được nữa.' },
     ],
     footer: { left: [
-      { label: 'Khác Onboarding của Nhân Sự', text: 'đây là lộ trình HỌC (nội dung/Chương Trình), khác Onboarding/Offboarding (Nhân Sự) vốn là các việc hành chính theo mốc thời gian — 2 quy trình độc lập, không tự động liên kết với nhau.' },
+      { label: 'Khác Onboarding của Nhân Sự', text: 'đây là lộ trình HỌC (nội dung nhập tay), khác Onboarding/Offboarding (Nhân Sự) vốn là các việc hành chính theo mốc thời gian — 2 quy trình độc lập, không tự động liên kết với nhau.' },
     ], right: [
       { label: 'Không xoá phân công cũ', text: 'xoá 1 lộ trình khỏi danh mục không xoá dữ liệu phân công đã gán cho nhân viên trước đó — giữ nguyên lịch sử học tập.' },
     ] },

@@ -1611,18 +1611,21 @@ router.post('/trainingCourses/:id/edit', async (req, res) => {
   }
 });
 // Đợt 4: trainingCourses — xoá cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection Đào Tạo
-// khác ở trên, BỔ SUNG kiểm tham chiếu (lớp học/kế hoạch đào tạo/lộ trình thăng tiến/lộ trình tân binh).
+// khác ở trên, BỔ SUNG kiểm tham chiếu (lớp học/kế hoạch đào tạo/lộ trình thăng tiến).
+//
+// LỖI ĐÃ VÁ (10/2026): bỏ hẳn kiểm tham chiếu onboardingPaths ở đây — Lộ Trình Tân Binh không còn
+// tham chiếu trainingCourses nữa (Giai đoạn 1/2 đã đổi sang nội dung nhập tay, xem
+// normalizeOnboardingPathFields(), lib/createValidation.js).
 router.post('/trainingCourses/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     assertAdminForDelete(freshUser);
-    const [classes, plans, careerPaths, onboardingPaths] = await Promise.all([
+    const [classes, plans, careerPaths] = await Promise.all([
       getAllForCollection('trainingClasses'),
       getAllForCollection('trainingPlans'),
-      getAllForCollection('careerPaths'),
-      getAllForCollection('onboardingPaths')
+      getAllForCollection('careerPaths')
     ]);
     const refs = [];
     const classCount = classes.filter(c => c.courseId === itemId).length;
@@ -1632,10 +1635,6 @@ router.post('/trainingCourses/:id/delete', async (req, res) => {
     const careerCount = careerPaths.filter(p => (Array.isArray(p.stages) ? p.stages : [])
       .some(s => (Array.isArray(s?.requiredCourseIds) ? s.requiredCourseIds : []).includes(itemId))).length;
     if (careerCount) refs.push(`${careerCount} lộ trình thăng tiến`);
-    const onboardingCount = onboardingPaths.filter(p =>
-      (Array.isArray(p.stage1RequiredCourseIds) ? p.stage1RequiredCourseIds : []).includes(itemId) ||
-      (Array.isArray(p.stage2RequiredCourseIds) ? p.stage2RequiredCourseIds : []).includes(itemId)).length;
-    if (onboardingCount) refs.push(`${onboardingCount} lộ trình đào tạo tân binh`);
     if (refs.length) {
       throw new HttpError(409, `Không thể xóa chương trình đào tạo này vì đang được ${refs.join(', ')} sử dụng. Vui lòng gỡ/đổi chương trình ở các hồ sơ đó trước.`);
     }
@@ -1670,25 +1669,19 @@ router.post('/trainingPlans/:id/edit', async (req, res) => {
 router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res, 'trainingPlans'));
 
 // ===================== ĐÀO TẠO TÂN BINH =====================
-// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo. trainingCourses (dùng để kiểm
-// tra stage{1,2}RequiredCourseIds mới nếu có đổi, xem normalizeOnboardingPathFields()) là MIGRATED_
-// COLLECTION (nằm ở bảng SQL riêng, KHÔNG có trong getAllAppData()) nên phải tự đọc thêm qua
-// getAllForCollection() rồi gắn vào appData TRƯỚC khi khoá đúng 1 dòng onboardingPaths để sửa — cùng
-// khuôn trainingPlans/:id/edit ở trên.
+// POST /api/records/onboardingPaths/:id/edit — sửa 1 Lộ Trình đã tạo.
 //
-// LỖI ĐÃ VÁ (rà soát Đào Tạo, 9/2026): trước đây thiếu đúng dòng gắn appData.trainingCourses này ->
-// normalizeOnboardingPathFields() luôn thấy trainingCourses rỗng -> MỌI id trong
-// stage1RequiredCourseIds/stage2RequiredCourseIds (dù không đổi) đều bị coi không hợp lệ -> sửa Lộ
-// Trình luôn lỗi 400, kể cả khi chỉ đổi các field khác (VD tiêu chí Giai đoạn 3).
+// LỖI ĐÃ VÁ (10/2026): trước đây phải tự đọc thêm trainingCourses (MIGRATED_COLLECTION) rồi gắn vào
+// appData để normalizeOnboardingPathFields() kiểm tra stage{1,2}RequiredCourseIds — nay Giai đoạn 1/2
+// đã đổi hẳn sang nội dung nhập tay (stage1Criteria/stage2Criteria), không còn tham chiếu
+// trainingCourses nữa nên bỏ hẳn bước đọc/gắn appData này.
 router.post('/onboardingPaths/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const appData = await getAllAppData();
-    appData.trainingCourses = await getAllForCollection('trainingCourses');
     const result = await withLockedRecordForCollection('onboardingPaths', itemId, (item) =>
-      recordActions.editOnboardingPath(req.body, freshUser, item, appData));
+      recordActions.editOnboardingPath(req.body, freshUser, item));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `onboardingPaths/${req.params.id}/edit`, err);
@@ -1697,12 +1690,10 @@ router.post('/onboardingPaths/:id/edit', async (req, res) => {
 // Xoá Lộ Trình — "xóa = quyền tối cao, chỉ Admin" như mọi catalog Đào Tạo khác ở trên.
 //
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Trung bình): trước đây xoá được VÔ ĐIỀU
-// KIỆN, chỉ chấp nhận "đánh đổi" là các onboardingProgress đang theo lộ trình đó mất tham chiếu gốc.
-// Thực tế nặng hơn thế: confirm-stage (xác nhận hoàn thành Giai đoạn 1/2) đọc SỐNG
-// stage{1,2}RequiredCourseIds từ chính bản ghi onboardingPaths để đối chiếu "đã Đạt đủ chương trình bắt
-// buộc chưa" — lộ trình bị xoá thì MỌI hồ sơ tân binh đang dở dang theo lộ trình đó KẸT VĨNH VIỄN, không
-// xác nhận tiếp giai đoạn nào được nữa (không có đường sửa/chuyển lộ trình khác). Chặn xoá khi còn hồ sơ
-// tham chiếu, đúng khuôn budgetTemplates ở trên (409 kèm số lượng, để admin tự xử lý các hồ sơ đó trước).
+// KIỆN, chỉ chấp nhận "đánh đổi" là các onboardingProgress đang theo lộ trình đó mất tham chiếu gốc —
+// lộ trình bị xoá thì MỌI hồ sơ tân binh đang dở dang theo lộ trình đó KẸT VĨNH VIỄN, không xác nhận
+// tiếp giai đoạn nào được nữa (không có đường sửa/chuyển lộ trình khác). Chặn xoá khi còn hồ sơ tham
+// chiếu, đúng khuôn budgetTemplates ở trên (409 kèm số lượng, để admin tự xử lý các hồ sơ đó trước).
 router.post('/onboardingPaths/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -1722,22 +1713,22 @@ router.post('/onboardingPaths/:id/delete', async (req, res) => {
 });
 
 // POST /api/records/onboardingProgress/:id/confirm-stage — Nhân Sự (trainingManage/admin) xác nhận nhân
-// viên đã hoàn thành Giai đoạn 1/2 (Đợt 8 — cùng khuôn /careerPaths/:id/confirm ở dưới: đọc kèm
-// trainingRegistrations/trainingClasses để tra "đã Đạt đủ chương trình bắt buộc của giai đoạn chưa", chỉ
-// khác là kết quả ghi THẲNG vào đúng 1 dòng onboardingProgress đang khoá, không cần insert thêm collection
-// phụ nào khác vì onboardingProgress vốn đã LÀ hồ sơ theo từng nhân viên, không phải catalog dùng chung
-// như careerPaths).
+// viên đã hoàn thành Giai đoạn 1/2 (Đợt 8). Kết quả ghi THẲNG vào đúng 1 dòng onboardingProgress đang
+// khoá, không cần insert thêm collection phụ nào khác.
+//
+// LỖI ĐÃ VÁ (10/2026): trước đây còn đọc kèm trainingRegistrations/trainingClasses để tra "đã Đạt đủ
+// chương trình bắt buộc của giai đoạn chưa" (stage{1,2}RequiredCourseIds) — Giai đoạn 1/2 giờ là nội
+// dung nhập tay (stage1Criteria/stage2Criteria), Nhân Sự tự theo dõi thực tế rồi xác nhận, không còn
+// đối chiếu gì với trainingClasses/trainingRegistrations nữa nên bỏ hẳn 2 lượt đọc này.
 router.post('/onboardingProgress/:id/confirm-stage', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     const paths = await getAllForCollection('onboardingPaths');
-    const allRegs = await getAllForCollection('trainingRegistrations');
-    const trainingClasses = await getAllForCollection('trainingClasses');
     const result = await withLockedRecordForCollection('onboardingProgress', itemId, (item) => {
       const path = paths.find(p => p.id === item.pathId);
-      return recordActions.confirmOnboardingStage(req.body, freshUser, item, path, allRegs, trainingClasses);
+      return recordActions.confirmOnboardingStage(req.body, freshUser, item, path);
     });
     res.json({ ok: true, item: result });
   } catch (err) {

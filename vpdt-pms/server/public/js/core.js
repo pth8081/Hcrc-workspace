@@ -1156,12 +1156,13 @@ const CORE_FIELD_MANIFEST = {
     { id: 'cpDescription', label: 'Mô Tả', required: false }
   ],
   // ONBOARDING_PATH: #onboardingPathForm (Đào Tạo > Đào Tạo Tân Binh > Quản Lý Lộ Trình Đào Tạo Tân Binh).
-  // opStage1/2RequiredCourseIds là <select multiple> tham chiếu trainingCourses (không phải danh sách
-  // nhãn cố định) nên KHÔNG có optionsKey, cùng lý do tpCourseId ở trên.
+  // LỖI ĐÃ VÁ (10/2026): opStage1/2 trước đây là <select multiple> tham chiếu trainingCourses — đã đổi
+  // hẳn sang <textarea> nội dung nhập tay (cùng khuôn opStage3Criteria vốn đã luôn nhập tay), để tránh
+  // danh mục Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm lựa chọn không liên quan.
   ONBOARDING_PATH: [
     { id: 'opName', label: 'Tên Lộ Trình', required: true },
-    { id: 'opStage1RequiredCourseIds', label: 'Chương Trình Học Bắt Buộc Giai Đoạn 1 (Ngày 1-7, giữ Ctrl/Cmd để chọn nhiều)', required: true },
-    { id: 'opStage2RequiredCourseIds', label: 'Chương Trình Học Bắt Buộc Giai Đoạn 2 (Ngày 8-21, giữ Ctrl/Cmd để chọn nhiều)', required: true },
+    { id: 'opStage1Criteria', label: 'Nội Dung Bắt Buộc Giai Đoạn 1 (Ngày 1-7)', required: true },
+    { id: 'opStage2Criteria', label: 'Nội Dung Bắt Buộc Giai Đoạn 2 (Ngày 8-21)', required: true },
     { id: 'opStage3Criteria', label: 'Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59, quản lý trực tiếp đánh giá — không có bài test)', required: false }
   ],
   // ONBOARDING_ASSIGN: #onboardingAssignForm (Đào Tạo > Đào Tạo Tân Binh > Phân Công Lộ Trình Cho Nhân

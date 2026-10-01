@@ -467,7 +467,14 @@
            cùng tinh thần trainingPlans/sessionState đã có. 4 khối hiện/ẩn ĐỘC LẬP theo quyền (xem
            renderOnboardingTab()): Quản lý Lộ Trình + Phân Công (trainingManage/admin), Lộ Trình Của Tôi
            (bất kỳ ai có 1 dòng onboardingProgress được gán), Đánh Giá Giai đoạn 3 (onboardingEvaluate,
-           đúng phòng ban/siêu thị — mirror uniformStoreManage/item.dept). -->
+           đúng phòng ban/siêu thị — mirror uniformStoreManage/item.dept).
+           LỖI ĐÃ VÁ (10/2026, phản ánh người dùng) — Giai đoạn 1/2 TRƯỚC ĐÂY bắt buộc chọn "Chương Trình"
+           (trainingCourses, dùng CHUNG với Kế Hoạch Đào Tạo/Lớp Học/Lộ Trình Thăng Tiến) rồi tự động tính
+           % hoàn thành theo kết quả thi ở Lớp Học — nhưng danh mục Chương Trình bị "Nhập Kế Hoạch Đào Tạo
+           từ Excel" tự đẩy thêm rất nhiều dòng (category "Nhập từ Excel") vào, khiến ô chọn của Lộ Trình
+           Tân Binh ngập tràn lựa chọn không liên quan. Đã bỏ hẳn tham chiếu này — Giai đoạn 1/2 giờ là 2 ô
+           NỘI DUNG NHẬP TAY (như Giai đoạn 3 vốn đã vậy), không còn gắn gì với danh mục Chương Trình/Kế
+           Hoạch Đào Tạo nữa — Nhân Sự tự theo dõi thực tế rồi bấm "Xác Nhận" hoàn toàn thủ công. -->
       <div id="trainingLmsOnboardingPanel" class="hidden space-y-5">
         <div id="onboardingEmployeesDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 
@@ -481,19 +488,19 @@
                 <input id="opName" class="w-full border p-1.5 rounded" required>
               </div>
               <div>
-                <label class="block font-semibold text-gray-600 mb-1">Chương Trình Học Bắt Buộc Giai Đoạn 1 (Ngày 1-7, giữ Ctrl/Cmd để chọn nhiều)</label>
-                <select id="opStage1RequiredCourseIds" multiple size="5" class="w-full border p-1.5 rounded bg-white" required></select>
+                <label class="block font-semibold text-gray-600 mb-1">Nội Dung Bắt Buộc Giai Đoạn 1 (Ngày 1-7)</label>
+                <textarea id="opStage1Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Hội nhập công ty, quy định nội quy, an toàn lao động, kỹ năng bán hàng cơ bản..." required></textarea>
               </div>
               <div>
-                <label class="block font-semibold text-gray-600 mb-1">Chương Trình Học Bắt Buộc Giai Đoạn 2 (Ngày 8-21, giữ Ctrl/Cmd để chọn nhiều)</label>
-                <select id="opStage2RequiredCourseIds" multiple size="5" class="w-full border p-1.5 rounded bg-white" required></select>
+                <label class="block font-semibold text-gray-600 mb-1">Nội Dung Bắt Buộc Giai Đoạn 2 (Ngày 8-21)</label>
+                <textarea id="opStage2Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Nghiệp vụ chuyên sâu theo vị trí, quy trình vận hành, kiểm kê..." required></textarea>
               </div>
               <div class="md:col-span-2">
                 <label class="block font-semibold text-gray-600 mb-1">Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59, quản lý trực tiếp đánh giá — không có bài test)</label>
                 <textarea id="opStage3Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Thái độ làm việc, mức độ nắm quy trình, khả năng xử lý tình huống thực tế..."></textarea>
               </div>
             </div>
-            <p class="text-[11px] text-gray-500 italic">Nhân viên hoàn thành Giai đoạn 1/2 bằng cách tự đăng ký + học các lớp thuộc đúng chương trình được chọn ở tab "Lớp Học" (lớp PHẢI gán bài test — chỉ tính Đạt khi tự làm bài, không chấm tay được). % hoàn thành tự động cập nhật; Nhân Sự bấm "Xác Nhận" từng giai đoạn khi đã đủ.</p>
+            <p class="text-[11px] text-gray-500 italic">Nội dung Giai đoạn 1/2/3 do Nhân Sự tự nhập tay (không gán Chương Trình/Lớp Học cụ thể nào) — Nhân Sự tự theo dõi thực tế rồi bấm "Xác Nhận" từng giai đoạn khi nhân viên đã hoàn thành.</p>
             <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
             <div id="dynamicFieldsContainer_ONBOARDING_PATH" class="contents"></div>
             <div class="flex justify-end gap-2">
@@ -506,7 +513,7 @@
           <div class="overflow-x-auto">
             <table class="w-full border-collapse border text-xs bg-white">
               <thead><tr class="bg-gray-100 text-left text-gray-700">
-                <th class="border p-2">Tên Lộ Trình</th><th class="border p-2">GĐ1: Chương Trình</th><th class="border p-2">GĐ2: Chương Trình</th>
+                <th class="border p-2">Tên Lộ Trình</th><th class="border p-2">GĐ1: Nội Dung</th><th class="border p-2">GĐ2: Nội Dung</th>
                 <th class="border p-2">Tiêu Chí GĐ3</th><th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
               </tr></thead>
               <tbody id="onboardingPathsTableBody"></tbody>

@@ -992,21 +992,23 @@ function __mockConfirmJobFilled(user, job) {
 
 // ===================== onboardingPaths / onboardingProgress (Đào Tạo Tân Binh) =====================
 // mirrors normalizeOnboardingPathFields() ở lib/createValidation.js — dùng CHUNG cho tạo lẫn sửa, cùng
-// lý do __mockNormalizeTrainingPlanFields() ở trên. Đợt 8 — Giai đoạn 1/2 đổi sang chọn CHƯƠNG TRÌNH HỌC
-// bắt buộc (giống hệt careerPaths.stages[].requiredCourseIds), bỏ hẳn tài liệu/bài test rời.
+// lý do __mockNormalizeTrainingPlanFields() ở trên.
+// LỖI ĐÃ VÁ (10/2026): Giai đoạn 1/2 trước đây chọn CHƯƠNG TRÌNH HỌC bắt buộc (tham chiếu
+// trainingCourses, giống hệt careerPaths.stages[].requiredCourseIds) — đã đổi hẳn sang NỘI DUNG NHẬP
+// TAY (stage1Criteria/stage2Criteria, cùng khuôn stage3Criteria) để tránh danh mục Chương Trình bị
+// "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm quá nhiều lựa chọn không liên quan vào ô chọn.
 function __mockNormalizeOnboardingPathFields(payload) {
   if (!payload.name || !String(payload.name).trim()) throw __mockHttpError(400, 'Thiếu tên lộ trình đào tạo tân binh');
   payload.name = String(payload.name).trim();
-  const toRequiredCourseIds = (raw, label) => {
-    const ids = Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : [];
-    if (!ids.length) throw __mockHttpError(400, `Vui lòng chọn ít nhất 1 chương trình học bắt buộc cho ${label}`);
-    const invalid = ids.filter((id) => !DB.trainingCourses.some((c) => c.id === id));
-    if (invalid.length) throw __mockHttpError(400, `${label} có chương trình được chọn không hợp lệ`);
-    return ids;
+  const toCriteria = (raw, label) => {
+    const text = raw ? String(raw).trim().slice(0, 3000) : '';
+    if (!text) throw __mockHttpError(400, `Vui lòng nhập nội dung bắt buộc cho ${label}`);
+    return text;
   };
-  payload.stage1RequiredCourseIds = toRequiredCourseIds(payload.stage1RequiredCourseIds, 'Giai đoạn 1');
-  payload.stage2RequiredCourseIds = toRequiredCourseIds(payload.stage2RequiredCourseIds, 'Giai đoạn 2');
+  payload.stage1Criteria = toCriteria(payload.stage1Criteria, 'Giai đoạn 1');
+  payload.stage2Criteria = toCriteria(payload.stage2Criteria, 'Giai đoạn 2');
   payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
+  delete payload.stage1RequiredCourseIds; delete payload.stage2RequiredCourseIds;
   delete payload.stage1DocumentIds; delete payload.test1Id;
   delete payload.stage2DocumentIds; delete payload.test2Id;
 }
@@ -1016,7 +1018,7 @@ function __mockValidateOnboardingPathCreate(payload, user) {
 }
 function __mockEditOnboardingPath(payload, user, path) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
-  const fields = ['name', 'stage1RequiredCourseIds', 'stage2RequiredCourseIds', 'stage3Criteria'];
+  const fields = ['name', 'stage1Criteria', 'stage2Criteria', 'stage3Criteria'];
   fields.forEach((f) => { if (payload[f] !== undefined) path[f] = payload[f]; });
   __mockNormalizeOnboardingPathFields(path);
   return path;
@@ -1049,9 +1051,11 @@ function __mockValidateOnboardingProgressCreate(payload, user) {
   payload.certificateIssued = false; payload.certificateIssuedAt = null; payload.certificateIssuedBy = null;
 }
 
-// mirrors confirmOnboardingStage() ở lib/recordActions.js (Đợt 8) — Nhân Sự xác nhận Giai đoạn 1/2 sau
-// khi nhân viên tự đạt đủ chương trình bắt buộc qua lớp học CÓ gán bài test, cùng khuôn
-// __mockConfirmCareerPath() ở dưới.
+// mirrors confirmOnboardingStage() ở lib/recordActions.js (Đợt 8) — Nhân Sự xác nhận Giai đoạn 1/2.
+// LỖI ĐÃ VÁ (10/2026): trước đây còn bắt buộc nhân viên đã đạt đủ chương trình bắt buộc qua lớp học CÓ
+// gán bài test (tham chiếu stage{1,2}RequiredCourseIds) — đã bỏ hẳn, Giai đoạn 1/2 giờ là nội dung
+// nhập tay, Nhân Sự tự theo dõi thực tế rồi xác nhận, không còn đối chiếu gì với trainingClasses/
+// trainingRegistrations nữa.
 function __mockConfirmOnboardingStage(payload, user, progress) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền xác nhận giai đoạn đào tạo tân binh');
   const stage = Number(payload?.stage);
@@ -1061,11 +1065,6 @@ function __mockConfirmOnboardingStage(payload, user, progress) {
   if (stage === 2 && progress.stage1Result !== 'CONFIRMED') throw __mockHttpError(409, 'Cần xác nhận hoàn thành Giai đoạn 1 trước khi xác nhận Giai đoạn 2');
   const path = DB.onboardingPaths.find((p) => p.id === progress.pathId);
   if (!path) throw __mockHttpError(404, 'Không tìm thấy lộ trình đào tạo tân binh của hồ sơ này (có thể đã bị xoá)');
-  const requiredCourseIds = Array.isArray(path[`stage${stage}RequiredCourseIds`]) ? path[`stage${stage}RequiredCourseIds`] : [];
-  const missing = requiredCourseIds.filter((courseId) => !DB.trainingRegistrations.some((r) =>
-    r.creator === progress.employeeUsername && r.result === 'PASSED' &&
-    DB.trainingClasses.some((c) => c.id === r.classId && c.courseId === courseId && c.testId != null)));
-  if (missing.length) throw __mockHttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Giai đoạn ${stage} — chưa thể xác nhận`);
   progress[resultField] = 'CONFIRMED';
   progress[`stage${stage}ConfirmedBy`] = user.username;
   progress[`stage${stage}ConfirmedByName`] = user.name;

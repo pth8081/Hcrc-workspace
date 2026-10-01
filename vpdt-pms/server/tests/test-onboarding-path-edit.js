@@ -1,11 +1,14 @@
 // server/tests/test-onboarding-path-edit.js
 //
-// Regression test cho LỖI ĐÃ VÁ (rà soát Đào Tạo, 9/2026) — POST /api/records/onboardingPaths/:id/edit
-// (routes/records.js): route gọi getAllAppData() nhưng KHÔNG nạp appData.trainingCourses (trainingCourses
-// là MIGRATED_COLLECTION, nằm ở bảng SQL riêng, KHÔNG có trong getAllAppData()) -> normalizeOnboardingPathFields()
-// (lib/createValidation.js) luôn thấy appData.trainingCourses rỗng -> MỌI id trong
-// stage1RequiredCourseIds/stage2RequiredCourseIds (dù không đổi gì) đều bị coi không hợp lệ -> sửa Lộ
-// Trình Đào Tạo Tân Binh luôn lỗi 400, kể cả khi chỉ đổi field khác (VD tiêu chí Giai đoạn 3).
+// Regression test cho POST /api/records/onboardingPaths/:id/edit (routes/records.js).
+//
+// LỖI ĐÃ VÁ (10/2026): bài test này ban đầu (9/2026) chứng minh 1 lỗi đã vá về việc route quên nạp
+// appData.trainingCourses khiến normalizeOnboardingPathFields() luôn từ chối stage{1,2}RequiredCourseIds
+// hợp lệ. Giai đoạn 1/2 nay đã bỏ hẳn tham chiếu trainingCourses — đổi hẳn sang NỘI DUNG NHẬP TAY
+// (stage1Criteria/stage2Criteria, cùng khuôn stage3Criteria vốn đã luôn nhập tay) để tránh danh mục
+// Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm lựa chọn không liên quan — nên route
+// KHÔNG còn đọc/cần trainingCourses nữa, bài test được viết lại để xác nhận hành vi MỚI: sửa Lộ Trình chỉ
+// cần validate nội dung chữ (không rỗng), không còn đối chiếu bất kỳ danh mục nào.
 //
 // KIẾN TRÚC: chạy thẳng express router THẬT (routes/records.js) trong tiến trình Node, không mở
 // Playwright, chỉ giả lập tầng LƯU TRỮ + middleware xác thực — cùng khuôn
@@ -33,17 +36,13 @@ const TRAINER = { username: 'dt1', name: 'Cán Bộ Đào Tạo', dept: 'Hành C
 const USERS = [ADMIN, TRAINER];
 
 const RECORDS = {};
-const COLLECTIONS = ['onboardingPaths', 'trainingCourses'];
+const COLLECTIONS = ['onboardingPaths'];
 
 function resetRecords() {
   for (const key of COLLECTIONS) RECORDS[key] = [];
-  RECORDS.trainingCourses = [
-    { id: 10, name: 'Nội Quy Công Ty', category: 'Tân Binh' },
-    { id: 11, name: 'Quy Trình Kho', category: 'Tân Binh' }
-  ];
   RECORDS.onboardingPaths = [{
     id: 1, name: 'Lộ Trình Nhân Viên Kho',
-    stage1RequiredCourseIds: [10], stage2RequiredCourseIds: [11],
+    stage1Criteria: 'Nội quy công ty, an toàn lao động.', stage2Criteria: 'Quy trình kho.',
     stage3Criteria: 'Thái độ làm việc.',
     creator: TRAINER.username, creatorName: TRAINER.name
   }];
@@ -176,38 +175,39 @@ async function main() {
   const run = createRunner();
 
   try {
-    await run.run('sửa Lộ Trình Tân Binh CHỈ đổi tiêu chí Giai đoạn 3 (không đổi chương trình bắt buộc) phải THÀNH CÔNG', async () => {
+    await run.run('sửa Lộ Trình Tân Binh CHỈ đổi tiêu chí Giai đoạn 3 (không đổi nội dung Giai đoạn 1/2) phải THÀNH CÔNG', async () => {
       resetRecords();
       const res = await api('POST', '/api/records/onboardingPaths/1/edit', {
         name: 'Lộ Trình Nhân Viên Kho',
-        stage1RequiredCourseIds: [10], stage2RequiredCourseIds: [11],
+        stage1Criteria: 'Nội quy công ty, an toàn lao động.', stage2Criteria: 'Quy trình kho.',
         stage3Criteria: 'Tiêu chí đã cập nhật.'
       }, TRAINER);
       assertEqual(res.status, 200, `Phải sửa được: ${JSON.stringify(res.body)}`);
       assertEqual(res.body.item.stage3Criteria, 'Tiêu chí đã cập nhật.');
-      assertEqual(res.body.item.stage1RequiredCourseIds[0], 10, 'stage1RequiredCourseIds phải giữ nguyên/hợp lệ');
+      assertEqual(res.body.item.stage1Criteria, 'Nội quy công ty, an toàn lao động.', 'stage1Criteria phải giữ nguyên');
     });
 
-    await run.run('sửa Lộ Trình đổi SANG 1 chương trình hợp lệ khác vẫn THÀNH CÔNG (chứng minh trainingCourses thật đã được đối chiếu, không phải bỏ qua kiểm tra)', async () => {
+    await run.run('sửa Lộ Trình đổi SANG nội dung khác cho Giai đoạn 1/2 vẫn THÀNH CÔNG (không còn đối chiếu bất kỳ danh mục nào)', async () => {
       resetRecords();
       const res = await api('POST', '/api/records/onboardingPaths/1/edit', {
         name: 'Lộ Trình Nhân Viên Kho',
-        stage1RequiredCourseIds: [11], stage2RequiredCourseIds: [10],
+        stage1Criteria: 'Nội dung Giai đoạn 1 đã đổi.', stage2Criteria: 'Nội dung Giai đoạn 2 đã đổi.',
         stage3Criteria: 'x'
       }, TRAINER);
       assertEqual(res.status, 200, `Phải sửa được: ${JSON.stringify(res.body)}`);
-      assertEqual(res.body.item.stage1RequiredCourseIds[0], 11);
+      assertEqual(res.body.item.stage1Criteria, 'Nội dung Giai đoạn 1 đã đổi.');
+      assertEqual(res.body.item.stage2Criteria, 'Nội dung Giai đoạn 2 đã đổi.');
     });
 
-    await run.run('sửa Lộ Trình với 1 courseId KHÔNG có thật vẫn bị từ chối 400 (kiểm tra thật, không bỏ qua)', async () => {
+    await run.run('sửa Lộ Trình với Giai đoạn 1 để trống bị từ chối 400 (vẫn bắt buộc nhập nội dung)', async () => {
       resetRecords();
       const res = await api('POST', '/api/records/onboardingPaths/1/edit', {
         name: 'Lộ Trình Nhân Viên Kho',
-        stage1RequiredCourseIds: [999999], stage2RequiredCourseIds: [11],
+        stage1Criteria: '', stage2Criteria: 'Quy trình kho.',
         stage3Criteria: 'x'
       }, TRAINER);
       assertEqual(res.status, 400);
-      assertIncludes(res.body.error, 'không hợp lệ');
+      assertIncludes(res.body.error, 'nội dung bắt buộc cho Giai đoạn 1');
     });
 
     await run.run('người không có quyền trainingManage/admin bị từ chối 403 (gác quyền không đổi)', async () => {
