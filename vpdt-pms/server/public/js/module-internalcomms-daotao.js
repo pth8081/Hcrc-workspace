@@ -2483,7 +2483,6 @@ function renderTrainingMyRegs() {
   const pageItems = paginateList('trainingMyRegs', mine, 'renderTrainingMyRegs', 'đăng ký');
 
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Bạn chưa đăng ký lớp học nào.</td></tr>`; return; }
-  const now = new Date();
   tbody.innerHTML = pageItems.map(r => {
     const cls = DB.trainingClasses.find(c => c.id === r.classId);
     // Đợt 10 — bài test có câu hỏi Nghị Luận (ESSAY) khiến reg.result CÒN Ở "REGISTERED" ngay cả SAU KHI
@@ -2508,9 +2507,11 @@ function renderTrainingMyRegs() {
     // trình không có chỗ nào để bấm vào, chỉ thấy 1 dòng chữ khoá). Nội dung modal khác nhau theo
     // cls.mode (xem renderTrainingJoinClassModalBody()): ONLINE hiện danh sách tài liệu bắt buộc (nếu
     // có) để đánh dấu đã xem; OFFLINE hiện thông tin buổi học (địa điểm/thời gian/giảng viên/trạng thái)
-    // + hướng dẫn quét mã QR khi buổi học đã kết thúc. Bài test vẫn gác đúng như Đợt 9 (xem
-    // routes/records.js submit-test): ONLINE cần xem hết giáo trình bắt buộc + qua endTime, OFFLINE cần
-    // giảng viên bấm "Kết Thúc Lớp".
+    // + hướng dẫn quét mã QR khi buổi học đã kết thúc. Bài test gác đúng như routes/records.js
+    // submit-test: ONLINE chỉ cần xem hết giáo trình bắt buộc (nếu có) là thi được NGAY, KHÔNG còn phụ
+    // thuộc giờ kết thúc lớp (cls.endTime) — bỏ từ 10/2026 theo phản ánh người dùng (học xong rồi vẫn
+    // phải chờ tới đúng giờ lịch mới thi được, dù không liên quan gì tới việc đã học xong hay chưa).
+    // OFFLINE vẫn cần giảng viên bấm "Kết Thúc Lớp" (không đổi).
     let testHTML = '';
     if (cls && r.result === 'REGISTERED') {
       if (mySubmission) {
@@ -2532,11 +2533,7 @@ function renderTrainingMyRegs() {
         const allViewed = !requiredDocIds.length || viewedCount === requiredDocIds.length;
         testHTML += `<button data-op="openTrainingJoinClassModal" data-arg0="${r.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📚 Vào Lớp Học${requiredDocIds.length ? ` (${viewedCount}/${requiredDocIds.length})` : ''}</button>`;
         if (cls.testId != null) {
-          if (!cls.endTime) {
-            testHTML += `<div class="text-xs text-gray-400 mt-1">🧪 Lớp chưa có giờ kết thúc, chưa thể mở bài test</div>`;
-          } else if (now < new Date(cls.endTime)) {
-            testHTML += `<div class="text-xs text-gray-400 mt-1">🔒 Bài test mở lúc ${escapeHtml(cls.endTime.replace('T', ' '))}</div>`;
-          } else if (!allViewed) {
+          if (!allViewed) {
             testHTML += `<div class="text-xs text-amber-600 mt-1">📖 Cần xem hết tài liệu giáo trình trước khi thi</div>`;
           } else {
             testHTML += `<button data-op="openTakeTestModal" data-arg0="${cls.id}" class="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 mt-1">📝 Vào Làm Bài Test</button>`;
@@ -3305,17 +3302,17 @@ const autoOpenedTestForClassIds = new Set();
 // Sau khi 1+ đăng ký (lớp ONLINE) vừa được server tự đánh dấu "đã xem" 1 tài liệu bắt buộc (completedNow,
 // xem trackTrainingDocumentProgress() ở trên) — kiểm từng lớp liên quan: nếu đã xem HẾT toàn bộ tài liệu
 // bắt buộc (cls.documentIds so với reg.viewedDocumentIds MỚI NHẤT vừa cập nhật) VÀ lớp có gán bài test
-// (cls.testId) VÀ đã đủ điều kiện mở (đúng ĐIỀU KIỆN hiện có ở renderTrainingMyRegs(): có endTime + đã
-// qua endTime) VÀ học viên CHƯA có bài nộp nào (mySubmission) VÀ CHƯA từng tự mở lớp này trong phiên này
+// (cls.testId) VÀ học viên CHƯA có bài nộp nào (mySubmission) VÀ CHƯA từng tự mở lớp này trong phiên này
 // — tự động gọi openTakeTestModal() thay vì bắt học viên tự bấm nút. Chỉ tự mở TỐI ĐA 1 bài/lượt gọi
 // (đóng gói cho hiếm khi 1 tài liệu dùng chung nhiều lớp cùng hoàn thành 1 lúc, tránh dồn nhiều modal).
+// KHÔNG còn điều kiện cls.endTime (bỏ từ 10/2026, xem routes/records.js submit-test) — học xong là mở
+// ngay, không cần đợi tới giờ kết thúc lịch của lớp.
 function maybeAutoOpenTrainingTestAfterDocsCompleted(updatedRegistrations) {
   for (const reg of updatedRegistrations || []) {
     if (reg.result !== 'REGISTERED') continue; // đã có kết quả (PASSED/FAILED) rồi thì thôi, không có gì để làm bài nữa
     const cls = DB.trainingClasses.find(c => c.id === reg.classId);
     if (!cls || cls.mode !== 'ONLINE' || cls.testId == null) continue;
     if (autoOpenedTestForClassIds.has(cls.id)) continue;
-    if (!cls.endTime || new Date(cls.endTime) > new Date()) continue; // chưa tới giờ mở bài test
     const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
     const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
     const allViewed = !requiredDocIds.length || requiredDocIds.every(id => viewedIds.includes(id));
