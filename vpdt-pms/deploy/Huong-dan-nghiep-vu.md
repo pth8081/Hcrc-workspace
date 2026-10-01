@@ -3895,10 +3895,18 @@ làm được nay bị chặn:
 
 **Lớp Học (Đào Tạo)**
 - Sau khi học viên xem xong **toàn bộ tài liệu bắt buộc** của lớp (video đạt
-  ~95% thời lượng/PDF xem hết mọi trang), nếu lớp đã gán Bài Test, hệ thống
-  **tự động mở popup bài test** ngay — không cần tự tìm nút "📝 Vào Làm Bài
-  Test" nữa. Chỉ mở 1 lần/lượt xem, không lặp lại nếu học viên tự đóng hoặc
-  đã có kết quả.
+  ~95% thời lượng/PDF đạt ~95% số trang, làm tròn lên — xem chi tiết bên
+  dưới), nếu lớp đã gán Bài Test, hệ thống **tự động mở popup bài test**
+  ngay — không cần tự tìm nút "📝 Vào Làm Bài Test" nữa. Chỉ mở 1 lần/lượt
+  xem, không lặp lại nếu học viên tự đóng hoặc đã có kết quả.
+- **Tài liệu PDF bắt buộc (từ v24.56)**: xem theo kiểu **lật từng trang**
+  (nút "◀ Trang trước"/"Trang sau ▶" + chỉ báo "Trang X/N") thay vì cuộn
+  liên tục như trước — cuộn liên tục trên PDF khổ dọc (A4/Letter) từng có
+  lỗi không bao giờ báo "đã xem" dù đã đọc hết, do khung xem cố định thấp
+  hơn chiều cao trang. Đánh dấu "đã xem" 1 trang sau khi dừng lại đọc đủ
+  ~900ms (chống bấm "Trang sau" liên tục không đọc); tính hoàn thành khi đã
+  lật qua **≥ 95% tổng số trang** (làm tròn LÊN — tài liệu càng ngắn càng
+  gần đòi đủ mọi trang, tài liệu dài mới cho phép bỏ sót 1-2 trang).
 - **Bộ Câu Hỏi**: từ nay được **SỬA** dù bài test đã có người nộp, miễn không
   đổi cấu trúc chấm điểm (số câu/loại câu/điểm/đáp án đúng/số đáp án) — hệ
   thống tự so sánh câu hỏi cũ-mới, chỉ chặn (409) khi thay đổi thật sự ảnh
