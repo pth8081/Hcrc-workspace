@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**24.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.57 (2026-10-01): Đào Tạo — bài test mở ngay khi học xong giáo trình, không còn chờ giờ kết thúc lớp (ONLINE)
+
+Theo phản ánh người dùng: học xong cả video lẫn PDF bắt buộc của 1 lớp ONLINE
+rồi mà bài test vẫn không bấm vào làm được. Rà soát xác nhận KHÔNG có lỗi
+"phải học theo đúng thứ tự" nào (mọi điểm kiểm tra hoàn thành tài liệu đều so
+sánh theo TẬP HỢP `viewedDocumentIds` chứa đủ `documentIds`, không hề có kiểm
+tra thứ tự/vị trí) — lỗi thật nằm ở 1 điều kiện khác hoàn toàn không liên quan
+tới việc đã học xong hay chưa: lớp ONLINE có gán `cls.endTime` (giờ kết thúc
+lịch học) thì bài test CHỈ mở được sau khi `now >= endTime`, bất kể học viên
+đã xem hết giáo trình từ trước đó rất lâu. Đã bỏ hẳn điều kiện này ở cả 3 nơi
+cùng chặn (client lẫn server, xem `routes/records.js` `POST
+trainingClasses/:id/submit-test`, `module-internalcomms-daotao.js`
+`renderTrainingMyRegs()` + `maybeAutoOpenTrainingTestAfterDocsCompleted()`) —
+giờ bài test mở **NGAY** khi xem xong tài liệu bắt buộc (nếu lớp có gán), bất
+kể `endTime` lớp là quá khứ, tương lai, hay chưa đặt. Lớp OFFLINE không đổi
+gì (vẫn cần giảng viên bấm "Kết Thúc Lớp" — cơ chế hoàn toàn khác, dựa
+`sessionState` chứ không dựa `endTime`); quy tắc `endTime` chặn ĐĂNG KÝ MỚI
+vào lớp đã hết hạn và quy tắc chặn XOÁ tài liệu/lớp đang dùng dở cũng không
+đổi (2 việc khác, không liên quan tới quyền vào thi).
+
+Viết lại test `test-audit-round2-internalcomms-training-routes.js` cho đúng
+hành vi mới (4 kịch bản: endTime tương lai/rỗng/quá khứ, có/không giáo trình
+bắt buộc), chạy full regression toàn bộ `tests/test-*.js`, demo ảnh chứng
+minh bài test tự mở ngay sau khi hoàn thành giáo trình dù lớp có `endTime`
+30 ngày sau mới merge (theo yêu cầu người dùng "cứ merge và sau đó demo").
 
 ## v24.56 (2026-10-01): Đào Tạo — vá lỗi PDF không báo "đã học xong" + lật trang thay vì cuộn; Phân Quyền — header ngang cho bảng Sửa Nhanh
 

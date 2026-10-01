@@ -10,8 +10,9 @@
 // xác thực.
 //
 // Mỗi kịch bản gắn với ĐÚNG 1 phát hiện đã vá:
-//   #1  POST /trainingClasses/:id/submit-test — lớp ONLINE phải qua endTime mới cho nộp bài (trước đây
-//       chỉ kiểm documentIds).
+//   #1  POST /trainingClasses/:id/submit-test — lớp ONLINE CHỈ còn gác theo documentIds (đã xem hết giáo
+//       trình bắt buộc chưa), KHÔNG còn gác theo cls.endTime nữa (bỏ từ 10/2026, phản ánh người dùng: học
+//       xong rồi vẫn phải đợi đúng giờ lịch lớp mới thi được, không liên quan gì tới việc đã học xong).
 //   #6  POST /trainingClasses/:id/delete và /trainingDocuments/:id/delete — kiểm tham chiếu trước khi
 //       xoá (trước đây deleteAdminOnly() trần, xoá vô điều kiện).
 //   #7  POST /trainingDocuments/:id/track-progress — durationSeconds/pageCount (MẪU SỐ hoàn thành) ép
@@ -195,30 +196,40 @@ async function main() {
 
   try {
     // ===================================================================================
-    // #1 — submit-test ONLINE phải qua endTime
+    // #1 — submit-test ONLINE KHÔNG còn gác theo endTime, CHỈ còn gác theo documentIds
     // ===================================================================================
-    await run.run('#1 — Lớp ONLINE có endTime TƯƠNG LAI: submit-test bị chặn 409 dù đã đăng ký', async () => {
+    await run.run('#1 — Lớp ONLINE có endTime TƯƠNG LAI, KHÔNG có giáo trình bắt buộc: submit-test vẫn thành công NGAY (không chờ tới giờ kết thúc)', async () => {
       resetRecords();
-      const res = await api('POST', '/api/records/trainingClasses/900/submit-test', { answers: {} }, NV1);
-      assertEqual(res.status, 409, 'Phải bị chặn vì lớp chưa kết thúc');
-      assertIncludes(res.body.error, 'kết thúc');
-      assertEqual(RECORDS.trainingTestSubmissions.length, 0, 'Không được tạo bản ghi nộp bài nào');
-    });
-
-    await run.run('#1 — Lớp ONLINE đã qua endTime (quá khứ): submit-test hoạt động bình thường', async () => {
-      resetRecords();
-      RECORDS.trainingClasses[0].endTime = PAST;
       const res = await api('POST', '/api/records/trainingClasses/900/submit-test', { answers: { 1: 0 } }, NV1);
-      assertEqual(res.status, 200, `Phải nộp bài được: ${JSON.stringify(res.body)}`);
+      assertEqual(res.status, 200, `Phải nộp bài được ngay dù endTime tương lai: ${JSON.stringify(res.body)}`);
       assertEqual(RECORDS.trainingTestSubmissions.length, 1);
     });
 
-    await run.run('#1 — Lớp ONLINE KHÔNG có endTime: submit-test bị chặn 409 ("chưa có giờ kết thúc")', async () => {
+    await run.run('#1 — Lớp ONLINE KHÔNG có endTime (rỗng), KHÔNG có giáo trình bắt buộc: submit-test vẫn thành công bình thường', async () => {
       resetRecords();
       RECORDS.trainingClasses[0].endTime = '';
+      const res = await api('POST', '/api/records/trainingClasses/900/submit-test', { answers: { 1: 0 } }, NV1);
+      assertEqual(res.status, 200, `Phải nộp bài được dù lớp chưa có endTime: ${JSON.stringify(res.body)}`);
+      assertEqual(RECORDS.trainingTestSubmissions.length, 1);
+    });
+
+    await run.run('#1 — Lớp ONLINE có giáo trình bắt buộc CHƯA xem hết (dù endTime đã QUA KHỨ): submit-test vẫn bị chặn 409', async () => {
+      resetRecords();
+      RECORDS.trainingClasses[0].endTime = PAST;
+      RECORDS.trainingClasses[0].documentIds = [800];
       const res = await api('POST', '/api/records/trainingClasses/900/submit-test', { answers: {} }, NV1);
       assertEqual(res.status, 409);
-      assertIncludes(res.body.error, 'giờ kết thúc');
+      assertIncludes(res.body.error, 'xem hết tài liệu');
+      assertEqual(RECORDS.trainingTestSubmissions.length, 0, 'Không được tạo bản ghi nộp bài nào');
+    });
+
+    await run.run('#1 — Lớp ONLINE có giáo trình bắt buộc ĐÃ xem hết + endTime TƯƠNG LAI: submit-test vẫn thành công NGAY', async () => {
+      resetRecords();
+      RECORDS.trainingClasses[0].documentIds = [800];
+      RECORDS.trainingRegistrations[0].viewedDocumentIds = [800];
+      const res = await api('POST', '/api/records/trainingClasses/900/submit-test', { answers: { 1: 0 } }, NV1);
+      assertEqual(res.status, 200, `Phải nộp bài được ngay sau khi xem hết giáo trình, dù endTime tương lai: ${JSON.stringify(res.body)}`);
+      assertEqual(RECORDS.trainingTestSubmissions.length, 1);
     });
 
     // ===================================================================================

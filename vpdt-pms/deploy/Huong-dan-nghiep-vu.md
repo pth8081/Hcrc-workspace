@@ -3899,6 +3899,16 @@ làm được nay bị chặn:
   dưới), nếu lớp đã gán Bài Test, hệ thống **tự động mở popup bài test**
   ngay — không cần tự tìm nút "📝 Vào Làm Bài Test" nữa. Chỉ mở 1 lần/lượt
   xem, không lặp lại nếu học viên tự đóng hoặc đã có kết quả.
+- **Bài test mở NGAY sau khi học xong, không chờ giờ kết thúc lớp (từ
+  v24.57)** — lớp ONLINE trước đây còn bị chặn thêm 1 lớp điều kiện không
+  liên quan tới việc đã học xong hay chưa: nếu lớp có gán **Giờ kết thúc**
+  (`endTime`), bài test chỉ mở được sau khi tới đúng giờ đó, dù học viên đã
+  xem hết giáo trình bắt buộc từ trước đó rất lâu. Đã bỏ hẳn điều kiện này —
+  nút "📝 Vào Làm Bài Test" (thủ công) và popup tự mở đều chỉ còn phụ thuộc
+  DUY NHẤT vào việc đã xem hết tài liệu bắt buộc hay chưa, không quan tâm
+  `endTime` là quá khứ/tương lai/chưa đặt. Lớp OFFLINE không đổi gì (vẫn cần
+  giảng viên bấm "Kết Thúc Lớp" mới mở được bài test, cơ chế khác hẳn, dựa
+  trạng thái buổi học chứ không dựa giờ kết thúc lịch).
 - **Tài liệu PDF bắt buộc (từ v24.56)**: xem theo kiểu **lật từng trang**
   (nút "◀ Trang trước"/"Trang sau ▶" + chỉ báo "Trang X/N") thay vì cuộn
   liên tục như trước — cuộn liên tục trên PDF khổ dọc (A4/Letter) từng có

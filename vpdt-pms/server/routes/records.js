@@ -2099,29 +2099,21 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
       if (!reg) throw new HttpError(403, 'Bạn chưa đăng ký lớp học này nên không thể làm bài test');
 
       // Đợt 9 — "học xong mới thi", áp dụng khác nhau theo kiểu lớp: OFFLINE phải chờ giảng viên bấm
-      // "Kết Thúc Lớp" (cls.sessionState chuyển ENDED, xem endOfflineTrainingClass()) — trước đây route
-      // này KHÔNG hề kiểm tra sessionState dù comment ở routes/trainingRoster.js (mã QR) từng khẳng định
-      // có, khiến học viên quét mã QR làm bài được ngay cả khi buổi học còn đang diễn ra. ONLINE phải xem
-      // hết giáo trình bắt buộc (cls.documentIds, đánh dấu qua markTrainingDocumentViewed()) nếu lớp có
-      // gán giáo trình — lớp không gán giáo trình nào thì không có gì để gác thêm, giữ nguyên hành vi cũ
-      // (chỉ cần qua endTime).
+      // "Kết Thúc Lớp" (cls.sessionState chuyển ENDED, xem endOfflineTrainingClass()). ONLINE phải xem hết
+      // giáo trình bắt buộc (cls.documentIds, đánh dấu qua markTrainingDocumentViewed()) nếu lớp có gán
+      // giáo trình — lớp không gán giáo trình nào thì không có gì để gác thêm.
+      //
+      // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng): bản trước (từ đợt rà soát vòng 2, 9/2026) còn bắt buộc
+      // nhánh ONLINE phải có VÀ đã qua cls.endTime mới cho nộp bài — nghĩa là dù học viên đã xem xong 100%
+      // giáo trình bắt buộc (video 95% + PDF 95%), bài test vẫn bị khoá tới đúng giờ kết thúc LỊCH lớp học
+      // mới mở ra, không liên quan gì tới việc đã học xong hay chưa. Bỏ hẳn điều kiện endTime này — nhánh
+      // ONLINE giờ CHỈ còn đúng 1 điều kiện: xem hết giáo trình bắt buộc (nếu có) là được thi ngay, không
+      // cần đợi tới giờ/ngày nào trong cấu hình lớp.
       if (cls.mode === 'OFFLINE') {
         if (cls.sessionState !== 'ENDED') {
           throw new HttpError(409, 'Buổi học chưa kết thúc — giảng viên cần bấm "Kết Thúc Lớp" trước khi học viên làm bài test');
         }
       } else {
-        // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #1 cụm Truyền Thông Nội Bộ/Đào Tạo):
-        // trước đây nhánh ONLINE chỉ kiểm documentIds, KHÔNG kiểm cls.endTime — client chỉ hiện nút thi
-        // khi now >= cls.endTime (xem module-internalcomms-daotao.js), nhưng gọi thẳng route này (VD lớp
-        // ONLINE tương lai không gán giáo trình bắt buộc) vẫn được chấm ngay. Đồng bộ đúng điều kiện
-        // client: cần có cls.endTime VÀ đã qua endTime mới cho nộp bài, y hệt gate sessionState ENDED
-        // của nhánh OFFLINE ngay trên.
-        if (!cls.endTime) {
-          throw new HttpError(409, 'Lớp học chưa có giờ kết thúc — chưa thể làm bài test');
-        }
-        if (new Date() < new Date(cls.endTime)) {
-          throw new HttpError(409, 'Lớp học chưa kết thúc — cần đợi đến giờ kết thúc lớp mới được làm bài test');
-        }
         const requiredDocIds = Array.isArray(cls.documentIds) ? cls.documentIds : [];
         const viewedIds = Array.isArray(reg.viewedDocumentIds) ? reg.viewedDocumentIds : [];
         if (requiredDocIds.length && !requiredDocIds.every(id => viewedIds.includes(id))) {
