@@ -490,17 +490,34 @@
               <div>
                 <label class="block font-semibold text-gray-600 mb-1">Nội Dung Bắt Buộc Giai Đoạn 1 (Ngày 1-7)</label>
                 <textarea id="opStage1Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Hội nhập công ty, quy định nội quy, an toàn lao động, kỹ năng bán hàng cơ bản..." required></textarea>
+                <label class="block font-semibold text-gray-600 mb-1 mt-2">Tài Liệu Đào Tạo Đính Kèm (tuỳ chọn)</label>
+                <select id="opStage1DocIds" multiple class="w-full border p-1.5 rounded bg-white h-20"></select>
               </div>
               <div>
                 <label class="block font-semibold text-gray-600 mb-1">Nội Dung Bắt Buộc Giai Đoạn 2 (Ngày 8-21)</label>
                 <textarea id="opStage2Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Nghiệp vụ chuyên sâu theo vị trí, quy trình vận hành, kiểm kê..." required></textarea>
+                <label class="block font-semibold text-gray-600 mb-1 mt-2">Tài Liệu Đào Tạo Đính Kèm (tuỳ chọn)</label>
+                <select id="opStage2DocIds" multiple class="w-full border p-1.5 rounded bg-white h-20"></select>
               </div>
               <div class="md:col-span-2">
                 <label class="block font-semibold text-gray-600 mb-1">Tiêu Chí Đánh Giá Giai Đoạn 3 (Ngày 59, quản lý trực tiếp đánh giá — không có bài test)</label>
                 <textarea id="opStage3Criteria" class="w-full border p-1.5 rounded h-20" placeholder="VD: Thái độ làm việc, mức độ nắm quy trình, khả năng xử lý tình huống thực tế..."></textarea>
               </div>
+              <!-- Lớp Học Tham Chiếu (tuỳ chọn, 10/2026 — theo yêu cầu người dùng "GĐ1 link kết quả từ lớp
+                   Tân binh sang"): CHỈ trỏ vào 1 trainingClasses CÓ THẬT (không phải danh mục trainingCourses
+                   — tránh lặp lại đúng lỗi "ngập lựa chọn Nhập từ Excel" vừa vá ở trên, vì trainingClasses
+                   KHÔNG bị Nhập Kế Hoạch Đào Tạo tự đẩy thêm dòng nào). Thuần tham khảo — hiện kết quả thi
+                   thật của nhân viên ở lớp đó cho Nhân Sự xem TRƯỚC khi tự bấm "Xác Nhận GĐ1" thủ công,
+                   KHÔNG tự động xác nhận hộ, KHÔNG bắt buộc chọn. -->
+              <div class="md:col-span-2">
+                <label class="block font-semibold text-gray-600 mb-1">Lớp Học Tham Chiếu Cho Giai Đoạn 1 (tuỳ chọn)</label>
+                <select id="opLinkedClassId" class="w-full border p-1.5 rounded bg-white">
+                  <option value="">-- Không tham chiếu lớp học nào --</option>
+                </select>
+                <p class="text-[11px] text-gray-500 italic mt-1">Nếu chọn, bảng Phân Công bên dưới sẽ hiện kèm kết quả thi thật (nếu nhân viên có đăng ký đúng lớp này) ngay cạnh nút "Xác Nhận GĐ1" để Nhân Sự tham khảo — KHÔNG tự động xác nhận hộ.</p>
+              </div>
             </div>
-            <p class="text-[11px] text-gray-500 italic">Nội dung Giai đoạn 1/2/3 do Nhân Sự tự nhập tay (không gán Chương Trình/Lớp Học cụ thể nào) — Nhân Sự tự theo dõi thực tế rồi bấm "Xác Nhận" từng giai đoạn khi nhân viên đã hoàn thành.</p>
+            <p class="text-[11px] text-gray-500 italic">Nội dung Giai đoạn 1/2/3 do Nhân Sự tự nhập tay (không bắt buộc gán Chương Trình/Lớp Học cụ thể nào) — Nhân Sự tự theo dõi thực tế rồi bấm "Xác Nhận" từng giai đoạn khi nhân viên đã hoàn thành.</p>
             <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
             <div id="dynamicFieldsContainer_ONBOARDING_PATH" class="contents"></div>
             <div class="flex justify-end gap-2">

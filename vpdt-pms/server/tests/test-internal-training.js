@@ -244,19 +244,22 @@ async function main() {
     });
 
     // Đợt 8 (bắt buộc thi): lớp có gán bài test -> chấm tay bị chặn HẲN toàn hệ thống (server 409),
-    // form Kết Quả chỉ còn hiển thị 1 ghi chú, "Đạt" duy nhất đến từ tự làm bài qua đúng modal thật.
+    // form Kết Quả chỉ còn hiển thị 1 ghi chú, "Hoàn thành" duy nhất đến từ tự làm bài qua đúng modal thật.
     await run('manual grading is blocked for a class with an assigned test (UI hides the form; server rejects a bypassed call)', async () => {
       await page.evaluate((u) => { currentUser = u; }, trainer);
       const nv3RegId = await page.evaluate((id) => DB.trainingRegistrations.find((r) => r.classId === id && r.creator === 'nv3').id, onlineClassId);
       const modalHTML = await page.evaluate((id) => { openTrainingResultsModal(id); return document.getElementById('trainingResultsModalBody').innerHTML; }, onlineClassId);
       // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng): trước đây in cứng "Tự động qua bài test" cho MỌI học
       // viên kể cả chưa làm bài — nhìn như thể đã "qua" dù đang REGISTERED. Nay phải đọc đúng
-      // r.result: nv3 CHƯA làm bài ở bước này nên phải thấy ghi chú "chưa làm bài", không phải đã Đạt.
+      // r.result: nv3 CHƯA làm bài ở bước này nên phải thấy ghi chú "chưa làm bài", không phải đã Hoàn thành.
       // Soi đúng DÒNG của nv3 (không soi cả modalHTML — nv1/nv2 trong cùng lớp đã có kết quả thật từ
-      // trước, modal có "✅ Đạt"/"❌ Không đạt" của HỌ là đúng, không phải lỗi).
+      // trước, modal có "✅ Hoàn thành"/"❌ Chưa hoàn thành" của HỌ là đúng, không phải lỗi). Đợt sau
+      // (10/2026, phản ánh người dùng): đổi nhãn cột này từ "Đạt"/"Không đạt" sang "Hoàn thành"/"Chưa
+      // hoàn thành" — KHÔNG đụng sub-badge "Đạt"/"Không đạt" ở cột Trạng Thái (getTrainingRegDisplayStatus(),
+      // test riêng ở dưới file này).
       const nv3RowHTML = modalHTML.slice(modalHTML.indexOf('Học Viên Ba'), modalHTML.indexOf('Học Viên Ba') + 400);
       assert(nv3RowHTML.includes('Chưa làm bài test'), 'a not-yet-taken registration should show a pending note, not an auto-pass claim');
-      assert(!nv3RowHTML.includes('✅ Đạt') && !nv3RowHTML.includes('❌ Không đạt'), "nv3's own row has no result yet, so no Đạt/Không đạt badge should render in it");
+      assert(!nv3RowHTML.includes('✅ Hoàn thành') && !nv3RowHTML.includes('❌ Chưa hoàn thành'), "nv3's own row has no result yet, so no Hoàn thành/Chưa hoàn thành badge should render in it");
       assert(!modalHTML.includes(`trResult_${nv3RegId}`), 'no manual result <select> should be rendered for a tested class');
 
       let errMsg = null;
@@ -282,13 +285,13 @@ async function main() {
       assertEqual(result.result, 'PASSED', `expected PASSED, got ${result.result}`);
       assertEqual(result.score, 100, `expected 100%, got ${result.score}`);
       await page.evaluate((u) => { currentUser = u; }, trainer);
-      // Sau khi nv3 đã Đạt, modal Kết Quả phải phản ánh đúng kết quả thật (✅ Đạt), không còn ghi chú
-      // "chưa làm bài" nữa — xác nhận resultCell đọc SỐNG r.result thay vì in cứng 1 câu cho cả lớp.
-      // Soi đúng dòng của nv3 (các học viên khác trong lớp cũng có "✅ Đạt" từ trước, không đủ để
-      // chứng minh resultCell đọc đúng CHO NV3 nếu chỉ soi cả modalHTML).
+      // Sau khi nv3 đã Hoàn thành, modal Kết Quả phải phản ánh đúng kết quả thật (✅ Hoàn thành), không
+      // còn ghi chú "chưa làm bài" nữa — xác nhận resultCell đọc SỐNG r.result thay vì in cứng 1 câu cho
+      // cả lớp. Soi đúng dòng của nv3 (các học viên khác trong lớp cũng có "✅ Hoàn thành" từ trước,
+      // không đủ để chứng minh resultCell đọc đúng CHO NV3 nếu chỉ soi cả modalHTML).
       const modalHTML = await page.evaluate((id) => { openTrainingResultsModal(id); return document.getElementById('trainingResultsModalBody').innerHTML; }, onlineClassId);
       const nv3RowHTML = modalHTML.slice(modalHTML.indexOf('Học Viên Ba'), modalHTML.indexOf('Học Viên Ba') + 400);
-      assert(nv3RowHTML.includes('✅ Đạt'), 'the results modal should now show the real PASSED badge in nv3\'s own row');
+      assert(nv3RowHTML.includes('✅ Hoàn thành'), 'the results modal should now show the real PASSED badge in nv3\'s own row');
       assert(!nv3RowHTML.includes('Chưa làm bài test'), 'the pending note must be gone from nv3\'s row now that they have a real result');
     });
 
@@ -684,6 +687,10 @@ async function main() {
       assert(doc.fileUrl == null, 'a VIDEO document should not have a fileUrl');
       assertEqual(doc.mandatory, false, 'mandatory should default to false when the checkbox is left unchecked');
       assertEqual(doc.durationSeconds, 600, 'durationSeconds should round-trip from the required "Thời Lượng Video" field (phát hiện #7)');
+      // Thumbnail (10/2026, "Kho Tài Liệu Đào Tạo cần có bổ sung Thumbnail hiển thị minh họa") — VIDEO
+      // tự tính từ videoId ở SERVER (extractYoutubeVideoIdForThumbnail(), createValidation.js), không
+      // tin bất kỳ giá trị nào client gửi kèm.
+      assertEqual(doc.thumbnailUrl, 'https://img.youtube.com/vi/abc123XYZ/hqdefault.jpg', 'VIDEO document thumbnailUrl should be auto-derived from the videoId server-side');
 
       const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
       // Đợt (video 0.5x-1.5x + chặn tua vượt điểm đã xem xa nhất): VIDEO không còn nhúng <iframe> trực
@@ -714,6 +721,7 @@ async function main() {
       assertEqual(doc.mandatory, true, 'mandatory flag should round-trip as true when the checkbox is checked');
       assertEqual(doc.courseId, courseId1, 'courseId should round-trip on the document');
       assert(doc.fileUrl, 'an IMAGE document should still have a real fileUrl (same upload mechanism as DOCUMENT)');
+      assertEqual(doc.thumbnailUrl, '', 'an IMAGE document should not have a separate thumbnailUrl (client renders fileUrl itself as the thumbnail)');
 
       const containerHTML = await page.evaluate(() => { renderTrainingDocuments(); return document.getElementById('trainingDocumentsContainer').innerHTML; });
       assert(containerHTML.includes('<img'), 'an IMAGE document should render as a thumbnail <img>, not a download link');
@@ -1083,6 +1091,11 @@ async function main() {
       assertEqual(afterCreateCount, beforeCount + 1, 'phải tạo được tài liệu mới (chuẩn bị dữ liệu cho kịch bản Sửa)');
       editDocId = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Tài Liệu Test Sửa').id);
       const originalFileUrl = await page.evaluate((id) => DB.trainingDocuments.find((d) => d.id === id).fileUrl, editDocId);
+      // Thumbnail DOCUMENT (10/2026) là best-effort (generateDocThumbnail() vẽ trang 1 PDF bằng PDF.js) —
+      // tệp giả "%PDF-1.4 fake" ở trên KHÔNG phải PDF thật nên PDF.js không vẽ được, thumbnailUrl phải để
+      // trống (rơi về icon loại tệp) chứ KHÔNG được làm hỏng/chặn luồng tạo tài liệu.
+      const createdDoc = await page.evaluate((id) => DB.trainingDocuments.find((d) => d.id === id), editDocId);
+      assertEqual(createdDoc.thumbnailUrl, '', 'a non-parseable fake PDF must fail thumbnail generation gracefully (best-effort), not block document creation');
 
       await page.evaluate((id) => editTrainingDocument(id), editDocId);
       const docTypeDisabled = await page.evaluate(() => document.getElementById('tdDocType').disabled);

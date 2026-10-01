@@ -1675,13 +1675,18 @@ router.post('/trainingPlans/:id/delete', (req, res) => deleteAdminOnly(req, res,
 // appData để normalizeOnboardingPathFields() kiểm tra stage{1,2}RequiredCourseIds — nay Giai đoạn 1/2
 // đã đổi hẳn sang nội dung nhập tay (stage1Criteria/stage2Criteria), không còn tham chiếu
 // trainingCourses nữa nên bỏ hẳn bước đọc/gắn appData này.
+// Đợt sau (10/2026): đọc LẠI appData (getAllAppData(), toàn bộ dataset — KHÔNG lặp lại việc tự ghép
+// riêng 1 collection như trainingCourses cũ) để normalizeOnboardingPathFields() xác minh
+// stage1DocIds/stage2DocIds (trainingDocuments) và linkedClassId (trainingClasses) mới thêm — 2 tham
+// chiếu này khác hẳn bản chất courseId đã bỏ, xem chú thích đầy đủ ở lib/createValidation.js.
 router.post('/onboardingPaths/:id/edit', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('onboardingPaths', itemId, (item) =>
-      recordActions.editOnboardingPath(req.body, freshUser, item));
+      recordActions.editOnboardingPath(req.body, freshUser, item, appData));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `onboardingPaths/${req.params.id}/edit`, err);

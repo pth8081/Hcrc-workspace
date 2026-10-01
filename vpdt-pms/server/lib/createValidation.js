@@ -143,6 +143,25 @@ function isValidYoutubeUrl(value) {
   return YOUTUBE_HOSTNAMES.has(parsed.hostname.toLowerCase());
 }
 
+// Tách videoId từ 1 videoUrl ĐÃ qua isValidYoutubeUrl() (scheme/hostname đã chắc chắn hợp lệ ở trên) —
+// dùng để tự sinh thumbnailUrl phía SERVER cho trainingDocuments.docType === 'VIDEO' (10/2026, "Kho Tài
+// Liệu Đào Tạo cần có bổ sung Thumbnail hiển thị minh họa") thay vì tin thumbnailUrl client tự gửi kèm
+// (ảnh img.youtube.com/vi/<id>/... không cần tải lên, suy ra thẳng từ videoId nên không có gì để giả
+// mạo nếu TỰ TÍNH ở đây — mirror đúng luật tách videoId ở extractYoutubeVideoId(), module-internalcomms-daotao.js).
+function extractYoutubeVideoIdForThumbnail(videoUrl) {
+  try {
+    const u = new URL(videoUrl);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return u.pathname.slice(1) || null;
+    if (host.endsWith('youtube.com')) {
+      const v = u.searchParams.get('v');
+      if (v) return v;
+      if (u.pathname.startsWith('/embed/')) return u.pathname.split('/embed/')[1] || null;
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
 // Khớp đúng SUBMISSION_APPROVAL_LAYERS trong index.html — xem "LƯU Ý BẢO TRÌ" ở đầu file, 2 cài đặt
 // độc lập vì client (trình duyệt) không import chung được với server (Node).
 // "Loại Tờ Trình" giờ là dữ liệu (appData.submissionTypes, admin tự thêm/bớt ở màn Biểu Mẫu) thay vì
@@ -2305,6 +2324,12 @@ const CREATE_MODULE_CONFIGS = {
         }
         payload.durationSeconds = Math.floor(durationSeconds);
         payload.pageCount = null;
+        // Thumbnail VIDEO (10/2026) — TỰ SINH từ videoId (ảnh img.youtube.com có sẵn do Youtube cung
+        // cấp cho MỌI video công khai, không cần tải lên) — không tin bất kỳ thumbnailUrl nào client gửi
+        // kèm cho nhánh VIDEO, luôn ghi đè bằng giá trị tự tính ở đây.
+        const videoId = extractYoutubeVideoIdForThumbnail(videoUrl);
+        payload.thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
+        payload.thumbnailFileName = '';
       } else {
         if (!payload.fileUrl) {
           throw new CreateError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
@@ -2319,6 +2344,19 @@ const CREATE_MODULE_CONFIGS = {
         // pdf-lib ngay sau validateAndPrepareCreate(), xem routes/create.js builderFn) — để null ở đây,
         // KHÔNG tin payload.pageCount client tự gửi kèm (cùng lý do durationSeconds ở nhánh VIDEO).
         payload.pageCount = null;
+        // Thumbnail DOCUMENT/IMAGE (10/2026) — DOCUMENT: ảnh trang đầu PDF do client tự vẽ (PDF.js) rồi
+        // tải lên như 1 ảnh thật (generateDocThumbnail(), tái dùng nguyên hàm đã có ở module-tailieu.js,
+        // cùng khuôn Kho Tài Liệu chung) — optional (PDF hỏng/Word/Excel không vẽ trước được thì để
+        // trống, rơi về icon loại tệp ở client, xem docThumbHTML()); PHẢI qua assertUploadedFileUrl() nếu
+        // có vì đây LÀ 1 đường tải file thật, không tự tính như nhánh VIDEO ở trên. IMAGE: client dùng
+        // THẲNG fileUrl gốc làm thumbnail (không tải thêm ảnh riêng) nên luôn để trống ở đây.
+        if (docType === 'IMAGE') {
+          payload.thumbnailUrl = ''; payload.thumbnailFileName = '';
+        } else {
+          payload.thumbnailUrl = payload.thumbnailUrl ? String(payload.thumbnailUrl).trim() : '';
+          if (payload.thumbnailUrl) assertUploadedFileUrl(payload.thumbnailUrl, 'Ảnh minh hoạ tài liệu');
+          payload.thumbnailFileName = payload.thumbnailFileName ? String(payload.thumbnailFileName).trim() : '';
+        }
       }
 
       // Bắt Buộc Hoàn Thành (mandatory, Đợt 4) — CHỈ là cờ hiển thị (badge) ở phase này, KHÔNG có logic
@@ -2646,7 +2684,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo lộ trình đào tạo tân binh');
       }
-      normalizeOnboardingPathFields(payload);
+      normalizeOnboardingPathFields(payload, appData);
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'ONBOARDING_PATH');
     }
   },
@@ -4484,7 +4522,18 @@ function normalizeCareerPathFields(payload, appData) {
 // Excel") vào, khiến ô chọn của Lộ Trình Tân Binh ngập tràn lựa chọn không liên quan. Đã bỏ hẳn tham
 // chiếu courseId — Giai đoạn 1/2 giờ là NỘI DUNG NHẬP TAY (stage1Criteria/stage2Criteria, cùng khuôn
 // stage3Criteria vốn đã luôn là nhập tay), không còn gắn gì với danh mục Chương Trình nữa.
-function normalizeOnboardingPathFields(payload) {
+//
+// Đợt sau (10/2026, theo yêu cầu người dùng): thêm LẠI 2 tham chiếu TUỲ CHỌN hoàn toàn khác bản chất với
+// courseId đã bỏ ở trên, không lặp lại lỗi cũ:
+// - stage1DocIds/stage2DocIds: trỏ vào trainingDocuments (Kho Tài Liệu Đào Tạo) — collection này KHÔNG
+//   có đường nhập Excel hàng loạt nào (chỉ "Nhập Kế Hoạch Đào Tạo từ Excel" đẩy rác vào trainingCourses,
+//   xem lịch sử ở trên), nên an toàn để tham chiếu. Thuần ĐÍNH KÈM tham khảo — không ảnh hưởng gì tới
+//   điều kiện "Xác Nhận" GĐ1/GĐ2 (vẫn Nhân Sự tự quyết định thủ công như cũ).
+// - linkedClassId: trỏ vào 1 trainingClasses CÓ THẬT (không phải danh mục trainingCourses) — CHỈ dùng để
+//   hiển thị THAM KHẢO kết quả thi thật của nhân viên ở lớp đó cho Giai đoạn 1
+//   (onboardingLinkedClassResultHintHTML(), module-internalcomms-daotao.js), KHÔNG tự động tính "Đạt",
+//   KHÔNG bắt buộc chọn, KHÔNG ràng buộc điều kiện Xác Nhận.
+function normalizeOnboardingPathFields(payload, appData) {
   if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình đào tạo tân binh');
   payload.name = String(payload.name).trim();
 
@@ -4498,9 +4547,21 @@ function normalizeOnboardingPathFields(payload) {
 
   payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
 
+  const docs = appData?.trainingDocuments || [];
+  const toDocIds = (raw) => {
+    const ids = Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : [];
+    return ids.filter(id => docs.some(d => d.id === id));
+  };
+  payload.stage1DocIds = toDocIds(payload.stage1DocIds);
+  payload.stage2DocIds = toDocIds(payload.stage2DocIds);
+
+  const classes = appData?.trainingClasses || [];
+  const linkedClassId = (payload.linkedClassId === '' || payload.linkedClassId == null) ? null : Number(payload.linkedClassId);
+  payload.linkedClassId = (linkedClassId != null && classes.some(c => c.id === linkedClassId)) ? linkedClassId : null;
+
   delete payload.stage1RequiredCourseIds; delete payload.stage2RequiredCourseIds;
-  delete payload.stage1DocumentIds; delete payload.test1Id;
-  delete payload.stage2DocumentIds; delete payload.test2Id;
+  delete payload.stage1DocumentIds; delete payload.test1Id; delete payload.test2Id;
+  delete payload.stage2DocumentIds;
 }
 
 // budgetLines (Ngân Sách 2.0) — "Danh Mục" (item_category, phân loại THEO ĐỐI TƯỢNG CHI, tách biệt hẳn
@@ -4592,6 +4653,9 @@ module.exports = {
   normalizeCareerPathFields,
   normalizeRecruitmentJobFields,
   isValidYoutubeUrl,
+  // Export cho lib/recordActions.js editTrainingDocument() — tính lại thumbnailUrl khi admin sửa sang 1
+  // videoUrl khác, cùng cách tự sinh (không tin client) với lúc tạo (trainingDocuments.extraValidate ở trên).
+  extractYoutubeVideoIdForThumbnail,
   HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, HR_TASK_DEPARTMENTS,
   BUDGET_LINE_ITEM_CATEGORIES, normalizeBudgetLineCoreFields
 };
