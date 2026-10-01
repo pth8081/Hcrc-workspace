@@ -794,8 +794,8 @@ async function main() {
       async () => {
         await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('ONBOARDING'); });
         await page.fill('#opName', 'Lộ trình tân binh kiểm thử');
-        await page.selectOption('#opStage1RequiredCourseIds', ['501']);
-        await page.selectOption('#opStage2RequiredCourseIds', ['501']);
+        await page.fill('#opStage1Criteria', 'Nội dung Giai đoạn 1 kiểm thử.');
+        await page.fill('#opStage2Criteria', 'Nội dung Giai đoạn 2 kiểm thử.');
         await page.fill('#opStage3Criteria', 'Tiêu chí kiểm thử.');
         await page.evaluate(() => {
           editingOnboardingPathId = 999;
@@ -807,8 +807,8 @@ async function main() {
         await page.click('#onboardingPathForm button[data-arg1="resetOnboardingPathForm"]');
         const state = await page.evaluate(() => ({
           opName: document.getElementById('opName').value,
-          stage1Selected: [...document.getElementById('opStage1RequiredCourseIds').selectedOptions].length,
-          stage2Selected: [...document.getElementById('opStage2RequiredCourseIds').selectedOptions].length,
+          opStage1Criteria: document.getElementById('opStage1Criteria').value,
+          opStage2Criteria: document.getElementById('opStage2Criteria').value,
           opStage3Criteria: document.getElementById('opStage3Criteria').value,
           editingId: editingOnboardingPathId,
           cancelBtnHidden: document.getElementById('opCancelEditBtn').classList.contains('hidden'),
@@ -817,8 +817,8 @@ async function main() {
         }));
         assertTrue(state.confirmCalls === 1, `Form đang có dữ liệu -> phải hỏi xác nhận đúng 1 lần, thực tế ${state.confirmCalls}`);
         assertTrue(state.opName === '', 'opName phải về rỗng');
-        assertTrue(state.stage1Selected === 0, 'opStage1RequiredCourseIds phải không còn lựa chọn nào');
-        assertTrue(state.stage2Selected === 0, 'opStage2RequiredCourseIds phải không còn lựa chọn nào');
+        assertTrue(state.opStage1Criteria === '', 'opStage1Criteria phải về rỗng');
+        assertTrue(state.opStage2Criteria === '', 'opStage2Criteria phải về rỗng');
         assertTrue(state.opStage3Criteria === '', 'opStage3Criteria phải về rỗng');
         assertTrue(state.editingId === null, 'editingOnboardingPathId phải về null (thoát Sửa dở dang)');
         assertTrue(state.cancelBtnHidden === true, 'Nút "Hủy Sửa" phải ẩn lại');

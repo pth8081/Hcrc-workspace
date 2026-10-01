@@ -5473,24 +5473,29 @@ function assertCanRevokeCareerPathConfirmation(user, confirmation, allConfirmati
 // Sửa 1 Lộ Trình đã tạo (onboardingPaths, Đợt 6) — cùng khuôn editTrainingPlan() ở trên (whitelist field
 // rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO, xem normalizeOnboardingPathFields() ở
 // lib/createValidation.js).
-const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1RequiredCourseIds', 'stage2RequiredCourseIds', 'stage3Criteria'];
-function editOnboardingPath(payload, user, path, appData) {
+// LỖI ĐÃ VÁ (10/2026): Giai đoạn 1/2 trước đây whitelist stage{1,2}RequiredCourseIds (tham chiếu
+// trainingCourses) — đã đổi hẳn sang stage1Criteria/stage2Criteria (nội dung nhập tay, cùng khuôn
+// stage3Criteria) để tránh danh mục Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm quá
+// nhiều lựa chọn không liên quan vào ô chọn của Lộ Trình Tân Binh.
+const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1Criteria', 'stage2Criteria', 'stage3Criteria'];
+function editOnboardingPath(payload, user, path) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
   for (const field of ONBOARDING_PATH_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) path[field] = payload[field];
   }
-  normalizeOnboardingPathFields(path, appData);
+  normalizeOnboardingPathFields(path);
   return path;
 }
 
 // Xác nhận 1 nhân viên đã hoàn thành Giai đoạn 1 hoặc 2 của lộ trình tân binh (Đợt 8 — cùng khuôn
-// confirmCareerPathForEmployee() ở trên: NHÂN SỰ (trainingManage/admin) bấm Xác Nhận, không phải nhân
-// viên tự nộp bài nữa — nhân viên tự đăng ký + học lớp thuộc đúng chương trình yêu cầu qua module Lớp
-// Học như bình thường, "Đạt" đến từ đó). Gác tuần tự: Giai đoạn 2 chỉ xác nhận được sau khi Giai đoạn 1
-// đã CONFIRMED. Yêu cầu tất cả chương trình bắt buộc của giai đoạn đó đã PASSED ở 1 lớp CÓ gán bài test
-// (c.testId != null — xem giải thích ở confirmCareerPathForEmployee()).
-function confirmOnboardingStage(payload, user, progress, path, allRegistrations, trainingClasses) {
+// confirmCareerPathForEmployee() ở trên: NHÂN SỰ (trainingManage/admin) bấm Xác Nhận). Gác tuần tự: Giai
+// đoạn 2 chỉ xác nhận được sau khi Giai đoạn 1 đã CONFIRMED.
+// LỖI ĐÃ VÁ (10/2026): trước đây còn bắt buộc tất cả chương trình bắt buộc của giai đoạn đó đã PASSED ở
+// 1 lớp CÓ gán bài test (tham chiếu stage{1,2}RequiredCourseIds) — đã bỏ hẳn, Giai đoạn 1/2 giờ là NỘI
+// DUNG NHẬP TAY (stage1Criteria/stage2Criteria), Nhân Sự tự theo dõi thực tế rồi xác nhận, không còn
+// gắn với bất kỳ Chương Trình/Lớp Học nào nữa (cùng khuôn Giai đoạn 3 vốn đã luôn thuần nhập tay).
+function confirmOnboardingStage(payload, user, progress, path) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận giai đoạn đào tạo tân binh');
   const stage = Number(payload?.stage);
   if (stage !== 1 && stage !== 2) throw new HttpError(400, 'Giai đoạn không hợp lệ (chỉ nhận 1 hoặc 2)');
@@ -5502,14 +5507,6 @@ function confirmOnboardingStage(payload, user, progress, path, allRegistrations,
     throw new HttpError(409, 'Cần xác nhận hoàn thành Giai đoạn 1 trước khi xác nhận Giai đoạn 2');
   }
   if (!path) throw new HttpError(404, 'Không tìm thấy lộ trình đào tạo tân binh của hồ sơ này (có thể đã bị xoá)');
-  const requiredCourseIds = Array.isArray(path[`stage${stage}RequiredCourseIds`]) ? path[`stage${stage}RequiredCourseIds`] : [];
-  const classes = trainingClasses || [];
-  const missing = requiredCourseIds.filter(courseId => !(allRegistrations || []).some(r =>
-    r.creator === progress.employeeUsername && r.result === 'PASSED' &&
-    classes.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null)));
-  if (missing.length) {
-    throw new HttpError(409, `Nhân viên chưa đạt yêu cầu ở ${missing.length} chương trình bắt buộc của Giai đoạn ${stage} — chưa thể xác nhận`);
-  }
   progress[resultField] = 'CONFIRMED';
   progress[`stage${stage}ConfirmedBy`] = user.username;
   progress[`stage${stage}ConfirmedByName`] = user.name;

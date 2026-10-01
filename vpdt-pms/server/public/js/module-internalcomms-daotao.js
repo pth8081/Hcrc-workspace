@@ -3720,9 +3720,9 @@ function onboardingStageBadgeHTML(stageNum, progress, milestones) {
   const result = progress[resultField];
   const m = milestones ? milestones[`stage${stageNum}`] : null;
   let resultHTML;
-  // Đợt 8 — Giai đoạn 1/2 không còn Đạt/Không đạt cấp-cả-giai-đoạn (đó là chuyện của từng lớp/bài thi,
-  // xem computeOnboardingStageProgress()) — chỉ còn 2 trạng thái: chưa/đã được Nhân Sự CONFIRMED. Giai
-  // đoạn 3 giữ nguyên Đạt/Không đạt (đánh giá tự do, không đổi).
+  // Giai đoạn 1/2 chỉ còn 2 trạng thái: chưa/đã được Nhân Sự CONFIRMED (nội dung nhập tay, không còn
+  // gắn Chương Trình/bài thi nào — xem chú thích đầu internalSection.html). Giai đoạn 3 giữ nguyên
+  // Đạt/Không đạt (đánh giá tự do, không đổi).
   if (stageNum !== 3 && result === 'CONFIRMED') resultHTML = `<span class="text-emerald-700 font-bold">✅ Đã xác nhận</span>`;
   else if (stageNum === 3 && result === 'PASSED') resultHTML = `<span class="text-emerald-700 font-bold">✅ Đạt</span>`;
   else if (stageNum === 3 && result === 'FAILED') resultHTML = `<span class="text-red-600 font-bold">❌ Không đạt</span>`;
@@ -3738,9 +3738,6 @@ function onboardingStageBadgeHTML(stageNum, progress, milestones) {
 let editingOnboardingPathId = null;
 
 function populateOnboardingPathSelects() {
-  const s1 = document.getElementById('opStage1RequiredCourseIds'); populateCpStageCourseSelectOptions(s1);
-  const s2 = document.getElementById('opStage2RequiredCourseIds'); populateCpStageCourseSelectOptions(s2);
-
   const pathOpts = DB.onboardingPaths.slice().sort((a, b) => b.id - a.id)
     .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   const oaSel = document.getElementById('oaPathId'); if (oaSel) oaSel.innerHTML = pathOpts || `<option value="" disabled>-- Chưa có lộ trình nào, tạo ở khối trên --</option>`;
@@ -3757,8 +3754,8 @@ async function submitOnboardingPath(e) {
   }
   const payload = {
     name: document.getElementById('opName').value.trim(),
-    stage1RequiredCourseIds: [...document.getElementById('opStage1RequiredCourseIds').selectedOptions].map(o => Number(o.value)),
-    stage2RequiredCourseIds: [...document.getElementById('opStage2RequiredCourseIds').selectedOptions].map(o => Number(o.value)),
+    stage1Criteria: document.getElementById('opStage1Criteria').value.trim(),
+    stage2Criteria: document.getElementById('opStage2Criteria').value.trim(),
     stage3Criteria: document.getElementById('opStage3Criteria').value.trim(),
     customData
   };
@@ -3787,8 +3784,8 @@ function openEditOnboardingPath(id) {
   editingOnboardingPathId = id;
   populateOnboardingPathSelects();
   document.getElementById('opName').value = path.name;
-  [...document.getElementById('opStage1RequiredCourseIds').options].forEach(o => { o.selected = (path.stage1RequiredCourseIds || []).includes(Number(o.value)); });
-  [...document.getElementById('opStage2RequiredCourseIds').options].forEach(o => { o.selected = (path.stage2RequiredCourseIds || []).includes(Number(o.value)); });
+  document.getElementById('opStage1Criteria').value = path.stage1Criteria || '';
+  document.getElementById('opStage2Criteria').value = path.stage2Criteria || '';
   document.getElementById('opStage3Criteria').value = path.stage3Criteria || '';
   document.getElementById('opSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('opCancelEditBtn').classList.remove('hidden');
@@ -3824,46 +3821,33 @@ function renderOnboardingPathsTable() {
   if (!tbody) return;
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lộ trình đào tạo tân binh nào.</td></tr>`; return; }
   const canManage = canManageTrainingLocal(currentUser);
-  const courseNamesHTML = (courseIds) => (courseIds || []).map(id => {
-    const c = DB.trainingCourses.find(x => x.id === id);
-    return c ? escapeHtml(c.name) : `<span class="text-red-500 italic">(chương trình đã xoá)</span>`;
-  }).join(', ') || `<span class="text-gray-400 italic">(chưa chọn)</span>`;
+  const criteriaCellHTML = (text) => text
+    ? `<div class="max-w-xs truncate" title="${escapeHtml(text)}">${escapeHtml(text)}</div>`
+    : `<span class="text-gray-400 italic">(chưa nhập)</span>`;
   tbody.innerHTML = pageItems.map(p => {
     const actions = canManage ? `
       <button data-op="openEditOnboardingPath" data-arg0="${p.id}" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
       ${currentUser.perms?.admin ? `<button data-op="deleteOnboardingPath" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}` : '';
     return `<tr class="hover:bg-gray-50">
       <td class="border p-2 font-bold">${escapeHtml(p.name)}</td>
-      <td class="border p-2">${courseNamesHTML(p.stage1RequiredCourseIds)}</td>
-      <td class="border p-2">${courseNamesHTML(p.stage2RequiredCourseIds)}</td>
+      <td class="border p-2">${criteriaCellHTML(p.stage1Criteria)}</td>
+      <td class="border p-2">${criteriaCellHTML(p.stage2Criteria)}</td>
       <td class="border p-2 max-w-xs truncate" title="${escapeHtml(p.stage3Criteria || '')}">${escapeHtml(p.stage3Criteria || '(chưa nhập)')}</td>
       <td class="border p-2 text-center whitespace-nowrap">${actions}</td>
     </tr>`;
   }).join('');
 }
 
-// Đợt 8 — % hoàn thành chương trình bắt buộc của Giai đoạn 1/2 cho ĐÚNG 1 nhân viên (progress) trên 1
-// lộ trình — cùng công thức "Đạt = có 1 trainingRegistrations PASSED ở 1 lớp thuộc chương trình CÓ gán
-// bài test" như computeCareerPathStageStatuses() (mirror ĐÚNG luật gác ở confirmOnboardingStage(),
-// lib/recordActions.js).
-function computeOnboardingStageProgress(progress, path, stageNum) {
-  const requiredCourseIds = Array.isArray(path?.[`stage${stageNum}RequiredCourseIds`]) ? path[`stage${stageNum}RequiredCourseIds`] : [];
-  const done = requiredCourseIds.filter(courseId => DB.trainingRegistrations.some(r =>
-    r.creator === progress.employeeUsername && r.result === 'PASSED' &&
-    DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null))).length;
-  return { total: requiredCourseIds.length, done };
-}
-
-// Ô "Xác Nhận" Giai đoạn 1/2 trong bảng Phân Công (Khối 2, chỉ Nhân Sự canManage nhìn thấy) — % gợi ý +
-// 1 nút Xác Nhận LUÔN bấm được (server mới chốt điều kiện thật, xem confirmOnboardingStageAction()),
-// rỗng nếu giai đoạn đã CONFIRMED hoặc đang bị khoá tuần tự (Giai đoạn 2 cần Giai đoạn 1 xong trước).
+// Ô "Xác Nhận" Giai đoạn 1/2 trong bảng Phân Công (Khối 2, chỉ Nhân Sự canManage nhìn thấy) — Giai đoạn
+// 1/2 giờ là nội dung NHẬP TAY (không còn gắn Chương Trình/kết quả thi ở Lớp Học, xem chú thích ở đầu
+// internalSection.html), nên không còn gì để tự tính % — chỉ còn 1 nút Xác Nhận thuần tuý Nhân Sự tự
+// quyết định, rỗng nếu giai đoạn đã CONFIRMED hoặc đang bị khoá tuần tự (Giai đoạn 2 cần Giai đoạn 1
+// xong trước).
 function onboardingStageConfirmCellHTML(p, path, stageNum, canManage) {
   if (!canManage) return '';
   if (p[`stage${stageNum}Result`] === 'CONFIRMED') return '';
   if (stageNum === 2 && p.stage1Result !== 'CONFIRMED') return '';
-  const { done, total } = computeOnboardingStageProgress(p, path, stageNum);
-  const suggest = total > 0 && done >= total ? ' <span class="text-emerald-600 font-bold">✅</span>' : '';
-  return `<div class="mt-1"><span class="text-[10px] text-gray-500">${done}/${total} CT${suggest}</span><br><button data-op="confirmOnboardingStageAction" data-arg0="${p.id}" data-arg1="${stageNum}" class="mt-0.5 bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Xác Nhận GĐ${stageNum}</button></div>`;
+  return `<div class="mt-1"><button data-op="confirmOnboardingStageAction" data-arg0="${p.id}" data-arg1="${stageNum}" class="bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Xác Nhận GĐ${stageNum}</button></div>`;
 }
 
 // ---- Phân Công (Khối 2) ----
@@ -3957,26 +3941,22 @@ function renderOnboardingProgressTable() {
 
 // ---- Lộ Trình Tân Binh Của Tôi (Khối 3) ----
 
-// Đợt 8 — hiển thị danh sách CHƯƠNG TRÌNH HỌC bắt buộc của 1 giai đoạn cho nhân viên xem, kèm dấu đã Đạt
-// hay chưa (dựa đúng công thức computeOnboardingStageProgress()) — thay hẳn khối tài liệu/nút vào làm
-// bài test cũ (đã bỏ, xem giải thích ở computeOnboardingStageProgress()).
-function onboardingStageCoursesHTML(path, stageNum) {
-  const courseIds = Array.isArray(path?.[`stage${stageNum}RequiredCourseIds`]) ? path[`stage${stageNum}RequiredCourseIds`] : [];
-  if (!courseIds.length) return '<div class="text-xs text-gray-400 italic">Chưa cấu hình chương trình.</div>';
-  return courseIds.map(courseId => {
-    const course = DB.trainingCourses.find(c => c.id === courseId);
-    const passed = DB.trainingRegistrations.some(r => r.creator === currentUser.username && r.result === 'PASSED' &&
-      DB.trainingClasses.some(c => c.id === r.classId && c.courseId === courseId && c.testId != null));
-    return `<div class="text-xs flex items-center gap-1">${passed ? '✅' : '⬜'} ${course ? escapeHtml(course.name) : '<span class="text-red-500 italic">(chương trình đã xoá)</span>'}</div>`;
-  }).join('');
+// LỖI ĐÃ VÁ (10/2026) — trước đây hiển thị danh sách Chương Trình Học bắt buộc kèm dấu Đạt/chưa Đạt dựa
+// theo kết quả thi ở Lớp Học (xem lịch sử ở chú thích đầu internalSection.html). Giai đoạn 1/2 giờ là
+// nội dung NHẬP TAY thuần tuý (path.stage1Criteria/stage2Criteria), không còn gắn Chương Trình/Lớp Học
+// nào — chỉ còn hiển thị ĐÚNG nội dung đó, Nhân Sự tự theo dõi thực tế rồi xác nhận.
+function onboardingStageCriteriaHTML(criteria) {
+  return criteria
+    ? `<div class="text-xs text-gray-700 whitespace-pre-line">${escapeHtml(criteria)}</div>`
+    : '<div class="text-xs text-gray-400 italic">Chưa nhập nội dung.</div>';
 }
 
 function renderMyOnboardingCardHTML(p) {
   const path = DB.onboardingPaths.find(x => x.id === p.pathId);
   const m = computeOnboardingMilestones(p);
-  const stage1Courses = onboardingStageCoursesHTML(path, 1);
-  const stage2Courses = onboardingStageCoursesHTML(path, 2);
-  const stageHint = `<div class="text-xs text-gray-500 italic">Đăng ký + học các lớp thuộc chương trình trên ở tab "Lớp Học" (lớp có bài test) — hoàn thành hết sẽ chờ Nhân Sự xác nhận.</div>`;
+  const stage1Content = onboardingStageCriteriaHTML(path?.stage1Criteria);
+  const stage2Content = onboardingStageCriteriaHTML(path?.stage2Criteria);
+  const stageHint = `<div class="text-xs text-gray-500 italic">Hoàn thành nội dung trên trong thực tế — Nhân Sự sẽ xác nhận khi đã đủ.</div>`;
 
   const stage1Note = p.stage1Result === 'CONFIRMED'
     ? `<div class="text-xs text-emerald-700 font-bold">✅ Đã được Nhân Sự xác nhận hoàn thành</div>`
@@ -4011,12 +3991,12 @@ function renderMyOnboardingCardHTML(p) {
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div class="border rounded p-2 space-y-2">
         <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 1 (Ngày 1-7) ${onboardingStageBadgeHTML(1, p, m)}</div>
-        <div class="space-y-1">${stage1Courses}</div>
+        ${stage1Content}
         <div>${stage1Note}</div>
       </div>
       <div class="border rounded p-2 space-y-2">
         <div class="font-bold text-xs text-gray-700 flex justify-between items-center">Giai Đoạn 2 (Ngày 8-21) ${onboardingStageBadgeHTML(2, p, m)}</div>
-        <div class="space-y-1">${stage2Courses}</div>
+        ${stage2Content}
         <div>${stage2Note}</div>
       </div>
       <div class="border rounded p-2 space-y-2">

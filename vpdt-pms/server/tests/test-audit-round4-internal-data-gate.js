@@ -73,7 +73,7 @@ function resetRecords() {
   RECORDS.trainingPlans = [{ id: 11, month: '2026-10', courseId: 6, targetDept: 'Kinh Doanh', creator: TRAINER.username, dept: 'Hành Chính' }];
   RECORDS.careerPaths = [{ id: 12, code: 'LT-001', name: 'Lộ trình bán hàng', stages: [{ name: 'Cấp 1', requiredCourseIds: [6] }], creator: TRAINER.username, dept: 'Hành Chính' }];
   RECORDS.careerPathConfirmations = [{ id: 13, pathId: 12, username: NV_TAT_MODULE.username, stageIndex: 0, dept: 'Kinh Doanh' }];
-  RECORDS.onboardingPaths = [{ id: 14, code: 'HN-001', name: 'Tân binh KD', stage1RequiredCourseIds: [6], stage2RequiredCourseIds: [], creator: TRAINER.username, dept: 'Hành Chính' }];
+  RECORDS.onboardingPaths = [{ id: 14, code: 'HN-001', name: 'Tân binh KD', stage1Criteria: 'Hội nhập công ty.', stage2Criteria: 'Nghiệp vụ chuyên sâu.', creator: TRAINER.username, dept: 'Hành Chính' }];
   RECORDS.onboardingProgress = [{ id: 15, pathId: 14, employeeUsername: NV_TAT_MODULE.username, employeeName: NV_TAT_MODULE.name, dept: 'Kinh Doanh' }];
   RECORDS.hrFeedback = [{ id: 16, creator: NV_TAT_MODULE.username, content: 'Câu hỏi riêng tư', dept: 'Kinh Doanh' }];
 }
@@ -298,14 +298,15 @@ async function main() {
       assertEqual(RECORDS.trainingTests.length, 0);
     });
 
-    await run.run('Fix 2 — xoá CHƯƠNG TRÌNH đang được lớp học/kế hoạch/lộ trình dùng -> 409, nêu đủ nơi tham chiếu', async () => {
+    await run.run('Fix 2 — xoá CHƯƠNG TRÌNH đang được lớp học/kế hoạch/lộ trình thăng tiến dùng -> 409, nêu đủ nơi tham chiếu', async () => {
       resetRecords();
       const res = await api('POST', '/api/records/trainingCourses/6/delete', {}, ADMIN);
       assertEqual(res.status, 409);
       assertIncludes(res.body.error, 'lớp học');
       assertIncludes(res.body.error, 'kế hoạch đào tạo');
       assertIncludes(res.body.error, 'lộ trình thăng tiến');
-      assertIncludes(res.body.error, 'lộ trình đào tạo tân binh');
+      // LỖI ĐÃ VÁ (10/2026): onboardingPaths KHÔNG còn tham chiếu trainingCourses nữa (Giai đoạn 1/2 đổi
+      // sang nội dung nhập tay) nên thông báo này không còn nhắc "lộ trình đào tạo tân binh".
       assertEqual(RECORDS.trainingCourses.length, 1, 'Chương trình phải còn nguyên');
     });
 

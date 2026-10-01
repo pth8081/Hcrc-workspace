@@ -1,10 +1,15 @@
 // tests/test-onboarding.js — Đào Tạo Tân Binh (onboardingPaths + onboardingProgress).
 // Tách file riêng khỏi test-internal-training.js/test-training-plans.js/test-career-paths.js (cùng lý
 // do các Đợt trước tách riêng: đây là 1 khối tính năng đủ lớn — catalog Lộ Trình + Phân Công + Giai đoạn
-// 1/2 (Đợt 8: chọn CHƯƠNG TRÌNH HỌC bắt buộc, giống hệt careerPaths.stages[].requiredCourseIds — "Đạt"
-// đến từ tự đăng ký + học lớp CÓ gán bài test, Nhân Sự xác nhận từng giai đoạn qua confirm-stage, KHÔNG
-// còn là 1 bài test rời không gắn lớp học như trước Đợt 8) + đánh giá thủ công (Giai đoạn 3, gác theo
-// dept, KHÔNG đổi) + cấp Chứng Chỉ Hoàn Thành PDF.
+// 1/2 + đánh giá thủ công (Giai đoạn 3, gác theo dept, KHÔNG đổi) + cấp Chứng Chỉ Hoàn Thành PDF.
+//
+// LỖI ĐÃ VÁ (10/2026): Giai đoạn 1/2 trước đây (Đợt 8) bắt buộc chọn CHƯƠNG TRÌNH HỌC (tham chiếu
+// trainingCourses, giống hệt careerPaths.stages[].requiredCourseIds — "Đạt" đến từ tự đăng ký + học lớp
+// CÓ gán bài test, Nhân Sự xác nhận qua confirm-stage) — nhưng danh mục Chương Trình bị "Nhập Kế Hoạch
+// Đào Tạo từ Excel" tự đẩy thêm rất nhiều lựa chọn không liên quan vào ô chọn. Đã bỏ hẳn tham chiếu
+// courseId — Giai đoạn 1/2 giờ là NỘI DUNG NHẬP TAY (stage1Criteria/stage2Criteria, cùng khuôn
+// stage3Criteria vốn đã luôn nhập tay), Nhân Sự tự theo dõi thực tế rồi xác nhận qua confirm-stage,
+// không còn gắn với trainingClasses/trainingRegistrations/trainingCourses nào nữa.
 //
 // PHẠM VI: server thật không chạy được trong sandbox này (không có SQL Server) — mọi kịch bản dưới đây
 // chạy qua _mock-backend.js (mirror lib/createValidation.js CREATE_MODULE_CONFIGS.onboardingPaths/
@@ -64,75 +69,35 @@ async function main() {
       await page.evaluate((u) => { currentUser = u; }, hr);
     });
 
-    // ===================== Chuẩn bị dữ liệu: 1 bài test + 2 Chương Trình + lớp học =====================
+    // ===================== Lộ Trình: nội dung nhập tay (stage1Criteria/stage2Criteria/stage3Criteria) =====================
 
-    // Đợt 8 — mỗi lớp PHẢI gán bài test (setTrainingRegistrationResult() chặn chấm tay khi lớp có test,
-    // confirmOnboardingStage() chỉ tính "Đạt" khi c.testId != null) — dùng CHUNG 1 bài test 1 câu (đúng
-    // khuôn Ngân Hàng Câu Hỏi tái sử dụng nhiều lớp, cùng tinh thần test-career-paths.js).
-    let course1Id = null, course2Id = null, class1Id = null, class2Id = null;
-    await run('seed 1 trainingTests + 2 trainingCourses + 2 trainingClasses (mỗi lớp gán 1 chương trình + bài test) to build stages against', async () => {
-      const ids = await page.evaluate(async () => {
-        const test = (await callCreateAction('trainingTests', {
-          title: 'Test Chương Trình', category: '',
-          questions: [{ text: 'Câu hỏi duy nhất', type: 'SINGLE', options: [{ text: 'Đáp án đúng' }, { text: 'Đáp án sai' }], correctOptionIds: [1] }]
-        })).item;
-        DB.trainingTests.push(test);
-        const course1 = (await callCreateAction('trainingCourses', { name: 'Nội Quy Công Ty', category: 'Nghiệp vụ' })).item;
-        const course2 = (await callCreateAction('trainingCourses', { name: 'Quy Trình Kho', category: 'Nghiệp vụ' })).item;
-        DB.trainingCourses.push(course1, course2);
-        const mkClass = (title, courseId) => callCreateAction('trainingClasses', {
-          category: 'Nghiệp vụ', title, startTime: '2026-01-10T08:00', courseId, testId: test.id, passScore: 60
-        });
-        const c1 = (await mkClass('Nội Quy Công Ty - Lớp 1', course1.id)).item;
-        const c2 = (await mkClass('Quy Trình Kho - Lớp 1', course2.id)).item;
-        DB.trainingClasses.push(c1, c2);
-        return { course1: course1.id, course2: course2.id, c1: c1.id, c2: c2.id };
-      });
-      course1Id = ids.course1; course2Id = ids.course2; class1Id = ids.c1; class2Id = ids.c2;
-    });
-
-    // Đăng ký + tự làm bài qua ĐÚNG modal thật (openTakeTestModal/ttTakeSelectOption/ttTakeGoNext) —
-    // chấm tay (set-result) giờ bị chặn khi lớp có testId, cùng khuôn test-career-paths.js.
-    async function registerAndPassClass(classId) {
-      await page.evaluate((id) => registerForTrainingClass(id), classId);
-      await page.evaluate((id) => openTakeTestModal(id), classId);
-      await page.evaluate(async () => {
-        const total = ttTakeQuestions.length;
-        for (let i = 0; i < total; i++) {
-          const q = ttTakeQuestions[ttTakeIndex];
-          q.correctOptionIds.forEach((optId) => ttTakeSelectOption(optId, true));
-          await ttTakeGoNext();
-        }
-      });
-      await page.waitForFunction(() => document.getElementById('trainingTakeTestModal').classList.contains('hidden'));
-    }
-
-    await run('a stage missing requiredCourseIds is rejected server-side', async () => {
+    await run('a stage missing stage1Criteria/stage2Criteria text is rejected server-side', async () => {
       let errMsg = null;
       await page.evaluate(async () => {
-        try { await callCreateAction('onboardingPaths', { name: 'Lộ Trình Thiếu Chương Trình', stage1RequiredCourseIds: [], stage2RequiredCourseIds: [1] }); }
+        try { await callCreateAction('onboardingPaths', { name: 'Lộ Trình Thiếu Nội Dung', stage1Criteria: '', stage2Criteria: 'Có nội dung' }); }
         catch (err) { window.__lastCreateErr = err.message; }
       });
       errMsg = await page.evaluate(() => window.__lastCreateErr);
-      assert(errMsg && errMsg.includes('chương trình học bắt buộc cho Giai đoạn 1'), `expected a missing-course error, got: ${errMsg}`);
+      assert(errMsg && errMsg.includes('nội dung bắt buộc cho Giai đoạn 1'), `expected a missing-criteria error, got: ${errMsg}`);
     });
 
     let pathId = null;
     await run('trainingManage creates a full onboardingPaths entry via the real form (submitOnboardingPath)', async () => {
-      await page.evaluate((ids) => {
+      await page.evaluate(() => {
         window.__alerts.length = 0;
         document.getElementById('opName').value = 'Lộ Trình Nhân Viên Kho';
         populateOnboardingPathSelects();
-        [...document.getElementById('opStage1RequiredCourseIds').options].forEach((o) => { o.selected = Number(o.value) === ids.course1; });
-        [...document.getElementById('opStage2RequiredCourseIds').options].forEach((o) => { o.selected = Number(o.value) === ids.course2; });
+        document.getElementById('opStage1Criteria').value = 'Hội nhập công ty, nội quy, an toàn lao động.';
+        document.getElementById('opStage2Criteria').value = 'Quy trình kho, nghiệp vụ chuyên sâu.';
         document.getElementById('opStage3Criteria').value = 'Thái độ làm việc, tuân thủ quy trình kho.';
-      }, { course1: course1Id, course2: course2Id });
+      });
       await page.evaluate(() => submitOnboardingPath({ preventDefault() {}, target: { reset() {} } }));
       const paths = await page.evaluate(() => DB.onboardingPaths);
       assertEqual(paths.length, 1, 'expected exactly 1 onboarding path');
       pathId = paths[0].id;
-      assertEqual(paths[0].stage1RequiredCourseIds[0], course1Id, 'stage1RequiredCourseIds mismatch');
-      assertEqual(paths[0].stage2RequiredCourseIds[0], course2Id, 'stage2RequiredCourseIds mismatch');
+      assertEqual(paths[0].stage1Criteria, 'Hội nhập công ty, nội quy, an toàn lao động.', 'stage1Criteria mismatch');
+      assertEqual(paths[0].stage2Criteria, 'Quy trình kho, nghiệp vụ chuyên sâu.', 'stage2Criteria mismatch');
+      assert(!('stage1RequiredCourseIds' in paths[0]), 'stage1RequiredCourseIds should no longer exist on onboardingPaths');
       const alerts = await page.evaluate(() => window.__alerts.slice());
       assert(alerts.some((a) => a.includes('Đã tạo lộ trình đào tạo tân binh')), `expected success alert, got ${JSON.stringify(alerts)}`);
     });
@@ -143,7 +108,7 @@ async function main() {
       await page.evaluate(() => submitOnboardingPath({ preventDefault() {}, target: { reset() {} } }));
       const path = await page.evaluate((id) => DB.onboardingPaths.find((p) => p.id === id), pathId);
       assertEqual(path.stage3Criteria, 'Tiêu chí đã cập nhật.', 'stage3Criteria should be updated');
-      assertEqual(path.stage1RequiredCourseIds[0], course1Id, 'unrelated field (stage1RequiredCourseIds) should be preserved after a partial edit');
+      assertEqual(path.stage1Criteria, 'Hội nhập công ty, nội quy, an toàn lao động.', 'unrelated field (stage1Criteria) should be preserved after a partial edit');
     });
 
     await run('only Admin sees the "Xóa" button for onboardingPaths, not a trainingManage-only user', async () => {
@@ -243,19 +208,9 @@ async function main() {
       await page.evaluate((u) => { currentUser = u; }, hr);
     });
 
-    // ===================== Luồng tân binh: học lớp GĐ1 -> Đạt -> HR xác nhận -> mở khoá GĐ2 -> Đạt -> xác nhận =====================
+    // ===================== Luồng tân binh: Giai đoạn 1/2 nội dung nhập tay -> HR tự theo dõi thực tế rồi xác nhận =====================
 
-    await run('confirm-stage is blocked while the required course (Nội Quy Công Ty) has no PASSED registration yet', async () => {
-      let errMsg = null;
-      await page.evaluate(async (pid) => {
-        try { await callRecordAction('onboardingProgress', pid, 'confirm-stage', { stage: 1 }); }
-        catch (err) { window.__lastCreateErr = err.message; }
-      }, progressId);
-      errMsg = await page.evaluate(() => window.__lastCreateErr);
-      assert(errMsg && errMsg.includes('chưa đạt yêu cầu'), `expected a missing-course error, got: ${errMsg}`);
-    });
-
-    await run('confirm-stage for Stage 2 before Stage 1 is confirmed is rejected regardless of course completion (sequential gate)', async () => {
+    await run('confirm-stage for Stage 2 before Stage 1 is confirmed is rejected (sequential gate)', async () => {
       let errMsg = null;
       await page.evaluate(async (pid) => {
         try { await callRecordAction('onboardingProgress', pid, 'confirm-stage', { stage: 2 }); }
@@ -277,16 +232,7 @@ async function main() {
       await page.evaluate((u) => { currentUser = u; }, hr);
     });
 
-    await run('staff.it registers for + passes the Stage 1 class (Nội Quy Công Ty) via the real test-taking modal', async () => {
-      await page.evaluate((u) => { currentUser = u; }, staffIt);
-      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
-      await registerAndPassClass(class1Id);
-      const reg = await page.evaluate((cid) => DB.trainingRegistrations.find((r) => r.classId === cid && r.creator === 'staff.it'), class1Id);
-      assertEqual(reg.result, 'PASSED', 'registration should be PASSED');
-      await page.evaluate((u) => { currentUser = u; }, hr);
-    });
-
-    await run('HR confirms Stage 1 now that the required course is PASSED, unlocking Stage 2', async () => {
+    await run('HR confirms Stage 1 after tracking the hand-entered criteria in real life, unlocking Stage 2', async () => {
       const result = await page.evaluate(async (pid) => callRecordAction('onboardingProgress', pid, 'confirm-stage', { stage: 1 }), progressId);
       const updated = result.item;
       assertEqual(updated.stage1Result, 'CONFIRMED', 'stage1Result should be CONFIRMED');
@@ -305,21 +251,7 @@ async function main() {
       assert(errMsg && errMsg.includes('đã được xác nhận hoàn thành từ trước'), `expected an already-confirmed error, got: ${errMsg}`);
     });
 
-    await run('Stage 2 confirm still fails on its own course requirement (Quy Trình Kho not passed yet)', async () => {
-      let errMsg = null;
-      await page.evaluate(async (pid) => {
-        try { await callRecordAction('onboardingProgress', pid, 'confirm-stage', { stage: 2 }); }
-        catch (err) { window.__lastCreateErr = err.message; }
-      }, progressId);
-      errMsg = await page.evaluate(() => window.__lastCreateErr);
-      assert(errMsg && errMsg.includes('chưa đạt yêu cầu'), `expected a missing-course error (not a sequential-order error) for stage 2, got: ${errMsg}`);
-    });
-
-    await run('staff.it passes the Stage 2 class (Quy Trình Kho), then HR confirms Stage 2', async () => {
-      await page.evaluate((u) => { currentUser = u; }, staffIt);
-      await registerAndPassClass(class2Id);
-      await page.evaluate((u) => { currentUser = u; }, hr);
-
+    await run('HR confirms Stage 2 after tracking the hand-entered criteria in real life (no course/test dependency)', async () => {
       const result = await page.evaluate(async (pid) => callRecordAction('onboardingProgress', pid, 'confirm-stage', { stage: 2 }), progressId);
       const updated = result.item;
       assertEqual(updated.stage2Result, 'CONFIRMED', 'stage2Result should be CONFIRMED');

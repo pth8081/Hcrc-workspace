@@ -2625,16 +2625,18 @@ const CREATE_MODULE_CONFIGS = {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_PLAN');
     }
   },
-  // Đào Tạo Tân Binh (Đợt 8 — đổi Giai đoạn 1/2 sang cùng khuôn Lộ Trình Thăng Tiến) — "Lộ Trình"
-  // (onboardingPaths) là 1 catalog TÁI SỬ DỤNG được cho nhiều nhân viên mới khác nhau (tạo 1 lần, gán lại
-  // nhiều lần qua onboardingProgress.pathId bên dưới) — KHÔNG phải hồ sơ theo từng nhân viên. Giai đoạn
-  // 1/2 mỗi giai đoạn chọn 1+ CHƯƠNG TRÌNH HỌC bắt buộc (stage1RequiredCourseIds/stage2RequiredCourseIds
-  // — trỏ vào trainingCourses, giống hệt careerPaths.stages[].requiredCourseIds): nhân viên phải tự đăng
-  // ký + học lớp thuộc đúng chương trình đó, lớp BẮT BUỘC có gán bài test (setTrainingRegistrationResult()
-  // ở lib/recordActions.js chặn chấm tay khi lớp có test) nên "Đạt" chỉ đến từ tự làm bài + tự động chấm.
-  // Giai đoạn 3 KHÔNG đổi — vẫn là tiêu chí đánh giá dạng văn bản tự do (stage3Criteria) để quản lý trực
-  // tiếp (onboardingEvaluate) chấm cảm quan, không gắn chương trình/bài test nào. Quản lý (tạo/sửa/xoá)
-  // CHỈ trainingManage — cùng tinh thần "danh mục dùng chung toàn công ty" như trainingCourses/trainingPlans.
+  // Đào Tạo Tân Binh — "Lộ Trình" (onboardingPaths) là 1 catalog TÁI SỬ DỤNG được cho nhiều nhân viên mới
+  // khác nhau (tạo 1 lần, gán lại nhiều lần qua onboardingProgress.pathId bên dưới) — KHÔNG phải hồ sơ
+  // theo từng nhân viên.
+  // LỖI ĐÃ VÁ (10/2026): Giai đoạn 1/2 trước đây (Đợt 8) mỗi giai đoạn chọn 1+ CHƯƠNG TRÌNH HỌC bắt buộc
+  // (stage1RequiredCourseIds/stage2RequiredCourseIds — trỏ vào trainingCourses, giống hệt
+  // careerPaths.stages[].requiredCourseIds) nhưng danh mục Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ
+  // Excel" tự đẩy thêm rất nhiều lựa chọn không liên quan (category 'Nhập từ Excel') vào ô chọn. Đã bỏ
+  // hẳn tham chiếu courseId — cả Giai đoạn 1/2/3 giờ đều là NỘI DUNG NHẬP TAY (stage1Criteria/
+  // stage2Criteria/stage3Criteria), Nhân Sự/quản lý trực tiếp tự theo dõi thực tế rồi xác nhận/đánh giá
+  // cảm quan, không còn gắn với trainingClasses/trainingRegistrations/trainingCourses nào nữa. Quản lý
+  // (tạo/sửa/xoá) CHỈ trainingManage — cùng tinh thần "danh mục dùng chung toàn công ty" như
+  // trainingCourses/trainingPlans.
   onboardingPaths: {
     dbKey: 'onboardingPaths',
     forceOwnDept: true, // không có khái niệm phòng ban riêng (danh mục dùng chung toàn công ty)
@@ -2644,7 +2646,7 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền tạo lộ trình đào tạo tân binh');
       }
-      normalizeOnboardingPathFields(payload, appData);
+      normalizeOnboardingPathFields(payload);
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'ONBOARDING_PATH');
     }
   },
@@ -4475,28 +4477,28 @@ function normalizeCareerPathFields(payload, appData) {
 
 // Chuẩn hoá + kiểm tra các field của 1 Lộ Trình Đào Tạo Tân Binh (onboardingPaths) — dùng CHUNG cho cả
 // TẠO (extraValidate ở trên) LẪN SỬA (editOnboardingPath(), lib/recordActions.js), cùng lý do tách riêng
-// như normalizeTrainingPlanFields ở trên. Đợt 8 — Giai đoạn 1/2 đổi từ (tài liệu + 1 bài test rời, không
-// gắn lớp học) sang chọn CHƯƠNG TRÌNH HỌC bắt buộc (giống hệt careerPaths.stages[].requiredCourseIds) —
-// "Đạt" 1 chương trình = có 1 trainingRegistrations PASSED ở 1 lớp thuộc đúng chương trình đó (xem
-// confirmOnboardingStage(), lib/recordActions.js) — field cũ stage1DocumentIds/test1Id/stage2DocumentIds/
-// test2Id bỏ hẳn, không giữ tương thích ngược (tính năng chưa phát hành cho người dùng thật).
-function normalizeOnboardingPathFields(payload, appData) {
+// như normalizeTrainingPlanFields ở trên.
+// LỖI ĐÃ VÁ (10/2026, phản ánh người dùng): Giai đoạn 1/2 trước đây bắt buộc chọn "Chương Trình"
+// (trainingCourses — dùng CHUNG với Kế Hoạch Đào Tạo/Lớp Học/Lộ Trình Thăng Tiến), nhưng danh mục
+// Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm rất nhiều dòng (category "Nhập từ
+// Excel") vào, khiến ô chọn của Lộ Trình Tân Binh ngập tràn lựa chọn không liên quan. Đã bỏ hẳn tham
+// chiếu courseId — Giai đoạn 1/2 giờ là NỘI DUNG NHẬP TAY (stage1Criteria/stage2Criteria, cùng khuôn
+// stage3Criteria vốn đã luôn là nhập tay), không còn gắn gì với danh mục Chương Trình nữa.
+function normalizeOnboardingPathFields(payload) {
   if (!payload.name || !String(payload.name).trim()) throw new CreateError(400, 'Thiếu tên lộ trình đào tạo tân binh');
   payload.name = String(payload.name).trim();
 
-  const courses = appData?.trainingCourses || [];
-  const toRequiredCourseIds = (raw, label) => {
-    const ids = Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : [];
-    if (!ids.length) throw new CreateError(400, `Vui lòng chọn ít nhất 1 chương trình học bắt buộc cho ${label}`);
-    const invalid = ids.filter(id => !courses.some(c => c.id === id));
-    if (invalid.length) throw new CreateError(400, `${label} có chương trình được chọn không hợp lệ`);
-    return ids;
+  const toCriteria = (raw, label) => {
+    const text = raw ? String(raw).trim().slice(0, 3000) : '';
+    if (!text) throw new CreateError(400, `Vui lòng nhập nội dung bắt buộc cho ${label}`);
+    return text;
   };
-  payload.stage1RequiredCourseIds = toRequiredCourseIds(payload.stage1RequiredCourseIds, 'Giai đoạn 1');
-  payload.stage2RequiredCourseIds = toRequiredCourseIds(payload.stage2RequiredCourseIds, 'Giai đoạn 2');
+  payload.stage1Criteria = toCriteria(payload.stage1Criteria, 'Giai đoạn 1');
+  payload.stage2Criteria = toCriteria(payload.stage2Criteria, 'Giai đoạn 2');
 
   payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
 
+  delete payload.stage1RequiredCourseIds; delete payload.stage2RequiredCourseIds;
   delete payload.stage1DocumentIds; delete payload.test1Id;
   delete payload.stage2DocumentIds; delete payload.test2Id;
 }
