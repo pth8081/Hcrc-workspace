@@ -249,6 +249,89 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // (A2) Ô CHỌN NGƯỜI/NHÓM DẠNG DROPDOWN TÌM-KIẾM-CHỌN-NHIỀU (10/2026, thay ô gõ chữ lọc cũ)
+  // ==========================================================================
+  await scenario('(d2) renderPmQuickEditPicker() + chọn người cụ thể qua ô tìm-kiếm-chọn-nhiều -> bảng Sửa Nhanh chỉ còn đúng người đã chọn', async () => {
+    const r = await page.evaluate(() => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 2, username: 'nv.k', name: 'Nhân Viên K', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 3, username: 'nv.l', name: 'Nhân Viên L', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      pmQuickEditKind = 'users';
+      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      renderPmQuickEditGroupSelect();
+      renderPmQuickEditPicker();
+      renderPmQuickEditTable();
+      const rowCountBeforeSelect = document.querySelectorAll('#pmQuickEditTableBody tr').length;
+      const pickerItems = document.getElementById('pmQuickEditPicker')._gmsItems || [];
+      gmsAdd('pmQuickEditPicker', 'nv.k');
+      const bodyText = document.getElementById('pmQuickEditTableBody').textContent;
+      const rowCountAfterSelect = document.querySelectorAll('#pmQuickEditTableBody tr').length;
+      return {
+        rowCountBeforeSelect, rowCountAfterSelect, bodyText,
+        pickerHasAdmin: pickerItems.some(it => it.value === 'admin'),
+        status: document.getElementById('pmQuickEditStatus').textContent,
+      };
+    });
+    record('(d2) chưa chọn ai -> bảng hiện cả 3 người (kể cả admin), giống hệt hành vi cũ không có bộ lọc', r.rowCountBeforeSelect === 3, JSON.stringify(r));
+    record('(d2) ô chọn KHÔNG có "admin" trong danh sách ứng viên (admin luôn khoá, không cần chọn)', r.pickerHasAdmin === false, JSON.stringify(r));
+    record('(d2) chọn đúng 1 người -> bảng chỉ còn đúng 1 dòng', r.rowCountAfterSelect === 1, JSON.stringify(r));
+    record('(d2) dòng còn lại đúng là nv.k, KHÔNG còn nv.l', r.bodyText.includes('nv.k') && !r.bodyText.includes('nv.l'), r.bodyText);
+    record('(d2) dòng trạng thái báo đang thu hẹp theo lựa chọn', r.status.includes('thu hẹp'), r.status);
+  });
+
+  await scenario('(d3) togglePmQuickEditColumn(): bấm ✓/✗ đầu cột -> tick/bỏ-tick quyền đó cho TOÀN BỘ người đang hiện trong bảng cùng lúc, bỏ qua ô "admin" đang khoá', async () => {
+    const r = await page.evaluate(() => {
+      DB.permGroups = [];
+      DB.users = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 2, username: 'nv.m', name: 'Nhân Viên M', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 3, username: 'nv.n', name: 'Nhân Viên N', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      pmQuickEditKind = 'users';
+      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      renderPmQuickEditGroupSelect();
+      renderPmQuickEditPicker();
+      renderPmQuickEditTable();
+      const cb = (u) => document.querySelector(`input[data-pm-quick-cell][data-entity="${u}"][data-key="contractApprove"]`);
+      const beforeAllUnchecked = !cb('nv.m').checked && !cb('nv.n').checked;
+      togglePmQuickEditColumn('contractApprove'); // bật cả cột (đang toàn bộ chưa tick)
+      const afterFirstToggle = { m: cb('nv.m').checked, n: cb('nv.n').checked, adminDisabled: cb('admin').disabled, adminChecked: cb('admin').checked };
+      togglePmQuickEditColumn('contractApprove'); // bấm lại (đang toàn bộ đã tick) -> tắt cả cột
+      const afterSecondToggle = { m: cb('nv.m').checked, n: cb('nv.n').checked };
+      return { beforeAllUnchecked, afterFirstToggle, afterSecondToggle };
+    });
+    record('(d3) trước khi bấm, cả 2 người đều chưa tick (đúng perms gốc)', r.beforeAllUnchecked === true, JSON.stringify(r));
+    record('(d3) bấm 1 lần -> tick HẾT cho cả nv.m lẫn nv.n chỉ bằng 1 click', r.afterFirstToggle.m === true && r.afterFirstToggle.n === true, JSON.stringify(r));
+    record('(d3) ô "admin" vẫn khoá và KHÔNG bị tick (toggle hàng loạt bỏ qua ô đã disabled)', r.afterFirstToggle.adminDisabled === true && r.afterFirstToggle.adminChecked === false, JSON.stringify(r));
+    record('(d3) bấm lần 2 (đang toàn bộ đã tick) -> bỏ tick HẾT', r.afterSecondToggle.m === false && r.afterSecondToggle.n === false, JSON.stringify(r));
+  });
+
+  await scenario('(d4) setPmQuickEditKind(): đổi Người Dùng <-> Nhóm Phân Quyền xoá lựa chọn đang có ở ô chọn (2 tập giá trị khác nhau)', async () => {
+    const r = await page.evaluate(() => {
+      DB.permGroups = [{ id: 'grp_z', name: 'Nhóm Z', perms: { contractApprove: false }, reportExtraKeys: [] }];
+      DB.users = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 2, username: 'nv.o', name: 'Nhân Viên O', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+      ];
+      pmQuickEditKind = 'users';
+      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      renderPmQuickEditGroupSelect();
+      renderPmQuickEditPicker();
+      renderPmQuickEditTable();
+      gmsAdd('pmQuickEditPicker', 'nv.o');
+      const selectedBeforeSwitch = getMultiSelectValues('pmQuickEditPicker');
+      setPmQuickEditKind('groups');
+      const selectedAfterSwitch = getMultiSelectValues('pmQuickEditPicker');
+      return { selectedBeforeSwitch, selectedAfterSwitch };
+    });
+    record('(d4) trước khi đổi, đã chọn đúng nv.o', JSON.stringify(r.selectedBeforeSwitch) === JSON.stringify(['nv.o']), JSON.stringify(r));
+    record('(d4) đổi sang Nhóm Phân Quyền -> lựa chọn cũ (nv.o, không thuộc tập giá trị nhóm) bị loại bỏ', !r.selectedAfterSwitch.includes('nv.o'), JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // (B) GÁN/GỠ NHÓM PHÂN QUYỀN HÀNG LOẠT TỪ DANH SÁCH NGƯỜI DÙNG
   // ==========================================================================
   await scenario('(e) renderUserBulkPeoplePicker(): admin KHÔNG nằm trong danh sách ứng viên chọn được, người thường thì có', async () => {

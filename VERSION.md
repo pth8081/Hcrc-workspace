@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**24.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.63 (2026-10-01): Ma Trận Phân Quyền — ô chọn người/nhóm dạng dropdown tìm-kiếm-chọn-nhiều
+
+Theo yêu cầu người dùng (kèm ảnh chụp màn hình khối "🧮 Ma Trận Phân Quyền"):
+"chuyển chỗ này thành dropdown + searchable + multi choice để tôi có thể
+hiển thị nhiều người khi chọn và phân quyền ma trận thay vì từng người một".
+Đã gửi demo tương tác (HTML artifact) trước khi triển khai, người dùng xác
+nhận đúng yêu cầu rồi mới làm thật.
+
+Ô "🔍 Tìm người/nhóm..." cũ trong khối "🖊️ Sửa Nhanh Trên Web" (gõ chữ lọc
+theo chuỗi con, không "ghim" được danh sách cụ thể) được thay bằng dropdown
+tìm-kiếm-chọn-nhiều dạng chip (`renderPmQuickEditPicker()`,
+`module-admin-permgroups.js`), tái dùng NGUYÊN `renderMultiSelectDropdown()`
+(core.js, cùng widget đang dùng cho ô "Bulk Gán Nhóm" ngay dưới cùng file).
+Không chọn ai = bảng hiện TẤT CẢ như hành vi cũ; chọn người/nhóm cụ thể =
+bảng chỉ còn đúng những người đó, đúng thứ tự đã bấm chọn. Đổi "Khối quyền"
+giữ nguyên lựa chọn; đổi "Người Dùng" ⇄ "Nhóm Phân Quyền" xoá lựa chọn cũ
+(2 tập giá trị khác nhau — tự động qua bước lọc `prevSelected` theo danh
+sách `items` mới, không cần code riêng). Tài khoản `admin` gốc không nằm
+trong ô chọn (giống `userBulkPeoplePicker` ở khối Bulk Gán Nhóm).
+
+Thêm bonus đúng tinh thần "phân quyền ma trận hàng loạt thay vì từng người
+một": nút "✓/✗ tất cả" ở đầu mỗi cột quyền (`togglePmQuickEditColumn()`) —
+bật/tắt đúng quyền đó cho TOÀN BỘ người đang hiện trong bảng (đã thu hẹp
+qua ô chọn ở trên, nếu có) chỉ bằng 1 click, bỏ qua ô `admin` đang khoá.
+Chỉ đổi checkbox trên DOM — vẫn phải bấm "💾 Lưu Thay Đổi" như cũ
+(`savePmQuickEdit()` không đổi gì, vẫn đọc nguyên bộ checkbox hiện có).
+
+Thêm 4 kịch bản test mới vào `tests/test-perm-matrix-quickedit-and-bulk-group.js`
+(chọn người cụ thể thu hẹp bảng, toggle cột hàng loạt bỏ qua ô admin khoá,
+đổi Người Dùng/Nhóm Phân Quyền xoá lựa chọn cũ) — chạy lại toàn bộ file
+(43/43) + `test-perm-matrix-client.js` (46/46), không phát sinh regression.
 
 ## v24.62 (2026-10-01): Đào Tạo — hiện số liệu tiến độ xem thật trong modal "Vào Lớp Học"
 
