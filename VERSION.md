@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**24.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.58 (2026-10-01): Đào Tạo — cho phép xem lại tài liệu/buổi học sau khi đã Hoàn thành
+
+Theo yêu cầu người dùng ngay sau bản v24.57: sau khi đăng ký đã có kết quả
+(Đạt/Không đạt — "Hoàn thành"), tab "Đăng Ký Của Tôi" trước đây **MẤT HẲN**
+nút "Vào Lớp Học" (nút duy nhất mở modal xem video/tài liệu/thông tin buổi
+học) — học viên hết đường quay lại xem dù tiến độ xem (`viewedDocumentIds`,
+`trainingDocumentProgress`) vẫn còn nguyên trong CSDL. Đã sửa: nút này giờ
+LUÔN hiện cho mọi đăng ký (trừ đã huỷ), chỉ đổi NHÃN khi đã có kết quả —
+"📚 Xem Lại Tài Liệu" (ONLINE) / "📍 Xem Lại Buổi Học" (OFFLINE) — và các
+dòng chữ/nút liên quan tới BÀI TEST (nhắc xem hết giáo trình, khoá chờ
+giảng viên kết thúc lớp, nút "Vào Làm Bài Test") chỉ còn hiện khi đăng ký
+còn ở trạng thái REGISTERED (chưa có kết quả), không hiện lại sau khi đã
+Hoàn thành. Mở lại modal xem chỉ để XEM — không có bước ghi nào thay đổi
+`result`/`viewedDocumentIds`/tiến độ đã có (toàn bộ các hàm liên quan vốn đã
+"chống thụt lùi" từ trước, xác nhận lại qua test mới).
+
+Thêm `test-training-view-after-complete.js` (6 kịch bản: ONLINE lẫn OFFLINE,
+xác nhận nút xem lại xuất hiện + badge "Đã xem" không đổi + không còn nút
+thi lại), chạy lại toàn bộ 15 file test liên quan Đào Tạo xác nhận không có
+gì bị ảnh hưởng.
 
 ## v24.57 (2026-10-01): Đào Tạo — bài test mở ngay khi học xong giáo trình, không còn chờ giờ kết thúc lớp (ONLINE)
 
