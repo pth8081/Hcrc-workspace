@@ -380,14 +380,35 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
     // Đánh dấu "đã xem" 1 trang khi trang đó nằm trong khung nhìn (root = chính container cuộn được)
     // ĐỦ LÂU (dwell ~900ms, tránh tính "đã xem" 1 trang lướt qua khi cuộn nhanh/fling) — mỗi trang chỉ
     // báo callback ĐÚNG 1 LẦN (viewedPages chặn báo lại), khớp yêu cầu "phải THẬT SỰ xem qua từng trang".
+    //
+    // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng — "cuộn hết file PDF vẫn không báo đã xem"): bản trước dùng
+    // thẳng entry.intersectionRatio (tỉ lệ giao nhau SO VỚI DIỆN TÍCH CHÍNH TRANG) để so ngưỡng 0.6. Với
+    // khung xem cố định h-[65vh] THẤP hơn 1 trang PDF khổ DỌC (A4/Letter — tuyệt đại đa số tài liệu đào
+    // tạo thật), trang không BAO GIỜ đạt nổi 60% diện tích CHÍNH NÓ hiển thị cùng lúc, dù đã cuộn tới đúng
+    // giữa trang và dừng lại đọc thật — observer không bao giờ coi là "đang hiển thị" nên không bao giờ
+    // tính "đã xem". File test cũ (test-training-video-pdf-progress.js) né được lỗi này bằng cách set
+    // viewport CAO bất thường (2000px) + dùng trang PDF khổ NGANG nhỏ (300x200) — không đại diện cho PDF
+    // đào tạo khổ dọc trên trình duyệt/kích thước màn hình bình thường.
+    // Sửa: tính visibleRatio = chiều cao phần giao nhau / MIN(chiều cao khung xem, chiều cao trang) thay
+    // vì chia thẳng cho diện tích trang — luôn có thể đạt 1.0 khi bên NHỎ HƠN (khung xem hoặc trang, tuỳ
+    // trang hẹp/dài hơn khung) đã nằm GỌN trong bên kia, đúng cho CẢ 2 trường hợp (trang ngắn hơn khung
+    // HAY trang cao hơn khung) thay vì chỉ đúng khi trang vừa/ngắn hơn khung như trước. threshold đăng ký
+    // nhiều mốc (0, 0.05, ..., 1.0) để observer gọi lại callback đủ dày theo từng bước cuộn — ngưỡng
+    // "đang hiển thị" 0.6 vẫn giữ nguyên, chỉ đổi MẪU SỐ tính tỉ lệ.
     let observer = null;
     const viewedPages = new Set(progress?.initialViewedPages || []);
     const dwellTimers = new Map(); // pageNum -> timeout handle
     if (progress && typeof progress.onPageViewed === 'function') {
+      const intersectionThresholds = Array.from({ length: 21 }, (_, i) => i / 20);
       observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
           const pageNum = Number(entry.target.dataset.pageNum);
-          if (entry.isIntersecting) {
+          const viewportHeight = entry.rootBounds ? entry.rootBounds.height : entry.boundingClientRect.height;
+          const pageHeight = entry.boundingClientRect.height;
+          const denom = Math.min(viewportHeight, pageHeight) || 1;
+          const visibleRatio = entry.intersectionRect.height / denom;
+          const prominentlyVisible = entry.isIntersecting && visibleRatio >= 0.6;
+          if (prominentlyVisible) {
             if (viewedPages.has(pageNum) || dwellTimers.has(pageNum)) return;
             const handle = setTimeout(() => {
               dwellTimers.delete(pageNum);
@@ -401,7 +422,7 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
             dwellTimers.delete(pageNum);
           }
         });
-      }, { root: container, threshold: 0.6 });
+      }, { root: container, threshold: intersectionThresholds });
       container._pdfPageObserver = observer;
     }
 
