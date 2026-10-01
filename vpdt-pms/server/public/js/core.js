@@ -500,6 +500,7 @@ const DB = {
   depts: [], cats: [], stores: [], users: [], docs: [],
   deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
   jobTitles: [], submissionTypes: [], contractTypes: [], carTypes: [], uniformCatalog: [], itTicketCategories: [],
+  employmentTypes: [], workSchedules: [],
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [], submissionApprovalLevels: [],
@@ -1181,6 +1182,32 @@ const CORE_FIELD_MANIFEST = {
     // employeeProfiles ở routes/create.js.
     { id: 'hrpOnbAddress', label: 'Địa Chỉ (tuỳ chọn)', required: false },
     { id: 'hrpOnbNationalId', label: 'Số CCCD (tuỳ chọn)', required: false },
+    // Thông Tin Bổ Sung (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — TẤT CẢ tuỳ chọn, gộp
+    // trong panel gấp/mở "📋 Thông Tin Bổ Sung" — xem chú thích đầy đủ ở hrProcesses.extraValidate
+    // (lib/createValidation.js) + submitHrpOnboarding() (module-hrlifecycle.js).
+    { id: 'hrpOnbGender', label: 'Giới Tính (tuỳ chọn)', required: false },
+    { id: 'hrpOnbDateOfBirth', label: 'Ngày Sinh (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPermanentAddress', label: 'Hộ Khẩu Thường Trú (tuỳ chọn)', required: false },
+    { id: 'hrpOnbNationalIdIssueDate', label: 'Ngày Cấp CCCD (tuỳ chọn)', required: false },
+    { id: 'hrpOnbNationalIdIssuePlace', label: 'Nơi Cấp CCCD (tuỳ chọn)', required: false },
+    // employmentType/workSchedule CÓ optionsKey (10/2026, theo yêu cầu người dùng "để sau này tôi có thể
+    // sửa, thêm thông tin") — trỏ DB.employmentTypes/DB.workSchedules (admin tự thêm/bớt lựa chọn qua
+    // nút Sửa trường mặc định ở màn Biểu Mẫu, cùng khuôn contractType/carType — xem defaults.js).
+    { id: 'hrpOnbEmploymentType', label: 'Hình Thức Làm Việc (tuỳ chọn)', required: false, optionsKey: 'employmentTypes' },
+    { id: 'hrpOnbWorkSchedule', label: 'Thời Gian Làm Việc (tuỳ chọn)', required: false, optionsKey: 'workSchedules' },
+    { id: 'hrpOnbEduDegree', label: 'Học Vấn - Trình Độ (tuỳ chọn)', required: false },
+    { id: 'hrpOnbEduSchool', label: 'Học Vấn - Trường (tuỳ chọn)', required: false },
+    { id: 'hrpOnbEduMajor', label: 'Học Vấn - Chuyên Ngành (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlannedContractType', label: 'Loại HĐLĐ Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlannedContractEndDate', label: 'Ngày Kết Thúc HĐ Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlannedBaseSalary', label: 'Lương Cơ Bản Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_responsibilityAllowance', label: 'Phụ Cấp Trách Nhiệm Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_concurrentAllowance', label: 'Phụ Cấp Kiêm Nhiệm Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_hazardAllowance', label: 'Phụ Cấp Độc Hại Nặng Nhọc Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_lunchAllowance', label: 'Phụ Cấp Ăn Trưa Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_transportAllowance', label: 'Hỗ Trợ Đi Lại Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_phoneAllowance', label: 'Hỗ Trợ Điện Thoại Dự Kiến (tuỳ chọn)', required: false },
+    { id: 'hrpOnbPlanned_otherAllowance', label: 'Phụ Cấp/Hỗ Trợ Khác Dự Kiến (tuỳ chọn)', required: false },
     { id: 'hrpOnbNote', label: 'Ghi Chú Thêm (tuỳ chọn)', required: false }
   ],
   HR_OFFBOARDING: [
@@ -1267,6 +1294,10 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpfCF_dateOfBirth', label: 'Ngày Sinh', required: false },
     { id: 'hrpfCF_gender', label: 'Giới Tính', required: false },
     { id: 'hrpfCF_nationalId', label: 'Số CCCD/CMND', required: false },
+    { id: 'hrpfCF_nationalIdIssueDate', label: 'Ngày Cấp CCCD/CMND', required: false },
+    { id: 'hrpfCF_nationalIdIssuePlace', label: 'Nơi Cấp CCCD/CMND', required: false },
+    { id: 'hrpfCF_employmentType', label: 'Hình Thức Làm Việc', required: false, optionsKey: 'employmentTypes' },
+    { id: 'hrpfCF_workSchedule', label: 'Thời Gian Làm Việc', required: false, optionsKey: 'workSchedules' },
     { id: 'hrpfCF_permanentAddress', label: 'Địa Chỉ Thường Trú', required: false },
     { id: 'hrpfCF_currentAddress', label: 'Địa Chỉ Hiện Tại', required: false },
     { id: 'hrpfCF_personalEmail', label: 'Email Cá Nhân', required: false },
@@ -9658,6 +9689,27 @@ function populateDropdowns() {
     carTypeSel.innerHTML = DB.carTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     if (DB.carTypes.includes(current)) carTypeSel.value = current;
   }
+
+  // Hình Thức Làm Việc/Thời Gian Làm Việc (employeeProfiles.employmentType/workSchedule, optionsKey
+  // 'employmentTypes'/'workSchedules') — cùng khuôn contractType/carType ở trên nhưng KHÔNG bắt buộc nên
+  // giữ lại option rỗng "-- Chọn --" đầu danh sách. Dùng ở CẢ 2 màn: form Onboarding (hrpOnb*) và modal
+  // "+ Tạo Hồ Sơ Mới" của Hồ Sơ Nhân Sự (hrpfCF_*) — cùng 1 danh mục dùng chung.
+  ['hrpOnbEmploymentType', 'hrpfCF_employmentType'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn --</option>' +
+      DB.employmentTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if (DB.employmentTypes.includes(current)) sel.value = current;
+  });
+  ['hrpOnbWorkSchedule', 'hrpfCF_workSchedule'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn --</option>' +
+      DB.workSchedules.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if (DB.workSchedules.includes(current)) sel.value = current;
+  });
 
   // Mục Đích Sử Dụng (Đăng Ký Xe) — cùng khuôn carType ở trên nhưng value là KEY.
   populateCarPurposeSelect();
