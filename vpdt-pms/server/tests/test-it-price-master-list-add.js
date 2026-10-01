@@ -112,10 +112,12 @@ async function main() {
         page.click('[data-op="addItPriceMasterList"]'),
       ]);
       await chooser.setFiles({ name: 'gia-test.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('fake-xlsx-content') });
-      // pickMarginColumnKey() mở modal #colRoleModal (chờ người dùng chọn/Hủy) — bấm "Hủy" (giữ nguyên
-      // hành vi không bắt buộc gán cột Margin/Chiết Khấu) để hoàn tất luồng thêm mẫu.
-      await page.waitForSelector('#colRoleModal:not(.hidden)', { timeout: 3000 });
-      await page.click('[data-op="closeColRoleModal"]');
+      // Đợt 10/2026 (theo yêu cầu người dùng): bước chọn cột Margin/Chiết Khấu (modal #colRoleModal) giờ
+      // CHỈ hỏi khi đang ở Bán Buôn (activeBizConfigPriceTab === 'WHOLESALE') — kịch bản này đang ở mặc
+      // định Bán Lẻ nên modal KHÔNG được mở, luồng thêm mẫu phải hoàn tất thẳng không cần thao tác gì
+      // thêm.
+      const modalOpenedForRetail = await page.evaluate(() => !document.getElementById('colRoleModal').classList.contains('hidden'));
+      assert(!modalOpenedForRetail, 'Bán Lẻ không được hỏi gán cột Margin/Chiết Khấu (#colRoleModal không được mở)');
 
       await page.waitForTimeout(300);
       const result = await page.evaluate(() => ({
@@ -135,6 +137,43 @@ async function main() {
       assert(result.alerts.some(a => a.includes('Đã thêm Mẫu Giá')), 'Phải có thông báo thành công');
       assert(!result.selectWrapHidden, 'LỖI THẬT (nội dung gốc người dùng báo — "không chọn được mẫu giá"): vừa thêm mẫu xong, dropdown "Mẫu Giá Phê Duyệt" phải HIỆN NGAY, không cần đổi tab/tải lại trang');
       assert(result.selectOptionsText.some(t => t.includes('Mẫu giá test Q4/2026')), 'Mẫu vừa thêm phải xuất hiện ngay trong dropdown để người đề xuất chọn');
+    });
+
+    await run.run('Bán Buôn: thêm Mẫu Giá MỚI mở modal #colRoleModal với 2 vai trò riêng Margin/Chiết Khấu, chọn cả 2 -> lưu đúng marginColumnKey/discountColumnKey riêng biệt', async () => {
+      await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); setBizConfigPriceTab('WHOLESALE'); });
+      await stubParseFileRoute(page, { columns: [{ key: 'c0', label: 'Tên hàng' }, { key: 'c1', label: 'Margin (%)' }, { key: 'c2', label: 'Chiết Khấu (%)' }] });
+      await page.evaluate(() => { window.__promptAnswer = 'Mẫu giá Bán Buôn test'; });
+
+      const [chooser] = await Promise.all([
+        page.waitForEvent('filechooser', { timeout: 3000 }),
+        page.click('[data-op="addItPriceMasterList"]'),
+      ]);
+      await chooser.setFiles({ name: 'gia-wholesale-test.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('fake-xlsx-content') });
+      await page.waitForSelector('#colRoleModal:not(.hidden)', { timeout: 3000 });
+      const roleFields = await page.evaluate(() => ({
+        hasMargin: !!document.getElementById('colRoleSel_margin'),
+        hasDiscount: !!document.getElementById('colRoleSel_discount')
+      }));
+      assert(roleFields.hasMargin && roleFields.hasDiscount, 'Modal phải có 2 ô chọn RIÊNG cho vai trò "Margin" và "Chiết Khấu" (không còn gộp chung 1 vai trò)');
+      await page.selectOption('#colRoleSel_margin', '1'); // cột c1 "Margin (%)"
+      await page.selectOption('#colRoleSel_discount', '2'); // cột c2 "Chiết Khấu (%)"
+      await page.click('[data-op="confirmColRoleModal"]');
+
+      await page.waitForTimeout(300);
+      const added = await page.evaluate(() => DB.itPriceMasterLists.find(m => m.name === 'Mẫu giá Bán Buôn test'));
+      assertEqual(added.marginColumnKey, 'c1', 'Phải lưu đúng cột Margin đã chọn riêng (c1)');
+      assertEqual(added.discountColumnKey, 'c2', 'Phải lưu đúng cột Chiết Khấu đã chọn riêng (c2), KHÔNG trùng với cột Margin');
+      assertEqual(added.priceType, 'WHOLESALE', 'Mẫu Giá tạo lúc đang mở sub-tab Bán Buôn phải gắn priceType WHOLESALE');
+
+      const adminRowHTML = await page.evaluate(() => document.getElementById('itPriceMasterListTableBody').innerHTML);
+      assert(adminRowHTML.includes('🎯Margin') && adminRowHTML.includes('🎯Chiết Khấu'), 'Bảng quản trị Bán Buôn phải đánh dấu RIÊNG cả 2 cột đã gán (🎯Margin và 🎯Chiết Khấu)');
+    });
+
+    await run.run('Bán Lẻ: bảng quản trị KHÔNG hiện nút "🎯 Cột Margin/CK" (ẩn hẳn khỏi kênh Bán Lẻ)', async () => {
+      await page.evaluate(() => { setBizConfigPriceTab('RETAIL'); });
+      await page.waitForTimeout(100);
+      const hasMarginBtn = await page.evaluate(() => !!document.querySelector('[data-op="setItPriceMasterListMarginColumn"]'));
+      assert(!hasMarginBtn, 'Bán Lẻ không được có nút "🎯 Cột Margin/CK" nào trong bảng quản trị Mẫu Giá');
     });
 
     await run.run('"🔄 Thay mẫu" (replaceItPriceMasterListFile, dùng chung helper) cũng không bị khoá cứng khi Hủy hộp thoại', async () => {

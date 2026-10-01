@@ -134,11 +134,18 @@ function itPriceTierWrongSideCount(tier, nums) {
 }
 
 // Đối chiếu mức Margin/Chiết Khấu người đề xuất TỰ CHỌN (#itPriceTier) với số liệu THẬT trong file bảng
-// giá vừa tải lên (chỉ khi Mẫu Giá đã chọn có gán marginColumnKey — xem setItPriceMasterListMarginColumn()
-// ở trên) — quyết định nghiệp vụ 9/2026 (task #82): CHỈ hiện CẢNH BÁO cho người gửi nếu trung bình cộng
-// số liệu thật có vẻ không khớp mức đã chọn, KHÔNG chặn gửi, KHÔNG ràng buộc người duyệt (người duyệt vẫn
-// tự do xử lý y hệt trước đây — hàm này không đụng gì tới luồng server/duyệt). Gọi lại mỗi khi đổi mức áp
-// dụng (data-op-change ở #itPriceTier), đổi Mẫu Giá, đọc xong file mới, hoặc reset/đổi sub-tab.
+// giá vừa tải lên (chỉ khi Mẫu Giá đã chọn có gán marginColumnKey/discountColumnKey — xem
+// setItPriceMasterListMarginColumn() ở trên) — quyết định nghiệp vụ 9/2026 (task #82): CHỈ hiện CẢNH BÁO
+// cho người gửi nếu trung bình cộng số liệu thật có vẻ không khớp mức đã chọn, KHÔNG chặn gửi, KHÔNG ràng
+// buộc người duyệt (người duyệt vẫn tự do xử lý y hệt trước đây — hàm này không đụng gì tới luồng
+// server/duyệt). Gọi lại mỗi khi đổi mức áp dụng (data-op-change ở #itPriceTier), đổi Mẫu Giá, đọc xong
+// file mới, hoặc reset/đổi sub-tab.
+// Đợt 10/2026 (theo yêu cầu người dùng): 2 tier MARGIN_* và 2 tier DISCOUNT_* trước đây CÙNG đọc chung 1
+// cột marginColumnKey (không khớp thực tế — Margin và Chiết Khấu là 2 số liệu khác nhau trong file) — nay
+// mỗi nhóm tier đọc đúng cột riêng (marginColumnKey cho MARGIN_*, discountColumnKey cho DISCOUNT_*).
+function itPriceColumnKeyForTier(tier) {
+  return (tier === 'DISCOUNT_LTE5' || tier === 'DISCOUNT_GT5') ? 'discountColumnKey' : 'marginColumnKey';
+}
 function checkItPriceMarginConsistency() {
   const warnWrap = document.getElementById('itPriceMarginWarningWrap');
   const warnText = document.getElementById('itPriceMarginWarningText');
@@ -149,10 +156,12 @@ function checkItPriceMarginConsistency() {
   if (!tier) return hide();
   const masterListId = document.getElementById('itPriceMasterListSelect')?.value;
   const list = masterListId ? (DB.itPriceMasterLists || []).find(m => String(m.id) === masterListId) : null;
-  if (!list?.marginColumnKey) return hide();
+  const colField = itPriceColumnKeyForTier(tier);
+  const colKey = list?.[colField];
+  if (!colKey) return hide();
   const items = itPricePendingFile?.items;
   if (!items || !items.length) return hide();
-  const nums = items.map(it => parseItPriceMarginNumber(it.values?.[list.marginColumnKey])).filter(n => n !== null);
+  const nums = items.map(it => parseItPriceMarginNumber(it.values?.[colKey])).filter(n => n !== null);
   if (!nums.length) return hide();
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): TRƯỚC ĐÂY chỉ so TRUNG BÌNH
   // CỘNG cả file với mốc 5% — vài dòng margin cao (đáng ra đi quy trình duyệt khác, MARGIN_GTE5) có thể
@@ -163,7 +172,7 @@ function checkItPriceMarginConsistency() {
   if (!wrongCount) return hide();
   const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
   const min = Math.min(...nums), max = Math.max(...nums);
-  const colLabel = list.columns.find(c => c.key === list.marginColumnKey)?.label || 'Margin/Chiết Khấu';
+  const colLabel = list.columns.find(c => c.key === colKey)?.label || 'Margin/Chiết Khấu';
   warnText.innerText = `Số liệu cột "${colLabel}" trong file: ${wrongCount}/${nums.length} dòng (nhỏ nhất ${min.toFixed(1)}%, lớn nhất ${max.toFixed(1)}%, trung bình ${avg.toFixed(1)}%) có vẻ KHÔNG khớp với mức "${itPriceTierLabel(tier)}" đã chọn — vui lòng kiểm tra lại trước khi gửi (chỉ để bạn lưu ý, không bắt buộc phải sửa).`;
   warnWrap.classList.remove('hidden');
 }
@@ -257,8 +266,10 @@ function confirmColRoleModal() {
 // Mỗi thao tác (thêm/thay file/xoá) LƯU NGAY sau khi xong — khác kiểu draft-rồi-bấm-Lưu-1-lần của
 // "Nhóm Không Cấp Văn Phòng Phẩm" vì mỗi thao tác ở đây vốn đã là 1 round-trip server riêng (đọc/parse
 // file), không có nhiều field rời rạc cần gộp lại thành 1 lượt lưu. Cột đọc được từ file mẫu LẤY NGUYÊN
-// VĂN, lưu thẳng — CHỈ riêng "Margin/Chiết Khấu" (marginColumnKey, từ 9/2026 task #82) là 1 gán vai trò
-// TUỲ CHỌN admin tự chọn thêm sau khi đọc cột xong (xem pickMarginColumnKey() bên dưới).
+// VĂN, lưu thẳng — CHỈ riêng "Margin"/"Chiết Khấu" (marginColumnKey/discountColumnKey, từ 9/2026 task #82,
+// tách 2 cột riêng 10/2026 theo yêu cầu người dùng) là 2 gán vai trò TUỲ CHỌN admin tự chọn thêm sau khi
+// đọc cột xong (xem pickMarginColumnKey() bên dưới) — CHỈ áp dụng Bán Buôn, Bán Lẻ không có bước này
+// (không có khái niệm tier Margin/Chiết Khấu tự chọn lúc nộp, xem submitItPriceApproval()).
 //
 // Đợt "Cấu Hình Nghiệp Vụ" (10/2026, theo yêu cầu người dùng): màn quản trị này dời từ Hỗ Trợ IT sang
 // "⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ" (2 tab con thật "🏷️ Mẫu Giá Bán Lẻ"/"🏪 Mẫu Giá Bán Buôn", xem
@@ -281,15 +292,26 @@ function renderItPriceMasterListAdmin() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
   }
+  // Bước chọn cột Margin/Chiết Khấu (đối chiếu số liệu lúc nộp Bán Buôn, xem checkItPriceMarginConsistency())
+  // KHÔNG áp dụng cho Bán Lẻ (Bán Lẻ không có khái niệm tier Margin/Chiết Khấu tự chọn lúc nộp — xem
+  // submitItPriceApproval()) — theo xác nhận người dùng (10/2026), ẩn hẳn phần đánh dấu cột Margin/CK +
+  // nút "🎯 Cột Margin/CK" khỏi bảng quản trị Mẫu Giá Bán Lẻ (cột "Các Cột Trong Mẫu" của bảng vẫn giữ
+  // nguyên — tiêu đề bảng cố định 4 cột ở systemSection.html, chỉ đổi NỘI DUNG ô theo kênh), chỉ còn ở
+  // Bán Buôn.
+  const isWholesaleTab = activeBizConfigPriceTab === 'WHOLESALE';
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><a href="${attachmentDownloadUrl(m.fileUrl, null, m.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline font-normal">📥 ${escapeHtml(m.fileName || '')}</a></td>
-      <td class="border p-2">${(m.columns || []).map(c => `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 ${c.key === m.marginColumnKey ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-gray-100 text-gray-700'}">${escapeHtml(c.label)}${c.key === m.marginColumnKey ? ' 🎯' : ''}</span>`).join('')}
-        ${m.marginColumnKey ? '' : '<div class="text-[11px] text-gray-400 italic mt-1">Chưa gán cột Margin/Chiết Khấu</div>'}</td>
+      <td class="border p-2">${(m.columns || []).map(c => {
+        const tag = isWholesaleTab ? (c.key === m.marginColumnKey ? ' 🎯Margin' : (c.key === m.discountColumnKey ? ' 🎯Chiết Khấu' : '')) : '';
+        const cls = tag ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-gray-100 text-gray-700';
+        return `<span class="inline-block px-1.5 py-0.5 rounded text-[11px] mr-1 mb-1 ${cls}">${escapeHtml(c.label)}${tag}</span>`;
+      }).join('')}
+        ${isWholesaleTab && !m.marginColumnKey && !m.discountColumnKey ? '<div class="text-[11px] text-gray-400 italic mt-1">Chưa gán cột Margin/Chiết Khấu</div>' : ''}</td>
       <td class="border p-2">${escapeHtml(m.uploadedByName || '')}<br><span class="text-[11px] text-gray-400">${escapeHtml(m.uploadedAt || '')}</span></td>
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">
         <button type="button" data-op="renameItPriceMasterList" data-arg0="${m.id}" class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-[11px] font-bold hover:bg-gray-300">✏️ Đổi tên</button>
-        <button type="button" data-op="setItPriceMasterListMarginColumn" data-arg0="${m.id}" class="px-2 py-1 bg-amber-500 text-white rounded text-[11px] font-bold hover:bg-amber-600">🎯 Cột Margin/CK</button>
+        ${isWholesaleTab ? `<button type="button" data-op="setItPriceMasterListMarginColumn" data-arg0="${m.id}" class="px-2 py-1 bg-amber-500 text-white rounded text-[11px] font-bold hover:bg-amber-600">🎯 Cột Margin/CK</button>` : ''}
         <button type="button" data-op="replaceItPriceMasterListFile" data-arg0="${m.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">🔄 Thay mẫu</button>
         <button type="button" data-op="deleteItPriceMasterList" data-arg0="${m.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">🗑️ Xoá</button>
       </td>
@@ -308,32 +330,43 @@ function setBizConfigPriceTab(tab) {
   renderItPriceMasterListAdmin();
 }
 
-// Cho admin chọn (TUỲ CHỌN) 1 cột trong "columns" đóng vai trò "Margin/Chiết Khấu (%)" — dùng lại modal
-// dùng chung "Gán vai trò cột" (#colRoleModal, xem openColumnRoleMappingModal() ở trên) vốn đang KHÔNG
-// còn ai gọi tới cho Mẫu Giá từ đợt bỏ "vai trò cột" (task #82 dùng lại ĐÚNG 1 vai trò, không required —
-// bấm Hủy modal = coi như không chọn cột nào, KHÔNG huỷ luôn thao tác thêm/thay Mẫu Giá đang làm dở).
-// Trả về key cột đã chọn, hoặc null nếu không chọn/bấm Hủy.
+// Cho admin chọn (TUỲ CHỌN) 2 cột RIÊNG trong "columns" đóng vai trò "Margin (%)" và "Chiết Khấu (%)" —
+// dùng lại modal dùng chung "Gán vai trò cột" (#colRoleModal, xem openColumnRoleMappingModal() ở trên).
+// Đợt 10/2026 (theo yêu cầu người dùng, CHỈ áp dụng Bán Buôn — Bán Lẻ đã ẩn hẳn bước này, xem
+// renderItPriceMasterListAdmin()): trước đây chỉ 1 vai trò "margin" dùng chung cho CẢ 4 tier
+// (MARGIN_LT5/MARGIN_GTE5/DISCOUNT_LTE5/DISCOUNT_GT5, xem itPriceTierWrongSideCount()) dù Margin và
+// Chiết Khấu thường là 2 cột số liệu khác nhau trong file thật — nay tách 2 vai trò riêng, mỗi tier đọc
+// đúng cột của mình (xem itPriceColumnKeyForTier()). Bấm Hủy modal = coi như không chọn cột nào, KHÔNG
+// huỷ luôn thao tác thêm/thay Mẫu Giá đang làm dở. Trả về {marginColumnKey, discountColumnKey} (mỗi field
+// có thể null nếu không chọn).
 async function pickMarginColumnKey(columns) {
-  if (!columns || !columns.length) return null;
+  if (!columns || !columns.length) return { marginColumnKey: null, discountColumnKey: null };
   const result = await openColumnRoleMappingModal(columns.map(c => c.label), {
-    title: '🎯 Chọn Cột Margin/Chiết Khấu (tuỳ chọn)',
-    hint: 'Nếu file mẫu này có 1 cột thể hiện % Margin/Chiết Khấu, chọn đúng cột đó để hệ thống tự đối chiếu số liệu thật với mức người đề xuất chọn lúc nộp Bán Buôn — CHỈ hiện cảnh báo cho người gửi nếu có vẻ không khớp, KHÔNG chặn gửi và KHÔNG ràng buộc người duyệt. Để trống (bấm Hủy) nếu không dùng.',
-    roles: [{ key: 'margin', label: 'Cột Margin/Chiết Khấu (%)', required: false }]
+    title: '🎯 Chọn Cột Margin / Chiết Khấu (tuỳ chọn, 2 cột riêng)',
+    hint: 'Nếu file mẫu này có cột thể hiện % Margin và/hoặc % Chiết Khấu, chọn đúng cột tương ứng để hệ thống tự đối chiếu số liệu thật với mức người đề xuất chọn lúc nộp Bán Buôn — CHỈ hiện cảnh báo cho người gửi nếu có vẻ không khớp, KHÔNG chặn gửi và KHÔNG ràng buộc người duyệt. Để trống (bấm Hủy) nếu không dùng.',
+    roles: [
+      { key: 'margin', label: 'Cột Margin (%)', required: false },
+      { key: 'discount', label: 'Cột Chiết Khấu (%)', required: false }
+    ]
   });
-  if (!result) return null;
-  const idx = result.picked?.margin;
-  return (idx !== undefined && idx !== '') ? columns[Number(idx)].key : null;
+  if (!result) return { marginColumnKey: null, discountColumnKey: null };
+  const marginIdx = result.picked?.margin;
+  const discountIdx = result.picked?.discount;
+  return {
+    marginColumnKey: (marginIdx !== undefined && marginIdx !== '') ? columns[Number(marginIdx)].key : null,
+    discountColumnKey: (discountIdx !== undefined && discountIdx !== '') ? columns[Number(discountIdx)].key : null
+  };
 }
 
 async function setItPriceMasterListMarginColumn(id) {
   const list = (DB.itPriceMasterLists || []).find(m => m.id === id);
   if (!list) return;
-  const marginColumnKey = await pickMarginColumnKey(list.columns);
+  const { marginColumnKey, discountColumnKey } = await pickMarginColumnKey(list.columns);
   const snapshot = [...(DB.itPriceMasterLists || [])];
-  DB.itPriceMasterLists = snapshot.map(m => m.id === id ? { ...m, marginColumnKey } : m);
+  DB.itPriceMasterLists = snapshot.map(m => m.id === id ? { ...m, marginColumnKey, discountColumnKey } : m);
   const saved = await syncStorage('itPriceMasterLists');
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
-  logSystemAction('IT_SUPPORT', 'SET_IT_PRICE_MARGIN_COLUMN', `Gán cột Margin/Chiết Khấu cho Mẫu Giá "${list.name}"${marginColumnKey ? '' : ' (bỏ gán)'}`, 'SUCCESS');
+  logSystemAction('IT_SUPPORT', 'SET_IT_PRICE_MARGIN_COLUMN', `Gán cột Margin/Chiết Khấu cho Mẫu Giá "${list.name}"${(marginColumnKey || discountColumnKey) ? '' : ' (bỏ gán)'}`, 'SUCCESS');
   renderItPriceMasterListAdmin();
 }
 
@@ -391,11 +424,15 @@ async function addItPriceMasterList() {
   const name = prompt(`Nhập Tên Mẫu Giá (VD: "Mẫu giá Q3/2026", "Mẫu giá ngành thực phẩm"):`);
   if (name === null) return;
   if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
-  const marginColumnKey = await pickMarginColumnKey(parsed.columns);
+  // Bước chọn cột Margin/Chiết Khấu CHỈ áp dụng Bán Buôn (xem renderItPriceMasterListAdmin()) — Bán Lẻ
+  // không có khái niệm tier Margin/Chiết Khấu tự chọn lúc nộp nên bỏ qua hẳn, không hỏi admin.
+  const { marginColumnKey, discountColumnKey } = activeBizConfigPriceTab === 'WHOLESALE'
+    ? await pickMarginColumnKey(parsed.columns)
+    : { marginColumnKey: null, discountColumnKey: null };
 
   const entry = {
     id: Date.now(), name: name.trim(),
-    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey,
+    fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey, discountColumnKey,
     // Gắn đúng kênh đang mở lúc tạo (mục 1 kế hoạch) — trước đây KHÔNG có field này nên 1 mẫu bị dùng
     // chung/xoá nhầm giữa Bán Lẻ và Bán Buôn.
     priceType: activeBizConfigPriceTab,
@@ -423,12 +460,15 @@ async function replaceItPriceMasterListFile(id) {
   const parsed = await pickAndParseMasterListFile();
   if (!parsed) return;
   // Khuôn cột đổi hẳn -> cột Margin/Chiết Khấu gán trước đó (nếu có) hoàn toàn có thể không còn đúng vị
-  // trí/tên -> luôn hỏi lại từ đầu (không tự giữ marginColumnKey cũ).
-  const marginColumnKey = await pickMarginColumnKey(parsed.columns);
+  // trí/tên -> luôn hỏi lại từ đầu (không tự giữ marginColumnKey/discountColumnKey cũ). CHỈ hỏi cho Bán
+  // Buôn (xem renderItPriceMasterListAdmin()/addItPriceMasterList()) — Bán Lẻ bỏ qua hẳn bước này.
+  const { marginColumnKey, discountColumnKey } = activeBizConfigPriceTab === 'WHOLESALE'
+    ? await pickMarginColumnKey(parsed.columns)
+    : { marginColumnKey: null, discountColumnKey: null };
 
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? {
-    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey,
+    ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey, discountColumnKey,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN')
   } : m);
   const saved = await syncStorage('itPriceMasterLists');
