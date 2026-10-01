@@ -1537,8 +1537,17 @@ function renderTrainingResultsModalBody() {
   const hasTest = cls && cls.testId != null;
   body.innerHTML = regs.map(r => {
     const disp = getTrainingRegDisplayStatus(r, cls);
+    // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng): cột "Kết Quả" trước đây in cứng "🧪 Tự động qua bài
+    // test" cho MỌI học viên của lớp có gán bài test, kể cả học viên CHƯA làm bài (result vẫn
+    // REGISTERED) — nhìn như thể ai cũng tự động "qua" dù chưa thi. Nay đọc đúng r.result: còn đang
+    // học thì nói rõ "chưa có kết quả", đã có PASSED/FAILED thì hiện đúng Đạt/Không đạt (đến từ
+    // ttTakeSubmit() khi học viên tự làm bài — không phải tự động pass).
     const resultCell = hasTest
-      ? `<span class="text-xs italic text-gray-500">🧪 Tự động qua bài test</span>`
+      ? (r.result === 'PASSED'
+          ? `<span class="text-xs font-bold text-emerald-700">✅ Đạt</span>`
+          : r.result === 'FAILED'
+            ? `<span class="text-xs font-bold text-red-600">❌ Không đạt</span>`
+            : `<span class="text-xs italic text-gray-400">🧪 Chưa làm bài test (tự động chấm khi nộp bài)</span>`)
       : `<select id="trResult_${r.id}" class="border rounded p-1">
           <option value="REGISTERED" ${r.result === 'REGISTERED' ? 'selected' : ''}>Đang học</option>
           <option value="PASSED" ${r.result === 'PASSED' ? 'selected' : ''}>✅ Đạt</option>

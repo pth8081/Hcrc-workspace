@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**24.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.61 (2026-10-01): Đào Tạo — sửa nhãn "Tự động qua bài test" gây hiểu nhầm là đã Đạt
+
+Theo phản ánh người dùng (kèm ảnh chụp màn hình modal "Kết quả" của 1 lớp
+học có gán bài test): cột "Kết Quả" in cứng dòng chữ "🧪 Tự động qua bài
+test" cho **MỌI** học viên của lớp, kể cả những người vẫn đang "Đang học"
+(chưa hề làm bài) — nhìn qua như thể ai cũng tự động "qua" dù chưa thi,
+trong khi thực tế kết quả thật (Đạt/Không đạt) chỉ đến từ việc học viên tự
+làm bài qua đúng modal thi (`ttTakeSubmit()`), không có gì "tự động pass"
+cả.
+
+Root cause: `renderTrainingResultsModalBody()` (module-internalcomms-daotao.js)
+coi "lớp có gán bài test" (`cls.testId != null`) là đủ điều kiện in nguyên
+văn 1 câu tĩnh cho ô Kết Quả, không hề đọc `r.result` của từng học viên.
+Đã sửa: ô Kết Quả nay đọc đúng trạng thái hiện tại — còn REGISTERED (chưa
+làm bài) hiện "🧪 Chưa làm bài test (tự động chấm khi nộp bài)", đã PASSED
+hiện "✅ Đạt", đã FAILED hiện "❌ Không đạt" (cùng màu sắc với toàn hệ thống).
+Hành vi nghiệp vụ không đổi gì — chấm tay vẫn bị chặn hẳn khi lớp có bài
+test (`setTrainingRegistrationResult()` vẫn 409 phía server như cũ), đây
+thuần là sửa hiển thị cho đúng dữ liệu thật.
+
+Cập nhật `tests/test-internal-training.js`: assertion cũ kiểm tra chuỗi
+tĩnh "Tự động qua bài test" đổi thành kiểm tra đúng DÒNG của học viên chưa
+làm bài (phải thấy ghi chú chờ, không được thấy badge Đạt/Không đạt), và
+thêm 1 bước xác nhận sau khi học viên đó làm bài xong modal hiện đúng
+"✅ Đạt" cho đúng dòng của họ. Chạy lại `test-internal-training.js` (53/53),
+`test-career-paths.js` (28/28), `test-training-plans.js` (22/22),
+`test-audit-round4-internal-training.js` (47/47),
+`test-audit-round2-internalcomms-training-routes.js` (16/16) — không phát
+sinh regression.
 
 ## v24.60 (2026-10-01): Lộ Trình Tân Binh — bỏ hẳn tham chiếu Chương Trình, đổi sang nội dung nhập tay
 
