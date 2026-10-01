@@ -4724,14 +4724,20 @@ function isTrainingVideoProgressComplete(furthestSeconds, durationSeconds) {
   return duration > 0 && furthest >= duration * TRAINING_VIDEO_COMPLETION_RATIO;
 }
 
-// pageCount phải > 0 và đã xem đủ MỌI trang 1..pageCount (không chỉ đủ SỐ LƯỢNG — dùng Set để không đếm
-// trùng 1 trang xem lại nhiều lần) mới coi là hoàn thành.
+// Đổi từ "bắt buộc đủ MỌI trang 1..pageCount" sang ngưỡng ~95% SỐ TRANG đã xem (theo yêu cầu người
+// dùng 10/2026, cùng tinh thần TRAINING_VIDEO_COMPLETION_RATIO) — khớp với việc client chuyển sang xem
+// theo kiểu LẬT TỪNG TRANG thay vì cuộn liên tục: đếm số trang KHÁC NHAU đã lật qua (Set, không tính
+// trùng 1 trang xem lại nhiều lần) so với ngưỡng LÀM TRÒN LÊN (Math.ceil) của pageCount — người dùng
+// yêu cầu rõ ràng làm tròn LÊN, nghĩa là tài liệu càng ít trang thì ngưỡng càng khắt khe (gần như vẫn
+// đòi đủ mọi trang với tài liệu ngắn, VD 5 trang -> ceil(4.75)=5), chỉ thật sự nới ra khi tài liệu đủ dài
+// (VD 21 trang -> ceil(19.95)=20, bỏ sót 1 trang vẫn qua).
+const TRAINING_PDF_COMPLETION_RATIO = 0.95;
 function isTrainingPdfProgressComplete(viewedPages, pageCount) {
   const count = Number(pageCount) || 0;
   if (count <= 0) return false;
   const viewed = new Set((viewedPages || []).map(Number));
-  for (let p = 1; p <= count; p++) { if (!viewed.has(p)) return false; }
-  return true;
+  const required = Math.ceil(count * TRAINING_PDF_COMPLETION_RATIO);
+  return viewed.size >= required;
 }
 
 // Hợp nhất 1 lượt báo cáo tiến độ (payload từ client — poll video mỗi vài giây/mỗi trang PDF cuộn qua đủ

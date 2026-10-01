@@ -887,6 +887,17 @@ function pmQuickEditColumnsForGroup() {
     .sort((a, b) => permMatrixColumnHeader(a).localeCompare(permMatrixColumnHeader(b), 'vi'));
 }
 
+// Header NGANG (10/2026, theo yêu cầu người dùng "quy ngang cho dễ nhìn" thay vì xoay dọc
+// writing-mode:vertical-rl trước đây) — mọi cột trong bảng đang hiện đều CÙNG 1 khối quyền
+// (pmQuickEditGroupKey) nên tiền tố "<Tên khối> — " ở đầu nhãn là thừa, bỏ đi để text ngắn lại
+// đáng kể (VD "Báo Cáo Định Kỳ — Tổng hợp báo cáo..." -> chỉ còn "Tổng hợp báo cáo..."), giúp cột
+// đủ hẹp để hiện ngang mà vẫn đọc được, không cần xoay chữ.
+function pmQuickEditColumnShortLabel(key) {
+  const full = permMatrixColumnHeader(key);
+  const prefix = `${pmQuickEditGroupKey} — `;
+  return full.startsWith(prefix) ? full.slice(prefix.length) : full;
+}
+
 function renderPmQuickEditTable() {
   const thead = document.getElementById('pmQuickEditTableHead');
   const tbody = document.getElementById('pmQuickEditTableBody');
@@ -907,8 +918,8 @@ function renderPmQuickEditTable() {
   });
 
   thead.innerHTML = `<tr class="bg-gray-100 text-left">
-    <th class="border p-1.5 sticky left-0 bg-gray-100 z-10">${pmQuickEditKind === 'users' ? 'Người Dùng' : 'Nhóm'}</th>
-    ${cols.map(c => `<th class="border p-1 text-center align-bottom whitespace-nowrap" data-style="writing-mode:vertical-rl">${escapeHtml(permMatrixColumnHeader(c))}</th>`).join('')}
+    <th class="border p-1.5 sticky left-0 top-0 bg-gray-100 z-20">${pmQuickEditKind === 'users' ? 'Người Dùng' : 'Nhóm'}</th>
+    ${cols.map(c => `<th class="border p-1 text-center align-top text-[11px] leading-tight sticky top-0 bg-gray-100 z-10 min-w-[110px] max-w-[170px]">${escapeHtml(pmQuickEditColumnShortLabel(c))}</th>`).join('')}
   </tr>`;
 
   if (!entities.length) {
@@ -927,7 +938,6 @@ function renderPmQuickEditTable() {
       </tr>`;
     }).join('');
   }
-  applyDataStyles(thead);
   if (status) status.innerText = `${entities.length} ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} × ${cols.length} quyền trong khối "${pmQuickEditGroupKey}".`;
 }
 

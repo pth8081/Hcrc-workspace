@@ -39,11 +39,18 @@ async function runServerUnitTests(run) {
     assert.strictEqual(isTrainingVideoProgressComplete(0, 0), false, 'duration=0 (chưa biết) không bao giờ coi là hoàn thành');
   });
 
-  await run('[server] isTrainingPdfProgressComplete(): phải có ĐỦ MỌI trang 1..N, không chỉ đủ SỐ LƯỢNG', () => {
-    assert.strictEqual(isTrainingPdfProgressComplete([1, 2, 4, 5], 5), false, 'thiếu trang 3 dù đã đủ 4/5 trang');
-    assert.strictEqual(isTrainingPdfProgressComplete([1, 2, 3, 4, 5], 5), true);
+  await run('[server] isTrainingPdfProgressComplete(): ngưỡng ~95% SỐ TRANG (làm tròn LÊN), không còn bắt buộc đủ TUYỆT ĐỐI mọi trang', () => {
+    // Tài liệu NGẮN (5 trang): ceil(5*0.95)=ceil(4.75)=5 -> làm tròn lên vẫn đòi đủ CẢ 5 trang, bỏ 1
+    // trang (4/5) chưa đủ ngưỡng.
+    assert.strictEqual(isTrainingPdfProgressComplete([1, 2, 4, 5], 5), false, '4/5 trang (thiếu trang 3) chưa đạt ngưỡng ceil(4.75)=5');
+    assert.strictEqual(isTrainingPdfProgressComplete([1, 2, 3, 4, 5], 5), true, 'đủ 5/5 trang');
     assert.strictEqual(isTrainingPdfProgressComplete([1, 1, 1], 1), true, 'trang xem lại nhiều lần không tính trùng');
     assert.strictEqual(isTrainingPdfProgressComplete([], 0), false, 'pageCount=0 (chưa biết) không bao giờ hoàn thành');
+    // Tài liệu DÀI (21 trang): ceil(21*0.95)=ceil(19.95)=20 -> được phép bỏ sót ĐÚNG 1 trang.
+    const pages20of21 = Array.from({ length: 20 }, (_, i) => i + 1); // 1..20, bỏ trang 21
+    assert.strictEqual(isTrainingPdfProgressComplete(pages20of21, 21), true, '20/21 trang đạt ngưỡng ceil(19.95)=20');
+    const pages19of21 = pages20of21.slice(0, 19); // 1..19
+    assert.strictEqual(isTrainingPdfProgressComplete(pages19of21, 21), false, '19/21 trang CHƯA đạt ngưỡng 20');
   });
 
   await run('[server] computeTrainingDocumentProgressUpdate(): video — furthestSeconds CHỈ tăng, không bao giờ giảm (chống thụt lùi)', () => {
@@ -114,7 +121,7 @@ async function main() {
       assertEqual(results[1], 80, 'currentTime cao hơn thì tăng furthestWatched');
     });
 
-    // ===================== Phần 3: PDF thật, cuộn thật =====================
+    // ===================== Phần 3: PDF thật, LẬT TỪNG TRANG thật =====================
     const trainer = makeUser({ username: 'gv.linh', name: 'Trần Thị Linh', dept: 'Phòng Nhân Sự', perms: { trainingManage: true } });
     const nv1 = makeUser({ username: 'nv1', name: 'Học Viên Một', dept: 'Phòng CNTT', perms: {} });
 
@@ -122,16 +129,14 @@ async function main() {
     await page.evaluate((users) => { DB.users = users; }, [trainer, nv1]);
     await page.evaluate((u) => finishLogin(u), trainer);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); });
-    // Viewport CAO để khung xem PDF (h-[65vh]) đủ chỗ hiện >=60% mỗi trang (IntersectionObserver
-    // threshold 0.6 ở renderPdfProtected()) khi cuộn scrollIntoView({block:'center'}) — viewport mặc định
-    // (nhỏ hơn) khiến trang PDF cao hơn khung xem, không bao giờ đạt tỉ lệ hiển thị 60% dù đã cuộn tới.
-    await page.setViewportSize({ width: 1280, height: 2000 });
-
-    await run('[setup] tạo file PDF thật (5 trang, khổ nhỏ) qua static server của harness', async () => {
+    // Viewport MẶC ĐỊNH (1280x720, không chỉnh tay) + trang PDF khổ DỌC (tỉ lệ ~A4, 300x424) — khổ dọc
+    // không còn ảnh hưởng gì tới việc tính "đã xem" nữa (renderPdfProtected() giờ LẬT TỪNG TRANG, không
+    // còn cuộn + đo tỉ lệ hiển thị), nhưng vẫn giữ khổ dọc thật để gần đúng tài liệu đào tạo thực tế.
+    await run('[setup] tạo file PDF thật (5 trang, khổ DỌC ~A4) qua static server của harness', async () => {
       const pdfDoc = await PDFDocument.create();
       for (let i = 0; i < 5; i++) {
-        const p = pdfDoc.addPage([300, 200]);
-        p.drawText(`Trang ${i + 1}`, { x: 20, y: 150, size: 24 });
+        const p = pdfDoc.addPage([300, 424]);
+        p.drawText(`Trang ${i + 1}`, { x: 20, y: 380, size: 24 });
       }
       const bytes = await pdfDoc.save();
       if (!fs.existsSync(uploadsDir)) { fs.mkdirSync(uploadsDir, { recursive: true }); createdUploadsDir = true; }
@@ -176,18 +181,21 @@ async function main() {
       assert.ok(bodyHTML.includes('Sẽ tự động đánh dấu'), 'expected the auto-tracking hint text');
     });
 
-    await run('cuộn qua CHỈ 3/5 trang thật (PDF.js + IntersectionObserver thật) — CHƯA tính hoàn thành', async () => {
+    await run('lật qua CHỈ 3/5 trang thật (nút "Trang sau" của renderPdfProtected()) — CHƯA tính hoàn thành', async () => {
       await page.evaluate((docId) => viewTrainingPdfDoc(docId), pdfDocId);
       // renderPdfProtected() vẽ TỪNG TRANG tuần tự (await page.render() mỗi trang) — chờ tới khi ĐỦ cả 5
       // trang đã vào DOM, không chỉ trang đầu tiên xuất hiện.
       await page.waitForFunction(() => document.querySelectorAll('#viewModalContent [data-page-num]').length === 5, null, { timeout: 10000 });
 
-      for (let p = 1; p <= 3; p++) {
-        await page.evaluate((pn) => {
-          document.querySelector(`#viewModalContent [data-page-num="${pn}"]`).scrollIntoView({ block: 'center' });
-        }, p);
-        await page.waitForTimeout(1100); // > 900ms dwell threshold ở renderPdfProtected()
+      // Mở lên đã TỰ ĐỘNG đứng ở trang 1 (dwell bắt đầu ngay) — chờ đủ dwell rồi mới bấm "Trang sau" 2
+      // lần để qua trang 2 rồi trang 3 (mỗi lần bấm đợi đủ > 900ms dwell threshold trước khi bấm tiếp,
+      // tránh huỷ dwell đang chờ của chính trang đó).
+      await page.waitForTimeout(1100);
+      for (let i = 0; i < 2; i++) {
+        await page.click('#viewModalContent [data-pdf-page-nav="next"]');
+        await page.waitForTimeout(1100);
       }
+
       await page.waitForFunction(() => {
         const p = DB.trainingDocumentProgress.find((x) => x.username === 'nv1');
         return p && p.viewedPages && p.viewedPages.length >= 3;
@@ -195,22 +203,15 @@ async function main() {
 
       const progress = await page.evaluate(() => DB.trainingDocumentProgress.find((p) => p.username === 'nv1'));
       assert.ok(progress, 'expected a progress row to exist for nv1');
-      // >=3 trang đầu chắc chắn đã "đã xem" (đã cuộn dừng đủ lâu ở từng trang) — trang liền kề CÓ THỂ
-      // cũng lọt qua ngưỡng hiển thị 60% tuỳ kích thước khung xem thật (không phải bug, chỉ là kích thước
-      // khung/trang trong môi trường test không tách bạch tuyệt đối từng trang như 1 lượt đọc thật) —
-      // điều THẬT SỰ cần khẳng định ở bước "chưa hoàn thành" là trang CUỐI (5) chưa từng được cuộn tới.
-      assert.ok([1, 2, 3].every((p) => progress.viewedPages.includes(p)), `expected pages 1-3 to be viewed, got ${JSON.stringify(progress.viewedPages)}`);
-      assert.ok(!progress.viewedPages.includes(5), `page 5 (never scrolled to) must not be marked viewed, got ${JSON.stringify(progress.viewedPages)}`);
-      assert.ok(!progress.completedAt, 'must NOT be complete while page 5 has never been scrolled into view');
+      assert.deepStrictEqual(progress.viewedPages, [1, 2, 3], `expected EXACTLY pages 1-3 to be viewed, got ${JSON.stringify(progress.viewedPages)}`);
+      assert.ok(!progress.completedAt, 'must NOT be complete while pages 4-5 were never flipped to (ngưỡng ceil(5*0.95)=5, mới có 3/5)');
       const reg = await page.evaluate(() => DB.trainingRegistrations.find((r) => r.creator === 'nv1'));
       assert.ok(!(reg.viewedDocumentIds || []).length, 'the class registration must NOT be auto-marked as viewed yet');
     });
 
-    await run('cuộn nốt 2 trang còn lại — hoàn thành, TỰ ĐỘNG đánh dấu "đã xem" cho đăng ký lớp, bài test mở khoá', async () => {
-      for (const p of [4, 5]) {
-        await page.evaluate((pn) => {
-          document.querySelector(`#viewModalContent [data-page-num="${pn}"]`).scrollIntoView({ block: 'center' });
-        }, p);
+    await run('lật nốt 2 trang còn lại — hoàn thành, TỰ ĐỘNG đánh dấu "đã xem" cho đăng ký lớp, bài test mở khoá', async () => {
+      for (let i = 0; i < 2; i++) {
+        await page.click('#viewModalContent [data-pdf-page-nav="next"]');
         await page.waitForTimeout(1100);
       }
       await page.waitForFunction(() => {
@@ -226,6 +227,19 @@ async function main() {
         const reg = DB.trainingRegistrations.find((r) => r.creator === 'nv1');
         return reg && (reg.viewedDocumentIds || []).includes(docId);
       }, pdfDocId, { timeout: 5000 });
+    });
+
+    await run('nút "Trang sau" bị khoá (disabled) ở trang cuối, "Trang trước" bị khoá ở trang đầu', async () => {
+      const atLastPage = await page.evaluate(() => document.querySelector('#viewModalContent [data-pdf-page-nav="next"]').disabled);
+      assert.strictEqual(atLastPage, true, 'nút Trang sau phải bị khoá khi đang ở trang cuối (5/5)');
+      await page.click('#viewModalContent [data-pdf-page-nav="prev"]');
+      await page.click('#viewModalContent [data-pdf-page-nav="prev"]');
+      await page.click('#viewModalContent [data-pdf-page-nav="prev"]');
+      await page.click('#viewModalContent [data-pdf-page-nav="prev"]'); // về lại trang 1
+      const indicator = await page.evaluate(() => document.querySelector('#viewModalContent [data-pdf-page-indicator]').textContent);
+      assertEqual(indicator, 'Trang 1/5');
+      const atFirstPage = await page.evaluate(() => document.querySelector('#viewModalContent [data-pdf-page-nav="prev"]').disabled);
+      assert.strictEqual(atFirstPage, true, 'nút Trang trước phải bị khoá khi đang ở trang đầu (1/5)');
     });
 
     // ===================== Phần 4: video — round-trip qua trackTrainingDocumentProgress() (không dựng YT.Player thật) =====================

@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**24.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.56 (2026-10-01): Đào Tạo — vá lỗi PDF không báo "đã học xong" + lật trang thay vì cuộn; Phân Quyền — header ngang cho bảng Sửa Nhanh
+
+Theo 2 yêu cầu người dùng gửi kèm ảnh chụp màn hình thật:
+
+1. **Lỗi PDF Đào Tạo không báo "đã học xong" dù đã cuộn hết file** — xác
+   nhận đúng là lỗi thật: `renderPdfProtected()` (`core.js`) trước đây tính
+   tỉ lệ hiển thị 1 trang SO VỚI DIỆN TÍCH CHÍNH TRANG đó (qua
+   `IntersectionObserver`) để so ngưỡng 60% — với trang PDF khổ DỌC (A4/
+   Letter, tuyệt đại đa số tài liệu đào tạo thật) cao hơn khung xem cố định
+   `h-[65vh]`, trang không bao giờ đạt nổi 60% diện tích CHÍNH NÓ hiển thị
+   cùng lúc dù đã cuộn dừng lại đọc đúng giữa trang — bug tồn tại từ trước,
+   bị che bởi bộ test cũ dùng viewport giả cao 2000px + trang PDF khổ NGANG
+   không đại diện cho thực tế.
+2. Theo đề xuất tiếp theo của người dùng ("xác định số trang và cho lật
+   trang thay vì cuộn, đạt 95% tổng trang thì chốt đã xem") — thay hẳn cơ
+   chế cuộn bằng **LẬT TỪNG TRANG** (nút "◀ Trang trước"/"Trang sau ▶" +
+   chỉ báo "Trang X/N"): biết CHÍNH XÁC trang đang xem, loại bỏ hoàn toàn
+   lớp lỗi hình học ở trên. Vẫn giữ độ trễ ~900ms/trang (chống bấm liên tục
+   không đọc). Hoàn thành tính theo ngưỡng **~95% số trang, LÀM TRÒN LÊN**
+   (`Math.ceil`, theo yêu cầu người dùng) thay vì bắt buộc đủ tuyệt đối mọi
+   trang — tài liệu ngắn vẫn gần như đòi đủ mọi trang, tài liệu dài mới
+   thật sự cho phép bỏ sót 1-2 trang. Các màn xem PDF khác (Tài Liệu, Hợp
+   Đồng, Giấy Phép...) không tham số `progress` nên không đổi gì, vẫn cuộn
+   như cũ.
+3. **Ma Trận Phân Quyền > Sửa Nhanh Trên Web** — đổi tiêu đề cột từ xoay
+   dọc (`writing-mode:vertical-rl`, khó đọc) sang **nằm ngang**: bỏ tiền tố
+   tên khối quyền lặp lại ở mỗi cột (cả bảng chỉ đang xem 1 khối), cho chữ
+   tự xuống dòng trong `min-width 110px/max-width 170px` thay vì tràn
+   ngang, kèm ghim header khi cuộn danh sách dài.
+
+Viết lại/bổ sung test cho cả 3 việc (`test-training-video-pdf-progress.js`,
+`test-perm-matrix-quickedit-and-bulk-group.js`), xác nhận ngược bằng cách
+tạm phục hồi code cũ để chứng minh test mới bắt đúng lỗi gốc, chạy full
+regression toàn bộ `tests/test-*.js`, gửi demo ảnh cho người dùng xác nhận
+trước khi merge (theo yêu cầu riêng của đợt này).
 
 ## v24.55 (2026-09-30): HR — đồng bộ field Onboarding/Hồ Sơ Nhân Sự theo file Excel "Trường Thông Tin Tạo Mã"
 
