@@ -122,16 +122,17 @@ async function main() {
     await page.evaluate((users) => { DB.users = users; }, [trainer, nv1]);
     await page.evaluate((u) => finishLogin(u), trainer);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); });
-    // Viewport CAO để khung xem PDF (h-[65vh]) đủ chỗ hiện >=60% mỗi trang (IntersectionObserver
-    // threshold 0.6 ở renderPdfProtected()) khi cuộn scrollIntoView({block:'center'}) — viewport mặc định
-    // (nhỏ hơn) khiến trang PDF cao hơn khung xem, không bao giờ đạt tỉ lệ hiển thị 60% dù đã cuộn tới.
-    await page.setViewportSize({ width: 1280, height: 2000 });
-
-    await run('[setup] tạo file PDF thật (5 trang, khổ nhỏ) qua static server của harness', async () => {
+    // Viewport MẶC ĐỊNH (1280x720, không chỉnh tay) + trang PDF khổ DỌC (tỉ lệ ~A4, 300x424) — cố tình
+    // tái hiện ĐÚNG trường hợp thật: trang dọc cao hơn khung xem cố định `h-[65vh]` của
+    // openFileProtectedView() (module-tailieu.js), từng khiến renderPdfProtected() không bao giờ đạt
+    // ngưỡng "đã xem" dù đã cuộn hết (xem chú thích sửa lỗi tại renderPdfProtected() ở core.js) — bản
+    // test cũ né lỗi này bằng viewport giả cao 2000px + trang PDF nằm NGANG (300x200), nên không hề phát
+    // hiện ra bug cho tới khi người dùng báo lỗi thật trên trang dọc + viewport bình thường.
+    await run('[setup] tạo file PDF thật (5 trang, khổ DỌC ~A4) qua static server của harness', async () => {
       const pdfDoc = await PDFDocument.create();
       for (let i = 0; i < 5; i++) {
-        const p = pdfDoc.addPage([300, 200]);
-        p.drawText(`Trang ${i + 1}`, { x: 20, y: 150, size: 24 });
+        const p = pdfDoc.addPage([300, 424]);
+        p.drawText(`Trang ${i + 1}`, { x: 20, y: 380, size: 24 });
       }
       const bytes = await pdfDoc.save();
       if (!fs.existsSync(uploadsDir)) { fs.mkdirSync(uploadsDir, { recursive: true }); createdUploadsDir = true; }
