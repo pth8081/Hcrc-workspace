@@ -10,17 +10,20 @@
 // Test THUẦN CLIENT qua Playwright (cùng khuôn tests/test-perm-matrix-client.js — sandbox này không có
 // SQL Server thật): serve public/index.html tĩnh, stub window.fetch/alert/confirm, hand-seed
 // DB.users/DB.permGroups, gọi thẳng các hàm togglePermMatrixQuickEdit()/savePmQuickEdit()/
-// applyUserBulkGroupAction() như UI thật gọi qua data-op — CÓ thao tác trên DOM thật (checkbox trong
-// bảng render), khác các test buildPermMatrixRowChanges() thuần logic đã có.
+// applyUserBulkGroupAction() như UI thật gọi qua data-op — CÓ thao tác trên DOM thật, khác các test
+// buildPermMatrixRowChanges() thuần logic đã có.
 //
 // Phủ đúng các điểm THIẾT KẾ cốt lõi cần xác minh:
 //   - Sửa Nhanh Trên Web: bảng chỉ hiện đúng cột của 1 "khối" đang chọn, tick đúng ô -> lưu đúng, tài
 //     khoản "admin" gốc không có checkbox (không sửa được).
 //   - Sửa Nhanh Trên Web (Nhóm): sửa quyền nhóm CASCADE ngay cho thành viên, giống hệt đường Excel.
 //   - Không có thay đổi nào thì không gọi lưu, không báo "đã lưu".
-//   - Bulk gán/gỡ Nhóm: chọn nhiều dòng -> ADD/REMOVE đúng, permOverrides reset đúng luật savePermGroup(),
-//     người không được chọn không bị ảnh hưởng, tài khoản "admin" không có checkbox chọn.
-//   - renderUsers() reset lại trạng thái chọn hàng loạt sau mỗi lần render lại (đổi trang/lọc).
+//   - Bulk gán/gỡ Nhóm: chọn người qua Ô TÌM-KIẾM-GÕ-CHỌN-NHIỀU-NGƯỜI (userBulkPeoplePicker,
+//     renderMultiSelectDropdown(), 10/2026 — thay hẳn checkbox từng dòng cũ) -> ADD/REMOVE đúng,
+//     permOverrides reset đúng luật savePermGroup(), người không được chọn không bị ảnh hưởng, tài
+//     khoản "admin" gốc không nằm trong danh sách ứng viên chọn được.
+//   - LỖI ĐÃ VÁ (10/2026, phản ánh người dùng): lựa chọn người dùng giờ KHÔNG bị mất khi renderUsers()
+//     chạy lại (đổi trang/lọc bảng Người Dùng bên dưới) — khác hẳn checkbox-theo-trang cũ.
 //
 // Run: node server/tests/test-perm-matrix-quickedit-and-bulk-group.js
 // ==========================================================================
@@ -248,7 +251,7 @@ async function scenario(name, fn) {
   // ==========================================================================
   // (B) GÁN/GỠ NHÓM PHÂN QUYỀN HÀNG LOẠT TỪ DANH SÁCH NGƯỜI DÙNG
   // ==========================================================================
-  await scenario('(e) renderUsers(): admin KHÔNG có checkbox chọn hàng loạt, người thường thì có', async () => {
+  await scenario('(e) renderUserBulkPeoplePicker(): admin KHÔNG nằm trong danh sách ứng viên chọn được, người thường thì có', async () => {
     const r = await page.evaluate(() => {
       DB.permGroups = [];
       DB.users = [
@@ -256,13 +259,14 @@ async function scenario(name, fn) {
         { id: 2, username: 'nv.c', name: 'Nhân Viên C', dept: 'Kinh Doanh', perms: { admin: false }, groupIds: [], permOverrides: null, active: true },
       ];
       renderUsers();
+      const items = document.getElementById('userBulkPeoplePicker')._gmsItems || [];
       return {
-        adminHasCb: !!document.querySelector('#userRow_1 .user-bulk-select-cb'),
-        nvHasCb: !!document.querySelector('#userRow_2 .user-bulk-select-cb'),
+        adminIsCandidate: items.some(it => it.value === 'admin'),
+        nvIsCandidate: items.some(it => it.value === 'nv.c'),
       };
     });
-    record('(e) dòng "admin" KHÔNG có checkbox chọn hàng loạt', r.adminHasCb === false, JSON.stringify(r));
-    record('(e) dòng người thường CÓ checkbox chọn hàng loạt', r.nvHasCb === true, JSON.stringify(r));
+    record('(e) "admin" KHÔNG nằm trong danh sách chọn được', r.adminIsCandidate === false, JSON.stringify(r));
+    record('(e) người thường CÓ trong danh sách chọn được', r.nvIsCandidate === true, JSON.stringify(r));
   });
 
   await scenario('(f) applyUserBulkGroupAction("ADD"): gán nhiều người cùng lúc vào 1 nhóm, người không chọn không bị ảnh hưởng', async () => {
@@ -277,8 +281,10 @@ async function scenario(name, fn) {
         { id: 4, username: 'nv.f', name: 'Nhân Viên F (không chọn)', dept: 'Kinh Doanh', perms: {}, groupIds: [], permOverrides: null, active: true },
       ];
       renderUsers();
-      document.querySelector('#userRow_2 .user-bulk-select-cb').checked = true;
-      document.querySelector('#userRow_3 .user-bulk-select-cb').checked = true;
+      // Chọn người qua ô tìm-kiếm-gõ-chọn-nhiều-người (gmsAdd() — cùng hàm data-op="gmsAdd" gọi khi bấm
+      // 1 dòng gợi ý trong dropdown thật), KHÔNG còn tick checkbox trong bảng.
+      gmsAdd('userBulkPeoplePicker', 'nv.d');
+      gmsAdd('userBulkPeoplePicker', 'nv.e');
       document.getElementById('userBulkGroupSelect').value = 'grp_bulk';
       await applyUserBulkGroupAction('ADD');
       return {
@@ -305,7 +311,7 @@ async function scenario(name, fn) {
         { id: 2, username: 'nv.g', name: 'Nhân Viên G', dept: 'Kinh Doanh', perms: { paymentManage: true }, groupIds: ['grp_rm'], permOverrides: { carDispatch: true }, active: true },
       ];
       renderUsers();
-      document.querySelector('#userRow_2 .user-bulk-select-cb').checked = true;
+      gmsAdd('userBulkPeoplePicker', 'nv.g');
       document.getElementById('userBulkGroupSelect').value = 'grp_rm';
       await applyUserBulkGroupAction('REMOVE');
       return { nvG: DB.users.find(u => u.username === 'nv.g') };
@@ -328,7 +334,7 @@ async function scenario(name, fn) {
     record('(h) KHÔNG gọi lưu', !r.savedCall, JSON.stringify(r.savedCall));
   });
 
-  await scenario('(i) renderUsers() reset lại thanh hành động + bỏ tick "Chọn tất cả" mỗi lần render lại', async () => {
+  await scenario('(i) LỖI ĐÃ VÁ: renderUsers() chạy lại (đổi trang/lọc bảng) KHÔNG còn làm mất lựa chọn người dùng đang chọn ở ô tìm-kiếm', async () => {
     const r = await page.evaluate(() => {
       DB.permGroups = [];
       DB.users = [
@@ -336,18 +342,19 @@ async function scenario(name, fn) {
         { id: 2, username: 'nv.h', name: 'Nhân Viên H', dept: 'Kinh Doanh', perms: {}, groupIds: [], permOverrides: null, active: true },
       ];
       renderUsers();
-      document.querySelector('#userRow_2 .user-bulk-select-cb').checked = true;
-      onUserBulkSelectChange();
-      const barVisibleAfterTick = !document.getElementById('userBulkActionBar').classList.contains('hidden');
-      renderUsers(); // render lại (VD đổi trang/lọc) — phải reset về ẩn
-      const barHiddenAfterRerender = document.getElementById('userBulkActionBar').classList.contains('hidden');
-      return { barVisibleAfterTick, barHiddenAfterRerender };
+      gmsAdd('userBulkPeoplePicker', 'nv.h');
+      const barVisibleAfterSelect = !document.getElementById('userBulkActionBar').classList.contains('hidden');
+      renderUsers(); // render lại (VD đổi trang/lọc bảng Người Dùng) — KHÔNG được mất lựa chọn đang có
+      const stillSelected = getMultiSelectValues('userBulkPeoplePicker');
+      const barVisibleAfterRerender = !document.getElementById('userBulkActionBar').classList.contains('hidden');
+      return { barVisibleAfterSelect, stillSelected, barVisibleAfterRerender };
     });
-    record('(i) thanh hành động hiện ra khi có tick', r.barVisibleAfterTick === true, JSON.stringify(r));
-    record('(i) renderUsers() lại thì thanh hành động ẩn về lại (không giữ trạng thái ảo)', r.barHiddenAfterRerender === true, JSON.stringify(r));
+    record('(i) thanh hành động hiện ra khi có người được chọn', r.barVisibleAfterSelect === true, JSON.stringify(r));
+    record('(i) renderUsers() lại vẫn GIỮ NGUYÊN người đã chọn (nv.h)', Array.isArray(r.stillSelected) && r.stillSelected.includes('nv.h'), JSON.stringify(r));
+    record('(i) thanh hành động vẫn hiện sau khi renderUsers() lại', r.barVisibleAfterRerender === true, JSON.stringify(r));
   });
 
-  await scenario('(j) toggleUserBulkSelectAll(): tick "Chọn tất cả" chọn hết mọi dòng đang hiển thị', async () => {
+  await scenario('(j) chọn nhiều người liên tiếp qua ô tìm-kiếm -> đếm đúng số lượng, bỏ chọn 1 người thì đếm giảm đúng', async () => {
     const r = await page.evaluate(() => {
       DB.permGroups = [];
       DB.users = [
@@ -356,14 +363,17 @@ async function scenario(name, fn) {
         { id: 3, username: 'nv.j', name: 'Nhân Viên J', dept: 'Kinh Doanh', perms: {}, groupIds: [], permOverrides: null, active: true },
       ];
       renderUsers();
-      document.getElementById('userBulkSelectAll').checked = true;
-      toggleUserBulkSelectAll();
-      const allChecked = [...document.querySelectorAll('.user-bulk-select-cb')].every(cb => cb.checked);
-      const count = document.getElementById('userBulkSelectedCount').innerText;
-      return { allChecked, count };
+      gmsAdd('userBulkPeoplePicker', 'nv.i');
+      gmsAdd('userBulkPeoplePicker', 'nv.j');
+      const countAfterTwo = document.getElementById('userBulkSelectedCount').innerText;
+      gmsRemove('userBulkPeoplePicker', 'nv.i');
+      const countAfterRemoveOne = document.getElementById('userBulkSelectedCount').innerText;
+      const remaining = getMultiSelectValues('userBulkPeoplePicker');
+      return { countAfterTwo, countAfterRemoveOne, remaining };
     });
-    record('(j) mọi dòng (trừ admin, không có checkbox) đều được tick', r.allChecked === true, JSON.stringify(r));
-    record('(j) đếm đúng số lượng đã chọn (2)', r.count === '2', JSON.stringify(r));
+    record('(j) đếm đúng số lượng đã chọn (2)', r.countAfterTwo === '2', JSON.stringify(r));
+    record('(j) bỏ chọn 1 người -> đếm giảm còn 1', r.countAfterRemoveOne === '1', JSON.stringify(r));
+    record('(j) người còn lại đúng là nv.j', JSON.stringify(r.remaining) === JSON.stringify(['nv.j']), JSON.stringify(r));
   });
 
   await browser.close();

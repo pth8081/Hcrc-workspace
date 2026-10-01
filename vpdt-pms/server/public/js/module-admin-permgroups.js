@@ -1020,22 +1020,34 @@ async function savePmQuickEdit() {
 // NHIỀU NGƯỜI trước rồi mới chọn 1 NHÓM để áp, còn renderGroupMembersPicker() (màn Sửa Nhóm) chọn 1
 // NHÓM trước rồi chọn NHIỀU NGƯỜI.
 //
-// LƯU Ý PHẠM VI: lựa chọn (tick) chỉ tồn tại trong DOM của TRANG ĐANG HIỂN THỊ (renderUsers() phân
-// trang) — đổi trang/lọc lại sẽ mất lựa chọn cũ, đã nêu rõ ở dòng ghi chú trong systemSection.html.
-function toggleUserBulkSelectAll() {
-  const checked = !!document.getElementById('userBulkSelectAll')?.checked;
-  document.querySelectorAll('.user-bulk-select-cb').forEach(cb => { cb.checked = checked; });
-  onUserBulkSelectChange();
+// LỖI ĐÃ VÁ (10/2026, phản ánh người dùng muốn ô "dropdown + searchable + multiple choice") — trước
+// đây chọn người bằng tick checkbox TỪNG DÒNG trong bảng Người Dùng có phân trang: đổi trang/gõ lọc
+// lại là MẤT HẾT lựa chọn cũ, không chọn được người nằm khác trang cùng lúc. Nay đổi sang ô tìm-kiếm-
+// gõ-chọn-nhiều-người (renderMultiSelectDropdown(), core.js — cùng widget đang dùng cho Khối/Chức
+// Danh/Vị Trí Tham Gia Quy Trình) — gõ tên/username/phòng ban để tìm, chọn được BẤT KỲ ai trong TOÀN
+// BỘ danh sách bất kể đang ở trang/bộ lọc nào, lựa chọn hiện dạng chip, không phụ thuộc bảng bên dưới.
+function renderUserBulkPeoplePicker() {
+  const containerId = 'userBulkPeoplePicker';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  // Giữ lại lựa chọn đang có (nếu widget đã khởi tạo từ trước) khi danh sách người dùng đổi (thêm/xoá/
+  // import Excel...) — chỉ loại bỏ đúng những username không còn tồn tại nữa, không reset sạch toàn bộ.
+  const prevSelected = container._gmsSelected ? [...container._gmsSelected] : [];
+  const items = DB.users.filter(u => u.username !== 'admin').map(u => ({ value: u.username, label: `${u.name} (${u.username}) - ${u.dept}` }));
+  const validSelected = prevSelected.filter(username => items.some(it => it.value === username));
+  renderMultiSelectDropdown(containerId, items, validSelected, {
+    placeholder: '🔍 Tìm theo tên/username/phòng ban để chọn người dùng...',
+    emptyText: 'Chưa chọn người dùng nào.',
+    onChange: onUserBulkPeopleSelectChange
+  });
+  onUserBulkPeopleSelectChange(validSelected);
 }
-function onUserBulkSelectChange() {
-  const rowCbs = [...document.querySelectorAll('.user-bulk-select-cb')];
-  const count = rowCbs.filter(cb => cb.checked).length;
+function onUserBulkPeopleSelectChange(selectedUsernames) {
+  const count = (selectedUsernames || []).length;
   const bar = document.getElementById('userBulkActionBar');
   if (bar) bar.classList.toggle('hidden', count === 0);
   const label = document.getElementById('userBulkSelectedCount');
   if (label) label.innerText = String(count);
-  const selectAllCb = document.getElementById('userBulkSelectAll');
-  if (selectAllCb) selectAllCb.checked = rowCbs.length > 0 && rowCbs.every(cb => cb.checked);
 }
 function renderUserBulkGroupSelect() {
   const sel = document.getElementById('userBulkGroupSelect');
@@ -1046,14 +1058,14 @@ function renderUserBulkGroupSelect() {
 }
 
 async function applyUserBulkGroupAction(mode) { // mode: 'ADD' | 'REMOVE'
-  const ids = [...document.querySelectorAll('.user-bulk-select-cb:checked')].map(cb => Number(cb.value));
-  if (!ids.length) return alert('Chưa chọn người dùng nào.');
+  const usernames = getMultiSelectValues('userBulkPeoplePicker');
+  if (!usernames.length) return alert('Chưa chọn người dùng nào.');
   const groupId = document.getElementById('userBulkGroupSelect')?.value;
   const group = DB.permGroups.find(g => g.id === groupId);
   if (!group) return alert('Vui lòng chọn Nhóm Phân Quyền.');
 
-  const targets = DB.users.filter(u => ids.includes(u.id) && u.username !== 'admin');
-  const skippedAdmin = ids.length !== targets.length;
+  const targets = DB.users.filter(u => usernames.includes(u.username) && u.username !== 'admin');
+  const skippedAdmin = usernames.length !== targets.length;
   if (!targets.length) return alert('Không có người dùng hợp lệ để áp dụng (tài khoản admin gốc luôn được bỏ qua).');
 
   const actionLabel = mode === 'ADD' ? `gán vào nhóm "${group.name}"` : `gỡ khỏi nhóm "${group.name}"`;
@@ -1079,6 +1091,8 @@ async function applyUserBulkGroupAction(mode) { // mode: 'ADD' | 'REMOVE'
   if (!savedUsers) { DB.users = usersSnapshot; renderUsers(); return; }
   logSystemAction('USER_MGM', `BULK_${mode}_PERM_GROUP`, `${mode === 'ADD' ? 'Gán' : 'Gỡ'} nhóm phân quyền [${group.name}] hàng loạt — ${changed} người dùng`, 'SUCCESS', group.name);
   alert(`✅ Đã ${mode === 'ADD' ? 'gán' : 'gỡ'} ${changed} người dùng ${mode === 'ADD' ? 'vào' : 'khỏi'} nhóm "${group.name}"!`);
+  gmsClear('userBulkPeoplePicker');
+  onUserBulkPeopleSelectChange([]);
   renderUsers();
 }
 

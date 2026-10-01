@@ -4251,6 +4251,19 @@ Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
 Không cần chuẩn bị file mẫu riêng — luôn **xuất trước rồi sửa trên chính
 file vừa xuất** (đã có sẵn đúng cột/định dạng hệ thống nhận diện được).
 
+**Gán/Gỡ Nhóm Phân Quyền hàng loạt — ô tìm-kiếm-gõ-chọn-nhiều-người (từ
+v24.59)**: ngay dưới khối "Sửa Nhanh Trên Web" ở cùng tab, có 1 ô riêng để
+chọn NHIỀU người dùng rồi gán/gỡ 1 Nhóm Phân Quyền cho tất cả cùng lúc —
+phù hợp khi chỉ cần đổi nhóm hàng loạt, không cần sửa cả bảng ma trận
+Excel. Gõ tên/username/phòng ban vào ô tìm kiếm để tìm và chọn từng người
+(hiện dạng chip, bấm "×" trên chip để bỏ chọn), chọn được **bất kỳ ai
+trong toàn bộ danh sách người dùng**, không phụ thuộc trang/bộ lọc đang
+xem ở bảng Người Dùng bên dưới (đổi trang/gõ lọc lại bảng không còn làm
+mất lựa chọn đang có — khác bản cũ dùng tick checkbox từng dòng trong bảng
+phân trang). Chọn xong, chọn 1 Nhóm Phân Quyền ở ô bên cạnh rồi bấm "➕ Gán
+Vào Nhóm"/"➖ Gỡ Khỏi Nhóm". Tài khoản `admin` gốc không nằm trong danh
+sách chọn được (giữ nguyên quy tắc khoá cứng ở mục 6.1).
+
 ### 6.3. 7 quyền "Xem Báo Cáo" riêng theo module (10/2026)
 
 Theo yêu cầu người dùng, tiếp nối đợt Checklist ở mục 6.2: rà soát toàn hệ

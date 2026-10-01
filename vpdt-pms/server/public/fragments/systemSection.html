@@ -2178,20 +2178,25 @@
       <input id="filterUserKeyword" data-op-input="onUserFilterChange" placeholder="🔍 Tìm theo Username, Họ tên, hoặc Phòng ban..." class="w-full border p-2 rounded text-xs mb-2">
 
       <!-- Gán/Gỡ Nhóm Phân Quyền hàng loạt (10/2026, theo yêu cầu người dùng "chọn nhiều người rồi gán
-           nhóm 1 lần") — chọn tick ở cột đầu bảng bên dưới, chỉ áp dụng cho DÒNG ĐANG HIỂN THỊ TRÊN
-           TRANG NÀY (đổi trang/lọc lại sẽ mất lựa chọn cũ) — xem applyUserBulkGroupAction() (module-admin-permgroups.js). -->
-      <div id="userBulkActionBar" class="hidden bg-purple-50 border border-purple-200 rounded p-2 mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span class="font-bold text-purple-800">Đã chọn <span id="userBulkSelectedCount">0</span> người dùng (trên trang này):</span>
-        <select id="userBulkGroupSelect" class="border p-1.5 rounded bg-white font-semibold"></select>
-        <button type="button" data-op="applyUserBulkGroupAction" data-arg0="ADD" class="bg-purple-600 text-white px-2.5 py-1 rounded font-bold hover:bg-purple-700">➕ Gán Vào Nhóm</button>
-        <button type="button" data-op="applyUserBulkGroupAction" data-arg0="REMOVE" class="bg-gray-500 text-white px-2.5 py-1 rounded font-bold hover:bg-gray-600">➖ Gỡ Khỏi Nhóm</button>
+           nhóm 1 lần") — chọn người qua Ô TÌM-KIẾM-GÕ-CHỌN-NHIỀU-NGƯỜI bên dưới (renderUserBulkPeoplePicker(),
+           module-admin-permgroups.js — cùng widget renderMultiSelectDropdown() dùng cho Khối/Chức Danh/Vị
+           Trí Tham Gia Quy Trình), KHÔNG còn tick checkbox từng dòng trong bảng — chọn được BẤT KỲ ai
+           trong TOÀN BỘ danh sách, không phụ thuộc trang/bộ lọc đang xem ở bảng bên dưới. -->
+      <div class="bg-purple-50 border border-purple-200 rounded p-2 mb-2 space-y-1.5 text-xs">
+        <div class="font-bold text-purple-800">👥 Gán/Gỡ Nhóm Phân Quyền hàng loạt</div>
+        <div id="userBulkPeoplePicker"></div>
+        <div id="userBulkActionBar" class="hidden flex flex-wrap items-center gap-2 pt-1">
+          <span class="font-bold text-purple-800">Đã chọn <span id="userBulkSelectedCount">0</span> người dùng:</span>
+          <select id="userBulkGroupSelect" class="border p-1.5 rounded bg-white font-semibold"></select>
+          <button type="button" data-op="applyUserBulkGroupAction" data-arg0="ADD" class="bg-purple-600 text-white px-2.5 py-1 rounded font-bold hover:bg-purple-700">➕ Gán Vào Nhóm</button>
+          <button type="button" data-op="applyUserBulkGroupAction" data-arg0="REMOVE" class="bg-gray-500 text-white px-2.5 py-1 rounded font-bold hover:bg-gray-600">➖ Gỡ Khỏi Nhóm</button>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border bg-white text-xs">
           <thead>
             <tr class="bg-gray-100 text-left">
-              <th class="border p-2 text-center"><input type="checkbox" id="userBulkSelectAll" data-op-change="toggleUserBulkSelectAll" title="Chọn tất cả (trang này)"></th>
               <th class="border p-2">Username</th>
               <th class="border p-2">Họ Tên</th>
               <th class="border p-2">Liên Hệ</th>
