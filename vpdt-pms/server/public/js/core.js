@@ -367,7 +367,6 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
   container.innerHTML = '<div class="p-6 text-center text-gray-500 text-sm">⏳ Đang tải PDF để xem...</div>';
   // Dọn observer của lượt render TRƯỚC (nếu container này từng vẽ PDF khác) — tránh 2 observer cùng
   // gắn vào 1 phần tử <div> dùng lại nhiều lượt mở Khung Xem Bảo Vệ trong 1 phiên.
-  if (container._pdfPageObserver) { container._pdfPageObserver.disconnect(); container._pdfPageObserver = null; }
   if (container._pdfResizeObserver) { container._pdfResizeObserver.disconnect(); container._pdfResizeObserver = null; }
   try {
     await ensurePdfJsReady();
@@ -375,61 +374,61 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
     container.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'flex flex-col items-center gap-3 py-2 w-full';
-    container.appendChild(wrap);
 
-    // Đánh dấu "đã xem" 1 trang khi trang đó nằm trong khung nhìn (root = chính container cuộn được)
-    // ĐỦ LÂU (dwell ~900ms, tránh tính "đã xem" 1 trang lướt qua khi cuộn nhanh/fling) — mỗi trang chỉ
-    // báo callback ĐÚNG 1 LẦN (viewedPages chặn báo lại), khớp yêu cầu "phải THẬT SỰ xem qua từng trang".
-    //
-    // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng — "cuộn hết file PDF vẫn không báo đã xem"): bản trước dùng
-    // thẳng entry.intersectionRatio (tỉ lệ giao nhau SO VỚI DIỆN TÍCH CHÍNH TRANG) để so ngưỡng 0.6. Với
-    // khung xem cố định h-[65vh] THẤP hơn 1 trang PDF khổ DỌC (A4/Letter — tuyệt đại đa số tài liệu đào
-    // tạo thật), trang không BAO GIỜ đạt nổi 60% diện tích CHÍNH NÓ hiển thị cùng lúc, dù đã cuộn tới đúng
-    // giữa trang và dừng lại đọc thật — observer không bao giờ coi là "đang hiển thị" nên không bao giờ
-    // tính "đã xem". File test cũ (test-training-video-pdf-progress.js) né được lỗi này bằng cách set
-    // viewport CAO bất thường (2000px) + dùng trang PDF khổ NGANG nhỏ (300x200) — không đại diện cho PDF
-    // đào tạo khổ dọc trên trình duyệt/kích thước màn hình bình thường.
-    // Sửa: tính visibleRatio = chiều cao phần giao nhau / MIN(chiều cao khung xem, chiều cao trang) thay
-    // vì chia thẳng cho diện tích trang — luôn có thể đạt 1.0 khi bên NHỎ HƠN (khung xem hoặc trang, tuỳ
-    // trang hẹp/dài hơn khung) đã nằm GỌN trong bên kia, đúng cho CẢ 2 trường hợp (trang ngắn hơn khung
-    // HAY trang cao hơn khung) thay vì chỉ đúng khi trang vừa/ngắn hơn khung như trước. threshold đăng ký
-    // nhiều mốc (0, 0.05, ..., 1.0) để observer gọi lại callback đủ dày theo từng bước cuộn — ngưỡng
-    // "đang hiển thị" 0.6 vẫn giữ nguyên, chỉ đổi MẪU SỐ tính tỉ lệ.
-    let observer = null;
+    // LẬT TỪNG TRANG thay vì cuộn liên tục khi có theo dõi tiến độ (10/2026, theo yêu cầu người dùng —
+    // thay cho cách cuộn + IntersectionObserver trước đó, từng bị lỗi hình học với trang PDF khổ dọc cao
+    // hơn khung xem h-[65vh], xem lịch sử ở test-training-video-pdf-progress.js). Chỉ 1 trang hiển thị
+    // tại 1 thời điểm, chuyển trang qua nút Trang trước/Trang sau — đơn giản & chắc chắn hơn hẳn: biết
+    // CHÍNH XÁC trang nào đang xem (không cần đo tỉ lệ hiển thị/giao nhau gì cả). Vẫn giữ dwell ~900ms
+    // trước khi tính 1 trang là "đã xem" (chống bấm "Trang sau" liên tục thật nhanh mà không đọc) — nếu
+    // rời trang trước khi đủ 900ms thì KHÔNG tính, giữ đúng tinh thần "phải thật sự xem qua từng trang"
+    // như cơ chế cuộn cũ. Hoàn thành tính theo NGƯỠNG ~95% số trang (isTrainingPdfProgressComplete() ở
+    // lib/recordActions.js), không còn bắt buộc đủ TUYỆT ĐỐI mọi trang — tài liệu càng dài càng cho phép
+    // bỏ sót 1 vài trang hợp lý. MỌI caller khác (không có progress) vẫn cuộn liên tục như trước, không
+    // đổi gì (isPaged = false bên dưới).
+    const isPaged = !!(progress && typeof progress.onPageViewed === 'function');
     const viewedPages = new Set(progress?.initialViewedPages || []);
-    const dwellTimers = new Map(); // pageNum -> timeout handle
-    if (progress && typeof progress.onPageViewed === 'function') {
-      const intersectionThresholds = Array.from({ length: 21 }, (_, i) => i / 20);
-      observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          const pageNum = Number(entry.target.dataset.pageNum);
-          const viewportHeight = entry.rootBounds ? entry.rootBounds.height : entry.boundingClientRect.height;
-          const pageHeight = entry.boundingClientRect.height;
-          const denom = Math.min(viewportHeight, pageHeight) || 1;
-          const visibleRatio = entry.intersectionRect.height / denom;
-          const prominentlyVisible = entry.isIntersecting && visibleRatio >= 0.6;
-          if (prominentlyVisible) {
-            if (viewedPages.has(pageNum) || dwellTimers.has(pageNum)) return;
-            const handle = setTimeout(() => {
-              dwellTimers.delete(pageNum);
-              if (viewedPages.has(pageNum)) return;
-              viewedPages.add(pageNum);
-              progress.onPageViewed(pageNum, pdf.numPages);
-            }, 900);
-            dwellTimers.set(pageNum, handle);
-          } else if (dwellTimers.has(pageNum)) {
-            clearTimeout(dwellTimers.get(pageNum));
-            dwellTimers.delete(pageNum);
-          }
-        });
-      }, { root: container, threshold: intersectionThresholds });
-      container._pdfPageObserver = observer;
+    let dwellTimer = null;
+    let currentPageNum = 1;
+    function cancelDwell() { if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; } }
+    function scheduleDwell(pageNum) {
+      cancelDwell();
+      if (viewedPages.has(pageNum)) return;
+      dwellTimer = setTimeout(() => {
+        dwellTimer = null;
+        if (viewedPages.has(pageNum)) return;
+        viewedPages.add(pageNum);
+        progress.onPageViewed(pageNum, pdf.numPages);
+      }, 900);
     }
+
+    let navBar = null, pageIndicator = null, prevBtn = null, nextBtn = null;
+    if (isPaged) {
+      navBar = document.createElement('div');
+      navBar.className = 'flex items-center justify-center gap-3 text-sm py-1 select-none';
+      prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-40 disabled:cursor-not-allowed';
+      prevBtn.textContent = '◀ Trang trước';
+      prevBtn.dataset.pdfPageNav = 'prev';
+      pageIndicator = document.createElement('div');
+      pageIndicator.className = 'font-bold text-gray-600';
+      pageIndicator.dataset.pdfPageIndicator = '';
+      nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed';
+      nextBtn.textContent = 'Trang sau ▶';
+      nextBtn.dataset.pdfPageNav = 'next';
+      navBar.appendChild(prevBtn);
+      navBar.appendChild(pageIndicator);
+      navBar.appendChild(nextBtn);
+      container.appendChild(navBar);
+    }
+    container.appendChild(wrap);
 
     // Thu thập trang + dựng khung DOM CỐ ĐỊNH 1 LẦN (page/pageWrap/canvas) — renderAtWidth() bên dưới
     // chỉ tính lại scale + vẽ lại canvas mỗi khi bề rộng container đổi (xoay màn hình/thu-phóng cửa sổ
-    // trên mobile), KHÔNG tạo lại DOM (giữ nguyên phần tử pageWrap đang được IntersectionObserver theo
-    // dõi ở trên, tránh mất trạng thái "đã xem" khi resize).
+    // trên mobile), KHÔNG tạo lại DOM.
     const pageEntries = [];
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
@@ -438,7 +437,7 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
       pageWrap.className = 'relative bg-white shadow-md flex-shrink-0';
       pageWrap.oncontextmenu = () => false;
       pageWrap.dataset.pageNum = String(pageNum);
-      if (observer) observer.observe(pageWrap);
+      if (isPaged && pageNum !== 1) pageWrap.classList.add('hidden');
 
       const canvas = document.createElement('canvas');
       canvas.style.display = 'block';
@@ -452,13 +451,34 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
         pageWrap.appendChild(wm);
       }
 
-      const pageLabel = document.createElement('div');
-      pageLabel.className = 'text-[11px] text-gray-400 select-none';
-      pageLabel.textContent = `Trang ${pageNum}/${pdf.numPages}`;
-
       wrap.appendChild(pageWrap);
-      wrap.appendChild(pageLabel);
-      pageEntries.push({ page, pageWrap, canvas });
+      if (!isPaged) {
+        const pageLabel = document.createElement('div');
+        pageLabel.className = 'text-[11px] text-gray-400 select-none';
+        pageLabel.textContent = `Trang ${pageNum}/${pdf.numPages}`;
+        wrap.appendChild(pageLabel);
+      }
+      pageEntries.push({ page, pageWrap, canvas, pageNum });
+    }
+
+    if (isPaged) {
+      function updateNav() {
+        pageIndicator.textContent = `Trang ${currentPageNum}/${pdf.numPages}`;
+        prevBtn.disabled = currentPageNum <= 1;
+        nextBtn.disabled = currentPageNum >= pdf.numPages;
+      }
+      function goToPage(n) {
+        if (n < 1 || n > pdf.numPages || n === currentPageNum) return;
+        cancelDwell();
+        pageEntries.forEach((e) => e.pageWrap.classList.toggle('hidden', e.pageNum !== n));
+        currentPageNum = n;
+        updateNav();
+        scheduleDwell(n);
+      }
+      prevBtn.addEventListener('click', () => goToPage(currentPageNum - 1));
+      nextBtn.addEventListener('click', () => goToPage(currentPageNum + 1));
+      updateNav();
+      scheduleDwell(currentPageNum);
     }
 
     // renderAtWidth() — vẽ lại MỌI trang theo scale khớp bề rộng container HIỆN TẠI. renderToken huỷ các
@@ -489,7 +509,7 @@ window.renderPdfProtected = async function(container, fileSrc, watermarkText, pr
 
     // Vẽ lại khi container đổi bề rộng — debounce ~200ms tránh vẽ liên tục lúc trình duyệt đang kéo dãn/
     // bàn phím ảo mobile đóng-mở làm clientWidth nhấp nháy. Không disconnect ở đây — dọn ở đầu hàm (lượt
-    // render kế tiếp trên CÙNG container) như _pdfPageObserver, container vẫn còn dùng tới lúc đó.
+    // render kế tiếp trên CÙNG container), container vẫn còn dùng tới lúc đó.
     let resizeTimer = null;
     const resizeObserver = new ResizeObserver(() => {
       clearTimeout(resizeTimer);
