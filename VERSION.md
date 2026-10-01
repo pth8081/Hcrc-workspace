@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**24.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.62 (2026-10-01): Đào Tạo — hiện số liệu tiến độ xem thật trong modal "Vào Lớp Học"
+
+Theo phản ánh người dùng (quyền admin): "xem xong video và pdf tôi sao lại
+không thấy đã xem như user bình thường?". Điều tra xác nhận đây **không
+phải khác biệt theo quyền admin/user** — `markTrainingDocumentViewed()`,
+route `POST trainingDocuments/:id/track-progress` và `bulkRegisterTrainingClass()`
+không có bất kỳ nhánh xử lý riêng nào theo role. Người dùng xác nhận số đếm
+"(x/y)" ở bảng "Đăng Ký Của Tôi" cũng báo "chưa đủ" — tức bản thân server
+cũng đang tính là CHƯA đạt ngưỡng hoàn thành (≥95% thời lượng video hoặc
+≥95% số trang PDF, xem `TRAINING_VIDEO_COMPLETION_RATIO`/
+`TRAINING_PDF_COMPLETION_RATIO` ở `lib/recordActions.js`), áp dụng chung cho
+MỌI tài khoản.
+
+Nguyên nhân khả dĩ (ngưỡng đúng nhưng không ai tự biết mình đang thiếu bao
+nhiêu): `durationSeconds` của VIDEO do `trainingManage`/admin nhập tay lúc
+thêm tài liệu — nếu nhập sai, xem hết 100% thật vẫn không đủ 95% của con số
+sai; PDF đếm số trang đã lật qua (debounce ~1.2s mỗi lần gửi tiến độ) nên
+nhảy thẳng tới trang cuối hoặc đóng trình xem quá nhanh có thể bỏ sót vài
+trang giữa. Trước đây modal "Vào Lớp Học" chỉ hiện gợi ý mơ hồ "Sẽ tự động
+đánh dấu đã xem khi bạn xem đủ ~95%..." — không có số liệu thật nên không
+chẩn đoán được.
+
+Đã sửa `renderTrainingJoinClassModalBody()` (module-internalcomms-daotao.js):
+đọc `DB.trainingDocumentProgress` (đã tải sẵn cùng lúc ghi tiến độ) và hiện
+đúng số liệu thật — VD "📊 Đã xem 180/300 giây (~60%) — cần đạt ≥95%..." cho
+video, "📊 Đã xem 8/15 trang (~53%) — cần đạt ≥95%..." cho PDF — thay cho
+câu gợi ý mơ hồ cũ. Luồng tự mở bài test
+(`maybeAutoOpenTrainingTestAfterDocsCompleted()`) vẫn đúng như cũ, chỉ kích
+hoạt khi server xác nhận `completedNow` — không đổi logic nghiệp vụ, chỉ
+thêm hiển thị minh bạch để người xem (và admin khi kiểm tra) tự biết chính
+xác lý do chưa lên "✅ Đã xem"/chưa tự mở bài test.
+
+Chạy lại `test-internal-training.js` (53/53) — không phát sinh regression,
+không cần test mới riêng (thay đổi thuần hiển thị, không đổi logic/dữ liệu).
 
 ## v24.61 (2026-10-01): Đào Tạo — sửa nhãn "Tự động qua bài test" gây hiểu nhầm là đã Đạt
 

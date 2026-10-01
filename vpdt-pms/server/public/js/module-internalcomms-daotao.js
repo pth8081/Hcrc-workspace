@@ -2680,8 +2680,29 @@ function renderTrainingJoinClassModalBody() {
     if (isViewed) {
       statusHTML = '';
     } else if (autoTracked) {
-      const hint = d.docType === 'VIDEO' ? 'xem đủ ~95% thời lượng video' : 'cuộn xem hết mọi trang tài liệu';
-      statusHTML = `<div class="text-[11px] text-gray-400 italic">📊 Sẽ tự động đánh dấu đã xem khi bạn ${hint}.</div>`;
+      // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng "xem xong video/PDF vẫn không thấy Đã xem" — không phân
+      // biệt gì theo quyền admin/user thường, cùng 1 ngưỡng cho mọi người): trước đây chỉ hiện gợi ý mơ
+      // hồ "sẽ tự động đánh dấu khi xem đủ ~95%", không có số liệu thật nên không ai tự biết đang thiếu
+      // bao nhiêu (VD durationSeconds nhập tay sai lúc thêm video khiến xem hết 100% thật vẫn không đủ
+      // 95% của con số sai, hoặc đóng trình xem PDF quá nhanh khiến vài trang cuối chưa kịp gửi tiến độ
+      // debounce ~1.2s). Đọc DB.trainingDocumentProgress (đã tải cùng lúc viewTrainingVideoDoc()/
+      // viewTrainingPdfDoc() ghi tiến độ) để hiện đúng số liệu THẬT đã ghi nhận, thay cho câu mơ hồ.
+      const progress = (DB.trainingDocumentProgress || []).find(p => p.docId === docId && p.username === currentUser.username);
+      if (d.docType === 'VIDEO') {
+        const furthest = Math.floor(progress?.furthestSeconds || 0);
+        const duration = Math.floor(progress?.durationSeconds || d.durationSeconds || 0);
+        const pct = duration > 0 ? Math.floor((furthest / duration) * 100) : 0;
+        statusHTML = duration > 0
+          ? `<div class="text-[11px] text-gray-400 italic">📊 Đã xem ${furthest}/${duration} giây (~${pct}%) — cần đạt ≥95% mới tự động đánh dấu đã xem.</div>`
+          : `<div class="text-[11px] text-gray-400 italic">📊 Sẽ tự động đánh dấu đã xem khi bạn xem đủ ~95% thời lượng video.</div>`;
+      } else {
+        const viewedCount = Array.isArray(progress?.viewedPages) ? new Set(progress.viewedPages).size : 0;
+        const pageCount = Number(progress?.pageCount || d.pageCount || 0);
+        const pct = pageCount > 0 ? Math.floor((viewedCount / pageCount) * 100) : 0;
+        statusHTML = pageCount > 0
+          ? `<div class="text-[11px] text-gray-400 italic">📊 Đã xem ${viewedCount}/${pageCount} trang (~${pct}%) — cần đạt ≥95% mới tự động đánh dấu đã xem.</div>`
+          : `<div class="text-[11px] text-gray-400 italic">📊 Sẽ tự động đánh dấu đã xem khi bạn cuộn xem hết mọi trang tài liệu.</div>`;
+      }
     } else {
       statusHTML = `<button data-op="markTrainingDocumentViewedAction" data-arg0="${docId}" class="bg-emerald-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-emerald-700">Đánh dấu đã xem</button>`;
     }
