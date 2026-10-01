@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**24.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.64 (2026-10-01): Ma Trận Phân Quyền — vá dropdown gợi ý bị bảng dưới đè lên
+
+Theo phản ánh người dùng (kèm ảnh chụp): dropdown gợi ý của ô chọn người/
+nhóm mới thêm ở v24.63 bị bảng tick quyền NGAY BÊN DƯỚI đè lên, cắt mất phần
+dưới danh sách gợi ý.
+
+Root cause: dropdown gợi ý (`renderMultiSelectDropdown()`, core.js) có
+`z-20` cố định, nhưng container `#pmQuickEditPicker` chứa nó KHÔNG có
+`position` riêng — nên z-index đó tranh chấp NGAY Ở stacking context gốc với
+thead sticky của bảng bên dưới (cũng `z-20`/`z-10`, xem `renderPmQuickEditTable()`).
+Khi 2 phần tử ở CÙNG stacking context có z-index bằng nhau, phần tử SAU
+trong DOM thắng — bảng nằm sau trong DOM nên đè lên dropdown.
+
+Đã sửa: thêm `class="relative z-30"` cho `#pmQuickEditPicker`
+(`public/fragments/systemSection.html`) — bọc picker vào 1 stacking context
+riêng với z-index cao hơn toàn bộ bảng bên dưới, đảm bảo dropdown gợi ý LUÔN
+nổi lên trên bất kể thứ tự DOM. Thuần CSS (class Tailwind tĩnh, không
+style="..." động) — không đổi logic JS. Chạy lại
+`test-perm-matrix-quickedit-and-bulk-group.js` (43/43), không phát sinh
+regression.
 
 ## v24.63 (2026-10-01): Ma Trận Phân Quyền — ô chọn người/nhóm dạng dropdown tìm-kiếm-chọn-nhiều
 
