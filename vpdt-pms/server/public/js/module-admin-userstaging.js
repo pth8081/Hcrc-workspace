@@ -530,7 +530,6 @@ function renderUsers() {
     const isInactive = u.active === false;
     return `
     <tr id="userRow_${u.id}" class="hover:bg-gray-50 border-b${isInactive ? ' bg-gray-50 opacity-60' : ''}">
-      <td class="border p-2 text-center">${u.username === 'admin' ? '' : `<input type="checkbox" class="user-bulk-select-cb" value="${u.id}" data-op-change="onUserBulkSelectChange">`}</td>
       <td class="border p-2 font-bold font-mono text-purple-700">
         ${escapeHtml(u.username)}
         ${isInactive ? '<span class="ml-1 inline-block bg-gray-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded align-middle">🔒 Đã khóa</span>' : ''}
@@ -554,13 +553,14 @@ function renderUsers() {
   `;
   }).join('');
 
-  // Danh sách vừa render lại (đổi trang/lọc) -> mọi checkbox chọn hàng loạt cũ đã bị thay thế, thanh
-  // hành động phải ẩn lại và đếm về 0 (không giữ trạng thái "đã chọn" ảo cho các dòng không còn trong
-  // DOM) — xem applyUserBulkGroupAction() (module-admin-permgroups.js).
-  document.getElementById('userBulkActionBar')?.classList.add('hidden');
-  const selectAllCb = document.getElementById('userBulkSelectAll');
-  if (selectAllCb) selectAllCb.checked = false;
+  // Bulk Gán/Gỡ Nhóm Phân Quyền (10/2026) — lựa chọn người dùng giờ nằm Ở RIÊNG 1 ô tìm-kiếm-gõ-chọn-
+  // nhiều-người (userBulkPeoplePicker, xem renderUserBulkPeoplePicker() ở module-admin-permgroups.js),
+  // KHÔNG còn gắn với bảng này nữa — đổi trang/lọc lại bảng KHÔNG còn làm mất lựa chọn đang có (khác hẳn
+  // trước đây dùng checkbox từng dòng). Vì vậy KHÔNG reset gì ở đây, chỉ làm mới options của ô chọn Nhóm
+  // (danh sách nhóm có thể vừa đổi) — ô chọn người dùng tự refresh candidates mà vẫn giữ lựa chọn cũ
+  // trong renderUserBulkPeoplePicker().
   if (typeof renderUserBulkGroupSelect === 'function') renderUserBulkGroupSelect();
+  if (typeof renderUserBulkPeoplePicker === 'function') renderUserBulkPeoplePicker();
 }
 
 // downloadXlsxFromServer() — CHUYỂN sang public/js/core.js (file luôn nạp EAGER) — xem chú thích ở đó.

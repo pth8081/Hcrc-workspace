@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**24.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.59 (2026-10-01): Phân Quyền — đổi ô chọn người hàng loạt sang dropdown tìm-kiếm-gõ-chọn-nhiều-người
+
+Theo yêu cầu người dùng: "Ma Trận Phân Quyền ... chọn người dùng theo dạng
+dropdown + searchable + multiple choice để phân quyền nhiều người một
+lúc". Tính năng "Gán/Gỡ Nhóm Phân Quyền hàng loạt" (Hệ Thống > Quản Trị >
+Phân Quyền > Người Dùng) trước đây chọn người bằng TICK CHECKBOX từng dòng
+trong bảng có phân trang — đổi trang hoặc gõ lọc lại bảng là MẤT HẾT lựa
+chọn cũ, không chọn được người nằm khác trang cùng lúc.
+
+Đã thay hẳn bằng ô **tìm-kiếm-gõ-chọn-nhiều-người** (tái dùng
+`renderMultiSelectDropdown()` — cùng widget đang dùng cho ô chọn Khối/Chức
+Danh/Vị Trí Tham Gia Quy Trình, `core.js`): gõ tên/username/phòng ban để
+tìm, bấm chọn hiện dạng chip có nút xoá riêng từng người, chọn được **bất
+kỳ ai trong toàn bộ danh sách** bất kể đang xem trang/bộ lọc nào ở bảng bên
+dưới — đổi trang/lọc bảng Người Dùng KHÔNG còn làm mất lựa chọn đang có.
+Tài khoản "admin" gốc không nằm trong danh sách chọn được (giữ nguyên quy
+tắc cũ). Thêm hàm dùng chung mới `gmsClear()` (core.js) để xoá sạch lựa
+chọn sau khi áp dụng xong 1 đợt Gán/Gỡ Nhóm.
+
+Viết lại `test-perm-matrix-quickedit-and-bulk-group.js` cho đúng cơ chế
+mới (bao gồm kịch bản xác nhận trực tiếp lỗi cũ đã hết: chọn người xong
+đổi bộ lọc bảng vẫn giữ nguyên lựa chọn), chạy lại toàn bộ test liên quan
+Phân Quyền/Cây Quyền/Mua Hàng/IT/VPP/Áp Dụng Nhanh — không phát sinh gì
+ảnh hưởng.
 
 ## v24.58 (2026-10-01): Đào Tạo — cho phép xem lại tài liệu/buổi học sau khi đã Hoàn thành
 

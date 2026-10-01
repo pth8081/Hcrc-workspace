@@ -11221,6 +11221,15 @@ function gmsRemove(containerId, value) {
   container._gmsSelected.delete(value);
   container._gmsRenderChips();
 }
+// Xoá sạch lựa chọn hiện tại (VD sau khi 1 thao tác hàng loạt áp dụng xong, xem
+// applyUserBulkGroupAction() ở module-admin-permgroups.js) — cùng vai trò pmsClear() ở trên, chỉ khác
+// contract dữ liệu (_gmsSelected thay vì _pmsSelected).
+function gmsClear(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !container._gmsSelected) return;
+  container._gmsSelected.clear();
+  container._gmsRenderChips();
+}
 // Đọc lại danh sách value đang chọn của 1 dropdown renderMultiSelectDropdown() — dùng lúc Lưu (thay
 // cho việc query hidden checkbox như renderPeopleMultiSelect(), 3 danh mục/ô Vị Trí này không cần "hợp
 // đồng" checkbox ẩn vì không có code cũ nào khác đọc theo kiểu đó).
