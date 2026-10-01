@@ -849,6 +849,7 @@ function togglePermMatrixQuickEdit() {
   if (kindUsersCb) kindUsersCb.checked = true;
   pmQuickEditGroupKey = null;
   renderPmQuickEditGroupSelect();
+  renderPmQuickEditPicker();
   renderPmQuickEditTable();
 }
 
@@ -856,7 +857,34 @@ function setPmQuickEditKind(kind) {
   pmQuickEditKind = kind === 'groups' ? 'groups' : 'users';
   pmQuickEditGroupKey = null;
   renderPmQuickEditGroupSelect();
+  renderPmQuickEditPicker();
   renderPmQuickEditTable();
+}
+
+// Ô chọn người/nhóm (10/2026, theo phản ánh người dùng "chuyển thành dropdown + searchable + multi
+// choice ... phân quyền ma trận thay vì từng người một") — tái dùng NGUYÊN renderMultiSelectDropdown()
+// (core.js, cùng widget đang dùng cho renderUserBulkPeoplePicker() ở khối "Gán/Gỡ Nhóm Hàng Loạt" ngay
+// dưới file này) thay cho ô gõ chữ lọc cũ (so khớp chuỗi con, không "ghim" được danh sách cụ thể).
+// Đọc lại lựa chọn hiện có (nếu widget đã khởi tạo từ trước) để KHÔNG mất lựa chọn khi đổi "Khối quyền"
+// (renderPmQuickEditTable() gọi lại mỗi lần đổi khối, không đụng tới picker) — chỉ loại bỏ đúng những
+// giá trị không còn hợp lệ (VD đổi "Người Dùng" <-> "Nhóm Phân Quyền", 2 tập giá trị khác hẳn nhau).
+function renderPmQuickEditPicker() {
+  const containerId = 'pmQuickEditPicker';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const prevSelected = container._gmsSelected ? [...container._gmsSelected] : [];
+  const entities = pmQuickEditEntities();
+  const items = pmQuickEditKind === 'users'
+    ? entities.filter(e => e.username !== 'admin').map(e => ({ value: e.username, label: `${e.name} (${e.username}) — ${e.dept || ''}` }))
+    : entities.map(e => ({ value: e.name, label: e.description ? `${e.name} — ${e.description}` : e.name }));
+  const validSelected = prevSelected.filter(key => items.some(it => it.value === key));
+  renderMultiSelectDropdown(containerId, items, validSelected, {
+    placeholder: pmQuickEditKind === 'users'
+      ? '🔍 Gõ tên/username/phòng ban để thêm người (để trống = hiện tất cả)...'
+      : '🔍 Gõ tên nhóm để thêm (để trống = hiện tất cả)...',
+    emptyText: 'Chưa chọn ai — bảng dưới đang hiện tất cả.',
+    onChange: () => renderPmQuickEditTable()
+  });
 }
 
 function renderPmQuickEditGroupSelect() {
@@ -871,10 +899,6 @@ function renderPmQuickEditGroupSelect() {
 
 function onPmQuickEditGroupChange() {
   pmQuickEditGroupKey = document.getElementById('pmQuickEditGroupSelect')?.value || null;
-  renderPmQuickEditTable();
-}
-
-function onPmQuickEditFilterChange() {
   renderPmQuickEditTable();
 }
 
@@ -910,20 +934,28 @@ function renderPmQuickEditTable() {
     if (status) status.innerText = '';
     return;
   }
-  const keyword = (document.getElementById('pmQuickEditFilter')?.value || '').toLowerCase().trim();
-  const entities = pmQuickEditEntities().filter(e => {
-    if (!keyword) return true;
-    const hay = pmQuickEditKind === 'users' ? `${e.username} ${e.name || ''} ${e.dept || ''}` : `${e.name} ${e.description || ''}`;
-    return hay.toLowerCase().includes(keyword);
-  });
+  // Ô chọn người/nhóm (renderPmQuickEditPicker()) thay cho ô gõ chữ lọc cũ — KHÔNG chọn ai (mảng rỗng)
+  // = hiện TẤT CẢ như hành vi gốc, chọn cụ thể ai thì bảng chỉ còn đúng những người đó, ĐÚNG thứ tự đã
+  // bấm chọn (không phải thứ tự gốc trong DB.users/DB.permGroups) để dễ đối chiếu với chip đang hiện.
+  const selectedKeys = getMultiSelectValues('pmQuickEditPicker');
+  const allEntities = pmQuickEditEntities();
+  const entities = selectedKeys.length
+    ? selectedKeys.map(key => allEntities.find(e => (pmQuickEditKind === 'users' ? e.username : e.name) === key)).filter(Boolean)
+    : allEntities;
 
+  // Nút ✓/✗ đầu mỗi cột (10/2026, theo yêu cầu người dùng "phân quyền ma trận thay vì từng người một") —
+  // bật/tắt 1 quyền cho TOÀN BỘ người đang hiện trong bảng (đã thu hẹp qua ô chọn ở trên, nếu có) chỉ
+  // bằng 1 click, xem togglePmQuickEditColumn() — chỉ đổi checkbox trên DOM, vẫn phải bấm "💾 Lưu Thay
+  // Đổi" như cũ để ghi thật xuống server (savePmQuickEdit() không đổi gì, vẫn đọc nguyên bộ checkbox này).
   thead.innerHTML = `<tr class="bg-gray-100 text-left">
     <th class="border p-1.5 sticky left-0 top-0 bg-gray-100 z-20">${pmQuickEditKind === 'users' ? 'Người Dùng' : 'Nhóm'}</th>
-    ${cols.map(c => `<th class="border p-1 text-center align-top text-[11px] leading-tight sticky top-0 bg-gray-100 z-10 min-w-[110px] max-w-[170px]">${escapeHtml(pmQuickEditColumnShortLabel(c))}</th>`).join('')}
+    ${cols.map(c => `<th class="border p-1 text-center align-top text-[11px] leading-tight sticky top-0 bg-gray-100 z-10 min-w-[110px] max-w-[170px]">
+      <button type="button" data-op="togglePmQuickEditColumn" data-arg0="${escapeHtml(c)}" class="block w-full text-[11px] leading-none mb-1 px-1 py-0.5 rounded border border-purple-200 bg-white hover:bg-purple-100 font-bold text-purple-700" title="Bật/tắt quyền này cho toàn bộ người đang hiện trong bảng">✓/✗ tất cả</button>
+      ${escapeHtml(pmQuickEditColumnShortLabel(c))}</th>`).join('')}
   </tr>`;
 
   if (!entities.length) {
-    tbody.innerHTML = `<tr><td class="p-2 text-gray-400 italic" colspan="${cols.length + 1}">Không có ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} nào khớp tìm kiếm.</td></tr>`;
+    tbody.innerHTML = `<tr><td class="p-2 text-gray-400 italic" colspan="${cols.length + 1}">Không có ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} nào trong lựa chọn hiện tại.</td></tr>`;
   } else {
     const flatByEntity = entities.map(e => flattenPermsForMatrix(e.perms || {}));
     tbody.innerHTML = entities.map((e, idx) => {
@@ -938,7 +970,24 @@ function renderPmQuickEditTable() {
       </tr>`;
     }).join('');
   }
-  if (status) status.innerText = `${entities.length} ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} × ${cols.length} quyền trong khối "${pmQuickEditGroupKey}".`;
+  if (status) status.innerText = `${entities.length} ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} × ${cols.length} quyền trong khối "${pmQuickEditGroupKey}"` +
+    (selectedKeys.length ? ` — đang thu hẹp theo ${selectedKeys.length} lựa chọn.` : ' (chưa chọn ai = hiện tất cả).');
+}
+
+// Bật/tắt 1 quyền cho TOÀN BỘ người đang hiện trong bảng (đã thu hẹp qua renderPmQuickEditPicker() ở
+// trên, nếu có) chỉ bằng 1 click — đúng tinh thần "phân quyền ma trận hàng loạt thay vì từng người một"
+// người dùng yêu cầu (10/2026). Nếu MỌI ô đang hiện đã tick sẵn thì bỏ tick hết (toggle "tắt cả"), ngược
+// lại tick hết (kể cả khi đang ở trạng thái hỗn hợp — ưu tiên "bật cả" để 1 click luôn cho kết quả đồng
+// nhất, dễ đoán hơn thay vì tuỳ thuộc ô nào đang hiện trước). CHỈ đổi checkbox trên DOM — cùng 1 bước với
+// tick tay từng ô, chưa ghi gì xuống server; vẫn phải bấm "💾 Lưu Thay Đổi" (savePmQuickEdit() đọc lại
+// ĐÚNG bộ checkbox này, không cần sửa gì thêm ở đó). Bỏ qua ô "admin" gốc luôn bị disabled (không đổi).
+function togglePmQuickEditColumn(colKey) {
+  const wrap = document.getElementById('permMatrixQuickEditWrap');
+  if (!wrap) return;
+  const cells = [...wrap.querySelectorAll('input[data-pm-quick-cell]')].filter(cb => cb.getAttribute('data-key') === colKey && !cb.disabled);
+  if (!cells.length) return;
+  const allChecked = cells.every(cb => cb.checked);
+  cells.forEach(cb => { cb.checked = !allChecked; });
 }
 
 // Đọc lại toàn bộ ô đã tick trên bảng đang hiện -> dựng đúng cấu trúc "row" mà buildPermMatrixRowChanges()

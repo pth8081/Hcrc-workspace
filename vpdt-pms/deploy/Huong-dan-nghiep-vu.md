@@ -4266,6 +4266,22 @@ Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
 Không cần chuẩn bị file mẫu riêng — luôn **xuất trước rồi sửa trên chính
 file vừa xuất** (đã có sẵn đúng cột/định dạng hệ thống nhận diện được).
 
+**Sửa Nhanh Trên Web — tick trực tiếp, không cần Excel**: nút "🖊️ Sửa Nhanh
+Trên Web" (ngay cạnh 4 nút Xuất/Nhập Excel ở trên) mở 1 bảng tick trực tiếp
+— chọn "Người Dùng"/"Nhóm Phân Quyền" + 1 "Khối quyền" để bảng đủ gọn hiện
+hết trên 1 màn hình, tick/bỏ tick từng ô rồi bấm "💾 Lưu Thay Đổi". **Ô chọn
+người/nhóm (từ v24.63, theo phản ánh người dùng "chuyển thành dropdown +
+searchable + multi choice ... phân quyền ma trận thay vì từng người một")**:
+không chọn ai = bảng hiện TẤT CẢ người dùng/nhóm; gõ tìm rồi chọn vài người/
+nhóm cụ thể (hiện dạng chip, bấm "×" để bỏ) = bảng chỉ còn đúng những người
+đó, dễ sửa quyền hàng loạt cho 1 nhóm nhỏ thay vì cuộn tìm cả danh sách.
+Đổi "Khối quyền" vẫn giữ nguyên lựa chọn đang có; đổi "Người Dùng" ⇄ "Nhóm
+Phân Quyền" sẽ xoá lựa chọn (2 danh sách khác nhau). **Nút "✓/✗ tất cả" ở
+đầu mỗi cột quyền** — bật/tắt đúng quyền đó cho TOÀN BỘ người đang hiện
+trong bảng chỉ bằng 1 click (vẫn phải bấm "💾 Lưu Thay Đổi" sau đó mới ghi
+thật xuống hệ thống). Tài khoản `admin` gốc không nằm trong ô chọn và ô
+tick của tài khoản này luôn bị khoá (không sửa được qua đây).
+
 **Gán/Gỡ Nhóm Phân Quyền hàng loạt — ô tìm-kiếm-gõ-chọn-nhiều-người (từ
 v24.59)**: ngay dưới khối "Sửa Nhanh Trên Web" ở cùng tab, có 1 ô riêng để
 chọn NHIỀU người dùng rồi gán/gỡ 1 Nhóm Phân Quyền cho tất cả cùng lúc —

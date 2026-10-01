@@ -2135,7 +2135,12 @@
 
         <!-- Sửa Nhanh Trên Web (10/2026) — tick trực tiếp thay vì Xuất/Sửa Excel/Nhập lại. Chỉ 1 "khối"
              quyền tại 1 thời điểm (chọn ở ô dưới) để bảng đủ gọn hiện hết trên 1 màn hình — đổi Nhóm Phân
-             Quyền/mở thêm tab Báo Cáo vẫn phải làm qua form Sửa Người Dùng/Nhóm hoặc Excel như cũ. -->
+             Quyền/mở thêm tab Báo Cáo vẫn phải làm qua form Sửa Người Dùng/Nhóm hoặc Excel như cũ.
+             Ô chọn người/nhóm (10/2026, theo phản ánh người dùng "chuyển thành dropdown + searchable +
+             multi choice ... phân quyền ma trận thay vì từng người một") — dropdown tìm-kiếm-chọn-nhiều
+             (renderPmQuickEditPicker(), dùng chung renderMultiSelectDropdown() ở core.js) thay cho ô gõ
+             chữ lọc cũ: không chọn ai = bảng hiện TẤT CẢ (như trước), chọn người/nhóm cụ thể = bảng chỉ
+             còn đúng những người đó để sửa quyền hàng loạt. -->
         <div id="permMatrixQuickEditWrap" class="hidden border rounded p-2 bg-purple-50 space-y-2">
           <div class="flex flex-wrap items-center gap-3 text-xs">
             <label class="flex items-center gap-1 font-semibold"><input type="radio" name="pmQuickEditKind" id="pmQuickEditKindUsers" value="users" checked data-op-change="setPmQuickEditKind" data-arg-value="0"> Người Dùng</label>
@@ -2143,8 +2148,8 @@
             <label class="flex items-center gap-1 font-semibold">Khối quyền:
               <select id="pmQuickEditGroupSelect" data-op-change="onPmQuickEditGroupChange" class="border p-1.5 rounded bg-white font-semibold"></select>
             </label>
-            <input id="pmQuickEditFilter" data-op-input="onPmQuickEditFilterChange" placeholder="🔍 Tìm người/nhóm..." class="border p-1.5 rounded flex-1 min-w-[160px]">
           </div>
+          <div id="pmQuickEditPicker"></div>
           <div id="pmQuickEditStatus" class="text-[11px] text-gray-500"></div>
           <div class="overflow-auto max-h-[420px] border rounded bg-white">
             <table class="text-xs border-collapse w-full">
