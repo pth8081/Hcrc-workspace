@@ -2149,7 +2149,13 @@
               <select id="pmQuickEditGroupSelect" data-op-change="onPmQuickEditGroupChange" class="border p-1.5 rounded bg-white font-semibold"></select>
             </label>
           </div>
-          <div id="pmQuickEditPicker"></div>
+          <!-- relative+z-30 (10/2026, phản ánh người dùng "bị cắt" — ảnh chụp dropdown gợi ý bị bảng bên
+               dưới đè lên): bảng bên dưới có thead sticky với z-20/z-10 (collides với z-20 mặc định của
+               dropdown gợi ý ở renderMultiSelectDropdown(), core.js) — cả 2 không có ancestor định vị
+               riêng nên tranh nhau NGAY Ở stacking context gốc, DOM sau thắng khi z-index bằng nhau
+               (bảng render SAU nên đè lên). Bọc picker trong 1 stacking context riêng với z-index cao
+               hơn (30) để toàn bộ dropdown con của nó LUÔN nổi trên bảng, bất kể thứ tự DOM. -->
+          <div id="pmQuickEditPicker" class="relative z-30"></div>
           <div id="pmQuickEditStatus" class="text-[11px] text-gray-500"></div>
           <div class="overflow-auto max-h-[420px] border rounded bg-white">
             <table class="text-xs border-collapse w-full">
