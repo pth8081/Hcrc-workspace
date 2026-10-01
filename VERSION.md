@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**24.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.67 (2026-10-01): Đào Tạo — 4 cải tiến theo yêu cầu "Tuyển dụng & Đào tạo TTNB"
+
+Theo yêu cầu người dùng (đọc file docx yêu cầu, xác nhận phương án rồi làm +
+merge luôn): 4 cải tiến cho cụm Đào Tạo.
+
+1. **Lớp Học** — học viên đã đăng ký 1 lớp nay thấy ngay trạng thái đăng ký
+   + 1 nút vào thẳng lớp/bài test (hoặc xem lại sau khi đã có kết quả) ngay
+   tại danh sách Lớp Học, không cần tự chuyển sang tab "Đăng Ký Của Tôi".
+2. **Kết Quả** — đổi nhãn hiển thị "✅ Đạt"/"❌ Không đạt" sang "✅ Hoàn
+   thành"/"❌ Chưa hoàn thành" (modal xem kết quả lớp, cả 2 nhánh có bài
+   test lẫn Nhân Sự tự chấm tay) — chỉ đổi chữ, không đổi logic tính.
+3. **Lộ Trình Tân Binh** — Giai Đoạn 1/2 nay gán được nhiều **Tài Liệu Đính
+   Kèm** (tham chiếu Kho Tài Liệu Đào Tạo, tuỳ chọn) + 1 **Lớp Học Tham
+   Chiếu** (tuỳ chọn) hiện gợi ý kết quả THẬT của nhân viên tân binh ở lớp
+   đó ngay tại Giai Đoạn 1 của màn theo dõi tiến độ — CHỈ LÀ GỢI Ý, không tự
+   động xác nhận hộ. Dùng field mới (`stage1DocIds`/`stage2DocIds`/
+   `linkedClassId`, tham chiếu `trainingDocuments`/`trainingClasses`) —
+   CỐ Ý không đụng lại `trainingCourses` để không lặp lại lỗi danh mục
+   Chương Trình bị Excel làm bẩn đã vá ở v24.6x trước đó (xem `CLAUDE.md`).
+4. **Kho Tài Liệu Đào Tạo** — bổ sung ảnh đại diện (thumbnail): tài liệu PDF
+   tự chụp trang đầu (best-effort, PDF lỗi rơi về icon loại tệp); Video
+   YouTube tự lấy ảnh đại diện thật từ YouTube (`img.youtube.com`, tính lại
+   phía SERVER từ videoId, không tin giá trị client gửi); Ảnh hiển thị thẳng
+   chính ảnh đó.
+
+Cập nhật `tests/_mock-backend.js` + `tests/test-onboarding-path-edit.js` +
+`tests/test-internal-training.js` để phủ đúng hành vi mới (field mới ở
+onboardingPaths, thumbnailUrl tự sinh cho VIDEO/best-effort cho DOCUMENT).
+Chạy lại toàn bộ bộ test liên quan Đào Tạo/Onboarding (`test-internal-training.js`
+53/53, `test-onboarding.js` 23/23, `test-onboarding-path-edit.js` 7/7,
+`test-doc-thumbnail.js` 5/5 cùng ~10 bộ test Đào Tạo/Onboarding khác), không
+phát sinh regression. Cập nhật `deploy/Huong-dan-nghiep-vu.md` (mục 5e mới).
 
 ## v24.66 (2026-10-01): Trang Đăng Nhập — thiết kế lại khối hero (bỏ tiêu đề chữ, thêm minh hoạ)
 

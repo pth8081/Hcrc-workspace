@@ -4042,6 +4042,50 @@ làm được nay bị chặn:
   nhân kỹ thuật: 1 sự kiện click bị bắt trùng bởi 2 lớp xử lý lồng nhau) —
   đã vá tận gốc, giờ chỉ hỏi xác nhận đúng 1 lần.
 
+## 5e. Đợt cập nhật 10/2026: Đào Tạo — 4 cải tiến theo phản ánh Tuyển Dụng & Đào Tạo TTNB
+
+**Lớp Học — nút vào lớp trực tiếp cho học viên đã đăng ký**
+- Trước đây học viên đã đăng ký 1 lớp phải tự tìm sang tab **"Đăng Ký Của
+  Tôi"** mới vào lại được lớp/bài test. Nay ngay tại danh sách **Lớp Học**,
+  học viên đã đăng ký thấy luôn trạng thái đăng ký của mình (📌 Chờ/Đang
+  học/Hoàn thành/Đã hủy) kèm 1 nút vào thẳng lớp — **"📍 Vào Lớp Học"**/
+  **"📚 Vào Lớp Học"** (OFFLINE/ONLINE) khi chưa có kết quả, đổi thành
+  **"📍 Xem Lại Buổi Học"**/**"📚 Xem Lại Tài Liệu"** sau khi đã có kết quả —
+  không cần chuyển tab nữa.
+
+**Kết Quả — đổi nhãn hiển thị cho rõ nghĩa**
+- Cột/badge **Kết Quả** của 1 lượt học (modal xem kết quả lớp, cả nhánh có
+  bài test lẫn nhánh Nhân Sự tự chấm tay) đổi nhãn từ **"✅ Đạt"/"❌ Không
+  đạt"** sang **"✅ Hoàn thành"/"❌ Chưa hoàn thành"** — đúng tinh thần
+  "hoàn thành khoá học" hơn là "thi đạt/rớt" cho các lớp không chấm điểm
+  theo kiểu thi cử. Không đổi logic tính kết quả, chỉ đổi chữ hiển thị.
+
+**Lộ Trình Tân Binh — gán tài liệu đào tạo + tham chiếu kết quả lớp Tân Binh**
+- Form tạo/sửa **Lộ Trình Đào Tạo Tân Binh**: mỗi Giai Đoạn 1/2 (ngoài ô
+  **Nội Dung Bắt Buộc** nhập tay đã có) nay có thêm ô chọn nhiều
+  **"📎 Tài Liệu Đính Kèm"** (tham chiếu **Kho Tài Liệu Đào Tạo**, tuỳ chọn)
+  — nhân viên tân binh xem được ngay tài liệu/video liên quan đúng giai
+  đoạn đang học, thay vì chỉ đọc mô tả chữ.
+- Thêm 1 ô **"🔗 Lớp Học Tham Chiếu"** (tuỳ chọn, chọn 1 **Lớp Học** có
+  thật trong **Lớp Học (Đào Tạo)**) — khi đã chọn, màn theo dõi tiến độ
+  Giai Đoạn 1 của NHÂN VIÊN TÂN BINH đó hiện thêm 1 dòng **kết quả THẬT**
+  của chính nhân viên ở lớp được tham chiếu (VD "🧪 Lớp Tân Binh Kho Q1:
+  Hoàn thành") — CHỈ LÀ GỢI Ý THAM KHẢO cho người xác nhận giai đoạn, KHÔNG
+  tự động xác nhận hộ Giai Đoạn 1 (Nhân Sự vẫn phải tự bấm "Xác Nhận" sau
+  khi đối chiếu). Chọn lớp nào không quyết định gì khác ngoài hiển thị gợi ý
+  này — không liên quan tới danh mục Chương Trình (xem lại lý do bỏ hẳn
+  tham chiếu Chương Trình ở mục trên, 2 lựa chọn mới này KHÔNG lặp lại lỗi
+  đó vì Kho Tài Liệu Đào Tạo/Lớp Học không có luồng Excel tự tạo hàng loạt).
+
+**Kho Tài Liệu Đào Tạo — ảnh đại diện (thumbnail)**
+- Cùng tinh thần "Kho Tài Liệu" chung (mục 5d ở trên) nhưng áp dụng riêng
+  cho **Kho Tài Liệu Đào Tạo**: tài liệu dạng **Tệp** (PDF) tự chụp trang
+  đầu làm ảnh đại diện lúc tải lên (chạy ngầm, PDF lỗi/không vẽ được thì
+  rơi về icon loại tệp, không chặn việc tải lên); tài liệu dạng **Video
+  YouTube** tự lấy ảnh đại diện THẬT từ YouTube (không cần tải lên gì
+  thêm); tài liệu dạng **Ảnh** hiển thị thẳng chính ảnh đó làm đại diện
+  (như trước).
+
 ---
 
 ## 6. Phân quyền (permission model)

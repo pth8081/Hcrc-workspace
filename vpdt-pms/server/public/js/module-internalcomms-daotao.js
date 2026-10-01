@@ -544,7 +544,15 @@ function renderTrainingClasses() {
     if (myReg) {
       const disp = getTrainingRegDisplayStatus(myReg, c);
       const cls = disp.key === 'DONE' ? (myReg.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : disp.key === 'CANCELLED' ? 'text-gray-400' : 'text-indigo-600';
-      actionHTML = `<span class="text-xs font-bold ${cls}">📌 ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span>`;
+      // LỖI ĐÃ VÁ (phản ánh người dùng 10/2026): trước đây dòng này CHỈ hiện badge trạng thái tĩnh, không
+      // có đường nào cho học viên bấm vào tham gia lớp/làm bài test ngay từ Danh Sách Lớp Học — phải tự
+      // mò sang tab "📝 Đăng Ký Của Tôi" mới thấy nút "Vào Lớp Học". Dùng lại ĐÚNG modal
+      // openTrainingJoinClassModal() (renderTrainingJoinClassModalBody() ở dưới, cùng file) thay vì phải
+      // chuyển tab — nhãn đổi "Xem Lại..." khi đã có kết quả, khớp hệt renderTrainingMyRegs().
+      const doneReg = myReg.result !== 'REGISTERED';
+      const joinLabel = c.mode === 'OFFLINE' ? (doneReg ? '📍 Xem Lại Buổi Học' : '📍 Vào Lớp Học') : (doneReg ? '📚 Xem Lại Tài Liệu' : '📚 Vào Lớp Học');
+      actionHTML = `<span class="text-xs font-bold ${cls}">📌 ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</span><br>
+        <button data-op="openTrainingJoinClassModal" data-arg0="${myReg.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1">${joinLabel}</button>`;
     } else if (!isInvited) {
       actionHTML = `<span class="text-xs text-gray-400 italic">Lớp này giới hạn theo danh sách mời.</span>`;
     } else if (getTrainingClassSessionState(c) === 'ENDED') {
@@ -1540,18 +1548,22 @@ function renderTrainingResultsModalBody() {
     // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng): cột "Kết Quả" trước đây in cứng "🧪 Tự động qua bài
     // test" cho MỌI học viên của lớp có gán bài test, kể cả học viên CHƯA làm bài (result vẫn
     // REGISTERED) — nhìn như thể ai cũng tự động "qua" dù chưa thi. Nay đọc đúng r.result: còn đang
-    // học thì nói rõ "chưa có kết quả", đã có PASSED/FAILED thì hiện đúng Đạt/Không đạt (đến từ
-    // ttTakeSubmit() khi học viên tự làm bài — không phải tự động pass).
+    // học thì nói rõ "chưa có kết quả", đã có PASSED/FAILED thì hiện rõ Hoàn thành/Chưa hoàn thành (đến
+    // từ ttTakeSubmit() khi học viên tự làm bài — không phải tự động pass). Đợt sau (10/2026, phản ánh
+    // người dùng): đổi nhãn "Đạt"/"Không đạt" thành "Hoàn thành"/"Chưa hoàn thành" cho đúng chữ người
+    // dùng muốn thấy ở cột này — KHÔNG đụng field r.result gốc (vẫn PASSED/FAILED) hay sub-badge "Đạt"/
+    // "Không đạt" ở cột Trạng Thái (getTrainingRegDisplayStatus(), khái niệm khác — Trạng Thái nói về
+    // tiến trình Chờ/Đang học/Hoàn thành, còn cột này nói riêng về việc thi đạt hay chưa).
     const resultCell = hasTest
       ? (r.result === 'PASSED'
-          ? `<span class="text-xs font-bold text-emerald-700">✅ Đạt</span>`
+          ? `<span class="text-xs font-bold text-emerald-700">✅ Hoàn thành</span>`
           : r.result === 'FAILED'
-            ? `<span class="text-xs font-bold text-red-600">❌ Không đạt</span>`
+            ? `<span class="text-xs font-bold text-red-600">❌ Chưa hoàn thành</span>`
             : `<span class="text-xs italic text-gray-400">🧪 Chưa làm bài test (tự động chấm khi nộp bài)</span>`)
       : `<select id="trResult_${r.id}" class="border rounded p-1">
           <option value="REGISTERED" ${r.result === 'REGISTERED' ? 'selected' : ''}>Đang học</option>
-          <option value="PASSED" ${r.result === 'PASSED' ? 'selected' : ''}>✅ Đạt</option>
-          <option value="FAILED" ${r.result === 'FAILED' ? 'selected' : ''}>❌ Không đạt</option>
+          <option value="PASSED" ${r.result === 'PASSED' ? 'selected' : ''}>✅ Hoàn thành</option>
+          <option value="FAILED" ${r.result === 'FAILED' ? 'selected' : ''}>❌ Chưa hoàn thành</option>
         </select>`;
     const scoreCell = hasTest
       ? `${r.score != null ? escapeHtml(String(r.score)) + '%' : ''}`
@@ -1587,7 +1599,7 @@ function renderTrainingResultsModalBody() {
 
 async function saveTrainingResult(regId) {
   const result = document.getElementById(`trResult_${regId}`).value;
-  if (result === 'REGISTERED') return alert('Vui lòng chọn Đạt hoặc Không đạt để lưu kết quả.');
+  if (result === 'REGISTERED') return alert('Vui lòng chọn Hoàn thành hoặc Chưa hoàn thành để lưu kết quả.');
   const scoreRaw = document.getElementById(`trScore_${regId}`).value;
   let updated;
   try {
@@ -3065,6 +3077,23 @@ async function submitTrainingDocument(e) {
       uploaded = await uploadFileToServer(file, docType === 'IMAGE' ? 'internalImage' : 'internal');
     } catch (err) { return alert(`⛔ Tải tệp thất bại: ${err.message}`); }
     payload.fileUrl = uploaded.fileUrl; payload.fileName = uploaded.fileName; payload.fileType = uploaded.fileType;
+    // Thumbnail DOCUMENT (10/2026, "Kho Tài Liệu Đào Tạo cần có bổ sung Thumbnail hiển thị minh họa") —
+    // tái dùng NGUYÊN generateDocThumbnail() đã có sẵn ở module-tailieu.js (vẽ trang 1 PDF ra <canvas>
+    // bằng PDF.js, nén PNG) — hàm toàn cục, cùng trang KHÔNG qua <script type="module"> nên gọi thẳng
+    // được, không cần ensureFnReady() (module-tailieu.js luôn nạp TRƯỚC module-internalcomms-daotao.js,
+    // xem MODULE_LOAD_GROUPS ở core.js: "internalcomms-daotao" phụ thuộc "formbuilder-nav"). Best-effort
+    // — PDF hỏng/không vẽ được thì để trống, rơi về icon loại tệp (docThumbHTML()); IMAGE dùng thẳng
+    // fileUrl gốc làm thumbnail nên không cần sinh gì thêm ở đây.
+    if (docType === 'DOCUMENT') {
+      try {
+        const thumbFile = await generateDocThumbnail(file);
+        if (thumbFile) {
+          const uploadedThumb = await uploadFileToServer(thumbFile, 'internalImage');
+          payload.thumbnailUrl = uploadedThumb.fileUrl;
+          payload.thumbnailFileName = uploadedThumb.fileName;
+        }
+      } catch (err) { /* best-effort, không chặn tải lên tài liệu */ }
+    }
   }
   let savedDoc;
   try {
@@ -3403,12 +3432,19 @@ function renderTrainingDocuments() {
     } else {
       actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 text-center">⬇️ Tải</a>`;
     }
+    // Thumbnail minh hoạ (10/2026) — tái dùng NGUYÊN docThumbHTML() (module-tailieu.js, cùng khuôn Kho
+    // Tài Liệu chung): ưu tiên d.thumbnailUrl (ảnh trang đầu PDF tự vẽ lúc tải DOCUMENT lên, hoặc ảnh
+    // img.youtube.com tự tính cho VIDEO — cả 2 đều đã có sẵn trong record), IMAGE rơi về thẳng fileUrl
+    // gốc, còn lại (DOCX/XLSX không có thumbnail hoặc vẽ thất bại) hiện icon theo loại tệp.
     return `
     <div class="bg-white rounded border p-3 flex justify-between items-start gap-2">
-      <div class="min-w-0">
-        <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}${mandatoryBadge}</div>
-        <div class="text-xs text-gray-500">${escapeHtml(d.category)} — ${escapeHtml(d.uploaderName || '')}${course ? ` — Chương trình: ${escapeHtml(course.name)}` : ''}</div>
-        ${d.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(d.description)}</div>` : ''}
+      <div class="flex gap-2 min-w-0">
+        ${docThumbHTML(d)}
+        <div class="min-w-0">
+          <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}${mandatoryBadge}</div>
+          <div class="text-xs text-gray-500">${escapeHtml(d.category)} — ${escapeHtml(d.uploaderName || '')}${course ? ` — Chương trình: ${escapeHtml(course.name)}` : ''}</div>
+          ${d.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(d.description)}</div>` : ''}
+        </div>
       </div>
       <div class="flex flex-col gap-1 flex-shrink-0 items-end">
         ${actionHTML}
@@ -3771,6 +3807,21 @@ function populateOnboardingPathSelects() {
   const pathOpts = DB.onboardingPaths.slice().sort((a, b) => b.id - a.id)
     .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   const oaSel = document.getElementById('oaPathId'); if (oaSel) oaSel.innerHTML = pathOpts || `<option value="" disabled>-- Chưa có lộ trình nào, tạo ở khối trên --</option>`;
+  // Tài Liệu Đào Tạo đính kèm GĐ1/GĐ2 (tuỳ chọn, 10/2026) — cùng khuôn tcDocumentIds
+  // (populateTrainingClassMultiSelects()) — trainingDocuments KHÔNG bị Nhập Kế Hoạch Đào Tạo từ Excel
+  // đẩy thêm dòng rác nào (chỉ trainingCourses mới bị, xem lịch sử ở đầu internalSection.html), nên an
+  // toàn để dùng lại làm ô chọn tuỳ chọn ở đây.
+  const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
+    .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
+  const s1Doc = document.getElementById('opStage1DocIds'); if (s1Doc) s1Doc.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
+  const s2Doc = document.getElementById('opStage2DocIds'); if (s2Doc) s2Doc.innerHTML = docOpts || `<option value="" disabled>-- Kho tài liệu đang trống --</option>`;
+  // Lớp Học Tham Chiếu GĐ1 (tuỳ chọn, 10/2026) — trỏ vào 1 trainingClasses CÓ THẬT (không phải
+  // trainingCourses — xem chú thích đầy đủ ở internalSection.html, tránh lặp lại lỗi "ngập lựa chọn
+  // Nhập từ Excel" vừa vá).
+  const classOpts = DB.trainingClasses.slice().sort((a, b) => b.id - a.id)
+    .map(c => `<option value="${c.id}">${escapeHtml(c.code || '')} - ${escapeHtml(c.title)}</option>`).join('');
+  const linkedClassSel = document.getElementById('opLinkedClassId');
+  if (linkedClassSel) linkedClassSel.innerHTML = `<option value="">-- Không tham chiếu lớp học nào --</option>` + classOpts;
 }
 
 async function submitOnboardingPath(e) {
@@ -3787,6 +3838,9 @@ async function submitOnboardingPath(e) {
     stage1Criteria: document.getElementById('opStage1Criteria').value.trim(),
     stage2Criteria: document.getElementById('opStage2Criteria').value.trim(),
     stage3Criteria: document.getElementById('opStage3Criteria').value.trim(),
+    stage1DocIds: [...document.getElementById('opStage1DocIds').selectedOptions].map(o => Number(o.value)),
+    stage2DocIds: [...document.getElementById('opStage2DocIds').selectedOptions].map(o => Number(o.value)),
+    linkedClassId: document.getElementById('opLinkedClassId').value,
     customData
   };
   try {
@@ -3817,6 +3871,11 @@ function openEditOnboardingPath(id) {
   document.getElementById('opStage1Criteria').value = path.stage1Criteria || '';
   document.getElementById('opStage2Criteria').value = path.stage2Criteria || '';
   document.getElementById('opStage3Criteria').value = path.stage3Criteria || '';
+  const stage1DocIds = new Set(path.stage1DocIds || []);
+  const stage2DocIds = new Set(path.stage2DocIds || []);
+  [...document.getElementById('opStage1DocIds').options].forEach(o => { o.selected = stage1DocIds.has(Number(o.value)); });
+  [...document.getElementById('opStage2DocIds').options].forEach(o => { o.selected = stage2DocIds.has(Number(o.value)); });
+  document.getElementById('opLinkedClassId').value = path.linkedClassId != null ? String(path.linkedClassId) : '';
   document.getElementById('opSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('opCancelEditBtn').classList.remove('hidden');
   document.getElementById('onboardingPathForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3851,17 +3910,24 @@ function renderOnboardingPathsTable() {
   if (!tbody) return;
   if (!pageItems.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400 italic">Chưa có lộ trình đào tạo tân binh nào.</td></tr>`; return; }
   const canManage = canManageTrainingLocal(currentUser);
-  const criteriaCellHTML = (text) => text
-    ? `<div class="max-w-xs truncate" title="${escapeHtml(text)}">${escapeHtml(text)}</div>`
-    : `<span class="text-gray-400 italic">(chưa nhập)</span>`;
+  // Đợt sau (10/2026, theo yêu cầu người dùng): kèm đếm số Tài Liệu Đào Tạo đính kèm (docIds) ngay dưới
+  // nội dung GĐ1/GĐ2 nếu có — thuần hiển thị tham khảo cho Nhân Sự biết lộ trình này đã gắn tài liệu gì.
+  const criteriaCellHTML = (text, docIds) => {
+    const base = text
+      ? `<div class="max-w-xs truncate" title="${escapeHtml(text)}">${escapeHtml(text)}</div>`
+      : `<span class="text-gray-400 italic">(chưa nhập)</span>`;
+    const docCount = Array.isArray(docIds) ? docIds.length : 0;
+    return base + (docCount ? `<div class="text-[11px] text-indigo-600 mt-0.5">📎 ${docCount} tài liệu đính kèm</div>` : '');
+  };
   tbody.innerHTML = pageItems.map(p => {
     const actions = canManage ? `
       <button data-op="openEditOnboardingPath" data-arg0="${p.id}" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
       ${currentUser.perms?.admin ? `<button data-op="deleteOnboardingPath" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline">Xóa</button>` : ''}` : '';
+    const linkedClass = p.linkedClassId != null ? DB.trainingClasses.find(c => c.id === p.linkedClassId) : null;
     return `<tr class="hover:bg-gray-50">
-      <td class="border p-2 font-bold">${escapeHtml(p.name)}</td>
-      <td class="border p-2">${criteriaCellHTML(p.stage1Criteria)}</td>
-      <td class="border p-2">${criteriaCellHTML(p.stage2Criteria)}</td>
+      <td class="border p-2 font-bold">${escapeHtml(p.name)}${linkedClass ? `<div class="text-[11px] text-gray-400 font-normal mt-0.5">🔗 Tham chiếu: ${escapeHtml(linkedClass.code || '')} - ${escapeHtml(linkedClass.title)}</div>` : ''}</td>
+      <td class="border p-2">${criteriaCellHTML(p.stage1Criteria, p.stage1DocIds)}</td>
+      <td class="border p-2">${criteriaCellHTML(p.stage2Criteria, p.stage2DocIds)}</td>
       <td class="border p-2 max-w-xs truncate" title="${escapeHtml(p.stage3Criteria || '')}">${escapeHtml(p.stage3Criteria || '(chưa nhập)')}</td>
       <td class="border p-2 text-center whitespace-nowrap">${actions}</td>
     </tr>`;
@@ -3878,6 +3944,23 @@ function onboardingStageConfirmCellHTML(p, path, stageNum, canManage) {
   if (p[`stage${stageNum}Result`] === 'CONFIRMED') return '';
   if (stageNum === 2 && p.stage1Result !== 'CONFIRMED') return '';
   return `<div class="mt-1"><button data-op="confirmOnboardingStageAction" data-arg0="${p.id}" data-arg1="${stageNum}" class="bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px] font-bold hover:bg-emerald-700">Xác Nhận GĐ${stageNum}</button></div>`;
+}
+
+// Đợt sau (10/2026, theo yêu cầu người dùng "Giai đoạn 1 sẽ link kết quả từ lớp Tân binh sang") — CHỈ
+// hiển thị THAM KHẢO kết quả thi thật của nhân viên này ở ĐÚNG lớp học path.linkedClassId (nếu lộ
+// trình có gán, xem opLinkedClassId ở form trên) — KHÔNG tự động xác nhận hộ, KHÔNG chặn/bắt buộc Nhân
+// Sự phải theo kết quả này, Nhân Sự vẫn tự do bấm "Xác Nhận GĐ1" độc lập như trước. Trỏ vào 1
+// trainingClasses CÓ THẬT (không phải danh mục trainingCourses) nên không lặp lại lỗi "ngập lựa chọn
+// Nhập từ Excel" đã vá — chỉ áp dụng Giai đoạn 1 theo đúng yêu cầu (Giai đoạn 2 không có khái niệm này).
+function onboardingLinkedClassResultHintHTML(p, path) {
+  if (!path?.linkedClassId) return '';
+  const cls = DB.trainingClasses.find(c => c.id === path.linkedClassId);
+  if (!cls) return '';
+  const reg = DB.trainingRegistrations.find(r => r.classId === cls.id && r.creator === p.employeeUsername && r.result !== 'CANCELLED');
+  if (!reg) return `<div class="text-[10px] text-gray-400 italic mt-1">Chưa đăng ký lớp "${escapeHtml(cls.title)}"</div>`;
+  const disp = getTrainingRegDisplayStatus(reg, cls);
+  const cls2 = disp.key === 'DONE' ? (reg.result === 'PASSED' ? 'text-emerald-600' : 'text-red-600') : 'text-indigo-600';
+  return `<div class="text-[10px] ${cls2} font-bold mt-1">🧪 ${escapeHtml(cls.title)}: ${escapeHtml(disp.label)}${disp.sub ? ` (${escapeHtml(disp.sub)})` : ''}</div>`;
 }
 
 // ---- Phân Công (Khối 2) ----
@@ -3960,7 +4043,7 @@ function renderOnboardingProgressTable() {
       <td class="border p-2">${escapeHtml(p.employeeName)}<div class="text-gray-400">(${escapeHtml(p.employeeUsername)})</div></td>
       <td class="border p-2">${escapeHtml(p.pathName)}</td>
       <td class="border p-2">${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN')) : ''}</td>
-      <td class="border p-2 text-center">${onboardingStageBadgeHTML(1, p, m)}${onboardingStageConfirmCellHTML(p, path, 1, canManage)}</td>
+      <td class="border p-2 text-center">${onboardingStageBadgeHTML(1, p, m)}${canManage ? onboardingLinkedClassResultHintHTML(p, path) : ''}${onboardingStageConfirmCellHTML(p, path, 1, canManage)}</td>
       <td class="border p-2 text-center">${onboardingStageBadgeHTML(2, p, m)}${onboardingStageConfirmCellHTML(p, path, 2, canManage)}</td>
       <td class="border p-2 text-center">${onboardingStageBadgeHTML(3, p, m)}</td>
       <td class="border p-2 text-center">${certCell}</td>
@@ -3974,18 +4057,29 @@ function renderOnboardingProgressTable() {
 // LỖI ĐÃ VÁ (10/2026) — trước đây hiển thị danh sách Chương Trình Học bắt buộc kèm dấu Đạt/chưa Đạt dựa
 // theo kết quả thi ở Lớp Học (xem lịch sử ở chú thích đầu internalSection.html). Giai đoạn 1/2 giờ là
 // nội dung NHẬP TAY thuần tuý (path.stage1Criteria/stage2Criteria), không còn gắn Chương Trình/Lớp Học
-// nào — chỉ còn hiển thị ĐÚNG nội dung đó, Nhân Sự tự theo dõi thực tế rồi xác nhận.
-function onboardingStageCriteriaHTML(criteria) {
-  return criteria
+// nào — chỉ còn hiển thị ĐÚNG nội dung đó, Nhân Sự tự theo dõi thực tế rồi xác nhận. Đợt sau (10/2026,
+// theo yêu cầu người dùng): có thể kèm thêm 1-nhiều Tài Liệu Đào Tạo đính kèm (docIds, trainingDocuments
+// — KHÁC hẳn trainingCourses từng gây lỗi "ngập lựa chọn Nhập từ Excel" ở trên) — thuần tham khảo, dùng
+// lại ĐÚNG trainingDocOpenLinkHTML() (Xem Tài Liệu/Xem Video, cùng theo dõi tiến độ như Kho Tài Liệu).
+function onboardingStageCriteriaHTML(criteria, docIds) {
+  const criteriaHTML = criteria
     ? `<div class="text-xs text-gray-700 whitespace-pre-line">${escapeHtml(criteria)}</div>`
     : '<div class="text-xs text-gray-400 italic">Chưa nhập nội dung.</div>';
+  const docs = (Array.isArray(docIds) ? docIds : []).map(id => DB.trainingDocuments.find(d => d.id === id)).filter(Boolean);
+  if (!docs.length) return criteriaHTML;
+  const docsHTML = `<div class="flex flex-wrap gap-1 mt-2">${docs.map(d => `
+    <div class="border rounded p-1.5 bg-gray-50">
+      <div class="text-[11px] font-semibold text-gray-700">${escapeHtml(d.title)}</div>
+      ${trainingDocOpenLinkHTML(d)}
+    </div>`).join('')}</div>`;
+  return criteriaHTML + docsHTML;
 }
 
 function renderMyOnboardingCardHTML(p) {
   const path = DB.onboardingPaths.find(x => x.id === p.pathId);
   const m = computeOnboardingMilestones(p);
-  const stage1Content = onboardingStageCriteriaHTML(path?.stage1Criteria);
-  const stage2Content = onboardingStageCriteriaHTML(path?.stage2Criteria);
+  const stage1Content = onboardingStageCriteriaHTML(path?.stage1Criteria, path?.stage1DocIds);
+  const stage2Content = onboardingStageCriteriaHTML(path?.stage2Criteria, path?.stage2DocIds);
   const stageHint = `<div class="text-xs text-gray-500 italic">Hoàn thành nội dung trên trong thực tế — Nhân Sự sẽ xác nhận khi đã đủ.</div>`;
 
   const stage1Note = p.stage1Result === 'CONFIRMED'

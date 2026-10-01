@@ -53,12 +53,22 @@ let CURRENT_USERNAME = ADMIN.username;
 
 const { HttpError } = require('../lib/httpErrors');
 
+// trainingDocuments/trainingClasses CŨNG KHÔNG nằm trong AppData thật (đều là MIGRATED_COLLECTION,
+// xem recordStore.js) — nhưng routes/records.js /onboardingPaths/:id/edit lại gọi getAllAppData() (đã
+// re-add 10/2026) rồi TỰ LẤY appData.trainingDocuments/appData.trainingClasses, nên mirror đúng thực tế
+// ở đây nghĩa là field đó PHẢI có mặt (không phải chỉ Set rỗng) để test phơi bày đúng lỗi nếu route quên
+// nạp, giống hệt lý do trainingCourses từng bị thiếu trước khi vá.
+const TRAINING_DOCS = [{ id: 1, title: 'Tài Liệu Kho A' }, { id: 2, title: 'Tài Liệu Kho B' }];
+const TRAINING_CLASSES = [{ id: 10, title: 'Lớp Tân Binh Kho Q1' }];
 stubModule('lib/appData', {
   // Cố ý KHÔNG có trainingCourses ở đây — mirror ĐÚNG thực tế getAllAppData() (trainingCourses là
   // MIGRATED_COLLECTION, không nằm trong AppData) để bài test này thật sự phơi bày đúng lỗi đã vá thay
   // vì âm thầm cho qua nhờ giả lập sai.
   getAppDataValue: async (key) => (key === 'sensitiveKeywords' ? [] : null),
-  getAllAppData: async () => ({ users: USERS, depts: ['Hành Chính', 'Ban Giám Đốc'], stores: [] }),
+  getAllAppData: async () => ({
+    users: USERS, depts: ['Hành Chính', 'Ban Giám Đốc'], stores: [],
+    trainingDocuments: TRAINING_DOCS, trainingClasses: TRAINING_CLASSES
+  }),
   withLockedAppDataValue: async (key, fn) => fn(null)
 });
 
@@ -208,6 +218,42 @@ async function main() {
       }, TRAINER);
       assertEqual(res.status, 400);
       assertIncludes(res.body.error, 'nội dung bắt buộc cho Giai đoạn 1');
+    });
+
+    await run.run('sửa Lộ Trình gán stage1DocIds/stage2DocIds (tham chiếu trainingDocuments) + linkedClassId (tham chiếu trainingClasses) hợp lệ phải THÀNH CÔNG', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/onboardingPaths/1/edit', {
+        name: 'Lộ Trình Nhân Viên Kho',
+        stage1Criteria: 'Nội quy công ty, an toàn lao động.', stage2Criteria: 'Quy trình kho.',
+        stage3Criteria: 'x',
+        stage1DocIds: [1, 2], stage2DocIds: [2], linkedClassId: 10
+      }, TRAINER);
+      assertEqual(res.status, 200, `Phải sửa được: ${JSON.stringify(res.body)}`);
+      assertEqual(JSON.stringify(res.body.item.stage1DocIds), JSON.stringify([1, 2]));
+      assertEqual(JSON.stringify(res.body.item.stage2DocIds), JSON.stringify([2]));
+      assertEqual(res.body.item.linkedClassId, 10);
+    });
+
+    await run.run('stage1DocIds chứa ID tài liệu KHÔNG tồn tại bị lọc bỏ âm thầm (không văng lỗi, chỉ giữ ID hợp lệ)', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/onboardingPaths/1/edit', {
+        name: 'Lộ Trình Nhân Viên Kho',
+        stage1Criteria: 'a', stage2Criteria: 'b', stage3Criteria: 'x',
+        stage1DocIds: [1, 9999]
+      }, TRAINER);
+      assertEqual(res.status, 200, `Phải sửa được: ${JSON.stringify(res.body)}`);
+      assertEqual(JSON.stringify(res.body.item.stage1DocIds), JSON.stringify([1]), 'ID tài liệu không tồn tại (9999) phải bị lọc bỏ');
+    });
+
+    await run.run('linkedClassId trỏ tới lớp KHÔNG tồn tại bị chuẩn hoá về null (không văng lỗi)', async () => {
+      resetRecords();
+      const res = await api('POST', '/api/records/onboardingPaths/1/edit', {
+        name: 'Lộ Trình Nhân Viên Kho',
+        stage1Criteria: 'a', stage2Criteria: 'b', stage3Criteria: 'x',
+        linkedClassId: 9999
+      }, TRAINER);
+      assertEqual(res.status, 200, `Phải sửa được: ${JSON.stringify(res.body)}`);
+      assertEqual(res.body.item.linkedClassId, null, 'linkedClassId trỏ lớp không tồn tại phải về null');
     });
 
     await run.run('người không có quyền trainingManage/admin bị từ chối 403 (gác quyền không đổi)', async () => {

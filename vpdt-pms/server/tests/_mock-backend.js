@@ -420,15 +420,45 @@ function __mockValidateTrainingDocumentCreate(payload, user) {
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw __mockHttpError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
     payload.durationSeconds = Math.floor(durationSeconds);
     payload.pageCount = null;
+    // Thumbnail VIDEO (10/2026) — mirrors extractYoutubeVideoIdForThumbnail()/img.youtube.com ở
+    // createValidation.js — TỰ TÍNH từ videoId, không tin thumbnailUrl client gửi kèm.
+    payload.thumbnailUrl = __mockExtractYoutubeVideoId(videoUrl)
+      ? `https://img.youtube.com/vi/${__mockExtractYoutubeVideoId(videoUrl)}/hqdefault.jpg` : '';
+    payload.thumbnailFileName = '';
   } else {
     if (!payload.fileUrl) throw __mockHttpError(400, docType === 'IMAGE' ? 'Vui lòng chọn ảnh cần tải lên' : 'Vui lòng chọn tệp tài liệu cần tải lên');
     payload.videoUrl = '';
     payload.durationSeconds = null;
     payload.pageCount = null;
+    // Thumbnail DOCUMENT/IMAGE (10/2026) — mirrors createValidation.js: DOCUMENT nhận thumbnailUrl
+    // optional do client tự vẽ+tải lên (best-effort, generateDocThumbnail()); IMAGE luôn để trống (client
+    // dùng thẳng fileUrl gốc làm thumbnail).
+    if (docType === 'IMAGE') {
+      payload.thumbnailUrl = ''; payload.thumbnailFileName = '';
+    } else {
+      payload.thumbnailUrl = payload.thumbnailUrl ? String(payload.thumbnailUrl).trim() : '';
+      payload.thumbnailFileName = payload.thumbnailFileName ? String(payload.thumbnailFileName).trim() : '';
+    }
   }
 
   payload.mandatory = payload.mandatory === true || payload.mandatory === 'true';
   __mockValidateCourseId(payload);
+}
+
+// Tách videoId — mirrors extractYoutubeVideoIdForThumbnail() ở lib/createValidation.js (dùng chung cho
+// nhánh tạo VÀ sửa ở __mockEditTrainingDocument() bên dưới).
+function __mockExtractYoutubeVideoId(videoUrl) {
+  try {
+    const u = new URL(videoUrl);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return u.pathname.slice(1) || null;
+    if (host.endsWith('youtube.com')) {
+      const v = u.searchParams.get('v');
+      if (v) return v;
+      if (u.pathname.startsWith('/embed/')) return u.pathname.split('/embed/')[1] || null;
+    }
+    return null;
+  } catch (e) { return null; }
 }
 
 // __mockEditTrainingDocument() — 10/2026, thêm nút "✏️ Sửa" cho Kho Tài Liệu. CHỈ sửa được METADATA
@@ -453,6 +483,10 @@ function __mockEditTrainingDocument(payload, user, doc) {
     const durationSeconds = Number(doc.durationSeconds);
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw __mockHttpError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
     doc.durationSeconds = Math.floor(durationSeconds);
+    // mirrors editTrainingDocument() ở lib/recordActions.js — tính lại thumbnail theo videoId MỚI.
+    const videoId = __mockExtractYoutubeVideoId(videoUrl);
+    doc.thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
+    doc.thumbnailFileName = '';
   }
   __mockValidateCourseId(doc);
   return doc;
@@ -997,6 +1031,10 @@ function __mockConfirmJobFilled(user, job) {
 // trainingCourses, giống hệt careerPaths.stages[].requiredCourseIds) — đã đổi hẳn sang NỘI DUNG NHẬP
 // TAY (stage1Criteria/stage2Criteria, cùng khuôn stage3Criteria) để tránh danh mục Chương Trình bị
 // "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm quá nhiều lựa chọn không liên quan vào ô chọn.
+// stage1DocIds/stage2DocIds (tham chiếu DB.trainingDocuments) + linkedClassId (tham chiếu
+// DB.trainingClasses) — thêm 10/2026, cùng đợt gán tài liệu đào tạo + link kết quả lớp Tân binh.
+// CỐ TÌNH dùng tên field MỚI, KHÁC HẲN stage1DocumentIds/test1Id/... đã bị xoá ở trên, và CỐ TÌNH
+// không đụng tới trainingCourses (tránh lặp lại lỗi danh mục Chương Trình bị Excel làm bẩn).
 function __mockNormalizeOnboardingPathFields(payload) {
   if (!payload.name || !String(payload.name).trim()) throw __mockHttpError(400, 'Thiếu tên lộ trình đào tạo tân binh');
   payload.name = String(payload.name).trim();
@@ -1008,6 +1046,17 @@ function __mockNormalizeOnboardingPathFields(payload) {
   payload.stage1Criteria = toCriteria(payload.stage1Criteria, 'Giai đoạn 1');
   payload.stage2Criteria = toCriteria(payload.stage2Criteria, 'Giai đoạn 2');
   payload.stage3Criteria = payload.stage3Criteria ? String(payload.stage3Criteria).trim().slice(0, 3000) : '';
+
+  const toDocIds = (raw) => {
+    const ids = Array.isArray(raw) ? [...new Set(raw.map(Number))].filter(Number.isFinite) : [];
+    return ids.filter((id) => DB.trainingDocuments.some((d) => d.id === id));
+  };
+  payload.stage1DocIds = toDocIds(payload.stage1DocIds);
+  payload.stage2DocIds = toDocIds(payload.stage2DocIds);
+
+  const linkedClassId = (payload.linkedClassId === '' || payload.linkedClassId == null) ? null : Number(payload.linkedClassId);
+  payload.linkedClassId = (linkedClassId != null && DB.trainingClasses.some((c) => c.id === linkedClassId)) ? linkedClassId : null;
+
   delete payload.stage1RequiredCourseIds; delete payload.stage2RequiredCourseIds;
   delete payload.stage1DocumentIds; delete payload.test1Id;
   delete payload.stage2DocumentIds; delete payload.test2Id;
@@ -1018,7 +1067,7 @@ function __mockValidateOnboardingPathCreate(payload, user) {
 }
 function __mockEditOnboardingPath(payload, user, path) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
-  const fields = ['name', 'stage1Criteria', 'stage2Criteria', 'stage3Criteria'];
+  const fields = ['name', 'stage1Criteria', 'stage2Criteria', 'stage3Criteria', 'stage1DocIds', 'stage2DocIds', 'linkedClassId'];
   fields.forEach((f) => { if (payload[f] !== undefined) path[f] = payload[f]; });
   __mockNormalizeOnboardingPathFields(path);
   return path;

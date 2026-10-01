@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -5053,6 +5053,12 @@ function editTrainingDocument(payload, user, doc, appData) {
       throw new HttpError(400, 'Vui lòng nhập thời lượng video (giây) hợp lệ');
     }
     doc.durationSeconds = Math.floor(durationSeconds);
+    // Thumbnail VIDEO tính lại theo videoId MỚI nếu admin sửa sang 1 link Youtube khác — cùng cách tự
+    // sinh (không tin client) với lúc tạo, xem normalizeTrainingCourseFields... à trainingDocuments ở
+    // createValidation.js (extractYoutubeVideoIdForThumbnail()).
+    const videoId = extractYoutubeVideoIdForThumbnail(videoUrl);
+    doc.thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
+    doc.thumbnailFileName = '';
   }
   const courseId = (doc.courseId === '' || doc.courseId == null) ? null : Number(doc.courseId);
   if (courseId != null) {
@@ -5477,14 +5483,16 @@ function assertCanRevokeCareerPathConfirmation(user, confirmation, allConfirmati
 // trainingCourses) — đã đổi hẳn sang stage1Criteria/stage2Criteria (nội dung nhập tay, cùng khuôn
 // stage3Criteria) để tránh danh mục Chương Trình bị "Nhập Kế Hoạch Đào Tạo từ Excel" tự đẩy thêm quá
 // nhiều lựa chọn không liên quan vào ô chọn của Lộ Trình Tân Binh.
-const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1Criteria', 'stage2Criteria', 'stage3Criteria'];
-function editOnboardingPath(payload, user, path) {
+// Đợt sau (10/2026): thêm stage1DocIds/stage2DocIds (trainingDocuments, tham khảo) + linkedClassId
+// (trainingClasses, chỉ hiện gợi ý kết quả GĐ1) — xem chú thích đầy đủ ở normalizeOnboardingPathFields().
+const ONBOARDING_PATH_EDITABLE_FIELDS = ['name', 'stage1Criteria', 'stage2Criteria', 'stage3Criteria', 'stage1DocIds', 'stage2DocIds', 'linkedClassId'];
+function editOnboardingPath(payload, user, path, appData) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình đào tạo tân binh');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
   for (const field of ONBOARDING_PATH_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) path[field] = payload[field];
   }
-  normalizeOnboardingPathFields(path);
+  normalizeOnboardingPathFields(path, appData);
   return path;
 }
 
