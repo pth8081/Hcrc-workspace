@@ -3909,6 +3909,16 @@ làm được nay bị chặn:
   `endTime` là quá khứ/tương lai/chưa đặt. Lớp OFFLINE không đổi gì (vẫn cần
   giảng viên bấm "Kết Thúc Lớp" mới mở được bài test, cơ chế khác hẳn, dựa
   trạng thái buổi học chứ không dựa giờ kết thúc lịch).
+- **Xem lại tài liệu/buổi học sau khi đã Hoàn thành (từ v24.58)** — trước
+  đây ngay khi đăng ký có kết quả (Đạt/Không đạt), nút "Vào Lớp Học" biến
+  mất hẳn khỏi tab "Đăng Ký Của Tôi", học viên hết đường quay lại xem video/
+  tài liệu đã học. Nay nút này LUÔN còn, chỉ đổi nhãn thành "📚 Xem Lại Tài
+  Liệu" (ONLINE) / "📍 Xem Lại Buổi Học" (OFFLINE) sau khi đã Hoàn thành —
+  bấm vào chỉ để XEM LẠI, không đổi gì kết quả/tiến độ đã ghi nhận trước đó
+  (badge "✅ Đã xem" vẫn nguyên). Riêng nút/thông báo liên quan tới BÀI TEST
+  (nhắc xem hết giáo trình, khoá chờ giảng viên kết thúc lớp, nút "Vào Làm
+  Bài Test") chỉ còn hiện khi đăng ký CHƯA có kết quả, không hiện lại sau
+  khi đã Hoàn thành.
 - **Tài liệu PDF bắt buộc (từ v24.56)**: xem theo kiểu **lật từng trang**
   (nút "◀ Trang trước"/"Trang sau ▶" + chỉ báo "Trang X/N") thay vì cuộn
   liên tục như trước — cuộn liên tục trên PDF khổ dọc (A4/Letter) từng có

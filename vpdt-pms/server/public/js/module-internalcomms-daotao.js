@@ -2512,16 +2512,26 @@ function renderTrainingMyRegs() {
     // thuộc giờ kết thúc lớp (cls.endTime) — bỏ từ 10/2026 theo phản ánh người dùng (học xong rồi vẫn
     // phải chờ tới đúng giờ lịch mới thi được, dù không liên quan gì tới việc đã học xong hay chưa).
     // OFFLINE vẫn cần giảng viên bấm "Kết Thúc Lớp" (không đổi).
+    // LỖI ĐÃ VÁ (10/2026, phản ánh người dùng) — nút "Vào Lớp Học" trước đây CHỈ hiện khi r.result còn
+    // REGISTERED: ngay khi có kết quả (PASSED/FAILED, "Hoàn thành"), học viên MẤT HẲN đường vào xem lại
+    // tài liệu/video đã học (dù tiến độ xem vẫn còn nguyên trong viewedDocumentIds/trainingDocumentProgress
+    // — chỉ là không còn chỗ bấm vào). Tách riêng: nút VÀO XEM (đổi nhãn "Xem Lại Tài Liệu"/"Xem Lại Buổi
+    // Học" khi đã có kết quả) hiện cho MỌI reg (trừ CANCELLED, vốn đã bị lọc khỏi bảng này từ đầu hàm) —
+    // chỉ các dòng LIÊN QUAN TỚI BÀI TEST (thông báo chờ/khoá, nút "Vào Làm Bài Test") mới còn giới hạn
+    // r.result === 'REGISTERED' (đã có kết quả thì không còn gì để thi lại). renderTrainingJoinClassModalBody()
+    // vốn đã không đụng gì tới result/viewedDocumentIds (chỉ hiển thị, "Đánh dấu đã xem" tự ẩn khi
+    // isViewed=true) nên mở lại modal này cho reg đã Hoàn thành chỉ để XEM, không làm đổi trạng thái gì.
     let testHTML = '';
-    if (cls && r.result === 'REGISTERED') {
-      if (mySubmission) {
+    if (cls) {
+      const done = r.result !== 'REGISTERED';
+      if (mySubmission && !done) {
         // Đợt 10 — đã nộp bài rồi (bài test có câu Nghị Luận) nhưng reg.result CHƯA chuyển PASSED/FAILED
         // (chờ chấm tay, xem pendingEssay ở trên) — KHÔNG được hiện lại nút "Vào Làm Bài Test" (server dù
         // sao cũng chặn nộp lần 2, nhưng để nút đó hiện ra là gây hiểu lầm đã có thể làm lại).
         testHTML += `<div class="text-xs text-amber-600 mt-1">⏳ Đã nộp bài — kết quả sẽ có sau khi giảng viên chấm xong phần nghị luận</div>`;
       } else if (cls.mode === 'OFFLINE') {
-        testHTML += `<button data-op="openTrainingJoinClassModal" data-arg0="${r.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📍 Vào Lớp Học</button>`;
-        if (cls.testId != null) {
+        testHTML += `<button data-op="openTrainingJoinClassModal" data-arg0="${r.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📍 ${done ? 'Xem Lại Buổi Học' : 'Vào Lớp Học'}</button>`;
+        if (!done && cls.testId != null) {
           testHTML += getTrainingClassSessionState(cls) === 'ENDED'
             ? `<div class="text-xs text-gray-400 mt-1">🧪 Quét mã QR tại lớp để làm bài</div>`
             : `<div class="text-xs text-gray-400 mt-1">🔒 Chờ giảng viên bấm "Kết Thúc Lớp" để mở bài test</div>`;
@@ -2531,8 +2541,8 @@ function renderTrainingMyRegs() {
         const viewedIds = Array.isArray(r.viewedDocumentIds) ? r.viewedDocumentIds : [];
         const viewedCount = requiredDocIds.filter(id => viewedIds.includes(id)).length;
         const allViewed = !requiredDocIds.length || viewedCount === requiredDocIds.length;
-        testHTML += `<button data-op="openTrainingJoinClassModal" data-arg0="${r.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📚 Vào Lớp Học${requiredDocIds.length ? ` (${viewedCount}/${requiredDocIds.length})` : ''}</button>`;
-        if (cls.testId != null) {
+        testHTML += `<button data-op="openTrainingJoinClassModal" data-arg0="${r.id}" class="bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700 mt-1 mr-1">📚 ${done ? 'Xem Lại Tài Liệu' : 'Vào Lớp Học'}${requiredDocIds.length ? ` (${viewedCount}/${requiredDocIds.length})` : ''}</button>`;
+        if (!done && cls.testId != null) {
           if (!allViewed) {
             testHTML += `<div class="text-xs text-amber-600 mt-1">📖 Cần xem hết tài liệu giáo trình trước khi thi</div>`;
           } else {
