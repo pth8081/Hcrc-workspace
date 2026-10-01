@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**24.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.66 (2026-10-01): Trang Đăng Nhập — thiết kế lại khối hero (bỏ tiêu đề chữ, thêm minh hoạ)
+
+Theo yêu cầu người dùng (demo ảnh trước, xác nhận rồi mới làm thật): bỏ
+headline/sub-text lớn ("Vận hành công việc và phê duyệt...") cùng dòng chữ
+"Hệ thống nội bộ" (cả eyebrow lẫn footer) khỏi khối hero (nền xanh navy) ở
+trang đăng nhập — thay bằng 1 minh hoạ SVG (màn hình dashboard + biểu đồ
+doanh thu + huy hiệu duyệt + túi mua sắm, tông màu thương hiệu sẵn có
+`#38bdf8`/`#60a5fa`/`#4f46e5`/`#a78bfa`) thể hiện "không gian làm việc số"
+ngành bán lẻ/văn phòng.
+
+Đã qua nhiều vòng chỉnh theo phản hồi người dùng (đổi minh hoạ, cân chỉnh
+tỉ lệ) trước khi chốt: `.loginpage-hero-mid`/`.loginpage-hero-illustration`
+đổi sang padding/margin ĐỐI XỨNG (trước đó lệch — khoảng trống phía dưới
+minh hoạ lớn hơn hẳn phía trên) để khối hero cân đối trên/dưới. 2 class CSS
+không còn dùng (`loginpage-hero-eyebrow`/`loginpage-hero-headline`/
+`loginpage-hero-sub`/`loginpage-hero-foot`) đã xoá khỏi `app.css`. Thuần
+HTML/CSS/SVG tĩnh — không đổi logic đăng nhập, không đổi quyền hạn. Chạy
+lại `test-auth-login.js`/`test-login-cache-first-render.js`/
+`test-user-import-login-e2e.js`/`test-csp-full-audit.js`, không phát sinh
+regression.
+
+## v24.65 (2026-10-01): Mẫu Giá — ẩn bước chọn cột Margin khỏi Bán Lẻ, Bán Buôn chọn 2 cột riêng
+
+Theo yêu cầu người dùng: Bán Lẻ không có khái niệm mức Margin/Chiết Khấu tự
+chọn lúc nộp (chỉ Bán Buôn mới có 4 mức MARGIN_LT5/MARGIN_GTE5/
+DISCOUNT_LTE5/DISCOUNT_GT5) nên nút "🎯 Cột Margin/CK" + bước hỏi gán cột
+khi thêm/thay Mẫu Giá giờ ẩn hẳn khỏi tab "🏷️ Mẫu Giá Bán Lẻ" (Hệ Thống →
+Cấu Hình Nghiệp Vụ), chỉ còn ở tab "🏪 Mẫu Giá Bán Buôn".
+
+Đồng thời sửa 1 bất nhất tiềm ẩn ở Bán Buôn: trước đây CẢ 4 mức cùng đọc
+chung 1 cột `marginColumnKey` duy nhất để đối chiếu số liệu (dù Margin và
+Chiết Khấu thường là 2 cột số liệu khác nhau trong file thật) — nay tách 2
+vai trò cột RIÊNG (`marginColumnKey`/`discountColumnKey` mới), modal "Gán
+vai trò cột" cho chọn cả 2 cùng lúc, 2 mức MARGIN_* đọc đúng cột Margin, 2
+mức DISCOUNT_* đọc đúng cột Chiết Khấu (`itPriceColumnKeyForTier()`,
+`module-itsupport-price.js`). Cập nhật test hiện có (`test-itprice-margin-
+warning.js`/`test-it-price-master-list-add.js`) + thêm kịch bản kiểm tra 2
+cột độc lập nhau, không ảnh hưởng gì tới dữ liệu Mẫu Giá cũ (field mới chỉ
+thêm, không đổi cấu trúc cũ).
 
 ## v24.64 (2026-10-01): Ma Trận Phân Quyền — vá dropdown gợi ý bị bảng dưới đè lên
 

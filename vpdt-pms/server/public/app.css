@@ -366,23 +366,19 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   padding: 40px 44px;
 }
 .loginpage-hero-nodes { position: absolute; inset: 0; opacity: .5; pointer-events: none; }
-.loginpage-hero-top, .loginpage-hero-mid, .loginpage-hero-modules, .loginpage-hero-foot { position: relative; z-index: 1; }
+.loginpage-hero-top, .loginpage-hero-mid, .loginpage-hero-modules { position: relative; z-index: 1; }
 .loginpage-hero-brand { display: flex; align-items: center; gap: 12px; }
 .loginpage-hero-brand svg { width: 32px; height: 32px; flex-shrink: 0; }
 .loginpage-hero-wordmark { font-size: 16px; font-weight: 700; }
 .loginpage-hero-wordmark small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #a9b8e6; margin-top: 1px; }
 
-.loginpage-hero-mid { max-width: 460px; margin: auto 0; padding: 40px 0; }
-.loginpage-hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #38bdf8; margin-bottom: 16px; }
-.loginpage-hero-eyebrow::before { content: ''; width: 18px; height: 2px; background: #38bdf8; border-radius: 2px; }
-.loginpage-hero-headline { font-size: clamp(24px, 2.4vw, 32px); line-height: 1.2; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; margin: 0 0 14px; }
-.loginpage-hero-sub { font-size: 14.5px; line-height: 1.65; color: #a9b8e6; max-width: 42ch; margin: 0; }
+.loginpage-hero-mid { max-width: 460px; margin: auto 0; padding: 18px 0; }
+.loginpage-hero-illustration { display: block; width: 100%; max-width: 312px; margin: 0 auto; }
 
 .loginpage-hero-modules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(255,255,255,.09); border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.09); }
 .loginpage-hero-module { background: rgba(255,255,255,.03); padding: 13px 11px; }
 .loginpage-hero-module svg { width: 17px; height: 17px; color: #38bdf8; margin-bottom: 7px; }
 .loginpage-hero-module span { display: block; font-size: 11px; font-weight: 600; color: #eef3ff; line-height: 1.35; }
-.loginpage-hero-foot { font-size: 11.5px; color: #a9b8e6; }
 
 @media (max-width: 880px) { .loginpage-hero-modules { display: none; } }
 @media (max-width: 520px) { .loginpage-hero { padding: 32px 26px; } }
