@@ -2367,10 +2367,12 @@
          người đề xuất chọn đúng mẫu áp dụng khi nộp bảng giá (Vận Hành/Mua Hàng). Cột nào đọc được từ
          dòng tiêu đề file mẫu được LẤY NGUYÊN VĂN, việc kiểm tra hợp lệ khi nộp bảng giá CHỈ còn là so
          khớp tên cột file người đề xuất nộp với tên cột của Mẫu Giá đã chọn (xem rowsToPriceItems() ở
-         lib/priceFileParser.js). Có thể gán cột "Margin/Chiết Khấu (%)" (marginColumnKey,
-         setItPriceMasterListMarginColumn()) để hệ thống tự đối chiếu số liệu thật trong file với mức
-         Margin/Chiết Khấu người đề xuất TỰ CHỌN lúc nộp Bán Buôn — CHỈ hiện CẢNH BÁO nếu có vẻ không
-         khớp, KHÔNG chặn gửi và KHÔNG ràng buộc người duyệt. -->
+         lib/priceFileParser.js). CHỈ ở Bán Buôn, có thể gán 2 cột RIÊNG "Margin (%)"/"Chiết Khấu (%)"
+         (marginColumnKey/discountColumnKey, setItPriceMasterListMarginColumn()) để hệ thống tự đối chiếu
+         số liệu thật trong file với mức Margin/Chiết Khấu người đề xuất TỰ CHỌN lúc nộp — CHỈ hiện CẢNH
+         BÁO nếu có vẻ không khớp, KHÔNG chặn gửi và KHÔNG ràng buộc người duyệt. Bán Lẻ không có bước
+         này (không có khái niệm tier Margin/Chiết Khấu tự chọn lúc nộp, xem submitItPriceApproval() ở
+         module-itsupport-price.js). -->
     <div id="itPriceMasterListAdminWrap" class="bg-white p-4 rounded border space-y-3">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>

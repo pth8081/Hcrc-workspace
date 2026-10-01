@@ -3,9 +3,14 @@
 // Yêu cầu người dùng (9/2026 rà soát nghiệp vụ, mục 4 "Giá bán buôn... đặt cột KT margin, check thông
 // báo nếu sai"): checkItPriceMarginConsistency() (public/js/module-itsupport-price.js) đối chiếu mức
 // Margin/Chiết Khấu người đề xuất TỰ CHỌN (#itPriceTier) với số liệu THẬT trong cột đã gán vai trò
-// "Margin/Chiết Khấu" (marginColumnKey, admin gán 1 lần cho Mẫu Giá qua "🎯 Cột Margin/CK") của file bảng
-// giá vừa tải lên — CHỈ CẢNH BÁO (không chặn gửi) khi TRUNG BÌNH CỘNG số liệu thật KHÔNG khớp mức đã
-// chọn.
+// "Margin/Chiết Khấu" (admin gán 1 lần cho Mẫu Giá qua "🎯 Cột Margin/CK") của file bảng giá vừa tải lên —
+// CHỈ CẢNH BÁO (không chặn gửi) khi TRUNG BÌNH CỘNG số liệu thật KHÔNG khớp mức đã chọn.
+//
+// Đợt 10/2026 (theo yêu cầu người dùng): trước đây CẢ 4 tier (MARGIN_LT5/MARGIN_GTE5/DISCOUNT_LTE5/
+// DISCOUNT_GT5) CÙNG đọc chung 1 cột marginColumnKey — nay tách 2 vai trò cột RIÊNG: marginColumnKey cho
+// 2 tier MARGIN_*, discountColumnKey (MỚI) cho 2 tier DISCOUNT_* — xem itPriceColumnKeyForTier(). Bước
+// chọn cột này giờ CHỈ còn hỏi ở Bán Buôn (ẩn hẳn khỏi Bán Lẻ, xem renderItPriceMasterListAdmin()) nhưng
+// không ảnh hưởng tới test này (chỉ test logic đối chiếu ở form Bán Buôn, không đụng màn quản trị).
 //
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): dùng THUẦN trung bình cộng có
 // thể bị vài dòng margin cao che mất khi trung bình hoá cùng nhiều dòng thấp (dòng đó đáng ra thuộc mức
@@ -24,15 +29,16 @@ const PORT = 8994;
 const STAFF = { username: 'staff_mkt', name: 'Trần Thị Marketing', dept: 'Marketing', perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true }, active: true };
 
 const MASTER_LIST_WITH_MARGIN = {
-  id: 1, name: 'Bảng Giá Có Cột Margin', marginColumnKey: 'margin',
+  id: 1, name: 'Bảng Giá Có Cột Margin', marginColumnKey: 'margin', discountColumnKey: 'discount',
   columns: [
-    { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'margin', label: 'Margin (%)' }
+    { key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' },
+    { key: 'margin', label: 'Margin (%)' }, { key: 'discount', label: 'Chiết Khấu (%)' }
   ],
   fileUrl: '/uploads/mau-co-margin.xlsx', fileName: 'mau-co-margin.xlsx',
   uploadedBy: 'admin', uploadedByName: 'Quản Trị Viên', uploadedAt: new Date().toLocaleString('vi-VN')
 };
 const MASTER_LIST_NO_MARGIN = {
-  id: 2, name: 'Bảng Giá Không Có Cột Margin', marginColumnKey: null,
+  id: 2, name: 'Bảng Giá Không Có Cột Margin', marginColumnKey: null, discountColumnKey: null,
   columns: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }],
   fileUrl: '/uploads/mau-khong-margin.xlsx', fileName: 'mau-khong-margin.xlsx',
   uploadedBy: 'admin', uploadedByName: 'Quản Trị Viên', uploadedAt: new Date().toLocaleString('vi-VN')
@@ -45,15 +51,17 @@ const state = createMockState({
   stores: ['Siêu thị Demo']
 });
 
-function seedPendingFileWithMargins(page, marginValues) {
-  return page.evaluate((vals) => {
+// colKey: 'margin' hoặc 'discount' — field THẬT trong items phải khớp đúng marginColumnKey/
+// discountColumnKey của Mẫu Giá đang chọn (2 cột RIÊNG từ 10/2026, xem itPriceColumnKeyForTier()).
+function seedPendingFileWithMargins(page, values, colKey = 'margin') {
+  return page.evaluate(({ vals, ck }) => {
     itPricePendingFile = {
       fileUrl: '/uploads/gia-margin-test.xlsx', fileName: 'gia-margin-test.xlsx',
-      items: vals.map((v, i) => ({ values: { code: `SP00${i + 1}`, name: `Mặt hàng ${i + 1}`, margin: v } })),
-      columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: 'margin', label: 'Margin (%)' }]
+      items: vals.map((v, i) => ({ values: { code: `SP00${i + 1}`, name: `Mặt hàng ${i + 1}`, [ck]: v } })),
+      columnLabels: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên mặt hàng' }, { key: ck, label: ck === 'margin' ? 'Margin (%)' : 'Chiết Khấu (%)' }]
     };
     checkItPriceMarginConsistency();
-  }, marginValues);
+  }, { vals: values, ck: colKey });
 }
 
 async function warningState(page) {
@@ -116,11 +124,14 @@ async function main() {
       assertEqual(s.hidden, false, 'Đổi mức làm số liệu cũ không còn khớp: cảnh báo phải hiện lại ngay khi đổi mức (không cần tải lại file)');
     });
 
-    await run.run('Đổi mức Chiết Khấu (DISCOUNT_LTE5) với số liệu chiết khấu thật avg 8% (>5%) -> cảnh báo HIỆN, nhánh discount (không phải nhánh margin)', async () => {
+    await run.run('Đổi mức Chiết Khấu (DISCOUNT_LTE5) với số liệu chiết khấu thật avg 8% (>5%) -> cảnh báo HIỆN, đọc đúng cột discountColumnKey RIÊNG (không phải cột margin)', async () => {
       await page.selectOption('#itPriceTier', 'DISCOUNT_LTE5');
-      await seedPendingFileWithMargins(page, ['7%', '8%', '9%']); // avg = 8, KHÔNG khớp DISCOUNT_LTE5 (<=5)
+      // Đợt 10/2026: tier DISCOUNT_* giờ đọc discountColumnKey ('discount'), KHÔNG còn đọc chung
+      // marginColumnKey như trước — cố tình seed cột 'margin' (nếu còn đọc nhầm) với số liệu KHÁC để phân
+      // biệt rõ: nếu code vẫn đọc nhầm cột margin (rỗng ở seed này) thì nums sẽ rỗng -> cảnh báo ẨN SAI.
+      await seedPendingFileWithMargins(page, ['7%', '8%', '9%'], 'discount'); // avg = 8, KHÔNG khớp DISCOUNT_LTE5 (<=5)
       const s = await warningState(page);
-      assertEqual(s.hidden, false, 'Chiết khấu 8% trung bình vượt mức DISCOUNT_LTE5 (<=5%): cảnh báo phải hiện');
+      assertEqual(s.hidden, false, 'Chiết khấu 8% trung bình vượt mức DISCOUNT_LTE5 (<=5%): cảnh báo phải hiện, đọc đúng cột discountColumnKey');
     });
 
     await run.run('LỖI ĐÃ VÁ: mức MARGIN_LT5, đa số dòng THẤP nhưng 1 dòng margin CAO (30%) bị trung bình hoá che mất -> vẫn PHẢI cảnh báo (trước đây avg=8.75<... thực ra avg vẫn >=5 ở đây; dùng bộ số khiến avg < 5 nhưng có dòng >= 5)', async () => {
@@ -151,6 +162,32 @@ async function main() {
       await seedPendingFileWithMargins(page, ['1.234,5%']);
       const s = await warningState(page);
       assertEqual(s.hidden, false, 'Giá trị "1.234,5%" phải đọc đúng thành 1234.5 (>=5%, sai phía MARGIN_LT5) -> cảnh báo PHẢI HIỆN; nếu ẩn nghĩa là parse ra NaN rồi bị lọc mất (lỗi CŨ chưa vá)');
+    });
+
+    await run.run('2 cột Margin/Chiết Khấu ĐỘC LẬP nhau: cùng 1 file có cả 2 cột, đổi tier chỉ đổi cột được đọc, không lẫn số liệu', async () => {
+      await page.selectOption('#itPriceMasterListSelect', String(MASTER_LIST_WITH_MARGIN.id));
+      await page.waitForTimeout(100);
+      // margin khớp MARGIN_LT5 (toàn bộ < 5%), nhưng discount lại KHÔNG khớp DISCOUNT_LTE5 (toàn bộ > 5%)
+      // -- cùng 1 itPricePendingFile, nếu code lỡ đọc nhầm cột sẽ cho kết quả ẨN/HIỆN SAI ở 1 trong 2 tier.
+      await page.evaluate(() => {
+        itPricePendingFile = {
+          fileUrl: '/x', fileName: 'x.xlsx',
+          items: [
+            { values: { code: 'SP001', name: 'A', margin: '2%', discount: '8%' } },
+            { values: { code: 'SP002', name: 'B', margin: '3%', discount: '9%' } }
+          ],
+          columnLabels: []
+        };
+      });
+      await page.selectOption('#itPriceTier', 'MARGIN_LT5');
+      await page.evaluate(() => checkItPriceMarginConsistency());
+      const sMargin = await warningState(page);
+      assertEqual(sMargin.hidden, true, 'Tier MARGIN_LT5 phải đọc cột margin (2%/3%, khớp) -- KHÔNG được lẫn sang cột discount (8%/9%, sẽ sai)');
+
+      await page.selectOption('#itPriceTier', 'DISCOUNT_LTE5');
+      await page.waitForTimeout(100);
+      const sDiscount = await warningState(page);
+      assertEqual(sDiscount.hidden, false, 'Tier DISCOUNT_LTE5 phải đọc cột discount (8%/9%, KHÔNG khớp <=5%) -- KHÔNG được lẫn sang cột margin (2%/3%, sẽ khớp nhầm)');
     });
 
     await run.run('Form Bán Lẻ (Mua Hàng) không có khối cảnh báo margin nào (chỉ áp dụng Bán Buôn, 2 form giờ tách vật lý)', async () => {

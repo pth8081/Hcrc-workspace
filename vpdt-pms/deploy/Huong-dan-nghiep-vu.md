@@ -1412,12 +1412,18 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     ban (dùng chung engine quy trình phòng ban ở mục 3), **Bán Buôn** theo 4
     mức Margin/Chiết khấu cố định (không theo phòng ban). Mức người đề xuất
     chọn vẫn **TỰ KHAI** (server không ép server-side), nhưng từ 9/2026 admin
-    có thể (tuỳ chọn, không bắt buộc) gán 1 cột trong **Mẫu Giá** (Hệ Thống →
-    Hỗ Trợ IT → "📐 Mẫu Giá", nút "🎯 Cột Margin/CK") làm cột "Margin/Chiết
-    Khấu (%)" — khi đã gán, hệ thống tự đối chiếu số liệu THẬT trong file bảng
-    giá vừa tải lên với mức người đề xuất chọn, **CHỈ hiện cảnh báo màu vàng**
-    cho người gửi nếu có vẻ không khớp để họ tự kiểm tra lại (không chặn gửi,
-    không ràng buộc gì tới người duyệt — người duyệt vẫn tự do xử lý như cũ).
+    có thể (tuỳ chọn, không bắt buộc) gán cột trong **Mẫu Giá** (Hệ Thống →
+    Cấu Hình Nghiệp Vụ → tab "🏪 Mẫu Giá Bán Buôn", nút "🎯 Cột Margin/CK") —
+    khi đã gán, hệ thống tự đối chiếu số liệu THẬT trong file bảng giá vừa tải
+    lên với mức người đề xuất chọn, **CHỈ hiện cảnh báo màu vàng** cho người
+    gửi nếu có vẻ không khớp để họ tự kiểm tra lại (không chặn gửi, không
+    ràng buộc gì tới người duyệt — người duyệt vẫn tự do xử lý như cũ). **Từ
+    10/2026**: gán được **2 cột RIÊNG** — "Margin (%)" (đối chiếu 2 mức
+    MARGIN_LT5/MARGIN_GTE5) và "Chiết Khấu (%)" (đối chiếu 2 mức
+    DISCOUNT_LTE5/DISCOUNT_GT5) — trước đó cả 4 mức cùng đọc chung 1 cột, dễ
+    sai lệch nếu file thật tách 2 số liệu khác nhau. Bước gán cột này **CHỈ
+    áp dụng Bán Buôn** — Mẫu Giá Bán Lẻ không có nút "🎯 Cột Margin/CK" (Bán
+    Lẻ không có khái niệm mức Margin/Chiết Khấu tự chọn lúc nộp).
     Form nộp có thêm 3
     trường **CHỈ mang tính thông tin** cho đội Hỗ Trợ IT biết phạm vi/thời hạn
     áp giá khi xử lý (không giới hạn ai xem được đề xuất, không có xử lý tự
@@ -1528,7 +1534,11 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     nghiệp vụ khác sẽ bổ sung về sau, không chỉ riêng Mẫu Giá. Tab "Hỗ Trợ IT
     → Phê Duyệt Giá" chỉ còn xem danh sách + xử lý (Duyệt/Từ chối/Nhận xử
     lý/Áp giá) — dropdown chọn mẫu ở form tạo đề xuất (Mua Hàng cho Bán Lẻ,
-    Vận Hành cho Bán Buôn) không đổi vị trí, chỉ panel quản trị đổi chỗ.
+    Vận Hành cho Bán Buôn) không đổi vị trí, chỉ panel quản trị đổi chỗ. **Từ
+    10/2026**: nút "🎯 Cột Margin/CK" (gán cột đối chiếu Margin/Chiết Khấu,
+    nay cho chọn 2 cột riêng) chỉ còn hiện ở tab **🏪 Mẫu Giá Bán Buôn** — tab
+    **🏷️ Mẫu Giá Bán Lẻ** đã ẩn hẳn bước này (Bán Lẻ không có mức Margin/
+    Chiết Khấu tự chọn lúc nộp nên không cần đối chiếu).
   - **Cây phân quyền — 4 quyền Phê Duyệt Giá dời sang đúng module nghiệp vụ
     (10/2026)** — **Đề xuất duyệt giá Bán Buôn**/**Phê duyệt từ chối khẩn cấp
     Bán Buôn** dời từ "15. Hỗ Trợ IT" sang "22. Vận Hành"; **Đề xuất duyệt giá
