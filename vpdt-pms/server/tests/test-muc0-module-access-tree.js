@@ -20,6 +20,12 @@
 //      BUSINESS_MODULES — mặc định vẫn vào được (không ảnh hưởng ai), tắt riêng qua Mục 0 là chặn hẳn.
 //   E) renderModuleAccessCheckboxes() đệ quy: cây render ra đủ checkbox ở MỌI tầng (không chỉ 2 tầng
 //      cứng như bản cũ) — kiểm tra DOM thật có đủ id pModuleAccess_<key> cho 1 tab cháu sâu nhất.
+//   F) LỖI ĐÃ VÁ (phát hiện khi chụp ảnh demo, cùng đợt): setOperationStoreSubTab() (module-vanhanh.js)
+//      TRƯỚC ĐÂY ghi đè toàn bộ className của nút tab con — XOÁ MẤT class "hidden" mà
+//      updateOperationStoreSubTabVisibility() vừa tick ngay trước đó trong setVanHanhSubTab('STORE') —
+//      khiến TOÀN BỘ gác quyền ở mục A/B phía trên vô hiệu hoá ngay khi người dùng thực sự bấm vào tab
+//      "🏬 Siêu Thị" trên giao diện thật (dù hàm canAccessOperationSubTab() tính đúng). Test DOM thật,
+//      qua đúng luồng người dùng bấm (switchTab -> setVanHanhSubTab('STORE')), không gọi tắt hàm con.
 //
 // Chạy: node server/tests/test-muc0-module-access-tree.js
 const {
@@ -174,6 +180,18 @@ async function main() {
       assert(ids.tabChau, 'Phải có checkbox tab cháu "trainingLmsDashboard" (cấp 3) — TRƯỚC ĐÂY bản render cũ CHỈ vẽ 2 tầng, cấp 3 sẽ hoàn toàn vắng mặt nếu bug tái diễn');
       assert(ids.vanHanhReport, 'Phải có checkbox "vanHanhReport" (fix trực tiếp lỗi Vận Hành)');
       assert(ids.payment, 'Phải có checkbox "payment" (module trước đây vắng mặt khỏi Mục 0)');
+    });
+
+    await run.run('F) LỖI ĐÃ VÁ: setOperationStoreSubTab() không còn xoá mất class "hidden" của nút Báo Cáo', async () => {
+      // Đúng luồng người dùng thật: đăng nhập (chưa có quyền quản lý rộng/giao việc gì) -> bấm vào tab
+      // "Vận Hành" -> bấm vào tab con "🏬 Siêu Thị" — KHÔNG gọi tắt canAccessOperationSubTab()/
+      // updateOperationStoreSubTabVisibility() trực tiếp, để bắt đúng lỗi "tính đúng nhưng DOM sai".
+      const noAccessUser = { username: 'novhstore', name: 'NV Không Liên Quan', dept: 'Vận Hành', perms: {} };
+      await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, noAccessUser);
+      await page.evaluate(() => { switchTab('vanHanh'); });
+      await page.evaluate(() => { setVanHanhSubTab('STORE'); });
+      const hiddenAfter = await page.evaluate(() => document.getElementById('btnOpStoreSubReport').className.includes('hidden'));
+      assert(hiddenAfter, 'Nút "📊 Báo Cáo" PHẢI còn ẩn SAU KHI bấm vào tab con "Siêu Thị" — trước fix, setOperationStoreSubTab() ghi đè mất class "hidden" ngay bước này, khiến nút hiện ra dù không ai có quyền.');
     });
 
   } finally {

@@ -164,11 +164,19 @@ function setOperationStoreSubTab(tab) {
     ['ACCEPTANCE', 'opStoreAcceptancePanel', 'btnOpStoreSubAcceptance'],
     ['REPORT', 'opStoreReportPanel', 'btnOpStoreSubReport']
   ];
+  // LỖI ĐÃ VÁ (10/2026, phát hiện khi chụp ảnh demo đợt Mục 0): trước đây dòng gán btn.className bên
+  // dưới GHI ĐÈ TOÀN BỘ class, xoá mất class "hidden" mà updateOperationStoreSubTabVisibility() vừa
+  // tick NGAY TRƯỚC ĐÓ (setVanHanhSubTab('STORE') luôn gọi 2 hàm này liên tiếp) — khiến TẤT CẢ nút tab
+  // con (kể cả ESTIMATE/EXECUTION/ACCEPTANCE/REPORT vừa được gác quyền Mục 0) LUÔN hiện ra bất kể quyền,
+  // vô hiệu hoá hoàn toàn phần ẩn/hiện mỗi khi người dùng thực sự mở tab "🏬 Siêu Thị". Tính lại ĐÚNG
+  // NGAY TẠI ĐÂY (không phụ thuộc thứ tự gọi 2 hàm) — tự đủ, không cần updateOperationStoreSubTabVisibility()
+  // chạy trước nữa, nhưng vẫn giữ hàm đó (còn dùng để tự nhảy sang tab con đầu tiên còn thấy được).
   tabs.forEach(([key, wrapId, btnId]) => {
     const isActive = key === tab;
     document.getElementById(wrapId).classList.toggle('hidden', !isActive);
     const btn = document.getElementById(btnId);
-    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-emerald-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+    const visible = canAccessOperationSubTab(currentUser, key);
+    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-emerald-700 text-white' : 'bg-gray-200 text-gray-700'}` + (visible ? '' : ' hidden');
   });
 
   if (tab === 'OPEN') {

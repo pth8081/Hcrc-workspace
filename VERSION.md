@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**24.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.69 (2026-10-02): Vá lỗi DOM "setOperationStoreSubTab() xoá mất class ẩn" — phát hiện khi chụp ảnh demo v24.68
+
+Khi chụp ảnh demo minh hoạ đợt Mục 0 (v24.68) cho tài liệu bàn giao, phát
+hiện lỗi THẬT: tuy `canAccessOperationSubTab()` đã tính ĐÚNG ai được thấy
+tab "📊 Báo Cáo" (Vận Hành > Siêu Thị), nút đó vẫn LUÔN hiện ra trên giao
+diện thật bất kể quyền — vì `setOperationStoreSubTab()` (module-vanhanh.js)
+ghi đè toàn bộ `className` của 6 nút tab con NGAY SAU KHI
+`updateOperationStoreSubTabVisibility()` vừa tick xong class "hidden"
+(2 hàm này luôn gọi liên tiếp trong `setVanHanhSubTab('STORE')`), xoá mất
+y hệt class vừa tick. Lỗi này tồn tại TỪ TRƯỚC (không phải do v24.68 gây
+ra) nhưng khiến phần hard-gate vừa thêm ở v24.68 (vanHanhEstimate/
+vanHanhExecution/vanHanhAcceptance/vanHanhReport) không có tác dụng thật
+trên giao diện — tab vẫn hiện ra bất kể checkbox Mục 0 tắt hay bật.
+
+Đã vá: tính lại đúng trạng thái ẩn/hiện NGAY TẠI `setOperationStoreSubTab()`
+(gọi thẳng `canAccessOperationSubTab()`, không phụ thuộc thứ tự gọi hàm
+khác trước đó nữa). Thêm kịch bản test mới (F) vào
+`tests/test-muc0-module-access-tree.js` — đi ĐÚNG luồng người dùng thật
+(đăng nhập → bấm tab Vận Hành → bấm tab con Siêu Thị), không gọi tắt hàm
+con, để bắt lại đúng lớp lỗi "tính đúng nhưng DOM sai" này nếu tái diễn.
+Chạy lại toàn bộ test Vận Hành liên quan — PASS (1 test khác không liên
+quan, `test-operation-order-report.js`, có 1 kịch bản lỗi do giả định cố
+định tháng hiện tại, không liên quan thay đổi này).
 
 ## v24.68 (2026-10-02): Mục 0 — mở rộng "Quyền Truy Cập Module" thành cây 3-4 tầng + vá lỗi Vận Hành lộ tab Báo Cáo
 
