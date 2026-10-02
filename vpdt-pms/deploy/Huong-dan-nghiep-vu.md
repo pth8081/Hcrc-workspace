@@ -4124,6 +4124,39 @@ phòng cụ thể). Khối "0. Quyền Truy Cập Module" quyết định ngư�
 được module** hay không trước tiên — không có quyền vào module thì các quyền
 chi tiết bên trong module đó (khối 2-22 tương ứng) vô nghĩa.
 
+**Khối "0. Quyền Truy Cập Module" mở rộng thành cây 3-4 tầng (10/2026)** —
+trước đây khối này chỉ sâu đúng 2 tầng (module → module con, VD "Hành Chính"
+→ "Đăng Ký Xe"). Nay thêm được cả **tab con**/**tab cháu** NẰM BÊN TRONG 1
+module, hiển thị thụt lề (↳) ngay dưới module/tab cha tương ứng trên cùng
+màn hình, KHÔNG phải màn riêng:
+- **Truyền Thông Nội Bộ** → 5 tab con (Nhịp Sống HCRC/Đào Tạo/Tuyển Dụng/
+  Góc Chia Sẻ/HCRC Đồng Hành); tab con "Đào Tạo" lại có tiếp 9 tab cháu
+  (Dashboard/Lớp Học/Chương Trình/Kế Hoạch Đào Tạo/Đăng Ký Của Tôi/Kho Tài
+  Liệu/Lộ Trình Thăng Tiến/Lộ Trình Tân Binh/Ngân Hàng Câu Hỏi).
+- **Vận Hành** → 4 tab con trong "🏬 Siêu Thị" (Dự Toán/Công Việc/Nghiệm
+  Thu/Báo Cáo).
+- **Tổng Hợp** → thêm module con "Thanh Toán" (trước đây hoàn toàn vắng
+  mặt khỏi khối 0, không có cách nào tắt riêng).
+
+**Nguyên tắc GÁC CỨNG, áp dụng cho MỌI checkbox khối 0 (module lẫn tab con/
+tab cháu)**: tắt 1 checkbox là ẨN HẲN đúng module/tab đó với MỌI người
+thuộc nhóm/tài khoản bị tắt — **kể cả người đang có quyền hành động chi
+tiết khác (khối 2-22) cho đúng khu vực đó cũng không còn thấy để truy cập**.
+VD tắt riêng "Vận Hành > 🏬 Siêu Thị > Báo Cáo" thì người có quyền "Quản lý
+toàn bộ hồ sơ Vận Hành" (khối 22) cũng không còn thấy tab đó — 2 lớp quyền
+hoàn toàn độc lập, phải ĐỦ CẢ HAI mới vào được. Tắt 1 module/tab cha cũng tự
+động khoá theo TẤT CẢ tab con/tab cháu bên trong (cascade đa tầng), không
+cần tắt tay từng tab con một. Mọi checkbox MỚI ở trên đều **mặc định BẬT**
+— không ảnh hưởng tới bất kỳ ai đang dùng hệ thống cho tới khi admin chủ
+động vào Phân Quyền tắt riêng.
+
+**Vá lỗi thật kèm đợt này**: trước đây cấp quyền "Công Việc"/"Nghiệm Thu"
+(Vận Hành > Siêu Thị) cho 1 người CHỈ được gán/chỉ định đúng 1 công việc cụ
+thể (không có quyền quản lý hồ sơ rộng) lại vô tình kéo theo thấy được cả
+tab "📊 Báo Cáo" (màn tổng hợp MỌI công việc) — đã tách riêng điều kiện hiện
+tab Báo Cáo (chỉ người có quyền quản lý hồ sơ rộng hoặc quyền xem báo cáo
+riêng mới thấy), không còn dựa vào việc chỉ được gán 1 công việc nữa.
+
 **Chọn siêu thị đổi sang ô tìm-kiếm-gõ-chọn (10/2026)** — riêng 2 khối "22.
 Vận Hành" (mục "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị") và "23. Checklist Đánh
 Giá Siêu Thị" (mục "Phạm Vi Kiểm Soát"), phạm vi trước đây là lưới checkbox

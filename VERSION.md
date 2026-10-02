@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**24.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.68 (2026-10-02): Mục 0 — mở rộng "Quyền Truy Cập Module" thành cây 3-4 tầng + vá lỗi Vận Hành lộ tab Báo Cáo
+
+Theo yêu cầu người dùng: hệ thống đã có sẵn 1 phần "Mục 0. Quyền Truy Cập
+Module" (checkbox `moduleAccess.<key>` theo từng module/module con,
+`BUSINESS_MODULES`/`hasModuleAccess()`/`renderModuleAccessCheckboxes()`
+trong `core.js`+`module-admin.js`) nhưng (a) chỉ sâu đúng 2 tầng (module →
+module con), chưa có khái niệm "tab con"/"tab cháu" bên trong 1 module, và
+(b) module "Thanh Toán" (Tổng Hợp > Thanh Toán) hoàn toàn vắng mặt khỏi
+danh sách — admin không có cách nào tắt riêng module này qua Mục 0. Đồng
+thời, rà soát phát hiện lỗi thật: cấp quyền "Công Việc" (EXECUTION)/"Nghiệm
+Thu" (ACCEPTANCE) ở Vận Hành > Siêu Thị — vốn còn nới quyền cho cả người
+CHỈ được gán/chỉ định đúng 1 công việc, không giữ quyền quản lý hồ sơ rộng
+nào — lại kéo theo thấy được cả tab "📊 Báo Cáo" (tab tổng hợp MỌI công
+việc), do `canAccessOperationSubTab()` gộp chung `REPORT` vào đúng 1 khối
+OR-logic với tab cha `STORE`.
+
+1. **Tổng quát hoá `hasModuleAccess()`** từ "chỉ xét đúng 1 cấp cha" sang
+   vòng lặp leo hết chuỗi tổ tiên — hỗ trợ cây sâu 3-4 tầng (module → tab
+   con → tab cháu) mà không đổi hành vi cây 2 tầng cũ.
+2. **Tổng quát hoá `renderModuleAccessCheckboxes()`** (module-admin.js)
+   thành đệ quy độ sâu bất kỳ — bản cũ CHỈ vẽ đúng 2 tầng cứng nên module
+   con của module con (tab cháu) sẽ không bao giờ hiện ra trên màn Phân
+   Quyền dù đã có trong `BUSINESS_MODULES`.
+3. **Thêm 19 checkbox Mục 0 mới** vào `BUSINESS_MODULES` (mặc định TRUE —
+   không ảnh hưởng ai cho tới khi admin chủ động tắt):
+   - `payment` (Tổng Hợp > Thanh Toán) — đóng khoảng trống module vắng mặt;
+     wire vào `canAccessPaymentModule()`/`canManagePaymentRequestsClient()`.
+   - 5 tab con của Truyền Thông Nội Bộ: `internalNews`/`internalTraining`/
+     `internalRecruitment`/`internalShare`/`internalQna` — demo đã gửi và
+     người dùng xác nhận ở module này.
+   - 9 tab cháu LMS lồng trong "Đào Tạo": `trainingLmsDashboard`/`...Classes`/
+     `...Courses`/`...Plans`/`...MyRegs`/`...Docs`/`...Paths`/`...Onboarding`/
+     `...Tests`.
+   - 4 tab con của Vận Hành > Siêu Thị: `vanHanhEstimate`/`vanHanhExecution`/
+     `vanHanhAcceptance`/`vanHanhReport`.
+4. **Fix lỗi Vận Hành (nguyên nhân người dùng báo cáo)**: tách hẳn
+   `REPORT` khỏi OR-logic của `STORE` trong `canAccessOperationSubTab()` —
+   giờ chỉ người có quyền quản lý hồ sơ rộng (`operationRecordManageAll`/
+   `operationRecordViewAll`/`operationStoreOpenCreate`/
+   `operationRepairCreate`/admin) hoặc quyền xem báo cáo riêng
+   `operationStoreReportView` (đã có checkbox từ đợt trước nhưng chưa từng
+   được nối đúng điểm gác) mới thấy tab Báo Cáo — bỏ hẳn nhánh "chỉ được
+   gán/chỉ định 1 công việc".
+5. **Hard-gate đúng yêu cầu** "ai không được chọn quyền thì kể cả có quyền
+   ở module cũng không thấy để truy cập": 4 checkbox `vanHanh*` ở trên AND
+   thêm vào `canAccessOperationSubTab()` — admin tắt riêng `vanHanhReport`
+   thì NGAY CẢ người có `operationRecordManageAll` cũng không còn thấy tab
+   Báo Cáo. Tương tự cho 14 checkbox Truyền Thông Nội Bộ/Đào Tạo (các tab
+   này trước đây hoàn toàn không có khái niệm quyền hiển thị riêng).
+6. Thêm 19 nhãn tiếng Việt tương ứng vào `PERM_KEY_VN_LABELS`
+   (`module-admin-permgroups.js`) — tự động xuất hiện trên Ma Trận Phân
+   Quyền (sheet "Quyền Vào Module"), đúng quy ước bắt buộc ở `CLAUDE.md`.
+7. Viết test mới `tests/test-muc0-module-access-tree.js` (13 kịch bản, chạy
+   qua Playwright nạp nguyên vẹn app thật) + chạy lại toàn bộ test liên
+   quan (perm-matrix ×4, module-access-gate ×2, operation ×6,
+   internal/training ×9, hr-selfservice, admin-users-permgroups) — tất cả
+   PASS, không phát sinh regression.
+
+Không cần thao tác gì thêm ngoài copy code + `pm2 restart` (không đổi
+schema SQL, không thêm biến môi trường, không thêm dependency).
 
 ## v24.67 (2026-10-01): Đào Tạo — 4 cải tiến theo yêu cầu "Tuyển dụng & Đào tạo TTNB"
 

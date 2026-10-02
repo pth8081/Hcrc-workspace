@@ -1143,37 +1143,41 @@ function buildModuleTabNotesHTML(moduleKey) {
   `;
 }
 
+// Vẽ ĐỆ QUY 1 node + toàn bộ cháu con của nó (độ sâu bất kỳ) — TRƯỚC ĐÂY (tới trước đợt "Mục 0: Quyền
+// Truy Cập Module" 10/2026) hàm cha chỉ vẽ ĐÚNG 2 tầng cứng (topLevel + đúng 1 lớp childModules), nên
+// module con của module con (VD "trainingLmsDashboard" có parent "internalTraining", bản thân
+// "internalTraining" lại có parent "internal" — cây 3 tầng) sẽ KHÔNG BAO GIỜ được vẽ ra dù đã có trong
+// BUSINESS_MODULES. Đệ quy tới độ sâu bất kỳ để khớp đúng cây "slide bar > tab con > tab cháu" người
+// dùng yêu cầu — vẫn giữ NGUYÊN id checkbox `${prefix}_${key}` ở mọi tầng, nên
+// readModuleAccessFromForm()/populateModuleAccessForm()/defaultModuleAccess() không cần đổi gì (đã lặp
+// phẳng qua BUSINESS_MODULES, không quan tâm độ sâu).
+function renderModuleAccessNode(m, prefix, depth) {
+  const children = BUSINESS_MODULES.filter(c => c.parent === m.key);
+  // Thu nhỏ dần cỡ chữ theo độ sâu (0: module gốc, 1: module con/tab con, 2+: tab cháu) — giúp phân biệt
+  // trực quan đúng 3 cấp "slide bar / tab con / tab cháu" ngay trên cây, không cần đọc chú thích.
+  const labelCls = depth === 0 ? 'text-gray-700' : (depth === 1 ? 'text-gray-600 text-[11px]' : 'text-gray-500 text-[10.5px] italic');
+  return `
+    <label class="flex items-center gap-1.5 ${labelCls} cursor-pointer">
+      <input type="checkbox" id="${prefix}_${m.key}" checked>
+      <span>${depth >= 2 ? '↳ ' : ''}${escapeHtml(m.label)}</span>
+    </label>
+    ${buildModuleTabNotesHTML(m.key)}
+    ${children.length ? `
+      <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
+        ${children.map(c => renderModuleAccessNode(c, prefix, depth + 1)).join('')}
+      </div>
+    ` : ''}
+  `;
+}
 function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', prefix = 'pModuleAccess') {
   const el = document.getElementById(containerId);
   if (!el) return;
-  // Module con (field "parent", vd Xe/Phòng họp/VPP thuộc "hanhchinh") render LỒNG dưới đúng module
-  // cha thay vì liệt kê ngang hàng — vẫn là checkbox pModuleAccess_<key> ĐẦY ĐỦ, nên
-  // readModuleAccessFromForm()/populateModuleAccessForm() không cần đổi gì (đã lặp qua toàn bộ mảng
-  // phẳng sẵn).
   const topLevel = BUSINESS_MODULES.filter(m => !m.parent);
-  el.innerHTML = topLevel.map(m => {
-    const childModules = BUSINESS_MODULES.filter(c => c.parent === m.key);
-    return `
+  el.innerHTML = topLevel.map(m => `
     <div class="bg-slate-50 px-2 py-1 rounded border">
-      <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-        <input type="checkbox" id="${prefix}_${m.key}" checked>
-        <span>${escapeHtml(m.label)}</span>
-      </label>
-      ${buildModuleTabNotesHTML(m.key)}
-      ${childModules.length ? `
-        <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
-          ${childModules.map(c => `
-            <label class="flex items-center gap-1.5 text-gray-600 text-[11px] cursor-pointer">
-              <input type="checkbox" id="${prefix}_${c.key}" checked>
-              <span>${escapeHtml(c.label)}</span>
-            </label>
-            ${buildModuleTabNotesHTML(c.key)}
-          `).join('')}
-        </div>
-      ` : ''}
+      ${renderModuleAccessNode(m, prefix, 0)}
     </div>
-  `;
-  }).join('');
+  `).join('');
 }
 
 function readModuleAccessFromForm(prefix = 'pModuleAccess') {
