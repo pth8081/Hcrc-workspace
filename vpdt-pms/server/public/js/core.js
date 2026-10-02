@@ -2088,6 +2088,32 @@ const BUSINESS_MODULES = [
   { key: 'submission', label: 'Văn Bản Trình / Tờ Trình' },
   { key: 'task', label: 'Công Việc' },
   { key: 'internal', label: 'Truyền Thông Nội Bộ' },
+  // Mục 0 — CẤP 3 "tab con" (10/2026, yêu cầu người dùng "phân quyền vào slide bar, tab bên trong từng
+  // menu con theo dạng hình cây"): 5 tab con của "Truyền Thông Nội Bộ" TRƯỚC ĐÂY không có bất kỳ gác
+  // quyền hiển thị nào (setInternalSubTab(), module-internalcomms-nhipsong.js — mở cho MỌI người vào
+  // được module là thấy hết cả 5 tab). Đây là checkbox MỚI HOÀN TOÀN (không cross-reference 1 quyền
+  // hành động nào có sẵn như MODULE_TAB_MAP — vì các tab này vốn không có khái niệm quyền riêng), mặc
+  // định TRUE (giữ nguyên hành vi hiện tại cho mọi user/nhóm đã có) — admin tắt riêng tab nào thì tab đó
+  // ẩn hẳn khỏi nav + không bấm trực tiếp được, xem canAccessInternalSubTab()/resolveAccessibleInternalSubTab().
+  { key: 'internalNews', label: 'Truyền Thông — Tin Tức (Nhịp Sống HCRC)', parent: 'internal' },
+  { key: 'internalTraining', label: 'Truyền Thông — Đào Tạo', parent: 'internal' },
+  { key: 'internalRecruitment', label: 'Truyền Thông — Tuyển Dụng', parent: 'internal' },
+  { key: 'internalShare', label: 'Truyền Thông — Góc Chia Sẻ', parent: 'internal' },
+  { key: 'internalQna', label: 'Truyền Thông — HCRC Đồng Hành', parent: 'internal' },
+  // Mục 0 — CẤP 4 "tab cháu" (9 tab LMS lồng trong tab con "Đào Tạo" ở trên, setTrainingLmsTab(),
+  // module-internalcomms-daotao.js) — cùng lý do/khuôn với 5 entry internal* phía trên (trước đây KHÔNG
+  // có gác quyền hiển thị riêng nào), parent trỏ tới "internalTraining" (không phải "internal" trực
+  // tiếp) để cascade đúng 3 tầng: tắt "internal" hoặc "internalTraining" thì khoá luôn cả 9 tab này, xem
+  // vòng lặp tổ tiên MỚI ở hasModuleAccess().
+  { key: 'trainingLmsDashboard', label: 'Đào Tạo — Dashboard', parent: 'internalTraining' },
+  { key: 'trainingLmsClasses', label: 'Đào Tạo — Lớp Học', parent: 'internalTraining' },
+  { key: 'trainingLmsCourses', label: 'Đào Tạo — Chương Trình', parent: 'internalTraining' },
+  { key: 'trainingLmsPlans', label: 'Đào Tạo — Kế Hoạch Đào Tạo', parent: 'internalTraining' },
+  { key: 'trainingLmsMyRegs', label: 'Đào Tạo — Đăng Ký Của Tôi', parent: 'internalTraining' },
+  { key: 'trainingLmsDocs', label: 'Đào Tạo — Kho Tài Liệu', parent: 'internalTraining' },
+  { key: 'trainingLmsPaths', label: 'Đào Tạo — Lộ Trình Thăng Tiến', parent: 'internalTraining' },
+  { key: 'trainingLmsOnboarding', label: 'Đào Tạo — Lộ Trình Tân Binh', parent: 'internalTraining' },
+  { key: 'trainingLmsTests', label: 'Đào Tạo — Ngân Hàng Câu Hỏi', parent: 'internalTraining' },
   { key: 'contract', label: 'Hợp Đồng' },
   { key: 'minutes', label: 'Biên Bản Họp' },
   { key: 'hanhchinh', label: 'Hành Chính' },
@@ -2111,6 +2137,14 @@ const BUSINESS_MODULES = [
   // budgetEntries, không chung gì với officeReqs) — quyền chi tiết budgetManage/budgetCreate/
   // budgetAggregate nằm ở khối 18 cây phân quyền.
   { key: 'budget', label: 'Ngân Sách', parent: 'office' },
+  // "Thanh Toán" — module con của "Tổng Hợp" (cùng dropdown #tongHopNavWrap, sub-tab PAYMENT trong
+  // setOfficeSubTab()), quyền thật nằm ở paymentManage/isMemberOfAnyExtraApprovalGroup(['PAYMENT'])/tự
+  // tạo hồ sơ, xem canAccessPaymentModule(). TRƯỚC ĐÂY module này hoàn toàn VẮNG MẶT khỏi BUSINESS_MODULES
+  // (phát hiện ở đợt rà soát Mục 0 10/2026, rà toàn bộ canAccessXModule() xem hàm nào CHƯA gọi
+  // hasModuleAccess()) — nghĩa là admin KHÔNG CÓ CÁCH NÀO tắt riêng "Thanh Toán" qua Mục 0 dù mọi module
+  // con khác của Tổng Hợp (budget) đã có checkbox từ lâu. Thêm vào đây + wire hasModuleAccess('payment')
+  // vào canAccessPaymentModule()/canManagePaymentRequestsClient() đóng đúng khoảng trống này.
+  { key: 'payment', label: 'Thanh Toán', parent: 'office' },
   // "Hỗ Trợ IT" — mở cho TOÀN BỘ nhân viên (giống Công Việc/Tài Liệu, admin có thể tắt riêng qua
   // checkbox này nếu cần) — 2 sub-module con (Phê Duyệt Giá/Hỗ Trợ Yêu Cầu) không cần khoá riêng ở
   // đây vì quyền thật nằm ở itPriceProposeCreate/itManage (khối 13 cây phân quyền), chỉ chặn AI
@@ -2179,6 +2213,21 @@ const BUSINESS_MODULES = [
   // Hợp"): quyền thật nằm ở operationOrderCreate/operationStoreOpenCreate/operationRepairCreate (khối
   // phân quyền riêng), đúng khuôn "Đồng Phục"/"Giấy Phép" — module không mở sẵn cho ai.
   { key: 'vanHanh', label: 'Vận Hành' },
+  // Mục 0 — CẤP 3 "tab con" của "Vận Hành" (4 tab lồng trong "🏬 Siêu Thị" KHÔNG có checkbox module-
+  // access riêng nào trước đây — ESTIMATE/EXECUTION/ACCEPTANCE/REPORT, xem setOperationStoreSubTab() ở
+  // module-vanhanh.js). ĐÂY LÀ FIX TRỰC TIẾP cho lỗi người dùng báo cáo 10/2026: user chỉ được cấp quyền
+  // "Công Việc" (EXECUTION)/"Nghiệm Thu" (ACCEPTANCE) — vốn còn nới quyền cho CẢ người chỉ được GÁN/CHỈ
+  // ĐỊNH trên 1 công việc cụ thể, không giữ quyền quản lý rộng nào — lại thấy được tab "📊 Báo Cáo" vì
+  // canAccessOperationSubTab() TRƯỚC ĐÂY gộp chung REPORT vào đúng 1 khối OR-logic với STORE (bất kỳ
+  // quyền nào trong 5 tab con là thấy luôn REPORT, xem lịch sử sửa tại canAccessOperationSubTab()).
+  // 4 checkbox MỚI này là lớp gác CỨNG độc lập (AND thêm, không thay thế) — tắt riêng tab nào thì tab đó
+  // ẩn hẳn với TẤT CẢ mọi người, kể cả người đang có quyền hành động (operationRecordManageAll...) cho
+  // đúng tab đó, mặc định TRUE (giữ nguyên hành vi hiện tại, không ai bị ảnh hưởng nếu admin không chủ
+  // động tắt).
+  { key: 'vanHanhEstimate', label: 'Vận Hành — Siêu Thị > Dự Toán', parent: 'vanHanh' },
+  { key: 'vanHanhExecution', label: 'Vận Hành — Siêu Thị > Công Việc', parent: 'vanHanh' },
+  { key: 'vanHanhAcceptance', label: 'Vận Hành — Siêu Thị > Nghiệm Thu', parent: 'vanHanh' },
+  { key: 'vanHanhReport', label: 'Vận Hành — Siêu Thị > Báo Cáo', parent: 'vanHanh' },
   // "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL mới, đúng khuôn "Đồng Phục"/"Giấy Phép"/"Vận Hành":
   // module không mở sẵn cho ai, quyền thật nằm ở checklistTemplateManage/checklistReportView/
   // checklistAuditScope (khối 23 cây phân quyền) HOẶC tự động đủ điều kiện nếu posType===STORE (tự làm
@@ -2803,10 +2852,19 @@ function hasModuleAccess(user, moduleKey) {
   if (user.perms?.admin) return true;
   const ma = user.perms?.moduleAccess;
   if (!ma) return true;
-  // Module con (vd "car"/"meeting"/"vpp" thuộc cha "hanhchinh", xem BUSINESS_MODULES) bị khoá NGAY nếu
-  // module cha tắt, bất kể checkbox riêng của module con đang bật hay tắt — cha khoá là khoá hết con.
-  const mod = BUSINESS_MODULES.find(m => m.key === moduleKey);
-  if (mod?.parent && ma[mod.parent] === false) return false;
+  // Module/tab con (vd "car"/"meeting"/"vpp" thuộc cha "hanhchinh", hoặc sâu hơn — "trainingLmsDashboard"
+  // thuộc cha "internalTraining" thuộc cha "internal", xem BUSINESS_MODULES) bị khoá NGAY nếu BẤT KỲ tổ
+  // tiên nào (cha, ông, ...) đang tắt, bất kể checkbox riêng của chính nó đang bật hay tắt — tổ tiên khoá
+  // là khoá hết con cháu. Lặp lên theo chuỗi `parent` (thay vì chỉ xét đúng 1 cấp cha như trước) để hỗ
+  // trợ cây Mục 0 từ 3 tầng trở lên (module -> tab con -> tab cháu, đợt "Mục 0: Quyền Truy Cập Module"
+  // 10/2026) — với cây 2 tầng cũ, vòng lặp chỉ chạy đúng 1 lần, hành vi giữ nguyên y hệt bản cũ.
+  let cur = moduleKey;
+  for (let guard = 0; guard < 10; guard++) {
+    const mod = BUSINESS_MODULES.find(m => m.key === cur);
+    if (!mod?.parent) break;
+    if (ma[mod.parent] === false) return false;
+    cur = mod.parent;
+  }
   return ma[moduleKey] !== false;
 }
 
@@ -3481,6 +3539,38 @@ function canDownloadTaskRecord(user) {
 function canAccessInternalModule(user) {
   if (!user) return false;
   return hasModuleAccess(user, 'internal');
+}
+
+// Mục 0 — gác tab con của "Truyền Thông Nội Bộ" (10/2026, xem chú thích đầy đủ tại các entry internal*
+// trong BUSINESS_MODULES) — TRƯỚC ĐÂY 5 tab NEWS/TRAINING/RECRUITMENT/SHARE/QNA không có khái niệm
+// quyền hiển thị riêng nào (chỉ cần qua được canAccessInternalModule() là thấy hết). Đây THUẦN là lớp
+// gác Mục 0 (không có quyền hành động nào khác để AND cùng, vì các tab này vốn mở chung cho mọi người).
+const INTERNAL_SUBTAB_MODULE_KEY = { NEWS: 'internalNews', TRAINING: 'internalTraining', RECRUITMENT: 'internalRecruitment', SHARE: 'internalShare', QNA: 'internalQna' };
+function canAccessInternalSubTab(user, subTab) {
+  const key = INTERNAL_SUBTAB_MODULE_KEY[subTab];
+  if (!key) return false;
+  return hasModuleAccess(user, key);
+}
+// Trả về đúng subTab đang xin mở nếu còn thấy được, nếu không trả về tab con ĐẦU TIÊN mà user còn thấy
+// (fallback — admin hiếm khi tắt hết cả 5 tab, nhưng tránh kẹt ở 1 tab đã bị khoá nếu có).
+function resolveAccessibleInternalSubTab(user, subTab) {
+  if (canAccessInternalSubTab(user, subTab)) return subTab;
+  return Object.keys(INTERNAL_SUBTAB_MODULE_KEY).find(k => canAccessInternalSubTab(user, k)) || subTab;
+}
+
+// Mục 0 — gác 9 tab cháu LMS lồng trong tab con "Đào Tạo" (setTrainingLmsTab(), module-internalcomms-
+// daotao.js) — cùng lý do/khuôn với canAccessInternalSubTab() ở trên, parent đã trỏ "internalTraining"
+// trong BUSINESS_MODULES nên hasModuleAccess() tự cascade đúng (tắt "internal" hoặc "internalTraining"
+// là khoá theo cả 9 tab này, không cần kiểm tra lại ở đây).
+const TRAINING_LMS_TAB_MODULE_KEY = { DASHBOARD: 'trainingLmsDashboard', CLASSES: 'trainingLmsClasses', COURSES: 'trainingLmsCourses', PLANS: 'trainingLmsPlans', MY_REGS: 'trainingLmsMyRegs', DOCS: 'trainingLmsDocs', PATHS: 'trainingLmsPaths', ONBOARDING: 'trainingLmsOnboarding', TESTS: 'trainingLmsTests' };
+function canAccessTrainingLmsTab(user, tab) {
+  const key = TRAINING_LMS_TAB_MODULE_KEY[tab];
+  if (!key) return false;
+  return hasModuleAccess(user, key);
+}
+function resolveAccessibleTrainingLmsTab(user, tab) {
+  if (canAccessTrainingLmsTab(user, tab)) return tab;
+  return Object.keys(TRAINING_LMS_TAB_MODULE_KEY).find(k => canAccessTrainingLmsTab(user, k)) || tab;
 }
 
 function canAccessSubmissionModule(user) {
@@ -8754,7 +8844,12 @@ function _dispatchTabRender(tabName) {
 // (scope đó luôn true do "phòng ban của chính mình" mặc định — quá rộng cho 1 module động tới tiền).
 function canAccessPaymentModule(user) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.paymentManage) return true;
+  if (user.perms?.admin) return true;
+  // Mục 0 (10/2026): "payment" TRƯỚC ĐÂY vắng mặt khỏi BUSINESS_MODULES/moduleAccess — thêm vào đây làm
+  // lớp gác CỨNG độc lập, giống hệt mọi module khác (hasModuleAccess() mặc định TRUE nếu admin chưa tắt
+  // riêng, nên không ảnh hưởng ai cho tới khi có người chủ động cấu hình).
+  if (!hasModuleAccess(user, 'payment')) return false;
+  if (user.perms?.paymentManage) return true;
   if (isApproverInWorkflowMap(DB.paymentDeptWorkflows, user.username)) return true;
   // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu nhánh này — người CHỈ thuộc "Nhóm
   // Phê Duyệt Cuối" PAYMENT (VD TGD/PTGD, không có paymentManage/không thuộc paymentDeptWorkflows[dept]
@@ -8770,7 +8865,11 @@ function canAccessPaymentModule(user) {
 // canAccessPaymentModule() ngay tren nhung giu ten rieng (dung o ngu canh khac trong code cu, khong doi
 // de tranh anh huong noi khac dang goi dung ten nay).
 function canManagePaymentRequestsClient(user) {
-  return !!(user?.perms?.admin || user?.perms?.paymentManage);
+  if (user?.perms?.admin) return true;
+  // Giữ ĐÚNG điều kiện với canAccessPaymentModule() (xem chú thích tại đó) — thêm gác Mục 0 'payment' ở
+  // đây luôn, nếu không thẻ "Chờ Thanh Toán" ở Approval Hub vẫn hiện dù admin đã tắt hẳn module Thanh
+  // Toán cho người này.
+  return !!(hasModuleAccess(user, 'payment') && user?.perms?.paymentManage);
 }
 
 // hasActivePaymentRequestForSourceClient() — bản sao client-side của hasActivePaymentRequestForSource()
@@ -9211,18 +9310,33 @@ function canAccessOperationSubTab(user, kind) {
   // nào) chỉ cần giữ BẤT KỲ quyền quản lý hồ sơ nào (operationStoreOpenCreate/operationRepairCreate/
   // operationRecordManageAll/admin) là đủ hiện tab — canManageOperationRecordClient() lọc lại chính xác
   // theo TỪNG hồ sơ (đúng creator) khi render nút thao tác thật bên trong tab.
-  if (kind === 'ESTIMATE') return hasAnyOperationRecordManagePermClient(user);
+  // Mục 0 (10/2026): AND thêm hasModuleAccess('vanHanhEstimate'/...) — lớp gác CỨNG độc lập admin có thể
+  // tắt riêng qua Phân Quyền > "0. Quyền Truy Cập Module", mặc định TRUE nên không đổi hành vi hiện tại.
+  if (kind === 'ESTIMATE') return hasModuleAccess(user, 'vanHanhEstimate') && hasAnyOperationRecordManagePermClient(user);
   // EXECUTION/ACCEPTANCE: "toàn quyền quản lý hồ sơ" thấy hết; NGOÀI RA người được gán/chỉ định trực
   // tiếp trên ít nhất 1 công việc (dù không có quyền rộng) cũng cần thấy tab để còn thao tác đúng việc
   // của mình (xem updateOperationWorkItemProgress/acceptOperationWorkItem ở lib/recordActions.js —
   // server đã chặn/nới quyền tương ứng, KHÔNG đổi bởi đợt overhaul quyền này).
-  if (kind === 'EXECUTION') return hasAnyOperationRecordManagePermClient(user)
-    || (DB.operationWorkItems || []).some(w => isWorkItemAssignee(w, user.username) || workItemAssignees(w).some(u => isManagerOf(user.username, u, DB.users)));
-  if (kind === 'ACCEPTANCE') return hasAnyOperationRecordManagePermClient(user)
-    || (DB.operationWorkItems || []).some(w => w.acceptorUsername === user.username || isManagerOf(user.username, w.acceptorUsername, DB.users));
-  // 'STORE'/'REPORT': tab cha "Siêu Thị" — hiện khi có BẤT KỲ quyền nào trong 5 giai đoạn con.
-  if (kind === 'STORE' || kind === 'REPORT') {
-    return ['STORE_OPEN', 'REPAIR', 'ESTIMATE', 'EXECUTION', 'ACCEPTANCE'].some(k => canAccessOperationSubTab(user, k));
+  if (kind === 'EXECUTION') return hasModuleAccess(user, 'vanHanhExecution') && (hasAnyOperationRecordManagePermClient(user)
+    || (DB.operationWorkItems || []).some(w => isWorkItemAssignee(w, user.username) || workItemAssignees(w).some(u => isManagerOf(user.username, u, DB.users))));
+  if (kind === 'ACCEPTANCE') return hasModuleAccess(user, 'vanHanhAcceptance') && (hasAnyOperationRecordManagePermClient(user)
+    || (DB.operationWorkItems || []).some(w => w.acceptorUsername === user.username || isManagerOf(user.username, w.acceptorUsername, DB.users)));
+  // LỖI ĐÃ VÁ (10/2026, báo cáo người dùng: cấp quyền "Công Việc"/"Nghiệm Thu" cho 1 công việc cụ thể lại
+  // thấy được cả tab "📊 Báo Cáo"): REPORT TRƯỚC ĐÂY gộp chung 1 khối OR-logic với STORE (hễ có BẤT KỲ
+  // quyền nào trong 5 giai đoạn con, kể cả chỉ được GÁN/CHỈ ĐỊNH trên 1 công việc — EXECUTION/ACCEPTANCE ở
+  // trên — là thấy luôn Báo Cáo, vốn là màn TỔNG HỢP toàn bộ các giai đoạn, không nên lộ cho người chỉ
+  // làm đúng 1 việc). Tách riêng hẳn: chỉ người có quyền QUẢN LÝ hồ sơ rộng (hasAnyOperationRecordManagePermClient
+  // — operationStoreOpenCreate/operationRepairCreate/operationRecordManageAll/operationRecordViewAll/admin)
+  // hoặc quyền XEM BÁO CÁO riêng operationStoreReportView (đã có sẵn checkbox từ đợt "7-module report-
+  // permission rollout" nhưng CHƯA từng được nối vào đúng điểm gác tab này — khoảng trống khiến bản vá
+  // trước không có tác dụng) mới thấy Báo Cáo — KHÔNG còn nhánh "chỉ được gán/chỉ định 1 công việc" nữa.
+  if (kind === 'REPORT') return hasModuleAccess(user, 'vanHanhReport')
+    && (hasAnyOperationRecordManagePermClient(user) || !!user.perms?.operationStoreReportView);
+  // 'STORE': tab cha "Siêu Thị" — hiện khi có BẤT KỲ quyền nào trong 6 tab con (kể cả chỉ đủ điều kiện
+  // thấy riêng Báo Cáo) — KHÔNG dùng lại định nghĩa này cho REPORT (xem fix ở trên, tránh lặp lại đúng
+  // lỗi vừa vá: REPORT phải có định nghĩa riêng, không được là 1 nhánh của chính OR-logic của STORE).
+  if (kind === 'STORE') {
+    return ['STORE_OPEN', 'REPAIR', 'ESTIMATE', 'EXECUTION', 'ACCEPTANCE', 'REPORT'].some(k => canAccessOperationSubTab(user, k));
   }
   return false;
 }

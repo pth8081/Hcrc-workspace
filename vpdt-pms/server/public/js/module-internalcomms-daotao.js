@@ -52,6 +52,9 @@ function getTrainingRegDisplayStatus(reg, cls) {
 
 let activeTrainingLmsTab = 'CLASSES';
 function setTrainingLmsTab(tab) {
+  // Mục 0 (10/2026): gác CỨNG theo checkbox "0. Quyền Truy Cập Module" riêng của từng tab LMS (xem
+  // canAccessTrainingLmsTab(), core.js) — cùng khuôn resolveAccessibleInternalSubTab() ở setInternalSubTab().
+  tab = resolveAccessibleTrainingLmsTab(currentUser, tab);
   activeTrainingLmsTab = tab;
   // Reset trang về 1 khi đổi tab con — mỗi tab có moduleKey phân trang riêng (trainingClasses/
   // trainingCourses/trainingPlans/trainingMyRegs/trainingDocuments/careerPaths/trainingTests), tránh
@@ -60,7 +63,9 @@ function setTrainingLmsTab(tab) {
   const btnMap = { DASHBOARD: 'btnTrainingLmsDashboard', CLASSES: 'btnTrainingLmsClasses', COURSES: 'btnTrainingLmsCourses', PLANS: 'btnTrainingLmsPlans', MY_REGS: 'btnTrainingLmsMyRegs', DOCS: 'btnTrainingLmsDocs', PATHS: 'btnTrainingLmsPaths', ONBOARDING: 'btnTrainingLmsOnboarding', TESTS: 'btnTrainingLmsTests' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
-    if (btn) btn.className = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    if (!btn) return;
+    const cls = key === tab ? 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    btn.className = cls + (canAccessTrainingLmsTab(currentUser, key) ? '' : ' hidden');
   });
   document.getElementById('trainingLmsDashboardPanel').classList.toggle('hidden', tab !== 'DASHBOARD');
   document.getElementById('trainingLmsClassesPanel').classList.toggle('hidden', tab !== 'CLASSES');

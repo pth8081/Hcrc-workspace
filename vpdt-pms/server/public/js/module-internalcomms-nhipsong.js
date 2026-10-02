@@ -10,6 +10,11 @@ function setInternalSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('internal');
   resetListPage('internalNews');
+  // Mục 0 (10/2026): gác CỨNG theo checkbox "0. Quyền Truy Cập Module" riêng của từng tab (xem
+  // canAccessInternalSubTab(), core.js) — nếu tab đang xin mở đã bị admin tắt, tự chuyển sang tab con
+  // ĐẦU TIÊN còn thấy được thay vì chặn cứng bằng alert (các tab này mặc định mở cho mọi người, không có
+  // "màn chặn truy cập" quen thuộc như module khác, nên im lặng điều hướng là trải nghiệm hợp lý hơn).
+  subTab = resolveAccessibleInternalSubTab(currentUser, subTab);
   activeInternalSubTab = subTab;
 
   // Vá lỗi "tab không có Dashboard vẫn thấy Dashboard cũ" (Đợt E, 9/2026): trước đây #internalDashboardCards
@@ -29,7 +34,9 @@ function setInternalSubTab(subTab) {
   const btnMap = { NEWS: 'btnInternalSubNews', TRAINING: 'btnInternalSubTraining', RECRUITMENT: 'btnInternalSubRecruitment', SHARE: 'btnInternalSubShare', QNA: 'btnInternalSubQna' };
   Object.entries(btnMap).forEach(([type, btnId]) => {
     const btn = document.getElementById(btnId);
-    if (btn) btn.className = type === subTab ? 'px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    if (!btn) return;
+    const cls = type === subTab ? 'px-3 py-1 rounded text-xs font-bold bg-fuchsia-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+    btn.className = cls + (canAccessInternalSubTab(currentUser, type) ? '' : ' hidden');
   });
 
   // "Đào tạo" (tạm thời) — thay hẳn khung đăng bài đơn giản cũ bằng LMS thu gọn (Lớp Học/Đăng Ký Của
