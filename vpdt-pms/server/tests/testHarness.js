@@ -570,6 +570,17 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/deptViewScopeConfig (10/2026) — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js
+      // (chỉ Admin mới sửa được map tắt/bật "cùng phòng tự động xem") — cùng lý do KHÔNG mô phỏng toàn bộ
+      // generic POST /api/data/:key như các nhánh uniformCatalog/hrTaskTemplates ở trên.
+      if (pathName === '/api/data/deptViewScopeConfig' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.deptViewScopeConfig = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/data/priceZones — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (priceZones chỉ
       // Admin mới ghi được, xem chú thích tại đó) — cùng lý do KHÔNG mô phỏng toàn bộ generic
       // POST /api/data/:key như 2 nhánh uniformCatalog/hrTaskTemplates ở trên.

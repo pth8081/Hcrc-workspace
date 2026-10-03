@@ -614,6 +614,22 @@ const DEFAULTS = {
   // người duyệt cho 1 phòng ban cụ thể (không cần có meetingApprove) — xem canDecideMeeting() ở
   // lib/recordActions.js. 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối.
   meetingDeptWorkflows: {},
+  // 10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở xem theo phòng ban": trước đây
+  // 11 hàm canView*() dưới đây (budget/payment/office/car/contract/submission/meeting/3×operation/report)
+  // đều CỨNG trong code 1 nhánh "cùng phòng ban là tự động xem được" (KHÔNG cần giữ quyền gì riêng, xem
+  // scopeAllows()/canViewBudgetLine()/canViewPaymentRequest()/... ở lib/recordViewScope.js) — không có
+  // cách nào tắt/bật theo module, giống hệt nhau cho mọi hệ thống. Map PHẲNG { [moduleKey]: boolean } —
+  // admin cấu hình ở màn mới "🔒 Phạm Vi Xem Theo Phòng Ban" (Hệ Thống → Nghiệp Vụ Nâng Cao). Key THIẾU
+  // hoặc giá trị `true` = GIỮ NGUYÊN hành vi cũ (cùng phòng tự động xem) — KHÔNG đổi hành vi cho bất kỳ
+  // ai nếu admin không đụng tới màn này. Đặt `false` cho 1 moduleKey thì người trong phòng ban đó CHỈ
+  // còn thấy đúng hồ sơ do CHÍNH MÌNH tạo — các lớp xem khác (admin, quyền quản lý/tổng hợp toàn công ty,
+  // quản lý cấp trên của người tạo, người đang là approver theo quy trình dù khác phòng ban) LUÔN giữ
+  // nguyên, không bị tắt bởi map này (xem deptAutoViewOn() ở lib/recordViewScope.js — chỉ gác ĐÚNG 1
+  // nhánh "bystander cùng phòng", không đụng các nhánh còn lại, để không ai mất quyền xem hồ sơ cần xử
+  // lý/đã tạo). 11 key hợp lệ: budget, payment, office, car, contract, submission, meeting,
+  // operationOrder, operationStoreOpening, operationRepair, report — xem DEPT_VIEW_SCOPE_MODULES ở
+  // lib/recordViewScope.js (nguồn khai báo DUY NHẤT, màn admin tự render theo đúng danh sách này).
+  deptViewScopeConfig: {},
   // ("operationOrderDeptWorkflows" — quy trình duyệt Đơn Hàng theo phòng ban — đã bị XOÁ HẲN, thay bằng
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.
   // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows — Mở Mới/Sửa Chữa Siêu Thị — CŨNG ĐÃ

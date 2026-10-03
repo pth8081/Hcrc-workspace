@@ -95,11 +95,46 @@ function assertNoManagerCycle(users) {
   }
 }
 
-function scopeAllows(user, scope, dept) {
+// 11 module dùng CHUNG 1 cơ chế "cùng phòng ban là tự động xem được" (qua scopeAllows() dưới đây HOẶC so
+// trực tiếp item.dept === user.dept ở canView* riêng của budget/payment/3×operation/report) — nguồn khai
+// báo DUY NHẤT cho deptViewScopeConfig (xem chú thích đầy đủ ở defaults.js), màn admin
+// "🔒 Phạm Vi Xem Theo Phòng Ban" (module-admin-deptviewscope.js) tự render đúng theo danh sách này, thêm
+// module mới vào nhóm "cùng phòng tự động xem" chỉ cần thêm 1 dòng ở đây (không cần sửa gì ở client).
+const DEPT_VIEW_SCOPE_MODULES = [
+  { key: 'budget', label: 'Ngân Sách' },
+  { key: 'payment', label: 'Thanh Toán' },
+  { key: 'office', label: 'Mua Sắm / Sửa Chữa Văn Phòng' },
+  { key: 'car', label: 'Đăng Ký Xe' },
+  { key: 'contract', label: 'Hợp Đồng' },
+  { key: 'submission', label: 'Tờ Trình' },
+  { key: 'meeting', label: 'Đặt Phòng Họp' },
+  { key: 'operationOrder', label: 'Vận Hành — Đặt Hàng ST/HO' },
+  { key: 'operationStoreOpening', label: 'Vận Hành — Mở Mới Siêu Thị' },
+  { key: 'operationRepair', label: 'Vận Hành — Sửa Chữa Siêu Thị' },
+  { key: 'report', label: 'Báo Cáo Định Kỳ' }
+];
+
+// deptAutoViewOn(): map deptViewScopeConfig THIẾU key hoặc giá trị khác `false` -> GIỮ NGUYÊN hành vi cũ
+// (cùng phòng tự động xem) — an toàn tuyệt đối khi admin chưa từng mở màn cấu hình mới (không đổi hành
+// vi cho bất kỳ hệ thống nào đang chạy). `moduleKey` rỗng (canDownloadRecordFile() KHÔNG truyền — xem
+// chú thích ở đó) cũng coi như BẬT, cố ý KHÔNG đụng tới cơ chế tải file (phạm vi khác, chưa đưa vào đợt
+// này).
+function deptAutoViewOn(appData, moduleKey) {
+  if (!moduleKey) return true;
+  const cfg = appData?.deptViewScopeConfig;
+  if (!cfg || cfg[moduleKey] == null) return true;
+  return cfg[moduleKey] !== false;
+}
+
+// scopeAllows(): thêm 2 tham số CUỐI `moduleKey`/`appData` (TUỲ CHỌN — mọi lời gọi cũ không truyền vẫn
+// an toàn, deptAutoViewOn() coi như BẬT) để nhánh "cùng phòng là thấy" tôn trọng deptViewScopeConfig.
+// canDownloadRecordFile() CỐ Ý không truyền 2 tham số này (xem chú thích ở đó) — tải file giữ nguyên
+// hành vi cũ, chưa thuộc phạm vi đợt cấu hình này.
+function scopeAllows(user, scope, dept, moduleKey, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (scope?.all) return true;
-  if (dept && user.dept === dept) return true;
+  if (dept && user.dept === dept && deptAutoViewOn(appData, moduleKey)) return true;
   return !!(dept && Array.isArray(scope?.depts) && scope.depts.includes(dept));
 }
 
@@ -165,7 +200,7 @@ function canViewSubmission(user, sub, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.submissionView, sub.dept)) return true;
+  if (scopeAllows(user, user.perms?.submissionView, sub.dept, 'submission', appData)) return true;
   if ((sub.opinionRequestees || []).includes(user.username)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.submissions.resolveWfConfig(sub, appData).approvers, user.username);
 }
@@ -407,15 +442,15 @@ function filterRecruitmentReferralsForUser(referrals, user) {
 // (không riêng của mình) cộng với bản nháp CỦA CHÍNH MÌNH — trước đây GET /api/data trả nguyên mảng
 // reportEntries của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập, kể cả bản NHÁP (nội dung
 // đang soạn dở, chưa gửi) của người khác phòng ban khác.
-function canViewReportEntry(user, entry) {
+function canViewReportEntry(user, entry, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.reportManage || user.perms?.reportAggregate) return true;
   if (entry.creator === user.username) return true;
-  return !!(entry.dept === user.dept && entry.status !== 'DRAFT');
+  return !!(entry.dept === user.dept && entry.status !== 'DRAFT' && deptAutoViewOn(appData, 'report'));
 }
 
-function filterReportEntriesForUser(entries, user) {
-  return (entries || []).filter(e => canViewReportEntry(user, e));
+function filterReportEntriesForUser(entries, user, appData) {
+  return (entries || []).filter(e => canViewReportEntry(user, e, appData));
 }
 
 // Khớp canDownloadFile(user, moduleKey, dept, ownerUsername) ở public/index.html — dùng cho
@@ -437,13 +472,13 @@ function canViewContract(user, contract, appData) {
   if (contract.creator === user.username) return true;
   // Quản lý (trực tiếp/gián tiếp) của người tạo — mục 3 kế hoạch 10/2026, cùng khuôn canViewDoc() ở trên.
   if (isManagerOf(user.username, contract.creator, appData?.users)) return true;
-  if (scopeAllows(user, user.perms?.contractView, contract.dept)) return true;
+  if (scopeAllows(user, user.perms?.contractView, contract.dept, 'contract', appData)) return true;
   // Đơn vị tiếp nhận theo dõi & thanh toán (custodianDept) được XEM hợp đồng/phụ lục ngay từ lúc tạo
   // (không đợi approvalStatus === 'APPROVED') — khớp yêu cầu "đơn vị chọn có thể cùng xem hợp đồng và
   // phụ lục hợp đồng khi được phê duyệt", và nhất quán với cách người tạo (creator) ở trên cũng luôn
   // xem được ngay không điều kiện. custodianDept luôn có giá trị cụ thể (mặc định = dept khi không
   // chọn, xem createValidation.js), nên nhánh này là no-op vô hại khi 2 field trùng nhau.
-  if (scopeAllows(user, user.perms?.contractView, contract.custodianDept || contract.dept)) return true;
+  if (scopeAllows(user, user.perms?.contractView, contract.custodianDept || contract.dept, 'contract', appData)) return true;
   if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
   return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
 }
@@ -461,7 +496,7 @@ function canViewCarReg(user, carReg, appData) {
   // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban với
   // carView — cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).
   if (carReg.assignedDriverUsername === user.username) return true;
-  if (scopeAllows(user, user.perms?.carView, carReg.dept)) return true;
+  if (scopeAllows(user, user.perms?.carView, carReg.dept, 'car', appData)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.carRegs.resolveWfConfig(carReg, appData).approvers, user.username);
 }
 
@@ -476,7 +511,7 @@ function canViewOfficeReq(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (item.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.officeView, item.dept)) return true;
+  if (scopeAllows(user, user.perms?.officeView, item.dept, 'office', appData)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.officeReqs.resolveWfConfig(item, appData).approvers, user.username);
 }
 
@@ -546,7 +581,7 @@ function filterBudgetEntriesForUser(entries, user, appData) {
 // canViewBudgetEntry() ở trên: admin/budgetManage/budgetAggregate xem HẾT, còn lại chỉ xem đúng dòng có
 // Khối Phòng Ban (item.dept) trùng phòng ban của mình — kể cả dòng mình không phải người tạo (Ngân Sách
 // là hồ sơ của ĐƠN VỊ, không phải cá nhân, cùng tinh thần budgetEntries).
-function canViewBudgetLine(user, item) {
+function canViewBudgetLine(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate || user.perms?.budgetReportView) return true;
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Trung bình): thiếu nhánh "chính người tạo" mà
@@ -557,9 +592,9 @@ function canViewBudgetLine(user, item) {
   // hàm này vẫn mang giả định CŨ (dept luôn trùng người tạo) nên người tạo mất quyền xem lại chính dòng
   // mình vừa tạo ngay khi chọn Khối Phòng Ban khác phòng ban mình.
   if (item.createdBy === user.username) return true;
-  return item.dept === user.dept;
+  return item.dept === user.dept && deptAutoViewOn(appData, 'budget');
 }
-function filterBudgetLinesForUser(items, user) {
+function filterBudgetLinesForUser(items, user, appData) {
   return (items || []).filter(i => canViewBudgetLine(user, i));
 }
 
@@ -586,7 +621,7 @@ function filterBudgetPeriodsForUser(items, user) {
 function canViewOperationOrder(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.operationOrderReportView) return true;
-  if (item.dept === user.dept) return true;
+  if (item.dept === user.dept && deptAutoViewOn(appData, 'operationOrder')) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.operationOrders.resolveWfConfig(item, appData).approvers, user.username);
 }
 function filterOperationOrdersForUser(items, user, appData) {
@@ -630,7 +665,7 @@ function canViewOperationStoreOpening(user, item, appData) {
   // đây (view scope) + redactOperationEstimateItemsToOwnedScope() bên dưới, KHÔNG thêm vào
   // canManageOperationRecord()/canManageOperationRecordClient() để không vô tình cấp quyền sửa.
   if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView) return true;
-  if (item.dept === user.dept) return true;
+  if (item.dept === user.dept && deptAutoViewOn(appData, 'operationStoreOpening')) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
   // KHÔNG còn nhánh "đang là approver" nào (hồ sơ chính lẫn Dự toán) — chủ ứng dụng xác nhận Vận Hành >
   // Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả Dự toán (để trưởng phòng tự lập/lưu). MODULE_CONFIGS
@@ -654,7 +689,9 @@ function redactOperationEstimateItemsToOwnedScope(user, sourceType, item, appDat
   if (!user) return item;
   // operationRecordViewAll: xem đầy đủ (không redact) — cùng khuôn admin/operationRecordManageAll, xem
   // chú thích ở canViewOperationStoreOpening()/canViewOperationRepair() ngay trên.
-  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView || item.dept === user.dept) return item;
+  const moduleKey = sourceType === 'OPERATION_REPAIR' ? 'operationRepair' : 'operationStoreOpening';
+  if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView
+    || (item.dept === user.dept && deptAutoViewOn(appData, moduleKey))) return item;
   if (hasOwnWorkItemInSource(user, sourceType, item.id, appData)) return item;
   if (!hasOwnEstimateCategoryInSource(user, item)) return item;
   const ownedTopIds = new Set((item.estimateItems || [])
@@ -675,7 +712,7 @@ function canViewOperationRepair(user, item, appData) {
   // Audit nghiệp vụ (đợt 4) — cùng lý do đã thêm ở canViewOperationStoreOpening() ngay trên.
   // operationRecordViewAll — xem chú thích đầy đủ ở canViewOperationStoreOpening() ngay trên.
   if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView) return true;
-  if (item.dept === user.dept) return true;
+  if (item.dept === user.dept && deptAutoViewOn(appData, 'operationRepair')) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
   // Cùng lý do ở canViewOperationStoreOpening() bên trên — KHÔNG còn nhánh "đang là approver" nào (hồ sơ
   // chính lẫn Dự toán).
@@ -748,7 +785,7 @@ function canViewMeeting(user, meeting, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.meetingView, meeting.dept)) return true;
+  if (scopeAllows(user, user.perms?.meetingView, meeting.dept, 'meeting', appData)) return true;
   if (user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView) return true;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[meeting.dept], appData || {});
@@ -1019,7 +1056,7 @@ function filterItServiceRenewalsForUser(items, user) {
 function canViewPaymentRequest(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.paymentManage) return true;
-  if (item.dept && item.dept === user.dept) return true;
+  if (item.dept && item.dept === user.dept && deptAutoViewOn(appData, 'payment')) return true;
   // Quản lý (trực tiếp/gián tiếp) của người tạo đề nghị — mục 3 kế hoạch 10/2026, cùng khuôn
   // canViewDoc()/canViewContract() ở trên (item.createdBy — xem creatorField ở lib/createValidation.js).
   if (isManagerOf(user.username, item.createdBy, appData?.users)) return true;
@@ -1391,6 +1428,7 @@ function canAccessItPriceApprovalModuleServer(user, priceType, data) {
 
 module.exports = {
   isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
+  DEPT_VIEW_SCOPE_MODULES, deptAutoViewOn,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,

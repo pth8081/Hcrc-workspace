@@ -97,7 +97,11 @@ const REPORT_QUERY_CONFIGS = {
   contracts: { filterFn: filterContractsForUser, needsAppData: true },
   carRegs: { filterFn: filterCarRegsForUser, needsAppData: true },
   officeReqs: { filterFn: filterOfficeReqsForUser, needsAppData: true },
-  meetings: { filterFn: filterMeetingsForUser, needsAppData: false },
+  // needsAppData: true (10/2026) — canViewMeeting() cần appData cho cả meetingDeptWorkflows (approver
+  // riêng theo phòng ban) lẫn deptViewScopeConfig (nhánh "cùng phòng tự động xem") — trước đây false, bỏ
+  // sót, khiến màn Báo Cáo đọc appData=undefined ở canViewMeeting(): an toàn (chỉ mất đúng 2 nhánh mới,
+  // không lộ thêm dữ liệu) nhưng khác hành vi GET /api/data chính — sửa luôn cho nhất quán.
+  meetings: { filterFn: filterMeetingsForUser, needsAppData: true },
   // dbo.MeetingMinutes KHÔNG có cột Dept (canViewMeetingMinutes không lọc theo dept) — nhưng Báo Cáo
   // Biên Bản Họp vẫn cho chọn phòng ban để lọc theo r.dept lấy từ Payload, nên áp lại đúng hành vi đó
   // bằng JS sau khi tải (không đẩy được xuống SQL vì không có cột để where).
@@ -142,9 +146,11 @@ const REPORT_QUERY_CONFIGS = {
   // (lib/recordViewScope.js, logic quyền tương đương budgetEntries/budgetLines: admin/budgetManage/
   // budgetAggregate xem hết, còn lại chỉ xem kỳ của đúng phòng ban mình).
   budgetPeriods: { filterFn: filterBudgetPeriodsForUser, needsAppData: false },
-  // budgetLines (Ngân Sách 2.0, v23.0) — canViewBudgetLine() không cần appData (chỉ 1 cấp gác permission
+  // budgetLines (Ngân Sách 2.0, v23.0) — needsAppData: true (10/2026, đợt deptViewScopeConfig):
+  // canViewBudgetLine() giờ cần appData.deptViewScopeConfig để biết nhánh "cùng phòng tự động xem" có
+  // đang BẬT hay không (xem lib/recordViewScope.js) — trước đây canViewBudgetLine() không cần appData (chỉ 1 cấp gác permission
   // phẳng, không có approver theo phòng ban), xem lib/recordViewScope.js.
-  budgetLines: { filterFn: filterBudgetLinesForUser, needsAppData: false },
+  budgetLines: { filterFn: filterBudgetLinesForUser, needsAppData: true },
   vppRegistrations: { filterFn: filterVppRegistrationsForUser, needsAppData: true },
   // dbo.Tasks KHÔNG thuộc 55 collection DEDICATED_TABLES (bảng riêng có sẵn từ Bước 6b, xem
   // lib/taskStore.js queryTasksInRange()) — cfg (DEDICATED_TABLES[collection]) sẽ là undefined cho

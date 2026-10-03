@@ -224,6 +224,7 @@
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="GROUPS" id="btnAdvWorkflowSubGroups" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖋️ Nhóm Phê Duyệt Trình/HĐ</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="SPECIALPERM" id="btnAdvWorkflowSubSpecialPerm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Nhóm Quyền Đặc Biệt</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="EXTRAAPPROVAL" id="btnAdvWorkflowSubExtraApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖊️ Nhóm Phê Duyệt Cuối</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="DEPTVIEWSCOPE" id="btnAdvWorkflowSubDeptViewScope" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔒 Phạm Vi Xem Theo Phòng Ban</button>
     </div>
 
   <!-- Màn hình 3c: "🏬 Quy Trình Đặt Hàng Siêu Thị" (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/data-op
@@ -412,6 +413,34 @@
         <p class="text-[11px] text-gray-500 italic mb-2">Người tạo hồ sơ chọn 1 trong các cấp dưới đây — mỗi cấp quyết định nhóm nào ở bảng trên được PHÉP hiện ra để tick, nhóm nào bị khoá bắt buộc tick sẵn.</p>
         <div id="extraApprovalLevelsAdminWrap"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- 🔒 Phạm Vi Xem Theo Phòng Ban (10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở
+       xem theo phòng ban") — 11 module hiện CỨNG 1 nhánh "cùng phòng ban là tự động xem được" (xem
+       DEPT_VIEW_SCOPE_MODULES/deptAutoViewOn() ở lib/recordViewScope.js, DEPT_VIEW_SCOPE_MODULE_LABELS ở
+       module-admin-deptviewscope.js) — màn này cho admin tắt/bật TỪNG module mà không cần sửa code. Tắt 1
+       module thì người trong phòng ban đó CHỈ còn thấy đúng hồ sơ do CHÍNH MÌNH tạo — các lớp xem khác
+       (admin, quyền quản lý toàn công ty, quản lý cấp trên của người tạo, người đang là approver dù khác
+       phòng ban) KHÔNG bị ảnh hưởng, luôn giữ nguyên. Mặc định (chưa đụng tới màn này) = BẬT hết, giữ
+       nguyên hành vi cũ, không ai bị mất quyền xem gì cả. -->
+  <div id="advWorkflowSubDeptViewScope" class="hidden space-y-4">
+    <div class="bg-white p-4 rounded border space-y-3">
+      <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">🔒 Phạm Vi Xem Theo Phòng Ban</h3>
+      <p class="text-[11px] text-gray-500 italic">Mặc định MỌI module đều BẬT: ai cùng phòng ban với hồ sơ cũng tự động xem được (dù không phải người tạo). Tắt 1 module thì người trong phòng ban đó CHỈ còn thấy đúng hồ sơ do chính mình tạo — quyền quản lý toàn công ty, quản lý cấp trên của người tạo, và người đang được phân công duyệt (dù khác phòng ban) KHÔNG bị ảnh hưởng.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs text-left">
+          <thead class="bg-gray-100 text-gray-700 font-bold">
+            <tr>
+              <th class="p-2 border">Module</th>
+              <th class="p-2 border text-center">Bật</th>
+              <th class="p-2 border">Trạng Thái</th>
+            </tr>
+          </thead>
+          <tbody id="deptViewScopeTableBody"></tbody>
+        </table>
+      </div>
+      <button type="button" data-op="saveDeptViewScopeConfig" class="bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded hover:bg-indigo-700">💾 Lưu Phạm Vi Xem</button>
     </div>
   </div>
   </div>

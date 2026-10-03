@@ -139,6 +139,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // cùng lý do bảo mật: không cho user thường tự ghi thẳng qua POST /api/data/meetingDeptWorkflows và tự
   // phong mình làm người duyệt lịch họp.
   'meetingDeptWorkflows',
+  // deptViewScopeConfig: tắt/bật "cùng phòng ban tự động xem" cho 11 module (xem defaults.js +
+  // DEPT_VIEW_SCOPE_MODULES ở lib/recordViewScope.js) — không để user thường tự ghi thẳng qua POST
+  // /api/data/deptViewScopeConfig và tự mở rộng/thu hẹp phạm vi xem của chính mình.
+  'deptViewScopeConfig',
   // submissionTypes: chi phối tra cứu quy trình theo loại (submissionTypeDeptWorkflows) — không để
   // user thường tự đổi/xoá key đang được cấu hình quy trình riêng.
   'submissionTypes',
@@ -293,7 +297,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   'workflows', 'quickApplyConfigs', 'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows', 'paymentDeptWorkflows', 'budgetDeptWorkflows',
-  'budgetApprovedDeptWorkflows', 'meetingDeptWorkflows',
+  'budgetApprovedDeptWorkflows', 'meetingDeptWorkflows', 'deptViewScopeConfig',
   'itPriceDeptWorkflows', 'itPriceTierWorkflows',
   'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows', 'operationOrderStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
@@ -1495,7 +1499,7 @@ router.get('/', async (req, res) => {
     // reportEntries: cùng dạng lỗ hổng như docs/submissions ở trên — GET /api/data trước đây trả nguyên
     // báo cáo (kể cả bản NHÁP đang soạn dở) của MỌI người ở MỌI phòng ban cho bất kỳ ai đã đăng nhập,
     // trong khi renderPrEntryTable() (index.html) chỉ ẩn ở giao diện theo đúng logic canViewReportEntry().
-    if (data.reportEntries) data.reportEntries = filterReportEntriesForUser(data.reportEntries, req.freshUser);
+    if (data.reportEntries) data.reportEntries = filterReportEntriesForUser(data.reportEntries, req.freshUser, data);
     // contracts/carRegs/officeReqs/meetings/meetingMinutes: cùng dạng lỗ hổng như docs/submissions —
     // trước đây 5 collection này hoàn toàn KHÔNG được lọc lại ở server (chỉ ẩn ở renderContracts()/
     // renderCarRegs()/renderOfficeReqs()/renderMeetings()/canViewMeetingMinutesRecord() phía giao
@@ -1737,7 +1741,7 @@ const LAZY_DATA_GROUPS = {
     collections: [
       { key: 'budgetTemplates' },
       { key: 'budgetPeriods', filter: filterBudgetPeriodsForUser },
-      { key: 'budgetLines', loader: (user) => loadBudgetLinesScoped(user), filter: filterBudgetLinesForUser }
+      { key: 'budgetLines', loader: (user) => loadBudgetLinesScoped(user), filter: filterBudgetLinesForUser, needsAppData: true }
     ]
   },
   itSupport: {

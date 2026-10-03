@@ -307,6 +307,38 @@ Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 
 Duyệt** (mục 7) — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier
 cấu hình độc lập.
 
+### 3.0. Phạm vi XEM theo phòng ban (khác với AI DUYỆT ở trên)
+
+**Lưu ý phân biệt**: các mục trên quy định AI DUYỆT được 1 hồ sơ; mục này quy
+định AI XEM ĐƯỢC (đọc được) 1 hồ sơ trong danh sách — 2 khái niệm độc lập.
+
+8 module (10 collection, 11 khoá cấu hình) sau mặc định cho **cả phòng ban**
+xem được hồ sơ của phòng mình (không chỉ người tạo): Ngân Sách, Thanh Toán,
+Mua Sắm/Sửa Chữa Văn Phòng, Đăng Ký Xe, Hợp Đồng, Tờ Trình, Đặt Phòng Họp, Vận
+Hành (tách riêng 3 khoá: Đặt Hàng ST/HO, Mở Mới Siêu Thị, Sửa Chữa Siêu Thị),
+Báo Cáo Định Kỳ. Từ 10/2026, admin tự TẮT/BẬT việc này cho TỪNG module tại
+**Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban** (map
+`deptViewScopeConfig`, xem `DEPT_VIEW_SCOPE_MODULES`/`deptAutoViewOn()` ở
+`lib/recordViewScope.js`) mà không cần sửa code.
+
+- **Mặc định (chưa đụng tới màn cấu hình)**: TẤT CẢ module đều BẬT — giữ
+  nguyên hành vi cũ 100%, không ai mất quyền xem gì.
+- **Tắt 1 module**: người cùng phòng ban (không phải người tạo) KHÔNG còn
+  thấy hồ sơ đó trong danh sách nữa — CHỈ còn thấy đúng hồ sơ do chính mình
+  tạo.
+- **KHÔNG bị ảnh hưởng dù tắt**: admin, quyền quản lý/tổng hợp toàn công ty
+  (`budgetManage`, `paymentManage`...), quản lý trực tiếp/gián tiếp của người
+  tạo (theo Cơ Cấu Tổ Chức), và người đang được cấu hình làm người duyệt bước
+  đó (dù ở phòng ban khác, xem mục 3 ở trên) — các lớp xem này LUÔN giữ
+  nguyên, không phụ thuộc công tắc này.
+
+**Các module KHÔNG có mặt trong ma trận này** (Công Việc, IT Hỗ Trợ ticket,
+Phê Duyệt Giá, Tài Liệu...) vốn KHÔNG dùng cơ chế "cùng phòng tự động xem" —
+Công Việc/IT ticket xét theo người được giao/người tạo chứ không theo phòng
+ban; Tài Liệu thì ngược lại, phải được admin cấp RÕ quyền xem theo phòng ban
+(`viewDraftDepts`/`viewApprovedDepts`, Ma Trận Phân Quyền) mới xem được dù
+cùng phòng — không có gì để "tắt" thêm ở đây.
+
 ### 3.1. 3 cách gán người duyệt cho 1 bước
 
 Mỗi bước duyệt (của mỗi phòng ban/tier) chọn đúng 1 trong 3 chế độ:

@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**24.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.73 (2026-10-03): Ma Trận "🔒 Phạm Vi Xem Theo Phòng Ban" — tự cấu hình 11 module
+
+Tiếp nối câu hỏi của người dùng ("các module có phải phòng nào chỉ xem được phiếu phòng đó không") —
+sau khi rà soát + liệt kê chi tiết cả hệ thống, người dùng yêu cầu làm 1 ma trận để TỰ cấu hình được
+việc này thay vì cứng trong code. Đã triển khai cho đúng 8 module nghiệp vụ (10 collection, 11 khoá cấu
+hình do Vận Hành tách 3 luồng độc lập) dùng chung 1 cơ chế "cùng phòng ban là tự động xem được":
+**Ngân Sách, Thanh Toán, Mua Sắm/Sửa Chữa Văn Phòng, Đăng Ký Xe, Hợp Đồng, Tờ Trình, Đặt Phòng Họp, Vận
+Hành (Đặt Hàng ST/HO + Mở Mới Siêu Thị + Sửa Chữa Siêu Thị), Báo Cáo Định Kỳ**.
+
+- **Cơ chế**: map phẳng mới `deptViewScopeConfig` (`defaults.js`) — `{ [moduleKey]: boolean }`. THIẾU key
+  hoặc `true` = GIỮ NGUYÊN hành vi cũ (cùng phòng tự động xem) — mặc định BẬT hết, KHÔNG đổi hành vi cho
+  bất kỳ hệ thống nào chưa từng mở màn cấu hình mới. `false` = người trong phòng ban đó CHỈ còn thấy đúng
+  hồ sơ do CHÍNH MÌNH tạo — các lớp xem khác (admin, quyền quản lý/tổng hợp toàn công ty, quản lý cấp
+  trên của người tạo theo Cơ Cấu Tổ Chức, người đang được phân công duyệt dù khác phòng ban) LUÔN giữ
+  nguyên, không bị tắt theo (xem `deptAutoViewOn()`/`DEPT_VIEW_SCOPE_MODULES` ở `lib/recordViewScope.js`
+  — nguồn khai báo duy nhất).
+- **Màn cấu hình mới**: "🔒 Phạm Vi Xem Theo Phòng Ban" (Hệ Thống → Nghiệp Vụ Nâng Cao → sub-tab mới) —
+  bảng 11 dòng, mỗi dòng 1 checkbox Bật/Tắt + trạng thái hiển thị rõ ("Cùng phòng tự động xem" / "Chỉ
+  người tạo xem"), nút Lưu duy nhất ghi cả map (`module-admin-deptviewscope.js`).
+- **Phát hiện phụ trong lúc rà soát**: canViewMeeting() cũng dùng chung cơ chế `scopeAllows()` như 4
+  module kia (office/car/contract/submission) — đã đưa luôn Đặt Phòng Họp vào ma trận (ngoài phạm vi câu
+  hỏi gốc của người dùng nhưng cùng 1 cơ chế, không thêm rủi ro).
+- **KHÔNG áp dụng cho**: Công Việc, IT Hỗ Trợ ticket, Phê Duyệt Giá, Tài Liệu... — các module này vốn đã
+  KHÔNG dùng cơ chế "cùng phòng tự động xem" (xét theo người được giao/người tạo/quyền phẳng riêng, hoặc
+  ngược lại — Tài Liệu phải CẤP RÕ quyền mới xem được dù cùng phòng), nêu rõ với người dùng lý do không
+  đưa vào đợt này thay vì tự ý đoán.
+- **Kiểm thử**: `tests/test-dept-view-scope.js` (29 kịch bản thuần, không DB/mạng — xác minh ĐÚNG hành vi
+  BẬT=giữ nguyên/TẮT=chỉ người tạo xem cho cả 11 khoá, cùng các lớp xem khác KHÔNG bị ảnh hưởng) +
+  `tests/test-dept-view-scope-ui.js` (demo thật qua Chromium — màn cấu hình vẽ đúng trạng thái, tick/lưu
+  gửi đúng payload). Regression diện rộng: test-budget-lines/test-payment/test-contract/test-office-budget/
+  test-car-regs-scope/test-operation-orders-dept-scope/test-submissions-scope/test-reports/
+  test-adv-workflow-tab-deep/test-meeting-dept-workflow/test-audit-createvsapprove-gaps/
+  test-report-permission-rollout — tất cả PASS, không hồi quy.
+- **Việc cần làm khi deploy**: copy code + `pm2 restart` — KHÔNG cần chạy lại `schema.sql` (không có
+  bảng/cột SQL mới, `deptViewScopeConfig` nằm trong AppData JSON hiện có). Không có biến môi trường/
+  dependency npm mới.
 
 ## v24.72 (2026-10-03): Ngân Sách + Đặt Phòng Họp — bổ sung route phê duyệt cuối theo phòng ban
 

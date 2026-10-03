@@ -460,7 +460,7 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     }
     return true;
   }
-  if (owning.reportEntry) return canViewReportEntry(user, owning.entry);
+  if (owning.reportEntry) return canViewReportEntry(user, owning.entry, await getAllAppData());
   if (owning.reportPeriod) return canSeeReportCompilation(user, owning.period) || canSeeReportPdfCompilation(user, owning.period);
   if (owning.recruitment) return filterRecruitmentReferralsForUser([owning.referral], user).length > 0;
   if (owning.license) return canViewLicense(user, owning.item);
