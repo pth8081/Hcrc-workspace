@@ -663,6 +663,22 @@ const INTERNAL_POST_MAX_VIDEOS = 2;
 const INTERNAL_POST_IMAGE_URL_EXT_RE = /\.(jpe?g|png|webp)$/i;
 const INTERNAL_POST_VIDEO_URL_EXT_RE = /\.(mp4|webm)$/i;
 
+// LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao): chặn "ảnh-only" cho NEWS/SHARE (Việc E, v24.79)
+// trước đây so `payload.attachment.fileType` — chuỗi DO CLIENT TỰ KHAI khi gửi payload tạo/sửa bài, hoàn
+// toàn KHÔNG được đối chiếu lại với nội dung file thật (khác `fileType` trả về từ chính POST /api/upload,
+// vốn cũng chỉ là Content-Type do client khai trong multipart, không phải kết quả verifyFileSignature()).
+// Một request tự soạn upload 1 file .pdf THẬT (hợp lệ, verifyFileSignature() xác nhận đúng magic bytes,
+// routes/upload.js) rồi khai `attachment.fileType: "image/jpeg"` trỏ vào đúng fileUrl .pdf đó vẫn lọt qua
+// — chặn hình thức, không phải chặn thật. Đuôi file THẬT trong `fileUrl` mới là tín hiệu đáng tin: multer
+// (routes/upload.js, `safeExt`) chỉ gán đúng đuôi khi đuôi đó nằm trong allowlist VÀ verifyFileSignature()
+// xác nhận khớp chữ ký nhị phân ngay sau đó (xoá file nếu sai) — không thể có file tồn tại trên đĩa với
+// đuôi ảnh mà nội dung không phải ảnh. Dùng lại ĐÚNG `INTERNAL_POST_IMAGE_URL_EXT_RE` (đã dùng để validate
+// `images[]` ở `normalizeInternalPostFileList()` ngay dưới) thay vì tin `fileType` — khớp đúng mô hình tin
+// cậy đã áp dụng nhất quán cho toàn bộ field file khác của chính module này.
+function isInternalPostImageAttachmentUrl(fileUrl) {
+  return INTERNAL_POST_IMAGE_URL_EXT_RE.test(String(fileUrl || ''));
+}
+
 function sanitizeInternalPostHtml(html) {
   return sanitizeHtmlLib(String(html || ''), {
     allowedTags: INTERNAL_POST_ALLOWED_TAGS,
@@ -1656,7 +1672,7 @@ const CREATE_MODULE_CONFIGS = {
       // áp cho SHARE/video ngay phía trên. Đường TẠO luôn là bài MỚI nên chặn thẳng; đường SỬA
       // (editInternalPost(), lib/recordActions.js) có chú thích riêng để KHÔNG xoá đính kèm tài liệu cũ
       // của bài có từ trước đợt siết này.
-      if ((type === 'NEWS' || type === 'SHARE') && payload.attachment && !String(payload.attachment.fileType || '').startsWith('image/')) {
+      if ((type === 'NEWS' || type === 'SHARE') && payload.attachment && !isInternalPostImageAttachmentUrl(payload.attachment.fileUrl)) {
         throw new CreateError(400, 'Nhịp Sống HCRC/Góc Chia Sẻ chỉ cho phép đính kèm ảnh, không cho tải tệp tài liệu lên.');
       }
 
@@ -4669,6 +4685,10 @@ module.exports = {
   canCreateInternalPostType,
   // Export cho editInternalPost() (lib/recordActions.js) + test — nội dung HTML (sanitize) + ảnh/video bài viết.
   normalizeInternalPostContent, normalizeInternalPostMedia, sanitizeInternalPostHtml,
+  // Export cho editInternalPost() (lib/recordActions.js) — chặn ảnh-only NEWS/SHARE dựa vào ĐUÔI FILE
+  // THẬT trong fileUrl (đã qua verifyFileSignature() lúc upload), không tin fileType client tự khai —
+  // xem chú thích đầy đủ ở định nghĩa hàm, "Việc E" (v24.79) + rà soát v24.74→v24.81 (11/2026, mức Cao).
+  isInternalPostImageAttachmentUrl,
   INTERNAL_POST_MAX_IMAGES, INTERNAL_POST_MAX_VIDEOS, INTERNAL_POST_CONTENT_MAX_LEN,
   OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload,
   buildEffectiveContractApprovalWorkflowServer,

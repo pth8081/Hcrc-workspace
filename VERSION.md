@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**24.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.82 (2026-10-03): Vá lỗ hổng Cao — giả mạo `fileType` để đính kèm thực thi được vào Nhịp Sống/Góc Chia Sẻ
+
+Rà soát chuyên sâu các sửa đổi từ v24.74→v24.81 (4 agent song song) phát hiện: `createInternalPost()`/
+`editInternalPost()` (`lib/recordActions.js`) tin thẳng `payload.attachment.fileType` (client tự khai
+trong JSON, KHÔNG phải mimetype thật do multipart xác định) khi quyết định ảnh đính kèm bài viết NEWS/
+SHARE được hiển thị bằng `<img src="...">` ở client hay không — khác hẳn `images[]`/`videos[]` (đã dùng
+đúng pattern "tin đuôi file thật trên đĩa, không tin field do client khai" qua
+`INTERNAL_POST_IMAGE_URL_EXT_RE`). Vì `verifyFileSignature()` (`lib/fileSignature.js`, chạy ở
+`routes/upload.js` lúc tải lên) đã xác nhận đuôi file thật khớp magic bytes rồi mới giữ file, đuôi file
+trong `fileUrl` đã lưu trên đĩa là tín hiệu ĐÁNG TIN — còn `fileType` gửi kèm trong JSON payload tạo/sửa
+bài viết thì không, có thể khai sai để chèn file không phải ảnh (SVG chứa script, HTML...) vào field hiển
+thị qua `<img src>`.
+
+- Thêm `isInternalPostImageAttachmentUrl(fileUrl)` (`lib/createValidation.js`) tái dùng
+  `INTERNAL_POST_IMAGE_URL_EXT_RE` sẵn có — đổi cả 2 lối tạo/sửa bài viết (`createInternalPost()`/
+  `editInternalPost()` ở `lib/recordActions.js`) sang kiểm đuôi file thật trong `fileUrl`, không còn tin
+  `fileType` do client tự khai.
+- Thêm 3 kịch bản test mới vào `tests/test-audit-fixes-batch1.js` ("Fix 4c2"): giả mạo fileType ở lối tạo
+  bị chặn, giả mạo ở lối sửa bị chặn, ảnh `.jpg` hợp lệ vẫn được chấp nhận dù `fileType` sai/thiếu.
 
 ## v24.81 (2026-10-03): Chốt chặn canBeApprover cho thành viên Nhóm Phê Duyệt ("Việc C")
 

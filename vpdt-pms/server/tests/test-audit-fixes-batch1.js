@@ -406,6 +406,42 @@ async function main() {
       assertEqual(okDraft.attachment.fileUrl, '/uploads/1756500000000-bbbbbbbbbbbbbbbb.jpg', 'URL hợp lệ vẫn phải lưu được khi sửa');
     });
 
+    await run.run('Fix 4c2 (rà soát v24.74→v24.81, mức Cao) — NEWS/SHARE: KHÔNG thể lách luật "chỉ ảnh" bằng fileType giả ("image/jpeg") trỏ tới fileUrl KHÔNG phải đuôi ảnh — cả TẠO lẫn SỬA', () => {
+      const appData = { internalShareCategories: [{ key: 'CHIA_SE', label: 'Chia sẻ' }] };
+      // TẠO: payload khai fileType="image/jpeg" nhưng fileUrl thật là .pdf (mô phỏng kẻ tấn công
+      // upload 1 pdf thật qua /api/upload rồi tự soạn request tạo bài nói dối fileType).
+      const errCreate = expectThrows(() => createRecord('internalPosts', {
+        type: 'SHARE', title: 'Bài chia sẻ', content: 'Nội dung', postCategory: 'CHIA_SE',
+        attachment: { fileName: 'tai-lieu.pdf', fileType: 'image/jpeg', fileUrl: '/uploads/1756500000000-real-pdf-file.pdf' }
+      }, PLAIN_KD, [], appData),
+      'fileType giả mạo "image/jpeg" trỏ tới file .pdf thật PHẢI vẫn bị chặn (dựa vào đuôi file thật, không tin fileType client khai)');
+      assertEqual(errCreate.status, 400, 'Phải trả 400');
+      assertIncludes(errCreate.message, 'chỉ cho phép đính kèm ảnh', 'Thông báo lỗi phải đúng luật ảnh-only');
+
+      // SỬA: cùng kịch bản lách luật, qua editInternalPost().
+      const shareAppData = { internalShareCategories: [{ key: 'GOP_Y', label: 'Góp Ý' }] };
+      const draft = {
+        id: 9502, type: 'SHARE', status: 'DRAFT', author: PLAIN_KD.username, title: 'Nháp', content: 'x',
+        postCategory: 'GOP_Y', attachment: null
+      };
+      const errEdit = expectThrows(() => recordActions.editInternalPost(
+        { attachment: { fileName: 'tai-lieu.pdf', fileType: 'image/jpeg', fileUrl: '/uploads/1756500000000-real-pdf-file-2.pdf' } },
+        PLAIN_KD, draft, shareAppData
+      ), 'Đường SỬA cũng phải chặn fileType giả mạo trỏ tới file .pdf thật');
+      assertEqual(errEdit.status, 400, 'Phải trả 400');
+      assertEqual(draft.attachment, null, 'Bản ghi KHÔNG được bị sửa đổi khi payload bị từ chối');
+
+      // Đối chứng: fileType SAI/thiếu nhưng fileUrl ĐÚNG đuôi ảnh vẫn phải cho qua (đuôi file thật mới là
+      // tín hiệu đáng tin, không phải fileType — khớp đúng cách verifyFileSignature() của routes/upload.js
+      // đã xác nhận nội dung thật của file khi còn nằm trên đĩa).
+      const okDespiteWrongFileType = createRecord('internalPosts', {
+        type: 'SHARE', title: 'Bài ảnh thật', content: 'Nội dung', postCategory: 'CHIA_SE',
+        attachment: { fileName: 'anh.jpg', fileType: 'application/octet-stream', fileUrl: '/uploads/1756500000000-real-image.jpg' }
+      }, PLAIN_KD, [], appData);
+      assertEqual(okDespiteWrongFileType.attachment.fileUrl, '/uploads/1756500000000-real-image.jpg',
+        'fileUrl đúng đuôi ảnh (.jpg) phải được chấp nhận dù fileType client khai sai/thiếu');
+    });
+
     await run.run('Fix 4d — recruitmentJobs.bannerUrl / recruitmentReferrals.cvFileUrl cũng chặn scheme javascript:', () => {
       const HR = { username: 'hr1', name: 'Nhân Sự', dept: 'Nhân Sự', perms: { internalRecruitmentCreate: true }, active: true };
       const jobPayload = {

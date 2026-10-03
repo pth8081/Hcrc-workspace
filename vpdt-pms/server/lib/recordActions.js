@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
@@ -3195,7 +3195,11 @@ function editInternalPost(payload, user, post, appData) {
     // không phải ảnh cho NEWS/SHARE (ô "Tệp Đính Kèm" đã bỏ khỏi form), nhưng vẫn cho GIỮ NGUYÊN đính
     // kèm tài liệu cũ nếu bài đã có từ trước đợt siết này (so URL không đổi = không chặn).
     const isNewAttachment = payload.attachment && payload.attachment.fileUrl !== post.attachment?.fileUrl;
-    if ((post.type === 'NEWS' || post.type === 'SHARE') && isNewAttachment && !String(payload.attachment.fileType || '').startsWith('image/')) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao): trước đây so `payload.attachment.fileType`
+    // (chuỗi client tự khai, không được xác minh) — nay đối chiếu ĐUÔI FILE THẬT trong fileUrl (đã qua
+    // verifyFileSignature() lúc upload, không thể giả mạo) qua isInternalPostImageAttachmentUrl(), xem
+    // chú thích đầy đủ ở định nghĩa hàm (lib/createValidation.js).
+    if ((post.type === 'NEWS' || post.type === 'SHARE') && isNewAttachment && payload.attachment && !isInternalPostImageAttachmentUrl(payload.attachment.fileUrl)) {
       throw new HttpError(400, 'Nhịp Sống HCRC/Góc Chia Sẻ chỉ cho phép đính kèm ảnh, không cho tải tệp tài liệu lên.');
     }
   }
