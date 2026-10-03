@@ -28,7 +28,11 @@ const WHOLESALE_APPROVER = { username: 'duyet_wholesale', name: 'Người Duyệ
 const EMERGENCY_USER = { username: 'khancap1', name: 'Người Xét Từ Chối Khẩn Cấp', dept: 'Phòng Z', perms: { itPriceEmergencyRejectApproveRetail: true }, active: true };
 const IT_MANAGER = { username: 'itmgr', name: 'Trưởng Nhóm Hỗ Trợ IT', dept: 'Phòng IT', perms: { itManage: true, itPriceSupport: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [CREATOR_A, RETAIL_APPROVER_B, WHOLESALE_APPROVER, EMERGENCY_USER, IT_MANAGER, ADMIN];
+// MANAGED_CREATOR_PRICE: dùng RIÊNG cho kịch bản deptViewScopeConfig.itPriceApproval.managerCanView dưới
+// (được CREATOR_A quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN HỆ
+// QUẢN LÝ với NGƯỜI TẠO từng hồ sơ cụ thể (item.creator), không phải cấp quyền xem toàn công ty.
+const MANAGED_CREATOR_PRICE = { username: 'nv_cap_duoi_price', name: 'NV Cấp Dưới Của A (Giá)', dept: 'Phòng C', perms: {}, managerUsername: 'nva', active: true };
+const USERS = [CREATOR_A, RETAIL_APPROVER_B, WHOLESALE_APPROVER, EMERGENCY_USER, IT_MANAGER, ADMIN, MANAGED_CREATOR_PRICE];
 
 const APP_DATA = {
   // Cấu hình PHẲNG (legacy) = tính là RETAIL, khớp resolveItPriceDeptWorkflowConfig().
@@ -37,7 +41,10 @@ const APP_DATA = {
   },
   itPriceTierWorkflows: {
     TIER1: { approvers: { 1: ['duyet_wholesale'] } }
-  }
+  },
+  // isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
+  // theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới.
+  users: USERS
 };
 
 let ALL_ITEMS;
@@ -170,6 +177,31 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.itPriceApprovals || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 đề xuất');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['itPriceApproval']
+    // trước đây KHÔNG được loadItPriceApprovalsScoped() đọc — xem chú thích đầy đủ tại
+    // loadItPriceApprovalsScoped() (routes/data.js).
+    await run.run('GET /api/data: deptViewScopeConfig.itPriceApproval.extraViewers=[nva] -> A nhận ĐỦ toàn bộ dù mode mặc định CREATOR_ONLY', async () => {
+      resetData(); fullLoadCallCount = 0;
+      APP_DATA.deptViewScopeConfig = { itPriceApproval: { mode: 'CREATOR_ONLY', extraViewers: [CREATOR_A.username], managerCanView: false } };
+      const res = await api('GET', '/api/data', undefined, CREATOR_A);
+      const ids = (res.body.itPriceApprovals || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 đề xuất');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('GET /api/data: deptViewScopeConfig.itPriceApproval.managerCanView=true -> quản lý của người tạo hồ sơ nhận thêm hồ sơ của cấp dưới, không phải mọi user thường', async () => {
+      resetData(); fullLoadCallCount = 0;
+      // Hồ sơ #5 riêng (creator) của MANAGED_CREATOR_PRICE — người mà CREATOR_A (nva) quản lý trực tiếp.
+      ALL_ITEMS.push({ id: 5, dept: 'Phòng C', creator: MANAGED_CREATOR_PRICE.username, priceType: 'RETAIL' });
+      APP_DATA.deptViewScopeConfig = { itPriceApproval: { mode: 'CREATOR_ONLY', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data', undefined, CREATOR_A);
+      const ids = (res.body.itPriceApprovals || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,5', 'nva (quản lý của nv_cap_duoi_price) phải thấy #1 (của mình) + #5 (của cấp dưới) qua managerCanView, KHÔNG thấy #2/#3/#4');
+      assert(fullLoadCallCount >= 1, 'managerCanView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterItPriceApprovalsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

@@ -29,7 +29,11 @@ const STORE_MGR_B = { username: 'gdB', name: 'Giám Đốc Siêu Thị B', dept:
 const OFFICE_USER = { username: 'nvvp', name: 'Nhân Viên Văn Phòng', dept: 'Phòng Kiểm Soát', posType: 'OFFICE', perms: {}, active: true };
 const AUDITOR = { username: 'kiemtra1', name: 'Kiểm Tra Viên', dept: 'Phòng Kiểm Soát', posType: 'OFFICE', perms: { checklistReportView: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [STORE_MGR_A, STORE_MGR_B, OFFICE_USER, AUDITOR, ADMIN];
+// MANAGED_SUBMITTER: dùng RIÊNG cho kịch bản deptViewScopeConfig.checklist.managerCanView dưới (được
+// OFFICE_USER (nvvp) quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN
+// HỆ QUẢN LÝ với NGƯỜI NỘP BÀI cụ thể (item.submittedByUsername), không phải cấp quyền xem toàn công ty.
+const MANAGED_SUBMITTER = { username: 'nv_cap_duoi_checklist', name: 'NV Cấp Dưới Của nvvp', dept: 'Siêu Thị B', posType: 'STORE', perms: {}, managerUsername: 'nvvp', active: true };
+const USERS = [STORE_MGR_A, STORE_MGR_B, OFFICE_USER, AUDITOR, ADMIN, MANAGED_SUBMITTER];
 
 let ALL_SUBMISSIONS;
 function resetData() {
@@ -42,11 +46,16 @@ function resetData() {
 }
 resetData();
 
+// isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
+// theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới. APP_DATA dùng object
+// mutable (không phải literal cố định) để các kịch bản sau có thể tự gán/xoá deptViewScopeConfig.
+const APP_DATA = { users: USERS };
+
 let byColumnCalls = [];
 let fullLoadCallCount = 0;
 
 stubModule('lib/appData', {
-  getAllAppDataWithVersionsCached: async () => ({ data: {}, versions: {} })
+  getAllAppDataWithVersionsCached: async () => ({ data: APP_DATA, versions: {} })
 });
 stubModule('lib/taskStore', { getAllTasksCached: async () => [] });
 stubModule('lib/operationWorkItemStore', { getAllWorkItemsCached: async () => [] });
@@ -158,6 +167,32 @@ async function main() {
       const res = await api('GET', '/api/data/lazy/checklist', undefined, ADMIN);
       const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 bài');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['checklist'] trước
+    // đây KHÔNG được loadChecklistSubmissionsScoped() đọc — xem chú thích đầy đủ tại
+    // loadChecklistSubmissionsScoped() (routes/data.js).
+    await run.run('GET /api/data/lazy/checklist: deptViewScopeConfig.checklist.extraViewers=[nvvp] -> nvvp nhận ĐỦ toàn bộ dù không có checklistReportView', async () => {
+      resetData(); fullLoadCallCount = 0;
+      APP_DATA.deptViewScopeConfig = { checklist: { mode: 'DEPT', extraViewers: [OFFICE_USER.username], managerCanView: false } };
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, OFFICE_USER);
+      const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 bài, mọi siêu thị, kể cả DRAFT');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide, giống checklistReportView');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('GET /api/data/lazy/checklist: deptViewScopeConfig.checklist.managerCanView=true -> quản lý của người nộp bài nhận thêm bài của cấp dưới, không phải mọi user thường', async () => {
+      resetData(); fullLoadCallCount = 0;
+      // Bài #5 riêng (submittedByUsername) của MANAGED_SUBMITTER — người mà OFFICE_USER (nvvp) quản lý
+      // trực tiếp qua managerUsername.
+      ALL_SUBMISSIONS.push({ id: 5, submittedByUsername: MANAGED_SUBMITTER.username, storeCode: 'Siêu Thị B', status: 'SUBMITTED' });
+      APP_DATA.deptViewScopeConfig = { checklist: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data/lazy/checklist', undefined, OFFICE_USER);
+      const ids = (res.body.checklistSubmissions || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,5', 'nvvp (quản lý của nv_cap_duoi_checklist) phải thấy #1 (của mình) + #5 (của cấp dưới) qua managerCanView, KHÔNG thấy #2/#3/#4');
+      assert(fullLoadCallCount >= 1, 'managerCanView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterChecklistSubmissionsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

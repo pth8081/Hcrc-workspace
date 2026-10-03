@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**24.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.84 (2026-10-03): Vá lỗ hổng Trung bình — deptViewScopeConfig chưa được wire vào lớp SQL pre-filter (8 module)
+
+Rà soát sửa đổi v24.74→v24.81 phát hiện: Ma trận "🔒 Phạm Vi Xem Theo Phòng Ban"
+(`deptViewScopeConfig`, 4-state model `mode`/`extraViewers`/`managerCanView` — xem v24.74 ở dưới) đã được
+các hàm `canView*()` (lớp lọc thứ 2, lib/recordViewScope.js) đọc đúng từ đầu, nhưng lớp **SQL pre-filter**
+(các hàm `load*Scoped()` ở `routes/data.js`, quyết định dữ liệu gì được TẢI TỪ SQL trước khi lớp lọc thứ 2
+có cơ hội áp dụng) ở 8 module sau đây CHƯA TỪNG đọc cấu hình này — admin bật `extraViewers`/
+`managerCanView`/đổi `mode` cho các module này ở màn Ma trận hoàn toàn KHÔNG có tác dụng (hồ sơ liên quan
+chưa từng được tải về để lớp lọc thứ 2 lọc lại): **itPriceApproval, vpp, budget (budgetLines), checklist,
+payment (paymentRequests), car (carRegs), office (officeReqs), operationOrder**. Đây là lỗi "mất chức
+năng" (fail closed — hồ sơ bị thiếu, không phải lộ thừa), không phải lỗ hổng an toàn, nhưng ảnh hưởng tới
+tính đúng đắn của 1 tính năng quản trị đã công bố cho người dùng.
+
+- Thêm đọc `moduleViewConfig(data, '<moduleKey>', <defaultMode>)` + `extraViewers`/`managerCanView` vào cả
+  8 hàm `load*Scoped()` liên quan (`routes/data.js`) — khi `extraViewers` chứa user hoặc `managerCanView`
+  bật, tải company-wide (giống admin) để lớp lọc thứ 2 (`canView*()`/`extraViewScopeAllows()`) có đủ dữ
+  liệu áp dụng đúng phạm vi thật; khi `mode: 'DEPT'`, thêm phòng ban của user vào tập phòng ban cần tải.
+- Thêm 2 kịch bản test mới (`extraViewers`, `managerCanView`) cho mỗi module vào 7 file test SQL
+  pre-filter đã có (`test-payment-requests-dept-scope.js`, `test-car-regs-scope.js`,
+  `test-office-reqs-scope.js`, `test-it-price-approvals-scope.js`, `test-vpp-registrations-scope.js`,
+  `test-checklist-submissions-scope.js`, `test-operation-orders-dept-scope.js`) + 1 file test mới
+  (`test-budget-lines-dept-scope.js`, chưa có file test SQL pre-filter riêng cho budgetLines trước đó).
+  Mỗi kịch bản `managerCanView` xác nhận đúng ngữ nghĩa hẹp của cờ này: chỉ cấp quyền xem cho ai là QUẢN LÝ
+  (qua `isManagerOf()`) của NGƯỜI TẠO từng hồ sơ cụ thể — không phải "mọi user thường xem được hết".
 
 ## v24.83 (2026-10-03): Vá lỗ hổng Cao — migration deptViewScopeConfig cấp thừa quyền xem xuyên công ty
 

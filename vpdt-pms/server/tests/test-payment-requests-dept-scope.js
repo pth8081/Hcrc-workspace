@@ -24,6 +24,12 @@ function stubModule(relPath, exportsObj) {
 
 const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng Kinh Doanh', perms: {}, active: true };
 const REGULAR_B = { username: 'ntb', name: 'Nhân Viên B', dept: 'Phòng Kế Toán', perms: {}, active: true };
+// managerUsername: REGULAR_A.username -> dùng RIÊNG cho kịch bản managerCanView dưới (A là quản lý trực
+// tiếp của người này, theo đúng ngữ nghĩa isManagerOf() — managerCanView chỉ cấp quyền xem theo QUAN HỆ
+// QUẢN LÝ với người tạo TỪNG hồ sơ cụ thể, không phải cấp quyền xem toàn công ty cho MỌI user thường như
+// extraViewers). Dùng user RIÊNG (không phải REGULAR_B) để không làm lệch các kịch bản dept-match khác
+// của B phía dưới (B vẫn hoàn toàn không có quan hệ quản lý với ai trong các bản ghi 1/2/3 gốc).
+const MANAGED_CREATOR = { username: 'nv_cap_duoi_a', name: 'NV Cấp Dưới Của A', dept: 'Phòng Kế Toán', perms: {}, managerUsername: 'nva', active: true };
 const PAYMENT_MGR = { username: 'ketoan1', name: 'Kế Toán Trưởng', dept: 'Phòng Kế Toán', perms: { paymentManage: true }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): paymentRequests là module DUY NHẤT trong cụm dept-workflow
@@ -31,11 +37,14 @@ const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám 
 // paymentDeptWorkflows, nhưng CHÍNH MÌNH thuộc Phòng Kế Toán (kịch bản thật: kế toán trung tâm duyệt hộ
 // nhiều phòng ban khác) — KHÔNG có cờ phẳng paymentManage.
 const APPROVER_CROSS_DEPT = { username: 'ketoan_duyet_kd', name: 'Kế Toán Duyệt Hộ KD', dept: 'Phòng Kế Toán', perms: {}, active: true };
-const USERS = [REGULAR_A, REGULAR_B, PAYMENT_MGR, ADMIN, APPROVER_CROSS_DEPT];
+const USERS = [REGULAR_A, REGULAR_B, PAYMENT_MGR, ADMIN, APPROVER_CROSS_DEPT, MANAGED_CREATOR];
 const APP_DATA = {
   paymentDeptWorkflows: {
     'Phòng Kinh Doanh': { approvers: { 1: ['ketoan_duyet_kd'] } }
-  }
+  },
+  // isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
+  // theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới.
+  users: USERS
 };
 
 // paymentRequests toàn công ty (mô phỏng bảng thật dbo.PaymentRequests) — nguồn DUY NHẤT cho cả 2 nhánh
@@ -171,6 +180,53 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.paymentRequests || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3', 'admin phải thấy đủ cả 3 hồ sơ');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['payment']
+    // (extraViewers/managerCanView, cfg 4-state model đã thêm từ v24.74) trước đây KHÔNG được
+    // loadPaymentRequestsScoped() đọc — admin bật cấu hình này ở "🔒 Phạm Vi Xem Theo Phòng Ban" không có
+    // tác dụng gì vì hồ sơ phòng ban khác chưa từng được tải từ SQL để lớp lọc thứ 2
+    // (canViewPaymentRequest()) có cơ hội áp dụng.
+    await run.run('GET /api/data: deptViewScopeConfig.payment.extraViewers=[B] -> B nhận ĐỦ toàn công ty dù KHÔNG có paymentManage', async () => {
+      resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
+      APP_DATA.deptViewScopeConfig = { payment: { mode: 'DEPT', extraViewers: [REGULAR_B.username], managerCanView: false } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_B);
+      const ids = (res.body.paymentRequests || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3', 'extraViewers phải thấy đủ cả 3 hồ sơ, mọi phòng ban');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide, giống paymentManage');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    // managerCanView KHÔNG phải cờ "mọi người dùng thường thấy hết" — nó chỉ cấp quyền xem cho ai là
+    // QUẢN LÝ (trực tiếp/gián tiếp, qua isManagerOf()) của NGƯỜI TẠO từng hồ sơ cụ thể. Dùng thêm 1 hồ sơ
+    // #4 riêng (createdBy=MANAGED_CREATOR, người mà A quản lý trực tiếp qua managerUsername) để kiểm đúng
+    // ngữ nghĩa này — SQL pre-filter (loadPaymentRequestsScoped()) vẫn phải MỞ RỘNG sang tải company-wide
+    // khi managerCanView=true (không thể biết trước ai là cấp dưới của ai chỉ từ dept), nên
+    // fullLoadCallCount vẫn phải >=1 dù lớp lọc thứ 2 (canViewPaymentRequest()) mới là nơi chốt đúng phạm vi.
+    await run.run('GET /api/data: deptViewScopeConfig.payment.managerCanView=true -> quản lý của người tạo hồ sơ nhận ĐỦ hồ sơ của cấp dưới, không phải mọi user thường', async () => {
+      resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
+      ALL_PAYMENT_REQUESTS.push({ id: 4, dept: 'Phòng Kế Toán', amount: 500000, status: 'PENDING', createdBy: MANAGED_CREATOR.username });
+      APP_DATA.deptViewScopeConfig = { payment: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.paymentRequests || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,3,4', 'A (quản lý của MANAGED_CREATOR) phải thấy #1/#3 của chính mình (dept khớp) + #4 của cấp dưới qua managerCanView, KHÔNG thấy #2 (phòng khác, không liên quan quản lý)');
+      assert(fullLoadCallCount >= 1, 'managerCanView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter (không thể biết trước quan hệ quản lý chỉ từ dept)');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('GET /api/data: deptViewScopeConfig.payment.managerCanView=true -> user thường KHÔNG có quan hệ quản lý với người tạo vẫn KHÔNG thấy hồ sơ phòng khác (lớp lọc thứ 2 vẫn chốt đúng)', async () => {
+      resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
+      ALL_PAYMENT_REQUESTS.push({ id: 4, dept: 'Phòng Kế Toán', amount: 500000, status: 'PENDING', createdBy: MANAGED_CREATOR.username });
+      APP_DATA.deptViewScopeConfig = { payment: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      // REGULAR_B không quản lý MANAGED_CREATOR (chỉ A mới là quản lý) -> dù cùng phòng Phòng Kế Toán và
+      // SQL pre-filter mở rộng tải company-wide, canViewPaymentRequest() vẫn cho B thấy #4 vì khớp dept
+      // (deptAutoViewOn) — đây là hành vi ĐÚNG của mode DEPT (không phải do managerCanView), nên assertion
+      // dưới xác nhận đúng khuôn: B thấy #2 (của phòng mình) + #4 (cũng phòng mình) nhưng KHÔNG thấy #1/#3
+      // (phòng khác, không có quan hệ quản lý).
+      const res = await api('GET', '/api/data', undefined, REGULAR_B);
+      const ids = (res.body.paymentRequests || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '2,4', 'B chỉ thấy hồ sơ ĐÚNG phòng mình (#2, #4), KHÔNG thấy #1/#3 của A dù managerCanView=true (B không phải quản lý của A)');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('GET /api/data: dù nhánh tải theo-phòng-ban trả THỪA (giả lập lỗi tầng dưới), filterPaymentRequestsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

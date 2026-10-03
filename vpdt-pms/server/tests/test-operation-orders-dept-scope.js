@@ -53,7 +53,11 @@ const REGULAR_B = { username: 'ntb', name: 'Nhân Viên B', dept: 'Siêu Thị B
 // đơn STORE nào — chỉ là 1 nhân viên thường cùng dept "Siêu Thị A" với item 1/3.
 const TIER_APPROVER = { username: 'gd1', name: 'Giám Đốc Vùng', dept: 'Siêu Thị A', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, REGULAR_B, TIER_APPROVER, ADMIN];
+// MANAGED_CREATOR_OO: dùng RIÊNG cho kịch bản deptViewScopeConfig.operationOrder.managerCanView dưới
+// (được REGULAR_A quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN HỆ
+// QUẢN LÝ với NGƯỜI TẠO từng hồ sơ cụ thể (item.creator), không phải cấp quyền xem toàn công ty.
+const MANAGED_CREATOR_OO = { username: 'nv_cap_duoi_oo', name: 'NV Cấp Dưới Của A (Đơn Hàng)', dept: 'Siêu Thị B', perms: {}, managerUsername: 'nva', active: true };
+const USERS = [REGULAR_A, REGULAR_B, TIER_APPROVER, ADMIN, MANAGED_CREATOR_OO];
 
 // Cấu hình tier: mọi đơn hàng dưới đây đều dùng orderLocationType 'STORE' + amount <= 10 triệu -> rơi
 // đúng tier 'LT10M' (xem OPERATION_ORDER_STORE_TIERS ở lib/workflowEngine.js) — gd1 là approver của tier
@@ -63,7 +67,10 @@ const APP_DATA = {
   operationOrderStoreTierWorkflows: {
     LT10M: { approvers: { 1: ['gd1'] } }
   },
-  operationOrderHOTierWorkflows: {}
+  operationOrderHOTierWorkflows: {},
+  // isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
+  // theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới.
+  users: USERS
 };
 
 let ALL_ORDERS;
@@ -180,6 +187,30 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, REGULAR_B);
       const ids = (res.body.operationOrders || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '2', 'B chỉ thấy đúng đơn hàng của Siêu Thị B');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['operationOrder']
+    // trước đây KHÔNG được đọc ở khối canSeeAllOperationOrders (routes/data.js, trong router.get('/')).
+    await run.run('GET /api/data: deptViewScopeConfig.operationOrder.extraViewers=[nva] -> A nhận ĐỦ toàn công ty dù KHÔNG phải approver tier nào', async () => {
+      resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
+      APP_DATA.deptViewScopeConfig = { operationOrder: { mode: 'DEPT', extraViewers: [REGULAR_A.username], managerCanView: false } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.operationOrders || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3', 'extraViewers phải thấy đủ cả 3 đơn hàng, mọi siêu thị');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('GET /api/data: deptViewScopeConfig.operationOrder.managerCanView=true -> quản lý của người tạo đơn hàng nhận thêm đơn của cấp dưới, không phải mọi user thường', async () => {
+      resetData(); byDeptCallCount = 0; fullLoadCallCount = 0;
+      // Đơn #4 riêng (creator) của MANAGED_CREATOR_OO — người mà REGULAR_A quản lý trực tiếp.
+      ALL_ORDERS.push({ id: 4, dept: 'Siêu Thị B', orderLocationType: 'STORE', amount: 500000, creator: MANAGED_CREATOR_OO.username });
+      APP_DATA.deptViewScopeConfig = { operationOrder: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.operationOrders || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,3,4', 'A (quản lý của nv_cap_duoi_oo) phải thấy #1/#3 (phòng mình) + #4 (của cấp dưới) qua managerCanView, KHÔNG thấy #2');
+      assert(fullLoadCallCount >= 1, 'managerCanView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('dù nhánh tải theo-phòng-ban trả THỪA (giả lập lỗi tầng dưới), filterOperationOrdersForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

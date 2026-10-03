@@ -27,13 +27,21 @@ const APPROVER_D = { username: 'duyet1', name: 'Người Duyệt Xe Phòng D', d
 const DRIVER_B = { username: 'lixe1', name: 'Lái Xe', dept: 'Phòng A', perms: {}, active: true };
 const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng A', perms: { carView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D, DRIVER_B, ALL_VIEW, ADMIN];
+// MANAGED_CREATOR_CAR: dùng RIÊNG cho kịch bản deptViewScopeConfig.car.managerCanView dưới (được REGULAR_A
+// quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN HỆ QUẢN LÝ với
+// NGƯỜI TẠO từng hồ sơ cụ thể (carReg.creator, qua scopeAllows()->extraViewScopeAllows()->isManagerOf()),
+// không phải cấp quyền xem toàn công ty cho MỌI user thường.
+const MANAGED_CREATOR_CAR = { username: 'nv_cap_duoi_car', name: 'NV Cấp Dưới Của A (Xe)', dept: 'Phòng B', perms: {}, managerUsername: 'nva', active: true };
+const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D, DRIVER_B, ALL_VIEW, ADMIN, MANAGED_CREATOR_CAR];
 
 const APP_DATA = {
   // duyet1 là người duyệt CẤU HÌNH của Phòng D (không liên quan phòng ban của chính duyet1, là Phòng A).
   carDeptWorkflows: {
     'Phòng D': { approvers: { 1: ['duyet1'] } }
-  }
+  },
+  // isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
+  // theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới.
+  users: USERS
 };
 
 let ALL_CARS;
@@ -171,6 +179,31 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.carRegs || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 xe');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['car'] trước đây
+    // KHÔNG được loadCarRegsScoped() đọc — xem chú thích đầy đủ tại loadCarRegsScoped() (routes/data.js).
+    await run.run('GET /api/data: deptViewScopeConfig.car.extraViewers=[nva] -> A nhận ĐỦ toàn công ty dù KHÔNG có carView.all', async () => {
+      resetData(); fullLoadCallCount = 0;
+      APP_DATA.deptViewScopeConfig = { car: { mode: 'DEPT', extraViewers: [REGULAR_A.username], managerCanView: false } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.carRegs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 xe, mọi phòng ban');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide, giống carView.all');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('GET /api/data: deptViewScopeConfig.car.managerCanView=true -> quản lý của người tạo hồ sơ nhận thêm hồ sơ của cấp dưới, không phải mọi user thường', async () => {
+      resetData(); fullLoadCallCount = 0;
+      // Hồ sơ #5 riêng (createdBy qua field `creator`, Phòng B) của MANAGED_CREATOR_CAR — người mà
+      // REGULAR_A quản lý trực tiếp qua managerUsername.
+      ALL_CARS.push({ id: 5, dept: 'Phòng B', assignedDriverUsername: null, creator: MANAGED_CREATOR_CAR.username });
+      APP_DATA.deptViewScopeConfig = { car: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.carRegs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,5', 'A (quản lý của nv_cap_duoi_car) phải thấy #1 (phòng mình) + #5 (của cấp dưới) qua managerCanView, KHÔNG thấy #2/#3/#4 (không liên quan)');
+      assert(fullLoadCallCount >= 1, 'managerCanView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter (không thể biết trước quan hệ quản lý chỉ từ dept)');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterCarRegsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

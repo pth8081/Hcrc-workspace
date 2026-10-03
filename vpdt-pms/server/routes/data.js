@@ -912,8 +912,13 @@ async function prepareOperationOrderApiConfigForSave(payload) {
 // nhất), nên queryDedicatedRecords() (chỉ AND các where, không hỗ trợ OR) không đủ để gộp thành 1 lượt.
 // Tải 2 lượt riêng (theo SubmittedByUsername, theo StoreCode khi posType STORE) rồi gộp + khử trùng theo
 // id ở Node — mỗi lượt vẫn tự lọc/cache đúng ở SQL (không tải nguyên bảng company-wide).
-async function loadChecklistSubmissionsScoped(user) {
-  const canSeeAll = !!(user?.perms?.admin || user?.perms?.checklistReportView || user?.perms?.checklistAtvstpReportView);
+async function loadChecklistSubmissionsScoped(user, data) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
+  // ở trên: deptViewScopeConfig['checklist'] (extraViewers/managerCanView — xem extraViewScopeAllows() ở
+  // canViewChecklistSubmission()) chưa từng được đọc ở lớp SQL pre-filter này.
+  const cfg = moduleViewConfig(data, 'checklist', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.checklistReportView || user?.perms?.checklistAtvstpReportView || isExtraViewer || cfg.managerCanView);
   if (canSeeAll) return getAllForCollectionCached('checklistSubmissions');
 
   const own = await getForCollectionByColumnCached('checklistSubmissions', 'SubmittedByUsername', user?.username);
@@ -1028,11 +1033,16 @@ function computePaymentRequestsApproverDepts(user, data) {
   return depts;
 }
 async function loadPaymentRequestsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.paymentManage || isExtraApprovalLayerApprover(user, data, ['PAYMENT'])) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
+  // ở trên: deptViewScopeConfig['payment'] (extraViewers/managerCanView — xem canViewPaymentRequest())
+  // chưa từng được đọc ở lớp SQL pre-filter này.
+  const cfg = moduleViewConfig(data, 'payment', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.paymentManage || isExtraApprovalLayerApprover(user, data, ['PAYMENT']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('paymentRequests');
   }
   const depts = new Set();
-  if (user?.dept) depts.add(user.dept);
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   computePaymentRequestsApproverDepts(user, data).forEach(d => depts.add(d));
 
   const byId = new Map();
@@ -1054,11 +1064,17 @@ function computeCarRegsApproverDepts(user, data) {
   return depts;
 }
 async function loadCarRegsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.carView?.all || isExtraApprovalLayerApprover(user, data, ['CAR'])) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
+  // ở trên: deptViewScopeConfig['car'] (extraViewers/managerCanView — xem scopeAllows() ở canViewCarReg())
+  // chưa từng được đọc ở lớp SQL pre-filter này (mảng user.perms?.carView?.all/.depts CŨ vẫn còn, song
+  // song với cấu hình chung 4-state mới — scopeAllows() đọc CẢ 2 nguồn).
+  const cfg = moduleViewConfig(data, 'car', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.carView?.all || isExtraApprovalLayerApprover(user, data, ['CAR']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('carRegs');
   }
   const depts = new Set();
-  if (user?.dept) depts.add(user.dept);
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   if (Array.isArray(user?.perms?.carView?.depts)) user.perms.carView.depts.forEach(d => depts.add(d));
   computeCarRegsApproverDepts(user, data).forEach(d => depts.add(d));
 
@@ -1093,11 +1109,15 @@ function computeOfficeReqsApproverDepts(user, data) {
   return depts;
 }
 async function loadOfficeReqsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.officeView?.all || isExtraApprovalLayerApprover(user, data, ['OFFICE_BUY', 'OFFICE_FIX'])) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadCarRegsScoped() ở trên:
+  // deptViewScopeConfig['office'] (extraViewers/managerCanView) chưa từng được đọc ở lớp SQL pre-filter này.
+  const cfg = moduleViewConfig(data, 'office', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.officeView?.all || isExtraApprovalLayerApprover(user, data, ['OFFICE_BUY', 'OFFICE_FIX']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('officeReqs');
   }
   const depts = new Set();
-  if (user?.dept) depts.add(user.dept);
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   if (Array.isArray(user?.perms?.officeView?.depts)) user.perms.officeView.depts.forEach(d => depts.add(d));
   computeOfficeReqsApproverDepts(user, data).forEach(d => depts.add(d));
 
@@ -1145,13 +1165,22 @@ function computeItPriceApprovalsApproverDepts(user, data) {
   return depts;
 }
 async function loadItPriceApprovalsScoped(user, data) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['itPriceApproval']
+  // (4-state model, cfg.extraViewers/managerCanView/mode — xem canViewItPriceApproval()) đã thêm từ
+  // v24.74 nhưng KHÔNG hề được đọc ở đây — admin bật mode DEPT/extraViewers/managerCanView cho module
+  // này ở "🔒 Phạm Vi Xem Theo Phòng Ban" trước đây KHÔNG có tác dụng gì (hồ sơ chưa từng được tải về từ
+  // SQL để lớp lọc thứ 2 — canViewItPriceApproval()/filterItPriceApprovalsForUser() — có cơ hội áp dụng).
+  const cfg = moduleViewConfig(data, 'itPriceApproval', 'CREATOR_ONLY');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
   const canSeeAll = !!(user?.perms?.admin || user?.perms?.itPriceSupport
     || user?.perms?.itPriceEmergencyRejectApproveWholesale || user?.perms?.itPriceEmergencyRejectApproveRetail
     || isApproverForAnyItPriceWholesaleTier(user, data)
-    || isExtraApprovalLayerApprover(user, data, ['ITPRICE_RETAIL', 'ITPRICE_WHOLESALE']));
+    || isExtraApprovalLayerApprover(user, data, ['ITPRICE_RETAIL', 'ITPRICE_WHOLESALE'])
+    || isExtraViewer || cfg.managerCanView);
   if (canSeeAll) return getAllForCollectionCached('itPriceApprovals');
 
   const depts = new Set(computeItPriceApprovalsApproverDepts(user, data));
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   const byId = new Map();
   await Promise.all([...depts].map(async (dept) => {
     const items = await getForCollectionByDeptCached('itPriceApprovals', dept);
@@ -1177,10 +1206,15 @@ function computeVppRegistrationsApproverDepts(user, data) {
   return depts;
 }
 async function loadVppRegistrationsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.vppManage || isExtraApprovalLayerApprover(user, data, ['VPP'])) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
+  // ngay trên: deptViewScopeConfig['vpp'] chưa từng được đọc ở lớp SQL pre-filter này.
+  const cfg = moduleViewConfig(data, 'vpp', 'CREATOR_ONLY');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.vppManage || isExtraApprovalLayerApprover(user, data, ['VPP']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('vppRegistrations');
   }
   const depts = new Set(computeVppRegistrationsApproverDepts(user, data));
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   const byId = new Map();
   await Promise.all([...depts].map(async (dept) => {
     const items = await getForCollectionByDeptCached('vppRegistrations', dept);
@@ -1236,8 +1270,13 @@ async function loadBudgetEntriesScoped(user, data) {
 // chính dòng mình vừa tạo nếu chỉ tải hẹp theo dept — tải company-wide an toàn cho họ (canViewBudgetLine()
 // vẫn lọc lại đúng phạm vi thật sau đó), còn lại (không budgetCreate/budgetManage/budgetAggregate/
 // budgetReportView/admin) vẫn tải hẹp theo dept như cũ.
-function loadBudgetLinesScoped(user) {
-  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView || user?.perms?.budgetCreate) {
+function loadBudgetLinesScoped(user, data) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
+  // ở trên: deptViewScopeConfig['budget'] (canViewBudgetLine() đã đọc từ v24.74) chưa từng được đọc ở
+  // lớp SQL pre-filter này.
+  const cfg = moduleViewConfig(data, 'budget', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView || user?.perms?.budgetCreate || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('budgetLines');
   }
   if (!user?.dept) return [];
@@ -1458,8 +1497,14 @@ router.get('/', async (req, res) => {
     // public/js/core.js), không còn đi qua vòng tải chung ở đây nữa.
     const migratedList = [...MIGRATED_COLLECTIONS].filter(c => !LAZY_DATA_GROUP_COLLECTION_KEYS.has(c) && c !== 'paymentRequests' && c !== 'trainingDocumentProgress' && c !== 'operationOrders' && c !== 'carRegs' && c !== 'officeReqs' && c !== 'itPriceApprovals' && c !== 'vppRegistrations' && c !== 'budgetEntries' && c !== 'docs' && c !== 'submissions' && c !== 'vendors' && c !== 'rebateTerms' && c !== 'rebateCalculations' && c !== 'notifications');
     const canManageTrainingFlat = !!(req.freshUser?.perms?.admin || req.freshUser?.perms?.trainingManage);
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
+    // ở trên: deptViewScopeConfig['operationOrder'] (extraViewers/managerCanView) chưa từng được đọc ở
+    // đây — getForCollectionByDeptCached() phía dưới chỉ tải đúng phòng ban user, không bù được nhánh đó.
+    const operationOrderScopeCfg = moduleViewConfig(data, 'operationOrder', 'DEPT');
+    const isOperationOrderExtraViewer = !!(req.freshUser?.username && operationOrderScopeCfg.extraViewers.includes(req.freshUser.username));
     const canSeeAllOperationOrders = !!req.freshUser?.perms?.admin || isApproverForAnyOperationOrderTier(req.freshUser, data)
-      || isExtraApprovalLayerApprover(req.freshUser, data, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO']);
+      || isExtraApprovalLayerApprover(req.freshUser, data, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'])
+      || isOperationOrderExtraViewer || operationOrderScopeCfg.managerCanView;
     const [tasksResult, workItemsResult, paymentRequestsResult, trainingDocumentProgressResult, operationOrdersResult, carRegsResult, officeReqsResult, itPriceApprovalsResult, vppRegistrationsResult, budgetEntriesResult, docsResult, submissionsResult, ...collectionResults] = await Promise.all([
       getAllTasksCached(),
       getAllWorkItemsCached(),
@@ -1759,7 +1804,7 @@ const LAZY_DATA_GROUPS = {
     collections: [
       { key: 'budgetTemplates' },
       { key: 'budgetPeriods', filter: filterBudgetPeriodsForUser },
-      { key: 'budgetLines', loader: (user) => loadBudgetLinesScoped(user), filter: filterBudgetLinesForUser, needsAppData: true }
+      { key: 'budgetLines', loader: (user, appData) => loadBudgetLinesScoped(user, appData), filter: filterBudgetLinesForUser, needsAppData: true }
     ]
   },
   itSupport: {
@@ -1789,7 +1834,7 @@ const LAZY_DATA_GROUPS = {
   checklist: {
     collections: [
       { key: 'checklistTemplates', filter: filterChecklistTemplatesForUser, needsAppData: true },
-      { key: 'checklistSubmissions', loader: (user) => loadChecklistSubmissionsScoped(user), filter: filterChecklistSubmissionsForUser, needsAppData: true }
+      { key: 'checklistSubmissions', loader: (user, appData) => loadChecklistSubmissionsScoped(user, appData), filter: filterChecklistSubmissionsForUser, needsAppData: true }
     ]
   }
 };

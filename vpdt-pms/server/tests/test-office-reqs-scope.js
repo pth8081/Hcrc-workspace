@@ -28,13 +28,21 @@ const APPROVER_D_FIX = { username: 'duyet1', name: 'Người Duyệt Sửa Chữ
 const CREATOR_OTHER_DEPT = { username: 'creator1', name: 'Người Tạo Hộ Phòng B', dept: 'Phòng A', perms: {}, active: true };
 const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng A', perms: { officeView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D_FIX, CREATOR_OTHER_DEPT, ALL_VIEW, ADMIN];
+// MANAGED_CREATOR_OFFICE: dùng RIÊNG cho kịch bản deptViewScopeConfig.office.managerCanView dưới (được
+// REGULAR_A quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN HỆ QUẢN
+// LÝ với NGƯỜI TẠO từng hồ sơ cụ thể (item.creator, qua scopeAllows()->extraViewScopeAllows()->
+// isManagerOf()), không phải cấp quyền xem toàn công ty cho MỌI user thường.
+const MANAGED_CREATOR_OFFICE = { username: 'nv_cap_duoi_office', name: 'NV Cấp Dưới Của A (Mua Sắm)', dept: 'Phòng B', perms: {}, managerUsername: 'nva', active: true };
+const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D_FIX, CREATOR_OTHER_DEPT, ALL_VIEW, ADMIN, MANAGED_CREATOR_OFFICE];
 
 const APP_DATA = {
   officeBuyDeptWorkflows: {},
   officeFixDeptWorkflows: {
     'Phòng D': { approvers: { 1: ['duyet1'] } }
-  }
+  },
+  // isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
+  // theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới.
+  users: USERS
 };
 
 let ALL_REQS;
@@ -174,6 +182,30 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.officeReqs || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 đề xuất');
+    });
+
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['office'] trước đây
+    // KHÔNG được loadOfficeReqsScoped() đọc — xem chú thích đầy đủ tại loadOfficeReqsScoped() (routes/data.js).
+    await run.run('GET /api/data: deptViewScopeConfig.office.extraViewers=[nva] -> A nhận ĐỦ toàn công ty dù KHÔNG có officeView.all', async () => {
+      resetData(); fullLoadCallCount = 0;
+      APP_DATA.deptViewScopeConfig = { office: { mode: 'DEPT', extraViewers: [REGULAR_A.username], managerCanView: false } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.officeReqs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 đề xuất, mọi phòng ban');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide, giống officeView.all');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('GET /api/data: deptViewScopeConfig.office.managerCanView=true -> quản lý của người tạo hồ sơ nhận thêm hồ sơ của cấp dưới, không phải mọi user thường', async () => {
+      resetData(); fullLoadCallCount = 0;
+      // Hồ sơ #5 riêng (creator) của MANAGED_CREATOR_OFFICE — người mà REGULAR_A quản lý trực tiếp.
+      ALL_REQS.push({ id: 5, dept: 'Phòng B', subType: 'MUA_BAN', creator: MANAGED_CREATOR_OFFICE.username });
+      APP_DATA.deptViewScopeConfig = { office: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_A);
+      const ids = (res.body.officeReqs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,5', 'A (quản lý của nv_cap_duoi_office) phải thấy #1 (phòng mình) + #5 (của cấp dưới) qua managerCanView, KHÔNG thấy #2/#3/#4');
+      assert(fullLoadCallCount >= 1, 'managerCanView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterOfficeReqsForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {
