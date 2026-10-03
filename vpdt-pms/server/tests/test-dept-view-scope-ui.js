@@ -1,11 +1,11 @@
 // tests/test-dept-view-scope-ui.js
 //
-// 10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở xem theo phòng ban": kiểm UI THẬT
-// (Chromium + public/index.html thật, cùng khuôn test-adv-workflow-tab-deep.js — Playwright trực tiếp,
-// KHÔNG qua testHarness.js) cho màn admin mới "🔒 Phạm Vi Xem Theo Phòng Ban" (sub-tab DEPTVIEWSCOPE của
-// "🔀 Nghiệp Vụ Nâng Cao", module-admin-deptviewscope.js). Logic quyền THẬT (deptAutoViewOn()/11 hàm
-// canView*) đã có bộ test thuần riêng (test-dept-view-scope.js, 29 kịch bản) — file này CHỈ xác minh
-// phần UI: bảng vẽ đúng 11 dòng theo đúng trạng thái DB.deptViewScopeConfig, tick/bỏ tick rồi bấm Lưu gửi
+// v24.74 — nâng cấp màn admin "🔒 Phạm Vi Xem Theo Phòng Ban" từ 1 checkbox đơn (BẬT/TẮT) thành MA TRẬN
+// 4 TRẠNG THÁI (radio Chỉ người tạo xem/Cùng phòng tự động xem + renderPeopleMultiSelect() cho "Chọn
+// người xem" + checkbox "Quản lý toàn quyền xem"). Logic quyền THẬT (moduleViewConfig()/
+// extraViewScopeAllows()/16 hàm canView*) đã có bộ test thuần riêng (test-dept-view-scope.js, 52 kịch
+// bản) — file này CHỈ xác minh phần UI: bảng vẽ đúng 17 dòng theo đúng trạng thái DB.deptViewScopeConfig
+// (cả dữ liệu CŨ dạng boolean lẫn object mới), đổi radio/tick multi-select/tick checkbox rồi bấm Lưu gửi
 // đúng payload lên server, không throw lỗi JS.
 //
 // Chạy: node tests/test-dept-view-scope-ui.js
@@ -55,6 +55,7 @@ async function main() {
   const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
   const page = await browser.newPage();
+  page.setDefaultTimeout(8000);
 
   const pageErrors = [];
   page.on('pageerror', (err) => pageErrors.push(String(err && err.message || err)));
@@ -89,24 +90,33 @@ async function main() {
       jobTitles: ['Nhân viên'],
       stores: ['Siêu Thị Quận 1'],
       workflows: [],
-      // Cố ý seed TRƯỚC 2 module đã bị tắt (budget/car) + 1 module chưa cấu hình gì (payment, coi như BẬT
-      // mặc định) để xác nhận bảng vẽ đúng checkbox BAN ĐẦU theo dữ liệu thật, không phải luôn mặc định on.
-      deptViewScopeConfig: { budget: false, car: false },
-      users: [], permGroups: [], _versions: {}
+      // Seed dữ liệu TRỘN: 1 key dạng boolean CŨ (v24.73, budget:false), 1 key dạng object MỚI đầy đủ 3
+      // trường (car), còn lại (payment...) chưa cấu hình gì (coi như defaultMode) — xác nhận bảng vẽ
+      // đúng CẢ 2 dạng dữ liệu cũ lẫn mới.
+      deptViewScopeConfig: {
+        budget: false,
+        car: { mode: 'DEPT', extraViewers: ['u2'], managerCanView: true }
+      },
+      users: [
+        { username: 'admin', name: 'Quản Trị Viên Test', dept: 'Phòng CNTT', perms: {} },
+        { username: 'u1', name: 'Nguyễn Văn Một', dept: 'Phòng CNTT', perms: {} },
+        { username: 'u2', name: 'Trần Thị Hai', dept: 'Phòng Kế Toán', perms: {} }
+      ],
+      permGroups: [], _versions: {}
     });
 
     const adminUser = {
       id: 1, username: 'admin', name: 'Quản Trị Viên Test', dept: 'Phòng CNTT', jobTitle: 'Nhân viên',
       email: 'admin@test.local', phone: '0900000000', perms: { admin: true }, groupIds: [], permOverrides: null, active: true
     };
-    DB.users.push(adminUser);
+    DB.users[0] = adminUser;
     finishLogin(adminUser);
     return {
       loginOk: document.getElementById('loginSection').classList.contains('hidden'),
       headerShown: !document.getElementById('userHeader').classList.contains('hidden')
     };
   });
-  record('setup: finishLogin(admin) + seed deptViewScopeConfig (budget/car tắt sẵn) không lỗi', setup.loginOk && setup.headerShown, JSON.stringify(setup));
+  record('setup: finishLogin(admin) + seed deptViewScopeConfig (boolean CŨ + object MỚI trộn lẫn) không lỗi', setup.loginOk && setup.headerShown, JSON.stringify(setup));
 
   await page.evaluate(() => Promise.all(Object.keys(typeof MODULE_LOAD_GROUPS !== 'undefined' ? MODULE_LOAD_GROUPS : {}).map((k) => loadModuleGroup(k))));
   await page.evaluate(() => Promise.all(Object.keys(typeof TAB_SECTION_FRAGMENT !== 'undefined' ? TAB_SECTION_FRAGMENT : {}).map(k => loadTabSectionHtml(k))));
@@ -117,43 +127,50 @@ async function main() {
   await page.waitForSelector('#advWorkflowSubDeptViewScope', { state: 'visible' });
   await page.waitForTimeout(80);
 
-  // 1) Bảng vẽ đúng 11 dòng
+  // 1) Bảng vẽ đúng 17 dòng
   const rowCount = await page.locator('#deptViewScopeTableBody tr').count();
-  record('1. Bảng vẽ đúng 11 dòng (11 module)', rowCount === 11, `rows=${rowCount}`);
+  record('1. Bảng vẽ đúng 17 dòng (17 module/key)', rowCount === 17, `rows=${rowCount}`);
 
-  // 2) 2 module đã seed tắt (budget/car) hiện checkbox KHÔNG tick, 9 module còn lại tick sẵn
-  const checkboxState = await page.evaluate(() => {
-    const out = {};
-    document.querySelectorAll('.dept-view-scope-cb').forEach(cb => { out[cb.value] = cb.checked; });
-    return out;
+  // 2) Đọc trạng thái radio ban đầu theo đúng dữ liệu đã seed
+  const initial = await page.evaluate(() => {
+    const modeOf = (key) => document.querySelector(`.dept-view-scope-mode-rb[data-module="${key}"]:checked`)?.value;
+    const extraOf = (key) => [...document.querySelectorAll(`.dept-view-scope-extra-cb[data-module="${key}"]`)].map(cb => cb.value);
+    const managerOf = (key) => document.querySelector(`.dept-view-scope-manager-cb[data-module="${key}"]`)?.checked;
+    return {
+      budgetMode: modeOf('budget'), budgetManager: managerOf('budget'),
+      carMode: modeOf('car'), carExtra: extraOf('car'), carManager: managerOf('car'),
+      paymentMode: modeOf('payment'),
+      taskMode: modeOf('task'), docMode: modeOf('doc'), checklistMode: modeOf('checklist')
+    };
   });
-  record('2a. Checkbox "budget" KHÔNG tick (đã tắt sẵn trong DB)', checkboxState.budget === false, JSON.stringify(checkboxState));
-  record('2b. Checkbox "car" KHÔNG tick (đã tắt sẵn trong DB)', checkboxState.car === false, JSON.stringify(checkboxState));
-  record('2c. Checkbox "payment" CÓ tick (chưa cấu hình -> mặc định BẬT)', checkboxState.payment === true, JSON.stringify(checkboxState));
-  record('2d. Đủ 11 key đúng danh sách module (budget/payment/office/car/contract/submission/meeting/3×operation/report)',
-    ['budget', 'payment', 'office', 'car', 'contract', 'submission', 'meeting', 'operationOrder', 'operationStoreOpening', 'operationRepair', 'report'].every(k => k in checkboxState),
-    JSON.stringify(Object.keys(checkboxState)));
+  record('2a. budget (boolean CŨ false) -> radio CREATOR_ONLY, manager mặc định false', initial.budgetMode === 'CREATOR_ONLY' && initial.budgetManager === false, JSON.stringify(initial));
+  record('2b. car (object MỚI) -> radio DEPT, extraViewers=["u2"], managerCanView=true', initial.carMode === 'DEPT' && JSON.stringify(initial.carExtra) === JSON.stringify(['u2']) && initial.carManager === true, JSON.stringify(initial));
+  record('2c. payment (chưa cấu hình) -> defaultMode DEPT', initial.paymentMode === 'DEPT', JSON.stringify(initial));
+  record('2d. task (chưa cấu hình) -> defaultMode CREATOR_ONLY (module mới, mặc định hẹp)', initial.taskMode === 'CREATOR_ONLY', JSON.stringify(initial));
+  record('2e. doc (chưa cấu hình) -> defaultMode CREATOR_ONLY', initial.docMode === 'CREATOR_ONLY', JSON.stringify(initial));
+  record('2f. checklist (chưa cấu hình) -> defaultMode DEPT (đã có sẵn hành vi cùng siêu thị từ trước)', initial.checklistMode === 'DEPT', JSON.stringify(initial));
 
   await page.locator('#advWorkflowSubDeptViewScope').screenshot({ path: path.join(OUT_DIR, '01-bang-truoc-khi-sua.png') });
   console.log('📸 01-bang-truoc-khi-sua.png');
 
-  // 3) Tick lại "budget" (bật lại), bỏ tick thêm "meeting" (tắt mới), bấm Lưu
-  await page.locator('.dept-view-scope-cb[value="budget"]').check();
-  await page.locator('.dept-view-scope-cb[value="meeting"]').uncheck();
+  // 3) Sửa: budget -> chuyển sang DEPT; thêm u1 vào extraViewers của budget; tick managerCanView của budget;
+  //    car -> chuyển về CREATOR_ONLY (bỏ qua, giữ nguyên extraViewers/manager); bấm Lưu.
+  await page.click('.dept-view-scope-mode-rb[data-module="budget"][value="DEPT"]');
+  await page.click('.dept-view-scope-manager-cb[data-module="budget"]');
+  await page.fill('#dvsExtraViewers_budget [data-pms-search]', 'Một');
+  await page.waitForTimeout(60);
+  await page.click('#dvsExtraViewers_budget [data-op="pmsAdd"]');
+  await page.click('.dept-view-scope-mode-rb[data-module="car"][value="CREATOR_ONLY"]');
   await page.click('button[data-op="saveDeptViewScopeConfig"]');
   await page.waitForTimeout(100);
 
-  const afterSave = await page.evaluate(() => ({
-    db: DB.deptViewScopeConfig,
-    posts: window.__capturedPosts
-  }));
-  record('3a. Sau khi Lưu: DB.deptViewScopeConfig.budget = true (vừa tick lại)', afterSave.db.budget === true, JSON.stringify(afterSave.db));
-  record('3b. Sau khi Lưu: DB.deptViewScopeConfig.meeting = false (vừa bỏ tick)', afterSave.db.meeting === false, JSON.stringify(afterSave.db));
-  record('3c. Sau khi Lưu: DB.deptViewScopeConfig.car vẫn = false (không đụng tới)', afterSave.db.car === false, JSON.stringify(afterSave.db));
+  const afterSave = await page.evaluate(() => ({ db: DB.deptViewScopeConfig, posts: window.__capturedPosts }));
+  record('3a. Sau Lưu: budget.mode = DEPT', afterSave.db.budget && afterSave.db.budget.mode === 'DEPT', JSON.stringify(afterSave.db.budget));
+  record('3b. Sau Lưu: budget.managerCanView = true', afterSave.db.budget && afterSave.db.budget.managerCanView === true, JSON.stringify(afterSave.db.budget));
+  record('3c. Sau Lưu: budget.extraViewers chứa "u1" (vừa thêm qua multi-select)', !!(afterSave.db.budget && afterSave.db.budget.extraViewers && afterSave.db.budget.extraViewers.includes('u1')), JSON.stringify(afterSave.db.budget));
+  record('3d. Sau Lưu: car.mode = CREATOR_ONLY (vừa đổi), extraViewers/manager giữ nguyên không mất', afterSave.db.car && afterSave.db.car.mode === 'CREATOR_ONLY' && JSON.stringify(afterSave.db.car.extraViewers) === JSON.stringify(['u2']) && afterSave.db.car.managerCanView === true, JSON.stringify(afterSave.db.car));
   const savePost = afterSave.posts.find(p => p.url === '/api/data/deptViewScopeConfig');
-  record('3d. Đã gửi ĐÚNG 1 lần POST /api/data/deptViewScopeConfig với payload khớp DB sau lưu',
-    !!savePost && savePost.body.budget === true && savePost.body.meeting === false && savePost.body.car === false,
-    JSON.stringify(savePost));
+  record('3e. Đã gửi ĐÚNG 1 lần POST /api/data/deptViewScopeConfig với payload khớp DB sau lưu (đủ 17 key)', !!savePost && Object.keys(savePost.body).length === 17 && savePost.body.budget.mode === 'DEPT', JSON.stringify(savePost && Object.keys(savePost.body).length));
 
   await page.locator('#advWorkflowSubDeptViewScope').screenshot({ path: path.join(OUT_DIR, '02-bang-sau-khi-sua-va-luu.png') });
   console.log('📸 02-bang-sau-khi-sua-va-luu.png');

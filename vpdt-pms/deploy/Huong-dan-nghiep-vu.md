@@ -312,32 +312,46 @@ cấu hình độc lập.
 **Lưu ý phân biệt**: các mục trên quy định AI DUYỆT được 1 hồ sơ; mục này quy
 định AI XEM ĐƯỢC (đọc được) 1 hồ sơ trong danh sách — 2 khái niệm độc lập.
 
-8 module (10 collection, 11 khoá cấu hình) sau mặc định cho **cả phòng ban**
-xem được hồ sơ của phòng mình (không chỉ người tạo): Ngân Sách, Thanh Toán,
-Mua Sắm/Sửa Chữa Văn Phòng, Đăng Ký Xe, Hợp Đồng, Tờ Trình, Đặt Phòng Họp, Vận
-Hành (tách riêng 3 khoá: Đặt Hàng ST/HO, Mở Mới Siêu Thị, Sửa Chữa Siêu Thị),
-Báo Cáo Định Kỳ. Từ 10/2026, admin tự TẮT/BẬT việc này cho TỪNG module tại
-**Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban** (map
-`deptViewScopeConfig`, xem `DEPT_VIEW_SCOPE_MODULES`/`deptAutoViewOn()` ở
-`lib/recordViewScope.js`) mà không cần sửa code.
+Từ 10/2026 (nâng cấp "4 trạng thái" ở v24.74), admin cấu hình phạm vi xem cho
+**17 module/khoá** tại **Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem
+Theo Phòng Ban** (map `deptViewScopeConfig`, xem `DEPT_VIEW_SCOPE_MODULES`/
+`moduleViewConfig()`/`extraViewScopeAllows()` ở `lib/recordViewScope.js`) mà
+không cần sửa code. Mỗi module chọn ĐỘC LẬP 4 trạng thái:
 
-- **Mặc định (chưa đụng tới màn cấu hình)**: TẤT CẢ module đều BẬT — giữ
-  nguyên hành vi cũ 100%, không ai mất quyền xem gì.
-- **Tắt 1 module**: người cùng phòng ban (không phải người tạo) KHÔNG còn
-  thấy hồ sơ đó trong danh sách nữa — CHỈ còn thấy đúng hồ sơ do chính mình
-  tạo.
-- **KHÔNG bị ảnh hưởng dù tắt**: admin, quyền quản lý/tổng hợp toàn công ty
-  (`budgetManage`, `paymentManage`...), quản lý trực tiếp/gián tiếp của người
-  tạo (theo Cơ Cấu Tổ Chức), và người đang được cấu hình làm người duyệt bước
-  đó (dù ở phòng ban khác, xem mục 3 ở trên) — các lớp xem này LUÔN giữ
-  nguyên, không phụ thuộc công tắc này.
+1. **Chỉ người tạo xem** — mặc định của 1 nhóm module (xem bảng dưới).
+2. **Cùng phòng ban tự động xem** — mặc định của nhóm module còn lại; LOẠI TRỪ
+   với #1 (chọn 1 trong 2 qua radio trên màn cấu hình).
+3. **Chọn người xem** — danh sách DÙNG CHUNG TOÀN CÔNG TY (KHÔNG gán riêng
+   theo từng phòng ban): ai trong danh sách này xem được MỌI hồ sơ của module
+   đó, bất kể phòng ban. CỘNG THÊM vào #1/#2, không loại trừ.
+4. **Người quản lý toàn quyền xem** — bật thì quản lý (trực tiếp + gián tiếp
+   theo Cơ Cấu Tổ Chức) của NGƯỜI TẠO hồ sơ luôn xem được, dù module đang ở
+   mode "Chỉ người tạo xem" (hữu ích khi nhân viên tự tạo không thấy lẫn
+   nhau nhưng trưởng phòng vẫn cần theo dõi). CỘNG THÊM, không loại trừ.
 
-**Các module KHÔNG có mặt trong ma trận này** (Công Việc, IT Hỗ Trợ ticket,
-Phê Duyệt Giá, Tài Liệu...) vốn KHÔNG dùng cơ chế "cùng phòng tự động xem" —
-Công Việc/IT ticket xét theo người được giao/người tạo chứ không theo phòng
-ban; Tài Liệu thì ngược lại, phải được admin cấp RÕ quyền xem theo phòng ban
-(`viewDraftDepts`/`viewApprovedDepts`, Ma Trận Phân Quyền) mới xem được dù
-cùng phòng — không có gì để "tắt" thêm ở đây.
+**Mặc định "Cùng phòng ban tự động xem" (11 module, giữ nguyên từ v24.73)**:
+Ngân Sách, Thanh Toán, Mua Sắm/Sửa Chữa Văn Phòng, Đăng Ký Xe, Hợp Đồng, Tờ
+Trình, Đặt Phòng Họp, Vận Hành (Đặt Hàng ST/HO, Mở Mới Siêu Thị, Sửa Chữa Siêu
+Thị), Báo Cáo Định Kỳ, Checklist Đánh Giá Siêu Thị (đã có sẵn nhánh "cùng siêu
+thị tự động xem" từ trước).
+
+**Mặc định "Chỉ người tạo xem" (6 module mới, admin TỰ CHỌN mở rộng nếu
+muốn)**: Công Việc (dept = cùng phòng NGƯỜI GIAO việc, lớp người-được-giao/
+cộng-tác-viên/quản-lý-của-người-được-giao LUÔN cố định không đổi dù cấu hình
+gì), Hỗ Trợ IT (phiếu — vốn cố ý hẹp để tránh lộ thông tin tài khoản/sự cố cá
+nhân), Phê Duyệt Giá (vốn cố ý hẹp để tránh lộ chiến lược giá — đội `itPriceSupport`
+luôn xem hết KHÔNG phụ thuộc cấu hình này), Tài Liệu (phải cấp quyền
+`viewDraftDepts`/`viewApprovedDepts` riêng ở Ma Trận Phân Quyền mới xem được
+dù cùng phòng — mục này chỉ CỘNG THÊM, không thay thế cơ chế đó), Văn Phòng
+Phẩm (vốn chỉ người tạo + người duyệt đúng bước).
+
+- **Mặc định (chưa đụng tới màn cấu hình)**: khớp ĐÚNG hành vi gốc từng module
+  (nêu trên) — không ai mất/thêm quyền xem gì nếu admin chưa từng mở màn này.
+- **KHÔNG bị ảnh hưởng bởi cấu hình này**: admin, quyền quản lý/tổng hợp toàn
+  công ty (`budgetManage`, `paymentManage`, `itPriceSupport`...), quản lý trực
+  tiếp/gián tiếp của người tạo khi đã là lớp CỐ ĐỊNH sẵn có (Tài Liệu/Thanh
+  Toán/Hợp Đồng), và người đang được cấu hình làm người duyệt bước đó (dù ở
+  phòng ban khác) — các lớp xem này LUÔN giữ nguyên.
 
 ### 3.1. 3 cách gán người duyệt cho 1 bước
 

@@ -95,6 +95,7 @@ const SYSTEM_NAV = [
     { key: 'sysWorkflow', icon: '🔀', label: 'Quy Trình & Phê Duyệt' },
     { key: 'sysAdvWorkflow', icon: '🔀', label: 'Nghiệp Vụ Nâng Cao' },
     { key: 'sysBizConfig', icon: '⚙️', label: 'Cấu Hình Nghiệp Vụ' },
+    { key: 'sysDeptViewScope', icon: '🔒', label: 'Phạm Vi Xem Theo Phòng Ban' },
   ]},
   { group: 'Danh Mục & Biểu Mẫu', items: [
     { key: 'sysCatalog', icon: '🗂️', label: 'Quản Lý Danh Mục' },
@@ -1334,6 +1335,30 @@ const SYSTEM_DOCS = {
       { label: 'Đã dời khỏi Hỗ Trợ IT', text: 'trước 10/2026, panel quản trị "Mẫu Giá" nằm trong "Hỗ Trợ IT → Phê Duyệt Giá" — nay dời hẳn sang đây theo yêu cầu người dùng, chỉ đổi VỊ TRÍ điều hướng, không đổi cách hoạt động/dữ liệu.' },
     ], right: [
       { label: 'Sẽ tiếp tục bổ sung', text: 'màn này thiết kế để làm nơi tập trung các cấu hình nghiệp vụ khác sẽ thêm về sau, không chỉ riêng Mẫu Giá.' },
+    ] },
+  },
+  sysDeptViewScope: {
+    icon: '🔒', title: 'Phạm Vi Xem Theo Phòng Ban', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cấu hình 4 trạng thái xem cho 17 module/khoá — chỉ người tạo xem / cùng phòng ban tự động xem / chọn thêm người xem (danh sách dùng chung toàn công ty) / quản lý toàn quyền xem — mà không cần sửa code. Khác hẳn "🔀 Quy Trình & Phê Duyệt" (AI DUYỆT được hồ sơ) — màn này quy định AI XEM ĐƯỢC (đọc được) hồ sơ trong danh sách.',
+    flow: { ariaLabel: 'Quy trình cấu hình 1 module', chain: [
+      { label: 'Chọn module', sub: '17 dòng, mỗi dòng độc lập' },
+      { label: 'Chọn mode (1 hoặc 2)', sub: 'Chỉ người tạo / Cùng phòng' },
+      { label: 'Cộng thêm 3 + 4 (tuỳ chọn)', sub: 'Chọn người xem + Quản lý toàn quyền xem' },
+      { label: 'Lưu', sub: 'Áp dụng ngay cho GET /api/data', kind: 'approved' },
+    ] },
+    steps: [
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban</b> (sub-tab riêng) — bảng 17 dòng, mỗi dòng 1 module/khoá.' },
+      { role: 'Quản trị viên', text: 'ở cột "1/2. Phạm Vi Cơ Bản", chọn ĐÚNG 1 trong 2 radio: <b>"Chỉ người tạo xem"</b> hoặc <b>"Cùng phòng tự động xem"</b> cho mỗi module.' },
+      { role: 'Quản trị viên', text: '(tuỳ chọn, CỘNG THÊM, không loại trừ #1/#2) ở cột "3. Chọn Người Xem", gõ tên/username/phòng ban vào ô tìm kiếm để thêm người vào danh sách DÙNG CHUNG TOÀN CÔNG TY — ai trong danh sách này xem được MỌI hồ sơ của module đó, bất kể phòng ban.' },
+      { role: 'Quản trị viên', text: '(tuỳ chọn, CỘNG THÊM) tick checkbox ở cột "4. Quản Lý Toàn Quyền Xem" để quản lý (trực tiếp + gián tiếp theo Cơ Cấu Tổ Chức) của người tạo hồ sơ luôn xem được, dù module đang ở mode "Chỉ người tạo xem".' },
+      { role: 'Quản trị viên', text: 'bấm <b>"💾 Lưu Phạm Vi Xem"</b> — áp dụng NGAY cho mọi lượt tải dữ liệu tiếp theo (GET /api/data), không cần khởi động lại server.' },
+    ],
+    footer: { left: [
+      { label: 'Mặc định khớp đúng hành vi gốc', text: 'module chưa từng được admin cấu hình giữ ĐÚNG hành vi trước khi có màn này (11 module gốc mặc định "cùng phòng tự động xem"; Công Việc/IT Hỗ Trợ/Phê Duyệt Giá/Tài Liệu/Văn Phòng Phẩm mặc định "chỉ người tạo xem"; Checklist mặc định "cùng phòng" vì đã có sẵn từ trước) — không ai mất/thêm quyền xem gì khi chưa đụng tới màn này.' },
+      { label: 'Công Việc — "người tạo" = người GIAO việc', text: 'người ĐƯỢC GIAO/cộng tác viên/quản lý của người được giao LUÔN xem được, không phụ thuộc cấu hình này — màn này chỉ thêm lớp "người khác không liên quan" có thấy hay không.' },
+    ], right: [
+      { label: 'KHÔNG bị ảnh hưởng bởi màn này', text: 'admin, quyền quản lý/tổng hợp toàn công ty (budgetManage/paymentManage/itPriceSupport...), và người đang được cấu hình làm người duyệt bước đó (dù khác phòng ban) — các lớp xem này LUÔN giữ nguyên dù cấu hình gì ở đây.' },
+      { label: 'Tài Liệu — lớp CỘNG THÊM, không thay thế', text: 'cơ chế viewDraftDepts/viewApprovedDepts (Ma Trận Phân Quyền) vẫn hoạt động song song — bật "Cùng phòng tự động xem" ở đây chỉ MỞ RỘNG thêm, không tắt cơ chế cũ.' },
     ] },
   },
   sysCatalog: {

@@ -95,47 +95,106 @@ function assertNoManagerCycle(users) {
   }
 }
 
-// 11 module dùng CHUNG 1 cơ chế "cùng phòng ban là tự động xem được" (qua scopeAllows() dưới đây HOẶC so
-// trực tiếp item.dept === user.dept ở canView* riêng của budget/payment/3×operation/report) — nguồn khai
-// báo DUY NHẤT cho deptViewScopeConfig (xem chú thích đầy đủ ở defaults.js), màn admin
-// "🔒 Phạm Vi Xem Theo Phòng Ban" (module-admin-deptviewscope.js) tự render đúng theo danh sách này, thêm
-// module mới vào nhóm "cùng phòng tự động xem" chỉ cần thêm 1 dòng ở đây (không cần sửa gì ở client).
+// 16 module dùng chung 1 KHUNG cấu hình "4 trạng thái" (10/2026, theo yêu cầu người dùng "cần 4 trạng
+// thái mới đủ để chọn tắt mở xem được hoặc không"): nguồn khai báo DUY NHẤT cho deptViewScopeConfig (xem
+// chú thích đầy đủ ở defaults.js), màn admin "🔒 Phạm Vi Xem Theo Phòng Ban"
+// (module-admin-deptviewscope.js) tự render đúng theo danh sách này. Mỗi module cấu hình ĐỘC LẬP qua 1
+// object { mode, extraViewers, managerCanView } (xem moduleViewConfig() ngay dưới):
+//   1. mode: 'CREATOR_ONLY' (chỉ người tạo xem) HOẶC 'DEPT' (cùng phòng ban tự động xem) — 2 lựa chọn
+//      LOẠI TRỪ NHAU của "lớp nền".
+//   2. extraViewers: string[] username — "Chọn người xem", danh sách DÙNG CHUNG TOÀN CÔNG TY (không
+//      theo phòng ban), CỘNG THÊM vào lớp nền ở trên (không loại trừ nhau) — ai trong danh sách này xem
+//      được MỌI bản ghi của module đó, bất kể phòng ban/mode.
+//   3. managerCanView: boolean — "Người quản lý toàn quyền xem", tái dùng ĐÚNG isManagerOf() (quản lý
+//      TRỰC TIẾP + GIÁN TIẾP theo Cơ Cấu Tổ Chức) của NGƯỜI TẠO hồ sơ — để khi mode=CREATOR_ONLY (nhân
+//      viên tự tạo không thấy lẫn nhau), trưởng phòng vẫn xem được hồ sơ cấp dưới.
+// `defaultMode` (tham số thứ 3 của moduleViewConfig()/deptAutoViewOn()) quyết định hành vi khi admin
+// CHƯA từng cấu hình module đó (key vắng mặt trong deptViewScopeConfig) — PHẢI khớp ĐÚNG hành vi gốc của
+// từng module để triển khai tính năng này không âm thầm đổi quyền xem cho bất kỳ hệ thống đang chạy nào:
+//   - 11 module gốc (budget..report): defaultMode ngầm định 'DEPT' (giữ đúng hành vi "cùng phòng tự động
+//     xem" đã có từ trước khi có màn cấu hình này).
+//   - task/itTicket/itPriceApproval/doc/vpp (5 module mới, 10/2026): defaultMode 'CREATOR_ONLY' — các
+//     module này TRƯỚC ĐÂY không có khái niệm "cùng phòng tự động xem" (Công Việc/IT ticket xét theo
+//     người liên quan; Phê Duyệt Giá/VPP chỉ người tạo+approver đúng bước; Tài Liệu còn NGƯỢC LẠI, đòi
+//     quyền viewDraftDepts/viewApprovedDepts riêng) — bật mode 'DEPT' là tính năng MỚI, phải admin TỰ
+//     chọn mới có, không mặc định bật.
+//   - checklist (module mới): defaultMode 'DEPT' — ĐÃ có sẵn nhánh "cùng siêu thị (phòng ban) tự động
+//     xem" cho bài nộp không phải nháp (xem canViewChecklistSubmission()) từ trước khi có màn cấu hình
+//     này, giữ nguyên đúng hành vi cũ.
 const DEPT_VIEW_SCOPE_MODULES = [
-  { key: 'budget', label: 'Ngân Sách' },
-  { key: 'payment', label: 'Thanh Toán' },
-  { key: 'office', label: 'Mua Sắm / Sửa Chữa Văn Phòng' },
-  { key: 'car', label: 'Đăng Ký Xe' },
-  { key: 'contract', label: 'Hợp Đồng' },
-  { key: 'submission', label: 'Tờ Trình' },
-  { key: 'meeting', label: 'Đặt Phòng Họp' },
-  { key: 'operationOrder', label: 'Vận Hành — Đặt Hàng ST/HO' },
-  { key: 'operationStoreOpening', label: 'Vận Hành — Mở Mới Siêu Thị' },
-  { key: 'operationRepair', label: 'Vận Hành — Sửa Chữa Siêu Thị' },
-  { key: 'report', label: 'Báo Cáo Định Kỳ' }
+  { key: 'budget', label: 'Ngân Sách', defaultMode: 'DEPT' },
+  { key: 'payment', label: 'Thanh Toán', defaultMode: 'DEPT' },
+  { key: 'office', label: 'Mua Sắm / Sửa Chữa Văn Phòng', defaultMode: 'DEPT' },
+  { key: 'car', label: 'Đăng Ký Xe', defaultMode: 'DEPT' },
+  { key: 'contract', label: 'Hợp Đồng', defaultMode: 'DEPT' },
+  { key: 'submission', label: 'Tờ Trình', defaultMode: 'DEPT' },
+  { key: 'meeting', label: 'Đặt Phòng Họp', defaultMode: 'DEPT' },
+  { key: 'operationOrder', label: 'Vận Hành — Đặt Hàng ST/HO', defaultMode: 'DEPT' },
+  { key: 'operationStoreOpening', label: 'Vận Hành — Mở Mới Siêu Thị', defaultMode: 'DEPT' },
+  { key: 'operationRepair', label: 'Vận Hành — Sửa Chữa Siêu Thị', defaultMode: 'DEPT' },
+  { key: 'report', label: 'Báo Cáo Định Kỳ', defaultMode: 'DEPT' },
+  { key: 'task', label: 'Công Việc', defaultMode: 'CREATOR_ONLY' },
+  { key: 'itTicket', label: 'Hỗ Trợ IT (Phiếu)', defaultMode: 'CREATOR_ONLY' },
+  { key: 'itPriceApproval', label: 'Phê Duyệt Giá (Bán Lẻ/Bán Buôn)', defaultMode: 'CREATOR_ONLY' },
+  { key: 'doc', label: 'Tài Liệu', defaultMode: 'CREATOR_ONLY' },
+  { key: 'checklist', label: 'Checklist Đánh Giá Siêu Thị', defaultMode: 'DEPT' },
+  { key: 'vpp', label: 'Văn Phòng Phẩm', defaultMode: 'CREATOR_ONLY' }
 ];
 
-// deptAutoViewOn(): map deptViewScopeConfig THIẾU key hoặc giá trị khác `false` -> GIỮ NGUYÊN hành vi cũ
-// (cùng phòng tự động xem) — an toàn tuyệt đối khi admin chưa từng mở màn cấu hình mới (không đổi hành
-// vi cho bất kỳ hệ thống nào đang chạy). `moduleKey` rỗng (canDownloadRecordFile() KHÔNG truyền — xem
-// chú thích ở đó) cũng coi như BẬT, cố ý KHÔNG đụng tới cơ chế tải file (phạm vi khác, chưa đưa vào đợt
-// này).
-function deptAutoViewOn(appData, moduleKey) {
-  if (!moduleKey) return true;
-  const cfg = appData?.deptViewScopeConfig;
-  if (!cfg || cfg[moduleKey] == null) return true;
-  return cfg[moduleKey] !== false;
+// moduleViewConfig(): chuẩn hoá deptViewScopeConfig[moduleKey] về đúng 1 object 3 trường, tương thích
+// NGƯỢC với 2 dạng CŨ: (1) key vắng mặt -> `defaultMode` (xem chú thích DEPT_VIEW_SCOPE_MODULES ở trên),
+// (2) boolean thuần (v24.73, trước khi có 4 trạng thái) -> false tương đương CREATOR_ONLY, true/khác
+// tương đương DEPT, extraViewers/managerCanView rỗng. Dữ liệu cũ KHÔNG cần migrate thủ công — đọc tới
+// đâu chuẩn hoá tới đó.
+function moduleViewConfig(appData, moduleKey, defaultMode) {
+  if (!moduleKey) return { mode: 'DEPT', extraViewers: [], managerCanView: false };
+  const raw = appData?.deptViewScopeConfig?.[moduleKey];
+  if (raw == null) return { mode: defaultMode || 'DEPT', extraViewers: [], managerCanView: false };
+  if (typeof raw === 'boolean') return { mode: raw === false ? 'CREATOR_ONLY' : 'DEPT', extraViewers: [], managerCanView: false };
+  return {
+    mode: raw.mode === 'CREATOR_ONLY' ? 'CREATOR_ONLY' : 'DEPT',
+    extraViewers: Array.isArray(raw.extraViewers) ? raw.extraViewers : [],
+    managerCanView: !!raw.managerCanView
+  };
 }
 
-// scopeAllows(): thêm 2 tham số CUỐI `moduleKey`/`appData` (TUỲ CHỌN — mọi lời gọi cũ không truyền vẫn
-// an toàn, deptAutoViewOn() coi như BẬT) để nhánh "cùng phòng là thấy" tôn trọng deptViewScopeConfig.
-// canDownloadRecordFile() CỐ Ý không truyền 2 tham số này (xem chú thích ở đó) — tải file giữ nguyên
-// hành vi cũ, chưa thuộc phạm vi đợt cấu hình này.
-function scopeAllows(user, scope, dept, moduleKey, appData) {
+// deptAutoViewOn(): true <=> mode hiệu lực là 'DEPT' (cùng phòng ban tự động xem) — giữ nguyên TÊN HÀM +
+// 2 tham số đầu (mọi lời gọi cũ không truyền `defaultMode` vẫn đúng hành vi cũ, coi như 'DEPT') để không
+// phải sửa lại hàng chục điểm gọi đã có từ v24.73. `moduleKey` rỗng (canDownloadRecordFile() KHÔNG
+// truyền — xem chú thích ở đó) cũng coi như BẬT, cố ý KHÔNG đụng tới cơ chế tải file (phạm vi khác, chưa
+// đưa vào đợt này).
+function deptAutoViewOn(appData, moduleKey, defaultMode) {
+  if (!moduleKey) return true;
+  return moduleViewConfig(appData, moduleKey, defaultMode).mode !== 'CREATOR_ONLY';
+}
+
+// extraViewScopeAllows(): 2 lớp CỘNG THÊM của mô hình 4 trạng thái — "3. Chọn người xem" (whitelist DÙNG
+// CHUNG TOÀN CÔNG TY, xác nhận qua AskUserQuestion 10/2026: 1 danh sách DUY NHẤT mỗi module, ai trong đó
+// xem được MỌI bản ghi bất kể phòng ban) và "4. Người quản lý toàn quyền xem" (tái dùng ĐÚNG isManagerOf()
+// — quản lý trực tiếp+gián tiếp theo Cơ Cấu Tổ Chức CỦA NGƯỜI TẠO hồ sơ). Cả 2 lớp này KHÔNG phụ thuộc
+// mode 1/2 — vẫn có hiệu lực dù mode đang CREATOR_ONLY hay DEPT. `creatorUsername` là field "chính chủ"
+// thật của TỪNG module (creator/uploader/createdBy/assignedBy — xem creatorField tương ứng ở
+// lib/createValidation.js, hoặc assignedBy cho Công Việc theo xác nhận người dùng "người tạo = người
+// giao việc").
+function extraViewScopeAllows(user, appData, moduleKey, creatorUsername) {
+  if (!user?.username || !moduleKey) return false;
+  const cfg = moduleViewConfig(appData, moduleKey);
+  if (cfg.extraViewers.includes(user.username)) return true;
+  return !!(cfg.managerCanView && creatorUsername && isManagerOf(user.username, creatorUsername, appData?.users));
+}
+
+// scopeAllows(): thêm tham số CUỐI `creatorUsername` (TUỲ CHỌN — lời gọi cũ không truyền chỉ mất đúng 2
+// lớp cộng thêm ở extraViewScopeAllows(), không ảnh hưởng gì khác) để nhánh "cùng phòng là thấy" tôn
+// trọng deptViewScopeConfig ĐẦY ĐỦ cả 4 trạng thái. canDownloadRecordFile() CỐ Ý không truyền 2 tham số
+// moduleKey/appData (xem chú thích ở đó) — tải file giữ nguyên hành vi cũ, chưa thuộc phạm vi đợt cấu
+// hình này.
+function scopeAllows(user, scope, dept, moduleKey, appData, creatorUsername) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (scope?.all) return true;
   if (dept && user.dept === dept && deptAutoViewOn(appData, moduleKey)) return true;
-  return !!(dept && Array.isArray(scope?.depts) && scope.depts.includes(dept));
+  if (dept && Array.isArray(scope?.depts) && scope.depts.includes(dept)) return true;
+  return extraViewScopeAllows(user, appData, moduleKey, creatorUsername);
 }
 
 // Khớp đúng khối lọc trong renderDocs() (public/index.html) — Xem Bản Nháp (PENDING/REJECTED) và Xem
@@ -172,6 +231,13 @@ function canViewDoc(user, doc, appData) {
   } else if (user.perms?.viewDraftAll || (user.perms?.viewDraftDepts || []).includes(doc.dept)) {
     return true;
   }
+  // 4-state model (10/2026): LỚP CỘNG THÊM, không đụng cơ chế viewDraftDepts/viewApprovedDepts ở trên —
+  // mode 'DEPT' = cùng phòng ban người tải lên tự động xem (TÍNH NĂNG MỚI, admin phải tự chọn mới có).
+  // defaultMode 'CREATOR_ONLY' (key vắng mặt giữ ĐÚNG hành vi gốc): Tài Liệu là module DUY NHẤT trong 16
+  // module này có default NGƯỢC hẳn — phải được cấp quyền viewDraftDepts/viewApprovedDepts riêng mới
+  // xem được dù cùng phòng, không tự động như 11 module kia.
+  if (doc.dept && doc.dept === user.dept && deptAutoViewOn(appData, 'doc', 'CREATOR_ONLY')) return true;
+  if (extraViewScopeAllows(user, appData, 'doc', doc.uploader)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.docs.resolveWfConfig(doc, appData).approvers, user.username);
 }
 
@@ -200,7 +266,7 @@ function canViewSubmission(user, sub, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.submissionView, sub.dept, 'submission', appData)) return true;
+  if (scopeAllows(user, user.perms?.submissionView, sub.dept, 'submission', appData, sub.creator)) return true;
   if ((sub.opinionRequestees || []).includes(user.username)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.submissions.resolveWfConfig(sub, appData).approvers, user.username);
 }
@@ -446,7 +512,8 @@ function canViewReportEntry(user, entry, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.reportManage || user.perms?.reportAggregate) return true;
   if (entry.creator === user.username) return true;
-  return !!(entry.dept === user.dept && entry.status !== 'DRAFT' && deptAutoViewOn(appData, 'report'));
+  if (entry.dept === user.dept && entry.status !== 'DRAFT' && deptAutoViewOn(appData, 'report')) return true;
+  return extraViewScopeAllows(user, appData, 'report', entry.creator);
 }
 
 function filterReportEntriesForUser(entries, user, appData) {
@@ -472,13 +539,13 @@ function canViewContract(user, contract, appData) {
   if (contract.creator === user.username) return true;
   // Quản lý (trực tiếp/gián tiếp) của người tạo — mục 3 kế hoạch 10/2026, cùng khuôn canViewDoc() ở trên.
   if (isManagerOf(user.username, contract.creator, appData?.users)) return true;
-  if (scopeAllows(user, user.perms?.contractView, contract.dept, 'contract', appData)) return true;
+  if (scopeAllows(user, user.perms?.contractView, contract.dept, 'contract', appData, contract.creator)) return true;
   // Đơn vị tiếp nhận theo dõi & thanh toán (custodianDept) được XEM hợp đồng/phụ lục ngay từ lúc tạo
   // (không đợi approvalStatus === 'APPROVED') — khớp yêu cầu "đơn vị chọn có thể cùng xem hợp đồng và
   // phụ lục hợp đồng khi được phê duyệt", và nhất quán với cách người tạo (creator) ở trên cũng luôn
   // xem được ngay không điều kiện. custodianDept luôn có giá trị cụ thể (mặc định = dept khi không
   // chọn, xem createValidation.js), nên nhánh này là no-op vô hại khi 2 field trùng nhau.
-  if (scopeAllows(user, user.perms?.contractView, contract.custodianDept || contract.dept, 'contract', appData)) return true;
+  if (scopeAllows(user, user.perms?.contractView, contract.custodianDept || contract.dept, 'contract', appData, contract.creator)) return true;
   if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
   return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
 }
@@ -496,7 +563,7 @@ function canViewCarReg(user, carReg, appData) {
   // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban với
   // carView — cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).
   if (carReg.assignedDriverUsername === user.username) return true;
-  if (scopeAllows(user, user.perms?.carView, carReg.dept, 'car', appData)) return true;
+  if (scopeAllows(user, user.perms?.carView, carReg.dept, 'car', appData, carReg.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.carRegs.resolveWfConfig(carReg, appData).approvers, user.username);
 }
 
@@ -511,7 +578,7 @@ function canViewOfficeReq(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (item.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.officeView, item.dept, 'office', appData)) return true;
+  if (scopeAllows(user, user.perms?.officeView, item.dept, 'office', appData, item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.officeReqs.resolveWfConfig(item, appData).approvers, user.username);
 }
 
@@ -535,6 +602,12 @@ function canViewItPriceApproval(user, item, appData) {
   if (emergencyPerm && (item.emergencyRejectStatus === 'PENDING' || item.emergencyRejectDecidedBy === user.username)) {
     return true;
   }
+  // 4-state model (10/2026): tương tự canViewItSupportTicket() — admin TỰ CHỌN mở rộng mode 'DEPT' nếu
+  // muốn (mặc định vẫn CREATOR_ONLY, giữ đúng phạm vi hẹp cố ý từ trước — xem chú thích hàm). forceOwnDept
+  // không áp dụng cho module này (đề xuất giá không có khái niệm "tạo hộ phòng ban khác" riêng, nhưng
+  // item.dept luôn được gán = dept của creator lúc tạo, xem lib/createValidation.js).
+  if (item.dept && item.dept === user.dept && deptAutoViewOn(appData, 'itPriceApproval', 'CREATOR_ONLY')) return true;
+  if (extraViewScopeAllows(user, appData, 'itPriceApproval', item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.itPriceApprovals.resolveWfConfig(item, appData).approvers, user.username);
 }
 
@@ -553,6 +626,10 @@ function canViewVppRegistration(user, item, appData) {
   if (!user) return false;
   if (canManageVpp(user) || user.perms?.vppReportView) return true;
   if (item.creator === user.username) return true;
+  // 4-state model (10/2026): cùng khuôn itPriceApproval/itTicket ở trên — admin TỰ CHỌN mode 'DEPT' nếu
+  // muốn (mặc định CREATOR_ONLY, giữ đúng phạm vi hẹp cố ý từ trước: chỉ người tạo + approver đúng bước).
+  if (item.dept && item.dept === user.dept && deptAutoViewOn(appData, 'vpp', 'CREATOR_ONLY')) return true;
+  if (extraViewScopeAllows(user, appData, 'vpp', item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.vppRegistrations.resolveWfConfig(item, appData).approvers, user.username);
 }
 
@@ -592,10 +669,15 @@ function canViewBudgetLine(user, item, appData) {
   // hàm này vẫn mang giả định CŨ (dept luôn trùng người tạo) nên người tạo mất quyền xem lại chính dòng
   // mình vừa tạo ngay khi chọn Khối Phòng Ban khác phòng ban mình.
   if (item.createdBy === user.username) return true;
-  return item.dept === user.dept && deptAutoViewOn(appData, 'budget');
+  if (item.dept === user.dept && deptAutoViewOn(appData, 'budget')) return true;
+  return extraViewScopeAllows(user, appData, 'budget', item.createdBy);
 }
 function filterBudgetLinesForUser(items, user, appData) {
-  return (items || []).filter(i => canViewBudgetLine(user, i));
+  // LỖI ĐÃ VÁ (4-state model 10/2026): trước đây KHÔNG truyền appData vào canViewBudgetLine() ở đây —
+  // deptAutoViewOn() vẫn an toàn (coi như BẬT khi thiếu appData) nhưng extraViewScopeAllows() (lớp
+  // "Chọn người xem"/"Quản lý toàn quyền xem" mới) sẽ LUÔN đọc thiếu users/config, không bao giờ có hiệu
+  // lực cho đúng module này.
+  return (items || []).filter(i => canViewBudgetLine(user, i, appData));
 }
 
 // budgetPeriods (module Ngân Sách CŨ — budgetEntries — vẫn GIỮ NGUYÊN, không xoá, để không mất lịch sử,
@@ -621,7 +703,11 @@ function filterBudgetPeriodsForUser(items, user) {
 function canViewOperationOrder(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.operationOrderReportView) return true;
+  // LỖI ĐÃ VÁ (4-state model 10/2026, cùng lớp lỗi payment ở trên): thêm nhánh "chính người tạo" để
+  // Option 1 "Chỉ người tạo xem" không vô tình chặn luôn người tạo đơn hàng.
+  if (item.creator === user.username) return true;
   if (item.dept === user.dept && deptAutoViewOn(appData, 'operationOrder')) return true;
+  if (extraViewScopeAllows(user, appData, 'operationOrder', item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.operationOrders.resolveWfConfig(item, appData).approvers, user.username);
 }
 function filterOperationOrdersForUser(items, user, appData) {
@@ -665,8 +751,12 @@ function canViewOperationStoreOpening(user, item, appData) {
   // đây (view scope) + redactOperationEstimateItemsToOwnedScope() bên dưới, KHÔNG thêm vào
   // canManageOperationRecord()/canManageOperationRecordClient() để không vô tình cấp quyền sửa.
   if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView) return true;
+  // LỖI ĐÃ VÁ (4-state model 10/2026, cùng lớp lỗi payment/operationOrder ở trên): thêm nhánh "chính
+  // người tạo" để Option 1 "Chỉ người tạo xem" không vô tình chặn luôn người tạo đề xuất.
+  if (item.creator === user.username) return true;
   if (item.dept === user.dept && deptAutoViewOn(appData, 'operationStoreOpening')) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_STORE_OPENING', item.id, appData)) return true;
+  if (extraViewScopeAllows(user, appData, 'operationStoreOpening', item.creator)) return true;
   // KHÔNG còn nhánh "đang là approver" nào (hồ sơ chính lẫn Dự toán) — chủ ứng dụng xác nhận Vận Hành >
   // Siêu Thị KHÔNG có bước phê duyệt nào cả, kể cả Dự toán (để trưởng phòng tự lập/lưu). MODULE_CONFIGS
   // operationStoreOpeningEstimate đã xoá khỏi lib/workflowEngine.js — không còn approver nào để mở rộng
@@ -691,7 +781,9 @@ function redactOperationEstimateItemsToOwnedScope(user, sourceType, item, appDat
   // chú thích ở canViewOperationStoreOpening()/canViewOperationRepair() ngay trên.
   const moduleKey = sourceType === 'OPERATION_REPAIR' ? 'operationRepair' : 'operationStoreOpening';
   if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView
-    || (item.dept === user.dept && deptAutoViewOn(appData, moduleKey))) return item;
+    || item.creator === user.username
+    || (item.dept === user.dept && deptAutoViewOn(appData, moduleKey))
+    || extraViewScopeAllows(user, appData, moduleKey, item.creator)) return item;
   if (hasOwnWorkItemInSource(user, sourceType, item.id, appData)) return item;
   if (!hasOwnEstimateCategoryInSource(user, item)) return item;
   const ownedTopIds = new Set((item.estimateItems || [])
@@ -712,8 +804,11 @@ function canViewOperationRepair(user, item, appData) {
   // Audit nghiệp vụ (đợt 4) — cùng lý do đã thêm ở canViewOperationStoreOpening() ngay trên.
   // operationRecordViewAll — xem chú thích đầy đủ ở canViewOperationStoreOpening() ngay trên.
   if (user.perms?.admin || user.perms?.operationRecordManageAll || user.perms?.operationRecordViewAll || user.perms?.operationStoreReportView) return true;
+  // LỖI ĐÃ VÁ (4-state model 10/2026) — cùng lý do ở canViewOperationStoreOpening() bên trên.
+  if (item.creator === user.username) return true;
   if (item.dept === user.dept && deptAutoViewOn(appData, 'operationRepair')) return true;
   if (hasOwnWorkItemInSource(user, 'OPERATION_REPAIR', item.id, appData)) return true;
+  if (extraViewScopeAllows(user, appData, 'operationRepair', item.creator)) return true;
   // Cùng lý do ở canViewOperationStoreOpening() bên trên — KHÔNG còn nhánh "đang là approver" nào (hồ sơ
   // chính lẫn Dự toán).
   return hasOwnEstimateCategoryInSource(user, item);
@@ -762,13 +857,19 @@ function canViewOperationWorkItem(user, item, appData) {
 // người được IT chủ động chỉ định "có trách nhiệm" phê duyệt (escalateItTicket() ở lib/recordActions.js)
 // cũng xem được ĐÚNG 1 ticket đó — không mở cả danh sách, cùng nguyên lý người duyệt phòng ban ở
 // canViewItPriceApproval() trên, nhưng thu hẹp về đúng 1 bản ghi họ được hỏi ý kiến.
-function canViewItSupportTicket(user, item) {
+// 4-state model (10/2026, xác nhận qua AskUserQuestion — admin có thể TỰ CHỌN mở rộng nếu muốn, dù
+// mặc định (key vắng mặt) vẫn giữ ĐÚNG phạm vi hẹp cố ý từ trước — defaultMode 'CREATOR_ONLY'): thêm
+// nhánh mode 'DEPT' (cùng phòng ban người tạo ticket tự động xem) + extraViewers/managerCanView, tương
+// tự 11 module gốc. forceOwnDept:true (lib/createValidation.js) nên item.dept luôn = dept của creator.
+function canViewItSupportTicket(user, item, appData) {
   if (!user) return false;
-  return !!(user.perms?.admin || user.perms?.itManage || item.creator === user.username || item.approvalApprover === user.username);
+  if (user.perms?.admin || user.perms?.itManage || item.creator === user.username || item.approvalApprover === user.username) return true;
+  if (item.dept && item.dept === user.dept && deptAutoViewOn(appData, 'itTicket', 'CREATOR_ONLY')) return true;
+  return extraViewScopeAllows(user, appData, 'itTicket', item.creator);
 }
 
-function filterItSupportTicketsForUser(items, user) {
-  return (items || []).filter(t => canViewItSupportTicket(user, t));
+function filterItSupportTicketsForUser(items, user, appData) {
+  return (items || []).filter(t => canViewItSupportTicket(user, t, appData));
 }
 
 // Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows(meetingView) HOẶC chính
@@ -785,7 +886,7 @@ function canViewMeeting(user, meeting, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.meetingView, meeting.dept, 'meeting', appData)) return true;
+  if (scopeAllows(user, user.perms?.meetingView, meeting.dept, 'meeting', appData, meeting.creator)) return true;
   if (user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView) return true;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[meeting.dept], appData || {});
@@ -840,12 +941,26 @@ function filterMeetingMinutesForUser(meetingMinutes, user) {
 // appData (tuỳ chọn) — chỉ cần khi muốn áp dụng nhánh "trưởng phòng xem việc nhân viên" (đọc
 // appData.users để đi ngược cây Cơ Cấu Tổ Chức qua isManagerOf()); gọi thiếu appData vẫn hoạt động
 // đúng như trước (bỏ qua nhánh này) — giữ tương thích ngược cho các chỗ gọi khác chưa cần.
+// 4-state model (10/2026, xác nhận qua AskUserQuestion): Công Việc KHÔNG có khái niệm "người tạo" như
+// 11 module kia — người BẮT BUỘC phải thấy là người ĐƯỢC GIAO việc (assignedTo), không phải người giao
+// (assignedBy). Người dùng xác nhận coi "người tạo" = NGƯỜI GIAO VIỆC (assignedBy); lớp assignedTo/
+// collaborators/manager-của-assignedTo ở trên LUÔN LÀ LỚP CỐ ĐỊNH, không đụng tới — deptViewScopeConfig
+// CHỈ kiểm soát thêm việc NGƯỜI KHÁC không liên quan có thấy hay không: mode 'DEPT' = cùng phòng ban của
+// NGƯỜI GIAO việc tự động xem (tính năng MỚI — Task trước đây hoàn toàn không có khái niệm phòng ban),
+// extraViewers/managerCanView áp dụng theo assignedBy (managerCanView ở đây gần như no-op vì quản lý
+// của assignedTo đã luôn thấy ở nhánh isManagerOf() trên, nhưng vẫn cộng thêm quản lý CỦA NGƯỜI GIAO
+// việc cho đúng khuôn chung). defaultMode 'CREATOR_ONLY' (xem DEPT_VIEW_SCOPE_MODULES) — key vắng mặt
+// giữ ĐÚNG hành vi gốc (không có lớp bystander nào), không âm thầm mở thêm quyền xem khi admin chưa cấu
+// hình.
 function canViewTaskRecord(user, t, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (user.perms?.taskView) return true;
   if (t.assignedTo === user.username || t.assignedBy === user.username || (t.collaborators || []).includes(user.username)) return true;
-  return isManagerOf(user.username, t.assignedTo, appData?.users);
+  if (isManagerOf(user.username, t.assignedTo, appData?.users)) return true;
+  const assigner = (appData?.users || []).find(u => u.username === t.assignedBy);
+  if (assigner?.dept && assigner.dept === user.dept && deptAutoViewOn(appData, 'task', 'CREATOR_ONLY')) return true;
+  return extraViewScopeAllows(user, appData, 'task', t.assignedBy);
 }
 
 function filterTasksForUser(tasks, user, appData) {
@@ -1056,10 +1171,16 @@ function filterItServiceRenewalsForUser(items, user) {
 function canViewPaymentRequest(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.paymentManage) return true;
+  // LỖI ĐÃ VÁ (4-state model 10/2026): Thanh Toán KHÔNG có nhánh "chính người tạo luôn xem" như MỌI
+  // hàm canView* chị em khác (budget/office/car/contract/submission/meeting/report đều có) — người tạo
+  // đề nghị mất quyền xem lại chính đề nghị mình vừa tạo ngay khi tắt dept-view (mode CREATOR_ONLY) cho
+  // module này. Thêm nhánh này để Option 1 "Chỉ người tạo xem" hoạt động ĐÚNG NGHĨA cho mọi module.
+  if (item.createdBy === user.username) return true;
   if (item.dept && item.dept === user.dept && deptAutoViewOn(appData, 'payment')) return true;
   // Quản lý (trực tiếp/gián tiếp) của người tạo đề nghị — mục 3 kế hoạch 10/2026, cùng khuôn
   // canViewDoc()/canViewContract() ở trên (item.createdBy — xem creatorField ở lib/createValidation.js).
   if (isManagerOf(user.username, item.createdBy, appData?.users)) return true;
+  if (extraViewScopeAllows(user, appData, 'payment', item.createdBy)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.paymentRequests.resolveWfConfig(item, appData).approvers, user.username);
 }
 
@@ -1209,7 +1330,7 @@ function canViewChecklistTemplate(user, item, appData) {
   // quyền xem bài đó — nếu không, người từng làm bài sẽ mất khả năng tra cứu lại câu hỏi/đáp án gốc
   // ngay khi có ai đó kích hoạt bản template mới thay thế.
   const submissions = (appData && appData.checklistSubmissions) || [];
-  return submissions.some(s => s.templateId === item.id && canViewChecklistSubmission(user, s));
+  return submissions.some(s => s.templateId === item.id && canViewChecklistSubmission(user, s, appData));
 }
 function filterChecklistTemplatesForUser(items, user, appData) {
   return (items || []).filter(t => canViewChecklistTemplate(user, t, appData));
@@ -1218,15 +1339,21 @@ function filterChecklistTemplatesForUser(items, user, appData) {
 // thái, kể cả DRAFT đang làm dở) cộng bài đã NỘP (SUBMITTED, không phải DRAFT người khác đang làm dở)
 // thực hiện tại ĐÚNG siêu thị của mình (Kết Quả & Phản Hồi — nhân viên siêu thị xem kết quả kiểm tra
 // CONTROL_AUDIT làm tại siêu thị họ, dù người thực hiện là kiểm soát viên khác).
-function canViewChecklistSubmission(user, item) {
+// 4-state model (10/2026): Checklist ĐÃ có sẵn nhánh "cùng siêu thị (phòng ban) tự động xem" cho bài
+// không phải nháp (nhánh storeCode===user.dept bên dưới) từ trước khi có màn cấu hình này — defaultMode
+// 'DEPT' (xem DEPT_VIEW_SCOPE_MODULES) giữ ĐÚNG hành vi gốc khi admin chưa cấu hình gì. Gác nhánh đó qua
+// deptAutoViewOn() để admin có thể TẮT nếu muốn (chuyển CREATOR_ONLY), cộng thêm extraViewScopeAllows
+// (Option 3/4).
+function canViewChecklistSubmission(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || canManageChecklistTemplates(user)) return true;
   if (canViewChecklistReportForTemplate(user, item.templateId)) return true;
   if (item.submittedByUsername === user.username) return true;
-  return !!(item.status !== 'DRAFT' && user.posType === 'STORE' && item.storeCode === user.dept);
+  if (item.status !== 'DRAFT' && user.posType === 'STORE' && item.storeCode === user.dept && deptAutoViewOn(appData, 'checklist', 'DEPT')) return true;
+  return extraViewScopeAllows(user, appData, 'checklist', item.submittedByUsername);
 }
-function filterChecklistSubmissionsForUser(items, user) {
-  return (items || []).filter(s => canViewChecklistSubmission(user, s));
+function filterChecklistSubmissionsForUser(items, user, appData) {
+  return (items || []).filter(s => canViewChecklistSubmission(user, s, appData));
 }
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): "xem chéo Báo Cáo" — người KHÔNG thuộc module Checklist
@@ -1237,7 +1364,7 @@ function filterChecklistSubmissionsForUser(items, user) {
 // phạm vi kiểm soát/tự đánh giá siêu thị như cũ). CHỈ dùng riêng cho route GET /api/reports/checklistSubmissions
 // (routes/reports.js) — KHÔNG áp dụng cho GET /api/data (routes/data.js vẫn gọi filterChecklistSubmissionsForUser()
 // nguyên bản ở trên), nên quyền xem chéo này không rò rỉ sang bất kỳ màn nào khác ngoài Báo Cáo.
-function filterChecklistSubmissionsForReportCrossView(items, user) {
+function filterChecklistSubmissionsForReportCrossView(items, user, appData) {
   if (!user) return [];
   if (user.perms?.admin || canManageChecklistTemplates(user)) return items || [];
   if (user.perms?.reportViewAll || (user.reportExtraKeys || []).includes('checklist')) return items || [];
@@ -1246,7 +1373,7 @@ function filterChecklistSubmissionsForReportCrossView(items, user) {
   // thấy MỌI mẫu khi vào qua Báo Cáo tổng hợp" chỉ vì canViewChecklistReports(user) trước đây là bypass
   // toàn phần không phân biệt mẫu.
   if (canViewChecklistReports(user)) return (items || []).filter(s => canViewChecklistReportForTemplate(user, s.templateId));
-  return filterChecklistSubmissionsForUser(items, user);
+  return filterChecklistSubmissionsForUser(items, user, appData);
 }
 
 // Mua Hàng > BAS (v23.30, module TOP-LEVEL riêng — xem lib/vendorRebate.js) — RebateCalculations (số liệu
@@ -1428,7 +1555,7 @@ function canAccessItPriceApprovalModuleServer(user, priceType, data) {
 
 module.exports = {
   isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
-  DEPT_VIEW_SCOPE_MODULES, deptAutoViewOn,
+  DEPT_VIEW_SCOPE_MODULES, deptAutoViewOn, moduleViewConfig, extraViewScopeAllows,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,

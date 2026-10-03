@@ -614,21 +614,31 @@ const DEFAULTS = {
   // người duyệt cho 1 phòng ban cụ thể (không cần có meetingApprove) — xem canDecideMeeting() ở
   // lib/recordActions.js. 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối.
   meetingDeptWorkflows: {},
-  // 10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở xem theo phòng ban": trước đây
-  // 11 hàm canView*() dưới đây (budget/payment/office/car/contract/submission/meeting/3×operation/report)
-  // đều CỨNG trong code 1 nhánh "cùng phòng ban là tự động xem được" (KHÔNG cần giữ quyền gì riêng, xem
-  // scopeAllows()/canViewBudgetLine()/canViewPaymentRequest()/... ở lib/recordViewScope.js) — không có
-  // cách nào tắt/bật theo module, giống hệt nhau cho mọi hệ thống. Map PHẲNG { [moduleKey]: boolean } —
-  // admin cấu hình ở màn mới "🔒 Phạm Vi Xem Theo Phòng Ban" (Hệ Thống → Nghiệp Vụ Nâng Cao). Key THIẾU
-  // hoặc giá trị `true` = GIỮ NGUYÊN hành vi cũ (cùng phòng tự động xem) — KHÔNG đổi hành vi cho bất kỳ
-  // ai nếu admin không đụng tới màn này. Đặt `false` cho 1 moduleKey thì người trong phòng ban đó CHỈ
-  // còn thấy đúng hồ sơ do CHÍNH MÌNH tạo — các lớp xem khác (admin, quyền quản lý/tổng hợp toàn công ty,
-  // quản lý cấp trên của người tạo, người đang là approver theo quy trình dù khác phòng ban) LUÔN giữ
-  // nguyên, không bị tắt bởi map này (xem deptAutoViewOn() ở lib/recordViewScope.js — chỉ gác ĐÚNG 1
-  // nhánh "bystander cùng phòng", không đụng các nhánh còn lại, để không ai mất quyền xem hồ sơ cần xử
-  // lý/đã tạo). 11 key hợp lệ: budget, payment, office, car, contract, submission, meeting,
-  // operationOrder, operationStoreOpening, operationRepair, report — xem DEPT_VIEW_SCOPE_MODULES ở
-  // lib/recordViewScope.js (nguồn khai báo DUY NHẤT, màn admin tự render theo đúng danh sách này).
+  // 10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở xem theo phòng ban" rồi nâng
+  // cấp thành "4 trạng thái" (v24.74, theo yêu cầu "cần 4 trạng thái này mới đúng để có thể chọn tắt mở
+  // có thể xem được hoặc không thể xem được"): map { [moduleKey]: object|boolean } — admin cấu hình ở
+  // màn "🔒 Phạm Vi Xem Theo Phòng Ban" (Hệ Thống → Nghiệp Vụ Nâng Cao). Mỗi moduleKey, object dạng:
+  //   { mode: 'CREATOR_ONLY'|'DEPT', extraViewers: string[] (username), managerCanView: boolean }
+  // 4 trạng thái:
+  //   1. mode='CREATOR_ONLY' — chỉ người tạo xem (+ các lớp CỐ ĐỊNH không đổi — xem dưới).
+  //   2. mode='DEPT' — cùng phòng ban (của người tạo) tự động xem — LOẠI TRỪ với #1.
+  //   3. extraViewers — "Chọn người xem": whitelist DÙNG CHUNG TOÀN CÔNG TY (KHÔNG theo phòng ban, xác
+  //      nhận qua AskUserQuestion 10/2026), CỘNG THÊM vào #1/#2 (không loại trừ) — ai trong danh sách
+  //      xem được MỌI bản ghi của module đó bất kể phòng ban.
+  //   4. managerCanView — "Người quản lý toàn quyền xem": tái dùng ĐÚNG isManagerOf() (quản lý trực
+  //      tiếp+gián tiếp theo Cơ Cấu Tổ Chức CỦA NGƯỜI TẠO hồ sơ, xác nhận qua AskUserQuestion), để khi
+  //      mode=CREATOR_ONLY (nhân viên tự tạo không thấy lẫn nhau) trưởng phòng vẫn xem được.
+  // Tương thích NGƯỢC: key THIẾU -> `defaultMode` riêng của từng module (xem DEPT_VIEW_SCOPE_MODULES ở
+  // lib/recordViewScope.js — PHẢI khớp đúng hành vi gốc từng module, không âm thầm đổi quyền xem khi
+  // admin chưa cấu hình); giá trị boolean thuần (dữ liệu CŨ từ v24.73, trước khi có 4 trạng thái) ->
+  // false tương đương CREATOR_ONLY, true/khác tương đương DEPT (xem moduleViewConfig()).
+  // Các lớp xem khác LUÔN CỐ ĐỊNH, không bị map này đụng tới: admin, quyền quản lý/tổng hợp toàn công ty
+  // (budgetManage/paymentManage/...), người đang là approver theo quy trình dù khác phòng ban — xem
+  // deptAutoViewOn()/extraViewScopeAllows() ở lib/recordViewScope.js. 16 key hợp lệ: 11 module gốc
+  // (budget, payment, office, car, contract, submission, meeting, operationOrder, operationStoreOpening,
+  // operationRepair, report) + 5 module mở rộng v24.74 (task, itTicket, itPriceApproval, doc, checklist,
+  // vpp — thực ra 6 key vì "IT" tách 2 module con) — xem DEPT_VIEW_SCOPE_MODULES ở lib/recordViewScope.js
+  // (nguồn khai báo DUY NHẤT, màn admin tự render theo đúng danh sách này).
   deptViewScopeConfig: {},
   // ("operationOrderDeptWorkflows" — quy trình duyệt Đơn Hàng theo phòng ban — đã bị XOÁ HẲN, thay bằng
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.

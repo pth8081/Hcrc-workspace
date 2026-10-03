@@ -1747,7 +1747,7 @@ const LAZY_DATA_GROUPS = {
   itSupport: {
     collections: [
       { key: 'itServiceRenewals', filter: filterItServiceRenewalsForUser },
-      { key: 'itSupportTickets', filter: filterItSupportTicketsForUser }
+      { key: 'itSupportTickets', filter: filterItSupportTicketsForUser, needsAppData: true }
     ]
   },
   laborContract: {
@@ -1771,7 +1771,7 @@ const LAZY_DATA_GROUPS = {
   checklist: {
     collections: [
       { key: 'checklistTemplates', filter: filterChecklistTemplatesForUser, needsAppData: true },
-      { key: 'checklistSubmissions', loader: (user) => loadChecklistSubmissionsScoped(user), filter: filterChecklistSubmissionsForUser }
+      { key: 'checklistSubmissions', loader: (user) => loadChecklistSubmissionsScoped(user), filter: filterChecklistSubmissionsForUser, needsAppData: true }
     ]
   }
 };

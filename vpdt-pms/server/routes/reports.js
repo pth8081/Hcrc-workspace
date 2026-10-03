@@ -115,7 +115,7 @@ const REPORT_QUERY_CONFIGS = {
     filterFn: filterInternalPostsForUser, needsAppData: false, ignoreDept: true,
     postFilter: items => items.filter(r => r.status !== 'PENDING' && r.status !== 'REJECTED')
   },
-  itSupportTickets: { filterFn: filterItSupportTicketsForUser, needsAppData: false },
+  itSupportTickets: { filterFn: filterItSupportTicketsForUser, needsAppData: true },
   // itPriceApprovals/itServiceRenewals — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Trung bình): 2
   // module CÓ luồng tạo/duyệt hồ sơ thật (đúng quy tắc CLAUDE.md "module mới có tạo hồ sơ phải thêm vào
   // Báo Cáo") nhưng trước đây hoàn toàn vắng mặt ở đây — thêm entry mirror khuôn hàm canView*() thật của
@@ -166,7 +166,7 @@ const REPORT_QUERY_CONFIGS = {
   // mà KHÔNG cấp thêm quyền vào module Checklist thật (canAccessChecklistModule() không đổi). Bảng
   // ChecklistSubmissions không có cột Dept (chỉ StoreCode, phân quyền PHẲNG — xem sql/schema.sql) nên
   // where.Dept ở route bên dưới tự bỏ qua (cfg.columns.Dept undefined), không cần ignoreDept.
-  checklistSubmissions: { filterFn: filterChecklistSubmissionsForReportCrossView, needsAppData: false },
+  checklistSubmissions: { filterFn: filterChecklistSubmissionsForReportCrossView, needsAppData: true },
   // Mua Hàng > BAS (v23.30) — CÙNG khuôn checklistSubmissions ngay trên: filterFn RIÊNG
   // (filterRebateCalculationsForReportView) cho phép xem chéo qua reportViewAll/reportExtraKeys mà KHÔNG
   // cấp quyền vào module Mua Hàng thật (canAccessPurchasingModule() ở client không đổi). Bảng

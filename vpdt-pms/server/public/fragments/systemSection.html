@@ -416,25 +416,25 @@
     </div>
   </div>
 
-  <!-- 🔒 Phạm Vi Xem Theo Phòng Ban (10/2026, theo yêu cầu người dùng "làm ma trận để tự cấu hình khoá/mở
-       xem theo phòng ban") — 11 module hiện CỨNG 1 nhánh "cùng phòng ban là tự động xem được" (xem
-       DEPT_VIEW_SCOPE_MODULES/deptAutoViewOn() ở lib/recordViewScope.js, DEPT_VIEW_SCOPE_MODULE_LABELS ở
-       module-admin-deptviewscope.js) — màn này cho admin tắt/bật TỪNG module mà không cần sửa code. Tắt 1
-       module thì người trong phòng ban đó CHỈ còn thấy đúng hồ sơ do CHÍNH MÌNH tạo — các lớp xem khác
-       (admin, quyền quản lý toàn công ty, quản lý cấp trên của người tạo, người đang là approver dù khác
-       phòng ban) KHÔNG bị ảnh hưởng, luôn giữ nguyên. Mặc định (chưa đụng tới màn này) = BẬT hết, giữ
-       nguyên hành vi cũ, không ai bị mất quyền xem gì cả. -->
+  <!-- 🔒 Phạm Vi Xem Theo Phòng Ban (10/2026, nâng cấp lên MA TRẬN 4 TRẠNG THÁI ở v24.74 theo yêu cầu
+       "cần 4 trạng thái này mới đúng để có thể chọn tắt mở có thể xem được hoặc không thể xem được") —
+       16 module cấu hình ĐỘC LẬP qua đúng 1 object { mode, extraViewers, managerCanView } mỗi module
+       (xem moduleViewConfig()/DEPT_VIEW_SCOPE_MODULES ở lib/recordViewScope.js, DEPT_VIEW_SCOPE_MODULE_LABELS
+       ở module-admin-deptviewscope.js). Các lớp xem khác (admin, quyền quản lý toàn công ty, người đang
+       được phân công duyệt dù khác phòng ban) KHÔNG bị ảnh hưởng bởi màn này, luôn giữ nguyên. Mặc định
+       (chưa đụng tới màn này) khớp ĐÚNG hành vi gốc của từng module — không ai bị mất/thêm quyền xem gì. -->
   <div id="advWorkflowSubDeptViewScope" class="hidden space-y-4">
     <div class="bg-white p-4 rounded border space-y-3">
       <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">🔒 Phạm Vi Xem Theo Phòng Ban</h3>
-      <p class="text-[11px] text-gray-500 italic">Mặc định MỌI module đều BẬT: ai cùng phòng ban với hồ sơ cũng tự động xem được (dù không phải người tạo). Tắt 1 module thì người trong phòng ban đó CHỈ còn thấy đúng hồ sơ do chính mình tạo — quyền quản lý toàn công ty, quản lý cấp trên của người tạo, và người đang được phân công duyệt (dù khác phòng ban) KHÔNG bị ảnh hưởng.</p>
+      <p class="text-[11px] text-gray-500 italic">4 trạng thái cho mỗi module — (1)/(2) chọn 1 trong 2 (chỉ người tạo xem HOẶC cùng phòng tự động xem); (3)/(4) là lớp CỘNG THÊM, không loại trừ (1)/(2): "Chọn người xem" là danh sách dùng chung toàn công ty (ai trong đó xem được MỌI bản ghi của module, bất kể phòng ban), "Quản lý toàn quyền xem" cho trưởng phòng (trực tiếp/gián tiếp theo Cơ Cấu Tổ Chức) của người tạo luôn xem được dù đang ở mode "Chỉ người tạo xem".</p>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse text-xs text-left">
           <thead class="bg-gray-100 text-gray-700 font-bold">
             <tr>
               <th class="p-2 border">Module</th>
-              <th class="p-2 border text-center">Bật</th>
-              <th class="p-2 border">Trạng Thái</th>
+              <th class="p-2 border">1/2. Phạm Vi Cơ Bản</th>
+              <th class="p-2 border">3. Chọn Người Xem (toàn công ty)</th>
+              <th class="p-2 border text-center">4. Quản Lý Toàn Quyền Xem</th>
             </tr>
           </thead>
           <tbody id="deptViewScopeTableBody"></tbody>

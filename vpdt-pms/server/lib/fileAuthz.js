@@ -495,7 +495,9 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   // nhánh đó (nếu có) sẽ luôn coi như rỗng.
   if (owning.paymentRequest) return canViewPaymentRequest(user, owning.item, await getAllAppData());
   if (owning.hrProcess) return canViewHrProcess(user, owning.item);
-  if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item);
+  // canViewChecklistSubmission() cần appData (4-state model 10/2026 — nhánh mode DEPT có thể bị TẮT +
+  // extraViewers/managerCanView, xem lib/recordViewScope.js).
+  if (owning.checklistSubmission) return canViewChecklistSubmission(user, owning.item, await getAllAppData());
   // 5 collection mới vá (xem chú thích findOwningRecord()) — cùng khuôn hrProcess/checklistSubmission:
   // dùng thẳng canView* đã có sẵn cho cả 2 mode (không có khái niệm quyền "tải riêng" tách khỏi "xem").
   // canViewTaskRecord() cần appData (nhánh "trưởng phòng của người được giao", xem isManagerOf()).
@@ -504,7 +506,9 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   // canViewMeeting() cần appData (nhánh approver theo meetingDeptWorkflows mới thêm, 10/2026 — xem
   // lib/recordViewScope.js) — mirror đúng chú thích paymentRequest ở trên.
   if (owning.meeting) return canViewMeeting(user, owning.item, await getAllAppData());
-  if (owning.itSupportTicket) return canViewItSupportTicket(user, owning.item);
+  // canViewItSupportTicket() cần appData (4-state model 10/2026 — nhánh mode DEPT mới + extraViewers/
+  // managerCanView, xem lib/recordViewScope.js).
+  if (owning.itSupportTicket) return canViewItSupportTicket(user, owning.item, await getAllAppData());
   if (owning.hrFeedback) return canViewHrFeedback(user, owning.item);
   // Đồng Phục — không cần appData (canViewUniformPeriod/Issuance/Transfer chỉ đọc user.perms + item).
   if (owning.uniformPeriod) return canViewUniformPeriod(user, owning.item);

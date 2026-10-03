@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**24.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.74 (2026-10-03): Ma Trận "🔒 Phạm Vi Xem Theo Phòng Ban" — nâng cấp lên 4 TRẠNG THÁI + 6 module mới
+
+Người dùng: "Cần 4 trạng thái này mới đúng để có thể chọn tắt mở có thể xem được hoặc không thể xem
+được... Và phát triển sang các module khác để sau này chặn hoặc phân quyền cho chặt chẽ." Nâng cấp v24.73
+(toggle BẬT/TẮT đơn giản) thành ma trận 4 trạng thái, đồng thời mở rộng từ 11 lên 17 key (6 key mới: Công
+Việc, Hỗ Trợ IT ticket, Phê Duyệt Giá, Tài Liệu, Checklist Đánh Giá Siêu Thị, Văn Phòng Phẩm).
+
+- **4 trạng thái** cho mỗi module (`deptViewScopeConfig[key]` nay là object `{ mode, extraViewers,
+  managerCanView }`, `moduleViewConfig()`/`extraViewScopeAllows()` ở `lib/recordViewScope.js`):
+  1. `mode: 'CREATOR_ONLY'` — chỉ người tạo xem.
+  2. `mode: 'DEPT'` — cùng phòng ban tự động xem (loại trừ #1).
+  3. `extraViewers: string[]` — "Chọn người xem": whitelist DÙNG CHUNG TOÀN CÔNG TY (xác nhận qua
+     AskUserQuestion — KHÔNG phải gán riêng theo từng phòng ban), cộng thêm vào #1/#2.
+  4. `managerCanView: boolean` — "Người quản lý toàn quyền xem": tái dùng ĐÚNG `isManagerOf()` (quản lý
+     trực tiếp+gián tiếp theo Cơ Cấu Tổ Chức, xác nhận qua AskUserQuestion) của NGƯỜI TẠO hồ sơ.
+  Tương thích ngược hoàn toàn với dữ liệu boolean cũ (v24.73) và với key vắng mặt (mỗi module có
+  `defaultMode` riêng khớp đúng hành vi gốc, xem `DEPT_VIEW_SCOPE_MODULES`).
+- **Lỗi đã vá kèm theo**: 4 module "hồ sơ của ĐƠN VỊ" (Thanh Toán, Vận Hành Đặt Hàng/Mở Mới/Sửa Chữa)
+  thiếu nhánh "chính người tạo luôn xem" mà mọi module chị em khác đều có — khi tắt dept-view, chính
+  người tạo cũng mất quyền xem lại hồ sơ mình vừa tạo. Đã thêm nhánh này cho cả 4.
+- **6 module mới** (mỗi module đánh giá fit riêng trước khi thêm):
+  - **Công Việc**: "người tạo" = người GIAO việc (assignedBy, theo xác nhận người dùng) — lớp
+    assignedTo/collaborators/quản lý-của-assignedTo LUÔN CỐ ĐỊNH; mode DEPT là tính năng MỚI hoàn toàn
+    (Task trước đây không có khái niệm phòng ban).
+  - **Hỗ Trợ IT (ticket)** + **Phê Duyệt Giá**: defaultMode CREATOR_ONLY (giữ đúng thiết kế cố ý hẹp từ
+    trước) — admin có thể TỰ CHỌN mở mode DEPT nếu muốn. `itPriceSupport` (đội hỗ trợ giá) tiếp tục LUÔN
+    xem hết, không bị ảnh hưởng bởi map này (xác nhận người dùng).
+  - **Tài Liệu**: defaultMode CREATOR_ONLY (khớp đúng default gốc — phải cấp viewDraftDepts/
+    viewApprovedDepts riêng mới xem được dù cùng phòng); mode DEPT ở đây là lớp CỘNG THÊM, không đụng cơ
+    chế cũ.
+  - **Checklist Đánh Giá Siêu Thị**: defaultMode DEPT (đã có sẵn nhánh "cùng siêu thị tự động xem" từ
+    trước) — admin có thể tắt.
+  - **Văn Phòng Phẩm**: defaultMode CREATOR_ONLY (khớp đúng default gốc: chỉ người tạo + approver).
+- **Màn cấu hình**: bảng 17 dòng, mỗi dòng radio (mode) + ô chọn nhiều người (extraViewers, tái dùng
+  `renderPeopleMultiSelect()`) + checkbox (managerCanView).
+- **Kiểm thử**: `tests/test-dept-view-scope.js` (52 kịch bản thuần) + `tests/test-dept-view-scope-ui.js`
+  (demo Chromium — bảng vẽ đúng cả dữ liệu CŨ dạng boolean lẫn object MỚI, sửa/lưu đúng payload). Full
+  regression các module liên quan: PASS, không hồi quy.
+- **Việc cần làm khi deploy**: copy code + `pm2 restart` — không có thay đổi schema/env/dependency mới.
 
 ## v24.73 (2026-10-03): Ma Trận "🔒 Phạm Vi Xem Theo Phòng Ban" — tự cấu hình 11 module
 
