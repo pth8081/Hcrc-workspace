@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**24.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.77 (2026-10-03): Vá lỗ hổng phân quyền module/tab/sub-tab — tắt checkbox Mục 0 phải chặn luôn, không chỉ ẩn nút
+
+Người dùng báo cáo: tắt quyền vào 1 module/tab/sub-tab ở Mục 0 ("Quyền Truy Cập Module") thì nút điều
+hướng ẩn đúng, nhưng vẫn truy cập/xem được nội dung qua đường khác — yêu cầu rà soát cẩn thận + demo
+trước khi vá. Rà soát toàn bộ ~28 hàm chuyển tab con phát hiện 2 lớp lỗi lặp lại:
+
+- **Lớp 1 — "button-only gating"**: checkbox Mục 0 chỉ dùng để ẩn CSS của nút điều hướng, nội dung vẫn
+  vẽ ra nếu có đường gọi khác tới đúng hàm render. Phát hiện thật (đã demo ảnh cho người dùng xác nhận
+  trước khi vá): `setOperationStoreSubTab()` (`module-vanhanh.js`) — gọi `setOperationStoreSubTab('ESTIMATE')`
+  (đúng luồng `submitOperationStoreOpening()`/`submitOperationRepair()`/nút "🔍 Xem" ở Approval Hub) vẫn
+  hiện đủ số liệu ngân sách dù tab "📂 Dự Toán" đã bị tắt riêng qua `moduleAccess.vanHanhEstimate`. Đã sửa
+  theo khuôn "compute-then-redirect" (tự tính lại sibling được phép TRƯỚC khi vẽ, không tin nút gọi đã
+  kiểm tra).
+- **Lớp 2 — "stuck-fallback"**: khi admin tắt HẾT mọi sibling cùng cấp, code `fallback ? fallback[0] : x`
+  giữ nguyên tab đang bị khoá (thay vì dừng hẳn) — nội dung của tab đó vẫn vẽ. Phát hiện ở
+  `setItSupportSubTab()` (`module-itsupport-price.js`), `resolveAccessibleInternalSubTab()`/
+  `resolveAccessibleTrainingLmsTab()` (`core.js`, dùng cho Truyền Thông Nội Bộ/Đào Tạo) — đổi fallback về
+  `null` + thêm `if (!subTab) return;` ở nơi cần (nơi còn lại đã tự an toàn khi nhận `null`, xác minh qua
+  đọc code, không đoán).
+- **Thêm lớp chặn `switchTab()` còn thiếu** cho `'itSupport'` (gọi tay/console bỏ qua mọi guard trước đó)
+  và `'system'` (mức Thấp/cosmetic — không lộ dữ liệu, chỉ hiện wrapper rỗng + tải fragment không cần).
+- Đã xác minh riêng: Checklist/Thanh Toán KHÔNG cần vá thêm — cả 2 có lớp quyền chi tiết độc lập
+  (`canViewPaymentRequest()`/4 quyền phẳng Checklist) chặn đúng ở server, không "mở cho tất cả theo mặc
+  định" như lo ngại ban đầu.
+- Test mới: `tests/test-muc0-module-access-tree.js` thêm 3 kịch bản G/H/I (dùng Playwright nạp nguyên vẹn
+  `public/index.html`/`core.js`, gọi trực tiếp hàm thật, không mock lại logic phân quyền) chốt lại cả 3
+  lỗi thật vừa vá, chống tái phát.
 
 ## v24.76 (2026-10-03): Làm gọn phân quyền Checklist — dời Cấu Hình vào Hệ Thống + 4 quyền phẳng
 

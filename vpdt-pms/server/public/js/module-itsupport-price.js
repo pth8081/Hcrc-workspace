@@ -21,8 +21,12 @@ function setItSupportSubTab(subTab) {
   const itTabOrder = [['PRICE', canPrice], ['TICKET', canTicket], ['RENEWAL', canRenewal]];
   const curItTab = itTabOrder.find(([k]) => k === subTab);
   if (!curItTab || !curItTab[1]) {
+    // LỖI ĐÃ VÁ (11/2026): trước đây `subTab = fallback ? fallback[0] : subTab` GIỮ NGUYÊN tab bị cấm khi
+    // KHÔNG còn sibling nào được phép (VD admin tắt hẳn module cha "itSupport" qua Mục 0 -> cả 3 sibling
+    // đều false) — render vẫn chạy tiếp với subTab cũ, hiện đủ dữ liệu dù đã bị khoá. Đổi về `null` để các
+    // nhánh render bên dưới tự dừng (xem `if (!subTab) return;`).
     const fallback = itTabOrder.find(([, ok]) => ok);
-    subTab = fallback ? fallback[0] : subTab;
+    subTab = fallback ? fallback[0] : null;
   }
   activeItSupportSubTab = subTab;
   document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
@@ -33,6 +37,10 @@ function setItSupportSubTab(subTab) {
   document.getElementById('btnItSubPrice').className = (subTab === 'PRICE' ? activeCls : inactiveCls) + (canPrice ? '' : ' hidden');
   document.getElementById('btnItSubTicket').className = (subTab === 'TICKET' ? activeCls : inactiveCls) + (canTicket ? '' : ' hidden');
   document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canRenewal ? '' : ' hidden');
+
+  // Không còn sub-tab nào được phép xem (cả 3 checkbox Mục 0 liên quan đều đã bị tắt) — mọi khung đã ẩn
+  // hết ở trên, dừng luôn, không vẽ nội dung gì.
+  if (!subTab) return;
 
   if (subTab === 'PRICE') {
     // Form tạo đề xuất (Bán Buôn/Bán Lẻ) ĐÃ CHUYỂN khỏi Hỗ Trợ IT (10/2026) sang module-vanhanh.js/

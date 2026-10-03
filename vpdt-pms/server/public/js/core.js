@@ -3635,9 +3635,12 @@ function canAccessInternalSubTab(user, subTab) {
 }
 // Trả về đúng subTab đang xin mở nếu còn thấy được, nếu không trả về tab con ĐẦU TIÊN mà user còn thấy
 // (fallback — admin hiếm khi tắt hết cả 5 tab, nhưng tránh kẹt ở 1 tab đã bị khoá nếu có).
+// LỖI ĐÃ VÁ (11/2026): trước đây `|| subTab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn sibling nào được
+// phép (cả 5 checkbox con đều bị tắt) — setInternalSubTab() vẫn vẽ nội dung của đúng tab vừa bị khoá.
+// Trả `null` để nơi gọi tự dừng hẳn, không vẽ gì.
 function resolveAccessibleInternalSubTab(user, subTab) {
   if (canAccessInternalSubTab(user, subTab)) return subTab;
-  return Object.keys(INTERNAL_SUBTAB_MODULE_KEY).find(k => canAccessInternalSubTab(user, k)) || subTab;
+  return Object.keys(INTERNAL_SUBTAB_MODULE_KEY).find(k => canAccessInternalSubTab(user, k)) || null;
 }
 
 // Mục 0 — gác 9 tab cháu LMS lồng trong tab con "Đào Tạo" (setTrainingLmsTab(), module-internalcomms-
@@ -3650,9 +3653,11 @@ function canAccessTrainingLmsTab(user, tab) {
   if (!key) return false;
   return hasModuleAccess(user, key);
 }
+// LỖI ĐÃ VÁ (11/2026) — cùng lý do resolveAccessibleInternalSubTab() ở trên: trả `null` thay vì giữ
+// nguyên `tab` bị khoá khi KHÔNG còn tab cháu LMS nào được phép (cả 9 checkbox đều tắt).
 function resolveAccessibleTrainingLmsTab(user, tab) {
   if (canAccessTrainingLmsTab(user, tab)) return tab;
-  return Object.keys(TRAINING_LMS_TAB_MODULE_KEY).find(k => canAccessTrainingLmsTab(user, k)) || tab;
+  return Object.keys(TRAINING_LMS_TAB_MODULE_KEY).find(k => canAccessTrainingLmsTab(user, k)) || null;
 }
 
 function canAccessSubmissionModule(user) {
@@ -8749,6 +8754,23 @@ async function switchTab(tabName) {
   }
   if (tabName === 'nghiepVu' && !canAccessNghiepVuModule(currentUser)) {
     alert('⛔ Bạn không có quyền truy cập Module Nghiệp Vụ!');
+    return;
+  }
+  // LỖI ĐÃ VÁ (11/2026, phát hiện qua rà soát "tắt quyền sub-tab phải chặn luôn, không chỉ ẩn nút"):
+  // "itSupport" là module DUY NHẤT thiếu hẳn khối chặn ở đây — switchTab('itSupport') (gọi thẳng qua
+  // console, hoặc qua core-approvalhub.js nút "🔍 Xem" của itPriceApprovals) bỏ qua mọi kiểm tra quyền và
+  // render thẳng xuống _dispatchTabRender() (không có guard ở đó nữa, luôn gọi setItSupportSubTab()).
+  if (tabName === 'itSupport' && !canAccessItSupportModule(currentUser)) {
+    alert('⛔ Bạn không có quyền truy cập Module Hỗ Trợ IT!');
+    return;
+  }
+  // LỖI ĐÃ VÁ (11/2026, cùng đợt itSupport ở trên) — mức Thấp/cosmetic: "system" (⚙️ Hệ Thống, màn CẤU
+  // HÌNH ADMIN, không thuộc cây Mục 0) cũng thiếu guard — gọi tay switchTab('system') với non-admin
+  // KHÔNG lộ dữ liệu gì (4 panel con formSection/adminSection/workflowSection/logSection vẫn chỉ hiện
+  // khi admin, xem _dispatchTabRender()) nhưng #systemSection (wrapper rỗng) vẫn hiện ra + tải lazy
+  // fragment không cần thiết — chặn hẳn ở đây cho nhất quán với mọi module khác, không đợi lộ gì mới vá.
+  if (tabName === 'system' && !currentUser.perms?.admin) {
+    alert('⛔ Bạn không có quyền truy cập Hệ Thống!');
     return;
   }
 

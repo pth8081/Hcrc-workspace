@@ -50,6 +50,44 @@ const WORK_ITEM = {
   acceptorUsername: 'acceptor1', acceptorName: 'NV Nghiệm Thu', history: []
 };
 
+// ===== Fixture cho 3 LỖI ĐÃ VÁ ở mục G/H/I (phát hiện 11/2026, demo "menu ẩn nhưng vẫn xem được") =====
+// G) setOperationStoreSubTab('ESTIMATE') từng vẽ đủ dữ liệu ngân sách dù checkbox "vanHanhEstimate" đã
+// bị tắt riêng (xem demo.js ở scratchpad đợt vá — RECORD_G mirror ĐÚNG shape record đã dùng để demo lỗi
+// thật cho người dùng, 2 field approvedBudget/estimateTotalAmount là dữ liệu "nhạy cảm" bị lộ).
+const ESTIMATE_BLOCKED_VIEWER = {
+  username: 'opviewer_g', name: 'NV Xem Dự Toán Bị Chặn', dept: 'Vận Hành',
+  perms: { operationRecordViewAll: true, moduleAccess: { vanHanhEstimate: false } }
+};
+const RECORD_G = {
+  id: 9201, code: 'MMST-9201', storeName: 'Siêu Thị Quận 1', dept: 'Siêu thị A', creator: 'giamdoc_a',
+  status: 'APPROVED', estimateStatus: 'APPROVED', approvedBudget: 850000000, estimateTotalAmount: 812000000,
+  estimateItems: [], history: []
+};
+// H) switchTab('itSupport') từng thiếu hẳn khối chặn (bất kỳ ai gọi tay cũng vào được), VÀ
+// setItSupportSubTab() từng giữ nguyên subTab bị cấm (không fallback null) khi cả 3 checkbox con đều
+// tắt — khiến renderItPriceApprovals() vẫn chạy dù module cha "itSupport" đã bị khoá hẳn.
+// Giữ module cha "itSupport" MỞ (mặc định, không set false) — mục đích CHỈ bắt lỗi resolver
+// setItSupportSubTab() tự nó (không nhờ guard switchTab() chặn hộ), đúng khuôn "stuck-fallback" (xem
+// resolveAccessibleInternalSubTab() cùng đợt vá). Guard switchTab('itSupport') (Gap 1) đã có test riêng
+// implicit qua việc hàm KHÔNG bị block ở đây dù gọi switchTab('itSupport') trực tiếp.
+const ITSUPPORT_BLOCKED_USER = {
+  username: 'itviewer_h', name: 'NV Bị Khoá Hỗ Trợ IT', dept: 'Vận Hành',
+  perms: { moduleAccess: { itSupportPrice: false, itSupportTicket: false, itSupportRenewal: false } }
+};
+const ITPRICE_RECORD_H = {
+  id: 9301, code: 'BL-9301', priceType: 'RETAIL', status: 'PENDING', creator: 'nv_h',
+  productName: 'MAT HANG BI KHOA H', history: []
+};
+// I) resolveAccessibleInternalSubTab() từng giữ nguyên subTab bị cấm (`|| subTab`) khi cả 5 checkbox
+// con (internalNews/internalTraining/internalRecruitment/internalShare/internalQna) đều tắt.
+const INTERNAL_BLOCKED_USER = {
+  username: 'internalviewer_i', name: 'NV Bị Khoá Truyền Thông', dept: 'Vận Hành',
+  perms: { moduleAccess: { internalNews: false, internalTraining: false, internalRecruitment: false, internalShare: false, internalQna: false } }
+};
+const INTERNAL_POST_I = {
+  id: 9401, type: 'NEWS', title: 'TIN BI KHOA I', content: 'noi dung', creator: 'nv_i', createdAt: new Date().toISOString(), likes: [], comments: [], seenBy: []
+};
+
 async function loginAs(page, user) {
   await page.evaluate(async (u) => {
     window.__resetCapture();
@@ -60,8 +98,11 @@ async function loginAs(page, user) {
 async function main() {
   const state = createMockState({
     depts: ['Vận Hành'],
-    users: [ASSIGNEE_ONLY, ACCEPTOR_ONLY, FULL_MANAGER, REPORT_VIEWER],
-    operationWorkItems: [WORK_ITEM]
+    users: [ASSIGNEE_ONLY, ACCEPTOR_ONLY, FULL_MANAGER, REPORT_VIEWER, ESTIMATE_BLOCKED_VIEWER, ITSUPPORT_BLOCKED_USER, INTERNAL_BLOCKED_USER],
+    operationWorkItems: [WORK_ITEM],
+    operationStoreOpenings: [RECORD_G],
+    itPriceApprovals: [ITPRICE_RECORD_H],
+    internalPosts: [INTERNAL_POST_I]
   });
 
   const server = await startStaticServer(PORT);
@@ -192,6 +233,59 @@ async function main() {
       await page.evaluate(() => { setVanHanhSubTab('STORE'); });
       const hiddenAfter = await page.evaluate(() => document.getElementById('btnOpStoreSubReport').className.includes('hidden'));
       assert(hiddenAfter, 'Nút "📊 Báo Cáo" PHẢI còn ẩn SAU KHI bấm vào tab con "Siêu Thị" — trước fix, setOperationStoreSubTab() ghi đè mất class "hidden" ngay bước này, khiến nút hiện ra dù không ai có quyền.');
+    });
+
+    await run.run('G) LỖI ĐÃ VÁ: setOperationStoreSubTab("ESTIMATE") không còn vẽ dữ liệu ngân sách khi "vanHanhEstimate" bị tắt', async () => {
+      // Đúng luồng người dùng thật (không gọi tắt canAccessOperationSubTab()): bấm Vận Hành -> Siêu Thị
+      // -> (giả lập bấm "🔍 Xem"/mở đề xuất) gọi setOperationStoreSubTab('ESTIMATE') — đây CHÍNH XÁC là
+      // hàm demo đã chứng minh lộ dữ liệu ngân sách của 2 hồ sơ khác phòng ban cho người dùng xác nhận.
+      await loginAs(page, ESTIMATE_BLOCKED_VIEWER);
+      await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('STORE'); });
+      const btnHidden = await page.evaluate(() => document.getElementById('btnOpStoreSubEstimate').className.includes('hidden'));
+      assert(btnHidden, 'Nút "📂 Dự Toán" phải ẩn (operationRecordViewAll không ghi đè được checkbox Mục 0 "vanHanhEstimate" đã tắt riêng)');
+      await page.evaluate(() => { setOperationStoreSubTab('ESTIMATE'); });
+      const leaked = await page.evaluate(() => {
+        const tbody = document.getElementById('operationEstimateTableBody');
+        return { rowCount: tbody ? tbody.querySelectorAll('tr').length : -1, text: tbody ? tbody.innerText : '' };
+      });
+      assertEqual(leaked.rowCount, 0, `Bảng Dự Toán PHẢI rỗng (0 dòng) khi gọi setOperationStoreSubTab("ESTIMATE") sau khi tắt "vanHanhEstimate" — TRƯỚC ĐÂY vẫn vẽ đủ dữ liệu ngân sách hồ sơ MMST-9201 dù nút điều hướng đã ẩn đúng (lỗi thật đã demo cho người dùng). Nội dung bảng hiện tại: ${leaked.text}`);
+      assert(!leaked.text.includes('MMST-9201'), 'Nội dung bảng Dự Toán KHÔNG được chứa mã hồ sơ đã bị khoá quyền xem (MMST-9201)');
+    });
+
+    await run.run('H) LỖI ĐÃ VÁ: setItSupportSubTab() không còn kẹt ở tab đã bị khoá khi tắt hết 3 checkbox con', async () => {
+      // Module cha "itSupport" vẫn MỞ (không bị chặn bởi guard switchTab('itSupport') mới thêm) — bắt
+      // đúng lỗi NẰM TRONG resolver của setItSupportSubTab() (trước đây `fallback ? fallback[0] : subTab`
+      // giữ nguyên tab PRICE bị cấm khi cả 3 sibling đều false, vẫn gọi renderItPriceApprovals()).
+      await loginAs(page, ITSUPPORT_BLOCKED_USER);
+      await page.evaluate(() => { switchTab('itSupport'); });
+      const alerts = await page.evaluate(() => window.__alerts || []);
+      assertEqual(alerts.length, 0, `switchTab("itSupport") KHÔNG được chặn bằng alert ở kịch bản này (module cha vẫn mở, chỉ 3 tab con bị tắt) — alerts: ${JSON.stringify(alerts)}`);
+      const state = await page.evaluate(() => {
+        const sentinel = '__SENTINEL_H__';
+        document.getElementById('itPriceTableBody').innerHTML = `<tr><td>${sentinel}</td></tr>`;
+        setItSupportSubTab('PRICE');
+        const tbody = document.getElementById('itPriceTableBody');
+        return {
+          activeTab: activeItSupportSubTab,
+          priceWrapHidden: document.getElementById('itSubPrice').classList.contains('hidden'),
+          sentinelStillThere: tbody.innerHTML.includes(sentinel)
+        };
+      });
+      assertEqual(state.activeTab, null, `activeItSupportSubTab PHẢI là null khi cả 3 checkbox con đều bị tắt — TRƯỚC ĐÂY giữ nguyên "PRICE" (fallback về subTab cũ) khiến nhánh render bên dưới vẫn chạy. Giá trị thực tế: ${state.activeTab}`);
+      assert(state.priceWrapHidden, 'Khung "🏷️ Phê Duyệt Giá" phải ẩn khi không còn sub-tab nào được phép');
+      assert(state.sentinelStillThere, 'renderItPriceApprovals() KHÔNG được gọi lại (nội dung sentinel test phải còn nguyên) — TRƯỚC ĐÂY vẫn gọi render dù subTab đã bị khoá, nạp đè lên bằng dữ liệu hồ sơ BL-9301 thật.');
+    });
+
+    await run.run('I) LỖI ĐÃ VÁ: resolveAccessibleInternalSubTab() không còn kẹt ở tab đã bị khoá khi tắt hết 5 checkbox con', async () => {
+      await loginAs(page, INTERNAL_BLOCKED_USER);
+      await page.evaluate(() => { switchTab('internal'); });
+      const state = await page.evaluate(() => {
+        setInternalSubTab('NEWS');
+        const container = document.getElementById('internalPostsContainer');
+        return { activeSubTab: activeInternalSubTab, containerText: container ? container.innerText : '' };
+      });
+      assertEqual(state.activeSubTab, null, `activeInternalSubTab PHẢI là null khi cả 5 checkbox con (NEWS/TRAINING/RECRUITMENT/SHARE/QNA) đều bị tắt — TRƯỚC ĐÂY giữ nguyên "NEWS" (\`|| subTab\`), khiến renderInternalPosts() vẫn vẽ bài đăng thuộc tab đã khoá. Giá trị thực tế: ${state.activeSubTab}`);
+      assert(!state.containerText.includes('TIN BI KHOA I'), 'Nội dung khu vực bài đăng KHÔNG được chứa tiêu đề bài đăng đã bị khoá quyền xem (TIN BI KHOA I)');
     });
 
   } finally {

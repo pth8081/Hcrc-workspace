@@ -4248,6 +4248,20 @@ cần tắt tay từng tab con một. Mọi checkbox MỚI ở trên đều **m�
 — không ảnh hưởng tới bất kỳ ai đang dùng hệ thống cho tới khi admin chủ
 động vào Phân Quyền tắt riêng.
 
+**Vá lỗi thật (11/2026): nguyên tắc GÁC CỨNG ở trên trước đây KHÔNG được đảm
+bảo end-to-end ở 1 số nơi** — rà soát toàn bộ ~28 hàm chuyển tab con phát
+hiện 2 lớp lỗi: (1) 1 vài hàm chỉ dùng checkbox khối 0 để ẨN NÚT điều hướng
+(CSS), còn nội dung bảng dữ liệu vẫn vẽ ra bất kể nút có ẩn hay không — nếu
+có cách khác gọi tới đúng hàm vẽ đó (VD bấm "🔍 Xem" ở hồ sơ liên quan) thì
+vẫn xem được dữ liệu dù tab đã bị khoá (phát hiện thật ở "Vận Hành > Siêu
+Thị > Dự Toán"); (2) khi admin tắt HẾT mọi tab con cùng cấp (không còn tab
+nào được phép), 1 vài hàm vẫn giữ nguyên tab đang bị khoá thay vì dừng hẳn,
+khiến nội dung tab đó vẫn hiện. Đã vá cả 2 lớp lỗi này (Vận Hành > Siêu Thị,
+Hỗ Trợ IT, Truyền Thông Nội Bộ/Đào Tạo) + thêm lớp chặn `switchTab()` còn
+thiếu cho "Hỗ Trợ IT"/"⚙️ Hệ Thống" (gọi tay/qua console vẫn bị chặn ngay,
+không chỉ ẩn nút) — hành vi ĐÚNG như tài liệu đã mô tả từ trước, không đổi
+ý nghĩa bất kỳ checkbox nào.
+
 **Vá lỗi thật kèm đợt này**: trước đây cấp quyền "Công Việc"/"Nghiệm Thu"
 (Vận Hành > Siêu Thị) cho 1 người CHỈ được gán/chỉ định đúng 1 công việc cụ
 thể (không có quyền quản lý hồ sơ rộng) lại vô tình kéo theo thấy được cả

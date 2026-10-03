@@ -172,7 +172,6 @@ function setVanHanhSubTab(subTab) {
 // đúng tab con đã chọn, nên phải có sẵn ngay từ đầu — không thể khai báo ở 1 file module-*.js được nạp
 // lười (Hạ tầng: nạp module theo cụm, đợt 7).
 function setOperationStoreSubTab(tab) {
-  activeOperationStoreSubTab = tab;
   // LỖI ĐÃ VÁ (phát hiện trong đợt rà soát Mục 0 "không bỏ qua bất kỳ subtab nào", 10/2026): cột thứ 3
   // dưới đây là permKind truyền vào canAccessOperationSubTab() — tabKey 'OPEN' KHÔNG khớp permKind thật
   // của hàm đó ('STORE_OPEN', xem core.js), nên trước đây canAccessOperationSubTab(user,'OPEN') luôn rơi
@@ -187,13 +186,27 @@ function setOperationStoreSubTab(tab) {
     ['ACCEPTANCE', 'opStoreAcceptancePanel', 'btnOpStoreSubAcceptance', 'ACCEPTANCE'],
     ['REPORT', 'opStoreReportPanel', 'btnOpStoreSubReport', 'REPORT']
   ];
-  // LỖI ĐÃ VÁ (10/2026, phát hiện khi chụp ảnh demo đợt Mục 0): trước đây dòng gán btn.className bên
-  // dưới GHI ĐÈ TOÀN BỘ class, xoá mất class "hidden" mà updateOperationStoreSubTabVisibility() vừa
-  // tick NGAY TRƯỚC ĐÓ (setVanHanhSubTab('STORE') luôn gọi 2 hàm này liên tiếp) — khiến TẤT CẢ nút tab
-  // con (kể cả ESTIMATE/EXECUTION/ACCEPTANCE/REPORT vừa được gác quyền Mục 0) LUÔN hiện ra bất kể quyền,
-  // vô hiệu hoá hoàn toàn phần ẩn/hiện mỗi khi người dùng thực sự mở tab "🏬 Siêu Thị". Tính lại ĐÚNG
-  // NGAY TẠI ĐÂY (không phụ thuộc thứ tự gọi 2 hàm) — tự đủ, không cần updateOperationStoreSubTabVisibility()
-  // chạy trước nữa, nhưng vẫn giữ hàm đó (còn dùng để tự nhảy sang tab con đầu tiên còn thấy được).
+  // LỖI ĐÃ VÁ (11/2026, phát hiện qua demo chụp ảnh theo yêu cầu người dùng "tắt quyền sub-tab sâu phải
+  // ẩn VÀ chặn luôn, không chỉ ẩn nút"): hàm này TRƯỚC ĐÂY chỉ dùng quyền để tô màu/ẩn NÚT bấm — phần vẽ
+  // nội dung bên dưới (renderOperationEstimateList()/renderOperationExecutionList()/...) chạy VÔ ĐIỀU
+  // KIỆN theo đúng tham số `tab` truyền vào, không tự kiểm tra lại quyền. 3 nơi gọi thẳng hàm này với 1
+  // tab cố định mà KHÔNG qua setVanHanhSubTab('STORE') (nơi DUY NHẤT từng gọi
+  // updateOperationStoreSubTabVisibility() để tự sửa trước khi gọi xuống đây) vẫn hiển thị đầy đủ dữ liệu
+  // thật dù Mục 0 đã khoá đúng sub-tab đó: submitOperationStoreOpening()/submitOperationRepair() (tự
+  // nhảy sang "ESTIMATE" ngay sau khi nộp hồ sơ) và core-approvalhub.js (nút "🔍 Xem" ở Phê Duyệt tập
+  // trung cho operationStoreOpenings/operationRepairs). Tự kiểm tra + tự sửa lại `tab` NGAY TẠI ĐÂY
+  // (đúng khuôn setCarSubTab()/setMeetingSubTab()/setContractSubTab() — "không tin bất kỳ nơi gọi nào đã
+  // kiểm tra quyền hộ", cùng nguyên tắc "server luôn tự xác minh lại" áp cho chính lớp render client) —
+  // không còn phụ thuộc updateOperationStoreSubTabVisibility() chạy trước mới an toàn nữa (hàm đó vẫn giữ
+  // nguyên, chỉ còn vai trò tô ẩn/hiện nút lúc finishLogin() khi DOM tab này chưa chắc đã tải).
+  const found = tabs.find(([key]) => key === tab);
+  const stillAllowed = found && canAccessOperationSubTab(currentUser, found[3]);
+  if (!stillAllowed) {
+    const fallback = tabs.find(([, , , permKind]) => canAccessOperationSubTab(currentUser, permKind));
+    tab = fallback ? fallback[0] : null;
+  }
+  activeOperationStoreSubTab = tab;
+
   tabs.forEach(([key, wrapId, btnId, permKind]) => {
     const isActive = key === tab;
     document.getElementById(wrapId).classList.toggle('hidden', !isActive);
@@ -201,6 +214,10 @@ function setOperationStoreSubTab(tab) {
     const visible = canAccessOperationSubTab(currentUser, permKind);
     btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-emerald-700 text-white' : 'bg-gray-200 text-gray-700'}` + (visible ? '' : ' hidden');
   });
+
+  // Không còn sub-tab nào được phép xem (mọi checkbox Mục 0 liên quan đều đã bị tắt) — mọi khung đã ẩn
+  // hết ở vòng lặp trên, dừng luôn, không vẽ nội dung gì (tránh vẽ nhầm dữ liệu của tab vừa bị khoá).
+  if (!tab) return;
 
   if (tab === 'OPEN') {
     renderOperationList('operationStoreOpenings');
