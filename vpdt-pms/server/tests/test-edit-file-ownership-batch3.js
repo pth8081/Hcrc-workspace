@@ -70,7 +70,7 @@ function defaultRecords() {
       {
         id: 100, author: 'u1', status: 'DRAFT', type: 'SHARE', title: 'Bài Góc Chia Sẻ test',
         content: 'Nội dung', postCategory: 'CAT1',
-        attachment: { fileUrl: '/uploads/existing-post-attachment.pdf', fileName: 'dinh-kem.pdf' },
+        attachment: { fileUrl: '/uploads/existing-post-attachment.jpg', fileName: 'dinh-kem.jpg', fileType: 'image/jpeg' },
         comments: [], likes: [], readBy: [], customData: {}
       }
     ]
@@ -153,8 +153,8 @@ async function api(method, urlPath, body, asUser) {
 function reset() {
   resetRecords();
   uploadedFilesStore.clear();
-  uploadedFilesStore.set('/uploads/u1-owned-file.pdf', 'u1');
-  uploadedFilesStore.set('/uploads/u2-secret-file.pdf', 'u2');
+  uploadedFilesStore.set('/uploads/u1-owned-file.jpg', 'u1');
+  uploadedFilesStore.set('/uploads/u2-secret-file.jpg', 'u2');
 }
 
 async function main() {
@@ -164,21 +164,21 @@ async function main() {
     // được âm thầm "chiếm quyền sở hữu" file đó qua 1 bài Góc Chia Sẻ nháp.
     reset();
     let r = await api('POST', '/api/records/internalPosts/100/edit',
-      { title: 'Bài Góc Chia Sẻ test', content: 'Nội dung', postCategory: 'CAT1', attachment: { fileUrl: '/uploads/u2-secret-file.pdf', fileName: 'chiem-doat.pdf' } }, U1);
+      { title: 'Bài Góc Chia Sẻ test', content: 'Nội dung', postCategory: 'CAT1', attachment: { fileUrl: '/uploads/u2-secret-file.jpg', fileName: 'chiem-doat.jpg', fileType: 'image/jpeg' } }, U1);
     check('internalPosts/edit: chặn gắn tệp của người khác (u2) — 403', r.status === 403, r.body);
-    check('internalPosts/edit: attachment.fileUrl KHÔNG bị đổi sau khi chặn', RECORDS.internalPosts[0].attachment.fileUrl === '/uploads/existing-post-attachment.pdf', RECORDS.internalPosts[0]);
+    check('internalPosts/edit: attachment.fileUrl KHÔNG bị đổi sau khi chặn', RECORDS.internalPosts[0].attachment.fileUrl === '/uploads/existing-post-attachment.jpg', RECORDS.internalPosts[0]);
 
     // Gắn tệp CHÍNH MÌNH đã tải lên -> vẫn phải hoạt động bình thường (không phá tính năng sửa).
     reset();
     r = await api('POST', '/api/records/internalPosts/100/edit',
-      { title: 'Bài Góc Chia Sẻ test', content: 'Nội dung', postCategory: 'CAT1', attachment: { fileUrl: '/uploads/u1-owned-file.pdf', fileName: 'moi.pdf' } }, U1);
+      { title: 'Bài Góc Chia Sẻ test', content: 'Nội dung', postCategory: 'CAT1', attachment: { fileUrl: '/uploads/u1-owned-file.jpg', fileName: 'moi.jpg', fileType: 'image/jpeg' } }, U1);
     check('internalPosts/edit: gắn tệp CHÍNH MÌNH -> thành công (200)', r.status === 200, r.body);
-    check('internalPosts/edit: attachment.fileUrl mới được lưu đúng', RECORDS.internalPosts[0].attachment.fileUrl === '/uploads/u1-owned-file.pdf', RECORDS.internalPosts[0]);
+    check('internalPosts/edit: attachment.fileUrl mới được lưu đúng', RECORDS.internalPosts[0].attachment.fileUrl === '/uploads/u1-owned-file.jpg', RECORDS.internalPosts[0]);
 
     // Không đổi attachment (giữ nguyên tệp cũ) -> exemptFileUrls phải cho qua, không đòi hỏi lại quyền sở hữu.
     reset();
     r = await api('POST', '/api/records/internalPosts/100/edit',
-      { title: 'Đổi tiêu đề, giữ nguyên tệp', content: 'Nội dung', postCategory: 'CAT1', attachment: { fileUrl: '/uploads/existing-post-attachment.pdf', fileName: 'dinh-kem.pdf' } }, U1);
+      { title: 'Đổi tiêu đề, giữ nguyên tệp', content: 'Nội dung', postCategory: 'CAT1', attachment: { fileUrl: '/uploads/existing-post-attachment.jpg', fileName: 'dinh-kem.jpg', fileType: 'image/jpeg' } }, U1);
     check('internalPosts/edit: giữ nguyên tệp cũ (exempt) -> thành công (200)', r.status === 200, r.body);
     check('internalPosts/edit: title mới được lưu đúng', RECORDS.internalPosts[0].title === 'Đổi tiêu đề, giữ nguyên tệp', RECORDS.internalPosts[0]);
 

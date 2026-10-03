@@ -1,11 +1,11 @@
 // tests/test-formsplit-internalpost-office.js — đợt "biểu mẫu không dùng chung" (10/2026, theo yêu cầu
 // người dùng rà soát bug Nhịp Sống HCRC + tách Biểu Mẫu):
 //
-// 1) BUG THẬT đã vá: #internalFile (Nhịp Sống HCRC/Góc Chia Sẻ) luôn gửi cứng moduleKey 'internal' khi
-//    tải tệp đính kèm lên /api/upload — dù field này cũng dùng làm ẢNH BÌA bài viết. moduleKey 'internal'
-//    ở "Quản Lý Tệp File" mặc định chỉ cho .pdf/.docx/.xlsx (không có ảnh), nên khi admin đã cấu hình
-//    đúng như nhãn gợi ý, mọi ảnh bìa bị server từ chối ("ảnh chọn được nhưng ko đăng bài được"). Client
-//    nay tự nhận diện qua file.type để chọn đúng moduleKey ('internalImage' cho ảnh, 'internal' còn lại).
+// 1) [ĐÃ BỎ, 11/2026 "Việc E"] #internalFile (ô tải tài liệu pdf/docx/xlsx đính kèm Nhịp Sống HCRC/Góc
+//    Chia Sẻ) đã bỏ hẳn khỏi form — 2 loại bài này giờ CHỈ còn đính kèm ẢNH qua gallery
+//    (#internalImagesInput, xem test-internal-media-client.js). Phần test cũ kiểm moduleKey tự nhận diện
+//    'internalImage' vs 'internal' theo file.type cho riêng field này không còn áp dụng, đã xoá khỏi file
+//    này (ảnh bìa qua gallery dùng moduleKey 'internalImage' cố định, không cần tự nhận diện nữa).
 // 2) Biểu Mẫu: CORE_FIELD_MANIFEST.INTERNAL_POST (1 coreKey chung Nhịp Sống HCRC + Góc Chia Sẻ) tách
 //    thành INTERNAL_POST_NEWS/INTERNAL_POST_SHARE — mỗi loại 1 coreKey + 1 modKey "Trường Bổ Sung" riêng.
 // 3) Biểu Mẫu: CORE_FIELD_MANIFEST.OFFICE (1 coreKey chung Mua Sắm + Sửa Chữa) tách thành
@@ -15,25 +15,9 @@
 //    chung, từ TRƯỚC đợt tách) tự chuyển sang cả 2 modKey mới khi tải lại, không mất cấu hình admin cũ.
 //
 // Run: node server/tests/test-formsplit-internalpost-office.js
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { setup, teardown, makeRunner, assert, assertEqual, baseCatalogSeed, makeUser } = require('./_harness');
 
 const PORT = 8994;
-
-function makeDummyImageFile() {
-  const tmpPath = path.join(os.tmpdir(), 'anh-bia-test.png');
-  // PNG header thật (đủ để File API gán type 'image/png' theo phần mở rộng — mock backend không kiểm
-  // tra magic bytes, chỉ dùng file.name/file.type do trình duyệt tự suy ra từ đuôi file).
-  fs.writeFileSync(tmpPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  return tmpPath;
-}
-function makeDummyDocFile() {
-  const tmpPath = path.join(os.tmpdir(), 'tai-lieu-test.pdf');
-  fs.writeFileSync(tmpPath, '%PDF-1.4 dummy doc content');
-  return tmpPath;
-}
 
 async function main() {
   const { server, browser, page, pageErrors } = await setup(PORT);
@@ -47,46 +31,6 @@ async function main() {
     await page.evaluate((users) => { DB.users = users; }, [author, admin]);
     await page.evaluate((u) => finishLogin(u), author);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); });
-
-    // ===== 1) Upload moduleKey tự nhận diện theo file.type =====
-    await run('#internalFile (Nhịp Sống HCRC): chọn ẢNH -> uploadFileToServer() gửi moduleKey "internalImage"', async () => {
-      await page.evaluate(() => { window.__uploadModuleKeys = []; });
-      await page.fill('#internalTitle', 'Tin có ảnh bìa');
-      await page.fill('#internalContent', 'Nội dung tin tức có ảnh bìa đính kèm.');
-      await page.selectOption('#internalPostCategory', { index: 1 });
-      await page.setInputFiles('#internalFile', makeDummyImageFile());
-      await page.click('#internalSubmitBtn');
-      await page.waitForTimeout(200);
-      const keys = await page.evaluate(() => window.__uploadModuleKeys);
-      assert(keys.includes('internalImage'), `Phải gửi moduleKey 'internalImage' cho ảnh, thực tế: ${JSON.stringify(keys)}`);
-      assertEqual(await page.evaluate(() => DB.internalPosts.length), 1, 'Phải đăng thành công post NEWS có ảnh bìa');
-    });
-
-    await run('#internalFile (Nhịp Sống HCRC): chọn TỆP VĂN BẢN -> uploadFileToServer() vẫn gửi moduleKey "internal" như cũ', async () => {
-      await page.evaluate(() => { window.__uploadModuleKeys = []; DB.internalPosts = []; });
-      await page.fill('#internalTitle', 'Tin có tài liệu đính kèm');
-      await page.fill('#internalContent', 'Nội dung tin tức có tài liệu PDF đính kèm.');
-      await page.selectOption('#internalPostCategory', { index: 1 });
-      await page.setInputFiles('#internalFile', makeDummyDocFile());
-      await page.click('#internalSubmitBtn');
-      await page.waitForTimeout(200);
-      const keys = await page.evaluate(() => window.__uploadModuleKeys);
-      assert(keys.includes('internal'), `Phải vẫn gửi moduleKey 'internal' cho tệp văn bản, thực tế: ${JSON.stringify(keys)}`);
-      assertEqual(await page.evaluate(() => DB.internalPosts.length), 1, 'Phải đăng thành công post NEWS có tài liệu đính kèm');
-    });
-
-    await run('#internalFile (Góc Chia Sẻ): chọn ẢNH cũng tự nhận diện đúng moduleKey "internalImage" (không chỉ riêng NEWS)', async () => {
-      await page.evaluate(() => { window.__uploadModuleKeys = []; DB.internalPosts = []; });
-      await page.evaluate(() => setInternalSubTab('SHARE'));
-      await page.fill('#internalTitle', 'Chia sẻ có ảnh');
-      await page.fill('#internalContent', 'Nội dung góc chia sẻ có ảnh.');
-      await page.selectOption('#internalPostCategoryShare', { index: 1 });
-      await page.setInputFiles('#internalFile', makeDummyImageFile());
-      await page.click('#internalSubmitBtn');
-      await page.waitForTimeout(200);
-      const keys = await page.evaluate(() => window.__uploadModuleKeys);
-      assert(keys.includes('internalImage'), `Phải gửi moduleKey 'internalImage' cho ảnh ở Góc Chia Sẻ, thực tế: ${JSON.stringify(keys)}`);
-    });
 
     // ===== 1b) BUG THẬT NGHIÊM TRỌNG đã vá riêng: required "kẹt" trên field ẨN của loại bài KIA khiến
     // form KHÔNG THỂ submit qua HTML5 native validation dù đã điền đủ mọi ô đang hiện — đây là nguyên

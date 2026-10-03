@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**24.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.79 (2026-10-03): Nhịp Sống HCRC/Góc Chia Sẻ — bỏ ô tải tài liệu, chỉ còn đính kèm ảnh ("Việc E")
+
+Người dùng xác nhận (chọn phương án xoá UI + chặn server, không chỉ ẩn giao diện): rà soát Nhịp Sống
+HCRC và Góc Chia Sẻ, chỉ cho đính kèm NHIỀU ẢNH minh hoạ cho bài viết (đã có `images[]`/`coverImage` từ
+trước), bỏ hẳn khả năng tải tài liệu (pdf/docx/xlsx) lên 2 loại bài này.
+
+- **Client**: bỏ ô `#internalFile` ("Tệp Đính Kèm") khỏi `internalSection.html`; bỏ logic
+  upload/moduleKey tương ứng ở `submitInternalPost()`/`resetInternalPostForm()`
+  (`module-internalcomms-nhipsong.js`); bỏ entry `internal: ['internalFile']` khỏi
+  `applyUploadAcceptAttrs()` (`core.js`). Tạo bài mới luôn gửi `attachment: null`; sửa bài giữ
+  `undefined` (không đụng tới) để không xoá đính kèm tài liệu cũ của bài có từ trước đợt này.
+- **Server** (chặn thật, không chỉ ẩn UI — cùng nguyên tắc đã áp cho chặn video tải lên của Góc Chia
+  Sẻ): `internalPosts.extraValidate` (`createValidation.js`) và `editInternalPost()`
+  (`recordActions.js`) từ chối payload `attachment` của bài NEWS/SHARE nếu `fileType` không phải ảnh
+  (`image/*`). Đường SỬA chỉ chặn gán tài liệu MỚI — attachment tài liệu cũ (từ trước đợt siết này) vẫn
+  giữ nguyên/xem/tải được, không mất dữ liệu lịch sử.
+- Cập nhật test: xoá hẳn phần test `#internalFile` moduleKey tự nhận diện trong
+  `test-formsplit-internalpost-office.js` (field không còn tồn tại); sửa fixture dùng ảnh thay tài liệu
+  pdf ở 4 file test khác (`test-form-reset-file-remove.js`, `test-audit-fixes-batch1.js`,
+  `test-edit-file-ownership-batch3.js`, `test-internal-media-server.js`) — các test này đang kiểm hành
+  vi khác (reset form, chặn scheme `javascript:`, ownership file, tách field `attachment`/`images[]`),
+  không liên quan tới luật mới, chỉ cần đổi fixture sang ảnh để không bị chặn nhầm.
+- Đào Tạo (`tdFile`)/Tuyển Dụng (`rrCvFile`) vẫn dùng chung moduleKey upload `'internal'` cho tài liệu
+  khoá học/CV ứng viên — KHÔNG bị ảnh hưởng (chỉ riêng ô `#internalFile` của Nhịp Sống HCRC/Góc Chia Sẻ
+  bị bỏ).
 
 ## v24.78 (2026-10-03): Bỏ quyền phẳng dư thừa "Duyệt hợp đồng" (contractApprove)
 

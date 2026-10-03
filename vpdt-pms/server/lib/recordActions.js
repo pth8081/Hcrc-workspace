@@ -3191,6 +3191,13 @@ function editInternalPost(payload, user, post, appData) {
   // (bài Nháp/bài bị Yêu cầu bổ sung, chính tác giả tự sửa) vẫn mở nguyên.
   if (payload && payload.attachment !== undefined) {
     assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
+    // LỖI ĐÃ VÁ (11/2026, "Việc E"): cùng nguyên tắc với video SHARE ở dưới — chặn gán MỚI 1 tài liệu
+    // không phải ảnh cho NEWS/SHARE (ô "Tệp Đính Kèm" đã bỏ khỏi form), nhưng vẫn cho GIỮ NGUYÊN đính
+    // kèm tài liệu cũ nếu bài đã có từ trước đợt siết này (so URL không đổi = không chặn).
+    const isNewAttachment = payload.attachment && payload.attachment.fileUrl !== post.attachment?.fileUrl;
+    if ((post.type === 'NEWS' || post.type === 'SHARE') && isNewAttachment && !String(payload.attachment.fileType || '').startsWith('image/')) {
+      throw new HttpError(400, 'Nhịp Sống HCRC/Góc Chia Sẻ chỉ cho phép đính kèm ảnh, không cho tải tệp tài liệu lên.');
+    }
   }
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 3: client LUÔN tự dựng lại nguyên object "training" mới (không
   // đọc lại registeredUsers cũ) mỗi lần gửi sửa, nên sửa 1 bài ĐÀO TẠO đã có người đăng ký (đăng ký được

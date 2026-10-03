@@ -965,16 +965,16 @@ async function main() {
     });
 
     // ================= 21) Nội Bộ > Nhịp Sống HCRC (internalPostForm) =================
+    // Ô "Tệp Đính Kèm" (#internalFile, tài liệu pdf/docx/xlsx) đã BỎ (11/2026, "Việc E") — NEWS/SHARE
+    // giờ chỉ còn đính kèm ảnh qua gallery `#internalImagesInput`. Bài test này giờ chỉ còn xác nhận
+    // Làm Mới trắng title/category/content + tắt Ghim, không còn cần kiểm chip file tài liệu.
     await check(
-      'Nhịp Sống HCRC (Nội Bộ): chip file đính kèm internalFile, "Làm Mới" trắng form + tắt Ghim bài (gọi lại cancelEditInternalPost() có sẵn)',
+      'Nhịp Sống HCRC (Nội Bộ): "Làm Mới" trắng form + tắt Ghim bài (gọi lại cancelEditInternalPost() có sẵn)',
       async () => {
         await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); });
         await page.fill('#internalTitle', 'Tin kiểm thử reset form');
         await page.selectOption('#internalPostCategory', 'THI_DUA');
         await page.fill('#internalContent', 'Nội dung kiểm thử reset form.');
-        await page.setInputFiles('#internalFile', fakeFile('dinh-kem.pdf', 'noi dung', 'application/pdf'));
-        const chip = await page.locator('#internalFileChip').innerText();
-        assertTrue(chip.includes('dinh-kem.pdf'), `Chip internalFile phải hiện tên file, thực tế: ${chip}`);
         await page.check('#internalPinCheckbox');
         await page.evaluate(() => toggleInternalPinDurationWrap(document.getElementById('internalPinCheckbox')));
         const pinWrapHiddenBefore = await page.evaluate(() => document.getElementById('internalPinDurationWrap').classList.contains('hidden'));
@@ -986,8 +986,6 @@ async function main() {
           internalTitle: document.getElementById('internalTitle').value,
           internalPostCategory: document.getElementById('internalPostCategory').value,
           internalContent: document.getElementById('internalContent').textContent,
-          internalFileValue: document.getElementById('internalFile').value,
-          internalFileChip: document.getElementById('internalFileChip').innerHTML,
           pinChecked: document.getElementById('internalPinCheckbox').checked,
           pinWrapHidden: document.getElementById('internalPinDurationWrap').classList.contains('hidden'),
           confirmCalls: window.__confirmCalls.length
@@ -996,8 +994,6 @@ async function main() {
         assertTrue(state.internalTitle === '', 'internalTitle phải về rỗng');
         assertTrue(state.internalPostCategory === '', `internalPostCategory phải về rỗng, thực tế "${state.internalPostCategory}"`);
         assertTrue(state.internalContent === '', 'internalContent phải về rỗng');
-        assertTrue(state.internalFileValue === '', 'internalFile input phải về rỗng');
-        assertTrue(state.internalFileChip === '', 'Chip internalFile phải biến mất sau Làm Mới');
         assertTrue(state.pinChecked === false, 'internalPinCheckbox phải bỏ tick');
         assertTrue(state.pinWrapHidden === true, 'Khối chọn số ngày Ghim phải ẩn lại');
       }

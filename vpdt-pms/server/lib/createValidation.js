@@ -1609,6 +1609,16 @@ const CREATE_MODULE_CONFIGS = {
 
       // Tệp đính kèm (tuỳ chọn) — chặn scheme "javascript:" trước khi lưu, xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
+      // LỖI ĐÃ VÁ (11/2026, "Việc E" theo yêu cầu người dùng): Nhịp Sống HCRC/Góc Chia Sẻ chỉ còn đính
+      // kèm ẢNH qua gallery (images[]/coverImage, normalizeInternalPostMedia() ở trên) — ô "Tệp Đính Kèm"
+      // (tài liệu pdf/docx/xlsx) đã bỏ khỏi form. Chặn LẠI ở đây (không chỉ ẩn UI) vì 1 request tự soạn
+      // gửi thẳng `attachment` không phải ảnh vẫn né được nếu chỉ chặn phía client — cùng nguyên tắc đã
+      // áp cho SHARE/video ngay phía trên. Đường TẠO luôn là bài MỚI nên chặn thẳng; đường SỬA
+      // (editInternalPost(), lib/recordActions.js) có chú thích riêng để KHÔNG xoá đính kèm tài liệu cũ
+      // của bài có từ trước đợt siết này.
+      if ((type === 'NEWS' || type === 'SHARE') && payload.attachment && !String(payload.attachment.fileType || '').startsWith('image/')) {
+        throw new CreateError(400, 'Nhịp Sống HCRC/Góc Chia Sẻ chỉ cho phép đính kèm ảnh, không cho tải tệp tài liệu lên.');
+      }
 
       // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Nhịp Sống HCRC/Góc Chia Sẻ, tách riêng 10/2026)
       // — chỉ NEWS/SHARE còn hiện #dynamicFieldsContainer_INTERNAL_POST ở client (xem

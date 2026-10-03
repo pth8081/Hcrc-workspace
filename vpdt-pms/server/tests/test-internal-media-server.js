@@ -138,7 +138,10 @@ async function main() {
   });
 
   await run('attachment CŨ không bị đụng tới khi thêm images[] (2 field tách biệt)', async () => {
-    const att = { fileName: 'doc.pdf', fileType: 'application/pdf', fileUrl: '/uploads/1-doc.pdf' };
+    // fileType ẢNH (không phải application/pdf): từ "Việc E" (11/2026), NEWS/SHARE chỉ còn được đính kèm
+    // ảnh qua attachment (ô #internalFile tài liệu đã bỏ) — đổi fixture sang ảnh để không bị chặn nhầm ở
+    // lớp luật MỚI đó, bài test này chỉ đang kiểm 2 field attachment/images[] tách biệt nhau.
+    const att = { fileName: 'doc.jpg', fileType: 'image/jpeg', fileUrl: '/uploads/1-doc.jpg' };
     const p = createNews({ attachment: att, images: [img(1)] });
     assert.deepStrictEqual(p.attachment, att);
     assert.deepStrictEqual(p.coverImage, img(1));

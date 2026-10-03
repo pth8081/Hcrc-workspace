@@ -899,6 +899,17 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     hệt (không chỉ ẩn giao diện); bài Góc Chia Sẻ cũ lỡ có video tải lên từ
     trước đợt này vẫn sửa/xoá/giữ nguyên được, chỉ chặn thêm video tải lên
     MỚI.
+  - **Nhịp Sống HCRC/Góc Chia Sẻ: CHỈ còn đính kèm ẢNH, đã bỏ ô tải tài liệu
+    (11/2026)** — ô "Tệp Đính Kèm" (tài liệu pdf/docx/xlsx, field `attachment`)
+    đã bỏ hẳn khỏi form soạn bài của 2 loại này; 2 loại bài này giờ CHỈ còn
+    đính kèm minh họa qua gallery ảnh (`images[]`/`coverImage`, tối đa 8 ảnh,
+    xem mục ngay trên) — không còn cách đính kèm tài liệu nào khác. Server
+    chặn lại y hệt (không chỉ ẩn giao diện): nếu payload `attachment` gửi lên
+    không phải ảnh (`fileType` không bắt đầu `image/`) sẽ bị từ chối. Bài cũ
+    lỡ có tài liệu đính kèm từ trước đợt này vẫn giữ nguyên/xem/tải được bình
+    thường (chỉ chặn gán tài liệu MỚI không phải ảnh khi sửa bài), không mất
+    dữ liệu lịch sử. Đào Tạo/Tuyển Dụng (vẫn dùng chung moduleKey upload
+    `'internal'` cho tài liệu khoá học/CV ứng viên) không bị ảnh hưởng.
   - **Bắt buộc tiêu đề/nội dung + trần độ dài (rà soát chuyên sâu vòng 2,
     9/2026)** — bài đăng nay bắt buộc có tiêu đề (tối đa 300 ký tự) và nội
     dung (tối đa 20.000 ký tự) ở CẢ lúc tạo lẫn lúc sửa (không còn tạo/sửa

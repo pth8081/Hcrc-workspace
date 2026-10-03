@@ -7978,7 +7978,11 @@ function closeMobileSidebar() {
 // này NGAY SAU đăng nhập, trước khi mở bất kỳ tab nào, nên không thể để nằm ở 1 module-*.js nạp lười.
 function applyUploadAcceptAttrs() {
   const STATIC_INPUTS = {
-    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'], internal: ['internalFile'],
+    doc: ['docFile'], submission: ['subFile', 'subExtraFiles'], contract: ['contractFile'],
+    // internal: ['internalFile'] ĐÃ BỎ (11/2026, "Việc E") — ô "Tệp Đính Kèm" của Nhịp Sống HCRC/Góc Chia
+    // Sẻ đã xoá hẳn khỏi form, không còn input tĩnh nào khác dùng moduleKey 'internal' cho mục đích này
+    // (tdFile/rrCvFile cũng dùng moduleKey 'internal' nhưng accept ĐỘNG theo ngữ cảnh, không nằm trong
+    // danh sách tĩnh ở đây — xem chú thích internalImage ngay dưới).
     // internalImage (LỖI ĐÃ VÁ — xem chú thích MODULE_DEFAULT_ALLOWED_EXT.internalImage ở
     // routes/upload.js): banner tin tuyển dụng, KHÔNG gồm tdFile (Truyền Thông Nội Bộ > Tài Liệu) vì
     // field đó ĐỘNG (dùng chung cho cả nhánh IMAGE lẫn văn bản tuỳ docType, không có 1 accept cố định).
@@ -8879,7 +8883,7 @@ function _dispatchTabRender(tabName) {
   if (['minutes', 'task', 'periodicReport'].includes(tabName)) renderCrossTabBar('dieuHanh', tabName);
   if (['meeting', 'car', 'vpp', 'uniform', 'license'].includes(tabName)) renderCrossTabBar('hanhChinh', tabName);
   // applyUploadAcceptAttrs() (v23.11): CÙNG lý do — trước đây chỉ gọi 1 lần ở finishLogin() (đặt thuộc
-  // tính accept="..." cho ô chọn file docFile/subFile/contractFile/internalFile theo cấu hình admin), lúc
+  // tính accept="..." cho ô chọn file docFile/subFile/contractFile theo cấu hình admin), lúc
   // đó các tab doc/submission/contract/internal có thể CHƯA từng mở trong phiên. Gọi lại ở đây để áp đúng
   // ngay khi ô chọn file thật sự xuất hiện trong DOM lần đầu (guard `if (el)` sẵn có nên gọi lại vô hại).
   applyUploadAcceptAttrs();

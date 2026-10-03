@@ -1271,11 +1271,11 @@
           <div id="internalVideosPreview" class="space-y-1 mt-1"></div>
         </div>
       </div>
-      <div>
-        <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm (tuỳ chọn)</label>
-        <input id="internalFile" type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="internalFileChip" class="w-full border p-1.5 rounded bg-white">
-        <div id="internalFileChip" class="mt-1"></div>
-      </div>
+      <!-- Ô "Tệp Đính Kèm" (tài liệu pdf/docx/xlsx) ĐÃ BỎ (11/2026, theo yêu cầu người dùng "Việc E") —
+           Nhịp Sống HCRC/Góc Chia Sẻ giờ CHỈ còn đính kèm ẢNH qua gallery #internalImagesInput phía trên
+           (đã hỗ trợ nhiều ảnh + chọn đại diện, đủ thay thế nhu cầu "ảnh bìa" của field cũ). Server cũng
+           đã chặn cứng (lib/createValidation.js, internalPosts.extraValidate) nếu có request tự soạn
+           gửi `attachment` không phải ảnh cho 2 type này — không chỉ ẩn UI. -->
       <!-- Ghim lên trang chủ (Đợt E) — chỉ hiện cho Tin tức/Đào tạo/Khen thưởng, chỉ người có quyền
            internalPostApprove/admin mới thấy (toggle ẩn/hiện ở setInternalSubTab()/finishLogin()).
            Thời hạn tính Ở SERVER từ pinDurationDays, không tin timestamp client tự gửi. -->

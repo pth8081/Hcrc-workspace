@@ -568,32 +568,12 @@ async function submitInternalPost(e) {
   let publishAt;
   if (type === 'NEWS') publishAt = document.getElementById('internalPublishAt')?.value || '';
 
-  const fileInput = document.getElementById('internalFile');
-  let attachment;
-  if (fileInput?.files[0]) {
-    // BUG THẬT đã vá (10/2026, người dùng báo "ảnh chọn được nhưng ko đăng bài được"): #internalFile
-    // dùng CHUNG cho cả tệp văn bản LẪN ảnh bìa bài viết (xem isInternalImageAttachment(), coverHTML ở
-    // renderInternalNewsCard()/renderInternalPostCard() phía dưới) nhưng luôn gửi cứng moduleKey
-    // 'internal' — moduleKey này ở "Quản Lý Tệp File" (routes/upload.js) mặc định CHỈ cho .pdf/.docx/.xlsx
-    // (đúng như accept= của input), không có ảnh; nếu admin đã cấu hình đúng như nhãn "Truyền Thông Nội
-    // Bộ" gợi ý thì mọi ảnh bìa bị server từ chối. Cùng lỗi đã vá cho banner tuyển dụng (rjBannerFile,
-    // luôn dùng 'internalImage' — xem submitRecruitmentJob()) nhưng bỏ sót ở đây vì field này dùng
-    // CHUNG cho cả 2 loại tệp. Tự nhận diện qua file.type (MIME type chuẩn của File API, không phải đoán
-    // theo đuôi file) để chọn đúng moduleKey — ảnh dùng 'internalImage', còn lại vẫn 'internal' như cũ.
-    const chosenFile = fileInput.files[0];
-    const uploadModuleKey = chosenFile.type.startsWith('image/') ? 'internalImage' : 'internal';
-    try {
-      const uploaded = await uploadFileToServer(chosenFile, uploadModuleKey);
-      attachment = { fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl };
-    } catch (err) {
-      return alert(`⛔ Tải tệp đính kèm thất bại: ${err.message}`);
-    }
-  } else if (!isEditing) {
-    attachment = null; // Tạo mới, không chọn tệp = rõ ràng "không có đính kèm"
-  }
-  // Sửa bài mà không chọn tệp mới: KHÔNG gán attachment (giữ undefined) để bỏ hẳn field này khỏi
-  // payload gửi đi — editInternalPost() (lib/recordActions.js) chỉ ghi đè field CÓ MẶT trong payload,
-  // undefined nghĩa là "giữ nguyên đính kèm cũ", không tự ý xoá đính kèm bài đã có.
+  // Ô "Tệp Đính Kèm" (#internalFile, tài liệu pdf/docx/xlsx) ĐÃ BỎ (11/2026, "Việc E") — Nhịp Sống
+  // HCRC/Góc Chia Sẻ giờ chỉ còn đính kèm ảnh qua gallery `media` (images[]/coverImage) ở trên. Tạo mới
+  // luôn gửi `attachment: null` (rõ ràng "không có đính kèm"); sửa bài giữ `undefined` (không gán vào
+  // payload) để editInternalPost() (lib/recordActions.js) KHÔNG đụng tới đính kèm tài liệu cũ của bài đã
+  // có từ trước khi tính năng này còn tồn tại — chỉ chặn TẠO MỚI, không xoá dữ liệu lịch sử.
+  const attachment = isEditing ? undefined : null;
 
   // Trường bổ sung (Biểu Mẫu > Truyền Thông Nội Bộ - Nhịp Sống HCRC/Góc Chia Sẻ, tách riêng 10/2026) —
   // chỉ NEWS/SHARE còn hiện #dynamicFieldsContainer_INTERNAL_POST (TRAINING/RECRUITMENT return sớm ở
@@ -770,11 +750,10 @@ function cancelEditInternalPost() {
 // cancelEditInternalPost() sẵn — xem submitInternalPost()). Hành vi cần GIỐNG HỆT "Huỷ Sửa" (thoát Sửa dở
 // dang nếu có + trắng form + setInternalSubTab() tự đặt lại Ghim/Gửi lại email về mặc định của tab hiện
 // tại, xem setInternalSubTab()) — gọi lại thẳng cancelEditInternalPost(), cùng khuôn
-// resetMeetingMinutesForm()/module-bienbanhop.js — CHỈ thêm bước xoá chip file đính kèm (form.reset()
-// không tự bắn 'change' nên chip cũ không tự xoá, xem core.js).
+// resetMeetingMinutesForm()/module-bienbanhop.js. Bước xoá chip "Tệp Đính Kèm" cũ (clearSingleFileInput)
+// ĐÃ BỎ cùng ô #internalFile (11/2026, "Việc E").
 function resetInternalPostForm() {
   cancelEditInternalPost();
-  clearSingleFileInput('internalFile', 'internalFileChip');
 }
 
 // Wrapper cho CSP: checkbox "Ghim bài" đọc this.checked (không có data-arg-checked trong
