@@ -7448,12 +7448,31 @@ function rejectBudgetLineProposal(user, item, payload, appData) {
   return item;
 }
 
-// Phê Duyệt (APPROVED-stage dòng nhập trực tiếp) — CHỈ budgetManage/admin (khác Đề Xuất ở trên). Route
-// (routes/records.js) tự gọi TIẾP buildBudgetLineUsedRow() + createForCollection() ngay sau khi hàm này
-// trả về thành công — tách riêng vì hàm này chỉ mutate ĐÚNG 1 bản ghi đã khoá, không tự tạo bản ghi mới
-// được (xem withLockedRecordForCollection() ở lib/recordStore.js).
-function approveBudgetLine(user, item) {
-  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được duyệt');
+// Ai được QUYẾT ĐỊNH dòng Phê Duyệt (APPROVED-stage, "dòng nhập trực tiếp") — rà soát chuyên sâu
+// 10/2026, theo yêu cầu người dùng "Ngân Sách: những module nào chưa có route phê duyệt cuối cùng bổ
+// sung ngay": trước đây BẤT KỲ ai có budgetManage đều quyết định được dòng APPROVED của BẤT KỲ phòng
+// ban nào (chỉ chặn tự duyệt đúng dòng mình tạo) — ĐỔI sang cấu hình theo phòng ban
+// (budgetApprovedDeptWorkflows, TÁCH RIÊNG khỏi budgetDeptWorkflows của bước Đề Xuất vì 2 bước có thể
+// cần người duyệt khác nhau — VD Đề Xuất do Trưởng phòng duyệt, Phê Duyệt cuối do Ban Giám Đốc/Tài
+// Chính duyệt), CÙNG KHUÔN canDecideBudgetLineProposal() ở trên. budgetManage/admin vẫn LUÔN quyết
+// định được mọi dòng bất kể cấu hình (ghi đè toàn quyền, nhất quán với mọi module dept-workflow khác —
+// admin luôn bypass, xem canApproveStep() ở lib/workflowEngine.js). Người CHỈ có budgetCreate (không
+// budgetManage) phải là approver BƯỚC 1 của ĐÚNG phòng ban item.dept trong budgetApprovedDeptWorkflows
+// mới quyết định được — phòng ban CHƯA cấu hình = approvers rỗng = chỉ budgetManage/admin xử lý được.
+function canDecideBudgetLineFinal(user, item, appData) {
+  if (user.perms?.admin || user.perms?.budgetManage) return true;
+  if (!user.perms?.budgetCreate) return false;
+  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  const { approvers } = flatWorkflowConfigToSteps(appData?.budgetApprovedDeptWorkflows?.[item.dept], appData || {});
+  return (approvers[1] || []).includes(user.username);
+}
+
+// Phê Duyệt (APPROVED-stage dòng nhập trực tiếp). Route (routes/records.js) tự gọi TIẾP
+// buildBudgetLineUsedRow() + createForCollection() ngay sau khi hàm này trả về thành công — tách riêng
+// vì hàm này chỉ mutate ĐÚNG 1 bản ghi đã khoá, không tự tạo bản ghi mới được (xem
+// withLockedRecordForCollection() ở lib/recordStore.js).
+function approveBudgetLine(user, item, appData) {
+  if (!canDecideBudgetLineFinal(user, item, appData)) throw new HttpError(403, 'Bạn không có quyền duyệt dòng phê duyệt ngân sách của phòng ban này');
   if (item.stage !== 'APPROVED') throw new HttpError(409, 'Dòng này không phải Phê Duyệt');
   if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng phê duyệt này đã được xử lý rồi');
   assertNotSelfDecidingBudgetLine(user, item);
@@ -7463,8 +7482,8 @@ function approveBudgetLine(user, item) {
   item.decidedAt = nowVN();
   return item;
 }
-function rejectBudgetLine(user, item, payload) {
-  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được từ chối');
+function rejectBudgetLine(user, item, payload, appData) {
+  if (!canDecideBudgetLineFinal(user, item, appData)) throw new HttpError(403, 'Bạn không có quyền từ chối dòng phê duyệt ngân sách của phòng ban này');
   if (item.stage !== 'APPROVED') throw new HttpError(409, 'Dòng này không phải Phê Duyệt');
   if (item.status !== 'SUBMITTED') throw new HttpError(409, 'Dòng phê duyệt này đã được xử lý rồi');
   assertNotSelfDecidingBudgetLine(user, item);
@@ -8307,7 +8326,30 @@ function renewItServiceRenewal(user, item, payload) {
   return item;
 }
 
+// ===================== ĐẶT PHÒNG HỌP (meetings) — route "approve" =====================
+// canDecideMeeting() (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): logic nghiệp vụ
+// còn lại của module này (approve/cancel/sửa) vẫn nằm nguyên trong routes/meetingActions.js (bespoke
+// route riêng, không đi qua recordActions/workflowEngine — xem chú thích đầu file đó), hàm NÀY được tách
+// ra đây CHỈ để tái dùng đúng pattern cấu hình quy trình theo phòng ban (flatWorkflowConfigToSteps) +
+// testable thuần không cần Express/DB, cùng khuôn canDecideBudgetLineFinal() ở trên.
+//
+// Trước đây "approve" chỉ gác bằng ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty — BẤT KỲ ai giữ
+// quyền này đều duyệt được lịch họp của MỌI phòng ban, không phân biệt phòng ban nào duyệt phòng ban
+// nào. Nay CỘNG THÊM cấu hình theo phòng ban (meetingDeptWorkflows, admin gán ở "Quy Trình & Phê Duyệt").
+// meetingApprove/admin vẫn LUÔN duyệt được MỌI phòng ban như cũ (ghi đè toàn quyền, KHÔNG đổi hành vi cũ
+// cho ai đang giữ quyền này) — map chỉ CỘNG THÊM khả năng admin gán RIÊNG người duyệt cho 1 phòng ban cụ
+// thể dù người đó không giữ quyền phẳng meetingApprove (khác budgetLines — module này không có khái
+// niệm "quyền tạo hồ sơ" (meetingCreate) làm điều kiện tiên quyết, nên không cần thêm gate phụ nào, mirror
+// đúng carDeptWorkflows/vppDeptWorkflows — chỉ cần có mặt trong danh sách approver bước 1 là đủ).
+function canDecideMeeting(user, item, appData) {
+  if (user.perms?.admin || user.perms?.meetingApprove) return true;
+  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[item.dept], appData || {});
+  return (approvers[1] || []).includes(user.username);
+}
+
 module.exports = {
+  canDecideMeeting,
   editContract,
   editDocDraft, submitDocDraft,
   editCarRegDraft, submitCarRegDraft,
@@ -8366,7 +8408,8 @@ module.exports = {
   canCancelUniformTransfer, cancelUniformTransfer,
   canManageBudget, canAggregateBudget, isBudgetPeriodClosed,
   closeBudgetPeriod, reopenBudgetPeriod, updateBudgetEntryDraft, submitBudgetEntry, updateApprovedActualBudgetEntry, updateBudgetTemplate,
-  canCreateBudgetLine, canDecideBudgetLineProposal, approveBudgetLineProposal, rejectBudgetLineProposal, approveBudgetLine, rejectBudgetLine,
+  canCreateBudgetLine, canDecideBudgetLineProposal, approveBudgetLineProposal, rejectBudgetLineProposal,
+  canDecideBudgetLineFinal, approveBudgetLine, rejectBudgetLine,
   updateBudgetLineDraft, assertCanDeleteBudgetLineDraft,
   buildBudgetLineUsedRow, updateBudgetLineUsedParent, addBudgetLineChild, updateBudgetLineChild,
   recomputeBudgetLineUsageStatus, assertCanDeleteBudgetLineUsedParent, assertCanDeleteBudgetLineChild,

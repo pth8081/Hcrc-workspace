@@ -602,6 +602,18 @@ const DEFAULTS = {
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách theo phòng ban, cùng khuôn vppDeptWorkflows/
   // itPriceDeptWorkflows ở trên. Admin cấu hình ở tab "Quy Trình & Phê Duyệt".
   budgetDeptWorkflows: {},
+  // Ngân Sách — bước Phê Duyệt CUỐI (stage=APPROVED, dòng nhập trực tiếp) duyệt theo phòng ban — TÁCH
+  // RIÊNG khỏi budgetDeptWorkflows ở trên (bước Đề Xuất) vì có thể cần người duyệt KHÁC (VD Đề Xuất do
+  // Trưởng phòng duyệt, Phê Duyệt cuối do Ban Giám Đốc/Tài Chính duyệt) — xem canDecideBudgetLineFinal()
+  // ở lib/recordActions.js. 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối cho Ngân Sách.
+  budgetApprovedDeptWorkflows: {},
+  // Đặt Phòng Họp — trước đây duyệt bằng ĐÚNG 1 cờ quyền phẳng meetingApprove toàn công ty, không phân
+  // biệt phòng ban nào duyệt phòng ban nào. Nay CŨNG cấu hình thêm theo phòng ban (cùng khuôn
+  // budgetApprovedDeptWorkflows ở trên) — ai có meetingApprove/admin vẫn LUÔN duyệt được MỌI phòng ban
+  // như cũ (ghi đè toàn quyền, không đổi hành vi cũ), map này chỉ CỘNG THÊM khả năng admin gán riêng
+  // người duyệt cho 1 phòng ban cụ thể (không cần có meetingApprove) — xem canDecideMeeting() ở
+  // lib/recordActions.js. 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối.
+  meetingDeptWorkflows: {},
   // ("operationOrderDeptWorkflows" — quy trình duyệt Đơn Hàng theo phòng ban — đã bị XOÁ HẲN, thay bằng
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.
   // operationStoreOpenDeptWorkflows/operationRepairDeptWorkflows — Mở Mới/Sửa Chữa Siêu Thị — CŨNG ĐÃ

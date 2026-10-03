@@ -267,20 +267,41 @@ nữa — không có bước phê duyệt nào cả, kể cả giai đoạn Dự
 Toán **không** có bước Từ Chối qua engine này (chỉ Duyệt) — cần trả lại thì
 dùng "Yêu Cầu Bổ Sung" (kênh riêng, không đổi).
 
-**Ngân Sách — KHÔI PHỤC một phần từ 9/2026** (rà soát chuyên sâu "tạo≠duyệt"
-phát hiện #5): `budgetLines` (collection Ngân Sách 2.0, dùng cho **mọi** màn
-nhập liệu hiện tại — Đề Xuất/Phê Duyệt/Sử Dụng) VẪN KHÔNG đi qua
+**Ngân Sách — KHÔI PHỤC một phần từ 9/2026, mở rộng tiếp 10/2026** (rà soát
+chuyên sâu "tạo≠duyệt" phát hiện #5, rồi "những module nào chưa có route phê
+duyệt cuối cùng"): `budgetLines` (collection Ngân Sách 2.0, dùng cho **mọi**
+màn nhập liệu hiện tại — Đề Xuất/Phê Duyệt/Sử Dụng) VẪN KHÔNG đi qua
 `lib/workflowEngine.js`/`applyWorkflowAction()` đầy đủ (không có nhiều bước
-tuần tự `currentStep` như các module khác ở mục này), nhưng bước **📝 Đề
-Xuất** nay ĐỌC LẠI `budgetDeptWorkflows` (chỉ dùng đúng approver **bước 1**
-của quy trình cấu hình — cấu hình nhiều bước cho Ngân Sách chỉ bước 1 có tác
-dụng thật) qua `canDecideBudgetLineProposal()` (`lib/recordActions.js`) —
-màn cấu hình **"📊 QT Ngân Sách - Đề Xuất"** đã ĐƯỢC KHÔI PHỤC lại trong "🔄
-Quy Trình & Phê Duyệt" (mục 7.1, xem chi tiết ở mục 6). Bước **✅ Phê Duyệt**
-vẫn giữ nguyên 1 cấp gác quyền PHẲNG như trước (chỉ `budgetManage`/admin —
-KHÔNG đi qua cấu hình phòng ban này). `budgetDeptWorkflows` là dữ liệu CHUNG
-với module Ngân Sách 1.0 cũ (`budgetEntries`) — cấu hình 1 phòng ban ở đây áp
-dụng cho CẢ 2 nơi đọc tới nó.
+tuần tự `currentStep` như các module khác ở mục này), nhưng CẢ 2 bước quyết
+định nay đều đọc lại cấu hình theo phòng ban riêng (chỉ dùng đúng approver
+**bước 1** của quy trình cấu hình — cấu hình nhiều bước cho Ngân Sách chỉ
+bước 1 có tác dụng thật):
+- **📝 Đề Xuất**: `budgetDeptWorkflows` qua `canDecideBudgetLineProposal()` —
+  màn cấu hình **"📊 QT Ngân Sách - Đề Xuất"**.
+- **✅ Phê Duyệt** (10/2026, MỚI): `budgetApprovedDeptWorkflows` (TÁCH RIÊNG
+  khỏi map của bước Đề Xuất — 2 bước có thể cần người duyệt khác nhau, VD Đề
+  Xuất do Trưởng phòng, Phê Duyệt cuối do Ban Giám Đốc/Tài Chính) qua
+  `canDecideBudgetLineFinal()` — màn cấu hình **"📊 QT Ngân Sách - Phê Duyệt"**.
+
+Cả 2 màn cấu hình nằm trong "🔄 Quy Trình & Phê Duyệt" (mục 7.1, xem chi tiết ở
+mục 6). Ở cả 2 bước, `budgetManage`/admin vẫn **LUÔN** quyết định được mọi
+dòng bất kể cấu hình phòng ban (ghi đè toàn quyền, không đổi hành vi cũ cho ai
+đang giữ quyền này) — cấu hình theo phòng ban chỉ CỘNG THÊM khả năng admin
+gán riêng người quyết định (chỉ cần giữ `budgetCreate`, không cần
+`budgetManage`) cho 1 phòng ban cụ thể. `budgetDeptWorkflows` là dữ liệu
+CHUNG với module Ngân Sách 1.0 cũ (`budgetEntries`) — cấu hình 1 phòng ban ở
+đây áp dụng cho CẢ 2 nơi đọc tới nó; `budgetApprovedDeptWorkflows` là map
+MỚI, không dùng chung với module nào khác.
+
+**Đặt Phòng Họp (10/2026, MỚI)**: tương tự Ngân Sách ở trên — bước Duyệt
+trước đây chỉ gác bằng ĐÚNG 1 quyền phẳng `meetingApprove` toàn công ty (ai
+giữ quyền này duyệt được lịch của MỌI phòng ban). Nay bổ sung
+`meetingDeptWorkflows` qua `canDecideMeeting()` (`lib/recordActions.js`) —
+màn cấu hình **"🏢 QT Đặt Phòng Họp"**. `meetingApprove`/admin vẫn LUÔN duyệt
+được mọi phòng ban như cũ — map mới chỉ CỘNG THÊM khả năng gán riêng người
+duyệt cho 1 phòng ban cụ thể dù người đó không giữ `meetingApprove`. Nút "🔍
+Xem Quy Trình" ở form Đăng Ký hiện GỘP (union) cả người giữ `meetingApprove`
+lẫn người được gán riêng cho đúng phòng ban đang chọn trên form.
 
 Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 Quy Trình & Phê
 Duyệt** (mục 7) — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier
@@ -1231,6 +1252,11 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   Dung Phong Hop", 9 cột: mã lịch, phòng ban, phòng họp, nội dung, số người dự,
   thời gian, thiết bị, trạng thái) — CHỈ đọc dữ liệu đã có, tái dùng route xuất
   Excel dùng chung.
+  **Duyệt theo phòng ban (10/2026, MỚI)** — xem chi tiết cơ chế ở mục 3: bên
+  cạnh quyền phẳng `meetingApprove` (vẫn luôn duyệt được mọi phòng ban),
+  admin nay có thể gán RIÊNG người duyệt cho 1 phòng ban cụ thể tại "Hệ
+  Thống → Quy Trình & Phê Duyệt → 🏢 QT Đặt Phòng Họp", không cần cấp quyền
+  toàn công ty cho người đó.
   **Xem Lịch Họp — 3 chế độ Ngày/Tuần/Tháng**: chế độ **Ngày** (mặc định) giữ
   nguyên lưới giờ chi tiết 30 phút/phòng, kéo chuột hoặc giữ Shift bấm ô thứ 2
   để chọn nhiều khung giờ liên tiếp rồi đổ sẵn sang tab Đăng Ký. Chế độ **Tuần**/

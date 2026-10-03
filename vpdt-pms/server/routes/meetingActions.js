@@ -16,6 +16,7 @@ const { findMeetingConflict, validateRequiredCustomData, scopeAllows } = require
 const { getAllAppData } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { canDecideMeeting } = require('../lib/recordActions');
 
 router.use(requireAuth, blockIfMustChangePassword);
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): file router RIÊNG này (mount độc lập tại
@@ -76,11 +77,11 @@ router.post('/:id/:action', async (req, res) => {
     // requireAuth đã tự tra cứu user hiện tại (kể cả active) và gắn vào req.freshUser.
     const freshUser = req.freshUser;
     const hasPerm = !!(freshUser.perms?.admin || freshUser.perms?.[config.perm]);
-    // "approve" vẫn đòi đúng 1 cờ quyền như cũ — chỉ "cancel" có thêm lối "tự huỷ lịch của mình", nên
-    // phải kiểm tra creator NGAY TRONG mutatorFn (chỉ biết được item.creator sau khi đã khoá/đọc bản ghi).
-    if (action === 'approve' && !hasPerm) {
-      return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này' });
-    }
+    // "cancel" có thêm lối "tự huỷ lịch của mình", nên phải kiểm tra creator NGAY TRONG mutatorFn (chỉ
+    // biết được item.creator sau khi đã khoá/đọc bản ghi). "approve" (10/2026, theo yêu cầu người dùng
+    // bổ sung route phê duyệt cuối) giờ CŨNG kiểm tra NGAY TRONG mutatorFn thay vì chặn sớm ở đây — cần
+    // biết item.dept để đối chiếu meetingDeptWorkflows (canDecideMeeting(), xem lib/recordActions.js).
+    const appData = action === 'approve' ? await getAllAppData() : null;
 
     // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: allMeetings trước đây được đọc 1 LẦN DUY NHẤT TRƯỚC CẢ
     // withAppLock('meeting_room:...') ở dưới — bên trong closure đã khoá vẫn dùng LẠI đúng snapshot cũ
@@ -97,6 +98,9 @@ router.post('/:id/:action', async (req, res) => {
       // lúc này có thể đã được đặt cho lịch khác. Duyệt chỉ hợp lệ từ PENDING; huỷ hợp lệ từ PENDING/
       // APPROVED (không huỷ lại 1 lịch đã huỷ).
       if (action === 'approve') {
+        if (!canDecideMeeting(freshUser, item, appData)) {
+          throw new HttpError(403, 'Bạn không có quyền duyệt lịch họp của phòng ban này');
+        }
         if (item.status !== 'PENDING') {
           throw new HttpError(409, 'Lịch này không còn ở trạng thái chờ duyệt (có thể đã được xử lý ở nơi khác)');
         }
@@ -113,7 +117,7 @@ router.post('/:id/:action', async (req, res) => {
       item.status = config.status;
       // approvedBy/approvedByName/approvedAt — chỉ để MÀN "✅ Phê Duyệt" (getMyProcessedApprovals() ở
       // index.html) biết chính người này đã duyệt lịch nào khi lọc "Đã duyệt", KHÔNG dùng để kiểm tra
-      // quyền (vẫn 1 cờ meetingApprove toàn công ty như cũ).
+      // quyền (canDecideMeeting() ở trên mới là nơi quyết định).
       if (action === 'approve') {
         item.approvedBy = freshUser.username;
         item.approvedByName = freshUser.name;

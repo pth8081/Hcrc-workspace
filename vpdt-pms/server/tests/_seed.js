@@ -140,6 +140,16 @@ function buildAppData() {
     vppDeptWorkflows: {},
     itPriceDeptWorkflows: {},
     budgetDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD_BUDGET },
+    // budgetApprovedDeptWorkflows (10/2026, bổ sung route phê duyệt cuối): bước Phê Duyệt CUỐI (stage=
+    // APPROVED) — TÁI SỬ DỤNG cùng cặp kd1/tp_kd như budgetDeptWorkflows ở trên (an toàn cho test hiện
+    // có: không có kịch bản nào trong test-budget-lines.js từng kiểm tra "kd1/tp_kd KHÔNG duyệt được
+    // dòng APPROVED", chỉ admin/budgetmgr1 gọi action 'approve' trong suốt bộ test đó).
+    budgetApprovedDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD_BUDGET },
+    // meetingDeptWorkflows (10/2026, bổ sung route phê duyệt cuối Đặt Phòng Họp) — rỗng mặc định, mirror
+    // đúng các map dept-workflow rỗng khác ở trên (carDeptWorkflows/vppDeptWorkflows) cho tới khi có bộ
+    // test riêng cần cấu hình cụ thể (xem tests/test-budget-meeting-dept-workflow-ui.js, dùng
+    // testHarness.js/createMockState riêng, không đụng tới fixture dùng chung này).
+    meetingDeptWorkflows: {},
     contractApprovalDeptWorkflows: { 'Phòng Kinh Doanh': WF_1STEP_KD },
     // Lớp phê duyệt bổ sung tuỳ chọn của Hợp Đồng — mỗi lớp 1 người phụ trách RIÊNG để bài test xác
     // minh đúng THỨ TỰ/ĐÚNG NGƯỜI từng bước, không dùng chung 1 người (che mất lỗi thứ tự nếu có). Shape

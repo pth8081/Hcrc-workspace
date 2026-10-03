@@ -99,7 +99,8 @@ const DEPT_WORKFLOW_MAP_KEYS = [
   'deptWorkflows',
   'submissionDeptWorkflows', 'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
-  'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'paymentDeptWorkflows'
+  'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'budgetApprovedDeptWorkflows', 'paymentDeptWorkflows',
+  'meetingDeptWorkflows'
 ];
 
 // Đổi tên đúng 1 KEY tầng ngoài cùng của 1 map AppData dạng {[dept]: <bất kỳ giá trị gì>} — tách riêng

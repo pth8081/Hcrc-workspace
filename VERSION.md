@@ -1,8 +1,51 @@
 # Phiên bản hiện tại
 
-**24.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.72 (2026-10-03): Ngân Sách + Đặt Phòng Họp — bổ sung route phê duyệt cuối theo phòng ban
+
+Tiếp nối đợt rà soát ở v24.71 ("những module nào chưa có route phê duyệt cuối cùng bổ sung ngay"), người
+dùng xác nhận bổ sung đúng 2 module sau (4 module còn lại — Giấy Phép/Đồng Phục/Tuyển Dụng/Mua Hàng BAS —
+giữ nguyên theo quyết định riêng, xem chi tiết lý do bên dưới):
+
+- **Ngân Sách (budgetLines)**: bước Phê Duyệt CUỐI (`stage=APPROVED`, dòng nhập trực tiếp) trước đây chỉ
+  gác bằng ĐÚNG 1 quyền phẳng `budgetManage` — bất kỳ ai giữ quyền này đều duyệt được dòng của MỌI phòng
+  ban. Nay bổ sung cấu hình theo phòng ban RIÊNG (`budgetApprovedDeptWorkflows`, tách khỏi
+  `budgetDeptWorkflows` của bước Đề Xuất vì 2 bước có thể cần người duyệt khác nhau — VD Đề Xuất do
+  Trưởng phòng duyệt, Phê Duyệt cuối do Ban Giám Đốc/Tài Chính duyệt), cấu hình ở màn mới "Hệ Thống → Quy
+  Trình & Phê Duyệt → 📊 QT Ngân Sách - Phê Duyệt". `budgetManage`/admin vẫn **luôn** duyệt được mọi dòng
+  bất kể cấu hình (ghi đè toàn quyền, không đổi hành vi cũ cho ai đang giữ quyền này) — map mới chỉ CỘNG
+  THÊM khả năng admin gán riêng người duyệt (giữ `budgetCreate`, không cần `budgetManage`) cho 1 phòng ban
+  cụ thể. Xem `canDecideBudgetLineFinal()` (lib/recordActions.js).
+- **Đặt Phòng Họp (meetings)**: bước Duyệt trước đây chỉ gác bằng ĐÚNG 1 quyền phẳng `meetingApprove`
+  toàn công ty. Nay bổ sung cấu hình theo phòng ban (`meetingDeptWorkflows`), màn mới "🏢 QT Đặt Phòng
+  Họp". `meetingApprove`/admin vẫn **luôn** duyệt được mọi phòng ban như cũ — map mới chỉ CỘNG THÊM khả
+  năng gán riêng người duyệt cho 1 phòng ban cụ thể dù người đó không giữ `meetingApprove`. Nút "🔍 Xem
+  Quy Trình" ở form Đăng Ký nay hiện GỘP cả 2 nhóm (quyền phẳng + người được gán riêng theo phòng ban đang
+  chọn). Đã đồng thời vá kèm 1 gap về phạm vi xem (`canViewMeeting()`, lib/recordViewScope.js): người
+  được gán riêng cho 1 phòng ban phải XEM được lịch đó mới duyệt được — thiếu nhánh này thì GET /api/data
+  sẽ âm thầm lọc mất lịch trước khi tới tay approver mới (cùng lớp lỗi "extra-approval-layer-only approver
+  không thấy được hồ sơ" đã vá ở 7 module khác, đợt audit trước). Xem `canDecideMeeting()`
+  (lib/recordActions.js).
+- **4 module còn lại trong danh sách rà soát trước đó — GIỮ NGUYÊN, không đổi gì** (xác nhận qua
+  `AskUserQuestion` trước khi làm):
+  - **Giấy Phép (licenses)**: code có ghi chú rõ đây là quyết định nghiệp vụ CŨ đã chốt — cố ý dùng quyền
+    phẳng `licenseApprove`, không theo quy trình phòng ban (`getScope` rỗng, ai giữ quyền thấy/duyệt được
+    TẤT CẢ phòng ban).
+  - **Đồng Phục (uniformPeriods)**: 1 kỳ cấp phát có thể nhắm nhiều phòng ban/siêu thị cùng lúc
+    (`allocations[]`), nhưng cơ chế `allocations[].status` (GĐST tự xác nhận phần siêu thị mình SAU KHI
+    kỳ đã duyệt) đã đáp ứng đúng tinh thần "siêu thị nào duyệt cho siêu thị đó" — không cần đổi.
+  - **Tuyển Dụng (recruitmentReferrals)**: giữ nguyên theo yêu cầu người dùng.
+  - **Mua Hàng BAS (rebateCalculations)**: hoãn — để dành cho Giai đoạn 2 (Sổ Cái) như tài liệu gốc đã
+    dự định, module hiện chưa có khái niệm phòng ban nội bộ nào để route theo.
+
+Test mới: `tests/test-audit-createvsapprove-gaps.js` (+9 kịch bản #5b, Ngân Sách Phê Duyệt cuối),
+`tests/test-meeting-dept-workflow.js` (9 kịch bản thuần, `canDecideMeeting()`/`canViewMeeting()`),
+`tests/test-budget-meeting-dept-workflow-ui.js` (7 kịch bản UI thật qua Chromium — cả 2 màn admin cấu
+hình mới lẫn nút Duyệt ẩn/hiện đúng theo phòng ban ở cả Ngân Sách lẫn Đặt Phòng Họp). Full regression các
+bộ test liên quan (budget/meeting/catalog-rename/module-access-gate/csp-full-audit...) đều pass.
 
 ## v24.71 (2026-10-03): Thanh Toán — quyền "Xác nhận thanh toán" riêng, tách khỏi "Quản lý Thanh Toán"
 

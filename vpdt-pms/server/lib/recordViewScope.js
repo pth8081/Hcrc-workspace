@@ -737,16 +737,26 @@ function filterItSupportTicketsForUser(items, user) {
 // Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows(meetingView) HOẶC chính
 // người tạo HOẶC người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/
 // meetingCancel — không theo phòng ban, luôn cần thấy mọi lịch để xử lý).
-function canViewMeeting(user, meeting) {
+// canViewMeeting() (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): thêm nhánh approver
+// theo meetingDeptWorkflows (appData, optional — các nơi gọi cũ chưa truyền vẫn an toàn nhờ optional
+// chaining, chỉ mất đúng nhánh mới này) — một người được admin gán làm approver riêng cho phòng ban của
+// lịch họp đó (dù KHÔNG giữ quyền phẳng meetingApprove) giờ cũng phải XEM được lịch mới duyệt được (xem
+// canDecideMeeting() ở lib/recordActions.js) — thiếu nhánh này thì GET /api/data âm thầm lọc mất lịch
+// của phòng ban khác trước khi tới tay approver, cùng lớp lỗi "extra-approval-layer-only approver không
+// thấy được hồ sơ" đã vá ở 7 module khác (Fix #1, đợt rà soát 8-agent).
+function canViewMeeting(user, meeting, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
   if (scopeAllows(user, user.perms?.meetingView, meeting.dept)) return true;
-  return !!(user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView);
+  if (user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView) return true;
+  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[meeting.dept], appData || {});
+  return (approvers[1] || []).includes(user.username);
 }
 
-function filterMeetingsForUser(meetings, user) {
-  return (meetings || []).filter(m => canViewMeeting(user, m));
+function filterMeetingsForUser(meetings, user, appData) {
+  return (meetings || []).filter(m => canViewMeeting(user, m, appData));
 }
 
 // Khớp isMeetingMinutesAttendee()/canViewMeetingMinutesRecord() (public/index.html): admin, quyền

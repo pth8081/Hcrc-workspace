@@ -3019,13 +3019,16 @@ router.post('/budgetLines/:id/reject-proposal', async (req, res) => {
 // TÁCH RỜI (khoá+sửa dòng Phê Duyệt trước, rồi mới tạo dòng USED) vì withLockedRecordForCollection() chỉ
 // mutate ĐÚNG 1 bản ghi đã khoá — chấp nhận rủi ro cực hiếm (server crash giữa 2 bước) đổi lấy code đơn
 // giản, đúng tinh thần các thao tác "tạo kèm" khác trong hệ thống (không có transaction xuyên 2 bảng).
+// Cần appData (budgetApprovedDeptWorkflows/users/workflows) để canDecideBudgetLineFinal() tra đúng
+// approver theo phòng ban (xem lib/recordActions.js) — cùng khuôn /approve-proposal ở trên.
 router.post('/budgetLines/:id/approve', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const approved = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.approveBudgetLine(freshUser, item));
+      recordActions.approveBudgetLine(freshUser, item, appData));
     const usedItem = await createForCollection('budgetLines', () => ({
       ...recordActions.buildBudgetLineUsedRow(freshUser, approved), id: Date.now()
     }));
@@ -3038,8 +3041,9 @@ router.post('/budgetLines/:id/reject', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    const appData = await getAllAppData();
     const result = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
-      recordActions.rejectBudgetLine(freshUser, item, req.body));
+      recordActions.rejectBudgetLine(freshUser, item, req.body, appData));
     res.json({ ok: true, item: result });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/reject`, err); }
 });
