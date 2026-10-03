@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**24.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.83 (2026-10-03): Vá lỗ hổng Cao — migration deptViewScopeConfig cấp thừa quyền xem xuyên công ty
+
+Rà soát sửa đổi v24.74→v24.81 phát hiện: migration tự động trong `initDatabase()`
+(`public/js/core.js`, "Việc D" v24.80) gộp MỌI user có quyền phẳng CŨ
+`submissionView`/`contractView.all`/`.depts` vào `deptViewScopeConfig.submission`/
+`contract.extraViewers` (xem toàn công ty) để không mất quyền khi bỏ 2 quyền phẳng
+đó — nhưng coi BẤT KỲ `.depts` không rỗng nào là "cần di trú", kể cả khi toàn bộ
+`.depts` chỉ trùng đúng phòng ban hiện tại của chính user đó (hoàn toàn dư thừa, vì
+mode DEPT mặc định đã tự cho xem đúng phòng mình). Hậu quả: user chỉ từng được xem
+đúng phòng mình vô tình được cấp THÊM quyền xem xuyên công ty chưa từng có thật.
+
+- Sửa điều kiện di trú ở `core.js` (`initDatabase()`): chỉ coi `.depts` là tín hiệu
+  di trú thật khi có ít nhất 1 phòng ban KHÁC phòng ban hiện tại của user — áp dụng
+  cho cả 2 nhánh `submissionView`/`contractView`.
+- Thêm `tests/test-deptviewscope-migration.js` (3 kịch bản, Chromium thật qua
+  testHarness): user dư thừa (.depts=[đúng phòng mình]) KHÔNG bị di trú; user có
+  phòng ban khác PHẢI được di trú; user `.all=true` PHẢI được di trú bất kể phòng ban.
 
 ## v24.82 (2026-10-03): Vá lỗ hổng Cao — giả mạo `fileType` để đính kèm thực thi được vào Nhịp Sống/Góc Chia Sẻ
 

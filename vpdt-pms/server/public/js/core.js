@@ -4501,13 +4501,21 @@ async function initDatabase(loggingInUser, opts) {
     // xuyên phòng ban" của bất kỳ user THẬT nào đang có (ngoài 2 seed defaults.js đã tự chuyển tay),
     // quét TOÀN BỘ user thật mỗi lần tải trang và tự gộp vào deptViewScopeConfig.submission/
     // contract.extraViewers nếu CHƯA có trong đó — idempotent (chạy lại không đổi gì nếu đã gộp rồi).
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cấp thừa quyền xem xuyên công ty): trước đây
+    // BẤT KỲ `.depts` không rỗng nào cũng bị coi là "cần di trú sang extraViewers" (xem toàn công ty) —
+    // kể cả khi TOÀN BỘ `.depts` chỉ trùng ĐÚNG phòng ban hiện tại của chính user đó (hoàn toàn dư thừa,
+    // vì mode DEPT mặc định đã tự cho xem đúng phòng mình rồi — xem chú thích tương tự ở defaults.js cho
+    // seed `nv_nhansu`, nhưng trước đây migration THẬT chạy trên dữ liệu production lại KHÔNG áp cùng
+    // logic đó). Chỉ coi là "cần di trú" khi `.depts` có ít nhất 1 phòng ban KHÁC phòng ban hiện tại của
+    // chính user — đúng tín hiệu "user này từng được cấp xem phòng ban KHÁC", mới cần giữ lại quyền tương
+    // đương (extraViewers, xem toàn công ty — mô hình mới không còn khái niệm "thêm đúng N phòng cụ thể").
     const legacySubmissionViewers = new Set();
     const legacyContractViewers = new Set();
     (data.users || []).forEach(u => {
       const sv = u.perms?.submissionView;
-      if (sv?.all || (Array.isArray(sv?.depts) && sv.depts.length > 0)) legacySubmissionViewers.add(u.username);
+      if (sv?.all || (Array.isArray(sv?.depts) && sv.depts.some(d => d !== u.dept))) legacySubmissionViewers.add(u.username);
       const cv = u.perms?.contractView;
-      if (cv?.all || (Array.isArray(cv?.depts) && cv.depts.length > 0)) legacyContractViewers.add(u.username);
+      if (cv?.all || (Array.isArray(cv?.depts) && cv.depts.some(d => d !== u.dept))) legacyContractViewers.add(u.username);
     });
     let scopeConfigMigrated = false;
     if (legacySubmissionViewers.size || legacyContractViewers.size) {
