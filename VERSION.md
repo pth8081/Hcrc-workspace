@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**24.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.85 (2026-10-03): Vá lỗ hổng Cao — "stuck-fallback" ở 10 file sub-tab còn lại (Mục 0)
+
+Rà soát sửa đổi v24.74→v24.81 phát hiện: đợt vá "stuck-fallback" ở v24.77 (`setItSupportSubTab()`/
+`resolveAccessibleInternalSubTab()`/`resolveAccessibleTrainingLmsTab()`) chỉ sửa ĐÚNG 3 chỗ, nhưng cùng
+lớp lỗi còn tồn tại ở **10 file/12 hàm** sibling khác — mọi hàm `set*SubTab()` dùng khuôn
+`fallback ? fallback[0] : subTab` (hoặc ternary lồng nhau tương đương) để chọn tab con còn thấy được khi
+tab đang xin mở bị khoá, nhưng khi admin tắt HẾT mọi checkbox Mục 0 con của 1 tab (không còn sibling nào
+được phép), biểu thức `|| subTab` GIỮ NGUYÊN giá trị đã bị khoá — khiến panel/dữ liệu của đúng tab vừa bị
+khoá vẫn hiện ra hoặc được vẽ (menu đã ẩn nút nhưng nội dung vẫn lộ nếu gọi lại hàm, hoặc tab bị kẹt không
+tự rơi về tab khác). 2 trong 10 hàm còn NẶNG HƠN: `setOrgChartSubTab()` dùng `else` trần render KPI cho
+BẤT KỲ giá trị không phải TREE/DIAGRAM (kể cả giá trị rác), và `setPaymentSubTab()` dùng `else` trần
+render tab APPROVE cho bất kỳ giá trị khác MANAGE — cả 2 đã sửa thành so sánh tường minh.
+
+- Đổi fallback thành trả `null` (dừng hẳn, không vẽ gì) ở cả 10 file: `module-dangkyxe.js`
+  (`setCarSubTab`), `module-phonghop.js` (`setMeetingSubTab`), `module-vanhanh.js`
+  (`setOperationOrderSubTab` + `setVanHanhSubTab`), `module-baocaodinhky-nhap.js`
+  (`setPeriodicReportSubTab`), `module-dongphuc.js` (`setUniformSubTab`), `module-muahang.js`
+  (`setPurchasingSubTab` + `setMhBasSubTab`), `module-orgchart.js` (`setOrgChartSubTab`),
+  `module-thanhtoan.js` (`setPaymentSubTab`), `module-vpp.js` (`setVppSubTab`), `module-checklist.js`
+  (`setChecklistReportSubTab`).
+- Thêm `tests/test-stuck-subtab-fallback-fix.js` (12 kịch bản, 1 mỗi hàm, qua Chromium thật) — xác nhận
+  `active*SubTab`/biến tương đương đều về `null` và toàn bộ panel con đều ẩn khi tắt hết checkbox liên
+  quan, kể cả 2 chỗ "nặng hơn" (KPI/APPROVE không còn render nhầm).
+- Chạy lại toàn bộ test hiện có của 10 module liên quan (test-muc0-module-access-tree.js +
+  ~25 file test khác chạm tới các hàm này) — không phát hiện regression; 2 lỗi phát hiện trong lượt
+  chạy (test-operation-order-report.js "Tháng 9/2026" hard-code theo ngày hệ thống lúc viết test, và
+  test-operation-order-multifile-batch.js thiếu file PDF fixture môi trường) đã xác nhận TỒN TẠI SẴN
+  TRƯỚC khi vá (qua `git stash`), không liên quan tới đợt sửa này.
 
 ## v24.84 (2026-10-03): Vá lỗ hổng Trung bình — deptViewScopeConfig chưa được wire vào lớp SQL pre-filter (8 module)
 

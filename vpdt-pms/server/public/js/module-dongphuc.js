@@ -50,8 +50,13 @@ function setUniformSubTab(subTab) {
   const uniformTabOrder = [['PERIODS', canSeePeriods], ['STORE', canSeeStore], ['STOCK', canSeeStock], ['DASHBOARD', canSeeDashboard]];
   const curUniformTab = uniformTabOrder.find(([k]) => k === subTab);
   if (!curUniformTab || !curUniformTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| subTab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn
+    // sibling nào được phép (cả 4 checkbox uniformPeriods/uniformStore/uniformStock/uniformDashboard đều
+    // bị tắt). Đổi về `null` — 4 nhánh render bên dưới đều so sánh trực tiếp với 1 giá trị cụ thể nên tự
+    // động không khớp `null`, không cần thêm guard riêng.
     const fallback = uniformTabOrder.find(([, ok]) => ok);
-    subTab = fallback ? fallback[0] : subTab;
+    subTab = fallback ? fallback[0] : null;
   }
   activeUniformSubTab = subTab;
 

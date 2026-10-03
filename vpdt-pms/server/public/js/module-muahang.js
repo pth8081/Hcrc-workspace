@@ -78,8 +78,12 @@ function setPurchasingSubTab(tab) {
   const mhTabOrder = ['BAS', 'REPORT', 'ITPRICE'].map(t => [t, hasModuleAccess(currentUser, mhKeyMap[t])]);
   const curMhTab = mhTabOrder.find(([k]) => k === tab);
   if (!curMhTab || !curMhTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| tab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn sibling
+    // nào được phép (cả 3 checkbox muaHangBas/muaHangReport/muaHangItprice đều bị tắt). Đổi về `null` —
+    // nhánh render if/else-if bên dưới tự không khớp `null`, không cần guard riêng.
     const fallback = mhTabOrder.find(([, ok]) => ok);
-    tab = fallback ? fallback[0] : tab;
+    tab = fallback ? fallback[0] : null;
   }
   mhSubTab = tab;
   // "ITPRICE" (Phê Duyệt Giá Bán Lẻ, 10/2026) thêm vào chung vòng lặp ẩn/hiện panel + tô màu nút —
@@ -121,8 +125,13 @@ function setMhBasSubTab(tab) {
   const mhBasTabOrder = ['VENDOR', 'TERM', 'SYNC'].map(t => [t, hasModuleAccess(currentUser, mhBasKeyMap[t])]);
   const curMhBasTab = mhBasTabOrder.find(([k]) => k === tab);
   if (!curMhBasTab || !curMhBasTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| tab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn sibling
+    // nào được phép (cả 3 checkbox muaHangBasVendor/Term/Sync đều bị tắt) — vòng lặp forEach() bên dưới
+    // dùng `t !== tab` để ẩn/hiện panel, nên panel ứng với tab CŨ (vừa bị khoá) vẫn hiện ra (so khớp
+    // chính nó). Đổi về `null` để KHÔNG panel nào khớp `tab` nữa, tất cả tự ẩn.
     const fallback = mhBasTabOrder.find(([, ok]) => ok);
-    tab = fallback ? fallback[0] : tab;
+    tab = fallback ? fallback[0] : null;
   }
   mhBasSubTab = tab;
   mhBasTabOrder.forEach(([t, allowed]) => {

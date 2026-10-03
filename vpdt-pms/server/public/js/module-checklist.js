@@ -510,8 +510,19 @@ function setChecklistReportSubTab(tab) {
   // checklistAtvstpReportView giờ TÁCH RIÊNG, không còn 1 cờ chung gác cả 2 sub-tab như trước).
   const canGeneral = hasModuleAccess(currentUser, 'checklistReportGeneral') && canViewChecklistReportsGeneralClient(currentUser);
   const canVsattp = hasModuleAccess(currentUser, 'checklistReportVsattp') && canViewChecklistReportsAtvstpClient(currentUser);
-  if (tab === 'GENERAL' && !canGeneral) tab = canVsattp ? 'VSATTP' : 'GENERAL';
-  if (tab === 'VSATTP' && !canVsattp) tab = canGeneral ? 'GENERAL' : 'VSATTP';
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+  // setItSupportSubTab() v24.77): 2 dòng ternary lồng nhau TRƯỚC ĐÂY có thể quay vòng về ĐÚNG tab vừa bị
+  // khoá khi CẢ 2 checkbox checklistReportGeneral/checklistReportVsattp đều tắt (VD tab='GENERAL',
+  // !canGeneral -> vì canVsattp cũng false nên nhánh else trả lại 'GENERAL' — y hệt giá trị vừa bị
+  // chặn) — panel GENERAL (đã được render sẵn dữ liệu bởi renderChecklistReportTab() TRƯỚC khi gọi hàm
+  // này) không bị ẩn đi vì `classList.toggle('hidden', tab !== 'GENERAL')` vẫn khớp. Đổi sang khuôn
+  // tabOrder.find() dùng chung — trả `null` khi không còn sibling nào được phép.
+  const checklistReportTabOrder = [['GENERAL', canGeneral], ['VSATTP', canVsattp]];
+  const curChecklistReportTab = checklistReportTabOrder.find(([k]) => k === tab);
+  if (!curChecklistReportTab || !curChecklistReportTab[1]) {
+    const fallback = checklistReportTabOrder.find(([, ok]) => ok);
+    tab = fallback ? fallback[0] : null;
+  }
   checklistReportActiveSubTab = tab;
   document.getElementById('checklistReportGeneralPanel').classList.toggle('hidden', tab !== 'GENERAL');
   document.getElementById('checklistReportVsattpPanel').classList.toggle('hidden', tab !== 'VSATTP');

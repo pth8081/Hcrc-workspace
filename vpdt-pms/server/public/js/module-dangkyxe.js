@@ -168,8 +168,13 @@ function setCarSubTab(subTab) {
   const carTabOrder = [['REG', canSeeReg], ['CALENDAR', canSeeCalendar], ['DRIVER', canSeeDriver], ['REPORT', canSeeReport]];
   const curCarTab = carTabOrder.find(([k]) => k === subTab);
   if (!curCarTab || !curCarTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab()/resolveAccessibleInternalSubTab() v24.77): trước đây `|| subTab` GIỮ NGUYÊN
+    // tab đang xin mở khi KHÔNG còn sibling nào được phép (cả 4 checkbox carReg/carCalendar/carDriver/
+    // carReport đều bị tắt) — các nhánh render bên dưới vẫn chạy tiếp với subTab cũ, vẽ đủ dữ liệu dù đã
+    // bị khoá. Đổi về `null` để dừng hẳn (xem `if (!subTab) return;` ngay trước khi vẽ nội dung).
     const fallback = carTabOrder.find(([, ok]) => ok);
-    subTab = fallback ? fallback[0] : subTab;
+    subTab = fallback ? fallback[0] : null;
   }
 
   activeCarSubTab = subTab;
@@ -189,6 +194,11 @@ function setCarSubTab(subTab) {
   if (btnCalendar) btnCalendar.className = (subTab === 'CALENDAR' ? activeCls : inactiveCls) + (canSeeCalendar ? '' : ' hidden');
   if (btnDriver) btnDriver.className = (subTab === 'DRIVER' ? activeCls : inactiveCls) + (canSeeDriver ? '' : ' hidden');
   if (btnReport) btnReport.className = (subTab === 'REPORT' ? activeCls : inactiveCls) + (canSeeReport ? '' : ' hidden');
+
+  // Không còn sub-tab nào được phép xem (cả 4 checkbox Mục 0 liên quan đều đã bị tắt) — mọi khung đã ẩn
+  // hết ở trên, dừng luôn, không vẽ nội dung gì.
+  if (!subTab) return;
+
   if (subTab === 'REG') {
     renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');
     renderCarRegs();

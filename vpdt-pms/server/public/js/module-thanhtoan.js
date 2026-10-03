@@ -23,8 +23,15 @@ function setPaymentSubTab(subTab) {
   const payTabOrder = [['CREATE', canCreate], ['MANAGE', canManageTab], ['APPROVE', canApproveTab]];
   const curPayTab = payTabOrder.find(([k]) => k === subTab);
   if (!curPayTab || !curPayTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| subTab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn
+    // sibling nào được phép (cả 3 checkbox paymentCreateTab/ManageTab/ApproveTab đều bị tắt). Đổi về
+    // `null` — NẶNG HƠN 1 chỗ render bên dưới (`else renderPaymentRequests()` trần, phải sửa thành
+    // `else if (subTab === 'APPROVE')` tường minh, vì `else` trước đây chạy cho BẤT KỲ giá trị không phải
+    // MANAGE, kể cả CREATE/null, vô tình render dữ liệu đề nghị chờ duyệt dù tab APPROVE chưa chắc được
+    // phép).
     const fallback = payTabOrder.find(([, ok]) => ok);
-    subTab = fallback ? fallback[0] : subTab;
+    subTab = fallback ? fallback[0] : null;
   }
   activePaymentSubTab = subTab;
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white';
@@ -38,7 +45,7 @@ function setPaymentSubTab(subTab) {
   if (subTab === 'CREATE' && editingPaymentRequestId === null) cancelEditPaymentRequest();
   if (subTab === 'CREATE') renderDynamicInputsForModule('PAYMENT', 'dynamicFieldsContainer_PAYMENT');
   if (subTab === 'MANAGE') renderPaymentManageTab();
-  else renderPaymentRequests();
+  else if (subTab === 'APPROVE') renderPaymentRequests();
 }
 
 function renderPaymentCreateInstallmentsList(installments) {

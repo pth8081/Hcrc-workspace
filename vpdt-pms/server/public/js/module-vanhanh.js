@@ -75,8 +75,12 @@ function setOperationOrderSubTab(tab) {
   const opOrderTabOrder = ['STORE', 'HO', 'REPORT', 'RECEIPT'].map(k => [k, hasModuleAccess(currentUser, opOrderKeyMap[k])]);
   const curOpOrderTab = opOrderTabOrder.find(([k]) => k === tab);
   if (!curOpOrderTab || !curOpOrderTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| tab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn sibling
+    // nào được phép (cả 4 checkbox vanHanhOrdersStore/Ho/Report/Receipt đều bị tắt) — các nhánh render
+    // bên dưới vẫn chạy tiếp với tab cũ. Đổi về `null` để dừng hẳn (xem `if (!tab) return;`).
     const fallback = opOrderTabOrder.find(([, ok]) => ok);
-    tab = fallback ? fallback[0] : tab;
+    tab = fallback ? fallback[0] : null;
   }
   activeOperationOrderSubTab = tab;
   const isList = tab === 'STORE' || tab === 'HO';
@@ -124,8 +128,14 @@ function setVanHanhSubTab(subTab) {
   const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
   const curVhTab = vhTabOrder.find(([k]) => k === subTab);
   if (!curVhTab || !curVhTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| subTab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn
+    // sibling nào được phép (cả 3 checkbox vanHanhOrders/vanHanhStoreGroup/vanHanhItpriceTab đều bị tắt).
+    // Đổi về `null` — các nhánh render bên dưới (`if (subTab === 'ORDERS')`/`if (subTab === 'STORE') ...
+    // else if (subTab === 'ITPRICE')`) đều là so sánh trực tiếp với 1 giá trị cụ thể nên tự động không
+    // khớp `null`, không cần thêm guard riêng.
     const fallback = vhTabOrder.find(([, ok]) => ok);
-    subTab = fallback ? fallback[0] : subTab;
+    subTab = fallback ? fallback[0] : null;
   }
   activeVanHanhSubTab = subTab;
   const tabs = [

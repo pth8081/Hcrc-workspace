@@ -126,9 +126,18 @@ function setMeetingSubTab(subTab) {
   const canReg = hasModuleAccess(currentUser, 'meetingRegister');
   const canCal = hasModuleAccess(currentUser, 'meetingCalendar');
   const canSeeReport = hasModuleAccess(currentUser, 'meetingReport') && (canApproveMeeting(currentUser) || !!currentUser?.perms?.meetingReportView);
-  if (subTab === 'REPORT' && !canSeeReport) subTab = canReg ? 'REGISTER' : (canCal ? 'CALENDAR' : 'REPORT');
-  if (subTab === 'REGISTER' && !canReg) subTab = canCal ? 'CALENDAR' : (canSeeReport ? 'REPORT' : 'REGISTER');
-  if (subTab === 'CALENDAR' && !canCal) subTab = canReg ? 'REGISTER' : (canSeeReport ? 'REPORT' : 'CALENDAR');
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+  // setItSupportSubTab() v24.77): 3 dòng ternary lồng nhau TRƯỚC ĐÂY có thể quay vòng về ĐÚNG tab vừa bị
+  // khoá khi CẢ 3 checkbox meetingRegister/meetingCalendar/meetingReport đều tắt (VD subTab='REPORT',
+  // !canSeeReport -> vì canReg/canCal đều false nên nhánh else cuối trả lại 'REPORT' — y hệt giá trị vừa
+  // bị chặn). Đổi sang khuôn tabOrder.find() dùng chung (setCarSubTab()/setPaymentSubTab()...) — trả
+  // `null` khi không còn sibling nào được phép, để dừng hẳn render bên dưới (xem `if (!subTab) return;`).
+  const meetingTabOrder = [['REGISTER', canReg], ['CALENDAR', canCal], ['REPORT', canSeeReport]];
+  const curMeetingTab = meetingTabOrder.find(([k]) => k === subTab);
+  if (!curMeetingTab || !curMeetingTab[1]) {
+    const fallback = meetingTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : null;
+  }
 
   activeMeetingSubTab = subTab;
   const btnRegister = document.getElementById('btnMeetingSubRegister');
@@ -145,6 +154,11 @@ function setMeetingSubTab(subTab) {
   document.getElementById('meetingRegisterTabContent').classList.toggle('hidden', subTab !== 'REGISTER');
   document.getElementById('meetingCalendarTabContent').classList.toggle('hidden', subTab !== 'CALENDAR');
   document.getElementById('meetingReportTabContent').classList.toggle('hidden', subTab !== 'REPORT');
+
+  // Không còn sub-tab nào được phép xem (cả 3 checkbox Mục 0 liên quan đều đã bị tắt) — mọi khung đã ẩn
+  // hết ở trên, dừng luôn, không vẽ nội dung gì.
+  if (!subTab) return;
+
   if (subTab === 'CALENDAR') {
     renderMeetingCalendar();            // vẽ ngay bằng dữ liệu đang có (không để màn trắng khi chờ mạng)
     refreshMeetingBusySlots(true);      // rồi nạp lại phòng bận TOÀN CÔNG TY và vẽ lại (LỖI ĐÃ VÁ 10/2026)

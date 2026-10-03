@@ -153,8 +153,13 @@ function setOrgChartSubTab(subTab) {
   const ocTabOrder = [['TREE', canTree], ['DIAGRAM', canDiagram], ['KPI', canKpi]];
   const curOcTab = ocTabOrder.find(([k]) => k === subTab);
   if (!curOcTab || !curOcTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
+    // setItSupportSubTab() v24.77): trước đây `|| subTab` GIỮ NGUYÊN tab đang xin mở khi KHÔNG còn
+    // sibling nào được phép (cả 3 checkbox orgChartTree/Diagram/Kpi đều bị tắt). Đổi về `null` — NẶNG
+    // HƠN 2 nhánh render if/else-if khác (vẫn phải sửa thêm `else` cuối thành `else if` tường minh bên
+    // dưới, vì `else` trần trước đây render KPI cho BẤT KỲ giá trị không phải TREE/DIAGRAM, kể cả `null`).
     const fallback = ocTabOrder.find(([, ok]) => ok);
-    subTab = fallback ? fallback[0] : subTab;
+    subTab = fallback ? fallback[0] : null;
   }
   activeOrgChartSubTab = subTab;
   document.getElementById('orgChartTreeView').classList.toggle('hidden', subTab !== 'TREE');
@@ -167,7 +172,7 @@ function setOrgChartSubTab(subTab) {
   document.getElementById('btnOrgChartSubKpi').className = (subTab === 'KPI' ? activeCls : inactiveCls) + (canKpi ? '' : ' hidden');
   if (subTab === 'TREE') renderOrgChartTree();
   else if (subTab === 'DIAGRAM') renderOrgChartDiagramTab();
-  else renderOrgChartKpiFlowTab();
+  else if (subTab === 'KPI') renderOrgChartKpiFlowTab();
 }
 
 // ===== Suy diễn hiển thị/occupant — mirror ĐÚNG lib/orgChart.js (buildNodeDisplayName()/
