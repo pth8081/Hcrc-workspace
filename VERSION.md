@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**24.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.80 (2026-10-03): Làm gọn phân quyền Xem Văn Bản Trình/Hợp Đồng — bỏ cột "Xem" ("Việc D")
+
+Người dùng xác nhận "Việc D" sau khi được phân tích: bỏ cột "Xem" (quyền phẳng cũ
+`submissionView`/`contractView`, có `.all`/`.depts`) khỏi Ma Trận Phân Quyền ở 2 khối "Văn Bản Trình"/
+"Hợp Đồng & Giấy Phép", cùng khuôn đã áp cho Tài Liệu ở v24.75 — phạm vi xem theo phòng ban của 2 module
+này nay do DUY NHẤT `deptViewScopeConfig.submission`/`contract` (Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem
+Theo Phòng Ban) quyết định, không còn 2 nguồn cấu hình song song gây rối.
+
+- **Vá kèm 1 lỗi thật phát hiện trong lúc rà soát**: `loadSubmissionsScoped()` (`routes/data.js`) thiếu
+  nhánh company-wide cho `extraViewers`/`managerCanView` (khác hẳn `loadDocsScoped()` đã có từ trước) —
+  nếu không vá trước, user được cấu hình `extraViewers` sẽ bị tải THIẾU hồ sơ Văn Bản Trình (dù
+  `filterSubmissionsForUser()` ở lớp lọc thứ 2 vẫn đúng, lớp thu hẹp SQL phía trước lọc nhầm trước đó).
+- `canViewSubmission()`/`canViewContract()` (`lib/recordViewScope.js`): bỏ nhánh đọc
+  `user.perms?.submissionView`/`contractView` (truyền `null` cho `scopeAllows()`), giữ nguyên nhánh
+  dept-auto-view + `extraViewScopeAllows()` (extraViewers/managerCanView).
+- `defaults.js`: thêm `deptViewScopeConfig.submission`/`contract` mặc định (`mode: 'DEPT'`,
+  `extraViewers: ['ks_kiemsoat', 'sep_duyet']` — 2 user seed cũ từng có `submissionView.all`/
+  `contractView.all = true`), bỏ 2 key `submissionView`/`contractView` khỏi perms seed 3 user liên quan.
+- **An toàn dữ liệu production**: thêm migration tự động (một lần, idempotent) vào `initDatabase()`
+  (`core.js`, chạy mỗi lần `GET /api/data`) — quét MỌI user thật đang có `submissionView.all`/`.depths`
+  hoặc `contractView.all`/`.depths`, tự gộp vào `deptViewScopeConfig.submission/contract.extraViewers`
+  trước khi bỏ quyền phẳng, admin tự lưu lại (`syncStorage('deptViewScopeConfig', {silent:true})`) —
+  đảm bảo KHÔNG user thật nào bị mất quyền "xem xuyên phòng ban" cũ sau khi lên bản này.
+- Client: bỏ checkbox `pSubViewAll`/`pContractViewAll` khỏi `systemSection.html` +
+  `collectPermsFromForm()`/`populatePermsForm()`/`ALL`-toggle (`module-admin-permtree.js`), cột khỏi
+  `PERM_DEPT_TABLES` (`module-admin.js`), nhãn Ma Trận (`module-admin-permgroups.js`), dòng reset +
+  `summarizeUserPerms()` (`module-admin-userstaging.js`). `canAccessSubmissionModule()`/
+  `canAccessContractModule()` (`core.js`) đổi thành `if (user.dept) return true;` — hành vi KHÔNG đổi
+  (`scopeHasAny()` vốn đã luôn trả `true` khi có `user.dept`, bất kể quyền truyền vào, nên đây chỉ là
+  rút gọn code, không phải thay đổi logic).
+- Dọn 2 hàm lọc phía client đã lạc hậu so với server: `module-vanbantrinh.js`/`module-hopdong.js` bỏ
+  hẳn `canViewSub`/`canViewContractRec` (tự lọc lại theo `submissionView`/`contractView` cũ, trùng lặp
+  và sai lệch so với server), dùng thẳng `DB.submissions`/`DB.contracts` đã được server lọc đúng.
+- `test-submissions-scope.js` viết lại kịch bản `deptViewScopeConfig.submission.extraViewers` thay 2
+  kịch bản `submissionView.all`/`.depts` cũ; full regression xác nhận không có test nào fail do thay
+  đổi này (15 thất bại còn lại trong bộ test đều xác minh lại là lỗi môi trường/pre-existing có sẵn từ
+  trước, không liên quan — qua `git stash` so sánh trước/sau).
 
 ## v24.79 (2026-10-03): Nhịp Sống HCRC/Góc Chia Sẻ — bỏ ô tải tài liệu, chỉ còn đính kèm ảnh ("Việc E")
 

@@ -333,7 +333,12 @@ không cần sửa code. Mỗi module chọn ĐỘC LẬP 4 trạng thái:
 Ngân Sách, Thanh Toán, Mua Sắm/Sửa Chữa Văn Phòng, Đăng Ký Xe, Hợp Đồng, Tờ
 Trình, Đặt Phòng Họp, Vận Hành (Đặt Hàng ST/HO, Mở Mới Siêu Thị, Sửa Chữa Siêu
 Thị), Báo Cáo Định Kỳ, Checklist Đánh Giá Siêu Thị (đã có sẵn nhánh "cùng siêu
-thị tự động xem" từ trước).
+thị tự động xem" từ trước). **Hợp Đồng/Tờ Trình (từ v24.80, "Việc D")**: ĐÂY
+giờ là đúng và DUY NHẤT nơi cấu hình quyền xem xuyên phòng ban của 2 module
+này — Ma Trận Phân Quyền đã bỏ hẳn cột "Xem" cũ (`submissionView`/
+`contractView`), cùng khuôn đã áp cho Tài Liệu ở v24.75; "Xem xuyên mọi phòng
+ban" (trước đây quyền phẳng `.all`/`.depts`) nay cấu hình qua mục 3 "Chọn
+người xem" (extraViewers) ở màn này.
 
 **Mặc định "Chỉ người tạo xem" (6 module mới, admin TỰ CHỌN mở rộng nếu
 muốn)**: Công Việc (dept = cùng phòng NGƯỜI GIAO việc, lớp người-được-giao/

@@ -1211,8 +1211,10 @@ function populateModuleAccessForm(moduleAccess, prefix = 'pModuleAccess') {
 // hàng <tr>, xem chú thích tại đó).
 const PERM_DEPT_TABLES = [
   { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pDocDownload'] },
-  { tbody: 'pSubDeptTableBody', cols: ['pSubView', 'pSubCreate', 'pSubDownload'] },
-  { tbody: 'pContractDeptTableBody', cols: ['pContractView', 'pContractCreate', 'pContractDownload'] },
+  // LÀM GỌN (11/2026, "Việc D"): bỏ cột pSubView/pContractView ("Xem") — xem chú thích đầy đủ tại khối
+  // 📜 3/📄 4 trong systemSection.html.
+  { tbody: 'pSubDeptTableBody', cols: ['pSubCreate', 'pSubDownload'] },
+  { tbody: 'pContractDeptTableBody', cols: ['pContractCreate', 'pContractDownload'] },
   { tbody: 'pMeetingDeptTableBody', cols: ['pMeetingView', 'pMeetingBook'] },
   { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarCreate', 'pCarDownload'] },
   { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },

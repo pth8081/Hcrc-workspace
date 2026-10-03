@@ -435,23 +435,20 @@ function renderSubmissionReqs() {
   const tbody = document.getElementById('submissionTableBody');
   if (!tbody) return;
 
-  // CẬP NHẬT: trước đây hiển thị TẤT CẢ tờ trình của mọi phòng ban cho bất kỳ ai có quyền
-  // "submissionModule". Nay lọc theo phạm vi Xem (submissionView) — người tạo và approver được
-  // giao ở quy trình duyệt của phòng ban đó luôn xem được hồ sơ liên quan dù ngoài phạm vi.
+  // LÀM GỌN (11/2026, "Việc D"): bỏ bộ lọc client `canViewSub()` lỗi thời — tự code lại 1 bản
+  // scopeAllows() 3-tham-số không hề biết tới deptViewScopeConfig (extraViewers/managerCanView/mode),
+  // đã LỆCH với server (canViewSubmission(), lib/recordViewScope.js) từ trước đợt này. `DB.submissions`
+  // server đã lọc sẵn ĐÚNG phạm vi thật (GET /api/data, filterSubmissionsForUser()) — dùng thẳng,
+  // không cần lọc lại, khớp đúng khuôn đã áp cho Tài Liệu (module-tailieu.js).
   const deptFilter = document.getElementById('filterDeptSub')?.value || '';
   const statusFilter = document.getElementById('filterStatusSub')?.value || '';
   const fromDate = document.getElementById('filterFromDateSub')?.value || '';
   const toDate = document.getElementById('filterToDateSub')?.value || '';
   const keyword = (document.getElementById('filterKeywordSub')?.value || '').trim();
 
-  const canViewSub = sub => scopeAllows(currentUser, currentUser.perms?.submissionView, sub.dept) ||
-    sub.creator === currentUser.username ||
-    (sub.opinionRequestees || []).includes(currentUser.username) ||
-    isApproverForDeptWorkflow(resolveSubmissionWorkflow(sub), currentUser.username);
-
   // Thẻ dashboard — đếm trên toàn bộ tờ trình trong phạm vi quyền xem (không phụ thuộc dept/ngày/từ
   // khoá đang lọc), bấm thẻ sẽ set filterStatusSub rồi lọc lại danh sách bên dưới.
-  const scopedSubs = DB.submissions.filter(canViewSub);
+  const scopedSubs = DB.submissions;
   const subDashCards = [
     { key: '', label: 'Tổng Tờ Trình', count: scopedSubs.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedSubs.filter(s => s.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
@@ -461,8 +458,6 @@ function renderSubmissionReqs() {
   document.getElementById('subDashboardCards').innerHTML = buildDashboardCardsHTML(subDashCards, statusFilter, 'filterSubByCard');
 
   const visibleSubs = DB.submissions.filter(sub => {
-    if (!canViewSub(sub)) return false;
-
     if (deptFilter && sub.dept !== deptFilter) return false;
     if (statusFilter && sub.status !== statusFilter) return false;
     if (!isInDateRange(sub.createdAt, fromDate, toDate)) return false;

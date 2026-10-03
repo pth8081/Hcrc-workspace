@@ -887,19 +887,16 @@ function renderContracts() {
   const toDate = document.getElementById('filterToDateContract')?.value || '';
   const keyword = (document.getElementById('filterKeywordContract')?.value || '').trim();
 
-  const canViewContractRec = c => scopeAllows(currentUser, currentUser.perms?.contractView, c.dept) ||
-    scopeAllows(currentUser, currentUser.perms?.contractView, c.custodianDept) ||
-    c.creator === currentUser.username ||
-    // Quản lý (trực tiếp/gián tiếp) của người tạo — mục 3 kế hoạch 10/2026, mirror ĐÚNG canViewContract()
-    // server (lib/recordViewScope.js).
-    isManagerOf(currentUser.username, c.creator, DB.users) ||
-    isApproverForDeptWorkflow(resolveContractApprovalWorkflow(c), currentUser.username) ||
-    isApproverForDeptWorkflow(resolveContractManageWorkflow(c), currentUser.username);
-
+  // LÀM GỌN (11/2026, "Việc D"): bỏ bộ lọc client `canViewContractRec()` lỗi thời — tự code lại 1 bản
+  // scopeAllows() 3-tham-số không hề biết tới deptViewScopeConfig (extraViewers/managerCanView/mode),
+  // đã LỆCH với server (canViewContract(), lib/recordViewScope.js) từ trước đợt này. `DB.contracts`
+  // server đã lọc sẵn ĐÚNG phạm vi thật (GET /api/data, filterContractsForUser()) — dùng thẳng, khớp
+  // đúng khuôn đã áp cho Tài Liệu/Văn Bản Trình.
+  //
   // Thẻ dashboard — đếm trên phạm vi quyền xem, theo đúng luật hiển thị của từng sub-tab (Phê Duyệt:
   // hợp đồng gốc PENDING + phụ lục chưa APPROVED; Quản Lý HĐ: hợp đồng gốc APPROVED + phụ lục APPROVED
   // đếm riêng). Bấm thẻ set filterContractType (và filterSignedStatusContract ở Quản Lý HĐ) rồi lọc lại.
-  const scopedContracts = DB.contracts.filter(canViewContractRec);
+  const scopedContracts = DB.contracts;
   let contractDashCards;
   if (activeContractSubTab === 'APPROVAL') {
     const pendingRoots = scopedContracts.filter(c => !c.isAddendum && c.approvalStatus === 'PENDING');
@@ -964,8 +961,6 @@ function renderContracts() {
       if (activeContractSubTab === 'MANAGE' && c.approvalStatus !== 'APPROVED') return false;
       if (typeFilter === 'ADDENDUM') return false;
     }
-
-    if (!canViewContractRec(c)) return false;
 
     if (deptFilter && c.dept !== deptFilter) return false;
     if (activeContractSubTab === 'MANAGE' && signedStatusFilter && c.signedFileStatus !== signedStatusFilter) return false;

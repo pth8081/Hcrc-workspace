@@ -3664,7 +3664,11 @@ function canAccessSubmissionModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'submission')) return false;
-  if (scopeHasAny(user, user.perms?.submissionView)) return true;
+  // LÀM GỌN (11/2026, "Việc D"): bỏ hẳn submissionView — scopeHasAny(user, scope) luôn trả true khi
+  // user.dept có giá trị (BẤT KỂ scope truyền vào là gì, xem định nghĩa hàm đó), nên nhánh cũ
+  // `scopeHasAny(user, user.perms?.submissionView)` thực chất chỉ tương đương `if (user.dept)` — đổi
+  // thẳng cho rõ ràng, không đổi hành vi.
+  if (user.dept) return true;
   if (isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username)) return true;
   if (Object.values(DB.submissionTypeDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Nghiêm trọng): trước đây hàm này KHÔNG hề kiểm tra
@@ -3679,7 +3683,8 @@ function canAccessContractModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'contract')) return false;
-  if (scopeHasAny(user, user.perms?.contractView)) return true;
+  // LÀM GỌN (11/2026, "Việc D"): bỏ hẳn contractView — cùng lý do canAccessSubmissionModule() ở trên.
+  if (user.dept) return true;
   if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Nghiêm trọng): trước đây hàm này CHỈ dựa vào
@@ -4016,8 +4021,10 @@ function defaultNewUserPerms() {
     internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
     docDownload: emptyScope(),
-    submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
-    contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(),
+    // submissionView/contractView (cột "Xem") ĐÃ BỎ (11/2026, "Việc D") — xem canAccessSubmissionModule()/
+    // canAccessContractModule() + canViewSubmission()/canViewContract() (lib/recordViewScope.js).
+    submissionCreate: emptyScope(), submissionDownload: emptyScope(),
+    contractCreate: emptyScope(), contractDownload: emptyScope(),
     // contractImportSigned — quyền phẳng RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (hồ sơ APPROVED ngay,
     // không qua quy trình Phê Duyệt) — TÁCH khỏi contractCreate, xem lib/createValidation.js.
     contractImportSigned: false,
@@ -4243,18 +4250,23 @@ function migrateLegacyPerms(perms) {
   let changed = false;
   const scopeFromFlag = (flag) => ({ all: !!flag, depts: [] });
 
-  if (p.submissionView === undefined) {
-    p.submissionView = scopeFromFlag(p.submissionModule);
+  // submissionView/contractView (cột "Xem" cũ) ĐÃ BỎ (11/2026, "Việc D") — giá trị cũ (nếu còn) đã
+  // được quét/gộp vào deptViewScopeConfig.submission/contract.extraViewers ở khối di trú RIÊNG ngay
+  // TRƯỚC lời gọi migrateLegacyPerms() này (xem initDatabase()) — xoá hẳn 2 field dư thừa khỏi perms ở
+  // đây. submissionCreate/contractCreate (quyền Tạo, KHÔNG đổi) vẫn migrate bình thường từ cờ CỰC CŨ
+  // submissionModule/contractModule (boolean toàn công ty, trước khi có mô hình {all,depts}).
+  if (p.submissionCreate === undefined && p.submissionModule !== undefined) {
     p.submissionCreate = scopeFromFlag(p.submissionModule);
-    delete p.submissionModule;
     changed = true;
   }
-  if (p.contractView === undefined) {
-    p.contractView = scopeFromFlag(p.contractModule);
+  if (p.submissionModule !== undefined) { delete p.submissionModule; changed = true; }
+  if (p.submissionView !== undefined) { delete p.submissionView; changed = true; }
+  if (p.contractCreate === undefined && p.contractModule !== undefined) {
     p.contractCreate = scopeFromFlag(p.contractModule);
-    delete p.contractModule;
     changed = true;
   }
+  if (p.contractModule !== undefined) { delete p.contractModule; changed = true; }
+  if (p.contractView !== undefined) { delete p.contractView; changed = true; }
   if (p.carView === undefined) {
     p.carView = scopeFromFlag(p.carModule);
     p.carCreate = scopeFromFlag(p.carModule);
@@ -4483,6 +4495,37 @@ async function initDatabase(loggingInUser, opts) {
     // trang — nhưng chỉ khi người vừa đăng nhập là Admin, vì ghi "users" giờ yêu cầu quyền Admin ở
     // server (trước đây API không có xác thực nên ai load trang cũng lưu được).
     let permsMigrated = false;
+    // Di trú RIÊNG (11/2026, "Việc D"): quyền phẳng CŨ submissionView/contractView.all=true (hoặc
+    // .depts không rỗng — không có khái niệm tương đương chính xác cho "cấp nguyên 1 phòng ban", chỉ
+    // còn cách gộp CHÍNH người đó) đã bỏ khỏi Ma Trận Phân Quyền — để KHÔNG âm thầm làm mất quyền "xem
+    // xuyên phòng ban" của bất kỳ user THẬT nào đang có (ngoài 2 seed defaults.js đã tự chuyển tay),
+    // quét TOÀN BỘ user thật mỗi lần tải trang và tự gộp vào deptViewScopeConfig.submission/
+    // contract.extraViewers nếu CHƯA có trong đó — idempotent (chạy lại không đổi gì nếu đã gộp rồi).
+    const legacySubmissionViewers = new Set();
+    const legacyContractViewers = new Set();
+    (data.users || []).forEach(u => {
+      const sv = u.perms?.submissionView;
+      if (sv?.all || (Array.isArray(sv?.depts) && sv.depts.length > 0)) legacySubmissionViewers.add(u.username);
+      const cv = u.perms?.contractView;
+      if (cv?.all || (Array.isArray(cv?.depts) && cv.depts.length > 0)) legacyContractViewers.add(u.username);
+    });
+    let scopeConfigMigrated = false;
+    if (legacySubmissionViewers.size || legacyContractViewers.size) {
+      data.deptViewScopeConfig = data.deptViewScopeConfig || {};
+      const mergeLegacyViewersInto = (moduleKey, usernames) => {
+        if (!usernames.size) return;
+        const cfg = data.deptViewScopeConfig[moduleKey];
+        const normalized = (cfg && typeof cfg === 'object' && !Array.isArray(cfg))
+          ? { mode: cfg.mode === 'CREATOR_ONLY' ? 'CREATOR_ONLY' : 'DEPT', extraViewers: Array.isArray(cfg.extraViewers) ? [...cfg.extraViewers] : [], managerCanView: !!cfg.managerCanView }
+          : { mode: 'DEPT', extraViewers: [], managerCanView: false };
+        let added = false;
+        usernames.forEach(un => { if (!normalized.extraViewers.includes(un)) { normalized.extraViewers.push(un); added = true; } });
+        if (added) { data.deptViewScopeConfig[moduleKey] = normalized; scopeConfigMigrated = true; }
+      };
+      mergeLegacyViewersInto('submission', legacySubmissionViewers);
+      mergeLegacyViewersInto('contract', legacyContractViewers);
+      if (scopeConfigMigrated) console.log('ℹ️ Đã tự động chuyển quyền "Xem xuyên phòng ban" cũ (submissionView/contractView.all) sang extraViewers ở Hệ Thống → Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban — admin nên vào kiểm tra lại cho đúng ý.');
+    }
     // moduleApproverUsernames (routes/data.js computeModuleApproverUsernames()): danh sách username
     // đang giữ 1 cờ quyền phê duyệt cụ thể (meetingApprove/internalPostApprove/
     // itPriceEmergencyRejectApprove/licenseApprove), server tính sẵn từ perms ĐẦY ĐỦ trước khi ẩn bớt —
@@ -4529,6 +4572,10 @@ async function initDatabase(loggingInUser, opts) {
       // kết quả di trú rồi, không mất dữ liệu gì) — không được phép hiện alert chặn màn hình cho việc
       // này, kẻo người dùng tưởng lỗi trong khi họ chẳng thao tác gì cả.
       syncStorage('users', { silent: true });
+    }
+    if (scopeConfigMigrated && loggingInUser?.perms?.admin) {
+      // Lưu RIÊNG key deptViewScopeConfig (khác "users" ở trên) — cùng nguyên tắc lưu ngầm, silent:true.
+      syncStorage('deptViewScopeConfig', { silent: true });
     }
 
     DB.docs = data.docs || [];

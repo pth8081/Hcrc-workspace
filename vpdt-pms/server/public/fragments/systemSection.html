@@ -1336,16 +1336,15 @@
             <span id="permTreeBadge_sub" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <!-- LÀM GỌN (v24.79→v24.80, "Việc D", theo yêu cầu người dùng "bỏ hết phân quyền Xem lằng
+                 nhằng"): bỏ cột "Xem" cũ — người tạo và người đang duyệt LUÔN xem được mặc định (không
+                 cần cấp quyền gì), các trường hợp còn lại cấu hình ở Hệ Thống → Nghiệp Vụ Nâng Cao →
+                 🔒 Phạm Vi Xem Theo Phòng Ban (module "Tờ Trình", cùng mô hình 4 trạng thái dùng chung
+                 17 module đã áp cho Tài Liệu ở v24.75). Chỉ còn đúng 2 quyền ở đây: Tạo mới + Tải xuống. -->
             <table class="w-full text-[11px] border-collapse">
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
                   <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                  <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Xem</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pSubViewAll" data-op-change="toggleScopeGroup" data-arg0="pSubViewAll" data-arg1="pSubViewDept"><span>ALL</span>
-                    </label>
-                  </th>
                   <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
                     <span class="block mb-0.5">Tạo mới</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
@@ -1371,16 +1370,13 @@
             <span id="permTreeBadge_contract" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <!-- LÀM GỌN (v24.79→v24.80, "Việc D"): bỏ cột "Xem" cũ — xem chú thích đầy đủ tại khối
+                 📜 3. Văn Bản Trình ngay phía trên (cùng khuôn, module "Hợp Đồng" trong Phạm Vi Xem
+                 Theo Phòng Ban). Chỉ còn đúng 2 quyền ở đây: Tạo mới + Tải xuống. -->
             <table class="w-full text-[11px] border-collapse">
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
                   <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                  <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Xem</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pContractViewAll" data-op-change="toggleScopeGroup" data-arg0="pContractViewAll" data-arg1="pContractViewDept"><span>ALL</span>
-                    </label>
-                  </th>
                   <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
                     <span class="block mb-0.5">Tạo mới</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">

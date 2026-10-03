@@ -307,8 +307,8 @@ function resetUserForm() {
 
   [
     'pUploadAll', 'pDocDownloadAll',
-    'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
-    'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
+    'pSubCreateAll', 'pSubDownloadAll',
+    'pContractCreateAll', 'pContractDownloadAll',
     'pMeetingViewAll', 'pMeetingBookAll',
     'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
     'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
@@ -481,8 +481,8 @@ function summarizeUserPerms(perms) {
   const hasScope = (scope) => !!(scope?.all || (scope?.depts || []).length > 0);
   const parts = [];
   if (perms.uploadAll || (perms.uploadDepts || []).length) parts.push('📄 Tài liệu');
-  if (hasScope(perms.submissionView) || hasScope(perms.submissionCreate)) parts.push('📜 Tờ trình');
-  if (hasScope(perms.contractView) || hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
+  if (hasScope(perms.submissionCreate)) parts.push('📜 Tờ trình');
+  if (hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');

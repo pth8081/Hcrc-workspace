@@ -1287,11 +1287,13 @@ async function loadDocsScoped(user, data) {
 }
 
 // Bước 8l — submissions: canViewSubmission() (lib/recordViewScope.js) 5 nhánh — (1) admin xem HẾT, (2)
-// chính người TẠO (creator), (3) scopeAllows(submissionView, dept) — phòng ban mình HOẶC submissionView.
-// all/depts[], (4) đang được mời "Xin ý kiến" (opinionRequestees, mảng username admin gán TAY từng hồ
-// sơ), (5) đang là người duyệt theo effectiveApprovers ĐÃ ĐÓNG BĂNG lúc tạo (resolveSubmissionApproversServer()
-// ưu tiên đọc snapshot này trước, chỉ tra lại submissionTypeDeptWorkflows/submissionDeptWorkflows HIỆN
-// TẠI cho hồ sơ CŨ chưa có snapshot).
+// chính người TẠO (creator), (3) scopeAllows(dept, 'submission', deptViewScopeConfig) — phòng ban mình
+// (mode DEPT) HOẶC extraViewers/managerCanView (LÀM GỌN "Việc D" 11/2026, theo yêu cầu người dùng "bỏ hết
+// phân quyền Xem lằng nhằng" — đã bỏ hẳn quyền phẳng cũ submissionView, xem chú thích đầy đủ ở
+// loadSubmissionsScoped() dưới), (4) đang được mời "Xin ý kiến" (opinionRequestees, mảng username admin
+// gán TAY từng hồ sơ), (5) đang là người duyệt theo effectiveApprovers ĐÃ ĐÓNG BĂNG lúc tạo
+// (resolveSubmissionApproversServer() ưu tiên đọc snapshot này trước, chỉ tra lại
+// submissionTypeDeptWorkflows/submissionDeptWorkflows HIỆN TẠI cho hồ sơ CŨ chưa có snapshot).
 //
 // Nhánh (4)/(5) KHÔNG có cột SQL nào tra theo username (opinionRequestees là mảng tự do admin gán tay
 // từng hồ sơ, không giống Dept/Creator; effectiveApprovers là ẢNH CHỤP lúc tạo nên có thể LỆCH khỏi
@@ -1322,13 +1324,22 @@ function computeSubmissionsApproverDepts(user, data) {
   }
   return depts;
 }
+// LỖI ĐÃ VÁ (11/2026, "Việc D"): trước đây hàm này CHỈ đọc quyền phẳng CŨ submissionView.{all,depts} —
+// hoàn toàn chưa biết tới deptViewScopeConfig['submission'] (mode/extraViewers/managerCanView, khác
+// loadDocsScoped() đã có sẵn) — người được admin cấu hình extraViewers cho Tờ Trình sẽ KHÔNG được tải
+// hồ sơ ngoài phòng ban mình vào `data.submissions` ở đây, nên filterSubmissionsForUser() (lớp chắn thứ
+// 2, canViewSubmission()) dù có tính đúng cũng không "cứu" được vì hồ sơ chưa từng được tải — thấy ÍT
+// hơn đúng quyền thật (không phải lỗ hổng lộ dữ liệu, chỉ là thiếu). Đổi sang đọc moduleViewConfig() y
+// hệt loadDocsScoped(): company-wide nếu admin/extraViewers/managerCanView, còn lại chỉ PHÒNG BAN CHÍNH
+// MÌNH (nếu mode=DEPT) ∪ approverDepts, cộng thêm luôn 2 lượt riêng Creator + PENDING company-wide như cũ.
 async function loadSubmissionsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.submissionView?.all) {
+  const cfg = moduleViewConfig(data, 'submission', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('submissions');
   }
   const depts = new Set();
-  if (user?.dept) depts.add(user.dept);
-  if (Array.isArray(user?.perms?.submissionView?.depts)) user.perms.submissionView.depts.forEach(d => depts.add(d));
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   computeSubmissionsApproverDepts(user, data).forEach(d => depts.add(d));
 
   const byId = new Map();

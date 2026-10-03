@@ -223,9 +223,9 @@ function isApproverForApproversMap(approversMap, username) {
     Array.isArray(list) ? list.includes(username) : list === username);
 }
 
-// Khớp khối lọc trong renderSubmissionReqs() (public/index.html): scopeAllows(submissionView) HOẶC
-// chính người tạo HOẶC đang là approver ở đúng quy trình hiệu lực của hồ sơ đó (dù ngoài phạm vi Xem)
-// HOẶC đang được mời "Xin ý kiến" (opinionRequestees — lớp KHÔNG chặn duyệt, blocking:false, nên
+// Khớp khối lọc trong renderSubmissionReqs() (public/index.html): scopeAllows(dept, deptViewScopeConfig)
+// HOẶC chính người tạo HOẶC đang là approver ở đúng quy trình hiệu lực của hồ sơ đó (dù ngoài phạm vi
+// Xem) HOẶC đang được mời "Xin ý kiến" (opinionRequestees — lớp KHÔNG chặn duyệt, blocking:false, nên
 // KHÔNG nằm trong effectiveApprovers/approvers ở trên) — trước đây thiếu nhánh này khiến người được
 // admin chỉ định xin ý kiến nhưng ngoài phạm vi Xem/không phải approver không thấy được tờ trình ở bất
 // kỳ đâu (kể cả gọi thẳng GET /api/data), không có cách nào mở modal nhập ý kiến dù được chính admin
@@ -238,11 +238,17 @@ function isApproverForApproversMap(approversMap, username) {
 // mới bị ảnh hưởng) — đổi sang gọi MODULE_CONFIGS.submissions.resolveWfConfig() = resolveSubmissionWorkflow()
 // (đã tự ưu tiên đọc snapshot NẾU CÓ, chỉ mới tra cứu động qua resolveStepApproverUsernames() — có xử lý
 // đúng POSITION mode — khi CHƯA có snapshot), khớp đúng khuôn 5 module chị em, đồng thời đổi sang ĐỒNG BỘ.
+//
+// LÀM GỌN (11/2026, "Việc D" theo yêu cầu người dùng "bỏ hết phân quyền Xem lằng nhằng"): bỏ hẳn quyền
+// phẳng cũ `submissionView` — nhánh `scopeAllows()` dưới đây giờ truyền `null` (không còn `{all,depts}`
+// nào để đọc), chỉ còn 2 nhánh thật của nó còn hiệu lực: "cùng phòng ban tự động xem" (deptAutoViewOn,
+// mode mặc định DEPT) + deptViewScopeConfig['submission'] (extraViewers/managerCanView, qua
+// extraViewScopeAllows() — xem moduleViewConfig()/loadSubmissionsScoped() ở routes/data.js đã vá kèm).
 function canViewSubmission(user, sub, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.submissionView, sub.dept, 'submission', appData, sub.creator)) return true;
+  if (scopeAllows(user, null, sub.dept, 'submission', appData, sub.creator)) return true;
   if ((sub.opinionRequestees || []).includes(user.username)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.submissions.resolveWfConfig(sub, appData).approvers, user.username);
 }
@@ -504,24 +510,29 @@ function canDownloadRecordFile(user, moduleKey, dept, ownerUsername) {
   return scopeAllows(user, user.perms?.[`${moduleKey}Download`], dept);
 }
 
-// Khớp khối lọc trong renderContracts() (public/index.html): scopeAllows(contractView) HOẶC chính
-// người tạo HOẶC đang là approver ở 1 trong 2 quy trình TÁCH RIÊNG trên cùng bản ghi hợp đồng (Phê
-// Duyệt gốc + Quản Lý HĐ/Tài liệu ký) — dùng lại đúng 2 hàm resolve đã có ở lib/workflowEngine.js
-// (resolveContractApprovalWorkflow/resolveContractManageWorkflow) để không lặp lại logic. appData ở
-// đây chính là snapshot `data` đã đọc sẵn trong GET /api/data (đã có đủ các *DeptWorkflows cần dùng).
+// Khớp khối lọc trong renderContracts() (public/index.html): scopeAllows(dept, deptViewScopeConfig)
+// HOẶC chính người tạo HOẶC đang là approver ở 1 trong 2 quy trình TÁCH RIÊNG trên cùng bản ghi hợp
+// đồng (Phê Duyệt gốc + Quản Lý HĐ/Tài liệu ký) — dùng lại đúng 2 hàm resolve đã có ở
+// lib/workflowEngine.js (resolveContractApprovalWorkflow/resolveContractManageWorkflow) để không lặp
+// lại logic. appData ở đây chính là snapshot `data` đã đọc sẵn trong GET /api/data (đã có đủ các
+// *DeptWorkflows cần dùng).
+//
+// LÀM GỌN (11/2026, "Việc D"): bỏ hẳn quyền phẳng cũ `contractView` — cùng khuôn canViewSubmission() ở
+// trên, 2 lời gọi scopeAllows() dưới đây giờ truyền `null` (không còn `{all,depts}` để đọc), chỉ còn
+// nhánh "cùng phòng tự động xem" + deptViewScopeConfig['contract'] (extraViewers/managerCanView).
 function canViewContract(user, contract, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (contract.creator === user.username) return true;
   // Quản lý (trực tiếp/gián tiếp) của người tạo — mục 3 kế hoạch 10/2026, cùng khuôn canViewDoc() ở trên.
   if (isManagerOf(user.username, contract.creator, appData?.users)) return true;
-  if (scopeAllows(user, user.perms?.contractView, contract.dept, 'contract', appData, contract.creator)) return true;
+  if (scopeAllows(user, null, contract.dept, 'contract', appData, contract.creator)) return true;
   // Đơn vị tiếp nhận theo dõi & thanh toán (custodianDept) được XEM hợp đồng/phụ lục ngay từ lúc tạo
   // (không đợi approvalStatus === 'APPROVED') — khớp yêu cầu "đơn vị chọn có thể cùng xem hợp đồng và
   // phụ lục hợp đồng khi được phê duyệt", và nhất quán với cách người tạo (creator) ở trên cũng luôn
   // xem được ngay không điều kiện. custodianDept luôn có giá trị cụ thể (mặc định = dept khi không
   // chọn, xem createValidation.js), nên nhánh này là no-op vô hại khi 2 field trùng nhau.
-  if (scopeAllows(user, user.perms?.contractView, contract.custodianDept || contract.dept, 'contract', appData, contract.creator)) return true;
+  if (scopeAllows(user, null, contract.custodianDept || contract.dept, 'contract', appData, contract.creator)) return true;
   if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
   return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
 }

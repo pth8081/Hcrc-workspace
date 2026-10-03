@@ -2,12 +2,16 @@
 //
 // Regression test cho GET /api/data (routes/data.js) sau Bước 8l: submissions tách riêng khỏi vòng lặp
 // tải chung qua loadSubmissionsScoped(). canViewSubmission() (lib/recordViewScope.js) 5 nhánh — (1)
-// admin xem HẾT, (2) chính người TẠO (creator), (3) scopeAllows(submissionView, dept) — phòng ban mình
-// HOẶC submissionView.all/depts[], (4) đang được mời "Xin ý kiến" (opinionRequestees), (5) đang là
-// người duyệt theo effectiveApprovers ĐÃ ĐÓNG BĂNG lúc tạo (hoặc cấu hình hiện tại nếu hồ sơ CŨ chưa có
-// snapshot). loadSubmissionsScoped() SQL-narrow theo dept/creator/approver-config-hiện-tại + LUÔN tải
-// thêm mọi hồ sơ ĐANG PENDING company-wide để bù đắp 2 nhánh (4)/(5) không có cột SQL nào tra thẳng
-// được (xem chú thích đầy đủ ở routes/data.js).
+// admin xem HẾT, (2) chính người TẠO (creator), (3) scopeAllows(dept, deptViewScopeConfig) — phòng ban
+// mình (mode DEPT, mặc định) HOẶC deptViewScopeConfig.submission.extraViewers/managerCanView (LÀM GỌN
+// "Việc D" 11/2026 — đã bỏ hẳn quyền phẳng cũ submissionView.all/depts[], xem chú thích đầy đủ ở
+// loadSubmissionsScoped()/canViewSubmission()), (4) đang được mời "Xin ý kiến" (opinionRequestees), (5)
+// đang là người duyệt theo effectiveApprovers ĐÃ ĐÓNG BĂNG lúc tạo (hoặc cấu hình hiện tại nếu hồ sơ CŨ
+// chưa có snapshot). loadSubmissionsScoped() SQL-narrow theo dept/creator/approver-config-hiện-tại +
+// LUÔN tải thêm mọi hồ sơ ĐANG PENDING company-wide để bù đắp 2 nhánh (4)/(5) không có cột SQL nào tra
+// thẳng được (xem chú thích đầy đủ ở routes/data.js). Hành vi per-record ĐẦY ĐỦ của extraViewers/
+// managerCanView/mode (4 trạng thái, dùng chung 17 module) đã có bộ test riêng (test-dept-view-scope.js)
+// — file này CHỈ kiểm tích hợp với lớp SQL-narrowing loadSubmissionsScoped().
 //
 // Chạy: node server/tests/test-submissions-scope.js
 'use strict';
@@ -24,16 +28,17 @@ function stubModule(relPath, exportsObj) {
 }
 
 const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng A', perms: {}, active: true };
-const SCOPE_USER = { username: 'scopeuser', name: 'Người Có Phạm Vi Mở Rộng', dept: 'Phòng A', perms: { submissionView: { depts: ['Phòng C'] } }, active: true };
+// LÀM GỌN (11/2026, "Việc D"): quyền phẳng CŨ submissionView.depts/.all đã bỏ — "xem xuyên phòng ban"
+// giờ cấu hình qua deptViewScopeConfig.submission.extraViewers (xem APP_DATA dưới), không còn qua perms.
+const SCOPE_USER = { username: 'scopeuser', name: 'Người Có Phạm Vi Mở Rộng', dept: 'Phòng A', perms: {}, active: true };
 const APPROVER_TYPE = { username: 'duyet_type', name: 'Người Duyệt Loại Riêng', dept: 'Phòng X', perms: {}, active: true };
 const APPROVER_DEFAULT = { username: 'duyet_default', name: 'Người Duyệt Mặc Định', dept: 'Phòng X', perms: {}, active: true };
-const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng X', perms: { submissionView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): trước đây canViewSubmission() (cho hồ sơ CŨ chưa có
 // snapshot effectiveApprovers) tự đọc THẲNG submissionDeptWorkflows[dept].approvers (field TĨNH), bỏ
 // qua hẳn approverMode/approversByPosition ("Theo vị trí" — POSITION mode).
 const APPROVER_POSITION_I = { username: 'truongphong_i', name: 'Trưởng Phòng I', dept: 'Phòng I', jobTitle: 'Trưởng phòng I', perms: { canBeApprover: true }, active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_TYPE, APPROVER_DEFAULT, ALL_VIEW, ADMIN, APPROVER_POSITION_I];
+const USERS = [REGULAR_A, SCOPE_USER, APPROVER_TYPE, APPROVER_DEFAULT, ADMIN, APPROVER_POSITION_I];
 
 const APP_DATA = {
   submissionDeptWorkflows: {
@@ -44,6 +49,11 @@ const APP_DATA = {
     KHAC: {
       'Phòng F': { approvers: { 1: ['duyet_type'] } }
     }
+  },
+  // scopeuser trong extraViewers -> thay thế đúng submissionView.all/depts cũ (mô hình mới không còn
+  // khái niệm "cấp nguyên 1 phòng ban khác", chỉ còn "cấp xem xuyên TOÀN CÔNG TY cho từng người").
+  deptViewScopeConfig: {
+    submission: { mode: 'DEPT', extraViewers: ['scopeuser'], managerCanView: false }
   },
   users: USERS
 };
@@ -160,11 +170,12 @@ async function main() {
       assertEqual(fullLoadCallCount, 0, 'người thường KHÔNG được tải toàn bộ company-wide');
     });
 
-    await run.run('submissionView.depts=["Phòng C"]: thấy phòng ban mình (Phòng A, qua scopeAllows own-dept) + Phòng C (qua scope)', async () => {
-      resetData();
+    await run.run('deptViewScopeConfig.submission.extraViewers=["scopeuser"]: nhận ĐỦ toàn công ty (thay thế submissionView.all/depts cũ)', async () => {
+      resetData(); fullLoadCallCount = 0;
       const res = await api('GET', '/api/data', undefined, SCOPE_USER);
       const ids = (res.body.submissions || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,3', 'scopeuser (Phòng A) phải thấy id1 (Phòng A, phòng ban mình) + id3 (Phòng C, qua scope)');
+      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8', 'scopeuser (extraViewers) phải thấy đủ cả 8 hồ sơ');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải tải theo nhánh company-wide, giống managerCanView');
     });
 
     await run.run('Người duyệt theo submissionDeptWorkflows (mặc định): PHẢI thấy hồ sơ Phòng E dù đã REJECTED', async () => {
@@ -186,14 +197,6 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, APPROVER_POSITION_I);
       const ids = (res.body.submissions || []).map(r => r.id).sort((a, b) => a - b);
       assertEqual(ids.join(','), '8', 'truongphong_i phải thấy id8 (Phòng I, POSITION mode) — đây chính là lỗi đã vá (trước đây luôn rỗng cho mọi POSITION mode)');
-    });
-
-    await run.run('submissionView.all: nhận ĐỦ toàn công ty', async () => {
-      resetData(); fullLoadCallCount = 0;
-      const res = await api('GET', '/api/data', undefined, ALL_VIEW);
-      const ids = (res.body.submissions || []).map(r => r.id).sort((a, b) => a - b);
-      assertEqual(ids.join(','), '1,2,3,4,5,6,7,8', 'submissionView.all phải thấy đủ cả 8 hồ sơ');
-      assert(fullLoadCallCount >= 1, 'submissionView.all phải tải theo nhánh company-wide');
     });
 
     await run.run('admin: nhận ĐỦ toàn công ty', async () => {
