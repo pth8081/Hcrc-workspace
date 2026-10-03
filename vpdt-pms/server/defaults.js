@@ -860,7 +860,7 @@ const DEFAULTS = {
         contractView: { all: true, depts: [] }, contractCreate: { all: false, depts: ['Phòng IT'] }, contractDownload: { all: false, depts: [] },
         meetingView: { all: true, depts: [] }, meetingBookScope: { all: false, depts: ['Phòng IT'] },
         meetingApprove: true, meetingCancel: true,
-        internalPostApprove: true, contractApprove: true,
+        internalPostApprove: true,
         carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] }, carDownload: { all: false, depts: [] },
         officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] }, officeDownload: { all: false, depts: [] },
         officeBuy: true, officeFix: true
@@ -877,7 +877,7 @@ const DEFAULTS = {
         contractView: { all: true, depts: [] }, contractCreate: { all: true, depts: [] }, contractDownload: { all: true, depts: [] },
         meetingView: { all: true, depts: [] }, meetingBookScope: { all: true, depts: [] },
         meetingApprove: true, meetingCancel: true,
-        internalPostApprove: true, contractApprove: true, paymentManage: true,
+        internalPostApprove: true, paymentManage: true,
         carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] }, carDownload: { all: true, depts: [] },
         officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] }, officeDownload: { all: true, depts: [] },
         officeBuy: true, officeFix: true

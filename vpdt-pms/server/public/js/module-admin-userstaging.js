@@ -231,7 +231,6 @@ function resetUserForm() {
   document.getElementById('pTrainingInstruct').checked = !!defaults.trainingInstruct;
   document.getElementById('pOnboardingEvaluate').checked = !!defaults.onboardingEvaluate;
   document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
-  document.getElementById('pContractApprove').checked = !!defaults.contractApprove;
   document.getElementById('pContractImportSigned').checked = !!defaults.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
   document.getElementById('pVppManage').checked = !!defaults.vppManage;
@@ -484,7 +483,6 @@ function summarizeUserPerms(perms) {
   if (perms.uploadAll || (perms.uploadDepts || []).length) parts.push('📄 Tài liệu');
   if (hasScope(perms.submissionView) || hasScope(perms.submissionCreate)) parts.push('📜 Tờ trình');
   if (hasScope(perms.contractView) || hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
-  if (perms.contractApprove) parts.push('📄 Hợp đồng (duyệt)');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');

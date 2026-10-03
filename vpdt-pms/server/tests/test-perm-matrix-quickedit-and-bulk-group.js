@@ -141,21 +141,21 @@ async function scenario(name, fn) {
       DB.permGroups = [];
       DB.users = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
-        { id: 2, username: 'nv.a', name: 'Nhân Viên A', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.a', name: 'Nhân Viên A', perms: { admin: false, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       togglePermMatrixQuickEdit(); // mở (tự chọn khối mặc định — sẽ ghi đè lại đúng khối cần test ngay dưới)
       const wrapHiddenAfterOpen = document.getElementById('permMatrixQuickEditWrap').classList.contains('hidden');
-      // Chọn đúng khối chứa "contractApprove" (permMatrixColumnGroup('contractApprove')) — gán thẳng
+      // Chọn đúng khối chứa "licenseApprove" (permMatrixColumnGroup('licenseApprove')) — gán thẳng
       // biến + gọi lại render tay (KHÔNG qua onPmQuickEditGroupChange(), hàm đó đọc NGƯỢC lại giá trị từ
       // <select> DOM nên sẽ ghi đè mất giá trị vừa gán tay ở đây).
       pmQuickEditKind = 'users';
-      const targetGroup = permMatrixColumnGroup('contractApprove');
+      const targetGroup = permMatrixColumnGroup('licenseApprove');
       pmQuickEditGroupKey = targetGroup;
       renderPmQuickEditGroupSelect();
       renderPmQuickEditTable();
       const wrapHidden = wrapHiddenAfterOpen;
-      const adminCb = document.querySelector(`input[data-pm-quick-cell][data-entity="admin"][data-key="contractApprove"]`);
-      const nvCb = document.querySelector(`input[data-pm-quick-cell][data-entity="nv.a"][data-key="contractApprove"]`);
+      const adminCb = document.querySelector(`input[data-pm-quick-cell][data-entity="admin"][data-key="licenseApprove"]`);
+      const nvCb = document.querySelector(`input[data-pm-quick-cell][data-entity="nv.a"][data-key="licenseApprove"]`);
       return {
         wrapHidden, targetGroup,
         adminDisabled: adminCb ? adminCb.disabled : null,
@@ -165,9 +165,9 @@ async function scenario(name, fn) {
     });
     record('(a) bảng Sửa Nhanh hiện ra (không còn hidden)', r.wrapHidden === false, JSON.stringify(r));
     record('(a) ô "admin" bị disabled (không sửa được qua bảng này)', r.adminDisabled === true, JSON.stringify(r));
-    record('(a) ô "nv.a" phản ánh ĐÚNG perms.contractApprove=true hiện có (đã tick sẵn)', r.nvChecked === true, JSON.stringify(r));
-    record('(a) header bảng có chứa nhãn tiếng Việt của quyền (không phải "Q_contractApprove" thô)',
-      r.headerText.includes('Duyệt hợp đồng'), JSON.stringify(r));
+    record('(a) ô "nv.a" phản ánh ĐÚNG perms.licenseApprove=true hiện có (đã tick sẵn)', r.nvChecked === true, JSON.stringify(r));
+    record('(a) header bảng có chứa nhãn tiếng Việt của quyền (không phải "Q_licenseApprove" thô)',
+      r.headerText.includes('Duyệt Giấy Phép'), JSON.stringify(r));
   });
 
   await scenario('(b) savePmQuickEdit(): tick đổi 1 ô -> lưu đúng, không đụng quyền khác, gọi POST /api/data/users', async () => {
@@ -176,13 +176,13 @@ async function scenario(name, fn) {
       DB.permGroups = [];
       DB.users = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
-        { id: 2, username: 'nv.a', name: 'Nhân Viên A', perms: { admin: false, contractApprove: false, paymentManage: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.a', name: 'Nhân Viên A', perms: { admin: false, licenseApprove: false, paymentManage: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       pmQuickEditKind = 'users';
-      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      pmQuickEditGroupKey = permMatrixColumnGroup('licenseApprove');
       renderPmQuickEditGroupSelect();
       renderPmQuickEditTable();
-      const cb = document.querySelector(`input[data-pm-quick-cell][data-entity="nv.a"][data-key="contractApprove"]`);
+      const cb = document.querySelector(`input[data-pm-quick-cell][data-entity="nv.a"][data-key="licenseApprove"]`);
       cb.checked = true; // tick lên (trước đó false)
       await savePmQuickEdit();
       const nvAfter = DB.users.find(u => u.username === 'nv.a');
@@ -192,7 +192,7 @@ async function scenario(name, fn) {
         alerts: window.__alerts.slice(),
       };
     });
-    record('(b) contractApprove đã bật đúng như tick', r.nvAfter && r.nvAfter.perms.contractApprove === true, JSON.stringify(r.nvAfter));
+    record('(b) licenseApprove đã bật đúng như tick', r.nvAfter && r.nvAfter.perms.licenseApprove === true, JSON.stringify(r.nvAfter));
     record('(b) paymentManage (KHÔNG thuộc khối đang sửa) giữ nguyên true, không bị đụng tới',
       r.nvAfter && r.nvAfter.perms.paymentManage === true, JSON.stringify(r.nvAfter));
     record('(b) đã POST /api/data/users để lưu thật', !!r.savedCall, JSON.stringify(r.savedCall));
@@ -205,10 +205,10 @@ async function scenario(name, fn) {
       window.__alerts.length = 0;
       DB.permGroups = [];
       DB.users = [
-        { id: 2, username: 'nv.b', name: 'Nhân Viên B', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.b', name: 'Nhân Viên B', perms: { admin: false, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       pmQuickEditKind = 'users';
-      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      pmQuickEditGroupKey = permMatrixColumnGroup('licenseApprove');
       renderPmQuickEditTable(); // KHÔNG tick gì thêm — giữ nguyên trạng thái đã tick sẵn theo perms hiện có
       await savePmQuickEdit();
       return {
@@ -223,15 +223,15 @@ async function scenario(name, fn) {
   await scenario('(d) savePmQuickEdit() kind="groups": sửa quyền nhóm CASCADE ngay cho thành viên (giống đường Excel)', async () => {
     const r = await page.evaluate(async () => {
       window.__fetchCalls.length = 0;
-      DB.permGroups = [{ id: 'grp_Q', name: 'Nhóm Quick', perms: { contractApprove: false }, reportExtraKeys: [] }];
+      DB.permGroups = [{ id: 'grp_Q', name: 'Nhóm Quick', perms: { licenseApprove: false }, reportExtraKeys: [] }];
       DB.users = [
-        { id: 10, username: 'member.q', name: 'Thành Viên Q', perms: { contractApprove: false }, groupIds: ['grp_Q'], permOverrides: null, active: true },
-        { id: 11, username: 'other.q', name: 'Không Thuộc Nhóm', perms: { contractApprove: false }, groupIds: [], permOverrides: null, active: true },
+        { id: 10, username: 'member.q', name: 'Thành Viên Q', perms: { licenseApprove: false }, groupIds: ['grp_Q'], permOverrides: null, active: true },
+        { id: 11, username: 'other.q', name: 'Không Thuộc Nhóm', perms: { licenseApprove: false }, groupIds: [], permOverrides: null, active: true },
       ];
       pmQuickEditKind = 'groups';
-      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      pmQuickEditGroupKey = permMatrixColumnGroup('licenseApprove');
       renderPmQuickEditTable();
-      const cb = document.querySelector(`input[data-pm-quick-cell][data-entity="Nhóm Quick"][data-key="contractApprove"]`);
+      const cb = document.querySelector(`input[data-pm-quick-cell][data-entity="Nhóm Quick"][data-key="licenseApprove"]`);
       cb.checked = true;
       await savePmQuickEdit();
       return {
@@ -242,9 +242,9 @@ async function scenario(name, fn) {
         calledGroupsSync: window.__fetchCalls.some(c => c.url === '/api/data/permGroups' && c.method === 'POST'),
       };
     });
-    record('(d) quyền nhóm được cập nhật', r.groupAfter && r.groupAfter.perms.contractApprove === true, JSON.stringify(r.groupAfter));
-    record('(d) thành viên của nhóm được cascade NGAY', r.memberAfter && r.memberAfter.perms.contractApprove === true, JSON.stringify(r.memberAfter));
-    record('(d) người KHÔNG thuộc nhóm không bị ảnh hưởng', r.otherAfter && r.otherAfter.perms.contractApprove === false, JSON.stringify(r.otherAfter));
+    record('(d) quyền nhóm được cập nhật', r.groupAfter && r.groupAfter.perms.licenseApprove === true, JSON.stringify(r.groupAfter));
+    record('(d) thành viên của nhóm được cascade NGAY', r.memberAfter && r.memberAfter.perms.licenseApprove === true, JSON.stringify(r.memberAfter));
+    record('(d) người KHÔNG thuộc nhóm không bị ảnh hưởng', r.otherAfter && r.otherAfter.perms.licenseApprove === false, JSON.stringify(r.otherAfter));
     record('(d) đã lưu CẢ permGroups LẪN users (vì có cascade)', r.calledUsersSync && r.calledGroupsSync, JSON.stringify(r));
   });
 
@@ -256,11 +256,11 @@ async function scenario(name, fn) {
       DB.permGroups = [];
       DB.users = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
-        { id: 2, username: 'nv.k', name: 'Nhân Viên K', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
-        { id: 3, username: 'nv.l', name: 'Nhân Viên L', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.k', name: 'Nhân Viên K', dept: 'Kinh Doanh', perms: { admin: false, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 3, username: 'nv.l', name: 'Nhân Viên L', dept: 'Kinh Doanh', perms: { admin: false, licenseApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       pmQuickEditKind = 'users';
-      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      pmQuickEditGroupKey = permMatrixColumnGroup('licenseApprove');
       renderPmQuickEditGroupSelect();
       renderPmQuickEditPicker();
       renderPmQuickEditTable();
@@ -287,19 +287,19 @@ async function scenario(name, fn) {
       DB.permGroups = [];
       DB.users = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
-        { id: 2, username: 'nv.m', name: 'Nhân Viên M', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
-        { id: 3, username: 'nv.n', name: 'Nhân Viên N', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.m', name: 'Nhân Viên M', dept: 'Kinh Doanh', perms: { admin: false, licenseApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 3, username: 'nv.n', name: 'Nhân Viên N', dept: 'Kinh Doanh', perms: { admin: false, licenseApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       pmQuickEditKind = 'users';
-      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      pmQuickEditGroupKey = permMatrixColumnGroup('licenseApprove');
       renderPmQuickEditGroupSelect();
       renderPmQuickEditPicker();
       renderPmQuickEditTable();
-      const cb = (u) => document.querySelector(`input[data-pm-quick-cell][data-entity="${u}"][data-key="contractApprove"]`);
+      const cb = (u) => document.querySelector(`input[data-pm-quick-cell][data-entity="${u}"][data-key="licenseApprove"]`);
       const beforeAllUnchecked = !cb('nv.m').checked && !cb('nv.n').checked;
-      togglePmQuickEditColumn('contractApprove'); // bật cả cột (đang toàn bộ chưa tick)
+      togglePmQuickEditColumn('licenseApprove'); // bật cả cột (đang toàn bộ chưa tick)
       const afterFirstToggle = { m: cb('nv.m').checked, n: cb('nv.n').checked, adminDisabled: cb('admin').disabled, adminChecked: cb('admin').checked };
-      togglePmQuickEditColumn('contractApprove'); // bấm lại (đang toàn bộ đã tick) -> tắt cả cột
+      togglePmQuickEditColumn('licenseApprove'); // bấm lại (đang toàn bộ đã tick) -> tắt cả cột
       const afterSecondToggle = { m: cb('nv.m').checked, n: cb('nv.n').checked };
       return { beforeAllUnchecked, afterFirstToggle, afterSecondToggle };
     });
@@ -311,13 +311,13 @@ async function scenario(name, fn) {
 
   await scenario('(d4) setPmQuickEditKind(): đổi Người Dùng <-> Nhóm Phân Quyền xoá lựa chọn đang có ở ô chọn (2 tập giá trị khác nhau)', async () => {
     const r = await page.evaluate(() => {
-      DB.permGroups = [{ id: 'grp_z', name: 'Nhóm Z', perms: { contractApprove: false }, reportExtraKeys: [] }];
+      DB.permGroups = [{ id: 'grp_z', name: 'Nhóm Z', perms: { licenseApprove: false }, reportExtraKeys: [] }];
       DB.users = [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
-        { id: 2, username: 'nv.o', name: 'Nhân Viên O', dept: 'Kinh Doanh', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.o', name: 'Nhân Viên O', dept: 'Kinh Doanh', perms: { admin: false, licenseApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       pmQuickEditKind = 'users';
-      pmQuickEditGroupKey = permMatrixColumnGroup('contractApprove');
+      pmQuickEditGroupKey = permMatrixColumnGroup('licenseApprove');
       renderPmQuickEditGroupSelect();
       renderPmQuickEditPicker();
       renderPmQuickEditTable();

@@ -171,10 +171,10 @@ async function scenario(name, fn) {
     DB.workflowParticipatingDeptGroups = [];
 
     // Nhóm A: được duyệt Hợp Đồng + xác thực WEBAUTHN (mức cao nhất) + docDownload chỉ phòng Kế Toán.
-    const groupAPerms = { ...defaultNewUserPerms(), contractApprove: true, paymentManage: false,
+    const groupAPerms = { ...defaultNewUserPerms(), licenseApprove: true, paymentManage: false,
       approverAuthLevel: 'WEBAUTHN', docDownload: { all: false, depts: ['Kế Toán'] } };
     // Nhóm B: được quản lý Thanh Toán + xác thực PASSWORD (thấp hơn) + docDownload chỉ phòng Kinh Doanh.
-    const groupBPerms = { ...defaultNewUserPerms(), contractApprove: false, paymentManage: true,
+    const groupBPerms = { ...defaultNewUserPerms(), licenseApprove: false, paymentManage: true,
       approverAuthLevel: 'PASSWORD', docDownload: { all: false, depts: ['Kinh Doanh'] } };
     DB.permGroups.push({ id: 'grp_A', name: 'Nhóm Kế Toán', description: 'Duyệt hợp đồng', perms: groupAPerms });
     DB.permGroups.push({ id: 'grp_B', name: 'Nhóm Kinh Doanh', description: 'Quản lý thanh toán', perms: groupBPerms });
@@ -227,7 +227,7 @@ async function scenario(name, fn) {
         usersGrew: DB.users.length === usersBefore + 1,
         created: created ? {
           groupIds: (created.groupIds || []).slice().sort(),
-          contractApprove: created.perms.contractApprove,
+          licenseApprove: created.perms.licenseApprove,
           paymentManage: created.perms.paymentManage,
           approverAuthLevel: created.perms.approverAuthLevel,
           docDownloadAll: created.perms.docDownload.all,
@@ -243,8 +243,8 @@ async function scenario(name, fn) {
       r.usersGrew && r.alerts.length === 1 && /Đã lưu/.test(r.alerts[0]), JSON.stringify(r));
     record('(a) groupIds records both assigned groups',
       JSON.stringify(r.created.groupIds) === JSON.stringify(['grp_A', 'grp_B']), JSON.stringify(r.created));
-    record('(a) boolean perms are OR\'d across groups (contractApprove from A, paymentManage from B, both true)',
-      r.created.contractApprove === true && r.created.paymentManage === true, JSON.stringify(r.created));
+    record('(a) boolean perms are OR\'d across groups (licenseApprove from A, paymentManage from B, both true)',
+      r.created.licenseApprove === true && r.created.paymentManage === true, JSON.stringify(r.created));
     record('(a) {all,depts} scope perms are UNIONED across groups (docDownload depts = Kế Toán + Kinh Doanh)',
       r.created.docDownloadAll === false && JSON.stringify(r.created.docDownloadDepts) === JSON.stringify(['Kinh Doanh', 'Kế Toán'].sort()),
       JSON.stringify(r.created));
@@ -276,7 +276,7 @@ async function scenario(name, fn) {
         alerts: window.__alerts.slice(),
         updated: updated ? {
           groupIds: updated.groupIds,
-          contractApprove: updated.perms.contractApprove,
+          licenseApprove: updated.perms.licenseApprove,
           paymentManage: updated.perms.paymentManage,
           approverAuthLevel: updated.perms.approverAuthLevel,
           docDownloadDepts: updated.perms.docDownload.depts,
@@ -288,8 +288,8 @@ async function scenario(name, fn) {
     if (!r.updated) { record('(b) user still exists after save', false, JSON.stringify(r)); return; }
     record('(b) groupIds now contains only the remaining group (grp_B)',
       JSON.stringify(r.updated.groupIds) === JSON.stringify(['grp_B']), JSON.stringify(r.updated));
-    record('(b) boolean perm only from removed group (contractApprove) reverts to false',
-      r.updated.contractApprove === false, JSON.stringify(r.updated));
+    record('(b) boolean perm only from removed group (licenseApprove) reverts to false',
+      r.updated.licenseApprove === false, JSON.stringify(r.updated));
     record('(b) boolean perm from remaining group (paymentManage) is kept true',
       r.updated.paymentManage === true, JSON.stringify(r.updated));
     record('(b) approverAuthLevel drops to the remaining group\'s own level (PASSWORD, no longer WEBAUTHN)',

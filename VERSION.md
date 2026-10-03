@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**24.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.78 (2026-10-03): Bỏ quyền phẳng dư thừa "Duyệt hợp đồng" (contractApprove)
+
+Người dùng xác nhận "Việc A" sau khi được phân tích: checkbox "✅ Duyệt hợp đồng" (khối 4 "Hợp Đồng &
+Giấy Phép") chưa bao giờ được server đọc lại khi xử lý hành động Duyệt thật — quyền duyệt 100% do
+`canApproveStep()` quyết định (có tên trong danh sách approver của đúng bước, cấu hình theo phòng ban/
+Nhóm Phê Duyệt Trình-HĐ). Checkbox cũ chỉ còn dư thừa trong 1 điều kiện OR hiện module "✅ Phê Duyệt",
+mà điều kiện đó cũng đã có 3 check chính xác hơn (`contractApprovalDeptWorkflows`/
+`contractManageDeptWorkflows`/`contractApprovalGroups`) tự bắt đúng người duyệt thật rồi.
+
+- Bỏ checkbox khỏi `systemSection.html`, `collectPermsFromForm()`/`populatePermsForm()`
+  (`module-admin-permtree.js`), `summarizeUserPerms()` (`module-admin-userstaging.js`), nhãn Ma Trận
+  Phân Quyền (`module-admin-permgroups.js`), điều kiện OR dư thừa ở `canAccessApprovalHub()` (`core.js`),
+  và seed mặc định (`defaults.js`).
+- Không đổi hành vi thật nào — đã xác minh qua toàn bộ test liên quan (`test-contract.js`,
+  `test-approval-hub.js`, `test-muc0-module-access-tree.js`, 4 file test Ma Trận Phân Quyền) đều pass
+  100% trước/sau khi gỡ.
+- **Phát hiện phụ trong lúc rà soát**: tracker nội bộ từng ghi "Giấy Phép/Đồng Phục/Tuyển Dụng/Mua Hàng
+  BAS: thêm route phê duyệt cuối theo phòng ban" là đã hoàn tất, nhưng đối chiếu `git log` xác nhận việc
+  này **chưa từng được code thật** (chỉ Ngân Sách + Đặt Phòng Họp đã làm, v24.72). Người dùng xác nhận
+  giữ nguyên Giấy Phép ở quyền phẳng `licenseApprove` (Phương án 1, giới hạn 1 phòng xử lý) — không cần
+  xây route theo phòng ban cho module này.
 
 ## v24.77 (2026-10-03): Vá lỗ hổng phân quyền module/tab/sub-tab — tắt checkbox Mục 0 phải chặn luôn, không chỉ ẩn nút
 

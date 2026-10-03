@@ -3855,7 +3855,9 @@ function canCreateMeetingMinutes(user) {
 function canAccessApprovalHub(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (user.perms?.contractApprove || user.perms?.meetingApprove || user.perms?.internalPostApprove || user.perms?.paymentManage || user.perms?.licenseApprove) return true;
+  // contractApprove ĐÃ BỎ (11/2026) — 3 check contractApprovalDeptWorkflows/contractManageDeptWorkflows/
+  // contractApprovalGroups bên dưới đã tự bắt đúng người duyệt hợp đồng thật, điều kiện cờ phẳng là dư thừa.
+  if (user.perms?.meetingApprove || user.perms?.internalPostApprove || user.perms?.paymentManage || user.perms?.licenseApprove) return true;
   if (isApproverInWorkflowMap(DB.deptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.submissionDeptWorkflows, user.username)) return true;
   if (Object.values(DB.submissionTypeDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
@@ -4015,7 +4017,7 @@ function defaultNewUserPerms() {
     uploadAll: false, uploadDepts: [],
     docDownload: emptyScope(),
     submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
-    contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
+    contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(),
     // contractImportSigned — quyền phẳng RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (hồ sơ APPROVED ngay,
     // không qua quy trình Phê Duyệt) — TÁCH khỏi contractCreate, xem lib/createValidation.js.
     contractImportSigned: false,

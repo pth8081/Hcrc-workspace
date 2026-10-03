@@ -55,7 +55,7 @@ async function main() {
         ['nv02', 'Trần Thị B', 'FALSE'],
       ] },
       { name: 'Hợp Đồng & Giấy Phép', rows: [
-        ['Username', 'HoTen', 'Q_contractApprove'],
+        ['Username', 'HoTen', 'Q_licenseApprove'],
         ['nv01', 'Nguyễn Văn A', 'FALSE'],
         ['nv02', 'Trần Thị B', 'TRUE'],
       ] },
@@ -65,13 +65,13 @@ async function main() {
     const nv01 = rows.find(r => r.Username === 'nv01');
     const nv02 = rows.find(r => r.Username === 'nv02');
     assert.deepStrictEqual(
-      { admin: nv01.Q_admin, contractApprove: nv01.Q_contractApprove },
-      { admin: 'TRUE', contractApprove: 'FALSE' },
+      { admin: nv01.Q_admin, licenseApprove: nv01.Q_licenseApprove },
+      { admin: 'TRUE', licenseApprove: 'FALSE' },
       'nv01 phải có ĐỦ cả 2 cột quyền dù đến từ 2 sheet khác nhau'
     );
     assert.deepStrictEqual(
-      { admin: nv02.Q_admin, contractApprove: nv02.Q_contractApprove },
-      { admin: 'FALSE', contractApprove: 'TRUE' }
+      { admin: nv02.Q_admin, licenseApprove: nv02.Q_licenseApprove },
+      { admin: 'FALSE', licenseApprove: 'TRUE' }
     );
   });
 

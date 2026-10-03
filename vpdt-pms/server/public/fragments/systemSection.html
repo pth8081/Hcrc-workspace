@@ -1399,9 +1399,13 @@
             </table>
           </div>
           <div class="px-3 pb-3 space-y-1">
-            <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer text-[11px]">
-              <input type="checkbox" id="pContractApprove"> ✅ Duyệt hợp đồng (toàn công ty, sub-tab "Phê Duyệt")
-            </label>
+            <!-- "Duyệt hợp đồng" (contractApprove) ĐÃ BỎ (11/2026, theo yêu cầu người dùng "Việc A") — quyền
+                 duyệt thật 100% do đúng bước/phòng ban/Nhóm Phê Duyệt Trình-HĐ quyết định (canApproveStep(),
+                 lib/workflowEngine.js), cờ phẳng này trước đây KHÔNG hề được server đọc lại khi xử lý hành
+                 động Duyệt — chỉ còn tác dụng trong 1 điều kiện OR để hiện module "✅ Phê Duyệt" ở
+                 canAccessApprovalHub() (core.js), mà điều kiện đó cũng đã dư thừa vì 3 check chính xác hơn
+                 (contractApprovalDeptWorkflows/contractManageDeptWorkflows/contractApprovalGroups) tự bắt
+                 đúng người duyệt thật ngay bên dưới rồi. -->
             <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer text-[11px]">
               <input type="checkbox" id="pContractImportSigned"> 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab "Quản Lý HĐ")
             </label>

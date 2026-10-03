@@ -1642,7 +1642,7 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     Phê Duyệt**, nút này không còn dùng chung quyền "Tạo hồ sơ hợp đồng"
     (`contractCreate`) nữa mà cần 1 quyền riêng **"📥 Nhập Hợp Đồng / Phụ Lục
     ĐÃ KÝ"** (`contractImportSigned`, tick trong cây phân quyền của form Sửa
-    Người Dùng, ngay dưới "Duyệt hợp đồng"). Người không có quyền này vào
+    Người Dùng, khối "4. Hợp Đồng & Giấy Phép"). Người không có quyền này vào
     sub-tab "Quản Lý HĐ" sẽ **không thấy form nhập** (vẫn xem/theo dõi danh
     sách hợp đồng bình thường). **Sau khi cập nhật code, admin phải tự cấp
     quyền này cho đúng người (HR/kế toán) — không ai được cấp mặc định.**
@@ -1650,6 +1650,11 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     phạm vi quyền tạo hợp đồng của người sửa và khớp danh mục phòng ban/siêu
     thị thật (trước đây không kiểm gì, có thể đẩy hồ sơ sang phòng ban ngoài
     quyền mình rồi kéo theo cả quy trình duyệt sang đó).
+  - **Vá dư thừa (11/2026)**: bỏ hẳn checkbox phẳng "✅ Duyệt hợp đồng" (contractApprove) khỏi cây
+    phân quyền — rà soát code xác nhận quyền duyệt hợp đồng THẬT 100% do đúng bước/phòng ban/Nhóm Phê
+    Duyệt Trình-HĐ quyết định (canApproveStep(), không hề đọc lại cờ phẳng này), checkbox cũ chỉ còn tác
+    dụng (dư thừa) trong 1 điều kiện hiện module "✅ Phê Duyệt" vốn đã có 3 check chính xác hơn bên cạnh.
+    Không ảnh hưởng ai đang dùng hệ thống (admin không cần làm gì thêm).
   - **Nhóm Phê Duyệt HĐ & Cấp Phê Duyệt Cuối Cùng tự cấu hình** (10/2026, sub-tab
     **Phê Duyệt**) — cùng khuôn với Văn Bản Trình (mục 4.1), ở **Hệ Thống →
     🔀 Quy Trình Nâng Cao → 🖋️ Nhóm Phê Duyệt Trình/HĐ** (từ v23.65 — trước đó

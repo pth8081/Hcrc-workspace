@@ -134,13 +134,13 @@ async function scenario(name, fn) {
   await scenario('(a) collectPermMatrixColumns() chỉ lấy khoá boolean-only, loại khoá lẫn kiểu khác', async () => {
     const r = await page.evaluate(() => {
       const permsList = [
-        { admin: true, contractApprove: false, approverAuthLevel: 'PIN', docDownload: { all: true, depts: [] } },
-        { admin: false, contractApprove: true, approverAuthLevel: 'NONE', docDownload: { all: false, depts: ['Kế Toán'] } },
+        { admin: true, licenseApprove: false, approverAuthLevel: 'PIN', docDownload: { all: true, depts: [] } },
+        { admin: false, licenseApprove: true, approverAuthLevel: 'NONE', docDownload: { all: false, depts: ['Kế Toán'] } },
       ];
       return collectPermMatrixColumns(permsList);
     });
-    record('(a) có đúng "admin" và "contractApprove" (boolean ở mọi người)',
-      r.includes('admin') && r.includes('contractApprove'), JSON.stringify(r));
+    record('(a) có đúng "admin" và "licenseApprove" (boolean ở mọi người)',
+      r.includes('admin') && r.includes('licenseApprove'), JSON.stringify(r));
     record('(a) KHÔNG có "approverAuthLevel" (chuỗi enum, không phải boolean)',
       !r.includes('approverAuthLevel'), JSON.stringify(r));
     record('(a) CÓ "docDownload.all" (phần boolean của quyền phạm vi vẫn xuất được, theo thiết kế)',
@@ -164,19 +164,19 @@ async function scenario(name, fn) {
   await scenario('(b) buildPermMatrixRowChanges() phát hiện đúng thay đổi quyền + nhóm + báo cáo bổ sung', async () => {
     const r = await page.evaluate(() => {
       DB.permGroups = [{ id: 'grp_A', name: 'Nhóm A', perms: {} }, { id: 'grp_B', name: 'Nhóm B', perms: {} }];
-      const user = { username: 'nv01', perms: { admin: false, contractApprove: false }, groupIds: ['grp_A'], reportExtraKeys: [] };
-      const row = { Q_admin: 'TRUE', Q_contractApprove: 'FALSE', NhomPhanQuyen: 'Nhóm A;Nhóm B', BaoCao_MucBoSung: 'HANHCHINH_CAR' };
+      const user = { username: 'nv01', perms: { admin: false, licenseApprove: false }, groupIds: ['grp_A'], reportExtraKeys: [] };
+      const row = { Q_admin: 'TRUE', Q_licenseApprove: 'FALSE', NhomPhanQuyen: 'Nhóm A;Nhóm B', BaoCao_MucBoSung: 'HANHCHINH_CAR' };
       const diff = buildPermMatrixRowChanges('users', user, row);
       return diff;
     });
     record('(b) phát hiện đúng 3 thay đổi (admin, Nhóm Phân Quyền, Báo Cáo bổ sung)',
       r.changes.length === 3, JSON.stringify(r));
-    // contractApprove vắng mặt (không phải false tường minh) trong newPerms là ĐÚNG THIẾT KẾ, không phải
+    // licenseApprove vắng mặt (không phải false tường minh) trong newPerms là ĐÚNG THIẾT KẾ, không phải
     // lỗi — diffPerms()/isEmptyPermValue() (core.js, dùng chung với saveUser()) cố tình KHÔNG ghi "false"
     // thành override khi nhóm không có field đó, để nhóm bật quyền này lên sau này vẫn tự thừa hưởng
-    // được (không bị khoá cứng false vĩnh viễn) — !newPerms.contractApprove vẫn đúng "false" theo nghĩa.
-    record('(b) newPerms.admin = true, contractApprove vẫn "không bật" (không đổi) — vắng mặt = false theo diffPerms()',
-      r.newPerms.admin === true && !r.newPerms.contractApprove, JSON.stringify(r.newPerms));
+    // được (không bị khoá cứng false vĩnh viễn) — !newPerms.licenseApprove vẫn đúng "false" theo nghĩa.
+    record('(b) newPerms.admin = true, licenseApprove vẫn "không bật" (không đổi) — vắng mặt = false theo diffPerms()',
+      r.newPerms.admin === true && !r.newPerms.licenseApprove, JSON.stringify(r.newPerms));
     record('(b) newGroupIds gồm cả 2 nhóm (grp_A, grp_B)',
       JSON.stringify(r.newGroupIds.slice().sort()) === JSON.stringify(['grp_A', 'grp_B']), JSON.stringify(r.newGroupIds));
     record('(b) newReportExtraKeys = ["HANHCHINH_CAR"]',
@@ -250,14 +250,14 @@ async function scenario(name, fn) {
   // ==========================================================================
   await scenario('(d) Import Nhóm Phân Quyền: sửa quyền nhóm cascade ngay cho thành viên, gọi syncStorage cả 2 collection', async () => {
     const r = await page.evaluate(async () => {
-      DB.permGroups = [{ id: 'grp_B', name: 'Nhóm B', perms: { contractApprove: false }, reportExtraKeys: [] }];
+      DB.permGroups = [{ id: 'grp_B', name: 'Nhóm B', perms: { licenseApprove: false }, reportExtraKeys: [] }];
       DB.users = [
-        { id: 10, username: 'member1', name: 'Thành Viên 1', perms: { contractApprove: false }, groupIds: ['grp_B'], permOverrides: null, active: true },
-        { id: 11, username: 'other', name: 'Không Thuộc Nhóm', perms: { contractApprove: false }, groupIds: [], permOverrides: null, active: true },
+        { id: 10, username: 'member1', name: 'Thành Viên 1', perms: { licenseApprove: false }, groupIds: ['grp_B'], permOverrides: null, active: true },
+        { id: 11, username: 'other', name: 'Không Thuộc Nhóm', perms: { licenseApprove: false }, groupIds: [], permOverrides: null, active: true },
       ];
       window.__fetchHandlers['POST /api/admin/perm-matrix/import-xlsx'] = () => ({
         status: 200,
-        body: { rows: [{ TenNhom: 'Nhóm B', Q_contractApprove: 'TRUE' }] },
+        body: { rows: [{ TenNhom: 'Nhóm B', Q_licenseApprove: 'TRUE' }] },
       });
       window.__fetchHandlers['POST /api/data/permGroups'] = () => ({ status: 200, body: { ok: true, version: '2' } });
       window.__fetchHandlers['POST /api/data/users'] = () => ({ status: 200, body: { ok: true, version: '2' } });
@@ -275,12 +275,12 @@ async function scenario(name, fn) {
         calledGroupsSync: window.__fetchCalls.some(c => c.url === '/api/data/permGroups' && c.method === 'POST'),
       };
     });
-    record('(d) quyền của nhóm được cập nhật (contractApprove=true)',
-      r.groupAfter && r.groupAfter.perms.contractApprove === true, JSON.stringify(r.groupAfter));
-    record('(d) THÀNH VIÊN của nhóm được cascade NGAY (contractApprove=true) không cần sửa tay',
-      r.member1After && r.member1After.perms.contractApprove === true, JSON.stringify(r.member1After));
+    record('(d) quyền của nhóm được cập nhật (licenseApprove=true)',
+      r.groupAfter && r.groupAfter.perms.licenseApprove === true, JSON.stringify(r.groupAfter));
+    record('(d) THÀNH VIÊN của nhóm được cascade NGAY (licenseApprove=true) không cần sửa tay',
+      r.member1After && r.member1After.perms.licenseApprove === true, JSON.stringify(r.member1After));
     record('(d) người KHÔNG thuộc nhóm không bị ảnh hưởng',
-      r.otherAfter && r.otherAfter.perms.contractApprove === false, JSON.stringify(r.otherAfter));
+      r.otherAfter && r.otherAfter.perms.licenseApprove === false, JSON.stringify(r.otherAfter));
     record('(d) đã gọi syncStorage lưu CẢ permGroups LẪN users (vì có cascade)',
       r.calledUsersSync && r.calledGroupsSync, JSON.stringify(r));
   });
@@ -319,7 +319,7 @@ async function scenario(name, fn) {
         unmappedHeader,
         unmappedHeaderIsRawFallback: unmappedHeader === 'Q_' + unmappedKey,
         unmappedRoundTrip: resolvePermMatrixColumnKey(unmappedHeader),
-        legacyRawHeaderStillResolves: resolvePermMatrixColumnKey('Q_contractApprove'),
+        legacyRawHeaderStillResolves: resolvePermMatrixColumnKey('Q_licenseApprove'),
         nonPermColumnResolvesToNull: resolvePermMatrixColumnKey('Username'),
       };
     });
@@ -332,7 +332,7 @@ async function scenario(name, fn) {
     record('(f) khoá không có nhãn vẫn round-trip đúng qua nhánh fallback "Q_"',
       r.unmappedRoundTrip === 'khoaQuyenBiaDatKhongTonTai123', JSON.stringify(r));
     record('(f) tương thích ngược: file cũ còn header "Q_<khoá>" thô (bản trước khi có nhãn) vẫn đọc được',
-      r.legacyRawHeaderStillResolves === 'contractApprove', JSON.stringify(r));
+      r.legacyRawHeaderStillResolves === 'licenseApprove', JSON.stringify(r));
     record('(f) cột không phải quyền (VD "Username") -> trả về null, không bị hiểu nhầm thành 1 khoá quyền',
       r.nonPermColumnResolvesToNull === null, JSON.stringify(r));
   });
@@ -342,7 +342,7 @@ async function scenario(name, fn) {
       DB.permGroups = [];
       DB.users = [
         { id: 1, username: 'admin', name: 'Admin', perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
-        { id: 2, username: 'nv.b', name: 'Nhân Viên B', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.b', name: 'Nhân Viên B', perms: { admin: false, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       let captured = null;
       const orig = window.downloadMultiSheetXlsxFromServer;
@@ -350,16 +350,16 @@ async function scenario(name, fn) {
       try { downloadPermMatrixUsers(); } finally { window.downloadMultiSheetXlsxFromServer = orig; }
       const allColumns = captured.sheets.flatMap(s => s.columns);
       const adminCol = allColumns.find(c => c.key === 'Q_admin');
-      const contractApproveCol = allColumns.find(c => c.key === 'Q_contractApprove');
+      const licenseApproveCol = allColumns.find(c => c.key === 'Q_licenseApprove');
       return {
         adminHeader: adminCol && adminCol.header,
-        contractApproveHeader: contractApproveCol && contractApproveCol.header,
+        licenseApproveHeader: licenseApproveCol && licenseApproveCol.header,
       };
     });
     record('(f2) cột Q_admin xuất ra header tiếng Việt đúng nhãn tĩnh (permMatrixColumnHeader("admin"))',
       r.adminHeader && r.adminHeader !== 'Q_admin', JSON.stringify(r));
-    record('(f2) cột Q_contractApprove xuất ra header tiếng Việt (chứa "Duyệt hợp đồng")',
-      r.contractApproveHeader && r.contractApproveHeader.includes('Duyệt hợp đồng'), JSON.stringify(r));
+    record('(f2) cột Q_licenseApprove xuất ra header tiếng Việt (chứa "Duyệt Giấy Phép")',
+      r.licenseApproveHeader && r.licenseApproveHeader.includes('Duyệt Giấy Phép'), JSON.stringify(r));
   });
 
   // ===== (g) Ma Trận nhiều sheet (1 khối quyền = 1 sheet), đợt "mỗi module 1 sheet" 10/2026 =====
@@ -367,23 +367,23 @@ async function scenario(name, fn) {
     const r = await page.evaluate(async () => {
       DB.permGroups = [];
       DB.users = [
-        { id: 1, username: 'admin', name: 'Admin', dept: 'IT', perms: { admin: true, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
-        { id: 2, username: 'nv.b', name: 'Nhân Viên B', dept: 'Kế Toán', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 1, username: 'admin', name: 'Admin', dept: 'IT', perms: { admin: true, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 2, username: 'nv.b', name: 'Nhân Viên B', dept: 'Kế Toán', perms: { admin: false, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       let captured = null;
       const orig = window.downloadMultiSheetXlsxFromServer;
       window.downloadMultiSheetXlsxFromServer = (fileName, sheets) => { captured = { fileName, sheets }; };
       try { downloadPermMatrixUsers(); } finally { window.downloadMultiSheetXlsxFromServer = orig; }
       const sysSheet = captured.sheets.find(s => s.columns.some(c => c.key === 'Q_admin'));
-      const contractSheet = captured.sheets.find(s => s.columns.some(c => c.key === 'Q_contractApprove'));
+      const contractSheet = captured.sheets.find(s => s.columns.some(c => c.key === 'Q_licenseApprove'));
       return {
         sheetCount: captured.sheets.length,
-        sameSheet: sysSheet === contractSheet, // admin (Hệ Thống & Chung) và contractApprove (Hợp Đồng & Giấy Phép) PHẢI khác sheet
+        sameSheet: sysSheet === contractSheet, // admin (Hệ Thống & Chung) và licenseApprove (Hợp Đồng & Giấy Phép) PHẢI khác sheet
         sysSheetName: sysSheet && sysSheet.sheetName,
         contractSheetName: contractSheet && contractSheet.sheetName,
         sysSheetHasUsernameCol: sysSheet && sysSheet.columns.some(c => c.key === 'Username'),
         contractSheetHasUsernameCol: contractSheet && contractSheet.columns.some(c => c.key === 'Username'),
-        sysSheetOnlyHasItsOwnPermCol: sysSheet && !sysSheet.columns.some(c => c.key === 'Q_contractApprove'),
+        sysSheetOnlyHasItsOwnPermCol: sysSheet && !sysSheet.columns.some(c => c.key === 'Q_licenseApprove'),
         sysSheetRowCount: sysSheet && sysSheet.rows.length,
         sysSheetUsernames: sysSheet && sysSheet.rows.map(r => r.Username),
         adminRowQAdmin: sysSheet && sysSheet.rows.find(r => r.Username === 'admin')?.Q_admin,
@@ -391,11 +391,11 @@ async function scenario(name, fn) {
       };
     });
     record('(g) tách ra nhiều sheet (không còn 1 sheet phẳng duy nhất)', r.sheetCount > 1, JSON.stringify(r));
-    record('(g) admin và contractApprove nằm ở 2 sheet KHÁC NHAU (đúng khối quyền riêng)', r.sysSheetName && !r.sameSheet, JSON.stringify(r));
+    record('(g) admin và licenseApprove nằm ở 2 sheet KHÁC NHAU (đúng khối quyền riêng)', r.sysSheetName && !r.sameSheet, JSON.stringify(r));
     record('(g) sheet "Hệ Thống & Chung" đúng tên khối lấy từ PERM_KEY_VN_LABELS', r.sysSheetName === 'Hệ Thống & Chung', JSON.stringify(r));
-    record('(g) sheet "Hợp Đồng & Giấy Phép" đúng tên khối', r.contractSheetName === 'Hợp Đồng & Giấy Phép', JSON.stringify(r));
+    record('(g) sheet "Giấy Phép" đúng tên khối', r.contractSheetName === 'Giấy Phép', JSON.stringify(r));
     record('(g) cột Username LẶP LẠI ở cả 2 sheet (theo yêu cầu người dùng)', r.sysSheetHasUsernameCol && r.contractSheetHasUsernameCol, JSON.stringify(r));
-    record('(g) sheet "Hệ Thống & Chung" KHÔNG lẫn cột quyền của khối khác (Q_contractApprove)', r.sysSheetOnlyHasItsOwnPermCol, JSON.stringify(r));
+    record('(g) sheet "Hệ Thống & Chung" KHÔNG lẫn cột quyền của khối khác (Q_licenseApprove)', r.sysSheetOnlyHasItsOwnPermCol, JSON.stringify(r));
     record('(g) mỗi sheet vẫn có đủ 2 dòng (2 user) với đúng Username', r.sysSheetRowCount === 2 && JSON.stringify(r.sysSheetUsernames) === JSON.stringify(['admin', 'nv.b']), JSON.stringify(r));
     record('(g) xuất Excel dùng "Y"/"N" thay vì "TRUE"/"FALSE" (yêu cầu người dùng)', r.adminRowQAdmin === 'Y' && r.nvbRowQAdmin === 'N', JSON.stringify(r));
   });
@@ -410,14 +410,14 @@ async function scenario(name, fn) {
     const r = await page.evaluate(async () => {
       DB.permGroups = [];
       DB.users = [
-        { id: 1, username: 'nv.c', name: 'Nhân Viên C', dept: 'IT', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 1, username: 'nv.c', name: 'Nhân Viên C', dept: 'IT', perms: { admin: false, licenseApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       // Mô phỏng ĐÚNG những gì server (parseGenericMultiSheetMatrixXlsx) trả về sau khi gộp nhiều sheet
       // lại: 1 object phẳng/định danh, có cả 2 cột quyền dù chúng thuộc 2 sheet khác nhau lúc xuất.
       const mergedRowFromServer = {
         Username: 'nv.c', HoTen: 'Nhân Viên C', PhongBan: 'IT', NhomPhanQuyen: '', BaoCao_MucBoSung: '',
         [permMatrixColumnHeader('admin')]: 'TRUE',
-        [permMatrixColumnHeader('contractApprove')]: 'TRUE',
+        [permMatrixColumnHeader('licenseApprove')]: 'TRUE',
         duplicateInFile: false, duplicateExisting: false,
       };
       const origFetch = window.fetch;
@@ -430,12 +430,12 @@ async function scenario(name, fn) {
         found: item ? item.found : null,
         changeCount: item && item.diff ? item.diff.changes.length : null,
         newAdmin: item && item.diff ? item.diff.newPerms.admin : null,
-        newContractApprove: item && item.diff ? item.diff.newPerms.contractApprove : null,
+        newContractApprove: item && item.diff ? item.diff.newPerms.licenseApprove : null,
       };
     });
     record('(h) tìm đúng user theo Username dù dữ liệu đến từ nhiều sheet gộp lại', r.found === true, JSON.stringify(r));
-    record('(h) phát hiện đủ 2 thay đổi (admin + contractApprove, dù ở 2 sheet khác nhau lúc xuất)', r.changeCount === 2, JSON.stringify(r));
-    record('(h) newPerms.admin=true, newPerms.contractApprove=true (áp đúng cả 2 cột đến từ 2 "sheet" khác nhau)',
+    record('(h) phát hiện đủ 2 thay đổi (admin + licenseApprove, dù ở 2 sheet khác nhau lúc xuất)', r.changeCount === 2, JSON.stringify(r));
+    record('(h) newPerms.admin=true, newPerms.licenseApprove=true (áp đúng cả 2 cột đến từ 2 "sheet" khác nhau)',
       r.newAdmin === true && r.newContractApprove === true, JSON.stringify(r));
   });
 
@@ -444,12 +444,12 @@ async function scenario(name, fn) {
     const r = await page.evaluate(async () => {
       DB.permGroups = [];
       DB.users = [
-        { id: 1, username: 'nv.y', name: 'Nhân Viên Y', dept: 'IT', perms: { admin: false, contractApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 1, username: 'nv.y', name: 'Nhân Viên Y', dept: 'IT', perms: { admin: false, licenseApprove: true }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       const rowFromServer = {
         Username: 'nv.y', HoTen: 'Nhân Viên Y', PhongBan: 'IT', NhomPhanQuyen: '', BaoCao_MucBoSung: '',
         [permMatrixColumnHeader('admin')]: 'Y',
-        [permMatrixColumnHeader('contractApprove')]: 'N',
+        [permMatrixColumnHeader('licenseApprove')]: 'N',
         duplicateInFile: false, duplicateExisting: false,
       };
       const origFetch = window.fetch;
@@ -460,7 +460,7 @@ async function scenario(name, fn) {
       const item = permMatrixImportRows.find(it => it.identifier === 'nv.y');
       return {
         newAdmin: item && item.diff ? item.diff.newPerms.admin : null,
-        newContractApprove: item && item.diff ? item.diff.newPerms.contractApprove : null,
+        newContractApprove: item && item.diff ? item.diff.newPerms.licenseApprove : null,
       };
     });
     record('(i) "Y" -> true, "N" -> false (đúng chuẩn mới, không cần TRUE/FALSE nữa)',
@@ -478,12 +478,12 @@ async function scenario(name, fn) {
     const r = await page.evaluate(async () => {
       DB.permGroups = [];
       DB.users = [
-        { id: 1, username: 'nv.z', name: 'Nhân Viên Z', dept: 'IT', perms: { admin: false, contractApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
+        { id: 1, username: 'nv.z', name: 'Nhân Viên Z', dept: 'IT', perms: { admin: false, licenseApprove: false }, groupIds: [], permOverrides: null, active: true, reportExtraKeys: [] },
       ];
       const rowFromServer = {
         Username: 'nv.z', HoTen: 'Nhân Viên Z', PhongBan: 'IT', NhomPhanQuyen: '', BaoCao_MucBoSung: '',
         [permMatrixColumnHeader('admin')]: 'Y', // hợp lệ, không lạ
-        [permMatrixColumnHeader('contractApprove')]: 'Có', // gõ nhầm — KHÔNG phải Y/N/TRUE/FALSE
+        [permMatrixColumnHeader('licenseApprove')]: 'Có', // gõ nhầm — KHÔNG phải Y/N/TRUE/FALSE
         duplicateInFile: false, duplicateExisting: false,
       };
       const origFetch = window.fetch;
@@ -495,15 +495,15 @@ async function scenario(name, fn) {
       return {
         unrecognizedCount: item?.diff?.unrecognizedCells?.length ?? null,
         unrecognizedHeader: item?.diff?.unrecognizedCells?.[0]?.header ?? null,
-        expectedHeader: permMatrixColumnHeader('contractApprove'),
-        contractApproveNewVal: item?.diff?.newPerms?.contractApprove ?? null,
+        expectedHeader: permMatrixColumnHeader('licenseApprove'),
+        licenseApproveNewVal: item?.diff?.newPerms?.licenseApprove ?? null,
         include: item?.include ?? null,
       };
     });
-    record('(j) đúng 1 ô lạ được phát hiện, đúng cột contractApprove',
+    record('(j) đúng 1 ô lạ được phát hiện, đúng cột licenseApprove',
       r.unrecognizedCount === 1 && r.unrecognizedHeader === r.expectedHeader, JSON.stringify(r));
     record('(j) giá trị lạ vẫn an toàn coi là N (không tự bật quyền từ giá trị lạ)',
-      r.contractApproveNewVal === false, JSON.stringify(r));
+      r.licenseApproveNewVal === false, JSON.stringify(r));
     record('(j) dòng có ô lạ KHÔNG được tự tick sẵn ở preview (bắt admin tự kiểm tra trước khi áp dụng)',
       r.include === false, JSON.stringify(r));
   });
