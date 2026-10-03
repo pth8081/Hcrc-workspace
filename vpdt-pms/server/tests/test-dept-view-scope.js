@@ -250,12 +250,14 @@ test('itPriceApproval: admin bật mode DEPT -> cùng phòng tự động xem', 
   assert.strictEqual(canViewItPriceApproval(BYSTANDER, item, on), true);
 });
 
-// Tài Liệu: default NGƯỢC (CREATOR_ONLY) — chỉ người tạo xem trừ khi được cấp viewDraftDepts/viewApprovedDepts.
+// Tài Liệu: default NGƯỢC (CREATOR_ONLY) — chỉ người tạo/người duyệt xem trừ khi admin bật mode DEPT
+// hoặc thêm extraViewers/managerCanView (v24.75: đã bỏ hẳn 4 quyền phẳng viewDraftDepts/viewApprovedDepts
+// cũ ở Ma Trận Phân Quyền, Tài Liệu giờ xét quyền xem HOÀN TOÀN qua đúng khuôn deptViewScopeConfig này).
 test('doc: mặc định KHÔNG tự xem cùng phòng (default khác hẳn 11 module gốc)', () => {
   const doc = { uploader: 'creator', dept: DEPT, status: 'PENDING' };
   assert.strictEqual(canViewDoc(BYSTANDER, doc, {}), false);
 });
-test('doc: admin bật mode DEPT -> cùng phòng tự động xem (CỘNG THÊM, không đụng viewDraftDepts/viewApprovedDepts cũ)', () => {
+test('doc: admin bật mode DEPT -> cùng phòng tự động xem', () => {
   const doc = { uploader: 'creator', dept: DEPT, status: 'PENDING' };
   const on = { deptViewScopeConfig: { doc: { mode: 'DEPT' } } };
   assert.strictEqual(canViewDoc(BYSTANDER, doc, on), true);

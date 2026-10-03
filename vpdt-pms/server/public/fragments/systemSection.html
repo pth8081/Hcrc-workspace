@@ -1301,6 +1301,12 @@
             <span id="permTreeBadge_doc" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+            <!-- LÀM GỌN (v24.75, theo yêu cầu người dùng "bỏ hết các phân quyền lằng nhằng... chỉ giữ
+                 lại đúng quyền Tải tài liệu"): bỏ 2 cột "Xem Bản Nháp"/"Xem Đã Duyệt" cũ — người tạo và
+                 người đang duyệt LUÔN xem được mặc định (không cần cấp quyền gì), các trường hợp còn lại
+                 cấu hình ở Hệ Thống → Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban (module "Tài
+                 Liệu", mô hình 4 trạng thái dùng chung 17 module). Chỉ còn đúng 2 quyền ở đây: Tải Lên
+                 (ai được TẠO tài liệu) + Tải Tài Liệu (ai được TẢI file, tách riêng khỏi quyền xem). -->
             <table class="w-full text-[11px] border-collapse">
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
@@ -1311,20 +1317,8 @@
                       <input type="checkbox" id="pUploadAll" data-op-change="toggleScopeGroup" data-arg0="pUploadAll" data-arg1="pUploadDept"><span>ALL</span>
                     </label>
                   </th>
-                  <th class="text-center font-bold text-amber-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Xem Bản Nháp</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pViewDraftAll" data-op-change="toggleScopeGroup" data-arg0="pViewDraftAll" data-arg1="pViewDraftDept"><span>ALL</span>
-                    </label>
-                  </th>
-                  <th class="text-center font-bold text-emerald-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Xem Đã Duyệt</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pViewApprovedAll" data-op-change="toggleScopeGroup" data-arg0="pViewApprovedAll" data-arg1="pViewApprovedDept"><span>ALL</span>
-                    </label>
-                  </th>
                   <th class="text-center font-bold text-rose-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Tải Xuống</span>
+                    <span class="block mb-0.5">Tải Tài Liệu</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" id="pDocDownloadAll" data-op-change="toggleScopeGroup" data-arg0="pDocDownloadAll" data-arg1="pDocDownloadDept"><span>ALL</span>
                     </label>

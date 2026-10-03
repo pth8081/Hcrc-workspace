@@ -295,34 +295,20 @@ function renderDocs() {
   const fromDate = document.getElementById('filterFromDate')?.value || '';
   const toDate = document.getElementById('filterToDate')?.value || '';
 
-  // Kiểm tra quyền xem — tài liệu đã APPROVED xét quyền Xem Đã Duyệt, còn tài liệu đang xử lý / bị từ
-  // chối (PENDING/REJECTED = "bản nháp") xét quyền Xem Bản Nháp; người tải lên luôn xem được bài của
-  // chính mình.
-  //
-  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): thiếu hẳn nhánh "đang là người duyệt của quy trình hồ
-  // sơ này" mà module-vanbantrinh.js/module-hopdong.js đều đã có (isApproverForDeptWorkflow()) — server
-  // (canViewDoc(), lib/recordViewScope.js) đã có nhánh này từ trước, nên trước đây approver ngoài phạm
-  // vi viewDraftDepts/viewApprovedDepts của phòng ban đó VẪN được server trả về hồ sơ (nhất là sau khi
-  // vá thêm lỗi POSITION mode ở server), nhưng bị bộ lọc CLIENT này giấu mất khỏi tab Tài Liệu — chỉ còn
-  // thấy được qua Hộp Thư Phê Duyệt (buộc phải duyệt "mù" không xem trước được nội dung file).
-  const canViewDoc = doc => currentUser.perms.admin ||
-    (doc.status === 'APPROVED'
-      ? (currentUser.perms.viewApprovedAll || (currentUser.perms.viewApprovedDepts || []).includes(doc.dept))
-      : (currentUser.perms.viewDraftAll || (currentUser.perms.viewDraftDepts || []).includes(doc.dept))
-    ) ||
-    (doc.uploader === currentUser.username) ||
-    // Quản lý (trực tiếp/gián tiếp, theo Cơ Cấu Tổ Chức) của người tải lên — mục 3 kế hoạch 10/2026,
-    // mirror ĐÚNG canViewDoc() server (lib/recordViewScope.js).
-    isManagerOf(currentUser.username, doc.uploader, DB.users) ||
-    isApproverForDeptWorkflow(resolveDocWorkflowConfigForItemClient(doc), currentUser.username);
+  // LÀM GỌN (v24.75, theo yêu cầu người dùng "bỏ hết các phân quyền lằng nhằng"): bỏ HẲN bộ lọc quyền
+  // XEM ở CLIENT — DB.docs đã được SERVER lọc đúng phạm vi thật (filterDocsForUser()/canViewDoc() ở
+  // lib/recordViewScope.js, nguồn SỰ THẬT duy nhất) trước khi trả về qua GET /api/data, nên mọi bản ghi
+  // trong DB.docs đều ĐÃ hợp lệ để hiện — lọc lại ở đây chỉ tạo rủi ro DRIFT (từng xảy ra 2 lần: thiếu
+  // nhánh approver POSITION mode, rồi thiếu nhánh deptViewScopeConfig 4 trạng thái) khiến tài liệu hợp lệ
+  // bị ẨN NHẦM khỏi tab Tài Liệu dù server đã cho phép xem. Khớp đúng quy ước toàn hệ thống: client chỉ
+  // RENDER, không tự lọc lại quyền xem (xem chú thích đầu lib/recordViewScope.js).
 
   // Thẻ dashboard — đếm khớp CHÍNH XÁC những gì sẽ hiện ra khi bấm từng thẻ (xem filterDocByCard()).
   // "Tổng/Đã duyệt/Từ chối" đếm trên tài liệu GỐC (đúng những gì list hiện mặc định); "Chờ duyệt: Cập
   // nhật phiên bản" đếm riêng trên các bản ghi version (rootDocId != null) — trước đây không có cách
   // nào lọc/thấy nhanh các version đang chờ duyệt mà không mở rộng từng tài liệu gốc.
-  const viewableDocs = DB.docs.filter(canViewDoc);
-  const rootDocsAll = viewableDocs.filter(d => d.rootDocId == null);
-  const versionDocsAll = viewableDocs.filter(d => d.rootDocId != null);
+  const rootDocsAll = DB.docs.filter(d => d.rootDocId == null);
+  const versionDocsAll = DB.docs.filter(d => d.rootDocId != null);
   const dashCards = [
     { key: '__ALL__', label: 'Tổng Tài Liệu', count: rootDocsAll.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING_NEW', label: 'Chờ Duyệt: Tài Liệu Mới', count: rootDocsAll.filter(d => d.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
@@ -345,8 +331,6 @@ function renderDocs() {
   let filtered = DB.docs.filter(doc => {
     if (docTypeFilter === 'VERSION') { if (doc.rootDocId == null) return false; }
     else { if (doc.rootDocId != null) return false; }
-
-    if (!canViewDoc(doc)) return false;
 
     if (deptFilter && doc.dept !== deptFilter) return false;
     if (statusFilter && doc.status !== statusFilter) return false;

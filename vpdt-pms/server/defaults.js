@@ -839,8 +839,6 @@ const DEFAULTS = {
       perms: {
         admin: false,
         uploadAll: false, uploadDepts: ['Phòng Nhân Sự'],
-        viewDraftAll: false, viewDraftDepts: ['Phòng Nhân Sự'],
-        viewApprovedAll: false, viewApprovedDepts: ['Phòng Nhân Sự'],
         docDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         submissionView: { all: false, depts: ['Phòng Nhân Sự'] }, submissionCreate: { all: false, depts: ['Phòng Nhân Sự'] }, submissionDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         contractView: { all: false, depts: ['Phòng Nhân Sự'] }, contractCreate: { all: false, depts: ['Phòng Nhân Sự'] }, contractDownload: { all: false, depts: ['Phòng Nhân Sự'] },
@@ -856,8 +854,6 @@ const DEFAULTS = {
       perms: {
         admin: false,
         uploadAll: false, uploadDepts: [],
-        viewDraftAll: true, viewDraftDepts: [],
-        viewApprovedAll: true, viewApprovedDepts: [],
         docDownload: { all: false, depts: [] },
         // Kiểm soát viên cần xem xuyên phòng ban để kiểm toán, nhưng chỉ tạo hồ sơ trong phòng mình.
         submissionView: { all: true, depts: [] }, submissionCreate: { all: false, depts: ['Phòng IT'] }, submissionDownload: { all: false, depts: [] },
@@ -875,8 +871,6 @@ const DEFAULTS = {
       perms: {
         admin: false,
         uploadAll: true, uploadDepts: [],
-        viewDraftAll: true, viewDraftDepts: [],
-        viewApprovedAll: true, viewApprovedDepts: [],
         docDownload: { all: true, depts: [] },
         // Ban Giám Đốc cần toàn quyền xem & tạo trên mọi module để phê duyệt/giám sát toàn công ty.
         submissionView: { all: true, depts: [] }, submissionCreate: { all: true, depts: [] }, submissionDownload: { all: true, depts: [] },

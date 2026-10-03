@@ -549,12 +549,14 @@ async function main() {
       );
     }
 
-    // ===================== LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): tab Tài Liệu (client) thiếu
-    // hẳn nhánh "đang là người duyệt của quy trình hồ sơ này" mà module-vanbantrinh.js/module-hopdong.js
-    // đều đã có (isApproverForDeptWorkflow()) — kể cả sau khi server đã trả đúng hồ sơ về (canViewDoc()
-    // ở lib/recordViewScope.js), bộ lọc CLIENT vẫn giấu mất khỏi danh sách nếu approver ngoài phạm vi
-    // viewDraftDepts/viewApprovedDepts/không phải uploader. Test qua "Theo vị trí" (POSITION mode, cùng
-    // lớp lỗi với phần server đã vá) — dùng lại đúng khuôn cấu hình approverMode/approversByPosition.
+    // ===================== LÀM GỌN (v24.75): tab Tài Liệu (client) KHÔNG còn tự lọc lại quyền XEM nữa
+    // — DB.docs đã được SERVER chốt đúng phạm vi (canViewDoc() ở lib/recordViewScope.js) trước khi trả
+    // về, renderDocs() chỉ RENDER nguyên mảng này (xem chú thích tại renderDocs()). Test dưới chỉ còn
+    // xác nhận renderDocs() KHÔNG vô tình ẩn mất 1 bản ghi hợp lệ đã có trong DB.docs (sanity check tầng
+    // render) — phần "phòng ban khác không thấy được" (không rò rỉ chéo phòng ban qua POSITION mode) đã
+    // chuyển hẳn thành bài test SERVER ở tests/test-docs-scope.js (tầng duy nhất còn quyết định điều
+    // này, vì DB.docs ở đây là dữ liệu test harness DÙNG CHUNG giữa các lượt đăng nhập, không mô phỏng
+    // lại được việc server trả KHÁC NHAU cho từng user).
     // =====================
     {
       const approverPos = {
@@ -586,25 +588,9 @@ async function main() {
       renderDocs();
       const rowsAfterApproverLogin = document.getElementById('docTableBody').innerHTML;
       check(
-        'doc (rà soát 10/2026): người duyệt "Theo vị trí" (POSITION mode, KHÔNG phải uploader/viewDraftDepts) THẤY được tài liệu cần duyệt trong tab Tài Liệu',
+        'doc: renderDocs() hiện đúng 1 bản ghi hợp lệ đã có trong DB.docs (sanity check tầng render, không tự lọc lại quyền xem)',
         rowsAfterApproverLogin.includes('HC-POS-001'),
         rowsAfterApproverLogin.slice(0, 300)
-      );
-
-      // Người CÙNG chức danh nhưng KHÁC phòng ban (không khớp cặp jobTitle+dept) KHÔNG được coi là approver.
-      const notApproverPos = {
-        username: 'truongphong_khac', name: 'Trưởng Phòng Khác Phòng', dept: 'Phòng Kỹ Thuật',
-        jobTitle: 'Trưởng Phòng', role: 'staff', email: 'tpk@hcrc.vn', phone: '0900000098',
-        perms: { canBeApprover: true }
-      };
-      DB.users.push(notApproverPos);
-      finishLogin(notApproverPos);
-      renderDocs();
-      const rowsAfterOtherLogin = document.getElementById('docTableBody').innerHTML;
-      check(
-        'doc (rà soát 10/2026): trưởng phòng KHÁC (cùng chức danh nhưng khác phòng ban, không khớp cặp jobTitle+dept) KHÔNG thấy tài liệu này — không rò rỉ chéo phòng ban',
-        !rowsAfterOtherLogin.includes('HC-POS-001'),
-        rowsAfterOtherLogin.slice(0, 300)
       );
 
       finishLogin(adminUser);

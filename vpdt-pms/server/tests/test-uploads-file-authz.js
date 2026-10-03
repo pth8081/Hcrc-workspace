@@ -109,11 +109,12 @@ const COLLECTIONS = {
 // ===================== Người dùng =====================
 const ADMIN = { username: 'admin', dept: 'Ban Giám Đốc', perms: { admin: true } };
 const OWNER_DOC = { username: 'owner_doc', dept: DEPT_A, perms: {} };
-// NHÂN VẬT CHÍNH của kịch bản 3: được cấp quyền XEM tài liệu đã duyệt của DEPT_A, nhưng KHÔNG có cờ
-// docDownload. Ở phòng ban KHÁC (DEPT_B) — quan trọng, vì scopeAllows() tự cho qua khi user.dept trùng
-// dept hồ sơ, nếu để cùng phòng thì nhánh "không có quyền tải" không bao giờ được kiểm thật.
+// NHÂN VẬT CHÍNH của kịch bản 3: được cấp quyền XEM tài liệu (qua deptViewScopeConfig.doc.extraViewers,
+// khuôn v24.75 — Ma Trận Phân Quyền đã bỏ hẳn viewApprovedDepts cũ), nhưng KHÔNG có cờ docDownload. Ở
+// phòng ban KHÁC (DEPT_B) — quan trọng, vì scopeAllows() tự cho qua khi user.dept trùng dept hồ sơ, nếu
+// để cùng phòng thì nhánh "không có quyền tải" không bao giờ được kiểm thật.
 const VIEWER_NO_DOWNLOAD = {
-  username: 'viewer_nodl', dept: DEPT_B, perms: { viewApprovedDepts: [DEPT_A] }
+  username: 'viewer_nodl', dept: DEPT_B, perms: {}
 };
 // Người ngoài hoàn toàn: đã đăng nhập nhưng không được cấp quyền gì — chính là kẻ tấn công trong lỗ
 // hổng cũ (biết URL là đọc được file).
@@ -145,8 +146,11 @@ stubModule('../lib/recordStore', {
 });
 // deptWorkflows rỗng -> resolveDocApproversServer() trả {} -> nhánh "đang là người duyệt" của
 // canViewDoc() không cho ai qua, để test chỉ xét đúng nhánh phạm vi phòng ban đang cần khoá.
+// deptViewScopeConfig.doc.extraViewers=['viewer_nodl']: cấp quyền XEM cho VIEWER_NO_DOWNLOAD qua đúng
+// khuôn 4 trạng thái (v24.75) — KHÔNG cấp mode DEPT (sẽ làm nhánh phòng ban tự động xem lẫn vào kịch
+// bản 1, vốn cố ý dùng OUTSIDER cùng DEPT_B để kiểm "ngoài phạm vi vẫn bị chặn").
 stubModule('../lib/appData', {
-  getAllAppData: async () => ({ deptWorkflows: {} }),
+  getAllAppData: async () => ({ deptWorkflows: {}, deptViewScopeConfig: { doc: { mode: 'CREATOR_ONLY', extraViewers: ['viewer_nodl'], managerCanView: false } } }),
   getAppDataValue: async () => ({}),
   getAppDataValueCached: async () => ({})
 });

@@ -340,18 +340,21 @@ muốn)**: Công Việc (dept = cùng phòng NGƯỜI GIAO việc, lớp ngườ
 cộng-tác-viên/quản-lý-của-người-được-giao LUÔN cố định không đổi dù cấu hình
 gì), Hỗ Trợ IT (phiếu — vốn cố ý hẹp để tránh lộ thông tin tài khoản/sự cố cá
 nhân), Phê Duyệt Giá (vốn cố ý hẹp để tránh lộ chiến lược giá — đội `itPriceSupport`
-luôn xem hết KHÔNG phụ thuộc cấu hình này), Tài Liệu (phải cấp quyền
-`viewDraftDepts`/`viewApprovedDepts` riêng ở Ma Trận Phân Quyền mới xem được
-dù cùng phòng — mục này chỉ CỘNG THÊM, không thay thế cơ chế đó), Văn Phòng
-Phẩm (vốn chỉ người tạo + người duyệt đúng bước).
+luôn xem hết KHÔNG phụ thuộc cấu hình này), Tài Liệu (từ v24.75: ĐÂY là đúng
+và DUY NHẤT nơi cấu hình quyền xem của Tài Liệu — Ma Trận Phân Quyền đã bỏ hẳn
+4 quyền phẳng cũ "Xem Bản Nháp"/"Xem Đã Duyệt", chỉ còn đúng 1 quyền "Tải Tài
+Liệu" tách riêng cho việc TẢI FILE, không liên quan tới xem/liệt kê hồ sơ), Văn
+Phòng Phẩm (vốn chỉ người tạo + người duyệt đúng bước).
 
 - **Mặc định (chưa đụng tới màn cấu hình)**: khớp ĐÚNG hành vi gốc từng module
   (nêu trên) — không ai mất/thêm quyền xem gì nếu admin chưa từng mở màn này.
 - **KHÔNG bị ảnh hưởng bởi cấu hình này**: admin, quyền quản lý/tổng hợp toàn
   công ty (`budgetManage`, `paymentManage`, `itPriceSupport`...), quản lý trực
-  tiếp/gián tiếp của người tạo khi đã là lớp CỐ ĐỊNH sẵn có (Tài Liệu/Thanh
-  Toán/Hợp Đồng), và người đang được cấu hình làm người duyệt bước đó (dù ở
-  phòng ban khác) — các lớp xem này LUÔN giữ nguyên.
+  tiếp/gián tiếp của người tạo khi đã là lớp CỐ ĐỊNH sẵn có (Thanh Toán/Hợp
+  Đồng — Tài Liệu từ v24.75 không còn lớp cố định này, quản lý chỉ xem được
+  qua "Người quản lý toàn quyền xem" #4 nếu admin TỰ BẬT), và người đang được
+  cấu hình làm người duyệt bước đó (dù ở phòng ban khác) — các lớp xem này
+  LUÔN giữ nguyên.
 
 ### 3.1. 3 cách gán người duyệt cho 1 bước
 

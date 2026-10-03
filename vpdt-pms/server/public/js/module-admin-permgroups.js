@@ -281,9 +281,9 @@ async function deletePermGroup(id) {
 // (collectPermsFromForm(), module-admin-permtree.js) khi hệ thống thêm quyền mới sau này — không cần
 // đồng bộ tay. Các quyền dạng PHẠM VI {all, depts:[...]} (submissionView/carView/contractView...) chỉ
 // xuất được phần "all" (Toàn Bộ Phòng Ban, boolean) — phần "depts" (mảng cụ thể) và các trường không
-// phải boolean khác (approverAuthLevel là chuỗi enum, uploadDepts/viewDraftDepts/viewApprovedDepts là
-// mảng phẳng) CỐ Ý bỏ ngoài ma trận: 1 ô Excel gõ sai không có cách nào validate thành 1 danh sách
-// phòng ban hợp lệ, rủi ro cao hơn lợi ích — vẫn phải sửa tay từng người/nhóm cho các phần này như cũ.
+// phải boolean khác (approverAuthLevel là chuỗi enum, uploadDepts là mảng phẳng) CỐ Ý bỏ ngoài ma trận:
+// 1 ô Excel gõ sai không có cách nào validate thành 1 danh sách phòng ban hợp lệ, rủi ro cao hơn lợi
+// ích — vẫn phải sửa tay từng người/nhóm cho các phần này như cũ.
 //
 // 2 sheet Người Dùng/Nhóm Phân Quyền XUẤT RA 2 FILE .xlsx RIÊNG (không phải 2 sheet trong 1 workbook)
 // — server (lib/xlsxSafeRead.js streamFirstSheetRows()) CHỈ đọc được sheet ĐẦU TIÊN của mọi file upload
@@ -324,7 +324,7 @@ const PERM_KEY_VN_LABELS = {
   "contractDownload.all": "Hợp Đồng & Giấy Phép — Tải xuống",
   "contractImportSigned": "Hợp Đồng & Giấy Phép — 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab \"Quản Lý HĐ\")",
   "contractView.all": "Hợp Đồng & Giấy Phép — Xem",
-  "docDownload.all": "Tài Liệu — Tải Xuống",
+  "docDownload.all": "Tài Liệu — Tải Tài Liệu",
   "hrAttendanceManage": "Nhân Sự — ⏱️ Quản Lý Chấm Công & Phép Năm (HR)",
   "hrContractManage": "Nhân Sự — 📝 Quản Lý Hợp Đồng Lao Động (HR)",
   "hrLeaveApprove": "Nhân Sự — ✅ Duyệt Đơn Nghỉ Phép (quản lý trực tiếp)",
@@ -538,8 +538,6 @@ const PERM_KEY_VN_LABELS = {
   "uniformManage": "Đồng Phục — 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)",
   "uniformStoreManage": "Đồng Phục — ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)",
   "uploadAll": "Tài Liệu — Tải lên",
-  "viewApprovedAll": "Tài Liệu — Xem Đã Duyệt",
-  "viewDraftAll": "Tài Liệu — Xem Bản Nháp",
   "vppManage": "Văn Phòng Phẩm — ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)",
   "vppRegisterCreate": "Văn Phòng Phẩm — 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)",
   "vppReportView": "Văn Phòng Phẩm — 📊 Xem Báo Cáo (không kèm quyền cấu hình Kỳ Đăng Ký)"

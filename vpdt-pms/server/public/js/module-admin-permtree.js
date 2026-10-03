@@ -150,10 +150,6 @@ function collectPermsFromForm() {
     officeFix: document.getElementById('pOfficeFix').checked,
     uploadAll: document.getElementById('pUploadAll').checked,
     uploadDepts: Array.from(document.querySelectorAll('[id^="pUploadDept_"]:checked')).map(cb => cb.value),
-    viewDraftAll: document.getElementById('pViewDraftAll').checked,
-    viewDraftDepts: Array.from(document.querySelectorAll('[id^="pViewDraftDept_"]:checked')).map(cb => cb.value),
-    viewApprovedAll: document.getElementById('pViewApprovedAll').checked,
-    viewApprovedDepts: Array.from(document.querySelectorAll('[id^="pViewApprovedDept_"]:checked')).map(cb => cb.value),
     docDownload: scopeFromForm('pDocDownloadAll', 'pDocDownloadDept'),
 
     submissionView: scopeFromForm('pSubViewAll', 'pSubViewDept'),
@@ -407,8 +403,6 @@ function populatePermsForm(permsInput) {
   document.getElementById('pRebateViewReport').checked = !!perms.rebateViewReport;
 
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
-  document.getElementById('pViewDraftAll').checked = !!perms.viewDraftAll;
-  document.getElementById('pViewApprovedAll').checked = !!perms.viewApprovedAll;
   document.getElementById('pDocDownloadAll').checked = !!perms.docDownload?.all;
 
   document.getElementById('pSubViewAll').checked = !!perms.submissionView?.all;
@@ -453,8 +447,6 @@ function populatePermsForm(permsInput) {
   };
 
   setGroupCheckboxes(perms.uploadDepts, 'pUploadDept');
-  setGroupCheckboxes(perms.viewDraftDepts, 'pViewDraftDept');
-  setGroupCheckboxes(perms.viewApprovedDepts, 'pViewApprovedDept');
   setGroupCheckboxes(perms.docDownload?.depts, 'pDocDownloadDept');
   setGroupCheckboxes(perms.submissionView?.depts, 'pSubViewDept');
   setGroupCheckboxes(perms.submissionCreate?.depts, 'pSubCreateDept');
@@ -470,7 +462,7 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
-  ['pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
+  ['pUploadAll', 'pDocDownloadAll',
    'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
    'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
    'pMeetingViewAll', 'pMeetingBookAll',

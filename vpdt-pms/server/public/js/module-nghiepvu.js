@@ -1358,7 +1358,7 @@ const SYSTEM_DOCS = {
       { label: 'Công Việc — "người tạo" = người GIAO việc', text: 'người ĐƯỢC GIAO/cộng tác viên/quản lý của người được giao LUÔN xem được, không phụ thuộc cấu hình này — màn này chỉ thêm lớp "người khác không liên quan" có thấy hay không.' },
     ], right: [
       { label: 'KHÔNG bị ảnh hưởng bởi màn này', text: 'admin, quyền quản lý/tổng hợp toàn công ty (budgetManage/paymentManage/itPriceSupport...), và người đang được cấu hình làm người duyệt bước đó (dù khác phòng ban) — các lớp xem này LUÔN giữ nguyên dù cấu hình gì ở đây.' },
-      { label: 'Tài Liệu — lớp CỘNG THÊM, không thay thế', text: 'cơ chế viewDraftDepts/viewApprovedDepts (Ma Trận Phân Quyền) vẫn hoạt động song song — bật "Cùng phòng tự động xem" ở đây chỉ MỞ RỘNG thêm, không tắt cơ chế cũ.' },
+      { label: 'Tài Liệu — đã làm gọn (v24.75)', text: 'bỏ hẳn 4 quyền phẳng cũ "Xem Bản Nháp"/"Xem Đã Duyệt" (Ma Trận Phân Quyền) — Tài Liệu giờ xét quyền xem HOÀN TOÀN qua đúng 4 lớp chung này (admin/người tạo/người duyệt/mục này), Ma Trận Phân Quyền chỉ còn đúng 1 quyền "Tải Tài Liệu" (tách riêng cho endpoint tải file, không quyết định hồ sơ có hiện trong danh sách hay không).' },
     ] },
   },
   sysCatalog: {

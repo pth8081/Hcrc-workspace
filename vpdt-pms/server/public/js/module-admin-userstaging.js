@@ -307,7 +307,7 @@ function resetUserForm() {
   toggleOperationOrderReceiptScopeGroup();
 
   [
-    'pUploadAll', 'pViewDraftAll', 'pViewApprovedAll', 'pDocDownloadAll',
+    'pUploadAll', 'pDocDownloadAll',
     'pSubViewAll', 'pSubCreateAll', 'pSubDownloadAll',
     'pContractViewAll', 'pContractCreateAll', 'pContractDownloadAll',
     'pMeetingViewAll', 'pMeetingBookAll',

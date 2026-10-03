@@ -1210,7 +1210,7 @@ function populateModuleAccessForm(moduleAccess, prefix = 'pModuleAccess') {
 // được nhóm KHÔNG cần 1 container DOM riêng bọc đúng 1 cột (không còn khả thi vì các cột giờ nằm CHUNG 1
 // hàng <tr>, xem chú thích tại đó).
 const PERM_DEPT_TABLES = [
-  { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pViewDraft', 'pViewApproved', 'pDocDownload'] },
+  { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pDocDownload'] },
   { tbody: 'pSubDeptTableBody', cols: ['pSubView', 'pSubCreate', 'pSubDownload'] },
   { tbody: 'pContractDeptTableBody', cols: ['pContractView', 'pContractCreate', 'pContractDownload'] },
   { tbody: 'pMeetingDeptTableBody', cols: ['pMeetingView', 'pMeetingBook'] },

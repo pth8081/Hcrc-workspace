@@ -38,7 +38,7 @@ const {
   filterPayrollPeriodsForUser, filterPayslipsForUser,
   filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
-  canAccessItPriceApprovalModuleServer
+  canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { cascadeMeetingRoomRename, diffMeetingRoomRenames } = require('../lib/catalogRename');
@@ -509,12 +509,15 @@ function mergeGroupsBasePermsServer(groupsPerms) {
     } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
       result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
     } else if (Array.isArray(sample)) {
-      // PQ-02 (đợt test chuyên sâu 9/2026): uploadDepts/viewDraftDepts/viewApprovedDepts (Tài Liệu) là 3
-      // trường "kiểu cũ" — mảng phòng ban TRẦN, không phải object {all,depts} như phần còn lại của hệ
-      // thống (chưa migrate sang khuôn chung, xem đối chiếu boolean uploadAll/viewDraftAll/viewApprovedAll
-      // đi kèm đã OR đúng ở nhánh boolean trên). TRƯỚC ĐÂY rơi vào nhánh else -> lấy giá trị NHÓM CUỐI
-      // CÙNG (last-write-wins), làm mất phòng ban của các nhóm khác — vi phạm đúng nguyên tắc PQ-02
-      // "nhóm quyền là OVERLAY cộng thêm". Hợp nhất (union, khử trùng lặp) giống hệt nhánh {all,depts}.
+      // PQ-02 (đợt test chuyên sâu 9/2026): uploadDepts là trường "kiểu cũ" còn lại — mảng phòng ban
+      // TRẦN, không phải object {all,depts} như phần còn lại của hệ thống (chưa migrate sang khuôn
+      // chung, xem đối chiếu boolean uploadAll đi kèm đã OR đúng ở nhánh boolean trên). 3 quyền phẳng
+      // Tài Liệu cùng khuôn này (viewDraftAll/viewDraftDepts/viewApprovedAll/viewApprovedDepts) đã BỎ
+      // HẲN ở v24.75 (làm gọn phân quyền Tài Liệu) — nhánh này giờ chỉ còn phục vụ uploadDepts, nhưng
+      // vẫn giữ nguyên dạng UNION chung (không riêng theo tên khoá) để không cần sửa nếu sau này có
+      // thêm trường mảng trần khác. TRƯỚC ĐÂY rơi vào nhánh else -> lấy giá trị NHÓM CUỐI CÙNG
+      // (last-write-wins), làm mất phòng ban của các nhóm khác — vi phạm đúng nguyên tắc PQ-02 "nhóm
+      // quyền là OVERLAY cộng thêm". Hợp nhất (union, khử trùng lặp) giống hệt nhánh {all,depts}.
       result[key] = [...new Set(values.flatMap(v => Array.isArray(v) ? v : []))];
     } else {
       result[key] = values[values.length - 1];
@@ -1241,15 +1244,18 @@ function loadBudgetLinesScoped(user) {
   return getForCollectionByDeptCached('budgetLines', user.dept);
 }
 
-// Bước 8k — docs: canViewDoc() (lib/recordViewScope.js) 4 nhánh — (1) admin xem HẾT, (2) chính người
-// TẢI LÊN (uploader, mọi phòng ban/trạng thái), (3) viewApprovedAll/viewApprovedDepts (chỉ áp dụng hồ sơ
-// APPROVED) HOẶC viewDraftAll/viewDraftDepts (áp dụng hồ sơ KHÁC APPROVED), (4) đang là người duyệt theo
-// deptWorkflows[dept] (BẤT KỲ bước nào, không phân biệt trạng thái hồ sơ — khớp đúng
-// resolveDocApproversServer(), KHÔNG có snapshot effectiveApprovers như submissions bên dưới nên luôn
-// tra đúng cấu hình HIỆN TẠI, không có nguy cơ lệch dữ liệu cũ). viewDraftAll/viewApprovedAll (hiếm, vai
-// trò kiểu quản lý cấp cao) tải company-wide như admin — còn lại tải theo tập PHÒNG BAN (viewDraftDepts ∪
-// viewApprovedDepts ∪ approverDepts, TRÙNG hơi thừa 1 chút giữa 2 loại trạng thái nhưng filterDocsForUser()
-// vẫn lọc lại ĐÚNG sau đó, an toàn) + 1 lượt riêng theo Uploader.
+// Bước 8k — docs: canViewDoc() (lib/recordViewScope.js) LÀM GỌN v24.75 (bỏ hẳn 4 quyền phẳng cũ
+// viewDraftAll/viewDraftDepts/viewApprovedAll/viewApprovedDepts + nhánh isManagerOf unconditional, theo
+// yêu cầu người dùng "bỏ hết các phân quyền lằng nhằng... chỉ giữ lại đúng quyền Tải tài liệu") — còn
+// đúng 4 nhánh: (1) admin xem HẾT, (2) chính người TẢI LÊN (uploader), (3) đang là người duyệt theo
+// deptWorkflows[dept] (BẤT KỲ bước nào, LUÔN thấy để duyệt — khớp đúng resolveWfConfig(), không phân
+// biệt trạng thái hồ sơ), (4) deptViewScopeConfig['doc'] (mode DEPT/CREATOR_ONLY + extraViewers +
+// managerCanView — mirror ĐÚNG 16 module kia, xem moduleViewConfig()/extraViewScopeAllows()). Tải
+// company-wide như admin nếu user nằm trong extraViewers HOẶC managerCanView đang BẬT (quản lý có thể có
+// cấp dưới ở BẤT KỲ phòng ban nào, không rút gọn được về 1 tập phòng ban cụ thể để tải hẹp) — còn lại chỉ
+// tải theo PHÒNG BAN CHÍNH MÌNH (nếu mode=DEPT) ∪ approverDepts + 1 lượt riêng theo Uploader.
+// filterDocsForUser()/canViewDoc() vẫn lọc lại ĐÚNG phạm vi thật sau đó (lớp chắn thứ 2), nên tải hơi
+// thừa ở đây (managerCanView/extraViewers) là an toàn, không lộ dữ liệu.
 function computeDocsApproverDepts(user, data) {
   const depts = [];
   for (const [dept, wfConfig] of Object.entries(data.deptWorkflows || {})) {
@@ -1261,12 +1267,13 @@ function computeDocsApproverDepts(user, data) {
   return depts;
 }
 async function loadDocsScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.viewDraftAll || user?.perms?.viewApprovedAll || isExtraApprovalLayerApprover(user, data, ['DOC'])) {
+  const cfg = moduleViewConfig(data, 'doc', 'CREATOR_ONLY');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || isExtraViewer || cfg.managerCanView || isExtraApprovalLayerApprover(user, data, ['DOC'])) {
     return getAllForCollectionCached('docs');
   }
   const depts = new Set();
-  (user?.perms?.viewDraftDepts || []).forEach(d => depts.add(d));
-  (user?.perms?.viewApprovedDepts || []).forEach(d => depts.add(d));
+  if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
   computeDocsApproverDepts(user, data).forEach(d => depts.add(d));
 
   const byId = new Map();

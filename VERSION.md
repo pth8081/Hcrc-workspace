@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**24.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.75 (2026-10-03): Làm gọn phân quyền Tài Liệu — chỉ còn đúng quyền "Tải Tài Liệu"
+
+Người dùng: "Tài liệu tôi muốn bạn thay đổi một chút bỏ hết các phân quyền lằng nhằng đi, tái sử dụng mô
+hình tôi đưa ra vừa rồi... các quyền khác bỏ hết — người phê duyệt đã chọn và có trong quy trình thì luôn
+thấy tài liệu để phê duyệt... các phần liên quan đến tài liệu cũng chỉ để đúng quyền 'Tải tài liệu' các
+mục khác đã có phân quyền theo ma trận." Tái sử dụng NGUYÊN mô hình 4 trạng thái `deptViewScopeConfig`
+(v24.74) cho Tài Liệu, bỏ hẳn lớp quyền phẳng cũ riêng của module này.
+
+- **Bỏ HẲN 4 quyền phẳng cũ** ở Ma Trận Phân Quyền (Nhân Sự → Phân Quyền → Ma Trận): `viewDraftAll`,
+  `viewDraftDepts`, `viewApprovedAll`, `viewApprovedDepts` — cả checkbox cây phân quyền
+  (`systemSection.html`), cột bảng theo phòng ban (`module-admin.js` `PERM_DEPT_TABLES`), nhãn Excel
+  (`module-admin-permgroups.js`), và logic collect/populate form (`module-admin-permtree.js`).
+- **`canViewDoc()`** (`lib/recordViewScope.js`) rút từ 6 nhánh xuống đúng 4 nhánh: (1) admin xem HẾT,
+  (2) chính người TẢI LÊN (uploader), (3) đang là người duyệt của quy trình hồ sơ này (PEOPLE lẫn
+  POSITION mode, BẤT KỲ bước nào — LUÔN thấy để duyệt, không phụ thuộc cấu hình nào khác), (4)
+  `deptViewScopeConfig['doc']` (mode DEPT/CREATOR_ONLY + extraViewers + managerCanView — khớp đúng 16
+  module khác). Cũng bỏ nhánh `isManagerOf(uploader)` UNCONDITIONAL cũ — quản lý xem hồ sơ cấp dưới giờ
+  là TUỲ CHỌN qua `managerCanView` (admin tự bật ở "🔒 Phạm Vi Xem Theo Phòng Ban"), không còn mặc định.
+- **Giữ NGUYÊN KHÔNG ĐỔI quyền `docDownload`** ("Tải Tài Liệu", Ma Trận Phân Quyền) — quyền TÁCH RIÊNG
+  cho endpoint tải file thật (`canDownloadRecordFile()`), không liên quan tới `canViewDoc()` (hàm quyết
+  định hồ sơ có XUẤT HIỆN trong danh sách/GET /api/data hay không). Đây là quyền DUY NHẤT còn lại ở Ma
+  Trận Phân Quyền cho module Tài Liệu, đúng yêu cầu người dùng.
+- **`loadDocsScoped()`** (`routes/data.js`, tối ưu SQL trước khi lọc thật) đổi sang đọc
+  `moduleViewConfig(data, 'doc', 'CREATOR_ONLY')` thay cho 4 cờ cũ.
+- **Dọn code chết liên quan**: xoá hẳn `getUserAllowedDepts()` (`core.js`, chỉ có 1 lời gọi và kết quả
+  không được dùng ở đâu) và bộ lọc quyền xem phía CLIENT trong `module-tailieu.js` (hàm `canViewDoc()`
+  nội bộ của file này) — DB.docs đã được SERVER lọc đúng (lớp duy nhất quyết định, khớp quy ước chung:
+  client chỉ RENDER, không tự lọc lại quyền xem). Đây từng là nguồn lỗi DRIFT thật (2 lần trước đó bản
+  client bị lệch khỏi server khi thêm nhánh mới), xoá hẳn thay vì đồng bộ lại lần 3.
+- **Test**: viết lại `tests/test-docs-scope.js` theo mô hình mới (4 nhánh); cập nhật
+  `tests/test-dept-view-scope.js`, `tests/test-uploads-file-authz.js`, `tests/test-doc.js`,
+  `tests/test-merge-groups-perms.js` cho khớp (không còn 4 quyền phẳng cũ trong fixture).
 
 ## v24.74 (2026-10-03): Ma Trận "🔒 Phạm Vi Xem Theo Phòng Ban" — nâng cấp lên 4 TRẠNG THÁI + 6 module mới
 

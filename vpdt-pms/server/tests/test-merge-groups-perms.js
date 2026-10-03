@@ -3,10 +3,15 @@
 // PQ-02 (đợt test chuyên sâu 9/2026, mục Phân Quyền): mergeGroupsBasePermsServer() (routes/data.js) hợp
 // nhất quyền của nhiều nhóm mà 1 user thuộc về — nguyên tắc là OVERLAY/UNION (cộng dồn), không phải
 // last-write-wins. Test bằng script riêng đã xác nhận thuật toán {all,depts}/boolean/approverAuthLevel
-// (ranked enum) đều union ĐÚNG — nhưng phát hiện 3 trường "kiểu cũ" của Tài Liệu (uploadDepts/
-// viewDraftDepts/viewApprovedDepts, mảng TRẦN chứ không phải object {all,depts}) bị rơi vào nhánh
-// else -> lấy giá trị NHÓM CUỐI CÙNG, làm mất phòng ban của các nhóm khác. Test này gọi THẲNG hàm thật
-// (export qua module.exports.mergeGroupsBasePermsServer, xem routes/data.js) để không chép lại logic.
+// (ranked enum) đều union ĐÚNG — nhưng phát hiện nhánh mảng TRẦN (key kết thúc bằng "Depts" nhưng giá
+// trị là string[] thẳng, khác hẳn object {all,depts} chuẩn — ví dụ còn lại: uploadDepts) bị rơi vào
+// nhánh else -> lấy giá trị NHÓM CUỐI CÙNG, làm mất phòng ban của các nhóm khác. 2 test dưới dùng
+// viewApprovedDepts/viewDraftDepts CHỈ làm TÊN KHÓA ví dụ cho đúng khuôn mảng trần đó — 2 quyền này đã
+// bị bỏ hẳn khỏi Ma Trận Phân Quyền thật từ v24.75 (làm gọn phân quyền Tài Liệu), KHÔNG còn ý nghĩa
+// nghiệp vụ nào, nhưng mergeGroupsBasePermsServer() xét theo HÌNH DẠNG giá trị (mảng trần hay object),
+// không theo whitelist tên khoá cụ thể — nên vẫn là ví dụ hợp lệ để kiểm đúng nhánh "mảng trần" chung,
+// không cần đổi tên khoá. Test này gọi THẲNG hàm thật (export qua module.exports.mergeGroupsBasePermsServer,
+// xem routes/data.js) để không chép lại logic.
 //
 // Chạy: node server/tests/test-merge-groups-perms.js
 'use strict';

@@ -281,7 +281,8 @@ async function cascadePositionPairs(field, oldValue, newValue) {
 
 // users[].perms.*: nhiều quyền phẳng giới hạn theo danh sách phòng ban/siêu thị, dưới 2 khuôn khác nhau
 // — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2, cascadeStoreRename() trước đây bỏ sót hẳn users.perms:
-//  1) mảng chuỗi phẳng, tên quyền kết thúc bằng "Depts" (viewApprovedDepts/viewDraftDepts/uploadDepts...).
+//  1) mảng chuỗi phẳng, tên quyền kết thúc bằng "Depts" (VD uploadDepts) — generic theo HẬU TỐ tên key,
+//     không cần whitelist tên cụ thể.
 //  2) object {all, depts:[...]} (contractCreate/officeCreate/carCreate/submissionCreate/meetingBookScope/
 //     operationOrderReceiptManageStore..., xem scopeAllows() ở lib/recordActions.js) — hàm này generic
 //     theo CẤU TRÚC (bất kỳ field nào có .depts là mảng), không cần biết tên field cụ thể, nên đợt "Tách

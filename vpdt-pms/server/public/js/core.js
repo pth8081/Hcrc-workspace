@@ -2050,10 +2050,13 @@ function logSystemAction(module, actionType, description, status = 'SUCCESS', ta
 // PHÂN QUYỀN THEO PHÂN HỆ MODULE (Submission/Contract/Meeting/Car/Office)
 // ==========================================
 // Mỗi module nghiệp vụ (Tờ trình, Hợp đồng, Phòng họp, Đăng ký xe, Văn phòng) có phạm vi dữ liệu
-// riêng dạng { all: boolean, depts: string[] } cho hành động XEM và TẠO MỚI — giống hệt mô hình
-// đã áp dụng cho module Tài liệu (uploadDepts/viewApprovedDepts...), thay vì 1 công tắc bật/tắt
-// toàn công ty như trước (khiến ai cũng thấy dữ liệu của mọi phòng ban). Phòng ban của chính người
-// dùng luôn được phép mặc định, kể cả khi admin chưa cấp thêm quyền nào khác.
+// riêng dạng { all: boolean, depts: string[] } cho hành động XEM và TẠO MỚI — cùng khuôn `uploadAll`/
+// `uploadDepts` (phạm vi TẠO) của module Tài Liệu, thay vì 1 công tắc bật/tắt toàn công ty như trước
+// (khiến ai cũng thấy dữ liệu của mọi phòng ban). Phòng ban của chính người dùng luôn được phép mặc
+// định, kể cả khi admin chưa cấp thêm quyền nào khác. Riêng phạm vi XEM của Tài Liệu (v24.75, theo yêu
+// cầu người dùng "làm gọn") KHÔNG còn dùng mô hình {all,depts} này nữa — chuyển hẳn sang
+// deptViewScopeConfig['doc'] (4 trạng thái dùng chung 17 module, cấu hình ở Hệ Thống → Nghiệp Vụ Nâng
+// Cao → 🔒 Phạm Vi Xem Theo Phòng Ban), xem canViewDoc() ở lib/recordViewScope.js.
 
 // Kiểm tra 1 phạm vi {all, depts} có cho phép thao tác trên 1 phòng ban cụ thể hay không.
 function scopeAllows(user, scope, dept) {
@@ -3973,18 +3976,6 @@ function canAccessOfficeModule(user) {
   return !!(user.perms?.officeBuy || user.perms?.officeFix) || isMemberOfAnyExtraApprovalGroup(user, ['OFFICE_BUY', 'OFFICE_FIX']);
 }
 
-function getUserAllowedDepts(user) {
-  if (!user) return [];
-  if (user.perms?.admin) return [...DB.depts];
-  let allowed = new Set();
-  if (user.dept) allowed.add(user.dept);
-  if (user.perms?.uploadDepts) user.perms.uploadDepts.forEach(d => allowed.add(d));
-  if (user.perms?.viewDraftDepts) user.perms.viewDraftDepts.forEach(d => allowed.add(d));
-  if (user.perms?.viewApprovedDepts) user.perms.viewApprovedDepts.forEach(d => allowed.add(d));
-  if (allowed.size === 0) return [...DB.depts];
-  return Array.from(allowed);
-}
-
 // Kiểm tra quyền TẢI TỆP ĐÍNH KÈM. Người tạo/tải lên luôn được tải lại bản của chính mình.
 // CẬP NHẬT: quyền Tải xuống trước đây là 1 cờ DÙNG CHUNG cho mọi module (downloadAll/downloadDepts)
 // — cấp cho ai đó ở module Tài liệu vô tình cũng cho họ tải luôn ở Hợp đồng/Xe/Văn phòng. Nay tách
@@ -4017,8 +4008,6 @@ function defaultNewUserPerms() {
     trainingManage: false, trainingInstruct: false, onboardingEvaluate: false,
     internalPostApprove: false,
     uploadAll: false, uploadDepts: [],
-    viewDraftAll: false, viewDraftDepts: [],
-    viewApprovedAll: false, viewApprovedDepts: [],
     docDownload: emptyScope(),
     submissionView: emptyScope(), submissionCreate: emptyScope(), submissionDownload: emptyScope(),
     contractView: emptyScope(), contractCreate: emptyScope(), contractDownload: emptyScope(), contractApprove: false,
@@ -9788,11 +9777,10 @@ function getItTicketCategoryLabel(key) {
 function populateDropdowns() {
   const selDept = document.getElementById('selDept');
   if (selDept) {
-    // CẬP NHẬT: trước đây dùng getUserAllowedDepts() — hàm đó gộp cả viewDraftDepts/viewApprovedDepts
-    // (chỉ để XEM) vào danh sách, và mặc định trả về TOÀN BỘ phòng ban nếu rỗng — khiến dropdown tải
-    // lên tài liệu gần như không lọc gì. Nay dùng đúng phạm vi TẠO (uploadAll/uploadDepts), cùng cơ chế
-    // getScopedDepts()/scopeAllows() như 5 module Trình/Hợp đồng/Họp/Xe/Văn phòng — khớp với server
-    // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.docs.getScope).
+    // Dropdown chọn Phòng Ban TRÌNH khi tạo tài liệu — dùng đúng phạm vi TẠO (uploadAll/uploadDepts),
+    // cùng cơ chế getScopedDepts()/scopeAllows() như 5 module Trình/Hợp đồng/Họp/Xe/Văn phòng — khớp
+    // với server (xem lib/createValidation.js CREATE_MODULE_CONFIGS.docs.getScope). Không liên quan gì
+    // tới phạm vi XEM (nay là deptViewScopeConfig['doc'], xem canViewDoc() ở lib/recordViewScope.js).
     const docCreateScope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
     const docScopedDepts = getScopedDepts(currentUser, docCreateScope);
     selDept.innerHTML = '<option value="">-- Chọn Phòng Ban Trình --</option>' +
@@ -10028,9 +10016,8 @@ function populateUserDeptOptions(khoiId, preserveDept) {
 }
 
 function updateUploadDeptDropdown() {
-  const allowedDepts = getUserAllowedDepts(currentUser);
   const uploadBox = document.getElementById('uploadBox');
-  
+
   const canUpload = currentUser.perms.admin || currentUser.perms.uploadAll || (currentUser.perms.uploadDepts && currentUser.perms.uploadDepts.length > 0);
   if (uploadBox) {
     uploadBox.classList.toggle('hidden', !canUpload);

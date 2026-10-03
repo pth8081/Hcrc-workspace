@@ -115,9 +115,9 @@ function assertNoManagerCycle(users) {
 //     xem" đã có từ trước khi có màn cấu hình này).
 //   - task/itTicket/itPriceApproval/doc/vpp (5 module mới, 10/2026): defaultMode 'CREATOR_ONLY' — các
 //     module này TRƯỚC ĐÂY không có khái niệm "cùng phòng tự động xem" (Công Việc/IT ticket xét theo
-//     người liên quan; Phê Duyệt Giá/VPP chỉ người tạo+approver đúng bước; Tài Liệu còn NGƯỢC LẠI, đòi
-//     quyền viewDraftDepts/viewApprovedDepts riêng) — bật mode 'DEPT' là tính năng MỚI, phải admin TỰ
-//     chọn mới có, không mặc định bật.
+//     người liên quan; Phê Duyệt Giá/VPP/Tài Liệu chỉ người tạo+approver đúng bước — Tài Liệu đã bỏ hẳn
+//     4 quyền phẳng viewDraftAll/viewDraftDepts/viewApprovedAll/viewApprovedDepts cũ ở v24.75, làm gọn về
+//     đúng mô hình này) — bật mode 'DEPT' là tính năng MỚI, phải admin TỰ chọn mới có, không mặc định bật.
 //   - checklist (module mới): defaultMode 'DEPT' — ĐÃ có sẵn nhánh "cùng siêu thị (phòng ban) tự động
 //     xem" cho bài nộp không phải nháp (xem canViewChecklistSubmission()) từ trước khi có màn cấu hình
 //     này, giữ nguyên đúng hành vi cũ.
@@ -197,48 +197,24 @@ function scopeAllows(user, scope, dept, moduleKey, appData, creatorUsername) {
   return extraViewScopeAllows(user, appData, moduleKey, creatorUsername);
 }
 
-// Khớp đúng khối lọc trong renderDocs() (public/index.html) — Xem Bản Nháp (PENDING/REJECTED) và Xem
-// Đã Duyệt (APPROVED) là 2 quyền TÁCH RIÊNG, không dùng chung scopeAllows (không tự cho phòng ban của
-// chính mình trừ khi nằm trong danh sách depts được cấp). Bổ sung nhánh "đang là người duyệt của quy
-// trình hồ sơ này" (cùng khuôn canViewSubmission() ở trên) — trước đây THIẾU nhánh này: 1 người được
-// admin gán làm người duyệt bước 2 của tài liệu phòng ban KHÁC (không nằm trong viewDraftDepts của họ)
-// gọi thẳng GET /api/data vẫn KHÔNG đọc được tài liệu cần duyệt, dù giao diện (renderDocs() ở
-// index.html) chưa từng có logic tương đương để họ dựa vào — đây là lỗ hổng CHẶN NHẦM người có quyền
-// hợp pháp, khác các lỗ hổng "lộ dữ liệu" khác đã vá ở file này.
-//
-// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026): nhánh "đang là người duyệt" ở trên trước đây tự đọc THẲNG
-// `deptWorkflows[doc.dept].approvers` (field TĨNH, qua hàm resolveDocApproversServer() đã gỡ) thay vì đi
-// qua MODULE_CONFIGS.docs.resolveWfConfig() như 5 module chị em còn lại (carRegs/officeReqs/contracts/
-// itPriceApprovals/budgetEntries) — khi admin cấu hình bước duyệt Tài Liệu theo "Theo vị trí" (POSITION
-// mode, xem lib/positionApprovers.js), approver hợp lệ theo cấu hình đó nằm ở `approversByPosition`,
-// KHÔNG nằm trong field `approvers` tĩnh (luôn rỗng ở bước đó) — nhánh cũ luôn trả false cho đúng người
-// có quyền duyệt thật, hồ sơ KHÔNG XUẤT HIỆN ở tab Tài Liệu lẫn Hộp Thư Phê Duyệt (bị lọc mất ngay từ
-// GET /api/data), kẹt vĩnh viễn không ai nhìn thấy để duyệt. Đổi sang gọi resolveWfConfig() (đã tự xử lý
-// đúng cả PEOPLE lẫn POSITION mode qua resolveStepApproverUsernames(), điểm tra cứu DUY NHẤT) — đồng thời
-// đổi hẳn sang ĐỒNG BỘ (không còn async) vì resolveWfConfig() không cần await, khớp đúng khuôn
-// canViewCarReg()/canViewOfficeReq()/canViewContract() ở trên (đều nhận appData qua tham số, không tự
-// getAppDataValue() riêng).
+// LÀM GỌN (v24.75, theo yêu cầu người dùng "bỏ hết các phân quyền lằng nhằng... chỉ giữ lại đúng quyền
+// Tải tài liệu"): bỏ HẲN 4 quyền phẳng cũ viewDraftAll/viewDraftDepts/viewApprovedAll/viewApprovedDepts
+// (Ma Trận Phân Quyền — per-user/nhóm) VÀ bỏ nhánh isManagerOf(uploader) UNCONDITIONAL — Tài Liệu giờ chỉ
+// còn đúng 4 lớp, khớp đúng mô hình 16 module kia (deptViewScopeConfig 4 trạng thái, "Phạm Vi Xem Theo
+// Phòng Ban"): (1) admin, (2) chính người TẢI LÊN (uploader), (3) đang là người duyệt của quy trình hồ
+// sơ này (BẤT KỲ bước nào, PEOPLE lẫn POSITION mode qua resolveWfConfig() — LUÔN thấy để duyệt, không
+// phụ thuộc cấu hình nào khác), (4) deptViewScopeConfig['doc'] (mode DEPT/CREATOR_ONLY + extraViewers +
+// managerCanView — managerCanView THAY THẾ hẳn nhánh isManagerOf() cũ, giờ là TUỲ CHỌN admin bật/tắt
+// thay vì cố định). Quyền "Tải tài liệu" (docDownload, Ma Trận Phân Quyền) giữ NGUYÊN KHÔNG ĐỔI — đó là
+// quyền TÁCH RIÊNG cho endpoint tải file (canDownloadRecordFile()), không liên quan gì tới hàm này (hàm
+// này quyết định hồ sơ có XUẤT HIỆN trong danh sách/GET /api/data hay không).
 function canViewDoc(user, doc, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (doc.uploader === user.username) return true;
-  // Quản lý (trực tiếp/gián tiếp, theo Cơ Cấu Tổ Chức) của người tải lên luôn xem được — mục 3 kế
-  // hoạch 10/2026 "đảm bảo quản lý nhìn thấy hết tài liệu... của nhân viên mình" — cùng khuôn đã áp
-  // dụng cho Công Việc/Vận Hành từ trước (xem isManagerOf() ở đầu file).
-  if (isManagerOf(user.username, doc.uploader, appData?.users)) return true;
-  if (doc.status === 'APPROVED') {
-    if (user.perms?.viewApprovedAll || (user.perms?.viewApprovedDepts || []).includes(doc.dept)) return true;
-  } else if (user.perms?.viewDraftAll || (user.perms?.viewDraftDepts || []).includes(doc.dept)) {
-    return true;
-  }
-  // 4-state model (10/2026): LỚP CỘNG THÊM, không đụng cơ chế viewDraftDepts/viewApprovedDepts ở trên —
-  // mode 'DEPT' = cùng phòng ban người tải lên tự động xem (TÍNH NĂNG MỚI, admin phải tự chọn mới có).
-  // defaultMode 'CREATOR_ONLY' (key vắng mặt giữ ĐÚNG hành vi gốc): Tài Liệu là module DUY NHẤT trong 16
-  // module này có default NGƯỢC hẳn — phải được cấp quyền viewDraftDepts/viewApprovedDepts riêng mới
-  // xem được dù cùng phòng, không tự động như 11 module kia.
+  if (isApproverForApproversMap(MODULE_CONFIGS.docs.resolveWfConfig(doc, appData).approvers, user.username)) return true;
   if (doc.dept && doc.dept === user.dept && deptAutoViewOn(appData, 'doc', 'CREATOR_ONLY')) return true;
-  if (extraViewScopeAllows(user, appData, 'doc', doc.uploader)) return true;
-  return isApproverForApproversMap(MODULE_CONFIGS.docs.resolveWfConfig(doc, appData).approvers, user.username);
+  return extraViewScopeAllows(user, appData, 'doc', doc.uploader);
 }
 
 function isApproverForApproversMap(approversMap, username) {
