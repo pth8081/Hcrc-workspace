@@ -40,6 +40,16 @@ function canDecideBudgetLineProposalClient(user, item) {
   const wfConfig = DB.budgetDeptWorkflows?.[item.dept];
   return resolveEffectiveStepApprovers(wfConfig, 1).includes(user.username);
 }
+// Mirror CLIENT của canDecideBudgetLineFinal() (lib/recordActions.js) — bước Phê Duyệt CUỐI (stage=
+// APPROVED, dòng nhập trực tiếp), 10/2026 theo yêu cầu người dùng bổ sung route phê duyệt cuối cho Ngân
+// Sách. TÁCH RIÊNG khỏi canDecideBudgetLineProposalClient() ở trên (bước Đề Xuất) — map dbKey khác
+// (DB.budgetApprovedDeptWorkflows). CHỈ dùng để ẩn/hiện nút (UX) — server luôn tự xác minh lại.
+function canDecideBudgetLineFinalClient(user, item) {
+  if (user?.perms?.admin || user?.perms?.budgetManage) return true;
+  if (!user?.perms?.budgetCreate) return false;
+  const wfConfig = DB.budgetApprovedDeptWorkflows?.[item.dept];
+  return resolveEffectiveStepApprovers(wfConfig, 1).includes(user.username);
+}
 function canAggregateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView); }
 
 // blId/blEl — khớp đúng khuôn bId/bEl của thiết kế cũ (2 form Đề Xuất/Phê Duyệt dùng CHUNG code, chỉ
@@ -221,7 +231,7 @@ function renderBudgetLineList(stage) {
   const canManage = canManageBudgetLineClient(currentUser);
   tbody.innerHTML = items.map(item => {
     const isOwner = item.createdBy === currentUser.username;
-    const canDecide = item.status === 'SUBMITTED' && !isOwner && (stage === 'APPROVED' ? canManage : canDecideBudgetLineProposalClient(currentUser, item));
+    const canDecide = item.status === 'SUBMITTED' && !isOwner && (stage === 'APPROVED' ? canDecideBudgetLineFinalClient(currentUser, item) : canDecideBudgetLineProposalClient(currentUser, item));
     // LỖI ĐÃ VÁ (rà soát chuyên sâu Tổng Hợp, 9/2026): trước đây dòng REJECTED không có canEdit nào cả
     // (chỉ hiện "Đã xử lý bởi ...", không nút gì khác) — NGÕ CỤT VĨNH VIỄN, trái sơ đồ Nghiệp Vụ tự vẽ
     // "Bị từ chối -> Sửa & gửi lại". Server (updateBudgetLineDraft()) nay đã cho sửa cả khi REJECTED

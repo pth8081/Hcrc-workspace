@@ -546,7 +546,7 @@ const DB = {
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [], submissionApprovalLevels: [],
   contracts: [], contractApprovalGroups: [], contractApprovalLevels: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
-  meetings: [],
+  meetings: [], meetingDeptWorkflows: {},
   carRegs: [], carDeptWorkflows: {},
   officeReqs: [],
   officeBuyDeptWorkflows: {},
@@ -3718,6 +3718,19 @@ function canApproveMeeting(user) {
   return !!user.perms?.meetingApprove;
 }
 
+// canDecideMeetingClient() — mirror canDecideMeeting() (lib/recordActions.js), 10/2026 theo yêu cầu
+// người dùng bổ sung route phê duyệt cuối: bước Duyệt giờ CŨNG xét cấu hình theo phòng ban
+// (DB.meetingDeptWorkflows[meeting.dept]) — ai có meetingApprove/admin VẪN LUÔN duyệt được MỌI phòng
+// ban như cũ (canApproveMeeting() ở trên, không đổi hành vi cũ); người KHÔNG có meetingApprove nhưng
+// được admin gán làm approver riêng cho ĐÚNG phòng ban của lịch đó (bước 1) cũng duyệt được. KHÁC
+// canApproveMeeting() (vẫn dùng riêng cho Report/danh sách email, không cần biết 1 lịch cụ thể nào).
+// CHỈ dùng để ẩn/hiện nút (UX) — server luôn tự xác minh lại, sửa 1 bên phải sửa cả 2 bên.
+function canDecideMeetingClient(user, meeting) {
+  if (canApproveMeeting(user)) return true;
+  const wfConfig = DB.meetingDeptWorkflows?.[meeting?.dept];
+  return resolveEffectiveStepApprovers(wfConfig, 1).includes(user?.username);
+}
+
 // Mọi user LUÔN huỷ được lịch do CHÍNH MÌNH đặt (creator === self, không cần quyền gì thêm) —
 // meetingCancel ("Người quản lý phòng họp") + admin huỷ được lịch của BẤT KỲ ai. Tham số "meeting" tuỳ
 // chọn (bỏ trống khi chỉ cần biết user có phải "quản lý phòng họp" hay không, vd hiện nhãn quyền).
@@ -4528,6 +4541,9 @@ async function initDatabase(loggingInUser, opts) {
     DB.submissionPriorities = data.submissionPriorities || [];
     DB.contracts = data.contracts || [];
     DB.meetings = data.meetings || [];
+    // meetingDeptWorkflows (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): cấu hình
+    // người duyệt lịch họp theo phòng ban — xem canDecideMeeting()/canDecideMeetingClient().
+    DB.meetingDeptWorkflows = data.meetingDeptWorkflows || {};
     // meetingRooms: danh sách Phòng Họp (TRƯỚC ĐÂY const MEETING_ROOMS gõ cứng, đợt audit "form-fields-6").
     DB.meetingRooms = data.meetingRooms || [];
     DB.carRegs = data.carRegs || [];
@@ -4685,6 +4701,7 @@ async function initDatabase(loggingInUser, opts) {
     assignLazyGroupField('uniformStockAdjustments', data);
     assignLazyGroupField('uniformTransfers', data);
     DB.budgetDeptWorkflows = data.budgetDeptWorkflows || {};
+    DB.budgetApprovedDeptWorkflows = data.budgetApprovedDeptWorkflows || {};
     // budgetTemplates/budgetPeriods/budgetLines: thuộc nhóm lazy 'budget'. budgetEntries KHÔNG thuộc
     // nhóm này (CỐ Ý giữ ở route chính, xem chú thích LAZY_DATA_GROUPS ở routes/data.js).
     assignLazyGroupField('budgetTemplates', data);

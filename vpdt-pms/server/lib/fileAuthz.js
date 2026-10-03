@@ -501,7 +501,9 @@ async function authorizeFileAccess(user, fileUrl, mode) {
   // canViewTaskRecord() cần appData (nhánh "trưởng phòng của người được giao", xem isManagerOf()).
   if (owning.task) return canViewTaskRecord(user, owning.item, await getAllAppData());
   if (owning.meetingMinutes) return canViewMeetingMinutes(user, owning.item);
-  if (owning.meeting) return canViewMeeting(user, owning.item);
+  // canViewMeeting() cần appData (nhánh approver theo meetingDeptWorkflows mới thêm, 10/2026 — xem
+  // lib/recordViewScope.js) — mirror đúng chú thích paymentRequest ở trên.
+  if (owning.meeting) return canViewMeeting(user, owning.item, await getAllAppData());
   if (owning.itSupportTicket) return canViewItSupportTicket(user, owning.item);
   if (owning.hrFeedback) return canViewHrFeedback(user, owning.item);
   // Đồng Phục — không cần appData (canViewUniformPeriod/Issuance/Transfer chỉ đọc user.perms + item).

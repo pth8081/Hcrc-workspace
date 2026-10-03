@@ -276,14 +276,17 @@ function createMockApi(state) {
       }
       if (action === 'approve') {
         const item = findOr404(all, id);
-        const approved = recordActions.approveBudgetLine(user, item);
+        // 10/2026 (bổ sung route phê duyệt cuối): approveBudgetLine() nay cần appData (nhánh approver
+        // theo budgetApprovedDeptWorkflows) — mirror ĐÚNG routes/records.js thật, cùng khuôn
+        // approve-proposal/reject-proposal ở trên.
+        const approved = recordActions.approveBudgetLine(user, item, state.appData);
         const usedItem = Object.assign(recordActions.buildBudgetLineUsedRow(user, approved), { id: Date.now() });
         state.collections.budgetLines.unshift(usedItem);
         return { item: approved, usedItem };
       }
       if (action === 'reject') {
         const item = findOr404(all, id);
-        return { item: recordActions.rejectBudgetLine(user, item, payload) };
+        return { item: recordActions.rejectBudgetLine(user, item, payload, state.appData) };
       }
       if (action === 'used-parent-update') {
         const item = findOr404(all, id);

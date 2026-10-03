@@ -125,10 +125,17 @@
       <button data-op="switchWfModule" data-arg0="CONTRACT_APPROVAL" id="btnWfModContractApproval" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📄 QT Hợp Đồng - Phê Duyệt</button>
       <button data-op="switchWfModule" data-arg0="CONTRACT_MANAGE" id="btnWfModContractManage" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 QT Hợp Đồng - Quản Lý HĐ</button>
       <button data-op="switchWfModule" data-arg0="PAYMENT" id="btnWfModPAYMENT" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">💰 QT Thanh Toán</button>
+      <!-- 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối: meetingApprove/admin vẫn LUÔN
+           duyệt được mọi phòng ban như cũ, map này chỉ cộng thêm khả năng gán riêng người duyệt theo
+           phòng ban — xem canDecideMeeting() ở lib/recordActions.js. -->
+      <button data-op="switchWfModule" data-arg0="MEETING" id="btnWfModMeeting" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏢 QT Đặt Phòng Họp</button>
       <!-- Khôi phục lại (rà soát chuyên sâu 9/2026, phát hiện #5) — chỉ cấu hình bước "Đề Xuất" (PROPOSED)
-           của Ngân Sách 2.0 (budgetLines), xem canDecideBudgetLineProposal() ở lib/recordActions.js. Bước
-           "Phê Duyệt" (APPROVED) vẫn CHỈ budgetManage/admin, không đi qua cấu hình phòng ban này. -->
+           của Ngân Sách 2.0 (budgetLines), xem canDecideBudgetLineProposal() ở lib/recordActions.js. -->
       <button data-op="switchWfModule" data-arg0="BUDGET" id="btnWfModBudget" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Ngân Sách - Đề Xuất</button>
+      <!-- 10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối: bước "Phê Duyệt" (APPROVED, dòng
+           nhập trực tiếp) nay CŨNG cấu hình theo phòng ban (budgetApprovedDeptWorkflows, TÁCH RIÊNG khỏi
+           bước Đề Xuất ở trên) — xem canDecideBudgetLineFinal() ở lib/recordActions.js. -->
+      <button data-op="switchWfModule" data-arg0="BUDGET_APPROVE" id="btnWfModBudgetApprove" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 QT Ngân Sách - Phê Duyệt</button>
       <!-- Tách 2 tab riêng (10/2026, đợt tách Phê Duyệt Giá khỏi Hỗ Trợ IT) — trước là 1 nút gộp
            "ITPRICE" (label "QT Hỗ Trợ IT - Duyệt Giá") có switcher con Bán Lẻ/Bán Buôn bên trong. -->
       <button data-op="switchWfModule" data-arg0="ITPRICE_RETAIL" id="btnWfModITPRICE_RETAIL" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏷️ QT Phê Duyệt Giá Bán Lẻ</button>

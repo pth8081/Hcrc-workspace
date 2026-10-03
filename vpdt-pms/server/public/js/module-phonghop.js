@@ -82,13 +82,22 @@ function toDatetimeLocalValue(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-// "Xem Quy Trình" cho Đặt Phòng Họp — KHÔNG có dept-workflow nhiều bước như 10+ module khác (xem
-// canApproveMeeting()/getMeetingApproverUsernames() ở core.js), chỉ 1 cờ quyền phẳng meetingApprove
-// toàn công ty — dùng openSimpleApproverPreviewModal() (core.js) thay vì openGenericWorkflowPreviewModal().
+// "Xem Quy Trình" cho Đặt Phòng Họp — KHÔNG có dept-workflow NHIỀU BƯỚC như 10+ module khác (chỉ 1 bước
+// duy nhất, không có currentStep), nên vẫn dùng openSimpleApproverPreviewModal() (core.js) thay vì
+// openGenericWorkflowPreviewModal() — nhưng từ 10/2026 (bổ sung route phê duyệt cuối) danh sách này GỘP
+// (union) người giữ quyền phẳng meetingApprove toàn công ty (luôn duyệt được mọi phòng ban, ghi đè toàn
+// quyền) VỚI người được admin gán riêng cho ĐÚNG phòng ban đang chọn trên form (DB.meetingDeptWorkflows,
+// xem canDecideMeeting() ở lib/recordActions.js) — mirror đúng previewCarWorkflow() (module-dangkyxe.js)
+// về cách đọc dept từ form, nhưng gộp phẳng vì đây vẫn chỉ 1 bước, không phải nhiều bước theo step.
 function previewMeetingWorkflow() {
-  openSimpleApproverPreviewModal('🔍 Người Duyệt Đặt Phòng Họp', 'Áp dụng chung toàn công ty (không theo phòng ban)',
-    getFlatApproverUsernames(['meetingApprove']),
-    'Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) — liên hệ Quản trị viên.');
+  const dept = document.getElementById('meetingDept')?.value || '';
+  const flatApprovers = getFlatApproverUsernames(['meetingApprove']);
+  const deptApprovers = dept ? resolveEffectiveStepApprovers(DB.meetingDeptWorkflows?.[dept], 1) : [];
+  const merged = [...new Set([...flatApprovers, ...deptApprovers])];
+  openSimpleApproverPreviewModal('🔍 Người Duyệt Đặt Phòng Họp',
+    dept ? `Áp dụng chung toàn công ty + riêng cho phòng ban: ${dept}` : 'Áp dụng chung toàn công ty (chưa chọn phòng ban cụ thể)',
+    merged,
+    'Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) hoặc được gán riêng cho phòng ban này — liên hệ Quản trị viên.');
 }
 
 // Khung giờ 07:00 - 19:00, mỗi ô 30 phút, dùng cho lưới Lịch Họp.
@@ -948,10 +957,14 @@ function renderMeetings() {
 
   // CẬP NHẬT: lọc theo phạm vi Xem (meetingView) thay vì hiển thị lịch họp của mọi phòng ban.
   // Người có quyền Phê duyệt/Hủy lịch họp (vai trò quản lý phòng họp dùng chung toàn công ty)
-  // vẫn cần thấy mọi lịch để xử lý, nên được xem toàn bộ bất kể phạm vi phòng ban.
+  // vẫn cần thấy mọi lịch để xử lý, nên được xem toàn bộ bất kể phạm vi phòng ban. 10/2026 (bổ sung
+  // route phê duyệt cuối): dùng canDecideMeetingClient() thay vì canApproveMeeting() đơn thuần — người
+  // CHỈ được gán làm approver riêng cho phòng ban của 1 lịch cụ thể (không giữ meetingApprove) giờ cũng
+  // phải thấy ĐÚNG lịch đó trong bảng mới duyệt được, mirror server (canViewMeeting(), xem
+  // lib/recordViewScope.js — đã thêm nhánh tương ứng, nếu không bảng sẽ ẩn mất dòng dù server đã gửi về).
   const canViewMeeting = m => scopeAllows(currentUser, currentUser.perms?.meetingView, m.dept) ||
     m.creator === currentUser.username ||
-    canApproveMeeting(currentUser) || canCancelMeeting(currentUser);
+    canDecideMeetingClient(currentUser, m) || canCancelMeeting(currentUser);
 
   const scopedMeetings = DB.meetings.filter(canViewMeeting);
   const meetingDashCards = [
@@ -999,7 +1012,7 @@ function renderMeetings() {
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
-            const canApprove = canApproveMeeting(currentUser) && m.status === 'PENDING';
+            const canApprove = canDecideMeetingClient(currentUser, m) && m.status === 'PENDING';
             const canCancel = canCancelMeeting(currentUser, m) && m.status !== 'CANCELLED';
             const canEdit = canEditMeeting(currentUser, m) && m.status !== 'CANCELLED';
             const secondaryOptions = [];

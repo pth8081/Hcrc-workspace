@@ -185,5 +185,78 @@ function test(name, fn) {
   });
 }
 
+// ===== #5b (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): Ngân Sách (budgetLines) —
+// Phê Duyệt CUỐI (stage=APPROVED) theo cấu hình phòng ban RIÊNG (budgetApprovedDeptWorkflows), TÁCH
+// KHỎI budgetDeptWorkflows của bước Đề Xuất ở #5 — mirror đúng khuôn test nhưng dùng map khác =====
+{
+  const ADMIN = { username: 'admin1', perms: { admin: true } };
+  const BUDGET_MANAGE = { username: 'qlns1', perms: { budgetManage: true } };
+  const CONFIGURED_APPROVER = { username: 'bgd1', perms: { budgetCreate: true } };
+  const UNCONFIGURED_CREATOR = { username: 'nv_kd', perms: { budgetCreate: true } };
+
+  const appData = {
+    workflows: [{ id: 'wf1', steps: [{ order: 1, name: 'Duyệt' }] }],
+    // CỐ Ý khác người so với budgetDeptWorkflows ở #5 (tp_kd) — minh hoạ đúng ý nghĩa "2 bước có thể
+    // cần người duyệt khác nhau" (Đề Xuất do Trưởng phòng, Phê Duyệt cuối do Ban Giám Đốc).
+    budgetDeptWorkflows: { 'Khối Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp_kd'] } } },
+    budgetApprovedDeptWorkflows: {
+      'Khối Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['bgd1'] } }
+      // 'Khối Vận Hành' CỐ Ý không có trong đây — mô phỏng phòng ban CHƯA được admin cấu hình gì.
+    }
+  };
+
+  test('#5b Ngân Sách: budgetCreate KHÔNG phải approver bước 1 Phê Duyệt cuối của phòng ban -> canDecideBudgetLineFinal = false', () => {
+    const item = { dept: 'Khối Kinh Doanh', createdBy: 'nv_kd' };
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(UNCONFIGURED_CREATOR, item, appData), false);
+  });
+
+  test('#5b Ngân Sách: budgetCreate LÀ approver bước 1 Phê Duyệt cuối đúng phòng ban đã cấu hình -> canDecideBudgetLineFinal = true', () => {
+    const item = { dept: 'Khối Kinh Doanh', createdBy: 'nv_kd' };
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(CONFIGURED_APPROVER, item, appData), true);
+  });
+
+  test('#5b Ngân Sách: approver bước Đề Xuất (tp_kd) KHÔNG tự động là approver Phê Duyệt cuối (2 map tách biệt)', () => {
+    const item = { dept: 'Khối Kinh Doanh', createdBy: 'nv_kd' };
+    const PROPOSAL_APPROVER = { username: 'tp_kd', perms: { budgetCreate: true } };
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(PROPOSAL_APPROVER, item, appData), false);
+  });
+
+  test('#5b Ngân Sách: phòng ban CHƯA cấu hình Phê Duyệt cuối -> chỉ budgetManage/admin quyết định được', () => {
+    const item = { dept: 'Khối Vận Hành', createdBy: 'nv_kd' };
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(CONFIGURED_APPROVER, item, appData), false);
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(BUDGET_MANAGE, item, appData), true);
+    assert.strictEqual(recordActions.canDecideBudgetLineFinal(ADMIN, item, appData), true);
+  });
+
+  test('#5b Ngân Sách: approver đúng cấu hình duyệt được dòng Phê Duyệt cuối qua approveBudgetLine()', () => {
+    const item = { id: 101, dept: 'Khối Kinh Doanh', createdBy: 'nv_kd', stage: 'APPROVED', status: 'SUBMITTED' };
+    const result = recordActions.approveBudgetLine(CONFIGURED_APPROVER, item, appData);
+    assert.strictEqual(result.status, 'APPROVED');
+    assert.strictEqual(result.decidedBy, 'bgd1');
+  });
+
+  test('#5b Ngân Sách: approver đúng cấu hình từ chối được dòng Phê Duyệt cuối qua rejectBudgetLine()', () => {
+    const item = { id: 102, dept: 'Khối Kinh Doanh', createdBy: 'nv_kd', stage: 'APPROVED', status: 'SUBMITTED' };
+    const result = recordActions.rejectBudgetLine(CONFIGURED_APPROVER, item, { reason: 'sai định mức' }, appData);
+    assert.strictEqual(result.status, 'REJECTED');
+  });
+
+  test('#5b Ngân Sách: budgetCreate KHÔNG phải approver Phê Duyệt cuối -> approveBudgetLine() 403', () => {
+    const item = { id: 103, dept: 'Khối Kinh Doanh', createdBy: 'nv_kd', stage: 'APPROVED', status: 'SUBMITTED' };
+    assert.throws(() => recordActions.approveBudgetLine(UNCONFIGURED_CREATOR, item, appData), /403|không có quyền/);
+  });
+
+  test('#5b Ngân Sách: budgetManage vẫn LUÔN quyết định được mọi dòng Phê Duyệt cuối bất kể cấu hình phòng ban', () => {
+    const item = { id: 104, dept: 'Khối Kinh Doanh', createdBy: 'nv_kd', stage: 'APPROVED', status: 'SUBMITTED' };
+    const result = recordActions.approveBudgetLine(BUDGET_MANAGE, item, appData);
+    assert.strictEqual(result.status, 'APPROVED');
+  });
+
+  test('#5b Ngân Sách: approver đúng cấu hình vẫn KHÔNG tự duyệt được dòng Phê Duyệt cuối do chính mình tạo (assertNotSelfDecidingBudgetLine giữ nguyên)', () => {
+    const item = { id: 105, dept: 'Khối Kinh Doanh', createdBy: 'bgd1', stage: 'APPROVED', status: 'SUBMITTED' };
+    assert.throws(() => recordActions.approveBudgetLine(CONFIGURED_APPROVER, item, appData), /403|tự duyệt/);
+  });
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

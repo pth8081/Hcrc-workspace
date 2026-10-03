@@ -28,6 +28,12 @@ const WF_MODULE_CONFIG = {
   // không "types" lồng), thay cho quyền phẳng paymentManage/admin cũ. Xem lib/workflowEngine.js
   // MODULE_CONFIGS.paymentRequests.
   PAYMENT: { dbKey: 'paymentDeptWorkflows', label: 'Thanh Toán', title: '💰 Cấu Hình Quy Trình Phê Duyệt Đề Nghị Thanh Toán Theo Phòng Ban' },
+  // MEETING (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): trước đây Đặt Phòng Họp chỉ
+  // gác bằng 1 cờ quyền phẳng meetingApprove toàn công ty (xem routes/meetingActions.js) — nay CỘNG THÊM
+  // cấu hình theo phòng ban, cùng khuôn PAYMENT/BUDGET_APPROVE ở trên. meetingApprove/admin vẫn LUÔN
+  // duyệt được MỌI phòng ban như cũ (không đổi hành vi cho ai đang giữ quyền này) — xem
+  // canDecideMeeting() ở lib/recordActions.js.
+  MEETING: { dbKey: 'meetingDeptWorkflows', label: 'Đặt Phòng Họp', title: '🏢 Cấu Hình Quy Trình Phê Duyệt Đặt Phòng Họp Theo Phòng Ban' },
   // "Quy Trình Phê Duyệt Giá Bán Lẻ"/"...Bán Buôn" — 10/2026, TÁCH THÀNH 2 TAB RIÊNG (yêu cầu người
   // dùng: "Quy trình Phê duyệt giá bán buôn và giá bán lẻ trong tab quy trình và phê duyệt tách riêng"),
   // không còn 1 entry 'ITPRICE' gộp chung + priceTypeNested + wfSubmissionTypeTabs switcher như trước.
@@ -68,6 +74,11 @@ const WF_MODULE_CONFIG = {
   // admin vẫn LUÔN quyết định được mọi dòng bất kể cấu hình phòng ban (đã toàn quyền cả bước Phê Duyệt
   // cuối). Phòng ban CHƯA cấu hình = chỉ budgetManage/admin xử lý được Đề Xuất của phòng ban đó.
   BUDGET: { dbKey: 'budgetDeptWorkflows', label: 'Ngân Sách - Đề Xuất', title: '📊 Cấu Hình Quy Trình Duyệt Đề Xuất Ngân Sách Theo Phòng Ban' },
+  // BUDGET_APPROVE (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): bước Phê Duyệt CUỐI
+  // (stage=APPROVED, dòng nhập trực tiếp) — TÁCH RIÊNG khỏi BUDGET ở trên (bước Đề Xuất), map dbKey khác
+  // hẳn (budgetApprovedDeptWorkflows) vì người duyệt 2 bước có thể khác nhau. Xem
+  // canDecideBudgetLineFinal() ở lib/recordActions.js.
+  BUDGET_APPROVE: { dbKey: 'budgetApprovedDeptWorkflows', label: 'Ngân Sách - Phê Duyệt', title: '📊 Cấu Hình Quy Trình Phê Duyệt Cuối Ngân Sách Theo Phòng Ban' },
   // "Vận Hành" — Mở Mới/Sửa Chữa Siêu Thị vẫn theo phòng ban (mỗi luồng 1 map dept-workflow RIÊNG, cùng
   // khuôn OFFICE_BUY/OFFICE_FIX ở trên), KHÔNG liên quan gì tới module "Tổng Hợp" (2 module tách biệt
   // hoàn toàn, xem BUSINESS_MODULES).

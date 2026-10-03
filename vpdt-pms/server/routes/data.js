@@ -131,6 +131,14 @@ const ADMIN_ONLY_KEYS = new Set([
   // budgetDeptWorkflows: cấu hình Trưởng phòng duyệt ngân sách theo phòng ban (module Ngân Sách) —
   // cùng khuôn carDeptWorkflows/vppDeptWorkflows ở trên, chỉ sửa được ở màn Quy Trình & Phê Duyệt (admin).
   'budgetDeptWorkflows',
+  // budgetApprovedDeptWorkflows: cấu hình người duyệt bước Phê Duyệt CUỐI ngân sách theo phòng ban (TÁCH
+  // RIÊNG khỏi budgetDeptWorkflows — bước Đề Xuất) — cùng lý do bảo mật: không cho user thường tự ghi
+  // thẳng qua POST /api/data/budgetApprovedDeptWorkflows và tự phong mình làm người duyệt.
+  'budgetApprovedDeptWorkflows',
+  // meetingDeptWorkflows: cấu hình người duyệt lịch Đặt Phòng Họp theo phòng ban (module Đặt Phòng Họp) —
+  // cùng lý do bảo mật: không cho user thường tự ghi thẳng qua POST /api/data/meetingDeptWorkflows và tự
+  // phong mình làm người duyệt lịch họp.
+  'meetingDeptWorkflows',
   // submissionTypes: chi phối tra cứu quy trình theo loại (submissionTypeDeptWorkflows) — không để
   // user thường tự đổi/xoá key đang được cấu hình quy trình riêng.
   'submissionTypes',
@@ -285,6 +293,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   'workflows', 'quickApplyConfigs', 'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
   'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows', 'paymentDeptWorkflows', 'budgetDeptWorkflows',
+  'budgetApprovedDeptWorkflows', 'meetingDeptWorkflows',
   'itPriceDeptWorkflows', 'itPriceTierWorkflows',
   'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows', 'operationOrderStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
@@ -1496,7 +1505,7 @@ router.get('/', async (req, res) => {
     if (data.contracts) data.contracts = filterContractsForUser(data.contracts, req.freshUser, data);
     if (data.carRegs) data.carRegs = filterCarRegsForUser(data.carRegs, req.freshUser, data);
     if (data.officeReqs) data.officeReqs = filterOfficeReqsForUser(data.officeReqs, req.freshUser, data);
-    if (data.meetings) data.meetings = filterMeetingsForUser(data.meetings, req.freshUser);
+    if (data.meetings) data.meetings = filterMeetingsForUser(data.meetings, req.freshUser, data);
     if (data.meetingMinutes) data.meetingMinutes = filterMeetingMinutesForUser(data.meetingMinutes, req.freshUser);
     // itPriceApprovals: cùng dạng lỗ hổng như 9 collection ở trên — theo đúng khuôn carRegs/officeReqs
     // (dept-workflow) — xem lib/recordViewScope.js canViewItPriceApproval(). itSupportTickets chuyển
