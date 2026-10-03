@@ -1748,6 +1748,14 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       lý Thanh Toán (`paymentManage`) — trước đây chỉ có badge cảnh báo trên
       giao diện, không ai chủ động được nhắc. Mỗi đợt chỉ nhắc 1 lần cho mỗi
       ngưỡng đã vượt qua; đợt đã xác nhận thanh toán thì không còn bị nhắc.
+      **Quyền "Xác nhận thanh toán" riêng (10/2026)**: cây phân quyền thêm
+      checkbox `paymentConfirm` ("✅ Xác nhận thanh toán"), gác RIÊNG đúng 2
+      nút xác nhận (từng đợt/toàn bộ 1 lần) ở sub-tab "Xác Nhận" — người
+      KHÔNG có `paymentManage` lẫn `paymentConfirm` thì không còn thấy
+      nút/khối này nữa. Người giữ `paymentManage` vẫn TỰ ĐỘNG xác nhận được
+      như cũ (không cần tick thêm) — chỉ cần tick riêng `paymentConfirm` khi
+      muốn cấp quyền CHỈ xác nhận cho ai đó (VD kế toán viên không được sửa/
+      duyệt/xoá đề nghị).
       **Chặn gửi vào ngõ cụt (9/2026)**: "💰 QT Thanh Toán" mặc định RỖNG (chưa
       cấu hình phòng ban nào) — trước đây vẫn bấm "📨 Chuyển Xác Nhận Thanh
       Toán" được và đề nghị kẹt "Chờ duyệt" vĩnh viễn (module này không có nút

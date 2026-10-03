@@ -4012,7 +4012,7 @@ function defaultNewUserPerms() {
     // contractImportSigned — quyền phẳng RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (hồ sơ APPROVED ngay,
     // không qua quy trình Phê Duyệt) — TÁCH khỏi contractCreate, xem lib/createValidation.js.
     contractImportSigned: false,
-    paymentManage: false,
+    paymentManage: false, paymentConfirm: false,
     vppManage: false, vppRegisterCreate: false,
     // vppReportView (10/2026, đợt rà soát toàn hệ thống "checkbox phân quyền Báo Cáo theo module/tab/
     // sub-tab"): quyền CHỈ XEM tab "📊 Báo Cáo" trong module VPP, KHÔNG kèm quyền cấu hình Kỳ Đăng Ký —
@@ -8953,6 +8953,20 @@ function canManagePaymentRequestsClient(user) {
   // đây luôn, nếu không thẻ "Chờ Thanh Toán" ở Approval Hub vẫn hiện dù admin đã tắt hẳn module Thanh
   // Toán cho người này.
   return !!(hasModuleAccess(user, 'payment') && user?.perms?.paymentManage);
+}
+
+// canConfirmPaymentRequestClient() (10/2026, theo yêu cầu người dùng "có quyền xác nhận thanh toán mới
+// được xác nhận, không có quyền thì sub-tab xác nhận cũng không làm được") — quyền MỚI paymentConfirm,
+// TÁCH RIÊNG khỏi paymentManage (vốn dùng chung cho cả Tạo/Sửa/Xoá/vào module), CHỈ gác đúng 2 hành
+// động "Xác nhận thanh toán" (từng đợt/toàn bộ 1 lần, confirmPaymentInstallment()/
+// confirmPaymentRequestLumpSum() ở lib/recordActions.js) — KHÔNG đụng tới "Yêu Cầu Bổ Sung"/Sửa/Duyệt
+// bước (vẫn gác bằng canManagePaymentRequestsClient()/quy trình như cũ). Theo đúng yêu cầu: người có
+// paymentManage TỰ ĐỘNG có luôn quyền xác nhận (không cần tick thêm) — paymentConfirm chỉ dùng để cấp
+// RIÊNG quyền xác nhận cho người KHÔNG có paymentManage (VD kế toán viên chỉ xác nhận, không được sửa/
+// xoá đề nghị) — mirror lib/recordActions.js canConfirmPaymentRequest(), sửa 1 bên phải sửa cả 2 bên.
+function canConfirmPaymentRequestClient(user) {
+  if (user?.perms?.admin) return true;
+  return !!(hasModuleAccess(user, 'payment') && (user?.perms?.paymentManage || user?.perms?.paymentConfirm));
 }
 
 // hasActivePaymentRequestForSourceClient() — bản sao client-side của hasActivePaymentRequestForSource()
