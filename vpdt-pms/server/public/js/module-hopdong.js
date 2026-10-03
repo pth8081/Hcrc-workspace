@@ -13,11 +13,18 @@ let editingContractId = null;
 function setContractSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('contract');
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): checkbox độc lập contractApproval/contractManage
+  // — tắt riêng tab nào thì tự chuyển sang tab còn lại, không còn tab nào thì giữ nguyên (cả module đã
+  // bị khoá từ canAccessContractModule() rồi, không cần xử lý thêm ở đây).
+  const canApproval = hasModuleAccess(currentUser, 'contractApproval');
+  const canManageTab = hasModuleAccess(currentUser, 'contractManage');
+  if (subTab === 'APPROVAL' && !canApproval) subTab = canManageTab ? 'MANAGE' : 'APPROVAL';
+  if (subTab === 'MANAGE' && !canManageTab) subTab = canApproval ? 'APPROVAL' : 'MANAGE';
   activeContractSubTab = subTab;
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white';
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnContractSubApproval').className = subTab === 'APPROVAL' ? activeCls : inactiveCls;
-  document.getElementById('btnContractSubManage').className = subTab === 'MANAGE' ? activeCls : inactiveCls;
+  document.getElementById('btnContractSubApproval').className = (subTab === 'APPROVAL' ? activeCls : inactiveCls) + (canApproval ? '' : ' hidden');
+  document.getElementById('btnContractSubManage').className = (subTab === 'MANAGE' ? activeCls : inactiveCls) + (canManageTab ? '' : ' hidden');
   // "Nhập Hợp Đồng/Phụ Lục Đã Ký" (chỉ có ở sub-tab Quản Lý HĐ) tạo hồ sơ ĐÃ DUYỆT ngay, bỏ qua toàn bộ
   // quy trình Phê Duyệt — từ nay cần quyền RIÊNG `contractImportSigned` (trước đây dùng chung
   // contractCreate: ai tạo được hợp đồng thường cũng tự nhập được hợp đồng "đã ký" không cần ai duyệt).

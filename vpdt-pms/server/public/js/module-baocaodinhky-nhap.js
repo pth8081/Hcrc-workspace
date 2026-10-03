@@ -79,12 +79,20 @@ function formatDateVN(value) {
 
 function setPeriodicReportSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
-  if (subTab === 'PERIODS' && !canManageReportPeriodsClient(currentUser)) subTab = 'ENTRY';
-  if (subTab === 'AGGREGATE' && !canAggregateReportsClient(currentUser)) subTab = 'ENTRY';
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): AND thêm checkbox periodicReportEntry/
+  // Periods/Aggregate/Published vào đúng điều kiện đã có — tắt riêng tab nào thì lùi về tab còn thấy
+  // được đầu tiên.
+  const canEntry = hasModuleAccess(currentUser, 'periodicReportEntry');
+  const canPeriods = hasModuleAccess(currentUser, 'periodicReportPeriods') && canManageReportPeriodsClient(currentUser);
+  const canAggregate = hasModuleAccess(currentUser, 'periodicReportAggregate') && canAggregateReportsClient(currentUser);
+  const canPublished = hasModuleAccess(currentUser, 'periodicReportPublished');
+  const prTabOrder = [['ENTRY', canEntry], ['PERIODS', canPeriods], ['AGGREGATE', canAggregate], ['PUBLISHED', canPublished]];
+  const curPrTab = prTabOrder.find(([k]) => k === subTab);
+  if (!curPrTab || !curPrTab[1]) {
+    const fallback = prTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
   activePeriodicReportSubTab = subTab;
-
-  document.getElementById('btnPRSubPeriods').classList.toggle('hidden', !canManageReportPeriodsClient(currentUser));
-  document.getElementById('btnPRSubAggregate').classList.toggle('hidden', !canAggregateReportsClient(currentUser));
 
   document.getElementById('prSubEntry').classList.toggle('hidden', subTab !== 'ENTRY');
   document.getElementById('prSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
@@ -93,10 +101,11 @@ function setPeriodicReportSubTab(subTab) {
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnPRSubEntry').className = subTab === 'ENTRY' ? activeCls : inactiveCls;
-  document.getElementById('btnPRSubPeriods').className = subTab === 'PERIODS' ? activeCls : inactiveCls;
-  document.getElementById('btnPRSubAggregate').className = subTab === 'AGGREGATE' ? activeCls : inactiveCls;
-  document.getElementById('btnPRSubPublished').className = subTab === 'PUBLISHED' ? activeCls : inactiveCls;
+  // Gộp ẩn/hiện theo quyền + tô màu active trong ĐÚNG 1 lần gán className cho CẢ 4 nút.
+  document.getElementById('btnPRSubEntry').className = (subTab === 'ENTRY' ? activeCls : inactiveCls) + (canEntry ? '' : ' hidden');
+  document.getElementById('btnPRSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canPeriods ? '' : ' hidden');
+  document.getElementById('btnPRSubAggregate').className = (subTab === 'AGGREGATE' ? activeCls : inactiveCls) + (canAggregate ? '' : ' hidden');
+  document.getElementById('btnPRSubPublished').className = (subTab === 'PUBLISHED' ? activeCls : inactiveCls) + (canPublished ? '' : ' hidden');
 
   if (subTab === 'ENTRY') { renderPrEntryPeriodOptions(); renderPrEntryTable(); renderDynamicInputsForModule('REPORT_ENTRY', 'dynamicFieldsContainer_REPORT_ENTRY'); }
   if (subTab === 'PERIODS') { renderReportDeptCheckboxes(); renderPrPeriodsTable(); renderDynamicInputsForModule('REPORT_PERIOD', 'dynamicFieldsContainer_REPORT_PERIOD'); }

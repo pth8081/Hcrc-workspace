@@ -14,15 +14,25 @@ let activeItSupportSubTab = 'PRICE';
 
 function setItSupportSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  // Mục 0 (10/2026): AND thêm checkbox itSupportPrice/itSupportTicket/itSupportRenewal.
+  const canPrice = hasModuleAccess(currentUser, 'itSupportPrice');
+  const canTicket = hasModuleAccess(currentUser, 'itSupportTicket');
+  const canRenewal = hasModuleAccess(currentUser, 'itSupportRenewal') && canManageItRenewalClient(currentUser);
+  const itTabOrder = [['PRICE', canPrice], ['TICKET', canTicket], ['RENEWAL', canRenewal]];
+  const curItTab = itTabOrder.find(([k]) => k === subTab);
+  if (!curItTab || !curItTab[1]) {
+    const fallback = itTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
   activeItSupportSubTab = subTab;
   document.getElementById('itSubPrice').classList.toggle('hidden', subTab !== 'PRICE');
   document.getElementById('itSubTicket').classList.toggle('hidden', subTab !== 'TICKET');
   document.getElementById('itSubRenewal').classList.toggle('hidden', subTab !== 'RENEWAL');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-sky-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnItSubPrice').className = subTab === 'PRICE' ? activeCls : inactiveCls;
-  document.getElementById('btnItSubTicket').className = subTab === 'TICKET' ? activeCls : inactiveCls;
-  document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canManageItRenewalClient(currentUser) ? '' : ' hidden');
+  document.getElementById('btnItSubPrice').className = (subTab === 'PRICE' ? activeCls : inactiveCls) + (canPrice ? '' : ' hidden');
+  document.getElementById('btnItSubTicket').className = (subTab === 'TICKET' ? activeCls : inactiveCls) + (canTicket ? '' : ' hidden');
+  document.getElementById('btnItSubRenewal').className = (subTab === 'RENEWAL' ? activeCls : inactiveCls) + (canRenewal ? '' : ' hidden');
 
   if (subTab === 'PRICE') {
     // Form tạo đề xuất (Bán Buôn/Bán Lẻ) ĐÃ CHUYỂN khỏi Hỗ Trợ IT (10/2026) sang module-vanhanh.js/

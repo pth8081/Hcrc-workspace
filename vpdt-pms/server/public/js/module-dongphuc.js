@@ -42,10 +42,17 @@ function setUniformSubTab(subTab) {
   // Phát" (duyệt/từ chối kỳ) và "Xác Nhận/Cấp Phát" (duyệt/từ chối điều chuyển kho) — nếu không, người
   // chỉ giữ quyền duyệt sẽ không bao giờ tới được màn duyệt (2 nút bấm tab này trước đây CHỈ hiện cho
   // canHc/canStore, xem canAccessUniformModule() đã mở quyền vào MODULE nhưng chưa mở quyền vào TAB).
-  const canSeePeriods = canHc || canApprove;
-  const canSeeStore = canStore || canApprove;
-  if (subTab === 'PERIODS' && !canSeePeriods) subTab = canSeeStore ? 'STORE' : 'STOCK';
-  if (subTab === 'STORE' && !canSeeStore) subTab = canSeePeriods ? 'PERIODS' : 'STOCK';
+  // Mục 0 (10/2026): AND thêm checkbox uniformPeriods/uniformStore/uniformStock/uniformDashboard.
+  const canSeePeriods = (canHc || canApprove) && hasModuleAccess(currentUser, 'uniformPeriods');
+  const canSeeStore = (canStore || canApprove) && hasModuleAccess(currentUser, 'uniformStore');
+  const canSeeStock = hasModuleAccess(currentUser, 'uniformStock');
+  const canSeeDashboard = hasModuleAccess(currentUser, 'uniformDashboard');
+  const uniformTabOrder = [['PERIODS', canSeePeriods], ['STORE', canSeeStore], ['STOCK', canSeeStock], ['DASHBOARD', canSeeDashboard]];
+  const curUniformTab = uniformTabOrder.find(([k]) => k === subTab);
+  if (!curUniformTab || !curUniformTab[1]) {
+    const fallback = uniformTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
   activeUniformSubTab = subTab;
 
   document.getElementById('uniformSubPeriods').classList.toggle('hidden', subTab !== 'PERIODS');
@@ -57,8 +64,8 @@ function setUniformSubTab(subTab) {
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnUniformSubPeriods').className = (subTab === 'PERIODS' ? activeCls : inactiveCls) + (canSeePeriods ? '' : ' hidden');
   document.getElementById('btnUniformSubStore').className = (subTab === 'STORE' ? activeCls : inactiveCls) + (canSeeStore ? '' : ' hidden');
-  document.getElementById('btnUniformSubStock').className = subTab === 'STOCK' ? activeCls : inactiveCls;
-  document.getElementById('btnUniformSubDashboard').className = subTab === 'DASHBOARD' ? activeCls : inactiveCls;
+  document.getElementById('btnUniformSubStock').className = (subTab === 'STOCK' ? activeCls : inactiveCls) + (canSeeStock ? '' : ' hidden');
+  document.getElementById('btnUniformSubDashboard').className = (subTab === 'DASHBOARD' ? activeCls : inactiveCls) + (canSeeDashboard ? '' : ' hidden');
 
   if (subTab === 'PERIODS') {
     renderUniformCatalogList(); resetUniformPeriodForm(); renderUniformPeriodsList();

@@ -95,10 +95,19 @@ function hrpfCanManageOnboarding() { return !!currentUser.perms?.hrOnboardingMan
 // ĐĂNG NHẬP, trước khi module-hrprofile.js (lazy-load theo tab) từng được nạp.
 
 function renderHrProfileModule() {
-  document.getElementById('btnHrpfViewManage').classList.toggle('hidden', !(hrpfCanCreate() || hrpfCanFullView()));
-  document.getElementById('btnHrpfViewOnboardingQueue').classList.toggle('hidden', !hrpfCanManageOnboarding());
-  if (activeHrProfileView === 'MANAGE' && !(hrpfCanCreate() || hrpfCanFullView())) activeHrProfileView = 'ME';
-  if (activeHrProfileView === 'ONBOARDING_QUEUE' && !hrpfCanManageOnboarding()) activeHrProfileView = 'ME';
+  // Mục 0 (10/2026): AND thêm checkbox hrProfileMe/ManageTab/OnboardingQueue.
+  const hrpfCanMe = hasModuleAccess(currentUser, 'hrProfileMe');
+  const hrpfCanManageTab = hasModuleAccess(currentUser, 'hrProfileManageTab') && (hrpfCanCreate() || hrpfCanFullView());
+  const hrpfCanQueue = hasModuleAccess(currentUser, 'hrProfileOnboardingQueue') && hrpfCanManageOnboarding();
+  document.getElementById('btnHrpfViewMe').classList.toggle('hidden', !hrpfCanMe);
+  document.getElementById('btnHrpfViewManage').classList.toggle('hidden', !hrpfCanManageTab);
+  document.getElementById('btnHrpfViewOnboardingQueue').classList.toggle('hidden', !hrpfCanQueue);
+  const hrpfViewOrder = [['ME', hrpfCanMe], ['MANAGE', hrpfCanManageTab], ['ONBOARDING_QUEUE', hrpfCanQueue]];
+  const curHrpfView = hrpfViewOrder.find(([v]) => v === activeHrProfileView);
+  if (!curHrpfView || !curHrpfView[1]) {
+    const fallback = hrpfViewOrder.find(([, ok]) => ok);
+    activeHrProfileView = fallback ? fallback[0] : activeHrProfileView;
+  }
   // "Xem Hồ Sơ Nhân Viên (Quản Lý Trực Tiếp)" — riêng cho quyền hrProfileView (KHÔNG có hrProfileManage,
   // vốn đã thấy đủ toàn bộ hồ sơ qua "Quản Lý Hồ Sơ" rồi, không cần khối này) — hrProfileView là tầng
   // "quản lý trực tiếp xem giới hạn" của getProfileForViewer() (lib/employeeProfile.js), không tự tra được
@@ -262,15 +271,20 @@ function renderHrpfProfileReadOnly(profile, managerVisibleFields) {
 }
 
 function setHrProfileView(view) {
+  // Mục 0 (10/2026): tính lại ĐỘC LẬP giống renderHrProfileModule() — KHÔNG được gán className đè (mất
+  // class "hidden" vừa toggle ở đó), xem cùng lỗi đã sửa ở setMeetingSubTab() (module-phonghop.js).
+  const hrpfCanMe = hasModuleAccess(currentUser, 'hrProfileMe');
+  const hrpfCanManageTab = hasModuleAccess(currentUser, 'hrProfileManageTab') && (hrpfCanCreate() || hrpfCanFullView());
+  const hrpfCanQueue = hasModuleAccess(currentUser, 'hrProfileOnboardingQueue') && hrpfCanManageOnboarding();
   activeHrProfileView = view;
   document.getElementById('hrpfViewMe').classList.toggle('hidden', view !== 'ME');
   document.getElementById('hrpfViewManage').classList.toggle('hidden', view !== 'MANAGE');
   document.getElementById('hrpfViewOnboardingQueue').classList.toggle('hidden', view !== 'ONBOARDING_QUEUE');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
-  document.getElementById('btnHrpfViewMe').className = view === 'ME' ? activeCls : inactiveCls;
-  document.getElementById('btnHrpfViewManage').className = view === 'MANAGE' ? activeCls : inactiveCls;
-  document.getElementById('btnHrpfViewOnboardingQueue').className = view === 'ONBOARDING_QUEUE' ? activeCls : inactiveCls;
+  document.getElementById('btnHrpfViewMe').className = (view === 'ME' ? activeCls : inactiveCls) + (hrpfCanMe ? '' : ' hidden');
+  document.getElementById('btnHrpfViewManage').className = (view === 'MANAGE' ? activeCls : inactiveCls) + (hrpfCanManageTab ? '' : ' hidden');
+  document.getElementById('btnHrpfViewOnboardingQueue').className = (view === 'ONBOARDING_QUEUE' ? activeCls : inactiveCls) + (hrpfCanQueue ? '' : ' hidden');
   if (view === 'ME') { loadHrpfMyProfile(); return; }
   if (view === 'ONBOARDING_QUEUE') { loadHrpfOnboardingQueue(); return; }
 

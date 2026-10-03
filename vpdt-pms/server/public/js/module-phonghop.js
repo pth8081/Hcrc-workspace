@@ -111,16 +111,23 @@ function setMeetingSubTab(subTab) {
   // canViewMeeting() ở lib/recordViewScope.js cho phần bypass dữ liệu tương ứng) — chặn cả trường hợp
   // subTab='REPORT' được truyền vào khi KHÔNG có quyền (URL/gọi hàm trực tiếp), lùi về REGISTER thay vì
   // hiện trắng.
-  const canSeeReport = canApproveMeeting(currentUser) || !!currentUser?.perms?.meetingReportView;
-  if (subTab === 'REPORT' && !canSeeReport) subTab = 'REGISTER';
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): checkbox độc lập meetingRegister/
+  // meetingCalendar/meetingReport AND thêm vào đúng điều kiện đã có — tắt riêng tab nào thì lùi về tab
+  // còn thấy được đầu tiên.
+  const canReg = hasModuleAccess(currentUser, 'meetingRegister');
+  const canCal = hasModuleAccess(currentUser, 'meetingCalendar');
+  const canSeeReport = hasModuleAccess(currentUser, 'meetingReport') && (canApproveMeeting(currentUser) || !!currentUser?.perms?.meetingReportView);
+  if (subTab === 'REPORT' && !canSeeReport) subTab = canReg ? 'REGISTER' : (canCal ? 'CALENDAR' : 'REPORT');
+  if (subTab === 'REGISTER' && !canReg) subTab = canCal ? 'CALENDAR' : (canSeeReport ? 'REPORT' : 'REGISTER');
+  if (subTab === 'CALENDAR' && !canCal) subTab = canReg ? 'REGISTER' : (canSeeReport ? 'REPORT' : 'CALENDAR');
 
   activeMeetingSubTab = subTab;
   const btnRegister = document.getElementById('btnMeetingSubRegister');
   const btnCalendar = document.getElementById('btnMeetingSubCalendar');
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-emerald-700 text-white';
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  if (btnRegister) btnRegister.className = subTab === 'REGISTER' ? activeCls : inactiveCls;
-  if (btnCalendar) btnCalendar.className = subTab === 'CALENDAR' ? activeCls : inactiveCls;
+  if (btnRegister) btnRegister.className = (subTab === 'REGISTER' ? activeCls : inactiveCls) + (canReg ? '' : ' hidden');
+  if (btnCalendar) btnCalendar.className = (subTab === 'CALENDAR' ? activeCls : inactiveCls) + (canCal ? '' : ' hidden');
   // BUG THẬT đã sửa TRONG LÚC VIẾT (bắt được qua test): gán className Ở ĐÂY trước đây ghi đè MẤT hẳn
   // class "hidden" vừa toggle phía trên (className = "..." thay hẳn toàn bộ thuộc tính class, không phải
   // cộng thêm) — nút "Báo Cáo" bị lộ ra cho CẢ người không có quyền duyệt lịch họp dù canSeeReport=false.

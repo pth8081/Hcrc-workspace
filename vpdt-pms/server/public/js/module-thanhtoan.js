@@ -16,12 +16,22 @@ let managePaymentFilterSource = '';
 
 function setPaymentSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
+  // Mục 0 (10/2026): AND thêm checkbox paymentCreateTab/paymentManageTab/paymentApproveTab.
+  const canCreate = hasModuleAccess(currentUser, 'paymentCreateTab');
+  const canManageTab = hasModuleAccess(currentUser, 'paymentManageTab');
+  const canApproveTab = hasModuleAccess(currentUser, 'paymentApproveTab');
+  const payTabOrder = [['CREATE', canCreate], ['MANAGE', canManageTab], ['APPROVE', canApproveTab]];
+  const curPayTab = payTabOrder.find(([k]) => k === subTab);
+  if (!curPayTab || !curPayTab[1]) {
+    const fallback = payTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
   activePaymentSubTab = subTab;
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnPaymentSubCreate').className = subTab === 'CREATE' ? activeCls : inactiveCls;
-  document.getElementById('btnPaymentSubManage').className = subTab === 'MANAGE' ? activeCls : inactiveCls;
-  document.getElementById('btnPaymentSubApprove').className = subTab === 'APPROVE' ? activeCls : inactiveCls;
+  document.getElementById('btnPaymentSubCreate').className = (subTab === 'CREATE' ? activeCls : inactiveCls) + (canCreate ? '' : ' hidden');
+  document.getElementById('btnPaymentSubManage').className = (subTab === 'MANAGE' ? activeCls : inactiveCls) + (canManageTab ? '' : ' hidden');
+  document.getElementById('btnPaymentSubApprove').className = (subTab === 'APPROVE' ? activeCls : inactiveCls) + (canApproveTab ? '' : ' hidden');
   document.getElementById('paymentCreateWrap').classList.toggle('hidden', subTab !== 'CREATE');
   document.getElementById('paymentManageWrap').classList.toggle('hidden', subTab !== 'MANAGE');
   document.getElementById('paymentApproveWrap').classList.toggle('hidden', subTab !== 'APPROVE');

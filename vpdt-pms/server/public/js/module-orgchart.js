@@ -146,15 +146,25 @@ async function loadOrgChartCurrentVersion(id) {
 
 // ===== Sub-tab TREE / DIAGRAM / KPI =====
 function setOrgChartSubTab(subTab) {
+  // Mục 0 (10/2026): AND thêm checkbox orgChartTree/Diagram/Kpi.
+  const canTree = hasModuleAccess(currentUser, 'orgChartTree');
+  const canDiagram = hasModuleAccess(currentUser, 'orgChartDiagram');
+  const canKpi = hasModuleAccess(currentUser, 'orgChartKpi');
+  const ocTabOrder = [['TREE', canTree], ['DIAGRAM', canDiagram], ['KPI', canKpi]];
+  const curOcTab = ocTabOrder.find(([k]) => k === subTab);
+  if (!curOcTab || !curOcTab[1]) {
+    const fallback = ocTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
   activeOrgChartSubTab = subTab;
   document.getElementById('orgChartTreeView').classList.toggle('hidden', subTab !== 'TREE');
   document.getElementById('orgChartDiagramView').classList.toggle('hidden', subTab !== 'DIAGRAM');
   document.getElementById('orgChartKpiView').classList.toggle('hidden', subTab !== 'KPI');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
-  document.getElementById('btnOrgChartSubTree').className = subTab === 'TREE' ? activeCls : inactiveCls;
-  document.getElementById('btnOrgChartSubDiagram').className = subTab === 'DIAGRAM' ? activeCls : inactiveCls;
-  document.getElementById('btnOrgChartSubKpi').className = subTab === 'KPI' ? activeCls : inactiveCls;
+  document.getElementById('btnOrgChartSubTree').className = (subTab === 'TREE' ? activeCls : inactiveCls) + (canTree ? '' : ' hidden');
+  document.getElementById('btnOrgChartSubDiagram').className = (subTab === 'DIAGRAM' ? activeCls : inactiveCls) + (canDiagram ? '' : ' hidden');
+  document.getElementById('btnOrgChartSubKpi').className = (subTab === 'KPI' ? activeCls : inactiveCls) + (canKpi ? '' : ' hidden');
   if (subTab === 'TREE') renderOrgChartTree();
   else if (subTab === 'DIAGRAM') renderOrgChartDiagramTab();
   else renderOrgChartKpiFlowTab();
