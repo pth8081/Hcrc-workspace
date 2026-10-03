@@ -36,16 +36,26 @@ function canManageHrLifecycleClient(processType) {
 }
 
 function setHrLifecycleView(view) {
+  // Mục 0 (10/2026): AND thêm checkbox hrLifecycleList/MyTasks/Templates.
+  const canList = hasModuleAccess(currentUser, 'hrLifecycleList');
+  const canMyTasks = hasModuleAccess(currentUser, 'hrLifecycleMyTasks');
+  const canTemplates = hasModuleAccess(currentUser, 'hrLifecycleTemplates');
+  const hrlTabOrder = [['LIST', canList], ['MYTASKS', canMyTasks], ['TEMPLATES', canTemplates]];
+  const curHrlTab = hrlTabOrder.find(([k]) => k === view);
+  if (!curHrlTab || !curHrlTab[1]) {
+    const fallback = hrlTabOrder.find(([, ok]) => ok);
+    view = fallback ? fallback[0] : view;
+  }
   activeHrLifecycleView = view;
   document.getElementById('hrpViewList').classList.toggle('hidden', view !== 'LIST');
   document.getElementById('hrpViewMyTasks').classList.toggle('hidden', view !== 'MYTASKS');
   document.getElementById('hrpViewTemplates').classList.toggle('hidden', view !== 'TEMPLATES');
   const activeCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white';
   const inactiveCls = 'px-2.5 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700 hover:bg-gray-300';
-  document.getElementById('btnHrpViewList').className = view === 'LIST' ? activeCls : inactiveCls;
-  document.getElementById('btnHrpViewMyTasks').className = view === 'MYTASKS' ? activeCls : inactiveCls;
+  document.getElementById('btnHrpViewList').className = (view === 'LIST' ? activeCls : inactiveCls) + (canList ? '' : ' hidden');
+  document.getElementById('btnHrpViewMyTasks').className = (view === 'MYTASKS' ? activeCls : inactiveCls) + (canMyTasks ? '' : ' hidden');
   const btnTpl = document.getElementById('btnHrpViewTemplates');
-  if (btnTpl) btnTpl.className = view === 'TEMPLATES' ? activeCls : inactiveCls;
+  if (btnTpl) btnTpl.className = (view === 'TEMPLATES' ? activeCls : inactiveCls) + (canTemplates ? '' : ' hidden');
   if (view === 'LIST') renderHrProcessList();
   else if (view === 'MYTASKS') renderHrMyTasksList();
   else if (view === 'TEMPLATES') renderHrTaskTemplateAdmin();

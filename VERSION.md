@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**24.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.70 (2026-10-03): Mục 0 — mở rộng checkbox phân quyền xuống TẤT CẢ tab/subtab còn thiếu
+
+Theo yêu cầu người dùng "đảm bảo tất cả module menu phải tích chọn phân
+quyền đến từng tab, subtab, không được bỏ qua bất kỳ subtab nào": rà soát
+lại toàn bộ ~32 hàm chuyển tab con/tab cháu trên hệ thống (mọi
+`setXSubTab`/`setXView`) và bổ sung checkbox "0. Quyền Truy Cập Module" còn
+thiếu cho **71 tab/subtab** trên 19 nhóm module — trước đợt này chỉ Truyền
+Thông Nội Bộ, Vận Hành > Siêu Thị (4 tab) và Thanh Toán (module cha) có
+checkbox tới cấp tab/subtab, phần lớn module còn lại (Hợp Đồng, Đặt Phòng
+Họp, Đăng Ký Xe, Đồng Phục, Tổng Hợp, Ngân Sách, Báo Cáo Định Kỳ, Checklist,
+Cơ Cấu Tổ Chức, Văn Phòng Phẩm, Hỗ Trợ IT, Mua Hàng, Tuyển Dụng, Công & Phép,
+Onboarding/Offboarding, Hồ Sơ Nhân Sự, Lương, và các tab còn lại của Vận
+Hành — Đơn Hàng/Mở Mới/Sửa Chữa) chưa từng có lớp gác này ở cấp tab.
+
+Mỗi checkbox mới là 1 lớp AND độc lập (không thay thế quyền hành động đã
+có), mặc định BẬT nên không đổi hành vi hiện tại của bất kỳ ai — admin chỉ
+cần vào Phân Quyền tắt riêng 1 tab/subtab là ẩn hẳn khỏi menu người/nhóm đó,
+dù họ còn giữ quyền thao tác khác cho đúng khu vực đó. Đã thêm đủ 71 nhãn
+tiếng Việt tương ứng vào `PERM_KEY_VN_LABELS` (Ma Trận Phân Quyền tự nhận
+cột mới, không cần sửa gì thêm).
+
+Nhân tiện phát hiện và vá 1 lỗi THẬT có từ trước (không liên quan Mục 0):
+`setOperationStoreSubTab()` (module-vanhanh.js) truyền sai tham số cho
+`canAccessOperationSubTab()` ở nút "Mở Mới" (tabKey `'OPEN'` thay vì permKind
+`'STORE_OPEN'` đúng), khiến nút này luôn bị ẩn với TẤT CẢ mọi người kể cả ai
+có đủ quyền `operationStoreOpenCreate` — vá bằng cách thêm cột permKind
+riêng (giống khuôn `updateOperationStoreSubTabVisibility()` ngay cạnh đó).
+
+**Ngoại lệ có chủ đích (không thêm checkbox, nêu rõ để người dùng xác nhận
+nếu muốn làm nốt)**: `setProfileSubTab` (core.js) — cài đặt cá nhân tự phục
+vụ (Thông tin/Đổi mật khẩu/PIN/WebAuthn/TOTP/Đồng phục của tôi), không phải
+module nghiệp vụ; `setSystemSubTab`/`setLogSubTab`/`setAdvWorkflowSubTab`/
+`setAdminSubTab` (module-hethong-tabs.js) — màn cấu hình CHỈ admin thấy,
+admin luôn bypass Mục 0 nên gác thêm không có tác dụng; `setBizConfigPriceTab`
+— nằm trong "Hệ Thống → Cấu Hình Nghiệp Vụ" (cũng chỉ admin); `setItPriceSubTab`
+(module-itsupport-price.js) — nút chuyển RETAIL/WHOLESALE là chế độ NHẬP
+FORM, không phải tab điều hướng nội dung.
+
+Test: `tests/test-muc0-module-access-tree.js` (14/14) +
+`tests/test-perm-matrix-client.js` (46/46, gồm kiểm tra nhãn không trùng)
+vẫn PASS. Chạy lại toàn bộ test liên quan tới các module đã sửa (Hợp Đồng,
+Đặt Phòng Họp, Đăng Ký Xe, Đồng Phục, Ngân Sách, Thanh Toán, Lương,
+Checklist, Cơ Cấu Tổ Chức, VPP, Hỗ Trợ IT, Mua Hàng, Tuyển Dụng, Vận Hành,
+Onboarding) — PASS (chỉ 2 thất bại CŨ, không liên quan, đã xác nhận bằng
+`git stash`: `test-operation-order-report.js` do giả định cố định tháng
+hiện tại — xem ghi chú v24.69 — và `demo-muahang-module.js` do mock thiếu
+route, cả 2 đều thất bại y hệt trên code TRƯỚC đợt này).
 
 ## v24.69 (2026-10-02): Vá lỗi DOM "setOperationStoreSubTab() xoá mất class ẩn" — phát hiện khi chụp ảnh demo v24.68
 

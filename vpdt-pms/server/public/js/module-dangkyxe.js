@@ -158,8 +158,19 @@ function setCarSubTab(subTab) {
   // "📊 Báo Cáo" CHỈ hiện cho người quản lý (canSeeCarReportClient(), xem core.js) — chặn cả trường hợp
   // subTab='REPORT' được truyền vào khi KHÔNG có quyền (URL/gọi hàm trực tiếp), lùi về REG thay vì hiện
   // trắng — cùng khuôn setMeetingSubTab() (module-phonghop.js).
-  const canSeeReport = canSeeCarReportClient(currentUser);
-  if (subTab === 'REPORT' && !canSeeReport) subTab = 'REG';
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): AND thêm checkbox carReg/carCalendar/
+  // carDriver/carReport vào đúng điều kiện đã có — tắt riêng tab nào thì lùi về tab còn thấy được đầu
+  // tiên theo thứ tự REG → CALENDAR → DRIVER → REPORT.
+  const canSeeReg = hasModuleAccess(currentUser, 'carReg');
+  const canSeeCalendar = hasModuleAccess(currentUser, 'carCalendar');
+  const canSeeDriver = hasModuleAccess(currentUser, 'carDriver');
+  const canSeeReport = hasModuleAccess(currentUser, 'carReport') && canSeeCarReportClient(currentUser);
+  const carTabOrder = [['REG', canSeeReg], ['CALENDAR', canSeeCalendar], ['DRIVER', canSeeDriver], ['REPORT', canSeeReport]];
+  const curCarTab = carTabOrder.find(([k]) => k === subTab);
+  if (!curCarTab || !curCarTab[1]) {
+    const fallback = carTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
 
   activeCarSubTab = subTab;
   document.getElementById('carSubReg').classList.toggle('hidden', subTab !== 'REG');
@@ -168,12 +179,15 @@ function setCarSubTab(subTab) {
   document.getElementById('carSubReport').classList.toggle('hidden', subTab !== 'REPORT');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnCarSubReg').className = subTab === 'REG' ? activeCls : inactiveCls;
-  document.getElementById('btnCarSubCalendar').className = subTab === 'CALENDAR' ? activeCls : inactiveCls;
-  document.getElementById('btnCarSubDriver').className = subTab === 'DRIVER' ? activeCls : inactiveCls;
-  // Gộp ẩn/hiện theo quyền + tô màu active trong ĐÚNG 1 lần gán className — tránh đúng bug đã sửa ở
-  // setMeetingSubTab() (gán className riêng sau đó xoá mất class "hidden" vừa toggle).
+  // Gộp ẩn/hiện theo quyền + tô màu active trong ĐÚNG 1 lần gán className cho CẢ 4 nút — tránh đúng bug
+  // đã sửa ở setMeetingSubTab() (gán className riêng sau đó xoá mất class "hidden" vừa toggle).
+  const btnReg = document.getElementById('btnCarSubReg');
+  const btnCalendar = document.getElementById('btnCarSubCalendar');
+  const btnDriver = document.getElementById('btnCarSubDriver');
   const btnReport = document.getElementById('btnCarSubReport');
+  if (btnReg) btnReg.className = (subTab === 'REG' ? activeCls : inactiveCls) + (canSeeReg ? '' : ' hidden');
+  if (btnCalendar) btnCalendar.className = (subTab === 'CALENDAR' ? activeCls : inactiveCls) + (canSeeCalendar ? '' : ' hidden');
+  if (btnDriver) btnDriver.className = (subTab === 'DRIVER' ? activeCls : inactiveCls) + (canSeeDriver ? '' : ' hidden');
   if (btnReport) btnReport.className = (subTab === 'REPORT' ? activeCls : inactiveCls) + (canSeeReport ? '' : ' hidden');
   if (subTab === 'REG') {
     renderDynamicInputsForModule('CAR', 'dynamicFieldsContainer_CAR');

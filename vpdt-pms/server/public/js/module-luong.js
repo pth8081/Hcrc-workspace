@@ -36,9 +36,19 @@ function fmtMoney(n) {
 function renderHrPayrollModule() {
   const canManage = !!currentUser?.perms?.hrPayrollManage;
   const canApprove = !!currentUser?.perms?.hrPayrollApprove;
-  document.getElementById('btnHrpViewManage').classList.toggle('hidden', !(canManage || canApprove));
+  // Mục 0 (10/2026): AND thêm checkbox hrPayrollSelf/hrPayrollManageTab.
+  const canSelfView = hasModuleAccess(currentUser, 'hrPayrollSelf');
+  const canManageView = hasModuleAccess(currentUser, 'hrPayrollManageTab') && (canManage || canApprove);
+  document.getElementById('btnHrpViewSelf').classList.toggle('hidden', !canSelfView);
+  document.getElementById('btnHrpViewManage').classList.toggle('hidden', !canManageView);
   document.getElementById('btnHrpCreatePeriod').classList.toggle('hidden', !canManage);
   document.getElementById('btnHrpRateConfig').classList.toggle('hidden', !(canManage || canApprove));
+  const hrpViewOrder = [['SELF', canSelfView], ['MANAGE', canManageView]];
+  const curHrpView = hrpViewOrder.find(([v]) => v === hrpActiveView);
+  if (!curHrpView || !curHrpView[1]) {
+    const fallback = hrpViewOrder.find(([, ok]) => ok);
+    hrpActiveView = fallback ? fallback[0] : hrpActiveView;
+  }
   setHrPayrollView(hrpActiveView);
 }
 

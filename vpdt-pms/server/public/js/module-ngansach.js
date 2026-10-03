@@ -48,8 +48,17 @@ function blId(kind, base) { return `bl${kind}${base}`; }
 function blEl(kind, base) { return document.getElementById(blId(kind, base)); }
 
 function setBudgetLineTab(tab) {
-  const canSeeReport = canAggregateBudgetLineClient(currentUser);
-  if (tab === 'REPORT' && !canSeeReport) tab = 'PROPOSE';
+  // Mục 0 (10/2026): AND thêm checkbox budgetPropose/Approve/Used/Report.
+  const canPropose = hasModuleAccess(currentUser, 'budgetPropose');
+  const canApprove = hasModuleAccess(currentUser, 'budgetApprove');
+  const canUsed = hasModuleAccess(currentUser, 'budgetUsed');
+  const canSeeReport = hasModuleAccess(currentUser, 'budgetReport') && canAggregateBudgetLineClient(currentUser);
+  const blTabOrder = [['PROPOSE', canPropose], ['APPROVE', canApprove], ['USED', canUsed], ['REPORT', canSeeReport]];
+  const curBlTab = blTabOrder.find(([k]) => k === tab);
+  if (!curBlTab || !curBlTab[1]) {
+    const fallback = blTabOrder.find(([, ok]) => ok);
+    tab = fallback ? fallback[0] : tab;
+  }
   activeBudgetLineTab = tab;
   ['PROPOSE', 'APPROVE', 'USED', 'REPORT'].forEach(t => {
     const el = document.getElementById(`blTab_${t}`);
@@ -57,9 +66,9 @@ function setBudgetLineTab(tab) {
   });
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-violet-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnBlTab_PROPOSE').className = tab === 'PROPOSE' ? activeCls : inactiveCls;
-  document.getElementById('btnBlTab_APPROVE').className = tab === 'APPROVE' ? activeCls : inactiveCls;
-  document.getElementById('btnBlTab_USED').className = tab === 'USED' ? activeCls : inactiveCls;
+  document.getElementById('btnBlTab_PROPOSE').className = (tab === 'PROPOSE' ? activeCls : inactiveCls) + (canPropose ? '' : ' hidden');
+  document.getElementById('btnBlTab_APPROVE').className = (tab === 'APPROVE' ? activeCls : inactiveCls) + (canApprove ? '' : ' hidden');
+  document.getElementById('btnBlTab_USED').className = (tab === 'USED' ? activeCls : inactiveCls) + (canUsed ? '' : ' hidden');
   document.getElementById('btnBlTab_REPORT').className = (tab === 'REPORT' ? activeCls : inactiveCls) + (canSeeReport ? '' : ' hidden');
 
   if (tab === 'PROPOSE') { initBudgetLineFormIfNeeded('Propose'); renderBudgetLineList('PROPOSED'); }

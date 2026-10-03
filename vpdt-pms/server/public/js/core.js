@@ -2098,6 +2098,9 @@ const BUSINESS_MODULES = [
   { key: 'internalNews', label: 'Truyền Thông — Tin Tức (Nhịp Sống HCRC)', parent: 'internal' },
   { key: 'internalTraining', label: 'Truyền Thông — Đào Tạo', parent: 'internal' },
   { key: 'internalRecruitment', label: 'Truyền Thông — Tuyển Dụng', parent: 'internal' },
+  { key: 'internalRecruitmentJobs', label: 'Truyền Thông — Tuyển Dụng > Tin Tuyển Dụng', parent: 'internalRecruitment' },
+  { key: 'internalRecruitmentMyReferrals', label: 'Truyền Thông — Tuyển Dụng > Giới Thiệu Của Tôi', parent: 'internalRecruitment' },
+  { key: 'internalRecruitmentManage', label: 'Truyền Thông — Tuyển Dụng > Quản Lý Ứng Viên', parent: 'internalRecruitment' },
   { key: 'internalShare', label: 'Truyền Thông — Góc Chia Sẻ', parent: 'internal' },
   { key: 'internalQna', label: 'Truyền Thông — HCRC Đồng Hành', parent: 'internal' },
   // Mục 0 — CẤP 4 "tab cháu" (9 tab LMS lồng trong tab con "Đào Tạo" ở trên, setTrainingLmsTab(),
@@ -2115,28 +2118,53 @@ const BUSINESS_MODULES = [
   { key: 'trainingLmsOnboarding', label: 'Đào Tạo — Lộ Trình Tân Binh', parent: 'internalTraining' },
   { key: 'trainingLmsTests', label: 'Đào Tạo — Ngân Hàng Câu Hỏi', parent: 'internalTraining' },
   { key: 'contract', label: 'Hợp Đồng' },
+  // Mục 0 — CẤP 2 "tab con" (10/2026, đợt "đảm bảo tất cả module/menu phải tích chọn phân quyền đến
+  // từng tab, subtab, không bỏ qua bất kỳ subtab nào" — rà soát toàn bộ ~28 hàm setXSubTab() trong app,
+  // thêm checkbox độc lập cho MỌI tab còn thiếu). 2 tab con của "Hợp Đồng" — mặc định TRUE.
+  { key: 'contractApproval', label: 'Hợp Đồng — Phê Duyệt', parent: 'contract' },
+  { key: 'contractManage', label: 'Hợp Đồng — Quản Lý HĐ', parent: 'contract' },
   { key: 'minutes', label: 'Biên Bản Họp' },
   { key: 'hanhchinh', label: 'Hành Chính' },
   { key: 'meeting', label: 'Đặt Phòng Họp', parent: 'hanhchinh' },
+  { key: 'meetingRegister', label: 'Đặt Phòng Họp — Đăng Ký', parent: 'meeting' },
+  { key: 'meetingCalendar', label: 'Đặt Phòng Họp — Lịch', parent: 'meeting' },
+  { key: 'meetingReport', label: 'Đặt Phòng Họp — Báo Cáo', parent: 'meeting' },
   { key: 'car', label: 'Đăng Ký Xe', parent: 'hanhchinh' },
+  { key: 'carReg', label: 'Đăng Ký Xe — Đăng Ký', parent: 'car' },
+  { key: 'carCalendar', label: 'Đăng Ký Xe — Lịch Xe', parent: 'car' },
+  { key: 'carDriver', label: 'Đăng Ký Xe — Lái Xe', parent: 'car' },
+  { key: 'carReport', label: 'Đăng Ký Xe — Báo Cáo', parent: 'car' },
   // "Văn Phòng Phẩm" — quyền quản lý thật nằm ở pVppManage (khối 12 cây phân quyền), không khai ở đây.
   { key: 'vpp', label: 'Văn Phòng Phẩm', parent: 'hanhchinh' },
+  { key: 'vppRegister', label: 'Văn Phòng Phẩm — Đăng Ký', parent: 'vpp' },
+  { key: 'vppPeriods', label: 'Văn Phòng Phẩm — Kỳ', parent: 'vpp' },
+  { key: 'vppReports', label: 'Văn Phòng Phẩm — Báo Cáo', parent: 'vpp' },
   // "Đồng Phục" — quyền thật nằm ở uniformManage/uniformStoreManage (khối 16 cây phân quyền, cùng
   // khuôn itPriceProposeCreate/itManage của Hỗ Trợ IT) — module này không mở sẵn cho ai, 2 quyền trên
   // vừa quyết định ĐƯỢC LÀM GÌ vừa quyết định VÀO ĐƯỢC MÀN NÀO (ai không có cả 2 quyền thì vào module
   // cũng không thấy nội dung nào).
   { key: 'uniform', label: 'Đồng Phục', parent: 'hanhchinh' },
+  { key: 'uniformPeriods', label: 'Đồng Phục — Kỳ Cấp Phát', parent: 'uniform' },
+  { key: 'uniformStore', label: 'Đồng Phục — Xác Nhận/Cấp Phát', parent: 'uniform' },
+  { key: 'uniformStock', label: 'Đồng Phục — Tồn Kho', parent: 'uniform' },
+  { key: 'uniformDashboard', label: 'Đồng Phục — Dashboard', parent: 'uniform' },
   // "Giấy Phép" — quyền thật nằm ở licenseCreate/licenseApprove/licenseView (khối phân quyền riêng),
   // đúng khuôn "Đồng Phục" ở trên: module không mở sẵn cho ai, phân quyền hoàn toàn NGAY TRONG module
   // (không đi qua quy trình phòng ban), phòng ban khác không có 3 quyền này thì không thấy gì.
   { key: 'license', label: 'Giấy Phép', parent: 'hanhchinh' },
   // "Tổng Hợp" — quyền officeBuy/officeFix/paymentManage nằm ở khối 7/10 cây phân quyền.
   { key: 'office', label: 'Tổng Hợp' },
+  { key: 'officeMuaBan', label: 'Tổng Hợp — Mua Bán', parent: 'office' },
+  { key: 'officeSuaChua', label: 'Tổng Hợp — Sửa Chữa', parent: 'office' },
   // "Ngân Sách" — module con của "Tổng Hợp" (menu điều hướng gộp chung dropdown "Tổng Hợp", xem
   // #tongHopNavWrap), nhưng có màn hình/dữ liệu HOÀN TOÀN riêng (budgetPeriods/budgetTemplates/
   // budgetEntries, không chung gì với officeReqs) — quyền chi tiết budgetManage/budgetCreate/
   // budgetAggregate nằm ở khối 18 cây phân quyền.
   { key: 'budget', label: 'Ngân Sách', parent: 'office' },
+  { key: 'budgetPropose', label: 'Ngân Sách — Đề Xuất', parent: 'budget' },
+  { key: 'budgetApprove', label: 'Ngân Sách — Phê Duyệt', parent: 'budget' },
+  { key: 'budgetUsed', label: 'Ngân Sách — Sử Dụng', parent: 'budget' },
+  { key: 'budgetReport', label: 'Ngân Sách — Báo Cáo', parent: 'budget' },
   // "Thanh Toán" — module con của "Tổng Hợp" (cùng dropdown #tongHopNavWrap, sub-tab PAYMENT trong
   // setOfficeSubTab()), quyền thật nằm ở paymentManage/isMemberOfAnyExtraApprovalGroup(['PAYMENT'])/tự
   // tạo hồ sơ, xem canAccessPaymentModule(). TRƯỚC ĐÂY module này hoàn toàn VẮNG MẶT khỏi BUSINESS_MODULES
@@ -2145,16 +2173,26 @@ const BUSINESS_MODULES = [
   // con khác của Tổng Hợp (budget) đã có checkbox từ lâu. Thêm vào đây + wire hasModuleAccess('payment')
   // vào canAccessPaymentModule()/canManagePaymentRequestsClient() đóng đúng khoảng trống này.
   { key: 'payment', label: 'Thanh Toán', parent: 'office' },
+  { key: 'paymentCreateTab', label: 'Thanh Toán — Tạo Đề Nghị', parent: 'payment' },
+  { key: 'paymentManageTab', label: 'Thanh Toán — Quản Lý', parent: 'payment' },
+  { key: 'paymentApproveTab', label: 'Thanh Toán — Phê Duyệt', parent: 'payment' },
   // "Hỗ Trợ IT" — mở cho TOÀN BỘ nhân viên (giống Công Việc/Tài Liệu, admin có thể tắt riêng qua
   // checkbox này nếu cần) — 2 sub-module con (Phê Duyệt Giá/Hỗ Trợ Yêu Cầu) không cần khoá riêng ở
   // đây vì quyền thật nằm ở itPriceProposeCreate/itManage (khối 13 cây phân quyền), chỉ chặn AI
   // ĐƯỢC TẠO/XỬ LÝ chứ không chặn ai được VÀO module.
   { key: 'itSupport', label: 'Hỗ Trợ IT' },
+  { key: 'itSupportPrice', label: 'Hỗ Trợ IT — Phê Duyệt Giá', parent: 'itSupport' },
+  { key: 'itSupportTicket', label: 'Hỗ Trợ IT — Ticket', parent: 'itSupport' },
+  { key: 'itSupportRenewal', label: 'Hỗ Trợ IT — Gia Hạn Dịch Vụ', parent: 'itSupport' },
   // "Báo Cáo Định Kỳ" — quyền pReportManage/pReportAggregate/pReportEntryCreate nằm ở khối 13. Đây là
   // 1 QUY TRÌNH nghiệp vụ chủ động (nhân viên nộp báo cáo theo kỳ, có luồng tổng hợp/phê duyệt riêng)
   // — KHÁC "reports" bên dưới (màn tổng hợp SỐ LIỆU đọc từ 11 module khác, không có luồng nghiệp vụ
   // riêng của nó) — 2 module tuy tên gần giống nhau nhưng bản chất khác hẳn, không gộp/đổi chỗ.
   { key: 'periodicReport', label: 'Báo Cáo Định Kỳ' },
+  { key: 'periodicReportEntry', label: 'Báo Cáo Định Kỳ — Nhập Báo Cáo', parent: 'periodicReport' },
+  { key: 'periodicReportPeriods', label: 'Báo Cáo Định Kỳ — Quản Lý Kỳ', parent: 'periodicReport' },
+  { key: 'periodicReportAggregate', label: 'Báo Cáo Định Kỳ — Tổng Hợp', parent: 'periodicReport' },
+  { key: 'periodicReportPublished', label: 'Báo Cáo Định Kỳ — Đã Công Bố', parent: 'periodicReport' },
   // "Nhân Sự" — module TOP-LEVEL (không có parent), quyền thật là nhanSuManage (khối 21 cây phân
   // quyền), đúng khuôn "Đồng Phục"/"Giấy Phép": module không mở sẵn cho ai, không có quyền đó thì
   // không thấy/vào được. Từ khi tách "Cơ Cấu Tổ Chức" ra module con riêng (xem entry "orgChart" ngay
@@ -2171,6 +2209,9 @@ const BUSINESS_MODULES = [
   // nhanSuManage (khối 21, giữ nguyên 2 quyền cũ từng gác chung 1 tab trước đợt tách) — KHÔNG khai
   // vào MODULE_TAB_MAP vì module chỉ có đúng 1 tab, đúng khuôn "hr" ở trên.
   { key: 'orgChart', label: 'Cơ Cấu Tổ Chức', parent: 'hr' },
+  { key: 'orgChartTree', label: 'Cơ Cấu Tổ Chức — Cây', parent: 'orgChart' },
+  { key: 'orgChartDiagram', label: 'Cơ Cấu Tổ Chức — Sơ Đồ', parent: 'orgChart' },
+  { key: 'orgChartKpi', label: 'Cơ Cấu Tổ Chức — KPI', parent: 'orgChart' },
   // "Onboarding / Offboarding" v2 — module con nối vào chỗ trống đã chừa sẵn ở trên (xem git log "thêm
   // tab con Cơ Cấu Tổ Chức"). Thay hẳn bản v1 (2 sub-tab tạo yêu cầu cấp/khoá tài khoản qua Hỗ Trợ IT,
   // dùng 2 cờ hrOnboardingCreate/hrOffboardingCreate) bằng mô hình quy trình có checklist theo giai đoạn
@@ -2179,6 +2220,9 @@ const BUSINESS_MODULES = [
   // 4 cờ hrOnboardingManage/hrOffboardingManage/hrTaskTemplateManage/hrViewAll (khối 21) — xem
   // canAccessHrLifecycleModule().
   { key: 'hrLifecycle', label: 'Onboarding / Offboarding', parent: 'hr' },
+  { key: 'hrLifecycleList', label: 'Onboarding / Offboarding — Danh Sách Quy Trình', parent: 'hrLifecycle' },
+  { key: 'hrLifecycleMyTasks', label: 'Onboarding / Offboarding — Việc Của Tôi', parent: 'hrLifecycle' },
+  { key: 'hrLifecycleTemplates', label: 'Onboarding / Offboarding — Checklist Mẫu', parent: 'hrLifecycle' },
   // "Hồ Sơ Nhân Sự" — module con MỚI của "Nhân Sự" (Đợt 1/4 module Nhân Sự — Hồ Sơ → Hợp Đồng Lao Động
   // → Công & Phép, xem lib/employeeProfile.js đầu file phía server). KHÁC hẳn budget/vanHanh ("module
   // không mở sẵn cho ai") — module này TỰ MỞ cho MỌI nhân viên đã đăng nhập (tự xem/sửa hồ sơ CHÍNH
@@ -2186,6 +2230,9 @@ const BUSINESS_MODULES = [
   // bộ/sửa người khác) mới thật sự khoá riêng bằng hrProfileManage (đã enforce server-side, client chỉ
   // ẩn nút cho gọn UI).
   { key: 'hrProfile', label: 'Hồ Sơ Nhân Sự', parent: 'hr' },
+  { key: 'hrProfileMe', label: 'Hồ Sơ Nhân Sự — Hồ Sơ Của Tôi', parent: 'hrProfile' },
+  { key: 'hrProfileManageTab', label: 'Hồ Sơ Nhân Sự — Quản Lý', parent: 'hrProfile' },
+  { key: 'hrProfileOnboardingQueue', label: 'Hồ Sơ Nhân Sự — Hồ Sơ Onboarding', parent: 'hrProfile' },
   // "Hợp Đồng Lao Động" — module con MỚI của "Nhân Sự" (Đợt 2/4, xem lib/laborContract.js đầu file phía
   // server). KHÁC hrProfile ở trên (tự mở cho mọi người xem hồ sơ CHÍNH MÌNH) — module này CHỈ mở cho
   // người có quyền hrContractManage/admin (không có tầng "tự xem hợp đồng của mình" ở đợt này, đúng
@@ -2204,36 +2251,62 @@ const BUSINESS_MODULES = [
   // tự ẩn/hiện theo đúng quyền hrAttendanceManage/hrLeaveApprove/hrShiftRosterManage/hrShiftSwapApprove,
   // xem canAccessHrAttendanceModule().
   { key: 'hrAttendance', label: 'Công & Phép', parent: 'hr' },
+  { key: 'hrAttendanceSelf', label: 'Công & Phép — Của Tôi', parent: 'hrAttendance' },
+  { key: 'hrAttendanceApproveTab', label: 'Công & Phép — Duyệt Đơn', parent: 'hrAttendance' },
+  { key: 'hrAttendanceRosterTab', label: 'Công & Phép — Lịch Trực/Ca', parent: 'hrAttendance' },
+  { key: 'hrAttendanceManageTab', label: 'Công & Phép — Quản Lý', parent: 'hrAttendance' },
   // "Lương" — module con MỚI của "Nhân Sự" (Module Lương, xem lib/payroll.js đầu file phía server).
   // MỞ CHO MỌI NGƯỜI (cùng khuôn hrProfile/hrAttendance) vì mọi nhân viên đều tự xem phiếu lương CỦA
   // CHÍNH MÌNH — khối "Quản Lý Kỳ Lương" tự ẩn/hiện theo hrPayrollManage/hrPayrollApprove, xem
   // canAccessHrPayrollModule().
   { key: 'hrPayroll', label: 'Lương', parent: 'hr' },
+  { key: 'hrPayrollSelf', label: 'Lương — Phiếu Lương Của Tôi', parent: 'hrPayroll' },
+  { key: 'hrPayrollManageTab', label: 'Lương — Quản Lý Kỳ Lương', parent: 'hrPayroll' },
   // "Vận Hành" — module TOP-LEVEL mới, 3 luồng ĐỘC LẬP (không chung dữ liệu với officeReqs của "Tổng
   // Hợp"): quyền thật nằm ở operationOrderCreate/operationStoreOpenCreate/operationRepairCreate (khối
   // phân quyền riêng), đúng khuôn "Đồng Phục"/"Giấy Phép" — module không mở sẵn cho ai.
   { key: 'vanHanh', label: 'Vận Hành' },
-  // Mục 0 — CẤP 3 "tab con" của "Vận Hành" (4 tab lồng trong "🏬 Siêu Thị" KHÔNG có checkbox module-
-  // access riêng nào trước đây — ESTIMATE/EXECUTION/ACCEPTANCE/REPORT, xem setOperationStoreSubTab() ở
-  // module-vanhanh.js). ĐÂY LÀ FIX TRỰC TIẾP cho lỗi người dùng báo cáo 10/2026: user chỉ được cấp quyền
-  // "Công Việc" (EXECUTION)/"Nghiệm Thu" (ACCEPTANCE) — vốn còn nới quyền cho CẢ người chỉ được GÁN/CHỈ
-  // ĐỊNH trên 1 công việc cụ thể, không giữ quyền quản lý rộng nào — lại thấy được tab "📊 Báo Cáo" vì
-  // canAccessOperationSubTab() TRƯỚC ĐÂY gộp chung REPORT vào đúng 1 khối OR-logic với STORE (bất kỳ
-  // quyền nào trong 5 tab con là thấy luôn REPORT, xem lịch sử sửa tại canAccessOperationSubTab()).
+  // Mục 0 — CẤP 2 "tab con" (10/2026, đợt rà soát "không bỏ qua bất kỳ subtab nào"): 3 tab GỐC của Vận
+  // Hành (setVanHanhSubTab(), module-vanhanh.js: 📦 Đơn Hàng/🏬 Siêu Thị/Phê Duyệt Giá Bán Buôn).
+  { key: 'vanHanhOrders', label: 'Vận Hành — Đơn Hàng', parent: 'vanHanh' },
+  { key: 'vanHanhOrdersStore', label: 'Vận Hành — Đơn Hàng > Siêu Thị', parent: 'vanHanhOrders' },
+  { key: 'vanHanhOrdersHo', label: 'Vận Hành — Đơn Hàng > HO', parent: 'vanHanhOrders' },
+  { key: 'vanHanhOrdersReport', label: 'Vận Hành — Đơn Hàng > Báo Cáo', parent: 'vanHanhOrders' },
+  { key: 'vanHanhOrdersReceipt', label: 'Vận Hành — Đơn Hàng > Duyệt Nhập/Hủy', parent: 'vanHanhOrders' },
+  { key: 'vanHanhStoreGroup', label: 'Vận Hành — Siêu Thị', parent: 'vanHanh' },
+  { key: 'vanHanhItpriceTab', label: 'Vận Hành — Phê Duyệt Giá Bán Buôn', parent: 'vanHanh' },
+  // CẤP 3 "tab cháu" (4 tab lồng trong "🏬 Siêu Thị" KHÔNG có checkbox module-access riêng nào trước
+  // đây — ESTIMATE/EXECUTION/ACCEPTANCE/REPORT, xem setOperationStoreSubTab() ở module-vanhanh.js). ĐÂY
+  // LÀ FIX TRỰC TIẾP cho lỗi người dùng báo cáo 10/2026: user chỉ được cấp quyền "Công Việc" (EXECUTION)/
+  // "Nghiệm Thu" (ACCEPTANCE) — vốn còn nới quyền cho CẢ người chỉ được GÁN/CHỈ ĐỊNH trên 1 công việc cụ
+  // thể, không giữ quyền quản lý rộng nào — lại thấy được tab "📊 Báo Cáo" vì canAccessOperationSubTab()
+  // TRƯỚC ĐÂY gộp chung REPORT vào đúng 1 khối OR-logic với STORE (bất kỳ quyền nào trong 5 tab con là
+  // thấy luôn REPORT, xem lịch sử sửa tại canAccessOperationSubTab()).
   // 4 checkbox MỚI này là lớp gác CỨNG độc lập (AND thêm, không thay thế) — tắt riêng tab nào thì tab đó
   // ẩn hẳn với TẤT CẢ mọi người, kể cả người đang có quyền hành động (operationRecordManageAll...) cho
   // đúng tab đó, mặc định TRUE (giữ nguyên hành vi hiện tại, không ai bị ảnh hưởng nếu admin không chủ
-  // động tắt).
-  { key: 'vanHanhEstimate', label: 'Vận Hành — Siêu Thị > Dự Toán', parent: 'vanHanh' },
-  { key: 'vanHanhExecution', label: 'Vận Hành — Siêu Thị > Công Việc', parent: 'vanHanh' },
-  { key: 'vanHanhAcceptance', label: 'Vận Hành — Siêu Thị > Nghiệm Thu', parent: 'vanHanh' },
-  { key: 'vanHanhReport', label: 'Vận Hành — Siêu Thị > Báo Cáo', parent: 'vanHanh' },
+  // động tắt). Parent trỏ "vanHanhStoreGroup" (không phải "vanHanh" trực tiếp nữa) để khớp đúng cây 3
+  // tầng thật sự của giao diện (Vận Hành -> Siêu Thị -> 4 tab cháu).
+  { key: 'vanHanhEstimate', label: 'Vận Hành — Siêu Thị > Dự Toán', parent: 'vanHanhStoreGroup' },
+  { key: 'vanHanhExecution', label: 'Vận Hành — Siêu Thị > Công Việc', parent: 'vanHanhStoreGroup' },
+  { key: 'vanHanhAcceptance', label: 'Vận Hành — Siêu Thị > Nghiệm Thu', parent: 'vanHanhStoreGroup' },
+  { key: 'vanHanhReport', label: 'Vận Hành — Siêu Thị > Báo Cáo', parent: 'vanHanhStoreGroup' },
+  // 2 tab cháu còn lại của "🏬 Siêu Thị" (Mở Mới/Sửa Chữa) — thêm nốt trong đợt "không bỏ qua bất kỳ
+  // subtab nào" (10/2026) để đủ cả 6/6 tab con, không riêng 4 tab đã có trước đó.
+  { key: 'vanHanhStoreOpen', label: 'Vận Hành — Siêu Thị > Mở Mới', parent: 'vanHanhStoreGroup' },
+  { key: 'vanHanhRepair', label: 'Vận Hành — Siêu Thị > Sửa Chữa', parent: 'vanHanhStoreGroup' },
   // "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL mới, đúng khuôn "Đồng Phục"/"Giấy Phép"/"Vận Hành":
   // module không mở sẵn cho ai, quyền thật nằm ở checklistTemplateManage/checklistReportView/
   // checklistAuditScope (khối 23 cây phân quyền) HOẶC tự động đủ điều kiện nếu posType===STORE (tự làm
   // checklist "Tự Đánh Giá" của đúng siêu thị mình) — xem canAccessChecklistModule() + lib/checklist.js
   // phía server (cùng logic, PHẢI sửa cả 2 bên nếu đổi).
   { key: 'checklist', label: 'Checklist Đánh Giá Siêu Thị' },
+  { key: 'checklistConfig', label: 'Checklist — Cấu Hình Mẫu', parent: 'checklist' },
+  { key: 'checklistExecute', label: 'Checklist — Thực Hiện', parent: 'checklist' },
+  { key: 'checklistResult', label: 'Checklist — Kết Quả', parent: 'checklist' },
+  { key: 'checklistReport', label: 'Checklist — Báo Cáo', parent: 'checklist' },
+  { key: 'checklistReportGeneral', label: 'Checklist — Báo Cáo > Tổng Hợp', parent: 'checklistReport' },
+  { key: 'checklistReportVsattp', label: 'Checklist — Báo Cáo > VSATTP', parent: 'checklistReport' },
   // "Mua Hàng" — module TOP-LEVEL mới (v23.30), đúng khuôn "Checklist Đánh Giá Siêu Thị"/"Vận Hành":
   // module không mở sẵn cho ai, quyền thật nằm ở rebateTermManage/rebateTermActivate/rebateReconcile/
   // rebateApprove/rebateViewReport (khối 25 cây phân quyền, xem lib/vendorRebate.js phía server — PHẢI
@@ -2246,6 +2319,12 @@ const BUSINESS_MODULES = [
   // module con "Báo Cáo" nội bộ ở đây, đúng nguyên tắc đã chốt ở checklist "xem chéo bc không phân quyền
   // vào module nghiệp vụ").
   { key: 'muaHang', label: 'Mua Hàng' },
+  { key: 'muaHangBas', label: 'Mua Hàng — BAS', parent: 'muaHang' },
+  { key: 'muaHangBasVendor', label: 'Mua Hàng — BAS > Nhà Cung Cấp', parent: 'muaHangBas' },
+  { key: 'muaHangBasTerm', label: 'Mua Hàng — BAS > Điều Khoản', parent: 'muaHangBas' },
+  { key: 'muaHangBasSync', label: 'Mua Hàng — BAS > Đồng Bộ DSmart', parent: 'muaHangBas' },
+  { key: 'muaHangReport', label: 'Mua Hàng — Báo Cáo', parent: 'muaHang' },
+  { key: 'muaHangItprice', label: 'Mua Hàng — Phê Duyệt Giá Bán Lẻ', parent: 'muaHang' },
   // "Nghiệp Vụ" — màn tài liệu tham khảo TRỰC QUAN (sơ đồ quy trình + diễn giải) cho toàn bộ module
   // nghiệp vụ, KHÔNG tạo/lưu hồ sơ riêng (không có form nhập liệu, không cần entry Báo Cáo/Biểu Mẫu
   // theo quy ước module-mới ở CLAUDE.md). Mở sẵn cho MỌI tài khoản đã đăng nhập (giống 'doc'/'task') —
@@ -3860,6 +3939,10 @@ function getOfficeWorkflowMap(subType) {
 function canAccessOfficeSubTab(user, subType) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): checkbox độc lập officeMuaBan/officeSuaChua
+  // — admin tắt riêng tab nào thì ẩn hẳn với mọi người (kể cả extra-approver bên dưới).
+  if (subType === 'MUA_BAN' && !hasModuleAccess(user, 'officeMuaBan')) return false;
+  if (subType === 'SUA_CHUA' && !hasModuleAccess(user, 'officeSuaChua')) return false;
   // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): 2 dòng hard-block dưới đây chặn đứng người
   // CHỈ thuộc "Nhóm Phê Duyệt Cuối" OFFICE_BUY/OFFICE_FIX (không có quyền phẳng officeBuy/officeFix) —
   // họ vẫn cần vào được sub-tab tương ứng để xem lại hồ sơ đã xử lý, mirror canAccessCarModule().
@@ -9302,8 +9385,9 @@ function canAccessOperationSubTab(user, kind) {
   // sub-tab được (chỉ vào được gián tiếp qua nút "🔍 Xem" ở Approval Hub).
   if (kind === 'ORDER') return !!user.perms?.operationOrderCreate
     || isMemberOfAnyExtraApprovalGroup(user, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO']);
-  if (kind === 'STORE_OPEN') return !!user.perms?.operationStoreOpenCreate;
-  if (kind === 'REPAIR') return !!user.perms?.operationRepairCreate;
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): AND thêm checkbox vanHanhStoreOpen/vanHanhRepair.
+  if (kind === 'STORE_OPEN') return hasModuleAccess(user, 'vanHanhStoreOpen') && !!user.perms?.operationStoreOpenCreate;
+  if (kind === 'REPAIR') return hasModuleAccess(user, 'vanHanhRepair') && !!user.perms?.operationRepairCreate;
   // ESTIMATE/EXECUTION/ACCEPTANCE: 4 quyền tách riêng cũ (operationEstimateCreate/operationExecutionManage/
   // operationAcceptanceManage/operationUseConfirm) đã RÚT GỌN — gộp vào luật "toàn quyền quản lý hồ sơ"
   // chung, xem canManageOperationRecordClient() (module-vanhanh.js). Ở CẤP TAB (chưa biết đang xem hồ sơ

@@ -955,15 +955,19 @@ function renderRecruitment() {
   document.getElementById('recruitmentJobForm').classList.toggle('hidden', !canManage);
   document.getElementById('recruitmentJobNoPermNote').classList.toggle('hidden', canManage);
   renderDynamicInputsForModule('RECRUITMENT_JOB', 'dynamicFieldsContainer_RECRUITMENT_JOB');
-  if (!canManage && activeRecruitmentTab === 'MANAGE') { activeRecruitmentTab = 'JOBS'; }
+  // Mục 0 (10/2026): AND thêm checkbox internalRecruitmentJobs/MyReferrals/Manage.
+  const permMap = { JOBS: 'internalRecruitmentJobs', MY_REFERRALS: 'internalRecruitmentMyReferrals', MANAGE: 'internalRecruitmentManage' };
+  const allowedMap = { JOBS: hasModuleAccess(currentUser, permMap.JOBS), MY_REFERRALS: hasModuleAccess(currentUser, permMap.MY_REFERRALS), MANAGE: canManage && hasModuleAccess(currentUser, permMap.MANAGE) };
+  if (!allowedMap[activeRecruitmentTab]) {
+    activeRecruitmentTab = Object.keys(allowedMap).find(k => allowedMap[k]) || activeRecruitmentTab;
+  }
   // Đồng bộ class active/hidden của cả 3 nút tab con — "Quản Lý Ứng Viên" chỉ HR mới thấy nút.
   const btnMap = { JOBS: 'btnRecruitmentJobs', MY_REFERRALS: 'btnRecruitmentMyReferrals', MANAGE: 'btnRecruitmentManage' };
   Object.entries(btnMap).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
     if (!btn) return;
     const active = key === activeRecruitmentTab;
-    const isManage = key === 'MANAGE';
-    btn.className = (active ? 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700') + (isManage && !canManage ? ' hidden' : '');
+    btn.className = (active ? 'px-3 py-1 rounded text-xs font-bold bg-amber-700 text-white' : 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700') + (allowedMap[key] ? '' : ' hidden');
   });
   document.getElementById('recruitmentJobsPanel').classList.toggle('hidden', activeRecruitmentTab !== 'JOBS');
   document.getElementById('recruitmentMyReferralsPanel').classList.toggle('hidden', activeRecruitmentTab !== 'MY_REFERRALS');

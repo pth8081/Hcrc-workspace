@@ -59,12 +59,21 @@ function previewHacSwapWorkflow() {
 function hacMyWorkModel() { return currentUser?.posType === 'STORE' ? 'SHIFT_BASED' : 'OFFICE_HOURS'; }
 
 function renderHrAttendanceModule() {
-  document.getElementById('btnHacViewApprove').classList.toggle('hidden', !canApproveHacLeave(currentUser));
-  document.getElementById('btnHacViewRoster').classList.toggle('hidden', !(canManageHacRoster(currentUser) || canApproveHacSwap(currentUser)));
-  document.getElementById('btnHacViewManage').classList.toggle('hidden', !canManageHacAttendance(currentUser));
-  if (activeHrAttendanceView === 'APPROVE' && !canApproveHacLeave(currentUser)) activeHrAttendanceView = 'SELF';
-  if (activeHrAttendanceView === 'ROSTER' && !(canManageHacRoster(currentUser) || canApproveHacSwap(currentUser))) activeHrAttendanceView = 'SELF';
-  if (activeHrAttendanceView === 'MANAGE' && !canManageHacAttendance(currentUser)) activeHrAttendanceView = 'SELF';
+  // Mục 0 (10/2026): AND thêm checkbox hrAttendanceSelf/ApproveTab/RosterTab/ManageTab.
+  const canSelf = hasModuleAccess(currentUser, 'hrAttendanceSelf');
+  const canApprove = hasModuleAccess(currentUser, 'hrAttendanceApproveTab') && canApproveHacLeave(currentUser);
+  const canRoster = hasModuleAccess(currentUser, 'hrAttendanceRosterTab') && (canManageHacRoster(currentUser) || canApproveHacSwap(currentUser));
+  const canManageView = hasModuleAccess(currentUser, 'hrAttendanceManageTab') && canManageHacAttendance(currentUser);
+  document.getElementById('btnHacViewSelf').classList.toggle('hidden', !canSelf);
+  document.getElementById('btnHacViewApprove').classList.toggle('hidden', !canApprove);
+  document.getElementById('btnHacViewRoster').classList.toggle('hidden', !canRoster);
+  document.getElementById('btnHacViewManage').classList.toggle('hidden', !canManageView);
+  const hacViewOrder = [['SELF', canSelf], ['APPROVE', canApprove], ['ROSTER', canRoster], ['MANAGE', canManageView]];
+  const curHacView = hacViewOrder.find(([v]) => v === activeHrAttendanceView);
+  if (!curHacView || !curHacView[1]) {
+    const fallback = hacViewOrder.find(([, ok]) => ok);
+    activeHrAttendanceView = fallback ? fallback[0] : activeHrAttendanceView;
+  }
   setHrAttendanceView(activeHrAttendanceView);
 }
 

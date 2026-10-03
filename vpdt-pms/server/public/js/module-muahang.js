@@ -73,14 +73,23 @@ async function renderPurchasingModule() {
 }
 
 function setPurchasingSubTab(tab) {
+  // Mục 0 (10/2026): AND thêm checkbox muaHangBas/muaHangReport/muaHangItprice.
+  const mhKeyMap = { BAS: 'muaHangBas', REPORT: 'muaHangReport', ITPRICE: 'muaHangItprice' };
+  const mhTabOrder = ['BAS', 'REPORT', 'ITPRICE'].map(t => [t, hasModuleAccess(currentUser, mhKeyMap[t])]);
+  const curMhTab = mhTabOrder.find(([k]) => k === tab);
+  if (!curMhTab || !curMhTab[1]) {
+    const fallback = mhTabOrder.find(([, ok]) => ok);
+    tab = fallback ? fallback[0] : tab;
+  }
   mhSubTab = tab;
   // "ITPRICE" (Phê Duyệt Giá Bán Lẻ, 10/2026) thêm vào chung vòng lặp ẩn/hiện panel + tô màu nút —
   // #mhSubItprice khớp đúng khuôn dựng id `mhSub${Titlecase}` (ITPRICE -> "Itprice") của 2 mục cũ.
-  ['BAS', 'REPORT', 'ITPRICE'].forEach(t => {
+  mhTabOrder.forEach(([t, allowed]) => {
     const wrap = document.getElementById(`mhSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
     if (wrap) wrap.classList.toggle('hidden', t !== tab);
     const btn = document.getElementById(`btnMhSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
     if (btn) {
+      btn.classList.toggle('hidden', !allowed);
       btn.classList.toggle('bg-emerald-700', t === tab);
       btn.classList.toggle('text-white', t === tab);
       btn.classList.toggle('bg-gray-200', t !== tab);
@@ -107,12 +116,21 @@ function renderMhBasTab() {
 }
 
 function setMhBasSubTab(tab) {
+  // Mục 0 (10/2026): AND thêm checkbox muaHangBasVendor/Term/Sync.
+  const mhBasKeyMap = { VENDOR: 'muaHangBasVendor', TERM: 'muaHangBasTerm', SYNC: 'muaHangBasSync' };
+  const mhBasTabOrder = ['VENDOR', 'TERM', 'SYNC'].map(t => [t, hasModuleAccess(currentUser, mhBasKeyMap[t])]);
+  const curMhBasTab = mhBasTabOrder.find(([k]) => k === tab);
+  if (!curMhBasTab || !curMhBasTab[1]) {
+    const fallback = mhBasTabOrder.find(([, ok]) => ok);
+    tab = fallback ? fallback[0] : tab;
+  }
   mhBasSubTab = tab;
-  ['VENDOR', 'TERM', 'SYNC'].forEach(t => {
+  mhBasTabOrder.forEach(([t, allowed]) => {
     const panelId = t === 'VENDOR' ? 'mhBasSubVendor' : t === 'TERM' ? 'mhBasSubTerm' : 'mhBasSubSync';
     document.getElementById(panelId).classList.toggle('hidden', t !== tab);
     const btnId = t === 'VENDOR' ? 'btnMhBasSubVendor' : t === 'TERM' ? 'btnMhBasSubTerm' : 'btnMhBasSubSync';
     const btn = document.getElementById(btnId);
+    btn.classList.toggle('hidden', !allowed);
     btn.classList.toggle('bg-emerald-700', t === tab);
     btn.classList.toggle('text-white', t === tab);
     btn.classList.toggle('bg-gray-200', t !== tab);

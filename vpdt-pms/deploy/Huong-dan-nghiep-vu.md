@@ -4157,6 +4157,34 @@ tab "📊 Báo Cáo" (màn tổng hợp MỌI công việc) — đã tách riên
 tab Báo Cáo (chỉ người có quyền quản lý hồ sơ rộng hoặc quyền xem báo cáo
 riêng mới thấy), không còn dựa vào việc chỉ được gán 1 công việc nữa.
 
+**Mở rộng tiếp xuống TẤT CẢ tab/subtab còn thiếu (10/2026, v24.70)** — khối
+0 giờ phủ đủ xuống tab/subtab cấp sâu nhất cho toàn bộ module còn lại trên
+hệ thống, không riêng 3 khu vực nêu trên: Hợp Đồng (Phê Duyệt/Quản Lý HĐ),
+Đặt Phòng Họp (Đăng Ký/Lịch/Báo Cáo), Đăng Ký Xe (Đăng Ký/Lịch Xe/Lái Xe/
+Báo Cáo), Đồng Phục (Kỳ Cấp Phát/Xác Nhận-Cấp Phát/Tồn Kho/Dashboard), Tổng
+Hợp (Mua Bán/Sửa Chữa, cộng Ngân Sách: Đề Xuất/Phê Duyệt/Sử Dụng/Báo Cáo và
+Thanh Toán: Tạo Đề Nghị/Quản Lý/Phê Duyệt), Báo Cáo Định Kỳ (Nhập/Quản Lý
+Kỳ/Tổng Hợp/Đã Công Bố), Checklist (Cấu Hình Mẫu/Thực Hiện/Kết Quả/Báo Cáo,
+kể cả 2 tab cháu Tổng Hợp/VSATTP trong Báo Cáo), Cơ Cấu Tổ Chức (Cây/Sơ Đồ/
+KPI), Văn Phòng Phẩm (Đăng Ký/Kỳ/Báo Cáo), Hỗ Trợ IT (Phê Duyệt Giá/Ticket/
+Gia Hạn Dịch Vụ), Mua Hàng (BAS — gồm 3 tab cháu Nhà Cung Cấp/Điều Khoản/
+Đồng Bộ DSmart — /Báo Cáo/Phê Duyệt Giá Bán Lẻ), Tuyển Dụng (Tin Tuyển
+Dụng/Giới Thiệu Của Tôi/Quản Lý Ứng Viên), Công & Phép (Của Tôi/Duyệt Đơn/
+Lịch Trực-Ca/Quản Lý), Onboarding/Offboarding (Danh Sách Quy Trình/Việc Của
+Tôi/Checklist Mẫu), Hồ Sơ Nhân Sự (Hồ Sơ Của Tôi/Quản Lý/Hồ Sơ Onboarding),
+Lương (Phiếu Lương Của Tôi/Quản Lý Kỳ Lương), và nốt các tab còn lại của
+Vận Hành (Đơn Hàng — Siêu Thị/HO/Báo Cáo/Duyệt Nhập-Hủy; "🏬 Siêu Thị" cộng
+2 tab Mở Mới/Sửa Chữa còn thiếu; "💰 Phê Duyệt Giá Bán Buôn"). Cùng nguyên
+tắc gác cứng + mặc định bật như trên — không admin nào cần làm gì thêm trừ
+khi muốn chủ động tắt riêng 1 tab cho ai đó.
+
+Không thêm checkbox cho: màn cài đặt cá nhân tự phục vụ (Thông tin/Đổi mật
+khẩu/PIN/WebAuthn/Đồng phục của tôi — không phải module nghiệp vụ), các màn
+cấu hình CHỈ admin thấy trong "⚙️ Hệ Thống" (Quản Trị/Nhật Ký/Nghiệp Vụ Nâng
+Cao/Cấu Hình Nghiệp Vụ — admin luôn bypass khối 0 nên gác thêm vô nghĩa), và
+nút chuyển Bán Lẻ/Bán Buôn ở form tạo Phê Duyệt Giá (đó là chế độ nhập form,
+không phải tab điều hướng nội dung).
+
 **Chọn siêu thị đổi sang ô tìm-kiếm-gõ-chọn (10/2026)** — riêng 2 khối "22.
 Vận Hành" (mục "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị") và "23. Checklist Đánh
 Giá Siêu Thị" (mục "Phạm Vi Kiểm Soát"), phạm vi trước đây là lưới checkbox

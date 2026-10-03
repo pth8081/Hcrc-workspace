@@ -70,6 +70,14 @@ const OPERATION_KIND_META = {
 let activeOperationOrderSubTab = 'STORE';
 const OPERATION_ORDER_SUBTAB_LABELS = { STORE: '🏬 Đặt Hàng Tại Siêu Thị', HO: '🏢 Đặt Hàng Tại HO' };
 function setOperationOrderSubTab(tab) {
+  // Mục 0 (10/2026): AND thêm checkbox vanHanhOrdersStore/Ho/Report/Receipt.
+  const opOrderKeyMap = { STORE: 'vanHanhOrdersStore', HO: 'vanHanhOrdersHo', REPORT: 'vanHanhOrdersReport', RECEIPT: 'vanHanhOrdersReceipt' };
+  const opOrderTabOrder = ['STORE', 'HO', 'REPORT', 'RECEIPT'].map(k => [k, hasModuleAccess(currentUser, opOrderKeyMap[k])]);
+  const curOpOrderTab = opOrderTabOrder.find(([k]) => k === tab);
+  if (!curOpOrderTab || !curOpOrderTab[1]) {
+    const fallback = opOrderTabOrder.find(([, ok]) => ok);
+    tab = fallback ? fallback[0] : tab;
+  }
   activeOperationOrderSubTab = tab;
   const isList = tab === 'STORE' || tab === 'HO';
   document.getElementById('opOrderListPanel').classList.toggle('hidden', !isList);
@@ -79,10 +87,10 @@ function setOperationOrderSubTab(tab) {
   // đúng orderLocationType đang chọn, còn tab này CHỈ hiện đúng AWAITING_RECEIPT mà NGƯỜI DÙNG HIỆN TẠI
   // được quyền operationOrderReceiptManage xử lý, gộp CẢ HO lẫn Siêu Thị trong CÙNG 1 bảng).
   document.getElementById('opOrderReceiptPanel').classList.toggle('hidden', tab !== 'RECEIPT');
-  ['STORE', 'HO', 'REPORT', 'RECEIPT'].forEach(key => {
+  opOrderTabOrder.forEach(([key, allowed]) => {
     const btn = document.getElementById(`btnOpOrderSub${key}`);
     if (!btn) return;
-    btn.className = `px-3 py-1 rounded text-xs font-bold ${key === tab ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+    btn.className = `px-3 py-1 rounded text-xs font-bold ${key === tab ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}` + (allowed ? '' : ' hidden');
   });
   if (isList) {
     const badge = document.getElementById('operationOrderFormSubTabBadge');
@@ -111,6 +119,14 @@ let activeVanHanhSubTab = 'ORDERS';
 const VAN_HANH_SUBTAB_TO_KIND = { ORDERS: 'operationOrders' };
 
 function setVanHanhSubTab(subTab) {
+  // Mục 0 (10/2026): AND thêm checkbox vanHanhOrders/vanHanhStoreGroup/vanHanhItpriceTab.
+  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab' };
+  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
+  const curVhTab = vhTabOrder.find(([k]) => k === subTab);
+  if (!curVhTab || !curVhTab[1]) {
+    const fallback = vhTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : subTab;
+  }
   activeVanHanhSubTab = subTab;
   const tabs = [
     ['ORDERS', 'vanHanhOrdersWrap', 'btnVanHanhSubOrders'],
@@ -118,11 +134,12 @@ function setVanHanhSubTab(subTab) {
     // "Phê Duyệt Giá Bán Buôn" (10/2026) — chỉ form tạo đề xuất, xem chú thích ở vanHanhItPriceWrap.
     ['ITPRICE', 'vanHanhItPriceWrap', 'btnVanHanhSubItPrice']
   ];
+  const vhAllowedMap = Object.fromEntries(vhTabOrder);
   tabs.forEach(([key, wrapId, btnId]) => {
     const isActive = key === subTab;
     document.getElementById(wrapId).classList.toggle('hidden', !isActive);
     const btn = document.getElementById(btnId);
-    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}`;
+    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}` + (vhAllowedMap[key] ? '' : ' hidden');
   });
   const kind = VAN_HANH_SUBTAB_TO_KIND[subTab];
   if (kind) renderOperationList(kind);
@@ -156,13 +173,19 @@ function setVanHanhSubTab(subTab) {
 // lười (Hạ tầng: nạp module theo cụm, đợt 7).
 function setOperationStoreSubTab(tab) {
   activeOperationStoreSubTab = tab;
+  // LỖI ĐÃ VÁ (phát hiện trong đợt rà soát Mục 0 "không bỏ qua bất kỳ subtab nào", 10/2026): cột thứ 3
+  // dưới đây là permKind truyền vào canAccessOperationSubTab() — tabKey 'OPEN' KHÔNG khớp permKind thật
+  // của hàm đó ('STORE_OPEN', xem core.js), nên trước đây canAccessOperationSubTab(user,'OPEN') luôn rơi
+  // vào nhánh return false cuối hàm → nút "Mở Mới" bị ẩn với TẤT CẢ mọi người (kể cả người có đủ quyền
+  // operationStoreOpenCreate), từ khi gộp ẩn/hiện+tô màu vào 1 dòng className (v24.69). Thêm cột permKind
+  // riêng (giống đúng khuôn updateOperationStoreSubTabVisibility() ngay phía trên) để tránh lặp lại.
   const tabs = [
-    ['OPEN', 'vanHanhStoreOpenWrap', 'btnOpStoreSubOpen'],
-    ['REPAIR', 'vanHanhRepairsWrap', 'btnOpStoreSubRepair'],
-    ['ESTIMATE', 'opStoreEstimatePanel', 'btnOpStoreSubEstimate'],
-    ['EXECUTION', 'opStoreExecutionPanel', 'btnOpStoreSubExecution'],
-    ['ACCEPTANCE', 'opStoreAcceptancePanel', 'btnOpStoreSubAcceptance'],
-    ['REPORT', 'opStoreReportPanel', 'btnOpStoreSubReport']
+    ['OPEN', 'vanHanhStoreOpenWrap', 'btnOpStoreSubOpen', 'STORE_OPEN'],
+    ['REPAIR', 'vanHanhRepairsWrap', 'btnOpStoreSubRepair', 'REPAIR'],
+    ['ESTIMATE', 'opStoreEstimatePanel', 'btnOpStoreSubEstimate', 'ESTIMATE'],
+    ['EXECUTION', 'opStoreExecutionPanel', 'btnOpStoreSubExecution', 'EXECUTION'],
+    ['ACCEPTANCE', 'opStoreAcceptancePanel', 'btnOpStoreSubAcceptance', 'ACCEPTANCE'],
+    ['REPORT', 'opStoreReportPanel', 'btnOpStoreSubReport', 'REPORT']
   ];
   // LỖI ĐÃ VÁ (10/2026, phát hiện khi chụp ảnh demo đợt Mục 0): trước đây dòng gán btn.className bên
   // dưới GHI ĐÈ TOÀN BỘ class, xoá mất class "hidden" mà updateOperationStoreSubTabVisibility() vừa
@@ -171,11 +194,11 @@ function setOperationStoreSubTab(tab) {
   // vô hiệu hoá hoàn toàn phần ẩn/hiện mỗi khi người dùng thực sự mở tab "🏬 Siêu Thị". Tính lại ĐÚNG
   // NGAY TẠI ĐÂY (không phụ thuộc thứ tự gọi 2 hàm) — tự đủ, không cần updateOperationStoreSubTabVisibility()
   // chạy trước nữa, nhưng vẫn giữ hàm đó (còn dùng để tự nhảy sang tab con đầu tiên còn thấy được).
-  tabs.forEach(([key, wrapId, btnId]) => {
+  tabs.forEach(([key, wrapId, btnId, permKind]) => {
     const isActive = key === tab;
     document.getElementById(wrapId).classList.toggle('hidden', !isActive);
     const btn = document.getElementById(btnId);
-    const visible = canAccessOperationSubTab(currentUser, key);
+    const visible = canAccessOperationSubTab(currentUser, permKind);
     btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-emerald-700 text-white' : 'bg-gray-200 text-gray-700'}` + (visible ? '' : ' hidden');
   });
 

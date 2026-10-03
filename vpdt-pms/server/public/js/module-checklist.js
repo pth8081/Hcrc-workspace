@@ -49,10 +49,12 @@ function setChecklistSubTab(tab) {
 // Ẩn/hiện 4 nút tab theo đúng quyền — gọi mỗi lần vào module (switchTab('checklist')) và sau khi
 // finishLogin() đã có currentUser đầy đủ.
 function updateChecklistSubTabVisibility() {
-  const canManage = canManageChecklistTemplatesClient(currentUser);
-  const canReport = canViewChecklistReportsClient(currentUser);
-  const canExecute = isEligibleForStoreSelfClient(currentUser) || hasChecklistAuditScopeClient(currentUser) || canManage;
-  const canSeeResult = currentUser?.posType === 'STORE' && !!currentUser?.dept;
+  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): AND thêm checkbox checklistConfig/Execute/
+  // Result/Report vào đúng điều kiện đã có.
+  const canManage = canManageChecklistTemplatesClient(currentUser) && hasModuleAccess(currentUser, 'checklistConfig');
+  const canReport = canViewChecklistReportsClient(currentUser) && hasModuleAccess(currentUser, 'checklistReport');
+  const canExecute = (isEligibleForStoreSelfClient(currentUser) || hasChecklistAuditScopeClient(currentUser) || canManageChecklistTemplatesClient(currentUser)) && hasModuleAccess(currentUser, 'checklistExecute');
+  const canSeeResult = currentUser?.posType === 'STORE' && !!currentUser?.dept && hasModuleAccess(currentUser, 'checklistResult');
   document.getElementById('btnChecklistSubConfig').classList.toggle('hidden', !canManage);
   document.getElementById('btnChecklistSubExecute').classList.toggle('hidden', !canExecute);
   document.getElementById('btnChecklistSubResult').classList.toggle('hidden', !canSeeResult);
@@ -1091,13 +1093,18 @@ async function submitChecklistStoreResponse(submissionId) {
 // xem được hết không cần tách"), không có cờ quyền riêng nào khác cho 2 khối này.
 let checklistReportActiveSubTab = 'GENERAL';
 function setChecklistReportSubTab(tab) {
+  // Mục 0 (10/2026): checkbox độc lập checklistReportGeneral/checklistReportVsattp.
+  const canGeneral = hasModuleAccess(currentUser, 'checklistReportGeneral');
+  const canVsattp = hasModuleAccess(currentUser, 'checklistReportVsattp');
+  if (tab === 'GENERAL' && !canGeneral) tab = canVsattp ? 'VSATTP' : 'GENERAL';
+  if (tab === 'VSATTP' && !canVsattp) tab = canGeneral ? 'GENERAL' : 'VSATTP';
   checklistReportActiveSubTab = tab;
   document.getElementById('checklistReportGeneralPanel').classList.toggle('hidden', tab !== 'GENERAL');
   document.getElementById('checklistReportVsattpPanel').classList.toggle('hidden', tab !== 'VSATTP');
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-rose-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
-  document.getElementById('btnChecklistReportSubGeneral').className = tab === 'GENERAL' ? activeCls : inactiveCls;
-  document.getElementById('btnChecklistReportSubVsattp').className = tab === 'VSATTP' ? activeCls : inactiveCls;
+  document.getElementById('btnChecklistReportSubGeneral').className = (tab === 'GENERAL' ? activeCls : inactiveCls) + (canGeneral ? '' : ' hidden');
+  document.getElementById('btnChecklistReportSubVsattp').className = (tab === 'VSATTP' ? activeCls : inactiveCls) + (canVsattp ? '' : ' hidden');
   if (tab === 'VSATTP') renderChecklistVsattpDashboard();
 }
 function renderChecklistReportTab() {
