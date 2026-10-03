@@ -88,6 +88,7 @@ const NAV_POINTS = [
   { label: 'Hỗ Trợ IT > Phê Duyệt Giá', toggle: '#btnItSupportTab', click: 'button[data-op-seq*="setItSupportSubTab(PRICE)"]', section: 'itSupportSection' },
   { label: 'Hỗ Trợ IT > Hỗ Trợ Yêu Cầu', toggle: '#btnItSupportTab', click: 'button[data-op-seq*="setItSupportSubTab(TICKET)"]', section: 'itSupportSection' },
   { label: 'Hỗ Trợ IT > Gia Hạn Dịch Vụ', toggle: '#btnItSupportTab', click: '#btnItSupportNavRenewal', section: 'itSupportSection' },
+  { label: 'Hệ Thống > Cấu Hình Nghiệp Vụ', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(BIZCONFIG)"]', section: 'systemSection' },
   { label: 'Hệ Thống > Quản Trị', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(ADMIN)"]', section: 'systemSection' },
   { label: 'Hệ Thống > Biểu Mẫu', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(FORM)"]', section: 'systemSection' },
   { label: 'Hệ Thống > Quy Trình & Phê Duyệt', toggle: '#btnSystemTab', click: 'button[data-op-seq*="setSystemSubTab(WORKFLOW)"]', section: 'systemSection' },
@@ -99,6 +100,7 @@ const NAV_POINTS = [
 const DEEP_LABELS = new Set([
   'Nghiệp Vụ',
   'Vận Hành > Checklist Đánh Giá',
+  'Hệ Thống > Cấu Hình Nghiệp Vụ',
   'Tổng Hợp > Ngân Sách',
   'Hành Chính > Đăng ký xe',
   'Hành Chính > Văn phòng phẩm',
@@ -134,8 +136,14 @@ const MAX_CLICKS_PER_TAB = 10;
 const EXPECTED_ROW_LEVEL = [
   { collection: 'carRegs', op: 'runCarAction', textPattern: /(Xem|Chi tiết)/, moduleLabel: 'Hành Chính > Đăng ký xe' },
   { collection: 'budgetLines', op: 'editBudgetLineDraft', textPattern: null, moduleLabel: 'Tổng Hợp > Ngân Sách' },
-  { collection: 'checklistTemplates (Xem)', op: 'viewChecklistTemplate', textPattern: /Xem/, moduleLabel: 'Vận Hành > Checklist Đánh Giá' },
-  { collection: 'checklistTemplates (Sửa)', op: 'editViaCloneChecklistTemplate', textPattern: /Sửa/, moduleLabel: 'Vận Hành > Checklist Đánh Giá' },
+  // LỖI ĐÃ VÁ (11/2026): moduleLabel 2 dòng dưới trước đây vẫn trỏ "Vận Hành > Checklist Đánh Giá" —
+  // nút viewChecklistTemplate/editViaCloneChecklistTemplate đã dời hẳn sang Hệ Thống > ⚙️ Cấu Hình
+  // Nghiệp Vụ > ✅ Cấu Hình Checklist (module-admin-checklistconfig.js, đợt "Làm gọn phân quyền
+  // Checklist") nên bài test này không còn tìm thấy nút ở module cũ (tab Checklist của người dùng
+  // thường giờ chỉ còn Thực Hiện/Kết Quả/Báo Cáo) — không phải lỗi app, chỉ bài test chưa cập nhật theo
+  // vị trí mới.
+  { collection: 'checklistTemplates (Xem)', op: 'viewChecklistTemplate', textPattern: /Xem/, moduleLabel: 'Hệ Thống > Cấu Hình Nghiệp Vụ' },
+  { collection: 'checklistTemplates (Sửa)', op: 'editViaCloneChecklistTemplate', textPattern: /Sửa/, moduleLabel: 'Hệ Thống > Cấu Hình Nghiệp Vụ' },
   { collection: 'licenses', op: 'runLicenseAction', textPattern: /Chi tiết/, moduleLabel: 'Hành Chính > Giấy phép' },
   { collection: 'vppRegistrations', op: 'openVppRegModal', textPattern: /(Xem|Chi tiết)/, moduleLabel: 'Hành Chính > Văn phòng phẩm' },
   { collection: 'itPriceApprovals', op: 'openItPriceModal', textPattern: /Chi tiết/, moduleLabel: 'Hỗ Trợ IT > Phê Duyệt Giá' },
