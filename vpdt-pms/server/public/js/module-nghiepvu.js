@@ -790,30 +790,31 @@ const NGHIEP_VU_DOCS = {
     ] },
   },
   checklist: {
-    icon: '✅', title: 'Checklist Đánh Giá Siêu Thị', badge: 'Cập nhật 10/2026',
-    desc: 'Bộ tiêu chí đánh giá (hạng mục/câu hỏi/điểm) do quản trị chuẩn bị sẵn thành mẫu — người đánh giá chọn siêu thị rồi chấm theo đúng bộ tiêu chí đang dùng. Mỗi mẫu trải qua 3 trạng thái: Nháp → Đang dùng → Lưu trữ, với các nút Dừng/Sửa/Xoá phù hợp theo từng trạng thái và quyền hạn.',
+    icon: '✅', title: 'Checklist Đánh Giá Siêu Thị', badge: 'Cập nhật 11/2026',
+    desc: 'Bộ tiêu chí đánh giá (hạng mục/câu hỏi/điểm) do quản trị chuẩn bị sẵn thành mẫu — người đánh giá chọn siêu thị rồi chấm theo đúng bộ tiêu chí đang dùng. Mỗi mẫu trải qua 3 trạng thái: Nháp → Đang dùng → Lưu trữ. Từ 11/2026, module chỉ còn 3 tab <b>Thực Hiện / Kết Quả & Phản Hồi / Báo Cáo</b> — việc tạo/sửa/kích hoạt mẫu đã dời hẳn sang <b>Hệ Thống → ⚙️ Cấu Hình Nghiệp Vụ</b> (chỉ Quản Trị Viên, xem mục "Cấu Hình Nghiệp Vụ" ở tab ⚙️ Hệ Thống).',
     flow: { ariaLabel: 'Quy trình Checklist Đánh Giá Siêu Thị', chain: [
-      { label: 'Chuẩn bị mẫu', sub: 'Hạng mục, câu hỏi, điểm (quản trị)' },
+      { label: 'Chuẩn bị mẫu', sub: 'Hạng mục, câu hỏi, điểm (Hệ Thống → Cấu Hình Nghiệp Vụ)' },
       { label: 'Kích hoạt', sub: 'Chỉ 1 bản đang dùng mỗi lúc' },
       { label: 'Chấm điểm', sub: 'Chọn siêu thị, trả lời từng mục', kind: 'approved' },
       { label: 'Nộp & tổng hợp', sub: 'Tự tính điểm/xếp loại' },
     ] },
     steps: [
-      { role: 'Quản trị', text: 'vào <b>⚙️ Vận Hành → ✅ Checklist Đánh Giá</b> (sidebar) → tab <b>"🛠️ Cấu Hình"</b> → "🛠️ Tạo Mẫu Checklist Mới" → chọn Loại Mẫu, thêm hạng mục/câu hỏi/điểm → lưu ở trạng thái Nháp, rồi kích hoạt để chuyển thành "Đang dùng" (chỉ 1 mẫu đang dùng mỗi lúc).' },
-      { role: 'Người đánh giá', text: 'tab <b>"✅ Thực Hiện"</b> → chọn siêu thị cần đánh giá → trả lời từng mục theo đúng mẫu đang dùng → nộp bài (hệ thống tự tính điểm/xếp loại). Bài chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
-      { text: 'Xem kết quả và phản hồi: tab "📣 Kết Quả & Phản Hồi"; xem tổng hợp nhiều đợt: tab "📊 Báo Cáo" — CHIA 2 tab con dùng chung quyền checklistReportView: "📋 Checklist Siêu Thị/Cửa Hàng" (bảng phẳng mọi loại mẫu, như trước) và "🥗 Đánh Giá VSATTP" (Dashboard riêng, xem bước dưới).' },
-      { role: 'Người xem báo cáo', text: 'tab con "🥗 Đánh Giá VSATTP" (10/2026, áp dụng cho MỌI mẫu kiểu "Trừ Điểm Theo Hạng Mục", không riêng 1 mẫu tên "VSATTP") — lọc theo khoảng ngày + chọn nhiều/để trống = tất cả Siêu Thị/Cửa Hàng → xem Top 5 điểm TB cao/thấp nhất và tỷ lệ vi phạm theo từng tiêu chí, TÁCH RIÊNG Siêu Thị/Cửa Hàng theo đúng phân loại đã gán ở Hệ Thống → Quản Trị → Quản Lý Danh Mục → Danh Mục Siêu Thị (cột "Loại") — đơn vị CHƯA phân loại sẽ có cảnh báo riêng và KHÔNG tính vào Top 5/tỷ lệ vi phạm. Bấm "📥 Xuất Excel" tải 1 file gộp: sheet "Dashboard" + 1 sheet chi tiết/đơn vị.' },
-      { role: 'Quản trị', text: 'muốn đổi mẫu đang dùng: bấm "⏸️ Dừng" trên mẫu hiện tại (chuyển sang Lưu trữ) rồi kích hoạt mẫu khác; muốn sửa nội dung mẫu Đang dùng/Lưu trữ thì bấm "✏️ Sửa" (tự nhân bản thành 1 bản Nháp mới, không sửa trực tiếp để giữ nguyên dữ liệu bài đã nộp).' },
+      { role: 'Quản trị', text: 'tạo/sửa mẫu ở <b>Hệ Thống → ⚙️ Cấu Hình Nghiệp Vụ → "✅ Cấu Hình Checklist"</b> (xem chi tiết thao tác ở mục "Cấu Hình Nghiệp Vụ" trong tab ⚙️ Hệ Thống) — "+ Tạo Mẫu Mới" → chọn Loại Mẫu, thêm hạng mục/câu hỏi/điểm → lưu ở trạng thái Nháp, rồi kích hoạt để chuyển thành "Đang dùng" (chỉ 1 mẫu đang dùng mỗi lúc).' },
+      { role: 'Người đánh giá', text: 'tab <b>"✅ Thực Hiện"</b> của module Checklist → chọn siêu thị cần đánh giá → trả lời từng mục theo đúng mẫu đang dùng → nộp bài (hệ thống tự tính điểm/xếp loại). Bài chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu. <b>Phải được admin cấp quyền tường minh mới thấy được khối thực hiện tương ứng</b> (xem footer).' },
+      { text: 'Xem kết quả và phản hồi: tab "📣 Kết Quả & Phản Hồi"; xem tổng hợp nhiều đợt: tab "📊 Báo Cáo" — CHIA 2 tab con: "📋 Checklist Siêu Thị/Cửa Hàng" (bảng phẳng, dùng quyền checklistReportView) và "🥗 Đánh Giá VSATTP" (Dashboard riêng, dùng quyền checklistAtvstpReportView, xem bước dưới).' },
+      { role: 'Người xem báo cáo', text: 'tab con "🥗 Đánh Giá VSATTP" (áp dụng cho MỌI mẫu kiểu "Trừ Điểm Theo Hạng Mục" được admin gắn cờ "Đây là mẫu ATVSTP" lúc tạo, không riêng 1 mẫu tên "VSATTP") — lọc theo khoảng ngày + chọn nhiều/để trống = tất cả Siêu Thị/Cửa Hàng → xem Top 5 điểm TB cao/thấp nhất và tỷ lệ vi phạm theo từng tiêu chí, TÁCH RIÊNG Siêu Thị/Cửa Hàng theo đúng phân loại đã gán ở Hệ Thống → Quản Trị → Quản Lý Danh Mục → Danh Mục Siêu Thị (cột "Loại") — đơn vị CHƯA phân loại sẽ có cảnh báo riêng và KHÔNG tính vào Top 5/tỷ lệ vi phạm. Bấm "📥 Xuất Excel" tải 1 file gộp: sheet "Dashboard" + 1 sheet chi tiết/đơn vị.' },
+      { role: 'Quản trị', text: 'muốn đổi mẫu đang dùng: vào lại "✅ Cấu Hình Checklist" (Hệ Thống → Cấu Hình Nghiệp Vụ) → bấm "⏸️ Dừng" trên mẫu hiện tại (chuyển sang Lưu trữ) rồi kích hoạt mẫu khác; muốn sửa nội dung mẫu Đang dùng/Lưu trữ thì bấm "✏️ Sửa" (tự nhân bản thành 1 bản Nháp mới, không sửa trực tiếp để giữ nguyên dữ liệu bài đã nộp).' },
     ],
     footer: { left: [
       { label: 'Tiếp tục dở dang', text: 'bài chấm chưa nộp có thể bấm "Tiếp Tục" để làm tiếp, không cần làm lại từ đầu.' },
-      { label: 'Nhân bản mẫu', text: 'có thể nhân bản 1 mẫu có sẵn để chỉnh sửa nhanh thay vì dựng lại từ đầu — nhân bản được từ cả mẫu Đang dùng lẫn Lưu trữ.' },
+      { label: 'Nhân bản mẫu', text: 'có thể nhân bản 1 mẫu có sẵn để chỉnh sửa nhanh thay vì dựng lại từ đầu — nhân bản được từ cả mẫu Đang dùng lẫn Lưu trữ (thực hiện ở "✅ Cấu Hình Checklist", Hệ Thống → Cấu Hình Nghiệp Vụ).' },
+      { label: '4 quyền phẳng (11/2026)', text: '<code>checklistExecute</code> (+<code>checklistExecuteScope</code> cho người KHÔNG có siêu thị gắn sẵn — phải chọn thêm siêu thị/"All" mới thực hiện "Checklist Thường" được) — mặc định thấy báo cáo đúng siêu thị mình; <code>checklistReportView</code> (xem báo cáo Checklist Thường, MỌI siêu thị); <code>checklistAtvstpExecute</code> (thực hiện Kiểm Soát/VSATTP, MỌI siêu thị); <code>checklistAtvstpReportView</code> (xem báo cáo Kiểm Soát/VSATTP, MỌI siêu thị). Không có quyền nào ở trên = KHÔNG thấy nút module này ở sidebar.' },
     ], right: [
       { label: '⏸️ Dừng (Đang dùng → Lưu trữ)', text: 'dừng thủ công 1 mẫu Đang dùng mà không cần kích hoạt bản thay thế ngay. Muốn dùng lại đúng mẫu vừa Dừng thì bấm "🔄 Kích Hoạt Lại" ngay trên mẫu Lưu trữ đó — không cần Nhân Bản/Sửa gì cả, không tạo phiên bản mới.' },
       { label: '✏️ Sửa (Đang dùng/Lưu trữ)', text: 'không sửa trực tiếp được, để giữ nguyên dữ liệu các bài đã nộp trước đó — bấm "Sửa" sẽ tự nhân bản thành 1 bản Nháp mới rồi mở thẳng form sửa, gộp 2 bước cũ thành 1 lần bấm.' },
       { label: '🗑️ Xoá — chỉ Quản Trị Viên', text: 'nút Xoá chỉ Quản Trị Viên (quyền cao nhất) mới thấy được, ở mọi trạng thái — nếu mẫu đã có người nộp bài thì nút này sẽ bị khoá kèm gợi ý dùng "⏸️ Dừng" thay thế, để không làm mất dữ liệu báo cáo cũ.' },
       { label: 'Sửa lại phản hồi/giải trình (9/2026)', text: 'siêu thị (checklist Kiểm Soát) gõ nhầm hoặc muốn bổ sung phản hồi đã gửi thì bấm "✏️ Sửa" ngay cạnh phản hồi cũ ở tab "📣 Kết Quả & Phản Hồi" — nội dung mới GHI ĐÈ nội dung cũ, không lưu lịch sử các lần sửa trước.' },
-      { label: 'Dashboard VSATTP dùng chung 1 quyền (10/2026)', text: 'không tách quyền riêng cho tab "🥗 Đánh Giá VSATTP" — ai có checklistReportView (xem được tab "📊 Báo Cáo") thì xem được CẢ 2 tab con, theo đúng yêu cầu người dùng.' },
+      { label: 'Admin test mẫu (11/2026)', text: 'admin KHÔNG tự động là "Kiểm Soát Viên thật" nữa — nếu chưa được cấp quyền tường minh, admin thấy riêng 1 khối "🧪 Test Checklist" ở tab Thực Hiện để tự chọn bất kỳ siêu thị nào test mẫu vừa tạo (tạo dữ liệu THẬT, nên xoá sau khi test xong).' },
     ] },
   },
   orgChart: {
@@ -1319,7 +1320,7 @@ const SYSTEM_DOCS = {
   },
   sysBizConfig: {
     icon: '⚙️', title: 'Cấu Hình Nghiệp Vụ', badge: 'Chỉ Quản Trị Viên',
-    desc: 'Màn MỚI (10/2026, theo yêu cầu người dùng) gom các cấu hình nghiệp vụ (khác cấu hình danh mục/quy trình duyệt đã có màn riêng) về 1 chỗ — hiện có 2 sub-tab "🏷️ Mẫu Giá Bán Lẻ"/"🏪 Mẫu Giá Bán Buôn" (dời từ Hỗ Trợ IT sang), sẽ tiếp tục bổ sung thêm mục khác vào đây về sau.',
+    desc: 'Màn gom các cấu hình nghiệp vụ (khác cấu hình danh mục/quy trình duyệt đã có màn riêng) về 1 chỗ — hiện có sub-tab "🏷️ Mẫu Giá Bán Lẻ"/"🏪 Mẫu Giá Bán Buôn" (dời từ Hỗ Trợ IT sang, 10/2026) và khối "✅ Cấu Hình Checklist" (dời từ module Checklist sang, 11/2026 — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist, CHỈ admin), sẽ tiếp tục bổ sung thêm mục khác vào đây về sau.',
     flow: { ariaLabel: 'Quy trình quản lý Mẫu Giá', chain: [
       { label: 'Chọn sub-tab Bán Lẻ/Bán Buôn', sub: 'Mỗi kênh 1 danh sách mẫu riêng' },
       { label: 'Thêm/Thay/Đổi tên/Gán cột Margin/Xoá', sub: 'Chỉ tác động mẫu của đúng kênh đang mở' },
@@ -1330,11 +1331,14 @@ const SYSTEM_DOCS = {
       { role: 'Quản trị viên', text: 'bấm <b>"+ Thêm Mẫu Giá"</b> để tải lên 1 file mẫu mới (đọc tên cột từ dòng đầu file), hoặc dùng <b>"🔄 Thay mẫu"</b>/<b>"✏️ Đổi tên"</b>/<b>"🗑️ Xoá"</b> ngay tại dòng mẫu đã có.' },
       { role: 'Quản trị viên', text: 'tuỳ chọn gán <b>cột Margin/Chiết Khấu</b> cho mẫu (popup "Gán vai trò cột" hiện ra sau khi tải file) — dùng để tính cảnh báo margin bất thường khi tạo đề xuất Bán Buôn.' },
       { role: 'Quản trị viên', text: 'mẫu vừa thêm/sửa hiện NGAY ở dropdown chọn mẫu của form tạo đề xuất tương ứng (Bán Lẻ ở module Mua Hàng, Bán Buôn ở module Vận Hành) — không cần tải lại trang.' },
+      { role: 'Quản trị viên', text: 'kéo xuống khối <b>"✅ Cấu Hình Checklist"</b> (cùng tab) → bấm <b>"+ Tạo Mẫu Mới"</b> → chọn loại mẫu (câu hỏi QA hoặc Trừ Điểm Theo Hạng Mục) → soạn nội dung → <b>"Kích Hoạt"</b> để mẫu hiện ra ở tab Thực Hiện cho người được cấp quyền.' },
+      { role: 'Quản trị viên', text: 'với mẫu loại CONTROL_AUDIT (Kiểm Soát Viên), tick thêm ô <b>"🥗 Đây là mẫu ATVSTP"</b> nếu muốn báo cáo của mẫu này đi theo nhóm Báo Cáo ATVSTP riêng (<code>checklistAtvstpReportView</code>) thay vì nhóm Báo Cáo chung (<code>checklistReportView</code>) — không ảnh hưởng ai được THỰC HIỆN mẫu (luôn gác bởi <code>checklistAtvstpExecute</code> bất kể có tick hay không).' },
     ],
     footer: { left: [
       { label: 'Đã dời khỏi Hỗ Trợ IT', text: 'trước 10/2026, panel quản trị "Mẫu Giá" nằm trong "Hỗ Trợ IT → Phê Duyệt Giá" — nay dời hẳn sang đây theo yêu cầu người dùng, chỉ đổi VỊ TRÍ điều hướng, không đổi cách hoạt động/dữ liệu.' },
+      { label: 'Đã dời khỏi module Checklist', text: 'trước 11/2026, tab "🛠️ Cấu Hình" nằm ngay trong module Checklist (ai có quyền checklistTemplateManage cũ cũng vào được) — nay dời hẳn sang đây + ĐỔI SANG admin-only, module Checklist chỉ còn 3 tab Thực Hiện/Kết Quả & Phản Hồi/Báo Cáo.' },
     ], right: [
-      { label: 'Sẽ tiếp tục bổ sung', text: 'màn này thiết kế để làm nơi tập trung các cấu hình nghiệp vụ khác sẽ thêm về sau, không chỉ riêng Mẫu Giá.' },
+      { label: 'Sẽ tiếp tục bổ sung', text: 'màn này thiết kế để làm nơi tập trung các cấu hình nghiệp vụ khác sẽ thêm về sau, không chỉ riêng Mẫu Giá/Checklist.' },
     ] },
   },
   sysDeptViewScope: {

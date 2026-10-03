@@ -3141,9 +3141,16 @@ với module Vận Hành), mỗi collection (`checklistTemplates`/
 `dbo.ChecklistSubmissions`, mỗi bản ghi 1 dòng), phân quyền HOÀN TOÀN PHẲNG
 (không theo phòng ban như đa số module khác). Từ v17.0, nút điều hướng "✅ Checklist Đánh Giá" được GỘP CHUNG
 dropdown sidebar `"⚙️ Vận Hành ▾"` cho gọn (thuần UI, không đổi dữ liệu/quyền)
-— bấm vào vẫn mở đúng module này. 4 tab nội bộ: **Cấu Hình / Thực Hiện / Kết
-Quả & Phản Hồi / Báo Cáo** — tab Báo Cáo ở đây CHỈ báo cáo cho module này,
-tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
+— bấm vào vẫn mở đúng module này.
+
+**Từ 11/2026 (làm gọn phân quyền)**: module chỉ còn **3 tab nội bộ: Thực
+Hiện / Kết Quả & Phản Hồi / Báo Cáo** — tab **"🛠️ Cấu Hình"** (tạo/sửa/kích
+hoạt/nhân bản/xoá Mẫu Checklist) đã DỜI HẲN sang **Hệ Thống → ⚙️ Cấu Hình
+Nghiệp Vụ → "✅ Cấu Hình Checklist"** (`renderChecklistConfigAdmin()`,
+`public/js/module-admin-checklistconfig.js`), chỉ **Quản Trị Viên (admin)**
+mới thấy/vào được màn này — không còn quyền riêng gác việc tạo/sửa mẫu như
+`checklistTemplateManage` cũ. Tab Báo Cáo ở module Checklist vẫn CHỈ báo cáo
+cho module này, tách biệt hoàn toàn với module **Báo Cáo** tổng hợp (mục 5).
 
 **"Xem chéo" ở màn Báo Cáo tổng hợp (từ v23.29)**: theo yêu cầu người dùng —
 cho phép người KHÔNG thuộc module này (không tự nộp bài, không
@@ -3159,48 +3166,48 @@ phòng ban để giữ nguyên. Báo cáo VSATTP chi tiết (cây hạng mục/�
 CHỈ có ở tab Báo Cáo nội bộ (`checklistReportView` thật) — bản tóm tắt ở màn
 Báo Cáo tổng hợp không lặp lại phần này.
 
-**4 quyền phẳng** (khối cây phân quyền 23 "Checklist Đánh Giá Siêu Thị"):
-- `checklistTemplateManage` — tạo/sửa/kích hoạt/nhân bản/xoá Mẫu Checklist
-  (tab Cấu Hình).
-- `checklistReportView` — xem tab Báo Cáo (thống kê + xuất Excel) của module
-  này. **Từ 10/2026**: đi kèm 1 widget tìm-kiếm-gõ-chọn `checklistReportViewScope`
-  ({all, depts} — field `depts` chứa TEMPLATE ID chứ không phải tên phòng
-  ban, cùng lý do tái dùng tên field như `checklistAuditScope` bên dưới) —
-  admin có thể giới hạn xuống đúng những MẪU CHECKLIST cụ thể (cả 2 loại QA/
-  Trừ Điểm) mà người này được xem báo cáo, thay vì mặc định thấy hết mọi mẫu.
-  Không tick "ALL" và không chọn mẫu nào = không xem được báo cáo nào dù
-  `checklistReportView` vẫn bật. Áp dụng nhất quán ở cả màn hình lẫn 2 route
-  xuất Excel (`export-report`/`vsattp-dashboard/export`) và cả khi xem chéo
-  qua màn **📊 Báo Cáo** tổng hợp.
-- **`checklistStoreSelfExecute`** (9/2026, theo yêu cầu người dùng) — gác việc
-  **LÀM** checklist "Tự Đánh Giá" (STORE_SELF, dạng câu hỏi). TRƯỚC ĐÂY tự
-  động cho phép MỌI tài khoản đang ở Vị Trí Siêu Thị (posType='STORE'); từ
-  giờ admin PHẢI tự tick quyền này cho từng người (VD chỉ GĐST/CHT, không
-  phải mọi nhân viên tại siêu thị) — ai KHÔNG có quyền thì nút "✅ Checklist"
-  biến mất hẳn khỏi sidebar, không vào được tab module này (nếu không có
-  quyền checklist nào khác). Vẫn cần posType='STORE' + có Vị Trí Siêu Thị
-  hợp lệ mới đủ điều kiện (quyền này là điều kiện THÊM VÀO, không thay thế
-  yêu cầu về Vị Trí) — storeCode vẫn LUÔN suy từ `user.dept`, không đổi.
-  **Từ 10/2026**: cùng khuôn `checklistReportViewScope` ở trên — widget
-  `checklistStoreSelfExecuteScope` CHỈ liệt kê mẫu `templateType==='STORE_SELF'`
-  (đúng loại mẫu quyền này thật sự dùng tới), cho phép giới hạn xuống đúng
-  vài mẫu Tự Đánh Giá cụ thể thay vì làm được mọi mẫu.
-  **Deploy-impact quan trọng**: quyền mới mặc định `false` cho MỌI tài khoản
-  hiện có — sau khi deploy, toàn bộ nhân viên siêu thị đang tự đánh giá hàng
-  ngày sẽ MẤT quyền vào tab cho tới khi admin cấp lại quyền này (từng người
-  hoặc qua Nhóm Phân Quyền). Riêng 2 field Scope (10/2026) KHÔNG có deploy-
-  impact — tài khoản cũ chưa từng lưu qua UI mới tự động coi như "ALL" (thấy/
-  làm được mọi mẫu như hành vi trước đây), chỉ bị giới hạn thật khi admin chủ
-  động bỏ tick "ALL" và chọn mẫu cụ thể.
-- `checklistAuditScope` — phạm vi **siêu thị được phân công kiểm soát**
-  (dạng `{all, depts}` — field tên là `depts` dù chứa danh sách SIÊU THỊ,
-  không phải phòng ban, để tái dùng cơ chế merge phẳng theo nhóm quyền có sẵn
-  cho mọi field tên `depts`) — quyết định auditor được tạo/xem loại checklist
-  **Kiểm Soát Viên** cho những siêu thị nào. Admin tự cấu hình danh sách siêu
-  thị cụ thể (đa chọn) hoặc tick "ALL" (kiểm soát mọi siêu thị) ở màn Phân
-  Quyền — Kiểm Soát Viên tự chọn siêu thị cần đánh giá trong đúng phạm vi đó
-  ở ô dropdown khi bắt đầu làm bài (tab Thực Hiện), không bị khoá cứng về 1
-  siêu thị cố định nào.
+**4 quyền phẳng (từ 11/2026, làm gọn hẳn khỏi mô hình 6 quyền cũ)** — khối
+cây phân quyền 23 "Checklist Đánh Giá Siêu Thị". Quy tắc chung mới: tab
+"Cấu Hình" (tạo/sửa mẫu) không còn gắn quyền riêng ở đây nữa (xem admin-only
+ở trên) — cả 4 quyền dưới đây CHỈ còn liên quan tới **Thực Hiện** và
+**Báo Cáo**:
+- **`checklistExecute`** — thực hiện checklist "✅ Checklist Thường"
+  (`templateType='STORE_SELF'`). Người **có sẵn 1 Vị Trí Siêu Thị**
+  (`posType='STORE'` + `dept` hợp lệ — mặc định vẫn như trước, VD GĐST/CHT)
+  được cấp quyền này thì làm được NGAY cho đúng siêu thị mình công tác, và
+  mặc định cũng xem được báo cáo (tab Báo Cáo) giới hạn đúng siêu thị đó —
+  **nhưng vẫn phải được cấp quyền này tường minh**, không tự động theo
+  `posType` nữa như hành vi 9/2026 trước đây. Người **KHÔNG thuộc siêu thị
+  nào** (HO) được cấp `checklistExecute` thì PHẢI được cấp thêm
+  **`checklistExecuteScope`** (`{all, depts}` — `depts` là danh sách TÊN
+  SIÊU THỊ) mới thực hiện được: tick "ALL" (chọn bất kỳ siêu thị nào) hoặc
+  chọn sẵn vài siêu thị cụ thể — khi vào tab Thực Hiện sẽ thấy khối "✅
+  Checklist Thường — Chọn Siêu Thị" để tự chọn đúng 1 siêu thị trong phạm vi
+  đó trước khi bắt đầu (xem `resolveStoreCodeForSubmission()`/
+  `getChecklistExecuteScope()`, `lib/checklist.js`).
+- **`checklistReportView`** — xem tab Báo Cáo (thống kê + xuất Excel) của
+  module này, **PHẲNG cho MỌI siêu thị** (không còn widget giới hạn theo
+  mẫu/siêu thị như `checklistReportViewScope` cũ) — ai được cấp quyền này
+  thấy báo cáo "Checklist Thường" (STORE_SELF) của TẤT CẢ siêu thị.
+- **`checklistAtvstpExecute`** — thực hiện checklist "🔎 Kiểm Soát Siêu Thị"
+  (`templateType='CONTROL_AUDIT'`, VD mẫu VSATTP), **PHẲNG cho MỌI siêu
+  thị** — ai được cấp quyền này tự chọn bất kỳ siêu thị nào ở dropdown khi
+  bắt đầu làm bài (tab Thực Hiện), không còn phạm vi riêng theo siêu thị
+  như `checklistAuditScope` cũ.
+- **`checklistAtvstpReportView`** — xem báo cáo của loại checklist Kiểm Soát
+  (CONTROL_AUDIT), **PHẲNG cho MỌI siêu thị**.
+
+**Legacy-fallback khi nâng cấp (không mất quyền đột ngột)**: với tài khoản/
+nhóm ĐÃ LƯU quyền theo mô hình CŨ trước khi nâng cấp lên 11/2026 mà CHƯA
+được admin mở lại form lưu qua UI mới, hệ thống tự suy quyền mới từ dữ liệu
+cũ (cả server `lib/checklist.js` và client `core.js`, đối xứng 2 phía):
+`checklistExecute` suy từ `checklistStoreSelfExecute` cũ,
+`checklistAtvstpExecute` suy từ `checklistAuditScope` cũ (có phạm vi bất kỳ
+= coi như có quyền), `checklistAtvstpReportView` suy từ `checklistReportView`
+cũ (khi `checklistReportViewScope` chưa từng lưu hoặc để `{all:true}`). Suy
+luận này CHỈ áp dụng khi field mới `undefined` — admin lưu lại 1 lần qua
+màn Phân Quyền (dù không đổi gì) là chuyển hẳn sang field mới, không còn
+đọc theo field cũ nữa.
 
 **Vòng đời mẫu — Nháp → Đang dùng → Lưu trữ, đủ nút theo trạng thái + quyền
 (từ v23.4-v23.5)**: bảng "🛠️ Cấu Hình" hiện nút khác nhau tuỳ trạng thái:
@@ -3235,8 +3242,9 @@ mẫu vừa Dừng (không cần sửa gì) → bấm **"🔄 Kích Hoạt Lại
 Lưu Trữ đó — chuyển thẳng về Đang dùng, KHÔNG tạo dòng mới/KHÔNG tăng
 `version` (khác Nhân Bản).
 
-**🗑️ Xoá — chỉ Admin (từ v23.4)**: nút Xoá chỉ Quản Trị Viên (không còn đủ
-`checklistTemplateManage`) mới thấy được, ở MỌI trạng thái. Nếu mẫu đã có
+**🗑️ Xoá — chỉ Admin (từ v23.4, cả màn "Cấu Hình Checklist" từ 11/2026 vẫn
+giữ nguyên quy tắc này)**: nút Xoá chỉ Quản Trị Viên mới thấy được, ở MỌI
+trạng thái. Nếu mẫu đã có
 người nộp bài (`checklistSubmissions` tham chiếu `templateId`) thì bị chặn
 409 (khoá mờ ở UI, kèm gợi ý dùng "⏸️ Dừng" thay thế) — tránh mồ côi dữ liệu
 báo cáo cũ.
@@ -3270,24 +3278,31 @@ bản mới tự động lưu trữ bản cũ):
   **server luôn tự suy từ `user.dept`, không bao giờ tin giá trị client gửi
   lên** (chặn giả mạo tự chấm hộ siêu thị khác).
 - **CONTROL_AUDIT** (Kiểm soát viên đánh giá) — chỉ người có
-  `checklistAuditScope` phù hợp mới thực hiện được, phải chọn đúng 1 siêu thị
-  nằm trong phạm vi được phân công (server validate lại, không chỉ ẩn/hiện ở
-  giao diện). **Từ đợt rà soát chuyên sâu 2 (9/2026)**: siêu thị chọn còn
-  phải khớp đúng 1 mục THẬT trong Danh Mục Siêu Thị — trước đây chỉ kiểm tra
-  ĐÚNG PHẠM VI quyền (`checklistAuditScope`), chưa đối chiếu chuỗi đó có tồn
-  tại trong danh mục hay không (kể cả phạm vi "Toàn công ty"/admin), nên 1
-  request tự soạn có thể gửi bất kỳ chuỗi nào làm siêu thị đánh giá, tạo ra
-  bài nộp mang tên siêu thị không có thật, gây nhiễu báo cáo/thống kê.
+  `checklistAtvstpExecute` mới thực hiện được (từ 11/2026, quyền PHẲNG, mọi
+  siêu thị — xem mục quyền ở trên), tự chọn 1 siêu thị bất kỳ ở dropdown khi
+  bắt đầu làm bài, server validate lại chuỗi siêu thị chọn (không chỉ
+  ẩn/hiện ở giao diện). **Từ đợt rà soát chuyên sâu 2 (9/2026)**: siêu thị
+  chọn còn phải khớp đúng 1 mục THẬT trong Danh Mục Siêu Thị — trước đây chỉ
+  kiểm tra ĐÚNG PHẠM VI quyền, chưa đối chiếu chuỗi đó có tồn tại trong danh
+  mục hay không (kể cả phạm vi "Toàn công ty"/admin), nên 1 request tự soạn
+  có thể gửi bất kỳ chuỗi nào làm siêu thị đánh giá, tạo ra bài nộp mang tên
+  siêu thị không có thật, gây nhiễu báo cáo/thống kê.
 
-**Admin test Tự Đánh Giá (từ v17.1)**: tài khoản `admin` thường KHÔNG gắn Vị
-Trí Siêu Thị (`posType` khác `STORE`) nên mặc định không thực hiện được
-checklist STORE_SELF. Riêng admin được PHÉP tự chọn 1 siêu thị bất kỳ ở tab
-Thực Hiện (khối "🧪 Test Tự Đánh Giá") để test mẫu vừa tạo/kích hoạt — server
-tin `storeCode` admin gửi lên (khác hẳn quy tắc "luôn suy từ `user.dept`" áp
-dụng cho người dùng thường, xem `resolveStoreCodeForSubmission()`
-`lib/checklist.js`). Bài làm test này tạo `checklistSubmissions` THẬT (không
-phải dữ liệu ảo) gắn `storeCode` của siêu thị được chọn — nên xoá đi sau khi
-test xong nếu không muốn lẫn vào dữ liệu thật của siêu thị đó.
+**Admin test checklist (từ v17.1, đổi khuôn 11/2026)**: tài khoản `admin`
+thường KHÔNG gắn Vị Trí Siêu Thị (`posType` khác `STORE`) và cũng thường
+KHÔNG được cấp 2 quyền thực thi TƯỜNG MINH (`checklistExecute`/
+`checklistAtvstpExecute`) — ở tab Thực Hiện, admin thấy riêng 1 khối
+**"🧪 Test Checklist"** gộp CHUNG cả 2 loại mẫu (Checklist Thường/Kiểm Soát)
+đang KHÔNG có khối "thật" nào khác hiện cho mình, cho phép tự chọn TUỲ Ý 1
+siêu thị để test mẫu vừa tạo/kích hoạt (server đã bypass mọi kiểm tra quyền
+cho admin ở `resolveStoreCodeForSubmission()`, `lib/checklist.js`, nên
+không phát sinh rủi ro mới) — ĐỐI XỨNG với hành vi cũ, chỉ khác là KHÔNG còn
+tự động coi admin là "Kiểm Soát Viên thật" nữa (nếu admin được cấp thêm
+`checklistAtvstpExecute`/`checklistExecute` tường minh thì thấy đúng khối
+"thật" như người dùng thường, không còn gộp vào khối Test). Bài làm test
+này tạo `checklistSubmissions` THẬT (không phải dữ liệu ảo) gắn `storeCode`
+của siêu thị được chọn — nên xoá đi sau khi test xong nếu không muốn lẫn
+vào dữ liệu thật của siêu thị đó.
 
 **Cấu trúc câu hỏi** — mỗi câu có nhiều lựa chọn, mỗi lựa chọn có thể đánh
 dấu `isPassing`/`isCriticalFail`, và có thể **chỉ hiện khi** 1 lựa chọn cụ
