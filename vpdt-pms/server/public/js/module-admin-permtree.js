@@ -167,6 +167,7 @@ function collectPermsFromForm() {
     // bỏ qua quy trình Phê Duyệt). Tách khỏi contractCreate, xem contracts.extraValidate ở lib/createValidation.js.
     contractImportSigned: document.getElementById('pContractImportSigned').checked,
     paymentManage: document.getElementById('pPaymentManage').checked,
+    paymentConfirm: document.getElementById('pPaymentConfirm').checked,
     vppManage: document.getElementById('pVppManage').checked,
     vppReportView: document.getElementById('pVppReportView').checked,
     vppRegisterCreate: document.getElementById('pVppRegisterCreate').checked,
@@ -419,6 +420,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pContractApprove').checked = !!perms.contractApprove;
   document.getElementById('pContractImportSigned').checked = !!perms.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
+  document.getElementById('pPaymentConfirm').checked = !!perms.paymentConfirm;
   document.getElementById('pVppManage').checked = !!perms.vppManage;
   document.getElementById('pVppReportView').checked = !!perms.vppReportView;
   document.getElementById('pVppRegisterCreate').checked = !!perms.vppRegisterCreate;

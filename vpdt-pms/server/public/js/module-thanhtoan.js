@@ -815,6 +815,11 @@ function renderPaymentRequests() {
     return;
   }
   const canManage = canManagePaymentRequestsClient(currentUser);
+  // Mục 0 (10/2026, theo yêu cầu người dùng): quyền MỚI paymentConfirm, TÁCH RIÊNG khỏi canManage — chỉ
+  // gác đúng 2 nút "Xác nhận"/"💰 Xác Nhận Toàn Bộ" bên dưới. canManage (paymentManage) vẫn TỰ ĐỘNG có
+  // luôn quyền xác nhận (xem canConfirmPaymentRequestClient() ở core.js) — "Yêu Cầu Bổ Sung" KHÔNG đổi,
+  // vẫn gác bằng canManage như cũ.
+  const canConfirm = canConfirmPaymentRequestClient(currentUser);
   tbody.innerHTML = list.map(pr => {
     // ONE_TIME (Thanh toán 1 lần) — badge từng đợt CHỈ để theo dõi/hiển thị (yêu cầu nghiệp vụ #3), KHÔNG
     // có nút "Xác nhận" riêng cho từng đợt (xác nhận TOÀN BỘ 1 lần, xem nút "💰 Xác Nhận Toàn Bộ" bên dưới
@@ -833,7 +838,7 @@ function renderPaymentRequests() {
           ${(it.files || []).map(f => `<button type="button" data-op="viewPaymentRequestFile" data-arg0="${pr.id}" data-arg1="${escapeHtml(f.fileUrl)}" data-arg2="${escapeHtml(f.fileName)}" data-arg3="${escapeHtml(f.fileType || '')}" class="text-cyan-600 hover:underline ml-1">📎</button>`).join('')}
           <span class="ml-1">${paymentInstallmentDeadlineBadge(it, pr)}</span>
         </span>
-        ${(!it.confirmed && pr.status === 'APPROVED' && canManage && !isOneTime) ? `<button data-op="confirmPaymentInstallmentAction" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
+        ${(!it.confirmed && pr.status === 'APPROVED' && canConfirm && !isOneTime) ? `<button data-op="confirmPaymentInstallmentAction" data-arg0="${pr.id}" data-arg1="${idx}" class="text-cyan-600 font-bold hover:underline">Xác nhận</button>` : ''}
       </div>
     `).join('');
     return `
@@ -853,7 +858,7 @@ function renderPaymentRequests() {
           <div class="mt-1">${paymentOverallStatusBadge(pr)}</div>
         </td>
         <td class="border p-2 text-center space-y-1">
-          ${canManage && pr.status === 'APPROVED' && isOneTime ? `<button data-op="confirmPaymentRequestLumpSumAction" data-arg0="${pr.id}" class="block w-full bg-cyan-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-cyan-700">💰 Xác Nhận Toàn Bộ</button>` : ''}
+          ${canConfirm && pr.status === 'APPROVED' && isOneTime ? `<button data-op="confirmPaymentRequestLumpSumAction" data-arg0="${pr.id}" class="block w-full bg-cyan-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-cyan-700">💰 Xác Nhận Toàn Bộ</button>` : ''}
           ${canManage && pr.status === 'APPROVED' && !(pr.installments || []).some(it => it.confirmed === true) ? `<button data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${pr.status !== 'APPROVED' ? '<span class="text-[11px] text-gray-400 italic">Không có thao tác</span>' : ''}
         </td>

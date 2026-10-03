@@ -2201,6 +2201,16 @@ function canManagePaymentRequests(user) {
   return !!(user.perms?.admin || user.perms?.paymentManage);
 }
 
+// canConfirmPaymentRequest() (10/2026, theo yêu cầu người dùng): quyền MỚI paymentConfirm, TÁCH RIÊNG
+// khỏi paymentManage — CHỈ dùng cho 2 hành động "Xác nhận thanh toán" bên dưới (confirmPaymentInstallment/
+// confirmPaymentRequestLumpSum), KHÔNG đụng tới canManagePaymentRequests() (vẫn gác Tạo/Sửa/Duyệt/Yêu
+// cầu bổ sung/Xoá/vào module như cũ). Người có paymentManage TỰ ĐỘNG có luôn quyền xác nhận (không cần
+// tick thêm paymentConfirm) — paymentConfirm chỉ để cấp RIÊNG quyền xác nhận cho người KHÔNG có
+// paymentManage. Mirror public/js/core.js canConfirmPaymentRequestClient(), sửa 1 bên phải sửa cả 2 bên.
+function canConfirmPaymentRequest(user) {
+  return !!(user.perms?.admin || user.perms?.paymentManage || user.perms?.paymentConfirm);
+}
+
 // Người tạo (createdBy) SỬA được chính đề nghị của mình lúc còn NHÁP — cùng lý do người custodian bấm
 // "🧾 Lập Thanh Toán" ở module Hợp Đồng (canManageContractPayment(), theo contractCreate scope, KHÔNG
 // nhất thiết có paymentManage) vẫn cần tự lập/sửa các đợt thanh toán ở sub-tab "🗂️ Quản Lý Thanh Toán"
@@ -2485,7 +2495,7 @@ function countPaymentInstallmentWarnings(pr) {
 // LÚC TẠO/GỬI đề nghị (xem submitPaymentRequest()), bước xác nhận này chỉ còn là bấm xác nhận đơn thuần
 // (ĐẢO NGƯỢC lại thiết kế cũ — trước đây chính bước này mới bắt buộc upload tệp).
 function confirmPaymentInstallment(payload, user, pr) {
-  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
+  if (!canConfirmPaymentRequest(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
   if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
   if (pr.sourcePaymentType === 'ONE_TIME') {
     throw new HttpError(409, 'Đề nghị thanh toán "1 lần" — vui lòng xác nhận toàn bộ đề nghị (không xác nhận theo từng đợt)');
@@ -2514,7 +2524,7 @@ function confirmPaymentInstallment(payload, user, pr) {
 // dùng cờ này để biết có cần ghi ngược paymentStatus về bản ghi nguồn hay không, cùng khuôn
 // confirmPaymentInstallment()).
 function confirmPaymentRequestLumpSum(payload, user, pr) {
-  if (!canManagePaymentRequests(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
+  if (!canConfirmPaymentRequest(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
   if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
   if (pr.sourcePaymentType !== 'ONE_TIME') {
     throw new HttpError(409, 'Chỉ đề nghị thanh toán "1 lần" mới được xác nhận toàn bộ 1 lần — đề nghị này phải xác nhận theo từng đợt');
@@ -8305,7 +8315,7 @@ module.exports = {
   editSubmissionDraft, submitSubmissionDraft,
   canManageContractPayment, uploadContractSignedFile, startContractPayment,
   canManageOfficePayment, uploadOfficeSignedFile, startOfficePayment,
-  canManagePaymentRequests, canEditPaymentRequest, editPaymentRequest, submitPaymentRequest, requestPaymentInfo,
+  canManagePaymentRequests, canConfirmPaymentRequest, canEditPaymentRequest, editPaymentRequest, submitPaymentRequest, requestPaymentInfo,
   confirmPaymentInstallment, confirmPaymentRequestLumpSum, assertCanDeletePaymentRequest, computePaymentInstallmentDeadlineStatus,
   computePaymentRequestOverallStatus, countPaymentInstallmentWarnings, isCycleGroupFullyResolved,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,

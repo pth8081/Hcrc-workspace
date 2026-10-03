@@ -514,6 +514,7 @@ const PERM_KEY_VN_LABELS = {
   "operationStoreOpenCreate": "Vận Hành — 🏬 Tạo Đề Xuất Mở Mới Siêu Thị (+ Toàn Quyền Trên Hồ Sơ Của Mình)",
   "operationStoreReportView": "Vận Hành — 📊 Xem Báo Cáo QLDA/Siêu Thị (Mở Mới + Sửa Chữa)",
   "orgChartManage": "Nhân Sự — 🌳 Quản Lý Cơ Cấu Tổ Chức",
+  "paymentConfirm": "Thanh Toán — ✅ Xác nhận thanh toán (toàn công ty)",
   "paymentManage": "Thanh Toán — 💰 Quản lý Thanh Toán (toàn công ty)",
   "rebateApprove": "Mua Hàng > BAS — ✅ Phê Duyệt (dự phòng Giai đoạn 2 — Sổ Cái)",
   "rebateReconcile": "Mua Hàng > BAS — 🔄 Đối Chiếu (dự phòng Giai đoạn 2 — Sổ Cái)",

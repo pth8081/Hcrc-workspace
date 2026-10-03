@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**24.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.71 (2026-10-03): Thanh Toán — quyền "Xác nhận thanh toán" riêng, tách khỏi "Quản lý Thanh Toán"
+
+Theo yêu cầu người dùng, sau đợt rà soát các module có quy trình phê duyệt:
+
+- **Thanh Toán**: thêm quyền phẳng MỚI `paymentConfirm` ("✅ Xác nhận thanh toán"), gác RIÊNG đúng 2
+  hành động "Xác nhận thanh toán" (`confirmPaymentInstallment`/`confirmPaymentRequestLumpSum`, cả server
+  lẫn client — người không có quyền này giờ không còn thấy nút/khối xác nhận nữa, không chỉ dựa vào lỗi
+  403 từ server). Người có `paymentManage` **tự động** có luôn quyền xác nhận (không cần tick thêm) —
+  `paymentConfirm` chỉ dùng để cấp RIÊNG quyền xác nhận cho người KHÔNG có `paymentManage` (VD kế toán
+  viên chỉ xác nhận, không được sửa/duyệt/xoá đề nghị). "Yêu Cầu Bổ Sung" và các hành động quản lý khác
+  giữ nguyên, vẫn gác bằng `paymentManage` như cũ. Đã thêm checkbox + nhãn Ma Trận Phân Quyền tương ứng.
+- **Phê Duyệt Giá (itPriceApprovals)**: rà soát xác nhận quyết định Duyệt/Từ chối chính đã 100% đi theo
+  quy trình cấu hình (phòng ban/mức giá trị), không có quyền phẳng bypass nào. Riêng cơ chế "Từ chối
+  khẩn cấp" (2 bước: người duyệt bước cuối GỬI yêu cầu, người có quyền `itPriceEmergencyRejectApprove*`
+  XÉT duyệt yêu cầu đó) **giữ nguyên như cũ** theo xác nhận của người dùng — đã kiểm tra lại: nút gửi yêu
+  cầu chỉ hiện khi hồ sơ đã APPROVED, CHƯA áp giá (`!p.applied`) VÀ IT chưa nhận xử lý
+  (`!p.applyClaimedBy`) — đúng yêu cầu "áp dụng ngay sau khi duyệt xong nhưng IT chưa thực hiện thì vô
+  hiệu", không cần sửa gì thêm.
+- **Vận Hành — Đặt Hàng Siêu Thị, nhiều người cùng 1 bước ("Quy Trình Nâng Cao")**: đã rà soát lại cơ chế
+  `operationOrderStoreMixedApprovalRules`/`resolveOperationOrderStoreMixedApprovers()` và xác nhận: (1)
+  khi "ghép siêu thị" bằng 2 dòng cấu hình với danh sách siêu thị KHÔNG trùng nhau (VD 2 Quản Lý Vùng,
+  mỗi người phụ trách 1 nhóm siêu thị riêng) — với 1 đơn hàng cụ thể, CHỈ người phụ trách ĐÚNG siêu thị đó
+  mới phải duyệt, không bắt tất cả Quản Lý Vùng cùng duyệt; (2) khi 1 bước có nhiều dòng cấu hình đều áp
+  dụng cho MỌI siêu thị (không khai danh sách riêng) thì TẤT CẢ những người đó đều phải cùng duyệt mới
+  hoàn tất bước ("đồng phê duyệt"). Đây đúng là hành vi hệ thống đang chạy — không cần sửa code.
 
 ## v24.70 (2026-10-03): Mục 0 — mở rộng checkbox phân quyền xuống TẤT CẢ tab/subtab còn thiếu
 
