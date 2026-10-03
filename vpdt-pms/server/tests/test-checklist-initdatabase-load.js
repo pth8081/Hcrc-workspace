@@ -20,7 +20,13 @@ const {
 
 const PORT = 8988;
 
-const MANAGER = { username: 'qltc3', name: 'Quản Lý Checklist 3', dept: 'Phòng Vận Hành', perms: { checklistTemplateManage: true, checklistReportView: true }, active: true };
+// Cấu Hình Checklist nay admin-only (move vào Hệ Thống > Cấu Hình Nghiệp Vụ, setSystemSubTab() chặn
+// thẳng non-admin ở đầu hàm) — không còn quyền checklistTemplateManage riêng, phải dùng user admin thật.
+// totpEnabled: true — admin thật LUÔN bị proceedAfterAuth() (core.js) chặn ra màn "bắt buộc bật TOTP"
+// nếu chưa có cờ này, dừng NGAY TRƯỚC khi gọi initDatabase() — thiếu cờ này sẽ khiến bài test dưới đây
+// (đọc DB.checklistTemplates ngay sau đăng nhập) không bao giờ chạm tới initDatabase() thật, không phản
+// ánh đúng luồng admin thật đang cần kiểm.
+const MANAGER = { username: 'admin3', name: 'Admin Checklist 3', dept: 'Phòng Vận Hành', perms: { admin: true }, totpEnabled: true, active: true };
 
 // 1 template + 1 submission ĐÃ TỒN TẠI SẴN (mô phỏng dữ liệu do NGƯỜI KHÁC tạo từ trước, hoặc phiên
 // trước của chính người dùng) — KHÔNG tạo qua bất kỳ hành động client nào trong bài test này.
@@ -70,10 +76,9 @@ async function main() {
     });
 
     await run.run('Tab Cấu Hình phải HIỂN THỊ NGAY mẫu đã có sẵn (không cần thao tác gì thêm)', async () => {
-      const html = await page.evaluate(() => {
-        switchTab('checklist'); setChecklistSubTab('CONFIG');
-        return document.getElementById('checklistTemplateListWrap').innerHTML;
-      });
+      await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); });
+      await page.waitForTimeout(150);
+      const html = await page.evaluate(() => document.getElementById('checklistTemplateListWrap').innerHTML);
       assertEqual(html.includes('Mẫu Đã Tồn Tại Từ Trước'), true, 'Danh sách mẫu phải hiện đúng tên mẫu đã có sẵn ngay khi vào tab Cấu Hình');
     });
 

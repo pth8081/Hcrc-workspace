@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**24.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.76 (2026-10-03): Làm gọn phân quyền Checklist — dời Cấu Hình vào Hệ Thống + 4 quyền phẳng
+
+Người dùng: "move giúp tôi subtab cấu hình trong checklist ở joule vận hành vào Cấu hình nghiệp vụ...
+đổi tên là Cấu hình checklist, chỉ có admin mới cấu hình... rà soát lại phân quyền làm gọn lại" — thiết
+kế cuối cùng theo PA2 (field `isAtvstp` độc lập trên template, chỉ dùng để ĐỊNH TUYẾN báo cáo, không
+phải cổng thực thi).
+
+- **Dời "🛠️ Cấu Hình"** của module Checklist sang Hệ Thống → ⚙️ Cấu Hình Nghiệp Vụ, đổi tên "✅ Cấu Hình
+  Checklist" — admin-only (`setSystemSubTab()` chặn non-admin ngay đầu hàm). Tab Checklist gốc chỉ còn
+  "Thực Hiện"/"Kết Quả & Phản Hồi"/"Báo Cáo". Code builder tách sang file mới
+  `public/js/module-admin-checklistconfig.js` (đăng ký lazy-load group `admin-checklistconfig`).
+- **Làm gọn 6 quyền cũ → đúng 4 quyền phẳng**: `checklistExecute` (+`checklistExecuteScope` CHỈ dùng cho
+  người KHÔNG có siêu thị gắn sẵn — HO phải chọn thêm siêu thị/"All" mới thực hiện được "Checklist
+  Thường"), `checklistReportView` (phẳng, mọi siêu thị), `checklistAtvstpExecute` (phẳng, mọi siêu thị),
+  `checklistAtvstpReportView` (phẳng, mọi siêu thị) — bỏ hẳn `checklistTemplateManage`,
+  `checklistAuditScope`, `checklistReportViewScope`, `checklistStoreSelfExecute`/Scope. Legacy-fallback 2
+  chiều server (`lib/checklist.js`) + client (`core.js`) để không âm thầm thu hồi quyền user/nhóm cũ cho
+  tới khi admin lưu lại form.
+- **`isAtvstp`** (field mới trên `checklistTemplates`, chỉ set được khi `templateType==='CONTROL_AUDIT'`,
+  server tự ép `false` cho `STORE_SELF`) CHỈ dùng để ĐỊNH TUYẾN báo cáo (`canViewChecklistReportForTemplate()`
+  route theo `checklistAtvstpReportView` hay `checklistReportView`) — KHÔNG phải cổng thực thi: MỌI mẫu
+  `CONTROL_AUDIT` (isAtvstp hay không) đều gác thực thi/hiển thị bởi `checklistAtvstpExecute` (đã tự vá 1
+  bất nhất thật phát hiện trong lúc làm — `canViewChecklistTemplate()` từng gác theo `isAtvstpTemplate`
+  sai khớp với cổng tạo bài làm).
+- **Vá 1 lỗi Nghiêm trọng thật phát hiện qua test regression**: `populatePermsForm()`
+  (`module-admin-permtree.js`) còn gọi 3 hàm đã bị xoá (`toggleChecklistAuditScopeGroup`/
+  `toggleChecklistReportViewScopeGroup`/`toggleChecklistStoreSelfExecuteScopeGroup`) — crash JS
+  (`ReferenceError`) MỌI lần admin mở form sửa quyền bất kỳ user/nhóm nào. Đã vá về đúng 1 lời gọi
+  `toggleChecklistExecuteScopeGroup()`.
+- **Test**: sửa 5 file test UI theo điều hướng mới (`switchTab('system')`/`setSystemSubTab('BIZCONFIG')`/
+  `renderChecklistConfigAdmin()`), viết lại `tests/test-checklist.js` theo 4 quyền phẳng + ca HO-execute-
+  scope mới, xoá 2 file test mô hình cũ đã không còn tồn tại
+  (`test-checklist-report-selfexecute-templatescope.js`/`test-perm-tree-checklist-template-scope.js`),
+  đổi tên widget trong `test-perm-tree-store-scope-widget.js`. Toàn bộ 19 file test Checklist + 9 file
+  test Phân Quyền/Ma Trận liên quan pass 100%.
 
 ## v24.75 (2026-10-03): Làm gọn phân quyền Tài Liệu — chỉ còn đúng quyền "Tải Tài Liệu"
 

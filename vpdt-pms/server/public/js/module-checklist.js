@@ -3,34 +3,22 @@
 // trực tiếp gì ngoài DB.checklistTemplates/DB.checklistSubmissions/DB.stores/currentUser (đã nạp sẵn qua
 // GET /api/data, đã được lọc đúng phạm vi ở server — xem lib/recordViewScope.js).
 //
-// 4 tab: Cấu Hình (checklistTemplateManage) / Thực Hiện (mọi người đủ điều kiện) / Kết Quả & Phản Hồi
-// (nhân viên siêu thị) / Báo Cáo (checklistReportView, RIÊNG cho module này — KHÔNG liên quan module
-// "Báo Cáo" tổng hợp, theo đúng yêu cầu người dùng đã chốt).
+// 11/2026 LÀM GỌN (yêu cầu người dùng): sub-tab "Cấu Hình" đã dời HẲN sang Hệ Thống > ⚙️ Cấu Hình Nghiệp
+// Vụ > ✅ Cấu Hình Checklist (CHỈ admin — xem public/js/module-admin-checklistconfig.js). Module này giờ
+// CHỈ còn 3 tab: Thực Hiện (checklistExecute cho "Checklist Thường"/STORE_SELF, checklistAtvstpExecute
+// cho ATVSTP/CONTROL_AUDIT) / Kết Quả & Phản Hồi (nhân viên siêu thị) / Báo Cáo (checklistReportView +
+// checklistAtvstpReportView, RIÊNG cho module này — KHÔNG liên quan module "Báo Cáo" tổng hợp).
 
-let checklistActiveSubTab = 'CONFIG';
-// Bộ đếm optionId TOÀN CỤC dùng khi soạn mẫu — PHẢI tính giống HỆT thuật toán server
-// (validateChecklistQuestions() ở lib/checklist.js: tăng dần xuyên suốt cả checklist, KHÔNG reset theo
-// từng câu hỏi) để showIfOptionId client gửi lên khớp đúng ý server sẽ gán lại. Mảng câu hỏi đang soạn:
-// mỗi câu {text, type, isRequired, maxScore, note, showIfOptionId, options:[{text, scoreValue, isPassing, isCriticalFail}]}.
-let checklistBuilderQuestions = [];
-let checklistBuilderEditingId = null; // null = tạo mới; số = đang sửa template DRAFT có id này
-// v21.0 — 2 LOẠI MẪU, chọn NGAY LÚC TẠO (bất biến sau đó, xem lib/checklist.js::TEMPLATE_KINDS):
-// 'QA' (Câu hỏi & đáp án, đang có) / 'DEDUCTION' (Trừ điểm theo hạng mục, theo file VSATTP người dùng
-// gửi) — checklistBuilderCategories mirror ĐÚNG cấu trúc cây validateChecklistCategories() ở
-// lib/checklist.js: mỗi phần tử {name, maxDeduction, subItems:[{name, maxDeduction, criteria:[{description, ruleText, perInstanceValue}]}]}.
-let checklistBuilderKind = 'QA';
-let checklistBuilderCategories = [];
-// scoringMode ('SCORED'/'PASS_FAIL_ONLY', v20.9 — yêu cầu người dùng: "chỉ kiểm tra đạt/chưa đạt thì ẩn
-// chấm điểm đi") — đọc/ghi qua #checklistBuilderScoringMode, ẩn hết ô nhập điểm tối đa/điểm đáp án/ngưỡng
-// đạt % khi PASS_FAIL_ONLY (renderChecklistBuilderQuestions() bên dưới) — SERVER vẫn là nơi ép cứng
-// (validateChecklistQuestions()), đây chỉ là UI, không phải lớp bảo vệ duy nhất.
+let checklistActiveSubTab = 'EXECUTE';
+// checklistBuilderQuestions/checklistBuilderEditingId/checklistBuilderKind/checklistBuilderCategories
+// (state soạn mẫu) đã DỜI sang module-admin-checklistconfig.js cùng toàn bộ sub-tab Cấu Hình (11/2026).
 let checklistActiveSubmission = null; // bản ghi checklistSubmissions đang mở để làm bài
 let checklistActiveTemplateForSubmission = null;
 let checklistReportFilteredRows = [];
 
 function setChecklistSubTab(tab) {
   checklistActiveSubTab = tab;
-  ['CONFIG', 'EXECUTE', 'RESULT', 'REPORT'].forEach(t => {
+  ['EXECUTE', 'RESULT', 'REPORT'].forEach(t => {
     document.getElementById(`checklistSub${t.charAt(0) + t.slice(1).toLowerCase()}`).classList.toggle('hidden', t !== tab);
     const btn = document.getElementById(`btnChecklistSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
     if (btn) {
@@ -40,27 +28,22 @@ function setChecklistSubTab(tab) {
       btn.classList.toggle('text-gray-700', t !== tab);
     }
   });
-  if (tab === 'CONFIG') renderChecklistConfigTab();
-  else if (tab === 'EXECUTE') renderChecklistExecuteTab();
+  if (tab === 'EXECUTE') renderChecklistExecuteTab();
   else if (tab === 'RESULT') renderChecklistResultTab();
   else if (tab === 'REPORT') renderChecklistReportTab();
 }
 
-// Ẩn/hiện 4 nút tab theo đúng quyền — gọi mỗi lần vào module (switchTab('checklist')) và sau khi
-// finishLogin() đã có currentUser đầy đủ.
+// Ẩn/hiện 3 nút tab theo đúng quyền — gọi mỗi lần vào module (switchTab('checklist')) và sau khi
+// finishLogin() đã có currentUser đầy đủ. 11/2026: bỏ hẳn tab "Cấu Hình" (dời sang Hệ Thống, CHỈ admin).
 function updateChecklistSubTabVisibility() {
-  // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): AND thêm checkbox checklistConfig/Execute/
-  // Result/Report vào đúng điều kiện đã có.
-  const canManage = canManageChecklistTemplatesClient(currentUser) && hasModuleAccess(currentUser, 'checklistConfig');
   const canReport = canViewChecklistReportsClient(currentUser) && hasModuleAccess(currentUser, 'checklistReport');
-  const canExecute = (isEligibleForStoreSelfClient(currentUser) || hasChecklistAuditScopeClient(currentUser) || canManageChecklistTemplatesClient(currentUser)) && hasModuleAccess(currentUser, 'checklistExecute');
+  const canExecute = (canExecuteChecklistGeneralClient(currentUser) || canExecuteChecklistAtvstpClient(currentUser)) && hasModuleAccess(currentUser, 'checklistExecute');
   const canSeeResult = currentUser?.posType === 'STORE' && !!currentUser?.dept && hasModuleAccess(currentUser, 'checklistResult');
-  document.getElementById('btnChecklistSubConfig').classList.toggle('hidden', !canManage);
   document.getElementById('btnChecklistSubExecute').classList.toggle('hidden', !canExecute);
   document.getElementById('btnChecklistSubResult').classList.toggle('hidden', !canSeeResult);
   document.getElementById('btnChecklistSubReport').classList.toggle('hidden', !canReport);
   // Vào lần đầu — tự chọn tab đầu tiên người này thực sự thấy được, tránh dừng ở tab bị ẩn.
-  const order = [['CONFIG', canManage], ['EXECUTE', canExecute], ['RESULT', canSeeResult], ['REPORT', canReport]];
+  const order = [['EXECUTE', canExecute], ['RESULT', canSeeResult], ['REPORT', canReport]];
   if (!order.some(([t]) => t === checklistActiveSubTab) || !order.find(([t]) => t === checklistActiveSubTab)?.[1]) {
     const first = order.find(([, allowed]) => allowed);
     if (first) setChecklistSubTab(first[0]);
@@ -68,563 +51,18 @@ function updateChecklistSubTabVisibility() {
     setChecklistSubTab(checklistActiveSubTab);
   }
 }
-function isEligibleForStoreSelfClient(user) {
-  return !!(user && user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
+// hasExplicitChecklistExecuteClient()/hasExplicitChecklistAtvstpExecuteClient() — KHÁC
+// canExecuteChecklistGeneralClient()/canExecuteChecklistAtvstpClient() (core.js): 2 hàm đó tự động coi
+// admin có quyền (đúng cho việc ẩn/hiện CẢ tab "Thực Hiện" — admin luôn vào được để test mọi mẫu). 2 hàm
+// này CHỈ tính quyền TƯỜNG MINH (bỏ qua bypass admin) — dùng riêng để quyết định hiện khối "thật" (dữ
+// liệu/phạm vi thật của người dùng) hay dồn vào khối "🧪 Test" bên dưới (renderChecklistExecuteTab()) —
+// theo đúng yêu cầu người dùng đã chốt từ 9/2026: "ai có quyền mới là thực hiện", admin không tự nhiên
+// được tính là người có quyền thật chỉ vì có cờ admin.
+function hasExplicitChecklistExecuteClient(user) {
+  return !!user?.perms?.checklistExecute;
 }
-// hasExplicitChecklistAuditScopeClient() — KHÁC hasChecklistAuditScopeClient() (core.js): hàm đó tự động
-// coi admin có quyền Kiểm Soát (đúng cho việc ẩn/hiện tab "Thực Hiện" — admin luôn vào được để test mọi
-// mẫu). Hàm này CHỈ tính quyền checklistAuditScope TƯỜNG MINH (bỏ qua bypass admin) — dùng riêng để quyết
-// định hiện khối "🔎 Kiểm Soát Siêu Thị" (dữ liệu THẬT) hay dồn vào khối "🧪 Test" bên dưới
-// (renderChecklistExecuteTab()) — theo đúng yêu cầu người dùng 9/2026: "ai có quyền mới là thực hiện",
-// admin không tự nhiên được tính là người Kiểm Soát thật chỉ vì có cờ admin.
-function hasExplicitChecklistAuditScopeClient(user) {
-  const scope = user?.perms?.checklistAuditScope;
-  return !!(scope?.all || (scope?.depts || []).length);
-}
-
-// ===================== Sub-tab: Cấu Hình (checklistTemplateManage) =====================
-function renderChecklistConfigTab() {
-  const el = document.getElementById('checklistTemplateListWrap');
-  const templates = [...(DB.checklistTemplates || [])].sort((a, b) => (b.id || 0) - (a.id || 0));
-  if (!templates.length) { el.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có mẫu checklist nào.</p>'; return; }
-  const statusBadge = { DRAFT: 'bg-gray-200 text-gray-700', ACTIVE: 'bg-emerald-100 text-emerald-700', ARCHIVED: 'bg-slate-200 text-slate-600' };
-  const statusLabel = { DRAFT: 'Nháp', ACTIVE: 'Đang dùng', ARCHIVED: 'Lưu trữ' };
-  const typeLabel = { STORE_SELF: 'Tự Đánh Giá', CONTROL_AUDIT: 'Kiểm Soát' };
-  const kindLabel = { QA: '📋 Câu hỏi & đáp án', DEDUCTION: '📉 Trừ điểm theo hạng mục' };
-  const isAdmin = !!currentUser?.perms?.admin;
-  const submittedTemplateIds = new Set((DB.checklistSubmissions || []).map(s => s.templateId));
-  el.innerHTML = templates.map(t => {
-    const isDeduction = t.templateKind === 'DEDUCTION';
-    const countLabel = isDeduction
-      ? `${(t.categories || []).length} hạng mục lớn`
-      : `${(t.questions || []).length} câu hỏi`;
-    // Nút "Nhân Bản" (dưới) chỉ hiện cho ACTIVE/ARCHIVED — LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức
-    // Thấp): trước đây nút này hiện cho CẢ mẫu NHÁP trong khi server LUÔN từ chối (409 "Checklist Nháp
-    // đã sửa trực tiếp được — không cần nhân bản", xem routes/checklist.js POST templates/:id/clone),
-    // bấm vào chỉ nhận thông báo lỗi. Mẫu Nháp đã có sẵn nút "Sửa" mở thẳng builder.
-    // Nút "Xoá" cho ACTIVE/ARCHIVED: CHỈ admin thấy nút, và khoá mờ (disabled) nếu đã có ai nộp bài —
-    // xoá lúc đó sẽ làm mồ côi dữ liệu báo cáo cũ (server chặn lại y hệt, xem routes/checklist.js
-    // templates/:id/delete — đây chỉ là UI phản ánh trước để người dùng khỏi bấm rồi mới biết bị chặn).
-    let nonDraftActionsHTML = '';
-    if (t.status !== 'DRAFT') {
-      const hasSubmissions = submittedTemplateIds.has(t.id);
-      nonDraftActionsHTML = `<button type="button" data-op="viewChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700">👁️ Xem</button>
-          <button type="button" data-op="editViaCloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">✏️ Sửa</button>
-          ${t.status === 'ACTIVE' ? `<button type="button" data-op="deactivateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-bold hover:bg-amber-700">⏸️ Dừng</button>` : ''}
-          ${t.status === 'ARCHIVED' ? `<button type="button" data-op="activateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700">🔄 Kích Hoạt Lại</button>` : ''}
-          ${isAdmin ? `<button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" ${hasSubmissions ? 'disabled title="Đã có người nộp bài — không thể xoá, dùng Dừng thay thế"' : ''} class="px-2 py-1 rounded text-[11px] font-bold ${hasSubmissions ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}">🗑️ Xoá</button>` : ''}`;
-    }
-    return `
-    <div class="bg-white border rounded p-3 flex items-center justify-between gap-2 flex-wrap">
-      <div>
-        <div class="font-bold text-gray-800 text-sm">${escapeHtml(t.templateName)} <span class="text-gray-400 font-normal">(${escapeHtml(t.templateCode)}, v${t.version || 1})</span></div>
-        <div class="text-[11px] text-gray-500">${kindLabel[t.templateKind || 'QA']} · ${typeLabel[t.templateType] || t.templateType} · ${countLabel}${isDeduction ? '' : (t.scoringMode === 'PASS_FAIL_ONLY' ? ' · Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? ` · Ngưỡng đạt ${t.passThreshold}%` : ''))}</div>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${statusBadge[t.status] || ''}">${statusLabel[t.status] || t.status}</span>
-        ${t.status === 'DRAFT' ? `<button type="button" data-op="openChecklistTemplateBuilder" data-arg0="${t.id}" class="px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold hover:bg-sky-700">Sửa</button>
-          <button type="button" data-op="activateChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700">Kích Hoạt</button>
-          ${isAdmin ? `<button type="button" data-op="deleteChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700">Xoá</button>` : ''}`
-          : nonDraftActionsHTML}
-        ${t.status === 'DRAFT' ? '' : `<button type="button" data-op="cloneChecklistTemplate" data-arg0="${t.id}" class="px-2 py-1 bg-gray-500 text-white rounded text-[11px] font-bold hover:bg-gray-600">Nhân Bản</button>`}
-      </div>
-    </div>
-  `;
-  }).join('');
-}
-
-// "+ Tạo Mẫu Mới" (index.html) giờ gọi hàm NÀY trước (không phải openChecklistTemplateBuilder() thẳng) —
-// v21.0: 2 loại mẫu phải CHỌN NGAY LÚC TẠO (bất biến sau đó), nên chặn lại ở đây để chọn loại trước khi
-// mở đúng builder tương ứng. Sửa 1 mẫu ĐÃ có (templateId khác null) thì bỏ qua bước này — loại mẫu đọc
-// thẳng từ bản ghi, không hỏi lại.
-function openChecklistTemplateCreatePicker() {
-  closeChecklistTemplateView();
-  closeChecklistTemplateBuilder();
-  document.getElementById('checklistKindPickerWrap').classList.remove('hidden');
-}
-function closeChecklistTemplateCreatePicker() {
-  document.getElementById('checklistKindPickerWrap').classList.add('hidden');
-}
-function chooseChecklistTemplateKind(kind) {
-  closeChecklistTemplateCreatePicker();
-  openChecklistTemplateBuilder(null, kind);
-}
-
-function openChecklistTemplateBuilder(templateId, kind) {
-  closeChecklistTemplateView();
-  templateId = templateId ? Number(templateId) : null;
-  checklistBuilderEditingId = templateId;
-  if (templateId) {
-    const t = (DB.checklistTemplates || []).find(x => x.id === templateId);
-    if (!t) return alert('⛔ Không tìm thấy mẫu checklist');
-    if (t.status !== 'DRAFT') return alert('⛔ Chỉ sửa được checklist đang ở trạng thái Nháp');
-    checklistBuilderKind = t.templateKind || 'QA';
-    document.getElementById('checklistBuilderCode').value = t.templateCode;
-    document.getElementById('checklistBuilderName').value = t.templateName;
-    document.getElementById('checklistBuilderType').value = t.templateType;
-    document.getElementById('checklistBuilderScoringMode').value = t.scoringMode || 'SCORED';
-    document.getElementById('checklistBuilderPassThreshold').value = t.passThreshold != null ? t.passThreshold : '';
-    if (checklistBuilderKind === 'DEDUCTION') {
-      checklistBuilderCategories = (t.categories || []).map(cat => ({
-        name: cat.name, maxDeduction: cat.maxDeduction,
-        subItems: (cat.subItems || []).map(sub => ({
-          name: sub.name, maxDeduction: sub.maxDeduction,
-          criteria: (sub.criteria || []).map(c => ({ description: c.description, ruleText: c.ruleText || '', perInstanceValue: c.perInstanceValue }))
-        }))
-      }));
-      checklistBuilderQuestions = [];
-    } else {
-      checklistBuilderQuestions = (t.questions || []).map(q => ({
-        text: q.text, type: q.type, isRequired: q.isRequired, maxScore: q.maxScore, note: q.note || '',
-        category: q.category || '', showIfOptionId: q.showIfOptionId,
-        options: (q.options || []).map(o => ({ text: o.text, scoreValue: o.scoreValue, isPassing: o.isPassing, isCriticalFail: o.isCriticalFail }))
-      }));
-      checklistBuilderCategories = [];
-    }
-    document.getElementById('checklistBuilderTitle').innerText = `🛠️ Sửa Mẫu Checklist: ${t.templateName}`;
-  } else {
-    checklistBuilderKind = kind === 'DEDUCTION' ? 'DEDUCTION' : 'QA';
-    document.getElementById('checklistBuilderCode').value = '';
-    document.getElementById('checklistBuilderName').value = '';
-    document.getElementById('checklistBuilderType').value = 'STORE_SELF';
-    document.getElementById('checklistBuilderScoringMode').value = 'SCORED';
-    document.getElementById('checklistBuilderPassThreshold').value = '';
-    checklistBuilderQuestions = [];
-    checklistBuilderCategories = [];
-    document.getElementById('checklistBuilderTitle').innerText = checklistBuilderKind === 'DEDUCTION'
-      ? '🛠️ Tạo Mẫu Checklist Mới — Trừ Điểm Theo Hạng Mục' : '🛠️ Tạo Mẫu Checklist Mới — Câu Hỏi & Đáp Án';
-  }
-  // Ô "Chế Độ Chấm Điểm"/Excel Nhập-Xuất CHỈ áp dụng cho loại QA (xem TEMPLATE_KINDS ở lib/checklist.js —
-  // DEDUCTION luôn tính điểm số, không có khái niệm "chỉ Đạt/Chưa đạt").
-  const isDeduction = checklistBuilderKind === 'DEDUCTION';
-  document.getElementById('checklistBuilderScoringModeWrap').classList.toggle('hidden', isDeduction);
-  document.getElementById('checklistBuilderQuestionsSection').classList.toggle('hidden', isDeduction);
-  document.getElementById('checklistBuilderCategoriesSection').classList.toggle('hidden', !isDeduction);
-  onChecklistBuilderScoringModeChange();
-  document.getElementById('checklistTemplateBuilderWrap').classList.remove('hidden');
-  renderChecklistBuilderQuestions();
-  renderChecklistBuilderCategories();
-}
-// Đổi "Chế độ chấm điểm" — ẩn/hiện khối "Ngưỡng Điểm Đạt (%)" (không còn ý nghĩa khi PASS_FAIL_ONLY) và
-// render lại câu hỏi để ẩn/hiện ô nhập điểm tối đa/điểm đáp án theo đúng chế độ hiện chọn.
-function onChecklistBuilderScoringModeChange() {
-  const isPassFailOnly = document.getElementById('checklistBuilderScoringMode').value === 'PASS_FAIL_ONLY';
-  document.getElementById('checklistBuilderPassThresholdWrap').classList.toggle('hidden', isPassFailOnly);
-  renderChecklistBuilderQuestions();
-}
-function closeChecklistTemplateBuilder() {
-  document.getElementById('checklistTemplateBuilderWrap').classList.add('hidden');
-  checklistBuilderQuestions = [];
-  checklistBuilderCategories = [];
-  checklistBuilderEditingId = null;
-}
-
-// ===================== Xem READ-ONLY mẫu ĐANG DÙNG/LƯU TRỮ =====================
-// Phản hồi thực tế: admin muốn xem được nội dung checklist đang áp dụng (câu hỏi/lựa chọn/thang điểm)
-// mà KHÔNG sửa được trực tiếp — đúng tinh thần bất biến "chỉ sửa được khi còn DRAFT" (xem
-// lib/checklist.js) nên đây là màn CHỈ ĐỌC riêng, không tái dùng #checklistTemplateBuilderWrap (tránh
-// hiểu nhầm có thể bấm Lưu để sửa 1 bản ACTIVE/ARCHIVED).
-function viewChecklistTemplate(id) {
-  const t = (DB.checklistTemplates || []).find(x => x.id === Number(id));
-  if (!t) return alert('⛔ Không tìm thấy mẫu checklist');
-  closeChecklistTemplateBuilder();
-  const typeLabel = { STORE_SELF: 'Tự Đánh Giá', CONTROL_AUDIT: 'Kiểm Soát' };
-  const statusLabel = { DRAFT: 'Nháp', ACTIVE: 'Đang dùng', ARCHIVED: 'Lưu trữ' };
-  const isDeduction = t.templateKind === 'DEDUCTION';
-
-  document.getElementById('checklistTemplateViewTitle').innerText = `👁️ Xem Mẫu Checklist: ${t.templateName}`;
-  document.getElementById('checklistTemplateViewMeta').innerHTML = `
-    <div><span class="text-gray-500">Mã:</span> <b>${escapeHtml(t.templateCode)}</b></div>
-    <div><span class="text-gray-500">Loại:</span> <b>${typeLabel[t.templateType] || t.templateType}</b></div>
-    <div><span class="text-gray-500">Trạng thái:</span> <b>${statusLabel[t.status] || t.status}</b> (v${t.version || 1})</div>
-    <div><span class="text-gray-500">${isDeduction ? 'Loại mẫu' : 'Ngưỡng đạt'}:</span> <b>${isDeduction ? '📉 Trừ điểm theo hạng mục' : (t.scoringMode === 'PASS_FAIL_ONLY' ? 'Chỉ Đạt/Chưa đạt (không chấm điểm)' : (t.passThreshold != null ? t.passThreshold + '%' : 'Không chấm ngưỡng'))}</b></div>
-  `;
-
-  if (isDeduction) {
-    document.getElementById('checklistTemplateViewQuestionsWrap').innerHTML = (t.categories || []).map((cat, ci) => `
-      <div class="bg-white border rounded p-3 space-y-2">
-        <div class="font-bold text-gray-800 text-sm">${ci + 1}. ${escapeHtml(cat.name)} <span class="text-gray-400 font-normal text-xs">(tối đa ${cat.maxDeduction}đ)</span></div>
-        ${(cat.subItems || []).map((sub, si) => `
-          <div class="pl-3 border-l-2 border-gray-200 space-y-1">
-            <div class="font-semibold text-gray-700 text-xs">${ci + 1}.${si + 1} ${escapeHtml(sub.name)}${sub.maxDeduction != null ? ` <span class="text-gray-400 font-normal">(tối đa ${sub.maxDeduction}đ riêng)</span>` : ' <span class="text-gray-400 font-normal">(dùng chung trần hạng mục lớn)</span>'}</div>
-            ${(sub.criteria || []).map(c => `
-              <div class="text-[11px] text-gray-600 flex items-start gap-2">
-                <span class="flex-1 whitespace-pre-line">${escapeHtml(c.description)}</span>
-                <span class="text-gray-400 whitespace-nowrap">${c.perInstanceValue}đ/lần${c.ruleText ? ` · ${escapeHtml(c.ruleText)}` : ''}</span>
-              </div>
-            `).join('')}
-          </div>
-        `).join('')}
-      </div>
-    `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có hạng mục nào.</p>';
-    return void document.getElementById('checklistTemplateViewWrap').classList.remove('hidden');
-  }
-
-  const optionLabelById = new Map();
-  (t.questions || []).forEach((q, qi) => (q.options || []).forEach(o => optionLabelById.set(o.id, `Câu ${qi + 1} — ${o.text}`)));
-  const isPassFailOnly = t.scoringMode === 'PASS_FAIL_ONLY';
-  document.getElementById('checklistTemplateViewQuestionsWrap').innerHTML = (t.questions || []).map((q, qi) => `
-    <div class="bg-white border rounded p-3 space-y-1.5">
-      <div class="flex items-center justify-between gap-2 flex-wrap">
-        <span class="font-bold text-gray-800 text-xs">Câu ${qi + 1}. ${escapeHtml(q.text)}</span>
-        <span class="text-[10px] text-gray-400">${q.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}${q.isRequired ? ' · Bắt buộc' : ''}${!isPassFailOnly && q.maxScore ? ' · Tối đa ' + q.maxScore + 'đ' : ''}</span>
-      </div>
-      ${q.showIfOptionId != null ? `<div class="text-[10px] text-amber-600">↳ Chỉ hiện khi: ${escapeHtml(optionLabelById.get(q.showIfOptionId) || '—')}</div>` : ''}
-      ${q.note ? `<div class="text-[11px] text-gray-500 italic">${escapeHtml(q.note)}</div>` : ''}
-      <div class="space-y-1">
-        ${(q.options || []).map(o => `
-          <div class="flex items-center gap-2 text-[11px]">
-            <span class="text-gray-400 w-6">#${o.id}</span>
-            <span class="flex-1">${escapeHtml(o.text)}</span>
-            ${isPassFailOnly ? '' : `<span class="${o.scoreValue < 0 ? 'text-red-600 font-bold' : 'text-gray-500'}">${o.scoreValue}đ</span>`}
-            <span class="px-1.5 py-0.5 rounded-full font-bold ${o.isPassing ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${o.isPassing ? 'Đạt' : 'Không đạt'}</span>
-            ${o.isCriticalFail ? '<span class="px-1.5 py-0.5 rounded-full font-bold bg-red-600 text-white">Lỗi nghiêm trọng</span>' : ''}
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có câu hỏi.</p>';
-
-  document.getElementById('checklistTemplateViewWrap').classList.remove('hidden');
-}
-function closeChecklistTemplateView() {
-  document.getElementById('checklistTemplateViewWrap').classList.add('hidden');
-}
-
-function addChecklistBuilderQuestion() {
-  checklistBuilderQuestions.push({
-    text: '', type: 'SINGLE_CHOICE', isRequired: true, maxScore: 10, note: '', category: '', showIfOptionId: null,
-    options: [
-      { text: 'Đạt', scoreValue: 10, isPassing: true, isCriticalFail: false },
-      { text: 'Không đạt', scoreValue: 0, isPassing: false, isCriticalFail: false }
-    ]
-  });
-  renderChecklistBuilderQuestions();
-}
-function removeChecklistBuilderQuestion(qIdx) {
-  checklistBuilderQuestions.splice(Number(qIdx), 1);
-  // Câu hỏi bị xoá có thể là chủ của 1 optionId đang được câu sau tham chiếu qua showIfOptionId — xoá
-  // tham chiếu mồ côi đó luôn (client tự dọn, server dù sao cũng validate lại từ đầu).
-  const validIds = new Set();
-  checklistBuilderQuestions.forEach(q => q.options.forEach((o, oi) => validIds.add(`${q.text}_${oi}`)));
-  renderChecklistBuilderQuestions();
-}
-function addChecklistBuilderOption(qIdx) {
-  checklistBuilderQuestions[Number(qIdx)].options.push({ text: '', scoreValue: 0, isPassing: true, isCriticalFail: false });
-  renderChecklistBuilderQuestions();
-}
-function removeChecklistBuilderOption(qIdx, oIdx) {
-  checklistBuilderQuestions[Number(qIdx)].options.splice(Number(oIdx), 1);
-  renderChecklistBuilderQuestions();
-}
-// value đến từ data-arg-value="N" (chuỗi/số bình thường) HOẶC data-arg-el="N" (chính phần tử DOM —
-// dùng cho checkbox, vì el.value của checkbox luôn là "on" chứ không phải true/false, phải đọc el.checked).
-function updateChecklistBuilderQuestionField(qIdx, field, value) {
-  const q = checklistBuilderQuestions[Number(qIdx)];
-  if (value instanceof HTMLElement) value = value.checked;
-  if (field === 'maxScore') value = Number(value) || 0;
-  if (field === 'showIfOptionId') value = value === '' ? null : Number(value);
-  q[field] = value;
-  if (field === 'type') renderChecklistBuilderQuestions();
-}
-function updateChecklistBuilderOptionField(qIdx, oIdx, field, value) {
-  const o = checklistBuilderQuestions[Number(qIdx)].options[Number(oIdx)];
-  if (value instanceof HTMLElement) value = value.checked;
-  if (field === 'scoreValue') value = Number(value) || 0;
-  o[field] = value;
-}
-
-// ===================== Builder — LOẠI 2: DEDUCTION ("Trừ điểm theo hạng mục", v21.0) =====================
-// Cây 3 cấp — checklistBuilderCategories[ci].subItems[si].criteria[cri], mirror ĐÚNG cấu trúc
-// validateChecklistCategories() ở lib/checklist.js (không có optionId toàn cục kiểu QA vì loại mẫu này
-// không có điều kiện phân nhánh giữa các tiêu chí — không cần tham chiếu chéo).
-function addChecklistBuilderCategory() {
-  checklistBuilderCategories.push({ name: '', maxDeduction: 10, subItems: [] });
-  renderChecklistBuilderCategories();
-}
-function removeChecklistBuilderCategory(ci) {
-  checklistBuilderCategories.splice(Number(ci), 1);
-  renderChecklistBuilderCategories();
-}
-function updateChecklistBuilderCategoryField(ci, field, value) {
-  const cat = checklistBuilderCategories[Number(ci)];
-  if (field === 'maxDeduction') value = Number(value) || 0;
-  cat[field] = value;
-}
-function addChecklistBuilderSubItem(ci) {
-  checklistBuilderCategories[Number(ci)].subItems.push({ name: '', maxDeduction: null, criteria: [] });
-  renderChecklistBuilderCategories();
-}
-function removeChecklistBuilderSubItem(ci, si) {
-  checklistBuilderCategories[Number(ci)].subItems.splice(Number(si), 1);
-  renderChecklistBuilderCategories();
-}
-function updateChecklistBuilderSubItemField(ci, si, field, value) {
-  const sub = checklistBuilderCategories[Number(ci)].subItems[Number(si)];
-  if (field === 'maxDeduction') value = value === '' ? null : (Number(value) || 0);
-  sub[field] = value;
-}
-function addChecklistBuilderCriteria(ci, si) {
-  checklistBuilderCategories[Number(ci)].subItems[Number(si)].criteria.push({ description: '', ruleText: '', perInstanceValue: 1 });
-  renderChecklistBuilderCategories();
-}
-function removeChecklistBuilderCriteria(ci, si, cri) {
-  checklistBuilderCategories[Number(ci)].subItems[Number(si)].criteria.splice(Number(cri), 1);
-  renderChecklistBuilderCategories();
-}
-function updateChecklistBuilderCriteriaField(ci, si, cri, field, value) {
-  const c = checklistBuilderCategories[Number(ci)].subItems[Number(si)].criteria[Number(cri)];
-  if (field === 'perInstanceValue') value = Number(value) || 0;
-  c[field] = value;
-}
-function renderChecklistBuilderCategories() {
-  const el = document.getElementById('checklistBuilderCategoriesWrap');
-  if (!el) return;
-  el.innerHTML = checklistBuilderCategories.map((cat, ci) => `
-    <div class="bg-white border-2 border-rose-200 rounded p-3 space-y-2">
-      <div class="flex items-center gap-2">
-        <span class="font-bold text-gray-500 text-xs w-6">${ci + 1}.</span>
-        <input value="${escapeHtml(cat.name)}" placeholder="Tên hạng mục lớn (VD: CHẤT LƯỢNG SẢN PHẨM)" data-op-input="updateChecklistBuilderCategoryField" data-arg0="${ci}" data-arg1="name" data-arg-value="2" class="flex-1 border p-1.5 rounded text-xs font-bold">
-        <input type="number" min="0" value="${cat.maxDeduction}" placeholder="Điểm tối đa" title="Điểm tối đa của hạng mục lớn" data-op-input="updateChecklistBuilderCategoryField" data-arg0="${ci}" data-arg1="maxDeduction" data-arg-value="2" class="w-28 border p-1.5 rounded text-xs">
-        <button type="button" data-op="removeChecklistBuilderCategory" data-arg0="${ci}" class="text-red-600 text-[11px] font-bold hover:underline whitespace-nowrap">Xoá hạng mục</button>
-      </div>
-      <div class="pl-4 space-y-2">
-        ${cat.subItems.map((sub, si) => `
-          <div class="border-l-2 border-gray-200 pl-3 space-y-1.5">
-            <div class="flex items-center gap-2">
-              <span class="font-semibold text-gray-500 text-[11px] w-8">${ci + 1}.${si + 1}</span>
-              <input value="${escapeHtml(sub.name)}" placeholder="Tên hạng mục con (VD: Chất lượng cảm quan)" data-op-input="updateChecklistBuilderSubItemField" data-arg0="${ci}" data-arg1="${si}" data-arg2="name" data-arg-value="3" class="flex-1 border p-1 rounded text-[11px]">
-              <input type="number" min="0" value="${sub.maxDeduction != null ? sub.maxDeduction : ''}" placeholder="Điểm tối đa riêng (để trống = dùng chung hạng mục lớn)" title="Để trống nếu dùng chung điểm tối đa của hạng mục lớn" data-op-input="updateChecklistBuilderSubItemField" data-arg0="${ci}" data-arg1="${si}" data-arg2="maxDeduction" data-arg-value="3" class="w-44 border p-1 rounded text-[11px]">
-              <button type="button" data-op="removeChecklistBuilderSubItem" data-arg0="${ci}" data-arg1="${si}" class="text-red-500 text-[11px] font-bold">Xoá</button>
-            </div>
-            <div class="space-y-1">
-              ${sub.criteria.map((c, cri) => `
-                <div class="flex items-start gap-1.5">
-                  <textarea placeholder="Mô tả tiêu chí vi phạm" data-op-input="updateChecklistBuilderCriteriaField" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" data-arg3="description" data-arg-value="4" class="flex-1 border p-1 rounded text-[11px]" rows="1">${escapeHtml(c.description)}</textarea>
-                  <input value="${escapeHtml(c.ruleText || '')}" placeholder="Quy tắc (VD: Cho 1 mã SP không phù hợp)" data-op-input="updateChecklistBuilderCriteriaField" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" data-arg3="ruleText" data-arg-value="4" class="w-56 border p-1 rounded text-[11px]">
-                  <input type="number" min="0" value="${c.perInstanceValue}" placeholder="Điểm/lần" title="Điểm trừ THAM KHẢO cho 1 lần vi phạm — không ép buộc, người kiểm tra tự nhập tổng điểm trừ thực tế lúc làm bài" data-op-input="updateChecklistBuilderCriteriaField" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" data-arg3="perInstanceValue" data-arg-value="4" class="w-20 border p-1 rounded text-[11px]">
-                  <button type="button" data-op="removeChecklistBuilderCriteria" data-arg0="${ci}" data-arg1="${si}" data-arg2="${cri}" class="text-red-500 text-[11px] font-bold">✕</button>
-                </div>
-              `).join('')}
-              <button type="button" data-op="addChecklistBuilderCriteria" data-arg0="${ci}" data-arg1="${si}" class="text-sky-600 text-[11px] font-bold hover:underline">+ Thêm tiêu chí</button>
-            </div>
-          </div>
-        `).join('')}
-        <button type="button" data-op="addChecklistBuilderSubItem" data-arg0="${ci}" class="text-gray-600 text-[11px] font-bold hover:underline">+ Thêm hạng mục con</button>
-      </div>
-    </div>
-  `).join('') || '<p class="text-xs text-gray-400 italic">Chưa có hạng mục nào — bấm "+ Thêm Hạng Mục Lớn".</p>';
-}
-
-// Tính optionId TOÀN CỤC cho từng lựa chọn đang soạn — thuật toán PHẢI khớp Y HỆT server
-// (validateChecklistQuestions() ở lib/checklist.js: tăng dần liên tục, không reset theo câu hỏi).
-function computeChecklistBuilderOptionIds() {
-  let next = 1;
-  return checklistBuilderQuestions.map(q => q.options.map(() => next++));
-}
-function renderChecklistBuilderQuestions() {
-  const el = document.getElementById('checklistBuilderQuestionsWrap');
-  const isPassFailOnly = document.getElementById('checklistBuilderScoringMode').value === 'PASS_FAIL_ONLY';
-  const optionIdsByQ = computeChecklistBuilderOptionIds();
-  el.innerHTML = checklistBuilderQuestions.map((q, qi) => {
-    // Danh sách lựa chọn của MỌI câu hỏi ĐỨNG TRƯỚC câu này — nguồn cho dropdown "Chỉ hiện khi...".
-    const priorOptions = [];
-    for (let pi = 0; pi < qi; pi++) {
-      checklistBuilderQuestions[pi].options.forEach((o, oi) => {
-        priorOptions.push({ id: optionIdsByQ[pi][oi], label: `Câu ${pi + 1} — ${o.text || '(chưa đặt tên)'}` });
-      });
-    }
-    return `
-    <div class="bg-white border rounded p-3 space-y-2">
-      <div class="flex items-center justify-between gap-2">
-        <span class="font-bold text-gray-700 text-xs">Câu hỏi ${qi + 1}</span>
-        <button type="button" data-op="removeChecklistBuilderQuestion" data-arg0="${qi}" class="text-red-600 text-[11px] font-bold hover:underline">Xoá câu hỏi</button>
-      </div>
-      <input value="${escapeHtml(q.text)}" placeholder="Nội dung câu hỏi" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="text" data-arg-value="2" class="w-full border p-1.5 rounded text-xs">
-      <input value="${escapeHtml(q.category || '')}" placeholder="Nhóm/Hạng mục (tuỳ chọn, VD: 1. Kiểm soát cảnh quan chung) — dùng để in tiêu đề nhóm + tính % theo nhóm khi Xuất Báo Cáo" title="Để trống nếu câu hỏi đứng độc lập, không thuộc nhóm nào" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="category" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px] bg-amber-50">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <select data-op-change="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="type" data-arg-value="2" class="border p-1.5 rounded text-[11px]">
-          <option value="SINGLE_CHOICE" ${q.type === 'SINGLE_CHOICE' ? 'selected' : ''}>Chọn 1</option>
-          <option value="MULTIPLE_CHOICE" ${q.type === 'MULTIPLE_CHOICE' ? 'selected' : ''}>Chọn nhiều</option>
-        </select>
-        ${isPassFailOnly ? '' : `<input type="number" min="0" value="${q.maxScore}" placeholder="Điểm tối đa" data-op-input="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="maxScore" data-arg-value="2" class="border p-1.5 rounded text-[11px]">`}
-        <label class="flex items-center gap-1 text-[11px] text-gray-600">
-          <input type="checkbox" ${q.isRequired ? 'checked' : ''} data-op-change="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="isRequired" data-arg-el="2"> Bắt buộc trả lời
-        </label>
-        <select data-op-change="updateChecklistBuilderQuestionField" data-arg0="${qi}" data-arg1="showIfOptionId" data-arg-value="2" class="border p-1.5 rounded text-[11px]">
-          <option value="">Luôn hiện</option>
-          ${priorOptions.map(po => `<option value="${po.id}" ${q.showIfOptionId === po.id ? 'selected' : ''}>Chỉ hiện khi: ${escapeHtml(po.label)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="space-y-1">
-        ${q.options.map((o, oi) => `
-          <div class="flex items-center gap-1.5">
-            <span class="text-[10px] text-gray-400 w-6">#${optionIdsByQ[qi][oi]}</span>
-            <input value="${escapeHtml(o.text)}" placeholder="Lựa chọn" data-op-input="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="text" data-arg-value="3" class="flex-1 border p-1 rounded text-[11px]">
-            ${isPassFailOnly ? '' : `<input type="number" value="${o.scoreValue}" placeholder="Điểm (có thể âm)" title="Có thể nhập số âm để TRỪ điểm (VD đáp án 'Không đạt' của câu yêu cầu vàng)" data-op-input="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="scoreValue" data-arg-value="3" class="w-24 border p-1 rounded text-[11px]">`}
-            <label class="flex items-center gap-1 text-[10px] text-gray-600"><input type="checkbox" ${o.isPassing ? 'checked' : ''} data-op-change="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="isPassing" data-arg-el="3"> Đạt</label>
-            <label class="flex items-center gap-1 text-[10px] text-red-600"><input type="checkbox" ${o.isCriticalFail ? 'checked' : ''} data-op-change="updateChecklistBuilderOptionField" data-arg0="${qi}" data-arg1="${oi}" data-arg2="isCriticalFail" data-arg-el="3"> Lỗi nghiêm trọng</label>
-            <button type="button" data-op="removeChecklistBuilderOption" data-arg0="${qi}" data-arg1="${oi}" class="text-red-500 text-[11px] font-bold">✕</button>
-          </div>
-        `).join('')}
-        <button type="button" data-op="addChecklistBuilderOption" data-arg0="${qi}" class="text-sky-600 text-[11px] font-bold hover:underline">+ Thêm lựa chọn</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// ===================== Nhập/Xuất Excel câu hỏi (v20.9) — mirror ĐÚNG khuôn Nhập Câu Hỏi Từ Excel của
-// Ngân Hàng Câu Hỏi Đào Tạo (module-internalcomms-daotao.js::onTrainingTestImportFileChange()/
-// confirmTrainingTestImport()) — parse-questions CHỈ đọc/xem trước (routes/checklistImport.js), KHÔNG tự
-// lưu gì; vẫn phải bấm "💾 Lưu Mẫu" như thường sau khi nạp để server xác minh lại toàn bộ. =====================
-// So trùng Nội Dung Câu Hỏi với checklistBuilderQuestions[] đang soạn dở — cùng công thức chuẩn hoá với
-// normalizeDedupKey() (lib/importDedup.js) nhưng viết lại tại client vì trình duyệt không import được
-// module phía server; route parse-questions không biết đang sửa template nào nên chỉ tự đánh dấu
-// duplicateInFile (2 dòng trùng NGAY TRONG file), duplicateExisting phải tự tính ở đây.
-function checklistImportNormalizeText(s) {
-  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-let checklistImportPreviewItems = [];
-async function onChecklistImportFileChange(event) {
-  const file = event.target.files[0];
-  checklistImportPreviewItems = [];
-  document.getElementById('checklistImportPreviewWrap').classList.add('hidden');
-  document.getElementById('checklistImportConfirmBtn').classList.add('hidden');
-  const statusEl = document.getElementById('checklistImportStatus');
-  if (!file) { statusEl.innerText = ''; return; }
-
-  statusEl.innerText = '⏳ Đang đọc file...';
-  const formData = new FormData();
-  formData.append('file', file);
-  try {
-    const res = await fetch('/api/checklist/parse-questions', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
-    // duplicateExisting: so với DANH SÁCH CÂU HỎI ĐANG SOẠN DỞ (checklistBuilderQuestions) — server
-    // không biết đang sửa template nào nên chỉ gắn được duplicateInFile (lib/checklistImport.js).
-    const existingTexts = new Set(checklistBuilderQuestions.map(q => checklistImportNormalizeText(q.text)));
-    data.items.forEach((it, idx) => {
-      it._idx = idx;
-      if (!it.duplicateExisting) it.duplicateExisting = existingTexts.has(checklistImportNormalizeText(it.text));
-      // Mặc định BỎ CHỌN checkbox "Nhập câu này" cho câu nghi trùng (an toàn hơn), người dùng tự tick
-      // lại nếu vẫn muốn thêm — mirror ĐÚNG khuôn Budget Lines (không có khái niệm "ghi đè" ở đây, mỗi
-      // câu hỏi là 1 phần tử độc lập trong danh sách đang soạn, không phải bản ghi đã lưu).
-      it.include = it.valid && !it.duplicateInFile && !it.duplicateExisting;
-    });
-    checklistImportPreviewItems = data.items;
-    const validCount = data.items.filter(it => it.valid).length;
-    const dupCount = data.items.filter(it => it.duplicateInFile || it.duplicateExisting).length;
-    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} câu hỏi hợp lệ`
-      + (dupCount ? `, ${dupCount} câu NGHI TRÙNG (đã bỏ chọn sẵn, tick lại nếu vẫn muốn thêm).` : '.');
-    document.getElementById('checklistImportPreviewBody').innerHTML = data.items.map((it) => {
-      const dupNote = it.duplicateInFile ? '⚠️ Trùng câu khác trong file này'
-        : (it.duplicateExisting ? '⚠️ Trùng câu hỏi đã có trong danh sách đang soạn' : '');
-      return `<tr class="${dupNote ? 'bg-amber-50' : ''}">
-        <td class="p-1 text-center">${it.valid
-          ? `<input type="checkbox" data-op-change="toggleChecklistImportRow" data-arg0="${it._idx}" ${it.include ? 'checked' : ''}>`
-          : '<span class="text-red-600">⛔</span>'}</td>
-        <td class="p-1">${escapeHtml(it.text)}</td>
-        <td class="p-1">${it.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1'}</td>
-        <td class="p-1">${(it.options || []).length} đáp án</td>
-        <td class="p-1 text-red-600">${escapeHtml([...(it.errors || []), dupNote].filter(Boolean).join('; '))}</td>
-      </tr>`;
-    }).join('');
-    document.getElementById('checklistImportPreviewWrap').classList.remove('hidden');
-    if (validCount > 0) document.getElementById('checklistImportConfirmBtn').classList.remove('hidden');
-  } catch (err) {
-    statusEl.innerText = `⛔ ${err.message}`;
-    event.target.value = '';
-  }
-}
-// Tick/bỏ tick 1 câu hỏi xem trước trước khi nạp (VD câu bị đánh dấu nghi trùng, người dùng vẫn muốn
-// thêm) — chỉ đổi cờ include, không render lại toàn bộ bảng, cùng khuôn toggleBudgetLineImportRow().
-function toggleChecklistImportRow(idxStr) {
-  const idx = Number(idxStr);
-  const it = checklistImportPreviewItems.find(x => x._idx === idx);
-  if (it) it.include = !it.include;
-}
-// Nạp câu hỏi HỢP LỆ (và ĐƯỢC TICK CHỌN) vào checklistBuilderQuestions[] đang soạn — showIfOptionId LUÔN
-// null (Excel không có cột điều kiện phân nhánh, cấu hình thủ công lại qua dropdown "Chỉ hiện khi..."
-// sau khi nạp nếu cần).
-function confirmChecklistImport() {
-  const validItems = checklistImportPreviewItems.filter(it => it.valid && it.include);
-  if (!validItems.length) return alert('Chưa có câu hỏi nào được chọn để nạp.');
-  validItems.forEach(it => {
-    checklistBuilderQuestions.push({
-      text: it.text, type: it.type, isRequired: it.isRequired, maxScore: it.maxScore, note: '', showIfOptionId: null,
-      options: it.options.map(o => ({ text: o.text, scoreValue: o.scoreValue, isPassing: o.isPassing, isCriticalFail: o.isCriticalFail }))
-    });
-  });
-  alert(`✅ Đã nạp ${validItems.length} câu hỏi vào danh sách — kiểm tra lại rồi bấm "💾 Lưu Mẫu" để lưu.`);
-  document.getElementById('checklistImportFileInput').value = '';
-  document.getElementById('checklistImportPreviewWrap').classList.add('hidden');
-  document.getElementById('checklistImportConfirmBtn').classList.add('hidden');
-  document.getElementById('checklistImportStatus').innerText = '';
-  checklistImportPreviewItems = [];
-  renderChecklistBuilderQuestions();
-}
-// Xuất Excel — dùng ĐÚNG khuôn cột với file mẫu Nhập Từ Excel (1 dòng/đáp án, nhóm theo "STT Câu Hỏi")
-// để xuất ra sửa offline rồi nhập lại được ngay, không cần dựng lại từ đầu — tái dùng API xuất Excel
-// generic sẵn có (routes/adminExport.js + downloadXlsxFromServer(), core.js), KHÔNG cần route riêng.
-function exportChecklistBuilderQuestionsExcel() {
-  if (!checklistBuilderQuestions.length) return alert('Chưa có câu hỏi nào để xuất.');
-  const columns = [
-    { header: 'STT Câu Hỏi', key: 'qno', width: 10 },
-    { header: 'Nội Dung Câu Hỏi', key: 'text', width: 38 },
-    { header: 'Loại', key: 'type', width: 16 },
-    { header: 'Bắt Buộc', key: 'required', width: 12 },
-    { header: 'Điểm Tối Đa Câu Hỏi', key: 'maxScore', width: 18 },
-    { header: 'Nội Dung Đáp Án', key: 'optionText', width: 32 },
-    { header: 'Đạt', key: 'isPassing', width: 10 },
-    { header: 'Yêu Cầu Vàng / Lỗi Nghiêm Trọng', key: 'isCriticalFail', width: 22 },
-    { header: 'Điểm Đáp Án', key: 'scoreValue', width: 14 }
-  ];
-  const rows = [];
-  checklistBuilderQuestions.forEach((q, qi) => {
-    (q.options || []).forEach((o, oi) => {
-      rows.push({
-        qno: oi === 0 ? qi + 1 : '',
-        text: oi === 0 ? q.text : '',
-        type: oi === 0 ? (q.type === 'MULTIPLE_CHOICE' ? 'Chọn nhiều' : 'Chọn 1') : '',
-        required: oi === 0 ? (q.isRequired ? 'Có' : 'Không') : '',
-        maxScore: oi === 0 ? q.maxScore : '',
-        optionText: o.text,
-        isPassing: o.isPassing ? 'Có' : 'Không',
-        isCriticalFail: o.isCriticalFail ? 'Có' : 'Không',
-        scoreValue: o.scoreValue
-      });
-    });
-  });
-  downloadXlsxFromServer('cau-hoi-checklist.xlsx', 'Câu Hỏi', columns, rows);
-}
-
-async function saveChecklistTemplateBuilder() {
-  const payload = {
-    templateCode: document.getElementById('checklistBuilderCode').value.trim(),
-    templateName: document.getElementById('checklistBuilderName').value.trim(),
-    templateType: document.getElementById('checklistBuilderType').value,
-    templateKind: checklistBuilderKind
-  };
-  if (checklistBuilderKind === 'DEDUCTION') {
-    payload.categories = checklistBuilderCategories;
-  } else {
-    payload.scoringMode = document.getElementById('checklistBuilderScoringMode').value;
-    payload.passThreshold = document.getElementById('checklistBuilderPassThreshold').value === '' ? null : Number(document.getElementById('checklistBuilderPassThreshold').value);
-    payload.questions = checklistBuilderQuestions;
-  }
-  try {
-    let result;
-    if (checklistBuilderEditingId) {
-      result = await callWorkflowStyleAction(`/api/checklist/templates/${checklistBuilderEditingId}/edit`, payload);
-    } else {
-      result = await callCreateAction('checklistTemplates', payload);
-    }
-    checklistApplyTemplateUpdate(result.item);
-    closeChecklistTemplateBuilder();
-    renderChecklistConfigTab();
-    alert('✅ Đã lưu mẫu checklist.');
-  } catch (err) { alert('⛔ ' + err.message); }
+function hasExplicitChecklistAtvstpExecuteClient(user) {
+  return !!user?.perms?.checklistAtvstpExecute;
 }
 
 // Gọi 1 route POST tuỳ ý của routes/checklist.js (KHÔNG theo khuôn /api/workflow/<module>/<id>/<action>
@@ -638,99 +76,53 @@ async function callWorkflowStyleAction(path, payload) {
   return body;
 }
 
-function checklistApplyTemplateUpdate(item) {
-  DB.checklistTemplates = DB.checklistTemplates || [];
-  const idx = DB.checklistTemplates.findIndex(t => t.id === item.id);
-  if (idx >= 0) DB.checklistTemplates[idx] = item; else DB.checklistTemplates.unshift(item);
-}
 function checklistApplySubmissionUpdate(item) {
   DB.checklistSubmissions = DB.checklistSubmissions || [];
   const idx = DB.checklistSubmissions.findIndex(s => s.id === item.id);
   if (idx >= 0) DB.checklistSubmissions[idx] = item; else DB.checklistSubmissions.unshift(item);
 }
 
-async function cloneChecklistTemplate(id) {
-  if (!confirm('Nhân bản mẫu checklist này thành 1 bản Nháp mới (version kế tiếp)?')) return;
-  try {
-    const result = await callWorkflowStyleAction(`/api/checklist/templates/${id}/clone`, {});
-    checklistApplyTemplateUpdate(result.item);
-    renderChecklistConfigTab();
-    alert('✅ Đã nhân bản — mở "Sửa" trên bản Nháp mới để chỉnh nội dung.');
-  } catch (err) { alert('⛔ ' + err.message); }
-}
-async function activateChecklistTemplate(id) {
-  if (!confirm('Kích hoạt mẫu checklist này? Mọi bản Đang Dùng khác cùng Mã Checklist sẽ tự chuyển sang Lưu Trữ.')) return;
-  try {
-    const result = await callWorkflowStyleAction(`/api/checklist/templates/${id}/activate`, {});
-    checklistApplyTemplateUpdate(result.item);
-    (DB.checklistTemplates || []).forEach(t => { if (t.id !== result.item.id && t.templateCode === result.item.templateCode && t.status === 'ACTIVE') t.status = 'ARCHIVED'; });
-    renderChecklistConfigTab();
-    alert('✅ Đã kích hoạt.');
-  } catch (err) { alert('⛔ ' + err.message); }
-}
-// "✏️ Sửa" cho checklist ĐANG DÙNG/LƯU TRỮ — gộp 2 bước "Nhân Bản" rồi tự tìm bản Nháp mới bấm "Sửa"
-// thành 1 bước: nhân bản NGAY rồi mở thẳng builder trên bản Nháp vừa sinh ra (server /clone giờ nhận cả
-// ACTIVE lẫn ARCHIVED, xem routes/checklist.js). KHÔNG sửa trực tiếp bản đang dùng — vẫn giữ nguyên tắc
-// bảo toàn nội dung các bài đã nộp cũ (checklistSubmissions tham chiếu templateId của bản gốc).
-async function editViaCloneChecklistTemplate(id) {
-  if (!confirm('Nhân bản mẫu checklist này thành 1 bản Nháp mới và mở luôn form sửa?')) return;
-  try {
-    const result = await callWorkflowStyleAction(`/api/checklist/templates/${id}/clone`, {});
-    checklistApplyTemplateUpdate(result.item);
-    renderChecklistConfigTab();
-    openChecklistTemplateBuilder(result.item.id);
-  } catch (err) { alert('⛔ ' + err.message); }
-}
-// "⏸️ Dừng" — chuyển ACTIVE -> ARCHIVED thủ công, KHÔNG cần kích hoạt bản khác thay thế (khác
-// activateChecklistTemplate() tự lưu trữ các bản ACTIVE cùng mã khi kích hoạt 1 bản MỚI).
-async function deactivateChecklistTemplate(id) {
-  if (!confirm('Dừng sử dụng mẫu checklist này? Sẽ chuyển sang trạng thái "Lưu trữ" — không ai chấm được checklist này nữa cho tới khi kích hoạt lại 1 bản khác.')) return;
-  try {
-    const result = await callWorkflowStyleAction(`/api/checklist/templates/${id}/deactivate`, {});
-    checklistApplyTemplateUpdate(result.item);
-    renderChecklistConfigTab();
-    alert('✅ Đã dừng sử dụng.');
-  } catch (err) { alert('⛔ ' + err.message); }
-}
-async function deleteChecklistTemplate(id) {
-  const t = (DB.checklistTemplates || []).find(x => x.id === Number(id));
-  const confirmMsg = t && t.status !== 'DRAFT'
-    ? `Xoá HẲN mẫu checklist "${t.templateName}" (đang ${t.status === 'ACTIVE' ? 'Đang dùng' : 'Lưu trữ'})? Hành động này KHÔNG thể hoàn tác.`
-    : 'Xoá hẳn mẫu checklist Nháp này?';
-  if (!confirm(confirmMsg)) return;
-  try {
-    await callWorkflowStyleAction(`/api/checklist/templates/${id}/delete`, {});
-    DB.checklistTemplates = (DB.checklistTemplates || []).filter(t => t.id !== Number(id));
-    renderChecklistConfigTab();
-  } catch (err) { alert('⛔ ' + err.message); }
-}
-
 // ===================== Sub-tab: Thực Hiện =====================
+// hasHomeStoreClient() — mirror ĐÚNG hasHomeStore() ở lib/checklist.js.
+function hasHomeStoreClient(user) {
+  return !!(user && user.posType === 'STORE' && user.dept);
+}
 function renderChecklistExecuteTab() {
   const el = document.getElementById('checklistExecuteListWrap');
   const user = currentUser;
   const isAdmin = !!user?.perms?.admin;
   const activeTemplates = (DB.checklistTemplates || []).filter(t => t.status === 'ACTIVE');
   const storeSelfTemplatesAll = activeTemplates.filter(t => t.templateType === 'STORE_SELF');
-  const storeSelfTemplates = isEligibleForStoreSelfClient(user) ? storeSelfTemplatesAll : [];
-  // Kiểm Soát Siêu Thị (CONTROL_AUDIT, VD checklist VSATTP): khối "thật" CHỈ hiện cho user có
-  // checklistAuditScope TƯỜNG MINH — KHÔNG tự động coi admin có quyền Kiểm Soát thật chỉ vì có cờ admin
-  // (khác hasChecklistAuditScopeClient() ở core.js vốn bypass cho admin, dùng cho việc ẩn/hiện CẢ tab
-  // "Thực Hiện"). Theo đúng yêu cầu người dùng 9/2026: "ai có quyền mới là thực hiện" — admin không gắn
-  // checklistAuditScope thật thì dồn vào khối "🧪 Test" bên dưới, đối xứng với STORE_SELF.
-  const hasRealAuditScope = hasExplicitChecklistAuditScopeClient(user);
-  const auditScope = hasRealAuditScope ? getChecklistAuditStoresClient(user) : null;
-  const auditTemplates = auditScope ? activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT') : [];
-  const auditStores = auditScope ? (auditScope.all ? (DB.stores || []) : (auditScope.depts || [])) : [];
-  // Admin: tài khoản admin thường KHÔNG gắn Vị Trí Siêu Thị cụ thể (posType khác 'STORE') nên không lọt
-  // vào storeSelfTemplates ở trên dù mẫu đang ACTIVE, và cũng thường KHÔNG có checklistAuditScope tường
-  // minh — gộp cả 2 loại mẫu (Tự Đánh Giá + Kiểm Soát) vào CHUNG 1 khối Test bên dưới, cho phép admin
-  // chọn TÙY Ý 1 siêu thị để test mẫu (server đã nới ở resolveStoreCodeForSubmission()/canAuditStore()
-  // — admin vốn bypass mọi kiểm tra quyền khác trong hệ thống nên không phát sinh rủi ro mới), phục vụ
-  // nhu cầu kiểm tra mẫu vừa tạo/kích hoạt mà không cần tài khoản riêng có đúng quyền.
+  const auditTemplatesAll = activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT');
+
+  // "✅ Checklist Thường" (STORE_SELF) — 11/2026 LÀM GỌN theo yêu cầu người dùng: mặc định CHỈ người
+  // thuộc 1 siêu thị (hasHomeStoreClient) mới thực hiện/mặc định xem báo cáo đúng siêu thị mình, NHƯNG
+  // vẫn phải được CẤP checklistExecute TƯỜNG MINH mới thực hiện được (không tự động theo posType). Người
+  // KHÔNG thuộc siêu thị nào (HO) được cấp checklistExecute thì PHẢI chọn thêm đúng 1 siêu thị trong
+  // phạm vi checklistExecuteScope (all hoặc danh sách) mới thực hiện được — khối MỚI bên dưới, đối xứng
+  // khuôn "🔎 Kiểm Soát Siêu Thị" đã có.
+  const hasRealExecute = hasExplicitChecklistExecuteClient(user);
+  const showHomeStoreBox = hasRealExecute && hasHomeStoreClient(user) && storeSelfTemplatesAll.length;
+  const executeScope = hasRealExecute && !hasHomeStoreClient(user) ? getChecklistExecuteScopeClient(user) : null;
+  const executeScopeStores = executeScope ? (executeScope.all ? (DB.stores || []) : (executeScope.depts || [])) : [];
+  const showHoScopeBox = !!(executeScope && executeScopeStores.length && storeSelfTemplatesAll.length);
+
+  // "🔎 Kiểm Soát Siêu Thị" (CONTROL_AUDIT, VD checklist VSATTP) — PHẲNG (checklistAtvstpExecute), "ai
+  // được chọn thì thực hiện TẤT CẢ siêu thị" (không còn phạm vi theo siêu thị riêng của checklistAuditScope
+  // cũ) — khối "thật" CHỈ hiện cho user có quyền TƯỜNG MINH (không tự động bypass cho admin, theo đúng
+  // yêu cầu người dùng đã chốt "ai có quyền mới là thực hiện" từ 9/2026).
+  const hasRealAtvstpExecute = hasExplicitChecklistAtvstpExecuteClient(user);
+  const auditTemplates = hasRealAtvstpExecute ? auditTemplatesAll : [];
+  const auditStores = hasRealAtvstpExecute ? (DB.stores || []) : [];
+
+  // Admin: tài khoản admin thường KHÔNG gắn Vị Trí Siêu Thị cụ thể và cũng thường KHÔNG được cấp 2 quyền
+  // TƯỜNG MINH trên — gộp cả 2 loại mẫu (Checklist Thường + Kiểm Soát) vào CHUNG 1 khối Test bên dưới khi
+  // không có khối "thật" nào khác đã hiện, cho phép admin chọn TÙY Ý 1 siêu thị để test mẫu (server đã
+  // bypass mọi kiểm tra quyền cho admin ở resolveStoreCodeForSubmission() — không phát sinh rủi ro mới),
+  // phục vụ nhu cầu kiểm tra mẫu vừa tạo/kích hoạt mà không cần tài khoản riêng có đúng quyền.
   const adminTestTemplates = [
-    ...((isAdmin && !isEligibleForStoreSelfClient(user)) ? storeSelfTemplatesAll : []),
-    ...((isAdmin && !hasRealAuditScope) ? activeTemplates.filter(t => t.templateType === 'CONTROL_AUDIT') : [])
+    ...((isAdmin && !showHomeStoreBox && !showHoScopeBox) ? storeSelfTemplatesAll : []),
+    ...((isAdmin && !hasRealAtvstpExecute) ? auditTemplatesAll : [])
   ];
 
   const myDrafts = (DB.checklistSubmissions || []).filter(s => s.submittedByUsername === user.username && s.status === 'DRAFT');
@@ -745,13 +137,24 @@ function renderChecklistExecuteTab() {
       </div>`).join('')}
     </div>`;
   }
-  if (storeSelfTemplates.length) {
+  if (showHomeStoreBox) {
     html += `<div class="bg-teal-50 p-3 rounded border border-teal-200 space-y-1">
-      <h4 class="font-bold text-teal-800 text-xs">✅ Tự Đánh Giá — Siêu Thị ${escapeHtml(user.dept)}</h4>
-      ${storeSelfTemplates.map(t => `<div class="flex items-center justify-between text-xs">
+      <h4 class="font-bold text-teal-800 text-xs">✅ Checklist Thường — Siêu Thị ${escapeHtml(user.dept)}</h4>
+      ${storeSelfTemplatesAll.map(t => `<div class="flex items-center justify-between text-xs">
         <span>${escapeHtml(t.templateName)}</span>
         <button type="button" data-op="startChecklistSubmission" data-arg0="${t.id}" class="px-2 py-1 bg-teal-600 text-white rounded text-[11px] font-bold hover:bg-teal-700">Bắt Đầu</button>
       </div>`).join('')}
+    </div>`;
+  }
+  if (showHoScopeBox) {
+    html += `<div class="bg-teal-50 p-3 rounded border border-teal-200 space-y-2">
+      <h4 class="font-bold text-teal-800 text-xs">✅ Checklist Thường — Chọn Siêu Thị</h4>
+      <p class="text-[11px] text-teal-600">Bạn không gắn sẵn 1 siêu thị cụ thể — chọn đúng 1 siêu thị trong phạm vi được cấp để thực hiện.</p>
+      <div class="flex items-center gap-2 flex-wrap">
+        <select id="checklistExecuteScopeTemplateSelect" class="border p-1.5 rounded text-xs">${storeSelfTemplatesAll.map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('')}</select>
+        <select id="checklistExecuteScopeStoreSelect" class="border p-1.5 rounded text-xs">${executeScopeStores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        <button type="button" data-op="startChecklistExecuteScopeSubmission" class="px-3 py-1.5 bg-teal-600 text-white rounded text-xs font-bold hover:bg-teal-700">Bắt Đầu</button>
+      </div>
     </div>`;
   }
   if (auditTemplates.length) {
@@ -767,9 +170,9 @@ function renderChecklistExecuteTab() {
   if (adminTestTemplates.length) {
     html += `<div class="bg-indigo-50 p-3 rounded border border-indigo-200 space-y-2">
       <h4 class="font-bold text-indigo-800 text-xs">🧪 Test Checklist (Admin — chọn siêu thị bất kỳ)</h4>
-      <p class="text-[11px] text-indigo-600">Tài khoản admin không gắn Vị Trí Siêu Thị/chưa được cấp quyền Kiểm Soát thật nên chọn tạm 1 siêu thị để test mẫu — không tính là dữ liệu thật của siêu thị đó.</p>
+      <p class="text-[11px] text-indigo-600">Tài khoản admin không gắn Vị Trí Siêu Thị/chưa được cấp quyền thật nên chọn tạm 1 siêu thị để test mẫu — không tính là dữ liệu thật của siêu thị đó.</p>
       <div class="flex items-center gap-2 flex-wrap">
-        <select id="checklistAdminTestTemplateSelect" class="border p-1.5 rounded text-xs">${adminTestTemplates.map(t => `<option value="${t.id}">${t.templateType === 'CONTROL_AUDIT' ? '[Kiểm Soát] ' : '[Tự Đánh Giá] '}${escapeHtml(t.templateName)}</option>`).join('')}</select>
+        <select id="checklistAdminTestTemplateSelect" class="border p-1.5 rounded text-xs">${adminTestTemplates.map(t => `<option value="${t.id}">${t.templateType === 'CONTROL_AUDIT' ? '[Kiểm Soát] ' : '[Checklist Thường] '}${escapeHtml(t.templateName)}</option>`).join('')}</select>
         <select id="checklistAdminTestStoreSelect" class="border p-1.5 rounded text-xs">${(DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
         <button type="button" data-op="startChecklistAdminTestSubmission" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700">Bắt Đầu Test</button>
       </div>
@@ -786,6 +189,15 @@ function startChecklistAdminTestSubmission() {
 function startChecklistAuditSubmission() {
   const templateId = Number(document.getElementById('checklistAuditTemplateSelect').value);
   const storeCode = document.getElementById('checklistAuditStoreSelect').value;
+  startChecklistSubmission(templateId, storeCode);
+}
+// startChecklistExecuteScopeSubmission() — người KHÔNG có siêu thị gắn sẵn (HO) nhưng được cấp
+// checklistExecute + checklistExecuteScope, tự chọn đúng 1 siêu thị trong phạm vi để thực hiện "Checklist
+// Thường" (MỚI, 11/2026 — vá gap "HO user không bao giờ thực hiện được STORE_SELF" theo đúng yêu cầu
+// người dùng, xem resolveStoreCodeForSubmission()/lib/checklist.js).
+function startChecklistExecuteScopeSubmission() {
+  const templateId = Number(document.getElementById('checklistExecuteScopeTemplateSelect').value);
+  const storeCode = document.getElementById('checklistExecuteScopeStoreSelect').value;
   startChecklistSubmission(templateId, storeCode);
 }
 async function startChecklistSubmission(templateId, storeCode) {
@@ -1093,9 +505,11 @@ async function submitChecklistStoreResponse(submissionId) {
 // xem được hết không cần tách"), không có cờ quyền riêng nào khác cho 2 khối này.
 let checklistReportActiveSubTab = 'GENERAL';
 function setChecklistReportSubTab(tab) {
-  // Mục 0 (10/2026): checkbox độc lập checklistReportGeneral/checklistReportVsattp.
-  const canGeneral = hasModuleAccess(currentUser, 'checklistReportGeneral');
-  const canVsattp = hasModuleAccess(currentUser, 'checklistReportVsattp');
+  // Mục 0 (10/2026): checkbox độc lập checklistReportGeneral/checklistReportVsattp (module-access, bật/
+  // tắt cả tổ chức) — AND thêm đúng quyền THẬT của người này (11/2026 LÀM GỌN: checklistReportView/
+  // checklistAtvstpReportView giờ TÁCH RIÊNG, không còn 1 cờ chung gác cả 2 sub-tab như trước).
+  const canGeneral = hasModuleAccess(currentUser, 'checklistReportGeneral') && canViewChecklistReportsGeneralClient(currentUser);
+  const canVsattp = hasModuleAccess(currentUser, 'checklistReportVsattp') && canViewChecklistReportsAtvstpClient(currentUser);
   if (tab === 'GENERAL' && !canGeneral) tab = canVsattp ? 'VSATTP' : 'GENERAL';
   if (tab === 'VSATTP' && !canVsattp) tab = canGeneral ? 'GENERAL' : 'VSATTP';
   checklistReportActiveSubTab = tab;
@@ -1307,9 +721,8 @@ function exportChecklistReportExcel() {
 
 // ===================== Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng) =====================
 // Client mirror THUẦN HIỂN THỊ cho lib/checklist.js::computeVsattpDashboardData() (server, dùng khi xuất
-// Excel — nguồn sự thật) — sửa 1 bên PHẢI soát lại bên kia, cùng khuôn hasChecklistAuditScope()/
-// hasChecklistAuditScopeClient(). Áp dụng cho MỌI mẫu templateKind==='DEDUCTION' (không hardcode riêng
-// tên "VSATTP" — xác nhận người dùng 10/2026).
+// Excel — nguồn sự thật) — sửa 1 bên PHẢI soát lại bên kia. Áp dụng cho MỌI mẫu templateKind==='DEDUCTION'
+// (không hardcode riêng tên "VSATTP" — xác nhận người dùng 10/2026).
 // parseSubmittedAtDate() — mirror ĐÚNG parseSubmittedAtDate() ở routes/checklist.js: submittedAt lưu
 // dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN')) — NGÀY Ở TOKEN THỨ 2 (index 1
 // sau split(' '), không phải token đầu/index 0 — token đầu là GIỜ). Cố ý viết hàm RIÊNG ở đây thay vì tái

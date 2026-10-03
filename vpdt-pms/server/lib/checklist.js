@@ -7,19 +7,37 @@
 // 2 loại checklist, cơ chế gán siêu thị HOÀN TOÀN khác nhau:
 //   - STORE_SELF: nhân viên siêu thị tự đánh giá — storeCode LUÔN suy ra từ user.dept khi
 //     user.posType === 'STORE' (TUYỆT ĐỐI không tin storeCode client tự gửi lên, xem resolveStoreCodeForSubmission()).
-//   - CONTROL_AUDIT: nhân viên Kiểm soát đánh giá — PHẢI tự chọn storeCode, giới hạn trong phạm vi
-//     perms.checklistAuditScope ({all, depts} — "depts" ở đây là mảng TÊN SIÊU THỊ, dùng đúng tên field
-//     "depts" để tái dùng NGUYÊN mergeGroupsBasePerms()/mergeGroupsBasePermsServer() sẵn có — 2 hàm đó
-//     hardcode nhận diện field theo tên "depts", không nhận diện theo ý nghĩa, nên đổi tên field khác
-//     (VD "stores") sẽ ÂM THẦM MẤT khả năng hợp (union) phạm vi khi 1 user thuộc nhiều Nhóm Phân Quyền).
+//     Người KHÔNG có siêu thị gắn sẵn (HO) vẫn thực hiện được nếu có quyền checklistExecute VÀ được gán
+//     phạm vi checklistExecuteScope ({all,depts} — "depts" ở đây là mảng TÊN SIÊU THỊ cụ thể, PHẢI tự
+//     chọn 1 siêu thị trong phạm vi đó, giống hẳn cơ chế CONTROL_AUDIT bên dưới — 11/2026, yêu cầu người
+//     dùng "làm gọn lại phân quyền Checklist").
+//   - CONTROL_AUDIT: nhân viên Kiểm soát đánh giá — PHẢI tự chọn storeCode. Từ 11/2026, nhánh này CHỈ
+//     còn dùng cho mẫu ATVSTP (template.isAtvstp===true) — xem isAtvstpTemplate() — gác bởi quyền PHẲNG
+//     checklistAtvstpExecute (KHÔNG còn phạm vi theo siêu thị riêng — "ai được chọn sẽ thực hiện TẤT CẢ
+//     siêu thị", đã làm gọn, không cần {all,depts} như checklistAuditScope cũ).
 //
-// Phân quyền PHẲNG (đã chốt với người dùng — KHÔNG dùng ChecklistReportPermissions theo từng template
-// như tài liệu gốc đề xuất):
-//   - checklistTemplateManage: tạo/sửa (khi còn DRAFT)/nhân bản/kích hoạt/xoá template.
-//   - checklistAuditScope {all,depts}: phạm vi siêu thị được làm CONTROL_AUDIT.
-//   - checklistReportView: xem tab Báo Cáo (module-riêng, KHÔNG phải Báo Cáo tổng hợp).
-// Quyền LÀM checklist STORE_SELF tự động (không cờ riêng) nếu user.posType==='STORE'. Quyền PHẢN HỒI
-// kết quả CONTROL_AUDIT của siêu thị mình cũng tự động theo storeCode===user.dept.
+// LÀM GỌN PHÂN QUYỀN (11/2026, yêu cầu người dùng — xem CLAUDE.md/VERSION.md v24.76): bỏ hẳn
+// checklistTemplateManage (tạo/sửa/nhân bản/kích hoạt/xoá mẫu giờ CHỈ ADMIN, màn "🛠️ Cấu Hình Checklist"
+// đã dời sang Hệ Thống → Cấu Hình Nghiệp Vụ — xem public/js/module-admin-checklistconfig.js), bỏ hẳn
+// checklistAuditScope/checklistReportViewScope/checklistStoreSelfExecute(Scope) cũ, CHỈ còn ĐÚNG 4 quyền
+// phẳng cho người dùng thường, chia theo "Checklist Thường" (mọi mẫu KHÔNG đánh dấu ATVSTP) và "ATVSTP"
+// (template.isAtvstp===true — cờ ĐỘC LẬP do admin tự đánh dấu khi tạo/sửa mẫu Kiểm Soát trong màn Cấu
+// Hình, KHÔNG suy tự động theo templateType/templateKind, xem assertTemplateCoreFields()):
+//   - checklistExecute (boolean) + checklistExecuteScope ({all,depts} — depts = TÊN SIÊU THỊ): thực hiện
+//     mẫu "Checklist Thường" (STORE_SELF). Mặc định (có checklistExecute + user.posType==='STORE' +
+//     user.dept) CHỈ thực hiện được đúng siêu thị mình, KHÔNG cần chọn gì thêm. Người KHÔNG gắn siêu thị
+//     (không phải posType STORE) PHẢI thêm checklistExecuteScope (all hoặc 1 danh sách siêu thị cụ thể)
+//     mới thực hiện được, và phải tự CHỌN đúng 1 siêu thị trong phạm vi đó mỗi lần bắt đầu bài.
+//   - checklistReportView (boolean, PHẲNG — không còn phạm vi theo mẫu): xem báo cáo "Checklist Thường"
+//     (sub-tab "📋 Checklist Siêu Thị/Cửa Hàng") của TẤT CẢ siêu thị. KHÔNG cần quyền này để tự xem bài
+//     mình đã nộp hoặc (nếu posType STORE) xem bài đã nộp (không phải DRAFT) của ĐÚNG siêu thị mình — 2
+//     lớp xem đó LUÔN có sẵn độc lập (xem canViewChecklistSubmission(), lib/recordViewScope.js).
+//   - checklistAtvstpExecute (boolean, PHẲNG): thực hiện mẫu ATVSTP (CONTROL_AUDIT, isAtvstp===true) cho
+//     TẤT CẢ siêu thị — không cần/không có phạm vi theo siêu thị riêng.
+//   - checklistAtvstpReportView (boolean, PHẲNG): xem Dashboard "🥗 Đánh Giá VSATTP" của TẤT CẢ siêu thị.
+// "depts" trong checklistExecuteScope tiếp tục dùng ĐÚNG tên field đó (không đổi sang "stores") để
+// mergeGroupsBasePerms()/mergeGroupsBasePermsServer() tự union đúng theo cơ chế field-name "depts" sẵn
+// có — 2 hàm đó hardcode nhận diện theo TÊN field, không theo ý nghĩa.
 'use strict';
 
 const { HttpError } = require('./httpErrors');
@@ -55,75 +73,91 @@ function nowVN() {
   return new Date().toLocaleString('vi-VN');
 }
 
-// ===================== Phân quyền (phẳng) =====================
+// ===================== Phân quyền (phẳng, làm gọn 11/2026) =====================
+// canManageChecklistTemplates(): CHỈ ADMIN — tạo/sửa/nhân bản/kích hoạt/xoá mẫu checklist đã dời hẳn
+// sang màn "🛠️ Cấu Hình Checklist" (Hệ Thống → Cấu Hình Nghiệp Vụ), không còn quyền riêng
+// checklistTemplateManage cấp cho non-admin. Giữ TÊN HÀM cũ (không đổi tên) vì vẫn còn nhiều nơi gọi
+// đúng ngữ nghĩa "ai được quản lý mẫu" (bypass xem mọi trạng thái template, v.v.) — chỉ đổi NỘI DUNG.
 function canManageChecklistTemplates(user) {
-  return !!(user?.perms?.admin || user?.perms?.checklistTemplateManage);
+  return !!user?.perms?.admin;
 }
-function canViewChecklistReports(user) {
+// isAtvstpTemplate(): cờ ĐỘC LẬP template.isAtvstp (admin tự đánh dấu khi tạo/sửa mẫu Kiểm Soát trong
+// màn Cấu Hình — KHÔNG suy tự động theo templateType/templateKind, xem assertTemplateCoreFields()) —
+// CHỈ có ý nghĩa với templateType CONTROL_AUDIT (STORE_SELF luôn là "Checklist Thường", ép isAtvstp về
+// false ngay ở assertTemplateCoreFields() dù payload gửi gì).
+function isAtvstpTemplate(t) {
+  return !!(t && t.templateType === 'CONTROL_AUDIT' && t.isAtvstp === true);
+}
+// Quyền BÁO CÁO — PHẲNG, không còn phạm vi theo mẫu (checklistReportViewScope cũ đã bỏ, yêu cầu người
+// dùng "làm gọn"): checklistReportView xem Dashboard/bảng "Checklist Thường" của MỌI siêu thị,
+// checklistAtvstpReportView xem Dashboard "🥗 Đánh Giá VSATTP" của MỌI siêu thị — 2 quyền TÁCH RIÊNG,
+// không còn 1 cờ chung `checklistReportView` gác cả 2 sub-tab như trước 11/2026.
+function canViewChecklistReportsGeneral(user) {
   return !!(user?.perms?.admin || user?.perms?.checklistReportView);
 }
-// checklistAuditScope: Kiểm Soát Viên tự chọn danh sách siêu thị được phân công (depts) hoặc ALL —
-// KHÔNG khoá cứng theo user.dept (yêu cầu người dùng 9/2026: giữ nguyên logic cũ, Kiểm Soát Viên vẫn
-// tự chọn được siêu thị mình kiểm soát chứ không bị ép cứng về đúng 1 siêu thị gán trong Hồ Sơ).
-function getChecklistAuditStores(user) {
-  if (user?.perms?.admin) return { all: true, depts: [] };
-  return user?.perms?.checklistAuditScope || { all: false, depts: [] };
+// LEGACY FALLBACK (11/2026, đúng khuôn isApproverForOperationOrderReceipt()/lib/recordActions.js —
+// field MỚI checklistAtvstpReportView chưa từng tồn tại trước đợt này, nên tài khoản CHƯA được admin mở
+// lại form lưu qua UI mới sẽ luôn đọc undefined/false ở đây dù trước đó checklistReportView=true từng
+// cho xem ĐỦ CẢ 2 loại báo cáo (không phân biệt Thường/VSATTP trước 10/2026, hoặc có scope nhưng để
+// {all:true}/chưa từng lưu scope — xem comment lịch sử ở defaultNewUserPerms() phía client). Để KHÔNG
+// âm thầm khoá quyền đang có ngay khi merge (trước khi admin kịp rà lại Ma Trận Phân Quyền), fallback
+// đúng 1 lần: checklistReportView=true VÀ (chưa từng lưu checklistReportViewScope, HOẶC đã lưu nhưng để
+// {all:true}) -> vẫn coi là có quyền ATVSTP report cũ. KHÔNG fallback khi scope cũ đã bị giới hạn tường
+// minh (all:false có depts cụ thể) — trường hợp đó admin đã chủ động dùng UI mới, cần tự rà lại.
+function canViewChecklistReportsAtvstp(user) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.checklistAtvstpReportView) return true;
+  const oldScope = user?.perms?.checklistReportViewScope;
+  if (user?.perms?.checklistReportView && (!oldScope || oldScope.all)) return true;
+  return false;
 }
-function hasChecklistAuditScope(user) {
-  const scope = getChecklistAuditStores(user);
-  return !!(scope?.all || (scope?.depts || []).length);
+// canViewChecklistReports(): "có xem được tab Báo Cáo nói chung hay không" (OR của 2 quyền trên) — dùng
+// để gác hiện/ẩn CẢ tab 📊 Báo Cáo; sub-tab GENERAL/VSATTP bên trong tự gác riêng theo đúng 1 trong 2
+// hàm ở trên.
+function canViewChecklistReports(user) {
+  return canViewChecklistReportsGeneral(user) || canViewChecklistReportsAtvstp(user);
 }
-function canAuditStore(user, storeCode) {
-  if (!storeCode) return false;
-  const scope = getChecklistAuditStores(user);
-  if (scope.all) return true;
-  return (scope.depts || []).includes(storeCode);
+// canViewChecklistReportForTemplate(): quyền xem báo cáo của ĐÚNG 1 mẫu cụ thể — route theo đúng nhóm
+// Thường/ATVSTP của mẫu đó (không còn phạm vi theo templateId như checklistReportViewScope cũ).
+function canViewChecklistReportForTemplate(user, template) {
+  if (user?.perms?.admin) return true;
+  return isAtvstpTemplate(template) ? canViewChecklistReportsAtvstp(user) : canViewChecklistReportsGeneral(user);
 }
-// checklistStoreSelfExecute (9/2026, yêu cầu người dùng): quyền PHẲNG mới — gác hẳn việc LÀM checklist
-// "Tự Đánh Giá" (STORE_SELF, dạng câu hỏi) đằng sau 1 cờ quyền tường minh do admin tự gán, THAY vì tự
-// động cho phép mọi tài khoản đang ở Vị Trí Siêu Thị (posType='STORE') như trước — admin giờ tự chọn
-// đúng người (VD chỉ GĐST/CHT, không phải mọi nhân viên tại siêu thị) được vào tab này. Vẫn giữ điều
-// kiện posType==='STORE' + có dept (để biết ĐÚNG siêu thị nào — không đổi cách suy ra storeCode, xem
-// resolveStoreCodeForSubmission()) — cờ quyền mới là ĐIỀU KIỆN THÊM VÀO, không thay thế điều kiện cũ.
-function isEligibleForStoreSelf(user) {
-  return !!(user && user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
+// Quyền THỰC HIỆN "Checklist Thường" (STORE_SELF) — checklistExecute PHẢI được admin cấp tường minh
+// (không tự động theo posType, giữ nguyên nguyên tắc đã chốt 9/2026). checklistExecuteScope {all,depts}
+// (depts = TÊN SIÊU THỊ) CHỈ cần/được xét tới khi user KHÔNG có siêu thị gắn sẵn (không phải
+// posType==='STORE' hoặc thiếu dept) — người CÓ siêu thị gắn sẵn luôn mặc định chỉ làm đúng siêu thị đó,
+// không bị ảnh hưởng bởi field này (xem resolveStoreCodeForSubmission()).
+function hasHomeStore(user) {
+  return !!(user && user.posType === 'STORE' && user.dept);
 }
-// ===== Phạm vi theo MẪU checklist cho 2 quyền phẳng ở trên (10/2026, yêu cầu người dùng) =====
-// checklistReportViewScope/checklistStoreSelfExecuteScope {all,depts} — TÁI DÙNG tên field 'depts' dù
-// chứa ID MẪU CHECKLIST (không phải tên phòng ban/siêu thị) để mergeGroupsBasePerms()/
-// mergeGroupsBasePermsServer() tự union đúng theo cơ chế field-name 'depts' đã có sẵn — CÙNG lý do
-// checklistAuditScope ở trên dùng tên này cho danh sách siêu thị (2 hàm đó hardcode nhận diện theo TÊN
-// field, không theo ý nghĩa). Giá trị trong depts[] là templateId ÉP CHUỖI (widget
-// renderMultiSelectDropdown() ở client luôn lưu value dạng chuỗi) — luôn so sánh qua String().
-// LEGACY: tài khoản CHƯA từng được lưu qua UI mới (chỉ có field boolean checklistReportView/
-// checklistStoreSelfExecute cũ, chưa có field Scope) mặc định coi là {all:true} — GIỮ NGUYÊN hành vi cũ
-// (thấy hết mọi mẫu), không có regression âm thầm nào. Chỉ khi admin re-save qua UI mới (luôn ghi field
-// Scope) thì mới thực sự bị giới hạn theo đúng lựa chọn.
-function getChecklistReportViewScope(user) {
-  if (user?.perms?.admin || canManageChecklistTemplates(user)) return { all: true, depts: [] };
-  if (!canViewChecklistReports(user)) return { all: false, depts: [] };
-  return user?.perms?.checklistReportViewScope || { all: true, depts: [] };
+// LEGACY FALLBACK (11/2026): field checklistExecute MỚI hoàn toàn thay thế checklistStoreSelfExecute cũ
+// (cùng ngữ nghĩa — gác việc LÀM "Checklist Thường"/Tự Đánh Giá) — fallback khi field mới CHƯA từng
+// được lưu (undefined) để không âm thầm khoá quyền của tài khoản chưa được admin mở lại form.
+function canExecuteChecklistGeneral(user) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.checklistExecute !== undefined) return !!user.perms.checklistExecute;
+  return !!user?.perms?.checklistStoreSelfExecute;
 }
-function canViewChecklistReportForTemplate(user, templateId) {
-  const scope = getChecklistReportViewScope(user);
-  if (scope.all) return true;
-  return (scope.depts || []).map(String).includes(String(templateId));
+function getChecklistExecuteScope(user) {
+  return user?.perms?.checklistExecuteScope || { all: false, depts: [] };
 }
-function getChecklistStoreSelfExecuteScope(user) {
-  if (!isEligibleForStoreSelf(user)) return { all: false, depts: [] };
-  return user?.perms?.checklistStoreSelfExecuteScope || { all: true, depts: [] };
-}
-function canStoreSelfExecuteTemplate(user, templateId) {
-  const scope = getChecklistStoreSelfExecuteScope(user);
-  if (scope.all) return true;
-  return (scope.depts || []).map(String).includes(String(templateId));
+// Quyền THỰC HIỆN ATVSTP (CONTROL_AUDIT, isAtvstpTemplate()===true) — PHẲNG, "ai được chọn thì thực
+// hiện TẤT CẢ siêu thị" (đã bỏ hẳn phạm vi theo siêu thị riêng của checklistAuditScope cũ). LEGACY
+// FALLBACK: field checklistAtvstpExecute MỚI chưa từng tồn tại trước đợt này — tài khoản CHƯA được admin
+// mở lại form lưu qua UI mới thì suy từ checklistAuditScope cũ (có all HOẶC có ít nhất 1 siêu thị trong
+// depts -> coi là có quyền, nay ÁP DỤNG CHO TẤT CẢ siêu thị theo đúng mô hình mới, không còn giữ scope).
+function canExecuteChecklistAtvstp(user) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.checklistAtvstpExecute) return true;
+  const oldScope = user?.perms?.checklistAuditScope;
+  return !!(oldScope?.all || (oldScope?.depts || []).length);
 }
 function canAccessChecklistModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  if (canManageChecklistTemplates(user) || canViewChecklistReports(user)) return true;
-  if (hasChecklistAuditScope(user)) return true;
-  return isEligibleForStoreSelf(user);
+  return !!(canExecuteChecklistGeneral(user) || canExecuteChecklistAtvstp(user)
+    || canViewChecklistReportsGeneral(user) || canViewChecklistReportsAtvstp(user));
 }
 
 // ===================== Validate Template (tạo mới/sửa khi còn DRAFT) =====================
@@ -289,7 +323,13 @@ function assertTemplateCoreFields(payload) {
   if (passThreshold !== null && (!Number.isFinite(passThreshold) || passThreshold < 0 || passThreshold > 100)) {
     throw new HttpError(400, 'Ngưỡng điểm đạt (%) không hợp lệ');
   }
-  return { templateCode: templateCode.slice(0, 50), templateName: templateName.slice(0, 200), templateType: payload.templateType, templateKind, scoringMode, passThreshold };
+  // isAtvstp (11/2026, làm gọn phân quyền) — cờ ĐỘC LẬP, admin tự đánh dấu "Đây là mẫu ATVSTP" khi tạo/
+  // sửa mẫu Kiểm Soát trong màn Cấu Hình, quyết định quyền thực hiện/báo cáo đi theo nhóm nào (xem
+  // isAtvstpTemplate() đầu file) — CHỈ có ý nghĩa với templateType CONTROL_AUDIT; STORE_SELF ("Checklist
+  // Thường", theo đúng mô hình "siêu thị tự làm") luôn ép về false dù payload gửi gì, không cho lẫn 2
+  // mô hình thực hiện khác nhau (home-store mặc định vs. chọn siêu thị tường minh toàn công ty).
+  const isAtvstp = payload?.templateType === 'CONTROL_AUDIT' && payload?.isAtvstp === true;
+  return { templateCode: templateCode.slice(0, 50), templateName: templateName.slice(0, 200), templateType: payload.templateType, templateKind, scoringMode, passThreshold, isAtvstp };
 }
 
 // ===================== Mục 7.1 tài liệu gốc — điểm bảo mật cốt lõi =====================
@@ -313,39 +353,45 @@ function resolveStoreCodeForSubmission(template, user, requestedStoreCode, valid
   };
   if (template.templateType === 'STORE_SELF') {
     // Admin: cho phép TỰ CHỌN siêu thị để test mẫu Tự Đánh Giá (tài khoản admin thường không gắn Vị Trí
-    // Siêu Thị cụ thể nào nên isEligibleForStoreSelf() luôn false với admin) — vẫn giữ NGUYÊN bất biến
-    // bảo mật cho người dùng thường bên dưới (storeCode LUÔN suy từ user.dept, KHÔNG tin client). Admin
-    // vốn đã bỏ qua mọi kiểm tra quyền khác trong toàn hệ thống nên nới ở đây không phát sinh rủi ro mới
-    // — nhưng vẫn phải là 1 siêu thị CÓ THẬT trong danh mục (không phải bất kỳ chuỗi nào).
+    // Siêu Thị cụ thể nào) — vẫn giữ NGUYÊN bất biến bảo mật cho người dùng thường bên dưới (storeCode
+    // LUÔN suy từ user.dept khi có sẵn, KHÔNG tin client). Admin vốn đã bỏ qua mọi kiểm tra quyền khác
+    // trong toàn hệ thống nên nới ở đây không phát sinh rủi ro mới — nhưng vẫn phải là 1 siêu thị CÓ
+    // THẬT trong danh mục (không phải bất kỳ chuỗi nào).
     if (user?.perms?.admin) {
       const adminStoreCode = String(requestedStoreCode || '').trim();
       if (adminStoreCode) { assertKnownStore(adminStoreCode); return adminStoreCode; }
-      if (isEligibleForStoreSelf(user)) return user.dept;
+      if (hasHomeStore(user)) return user.dept;
       throw new HttpError(400, 'Vui lòng chọn siêu thị để test (tài khoản admin không gắn Vị Trí Siêu Thị cụ thể)');
     }
-    if (!isEligibleForStoreSelf(user)) {
-      // Phân biệt rõ 2 lý do khác nhau (checklistStoreSelfExecute mới thêm 9/2026) — tránh thông báo sai
-      // "chưa gắn siêu thị" cho người ĐÃ có Vị Trí Siêu Thị nhưng đơn giản là chưa được admin cấp quyền.
-      if (user?.posType === 'STORE' && user?.dept) {
-        throw new HttpError(403, 'Bạn chưa được cấp quyền "Đánh Giá Checklist" — liên hệ admin để được cấp quyền tự đánh giá checklist siêu thị.');
-      }
-      throw new HttpError(400, 'Vị trí hiện tại của bạn không gắn với siêu thị nào — liên hệ HR để kiểm tra Cơ Cấu Tổ Chức (Vị Trí Làm Việc)');
+    if (!canExecuteChecklistGeneral(user)) {
+      throw new HttpError(403, 'Bạn chưa được cấp quyền "Thực Hiện Checklist" — liên hệ admin để được cấp quyền.');
     }
-    // 10/2026: phạm vi theo MẪU (checklistStoreSelfExecuteScope) — có quyền "Đánh Giá Checklist" nói
-    // chung KHÔNG có nghĩa được làm MỌI mẫu, nếu admin đã giới hạn xuống 1 số mẫu cụ thể.
-    if (!canStoreSelfExecuteTemplate(user, template.id)) {
-      throw new HttpError(403, 'Bạn chưa được cấp quyền tự đánh giá đúng mẫu checklist này — liên hệ admin để mở rộng phạm vi.');
+    // Có siêu thị gắn sẵn (GĐST/CHT...) — LUÔN mặc định đúng siêu thị đó, không đọc requestedStoreCode
+    // (bất biến bảo mật cốt lõi, giữ nguyên hành vi gốc).
+    if (hasHomeStore(user)) return user.dept;
+    // KHÔNG có siêu thị gắn sẵn (HO) — 11/2026, yêu cầu người dùng: phải PHẢI thêm được cấp
+    // checklistExecuteScope (all hoặc 1 danh sách siêu thị cụ thể) VÀ tự chọn đúng 1 siêu thị trong
+    // phạm vi đó mỗi lần bắt đầu bài, giống hẳn cơ chế CONTROL_AUDIT bên dưới.
+    const scope = getChecklistExecuteScope(user);
+    if (!scope.all && !(scope.depts || []).length) {
+      throw new HttpError(403, 'Bạn chưa gắn Vị Trí Siêu Thị nào — liên hệ admin để được cấp thêm phạm vi "Thực Hiện Checklist" theo siêu thị cụ thể hoặc "Tất cả".');
     }
-    // user.dept của người dùng THẬT (không phải admin test) luôn tin được — không đối chiếu lại danh mục
-    // ở đây (đúng khuôn mọi nơi khác trong hệ thống tin user.dept đã gắn qua Cơ Cấu Tổ Chức).
-    return user.dept;
+    const storeCode = String(requestedStoreCode || '').trim();
+    if (!storeCode) throw new HttpError(400, 'Vui lòng chọn siêu thị cần thực hiện checklist');
+    if (!scope.all && !(scope.depts || []).includes(storeCode)) {
+      throw new HttpError(403, 'Bạn không có phạm vi Thực Hiện Checklist cho siêu thị này');
+    }
+    assertKnownStore(storeCode);
+    return storeCode;
   }
-  // CONTROL_AUDIT
+  // CONTROL_AUDIT — từ 11/2026 CHỈ còn dùng cho mẫu ATVSTP (xem isAtvstpTemplate() đầu file), gác bởi
+  // quyền PHẲNG checklistAtvstpExecute, KHÔNG còn phạm vi theo siêu thị riêng ("ai được chọn thì thực
+  // hiện TẤT CẢ siêu thị" — đã làm gọn, bỏ hẳn checklistAuditScope/canAuditStore cũ).
+  if (!user?.perms?.admin && !canExecuteChecklistAtvstp(user)) {
+    throw new HttpError(403, 'Bạn chưa được cấp quyền "Thực Hiện ATVSTP" — liên hệ admin để được cấp quyền.');
+  }
   const storeCode = String(requestedStoreCode || '').trim();
   if (!storeCode) throw new HttpError(400, 'Vui lòng chọn siêu thị cần đánh giá');
-  if (!canAuditStore(user, storeCode)) {
-    throw new HttpError(403, 'Bạn không có phạm vi Kiểm Soát cho siêu thị này');
-  }
   assertKnownStore(storeCode);
   return storeCode;
 }
@@ -755,10 +801,10 @@ function computeVsattpDashboardData(submissions, templates, storeTypes) {
 
 module.exports = {
   TEMPLATE_TYPES, TEMPLATE_STATUSES, QUESTION_TYPES, SCORING_MODES, TEMPLATE_KINDS,
-  canManageChecklistTemplates, canViewChecklistReports, getChecklistAuditStores, hasChecklistAuditScope,
-  canAuditStore, isEligibleForStoreSelf, canAccessChecklistModule,
-  getChecklistReportViewScope, canViewChecklistReportForTemplate,
-  getChecklistStoreSelfExecuteScope, canStoreSelfExecuteTemplate,
+  canManageChecklistTemplates, canAccessChecklistModule, isAtvstpTemplate,
+  canViewChecklistReports, canViewChecklistReportsGeneral, canViewChecklistReportsAtvstp,
+  canViewChecklistReportForTemplate,
+  hasHomeStore, canExecuteChecklistGeneral, getChecklistExecuteScope, canExecuteChecklistAtvstp,
   validateChecklistQuestions, validateChecklistCategories, assertTemplateCoreFields,
   resolveStoreCodeForSubmission, sanitizeChecklistAnswers, sanitizeChecklistDeductions, computeVisibleQuestions,
   computeChecklistScoring, computeDeductionScoring, assertReadyToFinalize,

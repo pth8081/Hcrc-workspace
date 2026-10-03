@@ -98,28 +98,31 @@ async function main() {
       ],
       users: [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng Vận Hành', jobTitle: 'Admin', email: 'a@test.local', phone: '090', perms: { admin: true }, active: true, groupIds: [], permOverrides: null },
-        { id: 2, username: 'qltc1', name: 'Quản Lý Checklist', dept: 'Phòng Vận Hành', jobTitle: 'QL', email: 'q@test.local', phone: '091', perms: { checklistTemplateManage: true }, active: true, groupIds: [], permOverrides: null }
+        // qltc1: 11/2026 LÀM GỌN — quản lý mẫu checklist CHỈ admin, không còn checklistTemplateManage
+        // cấp riêng. Giữ user này như 1 HO non-admin bất kỳ để khoá lại đúng hành vi "chỉ admin thấy
+        // nút Xoá" trong renderChecklistConfigAdmin() (dù về điều hướng thật, non-admin không vào được
+        // màn Cấu Hình Checklist nữa — xem canManageChecklistTemplatesClient()/core.js).
+        { id: 2, username: 'qltc1', name: 'Nhân Viên HO (không phải admin)', dept: 'Phòng Vận Hành', jobTitle: 'NV', email: 'q@test.local', phone: '091', perms: {}, active: true, groupIds: [], permOverrides: null }
       ]
     });
   });
 
-  // Đăng nhập admin trước — đủ để render tab Cấu Hình + có quyền nạp module-checklist.js.
-  // switchTab('checklist') nạp module-checklist.js KHÔNG đồng bộ (loadModuleGroup() chèn <script> rồi
-  // đợi sự kiện load) — PHẢI đợi tải xong rồi mới gọi setChecklistSubTab(), không được gộp chung 1
-  // evaluate() như đã lỡ làm ở bản nháp đầu (setChecklistSubTab is not defined -> lỗi không bắt được
-  // -> browser.close() không được gọi -> tiến trình treo mãi khi không có pipe/timeout dọn hộ).
+  // 11/2026: màn "✅ Cấu Hình Checklist" đã dời vào Hệ Thống > ⚙️ Cấu Hình Nghiệp Vụ (module-admin-checklistconfig.js,
+  // nạp lười qua nhóm "hethong-tabs") — không còn sub-tab "Cấu Hình" trong module-checklist.js nữa.
+  // switchTab('system') nạp module KHÔNG đồng bộ (loadModuleGroup() chèn <script> rồi đợi sự kiện load)
+  // — PHẢI đợi tải xong rồi mới gọi setSystemSubTab(), không được gộp chung 1 evaluate().
   await page.evaluate(() => finishLogin(DB.users.find(u => u.username === 'admin')));
-  await page.evaluate(() => switchTab('checklist'));
+  await page.evaluate(() => switchTab('system'));
   await page.waitForTimeout(250);
-  await page.evaluate(() => setChecklistSubTab('CONFIG'));
+  await page.evaluate(() => setSystemSubTab('BIZCONFIG'));
   await page.waitForTimeout(200);
 
-  const ready = await page.evaluate(() => typeof renderChecklistConfigTab === 'function' && typeof editViaCloneChecklistTemplate === 'function' && typeof deactivateChecklistTemplate === 'function');
-  record('setup: module-checklist.js đã nạp xong, các hàm cần test đã sẵn sàng', ready);
+  const ready = await page.evaluate(() => typeof renderChecklistConfigAdmin === 'function' && typeof editViaCloneChecklistTemplate === 'function' && typeof deactivateChecklistTemplate === 'function');
+  record('setup: module-admin-checklistconfig.js đã nạp xong, các hàm cần test đã sẵn sàng', ready);
   if (!ready) { record('DỪNG SỚM — không thể tiếp tục vì hàm chưa nạp được', false, JSON.stringify(pageErrors)); await browser.close(); server.close(); return finish(); }
 
   // ===== 1. Ma trận nút — ADMIN =====
-  await page.evaluate(() => renderChecklistConfigTab());
+  await page.evaluate(() => renderChecklistConfigAdmin());
   const htmlAdmin = await page.evaluate(() => document.getElementById('checklistTemplateListWrap').innerHTML);
   // Kiểm trực tiếp bằng cách tìm cụm "data-op="X" data-arg0="<id>"" xuất hiện đúng/không đúng.
   function hasOp(html, op, id) { return html.includes(`data-op="${op}" data-arg0="${id}"`); }
@@ -142,7 +145,7 @@ async function main() {
   record('DRAFT (201): KHÔNG còn nút "Nhân Bản" (server luôn từ chối 409 — LỖI ĐÃ VÁ 10/2026)', !hasOp(htmlAdmin, 'cloneChecklistTemplate', 201));
 
   // ===== 2. Ma trận nút — MANAGER (checklistTemplateManage, KHÔNG phải admin) =====
-  await page.evaluate(() => { finishLogin(DB.users.find(u => u.username === 'qltc1')); switchTab('checklist'); setChecklistSubTab('CONFIG'); renderChecklistConfigTab(); });
+  await page.evaluate(() => { finishLogin(DB.users.find(u => u.username === 'qltc1')); switchTab('system'); setSystemSubTab('BIZCONFIG'); renderChecklistConfigAdmin(); });
   await page.waitForTimeout(100);
   const htmlManager = await page.evaluate(() => document.getElementById('checklistTemplateListWrap').innerHTML);
   record('DRAFT (201): MANAGER (không admin) KHÔNG thấy nút Xoá', !hasOp(htmlManager, 'deleteChecklistTemplate', 201));
@@ -152,7 +155,7 @@ async function main() {
 
   // ===== 3. editViaCloneChecklistTemplate() end-to-end — clone xong mở thẳng builder đúng bản mới =====
   await page.evaluate(() => finishLogin(DB.users.find(u => u.username === 'admin')));
-  await page.evaluate(() => { switchTab('checklist'); setChecklistSubTab('CONFIG'); renderChecklistConfigTab(); });
+  await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); renderChecklistConfigAdmin(); });
   await page.waitForTimeout(100);
   const cloneResult = await page.evaluate(async () => {
     await editViaCloneChecklistTemplate(302);
@@ -166,7 +169,7 @@ async function main() {
   record('editViaCloneChecklistTemplate: tự mở builder đúng bản Nháp vừa nhân bản (mã CL_ACTIVE_CLEAN)', cloneResult.builderCodeValue === 'CL_ACTIVE_CLEAN' && cloneResult.builderTitle.includes('Sửa Mẫu Checklist'));
 
   // ===== 4. deactivateChecklistTemplate() end-to-end — ACTIVE -> ARCHIVED, danh sách render lại đúng =====
-  await page.evaluate(() => { closeChecklistTemplateBuilder(); renderChecklistConfigTab(); });
+  await page.evaluate(() => { closeChecklistTemplateBuilder(); renderChecklistConfigAdmin(); });
   const deactivateResult = await page.evaluate(async () => {
     await deactivateChecklistTemplate(302);
     const t = DB.checklistTemplates.find(x => x.id === 302);

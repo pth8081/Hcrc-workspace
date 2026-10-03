@@ -11,7 +11,7 @@
 const { MODULE_CONFIGS, resolveContractApprovalWorkflow, resolveContractManageWorkflow } = require('./workflowEngine');
 const { canApproveInternalPost, canManageTraining, canManageTrainingClass, canManageRecruitment, canEvaluateOnboardingStage3, workItemAssignees, isWorkItemAssignee } = require('./recordActions');
 const { HttpError } = require('./httpErrors');
-const { canManageChecklistTemplates, canViewChecklistReports, canViewChecklistReportForTemplate, hasChecklistAuditScope, canStoreSelfExecuteTemplate } = require('./checklist');
+const { canManageChecklistTemplates, canViewChecklistReports, canViewChecklistReportForTemplate, canExecuteChecklistGeneral, canExecuteChecklistAtvstp } = require('./checklist');
 const { canManageVendors, canManageTerms, canActivateTerm, canViewReport: canViewRebateReport } = require('./vendorRebate');
 
 // Khớp canManageVpp() ở public/index.html.
@@ -1285,20 +1285,24 @@ function filterPayslipsForUser(items, user) {
 }
 
 // ===== Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — phân quyền PHẲNG,
-// không theo phòng ban. checklistTemplates: người quản lý (checklistTemplateManage) hoặc xem báo cáo
-// (checklistReportView) thấy MỌI trạng thái (kể cả DRAFT/ARCHIVED, cần để cấu hình/đối chiếu lịch sử);
-// người khác CHỈ thấy template ACTIVE và đúng loại họ đủ điều kiện làm (STORE_SELF nếu posType STORE,
-// CONTROL_AUDIT nếu có checklistAuditScope) — không thấy template đang soạn (DRAFT) hay của loại khác.
+// không theo phòng ban. checklistTemplates: admin (quản lý mẫu đã dời hẳn vào Cấu Hình Nghiệp Vụ, chỉ
+// admin) hoặc xem báo cáo (checklistReportView/checklistAtvstpReportView) thấy MỌI trạng thái (kể cả
+// DRAFT/ARCHIVED, cần để đối chiếu lịch sử); người khác CHỈ thấy template ACTIVE và đúng nhóm họ đủ
+// điều kiện thực hiện theo templateType (STORE_SELF — checklistExecute, CONTROL_AUDIT — checklistAtvstpExecute)
+// — không thấy template đang soạn (DRAFT) hay của loại khác.
 function canViewChecklistTemplate(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || canManageChecklistTemplates(user)) return true;
-  // 10/2026: checklistReportView giờ có phạm vi theo MẪU (checklistReportViewScope) — người xem báo cáo
-  // chỉ thấy đúng những mẫu trong phạm vi được cấp, không còn mặc nhiên thấy MỌI mẫu (xem
-  // lib/checklist.js::canViewChecklistReportForTemplate()).
-  if (canViewChecklistReportForTemplate(user, item.id)) return true;
+  if (user.perms?.admin) return true;
+  // 11/2026: checklistReportView/checklistAtvstpReportView giờ PHẲNG (không còn phạm vi theo mẫu) —
+  // người xem báo cáo thấy MỌI mẫu đúng nhóm Thường/ATVSTP của mình.
+  if (canViewChecklistReportForTemplate(user, item)) return true;
   if (item.status === 'ACTIVE') {
-    if (item.templateType === 'STORE_SELF') return canStoreSelfExecuteTemplate(user, item.id);
-    if (item.templateType === 'CONTROL_AUDIT') return hasChecklistAuditScope(user);
+    // Theo đúng khuôn resolveStoreCodeForSubmission()/lib/checklist.js: thực hiện gác theo templateType
+    // (STORE_SELF -> checklistExecute, CONTROL_AUDIT -> checklistAtvstpExecute cho MỌI mẫu Kiểm Soát,
+    // KHÔNG riêng mẫu isAtvstp=true) — isAtvstp CHỈ là nhãn định tuyến BÁO CÁO (canViewChecklistReportForTemplate
+    // ở trên), KHÔNG phải điều kiện thực hiện/xem riêng.
+    if (item.templateType === 'CONTROL_AUDIT') return canExecuteChecklistAtvstp(user);
+    if (item.templateType === 'STORE_SELF') return canExecuteChecklistGeneral(user);
     return false;
   }
   // Template không còn ACTIVE (đã bị thay bằng bản clone khác, xem lib/checklist.js activate()): vẫn
@@ -1322,8 +1326,13 @@ function filterChecklistTemplatesForUser(items, user, appData) {
 // (Option 3/4).
 function canViewChecklistSubmission(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || canManageChecklistTemplates(user)) return true;
-  if (canViewChecklistReportForTemplate(user, item.templateId)) return true;
+  if (user.perms?.admin) return true;
+  const template = (appData?.checklistTemplates || []).find(t => t.id === item.templateId);
+  if (canViewChecklistReportForTemplate(user, template)) return true;
+  // Tự xem lại bài mình nộp, hoặc GĐ/NV siêu thị xem bài (đã nộp, không còn DRAFT) của chính siêu thị
+  // mình — 2 nhánh này LUÔN đúng, KHÔNG phụ thuộc checklistReportView/checklistAtvstpReportView (yêu
+  // cầu người dùng 11/2026: "đảm bảo nếu ko được chọn [quyền báo cáo] thì người đánh giá tự xem được
+  // báo cáo của mình").
   if (item.submittedByUsername === user.username) return true;
   if (item.status !== 'DRAFT' && user.posType === 'STORE' && item.storeCode === user.dept && deptAutoViewOn(appData, 'checklist', 'DEPT')) return true;
   return extraViewScopeAllows(user, appData, 'checklist', item.submittedByUsername);
@@ -1333,22 +1342,23 @@ function filterChecklistSubmissionsForUser(items, user, appData) {
 }
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): "xem chéo Báo Cáo" — người KHÔNG thuộc module Checklist
-// (không có checklistReportView/checklistTemplateManage, không tự nộp bài nào) vẫn cần xem được TOÀN BỘ
-// báo cáo Checklist qua màn "📊 Báo Cáo" tổng hợp (perms.reportViewAll hoặc reportExtraKeys chứa
+// (không có checklistReportView/checklistAtvstpReportView, không tự nộp bài nào) vẫn cần xem được TOÀN
+// BỘ báo cáo Checklist qua màn "📊 Báo Cáo" tổng hợp (perms.reportViewAll hoặc reportExtraKeys chứa
 // 'checklist', xem isReportKeyVisible() ở module-baocaoquantri.js) — KHÔNG cấp thêm quyền vào module
-// Checklist thật (canAccessChecklistModule() không đổi, vẫn đòi đúng checklistReportView/quản lý mẫu/
-// phạm vi kiểm soát/tự đánh giá siêu thị như cũ). CHỈ dùng riêng cho route GET /api/reports/checklistSubmissions
-// (routes/reports.js) — KHÔNG áp dụng cho GET /api/data (routes/data.js vẫn gọi filterChecklistSubmissionsForUser()
-// nguyên bản ở trên), nên quyền xem chéo này không rò rỉ sang bất kỳ màn nào khác ngoài Báo Cáo.
+// Checklist thật (canAccessChecklistModule() không đổi, vẫn đòi đúng 1 trong 4 quyền checklist như cũ).
+// CHỈ dùng riêng cho route GET /api/reports/checklistSubmissions (routes/reports.js) — KHÔNG áp dụng cho
+// GET /api/data (routes/data.js vẫn gọi filterChecklistSubmissionsForUser() nguyên bản ở trên), nên
+// quyền xem chéo này không rò rỉ sang bất kỳ màn nào khác ngoài Báo Cáo.
 function filterChecklistSubmissionsForReportCrossView(items, user, appData) {
   if (!user) return [];
-  if (user.perms?.admin || canManageChecklistTemplates(user)) return items || [];
+  if (user.perms?.admin) return items || [];
   if (user.perms?.reportViewAll || (user.reportExtraKeys || []).includes('checklist')) return items || [];
-  // 10/2026: checklistReportView có phạm vi theo MẪU — áp dụng CHÍNH XÁC cùng 1 phạm vi đó khi người này
-  // xem chéo qua màn "📊 Báo Cáo" tổng hợp, tránh lỗ hổng "đủ quyền xem 2 mẫu ở module gốc nhưng lại
-  // thấy MỌI mẫu khi vào qua Báo Cáo tổng hợp" chỉ vì canViewChecklistReports(user) trước đây là bypass
-  // toàn phần không phân biệt mẫu.
-  if (canViewChecklistReports(user)) return (items || []).filter(s => canViewChecklistReportForTemplate(user, s.templateId));
+  // 11/2026: checklistReportView/checklistAtvstpReportView giờ PHẲNG (không còn phạm vi theo mẫu) —
+  // người xem báo cáo (Thường hoặc ATVSTP) thấy đúng nhóm mẫu của mình khi xem chéo qua Báo Cáo tổng hợp.
+  if (canViewChecklistReports(user)) {
+    const templatesById = new Map((appData?.checklistTemplates || []).map(t => [t.id, t]));
+    return (items || []).filter(s => canViewChecklistReportForTemplate(user, templatesById.get(s.templateId)));
+  }
   return filterChecklistSubmissionsForUser(items, user, appData);
 }
 

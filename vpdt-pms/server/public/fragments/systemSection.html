@@ -1978,45 +1978,27 @@
             <span id="permTreeBadge_checklist" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Module TOP-LEVEL riêng (xem lib/checklist.js), phân quyền PHẲNG — KHÔNG theo phòng ban. Nhân viên siêu thị (posType Siêu Thị) PHẢI được tick "Đánh Giá Checklist (Tự Đánh Giá)" bên dưới mới vào được tab checklist "Tự Đánh Giá" (STORE_SELF) của đúng siêu thị mình — không tự động nữa. "Phạm Vi Kiểm Soát" bên dưới CHỈ áp dụng cho checklist "Kiểm Soát" (CONTROL_AUDIT) — kiểm soát viên/khu vực chọn siêu thị mình được phân công đi kiểm tra.</p>
+            <p class="text-[11px] text-gray-500 italic">Module TOP-LEVEL riêng (xem lib/checklist.js), phân quyền PHẲNG — KHÔNG theo phòng ban. 11/2026 LÀM GỌN: cấu hình/tạo/sửa/kích hoạt mẫu đã dời HẲN vào Hệ Thống &gt; ⚙️ Cấu Hình Nghiệp Vụ &gt; ✅ Cấu Hình Checklist (CHỈ admin, không còn quyền riêng ở đây) — module này chỉ còn đúng 4 quyền PHẲNG dưới đây. "Quyền Thực Hiện Checklist" mặc định CHỈ áp dụng cho người thuộc 1 siêu thị (posType Siêu Thị) đúng siêu thị mình — người KHÔNG thuộc siêu thị nào (HO) phải tick thêm "Phạm Vi Thực Hiện" (ALL hoặc chọn siêu thị) mới thực hiện được. "Quyền Thực Hiện/Báo Cáo ATVSTP" áp dụng cho TẤT CẢ siêu thị, không có phạm vi riêng.</p>
+            <div class="border rounded p-2 bg-rose-50/40 space-y-1">
+              <div class="flex justify-between items-center flex-wrap gap-1">
+                <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+                  <input type="checkbox" id="pChecklistExecute"> ✅ Quyền Thực Hiện Checklist (Checklist Thường — đúng siêu thị đang gán, hoặc chọn thêm phạm vi nếu không gắn siêu thị)
+                </label>
+                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
+                  <input type="checkbox" id="pChecklistExecuteScopeAll" data-op-change="toggleChecklistExecuteScopeGroup"><span>ALL (mọi siêu thị)</span>
+                </label>
+              </div>
+              <div id="pChecklistExecuteScopeDeptContainer" class="pl-1"></div>
+            </div>
             <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pChecklistTemplateManage"> 🛠️ Quản Lý Mẫu Checklist (tạo/sửa/kích hoạt)
+              <input type="checkbox" id="pChecklistReportView"> 📊 Quyền Báo Cáo Checklist (xem báo cáo "Checklist Thường" của TẤT CẢ siêu thị)
             </label>
-            <!-- checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026, yêu cầu người dùng):
-                 phạm vi theo MẪU checklist (cả 2 loại QA/Trừ Điểm) gắn kèm 2 quyền dưới đây — cùng khuôn
-                 widget tìm-kiếm-gõ-chọn như "Phạm Vi Kiểm Soát" bên dưới, chỉ đổi nguồn dữ liệu sang mẫu
-                 checklist (xem checklistTemplateScopeItems() ở module-admin.js). -->
-            <div class="border rounded p-2 bg-rose-50/40 space-y-1">
-              <div class="flex justify-between items-center flex-wrap gap-1">
-                <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-                  <input type="checkbox" id="pChecklistReportView"> 📊 Xem Báo Cáo Checklist (tab Báo Cáo trong module này)
-                </label>
-                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pChecklistReportViewScopeAll" data-op-change="toggleChecklistReportViewScopeGroup"><span>ALL (mọi mẫu)</span>
-                </label>
-              </div>
-              <div id="pChecklistReportViewScopeDeptContainer" class="pl-1"></div>
-            </div>
-            <div class="border rounded p-2 bg-rose-50/40 space-y-1">
-              <div class="flex justify-between items-center flex-wrap gap-1">
-                <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
-                  <input type="checkbox" id="pChecklistStoreSelfExecute"> ✅ Đánh Giá Checklist (Tự Đánh Giá — chỉ dạng câu hỏi, đúng siêu thị đang gán)
-                </label>
-                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pChecklistStoreSelfExecuteScopeAll" data-op-change="toggleChecklistStoreSelfExecuteScopeGroup"><span>ALL (mọi mẫu)</span>
-                </label>
-              </div>
-              <div id="pChecklistStoreSelfExecuteScopeDeptContainer" class="pl-1"></div>
-            </div>
-            <div>
-              <div class="flex justify-between items-center mb-1">
-                <span class="font-semibold text-gray-600 text-[11px]">Phạm Vi Kiểm Soát (Kiểm Soát Viên — siêu thị được phân công)</span>
-                <label class="flex items-center gap-1 font-bold text-rose-700 cursor-pointer text-[11px]">
-                  <input type="checkbox" id="pChecklistAuditScopeAll" data-op-change="toggleChecklistAuditScopeGroup"><span>ALL</span>
-                </label>
-              </div>
-              <div id="pChecklistAuditScopeDeptContainer" class="pl-1"></div>
-            </div>
+            <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pChecklistAtvstpExecute"> 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát — thực hiện được TẤT CẢ siêu thị)
+            </label>
+            <label class="flex items-center gap-2 text-rose-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pChecklistAtvstpReportView"> 🥗 Quyền Báo Cáo ATVSTP (xem Dashboard VSATTP của TẤT CẢ siêu thị)
+            </label>
           </div>
         </details>
 
@@ -2428,6 +2410,142 @@
         </table>
       </div>
       <input id="itPriceMasterListFileInput" type="file" accept=".xlsx,.xls" class="hidden">
+    </div>
+
+    <!-- "✅ Cấu Hình Checklist" (11/2026, dời từ module Checklist sang, CHỈ admin — không còn hidden,
+         luôn hiện khi tab BIZCONFIG mở, xem renderChecklistConfigAdmin()/module-admin-checklistconfig.js)
+         — CRUD mẫu checklist (CẢ "Checklist Thường" lẫn "ATVSTP"). Người dùng thường thực hiện/xem báo
+         cáo ở module "Checklist Đánh Giá Siêu Thị" riêng, không còn sửa mẫu được ở đó. -->
+    <div id="checklistConfigAdminWrap" class="bg-white p-3 rounded border space-y-4">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">✅ Cấu Hình Checklist — 📋 Danh Sách Mẫu</h3>
+        <button type="button" data-op="openChecklistTemplateCreatePicker" class="bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">+ Tạo Mẫu Mới</button>
+      </div>
+      <div id="checklistTemplateListWrap" class="space-y-2"></div>
+
+      <!-- Chọn LOẠI mẫu TRƯỚC KHI mở khung soạn (v21.0) — 2 loại loại trừ lẫn nhau, không đổi được sau
+           khi tạo (xem TEMPLATE_KINDS ở lib/checklist.js). -->
+      <div id="checklistKindPickerWrap" class="hidden bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-rose-900 text-base">Chọn Loại Mẫu Checklist</h3>
+          <button type="button" data-op="closeChecklistTemplateCreatePicker" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✕ Đóng</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <button type="button" data-op="chooseChecklistTemplateKind" data-arg0="QA" class="text-left bg-white border-2 border-rose-200 rounded p-3 hover:border-rose-500 space-y-1">
+            <div class="font-bold text-gray-800 text-sm">📋 Câu Hỏi &amp; Đáp Án</div>
+            <div class="text-[11px] text-gray-500">Từng câu hỏi có 1 hoặc nhiều lựa chọn trả lời, mỗi lựa chọn có điểm/Đạt-Lỗi riêng. Phù hợp checklist dạng khảo sát/kiểm tra tuân thủ theo câu hỏi.</div>
+          </button>
+          <button type="button" data-op="chooseChecklistTemplateKind" data-arg0="DEDUCTION" class="text-left bg-white border-2 border-rose-200 rounded p-3 hover:border-rose-500 space-y-1">
+            <div class="font-bold text-gray-800 text-sm">📉 Trừ Điểm Theo Hạng Mục</div>
+            <div class="text-[11px] text-gray-500">Cây Hạng Mục Lớn → Hạng Mục Con → Tiêu Chí, mỗi hạng mục có điểm tối đa, người kiểm tra trừ điểm khi phát hiện vi phạm. Phù hợp checklist đánh giá kiểu VSATTP.</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Xem read-only mẫu ĐANG DÙNG/LƯU TRỮ — KHÔNG cho sửa trực tiếp ở đây (bảo vệ toàn vẹn dữ liệu
+           lịch sử các bài đã nộp tham chiếu templateId, xem lib/checklist.js) — chỉ hiển thị đúng nội
+           dung câu hỏi/lựa chọn hiện có, muốn sửa phải Nhân Bản thành bản Nháp mới. -->
+      <div id="checklistTemplateViewWrap" class="hidden bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 id="checklistTemplateViewTitle" class="font-bold text-indigo-900 text-base">👁️ Xem Mẫu Checklist</h3>
+          <button type="button" data-op="closeChecklistTemplateView" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">✕ Đóng</button>
+        </div>
+        <div id="checklistTemplateViewMeta" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-white p-2 rounded border"></div>
+        <div id="checklistTemplateViewQuestionsWrap" class="space-y-2"></div>
+      </div>
+
+      <div id="checklistTemplateBuilderWrap" class="hidden bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <h3 id="checklistBuilderTitle" class="font-bold text-rose-900 text-base">🛠️ Tạo Mẫu Checklist Mới</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Checklist <span class="text-red-500">*</span></label>
+            <input id="checklistBuilderCode" placeholder="VD: CL_VESINH" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Checklist <span class="text-red-500">*</span></label>
+            <input id="checklistBuilderName" placeholder="VD: Đánh giá vệ sinh siêu thị" class="w-full border p-1.5 rounded text-xs">
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1 text-xs">Loại Checklist <span class="text-red-500">*</span></label>
+            <select id="checklistBuilderType" data-op-change="onChecklistBuilderTypeChange" class="w-full border p-1.5 rounded text-xs">
+              <option value="STORE_SELF">Checklist Thường (Siêu Thị tự làm)</option>
+              <option value="CONTROL_AUDIT">Kiểm Soát (Kiểm Soát Viên đi đánh giá)</option>
+            </select>
+          </div>
+          <!-- isAtvstp (MỚI, 11/2026 — "PA 2" đã chốt) — cờ ĐỘC LẬP, CHỈ hiện/có ý nghĩa với CONTROL_AUDIT
+               (xem onChecklistBuilderTypeChange()/module-admin-checklistconfig.js). Gác quyền BÁO CÁO
+               (checklistAtvstpReportView) của mẫu này vào Dashboard "🥗 Đánh Giá VSATTP" thay vì báo cáo
+               "Checklist Thường" thường (checklistReportView). -->
+          <div id="checklistBuilderIsAtvstpWrap" class="hidden flex items-end pb-1.5">
+            <label class="flex items-center gap-2 text-xs font-semibold text-gray-700">
+              <input type="checkbox" id="checklistBuilderIsAtvstp"> 🥗 Đây là mẫu ATVSTP (xem Dashboard/Báo Cáo riêng)
+            </label>
+          </div>
+          <div id="checklistBuilderScoringModeWrap" class="contents">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Chế Độ Chấm Điểm <span class="text-red-500">*</span></label>
+              <select id="checklistBuilderScoringMode" data-op-change="onChecklistBuilderScoringModeChange" class="w-full border p-1.5 rounded text-xs">
+                <option value="SCORED">Có chấm điểm</option>
+                <option value="PASS_FAIL_ONLY">Chỉ Đạt / Chưa đạt (không chấm điểm)</option>
+              </select>
+            </div>
+            <div id="checklistBuilderPassThresholdWrap">
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Ngưỡng Điểm Đạt (%) — để trống nếu không chấm ngưỡng</label>
+              <input id="checklistBuilderPassThreshold" type="number" min="0" max="100" placeholder="VD: 80" class="w-full border p-1.5 rounded text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- Loại QA: Câu Hỏi & Đáp Án (v20.9 trở về trước) — ẩn hoàn toàn khi soạn mẫu DEDUCTION. -->
+        <div id="checklistBuilderQuestionsSection" class="space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h4 class="font-bold text-gray-700 text-sm">❓ Câu Hỏi</h4>
+            <div class="flex items-center gap-2">
+              <button type="button" data-op="exportChecklistBuilderQuestionsExcel" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📥 Xuất Excel</button>
+              <button type="button" data-op="addChecklistBuilderQuestion" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Câu Hỏi</button>
+            </div>
+          </div>
+
+          <!-- Nhập Câu Hỏi Từ Excel — nạp vào checklistBuilderQuestions[] đang soạn dở (KHÔNG tự lưu mẫu),
+               người dùng vẫn bấm "💾 Lưu Mẫu" bên dưới như bình thường sau khi nạp (server xác minh lại toàn
+               bộ, xem lib/checklist.js::validateChecklistQuestions()). Dùng chung 1 file mẫu cho CẢ 2 chế độ
+               chấm điểm — cột điểm để trống nếu checklist chỉ Đạt/Chưa đạt (xem lib/checklistImport.js). -->
+          <div class="bg-gray-50 p-3 rounded border text-xs space-y-2">
+            <h5 class="font-bold text-gray-700">📥 Nhập Câu Hỏi Từ Excel</h5>
+            <div class="flex flex-wrap items-center gap-3">
+              <a href="/api/checklist/import-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+              <input id="checklistImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onChecklistImportFileChange" data-arg-event="0" class="text-xs">
+            </div>
+            <p id="checklistImportStatus" class="text-xs text-gray-500"></p>
+            <div id="checklistImportPreviewWrap" class="hidden border rounded max-h-56 overflow-y-auto">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-100 text-left sticky top-0"><tr>
+                  <th class="p-1 text-center">Nhập?</th><th class="p-1">Nội Dung Câu Hỏi</th><th class="p-1">Loại</th><th class="p-1">Đáp Án</th><th class="p-1">Trạng Thái</th>
+                </tr></thead>
+                <tbody id="checklistImportPreviewBody"></tbody>
+              </table>
+            </div>
+            <button type="button" id="checklistImportConfirmBtn" data-op="confirmChecklistImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Nạp Các Câu Hỏi Hợp Lệ Vào Danh Sách</button>
+          </div>
+
+          <div id="checklistBuilderQuestionsWrap" class="space-y-3"></div>
+        </div>
+
+        <!-- Loại DEDUCTION: Trừ Điểm Theo Hạng Mục (v21.0) — cây Hạng Mục Lớn → Hạng Mục Con → Tiêu Chí,
+             mirror ĐÚNG validateChecklistCategories() ở lib/checklist.js. -->
+        <div id="checklistBuilderCategoriesSection" class="hidden space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h4 class="font-bold text-gray-700 text-sm">📉 Hạng Mục Đánh Giá</h4>
+            <button type="button" data-op="addChecklistBuilderCategory" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm Hạng Mục Lớn</button>
+          </div>
+          <div id="checklistBuilderCategoriesWrap" class="space-y-3"></div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button type="button" data-op="closeChecklistTemplateBuilder" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+          <button type="button" data-op="saveChecklistTemplateBuilder" class="bg-rose-600 text-white px-5 py-2 rounded text-xs font-bold hover:bg-rose-700">💾 Lưu Mẫu</button>
+        </div>
+      </div>
     </div>
   </div>
 

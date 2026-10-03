@@ -25,7 +25,9 @@ const {
 
 const PORT = 8986;
 
-const MANAGER = { username: 'qltc2', name: 'Quản Lý Checklist 2', dept: 'Phòng Vận Hành', perms: { checklistTemplateManage: true }, active: true };
+// Cấu Hình Checklist nay admin-only (move vào Hệ Thống > Cấu Hình Nghiệp Vụ) — không còn quyền
+// checklistTemplateManage riêng, phải dùng user admin thật.
+const MANAGER = { username: 'admin2', name: 'Admin Checklist 2', dept: 'Phòng Vận Hành', perms: { admin: true }, active: true };
 
 const state = createMockState({
   depts: ['Phòng Vận Hành'],
@@ -49,7 +51,7 @@ async function main() {
 
   try {
     await loginAs(page, MANAGER);
-    await page.evaluate(() => { switchTab('checklist'); setChecklistSubTab('CONFIG'); });
+    await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); });
 
     await run.run('"+ Tạo Mẫu Mới" hiện bảng chọn loại mẫu, chọn DEDUCTION -> builder hiện khung Hạng Mục, ẩn khung Câu Hỏi', async () => {
       const s = await page.evaluate(() => {

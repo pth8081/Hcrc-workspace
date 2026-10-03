@@ -27,15 +27,27 @@ function stubModule(relPath, exportsObj) {
 }
 
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', posType: 'HO', perms: { admin: true }, active: true };
-const MANAGER = { username: 'qltc1', name: 'Quản Lý Checklist', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistTemplateManage: true }, active: true };
+// MANAGER: HO user KHÔNG có quyền checklist nào (11/2026 LÀM GỌN — quản lý mẫu đã dời hẳn vào Cấu Hình
+// Nghiệp Vụ, CHỈ admin, không còn checklistTemplateManage cấp cho non-admin) — giữ lại user này đúng vai
+// "non-admin bị chặn mọi hành động CRUD mẫu" cho các test 403 bên dưới.
+const MANAGER = { username: 'qltc1', name: 'Nhân Viên HO (không phải admin)', dept: 'Phòng Vận Hành', posType: 'HO', perms: {}, active: true };
 const REPORTER = { username: 'bc1', name: 'Người Xem Báo Cáo', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistReportView: true }, active: true };
-const AUDITOR = { username: 'ks1', name: 'Kiểm Soát Viên', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistAuditScope: { all: false, depts: ['Siêu thị A'] } }, active: true };
-const STORE_A_EMP = { username: 'nva', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu thị A', posType: 'STORE', perms: { checklistStoreSelfExecute: true }, active: true };
-const STORE_B_EMP = { username: 'nvb', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu thị B', posType: 'STORE', perms: { checklistStoreSelfExecute: true }, active: true };
-// STORE_A_EMP_NO_PERM: cùng Vị Trí Siêu Thị hợp lệ như STORE_A_EMP nhưng KHÔNG có checklistStoreSelfExecute
-// — dùng riêng cho test "có Vị Trí Siêu Thị nhưng chưa được admin cấp quyền vẫn phải bị chặn" (9/2026).
+// AUDITOR: checklistAtvstpExecute PHẲNG (11/2026 — thay checklistAuditScope cũ) — "ai được chọn thì thực
+// hiện TẤT CẢ siêu thị", không còn phạm vi riêng theo siêu thị.
+const AUDITOR = { username: 'ks1', name: 'Kiểm Soát Viên', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistAtvstpExecute: true }, active: true };
+const STORE_A_EMP = { username: 'nva', name: 'Nhân Viên Siêu Thị A', dept: 'Siêu thị A', posType: 'STORE', perms: { checklistExecute: true }, active: true };
+const STORE_B_EMP = { username: 'nvb', name: 'Nhân Viên Siêu Thị B', dept: 'Siêu thị B', posType: 'STORE', perms: { checklistExecute: true }, active: true };
+// STORE_A_EMP_NO_PERM: cùng Vị Trí Siêu Thị hợp lệ như STORE_A_EMP nhưng KHÔNG có checklistExecute —
+// dùng riêng cho test "có Vị Trí Siêu Thị nhưng chưa được admin cấp quyền vẫn phải bị chặn" (9/2026).
 const STORE_A_EMP_NO_PERM = { username: 'nva_noperm', name: 'Nhân Viên Siêu Thị A (chưa cấp quyền)', dept: 'Siêu thị A', posType: 'STORE', perms: {}, active: true };
-let USERS = [ADMIN, MANAGER, REPORTER, AUDITOR, STORE_A_EMP, STORE_B_EMP, STORE_A_EMP_NO_PERM];
+// HO_WITH_SCOPE: HO user (không gắn siêu thị) được cấp checklistExecute + checklistExecuteScope — tính
+// năng MỚI (11/2026, vá gap "HO user không bao giờ thực hiện được STORE_SELF" theo đúng yêu cầu người
+// dùng "nếu không thuộc siêu thị nào thì phải chọn thêm siêu thị mới được thực hiện").
+const HO_WITH_SCOPE = { username: 'ho_scope', name: 'Nhân Viên HO (có phạm vi thực hiện)', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistExecute: true, checklistExecuteScope: { all: false, depts: ['Siêu thị B'] } }, active: true };
+// HO_NO_SCOPE: HO user được cấp checklistExecute nhưng CHƯA được admin cấp thêm checklistExecuteScope —
+// phải vẫn bị chặn (không tự nhiên suy ra siêu thị nào để làm).
+const HO_NO_SCOPE = { username: 'ho_noscope', name: 'Nhân Viên HO (chưa có phạm vi)', dept: 'Phòng Vận Hành', posType: 'HO', perms: { checklistExecute: true }, active: true };
+let USERS = [ADMIN, MANAGER, REPORTER, AUDITOR, STORE_A_EMP, STORE_B_EMP, STORE_A_EMP_NO_PERM, HO_WITH_SCOPE, HO_NO_SCOPE];
 
 let RECORDS;
 function resetRecords() {
@@ -189,7 +201,7 @@ async function main() {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ACTIVE';
-      const res = await api('POST', `/api/checklist/templates/${t.id}/edit`, { templateCode: t.templateCode, templateName: 'Đổi tên', templateType: 'STORE_SELF', questions: t.questions }, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/edit`, { templateCode: t.templateCode, templateName: 'Đổi tên', templateType: 'STORE_SELF', questions: t.questions }, ADMIN);
       assertEqual(res.status, 409, 'Sửa template ACTIVE phải bị từ chối (409)');
     });
 
@@ -198,7 +210,7 @@ async function main() {
       const t1 = seedTemplate();
       const oldActive = seedTemplate({ templateCode: t1.templateCode });
       oldActive.status = 'ACTIVE';
-      const res = await api('POST', `/api/checklist/templates/${t1.id}/activate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t1.id}/activate`, {}, ADMIN);
       assertEqual(res.status, 200, 'Kích hoạt DRAFT phải thành công');
       assertEqual(res.body.item.status, 'ACTIVE', 'Template vừa kích hoạt phải chuyển ACTIVE');
       const refreshedOld = RECORDS.checklistTemplates.find(x => x.id === oldActive.id);
@@ -212,7 +224,7 @@ async function main() {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ARCHIVED';
-      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, ADMIN);
       assertEqual(res.status, 200, 'Kích hoạt lại từ ARCHIVED phải thành công');
       assertEqual(res.body.item.status, 'ACTIVE', 'Phải chuyển đúng về ACTIVE');
       assertEqual(res.body.item.version, t.version, 'Kích hoạt lại KHÔNG được tăng version (khác Nhân Bản)');
@@ -223,7 +235,7 @@ async function main() {
       t.status = 'ARCHIVED';
       const otherActive = seedTemplate({ templateCode: t.templateCode });
       otherActive.status = 'ACTIVE';
-      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, ADMIN);
       assertEqual(res.status, 200, 'Kích hoạt lại phải thành công');
       const refreshedOther = RECORDS.checklistTemplates.find(x => x.id === otherActive.id);
       assertEqual(refreshedOther.status, 'ARCHIVED', 'Bản ACTIVE khác cùng mã phải tự chuyển ARCHIVED');
@@ -232,7 +244,7 @@ async function main() {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ACTIVE';
-      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, ADMIN);
       assertEqual(res.status, 409, 'Kích hoạt 1 template đã ACTIVE sẵn phải bị từ chối (409)');
     });
 
@@ -240,21 +252,29 @@ async function main() {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ACTIVE'; t.version = 3;
-      const res = await api('POST', `/api/checklist/templates/${t.id}/clone`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/clone`, {}, ADMIN);
       assertEqual(res.status, 200, 'Nhân bản phải thành công');
       assertEqual(res.body.item.status, 'DRAFT', 'Bản nhân bản phải là DRAFT');
       assertEqual(res.body.item.version, 4, 'Bản nhân bản phải là version+1');
       assertEqual(res.body.item.clonedFromTemplateId, t.id, 'Phải ghi lại nguồn nhân bản');
     });
 
-    // v23.4: Xoá template giờ CHỈ Admin mới được (không còn đủ checklistTemplateManage như trước) — và
-    // cho phép xoá cả ACTIVE/ARCHIVED (không chỉ DRAFT) MIỄN LÀ chưa từng có ai nộp bài, tránh mồ côi dữ
-    // liệu báo cáo cũ (checklistSubmissions.templateId tham chiếu về bản đã xoá).
-    await run.run('Template: MANAGER (không phải admin) không xoá được kể cả template còn DRAFT', async () => {
+    // 11/2026 LÀM GỌN: quản lý mẫu (tạo/sửa/nhân bản/kích hoạt/dừng/xoá) giờ CHỈ ADMIN — không còn
+    // checklistTemplateManage cấp riêng cho non-admin như trước (v23.4 mới chỉ siết riêng route Xoá).
+    await run.run('Template: non-admin (MANAGER) bị chặn 403 ở MỌI hành động quản lý mẫu — edit/activate/clone/deactivate/delete', async () => {
       resetRecords();
       const t = seedTemplate();
-      const res = await api('POST', `/api/checklist/templates/${t.id}/delete`, {}, MANAGER);
-      assertEqual(res.status, 403, 'Manager không phải admin thì không xoá được (403)');
+      const resEdit = await api('POST', `/api/checklist/templates/${t.id}/edit`, { templateCode: t.templateCode, templateName: 'x', templateType: 'STORE_SELF', questions: t.questions }, MANAGER);
+      assertEqual(resEdit.status, 403, 'Sửa mẫu không phải admin thì bị chặn (403)');
+      const resActivate = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      assertEqual(resActivate.status, 403, 'Kích hoạt mẫu không phải admin thì bị chặn (403)');
+      const resClone = await api('POST', `/api/checklist/templates/${t.id}/clone`, {}, MANAGER);
+      assertEqual(resClone.status, 403, 'Nhân bản mẫu không phải admin thì bị chặn (403)');
+      t.status = 'ACTIVE';
+      const resDeactivate = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, MANAGER);
+      assertEqual(resDeactivate.status, 403, 'Dừng mẫu không phải admin thì bị chặn (403)');
+      const resDelete = await api('POST', `/api/checklist/templates/${t.id}/delete`, {}, MANAGER);
+      assertEqual(resDelete.status, 403, 'Manager không phải admin thì không xoá được (403)');
     });
     await run.run('Template: Admin xoá được ARCHIVED nếu CHƯA có ai nộp bài', async () => {
       resetRecords();
@@ -275,21 +295,21 @@ async function main() {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ACTIVE';
-      const res = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, ADMIN);
       assertEqual(res.status, 200, 'Dừng phải thành công');
       assertEqual(res.body.item.status, 'ARCHIVED', 'Sau khi Dừng phải chuyển ARCHIVED');
     });
     await run.run('Template: "Dừng" chỉ áp dụng cho ACTIVE — DRAFT/ARCHIVED bị chặn', async () => {
       resetRecords();
       const t = seedTemplate();
-      const res = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/deactivate`, {}, ADMIN);
       assertEqual(res.status, 409, 'Dừng 1 template DRAFT phải bị từ chối (409)');
     });
     await run.run('Template: nhân bản giờ CHO PHÉP cả từ ARCHIVED (không chỉ ACTIVE) — phục vụ nút "Sửa" mới', async () => {
       resetRecords();
       const t = seedTemplate();
       t.status = 'ARCHIVED'; t.version = 2;
-      const res = await api('POST', `/api/checklist/templates/${t.id}/clone`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/clone`, {}, ADMIN);
       assertEqual(res.status, 200, 'Nhân bản từ ARCHIVED phải thành công');
       assertEqual(res.body.item.status, 'DRAFT', 'Bản nhân bản phải là DRAFT');
     });
@@ -303,7 +323,7 @@ async function main() {
       resetRecords();
       const sub = { id: idSeq++, templateId: 1, status: 'DRAFT' };
       RECORDS.checklistSubmissions.push(sub);
-      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, ADMIN);
       assertEqual(res.status, 200, 'Xoá bài DRAFT phải thành công');
       assertEqual(RECORDS.checklistSubmissions.length, 0, 'Bài DRAFT phải bị xoá khỏi collection');
     });
@@ -311,11 +331,11 @@ async function main() {
       resetRecords();
       const sub = { id: idSeq++, templateId: 1, status: 'SUBMITTED', totalScore: 90, isPassed: true };
       RECORDS.checklistSubmissions.push(sub);
-      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/submissions/${sub.id}/delete`, {}, ADMIN);
       assertEqual(res.status, 409, 'Xoá bài đã nộp phải bị chặn (409)');
       assertEqual(RECORDS.checklistSubmissions.length, 1, 'Bài đã nộp KHÔNG được xoá khỏi collection');
     });
-    await run.run('Submission: người không có checklistTemplateManage (requireManage) bị chặn 403 kể cả bài DRAFT', async () => {
+    await run.run('Submission: người không phải admin (requireManage) bị chặn 403 kể cả bài DRAFT', async () => {
       resetRecords();
       const sub = { id: idSeq++, templateId: 1, status: 'DRAFT' };
       RECORDS.checklistSubmissions.push(sub);
@@ -332,26 +352,55 @@ async function main() {
       assertEqual(res.body.item.storeCode, 'Siêu thị A', 'storeCode phải LUÔN là dept thật của user, không phải giá trị client gửi lên');
     });
 
-    await run.run('STORE_SELF: người không ở vị trí Siêu Thị (posType khác STORE) bị chặn', async () => {
+    await run.run('STORE_SELF: người không có quyền checklistExecute nào bị chặn 403 (kể cả không gắn siêu thị)', async () => {
       resetRecords();
       const t = seedTemplate(); t.status = 'ACTIVE';
       const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, MANAGER);
-      assertEqual(res.status, 400, 'posType không phải STORE thì không tự đánh giá được');
+      assertEqual(res.status, 403, 'Không có checklistExecute thì không tự đánh giá được');
     });
 
-    // checklistStoreSelfExecute (9/2026, yêu cầu người dùng): quyền mới gác việc LÀM checklist Tự Đánh
-    // Giá — người ở Vị Trí Siêu Thị nhưng CHƯA được admin cấp quyền này vẫn phải bị chặn dù posType/dept
-    // đều hợp lệ (khác nhánh test ở trên — nhánh đó test thiếu posType, nhánh này test thiếu QUYỀN).
-    await run.run('STORE_SELF: có Vị Trí Siêu Thị hợp lệ nhưng CHƯA được cấp quyền checklistStoreSelfExecute -> vẫn bị chặn 403', async () => {
+    // 11/2026 (vá gap theo đúng yêu cầu người dùng): HO user (KHÔNG gắn siêu thị) được cấp checklistExecute
+    // vẫn phải chọn thêm checklistExecuteScope + tự chọn 1 siêu thị trong phạm vi mỗi lần bắt đầu bài.
+    await run.run('STORE_SELF: HO có checklistExecute nhưng CHƯA được cấp checklistExecuteScope -> 403', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị B' }, HO_NO_SCOPE);
+      assertEqual(res.status, 403, 'Chưa được cấp phạm vi siêu thị nào thì vẫn không thực hiện được dù có checklistExecute');
+    });
+    await run.run('STORE_SELF: HO có checklistExecuteScope nhưng KHÔNG chọn siêu thị -> 400 (phải chọn)', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, HO_WITH_SCOPE);
+      assertEqual(res.status, 400, 'Có phạm vi nhưng chưa chọn siêu thị cụ thể thì phải báo thiếu lựa chọn');
+    });
+    await run.run('STORE_SELF: HO chọn siêu thị NGOÀI phạm vi checklistExecuteScope -> 403', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị A' }, HO_WITH_SCOPE);
+      assertEqual(res.status, 403, 'Phạm vi chỉ cấp Siêu thị B -> chọn Siêu thị A phải bị chặn');
+    });
+    await run.run('STORE_SELF: HO chọn ĐÚNG siêu thị trong phạm vi checklistExecuteScope -> 200', async () => {
+      resetRecords();
+      const t = seedTemplate(); t.status = 'ACTIVE';
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị B' }, HO_WITH_SCOPE);
+      assertEqual(res.status, 200, 'Đúng phạm vi được cấp phải cho phép bắt đầu');
+      assertEqual(res.body.item.storeCode, 'Siêu thị B', 'storeCode phải đúng siêu thị HO chọn');
+    });
+
+    // checklistExecute (9/2026, yêu cầu người dùng, đổi tên 11/2026): quyền gác việc LÀM checklist Thường
+    // — người ở Vị Trí Siêu Thị nhưng CHƯA được admin cấp quyền này vẫn phải bị chặn dù posType/dept đều
+    // hợp lệ (khác nhánh test ở trên — nhánh đó test thiếu quyền hoàn toàn, nhánh này test thiếu QUYỀN
+    // dù có Vị Trí Siêu Thị hợp lệ).
+    await run.run('STORE_SELF: có Vị Trí Siêu Thị hợp lệ nhưng CHƯA được cấp quyền checklistExecute -> vẫn bị chặn 403', async () => {
       resetRecords();
       const t = seedTemplate(); t.status = 'ACTIVE';
       const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id }, STORE_A_EMP_NO_PERM);
       assertEqual(res.status, 403, 'Chưa được cấp quyền Đánh Giá Checklist thì dù có Vị Trí Siêu Thị vẫn không tự đánh giá được');
     });
 
-    await run.run('canAccessChecklistModule(): người ở Vị Trí Siêu Thị nhưng chưa được cấp checklistStoreSelfExecute + không có quyền checklist nào khác -> KHÔNG thấy tab module', () => {
+    await run.run('canAccessChecklistModule(): người ở Vị Trí Siêu Thị nhưng chưa được cấp checklistExecute + không có quyền checklist nào khác -> KHÔNG thấy tab module', () => {
       assertEqual(checklist.canAccessChecklistModule(STORE_A_EMP_NO_PERM), false, 'Chưa được cấp quyền nào ở module Checklist thì tab phải bị ẩn hẳn');
-      assertEqual(checklist.canAccessChecklistModule(STORE_A_EMP), true, 'Đối chứng: có checklistStoreSelfExecute thì vẫn thấy tab như cũ');
+      assertEqual(checklist.canAccessChecklistModule(STORE_A_EMP), true, 'Đối chứng: có checklistExecute thì vẫn thấy tab như cũ');
     });
 
     await run.run('STORE_SELF: admin không gắn Vị Trí Siêu Thị vẫn test được nếu tự chọn siêu thị (storeCode do admin gửi lên được tin, khác hẳn user thường)', async () => {
@@ -364,15 +413,22 @@ async function main() {
       assertEqual(res.body.item.storeCode, 'Siêu thị B', 'storeCode phải đúng giá trị admin chọn (khác quy tắc "luôn = user.dept" áp dụng cho người dùng thường)');
     });
 
-    // ===== 3. Phạm vi CONTROL_AUDIT =====
-    await run.run('CONTROL_AUDIT: kiểm soát viên ngoài phạm vi checklistAuditScope bị 403', async () => {
+    // ===== 3. checklistAtvstpExecute (11/2026 LÀM GỌN — PHẲNG, thay checklistAuditScope cũ) =====
+    await run.run('CONTROL_AUDIT: checklistAtvstpExecute PHẲNG -> kiểm soát viên thực hiện được BẤT KỲ siêu thị nào (không còn phạm vi riêng)', async () => {
       resetRecords();
       const t = seedTemplate({ templateType: 'CONTROL_AUDIT' }); t.status = 'ACTIVE';
       const resB = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị B' }, AUDITOR);
-      assertEqual(resB.status, 403, 'Kiểm soát viên chỉ được cấp phạm vi Siêu thị A -> đánh giá Siêu thị B phải bị từ chối');
+      assertEqual(resB.status, 200, 'checklistAtvstpExecute PHẲNG -> Siêu thị B cũng phải cho phép');
       const resA = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị A' }, AUDITOR);
-      assertEqual(resA.status, 200, 'Đúng phạm vi được cấp phải cho phép');
+      assertEqual(resA.status, 200, 'Siêu thị A cũng phải cho phép');
       assertEqual(resA.body.item.storeCode, 'Siêu thị A', 'storeCode phải đúng siêu thị được chọn');
+    });
+
+    await run.run('CONTROL_AUDIT: người KHÔNG có checklistAtvstpExecute bị chặn 403 dù chọn đúng siêu thị', async () => {
+      resetRecords();
+      const t = seedTemplate({ templateType: 'CONTROL_AUDIT' }); t.status = 'ACTIVE';
+      const res = await api('POST', '/api/checklist/submissions/start', { templateId: t.id, storeCode: 'Siêu thị A' }, REPORTER);
+      assertEqual(res.status, 403, 'REPORTER chỉ có checklistReportView, không có checklistAtvstpExecute -> phải bị chặn');
     });
 
     await run.run('CONTROL_AUDIT: thiếu storeCode bị từ chối', async () => {
@@ -804,7 +860,7 @@ async function main() {
       const res = await api('POST', `/api/checklist/templates/${t.id}/edit`, {
         templateCode: t.templateCode, templateName: t.templateName, templateType: t.templateType,
         templateKind: 'QA', questions: [{ text: 'x', options: [{ text: 'Đạt', isPassing: true }, { text: 'Không đạt', isPassing: false }] }]
-      }, MANAGER);
+      }, ADMIN);
       assertEqual(res.status, 400, 'Đổi loại mẫu sau khi đã tạo phải bị chặn 400');
     });
 
@@ -812,7 +868,7 @@ async function main() {
       resetRecords();
       const t = seedDeductionTemplate();
       t.categories = [];
-      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, MANAGER);
+      const res = await api('POST', `/api/checklist/templates/${t.id}/activate`, {}, ADMIN);
       assertEqual(res.status, 400, 'Kích hoạt template DEDUCTION rỗng categories phải bị chặn 400');
     });
 

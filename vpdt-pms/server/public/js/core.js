@@ -41,7 +41,7 @@
 // (dữ liệu HTML thuần, không phải script bị THỰC THI) để không bị scriptSrc chi phối gì cả.
 window.__ASSET_VERSION__ = document.querySelector('meta[name="app-version"]')?.content || null;
 
-const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"admin-deptviewscope":{"files":["module-admin-deptviewscope.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","admin-deptviewscope","formbuilder-nav","itsupport-tier","logsystem-trash","dangkyxe","phonghop"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav","itsupport-price"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]},"checklist":{"files":["module-checklist.js"],"deps":["formbuilder-nav"]},"muahang":{"files":["module-muahang.js"],"deps":["formbuilder-nav","itsupport-price"]},"nghiepvu":{"files":["module-nghiepvu.js"],"deps":[]}};
+const MODULE_LOAD_GROUPS = {"formbuilder-nav":{"files":["module-tailieu.js","module-formbuilder-nav.js"],"deps":[]},"admin-core":{"files":["module-admin.js"],"deps":["formbuilder-nav"]},"admin-permtree":{"files":["module-admin-permtree.js"],"deps":["admin-core"]},"admin-permgroups":{"files":["module-admin-permgroups.js","module-admin-submissiongroups.js","module-admin-userstaging.js"],"deps":["admin-core","admin-permtree"]},"admin-specialperm":{"files":["module-admin-specialperm.js"],"deps":[]},"admin-deptviewscope":{"files":["module-admin-deptviewscope.js"],"deps":[]},"baocaodinhky-nhap":{"files":["module-baocaodinhky-nhap.js","module-baocaodinhky-trinhchieu.js"],"deps":["formbuilder-nav","internalcomms-daotao-viewer"]},"dongphuc":{"files":["module-dongphuc.js"],"deps":[]},"baocaoquantri-preview":{"files":["module-baocaoquantri-preview.js","module-baocaoquantri.js"],"deps":["baocaodinhky-nhap","dongphuc","formbuilder-nav"]},"congviec":{"files":["module-congviec.js"],"deps":[]},"bienbanhop":{"files":["module-bienbanhop.js"],"deps":["congviec","formbuilder-nav"]},"dangkyxe":{"files":["module-dangkyxe.js"],"deps":["bienbanhop","formbuilder-nav"]},"hcrcdonghanh":{"files":["module-hcrcdonghanh.js"],"deps":["bienbanhop"]},"orgchart-v2":{"files":["module-orgchart.js"],"deps":["bienbanhop"]},"itsupport-renewal":{"files":["module-itsupport-renewal.js"],"deps":["formbuilder-nav"]},"itsupport-price":{"files":["module-itsupport-price.js"],"deps":["formbuilder-nav","itsupport-renewal"]},"internalcomms-daotao-viewer":{"files":["module-internalcomms-daotao-viewer.js"],"deps":["formbuilder-nav"]},"workflow":{"files":["module-workflow.js"],"deps":[]},"itsupport-tier":{"files":["module-ngansach.js","module-itsupport-tier.js"],"deps":["admin-specialperm","baocaodinhky-nhap","formbuilder-nav","internalcomms-daotao-viewer","itsupport-price","workflow"]},"logsystem-trash":{"files":["module-logsystem-trash.js"],"deps":[]},"hethong-tabs":{"files":["module-hethong-tabs.js"],"deps":["admin-core","admin-permgroups","admin-specialperm","admin-deptviewscope","formbuilder-nav","itsupport-tier","logsystem-trash","dangkyxe","phonghop","admin-checklistconfig"]},"vanbantrinh":{"files":["module-vanbantrinh.js"],"deps":["congviec","formbuilder-nav"]},"vpp":{"files":["module-vpp.js"],"deps":["admin-specialperm","formbuilder-nav"]},"hopdong":{"files":["module-hopdong.js","module-thanhtoan.js","module-office.js"],"deps":["formbuilder-nav","vanbantrinh","vpp"]},"internalcomms-daotao":{"files":["module-internalcomms-daotao.js"],"deps":["bienbanhop","formbuilder-nav"]},"phonghop":{"files":["module-phonghop.js"],"deps":["formbuilder-nav"]},"internalcomms-nhipsong":{"files":["module-internalcomms-nhipsong.js"],"deps":["formbuilder-nav","hcrcdonghanh","internalcomms-daotao","phonghop"]},"vanhanh":{"files":["module-vanhanh.js"],"deps":["bienbanhop","formbuilder-nav","itsupport-price"]},"hrlifecycle":{"files":["module-hrlifecycle.js"],"deps":["bienbanhop","formbuilder-nav"]},"hrprofile":{"files":["module-hrprofile.js"],"deps":["bienbanhop","formbuilder-nav"]},"hopdonglaodong":{"files":["module-hopdonglaodong.js"],"deps":["bienbanhop","formbuilder-nav"]},"conghop":{"files":["module-conghop.js"],"deps":["bienbanhop","formbuilder-nav"]},"luong":{"files":["module-luong.js"],"deps":["bienbanhop","formbuilder-nav"]},"checklist":{"files":["module-checklist.js"],"deps":["formbuilder-nav"]},"muahang":{"files":["module-muahang.js"],"deps":["formbuilder-nav","itsupport-price"]},"nghiepvu":{"files":["module-nghiepvu.js"],"deps":[]},"admin-checklistconfig":{"files":["module-admin-checklistconfig.js"],"deps":[]}};
 
 // MODULE_FN_GROUP: tra CHINH XAC 1 identifier top-level (function/const/let/class hoac window.X=)
 // duoc dinh nghia o file module-*.js NAO thuoc cum nao - dung cho ensureFnReady() (goi qua ten
@@ -2299,12 +2299,12 @@ const BUSINESS_MODULES = [
   { key: 'vanHanhStoreOpen', label: 'Vận Hành — Siêu Thị > Mở Mới', parent: 'vanHanhStoreGroup' },
   { key: 'vanHanhRepair', label: 'Vận Hành — Siêu Thị > Sửa Chữa', parent: 'vanHanhStoreGroup' },
   // "Checklist Đánh Giá Siêu Thị" — module TOP-LEVEL mới, đúng khuôn "Đồng Phục"/"Giấy Phép"/"Vận Hành":
-  // module không mở sẵn cho ai, quyền thật nằm ở checklistTemplateManage/checklistReportView/
-  // checklistAuditScope (khối 23 cây phân quyền) HOẶC tự động đủ điều kiện nếu posType===STORE (tự làm
-  // checklist "Tự Đánh Giá" của đúng siêu thị mình) — xem canAccessChecklistModule() + lib/checklist.js
-  // phía server (cùng logic, PHẢI sửa cả 2 bên nếu đổi).
+  // module không mở sẵn cho ai, quyền thật nằm ở 4 quyền PHẲNG checklistExecute/checklistReportView/
+  // checklistAtvstpExecute/checklistAtvstpReportView (khối 23 cây phân quyền) — xem
+  // canAccessChecklistModule() + lib/checklist.js phía server (cùng logic, PHẢI sửa cả 2 bên nếu đổi).
+  // 11/2026: KHÔNG còn sub-tab "Cấu Hình" ở đây nữa (dời hẳn vào Hệ Thống > Cấu Hình Nghiệp Vụ, CHỈ
+  // admin) — bỏ hẳn entry 'checklistConfig' cũ.
   { key: 'checklist', label: 'Checklist Đánh Giá Siêu Thị' },
-  { key: 'checklistConfig', label: 'Checklist — Cấu Hình Mẫu', parent: 'checklist' },
   { key: 'checklistExecute', label: 'Checklist — Thực Hiện', parent: 'checklist' },
   { key: 'checklistResult', label: 'Checklist — Kết Quả', parent: 'checklist' },
   { key: 'checklistReport', label: 'Checklist — Báo Cáo', parent: 'checklist' },
@@ -4088,26 +4088,26 @@ function defaultNewUserPerms() {
     // cuối) theo đúng nguyên tắc kiểm soát nội bộ (segregation of duties) tài liệu gốc yêu cầu, KHÔNG để
     // 1 quyền gộp chung 2 việc.
     hrPayrollManage: false, hrPayrollApprove: false, hrPayrollView: true,
-    // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — phân quyền PHẲNG:
-    // checklistTemplateManage (cấu hình mẫu), checklistReportView (xem Báo Cáo trong CHÍNH module này,
-    // KHÔNG liên quan module Báo Cáo tổng hợp riêng), checklistAuditScope (phạm vi siêu thị được kiểm
-    // soát cho loại CONTROL_AUDIT — dùng TÊN 'depts' dù chứa mã siêu thị, để mergeGroupsBasePerms() tự
-    // union đúng theo cơ chế field-name 'depts' đã có sẵn, xem mergeGroupsBasePerms() bên dưới).
-    checklistTemplateManage: false, checklistReportView: false, checklistAuditScope: emptyScope(),
-    // checklistReportViewScope {all,depts} (10/2026, yêu cầu người dùng): phạm vi MẪU checklist áp dụng
-    // cho checklistReportView ở trên — TÁI DÙNG field 'depts' (chứa TEMPLATE ID dạng chuỗi, không phải
-    // tên phòng ban) để mergeGroupsBasePerms() tự union đúng theo cơ chế field-name 'depts' đã có sẵn,
-    // CÙNG lý do checklistAuditScope dùng tên này cho danh sách siêu thị. Xem
-    // lib/checklist.js::getChecklistReportViewScope() cho phần fallback {all:true} khi tài khoản CHƯA
-    // từng được lưu qua UI mới (không có regression cho tài khoản cũ).
-    checklistReportViewScope: emptyScope(),
-    // checklistStoreSelfExecute (9/2026, yêu cầu người dùng): gác việc LÀM checklist "Tự Đánh Giá"
-    // (STORE_SELF, dạng câu hỏi) — admin phải tự cấp cho từng người (VD chỉ GĐST/CHT), không còn tự động
-    // cho MỌI người ở Vị Trí Siêu Thị như trước — xem isEligibleForStoreSelf() ở lib/checklist.js.
-    checklistStoreSelfExecute: false,
-    // checklistStoreSelfExecuteScope {all,depts} (10/2026) — CÙNG khuôn checklistReportViewScope ở trên,
-    // nhưng áp dụng cho quyền Tự Đánh Giá (chỉ hiện mẫu STORE_SELF cho phép Tự Đánh Giá ở ô chọn client).
-    checklistStoreSelfExecuteScope: emptyScope(),
+    // Checklist Đánh Giá Siêu Thị (module TOP-LEVEL riêng, xem lib/checklist.js) — 11/2026, LÀM GỌN theo
+    // yêu cầu người dùng: cấu hình/tạo/áp dụng mẫu đã dời HẲN vào Hệ Thống > ⚙️ Cấu Hình Nghiệp Vụ > ✅
+    // Cấu Hình Checklist (CHỈ admin, không còn checkbox quyền quản lý mẫu ở đây nữa). Module này giờ chỉ
+    // còn đúng 4 quyền PHẲNG, không còn khái niệm phạm vi theo MẪU:
+    // - checklistExecute + checklistExecuteScope {all,depts}: gác "Checklist Thường" (STORE_SELF). Người
+    //   thuộc 1 siêu thị (user.dept, posType STORE) mặc định CHỈ thực hiện/mặc định xem báo cáo đúng siêu
+    //   thị mình (không cần set scope) — NHƯNG vẫn phải được CẤP checklistExecute=true mới thực hiện
+    //   được. Người KHÔNG thuộc siêu thị nào (HO) phải có checklistExecuteScope (all hoặc danh sách siêu
+    //   thị, dùng TÊN 'depts' dù chứa mã siêu thị, để mergeGroupsBasePerms() tự union đúng theo cơ chế
+    //   field-name 'depts' đã có sẵn) VÀ tự chọn đúng 1 siêu thị trong phạm vi đó khi làm bài.
+    // - checklistReportView (PHẲNG, không còn phạm vi theo mẫu): được cấp thì xem Báo Cáo "Checklist
+    //   Thường" của TẤT CẢ siêu thị. KHÔNG cấp thì người nộp bài vẫn luôn tự xem lại bài CỦA CHÍNH MÌNH
+    //   (và GĐST/CHT luôn xem bài đã nộp của ĐÚNG siêu thị mình) — xem canViewChecklistSubmission()
+    //   lib/recordViewScope.js, không phụ thuộc quyền này.
+    // - checklistAtvstpExecute (PHẲNG): được cấp thì thực hiện ATVSTP (CONTROL_AUDIT, mẫu được admin đánh
+    //   dấu isAtvstp=true ở Cấu Hình Checklist) cho TẤT CẢ siêu thị — không còn phạm vi theo siêu thị.
+    // - checklistAtvstpReportView (PHẲNG): được cấp thì xem Báo Cáo ATVSTP (VSATTP Dashboard) của TẤT CẢ
+    //   siêu thị.
+    checklistExecute: false, checklistExecuteScope: emptyScope(),
+    checklistReportView: false, checklistAtvstpExecute: false, checklistAtvstpReportView: false,
     // Mua Hàng > BAS (module TOP-LEVEL mới, v23.30, xem lib/vendorRebate.js) — phân quyền PHẲNG, TÁCH
     // BIỆT NHIỆM VỤ rõ ràng (mục 8 tài liệu): người tạo/sửa Điều Khoản (rebateTermManage) KHÔNG tự động
     // kích hoạt được (rebateTermActivate riêng) — liên quan trực tiếp số tiền chiết khấu lớn với NCC.
@@ -9293,27 +9293,47 @@ function hasAnyOperationRecordManagePermClient(user) {
 // canViewChecklistReports/hasChecklistAuditScope/isEligibleForStoreSelf/canAccessChecklistModule) — sửa
 // 1 bên PHẢI sửa cả 2 bên. Định nghĩa ở core.js (không phải module-checklist.js) vì cần gọi ngay lúc
 // đăng nhập để quyết định hiện/ẩn nav, TRƯỚC KHI cụm module-checklist.js (nạp lười khi vào tab) kịp tải.
-function canManageChecklistTemplatesClient(user) { return !!(user?.perms?.admin || user?.perms?.checklistTemplateManage); }
-function canViewChecklistReportsClient(user) { return !!(user?.perms?.admin || user?.perms?.checklistReportView); }
-function hasChecklistAuditScopeClient(user) {
+// 11/2026 LÀM GỌN: cấu hình/quản lý mẫu đã dời hẳn vào Hệ Thống > Cấu Hình Nghiệp Vụ (CHỈ admin, xem
+// canManageChecklistTemplatesClient() không còn field quyền riêng nào). 4 quyền PHẲNG còn lại mirror
+// ĐÚNG canExecuteChecklistGeneral/canExecuteChecklistAtvstp/canViewChecklistReportsGeneral/
+// canViewChecklistReportsAtvstp/canAccessChecklistModule ở lib/checklist.js — sửa 1 bên PHẢI sửa cả 2.
+function canManageChecklistTemplatesClient(user) { return !!user?.perms?.admin; }
+// LEGACY FALLBACK (11/2026) — mirror ĐÚNG fallback phía server (lib/checklist.js) cho tài khoản CHƯA
+// được admin mở lại form lưu qua UI mới sau đợt làm gọn này: checklistExecute suy từ checklistStoreSelfExecute
+// cũ, checklistAtvstpExecute suy từ checklistAuditScope cũ (any), checklistAtvstpReportView suy từ
+// checklistReportView cũ khi checklistReportViewScope chưa từng lưu hoặc để {all:true}.
+function canExecuteChecklistGeneralClient(user) {
   if (user?.perms?.admin) return true;
-  const scope = user?.perms?.checklistAuditScope;
-  return !!(scope?.all || (scope?.depts || []).length);
+  if (user?.perms?.checklistExecute !== undefined) return !!user.perms.checklistExecute;
+  return !!user?.perms?.checklistStoreSelfExecute;
 }
-// getChecklistAuditStoresClient() — mirror ĐÚNG getChecklistAuditStores() ở lib/checklist.js, dùng để
-// dựng đúng danh sách siêu thị hiện ra ở ô chọn "Kiểm Soát Siêu Thị" (renderChecklistExecuteTab(),
-// module-checklist.js).
-function getChecklistAuditStoresClient(user) {
+function canExecuteChecklistAtvstpClient(user) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.checklistAtvstpExecute) return true;
+  const oldScope = user?.perms?.checklistAuditScope;
+  return !!(oldScope?.all || (oldScope?.depts || []).length);
+}
+function canViewChecklistReportsGeneralClient(user) { return !!(user?.perms?.admin || user?.perms?.checklistReportView); }
+function canViewChecklistReportsAtvstpClient(user) {
+  if (user?.perms?.admin) return true;
+  if (user?.perms?.checklistAtvstpReportView) return true;
+  const oldScope = user?.perms?.checklistReportViewScope;
+  return !!(user?.perms?.checklistReportView && (!oldScope || oldScope.all));
+}
+function canViewChecklistReportsClient(user) { return canViewChecklistReportsGeneralClient(user) || canViewChecklistReportsAtvstpClient(user); }
+// getChecklistExecuteScopeClient() — mirror ĐÚNG getChecklistExecuteScope() ở lib/checklist.js, dùng để
+// dựng đúng danh sách siêu thị hiện ra ở ô chọn siêu thị cho người KHÔNG có siêu thị gắn sẵn (HO) khi
+// làm "Checklist Thường" (renderChecklistExecuteTab(), module-checklist.js).
+function getChecklistExecuteScopeClient(user) {
   if (user?.perms?.admin) return { all: true, depts: [] };
-  return user?.perms?.checklistAuditScope || { all: false, depts: [] };
+  return user?.perms?.checklistExecuteScope || { all: false, depts: [] };
 }
 function canAccessChecklistModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'checklist')) return false;
-  if (canManageChecklistTemplatesClient(user) || canViewChecklistReportsClient(user)) return true;
-  if (hasChecklistAuditScopeClient(user)) return true;
-  return !!(user.posType === 'STORE' && user.dept && user.perms?.checklistStoreSelfExecute);
+  return !!(canExecuteChecklistGeneralClient(user) || canExecuteChecklistAtvstpClient(user)
+    || canViewChecklistReportsGeneralClient(user) || canViewChecklistReportsAtvstpClient(user));
 }
 // Mua Hàng > BAS (v23.30) — mirror ĐÚNG lib/vendorRebate.js phía server (canManageVendors/
 // canManageTerms/canActivateTerm/canViewReport/canReconcile/canApprove) — sửa 1 bên PHẢI sửa cả 2 bên.

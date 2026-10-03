@@ -906,14 +906,14 @@ async function prepareOperationOrderApiConfigForSave(payload) {
 }
 
 // Bước 8d — checklistSubmissions: canViewChecklistSubmission() (lib/recordViewScope.js) có 3 nhánh —
-// (1) admin/checklistTemplateManage/checklistReportView xem HẾT, (2) chính người nộp xem bài của mình,
-// (3) người posType STORE xem bài CHƯA NHÁP của ĐÚNG siêu thị mình (storeCode === dept) — khác
+// (1) admin/checklistReportView/checklistAtvstpReportView xem HẾT, (2) chính người nộp xem bài của
+// mình, (3) người posType STORE xem bài CHƯA NHÁP của ĐÚNG siêu thị mình (storeCode === dept) — khác
 // paymentRequests/trainingDocumentProgress ở chỗ có 2 điều kiện OR (không phải 1 điều kiện phẳng duy
 // nhất), nên queryDedicatedRecords() (chỉ AND các where, không hỗ trợ OR) không đủ để gộp thành 1 lượt.
 // Tải 2 lượt riêng (theo SubmittedByUsername, theo StoreCode khi posType STORE) rồi gộp + khử trùng theo
 // id ở Node — mỗi lượt vẫn tự lọc/cache đúng ở SQL (không tải nguyên bảng company-wide).
 async function loadChecklistSubmissionsScoped(user) {
-  const canSeeAll = !!(user?.perms?.admin || user?.perms?.checklistTemplateManage || user?.perms?.checklistReportView);
+  const canSeeAll = !!(user?.perms?.admin || user?.perms?.checklistReportView || user?.perms?.checklistAtvstpReportView);
   if (canSeeAll) return getAllForCollectionCached('checklistSubmissions');
 
   const own = await getForCollectionByColumnCached('checklistSubmissions', 'SubmittedByUsername', user?.username);

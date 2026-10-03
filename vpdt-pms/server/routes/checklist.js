@@ -467,9 +467,10 @@ router.post('/export-report', requireReportView, async (req, res) => {
     const templates = await getAllForCollection('checklistTemplates');
     const template = templates.find(t => t.id === templateId);
     if (!template) return res.status(404).json({ error: 'Không tìm thấy checklist' });
-    // 10/2026: checklistReportView có phạm vi theo MẪU — requireReportView chỉ xác nhận CÓ quyền xem báo
-    // cáo nói chung, còn phải đối chiếu riêng mẫu này có nằm trong phạm vi hay không.
-    if (!checklist.canViewChecklistReportForTemplate(req.freshUser, templateId)) {
+    // 11/2026: requireReportView chỉ xác nhận CÓ quyền xem báo cáo nói chung (Thường HOẶC ATVSTP) — còn
+    // phải đối chiếu riêng mẫu này thuộc nhóm nào (isAtvstpTemplate()) để xét ĐÚNG 1 trong 2 quyền phẳng
+    // checklistReportView/checklistAtvstpReportView.
+    if (!checklist.canViewChecklistReportForTemplate(req.freshUser, template)) {
       return res.status(403).json({ error: 'Bạn không có quyền xem báo cáo của đúng mẫu checklist này' });
     }
 
@@ -540,11 +541,12 @@ router.post('/vsattp-dashboard/export', requireReportView, async (req, res) => {
       getAppDataValueCached('storeTypes'),
       getAppDataValueCached('stores')
     ]);
-    // 10/2026: checklistReportView có phạm vi theo MẪU — chỉ gộp vào Dashboard/file xuất những mẫu
-    // DEDUCTION nằm trong phạm vi report-view của người gọi (scope.all hoặc có mặt trong danh sách chọn).
-    const deductionTemplateIds = new Set(templates
-      .filter(t => checklist.isDeductionTemplate(t) && checklist.canViewChecklistReportForTemplate(req.freshUser, t.id))
-      .map(t => t.id));
+    // 11/2026: Dashboard VSATTP gộp mọi mẫu DEDUCTION — chỉ còn gác bởi 1 quyền phẳng
+    // checklistAtvstpReportView/admin (đã bỏ hẳn phạm vi theo mẫu checklistReportViewScope cũ).
+    if (!checklist.canViewChecklistReportsAtvstp(req.freshUser)) {
+      return res.status(403).json({ error: 'Bạn không có quyền xem báo cáo Đánh Giá VSATTP' });
+    }
+    const deductionTemplateIds = new Set(templates.filter(t => checklist.isDeductionTemplate(t)).map(t => t.id));
     const matched = allSubmissions.filter(s => {
       if (s.status !== 'SUBMITTED' || !deductionTemplateIds.has(s.templateId)) return false;
       if (storeFilter && !storeFilter.has(s.storeCode)) return false;

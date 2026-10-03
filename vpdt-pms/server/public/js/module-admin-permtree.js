@@ -40,7 +40,7 @@ function computePermTreeNodeCount(bodyEl) {
       const groupPrefix = cb.id.slice(0, -3);
       const deptContainer = document.getElementById(groupPrefix + 'DeptContainer');
       // deptContainer có thể là lưới checkbox THẬT (đa số) HOẶC widget renderMultiSelectDropdown() (VD
-      // pOperationOrderReceiptDeptContainer/pChecklistAuditScopeDeptContainer, chọn siêu thị — xem
+      // pOperationOrderReceiptDeptContainer/pChecklistExecuteScopeDeptContainer, chọn siêu thị — xem
       // module-admin.js) — widget này không có checkbox nào trong DOM, trạng thái đã chọn nằm ở
       // deptContainer._gmsSelected (Set, gán bởi renderMultiSelectDropdown() ở core.js). Khi KHÔNG có
       // container (khuôn bảng mới), tra theo data-scope-group="<groupPrefix>" thay thế.
@@ -258,17 +258,18 @@ function collectPermsFromForm() {
     // thật dài/tên dài khiến lưới checkbox 2-3 cột bị ngắn tên, không nhìn thấy hết (phản hồi người dùng).
     // scopeFromMultiSelectDropdown() (core.js) đọc lại từ getMultiSelectValues() thay vì query checkbox.
     operationOrderReceiptManageStore: scopeFromMultiSelectDropdown('pOperationOrderReceiptAll', 'pOperationOrderReceiptDeptContainer'),
-    // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — checklistAuditScope CÙNG lý do đổi sang widget
-    // ở trên, nguồn siêu thị là DB.stores thay vì DB.depts, xem renderChecklistAuditScopeCheckboxes() ở
-    // module-admin.js.
-    checklistTemplateManage: document.getElementById('pChecklistTemplateManage').checked,
+    // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — 11/2026 LÀM GỌN: cấu hình/quản lý mẫu đã dời
+    // hẳn vào Hệ Thống > Cấu Hình Nghiệp Vụ (CHỈ admin, không còn checkbox ở đây). Còn đúng 4 quyền
+    // PHẲNG: checklistExecute (+ checklistExecuteScope, nguồn siêu thị DB.stores, CÙNG widget
+    // tìm-kiếm-gõ-chọn như operationOrderReceiptManageStore ở trên — chỉ áp dụng cho người KHÔNG có siêu
+    // thị gắn sẵn, xem renderChecklistExecuteScopeCheckboxes() ở module-admin.js), checklistReportView,
+    // checklistAtvstpExecute, checklistAtvstpReportView — 2 quyền ATVSTP KHÔNG có scope (ai được chọn
+    // thực hiện/xem báo cáo TẤT CẢ siêu thị).
+    checklistExecute: document.getElementById('pChecklistExecute').checked,
+    checklistExecuteScope: scopeFromMultiSelectDropdown('pChecklistExecuteScopeAll', 'pChecklistExecuteScopeDeptContainer'),
     checklistReportView: document.getElementById('pChecklistReportView').checked,
-    checklistStoreSelfExecute: document.getElementById('pChecklistStoreSelfExecute').checked,
-    checklistAuditScope: scopeFromMultiSelectDropdown('pChecklistAuditScopeAll', 'pChecklistAuditScopeDeptContainer'),
-    // checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026) — phạm vi MẪU checklist, xem
-    // chú thích đầy đủ ở populatePermsForm()/lib/checklist.js::getChecklistReportViewScope().
-    checklistReportViewScope: scopeFromMultiSelectDropdown('pChecklistReportViewScopeAll', 'pChecklistReportViewScopeDeptContainer'),
-    checklistStoreSelfExecuteScope: scopeFromMultiSelectDropdown('pChecklistStoreSelfExecuteScopeAll', 'pChecklistStoreSelfExecuteScopeDeptContainer'),
+    checklistAtvstpExecute: document.getElementById('pChecklistAtvstpExecute').checked,
+    checklistAtvstpReportView: document.getElementById('pChecklistAtvstpReportView').checked,
     // Nghiệp Vụ/Báo Cáo (10/2026): mặc định mỗi mục chỉ hiện theo quyền module THẬT tương ứng (xem
     // NV_KEY_ACCESS_FN ở module-nghiepvu.js, isReportNavNodeVisible() ở module-baocaoquantri.js) — 2
     // quyền này mở RỘNG THÊM (xem toàn bộ, bỏ qua giới hạn đó), không thay thế quyền module thật.
@@ -377,23 +378,20 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationOrderReceiptHO').checked = !!receiptHO;
   document.getElementById('pOperationOrderReceiptAll').checked = !!receiptStore?.all;
   setOperationOrderReceiptScopeCheckboxes(receiptStore?.depts);
-  document.getElementById('pChecklistTemplateManage').checked = !!perms.checklistTemplateManage;
+  // Checklist Đánh Giá Siêu Thị — 11/2026 LÀM GỌN: hiện ĐÚNG hiệu lực thật (kể cả fallback legacy, mirror
+  // canExecuteChecklistGeneralClient()/canExecuteChecklistAtvstpClient()/canViewChecklistReportsAtvstpClient()
+  // ở core.js) để admin thấy quyền tài khoản ĐANG CÓ trước khi lưu — lưu lại sẽ ghi THẲNG vào field mới,
+  // hoàn tất di chuyển cho đúng 1 tài khoản đó (không cần sửa tay nếu không đổi gì).
+  document.getElementById('pChecklistExecute').checked = perms.checklistExecute !== undefined ? !!perms.checklistExecute : !!perms.checklistStoreSelfExecute;
+  document.getElementById('pChecklistExecuteScopeAll').checked = !!perms.checklistExecuteScope?.all;
+  setChecklistExecuteScopeCheckboxes(perms.checklistExecuteScope?.depts);
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
-  document.getElementById('pChecklistStoreSelfExecute').checked = !!perms.checklistStoreSelfExecute;
-  document.getElementById('pChecklistAuditScopeAll').checked = !!perms.checklistAuditScope?.all;
-  setChecklistAuditScopeCheckboxes(perms.checklistAuditScope?.depts);
-  // checklistReportViewScope/checklistStoreSelfExecuteScope (10/2026) — LEGACY: tài khoản CHƯA từng
-  // được lưu qua UI mới (field Scope hoàn toàn vắng mặt) phải mặc định hiện "ALL" ĐÚNG BẰNG giá trị cờ
-  // phẳng cũ (checklistReportView/checklistStoreSelfExecute) — nếu không, admin mở form 1 user cũ rồi
-  // lưu lại (dù không đụng gì tới 2 khối này) sẽ VÔ TÌNH ghi đè thành {all:false, depts:[]} (khoá hẳn
-  // quyền đang có), vì collectPermsFromForm() bên dưới luôn xuất ra object Scope đầy đủ. Khi field Scope
-  // ĐÃ có (dù rỗng, tức đã từng lưu qua UI mới) thì dùng ĐÚNG giá trị đã lưu, không suy lại từ cờ cũ.
-  const reportScope = perms.checklistReportViewScope;
-  document.getElementById('pChecklistReportViewScopeAll').checked = reportScope ? !!reportScope.all : !!perms.checklistReportView;
-  setChecklistReportViewScopeCheckboxes(reportScope?.depts);
-  const selfScope = perms.checklistStoreSelfExecuteScope;
-  document.getElementById('pChecklistStoreSelfExecuteScopeAll').checked = selfScope ? !!selfScope.all : !!perms.checklistStoreSelfExecute;
-  setChecklistStoreSelfExecuteScopeCheckboxes(selfScope?.depts);
+  const oldAuditScope = perms.checklistAuditScope;
+  document.getElementById('pChecklistAtvstpExecute').checked = perms.checklistAtvstpExecute !== undefined
+    ? !!perms.checklistAtvstpExecute : !!(oldAuditScope?.all || (oldAuditScope?.depts || []).length);
+  const oldReportScope = perms.checklistReportViewScope;
+  document.getElementById('pChecklistAtvstpReportView').checked = perms.checklistAtvstpReportView !== undefined
+    ? !!perms.checklistAtvstpReportView : !!(perms.checklistReportView && (!oldReportScope || oldReportScope.all));
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
   document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;
@@ -473,9 +471,7 @@ function populatePermsForm(permsInput) {
     toggleScopeGroup(allId, deptPrefix);
   });
   toggleOperationOrderReceiptScopeGroup();
-  toggleChecklistAuditScopeGroup();
-  toggleChecklistReportViewScopeGroup();
-  toggleChecklistStoreSelfExecuteScopeGroup();
+  toggleChecklistExecuteScopeGroup();
 
   refreshPermTreeBadges();
   clearPermTreeDirtyMarks();

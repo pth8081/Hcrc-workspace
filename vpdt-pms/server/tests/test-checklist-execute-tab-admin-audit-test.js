@@ -1,13 +1,18 @@
 // server/tests/test-checklist-execute-tab-admin-audit-test.js
 //
 // Regression cho lỗi thật người dùng báo (9/2026, kèm ảnh chụp tab "Thực Hiện" module Checklist):
-// admin không gắn checklistAuditScope tường minh vẫn thấy khối "🔎 Kiểm Soát Siêu Thị" như 1 kiểm soát
-// viên THẬT (do hasChecklistAuditScopeClient() ở core.js bypass cho admin — đúng cho việc ẩn/hiện CẢ tab
-// "Thực Hiện", nhưng SAI khi dùng để quyết định hiện khối "thật" hay khối "Test" bên trong tab đó) —
-// khiến admin có thể tạo checklist VSATTP (CONTROL_AUDIT) CHO BẤT KỲ SIÊU THỊ NÀO, lẫn với dữ liệu kiểm
-// soát THẬT của nhân viên Kiểm Soát, không có cảnh báo "đây là Test" như khối Tự Đánh Giá đã có sẵn.
-// Yêu cầu người dùng: "ai có quyền [checklistAuditScope tường minh] mới là thực hiện [thật]" — đổi admin
-// (không có checklistAuditScope tường minh) sang khối "🧪 Test", ĐỐI XỨNG với khối Tự Đánh Giá đã có.
+// admin không được cấp quyền Thực Hiện ATVSTP tường minh vẫn thấy khối "🔎 Kiểm Soát Siêu Thị" như 1 kiểm
+// soát viên THẬT (do bypass cho admin ở client — đúng cho việc ẩn/hiện CẢ tab "Thực Hiện", nhưng SAI khi
+// dùng để quyết định hiện khối "thật" hay khối "Test" bên trong tab đó) — khiến admin có thể tạo checklist
+// VSATTP (CONTROL_AUDIT) CHO BẤT KỲ SIÊU THỊ NÀO, lẫn với dữ liệu kiểm soát THẬT của nhân viên Kiểm Soát,
+// không có cảnh báo "đây là Test" như khối Tự Đánh Giá đã có sẵn.
+// Yêu cầu người dùng: "ai có quyền [checklistAtvstpExecute tường minh] mới là thực hiện [thật]" — đổi
+// admin (không có quyền tường minh) sang khối "🧪 Test", ĐỐI XỨNG với khối Tự Đánh Giá đã có.
+//
+// 11/2026 — làm gọn phân quyền Checklist: checklistAuditScope (có phạm vi theo siêu thị) đã được thay
+// bằng checklistAtvstpExecute (quyền PHẲNG, "ai được chọn thì thực hiện TẤT CẢ siêu thị", xem
+// lib/checklist.js::canExecuteChecklistAtvstp()) — test này cập nhật theo đúng quyền mới, giữ nguyên bất
+// biến cần kiểm (admin không tự động là kiểm soát viên thật).
 //
 // Kiểm renderChecklistExecuteTab() (module-checklist.js) qua static server + Chromium thật, cùng khuôn
 // tests/test-checklist-config-actions-ui.js — không cần route server thật (không submit bài nào ở đây).
@@ -75,7 +80,7 @@ async function main() {
       ],
       users: [
         { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Phòng Vận Hành', posType: 'HO', jobTitle: 'Admin', email: 'a@test.local', phone: '090', perms: { admin: true }, active: true, groupIds: [], permOverrides: null },
-        { id: 2, username: 'ks1', name: 'Kiểm Soát Viên', dept: 'Phòng Vận Hành', posType: 'HO', jobTitle: 'KS', email: 'k@test.local', phone: '092', perms: { checklistAuditScope: { all: false, depts: ['Siêu thị A'] } }, active: true, groupIds: [], permOverrides: null }
+        { id: 2, username: 'ks1', name: 'Kiểm Soát Viên', dept: 'Phòng Vận Hành', posType: 'HO', jobTitle: 'KS', email: 'k@test.local', phone: '092', perms: { checklistAtvstpExecute: true }, active: true, groupIds: [], permOverrides: null }
       ]
     });
   });
@@ -86,7 +91,7 @@ async function main() {
   await page.evaluate(() => setChecklistSubTab('EXECUTE'));
   await page.waitForTimeout(150);
 
-  const ready = await page.evaluate(() => typeof renderChecklistExecuteTab === 'function' && typeof hasExplicitChecklistAuditScopeClient === 'function');
+  const ready = await page.evaluate(() => typeof renderChecklistExecuteTab === 'function' && typeof hasExplicitChecklistAtvstpExecuteClient === 'function');
   record('setup: module-checklist.js đã nạp xong, hàm cần test đã sẵn sàng', ready);
   if (!ready) { record('DỪNG SỚM — không thể tiếp tục', false, JSON.stringify(pageErrors)); await browser.close(); server.close(); return finish(); }
 
@@ -97,7 +102,7 @@ async function main() {
   record('ADMIN: thấy khối "🧪 Test Checklist" gộp chung', htmlAdmin.includes('Test Checklist') && htmlAdmin.includes('checklistAdminTestTemplateSelect'));
   const adminTestOptions = await page.evaluate(() => Array.from(document.getElementById('checklistAdminTestTemplateSelect').options).map(o => o.textContent));
   record('ADMIN: mẫu VSATTP (CONTROL_AUDIT) xuất hiện trong khối Test, gắn nhãn "[Kiểm Soát]"', adminTestOptions.some(t => t.includes('[Kiểm Soát]') && t.includes('VSATTP')), JSON.stringify(adminTestOptions));
-  record('ADMIN: mẫu Tự Đánh Giá (STORE_SELF) vẫn còn trong khối Test, gắn nhãn "[Tự Đánh Giá]"', adminTestOptions.some(t => t.includes('[Tự Đánh Giá]') && t.includes('GĐST/CHT')), JSON.stringify(adminTestOptions));
+  record('ADMIN: mẫu Tự Đánh Giá (STORE_SELF) vẫn còn trong khối Test, gắn nhãn "[Checklist Thường]"', adminTestOptions.some(t => t.includes('[Checklist Thường]') && t.includes('GĐST/CHT')), JSON.stringify(adminTestOptions));
   const adminStoreOptions = await page.evaluate(() => Array.from(document.getElementById('checklistAdminTestStoreSelect').options).map(o => o.value));
   record('ADMIN: ô chọn siêu thị của khối Test liệt kê ĐỦ mọi siêu thị (chọn bất kỳ)', adminStoreOptions.includes('Siêu thị A') && adminStoreOptions.includes('Siêu thị B'));
 
@@ -108,20 +113,22 @@ async function main() {
   record('Kiểm Soát Viên THẬT: VẪN thấy khối "🔎 Kiểm Soát Siêu Thị" thật (không đổi hành vi cũ)', htmlAuditor.includes('Kiểm Soát Siêu Thị') && htmlAuditor.includes('checklistAuditTemplateSelect'));
   record('Kiểm Soát Viên THẬT: KHÔNG thấy khối "🧪 Test Checklist" (không phải admin)', !htmlAuditor.includes('Test Checklist'));
   const auditorStoreOptions = await page.evaluate(() => Array.from(document.getElementById('checklistAuditStoreSelect').options).map(o => o.value));
-  record('Kiểm Soát Viên THẬT: ô chọn siêu thị của khối Kiểm Soát chỉ giới hạn ĐÚNG phạm vi được cấp (Siêu thị A)', auditorStoreOptions.length === 1 && auditorStoreOptions[0] === 'Siêu thị A', JSON.stringify(auditorStoreOptions));
+  // 11/2026: checklistAtvstpExecute là quyền PHẲNG — "ai được chọn thì thực hiện TẤT CẢ siêu thị", không
+  // còn phạm vi riêng theo siêu thị như checklistAuditScope cũ.
+  record('Kiểm Soát Viên THẬT: ô chọn siêu thị của khối Kiểm Soát liệt kê TẤT CẢ siêu thị (quyền phẳng, không còn phạm vi riêng)', auditorStoreOptions.includes('Siêu thị A') && auditorStoreOptions.includes('Siêu thị B'), JSON.stringify(auditorStoreOptions));
 
-  // ===== 3. ADMIN CÓ checklistAuditScope tường minh (trường hợp hiếm, admin được gán thêm scope) =====
+  // ===== 3. ADMIN CÓ checklistAtvstpExecute tường minh (trường hợp hiếm, admin được gán thêm quyền) =====
   await page.evaluate(() => {
-    DB.users.push({ id: 3, username: 'admin_ks', name: 'Admin Kiêm Kiểm Soát', dept: 'Phòng Vận Hành', posType: 'HO', jobTitle: 'Admin', email: 'ak@test.local', phone: '093', perms: { admin: true, checklistAuditScope: { all: true, depts: [] } }, active: true, groupIds: [], permOverrides: null });
+    DB.users.push({ id: 3, username: 'admin_ks', name: 'Admin Kiêm Kiểm Soát', dept: 'Phòng Vận Hành', posType: 'HO', jobTitle: 'Admin', email: 'ak@test.local', phone: '093', perms: { admin: true, checklistAtvstpExecute: true }, active: true, groupIds: [], permOverrides: null });
     finishLogin(DB.users.find(u => u.username === 'admin_ks'));
     switchTab('checklist'); setChecklistSubTab('EXECUTE'); renderChecklistExecuteTab();
   });
   await page.waitForTimeout(100);
   const htmlAdminKs = await page.evaluate(() => document.getElementById('checklistExecuteListWrap').innerHTML);
-  record('ADMIN CÓ checklistAuditScope thật: thấy khối "🔎 Kiểm Soát Siêu Thị" thật (không bị dồn vào Test)', htmlAdminKs.includes('Kiểm Soát Siêu Thị') && htmlAdminKs.includes('checklistAuditTemplateSelect'));
+  record('ADMIN CÓ checklistAtvstpExecute thật: thấy khối "🔎 Kiểm Soát Siêu Thị" thật (không bị dồn vào Test)', htmlAdminKs.includes('Kiểm Soát Siêu Thị') && htmlAdminKs.includes('checklistAuditTemplateSelect'));
   const adminKsTestOptionsExists = await page.evaluate(() => !!document.getElementById('checklistAdminTestTemplateSelect'));
   const adminKsTestOptions = adminKsTestOptionsExists ? await page.evaluate(() => Array.from(document.getElementById('checklistAdminTestTemplateSelect').options).map(o => o.textContent)) : [];
-  record('ADMIN CÓ checklistAuditScope thật: mẫu VSATTP KHÔNG còn lặp lại trong khối Test (chỉ Tự Đánh Giá test)', !adminKsTestOptions.some(t => t.includes('[Kiểm Soát]')), JSON.stringify(adminKsTestOptions));
+  record('ADMIN CÓ checklistAtvstpExecute thật: mẫu VSATTP KHÔNG còn lặp lại trong khối Test (chỉ Tự Đánh Giá test)', !adminKsTestOptions.some(t => t.includes('[Kiểm Soát]')), JSON.stringify(adminKsTestOptions));
 
   record('Không có lỗi JS chưa bắt (pageerror) nào phát sinh trong suốt bài test', pageErrors.length === 0, JSON.stringify(pageErrors));
 

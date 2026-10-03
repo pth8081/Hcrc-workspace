@@ -9,15 +9,17 @@
 // (phản hồi người dùng thật 9/2026).
 //
 // Kiểm tra:
-//   1. renderOperationOrderReceiptScopeCheckboxes()/renderChecklistAuditScopeCheckboxes() render ĐÚNG
+//   1. renderOperationOrderReceiptScopeCheckboxes()/renderChecklistExecuteScopeCheckboxes() render ĐÚNG
 //      widget (không còn checkbox nào trong container, có ô tìm kiếm data-pms-search).
 //   2. setXxxScopeCheckboxes(list) đổ đúng danh sách đã lưu lên widget (getMultiSelectValues() đọc lại
 //      khớp) — mô phỏng populatePermsForm() đổ dữ liệu user cũ lên form.
 //   3. scopeFromMultiSelectDropdown() (core.js, thay scopeFromForm() cũ) đọc lại đúng {all, depts} —
-//      đúng khuôn dữ liệu server đã lưu (operationOrderReceiptManageStore/checklistAuditScope).
+//      đúng khuôn dữ liệu server đã lưu (operationOrderReceiptManageStore/checklistExecuteScope — 11/2026
+//      làm gọn phân quyền Checklist, khối "Phạm Vi Kiểm Soát" cũ đổi thành "Phạm Vi Thực Hiện" gắn với
+//      quyền checklistExecute, xem CLAUDE.md/lib/checklist.js::getChecklistExecuteScope()).
 //   4. Thao tác THẬT qua UI (gõ tìm kiếm, bấm thêm/bấm xoá chip — data-op="gmsAdd"/"gmsRemove") vẫn ra
 //      đúng kết quả, KHÔNG chỉ gọi thẳng hàm JS.
-//   5. toggleOperationOrderReceiptScopeGroup()/toggleChecklistAuditScopeGroup() (bấm "ALL") làm mờ +
+//   5. toggleOperationOrderReceiptScopeGroup()/toggleChecklistExecuteScopeGroup() (bấm "ALL") làm mờ +
 //      khoá tương tác widget, giống hệt hành vi "disable checkbox" cũ.
 //   6. computePermTreeNodeCount()/refreshPermTreeBadges() (badge "đã cấp X/Y" trên mỗi khối quyền) đọc
 //      ĐÚNG trạng thái đã chọn của widget (khác checkbox, state nằm ở container._gmsSelected, không phải
@@ -112,20 +114,22 @@ const STORE_NAMES = ['Siêu Thị Quận 1 - Chi Nhánh Trung Tâm Thương Mạ
     await scenario('Setup: container "Duyệt Nhập/Hủy Đơn Hàng Siêu Thị" + "Checklist" có mặt trong DOM', async () => {
       const ids = await page.evaluate(() => ({
         receipt: !!document.getElementById('pOperationOrderReceiptDeptContainer'),
-        checklist: !!document.getElementById('pChecklistAuditScopeDeptContainer'),
-        oldChecklistIdGone: !document.getElementById('pChecklistAuditScopeStoreContainer')
+        checklist: !!document.getElementById('pChecklistExecuteScopeDeptContainer'),
+        // 2 id cũ của khối "Phạm Vi Kiểm Soát" (checklistAuditScope) đều phải biến mất — quyền này đã bị
+        // xoá hẳn (11/2026, làm gọn phân quyền Checklist, thay bằng checklistExecuteScope phẳng).
+        oldChecklistIdsGone: !document.getElementById('pChecklistAuditScopeStoreContainer') && !document.getElementById('pChecklistAuditScopeDeptContainer')
       }));
       if (!ids.receipt) throw new Error('Thiếu #pOperationOrderReceiptDeptContainer');
-      if (!ids.checklist) throw new Error('Thiếu #pChecklistAuditScopeDeptContainer (id mới sau đổi tên)');
-      if (!ids.oldChecklistIdGone) throw new Error('Id cũ #pChecklistAuditScopeStoreContainer vẫn còn sót trong HTML — chưa đổi hết');
+      if (!ids.checklist) throw new Error('Thiếu #pChecklistExecuteScopeDeptContainer (id mới sau làm gọn phân quyền Checklist)');
+      if (!ids.oldChecklistIdsGone) throw new Error('Id cũ #pChecklistAuditScopeStoreContainer/#pChecklistAuditScopeDeptContainer vẫn còn sót trong HTML — chưa đổi hết');
     });
 
-    await scenario('renderOperationOrderReceiptScopeCheckboxes()/renderChecklistAuditScopeCheckboxes() render ĐÚNG widget (không còn checkbox lưới cũ)', async () => {
+    await scenario('renderOperationOrderReceiptScopeCheckboxes()/renderChecklistExecuteScopeCheckboxes() render ĐÚNG widget (không còn checkbox lưới cũ)', async () => {
       const r = await page.evaluate(() => {
         renderOperationOrderReceiptScopeCheckboxes();
-        renderChecklistAuditScopeCheckboxes();
+        renderChecklistExecuteScopeCheckboxes();
         const recEl = document.getElementById('pOperationOrderReceiptDeptContainer');
-        const chkEl = document.getElementById('pChecklistAuditScopeDeptContainer');
+        const chkEl = document.getElementById('pChecklistExecuteScopeDeptContainer');
         return {
           recHasCheckbox: !!recEl.querySelector('input[type="checkbox"]'),
           recHasSearch: !!recEl.querySelector('[data-pms-search]'),
@@ -139,13 +143,13 @@ const STORE_NAMES = ['Siêu Thị Quận 1 - Chi Nhánh Trung Tâm Thương Mạ
       if (!r.chkHasSearch) throw new Error('Container Checklist thiếu ô tìm kiếm của widget renderMultiSelectDropdown()');
     });
 
-    await scenario('setOperationOrderReceiptScopeCheckboxes(list)/setChecklistAuditScopeCheckboxes(list) đổ đúng dữ liệu đã lưu lên widget', async () => {
+    await scenario('setOperationOrderReceiptScopeCheckboxes(list)/setChecklistExecuteScopeCheckboxes(list) đổ đúng dữ liệu đã lưu lên widget', async () => {
       const r = await page.evaluate((stores) => {
         setOperationOrderReceiptScopeCheckboxes([stores[0], stores[1]]);
-        setChecklistAuditScopeCheckboxes([stores[2]]);
+        setChecklistExecuteScopeCheckboxes([stores[2]]);
         return {
           receipt: getMultiSelectValues('pOperationOrderReceiptDeptContainer'),
-          checklist: getMultiSelectValues('pChecklistAuditScopeDeptContainer')
+          checklist: getMultiSelectValues('pChecklistExecuteScopeDeptContainer')
         };
       }, STORE_NAMES);
       if (JSON.stringify(r.receipt.sort()) !== JSON.stringify([STORE_NAMES[0], STORE_NAMES[1]].sort())) {
@@ -156,13 +160,13 @@ const STORE_NAMES = ['Siêu Thị Quận 1 - Chi Nhánh Trung Tâm Thương Mạ
       }
     });
 
-    await scenario('scopeFromMultiSelectDropdown() đọc lại đúng {all, depts} khớp khuôn dữ liệu server (operationOrderReceiptManageStore/checklistAuditScope)', async () => {
+    await scenario('scopeFromMultiSelectDropdown() đọc lại đúng {all, depts} khớp khuôn dữ liệu server (operationOrderReceiptManageStore/checklistExecuteScope)', async () => {
       const r = await page.evaluate((stores) => {
         document.getElementById('pOperationOrderReceiptAll').checked = false;
-        document.getElementById('pChecklistAuditScopeAll').checked = true;
+        document.getElementById('pChecklistExecuteScopeAll').checked = true;
         return {
           receipt: scopeFromMultiSelectDropdown('pOperationOrderReceiptAll', 'pOperationOrderReceiptDeptContainer'),
-          checklist: scopeFromMultiSelectDropdown('pChecklistAuditScopeAll', 'pChecklistAuditScopeDeptContainer')
+          checklist: scopeFromMultiSelectDropdown('pChecklistExecuteScopeAll', 'pChecklistExecuteScopeDeptContainer')
         };
       }, STORE_NAMES);
       if (r.receipt.all !== false || JSON.stringify(r.receipt.depts.sort()) !== JSON.stringify([STORE_NAMES[0], STORE_NAMES[1]].sort())) {
@@ -201,14 +205,14 @@ const STORE_NAMES = ['Siêu Thị Quận 1 - Chi Nhánh Trung Tâm Thương Mạ
       if (afterRemove.length !== 0) throw new Error(`Bấm xoá chip thật phải về rỗng, còn: ${JSON.stringify(afterRemove)}`);
     });
 
-    await scenario('toggleOperationOrderReceiptScopeGroup()/toggleChecklistAuditScopeGroup() ("ALL") làm mờ + khoá widget, giống hệt disable checkbox cũ', async () => {
+    await scenario('toggleOperationOrderReceiptScopeGroup()/toggleChecklistExecuteScopeGroup() ("ALL") làm mờ + khoá widget, giống hệt disable checkbox cũ', async () => {
       const r = await page.evaluate(() => {
         document.getElementById('pOperationOrderReceiptAll').checked = true;
         toggleOperationOrderReceiptScopeGroup();
-        document.getElementById('pChecklistAuditScopeAll').checked = false;
-        toggleChecklistAuditScopeGroup();
+        document.getElementById('pChecklistExecuteScopeAll').checked = false;
+        toggleChecklistExecuteScopeGroup();
         const recEl = document.getElementById('pOperationOrderReceiptDeptContainer');
-        const chkEl = document.getElementById('pChecklistAuditScopeDeptContainer');
+        const chkEl = document.getElementById('pChecklistExecuteScopeDeptContainer');
         return {
           recDisabled: recEl.classList.contains('opacity-40') && recEl.classList.contains('pointer-events-none'),
           chkDisabled: chkEl.classList.contains('opacity-40') || chkEl.classList.contains('pointer-events-none')
@@ -226,7 +230,7 @@ const STORE_NAMES = ['Siêu Thị Quận 1 - Chi Nhánh Trung Tâm Thương Mạ
     await scenario('computePermTreeNodeCount()/refreshPermTreeBadges(): badge "Vận Hành"/"Checklist" phải đếm ĐÚNG siêu thị đã chọn ở widget (không phải 0/0 do sai sót đọc checkbox cũ)', async () => {
       const r = await page.evaluate((stores) => {
         setOperationOrderReceiptScopeCheckboxes([stores[0]]);
-        setChecklistAuditScopeCheckboxes([stores[1], stores[2]]);
+        setChecklistExecuteScopeCheckboxes([stores[1], stores[2]]);
         refreshPermTreeBadges();
         return {
           vanHanh: document.getElementById('permTreeBadge_vanHanh').textContent,
