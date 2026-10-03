@@ -532,6 +532,46 @@ function assertApprovalGroupsSingleApproverCaps(value, keyLabel) {
   }
 }
 
+// "Việc C" (11/2026) — CHỐT CHẶN THẬT cho yêu cầu bảo mật cốt lõi đã chốt với người dùng ("vẫn phải phân
+// quyền người phê duyệt thì mới được duyệt", xem lib/positionApprovers.js) áp dụng cho THÀNH VIÊN NHÓM
+// PHÊ DUYỆT (submissionApprovalGroups/contractApprovalGroups/extraApprovalGroups_<moduleKey> — "Nhóm Phê
+// Duyệt Trình/HĐ" VÀ "Nhóm Phê Duyệt Cuối", 10+ module dùng CHUNG màn admin
+// renderApprovalGroupsTable() ở module-admin-submissiongroups.js). PEOPLE mode (nhóm là danh sách
+// username TĨNH, khác POSITION mode ở lib/positionApprovers.js vốn LUÔN tính lại động) KHÔNG re-check
+// canBeApprover tại thời điểm duyệt — hành vi CŨ, giữ nguyên, ngoài phạm vi đợt này (xem chú thích đầy đủ
+// ở lib/positionApprovers.js) — nên nếu không chặn NGAY LÚC LƯU, 1 admin có thể gán BẤT KỲ ai (kể cả
+// chưa từng được cấp quyền "Người duyệt"/canBeApprover) làm thành viên nhóm, biến họ thành approver hợp
+// lệ dù chưa từng được cấp quyền đó — client (module-admin-submissiongroups.js) đã tự lọc ứng viên theo
+// canBeApprover ở UI (cùng khuôn getApproverCandidateUsers() đã có), nhưng đây mới là chốt chặn THẬT,
+// phòng request tự soạn bỏ qua UI.
+// GRANDFATHER (bắt buộc, không phá cấu hình cũ đang chạy production): username ĐÃ có mặt trong CHÍNH
+// nhóm đó ở bản lưu TRƯỚC (oldValue, đọc qua getAppDataValue() ngay trước khi ghi đè — xem routes/data.js)
+// vẫn được GIỮ NGUYÊN dù hiện KHÔNG còn canBeApprover (có thể đã bị thu hồi sau) — chỉ chặn THÊM MỚI
+// người chưa từng có quyền vào 1 nhóm, không hồi tố xoá người cũ (cùng tinh thần "thành viên đã gán từ
+// trước không bị ảnh hưởng" của getApproverCandidateUsers()/renderPeopleMultiSelect() phía client).
+// oldValue: giá trị TRƯỚC đó của ĐÚNG key đang lưu (mảng nhóm, hoặc null/rỗng nếu lần đầu) — so khớp
+// theo g.id (đổi tên nhóm không ảnh hưởng, xoá/tạo lại nhóm mới cùng id cũ vẫn grandfather đúng members
+// cũ của id đó). users: DB.users đầy đủ (đọc qua getAppDataValue('users') ở routes/data.js).
+function assertApprovalGroupsMembersCanBeApprover(value, oldValue, users, keyLabel) {
+  if (!Array.isArray(value)) return; // shape đã bị assertApprovalGroupsSingleApproverCaps() chặn riêng
+  const usersByUsername = new Map((users || []).map(u => [u.username, u]));
+  const oldMembersByGroupId = new Map(
+    (Array.isArray(oldValue) ? oldValue : []).map(g => [g.id, new Set(Array.isArray(g?.members) ? g.members : [])])
+  );
+  for (const g of value) {
+    if (!g || !Array.isArray(g.members)) continue;
+    const grandfathered = oldMembersByGroupId.get(g.id) || new Set();
+    for (const username of g.members) {
+      if (grandfathered.has(username)) continue;
+      const u = usersByUsername.get(username);
+      const eligible = !!(u && (u.perms?.canBeApprover || u.perms?.admin));
+      if (!eligible) {
+        throw new CreateError(400, `Vai trò "${g.label || g.id}" (${keyLabel}) — "${username}" chưa có quyền "Người duyệt" (canBeApprover), không thể thêm làm thành viên mới.`);
+      }
+    }
+  }
+}
+
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
 // ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
 // (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
@@ -4650,6 +4690,9 @@ module.exports = {
   normalizeSubmissionCoreFields, SUBMISSION_TITLE_MAX, SUBMISSION_CONTENT_MAX,
   // Export cho routes/data.js POST /api/data/:key — chặn TGĐ >1 người khi admin lưu mục 11/14.
   assertApprovalGroupsSingleApproverCaps,
+  // Export cho routes/data.js POST /api/data/:key — "Việc C" (11/2026): chặn thêm MỚI thành viên nhóm
+  // phê duyệt chưa có quyền canBeApprover (grandfather thành viên cũ, xem chú thích đầy đủ ở hàm).
+  assertApprovalGroupsMembersCanBeApprover,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

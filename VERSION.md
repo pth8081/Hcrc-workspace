@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**24.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.81 (2026-10-03): Chốt chặn canBeApprover cho thành viên Nhóm Phê Duyệt ("Việc C")
+
+Người dùng xác nhận "Việc C" sau khi được phân tích: rà soát phát hiện màn **"🖋️ Nhóm Phê Duyệt
+Trình/HĐ"** (mục 11/14) và **"🔒 Nhóm Phê Duyệt Cuối"** (10 quy trình — Tài Liệu/Đăng Ký Xe/Mua Sắm/Sửa
+VP/VPP/Thanh Toán/Phê Duyệt Giá BL-BB/Vận Hành ST-HO) — tất cả dùng CHUNG 1 hàm admin
+`renderApprovalGroupsTable()` (`module-admin-submissiongroups.js`) — cho phép gán **BẤT KỲ** nhân viên
+active nào làm thành viên nhóm phê duyệt, kể cả người chưa từng được cấp quyền "Người duyệt"
+(`canBeApprover`). Vì PEOPLE mode không re-check quyền tại thời điểm duyệt (hành vi cũ, giữ nguyên — xem
+`lib/positionApprovers.js`), đây là đường lách qua yêu cầu bảo mật cốt lõi đã chốt với người dùng "vẫn
+phải phân quyền người phê duyệt thì mới được duyệt".
+
+- **Client** (`module-admin-submissiongroups.js`): `renderApprovalGroupsTable()` (chọn nhiều người) và
+  `renderSingleApproverSelect()` (chọn 1 người — nhóm `singleApprover:true`) đổi sang dùng
+  `getApproverCandidateUsers()` (hàm dùng chung đã có sẵn cho Ngân Sách/Hỗ Trợ IT, lọc
+  `canBeApprover||admin`, tự giữ người ĐÃ GÁN dù mất quyền sau này) thay vì `DB.users.filter(active)`.
+- **Server (chốt chặn thật)**: hàm mới `assertApprovalGroupsMembersCanBeApprover()`
+  (`lib/createValidation.js`), gọi từ `POST /api/data/:key` (`routes/data.js`) cho cả 3 họ key
+  (`submissionApprovalGroups`/`contractApprovalGroups`/10 key `extraApprovalGroups_<moduleKey>`) — từ
+  chối (400) nếu lưu thành viên **MỚI** chưa có `canBeApprover`/`admin`. **Grandfather bắt buộc**: thành
+  viên đã có trong CHÍNH nhóm đó (so theo `id`, đọc `oldValue` qua `getAppDataValue()` ngay trước khi ghi
+  đè) vẫn được giữ nguyên dù hiện không còn quyền — không hồi tố phá cấu hình cũ đang chạy production,
+  chỉ chặn gán THÊM người mới chưa từng được cấp quyền.
+- Viết 6 test case mới (`tests/test-locked-approval-layers.js`) cho hàm `assertApprovalGroupsMembersCanBeApprover()`
+  (thêm mới hợp lệ/không hợp lệ, grandfather đúng id nhóm, grandfather KHÔNG áp dụng chéo sang nhóm khác
+  id, user không tồn tại, shape không phải mảng) — 20/20 scenario pass. Full regression xác nhận không
+  có test nào khác bị ảnh hưởng.
 
 ## v24.80 (2026-10-03): Làm gọn phân quyền Xem Văn Bản Trình/Hợp Đồng — bỏ cột "Xem" ("Việc D")
 

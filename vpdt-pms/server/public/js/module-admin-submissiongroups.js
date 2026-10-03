@@ -103,13 +103,16 @@ async function syncApprovalAdminKey(moduleKind, key, snapshot) {
 // renderPeopleMultiSelect() (cho phép nhiều người). Vẫn hiện đúng người ĐÃ GÁN dù tài khoản đó vừa bị
 // khoá (active:false) — cùng tinh thần renderPeopleMultiSelect() ("thành viên đã gán từ trước không bị
 // ảnh hưởng").
+// "Việc C" (11/2026): ứng viên lọc theo canBeApprover||admin (getApproverCandidateUsers(), cùng hàm dùng
+// chung Ngân Sách/Hỗ Trợ IT đã có ở module-ngansach.js) thay vì MỌI user active — khớp đúng yêu cầu bảo
+// mật cốt lõi "vẫn phải phân quyền người phê duyệt thì mới được duyệt" (xem lib/positionApprovers.js).
+// getApproverCandidateUsers() tự giữ nguyên người ĐÃ GÁN (currentUsername) dù họ không còn canBeApprover,
+// nên vẫn đúng tinh thần "thành viên đã gán từ trước không bị ảnh hưởng" như trước — không cần đoạn
+// options.push(currentUser) thủ công nữa.
 function renderSingleApproverSelect(pickerId, selectClass, currentUsername) {
   const el = document.getElementById(pickerId);
   if (!el) return;
-  const activeUsers = DB.users.filter(u => u.active !== false);
-  const currentUser = DB.users.find(u => u.username === currentUsername);
-  const options = activeUsers.slice();
-  if (currentUsername && currentUser && !options.some(u => u.username === currentUsername)) options.push(currentUser);
+  const options = getApproverCandidateUsers(currentUsername ? [currentUsername] : []);
   el.innerHTML = `
     <select class="${selectClass} w-full border p-1.5 rounded text-xs">
       <option value="">-- Chưa gán --</option>
@@ -194,8 +197,11 @@ function renderApprovalGroupsTable(moduleKind) {
       renderSingleApproverSelect(pickerId, 'apg-single-select', (g.members || [])[0] || '');
     } else {
       // Tài khoản đã khoá không hiện trong nguồn tìm-để-thêm-mới nữa — thành viên đã gán từ trước
-      // (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips().
-      renderPeopleMultiSelect(pickerId, DB.users.filter(u => u.active !== false), g.members || [], '', {});
+      // (members) không bị ảnh hưởng, vẫn hiện đúng qua renderChips(). "Việc C" (11/2026): ứng viên lọc
+      // theo canBeApprover||admin (getApproverCandidateUsers(), cùng lý do/hàm dùng chung đã áp cho
+      // renderSingleApproverSelect() ngay trên) thay vì MỌI user active — server (routes/data.js ->
+      // assertApprovalGroupsMembersCanBeApprover()) là chốt chặn THẬT, đây chỉ là UX đúng trước.
+      renderPeopleMultiSelect(pickerId, getApproverCandidateUsers(g.members || []), g.members || [], '', {});
     }
   });
 }

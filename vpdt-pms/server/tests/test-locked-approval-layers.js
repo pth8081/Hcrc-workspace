@@ -142,7 +142,7 @@ stubModule('lib/auth', {
 const express = require('express');
 const { createRunner, assertEqual, assertIncludes } = require('./testHarness');
 const createRoutes = require('../routes/create');
-const { assertApprovalGroupsSingleApproverCaps } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover } = require('../lib/createValidation');
 
 let PORT = 0;
 function startApp() {
@@ -328,6 +328,78 @@ async function main() {
     try { assertApprovalGroupsSingleApproverCaps(null, 'mục 11'); }
     catch (err) { threw = true; }
     if (!threw) throw new Error('Phải throw khi value không phải mảng');
+  });
+
+  // ===== "Việc C" (11/2026): assertApprovalGroupsMembersCanBeApprover() — chốt chặn thật canBeApprover
+  // cho thành viên MỚI của nhóm phê duyệt, grandfather thành viên ĐÃ CÓ từ trước (xem chú thích đầy đủ ở
+  // hàm, lib/createValidation.js). Gọi trực tiếp hàm thuần, không cần dựng HTTP layer — cùng khuôn với
+  // assertApprovalGroupsSingleApproverCaps() ngay trên. =====
+  const CAN_APPROVE_USERS = [
+    { username: 'duyet1', perms: { canBeApprover: true } },
+    { username: 'admin1', perms: { admin: true } },
+    { username: 'nv_thuong', perms: {} } // KHÔNG có canBeApprover/admin
+  ];
+
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: thêm MỚI người có canBeApprover/admin -> KHÔNG lỗi', () => {
+    assertApprovalGroupsMembersCanBeApprover(
+      [{ id: 'G1', label: 'Nhóm 1', members: ['duyet1', 'admin1'] }],
+      [], // oldValue rỗng -> cả 2 đều là "thêm mới"
+      CAN_APPROVE_USERS,
+      'mục 11'
+    );
+  });
+
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: thêm MỚI người KHÔNG có canBeApprover -> throw', () => {
+    let threw = false;
+    try {
+      assertApprovalGroupsMembersCanBeApprover(
+        [{ id: 'G1', label: 'Nhóm Kinh Doanh', members: ['nv_thuong'] }],
+        [],
+        CAN_APPROVE_USERS,
+        'mục 11 — Nhóm Phê Duyệt Trình'
+      );
+    } catch (err) { threw = true; assertIncludes(err.message, 'nv_thuong', 'Thông báo lỗi phải nêu rõ username vi phạm'); assertIncludes(err.message, 'Nhóm Kinh Doanh', 'Thông báo lỗi phải nêu rõ tên nhóm'); }
+    if (!threw) throw new Error('Phải throw khi thêm MỚI người chưa có canBeApprover');
+  });
+
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: GRANDFATHER — người đã có trong oldValue (cùng id nhóm) vẫn giữ nguyên dù mất canBeApprover', () => {
+    // nv_thuong KHÔNG có canBeApprover, nhưng ĐÃ có mặt trong oldValue của ĐÚNG nhóm G1 -> không throw.
+    assertApprovalGroupsMembersCanBeApprover(
+      [{ id: 'G1', label: 'Nhóm Kinh Doanh', members: ['nv_thuong'] }],
+      [{ id: 'G1', label: 'Nhóm Kinh Doanh', members: ['nv_thuong'] }],
+      CAN_APPROVE_USERS,
+      'mục 11'
+    );
+  });
+
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: grandfather CHỈ áp dụng ĐÚNG id nhóm cũ — đổi id (nhóm mới cùng tên) không grandfather', () => {
+    let threw = false;
+    try {
+      assertApprovalGroupsMembersCanBeApprover(
+        [{ id: 'G2', label: 'Nhóm Kinh Doanh (mới)', members: ['nv_thuong'] }],
+        [{ id: 'G1', label: 'Nhóm Kinh Doanh', members: ['nv_thuong'] }], // id KHÁC -> không phải cùng nhóm
+        CAN_APPROVE_USERS,
+        'mục 11'
+      );
+    } catch (err) { threw = true; }
+    if (!threw) throw new Error('Phải throw — grandfather không được áp dụng chéo sang nhóm khác id');
+  });
+
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: user không tồn tại trong danh sách users -> throw (không coi là hợp lệ)', () => {
+    let threw = false;
+    try {
+      assertApprovalGroupsMembersCanBeApprover(
+        [{ id: 'G1', label: 'Nhóm 1', members: ['khong_ton_tai'] }],
+        [],
+        CAN_APPROVE_USERS,
+        'mục 11'
+      );
+    } catch (err) { threw = true; }
+    if (!threw) throw new Error('Phải throw khi username không khớp bất kỳ user nào');
+  });
+
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: value không phải mảng -> bỏ qua êm (shape đã bị assertApprovalGroupsSingleApproverCaps chặn riêng)', () => {
+    assertApprovalGroupsMembersCanBeApprover(null, [], CAN_APPROVE_USERS, 'mục 11'); // không throw
   });
 
   runner.summary();

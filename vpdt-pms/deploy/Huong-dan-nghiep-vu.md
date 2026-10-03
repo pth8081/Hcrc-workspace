@@ -450,6 +450,16 @@ quyền này thì vẫn không duyệt được gì — đây là lỗi cấu h�
 "đã chọn đúng vị trí ở Quy Trình & Phê Duyệt nhưng người đó vẫn không thấy nút
 Duyệt" → kiểm tra lại quyền "Người duyệt" của người đó trước.
 
+**Thành viên "Nhóm Phê Duyệt" cũng bắt buộc có quyền này (từ 11/2026, "Việc
+C")**: màn **"🖋️ Nhóm Phê Duyệt Trình/HĐ"** (mục 11/14) và **"🔒 Nhóm Phê Duyệt
+Cuối"** (10 quy trình — Tài Liệu/Đăng Ký Xe/Mua Sắm/Sửa VP/Văn Phòng Phẩm/
+Thanh Toán/Phê Duyệt Giá BL-BB/Vận Hành ST-HO) chỉ còn cho chọn người **đã có**
+quyền "Người duyệt" làm thành viên mới — ô chọn tự ẩn những ai chưa được cấp.
+Server cũng từ chối thẳng (400) nếu cố lưu 1 thành viên MỚI chưa có quyền này
+qua request tự soạn (bỏ qua giao diện). Thành viên **đã có từ trước** đợt vá
+này vẫn được giữ nguyên dù hiện không còn quyền "Người duyệt" (không hồi tố
+xoá cấu hình cũ) — chỉ chặn việc gán THÊM người mới chưa từng được cấp quyền.
+
 ### 3.3. Danh mục "Nhóm Quyền Đặc Biệt"
 
 Tại **Hệ Thống → 🔀 Quy Trình Nâng Cao → 🧩 Nhóm Quyền Đặc Biệt** (từ v23.65 —

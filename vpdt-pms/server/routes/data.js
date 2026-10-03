@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -1961,6 +1961,17 @@ router.post('/:key', async (req, res) => {
     // Nhóm Phê Duyệt Cuối (10 key extraApprovalGroups_<moduleKey>) — cùng lý do trên, generic theo Set
     // đã đăng ký ở EXTRA_APPROVAL_GROUPS_KEYS thay vì liệt kê tay 10 dòng if.
     if (EXTRA_APPROVAL_GROUPS_KEYS.has(key)) assertApprovalGroupsSingleApproverCaps(value, `Nhóm Phê Duyệt Cuối — ${key.replace('extraApprovalGroups_', '')}`);
+    // "Việc C" (11/2026) — chốt chặn canBeApprover cho THÀNH VIÊN MỚI của cả 3 họ key nhóm phê duyệt
+    // trên (xem chú thích đầy đủ ở assertApprovalGroupsMembersCanBeApprover(), lib/createValidation.js).
+    // oldValue đọc lại NGAY TRƯỚC khi ghi đè để grandfather đúng thành viên đã có — cùng khuôn oldRooms
+    // (meetingRooms rename cascade) đã dùng ở trên.
+    if (key === 'submissionApprovalGroups' || key === 'contractApprovalGroups' || EXTRA_APPROVAL_GROUPS_KEYS.has(key)) {
+      const [oldGroupsValue, allUsers] = await Promise.all([getAppDataValue(key), getAppDataValue('users')]);
+      const groupsLabel = key === 'submissionApprovalGroups' ? 'mục 11 — Nhóm Phê Duyệt Trình'
+        : key === 'contractApprovalGroups' ? 'mục 14 — Nhóm Phê Duyệt HĐ'
+        : `Nhóm Phê Duyệt Cuối — ${key.replace('extraApprovalGroups_', '')}`;
+      assertApprovalGroupsMembersCanBeApprover(value, oldGroupsValue, allUsers, groupsLabel);
+    }
     // Cấp Phê Duyệt Cuối Cùng: tự loại id nhóm KHÔNG còn tồn tại + bắt buộc lockedGroupIds ⊆
     // visibleGroupIds ngay tại server (xem sanitizeApprovalLevelsAgainstGroups()/
     // assertApprovalLevelsLockedWithinVisible() ở trên) — APPROVAL_LEVELS_TO_GROUPS_KEY đã có sẵn 10
