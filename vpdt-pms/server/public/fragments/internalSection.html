@@ -49,6 +49,13 @@
 
       <!-- LỚP HỌC -->
       <div id="trainingLmsClassesPanel" class="space-y-4">
+        <!-- Nút "+ Tạo Lớp Mới" (thu gọn form nhập, 10/2026, pattern mẫu mhVendorFormWrap/module-muahang.js)
+             — #trainingClassForm giờ LUÔN bắt đầu ẨN mỗi khi đổi tab LMS (setTrainingLmsTab()), chỉ mở
+             qua openTrainingClassForm() này. Nút chỉ hiện khi canManage (gộp đúng điều kiện cũ từng áp
+             trực tiếp lên chính form ở renderTrainingLms()). -->
+        <div class="flex justify-end">
+          <button type="button" data-op="openTrainingClassForm" id="btnTrainingClassNew" class="hidden bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Tạo Lớp Mới</button>
+        </div>
         <form id="trainingClassForm" data-op-submit="submitTrainingClass" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <h4 class="font-bold text-gray-700">➕ Tạo Lớp Học Mới</h4>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -141,6 +148,7 @@
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_TRAINING_CLASS" class="contents"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" data-op="closeTrainingClassForm" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">✕ Thu Gọn</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="trainingClassForm" data-arg1="resetTrainingClassForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Tạo Lớp Học</button>
           </div>
@@ -674,6 +682,13 @@
 
       <!-- TIN TUYỂN DỤNG -->
       <div id="recruitmentJobsPanel" class="space-y-4">
+        <!-- Nút "+ Đăng Tin Mới" (thu gọn form nhập, 10/2026, pattern mẫu mhVendorFormWrap/
+             module-muahang.js) — #recruitmentJobForm giờ LUÔN bắt đầu ẨN mỗi khi vào/đổi tab con
+             (renderRecruitment()), chỉ mở qua openRecruitmentJobForm() này HOẶC qua luồng Sửa tin
+             (openEditRecruitmentJob(), tự remove('hidden') trực tiếp). -->
+        <div class="flex justify-end">
+          <button type="button" data-op="openRecruitmentJobForm" id="btnRecruitmentJobNew" class="hidden bg-amber-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-700">+ Đăng Tin Mới</button>
+        </div>
         <form id="recruitmentJobForm" data-op-submit="submitRecruitmentJob" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <h4 class="font-bold text-gray-700">➕ Đăng Tin Tuyển Dụng Mới (Đợt 2: Bản Tin Tuyển Dụng)</h4>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -734,6 +749,7 @@
           <div id="dynamicFieldsContainer_RECRUITMENT_JOB" class="contents"></div>
           <div class="flex justify-end gap-2">
             <button type="button" id="rjCancelEditBtn" data-op="cancelEditRecruitmentJob" class="hidden bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">Hủy Sửa</button>
+            <button type="button" data-op="closeRecruitmentJobForm" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">✕ Thu Gọn</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="recruitmentJobForm" data-arg1="resetRecruitmentJobForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" id="rjSubmitBtn" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Đăng Tin</button>
           </div>
@@ -1168,7 +1184,17 @@
       </div>
     </div>
 
-    <form id="internalPostForm" data-op-submit="submitInternalPost" class="bg-white p-3 rounded border text-xs space-y-3">
+    <!-- Nút "+ Đăng Bài Mới" (thu gọn form nhập, 10/2026, pattern mẫu mhVendorFormWrap/module-muahang.js)
+         — #internalPostForm giờ LUÔN bắt đầu ẨN mỗi khi đổi sub-tab (xem setInternalSubTab()), chỉ mở
+         khi bấm nút này (openInternalPostForm()) HOẶC qua luồng Sửa bài Nháp/NEED_INFO
+         (editInternalPostUI() tự remove('hidden') trực tiếp, không qua nút). Nút này gộp đúng 2 điều
+         kiện CŨ từng dùng để ẩn/hiện chính form (usesOwnSection + canCreate) — chỉ hiện khi KHÔNG ở 3
+         sub-tab dùng khối riêng (Đào Tạo/Tuyển Dụng/HCRC Đồng Hành) VÀ có quyền đăng bài ở đúng sub-tab
+         đang mở. -->
+    <div class="flex justify-end">
+      <button type="button" data-op="openInternalPostForm" id="btnInternalPostNew" class="hidden bg-fuchsia-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">+ Đăng Bài Mới</button>
+    </div>
+    <form id="internalPostForm" data-op-submit="submitInternalPost" class="hidden bg-white p-3 rounded border text-xs space-y-3">
       <h4 id="internalFormTitle" class="font-bold text-gray-700">📝 Đăng Nhịp Sống HCRC Mới</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div class="md:col-span-2">
@@ -1312,6 +1338,10 @@
            đang Sửa 1 bài Nháp/Yêu cầu bổ sung có sẵn (editInternalPostUI()). -->
       <div class="flex justify-end gap-2">
         <button type="button" id="internalCancelEditBtn" data-op="cancelEditInternalPost" class="hidden px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">Huỷ Sửa</button>
+        <!-- "✕ Thu Gọn" (10/2026) — chỉ ẩn khung form (closeInternalPostForm()), KHÔNG đụng dữ liệu đã
+             nhập/trạng thái Sửa dở (khác "Huỷ Sửa" ở trên) — openInternalPostForm() tự lo huỷ Sửa dở nếu
+             có khi mở lại bằng nút "+ Đăng Bài Mới" phía trên, tránh lẫn dữ liệu. -->
+        <button type="button" data-op="closeInternalPostForm" class="px-4 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">✕ Thu Gọn</button>
         <button type="button" data-op="confirmAndResetForm" data-arg0="internalPostForm" data-arg1="resetInternalPostForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
         <button type="submit" id="internalDraftBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">📝 Lưu Nháp</button>
         <button type="submit" id="internalSubmitBtn" class="bg-fuchsia-600 text-white px-5 py-2 rounded font-bold hover:bg-fuchsia-700">Đăng Tin</button>

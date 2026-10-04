@@ -608,7 +608,9 @@ async function main() {
     await check(
       'Đào Tạo > Lớp Học: "Làm Mới" trắng form (Offline->Online, ẩn lại Giảng Viên/Địa Điểm) + trắng Danh Sách Được Mời (tcInviteListStaged) + trắng phần Nhập Từ Excel đang xem trước dở',
       async () => {
-        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+        // Thu gọn form nhập (10/2026) — #trainingClassForm giờ bắt đầu ẨN mỗi khi đổi tab LMS, phải tự
+        // mở qua openTrainingClassForm() (nút "+ Tạo Lớp Mới") trước khi fill/click thật bằng Playwright.
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); openTrainingClassForm(); });
         await page.fill('#tcTitle', 'Lớp kiểm thử reset form');
         await page.selectOption('#tcMode', 'OFFLINE');
         await page.evaluate(() => onTrainingClassModeChange());
@@ -884,7 +886,9 @@ async function main() {
     await check(
       'Tuyển Dụng > Tin Tuyển Dụng: chip ảnh banner rjBannerFile, "Làm Mới" trắng form',
       async () => {
-        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS'); });
+        // Thu gọn form nhập (10/2026) — #recruitmentJobForm giờ bắt đầu ẨN mỗi khi đổi tab, phải tự mở
+        // qua openRecruitmentJobForm() (nút "+ Đăng Tin Mới") trước khi fill/click thật bằng Playwright.
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS'); openRecruitmentJobForm(); });
         await page.fill('#rjTitle', 'Vị trí kiểm thử reset form');
         await page.fill('#rjContactInfo', '0900000000');
         await page.fill('#rjDescription', 'Mô tả kiểm thử reset form.');
@@ -984,7 +988,9 @@ async function main() {
     await check(
       'Nhịp Sống HCRC (Nội Bộ): "Làm Mới" trắng form + tắt Ghim bài (gọi lại cancelEditInternalPost() có sẵn)',
       async () => {
-        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); });
+        // Thu gọn form nhập (10/2026) — #internalPostForm giờ bắt đầu ẨN mỗi khi đổi sub-tab, phải tự
+        // mở qua openInternalPostForm() (nút "+ Đăng Bài Mới") trước khi fill/click thật bằng Playwright.
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); openInternalPostForm(); });
         await page.fill('#internalTitle', 'Tin kiểm thử reset form');
         await page.selectOption('#internalPostCategory', 'THI_DUA');
         await page.fill('#internalContent', 'Nội dung kiểm thử reset form.');
