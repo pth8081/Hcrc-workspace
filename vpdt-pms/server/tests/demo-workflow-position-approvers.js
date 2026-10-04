@@ -133,7 +133,9 @@ async function main() {
     // ===== (c) End-to-end THẬT — tạo 2 đề xuất Mua Bán rồi thử duyệt bằng 2 người khác nhau =====
     async function createOfficeBuyReq(titleSuffix) {
       await loginAs('kd1');
-      await page.evaluate(() => { switchTab('office'); setOfficeSubTab('MUA_BAN'); });
+      // "Thu gọn form nhập" (10/2026) — #officeForm giờ ẩn mặc định, mở qua openOfficeForm() trước khi
+      // page.fill() thao tác lên các ô bên trong.
+      await page.evaluate(() => { switchTab('office'); setOfficeSubTab('MUA_BAN'); openOfficeForm(); });
       const code = await page.locator('#offCode').inputValue();
       await page.fill('#offTitle', `Mua sắm thiết bị demo POSITION mode ${titleSuffix}`);
       await page.fill('#offReason', 'Kiểm thử end-to-end bước duyệt "Theo vị trí".');

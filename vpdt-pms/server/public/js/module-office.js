@@ -2,6 +2,20 @@
 // 7. MODULE PHÊ DUYỆT VĂN PHÒNG (OFFICE MODULE)
 // ==========================================
 
+// "Thu gọn form nhập" (10/2026) — #officeForm ẩn mặc định (class "hidden" tĩnh ở officeSection.html),
+// mở qua nút "+ Tạo Đề Xuất" (btnOfficeFormNew) cạnh tiêu đề, đóng qua nút "✕ Thu Gọn" trong form.
+// setOfficeSubTab() (core.js) vẫn tự lo việc đổi field/bảng theo subTab mỗi lần bấm sub-tab — KHÔNG
+// đụng vào logic đó. Ở đây chỉ cần đảm bảo bảng "Danh Sách Hạng Mục" (officeItems) có đúng 1 dòng
+// trống khi mở form lúc đang ở phân hệ Mua Sắm mà bảng đang trống (VD mở lại sau khi đã đóng form mà
+// KHÔNG đổi sub-tab, nên setOfficeSubTab() không tự chạy lại addOfficeItemRow()).
+function openOfficeForm() {
+  if (activeOfficeSubTab === 'MUA_BAN' && officeItems.length === 0) addOfficeItemRow();
+  document.getElementById('officeForm').classList.remove('hidden');
+}
+function closeOfficeForm() {
+  document.getElementById('officeForm').classList.add('hidden');
+}
+
 // --- Bảng nhiều hạng mục cho phiếu Đề Nghị Mua Sắm (Mẫu BM-TS01) ---
 function addOfficeItemRow() {
   officeItems.push({ name: '', model: '', unit: '', qty: 0, unitPrice: 0, note: '' });

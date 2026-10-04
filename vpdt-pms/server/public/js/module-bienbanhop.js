@@ -1,6 +1,22 @@
 // ==========================================
 // MODULE BIÊN BẢN HỌP (MEETING MINUTES MODULE)
 // ==========================================
+
+// "Thu gọn form nhập" (10/2026) — #minutesForm ẩn mặc định mỗi lần vào tab (xem nhánh tabName==='minutes'
+// ở switchTab(), core.js — quyền hiện nút/ẩn form vẫn gác bởi canCreateMeetingMinutes(), KHÔNG đổi hàm
+// đó), mở qua nút "+ Lập Biên Bản Mới" (btnMinutesFormNew, chỉ người có quyền mới thấy) hoặc qua
+// openEditMeetingMinutes() bên dưới (mở lại CHÍNH form này để Sửa). Đóng qua nút "✕ Thu Gọn" trong form
+// — gọi luôn resetMeetingMinutesForm() để thoát hẳn chế độ Sửa (nếu có), tránh giữ editingMinutesId dở
+// dang trong lúc form đang ẩn (2 bảng con "Thành Phần Tham Dự"/"Ý Kiến Chỉ Đạo" không có hàng mặc định —
+// hành vi gốc vốn đã vậy, chỉ render khi có hàng thêm/sửa/reset, không phải lỗi mới do đổi ẩn/hiện này).
+function openMinutesForm() {
+  document.getElementById('minutesForm').classList.remove('hidden');
+}
+function closeMinutesForm() {
+  resetMeetingMinutesForm();
+  document.getElementById('minutesForm').classList.add('hidden');
+}
+
 function onMinutesFilterChange() {
   resetListPage('minutes');
   renderMeetingMinutes();
@@ -696,6 +712,7 @@ function openEditMeetingMinutes(id) {
   }
 
   editingMinutesId = id;
+  openMinutesForm();
   document.getElementById('minutesCode').value = m.code;
   document.getElementById('minutesCode').readOnly = true;
   document.getElementById('minutesCode').classList.add('bg-gray-100', 'cursor-not-allowed');

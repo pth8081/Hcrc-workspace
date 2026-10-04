@@ -20,7 +20,10 @@ async function run() {
   const { page, loginAs, alerts, clearAlerts, confirmPending, jsExceptions, stop } = h;
 
   async function goToOffice(subTab) {
-    await page.evaluate((st) => { switchTab('office'); setOfficeSubTab(st); }, subTab);
+    // "Thu gọn form nhập" (10/2026) — #officeForm giờ ẩn mặc định, mở qua openOfficeForm() ngay sau khi
+    // chuyển sub-tab để các bước page.fill()/page.selectOption() phía sau (thao tác trực tiếp lên ô
+    // trong form) vẫn chạy được (Playwright yêu cầu phần tử phải visible).
+    await page.evaluate((st) => { switchTab('office'); setOfficeSubTab(st); openOfficeForm(); }, subTab);
   }
 
   // Đọc lại danh sách value của các "secondaryOptions" (dropdown "Khác ▾") đang hiển thị cho ĐÚNG 1

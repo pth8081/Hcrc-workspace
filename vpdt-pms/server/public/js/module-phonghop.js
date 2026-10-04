@@ -100,6 +100,19 @@ function previewMeetingWorkflow() {
     'Chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) hoặc được gán riêng cho phòng ban này — liên hệ Quản trị viên.');
 }
 
+// "Thu gọn form nhập" (10/2026) — #meetingForm ẩn mặc định (class "hidden" tĩnh ở meetingSection.html),
+// mở qua nút "+ Đặt Lịch Mới" (btnMeetingFormNew) cạnh tiêu đề, đóng qua nút "✕ Thu Gọn" trong form.
+// editMeeting() bên dưới (mở lại CHÍNH form này để Sửa) cũng gọi openMeetingForm() để đảm bảo hiện
+// form ra — KHÔNG tự reset gì ở đây (chỉ hiện/ẩn), closeMeetingForm() gọi luôn resetMeetingReqForm() để
+// thoát hẳn chế độ Sửa (nếu có) khi thu gọn, tránh giữ editingMeetingId dở dang trong lúc form đang ẩn.
+function openMeetingForm() {
+  document.getElementById('meetingForm').classList.remove('hidden');
+}
+function closeMeetingForm() {
+  resetMeetingReqForm();
+  document.getElementById('meetingForm').classList.add('hidden');
+}
+
 // Khung giờ 07:00 - 19:00, mỗi ô 30 phút, dùng cho lưới Lịch Họp.
 function generateMeetingTimeSlots() {
   const slots = [];
@@ -757,6 +770,7 @@ function quickBookMeetingSlot(roomIdx, dateStr, slot) {
   const room = (DB.meetingRooms || [])[roomIdx];
   if (!room) return;
   setMeetingSubTab('REGISTER');
+  openMeetingForm();
   document.getElementById('meetingRoom').value = room.name;
   const startDate = new Date(`${dateStr}T${slot}:00`);
   document.getElementById('meetingStartTime').value = toDatetimeLocalValue(startDate);
@@ -776,6 +790,7 @@ function finalizeMeetingSlotSelection(roomIdx, rowA, rowB) {
   const endSlotStart = meetingCalSlots[hi];
   if (!startSlot || !endSlotStart) return;
   setMeetingSubTab('REGISTER');
+  openMeetingForm();
   document.getElementById('meetingRoom').value = room.name;
   const startDate = new Date(`${meetingCalCurrentDate}T${startSlot}:00`);
   const endDate = new Date(new Date(`${meetingCalCurrentDate}T${endSlotStart}:00`).getTime() + 30 * 60000);
@@ -907,6 +922,7 @@ function editMeeting(id) {
   }
   editingMeetingId = id;
   setMeetingSubTab('REGISTER');
+  openMeetingForm();
 
   document.getElementById('meetingCode').value = m.code;
   document.getElementById('meetingDept').value = m.dept;
