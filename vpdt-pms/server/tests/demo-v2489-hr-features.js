@@ -163,26 +163,42 @@ async function main() {
   }, { version: ORG_VERSION, profile: HR_PROFILE });
 
   // ===== Ảnh 1: Quản Lý Danh Mục — 3 danh mục mới (Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật) =====
-  // switchTab() nạp lười module JS theo nhóm (loadModuleGroup()) — PHẢI tách riêng 1 evaluate() +
-  // waitForTimeout() TRƯỚC KHI gọi hàm thuộc module đó (setSystemSubTab() nằm trong hethong-tabs.js),
-  // nếu không sẽ ReferenceError do script module chưa kịp nạp xong (lỗi THẬT gặp phải lúc đầu viết demo
-  // này, cùng lớp lỗi timing — không phải hàm chưa tồn tại).
+  // switchTab() nạp lười module JS theo nhóm (loadModuleGroup()) — PHẢI chờ hàm thuộc module đó THẬT SỰ
+  // tồn tại (waitForFunction, không đoán 1 mốc thời gian cố định) trước khi gọi, nếu không sẽ
+  // ReferenceError do script module (hoặc cả cây dependency của nó — "hethong-tabs" phụ thuộc rất nhiều
+  // nhóm khác nên tải lâu hơn hẳn các tab khác) chưa kịp nạp xong (lỗi THẬT gặp phải lúc đầu viết demo
+  // này với waitForTimeout(300) cố định — không đủ cho riêng tab "system").
   await page.evaluate(() => switchTab('system'));
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => typeof setSystemSubTab === 'function', { timeout: 10000 });
   await page.evaluate(() => setSystemSubTab('ADMIN'));
+  // "Quản Trị" còn chia tiếp 6 tab con (setAdminSubTab) — Quản Lý Danh Mục nằm ở tab con "CATALOG",
+  // mặc định ẨN (class "hidden" tĩnh trong systemSection.html) tới khi bấm đúng tab này.
+  await page.evaluate(() => setAdminSubTab('CATALOG'));
   await page.waitForSelector('#jobGradeList', { timeout: 5000 });
+  // #adminSubCatalog là lưới NHIỀU CỘT (grid-cols-1 md:grid-cols-2 xl:grid-cols-3) — 3 khối danh mục mới
+  // KHÔNG nằm liền kề theo chiều dọc như tưởng tượng ban đầu (xen giữa các khối danh mục cũ khác tuỳ vị
+  // trí trong lưới), nên "hợp nhất 1 vùng clip từ box đầu tới box cuối" (cách làm lúc đầu) vô tình chụp
+  // trúng NHỮNG Ô KHÁC cùng hàng/cột thay vì đúng 3 khối cần — lỗi THẬT phát hiện khi xem lại ảnh chụp
+  // thử (ảnh 1 hiện "Chức Danh" + "Loại Kỷ Luật" nhưng THIẾU hẳn "Cấp Bậc"/"Lý Do Nghỉ Việc" ở giữa).
+  // Đổi sang chụp RIÊNG từng khối bằng locator.screenshot() (Playwright tự xác định đúng kích thước
+  // phần tử, không cần tự tính toạ độ) — đơn giản và chắc chắn đúng hơn hẳn.
+  const jobGradeCard = page.locator('#jobGradeList').locator('xpath=ancestor::div[contains(@class,"bg-fuchsia-50")]');
+  const resignationReasonCard = page.locator('#resignationReasonList').locator('xpath=ancestor::div[contains(@class,"bg-fuchsia-50")]');
+  const disciplinaryTypeCard = page.locator('#disciplinaryTypeList').locator('xpath=ancestor::div[contains(@class,"bg-fuchsia-50")]');
+  await jobGradeCard.scrollIntoViewIfNeeded();
   await page.waitForTimeout(200);
-  {
-    const box1 = await page.locator('#jobGradeList').locator('xpath=ancestor::div[contains(@class,"bg-fuchsia-50")]').boundingBox();
-    const box2 = await page.locator('#disciplinaryTypeList').locator('xpath=ancestor::div[contains(@class,"bg-fuchsia-50")]').boundingBox();
-    const clip = { x: Math.max(0, Math.min(box1.x, box2.x) - 10), y: Math.max(0, box1.y - 10), width: Math.max(box1.width, box2.width) + 20, height: (box2.y + box2.height) - box1.y + 20 };
-    await page.screenshot({ path: path.join(OUT_DIR, '1-quan-ly-danh-muc-3-danh-muc-moi.png'), clip });
-  }
-  console.log('Đã chụp: 1-quan-ly-danh-muc-3-danh-muc-moi.png');
+  await jobGradeCard.screenshot({ path: path.join(OUT_DIR, '1a-danh-muc-cap-bac.png') });
+  await resignationReasonCard.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await resignationReasonCard.screenshot({ path: path.join(OUT_DIR, '1b-danh-muc-ly-do-nghi-viec.png') });
+  await disciplinaryTypeCard.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await disciplinaryTypeCard.screenshot({ path: path.join(OUT_DIR, '1c-danh-muc-loai-ky-luat.png') });
+  console.log('Đã chụp: 1a/1b/1c-danh-muc-*.png');
 
   // ===== Ảnh 2: Cơ Cấu Tổ Chức — ô "Cấp Bậc" gõ-hoặc-chọn từ danh mục =====
   await page.evaluate(() => switchTab('orgChart'));
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => typeof openOrgChartEditNodeModal === 'function', { timeout: 10000 });
   await page.evaluate(() => openOrgChartEditNodeModal(3));
   await page.waitForSelector('#orgChartNodeModal:not(.hidden)', { timeout: 5000 });
   // Gõ 1 phần "L" để kích hoạt dropdown gợi ý sdd (hiển thị đúng 4 giá trị DB.jobGrades đã seed).
@@ -195,7 +211,7 @@ async function main() {
 
   // ===== Ảnh 3: Tạo Offboarding — field "Lý Do Nghỉ Việc" MỚI (tách khỏi "Ghi Chú Thêm") =====
   await page.evaluate(() => switchTab('hrLifecycle'));
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => typeof showHrCreateForm === 'function', { timeout: 10000 });
   await page.evaluate(() => showHrCreateForm('OFFBOARDING'));
   await page.waitForSelector('#hrpCreateOffboardWrap:not(.hidden)', { timeout: 5000 });
   await page.evaluate(() => {
@@ -206,6 +222,7 @@ async function main() {
   await page.click('#hrpOffbResignationReason');
   await page.fill('#hrpOffbResignationReason', 'Nghỉ việc theo nguyện vọng cá nhân');
   await page.evaluate(() => { document.getElementById('hrpOffbReason').value = 'Đã bàn giao đầy đủ công việc cho đồng nghiệp.'; });
+  await page.locator('#hrpCreateOffboardWrap').scrollIntoViewIfNeeded();
   await page.waitForTimeout(200);
   {
     const box = await page.locator('#hrpCreateOffboardWrap').boundingBox();
@@ -215,14 +232,25 @@ async function main() {
 
   // ===== Ảnh 4: Hồ Sơ Nhân Sự (Quản Lý Hồ Sơ) — khối "⚠️ Kỷ luật" + 7 trường mới Người Phụ Thuộc =====
   await page.evaluate(() => switchTab('hrProfile'));
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => typeof setHrProfileView === 'function', { timeout: 10000 });
   await page.evaluate(() => setHrProfileView('MANAGE'));
   await page.waitForTimeout(200);
   await page.evaluate((code) => openHrpfDetailModal(code, false), HR_PROFILE.employeeCode);
   await page.waitForSelector('#hrpfDetailModal:not(.hidden)', { timeout: 5000 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: path.join(OUT_DIR, '4-ho-so-nhan-su-ky-luat-phu-thuoc.png'), fullPage: true });
-  console.log('Đã chụp: 4-ho-so-nhan-su-ky-luat-phu-thuoc.png');
+  await page.screenshot({ path: path.join(OUT_DIR, '4a-ho-so-nhan-su-tong-quan.png'), fullPage: true });
+  // Modal này có VÙNG CUỘN RIÊNG bên trong (không phải cuộn trang) — fullPage:true chỉ chụp đúng phần
+  // đang hiện trong modal, không chụp được phần "Người phụ thuộc"/"Kỷ luật" nằm dưới cuối form dài. Cuộn
+  // + chụp RIÊNG từng khối bằng locator.screenshot() (như khối Ảnh 1) để thấy rõ đủ 7 trường mới + Kỷ luật.
+  const dependentsCard = page.locator('#hrpfDependentsRows').locator('xpath=..');
+  const disciplinaryCard = page.locator('#hrpfDisciplinaryRows').locator('xpath=..');
+  await dependentsCard.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await dependentsCard.screenshot({ path: path.join(OUT_DIR, '4b-nguoi-phu-thuoc-7-truong-moi.png') });
+  await disciplinaryCard.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
+  await disciplinaryCard.screenshot({ path: path.join(OUT_DIR, '4c-ky-luat.png') });
+  console.log('Đã chụp: 4a/4b/4c-ho-so-nhan-su-*.png');
 
   console.log('jsExceptions:', pageErrors);
   console.log('DONE. Ảnh đã lưu tại', OUT_DIR);
