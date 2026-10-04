@@ -10128,8 +10128,14 @@ function updateUploadDeptDropdown() {
   const uploadBox = document.getElementById('uploadBox');
 
   const canUpload = currentUser.perms.admin || currentUser.perms.uploadAll || (currentUser.perms.uploadDepts && currentUser.perms.uploadDepts.length > 0);
+  // Pattern "thu gọn form nhập" (10/2026): #uploadBox giờ LUÔN bắt đầu ẩn (class="hidden" tĩnh ở HTML),
+  // chỉ mở khi bấm "+ Tải Lên Tài Liệu" (openUploadBox(), module-tailieu.js) — hàm này (gọi 1 lần mỗi
+  // khi vào tab Tài Liệu, xem core.js _dispatchTabRender()) giờ chỉ còn quyết định NÚT "+ Tải Lên..." có
+  // hiện hay không theo ĐÚNG điều kiện cũ (canUpload) vốn dùng để ẩn/hiện CHÍNH form, và LUÔN ép form về
+  // ẩn mỗi lần vào tab để không lộ form đã mở từ trước sang lượt vào tab mới.
+  document.getElementById('btnUploadBoxNew')?.classList.toggle('hidden', !canUpload);
   if (uploadBox) {
-    uploadBox.classList.toggle('hidden', !canUpload);
+    uploadBox.classList.add('hidden');
   }
 }
 

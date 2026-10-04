@@ -6,6 +6,13 @@
 
     <div id="contractDashboardCards"></div>
 
+    <!-- Pattern "thu gọn form nhập" (10/2026) — form bên dưới (~17 field) mặc định ẩn, chỉ mở khi bấm nút
+         này hoặc "✏️ Sửa" 1 hồ sơ có sẵn. btnContractManageNew ẩn/hiện theo ĐÚNG điều kiện cũ của form
+         (subTab==='MANAGE' && !canImportSigned) — xem setContractSubTab() ở module-hopdong.js. -->
+    <div class="flex justify-end">
+      <button type="button" data-op="openContractManageForm" id="btnContractManageNew" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">+ Thêm Hợp Đồng/Phụ Lục</button>
+    </div>
+
     <div id="contractManageFormWrap" class="hidden bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
       <h3 id="contractManageFormTitle" class="font-bold text-cyan-900 text-base flex items-center gap-2">➕ Tạo Mới Hợp Đồng / Giấy Phép</h3>
       <p id="contractManageFormHint" class="text-xs text-cyan-800">Hồ sơ mới sẽ chờ phê duyệt (trừ khi bạn có quyền tự duyệt) rồi mới chuyển sang "Quản Lý Hợp Đồng & Giấy Phép" để theo dõi.</p>
@@ -127,6 +134,7 @@
           <div id="contractInstallmentsList" class="space-y-2"></div>
         </div>
         <div class="flex justify-end gap-2">
+          <button type="button" data-op="closeContractManageForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">✕ Thu Gọn</button>
           <button type="button" data-op="confirmAndResetForm" data-arg0="contractForm" data-arg1="resetContractForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="button" id="contractCancelEditBtn" data-op="cancelEditContract" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
           <button type="button" id="contractPreviewWfBtn" data-op="previewContractApprovalWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>

@@ -29,6 +29,9 @@ async function run() {
     await page.evaluate(() => {
       switchTab('contract');
       setContractSubTab('APPROVAL');
+      // Pattern "thu gọn form nhập" (10/2026): #contractManageFormWrap giờ bắt đầu ẩn, phải tự mở ra
+      // (như bấm "+ Thêm Hợp Đồng/Phụ Lục") trước khi test tương tác trực tiếp vào các ô trong form.
+      openContractManageForm();
       document.getElementById('contractOpMode').value = 'NEW';
       onContractOpModeChange();
     });

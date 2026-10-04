@@ -615,7 +615,21 @@ async function uploadDoc(e) {
 
   alert('✅ Tải lên và trình ký tài liệu thành công!');
   resetDocUploadForm();
+  // Thu gọn form lại sau khi lưu thành công (pattern "thu gọn form nhập", 10/2026) — cùng khuôn
+  // closeMhVendorForm() gọi sau submitMhVendorForm() ở module-muahang.js.
+  closeUploadBox();
   renderDocs();
+}
+
+// Pattern "thu gọn form nhập" (10/2026) — cùng khuôn openMhVendorForm()/closeMhVendorForm()
+// (module-muahang.js): #uploadBox chỉ mở khi bấm "+ Tải Lên Tài Liệu", luôn thu gọn lại sau khi lưu
+// thành công hoặc bấm "✕ Thu Gọn". btnUploadBoxNew ẩn/hiện theo ĐÚNG điều kiện cũ (canUpload) — xem
+// updateUploadDeptDropdown() ở core.js.
+function openUploadBox() {
+  document.getElementById('uploadBox').classList.remove('hidden');
+}
+function closeUploadBox() {
+  document.getElementById('uploadBox').classList.add('hidden');
 }
 
 // Xem trước quy trình duyệt tài liệu theo Phòng Ban Trình đang chọn — cùng khuôn
@@ -778,7 +792,12 @@ function renderLicenses() {
   const tbody = document.getElementById('licenseTableBody');
   if (!tbody) return;
 
-  document.getElementById('licenseUploadBox').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.licenseCreate));
+  // Pattern "thu gọn form nhập" (10/2026): NÚT "+ Tải Lên Giấy Phép" (không phải box) giờ theo ĐÚNG
+  // điều kiện cũ vốn ẩn/hiện box — box chỉ mở khi bấm nút (openLicenseUploadBox()); nếu điều kiện trả
+  // về false thì ép box ẩn hẳn (phòng trường hợp quyền vừa bị thu hồi khi box đang mở sẵn từ trước).
+  const canUploadLicense = !!(currentUser.perms?.admin || currentUser.perms?.licenseCreate);
+  document.getElementById('btnLicenseUploadBoxNew')?.classList.toggle('hidden', !canUploadLicense);
+  if (!canUploadLicense) document.getElementById('licenseUploadBox').classList.add('hidden');
   sddSetOptions('licenseTypeDatalist', DB.licenseTypes || []);
 
   const keyword = (document.getElementById('filterLicenseKeyword')?.value || '').toLowerCase().trim();
@@ -1295,6 +1314,9 @@ async function uploadLicense(e) {
 
   alert('✅ Tải lên và trình duyệt giấy phép thành công!');
   resetLicenseForm();
+  // Thu gọn form lại sau khi lưu thành công (pattern "thu gọn form nhập", 10/2026) — cùng khuôn
+  // closeMhVendorForm() gọi sau submitMhVendorForm() ở module-muahang.js.
+  closeLicenseUploadBox();
   renderLicenses();
 }
 
@@ -1307,6 +1329,17 @@ function resetLicenseForm() {
   document.getElementById('licenseOpMode').value = 'NEW';
   onLicenseOpModeChange();
   clearSingleFileInput('licenseFile', 'licenseFileChip');
+}
+
+// Pattern "thu gọn form nhập" (10/2026) — cùng khuôn openMhVendorForm()/closeMhVendorForm()
+// (module-muahang.js): #licenseUploadBox chỉ mở khi bấm "+ Tải Lên Giấy Phép", luôn thu gọn lại sau khi
+// lưu thành công hoặc bấm "✕ Thu Gọn". btnLicenseUploadBoxNew ẩn/hiện theo ĐÚNG điều kiện cũ
+// (canUpload) — xem renderLicenses().
+function openLicenseUploadBox() {
+  document.getElementById('licenseUploadBox').classList.remove('hidden');
+}
+function closeLicenseUploadBox() {
+  document.getElementById('licenseUploadBox').classList.add('hidden');
 }
 
 // ============ Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) — cùng khuôn CRUD phẳng đơn giản với

@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**24.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.88 (2026-10-04): "Thu gọn form nhập" — Hợp Đồng/Ngân Sách/Tài Liệu/Giấy Phép/Văn Bản Trình
+
+Áp dụng pattern "thu gọn form nhập" (mẫu gốc `openMhVendorForm()`/`closeMhVendorForm()`,
+module-muahang.js) cho 6 form/box nhập dài, hay chiếm hết màn hình ngay khi vào tab: form giờ mặc định
+ẨN (`class="hidden"` tĩnh ở HTML), chỉ mở khi bấm nút "+ ..." riêng ngoài form hoặc khi Sửa 1 hồ sơ có
+sẵn; thêm nút "✕ Thu Gọn" ở hàng nút hành động cuối form; form tự thu gọn lại sau khi lưu thành công.
+
+1. **Hợp Đồng** (`contractSection.html`/`module-hopdong.js`) — `#contractManageFormWrap` (~17 field).
+   Trước đây form tự lộ qua `classList.toggle('hidden', subTab==='MANAGE' && !canImportSigned)` ngay
+   trong `setContractSubTab()`; giờ điều kiện đó chỉ còn gác nút "+ Thêm Hợp Đồng/Phụ Lục"
+   (`#btnContractManageNew`), form luôn bị ép ẩn mỗi lần đổi sub-tab (`closeContractManageForm()`).
+   **Mang qua kèm** bản vá "stuck-fallback" cho `setContractSubTab()` (đã có sẵn, đã test, ở nhánh
+   `claude/chao-ban-oo5ijl` chưa merge lúc đợt này bắt đầu — mang qua để không xây pattern mới lên trên
+   1 lỗ hổng đã biết: trước đây khi cả 2 checkbox con `contractApproval`/`contractManage` đều tắt, hàm
+   vẫn giữ nguyên sub-tab đang xin mở thay vì dừng hẳn).
+2. **Ngân Sách** (`budgetSection.html`/`module-ngansach.js`) — `#blProposeFormWrap`/`#blApproveFormWrap`.
+   Điều kiện cũ (`canCreate`, cộng `canManage` cho dòng Phê Duyệt) chuyển sang gác nút "+ Thêm Đề Xuất"/
+   "+ Thêm Phê Duyệt" (`canOpenBudgetLineFormClient()`).
+3. **Tài Liệu** (`docSection.html`/`core.js` `updateUploadDeptDropdown()`) — `#uploadBox`.
+4. **Giấy Phép** (`licenseSection.html`/`module-tailieu.js` `renderLicenses()`) — `#licenseUploadBox`.
+5. **Văn Bản Trình** (`submissionSection.html`/`module-vanbantrinh.js`) — thêm `#submissionFormWrap`
+   bọc quanh form (trước đây không có wrap riêng, không gác quyền nào — nút chỉ đơn thuần thu gọn/mở).
+
+Cập nhật `tests/test-contract.js`/`tests/test-form-reset-file-remove.js` (gọi `open...Form()` trước khi
+tương tác trực tiếp vào các ô form qua Playwright — form giờ ẩn mặc định). Viết mới
+`tests/test-collapse-contract-budget-doc-forms.js` (20 kịch bản — nút ẩn/hiện đúng theo quyền cũ, form
+ẩn mặc định/mở/đóng đúng, và re-test lại kịch bản "stuck-fallback" của Hợp Đồng vẫn an toàn). Chạy lại
+toàn bộ test liên quan (test-contract.js 65/65, test-budget-lines.js 62/62, test-budget-lines-excel.js
+18/18, test-budget-meeting-dept-workflow-ui.js 7/7, test-doc.js 21/21, test-doc-thumbnail.js 5/5,
+test-license.js 15/15, test-submission.js 23/23, test-form-reset-file-remove.js 34/34,
+test-forms-batch1/2/3.js, test-code-format-hcrc.js, test-audit-round2-cluster1.js, test-payment.js
+111/111, test-preview-workflow-buttons.js 16/16, test-stuck-subtab-fallback-fix.js 12/12,
+test-lazy-load-all-tabs.js 46/46, test-csp-full-audit.js 3/3, test-csp-deep-interaction.js 19/19,
+demo-payment-installment-files.js, demo-payment-tracking.js) — không regression.
 
 ## v24.87 (2026-10-04): Vá 3 mục mức Thấp (cosmetic) còn lại từ đợt rà soát v24.74→v24.81
 

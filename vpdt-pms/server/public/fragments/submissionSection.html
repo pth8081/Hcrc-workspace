@@ -1,10 +1,18 @@
 
     <div id="subDashboardCards"></div>
 
-    <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+    <!-- Pattern "thu gọn form nhập" (10/2026): #submissionFormWrap mặc định ẩn, nút này mở ra khi cần —
+         module Văn Bản Trình không có gác quyền riêng cho form này (ai vào được module đều trình được),
+         nên nút KHÔNG cần ẩn/hiện theo quyền nào, chỉ đơn thuần thu gọn/mở rộng. -->
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">📜 Văn Bản Trình / Tờ Trình</h3>
+      <button type="button" data-op="openSubmissionForm" id="btnSubmissionFormNew" class="bg-amber-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-700">+ Trình Văn Bản Mới</button>
+    </div>
+
+    <div id="submissionFormWrap" class="hidden bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
       <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">📜 Trình Văn Bản / Tờ Trình Đề Xuất Phê Duyệt</h3>
       <p class="text-xs text-amber-800">Soạn thảo tờ trình đề xuất chủ trương, kinh phí hoặc quy chế. Luồng chuyển duyệt tích hợp phê duyệt đồng cấp đa cấp.</p>
-      
+
       <form id="submissionForm" data-op-submit="submitSubmissionReq" class="bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
@@ -70,6 +78,7 @@
         </div>
 
         <div class="flex justify-end gap-2">
+          <button type="button" data-op="closeSubmissionForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">✕ Thu Gọn</button>
           <button type="button" data-op="confirmAndResetForm" data-arg0="submissionForm" data-arg1="resetSubmissionForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="button" data-op="previewSubmissionWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">Gửi phê duyệt</button>

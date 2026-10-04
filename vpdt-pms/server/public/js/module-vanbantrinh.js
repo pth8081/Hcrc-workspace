@@ -146,7 +146,20 @@ async function doSubmitSubmissionReq(e) {
 
   alert('✅ Trình văn bản / tờ trình thành công!');
   resetSubmissionForm();
+  // Thu gọn form lại sau khi lưu thành công (pattern "thu gọn form nhập", 10/2026) — cùng khuôn
+  // closeMhVendorForm() gọi sau submitMhVendorForm() ở module-muahang.js.
+  closeSubmissionForm();
   renderSubmissionReqs();
+}
+
+// Pattern "thu gọn form nhập" (10/2026) — cùng khuôn openMhVendorForm()/closeMhVendorForm()
+// (module-muahang.js): #submissionFormWrap chỉ mở khi bấm "+ Trình Văn Bản Mới", luôn thu gọn lại sau
+// khi lưu thành công hoặc bấm "✕ Thu Gọn".
+function openSubmissionForm() {
+  document.getElementById('submissionFormWrap').classList.remove('hidden');
+}
+function closeSubmissionForm() {
+  document.getElementById('submissionFormWrap').classList.add('hidden');
 }
 
 // resetSubmissionForm() — dùng CHUNG bởi nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=

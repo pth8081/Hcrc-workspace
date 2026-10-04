@@ -1,6 +1,12 @@
 
     <div id="docDashboardCards"></div>
 
+    <!-- Pattern "thu gọn form nhập" (10/2026): #uploadBox mặc định ẩn, nút này ẩn/hiện theo ĐÚNG điều
+         kiện cũ từng gác form — xem updateUploadDeptDropdown() ở core.js. -->
+    <div class="flex justify-end">
+      <button type="button" data-op="openUploadBox" id="btnUploadBoxNew" class="hidden bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-blue-700">+ Tải Lên Tài Liệu</button>
+    </div>
+
     <div id="uploadBox" class="bg-blue-50 p-4 rounded border border-blue-200 hidden">
       <h3 class="font-bold mb-1 text-blue-900 flex items-center gap-2">
         📄 Tải Lên Tài Liệu Mới (PDF, Word, Excel, PowerPoint, Hình ảnh)
@@ -63,6 +69,7 @@
         <div id="extraApprovalMount_DOC" class="md:col-span-3"></div>
 
         <div class="md:col-span-3 flex justify-end gap-2">
+          <button type="button" data-op="closeUploadBox" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">✕ Thu Gọn</button>
           <button type="button" data-op="confirmAndResetForm" data-arg0="docForm" data-arg1="resetDocUploadForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">↺ Làm Mới</button>
           <button type="button" id="docPreviewWfBtn" data-op="previewDocWorkflow" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300 transition">🔍 Xem Quy Trình</button>
           <button type="submit" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700 transition">Gửi phê duyệt</button>
