@@ -573,3 +573,20 @@ input[data-sdd-list] {
    thật. Đổi sang dùng class này thay cho style="..." trực tiếp trên thẻ. */
 .nv-flow-svg { width:100%; height:auto; max-width:920px; display:block; margin:0 auto; }
 
+/* Phản hồi khi ẤN mọi nút toàn hệ thống (10/2026, yêu cầu người dùng: hover hiện tại đổi màu quá nhẹ,
+   không có cảm giác thật đang "ấn nút") — áp dụng 1 lần cho TOÀN BỘ <button> (rà soát: 808 thẻ <button>
+   trong public/fragments/*.html + index.html, chỉ 2 chỗ dùng <div data-op> làm nền mờ đóng sidebar/
+   modal không tính là "nút" thật nên không cần sửa) qua 1 selector chung — KHÔNG sửa từng file/từng
+   class riêng lẻ. scale(0.96) (lún xuống nhẹ) + brightness tối hơn hẳn (đậm hơn hover thường) tạo cảm
+   giác "nặng tay" rõ ràng khi bấm, tự trả về bình thường ngay khi thả tay (transition 2 chiều). Không
+   cần !important: rà soát không còn nơi nào trong HTML dùng class Tailwind "active:*" (0 kết quả) nên
+   không có xung đột specificity với rule chung này. :disabled bỏ qua (nút khoá không cần phản hồi ấn).
+   2 nút đã có hiệu ứng riêng từ trước (.loginpage-btn, .loginpage-captcha-refresh) vẫn giữ nguyên hiệu
+   ứng cũ của chúng (class-selector có specificity cao hơn type-selector này nên không bị đè). */
+button:not(:disabled) { transition: transform .08s ease, filter .08s ease; }
+button:not(:disabled):active { transform: scale(0.96); filter: brightness(0.88); }
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled) { transition: filter .08s ease; }
+  button:not(:disabled):active { transform: none; }
+}
+
