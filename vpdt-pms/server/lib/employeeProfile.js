@@ -83,7 +83,11 @@ const SENSITIVE_FIELDS = [
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
   'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName',
   'socialInsuranceNo', 'taxCode', 'dependents', 'education',
-  'nationality', 'maritalStatus', 'nationalIdIssueDate', 'nationalIdIssuePlace'
+  'nationality', 'maritalStatus', 'nationalIdIssueDate', 'nationalIdIssuePlace',
+  // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
+  // Bao_cao_thang) — PHẢI nằm trong danh sách này để mặc định ẨN khỏi quản lý trực tiếp/chính chủ (xem
+  // getProfileForViewer() bên dưới: field KHÔNG nằm trong SENSITIVE_FIELDS sẽ LUÔN hiện, không ẩn được).
+  'disciplinaryActions'
 ];
 // Nhãn hiển thị tiếng Việt cho từng trường — dùng cho màn cấu hình admin (checkbox chọn trường nào mở
 // cho quản lý trực tiếp/chính chủ) lẫn client hiển thị danh sách trường đang cấu hình. Khớp ĐÚNG
@@ -96,7 +100,8 @@ const SENSITIVE_FIELD_LABELS = {
   bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn',
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
-  nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND'
+  nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
+  disciplinaryActions: 'Kỷ luật'
 };
 // Lọc input admin gửi lên chỉ giữ đúng các field NẰM TRONG SENSITIVE_FIELDS (chặn gửi field lạ/field
 // định danh-hệ thống — không có ý nghĩa gì để "mở thêm" vì các field đó vốn đã luôn hiện sẵn).
@@ -183,6 +188,10 @@ function defaultProfile(employeeCode) {
     bankAccountNo: null, bankName: null,
     socialInsuranceNo: null, taxCode: null,
     dependents: [], education: [],
+    // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
+    // Bao_cao_thang) — HR-only (HR_ONLY_EDITABLE_FIELDS bên dưới, KHÔNG tự phục vụ), nằm trong
+    // SENSITIVE_FIELDS nên mặc định ẨN khỏi quản lý trực tiếp/chính chủ tới khi admin chủ động mở.
+    disciplinaryActions: [],
     // nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace (GĐ1, 10/2026 — đối chiếu file
     // Excel quản lý thủ công của Nhân Sự, theo yêu cầu người dùng) — tự phục vụ/HR sửa qua
     // SELF_EDITABLE_FIELDS/HR_ONLY_EDITABLE_FIELDS bên dưới, cùng khuôn field cá nhân/định danh đã có.
@@ -621,7 +630,9 @@ const SELF_EDITABLE_FIELDS = [
 const HR_ONLY_EDITABLE_FIELDS = [
   'nationalId', 'socialInsuranceNo', 'taxCode',
   'nationalIdIssueDate', 'nationalIdIssuePlace', 'deskLocation', 'retirementDate', 'socialInsuranceAtThisUnit',
-  'employmentType', 'workSchedule'
+  'employmentType', 'workSchedule',
+  // disciplinaryActions (10/2026) — chỉ HR mới ghi nhận kỷ luật, KHÔNG đưa vào SELF_EDITABLE_FIELDS.
+  'disciplinaryActions'
 ];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
@@ -637,6 +648,7 @@ const PROFILE_FIELD_LABELS = {
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
   socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
+  disciplinaryActions: 'Kỷ luật',
   workSchedule: 'Thời gian làm việc'
 };
 
@@ -646,6 +658,16 @@ const PROFILE_FIELD_LABELS = {
 // hay năm ở tương lai xa). Dữ liệu này đi vào giảm trừ gia cảnh (số người phụ thuộc, lib/payroll.js) và
 // báo cáo nhân sự nên phải sạch ngay từ điểm ghi.
 const MIN_VALID_YEAR = 1900;
+// "Tháng" ở đây dùng định dạng "YYYY-MM" (khớp <input type="month"> HTML chuẩn) — dùng cho 4 field mới
+// deductionFromMonth/deductionToMonth/deductionCutMonth/declarationMonth bên dưới (10/2026, theo yêu cầu
+// người dùng, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC" — tờ khai giảm trừ gia cảnh thuế TNCN).
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+function assertValidDependentMonth(value, idx, label) {
+  if (value == null || String(value).trim() === '') return;
+  if (!MONTH_RE.test(String(value).trim())) {
+    throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: ${label} không hợp lệ (định dạng YYYY-MM)`);
+  }
+}
 function assertValidDependent(dep, idx) {
   if (!dep || typeof dep !== 'object') throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1} không hợp lệ`);
   if (!dep.fullName || !String(dep.fullName).trim()) throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: thiếu Họ tên`);
@@ -658,6 +680,24 @@ function assertValidDependent(dep, idx) {
       throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: Ngày sinh phải từ năm ${MIN_VALID_YEAR} trở đi và không ở tương lai`);
     }
   }
+  // 6 field MỚI (10/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC") — đều TUỲ
+  // CHỌN (hồ sơ cũ không có các field này vẫn hợp lệ), chỉ validate ĐỊNH DẠNG khi có nhập.
+  assertValidDependentMonth(dep.deductionFromMonth, idx, 'Thời gian tính giảm trừ (Từ tháng)');
+  assertValidDependentMonth(dep.deductionToMonth, idx, 'Thời gian tính giảm trừ (Đến tháng)');
+  assertValidDependentMonth(dep.deductionCutMonth, idx, 'Tháng cắt giảm trừ');
+  assertValidDependentMonth(dep.declarationMonth, idx, 'Tháng kê khai');
+  if (dep.deductionAmount != null && String(dep.deductionAmount).trim() !== '') {
+    const amount = Number(dep.deductionAmount);
+    if (!Number.isFinite(amount) || amount < 0) throw new HttpError(400, `Người phụ thuộc dòng ${idx + 1}: Số tiền giảm trừ không hợp lệ`);
+  }
+}
+// disciplinaryActions[] (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
+// Bao_cao_thang) — mỗi dòng 1 lần ghi nhận kỷ luật: ngày, loại (gợi ý từ danh mục DB.disciplinaryTypes,
+// chuỗi tự do — không ép khớp catalog), lý do/mô tả. HR-only (xem HR_ONLY_EDITABLE_FIELDS).
+function assertValidDisciplinaryAction(item, idx) {
+  if (!item || typeof item !== 'object') throw new HttpError(400, `Kỷ luật dòng ${idx + 1} không hợp lệ`);
+  if (!item.date || Number.isNaN(new Date(item.date).getTime())) throw new HttpError(400, `Kỷ luật dòng ${idx + 1}: thiếu Ngày hoặc không hợp lệ`);
+  if (!item.type || !String(item.type).trim()) throw new HttpError(400, `Kỷ luật dòng ${idx + 1}: thiếu Loại kỷ luật`);
 }
 function assertValidEducation(edu, idx) {
   if (!edu || typeof edu !== 'object') throw new HttpError(400, `Học vấn dòng ${idx + 1} không hợp lệ`);
@@ -740,7 +780,17 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
             fullName: String(d.fullName).trim().slice(0, 200),
             relationship: String(d.relationship).trim().slice(0, 50),
             dateOfBirth: d.dateOfBirth || null,
-            taxCode: d.taxCode ? String(d.taxCode).trim().slice(0, 20) : null
+            taxCode: d.taxCode ? String(d.taxCode).trim().slice(0, 20) : null,
+            // 6 field MỚI (10/2026, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC" — tờ khai giảm trừ gia
+            // cảnh thuế TNCN): Quốc tịch, Số CMND/Hộ chiếu người phụ thuộc, Thời gian tính giảm trừ (Từ
+            // tháng/Đến tháng), Tháng cắt giảm trừ, Số tiền giảm trừ, Tháng kê khai.
+            nationality: d.nationality ? String(d.nationality).trim().slice(0, 50) : null,
+            idNumber: d.idNumber ? String(d.idNumber).trim().slice(0, 20) : null,
+            deductionFromMonth: d.deductionFromMonth || null,
+            deductionToMonth: d.deductionToMonth || null,
+            deductionCutMonth: d.deductionCutMonth || null,
+            deductionAmount: d.deductionAmount != null && String(d.deductionAmount).trim() !== '' ? Number(d.deductionAmount) : null,
+            declarationMonth: d.declarationMonth || null
           };
         });
         profile.dependents = cleaned;
@@ -759,6 +809,22 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
           };
         });
         profile.education = cleaned;
+        break;
+      }
+      case 'disciplinaryActions': {
+        if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách kỷ luật không hợp lệ');
+        const cleaned = val.slice(0, 50).map((item, i) => {
+          assertValidDisciplinaryAction(item, i);
+          return {
+            id: item.id || randomUUID(),
+            date: item.date,
+            type: String(item.type).trim().slice(0, 100),
+            note: item.note ? String(item.note).trim().slice(0, 1000) : null,
+            decidedBy: actorUsername, decidedByName: actorName || actorUsername,
+            createdAt: item.createdAt || new Date().toISOString()
+          };
+        });
+        profile.disciplinaryActions = cleaned;
         break;
       }
       default:

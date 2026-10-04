@@ -1994,8 +1994,14 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Cấp Bậc (tuỳ chọn)</label>
-            <input id="orgChartNodeJobGradeInput" placeholder="VD: L7.2" maxlength="20" class="w-full border p-1.5 rounded text-sm">
-            <p class="text-[11px] text-gray-400 mt-1">Tự động ghi vào hồ sơ nhân sự khi HR gán/đổi chức vụ này — để trống nếu chưa cần dùng.</p>
+            <input id="orgChartNodeJobGradeInput" data-sdd-list="orgChartJobGradeDatalist" autocomplete="off" placeholder="VD: L7.2 — gõ hoặc chọn từ danh mục Cấp Bậc" maxlength="20" class="w-full border p-1.5 rounded text-sm">
+            <div id="orgChartJobGradeDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <p class="text-[11px] text-gray-400 mt-1">Tự động ghi vào hồ sơ nhân sự khi HR gán/đổi chức vụ này — để trống nếu chưa cần dùng. Danh mục gợi ý sửa ở Hệ Thống → Quản Lý Danh Mục → Cấp Bậc.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Định Biên (tuỳ chọn)</label>
+            <input id="orgChartNodeHeadcountQuotaInput" type="number" min="0" step="1" placeholder="VD: 3" class="w-full border p-1.5 rounded text-sm">
+            <p class="text-[11px] text-gray-400 mt-1">Số chỗ được duyệt cho vị trí này — dùng để tính Báo Cáo Định Biên Nhân Sự (Định biên/Thực tế/Chênh lệch). Để trống nếu chưa đặt kế hoạch.</p>
           </div>
         </div>
       </div>
@@ -2076,6 +2082,36 @@
     </div>
   </div>
 
+  <!-- Modal "Báo Cáo Định Biên Nhân Sự" (10/2026, theo yêu cầu người dùng) — Định biên = headcountQuota
+       đặt tay trên node POSITION (sửa qua modal Sửa Node ở trên); Thực tế tính ĐỘNG từ employeeProfiles/
+       hrProcesses/users, xem lib/headcountReport.js + GET /api/org-chart/versions/:id/headcount-report. -->
+  <div id="orgChartHeadcountModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h3 class="font-bold text-base text-gray-800">📋 Báo Cáo Định Biên Nhân Sự</h3>
+        <button data-op="closeOrgChartHeadcountModal" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="text-[11px] text-gray-500 flex-1">Định biên = số chỗ được duyệt (đặt tay ở Sửa Vị Trí). Thực tế = Đang làm việc + Đang bàn giao nghỉ việc + Thai sản/nghỉ ốm + Kiêm nhiệm×0.5, tính theo bản đang xem. Chênh lệch dương = cần tuyển thêm, âm = dôi dư.</p>
+          <a id="btnOrgChartHeadcountExportXlsx" href="#" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-emerald-700 inline-block whitespace-nowrap">📊 Xuất Excel</a>
+        </div>
+        <div class="border rounded max-h-[65vh] overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-left sticky top-0"><tr>
+              <th class="p-1.5">Cấp / Tên</th><th class="p-1.5">Chức Danh</th><th class="p-1.5">Cấp Bậc</th>
+              <th class="p-1.5 text-right">Định Biên</th><th class="p-1.5 text-right">Thực Tế</th><th class="p-1.5 text-right">Chênh Lệch</th>
+              <th class="p-1.5 text-right">Đang LV</th><th class="p-1.5 text-right">Bàn Giao NV</th><th class="p-1.5 text-right">TS/Nghỉ Ốm</th><th class="p-1.5 text-right">Kiêm Nhiệm</th>
+            </tr></thead>
+            <tbody id="orgChartHeadcountTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="p-4 border-t flex justify-end">
+        <button data-op="closeOrgChartHeadcountModal" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 hover:bg-gray-300">Đóng</button>
+      </div>
+    </div>
+  </div>
 
 <!-- MODAL XEM/XỬ LÝ YÊU CẦU HỖ TRỢ IT -->
 <div id="itTicketModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">

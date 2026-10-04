@@ -116,6 +116,19 @@ const DEFAULTS = {
   // Loại đào tạo (module con "Truyền Thông Nội Bộ" > Đào tạo, tạm thời) — phân loại Kho Tài Liệu và Lớp
   // Học, cùng cơ chế mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, không có tra cứu phụ thuộc).
   trainingCategories: [],
+  // Cấp Bậc (10/2026, theo yêu cầu người dùng "cho cấu hình trong danh mục để mình chọn") — danh mục MỞ
+  // dùng cho field "Cấp Bậc" của node POSITION ở Cơ Cấu Tổ Chức (orgChartNodeJobGradeInput), cùng cơ chế
+  // mở như jobTitles ở trên (danh sách nhãn hiển thị thuần, admin thêm/xoá tại Quản Lý Danh Mục). jobGrade
+  // trên node POSITION (lib/orgChart.js) VẪN LÀ CHUỖI TỰ DO (không ép phải khớp đúng 1 giá trị trong danh
+  // mục này) — cùng mức ràng buộc "mềm" như jobTitle (gợi ý qua sdd widget, không chặn tự gõ giá trị mới).
+  jobGrades: [],
+  // Lý Do Nghỉ Việc (10/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "LIST_LYDO_NGHIVIEC") — danh
+  // mục MỞ cho field "Lý do nghỉ việc" (TÁCH khỏi ô "Lý do / Ghi chú" tự do có sẵn trên form Offboarding —
+  // xem hrpOffbResignationReason ở module-hrlifecycle.js) để báo cáo thống kê được theo đúng nhóm lý do.
+  resignationReasons: [],
+  // Loại Kỷ Luật (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel Bao_cao_thang)
+  // — danh mục MỞ cho field "Loại kỷ luật" của disciplinaryActions[] trên hồ sơ Nhân Sự (lib/employeeProfile.js).
+  disciplinaryTypes: [],
 
   // Từ khoá nhạy cảm dùng để QUÉT (không CHẶN) bình luận ở Truyền Thông Nội Bộ — xem
   // addInternalPostComment() ở lib/recordActions.js. Khác jobTitles/trainingCategories ở trên (danh

@@ -81,6 +81,7 @@ function showHrCreateForm(type) {
     renderDynamicInputsForModule('HR_ONBOARDING', 'dynamicFieldsContainer_HR_ONBOARDING');
   } else if (type === 'OFFBOARDING') {
     populateSystemUsersDatalist();
+    sddSetOptions('resignationReasonDatalist', (DB.resignationReasons || []).map(r => ({ label: r, value: r })));
     updateHrpOffboardingSubmitState();
     renderDynamicInputsForModule('HR_OFFBOARDING', 'dynamicFieldsContainer_HR_OFFBOARDING');
   }
@@ -311,6 +312,7 @@ async function submitHrpOffboarding(e) {
     isManagerialPosition: document.getElementById('hrpOffbIsManagerial').checked,
     directManagerUsername: document.getElementById('hrpOffbDirectManagerUsername').value || null,
     reason: document.getElementById('hrpOffbReason').value.trim(),
+    resignationReason: document.getElementById('hrpOffbResignationReason').value.trim(),
     customData
   };
   let newItem;

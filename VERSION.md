@@ -1,8 +1,70 @@
 # Phiên bản hiện tại
 
-**24.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.89 (2026-10-04): Cấp Bậc (danh mục) + Lý Do Nghỉ Việc + Kỷ Luật + 7 trường Người Phụ Thuộc
+
+Tiếp nối v24.88 (đã nêu rõ 3 gap chưa làm) — theo yêu cầu người dùng "làm luôn cả 2 phần, Cấp Bậc đã có
+danh mục chưa, nếu chưa thì cho cấu hình":
+
+1. **3 danh mục MỞ mới** (Hệ Thống → Quản Lý Danh Mục, dùng chung registry "danh mục mảng chuỗi phẳng"
+   sẵn có — `SIMPLE_CATALOG_EXCEL_CONFIG`/`SIMPLE_CATALOG_BULK_CONFIG` ở `core.js` + `GENERIC_SIMPLE_
+   CATALOGS` CRUD dùng chung ở `module-admin.js`): **Cấp Bậc** (`jobGrades`), **Lý Do Nghỉ Việc**
+   (`resignationReasons`), **Loại Kỷ Luật** (`disciplinaryTypes`) — `defaults.js`/`routes/data.js`
+   (`ADMIN_ONLY_KEYS`).
+2. **Cấp Bậc**: ô "Cấp Bậc" của Vị Trí (Cơ Cấu Tổ Chức) đổi từ gõ tay hoàn toàn tự do sang gõ-hoặc-chọn
+   (widget `sdd*`, KHÔNG dùng `<datalist>` native) gợi ý từ danh mục trên — vẫn là chuỗi tự do, không ép
+   khớp (`public/index.html` + `module-orgchart.js`: `ocPopulateJobGradeDatalist()`).
+3. **Lý Do Nghỉ Việc**: thêm field MỚI `resignationReason` trên `hrProcesses` OFFBOARDING (gõ-hoặc-chọn
+   từ danh mục), TÁCH khỏi field `reason` tự do có sẵn (đổi nhãn "Ghi Chú Thêm") — `lib/createValidation.js`
+   (trim + cắt 200 ký tự) + `hrLifecycleSection.html`/`module-hrlifecycle.js`.
+4. **Kỷ luật ("Số kỷ luật")**: thêm `disciplinaryActions[]` (Ngày/Loại kỷ luật — gợi ý từ danh mục/Ghi
+   chú) trên `employeeProfiles`, cùng kiến trúc mảng lồng với `dependents[]`/`education[]` (không phải
+   collection SQL riêng) — HR-only (`HR_ONLY_EDITABLE_FIELDS`), thêm vào `SENSITIVE_FIELDS` (opt-in qua
+   2 cấu hình "Trường Xem..." có sẵn, nâng tổng số trường nhạy cảm cấu hình được từ 19 lên 20) — KHÔNG
+   bao giờ hiện ở "Hồ Sơ Của Tôi" (`lib/employeeProfile.js` + UI mới trong `module-hrprofile.js`).
+5. **Người Phụ Thuộc — 7 trường mới** phục vụ khai giảm trừ gia cảnh thuế TNCN (đối chiếu mẫu "DATA
+   NGUOI PHU THUOC"): Quốc tịch, Số CMND/Hộ chiếu, Thời gian tính giảm trừ (Từ tháng/Đến tháng), Tháng
+   cắt giảm trừ, Số tiền giảm trừ, Tháng kê khai — đều tuỳ chọn, validate định dạng tháng (`YYYY-MM`,
+   khớp `<input type="month">`) + số tiền không âm (`lib/employeeProfile.js`: `assertValidDependentMonth()`).
+6. Test mới `tests/test-hr-discipline-jobgrade-resignation.js` (24 kịch bản: validate disciplinaryActions/
+   7 field mới dependents, visibility gating SENSITIVE_FIELDS, resignationReason persistence) — cập nhật
+   số lượng field nhạy cảm (19→20) ở `test-hr-profile.js`/`test-hr-profile-field-visibility.js`. Toàn bộ
+   test liên quan (Hồ Sơ Nhân Sự, Cơ Cấu Tổ Chức, Onboarding/Offboarding, Quản Lý Danh Mục, Nghiệp Vụ)
+   đã chạy lại — PASS, không có regression.
+7. Cập nhật `NGHIEP_VU_DOCS.orgChart/hrLifecycle/hrProfile` (`module-nghiepvu.js`) + mục mới 5f ở
+   `deploy/Huong-dan-nghiep-vu.md`.
+
+Deploy-impact: KHÔNG có thay đổi `schema.sql`/`.env.example`/`package.json` dependencies (chỉ thêm field
+JSON mới trên collection JSON-blob có sẵn + 3 danh mục mảng chuỗi mới trong `AppData`) — chỉ cần copy code
++ `pm2 restart`, không cần thao tác thủ công nào khác.
+
+## v24.88 (2026-10-04): Tính năng mới — Báo Cáo Định Biên Nhân Sự (Nhân Sự → Cơ Cấu Tổ Chức)
+
+Theo yêu cầu người dùng "biết được định biên nhân sự hiện tại, định biên nhân sự cần tuyển" — đã phân
+tích + đề xuất phương án qua doc riêng, demo xong và triển khai theo đúng Phương án A đã đề xuất:
+
+1. **`headcountQuota`** — field MỚI, tuỳ chọn (số nguyên ≥ 0, mặc định trống) trên mỗi node POSITION
+   của Cơ Cấu Tổ Chức (`lib/orgChart.js`) — "Định biên" (số chỗ được duyệt), đặt tay qua modal Sửa Vị
+   Trí hiện có (ô "Định Biên (tuỳ chọn)" mới), không cần field/collection nào khác.
+2. **`lib/headcountReport.js`** (mới) — tính "Thực tế" ĐỘNG (không lưu gì) từ dữ liệu đã có sẵn:
+   `employeeProfiles.positionKey` (đang làm việc/thai sản-nghỉ ốm, theo status ACTIVE/ON_LEAVE),
+   `hrProcesses` OFFBOARDING đang IN_PROGRESS (đang bàn giao nghỉ việc), `users[].secondaryPositions[]`
+   (kiêm nhiệm, hệ số ×0.5) — cộng dồn theo đúng cấp cây (Vị Trí → Phòng Ban → Khối → Công Ty).
+3. **2 route mới** `GET /api/org-chart/versions/:id/headcount-report` (JSON) và
+   `.../headcount-report/export-xlsx` (Excel, reuse `buildGenericWorkbook()`) — `routes/orgChart.js`.
+4. **UI**: nút "📋 Báo Cáo Định Biên Nhân Sự" (màn Cơ Cấu Tổ Chức) mở bảng Định Biên/Thực Tế/Chênh Lệch
+   (kèm breakdown Đang Làm Việc/Bàn Giao Nghỉ Việc/TS-Nghỉ Ốm/Kiêm Nhiệm) + nút Xuất Excel.
+5. Test mới `tests/test-orgchart-headcount-report.js` (12 kịch bản, tính Thực Tế + CRUD quota + route
+   JSON/Excel) + demo `tests/demo-orgchart-headcount.js` — toàn bộ test Cơ Cấu Tổ Chức hiện có (5 file)
+   vẫn PASS. Cập nhật `NGHIEP_VU_DOCS.orgChart` + `deploy/Huong-dan-nghiep-vu.md` mục 4.5.1.
+
+Đã rà soát riêng, CHƯA làm ở đợt này (nêu rõ với người dùng, chờ xác nhận hướng xử lý): báo cáo xuất
+Excel cho các sheet còn lại của mẫu Excel người dùng cung cấp (LIST_CHUCDANH/LIST_BOPHAN đã có catalog
+sẵn sàng xuất; LIST_LYDO_NGHIVIEC + "Số kỷ luật" + phần mở rộng `dependents[]` cho tờ khai thuế TNCN đều
+cần field/tính năng hoàn toàn mới, chưa có dữ liệu nền).
 
 ## v24.87 (2026-10-04): Vá 3 mục mức Thấp (cosmetic) còn lại từ đợt rà soát v24.74→v24.81
 

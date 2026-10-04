@@ -2472,10 +2472,35 @@ theo đúng vị trí trong cây**.
   quan hệ MỚI, khiến quản lý CŨ tiếp tục có quyền đánh giá KPI của nhân viên
   đã chuyển sang quản lý khác ("2 người cùng chấm 1 người"). Quan hệ thêm
   THỦ CÔNG (không theo cây báo cáo hành chính) không bao giờ bị đụng vào.
+- **📋 Báo Cáo Định Biên Nhân Sự (10/2026, theo yêu cầu người dùng "biết được
+  định biên hiện tại, định biên cần tuyển")** — nút riêng ở thanh công cụ,
+  hiện cho ai xem được version (cùng quyền `requireView` như xem cây):
+  - **Định Biên**: số chỗ được duyệt cho 1 **Vị Trí**, admin/HR tự đặt tay
+    ngay trong modal Sửa Vị Trí (ô "Định Biên (tuỳ chọn)", số nguyên ≥ 0) —
+    **field hoàn toàn mới**, không suy ra được từ dữ liệu vận hành sẵn có. Để
+    trống (không hiện "0") nếu chưa đặt kế hoạch cho vị trí đó.
+  - **Thực Tế**: tính **ĐỘNG mỗi lần mở báo cáo**, KHÔNG lưu gì thêm, gồm 4
+    cột con: **Đang Làm Việc** (hồ sơ Hồ Sơ Nhân Sự đang gán đúng vị trí đó,
+    trạng thái Đang làm việc) + **Đang Bàn Giao Nghỉ Việc** (đang có quy
+    trình Offboarding CHƯA hoàn tất) + **Thai Sản/Nghỉ Ốm** (trạng thái Đang
+    nghỉ phép dài hạn — hệ thống hiện GỘP CHUNG 1 cột, chưa tách được 2 lý do
+    riêng) + **Kiêm Nhiệm** (tính hệ số ×0.5/người, lấy từ "Vị Trí Kiêm
+    Nhiệm" đã gán ở hồ sơ Người Dùng).
+  - **Chênh Lệch** = Định Biên − Thực Tế: dương (tô cam) = còn thiếu người,
+    cần tuyển thêm đúng số đó; âm (tô đỏ) = đang dư người so với kế hoạch.
+  - Số liệu **cộng dồn theo đúng cấp cây** (Vị Trí → Phòng Ban chứa nó → Khối
+    → Công Ty) — dòng Phòng Ban/Khối/Công Ty hiện tổng Định Biên/Thực Tế của
+    toàn bộ nhánh con, không phải số riêng của chính node đó.
+  - Bấm **"📊 Xuất Excel"** ngay trong bảng báo cáo để tải về — route riêng
+    (không qua `/api/admin/export-xlsx` dùng chung, vì cần tính Thực Tế từ dữ
+    liệu Hồ Sơ Nhân Sự vốn đã bị chặn khỏi API Báo Cáo chung — cùng lý do như
+    mục 4.5.3 "Báo Cáo Nhân Sự").
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa dựng bảng
   lịch sử "ai giữ vị trí nào từ ngày nào"; danh sách Phòng Ban toàn hệ thống
   (`DB.depts`) chưa gắn động theo cây; chưa có cảnh báo tự động khi Offboarding
-  1 người đang là người đánh giá KPI của vị trí khác.
+  1 người đang là người đánh giá KPI của vị trí khác; Định Biên chưa có khái
+  niệm "theo kỳ/năm" (chỉ 1 con số hiện hành cho mỗi vị trí, không giữ lịch
+  sử định biên các kỳ trước — nếu cần, đây là hướng mở rộng sau).
 
 #### 4.5.2. Onboarding / Offboarding
 
@@ -4214,6 +4239,46 @@ làm được nay bị chặn:
   YouTube** tự lấy ảnh đại diện THẬT từ YouTube (không cần tải lên gì
   thêm); tài liệu dạng **Ảnh** hiển thị thẳng chính ảnh đó làm đại diện
   (như trước).
+
+---
+
+## 5f. Đợt cập nhật 10/2026: Danh mục Cấp Bậc + Lý Do Nghỉ Việc + Kỷ Luật + 7 trường Người Phụ Thuộc
+
+**3 danh mục MỞ mới (Hệ Thống → Quản Lý Danh Mục)**
+- **Cấp Bậc** — gợi ý cho ô "Cấp Bậc" của 1 Vị Trí trong **Cơ Cấu Tổ Chức**
+  (trước đây là ô gõ tay hoàn toàn tự do, không có danh mục nào cả).
+- **Lý Do Nghỉ Việc** — gợi ý cho ô "Lý Do Nghỉ Việc" khi tạo **Offboarding**.
+- **Loại Kỷ Luật** — gợi ý cho ô "Loại kỷ luật" ở khối Kỷ luật (Hồ Sơ Nhân Sự).
+- Cả 3 đều là danh mục **MỀM** (gợi ý qua ô gõ-hoặc-chọn, giống hệt "Chức
+  Danh"/"Phòng Ban" đã có từ trước) — KHÔNG ép buộc giá trị nhập phải khớp
+  đúng 1 mục có sẵn trong danh mục. Quản trị thêm/xoá mục trong danh mục
+  giống mọi danh mục khác (Thêm/Sửa/Xoá, chọn nhiều để xoá, Tải Mẫu/Nhập/
+  Xuất Excel — dùng chung registry "danh mục mảng chuỗi phẳng" đã có).
+
+**Onboarding/Offboarding — ô "Lý Do Nghỉ Việc" mới (chỉ Offboarding)**
+- Form tạo **Offboarding** có thêm ô **"Lý Do Nghỉ Việc"** (gõ-hoặc-chọn từ
+  danh mục ở trên), TÁCH RIÊNG khỏi ô **"Ghi Chú Thêm"** tự do có sẵn từ
+  trước (đổi nhãn từ "Lý do / Ghi chú" để rõ nghĩa hơn — không đổi hành vi/
+  dữ liệu đã lưu trước đó). Mục đích: thống kê báo cáo được theo đúng nhóm
+  lý do nghỉ việc thay vì phải đọc tay từng dòng ghi chú tự do.
+
+**Hồ Sơ Nhân Sự — khối "⚠️ Kỷ luật" mới (chỉ HR, tab "📋 Quản Lý Hồ Sơ")**
+- Mỗi hồ sơ nhân sự nay có thêm mảng **Kỷ luật**: Ngày, Loại kỷ luật (gợi ý
+  từ danh mục "Loại Kỷ Luật"), Ghi chú — chỉ người có quyền quản lý Hồ Sơ
+  Nhân Sự mới thêm/sửa được, KHÔNG hiện ở "👤 Hồ Sơ Của Tôi" (nhân viên
+  không tự xem/sửa kỷ luật của chính mình qua hệ thống này). Đây là field
+  **nhạy cảm** (nằm trong cấu hình "⚙️ Trường Xem Của Quản Lý Trực Tiếp" —
+  mặc định ẨN, admin phải chủ động mở mới cho quản lý trực tiếp xem được ở
+  bản giới hạn), nâng tổng số trường nhạy cảm có thể cấu hình từ 19 lên 20.
+
+**Người Phụ Thuộc — 7 trường mới phục vụ khai giảm trừ gia cảnh thuế TNCN**
+- Đối chiếu mẫu khai "Người Phụ Thuộc" của bộ phận Nhân Sự, mỗi người phụ
+  thuộc (Hồ Sơ Nhân Sự → khối "👨‍👩‍👧 Người phụ thuộc") có thêm: **Quốc
+  tịch**, **Số CMND/Hộ chiếu**, **Thời gian tính giảm trừ** (Từ tháng/Đến
+  tháng — chọn tháng/năm), **Tháng cắt giảm trừ**, **Số tiền giảm trừ**,
+  **Tháng kê khai**. Cả 7 trường đều **TUỲ CHỌN** (hồ sơ cũ/để trống vẫn
+  lưu và hiển thị bình thường) — áp dụng cho cả form nhập tay và Nhập/Xuất
+  Excel hàng loạt.
 
 ---
 

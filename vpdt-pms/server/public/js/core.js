@@ -4977,7 +4977,13 @@ const SIMPLE_CATALOG_EXCEL_CONFIG = {
   cats: { label: 'Phân Loại Tài Liệu', colLabel: 'Tên Phân Loại', sample: 'Quy chế', renderFn: 'renderCatList' },
   contractTypes: { label: 'Loại Hợp Đồng', colLabel: 'Tên Loại Hợp Đồng', sample: 'Hợp đồng thử việc', renderFn: 'renderContractTypeAbbrList' },
   jobTitles: { label: 'Chức Danh (Khối VP/HO)', colLabel: 'Tên Chức Danh', sample: 'Nhân Viên Kinh Doanh', renderFn: 'renderJobTitleList' },
-  trainingCategories: { label: 'Loại Đào Tạo', colLabel: 'Tên Loại Đào Tạo', sample: 'Đào tạo hội nhập', renderFn: 'renderTrainingCategoryList' }
+  trainingCategories: { label: 'Loại Đào Tạo', colLabel: 'Tên Loại Đào Tạo', sample: 'Đào tạo hội nhập', renderFn: 'renderTrainingCategoryList' },
+  // 3 danh mục MỚI (10/2026, theo yêu cầu người dùng) — dùng chung GENERIC_SIMPLE_CATALOGS +
+  // renderGenericSimpleCatalogList() (module-admin.js) nên renderFn trỏ về CÙNG 1 hàm cho cả 3, khác các
+  // dòng phía trên (mỗi danh mục cũ có hàm renderXxxList() riêng).
+  jobGrades: { label: 'Cấp Bậc', colLabel: 'Tên Cấp Bậc', sample: 'L5', renderFn: 'renderJobGradeList' },
+  resignationReasons: { label: 'Lý Do Nghỉ Việc', colLabel: 'Lý Do', sample: 'Nghỉ việc cá nhân', renderFn: 'renderResignationReasonList' },
+  disciplinaryTypes: { label: 'Loại Kỷ Luật', colLabel: 'Tên Loại Kỷ Luật', sample: 'Nhắc nhở', renderFn: 'renderDisciplinaryTypeList' }
 };
 
 function renderSimpleCatalogExcelToolsHtml(catalogKey) {
@@ -5465,7 +5471,10 @@ const SIMPLE_CATALOG_BULK_CONFIG = {
   cats: { dbKey: 'cats', kindLabel: 'phân loại tài liệu', renderFn: 'renderCatList', extraDbKey: 'docCatAbbrs' },
   jobTitles: { dbKey: 'jobTitles', kindLabel: 'chức danh', renderFn: 'renderJobTitleList' },
   trainingCategories: { dbKey: 'trainingCategories', kindLabel: 'loại đào tạo', renderFn: 'renderTrainingCategoryList',
-    afterDelete: () => { if (typeof syncTrainingCategorySelectsIfLoaded === 'function') syncTrainingCategorySelectsIfLoaded(); } }
+    afterDelete: () => { if (typeof syncTrainingCategorySelectsIfLoaded === 'function') syncTrainingCategorySelectsIfLoaded(); } },
+  jobGrades: { dbKey: 'jobGrades', kindLabel: 'cấp bậc', renderFn: 'renderJobGradeList' },
+  resignationReasons: { dbKey: 'resignationReasons', kindLabel: 'lý do nghỉ việc', renderFn: 'renderResignationReasonList' },
+  disciplinaryTypes: { dbKey: 'disciplinaryTypes', kindLabel: 'loại kỷ luật', renderFn: 'renderDisciplinaryTypeList' }
 };
 
 const catalogBulkSelection = {}; // { [catalogKey]: Set<string> } — reset tự nhiên khi tải lại trang.

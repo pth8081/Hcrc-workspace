@@ -906,6 +906,45 @@
         <div id="simpleCatalogExcelTools_jobTitles"></div>
       </div>
 
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎚️ Danh Mục Cấp Bậc</h3>
+        <p class="text-[11px] text-fuchsia-700">Gợi ý cho ô "Cấp Bậc" khi Thêm/Sửa Vị Trí ở Cơ Cấu Tổ Chức (Nhân Sự) — chỉ là danh sách gợi ý, vẫn gõ tự do được.</p>
+        <form data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'jobGrades'" class="flex gap-2">
+          <input id="txtJobGradeName" placeholder="Tên cấp bậc mới, VD: L5..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="jobGradeList" class="divide-y text-xs"></ul>
+        </div>
+        <div id="simpleCatalogExcelTools_jobGrades"></div>
+      </div>
+
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🚪 Danh Mục Lý Do Nghỉ Việc</h3>
+        <p class="text-[11px] text-fuchsia-700">Gợi ý cho ô "Lý do nghỉ việc" khi tạo Offboarding (Nhân Sự → Onboarding/Offboarding) — chỉ là danh sách gợi ý, vẫn gõ tự do được.</p>
+        <form data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'resignationReasons'" class="flex gap-2">
+          <input id="txtResignationReasonName" placeholder="Lý do mới, VD: Nghỉ việc cá nhân..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="resignationReasonList" class="divide-y text-xs"></ul>
+        </div>
+        <div id="simpleCatalogExcelTools_resignationReasons"></div>
+      </div>
+
+      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">⚠️ Danh Mục Loại Kỷ Luật</h3>
+        <p class="text-[11px] text-fuchsia-700">Gợi ý cho ô "Loại kỷ luật" khi HR ghi nhận kỷ luật ở Hồ Sơ Nhân Sự — chỉ là danh sách gợi ý, vẫn gõ tự do được.</p>
+        <form data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'disciplinaryTypes'" class="flex gap-2">
+          <input id="txtDisciplinaryTypeName" placeholder="Loại kỷ luật mới, VD: Nhắc nhở..." class="border p-1.5 rounded text-xs flex-1" required>
+          <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+        </form>
+        <div class="max-h-32 overflow-y-auto bg-white rounded border">
+          <ul id="disciplinaryTypeList" class="divide-y text-xs"></ul>
+        </div>
+        <div id="simpleCatalogExcelTools_disciplinaryTypes"></div>
+      </div>
+
       <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
         <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🏪 Danh Sách Chức Danh (Siêu Thị)</h3>
         <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ.</p>

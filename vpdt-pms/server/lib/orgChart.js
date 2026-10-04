@@ -52,6 +52,13 @@ const POS_TYPES = new Set(['HO', 'STORE']);
 // thao tác được. Nay sinh theo "lớn nhất đang có + 1" — cùng khuôn computeNextEmployeeCodeSeq()
 // (lib/employeeProfile.js)/generateContractCode() (lib/laborContract.js): đơn điệu tăng, không bao giờ
 // trùng trong cùng 1 mảng, giữ nguyên các id Date.now() cũ đang tồn tại (không cần migrate dữ liệu).
+function normalizeHeadcountQuota(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) throw new HttpError(400, 'Định biên phải là số nguyên không âm');
+  return Math.round(n);
+}
+
 function nextIdFor(items) {
   let maxId = 0;
   for (const it of items || []) {
@@ -166,7 +173,7 @@ function findPositionNodeForUser(version, user) {
 
 // ===== CRUD node (chỉ khi version.status==='DRAFT') =====
 
-function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, displayOrder }) {
+function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, headcountQuota, displayOrder }) {
   requireDraft(version);
   if (!NODE_TYPES.has(nodeType)) throw new HttpError(400, 'Loại node không hợp lệ');
   const isRoot = parentNodeId == null;
@@ -195,6 +202,11 @@ function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, job
     // dựng danh mục riêng vì mỗi vị trí luôn cùng 1 cấp bậc, không cần chọn lại mỗi lần) — snapshot
     // xuống hồ sơ khi gán chức vụ (xem applyPositionAssignment(), lib/employeeProfile.js).
     jobGrade: nodeType === 'POSITION' ? (jobGrade ? String(jobGrade).trim().slice(0, 20) : null) : null,
+    // headcountQuota (Định Biên Nhân Sự, 10/2026 — theo yêu cầu người dùng "báo cáo định biên hiện tại/
+    // cần tuyển"): số nguyên ≥ 0, TUỲ CHỌN (null = chưa đặt định biên), CHỈ có trên node POSITION — đây là
+    // phần dữ liệu DUY NHẤT không suy ra được từ dữ liệu vận hành sẵn có (số người ĐANG giữ vị trí suy
+    // động được từ employeeProfiles.positionKey, xem lib/headcountReport.js), do quản lý tự đặt kế hoạch.
+    headcountQuota: nodeType === 'POSITION' ? normalizeHeadcountQuota(headcountQuota) : null,
     nodeName: nodeType === 'POSITION' ? null : nodeName.trim(),
     positionKey: nodeType === 'POSITION' ? randomUUID() : null,
     displayOrder: Number.isFinite(displayOrder) ? displayOrder : (version.nodes || []).length
@@ -241,6 +253,9 @@ function editNode(version, nodeId, patch) {
     }
     if (patch.jobGrade !== undefined) {
       node.jobGrade = patch.jobGrade ? String(patch.jobGrade).trim().slice(0, 20) : null;
+    }
+    if (patch.headcountQuota !== undefined) {
+      node.headcountQuota = normalizeHeadcountQuota(patch.headcountQuota);
     }
   } else if (patch.nodeName !== undefined) {
     if (!patch.nodeName || !patch.nodeName.trim()) throw new HttpError(400, 'Tên không được để trống');
@@ -577,6 +592,7 @@ function renameJobTitleInAllVersions(versions, oldValue, newValue, isStore) {
 module.exports = {
   findVersion, getAppliedVersion, requireVersion, requireDraft,
   buildNodeDisplayName, findNearestDeptAncestor, resolvePositionOccupants, findPositionNodeForUser,
+  normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
   bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion,

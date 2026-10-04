@@ -482,6 +482,59 @@ async function renameJobTitle(name) {
   if (ok) { renderJobTitleList(); populateDropdowns(); }
 }
 
+// ===== 3 danh mục chuỗi phẳng MỚI (10/2026, theo yêu cầu người dùng): Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ
+// Luật — cùng mô hình thêm/xoá như Phòng Ban/Chức Danh ở trên nhưng KHÔNG cần "✏️ Sửa" (rename có
+// cascade, xem renameCatalogEntryClient()) vì 3 giá trị này chỉ dùng làm GỢI Ý (sdd widget cho phép gõ
+// tự do, không ép field tham chiếu phải khớp đúng 1 giá trị trong danh mục — xoá/sửa tên không làm hỏng
+// dữ liệu cũ) — viết CHUNG 1 bộ hàm thay vì lặp lại 3 lần cho jobTitle/depts style cũ.
+const GENERIC_SIMPLE_CATALOGS = {
+  jobGrades: { listId: 'jobGradeList', inputId: 'txtJobGradeName', label: 'cấp bậc', logPrefix: 'JOB_GRADE' },
+  resignationReasons: { listId: 'resignationReasonList', inputId: 'txtResignationReasonName', label: 'lý do nghỉ việc', logPrefix: 'RESIGNATION_REASON' },
+  disciplinaryTypes: { listId: 'disciplinaryTypeList', inputId: 'txtDisciplinaryTypeName', label: 'loại kỷ luật', logPrefix: 'DISCIPLINARY_TYPE' }
+};
+async function saveGenericSimpleCatalogEntry(key) {
+  const cfg = GENERIC_SIMPLE_CATALOGS[key];
+  if (!cfg) return;
+  const input = document.getElementById(cfg.inputId);
+  const name = input.value.trim();
+  if (!name) return;
+  if ((DB[key] || []).includes(name)) return alert(`Giá trị "${name}" đã tồn tại trong danh mục ${cfg.label}!`);
+  const prev = [...(DB[key] || [])];
+  DB[key] = [...prev, name];
+  const saved = await syncStorage(key);
+  if (!saved) { DB[key] = prev; return; }
+  logSystemAction('USER_MGM', `ADD_${cfg.logPrefix}`, `Thêm ${cfg.label} mới [${name}]`, 'SUCCESS', name);
+  input.value = '';
+  renderGenericSimpleCatalogList(key);
+}
+async function deleteGenericSimpleCatalogEntry(key, name) {
+  const cfg = GENERIC_SIMPLE_CATALOGS[key];
+  if (!cfg) return;
+  if (!confirmCatalogValueDeletion(cfg.label, name)) return;
+  const prev = [...(DB[key] || [])];
+  DB[key] = prev.filter(v => v !== name);
+  const saved = await syncStorage(key);
+  if (!saved) { DB[key] = prev; renderGenericSimpleCatalogList(key); return; }
+  logSystemAction('USER_MGM', `DELETE_${cfg.logPrefix}`, `Xóa ${cfg.label} [${name}]`, 'SUCCESS', name);
+  renderGenericSimpleCatalogList(key);
+}
+function renderGenericSimpleCatalogList(key) {
+  const cfg = GENERIC_SIMPLE_CATALOGS[key];
+  if (!cfg) return;
+  const ul = document.getElementById(cfg.listId);
+  if (!ul) return;
+  ul.innerHTML = renderCatalogBulkBarHtml(key) + (DB[key] || []).map(v => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderCatalogBulkCheckboxHtml(key, v)}
+      <span class="flex-1">${escapeHtml(v)}</span>
+      <button data-op="deleteGenericSimpleCatalogEntry" data-arg0="'${escapeHtml(key)}'" data-arg1="'${escapeHtml(v)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('');
+}
+function renderJobGradeList() { renderGenericSimpleCatalogList('jobGrades'); }
+function renderResignationReasonList() { renderGenericSimpleCatalogList('resignationReasons'); }
+function renderDisciplinaryTypeList() { renderGenericSimpleCatalogList('disciplinaryTypes'); }
+
 // ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label}[] (mục 4a) — TÁCH khỏi DB.jobTitles
 // (Khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType==='STORE' ở form Người Dùng đầy đủ.
 // Trước đây còn cờ restrictedFromSelfService (khoá 1 chức danh khỏi form rút gọn "Quản Lý Nhân Viên Siêu

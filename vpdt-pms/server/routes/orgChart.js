@@ -21,6 +21,9 @@ const { sendServerError, sendCatchError } = require('../lib/errorResponse');
 const orgChart = require('../lib/orgChart');
 const orgChartImport = require('../lib/orgChartImport');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { computeHeadcountReport } = require('../lib/headcountReport');
+const { buildGenericWorkbook } = require('../lib/adminExport');
+const { getAllForCollection } = require('../lib/recordStore');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -294,6 +297,68 @@ router.get('/versions/:id/export-xlsx', async (req, res) => {
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('GET /api/org-chart/versions/:id/export-xlsx lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể xuất file' });
+  }
+});
+
+// GET /api/org-chart/versions/:id/headcount-report — Báo Cáo Định Biên Nhân Sự (10/2026): "Thực tế"
+// tính ĐỘNG từ employeeProfiles/hrProcesses/users (xem lib/headcountReport.js), KHÔNG đọc/ghi gì thêm.
+async function loadHeadcountReport(versionId) {
+  const list = (await getAppDataValue('orgChartVersions')) || [];
+  const version = orgChart.requireVersion(list, Number(versionId));
+  const [employeeProfiles, hrProcesses, users] = await Promise.all([
+    getAppDataValue('employeeProfiles').then(v => v || []),
+    getAllForCollection('hrProcesses'),
+    getAppDataValue('users').then(v => v || [])
+  ]);
+  return { version, report: computeHeadcountReport(version, employeeProfiles, hrProcesses, users) };
+}
+router.get('/versions/:id/headcount-report', async (req, res) => {
+  if (!requireView(req, res)) return;
+  try {
+    const { report } = await loadHeadcountReport(req.params.id);
+    res.json(report);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'GET /api/org-chart/versions/:id/headcount-report', 'Không thể tính báo cáo định biên');
+  }
+});
+
+// GET /api/org-chart/versions/:id/headcount-report/export-xlsx — cùng dữ liệu route JSON trên, xuất
+// thẳng ra Excel (reuse buildGenericWorkbook() — lib/adminExport.js, đúng khuôn 1 sheet {columns, rows}).
+router.get('/versions/:id/headcount-report/export-xlsx', async (req, res) => {
+  if (!requireView(req, res)) return;
+  try {
+    const { version, report } = await loadHeadcountReport(req.params.id);
+    const columns = [
+      { header: 'Cấp / Tên', key: 'displayName', width: 40 },
+      { header: 'Chức Danh', key: 'jobTitle', width: 26 },
+      { header: 'Cấp Bậc', key: 'jobGrade', width: 10 },
+      { header: 'Định Biên', key: 'quota', width: 10 },
+      { header: 'Thực Tế', key: 'actualTotal', width: 10 },
+      { header: 'Chênh Lệch', key: 'variance', width: 10 },
+      { header: 'Đang Làm Việc', key: 'active', width: 12 },
+      { header: 'Đang Bàn Giao Nghỉ Việc', key: 'offboarding', width: 16 },
+      { header: 'Thai Sản/Nghỉ Ốm', key: 'onLeave', width: 14 },
+      { header: 'Kiêm Nhiệm', key: 'secondary', width: 10 },
+      { header: 'Mã Vị Trí', key: 'positionKey', width: 28 }
+    ];
+    const rows = report.rows.map(r => ({
+      displayName: `${'　'.repeat(r.level)}${r.displayName || ''}`,
+      jobTitle: r.jobTitle || '', jobGrade: r.jobGrade || '',
+      quota: r.quota == null ? '' : r.quota, actualTotal: r.actualTotal,
+      variance: r.variance == null ? '' : r.variance,
+      active: r.active, offboarding: r.offboarding, onLeave: r.onLeave, secondary: r.secondary,
+      positionKey: r.positionKey || ''
+    }));
+    const wb = buildGenericWorkbook('Dinh Bien Nhan Su', columns, rows);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Dinh_Bien_Nhan_Su_${version.id}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('GET /api/org-chart/versions/:id/headcount-report/export-xlsx lỗi:', err.message);
     res.status(500).json({ error: 'Không thể xuất file' });
   }
 });
