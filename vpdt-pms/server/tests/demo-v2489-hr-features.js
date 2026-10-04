@@ -81,6 +81,7 @@ async function main() {
   const server = await startStaticServer(PORT);
   const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
+  try {
   const page = await browser.newPage();
   await page.setViewportSize({ width: 1400, height: 1100 });
 
@@ -162,7 +163,13 @@ async function main() {
   }, { version: ORG_VERSION, profile: HR_PROFILE });
 
   // ===== Ảnh 1: Quản Lý Danh Mục — 3 danh mục mới (Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật) =====
-  await page.evaluate(() => { switchTab('system'); setSystemSubTab('ADMIN'); });
+  // switchTab() nạp lười module JS theo nhóm (loadModuleGroup()) — PHẢI tách riêng 1 evaluate() +
+  // waitForTimeout() TRƯỚC KHI gọi hàm thuộc module đó (setSystemSubTab() nằm trong hethong-tabs.js),
+  // nếu không sẽ ReferenceError do script module chưa kịp nạp xong (lỗi THẬT gặp phải lúc đầu viết demo
+  // này, cùng lớp lỗi timing — không phải hàm chưa tồn tại).
+  await page.evaluate(() => switchTab('system'));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => setSystemSubTab('ADMIN'));
   await page.waitForSelector('#jobGradeList', { timeout: 5000 });
   await page.waitForTimeout(200);
   {
@@ -208,6 +215,7 @@ async function main() {
 
   // ===== Ảnh 4: Hồ Sơ Nhân Sự (Quản Lý Hồ Sơ) — khối "⚠️ Kỷ luật" + 7 trường mới Người Phụ Thuộc =====
   await page.evaluate(() => switchTab('hrProfile'));
+  await page.waitForTimeout(300);
   await page.evaluate(() => setHrProfileView('MANAGE'));
   await page.waitForTimeout(200);
   await page.evaluate((code) => openHrpfDetailModal(code, false), HR_PROFILE.employeeCode);
@@ -217,9 +225,14 @@ async function main() {
   console.log('Đã chụp: 4-ho-so-nhan-su-ky-luat-phu-thuoc.png');
 
   console.log('jsExceptions:', pageErrors);
-  await browser.close();
-  server.close();
   console.log('DONE. Ảnh đã lưu tại', OUT_DIR);
+  } finally {
+    // LUÔN đóng browser dù thành công/lỗi — thiếu bước này (lỗi THẬT gặp phải lúc đầu viết demo) khiến
+    // tiến trình Node treo vô hạn khi 1 bước giữa đường ném lỗi (Chromium headless vẫn giữ event loop
+    // sống), trông giống "hang" trong lúc thực ra script đã dừng chạy từ sớm.
+    await browser.close().catch(() => {});
+    server.close();
+  }
 }
 
 main().catch((e) => { console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });
