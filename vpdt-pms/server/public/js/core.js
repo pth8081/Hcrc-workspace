@@ -8969,9 +8969,19 @@ function _dispatchTabRender(tabName) {
     populateMinutesLinkSelect();
     renderMeetingAttendeeTemplateSelect();
     const canCreate = canCreateMeetingMinutes(currentUser);
-    document.getElementById('minutesForm').classList.toggle('hidden', !canCreate);
+    // "Thu gọn form nhập" (10/2026) — nút "+ Lập Biên Bản Mới" (btnMinutesFormNew) CHỈ hiện cho người có
+    // quyền (canCreate), còn #minutesForm giờ ẩn mặc định mỗi lần vào tab (mở lại qua nút/openMinutesForm(),
+    // xem module-bienbanhop.js) — TRỪ khi đang dở dang Sửa 1 biên bản (editingMinutesId !== null, VD bấm
+    // "Sửa" rồi lỡ chuyển qua tab khác rồi quay lại) thì vẫn giữ form đang mở để không mất dữ liệu đang sửa.
+    // #minutesNoPermNote (không có quyền) giữ nguyên hành vi cũ — không đổi gì ở canCreateMeetingMinutes().
+    document.getElementById('btnMinutesFormNew').classList.toggle('hidden', !canCreate);
     document.getElementById('minutesNoPermNote').classList.toggle('hidden', canCreate);
-    if (editingMinutesId === null) document.getElementById('minutesCode').value = generateMinutesCode();
+    if (editingMinutesId === null) {
+      document.getElementById('minutesForm').classList.add('hidden');
+      document.getElementById('minutesCode').value = generateMinutesCode();
+    } else {
+      document.getElementById('minutesForm').classList.remove('hidden');
+    }
   }
   if (tabName === 'internal') { setInternalSubTab(activeInternalSubTab); }
   if (tabName === 'car') { setCarSubTab(activeCarSubTab); }

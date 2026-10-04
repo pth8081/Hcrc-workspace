@@ -1,10 +1,16 @@
 
     <div id="dieuHanhTabBar_minutes" class="hidden flex gap-2 flex-wrap"></div>
     <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
-      <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📝 Lập Biên Bản Họp & Ý Kiến Chỉ Đạo</h3>
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="font-bold text-rose-900 text-base flex items-center gap-2">📝 Lập Biên Bản Họp & Ý Kiến Chỉ Đạo</h3>
+        <!-- Nút chỉ hiện cho người CÓ quyền lập biên bản (canCreateMeetingMinutes()) — gác ở switchTab()
+             (core.js, nhánh tabName==='minutes') cùng lúc với #minutesForm/#minutesNoPermNote, KHÔNG gác
+             thêm ở đây để tránh 2 nơi lệch điều kiện. -->
+        <button type="button" data-op="openMinutesForm" id="btnMinutesFormNew" class="hidden bg-rose-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-rose-700">+ Lập Biên Bản Mới</button>
+      </div>
       <p class="text-xs text-rose-800">Nhập biên bản trực tiếp trong cuộc họp — ghi lại nội dung và các ý kiến chỉ đạo gán ngay cho từng người. Biên bản là kênh chung, không giới hạn theo phòng ban.</p>
 
-      <form id="minutesForm" data-op-submit="submitMeetingMinutes" class="bg-white p-3 rounded border text-xs space-y-3">
+      <form id="minutesForm" data-op-submit="submitMeetingMinutes" class="hidden bg-white p-3 rounded border text-xs space-y-3">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Mã Biên Bản</label>
@@ -102,6 +108,7 @@
         </div>
 
         <div class="flex justify-end gap-2">
+          <button type="button" data-op="closeMinutesForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">✕ Thu Gọn</button>
           <button type="button" data-op="confirmAndResetForm" data-arg0="minutesForm" data-arg1="resetMeetingMinutesForm" class="bg-gray-200 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
           <button type="button" id="minutesCancelEditBtn" data-op="cancelEditMeetingMinutes" class="hidden bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">Huỷ Sửa</button>
           <button type="submit" id="minutesSubmitBtn" class="bg-rose-600 text-white px-5 py-2 rounded font-bold hover:bg-rose-700">Lưu Biên Bản Họp</button>

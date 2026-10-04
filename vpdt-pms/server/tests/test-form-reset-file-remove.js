@@ -396,6 +396,11 @@ async function main() {
         await page.evaluate(() => {
           DB.carPurposes = [{ key: 'CT', label: 'Công tác' }];
           switchTab('car');
+          // "Thu gọn form nhập" (10/2026) — #carForm giờ ẩn mặc định, phải mở qua openCarForm() trước khi
+          // page.fill()/page.selectOption() thao tác lên các ô bên trong (Playwright yêu cầu phần tử phải
+          // visible). openCarForm() tự gọi resetCarRegForm() (sinh mã + 2 điểm Lộ Trình rỗng) — VÔ HẠI ở
+          // đây vì đang mở form lần đầu, chưa điền gì.
+          openCarForm();
         });
         await page.selectOption('#carDept', 'Phòng Kế Toán');
         await page.selectOption('#carType', '5 chỗ');
@@ -450,6 +455,9 @@ async function main() {
         await page.evaluate(() => {
           DB.meetingRooms = [{ id: 1, name: 'Phòng Họp A', short: 'A' }];
           switchTab('meeting');
+          // "Thu gọn form nhập" (10/2026) — #meetingForm giờ ẩn mặc định, mở qua openMeetingForm() trước
+          // khi page.fill() thao tác lên các ô bên trong (chỉ hiện/ẩn, KHÔNG tự reset gì).
+          openMeetingForm();
         });
         await page.selectOption('#meetingDept', 'Phòng Kế Toán');
         await page.selectOption('#meetingRoom', 'Phòng Họp A');
@@ -484,7 +492,10 @@ async function main() {
     await check(
       'Biên Bản Họp: "Làm Mới" trắng form + trắng bảng Thành Phần Tham Dự/Ý Kiến Chỉ Đạo về ĐÚNG 0 dòng (đúng hành vi cancelEditMeetingMinutes()/luồng lưu thành công đã có) + sinh lại mã + đưa nút Lưu về lại nhãn gốc',
       async () => {
-        await page.evaluate(() => switchTab('minutes'));
+        // "Thu gọn form nhập" (10/2026) — #minutesForm giờ ẩn mặc định mỗi lần vào tab (admin luôn thấy
+        // nút "+ Lập Biên Bản Mới" vì canCreateMeetingMinutes(admin)=true) — mở qua openMinutesForm()
+        // trước khi page.fill() thao tác lên các ô bên trong.
+        await page.evaluate(() => { switchTab('minutes'); openMinutesForm(); });
         await page.fill('#minutesTitle', 'Họp kiểm thử reset form');
         await page.fill('#minutesTime', '2026-09-10T09:00');
         await page.fill('#minutesLocation', 'Phòng họp A');
@@ -536,7 +547,9 @@ async function main() {
     await check(
       'Mua Bán (Mua Sắm): "Làm Mới" trắng form + collapse bảng "Danh Sách Hạng Mục Đề Nghị Mua Sắm" về ĐÚNG 1 dòng trống (không phải 0, không phải còn nguyên 2 dòng) + sinh lại mã',
       async () => {
-        await page.evaluate(() => switchTab('office')); // activeOfficeSubTab mặc định = 'MUA_BAN'
+        // "Thu gọn form nhập" (10/2026) — #officeForm giờ ẩn mặc định, mở qua openOfficeForm() trước khi
+        // page.fill()/page.selectOption() thao tác lên các ô bên trong.
+        await page.evaluate(() => { switchTab('office'); openOfficeForm(); }); // activeOfficeSubTab mặc định = 'MUA_BAN'
         await page.selectOption('#offDept', 'Phòng Kế Toán');
         await page.fill('#offTitle', 'Mua sắm kiểm thử reset form');
         await page.fill('#offReason', 'Lý do kiểm thử reset form.');
