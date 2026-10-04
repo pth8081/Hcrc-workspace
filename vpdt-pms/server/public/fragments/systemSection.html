@@ -493,6 +493,7 @@
       <button type="button" data-op="setAdminSubTab" data-arg0="PERMS" id="btnAdminSubPerms" class="px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white">🔐 Phân Quyền</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="EXTAUTH" id="btnAdminSubExtAuth" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔑 API Xác Thực Ngoài</button>
       <button type="button" data-op="setAdminSubTab" data-arg0="OPAPI" id="btnAdminSubOpApi" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔌 Cấu Hình API</button>
+      <button type="button" data-op="setAdminSubTab" data-arg0="TLSCERT" id="btnAdminSubTlsCert" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🔒 Chứng Chỉ TLS/HTTPS</button>
     </div>
 
     <!-- CẤU HÌNH HỆ THỐNG EMAIL -->
@@ -829,6 +830,42 @@
       </form>
 
       <p id="opApiLastSyncStatus" class="text-[11px] font-semibold rounded px-2 py-1.5 bg-white border"></p>
+    </div>
+
+    <!-- Chứng Chỉ TLS/HTTPS (10/2026, yêu cầu người dùng: team IT tự tải private key/certificate từ
+         giao diện web để server TỰ phục vụ HTTPS — không cần Nginx, dành cho track triển khai PM2-only).
+         Xem routes/adminTlsCert.js + lib/tlsCertManager.js. Mô hình đã xác nhận: (1) Node tự chạy HTTPS
+         (không qua Nginx), (2) áp dụng bằng RESTART THỦ CÔNG (pm2 restart) — KHÔNG hot-reload, (3) cổng
+         HTTPS cấu hình qua .env (HTTPS_PORT), KHÔNG ép cổng 443. Write-only đúng khuôn mật khẩu SMTP/
+         Graph API/EWS — KHÔNG có cách xem lại private key đã tải lên sau khi lưu. -->
+    <div id="adminSubTlsCert" class="hidden bg-rose-50 p-4 rounded border border-rose-300 space-y-4">
+      <div>
+        <h3 class="font-bold text-rose-900 text-sm flex items-center gap-1">🔒 Chứng Chỉ TLS/HTTPS (server tự phục vụ HTTPS, không qua Nginx)</h3>
+        <p class="text-[11px] text-gray-500 italic mt-1">Dành cho server đang chạy chỉ qua PM2 (không có Nginx đứng trước) muốn tự phục vụ HTTPS. Tải lên Private Key + Certificate (bắt buộc, kèm CA Chain nếu nhà cung cấp chứng chỉ yêu cầu) — server sẽ kiểm tra khớp key/cert THẬT trước khi lưu. <b>Chứng chỉ mới chỉ có hiệu lực sau khi khởi động lại server (pm2 restart)</b> — KHÔNG tự áp dụng ngay, và cần đặt biến môi trường <code class="bg-white px-1 rounded border">HTTPS_PORT</code> trong file .env (xem .env.example) thì HTTPS mới bật.</p>
+      </div>
+
+      <div id="tlsCertCurrentStatusBox" class="bg-white p-3 rounded border text-xs space-y-1"></div>
+      <button type="button" data-op="deleteTlsCertAction" class="bg-gray-600 text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-gray-700">🗑️ Xoá Chứng Chỉ Đang Lưu (nếu tải nhầm, cần restart để có hiệu lực)</button>
+
+      <form data-op-submit="uploadTlsCertAction" class="space-y-3 bg-white p-3 rounded border text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Private Key (.pem/.key) <span class="text-red-600">*</span></label>
+            <input id="tlsCertPrivateKeyFile" type="file" accept=".pem,.key,.txt" class="w-full border p-1.5 rounded bg-white text-[11px]" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Certificate (.pem/.crt) <span class="text-red-600">*</span></label>
+            <input id="tlsCertCertificateFile" type="file" accept=".pem,.crt,.cer,.txt" class="w-full border p-1.5 rounded bg-white text-[11px]" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">CA Chain (tuỳ chọn, .pem)</label>
+            <input id="tlsCertCaChainFile" type="file" accept=".pem,.crt,.cer,.txt" class="w-full border p-1.5 rounded bg-white text-[11px]">
+          </div>
+        </div>
+        <button type="submit" class="bg-rose-700 text-white px-4 py-1.5 rounded font-bold hover:bg-rose-800">⬆️ Tải Lên & Kiểm Tra Chứng Chỉ</button>
+      </form>
+
+      <p id="tlsCertUploadResultBox" class="hidden text-[11px] font-semibold rounded px-2 py-1.5 border"></p>
     </div>
 
     <div id="adminSubCatalog" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

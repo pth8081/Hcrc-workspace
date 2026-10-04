@@ -168,6 +168,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
   document.getElementById('adminSubExtAuth').classList.toggle('hidden', subTab !== 'EXTAUTH');
   document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'OPAPI');
+  document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -177,9 +178,11 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubExtAuth').className = subTab === 'EXTAUTH' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubOpApi').className = subTab === 'OPAPI' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
   if (subTab === 'OPAPI') loadOperationOrderApiConfigToForm();
+  if (subTab === 'TLSCERT') loadTlsCertStatus();
 }
 
 // ---------- Cấu Hình API — đồng bộ Đơn Hàng (Vận Hành) ra dsmart16 (jobs/operationOrderApiSync.js) ----------
@@ -429,6 +432,100 @@ async function deleteExternalApiKeyAction(id) {
     renderExternalApiKeysTable();
   } catch (err) {
     alert(`⛔ Lỗi xoá API key: ${err.message}`);
+  }
+}
+
+// ---------- Chứng Chỉ TLS/HTTPS (routes/adminTlsCert.js) ----------
+// KHÔNG đi qua DB.* (dữ liệu GET /api/data chung) — private key TLS không được lưu trong AppData/SQL,
+// chỉ nằm ở 3 file cố định server/certs/ (xem lib/tlsCertManager.js) — màn này tự gọi route riêng để
+// đọc trạng thái/metadata (KHÔNG BAO GIỜ có nội dung private key trong bất kỳ response nào).
+async function loadTlsCertStatus() {
+  const box = document.getElementById('tlsCertCurrentStatusBox');
+  if (!box) return;
+  box.innerHTML = '<span class="text-gray-400 italic">Đang tải trạng thái...</span>';
+  try {
+    const res = await fetch('/api/admin/tls-cert/status');
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    renderTlsCertStatus(body);
+  } catch (err) {
+    box.innerHTML = `<span class="text-red-600 font-bold">⛔ Không tải được trạng thái: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function renderTlsCertStatus(status) {
+  const box = document.getElementById('tlsCertCurrentStatusBox');
+  if (!box) return;
+  const parts = [];
+  if (!status.hasCertOnDisk) {
+    parts.push('<p class="text-gray-500 italic">Chưa tải chứng chỉ TLS nào lên hệ thống — server đang chạy thuần HTTP.</p>');
+  } else {
+    const meta = status.certMetadata || {};
+    if (meta.error) {
+      parts.push(`<p class="text-red-600 font-bold">⛔ ${escapeHtml(meta.error)}</p>`);
+    } else {
+      parts.push(`<p><b>Subject:</b> ${escapeHtml(meta.subject || '?')}</p>`);
+      parts.push(`<p><b>Issuer:</b> ${escapeHtml(meta.issuer || '?')}</p>`);
+      parts.push(`<p><b>Hiệu lực:</b> ${meta.validFrom ? new Date(meta.validFrom).toLocaleString('vi-VN') : '?'} → ${meta.validTo ? new Date(meta.validTo).toLocaleString('vi-VN') : '?'}</p>`);
+      parts.push(`<p><b>CA Chain:</b> ${meta.hasCaChain ? 'Có' : '<span class="text-gray-400 italic">Không</span>'}</p>`);
+    }
+  }
+  if (status.httpsListener && status.httpsListener.active) {
+    parts.push(`<p class="text-green-700 font-bold mt-1">✅ HTTPS ĐANG CHẠY THẬT tại cổng ${status.httpsListener.port} (từ lúc khởi động gần nhất: ${status.httpsListener.startedAt ? new Date(status.httpsListener.startedAt).toLocaleString('vi-VN') : '?'}).</p>`);
+  } else if (status.hasCertOnDisk) {
+    parts.push(`<p class="text-amber-700 font-bold mt-1">⚠️ Đã có chứng chỉ trên đĩa nhưng HTTPS CHƯA chạy — ${status.httpsPortConfigured ? `cần restart (pm2 restart) để áp dụng` : `cần đặt HTTPS_PORT trong .env rồi restart`}.</p>`);
+  } else {
+    parts.push(`<p class="text-gray-500 italic mt-1">HTTPS_PORT hiện ${status.httpsPortConfigured ? `đã đặt = ${status.httpsPortConfigured}` : 'chưa được đặt trong .env'}.</p>`);
+  }
+  box.innerHTML = parts.join('');
+}
+
+async function uploadTlsCertAction(e) {
+  e.preventDefault();
+  const keyFile = document.getElementById('tlsCertPrivateKeyFile').files[0];
+  const certFile = document.getElementById('tlsCertCertificateFile').files[0];
+  const caFile = document.getElementById('tlsCertCaChainFile').files[0];
+  const resultBox = document.getElementById('tlsCertUploadResultBox');
+  if (!keyFile || !certFile) {
+    alert('Vui lòng chọn đủ Private Key và Certificate');
+    return;
+  }
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-gray-50';
+  resultBox.classList.remove('hidden');
+  resultBox.textContent = 'Đang kiểm tra & tải chứng chỉ...';
+  try {
+    const formData = new FormData();
+    formData.append('privateKey', keyFile);
+    formData.append('certificate', certFile);
+    if (caFile) formData.append('caChain', caFile);
+    const res = await fetch('/api/admin/tls-cert', { method: 'POST', body: formData });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-green-50 text-green-800 border-green-300';
+    resultBox.textContent = `✅ ${body.message}`;
+    e.target.reset();
+    renderTlsCertStatus({ hasCertOnDisk: true, certMetadata: body.certMetadata, httpsListener: body.httpsListener, httpsPortConfigured: null });
+    loadTlsCertStatus(); // nạp lại đầy đủ (kèm httpsPortConfigured) từ server, tránh hiển thị thiếu.
+  } catch (err) {
+    resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-red-50 text-red-700 border-red-300';
+    resultBox.textContent = `⛔ ${err.message}`;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+async function deleteTlsCertAction() {
+  if (!confirm('Xoá chứng chỉ TLS đang lưu trên server? Thao tác này KHÔNG xoá ngay — HTTPS (nếu đang chạy) vẫn tiếp tục chạy với chứng chỉ cũ cho tới khi restart (pm2 restart), lúc đó server sẽ quay lại chạy thuần HTTP.')) return;
+  try {
+    const res = await fetch('/api/admin/tls-cert', { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    alert(`✅ ${body.message}`);
+    loadTlsCertStatus();
+  } catch (err) {
+    alert(`⛔ Lỗi xoá chứng chỉ TLS: ${err.message}`);
   }
 }
 

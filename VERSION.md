@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**25.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.2 (2026-10-04): Tải chứng chỉ TLS/HTTPS qua web — server tự phục vụ HTTPS không cần Nginx
+
+Yêu cầu người dùng: team IT cần tự tải private key/certificate trực tiếp từ giao diện web cho server
+chạy PM2 (không có Nginx đứng trước), để bật được HTTPS mà không cần SSH/copy file tay. Đã làm rõ 3
+quyết định kiến trúc trước khi triển khai (qua `AskUserQuestion`): (1) Node tự chạy HTTPS (KHÔNG qua
+Nginx) — màn tải chứng chỉ chỉ chuẩn bị file, server tự khởi động listener; (2) áp dụng bằng **restart
+thủ công** (`pm2 restart`), không hot-reload; (3) cổng HTTPS cấu hình qua `.env` (`HTTPS_PORT`), KHÔNG
+ép cổng 443 (tránh cần quyền root/setcap).
+
+- **`server/lib/tlsCertManager.js`** (MỚI): lưu chứng chỉ ở 3 tên file CỐ ĐỊNH trong `server/certs/`
+  (bỏ qua tên file người dùng tải lên, chống path traversal) — `tls-key.pem` (quyền 0600), `tls-cert.pem`
+  + `tls-ca.pem` tuỳ chọn (0644). Validate bằng `tls.createSecureContext()` THẬT (chính cơ chế Node dùng
+  để khởi động HTTPS — khớp/lệch key-cert hay PEM hỏng bị chặn ngay, không cần tự viết parser). Dùng
+  `crypto.X509Certificate` để lấy metadata AN TOÀN (Subject/Issuer/hạn dùng) hiển thị UI — KHÔNG BAO GIỜ
+  trả lại nội dung private key ở bất kỳ response/log nào (write-only, cùng nguyên tắc mật khẩu SMTP/
+  Graph API/EWS).
+- **`server/routes/adminTlsCert.js`** (MỚI, `/api/admin/tls-cert`): admin-only (`perms.admin`), dùng
+  CHUNG `lib/uploadRateLimiter.js` (tránh lặp lại lỗi "mỗi route 1 rate-limiter riêng" đã vá trước đó).
+  `multer.memoryStorage()` (PEM chỉ vài KB, không ghi file tạm ra đĩa). `GET /status` (metadata + trạng
+  thái HTTPS listener thật), `POST /` (tải lên, validate, lưu), `DELETE /` (xoá, cần restart để có hiệu
+  lực). Mọi hành động ghi `insertSystemLog()` (module `SYSTEM`) KHÔNG kèm nội dung PEM.
+- **`server/server.js`**: thêm listener `https.createServer()` TUỲ CHỌN, khởi động THÊM VÀO (không thay)
+  `app.listen(PORT)` HTTP sẵn có — chỉ bật khi có `HTTPS_PORT` trong `.env` VÀ có chứng chỉ hợp lệ trên
+  đĩa. Lỗi chứng chỉ (hỏng/lệch key) CHỈ log, KHÔNG làm crash app — HTTP luôn chạy được dù HTTPS cấu hình
+  sai hoặc chưa cấu hình.
+- **UI**: thêm tab con **"🔒 Chứng Chỉ TLS/HTTPS"** trong Hệ Thống → ⚙️ Quản Trị (`public/fragments/
+  systemSection.html` + `public/js/module-hethong-tabs.js`) — 3 ô chọn file (Private Key/Certificate/CA
+  Chain), nút tải lên, hiển thị trạng thái hiện tại (đã có cert chưa, HTTPS đang chạy thật hay chưa
+  restart), nút xoá chứng chỉ.
+- **`server/.env.example`**: thêm `HTTPS_PORT` (tuỳ chọn). **`server/.gitignore`**: thêm `certs/*`
+  (giữ `.gitkeep`) — TUYỆT ĐỐI không để private key lọt vào git.
+- **Nghiệp Vụ**: thêm entry `sysTlsCert` vào `SYSTEM_DOCS`/`SYSTEM_NAV` (`module-nghiepvu.js`).
+
+Xác minh: `tests/test-tls-cert-upload.js` (MỚI, 16/16 kịch bản) — sinh chứng chỉ THẬT bằng `openssl` lúc
+chạy test (1 cặp key/cert khớp, 1 cặp LỆCH từ 2 lần sinh độc lập), xác nhận `tls.createSecureContext()`
+chặn thật khi lệch key/cert hoặc PEM rác, round-trip ghi/đọc file + quyền 0600, admin-gate 403 cho non-
+admin ở cả 3 route, response/nhật ký hệ thống KHÔNG BAO GIỜ chứa chuỗi "PRIVATE KEY". `tests/
+test-nghiepvu.js` (157/157), `test-nghiepvu-csp.js` (6/6), `test-nghiepvu-click.js` (9/9) không
+regression. CSP self-check (grep `on[a-z]+=`/` style=`/`javascript:`/`eval(`) sạch trên toàn bộ file
+mới/sửa.
+
+**Deploy-impact**: biến `.env` mới `HTTPS_PORT` — TUỲ CHỌN, để trống thì hành vi KHÔNG đổi (chỉ chạy HTTP
+như hiện tại). Cần `npm install` KHÔNG (không thêm dependency mới — chỉ dùng module lõi `https`/`tls`/
+`crypto`). Không cần chạy lại `schema.sql`. Chỉ áp dụng cho track `Huong-dan-trien-khai-PM2.md` (PM2
+không Nginx) — track PM2+Nginx không cần dùng tính năng này (Nginx đã làm lớp HTTPS, tránh chồng 2 lớp
+TLS). Sau khi tải chứng chỉ qua UI, PHẢI `pm2 restart` để có hiệu lực (không tự áp dụng ngay).
 
 ## v25.1 (2026-10-04): Vá lỗ hổng NGHIÊM TRỌNG — EWS không gửi được tới Exchange on-premise dùng chứng chỉ tự ký
 

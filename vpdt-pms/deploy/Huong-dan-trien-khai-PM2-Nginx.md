@@ -632,6 +632,15 @@ sudo -u vpdt-app pm2 stop vpdt
 
 ## 11. Nginx (reverse proxy cổng 80/443 → 3000)
 
+> **Lưu ý (10/2026)**: bản PM2-only (`Huong-dan-trien-khai-PM2.md`, mục 11.8)
+> có thêm tính năng "HTTPS tự phục vụ" (server tự chạy HTTPS qua chứng chỉ
+> tải lên web, không cần Nginx) — **track này ĐÃ có HTTPS qua Nginx ở mục bên
+> dưới, KHÔNG cần bật thêm tính năng đó** (đặt `HTTPS_PORT` trong `.env` +
+> tải chứng chỉ ở Hệ Thống → Quản Trị → Chứng Chỉ TLS/HTTPS). Bật cả 2 cùng
+> lúc tạo ra 2 lớp TLS termination không cần thiết (Nginx giải mã HTTPS rồi
+> chuyển tiếp HTTP nội bộ tới Node — Node không cần tự giải mã HTTPS lần thứ
+> 2 nữa).
+
 ```bash
 sudo apt-get install -y nginx
 sudo nano /etc/nginx/sites-available/vpdt

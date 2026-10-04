@@ -5356,3 +5356,39 @@ Giới hạn số lần gọi: `EXTERNAL_AUTH_RATE_LIMIT_MAX` trong `.env` (mặ
 > được soạn riêng cho đối tác trong 1 phiên làm việc trước (dạng Artifact) —
 > mục này chỉ tóm tắt góc nhìn cấu hình/quản trị, không lặp lại toàn bộ đặc tả
 > API ở đây.
+
+### 7.10. Chứng Chỉ TLS/HTTPS (10/2026)
+
+**Hệ Thống → Quản Trị → 🔒 Chứng Chỉ TLS/HTTPS** (`routes/adminTlsCert.js` +
+`lib/tlsCertManager.js`) cho phép server **tự phục vụ HTTPS trực tiếp**
+(không cần đặt Nginx trước) — team IT tải Private Key + Certificate (kèm CA
+Chain tuỳ chọn) ngay từ giao diện web, không cần SSH/copy file tay. Dành cho
+server triển khai theo track PM2-only (`Huong-dan-trien-khai-PM2.md`, mục
+11.8) — server triển khai theo track PM2+Nginx (đã có HTTPS qua Nginx) không
+cần dùng tới màn này.
+
+- **Validate thật trước khi lưu**: dùng đúng `tls.createSecureContext()` —
+  cơ chế Node.js dùng để khởi động HTTPS thật — để kiểm tra Private Key có
+  khớp Certificate hay không. Lệch key/cert hoặc PEM sai định dạng bị chặn
+  NGAY, không lưu file nào, hiển thị lỗi rõ cho admin tự sửa.
+- **Áp dụng bằng RESTART THỦ CÔNG**: tải lên THÀNH CÔNG chỉ ghi file xuống
+  `server/certs/` — KHÔNG tự bật/đổi HTTPS đang chạy ngay. Phải chạy
+  `pm2 restart` để chứng chỉ mới có hiệu lực. Màn hình hiển thị rõ 2 trạng
+  thái khác nhau: "đã có chứng chỉ trên đĩa nhưng CHƯA restart" so với "HTTPS
+  ĐANG CHẠY THẬT tại cổng...".
+  - Cổng HTTPS **không** gán sẵn như HTTP (`PORT`) mà đặt riêng qua biến môi
+    trường `.env` **`HTTPS_PORT`** (nên dùng cổng không đặc quyền, ví dụ
+    `3443` — tránh 443 vì cần quyền root/`setcap`).
+- **Write-only — không xem lại được Private Key**: cùng nguyên tắc mật khẩu
+  SMTP/Microsoft Graph/EWS ở mục 7.8 — sau khi lưu, không có API/màn hình nào
+  trả lại nội dung private key đã tải lên (kể cả báo lỗi). Mất file gốc thì
+  phải tạo/xin cấp lại chứng chỉ mới, không có cách khôi phục.
+- **Xoá chứng chỉ**: nút "🗑️ Xoá Chứng Chỉ Đang Lưu" — cũng cần restart để
+  server quay lại chạy thuần HTTP; HTTPS đang chạy (nếu có) vẫn giữ nguyên
+  chứng chỉ CŨ cho tới lần restart kế tiếp (không tắt giữa chừng).
+- **Không ảnh hưởng HTTP hiện có**: listener HTTPS là THÊM VÀO, cổng HTTP
+  (`PORT`) vẫn luôn chạy song song — bật/chưa bật tính năng này không ảnh
+  hưởng gì tới các kết nối HTTP đang dùng.
+- Admin-only (`perms.admin`), dùng chung bucket rate-limit upload toàn hệ
+  thống (`lib/uploadRateLimiter.js`), mọi lượt tải/xoá đều ghi Nhật Ký Hệ
+  Thống (module `SYSTEM`) KHÔNG kèm nội dung PEM.

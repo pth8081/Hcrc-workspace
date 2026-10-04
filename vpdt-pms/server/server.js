@@ -13,6 +13,10 @@ const cookieParser = require('cookie-parser');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+// Chứng chỉ TLS tải lên qua Hệ Thống > Quản Trị > Chứng Chỉ TLS (10/2026, xem routes/adminTlsCert.js) —
+// cho phép server TỰ phục vụ HTTPS (không qua Nginx) ở track triển khai PM2-only. Xem start() dưới cùng.
+const tlsCertManager = require('./lib/tlsCertManager');
 const securityHeaders = require('./lib/securityHeaders');
 const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
@@ -38,6 +42,7 @@ const trainingRosterRoutes = require('./routes/trainingRoster');
 const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const trainingTestImportRoutes = require('./routes/trainingTestImport');
 const adminExportRoutes = require('./routes/adminExport');
+const adminTlsCertRoutes = require('./routes/adminTlsCert');
 const orgChartRoutes = require('./routes/orgChart');
 const employeeProfileRoutes = require('./routes/employeeProfile');
 const adminCatalogRoutes = require('./routes/adminCatalog');
@@ -182,6 +187,7 @@ app.use('/api/training', trainingRosterRoutes);
 app.use('/api/training', trainingPlanImportRoutes);
 app.use('/api/training', trainingTestImportRoutes);
 app.use('/api/admin', adminExportRoutes);
+app.use('/api/admin/tls-cert', adminTlsCertRoutes);
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
@@ -417,6 +423,30 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`✅ VPDT server đang chạy tại http://localhost:${PORT}`);
     });
+
+    // HTTPS server TUỲ CHỌN — THÊM VÀO (không thay) HTTP listener ở trên, chỉ khởi động khi admin đã
+    // tải chứng chỉ hợp lệ qua Hệ Thống > Quản Trị > Chứng Chỉ TLS (routes/adminTlsCert.js) VÀ đặt biến
+    // môi trường HTTPS_PORT (xem .env.example) — dành cho track triển khai PM2-only muốn tự phục vụ
+    // HTTPS không cần Nginx (xem deploy/Huong-dan-trien-khai-PM2.md mục HTTPS tự phục vụ). Mô hình "áp
+    // dụng bằng restart thủ công": route upload CHỈ ghi file, chứng chỉ mới chỉ có hiệu lực sau lần
+    // restart kế tiếp (đúng chỗ đọc file này). Lỗi chứng chỉ (hỏng/lệch key) CHỈ log, KHÔNG được làm
+    // crash app — HTTP ở trên vẫn phải chạy được dù HTTPS cấu hình sai.
+    const httpsPort = process.env.HTTPS_PORT ? parseInt(process.env.HTTPS_PORT, 10) : null;
+    if (httpsPort) {
+      try {
+        const credentials = tlsCertManager.loadHttpsCredentials();
+        if (credentials) {
+          https.createServer(credentials, app).listen(httpsPort, () => {
+            tlsCertManager.setHttpsStatus(true, httpsPort);
+            console.log(`✅ VPDT server đang chạy HTTPS tại https://localhost:${httpsPort}`);
+          });
+        } else {
+          console.log(`ℹ️ HTTPS_PORT=${httpsPort} đã đặt nhưng chưa có chứng chỉ TLS nào — bỏ qua HTTPS, chỉ chạy HTTP. Tải chứng chỉ qua Hệ Thống > Quản Trị > Chứng Chỉ TLS rồi "pm2 restart" để áp dụng.`);
+        }
+      } catch (err) {
+        console.error('⛔ Không khởi động được HTTPS server (chứng chỉ lỗi/lệch key?), chỉ chạy HTTP:', err.message);
+      }
+    }
 
     // Nhắc hết hạn hợp đồng: kiểm tra ngay lúc khởi động, sau đó lặp lại mỗi 24h.
     // Không phụ thuộc việc có ai mở trình duyệt hay không.

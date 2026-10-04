@@ -113,6 +113,7 @@ const SYSTEM_NAV = [
     { key: 'sysEmail', icon: '📧', label: 'Cấu Hình Email' },
     { key: 'sysExtAuth', icon: '🔑', label: 'API Xác Thực Ngoài' },
     { key: 'sysOpApi', icon: '🔌', label: 'Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16' },
+    { key: 'sysTlsCert', icon: '🔒', label: 'Chứng Chỉ TLS/HTTPS' },
   ]},
   { group: 'Kiến Trúc', items: [
     { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
@@ -1555,6 +1556,35 @@ const SYSTEM_DOCS = {
       { label: 'Chặn SSRF cho Base URL', text: 'Base URL do admin tự nhập được kiểm tra trước mỗi lần gọi: chỉ cho http/https, chặn mọi địa chỉ nội bộ/loopback/link-local (kể cả tên miền trỏ ngược về IP nội bộ sau khi phân giải DNS) và có timeout 15 giây — 1 endpoint treo không làm kẹt cả job đồng bộ.' },
       { label: 'Lỗi 1 đơn không chặn các đơn còn lại', text: 'job cô lập lỗi theo TỪNG đơn — 1 đơn gửi lỗi vẫn ghi nhận rồi đi tiếp, kết quả tổng kết ghi rõ SUCCESS/PARTIAL/FAILED ở dòng "Lần đồng bộ gần nhất" và trong Nhật Ký Hệ Thống.' },
       { label: 'Giá trị header mã hoá khi lưu', text: 'giá trị header xác thực được mã hoá trong cơ sở dữ liệu và KHÔNG bao giờ trả ngược về giao diện (cùng quy ước write-only với mật khẩu SMTP ở Cấu Hình Email) — mất thì nhập lại giá trị mới, không xem lại được.' },
+    ] },
+  },
+  // sysTlsCert (10/2026, yêu cầu người dùng: team IT tự tải Private Key/Certificate từ giao diện web để
+  // server tự phục vụ HTTPS KHÔNG qua Nginx, dành cho track triển khai PM2-only — xem
+  // routes/adminTlsCert.js + lib/tlsCertManager.js). KHÁC HOÀN TOÀN "Cấu Hình API"/"API Xác Thực Ngoài"
+  // ngay trên — đây là hạ tầng TLS của chính server này, không liên quan trao đổi dữ liệu với hệ thống
+  // ngoài nào.
+  sysTlsCert: {
+    icon: '🔒', title: 'Chứng Chỉ TLS/HTTPS', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cho phép server tự phục vụ HTTPS trực tiếp (không cần đặt Nginx trước) — team IT tải Private Key + Certificate (kèm CA Chain nếu cần) ngay từ giao diện web, server kiểm tra khớp key/cert THẬT trước khi lưu. Chỉ dành cho server đang chạy chỉ qua PM2 (chưa có Nginx); nếu đã dùng Nginx làm lớp HTTPS/TLS termination thì KHÔNG cần bật tính năng này (tránh 2 lớp TLS chồng nhau).',
+    flow: { ariaLabel: 'Quy trình bật HTTPS tự phục vụ qua tải chứng chỉ web', chain: [
+      { label: 'Đặt HTTPS_PORT trong .env', sub: 'Cổng KHÔNG đặc quyền, VD 3443' },
+      { label: 'Tải Private Key + Certificate', sub: 'Kiểm tra khớp key/cert thật', kind: 'decision' },
+      { label: 'Lưu vào server/certs/', sub: 'Ghi đè file cũ, quyền key 0600', kind: 'approved' },
+      { label: 'Restart (pm2 restart)', sub: 'HTTPS chỉ có hiệu lực SAU bước này' },
+    ], decision: { atIndex: 1, approveLabel: 'Key khớp cert', rejectLabel: 'Lệch key/cert hoặc PEM hỏng', rejectBox: { label: 'Báo lỗi ngay, KHÔNG lưu file', sub: 'Chứng chỉ cũ (nếu có) vẫn giữ nguyên' }, loopBackToIndex: 1, loopBackLabel: 'Tải lại đúng cặp key/cert' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'mở file <code>.env</code> trên server, đặt <code>HTTPS_PORT=3443</code> (hoặc cổng không đặc quyền khác, KHÔNG dùng 443 — cổng đó cần quyền root/setcap riêng) — xem chú thích mẫu ở <code>.env.example</code>.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔒 Chứng Chỉ TLS/HTTPS</b> (tab con) → chọn file <b>Private Key</b> và <b>Certificate</b> (bắt buộc), kèm <b>CA Chain</b> nếu nhà cung cấp chứng chỉ yêu cầu → bấm <b>"⬆️ Tải Lên & Kiểm Tra Chứng Chỉ"</b>.' },
+      { role: 'Quản trị viên', text: 'server kiểm tra khớp key/cert THẬT (cùng cơ chế dùng để khởi động HTTPS, không phải suy luận) — sai/lệch sẽ báo lỗi ngay, KHÔNG lưu file; đúng thì hiện Subject/Issuer/hạn dùng của chứng chỉ vừa tải.' },
+      { role: 'Quản trị viên', text: '<b>chạy "pm2 restart" (hoặc khởi động lại server)</b> — chứng chỉ mới KHÔNG tự áp dụng ngay, bắt buộc phải restart. Quay lại đúng tab này để xác nhận dòng trạng thái hiện "✅ HTTPS ĐANG CHẠY THẬT tại cổng...".' },
+      { role: 'Quản trị viên', text: 'tải nhầm file hoặc cần đổi hẳn sang chứng chỉ khác: bấm <b>"🗑️ Xoá Chứng Chỉ Đang Lưu"</b> rồi tải lại cặp đúng — HTTPS đang chạy (nếu có) vẫn tiếp tục chạy với chứng chỉ CŨ cho tới lần restart kế tiếp.' },
+    ],
+    footer: { left: [
+      { label: 'Áp dụng bằng restart thủ công', text: 'route tải lên CHỈ ghi file xuống server/certs/ — không hot-reload HTTPS server đang chạy. Đây là lựa chọn có chủ đích (đơn giản/dễ đoán hơn), không phải thiếu sót.' },
+      { label: 'Write-only — không xem lại được Private Key', text: 'cùng nguyên tắc mật khẩu SMTP/Microsoft Graph/EWS — sau khi lưu, không có API/màn hình nào trả lại nội dung private key đã tải lên; mất file gốc thì phải tạo/tải chứng chỉ mới.' },
+    ], right: [
+      { label: 'KHÔNG ảnh hưởng HTTP hiện có', text: 'đây là listener HTTPS THÊM VÀO, cổng HTTP cũ (biến PORT) vẫn luôn hoạt động song song — deploy hiện tại không bị ảnh hưởng gì nếu không đặt HTTPS_PORT.' },
+      { label: 'Không dùng cùng lúc với Nginx', text: 'nếu server đã triển khai theo track PM2+Nginx (xem deploy/Huong-dan-trien-khai-PM2-Nginx.md, Nginx đã làm lớp HTTPS termination) thì KHÔNG cần bật HTTPS_PORT — tránh 2 lớp TLS chồng nhau không cần thiết.' },
     ] },
   },
   systemArchitecture: {
