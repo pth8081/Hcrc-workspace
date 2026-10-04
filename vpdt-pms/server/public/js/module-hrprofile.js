@@ -167,6 +167,7 @@ async function confirmHrpfAssignPosition() {
     const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/set-position`, { positionKey, effectiveDate, note, fileUrl, fileName });
     alert('✅ Đã gán/đổi chức vụ. Lịch sử đã được ghi lại.');
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    hrpfPopulateDisciplinaryTypeDatalists();
     loadHrpfHistory(_hrpfManageDetailCode);
     loadHrProfileManageList();
   } catch (err) {
@@ -444,6 +445,7 @@ async function openHrpfDetailModal(employeeCode, readOnlyArg) {
   try {
     const data = await hrProfileApiCall('GET', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}`);
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    hrpfPopulateDisciplinaryTypeDatalists();
     document.getElementById('hrpfDetailModalTitle').textContent = _hrpfManageDetailReadOnly ? '👁️ Hồ Sơ Nhân Sự (chỉ xem)' : '✏️ Hồ Sơ Nhân Sự (đang sửa)';
     document.getElementById('hrpfDetailModal').classList.remove('hidden');
     loadHrpfHistory(employeeCode);
@@ -464,6 +466,7 @@ async function saveHrpfManageProfile() {
     const data = await hrProfileApiCall('PATCH', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}`, payload);
     alert('✅ Đã lưu Hồ Sơ Nhân Sự.');
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    hrpfPopulateDisciplinaryTypeDatalists();
     // Ảnh 2: lưu thành công có thể chính là hành động "Xác Nhận" (hồ sơ vừa tốt nghiệp khỏi hàng đợi
     // Onboarding) — chỉ gọi ĐÚNG list mà actor thật sự có quyền gọi (người CHỈ có hrOnboardingManage KHÔNG
     // gọi được GET /api/hr-profile chung, 403), tránh alert lỗi giả sau 1 lượt lưu vừa thành công.
@@ -483,6 +486,7 @@ async function toggleHrpfManualStatus() {
   try {
     const data = await hrProfileApiCall('PATCH', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/status`, { status: next });
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    hrpfPopulateDisciplinaryTypeDatalists();
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -504,6 +508,7 @@ async function confirmHrpfLinkAccount() {
     const data = await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}/link-account`, { username });
     alert('✅ Đã liên kết tài khoản VPDT với hồ sơ này.');
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    hrpfPopulateDisciplinaryTypeDatalists();
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -535,6 +540,7 @@ async function confirmHrpfRelinkAccount() {
     alert('✅ Đã đổi tài khoản liên kết.');
     _hrpfShowRelinkInput = false;
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
+    hrpfPopulateDisciplinaryTypeDatalists();
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);
@@ -1083,6 +1089,18 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       : (profile.education || []).map(hrpfEducationRowHtml).join('')}</div>
   </div>`;
 
+  // Kỷ luật (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel Bao_cao_thang) —
+  // CHỈ scope MANAGE (HR/admin), KHÔNG BAO GIỜ hiện ở scope ME — gợi ý Loại kỷ luật từ DB.disciplinaryTypes.
+  const disciplinaryBlock = scope !== 'MANAGE' ? '' : `<div class="mt-3 pt-3 border-t">
+    <div class="flex items-center justify-between mb-1">
+      <label class="block text-[11px] font-semibold text-gray-500">⚠️ Kỷ luật</label>
+      ${isReadOnly ? '' : '<button type="button" data-op="addHrpfDisciplinaryRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
+    </div>
+    <div id="hrpfDisciplinaryRows" class="space-y-1">${isReadOnly
+      ? ((profile.disciplinaryActions || []).length ? (profile.disciplinaryActions || []).map(hrpfDisciplinaryRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>')
+      : (profile.disciplinaryActions || []).map(hrpfDisciplinaryRowHtml).join('')}</div>
+  </div>`;
+
   const saveBtn = isReadOnly ? '' : (scope === 'ME'
     ? `<button type="button" data-op="saveHrpfMyProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`
     : `<button type="button" data-op="saveHrpfManageProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`);
@@ -1094,19 +1112,35 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${historyBlock}`;
 }
 
 function hrpfDependentRowHtml(d) {
   const dd = d || {};
-  return `<div class="grid grid-cols-4 gap-1 items-center hrpf-dependent-row" data-id="${escapeHtml(dd.id || '')}">
-    <input value="${escapeHtml(dd.fullName || '')}" placeholder="Họ tên" class="border p-1 rounded text-xs hrpf-dep-name">
-    <input value="${escapeHtml(dd.relationship || '')}" placeholder="Quan hệ" class="border p-1 rounded text-xs hrpf-dep-rel">
-    <input type="date" value="${escapeHtml((dd.dateOfBirth || '').slice(0, 10))}" class="border p-1 rounded text-xs hrpf-dep-dob">
-    <div class="flex items-center gap-1">
-      <input value="${escapeHtml(dd.taxCode || '')}" placeholder="MST người phụ thuộc" class="border p-1 rounded text-xs flex-1 hrpf-dep-tax">
-      <button type="button" data-op="removeHrpfRow" data-arg0="dependent" data-arg-el="1" class="text-red-500 hover:text-red-700 text-xs">✕</button>
+  // 7 field MỚI (10/2026, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC" — tờ khai giảm trừ gia cảnh thuế
+  // TNCN) — thêm thành 2 hàng con bên dưới hàng gốc (Họ tên/Quan hệ/Ngày sinh/MST), cùng 1 khối bo viền
+  // cho mỗi người phụ thuộc thay vì 1 hàng grid-4 phẳng như trước (quá chật để thêm cột).
+  return `<div class="border rounded p-2 space-y-1 hrpf-dependent-row" data-id="${escapeHtml(dd.id || '')}">
+    <div class="grid grid-cols-4 gap-1 items-center">
+      <input value="${escapeHtml(dd.fullName || '')}" placeholder="Họ tên" class="border p-1 rounded text-xs hrpf-dep-name">
+      <input value="${escapeHtml(dd.relationship || '')}" placeholder="Quan hệ" class="border p-1 rounded text-xs hrpf-dep-rel">
+      <input type="date" value="${escapeHtml((dd.dateOfBirth || '').slice(0, 10))}" class="border p-1 rounded text-xs hrpf-dep-dob">
+      <div class="flex items-center gap-1">
+        <input value="${escapeHtml(dd.taxCode || '')}" placeholder="MST người phụ thuộc" class="border p-1 rounded text-xs flex-1 hrpf-dep-tax">
+        <button type="button" data-op="removeHrpfRow" data-arg0="dependent" data-arg-el="1" class="text-red-500 hover:text-red-700 text-xs">✕</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-4 gap-1 items-center">
+      <input value="${escapeHtml(dd.nationality || '')}" placeholder="Quốc tịch" class="border p-1 rounded text-xs hrpf-dep-nationality">
+      <input value="${escapeHtml(dd.idNumber || '')}" placeholder="Số CMND/Hộ chiếu" class="border p-1 rounded text-xs hrpf-dep-idnumber">
+      <input type="month" value="${escapeHtml(dd.deductionFromMonth || '')}" title="Thời gian tính giảm trừ — Từ tháng" class="border p-1 rounded text-xs hrpf-dep-fromMonth">
+      <input type="month" value="${escapeHtml(dd.deductionToMonth || '')}" title="Thời gian tính giảm trừ — Đến tháng" class="border p-1 rounded text-xs hrpf-dep-toMonth">
+    </div>
+    <div class="grid grid-cols-3 gap-1 items-center">
+      <input type="month" value="${escapeHtml(dd.deductionCutMonth || '')}" title="Tháng cắt giảm trừ" class="border p-1 rounded text-xs hrpf-dep-cutMonth">
+      <input type="number" min="0" value="${dd.deductionAmount ?? ''}" placeholder="Số tiền giảm trừ" class="border p-1 rounded text-xs hrpf-dep-amount">
+      <input type="month" value="${escapeHtml(dd.declarationMonth || '')}" title="Tháng kê khai" class="border p-1 rounded text-xs hrpf-dep-declMonth">
     </div>
   </div>`;
 }
@@ -1126,11 +1160,19 @@ function hrpfEducationRowHtml(e) {
 // dạng chữ tĩnh, không có input/nút xoá dòng nào.
 function hrpfDependentRowReadOnlyHtml(d) {
   const dd = d || {};
-  return `<div class="grid grid-cols-4 gap-1 text-xs py-0.5 border-b border-gray-100">
-    <span>${escapeHtml(dd.fullName || '—')}</span>
-    <span>${escapeHtml(dd.relationship || '—')}</span>
-    <span>${escapeHtml((dd.dateOfBirth || '').slice(0, 10) || '—')}</span>
-    <span>${escapeHtml(dd.taxCode || '—')}</span>
+  return `<div class="text-xs py-0.5 border-b border-gray-100">
+    <div class="grid grid-cols-4 gap-1">
+      <span>${escapeHtml(dd.fullName || '—')}</span>
+      <span>${escapeHtml(dd.relationship || '—')}</span>
+      <span>${escapeHtml((dd.dateOfBirth || '').slice(0, 10) || '—')}</span>
+      <span>${escapeHtml(dd.taxCode || '—')}</span>
+    </div>
+    <div class="grid grid-cols-4 gap-1 text-gray-400">
+      <span>${escapeHtml(dd.nationality || '—')}</span>
+      <span>${escapeHtml(dd.idNumber || '—')}</span>
+      <span>${escapeHtml(dd.deductionFromMonth || '—')} → ${escapeHtml(dd.deductionToMonth || '—')}</span>
+      <span>Cắt: ${escapeHtml(dd.deductionCutMonth || '—')} · ${dd.deductionAmount ? Number(dd.deductionAmount).toLocaleString('vi-VN') : '—'} · KK: ${escapeHtml(dd.declarationMonth || '—')}</span>
+    </div>
   </div>`;
 }
 function hrpfEducationRowReadOnlyHtml(e) {
@@ -1142,11 +1184,45 @@ function hrpfEducationRowReadOnlyHtml(e) {
     <span>${escapeHtml(ee.graduationYear ? String(ee.graduationYear) : '—')}</span>
   </div>`;
 }
+// Kỷ luật (10/2026) — "Loại kỷ luật" gợi ý từ DB.disciplinaryTypes (sdd, danh mục MỞ, không ép buộc).
+function hrpfDisciplinaryRowHtml(item) {
+  const it = item || {};
+  const dlId = `hrpfDiscTypeDl_${it.id || Math.random().toString(36).slice(2)}`;
+  return `<div class="border rounded p-2 space-y-1 hrpf-disciplinaryAction-row" data-id="${escapeHtml(it.id || '')}">
+    <div class="grid grid-cols-4 gap-1 items-center">
+      <input type="date" value="${escapeHtml((it.date || '').slice(0, 10))}" class="border p-1 rounded text-xs hrpf-disc-date">
+      <input value="${escapeHtml(it.type || '')}" data-sdd-list="${dlId}" autocomplete="off" placeholder="Loại kỷ luật" class="border p-1 rounded text-xs hrpf-disc-type">
+      <input value="${escapeHtml(it.note || '')}" placeholder="Ghi chú" class="border p-1 rounded text-xs col-span-2 hrpf-disc-note">
+    </div>
+    <div id="${dlId}" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+    <div class="flex justify-end">
+      <button type="button" data-op="removeHrpfRow" data-arg0="disciplinaryAction" data-arg-el="1" class="text-red-500 hover:text-red-700 text-xs">✕ Xoá dòng</button>
+    </div>
+  </div>`;
+}
+function hrpfDisciplinaryRowReadOnlyHtml(item) {
+  const it = item || {};
+  return `<div class="grid grid-cols-4 gap-1 text-xs py-0.5 border-b border-gray-100">
+    <span>${escapeHtml((it.date || '').slice(0, 10) || '—')}</span>
+    <span>${escapeHtml(it.type || '—')}</span>
+    <span class="col-span-2 text-gray-500">${escapeHtml(it.note || '—')}</span>
+  </div>`;
+}
 function addHrpfDependentRow() {
   document.getElementById('hrpfDependentsRows').insertAdjacentHTML('beforeend', hrpfDependentRowHtml(null));
 }
 function addHrpfEducationRow() {
   document.getElementById('hrpfEducationRows').insertAdjacentHTML('beforeend', hrpfEducationRowHtml(null));
+}
+function addHrpfDisciplinaryRow() {
+  document.getElementById('hrpfDisciplinaryRows').insertAdjacentHTML('beforeend', hrpfDisciplinaryRowHtml(null));
+  hrpfPopulateDisciplinaryTypeDatalists();
+}
+// Nạp gợi ý DB.disciplinaryTypes cho MỌI dropdown "Loại kỷ luật" đang có trên form (dòng cũ lúc render +
+// dòng mới vừa thêm) — mỗi dòng có 1 dropdown riêng (id random) nên phải lặp qua data-sdd-dropdown.
+function hrpfPopulateDisciplinaryTypeDatalists() {
+  const items = (DB.disciplinaryTypes || []).map(t => ({ label: t, value: t }));
+  document.querySelectorAll('.hrpf-disciplinaryAction-row [data-sdd-dropdown]').forEach(dd => sddSetOptions(dd.id, items));
 }
 function removeHrpfRow(kind, btnEl) {
   btnEl.closest(`.hrpf-${kind}-row`)?.remove();
@@ -1182,7 +1258,14 @@ function collectHrpfProfileFormValues(scope) {
       fullName: row.querySelector('.hrpf-dep-name').value.trim(),
       relationship: row.querySelector('.hrpf-dep-rel').value.trim(),
       dateOfBirth: row.querySelector('.hrpf-dep-dob').value || null,
-      taxCode: row.querySelector('.hrpf-dep-tax').value.trim() || null
+      taxCode: row.querySelector('.hrpf-dep-tax').value.trim() || null,
+      nationality: row.querySelector('.hrpf-dep-nationality').value.trim() || null,
+      idNumber: row.querySelector('.hrpf-dep-idnumber').value.trim() || null,
+      deductionFromMonth: row.querySelector('.hrpf-dep-fromMonth').value || null,
+      deductionToMonth: row.querySelector('.hrpf-dep-toMonth').value || null,
+      deductionCutMonth: row.querySelector('.hrpf-dep-cutMonth').value || null,
+      deductionAmount: row.querySelector('.hrpf-dep-amount').value || null,
+      declarationMonth: row.querySelector('.hrpf-dep-declMonth').value || null
     })).filter(d => d.fullName || d.relationship);
   }
   if (document.getElementById('hrpfEducationRows')) {
@@ -1195,6 +1278,14 @@ function collectHrpfProfileFormValues(scope) {
     })).filter(e => e.degree || e.school);
   }
   if (scope === 'MANAGE') {
+    if (document.getElementById('hrpfDisciplinaryRows')) {
+      payload.disciplinaryActions = Array.from(document.querySelectorAll('.hrpf-disciplinaryAction-row')).map(row => ({
+        id: row.dataset.id || undefined,
+        date: row.querySelector('.hrpf-disc-date').value || null,
+        type: row.querySelector('.hrpf-disc-type').value.trim(),
+        note: row.querySelector('.hrpf-disc-note').value.trim() || null
+      })).filter(it => it.date || it.type);
+    }
     if (document.getElementById('hrpfF_nationalId')) payload.nationalId = val('hrpfF_nationalId') || null;
     if (document.getElementById('hrpfF_socialInsuranceNo')) payload.socialInsuranceNo = val('hrpfF_socialInsuranceNo') || null;
     if (document.getElementById('hrpfF_taxCode')) payload.taxCode = val('hrpfF_taxCode') || null;

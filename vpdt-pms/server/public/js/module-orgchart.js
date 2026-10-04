@@ -717,6 +717,11 @@ function ocPopulateJobTitleDatalist(posType) {
 function ocOnNodePosTypeChange() {
   ocPopulateJobTitleDatalist(document.getElementById('orgChartNodePosTypeSelect').value || '');
 }
+// Cấp Bậc (10/2026) — gợi ý từ DB.jobGrades (Quản Lý Danh Mục), KHÔNG ép phải khớp đúng 1 giá trị (cùng
+// mức ràng buộc "mềm" như ocPopulateJobTitleDatalist() ở trên — gõ tự do vẫn lưu được).
+function ocPopulateJobGradeDatalist() {
+  sddSetOptions('orgChartJobGradeDatalist', (DB.jobGrades || []).map(g => ({ label: g, value: g })));
+}
 function onOrgChartNodeTypeChange() {
   const type = document.getElementById('orgChartNodeTypeSelect').value;
   document.getElementById('orgChartNodeDeptFields').classList.toggle('hidden', type !== 'DEPARTMENT');
@@ -739,6 +744,7 @@ function openOrgChartAddNodeModal(parentNodeId) {
   document.getElementById('orgChartNodeHeadcountQuotaInput').value = '';
   ocPopulateNodeDeptRefSelect('');
   ocPopulateJobTitleDatalist();
+  ocPopulateJobGradeDatalist();
   onOrgChartNodeTypeChange();
   document.getElementById('orgChartNodeModal').classList.remove('hidden');
 }
@@ -759,6 +765,7 @@ function openOrgChartEditNodeModal(nodeId) {
     document.getElementById('orgChartNodeJobGradeInput').value = node.jobGrade || '';
     document.getElementById('orgChartNodeHeadcountQuotaInput').value = node.headcountQuota == null ? '' : node.headcountQuota;
     ocPopulateJobTitleDatalist(node.posType || ''); // SAU KHI đã biết posType — lọc đúng danh mục ngay khi mở
+    ocPopulateJobGradeDatalist();
   } else {
     ocPopulateJobTitleDatalist();
     document.getElementById('orgChartNodeNameInput').value = node.nodeName || '';

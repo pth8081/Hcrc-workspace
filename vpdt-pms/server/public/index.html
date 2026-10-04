@@ -1994,8 +1994,9 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Cấp Bậc (tuỳ chọn)</label>
-            <input id="orgChartNodeJobGradeInput" placeholder="VD: L7.2" maxlength="20" class="w-full border p-1.5 rounded text-sm">
-            <p class="text-[11px] text-gray-400 mt-1">Tự động ghi vào hồ sơ nhân sự khi HR gán/đổi chức vụ này — để trống nếu chưa cần dùng.</p>
+            <input id="orgChartNodeJobGradeInput" data-sdd-list="orgChartJobGradeDatalist" autocomplete="off" placeholder="VD: L7.2 — gõ hoặc chọn từ danh mục Cấp Bậc" maxlength="20" class="w-full border p-1.5 rounded text-sm">
+            <div id="orgChartJobGradeDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <p class="text-[11px] text-gray-400 mt-1">Tự động ghi vào hồ sơ nhân sự khi HR gán/đổi chức vụ này — để trống nếu chưa cần dùng. Danh mục gợi ý sửa ở Hệ Thống → Quản Lý Danh Mục → Cấp Bậc.</p>
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Định Biên (tuỳ chọn)</label>

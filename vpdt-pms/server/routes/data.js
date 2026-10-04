@@ -252,6 +252,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // mục (learnLicenseType(), routes/create.js) — không dựng lại được khả năng ghi đè/xoá trắng cả
   // danh mục. Admin vẫn thêm/bớt/dọn danh mục ở màn Quản Lý Danh Mục qua đúng route này như trước.
   'depts', 'cats', 'licenseTypes', 'trainingCategories', 'contractTypeAbbrs',
+  // jobGrades/resignationReasons/disciplinaryTypes (10/2026) — 3 danh mục MỞ mới (Cấp Bậc/Lý Do Nghỉ
+  // Việc/Loại Kỷ Luật, xem defaults.js), cùng lý do khoá ghi như depts/jobTitles ở trên: panel CRUD chỉ
+  // hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
+  'jobGrades', 'resignationReasons', 'disciplinaryTypes',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',

@@ -4242,6 +4242,46 @@ làm được nay bị chặn:
 
 ---
 
+## 5f. Đợt cập nhật 10/2026: Danh mục Cấp Bậc + Lý Do Nghỉ Việc + Kỷ Luật + 7 trường Người Phụ Thuộc
+
+**3 danh mục MỞ mới (Hệ Thống → Quản Lý Danh Mục)**
+- **Cấp Bậc** — gợi ý cho ô "Cấp Bậc" của 1 Vị Trí trong **Cơ Cấu Tổ Chức**
+  (trước đây là ô gõ tay hoàn toàn tự do, không có danh mục nào cả).
+- **Lý Do Nghỉ Việc** — gợi ý cho ô "Lý Do Nghỉ Việc" khi tạo **Offboarding**.
+- **Loại Kỷ Luật** — gợi ý cho ô "Loại kỷ luật" ở khối Kỷ luật (Hồ Sơ Nhân Sự).
+- Cả 3 đều là danh mục **MỀM** (gợi ý qua ô gõ-hoặc-chọn, giống hệt "Chức
+  Danh"/"Phòng Ban" đã có từ trước) — KHÔNG ép buộc giá trị nhập phải khớp
+  đúng 1 mục có sẵn trong danh mục. Quản trị thêm/xoá mục trong danh mục
+  giống mọi danh mục khác (Thêm/Sửa/Xoá, chọn nhiều để xoá, Tải Mẫu/Nhập/
+  Xuất Excel — dùng chung registry "danh mục mảng chuỗi phẳng" đã có).
+
+**Onboarding/Offboarding — ô "Lý Do Nghỉ Việc" mới (chỉ Offboarding)**
+- Form tạo **Offboarding** có thêm ô **"Lý Do Nghỉ Việc"** (gõ-hoặc-chọn từ
+  danh mục ở trên), TÁCH RIÊNG khỏi ô **"Ghi Chú Thêm"** tự do có sẵn từ
+  trước (đổi nhãn từ "Lý do / Ghi chú" để rõ nghĩa hơn — không đổi hành vi/
+  dữ liệu đã lưu trước đó). Mục đích: thống kê báo cáo được theo đúng nhóm
+  lý do nghỉ việc thay vì phải đọc tay từng dòng ghi chú tự do.
+
+**Hồ Sơ Nhân Sự — khối "⚠️ Kỷ luật" mới (chỉ HR, tab "📋 Quản Lý Hồ Sơ")**
+- Mỗi hồ sơ nhân sự nay có thêm mảng **Kỷ luật**: Ngày, Loại kỷ luật (gợi ý
+  từ danh mục "Loại Kỷ Luật"), Ghi chú — chỉ người có quyền quản lý Hồ Sơ
+  Nhân Sự mới thêm/sửa được, KHÔNG hiện ở "👤 Hồ Sơ Của Tôi" (nhân viên
+  không tự xem/sửa kỷ luật của chính mình qua hệ thống này). Đây là field
+  **nhạy cảm** (nằm trong cấu hình "⚙️ Trường Xem Của Quản Lý Trực Tiếp" —
+  mặc định ẨN, admin phải chủ động mở mới cho quản lý trực tiếp xem được ở
+  bản giới hạn), nâng tổng số trường nhạy cảm có thể cấu hình từ 19 lên 20.
+
+**Người Phụ Thuộc — 7 trường mới phục vụ khai giảm trừ gia cảnh thuế TNCN**
+- Đối chiếu mẫu khai "Người Phụ Thuộc" của bộ phận Nhân Sự, mỗi người phụ
+  thuộc (Hồ Sơ Nhân Sự → khối "👨‍👩‍👧 Người phụ thuộc") có thêm: **Quốc
+  tịch**, **Số CMND/Hộ chiếu**, **Thời gian tính giảm trừ** (Từ tháng/Đến
+  tháng — chọn tháng/năm), **Tháng cắt giảm trừ**, **Số tiền giảm trừ**,
+  **Tháng kê khai**. Cả 7 trường đều **TUỲ CHỌN** (hồ sơ cũ/để trống vẫn
+  lưu và hiển thị bình thường) — áp dụng cho cả form nhập tay và Nhập/Xuất
+  Excel hàng loạt.
+
+---
+
 ## 6. Phân quyền (permission model)
 
 **Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**
