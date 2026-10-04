@@ -23,7 +23,11 @@ async function main() {
     }, baseCatalogSeed());
     await page.evaluate((u) => { DB.users = [u]; }, admin);
     await page.evaluate((u) => finishLogin(u), admin);
-    await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); });
+    // Thu gọn form nhập (10/2026) — #internalPostForm giờ bắt đầu ẨN mỗi khi đổi sub-tab, phải tự mở
+    // qua openInternalPostForm() (nút "+ Đăng Bài Mới") trước khi tương tác trực tiếp các field thật
+    // bằng Playwright (fill/click/setInputFiles đều cần phần tử VISIBLE, khác hẳn page.evaluate() gán
+    // thẳng .value vốn không cần — toàn bộ test file này dùng tương tác thật nên cần mở form).
+    await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); openInternalPostForm(); });
 
     const waitUploads = (expectImages, expectVideos) => page.waitForFunction(([i, v]) =>
       internalMediaUploading === 0 && internalMediaDraft.images.length === i && internalMediaDraft.videos.length === v, [expectImages, expectVideos], { timeout: 10000 });
@@ -242,6 +246,9 @@ async function main() {
     // ===== Video nhúng YouTube (9/2026) — {type:'youtube', youtubeUrl} song song video tải lên =====
     const YT_URL = 'https://youtu.be/dQw4w9WgXcQ';
     await run('YouTube: nút "Dán link YouTube" (data-op) hiện ô nhập link + ẩn ô chọn tệp; "Tải video lên" đổi lại', async () => {
+      // cancelEditInternalPost() ở test ngay trên đã ẩn lại form (thu gọn form nhập, 10/2026) — mở lại
+      // trước khi click thật lên các nút trong #internalPostForm.
+      await page.evaluate(() => openInternalPostForm());
       await page.click('#internalVideoModeTabs [data-video-mode="youtube"]');
       let s = await page.evaluate(() => ({ up: document.getElementById('internalVideoUploadBox').classList.contains('hidden'), yt: document.getElementById('internalVideoYoutubeBox').classList.contains('hidden') }));
       assert(s.up && !s.yt, `chế độ YouTube: ${JSON.stringify(s)}`);
@@ -362,7 +369,9 @@ async function main() {
 
     // ===== Góc Chia Sẻ (SHARE, 10/2026): CHỈ cho nhúng link YouTube, KHÔNG cho tải file video lên =====
     await run('Góc Chia Sẻ (SHARE): ẩn nút "Tải video lên", tự chuyển sang chế độ Dán link YouTube', async () => {
-      await page.evaluate(() => setInternalSubTab('SHARE'));
+      // Thu gọn form nhập (10/2026) — mở lại form (bắt đầu ẨN sau khi đổi sub-tab) để test ngay dưới
+      // (và test kế tiếp) được fill/click thật lên #internalYoutubeUrlInput.
+      await page.evaluate(() => { setInternalSubTab('SHARE'); openInternalPostForm(); });
       const s = await page.evaluate(() => ({
         tabsHidden: document.getElementById('internalVideoModeTabs').classList.contains('hidden'),
         uploadHidden: document.getElementById('internalVideoUploadBox').classList.contains('hidden'),
@@ -407,6 +416,9 @@ async function main() {
     // (Không quét cả #internalPostForm: core.js đặt el.style.order qua CSSOM — hợp lệ CSP, có từ trước —
     // nên innerHTML của form tự serialize ra style="order: 0;" không phải do HTML nội tuyến.)
     await run('không có on*=/style= nội tuyến trong HTML đã render (preview ảnh/video, feed, chi tiết)', async () => {
+      // cancelEditInternalPost() ở test ngay trên đã ẩn lại form (thu gọn form nhập, 10/2026) — mở lại
+      // trước khi setInputFiles() thật lên #internalImagesInput/#internalVideosInput.
+      await page.evaluate(() => openInternalPostForm());
       await page.setInputFiles('#internalImagesInput', [{ name: 'x.png', mimeType: 'image/png', buffer: PNG }]);
       await page.setInputFiles('#internalVideosInput', [{ name: 'x.mp4', mimeType: 'video/mp4', buffer: MP4 }]);
       await waitUploads(1, 1);

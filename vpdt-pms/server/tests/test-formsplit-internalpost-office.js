@@ -41,7 +41,9 @@ async function main() {
     // readonly mới được miễn, xem setInternalSubTab() ở module-internalcomms-nhipsong.js). =====
     await run('Phiên MỚI đi thẳng Góc Chia Sẻ (chưa từng mở Nhịp Sống HCRC): form vẫn hợp lệ (không bị field ẩn internalPostCategory của NEWS chặn)', async () => {
       await page.evaluate((u) => finishLogin(u), author);
-      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); });
+      // Thu gọn form nhập (10/2026) — #internalPostForm giờ bắt đầu ẨN mỗi khi đổi sub-tab, phải tự mở
+      // qua openInternalPostForm() (nút "+ Đăng Bài Mới") trước khi fill/selectOption thật bằng Playwright.
+      await page.evaluate(() => { switchTab('internal'); setInternalSubTab('SHARE'); openInternalPostForm(); });
       await page.fill('#internalTitle', 'Chia sẻ phiên mới');
       await page.fill('#internalContent', 'Nội dung.');
       await page.selectOption('#internalPostCategoryShare', { index: 1 });
@@ -50,7 +52,7 @@ async function main() {
     });
 
     await run('Phiên MỚI đi thẳng Nhịp Sống HCRC (chưa từng mở Góc Chia Sẻ): form vẫn hợp lệ (không bị field ẩn internalPostCategoryShare chặn)', async () => {
-      await page.evaluate(() => { setInternalSubTab('NEWS'); });
+      await page.evaluate(() => { setInternalSubTab('NEWS'); openInternalPostForm(); });
       await page.selectOption('#internalPostCategory', { index: 1 });
       const formValid = await page.evaluate(() => document.getElementById('internalPostForm').checkValidity());
       assert(formValid, 'Form phải HỢP LỆ (checkValidity()=true) trên Nhịp Sống HCRC — field ẩn internalPostCategoryShare (Góc Chia Sẻ) không được required nữa');

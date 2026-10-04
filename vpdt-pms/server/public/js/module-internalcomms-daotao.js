@@ -76,6 +76,10 @@ function setTrainingLmsTab(tab) {
   document.getElementById('trainingLmsPathsPanel').classList.toggle('hidden', tab !== 'PATHS');
   document.getElementById('trainingLmsOnboardingPanel').classList.toggle('hidden', tab !== 'ONBOARDING');
   document.getElementById('trainingLmsTestsPanel').classList.toggle('hidden', tab !== 'TESTS');
+  // Thu gọn form nhập (10/2026, nút "+ Tạo Lớp Mới"/"✕ Thu Gọn", pattern mẫu mhVendorFormWrap) —
+  // #trainingClassForm giờ LUÔN bắt đầu ẨN mỗi khi đổi tab LMS (renderTrainingLms() ở dưới KHÔNG tự mở
+  // lại nữa, chỉ còn đổi hiện/ẩn nút "+ Tạo Lớp Mới" theo canManage) — chỉ mở qua openTrainingClassForm().
+  document.getElementById('trainingClassForm')?.classList.add('hidden');
   renderTrainingLms();
 }
 
@@ -253,7 +257,10 @@ function renderTrainingLms() {
   // không phải DASHBOARD nên trường hợp còn kẹt ở tab này chỉ xảy ra nếu quyền bị thu hồi NGAY khi đang
   // mở đúng tab đó (hiếm), không đáng để thêm phức tạp xử lý.
   if (!canManage && activeTrainingLmsTab === 'DASHBOARD') activeTrainingLmsTab = 'CLASSES';
-  document.getElementById('trainingClassForm').classList.toggle('hidden', !canManage);
+  // Thu gọn form nhập (10/2026): KHÔNG tự mở lại #trainingClassForm ở đây nữa (setTrainingLmsTab() đã
+  // ẩn sẵn mỗi khi đổi tab) — chỉ nút "+ Tạo Lớp Mới" đổi theo canManage, đúng gộp điều kiện cũ từng áp
+  // trực tiếp lên chính form.
+  document.getElementById('btnTrainingClassNew').classList.toggle('hidden', !canManage);
   document.getElementById('trainingClassNoPermNote').classList.toggle('hidden', canManage);
   // Chương Trình (Đợt 4) — catalog quản lý CHỈ trainingManage (kể cả giảng viên đã có trainingInstruct
   // cũng không tạo/xoá được, chỉ ĐỌC danh sách khi tạo/sửa lớp mình phụ trách — xem ghi chú
@@ -428,7 +435,20 @@ async function submitTrainingClass(e) {
   logSystemAction('INTERNAL', 'CREATE_TRAINING_CLASS', `Tạo lớp học đào tạo [${newClass.code} - ${newClass.title}]`, 'SUCCESS', newClass.code);
   alert('✅ Đã tạo lớp học thành công!');
   resetTrainingClassForm();
+  closeTrainingClassForm(); // Thu gọn form nhập (10/2026) — cùng khuôn closeMhVendorForm() sau khi lưu.
   renderTrainingLms();
+}
+
+// Thu gọn form nhập (10/2026, nút "+ Tạo Lớp Mới"/"✕ Thu Gọn", pattern mẫu mhVendorFormWrap/
+// module-muahang.js) — #trainingClassForm giờ bắt đầu ẨN mỗi khi đổi tab LMS (setTrainingLmsTab()), chỉ
+// mở lại qua openTrainingClassForm() này (Sửa lớp học đi qua MODAL riêng — openEditTrainingClassModal(),
+// không dùng chung form này nên không có rủi ro lẫn dữ liệu Sửa dở như #internalPostForm).
+function openTrainingClassForm() {
+  document.getElementById('trainingClassForm').classList.remove('hidden');
+  document.getElementById('trainingClassForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeTrainingClassForm() {
+  document.getElementById('trainingClassForm').classList.add('hidden');
 }
 
 // resetTrainingClassForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
