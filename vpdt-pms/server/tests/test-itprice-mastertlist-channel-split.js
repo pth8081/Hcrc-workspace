@@ -118,7 +118,7 @@ async function runClientTests(run) {
     // #mhItPriceMasterListSelect (Mua Hàng), WHOLESALE: #itPriceMasterListSelect (Vận Hành, id GIỮ
     // NGUYÊN — chỉ đổi trang sống của panel quản trị).
     async function retailSelectOptionTexts() {
-      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
+      await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); openMhItPriceCreateForm(); });
       await page.waitForTimeout(150);
       const texts = await page.evaluate(() => Array.from(document.getElementById('mhItPriceMasterListSelect').options).map(o => o.text));
       await page.evaluate(() => { switchTab('system'); setSystemSubTab('BIZCONFIG'); });
