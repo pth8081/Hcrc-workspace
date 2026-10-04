@@ -5172,6 +5172,32 @@ kiểu mã hoá (Không mã hoá/TLS/SSL, tự đổi Port sang giá trị chu�
 hệ thống chỉ **mô phỏng** gửi email (ghi Nhật ký hệ thống, không gửi thật) cho
 tới khi nhập SMTP Server ở màn này.
 
+**Đồng bộ Port ↔ Mã Hoá 2 CHIỀU** (10/2026, vá tương thích Postfix port 465):
+bấm 1 trong 3 nút mã hoá tự nhảy Port sang giá trị chuẩn (như trên), VÀ NGƯỢC
+LẠI — tự gõ thẳng đúng 1 trong 3 Port chuẩn (25/587/465) vào ô Port cũng tự
+chọn giúp đúng kiểu mã hoá khớp Port đó (VD gõ `465` tự bật "SSL"). Trước đây
+chỉ đồng bộ 1 chiều (mã hoá → port), nên admin gõ thẳng Port 465 mà không bấm
+nút SSL sẽ giữ nguyên mã hoá mặc định STARTTLS — kết hợp "Port 465 + STARTTLS"
+SAI với chuẩn SMTPS (465 luôn là "implicit TLS" — mã hoá ngay từ khi kết nối,
+khác hẳn STARTTLS/587 là kết nối thường rồi nâng cấp mã hoá sau) khiến gửi
+email treo/lỗi bắt tay mà không rõ nguyên nhân — đúng triệu chứng khi tích
+hợp với 1 Postfix gateway nội bộ lắng nghe ở port 465. Gõ 1 Port tuỳ chỉnh
+khác (không khớp 25/587/465, VD relay nội bộ dùng 2525) thì giữ nguyên mã hoá
+đang chọn, không tự đổi.
+
+**Chấp nhận chứng chỉ TLS tự ký** — checkbox ngay dưới khối Mã Hoá Kết Nối.
+Bật khi máy chủ SMTP nội bộ (VD Postfix tự dựng) dùng chứng chỉ TLS **tự ký**
+(self-signed, chưa có chứng chỉ do CA công cộng cấp) — mặc định nodemailer từ
+chối kết nối tới chứng chỉ này (lỗi "self signed certificate"). Mặc định tắt
+(an toàn hơn, vẫn kiểm tra chứng chỉ bình thường) — chỉ bật khi admin xác nhận
+rõ đây là máy chủ SMTP nội bộ tin cậy.
+
+**Gửi Thử hiện lỗi SMTP thật** — khi "Gửi Thử" thất bại, màn hình hiện thẳng
+thông báo lỗi THẬT từ máy chủ SMTP (VD "self signed certificate", "Greeting
+never received", sai tài khoản/mật khẩu...) thay vì câu chung "kiểm tra lại
+log server" như trước — admin không cần quyền SSH vào máy chủ vẫn tự chẩn
+đoán được nguyên nhân.
+
 **🔔 Thông Báo Email Phê Duyệt** — cho phép admin **tắt riêng** từng loại
 email liên quan phê duyệt theo từng module, mà không đụng gì tới cấu hình SMTP
 ở trên. Lý do: nhiều người đã thấy hồ sơ chờ duyệt qua Hộp Thư Phê Duyệt (mục

@@ -516,7 +516,7 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
-            <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded" required>
+            <input id="cfgSmtpPort" type="number" placeholder="587" data-op-change="syncSmtpEncryptionFromPort" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
@@ -532,7 +532,11 @@
             <button type="button" data-op="setSmtpEncryption" data-arg0="SSL" id="encBtn_SSL" class="px-3 py-1.5 rounded border font-semibold">SSL <span class="font-normal text-gray-400">(port 465)</span></button>
           </div>
           <input type="hidden" id="cfgSmtpEncryption" value="STARTTLS">
-          <p class="text-[11px] text-gray-400 italic mt-1">Chọn "TLS" hoặc "SSL" sẽ tự chuyển Port sang giá trị chuẩn ở trên — trừ khi Port hiện tại đã là 1 giá trị tuỳ chỉnh khác (sẽ giữ nguyên, sửa tay được như bình thường).</p>
+          <p class="text-[11px] text-gray-400 italic mt-1">Chọn "TLS" hoặc "SSL" sẽ tự chuyển Port sang giá trị chuẩn ở trên — trừ khi Port hiện tại đã là 1 giá trị tuỳ chỉnh khác (sẽ giữ nguyên, sửa tay được như bình thường). Ngược lại, tự gõ thẳng 1 trong 3 Port chuẩn (25/587/465) cũng tự chọn giúp đúng kiểu mã hoá khớp Port đó — VD gõ 465 (cổng SMTPS chuẩn của Postfix) sẽ tự bật "SSL", không cần bấm tay.</p>
+          <label class="flex items-center gap-2 font-semibold text-gray-600 mt-2">
+            <input type="checkbox" id="cfgSmtpAllowSelfSigned">
+            Chấp nhận chứng chỉ TLS tự ký (self-signed) — bật nếu máy chủ SMTP nội bộ (VD Postfix tự dựng) chưa có chứng chỉ do CA công cộng cấp
+          </label>
         </div>
 
         <div class="border-t pt-2">

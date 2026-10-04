@@ -6941,6 +6941,25 @@ function setSmtpEncryption(mode) {
   }
 }
 
+// LỖI ĐÃ VÁ (10/2026, báo cáo người dùng — gateway Postfix port 465 "không gửi được"): đồng bộ CHỈ 1
+// CHIỀU phía trên (bấm nút mã hoá -> tự nhảy Port) — chiều NGƯỢC LẠI (tự gõ thẳng Port chuẩn, VD được
+// báo "port Postfix của mình là 465" nên gõ 465 vào ô Port rồi bấm Lưu luôn, KHÔNG đụng tới 3 nút mã
+// hoá ở trên) trước đây KHÔNG tự đổi gì — "Mã Hoá Kết Nối" vẫn giữ nguyên giá trị mặc định của ô ẩn
+// cfgSmtpEncryption ("STARTTLS") dù Port đã là 465. Kết hợp "Port 465 + STARTTLS" SAI với Postfix chuẩn
+// (465 luôn là SSL/TLS ngay từ khi kết nối — "implicit TLS", KHÔNG phải bắt tay thường rồi nâng cấp
+// sau như STARTTLS/587) — lib/mailer.js dựng đúng 2 kiểu transport khác hẳn nhau (xem
+// encryptionToTransportOptions()), gửi theo STARTTLS tới 1 cổng chờ sẵn TLS ngay từ đầu sẽ treo/lỗi bắt
+// tay, "chưa thể gửi" mà không rõ nguyên nhân. Thêm hàm này (gọi qua data-op-change="..." trên chính ô
+// Port, xem systemSection.html) hoàn thiện nốt chiều còn thiếu — gõ ĐÚNG 1 trong 3 port chuẩn (25/587/
+// 465) thì tự chọn giúp đúng kiểu mã hoá khớp port đó, y hệt logic/độ ưu tiên setSmtpEncryption() ở
+// trên (chỉ áp dụng khi port gõ vào khớp CHÍNH XÁC 1 giá trị chuẩn — port tuỳ chỉnh khác (relay nội bộ
+// dùng 26/2525...) thì không đụng gì tới lựa chọn mã hoá đang có, đúng ý admin).
+function syncSmtpEncryptionFromPort() {
+  const port = parseInt(document.getElementById('cfgSmtpPort').value, 10);
+  const match = Object.entries(SMTP_ENCRYPTION_STANDARD_PORTS).find(([, p]) => p === port);
+  if (match) setSmtpEncryption(match[0]);
+}
+
 function toggleSmtpAuthFields() {
   const enabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   document.getElementById('cfgSmtpAuthFields').classList.toggle('hidden', !enabled);
@@ -6990,6 +7009,7 @@ async function saveEmailConfig(e) {
     // không phải bản ghi lưu thật (xem prepareEmailConfigForSave() ở routes/data.js). Để trống ô này
     // = giữ nguyên mật khẩu đã lưu, khớp đúng quy ước "write-only" như đổi mật khẩu người dùng.
     smtpPassPlain: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
+    smtpAllowSelfSigned: document.getElementById('cfgSmtpAllowSelfSigned').checked,
     senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
@@ -7030,6 +7050,7 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgSmtpAuthEnabled').checked = !!DB.emailConfig.smtpAuthEnabled;
   document.getElementById('cfgSmtpUser').value = DB.emailConfig.smtpUser || '';
   document.getElementById('cfgSmtpPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
+  document.getElementById('cfgSmtpAllowSelfSigned').checked = !!DB.emailConfig.smtpAllowSelfSigned;
   toggleSmtpAuthFields();
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
@@ -7192,7 +7213,8 @@ async function sendTestEmail() {
         smtpAuthEnabled,
         smtpUser: smtpAuthEnabled ? document.getElementById('cfgSmtpUser').value.trim() : '',
         smtpPass: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
-        senderEmail: document.getElementById('cfgSenderEmail').value.trim()
+        senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
+        smtpAllowSelfSigned: document.getElementById('cfgSmtpAllowSelfSigned').checked
       })
     });
     const body = await res.json().catch(() => ({}));

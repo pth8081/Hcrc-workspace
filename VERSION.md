@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**24.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.97 (2026-10-04): Vá tương thích Email SMTP với Postfix port 465 + hiện lỗi thật khi Gửi Thử
+
+Người dùng báo: email gateway Postfix lắng nghe ở port 465 nhưng hệ thống "chưa thể gửi" được, không rõ
+nguyên nhân. Chẩn đoán qua đọc code + mô phỏng 1 máy chủ TLS kiểu Postfix (self-signed cert, `tls` module
+Node) để xác nhận thật bằng sendMail(): phát hiện khung "Cấu Hình Email" trước đây chỉ đồng bộ Port theo
+Mã Hoá **1 CHIỀU** (bấm nút TLS/SSL → tự nhảy Port chuẩn), không có chiều ngược lại — admin gõ thẳng Port
+465 (không bấm nút SSL) vẫn giữ mã hoá mặc định STARTTLS, ra tổ hợp "Port 465 + STARTTLS" sai chuẩn
+SMTPS (465 phải là *implicit TLS* ngay từ đầu, không phải bắt tay thường rồi nâng cấp như STARTTLS), gây
+treo/lỗi bắt tay — đúng triệu chứng người dùng gặp.
+
+- `public/js/core.js`: thêm `syncSmtpEncryptionFromPort()` — đồng bộ chiều còn thiếu (gõ đúng 1 trong 3
+  Port chuẩn 25/587/465 → tự chọn đúng kiểu mã hoá khớp Port đó), gắn qua `data-op-change` trên chính ô
+  Port (`systemSection.html`). Port tuỳ chỉnh khác không bị đụng tới mã hoá đang chọn.
+- Thêm checkbox **"Chấp nhận chứng chỉ TLS tự ký"** (`cfgSmtpAllowSelfSigned`) — máy chủ chẩn đoán cũng
+  lộ ra 1 blocker thứ 2 rất có thể gặp tiếp theo với Postfix tự dựng: chứng chỉ TLS tự ký (không do CA
+  công cộng cấp) bị nodemailer từ chối mặc định, trước đây chỉ bật được qua `.env` (admin không SSH được
+  sẽ không tự bật). Nay bật trực tiếp trên web (`lib/mailer.js` nhận tham số `allowSelfSigned`, OR với
+  `.env SMTP_TLS_REJECT_UNAUTHORIZED` cũ — không mất đường lùi máy chủ cũ).
+- `routes/email.js` (`POST /` và `POST /test`): hiện thẳng lỗi SMTP THẬT (`err.message` từ nodemailer,
+  VD "self signed certificate", "Greeting never received") khi "Gửi Thử" thất bại, thay câu chung "kiểm
+  tra lại log server" — admin không cần SSH vào máy chủ vẫn tự chẩn đoán được.
+- Xác minh qua Playwright (`syncSmtpEncryptionFromPort` 4 kịch bản + checkbox save/load/test-payload 4
+  kịch bản, tổng 8/8 pass) + mô phỏng TLS server thật xác nhận đúng lỗi "Timeout" (STARTTLS sai) chuyển
+  thành bắt tay TLS đúng (SSL đúng) + chạy lại 3 bộ test Cấu Hình Email hiện có (33+4+5 scenario, không
+  regression).
+- Không cần đổi `schema.sql`/`.env.example` mới (field `smtpAllowSelfSigned` nằm trong `DB.emailConfig`,
+  lưu qua AppData JSON hiện có, không phải cột SQL riêng) — chỉ cần copy code + `pm2 restart`.
 
 ## v24.93 (2026-10-04): "Thu gọn form nhập" toàn ứng dụng (34 form + 21 thẻ danh mục) + làm mỏng ô Tìm Kiếm & Lọc
 

@@ -52,7 +52,7 @@ function resolveEncryption(emailConfig) {
   return (parseInt(smtpPort, 10) || 587) === 465 ? 'SSL' : 'STARTTLS';
 }
 
-function buildTransporter({ host, port, encryption, user, pass }) {
+function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned }) {
   const resolvedPort = parseInt(port, 10) || 587;
 
   const config = {
@@ -75,9 +75,14 @@ function buildTransporter({ host, port, encryption, user, pass }) {
   if (resolvedUser && resolvedPass) {
     config.auth = { user: resolvedUser, pass: resolvedPass };
   }
-  // Một số relay nội bộ dùng chứng chỉ TLS tự ký — cho phép bỏ qua kiểm tra hợp lệ chứng chỉ khi
-  // khai báo rõ ràng (mặc định vẫn kiểm tra bình thường).
-  if (process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false') {
+  // Một số relay nội bộ (VD Postfix tự dựng, chưa có chứng chỉ do CA công cộng cấp) dùng chứng chỉ TLS
+  // TỰ KÝ — cho phép bỏ qua kiểm tra hợp lệ chứng chỉ khi khai báo rõ ràng (mặc định vẫn kiểm tra bình
+  // thường, an toàn hơn). LỖI ĐÃ VÁ (10/2026): trước đây CHỈ bật được qua .env SMTP_TLS_REJECT_UNAUTHORIZED
+  // (admin không SSH được vào máy chủ sẽ không tự bật được) — nay thêm "allowSelfSigned" (tham số do nơi
+  // gọi truyền vào, lấy từ DB.emailConfig.smtpAllowSelfSigned — xem ô "Chấp nhận chứng chỉ TLS tự ký" ở
+  // màn Cấu Hình Email) làm nguồn THỨ 2, OR với .env cũ — admin tự bật trực tiếp trên web, không mất đi
+  // đường lùi .env của máy chủ đã deploy từ trước.
+  if (allowSelfSigned || process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false') {
     config.tls = { rejectUnauthorized: false };
   }
   return { transporter: nodemailer.createTransport(config), resolvedHost: host, resolvedPort };
@@ -87,7 +92,7 @@ function buildTransporter({ host, port, encryption, user, pass }) {
 // bại). Trả về { sent, failed, simulated, host, port } — có kèm host/port THỰC đã dùng để gửi (chỉ
 // khi simulated:false) để nơi gọi (Nhật ký hệ thống) ghi rõ đã xác nhận gửi tới máy chủ nào, phục vụ
 // việc kiểm tra/xác minh thay vì chỉ tin vào việc "đã thử gửi".
-async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from }) {
+async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   if (recipients.length === 0) return { sent: [], failed: [], simulated: false };
 
@@ -96,21 +101,31 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
     return { sent: [], failed: recipients, simulated: true };
   }
 
-  const { transporter, resolvedHost, resolvedPort } = buildTransporter({ host, port, encryption, user, pass });
+  const { transporter, resolvedHost, resolvedPort } = buildTransporter({ host, port, encryption, user, pass, allowSelfSigned });
   const fromAddr = from || user || process.env.SMTP_USER || 'no-reply@localhost';
 
   const sent = [];
   const failed = [];
+  // LỖI ĐÃ VÁ (10/2026, báo cáo người dùng — "chưa thể gửi" qua gateway Postfix nhưng không rõ vì
+  // sao): trước đây lỗi THẬT từ nodemailer (sai cặp Port/Mã hoá, xác thực sai, chứng chỉ TLS tự ký bị
+  // từ chối, kết nối bị từ chối/timeout...) chỉ log ra console SERVER — route POST /api/send-email/test
+  // (màn "Gửi Thử" ở Cấu Hình Email) trả về CÙNG 1 THÔNG BÁO CHUNG CHUNG "kiểm tra lại log server" bất
+  // kể nguyên nhân thật là gì, nên admin không có máy chủ (SSH) sẽ không tự chẩn đoán được. Giữ lại
+  // thông báo lỗi CUỐI CÙNG (đủ dùng cho "Gửi Thử" — luôn đúng 1 người nhận) để nơi gọi (routes/email.js)
+  // trả thẳng ra UI, giúp admin tự thấy ngay lý do thật (VD "Greeting never received" khi gửi STARTTLS
+  // tới cổng chờ sẵn TLS như 465, hoặc "self signed certificate" khi Postfix dùng chứng chỉ tự ký).
+  let lastErrorMessage = null;
   for (const addr of recipients) {
     try {
       await transporter.sendMail({ from: fromAddr, to: addr, subject, text, html: html || undefined });
       sent.push(addr);
     } catch (err) {
       console.error(`⛔ Gửi email tới ${addr} thất bại:`, err.message);
+      lastErrorMessage = err.message;
       failed.push(addr);
     }
   }
-  return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort };
+  return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort, errorMessage: lastErrorMessage };
 }
 
 module.exports = { sendMail, hasAuthConfigured, resolveEncryption };

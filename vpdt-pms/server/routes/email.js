@@ -148,7 +148,8 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
       port: emailConfig.smtpPort,
       encryption: resolveEncryption(emailConfig),
       user, pass,
-      from: emailConfig.senderEmail
+      from: emailConfig.senderEmail,
+      allowSelfSigned: !!emailConfig.smtpAllowSelfSigned
     });
     res.json(result);
   } catch (err) {
@@ -165,7 +166,7 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
   if (!req.freshUser?.perms?.admin) {
     return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được gửi email thử' });
   }
-  const { to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail } = req.body || {};
+  const { to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail, smtpAllowSelfSigned } = req.body || {};
   if (!to) return res.status(400).json({ error: 'Thiếu địa chỉ email nhận thử' });
   if (!host) return res.status(400).json({ error: 'Thiếu SMTP Server' });
 
@@ -200,13 +201,21 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
       host, port, encryption,
       user: testUser,
       pass: testPass,
-      from: senderEmail
+      from: senderEmail,
+      allowSelfSigned: !!smtpAllowSelfSigned
     });
     if (result.simulated) {
       return res.status(400).json({ error: 'Thiếu SMTP Server, không thể gửi thử' });
     }
     if (result.failed.length) {
-      return res.status(502).json({ error: `Máy chủ SMTP ${result.host}:${result.port} từ chối/lỗi gửi thử — kiểm tra lại log server để biết chi tiết.` });
+      // LỖI ĐÃ VÁ (10/2026): trả thẳng err.message THẬT từ nodemailer (lib/mailer.js) thay vì câu chung
+      // chung "kiểm tra log server" — admin không SSH được vào máy chủ vẫn tự thấy ngay nguyên nhân (vd
+      // sai cặp Port/Mã hoá khi gateway Postfix dùng cổng 465 "implicit TLS" nhưng form đang để STARTTLS,
+      // chứng chỉ TLS tự ký bị từ chối, sai tài khoản/mật khẩu...). Không lộ gì nhạy cảm — đây là thông
+      // báo lỗi SMTP chuẩn (vd "Invalid login", "self signed certificate"), không chứa mật khẩu/host nội
+      // bộ nào ngoài thứ admin vừa tự gõ trên chính form này.
+      const detail = result.errorMessage ? ` — Lỗi SMTP: ${result.errorMessage}` : '';
+      return res.status(502).json({ error: `Máy chủ SMTP ${result.host}:${result.port} từ chối/lỗi gửi thử${detail}` });
     }
     res.json({ ok: true, host: result.host, port: result.port });
   } catch (err) {
