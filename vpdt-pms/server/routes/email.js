@@ -179,7 +179,7 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
     sendMethod, graphTenantId, graphClientId, graphClientSecret, graphSenderMailbox,
     // sendMethod: 'EWS' khi admin đang thử nghiệm "Exchange (EWS)" — xác thực trực tiếp bằng mailbox
     // (Basic Auth) qua HTTPS, KHÔNG phải Azure AD App như Graph API, KHÔNG phải port 587 như SMTP.
-    ewsUrl, ewsMailboxUser, ewsMailboxPass
+    ewsUrl, ewsMailboxUser, ewsMailboxPass, ewsAllowSelfSigned
   } = req.body || {};
   if (!to) return res.status(400).json({ error: 'Thiếu địa chỉ email nhận thử' });
 
@@ -252,7 +252,7 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
         to,
         subject: '[VPDT] Email thử nghiệm cấu hình Exchange (EWS)',
         text: `Đây là email thử nghiệm để xác minh cấu hình gửi email qua Exchange Web Services (mailbox: ${ewsMailboxUser}). Nếu bạn nhận được email này, cấu hình đang hoạt động đúng.`,
-        ews: { enabled: true, ewsUrl, mailboxUser: ewsMailboxUser, mailboxPass: testMailboxPass }
+        ews: { enabled: true, ewsUrl, mailboxUser: ewsMailboxUser, mailboxPass: testMailboxPass, allowSelfSigned: !!ewsAllowSelfSigned }
       });
       if (result.simulated) {
         return res.status(400).json({ error: 'Thiếu thông tin cấu hình EWS, không thể gửi thử' });

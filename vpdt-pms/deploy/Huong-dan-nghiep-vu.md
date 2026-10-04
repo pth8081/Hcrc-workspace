@@ -5254,7 +5254,7 @@ trên.
   `CreateItem` — xem `lib/ewsMailer.js`) — **KHÔNG cần đăng ký Azure AD App**
   như Graph API, đơn giản hơn hẳn, nhưng vẫn **không dùng port 587** như
   SMTP thường. Khi chọn, form ẩn hẳn khối SMTP lẫn khối Graph API, hiện khối
-  riêng **"Cấu Hình Exchange Web Services (EWS)"** với 3 ô:
+  riêng **"Cấu Hình Exchange Web Services (EWS)"** với 4 ô:
   - **EWS URL** — địa chỉ endpoint EWS (VD
     `https://mail.yourcompany.com/EWS/Exchange.asmx` cho Exchange on-premise,
     hoặc URL EWS riêng của dịch vụ mail tương thích Exchange khác).
@@ -5263,6 +5263,15 @@ trên.
   - **Mật Khẩu Mailbox** — mật khẩu đăng nhập CHÍNH mailbox đó (write-only
     như mật khẩu SMTP/Client Secret Graph API — để trống khi sửa = giữ
     nguyên mật khẩu đã lưu).
+  - **Chấp nhận chứng chỉ TLS tự ký (self-signed)** — bật nếu máy chủ Exchange
+    on-premise/EWS nội bộ chưa có chứng chỉ do CA công cộng cấp (RIÊNG của
+    khối EWS, khác hẳn ô cùng tên của SMTP — 2 khối cấu hình độc lập). **BẮT
+    BUỘC phải bật đúng** nếu đúng tình huống này — người dùng xác nhận
+    (10/2026) máy chủ Exchange on-premise thật của họ dùng chứng chỉ tự ký:
+    nếu không bật, MỌI lượt gửi EWS sẽ luôn thất bại ngay ở tầng TLS
+    ("self-signed certificate") dù EWS URL/tài khoản/mật khẩu đều đúng, vì
+    `lib/ewsMailer.js` mặc định vẫn kiểm tra chứng chỉ bình thường (an toàn
+    hơn — chỉ tắt khi admin chủ động xác nhận).
   Dùng cho **Exchange on-premise** hoặc dịch vụ mail **tương thích giao thức
   Exchange** khác tự lưu trữ EWS endpoint riêng (VD **AWS WorkMail** — cùng
   giao thức EWS, chỉ khác URL endpoint theo vùng/tổ chức đã đăng ký). **Lưu ý

@@ -609,6 +609,10 @@
               <input id="cfgEwsPassPlain" type="password" placeholder="Để trống nếu giữ nguyên mật khẩu đã lưu" class="w-full border p-1.5 rounded" autocomplete="new-password">
             </div>
           </div>
+          <label class="flex items-center gap-2 font-semibold text-gray-600 mt-2">
+            <input type="checkbox" id="cfgEwsAllowSelfSigned">
+            Chấp nhận chứng chỉ TLS tự ký (self-signed) — bật nếu máy chủ Exchange on-premise/EWS nội bộ chưa có chứng chỉ do CA công cộng cấp
+          </label>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">

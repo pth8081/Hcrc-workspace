@@ -102,7 +102,11 @@ function resolveEwsOption(emailConfig) {
     enabled: true,
     ewsUrl: emailConfig.ewsUrl,
     mailboxUser: emailConfig.ewsMailboxUser,
-    mailboxPass
+    mailboxPass,
+    // "ewsAllowSelfSigned" — ô "Chấp nhận chứng chỉ TLS tự ký" RIÊNG của khối EWS (khác hẳn
+    // smtpAllowSelfSigned của SMTP, 2 khối cấu hình độc lập) — người dùng xác nhận (10/2026) máy chủ EWS
+    // on-premise thật của họ dùng chứng chỉ tự ký, không phải CA công cộng — xem lib/ewsMailer.js.
+    allowSelfSigned: !!emailConfig.ewsAllowSelfSigned
   };
 }
 
@@ -181,7 +185,7 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
     }
     const { sent, failed, lastErrorMessage } = await sendMailViaEws({
       ewsUrl: ews.ewsUrl, mailboxUser: ews.mailboxUser, mailboxPass: ews.mailboxPass,
-      to: recipients, subject, text, html
+      allowSelfSigned: ews.allowSelfSigned, to: recipients, subject, text, html
     });
     return { sent, failed, simulated: false, host: `${ews.ewsUrl} (Exchange Web Services)`, port: 443, errorMessage: lastErrorMessage };
   }

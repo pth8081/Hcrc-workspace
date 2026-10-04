@@ -135,23 +135,37 @@ async function main() {
     blockedSave.alerts.length > 0 && blockedSave.lastFetch === null,
     JSON.stringify(blockedSave));
 
-  // --- 2b. saveEmailConfig(): đủ EWS URL/Mailbox -> payload đúng ---
+  // --- 2b. saveEmailConfig(): đủ EWS URL/Mailbox + bật "Chấp nhận chứng chỉ TLS tự ký" -> payload đúng ---
+  // (10/2026, người dùng xác nhận máy chủ EWS on-premise thật của họ dùng chứng chỉ TỰ KÝ — ô này BẮT
+  // BUỘC phải có và phải gửi đúng lên server, nếu không mọi lượt gửi EWS thật sẽ luôn thất bại ở tầng TLS)
   await page.fill('#cfgEwsUrl', 'https://mail.test.local/EWS/Exchange.asmx');
   await page.fill('#cfgEwsMailboxUser', 'notify@test.local');
   await page.fill('#cfgEwsPassPlain', 'mysecret');
+  await page.check('#cfgEwsAllowSelfSigned', { force: true });
   await page.evaluate(() => { window.__alerts = []; window.__fetchByUrl = {}; });
   await page.evaluate(() => document.querySelector('form[data-op-submit="saveEmailConfig"]')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })));
   await page.waitForTimeout(100);
   const savedPayload = await page.evaluate(() => window.__fetchByUrl['/api/data/emailConfig']);
-  record('saveEmailConfig(): đủ cấu hình -> payload gửi lên đúng smtpGatewayType/ewsUrl/ewsMailboxUser/ewsPassPlain',
+  record('saveEmailConfig(): đủ cấu hình -> payload gửi lên đúng smtpGatewayType/ewsUrl/ewsMailboxUser/ewsPassPlain/ewsAllowSelfSigned',
     savedPayload && savedPayload.body &&
       savedPayload.body.smtpGatewayType === 'EXCHANGE_EWS' &&
       savedPayload.body.ewsUrl === 'https://mail.test.local/EWS/Exchange.asmx' &&
       savedPayload.body.ewsMailboxUser === 'notify@test.local' &&
-      savedPayload.body.ewsPassPlain === 'mysecret',
+      savedPayload.body.ewsPassPlain === 'mysecret' &&
+      savedPayload.body.ewsAllowSelfSigned === true,
     JSON.stringify(savedPayload));
 
-  // --- 3. sendTestEmail(): body gửi đúng sendMethod EWS ---
+  // --- 2c. loadEmailConfigToForm(): nạp lại cấu hình đã lưu -> ô "Chấp nhận chứng chỉ TLS tự ký" phải
+  // hiện ĐÚNG trạng thái đã lưu (không âm thầm reset về false, admin dễ tưởng nhầm vẫn đang bật) ---
+  const reloaded = await page.evaluate(() => {
+    DB.emailConfig = { smtpGatewayType: 'EXCHANGE_EWS', ewsUrl: 'https://mail.test.local/EWS/Exchange.asmx', ewsMailboxUser: 'notify@test.local', ewsAllowSelfSigned: true };
+    loadEmailConfigToForm();
+    return { checked: document.getElementById('cfgEwsAllowSelfSigned').checked };
+  });
+  record('loadEmailConfigToForm(): ewsAllowSelfSigned=true đã lưu -> ô checkbox hiện ĐÚNG đã tích',
+    reloaded.checked === true, JSON.stringify(reloaded));
+
+  // --- 3. sendTestEmail(): body gửi đúng sendMethod EWS + ewsAllowSelfSigned ---
   // Sau khi Lưu thành công, #cfgEwsPassPlain tự reset về rỗng (write-only, cùng quy ước SMTP/Graph API)
   // — ĐÚNG hành vi, không phải lỗi; gõ lại mật khẩu để gửi thử (giống admin gõ lại khi "Gửi Thử").
   await page.fill('#cfgEwsPassPlain', 'mysecret');
@@ -160,12 +174,13 @@ async function main() {
   await page.click('#cfgTestEmailBtn', { force: true });
   await page.waitForTimeout(150);
   const testPayload = await page.evaluate(() => window.__lastFetch);
-  record('sendTestEmail(): gatewayType=EXCHANGE_EWS -> body gửi đúng sendMethod="EWS" + 3 field EWS',
+  record('sendTestEmail(): gatewayType=EXCHANGE_EWS -> body gửi đúng sendMethod="EWS" + 4 field EWS (kể cả ewsAllowSelfSigned)',
     testPayload && testPayload.url === '/api/send-email/test' && testPayload.body &&
       testPayload.body.sendMethod === 'EWS' &&
       testPayload.body.ewsUrl === 'https://mail.test.local/EWS/Exchange.asmx' &&
       testPayload.body.ewsMailboxUser === 'notify@test.local' &&
       testPayload.body.ewsMailboxPass === 'mysecret' &&
+      testPayload.body.ewsAllowSelfSigned === true &&
       !('graphTenantId' in testPayload.body) && !('host' in testPayload.body),
     JSON.stringify(testPayload));
 

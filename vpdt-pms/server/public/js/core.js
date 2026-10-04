@@ -7125,6 +7125,9 @@ async function saveEmailConfig(e) {
     ewsMailboxUser: document.getElementById('cfgEwsMailboxUser').value.trim(),
     // "ewsPassPlain" cùng quy ước write-only như smtpPassPlain/graphClientSecretPlain ở trên.
     ewsPassPlain: document.getElementById('cfgEwsPassPlain').value,
+    // "Chấp nhận chứng chỉ TLS tự ký" RIÊNG của khối EWS (khác hẳn cfgSmtpAllowSelfSigned của SMTP) —
+    // người dùng xác nhận (10/2026) máy chủ Exchange on-premise thật của họ dùng chứng chỉ tự ký.
+    ewsAllowSelfSigned: document.getElementById('cfgEwsAllowSelfSigned').checked,
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
     licenseExpiryReminderDays: licenseReminderDays,
@@ -7175,6 +7178,7 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgEwsUrl').value = DB.emailConfig.ewsUrl || '';
   document.getElementById('cfgEwsMailboxUser').value = DB.emailConfig.ewsMailboxUser || '';
   document.getElementById('cfgEwsPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
+  document.getElementById('cfgEwsAllowSelfSigned').checked = !!DB.emailConfig.ewsAllowSelfSigned;
   refreshEmailGatewayPresetUI(DB.emailConfig.smtpGatewayType || 'CUSTOM');
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
@@ -7344,7 +7348,8 @@ async function sendTestEmail() {
         sendMethod: 'EWS',
         ewsUrl: document.getElementById('cfgEwsUrl').value.trim(),
         ewsMailboxUser: document.getElementById('cfgEwsMailboxUser').value.trim(),
-        ewsMailboxPass: document.getElementById('cfgEwsPassPlain').value
+        ewsMailboxPass: document.getElementById('cfgEwsPassPlain').value,
+        ewsAllowSelfSigned: document.getElementById('cfgEwsAllowSelfSigned').checked
       } : {
         to,
         host: document.getElementById('cfgSmtpHost').value.trim(),

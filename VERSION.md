@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**25.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. MINOR vừa chạm mốc `99` ở bản trước
-(`24.99`) nên cuộn sang MAJOR mới theo đúng quy tắc (`24.99` → `25.0`), không phải đổi lớn.
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.1 (2026-10-04): Vá lỗ hổng NGHIÊM TRỌNG — EWS không gửi được tới Exchange on-premise dùng chứng chỉ tự ký
+
+Người dùng xác nhận ngay sau khi v25.0 merge: máy chủ Exchange thật của họ là **ON-PREMISE** (không phải
+Exchange Online) và dùng **chứng chỉ TLS TỰ KÝ** (self-signed, giống hệt Postfix nội bộ của họ, chưa có
+CA công cộng cấp) — yêu cầu kiểm tra ngay xem tính năng EWS vừa thêm có đáp ứng được không.
+
+**Phát hiện lỗ hổng thật qua kiểm tra chủ động** (dựng 1 máy chủ HTTPS cục bộ với chứng chỉ tự ký thật
+bằng `openssl`, test request thật — không chỉ suy luận lý thuyết): bản v25.0 dùng thẳng `fetch()` toàn
+cục (Node 18+) để POST SOAP request tới EWS endpoint — `fetch()` LUÔN kiểm tra chứng chỉ TLS hợp lệ và
+**KHÔNG có cách nào tắt việc kiểm tra này qua tham số chuẩn** (không có `rejectUnauthorized` như module
+`https`; muốn dùng dispatcher tuỳ chỉnh phải thêm dependency `undici` ngoài). Hệ quả: với 1 EWS endpoint
+on-premise dùng chứng chỉ tự ký — ĐÚNG tình huống thật của người dùng — **mọi lượt gửi EWS LUÔN thất bại
+ngay ở tầng TLS** ("self-signed certificate"/"unable to verify the first certificate") dù EWS URL/tài
+khoản/mật khẩu đều đúng, khác hẳn SMTP (đã có sẵn ô "Chấp nhận chứng chỉ TLS tự ký" từ trước) và Graph API
+(luôn gọi endpoint công cộng Microsoft, không gặp vấn đề này).
+
+- `server/lib/ewsMailer.js`: đổi hẳn sang dùng module `https` thuần (không thêm dependency, Node đã có
+  sẵn) thay cho `fetch()` toàn cục — thêm tham số `allowSelfSigned`, đặt `rejectUnauthorized: false` khi
+  bật. Mặc định vẫn kiểm tra chứng chỉ bình thường (an toàn hơn).
+- `server/lib/mailer.js`: `resolveEwsOption()` đọc thêm `emailConfig.ewsAllowSelfSigned`, truyền
+  `allowSelfSigned` xuyên suốt `sendMail()` → `sendMailViaEws()`.
+- `routes/email.js` `/test`: nhận thêm `ewsAllowSelfSigned` từ body, truyền vào `ews.allowSelfSigned`.
+- **UI (Cấu Hình Email)**: thêm ô **"Chấp nhận chứng chỉ TLS tự ký"** RIÊNG trong khối "Cấu Hình Exchange
+  Web Services (EWS)" (khác hẳn ô cùng tên của SMTP — 2 khối cấu hình hoàn toàn độc lập, không chia sẻ
+  field, đúng kiến trúc đã có của hệ thống).
+
+Xác minh: viết lại TOÀN BỘ `tests/test-ews-mailer.js` để dựng 1 máy chủ HTTPS THẬT với chứng chỉ tự ký
+(sinh bằng `openssl` lúc chạy test, KHÔNG mock `fetch()` nữa vì code không còn dùng fetch) — 13/13 kịch
+bản, gồm 2 kịch bản TRỌNG YẾU chứng minh lỗ hổng có thật và đã được vá: (1) KHÔNG bật allowSelfSigned ->
+request thất bại THẬT ở tầng TLS với đúng lỗi "self-signed certificate" (không phải giả định), (2) CÓ bật
+allowSelfSigned -> gửi thành công tới CÙNG 1 máy chủ tự ký đó. `tests/test-ews-gateway-preset-ui.js` mở
+rộng lên 8/8 kịch bản (thêm toggle checkbox + payload lưu/gửi thử/nạp lại đều đúng `ewsAllowSelfSigned`).
+CSP full-audit 3/3 + deep-interaction 19/19 + approval-email-config 33/33 + admin-gate 4/4 không
+regression (đối chiếu baseline trước thay đổi, các lỗi tiền tồn ở vài test job khác giống hệt trước/sau).
 
 ## v25.0 (2026-10-04): Exchange (EWS) — phương thức gửi email thứ 3
 
