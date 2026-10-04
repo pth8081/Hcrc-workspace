@@ -1331,7 +1331,24 @@
           </div>
         </div>
 
-        <div class="flex justify-end gap-2 pt-1">
+        <!-- Thanh nút Lưu/Hủy luôn nổi trước màn hình (10/2026, yêu cầu người dùng) — form này (0-26 khối
+             quyền) rất dài, dòng nút nằm GIỮA form (trước khối cây quyền #permFieldsContainer), không
+             phải cuối form. ĐÃ THỬ "position: sticky bottom-0" trước — đo thật bằng Playwright thì sticky
+             chỉ bám đáy màn hình trong đúng ĐOẠN CUỘN TỪ ĐẦU FORM tới lúc vị trí tự nhiên của nó "bắt kịp"
+             viewport (ở đây ~460px), sau đó tự thả ra và cuộn bình thường — nghĩa là mất bám đúng ngay lúc
+             bắt đầu cuộn vào cây quyền (chỗ cần nhất). Lý do: sticky chỉ giữ được 1 phần tử ở rìa container
+             trong khoảng [vị_trí_tĩnh_tới_rìa_container], mà phần tử này nằm giữa (không phải cuối) nên
+             không đủ "đường chạy". Vì vậy đổi sang "position: fixed" (nổi tuyệt đối theo viewport, không
+             phụ thuộc vị trí trong form) — luôn hiện cả khi cuộn tới đâu, cả mobile lẫn desktop. Desktop
+             (md: trở lên) có sidebar #userHeader rộng 16rem (w-64) nằm bên trái nội dung chính nên bù
+             "md:left-64" để thanh nút không đè lên sidebar; khi sidebar ở trạng thái thu gọn
+             (.sidebar-collapsed, rộng 4.5rem) có 1 dòng CSS riêng ở app.css bù lại "left: 4.5rem" cho đúng
+             (xem khối chú thích "#userPermSaveBar" ở app.css). Mobile (<768px) sidebar ở dạng off-canvas
+             (đè nổi lên, không chiếm chỗ ngang) nên không cần bù gì, nổi full-width là đúng. z-10 thấp hơn
+             #systemSubTabBar (z-20, ghim đỉnh) và mọi modal/sidebar mobile (z-30/z-40/z-50) — không che
+             lớp nào khác. #permFieldsContainer (ngay dưới) được thêm "pb-20" để khối quyền cuối (26) không
+             bị thanh nút nổi che mất khi cuộn hết form. Không đổi hành vi bấm nút, chỉ đổi cách hiển thị. -->
+        <div id="userPermSaveBar" class="fixed bottom-0 left-0 right-0 md:left-64 z-10 flex justify-end gap-2 bg-white border-t border-gray-200 pt-3 pb-2 px-4 shadow-[0_-2px_6px_rgba(0,0,0,0.06)]">
           <button type="button" data-op="closeUserPermForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold">✕ Thu Gọn</button>
           <button type="button" data-op="cancelPermFormEdit" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
           <button type="button" id="btnAddToStagingList" data-op="addUserToStagingList" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
@@ -1358,7 +1375,7 @@
           </div>
         </div>
 
-        <div id="permFieldsContainer" class="space-y-2">
+        <div id="permFieldsContainer" class="space-y-2 pb-20">
         <details class="perm-tree-node bg-white rounded border text-xs">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 rounded">
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🔑 0. Quyền Truy Cập Module</span></span>

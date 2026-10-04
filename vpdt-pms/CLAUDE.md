@@ -1,5 +1,34 @@
 # Ghi chú cho Claude khi làm việc trên repo này
 
+## Quy tắc chuẩn cho MỌI thay đổi (không riêng gì Báo Cáo/Excel): cẩn thận, gọn, test kỹ, không ảnh hưởng module khác
+
+Người dùng xác nhận lại (10/2026, lúc sửa thanh nút Lưu/Hủy Phân Quyền từ
+sticky sang fixed) rằng đây là tiêu chuẩn áp dụng cho **MỌI** việc từ nay,
+không chỉ tính năng Báo Cáo/Xuất Excel (mục ngay dưới vốn chỉ nói riêng về
+Báo Cáo — mục này mở rộng ra toàn bộ công việc nói chung):
+
+- **Làm cẩn thận**: trước khi đổi 1 cơ chế hiển thị/hành vi đã có (CSS, JS,
+  layout...), đo/kiểm tra THẬT bằng công cụ (Playwright, test tự động...)
+  thay vì chỉ suy luận lý thuyết rồi tin là đúng — như đợt sticky→fixed này,
+  nếu không đo thật bằng Playwright ở nhiều mốc cuộn thì sẽ không phát hiện
+  ra "position: sticky" không hoạt động đúng như kỳ vọng.
+- **Không ảnh hưởng tới module/chức năng khác đang hoạt động ổn định**: ưu
+  tiên thay đổi tối thiểu, đúng đúng phạm vi yêu cầu; nếu phải sửa file
+  dùng chung (CSS toàn cục, hàm dùng chung...), phải xác nhận rõ thay đổi
+  đó không đụng tới selector/behaviour của module khác (VD thêm class/id
+  MỚI riêng cho phần tử đang sửa, không sửa trực tiếp rule CSS chung).
+- **Làm đến đâu gọn đến đâu**: xong 1 phần thì dọn gọn/test ngay phần đó
+  (file tạm ở scratchpad, không để sót file test tạm/log debug vào repo),
+  không để dồn nhiều thay đổi chưa kiểm tra rồi mới test 1 lần ở cuối.
+- **Test kỹ TRƯỚC khi báo cáo hoàn tất**: chạy lại bộ test hiện có liên quan
+  (không chỉ test mới viết) + tự kiểm tra CSP chuẩn nếu có sửa HTML/JS mới,
+  xác nhận pass thật rồi mới báo cáo xong — không suy luận "chắc đúng" khi
+  chưa chạy test xác nhận.
+
+Quy tắc chi tiết hơn cho riêng tính năng Báo Cáo/Excel vẫn giữ nguyên ở mục
+ngay dưới (không bị thay thế, chỉ là 1 trường hợp cụ thể của quy tắc chung
+này).
+
 ## Tính năng Báo Cáo/Xuất Excel mới: làm cẩn thận, test kỹ, không ảnh hưởng module khác
 
 Yêu cầu chuẩn của người dùng (10/2026) khi thêm bất kỳ màn "Xuất Excel"/báo

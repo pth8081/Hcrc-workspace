@@ -221,6 +221,17 @@
 #userHeader.sidebar-collapsed #itSupportDropdownPanel,
 #userHeader.sidebar-collapsed #heThongDropdownPanel { display: none !important; }
 
+/* #userPermSaveBar (thanh Lưu/Hủy nổi của form Phân Quyền, systemSection.html, 10/2026) dùng
+   "position: fixed" + "md:left-64" (khớp sidebar rộng 16rem bình thường) để không đè lên sidebar ở
+   desktop. Khi sidebar đang ở trạng thái thu gọn (.sidebar-collapsed, rộng 4.5rem ở trên) thì 16rem
+   để trống bên trái là SAI (tạo khoảng hở giữa sidebar và thanh nút) — selector sibling dưới đây bù lại
+   đúng 4.5rem, chỉ áp dụng từ 768px trở lên (khớp đúng breakpoint "md" — dưới đó sidebar luôn off-canvas,
+   #userPermSaveBar không bù gì, nổi full-width là đúng). #userHeader và khối nội dung chính là ANH EM
+   trực tiếp trong "<div class='flex min-h-screen'>" (index.html) nên dùng được tổ hợp "~". */
+@media (min-width: 768px) {
+  #userHeader.sidebar-collapsed ~ div #userPermSaveBar { left: 4.5rem; }
+}
+
 /* Responsive điện thoại (< 768px, khớp breakpoint "md" của Tailwind) — sidebar 16rem cố định trước đây
    chiếm gần hết bề ngang màn hình điện thoại, gần như không dùng được. Chuyển sang dạng "off-canvas":
    mặc định trượt ra ngoài bên trái (ẩn), bấm ☰ ở thanh trên cùng mới trượt vào đè lên nội dung (có lớp
