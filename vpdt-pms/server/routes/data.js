@@ -421,8 +421,14 @@ function stripPasswords(users) {
 // "write-only" như mật khẩu đăng nhập: để trống ô khi Sửa = giữ nguyên).
 function sanitizeEmailConfig(emailConfig) {
   if (!emailConfig || typeof emailConfig !== 'object') return emailConfig;
-  const { smtpPassEnc, ...rest } = emailConfig;
-  return { ...rest, hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc) };
+  const { smtpPassEnc, graphClientSecretEnc, ...rest } = emailConfig;
+  return {
+    ...rest,
+    hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc),
+    // Cùng khuôn hasSmtpAuth ở trên — Client Secret (Microsoft Graph API) cũng write-only, chỉ trả
+    // có/không đã cấu hình, không bao giờ trả lại giá trị đã mã hoá ra ngoài.
+    hasGraphAuth: !!(emailConfig.graphTenantId && emailConfig.graphClientId && graphClientSecretEnc)
+  };
 }
 
 // externalApiKeys: ẨN HOÀN TOÀN với người không phải admin (mảng rỗng, không riêng lọc field bí mật
@@ -889,18 +895,34 @@ EXTRA_APPROVAL_MODULE_KEYS.forEach(mk => {
 // tạm "smtpPassPlain" (chỉ có giá trị khi admin thực sự gõ mật khẩu mới), KHÔNG BAO GIỜ gửi lại
 // "smtpPassEnc" (đã bị lọc khỏi mọi response đọc, xem sanitizeEmailConfig() ở trên) nên không có gì để
 // vô tình đè mất. Để trống "smtpPassPlain" = giữ nguyên "smtpPassEnc" đang lưu, khớp đúng quy ước
-// "để trống ô mật khẩu khi sửa = giữ nguyên hash cũ" ở prepareUsersForSave().
+// "để trống ô mật khẩu khi sửa = giữ nguyên hash cũ" ở prepareUsersForSave(). Client Secret của phương
+// thức gửi Microsoft Graph API (10/2026, "Exchange Online — access mailbox trực tiếp") theo ĐÚNG khuôn
+// write-only y hệt ("graphClientSecretPlain" -> "graphClientSecretEnc"), xử lý CHUNG trong cùng 1 hàm
+// vì cùng thuộc 1 bản ghi DB.emailConfig, không tách route/hàm riêng.
 async function prepareEmailConfigForSave(payload) {
-  const { smtpPassPlain, smtpPassEnc: _ignoredFromClient, ...rest } = payload || {};
+  const {
+    smtpPassPlain, smtpPassEnc: _ignoredFromClient,
+    graphClientSecretPlain, graphClientSecretEnc: _ignoredGraphFromClient,
+    ...rest
+  } = payload || {};
+  const prior = await getAppDataValue('emailConfig');
+  let smtpPassEnc = prior?.smtpPassEnc;
   if (smtpPassPlain) {
     try {
-      return { ...rest, smtpPassEnc: encryptSecret(smtpPassPlain) };
+      smtpPassEnc = encryptSecret(smtpPassPlain);
     } catch (err) {
       throw new HttpError(400, `Không thể lưu mật khẩu SMTP: ${err.message}`);
     }
   }
-  const prior = await getAppDataValue('emailConfig');
-  return { ...rest, smtpPassEnc: prior?.smtpPassEnc };
+  let graphClientSecretEnc = prior?.graphClientSecretEnc;
+  if (graphClientSecretPlain) {
+    try {
+      graphClientSecretEnc = encryptSecret(graphClientSecretPlain);
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu Client Secret (Microsoft Graph API): ${err.message}`);
+    }
+  }
+  return { ...rest, smtpPassEnc, graphClientSecretEnc };
 }
 
 // headerValueEnc là write-only ở giao diện (ô luôn hiện trống, xem index.html) — cùng quy ước

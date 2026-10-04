@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**24.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.99 (2026-10-04): Exchange Online (Microsoft Graph API) — phương thức gửi email thứ 2
+
+Người dùng làm rõ yêu cầu: với Exchange Online, muốn cơ chế "access mailbox trực tiếp" thay vì SMTP AUTH
+port 587 (Microsoft đang hạn chế/ngừng dần Basic Auth SMTP AUTH ở nhiều tenant), nhưng vẫn phải GIỮ LẠI
+lựa chọn SMTP port 587 làm 1 phương thức riêng (không thay thế). Thêm phương thức gửi THỨ 2 hoàn toàn
+độc lập với SMTP: Microsoft Graph API (OAuth2 app-only, client-credentials flow).
+
+- `server/lib/graphMailer.js` (MỚI): lấy access token từ Azure AD (`login.microsoftonline.com/.../oauth2/
+  v2.0/token`) rồi gọi thẳng `POST /v1.0/users/{mailbox}/sendMail` của Microsoft Graph — dùng `fetch` có
+  sẵn từ Node 18+, không thêm dependency. Gửi riêng từng người nhận (khớp đúng ngữ nghĩa sent/failed của
+  SMTP), trả lỗi thật (VD "AADSTS7000215: Invalid client secret", "Access is denied") để "Gửi Thử" hiện
+  đúng nguyên nhân.
+- `server/lib/mailer.js`: `sendMail()` thêm tham số `graph` (optional) — rẽ nhánh hẳn sang Graph API khi
+  `graph.enabled`, không đụng gì luồng SMTP đang chạy. Thêm `resolveGraphOption(emailConfig)` DÙNG CHUNG
+  cho mọi nơi gọi `sendMail()` (giải mã `graphClientSecretEnc`, chỉ bật khi `smtpGatewayType ===
+  'EXCHANGE_GRAPH'`) — nối dây vào CẢ 12 điểm gọi `sendMail()` trong hệ thống (routes/email.js x2,
+  routes/auth.js x2 — OTP phê duyệt + cảnh báo đổi TOTP, và 9 jobs nhắc hạn/cảnh báo định kỳ) để mọi email
+  hệ thống (không riêng "Gửi Thử") đều tôn trọng đúng phương thức gửi admin đã chọn.
+- `routes/data.js`: `prepareEmailConfigForSave()` thêm xử lý `graphClientSecretPlain` → mã hoá thành
+  `graphClientSecretEnc` (write-only, cùng khuôn `smtpPassPlain`/`smtpPassEnc`). `sanitizeEmailConfig()`
+  lọc `graphClientSecretEnc` khỏi mọi response đọc, chỉ trả `hasGraphAuth` (có/không, không lộ giá trị).
+- `routes/email.js` `/test`: nhận thêm `sendMethod: 'GRAPH_API'` + 4 field Graph — áp dụng đúng cơ chế an
+  toàn "để trống Client Secret = dùng giá trị đã lưu, CHỈ hợp lệ nếu vẫn đúng Tenant/Client ID/Mailbox đã
+  lưu" như mật khẩu SMTP.
+- **UI (Cấu Hình Email)**: thêm nút preset thứ 5 **"Exchange Online (Graph API, access mailbox)"** bên
+  cạnh "Exchange (SMTP, xác thực mailbox)" — chọn Graph API ẩn hẳn khối SMTP (Host/Port/Mã hoá/Xác thực,
+  class `smtp-only-field`/`smtp-only-block`), hiện khối riêng "Cấu Hình Microsoft Graph API" (Tenant ID/
+  Client ID/Client Secret/Mailbox Người Gửi) kèm hướng dẫn đăng ký Azure AD App + cấp quyền `Mail.Send`.
+  2 lựa chọn Exchange tồn tại song song, không thay thế nhau.
+
+Xác minh: unit test backend 11/11 kịch bản (mock `global.fetch`, gồm gửi thành công, sai Client Secret,
+thiếu quyền Mail.Send, thiếu cấu hình, `resolveGraphOption()` giải mã đúng) + Playwright UI 5/5 kịch bản
+(ẩn/hiện đúng khối, giữ 2 lựa chọn Exchange độc lập, validate thiếu Tenant ID, payload lưu/test đúng) + 3
+bộ test Cấu Hình Email + 2 bộ verify v24.97/v24.98 không regression. Demo ảnh 4 màn hình (Postfix/Exchange
+SMTP/Gmail/Exchange Online Graph API) tại `server/demo-screenshots/email-gateway-presets/`. Không cần đổi
+`schema.sql`/`.env.example` (field Graph nằm trong `DB.emailConfig`, AppData JSON có sẵn, không thêm
+dependency npm nào) — chỉ cần copy code + `pm2 restart`.
 
 ## v24.98 (2026-10-04): Loại Email Gateway (preset Postfix/Exchange/Gmail/Tuỳ Chỉnh)
 

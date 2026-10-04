@@ -5198,28 +5198,53 @@ never received", sai tài khoản/mật khẩu...) thay vì câu chung "kiểm t
 log server" như trước — admin không cần quyền SSH vào máy chủ vẫn tự chẩn
 đoán được nguyên nhân.
 
-**Loại Email Gateway (preset Postfix/Exchange/Gmail/Tuỳ Chỉnh)** (10/2026, yêu
-cầu người dùng có cả Postfix nội bộ VÀ 1 hệ thống Exchange yêu cầu xác thực,
-muốn thêm cả Gmail) — 4 nút chọn nhanh ngay đầu form, tự điền gợi ý đúng
+**Loại Email Gateway (preset Postfix/Exchange/Exchange Online/Gmail/Tuỳ
+Chỉnh)** (10/2026, yêu cầu người dùng có cả Postfix nội bộ VÀ 1 hệ thống
+Exchange yêu cầu xác thực — cập nhật thêm "Exchange Online (Graph API)" khi
+người dùng làm rõ muốn cơ chế "access mailbox trực tiếp" cho Exchange Online,
+không phải SMTP port 587, và muốn GIỮ LẠI cả 2 lựa chọn Exchange song song —
+cùng Gmail) — 5 nút chọn nhanh ngay đầu form, tự điền gợi ý đúng
 Host/Port/Mã Hoá/Yêu Cầu Xác Thực theo từng loại. **Lưu ý quan trọng**: hệ
-thống vẫn chỉ gửi qua **1 cấu hình SMTP DUY NHẤT tại 1 thời điểm** (không phải
-chọn gateway riêng cho từng email gửi đi) — 4 nút này chỉ là "mẫu điền nhanh"
-giúp admin không phải tự tra cứu đúng Port/Mã hoá chuẩn của từng loại, tránh
-lặp lại lỗi Postfix port 465 đã vá ở trên.
+thống vẫn chỉ gửi qua **1 cấu hình DUY NHẤT tại 1 thời điểm** (không phải
+chọn gateway riêng cho từng email gửi đi) — các nút này chỉ là "mẫu điền
+nhanh" giúp admin không phải tự tra cứu đúng thông số chuẩn của từng loại,
+tránh lặp lại lỗi Postfix port 465 đã vá ở trên.
 
 - **Postfix** — relay nội bộ theo IP nguồn, **THƯỜNG KHÔNG cần xác thực**
   (khác hẳn Exchange/Gmail) — preset điền Port 465 + SSL, **không ép** bật ô
   "Yêu cầu xác thực" (admin tự quyết định, vẫn bật được nếu Postfix có cấu
   hình SASL riêng).
-- **Exchange** — **LUÔN yêu cầu xác thực** (SMTP AUTH) — xác thực **TRỰC
-  TIẾP vào 1 mailbox** dùng để gửi (không gửi ẩn danh được qua Exchange).
-  Preset điền Port 587 + TLS (STARTTLS) và **ép bật + khoá cứng** ô "Yêu cầu
-  xác thực" (không cho tắt nhầm). Tài Khoản SMTP = địa chỉ email **đầy đủ**
-  của mailbox (VD `notify@yourcompany.com`), Mật Khẩu SMTP = mật khẩu đăng
-  nhập mailbox đó. **KHÔNG dùng port 25** cho Exchange — port 25 trên
-  Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP
+- **Exchange (SMTP)** — **LUÔN yêu cầu xác thực** (SMTP AUTH) — xác thực
+  **TRỰC TIẾP vào 1 mailbox** dùng để gửi (không gửi ẩn danh được qua
+  Exchange). Preset điền Port 587 + TLS (STARTTLS) và **ép bật + khoá cứng**
+  ô "Yêu cầu xác thực" (không cho tắt nhầm). Tài Khoản SMTP = địa chỉ email
+  **đầy đủ** của mailbox (VD `notify@yourcompany.com`), Mật Khẩu SMTP = mật
+  khẩu đăng nhập mailbox đó. **KHÔNG dùng port 25** cho Exchange — port 25
+  trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP
   nguồn, không áp dụng xác thực tài khoản ở port này (đây chính là lý do
-  "gửi trực tiếp qua port 25" không xác thực/không gửi được).
+  "gửi trực tiếp qua port 25" không xác thực/không gửi được). Dùng cho
+  Exchange on-premise hoặc tenant Exchange Online còn bật Basic Auth/SMTP
+  AUTH.
+- **Exchange Online (Graph API)** — **PHƯƠNG THỨC GỬI THỨ 2, hoàn toàn khác
+  SMTP** — "access mailbox trực tiếp" bằng OAuth2 app-only (client
+  credentials flow), KHÔNG qua port 587/SMTP AUTH, gọi thẳng Microsoft Graph
+  REST API (xem `lib/graphMailer.js`) — đúng cách Microsoft khuyến nghị hiện
+  nay cho Exchange Online vì nhiều tenant đang hạn chế/ngừng dần Basic Auth
+  SMTP AUTH. Khi chọn, form ẩn hẳn toàn bộ khối SMTP (Host/Port/Mã hoá/Xác
+  thực) và hiện khối riêng **"Cấu Hình Microsoft Graph API"** với 4 ô:
+  - **Tenant ID** + **Client ID** (Application ID) — lấy từ 1 **Azure AD App
+    Registration** (Azure Portal → App Registrations → New registration).
+  - **Client Secret** — tạo tại "Certificates & secrets" của app đó (write-
+    only như mật khẩu SMTP — để trống khi sửa = giữ nguyên secret đã lưu).
+  - **Mailbox Người Gửi (UPN)** — địa chỉ email mailbox sẽ gửi thay (VD
+    `notify@yourcompany.com`).
+  Bắt buộc vào "API permissions" của app, thêm quyền **ỨNG DỤNG** (Application
+  permission, **không phải** Delegated) **"Mail.Send"** của Microsoft Graph,
+  rồi bấm **"Grant admin consent"** — thiếu bước cấp quyền này, "Gửi Thử" sẽ
+  báo lỗi quyền truy cập dù Tenant/Client ID/Secret đều đúng. Lựa chọn
+  **"Exchange (SMTP)"** ở trên **vẫn được giữ nguyên** làm phương thức riêng
+  — 2 lựa chọn Exchange tồn tại song song, không thay thế nhau, admin tự
+  chọn đúng cách tenant của mình đang hỗ trợ.
 - **Gmail** — cũng **LUÔN yêu cầu xác thực**. Preset điền sẵn Host
   `smtp.gmail.com` + Port 465 + SSL, ép bật + khoá ô xác thực. Từ 2022 Google
   đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật **Xác minh 2

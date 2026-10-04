@@ -6961,30 +6961,43 @@ function syncSmtpEncryptionFromPort() {
 }
 
 // Loại Email Gateway (10/2026, yêu cầu người dùng — có cả Postfix nội bộ VÀ 1 hệ thống Exchange yêu
-// cầu xác thực, muốn thêm cả Gmail, "tuỳ chọn được các loại email gateway"): 4 nút chọn nhanh preset
+// cầu xác thực, muốn thêm cả Gmail, "tuỳ chọn được các loại email gateway"): 5 nút chọn nhanh preset
 // Host/Port/Mã hoá/Yêu cầu xác thực theo ĐÚNG đặc điểm từng loại — hệ thống vẫn chỉ gửi qua 1 cấu hình
-// SMTP DUY NHẤT tại 1 thời điểm (không phải chọn gateway riêng cho từng email), nút preset chỉ giúp đỡ
-// điền đúng thông số chuẩn, tránh đoán sai Port/Mã hoá như lỗi Postfix 465 đã vá ở trên.
+// DUY NHẤT tại 1 thời điểm (không phải chọn gateway riêng cho từng email), nút preset chỉ giúp đỡ điền
+// đúng thông số chuẩn, tránh đoán sai Port/Mã hoá như lỗi Postfix 465 đã vá ở trên.
 // - Postfix: relay nội bộ theo IP nguồn, THƯỜNG không cần xác thực — để admin tự quyết định (không ép).
-// - Exchange/Gmail: LUÔN cần xác thực TRỰC TIẾP vào 1 mailbox (SMTP AUTH, không gửi ẩn danh được) — ép
-//   bật + khoá cứng ô "Yêu cầu xác thực" (authEl.disabled) để tránh admin tắt nhầm rồi không gửi được.
-//   Exchange dùng port 587 (STARTTLS, submission có xác thực) — KHÔNG dùng port 25 (port 25 trên
-//   Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP nguồn, không áp dụng xác thực
-//   tài khoản ở port này, đúng thắc mắc "đang không gửi trực tiếp qua port 25" của người dùng). Gmail
-//   dùng port 465 SSL + bắt buộc "Mật khẩu ứng dụng" (App Password) vì Google đã chặn mật khẩu thường.
+// - Exchange (SMTP): LUÔN cần xác thực TRỰC TIẾP vào 1 mailbox (SMTP AUTH, không gửi ẩn danh được) —
+//   ép bật + khoá cứng ô "Yêu cầu xác thực" (authEl.disabled). Dùng port 587 (STARTTLS, submission có
+//   xác thực) — KHÔNG dùng port 25 (port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous
+//   relay theo IP nguồn, không áp dụng xác thực tài khoản ở port này, đúng thắc mắc "đang không gửi
+//   trực tiếp qua port 25" của người dùng).
+// - Exchange Online (Graph API) (10/2026, bổ sung theo yêu cầu "access mailbox trực tiếp, không phải
+//   port 587"): PHƯƠNG THỨC GỬI THỨ 2, hoàn toàn KHÔNG dùng SMTP — xác thực bằng 1 Azure AD App (OAuth2
+//   client-credentials, app-only, không cần ai đăng nhập tương tác), gọi thẳng Microsoft Graph REST API
+//   để gửi NHÂN DANH 1 mailbox cụ thể (xem lib/graphMailer.js). Đúng cách Microsoft khuyến nghị cho
+//   Exchange Online hiện nay vì Basic Auth/SMTP AUTH đang bị hạn chế/ngừng dần ở nhiều tenant — ẩn hẳn
+//   khối Host/Port/Mã hoá/Xác thực SMTP (class "smtp-only-field"/"smtp-only-block"), hiện khối riêng
+//   "graph-only-block" (Tenant ID/Client ID/Client Secret/Mailbox Người Gửi). VẪN GIỮ NGUYÊN lựa chọn
+//   "Exchange" (SMTP port 587) ở trên làm phương thức riêng — đúng yêu cầu người dùng "để cả phương thức
+//   gửi qua mailbox cổng 587" — 2 lựa chọn Exchange song song, không thay thế nhau.
+// - Gmail: dùng port 465 SSL + bắt buộc "Mật khẩu ứng dụng" (App Password) vì Google đã chặn mật khẩu
+//   thường.
 const EMAIL_GATEWAY_HINTS = {
   POSTFIX: 'Postfix nội bộ (relay theo IP nguồn) thường KHÔNG cần xác thực — port chuẩn SSL 465 (khuyến nghị) hoặc 25 (không mã hoá, chỉ dùng trong mạng nội bộ tin cậy). Nếu Postfix có cấu hình SASL yêu cầu đăng nhập, vẫn bật được ô "Yêu cầu xác thực" bên dưới như bình thường.',
-  EXCHANGE: 'Exchange LUÔN yêu cầu xác thực (SMTP AUTH) — xác thực TRỰC TIẾP vào 1 mailbox dùng để gửi, không gửi ẩn danh được (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Dùng port 587 (STARTTLS) cho kết nối submission có xác thực — KHÔNG dùng port 25 (port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP nguồn, không áp dụng xác thực tài khoản ở port này). Tài Khoản SMTP = địa chỉ email ĐẦY ĐỦ của mailbox (VD notify@yourcompany.com), Mật Khẩu SMTP = mật khẩu đăng nhập mailbox đó.',
+  EXCHANGE: 'Exchange (SMTP) LUÔN yêu cầu xác thực (SMTP AUTH) — xác thực TRỰC TIẾP vào 1 mailbox dùng để gửi, không gửi ẩn danh được (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Dùng port 587 (STARTTLS) cho kết nối submission có xác thực — KHÔNG dùng port 25 (port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP nguồn, không áp dụng xác thực tài khoản ở port này). Tài Khoản SMTP = địa chỉ email ĐẦY ĐỦ của mailbox (VD notify@yourcompany.com), Mật Khẩu SMTP = mật khẩu đăng nhập mailbox đó. Nếu Exchange Online tenant đã tắt SMTP AUTH (Microsoft đang hạn chế dần), dùng lựa chọn "Exchange Online (Graph API)" bên cạnh thay thế.',
+  EXCHANGE_GRAPH: 'Exchange Online (Microsoft Graph API) — "access mailbox trực tiếp" bằng OAuth2 app-only, KHÔNG dùng SMTP/port 587. Tạo 1 Azure AD App (Azure Portal → App Registrations → New registration), vào "API permissions" thêm quyền ỨNG DỤNG (Application, không phải Delegated) "Mail.Send" của Microsoft Graph rồi bấm "Grant admin consent", tạo Client Secret tại "Certificates & secrets". Điền Tenant ID + Client ID + Client Secret + Mailbox Người Gửi (địa chỉ email mailbox sẽ gửi thay) bên dưới. Cách này không bị ảnh hưởng bởi việc Microsoft hạn chế/ngừng Basic Auth SMTP AUTH ở nhiều tenant Exchange Online.',
   GMAIL: 'Gmail LUÔN yêu cầu xác thực (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Từ 2022 Google đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật Xác minh 2 bước (2FA) cho tài khoản Google rồi tạo "Mật khẩu ứng dụng" (App Password, 16 ký tự) tại myaccount.google.com/apppasswords, dùng mã đó làm Mật Khẩu SMTP (KHÔNG dùng mật khẩu đăng nhập Gmail thường).',
   CUSTOM: 'Tự nhập đầy đủ thông số theo nhà cung cấp SMTP khác (VD SendGrid, SES, Mailgun...) hoặc 1 cấu hình Postfix/Exchange đặc biệt không theo mặc định ở các nút trên.'
 };
+const EMAIL_GATEWAY_TYPES = ['POSTFIX', 'EXCHANGE', 'EXCHANGE_GRAPH', 'GMAIL', 'CUSTOM'];
 const EMAIL_GATEWAY_FORCED_AUTH = new Set(['EXCHANGE', 'GMAIL']);
 
-// Chỉ đồng bộ UI (màu nút đang chọn/khoá-mở ô xác thực/đổi gợi ý) — KHÔNG đụng Host/Port/Mã hoá, dùng
-// khi tải lại cấu hình đã lưu (loadEmailConfigToForm) để không ghi đè mất giá trị thật đang chạy.
+// Chỉ đồng bộ UI (màu nút đang chọn/khoá-mở ô xác thực/hiện đúng khối SMTP hay Graph API/đổi gợi ý) —
+// KHÔNG đụng Host/Port/Mã hoá/giá trị Graph, dùng khi tải lại cấu hình đã lưu (loadEmailConfigToForm)
+// để không ghi đè mất giá trị thật đang chạy.
 function refreshEmailGatewayPresetUI(type) {
   document.getElementById('cfgSmtpGatewayType').value = type;
-  ['POSTFIX', 'EXCHANGE', 'GMAIL', 'CUSTOM'].forEach(t => {
+  EMAIL_GATEWAY_TYPES.forEach(t => {
     const btn = document.getElementById(`gwBtn_${t}`);
     if (t === type) btn.className = 'px-3 py-1.5 rounded border-2 border-amber-600 bg-amber-50 font-semibold text-amber-800';
     else btn.className = 'px-3 py-1.5 rounded border font-semibold text-gray-600 hover:bg-gray-50';
@@ -6994,9 +7007,14 @@ function refreshEmailGatewayPresetUI(type) {
   const forced = EMAIL_GATEWAY_FORCED_AUTH.has(type);
   authEl.disabled = forced;
   if (forced && !authEl.checked) { authEl.checked = true; toggleSmtpAuthFields(); }
+  // Exchange Online (Graph API) không dùng BẤT KỲ field SMTP nào (Host/Port/Mã hoá/Xác thực) — ẩn hẳn,
+  // hiện khối Graph API riêng thay vào đó. Mọi preset khác (kể cả "Exchange" SMTP port 587) đi ngược lại.
+  const isGraph = type === 'EXCHANGE_GRAPH';
+  document.querySelectorAll('.smtp-only-field, .smtp-only-block').forEach(el => el.classList.toggle('hidden', isGraph));
+  document.querySelectorAll('.graph-only-block').forEach(el => el.classList.toggle('hidden', !isGraph));
 }
 
-// Bấm 1 trong 4 nút preset: áp dụng gợi ý Host(Gmail)/Port/Mã hoá chuẩn rồi đồng bộ UI như trên.
+// Bấm 1 trong 5 nút preset: áp dụng gợi ý Host(Gmail)/Port/Mã hoá chuẩn rồi đồng bộ UI như trên.
 function setEmailGatewayPreset(type) {
   if (type === 'GMAIL') {
     document.getElementById('cfgSmtpHost').value = 'smtp.gmail.com';
@@ -7050,6 +7068,24 @@ async function saveEmailConfig(e) {
   if (laborContractReminderDays.length === 0) {
     return alert('⛔ Vui lòng nhập ít nhất 1 mốc số ngày nhắc hết hạn hợp đồng lao động hợp lệ (vd: 60, 45, 30)!');
   }
+  // LỖI ĐÃ VÁ (10/2026, thêm phương thức Graph API): "required" trên SMTP Server/Email Hệ Thống bị bỏ
+  // khỏi HTML — 1 input "required" nhưng bị ẩn qua class "hidden" (display:none, khi đang ở chế độ
+  // Graph API) có thể khiến trình duyệt chặn submit ÂM THẦM mà không hiện được bong bóng lỗi (không
+  // focus được phần tử không hiển thị) — tự kiểm tra bằng JS thay thế, áp dụng ĐÚNG field cần cho từng
+  // phương thức gửi đang chọn (SMTP vs Graph API), không bắt buộc field của phương thức KHÔNG dùng tới.
+  const gatewayType = document.getElementById('cfgSmtpGatewayType').value;
+  if (gatewayType === 'EXCHANGE_GRAPH') {
+    if (!document.getElementById('cfgGraphTenantId').value.trim() || !document.getElementById('cfgGraphClientId').value.trim() || !document.getElementById('cfgGraphSenderMailbox').value.trim()) {
+      return alert('⛔ Vui lòng nhập đủ Tenant ID, Client ID và Mailbox Người Gửi (Microsoft Graph API)!');
+    }
+  } else {
+    if (!document.getElementById('cfgSmtpHost').value.trim()) {
+      return alert('⛔ Vui lòng nhập SMTP Server!');
+    }
+    if (!document.getElementById('cfgSenderEmail').value.trim()) {
+      return alert('⛔ Vui lòng nhập Email Hệ Thống (Sender)!');
+    }
+  }
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   const prevEmailConfig = { ...(DB.emailConfig || {}) };
   DB.emailConfig = {
@@ -7064,8 +7100,16 @@ async function saveEmailConfig(e) {
     // = giữ nguyên mật khẩu đã lưu, khớp đúng quy ước "write-only" như đổi mật khẩu người dùng.
     smtpPassPlain: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
     smtpAllowSelfSigned: document.getElementById('cfgSmtpAllowSelfSigned').checked,
-    smtpGatewayType: document.getElementById('cfgSmtpGatewayType').value,
+    smtpGatewayType: gatewayType,
     senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
+    // Cấu hình Microsoft Graph API (10/2026, "Exchange Online — access mailbox trực tiếp") — chỉ CÓ
+    // TÁC DỤNG khi smtpGatewayType ở trên = "EXCHANGE_GRAPH" (xem resolveGraphOption() ở lib/mailer.js),
+    // vẫn gửi kèm bất kể đang chọn phương thức nào để không mất giá trị đã gõ nếu admin đổi qua lại.
+    graphTenantId: document.getElementById('cfgGraphTenantId').value.trim(),
+    graphClientId: document.getElementById('cfgGraphClientId').value.trim(),
+    // "graphClientSecretPlain" cùng quy ước write-only như smtpPassPlain ở trên.
+    graphClientSecretPlain: document.getElementById('cfgGraphClientSecretPlain').value,
+    graphSenderMailbox: document.getElementById('cfgGraphSenderMailbox').value.trim(),
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
     licenseExpiryReminderDays: licenseReminderDays,
@@ -7079,6 +7123,7 @@ async function saveEmailConfig(e) {
   const saved = await syncStorage('emailConfig');
   if (!saved) { DB.emailConfig = prevEmailConfig; return; }
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
+  document.getElementById('cfgGraphClientSecretPlain').value = ''; // cùng quy ước write-only
   logSystemAction('CONFIG', 'UPDATE_SMTP_CONFIG', 'Cập nhật SMTP server thành công.', 'SUCCESS', 'SMTP_CONFIG');
   alert('✅ Đã lưu cấu hình Email thành công!');
 }
@@ -7107,6 +7152,10 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgSmtpPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
   document.getElementById('cfgSmtpAllowSelfSigned').checked = !!DB.emailConfig.smtpAllowSelfSigned;
   toggleSmtpAuthFields();
+  document.getElementById('cfgGraphTenantId').value = DB.emailConfig.graphTenantId || '';
+  document.getElementById('cfgGraphClientId').value = DB.emailConfig.graphClientId || '';
+  document.getElementById('cfgGraphClientSecretPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
+  document.getElementById('cfgGraphSenderMailbox').value = DB.emailConfig.graphSenderMailbox || '';
   refreshEmailGatewayPresetUI(DB.emailConfig.smtpGatewayType || 'CUSTOM');
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
@@ -7257,11 +7306,20 @@ async function sendTestEmail() {
   resultEl.textContent = '⏳ Đang gửi thử...';
 
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
+  const gatewayType = document.getElementById('cfgSmtpGatewayType').value;
+  const isGraph = gatewayType === 'EXCHANGE_GRAPH';
   try {
     const res = await fetch('/api/send-email/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify(isGraph ? {
+        to,
+        sendMethod: 'GRAPH_API',
+        graphTenantId: document.getElementById('cfgGraphTenantId').value.trim(),
+        graphClientId: document.getElementById('cfgGraphClientId').value.trim(),
+        graphClientSecret: document.getElementById('cfgGraphClientSecretPlain').value,
+        graphSenderMailbox: document.getElementById('cfgGraphSenderMailbox').value.trim()
+      } : {
         to,
         host: document.getElementById('cfgSmtpHost').value.trim(),
         port: parseInt(document.getElementById('cfgSmtpPort').value, 10) || 587,
@@ -7276,7 +7334,9 @@ async function sendTestEmail() {
     const body = await res.json().catch(() => ({}));
     if (res.ok && body.ok) {
       resultEl.className = 'text-[11px] font-semibold text-green-700';
-      resultEl.textContent = `✅ Đã gửi thử thành công tới máy chủ SMTP ${body.host}:${body.port}!`;
+      resultEl.textContent = isGraph
+        ? '✅ Đã gửi thử thành công qua Microsoft Graph API!'
+        : `✅ Đã gửi thử thành công tới máy chủ SMTP ${body.host}:${body.port}!`;
     } else {
       resultEl.className = 'text-[11px] font-semibold text-red-600';
       resultEl.textContent = `⛔ ${body.error || 'Gửi thử thất bại'}`;

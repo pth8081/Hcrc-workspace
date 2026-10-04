@@ -6,7 +6,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getPool, sql } = require('../db');
-const { sendMail, hasAuthConfigured, resolveEncryption } = require('../lib/mailer');
+const { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { sendServerError } = require('../lib/errorResponse');
 const { getAllForCollection } = require('../lib/recordStore');
@@ -53,6 +53,10 @@ function resolveSmtpAccount(emailConfig) {
     return { user: null, pass: null };
   }
 }
+
+// resolveGraphOption() (lib/mailer.js) giải mã graphClientSecretEnc + dựng tham số "graph" truyền thẳng
+// cho sendMail() khi Loại Email Gateway đang chọn là "Exchange Online (Graph API)" — hàm DÙNG CHUNG cho
+// mọi nơi gọi sendMail() (routes/auth.js, jobs/*.js), không định nghĩa riêng ở đây nữa.
 
 // Trạng thái cấu hình xác thực SMTP (không nhạy cảm — chỉ trả có/không, không lộ giá trị thật) để màn
 // Cấu Hình Email hiển thị cho admin biết server đang chạy chế độ có xác thực hay ẩn danh — tính theo
@@ -149,7 +153,8 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
       encryption: resolveEncryption(emailConfig),
       user, pass,
       from: emailConfig.senderEmail,
-      allowSelfSigned: !!emailConfig.smtpAllowSelfSigned
+      allowSelfSigned: !!emailConfig.smtpAllowSelfSigned,
+      graph: resolveGraphOption(emailConfig)
     });
     res.json(result);
   } catch (err) {
@@ -166,8 +171,57 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
   if (!req.freshUser?.perms?.admin) {
     return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được gửi email thử' });
   }
-  const { to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail, smtpAllowSelfSigned } = req.body || {};
+  const {
+    to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail, smtpAllowSelfSigned,
+    // sendMethod: 'GRAPH_API' khi admin đang thử nghiệm "Exchange Online (Graph API)" — xem
+    // setEmailGatewayPreset() ở core.js. Mặc định (undefined/'SMTP') đi luồng SMTP y hệt trước giờ.
+    sendMethod, graphTenantId, graphClientId, graphClientSecret, graphSenderMailbox
+  } = req.body || {};
   if (!to) return res.status(400).json({ error: 'Thiếu địa chỉ email nhận thử' });
+
+  if (sendMethod === 'GRAPH_API') {
+    if (!graphTenantId || !graphClientId || !graphSenderMailbox) {
+      return res.status(400).json({ error: 'Thiếu Tenant ID/Client ID/Mailbox Người Gửi (Microsoft Graph API)' });
+    }
+    try {
+      // Client Secret trên form cũng write-only (giống mật khẩu SMTP) — để trống = dùng giá trị đã lưu,
+      // CHỈ hợp lệ khi vẫn ĐÚNG Tenant ID + Client ID + Mailbox Người Gửi đã lưu trước đó (đổi 1 trong 3
+      // mà để trống Client Secret rất dễ gửi nhầm sang 1 Azure AD App khác bằng secret cũ, luôn thất bại
+      // mà không rõ vì sao — cùng nguyên tắc đã áp dụng cho host/user ở nhánh SMTP bên dưới).
+      let testClientSecret = graphClientSecret;
+      if (!testClientSecret) {
+        const savedConfig = await getEmailConfig();
+        if (savedConfig.graphTenantId !== graphTenantId || savedConfig.graphClientId !== graphClientId || savedConfig.graphSenderMailbox !== graphSenderMailbox) {
+          return res.status(400).json({ error: 'Cấu hình Graph API chưa có Client Secret — vui lòng nhập Client Secret để gửi thử (Client Secret đã lưu thuộc về Tenant ID/Client ID/Mailbox khác).' });
+        }
+        try {
+          testClientSecret = savedConfig.graphClientSecretEnc ? decryptSecret(savedConfig.graphClientSecretEnc) : null;
+        } catch (err) {
+          console.error('⛔ Không giải mã được Client Secret (Graph API) đã lưu:', err.message);
+        }
+        if (!testClientSecret) {
+          return res.status(400).json({ error: 'Chưa có Client Secret đã lưu — vui lòng nhập Client Secret để gửi thử.' });
+        }
+      }
+      const result = await sendMail({
+        to,
+        subject: '[VPDT] Email thử nghiệm cấu hình Microsoft Graph API',
+        text: `Đây là email thử nghiệm để xác minh cấu hình gửi email qua Microsoft Graph API (mailbox: ${graphSenderMailbox}). Nếu bạn nhận được email này, cấu hình đang hoạt động đúng.`,
+        graph: { enabled: true, tenantId: graphTenantId, clientId: graphClientId, clientSecret: testClientSecret, senderMailbox: graphSenderMailbox }
+      });
+      if (result.simulated) {
+        return res.status(400).json({ error: 'Thiếu thông tin cấu hình Graph API, không thể gửi thử' });
+      }
+      if (result.failed.length) {
+        const detail = result.errorMessage ? ` — Lỗi: ${result.errorMessage}` : '';
+        return res.status(502).json({ error: `Microsoft Graph API từ chối/lỗi gửi thử${detail}` });
+      }
+      return res.json({ ok: true, host: result.host, port: result.port });
+    } catch (err) {
+      return sendServerError(res, 500, err, 'POST /api/send-email/test', 'Không thể gửi email thử qua Graph API');
+    }
+  }
+
   if (!host) return res.status(400).json({ error: 'Thiếu SMTP Server' });
 
   try {

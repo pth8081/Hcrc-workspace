@@ -6,7 +6,7 @@
 // định = người tạo + TOÀN BỘ người đang có quyền itServiceRenewalManage/admin (10/2026 tách khỏi itManage),
 // cộng thêm CC tuỳ chọn (itRenewalCcEmails).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -125,7 +125,8 @@ async function checkItServiceRenewalReminders() {
               subject, text: body,
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
-              from: emailConfig.senderEmail
+              from: emailConfig.senderEmail,
+              graph: resolveGraphOption(emailConfig)
             });
           } catch (err) {
             console.error('⛔ [Nhắc hạn dịch vụ CNTT] Gửi email thật thất bại:', err.message);

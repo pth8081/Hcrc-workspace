@@ -11,7 +11,7 @@
 // quan: PENDING/OVERDUE, còn lại DONE/SKIPPED đã đóng hẳn) — task đã OVERDUE sẽ không bị quét lại ở lần
 // chạy sau (idempotent tự nhiên qua điều kiện `status === 'PENDING'`).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -116,7 +116,8 @@ async function checkHrTaskOverdueReminders() {
                 subject, text: body,
                 host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
                 user: smtpUser, pass: smtpPass,
-                from: emailConfig.senderEmail
+                from: emailConfig.senderEmail,
+                graph: resolveGraphOption(emailConfig)
               });
             } catch (err) {
               console.error('⛔ [Nhắc việc quá hạn Onboarding/Offboarding] Gửi email thật thất bại:', err.message);

@@ -1,5 +1,9 @@
 // lib/mailer.js — Gửi email THẬT qua SMTP (nodemailer), dùng chung cho cả routes/email.js (gọi từ
-// frontend qua fetch) lẫn jobs/contractExpiryReminder.js (chạy định kỳ phía server).
+// frontend qua fetch) lẫn jobs/contractExpiryReminder.js (chạy định kỳ phía server). sendMail() vẫn là
+// ĐIỂM VÀO DUY NHẤT cho MỌI nơi gọi — từ 10/2026 có thêm tham số "graph" (optional) để rẽ sang phương
+// thức gửi THỨ 2 — Microsoft Graph API (xem lib/graphMailer.js) — dùng cho Exchange Online muốn "access
+// mailbox trực tiếp" (app-only OAuth2) thay vì SMTP AUTH; không truyền "graph" (hoặc graph.enabled
+// false) thì hành vi y hệt trước giờ, không đổi gì luồng SMTP đang chạy ổn định.
 //
 // PHÂN CHIA CẤU HÌNH — MỖI PHẦN CHỈ CÓ 1 NGUỒN DUY NHẤT, KHÔNG CHỒNG CHÉO ƯU TIÊN:
 // - Host/Port/Kiểu mã hoá/Email người gửi/Bật-tắt gửi mail/Tài khoản đăng nhập SMTP: cấu hình DUY
@@ -13,6 +17,8 @@
 //   không yêu cầu xác thực (kết nối ẩn danh).
 require('dotenv').config();
 const nodemailer = require('nodemailer');
+const { sendMailViaGraph } = require('./graphMailer');
+const { decryptSecret } = require('./emailCrypto');
 
 // Server (qua .env, đường lùi cũ) hoặc DB.emailConfig (qua tham số truyền vào) có đang cấu hình tài
 // khoản/mật khẩu đăng nhập SMTP hay không — dùng để hiển thị TRẠNG THÁI (không nhạy cảm, không lộ giá
@@ -50,6 +56,31 @@ function resolveEncryption(emailConfig) {
   if (smtpSecure === true) return 'SSL';
   if (smtpSecure === false) return 'STARTTLS';
   return (parseInt(smtpPort, 10) || 587) === 465 ? 'SSL' : 'STARTTLS';
+}
+
+// Dựng tham số "graph" truyền thẳng cho sendMail() bên dưới (xem chú thích ở nhánh graph?.enabled) từ 1
+// object DB.emailConfig THẬT (đọc nguyên từ DB, có graphClientSecretEnc) — HÀM DÙNG CHUNG cho mọi nơi
+// gọi sendMail() (routes/email.js, routes/auth.js, toàn bộ jobs/*.js) để chỉ viết ĐÚNG 1 lần logic giải
+// mã Client Secret + đọc đúng field, tránh mỗi nơi tự chép tay rồi lỡ quên nối dây khi thêm phương thức
+// Graph API (10/2026) — nơi gọi chỉ cần thêm `graph: resolveGraphOption(emailConfig)` vào object truyền
+// cho sendMail() hiện có, không cần sửa gì khác. Lỗi giải mã (khoá đổi/hỏng) không nên chặn hẳn việc gửi
+// nếu server còn cấu hình SMTP hợp lệ song song — chỉ log cảnh báo, coi như Graph API chưa có Client
+// Secret (sendMail() tự rơi về simulated:true ở nhánh graph nếu thiếu).
+function resolveGraphOption(emailConfig) {
+  if (emailConfig?.smtpGatewayType !== 'EXCHANGE_GRAPH') return { enabled: false };
+  let clientSecret = null;
+  try {
+    clientSecret = emailConfig.graphClientSecretEnc ? decryptSecret(emailConfig.graphClientSecretEnc) : null;
+  } catch (err) {
+    console.error('⛔ Không giải mã được Client Secret (Graph API) đã lưu:', err.message);
+  }
+  return {
+    enabled: true,
+    tenantId: emailConfig.graphTenantId,
+    clientId: emailConfig.graphClientId,
+    clientSecret,
+    senderMailbox: emailConfig.graphSenderMailbox
+  };
 }
 
 function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned }) {
@@ -92,9 +123,28 @@ function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned 
 // bại). Trả về { sent, failed, simulated, host, port } — có kèm host/port THỰC đã dùng để gửi (chỉ
 // khi simulated:false) để nơi gọi (Nhật ký hệ thống) ghi rõ đã xác nhận gửi tới máy chủ nào, phục vụ
 // việc kiểm tra/xác minh thay vì chỉ tin vào việc "đã thử gửi".
-async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned }) {
+async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned, graph }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   if (recipients.length === 0) return { sent: [], failed: [], simulated: false };
+
+  // Phương thức gửi THỨ 2 (10/2026, yêu cầu người dùng — Exchange Online muốn "access mailbox trực
+  // tiếp" thay vì SMTP AUTH port 587): Microsoft Graph API, xem lib/graphMailer.js. Tách HẲN khỏi luồng
+  // nodemailer bên dưới — 2 phương thức KHÔNG dùng chung bất kỳ cấu hình Host/Port/Mã hoá/Tài khoản SMTP
+  // nào (Graph xác thực bằng Azure AD App — tenantId/clientId/clientSecret — không phải tài khoản SMTP),
+  // cố tình giữ nhánh ĐỘC LẬP thay vì gộp chung để không đụng/làm rối luồng SMTP đang chạy ổn định. Vẫn
+  // giữ NGUYÊN cơ chế SMTP AUTH port 587 bên dưới làm 1 lựa chọn riêng (không thay thế) — đúng yêu cầu
+  // "vẫn phải để lại cơ chế gửi qua mailbox cổng 587" của người dùng, cho các Exchange on-premise hoặc
+  // tenant Exchange Online còn bật Basic Auth/SMTP AUTH.
+  if (graph?.enabled) {
+    if (!graph.tenantId || !graph.clientId || !graph.clientSecret || !graph.senderMailbox) {
+      return { sent: [], failed: recipients, simulated: true };
+    }
+    const { sent, failed, lastErrorMessage } = await sendMailViaGraph({
+      tenantId: graph.tenantId, clientId: graph.clientId, clientSecret: graph.clientSecret,
+      senderMailbox: graph.senderMailbox, to: recipients, subject, text, html
+    });
+    return { sent, failed, simulated: false, host: 'graph.microsoft.com (Microsoft Graph API)', port: 443, errorMessage: lastErrorMessage };
+  }
 
   // Chưa nhập SMTP Server ở màn Cấu Hình Email -> chưa thể gửi thật, mô phỏng như cũ.
   if (!host) {
@@ -128,4 +178,4 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
   return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort, errorMessage: lastErrorMessage };
 }
 
-module.exports = { sendMail, hasAuthConfigured, resolveEncryption };
+module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption };

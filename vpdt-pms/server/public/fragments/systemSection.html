@@ -506,7 +506,8 @@
           <label class="block font-semibold text-gray-600 mb-1">Loại Email Gateway (chọn nhanh cấu hình mẫu)</label>
           <div class="flex gap-1.5 flex-wrap">
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="POSTFIX" id="gwBtn_POSTFIX" class="px-3 py-1.5 rounded border font-semibold">Postfix <span class="font-normal text-gray-400">(nội bộ, thường không xác thực)</span></button>
-            <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE" id="gwBtn_EXCHANGE" class="px-3 py-1.5 rounded border font-semibold">Exchange <span class="font-normal text-gray-400">(xác thực mailbox)</span></button>
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE" id="gwBtn_EXCHANGE" class="px-3 py-1.5 rounded border font-semibold">Exchange <span class="font-normal text-gray-400">(SMTP, xác thực mailbox)</span></button>
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE_GRAPH" id="gwBtn_EXCHANGE_GRAPH" class="px-3 py-1.5 rounded border font-semibold">Exchange Online <span class="font-normal text-gray-400">(Graph API, access mailbox)</span></button>
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="GMAIL" id="gwBtn_GMAIL" class="px-3 py-1.5 rounded border font-semibold">Gmail <span class="font-normal text-gray-400">(App Password)</span></button>
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="CUSTOM" id="gwBtn_CUSTOM" class="px-3 py-1.5 rounded border font-semibold">Khác / Tuỳ Chỉnh</button>
           </div>
@@ -521,21 +522,21 @@
               <option value="false">Tắt (Disabled)</option>
             </select>
           </div>
-          <div>
+          <div class="smtp-only-field">
             <label class="block font-semibold text-gray-600 mb-1">SMTP Server</label>
-            <input id="cfgSmtpHost" placeholder="smtp.gmail.com" class="w-full border p-1.5 rounded" required>
+            <input id="cfgSmtpHost" placeholder="smtp.gmail.com" class="w-full border p-1.5 rounded">
           </div>
-          <div>
+          <div class="smtp-only-field">
             <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
-            <input id="cfgSmtpPort" type="number" placeholder="587" data-op-change="syncSmtpEncryptionFromPort" class="w-full border p-1.5 rounded" required>
+            <input id="cfgSmtpPort" type="number" placeholder="587" data-op-change="syncSmtpEncryptionFromPort" class="w-full border p-1.5 rounded">
           </div>
-          <div>
+          <div class="smtp-only-field">
             <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
-            <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded" required>
+            <input id="cfgSenderEmail" type="email" placeholder="dms-noreply@company.com" class="w-full border p-1.5 rounded">
           </div>
         </div>
 
-        <div>
+        <div class="smtp-only-block">
           <label class="block font-semibold text-gray-600 mb-1">Mã Hoá Kết Nối</label>
           <div class="flex gap-1.5 flex-wrap">
             <button type="button" data-op="setSmtpEncryption" data-arg0="NONE" id="encBtn_NONE" class="px-3 py-1.5 rounded border font-semibold">Không mã hoá <span class="font-normal text-gray-400">(port 25)</span></button>
@@ -550,7 +551,7 @@
           </label>
         </div>
 
-        <div class="border-t pt-2">
+        <div class="smtp-only-block border-t pt-2">
           <label class="flex items-center gap-2 font-semibold text-gray-600 mb-2">
             <input type="checkbox" id="cfgSmtpAuthEnabled" data-op-change="toggleSmtpAuthFields">
             Máy chủ SMTP yêu cầu xác thực (tài khoản/mật khẩu đăng nhập)
@@ -563,6 +564,29 @@
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Mật Khẩu SMTP</label>
               <input id="cfgSmtpPassPlain" type="password" placeholder="Để trống nếu giữ nguyên mật khẩu đã lưu" class="w-full border p-1.5 rounded" autocomplete="new-password">
+            </div>
+          </div>
+        </div>
+
+        <div class="graph-only-block hidden border-t pt-2">
+          <label class="block font-semibold text-gray-600 mb-1">Cấu Hình Microsoft Graph API (Azure AD App Registration)</label>
+          <p class="text-[11px] text-gray-400 italic mb-2">Đăng ký 1 Azure AD App tại Azure Portal → App Registrations, cấp quyền ỨNG DỤNG (Application permission, không phải Delegated) "Mail.Send" cho Microsoft Graph + bấm "Grant admin consent" — rồi điền 4 giá trị bên dưới (Client Secret tạo tại Certificates &amp; secrets).</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tenant ID</label>
+              <input id="cfgGraphTenantId" placeholder="00000000-0000-0000-0000-000000000000" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Client ID (Application ID)</label>
+              <input id="cfgGraphClientId" placeholder="00000000-0000-0000-0000-000000000000" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Client Secret</label>
+              <input id="cfgGraphClientSecretPlain" type="password" placeholder="Để trống nếu giữ nguyên Client Secret đã lưu" class="w-full border p-1.5 rounded" autocomplete="new-password">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mailbox Người Gửi (UPN)</label>
+              <input id="cfgGraphSenderMailbox" type="email" placeholder="notify@yourcompany.com" class="w-full border p-1.5 rounded">
             </div>
           </div>
         </div>
