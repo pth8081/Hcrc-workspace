@@ -142,11 +142,21 @@
 .perm-tree-node.perm-tree-dirty { border-left: 3px solid #f59e0b !important; background-color: #fffbeb !important; }
 /* Box "🔍 Tìm Kiếm & Lọc" thu gọn mặc định — dùng lại đúng khuôn <details>/<summary> ở trên, tách class
    riêng để không lẫn với cây phân quyền. Class dùng chung cho MỌI module (không đặt tên riêng theo
-   module) — module nào sau này có phần lọc dài chỉ cần bọc bằng đúng class này là tự thu gọn/mở ra. */
-.filter-box-details > summary { list-style: none; cursor: pointer; }
+   module) — module nào sau này có phần lọc dài chỉ cần bọc bằng đúng class này là tự thu gọn/mở ra.
+   (10/2026) Làm mỏng dòng tiêu đề khi ĐÓNG: bỏ hẳn padding p-4 Tailwind có sẵn trên chính <details> (CSS
+   này nạp SAU tailwind.css nên tự thắng mà không cần !important — xem index.html), dồn padding mỏng hơn
+   riêng cho <summary> (chỉ còn 1 dòng, không còn dư khoảng trắng dưới mỗi khi đóng) + trả lại padding
+   trái/phải/dưới cho khối nội dung (`> summary ~ *`, luôn là 1 <div> duy nhất ở MỌI nơi đang dùng class
+   này) khi mở ra — không đụng margin/padding-top riêng của từng nơi (mt-3/pt-2...) nên vẫn giữ đúng
+   khoảng cách đã có giữa tiêu đề và nội dung. */
+.filter-box-details { padding: 0; }
+.filter-box-details > summary { list-style: none; cursor: pointer; padding: 0.5rem 0.875rem; border-radius: inherit; transition: background-color 0.15s ease; }
+.filter-box-details > summary:hover { background-color: rgba(0, 0, 0, 0.035); }
+.filter-box-details[open] > summary { border-bottom: 1px solid rgba(0, 0, 0, 0.06); }
 .filter-box-details > summary::-webkit-details-marker { display: none; }
 .filter-box-details > summary .filter-box-chevron { transition: transform 0.15s ease; display: inline-block; }
 .filter-box-details[open] > summary .filter-box-chevron { transform: rotate(90deg); }
+.filter-box-details > summary ~ * { padding-left: 0.875rem; padding-right: 0.875rem; padding-bottom: 0.875rem; }
 /* Mục "0. Quyền Truy Cập Module" — mỗi tab con của module/module con (VD "Kỳ Đăng Ký" trong Văn Phòng
    Phẩm) hiện 1 dòng chú thích trỏ tới đúng khối 1-18 đang giữ checkbox quyền thật quyết định tab đó
    (KHÔNG nhân bản checkbox — chỉ đọc + nút "Đi tới", xem jumpToPermField()). Bấm "Đi tới" mở khối đích
