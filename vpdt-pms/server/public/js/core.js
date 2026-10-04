@@ -6390,7 +6390,14 @@ function runConfirmedAction() {
   const fn = _pendingConfirmAction;
   document.getElementById('genericConfirmModal').classList.add('hidden');
   _pendingConfirmAction = null;
-  if (fn) fn();
+  // LỖI ĐÃ VÁ (đợt rà soát diện rộng 10/2026, phát hiện qua agent audit cơ chế khoá nút chống
+  // double-submit): thiếu "return" khiến runCspOp() (core.js, dispatch nút "Đồng Ý" #genericConfirmOkBtn
+  // qua data-op="runConfirmedAction") KHÔNG BAO GIỜ thấy được Promise do fn trả về (dù fn async thật sự
+  // có gọi API) — hệ quả: mọi nơi dùng chung showConfirmModal()/runConfirmedAction() (không riêng Văn
+  // Bản Trình) đều MẤT tác dụng khoá nút chống bấm nhiều lần vừa thêm, có thể gửi trùng request khi bấm
+  // "Đồng Ý" liên tiếp. Thêm "return" là đủ — fn() vẫn chạy y hệt, chỉ khác là Promise của nó giờ được
+  // truyền ngược lên cho runCspOp() khoá/mở nút đúng lúc.
+  if (fn) return fn();
 }
 
 // ============================================================
@@ -10541,17 +10548,43 @@ function cspRunSeq(seqStr) {
   }
   return runFromCurrentIndex();
 }
+// lockOpVisual(el, locked) — phần HIỂN THỊ cho khoá chống double-submit runCspOp()/cspRunSeq ngay dưới
+// (yêu cầu người dùng 10/2026: "ấn 1 nút... nó phải khoá lại cho tới khi xong mới nhả ra") — trước đây
+// khoá data-op-in-flight chỉ chặn NGẦM việc gọi lại hàm, nút vẫn trông bình thường nên người dùng không
+// biết đang xử lý, dễ bấm tiếp tưởng bấm hụt. <button>/<input>/<select>/<textarea> dùng ".disabled" thật
+// (trình duyệt tự chặn tương tác + áp CSS "button:disabled" mới thêm ở app.css — mờ + xám + con trỏ
+// not-allowed, tách rõ khỏi dáng vẻ bình thường/hover/active); phần tử khác (không có .disabled, VD 2 chỗ
+// <div data-op=...> làm nền mờ đóng sidebar/modal) dùng class ".op-locked" (pointer-events:none + mờ đi,
+// cũng định nghĩa cạnh "button:disabled" ở app.css).
+function lockOpVisual(el, locked) {
+  if (!el) return;
+  if ('disabled' in el) el.disabled = locked;
+  else el.classList.toggle('op-locked', locked);
+}
 // runCspOp() — LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Thấp — "double-submit"): bấm 2 lần
 // liên tiếp thật nhanh vào ĐÚNG 1 nút submit/thao tác (VD do double-click hoặc mạng chậm) trước khi
 // request đầu hoàn tất có thể gửi 2 lần (tạo trùng bản ghi, tải trùng file...). Khoá lại CHÍNH el đó
 // (data-op-in-flight) trong lúc promise fn trả về CHƯA resolve/reject rồi tự mở lại — chỉ chặn bấm LẶP
 // LẠI trên cùng 1 phần tử, KHÔNG ảnh hưởng bấm nút khác hay thao tác đồng bộ (fn không trả Promise coi
-// như xong ngay, không cần khoá).
+// như xong ngay, không cần khoá). Nhánh data-op-submit: el truyền vào là chính <form> (không phải nút
+// Lưu) — <form> không có ".disabled" để hiện khoá, nên ưu tiên "e.submitter" (DOM chuẩn — nút THẬT đã
+// kích hoạt submit, xem SubmitEvent.submitter) để khoá hiển thị ĐÚNG nút người dùng vừa bấm. CẦN ưu tiên
+// submitter vì rà soát diện rộng (10/2026) phát hiện ÍT NHẤT 1 form có 2 nút type=submit cùng lúc
+// (internalSection.html, submitInternalPost — "Lưu Nháp" / "Đăng ngay", phân biệt bằng e.submitter.id)
+// — nếu chỉ querySelector('[type="submit"]') như bản đầu sẽ LUÔN khoá nhầm nút ĐẦU TIÊN trong DOM dù
+// người dùng bấm nút THỨ 2. querySelector() chỉ còn là phương án dự phòng khi trình duyệt/đường gọi nào
+// đó không có submitter (VD form.requestSubmit() gọi không truyền nút — hiếm, không có trong code này).
 function runCspOp(el, fn, args) {
+  let visualTarget = el;
+  if (el.tagName === 'FORM') {
+    const evt = args[0];
+    visualTarget = (evt && evt.submitter) || el.querySelector('[type="submit"]') || el;
+  }
   const result = fn.apply(null, args);
   if (result && typeof result.then === 'function') {
     el.dataset.opInFlight = '1';
-    result.finally(() => { delete el.dataset.opInFlight; });
+    lockOpVisual(visualTarget, true);
+    result.finally(() => { delete el.dataset.opInFlight; lockOpVisual(visualTarget, false); });
   }
 }
 function cspDispatchOp(el, evt, attrName) {
@@ -10629,8 +10662,21 @@ function bindCspDelegation(rootId) {
     const el = e.target.closest('[data-op], [data-op-seq]');
     if (!el || !root.contains(el)) return;
     if (el.hasAttribute('data-op-seq')) {
+      // LỖ HỔNG ĐÃ VÁ (10/2026, cùng đợt thêm khoá hiển thị runCspOp() ở trên): nhánh data-op-seq (44
+      // nút toàn hệ thống — chuỗi hành động "đóng dropdown|chuyển tab|..." qua data-op-seq="a()|b()|c()")
+      // trước đây gọi cspRunSeq() THẲNG, KHÔNG hề qua runCspOp() nên KHÔNG CÓ khoá chống double-submit
+      // nào cả (không ngầm, không hiện) — khác với 4 nhánh data-op/data-op-change/data-op-input/
+      // data-op-submit kia đều đã khoá từ trước. Thêm đúng cùng khuôn: kiểm tra/gắn opInFlight + khoá
+      // hiển thị (lockOpVisual()) nếu cspRunSeq() trả về Promise (chuỗi có bước bất đồng bộ) — chuỗi
+      // thuần đồng bộ (đa số, VD chuyển tab) trả về undefined, không bị khoá gì (giữ nguyên tức thời).
+      if (el.dataset.opInFlight === '1') return;
       if (el.dataset.opPreventDefault === '1') e.preventDefault();
-      cspRunSeq(el.getAttribute('data-op-seq'));
+      const seqResult = cspRunSeq(el.getAttribute('data-op-seq'));
+      if (seqResult && typeof seqResult.then === 'function') {
+        el.dataset.opInFlight = '1';
+        lockOpVisual(el, true);
+        seqResult.finally(() => { delete el.dataset.opInFlight; lockOpVisual(el, false); });
+      }
     } else {
       cspDispatchOp(el, e, 'data-op');
     }

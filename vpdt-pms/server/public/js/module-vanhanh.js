@@ -4054,32 +4054,47 @@ const OP_SUBMIT_ACTIONS = {
   // "💲 Phê Duyệt Giá Bán Buôn" — cùng lý do OP_CLICK_ACTIONS ở trên.
   submitItPriceApproval: e => submitItPriceApproval(e)
 };
+// LỖ HỔNG ĐÃ VÁ (đợt rà soát diện rộng 10/2026, phát hiện qua agent audit cơ chế khoá nút chống
+// double-submit): bindOperationDelegation() tự dựng registry riêng (OP_CLICK_ACTIONS/OP_CHANGE_ACTIONS/
+// OP_INPUT_ACTIONS/OP_SUBMIT_ACTIONS) thay vì window[fnName] như bindCspDelegation() chung (core.js) —
+// trước đây gọi THẲNG fn(el, e)/fn(e), hoàn toàn KHÔNG qua runCspOp() nên #vanHanhSection + 10 modal
+// con của nó (bind ở forEach(bindOperationDelegation) ngay dưới) chưa từng được hưởng khoá nút chống bấm
+// nhiều lần vừa thêm toàn hệ thống — bấm liên tiếp "Gửi phê duyệt" Đặt Hàng/Mở Siêu Thị/Sửa Chữa... vẫn
+// gửi được nhiều lần trước khi request đầu xong. runCspOp() (core.js, định nghĩa trước module này luôn
+// qua <script src="/js/core.js"> tĩnh ở index.html — module-vanhanh.js chỉ tải LƯỜI sau đó qua
+// MODULE_LOAD_GROUPS nên chắc chắn đã có sẵn) nhận (el, fn, args) tổng quát, không phụ thuộc cách fn
+// được tra cứu — gọi lại y hệt nó thay vì tự fn(...) là đủ, giữ nguyên đúng args cũ (el,e)/(e) từng
+// hàm đang nhận, không đổi chữ ký bất kỳ hàm OP_*_ACTIONS nào.
 function bindOperationDelegation(rootId) {
   const root = document.getElementById(rootId);
   if (!root) return;
   root.addEventListener('click', (e) => {
     const el = e.target.closest('[data-op]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_CLICK_ACTIONS[el.dataset.op];
-    if (fn) fn(el, e);
+    if (fn) runCspOp(el, fn, [el, e]);
   });
   root.addEventListener('change', (e) => {
     const el = e.target.closest('[data-op-change]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_CHANGE_ACTIONS[el.dataset.opChange];
-    if (fn) fn(el, e);
+    if (fn) runCspOp(el, fn, [el, e]);
   });
   root.addEventListener('input', (e) => {
     const el = e.target.closest('[data-op-input]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_INPUT_ACTIONS[el.dataset.opInput];
-    if (fn) fn(el, e);
+    if (fn) runCspOp(el, fn, [el, e]);
   });
   root.addEventListener('submit', (e) => {
     const el = e.target.closest('[data-op-submit]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_SUBMIT_ACTIONS[el.dataset.opSubmit];
-    if (fn) fn(e);
+    if (fn) runCspOp(el, fn, [e]);
   });
 }
 // BUG THẬT phát hiện lúc kiểm tra lại VHST-5 sau phản hồi người dùng ("🔗 Liên kết" không dùng được):
