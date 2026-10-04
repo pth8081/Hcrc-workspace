@@ -733,122 +733,138 @@
            để phản ánh đúng quan hệ cha-con. Mỗi Khối/Ban gán 1 hoặc nhiều Phòng Ban con (xem
            renderDeptGroupList()/saveDeptGroupChildren() ở module-admin.js) — dùng lọc ô "Phòng Ban" ở
            form Người Dùng và ở Phân Quyền phía trên. Span 2 cột (cần chỗ cho widget gán Phòng Ban con). -->
-      <div class="bg-purple-50 p-4 rounded border border-purple-200 space-y-3 md:col-span-2">
-        <h3 class="font-bold text-purple-900 text-sm flex items-center gap-1">🗂️ Quản Lý Danh Mục Khối/Ban</h3>
-        <p class="text-[11px] text-purple-700">Mỗi Khối/Ban gán 1 hoặc nhiều Phòng Ban con (Danh Mục Phòng Ban ngay bên cạnh) — dùng để LỌC ô "Phòng Ban" khi tạo Người Dùng và khi cấu hình Phạm Vi Phòng Ban ở Phân Quyền. Không gán Khối/Ban nào vẫn hoạt động bình thường (cả 2 ô đều để trống được).</p>
-        <form data-op-submit="saveDeptGroup" class="flex gap-2">
-          <input id="txtDeptGroupName" placeholder="Tên Khối/Ban mới (VD: Khối Kinh Doanh)..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Thêm</button>
-        </form>
-        <div id="deptGroupListWrap" class="max-h-72 overflow-y-auto space-y-2"></div>
-        <div id="objectCatalogExcelTools_deptGroups"></div>
-      </div>
-
-      <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
-        <h3 class="font-bold text-indigo-900 text-sm flex items-center gap-1">🏢 Quản Lý Danh Mục Phòng Ban</h3>
-        <form data-op-submit="saveDept" class="flex gap-2">
-          <input id="txtDeptName" placeholder="Tên phòng ban mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="deptList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-purple-50 p-4 rounded border border-purple-200 space-y-3 md:col-span-2">
+        <summary class="font-bold text-purple-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-purple-400">▸</span><span>🗂️ Quản Lý Danh Mục Khối/Ban</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-purple-700">Mỗi Khối/Ban gán 1 hoặc nhiều Phòng Ban con (Danh Mục Phòng Ban ngay bên cạnh) — dùng để LỌC ô "Phòng Ban" khi tạo Người Dùng và khi cấu hình Phạm Vi Phòng Ban ở Phân Quyền. Không gán Khối/Ban nào vẫn hoạt động bình thường (cả 2 ô đều để trống được).</p>
+          <form data-op-submit="saveDeptGroup" class="flex gap-2">
+            <input id="txtDeptGroupName" placeholder="Tên Khối/Ban mới (VD: Khối Kinh Doanh)..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Thêm</button>
+          </form>
+          <div id="deptGroupListWrap" class="max-h-72 overflow-y-auto space-y-2"></div>
+          <div id="objectCatalogExcelTools_deptGroups"></div>
         </div>
-        <div id="simpleCatalogExcelTools_depts"></div>
-      </div>
+      </details>
 
-      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
-        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">🏬 Quản Lý Danh Mục Siêu Thị</h3>
-        <p class="text-[11px] text-gray-500 italic">Danh mục RIÊNG cho siêu thị — dùng khi tạo/sửa Người Dùng (chọn Vị Trí = "Siêu Thị") và module Đồng Phục. Nếu tên siêu thị đang nằm sẵn trong Danh Mục Phòng Ban ở trên, bấm "Chuyển" ở dòng đó thay vì gõ lại từ đầu.</p>
-        <form data-op-submit="saveStore" class="flex gap-2">
-          <input id="txtStoreName" placeholder="Tên siêu thị mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="storeList" class="divide-y text-xs"></ul>
-        </div>
-        <div class="border-t pt-2 space-y-1.5">
-          <div class="flex items-center gap-2 flex-wrap text-[11px]">
-            <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">📄 Tải Mẫu</a>
-            <button type="button" data-op="exportStoreCatalogExcel" class="text-orange-700 font-bold hover:underline">📤 Xuất Excel</button>
-            <label class="text-orange-700 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onStoreImportFileChange" data-arg-event="0" class="hidden"></label>
+      <details class="filter-box-details bg-indigo-50 p-4 rounded border border-indigo-200 space-y-3">
+        <summary class="font-bold text-indigo-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-indigo-400">▸</span><span>🏢 Quản Lý Danh Mục Phòng Ban</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <form data-op-submit="saveDept" class="flex gap-2">
+            <input id="txtDeptName" placeholder="Tên phòng ban mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="deptList" class="divide-y text-xs"></ul>
           </div>
-          <p id="storeImportStatus" class="text-[11px] text-gray-500"></p>
-          <div id="storeImportPreviewWrap" class="hidden border rounded max-h-32 overflow-y-auto">
-            <table class="w-full text-[11px]">
-              <thead><tr class="bg-gray-100 text-left"><th class="p-1">Tên Siêu Thị</th><th class="p-1">Loại</th><th class="p-1">Trạng Thái</th></tr></thead>
-              <tbody id="storeImportPreviewBody"></tbody>
-            </table>
+          <div id="simpleCatalogExcelTools_depts"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <summary class="font-bold text-orange-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-orange-400">▸</span><span>🏬 Quản Lý Danh Mục Siêu Thị</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Danh mục RIÊNG cho siêu thị — dùng khi tạo/sửa Người Dùng (chọn Vị Trí = "Siêu Thị") và module Đồng Phục. Nếu tên siêu thị đang nằm sẵn trong Danh Mục Phòng Ban ở trên, bấm "Chuyển" ở dòng đó thay vì gõ lại từ đầu.</p>
+          <form data-op-submit="saveStore" class="flex gap-2">
+            <input id="txtStoreName" placeholder="Tên siêu thị mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="storeList" class="divide-y text-xs"></ul>
           </div>
-          <button type="button" id="storeImportConfirmBtn" data-op="confirmStoreImport" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Nhập Excel</button>
+          <div class="border-t pt-2 space-y-1.5">
+            <div class="flex items-center gap-2 flex-wrap text-[11px]">
+              <a href="/api/stores/import-template" class="text-orange-700 font-bold hover:underline">📄 Tải Mẫu</a>
+              <button type="button" data-op="exportStoreCatalogExcel" class="text-orange-700 font-bold hover:underline">📤 Xuất Excel</button>
+              <label class="text-orange-700 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input id="storeImportFileInput" type="file" accept=".xlsx,.xls,.csv" data-op-change="onStoreImportFileChange" data-arg-event="0" class="hidden"></label>
+            </div>
+            <p id="storeImportStatus" class="text-[11px] text-gray-500"></p>
+            <div id="storeImportPreviewWrap" class="hidden border rounded max-h-32 overflow-y-auto">
+              <table class="w-full text-[11px]">
+                <thead><tr class="bg-gray-100 text-left"><th class="p-1">Tên Siêu Thị</th><th class="p-1">Loại</th><th class="p-1">Trạng Thái</th></tr></thead>
+                <tbody id="storeImportPreviewBody"></tbody>
+              </table>
+            </div>
+            <button type="button" id="storeImportConfirmBtn" data-op="confirmStoreImport" class="hidden w-full bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">✅ Xác Nhận Nhập Excel</button>
+          </div>
         </div>
-      </div>
+      </details>
 
-      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
-        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục Các Loại Giấy Phép</h3>
-        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Tên giấy phép / Loại giấy phép" ở màn Giấy Phép — tự học thêm khi ai gõ loại mới, ở đây chỉ để dọn/xoá bớt.</p>
-        <form data-op-submit="saveLicenseType" class="flex gap-2">
-          <input id="txtLicenseTypeName" placeholder="Tên loại giấy phép mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="licenseTypeList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <summary class="font-bold text-sky-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-sky-400">▸</span><span>📜 Quản Lý Danh Mục Các Loại Giấy Phép</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Tên giấy phép / Loại giấy phép" ở màn Giấy Phép — tự học thêm khi ai gõ loại mới, ở đây chỉ để dọn/xoá bớt.</p>
+          <form data-op-submit="saveLicenseType" class="flex gap-2">
+            <input id="txtLicenseTypeName" placeholder="Tên loại giấy phép mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="licenseTypeList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_licenseTypes"></div>
         </div>
-        <div id="simpleCatalogExcelTools_licenseTypes"></div>
-      </div>
+      </details>
 
-      <div class="bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
-        <h3 class="font-bold text-teal-900 text-sm flex items-center gap-1">🚗 Quản Lý Danh Mục Loại Xe Cụ Thể</h3>
-        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Loại xe cụ thể" (Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính) — chọn 1 mục thường sẽ tự động điền Biển Kiểm Soát (BKS); mục đánh dấu "Xe Taxi" sẽ hiện ô "Hãng Taxi" thay vì BKS.</p>
-        <form data-op-submit="saveCarVehicleType" class="grid grid-cols-2 gap-2">
-          <input id="txtCarVehicleTypeName" placeholder="Tên loại xe (VD: Xe 5 chỗ)..." class="border p-1.5 rounded text-xs col-span-2" required>
-          <input id="txtCarVehicleTypeBienSo" placeholder="Biển kiểm soát cố định (VD: 30G-012.82)" class="border p-1.5 rounded text-xs">
-          <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" id="chkCarVehicleTypeIsTaxi"> Là Xe Taxi (hiện "Hãng Taxi" thay BKS)</label>
-          <button type="submit" class="col-span-2 bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="carVehicleTypeList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-teal-50 p-4 rounded border border-teal-200 space-y-3">
+        <summary class="font-bold text-teal-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-teal-400">▸</span><span>🚗 Quản Lý Danh Mục Loại Xe Cụ Thể</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Loại xe cụ thể" (Đăng Ký Xe > Phần Dành Cho Phòng Hành Chính) — chọn 1 mục thường sẽ tự động điền Biển Kiểm Soát (BKS); mục đánh dấu "Xe Taxi" sẽ hiện ô "Hãng Taxi" thay vì BKS.</p>
+          <form data-op-submit="saveCarVehicleType" class="grid grid-cols-2 gap-2">
+            <input id="txtCarVehicleTypeName" placeholder="Tên loại xe (VD: Xe 5 chỗ)..." class="border p-1.5 rounded text-xs col-span-2" required>
+            <input id="txtCarVehicleTypeBienSo" placeholder="Biển kiểm soát cố định (VD: 30G-012.82)" class="border p-1.5 rounded text-xs">
+            <label class="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" id="chkCarVehicleTypeIsTaxi"> Là Xe Taxi (hiện "Hãng Taxi" thay BKS)</label>
+            <button type="submit" class="col-span-2 bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="carVehicleTypeList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="objectCatalogExcelTools_carVehicleTypes"></div>
         </div>
-        <div id="objectCatalogExcelTools_carVehicleTypes"></div>
-      </div>
+      </details>
 
-      <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
-        <h3 class="font-bold text-amber-900 text-sm flex items-center gap-1">🚕 Quản Lý Danh Mục Hãng Taxi</h3>
-        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Hãng Taxi" — chỉ hiện khi chọn "Loại xe cụ thể" = mục đánh dấu Xe Taxi ở trên.</p>
-        <form data-op-submit="saveCarTaxiCompany" class="flex gap-2">
-          <input id="txtCarTaxiCompanyName" placeholder="Tên hãng taxi mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="carTaxiCompanyList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
+        <summary class="font-bold text-amber-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-amber-400">▸</span><span>🚕 Quản Lý Danh Mục Hãng Taxi</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Hãng Taxi" — chỉ hiện khi chọn "Loại xe cụ thể" = mục đánh dấu Xe Taxi ở trên.</p>
+          <form data-op-submit="saveCarTaxiCompany" class="flex gap-2">
+            <input id="txtCarTaxiCompanyName" placeholder="Tên hãng taxi mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="carTaxiCompanyList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_carTaxiCompanies"></div>
         </div>
-        <div id="simpleCatalogExcelTools_carTaxiCompanies"></div>
-      </div>
+      </details>
 
-      <div class="bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
-        <h3 class="font-bold text-orange-900 text-sm flex items-center gap-1">⭐ Quản Lý Danh Mục Lý Do Đánh Giá Chuyến Xe</h3>
-        <p class="text-[11px] text-gray-500 italic">Danh mục gợi ý cho câu hỏi "Điều gì cần thay đổi?" khi người đăng ký Đánh Giá Chuyến ở mức 1-4 sao (bắt buộc chọn ít nhất 1 mục nếu đánh giá 1-2 sao).</p>
-        <form data-op-submit="saveCarEvaluationIssue" class="flex gap-2">
-          <input id="txtCarEvaluationIssueName" placeholder="Lý do mới (VD: Đúng giờ)..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="carEvaluationIssueList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-orange-50 p-4 rounded border border-orange-200 space-y-3">
+        <summary class="font-bold text-orange-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-orange-400">▸</span><span>⭐ Quản Lý Danh Mục Lý Do Đánh Giá Chuyến Xe</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Danh mục gợi ý cho câu hỏi "Điều gì cần thay đổi?" khi người đăng ký Đánh Giá Chuyến ở mức 1-4 sao (bắt buộc chọn ít nhất 1 mục nếu đánh giá 1-2 sao).</p>
+          <form data-op-submit="saveCarEvaluationIssue" class="flex gap-2">
+            <input id="txtCarEvaluationIssueName" placeholder="Lý do mới (VD: Đúng giờ)..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-orange-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-orange-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="carEvaluationIssueList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_carEvaluationIssues"></div>
         </div>
-        <div id="simpleCatalogExcelTools_carEvaluationIssues"></div>
-      </div>
+      </details>
 
-      <div class="bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
-        <h3 class="font-bold text-rose-900 text-sm flex items-center gap-1">🗺️ Quản Lý Danh Mục Vùng Giá Áp Dụng</h3>
-        <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Vùng Giá Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ (Hỗ Trợ IT).</p>
-        <form data-op-submit="savePriceZone" class="flex gap-2">
-          <input id="txtPriceZoneName" placeholder="Tên vùng giá mới (VD: Miền Bắc)..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="priceZoneList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-rose-50 p-4 rounded border border-rose-200 space-y-3">
+        <summary class="font-bold text-rose-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-rose-400">▸</span><span>🗺️ Quản Lý Danh Mục Vùng Giá Áp Dụng</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Danh mục cho ô "Vùng Giá Áp Dụng" ở form Phê Duyệt Giá Bán Lẻ (Hỗ Trợ IT).</p>
+          <form data-op-submit="savePriceZone" class="flex gap-2">
+            <input id="txtPriceZoneName" placeholder="Tên vùng giá mới (VD: Miền Bắc)..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-rose-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="priceZoneList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_priceZones"></div>
         </div>
-        <div id="simpleCatalogExcelTools_priceZones"></div>
-      </div>
+      </details>
 
       <!-- Danh Mục "Loại Dịch Vụ" (Gia Hạn CNTT) — DỜI vào đây (yêu cầu người dùng 9/2026, trước đó nằm
            lẫn trong màn nghiệp vụ "Hỗ Trợ IT > Gia Hạn Dịch Vụ", không đúng chỗ vì đây là danh mục cấu
@@ -859,123 +875,139 @@
            Vụ" — nơi itServiceRenewalManage KHÔNG phải admin cũng vào được — nên phải tự ẩn/hiện theo
            quyền admin; giờ cả màn này đã admin-only sẵn nên bỏ hẳn lớp đó, xem renderItRenewalCategoryList()
            ở module-itsupport-renewal.js). -->
-      <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
-        <h3 class="font-bold text-sky-900 text-sm flex items-center gap-1">📜 Quản Lý Danh Mục "Loại Dịch Vụ" (Gia Hạn CNTT)</h3>
-        <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Loại dịch vụ" ở form "Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn" (Hỗ Trợ IT → Gia Hạn Dịch Vụ) — tự học thêm khi ai gõ loại mới, ở đây chỉ để thêm/dọn/xoá bớt.</p>
-        <form data-op-submit="saveItRenewalCategory" class="flex gap-2">
-          <input id="txtItRenewalCategoryName" placeholder="Tên loại dịch vụ mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="itRenewalCategoryList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
+        <summary class="font-bold text-sky-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-sky-400">▸</span><span>📜 Quản Lý Danh Mục "Loại Dịch Vụ" (Gia Hạn CNTT)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Nguồn gợi ý cho ô "Loại dịch vụ" ở form "Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn" (Hỗ Trợ IT → Gia Hạn Dịch Vụ) — tự học thêm khi ai gõ loại mới, ở đây chỉ để thêm/dọn/xoá bớt.</p>
+          <form data-op-submit="saveItRenewalCategory" class="flex gap-2">
+            <input id="txtItRenewalCategoryName" placeholder="Tên loại dịch vụ mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="itRenewalCategoryList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_itRenewalCategories"></div>
         </div>
-        <div id="simpleCatalogExcelTools_itRenewalCategories"></div>
-      </div>
+      </details>
 
-      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
-        <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🏷️ Quản Lý Phân Loại Tài Liệu</h3>
-        <form data-op-submit="saveCat" class="flex gap-2">
-          <input id="txtCatName" placeholder="Tên loại tài liệu mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="catList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <summary class="font-bold text-emerald-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-emerald-400">▸</span><span>🏷️ Quản Lý Phân Loại Tài Liệu</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <form data-op-submit="saveCat" class="flex gap-2">
+            <input id="txtCatName" placeholder="Tên loại tài liệu mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="catList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_cats"></div>
         </div>
-        <div id="simpleCatalogExcelTools_cats"></div>
-      </div>
+      </details>
 
-      <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
-        <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🏷️ Viết Tắt Loại Hợp Đồng (dùng sinh Mã Hợp Đồng)</h3>
-        <p class="text-[11px] text-gray-500 italic">Danh sách "Loại Pháp Lý" tự thêm/bớt ở màn Biểu Mẫu (nút Sửa trường mặc định) — ở đây chỉ chỉnh viết tắt dùng sinh Mã Hợp Đồng.</p>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="contractTypeAbbrList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
+        <summary class="font-bold text-cyan-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-cyan-400">▸</span><span>🏷️ Viết Tắt Loại Hợp Đồng (dùng sinh Mã Hợp Đồng)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-gray-500 italic">Danh sách "Loại Pháp Lý" tự thêm/bớt ở màn Biểu Mẫu (nút Sửa trường mặc định) — ở đây chỉ chỉnh viết tắt dùng sinh Mã Hợp Đồng.</p>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="contractTypeAbbrList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_contractTypes"></div>
         </div>
-        <div id="simpleCatalogExcelTools_contractTypes"></div>
-      </div>
+      </details>
 
-      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
-        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🎖️ Quản Lý Danh Sách Chức Danh (Khối Văn Phòng/HO)</h3>
-        <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt. Chỉ dùng cho nhân sự Khối Văn Phòng/HO — nhân viên Siêu Thị dùng danh sách riêng bên dưới.</p>
-        <form data-op-submit="saveJobTitle" class="flex gap-2">
-          <input id="txtJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="jobTitleList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🎖️ Quản Lý Danh Sách Chức Danh (Khối Văn Phòng/HO)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Chức danh gán cho người dùng (mục Cấu hình Quyền Hạn bên dưới) sẽ hiện kèm tên trên các chân ký phê duyệt. Chỉ dùng cho nhân sự Khối Văn Phòng/HO — nhân viên Siêu Thị dùng danh sách riêng bên dưới.</p>
+          <form data-op-submit="saveJobTitle" class="flex gap-2">
+            <input id="txtJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="jobTitleList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_jobTitles"></div>
         </div>
-        <div id="simpleCatalogExcelTools_jobTitles"></div>
-      </div>
+      </details>
 
-      <div class="bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
-        <h3 class="font-bold text-fuchsia-900 text-sm flex items-center gap-1">🏪 Danh Sách Chức Danh (Siêu Thị)</h3>
-        <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ.</p>
-        <form data-op-submit="saveStoreJobTitle" class="flex gap-2 items-center flex-wrap">
-          <input id="txtStoreJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-fuchsia-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-800">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="storeJobTitleList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🏪 Danh Sách Chức Danh (Siêu Thị)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Chức danh riêng cho nhân viên Siêu Thị (posType = Siêu Thị) — dùng ở form Người Dùng đầy đủ.</p>
+          <form data-op-submit="saveStoreJobTitle" class="flex gap-2 items-center flex-wrap">
+            <input id="txtStoreJobTitleName" placeholder="Tên chức danh mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-800">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="storeJobTitleList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="objectCatalogExcelTools_storeJobTitles"></div>
         </div>
-        <div id="objectCatalogExcelTools_storeJobTitles"></div>
-      </div>
+      </details>
 
       <!-- Vị Trí Làm Việc (10/2026) — danh mục MỞ thay 2 giá trị cứng HO/Siêu Thị (xem defaults.js
            positionTypes). 2 mục mặc định (HO/Siêu Thị) không xoá/đổi định danh được, tiếp tục dùng đúng
            2 khối "Phòng Ban"/"Siêu Thị"/"Chức Danh"/"Chức Danh (Siêu Thị)" ở trên — khối này chỉ quản lý
            Vị Trí Làm Việc TỰ THÊM (VD "Kho"), mỗi Vị Trí mang theo 1 cặp danh mục con RIÊNG (Địa Điểm +
            Chức Danh). span rộng cả 3 cột (xl:col-span-3) vì nội dung lồng nhau, cần nhiều chỗ hơn 1 ô. -->
-      <div class="bg-violet-50 p-4 rounded border border-violet-200 space-y-3 md:col-span-2 xl:col-span-3">
-        <h3 class="font-bold text-violet-900 text-sm flex items-center gap-1">🧭 Quản Lý Vị Trí Làm Việc</h3>
-        <p class="text-[11px] text-violet-700">Vị Trí Làm Việc quyết định người dùng chọn "Phòng Ban" hay "Siêu Thị" (hoặc danh sách riêng của Vị Trí tự thêm) khi tạo tài khoản — xem ô "Vị Trí Làm Việc" ở mục Cấu Hình Quyền Hạn bên dưới. 2 mục HO/Siêu Thị luôn có sẵn, không xoá/đổi định danh được (đổi tên hiển thị vẫn được).</p>
-        <form data-op-submit="createPositionType" class="flex gap-2">
-          <input id="txtPositionTypeName" placeholder="Tên Vị Trí Làm Việc mới (VD: Kho)..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">Thêm</button>
-        </form>
-        <div id="positionTypeList" class="space-y-2"></div>
-        <!-- Excel Vị Trí Làm Việc — nhánh BESPOKE (không qua OBJECT_CATALOG_EXCEL_CONFIG): chỉ Vị Trí tự thêm,
-             loại trừ 2 mục mặc định HO/Siêu Thị; ghi qua routes/positionTypes.js (xem module-admin.js). -->
-        <div class="border-t pt-2 mt-2 space-y-1.5 text-[11px]">
-          <div class="flex items-center gap-2 flex-wrap">
-            <button type="button" data-op="downloadPositionTypesTemplate" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
-            <button type="button" data-op="exportPositionTypesExcel" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
-            <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input id="positionTypesImportFileInput" type="file" accept=".xlsx,.csv" class="hidden" data-op-change="onPositionTypesImportFileChange" data-arg-event="0"></label>
-            <span id="positionTypesImportStatus" class="text-gray-500"></span>
+      <details class="filter-box-details bg-violet-50 p-4 rounded border border-violet-200 space-y-3 md:col-span-2 xl:col-span-3">
+        <summary class="font-bold text-violet-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-violet-400">▸</span><span>🧭 Quản Lý Vị Trí Làm Việc</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-violet-700">Vị Trí Làm Việc quyết định người dùng chọn "Phòng Ban" hay "Siêu Thị" (hoặc danh sách riêng của Vị Trí tự thêm) khi tạo tài khoản — xem ô "Vị Trí Làm Việc" ở mục Cấu Hình Quyền Hạn bên dưới. 2 mục HO/Siêu Thị luôn có sẵn, không xoá/đổi định danh được (đổi tên hiển thị vẫn được).</p>
+          <form data-op-submit="createPositionType" class="flex gap-2">
+            <input id="txtPositionTypeName" placeholder="Tên Vị Trí Làm Việc mới (VD: Kho)..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-violet-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-violet-700">Thêm</button>
+          </form>
+          <div id="positionTypeList" class="space-y-2"></div>
+          <!-- Excel Vị Trí Làm Việc — nhánh BESPOKE (không qua OBJECT_CATALOG_EXCEL_CONFIG): chỉ Vị Trí tự thêm,
+               loại trừ 2 mục mặc định HO/Siêu Thị; ghi qua routes/positionTypes.js (xem module-admin.js). -->
+          <div class="border-t pt-2 mt-2 space-y-1.5 text-[11px]">
+            <div class="flex items-center gap-2 flex-wrap">
+              <button type="button" data-op="downloadPositionTypesTemplate" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
+              <button type="button" data-op="exportPositionTypesExcel" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
+              <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input id="positionTypesImportFileInput" type="file" accept=".xlsx,.csv" class="hidden" data-op-change="onPositionTypesImportFileChange" data-arg-event="0"></label>
+              <span id="positionTypesImportStatus" class="text-gray-500"></span>
+            </div>
+            <p class="text-gray-500 italic">Excel chỉ gồm Vị Trí tự thêm (không gồm HO/Siêu Thị). Nhập Excel chỉ THÊM Vị Trí/Địa Điểm/Chức Danh mới và đổi tên hiển thị — không xoá gì.</p>
+            <div id="positionTypesImportPreview" class="hidden space-y-1.5"></div>
           </div>
-          <p class="text-gray-500 italic">Excel chỉ gồm Vị Trí tự thêm (không gồm HO/Siêu Thị). Nhập Excel chỉ THÊM Vị Trí/Địa Điểm/Chức Danh mới và đổi tên hiển thị — không xoá gì.</p>
-          <div id="positionTypesImportPreview" class="hidden space-y-1.5"></div>
         </div>
-      </div>
+      </details>
 
-      <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
-        <h3 class="font-bold text-emerald-900 text-sm flex items-center gap-1">🎓 Quản Lý Loại Đào Tạo</h3>
-        <p class="text-[11px] text-emerald-700">Dùng để phân loại Kho Tài Liệu và Lớp Học ở màn Truyền Thông Nội Bộ &gt; Đào tạo.</p>
-        <form data-op-submit="saveTrainingCategory" class="flex gap-2">
-          <input id="txtTrainingCategoryName" placeholder="Tên loại đào tạo mới..." class="border p-1.5 rounded text-xs flex-1" required>
-          <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
-        </form>
-        <div class="max-h-32 overflow-y-auto bg-white rounded border">
-          <ul id="trainingCategoryList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <summary class="font-bold text-emerald-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-emerald-400">▸</span><span>🎓 Quản Lý Loại Đào Tạo</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-emerald-700">Dùng để phân loại Kho Tài Liệu và Lớp Học ở màn Truyền Thông Nội Bộ &gt; Đào tạo.</p>
+          <form data-op-submit="saveTrainingCategory" class="flex gap-2">
+            <input id="txtTrainingCategoryName" placeholder="Tên loại đào tạo mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="trainingCategoryList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_trainingCategories"></div>
         </div>
-        <div id="simpleCatalogExcelTools_trainingCategories"></div>
-      </div>
+      </details>
 
-      <div class="bg-red-50 p-4 rounded border border-red-200 space-y-3">
-        <h3 class="font-bold text-red-900 text-sm flex items-center gap-1">🚨 Từ Khoá Nhạy Cảm (kiểm duyệt bình luận)</h3>
-        <p class="text-[11px] text-red-700">Dùng để QUÉT (không chặn đăng) bình luận ở Truyền Thông Nội Bộ — khớp thì chỉ gắn cờ cảnh báo cho người có quyền Duyệt Bài Đăng xem xét ở màn Phê Duyệt, không tự động xoá gì.</p>
-        <form data-op-submit="saveSensitiveKeyword" class="flex gap-2">
-          <input id="txtSensitiveKeywordTerm" placeholder="Từ/cụm từ..." class="border p-1.5 rounded text-xs flex-1" required>
-          <select id="selSensitiveKeywordCategory" class="border p-1.5 rounded text-xs bg-white">
-            <option value="TUC_TIU">Tục tĩu</option>
-            <option value="TIEU_CUC">Tiêu cực</option>
-            <option value="CUC_DOAN">Cực đoan</option>
-            <option value="PHAN_DONG">Phản động nhà nước</option>
-          </select>
-          <button type="submit" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">Thêm</button>
-        </form>
-        <div class="max-h-40 overflow-y-auto bg-white rounded border">
-          <ul id="sensitiveKeywordList" class="divide-y text-xs"></ul>
+      <details class="filter-box-details bg-red-50 p-4 rounded border border-red-200 space-y-3">
+        <summary class="font-bold text-red-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-red-400">▸</span><span>🚨 Từ Khoá Nhạy Cảm (kiểm duyệt bình luận)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-red-700">Dùng để QUÉT (không chặn đăng) bình luận ở Truyền Thông Nội Bộ — khớp thì chỉ gắn cờ cảnh báo cho người có quyền Duyệt Bài Đăng xem xét ở màn Phê Duyệt, không tự động xoá gì.</p>
+          <form data-op-submit="saveSensitiveKeyword" class="flex gap-2">
+            <input id="txtSensitiveKeywordTerm" placeholder="Từ/cụm từ..." class="border p-1.5 rounded text-xs flex-1" required>
+            <select id="selSensitiveKeywordCategory" class="border p-1.5 rounded text-xs bg-white">
+              <option value="TUC_TIU">Tục tĩu</option>
+              <option value="TIEU_CUC">Tiêu cực</option>
+              <option value="CUC_DOAN">Cực đoan</option>
+              <option value="PHAN_DONG">Phản động nhà nước</option>
+            </select>
+            <button type="submit" class="bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-red-700">Thêm</button>
+          </form>
+          <div class="max-h-40 overflow-y-auto bg-white rounded border">
+            <ul id="sensitiveKeywordList" class="divide-y text-xs"></ul>
+          </div>
         </div>
-      </div>
+      </details>
 
       <!-- Danh Mục Phòng Họp (DB.meetingRooms) — dời từ trong module Phòng Họp (#meetingSection) sang
            đây (BUG THẬT đã sửa theo yêu cầu người dùng — mọi danh mục quản trị khác đều gom về đúng 1
@@ -984,38 +1016,42 @@
            deleteMeetingRoomCatalogItem() ở module-phonghop.js — cùng cụm lazy-load "phonghop", ĐÃ được
            nạp sẵn cùng lúc "hethong-tabs" nên gọi trực tiếp an toàn (không cần ensureFnReady()), xem
            MODULE_LOAD_GROUPS ở core.js. -->
-      <div class="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
-        <div class="flex items-center justify-between gap-2 flex-wrap">
-          <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1">🗂️ Danh Mục Phòng Họp</h3>
+      <details class="filter-box-details bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
+        <summary class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="font-bold text-gray-800 text-sm flex items-center gap-1"><span class="filter-box-chevron text-gray-400">▸</span><span>🗂️ Danh Mục Phòng Họp</span></span>
           <span class="text-[11px] text-gray-500">Thêm/bớt/sửa phòng họp — dùng chung cho ô Chọn Phòng Họp và lưới Lịch Họp (module Phòng Họp).</span>
-        </div>
-        <div id="meetingRoomCatalogAdminForm" class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Phòng Họp Đầy Đủ</label>
-            <input id="meetingRoomCatalogName" placeholder="VD: Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)" class="w-full border p-1.5 rounded text-xs">
+        </summary>
+        <div class="p-0 pt-2 space-y-3">
+          <div id="meetingRoomCatalogAdminForm" class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Phòng Họp Đầy Đủ</label>
+              <input id="meetingRoomCatalogName" placeholder="VD: Phòng Họp Lớn A (Tầng 3 - Sức chứa 50 người)" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Gọn (cột trên Lịch Họp)</label>
+              <input id="meetingRoomCatalogShort" placeholder="VD: Phòng A (50 người)" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <button type="button" data-op="saveMeetingRoomCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
           </div>
-          <div>
-            <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Gọn (cột trên Lịch Họp)</label>
-            <input id="meetingRoomCatalogShort" placeholder="VD: Phòng A (50 người)" class="w-full border p-1.5 rounded text-xs">
-          </div>
-          <button type="button" data-op="saveMeetingRoomCatalogItem" class="bg-gray-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-700">+ Thêm</button>
+          <div id="meetingRoomCatalogListWrap" class="max-h-56 overflow-y-auto space-y-1.5"></div>
+          <div id="objectCatalogExcelTools_meetingRoomCatalog"></div>
         </div>
-        <div id="meetingRoomCatalogListWrap" class="max-h-56 overflow-y-auto space-y-1.5"></div>
-        <div id="objectCatalogExcelTools_meetingRoomCatalog"></div>
-      </div>
+      </details>
 
       <!-- Danh mục nguồn: PWA_SHORTCUT_CATALOG (client, hàm renderPwaShortcutCheckboxes()) — bản sao
            thủ công của cùng danh mục ở server/routes/pwaManifest.js, phải sửa cùng lúc 2 nơi nếu
            thêm/bớt module. Tick tối đa 4 mục — hầu hết launcher Android chỉ hiện được từng đó dù khai
            nhiều hơn (manifest route cũng tự cắt bớt phòng khi ai đó ghi thẳng qua API). -->
-      <div class="bg-blue-50 p-4 rounded border border-blue-200 space-y-3">
-        <h3 class="font-bold text-blue-900 text-sm flex items-center gap-1">📲 Phím Tắt PWA (Android/Chrome)</h3>
-        <p class="text-[11px] text-blue-700">Chọn tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính điện thoại/máy tính Android/Chrome — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. Không hỗ trợ trên iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).</p>
-        <div id="pwaShortcutChecklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-white text-xs"></div>
-        <div class="flex justify-end">
-          <button type="button" data-op="savePwaShortcutModules" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">💾 Lưu Phím Tắt PWA</button>
+      <details class="filter-box-details bg-blue-50 p-4 rounded border border-blue-200 space-y-3">
+        <summary class="font-bold text-blue-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-blue-400">▸</span><span>📲 Phím Tắt PWA (Android/Chrome)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-blue-700">Chọn tối đa 4 module hiện ra khi người dùng nhấn giữ icon ứng dụng đã cài trên màn hình chính điện thoại/máy tính Android/Chrome — bấm thẳng vào đúng module đó thay vì phải mở app rồi tự điều hướng. Không hỗ trợ trên iPhone/iPad (Apple chưa cho phép trình duyệt làm việc này).</p>
+          <div id="pwaShortcutChecklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-48 overflow-y-auto border rounded p-2 bg-white text-xs"></div>
+          <div class="flex justify-end">
+            <button type="button" data-op="savePwaShortcutModules" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700">💾 Lưu Phím Tắt PWA</button>
+          </div>
         </div>
-      </div>
+      </details>
     </div>
 
     <!-- CẤU HÌNH USER & PHÂN QUYỀN -->

@@ -62,6 +62,10 @@ async function main() {
     // ===== 1) Danh Mục Siêu Thị: thêm mới -> lưu thật (await + rollback đã vá) =====
     await page.evaluate(async () => { await switchTab('system'); setSystemSubTab('ADMIN'); setAdminSubTab('CATALOG'); });
     await page.waitForTimeout(150);
+    // Thẻ "Quản Lý Danh Mục Siêu Thị" (#adminSubCatalog) giờ bọc trong <details> thu gọn mặc định (10/2026,
+    // thu gọn 18 thẻ danh mục) — mở ra trước khi fill/click thật qua Playwright (input/nút bên trong
+    // <details> đóng không được trình duyệt coi là "visible", page.fill()/page.click() sẽ timeout).
+    await page.evaluate(() => { document.getElementById('txtStoreName')?.closest('details')?.setAttribute('open', ''); });
     await page.fill('#txtStoreName', 'Siêu Thị Quận 7 (Demo Mới)');
     await page.click('#txtStoreName ~ button');
     await page.waitForTimeout(200);
