@@ -18,7 +18,7 @@ const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../li
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
-const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
+const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer, canAccessItPriceApprovalModuleServer, canAccessHrFeedbackModuleServer } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 // MODULE_CONFIGS.operationOrders.resolveWfConfig: dùng LẠI đúng hàm resolveOperationOrderWorkflow() mà
 // routes/create.js đã dùng để cảnh báo "chưa có người duyệt" lúc TẠO — xem chú thích đầy đủ ở route
@@ -3959,11 +3959,20 @@ router.post('/itSupportTickets/:id/deny-escalation', async (req, res) => {
 // chỉ còn 2 hành động sau khi đã tồn tại: Nhân Sự trả lời, và nhân viên đánh dấu đã đọc phản hồi.
 router.post('/hrFeedback/:id/delete', (req, res) => deleteAdminOnly(req, res, 'hrFeedback'));
 
+// LỖI ĐÃ VÁ (đợt rà soát quyền phẳng/ownership toàn hệ thống, 10/2026): cả 3 route dưới đây trước đây
+// KHÔNG gác hasModuleAccessServer() ("Khối 0") — khác với routes/employeeProfile.js/routes/payroll.js đã
+// tự gác Mục 0 ngay đầu router. Quyền phẳng (nhanSuManage) + ownership (creator) vẫn đúng nên không mất
+// toàn vẹn dữ liệu, nhưng admin tắt moduleAccess.internal/hr cho 1 tài khoản cụ thể trước đây không chặn
+// được API gọi trực tiếp (chỉ ẩn đúng nút ở client) — mirror ĐÚNG canAccessHrFeedbackModuleServer() (lib/
+// recordViewScope.js, đã OR 2 nhánh 'internal'/'hr' dùng cho khâu XEM) để dùng CHUNG 1 nguồn chân lý.
 router.post('/hrFeedback/:id/respond', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    if (!canAccessHrFeedbackModuleServer(freshUser)) {
+      throw new HttpError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
+    }
     const result = await withLockedRecordForCollection('hrFeedback', itemId, (item) =>
       recordActions.respondToHrFeedback(freshUser, item, req.body));
     res.json({ ok: true, item: result });
@@ -3979,6 +3988,9 @@ router.post('/hrFeedback/:id/withdraw', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    if (!canAccessHrFeedbackModuleServer(freshUser)) {
+      throw new HttpError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
+    }
     const result = await withLockedRecordForCollection('hrFeedback', itemId, (item) =>
       recordActions.withdrawHrFeedback(freshUser, item));
     res.json({ ok: true, item: result });
@@ -3992,6 +4004,9 @@ router.post('/hrFeedback/:id/mark-read', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    if (!canAccessHrFeedbackModuleServer(freshUser)) {
+      throw new HttpError(403, 'Module này đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
+    }
     const result = await withLockedRecordForCollection('hrFeedback', itemId, (item) =>
       recordActions.markHrFeedbackRead(freshUser, item));
     res.json({ ok: true, item: result });

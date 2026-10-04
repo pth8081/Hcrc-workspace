@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**24.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.86 (2026-10-04): Vá lỗ hổng Trung bình — 3 route hrFeedback thiếu lớp gác Mục 0
+
+Rà soát quyền phẳng/ownership-access toàn hệ thống (5 agent song song, đối chiếu chuẩn ownership-access
+đã xác minh ở Vận Hành: gán việc = quyền thao tác đúng record, server luôn tự verify lại, có Mục 0 gate
+tương ứng ở client) — soát qua 30+ module, chỉ phát hiện đúng 1 gap thật:
+
+- `routes/records.js` — 3 route `POST /hrFeedback/:id/respond|withdraw|mark-read` gọi thẳng
+  `recordActions.respondToHrFeedback/withdrawHrFeedback/markHrFeedbackRead` mà KHÔNG gác
+  `hasModuleAccessServer()` ("Khối 0") như `routes/employeeProfile.js`/`routes/payroll.js` đã làm —
+  quyền phẳng (`nhanSuManage`) + ownership (`creator`) vẫn đúng nên không mất toàn vẹn dữ liệu, nhưng admin
+  tắt `moduleAccess.internal`/`moduleAccess.hr` cho 1 tài khoản cụ thể trước đây chỉ ẩn được nút ở client,
+  gọi thẳng API (biết sẵn `id` câu hỏi cũ của chính mình) vẫn rút lại/đánh dấu đã đọc/trả lời được.
+- Đã vá: thêm `canAccessHrFeedbackModuleServer()` (helper có sẵn ở `lib/recordViewScope.js`, đã OR đúng
+  2 nhánh `internal`/`hr`+`nhanSuManage` dùng cho khâu XEM) làm lớp gác đầu cả 3 route — dùng chung 1
+  nguồn chân lý, không viết điều kiện mới.
+- Các module/action khác đã kiểm (Vận Hành/Mua Hàng BAS, Nhân Sự còn lại, Công Việc/Checklist/Giấy Phép,
+  Xe/Phòng Họp/VPP/Đồng Phục/IT/Phê Duyệt Giá, Thanh Toán/Ngân Sách/Mua Sắm/Tài Liệu/Văn Bản Trình/
+  Truyền Thông/Cơ Cấu Tổ Chức) đều đạt chuẩn — không có gap nào khác.
+- Chạy lại `tests/test-hr-feedback.js` (12/12), `tests/test-audit-round4-internal-data-gate.js` (16/16),
+  `tests/test-audit-hethong-round2-server.js` (17/17, đã có sẵn unit test riêng cho
+  `canAccessHrFeedbackModuleServer()`) — không regression.
 
 ## v24.85 (2026-10-03): Vá lỗ hổng Cao — "stuck-fallback" ở 10 file sub-tab còn lại (Mục 0)
 
