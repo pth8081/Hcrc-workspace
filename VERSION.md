@@ -1,8 +1,69 @@
 # Phiên bản hiện tại
 
-**24.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.93 (2026-10-04): "Thu gọn form nhập" toàn ứng dụng (34 form + 21 thẻ danh mục) + làm mỏng ô Tìm Kiếm & Lọc
+
+Theo yêu cầu người dùng (ảnh chụp màn hình khối "0. Quyền Truy Cập Module" mặc định mở khác 24 khối còn
+lại, sau đó xác nhận triển khai toàn bộ danh sách form "chiếm hết màn hình ngay khi vào tab" đã khảo sát
+trước đó): áp dụng thống nhất pattern "thu gọn form nhập" — form ẩn mặc định (`class="hidden"` tĩnh ở
+HTML), chỉ mở khi bấm nút "+ ..." riêng hoặc khi Sửa 1 hồ sơ có sẵn, có nút "✕ Thu Gọn" để đóng lại — cho
+TOÀN BỘ form nhập dài còn thiếu trong hệ thống, cộng làm mỏng ô "🔍 Tìm Kiếm & Lọc" khi đóng. Mẫu gốc:
+`openMhVendorForm()`/`closeMhVendorForm()` (module-muahang.js). Triển khai qua 7 agent song song (worktree
+riêng) + 1 phần tự làm (form Phân Quyền, giữ lại vì rủi ro/kích thước lớn nhất):
+
+1. **Vận Hành/Mua Hàng/Hỗ Trợ IT** (7 form) — `vanHanhSection.html`, `muaHangSection.html`,
+   `itSupportSection.html` + `module-{itsupport-price,itsupport-renewal,muahang,vanhanh}.js`. Riêng
+   `module-vanhanh.js` dùng registry `OP_CLICK_ACTIONS` riêng (không phải `bindCspDelegation()` chung) —
+   đã thêm entry mới đúng khuôn. Test `test-collapse-operation-forms.js` (10/10).
+2. **Văn Phòng Phẩm (Tạo Kỳ Đăng Ký) + Đồng Phục** (6 form, 3 form Đồng Phục cần thêm wrapper div mới:
+   Cấp Đồng Phục/Báo Hỏng-Hủy/Thu Hồi) — `vppSection.html`, `uniformSection.html` +
+   `module-{vpp,dongphuc}.js`. Test `test-collapse-vpp-uniform-forms.js` (8/8).
+3. **Mua Sắm Văn Phòng/Đăng Ký Xe/Đặt Phòng Họp/Biên Bản Họp** — `officeSection.html`, `carSection.html`,
+   `meetingSection.html`, `minutesSection.html` + `module-{office,dangkyxe,phonghop,bienbanhop}.js` +
+   `core.js` (nhánh render biên bản họp). `openMeetingForm()` phải nối thêm vào 3 điểm mở gián tiếp
+   (`editMeeting()`/`quickBookMeetingSlot()`/`finalizeMeetingSlotSelection()`). Test
+   `test-collapse-car-meeting-minutes-forms.js` (10/10).
+4. **Hợp Đồng/Ngân Sách (Đề Xuất+Phê Duyệt)/Tài Liệu/Giấy Phép/Văn Bản Trình** (6 form) —
+   `contractSection.html`, `budgetSection.html`, `docSection.html`, `licenseSection.html`,
+   `submissionSection.html` + `module-{hopdong,ngansach,tailieu,vanbantrinh}.js`. `submissionSection.html`
+   trước đây chưa có wrapper riêng cho form, đã thêm `#submissionFormWrap`. Test
+   `test-collapse-contract-budget-doc-forms.js` (20/20, bao gồm re-test kịch bản "stuck-fallback" của
+   `setContractSubTab()` đã vá ở v24.91 — vẫn an toàn sau khi thêm pattern thu gọn lên trên).
+5. **Nhịp Sống HCRC (đăng bài) + Lớp Học (Đào Tạo) + Tuyển Dụng** (3 form) — `internalSection.html` +
+   `module-internalcomms-{daotao,nhipsong}.js`. Tiện tay vá luôn 1 lỗi tồn đọng:
+   `openEditRecruitmentJob()` trước đây không tự hiện lại form khi Sửa. Test
+   `test-collapse-internalcomms-training-forms.js` (11/11). **Chủ động KHÔNG làm** (nêu rõ lý do, để lại
+   cho đợt sau — đan xen quá sâu với luồng `renderTrainingLms()` render-lại-khi-CRUD, rủi ro cao hơn lợi
+   ích thu gọn màn hình): `prEntryFormBox`, `trainingDocForm`, `trainingPlanForm`, `trainingCourseForm`,
+   `careerPathForm`, `trainingTestForm`, `onboardingPathForm`, `hrFeedbackForm`, `orgChartBootstrapWrap`.
+6. **Quản Lý Danh Mục — 21 thẻ danh mục** (`#adminSubCatalog`, `systemSection.html`) — đổi từ `<div>` tĩnh
+   sang accordion `<details class="filter-box-details">`/`<summary>` (cùng khuôn ô Tìm Kiếm & Lọc, xem
+   mục bên dưới), mặc định đóng. Test `test-collapse-catalog-accordion.js` (6/6, xác nhận đủ 21/21 thẻ).
+7. **4 form admin nhỏ** — Biểu Mẫu (`#formFieldFormWrap`), Quy Trình & Phê Duyệt
+   (`#workflowTemplateFormWrap`, hàm lưu thật nằm ở `module-itsupport-tier.js` không phải
+   `module-workflow.js`), Áp Dụng Nhanh (`#quickApplyAddForm`), API Xác Thực Ngoài
+   (`#extApiKeyFormWrap`) — `systemSection.html` + `module-{formbuilder-nav,itsupport-tier,workflow,
+   hethong-tabs}.js`. Test `test-collapse-admin-small-forms.js` (8/8).
+8. **Thêm/Sửa Người Dùng & Phân Quyền** (`#userPermFormWrap`, `saveUser`/`savePermGroup`) — form LỚN NHẤT
+   toàn hệ thống (~1035 dòng, khối 0-26 quyền, dùng chung vật lý cho cả Người Dùng và Nhóm Phân Quyền qua
+   `toggleUserPermFormMode()`) — giữ lại tự làm riêng do kích thước/rủi ro. Nút mới "+ Thêm Người Dùng
+   Mới" (`openCreateUserForm()`); "✕ Thu Gọn" (`closeUserPermForm()`, KHÔNG reset dữ liệu — khác "Hủy"/
+   `cancelPermFormEdit()` vốn reset về rỗng). `editUser()`/`startCreateGroup()`/`editPermGroup()` đều tự
+   mở lại form khi Sửa. Test `test-collapse-permform.js` (19/19).
+9. **Làm mỏng ô "🔍 Tìm Kiếm & Lọc" khi đóng** (`app.css`, `.filter-box-details`) — padding dời từ
+   `<details>` sang chỉ `<summary>` (dòng tiêu đề mỏng hơn khi đóng) + phục hồi padding nội dung qua
+   selector `> summary ~ *` khi mở, không đụng `mt-3`/`pt-2` riêng của từng nơi dùng. Áp dụng chung cho cả
+   4 ô Tìm Kiếm & Lọc (Hợp Đồng/Tài Liệu/Giấy Phép/Hỗ Trợ IT) VÀ 21 thẻ danh mục mục 6.
+
+Tổng cộng 8 test mới (92 kịch bản) + full regression toàn bộ test liên quan trực tiếp từng module (không
+chỉ test mới viết) — không phát hiện regression. Agent worktree đều branch từ 1 commit base cũ (9 commit
+sau điểm dispatch), nên mọi merge đều được rà soát tay từng file thay đổi, không chỉ dựa vào auto-merge —
+phát hiện + vá 1 chỗ hổng merge thật (agent "21 thẻ danh mục" thiếu 3 thẻ Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ
+Luật vừa thêm ở v24.89, do nhánh base cũ chưa có) và 1 chỗ trùng số version dự kiến (agent "Hợp Đồng..."
+tự mang theo đúng bản vá stuck-fallback đã có ở HEAD — giữ bản HEAD, gộp đúng 1 dòng code mới của agent).
 
 ## v24.92 (2026-10-04): Thu gọn mặc định khối "0. Quyền Truy Cập Module" trong Cây Phân Quyền
 
