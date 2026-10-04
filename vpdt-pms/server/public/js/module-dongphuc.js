@@ -78,8 +78,11 @@ function setUniformSubTab(subTab) {
     // OBJECT_CATALOG_EXCEL_CONFIG.uniformCatalog ở core.js) — ẩn/hiện theo quyền trong renderUniformCatalogList().
     initObjectCatalogExcelToolsAll();
     // Form "Tạo Kỳ Cấp Phát" chỉ dành cho uniformManage/admin — approver-only vào tab này CHỈ để
-    // duyệt/từ chối, không tạo kỳ mới được (server cũng chặn nếu cố gọi thẳng API).
-    document.getElementById('uniformCreatePeriodBlock')?.classList.toggle('hidden', !canHc);
+    // duyệt/từ chối, không tạo kỳ mới được (server cũng chặn nếu cố gọi thẳng API). Thu gọn form (pattern
+    // chuẩn mhVendorFormWrap, 10/2026): quyền canHc giờ gác NÚT "+ Tạo Kỳ Cấp Phát" — khối form chỉ bị
+    // ÉP ẩn lại khi mất quyền (an toàn nếu đang mở dở), KHÔNG tự mở lại mỗi lần render như trước.
+    document.getElementById('btnUniformPeriodNew')?.classList.toggle('hidden', !canHc);
+    if (!canHc) document.getElementById('uniformCreatePeriodBlock')?.classList.add('hidden');
     renderDynamicInputsForModule('UNIFORM_PERIOD', 'dynamicFieldsContainer_UNIFORM_PERIOD');
   }
   if (subTab === 'STORE') {
@@ -128,7 +131,11 @@ function renderUniformCatalogList() {
   const form = document.getElementById('uniformCatalogAdminForm');
   if (!wrap) return;
   const canEdit = !!currentUser.perms?.admin || canManageUniform(currentUser);
-  if (form) form.classList.toggle('hidden', !canEdit);
+  // Thu gọn form (pattern chuẩn mhVendorFormWrap, 10/2026): quyền canEdit giờ gác NÚT "+ Thêm Mặt Hàng"
+  // — form chỉ bị ÉP ẩn lại khi mất quyền (an toàn nếu đang mở dở), KHÔNG tự mở lại mỗi lần render như
+  // trước (renderUniformCatalogList() gọi lại rất nhiều lần — sau mỗi lần thêm/sửa/xoá mặt hàng).
+  if (form && !canEdit) form.classList.add('hidden');
+  document.getElementById('btnUniformCatalogNew')?.classList.toggle('hidden', !canEdit);
   // Khối Excel (Tải Mẫu/Xuất/Nhập) cùng quyền với form Thêm/Sửa — gate ghi uniformCatalog ở
   // routes/data.js cũng chỉ admin/uniformManage.
   document.getElementById('objectCatalogExcelTools_uniformCatalog')?.classList.toggle('hidden', !canEdit);
@@ -158,6 +165,18 @@ function renderUniformCatalogList() {
 // deleteUniformCatalogItem() xoá hẳn cả object kèm codesBySize). null = đang ở chế độ THÊM MỚI (như cũ).
 let editingUniformCatalogId = null;
 
+// Thu gọn form Danh Mục Đồng Phục (pattern chuẩn mhVendorFormWrap/openMhVendorForm, module-muahang.js).
+// openUniformCatalogForm() dùng cho nút "+ Thêm Mặt Hàng" — CHỦ Ý gọi lại cancelEditUniformCatalogItem()
+// để luôn mở ra ở chế độ "+ Thêm" sạch, không giữ dở dang sửa từ lần trước.
+function openUniformCatalogForm() {
+  cancelEditUniformCatalogItem();
+  document.getElementById('uniformCatalogAdminForm').classList.remove('hidden');
+}
+function closeUniformCatalogForm() {
+  document.getElementById('uniformCatalogAdminForm').classList.add('hidden');
+  cancelEditUniformCatalogItem();
+}
+
 function editUniformCatalogItem(id) {
   const item = (DB.uniformCatalog || []).find(c => c.id === id);
   if (!item) return;
@@ -165,6 +184,9 @@ function editUniformCatalogItem(id) {
   document.getElementById('uniformCatalogName').value = item.name;
   document.getElementById('uniformCatalogSizes').value = (item.sizes || []).join(', ');
   updateUniformCatalogFormSubmitUI();
+  // Nút "✏️ Sửa" mở form lên luôn (form giờ ẨN mặc định, không tự mở theo quyền như trước) — KHÔNG gọi
+  // openUniformCatalogForm() ở đây vì nó sẽ reset mất editingUniformCatalogId vừa gán phía trên.
+  document.getElementById('uniformCatalogAdminForm').classList.remove('hidden');
 }
 
 function cancelEditUniformCatalogItem() {
@@ -247,6 +269,17 @@ function resetUniformPeriodForm() {
   document.getElementById('uniformPeriodNote').value = '';
   uniformAllocBlocks = [];
   renderUniformAllocationBlocks();
+}
+
+// Thu gọn form "Tạo Kỳ Cấp Phát" (pattern chuẩn mhVendorFormWrap/openMhVendorForm, module-muahang.js).
+// openUniformCreatePeriodForm() CHỦ Ý gọi lại resetUniformPeriodForm() để khối phân bổ theo siêu thị
+// LUÔN sạch mỗi lần mở lại, không giữ dở dang của lần mở trước.
+function openUniformCreatePeriodForm() {
+  resetUniformPeriodForm();
+  document.getElementById('uniformCreatePeriodBlock').classList.remove('hidden');
+}
+function closeUniformCreatePeriodForm() {
+  document.getElementById('uniformCreatePeriodBlock').classList.add('hidden');
 }
 
 function addUniformAllocationBlock() {
@@ -387,6 +420,7 @@ async function submitUniformPeriod() {
   logSystemAction('UNIFORM', 'CREATE_UNIFORM_PERIOD', `Tạo kỳ cấp phát đồng phục [${newPeriod.name}]`, 'SUCCESS', newPeriod.name);
   alert('✅ Đã tạo kỳ cấp phát đồng phục!');
   resetUniformPeriodForm();
+  closeUniformCreatePeriodForm();
   renderUniformPeriodsList();
 }
 
@@ -653,6 +687,17 @@ function resetUniformIssueForm() {
   renderUniformIssueItems();
 }
 
+// Thu gọn form "Cấp Đồng Phục Cho Nhân Viên" (pattern chuẩn mhVendorFormWrap/openMhVendorForm,
+// module-muahang.js) — wrap MỚI (form này trước đây không có id riêng). openUniformIssueForm() CHỦ Ý gọi
+// lại resetUniformIssueForm() để bảng mặt hàng động LUÔN sạch mỗi lần mở lại.
+function openUniformIssueForm() {
+  resetUniformIssueForm();
+  document.getElementById('uniformIssueFormWrap').classList.remove('hidden');
+}
+function closeUniformIssueForm() {
+  document.getElementById('uniformIssueFormWrap').classList.add('hidden');
+}
+
 function addUniformIssueItemRow() {
   uniformIssueItems.push({ name: '', size: '', qty: 0 });
   renderUniformIssueItems();
@@ -762,6 +807,7 @@ async function submitUniformIssuance() {
   logSystemAction('UNIFORM', 'CREATE_UNIFORM_ISSUANCE', `Cấp đồng phục cho nhân viên [${newIssuance.employeeName}]`, 'SUCCESS', newIssuance.code || '');
   alert('✅ Đã cấp đồng phục cho nhân viên!');
   resetUniformIssueForm();
+  closeUniformIssueForm();
   renderUniformIssuancesTable();
   // Cấp phát xong -> nhân viên vừa nhận phải hiện NGAY trong bảng "Đang Giữ" và dropdown "Đồng Phục —
   // Size" của "Báo Hỏng/Hủy (Từ Kho)" phải cập nhật lại đúng tồn kho còn lại (trước đây thiếu 2 dòng
@@ -1053,6 +1099,25 @@ function resetUniformAdjustForms() {
   if (empOutcomeDefault) empOutcomeDefault.checked = true;
 }
 
+// Thu gọn 2 form "Báo Hỏng/Hủy (Từ Kho)" + "Thu Hồi Từ Nhân Viên" (pattern chuẩn mhVendorFormWrap/
+// openMhVendorForm, module-muahang.js) — 2 wrap MỚI (2 form này trước đây không có id riêng). CHỦ Ý gọi
+// lại resetUniformAdjustForms() (dùng chung cho cả 2 — vô hại khi chỉ mở 1 trong 2) để dropdown mặt hàng/
+// nhân viên LUÔN tính lại đúng tồn kho/đang giữ mới nhất mỗi lần mở lại, không giữ dở dang lần trước.
+function openUniformAdjStockForm() {
+  resetUniformAdjustForms();
+  document.getElementById('uniformAdjStockFormWrap').classList.remove('hidden');
+}
+function closeUniformAdjStockForm() {
+  document.getElementById('uniformAdjStockFormWrap').classList.add('hidden');
+}
+function openUniformAdjEmpForm() {
+  resetUniformAdjustForms();
+  document.getElementById('uniformAdjEmpFormWrap').classList.remove('hidden');
+}
+function closeUniformAdjEmpForm() {
+  document.getElementById('uniformAdjEmpFormWrap').classList.add('hidden');
+}
+
 // Chọn nhân viên xong mới hiện dropdown mặt hàng — giới hạn CHÍNH XÁC những gì nhân viên đó đang giữ
 // (computeAllEmployeeUniformHoldingsClient()), không còn 2 ô tên/size gõ tự do như trước.
 function renderUniformAdjEmpItemOptions() {
@@ -1148,6 +1213,7 @@ async function submitUniformStockAdjustment(source) {
   logSystemAction('UNIFORM', 'CREATE_UNIFORM_STOCK_ADJUSTMENT', `${source === 'EMPLOYEE' ? 'Thu hồi từ nhân viên' : 'Báo hỏng/hủy từ kho'} [${newAdj.itemName}]`, 'SUCCESS', newAdj.itemName);
   alert('✅ Đã ghi nhận thao tác!');
   resetUniformAdjustForms();
+  if (source === 'EMPLOYEE') closeUniformAdjEmpForm(); else closeUniformAdjStockForm();
   renderUniformAdjustmentsTable();
   // Thao tác EMPLOYEE đổi số đang giữ của nhân viên -> phải làm mới lại bảng "Đang Giữ" ngay (trước đây
   // thiếu dòng này khiến bảng hiện "Không có nhân viên nào đang giữ đồng phục" dù dữ liệu đã đổi, phải
@@ -1418,8 +1484,11 @@ function resetUniformTransferForm() {
   const formWrap = document.getElementById('uniformTransferRequestForm');
   if (!formWrap) return;
   const canRequest = canManageUniformStore(currentUser);
-  formWrap.classList.toggle('hidden', !canRequest);
-  if (!canRequest) return;
+  // Thu gọn form (pattern chuẩn mhVendorFormWrap, 10/2026): quyền canRequest giờ gác NÚT "+ Gửi Yêu Cầu
+  // Điều Chuyển" — form chỉ bị ÉP ẩn lại khi mất quyền (an toàn nếu đang mở dở), KHÔNG tự mở lại mỗi lần
+  // STORE subtab được mở như trước (hàm này được gọi lại MỖI LẦN mở subtab, xem setUniformSubTab()).
+  document.getElementById('btnUniformTransferNew')?.classList.toggle('hidden', !canRequest);
+  if (!canRequest) { formWrap.classList.add('hidden'); return; }
 
   const targetDatalist = document.getElementById('uniformTransferTargetDeptDatalist');
   if (targetDatalist) {
@@ -1444,6 +1513,16 @@ function resetUniformTransferForm() {
   if (approveWrap) approveWrap.classList.toggle('hidden', !canApproveUniformClient(currentUser));
   const receiveWrap = document.getElementById('uniformTransferReceiveWrap');
   if (receiveWrap) receiveWrap.classList.toggle('hidden', !canManageUniformStore(currentUser));
+}
+
+// Thu gọn form (pattern chuẩn mhVendorFormWrap/openMhVendorForm, module-muahang.js). openUniformTransferForm()
+// CHỦ Ý gọi lại resetUniformTransferForm() để dropdown mặt hàng/tồn kho LUÔN tính lại mới nhất mỗi lần mở lại.
+function openUniformTransferForm() {
+  resetUniformTransferForm();
+  document.getElementById('uniformTransferRequestForm').classList.remove('hidden');
+}
+function closeUniformTransferForm() {
+  document.getElementById('uniformTransferRequestForm').classList.add('hidden');
 }
 
 async function callCreateUniformTransfer(payload) {
@@ -1494,6 +1573,7 @@ async function submitUniformTransfer() {
   logSystemAction('UNIFORM', 'CREATE_UNIFORM_TRANSFER', `Yêu cầu điều chuyển [${newTransfer.itemName}] từ ${newTransfer.sourceDept} sang ${newTransfer.targetDept}`, 'SUCCESS', newTransfer.itemName);
   alert('✅ Đã gửi yêu cầu điều chuyển kho, chờ duyệt!');
   resetUniformTransferForm();
+  closeUniformTransferForm();
   renderUniformTransfersTable();
 }
 
