@@ -274,6 +274,16 @@ function resetItRenewalForm() {
   clearSingleFileInput('itRenewalFile', 'itRenewalFileChip');
 }
 
+// Thu gọn form "Thêm Dịch Vụ CNTT Cần Theo Dõi Gia Hạn" (10/2026) — cùng khuôn openOperationOrderForm()
+// (module-vanhanh.js).
+function openItRenewalForm() {
+  resetItRenewalForm();
+  document.getElementById('itRenewalCreateForm')?.classList.remove('hidden');
+}
+function closeItRenewalForm() {
+  document.getElementById('itRenewalCreateForm')?.classList.add('hidden');
+}
+
 function downloadItServiceRenewalFile(id) {
   const item = DB.itServiceRenewals.find(x => x.id === id);
   if (!item || !item.fileUrl) return;

@@ -986,6 +986,17 @@ function resetOperationOrderForm() {
   applyOperationOrderPoLock(null);
 }
 
+// Thu gọn form "Tạo Đơn Hàng Mới" (10/2026, yêu cầu người dùng "thu gọn form nhập") — openOperationOrderForm()
+// LUÔN gọi lại resetOperationOrderForm() trước khi hiện form, đảm bảo bảng hạng mục về đúng 1 dòng trống +
+// input file/khoá PDF được xoá sạch mỗi lần mở, không giữ dữ liệu/trạng thái của lần mở trước.
+function openOperationOrderForm() {
+  resetOperationOrderForm();
+  document.getElementById('operationOrderForm').classList.remove('hidden');
+}
+function closeOperationOrderForm() {
+  document.getElementById('operationOrderForm').classList.add('hidden');
+}
+
 async function submitOperationStoreOpening(e) {
   e.preventDefault();
   if (!canCreateOperationStoreOpeningClient(currentUser)) return alert('⛔ Bạn không có quyền tạo đề xuất mở mới siêu thị!');
@@ -1056,6 +1067,15 @@ function resetOperationStoreOpenForm() {
   clearSingleFileInput('vsoFile', 'vsoFileChip');
 }
 
+// Thu gọn form "Tạo Đề Xuất Mở Mới Siêu Thị" (10/2026) — cùng khuôn openOperationOrderForm() ở trên.
+function openOperationStoreOpenForm() {
+  resetOperationStoreOpenForm();
+  document.getElementById('operationStoreOpenForm').classList.remove('hidden');
+}
+function closeOperationStoreOpenForm() {
+  document.getElementById('operationStoreOpenForm').classList.add('hidden');
+}
+
 async function submitOperationRepair(e) {
   e.preventDefault();
   if (!canCreateOperationRepairClient(currentUser)) return alert('⛔ Bạn không có quyền tạo đề xuất sửa chữa siêu thị!');
@@ -1117,6 +1137,15 @@ function resetOperationRepairForm() {
   formEl.reset();
   document.getElementById('vrCode').value = generateOperationRepairCode();
   clearSingleFileInput('vrFile', 'vrFileChip');
+}
+
+// Thu gọn form "Tạo Đề Xuất Sửa Chữa Siêu Thị" (10/2026) — cùng khuôn openOperationOrderForm() ở trên.
+function openOperationRepairForm() {
+  resetOperationRepairForm();
+  document.getElementById('operationRepairForm').classList.remove('hidden');
+}
+function closeOperationRepairForm() {
+  document.getElementById('operationRepairForm').classList.add('hidden');
 }
 
 function notifyOperationApprovalNeeded(kind, item) {
@@ -3937,7 +3966,20 @@ const OP_CLICK_ACTIONS = {
   // data-op mà form (module-itsupport-price.js) dùng, nếu không toàn bộ nút trong form sẽ IM LẶNG không
   // hoạt động — đúng lớp lỗi mọi chú thích phía trên đã ghi.
   previewItPriceWorkflow: () => previewItPriceWorkflow(),
-  removeOneFileFromMultiInput: el => removeOneFileFromMultiInput(el.dataset.arg0, el.dataset.arg1, el.dataset.arg2)
+  removeOneFileFromMultiInput: el => removeOneFileFromMultiInput(el.dataset.arg0, el.dataset.arg1, el.dataset.arg2),
+  // Thu gọn form (10/2026, yêu cầu người dùng "thu gọn form nhập") — registry riêng của Vận Hành KHÔNG
+  // tự soi window[fnName] như bindCspDelegation() chung (xem chú thích đầu OP_CLICK_ACTIONS), nên các nút
+  // "+ ..."/"✕ Thu Gọn" MỚI của 4 form (#operationOrderForm/#operationStoreOpenForm/#operationRepairForm/
+  // #itPriceCreateForm) PHẢI khai tường minh ở đây, nếu không sẽ IM LẶNG không mở/đóng được gì (đúng lớp
+  // lỗi mọi chú thích phía trên đã ghi — đã tự bắt được qua test-collapse-operation-forms.js).
+  openOperationOrderForm: () => openOperationOrderForm(),
+  closeOperationOrderForm: () => closeOperationOrderForm(),
+  openOperationStoreOpenForm: () => openOperationStoreOpenForm(),
+  closeOperationStoreOpenForm: () => closeOperationStoreOpenForm(),
+  openOperationRepairForm: () => openOperationRepairForm(),
+  closeOperationRepairForm: () => closeOperationRepairForm(),
+  openItPriceCreateForm: () => openItPriceCreateForm(),
+  closeItPriceCreateForm: () => closeItPriceCreateForm()
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),

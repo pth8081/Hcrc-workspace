@@ -23,8 +23,15 @@
     <div id="opOrderListPanel" class="space-y-6">
       <div id="operationOrderDashboardCards"></div>
       <div class="bg-cyan-50 p-4 rounded border border-cyan-200 space-y-3">
-        <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📦 Tạo Đơn Hàng Mới <span id="operationOrderFormSubTabBadge" class="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[11px] font-bold"></span></h3>
-        <form id="operationOrderForm" data-op-submit="submitOperationOrder" class="bg-white p-3 rounded border text-xs space-y-3">
+        <!-- Thu gọn form (10/2026, yêu cầu người dùng "thu gọn form nhập") — form mặc định ẨN (class
+             "hidden" tĩnh ngay trên <form>), chỉ mở khi bấm nút "+ Tạo Đơn Hàng" (openOperationOrderForm(),
+             module-vanhanh.js — gọi lại ĐÚNG resetOperationOrderForm() mỗi lần mở để bảng hạng mục luôn về
+             đúng 1 dòng trống/input file được xoá sạch, không giữ dữ liệu từ lần mở trước). -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-cyan-900 text-base flex items-center gap-2">📦 Tạo Đơn Hàng Mới <span id="operationOrderFormSubTabBadge" class="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[11px] font-bold"></span></h3>
+          <button type="button" data-op="openOperationOrderForm" id="btnOperationOrderNew" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">+ Tạo Đơn Hàng</button>
+        </div>
+        <form id="operationOrderForm" data-op-submit="submitOperationOrder" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đơn Hàng</label><input id="voCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tiêu Đề Đơn Hàng</label><input id="voTitle" placeholder="Tên đơn hàng cần mua..." class="w-full border p-1.5 rounded" required></div>
@@ -101,6 +108,7 @@
           <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — xem chú thích tại #extraApprovalMount_DOC (docSection.html). -->
           <div id="extraApprovalMount_OPERATION_ORDER"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" data-op="closeOperationOrderForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded text-xs font-bold hover:bg-gray-300">✕ Thu Gọn</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="operationOrderForm" data-arg1="resetOperationOrderForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <!-- Quy trình duyệt đơn hàng theo MỨC GIÁ TRỊ (không theo phòng ban) — mức suy ra từ tổng
                  hạng mục đang nhập dở, xem previewOperationOrderWorkflow() ở module-vanhanh.js. -->
@@ -268,8 +276,13 @@
     <div id="vanHanhStoreOpenWrap" class="space-y-6">
       <div id="operationStoreOpenDashboardCards"></div>
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
-        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🏬 Tạo Đề Xuất Mở Mới Siêu Thị</h3>
-        <form id="operationStoreOpenForm" data-op-submit="submitOperationStoreOpening" class="bg-white p-3 rounded border text-xs space-y-3">
+        <!-- Thu gọn form (10/2026) — cùng khuôn #operationOrderForm ở trên: mặc định ẨN, mở qua nút "+ Tạo
+             Đề Xuất Mở Mới" (openOperationStoreOpenForm(), module-vanhanh.js). -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">🏬 Tạo Đề Xuất Mở Mới Siêu Thị</h3>
+          <button type="button" data-op="openOperationStoreOpenForm" id="btnOperationStoreOpenNew" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Tạo Đề Xuất Mở Mới</button>
+        </div>
+        <form id="operationStoreOpenForm" data-op-submit="submitOperationStoreOpening" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label><input id="vsoCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Tên Siêu Thị Dự Kiến</label><input id="vsoStoreName" placeholder="VD: Siêu thị VPĐT Quận 7" class="w-full border p-1.5 rounded" required></div>
@@ -284,6 +297,7 @@
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_OPERATION_STORE_OPEN" class="contents"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" data-op="closeOperationStoreOpenForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded text-xs font-bold hover:bg-gray-300">✕ Thu Gọn</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="operationStoreOpenForm" data-arg1="resetOperationStoreOpenForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">💾 Lưu Hồ Sơ</button>
           </div>
@@ -335,8 +349,13 @@
     <div id="vanHanhRepairsWrap" class="hidden space-y-6">
       <div id="operationRepairDashboardCards"></div>
       <div class="bg-amber-50 p-4 rounded border border-amber-200 space-y-3">
-        <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị</h3>
-        <form id="operationRepairForm" data-op-submit="submitOperationRepair" class="bg-white p-3 rounded border text-xs space-y-3">
+        <!-- Thu gọn form (10/2026) — cùng khuôn #operationOrderForm ở trên: mặc định ẨN, mở qua nút "+ Tạo
+             Đề Xuất Sửa Chữa" (openOperationRepairForm(), module-vanhanh.js). -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-amber-900 text-base flex items-center gap-2">🔧 Tạo Đề Xuất Sửa Chữa Siêu Thị</h3>
+          <button type="button" data-op="openOperationRepairForm" id="btnOperationRepairNew" class="bg-amber-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-700">+ Tạo Đề Xuất Sửa Chữa</button>
+        </div>
+        <form id="operationRepairForm" data-op-submit="submitOperationRepair" class="hidden bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block font-semibold text-gray-600 mb-1">Mã Đề Xuất</label><input id="vrCode" readonly placeholder="Mã tự sinh" class="w-full border p-1.5 rounded bg-gray-100 cursor-not-allowed"></div>
             <div class="md:col-span-2"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị Cần Sửa Chữa</label><input id="vrStoreName" placeholder="Tên/địa điểm siêu thị..." class="w-full border p-1.5 rounded" required></div>
@@ -350,6 +369,7 @@
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_OPERATION_REPAIR" class="contents"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" data-op="closeOperationRepairForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded text-xs font-bold hover:bg-gray-300">✕ Thu Gọn</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="operationRepairForm" data-arg1="resetOperationRepairForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" class="bg-amber-600 text-white px-5 py-2 rounded font-bold hover:bg-amber-700">💾 Lưu Hồ Sơ</button>
           </div>
@@ -597,7 +617,15 @@
          đầy đủ" bên dưới dẫn thẳng tới đó, không nhân bản danh sách/modal ở đây). ===== -->
     <div id="vanHanhItPriceWrap" class="hidden space-y-4">
       <div class="bg-sky-50 p-4 rounded border border-sky-200 space-y-3">
-        <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">💲 Đề Xuất Duyệt Giá Bán Buôn</h3>
+        <!-- Thu gọn form (10/2026) — LOẠI B: nút "+ Đề Xuất Mới" (btnItPriceCreateNew) GÁC THEO ĐÚNG quyền
+             canProposeItPriceType() (xem setItPriceSubTab(), module-itsupport-price.js — trước đây quyền
+             này gác trực tiếp lên chính <form>, nay chuyển sang gác lên NÚT, form luôn mặc định ẨN tới khi
+             bấm mở, KHÔNG tự mở lại khi chuyển sub-tab/còn quyền). Người không có quyền KHÔNG thấy nút lẫn
+             form (vẫn thấy #itPriceNoCreatePermNote như cũ). -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-sky-900 text-base flex items-center gap-2">💲 Đề Xuất Duyệt Giá Bán Buôn</h3>
+          <button type="button" data-op="openItPriceCreateForm" id="btnItPriceCreateNew" class="hidden bg-sky-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-sky-700">+ Đề Xuất Mới</button>
+        </div>
         <p class="text-xs text-sky-700">Đề xuất mức giá bán buôn mới áp dụng cho 1 đơn vị/khách hàng bên ngoài. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành.</p>
         <div id="itPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá bán buôn.</div>
         <form id="itPriceCreateForm" data-op-submit="submitItPriceApproval" class="hidden bg-white p-3 rounded border text-xs space-y-3">
@@ -691,6 +719,7 @@
           <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — xem chú thích tại #extraApprovalMount_DOC (docSection.html). -->
           <div id="extraApprovalMount_ITPRICE_WHOLESALE"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" data-op="closeItPriceCreateForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded text-xs font-bold hover:bg-gray-300">✕ Thu Gọn</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="itPriceCreateForm" data-arg1="resetItPriceForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="button" id="itPricePreviewWfBtn" data-op="previewItPriceWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="submit" class="bg-sky-600 text-white px-5 py-2 rounded font-bold hover:bg-sky-700">Gửi phê duyệt</button>

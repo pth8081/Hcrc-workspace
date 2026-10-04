@@ -1049,6 +1049,8 @@ async function main() {
       'Phê Duyệt Giá: chip file đơn (bảng giá, ĐÃ có data-op-change riêng đọc file) + chip file nhiều (tài liệu bổ sung, xoá đúng 1 file), Mức Margin/Chiết Khấu (Bán Buôn) bị xoá giá trị nhưng KHÔNG tự chuyển lại sub-tab Bán Lẻ, mã đề xuất/phòng ban sinh lại đúng',
       async () => {
         await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
+        // Thu gọn form (10/2026) — #itPriceCreateForm giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới" trước.
+        await page.evaluate(() => openItPriceCreateForm());
         await page.selectOption('#itPriceTier', 'MARGIN_LT5');
         await page.fill('#itPriceReason', 'Lý do kiểm thử reset form');
 
@@ -1118,6 +1120,8 @@ async function main() {
       'Hỗ Trợ Yêu Cầu: "Làm Mới" trắng form + sinh lại mã yêu cầu mới (KHÔNG có ô tải tệp)',
       async () => {
         await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('TICKET'); });
+        // Thu gọn form (10/2026) — #itTicketCreateForm giờ mặc định ẨN, phải bấm "+ Gửi Yêu Cầu" trước.
+        await page.evaluate(() => openItTicketForm());
         await page.fill('#itTicketTitle', 'Yêu cầu kiểm thử reset form');
         await page.fill('#itTicketDescription', 'Mô tả kiểm thử reset form.');
         const codeBeforeReset = await page.locator('#itTicketCode').inputValue();
@@ -1145,6 +1149,8 @@ async function main() {
         // itServiceRenewals/itRenewalCategories: không thuộc 3 module gốc dùng _seed.js — bổ sung tay
         // (renderItServiceRenewals() gọi .map() thẳng lên DB.itServiceRenewals, undefined sẽ vỡ ngay).
         await page.evaluate(() => { DB.itServiceRenewals = []; DB.itRenewalCategories = []; switchTab('itSupport'); setItSupportSubTab('RENEWAL'); });
+        // Thu gọn form (10/2026) — #itRenewalCreateForm giờ mặc định ẨN, phải bấm "+ Thêm Dịch Vụ" trước.
+        await page.evaluate(() => openItRenewalForm());
         await page.fill('#itRenewalName', 'Office 365 kiểm thử reset form');
         await page.fill('#itRenewalCategory', 'Phần mềm kiểm thử');
         await page.fill('#itRenewalVendor', 'Microsoft');
@@ -1351,6 +1357,8 @@ async function main() {
           // Nêu rõ sub-tab thay vì trông cậy mặc định activeVanHanhSubTab — kịch bản trước đó (Phê Duyệt
           // Giá Bán Buôn) đã đổi biến này sang 'ITPRICE', không tự về lại 'ORDERS' giữa các kịch bản.
           setVanHanhSubTab('ORDERS');
+          // Thu gọn form (10/2026) — #operationOrderForm giờ mặc định ẨN, phải bấm "+ Tạo Đơn Hàng" trước.
+          openOperationOrderForm();
         });
         await page.fill('#voTitle', 'Đặt hàng kiểm thử reset form');
         await page.fill('#voSupplier', 'Công ty TNHH Kiểm Thử');
@@ -1408,6 +1416,9 @@ async function main() {
         await page.evaluate(() => {
           DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
           switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('OPEN');
+          // Thu gọn form (10/2026) — #operationStoreOpenForm giờ mặc định ẨN, phải bấm "+ Tạo Đề Xuất Mở
+          // Mới" trước.
+          openOperationStoreOpenForm();
         });
         await page.fill('#vsoStoreName', 'Siêu thị kiểm thử reset form');
         await page.fill('#vsoAddress', '123 Đường Kiểm Thử, Quận 1');
@@ -1459,6 +1470,9 @@ async function main() {
         await page.evaluate(() => {
           DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
           switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('REPAIR');
+          // Thu gọn form (10/2026) — #operationRepairForm giờ mặc định ẨN, phải bấm "+ Tạo Đề Xuất Sửa
+          // Chữa" trước.
+          openOperationRepairForm();
         });
         await page.fill('#vrStoreName', 'Siêu thị cần sửa kiểm thử');
         await page.fill('#vrTitle', 'Sửa hệ thống điện kiểm thử reset form');

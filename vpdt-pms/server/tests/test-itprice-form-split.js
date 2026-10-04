@@ -159,6 +159,9 @@ async function main() {
     await run.run('Danh mục Vùng Giá Áp Dụng rỗng (Bán Lẻ, Mua Hàng): hiện gợi ý + (admin) nút thêm nhanh ngay trong form', async () => {
       await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
+      // Thu gọn form (10/2026) — #mhItPriceCreateForm giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới"
+      // (openMhItPriceCreateForm()) trước khi đọc/thao tác field bên trong.
+      await page.evaluate(() => openMhItPriceCreateForm());
       const hintText = await page.evaluate(() => document.getElementById('mhItPriceRetailZoneEmptyHint').innerText);
       assert(hintText.includes('Chưa có Vùng Giá'), 'Phải hiện gợi ý rõ ràng khi danh mục rỗng, không để form trống trơn không giải thích');
       // staff_mkt (KHÔNG phải admin) -> KHÔNG có nút thêm nhanh.
@@ -183,6 +186,8 @@ async function main() {
       await loginAs(page, ADMIN);
       await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
+      // Thu gọn form (10/2026) — mở lại #mhItPriceCreateForm cho phiên admin MỚI (xem ghi chú ở block trên).
+      await page.evaluate(() => openMhItPriceCreateForm());
 
       const hasQuickAddBtn = await page.$('[data-op="quickAddPriceZoneFromItPriceForm"]');
       assert(hasQuickAddBtn, 'Admin PHẢI thấy nút thêm nhanh khi danh mục Vùng Giá đang rỗng');
@@ -222,6 +227,9 @@ async function main() {
       await loginAs(page, STAFF_MKT);
       await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
       await page.waitForTimeout(150);
+      // Thu gọn form (10/2026) — #itPriceCreateForm (Bán Buôn) giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới"
+      // (openItPriceCreateForm()) trước khi thao tác field bên trong.
+      await page.evaluate(() => openItPriceCreateForm());
       await page.selectOption('#itPriceMasterListSelect', '1');
       await page.fill('#itPriceReason', 'Test wholesale');
       await page.selectOption('#itPriceTier', 'MARGIN_LT5');

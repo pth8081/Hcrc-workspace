@@ -54,6 +54,8 @@ async function main() {
     // ===== Bán Lẻ (Mua Hàng, 10/2026) — form rút gọn, KHÔNG còn store-scope/date để cấu hình. =====
     console.log('01: form Bán Lẻ (Mua Hàng) — rút gọn, không còn Siêu Thị Áp Dụng/Ngày Áp Dụng/Ngày Hết Hiệu Lực (tự gắn mặc định ALL/hôm nay/Vĩnh viễn).');
     await page.evaluate(async () => { await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); });
+    // Thu gọn form (10/2026) — #mhItPriceCreateForm giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới" trước.
+    await page.evaluate(() => openMhItPriceCreateForm());
     await page.locator('#mhItPriceCreateForm').scrollIntoViewIfNeeded();
     await shot(page, '01-ban-le-form-rut-gon');
 
@@ -83,6 +85,8 @@ async function main() {
     console.log('\n03: form Bán Buôn (Vận Hành) — "🏬 Siêu Thị Đề Xuất" LUÔN hiện sẵn + LUÔN bắt buộc chọn, KHÔNG có "Toàn bộ".');
     await closeItPriceModalSafe(page);
     await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
+    // Thu gọn form (10/2026) — #itPriceCreateForm giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới" trước.
+    await page.evaluate(() => openItPriceCreateForm());
     await page.locator('#itPriceCreateForm').scrollIntoViewIfNeeded();
     await shot(page, '03-ban-buon-sieu-thi-de-xuat');
 
