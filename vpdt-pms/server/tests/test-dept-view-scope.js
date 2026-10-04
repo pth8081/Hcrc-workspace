@@ -21,7 +21,7 @@
 const assert = require('assert');
 const {
   DEPT_VIEW_SCOPE_MODULES, deptAutoViewOn, moduleViewConfig, extraViewScopeAllows,
-  canViewBudgetLine, canViewPaymentRequest, canViewReportEntry,
+  canViewBudgetEntry, canViewBudgetLine, canViewPaymentRequest, canViewReportEntry,
   canViewOfficeReq, canViewCarReg, canViewContract, canViewSubmission, canViewMeeting,
   canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
   canViewTaskRecord, canViewItSupportTicket, canViewItPriceApproval, canViewDoc,
@@ -98,6 +98,19 @@ test('budget: tắt -> cùng phòng (không phải người tạo) KHÔNG xem đ
   const off = { deptViewScopeConfig: { budget: false } };
   assert.strictEqual(canViewBudgetLine(BYSTANDER, item, off), false);
   assert.strictEqual(canViewBudgetLine({ username: 'creator', dept: DEPT, perms: {} }, item, off), true);
+});
+// LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): canViewBudgetEntry() (budgetEntries, Ngân Sách cũ)
+// trước đây không hề đọc deptViewScopeConfig['budget'] — mirror ĐÚNG 2 bài test canViewBudgetLine() ở
+// trên để chốt lại cả 2 hàm chị em cùng tuân theo 1 cấu hình chung.
+test('budget: canViewBudgetEntry() mặc định (chưa cấu hình) cùng phòng vẫn xem được', () => {
+  const item = { dept: DEPT, creator: 'creator' };
+  assert.strictEqual(canViewBudgetEntry(BYSTANDER, item, {}), true);
+});
+test('budget: canViewBudgetEntry() tắt -> cùng phòng (không phải người tạo) KHÔNG xem được, người tạo vẫn xem được', () => {
+  const item = { dept: DEPT, creator: 'creator' };
+  const off = { deptViewScopeConfig: { budget: false } };
+  assert.strictEqual(canViewBudgetEntry(BYSTANDER, item, off), false);
+  assert.strictEqual(canViewBudgetEntry({ username: 'creator', dept: DEPT, perms: {} }, item, off), true);
 });
 
 // ===================== payment (so trực tiếp) =====================

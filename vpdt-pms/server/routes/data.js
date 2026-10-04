@@ -471,11 +471,22 @@ const APPROVER_AUTH_LEVEL_RANK_SERVER = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN
 // Gộp quyền NỀN của NHIỀU nhóm phân quyền — khớp Y HỆT mergeGroupsBasePerms() ở public/index.html
 // (2 cài đặt độc lập, PHẢI giữ giống hệt nếu sửa 1 bên). Kết hợp theo kiểu dữ liệu từng trường: boolean
 // OR, scope {all,depts} hợp (union), approverAuthLevel lấy mức CAO NHẤT trong các nhóm.
+// LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): "Làm gọn phân quyền Xem Văn Bản Trình/Hợp Đồng" (Việc
+// D) bỏ hẳn 2 quyền phẳng CŨ submissionView/contractView khỏi cây quyền (collectPermsFromForm() không
+// còn ghi 2 field này) VÀ khỏi logic đọc (canViewSubmission()/canViewContract() đã bỏ hẳn, xem lib/
+// recordViewScope.js) — NHƯNG 1 permGroup chưa từng được admin mở lại để Lưu sau đợt này vẫn còn giữ
+// NGUYÊN 2 field cũ trong `perms` lưu trên DB. Hàm gộp dưới đây union mọi KEY có mặt ở BẤT KỲ nhóm nào
+// user đang thuộc — nên lưu lại 1 nhóm KHÁC (không phải nhóm còn field cũ) của 1 user cũng thuộc CẢ 2
+// nhóm vẫn vô tình "hồi sinh" field chết này vào u.perms. Loại khỏi vòng lặp ngay từ đầu để dù dữ liệu cũ
+// còn sót ở permGroups nào, nó không bao giờ lọt ngược vào perms hiệu lực của user nữa (field này không
+// còn được canView* nào đọc nên không có tác động an toàn, nhưng vẫn gây nhiễu Ma Trận Phân Quyền).
+const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView']);
 function mergeGroupsBasePermsServer(groupsPerms) {
   const list = (groupsPerms || []).filter(Boolean);
   if (!list.length) return {};
   const keys = new Set();
   list.forEach(p => Object.keys(p || {}).forEach(k => keys.add(k)));
+  DEPRECATED_PERM_KEYS.forEach(k => keys.delete(k));
   const result = {};
   keys.forEach(key => {
     const values = list.map(p => p?.[key]);

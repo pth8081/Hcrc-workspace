@@ -629,10 +629,19 @@ function filterVppRegistrationsForUser(items, user, appData) {
 // budgetManage/budgetAggregate xem được mọi phòng ban (đúng khuôn "Quản lý"/"Tổng hợp" ở Báo Cáo Định
 // Kỳ). Trưởng phòng đang là approver ở bước hiện tại cũng xem được dù khác phòng (hiếm nhưng có thể xảy
 // ra nếu admin gán người duyệt không cùng phòng ban với hồ sơ).
+// LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): hàm này chưa từng nối vào ma trận 4 trạng thái
+// "🔒 Phạm Vi Xem Theo Phòng Ban" (deptViewScopeConfig['budget']) — trước đây so sánh dept thô, nên admin
+// chọn mode CREATOR_ONLY hoặc cấu hình extraViewers/managerCanView cho module "budget" không có tác dụng
+// gì với budgetEntries (Ngân Sách cũ, vẫn đang chạy song song budgetLines "Ngân Sách 2.0" đã đúng chuẩn
+// này từ trước — xem canViewBudgetLine() dưới). Mirror đúng khuôn creator + deptAutoViewOn() +
+// extraViewScopeAllows() của canViewBudgetLine()/canViewOperationOrder() — approver-ngoài-phòng (quy
+// trình duyệt) vẫn giữ nguyên, không đổi.
 function canViewBudgetEntry(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.budgetManage || user.perms?.budgetAggregate || user.perms?.budgetReportView) return true;
-  if (item.dept === user.dept) return true;
+  if (item.creator === user.username) return true;
+  if (item.dept === user.dept && deptAutoViewOn(appData, 'budget')) return true;
+  if (extraViewScopeAllows(user, appData, 'budget', item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.budgetEntries.resolveWfConfig(item, appData).approvers, user.username);
 }
 

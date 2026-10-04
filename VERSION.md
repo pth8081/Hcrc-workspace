@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**24.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.87 (2026-10-04): Vá 3 mục mức Thấp (cosmetic) còn lại từ đợt rà soát v24.74→v24.81
+
+Hoàn tất toàn bộ báo cáo rà soát v24.74→v24.81 (4 Cao + 1 TB đã vá ở v24.82-v24.85, server-side mirror
+30 cờ Mục 0 đã xác nhận không cần vá) — xử lý tiếp 3 mục mức Thấp còn lại từ báo cáo gốc, không có tác
+động an toàn thật nhưng gây nhiễu/thiếu sót hiển thị:
+
+1. **`canViewBudgetEntry()` chưa nối vào ma trận 4 trạng thái** (`lib/recordViewScope.js`) — hàm này
+   (Ngân Sách cũ, collection `budgetEntries`) vẫn so sánh `item.dept === user.dept` thô, không đọc
+   `deptViewScopeConfig['budget']` qua `deptAutoViewOn()`/`extraViewScopeAllows()` như `canViewBudgetLine()`
+   (Ngân Sách 2.0) đã làm — admin chọn mode CREATOR_ONLY hoặc cấu hình extraViewers/managerCanView cho
+   module "budget" không có tác dụng gì với dữ liệu Ngân Sách cũ. Đã mirror đúng khuôn creator +
+   deptAutoViewOn() + extraViewScopeAllows(), giữ nguyên nhánh approver-theo-quy-trình.
+2. **`permGroups` làm "sống lại" field `submissionView`/`contractView` đã bỏ** (`public/js/core.js` +
+   `routes/data.js`) — `mergeGroupsBasePerms()`/`mergeGroupsBasePermsServer()` union mọi key có mặt ở
+   BẤT KỲ nhóm nào user thuộc; 1 permGroup chưa từng được admin Lưu lại sau "Việc D" (bỏ hẳn 2 quyền
+   phẳng cũ) vẫn còn giữ 2 field này trong `perms` lưu DB — lưu 1 nhóm KHÁC (không phải nhóm còn field
+   cũ) của 1 user cũng thuộc cả 2 nhóm vô tình "hồi sinh" field chết vào `u.perms`. Thêm
+   `DEPRECATED_PERM_KEYS` loại 2 field này khỏi vòng lặp gộp ở CẢ 2 bản (client + server).
+3. **Bảng tóm tắt quyền thiếu tag "Tờ trình"/"Hợp đồng" cho người chỉ có quyền Tải** (`summarizeUserPerms()`,
+   `public/js/module-admin-userstaging.js`) — trước đây chỉ xét `submissionCreate`/`contractCreate`, bỏ
+   sót `submissionDownload`/`contractDownload` (quyền Tải/Xem file, không có quyền Tạo). Đã thêm nhánh
+   OR tương ứng.
+
+Viết mới `tests/test-summarize-user-perms.js` (Playwright, 5 kịch bản) + 2 kịch bản mới trong
+`tests/test-dept-view-scope.js` (budget/canViewBudgetEntry) + 1 kịch bản mới trong
+`tests/test-merge-groups-perms.js` (DEPRECATED_PERM_KEYS) — chạy lại toàn bộ test liên quan
+(`test-dept-view-scope.js` 54/54, `test-budget-entries-scope.js` 6/6, `test-report-permission-rollout.js`
+20/20, `test-merge-groups-perms.js` 6/6, `test-admin-users-permgroups.js` 111/111,
+`test-perm-matrix-client.js` 46/46, `test-submissions-scope.js` 7/7, `test-deptviewscope-migration.js`
+3/3) + full regression 356 file test — không regression.
 
 ## v24.86 (2026-10-04): Vá lỗ hổng Trung bình — 3 route hrFeedback thiếu lớp gác Mục 0
 

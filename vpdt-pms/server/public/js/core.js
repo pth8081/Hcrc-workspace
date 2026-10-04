@@ -4182,11 +4182,17 @@ const APPROVER_AUTH_LEVEL_RANK = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
 // (an toàn hơn — không để 1 nhóm yêu cầu xác thực thấp vô tình hạ mức của nhóm khác). Không có nhóm nào
 // -> trả về {} (quyền hoàn toàn riêng, dùng thẳng formPerms). Cùng thuật toán với mergeGroupsBasePermsServer
 // ở routes/data.js — PHẢI giữ giống hệt nếu sửa 1 bên.
+// LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81) — mirror ĐÚNG DEPRECATED_PERM_KEYS ở
+// mergeGroupsBasePermsServer() (routes/data.js, xem chú thích đầy đủ ở đó): submissionView/contractView
+// đã bỏ hẳn (Việc D) nhưng có thể còn sót trong 1 permGroup chưa từng được Lưu lại sau đợt đó — loại khỏi
+// vòng lặp để không "hồi sinh" field chết vào perms hiệu lực của user khi lưu 1 nhóm KHÁC.
+const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView']);
 function mergeGroupsBasePerms(groupsPerms) {
   const list = (groupsPerms || []).filter(Boolean);
   if (!list.length) return {};
   const keys = new Set();
   list.forEach(p => Object.keys(p || {}).forEach(k => keys.add(k)));
+  DEPRECATED_PERM_KEYS.forEach(k => keys.delete(k));
   const result = {};
   keys.forEach(key => {
     const values = list.map(p => p?.[key]);

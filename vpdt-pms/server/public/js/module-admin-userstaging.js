@@ -481,8 +481,11 @@ function summarizeUserPerms(perms) {
   const hasScope = (scope) => !!(scope?.all || (scope?.depts || []).length > 0);
   const parts = [];
   if (perms.uploadAll || (perms.uploadDepts || []).length) parts.push('📄 Tài liệu');
-  if (hasScope(perms.submissionCreate)) parts.push('📜 Tờ trình');
-  if (hasScope(perms.contractCreate)) parts.push('📄 Hợp đồng');
+  // LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): trước đây chỉ xét submissionCreate/contractCreate —
+  // người CHỈ có quyền Tải (submissionDownload/contractDownload, không có quyền Tạo) bị rơi mất tag này
+  // dù vẫn thực sự có quyền thao tác trên module (tải hồ sơ Tờ Trình/Hợp Đồng).
+  if (hasScope(perms.submissionCreate) || hasScope(perms.submissionDownload)) parts.push('📜 Tờ trình');
+  if (hasScope(perms.contractCreate) || hasScope(perms.contractDownload)) parts.push('📄 Hợp đồng');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');

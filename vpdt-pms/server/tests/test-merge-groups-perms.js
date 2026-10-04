@@ -91,6 +91,20 @@ async function main() {
     assertArraySetEqual(merged.docViewScope.depts, ['A', 'B'], 'depts vẫn union đúng như cũ');
   });
 
+  // LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): submissionView/contractView đã bỏ hẳn khỏi cây quyền
+  // (Việc D) nhưng 1 permGroup chưa từng được Lưu lại sau đợt đó có thể vẫn còn field này trong `perms`
+  // lưu DB — hàm gộp PHẢI loại bỏ field này ngay, không để "hồi sinh" vào perms hiệu lực của user dù chỉ
+  // 1 trong N nhóm user thuộc còn sót field cũ.
+  await run.run('LỖI ĐÃ VÁ: submissionView/contractView (field đã bỏ) KHÔNG "hồi sinh" qua merge dù 1 nhóm còn sót', () => {
+    const merged = mergeGroupsBasePermsServer([
+      { submissionCreate: { all: false, depts: [] } },
+      { submissionView: { all: true, depts: [] }, contractView: { all: true, depts: [] } }
+    ]);
+    assertEqual('submissionView' in merged, false, 'submissionView phải bị loại khỏi kết quả gộp');
+    assertEqual('contractView' in merged, false, 'contractView phải bị loại khỏi kết quả gộp');
+    assertEqual(merged.submissionCreate.all, false, 'field hợp lệ khác vẫn gộp đúng như thường (không ảnh hưởng)');
+  });
+
   run.summary();
 }
 
