@@ -119,6 +119,40 @@ test('FIXED_LUMP_SUM allocationMode=PRORATA_BY_ENTITY -> chia theo đúng tỷ t
   assert.ok(Math.abs(sumAllocated - 50000000) < 1e-6, 'tổng phân bổ phải khớp đúng fixedAmount (không rơi rớt)');
 });
 
+// ===================== Vá Cao #3 (rà soát v24.74→v24.90, 10/2026) =====================
+// allocateFixedAmountByEntity(): trùng tên pháp nhân trong allocationEntities (VD ['BRG','BRG','FUJI'])
+// trước đây cộng basisAmount của BRG 2 LẦN vào grandTotal (mẫu số chung) nhưng chỉ 1 LẦN vào
+// totalsByEntity (tử số theo key) -> làm lệch tỷ trọng của FUJI (pháp nhân KHÔNG trùng) dù tổng vẫn khớp
+// 100% fixedAmount (dễ lọt test "tổng có khớp không"). Test dưới so sánh ĐÚNG ratio của FUJI với kịch bản
+// KHÔNG trùng (['BRG','FUJI']) để bắt được sai lệch tỷ trọng, không chỉ check tổng.
+test('allocateFixedAmountByEntity: trùng tên pháp nhân KHÔNG làm lệch tỷ trọng (dedupe trước khi tính grandTotal)', () => {
+  const brgAmount = 6914968017.95, fujiAmount = 4478603964.1;
+  const purchaseTransactions = [
+    { vendorCode: 'NCC001', purchaseDate: '2026-03-10', amount: brgAmount, isReturn: false, entity: 'BRG' },
+    { vendorCode: 'NCC001', purchaseDate: '2026-03-10', amount: fujiAmount, isReturn: false, entity: 'FUJI' }
+  ];
+  const termNoDup = { amountMode: 'FIXED_LUMP_SUM', fixedAmount: 50000000, allocationMode: 'PRORATA_BY_ENTITY', allocationEntities: ['BRG', 'FUJI'], scopes: [] };
+  const termWithDup = { amountMode: 'FIXED_LUMP_SUM', fixedAmount: 50000000, allocationMode: 'PRORATA_BY_ENTITY', allocationEntities: ['BRG', 'BRG', 'FUJI'], scopes: [] };
+
+  const resultNoDup = vendorRebate.computeRebateEstimate({ vendor, term: termNoDup, purchaseTransactions, periodStart: '2026-03-01', periodEnd: '2026-03-31' });
+  const resultWithDup = vendorRebate.computeRebateEstimate({ vendor, term: termWithDup, purchaseTransactions, periodStart: '2026-03-01', periodEnd: '2026-03-31' });
+
+  const fujiNoDup = resultNoDup.entityAllocation.find(e => e.entity === 'FUJI');
+  // Entity trùng ('BRG') xuất hiện 2 lần trong entityAllocation TRƯỚC KHI vá (bug cũ) — sau khi dedupe chỉ
+  // còn ĐÚNG 1 dòng mỗi entity, giống kịch bản không trùng.
+  assert.strictEqual(resultWithDup.entityAllocation.length, 2, `phải dedupe về đúng 2 pháp nhân (BRG+FUJI), thực tế: ${resultWithDup.entityAllocation.length}`);
+  const fujiWithDup = resultWithDup.entityAllocation.find(e => e.entity === 'FUJI');
+  assert.ok(Math.abs(fujiWithDup.ratio - fujiNoDup.ratio) < 1e-9, `tỷ trọng FUJI bị lệch do trùng tên BRG: ${fujiWithDup.ratio} (mong đợi ${fujiNoDup.ratio})`);
+  const sumAllocated = resultWithDup.entityAllocation.reduce((s, e) => s + e.allocatedAmount, 0);
+  assert.ok(Math.abs(sumAllocated - 50000000) < 1e-6, 'tổng phân bổ (đã dedupe) vẫn phải khớp đúng fixedAmount');
+});
+
+test('validateRebateTermPayload: PRORATA_BY_ENTITY trùng tên pháp nhân -> báo lỗi (chặn ngay tại validate)', () => {
+  const base = { termCode: 'DK-01', termName: 'X', termType: 'TRADE_SPEND', calcBasis: 'PURCHASE_VALUE', tierMode: 'GRADUATED', periodType: 'ONE_TIME', effectiveFrom: '2026-01-01', amountMode: 'FIXED_LUMP_SUM', fixedAmount: 1, allocationMode: 'PRORATA_BY_ENTITY', allocationEntities: ['BRG', 'BRG', 'FUJI'], scopes: [] };
+  const err = vendorRebate.validateRebateTermPayload(base);
+  assert.ok(err && err.includes('Trùng pháp nhân'), `phải báo lỗi trùng pháp nhân — thực tế: ${err}`);
+});
+
 test('FIXED_LUMP_SUM PRORATA nhưng không có giao dịch nào của pháp nhân nào -> ratio=0, không NaN/chia 0', () => {
   const term = { amountMode: 'FIXED_LUMP_SUM', fixedAmount: 1000000, allocationMode: 'PRORATA_BY_ENTITY', allocationEntities: ['BRG', 'FUJI'], scopes: [] };
   const result = vendorRebate.computeRebateEstimate({ vendor, term, purchaseTransactions: [], periodStart: '2026-03-01', periodEnd: '2026-03-31' });

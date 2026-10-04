@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**24.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.91 (2026-10-04): Vá 5 phát hiện đợt rà soát chuyên sâu v24.74→v24.90 (3 Cao + 2 Trung bình)
+
+Rà soát chuyên sâu (5 agent song song) toàn bộ thay đổi từ v24.74 đến v24.90 (bao gồm cả đợt mở rộng BAS
+đa pháp nhân/DC/Chiết Khấu Tăng Trưởng ở v24.90), theo yêu cầu người dùng — phát hiện 5 lỗ hổng/lỗi thật,
+đã vá toàn bộ và viết test riêng cho từng bản vá:
+
+1. **[Cao] `setContractSubTab()` (module-hopdong.js) — "stuck-fallback" thứ 14** — cùng lớp lỗi đã vá ở
+   13 hàm `set*SubTab()` khác (v24.77/v24.81): khi CẢ 2 checkbox Mục 0 `contractApproval`/`contractManage`
+   đều bị tắt, code cũ vẫn giữ nguyên sub-tab đang xin mở thay vì trả về `null` — khai thác được vì
+   `canAccessContractModule()` không chặn cả module (chỉ cần `user.dept`). Đổi về `null` khi không còn
+   sibling nào được phép; khi đó ẩn hẳn form + **xoá** (không chỉ ẩn) nội dung bảng/dashboard cũ trong DOM,
+   không gọi `renderContracts()`/`onContractOpModeChange()` (2 hàm này không có nhánh lọc an toàn cho `null`
+   — gọi tiếp sẽ lộ hồ sơ PENDING/DRAFT ở tab lẽ ra đã bị khoá).
+2. **[Cao] `loadBudgetEntriesScoped()` (routes/data.js) chưa wire `deptViewScopeConfig`** — thiếu đúng 2
+   nhánh `canViewBudgetEntry()` (lib/recordViewScope.js) đã có từ trước: quyền `budgetReportView` và
+   "Ma Trận Phạm Vi Xem Theo Phòng Ban" (`extraViewers`/`managerCanView`) — admin cấp quyền xem thêm qua Ma
+   Trận nhưng lớp SQL pre-filter này vẫn chỉ tải đúng Dept, khiến quyền đã cấp vô hiệu. Mirror đúng khuôn
+   `loadBudgetLinesScoped()` (collection chị em, đã vá đúng từ trước).
+3. **[Cao] `allocateFixedAmountByEntity()` (lib/vendorRebate.js) tính sai khi trùng tên pháp nhân** — mảng
+   `allocationEntities` có tên trùng (VD `['BRG','BRG','FUJI']`) khiến `grandTotal` (mẫu số chung) bị cộng
+   dư 1 lần cho entity trùng, làm lệch tỷ trọng phân bổ của các entity KHÁC (tổng vẫn khớp 100%
+   `fixedAmount`, dễ lọt test "tổng có khớp không"). Vá 2 lớp: chặn ngay tại
+   `validateRebateTermPayload()` (báo lỗi rõ "Trùng pháp nhân...") + dedupe phòng thủ trong chính hàm tính
+   (dữ liệu cũ đã lưu trước khi có validate).
+4. **[Trung bình] Migration `deptViewScopeConfig` cũ (v24.83) không dọn dữ liệu sai đã lưu** — bản vá
+   v24.83 chỉ siết điều kiện di trú GOING FORWARD, không re-scan username ĐÃ bị thêm dư thừa vào
+   `extraViewers` từ trước khi có bản vá đó.
+5. **[Trung bình] Migration `submissionView`/`contractView` phụ thuộc thời điểm admin đăng nhập** — di trú
+   ở client (core.js, "Việc D") chỉ lưu lên server khi người đăng nhập là Admin (ghi `deptViewScopeConfig`
+   yêu cầu quyền Admin) — user thường có quyền hợp lệ đăng nhập trước khi có admin nào sẽ không được di
+   trú ở server, nơi `canViewSubmission()`/`canViewContract()` thật sự đọc.
+
+   **Vá #4+#5 cùng lúc**: `jobs/legacyViewScopeMigration.js` mới — chạy Ở SERVER lúc khởi động (không phụ
+   thuộc ai đăng nhập, vá #5), tự reconcile `extraViewers` mỗi lần khởi động: thêm username hợp lệ CÒN
+   THIẾU + gỡ username chỉ khớp ĐÚNG shape bug cũ (`.depts` chỉ trùng đúng phòng ban chính họ) đang nằm dư
+   thừa trong `extraViewers` (vá #4) — KHÔNG đụng tới entry admin tự tay thêm qua Ma Trận UI. Có bước
+   "peek" đọc trước (không khoá) để chỉ ghi khi THẬT SỰ có thay đổi, tránh bump `UpdatedAt` vô ích ở MỌI
+   lần khởi động server (2 seed user `ks_kiemsoat`/`sep_duyet` luôn mang flag legacy vĩnh viễn) — tránh làm
+   admin đang sửa "Ma Trận Phạm Vi Xem Theo Phòng Ban" ở tab khác gặp conflict version oan.
+
+Test mới: `tests/test-legacy-view-scope-migration-job.js` (6 kịch bản), mở rộng
+`tests/test-stuck-subtab-fallback-fix.js` (+1 kịch bản Hợp Đồng),
+`tests/test-budget-entries-scope.js` (+3 kịch bản), `tests/test-vendorrebate-bas-extension-10-2026.js`
+(+2 kịch bản) — toàn bộ PASS. Full regression 398 file: 383 PASS, 15 FAIL — xác nhận cả 15 đều
+pre-existing/môi trường (Playwright timeout UI module khác, thiếu SQL Server, 1 demo Mua Hàng BAS dùng
+giả lập `prompt()` cũ cho luồng đã đổi sang date-input ở việc khác), không liên quan tới 5 bản vá này.
 
 ## v24.90 (2026-10-04): Mua Hàng BAS — mở rộng đa pháp nhân/DC/Chiết Khấu Tăng Trưởng + 4 báo cáo mới
 

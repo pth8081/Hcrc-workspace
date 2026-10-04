@@ -1255,7 +1255,18 @@ function computeBudgetEntriesApproverDepts(user, data) {
   return depts;
 }
 async function loadBudgetEntriesScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.90, 10/2026, mức Cao — cùng lớp gap vừa vá ở loadBudgetLinesScoped()
+  // ngay dưới, nhưng ở collection chị em budgetEntries): thiếu đúng 2 phần canViewBudgetEntry() (lib/
+  // recordViewScope.js) đã có từ trước — (1) quyền `budgetReportView` (chỉ xem báo cáo toàn công ty,
+  // không quản lý) KHÔNG được coi là "xem hết" ở lớp SQL pre-filter này, dù hàm canView* chị em đã coi là
+  // vậy; (2) deptViewScopeConfig['budget'] (extraViewers/managerCanView, "Ma Trận Phạm Vi Xem Theo Phòng
+  // Ban") chưa từng được đọc ở đây — admin cấp "xem thêm phòng ban khác" qua Ma Trận cho 1 user cụ thể
+  // nhưng SQL vẫn chỉ tải đúng Dept của họ, canViewBudgetEntry() lọc lại sau đó sẽ luôn rỗng vì dữ liệu
+  // phòng ban được cấp thêm chưa từng được tải về (fail-closed ngược — quyền đã cấp nhưng vô hiệu). Mirror
+  // đúng khuôn loadBudgetLinesScoped() (dùng chung 1 khoá cấu hình 'budget', khác collection).
+  const cfg = moduleViewConfig(data, 'budget', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('budgetEntries');
   }
   const depts = new Set();

@@ -340,6 +340,18 @@ này — Ma Trận Phân Quyền đã bỏ hẳn cột "Xem" cũ (`submissionVie
 ban" (trước đây quyền phẳng `.all`/`.depts`) nay cấu hình qua mục 3 "Chọn
 người xem" (extraViewers) ở màn này.
 
+**Di trú tự động (v24.91, vá 2 gap đợt rà soát v24.74→v24.90)**: việc chuyển
+`submissionView`/`contractView.all` cũ sang `extraViewers` giờ chạy THÊM Ở
+SERVER lúc khởi động (`jobs/legacyViewScopeMigration.js`, tự lặp lại mỗi lần
+khởi động, idempotent — chỉ ghi khi thật sự có thay đổi), không còn phụ thuộc
+việc có admin đăng nhập hay chưa (trước đây di trú chỉ chạy ở client và CHỈ
+lưu lên server khi NGƯỜI VỪA ĐĂNG NHẬP là Admin — user thường có quyền hợp lệ
+đăng nhập trước sẽ không được di trú ở phía server, nơi `canViewSubmission()`/
+`canViewContract()` thật sự đọc). Job này cũng tự dọn lại username từng bị
+thêm NHẦM vào `extraViewers` bởi bản vá v24.83 (trước đó, `.depts` chỉ trùng
+đúng phòng ban chính người đó vẫn bị coi là "cần di trú" — dư thừa quyền xem
+xuyên công ty) nếu dữ liệu sai đó đã kịp lưu lên server trước khi có bản vá.
+
 **Mặc định "Chỉ người tạo xem" (6 module mới, admin TỰ CHỌN mở rộng nếu
 muốn)**: Công Việc (dept = cùng phòng NGƯỜI GIAO việc, lớp người-được-giao/
 cộng-tác-viên/quản-lý-của-người-được-giao LUÔN cố định không đổi dù cấu hình

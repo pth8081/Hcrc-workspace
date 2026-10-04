@@ -14,17 +14,44 @@ function setContractSubTab(subTab) {
   window.scrollTo({ top: 0, behavior: 'auto' }); // Tránh "bay xuống cuối" khi đổi tab con — xem setSystemSubTab().
   resetListPage('contract');
   // Mục 0 (10/2026, đợt "không bỏ qua bất kỳ subtab nào"): checkbox độc lập contractApproval/contractManage
-  // — tắt riêng tab nào thì tự chuyển sang tab còn lại, không còn tab nào thì giữ nguyên (cả module đã
-  // bị khoá từ canAccessContractModule() rồi, không cần xử lý thêm ở đây).
+  // — tắt riêng tab nào thì tự chuyển sang tab còn lại.
   const canApproval = hasModuleAccess(currentUser, 'contractApproval');
   const canManageTab = hasModuleAccess(currentUser, 'contractManage');
-  if (subTab === 'APPROVAL' && !canApproval) subTab = canManageTab ? 'MANAGE' : 'APPROVAL';
-  if (subTab === 'MANAGE' && !canManageTab) subTab = canApproval ? 'APPROVAL' : 'MANAGE';
+  const contractTabOrder = [['APPROVAL', canApproval], ['MANAGE', canManageTab]];
+  const curContractTab = contractTabOrder.find(([k]) => k === subTab);
+  if (!curContractTab || !curContractTab[1]) {
+    // LỖI ĐÃ VÁ (rà soát v24.74→v24.90, 10/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở 13 hàm
+    // setXSubTab() khác, VD setItSupportSubTab() 11/2026): trước đây khi CẢ 2 checkbox
+    // contractApproval/contractManage đều bị tắt, code cũ vẫn GIỮ NGUYÊN subTab đang xin mở
+    // (`: 'APPROVAL'`/`: 'MANAGE'`) — khai thác được vì canAccessContractModule() KHÔNG chặn cả module
+    // (chỉ cần user.dept, gần như ai cũng có, hoặc là người duyệt/thành viên quy trình), nên module vẫn
+    // mở và hiện đủ form/danh sách của sub-tab đã bị khoá. Đổi về `null` khi không còn sibling nào được
+    // phép — xem `if (!subTab) { ...; return; }` bên dưới, tự dừng không vẽ nội dung gì.
+    const fallback = contractTabOrder.find(([, ok]) => ok);
+    subTab = fallback ? fallback[0] : null;
+  }
   activeContractSubTab = subTab;
   const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white';
   const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnContractSubApproval').className = (subTab === 'APPROVAL' ? activeCls : inactiveCls) + (canApproval ? '' : ' hidden');
   document.getElementById('btnContractSubManage').className = (subTab === 'MANAGE' ? activeCls : inactiveCls) + (canManageTab ? '' : ' hidden');
+
+  // Không còn sub-tab nào được phép xem (cả 2 checkbox contractApproval/contractManage đều bị tắt) — ẩn
+  // hẳn form + danh sách rồi dừng luôn, KHÔNG gọi onContractOpModeChange()/renderContracts(): 2 hàm đó
+  // giả định activeContractSubTab luôn là 'APPROVAL'/'MANAGE' và không có nhánh lọc riêng cho `null` —
+  // gọi tiếp sẽ lọc THIẾU (renderContracts() rơi vào nhánh `else` kiểu Quản Lý HĐ nhưng bỏ qua điều kiện
+  // `approvalStatus !== 'APPROVED'`, lộ cả hồ sơ PENDING/DRAFT) thay vì không hiện gì. Xoá luôn nội dung
+  // bảng/dashboard cũ trong DOM (không chỉ ẩn) vì hàm này còn được gọi lại khi dữ liệu quyền làm mới (xem
+  // core.js, chỗ gọi setContractSubTab(activeContractSubTab) sau khi refresh quyền).
+  if (!subTab) {
+    document.getElementById('contractManageFormWrap').classList.add('hidden');
+    document.getElementById('contractPaymentColHeader').classList.add('hidden');
+    document.getElementById('contractDashboardCards').innerHTML = '';
+    const tbody = document.getElementById('contractTableBody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Bạn không có quyền xem mục này.</td></tr>';
+    return;
+  }
+
   // "Nhập Hợp Đồng/Phụ Lục Đã Ký" (chỉ có ở sub-tab Quản Lý HĐ) tạo hồ sơ ĐÃ DUYỆT ngay, bỏ qua toàn bộ
   // quy trình Phê Duyệt — từ nay cần quyền RIÊNG `contractImportSigned` (trước đây dùng chung
   // contractCreate: ai tạo được hợp đồng thường cũng tự nhập được hợp đồng "đã ký" không cần ai duyệt).

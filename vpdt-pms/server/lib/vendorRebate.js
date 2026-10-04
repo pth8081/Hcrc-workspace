@@ -202,6 +202,18 @@ function validateRebateTermPayload(body) {
       if (!Array.isArray(entities) || entities.length < 2 || entities.some(e => !e || !String(e).trim())) {
         return 'Phân bổ theo tỷ trọng cần khai báo ít nhất 2 pháp nhân (allocationEntities)';
       }
+      // LỖI ĐÃ VÁ (rà soát v24.74→v24.90, 10/2026, mức Cao): trùng tên pháp nhân trong allocationEntities
+      // (VD ['BRG','BRG','FUJI']) khiến allocateFixedAmountByEntity() cộng basisAmount của pháp nhân đó 2
+      // LẦN vào grandTotal (mẫu số) nhưng chỉ 1 LẦN vào tử số (totalsByEntity theo key) — làm lệch tỷ
+      // trọng phân bổ của các pháp nhân KHÁC. Tổng các allocatedAmount vẫn khớp đúng 100% fixedAmount (dễ
+      // lọt qua kiểu test "tổng có khớp không") dù tỷ lệ từng pháp nhân đã sai — chặn ngay tại validate,
+      // mirror đúng khuôn seen.has(from) ở validateTiers() phía trên.
+      const seenEntities = new Set();
+      for (const e of entities) {
+        const key = String(e).trim();
+        if (seenEntities.has(key)) return `Trùng pháp nhân "${key}" trong danh sách phân bổ — mỗi pháp nhân chỉ khai 1 lần`;
+        seenEntities.add(key);
+      }
     }
     if (allocationMode === 'FULL_TO_ENTITY' && !String(body?.allocationTargetEntity || '').trim()) {
       return 'Vui lòng chọn Pháp Nhân nhận toàn bộ (allocationTargetEntity)';
@@ -283,16 +295,21 @@ function allocateFixedAmountByEntity(fixedAmount, term, purchaseTransactions, ve
     return [{ entity: term.allocationTargetEntity, purchaseAmount: null, ratio: 1, allocatedAmount: fixedAmount }];
   }
   if (allocationMode === 'PRORATA_BY_ENTITY' && Array.isArray(term.allocationEntities) && term.allocationEntities.length >= 2) {
+    // Khử trùng tên pháp nhân — lớp phòng thủ thứ 2 (defense-in-depth) cho dữ liệu đã lưu TRƯỚC khi có
+    // validate chặn trùng ở validateRebateTermPayload() (xem chú thích đầy đủ lỗi đã vá ở đó): trùng tên
+    // trong mảng gốc sẽ cộng basisAmount của pháp nhân đó 2 lần vào grandTotal nhưng chỉ 1 lần vào
+    // totalsByEntity, làm lệch tỷ trọng các pháp nhân khác.
+    const uniqueEntities = [...new Set(term.allocationEntities)];
     const totalsByEntity = {};
     let grandTotal = 0;
-    for (const entity of term.allocationEntities) {
+    for (const entity of uniqueEntities) {
       const { basisAmount: entityBasis } = aggregateBasisAmount(purchaseTransactions, {
         vendorCode, periodStart, periodEnd, scopes: [{ scopeType: 'ENTITY', scopeValue: entity }]
       });
       totalsByEntity[entity] = entityBasis;
       grandTotal += entityBasis;
     }
-    return term.allocationEntities.map(entity => {
+    return uniqueEntities.map(entity => {
       const ratio = grandTotal > 0 ? totalsByEntity[entity] / grandTotal : 0;
       return { entity, purchaseAmount: totalsByEntity[entity], ratio, allocatedAmount: fixedAmount * ratio };
     });
