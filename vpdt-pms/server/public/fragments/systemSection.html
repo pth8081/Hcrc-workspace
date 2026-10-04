@@ -502,6 +502,17 @@
       <p id="cfgSmtpAuthStatus" class="text-[11px] font-semibold rounded px-2 py-1 bg-white border"></p>
 
       <form data-op-submit="saveEmailConfig" class="space-y-3 bg-white p-3 rounded border text-xs">
+        <div class="border-b pb-3">
+          <label class="block font-semibold text-gray-600 mb-1">Loại Email Gateway (chọn nhanh cấu hình mẫu)</label>
+          <div class="flex gap-1.5 flex-wrap">
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="POSTFIX" id="gwBtn_POSTFIX" class="px-3 py-1.5 rounded border font-semibold">Postfix <span class="font-normal text-gray-400">(nội bộ, thường không xác thực)</span></button>
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE" id="gwBtn_EXCHANGE" class="px-3 py-1.5 rounded border font-semibold">Exchange <span class="font-normal text-gray-400">(xác thực mailbox)</span></button>
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="GMAIL" id="gwBtn_GMAIL" class="px-3 py-1.5 rounded border font-semibold">Gmail <span class="font-normal text-gray-400">(App Password)</span></button>
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="CUSTOM" id="gwBtn_CUSTOM" class="px-3 py-1.5 rounded border font-semibold">Khác / Tuỳ Chỉnh</button>
+          </div>
+          <input type="hidden" id="cfgSmtpGatewayType" value="CUSTOM">
+          <p id="cfgGatewayHint" class="text-[11px] text-gray-500 mt-1"></p>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Trạng thái gửi mail</label>

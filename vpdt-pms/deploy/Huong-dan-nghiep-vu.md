@@ -5198,6 +5198,44 @@ never received", sai tài khoản/mật khẩu...) thay vì câu chung "kiểm t
 log server" như trước — admin không cần quyền SSH vào máy chủ vẫn tự chẩn
 đoán được nguyên nhân.
 
+**Loại Email Gateway (preset Postfix/Exchange/Gmail/Tuỳ Chỉnh)** (10/2026, yêu
+cầu người dùng có cả Postfix nội bộ VÀ 1 hệ thống Exchange yêu cầu xác thực,
+muốn thêm cả Gmail) — 4 nút chọn nhanh ngay đầu form, tự điền gợi ý đúng
+Host/Port/Mã Hoá/Yêu Cầu Xác Thực theo từng loại. **Lưu ý quan trọng**: hệ
+thống vẫn chỉ gửi qua **1 cấu hình SMTP DUY NHẤT tại 1 thời điểm** (không phải
+chọn gateway riêng cho từng email gửi đi) — 4 nút này chỉ là "mẫu điền nhanh"
+giúp admin không phải tự tra cứu đúng Port/Mã hoá chuẩn của từng loại, tránh
+lặp lại lỗi Postfix port 465 đã vá ở trên.
+
+- **Postfix** — relay nội bộ theo IP nguồn, **THƯỜNG KHÔNG cần xác thực**
+  (khác hẳn Exchange/Gmail) — preset điền Port 465 + SSL, **không ép** bật ô
+  "Yêu cầu xác thực" (admin tự quyết định, vẫn bật được nếu Postfix có cấu
+  hình SASL riêng).
+- **Exchange** — **LUÔN yêu cầu xác thực** (SMTP AUTH) — xác thực **TRỰC
+  TIẾP vào 1 mailbox** dùng để gửi (không gửi ẩn danh được qua Exchange).
+  Preset điền Port 587 + TLS (STARTTLS) và **ép bật + khoá cứng** ô "Yêu cầu
+  xác thực" (không cho tắt nhầm). Tài Khoản SMTP = địa chỉ email **đầy đủ**
+  của mailbox (VD `notify@yourcompany.com`), Mật Khẩu SMTP = mật khẩu đăng
+  nhập mailbox đó. **KHÔNG dùng port 25** cho Exchange — port 25 trên
+  Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP
+  nguồn, không áp dụng xác thực tài khoản ở port này (đây chính là lý do
+  "gửi trực tiếp qua port 25" không xác thực/không gửi được).
+- **Gmail** — cũng **LUÔN yêu cầu xác thực**. Preset điền sẵn Host
+  `smtp.gmail.com` + Port 465 + SSL, ép bật + khoá ô xác thực. Từ 2022 Google
+  đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật **Xác minh 2
+  bước (2FA)** cho tài khoản Google rồi tạo **"Mật khẩu ứng dụng"** (App
+  Password, chuỗi 16 ký tự) tại `myaccount.google.com/apppasswords`, dùng mã
+  đó làm Mật Khẩu SMTP (không dùng mật khẩu đăng nhập Gmail thường).
+- **Khác / Tuỳ Chỉnh** — không áp đặt gì, giữ nguyên giá trị đang có, mở
+  khoá lại ô "Yêu cầu xác thực" nếu trước đó đang ở Exchange/Gmail — dùng
+  cho nhà cung cấp SMTP khác (SendGrid, SES, Mailgun...) hoặc 1 cấu hình
+  Postfix/Exchange đặc biệt không theo mặc định ở trên.
+
+Bấm nút preset chỉ điền gợi ý khi admin **chủ động bấm** — khi tải lại 1 cấu
+hình đã lưu trước đó, hệ thống chỉ đồng bộ lại giao diện (nút đang chọn, khoá/
+mở ô xác thực) theo đúng loại đã lưu, **không ghi đè** Host/Port/Mã hoá thật
+đang chạy.
+
 **🔔 Thông Báo Email Phê Duyệt** — cho phép admin **tắt riêng** từng loại
 email liên quan phê duyệt theo từng module, mà không đụng gì tới cấu hình SMTP
 ở trên. Lý do: nhiều người đã thấy hồ sơ chờ duyệt qua Hộp Thư Phê Duyệt (mục

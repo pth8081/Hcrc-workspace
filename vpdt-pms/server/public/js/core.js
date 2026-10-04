@@ -6960,6 +6960,60 @@ function syncSmtpEncryptionFromPort() {
   if (match) setSmtpEncryption(match[0]);
 }
 
+// Loại Email Gateway (10/2026, yêu cầu người dùng — có cả Postfix nội bộ VÀ 1 hệ thống Exchange yêu
+// cầu xác thực, muốn thêm cả Gmail, "tuỳ chọn được các loại email gateway"): 4 nút chọn nhanh preset
+// Host/Port/Mã hoá/Yêu cầu xác thực theo ĐÚNG đặc điểm từng loại — hệ thống vẫn chỉ gửi qua 1 cấu hình
+// SMTP DUY NHẤT tại 1 thời điểm (không phải chọn gateway riêng cho từng email), nút preset chỉ giúp đỡ
+// điền đúng thông số chuẩn, tránh đoán sai Port/Mã hoá như lỗi Postfix 465 đã vá ở trên.
+// - Postfix: relay nội bộ theo IP nguồn, THƯỜNG không cần xác thực — để admin tự quyết định (không ép).
+// - Exchange/Gmail: LUÔN cần xác thực TRỰC TIẾP vào 1 mailbox (SMTP AUTH, không gửi ẩn danh được) — ép
+//   bật + khoá cứng ô "Yêu cầu xác thực" (authEl.disabled) để tránh admin tắt nhầm rồi không gửi được.
+//   Exchange dùng port 587 (STARTTLS, submission có xác thực) — KHÔNG dùng port 25 (port 25 trên
+//   Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP nguồn, không áp dụng xác thực
+//   tài khoản ở port này, đúng thắc mắc "đang không gửi trực tiếp qua port 25" của người dùng). Gmail
+//   dùng port 465 SSL + bắt buộc "Mật khẩu ứng dụng" (App Password) vì Google đã chặn mật khẩu thường.
+const EMAIL_GATEWAY_HINTS = {
+  POSTFIX: 'Postfix nội bộ (relay theo IP nguồn) thường KHÔNG cần xác thực — port chuẩn SSL 465 (khuyến nghị) hoặc 25 (không mã hoá, chỉ dùng trong mạng nội bộ tin cậy). Nếu Postfix có cấu hình SASL yêu cầu đăng nhập, vẫn bật được ô "Yêu cầu xác thực" bên dưới như bình thường.',
+  EXCHANGE: 'Exchange LUÔN yêu cầu xác thực (SMTP AUTH) — xác thực TRỰC TIẾP vào 1 mailbox dùng để gửi, không gửi ẩn danh được (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Dùng port 587 (STARTTLS) cho kết nối submission có xác thực — KHÔNG dùng port 25 (port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP nguồn, không áp dụng xác thực tài khoản ở port này). Tài Khoản SMTP = địa chỉ email ĐẦY ĐỦ của mailbox (VD notify@yourcompany.com), Mật Khẩu SMTP = mật khẩu đăng nhập mailbox đó.',
+  GMAIL: 'Gmail LUÔN yêu cầu xác thực (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Từ 2022 Google đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật Xác minh 2 bước (2FA) cho tài khoản Google rồi tạo "Mật khẩu ứng dụng" (App Password, 16 ký tự) tại myaccount.google.com/apppasswords, dùng mã đó làm Mật Khẩu SMTP (KHÔNG dùng mật khẩu đăng nhập Gmail thường).',
+  CUSTOM: 'Tự nhập đầy đủ thông số theo nhà cung cấp SMTP khác (VD SendGrid, SES, Mailgun...) hoặc 1 cấu hình Postfix/Exchange đặc biệt không theo mặc định ở các nút trên.'
+};
+const EMAIL_GATEWAY_FORCED_AUTH = new Set(['EXCHANGE', 'GMAIL']);
+
+// Chỉ đồng bộ UI (màu nút đang chọn/khoá-mở ô xác thực/đổi gợi ý) — KHÔNG đụng Host/Port/Mã hoá, dùng
+// khi tải lại cấu hình đã lưu (loadEmailConfigToForm) để không ghi đè mất giá trị thật đang chạy.
+function refreshEmailGatewayPresetUI(type) {
+  document.getElementById('cfgSmtpGatewayType').value = type;
+  ['POSTFIX', 'EXCHANGE', 'GMAIL', 'CUSTOM'].forEach(t => {
+    const btn = document.getElementById(`gwBtn_${t}`);
+    if (t === type) btn.className = 'px-3 py-1.5 rounded border-2 border-amber-600 bg-amber-50 font-semibold text-amber-800';
+    else btn.className = 'px-3 py-1.5 rounded border font-semibold text-gray-600 hover:bg-gray-50';
+  });
+  document.getElementById('cfgGatewayHint').textContent = EMAIL_GATEWAY_HINTS[type] || '';
+  const authEl = document.getElementById('cfgSmtpAuthEnabled');
+  const forced = EMAIL_GATEWAY_FORCED_AUTH.has(type);
+  authEl.disabled = forced;
+  if (forced && !authEl.checked) { authEl.checked = true; toggleSmtpAuthFields(); }
+}
+
+// Bấm 1 trong 4 nút preset: áp dụng gợi ý Host(Gmail)/Port/Mã hoá chuẩn rồi đồng bộ UI như trên.
+function setEmailGatewayPreset(type) {
+  if (type === 'GMAIL') {
+    document.getElementById('cfgSmtpHost').value = 'smtp.gmail.com';
+    document.getElementById('cfgSmtpPort').value = 465;
+    setSmtpEncryption('SSL');
+  } else if (type === 'EXCHANGE') {
+    document.getElementById('cfgSmtpPort').value = 587;
+    setSmtpEncryption('STARTTLS');
+    document.getElementById('cfgSmtpHost').placeholder = 'mail.yourcompany.local hoặc smtp.office365.com';
+  } else if (type === 'POSTFIX') {
+    document.getElementById('cfgSmtpPort').value = 465;
+    setSmtpEncryption('SSL');
+    document.getElementById('cfgSmtpHost').placeholder = 'mail.yourcompany.com (Postfix nội bộ)';
+  }
+  refreshEmailGatewayPresetUI(type);
+}
+
 function toggleSmtpAuthFields() {
   const enabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   document.getElementById('cfgSmtpAuthFields').classList.toggle('hidden', !enabled);
@@ -7010,6 +7064,7 @@ async function saveEmailConfig(e) {
     // = giữ nguyên mật khẩu đã lưu, khớp đúng quy ước "write-only" như đổi mật khẩu người dùng.
     smtpPassPlain: smtpAuthEnabled ? document.getElementById('cfgSmtpPassPlain').value : '',
     smtpAllowSelfSigned: document.getElementById('cfgSmtpAllowSelfSigned').checked,
+    smtpGatewayType: document.getElementById('cfgSmtpGatewayType').value,
     senderEmail: document.getElementById('cfgSenderEmail').value.trim(),
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
@@ -7052,6 +7107,7 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgSmtpPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
   document.getElementById('cfgSmtpAllowSelfSigned').checked = !!DB.emailConfig.smtpAllowSelfSigned;
   toggleSmtpAuthFields();
+  refreshEmailGatewayPresetUI(DB.emailConfig.smtpGatewayType || 'CUSTOM');
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
     ? DB.emailConfig.contractExpiryReminderDays : [30, 15, 7]).join(', ');

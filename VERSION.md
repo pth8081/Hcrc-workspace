@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**24.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.98 (2026-10-04): Loại Email Gateway (preset Postfix/Exchange/Gmail/Tuỳ Chỉnh)
+
+Người dùng có cả Postfix nội bộ (không cần xác thực) VÀ 1 hệ thống Exchange yêu cầu xác thực trực tiếp
+vào mailbox, và muốn thêm cả Gmail — yêu cầu "tuỳ chọn được các loại email gateway". Thêm 4 nút preset
+ngay đầu form Cấu Hình Email (`cfgSmtpGatewayType`, lưu trong `DB.emailConfig`), tự điền gợi ý đúng
+Host/Port/Mã Hoá/Yêu Cầu Xác Thực — hệ thống vẫn chỉ gửi qua 1 cấu hình SMTP duy nhất tại 1 thời điểm
+(nodemailer vốn gateway-agnostic, không cần đổi gì ở `lib/mailer.js`), 4 nút chỉ giúp điền nhanh đúng
+chuẩn, tránh lặp lại lỗi "Port 465 + STARTTLS" đã vá ở v24.97:
+
+- **Postfix**: relay nội bộ theo IP nguồn, preset Port 465/SSL, KHÔNG ép bật xác thực (admin tự quyết).
+- **Exchange**: LUÔN cần xác thực trực tiếp vào mailbox (SMTP AUTH) — preset Port 587/STARTTLS, ép bật
+  + khoá cứng ô "Yêu cầu xác thực". Giải đáp thắc mắc người dùng "đang không gửi trực tiếp qua port 25":
+  port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP, không áp dụng xác
+  thực tài khoản ở port này — phải dùng port 587 (submission có xác thực).
+- **Gmail**: LUÔN cần xác thực — preset Host `smtp.gmail.com` + Port 465/SSL, ép bật + khoá xác thực.
+  Ghi chú rõ cần bật 2FA + tạo "Mật khẩu ứng dụng" (App Password 16 ký tự) vì Google đã chặn mật khẩu
+  Gmail thường qua SMTP từ 2022.
+- **Khác/Tuỳ Chỉnh**: không áp đặt gì, mở khoá lại ô xác thực nếu trước đó ở Exchange/Gmail.
+
+Bấm nút preset CHỈ áp dụng gợi ý khi admin chủ động bấm — khi tải lại cấu hình đã lưu, chỉ đồng bộ giao
+diện (nút đang chọn, khoá/mở ô xác thực) theo đúng loại đã lưu, KHÔNG ghi đè Host/Port/Mã hoá thật.
+
+Xác minh: Playwright 6/6 kịch bản mới (áp dụng preset đúng, khoá/mở xác thực đúng, tải lại không ghi đè
+host đã lưu, payload lưu đúng field) + 3 bộ test Cấu Hình Email hiện có + 2 bộ test v24.97 không regression.
+Demo ảnh 3 màn hình (Postfix/Exchange/Gmail) tại `server/demo-screenshots/email-gateway-presets/`. Không
+cần đổi `schema.sql`/`.env.example` (field `smtpGatewayType` nằm trong `DB.emailConfig`, AppData JSON có
+sẵn) — chỉ cần copy code + `pm2 restart`.
 
 ## v24.97 (2026-10-04): Vá tương thích Email SMTP với Postfix port 465 + hiện lỗi thật khi Gửi Thử
 
