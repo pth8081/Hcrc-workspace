@@ -37,13 +37,14 @@ function setContractSubTab(subTab) {
   document.getElementById('btnContractSubManage').className = (subTab === 'MANAGE' ? activeCls : inactiveCls) + (canManageTab ? '' : ' hidden');
 
   // Không còn sub-tab nào được phép xem (cả 2 checkbox contractApproval/contractManage đều bị tắt) — ẩn
-  // hẳn form + danh sách rồi dừng luôn, KHÔNG gọi onContractOpModeChange()/renderContracts(): 2 hàm đó
-  // giả định activeContractSubTab luôn là 'APPROVAL'/'MANAGE' và không có nhánh lọc riêng cho `null` —
-  // gọi tiếp sẽ lọc THIẾU (renderContracts() rơi vào nhánh `else` kiểu Quản Lý HĐ nhưng bỏ qua điều kiện
-  // `approvalStatus !== 'APPROVED'`, lộ cả hồ sơ PENDING/DRAFT) thay vì không hiện gì. Xoá luôn nội dung
-  // bảng/dashboard cũ trong DOM (không chỉ ẩn) vì hàm này còn được gọi lại khi dữ liệu quyền làm mới (xem
-  // core.js, chỗ gọi setContractSubTab(activeContractSubTab) sau khi refresh quyền).
+  // hẳn nút mở form + danh sách rồi dừng luôn, KHÔNG gọi onContractOpModeChange()/renderContracts(): 2
+  // hàm đó giả định activeContractSubTab luôn là 'APPROVAL'/'MANAGE' và không có nhánh lọc riêng cho
+  // `null` — gọi tiếp sẽ lọc THIẾU (renderContracts() rơi vào nhánh `else` kiểu Quản Lý HĐ nhưng bỏ qua
+  // điều kiện `approvalStatus !== 'APPROVED'`, lộ cả hồ sơ PENDING/DRAFT) thay vì không hiện gì. Xoá luôn
+  // nội dung bảng/dashboard cũ trong DOM (không chỉ ẩn) vì hàm này còn được gọi lại khi dữ liệu quyền làm
+  // mới (xem core.js, chỗ gọi setContractSubTab(activeContractSubTab) sau khi refresh quyền).
   if (!subTab) {
+    document.getElementById('btnContractManageNew').classList.add('hidden');
     document.getElementById('contractManageFormWrap').classList.add('hidden');
     document.getElementById('contractPaymentColHeader').classList.add('hidden');
     document.getElementById('contractDashboardCards').innerHTML = '';
@@ -55,10 +56,16 @@ function setContractSubTab(subTab) {
   // "Nhập Hợp Đồng/Phụ Lục Đã Ký" (chỉ có ở sub-tab Quản Lý HĐ) tạo hồ sơ ĐÃ DUYỆT ngay, bỏ qua toàn bộ
   // quy trình Phê Duyệt — từ nay cần quyền RIÊNG `contractImportSigned` (trước đây dùng chung
   // contractCreate: ai tạo được hợp đồng thường cũng tự nhập được hợp đồng "đã ký" không cần ai duyệt).
-  // Điểm gác THẬT ở server (contracts.extraValidate, lib/createValidation.js) — ẩn form ở đây để không
-  // mời người dùng điền xong mới nhận 403.
+  // Điểm gác THẬT ở server (contracts.extraValidate, lib/createValidation.js). Pattern "thu gọn form
+  // nhập" (10/2026): form #contractManageFormWrap giờ LUÔN bắt đầu ẩn (class="hidden" tĩnh ở HTML), chỉ
+  // mở khi bấm "+ Thêm Hợp Đồng/Phụ Lục" (openContractManageForm()) hoặc "✏️ Sửa" 1 hồ sơ có sẵn
+  // (openEditContract()) — ở ĐÂY chỉ còn quyết định NÚT "+ Thêm..." có hiện hay không theo ĐÚNG điều
+  // kiện cũ (ẩn nút khi đang ở Quản Lý HĐ mà không có quyền contractImportSigned), và LUÔN ép form về
+  // trạng thái ẩn mỗi lần đổi sub-tab (closeContractManageForm(), cũng tự thoát chế độ Sửa dở nếu có) để
+  // không lộ form đã mở từ sub-tab/quyền trước sang sub-tab hiện tại.
   const canImportSigned = !!(currentUser.perms?.admin || currentUser.perms?.contractImportSigned);
-  document.getElementById('contractManageFormWrap').classList.toggle('hidden', subTab === 'MANAGE' && !canImportSigned);
+  document.getElementById('btnContractManageNew').classList.toggle('hidden', subTab === 'MANAGE' && !canImportSigned);
+  closeContractManageForm();
   document.getElementById('contractPaymentColHeader').classList.toggle('hidden', subTab !== 'MANAGE');
   document.getElementById('contractListTitle').innerText = subTab === 'APPROVAL' ? '📋 Danh Sách Hợp Đồng Chờ Duyệt' : '📋 Danh Sách Hợp Đồng & Giấy Phép';
   document.getElementById('contractManageFormTitle').innerText = subTab === 'APPROVAL' ? '➕ Tạo Mới / Bổ Sung Phụ Lục Hợp Đồng' : '📥 Nhập Hợp Đồng / Phụ Lục Đã Ký';
@@ -75,6 +82,17 @@ function setContractSubTab(subTab) {
   opModeSelect.value = subTab === 'APPROVAL' ? 'NEW' : 'IMPORT_CONTRACT';
   onContractOpModeChange();
   renderContracts();
+}
+
+// Pattern "thu gọn form nhập" (10/2026) — cùng khuôn openMhVendorForm()/closeMhVendorForm()
+// (module-muahang.js): form #contractManageFormWrap chỉ mở khi bấm "+ Thêm Hợp Đồng/Phụ Lục", luôn ẩn
+// lại ngay sau khi lưu/đổi sub-tab (closeContractManageForm()) hoặc bấm "✕ Thu Gọn".
+function openContractManageForm() {
+  document.getElementById('contractManageFormWrap').classList.remove('hidden');
+}
+function closeContractManageForm() {
+  document.getElementById('contractManageFormWrap').classList.add('hidden');
+  cancelEditContract();
 }
 
 // 4 chế độ: NEW (Tạo Mới, tab Phê Duyệt) / ADDENDUM (Bổ Sung Phụ Lục CHỜ DUYỆT, tab Phê Duyệt) /
@@ -653,6 +671,9 @@ async function submitContractReq(e) {
     alert('✅ Đã gửi hồ sơ hợp đồng, đang chờ phê duyệt!');
   }
   resetContractForm();
+  // Thu gọn form lại sau khi lưu thành công (pattern "thu gọn form nhập", 10/2026) — cùng khuôn
+  // closeMhVendorForm() gọi sau submitMhVendorForm() ở module-muahang.js.
+  document.getElementById('contractManageFormWrap').classList.add('hidden');
   renderContracts();
 }
 
@@ -857,6 +878,8 @@ async function updateContractReq(e) {
   );
   alert('✅ Đã cập nhật hồ sơ hợp đồng thành công!');
   cancelEditContract();
+  // Thu gọn form lại sau khi lưu thành công (pattern "thu gọn form nhập", 10/2026).
+  document.getElementById('contractManageFormWrap').classList.add('hidden');
   renderContracts();
 }
 

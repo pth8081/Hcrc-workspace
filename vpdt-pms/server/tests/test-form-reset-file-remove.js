@@ -189,6 +189,9 @@ async function main() {
           const dongTrinhGroup = (DB.submissionApprovalGroups || []).find(g => g.id === 'DONG_TRINH');
           if (dongTrinhGroup) dongTrinhGroup.members = ['admin'];
           switchTab('submission');
+          // Pattern "thu gọn form nhập" (10/2026): #submissionFormWrap giờ bắt đầu ẩn — mở ra trước khi
+          // tương tác trực tiếp với các ô trong form (như bấm "+ Trình Văn Bản Mới").
+          openSubmissionForm();
         });
         // subDept KHÔNG có option rỗng đặt trước (cùng lý do contractDept ở kịch bản Hợp Đồng bên dưới)
         // — chọn "Phòng Kế Toán" (KHÁC option đầu tiên "Phòng Kinh Doanh") để quan sát được form.reset()
@@ -265,7 +268,9 @@ async function main() {
       // "Ban Giám Đốc", KHÁC "Phòng Kinh Doanh" là option đầu) mỗi lần reset về chế độ Tạo Mới.
       'Hợp Đồng: chip file, "Làm Mới" trắng form (contractDept tự chọn lại ĐÚNG phòng ban người dùng, contractType không có option rỗng -> reset về option đầu) + trắng Đợt Thanh Toán về 0 dòng + mã hợp đồng sinh lại đúng',
       async () => {
-        await page.evaluate(() => switchTab('contract'));
+        // Pattern "thu gọn form nhập" (10/2026): #contractManageFormWrap giờ bắt đầu ẩn — mở ra trước
+        // khi tương tác trực tiếp với các ô trong form (như bấm "+ Thêm Hợp Đồng/Phụ Lục").
+        await page.evaluate(() => { switchTab('contract'); openContractManageForm(); });
         await page.selectOption('#contractDept', 'Phòng Kế Toán');
         await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
         await page.fill('#contractTitle', 'Hợp đồng kiểm thử reset form');
@@ -318,7 +323,9 @@ async function main() {
       // "Ban Giám Đốc"), selCat vẫn về rỗng như cũ (không đụng tới) nên docCode vẫn về rỗng bình thường.
       'Tài Liệu: chip file, "Làm Mới" trắng form (selDept tự chọn lại ĐÚNG phòng ban người dùng) + đưa toggle Nhập Mới/Cập Nhật về lại "Nhập Mới" + mã về rỗng (chưa chọn lại Phân Loại)',
       async () => {
-        await page.evaluate(() => switchTab('doc'));
+        // Pattern "thu gọn form nhập" (10/2026): #uploadBox giờ bắt đầu ẩn — mở ra trước khi tương tác
+        // trực tiếp với các ô trong form (như bấm "+ Tải Lên Tài Liệu").
+        await page.evaluate(() => { switchTab('doc'); openUploadBox(); });
         await page.selectOption('#selDept', 'Phòng Kinh Doanh');
         await page.selectOption('#selCat', 'Hợp đồng / Hồ sơ');
         await page.fill('#docTitle', 'Tài liệu kiểm thử reset form');
@@ -358,7 +365,9 @@ async function main() {
     await check(
       'Giấy Phép: chip file, "Làm Mới" trắng form + sinh lại mã đúng khuôn HCRC-GP-...',
       async () => {
-        await page.evaluate(() => switchTab('license'));
+        // Pattern "thu gọn form nhập" (10/2026): #licenseUploadBox giờ bắt đầu ẩn — mở ra trước khi
+        // tương tác trực tiếp với các ô trong form (như bấm "+ Tải Lên Giấy Phép").
+        await page.evaluate(() => { switchTab('license'); openLicenseUploadBox(); });
         await page.fill('#licenseCompanyName', 'Công ty TNHH Kiểm Thử');
         await page.fill('#licenseLocationName', 'Chi nhánh kiểm thử');
         await page.fill('#licenseType', 'Giấy phép kiểm thử');
@@ -1296,7 +1305,9 @@ async function main() {
     await check(
       'Ngân Sách (Đề Xuất): form đang có dữ liệu CHƯA lưu -> "Làm Mới" hỏi xác nhận rồi trắng lại toàn bộ form',
       async () => {
-        await page.evaluate(() => { switchTab('budget'); setBudgetLineTab('PROPOSE'); });
+        // Pattern "thu gọn form nhập" (10/2026): #blProposeFormWrap giờ bắt đầu ẩn — mở ra trước khi
+        // tương tác trực tiếp với các ô trong form (như bấm "+ Thêm Đề Xuất").
+        await page.evaluate(() => { switchTab('budget'); setBudgetLineTab('PROPOSE'); openBudgetLineForm('Propose'); });
         await page.fill('#blProposeContent', 'Nội dung đề xuất kiểm thử reset');
         await page.fill('#blProposeDescription', 'Mô tả kiểm thử reset');
         await page.evaluate(() => { window.__confirmCalls = []; });
