@@ -902,6 +902,49 @@ HTTP `3000` cũ **vẫn tiếp tục hoạt động song song**, không bị ả
 - Firewall/router cần mở thêm đúng cổng `HTTPS_PORT` đã đặt (giống việc đã mở
   cổng `3000` cho HTTP ở mục trước), nếu truy cập từ máy khác trong mạng.
 
+### 11.9. Chứng Chỉ Tin Cậy (CA Ngoài) — khi server GỌI RA hệ thống khác qua HTTPS
+
+Khác hẳn mục 11.8 (server TỰ PHỤC VỤ HTTPS, hướng VÀO) — mục này dành cho
+hướng NGƯỢC LẠI: server tự làm **client** gọi API sang 1 hệ thống khác
+(dsmart16, DSmart API/Mua Hàng BAS, hay tích hợp mới sau này) qua HTTPS. Nếu
+hệ thống đích dùng chứng chỉ do **CA công khai** cấp (Let's Encrypt,
+DigiCert...) thì **không cần làm gì** — Node đã tự tin sẵn. Chỉ cần làm theo
+mục này khi hệ thống đích dùng chứng chỉ do **CA NỘI BỘ công ty** cấp (gặp
+lỗi "self-signed certificate"/"unable to verify the first certificate" khi
+server gọi sang).
+
+**Bước 1 — xác nhận `ecosystem.config.js` đã có dòng `NODE_EXTRA_CA_CERTS`**
+(đã có sẵn trong code, chỉ cần dùng đúng lệnh khởi động):
+```bash
+sudo -u vpdt-app pm2 start ecosystem.config.js --env production
+```
+Nếu trước giờ bạn khởi động bằng `pm2 start server.js --name vpdt` trực
+tiếp (không qua `ecosystem.config.js`), đổi sang dùng `ecosystem.config.js`
+— đây là cách DUY NHẤT để đặt biến này đúng (biến `NODE_EXTRA_CA_CERTS` chỉ
+có tác dụng khi là biến môi trường THẬT lúc PM2 khởi chạy tiến trình, **không
+đặt được qua `server/.env`** — đã kiểm chứng thật, dotenv set quá trễ).
+
+**Bước 2 — tải chứng chỉ CA GỐC qua giao diện web** (thông tin công khai,
+không phải private key, xin trực tiếp team hạ tầng/CA nội bộ công ty được):
+đăng nhập Quản Trị Viên → **Hệ Thống → ⚙️ Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA
+Ngoài)** → chọn file chứng chỉ CA (`.pem`/`.crt`/`.cer`, có thể ghép nhiều CA
+trong 1 file — hệ thống tự tách) → bấm **"⬆️ Thêm Chứng Chỉ CA"**. Tải nhầm
+chứng chỉ SERVER (không phải CA) sẽ bị từ chối ngay, không lưu.
+
+**Bước 3 — restart để áp dụng:**
+```bash
+sudo -u vpdt-app pm2 restart vpdt
+```
+Quay lại tab trên, xác nhận dòng trạng thái đổi sang "✅ Tiến trình này ĐÃ
+cấu hình đúng NODE_EXTRA_CA_CERTS...". Từ lúc này, MỌI lượt gọi ra ngoài của
+server (dsmart16, DSmart API, hay tích hợp mới) đều tự động tin chứng chỉ do
+CA đó cấp — không cần sửa code riêng cho từng tích hợp.
+
+**Lưu ý**: an toàn giữ nguyên dòng `NODE_EXTRA_CA_CERTS` trong
+`ecosystem.config.js` dù CHƯA từng thêm CA nào qua UI (file bundle chưa tồn
+tại thì Node chỉ in 1 dòng cảnh báo lúc khởi động, không ảnh hưởng HTTP/HTTPS
+hiện có) — không cần gỡ ra nếu chưa dùng tính năng này.
+
 ---
 
 ## 12. Kiểm tra sức khỏe hệ thống

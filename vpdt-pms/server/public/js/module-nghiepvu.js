@@ -114,6 +114,7 @@ const SYSTEM_NAV = [
     { key: 'sysExtAuth', icon: '🔑', label: 'API Xác Thực Ngoài' },
     { key: 'sysOpApi', icon: '🔌', label: 'Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16' },
     { key: 'sysTlsCert', icon: '🔒', label: 'Chứng Chỉ TLS/HTTPS' },
+    { key: 'sysTrustedCa', icon: '🔗', label: 'Chứng Chỉ Tin Cậy (CA Ngoài)' },
   ]},
   { group: 'Kiến Trúc', items: [
     { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
@@ -1585,6 +1586,33 @@ const SYSTEM_DOCS = {
     ], right: [
       { label: 'KHÔNG ảnh hưởng HTTP hiện có', text: 'đây là listener HTTPS THÊM VÀO, cổng HTTP cũ (biến PORT) vẫn luôn hoạt động song song — deploy hiện tại không bị ảnh hưởng gì nếu không đặt HTTPS_PORT.' },
       { label: 'Không dùng cùng lúc với Nginx', text: 'nếu server đã triển khai theo track PM2+Nginx (xem deploy/Huong-dan-trien-khai-PM2-Nginx.md, Nginx đã làm lớp HTTPS termination) thì KHÔNG cần bật HTTPS_PORT — tránh 2 lớp TLS chồng nhau không cần thiết.' },
+    ] },
+  },
+  // sysTrustedCa (10/2026, yêu cầu người dùng: "khi PM2 gọi API sang hệ thống khác dùng HTTPS, cần làm
+  // gì để nhận diện được" — tức CHIỀU NGƯỢC LẠI với sysTlsCert ngay trên: server này tự làm CLIENT gọi
+  // RA ngoài, không phải tự phục vụ HTTPS). Xem routes/adminTrustedCa.js + lib/trustedCaManager.js.
+  sysTrustedCa: {
+    icon: '🔗', title: 'Chứng Chỉ Tin Cậy (CA Ngoài)', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Khi server GỌI API sang 1 hệ thống khác (dsmart16, DSmart API, hay tích hợp mới sau này) qua HTTPS mà hệ thống đó dùng chứng chỉ do CA (Certificate Authority) NỘI BỘ công ty cấp — không phải CA công khai như Let\'s Encrypt/DigiCert (Node đã tự tin sẵn, không cần làm gì) — tải lên đây chứng chỉ CA GỐC (public, không phải private key) để "dạy" server tin thêm CA đó cho MỌI lượt gọi ra sau này, không cần sửa code riêng cho từng tích hợp.',
+    flow: { ariaLabel: 'Quy trình thêm CA tin cậy cho lượt gọi ra ngoài', chain: [
+      { label: 'Tải chứng chỉ CA gốc', sub: 'Kiểm tra PHẢI là CA (Basic Constraints)', kind: 'decision' },
+      { label: 'Lưu + dựng lại bundle', sub: 'server/certs/trusted-ca-bundle.pem', kind: 'approved' },
+      { label: 'Restart (pm2 restart)', sub: 'NODE_EXTRA_CA_CERTS đọc lại' },
+      { label: 'Lượt gọi ra ngoài THÀNH CÔNG', sub: 'fetch() + module https đều áp dụng', kind: 'approved' },
+    ], decision: { atIndex: 0, approveLabel: 'Đúng là chứng chỉ CA', rejectLabel: 'Là chứng chỉ SERVER (leaf)', rejectBox: { label: 'Báo lỗi ngay, không lưu', sub: 'Chặn tải nhầm cert không có tác dụng' }, loopBackToIndex: 0, loopBackLabel: 'Tải lại đúng chứng chỉ CA' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'xin team hạ tầng/CA nội bộ công ty file chứng chỉ CA GỐC (và CA trung gian nếu có) ở dạng PEM (<code>.pem</code>/<code>.crt</code>/<code>.cer</code>) — đây là thông tin CÔNG KHAI, không phải private key, có thể xin trực tiếp mà không lo lộ bí mật.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA Ngoài)</b> → chọn file (có thể chứa nhiều CA ghép trong 1 file, VD gốc + trung gian — hệ thống tự tách), đặt tên gợi nhớ tuỳ chọn → bấm <b>"⬆️ Thêm Chứng Chỉ CA"</b>.' },
+      { role: 'Quản trị viên', text: 'nếu tải nhầm 1 chứng chỉ SERVER/LEAF (VD export nhầm cert của chính website đích thay vì CA gốc), hệ thống báo lỗi ngay và KHÔNG lưu — chỉ chấp nhận chứng chỉ có đánh dấu CA:TRUE.' },
+      { role: 'Quản trị viên', text: 'xem dòng trạng thái đầu màn — nếu báo "⚠️ CHƯA thấy biến môi trường NODE_EXTRA_CA_CERTS", làm 1 LẦN: mở <code>ecosystem.config.js</code>, xác nhận dòng <code>NODE_EXTRA_CA_CERTS</code> trong khối <code>env</code> đang trỏ đúng (đã có sẵn, chỉ cần dùng <code>pm2 start ecosystem.config.js</code> thay vì <code>pm2 start server.js</code> trực tiếp).' },
+      { role: 'Quản trị viên', text: '<b>chạy "pm2 restart"</b> — chứng chỉ mới KHÔNG tự áp dụng ngay cho MỌI tiến trình PM2 cluster (dù 1 số trường hợp tiến trình đang xử lý request đó có thể áp dụng ngay, không nên dựa vào điều này). Quay lại tab để xác nhận dòng trạng thái đổi sang "✅ Tiến trình này ĐÃ cấu hình đúng...".' },
+    ],
+    footer: { left: [
+      { label: 'Không cần sửa code cho từng tích hợp', text: 'NODE_EXTRA_CA_CERTS là cơ chế CHUNG của Node.js, áp dụng tự động cho MỌI lượt gọi ra ngoài (cả fetch() lẫn module https) — không cần thêm tham số riêng ở lib/ewsMailer.js/lib/dsmartApiClient.js/jobs/operationOrderApiSync.js hay bất kỳ tích hợp mới nào sau này.' },
+      { label: 'Khác hẳn ô "Chấp nhận chứng chỉ TLS tự ký" (SMTP/EWS)', text: 'ô đó TẮT HẲN việc kiểm tra chứng chỉ cho 1 kết nối cụ thể (dùng khi hệ thống đích dùng chứng chỉ tự ký, không qua CA nào) — còn CA tin cậy ở đây CHỈ MỞ RỘNG danh sách CA được tin, vẫn kiểm tra đầy đủ chuỗi chứng chỉ, an toàn hơn và áp dụng được cho MỌI kết nối cùng lúc.' },
+    ], right: [
+      { label: 'Không nhạy cảm — chỉ là chứng chỉ công khai', text: 'khác hẳn private key TLS (mục "Chứng Chỉ TLS/HTTPS") — chứng chỉ CA là dữ liệu CÔNG KHAI, ai cũng xem được, không cần giữ kín. Lưu tại server/certs/trusted-ca-bundle.pem (vẫn gitignore cùng thư mục, không vì nhạy cảm mà vì đây là cấu hình riêng của từng máy chủ).' },
+      { label: 'Cần restart để áp dụng CHO MỌI tiến trình', text: 'biến NODE_EXTRA_CA_CERTS chỉ được Node đọc lúc khởi động — không đặt được qua server/.env (quá trễ), phải cấu hình 1 lần qua ecosystem.config.js rồi pm2 restart mỗi lần thêm/xoá CA.' },
     ] },
   },
   systemArchitecture: {

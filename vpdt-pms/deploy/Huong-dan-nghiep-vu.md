@@ -5392,3 +5392,43 @@ cần dùng tới màn này.
 - Admin-only (`perms.admin`), dùng chung bucket rate-limit upload toàn hệ
   thống (`lib/uploadRateLimiter.js`), mọi lượt tải/xoá đều ghi Nhật Ký Hệ
   Thống (module `SYSTEM`) KHÔNG kèm nội dung PEM.
+
+### 7.11. Chứng Chỉ Tin Cậy (CA Ngoài) (10/2026)
+
+**Hệ Thống → Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA Ngoài)** (`routes/
+adminTrustedCa.js` + `lib/trustedCaManager.js`) — **chiều NGƯỢC LẠI** với mục
+7.10 ngay trên: đây là khi server tự làm **CLIENT** gọi API sang 1 hệ thống
+khác (dsmart16, DSmart API/Mua Hàng BAS, hay tích hợp mới sau này) qua HTTPS,
+không phải server tự phục vụ HTTPS. Nếu hệ thống đích dùng chứng chỉ CA công
+khai (Let's Encrypt/DigiCert...) thì không cần dùng màn này — Node đã tự tin
+sẵn. Chỉ cần dùng khi hệ thống đích dùng chứng chỉ do **CA nội bộ công ty**
+cấp.
+
+- **Cơ chế**: dùng biến môi trường `NODE_EXTRA_CA_CERTS` của Node.js (có
+  sẵn, không phải tính năng tự viết) — trỏ tới 1 file chứa các chứng chỉ CA
+  bổ sung, áp dụng tự động cho **cả `fetch()` lẫn module `https`** mà
+  **KHÔNG cần sửa 1 dòng code nào** ở `lib/ewsMailer.js`/`lib/
+  dsmartApiClient.js`/`jobs/operationOrderApiSync.js` hay bất kỳ tích hợp
+  mới nào sau này — đã kiểm chứng thật (dựng 1 CA nội bộ giả lập + server
+  HTTPS ký bằng CA đó, xác nhận request thất bại khi KHÔNG có biến này và
+  thành công khi CÓ, cho cả 2 cách gọi).
+- **Validate nghiêm**: chỉ chấp nhận chứng chỉ **CA** thật (X509v3 Basic
+  Constraints CA:TRUE, kiểm bằng `crypto.X509Certificate`) — tải nhầm 1
+  chứng chỉ SERVER/LEAF (VD export nhầm cert của chính website đích) bị từ
+  chối ngay, không lưu (tải nhầm sẽ không có tác dụng gì nếu lọt qua). 1 file
+  tải lên có thể chứa NHIỀU CA ghép (VD gốc + trung gian) — tự tách thành
+  từng entry riêng để quản lý/xoá độc lập.
+- **KHÔNG nhạy cảm** — khác hẳn private key TLS (mục 7.10): chứng chỉ CA là
+  dữ liệu CÔNG KHAI, admin có thể xin trực tiếp team hạ tầng/CA nội bộ công
+  ty mà không lo lộ bí mật gì.
+- **Áp dụng bằng restart + cấu hình 1 LẦN qua `ecosystem.config.js`**: biến
+  `NODE_EXTRA_CA_CERTS` chỉ được Node đọc lúc khởi động, **không đặt được
+  qua `server/.env`** (dotenv set quá trễ, đã kiểm chứng thật) — phải là
+  biến môi trường thật của tiến trình PM2 lúc khởi chạy. `ecosystem.config.js`
+  (trong repo) đã có sẵn dòng này trong khối `env`, trỏ cố định tới
+  `server/certs/trusted-ca-bundle.pem` — chỉ cần dùng
+  `pm2 start ecosystem.config.js` (không phải `pm2 start server.js` trực
+  tiếp) rồi `pm2 restart` sau mỗi lần thêm/xoá CA qua UI. Màn hình tự chẩn
+  đoán và báo rõ tiến trình hiện tại đã cấu hình đúng hay chưa.
+- Admin-only (`perms.admin`), dùng chung bucket rate-limit upload toàn hệ
+  thống, mọi lượt thêm/xoá đều ghi Nhật Ký Hệ Thống (module `SYSTEM`).

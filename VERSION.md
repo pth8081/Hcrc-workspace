@@ -1,8 +1,62 @@
 # Phiên bản hiện tại
 
-**25.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.3 (2026-10-04): Chứng Chỉ Tin Cậy (CA Ngoài) — khi server GỌI RA hệ thống khác qua HTTPS
+
+Câu hỏi tiếp theo của người dùng sau khi merge v25.2: "khi PM2 call API sang hệ thống khác có sử dụng
+HTTPS thì cần làm gì để nhận diện được, và cho 1 giao diện để xử lý". Đây là CHIỀU NGƯỢC LẠI với v25.2
+(server tự phục vụ HTTPS, hướng VÀO) — ở đây server tự làm **client** gọi ra ngoài (dsmart16, DSmart
+API, EWS...). Đã xác nhận với người dùng qua `AskUserQuestion`: hiện tại dsmart16/DSmart API đều dùng
+CA công khai (không cần vá gì), nhưng người dùng muốn 1 màn **"Chứng Chỉ Tin Cậy"** chung, upload CA
+nội bộ áp dụng cho MỌI lượt gọi ra sau này (không chỉ 2 tích hợp hiện tại).
+
+**Xác minh cơ chế thật trước khi code** (dựng 1 CA nội bộ giả lập + server HTTPS ký bằng CA đó bằng
+`openssl`, spawn tiến trình Node con thật để test — không chỉ đọc tài liệu Node):
+- `NODE_EXTRA_CA_CERTS` (biến môi trường Node có sẵn, không phải tính năng tự viết) áp dụng tự động
+  cho **CẢ `fetch()` lẫn module `https`** — xác nhận cả 2 đều thất bại khi KHÔNG có biến này, cả 2 đều
+  thành công khi CÓ — nghĩa là **KHÔNG cần sửa 1 dòng code nào** ở `lib/ewsMailer.js`/`lib/
+  dsmartApiClient.js`/`jobs/operationOrderApiSync.js`.
+- Biến này CHỈ đọc được lúc Node KHỞI ĐỘNG — set `process.env.NODE_EXTRA_CA_CERTS` từ code ĐANG CHẠY
+  KHÔNG có tác dụng (xác nhận thật) — **không đặt được qua `server/.env`** (dotenv set quá trễ), phải
+  là biến môi trường thật của tiến trình PM2 lúc khởi chạy (`ecosystem.config.js`).
+- `tls.setDefaultCACertificates()` (Node ≥22.9, feature-detect) cho phép áp dụng NGAY tại runtime cho
+  tiến trình gọi nó — dùng làm lớp "best-effort" bổ sung, KHÔNG thay thế restart (PM2 cluster mode
+  chạy nhiều tiến trình, chỉ tiến trình gọi hàm này được áp dụng ngay).
+- File trỏ KHÔNG TỒN TẠI/RỖNG chỉ in 1 dòng cảnh báo, KHÔNG crash — an toàn giữ nguyên cấu hình dù
+  chưa từng dùng tính năng này.
+
+- **`server/lib/trustedCaManager.js`** (MỚI): lưu danh sách CA ở `server/certs/trusted-ca-registry.json`
+  (TỰ QUẢN LÝ qua file, KHÔNG qua `lib/appData.js`/`dbo.AppData` — `GET /api/data` bulk đọc TOÀN BỘ
+  bảng AppData không qua allowlist nào, 1 key mới sẽ tự lộ cho MỌI người dùng nếu không tự thêm logic
+  ẩn riêng, giống lý do `lib/tlsCertManager.js` cũng không dùng AppData). Validate bằng
+  `crypto.X509Certificate` — CHỈ chấp nhận chứng chỉ CA thật (Basic Constraints CA:TRUE), từ chối rõ
+  ràng nếu tải nhầm 1 chứng chỉ SERVER/LEAF. Hỗ trợ tải 1 file chứa NHIỀU CA ghép (tự tách). Dựng lại
+  `server/certs/trusted-ca-bundle.pem` sau mỗi lần thêm/xoá.
+- **`server/routes/adminTrustedCa.js`** (MỚI, `/api/admin/trusted-ca`): admin-only, multer
+  memoryStorage, dùng CHUNG `lib/uploadRateLimiter.js`. `GET /` (danh sách + chẩn đoán xem tiến trình
+  hiện tại đã cấu hình đúng `NODE_EXTRA_CA_CERTS` chưa), `POST /` (thêm), `DELETE /:id` (xoá). Ghi nhật
+  ký hệ thống (module `SYSTEM`) mọi lượt thêm/xoá.
+- **`server/server.js`**: nạp lại danh sách CA lúc khởi động (dựng lại file bundle + thử áp dụng ngay
+  nếu Node hỗ trợ), bọc try/catch không crash app.
+- **`server/ecosystem.config.js`**: thêm `NODE_EXTRA_CA_CERTS` vào khối `env`, trỏ cố định tới
+  `certs/trusted-ca-bundle.pem` — an toàn giữ nguyên dù chưa từng thêm CA nào.
+- **UI**: tab con mới **"🔗 Chứng Chỉ Tin Cậy (CA Ngoài)"** trong Hệ Thống → ⚙️ Quản Trị (cạnh "🔒
+  Chứng Chỉ TLS/HTTPS") — bảng danh sách CA đã thêm, form tải lên, dòng chẩn đoán trạng thái
+  `NODE_EXTRA_CA_CERTS`. Entry `sysTrustedCa` mới trong `SYSTEM_DOCS`/`SYSTEM_NAV`.
+
+Xác minh: `tests/test-trusted-ca.js` (MỚI, 22/22 kịch bản) — gồm kịch bản TRỌNG YẾU spawn tiến trình
+Node con thật, xác nhận request tới server HTTPS dùng CA nội bộ THẤT BẠI khi không có
+`NODE_EXTRA_CA_CERTS` và THÀNH CÔNG (cả `fetch()` và `https`) khi có, cộng validate/admin-gate/CRUD.
+`tests/test-nghiepvu.js` (160/160) không regression. CSP self-check sạch.
+
+**Deploy-impact**: KHÔNG có biến `.env` mới (khác `HTTPS_PORT` ở v25.2, biến `NODE_EXTRA_CA_CERTS` đặt
+trong `ecosystem.config.js`, không phải `.env`). Không thêm dependency, không đổi `schema.sql`. Chỉ
+cần dùng tính năng khi CÓ hệ thống ngoài dùng CA nội bộ — nếu dùng
+`pm2 start server.js` trực tiếp (không qua `ecosystem.config.js`), cần đổi sang
+`pm2 start ecosystem.config.js --env production` để biến môi trường có tác dụng.
 
 ## v25.2 (2026-10-04): Tải chứng chỉ TLS/HTTPS qua web — server tự phục vụ HTTPS không cần Nginx
 

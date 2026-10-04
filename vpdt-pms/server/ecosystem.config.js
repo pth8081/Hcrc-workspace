@@ -19,6 +19,16 @@
 // thể nào.
 //
 // Sử dụng: pm2 start ecosystem.config.js --env production
+//
+// NODE_EXTRA_CA_CERTS (10/2026, xem lib/trustedCaManager.js + routes/adminTrustedCa.js, màn "Hệ Thống
+// > Quản Trị > Chứng Chỉ Tin Cậy (CA Ngoài)") — CHỈ có tác dụng khi đặt ở ĐÂY (env của chính tiến
+// trình PM2 khởi chạy), KHÔNG đặt được qua server/.env (dotenv set quá trễ, sau khi Node đã đọc xong
+// biến này lúc khởi động — đã kiểm chứng thật). Trỏ cố định tới file `certs/trusted-ca-bundle.pem` —
+// admin KHÔNG cần sửa lại dòng này mỗi lần thêm/xoá CA qua UI, chỉ cần `pm2 restart` sau mỗi lần đổi.
+// An toàn giữ nguyên ở đây dù CHƯA từng thêm CA nào (file chưa tồn tại thì Node chỉ in 1 dòng cảnh báo
+// lúc khởi động, không crash) — không cần gỡ ra nếu không dùng tính năng này.
+const path = require('path');
+
 module.exports = {
   apps: [
     {
@@ -26,6 +36,9 @@ module.exports = {
       script: 'server.js',
       exec_mode: 'cluster',
       instances: 'max',
+      env: {
+        NODE_EXTRA_CA_CERTS: path.join(__dirname, 'certs', 'trusted-ca-bundle.pem')
+      },
       env_production: {
         NODE_ENV: 'production'
       }
