@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**24.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.92 (2026-10-04): Thu gọn mặc định khối "0. Quyền Truy Cập Module" trong Cây Phân Quyền
+
+Người dùng phát hiện (ảnh chụp màn hình Phân Quyền): trong 25 khối của Cây Phân Quyền (Hệ Thống → Quản
+Trị → Phân Quyền → Thêm/Sửa Người Dùng), 24/25 khối đã mặc định ĐÓNG (`<details class="perm-tree-node">`
+không `open`), riêng khối "🔑 0. Quyền Truy Cập Module" lại có `open` cứng trong HTML nên luôn hiện sẵn —
+không đồng bộ với các khối còn lại. Đã bỏ thuộc tính `open` ở `systemSection.html` (dòng 1266) để khối 0
+cũng đóng mặc định như 24 khối kia; không đổi logic nào khác — `setAllPermTreeNodes()`/`filterPermTree()`
+(module-admin-permtree.js) đã thao tác chung trên mọi `.perm-tree-node` nên không phụ thuộc trạng thái
+mặc định của từng khối, 2 nút "Mở rộng tất cả"/"Thu gọn tất cả" vẫn hoạt động đúng như trước.
+
+Đã chạy `test-perm-tree-expand-collapse.js` (6/6) và `test-muc0-module-access-tree.js` (17/17) — cả 2 bộ
+test trực tiếp liên quan tới cây phân quyền đều pass; đã verify trực quan qua demo Playwright (25/25 khối
+đều `open: false` khi mở lại form Thêm/Sửa Người Dùng lần đầu).
 
 ## v24.91 (2026-10-04): Vá 5 phát hiện đợt rà soát chuyên sâu v24.74→v24.90 (3 Cao + 2 Trung bình)
 
