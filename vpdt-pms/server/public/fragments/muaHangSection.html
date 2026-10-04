@@ -85,11 +85,12 @@
                 <label class="text-xs font-bold text-gray-600">Loại Điều Khoản</label>
                 <select id="mhTermType" class="w-full border rounded px-2 py-1.5 text-sm">
                   <option value="VOLUME_REBATE">Chiết Khấu Theo Doanh Số</option>
-                  <!-- LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3): GROWTH_REBATE CHƯA
-                       được server tính đúng (thiếu so sánh với kỳ trước) — disabled để không ai âm thầm
-                       chọn 1 lựa chọn tính SAI (server cũng đã chặn ở validateRebateTermPayload(), đây là
-                       lớp UX cho người dùng thấy rõ NGAY khi chọn, xem lib/vendorRebate.js). -->
-                  <option value="GROWTH_REBATE" disabled>Chiết Khấu Theo Tăng Trưởng (chưa hỗ trợ tính tự động)</option>
+                  <!-- CẬP NHẬT 10/2026: GROWTH_REBATE đã được hỗ trợ tính tự động (so basisAmount kỳ này
+                       với kỳ LIỀN TRƯỚC cùng độ dài, tra bậc thang CLIFF ra rate, áp lên basisAmount kỳ
+                       này — xem computePreviousPeriod()/findAchievedGrowthRate() ở lib/vendorRebate.js).
+                       Bậc Thang (Tiers) của điều khoản này mang Ý NGHĨA KHÁC VOLUME_REBATE: "Từ số tiền"
+                       ở đây là % TĂNG TRƯỞNG so kỳ liền trước, không phải số tiền mua hàng tuyệt đối. -->
+                  <option value="GROWTH_REBATE">Chiết Khấu Theo Tăng Trưởng (so kỳ liền trước)</option>
                   <option value="TRADE_SPEND">Trade Spend</option>
                   <option value="LISTING_FEE">Phí Lên Kệ</option>
                   <option value="EARLY_PAYMENT">Chiết Khấu Thanh Toán Sớm</option>
@@ -133,16 +134,61 @@
                 <input type="date" id="mhTermTo" class="w-full border rounded px-2 py-1.5 text-sm">
               </div>
             </div>
-            <label class="flex items-center gap-2 text-xs font-bold text-gray-600">
-              <input type="checkbox" id="mhTermRetroactive"> Áp dụng hồi tố (tính lại từ đầu kỳ khi đạt bậc cao hơn)
-            </label>
+            <div class="flex items-center gap-4 flex-wrap">
+              <label class="flex items-center gap-2 text-xs font-bold text-gray-600">
+                <input type="checkbox" id="mhTermRetroactive"> Áp dụng hồi tố (tính lại từ đầu kỳ khi đạt bậc cao hơn)
+              </label>
+              <label class="flex items-center gap-2 text-xs font-bold text-gray-600">
+                <input type="checkbox" id="mhTermIncludedInBas" checked> Tính vào BAS (bỏ tick nếu điều khoản này thanh toán/đối chiếu riêng, không gộp vào tổng BAS)
+              </label>
+            </div>
 
-            <div class="space-y-2">
+            <!-- amountMode (10/2026): phần lớn điều khoản là % theo bậc thang trên doanh số
+                 (PERCENT_TIERED, mặc định) — nhưng nhiều dòng trong Điều Khoản Thương Mại thực tế là SỐ
+                 TIỀN CỐ ĐỊNH/kỳ (VD "Phí tạo mã mới", "Thuê mướn...") không phụ thuộc doanh số. Chọn
+                 FIXED_LUMP_SUM ẩn khối Bậc Thang, hiện khối Số Tiền Cố Định + Phân Bổ Đa Pháp Nhân bên
+                 dưới — xem mhOnTermAmountModeChange(). -->
+            <div>
+              <label class="text-xs font-bold text-gray-600">Phương Thức Tính</label>
+              <select id="mhTermAmountMode" data-op-change="mhOnTermAmountModeChange" class="w-full md:w-72 border rounded px-2 py-1.5 text-sm">
+                <option value="PERCENT_TIERED">% Theo Bậc Thang (trên doanh số)</option>
+                <option value="FIXED_LUMP_SUM">Số Tiền Cố Định / Kỳ (không phụ thuộc doanh số)</option>
+              </select>
+            </div>
+
+            <div id="mhTiersSectionWrap" class="space-y-2">
               <div class="flex items-center justify-between">
                 <label class="text-xs font-bold text-gray-700">Bậc Thang (Tiers) *</label>
                 <button type="button" data-op="mhAddTierRow" class="bg-indigo-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Bậc</button>
               </div>
               <div id="mhTierRowsWrap" class="space-y-1"></div>
+            </div>
+
+            <!-- Fix amount + phân bổ đa pháp nhân (10/2026, mirror cột BF-BR "Tính BAS" trong file người
+                 dùng cung cấp) — chỉ hiện khi amountMode=FIXED_LUMP_SUM. allocationEntities nhập dạng
+                 danh sách mã pháp nhân cách nhau bởi dấu phẩy (VD "BRG,FUJI") — đủ dùng cho số lượng
+                 pháp nhân nhỏ (2-3), không cần widget multi-select riêng. -->
+            <div id="mhFixedAmountSectionWrap" class="hidden space-y-3 bg-white p-3 rounded border">
+              <div>
+                <label class="text-xs font-bold text-gray-600">Số Tiền Cố Định (VNĐ) *</label>
+                <input type="text" inputmode="numeric" id="mhTermFixedAmount" class="w-full md:w-60 border rounded px-2 py-1.5 text-sm money-input">
+              </div>
+              <div>
+                <label class="text-xs font-bold text-gray-600">Cách Phân Bổ Theo Pháp Nhân</label>
+                <select id="mhTermAllocationMode" data-op-change="mhOnTermAllocationModeChange" class="w-full md:w-80 border rounded px-2 py-1.5 text-sm">
+                  <option value="NONE">Không phân bổ (tính 1 khối cho NCC)</option>
+                  <option value="PRORATA_BY_ENTITY">Chia theo tỷ trọng thực nhập (≥2 pháp nhân)</option>
+                  <option value="FULL_TO_ENTITY">Gán nguyên 100% cho 1 pháp nhân</option>
+                </select>
+              </div>
+              <div id="mhAllocationEntitiesWrap" class="hidden">
+                <label class="text-xs font-bold text-gray-600">Danh Sách Pháp Nhân (cách nhau bởi dấu phẩy, VD "BRG,FUJI")</label>
+                <input type="text" id="mhTermAllocationEntities" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="BRG,FUJI">
+              </div>
+              <div id="mhAllocationTargetWrap" class="hidden">
+                <label class="text-xs font-bold text-gray-600">Pháp Nhân Nhận Toàn Bộ</label>
+                <input type="text" id="mhTermAllocationTargetEntity" class="w-full md:w-60 border rounded px-2 py-1.5 text-sm" placeholder="BRG">
+              </div>
             </div>
 
             <div class="space-y-2">
@@ -221,7 +267,42 @@
           </div>
         </div>
         <div id="mhReportSummaryWrap" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-gray-800 text-sm">📋 Chi Tiết Điều Khoản NCC</h4>
+          <button type="button" data-op="exportMhReportDetail" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+        </div>
         <div id="mhReportTableWrap" class="overflow-x-auto"></div>
+      </div>
+
+      <!-- Tổng Hợp BAS theo NCC+Kỳ (10/2026) — cộng dồn Total BAS (BS+BT+BU+BV, mirror sheet "Tính BAS"
+           file người dùng cung cấp) theo từng NCC + từng kỳ tính riêng biệt, tách rõ phần tính-vào-BAS
+           (includedInBas=true trên RebateTerm) với phần không tính vào BAS. -->
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-gray-800 text-sm">🧮 Tổng Hợp BAS Theo NCC Theo Kỳ</h4>
+          <button type="button" data-op="exportMhReportByVendor" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+        </div>
+        <div id="mhReportByVendorWrap" class="overflow-x-auto"></div>
+      </div>
+
+      <!-- Đạt Bậc Thang (10/2026) — điều khoản VOLUME_REBATE/GROWTH_REBATE đang ACTIVE: mốc đã đạt (lần
+           tính gần nhất) + còn cách bao nhiêu để lên mốc kế tiếp. -->
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-gray-800 text-sm">🪜 Đạt Bậc Thang</h4>
+          <button type="button" data-op="exportMhReportTier" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+        </div>
+        <div id="mhReportTierWrap" class="overflow-x-auto"></div>
+      </div>
+
+      <!-- So Sánh Kỳ (10/2026) — mỗi điều khoản: lần tính gần nhất so với lần tính NGAY TRƯỚC đó
+           (lịch sử rebateCalculations, append-only) — mirror ý "2022 vs hiện tại" của file ĐKTM gốc. -->
+      <div class="bg-white rounded border p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="font-bold text-gray-800 text-sm">📈 So Sánh Kỳ (Lần Tính Gần Nhất So Lần Trước)</h4>
+          <button type="button" data-op="exportMhReportTrend" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">📊 Xuất Excel</button>
+        </div>
+        <div id="mhReportTrendWrap" class="overflow-x-auto"></div>
       </div>
     </div>
 

@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**24.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**24.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v24.90 (2026-10-04): Mua Hàng BAS — mở rộng đa pháp nhân/DC/Chiết Khấu Tăng Trưởng + 4 báo cáo mới
+
+Theo file "Điều Khoản Thương Mại/Tính BAS" người dùng cung cấp để đối chiếu nghiệp vụ BAS thực tế —
+phân tích chi tiết + phương án đã được người dùng xác nhận trước khi triển khai (10/2026):
+
+1. **Chiết Khấu Theo Tăng Trưởng (GROWTH_REBATE) nay tính được tự động** — GỠ khỏi
+   `UNSUPPORTED_TERM_TYPES` (trước đây chặn vì chưa xác nhận công thức). Công thức đã xác nhận: so
+   `basisAmount` kỳ này với kỳ **LIỀN TRƯỚC cùng độ dài** (`computePreviousPeriod()`), tra bậc thang kiểu
+   CLIFF theo % tăng trưởng ra rate đã đạt (`findAchievedGrowthRate()`), áp rate đó lên `basisAmount` kỳ
+   này — `lib/vendorRebate.js`, route `POST /terms/:id/calculate` (`routes/purchasing.js`) tự mở rộng
+   khoảng truy vấn purchase để bao trùm cả kỳ liền trước.
+2. **Điều khoản Số Tiền Cố Định (`amountMode=FIXED_LUMP_SUM`)** — mirror các dòng "Phí tạo mã mới", "Thuê
+   mướn..." trong Điều Khoản Thương Mại (không phụ thuộc doanh số, khác hẳn % Bậc Thang mặc định
+   `PERCENT_TIERED`). Có thể **phân bổ theo tỷ trọng thực nhập đa pháp nhân**
+   (`allocationMode=PRORATA_BY_ENTITY`, ≥2 pháp nhân) hoặc **gán nguyên 100% cho 1 pháp nhân**
+   (`FULL_TO_ENTITY`) — mirror cột BF-BR "Tính BAS" (phân bổ BRG/Fuji) trong file người dùng cung cấp.
+3. **Cột mới `Entity`/`IsViaDC`** trên `dbo.VendorPurchaseTransactions` (migration `ALTER TABLE` có
+   `COL_LENGTH` guard, an toàn chạy lại) + 2 `scopeType` mới `ENTITY`/`CHANNEL` trong `matchesScope()`
+   (`lib/purchaseBasisAggregator.js`, CHỈ THÊM nhánh mới — 3 scopeType cũ giữ nguyên) — cho phép giới hạn
+   căn cứ tính của 1 điều khoản theo đúng 1 pháp nhân hoặc theo kênh mua qua Kho Trung Tâm (DC)/trực
+   tiếp, mirror cột riêng "BAS qua DC" trong file Tính BAS.
+4. **Cờ `includedInBas`** trên mỗi điều khoản (mặc định `true`, giữ nguyên hành vi cũ) — phân loại đúng
+   "Tính BAS" / "Không tính vào BAS" như cột Ghi Chú trong Điều Khoản Thương Mại gốc.
+5. **4 báo cáo mới** trong tab Báo Cáo nội bộ của Mua Hàng (`module-muahang.js`, mỗi báo cáo có nút
+   "📊 Xuất Excel" riêng dùng `downloadXlsxFromServer()` chung): Chi Tiết Điều Khoản NCC (bổ sung cột
+   Loại/Phương Thức/Tính BAS?), **Tổng Hợp BAS Theo NCC Theo Kỳ** (cộng dồn Total BAS, tách riêng phần
+   không tính vào BAS), **Đạt Bậc Thang** (mốc đã đạt + còn cách bao nhiêu để lên mốc kế tiếp), **So
+   Sánh Kỳ** (lần tính gần nhất so lần tính ngay trước, mirror ý "2022 vs hiện tại" của file gốc nhưng từ
+   số liệu thật trong hệ thống).
+6. UI tạo/sửa Điều Khoản (`muaHangSection.html`) thêm: checkbox "Tính vào BAS", chọn Phương Thức Tính (ẩn/
+   hiện khối Bậc Thang hoặc khối Số Tiền Cố Định + Phân Bổ Đa Pháp Nhân tương ứng), 2 scopeType mới ở
+   Phạm Vi Áp Dụng, mở lại lựa chọn GROWTH_REBATE (trước đây disabled).
+7. Test mới `tests/test-vendorrebate-bas-extension-10-2026.js` (19 kịch bản thuần, không cần DB) + cập
+   nhật `tests/test-purchasing-unsupported-calcbasis-termtype-periodtype.js` (2 kịch bản đổi từ "phải
+   chặn" sang "phải tính được" do GROWTH_REBATE nay được hỗ trợ) — toàn bộ test hiện có của module Mua
+   Hàng/BAS đã chạy lại, không regression ngoài ý muốn.
+
+Deploy-impact: **CÓ** thay đổi `schema.sql` (2 cột mới `Entity`/`IsViaDC` trên
+`VendorPurchaseTransactions`, migration tự chạy an toàn qua `COL_LENGTH` guard, không cần thao tác thủ
+công nào khác) — không thêm biến `.env`/dependency mới.
 
 ## v24.89 (2026-10-04): Cấp Bậc (danh mục) + Lý Do Nghỉ Việc + Kỷ Luật + 7 trường Người Phụ Thuộc
 

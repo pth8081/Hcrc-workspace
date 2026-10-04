@@ -20,7 +20,13 @@ function toTransaction(row) {
     sourceSystem: row.SourceSystem,
     sourceRefId: row.SourceRefId,
     dataConfidence: row.DataConfidence,
-    syncedAt: row.SyncedAt
+    syncedAt: row.SyncedAt,
+    // Entity/isViaDC thêm 10/2026 — row.Entity/row.IsViaDC có thể UNDEFINED nếu đọc từ DB CHƯA chạy
+    // migration ALTER TABLE mới (sql/schema.sql) — chốt về null/false tường minh, không để undefined rò
+    // ra tầng nghiệp vụ (matchesScope() so sánh === với scopeValue, undefined !== bất kỳ giá trị nào vẫn
+    // đúng ý "không khớp", nhưng chốt rõ ràng cho dễ debug/hiển thị).
+    entity: row.Entity != null ? row.Entity : null,
+    isViaDC: !!row.IsViaDC
   };
 }
 
@@ -37,7 +43,11 @@ function purchaseTransactionChanged(incoming, existing) {
     (incoming.categoryCode || null) !== (existing.CategoryCode || null) ||
     String(incoming.purchaseDate) !== existingPurchaseDate ||
     Math.round(Number(incoming.amount) * 100) !== Math.round(Number(existing.Amount) * 100) ||
-    !!incoming.isReturn !== !!existing.IsReturn
+    !!incoming.isReturn !== !!existing.IsReturn ||
+    // entity/isViaDC thêm 10/2026 — existing.Entity/IsViaDC có thể undefined nếu đọc từ DB chưa chạy
+    // migration cột mới, chốt về null/false y như toTransaction() để so sánh nhất quán.
+    (incoming.entity || null) !== (existing.Entity != null ? existing.Entity : null) ||
+    !!incoming.isViaDC !== !!existing.IsViaDC
   );
 }
 
@@ -109,11 +119,13 @@ async function bulkInsertPurchaseTransactions(rows) {
       req.input(`ssys${idx}`, sql.NVarChar(30), r.sourceSystem || 'DSMART');
       req.input(`sref${idx}`, sql.NVarChar(100), r.sourceRefId || null);
       req.input(`dc${idx}`, sql.NVarChar(20), r.dataConfidence || 'PROVISIONAL');
-      return `(@vc${idx}, @sc${idx}, @sf${idx}, @cc${idx}, @pd${idx}, @am${idx}, @ir${idx}, @ssys${idx}, @sref${idx}, @dc${idx})`;
+      req.input(`en${idx}`, sql.NVarChar(20), r.entity || null);
+      req.input(`dv${idx}`, sql.Bit, !!r.isViaDC);
+      return `(@vc${idx}, @sc${idx}, @sf${idx}, @cc${idx}, @pd${idx}, @am${idx}, @ir${idx}, @ssys${idx}, @sref${idx}, @dc${idx}, @en${idx}, @dv${idx})`;
     });
     await req.query(`
       INSERT INTO dbo.VendorPurchaseTransactions
-        (VendorCode, StoreCode, StoreFormat, CategoryCode, PurchaseDate, Amount, IsReturn, SourceSystem, SourceRefId, DataConfidence)
+        (VendorCode, StoreCode, StoreFormat, CategoryCode, PurchaseDate, Amount, IsReturn, SourceSystem, SourceRefId, DataConfidence, Entity, IsViaDC)
       VALUES ${valueRows.join(', ')};
     `);
     rowsInserted += chunk.length;
@@ -133,10 +145,13 @@ async function bulkInsertPurchaseTransactions(rows) {
     req.input('am', sql.Decimal(18, 2), r.amount);
     req.input('ir', sql.Bit, !!r.isReturn);
     req.input('dc', sql.NVarChar(20), r.dataConfidence || 'PROVISIONAL');
+    req.input('en', sql.NVarChar(20), r.entity || null);
+    req.input('dv', sql.Bit, !!r.isViaDC);
     await req.query(`
       UPDATE dbo.VendorPurchaseTransactions
       SET VendorCode = @vc, StoreCode = @sc, StoreFormat = @sf, CategoryCode = @cc,
-          PurchaseDate = @pd, Amount = @am, IsReturn = @ir, DataConfidence = @dc, SyncedAt = SYSUTCDATETIME()
+          PurchaseDate = @pd, Amount = @am, IsReturn = @ir, DataConfidence = @dc, Entity = @en, IsViaDC = @dv,
+          SyncedAt = SYSUTCDATETIME()
       WHERE TransId = @id;
     `);
     rowsUpdated++;

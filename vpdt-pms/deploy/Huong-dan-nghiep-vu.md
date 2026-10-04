@@ -3687,27 +3687,56 @@ bộ mô tả bên dưới.
 - **Điều Khoản Chiết Khấu (RebateTerms)** — nhiều điều khoản độc lập/1 NCC,
   mỗi điều khoản tự mang:
   - **Loại** (`termType`): Chiết Khấu Theo Doanh Số (VOLUME_REBATE), Chiết
-    Khấu Tăng Trưởng (GROWTH_REBATE — **CHƯA hỗ trợ tính tự động**, xem ghi
-    chú dưới), Trade Spend, Phí Niêm Yết (LISTING_FEE), Thanh Toán Sớm
+    Khấu Tăng Trưởng (GROWTH_REBATE — **đã hỗ trợ tính tự động từ 10/2026**,
+    xem ngay dưới), Trade Spend, Phí Niêm Yết (LISTING_FEE), Thanh Toán Sớm
     (EARLY_PAYMENT), Bồi Thường Hư Hỏng (DAMAGE_ALLOWANCE), Hỗ Trợ Mở Siêu
     Thị Mới (NEW_STORE_SUPPORT).
   - **Cơ sở tính** (`calcBasis`): trên Giá Trị Mua Hàng (PURCHASE_VALUE) hoặc
     Giá Trị Bán Ra (SELL_OUT_VALUE — **CHƯA hỗ trợ tính tự động**, xem ghi
     chú dưới).
   - **Giới hạn CHƯA hỗ trợ (10/2026, đợt audit chuyên sâu)**: `calcBasis`
-    Giá Trị Bán Ra (SELL_OUT_VALUE) và `termType` Chiết Khấu Tăng Trưởng
-    (GROWTH_REBATE) hiện **ĐÃ BỊ CHẶN** ở cả form Tạo/Sửa (2 lựa chọn hiện mờ
-    "chưa hỗ trợ tính tự động" trong dropdown, không chọn được) lẫn ở server
+    Giá Trị Bán Ra (SELL_OUT_VALUE) hiện **ĐÃ BỊ CHẶN** ở cả form Tạo/Sửa
+    (dropdown hiện mờ "chưa hỗ trợ tính tự động") lẫn server
     (`validateRebateTermPayload()`, `lib/vendorRebate.js`) — lý do: hệ thống
     hiện **chưa có nguồn dữ liệu "Giá Trị Bán Ra"** (chỉ có dữ liệu MUA HÀNG
-    từ DSmart/nhập tay), và GROWTH_REBATE cần công thức so sánh với "kỳ
-    trước" chưa được xác nhận rõ ràng với người dùng — trước đây 2 lựa chọn
-    này ÂM THẦM tính giống hệt VOLUME_REBATE/PURCHASE_VALUE (SAI hẳn ý nghĩa
-    nghiệp vụ) mà không cảnh báo gì. Điều khoản cũ đã lỡ tạo/kích hoạt với 1
-    trong 2 giá trị này (trước bản vá) vẫn xem/nhân bản được nhưng **không
-    kích hoạt lại được nữa** và **không "Tính Ước Tính" được nữa** (lỗi 409
-    rõ ràng) — cần đối soát thủ công ngoài hệ thống cho tới khi được bổ sung
-    đúng nguồn dữ liệu/công thức.
+    từ DSmart/nhập tay). Điều khoản cũ đã lỡ tạo/kích hoạt với giá trị này
+    (trước bản vá) vẫn xem/nhân bản được nhưng **không kích hoạt lại được
+    nữa** và **không "Tính Ước Tính" được nữa** (lỗi 409 rõ ràng) — cần đối
+    soát thủ công ngoài hệ thống cho tới khi được bổ sung đúng nguồn dữ liệu.
+  - **Chiết Khấu Theo Tăng Trưởng (GROWTH_REBATE) — ĐÃ hỗ trợ tính tự động
+    (10/2026)**: công thức đã xác nhận với người dùng — so `basisAmount` kỳ
+    này với kỳ **LIỀN TRƯỚC cùng độ dài** (VD kỳ 01/03-31/03 so với kỳ liền
+    trước 29/01-28/02, cùng 31 ngày), ra % tăng trưởng, tra bậc thang kiểu
+    "đạt mốc tính cả" (CLIFF, bất kể `tierMode` khai báo — ý nghĩa 1 mốc %
+    tăng trưởng không hợp với kiểu luỹ tiến từng phần) ra rate đã đạt, áp
+    rate đó lên TOÀN BỘ `basisAmount` kỳ này (không chỉ phần tăng thêm). Kỳ
+    trước không có doanh số (basisAmount=0) coi là tăng trưởng 100% nếu kỳ
+    này có doanh số, 0% nếu cả 2 kỳ đều không có. **Lưu ý khi khai Bậc Thang
+    cho loại này**: cột "Từ số tiền" mang ý nghĩa **% TĂNG TRƯỞNG**, không
+    phải số tiền mua hàng tuyệt đối như VOLUME_REBATE.
+  - **Phương Thức Tính (`amountMode`, 10/2026)** — mặc định **% Theo Bậc
+    Thang** (`PERCENT_TIERED`, hành vi gốc không đổi). Chọn **Số Tiền Cố
+    Định / Kỳ** (`FIXED_LUMP_SUM`) khi điều khoản là 1 khoản tiền cố định
+    không phụ thuộc doanh số (VD "Phí tạo mã mới", "Thuê mướn gian hàng...")
+    — ẩn khối Bậc Thang, hiện khối "Số Tiền Cố Định" + tuỳ chọn **Cách Phân
+    Bổ Theo Pháp Nhân** (`allocationMode`): Không phân bổ (`NONE`, mặc định
+    — tính 1 khối cho NCC), **Chia theo tỷ trọng thực nhập** (`PRORATA_BY_ENTITY`
+    — cần khai ≥2 mã pháp nhân cách nhau bởi dấu phẩy, VD "BRG,FUJI"; hệ
+    thống tự tính tỷ trọng = tổng mua hàng của pháp nhân đó / tổng mua hàng
+    cả các pháp nhân khai báo, trong đúng kỳ đang Tính Ước Tính), hoặc **Gán
+    nguyên 100% cho 1 pháp nhân** (`FULL_TO_ENTITY`).
+  - **Tính vào BAS? (`includedInBas`, 10/2026)** — checkbox mặc định BẬT
+    (mọi điều khoản cũ đọc lại coi như đã tính vào BAS, giữ nguyên hành vi
+    gốc). Bỏ tick cho điều khoản thanh toán/đối chiếu riêng với NCC (không
+    gộp vào tổng BAS kỳ) — ảnh hưởng tới cách tổng hợp ở báo cáo "Tổng Hợp
+    BAS Theo NCC Theo Kỳ" (xem mục Báo Cáo dưới).
+  - **Pháp Nhân / Kênh Mua (2 `scopeType` mới trong Phạm Vi Áp Dụng, 10/2026)**
+    — bên cạnh 3 loại phạm vi cũ (Định Dạng Siêu Thị/Siêu Thị/Ngành Hàng):
+    **Pháp Nhân** (`ENTITY`, giá trị khớp field `Entity` của giao dịch mua
+    hàng — VD "BRG"/"FUJI") giới hạn căn cứ tính của điều khoản theo đúng 1
+    pháp nhân, và **Kênh Mua** (`CHANNEL`, giá trị cố định `DC` hoặc `DIRECT`,
+    khớp field `IsViaDC`) giới hạn theo mua qua Kho Trung Tâm hay mua trực
+    tiếp — dùng khi 1 NCC có mức hỗ trợ riêng cho hàng qua DC.
   - **Bậc thang (Tiers[], tối đa 20 bậc/điều khoản)** theo 2 chế độ hay bị
     nhầm lẫn trong thực tế hợp đồng NCC — **`tierMode`**:
     - **GRADUATED (lũy tiến từng phần)** — mỗi bậc chỉ tính % trên PHẦN doanh
@@ -3826,10 +3855,27 @@ bộ mô tả bên dưới.
   vẫn phải tự bấm "⏳ Hết Hạn"; guard kỳ tính ở trên hoạt động độc lập, không
   phụ thuộc việc đã đánh dấu hết hạn hay chưa, nên đây vẫn là lớp bảo vệ
   chính chống tính sai dù điều khoản chưa được đánh dấu Hết Hạn.
-- **Báo Cáo** (tab riêng trong module + entry ở 📊 Báo Cáo tổng hợp) — liệt
-  kê mọi lượt tính ước tính (lọc theo NCC/khoảng ngày), tổng doanh số căn cứ +
-  tổng ước tính chiết khấu. Quyền xem: `rebateViewReport` (không cần
+- **Báo Cáo** (tab riêng trong module + entry tóm tắt ở 📊 Báo Cáo tổng hợp) —
+  liệt kê mọi lượt tính ước tính (lọc theo NCC/khoảng ngày), tổng doanh số căn
+  cứ + tổng ước tính chiết khấu. Quyền xem: `rebateViewReport` (không cần
   `rebateTermManage` — đúng người chỉ cần xem báo cáo, không sửa điều khoản).
+  **4 khối báo cáo chi tiết (10/2026, mỗi khối có nút "📊 Xuất Excel" riêng)**:
+  - **📋 Chi Tiết Điều Khoản NCC** — bảng danh sách lượt tính, nay có thêm cột
+    Loại Điều Khoản/Phương Thức Tính/Tính BAS? (✅/❌) để đối chiếu đúng với
+    phân loại trên từng điều khoản.
+  - **🧮 Tổng Hợp BAS Theo NCC Theo Kỳ** — cộng dồn số tiền theo đúng cặp
+    (NCC, Kỳ), tách riêng "Tổng Tính BAS" (chỉ cộng các điều khoản có
+    `includedInBas=true`) với "Không Tính Vào BAS" (hiển thị để đối chiếu,
+    KHÔNG gộp vào Tổng Tính BAS) — mirror cách tổng hợp Total BAS cuối kỳ của
+    kế toán.
+  - **🪜 Đạt Bậc Thang** — mọi điều khoản ACTIVE dạng bậc thang (VOLUME_REBATE/
+    GROWTH_REBATE) đang có số liệu: mốc rate ĐÃ ĐẠT ở lượt tính gần nhất, và
+    còn cách bao nhiêu (doanh số hoặc % tăng trưởng, tuỳ loại) để lên mốc rate
+    cao hơn — giúp chủ động làm việc với NCC trước khi chốt kỳ.
+  - **📈 So Sánh Kỳ** — mỗi điều khoản đã có ≥2 lượt tính: so lượt GẦN NHẤT với
+    lượt NGAY TRƯỚC đó (chênh lệch tuyệt đối + %) — lấy từ lịch sử
+    `RebateCalculations` thật trong hệ thống, không cần nhập tay số liệu kỳ
+    trước.
 - **5 quyền phẳng** (khối cây phân quyền 25 "Mua Hàng"): `rebateTermManage`
   (quản lý NCC + Điều Khoản), `rebateTermActivate` (kích hoạt điều khoản),
   `rebateViewReport` (xem báo cáo), `rebateReconcile`/`rebateApprove` (khai

@@ -7,12 +7,26 @@
 // purchaseBasisAggregator.js) — đã kiểm thử thật bởi người dùng (xem Mục 6.2 tài liệu), KHÔNG sửa logic.
 
 // scopes: mảng rỗng = áp dụng toàn hệ thống; có phần tử = chỉ cộng đúng phạm vi khai báo
+//
+// ENTITY/CHANNEL thêm 10/2026 (mở rộng theo file Điều Khoản Thương Mại/Tính BAS người dùng cung cấp) —
+// CHỈ THÊM 2 nhánh mới, 3 nhánh STORE_FORMAT/STORE/CATEGORY gốc giữ NGUYÊN VẸN không đổi 1 ký tự (phần
+// này đã được người dùng kiểm thử thật, xem chú thích đầu file — không sửa logic cũ).
 function matchesScope(purchaseLine, scopes) {
   if (!scopes || scopes.length === 0) return true; // không giới hạn phạm vi -> tính hết
   return scopes.some(scope => {
     if (scope.scopeType === 'STORE_FORMAT') return purchaseLine.storeFormat === scope.scopeValue;
     if (scope.scopeType === 'STORE') return purchaseLine.storeCode === scope.scopeValue;
     if (scope.scopeType === 'CATEGORY') return purchaseLine.categoryCode === scope.scopeValue;
+    // ENTITY: lọc đúng 1 pháp nhân (VD BRG/Fuji) — dùng cho cả giới hạn basisAmount theo pháp nhân (VD
+    // "Tổng Nhập BRG" làm căn cứ % có-điều-kiện/không-điều-kiện) lẫn tính tỷ trọng phân bổ fix amount
+    // (xem allocateFixedAmountByEntity() ở lib/vendorRebate.js).
+    if (scope.scopeType === 'ENTITY') return purchaseLine.entity === scope.scopeValue;
+    // CHANNEL: 'DC' = chỉ tính giao dịch mua qua Kho Trung Tâm (isViaDC=true), 'DIRECT' = chỉ tính giao
+    // dịch mua trực tiếp (isViaDC=false/null) — mirror đúng cột riêng "BAS qua DC" trong file Tính BAS.
+    if (scope.scopeType === 'CHANNEL') {
+      const lineChannel = purchaseLine.isViaDC ? 'DC' : 'DIRECT';
+      return lineChannel === scope.scopeValue;
+    }
     return false;
   });
 }

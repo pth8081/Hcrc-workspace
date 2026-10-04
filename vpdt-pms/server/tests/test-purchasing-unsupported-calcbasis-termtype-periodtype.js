@@ -4,12 +4,19 @@
 // computeRebateEstimate() (lib/vendorRebate.js) LUÔN gộp từ dbo.VendorPurchaseTransactions (dữ liệu MUA
 // HÀNG) rồi áp bậc thang PHẲNG, bất kể calcBasis='SELL_OUT_VALUE' (không nơi nào đọc field này, hệ thống
 // KHÔNG có nguồn dữ liệu "Giá Trị Bán Ra"), termType='GROWTH_REBATE' (tính y hệt VOLUME_REBATE, thiếu so
-// kỳ trước), periodType (không đối chiếu với periodStart/periodEnd). QUYẾT ĐỊNH (ghi trong báo cáo):
-// CHẶN calcBasis='SELL_OUT_VALUE' và termType='GROWTH_REBATE' ở validate (create/edit) VÀ phòng vệ sâu ở
-// activate/calculate cho các bản đã lỡ tạo trước bản vá — thay vì tự đoán công thức nghiệp vụ chưa được
-// xác nhận. Với periodType: đối chiếu ĐỘ DÀI kỳ tính khi "Tính Ước Tính" (đã có test riêng, xem
+// kỳ trước), periodType (không đối chiếu với periodStart/periodEnd). QUYẾT ĐỊNH BAN ĐẦU (ghi trong báo
+// cáo): CHẶN calcBasis='SELL_OUT_VALUE' và termType='GROWTH_REBATE' ở validate (create/edit) VÀ phòng vệ
+// sâu ở activate/calculate cho các bản đã lỡ tạo trước bản vá — thay vì tự đoán công thức nghiệp vụ chưa
+// được xác nhận. Với periodType: đối chiếu ĐỘ DÀI kỳ tính khi "Tính Ước Tính" (đã có test riêng, xem
 // tests/test-purchasing-rebate-calculate-period.js cho phần effectiveFrom/effectiveTo — file này chỉ
 // thêm phần periodType).
+//
+// CẬP NHẬT 10/2026: calcBasis='SELL_OUT_VALUE' VẪN bị chặn (chưa có nguồn dữ liệu), nhưng
+// termType='GROWTH_REBATE' đã ĐƯỢC HỖ TRỢ (người dùng xác nhận công thức: so basisAmount kỳ này với kỳ
+// LIỀN TRƯỚC cùng độ dài, tra bậc thang CLIFF ra rate, áp lên basisAmount kỳ này — xem
+// computePreviousPeriod()/findAchievedGrowthRate() ở lib/vendorRebate.js, test chi tiết ở
+// tests/test-vendorrebate-bas-extension-10-2026.js). 2 kịch bản GROWTH_REBATE trong file này đổi từ
+// "phải bị chặn" sang "phải tính được bình thường".
 //
 // Cùng khuôn tests/test-purchasing-term-vendor-and-dates.js — router THẬT (routes/create.js +
 // routes/purchasing.js).
@@ -127,8 +134,10 @@ async function main() {
     check('Thông báo lỗi nêu rõ "chưa hỗ trợ"', /chưa.*hỗ trợ/i.test(badBasis.body?.error || ''), badBasis.body);
 
     resetRecords();
-    const badType = await api('POST', '/api/create/rebateTerms', termPayload({ termType: 'GROWTH_REBATE' }));
-    check('LỖI ĐÃ VÁ: termType=GROWTH_REBATE -> bị chặn 400 ngay khi tạo', badType.status === 400 && RECORDS.rebateTerms.length === 0, badType.body);
+    // CẬP NHẬT 10/2026: termType=GROWTH_REBATE giờ được hỗ trợ -> tạo bình thường (khác hành vi cũ ở trên).
+    const growthCreate = await api('POST', '/api/create/rebateTerms', termPayload({ termType: 'GROWTH_REBATE' }));
+    check('CẬP NHẬT 10/2026: termType=GROWTH_REBATE -> tạo bình thường (200), không còn bị chặn',
+      growthCreate.status === 200 && RECORDS.rebateTerms.length === 1, growthCreate.body);
 
     resetRecords();
     const okCreate = await api('POST', '/api/create/rebateTerms', termPayload({}));
@@ -149,13 +158,15 @@ async function main() {
       activateOld.status === 409, activateOld.body);
     check('Bản ghi vẫn ở DRAFT (không lỡ kích hoạt)', RECORDS.rebateTerms[0].status === 'DRAFT', RECORDS.rebateTerms[0]);
 
-    // ===== Phòng vệ sâu: bản ACTIVE cũ (đã lỡ kích hoạt trước bản vá) không tính được nữa =====
+    // ===== CẬP NHẬT 10/2026: điều khoản ACTIVE termType=GROWTH_REBATE giờ TÍNH ĐƯỢC bình thường =====
     resetRecords();
     RECORDS.rebateTerms.push({ id: 98, vendorId: VENDOR.id, termCode: 'OLD-02', status: 'ACTIVE', calcBasis: 'PURCHASE_VALUE', termType: 'GROWTH_REBATE', tiers: [{ fromAmount: 0, ratePct: 2 }], periodType: 'MONTHLY', effectiveFrom: '2026-01-01', effectiveTo: null, history: [] });
-    const calcOld = await api('POST', '/api/purchasing/terms/98/calculate', { periodStart: '2026-09-01', periodEnd: '2026-09-30' });
-    check('LỖI ĐÃ VÁ (phòng vệ sâu): "Tính Ước Tính" cho điều khoản termType=GROWTH_REBATE cũ -> bị chặn 409, không ra số SAI âm thầm',
-      calcOld.status === 409, calcOld.body);
-    check('KHÔNG tạo bản ghi rebateCalculations nào (không có số ước tính sai lọt ra)', !RECORDS.rebateCalculations || RECORDS.rebateCalculations.length === 0, RECORDS.rebateCalculations);
+    const calcGrowth = await api('POST', '/api/purchasing/terms/98/calculate', { periodStart: '2026-09-01', periodEnd: '2026-09-30' });
+    check('CẬP NHẬT 10/2026: "Tính Ước Tính" cho điều khoản termType=GROWTH_REBATE -> tính được (200)',
+      calcGrowth.status === 200, calcGrowth.body);
+    check('Bản ghi rebateCalculations có breakdown dạng growth (growthPct/achievedRatePct)',
+      !!RECORDS.rebateCalculations?.[0]?.breakdown?.[0] && 'growthPct' in RECORDS.rebateCalculations[0].breakdown[0],
+      RECORDS.rebateCalculations);
 
     // ===== periodType: đối chiếu độ dài kỳ tính khi Tính Ước Tính =====
     resetRecords();

@@ -1445,6 +1445,24 @@ BEGIN
 END
 GO
 
+/* Entity/IsViaDC thêm 10/2026 (mở rộng BAS theo file Điều Khoản Thương Mại/Tính BAS người dùng cung cấp)
+   — Entity: mã pháp nhân mua hàng (VD 'BRG'/'FUJI'), dùng làm căn cứ phân bổ fix amount theo tỷ trọng
+   thực nhập (xem allocateFixedAmountByEntity() ở lib/vendorRebate.js) + lọc basisAmount riêng 1 pháp nhân
+   qua scopeType='ENTITY' mới (lib/purchaseBasisAggregator.js). IsViaDC: cờ giao dịch có qua Kho Trung Tâm
+   hay không, dùng cho scopeType='CHANNEL' (điều khoản "BAS qua DC" tính riêng). CẢ 2 cột NULL/DEFAULT 0
+   để KHÔNG phá dữ liệu cũ (dòng DSmart/nhập tay trước bản mở rộng không có 2 field này vẫn hợp lệ, đọc
+   lại coi như "không rõ pháp nhân"/"mua trực tiếp"). */
+IF OBJECT_ID('dbo.VendorPurchaseTransactions', 'U') IS NOT NULL AND COL_LENGTH('dbo.VendorPurchaseTransactions', 'Entity') IS NULL
+BEGIN
+    ALTER TABLE dbo.VendorPurchaseTransactions ADD Entity NVARCHAR(20) NULL;
+END
+GO
+IF OBJECT_ID('dbo.VendorPurchaseTransactions', 'U') IS NOT NULL AND COL_LENGTH('dbo.VendorPurchaseTransactions', 'IsViaDC') IS NULL
+BEGIN
+    ALTER TABLE dbo.VendorPurchaseTransactions ADD IsViaDC BIT NOT NULL DEFAULT 0;
+END
+GO
+
 /* PurchaseDataSyncLog — nhật ký mỗi lượt đồng bộ DSmart (cùng khuôn dbo.SystemLogs: IDENTITY PK, cột
    quan hệ thuần, không phải collection Payload-JSON — log KHÔNG BAO GIỜ sửa/xoá từng dòng qua UI thường,
    chỉ đọc danh sách + tự dọn cũ nếu cần sau này). */

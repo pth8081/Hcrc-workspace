@@ -2667,6 +2667,15 @@ const CREATE_MODULE_CONFIGS = {
         effectiveFrom: payload.effectiveFrom, effectiveTo: payload.effectiveTo || null,
         isRetroactive: !!payload.isRetroactive,
         tiers: payload.tiers, scopes: payload.scopes,
+        // Field mở rộng 10/2026 (xem lib/vendorRebate.js) — ĐỌC từ payload gốc TRƯỚC khi bị seeded đè về
+        // mặc định (seeded ở trên LUÔN mang giá trị mặc định includedInBas=true/amountMode=PERCENT_TIERED/...),
+        // không override thì client KHÔNG BAO GIỜ tạo được điều khoản FIXED_LUMP_SUM ngay từ đầu.
+        includedInBas: payload.includedInBas !== false,
+        amountMode: payload.amountMode || 'PERCENT_TIERED',
+        fixedAmount: payload.fixedAmount != null ? Number(payload.fixedAmount) : 0,
+        allocationMode: payload.allocationMode || 'NONE',
+        allocationEntities: Array.isArray(payload.allocationEntities) ? payload.allocationEntities : [],
+        allocationTargetEntity: payload.allocationTargetEntity || null,
         status: 'DRAFT', version: 1, clonedFromTermId: null, history: []
       });
       delete payload.id;

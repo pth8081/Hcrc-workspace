@@ -296,6 +296,10 @@ function mhRenderScopeRows() {
         <option value="STORE_FORMAT" ${r.scopeType === 'STORE_FORMAT' ? 'selected' : ''}>Định Dạng Siêu Thị</option>
         <option value="STORE" ${r.scopeType === 'STORE' ? 'selected' : ''}>Siêu Thị</option>
         <option value="CATEGORY" ${r.scopeType === 'CATEGORY' ? 'selected' : ''}>Ngành Hàng</option>
+        <!-- ENTITY/CHANNEL thêm 10/2026 — lọc riêng theo pháp nhân (VD BRG/Fuji, giá trị khớp field Entity
+             ở dòng giao dịch mua hàng) hoặc kênh mua (giá trị CỐ ĐỊNH "DC"/"DIRECT", khớp IsViaDC). -->
+        <option value="ENTITY" ${r.scopeType === 'ENTITY' ? 'selected' : ''}>Pháp Nhân</option>
+        <option value="CHANNEL" ${r.scopeType === 'CHANNEL' ? 'selected' : ''}>Kênh Mua (DC/Trực Tiếp)</option>
       </select>
       <input type="text" placeholder="Giá trị (mã)" value="${escapeHtml(r.scopeValue || '')}" data-op-input="mhUpdateScopeField" data-arg0="${idx}" data-arg1="scopeValue" data-arg-value="2" class="flex-1 border rounded px-2 py-1 text-xs">
       <button type="button" data-op="mhRemoveScopeRow" data-arg0="${idx}" class="text-red-500 text-xs">✕</button>
@@ -325,11 +329,35 @@ function openMhTermForm(id) {
   document.getElementById('mhTermFrom').value = t ? t.effectiveFrom : '';
   document.getElementById('mhTermTo').value = t ? (t.effectiveTo || '') : '';
   document.getElementById('mhTermRetroactive').checked = !!(t && t.isRetroactive);
+  // Field mở rộng 10/2026 (xem lib/vendorRebate.js defaultRebateTerm()) — điều khoản cũ chưa có field này
+  // đọc lại coi như includedInBas=true/amountMode=PERCENT_TIERED/allocationMode=NONE (đúng mặc định gốc).
+  document.getElementById('mhTermIncludedInBas').checked = !t || t.includedInBas !== false;
+  document.getElementById('mhTermAmountMode').value = (t && t.amountMode) || 'PERCENT_TIERED';
+  document.getElementById('mhTermFixedAmount').value = t ? formatMoneyDisplay(t.fixedAmount || '') : '';
+  document.getElementById('mhTermAllocationMode').value = (t && t.allocationMode) || 'NONE';
+  document.getElementById('mhTermAllocationEntities').value = t && Array.isArray(t.allocationEntities) ? t.allocationEntities.join(',') : '';
+  document.getElementById('mhTermAllocationTargetEntity').value = (t && t.allocationTargetEntity) || '';
   mhTierRows = t ? (t.tiers || []).map(r => ({ fromAmount: String(r.fromAmount), ratePct: String(r.ratePct) })) : [{ fromAmount: '0', ratePct: '' }];
   mhScopeRows = t ? (t.scopes || []).map(r => ({ ...r })) : [];
   mhRenderTierRows();
   mhRenderScopeRows();
+  mhOnTermAmountModeChange();
+  mhOnTermAllocationModeChange();
   document.getElementById('mhTermFormWrap').classList.remove('hidden');
+}
+
+// Ẩn/hiện khối Bậc Thang vs khối Số Tiền Cố Định + Phân Bổ Đa Pháp Nhân theo amountMode đang chọn
+// (10/2026) — KHÔNG xoá dữ liệu đã nhập ở khối bị ẩn (người dùng đổi qua đổi lại khi đang điền vẫn giữ
+// nguyên, chỉ payload gửi lên lúc Lưu mới quyết định field nào thật sự áp dụng, xem submitMhTermForm()).
+function mhOnTermAmountModeChange() {
+  const isFixed = document.getElementById('mhTermAmountMode').value === 'FIXED_LUMP_SUM';
+  document.getElementById('mhTiersSectionWrap').classList.toggle('hidden', isFixed);
+  document.getElementById('mhFixedAmountSectionWrap').classList.toggle('hidden', !isFixed);
+}
+function mhOnTermAllocationModeChange() {
+  const mode = document.getElementById('mhTermAllocationMode').value;
+  document.getElementById('mhAllocationEntitiesWrap').classList.toggle('hidden', mode !== 'PRORATA_BY_ENTITY');
+  document.getElementById('mhAllocationTargetWrap').classList.toggle('hidden', mode !== 'FULL_TO_ENTITY');
 }
 function closeMhTermForm() {
   document.getElementById('mhTermFormWrap').classList.add('hidden');
@@ -344,9 +372,27 @@ async function submitMhTermForm(e) {
   // qua được validateTiers() vì 0 nằm trong 0-100) -> ÂM THẦM lưu Tỷ Lệ % = 0% thay vì 12.5% người dùng
   // định nhập, không có cảnh báo gì. Nay chuẩn hoá dấu phẩy->chấm như các nơi khác (module-itsupport-price.js,
   // module-hopdong.js...) VÀ chặn ngay ở client nếu vẫn không phải số hợp lệ, không để lọt xuống server.
+  const amountMode = document.getElementById('mhTermAmountMode').value;
+  // FIXED_LUMP_SUM không cần Bậc Thang (server cũng không bắt buộc — xem validateRebateTermPayload()) —
+  // vẫn gửi mảng tiers hiện có (nếu người dùng đã gõ dở trước khi đổi amountMode) để không mất dữ liệu,
+  // nhưng KHÔNG chặn submit nếu tiers rỗng/ratePct chưa điền khi ở chế độ này.
   const tiers = mhTierRows.map(r => ({ fromAmount: Number(String(r.fromAmount).replace(/\D/g, '')), ratePct: parseFloat(String(r.ratePct).replace(',', '.')) }));
-  const invalidTier = tiers.find(t => !Number.isFinite(t.ratePct) || t.ratePct < 0 || t.ratePct > 100);
-  if (invalidTier) return alert('⛔ Tỷ lệ % mỗi bậc phải là số hợp lệ trong khoảng 0-100 (dùng dấu , hoặc . cho phần thập phân).');
+  if (amountMode === 'PERCENT_TIERED') {
+    const invalidTier = tiers.find(t => !Number.isFinite(t.ratePct) || t.ratePct < 0 || t.ratePct > 100);
+    if (invalidTier) return alert('⛔ Tỷ lệ % mỗi bậc phải là số hợp lệ trong khoảng 0-100 (dùng dấu , hoặc . cho phần thập phân).');
+  }
+  let fixedAmount = 0, allocationMode = 'NONE', allocationEntities = [], allocationTargetEntity = null;
+  if (amountMode === 'FIXED_LUMP_SUM') {
+    fixedAmount = Number(String(document.getElementById('mhTermFixedAmount').value || '').replace(/\D/g, '')) || 0;
+    allocationMode = document.getElementById('mhTermAllocationMode').value;
+    if (allocationMode === 'PRORATA_BY_ENTITY') {
+      allocationEntities = document.getElementById('mhTermAllocationEntities').value.split(',').map(s => s.trim()).filter(Boolean);
+      if (allocationEntities.length < 2) return alert('⛔ Phân bổ theo tỷ trọng cần khai báo ít nhất 2 pháp nhân (cách nhau bởi dấu phẩy).');
+    } else if (allocationMode === 'FULL_TO_ENTITY') {
+      allocationTargetEntity = document.getElementById('mhTermAllocationTargetEntity').value.trim();
+      if (!allocationTargetEntity) return alert('⛔ Vui lòng nhập Pháp Nhân nhận toàn bộ.');
+    }
+  }
   const scopes = mhScopeRows.filter(r => r.scopeValue && r.scopeValue.trim()).map(r => ({ scopeType: r.scopeType, scopeValue: r.scopeValue.trim() }));
   const payload = {
     vendorId: Number(document.getElementById('mhTermVendorId').value),
@@ -359,6 +405,8 @@ async function submitMhTermForm(e) {
     effectiveFrom: document.getElementById('mhTermFrom').value,
     effectiveTo: document.getElementById('mhTermTo').value || null,
     isRetroactive: document.getElementById('mhTermRetroactive').checked,
+    includedInBas: document.getElementById('mhTermIncludedInBas').checked,
+    amountMode, fixedAmount, allocationMode, allocationEntities, allocationTargetEntity,
     tiers, scopes
   };
   try {
@@ -545,21 +593,198 @@ function renderMhReportTab() {
     </div>`;
 
   const vendorByIdName = id => (mhVendors.find(v => v.id === id) || {}).vendorCode || `#${id}`;
+  const termById = id => mhTerms.find(t => t.id === id);
+  const AMOUNT_MODE_LABEL = { PERCENT_TIERED: '% Bậc Thang', FIXED_LUMP_SUM: 'Số Tiền Cố Định' };
   document.getElementById('mhReportTableWrap').innerHTML = rows.length ? `<table class="w-full text-xs border-collapse">
     <thead><tr class="bg-gray-50 text-left text-gray-600">
-      <th class="p-2 border-b">NCC</th><th class="p-2 border-b">Điều Khoản</th><th class="p-2 border-b">Kỳ</th>
+      <th class="p-2 border-b">NCC</th><th class="p-2 border-b">Điều Khoản</th><th class="p-2 border-b">Loại</th>
+      <th class="p-2 border-b">Phương Thức</th><th class="p-2 border-b text-center">Tính BAS?</th><th class="p-2 border-b">Kỳ</th>
       <th class="p-2 border-b text-right">Doanh Số Căn Cứ</th><th class="p-2 border-b text-right">Ước Tính Chiết Khấu</th>
       <th class="p-2 border-b">Người Tính</th><th class="p-2 border-b">Lúc</th>
     </tr></thead>
-    <tbody>${rows.map(c => `<tr class="border-b hover:bg-gray-50">
+    <tbody>${rows.map(c => {
+      const term = termById(c.termId);
+      const includedInBas = term ? term.includedInBas !== false : true;
+      return `<tr class="border-b hover:bg-gray-50">
       <td class="p-2 font-mono">${escapeHtml(vendorByIdName(c.vendorId))}</td>
       <td class="p-2 font-mono">${escapeHtml(c.termCode || '')}</td>
+      <td class="p-2">${escapeHtml(term?.termType || '')}</td>
+      <td class="p-2">${escapeHtml(AMOUNT_MODE_LABEL[term?.amountMode] || AMOUNT_MODE_LABEL.PERCENT_TIERED)}</td>
+      <td class="p-2 text-center">${includedInBas ? '✅' : '❌'}</td>
       <td class="p-2 whitespace-nowrap">${escapeHtml(c.periodStart)} → ${escapeHtml(c.periodEnd)}</td>
       <td class="p-2 text-right">${Number(c.basisAmount).toLocaleString('vi-VN')}đ</td>
       <td class="p-2 text-right font-bold text-fuchsia-700">${Number(c.rebateAmount).toLocaleString('vi-VN')}đ</td>
       <td class="p-2">${escapeHtml(c.calculatedByName || c.calculatedBy || '')}</td>
       <td class="p-2 whitespace-nowrap">${c.id ? new Date(c.id).toLocaleString('vi-VN') : ''}</td>
-    </tr>`).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có số liệu ước tính nào khớp bộ lọc.</div>';
+    </tr>`;
+    }).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có số liệu ước tính nào khớp bộ lọc.</div>';
+
+  renderMhReportByVendor(rows, vendorByIdName, termById);
+  renderMhReportTier(vendorByIdName);
+  renderMhReportTrend(vendorByIdName);
+}
+
+// Xuất Excel "Chi Tiết Điều Khoản NCC" — dùng ĐÚNG dữ liệu đang hiển thị trên bảng (đã lọc theo NCC/Từ
+// Ngày/Đến Ngày), tái dùng downloadXlsxFromServer() chung (core.js, POST /api/admin/export-xlsx) —
+// không viết route riêng (theo quy ước CLAUDE.md).
+function exportMhReportDetail() {
+  const vendorSel = document.getElementById('mhReportVendorFilter');
+  const vendorId = vendorSel.value ? Number(vendorSel.value) : null;
+  const from = document.getElementById('mhReportFrom').value;
+  const to = document.getElementById('mhReportTo').value;
+  let rows = mhCalculations.slice();
+  if (vendorId) rows = rows.filter(c => c.vendorId === vendorId);
+  if (from) rows = rows.filter(c => c.periodEnd >= from);
+  if (to) rows = rows.filter(c => c.periodStart <= to);
+  const vendorByIdName = id => (mhVendors.find(v => v.id === id) || {}).vendorCode || `#${id}`;
+  const termById = id => mhTerms.find(t => t.id === id);
+  const AMOUNT_MODE_LABEL = { PERCENT_TIERED: '% Bậc Thang', FIXED_LUMP_SUM: 'Số Tiền Cố Định' };
+  const columns = ['NCC', 'Mã Điều Khoản', 'Loại Điều Khoản', 'Phương Thức', 'Tính BAS', 'Kỳ Từ', 'Kỳ Đến', 'Doanh Số Căn Cứ', 'Ước Tính Chiết Khấu', 'Người Tính', 'Lúc Tính'];
+  const data = rows.map(c => {
+    const term = termById(c.termId);
+    const includedInBas = term ? term.includedInBas !== false : true;
+    return [vendorByIdName(c.vendorId), c.termCode || '', term?.termType || '', AMOUNT_MODE_LABEL[term?.amountMode] || AMOUNT_MODE_LABEL.PERCENT_TIERED,
+      includedInBas ? 'Có' : 'Không', c.periodStart, c.periodEnd, Number(c.basisAmount) || 0, Number(c.rebateAmount) || 0,
+      c.calculatedByName || c.calculatedBy || '', c.id ? new Date(c.id).toLocaleString('vi-VN') : ''];
+  });
+  downloadXlsxFromServer('ChiTietDieuKhoanNCC.xlsx', 'Chi Tiết Điều Khoản', columns, data);
+}
+
+// ===== Tổng Hợp BAS Theo NCC Theo Kỳ (10/2026) — cộng dồn Total BAS (mirror cột BW "Tính BAS" trong
+// file Điều Khoản Thương Mại/Tính BAS người dùng cung cấp): group các lượt tính theo đúng cặp
+// (vendorId, periodStart, periodEnd), tách rõ phần "Tính BAS" (term.includedInBas!==false — gộp vào
+// Total BAS) với phần "Không Tính Vào BAS" (settle riêng, hiển thị để đối chiếu nhưng KHÔNG gộp vào
+// Total BAS). =====
+let mhReportByVendorRowsCache = [];
+function renderMhReportByVendor(rows, vendorByIdName, termById) {
+  const groups = new Map(); // "vendorId|periodStart|periodEnd" -> { vendorId, periodStart, periodEnd, basTotal, excludedTotal }
+  rows.forEach(c => {
+    const key = `${c.vendorId}|${c.periodStart}|${c.periodEnd}`;
+    const term = termById(c.termId);
+    const includedInBas = term ? term.includedInBas !== false : true;
+    if (!groups.has(key)) groups.set(key, { vendorId: c.vendorId, periodStart: c.periodStart, periodEnd: c.periodEnd, basTotal: 0, excludedTotal: 0 });
+    const g = groups.get(key);
+    if (includedInBas) g.basTotal += Number(c.rebateAmount) || 0;
+    else g.excludedTotal += Number(c.rebateAmount) || 0;
+  });
+  const groupRows = [...groups.values()].sort((a, b) => (b.periodStart || '').localeCompare(a.periodStart || '') || vendorByIdName(a.vendorId).localeCompare(vendorByIdName(b.vendorId)));
+  mhReportByVendorRowsCache = groupRows.map(g => ({ ...g, vendorCode: vendorByIdName(g.vendorId) }));
+  document.getElementById('mhReportByVendorWrap').innerHTML = groupRows.length ? `<table class="w-full text-xs border-collapse">
+    <thead><tr class="bg-gray-50 text-left text-gray-600">
+      <th class="p-2 border-b">NCC</th><th class="p-2 border-b">Kỳ</th>
+      <th class="p-2 border-b text-right">Tổng Tính BAS</th><th class="p-2 border-b text-right">Không Tính Vào BAS (đối chiếu riêng)</th>
+    </tr></thead>
+    <tbody>${groupRows.map(g => `<tr class="border-b hover:bg-gray-50">
+      <td class="p-2 font-mono">${escapeHtml(vendorByIdName(g.vendorId))}</td>
+      <td class="p-2 whitespace-nowrap">${escapeHtml(g.periodStart)} → ${escapeHtml(g.periodEnd)}</td>
+      <td class="p-2 text-right font-bold text-emerald-700">${g.basTotal.toLocaleString('vi-VN')}đ</td>
+      <td class="p-2 text-right text-gray-500">${g.excludedTotal.toLocaleString('vi-VN')}đ</td>
+    </tr>`).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có số liệu khớp bộ lọc.</div>';
+}
+function exportMhReportByVendor() {
+  const columns = ['NCC', 'Kỳ Từ', 'Kỳ Đến', 'Tổng Tính BAS', 'Không Tính Vào BAS'];
+  const data = mhReportByVendorRowsCache.map(g => [g.vendorCode, g.periodStart, g.periodEnd, g.basTotal, g.excludedTotal]);
+  downloadXlsxFromServer('TongHopBasTheoNccTheoKy.xlsx', 'Tổng Hợp BAS', columns, data);
+}
+
+// ===== Đạt Bậc Thang (10/2026) — điều khoản ACTIVE dạng bậc thang (VOLUME_REBATE/GROWTH_REBATE, có
+// tiers): lấy lần tính GẦN NHẤT (id lớn nhất) của điều khoản đó, suy ra mốc đã đạt (so basisAmount với
+// VOLUME_REBATE, so growthPct — đọc từ breakdown[0] — với GROWTH_REBATE) + mốc kế tiếp còn cách bao
+// nhiêu, để người theo dõi NCC biết cần thêm bao nhiêu doanh số/tăng trưởng để lên mốc hưởng rate cao hơn. =====
+let mhReportTierRowsCache = [];
+function renderMhReportTier(vendorByIdName) {
+  const tierTerms = mhTerms.filter(t => t.status === 'ACTIVE' && ['VOLUME_REBATE', 'GROWTH_REBATE'].includes(t.termType) && Array.isArray(t.tiers) && t.tiers.length);
+  const rowsOut = [];
+  tierTerms.forEach(t => {
+    const calcs = mhCalculations.filter(c => c.termId === t.id).sort((a, b) => (b.id || 0) - (a.id || 0));
+    const latest = calcs[0];
+    if (!latest) return;
+    const sortedTiers = [...t.tiers].sort((a, b) => a.fromAmount - b.fromAmount);
+    const measureValue = t.termType === 'GROWTH_REBATE' ? Number(latest.breakdown?.[0]?.growthPct || 0) : Number(latest.basisAmount || 0);
+    let achievedTier = null, nextTier = null;
+    for (const tier of sortedTiers) {
+      if (measureValue >= tier.fromAmount) achievedTier = tier;
+      else { nextTier = tier; break; }
+    }
+    rowsOut.push({
+      vendorCode: vendorByIdName(t.vendorId), termCode: t.termCode, termType: t.termType,
+      measureValue, measureLabel: t.termType === 'GROWTH_REBATE' ? '% Tăng Trưởng' : 'Doanh Số Căn Cứ',
+      achievedRatePct: achievedTier ? achievedTier.ratePct : 0,
+      nextThreshold: nextTier ? nextTier.fromAmount : null,
+      gapToNext: nextTier ? Math.max(0, nextTier.fromAmount - measureValue) : null,
+      nextRatePct: nextTier ? nextTier.ratePct : null
+    });
+  });
+  mhReportTierRowsCache = rowsOut;
+  const fmtMeasure = (r, v) => r.termType === 'GROWTH_REBATE' ? `${Number(v).toLocaleString('vi-VN')}%` : `${Number(v).toLocaleString('vi-VN')}đ`;
+  document.getElementById('mhReportTierWrap').innerHTML = rowsOut.length ? `<table class="w-full text-xs border-collapse">
+    <thead><tr class="bg-gray-50 text-left text-gray-600">
+      <th class="p-2 border-b">NCC</th><th class="p-2 border-b">Điều Khoản</th><th class="p-2 border-b">${'Căn Cứ'}</th>
+      <th class="p-2 border-b text-right">Giá Trị Hiện Tại</th><th class="p-2 border-b text-right">Rate Đã Đạt</th>
+      <th class="p-2 border-b text-right">Còn Cách Mốc Kế Tiếp</th><th class="p-2 border-b text-right">Rate Mốc Kế Tiếp</th>
+    </tr></thead>
+    <tbody>${rowsOut.map(r => `<tr class="border-b hover:bg-gray-50">
+      <td class="p-2 font-mono">${escapeHtml(r.vendorCode)}</td>
+      <td class="p-2 font-mono">${escapeHtml(r.termCode)}</td>
+      <td class="p-2">${escapeHtml(r.measureLabel)}</td>
+      <td class="p-2 text-right">${fmtMeasure(r, r.measureValue)}</td>
+      <td class="p-2 text-right font-bold text-emerald-700">${r.achievedRatePct}%</td>
+      <td class="p-2 text-right">${r.gapToNext == null ? '— (đã đạt mốc cao nhất)' : fmtMeasure(r, r.gapToNext)}</td>
+      <td class="p-2 text-right">${r.nextRatePct == null ? '—' : r.nextRatePct + '%'}</td>
+    </tr>`).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có điều khoản bậc thang ACTIVE đã có số liệu tính.</div>';
+}
+function exportMhReportTier() {
+  const columns = ['NCC', 'Điều Khoản', 'Loại', 'Giá Trị Hiện Tại', 'Rate Đã Đạt (%)', 'Còn Cách Mốc Kế Tiếp', 'Rate Mốc Kế Tiếp (%)'];
+  const data = mhReportTierRowsCache.map(r => [r.vendorCode, r.termCode, r.termType, r.measureValue, r.achievedRatePct, r.gapToNext ?? '', r.nextRatePct ?? '']);
+  downloadXlsxFromServer('DatBacThang.xlsx', 'Đạt Bậc Thang', columns, data);
+}
+
+// ===== So Sánh Kỳ (10/2026) — mỗi điều khoản đã có >=2 lượt tính: so lượt GẦN NHẤT với lượt NGAY TRƯỚC
+// đó (lịch sử rebateCalculations append-only, mirror ý "2022 vs hiện tại" của file ĐKTM gốc, nhưng lấy
+// từ số liệu THẬT trong hệ thống thay vì gõ tay). =====
+let mhReportTrendRowsCache = [];
+function renderMhReportTrend(vendorByIdName) {
+  const byTerm = new Map();
+  mhCalculations.forEach(c => {
+    if (!byTerm.has(c.termId)) byTerm.set(c.termId, []);
+    byTerm.get(c.termId).push(c);
+  });
+  const rowsOut = [];
+  byTerm.forEach((calcs, termId) => {
+    if (calcs.length < 2) return;
+    const sorted = calcs.slice().sort((a, b) => (b.id || 0) - (a.id || 0));
+    const [latest, previous] = sorted;
+    const delta = Number(latest.rebateAmount || 0) - Number(previous.rebateAmount || 0);
+    const deltaPct = Number(previous.rebateAmount) > 0 ? (delta / Number(previous.rebateAmount)) * 100 : null;
+    rowsOut.push({
+      vendorCode: vendorByIdName(latest.vendorId), termCode: latest.termCode,
+      previousPeriod: `${previous.periodStart} → ${previous.periodEnd}`, previousRebate: Number(previous.rebateAmount) || 0,
+      latestPeriod: `${latest.periodStart} → ${latest.periodEnd}`, latestRebate: Number(latest.rebateAmount) || 0,
+      delta, deltaPct
+    });
+  });
+  mhReportTrendRowsCache = rowsOut;
+  document.getElementById('mhReportTrendWrap').innerHTML = rowsOut.length ? `<table class="w-full text-xs border-collapse">
+    <thead><tr class="bg-gray-50 text-left text-gray-600">
+      <th class="p-2 border-b">NCC</th><th class="p-2 border-b">Điều Khoản</th>
+      <th class="p-2 border-b">Kỳ Trước</th><th class="p-2 border-b text-right">Chiết Khấu Kỳ Trước</th>
+      <th class="p-2 border-b">Kỳ Gần Nhất</th><th class="p-2 border-b text-right">Chiết Khấu Kỳ Gần Nhất</th>
+      <th class="p-2 border-b text-right">Chênh Lệch</th>
+    </tr></thead>
+    <tbody>${rowsOut.map(r => `<tr class="border-b hover:bg-gray-50">
+      <td class="p-2 font-mono">${escapeHtml(r.vendorCode)}</td>
+      <td class="p-2 font-mono">${escapeHtml(r.termCode)}</td>
+      <td class="p-2 whitespace-nowrap">${escapeHtml(r.previousPeriod)}</td>
+      <td class="p-2 text-right">${r.previousRebate.toLocaleString('vi-VN')}đ</td>
+      <td class="p-2 whitespace-nowrap">${escapeHtml(r.latestPeriod)}</td>
+      <td class="p-2 text-right">${r.latestRebate.toLocaleString('vi-VN')}đ</td>
+      <td class="p-2 text-right font-bold ${r.delta >= 0 ? 'text-emerald-700' : 'text-red-600'}">${r.delta >= 0 ? '+' : ''}${r.delta.toLocaleString('vi-VN')}đ${r.deltaPct != null ? ` (${r.deltaPct >= 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%)` : ''}</td>
+    </tr>`).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có điều khoản nào đủ 2 lượt tính để so sánh.</div>';
+}
+function exportMhReportTrend() {
+  const columns = ['NCC', 'Điều Khoản', 'Kỳ Trước', 'Chiết Khấu Kỳ Trước', 'Kỳ Gần Nhất', 'Chiết Khấu Kỳ Gần Nhất', 'Chênh Lệch', 'Chênh Lệch (%)'];
+  const data = mhReportTrendRowsCache.map(r => [r.vendorCode, r.termCode, r.previousPeriod, r.previousRebate, r.latestPeriod, r.latestRebate, r.delta, r.deltaPct != null ? r.deltaPct.toFixed(1) : '']);
+  downloadXlsxFromServer('SoSanhKy.xlsx', 'So Sánh Kỳ', columns, data);
 }
 
 // ===== "💲 Phê Duyệt Giá Bán Lẻ" (itPriceApprovals, priceType=RETAIL) — 10/2026, chuyển từ Hỗ Trợ IT
