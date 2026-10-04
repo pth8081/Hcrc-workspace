@@ -1,8 +1,50 @@
 # Phiên bản hiện tại
 
-**24.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. MINOR vừa chạm mốc `99` ở bản trước
+(`24.99`) nên cuộn sang MAJOR mới theo đúng quy tắc (`24.99` → `25.0`), không phải đổi lớn.
+
+## v25.0 (2026-10-04): Exchange (EWS) — phương thức gửi email thứ 3
+
+Người dùng làm rõ tiếp yêu cầu: "AWS xác thực bằng mailbox sử dụng HTTPS, không phải port 587" — sau khi
+được hỏi lại qua `AskUserQuestion`, xác nhận ý muốn là **EWS (Exchange Web Services)**, không phải AWS SES
+hay AWS WorkMail qua SMTP. Thêm phương thức gửi THỨ 3 hoàn toàn độc lập với SMTP lẫn Graph API: EWS — cũng
+"access mailbox trực tiếp" qua HTTPS như Graph API, nhưng xác thực TRỰC TIẾP bằng tài khoản/mật khẩu của
+chính mailbox (HTTP Basic Auth), KHÔNG cần đăng ký Azure AD App.
+
+- `server/lib/ewsMailer.js` (MỚI): dựng SOAP XML `CreateItem` (MessageDisposition="SendAndSaveCopy") rồi
+  POST qua HTTPS tới EWS endpoint, xác thực bằng header `Authorization: Basic base64(user:pass)` — dùng
+  `fetch`/`Buffer` có sẵn từ Node 18+, không thêm dependency. Gửi riêng từng người nhận (khớp đúng ngữ
+  nghĩa sent/failed của SMTP/Graph API). **Gotcha đã xử lý đúng từ đầu**: EWS trả HTTP 200 NGAY CẢ KHI thao
+  tác thất bại — phải tự parse `<m:ResponseCode>` trong SOAP response, không được coi `res.ok` là đã gửi
+  thành công; lỗi thật lấy từ `<m:MessageText>`/`<faultstring>`.
+- `server/lib/mailer.js`: `sendMail()` thêm tham số `ews` (optional) — rẽ nhánh hẳn sang EWS khi
+  `ews.enabled`, đặt NGAY SAU nhánh `graph?.enabled`, không đụng gì luồng SMTP/Graph API đang chạy. Thêm
+  `resolveEwsOption(emailConfig)` DÙNG CHUNG cho mọi nơi gọi `sendMail()` (giải mã `ewsPassEnc`, chỉ bật
+  khi `smtpGatewayType === 'EXCHANGE_EWS'`) — nối dây vào CẢ 12 điểm gọi `sendMail()` (routes/email.js x2,
+  routes/auth.js x2, 9 jobs) đúng khuôn đã dùng khi thêm Graph API ở v24.99.
+- `routes/data.js`: `prepareEmailConfigForSave()` thêm xử lý `ewsPassPlain` → mã hoá thành `ewsPassEnc`
+  (write-only, cùng khuôn `smtpPassPlain`/`graphClientSecretPlain`). `sanitizeEmailConfig()` lọc
+  `ewsPassEnc` khỏi mọi response đọc, chỉ trả `hasEwsAuth`.
+- `routes/email.js` `/test`: nhận thêm `sendMethod: 'EWS'` + 3 field (`ewsUrl`/`ewsMailboxUser`/
+  `ewsMailboxPass`) — áp dụng đúng cơ chế an toàn "để trống mật khẩu = dùng giá trị đã lưu, CHỈ hợp lệ nếu
+  vẫn đúng EWS URL/Tài khoản đã lưu" như mật khẩu SMTP/Client Secret Graph API.
+- **UI (Cấu Hình Email)**: thêm nút preset thứ 6 **"Exchange (EWS) — mailbox qua HTTPS, AWS WorkMail..."**
+  — chọn EWS ẩn hẳn khối SMTP lẫn khối Graph API, hiện khối riêng "Cấu Hình Exchange Web Services (EWS)"
+  (EWS URL/Tài khoản Mailbox/Mật khẩu Mailbox) kèm ghi chú AWS WorkMail tương thích + Microsoft đang dần
+  ngừng hỗ trợ EWS cho Exchange Online (~hết 2026, không ảnh hưởng on-premise/AWS WorkMail). 3 lựa chọn
+  Exchange (SMTP/Graph API/EWS) tồn tại song song, không thay thế nhau.
+
+Xác minh: unit test backend 10/10 kịch bản (mock `global.fetch`, gồm gửi thành công, HTTP 401, SOAP lỗi dù
+HTTP 200, nhiều người nhận 1 lỗi, `resolveEwsOption()` giải mã đúng/dữ liệu hỏng, nhánh `sendMail()` thiếu
+cấu hình → simulated) + Playwright UI 7/7 kịch bản (ẩn/hiện đúng khối khi bấm/bỏ preset, validate thiếu EWS
+URL/Mailbox, payload lưu/gửi thử đúng field, không lẫn field SMTP/Graph API) + CSP full-audit 3/3 + CSP deep
+-interaction 19/19 + approval-email-config 33/33 + admin-gate 4/4 không regression (đối chiếu trực tiếp với
+HEAD trước thay đổi — các lỗi tiền tồn ở `test-admin-totp.js`/`test-it-approval-deadline-reminder*.js`/
+`test-payment-deadline-reminder.js`/`test-report-period-deadline-reminder.js`/`test-license-expiry-reminder
+-family.js`/`test-it-reminder-lost-update.js` xác nhận GIỐNG NHAU y hệt trước/sau, không phải do EWS gây
+ra).
 
 ## v24.99 (2026-10-04): Exchange Online (Microsoft Graph API) — phương thức gửi email thứ 2
 

@@ -11,7 +11,7 @@
 // thay vì tự viết lại SQL đọc/ghi AppData — 2 job cũ viết trước khi lib/appData.js tồn tại.
 const fs = require('fs');
 const path = require('path');
-const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAppDataValue, setAppDataValue } = require('../lib/appData');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -107,7 +107,8 @@ async function checkDiskSpace() {
           host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: resolveEncryption(emailConfig),
           user: smtpUser, pass: smtpPass,
           from: emailConfig.senderEmail,
-          graph: resolveGraphOption(emailConfig)
+          graph: resolveGraphOption(emailConfig),
+          ews: resolveEwsOption(emailConfig)
         });
       } catch (err) {
         console.error('⛔ [Giám sát ổ đĩa] Gửi email cảnh báo thất bại:', err.message);

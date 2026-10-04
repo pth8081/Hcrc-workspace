@@ -11,7 +11,7 @@
 // khỏi Nhật ký hệ thống thật mà không ai biết) — nay ghi qua insertSystemLog() để log thật sự xuất
 // hiện trong Nhật ký hệ thống.
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -166,7 +166,8 @@ async function checkContractExpiryReminders() {
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,
-              graph: resolveGraphOption(emailConfig)
+              graph: resolveGraphOption(emailConfig),
+              ews: resolveEwsOption(emailConfig)
             });
           } catch (err) {
             console.error('⛔ [Nhắc hạn hợp đồng] Gửi email thật thất bại:', err.message);

@@ -2,8 +2,11 @@
 // frontend qua fetch) lẫn jobs/contractExpiryReminder.js (chạy định kỳ phía server). sendMail() vẫn là
 // ĐIỂM VÀO DUY NHẤT cho MỌI nơi gọi — từ 10/2026 có thêm tham số "graph" (optional) để rẽ sang phương
 // thức gửi THỨ 2 — Microsoft Graph API (xem lib/graphMailer.js) — dùng cho Exchange Online muốn "access
-// mailbox trực tiếp" (app-only OAuth2) thay vì SMTP AUTH; không truyền "graph" (hoặc graph.enabled
-// false) thì hành vi y hệt trước giờ, không đổi gì luồng SMTP đang chạy ổn định.
+// mailbox trực tiếp" (app-only OAuth2) thay vì SMTP AUTH, VÀ tham số "ews" (optional) để rẽ sang phương
+// thức gửi THỨ 3 — Exchange Web Services (xem lib/ewsMailer.js) — cũng "access mailbox trực tiếp" qua
+// HTTPS nhưng xác thực TRỰC TIẾP bằng username/mật khẩu mailbox (Basic Auth), không cần đăng ký Azure AD
+// App như Graph API; không truyền "graph"/"ews" (hoặc enabled false) thì hành vi y hệt trước giờ, không
+// đổi gì luồng SMTP đang chạy ổn định.
 //
 // PHÂN CHIA CẤU HÌNH — MỖI PHẦN CHỈ CÓ 1 NGUỒN DUY NHẤT, KHÔNG CHỒNG CHÉO ƯU TIÊN:
 // - Host/Port/Kiểu mã hoá/Email người gửi/Bật-tắt gửi mail/Tài khoản đăng nhập SMTP: cấu hình DUY
@@ -18,6 +21,7 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
 const { sendMailViaGraph } = require('./graphMailer');
+const { sendMailViaEws } = require('./ewsMailer');
 const { decryptSecret } = require('./emailCrypto');
 
 // Server (qua .env, đường lùi cũ) hoặc DB.emailConfig (qua tham số truyền vào) có đang cấu hình tài
@@ -83,6 +87,25 @@ function resolveGraphOption(emailConfig) {
   };
 }
 
+// Cùng khuôn resolveGraphOption() ở trên — dựng tham số "ews" cho sendMail() khi Loại Email Gateway là
+// "Exchange (EWS)" (10/2026, yêu cầu người dùng muốn 1 cách "access mailbox trực tiếp" qua HTTPS nhưng
+// KHÔNG cần đăng ký Azure AD App như Graph API — EWS xác thực thẳng bằng username/mật khẩu mailbox).
+function resolveEwsOption(emailConfig) {
+  if (emailConfig?.smtpGatewayType !== 'EXCHANGE_EWS') return { enabled: false };
+  let mailboxPass = null;
+  try {
+    mailboxPass = emailConfig.ewsPassEnc ? decryptSecret(emailConfig.ewsPassEnc) : null;
+  } catch (err) {
+    console.error('⛔ Không giải mã được mật khẩu mailbox (EWS) đã lưu:', err.message);
+  }
+  return {
+    enabled: true,
+    ewsUrl: emailConfig.ewsUrl,
+    mailboxUser: emailConfig.ewsMailboxUser,
+    mailboxPass
+  };
+}
+
 function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned }) {
   const resolvedPort = parseInt(port, 10) || 587;
 
@@ -123,7 +146,7 @@ function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned 
 // bại). Trả về { sent, failed, simulated, host, port } — có kèm host/port THỰC đã dùng để gửi (chỉ
 // khi simulated:false) để nơi gọi (Nhật ký hệ thống) ghi rõ đã xác nhận gửi tới máy chủ nào, phục vụ
 // việc kiểm tra/xác minh thay vì chỉ tin vào việc "đã thử gửi".
-async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned, graph }) {
+async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned, graph, ews }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   if (recipients.length === 0) return { sent: [], failed: [], simulated: false };
 
@@ -144,6 +167,23 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
       senderMailbox: graph.senderMailbox, to: recipients, subject, text, html
     });
     return { sent, failed, simulated: false, host: 'graph.microsoft.com (Microsoft Graph API)', port: 443, errorMessage: lastErrorMessage };
+  }
+
+  // Phương thức gửi THỨ 3 (10/2026, yêu cầu người dùng — "AWS xác thực bằng mailbox sử dụng HTTPS,
+  // không phải port 587", làm rõ là EWS): Exchange Web Services, xem lib/ewsMailer.js. Cũng "access
+  // mailbox trực tiếp" qua HTTPS như Graph API, NHƯNG xác thực TRỰC TIẾP bằng username/mật khẩu của
+  // CHÍNH mailbox (HTTP Basic Auth) — không cần đăng ký Azure AD App/Client ID/Secret như Graph API, đơn
+  // giản hơn hẳn — phù hợp Exchange on-premise hoặc dịch vụ mail tương thích Exchange khác (VD AWS
+  // WorkMail — cùng giao thức EWS, chỉ khác URL endpoint).
+  if (ews?.enabled) {
+    if (!ews.ewsUrl || !ews.mailboxUser || !ews.mailboxPass) {
+      return { sent: [], failed: recipients, simulated: true };
+    }
+    const { sent, failed, lastErrorMessage } = await sendMailViaEws({
+      ewsUrl: ews.ewsUrl, mailboxUser: ews.mailboxUser, mailboxPass: ews.mailboxPass,
+      to: recipients, subject, text, html
+    });
+    return { sent, failed, simulated: false, host: `${ews.ewsUrl} (Exchange Web Services)`, port: 443, errorMessage: lastErrorMessage };
   }
 
   // Chưa nhập SMTP Server ở màn Cấu Hình Email -> chưa thể gửi thật, mô phỏng như cũ.
@@ -178,4 +218,4 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
   return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort, errorMessage: lastErrorMessage };
 }
 
-module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption };
+module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption };

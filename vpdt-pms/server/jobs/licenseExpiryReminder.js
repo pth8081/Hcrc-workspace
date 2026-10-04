@@ -6,7 +6,7 @@
 // phòng ban riêng như contractExpiryDeptContacts — người nhận mặc định = người tạo giấy phép + TOÀN BỘ
 // người đang có quyền licenseApprove/admin, cộng thêm CC tuỳ chọn (licenseExpiryCcEmails).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -149,7 +149,8 @@ async function checkLicenseExpiryReminders() {
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,
-              graph: resolveGraphOption(emailConfig)
+              graph: resolveGraphOption(emailConfig),
+              ews: resolveEwsOption(emailConfig)
             });
           } catch (err) {
             console.error('⛔ [Nhắc hạn giấy phép] Gửi email thật thất bại:', err.message);

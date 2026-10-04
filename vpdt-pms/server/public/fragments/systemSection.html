@@ -508,6 +508,7 @@
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="POSTFIX" id="gwBtn_POSTFIX" class="px-3 py-1.5 rounded border font-semibold">Postfix <span class="font-normal text-gray-400">(nội bộ, thường không xác thực)</span></button>
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE" id="gwBtn_EXCHANGE" class="px-3 py-1.5 rounded border font-semibold">Exchange <span class="font-normal text-gray-400">(SMTP, xác thực mailbox)</span></button>
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE_GRAPH" id="gwBtn_EXCHANGE_GRAPH" class="px-3 py-1.5 rounded border font-semibold">Exchange Online <span class="font-normal text-gray-400">(Graph API, access mailbox)</span></button>
+            <button type="button" data-op="setEmailGatewayPreset" data-arg0="EXCHANGE_EWS" id="gwBtn_EXCHANGE_EWS" class="px-3 py-1.5 rounded border font-semibold">Exchange (EWS) <span class="font-normal text-gray-400">(mailbox qua HTTPS, AWS WorkMail...)</span></button>
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="GMAIL" id="gwBtn_GMAIL" class="px-3 py-1.5 rounded border font-semibold">Gmail <span class="font-normal text-gray-400">(App Password)</span></button>
             <button type="button" data-op="setEmailGatewayPreset" data-arg0="CUSTOM" id="gwBtn_CUSTOM" class="px-3 py-1.5 rounded border font-semibold">Khác / Tuỳ Chỉnh</button>
           </div>
@@ -587,6 +588,25 @@
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Mailbox Người Gửi (UPN)</label>
               <input id="cfgGraphSenderMailbox" type="email" placeholder="notify@yourcompany.com" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+        </div>
+
+        <div class="ews-only-block hidden border-t pt-2">
+          <label class="block font-semibold text-gray-600 mb-1">Cấu Hình Exchange Web Services (EWS)</label>
+          <p class="text-[11px] text-gray-400 italic mb-2">Xác thực TRỰC TIẾP bằng tài khoản/mật khẩu của chính mailbox dùng để gửi (HTTP Basic Auth qua HTTPS) — KHÔNG cần đăng ký Azure AD App như Graph API. Dùng cho Exchange on-premise hoặc dịch vụ mail tương thích Exchange (VD AWS WorkMail — cùng giao thức EWS, chỉ khác URL endpoint). Microsoft đang dần ngừng hỗ trợ EWS cho Exchange Online (dự kiến hết năm 2026), vẫn hoạt động tốt cho on-premise/AWS WorkMail.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="md:col-span-2">
+              <label class="block font-semibold text-gray-600 mb-1">EWS URL</label>
+              <input id="cfgEwsUrl" placeholder="https://mail.yourcompany.com/EWS/Exchange.asmx" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tài Khoản Mailbox (UPN)</label>
+              <input id="cfgEwsMailboxUser" type="email" placeholder="notify@yourcompany.com" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mật Khẩu Mailbox</label>
+              <input id="cfgEwsPassPlain" type="password" placeholder="Để trống nếu giữ nguyên mật khẩu đã lưu" class="w-full border p-1.5 rounded" autocomplete="new-password">
             </div>
           </div>
         </div>

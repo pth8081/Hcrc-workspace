@@ -6,7 +6,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getPool, sql } = require('../db');
-const { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { sendServerError } = require('../lib/errorResponse');
 const { getAllForCollection } = require('../lib/recordStore');
@@ -154,7 +154,8 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
       user, pass,
       from: emailConfig.senderEmail,
       allowSelfSigned: !!emailConfig.smtpAllowSelfSigned,
-      graph: resolveGraphOption(emailConfig)
+      graph: resolveGraphOption(emailConfig),
+      ews: resolveEwsOption(emailConfig)
     });
     res.json(result);
   } catch (err) {
@@ -175,7 +176,10 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
     to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail, smtpAllowSelfSigned,
     // sendMethod: 'GRAPH_API' khi admin đang thử nghiệm "Exchange Online (Graph API)" — xem
     // setEmailGatewayPreset() ở core.js. Mặc định (undefined/'SMTP') đi luồng SMTP y hệt trước giờ.
-    sendMethod, graphTenantId, graphClientId, graphClientSecret, graphSenderMailbox
+    sendMethod, graphTenantId, graphClientId, graphClientSecret, graphSenderMailbox,
+    // sendMethod: 'EWS' khi admin đang thử nghiệm "Exchange (EWS)" — xác thực trực tiếp bằng mailbox
+    // (Basic Auth) qua HTTPS, KHÔNG phải Azure AD App như Graph API, KHÔNG phải port 587 như SMTP.
+    ewsUrl, ewsMailboxUser, ewsMailboxPass
   } = req.body || {};
   if (!to) return res.status(400).json({ error: 'Thiếu địa chỉ email nhận thử' });
 
@@ -219,6 +223,47 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
       return res.json({ ok: true, host: result.host, port: result.port });
     } catch (err) {
       return sendServerError(res, 500, err, 'POST /api/send-email/test', 'Không thể gửi email thử qua Graph API');
+    }
+  }
+
+  if (sendMethod === 'EWS') {
+    if (!ewsUrl || !ewsMailboxUser) {
+      return res.status(400).json({ error: 'Thiếu EWS URL/Tài khoản Mailbox (Exchange EWS)' });
+    }
+    try {
+      // Mật khẩu mailbox (EWS) trên form cũng write-only (giống Client Secret Graph API) — để trống =
+      // dùng giá trị đã lưu, CHỈ hợp lệ khi vẫn ĐÚNG EWS URL + Tài khoản Mailbox đã lưu trước đó.
+      let testMailboxPass = ewsMailboxPass;
+      if (!testMailboxPass) {
+        const savedConfig = await getEmailConfig();
+        if (savedConfig.ewsUrl !== ewsUrl || savedConfig.ewsMailboxUser !== ewsMailboxUser) {
+          return res.status(400).json({ error: 'Cấu hình EWS chưa có mật khẩu mailbox — vui lòng nhập mật khẩu để gửi thử (mật khẩu đã lưu thuộc về EWS URL/Tài khoản khác).' });
+        }
+        try {
+          testMailboxPass = savedConfig.ewsPassEnc ? decryptSecret(savedConfig.ewsPassEnc) : null;
+        } catch (err) {
+          console.error('⛔ Không giải mã được mật khẩu mailbox (EWS) đã lưu:', err.message);
+        }
+        if (!testMailboxPass) {
+          return res.status(400).json({ error: 'Chưa có mật khẩu mailbox đã lưu — vui lòng nhập mật khẩu để gửi thử.' });
+        }
+      }
+      const result = await sendMail({
+        to,
+        subject: '[VPDT] Email thử nghiệm cấu hình Exchange (EWS)',
+        text: `Đây là email thử nghiệm để xác minh cấu hình gửi email qua Exchange Web Services (mailbox: ${ewsMailboxUser}). Nếu bạn nhận được email này, cấu hình đang hoạt động đúng.`,
+        ews: { enabled: true, ewsUrl, mailboxUser: ewsMailboxUser, mailboxPass: testMailboxPass }
+      });
+      if (result.simulated) {
+        return res.status(400).json({ error: 'Thiếu thông tin cấu hình EWS, không thể gửi thử' });
+      }
+      if (result.failed.length) {
+        const detail = result.errorMessage ? ` — Lỗi: ${result.errorMessage}` : '';
+        return res.status(502).json({ error: `Exchange (EWS) từ chối/lỗi gửi thử${detail}` });
+      }
+      return res.json({ ok: true, host: result.host, port: result.port });
+    } catch (err) {
+      return sendServerError(res, 500, err, 'POST /api/send-email/test', 'Không thể gửi email thử qua EWS');
     }
   }
 

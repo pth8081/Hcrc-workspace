@@ -10,7 +10,7 @@
 // cáo thường có vòng đời ngắn hơn nhiều so với hợp đồng/giấy phép, không cần cấu hình admin riêng như
 // contractExpiryReminderDays).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -130,7 +130,8 @@ async function checkReportPeriodDeadlineReminders() {
                 host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
                 user: smtpUser, pass: smtpPass,
                 from: emailConfig.senderEmail,
-                graph: resolveGraphOption(emailConfig)
+                graph: resolveGraphOption(emailConfig),
+                ews: resolveEwsOption(emailConfig)
               });
             } catch (err) {
               console.error('⛔ [Nhắc hạn Báo Cáo Định Kỳ] Gửi email thật thất bại:', err.message);

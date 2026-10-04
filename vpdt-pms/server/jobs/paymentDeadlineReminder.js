@@ -14,7 +14,7 @@
 // Theo dõi "đã nhắc ngưỡng nào" Ở TỪNG ĐỢT (installment.notifiedThresholds), không phải ở cả đề nghị,
 // vì mỗi đợt có dueDate riêng — khác contractExpiryReminder.js (1 hợp đồng chỉ có 1 endDate).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -124,7 +124,8 @@ async function checkPaymentDeadlineReminders() {
                 host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
                 user: smtpUser, pass: smtpPass,
                 from: emailConfig.senderEmail,
-                graph: resolveGraphOption(emailConfig)
+                graph: resolveGraphOption(emailConfig),
+                ews: resolveEwsOption(emailConfig)
               });
             } catch (err) {
               console.error('⛔ [Nhắc hạn Thanh Toán] Gửi email thật thất bại:', err.message);

@@ -9,7 +9,7 @@
 // user.managerUsername, cùng field phẳng đã dùng ở isManagerOf()/lib/employeeProfile.js). Hợp đồng
 // INDEFINITE (endDate null) không bao giờ hết hạn -> bỏ qua tự nhiên (daysUntil() trả null).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -125,7 +125,8 @@ async function checkLaborContractExpiryReminders() {
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,
-              graph: resolveGraphOption(emailConfig)
+              graph: resolveGraphOption(emailConfig),
+              ews: resolveEwsOption(emailConfig)
             });
           } catch (err) {
             console.error('⛔ [Nhắc hạn Hợp Đồng Lao Động] Gửi email thật thất bại:', err.message);

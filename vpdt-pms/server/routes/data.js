@@ -421,13 +421,15 @@ function stripPasswords(users) {
 // "write-only" như mật khẩu đăng nhập: để trống ô khi Sửa = giữ nguyên).
 function sanitizeEmailConfig(emailConfig) {
   if (!emailConfig || typeof emailConfig !== 'object') return emailConfig;
-  const { smtpPassEnc, graphClientSecretEnc, ...rest } = emailConfig;
+  const { smtpPassEnc, graphClientSecretEnc, ewsPassEnc, ...rest } = emailConfig;
   return {
     ...rest,
     hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc),
     // Cùng khuôn hasSmtpAuth ở trên — Client Secret (Microsoft Graph API) cũng write-only, chỉ trả
     // có/không đã cấu hình, không bao giờ trả lại giá trị đã mã hoá ra ngoài.
-    hasGraphAuth: !!(emailConfig.graphTenantId && emailConfig.graphClientId && graphClientSecretEnc)
+    hasGraphAuth: !!(emailConfig.graphTenantId && emailConfig.graphClientId && graphClientSecretEnc),
+    // Mật khẩu mailbox (Exchange EWS, 10/2026) cũng write-only theo cùng quy ước trên.
+    hasEwsAuth: !!(emailConfig.ewsUrl && emailConfig.ewsMailboxUser && ewsPassEnc)
   };
 }
 
@@ -903,6 +905,9 @@ async function prepareEmailConfigForSave(payload) {
   const {
     smtpPassPlain, smtpPassEnc: _ignoredFromClient,
     graphClientSecretPlain, graphClientSecretEnc: _ignoredGraphFromClient,
+    // Mật khẩu mailbox của phương thức gửi Exchange (EWS, 10/2026, "xác thực trực tiếp bằng mailbox
+    // qua HTTPS") theo ĐÚNG khuôn write-only y hệt 2 secret trên.
+    ewsPassPlain, ewsPassEnc: _ignoredEwsFromClient,
     ...rest
   } = payload || {};
   const prior = await getAppDataValue('emailConfig');
@@ -922,7 +927,15 @@ async function prepareEmailConfigForSave(payload) {
       throw new HttpError(400, `Không thể lưu Client Secret (Microsoft Graph API): ${err.message}`);
     }
   }
-  return { ...rest, smtpPassEnc, graphClientSecretEnc };
+  let ewsPassEnc = prior?.ewsPassEnc;
+  if (ewsPassPlain) {
+    try {
+      ewsPassEnc = encryptSecret(ewsPassPlain);
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu mật khẩu mailbox (Exchange EWS): ${err.message}`);
+    }
+  }
+  return { ...rest, smtpPassEnc, graphClientSecretEnc, ewsPassEnc };
 }
 
 // headerValueEnc là write-only ở giao diện (ô luôn hiện trống, xem index.html) — cùng quy ước

@@ -5198,17 +5198,20 @@ never received", sai tài khoản/mật khẩu...) thay vì câu chung "kiểm t
 log server" như trước — admin không cần quyền SSH vào máy chủ vẫn tự chẩn
 đoán được nguyên nhân.
 
-**Loại Email Gateway (preset Postfix/Exchange/Exchange Online/Gmail/Tuỳ
-Chỉnh)** (10/2026, yêu cầu người dùng có cả Postfix nội bộ VÀ 1 hệ thống
-Exchange yêu cầu xác thực — cập nhật thêm "Exchange Online (Graph API)" khi
-người dùng làm rõ muốn cơ chế "access mailbox trực tiếp" cho Exchange Online,
-không phải SMTP port 587, và muốn GIỮ LẠI cả 2 lựa chọn Exchange song song —
-cùng Gmail) — 5 nút chọn nhanh ngay đầu form, tự điền gợi ý đúng
-Host/Port/Mã Hoá/Yêu Cầu Xác Thực theo từng loại. **Lưu ý quan trọng**: hệ
-thống vẫn chỉ gửi qua **1 cấu hình DUY NHẤT tại 1 thời điểm** (không phải
-chọn gateway riêng cho từng email gửi đi) — các nút này chỉ là "mẫu điền
-nhanh" giúp admin không phải tự tra cứu đúng thông số chuẩn của từng loại,
-tránh lặp lại lỗi Postfix port 465 đã vá ở trên.
+**Loại Email Gateway (preset Postfix/Exchange/Exchange Online/Exchange EWS/
+Gmail/Tuỳ Chỉnh)** (10/2026, yêu cầu người dùng có cả Postfix nội bộ VÀ 1 hệ
+thống Exchange yêu cầu xác thực — cập nhật thêm "Exchange Online (Graph API)"
+khi người dùng làm rõ muốn cơ chế "access mailbox trực tiếp" cho Exchange
+Online, không phải SMTP port 587, rồi cập nhật tiếp "Exchange (EWS)" khi người
+dùng làm rõ muốn 1 cách "access mailbox trực tiếp" khác qua HTTPS nhưng xác
+thực TRỰC TIẾP bằng mailbox (không cần đăng ký Azure AD App như Graph API) —
+và muốn GIỮ LẠI cả 3 lựa chọn Exchange song song — cùng Gmail) — 6 nút chọn
+nhanh ngay đầu form, tự điền gợi ý đúng Host/Port/Mã Hoá/Yêu Cầu Xác Thực theo
+từng loại. **Lưu ý quan trọng**: hệ thống vẫn chỉ gửi qua **1 cấu hình DUY
+NHẤT tại 1 thời điểm** (không phải chọn gateway riêng cho từng email gửi đi)
+— các nút này chỉ là "mẫu điền nhanh" giúp admin không phải tự tra cứu đúng
+thông số chuẩn của từng loại, tránh lặp lại lỗi Postfix port 465 đã vá ở
+trên.
 
 - **Postfix** — relay nội bộ theo IP nguồn, **THƯỜNG KHÔNG cần xác thực**
   (khác hẳn Exchange/Gmail) — preset điền Port 465 + SSL, **không ép** bật ô
@@ -5245,6 +5248,29 @@ tránh lặp lại lỗi Postfix port 465 đã vá ở trên.
   **"Exchange (SMTP)"** ở trên **vẫn được giữ nguyên** làm phương thức riêng
   — 2 lựa chọn Exchange tồn tại song song, không thay thế nhau, admin tự
   chọn đúng cách tenant của mình đang hỗ trợ.
+- **Exchange (EWS)** — **PHƯƠNG THỨC GỬI THỨ 3**, cũng "access mailbox trực
+  tiếp" qua HTTPS như Graph API ở trên, nhưng xác thực **TRỰC TIẾP bằng tài
+  khoản/mật khẩu của chính mailbox** dùng để gửi (HTTP Basic Auth, SOAP
+  `CreateItem` — xem `lib/ewsMailer.js`) — **KHÔNG cần đăng ký Azure AD App**
+  như Graph API, đơn giản hơn hẳn, nhưng vẫn **không dùng port 587** như
+  SMTP thường. Khi chọn, form ẩn hẳn khối SMTP lẫn khối Graph API, hiện khối
+  riêng **"Cấu Hình Exchange Web Services (EWS)"** với 3 ô:
+  - **EWS URL** — địa chỉ endpoint EWS (VD
+    `https://mail.yourcompany.com/EWS/Exchange.asmx` cho Exchange on-premise,
+    hoặc URL EWS riêng của dịch vụ mail tương thích Exchange khác).
+  - **Tài Khoản Mailbox (UPN)** — địa chỉ email đầy đủ của mailbox dùng để
+    gửi (VD `notify@yourcompany.com`).
+  - **Mật Khẩu Mailbox** — mật khẩu đăng nhập CHÍNH mailbox đó (write-only
+    như mật khẩu SMTP/Client Secret Graph API — để trống khi sửa = giữ
+    nguyên mật khẩu đã lưu).
+  Dùng cho **Exchange on-premise** hoặc dịch vụ mail **tương thích giao thức
+  Exchange** khác tự lưu trữ EWS endpoint riêng (VD **AWS WorkMail** — cùng
+  giao thức EWS, chỉ khác URL endpoint theo vùng/tổ chức đã đăng ký). **Lưu ý
+  quan trọng**: Microsoft đang dần **NGỪNG hỗ trợ EWS cho Exchange Online**
+  (dự kiến hết năm 2026) — EWS vẫn hoạt động tốt và không bị ảnh hưởng cho
+  Exchange on-premise/AWS WorkMail, nhưng KHÔNG nên chọn cách này cho
+  Exchange Online lâu dài (dùng **"Exchange Online (Graph API)"** ở trên cho
+  trường hợp đó).
 - **Gmail** — cũng **LUÔN yêu cầu xác thực**. Preset điền sẵn Host
   `smtp.gmail.com` + Port 465 + SSL, ép bật + khoá ô xác thực. Từ 2022 Google
   đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật **Xác minh 2

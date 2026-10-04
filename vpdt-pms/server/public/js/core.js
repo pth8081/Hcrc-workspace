@@ -6986,10 +6986,11 @@ const EMAIL_GATEWAY_HINTS = {
   POSTFIX: 'Postfix nội bộ (relay theo IP nguồn) thường KHÔNG cần xác thực — port chuẩn SSL 465 (khuyến nghị) hoặc 25 (không mã hoá, chỉ dùng trong mạng nội bộ tin cậy). Nếu Postfix có cấu hình SASL yêu cầu đăng nhập, vẫn bật được ô "Yêu cầu xác thực" bên dưới như bình thường.',
   EXCHANGE: 'Exchange (SMTP) LUÔN yêu cầu xác thực (SMTP AUTH) — xác thực TRỰC TIẾP vào 1 mailbox dùng để gửi, không gửi ẩn danh được (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Dùng port 587 (STARTTLS) cho kết nối submission có xác thực — KHÔNG dùng port 25 (port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP nguồn, không áp dụng xác thực tài khoản ở port này). Tài Khoản SMTP = địa chỉ email ĐẦY ĐỦ của mailbox (VD notify@yourcompany.com), Mật Khẩu SMTP = mật khẩu đăng nhập mailbox đó. Nếu Exchange Online tenant đã tắt SMTP AUTH (Microsoft đang hạn chế dần), dùng lựa chọn "Exchange Online (Graph API)" bên cạnh thay thế.',
   EXCHANGE_GRAPH: 'Exchange Online (Microsoft Graph API) — "access mailbox trực tiếp" bằng OAuth2 app-only, KHÔNG dùng SMTP/port 587. Tạo 1 Azure AD App (Azure Portal → App Registrations → New registration), vào "API permissions" thêm quyền ỨNG DỤNG (Application, không phải Delegated) "Mail.Send" của Microsoft Graph rồi bấm "Grant admin consent", tạo Client Secret tại "Certificates & secrets". Điền Tenant ID + Client ID + Client Secret + Mailbox Người Gửi (địa chỉ email mailbox sẽ gửi thay) bên dưới. Cách này không bị ảnh hưởng bởi việc Microsoft hạn chế/ngừng Basic Auth SMTP AUTH ở nhiều tenant Exchange Online.',
+  EXCHANGE_EWS: 'Exchange (EWS — Exchange Web Services) — xác thực TRỰC TIẾP bằng tài khoản/mật khẩu của chính mailbox dùng để gửi (HTTP Basic Auth qua HTTPS), KHÔNG dùng SMTP/port 587, KHÔNG cần đăng ký Azure AD App như Graph API. Điền EWS URL (VD https://mail.yourcompany.com/EWS/Exchange.asmx) + Tài khoản Mailbox (UPN) + Mật khẩu mailbox bên dưới. Dùng cho Exchange on-premise hoặc dịch vụ mail tương thích Exchange protocol (VD AWS WorkMail — cùng giao thức EWS, chỉ khác URL endpoint). Lưu ý: Microsoft đang dần ngừng hỗ trợ EWS cho Exchange Online (dự kiến hết năm 2026) — vẫn hoạt động tốt cho Exchange on-premise/AWS WorkMail, không ảnh hưởng.',
   GMAIL: 'Gmail LUÔN yêu cầu xác thực (đã tự khoá bật ô "Yêu cầu xác thực" bên dưới). Từ 2022 Google đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật Xác minh 2 bước (2FA) cho tài khoản Google rồi tạo "Mật khẩu ứng dụng" (App Password, 16 ký tự) tại myaccount.google.com/apppasswords, dùng mã đó làm Mật Khẩu SMTP (KHÔNG dùng mật khẩu đăng nhập Gmail thường).',
   CUSTOM: 'Tự nhập đầy đủ thông số theo nhà cung cấp SMTP khác (VD SendGrid, SES, Mailgun...) hoặc 1 cấu hình Postfix/Exchange đặc biệt không theo mặc định ở các nút trên.'
 };
-const EMAIL_GATEWAY_TYPES = ['POSTFIX', 'EXCHANGE', 'EXCHANGE_GRAPH', 'GMAIL', 'CUSTOM'];
+const EMAIL_GATEWAY_TYPES = ['POSTFIX', 'EXCHANGE', 'EXCHANGE_GRAPH', 'EXCHANGE_EWS', 'GMAIL', 'CUSTOM'];
 const EMAIL_GATEWAY_FORCED_AUTH = new Set(['EXCHANGE', 'GMAIL']);
 
 // Chỉ đồng bộ UI (màu nút đang chọn/khoá-mở ô xác thực/hiện đúng khối SMTP hay Graph API/đổi gợi ý) —
@@ -7007,11 +7008,14 @@ function refreshEmailGatewayPresetUI(type) {
   const forced = EMAIL_GATEWAY_FORCED_AUTH.has(type);
   authEl.disabled = forced;
   if (forced && !authEl.checked) { authEl.checked = true; toggleSmtpAuthFields(); }
-  // Exchange Online (Graph API) không dùng BẤT KỲ field SMTP nào (Host/Port/Mã hoá/Xác thực) — ẩn hẳn,
-  // hiện khối Graph API riêng thay vào đó. Mọi preset khác (kể cả "Exchange" SMTP port 587) đi ngược lại.
+  // Exchange Online (Graph API) và Exchange (EWS) không dùng BẤT KỲ field SMTP nào (Host/Port/Mã
+  // hoá/Xác thực) — ẩn hẳn, hiện đúng 1 khối riêng (Graph API hoặc EWS) thay vào đó. Mọi preset khác
+  // (kể cả "Exchange" SMTP port 587) đi ngược lại.
   const isGraph = type === 'EXCHANGE_GRAPH';
-  document.querySelectorAll('.smtp-only-field, .smtp-only-block').forEach(el => el.classList.toggle('hidden', isGraph));
+  const isEws = type === 'EXCHANGE_EWS';
+  document.querySelectorAll('.smtp-only-field, .smtp-only-block').forEach(el => el.classList.toggle('hidden', isGraph || isEws));
   document.querySelectorAll('.graph-only-block').forEach(el => el.classList.toggle('hidden', !isGraph));
+  document.querySelectorAll('.ews-only-block').forEach(el => el.classList.toggle('hidden', !isEws));
 }
 
 // Bấm 1 trong 5 nút preset: áp dụng gợi ý Host(Gmail)/Port/Mã hoá chuẩn rồi đồng bộ UI như trên.
@@ -7078,6 +7082,10 @@ async function saveEmailConfig(e) {
     if (!document.getElementById('cfgGraphTenantId').value.trim() || !document.getElementById('cfgGraphClientId').value.trim() || !document.getElementById('cfgGraphSenderMailbox').value.trim()) {
       return alert('⛔ Vui lòng nhập đủ Tenant ID, Client ID và Mailbox Người Gửi (Microsoft Graph API)!');
     }
+  } else if (gatewayType === 'EXCHANGE_EWS') {
+    if (!document.getElementById('cfgEwsUrl').value.trim() || !document.getElementById('cfgEwsMailboxUser').value.trim()) {
+      return alert('⛔ Vui lòng nhập đủ EWS URL và Tài khoản Mailbox (Exchange EWS)!');
+    }
   } else {
     if (!document.getElementById('cfgSmtpHost').value.trim()) {
       return alert('⛔ Vui lòng nhập SMTP Server!');
@@ -7110,6 +7118,13 @@ async function saveEmailConfig(e) {
     // "graphClientSecretPlain" cùng quy ước write-only như smtpPassPlain ở trên.
     graphClientSecretPlain: document.getElementById('cfgGraphClientSecretPlain').value,
     graphSenderMailbox: document.getElementById('cfgGraphSenderMailbox').value.trim(),
+    // Cấu hình Exchange Web Services (EWS, 10/2026, "xác thực trực tiếp bằng mailbox qua HTTPS") — chỉ
+    // CÓ TÁC DỤNG khi smtpGatewayType ở trên = "EXCHANGE_EWS" (xem resolveEwsOption() ở lib/mailer.js),
+    // cùng quy ước gửi kèm bất kể đang chọn phương thức nào như Graph API ở trên.
+    ewsUrl: document.getElementById('cfgEwsUrl').value.trim(),
+    ewsMailboxUser: document.getElementById('cfgEwsMailboxUser').value.trim(),
+    // "ewsPassPlain" cùng quy ước write-only như smtpPassPlain/graphClientSecretPlain ở trên.
+    ewsPassPlain: document.getElementById('cfgEwsPassPlain').value,
     contractExpiryReminderDays: reminderDays,
     contractExpiryCcEmails: parseEmailListInput(document.getElementById('cfgContractReminderCc').value),
     licenseExpiryReminderDays: licenseReminderDays,
@@ -7124,6 +7139,7 @@ async function saveEmailConfig(e) {
   if (!saved) { DB.emailConfig = prevEmailConfig; return; }
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
   document.getElementById('cfgGraphClientSecretPlain').value = ''; // cùng quy ước write-only
+  document.getElementById('cfgEwsPassPlain').value = ''; // cùng quy ước write-only
   logSystemAction('CONFIG', 'UPDATE_SMTP_CONFIG', 'Cập nhật SMTP server thành công.', 'SUCCESS', 'SMTP_CONFIG');
   alert('✅ Đã lưu cấu hình Email thành công!');
 }
@@ -7156,6 +7172,9 @@ function loadEmailConfigToForm() {
   document.getElementById('cfgGraphClientId').value = DB.emailConfig.graphClientId || '';
   document.getElementById('cfgGraphClientSecretPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
   document.getElementById('cfgGraphSenderMailbox').value = DB.emailConfig.graphSenderMailbox || '';
+  document.getElementById('cfgEwsUrl').value = DB.emailConfig.ewsUrl || '';
+  document.getElementById('cfgEwsMailboxUser').value = DB.emailConfig.ewsMailboxUser || '';
+  document.getElementById('cfgEwsPassPlain').value = ''; // write-only — không bao giờ có giá trị thật để hiện lại
   refreshEmailGatewayPresetUI(DB.emailConfig.smtpGatewayType || 'CUSTOM');
   document.getElementById('cfgSenderEmail').value = DB.emailConfig.senderEmail || 'dms-noreply@company.com';
   document.getElementById('cfgContractReminderDays').value = (DB.emailConfig.contractExpiryReminderDays && DB.emailConfig.contractExpiryReminderDays.length
@@ -7308,6 +7327,7 @@ async function sendTestEmail() {
   const smtpAuthEnabled = document.getElementById('cfgSmtpAuthEnabled').checked;
   const gatewayType = document.getElementById('cfgSmtpGatewayType').value;
   const isGraph = gatewayType === 'EXCHANGE_GRAPH';
+  const isEws = gatewayType === 'EXCHANGE_EWS';
   try {
     const res = await fetch('/api/send-email/test', {
       method: 'POST',
@@ -7319,6 +7339,12 @@ async function sendTestEmail() {
         graphClientId: document.getElementById('cfgGraphClientId').value.trim(),
         graphClientSecret: document.getElementById('cfgGraphClientSecretPlain').value,
         graphSenderMailbox: document.getElementById('cfgGraphSenderMailbox').value.trim()
+      } : isEws ? {
+        to,
+        sendMethod: 'EWS',
+        ewsUrl: document.getElementById('cfgEwsUrl').value.trim(),
+        ewsMailboxUser: document.getElementById('cfgEwsMailboxUser').value.trim(),
+        ewsMailboxPass: document.getElementById('cfgEwsPassPlain').value
       } : {
         to,
         host: document.getElementById('cfgSmtpHost').value.trim(),
@@ -7336,6 +7362,8 @@ async function sendTestEmail() {
       resultEl.className = 'text-[11px] font-semibold text-green-700';
       resultEl.textContent = isGraph
         ? '✅ Đã gửi thử thành công qua Microsoft Graph API!'
+        : isEws
+        ? '✅ Đã gửi thử thành công qua Exchange (EWS)!'
         : `✅ Đã gửi thử thành công tới máy chủ SMTP ${body.host}:${body.port}!`;
     } else {
       resultEl.className = 'text-[11px] font-semibold text-red-600';
