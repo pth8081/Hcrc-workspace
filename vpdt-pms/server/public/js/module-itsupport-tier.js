@@ -507,6 +507,23 @@ function resetWorkflowForm() {
   document.getElementById('stepBuilderContainer').innerHTML = '';
   document.getElementById('btnCancelWf').classList.add('hidden');
   addStepRow('Phê duyệt cấp 1');
+  // Pattern "thu gọn form nhập" (10/2026): hàm này vốn đã được gọi ở cả nút "Hủy" lẫn SAU KHI lưu thành
+  // công (saveWorkflowTemplate()) — tận dụng lại đúng 2 điểm gọi đó để thu gọn (ẩn) khung form, không
+  // cần rải thêm lệnh ẩn ở từng nơi. openWorkflowTemplateForm() gọi hàm này rồi tự mở lại ngay sau.
+  document.getElementById('workflowTemplateFormWrap')?.classList.add('hidden');
+}
+
+// openWorkflowTemplateForm()/closeWorkflowTemplateForm(): CHỈ lo phần hiện/ẩn khung (pattern "thu gọn
+// form nhập", 10/2026) — không đụng logic lưu/sửa/xoá mẫu quy trình. Gọi resetWorkflowForm() trước khi
+// mở để đảm bảo LUÔN có sẵn đúng 1 dòng bước mặc định + mã tự sinh ngay cả lần đầu tiên mở form trong
+// phiên (trước đây resetWorkflowForm() chỉ được gọi sau khi lưu/bấm Hủy — lần mở ĐẦU TIÊN chưa từng gọi
+// qua nên #stepBuilderContainer sẽ trống 0 dòng nếu không chủ động gọi lại ở đây).
+function openWorkflowTemplateForm() {
+  resetWorkflowForm();
+  document.getElementById('workflowTemplateFormWrap')?.classList.remove('hidden');
+}
+function closeWorkflowTemplateForm() {
+  document.getElementById('workflowTemplateFormWrap')?.classList.add('hidden');
 }
 
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, cụm Hệ Thống/Admin/Cấu Hình, mức Cao + Trung bình — gộp 2 phát
@@ -566,6 +583,10 @@ function editWorkflowTemplate(code) {
   const wf = DB.workflows.find(w => w.id === code);
   if (!wf) return;
 
+  // Pattern "thu gọn form nhập" (10/2026): form mặc định ẨN, "Sửa" phải tự mở lại (KHÔNG gọi
+  // resetWorkflowForm()/openWorkflowTemplateForm() ở đây — sẽ xoá mất dữ liệu đang nạp bên dưới).
+  document.getElementById('workflowTemplateFormWrap')?.classList.remove('hidden');
+
   document.getElementById('editingWfCode').value = wf.id;
   document.getElementById('wfCode').value = wf.id;
   document.getElementById('wfCode').disabled = true;
@@ -576,6 +597,7 @@ function editWorkflowTemplate(code) {
   wf.steps.forEach(s => addStepRow(s.name, s.actionLabel || ''));
 
   document.getElementById('btnCancelWf').classList.remove('hidden');
+  document.getElementById('wfName').closest('form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Quét ĐỆ QUY 1 map cấu hình quy trình để tìm mọi "ô" đang gán đúng mẫu `code`. Các map này KHÔNG cùng

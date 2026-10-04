@@ -46,6 +46,11 @@
            #wfSubmissionTypeTabs bên màn Quy Trình & Phê Duyệt), xem renderFormSubTabsBar(). -->
       <div id="formSubTabsBar" class="hidden gap-2 flex-wrap border-t border-rose-200 pt-3"></div>
 
+      <!-- Pattern "thu gọn form nhập" (10/2026): form mặc định ẨN, mở qua nút "+ Thêm Trường" cạnh tiêu
+           đề bảng bên dưới (xem openFormFieldForm()/closeFormFieldForm(), module-formbuilder-nav.js) —
+           editCustomField()/editCoreField() (nút "Sửa" của bảng) tự mở lại form này. KHÔNG đổi logic
+           nghiệp vụ thêm/sửa/xoá trường, chỉ đổi ẩn/hiện khung. -->
+      <div id="formFieldFormWrap" class="hidden">
       <form data-op-submit="addCustomField" class="bg-white p-4 rounded border space-y-3 text-xs">
         <h4 class="font-bold text-gray-800 text-sm flex items-center gap-1"><span id="lblFormFieldFormMode">➕ Thêm Trường Dữ Liệu Bổ Sung Cho:</span> <span id="lblActiveFormName" class="text-rose-600 font-extrabold">Văn Bản Trình / Tờ Trình</span></h4>
 
@@ -82,13 +87,18 @@
 
         <div class="flex justify-end gap-2">
           <button type="button" id="btnCancelEditField" data-op="cancelEditCustomField" class="hidden bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300 transition">Hủy Sửa</button>
+          <button type="button" data-op="closeFormFieldForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded font-bold hover:bg-gray-300 transition">✕ Thu Gọn</button>
           <button type="submit" id="btnSubmitCustomField" class="bg-rose-600 text-white px-4 py-1.5 rounded font-bold hover:bg-rose-700 transition">Thêm Trường Vào Biểu Mẫu</button>
         </div>
       </form>
+      </div>
 
       <div class="bg-white rounded border overflow-hidden">
-        <div class="p-3 bg-gray-50 border-b flex justify-between items-center">
-          <h4 class="font-bold text-gray-800 text-xs">Cấu Trúc Tất Cả Các Trường Đang Áp Dụng</h4>
+        <div class="p-3 bg-gray-50 border-b flex justify-between items-center gap-2 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="font-bold text-gray-800 text-xs">Cấu Trúc Tất Cả Các Trường Đang Áp Dụng</h4>
+            <button type="button" data-op="openFormFieldForm" id="btnFormFieldNew" class="bg-rose-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-rose-700">+ Thêm Trường</button>
+          </div>
           <span class="text-xs text-gray-500 italic">Trường mặc định: bấm Sửa để đổi Nhãn hiển thị / Bắt buộc (riêng vài trường dropdown còn sửa được cả danh sách lựa chọn) — không xóa được. Trường bổ sung: sửa/xóa/sắp xếp tự do.</span>
         </div>
         <div class="overflow-x-auto">
@@ -161,8 +171,16 @@
 
     <!-- ĐỊNH NGHĨA CÁC MẪU QUY TRÌNH (WORKFLOW TEMPLATES) -->
     <div class="bg-slate-50 p-4 rounded border space-y-4">
-      <h3 class="font-bold text-slate-800 text-base">🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt</h3>
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="font-bold text-slate-800 text-base">🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt</h3>
+        <!-- Pattern "thu gọn form nhập" (10/2026): form mặc định ẨN, mở qua nút này — xem
+             openWorkflowTemplateForm()/closeWorkflowTemplateForm() (module-itsupport-tier.js), KHÔNG đổi
+             logic lưu/sửa/xoá mẫu quy trình, chỉ đổi ẩn/hiện khung. editWorkflowTemplate() (nút "Sửa" ở
+             bảng bên dưới) tự mở lại form này. -->
+        <button type="button" data-op="openWorkflowTemplateForm" id="btnWorkflowTemplateNew" class="bg-emerald-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">+ Thêm Mẫu Quy Trình</button>
+      </div>
 
+      <div id="workflowTemplateFormWrap" class="hidden">
       <form data-op-submit="saveWorkflowTemplate" class="bg-white p-3 rounded border space-y-3">
         <input id="editingWfCode" type="hidden">
 
@@ -186,9 +204,11 @@
 
         <div class="flex justify-end gap-2">
           <button id="btnCancelWf" type="button" data-op="resetWorkflowForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy</button>
+          <button type="button" data-op="closeWorkflowTemplateForm" class="bg-gray-200 text-gray-700 text-xs px-3 py-1.5 rounded font-bold hover:bg-gray-300">✕ Thu Gọn</button>
           <button id="btnSaveWf" type="submit" class="bg-emerald-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-emerald-700">Lưu Mẫu Quy Trình</button>
         </div>
       </form>
+      </div>
 
       <div class="overflow-x-auto bg-white rounded border">
         <table class="w-full text-xs text-left">
@@ -299,9 +319,19 @@
       <div class="text-xs text-amber-900 mt-1">Mỗi cấu hình bên dưới chỉ set SỐ BƯỚC (mẫu quy trình) cho những phòng ban/mức <b>CHƯA từng cấu hình</b>, trong PHẠM VI CÁC MODULE bạn chọn riêng cho cấu hình đó — KHÔNG đụng module ngoài phạm vi, KHÔNG tự gán người duyệt, KHÔNG đụng tới mục đã có cấu hình sẵn. Vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt/sửa lại sau khi áp dụng.</div>
     </div>
 
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <h3 class="font-bold text-gray-800 text-sm">📋 Các Cấu Hình Áp Dụng Nhanh Đã Tạo</h3>
+      <!-- Pattern "thu gọn form nhập" (10/2026): form mặc định ẨN, mở qua nút này — xem
+           openQuickApplyConfigForm()/closeQuickApplyConfigForm() (module-workflow.js), KHÔNG đổi logic
+           lưu/áp dụng cấu hình, chỉ đổi ẩn/hiện khung. editQuickApplyConfig() (nút "✏️ Sửa" ở mỗi thẻ
+           cấu hình) tự mở lại form này VÀ tự nạp lại đúng lưới checkbox module/khối gán người duyệt theo
+           bước (renderQuickApplyPositionSteps() gọi lại bên trong editQuickApplyConfig()). -->
+      <button type="button" data-op="openQuickApplyConfigForm" id="btnQuickApplyConfigNew" class="bg-amber-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-amber-700">+ Thêm Cấu Hình Áp Dụng Nhanh</button>
+    </div>
+
     <div id="quickApplyConfigList" class="space-y-3"></div>
 
-    <div id="quickApplyAddForm" class="bg-white p-4 rounded border space-y-3">
+    <div id="quickApplyAddForm" class="hidden bg-white p-4 rounded border space-y-3">
       <h3 class="font-bold text-gray-800 text-sm">➕ Thêm / Sửa Cấu Hình Áp Dụng Nhanh</h3>
       <form data-op-submit="saveQuickApplyConfig" class="space-y-3">
         <div>
@@ -318,6 +348,7 @@
         </div>
         <div class="flex justify-end gap-2">
           <button id="btnCancelQaConfig" type="button" data-op="resetQuickApplyConfigForm" class="hidden bg-gray-400 text-white text-xs px-3 py-1.5 rounded font-bold">Hủy Sửa</button>
+          <button type="button" data-op="closeQuickApplyConfigForm" class="bg-gray-200 text-gray-700 text-xs px-3 py-1.5 rounded font-bold hover:bg-gray-300">✕ Thu Gọn</button>
           <button id="btnSaveQaConfig" type="submit" class="bg-amber-600 text-white text-xs px-4 py-1.5 rounded font-bold hover:bg-amber-700">💾 Lưu Cấu Hình</button>
         </div>
       </form>
@@ -635,15 +666,22 @@
 
     <!-- API XÁC THỰC NGOÀI (verify-credentials cho ứng dụng khác) -->
     <div id="adminSubExtAuth" class="hidden bg-cyan-50 p-4 rounded border border-cyan-300 space-y-4">
-      <div>
-        <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🔑 API Xác Thực Tài Khoản Cho Ứng Dụng Ngoài</h3>
-        <p class="text-[11px] text-gray-500 italic mt-1">Cấp API key cho 1 ứng dụng/hệ thống KHÁC, dùng chung 1 key cho 2 việc — mọi lệnh gọi đều kèm header <code class="bg-white px-1 rounded border">Authorization: Bearer &lt;API key&gt;</code>:</p>
-        <ul class="text-[11px] text-gray-500 list-disc pl-5 space-y-1">
-          <li><b>Xác thực tài khoản/mật khẩu:</b> <code class="bg-white px-1 rounded border">POST /api/external/verify-credentials</code>, body <code class="bg-white px-1 rounded border">{"account","password"}</code>, trả về <code class="bg-white px-1 rounded border">{"success": true|false}</code>. Đây KHÔNG phải đăng nhập hộ (không cấp phiên/cookie) — chỉ trả lời đúng/sai.</li>
-          <li><b>Đồng bộ danh bạ nhân sự:</b> <code class="bg-white px-1 rounded border">GET /api/external/users</code> — trả vị trí (Văn phòng/Siêu Thị)/mã nhân viên (username)/tên nhân viên/điện thoại/phòng/chức danh của TOÀN BỘ tài khoản; thêm <code class="bg-white px-1 rounded border">?account=&lt;username&gt;</code> để tra cứu đúng 1 hồ sơ. Không bao giờ kèm mật khẩu.</li>
-        </ul>
+      <div class="flex items-start justify-between gap-2 flex-wrap">
+        <div>
+          <h3 class="font-bold text-cyan-900 text-sm flex items-center gap-1">🔑 API Xác Thực Tài Khoản Cho Ứng Dụng Ngoài</h3>
+          <p class="text-[11px] text-gray-500 italic mt-1">Cấp API key cho 1 ứng dụng/hệ thống KHÁC, dùng chung 1 key cho 2 việc — mọi lệnh gọi đều kèm header <code class="bg-white px-1 rounded border">Authorization: Bearer &lt;API key&gt;</code>:</p>
+          <ul class="text-[11px] text-gray-500 list-disc pl-5 space-y-1">
+            <li><b>Xác thực tài khoản/mật khẩu:</b> <code class="bg-white px-1 rounded border">POST /api/external/verify-credentials</code>, body <code class="bg-white px-1 rounded border">{"account","password"}</code>, trả về <code class="bg-white px-1 rounded border">{"success": true|false}</code>. Đây KHÔNG phải đăng nhập hộ (không cấp phiên/cookie) — chỉ trả lời đúng/sai.</li>
+            <li><b>Đồng bộ danh bạ nhân sự:</b> <code class="bg-white px-1 rounded border">GET /api/external/users</code> — trả vị trí (Văn phòng/Siêu Thị)/mã nhân viên (username)/tên nhân viên/điện thoại/phòng/chức danh của TOÀN BỘ tài khoản; thêm <code class="bg-white px-1 rounded border">?account=&lt;username&gt;</code> để tra cứu đúng 1 hồ sơ. Không bao giờ kèm mật khẩu.</li>
+          </ul>
+        </div>
+        <!-- Pattern "thu gọn form nhập" (10/2026): form mặc định ẨN, mở qua nút này — xem
+             openExtApiKeyForm()/closeExtApiKeyForm() (module-hethong-tabs.js), KHÔNG đổi logic tạo key,
+             chỉ đổi ẩn/hiện khung. -->
+        <button type="button" data-op="openExtApiKeyForm" id="btnExtApiKeyNew" class="bg-cyan-700 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-cyan-800 shrink-0">+ Tạo API Key</button>
       </div>
 
+      <div id="extApiKeyFormWrap" class="hidden">
       <form data-op-submit="createExternalApiKeyAction" class="flex flex-wrap items-end gap-2 bg-white p-3 rounded border text-xs">
         <div class="flex-1 min-w-[220px]">
           <label class="block font-semibold text-gray-600 mb-1">Tên / Mô tả ứng dụng dùng key này</label>
@@ -653,8 +691,10 @@
           <label class="block font-semibold text-gray-600 mb-1">IP cho phép (lớp bảo mật thứ 2 — để trống = mọi IP)</label>
           <textarea id="extApiKeyAllowedIps" rows="1" placeholder="VD: 203.0.113.10, 203.0.113.0/24 (mỗi dòng hoặc phân tách bằng dấu phẩy)" class="w-full border p-1.5 rounded"></textarea>
         </div>
+        <button type="button" data-op="closeExtApiKeyForm" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded font-bold hover:bg-gray-300">✕ Thu Gọn</button>
         <button type="submit" class="bg-cyan-700 text-white px-4 py-1.5 rounded font-bold hover:bg-cyan-800">➕ Tạo API Key</button>
       </form>
+      </div>
 
       <!-- Hộp hiện key THẬT đúng 1 lần ngay sau khi tạo — ẩn mặc định, KHÔNG có cách nào xem lại sau khi đóng -->
       <div id="extApiKeyRevealBox" class="hidden bg-amber-50 border-2 border-amber-400 rounded p-3 space-y-2">
