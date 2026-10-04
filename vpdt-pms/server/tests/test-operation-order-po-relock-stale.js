@@ -92,6 +92,9 @@ async function main() {
     await run.run('Setup: login + mở form Đặt Hàng Tại Siêu Thị', async () => {
       await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, CREATOR);
       await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ORDERS'); });
+      // Thu gọn form (10/2026) — #operationOrderForm giờ mặc định ẨN, phải bấm "+ Tạo Đơn Hàng"
+      // (openOperationOrderForm()) trước khi thao tác field bên trong.
+      await page.evaluate(() => openOperationOrderForm());
       await page.waitForSelector('#operationOrderForm', { state: 'visible' });
       await page.evaluate((src) => { (0, eval)(src); }, APPLY_PO_SEQ_SRC);
     });

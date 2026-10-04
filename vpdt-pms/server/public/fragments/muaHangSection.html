@@ -232,7 +232,15 @@
          Phê Duyệt Giá (nút "Xem danh sách đầy đủ" bên dưới). -->
     <div id="mhSubItprice" class="hidden space-y-4">
       <div class="bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
-        <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">💲 Đề Xuất Duyệt Giá Bán Lẻ</h3>
+        <!-- Thu gọn form (10/2026, yêu cầu người dùng "thu gọn form nhập") — LOẠI B, cùng khuôn
+             #itPriceCreateForm (module-vanhanh.js/module-itsupport-price.js): nút "+ Đề Xuất Mới"
+             (btnMhItPriceCreateNew) gác theo ĐÚNG quyền canProposeItPriceType() (xem enterMuaHangItPriceForm(),
+             module-muahang.js), form luôn mặc định ẨN tới khi bấm mở. Người không có quyền KHÔNG thấy nút
+             lẫn form (vẫn thấy #mhItPriceNoCreatePermNote như cũ). -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <h3 class="font-bold text-emerald-900 text-base flex items-center gap-2">💲 Đề Xuất Duyệt Giá Bán Lẻ</h3>
+          <button type="button" data-op="openMhItPriceCreateForm" id="btnMhItPriceCreateNew" class="hidden bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Đề Xuất Mới</button>
+        </div>
         <p class="text-xs text-emerald-700">Đề xuất giá bán mới cho 1 mặt hàng tại siêu thị công ty đang vận hành. Sau khi được duyệt, đội Hỗ Trợ IT sẽ áp giá vào hệ thống bán hàng rồi xác nhận hoàn thành.</p>
         <div id="mhItPriceNoCreatePermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 p-3 rounded border">⛔ Bạn không có quyền đề xuất duyệt giá bán lẻ.</div>
         <form id="mhItPriceCreateForm" data-op-submit="submitMhItPriceApproval" class="hidden bg-white p-3 rounded border text-xs space-y-3">
@@ -291,6 +299,7 @@
           <!-- "Nhóm Phê Duyệt Cuối" (10/2026) — xem chú thích tại #extraApprovalMount_DOC (docSection.html). -->
           <div id="extraApprovalMount_ITPRICE_RETAIL"></div>
           <div class="flex justify-end gap-2">
+            <button type="button" data-op="closeMhItPriceCreateForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded text-xs font-bold hover:bg-gray-300">✕ Thu Gọn</button>
             <button type="button" id="mhItPricePreviewWfBtn" data-op="previewMhItPriceWorkflow" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">🔍 Xem Quy Trình</button>
             <button type="button" data-op="confirmAndResetForm" data-arg0="mhItPriceCreateForm" data-arg1="resetMhItPriceForm" class="bg-gray-200 text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-300">↺ Làm Mới</button>
             <button type="submit" class="bg-emerald-600 text-white px-5 py-2 rounded font-bold hover:bg-emerald-700">Gửi phê duyệt</button>

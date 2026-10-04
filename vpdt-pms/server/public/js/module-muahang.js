@@ -578,27 +578,35 @@ let mhItPricePendingFile = null;
 function enterMuaHangItPriceForm() {
   activeItPriceSubTab = 'RETAIL';
   const canCreate = canProposeItPriceType(currentUser, 'RETAIL');
-  const formEl = document.getElementById('mhItPriceCreateForm');
-  if (formEl) formEl.classList.toggle('hidden', !canCreate);
+  // Thu gọn form (10/2026): quyền này TRƯỚC ĐÂY gác trực tiếp lên chính #mhItPriceCreateForm — nay chuyển
+  // gác lên NÚT "+ Đề Xuất Mới" (btnMhItPriceCreateNew, mở form qua openMhItPriceCreateForm()); form mặc
+  // định luôn ẨN (class "hidden" tĩnh), chỉ tự đóng lại ở đây khi mất quyền (an toàn, phòng khi đang mở sẵn).
+  const openBtn = document.getElementById('btnMhItPriceCreateNew');
+  if (openBtn) openBtn.classList.toggle('hidden', !canCreate);
+  if (!canCreate) document.getElementById('mhItPriceCreateForm')?.classList.add('hidden');
   const noPermNote = document.getElementById('mhItPriceNoCreatePermNote');
   if (noPermNote) noPermNote.classList.toggle('hidden', canCreate);
-  if (canCreate) {
-    const codeEl = document.getElementById('mhItPriceCode');
-    if (codeEl) codeEl.value = generateItPriceCode();
-    const deptEl = document.getElementById('mhItPriceDeptDisplay');
-    if (deptEl) deptEl.value = currentUser.dept;
-    mhItPricePendingFile = null;
-    document.getElementById('mhItPriceFileStatus').innerText = '';
-    document.getElementById('mhItPriceFilePreviewWrap').classList.add('hidden');
-    populateMhItPriceRetailZoneSelect();
-    renderMhItPriceMasterListSelect();
-  }
   renderDynamicInputsForModule('IT_PRICE_RETAIL', 'dynamicFieldsContainer_IT_PRICE_RETAIL_MH');
   // renderMhItPriceList() (module-itsupport-price.js) — danh sách đề xuất Bán Lẻ CỦA TÔI/tôi cần duyệt,
   // hiện NGAY tại đây (10/2026, yêu cầu người dùng) — gọi lại mỗi lần vào tab để chắc chắn khớp dữ liệu
   // mới nhất, dù hàm này cũng tự chạy theo mọi thay đổi itPriceApprovals (xem renderItPriceApprovals()).
   renderMhItPriceList();
   if (canCreate) renderExtraApprovalMount('ITPRICE_RETAIL', 'extraApprovalMount_ITPRICE_RETAIL');
+}
+
+// Thu gọn form "Đề Xuất Duyệt Giá Bán Lẻ" (10/2026) — LOẠI B, cùng khuôn openItPriceCreateForm()
+// (module-itsupport-price.js): tự kiểm tra lại quyền trước khi mở (an toàn, phòng khi nút lọt qua), rồi
+// gọi lại đúng các hàm khởi tạo (mã tự sinh/phòng ban/Vùng Giá Áp Dụng/Mẫu Giá...) mỗi lần mở.
+function openMhItPriceCreateForm() {
+  const formEl = document.getElementById('mhItPriceCreateForm');
+  if (!formEl) return;
+  if (!canProposeItPriceType(currentUser, 'RETAIL')) return;
+  resetMhItPriceForm();
+  populateMhItPriceRetailZoneSelect();
+  formEl.classList.remove('hidden');
+}
+function closeMhItPriceCreateForm() {
+  document.getElementById('mhItPriceCreateForm')?.classList.add('hidden');
 }
 
 function renderMhItPriceMasterListSelect() {
