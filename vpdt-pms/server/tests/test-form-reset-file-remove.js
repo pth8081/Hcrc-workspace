@@ -1215,7 +1215,9 @@ async function main() {
     await check(
       'VPP Tạo Kỳ Đăng Ký Mới: chip file đơn vppCatalogFileInput (ĐÃ có data-op-change riêng đọc file), "Làm Mới" trắng form + tính LẠI bảng Nhân Sự Theo Phòng Ban theo số thật (không giữ số sửa tay)',
       async () => {
-        await page.evaluate(() => { switchTab('vpp'); setVppSubTab('PERIODS'); });
+        // openVppNewPeriodForm() (pattern thu gọn form, 10/2026) — form "Tạo Kỳ Đăng Ký Mới" giờ ẨN mặc
+        // định, phải bấm "+ Tạo Kỳ Đăng Ký Mới" mở ra trước khi điền.
+        await page.evaluate(() => { switchTab('vpp'); setVppSubTab('PERIODS'); openVppNewPeriodForm(); });
         await page.fill('#vppNewPeriodName', 'Kỳ kiểm thử reset form (Tạo Kỳ)');
         await page.fill('#vppNewPeriodStart', '2027-01-01');
         await page.fill('#vppNewPeriodEnd', '2027-01-31');
