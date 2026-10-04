@@ -614,6 +614,18 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/quickApplyConfigs — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (cấu hình
+      // "⚡ Áp Dụng Nhanh" chỉ Admin mới sửa/xoá được, xem routes/data.js ADMIN_ONLY_KEYS) — cần cho
+      // test-collapse-admin-small-forms.js (saveQuickApplyConfig() lưu thật qua UI), cùng lý do KHÔNG mô
+      // phỏng toàn bộ generic POST /api/data/:key như các nhánh ở trên.
+      if (pathName === '/api/data/quickApplyConfigs' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.quickApplyConfigs = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/workflow/:module/:id/:action — mirror routes/workflow.js's generic dept-workflow
       // approve/reject route (dùng chung lib/workflowEngine.js's MODULE_CONFIGS + applyWorkflowAction()
       // thật, KHÔNG tự đoán lại logic duyệt). Cần cho các module bỏ auto-approve (vd itPriceApprovals

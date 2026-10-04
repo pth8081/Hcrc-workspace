@@ -92,6 +92,9 @@ async function main() {
         .map(cb => cb.closest('label')?.innerText.trim() || cb.value)
     );
     console.log(`\n04: Áp Dụng Nhanh (Nghiệp Vụ Nâng Cao) — danh sách module chọn được:`, JSON.stringify(qaModuleLabels));
+    // Pattern "thu gọn form nhập" (10/2026): #quickApplyAddForm (chứa #qaModuleGrid) giờ mặc định ẨN,
+    // phải bấm "+ Thêm Cấu Hình Áp Dụng Nhanh" (openQuickApplyConfigForm()) để mở ra trước khi chụp ảnh.
+    await page.evaluate(() => openQuickApplyConfigForm());
     await page.locator('#qaModuleGrid').scrollIntoViewIfNeeded();
     await shot(page, '04-ap-dung-nhanh-tu-dong-thay-2-module-gia');
   } finally {

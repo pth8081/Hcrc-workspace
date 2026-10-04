@@ -113,7 +113,9 @@ async function addCustomField(e) {
     if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
     logSystemAction('CONFIG', 'ADD_CUSTOM_FIELD', `Thêm trường [${label}] cho biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
     alert('✅ Đã thêm trường dữ liệu bổ sung thành công!');
-    e.target.reset();
+    // cancelEditCustomField() reset form (thay e.target.reset() cũ) VÀ thu gọn khung sau khi lưu xong
+    // (pattern "thu gọn form nhập", 10/2026) — không có gì đang sửa ở nhánh này nên an toàn gọi thẳng.
+    cancelEditCustomField();
   }
 
   toggleOptionsInput();
@@ -125,6 +127,7 @@ function editCustomField(fieldId) {
   if (!field) return;
   editingCoreField = null;
   editingCustomFieldId = fieldId;
+  openFormFieldForm(); // pattern "thu gọn form nhập" (10/2026) — form mặc định ẨN, "Sửa" phải tự mở lại
   document.getElementById('fldTypeGroup').classList.remove('hidden');
   document.getElementById('fldLabel').value = field.label;
   document.getElementById('fldType').value = field.type;
@@ -150,6 +153,7 @@ function editCoreField(coreKey, fieldId) {
 
   editingCustomFieldId = null;
   editingCoreField = { coreKey, fieldId };
+  openFormFieldForm(); // pattern "thu gọn form nhập" (10/2026) — form mặc định ẨN, "Sửa" phải tự mở lại
 
   document.getElementById('fldLabel').value = label;
   document.getElementById('fldRequired').checked = required;
@@ -176,6 +180,21 @@ function cancelEditCustomField() {
   const submitBtn = document.getElementById('btnSubmitCustomField');
   if (submitBtn) submitBtn.innerText = 'Thêm Trường Vào Biểu Mẫu';
   document.getElementById('btnCancelEditField')?.classList.add('hidden');
+  // Pattern "thu gọn form nhập" (10/2026): hàm này vốn đã được gọi ở MỌI điểm "xong việc" với form này
+  // (Hủy Sửa, đổi tab/nhóm biểu mẫu ở switchFormTab(), xoá đúng trường đang sửa, VÀ 2 nhánh lưu thành
+  // công ở addCustomField()) — tận dụng lại đúng các điểm gọi đó để thu gọn (ẩn) khung form, không cần
+  // rải thêm lệnh ẩn ở từng nơi.
+  document.getElementById('formFieldFormWrap')?.classList.add('hidden');
+}
+
+// openFormFieldForm()/closeFormFieldForm(): CHỈ lo phần hiện/ẩn khung (pattern "thu gọn form nhập",
+// 10/2026) — không đụng logic thêm/sửa/xoá trường. closeFormFieldForm() tái dùng cancelEditCustomField()
+// (đã tự ẩn ở cuối hàm trên) để vừa ẩn vừa dọn sạch trạng thái đang sửa (nếu có), tránh trùng lặp.
+function openFormFieldForm() {
+  document.getElementById('formFieldFormWrap')?.classList.remove('hidden');
+}
+function closeFormFieldForm() {
+  cancelEditCustomField();
 }
 
 async function deleteCustomField(fieldId) {

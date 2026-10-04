@@ -291,6 +291,16 @@ function renderExternalApiKeysTable() {
   `).join('');
 }
 
+// openExtApiKeyForm()/closeExtApiKeyForm(): CHỈ lo phần hiện/ẩn khung tạo API key (pattern "thu gọn
+// form nhập", 10/2026) — không đụng logic tạo/thu hồi/tạo lại key. Form luôn ở trạng thái "tạo mới"
+// (không có luồng Sửa populate lại field nào), nên không cần reset gì thêm khi mở/đóng.
+function openExtApiKeyForm() {
+  document.getElementById('extApiKeyFormWrap')?.classList.remove('hidden');
+}
+function closeExtApiKeyForm() {
+  document.getElementById('extApiKeyFormWrap')?.classList.add('hidden');
+}
+
 async function createExternalApiKeyAction(e) {
   e.preventDefault();
   const nameInput = document.getElementById('extApiKeyName');
@@ -311,6 +321,9 @@ async function createExternalApiKeyAction(e) {
     renderExternalApiKeysTable();
     document.getElementById('extApiKeyRevealValue').textContent = apiKey;
     document.getElementById('extApiKeyRevealBox').classList.remove('hidden');
+    // Thu gọn lại khung tạo key sau khi tạo xong (pattern "thu gọn form nhập", 10/2026) — hộp hiện key
+    // #extApiKeyRevealBox nằm NGOÀI #extApiKeyFormWrap (không bị ẩn theo) nên vẫn hiện đầy đủ bên dưới.
+    closeExtApiKeyForm();
     // KHÔNG gọi logSystemAction() ở đây — server (routes/externalAuthAdmin.js) đã tự ghi Nhật ký hệ
     // thống trực tiếp (đảm bảo có log dù client mất mạng ngay sau response), gọi thêm ở đây sẽ trùng lặp.
   } catch (err) {

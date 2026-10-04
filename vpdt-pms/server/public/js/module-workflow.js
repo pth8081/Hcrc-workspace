@@ -590,6 +590,9 @@ async function saveQuickApplyConfig(e) {
 function editQuickApplyConfig(configId) {
   const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
   if (!cfg) return;
+  // Pattern "thu gọn form nhập" (10/2026): form mặc định ẨN, "✏️ Sửa" phải tự mở lại (KHÔNG gọi
+  // resetQuickApplyConfigForm()/openQuickApplyConfigForm() ở đây — sẽ xoá mất dữ liệu đang nạp bên dưới).
+  document.getElementById('quickApplyAddForm')?.classList.remove('hidden');
   editingQuickApplyConfigId = configId;
   const sel = document.getElementById('qaTplSelect');
   if (sel) sel.value = cfg.workflowId;
@@ -612,6 +615,23 @@ function resetQuickApplyConfigForm() {
   const btnSave = document.getElementById('btnSaveQaConfig');
   if (btnSave) btnSave.textContent = '💾 Lưu Cấu Hình';
   document.getElementById('btnCancelQaConfig')?.classList.add('hidden');
+  // Pattern "thu gọn form nhập" (10/2026): hàm này vốn đã được gọi ở cả nút "Hủy Sửa" lẫn SAU KHI lưu
+  // thành công (saveQuickApplyConfig()) — tận dụng lại đúng 2 điểm gọi đó để thu gọn (ẩn) khung form,
+  // không cần rải thêm lệnh ẩn ở từng nơi. openQuickApplyConfigForm() gọi hàm này rồi tự mở lại ngay sau.
+  document.getElementById('quickApplyAddForm')?.classList.add('hidden');
+}
+
+// openQuickApplyConfigForm()/closeQuickApplyConfigForm(): CHỈ lo phần hiện/ẩn khung (pattern "thu gọn
+// form nhập", 10/2026) — không đụng logic lưu/áp dụng cấu hình. Gọi resetQuickApplyConfigForm() trước
+// khi mở để đảm bảo LUÔN khởi tạo lại đúng lưới checkbox module (bỏ tick hết) + khối "Gán người duyệt
+// theo bước" (renderQuickApplyPositionSteps() ngay trong resetQuickApplyConfigForm()) mỗi lần bấm "+
+// Thêm Cấu Hình" — không để sót trạng thái của lượt Sửa/Thêm trước đó.
+function openQuickApplyConfigForm() {
+  resetQuickApplyConfigForm();
+  document.getElementById('quickApplyAddForm')?.classList.remove('hidden');
+}
+function closeQuickApplyConfigForm() {
+  document.getElementById('quickApplyAddForm')?.classList.add('hidden');
 }
 
 async function deleteQuickApplyConfig(configId) {
