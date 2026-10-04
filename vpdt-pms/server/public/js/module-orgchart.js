@@ -736,6 +736,7 @@ function openOrgChartAddNodeModal(parentNodeId) {
   document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = true;
   document.getElementById('orgChartNodePosTypeSelect').value = '';
   document.getElementById('orgChartNodeJobGradeInput').value = '';
+  document.getElementById('orgChartNodeHeadcountQuotaInput').value = '';
   ocPopulateNodeDeptRefSelect('');
   ocPopulateJobTitleDatalist();
   onOrgChartNodeTypeChange();
@@ -756,6 +757,7 @@ function openOrgChartEditNodeModal(nodeId) {
     document.getElementById('orgChartNodeRequiresDeptCheckbox').checked = node.requiresDept !== false;
     document.getElementById('orgChartNodePosTypeSelect').value = node.posType || '';
     document.getElementById('orgChartNodeJobGradeInput').value = node.jobGrade || '';
+    document.getElementById('orgChartNodeHeadcountQuotaInput').value = node.headcountQuota == null ? '' : node.headcountQuota;
     ocPopulateJobTitleDatalist(node.posType || ''); // SAU KHI đã biết posType — lọc đúng danh mục ngay khi mở
   } else {
     ocPopulateJobTitleDatalist();
@@ -778,7 +780,10 @@ async function saveOrgChartNodeClick() {
     payload.requiresDept = document.getElementById('orgChartNodeRequiresDeptCheckbox').checked;
     payload.posType = document.getElementById('orgChartNodePosTypeSelect').value || null;
     payload.jobGrade = document.getElementById('orgChartNodeJobGradeInput').value.trim() || null;
+    const quotaRaw = document.getElementById('orgChartNodeHeadcountQuotaInput').value.trim();
+    payload.headcountQuota = quotaRaw === '' ? null : Number(quotaRaw);
     if (!payload.jobTitle) return alert('⛔ Vui lòng nhập Chức Danh.');
+    if (quotaRaw !== '' && (!Number.isFinite(payload.headcountQuota) || payload.headcountQuota < 0)) return alert('⛔ Định biên phải là số nguyên không âm.');
   } else {
     payload.nodeName = document.getElementById('orgChartNodeNameInput').value.trim();
     payload.departmentRef = document.getElementById('orgChartNodeDeptRefSelect').value || null;
@@ -805,6 +810,48 @@ async function deleteOrgChartNodeClick(nodeId) {
   } catch (err) { return alert(`⛔ ${err.message}`); }
   await loadOrgChartCurrentVersion(_ocCurrentVersion.id);
   renderOrgChartTree();
+}
+
+// ===== Báo Cáo Định Biên Nhân Sự (10/2026) =====
+function ocFmtNum(n) {
+  if (n == null) return '—';
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+function renderOrgChartHeadcountTable(rows) {
+  const tbody = document.getElementById('orgChartHeadcountTableBody');
+  const LEVEL_CLS = { 0: 'font-bold bg-teal-50', 1: 'font-bold bg-gray-50' };
+  tbody.innerHTML = rows.map(r => {
+    const indent = '&nbsp;'.repeat(r.level * 4);
+    const rowCls = r.nodeType === 'POSITION' ? '' : (LEVEL_CLS[r.level] || 'font-semibold');
+    const varianceCls = r.variance == null ? '' : r.variance > 0 ? 'text-amber-700 font-bold' : r.variance < 0 ? 'text-red-600 font-bold' : '';
+    return `<tr class="border-t ${rowCls}">
+      <td class="p-1.5">${indent}${r.nodeType === 'POSITION' ? '💺 ' : r.nodeType === 'DEPARTMENT' ? '🏢 ' : ''}${escapeHtml(r.displayName || '')}</td>
+      <td class="p-1.5">${escapeHtml(r.jobTitle || '')}</td>
+      <td class="p-1.5">${escapeHtml(r.jobGrade || '')}</td>
+      <td class="p-1.5 text-right">${r.quota == null ? '—' : r.quota}</td>
+      <td class="p-1.5 text-right">${ocFmtNum(r.actualTotal)}</td>
+      <td class="p-1.5 text-right ${varianceCls}">${r.variance == null ? '—' : r.variance}</td>
+      <td class="p-1.5 text-right">${r.active}</td>
+      <td class="p-1.5 text-right">${r.offboarding}</td>
+      <td class="p-1.5 text-right">${r.onLeave}</td>
+      <td class="p-1.5 text-right">${ocFmtNum(r.secondary)}</td>
+    </tr>`;
+  }).join('');
+}
+async function openOrgChartHeadcountModal() {
+  if (!_ocCurrentVersion) return;
+  document.getElementById('btnOrgChartHeadcountExportXlsx').href = `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report/export-xlsx`;
+  document.getElementById('orgChartHeadcountModal').classList.remove('hidden');
+  document.getElementById('orgChartHeadcountTableBody').innerHTML = '<tr><td colspan="10" class="p-2 text-center text-gray-400">Đang tải...</td></tr>';
+  try {
+    const { rows } = await orgChartApiCall('GET', `/api/org-chart/versions/${_ocCurrentVersion.id}/headcount-report`);
+    renderOrgChartHeadcountTable(rows);
+  } catch (err) {
+    document.getElementById('orgChartHeadcountTableBody').innerHTML = `<tr><td colspan="10" class="p-2 text-center text-red-600">⛔ ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+function closeOrgChartHeadcountModal() {
+  document.getElementById('orgChartHeadcountModal').classList.add('hidden');
 }
 
 // ===== Tab "Cấu Hình Đánh Giá KPI" — chỉ thao tác trên version đang APPLIED =====

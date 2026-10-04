@@ -2472,10 +2472,35 @@ theo đúng vị trí trong cây**.
   quan hệ MỚI, khiến quản lý CŨ tiếp tục có quyền đánh giá KPI của nhân viên
   đã chuyển sang quản lý khác ("2 người cùng chấm 1 người"). Quan hệ thêm
   THỦ CÔNG (không theo cây báo cáo hành chính) không bao giờ bị đụng vào.
+- **📋 Báo Cáo Định Biên Nhân Sự (10/2026, theo yêu cầu người dùng "biết được
+  định biên hiện tại, định biên cần tuyển")** — nút riêng ở thanh công cụ,
+  hiện cho ai xem được version (cùng quyền `requireView` như xem cây):
+  - **Định Biên**: số chỗ được duyệt cho 1 **Vị Trí**, admin/HR tự đặt tay
+    ngay trong modal Sửa Vị Trí (ô "Định Biên (tuỳ chọn)", số nguyên ≥ 0) —
+    **field hoàn toàn mới**, không suy ra được từ dữ liệu vận hành sẵn có. Để
+    trống (không hiện "0") nếu chưa đặt kế hoạch cho vị trí đó.
+  - **Thực Tế**: tính **ĐỘNG mỗi lần mở báo cáo**, KHÔNG lưu gì thêm, gồm 4
+    cột con: **Đang Làm Việc** (hồ sơ Hồ Sơ Nhân Sự đang gán đúng vị trí đó,
+    trạng thái Đang làm việc) + **Đang Bàn Giao Nghỉ Việc** (đang có quy
+    trình Offboarding CHƯA hoàn tất) + **Thai Sản/Nghỉ Ốm** (trạng thái Đang
+    nghỉ phép dài hạn — hệ thống hiện GỘP CHUNG 1 cột, chưa tách được 2 lý do
+    riêng) + **Kiêm Nhiệm** (tính hệ số ×0.5/người, lấy từ "Vị Trí Kiêm
+    Nhiệm" đã gán ở hồ sơ Người Dùng).
+  - **Chênh Lệch** = Định Biên − Thực Tế: dương (tô cam) = còn thiếu người,
+    cần tuyển thêm đúng số đó; âm (tô đỏ) = đang dư người so với kế hoạch.
+  - Số liệu **cộng dồn theo đúng cấp cây** (Vị Trí → Phòng Ban chứa nó → Khối
+    → Công Ty) — dòng Phòng Ban/Khối/Công Ty hiện tổng Định Biên/Thực Tế của
+    toàn bộ nhánh con, không phải số riêng của chính node đó.
+  - Bấm **"📊 Xuất Excel"** ngay trong bảng báo cáo để tải về — route riêng
+    (không qua `/api/admin/export-xlsx` dùng chung, vì cần tính Thực Tế từ dữ
+    liệu Hồ Sơ Nhân Sự vốn đã bị chặn khỏi API Báo Cáo chung — cùng lý do như
+    mục 4.5.3 "Báo Cáo Nhân Sự").
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa dựng bảng
   lịch sử "ai giữ vị trí nào từ ngày nào"; danh sách Phòng Ban toàn hệ thống
   (`DB.depts`) chưa gắn động theo cây; chưa có cảnh báo tự động khi Offboarding
-  1 người đang là người đánh giá KPI của vị trí khác.
+  1 người đang là người đánh giá KPI của vị trí khác; Định Biên chưa có khái
+  niệm "theo kỳ/năm" (chỉ 1 con số hiện hành cho mỗi vị trí, không giữ lịch
+  sử định biên các kỳ trước — nếu cần, đây là hướng mở rộng sau).
 
 #### 4.5.2. Onboarding / Offboarding
 
