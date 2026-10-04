@@ -1154,7 +1154,14 @@
         <select id="permDeptKhoiBanFilter" data-op-change="filterPermDeptTablesByKhoiBan" class="border p-1.5 rounded text-xs bg-white"></select>
       </div>
 
-      <form data-op-submit="saveUser" class="space-y-4">
+      <!-- Pattern "thu gọn form nhập" (10/2026) — form Thêm/Sửa Người Dùng & Phân Quyền (0-26, ~1035
+           dòng) giờ ẨN mặc định (class="hidden" trên chính thẻ <form>, xem #userPermFormWrap), chỉ mở
+           khi bấm nút này (openCreateUserForm()), "Sửa" 1 người/nhóm có sẵn (editUser()/startCreateGroup()/
+           editPermGroup()), hoặc "Sửa" 1 dòng đang chờ ở Danh Sách Tạm (editPendingNewUser() — hàm này
+           tự gọi toggleUserPermFormMode() sẵn, không cần unhide riêng vì chỉ chạy được khi form đã mở). -->
+      <button type="button" data-op="openCreateUserForm" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700">+ Thêm Người Dùng Mới</button>
+
+      <form id="userPermFormWrap" data-op-submit="saveUser" class="hidden space-y-4">
         <input id="editUserId" type="hidden">
 
         <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3 bg-white p-3 rounded border">
@@ -1319,6 +1326,7 @@
         </div>
 
         <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-op="closeUserPermForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold">✕ Thu Gọn</button>
           <button type="button" data-op="cancelPermFormEdit" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
           <button type="button" id="btnAddToStagingList" data-op="addUserToStagingList" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
           <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>

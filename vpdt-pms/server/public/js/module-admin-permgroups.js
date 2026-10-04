@@ -133,6 +133,7 @@ function startCreateGroup() {
   document.getElementById('gGroupDesc').value = '';
   renderGroupMembersPicker([]);
   renderGroupReportExtraKeysWidget(null);
+  document.getElementById('userPermFormWrap').classList.remove('hidden');
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
@@ -147,7 +148,15 @@ function editPermGroup(id) {
   const currentMembers = DB.users.filter(u => (u.groupIds || []).includes(id)).map(u => u.username);
   renderGroupMembersPicker(currentMembers);
   renderGroupReportExtraKeysWidget(group);
+  document.getElementById('userPermFormWrap').classList.remove('hidden');
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// "✕ Thu Gọn" — chỉ ẩn lại form, KHÔNG reset dữ liệu đang nhập dở (khác "Hủy"/cancelPermFormEdit(),
+// module-admin-submissiongroups.js — hàm đó reset về trạng thái USER rỗng rồi mới ẩn). Cho phép admin
+// thu gọn để nhìn lại bảng danh sách bên dưới rồi mở lại (bấm "Sửa" 1 người/nhóm) không mất dữ liệu.
+function closeUserPermForm() {
+  document.getElementById('userPermFormWrap').classList.add('hidden');
 }
 
 // Trước đây savePermGroup()/deletePermGroup() mutate thẳng DB.permGroups/DB.users rồi gọi syncStorage()

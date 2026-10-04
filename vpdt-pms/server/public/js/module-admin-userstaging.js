@@ -333,12 +333,24 @@ function setAdminAccountPermsLocked(locked) {
   document.querySelectorAll('#permFieldsContainer input, #permFieldsContainer select').forEach(el => { el.disabled = locked; });
 }
 
+// Pattern "thu gọn form nhập" (10/2026) — cùng khuôn openMhVendorForm() (module-muahang.js): form
+// #userPermFormWrap chỉ mở khi bấm "+ Thêm Người Dùng Mới" ở đây, hoặc gián tiếp qua editUser()/
+// startCreateGroup()/editPermGroup() (module-admin-permgroups.js) khi Sửa 1 người/nhóm có sẵn.
+function openCreateUserForm() {
+  editingGroupId = null;
+  resetUserForm();
+  toggleUserPermFormMode('USER');
+  document.getElementById('userPermFormWrap').classList.remove('hidden');
+  document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function editUser(id) {
   const user = DB.users.find(u => u.id === id);
   if (!user) return;
 
   editingGroupId = null;
   toggleUserPermFormMode('USER');
+  document.getElementById('userPermFormWrap').classList.remove('hidden');
 
   document.getElementById('editUserId').value = user.id;
   document.getElementById('uUsername').value = user.username;
