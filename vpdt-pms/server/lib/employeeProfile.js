@@ -61,6 +61,25 @@ const WORK_SCHEDULES = new Set(['Giờ hành chính', 'Ca sáng', 'Ca chiều', 
 // MARITAL_STATUSES (mới, GĐ1 "đối chiếu file Excel quản lý thủ công của Nhân Sự", theo yêu cầu người
 // dùng — xem VERSION.md) — khớp đúng 3 lựa chọn cột "Tình trạng hôn nhân" ở file Excel gốc.
 const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
+// CURRENT_WORK_STATUS_DETAILS/NATIONAL_ID_ISSUE_PLACES (10/2026 — đối chiếu file Excel
+// "Template_Quan_ly_ho_so_nhan_su", theo yêu cầu người dùng "90 trường") — 2 Set MỚI cùng khuôn
+// EMPLOYMENT_TYPES/WORK_SCHEDULES ở trên (chỉ còn là GIÁ TRỊ MẶC ĐỊNH khi nơi gọi applyProfileEdit()
+// không truyền catalogs thật qua options — nguồn THẬT là appData.currentWorkStatusDetails/
+// appData.nationalIdIssuePlaces, admin tự sửa qua Quản Lý Danh Mục, xem defaults.js).
+const CURRENT_WORK_STATUS_DETAILS = new Set(['Hưu trí', 'HĐ thứ 2', 'Không lương', 'Nghỉ ốm dài ngày', 'Nghỉ thai sản', 'Khác']);
+const NATIONAL_ID_ISSUE_PLACES = new Set(['Bộ Công An', 'Cục cảnh sát QLHC về TTXH', 'Cục cảnh sát ĐKQL cư trú và DLQG về dân cư']);
+// LEGAL_ENTITIES (10/2026 — đối chiếu cột "Pháp nhân" mẫu Excel 90 trường) — cùng khuôn GIÁ TRỊ MẶC
+// ĐỊNH như CURRENT_WORK_STATUS_DETAILS/NATIONAL_ID_ISSUE_PLACES ở trên — nguồn THẬT là
+// appData.legalEntities (admin tự sửa qua Quản Lý Danh Mục, xem defaults.js).
+const LEGAL_ENTITIES = new Set(['Công ty TNHH HCRC']);
+// Char limit rộng hơn mặc định (300) cho 2 field ghi chú dài (10/2026, mẫu Excel 90 trường).
+const LONG_NOTE_MAX_LEN = 2000;
+// Field "ngày" thuần (dd/mm/yyyy, không enum) nhóm mới 10/2026 — dùng CHUNG đúng khuôn validate
+// nationalIdIssueDate/retirementDate đã có (xem applyProfileEdit()).
+const NEW_PLAIN_DATE_FIELDS = new Set([
+  'currentWorkStatusFrom', 'currentWorkStatusTo', 'joinDateAtPredecessorUnit', 'joinDateAtHcrc',
+  'resignationNoticeDate', 'resignationExpectedDate', 'tenureBaseDate'
+]);
 
 // Trường nhạy cảm/cá nhân — chỉ chính chủ (username đã liên kết) / hrProfileManage / admin xem được
 // MẶC ĐỊNH; quản lý trực tiếp (view-only theo hrProfileView) KHÔNG được xem dù có quyền xem hồ sơ nói
@@ -87,7 +106,13 @@ const SENSITIVE_FIELDS = [
   // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
   // Bao_cao_thang) — PHẢI nằm trong danh sách này để mặc định ẨN khỏi quản lý trực tiếp/chính chủ (xem
   // getProfileForViewer() bên dưới: field KHÔNG nằm trong SENSITIVE_FIELDS sẽ LUÔN hiện, không ẩn được).
-  'disciplinaryActions'
+  'disciplinaryActions',
+  // emergencyContactAddress/specialLaborStatus/currentWorkStatusDetail*/hrNote (10/2026, đối chiếu file
+  // Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — cùng nhóm riêng tư/nhạy cảm với emergencyContact*
+  // đã có (địa chỉ) hoặc mang tính cá nhân/y tế-gia đình (lao động đặc biệt, nghỉ thai sản/ốm dài ngày)
+  // hoặc ghi chú nội bộ có thể chứa thông tin nhạy cảm (hrNote) — mặc định ẨN như disciplinaryActions.
+  'emergencyContactAddress', 'specialLaborStatus',
+  'currentWorkStatusDetail', 'currentWorkStatusFrom', 'currentWorkStatusTo', 'hrNote'
 ];
 // Nhãn hiển thị tiếng Việt cho từng trường — dùng cho màn cấu hình admin (checkbox chọn trường nào mở
 // cho quản lý trực tiếp/chính chủ) lẫn client hiển thị danh sách trường đang cấu hình. Khớp ĐÚNG
@@ -101,7 +126,20 @@ const SENSITIVE_FIELD_LABELS = {
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn',
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
-  disciplinaryActions: 'Kỷ luật'
+  disciplinaryActions: 'Kỷ luật',
+  // 10/2026, đối chiếu file Excel "Template_Quan_ly_ho_so_nhan_su" (90 trường) — xem chú thích đầy đủ tại
+  // SENSITIVE_FIELDS/HR_ONLY_EDITABLE_FIELDS ở trên cho lý do phân loại nhạy cảm/ai sửa được từng field.
+  emergencyContactAddress: 'Địa chỉ người liên hệ khẩn cấp',
+  legalEntity: 'Đơn vị (pháp nhân)', workEmail: 'Email liên hệ công việc',
+  specialLaborStatus: 'Lao động đặc biệt',
+  currentWorkStatusDetail: 'Tình trạng làm việc hiện tại (chi tiết)',
+  currentWorkStatusFrom: 'Từ ngày (tình trạng làm việc)', currentWorkStatusTo: 'Đến ngày (tình trạng làm việc)',
+  lastInternalTransferUnit: 'Đơn vị điều chuyển nội bộ gần nhất', lastInternalTransferReason: 'Lý do điều chuyển nội bộ',
+  joinDateAtPredecessorUnit: 'Ngày vào đơn vị cũ cùng Tập Đoàn', joinDateAtHcrc: 'Ngày vào HCRC',
+  concurrentJobTitle: 'Kiêm nhiệm chức danh',
+  resignationNoticeDate: 'Ngày nhận đơn/thông tin nghỉ', resignationExpectedDate: 'Ngày dự kiến chấm dứt HĐLĐ',
+  tenureBaseDate: 'Ngày tính thâm niên',
+  careerHistoryNote: 'Quá trình công tác', hrNote: 'Ghi chú'
 };
 // Lọc input admin gửi lên chỉ giữ đúng các field NẰM TRONG SENSITIVE_FIELDS (chặn gửi field lạ/field
 // định danh-hệ thống — không có ý nghĩa gì để "mở thêm" vì các field đó vốn đã luôn hiện sẵn).
@@ -184,7 +222,13 @@ function defaultProfile(employeeCode) {
     dateOfBirth: null, gender: null,
     nationalId: null, permanentAddress: null, currentAddress: null,
     personalEmail: null,
+    // workEmail (10/2026, đối chiếu "Email công ty" mẫu Excel 90 cột quản lý hồ sơ nhân sự) — khác
+    // personalEmail (email cá nhân, tự phục vụ) — workEmail CHỈ HR sửa (HR_ONLY_EDITABLE_FIELDS).
+    workEmail: null,
     emergencyContactName: null, emergencyContactPhone: null, emergencyContactRelationship: null,
+    // emergencyContactAddress (10/2026, mẫu Excel 90 cột) — cùng nhóm liên hệ khẩn cấp, SENSITIVE_FIELDS
+    // + HR_ONLY_EDITABLE_FIELDS như emergencyContactName/Phone/Relationship.
+    emergencyContactAddress: null,
     bankAccountNo: null, bankName: null,
     socialInsuranceNo: null, taxCode: null,
     dependents: [], education: [],
@@ -204,6 +248,30 @@ function defaultProfile(employeeCode) {
     // employmentType/workSchedule (GĐ2, 10/2026) — cùng nhóm dữ liệu hành chính như 3 field ngay trên
     // (không phải thông tin riêng tư cá nhân), xem EMPLOYMENT_TYPES/WORK_SCHEDULES ở trên.
     employmentType: null, workSchedule: null,
+    // legalEntity/specialLaborStatus/currentWorkStatusDetail(+From/To) (10/2026, mẫu Excel 90 cột —
+    // "Pháp nhân", "Đối tượng LĐ đặc biệt", "Trạng thái làm việc hiện tại" chi tiết) — nhóm dữ liệu hành
+    // chính, CHỈ HR sửa + SENSITIVE_FIELDS (ẨN khỏi chính chủ/quản lý trực tiếp tới khi mở). currentWork-
+    // StatusDetail khác hẳn profile.status (ACTIVE/DRAFT/RESIGNED hệ thống) — đây là ghi chú nghiệp vụ chi
+    // tiết hơn (VD "Thai sản", "Nghỉ không lương dài hạn"...), xem CURRENT_WORK_STATUS_DETAILS ở trên.
+    legalEntity: null, specialLaborStatus: null,
+    currentWorkStatusDetail: null, currentWorkStatusFrom: null, currentWorkStatusTo: null,
+    // lastInternalTransferUnit/Reason (10/2026, mẫu Excel 90 cột — "Đơn vị chuyển đến/đi gần nhất",
+    // "Lý do chuyển") — ghi chú tự do, KHÔNG phải nguồn dữ liệu chức vụ/phòng ban chính thức (vẫn luôn
+    // là positionHistory/applyPositionAssignment()), chỉ để tham khảo nhanh trên hồ sơ.
+    lastInternalTransferUnit: null, lastInternalTransferReason: null,
+    // joinDateAtPredecessorUnit/joinDateAtHcrc/tenureBaseDate (10/2026, mẫu Excel 90 cột — "Ngày vào đơn
+    // vị tiền nhiệm", "Ngày vào HCRC", "Ngày tính thâm niên") — KHÁC createdAt (ngày tạo hồ sơ trong hệ
+    // thống); dùng cho báo cáo thâm niên theo mốc thực tế do HR nhập tay, không tự tính từ createdAt.
+    joinDateAtPredecessorUnit: null, joinDateAtHcrc: null, tenureBaseDate: null,
+    // concurrentJobTitle (10/2026, mẫu Excel 90 cột — "Chức danh kiêm nhiệm") — ghi chú tự do, KHÔNG qua
+    // applyPositionAssignment() (chỉ 1 chức vụ chính thức dùng positionKey/jobTitle/dept như trên).
+    concurrentJobTitle: null,
+    // resignationNoticeDate/resignationExpectedDate (10/2026, mẫu Excel 90 cột — "Ngày báo nghỉ", "Ngày
+    // dự kiến nghỉ") — ghi chú tiến độ nghỉ việc trước khi hoàn tất quy trình Offboarding chính thức.
+    resignationNoticeDate: null, resignationExpectedDate: null,
+    // careerHistoryNote/hrNote (10/2026, mẫu Excel 90 cột — "Quá trình công tác", "Ghi chú nhân sự") —
+    // ghi chú văn bản tự do, giới hạn ký tự rộng hơn mặc định (xem case riêng ở applyProfileEdit()).
+    careerHistoryNote: null, hrNote: null,
     // Chức vụ hiện tại — LUÔN chọn từ 1 node POSITION của bản Cơ Cấu Tổ Chức đang áp dụng (KHÔNG gõ tự
     // do), xem applyPositionAssignment(). positionLabel là tên hiển thị đã ghép sẵn (VD "Trưởng Phòng
     // Kinh Doanh") snapshot tại thời điểm gán — không tự đổi theo nếu sau này Cơ Cấu Tổ Chức đổi tên.
@@ -217,12 +285,17 @@ function defaultProfile(employeeCode) {
     // applyProfileEdit()) — gộp vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng, xem GET .../history.
     profileEditHistory: [],
     processId: null,
-    // onboardingQueueStatus (Ảnh 2, 9/2026, theo yêu cầu người dùng) — null/'PENDING'/'CANCELLED'. Hồ sơ
-    // nháp đặt chỗ lúc tạo Onboarding luôn vào "hàng đợi" PENDING (gán ở routes/create.js, đúng chỗ gán
-    // processId) — hiện ở tab riêng "🕐 Hồ Sơ Onboarding" (module-hrprofile.js), KHÔNG lẫn vào "Quản Lý Hồ
-    // Sơ" cho tới khi HR "Xác Nhận" (lưu hồ sơ thành công lúc đang PENDING -> null, xem PATCH
-    // /by-code/:employeeCode ở routes/employeeProfile.js) hoặc "Hủy" (-> CANCELLED, GIỮ LẠI hồ sơ — KHÔNG
-    // xoá — để phục vụ báo cáo "không nhận việc" sau này, xem cancelOnboardingQueueProfile() dưới đây).
+    // onboardingQueueStatus (Ảnh 2, 9/2026, theo yêu cầu người dùng; cập nhật 10/2026) —
+    // null/'PENDING'/'CANCELLED'/'CONFIRMED'. Hồ sơ nháp đặt chỗ lúc tạo Onboarding luôn vào "hàng đợi"
+    // PENDING (gán ở routes/create.js, đúng chỗ gán processId) — hiện ở tab riêng "🕐 Hồ Sơ Onboarding"
+    // (module-hrprofile.js), KHÔNG lẫn vào "Quản Lý Hồ Sơ" cho tới khi HR "Xác Nhận" (lưu hồ sơ thành
+    // công lúc đang PENDING -> CONFIRMED + profile.status='ACTIVE' ngay, coi như "đã nhận việc", xem PATCH
+    // /by-code/:employeeCode ở routes/employeeProfile.js) hoặc "Hủy" (-> CANCELLED, coi như "không nhận
+    // việc"). CẢ 2 trạng thái CONFIRMED/CANCELLED đều GIỮ LẠI hồ sơ — KHÔNG xoá — để vẫn thấy ở tab hàng
+    // đợi Onboarding phục vụ báo cáo sau này (xem GET .../onboarding-queue), đồng thời CONFIRMED cũng tự
+    // lọt vào "Quản Lý Hồ Sơ" (GET /, filter chỉ loại PENDING/CANCELLED) — 2 màn vẫn tách biệt, hồ sơ chỉ
+    // là 1 bản ghi DUY NHẤT hiện ở cả 2 nơi theo đúng vai trò từng màn. Xem cancelOnboardingQueueProfile()
+    // dưới đây cho nhánh "Hủy".
     // KHÁC HẲN nút "Hủy Quy Trình" có sẵn ở Nghiệp Vụ Nâng Cao (lib/recordActions.js::cancelHrProcess() +
     // cleanupDraftProfileOnOnboardingClosed() ở routes/records.js) — nút đó XOÁ HẲN hồ sơ DRAFT mồ côi để
     // giải phóng Mã Nhân Viên (hành vi đã có từ trước, có test riêng — test-audit-nhansu-onboarding-
@@ -632,7 +705,16 @@ const HR_ONLY_EDITABLE_FIELDS = [
   'nationalIdIssueDate', 'nationalIdIssuePlace', 'deskLocation', 'retirementDate', 'socialInsuranceAtThisUnit',
   'employmentType', 'workSchedule',
   // disciplinaryActions (10/2026) — chỉ HR mới ghi nhận kỷ luật, KHÔNG đưa vào SELF_EDITABLE_FIELDS.
-  'disciplinaryActions'
+  'disciplinaryActions',
+  // 17 field MỚI (10/2026, đối chiếu file Excel "Template_Quan_ly_ho_so_nhan_su" — 90 trường, theo yêu
+  // cầu người dùng) — toàn bộ dữ liệu HÀNH CHÍNH/nội bộ do HR ghi nhận, cùng nhóm nationalIdIssueDate/
+  // deskLocation ở trên (KHÔNG đưa vào SELF_EDITABLE_FIELDS — nhân viên không tự khai các mục này).
+  'emergencyContactAddress', 'legalEntity', 'workEmail', 'specialLaborStatus',
+  'currentWorkStatusDetail', 'currentWorkStatusFrom', 'currentWorkStatusTo',
+  'lastInternalTransferUnit', 'lastInternalTransferReason',
+  'joinDateAtPredecessorUnit', 'joinDateAtHcrc', 'concurrentJobTitle',
+  'resignationNoticeDate', 'resignationExpectedDate', 'tenureBaseDate',
+  'careerHistoryNote', 'hrNote'
 ];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
@@ -649,7 +731,21 @@ const PROFILE_FIELD_LABELS = {
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
   socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
   disciplinaryActions: 'Kỷ luật',
-  workSchedule: 'Thời gian làm việc'
+  workSchedule: 'Thời gian làm việc',
+  // 17 field MỚI (10/2026, mẫu Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — khớp ĐÚNG nhãn đã
+  // dùng ở SENSITIVE_FIELD_LABELS cho 6 field trùng (emergencyContactAddress/specialLaborStatus/
+  // currentWorkStatusDetail*/hrNote), không đặt tên khác nhau giữa 2 nơi.
+  emergencyContactAddress: 'Địa chỉ người liên hệ khẩn cấp',
+  legalEntity: 'Đơn vị (pháp nhân)', workEmail: 'Email liên hệ công việc',
+  specialLaborStatus: 'Lao động đặc biệt',
+  currentWorkStatusDetail: 'Tình trạng làm việc hiện tại (chi tiết)',
+  currentWorkStatusFrom: 'Từ ngày (tình trạng làm việc)', currentWorkStatusTo: 'Đến ngày (tình trạng làm việc)',
+  lastInternalTransferUnit: 'Đơn vị điều chuyển nội bộ gần nhất', lastInternalTransferReason: 'Lý do điều chuyển nội bộ',
+  joinDateAtPredecessorUnit: 'Ngày vào đơn vị cũ cùng Tập Đoàn', joinDateAtHcrc: 'Ngày vào HCRC',
+  concurrentJobTitle: 'Kiêm nhiệm chức danh',
+  resignationNoticeDate: 'Ngày nhận đơn/thông tin nghỉ', resignationExpectedDate: 'Ngày dự kiến chấm dứt HĐLĐ',
+  tenureBaseDate: 'Ngày tính thâm niên',
+  careerHistoryNote: 'Quá trình công tác', hrNote: 'Ghi chú'
 };
 
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): 2 hàm dưới đây trước đây CHỈ kiểm
@@ -771,6 +867,57 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         profile.workSchedule = val || null;
         break;
       }
+      // nationalIdIssuePlace (10/2026 — CHUYỂN từ free-text (default: case) sang enum đối chiếu danh mục,
+      // đúng khuôn employmentType/workSchedule ở trên — đối chiếu file Excel 90 trường có cột droplist
+      // "Nơi cấp CCCD"). options.nationalIdIssuePlaces là danh mục THẬT appData.nationalIdIssuePlaces.
+      case 'nationalIdIssuePlace': {
+        const allowedIssuePlaces = (options && Array.isArray(options.nationalIdIssuePlaces) && options.nationalIdIssuePlaces.length)
+          ? new Set(options.nationalIdIssuePlaces) : NATIONAL_ID_ISSUE_PLACES;
+        if (val != null && val !== '' && !allowedIssuePlaces.has(val)) throw new HttpError(400, 'Nơi cấp CCCD/CMND không hợp lệ');
+        profile.nationalIdIssuePlace = val || null;
+        break;
+      }
+      // legalEntity/specialLaborStatus/currentWorkStatusDetail (10/2026, mẫu Excel 90 trường — droplist)
+      // — cùng khuôn employmentType/workSchedule, dùng options.<key> nếu caller truyền danh mục thật.
+      case 'legalEntity': {
+        const allowedLegalEntities = (options && Array.isArray(options.legalEntities) && options.legalEntities.length)
+          ? new Set(options.legalEntities) : LEGAL_ENTITIES;
+        if (val != null && val !== '' && !allowedLegalEntities.has(val)) throw new HttpError(400, 'Đơn vị (pháp nhân) không hợp lệ');
+        profile.legalEntity = val || null;
+        break;
+      }
+      case 'specialLaborStatus': {
+        const allowedSpecialLaborStatuses = (options && Array.isArray(options.specialLaborStatuses) && options.specialLaborStatuses.length)
+          ? new Set(options.specialLaborStatuses) : null;
+        if (allowedSpecialLaborStatuses && val != null && val !== '' && !allowedSpecialLaborStatuses.has(val)) {
+          throw new HttpError(400, 'Đối tượng lao động đặc biệt không hợp lệ');
+        }
+        profile.specialLaborStatus = val ? String(val).trim().slice(0, 100) : null;
+        break;
+      }
+      case 'currentWorkStatusDetail': {
+        const allowedWorkStatusDetails = (options && Array.isArray(options.currentWorkStatusDetails) && options.currentWorkStatusDetails.length)
+          ? new Set(options.currentWorkStatusDetails) : CURRENT_WORK_STATUS_DETAILS;
+        if (val != null && val !== '' && !allowedWorkStatusDetails.has(val)) throw new HttpError(400, 'Tình trạng làm việc hiện tại không hợp lệ');
+        profile.currentWorkStatusDetail = val || null;
+        break;
+      }
+      // 7 field "ngày" thuần mới (xem NEW_PLAIN_DATE_FIELDS) — dùng CHUNG 1 case, cùng khuôn validate
+      // nationalIdIssueDate/retirementDate ở trên (chấp nhận rỗng, chỉ chặn chuỗi không parse được ngày).
+      case 'currentWorkStatusFrom': case 'currentWorkStatusTo':
+      case 'joinDateAtPredecessorUnit': case 'joinDateAtHcrc':
+      case 'resignationNoticeDate': case 'resignationExpectedDate': case 'tenureBaseDate':
+        if (val != null && val !== '' && isNaN(new Date(val).getTime())) throw new HttpError(400, `${PROFILE_FIELD_LABELS[field]} không hợp lệ`);
+        profile[field] = val || null;
+        break;
+      // careerHistoryNote/hrNote (10/2026, mẫu Excel 90 trường — ghi chú văn bản tự do dài hơn mặc định
+      // 300 ký tự của nhánh `default:` bên dưới) — LONG_NOTE_MAX_LEN = 2000.
+      case 'careerHistoryNote': case 'hrNote':
+        profile[field] = val == null ? null : String(val).trim().slice(0, LONG_NOTE_MAX_LEN);
+        break;
+      // emergencyContactAddress/workEmail/lastInternalTransferUnit/lastInternalTransferReason/
+      // concurrentJobTitle (10/2026, mẫu Excel 90 trường) — ghi chú/địa chỉ/email tự do, rơi về
+      // `default:` (trim + slice 300 ký tự) là ĐỦ, không cần case riêng.
       case 'dependents': {
         if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách người phụ thuộc không hợp lệ');
         const cleaned = val.slice(0, 20).map((d, i) => {
@@ -988,6 +1135,7 @@ function computeHrReportSummary(profiles, contracts, filters) {
 
 module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,

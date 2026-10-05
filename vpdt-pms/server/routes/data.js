@@ -256,6 +256,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // Việc/Loại Kỷ Luật, xem defaults.js), cùng lý do khoá ghi như depts/jobTitles ở trên: panel CRUD chỉ
   // hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'jobGrades', 'resignationReasons', 'disciplinaryTypes',
+  // legalEntities/specialLaborStatuses/currentWorkStatusDetails/nationalIdIssuePlaces (10/2026, mẫu
+  // Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — 4 danh mục MỞ mới, cùng lý do khoá ghi như
+  // jobGrades/resignationReasons/disciplinaryTypes ngay trên: panel CRUD chỉ hiện cho admin.
+  'legalEntities', 'specialLaborStatuses', 'currentWorkStatusDetails', 'nationalIdIssuePlaces',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',

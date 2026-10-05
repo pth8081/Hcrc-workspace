@@ -302,15 +302,18 @@ function setHrProfileView(view) {
   if (hrpfCanFullView()) loadHrProfileManageList();
 }
 
-// ===================== 🕐 Hồ Sơ Onboarding (Ảnh 2, 9/2026, theo yêu cầu người dùng) =====================
-// "Hàng đợi" hồ sơ nháp vừa đặt chỗ lúc tạo Onboarding — PENDING (chờ HR "Xác Nhận") hoặc CANCELLED (đã
-// "Hủy", coi như không tuyển, GIỮ LẠI để phục vụ báo cáo "không nhận việc" sau này). Luôn hiện MỚI TẠO
-// TRƯỚC (server đã sort sẵn theo createdAt giảm dần, xem GET /api/hr-profile/onboarding-queue). Gác riêng
-// hrOnboardingManage — KHÔNG dùng hrProfileManage/hrProfileFullView.
+// ===================== 🕐 Hồ Sơ Onboarding (Ảnh 2, 9/2026, theo yêu cầu người dùng; cập nhật 10/2026) =====================
+// "Hàng đợi" hồ sơ nháp vừa đặt chỗ lúc tạo Onboarding — PENDING (chờ HR "Xác Nhận"), CANCELLED (đã
+// "Hủy", coi như không tuyển) hoặc CONFIRMED (đã "Xác Nhận", coi như đã nhận việc) — CẢ 3 trạng thái đều
+// GIỮ LẠI ở đây để phục vụ báo cáo đầy đủ (CONFIRMED đồng thời cũng tự hiện ở "Quản Lý Hồ Sơ", xem GET
+// /api/hr-profile). Luôn hiện MỚI TẠO TRƯỚC (server đã sort sẵn theo createdAt giảm dần, xem GET
+// /api/hr-profile/onboarding-queue). Gác riêng hrOnboardingManage — KHÔNG dùng
+// hrProfileManage/hrProfileFullView.
 let _hrpfOnboardingQueueList = [];
 const HRPF_ONBOARDING_QUEUE_BADGES = {
   PENDING: '<span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-bold">⏳ Chờ xác nhận</span>',
-  CANCELLED: '<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold">🚫 Đã hủy</span>'
+  CANCELLED: '<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold">🚫 Đã hủy</span>',
+  CONFIRMED: '<span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">✅ Đã nhận việc</span>'
 };
 async function loadHrpfOnboardingQueue() {
   if (!hrpfCanManageOnboarding()) return;
@@ -334,18 +337,27 @@ function renderHrpfOnboardingQueueList() {
   tbody.innerHTML = _hrpfOnboardingQueueList.map(p => {
     const idn = hrpfIdentitySnapshot(p);
     const isPending = p.onboardingQueueStatus === 'PENDING';
+    const isConfirmed = p.onboardingQueueStatus === 'CONFIRMED';
+    // actionCell (10/2026): 3 trạng thái riêng — PENDING còn 2 nút Hủy/Xác Nhận; CANCELLED/CONFIRMED đều
+    // đã "chốt" (không còn nút hành động) nhưng CONFIRMED thêm 1 link mở thẳng hồ sơ đang nằm ở "Quản Lý
+    // Hồ Sơ" (tiện HR vừa Xác Nhận xong muốn vào sửa tiếp ngay, không phải tự đi tìm lại).
+    let actionCell;
+    if (isPending) {
+      actionCell = `<button type="button" data-op="hrpfCancelOnboardingQueue" data-arg0="${escapeHtml(p.employeeCode)}" class="px-2 py-1 rounded text-[11px] font-bold bg-red-600 text-white hover:bg-red-700">✖ Hủy</button>
+        <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✅ Xác Nhận</button>`;
+    } else if (isConfirmed) {
+      actionCell = `<button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-gray-500 text-white hover:bg-gray-600">👤 Xem Hồ Sơ</button>`;
+    } else {
+      actionCell = '<span class="text-[11px] text-gray-400 italic">Không tuyển — lưu để báo cáo</span>';
+    }
     return `<tr class="border-t hover:bg-gray-50">
       <td class="p-2 font-mono">${escapeHtml(p.employeeCode)}</td>
       <td class="p-2">${escapeHtml(idn.fullName || '(chưa rõ)')}</td>
       <td class="p-2">${escapeHtml(idn.dept)}${idn.jobTitle ? ' — ' + escapeHtml(idn.jobTitle) : ''}</td>
       <td class="p-2 text-gray-500">${escapeHtml(p.createdAt || '')}</td>
       <td class="p-2">${HRPF_ONBOARDING_QUEUE_BADGES[p.onboardingQueueStatus] || p.onboardingQueueStatus}
-        ${!isPending && p.onboardingQueueCancelReason ? `<div class="text-[11px] text-gray-500 mt-0.5">Lý do: ${escapeHtml(p.onboardingQueueCancelReason)}</div>` : ''}</td>
-      <td class="p-2 space-x-1 whitespace-nowrap">
-        ${isPending ? `<button type="button" data-op="hrpfCancelOnboardingQueue" data-arg0="${escapeHtml(p.employeeCode)}" class="px-2 py-1 rounded text-[11px] font-bold bg-red-600 text-white hover:bg-red-700">✖ Hủy</button>
-        <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✅ Xác Nhận</button>`
-        : '<span class="text-[11px] text-gray-400 italic">Không tuyển — lưu để báo cáo</span>'}
-      </td>
+        ${!isPending && !isConfirmed && p.onboardingQueueCancelReason ? `<div class="text-[11px] text-gray-500 mt-0.5">Lý do: ${escapeHtml(p.onboardingQueueCancelReason)}</div>` : ''}</td>
+      <td class="p-2 space-x-1 whitespace-nowrap">${actionCell}</td>
     </tr>`;
   }).join('');
 }
@@ -990,6 +1002,34 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       : roField('Thời gian làm việc', profile.workSchedule)}
   </div>`;
 
+  // 11 field HÀNH CHÍNH MỚI, KHÔNG nhạy cảm (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su")
+  // — cùng nhóm/cơ chế hiển thị như adminInfoBlock ở trên (luôn hiện, chỉ HR sửa qua editableHrOnly).
+  const legalEntityValue = profile.legalEntity;
+  const adminInfoBlock2 = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
+    ${editableHrOnly
+      ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đơn vị (pháp nhân)</label>
+        <select id="hrpfF_legalEntity" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">-- Chưa rõ --</option>
+          ${(DB.legalEntities || []).map(t => `<option value="${escapeHtml(t)}" ${legalEntityValue === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select></div>`
+      : roField('Đơn vị (pháp nhân)', legalEntityValue)}
+    ${editableHrOnly ? textField('Email liên hệ công việc', 'hrpfF_workEmail', profile.workEmail) : roField('Email liên hệ công việc', profile.workEmail)}
+    ${editableHrOnly ? textField('Kiêm nhiệm chức danh (ghi chú)', 'hrpfF_concurrentJobTitle', profile.concurrentJobTitle) : roField('Kiêm nhiệm chức danh (ghi chú)', profile.concurrentJobTitle)}
+    ${editableHrOnly ? textField('Đơn vị điều chuyển nội bộ gần nhất', 'hrpfF_lastInternalTransferUnit', profile.lastInternalTransferUnit) : roField('Đơn vị điều chuyển nội bộ gần nhất', profile.lastInternalTransferUnit)}
+    ${editableHrOnly ? textField('Lý do điều chuyển nội bộ', 'hrpfF_lastInternalTransferReason', profile.lastInternalTransferReason) : roField('Lý do điều chuyển nội bộ', profile.lastInternalTransferReason)}
+    ${editableHrOnly ? dateField('Ngày vào đơn vị cũ cùng Tập Đoàn', 'hrpfF_joinDateAtPredecessorUnit', profile.joinDateAtPredecessorUnit) : roField('Ngày vào đơn vị cũ cùng Tập Đoàn', (profile.joinDateAtPredecessorUnit || '').slice(0, 10))}
+    ${editableHrOnly ? dateField('Ngày vào HCRC', 'hrpfF_joinDateAtHcrc', profile.joinDateAtHcrc) : roField('Ngày vào HCRC', (profile.joinDateAtHcrc || '').slice(0, 10))}
+    ${editableHrOnly ? dateField('Ngày tính thâm niên', 'hrpfF_tenureBaseDate', profile.tenureBaseDate) : roField('Ngày tính thâm niên', (profile.tenureBaseDate || '').slice(0, 10))}
+    ${editableHrOnly ? dateField('Ngày nhận đơn/thông tin nghỉ', 'hrpfF_resignationNoticeDate', profile.resignationNoticeDate) : roField('Ngày nhận đơn/thông tin nghỉ', (profile.resignationNoticeDate || '').slice(0, 10))}
+    ${editableHrOnly ? dateField('Ngày dự kiến chấm dứt HĐLĐ', 'hrpfF_resignationExpectedDate', profile.resignationExpectedDate) : roField('Ngày dự kiến chấm dứt HĐLĐ', (profile.resignationExpectedDate || '').slice(0, 10))}
+  </div>
+  <div class="pb-3 border-b">
+    <label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Quá trình công tác</label>
+    ${editableHrOnly
+      ? `<textarea id="hrpfF_careerHistoryNote" rows="2" class="w-full border p-1.5 rounded text-sm">${escapeHtml(profile.careerHistoryNote || '')}</textarea>`
+      : `<p class="text-sm text-gray-800 whitespace-pre-wrap">${escapeHtml(profile.careerHistoryNote || '—')}</p>`}
+  </div>`;
+
   const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
     <button type="button" data-op="toggleHrpfManualStatus" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">
       ${profile.status === 'ON_LEAVE' ? '↩️ Chuyển về Đang làm việc' : '🌙 Chuyển sang Nghỉ dài hạn'}
@@ -1059,8 +1099,41 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     canSee('socialInsuranceNo') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số Sổ BHXH</label>${editableHrOnly ? textInput('hrpfF_socialInsuranceNo', profile.socialInsuranceNo) : roField('', profile.socialInsuranceNo)}</div>` : '',
     canSee('taxCode') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>` : '',
     canSee('nationalIdIssueDate') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày cấp CCCD/CMND</label>${editableHrOnly ? dateInput('hrpfF_nationalIdIssueDate', profile.nationalIdIssueDate) : roField('', (profile.nationalIdIssueDate || '').slice(0, 10))}</div>` : '',
-    canSee('nationalIdIssuePlace') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Nơi cấp CCCD/CMND</label>${editableHrOnly ? textInput('hrpfF_nationalIdIssuePlace', profile.nationalIdIssuePlace) : roField('', profile.nationalIdIssuePlace)}</div>` : ''
+    // nationalIdIssuePlace (10/2026, mẫu Excel 90 trường) — CHUYỂN từ ô gõ tự do sang <select> đối chiếu
+    // DB.nationalIdIssuePlaces, khớp đúng case 'nationalIdIssuePlace' (enum) đã đổi ở applyProfileEdit().
+    canSee('nationalIdIssuePlace') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Nơi cấp CCCD/CMND</label>${editableHrOnly
+      ? `<select id="hrpfF_nationalIdIssuePlace" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">-- Chưa rõ --</option>
+          ${(DB.nationalIdIssuePlaces || []).map(t => `<option value="${escapeHtml(t)}" ${profile.nationalIdIssuePlace === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select>`
+      : roField('', profile.nationalIdIssuePlace)}</div>` : '',
+    // 6 field NHẠY CẢM MỚI (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — cùng khuôn
+    // canSee()/editableHrOnly như nationalId/socialInsuranceNo ở trên (chỉ HR sửa, mặc định ẨN khỏi chính
+    // chủ/quản lý trực tiếp tới khi admin chủ động mở — xem SENSITIVE_FIELDS ở lib/employeeProfile.js).
+    canSee('emergencyContactAddress') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Địa chỉ người liên hệ khẩn cấp</label>${editableHrOnly ? textInput('hrpfF_emergencyContactAddress', profile.emergencyContactAddress) : roField('', profile.emergencyContactAddress)}</div>` : '',
+    canSee('specialLaborStatus') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đối tượng lao động đặc biệt</label>${editableHrOnly
+      ? `<select id="hrpfF_specialLaborStatus" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">-- Không --</option>
+          ${(DB.specialLaborStatuses || []).map(t => `<option value="${escapeHtml(t)}" ${profile.specialLaborStatus === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select>`
+      : roField('', profile.specialLaborStatus)}</div>` : '',
+    canSee('currentWorkStatusDetail') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng làm việc hiện tại (chi tiết)</label>${editableHrOnly
+      ? `<select id="hrpfF_currentWorkStatusDetail" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">-- Không --</option>
+          ${(DB.currentWorkStatusDetails || []).map(t => `<option value="${escapeHtml(t)}" ${profile.currentWorkStatusDetail === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select>`
+      : roField('', profile.currentWorkStatusDetail)}</div>` : '',
+    canSee('currentWorkStatusFrom') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày (tình trạng làm việc)</label>${editableHrOnly ? dateInput('hrpfF_currentWorkStatusFrom', profile.currentWorkStatusFrom) : roField('', (profile.currentWorkStatusFrom || '').slice(0, 10))}</div>` : '',
+    canSee('currentWorkStatusTo') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày (tình trạng làm việc)</label>${editableHrOnly ? dateInput('hrpfF_currentWorkStatusTo', profile.currentWorkStatusTo) : roField('', (profile.currentWorkStatusTo || '').slice(0, 10))}</div>` : ''
   ].filter(Boolean).join('');
+  // hrNote (10/2026, mẫu Excel 90 trường) — textarea riêng (2000 ký tự), tách khỏi grid 3 cột như
+  // careerHistoryNote ở adminInfoBlock2 (ghi chú dài, không hợp hiển thị ô nhỏ 1/3 hàng).
+  const hrNoteBlock = !canSee('hrNote') ? '' : `<div class="mt-3 pt-3 border-t">
+    <label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ghi chú nhân sự</label>
+    ${editableHrOnly
+      ? `<textarea id="hrpfF_hrNote" rows="2" class="w-full border p-1.5 rounded text-sm">${escapeHtml(profile.hrNote || '')}</textarea>`
+      : `<p class="text-sm text-gray-800 whitespace-pre-wrap">${escapeHtml(profile.hrNote || '—')}</p>`}
+  </div>`;
   const hrOnlyBlock = !hrOnlyFieldsHtml ? '' : `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3 pt-3 border-t">${hrOnlyFieldsHtml}</div>`;
 
   // scope MANAGE: LUÔN hiện (HR/admin xem/sửa đầy đủ, không phụ thuộc cấu hình trường xem). scope ME:
@@ -1112,7 +1185,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${historyBlock}`;
 }
 
@@ -1299,6 +1372,26 @@ function collectHrpfProfileFormValues(scope) {
       const raw = val('hrpfF_socialInsuranceAtThisUnit');
       payload.socialInsuranceAtThisUnit = raw === '' ? null : raw === '1';
     }
+    // 17 field MỚI (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — cùng khuôn
+    // if-exists-by-id như các field HR-only ở trên (chỉ gửi field thực sự có mặt trên form đang hiện,
+    // tránh gửi null đè field người xem không thấy do canSee()/selfVisibleFields).
+    if (document.getElementById('hrpfF_emergencyContactAddress')) payload.emergencyContactAddress = val('hrpfF_emergencyContactAddress') || null;
+    if (document.getElementById('hrpfF_legalEntity')) payload.legalEntity = val('hrpfF_legalEntity') || null;
+    if (document.getElementById('hrpfF_workEmail')) payload.workEmail = val('hrpfF_workEmail') || null;
+    if (document.getElementById('hrpfF_specialLaborStatus')) payload.specialLaborStatus = val('hrpfF_specialLaborStatus') || null;
+    if (document.getElementById('hrpfF_currentWorkStatusDetail')) payload.currentWorkStatusDetail = val('hrpfF_currentWorkStatusDetail') || null;
+    if (document.getElementById('hrpfF_currentWorkStatusFrom')) payload.currentWorkStatusFrom = val('hrpfF_currentWorkStatusFrom') || null;
+    if (document.getElementById('hrpfF_currentWorkStatusTo')) payload.currentWorkStatusTo = val('hrpfF_currentWorkStatusTo') || null;
+    if (document.getElementById('hrpfF_lastInternalTransferUnit')) payload.lastInternalTransferUnit = val('hrpfF_lastInternalTransferUnit') || null;
+    if (document.getElementById('hrpfF_lastInternalTransferReason')) payload.lastInternalTransferReason = val('hrpfF_lastInternalTransferReason') || null;
+    if (document.getElementById('hrpfF_joinDateAtPredecessorUnit')) payload.joinDateAtPredecessorUnit = val('hrpfF_joinDateAtPredecessorUnit') || null;
+    if (document.getElementById('hrpfF_joinDateAtHcrc')) payload.joinDateAtHcrc = val('hrpfF_joinDateAtHcrc') || null;
+    if (document.getElementById('hrpfF_concurrentJobTitle')) payload.concurrentJobTitle = val('hrpfF_concurrentJobTitle') || null;
+    if (document.getElementById('hrpfF_resignationNoticeDate')) payload.resignationNoticeDate = val('hrpfF_resignationNoticeDate') || null;
+    if (document.getElementById('hrpfF_resignationExpectedDate')) payload.resignationExpectedDate = val('hrpfF_resignationExpectedDate') || null;
+    if (document.getElementById('hrpfF_tenureBaseDate')) payload.tenureBaseDate = val('hrpfF_tenureBaseDate') || null;
+    if (document.getElementById('hrpfF_careerHistoryNote')) payload.careerHistoryNote = val('hrpfF_careerHistoryNote') || null;
+    if (document.getElementById('hrpfF_hrNote')) payload.hrNote = val('hrpfF_hrNote') || null;
   }
   return payload;
 }

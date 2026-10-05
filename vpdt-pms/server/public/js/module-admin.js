@@ -490,7 +490,13 @@ async function renameJobTitle(name) {
 const GENERIC_SIMPLE_CATALOGS = {
   jobGrades: { listId: 'jobGradeList', inputId: 'txtJobGradeName', label: 'cấp bậc', logPrefix: 'JOB_GRADE' },
   resignationReasons: { listId: 'resignationReasonList', inputId: 'txtResignationReasonName', label: 'lý do nghỉ việc', logPrefix: 'RESIGNATION_REASON' },
-  disciplinaryTypes: { listId: 'disciplinaryTypeList', inputId: 'txtDisciplinaryTypeName', label: 'loại kỷ luật', logPrefix: 'DISCIPLINARY_TYPE' }
+  disciplinaryTypes: { listId: 'disciplinaryTypeList', inputId: 'txtDisciplinaryTypeName', label: 'loại kỷ luật', logPrefix: 'DISCIPLINARY_TYPE' },
+  // 4 danh mục MỚI (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — cùng khuôn 3 danh
+  // mục trên (chuỗi phẳng, GỢI Ý qua sdd widget), dùng cho 4 field droplist mới ở Hồ Sơ Nhân Sự.
+  legalEntities: { listId: 'legalEntityList', inputId: 'txtLegalEntityName', label: 'đơn vị (pháp nhân)', logPrefix: 'LEGAL_ENTITY' },
+  specialLaborStatuses: { listId: 'specialLaborStatusList', inputId: 'txtSpecialLaborStatusName', label: 'đối tượng lao động đặc biệt', logPrefix: 'SPECIAL_LABOR_STATUS' },
+  currentWorkStatusDetails: { listId: 'currentWorkStatusDetailList', inputId: 'txtCurrentWorkStatusDetailName', label: 'tình trạng làm việc hiện tại', logPrefix: 'CURRENT_WORK_STATUS_DETAIL' },
+  nationalIdIssuePlaces: { listId: 'nationalIdIssuePlaceList', inputId: 'txtNationalIdIssuePlaceName', label: 'nơi cấp CCCD/CMND', logPrefix: 'NATIONAL_ID_ISSUE_PLACE' }
 };
 // LỖI ĐÃ VÁ (10/2026, người dùng báo "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không add được thông tin
 // vào đâu"): 3 form này dùng data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'" (quy ước
@@ -546,6 +552,10 @@ function renderGenericSimpleCatalogList(key) {
 function renderJobGradeList() { renderGenericSimpleCatalogList('jobGrades'); }
 function renderResignationReasonList() { renderGenericSimpleCatalogList('resignationReasons'); }
 function renderDisciplinaryTypeList() { renderGenericSimpleCatalogList('disciplinaryTypes'); }
+function renderLegalEntityList() { renderGenericSimpleCatalogList('legalEntities'); }
+function renderSpecialLaborStatusList() { renderGenericSimpleCatalogList('specialLaborStatuses'); }
+function renderCurrentWorkStatusDetailList() { renderGenericSimpleCatalogList('currentWorkStatusDetails'); }
+function renderNationalIdIssuePlaceList() { renderGenericSimpleCatalogList('nationalIdIssuePlaces'); }
 
 // ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label}[] (mục 4a) — TÁCH khỏi DB.jobTitles
 // (Khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType==='STORE' ở form Người Dùng đầy đủ.

@@ -1231,7 +1231,9 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpOnbDateOfBirth', label: 'Ngày Sinh (tuỳ chọn)', required: false },
     { id: 'hrpOnbPermanentAddress', label: 'Hộ Khẩu Thường Trú (tuỳ chọn)', required: false },
     { id: 'hrpOnbNationalIdIssueDate', label: 'Ngày Cấp CCCD (tuỳ chọn)', required: false },
-    { id: 'hrpOnbNationalIdIssuePlace', label: 'Nơi Cấp CCCD (tuỳ chọn)', required: false },
+    // nationalIdIssuePlace CÓ optionsKey (10/2026, mẫu Excel 90 trường — CHUYỂN từ gõ tự do sang <select>,
+    // cùng lý do employmentType/workSchedule ngay dưới) — trỏ DB.nationalIdIssuePlaces.
+    { id: 'hrpOnbNationalIdIssuePlace', label: 'Nơi Cấp CCCD (tuỳ chọn)', required: false, optionsKey: 'nationalIdIssuePlaces' },
     // employmentType/workSchedule CÓ optionsKey (10/2026, theo yêu cầu người dùng "để sau này tôi có thể
     // sửa, thêm thông tin") — trỏ DB.employmentTypes/DB.workSchedules (admin tự thêm/bớt lựa chọn qua
     // nút Sửa trường mặc định ở màn Biểu Mẫu, cùng khuôn contractType/carType — xem defaults.js).
@@ -4983,7 +4985,13 @@ const SIMPLE_CATALOG_EXCEL_CONFIG = {
   // dòng phía trên (mỗi danh mục cũ có hàm renderXxxList() riêng).
   jobGrades: { label: 'Cấp Bậc', colLabel: 'Tên Cấp Bậc', sample: 'L5', renderFn: 'renderJobGradeList' },
   resignationReasons: { label: 'Lý Do Nghỉ Việc', colLabel: 'Lý Do', sample: 'Nghỉ việc cá nhân', renderFn: 'renderResignationReasonList' },
-  disciplinaryTypes: { label: 'Loại Kỷ Luật', colLabel: 'Tên Loại Kỷ Luật', sample: 'Nhắc nhở', renderFn: 'renderDisciplinaryTypeList' }
+  disciplinaryTypes: { label: 'Loại Kỷ Luật', colLabel: 'Tên Loại Kỷ Luật', sample: 'Nhắc nhở', renderFn: 'renderDisciplinaryTypeList' },
+  // 4 danh mục MỚI (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — cùng khuôn 3 dòng
+  // trên (dùng chung GENERIC_SIMPLE_CATALOGS + renderGenericSimpleCatalogList() ở module-admin.js).
+  legalEntities: { label: 'Đơn Vị (Pháp Nhân)', colLabel: 'Tên Đơn Vị', sample: 'Công ty TNHH HCRC', renderFn: 'renderLegalEntityList' },
+  specialLaborStatuses: { label: 'Đối Tượng Lao Động Đặc Biệt', colLabel: 'Tên Đối Tượng', sample: 'Lao động khuyết tật', renderFn: 'renderSpecialLaborStatusList' },
+  currentWorkStatusDetails: { label: 'Tình Trạng Làm Việc Hiện Tại', colLabel: 'Tên Tình Trạng', sample: 'Nghỉ thai sản', renderFn: 'renderCurrentWorkStatusDetailList' },
+  nationalIdIssuePlaces: { label: 'Nơi Cấp CCCD/CMND', colLabel: 'Tên Nơi Cấp', sample: 'Cục Cảnh sát QLHC về TTXH', renderFn: 'renderNationalIdIssuePlaceList' }
 };
 
 function renderSimpleCatalogExcelToolsHtml(catalogKey) {
@@ -5474,7 +5482,11 @@ const SIMPLE_CATALOG_BULK_CONFIG = {
     afterDelete: () => { if (typeof syncTrainingCategorySelectsIfLoaded === 'function') syncTrainingCategorySelectsIfLoaded(); } },
   jobGrades: { dbKey: 'jobGrades', kindLabel: 'cấp bậc', renderFn: 'renderJobGradeList' },
   resignationReasons: { dbKey: 'resignationReasons', kindLabel: 'lý do nghỉ việc', renderFn: 'renderResignationReasonList' },
-  disciplinaryTypes: { dbKey: 'disciplinaryTypes', kindLabel: 'loại kỷ luật', renderFn: 'renderDisciplinaryTypeList' }
+  disciplinaryTypes: { dbKey: 'disciplinaryTypes', kindLabel: 'loại kỷ luật', renderFn: 'renderDisciplinaryTypeList' },
+  legalEntities: { dbKey: 'legalEntities', kindLabel: 'đơn vị (pháp nhân)', renderFn: 'renderLegalEntityList' },
+  specialLaborStatuses: { dbKey: 'specialLaborStatuses', kindLabel: 'đối tượng lao động đặc biệt', renderFn: 'renderSpecialLaborStatusList' },
+  currentWorkStatusDetails: { dbKey: 'currentWorkStatusDetails', kindLabel: 'tình trạng làm việc hiện tại', renderFn: 'renderCurrentWorkStatusDetailList' },
+  nationalIdIssuePlaces: { dbKey: 'nationalIdIssuePlaces', kindLabel: 'nơi cấp CCCD/CMND', renderFn: 'renderNationalIdIssuePlaceList' }
 };
 
 const catalogBulkSelection = {}; // { [catalogKey]: Set<string> } — reset tự nhiên khi tải lại trang.
@@ -10280,6 +10292,16 @@ function populateDropdowns() {
       DB.workSchedules.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     if (DB.workSchedules.includes(current)) sel.value = current;
   });
+  // Nơi Cấp CCCD (hrpOnbNationalIdIssuePlace, 10/2026 — mẫu Excel 90 trường) — cùng khuôn 2 khối ngay
+  // trên, CHUYỂN từ ô gõ tự do sang <select> nguồn DB.nationalIdIssuePlaces (xem hrLifecycleSection.html).
+  (() => {
+    const sel = document.getElementById('hrpOnbNationalIdIssuePlace');
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn --</option>' +
+      (DB.nationalIdIssuePlaces || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if ((DB.nationalIdIssuePlaces || []).includes(current)) sel.value = current;
+  })();
 
   // Mục Đích Sử Dụng (Đăng Ký Xe) — cùng khuôn carType ở trên nhưng value là KEY.
   populateCarPurposeSelect();

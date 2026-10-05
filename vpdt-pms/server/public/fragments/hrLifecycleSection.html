@@ -149,7 +149,14 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Nơi Cấp CCCD (tuỳ chọn)</label>
-                <input id="hrpOnbNationalIdIssuePlace" class="w-full border p-1.5 rounded text-xs">
+                <!-- nationalIdIssuePlace (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") —
+                     CHUYỂN từ ô gõ tự do sang <select> (như employmentType/workSchedule ngay dưới) vì
+                     field này giờ đối chiếu danh mục DB.nationalIdIssuePlaces ở lib/employeeProfile.js::
+                     applyProfileEdit() (case 'nationalIdIssuePlace') — <option> nạp ĐỘNG qua
+                     populateDropdowns() (core.js), KHÔNG gõ cứng ở đây. -->
+                <select id="hrpOnbNationalIdIssuePlace" class="w-full border p-1.5 rounded text-xs bg-white">
+                  <option value="">-- Chọn --</option>
+                </select>
               </div>
               <!-- employmentType/workSchedule: <option> nạp ĐỘNG từ DB.employmentTypes/DB.workSchedules
                    qua populateDropdowns() (public/js/core.js) — admin tự thêm/bớt lựa chọn qua nút Sửa
