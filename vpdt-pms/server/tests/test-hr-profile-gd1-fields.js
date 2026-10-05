@@ -81,10 +81,13 @@ async function main() {
     assertEqual(threw, true, 'Ngày nghỉ hưu dự kiến không hợp lệ phải bị chặn');
   });
 
-  await run.run('applyProfileEdit(): nationalIdIssuePlace/deskLocation lưu chuỗi tự do bình thường (HR-only)', () => {
+  await run.run('applyProfileEdit(): nationalIdIssuePlace (đối chiếu danh mục, fallback cứng khi không truyền options)/deskLocation (tự do) lưu bình thường (HR-only)', () => {
     const p = employeeProfile.defaultProfile('NV904');
-    employeeProfile.applyProfileEdit(p, { nationalIdIssuePlace: 'Cục CS QLHC về TTXH', deskLocation: 'Tầng 3 - Bàn 12' }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR One', {});
-    assertEqual(p.nationalIdIssuePlace, 'Cục CS QLHC về TTXH');
+    // nationalIdIssuePlace đã thành droplist đối chiếu danh mục (10/2026, mẫu Excel 90 trường) — khi
+    // KHÔNG truyền options.nationalIdIssuePlaces, rơi về fallback NATIONAL_ID_ISSUE_PLACES cứng, phải
+    // dùng ĐÚNG 1 giá trị có trong fallback đó để test không phụ thuộc danh mục admin cấu hình.
+    employeeProfile.applyProfileEdit(p, { nationalIdIssuePlace: 'Cục cảnh sát QLHC về TTXH', deskLocation: 'Tầng 3 - Bàn 12' }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr1', 'HR One', {});
+    assertEqual(p.nationalIdIssuePlace, 'Cục cảnh sát QLHC về TTXH');
     assertEqual(p.deskLocation, 'Tầng 3 - Bàn 12');
   });
 

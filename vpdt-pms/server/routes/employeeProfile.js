@@ -732,7 +732,9 @@ router.post('/', requireProfileCreate, async (req, res) => {
     let created, syncTarget = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username, req.freshUser.name, {
-        employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules
+        employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
+        legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
+        currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
       });
       if (positionKey) {
         const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
@@ -870,11 +872,17 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
               });
               continue;
             }
-            const updated = employeeProfile.updateProfileFromImport(list, row.employeeCode, row, req.freshUser.username, req.freshUser.name);
+            const updated = employeeProfile.updateProfileFromImport(list, row.employeeCode, row, req.freshUser.username, req.freshUser.name, {
+              employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
+              legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
+              currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
+            });
             results.updated.push(updated.employeeCode);
           } else {
             const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name, {
-              employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules
+              employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
+              legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
+              currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
             });
             results.created.push(created.employeeCode);
           }
@@ -911,7 +919,7 @@ const hrExportRateLimiter = rateLimit({
 router.get('/export-xlsx', hrExportRateLimiter, requireProfileFullView, async (req, res) => {
   try {
     const appData = await getAllAppData();
-    const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || []);
+    const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || [], appData.laborContracts || []);
     logHrProfileAction(req, 'EXPORT_XLSX', '', `Xuất Excel toàn bộ Hồ Sơ Nhân Sự (${(appData.employeeProfiles || []).length} hồ sơ, gồm CCCD/BHXH/MST/tài khoản ngân hàng)`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Ho_So_Nhan_Su.xlsx"');
