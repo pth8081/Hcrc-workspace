@@ -34,11 +34,18 @@ const COLUMNS = [
   { header: 'Địa Chỉ Thường Trú', key: 'permanentAddress', width: 28 },
   { header: 'Địa Chỉ Hiện Tại', key: 'currentAddress', width: 28 },
   { header: 'Email Cá Nhân', key: 'personalEmail', width: 22 },
+  // contactPhone (báo cáo rà soát mẫu Excel mới, 10/2026) — field THẬT trên employeeProfiles (copy 1 lần
+  // từ hrProcesses.phone lúc tạo Onboarding, sửa được sau qua HR_ONLY_EDITABLE_FIELDS), KHÁC
+  // emergencyContactPhone (số của người liên hệ khẩn cấp, không phải của chính nhân viên).
+  { header: 'Điện Thoại Liên Hệ', key: 'contactPhone', width: 16 },
   { header: 'Người Liên Hệ Khẩn Cấp', key: 'emergencyContactName', width: 20 },
   { header: 'SĐT Liên Hệ Khẩn Cấp', key: 'emergencyContactPhone', width: 16 },
   { header: 'Quan Hệ (khẩn cấp)', key: 'emergencyContactRelationship', width: 14 },
   { header: 'Số Tài Khoản Ngân Hàng', key: 'bankAccountNo', width: 18 },
   { header: 'Ngân Hàng', key: 'bankName', width: 18 },
+  // bankAccountHolderName (báo cáo rà soát mẫu Excel mới, 10/2026) — KHÁC bankName (tên NGÂN HÀNG), đây
+  // là tên CHỦ tài khoản (có thể khác tên nhân viên nếu dùng tài khoản người thân).
+  { header: 'Tên Chủ Tài Khoản Ngân Hàng', key: 'bankAccountHolderName', width: 22 },
   { header: 'Số Sổ BHXH', key: 'socialInsuranceNo', width: 14 },
   { header: 'Mã Số Thuế TNCN', key: 'taxCode', width: 14 },
   // GĐ1 (10/2026, đối chiếu Excel quản lý thủ công Nhân Sự) — jobGrade/concurrentTitle KHÔNG đưa vào
@@ -95,8 +102,46 @@ const CONTRACT_READONLY_COLUMNS = [
   { header: 'Hỗ Trợ Điện Thoại (CHỈ XEM)', key: 'phoneAllowance', width: 16 },
   { header: 'Phụ Cấp/Hỗ Trợ Khác (CHỈ XEM)', key: 'otherAllowance', width: 16 },
   { header: 'Ngày Chấm Dứt HĐLĐ (CHỈ XEM)', key: 'terminationDate', width: 18 },
-  { header: 'Lý Do Chấm Dứt HĐLĐ (CHỈ XEM)', key: 'terminationReason', width: 22 }
+  { header: 'Lý Do Chấm Dứt HĐLĐ (CHỈ XEM)', key: 'terminationReason', width: 22 },
+  // 3 khoản thu nhập + tỷ lệ lương thử việc (báo cáo rà soát mẫu Excel mới, 10/2026) — CÙNG khuôn đọc
+  // LIVE từ hợp đồng ACTIVE như các cột phụ cấp ở trên (xem lib/laborContract.js::INCOME_FIELDS).
+  { header: 'Mức Lương Đóng BHXH (CHỈ XEM)', key: 'socialInsuranceSalary', width: 16 },
+  { header: 'Thưởng HQCV/Năng Suất (CHỈ XEM)', key: 'productivityBonus', width: 16 },
+  { header: 'Khoản Khác (CHỈ XEM)', key: 'otherIncome', width: 16 },
+  { header: 'Tỷ Lệ Lương Thử Việc % (CHỈ XEM)', key: 'probationSalaryRate', width: 16 }
 ];
+// 8 cột CHỈ XEM đọc LIVE từ users/hrProcesses (báo cáo rà soát mẫu Excel mới, 10/2026) — xem
+// lib/employeeProfile.js::resolveWiredReadOnlyFields() + routes/employeeProfile.js::ensureDeptCode()
+// cho cơ chế đọc/sinh mã gốc (deptCodeMap đọc thẳng từ appData, KHÔNG tự sinh mã mới lúc xuất Excel —
+// tránh ghi dữ liệu trong 1 thao tác đọc/xuất báo cáo, để trống nếu bộ phận đó chưa từng được cấp mã).
+const WIRED_READONLY_COLUMNS = [
+  { header: 'Mã Bộ Phận (CHỈ XEM)', key: 'deptCode', width: 14 },
+  { header: 'Khối/Ban (CHỈ XEM)', key: 'khoiBan', width: 18 },
+  { header: 'Mã QLTT (CHỈ XEM)', key: 'managerUsername', width: 14 },
+  { header: 'Họ Tên QLTT (CHỈ XEM)', key: 'managerName', width: 20 },
+  { header: 'Mã QL Cấp Trên (CHỈ XEM)', key: 'managerManagerUsername', width: 16 },
+  { header: 'Họ Tên QL Cấp Trên (CHỈ XEM)', key: 'managerManagerName', width: 20 },
+  { header: 'Lý Do Nghỉ Việc (CHỈ XEM)', key: 'resignationReason', width: 22 },
+  { header: 'Ngày Nghỉ Việc Thực Tế (CHỈ XEM)', key: 'actualEndDateDisplay', width: 18 }
+];
+// 12 cột lịch sử (báo cáo rà soát mẫu Excel mới, 10/2026) — CHỈ dùng khi XUẤT Excel, KHÔNG hiển thị
+// dạng bảng trên màn Hồ Sơ (màn hình đã có khu lịch sử Hợp Đồng/Điều Chỉnh riêng ở tab Hợp Đồng Lao
+// Động) và KHÔNG có trong mẫu Tải Về để nhập (chỉ đọc, không có đường ghi ngược lại laborContracts qua
+// Excel này). 2 nhóm:
+//  - HĐLĐ lần 1/2/3: tối đa 3 bản ghi laborContracts CŨ NHẤT (theo startDate) của nhân viên — thường là
+//    các hợp đồng đã hết hạn/bị thay thế, nhưng không lọc cứng theo status (nhân viên mới chỉ có 1 hợp
+//    đồng ACTIVE thì hợp đồng đó vẫn hiện ở "Lần 1").
+//  - Điều chỉnh thu nhập lần 1/2/N: tối đa 3 phụ lục (amendments[]) CŨ NHẤT (theo applyDate) của hợp
+//    đồng ACTIVE hiện tại.
+const HISTORY_READONLY_COLUMNS = [];
+for (let i = 1; i <= 3; i++) {
+  HISTORY_READONLY_COLUMNS.push({ header: `Ngày Ký HĐLĐ Lần ${i} (CHỈ XEM)`, key: `contractHist${i}StartDate`, width: 16 });
+  HISTORY_READONLY_COLUMNS.push({ header: `Ngày Hết Hạn HĐLĐ Lần ${i} (CHỈ XEM)`, key: `contractHist${i}EndDate`, width: 16 });
+}
+for (let i = 1; i <= 3; i++) {
+  HISTORY_READONLY_COLUMNS.push({ header: `Ngày Áp Dụng Điều Chỉnh Lần ${i} (CHỈ XEM)`, key: `amendment${i}ApplyDate`, width: 18 });
+  HISTORY_READONLY_COLUMNS.push({ header: `Nội Dung Điều Chỉnh Lần ${i} (CHỈ XEM)`, key: `amendment${i}Content`, width: 30 });
+}
 const CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
 const CONTRACT_STATUS_LABELS = {
   DRAFT: 'Nháp', ACTIVE: 'Đang hiệu lực', EXPIRED: 'Hết hạn', TERMINATED: 'Đã chấm dứt', SUPERSEDED: 'Đã thay thế'
@@ -110,8 +155,10 @@ async function buildImportTemplateWorkbook() {
   sheet.addRow({
     employeeCode: 'NV1001', username: '', dateOfBirth: '1995-05-20', gender: 'Nam',
     nationalId: '079095001234', permanentAddress: '123 Đường ABC, Q.1, TP.HCM', currentAddress: '',
-    personalEmail: 'nguyenvana@gmail.com', emergencyContactName: 'Nguyễn Thị B', emergencyContactPhone: '0909123456',
+    personalEmail: 'nguyenvana@gmail.com', contactPhone: '0901234567',
+    emergencyContactName: 'Nguyễn Thị B', emergencyContactPhone: '0909123456',
     emergencyContactRelationship: 'Vợ/Chồng', bankAccountNo: '0071001234567', bankName: 'Vietcombank',
+    bankAccountHolderName: 'Nguyễn Văn A',
     socialInsuranceNo: '0123456789', taxCode: '8012345678',
     nationality: 'Việt Nam', maritalStatus: 'Độc thân', nationalIdIssueDate: '2020-01-15',
     nationalIdIssuePlace: 'Cục Cảnh sát QLHC về TTXH', deskLocation: 'Tầng 3 - Bàn 12',
@@ -131,7 +178,7 @@ async function buildImportTemplateWorkbook() {
   noteSheet.addRow(['Chưa hỗ trợ nhập "Người phụ thuộc"/"Học vấn" qua Excel — bổ sung sau khi import xong, qua Chi tiết từng hồ sơ.']);
   noteSheet.addRow(['"Cấp Bậc" KHÔNG nhập qua Excel này — tự lấy theo Chức Vụ khi HR gán ở Chi tiết hồ sơ (Cơ Cấu Tổ Chức).']);
   noteSheet.addRow(['4 cột "Đơn vị (Pháp nhân)"/"Đối tượng lao động đặc biệt"/"Tình trạng làm việc hiện tại" là droplist — chỉ nhận ĐÚNG 1 giá trị có trong danh mục tương ứng (Hệ Thống → Quản Lý Danh Mục); giá trị không khớp sẽ bị BỎ QUA dòng đó khi nhập thật, kèm lý do rõ ràng.']);
-  noteSheet.addRow(['~15 cột ở CUỐI file đánh dấu "(CHỈ XEM)" là dữ liệu Hợp Đồng Lao Động (lương/phụ cấp) — CHỈ xuất hiện khi Xuất Excel để xem/đối chiếu, KHÔNG có trong mẫu Tải Về để nhập — sửa lương/phụ cấp phải qua màn Hợp Đồng Lao Động, không sửa qua Excel này (tránh 2 nguồn dữ liệu lệch nhau).']);
+  noteSheet.addRow(['Các cột ở CUỐI file đánh dấu "(CHỈ XEM)" (gồm Mã Bộ Phận/Khối Ban/Quản Lý Trực Tiếp, lương/phụ cấp/thu nhập Hợp Đồng Lao Động, 12 cột lịch sử HĐLĐ Lần 1/2/3 + Điều Chỉnh Thu Nhập Lần 1/2/3) — CHỈ xuất hiện khi Xuất Excel để xem/đối chiếu, KHÔNG có trong mẫu Tải Về để nhập — sửa các dữ liệu này phải qua đúng màn nghiệp vụ (Hợp Đồng Lao Động/Chi tiết hồ sơ), không sửa qua Excel này (tránh 2 nguồn dữ liệu lệch nhau).']);
   noteSheet.eachRow(row => { row.font = { italic: true, color: { argb: 'FFDC2626' } }; });
   return wb;
 }
@@ -150,11 +197,13 @@ const HEADER_HINTS = {
   permanentAddress: ['dia chi thuong tru'],
   currentAddress: ['dia chi hien tai'],
   personalEmail: ['email ca nhan'],
+  contactPhone: ['dien thoai lien he'],
   emergencyContactName: ['nguoi lien he khan cap'],
   emergencyContactPhone: ['sdt lien he khan cap', 'so dien thoai lien he khan cap'],
   emergencyContactRelationship: ['quan he (khan cap)', 'quan he'],
   bankAccountNo: ['so tai khoan ngan hang'],
   bankName: ['ngan hang'],
+  bankAccountHolderName: ['ten chu tai khoan ngan hang'],
   socialInsuranceNo: ['so so bhxh', 'so bhxh'],
   taxCode: ['ma so thue tncn', 'ma so thue'],
   nationality: ['quoc tich'],
@@ -272,11 +321,13 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
     permanentAddress: String(get('permanentAddress') || '').trim() || null,
     currentAddress: String(get('currentAddress') || '').trim() || null,
     personalEmail: String(get('personalEmail') || '').trim() || null,
+    contactPhone: String(get('contactPhone') || '').trim() || null,
     emergencyContactName: String(get('emergencyContactName') || '').trim() || null,
     emergencyContactPhone: String(get('emergencyContactPhone') || '').trim() || null,
     emergencyContactRelationship: String(get('emergencyContactRelationship') || '').trim() || null,
     bankAccountNo: String(get('bankAccountNo') || '').trim() || null,
     bankName: String(get('bankName') || '').trim() || null,
+    bankAccountHolderName: String(get('bankAccountHolderName') || '').trim() || null,
     socialInsuranceNo: String(get('socialInsuranceNo') || '').trim() || null,
     taxCode: String(get('taxCode') || '').trim() || null,
     nationality: String(get('nationality') || '').trim() || null,
@@ -361,7 +412,27 @@ function findActiveContract(contracts, employeeCode) {
   return (contracts || []).find(c => c.employeeCode === employeeCode && c.status === 'ACTIVE') || null;
 }
 
-async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
+// 12 cột lịch sử (báo cáo rà soát mẫu Excel mới, 10/2026) — xem chú thích đầy đủ tại
+// HISTORY_READONLY_COLUMNS ở trên cho đúng quy tắc nghiệp vụ (tối đa 3 bản ghi laborContracts CŨ NHẤT
+// theo startDate + tối đa 3 phụ lục CŨ NHẤT theo applyDate của hợp đồng ACTIVE).
+function oldestContractsForEmployee(contracts, employeeCode, limit) {
+  return (contracts || [])
+    .filter(c => c.employeeCode === employeeCode && c.startDate)
+    .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)))
+    .slice(0, limit);
+}
+function oldestAmendmentsOfContract(contract, limit) {
+  return ((contract && contract.amendments) || [])
+    .slice()
+    .sort((a, b) => String(a.applyDate || '').localeCompare(String(b.applyDate || '')))
+    .slice(0, limit);
+}
+
+// deptCodeMap: appData.deptCodeMap THẬT do CALLER đọc sẵn — CHỈ đọc, KHÔNG tự sinh mã mới cho bộ phận
+// chưa từng được cấp mã (tránh ghi dữ liệu trong 1 thao tác đọc/xuất báo cáo, xem chú thích
+// WIRED_READONLY_COLUMNS ở trên).
+async function buildExportWorkbook(profiles, users, hrProcesses, contracts, deptCodeMap) {
+  const employeeProfile = require('./employeeProfile');
   const usersByUsername = new Map((users || []).map(u => [u.username, u]));
   const processesById = new Map((hrProcesses || []).map(p => [p.id, p]));
   const wb = new ExcelJS.Workbook();
@@ -379,7 +450,14 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
     { header: 'Địa Chỉ Thường Trú', key: 'permanentAddress', width: 28 },
     { header: 'Địa Chỉ Hiện Tại', key: 'currentAddress', width: 28 },
     { header: 'Email Cá Nhân', key: 'personalEmail', width: 22 },
+    { header: 'Điện Thoại Liên Hệ', key: 'contactPhone', width: 16 },
     { header: 'SĐT Khẩn Cấp', key: 'emergencyContactPhone', width: 16 },
+    // LỖI ĐÃ VÁ (báo cáo rà soát mẫu Excel mới, 10/2026): 3 cột ngân hàng CÓ trong mẫu Tải Về để nhập
+    // (COLUMNS ở trên) nhưng TRƯỚC ĐÂY không hề xuất hiện lại khi Xuất Excel — nhập vào được, xuất ra
+    // lại mất, 1 chiều. Bổ sung đủ cả 3 để đối xứng với import.
+    { header: 'Số Tài Khoản Ngân Hàng', key: 'bankAccountNo', width: 18 },
+    { header: 'Ngân Hàng', key: 'bankName', width: 18 },
+    { header: 'Tên Chủ Tài Khoản Ngân Hàng', key: 'bankAccountHolderName', width: 22 },
     { header: 'Số Sổ BHXH', key: 'socialInsuranceNo', width: 14 },
     { header: 'Mã Số Thuế TNCN', key: 'taxCode', width: 14 },
     { header: 'Quốc Tịch', key: 'nationality', width: 14 },
@@ -410,8 +488,14 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
     { header: 'Quá Trình Công Tác', key: 'careerHistoryNote', width: 30 },
     { header: 'Ghi Chú Nhân Sự', key: 'hrNote', width: 30 },
     { header: 'Cập Nhật Lần Cuối', key: 'updatedAt', width: 20 },
-    // ~15 cột CHỈ XEM cuối file (10/2026) — đọc LIVE từ hợp đồng ACTIVE, xem CONTRACT_READONLY_COLUMNS.
-    ...CONTRACT_READONLY_COLUMNS
+    // 8 cột CHỈ XEM đọc LIVE từ users/hrProcesses (báo cáo rà soát mẫu Excel mới, 10/2026) — xem
+    // WIRED_READONLY_COLUMNS ở trên.
+    ...WIRED_READONLY_COLUMNS,
+    // ~19 cột CHỈ XEM đọc LIVE từ hợp đồng ACTIVE, xem CONTRACT_READONLY_COLUMNS (10/2026, đã mở rộng
+    // thêm 4 cột thu nhập/tỷ lệ lương thử việc).
+    ...CONTRACT_READONLY_COLUMNS,
+    // 12 cột lịch sử (báo cáo rà soát mẫu Excel mới, 10/2026) — xem HISTORY_READONLY_COLUMNS ở trên.
+    ...HISTORY_READONLY_COLUMNS
   ];
   styleHeaderRow(sheet.getRow(1));
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hàm này tự gọi sheet.addRow() trực tiếp, không đi qua
@@ -421,12 +505,25 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
   for (const p of profiles || []) {
     const idn = identitySnapshot(p, usersByUsername, processesById);
     const c = findActiveContract(contracts, p.employeeCode);
+    const wired = employeeProfile.resolveWiredReadOnlyFields(p, users, hrProcesses);
+    const histContracts = oldestContractsForEmployee(contracts, p.employeeCode, 3);
+    const histAmendments = oldestAmendmentsOfContract(c, 3);
+    const historyRow = {};
+    for (let i = 0; i < 3; i++) {
+      const hc = histContracts[i];
+      historyRow[`contractHist${i + 1}StartDate`] = hc?.startDate || '';
+      historyRow[`contractHist${i + 1}EndDate`] = hc?.endDate || '';
+      const am = histAmendments[i];
+      historyRow[`amendment${i + 1}ApplyDate`] = am?.applyDate || '';
+      historyRow[`amendment${i + 1}Content`] = am ? `${am.amendmentType}: ${am.oldValue || ''} → ${am.newValue || ''}` : '';
+    }
     sheet.addRow(sanitizeRowForFormulaInjection({
       employeeCode: p.employeeCode, fullName: idn.fullName, dept: idn.dept, jobTitle: idn.jobTitle,
       username: p.username || '', statusLabel: STATUS_LABELS[p.status] || p.status,
       dateOfBirth: p.dateOfBirth || '', gender: p.gender || '', nationalId: p.nationalId || '',
       permanentAddress: p.permanentAddress || '', currentAddress: p.currentAddress || '',
-      personalEmail: p.personalEmail || '', emergencyContactPhone: p.emergencyContactPhone || '',
+      personalEmail: p.personalEmail || '', contactPhone: p.contactPhone || '', emergencyContactPhone: p.emergencyContactPhone || '',
+      bankAccountNo: p.bankAccountNo || '', bankName: p.bankName || '', bankAccountHolderName: p.bankAccountHolderName || '',
       socialInsuranceNo: p.socialInsuranceNo || '', taxCode: p.taxCode || '',
       nationality: p.nationality || '', maritalStatus: p.maritalStatus || '',
       nationalIdIssueDate: p.nationalIdIssueDate || '', nationalIdIssuePlace: p.nationalIdIssuePlace || '',
@@ -441,6 +538,10 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
       resignationNoticeDate: p.resignationNoticeDate || '', resignationExpectedDate: p.resignationExpectedDate || '',
       tenureBaseDate: p.tenureBaseDate || '', careerHistoryNote: p.careerHistoryNote || '', hrNote: p.hrNote || '',
       updatedAt: p.updatedAt || '',
+      deptCode: (deptCodeMap || {})[idn.dept] || '', khoiBan: wired.khoiBan || '',
+      managerUsername: wired.managerUsername || '', managerName: wired.managerName || '',
+      managerManagerUsername: wired.managerManagerUsername || '', managerManagerName: wired.managerManagerName || '',
+      resignationReason: wired.resignationReason || '', actualEndDateDisplay: wired.actualEndDate || wired.lastWorkingDate || '',
       contractCode: c?.code || '', contractTypeLabel: c ? (CONTRACT_TYPE_LABELS[c.contractType] || c.contractType) : '',
       contractStatusLabel: c ? (CONTRACT_STATUS_LABELS[c.status] || c.status) : '',
       contractStartDate: c?.startDate || '', contractEndDate: c?.endDate || '',
@@ -448,7 +549,10 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
       concurrentAllowance: c?.concurrentAllowance ?? '', hazardAllowance: c?.hazardAllowance ?? '',
       lunchAllowance: c?.lunchAllowance ?? '', transportAllowance: c?.transportAllowance ?? '',
       phoneAllowance: c?.phoneAllowance ?? '', otherAllowance: c?.otherAllowance ?? '',
-      terminationDate: c?.terminationDate || '', terminationReason: c?.terminationReason || ''
+      terminationDate: c?.terminationDate || '', terminationReason: c?.terminationReason || '',
+      socialInsuranceSalary: c?.socialInsuranceSalary ?? '', productivityBonus: c?.productivityBonus ?? '',
+      otherIncome: c?.otherIncome ?? '', probationSalaryRate: c?.probationSalaryRate ?? '',
+      ...historyRow
     }));
   }
   return wb;

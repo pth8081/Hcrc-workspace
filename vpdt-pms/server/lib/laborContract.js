@@ -121,6 +121,21 @@ const ALLOWANCE_FIELD_LABELS = {
   transportAllowance: 'Hỗ trợ đi lại', phoneAllowance: 'Hỗ trợ điện thoại', otherAllowance: 'Phụ cấp/Hỗ trợ khác'
 };
 
+// 4 field thu nhập MỚI (10/2026, báo cáo rà soát mẫu Excel mới — 4/8 cột "thực sự thiếu field" liên
+// quan Hợp Đồng Lao Động, người dùng xác nhận "Khoản khác" (BI) là 1 khoản thu nhập RIÊNG, không trùng
+// Thưởng HQCV) — CÙNG khuôn số (validate không âm) như baseSalary/ALLOWANCE_FIELDS, tính VÀO "Tổng thu
+// nhập" lúc xuất Excel (lib/employeeProfileImport.js) nhưng KHÔNG gộp chung với 7 khoản phụ cấp đã có
+// (nhóm "THÔNG TIN THU NHẬP THEO THỎA THUẬN" ở trên) vì khác hẳn ý nghĩa nghiệp vụ.
+const INCOME_FIELDS = ['socialInsuranceSalary', 'productivityBonus', 'otherIncome'];
+const INCOME_FIELD_LABELS = {
+  socialInsuranceSalary: 'Mức lương đóng BHXH', productivityBonus: 'Thưởng HQCV/Lương Năng suất',
+  otherIncome: 'Khoản khác'
+};
+// probationSalaryRate — "Tỷ lệ hưởng lương trong thời gian thử việc/Tập nghề" (mẫu Excel chỉ cho 2 lựa
+// chọn: 85%/100%) — lưu dạng số (85 hoặc 100), chỉ áp dụng ý nghĩa khi contractType='PROBATION' nhưng
+// không ép cứng ở field (hợp đồng nào cũng có thể gõ, HR tự biết field nào liên quan loại nào).
+const PROBATION_SALARY_RATES = new Set([85, 100]);
+
 function defaultContract(overrides) {
   return Object.assign({
     code: null, employeeCode: null, employeeUsername: null, hrProcessId: null,
@@ -128,6 +143,7 @@ function defaultContract(overrides) {
     startDate: null, endDate: null, baseSalary: null,
     responsibilityAllowance: null, concurrentAllowance: null, hazardAllowance: null,
     lunchAllowance: null, transportAllowance: null, phoneAllowance: null, otherAllowance: null,
+    socialInsuranceSalary: null, productivityBonus: null, otherIncome: null, probationSalaryRate: null,
     status: 'DRAFT',
     terminationDate: null, terminationReason: null,
     fileUrl: null, fileName: null,
@@ -258,7 +274,7 @@ function applyOffboardingTermination(contract, hrProcessItem) {
 // Trường HR sửa tay được (tạo mới thủ công/sửa hợp đồng đã có) — KHÔNG gồm code/employeeCode/
 // hrProcessId/status/renewalIndex/history/amendments/notifiedThresholds (đổi qua các hàm riêng ở trên/
 // dưới, không cho ghi đè tự do qua đây).
-const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSalary', ...ALLOWANCE_FIELDS, 'fileUrl', 'fileName', 'dept'];
+const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSalary', ...ALLOWANCE_FIELDS, ...INCOME_FIELDS, 'probationSalaryRate', 'fileUrl', 'fileName', 'dept'];
 
 // Nhãn hiển thị cho từng field sửa tay — dùng để ghi dòng lịch sử "MANUAL_EDIT" bên dưới (VD HR tăng
 // lương trực tiếp trên hợp đồng đang hiệu lực thay vì tạo hẳn hợp đồng mới/thêm phụ lục — trước đây
@@ -266,7 +282,8 @@ const MANUAL_EDITABLE_FIELDS = ['contractType', 'startDate', 'endDate', 'baseSal
 // nếu HR chọn sửa thẳng — xem yêu cầu "Lịch Sử Nhân Sự xuyên suốt" đã xác nhận với người dùng).
 const MANUAL_EDIT_FIELD_LABELS = {
   contractType: 'Loại hợp đồng', startDate: 'Ngày hiệu lực', endDate: 'Ngày hết hạn',
-  baseSalary: 'Lương cơ bản', ...ALLOWANCE_FIELD_LABELS,
+  baseSalary: 'Lương cơ bản', ...ALLOWANCE_FIELD_LABELS, ...INCOME_FIELD_LABELS,
+  probationSalaryRate: 'Tỷ lệ hưởng lương thử việc',
   fileUrl: 'Tệp hợp đồng', fileName: 'Tên tệp', dept: 'Phòng ban'
 };
 function applyManualEdit(contract, payload, actorUsername, actorName) {
@@ -283,9 +300,16 @@ function applyManualEdit(contract, payload, actorUsername, actorName) {
         break;
       case 'baseSalary':
       case 'responsibilityAllowance': case 'concurrentAllowance': case 'hazardAllowance':
-      case 'lunchAllowance': case 'transportAllowance': case 'phoneAllowance': case 'otherAllowance': {
+      case 'lunchAllowance': case 'transportAllowance': case 'phoneAllowance': case 'otherAllowance':
+      case 'socialInsuranceSalary': case 'productivityBonus': case 'otherIncome': {
         const n = val === '' || val === null || val === undefined ? null : Number(val);
         if (n !== null && (!Number.isFinite(n) || n < 0)) throw new HttpError(400, `${MANUAL_EDIT_FIELD_LABELS[field]} không hợp lệ`);
+        newVal = n;
+        break;
+      }
+      case 'probationSalaryRate': {
+        const n = val === '' || val === null || val === undefined ? null : Number(val);
+        if (n !== null && !PROBATION_SALARY_RATES.has(n)) throw new HttpError(400, 'Tỷ lệ hưởng lương thử việc chỉ nhận 85 hoặc 100 (%)');
         newVal = n;
         break;
       }
@@ -416,6 +440,7 @@ function assertValidManualStatusTransition(currentStatus, nextStatus) {
 
 module.exports = {
   CONTRACT_TYPES, STATUSES, POST_PROBATION_DECISIONS, MANUAL_EDITABLE_FIELDS, ALLOWANCE_FIELDS, ALLOWANCE_FIELD_LABELS,
+  INCOME_FIELDS, INCOME_FIELD_LABELS, PROBATION_SALARY_RATES,
   canManageContracts, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
   generateContractCode, defaultContract,
   buildProbationDraftPayload, applyActivateProbation, applyPostProbationDecision, applyOffboardingTermination,

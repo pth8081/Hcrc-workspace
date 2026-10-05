@@ -1350,6 +1350,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false },
     { id: 'hrpfCF_bankAccountNo', label: 'Số Tài Khoản Ngân Hàng', required: false },
     { id: 'hrpfCF_bankName', label: 'Ngân Hàng', required: false },
+    { id: 'hrpfCF_bankAccountHolderName', label: 'Tên Chủ Tài Khoản Ngân Hàng', required: false },
     { id: 'hrpfCF_socialInsuranceNo', label: 'Số Sổ BHXH', required: false },
     { id: 'hrpfCF_taxCode', label: 'Mã Số Thuế TNCN', required: false }
   ],
@@ -4493,6 +4494,20 @@ async function initDatabase(loggingInUser, opts) {
     DB.carTypes = data.carTypes || [];
     DB.itTicketCategories = data.itTicketCategories || [];
     DB.uniformCatalog = data.uniformCatalog || [];
+    // LỖI ĐÃ VÁ (10/2026, phát hiện khi rà soát thêm danh mục educationDegrees — cùng khuôn bug
+    // storeTypes đã vá ở trên): 8 danh mục GỢI Ý dùng chung GENERIC_SIMPLE_CATALOGS (module-admin.js)
+    // CHƯA TỪNG có dòng đọc lại ở đây — F5 xong DB.jobGrades (và 7 key còn lại) luôn là `undefined`,
+    // khiến panel Quản Lý Danh Mục hiện trống dù server đã lưu đủ dữ liệu, tới khi người dùng Thêm/Sửa
+    // 1 dòng (lúc đó mới được gán từ response API). educationDegrees (Danh Mục Bằng Cấp, báo cáo rà
+    // soát mẫu Excel mới) thêm MỚI cùng đợt, tránh lặp lại đúng lỗi vừa vá cho 7 key kia.
+    DB.jobGrades = data.jobGrades || [];
+    DB.resignationReasons = data.resignationReasons || [];
+    DB.disciplinaryTypes = data.disciplinaryTypes || [];
+    DB.legalEntities = data.legalEntities || [];
+    DB.specialLaborStatuses = data.specialLaborStatuses || [];
+    DB.currentWorkStatusDetails = data.currentWorkStatusDetails || [];
+    DB.nationalIdIssuePlaces = data.nationalIdIssuePlaces || [];
+    DB.educationDegrees = data.educationDegrees || [];
     // checklistTemplates/checklistSubmissions: thuộc LAZY_DATA_GROUPS (Lớp 3a) — xem assignLazyGroupField()
     // ngay phía trên initDatabase() cho lý do dùng hàm này thay vì gán thẳng `data.x || []`.
     assignLazyGroupField('checklistTemplates', data);
@@ -4991,7 +5006,9 @@ const SIMPLE_CATALOG_EXCEL_CONFIG = {
   legalEntities: { label: 'Đơn Vị (Pháp Nhân)', colLabel: 'Tên Đơn Vị', sample: 'Công ty TNHH HCRC', renderFn: 'renderLegalEntityList' },
   specialLaborStatuses: { label: 'Đối Tượng Lao Động Đặc Biệt', colLabel: 'Tên Đối Tượng', sample: 'Lao động khuyết tật', renderFn: 'renderSpecialLaborStatusList' },
   currentWorkStatusDetails: { label: 'Tình Trạng Làm Việc Hiện Tại', colLabel: 'Tên Tình Trạng', sample: 'Nghỉ thai sản', renderFn: 'renderCurrentWorkStatusDetailList' },
-  nationalIdIssuePlaces: { label: 'Nơi Cấp CCCD/CMND', colLabel: 'Tên Nơi Cấp', sample: 'Cục Cảnh sát QLHC về TTXH', renderFn: 'renderNationalIdIssuePlaceList' }
+  nationalIdIssuePlaces: { label: 'Nơi Cấp CCCD/CMND', colLabel: 'Tên Nơi Cấp', sample: 'Cục Cảnh sát QLHC về TTXH', renderFn: 'renderNationalIdIssuePlaceList' },
+  // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn 4 danh mục ngay trên.
+  educationDegrees: { label: 'Bằng Cấp', colLabel: 'Tên Bằng Cấp', sample: 'Đại Học', renderFn: 'renderEducationDegreeList' }
 };
 
 function renderSimpleCatalogExcelToolsHtml(catalogKey) {
@@ -5486,7 +5503,8 @@ const SIMPLE_CATALOG_BULK_CONFIG = {
   legalEntities: { dbKey: 'legalEntities', kindLabel: 'đơn vị (pháp nhân)', renderFn: 'renderLegalEntityList' },
   specialLaborStatuses: { dbKey: 'specialLaborStatuses', kindLabel: 'đối tượng lao động đặc biệt', renderFn: 'renderSpecialLaborStatusList' },
   currentWorkStatusDetails: { dbKey: 'currentWorkStatusDetails', kindLabel: 'tình trạng làm việc hiện tại', renderFn: 'renderCurrentWorkStatusDetailList' },
-  nationalIdIssuePlaces: { dbKey: 'nationalIdIssuePlaces', kindLabel: 'nơi cấp CCCD/CMND', renderFn: 'renderNationalIdIssuePlaceList' }
+  nationalIdIssuePlaces: { dbKey: 'nationalIdIssuePlaces', kindLabel: 'nơi cấp CCCD/CMND', renderFn: 'renderNationalIdIssuePlaceList' },
+  educationDegrees: { dbKey: 'educationDegrees', kindLabel: 'bằng cấp', renderFn: 'renderEducationDegreeList' }
 };
 
 const catalogBulkSelection = {}; // { [catalogKey]: Set<string> } — reset tự nhiên khi tải lại trang.

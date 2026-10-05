@@ -1218,6 +1218,22 @@
         </div>
       </details>
 
+      <!-- educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn 7 danh mục ngay trên. -->
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🎓 Danh Mục Bằng Cấp</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Trình độ" trong khối Học Vấn ở Hồ Sơ Nhân Sự.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="educationDegrees" class="flex gap-2">
+            <input id="txtEducationDegreeName" placeholder="Tên bằng cấp mới, VD: Đại Học..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="educationDegreeList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_educationDegrees"></div>
+        </div>
+      </details>
+
       <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
         <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🏪 Danh Sách Chức Danh (Siêu Thị)</span></summary>
         <div class="p-0 pt-2 space-y-3">

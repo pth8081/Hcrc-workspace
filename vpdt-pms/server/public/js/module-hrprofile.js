@@ -34,7 +34,7 @@ const HRPF_SENSITIVE_FIELD_LABELS = {
   emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
-  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', bankAccountHolderName: 'Tên chủ tài khoản ngân hàng', socialInsuranceNo: 'Số BHXH',
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn'
 };
 const HRPF_STATUS_BADGES = {
@@ -293,7 +293,7 @@ function renderHrpfProfileReadOnly(profile, managerVisibleFields) {
     <p class="text-sm text-gray-800">${escapeHtml(val || '—')}</p></div>`;
   const SIMPLE_FIELDS = ['dateOfBirth', 'gender', 'personalEmail', 'emergencyContactName', 'emergencyContactPhone',
     'emergencyContactRelationship', 'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo',
-    'bankName', 'socialInsuranceNo', 'taxCode'];
+    'bankName', 'bankAccountHolderName', 'socialInsuranceNo', 'taxCode'];
   const simpleFieldsHtml = SIMPLE_FIELDS.filter(f => visible.has(f))
     .map(f => roField(HRPF_SENSITIVE_FIELD_LABELS[f], profile[f])).join('');
   const dependentsHtml = !visible.has('dependents') ? '' : `<div class="mt-3 pt-3 border-t">
@@ -730,6 +730,7 @@ async function submitHrpfCreateProfile() {
     emergencyContactName: val('hrpfCF_emergencyContactName'), emergencyContactPhone: val('hrpfCF_emergencyContactPhone'),
     emergencyContactRelationship: val('hrpfCF_emergencyContactRelationship'),
     bankAccountNo: val('hrpfCF_bankAccountNo'), bankName: val('hrpfCF_bankName'),
+    bankAccountHolderName: val('hrpfCF_bankAccountHolderName'),
     socialInsuranceNo: val('hrpfCF_socialInsuranceNo'), taxCode: val('hrpfCF_taxCode')
   };
   try {
@@ -1116,6 +1117,23 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       : `<p class="text-sm text-gray-800 whitespace-pre-wrap">${escapeHtml(profile.careerHistoryNote || '—')}</p>`}
   </div>`;
 
+  // adminInfoBlock3 (10/2026, báo cáo rà soát mẫu Excel mới) — 8 cột ĐỌC LIVE từ users/hrProcesses, gộp
+  // sẵn vào `profile` ở response server (xem resolveWiredReadOnlyFields(), lib/employeeProfile.js) —
+  // TOÀN BỘ CHỈ-XEM ở đây (trừ contactPhone, field THẬT trên employeeProfiles, sửa như field hành chính
+  // khác), không qua applyProfileEdit() vì không thuộc employeeProfiles. Mã/Họ Tên QLTT + QL cấp trên lấy
+  // từ Cơ Cấu Tổ Chức (users.managerUsername), tự cập nhật nếu đổi quản lý — không cần HR tự gõ lại.
+  const managerChainText = [profile.managerUsername, profile.managerName].filter(Boolean).join(' — ');
+  const managerManagerChainText = [profile.managerManagerUsername, profile.managerManagerName].filter(Boolean).join(' — ');
+  const adminInfoBlock3 = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
+    ${editableHrOnly ? textField('Điện thoại liên hệ', 'hrpfF_contactPhone', profile.contactPhone) : roField('Điện thoại liên hệ', profile.contactPhone)}
+    ${roField('Mã bộ phận', profile.deptCode)}
+    ${roField('Khối/Ban', profile.khoiBan)}
+    ${roField('Mã/Họ Tên QLTT', managerChainText)}
+    ${roField('Mã/Họ Tên QL cấp trên', managerManagerChainText)}
+    ${roField('Lý do nghỉ việc/chuyển việc', profile.resignationReason)}
+    ${roField('Ngày nghỉ việc thực tế', (profile.actualEndDate || profile.lastWorkingDate || '').slice(0, 10))}
+  </div>`;
+
   const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
     <button type="button" data-op="toggleHrpfManualStatus" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">
       ${profile.status === 'ON_LEAVE' ? '↩️ Chuyển về Đang làm việc' : '🌙 Chuyển sang Nghỉ dài hạn'}
@@ -1187,6 +1205,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     ${canSee('emergencyContactRelationship') ? textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship) : ''}
     ${canSee('bankAccountNo') ? textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo) : ''}
     ${canSee('bankName') ? textField('Ngân hàng', 'hrpfF_bankName', profile.bankName) : ''}
+    ${canSee('bankAccountHolderName') ? textField('Tên chủ tài khoản ngân hàng', 'hrpfF_bankAccountHolderName', profile.bankAccountHolderName) : ''}
     ${canSee('nationality') ? textField('Quốc tịch', 'hrpfF_nationality', profile.nationality) : ''}
     ${canSee('maritalStatus') ? (isReadOnly ? roField('Tình trạng hôn nhân', profile.maritalStatus) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng hôn nhân</label>
       <select id="hrpfF_maritalStatus" class="w-full border p-1.5 rounded text-sm bg-white">
@@ -1286,7 +1305,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${adminInfoBlock3}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${contractBlock}${historyBlock}`;
 }
 
@@ -1320,8 +1339,16 @@ function hrpfDependentRowHtml(d) {
 }
 function hrpfEducationRowHtml(e) {
   const ee = e || {};
+  // degree (10/2026, báo cáo rà soát mẫu Excel mới — câu trả lời người dùng "cho drop list tùy chọn và
+  // đưa vào danh mục") — đổi từ ô gõ tự do sang <select> nguồn DB.educationDegrees (Danh Mục Bằng Cấp,
+  // Quản Lý Danh Mục), cùng khuôn nationalIdIssuePlace/legalEntity. Vẫn giữ giá trị cũ dù không còn nằm
+  // trong danh mục (dữ liệu lịch sử/đã xoá khỏi danh mục) để không âm thầm mất dữ liệu đã lưu.
+  const degreeOptions = Array.from(new Set([...(DB.educationDegrees || []), ...(ee.degree ? [ee.degree] : [])]));
   return `<div class="grid grid-cols-4 gap-1 items-center hrpf-education-row" data-id="${escapeHtml(ee.id || '')}">
-    <input value="${escapeHtml(ee.degree || '')}" placeholder="Bằng cấp" class="border p-1 rounded text-xs hrpf-edu-degree">
+    <select class="border p-1 rounded text-xs bg-white hrpf-edu-degree">
+      <option value="">-- Bằng cấp --</option>
+      ${degreeOptions.map(d => `<option value="${escapeHtml(d)}" ${ee.degree === d ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+    </select>
     <input value="${escapeHtml(ee.major || '')}" placeholder="Chuyên ngành" class="border p-1 rounded text-xs hrpf-edu-major">
     <input value="${escapeHtml(ee.school || '')}" placeholder="Trường" class="border p-1 rounded text-xs hrpf-edu-school">
     <div class="flex items-center gap-1">
@@ -1424,6 +1451,7 @@ function collectHrpfProfileFormValues(scope) {
   if (document.getElementById('hrpfF_emergencyContactRelationship')) payload.emergencyContactRelationship = val('hrpfF_emergencyContactRelationship') || null;
   if (document.getElementById('hrpfF_bankAccountNo')) payload.bankAccountNo = val('hrpfF_bankAccountNo') || null;
   if (document.getElementById('hrpfF_bankName')) payload.bankName = val('hrpfF_bankName') || null;
+  if (document.getElementById('hrpfF_bankAccountHolderName')) payload.bankAccountHolderName = val('hrpfF_bankAccountHolderName') || null;
   if (document.getElementById('hrpfF_nationality')) payload.nationality = val('hrpfF_nationality') || null;
   if (document.getElementById('hrpfF_maritalStatus')) payload.maritalStatus = val('hrpfF_maritalStatus') || null;
   if (document.getElementById('hrpfDependentsRows')) {
@@ -1493,6 +1521,8 @@ function collectHrpfProfileFormValues(scope) {
     if (document.getElementById('hrpfF_tenureBaseDate')) payload.tenureBaseDate = val('hrpfF_tenureBaseDate') || null;
     if (document.getElementById('hrpfF_careerHistoryNote')) payload.careerHistoryNote = val('hrpfF_careerHistoryNote') || null;
     if (document.getElementById('hrpfF_hrNote')) payload.hrNote = val('hrpfF_hrNote') || null;
+    // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới) — xem adminInfoBlock3.
+    if (document.getElementById('hrpfF_contactPhone')) payload.contactPhone = val('hrpfF_contactPhone') || null;
   }
   return payload;
 }

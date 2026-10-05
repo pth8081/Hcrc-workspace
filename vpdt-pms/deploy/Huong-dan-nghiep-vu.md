@@ -2934,6 +2934,36 @@ còn tự động xoá được hợp đồng lao động nữa.
     hợp đồng ở Hồ Sơ Nhân Sự (mục dưới, "CHỈ XEM") đọc **LIVE** từ Hợp Đồng
     Lao Động mỗi lần hiển thị/xuất, nên sửa hợp đồng ở đây (qua Excel hay
     form) tự hiện lại đúng ngay, không có bản sao dữ liệu nào cần đồng bộ.
+- **Excel Nhập TẠO MỚI hợp đồng hàng loạt (10/2026, theo yêu cầu người dùng —
+  di trú file quản lý nhân sự cũ, VD 500 nhân viên chưa có hợp đồng nào trong
+  hệ thống)** — 2 nút riêng **"📥 Tải Mẫu Tạo Mới"/"📤 Nhập Excel Tạo Mới"**
+  (cạnh 2 nút Nhập Excel sửa hàng loạt ở trên, KHÔNG dùng chung mẫu/màn —
+  khác hẳn về bản chất: mẫu này TẠO hợp đồng mới, mẫu kia CHỈ SỬA hợp đồng đã
+  có):
+  - Khoá/match theo **Mã Nhân Viên** — mã đó phải **đã có trong Hồ Sơ Nhân
+    Sự** (nhập Hồ Sơ Nhân Sự trước), nếu không màn xem trước báo lỗi ngay
+    dòng đó, không tự tạo hồ sơ hộ.
+  - Mỗi dòng hợp lệ ở màn xem trước có 1 ô chọn hành động:
+    - **employeeCode CHƯA có hợp đồng ACTIVE** → mặc định **"Tạo mới"**, tạo
+      hợp đồng DRAFT mới qua **đúng** luồng tạo tay đơn lẻ (sinh mã hợp đồng,
+      validate Lương/Phụ Cấp/Tỷ Lệ Lương Thử Việc, tính Lần Gia Hạn + áp luật
+      "Xác định thời hạn tối đa 2 lần gia hạn" như tạo tay) — không có đường
+      tắt nào bỏ qua các luật này qua Excel.
+    - **employeeCode ĐÃ có hợp đồng ACTIVE** → màn xem trước đánh dấu TRÙNG
+      (hiện rõ mã hợp đồng ACTIVE hiện có), mặc định **"Huỷ"** (an toàn, giữ
+      nguyên hợp đồng cũ) — HR tự đổi sang **"Ghi đè"** nếu muốn áp các cột đã
+      điền lên đúng hợp đồng ACTIVE đó (CHỈ ghi đè field có điền, để trống ô
+      nào = giữ nguyên, cùng khuôn Nhập Excel sửa hàng loạt ở trên).
+    - 2 dòng cùng Mã Nhân Viên trong 1 file cũng được đánh dấu trùng (mặc
+      định Huỷ dòng lặp lại) — tự chọn lại nếu thật sự cần tạo/ghi đè.
+  - Cột trong mẫu: Loại HĐLĐ, Ngày Hiệu Lực (bắt buộc), Ngày Hết Hạn (bắt
+    buộc trừ Vô thời hạn), Lần Gia Hạn (để trống = hệ thống tự tính), Lương Cơ
+    Bản, 7 khoản Phụ Cấp/Hỗ Trợ, 3 khoản Thu Nhập, Tỷ Lệ Lương Thử Việc —
+    **KHÔNG có cột Phòng Ban** (hợp đồng mới luôn lấy theo phòng ban của
+    người thực hiện import, giống tạo tay, điền vào cũng bị bỏ qua).
+  - Bấm "✅ Xác Nhận Tạo/Ghi Đè" mới thật sự ghi; mỗi dòng xử lý độc lập (1
+    dòng lỗi/bị chặn bởi luật nghiệp vụ không chặn các dòng còn lại), giới
+    hạn 300 dòng/lần như Nhập Excel sửa hàng loạt.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có tầng nhân
   viên tự xem hợp đồng lao động của chính mình; thời hạn thử việc theo từng
   loại vị trí (chuyên môn/kỹ thuật/mùa vụ) vẫn dùng chung 1 mốc ước tính 60
@@ -4127,6 +4157,36 @@ làm được nay bị chặn:
     Excel (dữ liệu hợp đồng/lương như trên) — các cột CHỈ XEM không có trong
     mẫu Tải Về để nhập, và nhập Excel cũng không sửa được dữ liệu hợp đồng
     (đúng nguyên tắc "sửa lương/phụ cấp chỉ qua Hợp Đồng Lao Động" ở trên).
+- **Mẫu Excel mới + field bổ sung (10/2026, đợt rà soát mẫu Excel mới nhất)** —
+  tiếp tục mở rộng từ mục 90 trường ở trên, THÊM vào (không thay thế):
+  - **Điện Thoại Liên Hệ** (`contactPhone`, KHÁC SĐT người liên hệ khẩn cấp)
+    + **Tên Chủ Tài Khoản Ngân Hàng** (`bankAccountHolderName`, KHÁC tên ngân
+    hàng) — 2 field tự nhập mới trên Chi tiết hồ sơ, đọc/ghi được qua Excel
+    (3 cột ngân hàng số TK/tên NH/tên chủ TK trước đây CÓ trong mẫu Tải Về để
+    nhập nhưng KHÔNG xuất hiện lại khi Xuất Excel — đã vá cùng đợt).
+  - **Danh Mục Bằng Cấp** (Hệ Thống → Quản Lý Danh Mục) — "Trình độ" ở khối
+    Học vấn nay là dropdown chọn từ danh mục này (có nút Sửa) thay vì gõ tay
+    tự do.
+  - **Mã Bộ Phận** tự sinh theo phòng ban (tiền tố "PH" + số tuần tự, cùng
+    khuôn Mã Nhân Viên "BL...") — HR không gõ tay, hệ thống tự cấp lần đầu
+    mỗi phòng ban xuất hiện; cột "Mã Bộ Phận (CHỈ XEM)" ở Xuất Excel CHỈ đọc
+    mã đã cấp, không tự sinh mã mới trong lúc xuất.
+  - **3 khoản thu nhập mới trên Hợp Đồng Lao Động** (Mức Lương Đóng BHXH,
+    Thưởng HQCV/Năng Suất, Khoản Khác — xác nhận là 3 khoản THẬT khác nhau,
+    không trùng ý nghĩa) + **Tỷ Lệ Lương Thử Việc** (chỉ nhận 85% hoặc 100%)
+    — sửa được ở tab Hợp Đồng Lao Động, hiện CHỈ XEM ở Chi tiết hồ sơ/Xuất
+    Excel (đọc LIVE từ hợp đồng ĐANG HIỆU LỰC, cùng khuôn 7 phụ cấp đã có).
+  - **8 cột CHỈ XEM đọc LIVE từ dữ liệu đã có sẵn** (KHÔNG lưu trùng, chỉ hiện
+    trên Chi tiết hồ sơ/Xuất Excel): Khối/Ban, Mã + Họ Tên Quản Lý Trực Tiếp,
+    Mã + Họ Tên Quản Lý Cấp Trên (tra theo chuỗi cấp quản lý ở Users), Lý Do
+    Nghỉ Việc + Ngày Nghỉ Việc Thực Tế (lấy từ hồ sơ Nghỉ Việc OFFBOARDING
+    mới nhất nếu có).
+  - **12 cột lịch sử CHỈ dùng khi Xuất Excel** (không có trong mẫu Tải Về,
+    không hiển thị dạng bảng ở Chi tiết hồ sơ — đã có khu lịch sử riêng ở tab
+    Hợp Đồng Lao Động): "HĐLĐ Lần 1/2/3" (Ngày ký + Ngày hết hạn của tối đa 3
+    hợp đồng CŨ NHẤT theo Ngày hiệu lực) và "Điều Chỉnh Thu Nhập Lần 1/2/3"
+    (Ngày áp dụng + nội dung của tối đa 3 phụ lục CŨ NHẤT theo Ngày áp dụng,
+    lấy từ hợp đồng ĐANG HIỆU LỰC).
 
 **Hợp Đồng Lao Động**
 - Chỉ thêm được **Phụ lục** cho hợp đồng **đang hiệu lực**. Hợp đồng còn Nháp

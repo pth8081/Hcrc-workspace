@@ -207,6 +207,14 @@ const DEFAULTS = {
   specialLaborStatuses: [],
   currentWorkStatusDetails: ['Hưu trí', 'HĐ thứ 2', 'Không lương', 'Nghỉ ốm dài ngày', 'Nghỉ thai sản', 'Khác'],
   nationalIdIssuePlaces: ['Bộ Công An', 'Cục cảnh sát QLHC về TTXH', 'Cục cảnh sát ĐKQL cư trú và DLQG về dân cư'],
+  // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới — câu trả lời người dùng cho cột "Trình
+  // độ": chuyển từ gõ tự do sang droplist) — cùng khuôn flat-array GỢI Ý như 4 danh mục ngay trên,
+  // dùng cho ô "Trình độ" trong khối Học Vấn ở Hồ Sơ Nhân Sự (education[].degree).
+  educationDegrees: ['Trung Cấp', 'Cao Đẳng', 'Đại Học', 'Sau Đại Học'],
+  // deptCodeMap (10/2026, báo cáo rà soát mẫu Excel mới — "Mã bộ phận") — object {<tên bộ phận>: <mã>},
+  // tự gán MỚI khi gặp tên bộ phận lần đầu (xem ensureDeptCode() ở routes/employeeProfile.js,
+  // generateDeptCode() ở lib/employeeProfile.js) — KHÔNG seed tay trước, bắt đầu rỗng.
+  deptCodeMap: {},
 
   // "Danh Mục" của ô Yêu Cầu Hỗ Trợ IT — TRƯỚC ĐÂY gõ cứng <option> trong index.html (IT_TICKET_CATEGORY_LABELS),
   // giờ chuyển thành dữ liệu để admin tự thêm/bớt/đổi nhãn tại màn Biểu Mẫu (CORE_FIELD_MANIFEST.IT_TICKET,

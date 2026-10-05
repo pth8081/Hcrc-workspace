@@ -25,7 +25,9 @@ const VALID_CATALOG_KEYS = new Set([
   // 7 danh mục gợi ý (10/2026, rà soát "mọi danh mục đều phải có Sửa") — xem CATALOG_HANDLERS ở
   // lib/catalogRename.js (simpleArrayCatalogHandler, không cascade).
   'jobGrades', 'resignationReasons', 'disciplinaryTypes', 'legalEntities',
-  'specialLaborStatuses', 'currentWorkStatusDetails', 'nationalIdIssuePlaces'
+  'specialLaborStatuses', 'currentWorkStatusDetails', 'nationalIdIssuePlaces',
+  // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn 7 danh mục gợi ý ngay trên.
+  'educationDegrees'
 ]);
 
 // POST /api/admin/renameCatalogEntry — body { catalogKey, oldValue, newValue }. Chỉ Quản Trị Viên (khớp

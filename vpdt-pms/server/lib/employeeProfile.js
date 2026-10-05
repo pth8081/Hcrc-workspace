@@ -100,7 +100,7 @@ const NEW_PLAIN_DATE_FIELDS = new Set([
 const SENSITIVE_FIELDS = [
   'dateOfBirth', 'gender', 'personalEmail',
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
-  'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName',
+  'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName', 'bankAccountHolderName',
   'socialInsuranceNo', 'taxCode', 'dependents', 'education',
   'nationality', 'maritalStatus', 'nationalIdIssueDate', 'nationalIdIssuePlace',
   // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
@@ -122,7 +122,9 @@ const SENSITIVE_FIELD_LABELS = {
   emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
-  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
+  // bankAccountHolderName (10/2026, báo cáo rà soát mẫu Excel mới — "Tên tài khoản Ngân hàng") — KHÁC
+  // bankName (tên NGÂN HÀNG, VD "Vietcombank"): đây là tên CHỦ THẺ (in hoa, không dấu).
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', bankAccountHolderName: 'Tên chủ tài khoản ngân hàng', socialInsuranceNo: 'Số BHXH',
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn',
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
@@ -206,6 +208,34 @@ function generateEmployeeCode(list) {
   return code;
 }
 
+// generateDeptCode()/ensureDeptCode() (10/2026, báo cáo rà soát mẫu Excel mới — câu trả lời người dùng
+// cho "Mã bộ phận": "sẽ được định nghĩa kiểu như mã tự sinh đang có của mã phòng" = cùng khuôn
+// generateEmployeeCode() ngay trên — tiền tố + số tuần tự 4 chữ số) — KHÁC employeeCode ở chỗ 1 mã gắn
+// với 1 TÊN BỘ PHẬN (không phải 1 nhân viên): mọi nhân viên cùng Phòng Ban/Siêu Thị dùng CHUNG 1 mã, lưu
+// ở appData riêng "deptCodeMap" (object {<tên bộ phận>: <mã>}), KHÔNG lồng vào employeeProfiles — tự gán
+// mã MỚI (nếu tên bộ phận đó chưa từng có mã) ngay lần đầu được truy vấn (xem ensureDeptCode() ở
+// routes/employeeProfile.js GET /by-code, /by-username), không cần HR tự đặt tay.
+const DEPT_CODE_PREFIX = 'PH';
+const DEPT_CODE_RE = /^PH(\d+)$/;
+function generateDeptCode(deptCodeMap) {
+  const used = new Set(Object.values(deptCodeMap || {}));
+  let maxSeq = 0;
+  for (const code of used) {
+    const m = DEPT_CODE_RE.exec(String(code || ''));
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  }
+  let seq = maxSeq + 1;
+  let code = `${DEPT_CODE_PREFIX}${String(seq).padStart(4, '0')}`;
+  while (used.has(code)) {
+    seq += 1;
+    code = `${DEPT_CODE_PREFIX}${String(seq).padStart(4, '0')}`;
+  }
+  return code;
+}
+
 function findProfile(list, employeeCode) {
   return (list || []).find(p => p.employeeCode === employeeCode) || null;
 }
@@ -225,11 +255,19 @@ function defaultProfile(employeeCode) {
     // workEmail (10/2026, đối chiếu "Email công ty" mẫu Excel 90 cột quản lý hồ sơ nhân sự) — khác
     // personalEmail (email cá nhân, tự phục vụ) — workEmail CHỈ HR sửa (HR_ONLY_EDITABLE_FIELDS).
     workEmail: null,
+    // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới — "Điện thoại liên hệ", khác hẳn
+    // emergencyContactPhone là SĐT người liên hệ khẩn cấp) — thu ở Onboarding (hrProcesses.phone), copy 1
+    // lần vào hồ sơ ngay sau khi tạo (cùng cơ chế currentAddress/nationalId ở routes/create.js), rồi HR
+    // sửa trực tiếp qua HR_ONLY_EDITABLE_FIELDS như field hành chính khác.
+    contactPhone: null,
     emergencyContactName: null, emergencyContactPhone: null, emergencyContactRelationship: null,
     // emergencyContactAddress (10/2026, mẫu Excel 90 cột) — cùng nhóm liên hệ khẩn cấp, SENSITIVE_FIELDS
     // + HR_ONLY_EDITABLE_FIELDS như emergencyContactName/Phone/Relationship.
     emergencyContactAddress: null,
     bankAccountNo: null, bankName: null,
+    // bankAccountHolderName (10/2026, báo cáo rà soát mẫu Excel mới — "Tên tài khoản Ngân hàng", KHÁC
+    // bankName là tên ngân hàng) — tự phục vụ như bankAccountNo/bankName ở trên.
+    bankAccountHolderName: null,
     socialInsuranceNo: null, taxCode: null,
     dependents: [], education: [],
     // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
@@ -698,12 +736,61 @@ function getProfileForViewer(profile, viewer, allUsers, managerVisibleFields) {
   return null;
 }
 
+// resolveWiredReadOnlyFields() (10/2026, mẫu Excel mới — báo cáo rà soát 90 trường): 8 cột ĐÃ CÓ dữ liệu
+// thật trong hệ thống nhưng nằm ở collection KHÁC employeeProfiles (users/hrProcesses) — đọc LIVE tại
+// thời điểm xem, KHÔNG sao chép/lưu trùng vào employeeProfiles (cùng tinh thần currentContract ở
+// routes/employeeProfile.js — "đọc sống, không duplicate-store"). Trả về object để gộp (Object.assign)
+// vào response JSON của GET /by-code, /by-username — KHÔNG ghi đè field nào đã có sẵn trên profile.
+// - khoiBan: snapshot ở DB.users (#253), KHÔNG có trên employeeProfiles.
+// - managerUsername/managerName + managerManagerUsername/managerManagerName: 2 cấp quản lý trực tiếp
+//   theo managerUsername của DB.users (Cơ Cấu Tổ Chức) — chỉ đi đúng 2 bước (khác isManagerOf() ở
+//   lib/recordViewScope.js vốn đi NGƯỢC tuỳ ý tới 50 bước để TRẢ LỜI true/false cho 1 cặp cụ thể).
+// - resignationReason/actualEndDate/lastWorkingDate: lấy từ bản ghi hrProcesses OFFBOARDING GẦN NHẤT
+//   khớp employeeUsername (có thể có NHIỀU lần nghỉ/tái tuyển — searchInactiveProfilesForRehire()/
+//   reactivateForRehire() ở trên) — sort theo createdAt, lấy mới nhất. null nếu nhân viên chưa từng có
+//   quy trình Offboarding (đang làm việc bình thường).
+function resolveWiredReadOnlyFields(profile, allUsers, allHrProcesses) {
+  const result = {
+    khoiBan: null,
+    managerUsername: null, managerName: null,
+    managerManagerUsername: null, managerManagerName: null,
+    resignationReason: null, actualEndDate: null, lastWorkingDate: null
+  };
+  if (!profile) return result;
+  const account = profile.username ? (allUsers || []).find(u => u.username === profile.username) : null;
+  if (account) {
+    result.khoiBan = account.khoiBan || null;
+    if (account.managerUsername) {
+      const mgr = (allUsers || []).find(u => u.username === account.managerUsername);
+      result.managerUsername = account.managerUsername;
+      result.managerName = mgr?.name || null;
+      if (mgr?.managerUsername) {
+        const mgr2 = (allUsers || []).find(u => u.username === mgr.managerUsername);
+        result.managerManagerUsername = mgr.managerUsername;
+        result.managerManagerName = mgr2?.name || null;
+      }
+    }
+  }
+  if (profile.username) {
+    const offboardings = (allHrProcesses || [])
+      .filter(p => p.processType === 'OFFBOARDING' && p.employeeUsername === profile.username)
+      .sort((a, b) => (parseVNDateTimeLocal(b.createdAt)?.getTime() || 0) - (parseVNDateTimeLocal(a.createdAt)?.getTime() || 0));
+    const latest = offboardings[0];
+    if (latest) {
+      result.resignationReason = latest.resignationReason || null;
+      result.actualEndDate = latest.actualEndDate || null;
+      result.lastWorkingDate = latest.lastWorkingDate || null;
+    }
+  }
+  return result;
+}
+
 // Trường tự phục vụ được sửa (chính chủ, KHÔNG có hrProfileManage) — không cho tự sửa status/processId/
 // employeeCode/username qua đường này.
 const SELF_EDITABLE_FIELDS = [
   'dateOfBirth', 'gender', 'permanentAddress', 'currentAddress', 'personalEmail',
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
-  'bankAccountNo', 'bankName', 'dependents', 'education',
+  'bankAccountNo', 'bankName', 'bankAccountHolderName', 'dependents', 'education',
   'nationality', 'maritalStatus'
 ];
 // HR (hrProfileManage/admin) sửa thêm được cả trường định danh pháp lý + trường hành chính (GĐ1).
@@ -721,7 +808,9 @@ const HR_ONLY_EDITABLE_FIELDS = [
   'lastInternalTransferUnit', 'lastInternalTransferReason',
   'joinDateAtPredecessorUnit', 'joinDateAtHcrc', 'concurrentJobTitle',
   'resignationNoticeDate', 'resignationExpectedDate', 'tenureBaseDate',
-  'careerHistoryNote', 'hrNote'
+  'careerHistoryNote', 'hrNote',
+  // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới) — xem chú thích tại defaultProfile().
+  'contactPhone'
 ];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
@@ -730,7 +819,7 @@ const PROFILE_FIELD_LABELS = {
   currentAddress: 'Địa chỉ hiện tại', personalEmail: 'Email cá nhân',
   emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
-  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', bankAccountHolderName: 'Tên chủ tài khoản ngân hàng',
   dependents: 'Người phụ thuộc', education: 'Học vấn',
   nationalId: 'CCCD/CMND', socialInsuranceNo: 'Số BHXH', taxCode: 'Mã số thuế',
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
@@ -738,7 +827,7 @@ const PROFILE_FIELD_LABELS = {
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
   socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
   disciplinaryActions: 'Kỷ luật',
-  workSchedule: 'Thời gian làm việc',
+  workSchedule: 'Thời gian làm việc', contactPhone: 'Điện thoại liên hệ',
   // 17 field MỚI (10/2026, mẫu Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — khớp ĐÚNG nhãn đã
   // dùng ở SENSITIVE_FIELD_LABELS cho 6 field trùng (emergencyContactAddress/specialLaborStatus/
   // currentWorkStatusDetail*/hrNote), không đặt tên khác nhau giữa 2 nơi.
@@ -1144,11 +1233,11 @@ module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
-  generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
+  generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
-  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
+  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
   computeHrReportSummary, computeTenureYears

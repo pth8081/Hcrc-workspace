@@ -222,7 +222,7 @@ async function main() {
       const defaultGet = await api('GET', '/api/hr-profile/self-field-config', undefined, HR_MGR);
       assertEqual(defaultGet.status, 200, 'HR phải xem được cấu hình');
       assertEqual(defaultGet.body.visibleFields.length, 0, 'Mặc định chưa cấu hình gì -> rỗng (opt-in)');
-      assertEqual(defaultGet.body.availableFields.length, 26, 'Phải liệt kê đủ 26 field nhạy cảm khả dụng (20 cũ +nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace/disciplinaryActions +6 field mẫu Excel 90 cột: emergencyContactAddress/specialLaborStatus/currentWorkStatusDetail/currentWorkStatusFrom/currentWorkStatusTo/hrNote)');
+      assertEqual(defaultGet.body.availableFields.length, 27, 'Phải liệt kê đủ 27 field nhạy cảm khả dụng (20 cũ +nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace/disciplinaryActions +6 field mẫu Excel 90 cột: emergencyContactAddress/specialLaborStatus/currentWorkStatusDetail/currentWorkStatusFrom/currentWorkStatusTo/hrNote +bankAccountHolderName (10/2026, báo cáo rà soát mẫu Excel mới))');
 
       const putRes = await api('PUT', '/api/hr-profile/self-field-config',
         { visibleFields: ['dependents', 'khong-hop-le-loai-bo'] }, HR_MGR);
@@ -568,7 +568,7 @@ async function main() {
       const defaultGet = await api('GET', '/api/hr-profile/manager-field-config', undefined, HR_MGR);
       assertEqual(defaultGet.status, 200, 'HR phải xem được cấu hình');
       assertEqual(defaultGet.body.visibleFields.length, 0, 'Mặc định chưa cấu hình gì -> rỗng (giữ nguyên hành vi cũ: ẩn hết)');
-      assertEqual(defaultGet.body.availableFields.length, 26, 'Phải liệt kê đủ 26 field nhạy cảm khả dụng (đã mở rộng 10/2026, gồm 6 field mẫu Excel 90 cột)');
+      assertEqual(defaultGet.body.availableFields.length, 27, 'Phải liệt kê đủ 27 field nhạy cảm khả dụng (đã mở rộng 10/2026, gồm 6 field mẫu Excel 90 cột + bankAccountHolderName)');
 
       // Trước khi cấu hình: quản lý trực tiếp KHÔNG thấy nationalId/dependents.
       const beforeCfg = await api('GET', '/api/hr-profile/by-code/NV001', undefined, DIRECT_MGR);

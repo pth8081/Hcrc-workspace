@@ -406,9 +406,12 @@ router.post('/:module', async (req, res) => {
         // gender/dateOfBirth/permanentAddress/nationalIdIssueDate/nationalIdIssuePlace/employmentType
         // (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG cơ chế currentAddress/
         // nationalId ở trên, đã trim/validate đầy đủ ở hrProcesses.extraValidate (lib/createValidation.js).
+        // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới — "Điện thoại liên hệ") — record.phone đã
+        // bắt buộc nhập + trim ở hrProcesses.extraValidate (xem lib/createValidation.js dòng ~3475), copy
+        // 1 lần vào hồ sơ CÙNG lúc với currentAddress/nationalId, KHÔNG lưu trùng ở nơi khác.
         if (idx !== -1 && (record.currentAddress || record.nationalId || record.gender || record.dateOfBirth
           || record.permanentAddress || record.nationalIdIssueDate || record.nationalIdIssuePlace
-          || record.employmentType || record.workSchedule)) {
+          || record.employmentType || record.workSchedule || record.phone)) {
           // CHỈ đưa vào payload đúng field client thực sự gửi khác rỗng — applyProfileEdit() coi field
           // "có mặt trong payload" (kể cả giá trị rỗng/undefined) là "cần ghi đè", nên field còn lại
           // (không nhập) PHẢI vắng mặt hẳn khỏi object này để giữ nguyên giá trị cũ, không bị ghi đè null.
@@ -422,6 +425,7 @@ router.post('/:module', async (req, res) => {
           if (record.nationalIdIssuePlace) onboardingProfileEdits.nationalIdIssuePlace = record.nationalIdIssuePlace;
           if (record.employmentType) onboardingProfileEdits.employmentType = record.employmentType;
           if (record.workSchedule) onboardingProfileEdits.workSchedule = record.workSchedule;
+          if (record.phone) onboardingProfileEdits.contactPhone = record.phone;
           // employmentTypes/workSchedules: truyền đúng danh mục THẬT appData.employmentTypes/
           // appData.workSchedules (admin tự sửa qua màn Biểu Mẫu) — appData đã đọc sẵn ở đầu handler
           // (getAllAppData()), record.employmentType/record.workSchedule đã qua đối chiếu CÙNG danh mục

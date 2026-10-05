@@ -6,6 +6,8 @@
           <a href="/api/labor-contracts/template" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">📥 Tải Mẫu</a>
           <button type="button" data-op="openHrContractImportModal" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-blue-700">📤 Nhập Excel</button>
           <button type="button" data-op="exportHrContractExcel" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">📊 Xuất Excel</button>
+          <a href="/api/labor-contracts/create-template" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">📥 Tải Mẫu Tạo Mới</a>
+          <button type="button" data-op="openHrContractCreateImportModal" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">📤 Nhập Excel Tạo Mới</button>
           <button type="button" data-op="openHrContractCreateModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-teal-700">➕ Tạo Hợp Đồng Mới</button>
         </div>
       </div>
@@ -66,4 +68,34 @@
         <button type="button" id="hrContractImportConfirmBtn" data-op="confirmHrContractImport" class="hidden bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">✅ Xác Nhận Nhập</button>
       </div>
     </div>
-  
+
+    <!-- Modal "Nhập Excel TẠO MỚI Hợp Đồng Lao Động hàng loạt" (10/2026) — khoá/match theo Mã Nhân
+         Viên; mã ĐÃ có hợp đồng ACTIVE thì người dùng tự chọn Tạo mới (chỉ khi không trùng)/Ghi đè/Huỷ
+         cho từng dòng (xem lib/laborContractCreateImport.js). KHÁC hẳn modal Nhập Excel ở trên (CHỈ sửa
+         hợp đồng ACTIVE đã có) — modal này TẠO MỚI hợp đồng cho nhân viên chưa có hợp đồng nào. -->
+    <div id="hrContractCreateImportModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-bold text-base">📤 Nhập Excel TẠO MỚI Hợp Đồng Lao Động hàng loạt</h3>
+          <button type="button" data-op="closeHrContractCreateImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-2">Dùng khi nhân viên CHƯA có hợp đồng nào trong hệ thống (VD di trú file quản lý cũ). Mã Nhân Viên phải đã có trong Hồ Sơ Nhân Sự. Mã ĐÃ có hợp đồng ĐANG HIỆU LỰC sẽ được đánh dấu TRÙNG — tự chọn Ghi đè hoặc Huỷ cho dòng đó.</p>
+        <input type="file" id="hrContractCreateImportFile" accept=".xlsx,.xls" data-op-change="onHrContractCreateImportFileChange" class="w-full border p-1.5 rounded text-xs mb-2">
+        <p id="hrContractCreateImportStatus" class="text-xs mb-2"></p>
+        <div id="hrContractCreateImportPreviewWrap" class="hidden border rounded max-h-72 overflow-y-auto mb-2">
+          <table class="w-full text-[11px]">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr>
+                <th class="p-1 text-left">Mã NV</th>
+                <th class="p-1 text-left">Họ Tên</th>
+                <th class="p-1 text-left">Loại HĐ</th>
+                <th class="p-1 text-left">Hành Động</th>
+                <th class="p-1 text-left">Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="hrContractCreateImportPreviewBody"></tbody>
+          </table>
+        </div>
+        <button type="button" id="hrContractCreateImportConfirmBtn" data-op="confirmHrContractCreateImport" class="hidden bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Tạo/Ghi Đè</button>
+      </div>
+    </div>
