@@ -13,23 +13,20 @@ function renderItPriceTierWorkflowTab(container) {
   // cần container đã tồn tại trong DOM, nên gom danh sách cần render widget vào đây rồi render THẬT SAU
   // khi container.innerHTML đã gán xong (xem vòng forEach ngay dưới .map()), thay vì dựng checkbox
   // ngay trong lúc build chuỗi HTML như trước.
-  // OPERATION_ORDER_STORE (đợt "Quy Trình Hỗn Hợp", 10/2026): danh sách approver/"Theo vị trí" cấu hình
-  // ở CÁC THẺ BÊN DƯỚI của module này KHÔNG còn được đọc để xác định người duyệt nữa — chỉ còn "Chọn
-  // mẫu quy trình" (số bước) là có tác dụng thật. Người duyệt của đơn "Đặt Hàng Tại Siêu Thị" giờ tra
-  // hoàn toàn từ appData.operationOrderStoreMixedApprovalRules (xem lib/workflowEngine.js
-  // resolveOperationOrderStoreMixedApprovers()) — cấu hình ở sub-tab "🏬 Quy Trình Đặt Hàng Siêu Thị"
-  // (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/key nội bộ vẫn "mixed") riêng.
-  // ITPRICE_WHOLESALE (đợt "🏪 QT Giá Bán Buôn (Siêu Thị)", 10/2026): CÙNG LÝ DO — LỖI ĐÃ VÁ ngay trong
-  // lúc triển khai (phát hiện khi người dùng hỏi lại, chưa kịp lộ ra production): thiếu banner này khiến
-  // admin vẫn thấy UI chọn người duyệt/"Theo vị trí" ở đây như không có gì đổi, tưởng vẫn có tác dụng,
-  // trong khi resolveWfConfig() (lib/workflowEngine.js, nhánh WHOLESALE) đã đổi sang tra hoàn toàn từ
-  // appData.itPriceWholesaleStoreMixedApprovalRules (cấu hình ở sub-tab "🏪 QT Giá Bán Buôn (Siêu Thị)").
-  // Banner này CHỈ hiện cho đúng 2 module STORE/ITPRICE_WHOLESALE (HO và các module khác vẫn đọc approvers
-  // ở đây như cũ).
+  // approverUiHidden (đợt "Dọn UI chết", 10/2026 — người dùng hỏi lại sau khi 2 cơ chế tự khớp siêu thị
+  // OPERATION_ORDER_STORE/ITPRICE_WHOLESALE đã có sub-tab riêng: "quy trình đang nằm trong Phê Duyệt có
+  // nên bỏ đi không?"): người duyệt/"Theo vị trí" cấu hình ở các THẺ BÊN DƯỚI màn này với đúng 2 module
+  // này không chỉ "không còn tác dụng" (như trước, chỉ cảnh báo) mà nay ẨN HẲN luôn — tránh admin tưởng
+  // vẫn cấu hình được. Chỉ còn "Chọn mẫu quy trình" (số bước) hiện/có tác dụng thật. DỮ LIỆU CŨ
+  // (approvers/approverMode/approversByPosition đã lưu trước đây trong operationOrderStoreTierWorkflows/
+  // itPriceTierWorkflows) GIỮ NGUYÊN trong DB — collectItPriceTierWorkflowConfig() KHÔNG đọc lại từ DOM
+  // (vì DOM không còn render) mà giữ nguyên nguyên trạng, chỉ cập nhật workflowId khi lưu (xem hàm đó).
+  // HO và các module khác vẫn render đầy đủ UI chọn người duyệt như cũ (không có sub-tab riêng).
+  const approverUiHidden = activeWfMod === 'OPERATION_ORDER_STORE' || activeWfMod === 'ITPRICE_WHOLESALE';
   const mixedApprovalNoticeHTML = activeWfMod === 'OPERATION_ORDER_STORE'
-    ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Danh sách người duyệt/"Theo vị trí" cấu hình ở các thẻ bên dưới <b>KHÔNG còn tác dụng</b> — người duyệt "Đặt Hàng Tại Siêu Thị" nay cấu hình ở sub-tab <b>"🏬 Quy Trình Đặt Hàng Siêu Thị"</b> (Hệ Thống). Ở đây chỉ còn "Chọn mẫu quy trình" (số bước theo mức giá trị) là có tác dụng thật.</div>`
+    ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Màn này chỉ còn dùng để <b>"Chọn mẫu quy trình"</b> (số bước theo mức giá trị) — người duyệt "Đặt Hàng Tại Siêu Thị" nay cấu hình ở sub-tab <b>"🏬 Quy Trình Đặt Hàng Siêu Thị"</b> (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao).</div>`
     : (activeWfMod === 'ITPRICE_WHOLESALE'
-      ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Danh sách người duyệt/"Theo vị trí" cấu hình ở các thẻ bên dưới <b>KHÔNG còn tác dụng</b> — người duyệt Phê Duyệt Giá Bán Buôn nay cấu hình ở sub-tab <b>"🏪 QT Giá Bán Buôn (Siêu Thị)"</b> (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao). Ở đây chỉ còn "Chọn mẫu quy trình" (số bước theo đúng Mức) là có tác dụng thật.</div>`
+      ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Màn này chỉ còn dùng để <b>"Chọn mẫu quy trình"</b> (số bước theo đúng Mức) — người duyệt Phê Duyệt Giá Bán Buôn nay cấu hình ở sub-tab <b>"🏪 QT Giá Bán Buôn (Siêu Thị)"</b> (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao).</div>`
       : '');
 
   const wfPickersToRender = [];
@@ -45,6 +42,15 @@ function renderItPriceTierWorkflowTab(container) {
     const effectiveApproversByPosition = isPending ? {} : (savedConfig.approversByPosition || {});
 
     const stepsConfigHTML = selectedWf.steps.map(step => {
+      // approverUiHidden (xem chú thích đầy đủ ở mixedApprovalNoticeHTML phía trên): KHÔNG render picker/
+      // "Theo vị trí" nữa cho 2 module đã có sub-tab riêng — chỉ còn tên bước để tham khảo.
+      if (approverUiHidden) {
+        return `
+          <div class="bg-gray-100 p-2 rounded text-xs border">
+            <div class="font-bold text-gray-700">Bước ${step.order}: ${escapeHtml(step.name)}</div>
+          </div>
+        `;
+      }
       const stepKey = `${tier.key}_${step.order}`;
       // "Theo vị trí" — cùng cơ chế renderWorkflowTab() (module-ngansach.js), xem chú thích đầy đủ ở đó.
       const isPositionMode = effectiveApproverMode[step.order] === 'POSITION';
@@ -97,7 +103,7 @@ function renderItPriceTierWorkflowTab(container) {
             </select>
           </div>
         </div>
-        ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.</div>` : ''}
+        ${isPending ? `<div class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">⚠️ Mẫu quy trình vừa đổi — <b>chưa lưu</b>. ${approverUiHidden ? 'Bấm "Lưu Cấu Hình" để áp dụng.' : 'Gán người duyệt cho từng bước rồi bấm "Lưu Cấu Hình" để áp dụng.'}</div>` : ''}
         <div class="space-y-2">${stepsConfigHTML}</div>
         <div class="flex justify-end pt-1 gap-2">
           ${tierWfMap[tier.key] ? `<button data-op="resetTierWorkflowConfig" data-arg0="${escapeHtml(tier.key)}" class="bg-white text-red-600 border border-red-300 px-3 py-1 rounded text-xs font-bold hover:bg-red-50">🗑️ Xoá Cấu Hình [${escapeHtml(tier.label)}]</button>` : ''}
@@ -161,6 +167,27 @@ function collectItPriceTierWorkflowConfig(tierKey) {
   if (!wfSelect) return null;
 
   const selectedWfId = wfSelect.value;
+
+  // approverUiHidden (xem chú thích đầy đủ ở renderItPriceTierWorkflowTab()): picker/"Theo vị trí" không
+  // còn render trong DOM cho 2 module này -> KHÔNG đọc input[data-tier]/wfPosModeToggle_ nữa (sẽ luôn ra
+  // rỗng, tưởng lầm "chưa có người duyệt" rồi XOÁ MẤT dữ liệu approvers cũ mỗi lần lưu). Giữ NGUYÊN
+  // approvers/approverMode/approversByPosition đã lưu trước đó trong DB, CHỈ cập nhật workflowId — đúng
+  // yêu cầu "giữ nguyên CSDL, chỉ ẩn UI" của người dùng. Không cảnh báo "chưa có người duyệt" nữa (màn
+  // này không còn cách nào để sửa cái đó).
+  if (activeWfMod === 'OPERATION_ORDER_STORE' || activeWfMod === 'ITPRICE_WHOLESALE') {
+    const modConfig = WF_MODULE_CONFIG[activeWfMod];
+    const existing = (DB[modConfig.tierDbKeyForWholesale] || {})[tierKey] || {};
+    return {
+      config: {
+        workflowId: selectedWfId,
+        approvers: existing.approvers || {},
+        approverMode: existing.approverMode || {},
+        approversByPosition: existing.approversByPosition || {}
+      },
+      emptySteps: []
+    };
+  }
+
   const approversObj = {};
   document.querySelectorAll(`input[data-tier="${tierKey}"]`).forEach(cb => {
     const stepOrder = parseInt(cb.getAttribute('data-step'), 10);

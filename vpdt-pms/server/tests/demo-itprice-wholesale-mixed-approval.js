@@ -78,11 +78,15 @@ async function main() {
       const text = document.body.innerText;
       return {
         hasNewSubTabName: text.includes('QT Giá Bán Buôn (Siêu Thị)'),
-        hasNoEffectNote: text.includes('KHÔNG còn tác dụng')
+        // Đợt "Dọn UI chết" (10/2026): banner đổi từ "...KHÔNG còn tác dụng" (coi như vẫn còn hiện UI
+        // chết bên dưới) sang "Màn này chỉ còn dùng để..." VÌ picker người duyệt/"Theo vị trí" nay ẨN
+        // HẲN luôn (không chỉ cảnh báo) — kiểm thêm picker THẬT KHÔNG còn trong DOM.
+        hasNoEffectNote: text.includes('Màn này chỉ còn dùng để'),
+        pickerHidden: !document.querySelector('[id^="wfTierApproverPicker_"]')
       };
     });
     console.log('01: "Quy Trình & Phê Duyệt" (Phê Duyệt Giá Bán Buôn) — banner cảnh báo mới:', JSON.stringify(bannerCheck));
-    if (!bannerCheck.hasNewSubTabName || !bannerCheck.hasNoEffectNote) throw new Error('Banner cảnh báo chưa đúng — kiểm tra lại module-itsupport-tier.js');
+    if (!bannerCheck.hasNewSubTabName || !bannerCheck.hasNoEffectNote || !bannerCheck.pickerHidden) throw new Error('Banner cảnh báo/ẩn picker chưa đúng — kiểm tra lại module-itsupport-tier.js');
     await shot(page, '01-canh-bao-khong-con-tac-dung-o-quy-trinh-phe-duyet');
 
     // ===== 2) So sánh: "🏬 Quy Trình Đặt Hàng Siêu Thị" (cơ chế gốc, đã có từ trước) =====

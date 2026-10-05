@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**25.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.20 (2026-10-05): Ẩn hẳn UI chọn người duyệt chết ở "Quy Trình & Phê Duyệt" (Đặt Hàng Siêu Thị + Phê Duyệt Giá Bán Buôn)
+
+Người dùng hỏi tiếp sau v25.19 (banner cảnh báo): "Nếu quy trình duyệt giá
+bán buôn và quy trình đặt hàng siêu thị đã tách riêng ra dưới quy trình nâng
+cao rồi thì các quy trình đang nằm ở trong quy trình phê duyệt có nên bỏ đi
+hay không?" — xác nhận (2 câu hỏi): (1) ẩn hẳn UI chọn người duyệt/"Theo vị
+trí" cho CẢ 2 module `OPERATION_ORDER_STORE` và `ITPRICE_WHOLESALE` ở màn
+"🔄 Quy Trình & Phê Duyệt" (chỉ còn giữ "Chọn mẫu quy trình" — phần duy nhất
+còn tác dụng thật); (2) **giữ nguyên dữ liệu approvers/approverMode/
+approversByPosition cũ trong CSDL**, không xoá/migrate, chỉ ẩn UI.
+
+- `public/js/module-itsupport-tier.js` (`renderItPriceTierWorkflowTab()`):
+  thêm cờ `approverUiHidden` (= `OPERATION_ORDER_STORE` hoặc
+  `ITPRICE_WHOLESALE`) — khi bật, mỗi thẻ "Bước N" chỉ còn hiện tên bước,
+  KHÔNG còn render picker người duyệt/toggle "Theo vị trí" nữa (trước đây
+  vẫn render đầy đủ, chỉ cảnh báo bằng banner). Banner cảnh báo đổi nội dung
+  từ "...KHÔNG còn tác dụng" (ngụ ý UI chết vẫn còn hiện bên dưới) sang "Màn
+  này chỉ còn dùng để 'Chọn mẫu quy trình'..." cho đúng với UI đã ẩn.
+- `collectItPriceTierWorkflowConfig()`: khi `approverUiHidden`, KHÔNG đọc
+  `input[data-tier]`/`wfPosModeToggle_` từ DOM nữa (các phần tử này không
+  còn tồn tại — đọc sẽ luôn ra rỗng) mà **giữ nguyên** `approvers`/
+  `approverMode`/`approversByPosition` đã lưu trước đó trong
+  `operationOrderStoreTierWorkflows`/`itPriceTierWorkflows`, chỉ cập nhật
+  `workflowId` (mẫu quy trình) khi bấm "Lưu Cấu Hình" — đúng yêu cầu "giữ
+  nguyên CSDL, chỉ ẩn UI". Không còn cảnh báo "chưa có người duyệt" cho 2
+  module này (màn không còn cách nào để sửa giá trị đó).
+- `OPERATION_ORDER_HO` (Đặt Hàng Tại HO) **không** bị ảnh hưởng — module
+  này chưa có sub-tab "Quy Trình Nâng Cao" riêng nào thay thế, nên UI chọn
+  người duyệt ở đây vẫn là nơi cấu hình DUY NHẤT, giữ nguyên như cũ.
+- `tests/test-adv-workflow-tab-deep.js`: cập nhật A6 (banner đổi nội dung +
+  xác nhận picker `wfTierApproverPicker_*` KHÔNG còn trong DOM), thêm A7 mới
+  (bấm "Lưu Cấu Hình" khi picker đã ẩn -> xác nhận approvers CŨ đã seed
+  trước đó được GIỮ NGUYÊN trong DB, không bị xoá thành rỗng).
+- `tests/demo-itprice-wholesale-mixed-approval.js`: cập nhật assertion banner
+  (cụm mới) + thêm kiểm tra picker ẩn hẳn cho `ITPRICE_WHOLESALE`.
+- Chạy lại 35 file test liên quan (Nghiệp Vụ Nâng Cao, Quy Trình & Phê
+  Duyệt, itPriceApprovals, operationOrders, CSP) — không phát sinh
+  regression.
 
 ## v25.19 (2026-10-05): Vá banner cảnh báo còn thiếu ở "Quy Trình & Phê Duyệt" (Phê Duyệt Giá Bán Buôn)
 

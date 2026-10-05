@@ -1663,6 +1663,20 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     B/C không còn bị kéo vào nữa). RETAIL (Phê Duyệt Giá Bán Lẻ, theo phòng
     ban ở `itPriceDeptWorkflows`) KHÔNG đụng tới gì — vẫn hành vi cũ 100%, chỉ
     WHOLESALE đổi cơ chế người duyệt.
+  - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
+    (10/2026)** — ngay sau khi đưa cơ chế trên vào, admin hỏi lại "quy trình
+    đang nằm trong Phê Duyệt có nên bỏ đi không, nó còn tác dụng gì không?".
+    Xác nhận: phần chọn người duyệt/"Theo vị trí" theo từng bước ở màn "🔄 Quy
+    Trình & Phê Duyệt" (mục "💰 QT Giá Bán Buôn") KHÔNG còn hiện ra nữa (trước
+    đó chỉ cảnh báo "không còn tác dụng" nhưng UI vẫn còn, dễ gây nhầm) — màn
+    này giờ CHỈ còn đúng 1 việc: "Chọn mẫu quy trình" (số bước) cho từng mức.
+    Dữ liệu người duyệt đã lưu TRƯỚC ĐÓ ở màn cũ vẫn được GIỮ NGUYÊN trong CSDL
+    (không xoá/không migrate) — chỉ không còn đường nào sửa/xem lại qua màn
+    cũ nữa; người duyệt thật từ nay tra 100% qua sub-tab "🏪 QT Giá Bán Buôn
+    (Siêu Thị)" ở trên. Cùng đợt: "🏬 Quy Trình Đặt Hàng Siêu Thị" (operationOrders
+    STORE, mục 4.4 Vận Hành) cũng được dọn tương tự — xem ghi chú ở đó.
+    "📦 Đặt Hàng Tại HO" KHÔNG bị ảnh hưởng (chưa có sub-tab riêng thay thế,
+    màn "🔄 Quy Trình & Phê Duyệt" vẫn là nơi cấu hình người duyệt DUY NHẤT).
   - **📐 Mẫu Giá dời sang Hệ Thống → Cấu Hình Nghiệp Vụ (10/2026)** — panel
     quản trị Mẫu Giá (thêm/thay/đổi tên/gán cột Margin/xoá) không còn nằm ở
     Hỗ Trợ IT nữa, đã dời sang màn MỚI **⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ**
@@ -2114,6 +2128,18 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
     cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
     Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
+  - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
+    (10/2026)**: phần chọn người duyệt/"Theo vị trí" theo từng bước ở màn
+    "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị")
+    KHÔNG còn hiện ra nữa (trước đó chỉ cảnh báo "không còn tác dụng" nhưng UI
+    vẫn còn, dễ gây nhầm) — màn này giờ CHỈ còn đúng 1 việc: "Chọn mẫu quy
+    trình" (số bước theo mức giá trị). Dữ liệu người duyệt đã lưu TRƯỚC ĐÓ ở
+    màn cũ vẫn được GIỮ NGUYÊN trong CSDL (không xoá/không migrate) — chỉ
+    không còn đường nào sửa/xem lại qua màn cũ nữa; người duyệt thật từ nay
+    tra 100% qua sub-tab "🏬 Quy Trình Đặt Hàng Siêu Thị" ở trên. "📦 Đặt Hàng
+    Tại HO" KHÔNG bị ảnh hưởng — như đã nêu ở trên, HO chưa có sub-tab riêng
+    thay thế nên màn "🔄 Quy Trình & Phê Duyệt" vẫn là nơi cấu hình người
+    duyệt DUY NHẤT cho HO.
   - **Cảnh báo "⚠️ Chưa cấu hình duyệt"** (9/2026, đợt rà soát chuyên sâu): nếu
     admin CHƯA cấu hình mẫu quy trình (số bước) cho 1 mức giá trị nào đó (màn
     "🔄 Quy Trình & Phê Duyệt"), đơn hàng rơi vào mức đó sẽ hiện rõ cảnh báo
