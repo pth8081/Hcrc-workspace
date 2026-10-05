@@ -1,8 +1,70 @@
 # Phiên bản hiện tại
 
-**25.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.6 (2026-10-05): Vá lỗi "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không thêm được" (data-op-submit bỏ qua data-arg0)
+
+Người dùng phản ánh (sau khi đã vá v25.5): "các cấu hình danh mục nhân sự như là chức danh, lý do kỷ
+luật là tôi không thể add được thông tin vào đâu" — kiểm tra lại kỹ hơn phát hiện đây là lỗi RIÊNG,
+khác hẳn lỗi v25.5 (orgChartImportModal).
+
+**Xác nhận gốc rễ qua Playwright thật** (đo trực tiếp, không suy diễn): 3 form "Thêm" của Hệ Thống →
+Quản Trị → 🗂️ Quản Lý Danh Mục — "🎚️ Danh Mục Cấp Bậc", "🚪 Danh Mục Lý Do Nghỉ Việc", "⚠️ Danh Mục Loại
+Kỷ Luật" (`jobGrades`/`resignationReasons`/`disciplinaryTypes`) — dùng chung
+`data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'"`. Nhánh `submit` của
+`bindCspDelegation()` (`core.js`) KHÔNG hề gọi `cspCollectArgs()` như 3 nhánh click/change/input khác —
+nó LUÔN gọi cứng `fn(e)` (chỉ truyền `SubmitEvent`), bỏ qua hoàn toàn `data-arg0`. Hậu quả:
+`saveGenericSimpleCatalogEntry()` nhận được `key` CHÍNH LÀ `SubmitEvent` (không phải chuỗi tên danh
+mục), `GENERIC_SIMPLE_CATALOGS[key]` luôn `undefined` → hàm `return` NGAY DÒNG ĐẦU — im lặng hoàn toàn
+(không alert, không gọi API, không xoá ô nhập) — đúng khớp "bấm Thêm không có tác dụng gì". Đây là lỗi
+có từ lúc 3 danh mục này được thêm (10/2026, v23.x), không phải lỗi mới phát sinh — do chưa từng có
+test Playwright bấm thật qua UI nút "Thêm" này (các test cũ chỉ gọi thẳng hàm JS hoặc test phần khác).
+
+**Vá tại điểm hẹp nhất** (không đổi cơ chế dispatch `submit` dùng chung — tránh ảnh hưởng ~70 form
+`data-op-submit` khác đang dựa đúng quy ước `fn(e)` hiện tại):
+- `public/js/module-admin.js`: `saveGenericSimpleCatalogEntry(key)` → `saveGenericSimpleCatalogEntry(e)`,
+  tự đọc `key` từ `e.target.dataset.catalogKey` (`e.target` lúc `submit` chính là `<form>`).
+- `public/fragments/systemSection.html`: 3 `<form>` liên quan đổi `data-arg0="'<key>'"` (bị bỏ qua) sang
+  `data-catalog-key="<key>"` (đọc trực tiếp, không qua `cspCollectArgs()`).
+
+**Test mới** `tests/test-generic-simple-catalog-add-submit.js` — bấm THẬT qua UI cho cả 3 danh mục (mở
+`<details>` đang đóng mặc định bằng click → điền ô → bấm nút "Thêm" THẬT, không gọi thẳng hàm JS) →
+xác nhận gọi đúng `POST /api/data/<key>`, danh sách tự vẽ lại, ô nhập tự xoá. Đã xác minh test THẤT BẠI
+(12/16) khi revert bản vá — tái hiện đúng lỗi "im lặng hoàn toàn" — và PASS (16/16) sau khi vá. Chạy lại
+toàn bộ 15 test liên quan danh mục admin (catalog-bulk-delete, catalog-rename-*, collapse-catalog-
+accordion, form-fields-6-catalogs, hr-discipline-jobgrade-resignation, mixed-approval-jobtitle-mix,
+object-catalog-excel*, pricefile-vppcatalog-ownership, simple-catalog-excel-tools, store-catalog-excel,
+vpp-catalog-template-export) — không regression.
+
+## v25.5 (2026-10-05): Vá lỗi "Nhập Excel Cơ Cấu Tổ Chức" bị treo — thiếu `bindCspDelegation()` cho modal
+
+Người dùng phản ánh: ở Nhân Sự > Cơ Cấu Tổ Chức (phần "định vị nhân sự" — gán vị trí/chức danh cho nhân
+sự theo cây tổ chức), bấm "📤 Nhập Excel (Bản Nháp Mới)" mở được modal, nhưng sau khi chọn file thì
+"không tác động gì", modal như bị "treo" không bấm được gì tiếp.
+
+**Xác nhận gốc rễ qua rà soát code** (không suy diễn): `#orgChartImportModal` là 1 `<div>` gốc ĐỘC LẬP
+sống ngoài `#orgChartSection` trong `public/index.html` (giống 3 modal khác của Cơ Cấu Tổ Chức —
+`orgChartNodeModal`/`orgChartApplyResultModal`/`orgChartDiffModal`), nhưng CHƯA TỪNG được gọi
+`bindCspDelegation('orgChartImportModal')` trong `public/js/core.js` từ lúc tính năng "Nhập Excel" này
+được thêm vào — nút "✕ Hủy"/"✅ Tạo Bản Nháp Mới Từ File" (`data-op`) và ô chọn file
+`#orgChartImportFileInput` (`data-op-change`) bên trong modal đều không có listener nào bắt được sự
+kiện. Dialog chọn file của hệ điều hành vẫn mở được (hành vi gốc trình duyệt, không qua CSP/JS nào cả)
+— đúng khớp với mô tả "mở được nhưng chọn file không tác động gì". Không có test Playwright nào từng
+bấm thật qua UI nút này (`tests/test-orgchart-import-export.js` chỉ test thuần thư viện server-side
+`lib/orgChartImport.js`) nên lỗi lọt qua mọi đợt rà soát trước đây — đã kiểm tra, các catalog Excel khác
+của Nhân Sự (Cấp Bậc/Lý Do Nghỉ Việc/Kỷ Luật...) đều render vào placeholder NẰM TRONG `#systemSection`
+(đã bind từ trước) nên không bị ảnh hưởng, chỉ riêng modal Nhập Excel Cơ Cấu Tổ Chức này bị thiếu.
+
+**Vá**: thêm đúng 1 dòng `bindCspDelegation('orgChartImportModal')` cạnh 3 dòng bind đã có của module
+này (`core.js`). Viết test mới `tests/test-orgchart-import-modal-binding.js` — bấm thật qua UI (mở
+modal → chọn file thật qua `page.setInputFiles()` → xác nhận status/preview/nút Xác Nhận đều phản hồi
+→ bấm Hủy đóng được modal), đã xác minh test THẤT BẠI khi revert bản vá (tái hiện đúng lỗi "treo", status
+rỗng mãi) và PASS sau khi vá — không phải suy luận lý thuyết. Chạy lại toàn bộ 6 bộ test Cơ Cấu Tổ Chức
+hiện có (`test-orgchart-v2.js` 16/16, `test-orgchart-import-export.js` 19/19, `test-orgchart-diagram-tab.js`
+17/17, `test-orgchart-delete-draft-version.js` 5/5, `test-orgchart-headcount-report.js` 5/5,
+`test-orgchart-kpiflow-prune.js` 6/6) + vài test CSP-delegation liên quan khác — không regression.
 
 ## v25.4 (2026-10-05): Thanh Toán — phục hồi logic cũ "bắt buộc tệp chứng từ lúc Xác Nhận" (khôi phục ý muốn người dùng, không phải đảo ngược mới)
 
