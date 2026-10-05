@@ -2634,6 +2634,10 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     hồ sơ Nháp mồ côi để giải phóng Mã Nhân Viên dùng lại — dành cho trường
     hợp tạo nhầm/làm lại từ đầu) — 2 nút phục vụ 2 tình huống khác nhau, dùng
     đúng nút theo đúng mục đích.
+  - **"📊 Xuất Excel"** (10/2026, theo yêu cầu người dùng — tab này CHỈ cần
+    xuất, KHÔNG có Tải Mẫu/Nhập) — xuất ĐÚNG danh sách đang hiện trong hàng
+    đợi (cả 3 trạng thái Chờ xác nhận/Đã hủy/Đã nhận việc), gồm Mã Nhân Viên,
+    Họ Tên, Phòng Ban, Chức Danh, Ngày Tạo, Trạng Thái, Lý Do Hủy.
 - HR/admin (**"🗂️ Quản Lý Hồ Sơ Nhân Sự"**) **liên kết** hồ sơ với 1 tài khoản
   VPDT thật (thường ngay sau khi IT hoàn thành việc "Tạo tài khoản VPDT" ở
   Onboarding) — trước khi liên kết, hồ sơ chỉ HR mới tra cứu được.

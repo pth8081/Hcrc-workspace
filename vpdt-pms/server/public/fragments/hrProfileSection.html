@@ -71,11 +71,14 @@
     <!-- 🕐 Hồ Sơ Onboarding — Ảnh 2 (9/2026, theo yêu cầu người dùng): hàng đợi hồ sơ nháp vừa đặt chỗ lúc
          tạo Onboarding, gác riêng hrOnboardingManage (module-hrprofile.js). -->
     <div id="hrpfViewOnboardingQueue" class="hidden space-y-3">
-      <div class="bg-teal-50 border border-teal-200 text-teal-800 text-[11px] rounded p-2.5">
-        💡 <b>Xác Nhận</b>: mở hồ sơ để cập nhật tiếp thông tin ứng viên — lưu xong hồ sơ tự chuyển sang tab
-        "📋 Quản Lý Hồ Sơ".<br>
-        💡 <b>Hủy</b>: coi như không tuyển ứng viên này — hồ sơ ở lại đây với trạng thái "Đã hủy" (phục vụ
-        báo cáo không nhận việc sau này). Luôn sắp xếp mới tạo trước.
+      <div class="flex items-start justify-between gap-2">
+        <div class="bg-teal-50 border border-teal-200 text-teal-800 text-[11px] rounded p-2.5 flex-1">
+          💡 <b>Xác Nhận</b>: mở hồ sơ để cập nhật tiếp thông tin ứng viên — lưu xong hồ sơ tự chuyển sang tab
+          "📋 Quản Lý Hồ Sơ".<br>
+          💡 <b>Hủy</b>: coi như không tuyển ứng viên này — hồ sơ ở lại đây với trạng thái "Đã hủy" (phục vụ
+          báo cáo không nhận việc sau này). Luôn sắp xếp mới tạo trước.
+        </div>
+        <button type="button" data-op="exportHrpfOnboardingQueueExcel" class="shrink-0 bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">📊 Xuất Excel</button>
       </div>
       <div class="overflow-x-auto bg-white border rounded-lg">
         <table class="w-full text-xs">

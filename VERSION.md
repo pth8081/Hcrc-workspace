@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**25.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.11 (2026-10-05): Hồ Sơ Onboarding (hàng đợi) — thêm "📊 Xuất Excel"
+
+Người dùng làm rõ: hệ thống có 2 màn đều liên quan "Onboarding" — (1) "Nhân
+Sự > Onboarding / Offboarding" (quy trình checklist, đã thêm Xuất Excel ở
+v25.9) và (2) "Hồ Sơ Nhân Sự > 🕐 Hồ Sơ Onboarding" (tab hàng đợi hồ sơ nháp
+PENDING/CANCELLED/CONFIRMED, `module-hrprofile.js`) — ý định ban đầu là màn
+(2). Bổ sung nút "📊 Xuất Excel" vào ĐÚNG tab (2), CHỈ xuất (không Tải Mẫu/
+Nhập), giữ nguyên nút đã có ở màn (1).
+
+- Nút mới trong `hrProfileSection.html` (`#hrpfViewOnboardingQueue`), gọi
+  `exportHrpfOnboardingQueueExcel()` mới (`module-hrprofile.js`) — xuất ĐÚNG
+  `_hrpfOnboardingQueueList` đang hiện trên màn (cả 3 trạng thái), gồm Mã
+  Nhân Viên, Họ Tên, Phòng Ban, Chức Danh, Ngày Tạo, Trạng Thái, Lý Do Hủy.
+- Dùng đúng route dùng chung `POST /api/admin/export-xlsx` qua
+  `downloadXlsxFromServer()` — không viết route riêng (theo quy tắc CLAUDE.md).
+- 7 kịch bản test mới (Playwright, `test-hr-onboarding-queue-export.js`) +
+  chạy lại 6 file test HR/Onboarding liên quan — không regression.
 
 ## v25.10 (2026-10-05): Thêm demo script còn thiếu (chụp ảnh nút Xuất Excel Onboarding)
 
