@@ -763,8 +763,9 @@ async function deleteCarVehicleType(id) {
 function renderCarVehicleTypeList() {
   const ul = document.getElementById('carVehicleTypeList');
   if (!ul) return;
-  ul.innerHTML = (DB.carVehicleTypes || []).map(t => `
+  ul.innerHTML = renderObjectCatalogBulkBarHtml('carVehicleTypes') + (DB.carVehicleTypes || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderObjectCatalogBulkCheckboxHtml('carVehicleTypes', t.id)}
       <span class="flex-1">${escapeHtml(t.name)} ${t.isTaxi ? '<span class="text-amber-600 font-bold">(Taxi)</span>' : (t.bienSo ? `<span class="text-gray-500">— BKS ${escapeHtml(t.bienSo)}</span>` : '')}</span>
       <button data-op="editCarVehicleType" data-arg0="${t.id}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteCarVehicleType" data-arg0="${t.id}" class="text-red-500 font-bold hover:underline">Xóa</button>

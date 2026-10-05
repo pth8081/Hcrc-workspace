@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**25.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.22 (2026-10-05): Mở rộng "chọn nhiều để xoá" sang 7 danh mục dạng OBJECT còn thiếu
+
+Theo yêu cầu người dùng: "danh mục phải sửa được đảm bảo tất cả các danh mục
+đều phải sửa được chọn xóa nhiều". Soát lại Hệ Thống → Quản Lý Danh Mục (27
+panel) xác nhận: Sửa đã có đủ khắp nơi (đợt v24.x #398); nhưng "chọn nhiều để
+xoá" (`SIMPLE_CATALOG_BULK_CONFIG`, v25 trước) khi đó CHỈ áp dụng cho 11 danh
+mục mảng chuỗi phẳng, cố tình loại trừ mọi danh mục dạng OBJECT nhiều field
+"để đợt sau" — nay triển khai đợt đó:
+
+- **`OBJECT_CATALOG_BULK_CONFIG`** (`public/js/core.js`) — mở rộng khuôn
+  "chọn nhiều để xoá" (thanh "Đã chọn N mục"/"Chọn tất cả"/"Xoá N Mục Đã
+  Chọn") sang danh mục dạng `{...}[]`, khoá định danh theo `idField` cấu hình
+  riêng từng danh mục (không nhất thiết là chính chuỗi hiển thị): áp dụng cho
+  **sensitiveKeywords** (Từ Khoá Nhạy Cảm, khoá `id` số), **storeJobTitles**
+  (Chức Danh Siêu Thị, khoá `label`), **jobTitleGradeDefaults** (Chức Danh↔Cấp
+  Bậc, khoá `jobTitle`), **carVehicleTypes** (Loại Xe Cụ Thể, `module-dangkyxe.js`),
+  **deptGroups** (Khối/Ban, vẽ dạng thẻ `<div>` không phải `<ul>/<li>`, có
+  thêm hook dọn bộ lọc Khối/Ban ở Phân Quyền sau khi xoá) và **meetingRooms**
+  (Phòng Họp, `module-phonghop.js`, cũng vẽ dạng thẻ `<div>` — có thêm bước dò
+  lịch sắp tới còn dùng phòng TRƯỚC khi xoá hàng loạt, gộp cảnh báo cho cả
+  lượt, mirror đúng logic xoá đơn lẻ đã có).
+- **`positionTypes`** (Vị Trí Làm Việc) dùng cơ chế **BESPOKE riêng**
+  (`bulkDeletePositionTypes()`, `module-admin.js`) thay vì
+  `OBJECT_CATALOG_BULK_CONFIG` — vì danh mục này có cấu trúc LỒNG
+  (Địa Điểm/Chức Danh con riêng từng Vị Trí) + REST riêng có kiểm tra ràng
+  buộc server-side (chặn xoá nếu đang gán tài khoản) + 2 mục builtin (HO/Siêu
+  Thị) không được chọn/xoá — không khớp khuôn "ghi đè thẳng cả mảng qua
+  `syncStorage()` 1 lần". Cơ chế mới tự loop gọi tuần tự
+  `DELETE /api/admin/position-types/:key` cho từng Vị Trí đã chọn, BỎ QUA ÊM
+  (không chặn cả lượt) Vị Trí nào server từ chối xoá (đang gán tài khoản),
+  rồi báo rõ qua `alert()` danh sách Vị Trí nào không xoá được + lý do.
+- Không gồm **contractTypeAbbrs** (Viết Tắt Loại Hợp Đồng) — panel này không
+  Thêm/Xoá item nào (chỉ sửa viết tắt của lựa chọn quản lý ở Biểu Mẫu), không
+  có gì để "chọn nhiều xoá".
+- Viết test mới `tests/test-object-catalog-bulk-delete.js` (17 kịch bản: cả 6
+  danh mục OBJECT_CATALOG_BULK_CONFIG + positionTypes bespoke + rollback khi
+  lưu thất bại + xác nhận bar "Chọn tất cả" vẽ đúng dạng `<div>`/`<li>` tuỳ
+  danh mục), chạy lại toàn bộ test Quản Lý Danh Mục/Excel/Phân Quyền liên quan
+  — không phát sinh regression.
 
 ## v25.21 (2026-10-05): Danh mục "Chức Danh ↔ Cấp Bậc" — tự điền gợi ý Cấp Bậc ở Cơ Cấu Tổ Chức
 

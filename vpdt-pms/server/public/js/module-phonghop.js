@@ -206,11 +206,14 @@ function renderMeetingRoomCatalogList() {
     wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có phòng họp nào trong danh mục.</div>`;
     return;
   }
-  wrap.innerHTML = rooms.map(r => `
+  wrap.innerHTML = renderObjectCatalogBulkBarHtml('meetingRooms', 'div') + rooms.map(r => `
     <div class="bg-white p-2.5 rounded border flex items-center justify-between gap-2 flex-wrap">
-      <div>
-        <span class="font-bold text-slate-800 text-xs">${escapeHtml(r.name)}</span>
-        <div class="text-[11px] text-gray-500 mt-0.5">Tên gọn: ${escapeHtml(r.short)}</div>
+      <div class="flex items-center gap-2">
+        ${renderObjectCatalogBulkCheckboxHtml('meetingRooms', r.id)}
+        <div>
+          <span class="font-bold text-slate-800 text-xs">${escapeHtml(r.name)}</span>
+          <div class="text-[11px] text-gray-500 mt-0.5">Tên gọn: ${escapeHtml(r.short)}</div>
+        </div>
       </div>
       <div class="space-x-2">
         <button type="button" data-op="editMeetingRoomCatalogItem" data-arg0="${r.id}" class="text-blue-600 hover:text-blue-800 text-xs font-bold">✏️ Sửa</button>

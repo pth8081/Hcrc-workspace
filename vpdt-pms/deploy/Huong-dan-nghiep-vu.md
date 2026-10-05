@@ -4961,9 +4961,22 @@ kèm nút **🗑️ Xoá N Mục Đã Chọn** để xoá cả loạt trong 1 l�
 bấm Xoá từng dòng). Cùng cảnh báo tham chiếu treo như xoá đơn lẻ ở trên.
 Riêng "Phòng Ban" xoá nhiều vẫn dọn đúng cả **Viết tắt** lẫn liên kết
 **Khối/Ban** của TỪNG tên bị xoá (như xoá đơn lẻ, chỉ khác là gộp vào đúng 1
-lượt lưu cho nhiều tên cùng lúc). Danh mục dạng nhiều-field (Khối/Ban, Loại
-Xe Cụ Thể, Vị Trí Làm Việc, Danh Mục Phòng Họp, Từ Khoá Nhạy Cảm...) CHƯA có
-tính năng này (để đợt sau).
+lượt lưu cho nhiều tên cùng lúc).
+
+**☑️ Chọn nhiều để xoá — mở rộng sang danh mục nhiều-field (10/2026, đợt 2)** —
+phần "để đợt sau" ở trên nay đã làm: **Từ Khoá Nhạy Cảm, Chức Danh Siêu Thị,
+Chức Danh ↔ Cấp Bậc, Loại Xe Cụ Thể, Khối/Ban, Danh Mục Phòng Họp** cũng có
+đủ checkbox từng dòng + "Chọn tất cả" + "🗑️ Xoá N Mục Đã Chọn" y hệt khuôn
+trên (Khối/Ban và Phòng Họp vẽ dạng thẻ thay vì danh sách dòng, nhưng thao
+tác chọn/xoá giống hệt). Riêng **Phòng Họp**: xoá nhiều vẫn tự dò lịch họp
+SẮP TỚI còn dùng từng phòng trước khi xoá (như xoá đơn lẻ), gộp cảnh báo cho
+cả lượt vào 1 hộp thoại xác nhận thay vì hỏi từng phòng. **Vị Trí Làm Việc**
+dùng cơ chế chọn-nhiều-xoá RIÊNG (không hoàn toàn giống các danh mục trên) vì
+có Địa Điểm/Chức Danh con lồng theo từng Vị Trí + 2 Vị Trí mặc định HO/Siêu
+Thị không cho xoá: tick chọn nhiều Vị Trí rồi xoá, hệ thống tự BỎ QUA Vị Trí
+nào đang có tài khoản gán (không chặn cả lượt), báo rõ Vị Trí nào không xoá
+được. **Viết Tắt Loại Hợp Đồng** không có tính năng này vì panel đó không
+Thêm/Xoá được mục nào (chỉ sửa viết tắt của lựa chọn quản lý ở Biểu Mẫu).
 
 **LỖI ĐÃ VÁ (10/2026): đổi tên/xoá 1 giá trị danh mục TOÀN CHỮ SỐ** — cơ chế
 điều hướng dùng chung của toàn ứng dụng trước đây tự hiểu nhầm giá trị toàn

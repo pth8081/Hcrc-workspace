@@ -177,10 +177,10 @@ async function saveDeptGroupChildren(id) {
 function renderDeptGroupList() {
   const wrap = document.getElementById('deptGroupListWrap');
   if (!wrap) return;
-  wrap.innerHTML = (DB.deptGroups || []).map(g => `
+  wrap.innerHTML = renderObjectCatalogBulkBarHtml('deptGroups', 'div') + ((DB.deptGroups || []).map(g => `
     <div class="bg-white rounded border p-2.5 space-y-1.5">
       <div class="flex items-center justify-between gap-2">
-        <span class="font-semibold text-xs">${escapeHtml(g.name)} <span class="text-gray-400 font-normal">(${g.depts.length} phòng ban)</span></span>
+        <span class="font-semibold text-xs flex items-center gap-2">${renderObjectCatalogBulkCheckboxHtml('deptGroups', g.id)}${escapeHtml(g.name)} <span class="text-gray-400 font-normal">(${g.depts.length} phòng ban)</span></span>
         <div class="flex gap-2 shrink-0">
           <button type="button" data-op="renameDeptGroup" data-arg0="${g.id}" class="text-blue-600 font-bold hover:underline text-xs whitespace-nowrap">✏️ Sửa tên</button>
           <button type="button" data-op="deleteDeptGroup" data-arg0="${g.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>
@@ -191,7 +191,7 @@ function renderDeptGroupList() {
         <button type="button" data-op="saveDeptGroupChildren" data-arg0="${g.id}" class="bg-purple-600 text-white text-[11px] font-bold px-2.5 py-1 rounded hover:bg-purple-700">💾 Lưu Phòng Ban</button>
       </div>
     </div>
-  `).join('') || '<p class="text-[11px] text-gray-400 italic">Chưa có Khối/Ban nào.</p>';
+  `).join('') || '<p class="text-[11px] text-gray-400 italic">Chưa có Khối/Ban nào.</p>');
   (DB.deptGroups || []).forEach(g => {
     renderMultiSelectDropdown(`deptGroupChildren_${g.id}`, DB.depts, g.depts, {
       placeholder: '🔍 Tìm Phòng Ban để gán vào Khối này...',
@@ -610,8 +610,9 @@ async function renameStoreJobTitle(label) {
 function renderStoreJobTitleList() {
   const ul = document.getElementById('storeJobTitleList');
   if (!ul) return;
-  ul.innerHTML = (DB.storeJobTitles || []).map(t => `
+  ul.innerHTML = renderObjectCatalogBulkBarHtml('storeJobTitles') + (DB.storeJobTitles || []).map(t => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderObjectCatalogBulkCheckboxHtml('storeJobTitles', t.label)}
       <span class="flex-1">${escapeHtml(t.label)}</span>
       <button data-op="renameStoreJobTitle" data-arg0="${escapeHtml(t.label)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteStoreJobTitle" data-arg0="${escapeHtml(t.label)}" class="text-red-500 font-bold hover:underline">Xóa</button>
@@ -715,13 +716,14 @@ function renderJobTitleGradeDefaultList() {
   sddSetOptions('jtgdJobTitleDatalist', jtgdJobTitleOptions());
   sddSetOptions('jtgdJobGradeDatalist', (DB.jobGrades || []).map(g => ({ label: g, value: g })));
   const list = (DB.jobTitleGradeDefaults || []).slice().sort((a, b) => a.jobTitle.localeCompare(b.jobTitle, 'vi'));
-  ul.innerHTML = list.length ? list.map(row => `
+  ul.innerHTML = renderObjectCatalogBulkBarHtml('jobTitleGradeDefaults') + (list.length ? list.map(row => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderObjectCatalogBulkCheckboxHtml('jobTitleGradeDefaults', row.jobTitle)}
       <span class="flex-1"><b>${escapeHtml(row.jobTitle)}</b> → <span class="text-fuchsia-700 font-bold">${escapeHtml(row.jobGrade)}</span></span>
       <button data-op="editJobTitleGradeDefault" data-arg0="${escapeHtml(row.jobTitle)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteJobTitleGradeDefault" data-arg0="${escapeHtml(row.jobTitle)}" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
-  `).join('') : `<li class="p-3 text-center text-gray-400 italic text-xs">Chưa có cấu hình nào.</li>`;
+  `).join('') : `<li class="p-3 text-center text-gray-400 italic text-xs">Chưa có cấu hình nào.</li>`);
 }
 
 // ===== Vị Trí Làm Việc (DB.positionTypes, 10/2026) — danh mục MỞ thay 2 giá trị cứng HO/STORE, xem
@@ -843,10 +845,79 @@ async function renamePositionTypeEntry(key, field, oldValue) {
   }
 }
 
+// positionTypeBulkSelection — bulk-select-delete RIÊNG (không qua OBJECT_CATALOG_BULK_CONFIG ở core.js)
+// vì positionTypes có cấu trúc LỒNG + REST riêng có kiểm tra ràng buộc (chặn xoá nếu đang gán tài
+// khoản) + 2 mục builtin (HO/STORE, không được chọn/xoá) — xem chú thích đầy đủ tại
+// OBJECT_CATALOG_BULK_CONFIG (core.js). CHỈ áp dụng ở cấp "Vị Trí" (không bulk-delete lồng sâu xuống
+// từng Địa Điểm/Chức Danh con — các dòng đó đã có ✏️/Xóa đơn lẻ, số lượng thường rất ít không cần bulk).
+const positionTypeBulkSelection = new Set();
+function isPositionTypeBulkSelected(key) { return positionTypeBulkSelection.has(key); }
+function togglePositionTypeBulkItem(key, el) {
+  if (el.checked) positionTypeBulkSelection.add(key); else positionTypeBulkSelection.delete(key);
+  renderPositionTypeList();
+}
+function togglePositionTypeBulkAll(el) {
+  positionTypeBulkSelection.clear();
+  if (el.checked) (DB.positionTypes || []).filter(t => !t.builtin).forEach(t => positionTypeBulkSelection.add(t.key));
+  renderPositionTypeList();
+}
+function clearPositionTypeBulkSelection() {
+  positionTypeBulkSelection.clear();
+  renderPositionTypeList();
+}
+function renderPositionTypeBulkBarHtml() {
+  const selectable = (DB.positionTypes || []).filter(t => !t.builtin);
+  if (!selectable.length) return '';
+  const allChecked = selectable.every(t => positionTypeBulkSelection.has(t.key));
+  let html = '';
+  if (positionTypeBulkSelection.size) {
+    html += `<div class="flex items-center justify-between bg-amber-50 border border-amber-300 rounded px-2.5 py-1.5 mb-1 text-[11px]">
+      <span class="font-semibold text-gray-700">Đã chọn ${positionTypeBulkSelection.size} Vị Trí Làm Việc</span>
+      <div class="flex items-center gap-2">
+        <button type="button" data-op="clearPositionTypeBulkSelection" class="text-gray-500 underline">Bỏ chọn</button>
+        <button type="button" data-op="bulkDeletePositionTypes" class="bg-red-600 text-white px-2 py-1 rounded font-bold">🗑️ Xoá ${positionTypeBulkSelection.size} Mục Đã Chọn</button>
+      </div>
+    </div>`;
+  }
+  html += `<div class="flex items-center gap-2 px-2 py-1 text-[11px] text-gray-400 bg-white rounded border">
+    <input type="checkbox" data-op-change="togglePositionTypeBulkAll" data-arg-el="0" ${allChecked ? 'checked' : ''}>
+    <span class="italic">Chọn tất cả (trừ 2 Vị Trí mặc định HO/Siêu Thị)</span>
+  </div>`;
+  return html;
+}
+async function bulkDeletePositionTypes() {
+  const keys = Array.from(positionTypeBulkSelection);
+  if (!keys.length) return;
+  const items = (DB.positionTypes || []).filter(t => keys.includes(t.key));
+  if (!items.length) return;
+  const labels = items.map(t => t.label);
+  const preview = labels.slice(0, 8).join(', ') + (labels.length > 8 ? `... (+${labels.length - 8})` : '');
+  if (!confirm(`Xoá ${items.length} Vị Trí Làm Việc đã chọn (kèm toàn bộ Địa Điểm/Chức Danh riêng của từng Vị Trí)?\n\n${preview}\n\nVị Trí nào đang có tài khoản gán sẽ TỰ ĐỘNG BỊ BỎ QUA (không xoá được), các Vị Trí còn lại vẫn xoá bình thường.`)) return;
+
+  let okCount = 0;
+  const failed = [];
+  for (const t of items) {
+    try {
+      const res = await fetch(`/api/admin/position-types/${encodeURIComponent(t.key)}`, { method: 'DELETE' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      DB.positionTypes = body.positionTypes;
+      okCount++;
+    } catch (err) {
+      failed.push(`${t.label} (${err.message})`);
+    }
+  }
+  if (okCount) logSystemAction('USER_MGM', 'BULK_DELETE_POSITION_TYPE', `Xóa ${okCount} Vị Trí Làm Việc: ${labels.join(', ')}`, 'SUCCESS', String(okCount));
+  positionTypeBulkSelection.clear();
+  renderPositionTypeList();
+  populateUserPosTypeOptions();
+  if (failed.length) alert(`⚠️ ${failed.length}/${items.length} Vị Trí KHÔNG xoá được (đang có tài khoản gán Vị Trí đó):\n\n${failed.join('\n')}`);
+}
+
 function renderPositionTypeList() {
   const wrap = document.getElementById('positionTypeList');
   if (!wrap) return;
-  wrap.innerHTML = (DB.positionTypes || []).map(t => {
+  wrap.innerHTML = renderPositionTypeBulkBarHtml() + (DB.positionTypes || []).map(t => {
     if (t.builtin) {
       return `
       <div class="bg-white rounded border p-2 flex items-center justify-between gap-2">
@@ -869,7 +940,10 @@ function renderPositionTypeList() {
     return `
     <div class="bg-white rounded border p-2 space-y-2">
       <div class="flex items-center justify-between gap-2">
-        <span class="font-semibold text-xs">${escapeHtml(t.label)}</span>
+        <span class="font-semibold text-xs flex items-center gap-2">
+          <input type="checkbox" data-op-change="togglePositionTypeBulkItem" data-arg0="'${escapeHtml(t.key)}'" data-arg-el="1" ${isPositionTypeBulkSelected(t.key) ? 'checked' : ''} class="w-3.5 h-3.5 shrink-0">
+          ${escapeHtml(t.label)}
+        </span>
         <div class="flex gap-2 text-xs">
           <button data-op="renamePositionTypeLabel" data-arg0="${escapeHtml(t.key)}" data-arg1="${escapeHtml(t.label)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Đổi tên</button>
           <button data-op="deletePositionType" data-arg0="${escapeHtml(t.key)}" data-arg1="${escapeHtml(t.label)}" class="text-red-500 font-bold hover:underline">Xóa Vị Trí</button>
@@ -1170,8 +1244,9 @@ async function deleteSensitiveKeyword(id) {
 function renderSensitiveKeywordList() {
   const ul = document.getElementById('sensitiveKeywordList');
   if (!ul) return;
-  ul.innerHTML = DB.sensitiveKeywords.map(k => `
+  ul.innerHTML = renderObjectCatalogBulkBarHtml('sensitiveKeywords') + DB.sensitiveKeywords.map(k => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      ${renderObjectCatalogBulkCheckboxHtml('sensitiveKeywords', k.id)}
       <span class="flex-1">${escapeHtml(k.term)} <span class="text-[10px] px-1.5 py-0.5 rounded-full ${SENSITIVE_CATEGORY_SEVERE.has(k.category) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${SENSITIVE_CATEGORY_LABELS[k.category] || k.category}</span></span>
       <button data-op="editSensitiveKeyword" data-arg0="${k.id}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteSensitiveKeyword" data-arg0="${k.id}" class="text-red-500 font-bold hover:underline">Xóa</button>
