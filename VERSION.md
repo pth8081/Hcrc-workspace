@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**25.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.14 (2026-10-06): Quản Lý Danh Mục — bổ sung "✏️ Sửa" cho 7 danh mục còn thiếu
+
+Người dùng rà soát màn Quản Lý Danh Mục, phát hiện 7 danh mục chỉ có Thêm/Xoá,
+không có Sửa (bất nhất với các danh mục khác): Cấp Bậc, Lý Do Nghỉ Việc, Loại
+Kỷ Luật, Đơn Vị (Pháp Nhân), Đối Tượng Lao Động Đặc Biệt, Tình Trạng Làm Việc
+Hiện Tại, Nơi Cấp CCCD/CMND — yêu cầu bổ sung ngay.
+
+- `lib/catalogRename.js`: thêm 7 khoá vào `CATALOG_HANDLERS` qua
+  `simpleArrayCatalogHandler()` có sẵn (không cascade — các field tham chiếu
+  dùng ô gõ-tự-do/gợi ý, không ép khớp đúng 1 giá trị danh mục).
+- `routes/adminCatalog.js`: thêm 7 khoá vào `VALID_CATALOG_KEYS` (route
+  `POST /api/admin/renameCatalogEntry` chặn khoá lạ bằng allowlist riêng,
+  tách khỏi `CATALOG_HANDLERS`).
+- `public/js/module-admin.js`: nút "✏️ Sửa" mới trong
+  `renderGenericSimpleCatalogList()` + hàm `renameGenericSimpleCatalogEntry()`
+  dùng chung `renameCatalogEntryClient()` đã có.
+- 25 kịch bản test mới (`test-catalog-rename-hr-suggestion-catalogs.js`) +
+  chạy lại 4 bộ test catalog-rename hiện có — không regression.
 
 ## v25.13 (2026-10-05): Hợp Đồng Lao Động — thêm Excel Tải Mẫu/Nhập/Xuất
 

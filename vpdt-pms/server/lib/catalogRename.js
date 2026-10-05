@@ -615,6 +615,18 @@ const CATALOG_HANDLERS = {
   // ngược lại danh mục) — 10/2026, thêm nút "✏️ Sửa" (trước đây chỉ Xoá, gõ sai tên phải xoá tạo lại,
   // MẤT liên kết với các bản ghi Gia Hạn CNTT đã gán loại dịch vụ đó).
   itRenewalCategories: simpleArrayCatalogHandler('itRenewalCategories', 'Danh Mục Loại Dịch Vụ Gia Hạn CNTT'),
+  // 7 danh mục GỢI Ý (gõ tự do qua sdd widget, không ép khớp đúng 1 giá trị) ở Hồ Sơ Nhân Sự/Quản Lý
+  // Danh Mục — TRƯỚC ĐÂY cố ý KHÔNG có "✏️ Sửa" (xem chú thích cũ GENERIC_SIMPLE_CATALOGS ở
+  // module-admin.js: "không cần Sửa vì chỉ dùng làm gợi ý"), nhưng người dùng rà soát lại màn Quản Lý
+  // Danh Mục thấy bất nhất với các danh mục khác đều có Sửa — bổ sung cùng khuôn simpleArrayCatalogHandler
+  // (không cascade, đúng tinh thần gợi ý tự do ban đầu).
+  jobGrades: simpleArrayCatalogHandler('jobGrades', 'Danh Mục Cấp Bậc'),
+  resignationReasons: simpleArrayCatalogHandler('resignationReasons', 'Danh Mục Lý Do Nghỉ Việc'),
+  disciplinaryTypes: simpleArrayCatalogHandler('disciplinaryTypes', 'Danh Mục Loại Kỷ Luật'),
+  legalEntities: simpleArrayCatalogHandler('legalEntities', 'Danh Mục Đơn Vị (Pháp Nhân)'),
+  specialLaborStatuses: simpleArrayCatalogHandler('specialLaborStatuses', 'Danh Mục Đối Tượng Lao Động Đặc Biệt'),
+  currentWorkStatusDetails: simpleArrayCatalogHandler('currentWorkStatusDetails', 'Danh Mục Tình Trạng Làm Việc Hiện Tại'),
+  nationalIdIssuePlaces: simpleArrayCatalogHandler('nationalIdIssuePlaces', 'Danh Mục Nơi Cấp CCCD/CMND'),
   jobTitles: {
     async renameInCatalog(oldValue, newValue) {
       return withLockedAppDataValue('jobTitles', (list) => {

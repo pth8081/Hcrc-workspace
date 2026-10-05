@@ -482,11 +482,12 @@ async function renameJobTitle(name) {
   if (ok) { renderJobTitleList(); populateDropdowns(); }
 }
 
-// ===== 3 danh mục chuỗi phẳng MỚI (10/2026, theo yêu cầu người dùng): Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ
-// Luật — cùng mô hình thêm/xoá như Phòng Ban/Chức Danh ở trên nhưng KHÔNG cần "✏️ Sửa" (rename có
-// cascade, xem renameCatalogEntryClient()) vì 3 giá trị này chỉ dùng làm GỢI Ý (sdd widget cho phép gõ
-// tự do, không ép field tham chiếu phải khớp đúng 1 giá trị trong danh mục — xoá/sửa tên không làm hỏng
-// dữ liệu cũ) — viết CHUNG 1 bộ hàm thay vì lặp lại 3 lần cho jobTitle/depts style cũ.
+// ===== Các danh mục chuỗi phẳng dạng GỢI Ý (10/2026, theo yêu cầu người dùng): Cấp Bậc/Lý Do Nghỉ Việc/
+// Loại Kỷ Luật/Đơn Vị (Pháp Nhân)/Đối Tượng Lao Động Đặc Biệt/Tình Trạng Làm Việc Hiện Tại/Nơi Cấp CCCD
+// — cùng mô hình thêm/xoá/sửa như Phòng Ban/Chức Danh ở trên, viết CHUNG 1 bộ hàm thay vì lặp lại nhiều
+// lần. "✏️ Sửa" (renameGenericSimpleCatalogEntry()) dùng renameCatalogEntryClient() KHÔNG cascade (xem
+// simpleArrayCatalogHandler() ở lib/catalogRename.js) — các field tham chiếu dùng sdd widget cho phép gõ
+// tự do, không ép khớp đúng 1 giá trị trong danh mục, nên sửa tên ở đây không ảnh hưởng dữ liệu cũ đã lưu.
 const GENERIC_SIMPLE_CATALOGS = {
   jobGrades: { listId: 'jobGradeList', inputId: 'txtJobGradeName', label: 'cấp bậc', logPrefix: 'JOB_GRADE' },
   resignationReasons: { listId: 'resignationReasonList', inputId: 'txtResignationReasonName', label: 'lý do nghỉ việc', logPrefix: 'RESIGNATION_REASON' },
@@ -545,9 +546,20 @@ function renderGenericSimpleCatalogList(key) {
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       ${renderCatalogBulkCheckboxHtml(key, v)}
       <span class="flex-1">${escapeHtml(v)}</span>
+      <button data-op="renameGenericSimpleCatalogEntry" data-arg0="'${escapeHtml(key)}'" data-arg1="'${escapeHtml(v)}'" class="text-blue-600 font-bold hover:underline">✏️ Sửa</button>
       <button data-op="deleteGenericSimpleCatalogEntry" data-arg0="'${escapeHtml(key)}'" data-arg1="'${escapeHtml(v)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
   `).join('');
+}
+// renameGenericSimpleCatalogEntry (10/2026, rà soát "mọi danh mục đều phải có Sửa") — dùng CHUNG
+// renameCatalogEntryClient() đã có (cùng hàm các danh mục khác đang dùng), tự đọc đúng label/key qua
+// GENERIC_SIMPLE_CATALOGS — route server đã đăng ký 7 khoá này vào CATALOG_HANDLERS (không cascade, xem
+// lib/catalogRename.js) + VALID_CATALOG_KEYS (routes/adminCatalog.js).
+async function renameGenericSimpleCatalogEntry(key, name) {
+  const cfg = GENERIC_SIMPLE_CATALOGS[key];
+  if (!cfg) return;
+  const ok = await renameCatalogEntryClient(key, name, cfg.label);
+  if (ok) renderGenericSimpleCatalogList(key);
 }
 function renderJobGradeList() { renderGenericSimpleCatalogList('jobGrades'); }
 function renderResignationReasonList() { renderGenericSimpleCatalogList('resignationReasons'); }
