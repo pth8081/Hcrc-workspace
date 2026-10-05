@@ -760,6 +760,26 @@
     </div>
   </div>
 
+  <!-- Modal "✅ Xác Nhận Đã Thanh Toán" (từng đợt/toàn bộ 1 lần) — 10/2026, theo đúng yêu cầu người dùng
+       "giữ logic cũ": bắt buộc đính kèm 1 tệp chứng từ đã chi (VD uỷ nhiệm chi, phiếu chi) NGAY LÚC xác
+       nhận, khác hẳn modal tải "Tài liệu ký" ở trên (đó là bước TRƯỚC, mở thanh toán — modal này là bước
+       CUỐI, đóng thanh toán). Dùng CHUNG cho cả confirmPaymentInstallmentAction()/
+       confirmPaymentRequestLumpSumAction() ở module-thanhtoan.js, chỉ khác target.index (null = lump-sum). -->
+  <div id="paymentConfirmFileModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg p-5 w-full max-w-md space-y-3">
+      <h3 id="paymentConfirmFileModalTitle" class="font-bold text-gray-800">✅ Xác Nhận Đã Thanh Toán</h3>
+      <p id="paymentConfirmFileModalSub" class="text-xs text-gray-500"></p>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1 text-xs">Tệp Chứng Từ Đã Thanh Toán (VD uỷ nhiệm chi, phiếu chi) <span class="text-red-600">*</span></label>
+        <input id="paymentConfirmFileInput" type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" class="w-full border p-1.5 bg-white rounded text-xs">
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button data-op="closePaymentConfirmFileModal" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Hủy</button>
+        <button data-op="submitPaymentConfirmFile" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Xác Nhận</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal "✏️ Đổi Hình Thức Thanh Toán" (yêu cầu mới, hợp đồng ĐÃ APPROVED) — mirror nhẹ khối Loại
        Thanh Toán/Các Đợt Thanh Toán ở form Sửa hợp đồng thường (#contractPaymentType/#contractInstallmentsList),
        NHƯNG dùng ID riêng (cptc*) vì 2 khối không thể trùng id trong cùng 1 trang. Gửi đi KHÔNG áp dụng

@@ -2354,13 +2354,13 @@ function submitPaymentRequest(user, pr, appData) {
   if (missingOrdinals.length) {
     throw new HttpError(400, `Vui lòng nhập số tiền lớn hơn 0 cho đợt thanh toán số: ${missingOrdinals.join(', ')} trước khi chuyển xác nhận thanh toán`);
   }
-  // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file, đính kèm qua editPaymentRequest() lúc còn NHÁP) — bắt buộc
-  // >=1 tệp trước khi gửi đi, khớp yêu cầu nghiệp vụ MỚI (đảo ngược so với thiết kế cũ — trước đây bắt
-  // buộc tệp ở bước xác nhận CUỐI, xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum()).
-  const requestFiles = Array.isArray(pr.requestFiles) ? pr.requestFiles : [];
-  if (!requestFiles.length) {
-    throw new HttpError(400, 'Vui lòng đính kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" (có thể chọn nhiều tệp) trước khi chuyển xác nhận thanh toán');
-  }
+  // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file, đính kèm qua editPaymentRequest() lúc còn NHÁP) — 10/2026,
+  // theo đúng yêu cầu người dùng "giữ logic cũ": KHÔNG còn bắt buộc đính kèm ở bước gửi duyệt này nữa
+  // (requestFiles vẫn TUỲ CHỌN, người lập có thể đính kèm tham khảo nếu muốn) — tệp CHỨNG TỪ đã chi bắt
+  // buộc trở lại đúng ở bước xác nhận CUỐI (xem confirmPaymentInstallment()/confirmPaymentRequestLumpSum()
+  // bên dưới, mỗi đợt/lần xác nhận phải kèm 1 tệp chứng từ riêng). Đã từng bị đảo ngược ở 1 đợt trước (xem
+  // lịch sử git commit "Đảo ngược logic đính kèm Hồ Sơ Đề Nghị Thanh Toán") — người dùng xác nhận lại đó
+  // KHÔNG phải ý muốn, phục hồi đúng thiết kế gốc.
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "…/Thanh Toán", mức Trung bình — "gửi vào ngõ cụt"):
   // appData.paymentDeptWorkflows mặc định RỖNG ({} ở defaults.js) và module này khai disallowReject:true
   // (không Từ chối được qua engine), xoá thì chỉ admin — nên 1 đề nghị gửi đi khi phòng ban CHƯA được
@@ -2491,9 +2491,12 @@ function countPaymentInstallmentWarnings(pr) {
 // định kỳ/thủ công/nguồn không có khái niệm paymentType) — đề nghị ONE_TIME phải xác nhận TOÀN BỘ 1 lần
 // qua confirmPaymentRequestLumpSum() bên dưới, KHÔNG được xác nhận nhỏ giọt từng đợt (yêu cầu nghiệp vụ
 // #7 "không được phép ấn xác nhận trên tổng đợt" — vế ngược lại, "1 lần" KHÔNG được xác nhận theo đợt).
-// KHÔNG còn bắt buộc kèm tệp nữa — "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) giờ đã bắt buộc đính kèm NGAY
-// LÚC TẠO/GỬI đề nghị (xem submitPaymentRequest()), bước xác nhận này chỉ còn là bấm xác nhận đơn thuần
-// (ĐẢO NGƯỢC lại thiết kế cũ — trước đây chính bước này mới bắt buộc upload tệp).
+// 10/2026, theo đúng yêu cầu người dùng "giữ logic cũ": BẮT BUỘC TRỞ LẠI kèm 1 tệp chứng từ đã chi ngay
+// tại bước xác nhận này (payload.fileUrl/fileName/fileType) — "Hồ Sơ Đề Nghị Thanh Toán" chung
+// (pr.requestFiles) giờ chỉ còn TUỲ CHỌN lúc gửi duyệt (xem submitPaymentRequest()). Lưu lại trên ĐÚNG
+// đợt vừa xác nhận (confirmFileUrl/confirmFileName/confirmFileType) — field này đã có sẵn trong data
+// model (buildPaymentInstallments()/normalizePaymentInstallmentsOverride()) nhưng bị bỏ trống từ đợt đảo
+// ngược trước, nay dùng lại đúng mục đích ban đầu.
 function confirmPaymentInstallment(payload, user, pr) {
   if (!canConfirmPaymentRequest(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận thanh toán');
   if (pr.status !== 'APPROVED') throw new HttpError(409, 'Đề nghị thanh toán chưa được duyệt hoặc đã hoàn tất');
@@ -2503,9 +2506,15 @@ function confirmPaymentInstallment(payload, user, pr) {
   const idx = Number(payload?.index);
   if (!Array.isArray(pr.installments) || !pr.installments[idx]) throw new HttpError(400, 'Đợt thanh toán không hợp lệ');
   if (pr.installments[idx].confirmed) throw new HttpError(409, 'Đợt thanh toán này đã được xác nhận trước đó');
+  const { fileUrl, fileName, fileType } = payload || {};
+  if (!fileUrl || !fileName) throw new HttpError(400, 'Vui lòng đính kèm tệp chứng từ đã thanh toán (VD uỷ nhiệm chi, phiếu chi) trước khi xác nhận đợt này');
+  assertUploadedFileUrl(fileUrl, 'Tệp chứng từ thanh toán');
   pr.installments[idx].confirmed = true;
   pr.installments[idx].confirmedBy = user.username;
   pr.installments[idx].confirmedAt = nowVN();
+  pr.installments[idx].confirmFileUrl = fileUrl;
+  pr.installments[idx].confirmFileName = fileName;
+  pr.installments[idx].confirmFileType = fileType || '';
 
   const justCompleted = pr.installments.every(it => it.confirmed);
   if (justCompleted) {
@@ -2529,9 +2538,16 @@ function confirmPaymentRequestLumpSum(payload, user, pr) {
   if (pr.sourcePaymentType !== 'ONE_TIME') {
     throw new HttpError(409, 'Chỉ đề nghị thanh toán "1 lần" mới được xác nhận toàn bộ 1 lần — đề nghị này phải xác nhận theo từng đợt');
   }
+  // 10/2026, theo đúng yêu cầu người dùng "giữ logic cũ": bắt buộc kèm 1 tệp chứng từ đã chi DUY NHẤT
+  // cho cả đề nghị (khác confirmPaymentInstallment() ở trên, mỗi đợt 1 tệp riêng) — ghi cùng 1 tệp này
+  // vào confirmFileUrl/confirmFileName/confirmFileType của TỪNG đợt để badge từng đợt nhất quán.
+  const { fileUrl, fileName, fileType } = payload || {};
+  if (!fileUrl || !fileName) throw new HttpError(400, 'Vui lòng đính kèm tệp chứng từ đã thanh toán (VD uỷ nhiệm chi, phiếu chi) trước khi xác nhận');
+  assertUploadedFileUrl(fileUrl, 'Tệp chứng từ thanh toán');
   const now = nowVN();
   pr.installments = (Array.isArray(pr.installments) ? pr.installments : []).map(it => ({
-    ...it, confirmed: true, confirmedBy: user.username, confirmedAt: now
+    ...it, confirmed: true, confirmedBy: user.username, confirmedAt: now,
+    confirmFileUrl: fileUrl, confirmFileName: fileName, confirmFileType: fileType || ''
   }));
   pr.status = 'PAID';
   pr.paidAt = now;
