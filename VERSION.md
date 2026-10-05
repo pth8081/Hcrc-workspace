@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**25.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.9 (2026-10-05): Onboarding/Offboarding — thêm "📊 Xuất Excel"
+
+Theo yêu cầu người dùng (đợt tiếp nối việc "mọi module Nhân Sự đều có Tải Mẫu/
+Xuất/Nhập Excel"): Onboarding/Offboarding **CHỈ cần Xuất Excel**, không cần
+Tải Mẫu/Nhập (khác Hồ Sơ Nhân Sự/kế hoạch sắp tới cho Hợp Đồng Lao Động).
+
+- Thêm nút "📊 Xuất Excel" vào action bar màn "📋 Danh Sách Quy Trình"
+  (`public/fragments/hrLifecycleSection.html`), gọi `exportHrProcessExcel()`
+  mới (`module-hrlifecycle.js`) — xuất ĐÚNG danh sách đang hiện trên màn,
+  tôn trọng 2 bộ lọc Loại/Trạng Thái đang chọn (tách `getVisibleHrProcessList()`
+  dùng chung với `renderHrProcessList()` để không lệch logic lọc).
+- **Dùng ĐÚNG route dùng chung** `POST /api/admin/export-xlsx` qua
+  `downloadXlsxFromServer()` (không viết route riêng) — theo đúng quy tắc
+  CLAUDE.md: client tự dựng columns/rows từ `DB.hrProcesses` đã có sẵn
+  (collection này KHÔNG bị chặn khỏi `GET /api/data` như `employeeProfiles`/
+  `laborContracts`), không đọc/ghi gì thêm vào CSDL.
+- 3 kịch bản test mới trong `test-hr-lifecycle.js` (columns/rows đúng, lọc
+  theo loại đúng, real click nút không lỗi CSP/JS) — tổng 39/39 kịch bản
+  pass, chạy lại 108+ kịch bản Onboarding/HR liên quan khác không regression.
 
 ## v25.8 (2026-10-05): 90 trường Hồ Sơ Nhân Sự — ĐỢT 2/2 (khối HĐLĐ chỉ xem + thâm niên theo Tập Đoàn + Excel gộp 90 cột) — HOÀN TẤT
 

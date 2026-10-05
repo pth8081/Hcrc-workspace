@@ -624,6 +624,58 @@ async function main() {
       await loginAs(page, HR1);
     });
 
+    // ===================== "📊 Xuất Excel" (10/2026, theo yêu cầu người dùng — Onboarding/Offboarding
+    // CHỈ cần xuất, KHÔNG cần Tải Mẫu/Nhập) — mirror ĐÚNG khuôn exportBudgetLineExcel(): client tự dựng
+    // columns/rows từ DB.hrProcesses (không bị chặn khỏi GET /api/data như employeeProfiles/
+    // laborContracts), gọi downloadXlsxFromServer() dùng chung — stub lại hàm này để bắt payload thay vì
+    // tải file thật, cùng khuôn test-budget-lines-excel.js. =====================
+
+    await run.run('exportHrProcessExcel(): dựng đúng columns/rows từ danh sách đang hiện (tôn trọng bộ lọc Loại/Trạng Thái)', async () => {
+      await page.evaluate(() => { switchTab('hrLifecycle'); setHrLifecycleView('LIST'); setHrpListFilterType('ALL'); setHrpListFilterStatus('ALL'); });
+      const captured = await page.evaluate(() => {
+        const originalFn = window.downloadXlsxFromServer;
+        let captured = null;
+        window.downloadXlsxFromServer = (fileName, sheetName, columns, rows) => { captured = { fileName, sheetName, columns, rows }; };
+        exportHrProcessExcel();
+        window.downloadXlsxFromServer = originalFn;
+        return captured;
+      });
+      assert(!!captured, 'Phải gọi downloadXlsxFromServer() khi danh sách không rỗng');
+      assertEqual(captured.fileName, 'Onboarding_Offboarding.xlsx');
+      assert(captured.columns.some(c => c.key === 'code' && c.header === 'Mã NV / Tài Khoản'), 'Phải có cột Mã NV / Tài Khoản');
+      assert(captured.columns.some(c => c.key === 'stage'), 'Phải có cột Giai Đoạn');
+      const onbRow = captured.rows.find(r => r.code === 'NV0001');
+      assert(!!onbRow, 'Phải có đúng dòng Onboarding NV0001 trong rows');
+      assertEqual(onbRow.type, 'Onboarding');
+      assertEqual(onbRow.fullName, 'Trần Văn Mới');
+    });
+
+    await run.run('exportHrProcessExcel(): lọc theo "ONBOARDING" -> chỉ xuất đúng dòng Onboarding, không lẫn Offboarding', async () => {
+      await page.evaluate(() => { setHrpListFilterType('ONBOARDING'); });
+      const captured = await page.evaluate(() => {
+        let captured = null;
+        window.downloadXlsxFromServer = (fileName, sheetName, columns, rows) => { captured = rows; };
+        exportHrProcessExcel();
+        return captured;
+      });
+      assert(captured.every(r => r.type === 'Onboarding'), 'Chỉ được có dòng Onboarding khi đang lọc ONBOARDING');
+      assert(captured.length > 0, 'Phải có ít nhất 1 dòng Onboarding');
+      await page.evaluate(() => { setHrpListFilterType('ALL'); });
+    });
+
+    await run.run('Real click nút "📊 Xuất Excel" trong action bar — không lỗi JS, gọi đúng exportHrProcessExcel()', async () => {
+      await page.evaluate(() => {
+        window.__exportHrProcessExcelCalled = false;
+        window.__origExportHrProcessExcel = exportHrProcessExcel;
+        exportHrProcessExcel = () => { window.__exportHrProcessExcelCalled = true; };
+      });
+      await page.click('[data-op="exportHrProcessExcel"]');
+      await page.waitForTimeout(100);
+      const called = await page.evaluate(() => window.__exportHrProcessExcelCalled);
+      assertEqual(called, true, 'Click nút thật phải gọi đúng exportHrProcessExcel() qua bindCspDelegation');
+      await page.evaluate(() => { exportHrProcessExcel = window.__origExportHrProcessExcel; });
+    });
+
   } finally {
     await browser.close();
     server.close();

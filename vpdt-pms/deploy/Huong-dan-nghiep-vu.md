@@ -2572,6 +2572,13 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
 - **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang được
   giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm), gộp cả
   Onboarding lẫn Offboarding.
+- **"📊 Xuất Excel"** (10/2026, theo yêu cầu người dùng — CHỈ xuất, KHÔNG có
+  Tải Mẫu/Nhập Excel cho Onboarding/Offboarding, khác Hồ Sơ Nhân Sự/Hợp Đồng
+  Lao Động) — xuất ĐÚNG danh sách đang hiện trên màn "Danh Sách Quy Trình",
+  tôn trọng 2 bộ lọc Loại/Trạng Thái đang chọn. File gồm: Loại (Onboarding/
+  Offboarding), Mã NV/Tài Khoản, Họ Tên, Phòng Ban, Chức Danh, Vị Trí, Email,
+  SĐT, Giai Đoạn, Tiến Độ Checklist, Ngày Bắt Đầu/Dự Kiến Kết Thúc/Nghỉ Thực
+  Tế, Trạng Thái, Quản Lý Trực Tiếp, Ghi Chú.
 - **Checklist Mẫu** (sub-view chỉ hiện với quyền **"📋 Quản Lý Checklist
   Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn. Đổi
   danh mục **không ảnh hưởng ngược** các quy trình đã tạo trước đó (checklist
