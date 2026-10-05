@@ -45,7 +45,16 @@ function setInternalSubTab(subTab) {
   // Tuyển Dụng và HCRC Đồng Hành (hộp thư hỏi/đáp riêng tư với Nhân Sự).
   const usesOwnSection = subTab === 'TRAINING' || subTab === 'RECRUITMENT' || subTab === 'QNA';
   document.getElementById('internalTrainingLmsSection').classList.toggle('hidden', subTab !== 'TRAINING');
-  document.getElementById('internalPostForm').classList.toggle('hidden', usesOwnSection);
+  // Thu gọn form nhập (10/2026, pattern mẫu mhVendorFormWrap) — #internalPostForm giờ LUÔN bắt đầu ẨN
+  // mỗi khi đổi sub-tab, bất kể usesOwnSection/canCreate (cả 3 sub-tab usesOwnSection return SỚM ngay
+  // dưới đây nên không bao giờ chạm tới đoạn canCreate ở cuối hàm — form/nút "+ Đăng Bài Mới" giữ
+  // nguyên trạng thái ẩn này). Chỉ mở lại qua nút "+ Đăng Bài Mới" (openInternalPostForm()) hoặc luồng
+  // Sửa bài Nháp/NEED_INFO (editInternalPostUI(), tự remove('hidden') trực tiếp — GIỮ NGUYÊN, không đổi).
+  document.getElementById('internalPostForm').classList.add('hidden');
+  // Nút "+ Đăng Bài Mới" cũng ẩn mặc định ở đây — chỉ được hiện lại (gộp đúng điều kiện canCreate) ở
+  // đoạn cuối hàm cho đúng 2 sub-tab NEWS/SHARE còn dùng form này; 3 sub-tab usesOwnSection return sớm
+  // nên nút này giữ nguyên ẩn cho chúng, đúng như form.
+  document.getElementById('btnInternalPostNew').classList.add('hidden');
   document.getElementById('internalNoPermNote').classList.add('hidden');
   document.getElementById('internalFilterBlock').classList.toggle('hidden', usesOwnSection);
   document.getElementById('internalListBlock').classList.toggle('hidden', usesOwnSection);
@@ -129,7 +138,10 @@ function setInternalSubTab(subTab) {
   document.getElementById('internalSubmitBtn').innerText = (subTab === 'SHARE' && !canApproveInternalPost(currentUser)) ? 'Gửi Duyệt' : 'Đăng Ngay';
 
   const canCreate = canCreateInternalPost(currentUser, subTab);
-  document.getElementById('internalPostForm').classList.toggle('hidden', !canCreate);
+  // Thu gọn form nhập (10/2026): KHÔNG tự mở lại #internalPostForm ở đây nữa (đã ẩn sẵn từ đầu hàm) —
+  // chỉ nút "+ Đăng Bài Mới" đổi theo canCreate (đã ẩn sẵn theo usesOwnSection từ đầu hàm, ở đây AND
+  // thêm điều kiện canCreate, đúng gộp 2 điều kiện cũ từng áp trực tiếp lên chính form).
+  document.getElementById('btnInternalPostNew').classList.toggle('hidden', !canCreate);
   document.getElementById('internalNoPermNote').classList.toggle('hidden', canCreate);
 
   renderInternalPosts();
@@ -745,6 +757,26 @@ function cancelEditInternalPost() {
   document.getElementById('internalCancelEditBtn').classList.add('hidden');
   setInternalSubTab(activeInternalSubTab); // khôi phục tiêu đề/nhãn nút mặc định của tab hiện tại
 }
+
+// Thu gọn form nhập (10/2026, nút "+ Đăng Bài Mới"/"✕ Thu Gọn", pattern mẫu mhVendorFormWrap/
+// module-muahang.js) — #internalPostForm giờ bắt đầu ẨN mỗi khi đổi sub-tab (setInternalSubTab()),
+// chỉ mở lại qua openInternalPostForm() này HOẶC qua editInternalPostUI() (Sửa bài Nháp/NEED_INFO,
+// tự remove('hidden') trực tiếp — không đi qua đây).
+function openInternalPostForm() {
+  // Nếu đang dở 1 phiên Sửa (editingInternalPostId != null) mà trước đó người dùng chỉ bấm "✕ Thu Gọn"
+  // (chỉ ẩn khung, KHÔNG huỷ Sửa) thay vì "Huỷ Sửa" — PHẢI huỷ Sửa dở ở đây trước khi mở form "mới",
+  // tránh bấm "+ Đăng Bài Mới" nhưng submitInternalPost() vẫn âm thầm gọi nhánh edit đè lên bài cũ.
+  // cancelEditInternalPost() tự trắng form + gọi lại setInternalSubTab() (ẩn form lại theo đúng khuôn
+  // mới) nên phải remove('hidden') LẠI sau khi gọi, không gộp chung điều kiện.
+  if (editingInternalPostId) cancelEditInternalPost();
+  document.getElementById('internalPostForm').classList.remove('hidden');
+  document.getElementById('internalPostForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeInternalPostForm() {
+  // Chỉ ẩn khung — KHÔNG đụng dữ liệu đã nhập/trạng thái Sửa dở (khác hẳn "Huỷ Sửa"/cancelEditInternalPost()
+  // ở trên). openInternalPostForm() ở trên tự lo huỷ Sửa dở (nếu có) khi mở lại qua nút "+ Đăng Bài Mới".
+  document.getElementById('internalPostForm').classList.add('hidden');
+}
 // resetInternalPostForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
 // "resetInternalPostForm", xem core.js) VÀ luồng đăng bài MỚI thành công ở trên (nhánh Sửa đã gọi thẳng
 // cancelEditInternalPost() sẵn — xem submitInternalPost()). Hành vi cần GIỐNG HỆT "Huỷ Sửa" (thoát Sửa dở
@@ -931,7 +963,13 @@ function setRecruitmentTab(tab) {
 
 function renderRecruitment() {
   const canManage = canManageRecruitmentLocal(currentUser);
-  document.getElementById('recruitmentJobForm').classList.toggle('hidden', !canManage);
+  // Thu gọn form nhập (10/2026, pattern mẫu mhVendorFormWrap) — #recruitmentJobForm giờ LUÔN bắt đầu
+  // ẨN mỗi khi renderRecruitment() chạy (chỉ gọi từ 2 nơi, cả 2 đều là "nav" thật — setInternalSubTab()
+  // vào tab Tuyển Dụng + setRecruitmentTab() đổi tab con — KHÔNG có lượt gọi nào từ luồng CRUD/refresh
+  // danh sách nên an toàn khi luôn ẩn ở đây). Chỉ mở lại qua nút "+ Đăng Tin Mới"
+  // (openRecruitmentJobForm()) hoặc luồng Sửa tin (openEditRecruitmentJob(), tự remove('hidden')).
+  document.getElementById('recruitmentJobForm').classList.add('hidden');
+  document.getElementById('btnRecruitmentJobNew').classList.toggle('hidden', !canManage);
   document.getElementById('recruitmentJobNoPermNote').classList.toggle('hidden', canManage);
   renderDynamicInputsForModule('RECRUITMENT_JOB', 'dynamicFieldsContainer_RECRUITMENT_JOB');
   // Mục 0 (10/2026): AND thêm checkbox internalRecruitmentJobs/MyReferrals/Manage.
@@ -1015,7 +1053,7 @@ async function submitRecruitmentJob(e) {
       DB.recruitmentJobs.unshift(result.item);
       logSystemAction('INTERNAL', 'CREATE_RECRUITMENT_JOB', `Đăng tin tuyển dụng [${result.item.title}]`, 'SUCCESS');
       alert('✅ Đã đăng tin tuyển dụng thành công!');
-      resetRecruitmentJobForm();
+      resetRecruitmentJobForm(); // tự thu gọn form nhập luôn (10/2026) — xem chú thích ở resetRecruitmentJobForm().
       resetListPage('recruitmentJobs');
     }
   } catch (err) { return alert(`⛔ ${err.message}`); }
@@ -1033,6 +1071,10 @@ function resetRecruitmentJobForm() {
   if (submitBtn) submitBtn.innerText = 'Đăng Tin';
   const cancelBtn = document.getElementById('rjCancelEditBtn');
   if (cancelBtn) cancelBtn.classList.add('hidden');
+  // Thu gọn form nhập (10/2026) — "Làm Mới"/đăng tin thành công/Hủy Sửa đều dùng chung hàm này, nên thu
+  // gọn lại NGAY TẠI ĐÂY (1 chỗ duy nhất) là đủ cho cả 3 luồng, cùng khuôn resetInternalPostForm() ở
+  // Nhịp Sống HCRC (gọi lại cancelEditInternalPost() vốn cũng tự ẩn form qua setInternalSubTab()).
+  closeRecruitmentJobForm();
 }
 function openEditRecruitmentJob(id) {
   const job = DB.recruitmentJobs.find(j => j.id === id);
@@ -1052,10 +1094,28 @@ function openEditRecruitmentJob(id) {
   clearSingleFileInput('rjBannerFile', 'rjBannerFileChip');
   document.getElementById('rjSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('rjCancelEditBtn').classList.remove('hidden');
+  // Thu gọn form nhập (10/2026) — luồng Sửa tin tự mở lại form trực tiếp (KHÔNG qua nút "+ Đăng Tin
+  // Mới"), cùng khuôn editInternalPostUI()/dòng 734 ở module-internalcomms-nhipsong.js (Nhịp Sống HCRC).
+  document.getElementById('recruitmentJobForm').classList.remove('hidden');
   document.getElementById('recruitmentJobForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function cancelEditRecruitmentJob() {
-  resetRecruitmentJobForm();
+  resetRecruitmentJobForm(); // tự thu gọn form nhập luôn (10/2026) — xem chú thích ở resetRecruitmentJobForm().
+}
+
+// Thu gọn form nhập (10/2026, nút "+ Đăng Tin Mới"/"✕ Thu Gọn", pattern mẫu mhVendorFormWrap/
+// module-muahang.js) — #recruitmentJobForm giờ bắt đầu ẨN mỗi khi renderRecruitment() chạy, chỉ mở lại
+// qua openRecruitmentJobForm() này HOẶC openEditRecruitmentJob() (Sửa tin, tự remove('hidden') riêng).
+function openRecruitmentJobForm() {
+  // Nếu đang dở 1 phiên Sửa (editingRecruitmentJobId != null) mà trước đó chỉ bấm "✕ Thu Gọn" (không
+  // bấm "Hủy Sửa") — PHẢI huỷ Sửa dở trước, tránh bấm "+ Đăng Tin Mới" nhưng submit lại âm thầm đè lên
+  // tin đang sửa dở (cùng rủi ro đã xử lý ở openInternalPostForm()).
+  if (editingRecruitmentJobId) cancelEditRecruitmentJob();
+  document.getElementById('recruitmentJobForm').classList.remove('hidden');
+  document.getElementById('recruitmentJobForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeRecruitmentJobForm() {
+  document.getElementById('recruitmentJobForm').classList.add('hidden');
 }
 
 // Đợt (Tháng) không phải danh mục cố định (mỗi tin tự nhập <input type=month>, xem rjMonth) — dropdown

@@ -122,6 +122,7 @@ async function main() {
       const result = await page.evaluate(async () => {
         await switchTab('muaHang');
         setPurchasingSubTab('ITPRICE');
+        openMhItPriceCreateForm(); // Pattern "thu gọn form nhập" (10/2026) — form giờ ẩn mặc định.
         document.getElementById('mhItPriceMasterListSelect').value = String(1);
         document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá theo chương trình khuyến mãi';
         mhItPricePendingFile = {
@@ -447,6 +448,7 @@ async function main() {
         window.__resetCapture();
         await switchTab('muaHang');
         setPurchasingSubTab('ITPRICE');
+        openMhItPriceCreateForm(); // Pattern "thu gọn form nhập" (10/2026) — form giờ ẩn mặc định.
         document.getElementById('mhItPriceCode').value = generateItPriceCode();
         document.getElementById('mhItPriceMasterListSelect').value = String(1);
         document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá đợt 2';
@@ -570,6 +572,7 @@ async function main() {
         // Bán Lẻ (10/2026, tách khỏi Hỗ Trợ IT) tạo ở Mua Hàng > Phê Duyệt Giá Bán Lẻ (mh* ids).
         await switchTab('muaHang');
         setPurchasingSubTab('ITPRICE');
+        openMhItPriceCreateForm(); // Pattern "thu gọn form nhập" (10/2026) — form giờ ẩn mặc định.
         document.getElementById('mhItPriceMasterListSelect').value = String(1);
         document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá bán lẻ Marketing';
         mhItPricePendingFile = {
@@ -588,6 +591,7 @@ async function main() {
         // NGUYÊN itPrice* — chỉ đổi nơi sống, xem enterVanHanhItPriceForm()/setItPriceSubTab()).
         await switchTab('vanHanh');
         setVanHanhSubTab('ITPRICE');
+        openItPriceCreateForm(); // Pattern "thu gọn form nhập" (10/2026) — form giờ ẩn mặc định.
         // "Siêu Thị Đề Xuất" (đợt 9/2026) — Bán Buôn KHÔNG có "Toàn bộ", bắt buộc chọn >=1 siêu thị
         // (setItPriceSubTab() ở trên đã tự render sẵn ô multi-select rỗng qua
         // applyItPriceStoreScopeUIForSubTab(), gmsAdd() mô phỏng đúng thao tác click chọn 1 gợi ý).
@@ -643,7 +647,7 @@ async function main() {
       await loginAs(page, STAFF_MKT);
       const clientBlocked = await page.evaluate(async () => {
         window.__resetCapture();
-        await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE');
+        await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); openItPriceCreateForm();
         document.getElementById('itPriceCode').value = generateItPriceCode();
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceTier').value = ''; // cố tình không chọn mức
@@ -683,7 +687,7 @@ async function main() {
     await run.run('Bán Buôn theo tier: tạo thêm 1 hồ sơ ở mức Chiết khấu > 5% (tier khác hồ sơ kịch bản 10)', async () => {
       await loginAs(page, STAFF_MKT);
       const created = await page.evaluate(async () => {
-        await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE');
+        await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); openItPriceCreateForm();
         gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
@@ -850,7 +854,7 @@ async function main() {
     await run.run('Tài liệu bổ sung liên quan: chọn nhiều tệp lúc tạo -> lưu đúng vào item.extraFiles, hiện đúng trong modal chi tiết', async () => {
       await loginAs(page, STAFF_KD);
       const created = await page.evaluate(async () => {
-        await switchTab('muaHang'); setPurchasingSubTab('ITPRICE');
+        await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); openMhItPriceCreateForm();
         document.getElementById('mhItPriceMasterListSelect').value = String(1);
         document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá kèm tài liệu bổ sung';
         mhItPricePendingFile = {
@@ -887,7 +891,7 @@ async function main() {
     await run.run('Tài liệu bổ sung liên quan: KHÔNG chọn tệp nào vẫn tạo được bình thường (hoàn toàn tuỳ chọn) — khối modal ẨN', async () => {
       await loginAs(page, STAFF_KD);
       const created = await page.evaluate(async () => {
-        await switchTab('muaHang'); setPurchasingSubTab('ITPRICE');
+        await switchTab('muaHang'); setPurchasingSubTab('ITPRICE'); openMhItPriceCreateForm();
         document.getElementById('mhItPriceMasterListSelect').value = String(1);
         document.getElementById('mhItPriceReason').value = 'Điều chỉnh giá không kèm tài liệu bổ sung';
         // Dọn lại #mhItPriceExtraFiles còn sót từ kịch bản trước — fake event.target.reset() ở test này

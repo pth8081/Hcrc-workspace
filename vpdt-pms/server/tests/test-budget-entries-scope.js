@@ -23,22 +23,32 @@ const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng A', pe
 const APPROVER_B = { username: 'duyet_b', name: 'Người Duyệt Phòng B', dept: 'Phòng Z', perms: {}, active: true };
 const BUDGET_MGR = { username: 'ketoan1', name: 'Quản Lý Ngân Sách', dept: 'Phòng Kế Toán', perms: { budgetManage: true }, active: true };
 const BUDGET_AGG = { username: 'tonghop1', name: 'Người Xem Tổng Hợp', dept: 'Phòng Kế Toán', perms: { budgetAggregate: true }, active: true };
+// BUDGET_REPORT_VIEWER/REGULAR_B/MANAGER_OF_B: thêm cho đợt vá Cao #2 (rà soát v24.74→v24.90, 10/2026) —
+// loadBudgetEntriesScoped() trước đây thiếu HẲN budgetReportView + deptViewScopeConfig['budget']
+// (extraViewers/managerCanView), khớp đúng gap đã vá ở loadBudgetLinesScoped() (test-budget-lines-dept-
+// scope.js) nhưng chưa từng được mirror sang budgetEntries.
+const BUDGET_REPORT_VIEWER = { username: 'baocao1', name: 'Người Xem Báo Cáo Ngân Sách', dept: 'Phòng Kế Toán', perms: { budgetReportView: true }, active: true };
+const REGULAR_B = { username: 'nvb', name: 'Nhân Viên B', dept: 'Phòng B', perms: {}, active: true, managerUsername: 'qlb' };
+const MANAGER_OF_B = { username: 'qlb', name: 'Quản Lý Của B', dept: 'Phòng Z', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
-const USERS = [REGULAR_A, APPROVER_B, BUDGET_MGR, BUDGET_AGG, ADMIN];
+const USERS = [REGULAR_A, APPROVER_B, BUDGET_MGR, BUDGET_AGG, BUDGET_REPORT_VIEWER, REGULAR_B, MANAGER_OF_B, ADMIN];
 
 const APP_DATA = {
   budgetDeptWorkflows: {
     'Phòng B': { approvers: { 1: ['duyet_b'] } }
-  }
+  },
+  users: USERS
 };
 
 let ALL_ENTRIES;
 function resetData() {
   ALL_ENTRIES = [
-    { id: 1, dept: 'Phòng A' },
-    { id: 2, dept: 'Phòng B' },
-    { id: 3, dept: 'Phòng C' }
+    { id: 1, dept: 'Phòng A', creator: 'nva' },
+    { id: 2, dept: 'Phòng B', creator: 'duyet_b' },
+    { id: 3, dept: 'Phòng C', creator: 'someone_else' },
+    { id: 4, dept: 'Phòng C', creator: 'nvb' } // của REGULAR_B (nvb), phòng KHÁC phòng nvb (Phòng B) — chỉ managerCanView mới thấy được qua MANAGER_OF_B
   ];
+  delete APP_DATA.deptViewScopeConfig;
 }
 resetData();
 
@@ -135,21 +145,47 @@ async function main() {
       resetData();
       const res = await api('GET', '/api/data', undefined, BUDGET_MGR);
       const ids = (res.body.budgetEntries || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3', 'budgetManage phải thấy đủ cả 3 hồ sơ');
+      assertEqual(ids.join(','), '1,2,3,4', 'budgetManage phải thấy đủ cả 4 hồ sơ');
     });
 
     await run.run('budgetAggregate: nhận ĐỦ toàn bộ', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, BUDGET_AGG);
       const ids = (res.body.budgetEntries || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3', 'budgetAggregate phải thấy đủ cả 3 hồ sơ');
+      assertEqual(ids.join(','), '1,2,3,4', 'budgetAggregate phải thấy đủ cả 4 hồ sơ');
     });
 
     await run.run('admin: nhận ĐỦ toàn bộ', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.budgetEntries || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3', 'admin phải thấy đủ cả 3 hồ sơ');
+      assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 hồ sơ');
+    });
+
+    // --- Đợt vá Cao #2 (rà soát v24.74→v24.90, 10/2026) ---
+    await run.run('budgetReportView: nhận ĐỦ toàn bộ dù KHÔNG có budgetManage/budgetAggregate (gap vừa vá)', async () => {
+      resetData();
+      const res = await api('GET', '/api/data', undefined, BUDGET_REPORT_VIEWER);
+      const ids = (res.body.budgetEntries || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'budgetReportView phải thấy đủ cả 4 hồ sơ, giống budgetManage');
+    });
+
+    await run.run('deptViewScopeConfig.budget.extraViewers=[nvb] -> B nhận ĐỦ toàn công ty dù KHÔNG có quyền quản lý nào (gap vừa vá)', async () => {
+      resetData();
+      APP_DATA.deptViewScopeConfig = { budget: { mode: 'DEPT', extraViewers: [REGULAR_B.username], managerCanView: false } };
+      const res = await api('GET', '/api/data', undefined, REGULAR_B);
+      const ids = (res.body.budgetEntries || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 dòng, mọi phòng ban');
+      delete APP_DATA.deptViewScopeConfig;
+    });
+
+    await run.run('deptViewScopeConfig.budget.managerCanView=true -> quản lý nhận thêm hồ sơ của cấp dưới (gap vừa vá)', async () => {
+      resetData();
+      APP_DATA.deptViewScopeConfig = { budget: { mode: 'DEPT', extraViewers: [], managerCanView: true } };
+      const res = await api('GET', '/api/data', undefined, MANAGER_OF_B);
+      const ids = (res.body.budgetEntries || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '4', 'qlb (quản lý của nvb) phải thấy #4 (của cấp dưới) qua managerCanView, KHÔNG thấy #1/#2/#3');
+      delete APP_DATA.deptViewScopeConfig;
     });
 
     await run.run('dù nhánh tải trả THỪA (giả lập lỗi tầng dưới), filterBudgetEntriesForUser() vẫn chốt đúng phạm vi (lớp chắn thứ 2)', async () => {

@@ -15,8 +15,22 @@ const VALID_TERM_TYPES = ['VOLUME_REBATE', 'GROWTH_REBATE', 'TRADE_SPEND', 'LIST
 const VALID_CALC_BASIS = ['PURCHASE_VALUE', 'SELL_OUT_VALUE'];
 const VALID_TIER_MODES = ['GRADUATED', 'CLIFF'];
 const VALID_PERIOD_TYPES = ['MONTHLY', 'QUARTERLY', 'YEARLY', 'ONE_TIME'];
-const VALID_SCOPE_TYPES = ['STORE_FORMAT', 'STORE', 'CATEGORY'];
+// ENTITY/CHANNEL thêm 10/2026 (mở rộng theo file Điều Khoản Thương Mại/Tính BAS người dùng cung cấp) —
+// ENTITY lọc đúng phạm vi 1 pháp nhân (VD BRG/Fuji, xem Entity ở dbo.VendorPurchaseTransactions), CHANNEL
+// lọc đúng phạm vi mua hàng qua Kho Trung Tâm (DC) hay mua trực tiếp (xem IsViaDC) — mirror đúng khuôn
+// matchesScope() hiện có (lib/purchaseBasisAggregator.js), KHÔNG đổi 3 scopeType cũ.
+const VALID_SCOPE_TYPES = ['STORE_FORMAT', 'STORE', 'CATEGORY', 'ENTITY', 'CHANNEL'];
 const VALID_TERM_STATUSES = ['DRAFT', 'ACTIVE', 'EXPIRED', 'ARCHIVED'];
+// amountMode thêm 10/2026: phần lớn điều khoản là % theo bậc thang trên doanh số (PERCENT_TIERED, hành vi
+// GỐC — giữ nguyên mặc định để không đổi hành vi điều khoản cũ), nhưng nhiều dòng trong Điều Khoản Thương
+// Mại thực tế là SỐ TIỀN CỐ ĐỊNH/kỳ (VD "Phí tạo mã mới", "Thuê mướn...") không phụ thuộc doanh số —
+// FIXED_LUMP_SUM cho đúng nhóm này, có thể kèm phân bổ đa pháp nhân (allocationMode).
+const VALID_AMOUNT_MODES = ['PERCENT_TIERED', 'FIXED_LUMP_SUM'];
+// allocationMode CHỈ có ý nghĩa khi amountMode=FIXED_LUMP_SUM — chia 1 số tiền cố định cho nhiều pháp
+// nhân (VD BRG/Fuji cùng hưởng 1 khoản hỗ trợ của NCC) theo đúng tỷ trọng thực nhập của mỗi pháp nhân
+// trong kỳ (PRORATA_BY_ENTITY), hoặc gán nguyên 100% cho 1 pháp nhân chỉ định (FULL_TO_ENTITY) — đúng 2
+// cách phân bổ quan sát được ở sheet "Tính BAS" (cột BF-BR) của file người dùng cung cấp.
+const VALID_ALLOCATION_MODES = ['NONE', 'PRORATA_BY_ENTITY', 'FULL_TO_ENTITY'];
 
 // ===================== Phân quyền (mục 8 tài liệu) =====================
 function canManageVendors(user) {
@@ -86,6 +100,15 @@ function defaultRebateTerm(vendorId) {
     isRetroactive: false,
     clonedFromTermId: null,
     tiers: [], scopes: [],
+    // Mặc định GIỮ NGUYÊN hành vi gốc (PERCENT_TIERED/includedInBas=true/allocationMode=NONE) — mọi điều
+    // khoản tạo TRƯỚC bản mở rộng 10/2026 đọc lại vẫn coi như các field này ở đúng giá trị mặc định này
+    // (xem các điểm đọc `term.amountMode || 'PERCENT_TIERED'`/`term.includedInBas !== false` tương ứng).
+    includedInBas: true,
+    amountMode: 'PERCENT_TIERED',
+    fixedAmount: 0,
+    allocationMode: 'NONE',
+    allocationEntities: [],
+    allocationTargetEntity: null,
     history: []
   };
 }
@@ -159,8 +182,43 @@ function validateRebateTermPayload(body) {
   if (body?.effectiveTo && String(body.effectiveTo) < String(body.effectiveFrom)) {
     return 'Ngày Hiệu Lực Đến không được trước Ngày Hiệu Lực Từ';
   }
-  const tierErr = validateTiers(body?.tiers);
-  if (tierErr) return tierErr;
+  // amountMode/allocationMode thêm 10/2026 — body?.amountMode thiếu (điều khoản cũ trước bản mở rộng,
+  // hoặc client cũ chưa gửi field này) coi như 'PERCENT_TIERED' (hành vi gốc, giữ nguyên validateTiers
+  // bắt buộc như trước), KHÔNG chặn lỗi vì thiếu field mới.
+  const amountMode = body?.amountMode || 'PERCENT_TIERED';
+  if (!VALID_AMOUNT_MODES.includes(amountMode)) return `Phương thức tính "${amountMode}" không hợp lệ`;
+  if (amountMode === 'PERCENT_TIERED') {
+    const tierErr = validateTiers(body?.tiers);
+    if (tierErr) return tierErr;
+  } else {
+    // FIXED_LUMP_SUM: số tiền cố định/kỳ, KHÔNG cần bậc thang (đúng bản chất "Phí tạo mã mới"/"Thuê
+    // mướn..." trong Điều Khoản Thương Mại — không phụ thuộc doanh số).
+    const fixedAmount = Number(body?.fixedAmount);
+    if (!Number.isFinite(fixedAmount) || fixedAmount < 0) return 'Vui lòng nhập Số Tiền Cố Định (số >= 0) cho điều khoản dạng Số Tiền Cố Định';
+    const allocationMode = body?.allocationMode || 'NONE';
+    if (!VALID_ALLOCATION_MODES.includes(allocationMode)) return `Cách phân bổ "${allocationMode}" không hợp lệ`;
+    if (allocationMode === 'PRORATA_BY_ENTITY') {
+      const entities = body?.allocationEntities;
+      if (!Array.isArray(entities) || entities.length < 2 || entities.some(e => !e || !String(e).trim())) {
+        return 'Phân bổ theo tỷ trọng cần khai báo ít nhất 2 pháp nhân (allocationEntities)';
+      }
+      // LỖI ĐÃ VÁ (rà soát v24.74→v24.90, 10/2026, mức Cao): trùng tên pháp nhân trong allocationEntities
+      // (VD ['BRG','BRG','FUJI']) khiến allocateFixedAmountByEntity() cộng basisAmount của pháp nhân đó 2
+      // LẦN vào grandTotal (mẫu số) nhưng chỉ 1 LẦN vào tử số (totalsByEntity theo key) — làm lệch tỷ
+      // trọng phân bổ của các pháp nhân KHÁC. Tổng các allocatedAmount vẫn khớp đúng 100% fixedAmount (dễ
+      // lọt qua kiểu test "tổng có khớp không") dù tỷ lệ từng pháp nhân đã sai — chặn ngay tại validate,
+      // mirror đúng khuôn seen.has(from) ở validateTiers() phía trên.
+      const seenEntities = new Set();
+      for (const e of entities) {
+        const key = String(e).trim();
+        if (seenEntities.has(key)) return `Trùng pháp nhân "${key}" trong danh sách phân bổ — mỗi pháp nhân chỉ khai 1 lần`;
+        seenEntities.add(key);
+      }
+    }
+    if (allocationMode === 'FULL_TO_ENTITY' && !String(body?.allocationTargetEntity || '').trim()) {
+      return 'Vui lòng chọn Pháp Nhân nhận toàn bộ (allocationTargetEntity)';
+    }
+  }
   const scopeErr = validateScopes(body?.scopes);
   if (scopeErr) return scopeErr;
   return null;
@@ -207,14 +265,98 @@ function cloneTermAsDraft(term, username) {
 const { aggregateBasisAmount } = require('./purchaseBasisAggregator');
 const { calculateTieredRebate } = require('./tieredCalculator');
 
+// Tìm tỷ lệ % ĐÃ ĐẠT theo kiểu CLIFF (mốc cao nhất mà "value" đạt tới) — dùng RIÊNG cho GROWTH_REBATE
+// (xem computeRebateEstimate() bên dưới): bậc thang của điều khoản tăng trưởng mang Ý NGHĨA KHÁC bậc
+// thang VOLUME_REBATE thường (fromAmount ở đây là % TĂNG TRƯỞNG so kỳ liền trước, không phải số tiền mua
+// hàng tuyệt đối) — KHÔNG gọi calculateTieredRebate() (lib/tieredCalculator.js, đã kiểm thử thật bởi
+// người dùng, không sửa logic) vì hàm đó LUÔN nhân ngược "value" đầu vào với rate% để ra rebateAmount,
+// sai đơn vị nếu value là % tăng trưởng thay vì số tiền. Luôn áp dụng kiểu CLIFF (đạt mốc nào tính rate đó
+// cho toàn bộ) bất kể term.tierMode — GRADUATED không có ý nghĩa nghiệp vụ rõ ràng cho 1 mốc %, xác nhận
+// lại với người dùng nếu cần hỗ trợ thêm sau này.
+function findAchievedGrowthRate(growthPct, tiers) {
+  const sorted = [...(tiers || [])].sort((a, b) => a.fromAmount - b.fromAmount);
+  let rate = 0;
+  for (const tier of sorted) {
+    if (growthPct >= tier.fromAmount) rate = tier.ratePct;
+  }
+  return rate;
+}
+
+// Phân bổ 1 số tiền cố định (FIXED_LUMP_SUM) cho nhiều pháp nhân theo tỷ trọng thực nhập (PRORATA_BY_ENTITY)
+// hoặc gán nguyên cho 1 pháp nhân (FULL_TO_ENTITY) — mirror đúng cột BF-BR "Tính BAS" (phân bổ fix amount
+// cho riêng BRG, có khoản 100%, có khoản theo tỷ trọng) trong file người dùng cung cấp. CHỦ Ý CHỈ lọc theo
+// ENTITY (không gộp thêm term.scopes khác) — matchesScope() ghép nhiều scope theo kiểu "khớp 1 trong các
+// scope" (OR), ghép thêm điều kiện ENTITY vào scopes gốc sẽ biến thành "khớp Entity HOẶC khớp scope gốc"
+// (sai ý "VÀ"), không phải hạn chế thật của nghiệp vụ — các điều khoản FIXED_LUMP_SUM quan sát được trong
+// Điều Khoản Thương Mại thực tế đều không kèm scope phạm vi cửa hàng/ngành hàng khác.
+function allocateFixedAmountByEntity(fixedAmount, term, purchaseTransactions, vendorCode, periodStart, periodEnd) {
+  const allocationMode = term.allocationMode || 'NONE';
+  if (allocationMode === 'FULL_TO_ENTITY' && term.allocationTargetEntity) {
+    return [{ entity: term.allocationTargetEntity, purchaseAmount: null, ratio: 1, allocatedAmount: fixedAmount }];
+  }
+  if (allocationMode === 'PRORATA_BY_ENTITY' && Array.isArray(term.allocationEntities) && term.allocationEntities.length >= 2) {
+    // Khử trùng tên pháp nhân — lớp phòng thủ thứ 2 (defense-in-depth) cho dữ liệu đã lưu TRƯỚC khi có
+    // validate chặn trùng ở validateRebateTermPayload() (xem chú thích đầy đủ lỗi đã vá ở đó): trùng tên
+    // trong mảng gốc sẽ cộng basisAmount của pháp nhân đó 2 lần vào grandTotal nhưng chỉ 1 lần vào
+    // totalsByEntity, làm lệch tỷ trọng các pháp nhân khác.
+    const uniqueEntities = [...new Set(term.allocationEntities)];
+    const totalsByEntity = {};
+    let grandTotal = 0;
+    for (const entity of uniqueEntities) {
+      const { basisAmount: entityBasis } = aggregateBasisAmount(purchaseTransactions, {
+        vendorCode, periodStart, periodEnd, scopes: [{ scopeType: 'ENTITY', scopeValue: entity }]
+      });
+      totalsByEntity[entity] = entityBasis;
+      grandTotal += entityBasis;
+    }
+    return uniqueEntities.map(entity => {
+      const ratio = grandTotal > 0 ? totalsByEntity[entity] / grandTotal : 0;
+      return { entity, purchaseAmount: totalsByEntity[entity], ratio, allocatedAmount: fixedAmount * ratio };
+    });
+  }
+  return null; // allocationMode='NONE' -> không chia, toàn bộ fixedAmount tính 1 khối cho NCC (không theo pháp nhân)
+}
+
 // purchaseTransactions: mảng { vendorCode, storeCode, storeFormat, categoryCode, purchaseDate, amount, isReturn }
 // (đã đọc từ dbo.VendorPurchaseTransactions, xem lib/vendorPurchaseStore.js) — hàm này THUẦN, không tự
 // đọc DB, để dễ kiểm thử độc lập (mirror đúng cách tieredCalculator.js/purchaseBasisAggregator.js đã
 // được kiểm thử trong tài liệu gốc).
-function computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart, periodEnd }) {
+//
+// previousPeriodStart/previousPeriodEnd (thêm 10/2026): CHỈ cần truyền khi term.termType==='GROWTH_REBATE'
+// (routes/purchasing.js tự tính kỳ liền trước cùng độ dài trước khi gọi) — purchaseTransactions LÚC ĐÓ
+// phải đã bao trùm CẢ kỳ hiện tại lẫn kỳ liền trước (route tự mở rộng khoảng truy vấn), hàm này tự lọc lại
+// đúng từng kỳ qua 2 lượt gọi aggregateBasisAmount() riêng.
+function computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart, periodEnd, previousPeriodStart, previousPeriodEnd }) {
   const { basisAmount, detail } = aggregateBasisAmount(purchaseTransactions, {
     vendorCode: vendor.vendorCode, periodStart, periodEnd, scopes: term.scopes || []
   });
+
+  if ((term.amountMode || 'PERCENT_TIERED') === 'FIXED_LUMP_SUM') {
+    const fixedAmount = Number(term.fixedAmount) || 0;
+    const entityAllocation = allocateFixedAmountByEntity(fixedAmount, term, purchaseTransactions, vendor.vendorCode, periodStart, periodEnd);
+    return {
+      basisAmount, aggregateDetail: detail, rebateAmount: fixedAmount,
+      breakdown: entityAllocation ? [{ fixedAmount, entityAllocation }] : [{ fixedAmount }],
+      entityAllocation
+    };
+  }
+
+  if (term.termType === 'GROWTH_REBATE') {
+    const prev = aggregateBasisAmount(purchaseTransactions, {
+      vendorCode: vendor.vendorCode, periodStart: previousPeriodStart, periodEnd: previousPeriodEnd, scopes: term.scopes || []
+    });
+    const prevBasisAmount = prev.basisAmount;
+    // prevBasisAmount=0: không có cơ sở so sánh % thật (chia 0) — coi như "tăng trưởng 100%" nếu kỳ này
+    // có doanh số (NCC mới phát sinh/mới qua ngưỡng), hoặc 0% nếu cả 2 kỳ đều không có doanh số.
+    const growthPct = prevBasisAmount > 0 ? ((basisAmount - prevBasisAmount) / prevBasisAmount) * 100 : (basisAmount > 0 ? 100 : 0);
+    const achievedRatePct = findAchievedGrowthRate(growthPct, term.tiers || []);
+    const rebateAmount = basisAmount * achievedRatePct / 100;
+    return {
+      basisAmount, aggregateDetail: detail, rebateAmount,
+      breakdown: [{ prevBasisAmount, prevAggregateDetail: prev.detail, growthPct, achievedRatePct }]
+    };
+  }
+
   const { rebateAmount, breakdown } = calculateTieredRebate(basisAmount, term.tiers || [], term.tierMode);
   return { basisAmount, aggregateDetail: detail, rebateAmount, breakdown };
 }
@@ -228,27 +370,40 @@ function computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart
 //     nghĩa nghiệp vụ mà không ai biết. QUYẾT ĐỊNH: CHẶN chọn calcBasis='SELL_OUT_VALUE' ở validate (tạo/
 //     sửa điều khoản) — an toàn hơn tính sai âm thầm; khi hệ thống có nguồn dữ liệu Giá Trị Bán Ra thật,
 //     gỡ chặn ở đây + bổ sung aggregator riêng cho SELL_OUT_VALUE.
-//   - termType='GROWTH_REBATE' (Chiết Khấu Theo Tăng Trưởng): công thức đúng cần SO SÁNH VỚI KỲ TRƯỚC
-//     (basisAmount kỳ này so với kỳ liền trước cùng độ dài) nhưng computeRebateEstimate() tính Y HỆT
-//     VOLUME_REBATE (bỏ qua hoàn toàn việc so kỳ trước) — ngữ nghĩa CHÍNH XÁC của "tăng trưởng" (so % hay
-//     so số tuyệt đối, "kỳ trước" là kỳ liền kề hay cùng kỳ năm trước) chưa được xác nhận rõ với người
-//     dùng, và tự suy đoán rồi cài đặt có thể SAI theo hướng khác — an toàn hơn là CHẶN tương tự
-//     SELL_OUT_VALUE cho tới khi xác nhận đúng công thức nghiệp vụ, tránh 1 lựa chọn âm thầm tính sai.
+//   - termType='GROWTH_REBATE' (Chiết Khấu Theo Tăng Trưởng): ĐÃ XÁC NHẬN với người dùng (10/2026) công
+//     thức so với KỲ LIỀN TRƯỚC (không phải cùng kỳ năm trước) — xem computeRebateEstimate()/
+//     findAchievedGrowthRate() phía trên: tính % tăng trưởng basisAmount kỳ này so kỳ liền trước cùng độ
+//     dài (routes/purchasing.js tự tính previousPeriodStart/End), tra bậc thang CLIFF theo % tăng trưởng
+//     đó ra rate đã đạt, áp dụng rate lên basisAmount KỲ NÀY (không áp lên phần tăng thêm) — ĐÃ GỠ khỏi
+//     UNSUPPORTED_TERM_TYPES.
 //   - periodType (MONTHLY/QUARTERLY/YEARLY/ONE_TIME): TRƯỚC ĐÂY hoàn toàn không đối chiếu với khoảng
 //     periodStart/periodEnd người dùng chọn lúc "Tính Ước Tính" — chọn periodType=MONTHLY nhưng tính cho
 //     nguyên 1 năm vẫn chạy bình thường không cảnh báo. Đây là phần DỄ SỬA ĐÚNG nhất (không cần thêm
 //     nguồn dữ liệu/công thức mới, chỉ đối chiếu độ dài kỳ) — validatePeriodMatchesPeriodType() bên dưới,
 //     gọi từ POST /terms/:id/calculate (routes/purchasing.js).
 const UNSUPPORTED_CALC_BASIS = new Set(['SELL_OUT_VALUE']);
-const UNSUPPORTED_TERM_TYPES = new Set(['GROWTH_REBATE']);
+const UNSUPPORTED_TERM_TYPES = new Set([]);
 function assertCalcBasisAndTermTypeSupported(calcBasis, termType) {
   if (UNSUPPORTED_CALC_BASIS.has(calcBasis)) {
     return `Căn cứ tính "Giá Trị Bán Ra" (SELL_OUT_VALUE) CHƯA được hệ thống hỗ trợ tính tự động (chưa có nguồn dữ liệu doanh số bán ra) — vui lòng chọn "Giá Trị Mua Hàng" (PURCHASE_VALUE), hoặc đối soát thủ công ngoài hệ thống cho tới khi được bổ sung.`;
   }
   if (UNSUPPORTED_TERM_TYPES.has(termType)) {
-    return `Loại điều khoản "Chiết Khấu Theo Tăng Trưởng" (GROWTH_REBATE) CHƯA được hệ thống hỗ trợ tính tự động (cần so sánh với kỳ trước, chưa xác nhận đúng công thức nghiệp vụ) — vui lòng chọn loại điều khoản khác, hoặc đối soát thủ công ngoài hệ thống cho tới khi được bổ sung.`;
+    return `Loại điều khoản "${termType}" CHƯA được hệ thống hỗ trợ tính tự động.`;
   }
   return null;
+}
+
+// Tính kỳ LIỀN TRƯỚC cùng độ dài với [periodStart, periodEnd] (cả 2 dạng YYYY-MM-DD) — dùng CHO
+// GROWTH_REBATE (routes/purchasing.js gọi TRƯỚC khi truy vấn purchaseTransactions, để mở rộng khoảng
+// truy vấn bao trùm luôn kỳ liền trước). VD kỳ 2026-03-01→2026-03-31 (31 ngày) -> kỳ liền trước
+// 2026-01-29→2026-02-28 (31 ngày, kết thúc đúng 1 ngày trước periodStart).
+function computePreviousPeriod(periodStart, periodEnd) {
+  const start = new Date(`${periodStart}T00:00:00Z`);
+  const end = new Date(`${periodEnd}T00:00:00Z`);
+  const durationMs = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime() - 24 * 3600 * 1000);
+  const prevStart = new Date(prevEnd.getTime() - durationMs);
+  return { previousPeriodStart: prevStart.toISOString().slice(0, 10), previousPeriodEnd: prevEnd.toISOString().slice(0, 10) };
 }
 
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Cao — phát hiện #3, phần periodType): đối chiếu ĐỘ DÀI kỳ
@@ -286,10 +441,11 @@ function validatePeriodMatchesPeriodType(periodType, periodStart, periodEnd) {
 
 module.exports = {
   VALID_TERM_TYPES, VALID_CALC_BASIS, VALID_TIER_MODES, VALID_PERIOD_TYPES, VALID_SCOPE_TYPES, VALID_TERM_STATUSES,
+  VALID_AMOUNT_MODES, VALID_ALLOCATION_MODES,
   canManageVendors, canManageTerms, canActivateTerm, canViewReport, canReconcile, canApprove,
   defaultVendor, validateVendorPayload,
   defaultRebateTerm, validateTiers, validateScopes, validateRebateTermPayload, checkDuplicateTermCode,
   assertValidTermTransition, cloneTermAsDraft,
-  computeRebateEstimate,
+  computeRebateEstimate, findAchievedGrowthRate, allocateFixedAmountByEntity, computePreviousPeriod,
   UNSUPPORTED_CALC_BASIS, UNSUPPORTED_TERM_TYPES, assertCalcBasisAndTermTypeSupported, validatePeriodMatchesPeriodType
 };

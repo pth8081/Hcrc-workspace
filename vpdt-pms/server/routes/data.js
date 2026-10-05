@@ -252,6 +252,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // mục (learnLicenseType(), routes/create.js) — không dựng lại được khả năng ghi đè/xoá trắng cả
   // danh mục. Admin vẫn thêm/bớt/dọn danh mục ở màn Quản Lý Danh Mục qua đúng route này như trước.
   'depts', 'cats', 'licenseTypes', 'trainingCategories', 'contractTypeAbbrs',
+  // jobGrades/resignationReasons/disciplinaryTypes (10/2026) — 3 danh mục MỞ mới (Cấp Bậc/Lý Do Nghỉ
+  // Việc/Loại Kỷ Luật, xem defaults.js), cùng lý do khoá ghi như depts/jobTitles ở trên: panel CRUD chỉ
+  // hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
+  'jobGrades', 'resignationReasons', 'disciplinaryTypes',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',
@@ -417,8 +421,16 @@ function stripPasswords(users) {
 // "write-only" như mật khẩu đăng nhập: để trống ô khi Sửa = giữ nguyên).
 function sanitizeEmailConfig(emailConfig) {
   if (!emailConfig || typeof emailConfig !== 'object') return emailConfig;
-  const { smtpPassEnc, ...rest } = emailConfig;
-  return { ...rest, hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc) };
+  const { smtpPassEnc, graphClientSecretEnc, ewsPassEnc, ...rest } = emailConfig;
+  return {
+    ...rest,
+    hasSmtpAuth: !!(emailConfig.smtpAuthEnabled && emailConfig.smtpUser && smtpPassEnc),
+    // Cùng khuôn hasSmtpAuth ở trên — Client Secret (Microsoft Graph API) cũng write-only, chỉ trả
+    // có/không đã cấu hình, không bao giờ trả lại giá trị đã mã hoá ra ngoài.
+    hasGraphAuth: !!(emailConfig.graphTenantId && emailConfig.graphClientId && graphClientSecretEnc),
+    // Mật khẩu mailbox (Exchange EWS, 10/2026) cũng write-only theo cùng quy ước trên.
+    hasEwsAuth: !!(emailConfig.ewsUrl && emailConfig.ewsMailboxUser && ewsPassEnc)
+  };
 }
 
 // externalApiKeys: ẨN HOÀN TOÀN với người không phải admin (mảng rỗng, không riêng lọc field bí mật
@@ -885,18 +897,45 @@ EXTRA_APPROVAL_MODULE_KEYS.forEach(mk => {
 // tạm "smtpPassPlain" (chỉ có giá trị khi admin thực sự gõ mật khẩu mới), KHÔNG BAO GIỜ gửi lại
 // "smtpPassEnc" (đã bị lọc khỏi mọi response đọc, xem sanitizeEmailConfig() ở trên) nên không có gì để
 // vô tình đè mất. Để trống "smtpPassPlain" = giữ nguyên "smtpPassEnc" đang lưu, khớp đúng quy ước
-// "để trống ô mật khẩu khi sửa = giữ nguyên hash cũ" ở prepareUsersForSave().
+// "để trống ô mật khẩu khi sửa = giữ nguyên hash cũ" ở prepareUsersForSave(). Client Secret của phương
+// thức gửi Microsoft Graph API (10/2026, "Exchange Online — access mailbox trực tiếp") theo ĐÚNG khuôn
+// write-only y hệt ("graphClientSecretPlain" -> "graphClientSecretEnc"), xử lý CHUNG trong cùng 1 hàm
+// vì cùng thuộc 1 bản ghi DB.emailConfig, không tách route/hàm riêng.
 async function prepareEmailConfigForSave(payload) {
-  const { smtpPassPlain, smtpPassEnc: _ignoredFromClient, ...rest } = payload || {};
+  const {
+    smtpPassPlain, smtpPassEnc: _ignoredFromClient,
+    graphClientSecretPlain, graphClientSecretEnc: _ignoredGraphFromClient,
+    // Mật khẩu mailbox của phương thức gửi Exchange (EWS, 10/2026, "xác thực trực tiếp bằng mailbox
+    // qua HTTPS") theo ĐÚNG khuôn write-only y hệt 2 secret trên.
+    ewsPassPlain, ewsPassEnc: _ignoredEwsFromClient,
+    ...rest
+  } = payload || {};
+  const prior = await getAppDataValue('emailConfig');
+  let smtpPassEnc = prior?.smtpPassEnc;
   if (smtpPassPlain) {
     try {
-      return { ...rest, smtpPassEnc: encryptSecret(smtpPassPlain) };
+      smtpPassEnc = encryptSecret(smtpPassPlain);
     } catch (err) {
       throw new HttpError(400, `Không thể lưu mật khẩu SMTP: ${err.message}`);
     }
   }
-  const prior = await getAppDataValue('emailConfig');
-  return { ...rest, smtpPassEnc: prior?.smtpPassEnc };
+  let graphClientSecretEnc = prior?.graphClientSecretEnc;
+  if (graphClientSecretPlain) {
+    try {
+      graphClientSecretEnc = encryptSecret(graphClientSecretPlain);
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu Client Secret (Microsoft Graph API): ${err.message}`);
+    }
+  }
+  let ewsPassEnc = prior?.ewsPassEnc;
+  if (ewsPassPlain) {
+    try {
+      ewsPassEnc = encryptSecret(ewsPassPlain);
+    } catch (err) {
+      throw new HttpError(400, `Không thể lưu mật khẩu mailbox (Exchange EWS): ${err.message}`);
+    }
+  }
+  return { ...rest, smtpPassEnc, graphClientSecretEnc, ewsPassEnc };
 }
 
 // headerValueEnc là write-only ở giao diện (ô luôn hiện trống, xem index.html) — cùng quy ước
@@ -1251,7 +1290,18 @@ function computeBudgetEntriesApproverDepts(user, data) {
   return depts;
 }
 async function loadBudgetEntriesScoped(user, data) {
-  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate) {
+  // LỖI ĐÃ VÁ (rà soát v24.74→v24.90, 10/2026, mức Cao — cùng lớp gap vừa vá ở loadBudgetLinesScoped()
+  // ngay dưới, nhưng ở collection chị em budgetEntries): thiếu đúng 2 phần canViewBudgetEntry() (lib/
+  // recordViewScope.js) đã có từ trước — (1) quyền `budgetReportView` (chỉ xem báo cáo toàn công ty,
+  // không quản lý) KHÔNG được coi là "xem hết" ở lớp SQL pre-filter này, dù hàm canView* chị em đã coi là
+  // vậy; (2) deptViewScopeConfig['budget'] (extraViewers/managerCanView, "Ma Trận Phạm Vi Xem Theo Phòng
+  // Ban") chưa từng được đọc ở đây — admin cấp "xem thêm phòng ban khác" qua Ma Trận cho 1 user cụ thể
+  // nhưng SQL vẫn chỉ tải đúng Dept của họ, canViewBudgetEntry() lọc lại sau đó sẽ luôn rỗng vì dữ liệu
+  // phòng ban được cấp thêm chưa từng được tải về (fail-closed ngược — quyền đã cấp nhưng vô hiệu). Mirror
+  // đúng khuôn loadBudgetLinesScoped() (dùng chung 1 khoá cấu hình 'budget', khác collection).
+  const cfg = moduleViewConfig(data, 'budget', 'DEPT');
+  const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
+  if (user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('budgetEntries');
   }
   const depts = new Set();

@@ -170,7 +170,9 @@ async function gotoLogTab(page, moduleFilter) {
 // chính là sự kiện "Cần phê duyệt" (NOTIFY_APPROVAL_NEEDED) mà DB.approvalEmailConfig.CAR.approvalNeeded
 // đang chặn/cho gửi.
 async function submitRealCarRegistration(page) {
-  await page.evaluate(() => switchTab('car'));
+  // "Thu gọn form nhập" (10/2026) — #carForm giờ ẩn mặc định, mở qua openCarForm() trước khi
+  // page.selectOption()/page.fill() thao tác lên các ô bên trong.
+  await page.evaluate(() => { switchTab('car'); openCarForm(); });
   await page.waitForFunction(() => document.getElementById('carDept')?.options.length > 0);
   await page.selectOption('#carDept', 'Kế Toán');
   await page.selectOption('#carType', 'Xe 4 chỗ');

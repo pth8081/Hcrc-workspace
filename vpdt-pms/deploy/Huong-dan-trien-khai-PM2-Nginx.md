@@ -632,6 +632,15 @@ sudo -u vpdt-app pm2 stop vpdt
 
 ## 11. Nginx (reverse proxy cổng 80/443 → 3000)
 
+> **Lưu ý (10/2026)**: bản PM2-only (`Huong-dan-trien-khai-PM2.md`, mục 11.8)
+> có thêm tính năng "HTTPS tự phục vụ" (server tự chạy HTTPS qua chứng chỉ
+> tải lên web, không cần Nginx) — **track này ĐÃ có HTTPS qua Nginx ở mục bên
+> dưới, KHÔNG cần bật thêm tính năng đó** (đặt `HTTPS_PORT` trong `.env` +
+> tải chứng chỉ ở Hệ Thống → Quản Trị → Chứng Chỉ TLS/HTTPS). Bật cả 2 cùng
+> lúc tạo ra 2 lớp TLS termination không cần thiết (Nginx giải mã HTTPS rồi
+> chuyển tiếp HTTP nội bộ tới Node — Node không cần tự giải mã HTTPS lần thứ
+> 2 nữa).
+
 ```bash
 sudo apt-get install -y nginx
 sudo nano /etc/nginx/sites-available/vpdt
@@ -1098,6 +1107,39 @@ Giai đoạn này CHƯA làm thông báo đẩy (push notification), chỉ dừn
 
 Không cần làm gì thêm ngoài copy code + restart theo mục 16 — không có biến
 môi trường mới, không đổi `schema.sql`, không thêm gói npm nào.
+
+---
+
+### 14.8. Chứng Chỉ Tin Cậy (CA Ngoài) — khi server GỌI RA hệ thống khác qua HTTPS
+
+Khác hẳn Nginx ở mục 11 (Nginx làm HTTPS cho lượt gọi VÀO từ người dùng) —
+mục này dành cho hướng NGƯỢC LẠI: server tự làm **client** gọi API sang 1 hệ
+thống khác (dsmart16, DSmart API/Mua Hàng BAS, hay tích hợp mới sau này) qua
+HTTPS. Nếu hệ thống đích dùng chứng chỉ do **CA công khai** cấp (Let's
+Encrypt, DigiCert...) thì **không cần làm gì** — Node đã tự tin sẵn. Chỉ cần
+làm theo mục này khi hệ thống đích dùng chứng chỉ do **CA NỘI BỘ công ty**
+cấp (gặp lỗi "self-signed certificate"/"unable to verify the first
+certificate" khi server gọi sang).
+
+Track này đã dùng `ecosystem.config.js` + cluster mode (mục 10b) nên biến
+`NODE_EXTRA_CA_CERTS` đã sẵn trong khối `env` của file đó — không cần thêm
+bước nào ở tầng PM2.
+
+1. Tải chứng chỉ CA GỐC qua giao diện web (thông tin công khai, không phải
+   private key, xin trực tiếp team hạ tầng/CA nội bộ công ty được): đăng
+   nhập Quản Trị Viên → **Hệ Thống → ⚙️ Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA
+   Ngoài)** → chọn file chứng chỉ CA (`.pem`/`.crt`/`.cer`, có thể ghép nhiều
+   CA trong 1 file) → bấm **"⬆️ Thêm Chứng Chỉ CA"**. Tải nhầm chứng chỉ
+   SERVER (không phải CA) sẽ bị từ chối ngay, không lưu.
+2. `sudo -u vpdt-app pm2 restart vpdt` — biến `NODE_EXTRA_CA_CERTS` chỉ được
+   Node đọc lúc khởi động (không đặt được qua `server/.env`, quá trễ).
+3. Quay lại tab trên, xác nhận dòng trạng thái đổi sang "✅ Tiến trình này ĐÃ
+   cấu hình đúng NODE_EXTRA_CA_CERTS...". Từ lúc này, MỌI lượt gọi ra ngoài
+   của server đều tự động tin chứng chỉ do CA đó cấp.
+
+Không cần làm gì thêm ngoài copy code + restart ở lần cập nhật đầu tiên có
+tính năng này — `ecosystem.config.js` đã sẵn dòng cấu hình, an toàn giữ
+nguyên dù chưa từng thêm CA nào qua UI.
 
 ---
 

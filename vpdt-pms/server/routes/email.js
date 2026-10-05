@@ -6,7 +6,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getPool, sql } = require('../db');
-const { sendMail, hasAuthConfigured, resolveEncryption } = require('../lib/mailer');
+const { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { sendServerError } = require('../lib/errorResponse');
 const { getAllForCollection } = require('../lib/recordStore');
@@ -53,6 +53,10 @@ function resolveSmtpAccount(emailConfig) {
     return { user: null, pass: null };
   }
 }
+
+// resolveGraphOption() (lib/mailer.js) giải mã graphClientSecretEnc + dựng tham số "graph" truyền thẳng
+// cho sendMail() khi Loại Email Gateway đang chọn là "Exchange Online (Graph API)" — hàm DÙNG CHUNG cho
+// mọi nơi gọi sendMail() (routes/auth.js, jobs/*.js), không định nghĩa riêng ở đây nữa.
 
 // Trạng thái cấu hình xác thực SMTP (không nhạy cảm — chỉ trả có/không, không lộ giá trị thật) để màn
 // Cấu Hình Email hiển thị cho admin biết server đang chạy chế độ có xác thực hay ẩn danh — tính theo
@@ -148,7 +152,10 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
       port: emailConfig.smtpPort,
       encryption: resolveEncryption(emailConfig),
       user, pass,
-      from: emailConfig.senderEmail
+      from: emailConfig.senderEmail,
+      allowSelfSigned: !!emailConfig.smtpAllowSelfSigned,
+      graph: resolveGraphOption(emailConfig),
+      ews: resolveEwsOption(emailConfig)
     });
     res.json(result);
   } catch (err) {
@@ -165,8 +172,101 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
   if (!req.freshUser?.perms?.admin) {
     return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được gửi email thử' });
   }
-  const { to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail } = req.body || {};
+  const {
+    to, host, port, encryption, smtpAuthEnabled, smtpUser, smtpPass, senderEmail, smtpAllowSelfSigned,
+    // sendMethod: 'GRAPH_API' khi admin đang thử nghiệm "Exchange Online (Graph API)" — xem
+    // setEmailGatewayPreset() ở core.js. Mặc định (undefined/'SMTP') đi luồng SMTP y hệt trước giờ.
+    sendMethod, graphTenantId, graphClientId, graphClientSecret, graphSenderMailbox,
+    // sendMethod: 'EWS' khi admin đang thử nghiệm "Exchange (EWS)" — xác thực trực tiếp bằng mailbox
+    // (Basic Auth) qua HTTPS, KHÔNG phải Azure AD App như Graph API, KHÔNG phải port 587 như SMTP.
+    ewsUrl, ewsMailboxUser, ewsMailboxPass, ewsAllowSelfSigned
+  } = req.body || {};
   if (!to) return res.status(400).json({ error: 'Thiếu địa chỉ email nhận thử' });
+
+  if (sendMethod === 'GRAPH_API') {
+    if (!graphTenantId || !graphClientId || !graphSenderMailbox) {
+      return res.status(400).json({ error: 'Thiếu Tenant ID/Client ID/Mailbox Người Gửi (Microsoft Graph API)' });
+    }
+    try {
+      // Client Secret trên form cũng write-only (giống mật khẩu SMTP) — để trống = dùng giá trị đã lưu,
+      // CHỈ hợp lệ khi vẫn ĐÚNG Tenant ID + Client ID + Mailbox Người Gửi đã lưu trước đó (đổi 1 trong 3
+      // mà để trống Client Secret rất dễ gửi nhầm sang 1 Azure AD App khác bằng secret cũ, luôn thất bại
+      // mà không rõ vì sao — cùng nguyên tắc đã áp dụng cho host/user ở nhánh SMTP bên dưới).
+      let testClientSecret = graphClientSecret;
+      if (!testClientSecret) {
+        const savedConfig = await getEmailConfig();
+        if (savedConfig.graphTenantId !== graphTenantId || savedConfig.graphClientId !== graphClientId || savedConfig.graphSenderMailbox !== graphSenderMailbox) {
+          return res.status(400).json({ error: 'Cấu hình Graph API chưa có Client Secret — vui lòng nhập Client Secret để gửi thử (Client Secret đã lưu thuộc về Tenant ID/Client ID/Mailbox khác).' });
+        }
+        try {
+          testClientSecret = savedConfig.graphClientSecretEnc ? decryptSecret(savedConfig.graphClientSecretEnc) : null;
+        } catch (err) {
+          console.error('⛔ Không giải mã được Client Secret (Graph API) đã lưu:', err.message);
+        }
+        if (!testClientSecret) {
+          return res.status(400).json({ error: 'Chưa có Client Secret đã lưu — vui lòng nhập Client Secret để gửi thử.' });
+        }
+      }
+      const result = await sendMail({
+        to,
+        subject: '[VPDT] Email thử nghiệm cấu hình Microsoft Graph API',
+        text: `Đây là email thử nghiệm để xác minh cấu hình gửi email qua Microsoft Graph API (mailbox: ${graphSenderMailbox}). Nếu bạn nhận được email này, cấu hình đang hoạt động đúng.`,
+        graph: { enabled: true, tenantId: graphTenantId, clientId: graphClientId, clientSecret: testClientSecret, senderMailbox: graphSenderMailbox }
+      });
+      if (result.simulated) {
+        return res.status(400).json({ error: 'Thiếu thông tin cấu hình Graph API, không thể gửi thử' });
+      }
+      if (result.failed.length) {
+        const detail = result.errorMessage ? ` — Lỗi: ${result.errorMessage}` : '';
+        return res.status(502).json({ error: `Microsoft Graph API từ chối/lỗi gửi thử${detail}` });
+      }
+      return res.json({ ok: true, host: result.host, port: result.port });
+    } catch (err) {
+      return sendServerError(res, 500, err, 'POST /api/send-email/test', 'Không thể gửi email thử qua Graph API');
+    }
+  }
+
+  if (sendMethod === 'EWS') {
+    if (!ewsUrl || !ewsMailboxUser) {
+      return res.status(400).json({ error: 'Thiếu EWS URL/Tài khoản Mailbox (Exchange EWS)' });
+    }
+    try {
+      // Mật khẩu mailbox (EWS) trên form cũng write-only (giống Client Secret Graph API) — để trống =
+      // dùng giá trị đã lưu, CHỈ hợp lệ khi vẫn ĐÚNG EWS URL + Tài khoản Mailbox đã lưu trước đó.
+      let testMailboxPass = ewsMailboxPass;
+      if (!testMailboxPass) {
+        const savedConfig = await getEmailConfig();
+        if (savedConfig.ewsUrl !== ewsUrl || savedConfig.ewsMailboxUser !== ewsMailboxUser) {
+          return res.status(400).json({ error: 'Cấu hình EWS chưa có mật khẩu mailbox — vui lòng nhập mật khẩu để gửi thử (mật khẩu đã lưu thuộc về EWS URL/Tài khoản khác).' });
+        }
+        try {
+          testMailboxPass = savedConfig.ewsPassEnc ? decryptSecret(savedConfig.ewsPassEnc) : null;
+        } catch (err) {
+          console.error('⛔ Không giải mã được mật khẩu mailbox (EWS) đã lưu:', err.message);
+        }
+        if (!testMailboxPass) {
+          return res.status(400).json({ error: 'Chưa có mật khẩu mailbox đã lưu — vui lòng nhập mật khẩu để gửi thử.' });
+        }
+      }
+      const result = await sendMail({
+        to,
+        subject: '[VPDT] Email thử nghiệm cấu hình Exchange (EWS)',
+        text: `Đây là email thử nghiệm để xác minh cấu hình gửi email qua Exchange Web Services (mailbox: ${ewsMailboxUser}). Nếu bạn nhận được email này, cấu hình đang hoạt động đúng.`,
+        ews: { enabled: true, ewsUrl, mailboxUser: ewsMailboxUser, mailboxPass: testMailboxPass, allowSelfSigned: !!ewsAllowSelfSigned }
+      });
+      if (result.simulated) {
+        return res.status(400).json({ error: 'Thiếu thông tin cấu hình EWS, không thể gửi thử' });
+      }
+      if (result.failed.length) {
+        const detail = result.errorMessage ? ` — Lỗi: ${result.errorMessage}` : '';
+        return res.status(502).json({ error: `Exchange (EWS) từ chối/lỗi gửi thử${detail}` });
+      }
+      return res.json({ ok: true, host: result.host, port: result.port });
+    } catch (err) {
+      return sendServerError(res, 500, err, 'POST /api/send-email/test', 'Không thể gửi email thử qua EWS');
+    }
+  }
+
   if (!host) return res.status(400).json({ error: 'Thiếu SMTP Server' });
 
   try {
@@ -200,13 +300,21 @@ router.post('/test', sendEmailRateLimiter, async (req, res) => {
       host, port, encryption,
       user: testUser,
       pass: testPass,
-      from: senderEmail
+      from: senderEmail,
+      allowSelfSigned: !!smtpAllowSelfSigned
     });
     if (result.simulated) {
       return res.status(400).json({ error: 'Thiếu SMTP Server, không thể gửi thử' });
     }
     if (result.failed.length) {
-      return res.status(502).json({ error: `Máy chủ SMTP ${result.host}:${result.port} từ chối/lỗi gửi thử — kiểm tra lại log server để biết chi tiết.` });
+      // LỖI ĐÃ VÁ (10/2026): trả thẳng err.message THẬT từ nodemailer (lib/mailer.js) thay vì câu chung
+      // chung "kiểm tra log server" — admin không SSH được vào máy chủ vẫn tự thấy ngay nguyên nhân (vd
+      // sai cặp Port/Mã hoá khi gateway Postfix dùng cổng 465 "implicit TLS" nhưng form đang để STARTTLS,
+      // chứng chỉ TLS tự ký bị từ chối, sai tài khoản/mật khẩu...). Không lộ gì nhạy cảm — đây là thông
+      // báo lỗi SMTP chuẩn (vd "Invalid login", "self signed certificate"), không chứa mật khẩu/host nội
+      // bộ nào ngoài thứ admin vừa tự gõ trên chính form này.
+      const detail = result.errorMessage ? ` — Lỗi SMTP: ${result.errorMessage}` : '';
+      return res.status(502).json({ error: `Máy chủ SMTP ${result.host}:${result.port} từ chối/lỗi gửi thử${detail}` });
     }
     res.json({ ok: true, host: result.host, port: result.port });
   } catch (err) {

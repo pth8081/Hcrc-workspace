@@ -84,6 +84,9 @@ async function main() {
     // vào tab này).
     await page.evaluate(async () => { await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
     await page.waitForTimeout(150);
+    // Thu gọn form (10/2026) — #itPriceCreateForm giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới"
+    // (openItPriceCreateForm()) trước khi thao tác field bên trong (page.selectOption() cần phần tử visible).
+    await page.evaluate(() => openItPriceCreateForm());
 
     await run.run('Chưa chọn Mẫu Giá nào -> cảnh báo LUÔN ẩn dù tải file có cột margin', async () => {
       await page.selectOption('#itPriceTier', 'MARGIN_LT5');

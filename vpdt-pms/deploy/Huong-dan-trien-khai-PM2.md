@@ -12,15 +12,24 @@
   Internet công khai.
 - Muốn dựng nhanh, ít bước cấu hình hơn, chưa cần HTTPS/domain riêng.
 
-**KHÔNG dùng bản này nếu** bạn cần public ứng dụng ra Internet, cần HTTPS thật
-(tên miền + chứng chỉ), hoặc cần các tính năng bắt buộc phải có HTTPS (đăng
-nhập vân tay/Face ID — WebAuthn, cài ứng dụng lên màn hình chính đúng chuẩn —
-PWA) — chuyển sang dùng
-[`Huong-dan-trien-khai-PM2-Nginx.md`](./Huong-dan-trien-khai-PM2-Nginx.md)
-(cùng thư mục), có thêm lớp Nginx làm reverse proxy + HTTPS + fail2ban. 2 bản
-hướng dẫn dùng chung toàn bộ phần cài đặt Node.js/SQL Server/PM2 — chỉ khác ở
-việc có lớp Nginx hay không, nên có thể **chuyển từ bản này sang bản kia bất
-cứ lúc nào sau này** (chỉ cần làm thêm phần Nginx, không phải dựng lại từ đầu).
+**Từ 10/2026, bản này vẫn có thể có HTTPS** mà không cần Nginx — xem mục
+**"11.8. HTTPS tự phục vụ (không qua Nginx)"** ở cuối tài liệu này: team IT tự
+tải Private Key + Certificate qua giao diện web (Hệ Thống → ⚙️ Quản Trị → 🔒
+Chứng Chỉ TLS/HTTPS), server tự khởi động 1 listener HTTPS thêm vào (không
+thay) listener HTTP sẵn có. Điều này **mở khoá** các tính năng trước đây ghi
+"CẦN HTTPS, KHÔNG dùng được ở track này" (đăng nhập vân tay/Face ID — WebAuthn,
+cài ứng dụng lên màn hình chính đúng chuẩn — PWA) — xem mục 11.6/11.7, chỉ
+cần thêm bước bật HTTPS tự phục vụ ở 11.8.
+
+**Vẫn nên chuyển sang** [`Huong-dan-trien-khai-PM2-Nginx.md`](./Huong-dan-trien-khai-PM2-Nginx.md)
+(cùng thư mục) nếu cần **public ứng dụng ra Internet thật** (domain + chứng
+chỉ CA công khai, fail2ban chống dò mật khẩu ở tầng mạng) — HTTPS tự phục vụ ở
+mục 11.8 phù hợp cho mạng nội bộ/VPN muốn có HTTPS mà chưa cần/chưa muốn dựng
+Nginx, KHÔNG thay thế hoàn toàn vai trò reverse proxy + fail2ban của Nginx. 2
+bản hướng dẫn dùng chung toàn bộ phần cài đặt Node.js/SQL Server/PM2 — chỉ
+khác ở việc có lớp Nginx hay không, nên có thể **chuyển từ bản này sang bản
+kia bất cứ lúc nào sau này** (chỉ cần làm thêm phần Nginx, không phải dựng lại
+từ đầu).
 
 ---
 
@@ -821,20 +830,22 @@ mật khẩu hàng loạt), người dùng gõ lại đúng mã đó.
 Không cấu hình (mặc định `false`) thì trang đăng nhập hoạt động y như
 trước — không bắt buộc.
 
-### 11.6. Đăng nhập/xác thực khi Duyệt bằng vân tay, Face ID (WebAuthn/FIDO2) — CẦN HTTPS, KHÔNG dùng được ở track này
+### 11.6. Đăng nhập/xác thực khi Duyệt bằng vân tay, Face ID (WebAuthn/FIDO2) — CẦN HTTPS
 
 Tính năng đăng nhập bằng vân tay/Face ID và mức xác thực "WEBAUTHN" khi Duyệt
 **yêu cầu trình duyệt cấp API vân tay/Face ID qua HTTPS thật** (trừ đúng
-`http://localhost` lúc dev) — track PM2-only này phục vụ qua `http://<ip>`
-thường nên **tính năng này sẽ không dùng được** (nút liên quan tự ẩn phía
-trình duyệt, không cần tắt gì thêm). Muốn dùng, chuyển sang
+`http://localhost` lúc dev). Track PM2-only này phục vụ qua `http://<ip>`
+thường nên **mặc định tính năng này không dùng được** (nút liên quan tự ẩn
+phía trình duyệt, không cần tắt gì thêm) — **trừ khi đã bật HTTPS tự phục vụ
+ở mục 11.8** ngay dưới (không cần Nginx), hoặc chuyển sang
 [`Huong-dan-trien-khai-PM2-Nginx.md`](./Huong-dan-trien-khai-PM2-Nginx.md)
-mục 14.6 (có HTTPS).
+mục 14.6 (HTTPS qua Nginx).
 
 ### 11.7. Cài đặt ứng dụng lên màn hình chính (PWA) — hoạt động hạn chế khi không có HTTPS
 
 Cho phép người dùng "cài" HCRC Workspace như 1 ứng dụng (icon riêng, mở
-không qua trình duyệt) trên điện thoại/máy tính. Ở track này (không HTTPS):
+không qua trình duyệt) trên điện thoại/máy tính. Khi track này CHƯA bật HTTPS
+(mục 11.8):
 - **Android/Chrome**: yêu cầu ngữ cảnh bảo mật (HTTPS hoặc `localhost`) để
   trình duyệt cho cài đặt đầy đủ — qua `http://<ip>` LAN thường, Chrome
   **sẽ KHÔNG cho cài đặt** (không hiện gợi ý cài, nút "Cài Đặt Ngay" ở
@@ -844,9 +855,95 @@ không qua trình duyệt) trên điện thoại/máy tính. Ở track này (kh�
   đơn giản, KHÔNG có các đặc tính PWA đầy đủ (không có Service Worker hoạt
   động ổn định, không cache offline).
 
-Muốn trải nghiệm cài đặt đầy đủ trên mọi thiết bị, chuyển sang
+Muốn trải nghiệm cài đặt đầy đủ, bật HTTPS tự phục vụ ở mục 11.8 ngay dưới
+(không cần Nginx), hoặc chuyển sang
 [`Huong-dan-trien-khai-PM2-Nginx.md`](./Huong-dan-trien-khai-PM2-Nginx.md)
-mục 14.7 (có HTTPS).
+mục 14.7 (HTTPS qua Nginx).
+
+### 11.8. HTTPS tự phục vụ (không qua Nginx) — mở khoá mục 11.6/11.7
+
+Từ 10/2026, server tự chạy được 1 listener HTTPS THÊM VÀO (không thay) listener
+HTTP sẵn có ở track này — không cần dựng Nginx. Phù hợp khi đã có sẵn 1 chứng
+chỉ TLS (tự ký cho mạng nội bộ, hoặc do CA nội bộ công ty cấp) và chỉ cần bật
+HTTPS mà chưa muốn/chưa cần đầu tư thêm Nginx + fail2ban (xem bản PM2+Nginx
+nếu cần public ra Internet thật).
+
+**Bước 1 — đặt cổng HTTPS:** mở `server/.env`, thêm dòng (cổng tuỳ chọn,
+KHÔNG dùng 443 — cổng đặc quyền cần quyền root/`setcap` riêng, không áp dụng
+trong mô hình này):
+```
+HTTPS_PORT=3443
+```
+
+**Bước 2 — tải chứng chỉ TLS qua giao diện web** (không cần SSH/copy file
+tay): đăng nhập bằng tài khoản Quản Trị Viên → **Hệ Thống → ⚙️ Quản Trị → 🔒
+Chứng Chỉ TLS/HTTPS** → chọn file **Private Key** (`.pem`/`.key`) và
+**Certificate** (`.pem`/`.crt`/`.cer`) — bắt buộc cả 2, kèm **CA Chain** nếu
+nhà cung cấp/CA nội bộ yêu cầu — bấm **"⬆️ Tải Lên & Kiểm Tra Chứng Chỉ"**.
+Server kiểm tra khớp key/cert THẬT trước khi lưu; sai/lệch sẽ báo lỗi ngay,
+không lưu file nào.
+
+**Bước 3 — restart để áp dụng** (chứng chỉ mới KHÔNG tự có hiệu lực ngay):
+```bash
+sudo -u vpdt-app pm2 restart vpdt
+```
+Quay lại đúng tab trên, xác nhận dòng trạng thái hiện "✅ HTTPS ĐANG CHẠY
+THẬT tại cổng...". Từ lúc này, truy cập `https://<ip-server>:3443` (đúng
+`HTTPS_PORT` đã đặt) sẽ dùng được WebAuthn/PWA đầy đủ như mục 11.6/11.7 — cổng
+HTTP `3000` cũ **vẫn tiếp tục hoạt động song song**, không bị ảnh hưởng.
+
+**Lưu ý vận hành:**
+- Chứng chỉ lưu tại `server/certs/` trên máy chủ (đã thêm vào `.gitignore` —
+  KHÔNG commit lên git). Mất/xoá nhầm thì tải lại qua UI, không có cách khôi
+  phục nội dung private key cũ (write-only, cùng nguyên tắc mật khẩu SMTP).
+- Nếu tải nhầm chứng chỉ, bấm "🗑️ Xoá Chứng Chỉ Đang Lưu" ở màn trên rồi tải
+  lại — HTTPS đang chạy (nếu có) vẫn giữ nguyên chứng chỉ CŨ cho tới lần
+  restart kế tiếp.
+- Firewall/router cần mở thêm đúng cổng `HTTPS_PORT` đã đặt (giống việc đã mở
+  cổng `3000` cho HTTP ở mục trước), nếu truy cập từ máy khác trong mạng.
+
+### 11.9. Chứng Chỉ Tin Cậy (CA Ngoài) — khi server GỌI RA hệ thống khác qua HTTPS
+
+Khác hẳn mục 11.8 (server TỰ PHỤC VỤ HTTPS, hướng VÀO) — mục này dành cho
+hướng NGƯỢC LẠI: server tự làm **client** gọi API sang 1 hệ thống khác
+(dsmart16, DSmart API/Mua Hàng BAS, hay tích hợp mới sau này) qua HTTPS. Nếu
+hệ thống đích dùng chứng chỉ do **CA công khai** cấp (Let's Encrypt,
+DigiCert...) thì **không cần làm gì** — Node đã tự tin sẵn. Chỉ cần làm theo
+mục này khi hệ thống đích dùng chứng chỉ do **CA NỘI BỘ công ty** cấp (gặp
+lỗi "self-signed certificate"/"unable to verify the first certificate" khi
+server gọi sang).
+
+**Bước 1 — xác nhận `ecosystem.config.js` đã có dòng `NODE_EXTRA_CA_CERTS`**
+(đã có sẵn trong code, chỉ cần dùng đúng lệnh khởi động):
+```bash
+sudo -u vpdt-app pm2 start ecosystem.config.js --env production
+```
+Nếu trước giờ bạn khởi động bằng `pm2 start server.js --name vpdt` trực
+tiếp (không qua `ecosystem.config.js`), đổi sang dùng `ecosystem.config.js`
+— đây là cách DUY NHẤT để đặt biến này đúng (biến `NODE_EXTRA_CA_CERTS` chỉ
+có tác dụng khi là biến môi trường THẬT lúc PM2 khởi chạy tiến trình, **không
+đặt được qua `server/.env`** — đã kiểm chứng thật, dotenv set quá trễ).
+
+**Bước 2 — tải chứng chỉ CA GỐC qua giao diện web** (thông tin công khai,
+không phải private key, xin trực tiếp team hạ tầng/CA nội bộ công ty được):
+đăng nhập Quản Trị Viên → **Hệ Thống → ⚙️ Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA
+Ngoài)** → chọn file chứng chỉ CA (`.pem`/`.crt`/`.cer`, có thể ghép nhiều CA
+trong 1 file — hệ thống tự tách) → bấm **"⬆️ Thêm Chứng Chỉ CA"**. Tải nhầm
+chứng chỉ SERVER (không phải CA) sẽ bị từ chối ngay, không lưu.
+
+**Bước 3 — restart để áp dụng:**
+```bash
+sudo -u vpdt-app pm2 restart vpdt
+```
+Quay lại tab trên, xác nhận dòng trạng thái đổi sang "✅ Tiến trình này ĐÃ
+cấu hình đúng NODE_EXTRA_CA_CERTS...". Từ lúc này, MỌI lượt gọi ra ngoài của
+server (dsmart16, DSmart API, hay tích hợp mới) đều tự động tin chứng chỉ do
+CA đó cấp — không cần sửa code riêng cho từng tích hợp.
+
+**Lưu ý**: an toàn giữ nguyên dòng `NODE_EXTRA_CA_CERTS` trong
+`ecosystem.config.js` dù CHƯA từng thêm CA nào qua UI (file bundle chưa tồn
+tại thì Node chỉ in 1 dòng cảnh báo lúc khởi động, không ảnh hưởng HTTP/HTTPS
+hiện có) — không cần gỡ ra nếu chưa dùng tính năng này.
 
 ---
 

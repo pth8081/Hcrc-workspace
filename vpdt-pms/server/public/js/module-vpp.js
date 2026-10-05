@@ -826,6 +826,18 @@ async function processVppReg(actionType) {
 // ============ KỲ ĐĂNG KÝ (quản lý — chỉ vppManage/admin) ============
 let vppPendingCatalog = null; // { items, fileUrl, fileName } — kết quả đọc file gần nhất, chờ bấm "Tạo Kỳ Đăng Ký"
 
+// Thu gọn form "Tạo Kỳ Đăng Ký Mới" (pattern chuẩn mhVendorFormWrap/openMhVendorForm, module-muahang.js).
+// openVppNewPeriodForm() CHỦ Ý gọi lại resetVppNewPeriodForm() (hàm khởi tạo ĐẦY ĐỦ, đã dùng chung cho
+// nút "↺ Làm Mới" VÀ sau khi tạo kỳ thành công từ trước — xem chú thích tại hàm đó) để form LUÔN ở trạng
+// thái sạch mỗi lần mở lại, không giữ dữ liệu/preview Excel/nhóm mức riêng của lần mở trước.
+function openVppNewPeriodForm() {
+  resetVppNewPeriodForm();
+  document.getElementById('vppNewPeriodFormWrap').classList.remove('hidden');
+}
+function closeVppNewPeriodForm() {
+  document.getElementById('vppNewPeriodFormWrap').classList.add('hidden');
+}
+
 async function onVppCatalogFileChange(event) {
   // Input này đã có data-op-change nghiệp vụ riêng (đọc/xem trước danh mục) từ trước khi có mẫu chip
   // "📎 tên file [✕]" dùng chung (xem onSingleFileChosen()/core.js) — 1 input CHỈ nhận 1 data-op-change
@@ -902,6 +914,7 @@ async function createVppPeriod() {
   alert('✅ Đã tạo kỳ đăng ký mới!');
 
   resetVppNewPeriodForm();
+  closeVppNewPeriodForm();
   renderVppPeriods();
 }
 

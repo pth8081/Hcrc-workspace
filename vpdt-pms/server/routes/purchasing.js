@@ -167,7 +167,15 @@ router.post('/terms/:id/edit', requireManageTerms, async (req, res) => {
         termType: req.body.termType, calcBasis: req.body.calcBasis, tierMode: req.body.tierMode, periodType: req.body.periodType,
         effectiveFrom: req.body.effectiveFrom, effectiveTo: req.body.effectiveTo || null,
         isRetroactive: !!req.body.isRetroactive,
-        tiers: req.body.tiers, scopes: req.body.scopes
+        tiers: req.body.tiers, scopes: req.body.scopes,
+        // Field mở rộng 10/2026 (xem lib/vendorRebate.js) — includedInBas mặc định true nếu client cũ
+        // chưa gửi (giữ nguyên hành vi gốc: mọi điều khoản đều tính vào BAS).
+        includedInBas: req.body.includedInBas !== false,
+        amountMode: req.body.amountMode || 'PERCENT_TIERED',
+        fixedAmount: req.body.fixedAmount != null ? Number(req.body.fixedAmount) : 0,
+        allocationMode: req.body.allocationMode || 'NONE',
+        allocationEntities: Array.isArray(req.body.allocationEntities) ? req.body.allocationEntities : [],
+        allocationTargetEntity: req.body.allocationTargetEntity || null
       };
     });
     logPurchasing(req, 'EDIT_TERM', updated.termCode, `Sửa điều khoản ${updated.termCode} (v${updated.version})`);
@@ -326,8 +334,17 @@ router.post('/terms/:id/calculate', requireManageTerms, async (req, res) => {
       return res.status(409).json({ error: `Nhà cung cấp "${vendor.name}" hiện không ở trạng thái Hoạt động — không thể tính ước tính rebate` });
     }
 
-    const purchaseTransactions = await queryPurchaseTransactionsForVendor(vendor.vendorCode, periodStart, periodEnd);
-    const result = vendorRebate.computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart, periodEnd });
+    // GROWTH_REBATE (10/2026) cần so sánh basisAmount kỳ này với kỳ LIỀN TRƯỚC cùng độ dài — mở rộng
+    // khoảng truy vấn purchaseTransactions bao trùm luôn kỳ liền trước (computeRebateEstimate() tự lọc
+    // lại đúng từng kỳ qua 2 lượt gọi aggregateBasisAmount() riêng, xem lib/vendorRebate.js). Mọi
+    // termType khác KHÔNG đổi hành vi (previousPeriodStart/End = undefined, queryFrom = periodStart y hệt trước đây).
+    let previousPeriodStart, previousPeriodEnd, queryFrom = periodStart;
+    if (term.termType === 'GROWTH_REBATE') {
+      ({ previousPeriodStart, previousPeriodEnd } = vendorRebate.computePreviousPeriod(periodStart, periodEnd));
+      queryFrom = previousPeriodStart;
+    }
+    const purchaseTransactions = await queryPurchaseTransactionsForVendor(vendor.vendorCode, queryFrom, periodEnd);
+    const result = vendorRebate.computeRebateEstimate({ vendor, term, purchaseTransactions, periodStart, periodEnd, previousPeriodStart, previousPeriodEnd });
 
     const record = {
       id: Date.now(),
@@ -429,6 +446,9 @@ router.post('/sync', requireManageTerms, syncRateLimiter, async (req, res) => {
         rows.push({
           vendorCode, storeCode, storeFormat: it.storeFormat, categoryCode: it.categoryCode,
           purchaseDate, amount, isReturn: !!it.isReturn,
+          // entity/isViaDC thêm 10/2026 — field TUỲ CHỌN từ DSmart (chưa chắc API nguồn đã trả về), null/
+          // false nếu thiếu, KHÔNG chặn dòng vì thiếu 2 field này (khác các field NOT NULL ở trên).
+          entity: it.entity || null, isViaDC: !!it.isViaDC,
           sourceSystem: 'DSMART', sourceRefId: it.refId || it.id || null, dataConfidence: 'PROVISIONAL'
         });
       });

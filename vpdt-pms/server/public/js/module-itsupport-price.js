@@ -766,6 +766,21 @@ function resetItPriceForm() {
   checkItPriceMarginConsistency(); // itPricePendingFile vừa về null + itPriceTier vừa trắng -> tự ẩn cảnh báo cũ.
 }
 
+// Thu gọn form "Đề Xuất Duyệt Giá Bán Buôn" (10/2026, Vận Hành) — LOẠI B: openItPriceCreateForm() tự
+// kiểm tra lại quyền canProposeItPriceType() trước khi mở (an toàn, phòng khi nút lọt qua dù đã ẩn theo
+// quyền ở setItPriceSubTab()), rồi gọi lại resetItPriceForm() để mọi phần khởi tạo (mã tự sinh/phòng
+// ban/Mẫu Giá/multi-select siêu thị...) luôn đúng mỗi lần mở, không giữ dữ liệu lần mở trước.
+function openItPriceCreateForm() {
+  const formEl = document.getElementById('itPriceCreateForm');
+  if (!formEl) return;
+  if (!canProposeItPriceType(currentUser, activeItPriceSubTab)) return;
+  resetItPriceForm();
+  formEl.classList.remove('hidden');
+}
+function closeItPriceCreateForm() {
+  document.getElementById('itPriceCreateForm')?.classList.add('hidden');
+}
+
 // ===== Danh Mục "Vùng Giá Áp Dụng" (DB.priceZones) — Hỗ Trợ IT > Phê Duyệt Giá, sub-tab Bán Lẻ, ô
 // #itPriceRetailZone. Danh sách phẳng thuần, mirror DB.carTaxiCompanies/DB.stores (không cần key ổn
 // định — tên vùng chính là giá trị lưu thẳng vào itPriceApprovals.priceZone). =====
@@ -872,10 +887,15 @@ function setItPriceSubTab(subTab) {
     // phải vẽ lại đúng bộ field của sub-tab vừa chuyển tới, không còn dùng chung 1 bộ như trước.
     renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');
     // Quyền đề xuất giờ tách riêng theo priceType (itPriceProposeCreateWholesale/Retail, 10/2026) — một
-    // người có thể chỉ được đề xuất 1 trong 2 loại, nên form tạo phải ẩn/hiện lại MỖI LẦN đổi sub-tab,
+    // người có thể chỉ được đề xuất 1 trong 2 loại, nên nút tạo phải ẩn/hiện lại MỖI LẦN đổi sub-tab,
     // không chỉ 1 lần lúc vào tab PRICE như trước (lúc đó còn dùng chung 1 flag).
+    // Thu gọn form (10/2026): quyền này TRƯỚC ĐÂY gác trực tiếp lên chính createForm — nay chuyển gác lên
+    // NÚT "+ Đề Xuất Mới" (btnItPriceCreateNew, mở form qua openItPriceCreateForm()); form mặc định luôn
+    // ẨN (class "hidden" tĩnh), chỉ tự đóng lại ở đây khi mất quyền (an toàn, phòng khi đang mở sẵn).
     const canCreateSub = canProposeItPriceType(currentUser, activeItPriceSubTab);
-    createForm.classList.toggle('hidden', !canCreateSub);
+    const openBtn = document.getElementById('btnItPriceCreateNew');
+    if (openBtn) openBtn.classList.toggle('hidden', !canCreateSub);
+    if (!canCreateSub) createForm.classList.add('hidden');
     const noPermNote = document.getElementById('itPriceNoCreatePermNote');
     if (noPermNote) noPermNote.classList.toggle('hidden', canCreateSub);
     renderItPriceMasterListSelect();
@@ -1921,6 +1941,15 @@ function resetItTicketForm() {
   if (!formEl) return;
   formEl.reset();
   document.getElementById('itTicketCode').value = generateItTicketCode();
+}
+
+// Thu gọn form "Gửi Yêu Cầu Hỗ Trợ IT" (10/2026) — cùng khuôn openOperationOrderForm() (module-vanhanh.js).
+function openItTicketForm() {
+  resetItTicketForm();
+  document.getElementById('itTicketCreateForm')?.classList.remove('hidden');
+}
+function closeItTicketForm() {
+  document.getElementById('itTicketCreateForm')?.classList.add('hidden');
 }
 
 function onItTicketFilterChange() {

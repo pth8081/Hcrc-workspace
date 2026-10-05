@@ -51,11 +51,29 @@ function canDecideBudgetLineFinalClient(user, item) {
   return resolveEffectiveStepApprovers(wfConfig, 1).includes(user.username);
 }
 function canAggregateBudgetLineClient(user) { return !!(user?.perms?.admin || user?.perms?.budgetManage || user?.perms?.budgetAggregate || user?.perms?.budgetReportView); }
+// Điều kiện ĐÚNG NGUYÊN như cũ từng dùng để ẩn/hiện CHÍNH form #blProposeFormWrap/#blApproveFormWrap
+// (renderBudgetLineList()) — pattern "thu gọn form nhập" (10/2026) chuyển điều kiện này sang ẩn/hiện NÚT
+// "+ Thêm..." thay vì form, xem blEl(kind,'NewBtn') ở renderBudgetLineList()/editBudgetLineDraft().
+function canOpenBudgetLineFormClient(stage) {
+  return canCreateBudgetLineClient(currentUser) && !(stage === 'APPROVED' && !canManageBudgetLineClient(currentUser));
+}
 
 // blId/blEl — khớp đúng khuôn bId/bEl của thiết kế cũ (2 form Đề Xuất/Phê Duyệt dùng CHUNG code, chỉ
 // khác hậu tố _Propose/_Approve trên id DOM).
 function blId(kind, base) { return `bl${kind}${base}`; }
 function blEl(kind, base) { return document.getElementById(blId(kind, base)); }
+
+// Pattern "thu gọn form nhập" (10/2026) — cùng khuôn openMhVendorForm()/closeMhVendorForm()
+// (module-muahang.js): #blProposeFormWrap/#blApproveFormWrap chỉ mở khi bấm "+ Thêm...", luôn thu gọn
+// lại (và trắng form) sau khi lưu/đóng, để không lưu lại dở dang 1 dòng Đề Xuất/Phê Duyệt cũ.
+function openBudgetLineForm(kind) {
+  resetBudgetLineForm(kind); // bấm "+" luôn bắt đầu TẠO MỚI, không dính dở trạng thái Sửa trước đó
+  blEl(kind, 'FormWrap').classList.remove('hidden');
+}
+function closeBudgetLineForm(kind) {
+  blEl(kind, 'FormWrap').classList.add('hidden');
+  resetBudgetLineForm(kind);
+}
 
 function setBudgetLineTab(tab) {
   // Mục 0 (10/2026): AND thêm checkbox budgetPropose/Approve/Used/Report.
@@ -179,7 +197,9 @@ async function addBudgetLineDraft(kind) {
   logSystemAction('BUDGET', editingId ? 'UPDATE_BUDGET_LINE' : 'CREATE_BUDGET_LINE',
     `${editingId ? 'Sửa' : 'Tạo'} dòng ${stageLabel} ngân sách: ${saved.content}`, 'SUCCESS', String(saved.id));
   alert(editingId ? '✅ Đã lưu thay đổi!' : '✅ Đã lưu!');
-  resetBudgetLineForm(kind);
+  // Thu gọn form lại sau khi lưu thành công (pattern "thu gọn form nhập", 10/2026) — cùng khuôn
+  // closeMhVendorForm() gọi sau submitMhVendorForm() ở module-muahang.js.
+  closeBudgetLineForm(kind);
   renderBudgetLineList(stage);
 }
 
@@ -188,6 +208,10 @@ function editBudgetLineDraft(id, stage) {
   if (!item) return;
   const kind = stage === 'APPROVED' ? 'Approve' : 'Propose';
   budgetLineEditingId[kind] = id;
+  // Pattern "thu gọn form nhập" (10/2026): form giờ bắt đầu ẩn — mở ra khi Sửa 1 dòng có sẵn, ĐÚNG theo
+  // cùng điều kiện cũ (canOpenBudgetLineFormClient()) vốn dùng để ẩn/hiện CHÍNH form này, để giữ nguyên
+  // hành vi cũ (không mở được nếu không đủ quyền, dù nút "✏️" ở dòng bảng vẫn hiện theo canEdit riêng).
+  if (canOpenBudgetLineFormClient(stage)) blEl(kind, 'FormWrap').classList.remove('hidden');
   const isHo = item.location === 'HO';
   blEl(kind, 'Location').value = isHo ? 'HO' : 'STORE';
   onBudgetLineLocTypeChange(kind);
@@ -219,7 +243,13 @@ function renderBudgetLineList(stage) {
   const kind = stage === 'APPROVED' ? 'Approve' : 'Propose';
   const canCreate = canCreateBudgetLineClient(currentUser);
   blEl(kind, 'NoCreatePermNote').classList.toggle('hidden', canCreate);
-  blEl(kind, 'FormWrap').classList.toggle('hidden', !canCreate || (stage === 'APPROVED' && !canManageBudgetLineClient(currentUser)));
+  // Pattern "thu gọn form nhập" (10/2026): NÚT "+ Thêm..." (không phải form) giờ theo ĐÚNG điều kiện cũ
+  // vốn ẩn/hiện form — xem canOpenBudgetLineFormClient(). Form chỉ mở khi bấm nút/Sửa 1 dòng; nếu điều
+  // kiện trả về false thì ép form ẩn hẳn (phòng trường hợp quyền vừa bị thu hồi khi form đang mở sẵn từ
+  // trước, cùng tinh thần closeContractManageForm() ở setContractSubTab()/module-hopdong.js).
+  const canOpenForm = canOpenBudgetLineFormClient(stage);
+  blEl(kind, 'NewBtn').classList.toggle('hidden', !canOpenForm);
+  if (!canOpenForm) blEl(kind, 'FormWrap').classList.add('hidden');
 
   const tbody = blEl(kind, 'ListBody');
   if (!tbody) return;

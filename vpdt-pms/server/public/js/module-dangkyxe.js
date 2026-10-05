@@ -1,6 +1,20 @@
 // ==========================================
 // 6. MODULE ĐĂNG KÝ XE (CAR REGISTRATION MODULE)
 // ==========================================
+
+// "Thu gọn form nhập" (10/2026) — #carForm ẩn mặc định (class "hidden" tĩnh ở carSection.html), mở qua
+// nút "+ Đăng Ký Mới" (btnCarFormNew) cạnh header, đóng qua nút "✕ Thu Gọn" trong form. Mỗi lần mở là 1
+// phiếu MỚI (form này không có chế độ sửa), nên gọi thẳng resetCarRegForm() — vừa sinh lại mã phiếu vừa
+// đưa "Lộ Trình Di Chuyển" (mảng JS carRoutePoints, xem resetCarRoutePoints()) về đúng 2 điểm trống
+// (Điểm xuất phát + 1 điểm đến), tránh hiện lại lộ trình cũ dở dang từ lần mở trước đó.
+function openCarForm() {
+  resetCarRegForm();
+  document.getElementById('carForm').classList.remove('hidden');
+}
+function closeCarForm() {
+  document.getElementById('carForm').classList.add('hidden');
+}
+
 async function submitCarReq(e) {
   e.preventDefault();
   const code = document.getElementById('carCode').value.trim();

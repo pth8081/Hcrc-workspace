@@ -113,6 +113,8 @@ const SYSTEM_NAV = [
     { key: 'sysEmail', icon: '📧', label: 'Cấu Hình Email' },
     { key: 'sysExtAuth', icon: '🔑', label: 'API Xác Thực Ngoài' },
     { key: 'sysOpApi', icon: '🔌', label: 'Cấu Hình API — Đồng Bộ Đơn Hàng Ra dsmart16' },
+    { key: 'sysTlsCert', icon: '🔒', label: 'Chứng Chỉ TLS/HTTPS' },
+    { key: 'sysTrustedCa', icon: '🔗', label: 'Chứng Chỉ Tin Cậy (CA Ngoài)' },
   ]},
   { group: 'Kiến Trúc', items: [
     { key: 'systemArchitecture', icon: '🗺️', label: 'Sơ Đồ Kiến Trúc Hệ Thống' },
@@ -832,6 +834,7 @@ const NGHIEP_VU_DOCS = {
       { text: 'Bấm <b>"✅ Áp Dụng Phiên Bản Này"</b> để có hiệu lực ngay — bản đang áp dụng cũ tự chuyển sang Lưu trữ, không cần ai duyệt lần 2. Sau khi Áp Dụng xong, hệ thống TỰ chuyển sang tab "🖼️ Sơ Đồ Trực Quan" để xem ngay sơ đồ khối cấp Phòng Ban vừa cập nhật — bấm <b>"🖼️ Tải Ảnh (PNG)"</b> hoặc <b>"⬇️ Tải SVG (Vector)"</b> để tải về.' },
       { text: 'Chỉ vừa đổi phòng ban/chức danh 1-2 người mà chưa muốn áp dụng cả phiên bản mới: bấm riêng "🔄 Đồng Bộ Quản Lý Trực Tiếp" để cập nhật ngay field này.' },
       { text: 'Cấu hình luồng KPI theo cấp bậc: tab "🎯 Cấu Hình Đánh Giá KPI" → bấm "Thêm Quan Hệ".' },
+      { text: 'Đặt Định Biên cho 1 vị trí (10/2026): mở bản Nháp → "✏️ Sửa" vị trí đó → điền số vào ô "Định Biên (tuỳ chọn)" → Lưu. Xem báo cáo tổng hợp: bấm <b>"📋 Báo Cáo Định Biên Nhân Sự"</b> (phía trên cây) — bảng hiện Định Biên/Thực Tế/Chênh Lệch theo ĐÚNG phiên bản đang chọn, có nút "📊 Xuất Excel".' },
     ],
     footer: { left: [
       { label: 'Không sửa phiên bản cũ', text: 'sửa node (thêm/sửa/xoá vị trí) là sửa TRỰC TIẾP trên bản Nháp hiện có, không tự tạo phiên bản mới mỗi lần sửa — chỉ khi bấm "+ Tạo Bản Nháp Mới" mới sinh phiên bản mới (luôn clone từ bản đang áp dụng); phiên bản Đã áp dụng/Lưu trữ chỉ xem, không sửa lại được.' },
@@ -842,6 +845,8 @@ const NGHIEP_VU_DOCS = {
       { label: 'So sánh phiên bản', text: 'xem được bảng so sánh (Thêm mới/Đã xoá/Đổi tên-chuyển cấp) giữa 1 phiên bản Lưu Trữ và phiên bản đang Áp Dụng, chỉ để đối chiếu, không sửa được từ màn so sánh.' },
       { label: '🖼️ Sơ Đồ Trực Quan — CHỈ cấp Phòng Ban (10/2026)', text: 'theo yêu cầu người dùng: sơ đồ khối chỉ vẽ tới cấp Phòng Ban (bỏ qua mọi Vị Trí nằm giữa, kể cả khi 1 Phòng Ban là "con" của 1 Vị Trí như Tổng Giám Đốc — tự gắn vào Phòng Ban/Công Ty tổ tiên gần nhất), giữ nguyên cấu trúc Phòng Ban lồng Phòng Ban con. Muốn xem đủ Vị Trí bên trong từng phòng thì quay lại tab "🌳 Sơ Đồ Tổ Chức". Vẽ theo ĐÚNG phiên bản đang chọn ở dropdown phía trên (không giới hạn chỉ bản Đang áp dụng).' },
       { label: 'Luồng KPI tự sinh theo cấp bậc tự "dọn dẹp" khi đổi cha (từ 9/2026)', text: 'mỗi lần Áp Dụng, hệ thống KHÔNG chỉ tự thêm quan hệ đánh giá còn thiếu theo cây mới (cấp trên trực tiếp đánh giá cấp dưới) mà còn tự XOÁ quan hệ tự sinh đã lỗi thời khi 1 vị trí bị đổi sang cấp trên khác giữa 2 lần Áp Dụng — tránh cả quản lý CŨ lẫn quản lý MỚI cùng có quyền đánh giá 1 người ("2 người cùng chấm 1 nhân viên"). Quan hệ tự thêm TAY qua "Thêm Quan Hệ" (không theo cây) không bao giờ bị đụng vào dù cây đổi thế nào.' },
+      { label: '📋 Báo Cáo Định Biên Nhân Sự (10/2026)', text: 'Định Biên = số chỗ được duyệt cho 1 vị trí, admin/HR tự đặt tay (field tuỳ chọn trên chính node Vị Trí, không có gì thì hiện "—"). Thực Tế tính ĐỘNG mỗi lần xem (không lưu gì thêm): Đang Làm Việc + Đang Bàn Giao Nghỉ Việc (hồ sơ có quy trình Offboarding đang chạy) + Thai Sản/Nghỉ Ốm (gộp 1 cột — hệ thống hiện không tách riêng 2 lý do) + Kiêm Nhiệm×0.5. Chênh Lệch = Định Biên − Thực Tế: dương = còn thiếu người (cần tuyển thêm), âm = dư người. Số liệu cộng dồn theo đúng cấp Phòng Ban/Khối lên tới gốc Công Ty — bấm "📊 Xuất Excel" ngay trong bảng để tải về.' },
+      { label: 'Cấp Bậc — danh mục gợi ý (10/2026)', text: 'ô "Cấp Bậc" ở form Thêm/Sửa Vị Trí nay gõ-hoặc-chọn từ danh mục "Cấp Bậc" (Hệ Thống → Quản Lý Danh Mục) — vẫn là CHUỖI TỰ DO (gõ giá trị không có trong danh mục vẫn lưu được), danh mục chỉ để gợi ý nhất quán giữa các Vị Trí, không ép buộc khớp đúng 1 giá trị.' },
     ] },
   },
   hrLifecycle: {
@@ -855,6 +860,7 @@ const NGHIEP_VU_DOCS = {
     ] },
     steps: [
       { role: 'Nhân Sự', text: 'vào <b>💼 Nhân Sự → 🧑‍💼 Onboarding / Offboarding</b> (sidebar) → bấm <b>"+ Tạo Onboarding"</b> (nhân viên mới) hoặc <b>"+ Tạo Offboarding"</b> (nhân viên nghỉ việc) → điền thông tin → bấm <b>"📨 Tạo Quy Trình"</b> — hệ thống tự sinh danh sách việc cần làm theo mẫu, gán đúng bộ phận phụ trách từng việc.' },
+      { role: 'Nhân Sự', text: '(10/2026) Khi tạo Offboarding, có thêm ô "Lý Do Nghỉ Việc" (gõ-hoặc-chọn từ danh mục "Lý Do Nghỉ Việc", Hệ Thống → Quản Lý Danh Mục) — TÁCH RIÊNG khỏi ô "Ghi Chú Thêm" tự do có sẵn, dùng để thống kê báo cáo theo đúng nhóm lý do nghỉ việc. Cả 2 ô đều tuỳ chọn.' },
       { role: 'Người phụ trách từng việc', text: 'vào tab <b>"✅ Việc Của Tôi"</b> để xem đúng việc được gán cho mình (theo bộ phận Nhân Sự/IT/Hành Chính/Kế Toán/Quản Lý trực tiếp) → đánh dấu hoàn tất từng việc.' },
       { text: 'Theo dõi toàn bộ tiến độ: tab <b>"📋 Danh Sách Quy Trình"</b> — quy trình tự chuyển trạng thái hoàn tất khi đã xong hết việc bắt buộc (riêng Offboarding còn chờ chỉ định người kế nhiệm nếu người nghỉ đang quản lý trực tiếp ai đó).' },
       { role: 'Quản trị', text: 'chuẩn bị sẵn danh sách việc theo mốc thời gian: tab "🗂️ Checklist Mẫu".' },
@@ -889,7 +895,9 @@ const NGHIEP_VU_DOCS = {
       { label: 'Liên Kết Tài Khoản VPDT', text: 'hồ sơ tạo tay có thể chưa có tài khoản VPDT ngay (tick "Liên Kết Tài Khoản" ở màn hồ sơ khi tài khoản đã có sau) — nếu hồ sơ ĐÃ được gán Chức Vụ TRƯỚC lúc liên kết, hệ thống tự đồng bộ NGAY Phòng Ban/Chức Danh/Vị Trí xuống tài khoản vừa liên kết (từ 9/2026, cùng cơ chế đồng bộ khi gán Chức Vụ cho hồ sơ ĐÃ có tài khoản) — không cần vào gán lại Chức Vụ 1 lần nữa chỉ để kích hoạt đồng bộ.' },
       { label: 'Đổi tài khoản liên kết khi tái tuyển (9/2026)', text: 'hồ sơ ĐÃ có tài khoản liên kết (VD tài khoản cũ đã bị khoá/xoá khi nghỉ việc) muốn đổi sang tài khoản VPDT MỚI khi tái tuyển: bấm "🔁 Đổi tài khoản liên kết" ngay tại màn Quản Lý Hồ Sơ → gõ chọn tài khoản mới → Xác Nhận Đổi. Tài khoản cũ mất quyền xem/sửa hồ sơ ngay, lịch sử đổi được lưu lại để tra soát — khác "Liên Kết Tài Khoản VPDT" (chỉ dùng cho hồ sơ CHƯA từng liên kết lần nào).' },
       { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
-      { label: 'Cấu hình trường xem (opt-in)', text: '2 nút "⚙️" riêng trong Quản Lý Hồ Sơ, cùng nguyên tắc: MẶC ĐỊNH KHÔNG trường nhạy cảm nào hiển thị (đủ 15 field: ngày sinh, giới tính, email cá nhân, liên hệ khẩn cấp, CCCD, địa chỉ, ngân hàng, BHXH, mã số thuế, người phụ thuộc, học vấn) tới khi admin chủ động mở — "Trường Xem Của Quản Lý Trực Tiếp" áp dụng khi quản lý xem hồ sơ cấp dưới, "Trường Xem Của Tôi" áp dụng khi chính nhân viên tự xem/sửa hồ sơ mình — 2 cấu hình độc lập, mở ở màn này không tự mở cho màn kia.' },
+      { label: 'Cấu hình trường xem (opt-in)', text: '2 nút "⚙️" riêng trong Quản Lý Hồ Sơ, cùng nguyên tắc: MẶC ĐỊNH KHÔNG trường nhạy cảm nào hiển thị (đủ 20 field: ngày sinh, giới tính, email cá nhân, liên hệ khẩn cấp, CCCD, địa chỉ, ngân hàng, BHXH, mã số thuế, quốc tịch, tình trạng hôn nhân, ngày/nơi cấp CCCD, người phụ thuộc, học vấn, kỷ luật...) tới khi admin chủ động mở — "Trường Xem Của Quản Lý Trực Tiếp" áp dụng khi quản lý xem hồ sơ cấp dưới, "Trường Xem Của Tôi" áp dụng khi chính nhân viên tự xem/sửa hồ sơ mình — 2 cấu hình độc lập, mở ở màn này không tự mở cho màn kia.' },
+      { label: 'Kỷ luật (10/2026)', text: 'khối "⚠️ Kỷ luật" (Ngày/Loại kỷ luật — gõ-hoặc-chọn từ danh mục "Loại Kỷ Luật"/Ghi chú) chỉ HR mới thêm/sửa được (tab "📋 Quản Lý Hồ Sơ"), không hiện ở "👤 Hồ Sơ Của Tôi" dù có cấu hình mở hay không — nhân viên KHÔNG tự xem/sửa kỷ luật của mình qua hệ thống này.' },
+      { label: 'Người Phụ Thuộc — 7 trường khai thuế TNCN (10/2026)', text: 'mỗi người phụ thuộc có thêm Quốc tịch, Số CMND/Hộ chiếu, Thời gian tính giảm trừ (Từ tháng/Đến tháng), Tháng cắt giảm trừ, Số tiền giảm trừ, Tháng kê khai — đối chiếu mẫu khai giảm trừ gia cảnh thuế TNCN, đều TUỲ CHỌN (để trống vẫn lưu được).' },
     ], right: [
       { label: 'Lịch Sử Thay Đổi & Chỉnh Sửa', text: 'mọi lần tạo mới/sửa hồ sơ (liệt kê đúng field đã đổi) được ghi lại, gộp chung vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng/tái tuyển — luôn sắp mới nhất lên đầu.' },
     ] },
@@ -1549,6 +1557,62 @@ const SYSTEM_DOCS = {
       { label: 'Chặn SSRF cho Base URL', text: 'Base URL do admin tự nhập được kiểm tra trước mỗi lần gọi: chỉ cho http/https, chặn mọi địa chỉ nội bộ/loopback/link-local (kể cả tên miền trỏ ngược về IP nội bộ sau khi phân giải DNS) và có timeout 15 giây — 1 endpoint treo không làm kẹt cả job đồng bộ.' },
       { label: 'Lỗi 1 đơn không chặn các đơn còn lại', text: 'job cô lập lỗi theo TỪNG đơn — 1 đơn gửi lỗi vẫn ghi nhận rồi đi tiếp, kết quả tổng kết ghi rõ SUCCESS/PARTIAL/FAILED ở dòng "Lần đồng bộ gần nhất" và trong Nhật Ký Hệ Thống.' },
       { label: 'Giá trị header mã hoá khi lưu', text: 'giá trị header xác thực được mã hoá trong cơ sở dữ liệu và KHÔNG bao giờ trả ngược về giao diện (cùng quy ước write-only với mật khẩu SMTP ở Cấu Hình Email) — mất thì nhập lại giá trị mới, không xem lại được.' },
+    ] },
+  },
+  // sysTlsCert (10/2026, yêu cầu người dùng: team IT tự tải Private Key/Certificate từ giao diện web để
+  // server tự phục vụ HTTPS KHÔNG qua Nginx, dành cho track triển khai PM2-only — xem
+  // routes/adminTlsCert.js + lib/tlsCertManager.js). KHÁC HOÀN TOÀN "Cấu Hình API"/"API Xác Thực Ngoài"
+  // ngay trên — đây là hạ tầng TLS của chính server này, không liên quan trao đổi dữ liệu với hệ thống
+  // ngoài nào.
+  sysTlsCert: {
+    icon: '🔒', title: 'Chứng Chỉ TLS/HTTPS', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Cho phép server tự phục vụ HTTPS trực tiếp (không cần đặt Nginx trước) — team IT tải Private Key + Certificate (kèm CA Chain nếu cần) ngay từ giao diện web, server kiểm tra khớp key/cert THẬT trước khi lưu. Chỉ dành cho server đang chạy chỉ qua PM2 (chưa có Nginx); nếu đã dùng Nginx làm lớp HTTPS/TLS termination thì KHÔNG cần bật tính năng này (tránh 2 lớp TLS chồng nhau).',
+    flow: { ariaLabel: 'Quy trình bật HTTPS tự phục vụ qua tải chứng chỉ web', chain: [
+      { label: 'Đặt HTTPS_PORT trong .env', sub: 'Cổng KHÔNG đặc quyền, VD 3443' },
+      { label: 'Tải Private Key + Certificate', sub: 'Kiểm tra khớp key/cert thật', kind: 'decision' },
+      { label: 'Lưu vào server/certs/', sub: 'Ghi đè file cũ, quyền key 0600', kind: 'approved' },
+      { label: 'Restart (pm2 restart)', sub: 'HTTPS chỉ có hiệu lực SAU bước này' },
+    ], decision: { atIndex: 1, approveLabel: 'Key khớp cert', rejectLabel: 'Lệch key/cert hoặc PEM hỏng', rejectBox: { label: 'Báo lỗi ngay, KHÔNG lưu file', sub: 'Chứng chỉ cũ (nếu có) vẫn giữ nguyên' }, loopBackToIndex: 1, loopBackLabel: 'Tải lại đúng cặp key/cert' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'mở file <code>.env</code> trên server, đặt <code>HTTPS_PORT=3443</code> (hoặc cổng không đặc quyền khác, KHÔNG dùng 443 — cổng đó cần quyền root/setcap riêng) — xem chú thích mẫu ở <code>.env.example</code>.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔒 Chứng Chỉ TLS/HTTPS</b> (tab con) → chọn file <b>Private Key</b> và <b>Certificate</b> (bắt buộc), kèm <b>CA Chain</b> nếu nhà cung cấp chứng chỉ yêu cầu → bấm <b>"⬆️ Tải Lên & Kiểm Tra Chứng Chỉ"</b>.' },
+      { role: 'Quản trị viên', text: 'server kiểm tra khớp key/cert THẬT (cùng cơ chế dùng để khởi động HTTPS, không phải suy luận) — sai/lệch sẽ báo lỗi ngay, KHÔNG lưu file; đúng thì hiện Subject/Issuer/hạn dùng của chứng chỉ vừa tải.' },
+      { role: 'Quản trị viên', text: '<b>chạy "pm2 restart" (hoặc khởi động lại server)</b> — chứng chỉ mới KHÔNG tự áp dụng ngay, bắt buộc phải restart. Quay lại đúng tab này để xác nhận dòng trạng thái hiện "✅ HTTPS ĐANG CHẠY THẬT tại cổng...".' },
+      { role: 'Quản trị viên', text: 'tải nhầm file hoặc cần đổi hẳn sang chứng chỉ khác: bấm <b>"🗑️ Xoá Chứng Chỉ Đang Lưu"</b> rồi tải lại cặp đúng — HTTPS đang chạy (nếu có) vẫn tiếp tục chạy với chứng chỉ CŨ cho tới lần restart kế tiếp.' },
+    ],
+    footer: { left: [
+      { label: 'Áp dụng bằng restart thủ công', text: 'route tải lên CHỈ ghi file xuống server/certs/ — không hot-reload HTTPS server đang chạy. Đây là lựa chọn có chủ đích (đơn giản/dễ đoán hơn), không phải thiếu sót.' },
+      { label: 'Write-only — không xem lại được Private Key', text: 'cùng nguyên tắc mật khẩu SMTP/Microsoft Graph/EWS — sau khi lưu, không có API/màn hình nào trả lại nội dung private key đã tải lên; mất file gốc thì phải tạo/tải chứng chỉ mới.' },
+    ], right: [
+      { label: 'KHÔNG ảnh hưởng HTTP hiện có', text: 'đây là listener HTTPS THÊM VÀO, cổng HTTP cũ (biến PORT) vẫn luôn hoạt động song song — deploy hiện tại không bị ảnh hưởng gì nếu không đặt HTTPS_PORT.' },
+      { label: 'Không dùng cùng lúc với Nginx', text: 'nếu server đã triển khai theo track PM2+Nginx (xem deploy/Huong-dan-trien-khai-PM2-Nginx.md, Nginx đã làm lớp HTTPS termination) thì KHÔNG cần bật HTTPS_PORT — tránh 2 lớp TLS chồng nhau không cần thiết.' },
+    ] },
+  },
+  // sysTrustedCa (10/2026, yêu cầu người dùng: "khi PM2 gọi API sang hệ thống khác dùng HTTPS, cần làm
+  // gì để nhận diện được" — tức CHIỀU NGƯỢC LẠI với sysTlsCert ngay trên: server này tự làm CLIENT gọi
+  // RA ngoài, không phải tự phục vụ HTTPS). Xem routes/adminTrustedCa.js + lib/trustedCaManager.js.
+  sysTrustedCa: {
+    icon: '🔗', title: 'Chứng Chỉ Tin Cậy (CA Ngoài)', badge: 'Chỉ Quản Trị Viên',
+    desc: 'Khi server GỌI API sang 1 hệ thống khác (dsmart16, DSmart API, hay tích hợp mới sau này) qua HTTPS mà hệ thống đó dùng chứng chỉ do CA (Certificate Authority) NỘI BỘ công ty cấp — không phải CA công khai như Let\'s Encrypt/DigiCert (Node đã tự tin sẵn, không cần làm gì) — tải lên đây chứng chỉ CA GỐC (public, không phải private key) để "dạy" server tin thêm CA đó cho MỌI lượt gọi ra sau này, không cần sửa code riêng cho từng tích hợp.',
+    flow: { ariaLabel: 'Quy trình thêm CA tin cậy cho lượt gọi ra ngoài', chain: [
+      { label: 'Tải chứng chỉ CA gốc', sub: 'Kiểm tra PHẢI là CA (Basic Constraints)', kind: 'decision' },
+      { label: 'Lưu + dựng lại bundle', sub: 'server/certs/trusted-ca-bundle.pem', kind: 'approved' },
+      { label: 'Restart (pm2 restart)', sub: 'NODE_EXTRA_CA_CERTS đọc lại' },
+      { label: 'Lượt gọi ra ngoài THÀNH CÔNG', sub: 'fetch() + module https đều áp dụng', kind: 'approved' },
+    ], decision: { atIndex: 0, approveLabel: 'Đúng là chứng chỉ CA', rejectLabel: 'Là chứng chỉ SERVER (leaf)', rejectBox: { label: 'Báo lỗi ngay, không lưu', sub: 'Chặn tải nhầm cert không có tác dụng' }, loopBackToIndex: 0, loopBackLabel: 'Tải lại đúng chứng chỉ CA' } },
+    steps: [
+      { role: 'Quản trị viên', text: 'xin team hạ tầng/CA nội bộ công ty file chứng chỉ CA GỐC (và CA trung gian nếu có) ở dạng PEM (<code>.pem</code>/<code>.crt</code>/<code>.cer</code>) — đây là thông tin CÔNG KHAI, không phải private key, có thể xin trực tiếp mà không lo lộ bí mật.' },
+      { role: 'Quản trị viên', text: 'vào <b>Hệ Thống → ⚙️ Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA Ngoài)</b> → chọn file (có thể chứa nhiều CA ghép trong 1 file, VD gốc + trung gian — hệ thống tự tách), đặt tên gợi nhớ tuỳ chọn → bấm <b>"⬆️ Thêm Chứng Chỉ CA"</b>.' },
+      { role: 'Quản trị viên', text: 'nếu tải nhầm 1 chứng chỉ SERVER/LEAF (VD export nhầm cert của chính website đích thay vì CA gốc), hệ thống báo lỗi ngay và KHÔNG lưu — chỉ chấp nhận chứng chỉ có đánh dấu CA:TRUE.' },
+      { role: 'Quản trị viên', text: 'xem dòng trạng thái đầu màn — nếu báo "⚠️ CHƯA thấy biến môi trường NODE_EXTRA_CA_CERTS", làm 1 LẦN: mở <code>ecosystem.config.js</code>, xác nhận dòng <code>NODE_EXTRA_CA_CERTS</code> trong khối <code>env</code> đang trỏ đúng (đã có sẵn, chỉ cần dùng <code>pm2 start ecosystem.config.js</code> thay vì <code>pm2 start server.js</code> trực tiếp).' },
+      { role: 'Quản trị viên', text: '<b>chạy "pm2 restart"</b> — chứng chỉ mới KHÔNG tự áp dụng ngay cho MỌI tiến trình PM2 cluster (dù 1 số trường hợp tiến trình đang xử lý request đó có thể áp dụng ngay, không nên dựa vào điều này). Quay lại tab để xác nhận dòng trạng thái đổi sang "✅ Tiến trình này ĐÃ cấu hình đúng...".' },
+    ],
+    footer: { left: [
+      { label: 'Không cần sửa code cho từng tích hợp', text: 'NODE_EXTRA_CA_CERTS là cơ chế CHUNG của Node.js, áp dụng tự động cho MỌI lượt gọi ra ngoài (cả fetch() lẫn module https) — không cần thêm tham số riêng ở lib/ewsMailer.js/lib/dsmartApiClient.js/jobs/operationOrderApiSync.js hay bất kỳ tích hợp mới nào sau này.' },
+      { label: 'Khác hẳn ô "Chấp nhận chứng chỉ TLS tự ký" (SMTP/EWS)', text: 'ô đó TẮT HẲN việc kiểm tra chứng chỉ cho 1 kết nối cụ thể (dùng khi hệ thống đích dùng chứng chỉ tự ký, không qua CA nào) — còn CA tin cậy ở đây CHỈ MỞ RỘNG danh sách CA được tin, vẫn kiểm tra đầy đủ chuỗi chứng chỉ, an toàn hơn và áp dụng được cho MỌI kết nối cùng lúc.' },
+    ], right: [
+      { label: 'Không nhạy cảm — chỉ là chứng chỉ công khai', text: 'khác hẳn private key TLS (mục "Chứng Chỉ TLS/HTTPS") — chứng chỉ CA là dữ liệu CÔNG KHAI, ai cũng xem được, không cần giữ kín. Lưu tại server/certs/trusted-ca-bundle.pem (vẫn gitignore cùng thư mục, không vì nhạy cảm mà vì đây là cấu hình riêng của từng máy chủ).' },
+      { label: 'Cần restart để áp dụng CHO MỌI tiến trình', text: 'biến NODE_EXTRA_CA_CERTS chỉ được Node đọc lúc khởi động — không đặt được qua server/.env (quá trễ), phải cấu hình 1 lần qua ecosystem.config.js rồi pm2 restart mỗi lần thêm/xoá CA.' },
     ] },
   },
   systemArchitecture: {

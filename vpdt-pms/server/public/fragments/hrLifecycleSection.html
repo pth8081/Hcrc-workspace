@@ -257,7 +257,13 @@
             <span class="text-xs text-gray-800">Nhân viên nghỉ việc đang giữ vị trí quản lý (cần bàn giao đội nhóm)</span>
           </label>
           <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Lý do / Ghi chú (tuỳ chọn)</label>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lý Do Nghỉ Việc (tuỳ chọn)</label>
+            <input id="hrpOffbResignationReason" data-sdd-list="resignationReasonDatalist" autocomplete="off" placeholder="Gõ hoặc chọn từ danh mục Lý Do Nghỉ Việc..." class="w-full border p-1.5 rounded text-xs">
+            <div id="resignationReasonDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <p class="text-[11px] text-gray-400 mt-1">Dùng để thống kê báo cáo theo nhóm lý do — sửa danh mục gợi ý ở Hệ Thống → Quản Lý Danh Mục → Lý Do Nghỉ Việc.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ghi Chú Thêm (tuỳ chọn)</label>
             <textarea id="hrpOffbReason" class="w-full border p-1.5 rounded text-xs h-16" placeholder="VD: nghỉ việc từ ngày..."></textarea>
           </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->

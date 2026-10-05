@@ -261,6 +261,10 @@ async function main() {
   record('B1. QUICKAPPLY: danh sách cấu hình trống ban đầu hiện đúng thông báo', /Chưa có cấu hình/.test(emptyQaList), emptyQaList);
 
   // B2: tạo cấu hình mới — mẫu WF_1STEP, module DOC
+  // Pattern "thu gọn form nhập" (10/2026): #quickApplyAddForm giờ mặc định ẨN, phải bấm "+ Thêm Cấu
+  // Hình Áp Dụng Nhanh" (openQuickApplyConfigForm()) để mở ra trước khi tương tác thật qua UI.
+  await page.click('#btnQuickApplyConfigNew');
+  await page.waitForSelector('#quickApplyAddForm', { state: 'visible' });
   await page.selectOption('#qaTplSelect', 'WF_1STEP');
   await page.locator('#qaModuleGrid .qaModuleCheck[value="DOC"]').check();
   await page.click('#btnSaveQaConfig');

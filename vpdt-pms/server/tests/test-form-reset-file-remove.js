@@ -189,6 +189,9 @@ async function main() {
           const dongTrinhGroup = (DB.submissionApprovalGroups || []).find(g => g.id === 'DONG_TRINH');
           if (dongTrinhGroup) dongTrinhGroup.members = ['admin'];
           switchTab('submission');
+          // Pattern "thu gọn form nhập" (10/2026): #submissionFormWrap giờ bắt đầu ẩn — mở ra trước khi
+          // tương tác trực tiếp với các ô trong form (như bấm "+ Trình Văn Bản Mới").
+          openSubmissionForm();
         });
         // subDept KHÔNG có option rỗng đặt trước (cùng lý do contractDept ở kịch bản Hợp Đồng bên dưới)
         // — chọn "Phòng Kế Toán" (KHÁC option đầu tiên "Phòng Kinh Doanh") để quan sát được form.reset()
@@ -265,7 +268,9 @@ async function main() {
       // "Ban Giám Đốc", KHÁC "Phòng Kinh Doanh" là option đầu) mỗi lần reset về chế độ Tạo Mới.
       'Hợp Đồng: chip file, "Làm Mới" trắng form (contractDept tự chọn lại ĐÚNG phòng ban người dùng, contractType không có option rỗng -> reset về option đầu) + trắng Đợt Thanh Toán về 0 dòng + mã hợp đồng sinh lại đúng',
       async () => {
-        await page.evaluate(() => switchTab('contract'));
+        // Pattern "thu gọn form nhập" (10/2026): #contractManageFormWrap giờ bắt đầu ẩn — mở ra trước
+        // khi tương tác trực tiếp với các ô trong form (như bấm "+ Thêm Hợp Đồng/Phụ Lục").
+        await page.evaluate(() => { switchTab('contract'); openContractManageForm(); });
         await page.selectOption('#contractDept', 'Phòng Kế Toán');
         await page.selectOption('#contractType', 'Hợp đồng dịch vụ');
         await page.fill('#contractTitle', 'Hợp đồng kiểm thử reset form');
@@ -318,7 +323,9 @@ async function main() {
       // "Ban Giám Đốc"), selCat vẫn về rỗng như cũ (không đụng tới) nên docCode vẫn về rỗng bình thường.
       'Tài Liệu: chip file, "Làm Mới" trắng form (selDept tự chọn lại ĐÚNG phòng ban người dùng) + đưa toggle Nhập Mới/Cập Nhật về lại "Nhập Mới" + mã về rỗng (chưa chọn lại Phân Loại)',
       async () => {
-        await page.evaluate(() => switchTab('doc'));
+        // Pattern "thu gọn form nhập" (10/2026): #uploadBox giờ bắt đầu ẩn — mở ra trước khi tương tác
+        // trực tiếp với các ô trong form (như bấm "+ Tải Lên Tài Liệu").
+        await page.evaluate(() => { switchTab('doc'); openUploadBox(); });
         await page.selectOption('#selDept', 'Phòng Kinh Doanh');
         await page.selectOption('#selCat', 'Hợp đồng / Hồ sơ');
         await page.fill('#docTitle', 'Tài liệu kiểm thử reset form');
@@ -358,7 +365,9 @@ async function main() {
     await check(
       'Giấy Phép: chip file, "Làm Mới" trắng form + sinh lại mã đúng khuôn HCRC-GP-...',
       async () => {
-        await page.evaluate(() => switchTab('license'));
+        // Pattern "thu gọn form nhập" (10/2026): #licenseUploadBox giờ bắt đầu ẩn — mở ra trước khi
+        // tương tác trực tiếp với các ô trong form (như bấm "+ Tải Lên Giấy Phép").
+        await page.evaluate(() => { switchTab('license'); openLicenseUploadBox(); });
         await page.fill('#licenseCompanyName', 'Công ty TNHH Kiểm Thử');
         await page.fill('#licenseLocationName', 'Chi nhánh kiểm thử');
         await page.fill('#licenseType', 'Giấy phép kiểm thử');
@@ -396,6 +405,11 @@ async function main() {
         await page.evaluate(() => {
           DB.carPurposes = [{ key: 'CT', label: 'Công tác' }];
           switchTab('car');
+          // "Thu gọn form nhập" (10/2026) — #carForm giờ ẩn mặc định, phải mở qua openCarForm() trước khi
+          // page.fill()/page.selectOption() thao tác lên các ô bên trong (Playwright yêu cầu phần tử phải
+          // visible). openCarForm() tự gọi resetCarRegForm() (sinh mã + 2 điểm Lộ Trình rỗng) — VÔ HẠI ở
+          // đây vì đang mở form lần đầu, chưa điền gì.
+          openCarForm();
         });
         await page.selectOption('#carDept', 'Phòng Kế Toán');
         await page.selectOption('#carType', '5 chỗ');
@@ -450,6 +464,9 @@ async function main() {
         await page.evaluate(() => {
           DB.meetingRooms = [{ id: 1, name: 'Phòng Họp A', short: 'A' }];
           switchTab('meeting');
+          // "Thu gọn form nhập" (10/2026) — #meetingForm giờ ẩn mặc định, mở qua openMeetingForm() trước
+          // khi page.fill() thao tác lên các ô bên trong (chỉ hiện/ẩn, KHÔNG tự reset gì).
+          openMeetingForm();
         });
         await page.selectOption('#meetingDept', 'Phòng Kế Toán');
         await page.selectOption('#meetingRoom', 'Phòng Họp A');
@@ -484,7 +501,10 @@ async function main() {
     await check(
       'Biên Bản Họp: "Làm Mới" trắng form + trắng bảng Thành Phần Tham Dự/Ý Kiến Chỉ Đạo về ĐÚNG 0 dòng (đúng hành vi cancelEditMeetingMinutes()/luồng lưu thành công đã có) + sinh lại mã + đưa nút Lưu về lại nhãn gốc',
       async () => {
-        await page.evaluate(() => switchTab('minutes'));
+        // "Thu gọn form nhập" (10/2026) — #minutesForm giờ ẩn mặc định mỗi lần vào tab (admin luôn thấy
+        // nút "+ Lập Biên Bản Mới" vì canCreateMeetingMinutes(admin)=true) — mở qua openMinutesForm()
+        // trước khi page.fill() thao tác lên các ô bên trong.
+        await page.evaluate(() => { switchTab('minutes'); openMinutesForm(); });
         await page.fill('#minutesTitle', 'Họp kiểm thử reset form');
         await page.fill('#minutesTime', '2026-09-10T09:00');
         await page.fill('#minutesLocation', 'Phòng họp A');
@@ -536,7 +556,9 @@ async function main() {
     await check(
       'Mua Bán (Mua Sắm): "Làm Mới" trắng form + collapse bảng "Danh Sách Hạng Mục Đề Nghị Mua Sắm" về ĐÚNG 1 dòng trống (không phải 0, không phải còn nguyên 2 dòng) + sinh lại mã',
       async () => {
-        await page.evaluate(() => switchTab('office')); // activeOfficeSubTab mặc định = 'MUA_BAN'
+        // "Thu gọn form nhập" (10/2026) — #officeForm giờ ẩn mặc định, mở qua openOfficeForm() trước khi
+        // page.fill()/page.selectOption() thao tác lên các ô bên trong.
+        await page.evaluate(() => { switchTab('office'); openOfficeForm(); }); // activeOfficeSubTab mặc định = 'MUA_BAN'
         await page.selectOption('#offDept', 'Phòng Kế Toán');
         await page.fill('#offTitle', 'Mua sắm kiểm thử reset form');
         await page.fill('#offReason', 'Lý do kiểm thử reset form.');
@@ -595,7 +617,9 @@ async function main() {
     await check(
       'Đào Tạo > Lớp Học: "Làm Mới" trắng form (Offline->Online, ẩn lại Giảng Viên/Địa Điểm) + trắng Danh Sách Được Mời (tcInviteListStaged) + trắng phần Nhập Từ Excel đang xem trước dở',
       async () => {
-        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); });
+        // Thu gọn form nhập (10/2026) — #trainingClassForm giờ bắt đầu ẨN mỗi khi đổi tab LMS, phải tự
+        // mở qua openTrainingClassForm() (nút "+ Tạo Lớp Mới") trước khi fill/click thật bằng Playwright.
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('CLASSES'); openTrainingClassForm(); });
         await page.fill('#tcTitle', 'Lớp kiểm thử reset form');
         await page.selectOption('#tcMode', 'OFFLINE');
         await page.evaluate(() => onTrainingClassModeChange());
@@ -871,7 +895,9 @@ async function main() {
     await check(
       'Tuyển Dụng > Tin Tuyển Dụng: chip ảnh banner rjBannerFile, "Làm Mới" trắng form',
       async () => {
-        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS'); });
+        // Thu gọn form nhập (10/2026) — #recruitmentJobForm giờ bắt đầu ẨN mỗi khi đổi tab, phải tự mở
+        // qua openRecruitmentJobForm() (nút "+ Đăng Tin Mới") trước khi fill/click thật bằng Playwright.
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('RECRUITMENT'); setRecruitmentTab('JOBS'); openRecruitmentJobForm(); });
         await page.fill('#rjTitle', 'Vị trí kiểm thử reset form');
         await page.fill('#rjContactInfo', '0900000000');
         await page.fill('#rjDescription', 'Mô tả kiểm thử reset form.');
@@ -971,7 +997,9 @@ async function main() {
     await check(
       'Nhịp Sống HCRC (Nội Bộ): "Làm Mới" trắng form + tắt Ghim bài (gọi lại cancelEditInternalPost() có sẵn)',
       async () => {
-        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); });
+        // Thu gọn form nhập (10/2026) — #internalPostForm giờ bắt đầu ẨN mỗi khi đổi sub-tab, phải tự
+        // mở qua openInternalPostForm() (nút "+ Đăng Bài Mới") trước khi fill/click thật bằng Playwright.
+        await page.evaluate(() => { switchTab('internal'); setInternalSubTab('NEWS'); openInternalPostForm(); });
         await page.fill('#internalTitle', 'Tin kiểm thử reset form');
         await page.selectOption('#internalPostCategory', 'THI_DUA');
         await page.fill('#internalContent', 'Nội dung kiểm thử reset form.');
@@ -1036,6 +1064,8 @@ async function main() {
       'Phê Duyệt Giá: chip file đơn (bảng giá, ĐÃ có data-op-change riêng đọc file) + chip file nhiều (tài liệu bổ sung, xoá đúng 1 file), Mức Margin/Chiết Khấu (Bán Buôn) bị xoá giá trị nhưng KHÔNG tự chuyển lại sub-tab Bán Lẻ, mã đề xuất/phòng ban sinh lại đúng',
       async () => {
         await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); });
+        // Thu gọn form (10/2026) — #itPriceCreateForm giờ mặc định ẨN, phải bấm "+ Đề Xuất Mới" trước.
+        await page.evaluate(() => openItPriceCreateForm());
         await page.selectOption('#itPriceTier', 'MARGIN_LT5');
         await page.fill('#itPriceReason', 'Lý do kiểm thử reset form');
 
@@ -1105,6 +1135,8 @@ async function main() {
       'Hỗ Trợ Yêu Cầu: "Làm Mới" trắng form + sinh lại mã yêu cầu mới (KHÔNG có ô tải tệp)',
       async () => {
         await page.evaluate(() => { switchTab('itSupport'); setItSupportSubTab('TICKET'); });
+        // Thu gọn form (10/2026) — #itTicketCreateForm giờ mặc định ẨN, phải bấm "+ Gửi Yêu Cầu" trước.
+        await page.evaluate(() => openItTicketForm());
         await page.fill('#itTicketTitle', 'Yêu cầu kiểm thử reset form');
         await page.fill('#itTicketDescription', 'Mô tả kiểm thử reset form.');
         const codeBeforeReset = await page.locator('#itTicketCode').inputValue();
@@ -1132,6 +1164,8 @@ async function main() {
         // itServiceRenewals/itRenewalCategories: không thuộc 3 module gốc dùng _seed.js — bổ sung tay
         // (renderItServiceRenewals() gọi .map() thẳng lên DB.itServiceRenewals, undefined sẽ vỡ ngay).
         await page.evaluate(() => { DB.itServiceRenewals = []; DB.itRenewalCategories = []; switchTab('itSupport'); setItSupportSubTab('RENEWAL'); });
+        // Thu gọn form (10/2026) — #itRenewalCreateForm giờ mặc định ẨN, phải bấm "+ Thêm Dịch Vụ" trước.
+        await page.evaluate(() => openItRenewalForm());
         await page.fill('#itRenewalName', 'Office 365 kiểm thử reset form');
         await page.fill('#itRenewalCategory', 'Phần mềm kiểm thử');
         await page.fill('#itRenewalVendor', 'Microsoft');
@@ -1215,7 +1249,9 @@ async function main() {
     await check(
       'VPP Tạo Kỳ Đăng Ký Mới: chip file đơn vppCatalogFileInput (ĐÃ có data-op-change riêng đọc file), "Làm Mới" trắng form + tính LẠI bảng Nhân Sự Theo Phòng Ban theo số thật (không giữ số sửa tay)',
       async () => {
-        await page.evaluate(() => { switchTab('vpp'); setVppSubTab('PERIODS'); });
+        // openVppNewPeriodForm() (pattern thu gọn form, 10/2026) — form "Tạo Kỳ Đăng Ký Mới" giờ ẨN mặc
+        // định, phải bấm "+ Tạo Kỳ Đăng Ký Mới" mở ra trước khi điền.
+        await page.evaluate(() => { switchTab('vpp'); setVppSubTab('PERIODS'); openVppNewPeriodForm(); });
         await page.fill('#vppNewPeriodName', 'Kỳ kiểm thử reset form (Tạo Kỳ)');
         await page.fill('#vppNewPeriodStart', '2027-01-01');
         await page.fill('#vppNewPeriodEnd', '2027-01-31');
@@ -1269,7 +1305,9 @@ async function main() {
     await check(
       'Ngân Sách (Đề Xuất): form đang có dữ liệu CHƯA lưu -> "Làm Mới" hỏi xác nhận rồi trắng lại toàn bộ form',
       async () => {
-        await page.evaluate(() => { switchTab('budget'); setBudgetLineTab('PROPOSE'); });
+        // Pattern "thu gọn form nhập" (10/2026): #blProposeFormWrap giờ bắt đầu ẩn — mở ra trước khi
+        // tương tác trực tiếp với các ô trong form (như bấm "+ Thêm Đề Xuất").
+        await page.evaluate(() => { switchTab('budget'); setBudgetLineTab('PROPOSE'); openBudgetLineForm('Propose'); });
         await page.fill('#blProposeContent', 'Nội dung đề xuất kiểm thử reset');
         await page.fill('#blProposeDescription', 'Mô tả kiểm thử reset');
         await page.evaluate(() => { window.__confirmCalls = []; });
@@ -1336,6 +1374,8 @@ async function main() {
           // Nêu rõ sub-tab thay vì trông cậy mặc định activeVanHanhSubTab — kịch bản trước đó (Phê Duyệt
           // Giá Bán Buôn) đã đổi biến này sang 'ITPRICE', không tự về lại 'ORDERS' giữa các kịch bản.
           setVanHanhSubTab('ORDERS');
+          // Thu gọn form (10/2026) — #operationOrderForm giờ mặc định ẨN, phải bấm "+ Tạo Đơn Hàng" trước.
+          openOperationOrderForm();
         });
         await page.fill('#voTitle', 'Đặt hàng kiểm thử reset form');
         await page.fill('#voSupplier', 'Công ty TNHH Kiểm Thử');
@@ -1393,6 +1433,9 @@ async function main() {
         await page.evaluate(() => {
           DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
           switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('OPEN');
+          // Thu gọn form (10/2026) — #operationStoreOpenForm giờ mặc định ẨN, phải bấm "+ Tạo Đề Xuất Mở
+          // Mới" trước.
+          openOperationStoreOpenForm();
         });
         await page.fill('#vsoStoreName', 'Siêu thị kiểm thử reset form');
         await page.fill('#vsoAddress', '123 Đường Kiểm Thử, Quận 1');
@@ -1444,6 +1487,9 @@ async function main() {
         await page.evaluate(() => {
           DB.operationOrders = []; DB.operationStoreOpenings = []; DB.operationRepairs = [];
           switchTab('vanHanh'); setVanHanhSubTab('STORE'); setOperationStoreSubTab('REPAIR');
+          // Thu gọn form (10/2026) — #operationRepairForm giờ mặc định ẨN, phải bấm "+ Tạo Đề Xuất Sửa
+          // Chữa" trước.
+          openOperationRepairForm();
         });
         await page.fill('#vrStoreName', 'Siêu thị cần sửa kiểm thử');
         await page.fill('#vrTitle', 'Sửa hệ thống điện kiểm thử reset form');

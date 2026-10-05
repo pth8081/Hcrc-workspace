@@ -27,6 +27,9 @@ async function main() {
   try {
     await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, CREATOR);
     await page.evaluate(() => { switchTab('vanHanh'); setVanHanhSubTab('ORDERS'); });
+    // Thu gọn form (10/2026) — #operationOrderForm giờ mặc định ẨN, phải bấm "+ Tạo Đơn Hàng"
+    // (openOperationOrderForm()) trước khi thao tác field bên trong.
+    await page.evaluate(() => openOperationOrderForm());
     await page.waitForSelector('#operationOrderForm', { state: 'visible' });
 
     await run.run('Chọn ĐÚNG 1 file PDF: vẫn giữ hành vi cũ — tự điền form, KHÔNG tự tạo đơn', async () => {

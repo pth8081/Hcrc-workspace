@@ -17,7 +17,7 @@
 //
 // Nhân bản khuôn giả lập/gửi mail chung với jobs/hrTaskOverdueReminder.js.
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -79,7 +79,9 @@ async function checkItApprovalDeadlineReminders() {
           sendResult = await sendMail({
             to: recipients.map(r => r.email), subject, text: body,
             host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
-            user: smtpUser, pass: smtpPass, from: emailConfig.senderEmail
+            user: smtpUser, pass: smtpPass, from: emailConfig.senderEmail,
+            graph: resolveGraphOption(emailConfig),
+            ews: resolveEwsOption(emailConfig)
           });
         } catch (err) {
           console.error('⛔ [Nhắc hạn Phê Duyệt IT] Gửi email thật thất bại:', err.message);

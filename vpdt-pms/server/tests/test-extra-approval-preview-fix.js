@@ -225,6 +225,11 @@ async function main() {
   await page.waitForSelector('#docSection', { state: 'visible' });
   await page.waitForTimeout(80);
 
+  // Pattern "thu gọn form nhập" (10/2026): #uploadBox (chứa #selDept) giờ ẩn mặc định, phải bấm "+ Tải
+  // Lên Tài Liệu" (openUploadBox()) trước khi tương tác trực tiếp vào các ô form — không phải regression,
+  // chỉ cần đi đúng luồng UI mới (cùng cách test-contract.js/test-form-reset-file-remove.js đã cập nhật).
+  await page.evaluate(() => openUploadBox());
+
   // C1: dept CÓ quy trình gốc + đã chọn Cấp/Nhóm Phê Duyệt Cuối -> modal phải hiện ĐÚNG bước mới.
   await page.selectOption('#selDept', 'Phòng CNTT');
   const docLevelSel = page.locator('#extraApprovalLevel_DOC');

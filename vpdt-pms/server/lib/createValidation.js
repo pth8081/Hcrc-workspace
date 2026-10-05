@@ -2667,6 +2667,15 @@ const CREATE_MODULE_CONFIGS = {
         effectiveFrom: payload.effectiveFrom, effectiveTo: payload.effectiveTo || null,
         isRetroactive: !!payload.isRetroactive,
         tiers: payload.tiers, scopes: payload.scopes,
+        // Field mở rộng 10/2026 (xem lib/vendorRebate.js) — ĐỌC từ payload gốc TRƯỚC khi bị seeded đè về
+        // mặc định (seeded ở trên LUÔN mang giá trị mặc định includedInBas=true/amountMode=PERCENT_TIERED/...),
+        // không override thì client KHÔNG BAO GIỜ tạo được điều khoản FIXED_LUMP_SUM ngay từ đầu.
+        includedInBas: payload.includedInBas !== false,
+        amountMode: payload.amountMode || 'PERCENT_TIERED',
+        fixedAmount: payload.fixedAmount != null ? Number(payload.fixedAmount) : 0,
+        allocationMode: payload.allocationMode || 'NONE',
+        allocationEntities: Array.isArray(payload.allocationEntities) ? payload.allocationEntities : [],
+        allocationTargetEntity: payload.allocationTargetEntity || null,
         status: 'DRAFT', version: 1, clonedFromTermId: null, history: []
       });
       delete payload.id;
@@ -3602,6 +3611,13 @@ const CREATE_MODULE_CONFIGS = {
 
       payload.note = payload.note ? String(payload.note).trim().slice(0, 1000) : '';
       payload.reason = payload.reason ? String(payload.reason).trim().slice(0, 1000) : '';
+      // resignationReason (10/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "LIST_LYDO_NGHIVIEC")
+      // — TÁCH khỏi "reason" (ghi chú tự do) ở trên: field RIÊNG cho lý do nghỉ việc dạng gợi ý từ danh
+      // mục DB.resignationReasons (Quản Lý Danh Mục) để báo cáo thống kê được theo đúng nhóm lý do. Chuỗi
+      // tự do (không ép phải khớp đúng 1 giá trị trong danh mục — cùng mức ràng buộc "mềm" như jobTitle).
+      // Chỉ OFFBOARDING mới có field này (không áp dụng ONBOARDING).
+      payload.resignationReason = processType === 'OFFBOARDING' && payload.resignationReason
+        ? String(payload.resignationReason).trim().slice(0, 200) : null;
 
       // Tự sinh tasks[] từ danh mục checklist chuẩn ĐANG BẬT (IsActive) đúng processType — mục 4.1 tài
       // liệu gốc: DueDate = DATEADD(DAY, DueDaysOffset, AnchorDate). Danh mục RỖNG (admin lỡ tắt hết)

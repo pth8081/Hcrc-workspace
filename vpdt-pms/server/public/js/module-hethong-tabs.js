@@ -52,7 +52,7 @@ function setSystemSubTab(subTab) {
   document.getElementById('btnSystemSubTrash').className = subTab === 'TRASH' ? activeCls : inactiveCls;
 
   if (subTab === 'ADMIN') {
-    renderDeptGroupList(); renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderCarEvaluationIssueList(); renderPriceZoneList(); renderItRenewalCategoryList(); renderMeetingRoomCatalogList(); renderPositionTypeList();
+    renderDeptGroupList(); renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderCarEvaluationIssueList(); renderPriceZoneList(); renderItRenewalCategoryList(); renderMeetingRoomCatalogList(); renderPositionTypeList(); renderJobGradeList(); renderResignationReasonList(); renderDisciplinaryTypeList();
     // 11/2026 LÀM GỌN: checklistExecuteScope (thay checklistReportViewScope/checklistStoreSelfExecuteScope
     // cũ) giờ đọc DB.stores (eager, không còn lazy) thay vì DB.checklistTemplates — bỏ hẳn khối
     // loadDataGroup('checklist') từng cần ở đây (xem renderChecklistExecuteScopeCheckboxes() ở module-admin.js).
@@ -168,6 +168,8 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubPerms').classList.toggle('hidden', subTab !== 'PERMS');
   document.getElementById('adminSubExtAuth').classList.toggle('hidden', subTab !== 'EXTAUTH');
   document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'OPAPI');
+  document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
+  document.getElementById('adminSubTrustedCa').classList.toggle('hidden', subTab !== 'TRUSTEDCA');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -177,9 +179,13 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubPerms').className = subTab === 'PERMS' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubExtAuth').className = subTab === 'EXTAUTH' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubOpApi').className = subTab === 'OPAPI' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubTrustedCa').className = subTab === 'TRUSTEDCA' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
   if (subTab === 'OPAPI') loadOperationOrderApiConfigToForm();
+  if (subTab === 'TLSCERT') loadTlsCertStatus();
+  if (subTab === 'TRUSTEDCA') loadTrustedCaList();
 }
 
 // ---------- Cấu Hình API — đồng bộ Đơn Hàng (Vận Hành) ra dsmart16 (jobs/operationOrderApiSync.js) ----------
@@ -291,6 +297,16 @@ function renderExternalApiKeysTable() {
   `).join('');
 }
 
+// openExtApiKeyForm()/closeExtApiKeyForm(): CHỈ lo phần hiện/ẩn khung tạo API key (pattern "thu gọn
+// form nhập", 10/2026) — không đụng logic tạo/thu hồi/tạo lại key. Form luôn ở trạng thái "tạo mới"
+// (không có luồng Sửa populate lại field nào), nên không cần reset gì thêm khi mở/đóng.
+function openExtApiKeyForm() {
+  document.getElementById('extApiKeyFormWrap')?.classList.remove('hidden');
+}
+function closeExtApiKeyForm() {
+  document.getElementById('extApiKeyFormWrap')?.classList.add('hidden');
+}
+
 async function createExternalApiKeyAction(e) {
   e.preventDefault();
   const nameInput = document.getElementById('extApiKeyName');
@@ -311,6 +327,9 @@ async function createExternalApiKeyAction(e) {
     renderExternalApiKeysTable();
     document.getElementById('extApiKeyRevealValue').textContent = apiKey;
     document.getElementById('extApiKeyRevealBox').classList.remove('hidden');
+    // Thu gọn lại khung tạo key sau khi tạo xong (pattern "thu gọn form nhập", 10/2026) — hộp hiện key
+    // #extApiKeyRevealBox nằm NGOÀI #extApiKeyFormWrap (không bị ẩn theo) nên vẫn hiện đầy đủ bên dưới.
+    closeExtApiKeyForm();
     // KHÔNG gọi logSystemAction() ở đây — server (routes/externalAuthAdmin.js) đã tự ghi Nhật ký hệ
     // thống trực tiếp (đảm bảo có log dù client mất mạng ngay sau response), gọi thêm ở đây sẽ trùng lặp.
   } catch (err) {
@@ -416,6 +435,193 @@ async function deleteExternalApiKeyAction(id) {
     renderExternalApiKeysTable();
   } catch (err) {
     alert(`⛔ Lỗi xoá API key: ${err.message}`);
+  }
+}
+
+// ---------- Chứng Chỉ TLS/HTTPS (routes/adminTlsCert.js) ----------
+// KHÔNG đi qua DB.* (dữ liệu GET /api/data chung) — private key TLS không được lưu trong AppData/SQL,
+// chỉ nằm ở 3 file cố định server/certs/ (xem lib/tlsCertManager.js) — màn này tự gọi route riêng để
+// đọc trạng thái/metadata (KHÔNG BAO GIỜ có nội dung private key trong bất kỳ response nào).
+async function loadTlsCertStatus() {
+  const box = document.getElementById('tlsCertCurrentStatusBox');
+  if (!box) return;
+  box.innerHTML = '<span class="text-gray-400 italic">Đang tải trạng thái...</span>';
+  try {
+    const res = await fetch('/api/admin/tls-cert/status');
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    renderTlsCertStatus(body);
+  } catch (err) {
+    box.innerHTML = `<span class="text-red-600 font-bold">⛔ Không tải được trạng thái: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function renderTlsCertStatus(status) {
+  const box = document.getElementById('tlsCertCurrentStatusBox');
+  if (!box) return;
+  const parts = [];
+  if (!status.hasCertOnDisk) {
+    parts.push('<p class="text-gray-500 italic">Chưa tải chứng chỉ TLS nào lên hệ thống — server đang chạy thuần HTTP.</p>');
+  } else {
+    const meta = status.certMetadata || {};
+    if (meta.error) {
+      parts.push(`<p class="text-red-600 font-bold">⛔ ${escapeHtml(meta.error)}</p>`);
+    } else {
+      parts.push(`<p><b>Subject:</b> ${escapeHtml(meta.subject || '?')}</p>`);
+      parts.push(`<p><b>Issuer:</b> ${escapeHtml(meta.issuer || '?')}</p>`);
+      parts.push(`<p><b>Hiệu lực:</b> ${meta.validFrom ? new Date(meta.validFrom).toLocaleString('vi-VN') : '?'} → ${meta.validTo ? new Date(meta.validTo).toLocaleString('vi-VN') : '?'}</p>`);
+      parts.push(`<p><b>CA Chain:</b> ${meta.hasCaChain ? 'Có' : '<span class="text-gray-400 italic">Không</span>'}</p>`);
+    }
+  }
+  if (status.httpsListener && status.httpsListener.active) {
+    parts.push(`<p class="text-green-700 font-bold mt-1">✅ HTTPS ĐANG CHẠY THẬT tại cổng ${status.httpsListener.port} (từ lúc khởi động gần nhất: ${status.httpsListener.startedAt ? new Date(status.httpsListener.startedAt).toLocaleString('vi-VN') : '?'}).</p>`);
+  } else if (status.hasCertOnDisk) {
+    parts.push(`<p class="text-amber-700 font-bold mt-1">⚠️ Đã có chứng chỉ trên đĩa nhưng HTTPS CHƯA chạy — ${status.httpsPortConfigured ? `cần restart (pm2 restart) để áp dụng` : `cần đặt HTTPS_PORT trong .env rồi restart`}.</p>`);
+  } else {
+    parts.push(`<p class="text-gray-500 italic mt-1">HTTPS_PORT hiện ${status.httpsPortConfigured ? `đã đặt = ${status.httpsPortConfigured}` : 'chưa được đặt trong .env'}.</p>`);
+  }
+  box.innerHTML = parts.join('');
+}
+
+async function uploadTlsCertAction(e) {
+  e.preventDefault();
+  const keyFile = document.getElementById('tlsCertPrivateKeyFile').files[0];
+  const certFile = document.getElementById('tlsCertCertificateFile').files[0];
+  const caFile = document.getElementById('tlsCertCaChainFile').files[0];
+  const resultBox = document.getElementById('tlsCertUploadResultBox');
+  if (!keyFile || !certFile) {
+    alert('Vui lòng chọn đủ Private Key và Certificate');
+    return;
+  }
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-gray-50';
+  resultBox.classList.remove('hidden');
+  resultBox.textContent = 'Đang kiểm tra & tải chứng chỉ...';
+  try {
+    const formData = new FormData();
+    formData.append('privateKey', keyFile);
+    formData.append('certificate', certFile);
+    if (caFile) formData.append('caChain', caFile);
+    const res = await fetch('/api/admin/tls-cert', { method: 'POST', body: formData });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-green-50 text-green-800 border-green-300';
+    resultBox.textContent = `✅ ${body.message}`;
+    e.target.reset();
+    renderTlsCertStatus({ hasCertOnDisk: true, certMetadata: body.certMetadata, httpsListener: body.httpsListener, httpsPortConfigured: null });
+    loadTlsCertStatus(); // nạp lại đầy đủ (kèm httpsPortConfigured) từ server, tránh hiển thị thiếu.
+  } catch (err) {
+    resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-red-50 text-red-700 border-red-300';
+    resultBox.textContent = `⛔ ${err.message}`;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+async function deleteTlsCertAction() {
+  if (!confirm('Xoá chứng chỉ TLS đang lưu trên server? Thao tác này KHÔNG xoá ngay — HTTPS (nếu đang chạy) vẫn tiếp tục chạy với chứng chỉ cũ cho tới khi restart (pm2 restart), lúc đó server sẽ quay lại chạy thuần HTTP.')) return;
+  try {
+    const res = await fetch('/api/admin/tls-cert', { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    alert(`✅ ${body.message}`);
+    loadTlsCertStatus();
+  } catch (err) {
+    alert(`⛔ Lỗi xoá chứng chỉ TLS: ${err.message}`);
+  }
+}
+
+// ---------- Chứng Chỉ Tin Cậy (CA Ngoài) — routes/adminTrustedCa.js ----------
+// Dùng khi server GỌI RA hệ thống khác qua HTTPS mà hệ thống đó dùng chứng chỉ do CA nội bộ công ty
+// cấp — KHÁC HẲN tab Chứng Chỉ TLS/HTTPS ở trên (server tự phục vụ HTTPS, hướng VÀO).
+async function loadTrustedCaList() {
+  const statusBox = document.getElementById('trustedCaEnvStatusBox');
+  const tbody = document.getElementById('trustedCaTableBody');
+  if (statusBox) statusBox.innerHTML = '<span class="text-gray-400 italic">Đang tải...</span>';
+  try {
+    const res = await fetch('/api/admin/trusted-ca');
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    renderTrustedCaEnvStatus(body.envConfig);
+    renderTrustedCaTable(body.certificates || []);
+  } catch (err) {
+    if (statusBox) statusBox.innerHTML = `<span class="text-red-600 font-bold">⛔ Không tải được: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function renderTrustedCaEnvStatus(envConfig) {
+  const box = document.getElementById('trustedCaEnvStatusBox');
+  if (!box || !envConfig) return;
+  if (envConfig.isConfiguredCorrectly) {
+    box.innerHTML = `<p class="text-green-700 font-bold">✅ Tiến trình này ĐÃ cấu hình đúng NODE_EXTRA_CA_CERTS → ${escapeHtml(envConfig.bundlePath)}.</p>`;
+  } else {
+    box.innerHTML = `
+      <p class="text-amber-700 font-bold">⚠️ Tiến trình này CHƯA thấy biến môi trường NODE_EXTRA_CA_CERTS trỏ đúng tới ${escapeHtml(envConfig.bundlePath)} (hiện tại: ${envConfig.nodeExtraCaCertsCurrent ? escapeHtml(envConfig.nodeExtraCaCertsCurrent) : '(chưa đặt)'}).</p>
+      <p class="text-gray-500 italic mt-1">Cần làm 1 LẦN: thêm dòng <code class="bg-gray-100 px-1 rounded border">NODE_EXTRA_CA_CERTS</code> vào khối <code class="bg-gray-100 px-1 rounded border">env</code> của <code class="bg-gray-100 px-1 rounded border">ecosystem.config.js</code> (đã có sẵn comment hướng dẫn trong file) rồi <code class="bg-gray-100 px-1 rounded border">pm2 restart</code> — xem Hướng Dẫn Triển Khai.</p>`;
+  }
+}
+
+function renderTrustedCaTable(list) {
+  const tbody = document.getElementById('trustedCaTableBody');
+  if (!tbody) return;
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-3 text-center text-gray-400 italic">Chưa có chứng chỉ CA tin cậy nào được thêm</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = [...list].sort((a, b) => (b.id || 0) - (a.id || 0)).map(c => `
+    <tr class="border-b hover:bg-gray-50">
+      <td class="py-1.5 px-2 font-semibold">${escapeHtml(c.name)}</td>
+      <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(c.subject)}</td>
+      <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(c.issuer)}</td>
+      <td class="py-1.5 px-2">${c.validTo ? new Date(c.validTo).toLocaleDateString('vi-VN') : ''}</td>
+      <td class="py-1.5 px-2">${escapeHtml(c.addedByName || c.addedBy || '')}</td>
+      <td class="py-1.5 px-2">${c.addedAt ? new Date(c.addedAt).toLocaleString('vi-VN') : ''}</td>
+      <td class="py-1.5 px-2"><button type="button" data-op="deleteTrustedCaAction" data-arg0="${c.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">🗑️ Xoá</button></td>
+    </tr>
+  `).join('');
+}
+
+async function uploadTrustedCaAction(e) {
+  e.preventDefault();
+  const fileInput = document.getElementById('trustedCaFile');
+  const file = fileInput.files[0];
+  const name = document.getElementById('trustedCaName').value.trim();
+  const resultBox = document.getElementById('trustedCaUploadResultBox');
+  if (!file) { alert('Vui lòng chọn file chứng chỉ CA'); return; }
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-gray-50';
+  resultBox.classList.remove('hidden');
+  resultBox.textContent = 'Đang kiểm tra & thêm chứng chỉ CA...';
+  try {
+    const formData = new FormData();
+    formData.append('caCertFile', file);
+    if (name) formData.append('name', name);
+    const res = await fetch('/api/admin/trusted-ca', { method: 'POST', body: formData });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-green-50 text-green-800 border-green-300';
+    resultBox.textContent = `✅ ${body.message}`;
+    e.target.reset();
+    loadTrustedCaList();
+  } catch (err) {
+    resultBox.className = 'text-[11px] font-semibold rounded px-2 py-1.5 border bg-red-50 text-red-700 border-red-300';
+    resultBox.textContent = `⛔ ${err.message}`;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+async function deleteTrustedCaAction(id) {
+  if (!confirm('Xoá chứng chỉ CA tin cậy này? Cần restart (pm2 restart) để áp dụng cho TẤT CẢ tiến trình.')) return;
+  try {
+    const res = await fetch(`/api/admin/trusted-ca/${id}`, { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    loadTrustedCaList();
+  } catch (err) {
+    alert(`⛔ Lỗi xoá chứng chỉ CA: ${err.message}`);
   }
 }
 

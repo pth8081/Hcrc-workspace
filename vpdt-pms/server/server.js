@@ -13,6 +13,14 @@ const cookieParser = require('cookie-parser');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+// Chứng chỉ TLS tải lên qua Hệ Thống > Quản Trị > Chứng Chỉ TLS (10/2026, xem routes/adminTlsCert.js) —
+// cho phép server TỰ phục vụ HTTPS (không qua Nginx) ở track triển khai PM2-only. Xem start() dưới cùng.
+const tlsCertManager = require('./lib/tlsCertManager');
+// Chứng chỉ CA nội bộ được "tin cậy" cho các lượt GỌI RA NGOÀI qua HTTPS (10/2026, xem
+// lib/trustedCaManager.js + routes/adminTrustedCa.js) — HƯỚNG NGƯỢC LẠI với tlsCertManager ở trên (đây
+// là server tự làm CLIENT gọi sang hệ thống khác, không phải server tự phục vụ HTTPS).
+const trustedCaManager = require('./lib/trustedCaManager');
 const securityHeaders = require('./lib/securityHeaders');
 const { version: APP_VERSION } = require('./package.json');
 const { getPool } = require('./db');
@@ -38,6 +46,8 @@ const trainingRosterRoutes = require('./routes/trainingRoster');
 const trainingPlanImportRoutes = require('./routes/trainingPlanImport');
 const trainingTestImportRoutes = require('./routes/trainingTestImport');
 const adminExportRoutes = require('./routes/adminExport');
+const adminTlsCertRoutes = require('./routes/adminTlsCert');
+const adminTrustedCaRoutes = require('./routes/adminTrustedCa');
 const orgChartRoutes = require('./routes/orgChart');
 const employeeProfileRoutes = require('./routes/employeeProfile');
 const adminCatalogRoutes = require('./routes/adminCatalog');
@@ -73,6 +83,7 @@ const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRo
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
 const { checkPaymentDeadlineReminders } = require('./jobs/paymentDeadlineReminder');
 const { checkItApprovalDeadlineReminders } = require('./jobs/itApprovalDeadlineReminder');
+const { migrateLegacySubmissionContractViewers } = require('./jobs/legacyViewScopeMigration');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -181,6 +192,8 @@ app.use('/api/training', trainingRosterRoutes);
 app.use('/api/training', trainingPlanImportRoutes);
 app.use('/api/training', trainingTestImportRoutes);
 app.use('/api/admin', adminExportRoutes);
+app.use('/api/admin/tls-cert', adminTlsCertRoutes);
+app.use('/api/admin/trusted-ca', adminTrustedCaRoutes);
 app.use('/api/org-chart', orgChartRoutes);
 app.use('/api/hr-profile', employeeProfileRoutes);
 app.use('/api/admin', adminCatalogRoutes);
@@ -413,9 +426,43 @@ async function start() {
     await getPool();
     console.log('⏳ Đang kiểm tra / khởi tạo dữ liệu mặc định...');
     await seedDefaults();
+
+    // Nạp lại danh sách CA tin cậy (gọi RA NGOÀI, xem trustedCaManager.js) lúc khởi động — dựng lại
+    // file bundle cho NODE_EXTRA_CA_CERTS (phòng trường hợp file bị mất giữa 2 lần khởi động, VD clone
+    // code mới) + thử áp dụng ngay cho tiến trình này nếu Node hỗ trợ (best-effort, không bắt buộc).
+    try {
+      trustedCaManager.syncOnStartup();
+    } catch (err) {
+      console.error('⚠️ Không nạp lại được danh sách CA tin cậy lúc khởi động (bỏ qua, không ảnh hưởng HTTP/HTTPS):', err.message);
+    }
+
     app.listen(PORT, () => {
       console.log(`✅ VPDT server đang chạy tại http://localhost:${PORT}`);
     });
+
+    // HTTPS server TUỲ CHỌN — THÊM VÀO (không thay) HTTP listener ở trên, chỉ khởi động khi admin đã
+    // tải chứng chỉ hợp lệ qua Hệ Thống > Quản Trị > Chứng Chỉ TLS (routes/adminTlsCert.js) VÀ đặt biến
+    // môi trường HTTPS_PORT (xem .env.example) — dành cho track triển khai PM2-only muốn tự phục vụ
+    // HTTPS không cần Nginx (xem deploy/Huong-dan-trien-khai-PM2.md mục HTTPS tự phục vụ). Mô hình "áp
+    // dụng bằng restart thủ công": route upload CHỈ ghi file, chứng chỉ mới chỉ có hiệu lực sau lần
+    // restart kế tiếp (đúng chỗ đọc file này). Lỗi chứng chỉ (hỏng/lệch key) CHỈ log, KHÔNG được làm
+    // crash app — HTTP ở trên vẫn phải chạy được dù HTTPS cấu hình sai.
+    const httpsPort = process.env.HTTPS_PORT ? parseInt(process.env.HTTPS_PORT, 10) : null;
+    if (httpsPort) {
+      try {
+        const credentials = tlsCertManager.loadHttpsCredentials();
+        if (credentials) {
+          https.createServer(credentials, app).listen(httpsPort, () => {
+            tlsCertManager.setHttpsStatus(true, httpsPort);
+            console.log(`✅ VPDT server đang chạy HTTPS tại https://localhost:${httpsPort}`);
+          });
+        } else {
+          console.log(`ℹ️ HTTPS_PORT=${httpsPort} đã đặt nhưng chưa có chứng chỉ TLS nào — bỏ qua HTTPS, chỉ chạy HTTP. Tải chứng chỉ qua Hệ Thống > Quản Trị > Chứng Chỉ TLS rồi "pm2 restart" để áp dụng.`);
+        }
+      } catch (err) {
+        console.error('⛔ Không khởi động được HTTPS server (chứng chỉ lỗi/lệch key?), chỉ chạy HTTP:', err.message);
+      }
+    }
 
     // Nhắc hết hạn hợp đồng: kiểm tra ngay lúc khởi động, sau đó lặp lại mỗi 24h.
     // Không phụ thuộc việc có ai mở trình duyệt hay không.
@@ -426,6 +473,11 @@ async function start() {
     // gửi trùng email nhắc hạn N lần (N = số tiến trình).
     const isSchedulerInstance = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0';
     if (isSchedulerInstance) {
+      // Di trú quyền Xem cũ submissionView/contractView -> deptViewScopeConfig.extraViewers: CHẠY Ở ĐÂY
+      // (server, lúc khởi động) — KHÔNG lặp lại định kỳ như các job nhắc hạn khác (migration tự idempotent,
+      // chạy 1 lần/lần khởi động là đủ, dữ liệu users/perms hiếm khi đổi liên tục giữa các lần khởi động) —
+      // xem chú thích đầy đủ 2 lỗi đã vá ở jobs/legacyViewScopeMigration.js.
+      migrateLegacySubmissionContractViewers();
       checkContractExpiryReminders();
       setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
       checkLicenseExpiryReminders();

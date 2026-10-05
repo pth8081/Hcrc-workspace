@@ -254,6 +254,9 @@ async function main() {
   await page.evaluate(() => document.getElementById('btnMhSubItPrice')?.click());
   await page.waitForTimeout(80);
   await page.evaluate((fn) => window.ensureFnReady ? ensureFnReady(fn) : null, 'previewMhItPriceWorkflow');
+  // Pattern "thu gọn form nhập" (10/2026): #mhItPriceCreateForm (chứa mhItPricePreviewWfBtn) giờ ẩn
+  // mặc định — mở ra trước khi bấm nút bên trong nó.
+  await page.evaluate(() => { if (typeof openMhItPriceCreateForm === 'function') openMhItPriceCreateForm(); });
   await page.evaluate(() => document.getElementById('mhItPricePreviewWfBtn')?.click());
   await page.waitForTimeout(400);
   modal = await readModal();

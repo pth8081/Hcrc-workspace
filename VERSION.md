@@ -1,8 +1,504 @@
 # Phiên bản hiện tại
 
-**24.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.3 (2026-10-04): Chứng Chỉ Tin Cậy (CA Ngoài) — khi server GỌI RA hệ thống khác qua HTTPS
+
+Câu hỏi tiếp theo của người dùng sau khi merge v25.2: "khi PM2 call API sang hệ thống khác có sử dụng
+HTTPS thì cần làm gì để nhận diện được, và cho 1 giao diện để xử lý". Đây là CHIỀU NGƯỢC LẠI với v25.2
+(server tự phục vụ HTTPS, hướng VÀO) — ở đây server tự làm **client** gọi ra ngoài (dsmart16, DSmart
+API, EWS...). Đã xác nhận với người dùng qua `AskUserQuestion`: hiện tại dsmart16/DSmart API đều dùng
+CA công khai (không cần vá gì), nhưng người dùng muốn 1 màn **"Chứng Chỉ Tin Cậy"** chung, upload CA
+nội bộ áp dụng cho MỌI lượt gọi ra sau này (không chỉ 2 tích hợp hiện tại).
+
+**Xác minh cơ chế thật trước khi code** (dựng 1 CA nội bộ giả lập + server HTTPS ký bằng CA đó bằng
+`openssl`, spawn tiến trình Node con thật để test — không chỉ đọc tài liệu Node):
+- `NODE_EXTRA_CA_CERTS` (biến môi trường Node có sẵn, không phải tính năng tự viết) áp dụng tự động
+  cho **CẢ `fetch()` lẫn module `https`** — xác nhận cả 2 đều thất bại khi KHÔNG có biến này, cả 2 đều
+  thành công khi CÓ — nghĩa là **KHÔNG cần sửa 1 dòng code nào** ở `lib/ewsMailer.js`/`lib/
+  dsmartApiClient.js`/`jobs/operationOrderApiSync.js`.
+- Biến này CHỈ đọc được lúc Node KHỞI ĐỘNG — set `process.env.NODE_EXTRA_CA_CERTS` từ code ĐANG CHẠY
+  KHÔNG có tác dụng (xác nhận thật) — **không đặt được qua `server/.env`** (dotenv set quá trễ), phải
+  là biến môi trường thật của tiến trình PM2 lúc khởi chạy (`ecosystem.config.js`).
+- `tls.setDefaultCACertificates()` (Node ≥22.9, feature-detect) cho phép áp dụng NGAY tại runtime cho
+  tiến trình gọi nó — dùng làm lớp "best-effort" bổ sung, KHÔNG thay thế restart (PM2 cluster mode
+  chạy nhiều tiến trình, chỉ tiến trình gọi hàm này được áp dụng ngay).
+- File trỏ KHÔNG TỒN TẠI/RỖNG chỉ in 1 dòng cảnh báo, KHÔNG crash — an toàn giữ nguyên cấu hình dù
+  chưa từng dùng tính năng này.
+
+- **`server/lib/trustedCaManager.js`** (MỚI): lưu danh sách CA ở `server/certs/trusted-ca-registry.json`
+  (TỰ QUẢN LÝ qua file, KHÔNG qua `lib/appData.js`/`dbo.AppData` — `GET /api/data` bulk đọc TOÀN BỘ
+  bảng AppData không qua allowlist nào, 1 key mới sẽ tự lộ cho MỌI người dùng nếu không tự thêm logic
+  ẩn riêng, giống lý do `lib/tlsCertManager.js` cũng không dùng AppData). Validate bằng
+  `crypto.X509Certificate` — CHỈ chấp nhận chứng chỉ CA thật (Basic Constraints CA:TRUE), từ chối rõ
+  ràng nếu tải nhầm 1 chứng chỉ SERVER/LEAF. Hỗ trợ tải 1 file chứa NHIỀU CA ghép (tự tách). Dựng lại
+  `server/certs/trusted-ca-bundle.pem` sau mỗi lần thêm/xoá.
+- **`server/routes/adminTrustedCa.js`** (MỚI, `/api/admin/trusted-ca`): admin-only, multer
+  memoryStorage, dùng CHUNG `lib/uploadRateLimiter.js`. `GET /` (danh sách + chẩn đoán xem tiến trình
+  hiện tại đã cấu hình đúng `NODE_EXTRA_CA_CERTS` chưa), `POST /` (thêm), `DELETE /:id` (xoá). Ghi nhật
+  ký hệ thống (module `SYSTEM`) mọi lượt thêm/xoá.
+- **`server/server.js`**: nạp lại danh sách CA lúc khởi động (dựng lại file bundle + thử áp dụng ngay
+  nếu Node hỗ trợ), bọc try/catch không crash app.
+- **`server/ecosystem.config.js`**: thêm `NODE_EXTRA_CA_CERTS` vào khối `env`, trỏ cố định tới
+  `certs/trusted-ca-bundle.pem` — an toàn giữ nguyên dù chưa từng thêm CA nào.
+- **UI**: tab con mới **"🔗 Chứng Chỉ Tin Cậy (CA Ngoài)"** trong Hệ Thống → ⚙️ Quản Trị (cạnh "🔒
+  Chứng Chỉ TLS/HTTPS") — bảng danh sách CA đã thêm, form tải lên, dòng chẩn đoán trạng thái
+  `NODE_EXTRA_CA_CERTS`. Entry `sysTrustedCa` mới trong `SYSTEM_DOCS`/`SYSTEM_NAV`.
+
+Xác minh: `tests/test-trusted-ca.js` (MỚI, 22/22 kịch bản) — gồm kịch bản TRỌNG YẾU spawn tiến trình
+Node con thật, xác nhận request tới server HTTPS dùng CA nội bộ THẤT BẠI khi không có
+`NODE_EXTRA_CA_CERTS` và THÀNH CÔNG (cả `fetch()` và `https`) khi có, cộng validate/admin-gate/CRUD.
+`tests/test-nghiepvu.js` (160/160) không regression. CSP self-check sạch.
+
+**Deploy-impact**: KHÔNG có biến `.env` mới (khác `HTTPS_PORT` ở v25.2, biến `NODE_EXTRA_CA_CERTS` đặt
+trong `ecosystem.config.js`, không phải `.env`). Không thêm dependency, không đổi `schema.sql`. Chỉ
+cần dùng tính năng khi CÓ hệ thống ngoài dùng CA nội bộ — nếu dùng
+`pm2 start server.js` trực tiếp (không qua `ecosystem.config.js`), cần đổi sang
+`pm2 start ecosystem.config.js --env production` để biến môi trường có tác dụng.
+
+## v25.2 (2026-10-04): Tải chứng chỉ TLS/HTTPS qua web — server tự phục vụ HTTPS không cần Nginx
+
+Yêu cầu người dùng: team IT cần tự tải private key/certificate trực tiếp từ giao diện web cho server
+chạy PM2 (không có Nginx đứng trước), để bật được HTTPS mà không cần SSH/copy file tay. Đã làm rõ 3
+quyết định kiến trúc trước khi triển khai (qua `AskUserQuestion`): (1) Node tự chạy HTTPS (KHÔNG qua
+Nginx) — màn tải chứng chỉ chỉ chuẩn bị file, server tự khởi động listener; (2) áp dụng bằng **restart
+thủ công** (`pm2 restart`), không hot-reload; (3) cổng HTTPS cấu hình qua `.env` (`HTTPS_PORT`), KHÔNG
+ép cổng 443 (tránh cần quyền root/setcap).
+
+- **`server/lib/tlsCertManager.js`** (MỚI): lưu chứng chỉ ở 3 tên file CỐ ĐỊNH trong `server/certs/`
+  (bỏ qua tên file người dùng tải lên, chống path traversal) — `tls-key.pem` (quyền 0600), `tls-cert.pem`
+  + `tls-ca.pem` tuỳ chọn (0644). Validate bằng `tls.createSecureContext()` THẬT (chính cơ chế Node dùng
+  để khởi động HTTPS — khớp/lệch key-cert hay PEM hỏng bị chặn ngay, không cần tự viết parser). Dùng
+  `crypto.X509Certificate` để lấy metadata AN TOÀN (Subject/Issuer/hạn dùng) hiển thị UI — KHÔNG BAO GIỜ
+  trả lại nội dung private key ở bất kỳ response/log nào (write-only, cùng nguyên tắc mật khẩu SMTP/
+  Graph API/EWS).
+- **`server/routes/adminTlsCert.js`** (MỚI, `/api/admin/tls-cert`): admin-only (`perms.admin`), dùng
+  CHUNG `lib/uploadRateLimiter.js` (tránh lặp lại lỗi "mỗi route 1 rate-limiter riêng" đã vá trước đó).
+  `multer.memoryStorage()` (PEM chỉ vài KB, không ghi file tạm ra đĩa). `GET /status` (metadata + trạng
+  thái HTTPS listener thật), `POST /` (tải lên, validate, lưu), `DELETE /` (xoá, cần restart để có hiệu
+  lực). Mọi hành động ghi `insertSystemLog()` (module `SYSTEM`) KHÔNG kèm nội dung PEM.
+- **`server/server.js`**: thêm listener `https.createServer()` TUỲ CHỌN, khởi động THÊM VÀO (không thay)
+  `app.listen(PORT)` HTTP sẵn có — chỉ bật khi có `HTTPS_PORT` trong `.env` VÀ có chứng chỉ hợp lệ trên
+  đĩa. Lỗi chứng chỉ (hỏng/lệch key) CHỈ log, KHÔNG làm crash app — HTTP luôn chạy được dù HTTPS cấu hình
+  sai hoặc chưa cấu hình.
+- **UI**: thêm tab con **"🔒 Chứng Chỉ TLS/HTTPS"** trong Hệ Thống → ⚙️ Quản Trị (`public/fragments/
+  systemSection.html` + `public/js/module-hethong-tabs.js`) — 3 ô chọn file (Private Key/Certificate/CA
+  Chain), nút tải lên, hiển thị trạng thái hiện tại (đã có cert chưa, HTTPS đang chạy thật hay chưa
+  restart), nút xoá chứng chỉ.
+- **`server/.env.example`**: thêm `HTTPS_PORT` (tuỳ chọn). **`server/.gitignore`**: thêm `certs/*`
+  (giữ `.gitkeep`) — TUYỆT ĐỐI không để private key lọt vào git.
+- **Nghiệp Vụ**: thêm entry `sysTlsCert` vào `SYSTEM_DOCS`/`SYSTEM_NAV` (`module-nghiepvu.js`).
+
+Xác minh: `tests/test-tls-cert-upload.js` (MỚI, 16/16 kịch bản) — sinh chứng chỉ THẬT bằng `openssl` lúc
+chạy test (1 cặp key/cert khớp, 1 cặp LỆCH từ 2 lần sinh độc lập), xác nhận `tls.createSecureContext()`
+chặn thật khi lệch key/cert hoặc PEM rác, round-trip ghi/đọc file + quyền 0600, admin-gate 403 cho non-
+admin ở cả 3 route, response/nhật ký hệ thống KHÔNG BAO GIỜ chứa chuỗi "PRIVATE KEY". `tests/
+test-nghiepvu.js` (157/157), `test-nghiepvu-csp.js` (6/6), `test-nghiepvu-click.js` (9/9) không
+regression. CSP self-check (grep `on[a-z]+=`/` style=`/`javascript:`/`eval(`) sạch trên toàn bộ file
+mới/sửa.
+
+**Deploy-impact**: biến `.env` mới `HTTPS_PORT` — TUỲ CHỌN, để trống thì hành vi KHÔNG đổi (chỉ chạy HTTP
+như hiện tại). Cần `npm install` KHÔNG (không thêm dependency mới — chỉ dùng module lõi `https`/`tls`/
+`crypto`). Không cần chạy lại `schema.sql`. Chỉ áp dụng cho track `Huong-dan-trien-khai-PM2.md` (PM2
+không Nginx) — track PM2+Nginx không cần dùng tính năng này (Nginx đã làm lớp HTTPS, tránh chồng 2 lớp
+TLS). Sau khi tải chứng chỉ qua UI, PHẢI `pm2 restart` để có hiệu lực (không tự áp dụng ngay).
+
+## v25.1 (2026-10-04): Vá lỗ hổng NGHIÊM TRỌNG — EWS không gửi được tới Exchange on-premise dùng chứng chỉ tự ký
+
+Người dùng xác nhận ngay sau khi v25.0 merge: máy chủ Exchange thật của họ là **ON-PREMISE** (không phải
+Exchange Online) và dùng **chứng chỉ TLS TỰ KÝ** (self-signed, giống hệt Postfix nội bộ của họ, chưa có
+CA công cộng cấp) — yêu cầu kiểm tra ngay xem tính năng EWS vừa thêm có đáp ứng được không.
+
+**Phát hiện lỗ hổng thật qua kiểm tra chủ động** (dựng 1 máy chủ HTTPS cục bộ với chứng chỉ tự ký thật
+bằng `openssl`, test request thật — không chỉ suy luận lý thuyết): bản v25.0 dùng thẳng `fetch()` toàn
+cục (Node 18+) để POST SOAP request tới EWS endpoint — `fetch()` LUÔN kiểm tra chứng chỉ TLS hợp lệ và
+**KHÔNG có cách nào tắt việc kiểm tra này qua tham số chuẩn** (không có `rejectUnauthorized` như module
+`https`; muốn dùng dispatcher tuỳ chỉnh phải thêm dependency `undici` ngoài). Hệ quả: với 1 EWS endpoint
+on-premise dùng chứng chỉ tự ký — ĐÚNG tình huống thật của người dùng — **mọi lượt gửi EWS LUÔN thất bại
+ngay ở tầng TLS** ("self-signed certificate"/"unable to verify the first certificate") dù EWS URL/tài
+khoản/mật khẩu đều đúng, khác hẳn SMTP (đã có sẵn ô "Chấp nhận chứng chỉ TLS tự ký" từ trước) và Graph API
+(luôn gọi endpoint công cộng Microsoft, không gặp vấn đề này).
+
+- `server/lib/ewsMailer.js`: đổi hẳn sang dùng module `https` thuần (không thêm dependency, Node đã có
+  sẵn) thay cho `fetch()` toàn cục — thêm tham số `allowSelfSigned`, đặt `rejectUnauthorized: false` khi
+  bật. Mặc định vẫn kiểm tra chứng chỉ bình thường (an toàn hơn).
+- `server/lib/mailer.js`: `resolveEwsOption()` đọc thêm `emailConfig.ewsAllowSelfSigned`, truyền
+  `allowSelfSigned` xuyên suốt `sendMail()` → `sendMailViaEws()`.
+- `routes/email.js` `/test`: nhận thêm `ewsAllowSelfSigned` từ body, truyền vào `ews.allowSelfSigned`.
+- **UI (Cấu Hình Email)**: thêm ô **"Chấp nhận chứng chỉ TLS tự ký"** RIÊNG trong khối "Cấu Hình Exchange
+  Web Services (EWS)" (khác hẳn ô cùng tên của SMTP — 2 khối cấu hình hoàn toàn độc lập, không chia sẻ
+  field, đúng kiến trúc đã có của hệ thống).
+
+Xác minh: viết lại TOÀN BỘ `tests/test-ews-mailer.js` để dựng 1 máy chủ HTTPS THẬT với chứng chỉ tự ký
+(sinh bằng `openssl` lúc chạy test, KHÔNG mock `fetch()` nữa vì code không còn dùng fetch) — 13/13 kịch
+bản, gồm 2 kịch bản TRỌNG YẾU chứng minh lỗ hổng có thật và đã được vá: (1) KHÔNG bật allowSelfSigned ->
+request thất bại THẬT ở tầng TLS với đúng lỗi "self-signed certificate" (không phải giả định), (2) CÓ bật
+allowSelfSigned -> gửi thành công tới CÙNG 1 máy chủ tự ký đó. `tests/test-ews-gateway-preset-ui.js` mở
+rộng lên 8/8 kịch bản (thêm toggle checkbox + payload lưu/gửi thử/nạp lại đều đúng `ewsAllowSelfSigned`).
+CSP full-audit 3/3 + deep-interaction 19/19 + approval-email-config 33/33 + admin-gate 4/4 không
+regression (đối chiếu baseline trước thay đổi, các lỗi tiền tồn ở vài test job khác giống hệt trước/sau).
+
+## v25.0 (2026-10-04): Exchange (EWS) — phương thức gửi email thứ 3
+
+Người dùng làm rõ tiếp yêu cầu: "AWS xác thực bằng mailbox sử dụng HTTPS, không phải port 587" — sau khi
+được hỏi lại qua `AskUserQuestion`, xác nhận ý muốn là **EWS (Exchange Web Services)**, không phải AWS SES
+hay AWS WorkMail qua SMTP. Thêm phương thức gửi THỨ 3 hoàn toàn độc lập với SMTP lẫn Graph API: EWS — cũng
+"access mailbox trực tiếp" qua HTTPS như Graph API, nhưng xác thực TRỰC TIẾP bằng tài khoản/mật khẩu của
+chính mailbox (HTTP Basic Auth), KHÔNG cần đăng ký Azure AD App.
+
+- `server/lib/ewsMailer.js` (MỚI): dựng SOAP XML `CreateItem` (MessageDisposition="SendAndSaveCopy") rồi
+  POST qua HTTPS tới EWS endpoint, xác thực bằng header `Authorization: Basic base64(user:pass)` — dùng
+  `fetch`/`Buffer` có sẵn từ Node 18+, không thêm dependency. Gửi riêng từng người nhận (khớp đúng ngữ
+  nghĩa sent/failed của SMTP/Graph API). **Gotcha đã xử lý đúng từ đầu**: EWS trả HTTP 200 NGAY CẢ KHI thao
+  tác thất bại — phải tự parse `<m:ResponseCode>` trong SOAP response, không được coi `res.ok` là đã gửi
+  thành công; lỗi thật lấy từ `<m:MessageText>`/`<faultstring>`.
+- `server/lib/mailer.js`: `sendMail()` thêm tham số `ews` (optional) — rẽ nhánh hẳn sang EWS khi
+  `ews.enabled`, đặt NGAY SAU nhánh `graph?.enabled`, không đụng gì luồng SMTP/Graph API đang chạy. Thêm
+  `resolveEwsOption(emailConfig)` DÙNG CHUNG cho mọi nơi gọi `sendMail()` (giải mã `ewsPassEnc`, chỉ bật
+  khi `smtpGatewayType === 'EXCHANGE_EWS'`) — nối dây vào CẢ 12 điểm gọi `sendMail()` (routes/email.js x2,
+  routes/auth.js x2, 9 jobs) đúng khuôn đã dùng khi thêm Graph API ở v24.99.
+- `routes/data.js`: `prepareEmailConfigForSave()` thêm xử lý `ewsPassPlain` → mã hoá thành `ewsPassEnc`
+  (write-only, cùng khuôn `smtpPassPlain`/`graphClientSecretPlain`). `sanitizeEmailConfig()` lọc
+  `ewsPassEnc` khỏi mọi response đọc, chỉ trả `hasEwsAuth`.
+- `routes/email.js` `/test`: nhận thêm `sendMethod: 'EWS'` + 3 field (`ewsUrl`/`ewsMailboxUser`/
+  `ewsMailboxPass`) — áp dụng đúng cơ chế an toàn "để trống mật khẩu = dùng giá trị đã lưu, CHỈ hợp lệ nếu
+  vẫn đúng EWS URL/Tài khoản đã lưu" như mật khẩu SMTP/Client Secret Graph API.
+- **UI (Cấu Hình Email)**: thêm nút preset thứ 6 **"Exchange (EWS) — mailbox qua HTTPS, AWS WorkMail..."**
+  — chọn EWS ẩn hẳn khối SMTP lẫn khối Graph API, hiện khối riêng "Cấu Hình Exchange Web Services (EWS)"
+  (EWS URL/Tài khoản Mailbox/Mật khẩu Mailbox) kèm ghi chú AWS WorkMail tương thích + Microsoft đang dần
+  ngừng hỗ trợ EWS cho Exchange Online (~hết 2026, không ảnh hưởng on-premise/AWS WorkMail). 3 lựa chọn
+  Exchange (SMTP/Graph API/EWS) tồn tại song song, không thay thế nhau.
+
+Xác minh: unit test backend 10/10 kịch bản (mock `global.fetch`, gồm gửi thành công, HTTP 401, SOAP lỗi dù
+HTTP 200, nhiều người nhận 1 lỗi, `resolveEwsOption()` giải mã đúng/dữ liệu hỏng, nhánh `sendMail()` thiếu
+cấu hình → simulated) + Playwright UI 7/7 kịch bản (ẩn/hiện đúng khối khi bấm/bỏ preset, validate thiếu EWS
+URL/Mailbox, payload lưu/gửi thử đúng field, không lẫn field SMTP/Graph API) + CSP full-audit 3/3 + CSP deep
+-interaction 19/19 + approval-email-config 33/33 + admin-gate 4/4 không regression (đối chiếu trực tiếp với
+HEAD trước thay đổi — các lỗi tiền tồn ở `test-admin-totp.js`/`test-it-approval-deadline-reminder*.js`/
+`test-payment-deadline-reminder.js`/`test-report-period-deadline-reminder.js`/`test-license-expiry-reminder
+-family.js`/`test-it-reminder-lost-update.js` xác nhận GIỐNG NHAU y hệt trước/sau, không phải do EWS gây
+ra).
+
+## v24.99 (2026-10-04): Exchange Online (Microsoft Graph API) — phương thức gửi email thứ 2
+
+Người dùng làm rõ yêu cầu: với Exchange Online, muốn cơ chế "access mailbox trực tiếp" thay vì SMTP AUTH
+port 587 (Microsoft đang hạn chế/ngừng dần Basic Auth SMTP AUTH ở nhiều tenant), nhưng vẫn phải GIỮ LẠI
+lựa chọn SMTP port 587 làm 1 phương thức riêng (không thay thế). Thêm phương thức gửi THỨ 2 hoàn toàn
+độc lập với SMTP: Microsoft Graph API (OAuth2 app-only, client-credentials flow).
+
+- `server/lib/graphMailer.js` (MỚI): lấy access token từ Azure AD (`login.microsoftonline.com/.../oauth2/
+  v2.0/token`) rồi gọi thẳng `POST /v1.0/users/{mailbox}/sendMail` của Microsoft Graph — dùng `fetch` có
+  sẵn từ Node 18+, không thêm dependency. Gửi riêng từng người nhận (khớp đúng ngữ nghĩa sent/failed của
+  SMTP), trả lỗi thật (VD "AADSTS7000215: Invalid client secret", "Access is denied") để "Gửi Thử" hiện
+  đúng nguyên nhân.
+- `server/lib/mailer.js`: `sendMail()` thêm tham số `graph` (optional) — rẽ nhánh hẳn sang Graph API khi
+  `graph.enabled`, không đụng gì luồng SMTP đang chạy. Thêm `resolveGraphOption(emailConfig)` DÙNG CHUNG
+  cho mọi nơi gọi `sendMail()` (giải mã `graphClientSecretEnc`, chỉ bật khi `smtpGatewayType ===
+  'EXCHANGE_GRAPH'`) — nối dây vào CẢ 12 điểm gọi `sendMail()` trong hệ thống (routes/email.js x2,
+  routes/auth.js x2 — OTP phê duyệt + cảnh báo đổi TOTP, và 9 jobs nhắc hạn/cảnh báo định kỳ) để mọi email
+  hệ thống (không riêng "Gửi Thử") đều tôn trọng đúng phương thức gửi admin đã chọn.
+- `routes/data.js`: `prepareEmailConfigForSave()` thêm xử lý `graphClientSecretPlain` → mã hoá thành
+  `graphClientSecretEnc` (write-only, cùng khuôn `smtpPassPlain`/`smtpPassEnc`). `sanitizeEmailConfig()`
+  lọc `graphClientSecretEnc` khỏi mọi response đọc, chỉ trả `hasGraphAuth` (có/không, không lộ giá trị).
+- `routes/email.js` `/test`: nhận thêm `sendMethod: 'GRAPH_API'` + 4 field Graph — áp dụng đúng cơ chế an
+  toàn "để trống Client Secret = dùng giá trị đã lưu, CHỈ hợp lệ nếu vẫn đúng Tenant/Client ID/Mailbox đã
+  lưu" như mật khẩu SMTP.
+- **UI (Cấu Hình Email)**: thêm nút preset thứ 5 **"Exchange Online (Graph API, access mailbox)"** bên
+  cạnh "Exchange (SMTP, xác thực mailbox)" — chọn Graph API ẩn hẳn khối SMTP (Host/Port/Mã hoá/Xác thực,
+  class `smtp-only-field`/`smtp-only-block`), hiện khối riêng "Cấu Hình Microsoft Graph API" (Tenant ID/
+  Client ID/Client Secret/Mailbox Người Gửi) kèm hướng dẫn đăng ký Azure AD App + cấp quyền `Mail.Send`.
+  2 lựa chọn Exchange tồn tại song song, không thay thế nhau.
+
+Xác minh: unit test backend 11/11 kịch bản (mock `global.fetch`, gồm gửi thành công, sai Client Secret,
+thiếu quyền Mail.Send, thiếu cấu hình, `resolveGraphOption()` giải mã đúng) + Playwright UI 5/5 kịch bản
+(ẩn/hiện đúng khối, giữ 2 lựa chọn Exchange độc lập, validate thiếu Tenant ID, payload lưu/test đúng) + 3
+bộ test Cấu Hình Email + 2 bộ verify v24.97/v24.98 không regression. Demo ảnh 4 màn hình (Postfix/Exchange
+SMTP/Gmail/Exchange Online Graph API) tại `server/demo-screenshots/email-gateway-presets/`. Không cần đổi
+`schema.sql`/`.env.example` (field Graph nằm trong `DB.emailConfig`, AppData JSON có sẵn, không thêm
+dependency npm nào) — chỉ cần copy code + `pm2 restart`.
+
+## v24.98 (2026-10-04): Loại Email Gateway (preset Postfix/Exchange/Gmail/Tuỳ Chỉnh)
+
+Người dùng có cả Postfix nội bộ (không cần xác thực) VÀ 1 hệ thống Exchange yêu cầu xác thực trực tiếp
+vào mailbox, và muốn thêm cả Gmail — yêu cầu "tuỳ chọn được các loại email gateway". Thêm 4 nút preset
+ngay đầu form Cấu Hình Email (`cfgSmtpGatewayType`, lưu trong `DB.emailConfig`), tự điền gợi ý đúng
+Host/Port/Mã Hoá/Yêu Cầu Xác Thực — hệ thống vẫn chỉ gửi qua 1 cấu hình SMTP duy nhất tại 1 thời điểm
+(nodemailer vốn gateway-agnostic, không cần đổi gì ở `lib/mailer.js`), 4 nút chỉ giúp điền nhanh đúng
+chuẩn, tránh lặp lại lỗi "Port 465 + STARTTLS" đã vá ở v24.97:
+
+- **Postfix**: relay nội bộ theo IP nguồn, preset Port 465/SSL, KHÔNG ép bật xác thực (admin tự quyết).
+- **Exchange**: LUÔN cần xác thực trực tiếp vào mailbox (SMTP AUTH) — preset Port 587/STARTTLS, ép bật
+  + khoá cứng ô "Yêu cầu xác thực". Giải đáp thắc mắc người dùng "đang không gửi trực tiếp qua port 25":
+  port 25 trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP, không áp dụng xác
+  thực tài khoản ở port này — phải dùng port 587 (submission có xác thực).
+- **Gmail**: LUÔN cần xác thực — preset Host `smtp.gmail.com` + Port 465/SSL, ép bật + khoá xác thực.
+  Ghi chú rõ cần bật 2FA + tạo "Mật khẩu ứng dụng" (App Password 16 ký tự) vì Google đã chặn mật khẩu
+  Gmail thường qua SMTP từ 2022.
+- **Khác/Tuỳ Chỉnh**: không áp đặt gì, mở khoá lại ô xác thực nếu trước đó ở Exchange/Gmail.
+
+Bấm nút preset CHỈ áp dụng gợi ý khi admin chủ động bấm — khi tải lại cấu hình đã lưu, chỉ đồng bộ giao
+diện (nút đang chọn, khoá/mở ô xác thực) theo đúng loại đã lưu, KHÔNG ghi đè Host/Port/Mã hoá thật.
+
+Xác minh: Playwright 6/6 kịch bản mới (áp dụng preset đúng, khoá/mở xác thực đúng, tải lại không ghi đè
+host đã lưu, payload lưu đúng field) + 3 bộ test Cấu Hình Email hiện có + 2 bộ test v24.97 không regression.
+Demo ảnh 3 màn hình (Postfix/Exchange/Gmail) tại `server/demo-screenshots/email-gateway-presets/`. Không
+cần đổi `schema.sql`/`.env.example` (field `smtpGatewayType` nằm trong `DB.emailConfig`, AppData JSON có
+sẵn) — chỉ cần copy code + `pm2 restart`.
+
+## v24.97 (2026-10-04): Vá tương thích Email SMTP với Postfix port 465 + hiện lỗi thật khi Gửi Thử
+
+Người dùng báo: email gateway Postfix lắng nghe ở port 465 nhưng hệ thống "chưa thể gửi" được, không rõ
+nguyên nhân. Chẩn đoán qua đọc code + mô phỏng 1 máy chủ TLS kiểu Postfix (self-signed cert, `tls` module
+Node) để xác nhận thật bằng sendMail(): phát hiện khung "Cấu Hình Email" trước đây chỉ đồng bộ Port theo
+Mã Hoá **1 CHIỀU** (bấm nút TLS/SSL → tự nhảy Port chuẩn), không có chiều ngược lại — admin gõ thẳng Port
+465 (không bấm nút SSL) vẫn giữ mã hoá mặc định STARTTLS, ra tổ hợp "Port 465 + STARTTLS" sai chuẩn
+SMTPS (465 phải là *implicit TLS* ngay từ đầu, không phải bắt tay thường rồi nâng cấp như STARTTLS), gây
+treo/lỗi bắt tay — đúng triệu chứng người dùng gặp.
+
+- `public/js/core.js`: thêm `syncSmtpEncryptionFromPort()` — đồng bộ chiều còn thiếu (gõ đúng 1 trong 3
+  Port chuẩn 25/587/465 → tự chọn đúng kiểu mã hoá khớp Port đó), gắn qua `data-op-change` trên chính ô
+  Port (`systemSection.html`). Port tuỳ chỉnh khác không bị đụng tới mã hoá đang chọn.
+- Thêm checkbox **"Chấp nhận chứng chỉ TLS tự ký"** (`cfgSmtpAllowSelfSigned`) — máy chủ chẩn đoán cũng
+  lộ ra 1 blocker thứ 2 rất có thể gặp tiếp theo với Postfix tự dựng: chứng chỉ TLS tự ký (không do CA
+  công cộng cấp) bị nodemailer từ chối mặc định, trước đây chỉ bật được qua `.env` (admin không SSH được
+  sẽ không tự bật). Nay bật trực tiếp trên web (`lib/mailer.js` nhận tham số `allowSelfSigned`, OR với
+  `.env SMTP_TLS_REJECT_UNAUTHORIZED` cũ — không mất đường lùi máy chủ cũ).
+- `routes/email.js` (`POST /` và `POST /test`): hiện thẳng lỗi SMTP THẬT (`err.message` từ nodemailer,
+  VD "self signed certificate", "Greeting never received") khi "Gửi Thử" thất bại, thay câu chung "kiểm
+  tra lại log server" — admin không cần SSH vào máy chủ vẫn tự chẩn đoán được.
+- Xác minh qua Playwright (`syncSmtpEncryptionFromPort` 4 kịch bản + checkbox save/load/test-payload 4
+  kịch bản, tổng 8/8 pass) + mô phỏng TLS server thật xác nhận đúng lỗi "Timeout" (STARTTLS sai) chuyển
+  thành bắt tay TLS đúng (SSL đúng) + chạy lại 3 bộ test Cấu Hình Email hiện có (33+4+5 scenario, không
+  regression).
+- Không cần đổi `schema.sql`/`.env.example` mới (field `smtpAllowSelfSigned` nằm trong `DB.emailConfig`,
+  lưu qua AppData JSON hiện có, không phải cột SQL riêng) — chỉ cần copy code + `pm2 restart`.
+
+## v24.93 (2026-10-04): "Thu gọn form nhập" toàn ứng dụng (34 form + 21 thẻ danh mục) + làm mỏng ô Tìm Kiếm & Lọc
+
+Theo yêu cầu người dùng (ảnh chụp màn hình khối "0. Quyền Truy Cập Module" mặc định mở khác 24 khối còn
+lại, sau đó xác nhận triển khai toàn bộ danh sách form "chiếm hết màn hình ngay khi vào tab" đã khảo sát
+trước đó): áp dụng thống nhất pattern "thu gọn form nhập" — form ẩn mặc định (`class="hidden"` tĩnh ở
+HTML), chỉ mở khi bấm nút "+ ..." riêng hoặc khi Sửa 1 hồ sơ có sẵn, có nút "✕ Thu Gọn" để đóng lại — cho
+TOÀN BỘ form nhập dài còn thiếu trong hệ thống, cộng làm mỏng ô "🔍 Tìm Kiếm & Lọc" khi đóng. Mẫu gốc:
+`openMhVendorForm()`/`closeMhVendorForm()` (module-muahang.js). Triển khai qua 7 agent song song (worktree
+riêng) + 1 phần tự làm (form Phân Quyền, giữ lại vì rủi ro/kích thước lớn nhất):
+
+1. **Vận Hành/Mua Hàng/Hỗ Trợ IT** (7 form) — `vanHanhSection.html`, `muaHangSection.html`,
+   `itSupportSection.html` + `module-{itsupport-price,itsupport-renewal,muahang,vanhanh}.js`. Riêng
+   `module-vanhanh.js` dùng registry `OP_CLICK_ACTIONS` riêng (không phải `bindCspDelegation()` chung) —
+   đã thêm entry mới đúng khuôn. Test `test-collapse-operation-forms.js` (10/10).
+2. **Văn Phòng Phẩm (Tạo Kỳ Đăng Ký) + Đồng Phục** (6 form, 3 form Đồng Phục cần thêm wrapper div mới:
+   Cấp Đồng Phục/Báo Hỏng-Hủy/Thu Hồi) — `vppSection.html`, `uniformSection.html` +
+   `module-{vpp,dongphuc}.js`. Test `test-collapse-vpp-uniform-forms.js` (8/8).
+3. **Mua Sắm Văn Phòng/Đăng Ký Xe/Đặt Phòng Họp/Biên Bản Họp** — `officeSection.html`, `carSection.html`,
+   `meetingSection.html`, `minutesSection.html` + `module-{office,dangkyxe,phonghop,bienbanhop}.js` +
+   `core.js` (nhánh render biên bản họp). `openMeetingForm()` phải nối thêm vào 3 điểm mở gián tiếp
+   (`editMeeting()`/`quickBookMeetingSlot()`/`finalizeMeetingSlotSelection()`). Test
+   `test-collapse-car-meeting-minutes-forms.js` (10/10).
+4. **Hợp Đồng/Ngân Sách (Đề Xuất+Phê Duyệt)/Tài Liệu/Giấy Phép/Văn Bản Trình** (6 form) —
+   `contractSection.html`, `budgetSection.html`, `docSection.html`, `licenseSection.html`,
+   `submissionSection.html` + `module-{hopdong,ngansach,tailieu,vanbantrinh}.js`. `submissionSection.html`
+   trước đây chưa có wrapper riêng cho form, đã thêm `#submissionFormWrap`. Test
+   `test-collapse-contract-budget-doc-forms.js` (20/20, bao gồm re-test kịch bản "stuck-fallback" của
+   `setContractSubTab()` đã vá ở v24.91 — vẫn an toàn sau khi thêm pattern thu gọn lên trên).
+5. **Nhịp Sống HCRC (đăng bài) + Lớp Học (Đào Tạo) + Tuyển Dụng** (3 form) — `internalSection.html` +
+   `module-internalcomms-{daotao,nhipsong}.js`. Tiện tay vá luôn 1 lỗi tồn đọng:
+   `openEditRecruitmentJob()` trước đây không tự hiện lại form khi Sửa. Test
+   `test-collapse-internalcomms-training-forms.js` (11/11). **Chủ động KHÔNG làm** (nêu rõ lý do, để lại
+   cho đợt sau — đan xen quá sâu với luồng `renderTrainingLms()` render-lại-khi-CRUD, rủi ro cao hơn lợi
+   ích thu gọn màn hình): `prEntryFormBox`, `trainingDocForm`, `trainingPlanForm`, `trainingCourseForm`,
+   `careerPathForm`, `trainingTestForm`, `onboardingPathForm`, `hrFeedbackForm`, `orgChartBootstrapWrap`.
+6. **Quản Lý Danh Mục — 21 thẻ danh mục** (`#adminSubCatalog`, `systemSection.html`) — đổi từ `<div>` tĩnh
+   sang accordion `<details class="filter-box-details">`/`<summary>` (cùng khuôn ô Tìm Kiếm & Lọc, xem
+   mục bên dưới), mặc định đóng. Test `test-collapse-catalog-accordion.js` (6/6, xác nhận đủ 21/21 thẻ).
+7. **4 form admin nhỏ** — Biểu Mẫu (`#formFieldFormWrap`), Quy Trình & Phê Duyệt
+   (`#workflowTemplateFormWrap`, hàm lưu thật nằm ở `module-itsupport-tier.js` không phải
+   `module-workflow.js`), Áp Dụng Nhanh (`#quickApplyAddForm`), API Xác Thực Ngoài
+   (`#extApiKeyFormWrap`) — `systemSection.html` + `module-{formbuilder-nav,itsupport-tier,workflow,
+   hethong-tabs}.js`. Test `test-collapse-admin-small-forms.js` (8/8).
+8. **Thêm/Sửa Người Dùng & Phân Quyền** (`#userPermFormWrap`, `saveUser`/`savePermGroup`) — form LỚN NHẤT
+   toàn hệ thống (~1035 dòng, khối 0-26 quyền, dùng chung vật lý cho cả Người Dùng và Nhóm Phân Quyền qua
+   `toggleUserPermFormMode()`) — giữ lại tự làm riêng do kích thước/rủi ro. Nút mới "+ Thêm Người Dùng
+   Mới" (`openCreateUserForm()`); "✕ Thu Gọn" (`closeUserPermForm()`, KHÔNG reset dữ liệu — khác "Hủy"/
+   `cancelPermFormEdit()` vốn reset về rỗng). `editUser()`/`startCreateGroup()`/`editPermGroup()` đều tự
+   mở lại form khi Sửa. Test `test-collapse-permform.js` (19/19).
+9. **Làm mỏng ô "🔍 Tìm Kiếm & Lọc" khi đóng** (`app.css`, `.filter-box-details`) — padding dời từ
+   `<details>` sang chỉ `<summary>` (dòng tiêu đề mỏng hơn khi đóng) + phục hồi padding nội dung qua
+   selector `> summary ~ *` khi mở, không đụng `mt-3`/`pt-2` riêng của từng nơi dùng. Áp dụng chung cho cả
+   4 ô Tìm Kiếm & Lọc (Hợp Đồng/Tài Liệu/Giấy Phép/Hỗ Trợ IT) VÀ 21 thẻ danh mục mục 6.
+
+Tổng cộng 8 test mới (92 kịch bản) + full regression toàn bộ test liên quan trực tiếp từng module (không
+chỉ test mới viết) — không phát hiện regression. Agent worktree đều branch từ 1 commit base cũ (9 commit
+sau điểm dispatch), nên mọi merge đều được rà soát tay từng file thay đổi, không chỉ dựa vào auto-merge —
+phát hiện + vá 1 chỗ hổng merge thật (agent "21 thẻ danh mục" thiếu 3 thẻ Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ
+Luật vừa thêm ở v24.89, do nhánh base cũ chưa có) và 1 chỗ trùng số version dự kiến (agent "Hợp Đồng..."
+tự mang theo đúng bản vá stuck-fallback đã có ở HEAD — giữ bản HEAD, gộp đúng 1 dòng code mới của agent).
+
+## v24.92 (2026-10-04): Thu gọn mặc định khối "0. Quyền Truy Cập Module" trong Cây Phân Quyền
+
+Người dùng phát hiện (ảnh chụp màn hình Phân Quyền): trong 25 khối của Cây Phân Quyền (Hệ Thống → Quản
+Trị → Phân Quyền → Thêm/Sửa Người Dùng), 24/25 khối đã mặc định ĐÓNG (`<details class="perm-tree-node">`
+không `open`), riêng khối "🔑 0. Quyền Truy Cập Module" lại có `open` cứng trong HTML nên luôn hiện sẵn —
+không đồng bộ với các khối còn lại. Đã bỏ thuộc tính `open` ở `systemSection.html` (dòng 1266) để khối 0
+cũng đóng mặc định như 24 khối kia; không đổi logic nào khác — `setAllPermTreeNodes()`/`filterPermTree()`
+(module-admin-permtree.js) đã thao tác chung trên mọi `.perm-tree-node` nên không phụ thuộc trạng thái
+mặc định của từng khối, 2 nút "Mở rộng tất cả"/"Thu gọn tất cả" vẫn hoạt động đúng như trước.
+
+Đã chạy `test-perm-tree-expand-collapse.js` (6/6) và `test-muc0-module-access-tree.js` (17/17) — cả 2 bộ
+test trực tiếp liên quan tới cây phân quyền đều pass; đã verify trực quan qua demo Playwright (25/25 khối
+đều `open: false` khi mở lại form Thêm/Sửa Người Dùng lần đầu).
+
+## v24.91 (2026-10-04): Vá 5 phát hiện đợt rà soát chuyên sâu v24.74→v24.90 (3 Cao + 2 Trung bình)
+
+Rà soát chuyên sâu (5 agent song song) toàn bộ thay đổi từ v24.74 đến v24.90 (bao gồm cả đợt mở rộng BAS
+đa pháp nhân/DC/Chiết Khấu Tăng Trưởng ở v24.90), theo yêu cầu người dùng — phát hiện 5 lỗ hổng/lỗi thật,
+đã vá toàn bộ và viết test riêng cho từng bản vá:
+
+1. **[Cao] `setContractSubTab()` (module-hopdong.js) — "stuck-fallback" thứ 14** — cùng lớp lỗi đã vá ở
+   13 hàm `set*SubTab()` khác (v24.77/v24.81): khi CẢ 2 checkbox Mục 0 `contractApproval`/`contractManage`
+   đều bị tắt, code cũ vẫn giữ nguyên sub-tab đang xin mở thay vì trả về `null` — khai thác được vì
+   `canAccessContractModule()` không chặn cả module (chỉ cần `user.dept`). Đổi về `null` khi không còn
+   sibling nào được phép; khi đó ẩn hẳn form + **xoá** (không chỉ ẩn) nội dung bảng/dashboard cũ trong DOM,
+   không gọi `renderContracts()`/`onContractOpModeChange()` (2 hàm này không có nhánh lọc an toàn cho `null`
+   — gọi tiếp sẽ lộ hồ sơ PENDING/DRAFT ở tab lẽ ra đã bị khoá).
+2. **[Cao] `loadBudgetEntriesScoped()` (routes/data.js) chưa wire `deptViewScopeConfig`** — thiếu đúng 2
+   nhánh `canViewBudgetEntry()` (lib/recordViewScope.js) đã có từ trước: quyền `budgetReportView` và
+   "Ma Trận Phạm Vi Xem Theo Phòng Ban" (`extraViewers`/`managerCanView`) — admin cấp quyền xem thêm qua Ma
+   Trận nhưng lớp SQL pre-filter này vẫn chỉ tải đúng Dept, khiến quyền đã cấp vô hiệu. Mirror đúng khuôn
+   `loadBudgetLinesScoped()` (collection chị em, đã vá đúng từ trước).
+3. **[Cao] `allocateFixedAmountByEntity()` (lib/vendorRebate.js) tính sai khi trùng tên pháp nhân** — mảng
+   `allocationEntities` có tên trùng (VD `['BRG','BRG','FUJI']`) khiến `grandTotal` (mẫu số chung) bị cộng
+   dư 1 lần cho entity trùng, làm lệch tỷ trọng phân bổ của các entity KHÁC (tổng vẫn khớp 100%
+   `fixedAmount`, dễ lọt test "tổng có khớp không"). Vá 2 lớp: chặn ngay tại
+   `validateRebateTermPayload()` (báo lỗi rõ "Trùng pháp nhân...") + dedupe phòng thủ trong chính hàm tính
+   (dữ liệu cũ đã lưu trước khi có validate).
+4. **[Trung bình] Migration `deptViewScopeConfig` cũ (v24.83) không dọn dữ liệu sai đã lưu** — bản vá
+   v24.83 chỉ siết điều kiện di trú GOING FORWARD, không re-scan username ĐÃ bị thêm dư thừa vào
+   `extraViewers` từ trước khi có bản vá đó.
+5. **[Trung bình] Migration `submissionView`/`contractView` phụ thuộc thời điểm admin đăng nhập** — di trú
+   ở client (core.js, "Việc D") chỉ lưu lên server khi người đăng nhập là Admin (ghi `deptViewScopeConfig`
+   yêu cầu quyền Admin) — user thường có quyền hợp lệ đăng nhập trước khi có admin nào sẽ không được di
+   trú ở server, nơi `canViewSubmission()`/`canViewContract()` thật sự đọc.
+
+   **Vá #4+#5 cùng lúc**: `jobs/legacyViewScopeMigration.js` mới — chạy Ở SERVER lúc khởi động (không phụ
+   thuộc ai đăng nhập, vá #5), tự reconcile `extraViewers` mỗi lần khởi động: thêm username hợp lệ CÒN
+   THIẾU + gỡ username chỉ khớp ĐÚNG shape bug cũ (`.depts` chỉ trùng đúng phòng ban chính họ) đang nằm dư
+   thừa trong `extraViewers` (vá #4) — KHÔNG đụng tới entry admin tự tay thêm qua Ma Trận UI. Có bước
+   "peek" đọc trước (không khoá) để chỉ ghi khi THẬT SỰ có thay đổi, tránh bump `UpdatedAt` vô ích ở MỌI
+   lần khởi động server (2 seed user `ks_kiemsoat`/`sep_duyet` luôn mang flag legacy vĩnh viễn) — tránh làm
+   admin đang sửa "Ma Trận Phạm Vi Xem Theo Phòng Ban" ở tab khác gặp conflict version oan.
+
+Test mới: `tests/test-legacy-view-scope-migration-job.js` (6 kịch bản), mở rộng
+`tests/test-stuck-subtab-fallback-fix.js` (+1 kịch bản Hợp Đồng),
+`tests/test-budget-entries-scope.js` (+3 kịch bản), `tests/test-vendorrebate-bas-extension-10-2026.js`
+(+2 kịch bản) — toàn bộ PASS. Full regression 398 file: 383 PASS, 15 FAIL — xác nhận cả 15 đều
+pre-existing/môi trường (Playwright timeout UI module khác, thiếu SQL Server, 1 demo Mua Hàng BAS dùng
+giả lập `prompt()` cũ cho luồng đã đổi sang date-input ở việc khác), không liên quan tới 5 bản vá này.
+
+## v24.90 (2026-10-04): Mua Hàng BAS — mở rộng đa pháp nhân/DC/Chiết Khấu Tăng Trưởng + 4 báo cáo mới
+
+Theo file "Điều Khoản Thương Mại/Tính BAS" người dùng cung cấp để đối chiếu nghiệp vụ BAS thực tế —
+phân tích chi tiết + phương án đã được người dùng xác nhận trước khi triển khai (10/2026):
+
+1. **Chiết Khấu Theo Tăng Trưởng (GROWTH_REBATE) nay tính được tự động** — GỠ khỏi
+   `UNSUPPORTED_TERM_TYPES` (trước đây chặn vì chưa xác nhận công thức). Công thức đã xác nhận: so
+   `basisAmount` kỳ này với kỳ **LIỀN TRƯỚC cùng độ dài** (`computePreviousPeriod()`), tra bậc thang kiểu
+   CLIFF theo % tăng trưởng ra rate đã đạt (`findAchievedGrowthRate()`), áp rate đó lên `basisAmount` kỳ
+   này — `lib/vendorRebate.js`, route `POST /terms/:id/calculate` (`routes/purchasing.js`) tự mở rộng
+   khoảng truy vấn purchase để bao trùm cả kỳ liền trước.
+2. **Điều khoản Số Tiền Cố Định (`amountMode=FIXED_LUMP_SUM`)** — mirror các dòng "Phí tạo mã mới", "Thuê
+   mướn..." trong Điều Khoản Thương Mại (không phụ thuộc doanh số, khác hẳn % Bậc Thang mặc định
+   `PERCENT_TIERED`). Có thể **phân bổ theo tỷ trọng thực nhập đa pháp nhân**
+   (`allocationMode=PRORATA_BY_ENTITY`, ≥2 pháp nhân) hoặc **gán nguyên 100% cho 1 pháp nhân**
+   (`FULL_TO_ENTITY`) — mirror cột BF-BR "Tính BAS" (phân bổ BRG/Fuji) trong file người dùng cung cấp.
+3. **Cột mới `Entity`/`IsViaDC`** trên `dbo.VendorPurchaseTransactions` (migration `ALTER TABLE` có
+   `COL_LENGTH` guard, an toàn chạy lại) + 2 `scopeType` mới `ENTITY`/`CHANNEL` trong `matchesScope()`
+   (`lib/purchaseBasisAggregator.js`, CHỈ THÊM nhánh mới — 3 scopeType cũ giữ nguyên) — cho phép giới hạn
+   căn cứ tính của 1 điều khoản theo đúng 1 pháp nhân hoặc theo kênh mua qua Kho Trung Tâm (DC)/trực
+   tiếp, mirror cột riêng "BAS qua DC" trong file Tính BAS.
+4. **Cờ `includedInBas`** trên mỗi điều khoản (mặc định `true`, giữ nguyên hành vi cũ) — phân loại đúng
+   "Tính BAS" / "Không tính vào BAS" như cột Ghi Chú trong Điều Khoản Thương Mại gốc.
+5. **4 báo cáo mới** trong tab Báo Cáo nội bộ của Mua Hàng (`module-muahang.js`, mỗi báo cáo có nút
+   "📊 Xuất Excel" riêng dùng `downloadXlsxFromServer()` chung): Chi Tiết Điều Khoản NCC (bổ sung cột
+   Loại/Phương Thức/Tính BAS?), **Tổng Hợp BAS Theo NCC Theo Kỳ** (cộng dồn Total BAS, tách riêng phần
+   không tính vào BAS), **Đạt Bậc Thang** (mốc đã đạt + còn cách bao nhiêu để lên mốc kế tiếp), **So
+   Sánh Kỳ** (lần tính gần nhất so lần tính ngay trước, mirror ý "2022 vs hiện tại" của file gốc nhưng từ
+   số liệu thật trong hệ thống).
+6. UI tạo/sửa Điều Khoản (`muaHangSection.html`) thêm: checkbox "Tính vào BAS", chọn Phương Thức Tính (ẩn/
+   hiện khối Bậc Thang hoặc khối Số Tiền Cố Định + Phân Bổ Đa Pháp Nhân tương ứng), 2 scopeType mới ở
+   Phạm Vi Áp Dụng, mở lại lựa chọn GROWTH_REBATE (trước đây disabled).
+7. Test mới `tests/test-vendorrebate-bas-extension-10-2026.js` (19 kịch bản thuần, không cần DB) + cập
+   nhật `tests/test-purchasing-unsupported-calcbasis-termtype-periodtype.js` (2 kịch bản đổi từ "phải
+   chặn" sang "phải tính được" do GROWTH_REBATE nay được hỗ trợ) — toàn bộ test hiện có của module Mua
+   Hàng/BAS đã chạy lại, không regression ngoài ý muốn.
+
+Deploy-impact: **CÓ** thay đổi `schema.sql` (2 cột mới `Entity`/`IsViaDC` trên
+`VendorPurchaseTransactions`, migration tự chạy an toàn qua `COL_LENGTH` guard, không cần thao tác thủ
+công nào khác) — không thêm biến `.env`/dependency mới.
+
+## v24.89 (2026-10-04): Cấp Bậc (danh mục) + Lý Do Nghỉ Việc + Kỷ Luật + 7 trường Người Phụ Thuộc
+
+Tiếp nối v24.88 (đã nêu rõ 3 gap chưa làm) — theo yêu cầu người dùng "làm luôn cả 2 phần, Cấp Bậc đã có
+danh mục chưa, nếu chưa thì cho cấu hình":
+
+1. **3 danh mục MỞ mới** (Hệ Thống → Quản Lý Danh Mục, dùng chung registry "danh mục mảng chuỗi phẳng"
+   sẵn có — `SIMPLE_CATALOG_EXCEL_CONFIG`/`SIMPLE_CATALOG_BULK_CONFIG` ở `core.js` + `GENERIC_SIMPLE_
+   CATALOGS` CRUD dùng chung ở `module-admin.js`): **Cấp Bậc** (`jobGrades`), **Lý Do Nghỉ Việc**
+   (`resignationReasons`), **Loại Kỷ Luật** (`disciplinaryTypes`) — `defaults.js`/`routes/data.js`
+   (`ADMIN_ONLY_KEYS`).
+2. **Cấp Bậc**: ô "Cấp Bậc" của Vị Trí (Cơ Cấu Tổ Chức) đổi từ gõ tay hoàn toàn tự do sang gõ-hoặc-chọn
+   (widget `sdd*`, KHÔNG dùng `<datalist>` native) gợi ý từ danh mục trên — vẫn là chuỗi tự do, không ép
+   khớp (`public/index.html` + `module-orgchart.js`: `ocPopulateJobGradeDatalist()`).
+3. **Lý Do Nghỉ Việc**: thêm field MỚI `resignationReason` trên `hrProcesses` OFFBOARDING (gõ-hoặc-chọn
+   từ danh mục), TÁCH khỏi field `reason` tự do có sẵn (đổi nhãn "Ghi Chú Thêm") — `lib/createValidation.js`
+   (trim + cắt 200 ký tự) + `hrLifecycleSection.html`/`module-hrlifecycle.js`.
+4. **Kỷ luật ("Số kỷ luật")**: thêm `disciplinaryActions[]` (Ngày/Loại kỷ luật — gợi ý từ danh mục/Ghi
+   chú) trên `employeeProfiles`, cùng kiến trúc mảng lồng với `dependents[]`/`education[]` (không phải
+   collection SQL riêng) — HR-only (`HR_ONLY_EDITABLE_FIELDS`), thêm vào `SENSITIVE_FIELDS` (opt-in qua
+   2 cấu hình "Trường Xem..." có sẵn, nâng tổng số trường nhạy cảm cấu hình được từ 19 lên 20) — KHÔNG
+   bao giờ hiện ở "Hồ Sơ Của Tôi" (`lib/employeeProfile.js` + UI mới trong `module-hrprofile.js`).
+5. **Người Phụ Thuộc — 7 trường mới** phục vụ khai giảm trừ gia cảnh thuế TNCN (đối chiếu mẫu "DATA
+   NGUOI PHU THUOC"): Quốc tịch, Số CMND/Hộ chiếu, Thời gian tính giảm trừ (Từ tháng/Đến tháng), Tháng
+   cắt giảm trừ, Số tiền giảm trừ, Tháng kê khai — đều tuỳ chọn, validate định dạng tháng (`YYYY-MM`,
+   khớp `<input type="month">`) + số tiền không âm (`lib/employeeProfile.js`: `assertValidDependentMonth()`).
+6. Test mới `tests/test-hr-discipline-jobgrade-resignation.js` (24 kịch bản: validate disciplinaryActions/
+   7 field mới dependents, visibility gating SENSITIVE_FIELDS, resignationReason persistence) — cập nhật
+   số lượng field nhạy cảm (19→20) ở `test-hr-profile.js`/`test-hr-profile-field-visibility.js`. Toàn bộ
+   test liên quan (Hồ Sơ Nhân Sự, Cơ Cấu Tổ Chức, Onboarding/Offboarding, Quản Lý Danh Mục, Nghiệp Vụ)
+   đã chạy lại — PASS, không có regression.
+7. Cập nhật `NGHIEP_VU_DOCS.orgChart/hrLifecycle/hrProfile` (`module-nghiepvu.js`) + mục mới 5f ở
+   `deploy/Huong-dan-nghiep-vu.md`.
+
+Deploy-impact: KHÔNG có thay đổi `schema.sql`/`.env.example`/`package.json` dependencies (chỉ thêm field
+JSON mới trên collection JSON-blob có sẵn + 3 danh mục mảng chuỗi mới trong `AppData`) — chỉ cần copy code
++ `pm2 restart`, không cần thao tác thủ công nào khác.
+
+## v24.88 (2026-10-04): Tính năng mới — Báo Cáo Định Biên Nhân Sự (Nhân Sự → Cơ Cấu Tổ Chức)
+
+Theo yêu cầu người dùng "biết được định biên nhân sự hiện tại, định biên nhân sự cần tuyển" — đã phân
+tích + đề xuất phương án qua doc riêng, demo xong và triển khai theo đúng Phương án A đã đề xuất:
+
+1. **`headcountQuota`** — field MỚI, tuỳ chọn (số nguyên ≥ 0, mặc định trống) trên mỗi node POSITION
+   của Cơ Cấu Tổ Chức (`lib/orgChart.js`) — "Định biên" (số chỗ được duyệt), đặt tay qua modal Sửa Vị
+   Trí hiện có (ô "Định Biên (tuỳ chọn)" mới), không cần field/collection nào khác.
+2. **`lib/headcountReport.js`** (mới) — tính "Thực tế" ĐỘNG (không lưu gì) từ dữ liệu đã có sẵn:
+   `employeeProfiles.positionKey` (đang làm việc/thai sản-nghỉ ốm, theo status ACTIVE/ON_LEAVE),
+   `hrProcesses` OFFBOARDING đang IN_PROGRESS (đang bàn giao nghỉ việc), `users[].secondaryPositions[]`
+   (kiêm nhiệm, hệ số ×0.5) — cộng dồn theo đúng cấp cây (Vị Trí → Phòng Ban → Khối → Công Ty).
+3. **2 route mới** `GET /api/org-chart/versions/:id/headcount-report` (JSON) và
+   `.../headcount-report/export-xlsx` (Excel, reuse `buildGenericWorkbook()`) — `routes/orgChart.js`.
+4. **UI**: nút "📋 Báo Cáo Định Biên Nhân Sự" (màn Cơ Cấu Tổ Chức) mở bảng Định Biên/Thực Tế/Chênh Lệch
+   (kèm breakdown Đang Làm Việc/Bàn Giao Nghỉ Việc/TS-Nghỉ Ốm/Kiêm Nhiệm) + nút Xuất Excel.
+5. Test mới `tests/test-orgchart-headcount-report.js` (12 kịch bản, tính Thực Tế + CRUD quota + route
+   JSON/Excel) + demo `tests/demo-orgchart-headcount.js` — toàn bộ test Cơ Cấu Tổ Chức hiện có (5 file)
+   vẫn PASS. Cập nhật `NGHIEP_VU_DOCS.orgChart` + `deploy/Huong-dan-nghiep-vu.md` mục 4.5.1.
+
+Đã rà soát riêng, CHƯA làm ở đợt này (nêu rõ với người dùng, chờ xác nhận hướng xử lý): báo cáo xuất
+Excel cho các sheet còn lại của mẫu Excel người dùng cung cấp (LIST_CHUCDANH/LIST_BOPHAN đã có catalog
+sẵn sàng xuất; LIST_LYDO_NGHIVIEC + "Số kỷ luật" + phần mở rộng `dependents[]` cho tờ khai thuế TNCN đều
+cần field/tính năng hoàn toàn mới, chưa có dữ liệu nền).
 
 ## v24.87 (2026-10-04): Vá 3 mục mức Thấp (cosmetic) còn lại từ đợt rà soát v24.74→v24.81
 

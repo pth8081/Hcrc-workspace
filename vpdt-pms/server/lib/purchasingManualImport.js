@@ -40,7 +40,12 @@ const TX_COLUMNS = [
   { key: 'categoryCode', header: 'Mã Ngành Hàng', hints: ['ma nganh hang', 'categorycode'], width: 18 },
   { key: 'purchaseDate', header: 'Ngày Mua (YYYY-MM-DD) (*)', hints: ['ngay mua', 'purchasedate'], width: 20 },
   { key: 'amount', header: 'Số Tiền (*)', hints: ['so tien', 'thanh tien', 'amount'], width: 18 },
-  { key: 'isReturn', header: 'Hàng Trả Lại (Có/Không)', hints: ['hang tra lai', 'tra lai', 'isreturn'], width: 20 }
+  { key: 'isReturn', header: 'Hàng Trả Lại (Có/Không)', hints: ['hang tra lai', 'tra lai', 'isreturn'], width: 20 },
+  // entity/isViaDC thêm 10/2026 (mở rộng BAS đa pháp nhân/qua DC) — 2 cột TUỲ CHỌN, để trống vẫn nhập
+  // được bình thường (coi như "không rõ pháp nhân"/"mua trực tiếp", đúng hành vi mặc định ở lib/
+  // vendorPurchaseStore.js).
+  { key: 'entity', header: 'Pháp Nhân (VD BRG/FUJI)', hints: ['phap nhan', 'entity'], width: 18 },
+  { key: 'isViaDC', header: 'Qua Kho Trung Tâm/DC (Có/Không)', hints: ['qua dc', 'qua kho trung tam', 'isviadc'], width: 26 }
 ];
 
 async function buildPurchaseTransactionTemplateWorkbook() {
@@ -50,7 +55,8 @@ async function buildPurchaseTransactionTemplateWorkbook() {
   styleHeaderRow(sheet.getRow(1));
   sheet.addRow({
     vendorCode: 'NCC001 (VD, xoá dòng này trước khi nộp)', storeCode: 'ST001', storeFormat: 'MART',
-    categoryCode: 'FOOD', purchaseDate: '2026-09-01', amount: 15000000, isReturn: 'Không'
+    categoryCode: 'FOOD', purchaseDate: '2026-09-01', amount: 15000000, isReturn: 'Không',
+    entity: 'BRG', isViaDC: 'Không'
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   return wb;
@@ -120,8 +126,11 @@ function parseIsReturn(raw) {
 // bản vá sẽ không còn nhận diện được là trùng nữa (tạo dòng mới thay vì bỏ qua). Chấp nhận được (nhất
 // quán với các lần sửa thuật toán hash/dedup khác trong hệ thống) vì đây là sửa đúng bản chất nghiệp vụ
 // (2 dòng khác Định Dạng PHẢI được coi là 2 giao dịch khác nhau).
+//
+// Thêm 10/2026: cùng lý do trên, bổ sung entity/isViaDC vào hash (2 dòng khác pháp nhân/khác kênh DC là
+// 2 giao dịch khác nhau) — CÙNG LƯU Ý VẬN HÀNH như trên (sourceRefId của dòng MANUAL cũ lệch với dòng mới).
 function buildManualSourceRefId(row) {
-  const canon = [row.vendorCode, row.storeCode, row.storeFormat || '', row.categoryCode || '', row.purchaseDate, row.amount, row.isReturn ? '1' : '0'].join('|');
+  const canon = [row.vendorCode, row.storeCode, row.storeFormat || '', row.categoryCode || '', row.purchaseDate, row.amount, row.isReturn ? '1' : '0', row.entity || '', row.isViaDC ? '1' : '0'].join('|');
   return 'MANUAL-' + crypto.createHash('sha1').update(canon).digest('hex').slice(0, 24);
 }
 
@@ -145,7 +154,7 @@ async function parsePurchaseTransactionImportXlsx(buffer) {
       headerSeen = true;
       colMap = detectColumnMap(cells);
       if (colMap) return true; // dòng đầu là tiêu đề -> bỏ qua
-      colMap = { vendorCode: 0, storeCode: 1, storeFormat: 2, categoryCode: 3, purchaseDate: 4, amount: 5, isReturn: 6 };
+      colMap = { vendorCode: 0, storeCode: 1, storeFormat: 2, categoryCode: 3, purchaseDate: 4, amount: 5, isReturn: 6, entity: 7, isViaDC: 8 };
     }
     const vendorCode = String(cells[colMap.vendorCode] ?? '').trim();
     const storeCode = String(cells[colMap.storeCode] ?? '').trim();
@@ -154,6 +163,10 @@ async function parsePurchaseTransactionImportXlsx(buffer) {
     const purchaseDateRaw = cells[colMap.purchaseDate];
     const amountRaw = cells[colMap.amount];
     const isReturn = parseIsReturn(cells[colMap.isReturn]);
+    // entity/isViaDC thêm 10/2026 — TUỲ CHỌN (colMap.entity/isViaDC có thể undefined nếu file cũ không
+    // có 2 cột này, cells[undefined] -> undefined -> chuỗi rỗng/false, không chặn dòng).
+    const entity = String(cells[colMap.entity] ?? '').trim();
+    const isViaDC = parseIsReturn(cells[colMap.isViaDC]); // tái dùng parser "Có/Không" giống isReturn
     if (!vendorCode && !storeCode && !purchaseDateRaw && !amountRaw) return true; // dòng trắng hoàn toàn -> bỏ qua êm
 
     const purchaseDate = parseDate(purchaseDateRaw);
@@ -171,7 +184,8 @@ async function parsePurchaseTransactionImportXlsx(buffer) {
 
     const row = {
       vendorCode, storeCode, storeFormat: storeFormat || null, categoryCode: categoryCode || null,
-      purchaseDate, amount, isReturn, sourceSystem: 'MANUAL', dataConfidence: 'PROVISIONAL'
+      purchaseDate, amount, isReturn, entity: entity || null, isViaDC,
+      sourceSystem: 'MANUAL', dataConfidence: 'PROVISIONAL'
     };
     row.sourceRefId = buildManualSourceRefId(row);
     rows.push(row);
@@ -199,7 +213,8 @@ async function buildPurchaseTransactionExportWorkbook(transactions, truncated = 
     sheet.addRow({
       vendorCode: t.vendorCode, storeCode: t.storeCode, storeFormat: t.storeFormat || '',
       categoryCode: t.categoryCode || '', purchaseDate: t.purchaseDate, amount: t.amount,
-      isReturn: t.isReturn ? 'Có' : 'Không'
+      isReturn: t.isReturn ? 'Có' : 'Không',
+      entity: t.entity || '', isViaDC: t.isViaDC ? 'Có' : 'Không'
     });
   });
   if (truncated) {

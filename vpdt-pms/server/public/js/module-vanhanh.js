@@ -986,6 +986,17 @@ function resetOperationOrderForm() {
   applyOperationOrderPoLock(null);
 }
 
+// Thu gọn form "Tạo Đơn Hàng Mới" (10/2026, yêu cầu người dùng "thu gọn form nhập") — openOperationOrderForm()
+// LUÔN gọi lại resetOperationOrderForm() trước khi hiện form, đảm bảo bảng hạng mục về đúng 1 dòng trống +
+// input file/khoá PDF được xoá sạch mỗi lần mở, không giữ dữ liệu/trạng thái của lần mở trước.
+function openOperationOrderForm() {
+  resetOperationOrderForm();
+  document.getElementById('operationOrderForm').classList.remove('hidden');
+}
+function closeOperationOrderForm() {
+  document.getElementById('operationOrderForm').classList.add('hidden');
+}
+
 async function submitOperationStoreOpening(e) {
   e.preventDefault();
   if (!canCreateOperationStoreOpeningClient(currentUser)) return alert('⛔ Bạn không có quyền tạo đề xuất mở mới siêu thị!');
@@ -1056,6 +1067,15 @@ function resetOperationStoreOpenForm() {
   clearSingleFileInput('vsoFile', 'vsoFileChip');
 }
 
+// Thu gọn form "Tạo Đề Xuất Mở Mới Siêu Thị" (10/2026) — cùng khuôn openOperationOrderForm() ở trên.
+function openOperationStoreOpenForm() {
+  resetOperationStoreOpenForm();
+  document.getElementById('operationStoreOpenForm').classList.remove('hidden');
+}
+function closeOperationStoreOpenForm() {
+  document.getElementById('operationStoreOpenForm').classList.add('hidden');
+}
+
 async function submitOperationRepair(e) {
   e.preventDefault();
   if (!canCreateOperationRepairClient(currentUser)) return alert('⛔ Bạn không có quyền tạo đề xuất sửa chữa siêu thị!');
@@ -1117,6 +1137,15 @@ function resetOperationRepairForm() {
   formEl.reset();
   document.getElementById('vrCode').value = generateOperationRepairCode();
   clearSingleFileInput('vrFile', 'vrFileChip');
+}
+
+// Thu gọn form "Tạo Đề Xuất Sửa Chữa Siêu Thị" (10/2026) — cùng khuôn openOperationOrderForm() ở trên.
+function openOperationRepairForm() {
+  resetOperationRepairForm();
+  document.getElementById('operationRepairForm').classList.remove('hidden');
+}
+function closeOperationRepairForm() {
+  document.getElementById('operationRepairForm').classList.add('hidden');
 }
 
 function notifyOperationApprovalNeeded(kind, item) {
@@ -3937,7 +3966,20 @@ const OP_CLICK_ACTIONS = {
   // data-op mà form (module-itsupport-price.js) dùng, nếu không toàn bộ nút trong form sẽ IM LẶNG không
   // hoạt động — đúng lớp lỗi mọi chú thích phía trên đã ghi.
   previewItPriceWorkflow: () => previewItPriceWorkflow(),
-  removeOneFileFromMultiInput: el => removeOneFileFromMultiInput(el.dataset.arg0, el.dataset.arg1, el.dataset.arg2)
+  removeOneFileFromMultiInput: el => removeOneFileFromMultiInput(el.dataset.arg0, el.dataset.arg1, el.dataset.arg2),
+  // Thu gọn form (10/2026, yêu cầu người dùng "thu gọn form nhập") — registry riêng của Vận Hành KHÔNG
+  // tự soi window[fnName] như bindCspDelegation() chung (xem chú thích đầu OP_CLICK_ACTIONS), nên các nút
+  // "+ ..."/"✕ Thu Gọn" MỚI của 4 form (#operationOrderForm/#operationStoreOpenForm/#operationRepairForm/
+  // #itPriceCreateForm) PHẢI khai tường minh ở đây, nếu không sẽ IM LẶNG không mở/đóng được gì (đúng lớp
+  // lỗi mọi chú thích phía trên đã ghi — đã tự bắt được qua test-collapse-operation-forms.js).
+  openOperationOrderForm: () => openOperationOrderForm(),
+  closeOperationOrderForm: () => closeOperationOrderForm(),
+  openOperationStoreOpenForm: () => openOperationStoreOpenForm(),
+  closeOperationStoreOpenForm: () => closeOperationStoreOpenForm(),
+  openOperationRepairForm: () => openOperationRepairForm(),
+  closeOperationRepairForm: () => closeOperationRepairForm(),
+  openItPriceCreateForm: () => openItPriceCreateForm(),
+  closeItPriceCreateForm: () => closeItPriceCreateForm()
 };
 const OP_CHANGE_ACTIONS = {
   onOperationOrderFilterChange: () => onOperationOrderFilterChange(),
@@ -4012,32 +4054,47 @@ const OP_SUBMIT_ACTIONS = {
   // "💲 Phê Duyệt Giá Bán Buôn" — cùng lý do OP_CLICK_ACTIONS ở trên.
   submitItPriceApproval: e => submitItPriceApproval(e)
 };
+// LỖ HỔNG ĐÃ VÁ (đợt rà soát diện rộng 10/2026, phát hiện qua agent audit cơ chế khoá nút chống
+// double-submit): bindOperationDelegation() tự dựng registry riêng (OP_CLICK_ACTIONS/OP_CHANGE_ACTIONS/
+// OP_INPUT_ACTIONS/OP_SUBMIT_ACTIONS) thay vì window[fnName] như bindCspDelegation() chung (core.js) —
+// trước đây gọi THẲNG fn(el, e)/fn(e), hoàn toàn KHÔNG qua runCspOp() nên #vanHanhSection + 10 modal
+// con của nó (bind ở forEach(bindOperationDelegation) ngay dưới) chưa từng được hưởng khoá nút chống bấm
+// nhiều lần vừa thêm toàn hệ thống — bấm liên tiếp "Gửi phê duyệt" Đặt Hàng/Mở Siêu Thị/Sửa Chữa... vẫn
+// gửi được nhiều lần trước khi request đầu xong. runCspOp() (core.js, định nghĩa trước module này luôn
+// qua <script src="/js/core.js"> tĩnh ở index.html — module-vanhanh.js chỉ tải LƯỜI sau đó qua
+// MODULE_LOAD_GROUPS nên chắc chắn đã có sẵn) nhận (el, fn, args) tổng quát, không phụ thuộc cách fn
+// được tra cứu — gọi lại y hệt nó thay vì tự fn(...) là đủ, giữ nguyên đúng args cũ (el,e)/(e) từng
+// hàm đang nhận, không đổi chữ ký bất kỳ hàm OP_*_ACTIONS nào.
 function bindOperationDelegation(rootId) {
   const root = document.getElementById(rootId);
   if (!root) return;
   root.addEventListener('click', (e) => {
     const el = e.target.closest('[data-op]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_CLICK_ACTIONS[el.dataset.op];
-    if (fn) fn(el, e);
+    if (fn) runCspOp(el, fn, [el, e]);
   });
   root.addEventListener('change', (e) => {
     const el = e.target.closest('[data-op-change]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_CHANGE_ACTIONS[el.dataset.opChange];
-    if (fn) fn(el, e);
+    if (fn) runCspOp(el, fn, [el, e]);
   });
   root.addEventListener('input', (e) => {
     const el = e.target.closest('[data-op-input]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_INPUT_ACTIONS[el.dataset.opInput];
-    if (fn) fn(el, e);
+    if (fn) runCspOp(el, fn, [el, e]);
   });
   root.addEventListener('submit', (e) => {
     const el = e.target.closest('[data-op-submit]');
     if (!el || !root.contains(el)) return;
+    if (el.dataset.opInFlight === '1') return;
     const fn = OP_SUBMIT_ACTIONS[el.dataset.opSubmit];
-    if (fn) fn(e);
+    if (fn) runCspOp(el, fn, [e]);
   });
 }
 // BUG THẬT phát hiện lúc kiểm tra lại VHST-5 sau phản hồi người dùng ("🔗 Liên kết" không dùng được):

@@ -15,6 +15,12 @@
 // module-thanhtoan.js (setPaymentSubTab), module-vpp.js (setVppSubTab), module-checklist.js
 // (setChecklistReportSubTab).
 //
+// setContractSubTab() (module-hopdong.js) thêm sau (rà soát v24.74→v24.90, 10/2026, mức Cao — hàm thứ 14
+// cùng lớp lỗi, bị bỏ sót ở 2 đợt trước vì canAccessContractModule() không chặn cả module nên dễ lọt qua
+// 1 lượt test chỉ kiểm tra "vào được module hay không"): KHÁC các hàm trên (có panel con riêng để ẩn),
+// Hợp Đồng dùng CHUNG 1 form/danh sách cho cả 2 sub-tab — khi null phải ẩn hẳn form + XOÁ nội dung bảng
+// cũ (không chỉ ẩn), xem chú thích đầy đủ ở setContractSubTab().
+//
 // Chạy: node server/tests/test-stuck-subtab-fallback-fix.js
 'use strict';
 const {
@@ -38,6 +44,10 @@ const ORGCHART_USER = { username: 'orgchart1', name: 'NV Cơ Cấu Tổ Chức',
 const PAYMENT_USER = { username: 'payment1', name: 'NV Thanh Toán', dept: 'Vận Hành', perms: { officeBuy: true, paymentManage: true, moduleAccess: { paymentCreateTab: false, paymentManageTab: false, paymentApproveTab: false } } };
 const VPP_USER = { username: 'vpp1', name: 'NV VPP', dept: 'Vận Hành', perms: { vppReportView: true, moduleAccess: { vppRegister: false, vppPeriods: false, vppReports: false } } };
 const CHECKLIST_USER = { username: 'checklist1', name: 'NV Checklist', dept: 'Vận Hành', perms: { checklistReportView: true, checklistAtvstpReportView: true, moduleAccess: { checklistReportGeneral: false, checklistReportVsattp: false } } };
+// moduleAccess.contract giữ MỞ (cha) — chỉ khoá 2 checkbox con contractApproval/contractManage, để vào
+// được module (canAccessContractModule() chỉ cần user.dept, không chặn ở đây) rồi gọi đúng
+// setContractSubTab() (không bị chặn sớm hơn ở switchTab()).
+const CONTRACT_USER = { username: 'contract1', name: 'NV Hợp Đồng', dept: 'Vận Hành', perms: { moduleAccess: { contractApproval: false, contractManage: false } } };
 
 async function loginAs(page, user) {
   await page.evaluate(async (u) => {
@@ -49,7 +59,7 @@ async function loginAs(page, user) {
 async function main() {
   const state = createMockState({
     depts: ['Vận Hành'],
-    users: [CAR_USER, MEETING_USER, OPORDER_USER, VANHANH_USER, PERIODIC_USER, UNIFORM_USER, MUAHANG_USER, MUAHANGBAS_USER, ORGCHART_USER, PAYMENT_USER, VPP_USER, CHECKLIST_USER]
+    users: [CAR_USER, MEETING_USER, OPORDER_USER, VANHANH_USER, PERIODIC_USER, UNIFORM_USER, MUAHANG_USER, MUAHANGBAS_USER, ORGCHART_USER, PAYMENT_USER, VPP_USER, CHECKLIST_USER, CONTRACT_USER]
   });
 
   const server = await startStaticServer(PORT);
@@ -232,6 +242,30 @@ async function main() {
       });
       assertEqual(state2.active, null, `checklistReportActiveSubTab phải null, thực tế: ${state2.active}`);
       assert(state2.generalHidden, 'Panel Báo Cáo Chung Checklist phải ẩn');
+    });
+
+    await run.run('setContractSubTab(): activeContractSubTab=null khi cả 2 checkbox con đều tắt, ẩn form + XOÁ nội dung bảng/dashboard cũ', async () => {
+      await loginAs(page, CONTRACT_USER);
+      await page.evaluate(() => { switchTab('contract'); });
+      const state2 = await page.evaluate(() => {
+        // Gọi 1 lần với tbody/dashboard có nội dung "cũ" giả lập trước, để xác nhận hàm XOÁ hẳn (không chỉ
+        // ẩn) — mirror đúng tình huống thật: hàm này còn được gọi lại khi dữ liệu quyền làm mới.
+        document.getElementById('contractTableBody').innerHTML = '<tr><td>DỮ LIỆU CŨ RÒ RỈ</td></tr>';
+        document.getElementById('contractDashboardCards').innerHTML = '<div>CŨ</div>';
+        setContractSubTab('MANAGE');
+        return {
+          active: activeContractSubTab,
+          formHidden: document.getElementById('contractManageFormWrap').classList.contains('hidden'),
+          paymentColHidden: document.getElementById('contractPaymentColHeader').classList.contains('hidden'),
+          tbodyHtml: document.getElementById('contractTableBody').innerHTML,
+          dashboardHtml: document.getElementById('contractDashboardCards').innerHTML
+        };
+      });
+      assertEqual(state2.active, null, `activeContractSubTab phải null, thực tế: ${state2.active}`);
+      assert(state2.formHidden, 'Form Tạo Mới/Nhập Hợp Đồng phải ẩn');
+      assert(state2.paymentColHidden, 'Cột Thanh Toán phải ẩn');
+      assert(!state2.tbodyHtml.includes('DỮ LIỆU CŨ RÒ RỈ'), 'Nội dung bảng Hợp Đồng CŨ phải bị XOÁ hẳn (không chỉ ẩn), thực tế: ' + state2.tbodyHtml);
+      assert(!state2.dashboardHtml.includes('CŨ'), 'Nội dung Dashboard CŨ phải bị XOÁ hẳn, thực tế: ' + state2.dashboardHtml);
     });
 
     assertEqual(jsErrors.length, 0, 'Không có lỗi JS nào phát sinh: ' + jsErrors.join('\n'));

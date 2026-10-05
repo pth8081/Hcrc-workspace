@@ -14,7 +14,7 @@ const webauthn = require('../lib/webauthn');
 const totp = require('../lib/totp');
 const QRCode = require('qrcode');
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { encryptSecret, decryptSecret } = require('../lib/emailCrypto');
 const { insertSystemLog } = require('../lib/systemLogStore');
 
@@ -672,7 +672,9 @@ async function notifyTotpChange(user, message) {
     text: message,
     host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: resolveEncryption(emailConfig),
     user: smtpUser, pass: smtpPass,
-    from: emailConfig.senderEmail
+    from: emailConfig.senderEmail,
+    graph: resolveGraphOption(emailConfig),
+    ews: resolveEwsOption(emailConfig)
   });
 }
 
@@ -706,7 +708,9 @@ router.post('/request-approval-otp', loginRateLimiter, requireAuth, async (req, 
       text: `Mã OTP của bạn: ${code} (chỉ dùng 1 lần cho lượt duyệt này, hết hạn sau 5 phút)`,
       host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: resolveEncryption(emailConfig),
       user: smtpUser, pass: smtpPass,
-      from: emailConfig.senderEmail
+      from: emailConfig.senderEmail,
+      graph: resolveGraphOption(emailConfig),
+      ews: resolveEwsOption(emailConfig)
     });
     res.json({ ok: true });
   } catch (err) {

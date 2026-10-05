@@ -4,3 +4,7 @@ uploads/*
 !uploads/.gitkeep
 tests/.tmp-assets/
 demo-screenshots/
+# Chứng chỉ TLS/HTTPS tải lên qua màn Quản Trị (private key + cert) — TUYỆT ĐỐI không commit,
+# xem routes/adminTlsCert.js + lib/tlsCertManager.js.
+certs/*
+!certs/.gitkeep

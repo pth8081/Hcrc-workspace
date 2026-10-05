@@ -340,6 +340,18 @@ này — Ma Trận Phân Quyền đã bỏ hẳn cột "Xem" cũ (`submissionVie
 ban" (trước đây quyền phẳng `.all`/`.depts`) nay cấu hình qua mục 3 "Chọn
 người xem" (extraViewers) ở màn này.
 
+**Di trú tự động (v24.91, vá 2 gap đợt rà soát v24.74→v24.90)**: việc chuyển
+`submissionView`/`contractView.all` cũ sang `extraViewers` giờ chạy THÊM Ở
+SERVER lúc khởi động (`jobs/legacyViewScopeMigration.js`, tự lặp lại mỗi lần
+khởi động, idempotent — chỉ ghi khi thật sự có thay đổi), không còn phụ thuộc
+việc có admin đăng nhập hay chưa (trước đây di trú chỉ chạy ở client và CHỈ
+lưu lên server khi NGƯỜI VỪA ĐĂNG NHẬP là Admin — user thường có quyền hợp lệ
+đăng nhập trước sẽ không được di trú ở phía server, nơi `canViewSubmission()`/
+`canViewContract()` thật sự đọc). Job này cũng tự dọn lại username từng bị
+thêm NHẦM vào `extraViewers` bởi bản vá v24.83 (trước đó, `.depts` chỉ trùng
+đúng phòng ban chính người đó vẫn bị coi là "cần di trú" — dư thừa quyền xem
+xuyên công ty) nếu dữ liệu sai đó đã kịp lưu lên server trước khi có bản vá.
+
 **Mặc định "Chỉ người tạo xem" (6 module mới, admin TỰ CHỌN mở rộng nếu
 muốn)**: Công Việc (dept = cùng phòng NGƯỜI GIAO việc, lớp người-được-giao/
 cộng-tác-viên/quản-lý-của-người-được-giao LUÔN cố định không đổi dù cấu hình
@@ -2472,10 +2484,35 @@ theo đúng vị trí trong cây**.
   quan hệ MỚI, khiến quản lý CŨ tiếp tục có quyền đánh giá KPI của nhân viên
   đã chuyển sang quản lý khác ("2 người cùng chấm 1 người"). Quan hệ thêm
   THỦ CÔNG (không theo cây báo cáo hành chính) không bao giờ bị đụng vào.
+- **📋 Báo Cáo Định Biên Nhân Sự (10/2026, theo yêu cầu người dùng "biết được
+  định biên hiện tại, định biên cần tuyển")** — nút riêng ở thanh công cụ,
+  hiện cho ai xem được version (cùng quyền `requireView` như xem cây):
+  - **Định Biên**: số chỗ được duyệt cho 1 **Vị Trí**, admin/HR tự đặt tay
+    ngay trong modal Sửa Vị Trí (ô "Định Biên (tuỳ chọn)", số nguyên ≥ 0) —
+    **field hoàn toàn mới**, không suy ra được từ dữ liệu vận hành sẵn có. Để
+    trống (không hiện "0") nếu chưa đặt kế hoạch cho vị trí đó.
+  - **Thực Tế**: tính **ĐỘNG mỗi lần mở báo cáo**, KHÔNG lưu gì thêm, gồm 4
+    cột con: **Đang Làm Việc** (hồ sơ Hồ Sơ Nhân Sự đang gán đúng vị trí đó,
+    trạng thái Đang làm việc) + **Đang Bàn Giao Nghỉ Việc** (đang có quy
+    trình Offboarding CHƯA hoàn tất) + **Thai Sản/Nghỉ Ốm** (trạng thái Đang
+    nghỉ phép dài hạn — hệ thống hiện GỘP CHUNG 1 cột, chưa tách được 2 lý do
+    riêng) + **Kiêm Nhiệm** (tính hệ số ×0.5/người, lấy từ "Vị Trí Kiêm
+    Nhiệm" đã gán ở hồ sơ Người Dùng).
+  - **Chênh Lệch** = Định Biên − Thực Tế: dương (tô cam) = còn thiếu người,
+    cần tuyển thêm đúng số đó; âm (tô đỏ) = đang dư người so với kế hoạch.
+  - Số liệu **cộng dồn theo đúng cấp cây** (Vị Trí → Phòng Ban chứa nó → Khối
+    → Công Ty) — dòng Phòng Ban/Khối/Công Ty hiện tổng Định Biên/Thực Tế của
+    toàn bộ nhánh con, không phải số riêng của chính node đó.
+  - Bấm **"📊 Xuất Excel"** ngay trong bảng báo cáo để tải về — route riêng
+    (không qua `/api/admin/export-xlsx` dùng chung, vì cần tính Thực Tế từ dữ
+    liệu Hồ Sơ Nhân Sự vốn đã bị chặn khỏi API Báo Cáo chung — cùng lý do như
+    mục 4.5.3 "Báo Cáo Nhân Sự").
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa dựng bảng
   lịch sử "ai giữ vị trí nào từ ngày nào"; danh sách Phòng Ban toàn hệ thống
   (`DB.depts`) chưa gắn động theo cây; chưa có cảnh báo tự động khi Offboarding
-  1 người đang là người đánh giá KPI của vị trí khác.
+  1 người đang là người đánh giá KPI của vị trí khác; Định Biên chưa có khái
+  niệm "theo kỳ/năm" (chỉ 1 con số hiện hành cho mỗi vị trí, không giữ lịch
+  sử định biên các kỳ trước — nếu cần, đây là hướng mở rộng sau).
 
 #### 4.5.2. Onboarding / Offboarding
 
@@ -3662,27 +3699,56 @@ bộ mô tả bên dưới.
 - **Điều Khoản Chiết Khấu (RebateTerms)** — nhiều điều khoản độc lập/1 NCC,
   mỗi điều khoản tự mang:
   - **Loại** (`termType`): Chiết Khấu Theo Doanh Số (VOLUME_REBATE), Chiết
-    Khấu Tăng Trưởng (GROWTH_REBATE — **CHƯA hỗ trợ tính tự động**, xem ghi
-    chú dưới), Trade Spend, Phí Niêm Yết (LISTING_FEE), Thanh Toán Sớm
+    Khấu Tăng Trưởng (GROWTH_REBATE — **đã hỗ trợ tính tự động từ 10/2026**,
+    xem ngay dưới), Trade Spend, Phí Niêm Yết (LISTING_FEE), Thanh Toán Sớm
     (EARLY_PAYMENT), Bồi Thường Hư Hỏng (DAMAGE_ALLOWANCE), Hỗ Trợ Mở Siêu
     Thị Mới (NEW_STORE_SUPPORT).
   - **Cơ sở tính** (`calcBasis`): trên Giá Trị Mua Hàng (PURCHASE_VALUE) hoặc
     Giá Trị Bán Ra (SELL_OUT_VALUE — **CHƯA hỗ trợ tính tự động**, xem ghi
     chú dưới).
   - **Giới hạn CHƯA hỗ trợ (10/2026, đợt audit chuyên sâu)**: `calcBasis`
-    Giá Trị Bán Ra (SELL_OUT_VALUE) và `termType` Chiết Khấu Tăng Trưởng
-    (GROWTH_REBATE) hiện **ĐÃ BỊ CHẶN** ở cả form Tạo/Sửa (2 lựa chọn hiện mờ
-    "chưa hỗ trợ tính tự động" trong dropdown, không chọn được) lẫn ở server
+    Giá Trị Bán Ra (SELL_OUT_VALUE) hiện **ĐÃ BỊ CHẶN** ở cả form Tạo/Sửa
+    (dropdown hiện mờ "chưa hỗ trợ tính tự động") lẫn server
     (`validateRebateTermPayload()`, `lib/vendorRebate.js`) — lý do: hệ thống
     hiện **chưa có nguồn dữ liệu "Giá Trị Bán Ra"** (chỉ có dữ liệu MUA HÀNG
-    từ DSmart/nhập tay), và GROWTH_REBATE cần công thức so sánh với "kỳ
-    trước" chưa được xác nhận rõ ràng với người dùng — trước đây 2 lựa chọn
-    này ÂM THẦM tính giống hệt VOLUME_REBATE/PURCHASE_VALUE (SAI hẳn ý nghĩa
-    nghiệp vụ) mà không cảnh báo gì. Điều khoản cũ đã lỡ tạo/kích hoạt với 1
-    trong 2 giá trị này (trước bản vá) vẫn xem/nhân bản được nhưng **không
-    kích hoạt lại được nữa** và **không "Tính Ước Tính" được nữa** (lỗi 409
-    rõ ràng) — cần đối soát thủ công ngoài hệ thống cho tới khi được bổ sung
-    đúng nguồn dữ liệu/công thức.
+    từ DSmart/nhập tay). Điều khoản cũ đã lỡ tạo/kích hoạt với giá trị này
+    (trước bản vá) vẫn xem/nhân bản được nhưng **không kích hoạt lại được
+    nữa** và **không "Tính Ước Tính" được nữa** (lỗi 409 rõ ràng) — cần đối
+    soát thủ công ngoài hệ thống cho tới khi được bổ sung đúng nguồn dữ liệu.
+  - **Chiết Khấu Theo Tăng Trưởng (GROWTH_REBATE) — ĐÃ hỗ trợ tính tự động
+    (10/2026)**: công thức đã xác nhận với người dùng — so `basisAmount` kỳ
+    này với kỳ **LIỀN TRƯỚC cùng độ dài** (VD kỳ 01/03-31/03 so với kỳ liền
+    trước 29/01-28/02, cùng 31 ngày), ra % tăng trưởng, tra bậc thang kiểu
+    "đạt mốc tính cả" (CLIFF, bất kể `tierMode` khai báo — ý nghĩa 1 mốc %
+    tăng trưởng không hợp với kiểu luỹ tiến từng phần) ra rate đã đạt, áp
+    rate đó lên TOÀN BỘ `basisAmount` kỳ này (không chỉ phần tăng thêm). Kỳ
+    trước không có doanh số (basisAmount=0) coi là tăng trưởng 100% nếu kỳ
+    này có doanh số, 0% nếu cả 2 kỳ đều không có. **Lưu ý khi khai Bậc Thang
+    cho loại này**: cột "Từ số tiền" mang ý nghĩa **% TĂNG TRƯỞNG**, không
+    phải số tiền mua hàng tuyệt đối như VOLUME_REBATE.
+  - **Phương Thức Tính (`amountMode`, 10/2026)** — mặc định **% Theo Bậc
+    Thang** (`PERCENT_TIERED`, hành vi gốc không đổi). Chọn **Số Tiền Cố
+    Định / Kỳ** (`FIXED_LUMP_SUM`) khi điều khoản là 1 khoản tiền cố định
+    không phụ thuộc doanh số (VD "Phí tạo mã mới", "Thuê mướn gian hàng...")
+    — ẩn khối Bậc Thang, hiện khối "Số Tiền Cố Định" + tuỳ chọn **Cách Phân
+    Bổ Theo Pháp Nhân** (`allocationMode`): Không phân bổ (`NONE`, mặc định
+    — tính 1 khối cho NCC), **Chia theo tỷ trọng thực nhập** (`PRORATA_BY_ENTITY`
+    — cần khai ≥2 mã pháp nhân cách nhau bởi dấu phẩy, VD "BRG,FUJI"; hệ
+    thống tự tính tỷ trọng = tổng mua hàng của pháp nhân đó / tổng mua hàng
+    cả các pháp nhân khai báo, trong đúng kỳ đang Tính Ước Tính), hoặc **Gán
+    nguyên 100% cho 1 pháp nhân** (`FULL_TO_ENTITY`).
+  - **Tính vào BAS? (`includedInBas`, 10/2026)** — checkbox mặc định BẬT
+    (mọi điều khoản cũ đọc lại coi như đã tính vào BAS, giữ nguyên hành vi
+    gốc). Bỏ tick cho điều khoản thanh toán/đối chiếu riêng với NCC (không
+    gộp vào tổng BAS kỳ) — ảnh hưởng tới cách tổng hợp ở báo cáo "Tổng Hợp
+    BAS Theo NCC Theo Kỳ" (xem mục Báo Cáo dưới).
+  - **Pháp Nhân / Kênh Mua (2 `scopeType` mới trong Phạm Vi Áp Dụng, 10/2026)**
+    — bên cạnh 3 loại phạm vi cũ (Định Dạng Siêu Thị/Siêu Thị/Ngành Hàng):
+    **Pháp Nhân** (`ENTITY`, giá trị khớp field `Entity` của giao dịch mua
+    hàng — VD "BRG"/"FUJI") giới hạn căn cứ tính của điều khoản theo đúng 1
+    pháp nhân, và **Kênh Mua** (`CHANNEL`, giá trị cố định `DC` hoặc `DIRECT`,
+    khớp field `IsViaDC`) giới hạn theo mua qua Kho Trung Tâm hay mua trực
+    tiếp — dùng khi 1 NCC có mức hỗ trợ riêng cho hàng qua DC.
   - **Bậc thang (Tiers[], tối đa 20 bậc/điều khoản)** theo 2 chế độ hay bị
     nhầm lẫn trong thực tế hợp đồng NCC — **`tierMode`**:
     - **GRADUATED (lũy tiến từng phần)** — mỗi bậc chỉ tính % trên PHẦN doanh
@@ -3801,10 +3867,27 @@ bộ mô tả bên dưới.
   vẫn phải tự bấm "⏳ Hết Hạn"; guard kỳ tính ở trên hoạt động độc lập, không
   phụ thuộc việc đã đánh dấu hết hạn hay chưa, nên đây vẫn là lớp bảo vệ
   chính chống tính sai dù điều khoản chưa được đánh dấu Hết Hạn.
-- **Báo Cáo** (tab riêng trong module + entry ở 📊 Báo Cáo tổng hợp) — liệt
-  kê mọi lượt tính ước tính (lọc theo NCC/khoảng ngày), tổng doanh số căn cứ +
-  tổng ước tính chiết khấu. Quyền xem: `rebateViewReport` (không cần
+- **Báo Cáo** (tab riêng trong module + entry tóm tắt ở 📊 Báo Cáo tổng hợp) —
+  liệt kê mọi lượt tính ước tính (lọc theo NCC/khoảng ngày), tổng doanh số căn
+  cứ + tổng ước tính chiết khấu. Quyền xem: `rebateViewReport` (không cần
   `rebateTermManage` — đúng người chỉ cần xem báo cáo, không sửa điều khoản).
+  **4 khối báo cáo chi tiết (10/2026, mỗi khối có nút "📊 Xuất Excel" riêng)**:
+  - **📋 Chi Tiết Điều Khoản NCC** — bảng danh sách lượt tính, nay có thêm cột
+    Loại Điều Khoản/Phương Thức Tính/Tính BAS? (✅/❌) để đối chiếu đúng với
+    phân loại trên từng điều khoản.
+  - **🧮 Tổng Hợp BAS Theo NCC Theo Kỳ** — cộng dồn số tiền theo đúng cặp
+    (NCC, Kỳ), tách riêng "Tổng Tính BAS" (chỉ cộng các điều khoản có
+    `includedInBas=true`) với "Không Tính Vào BAS" (hiển thị để đối chiếu,
+    KHÔNG gộp vào Tổng Tính BAS) — mirror cách tổng hợp Total BAS cuối kỳ của
+    kế toán.
+  - **🪜 Đạt Bậc Thang** — mọi điều khoản ACTIVE dạng bậc thang (VOLUME_REBATE/
+    GROWTH_REBATE) đang có số liệu: mốc rate ĐÃ ĐẠT ở lượt tính gần nhất, và
+    còn cách bao nhiêu (doanh số hoặc % tăng trưởng, tuỳ loại) để lên mốc rate
+    cao hơn — giúp chủ động làm việc với NCC trước khi chốt kỳ.
+  - **📈 So Sánh Kỳ** — mỗi điều khoản đã có ≥2 lượt tính: so lượt GẦN NHẤT với
+    lượt NGAY TRƯỚC đó (chênh lệch tuyệt đối + %) — lấy từ lịch sử
+    `RebateCalculations` thật trong hệ thống, không cần nhập tay số liệu kỳ
+    trước.
 - **5 quyền phẳng** (khối cây phân quyền 25 "Mua Hàng"): `rebateTermManage`
   (quản lý NCC + Điều Khoản), `rebateTermActivate` (kích hoạt điều khoản),
   `rebateViewReport` (xem báo cáo), `rebateReconcile`/`rebateApprove` (khai
@@ -4214,6 +4297,46 @@ làm được nay bị chặn:
   YouTube** tự lấy ảnh đại diện THẬT từ YouTube (không cần tải lên gì
   thêm); tài liệu dạng **Ảnh** hiển thị thẳng chính ảnh đó làm đại diện
   (như trước).
+
+---
+
+## 5f. Đợt cập nhật 10/2026: Danh mục Cấp Bậc + Lý Do Nghỉ Việc + Kỷ Luật + 7 trường Người Phụ Thuộc
+
+**3 danh mục MỞ mới (Hệ Thống → Quản Lý Danh Mục)**
+- **Cấp Bậc** — gợi ý cho ô "Cấp Bậc" của 1 Vị Trí trong **Cơ Cấu Tổ Chức**
+  (trước đây là ô gõ tay hoàn toàn tự do, không có danh mục nào cả).
+- **Lý Do Nghỉ Việc** — gợi ý cho ô "Lý Do Nghỉ Việc" khi tạo **Offboarding**.
+- **Loại Kỷ Luật** — gợi ý cho ô "Loại kỷ luật" ở khối Kỷ luật (Hồ Sơ Nhân Sự).
+- Cả 3 đều là danh mục **MỀM** (gợi ý qua ô gõ-hoặc-chọn, giống hệt "Chức
+  Danh"/"Phòng Ban" đã có từ trước) — KHÔNG ép buộc giá trị nhập phải khớp
+  đúng 1 mục có sẵn trong danh mục. Quản trị thêm/xoá mục trong danh mục
+  giống mọi danh mục khác (Thêm/Sửa/Xoá, chọn nhiều để xoá, Tải Mẫu/Nhập/
+  Xuất Excel — dùng chung registry "danh mục mảng chuỗi phẳng" đã có).
+
+**Onboarding/Offboarding — ô "Lý Do Nghỉ Việc" mới (chỉ Offboarding)**
+- Form tạo **Offboarding** có thêm ô **"Lý Do Nghỉ Việc"** (gõ-hoặc-chọn từ
+  danh mục ở trên), TÁCH RIÊNG khỏi ô **"Ghi Chú Thêm"** tự do có sẵn từ
+  trước (đổi nhãn từ "Lý do / Ghi chú" để rõ nghĩa hơn — không đổi hành vi/
+  dữ liệu đã lưu trước đó). Mục đích: thống kê báo cáo được theo đúng nhóm
+  lý do nghỉ việc thay vì phải đọc tay từng dòng ghi chú tự do.
+
+**Hồ Sơ Nhân Sự — khối "⚠️ Kỷ luật" mới (chỉ HR, tab "📋 Quản Lý Hồ Sơ")**
+- Mỗi hồ sơ nhân sự nay có thêm mảng **Kỷ luật**: Ngày, Loại kỷ luật (gợi ý
+  từ danh mục "Loại Kỷ Luật"), Ghi chú — chỉ người có quyền quản lý Hồ Sơ
+  Nhân Sự mới thêm/sửa được, KHÔNG hiện ở "👤 Hồ Sơ Của Tôi" (nhân viên
+  không tự xem/sửa kỷ luật của chính mình qua hệ thống này). Đây là field
+  **nhạy cảm** (nằm trong cấu hình "⚙️ Trường Xem Của Quản Lý Trực Tiếp" —
+  mặc định ẨN, admin phải chủ động mở mới cho quản lý trực tiếp xem được ở
+  bản giới hạn), nâng tổng số trường nhạy cảm có thể cấu hình từ 19 lên 20.
+
+**Người Phụ Thuộc — 7 trường mới phục vụ khai giảm trừ gia cảnh thuế TNCN**
+- Đối chiếu mẫu khai "Người Phụ Thuộc" của bộ phận Nhân Sự, mỗi người phụ
+  thuộc (Hồ Sơ Nhân Sự → khối "👨‍👩‍👧 Người phụ thuộc") có thêm: **Quốc
+  tịch**, **Số CMND/Hộ chiếu**, **Thời gian tính giảm trừ** (Từ tháng/Đến
+  tháng — chọn tháng/năm), **Tháng cắt giảm trừ**, **Số tiền giảm trừ**,
+  **Tháng kê khai**. Cả 7 trường đều **TUỲ CHỌN** (hồ sơ cũ/để trống vẫn
+  lưu và hiển thị bình thường) — áp dụng cho cả form nhập tay và Nhập/Xuất
+  Excel hàng loạt.
 
 ---
 
@@ -5049,6 +5172,130 @@ kiểu mã hoá (Không mã hoá/TLS/SSL, tự đổi Port sang giá trị chu�
 hệ thống chỉ **mô phỏng** gửi email (ghi Nhật ký hệ thống, không gửi thật) cho
 tới khi nhập SMTP Server ở màn này.
 
+**Đồng bộ Port ↔ Mã Hoá 2 CHIỀU** (10/2026, vá tương thích Postfix port 465):
+bấm 1 trong 3 nút mã hoá tự nhảy Port sang giá trị chuẩn (như trên), VÀ NGƯỢC
+LẠI — tự gõ thẳng đúng 1 trong 3 Port chuẩn (25/587/465) vào ô Port cũng tự
+chọn giúp đúng kiểu mã hoá khớp Port đó (VD gõ `465` tự bật "SSL"). Trước đây
+chỉ đồng bộ 1 chiều (mã hoá → port), nên admin gõ thẳng Port 465 mà không bấm
+nút SSL sẽ giữ nguyên mã hoá mặc định STARTTLS — kết hợp "Port 465 + STARTTLS"
+SAI với chuẩn SMTPS (465 luôn là "implicit TLS" — mã hoá ngay từ khi kết nối,
+khác hẳn STARTTLS/587 là kết nối thường rồi nâng cấp mã hoá sau) khiến gửi
+email treo/lỗi bắt tay mà không rõ nguyên nhân — đúng triệu chứng khi tích
+hợp với 1 Postfix gateway nội bộ lắng nghe ở port 465. Gõ 1 Port tuỳ chỉnh
+khác (không khớp 25/587/465, VD relay nội bộ dùng 2525) thì giữ nguyên mã hoá
+đang chọn, không tự đổi.
+
+**Chấp nhận chứng chỉ TLS tự ký** — checkbox ngay dưới khối Mã Hoá Kết Nối.
+Bật khi máy chủ SMTP nội bộ (VD Postfix tự dựng) dùng chứng chỉ TLS **tự ký**
+(self-signed, chưa có chứng chỉ do CA công cộng cấp) — mặc định nodemailer từ
+chối kết nối tới chứng chỉ này (lỗi "self signed certificate"). Mặc định tắt
+(an toàn hơn, vẫn kiểm tra chứng chỉ bình thường) — chỉ bật khi admin xác nhận
+rõ đây là máy chủ SMTP nội bộ tin cậy.
+
+**Gửi Thử hiện lỗi SMTP thật** — khi "Gửi Thử" thất bại, màn hình hiện thẳng
+thông báo lỗi THẬT từ máy chủ SMTP (VD "self signed certificate", "Greeting
+never received", sai tài khoản/mật khẩu...) thay vì câu chung "kiểm tra lại
+log server" như trước — admin không cần quyền SSH vào máy chủ vẫn tự chẩn
+đoán được nguyên nhân.
+
+**Loại Email Gateway (preset Postfix/Exchange/Exchange Online/Exchange EWS/
+Gmail/Tuỳ Chỉnh)** (10/2026, yêu cầu người dùng có cả Postfix nội bộ VÀ 1 hệ
+thống Exchange yêu cầu xác thực — cập nhật thêm "Exchange Online (Graph API)"
+khi người dùng làm rõ muốn cơ chế "access mailbox trực tiếp" cho Exchange
+Online, không phải SMTP port 587, rồi cập nhật tiếp "Exchange (EWS)" khi người
+dùng làm rõ muốn 1 cách "access mailbox trực tiếp" khác qua HTTPS nhưng xác
+thực TRỰC TIẾP bằng mailbox (không cần đăng ký Azure AD App như Graph API) —
+và muốn GIỮ LẠI cả 3 lựa chọn Exchange song song — cùng Gmail) — 6 nút chọn
+nhanh ngay đầu form, tự điền gợi ý đúng Host/Port/Mã Hoá/Yêu Cầu Xác Thực theo
+từng loại. **Lưu ý quan trọng**: hệ thống vẫn chỉ gửi qua **1 cấu hình DUY
+NHẤT tại 1 thời điểm** (không phải chọn gateway riêng cho từng email gửi đi)
+— các nút này chỉ là "mẫu điền nhanh" giúp admin không phải tự tra cứu đúng
+thông số chuẩn của từng loại, tránh lặp lại lỗi Postfix port 465 đã vá ở
+trên.
+
+- **Postfix** — relay nội bộ theo IP nguồn, **THƯỜNG KHÔNG cần xác thực**
+  (khác hẳn Exchange/Gmail) — preset điền Port 465 + SSL, **không ép** bật ô
+  "Yêu cầu xác thực" (admin tự quyết định, vẫn bật được nếu Postfix có cấu
+  hình SASL riêng).
+- **Exchange (SMTP)** — **LUÔN yêu cầu xác thực** (SMTP AUTH) — xác thực
+  **TRỰC TIẾP vào 1 mailbox** dùng để gửi (không gửi ẩn danh được qua
+  Exchange). Preset điền Port 587 + TLS (STARTTLS) và **ép bật + khoá cứng**
+  ô "Yêu cầu xác thực" (không cho tắt nhầm). Tài Khoản SMTP = địa chỉ email
+  **đầy đủ** của mailbox (VD `notify@yourcompany.com`), Mật Khẩu SMTP = mật
+  khẩu đăng nhập mailbox đó. **KHÔNG dùng port 25** cho Exchange — port 25
+  trên Exchange chỉ dành cho relay giữa server mail/anonymous relay theo IP
+  nguồn, không áp dụng xác thực tài khoản ở port này (đây chính là lý do
+  "gửi trực tiếp qua port 25" không xác thực/không gửi được). Dùng cho
+  Exchange on-premise hoặc tenant Exchange Online còn bật Basic Auth/SMTP
+  AUTH.
+- **Exchange Online (Graph API)** — **PHƯƠNG THỨC GỬI THỨ 2, hoàn toàn khác
+  SMTP** — "access mailbox trực tiếp" bằng OAuth2 app-only (client
+  credentials flow), KHÔNG qua port 587/SMTP AUTH, gọi thẳng Microsoft Graph
+  REST API (xem `lib/graphMailer.js`) — đúng cách Microsoft khuyến nghị hiện
+  nay cho Exchange Online vì nhiều tenant đang hạn chế/ngừng dần Basic Auth
+  SMTP AUTH. Khi chọn, form ẩn hẳn toàn bộ khối SMTP (Host/Port/Mã hoá/Xác
+  thực) và hiện khối riêng **"Cấu Hình Microsoft Graph API"** với 4 ô:
+  - **Tenant ID** + **Client ID** (Application ID) — lấy từ 1 **Azure AD App
+    Registration** (Azure Portal → App Registrations → New registration).
+  - **Client Secret** — tạo tại "Certificates & secrets" của app đó (write-
+    only như mật khẩu SMTP — để trống khi sửa = giữ nguyên secret đã lưu).
+  - **Mailbox Người Gửi (UPN)** — địa chỉ email mailbox sẽ gửi thay (VD
+    `notify@yourcompany.com`).
+  Bắt buộc vào "API permissions" của app, thêm quyền **ỨNG DỤNG** (Application
+  permission, **không phải** Delegated) **"Mail.Send"** của Microsoft Graph,
+  rồi bấm **"Grant admin consent"** — thiếu bước cấp quyền này, "Gửi Thử" sẽ
+  báo lỗi quyền truy cập dù Tenant/Client ID/Secret đều đúng. Lựa chọn
+  **"Exchange (SMTP)"** ở trên **vẫn được giữ nguyên** làm phương thức riêng
+  — 2 lựa chọn Exchange tồn tại song song, không thay thế nhau, admin tự
+  chọn đúng cách tenant của mình đang hỗ trợ.
+- **Exchange (EWS)** — **PHƯƠNG THỨC GỬI THỨ 3**, cũng "access mailbox trực
+  tiếp" qua HTTPS như Graph API ở trên, nhưng xác thực **TRỰC TIẾP bằng tài
+  khoản/mật khẩu của chính mailbox** dùng để gửi (HTTP Basic Auth, SOAP
+  `CreateItem` — xem `lib/ewsMailer.js`) — **KHÔNG cần đăng ký Azure AD App**
+  như Graph API, đơn giản hơn hẳn, nhưng vẫn **không dùng port 587** như
+  SMTP thường. Khi chọn, form ẩn hẳn khối SMTP lẫn khối Graph API, hiện khối
+  riêng **"Cấu Hình Exchange Web Services (EWS)"** với 4 ô:
+  - **EWS URL** — địa chỉ endpoint EWS (VD
+    `https://mail.yourcompany.com/EWS/Exchange.asmx` cho Exchange on-premise,
+    hoặc URL EWS riêng của dịch vụ mail tương thích Exchange khác).
+  - **Tài Khoản Mailbox (UPN)** — địa chỉ email đầy đủ của mailbox dùng để
+    gửi (VD `notify@yourcompany.com`).
+  - **Mật Khẩu Mailbox** — mật khẩu đăng nhập CHÍNH mailbox đó (write-only
+    như mật khẩu SMTP/Client Secret Graph API — để trống khi sửa = giữ
+    nguyên mật khẩu đã lưu).
+  - **Chấp nhận chứng chỉ TLS tự ký (self-signed)** — bật nếu máy chủ Exchange
+    on-premise/EWS nội bộ chưa có chứng chỉ do CA công cộng cấp (RIÊNG của
+    khối EWS, khác hẳn ô cùng tên của SMTP — 2 khối cấu hình độc lập). **BẮT
+    BUỘC phải bật đúng** nếu đúng tình huống này — người dùng xác nhận
+    (10/2026) máy chủ Exchange on-premise thật của họ dùng chứng chỉ tự ký:
+    nếu không bật, MỌI lượt gửi EWS sẽ luôn thất bại ngay ở tầng TLS
+    ("self-signed certificate") dù EWS URL/tài khoản/mật khẩu đều đúng, vì
+    `lib/ewsMailer.js` mặc định vẫn kiểm tra chứng chỉ bình thường (an toàn
+    hơn — chỉ tắt khi admin chủ động xác nhận).
+  Dùng cho **Exchange on-premise** hoặc dịch vụ mail **tương thích giao thức
+  Exchange** khác tự lưu trữ EWS endpoint riêng (VD **AWS WorkMail** — cùng
+  giao thức EWS, chỉ khác URL endpoint theo vùng/tổ chức đã đăng ký). **Lưu ý
+  quan trọng**: Microsoft đang dần **NGỪNG hỗ trợ EWS cho Exchange Online**
+  (dự kiến hết năm 2026) — EWS vẫn hoạt động tốt và không bị ảnh hưởng cho
+  Exchange on-premise/AWS WorkMail, nhưng KHÔNG nên chọn cách này cho
+  Exchange Online lâu dài (dùng **"Exchange Online (Graph API)"** ở trên cho
+  trường hợp đó).
+- **Gmail** — cũng **LUÔN yêu cầu xác thực**. Preset điền sẵn Host
+  `smtp.gmail.com` + Port 465 + SSL, ép bật + khoá ô xác thực. Từ 2022 Google
+  đã chặn đăng nhập SMTP bằng mật khẩu Gmail thường — phải bật **Xác minh 2
+  bước (2FA)** cho tài khoản Google rồi tạo **"Mật khẩu ứng dụng"** (App
+  Password, chuỗi 16 ký tự) tại `myaccount.google.com/apppasswords`, dùng mã
+  đó làm Mật Khẩu SMTP (không dùng mật khẩu đăng nhập Gmail thường).
+- **Khác / Tuỳ Chỉnh** — không áp đặt gì, giữ nguyên giá trị đang có, mở
+  khoá lại ô "Yêu cầu xác thực" nếu trước đó đang ở Exchange/Gmail — dùng
+  cho nhà cung cấp SMTP khác (SendGrid, SES, Mailgun...) hoặc 1 cấu hình
+  Postfix/Exchange đặc biệt không theo mặc định ở trên.
+
+Bấm nút preset chỉ điền gợi ý khi admin **chủ động bấm** — khi tải lại 1 cấu
+hình đã lưu trước đó, hệ thống chỉ đồng bộ lại giao diện (nút đang chọn, khoá/
+mở ô xác thực) theo đúng loại đã lưu, **không ghi đè** Host/Port/Mã hoá thật
+đang chạy.
+
 **🔔 Thông Báo Email Phê Duyệt** — cho phép admin **tắt riêng** từng loại
 email liên quan phê duyệt theo từng module, mà không đụng gì tới cấu hình SMTP
 ở trên. Lý do: nhiều người đã thấy hồ sơ chờ duyệt qua Hộp Thư Phê Duyệt (mục
@@ -5109,3 +5356,79 @@ Giới hạn số lần gọi: `EXTERNAL_AUTH_RATE_LIMIT_MAX` trong `.env` (mặ
 > được soạn riêng cho đối tác trong 1 phiên làm việc trước (dạng Artifact) —
 > mục này chỉ tóm tắt góc nhìn cấu hình/quản trị, không lặp lại toàn bộ đặc tả
 > API ở đây.
+
+### 7.10. Chứng Chỉ TLS/HTTPS (10/2026)
+
+**Hệ Thống → Quản Trị → 🔒 Chứng Chỉ TLS/HTTPS** (`routes/adminTlsCert.js` +
+`lib/tlsCertManager.js`) cho phép server **tự phục vụ HTTPS trực tiếp**
+(không cần đặt Nginx trước) — team IT tải Private Key + Certificate (kèm CA
+Chain tuỳ chọn) ngay từ giao diện web, không cần SSH/copy file tay. Dành cho
+server triển khai theo track PM2-only (`Huong-dan-trien-khai-PM2.md`, mục
+11.8) — server triển khai theo track PM2+Nginx (đã có HTTPS qua Nginx) không
+cần dùng tới màn này.
+
+- **Validate thật trước khi lưu**: dùng đúng `tls.createSecureContext()` —
+  cơ chế Node.js dùng để khởi động HTTPS thật — để kiểm tra Private Key có
+  khớp Certificate hay không. Lệch key/cert hoặc PEM sai định dạng bị chặn
+  NGAY, không lưu file nào, hiển thị lỗi rõ cho admin tự sửa.
+- **Áp dụng bằng RESTART THỦ CÔNG**: tải lên THÀNH CÔNG chỉ ghi file xuống
+  `server/certs/` — KHÔNG tự bật/đổi HTTPS đang chạy ngay. Phải chạy
+  `pm2 restart` để chứng chỉ mới có hiệu lực. Màn hình hiển thị rõ 2 trạng
+  thái khác nhau: "đã có chứng chỉ trên đĩa nhưng CHƯA restart" so với "HTTPS
+  ĐANG CHẠY THẬT tại cổng...".
+  - Cổng HTTPS **không** gán sẵn như HTTP (`PORT`) mà đặt riêng qua biến môi
+    trường `.env` **`HTTPS_PORT`** (nên dùng cổng không đặc quyền, ví dụ
+    `3443` — tránh 443 vì cần quyền root/`setcap`).
+- **Write-only — không xem lại được Private Key**: cùng nguyên tắc mật khẩu
+  SMTP/Microsoft Graph/EWS ở mục 7.8 — sau khi lưu, không có API/màn hình nào
+  trả lại nội dung private key đã tải lên (kể cả báo lỗi). Mất file gốc thì
+  phải tạo/xin cấp lại chứng chỉ mới, không có cách khôi phục.
+- **Xoá chứng chỉ**: nút "🗑️ Xoá Chứng Chỉ Đang Lưu" — cũng cần restart để
+  server quay lại chạy thuần HTTP; HTTPS đang chạy (nếu có) vẫn giữ nguyên
+  chứng chỉ CŨ cho tới lần restart kế tiếp (không tắt giữa chừng).
+- **Không ảnh hưởng HTTP hiện có**: listener HTTPS là THÊM VÀO, cổng HTTP
+  (`PORT`) vẫn luôn chạy song song — bật/chưa bật tính năng này không ảnh
+  hưởng gì tới các kết nối HTTP đang dùng.
+- Admin-only (`perms.admin`), dùng chung bucket rate-limit upload toàn hệ
+  thống (`lib/uploadRateLimiter.js`), mọi lượt tải/xoá đều ghi Nhật Ký Hệ
+  Thống (module `SYSTEM`) KHÔNG kèm nội dung PEM.
+
+### 7.11. Chứng Chỉ Tin Cậy (CA Ngoài) (10/2026)
+
+**Hệ Thống → Quản Trị → 🔗 Chứng Chỉ Tin Cậy (CA Ngoài)** (`routes/
+adminTrustedCa.js` + `lib/trustedCaManager.js`) — **chiều NGƯỢC LẠI** với mục
+7.10 ngay trên: đây là khi server tự làm **CLIENT** gọi API sang 1 hệ thống
+khác (dsmart16, DSmart API/Mua Hàng BAS, hay tích hợp mới sau này) qua HTTPS,
+không phải server tự phục vụ HTTPS. Nếu hệ thống đích dùng chứng chỉ CA công
+khai (Let's Encrypt/DigiCert...) thì không cần dùng màn này — Node đã tự tin
+sẵn. Chỉ cần dùng khi hệ thống đích dùng chứng chỉ do **CA nội bộ công ty**
+cấp.
+
+- **Cơ chế**: dùng biến môi trường `NODE_EXTRA_CA_CERTS` của Node.js (có
+  sẵn, không phải tính năng tự viết) — trỏ tới 1 file chứa các chứng chỉ CA
+  bổ sung, áp dụng tự động cho **cả `fetch()` lẫn module `https`** mà
+  **KHÔNG cần sửa 1 dòng code nào** ở `lib/ewsMailer.js`/`lib/
+  dsmartApiClient.js`/`jobs/operationOrderApiSync.js` hay bất kỳ tích hợp
+  mới nào sau này — đã kiểm chứng thật (dựng 1 CA nội bộ giả lập + server
+  HTTPS ký bằng CA đó, xác nhận request thất bại khi KHÔNG có biến này và
+  thành công khi CÓ, cho cả 2 cách gọi).
+- **Validate nghiêm**: chỉ chấp nhận chứng chỉ **CA** thật (X509v3 Basic
+  Constraints CA:TRUE, kiểm bằng `crypto.X509Certificate`) — tải nhầm 1
+  chứng chỉ SERVER/LEAF (VD export nhầm cert của chính website đích) bị từ
+  chối ngay, không lưu (tải nhầm sẽ không có tác dụng gì nếu lọt qua). 1 file
+  tải lên có thể chứa NHIỀU CA ghép (VD gốc + trung gian) — tự tách thành
+  từng entry riêng để quản lý/xoá độc lập.
+- **KHÔNG nhạy cảm** — khác hẳn private key TLS (mục 7.10): chứng chỉ CA là
+  dữ liệu CÔNG KHAI, admin có thể xin trực tiếp team hạ tầng/CA nội bộ công
+  ty mà không lo lộ bí mật gì.
+- **Áp dụng bằng restart + cấu hình 1 LẦN qua `ecosystem.config.js`**: biến
+  `NODE_EXTRA_CA_CERTS` chỉ được Node đọc lúc khởi động, **không đặt được
+  qua `server/.env`** (dotenv set quá trễ, đã kiểm chứng thật) — phải là
+  biến môi trường thật của tiến trình PM2 lúc khởi chạy. `ecosystem.config.js`
+  (trong repo) đã có sẵn dòng này trong khối `env`, trỏ cố định tới
+  `server/certs/trusted-ca-bundle.pem` — chỉ cần dùng
+  `pm2 start ecosystem.config.js` (không phải `pm2 start server.js` trực
+  tiếp) rồi `pm2 restart` sau mỗi lần thêm/xoá CA qua UI. Màn hình tự chẩn
+  đoán và báo rõ tiến trình hiện tại đã cấu hình đúng hay chưa.
+- Admin-only (`perms.admin`), dùng chung bucket rate-limit upload toàn hệ
+  thống, mọi lượt thêm/xoá đều ghi Nhật Ký Hệ Thống (module `SYSTEM`).

@@ -184,6 +184,10 @@ async function shot(page, selector, file) {
       setAdminSubTab('CATALOG');
     });
     await page.waitForTimeout(150);
+    // Thẻ "Quản Lý Danh Mục 'Loại Dịch Vụ'" giờ bọc trong <details> thu gọn mặc định (10/2026, thu gọn 18
+    // thẻ danh mục ở #adminSubCatalog) — mở ra trước khi chụp ảnh (nội dung trong <details> đóng không
+    // render ra màn hình, locator.screenshot() sẽ timeout vì "element is not visible").
+    await page.evaluate(() => { document.getElementById('itRenewalCategoryList')?.closest('details')?.setAttribute('open', ''); });
     await shot(page, '#itRenewalCategoryList', '10-loaidichvu-danh-sach.png');
     await page.evaluate(async () => { await renameItRenewalCategory('Domain'); });
     await page.waitForTimeout(150);
