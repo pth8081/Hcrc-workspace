@@ -1,11 +1,10 @@
 // server/tests/demo-payment-tracking.js
 //
 // DEMO thật (không phải bộ hồi quy tự động — tests/test-payment.js đã phủ đủ luật nghiệp vụ) cho refinement
-// module Thanh Toán (v13.4, cập nhật theo logic đảo ngược yêu cầu đính kèm tệp — xem tests/test-payment.js):
-// "Quản Lý Thanh Toán" giữ lại đề nghị PAID (không còn biến mất), badge trạng thái tổng hợp "tổng đợt" +
-// cảnh báo quá hạn/sắp đến hạn. "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) giờ BẮT BUỘC đính kèm lúc TẠO/NHÁP
-// (trước "Chuyển Xác Nhận Thanh Toán", DRAFT -> PENDING) — xác nhận TỪNG ĐỢT/TOÀN BỘ 1 LẦN không còn yêu
-// cầu tệp gì nữa.
+// module Thanh Toán (v13.4). "Quản Lý Thanh Toán" giữ lại đề nghị PAID (không còn biến mất), badge trạng
+// thái tổng hợp "tổng đợt" + cảnh báo quá hạn/sắp đến hạn. 10/2026, phục hồi logic cũ (theo đúng yêu cầu
+// người dùng "giữ logic cũ"): "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) giờ chỉ TUỲ CHỌN lúc TẠO/gửi duyệt —
+// tệp CHỨNG TỪ đã chi bắt buộc TRỞ LẠI NGAY TẠI bước "Xác Nhận Đã Thanh Toán" (modal #paymentConfirmFileModal).
 //
 // Dùng ĐÚNG hạ tầng test-payment.js đã dùng (tests/_harness-contract.js — Chromium thật mở public/
 // index.html thật + toàn bộ public/js/*.js thật, chỉ tầng mạng là mock backend tái sử dụng NGUYÊN VẸN
@@ -52,6 +51,8 @@ async function main() {
   fs.mkdirSync(assetDir, { recursive: true });
   const requestFile = path.join(assetDir, 'demo-payment-request.pdf');
   fs.writeFileSync(requestFile, '%PDF-1.4 demo Ho So De Nghi Thanh Toan');
+  const confirmFile = path.join(assetDir, 'demo-payment-confirm-proof.pdf');
+  fs.writeFileSync(confirmFile, '%PDF-1.4 demo chung tu da thanh toan');
 
   const h = await startHarness();
   const { page, loginAs, seedRecord, stop } = h;
@@ -77,6 +78,20 @@ async function main() {
     await page.evaluate((prId) => openPaymentManageEdit(prId), id);
     await page.waitForTimeout(80);
     await page.setInputFiles(`#paymentManageRequestFilesInput_${id}`, [requestFile]);
+  }
+  // Xác nhận "Đã Thanh Toán" ĐÚNG luồng UI thật, modal #paymentConfirmFileModal (10/2026, phục hồi logic
+  // cũ — bắt buộc tệp chứng từ NGAY TẠI bước xác nhận) — xem tests/test-payment.js (helper gốc).
+  async function confirmInstallmentViaModal(id, index) {
+    await page.evaluate(({ id, index }) => confirmPaymentInstallmentAction(id, index), { id, index });
+    await page.waitForTimeout(60);
+    await page.setInputFiles('#paymentConfirmFileInput', [confirmFile]);
+    await page.evaluate(() => submitPaymentConfirmFile());
+  }
+  async function confirmLumpSumViaModal(id) {
+    await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), id);
+    await page.waitForTimeout(60);
+    await page.setInputFiles('#paymentConfirmFileInput', [confirmFile]);
+    await page.evaluate(() => submitPaymentConfirmFile());
   }
 
   try {
@@ -146,8 +161,7 @@ async function main() {
     }
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), betaPr1.id); // xác nhận sẵn đợt 1
-    await h.confirmPending();
+    await confirmInstallmentViaModal(betaPr1.id, 0); // xác nhận sẵn đợt 1
 
     // ---- Gamma: đi hết luồng tới PAID (lump-sum) để chứng minh "Quản Lý Thanh Toán" vẫn hiển thị PAID ----
     await loginAs('kd1');
@@ -164,8 +178,7 @@ async function main() {
     await h.confirmPending();
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), gammaPr.id);
-    await h.confirmPending();
+    await confirmLumpSumViaModal(gammaPr.id);
     await page.waitForTimeout(300);
 
     // ---- Delta: 1 đề nghị thủ công đứng ở PENDING (chờ duyệt) để thêm sắc thái trạng thái — đính kèm
@@ -202,26 +215,25 @@ async function main() {
     console.log('Đã lưu 02-xac-nhan-de-nghi-thanh-toan-tong-quan.png');
 
     // ===== Ảnh 3: Modal xác nhận TỪNG ĐỢT (PERIODIC, Beta — bản ghi đợt 2 còn lại, TỰ đi hết quy trình
-    // RIÊNG nên chỉ có đúng 1 đợt tại index 0) — không còn yêu cầu tệp (Hồ Sơ Đề Nghị Thanh Toán giờ đính
-    // kèm lúc TẠO, không phải lúc xác nhận) =====
+    // RIÊNG nên chỉ có đúng 1 đợt tại index 0) — 10/2026, phục hồi logic cũ: BẮT BUỘC TRỞ LẠI tệp chứng
+    // từ đã chi (modal #paymentConfirmFileModal) =====
     await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), betaPr2.id);
-    await page.waitForSelector('#genericConfirmModal:not(.hidden)');
-    await page.locator('#genericConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '03-modal-xac-nhan-tung-dot-dinh-ky.png') });
+    await page.waitForSelector('#paymentConfirmFileModal:not(.hidden)');
+    await page.locator('#paymentConfirmFileModal > div').screenshot({ path: path.join(OUT_DIR, '03-modal-xac-nhan-tung-dot-dinh-ky.png') });
     console.log('Đã lưu 03-modal-xac-nhan-tung-dot-dinh-ky.png');
-    await page.evaluate(() => closeGenericConfirmModal());
+    await page.evaluate(() => closePaymentConfirmFileModal());
 
-    // ===== Ảnh 4: Modal xác nhận TOÀN BỘ 1 LẦN (ONE_TIME, Alpha) — không còn yêu cầu tệp =====
+    // ===== Ảnh 4: Modal xác nhận TOÀN BỘ 1 LẦN (ONE_TIME, Alpha) — cũng bắt buộc tệp chứng từ =====
     await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), alphaPr.id);
-    await page.waitForSelector('#genericConfirmModal:not(.hidden)');
-    await page.locator('#genericConfirmModal > div').screenshot({ path: path.join(OUT_DIR, '04-modal-xac-nhan-toan-bo-mot-lan.png') });
+    await page.waitForSelector('#paymentConfirmFileModal:not(.hidden)');
+    await page.locator('#paymentConfirmFileModal > div').screenshot({ path: path.join(OUT_DIR, '04-modal-xac-nhan-toan-bo-mot-lan.png') });
     console.log('Đã lưu 04-modal-xac-nhan-toan-bo-mot-lan.png');
-    await page.evaluate(() => closeGenericConfirmModal());
+    await page.evaluate(() => closePaymentConfirmFileModal());
 
     // ===== Ảnh 5 (bằng chứng khép vòng): xác nhận THẬT bản ghi đợt 2 của Beta (cả 2 bản ghi tách ra đều
     // PAID) -> CẢ LÔ hoàn tất, rồi chụp lại "Quản Lý Thanh Toán" lần nữa để thấy Beta giờ cũng "✅ Đã
     // thanh toán" mà KHÔNG biến mất khỏi danh sách =====
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), betaPr2.id);
-    await h.confirmPending();
+    await confirmInstallmentViaModal(betaPr2.id, 0);
     await page.waitForTimeout(300);
     await goToPaymentManage();
     await page.waitForSelector('#paymentManageList');

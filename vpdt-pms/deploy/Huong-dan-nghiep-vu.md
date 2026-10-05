@@ -1823,18 +1823,19 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       nghị đang **NHÁP** (`DRAFT`) — CẢ 3 đường tạo đề nghị (tạo thủ công,
       tự sinh có nguồn từ Hợp Đồng/Mua Bán/Sửa Chữa, HOẶC kế toán tự khởi
       tạo có nguồn ngay tại tab "➕ Tạo Mới") đều LUÔN tạo NHÁP giống nhau,
-      KHÔNG có đường nào đi thẳng "Chờ duyệt" nữa — phải đính kèm "Hồ Sơ Đề
-      Nghị Thanh Toán" rồi tự bấm "📨 Chuyển Xác Nhận Thanh Toán" ở đây mới
-      chuyển sang Chờ duyệt. Khi còn NHÁP, **số tiền từng đợt KHÔNG bắt buộc** — có thể bấm
+      KHÔNG có đường nào đi thẳng "Chờ duyệt" nữa — tự bấm "📨 Chuyển Xác
+      Nhận Thanh Toán" ở đây mới chuyển sang Chờ duyệt ("Hồ Sơ Đề Nghị Thanh
+      Toán" đính kèm ở bước này CHỈ TUỲ CHỌN, xem lại 10/2026 bên dưới). Khi còn NHÁP, **số tiền từng đợt KHÔNG bắt buộc** — có thể bấm
       **"💾 Lưu"** để giữ nguyên NHÁP, chỉnh sửa dần. Chỉ khi bấm **"📨 Chuyển
       Xác Nhận Thanh Toán"** (NHÁP → Chờ duyệt) thì **MỌI đợt mới bắt buộc
       phải có số tiền > 0** — thiếu đợt nào bị chặn ngay, cả ở giao diện lẫn
       server.
       **v20.7+**: ngoài "Hồ Sơ Đề Nghị Thanh Toán" dùng CHUNG cho cả đề nghị
-      (bắt buộc >=1 tệp trước khi gửi, xem bên dưới), **mỗi đợt thanh toán còn
-      có thể đính kèm thêm tệp RIÊNG của đợt đó** (cũng nhiều tệp/lần) — hoàn
-      toàn TUỲ CHỌN, không thay thế tệp chung, chỉ để lưu chứng từ/căn cứ
-      riêng cho từng đợt khi cần (VD hoá đơn từng lần thanh toán khác nhau).
+      (10/2026: CHỈ TUỲ CHỌN lúc gửi duyệt, xem bên dưới), **mỗi đợt thanh
+      toán còn có thể đính kèm thêm tệp RIÊNG của đợt đó** (cũng nhiều tệp/
+      lần) — hoàn toàn TUỲ CHỌN, không thay thế tệp chung, chỉ để lưu chứng
+      từ/căn cứ riêng cho từng đợt khi cần (VD hoá đơn từng lần thanh toán
+      khác nhau).
       Sub-tab này cũng là nơi **duyệt theo bước/phòng ban** cho đề nghị đang
       "Chờ duyệt"/"Cần bổ sung" (admin cấu hình người duyệt ở "⚙️ Quản Trị" >
       "Quy Trình & Phê Duyệt" > "💰 QT Thanh Toán") — mỗi đề nghị hiện nút
@@ -1892,21 +1893,22 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       nhãn "APPROVED" cũ), dùng để **phân quyền riêng cho kế toán**: người
       được gán quyền ở tab này CHỈ bấm xác nhận đã chi tiền thật, không đụng
       tới bước duyệt nội bộ (đã chuyển hẳn sang "🗂️ Quản Lý Thanh Toán" ở
-      trên). **Yêu cầu đính kèm tệp đã chuyển lên bước GỬI ĐỀ NGHỊ** (v17.6+):
-      "Hồ Sơ Đề Nghị Thanh Toán" (nhiều tệp) giờ bắt buộc đính kèm **NGAY LÚC**
-      bấm "📨 Chuyển Xác Nhận Thanh Toán" (NHÁP → Chờ duyệt, xem sub-tab "🗂️
-      Quản Lý Thanh Toán" ở trên) — thiếu tệp bị chặn ngay từ bước đó, cả giao
-      diện lẫn server. Vì vậy **bước Xác Nhận cuối cùng dưới đây KHÔNG còn bắt
-      buộc đính kèm thêm tệp nào nữa** (đảo ngược so với thiết kế cũ trước
-      v17.6, khi tệp chỉ bắt buộc ở đúng bước này) — chỉ còn 2 CHẾ ĐỘ xác nhận
+      trên). **Tệp chứng từ bắt buộc NGAY TẠI bước Xác Nhận này (10/2026,
+      phục hồi thiết kế gốc)**: khoảng v17.6→10/2026 hệ thống từng chuyển
+      yêu cầu đính kèm "Hồ Sơ Đề Nghị Thanh Toán" lên bước GỬI ĐỀ NGHỊ và bỏ
+      yêu cầu tệp ở bước Xác Nhận — đợt 10/2026 đã **đảo ngược lại đúng thiết
+      kế gốc** theo yêu cầu người dùng: "Hồ Sơ Đề Nghị Thanh Toán" lúc gửi
+      duyệt (sub-tab "🗂️ Quản Lý Thanh Toán") giờ CHỈ TUỲ CHỌN, còn bước Xác
+      Nhận dưới đây **bắt buộc đính kèm 1 tệp chứng từ đã chi** (VD uỷ nhiệm
+      chi, phiếu chi) ngay trong modal xác nhận — chỉ còn 2 CHẾ ĐỘ xác nhận
       tuỳ loại hợp đồng nguồn, chốt CỐ ĐỊNH ngay lúc tạo đề nghị:
       - Hợp đồng **"Thanh toán 1 lần"** (và MỌI đề nghị nguồn Hợp đồng loại
-        này): nút **"💰 Xác Nhận Toàn Bộ"** — 1 lần bấm chuyển thẳng "Đã thanh
-        toán" cho TẤT CẢ các đợt cùng lúc (không cần chọn thêm tệp nào).
+        này): nút **"💰 Xác Nhận Toàn Bộ"** — chọn 1 tệp chứng từ DUY NHẤT rồi
+        bấm Xác Nhận, chuyển thẳng "Đã thanh toán" cho TẤT CẢ các đợt cùng lúc.
       - Hợp đồng **"Thanh toán định kỳ"**, đề nghị tạo THỦ CÔNG, và đề nghị
         nguồn Mua Bán/Sửa Chữa/Đầu Tư: nút **"Xác nhận"** riêng cho TỪNG ĐỢT
-        (không cần chọn thêm tệp nào), lặp lại cho tới khi xác nhận HẾT mọi
-        đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
+        (mỗi đợt chọn 1 tệp chứng từ riêng), lặp lại cho tới khi xác nhận HẾT
+        mọi đợt thì đề nghị **tự động** chuyển "Đã thanh toán".
       - **"📝 Yêu Cầu Bổ Sung" ngay tại tab này** — kế toán (quyền quản lý
         thanh toán) vẫn có thể trả đề nghị đang "APPROVED" (⏳ Đang chờ thanh
         toán) về **"Cần bổ sung"** (`NEED_INFO`, quay lại sửa được ở "➕ Tạo

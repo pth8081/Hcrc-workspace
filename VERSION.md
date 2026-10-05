@@ -1,8 +1,54 @@
 # Phiên bản hiện tại
 
-**25.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.4 (2026-10-05): Thanh Toán — phục hồi logic cũ "bắt buộc tệp chứng từ lúc Xác Nhận" (khôi phục ý muốn người dùng, không phải đảo ngược mới)
+
+Người dùng phản ánh module Hợp Đồng/Thanh Toán không còn đúng logic cũ: "Khi tải tài liệu lên để đáp ứng
+điều kiện thanh toán vẫn phải phê duyệt theo quy trình và trạng thái vẫn như trước đây thay đổi khi có
+các thao tác xác nhận từ xác nhận thanh toán", đồng thời khẳng định việc xác nhận theo đợt/1 lần theo
+đúng hình thức thanh toán của hợp đồng vẫn phải giữ nguyên — "sao bạn lại thay đổi logic của tôi?".
+
+**Phân tích + xác nhận gốc rễ qua lịch sử git** (không đoán, lần ngược từng commit): logic "thanh toán
+theo đợt/1 lần theo đúng hợp đồng" (`contract.paymentType`/`sourcePaymentType`) **chưa từng bị đổi** —
+vẫn đúng như thiết kế gốc, nằm ngoài phạm vi phản ánh. Thứ ĐÃ bị đổi là **thời điểm bắt buộc đính kèm tệp
+chứng từ**: thiết kế gốc bắt buộc 1 tệp chứng từ đã chi (VD uỷ nhiệm chi/phiếu chi) NGAY TẠI bước "Xác
+Nhận Đã Thanh Toán" — commit `180878e` (9/9/2026) đã **đảo ngược** việc này, chuyển yêu cầu đính kèm tệp
+lên bước GỬI ĐỀ NGHỊ (DRAFT → PENDING, "Hồ Sơ Đề Nghị Thanh Toán" dùng chung) và bỏ hẳn yêu cầu tệp ở bước
+Xác Nhận. Đây chính là điều người dùng phản ánh "logic đã đổi" — không phải suy diễn, xác nhận được bằng
+đúng nguyên văn commit message gốc.
+
+**Phục hồi (forward-fix, KHÔNG `git revert` thô — hơn 60 commit sau đó đã sửa đè cùng các hàm này, revert
+thẳng sẽ xoá nhầm nhiều cải tiến hợp lệ khác, VD wiring "Nhóm Phê Duyệt Cuối", kiến trúc "mỗi đợt tự đi
+hết quy trình riêng"):**
+
+- **`lib/recordActions.js`**: `submitPaymentRequest()` (DRAFT → PENDING) bỏ yêu cầu bắt buộc >=1 tệp
+  `requestFiles` — field này giờ chỉ TUỲ CHỌN. `confirmPaymentInstallment()`/`confirmPaymentRequestLumpSum()`
+  bắt buộc TRỞ LẠI `payload.fileUrl`/`fileName`/`fileType`, lưu vào `confirmFileUrl`/`confirmFileName`/
+  `confirmFileType` của đúng đợt (field này đã có sẵn trong data model từ trước, chỉ bị bỏ trống từ đợt
+  đảo ngược — dùng lại đúng mục đích ban đầu). `fileAuthz.js` đã sẵn soi đúng `confirmFileUrl` từ trước
+  (đợt vá ownership #125), không cần sửa gì thêm.
+- **UI (`module-thanhtoan.js` + `public/index.html` + `core.js`)**: modal mới **`#paymentConfirmFileModal`**
+  (dùng chung cho xác nhận từng đợt lẫn toàn bộ 1 lần) — chọn 1 tệp chứng từ rồi mới gọi được
+  `confirm-installment`/`confirm-lump-sum`; chặn ở client nếu chưa chọn tệp. Form "🗂️ Quản Lý Thanh Toán"
+  bỏ chặn bắt buộc `requestFiles` lúc "Chuyển Xác Nhận Thanh Toán".
+- Cập nhật tài liệu: `module-nghiepvu.js` (entry Thanh Toán) + `deploy/Huong-dan-nghiep-vu.md` — mô tả lại
+  đúng luồng: tài liệu ký vẫn phải qua phê duyệt quy trình trước khi mở thanh toán (không đổi); "Hồ Sơ Đề
+  Nghị Thanh Toán" lúc gửi duyệt nay TUỲ CHỌN; tệp chứng từ bắt buộc đúng lúc Xác Nhận; thanh toán theo
+  đợt/1 lần vẫn khoá cứng theo `paymentType` của hợp đồng nguồn (không đổi).
+
+Xác minh: `tests/test-payment.js` (110/110, viết lại các kịch bản liên quan + helper
+`confirmInstallmentViaModal()`/`confirmLumpSumViaModal()` lái đúng modal thật qua Playwright),
+`tests/test-contract.js` (65/65, không regression). `tests/demo-payment-tracking.js` +
+`tests/demo-payment-installment-statuses.js` (demo script, cập nhật theo modal mới, chạy sạch). CSP
+self-check (grep `on[a-z]+=`/` style=`/`javascript:`/`eval(`) sạch trên toàn bộ file mới/sửa.
+
+**Deploy-impact**: không có biến `.env` mới, không đổi `schema.sql`, không thêm dependency. Dữ liệu đề
+nghị thanh toán ĐANG DỞ (DRAFT/PENDING) tạo theo luật cũ (đã đính kèm `requestFiles` lúc lập, chưa xác
+nhận xong) không mất dữ liệu — chỉ cần đính kèm thêm 1 tệp chứng từ khi tới bước Xác Nhận các đợt chưa
+xác nhận.
 
 ## v25.3 (2026-10-04): Chứng Chỉ Tin Cậy (CA Ngoài) — khi server GỌI RA hệ thống khác qua HTTPS
 

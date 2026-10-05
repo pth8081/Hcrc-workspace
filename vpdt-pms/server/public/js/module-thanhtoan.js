@@ -631,8 +631,10 @@ function submitPaymentRequestAction(id) {
     bodyHTML: `Chuyển đề nghị "<b>${escapeHtml(pr.title)}</b>" sang chờ duyệt theo phòng ban?${warnHTML}`,
     confirmLabel: 'Chuyển Xác Nhận',
     onConfirm: async () => {
-      // Upload + gộp "Hồ Sơ Đề Nghị Thanh Toán" mới chọn (nếu có) TRƯỚC — bắt buộc >=1 tệp mới cho gửi
-      // (mirror đúng luật server ở submitPaymentRequest(), lib/recordActions.js).
+      // Upload + gộp "Hồ Sơ Đề Nghị Thanh Toán" mới chọn (nếu có) TRƯỚC — 10/2026, theo đúng yêu cầu
+      // người dùng "giữ logic cũ": field này giờ CHỈ TUỲ CHỌN (không còn bắt buộc >=1 tệp mới cho gửi
+      // như trước) — tệp CHỨNG TỪ bắt buộc đúng ở bước xác nhận CUỐI (xem confirmPaymentInstallmentAction()/
+      // confirmPaymentRequestLumpSumAction() bên dưới), mirror đúng luật server submitPaymentRequest().
       let requestFiles;
       try {
         requestFiles = await collectAndUploadPaymentManageRequestFiles(id);
@@ -648,10 +650,6 @@ function submitPaymentRequestAction(id) {
       } catch (err) { return alert(`⛔ ${err.message}`); }
       const editIdx = DB.paymentRequests.findIndex(x => x.id === id);
       if (editIdx !== -1) DB.paymentRequests[editIdx] = afterEdit;
-      if (!requestFiles.length) {
-        renderPaymentManageTab();
-        return alert('⛔ Vui lòng đính kèm ít nhất 1 tệp "Hồ Sơ Đề Nghị Thanh Toán" trước khi chuyển xác nhận thanh toán!');
-      }
       let updated;
       try {
         const result = await callRecordAction('paymentRequests', id, 'submit', {});
@@ -984,30 +982,22 @@ function deletePaymentRequestAction(id) {
   });
 }
 
-// ========== "✅ Xác Nhận Thanh Toán" — KHÔNG còn bắt buộc upload tệp ở bước này nữa (ĐẢO NGƯỢC lại thiết
-// kế cũ): "Hồ Sơ Đề Nghị Thanh Toán" giờ đã bắt buộc đính kèm NGAY LÚC TẠO/GỬI (xem "🗂️ Quản Lý Thanh
-// Toán"/submitPaymentRequestAction()), nên bước xác nhận này chỉ còn là 1 xác nhận đơn thuần qua
-// showConfirmModal() — dùng CHUNG applyPaymentConfirmResult() cho cả xác nhận TỪNG ĐỢT
-// (confirmPaymentInstallmentAction()) và TOÀN BỘ 1 LẦN (confirmPaymentRequestLumpSumAction(), CHỈ nguồn
-// Hợp đồng "Thanh toán 1 lần", ONE_TIME). ==========
+// ========== "✅ Xác Nhận Thanh Toán" — 10/2026, theo đúng yêu cầu người dùng "giữ logic cũ": BẮT BUỘC
+// TRỞ LẠI đính kèm 1 tệp chứng từ đã chi (VD uỷ nhiệm chi, phiếu chi) NGAY TẠI bước xác nhận này —
+// "Hồ Sơ Đề Nghị Thanh Toán" (requestFiles) ở "🗂️ Quản Lý Thanh Toán" giờ chỉ còn TUỲ CHỌN. Dùng modal
+// riêng #paymentConfirmFileModal (public/index.html) — paymentConfirmTarget = {id, index} (index null =
+// xác nhận TOÀN BỘ 1 lần). applyPaymentConfirmResult() dùng CHUNG cho cả 2 đường. ==========
+let paymentConfirmTarget = null; // { id, index|null }
 function confirmPaymentInstallmentAction(id, index) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
   const it = pr.installments[index];
   if (!it) return;
-  showConfirmModal({
-    title: 'Xác nhận thanh toán đợt',
-    bodyHTML: `Xác nhận đã thanh toán đợt "<b>${escapeHtml(it.description || '')}</b>" (${(it.amount || 0).toLocaleString('vi-VN')} VNĐ)?`,
-    confirmLabel: 'Xác Nhận',
-    onConfirm: async () => {
-      let updated, justCompleted;
-      try {
-        const result = await callRecordAction('paymentRequests', id, 'confirm-installment', { index });
-        updated = result.item; justCompleted = result.justCompleted;
-      } catch (err) { return alert(`⛔ ${err.message}`); }
-      applyPaymentConfirmResult(updated, justCompleted, `Xác nhận thanh toán đợt [${it.description || ''}] cho [${updated.title}]`);
-    }
-  });
+  paymentConfirmTarget = { id, index };
+  document.getElementById('paymentConfirmFileModalTitle').innerText = '✅ Xác Nhận Thanh Toán Đợt';
+  document.getElementById('paymentConfirmFileModalSub').innerText = `Đợt "${it.description || ''}" — ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ`;
+  document.getElementById('paymentConfirmFileInput').value = '';
+  document.getElementById('paymentConfirmFileModal').classList.remove('hidden');
 }
 // "💰 Xác Nhận Toàn Bộ" — CHỈ hiện/gọi được cho đề nghị sourcePaymentType === 'ONE_TIME' (xem gate ở
 // renderPaymentRequests()) — server (confirmPaymentRequestLumpSum(), lib/recordActions.js) TỰ chặn 409
@@ -1015,19 +1005,40 @@ function confirmPaymentInstallmentAction(id, index) {
 function confirmPaymentRequestLumpSumAction(id) {
   const pr = DB.paymentRequests.find(x => x.id === id);
   if (!pr) return;
-  showConfirmModal({
-    title: 'Xác nhận thanh toán (toàn bộ)',
-    bodyHTML: `Xác nhận TOÀN BỘ đề nghị "<b>${escapeHtml(pr.title)}</b>" (${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ) đã thanh toán — áp dụng cho tất cả các đợt?`,
-    confirmLabel: 'Xác Nhận',
-    onConfirm: async () => {
-      let updated, justCompleted;
-      try {
-        const result = await callRecordAction('paymentRequests', id, 'confirm-lump-sum', {});
-        updated = result.item; justCompleted = result.justCompleted;
-      } catch (err) { return alert(`⛔ ${err.message}`); }
-      applyPaymentConfirmResult(updated, justCompleted, `Xác nhận thanh toán TOÀN BỘ [${updated.title}]`);
-    }
-  });
+  paymentConfirmTarget = { id, index: null };
+  document.getElementById('paymentConfirmFileModalTitle').innerText = '✅ Xác Nhận Thanh Toán (Toàn Bộ)';
+  document.getElementById('paymentConfirmFileModalSub').innerText = `"${pr.title}" — ${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ (áp dụng cho tất cả các đợt)`;
+  document.getElementById('paymentConfirmFileInput').value = '';
+  document.getElementById('paymentConfirmFileModal').classList.remove('hidden');
+}
+function closePaymentConfirmFileModal() {
+  paymentConfirmTarget = null;
+  document.getElementById('paymentConfirmFileModal').classList.add('hidden');
+}
+async function submitPaymentConfirmFile() {
+  if (!paymentConfirmTarget) return;
+  const { id, index } = paymentConfirmTarget;
+  const pr = DB.paymentRequests.find(x => x.id === id);
+  if (!pr) return;
+  const file = document.getElementById('paymentConfirmFileInput').files[0];
+  if (!file) return alert('⛔ Vui lòng chọn tệp chứng từ đã thanh toán!');
+  let uploaded;
+  try {
+    uploaded = await uploadFileToServer(file, 'payment');
+  } catch (err) {
+    return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+  }
+  const action = index == null ? 'confirm-lump-sum' : 'confirm-installment';
+  const payload = { fileUrl: uploaded.fileUrl, fileName: uploaded.fileName, fileType: uploaded.fileType };
+  if (index != null) payload.index = index;
+  let updated, justCompleted;
+  try {
+    const result = await callRecordAction('paymentRequests', id, action, payload);
+    updated = result.item; justCompleted = result.justCompleted;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  closePaymentConfirmFileModal();
+  const label = index == null ? `Xác nhận thanh toán TOÀN BỘ [${updated.title}]` : `Xác nhận thanh toán đợt [${(pr.installments[index] || {}).description || ''}] cho [${updated.title}]`;
+  applyPaymentConfirmResult(updated, justCompleted, label);
 }
 // Đủ hết các đợt (hoặc xác nhận lump-sum) thì server tự chuyển PAID (justCompleted=true) và đã ghi ngược
 // paymentStatus vào bản ghi nguồn; client chỉ cần đồng bộ lại cục bộ để UI cập nhật ngay, không cần tải

@@ -1,12 +1,13 @@
 // tests/test-payment.js — Kiểm thử hồi quy module Thanh Toán ("Tổng Hợp" > "💰 Thanh toán").
 //
-// v15.3 — ĐẢO NGƯỢC logic đính kèm tệp (yêu cầu nghiệp vụ mới): "Hồ Sơ Đề Nghị Thanh Toán" (multi-file)
-// giờ BẮT BUỘC đính kèm >=1 tệp NGAY LÚC TẠO/LẬP đợt thanh toán (sub-tab "🗂️ Quản Lý Thanh Toán") trước
-// khi "Chuyển Xác Nhận Thanh Toán" (DRAFT -> PENDING) được — TRƯỚC ĐÂY bắt buộc tệp ở bước xác nhận CUỐI
-// (confirm-installment/confirm-lump-sum), giờ 2 hàm đó KHÔNG còn đòi hỏi tệp gì nữa (chỉ còn 1 cú bấm xác
-// nhận đơn thuần). ĐỒNG THỜI thống nhất TOÀN BỘ 4 đường tạo đề nghị thanh toán (Hợp đồng "🧾 Lập Thanh
-// Toán", officeReqs "Chuyển Sang Thanh Toán", kế toán tự tạo có nguồn "from-source", tạo thủ công) về
-// CHUNG 1 cổng: LUÔN tạo NHÁP (DRAFT) trước — không còn nhánh nào đi thẳng PENDING nữa.
+// v15.3 từng ĐẢO NGƯỢC logic đính kèm tệp, bắt buộc "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) ngay lúc
+// TẠO/LẬP đợt thanh toán, bỏ yêu cầu tệp ở bước xác nhận CUỐI. 10/2026, theo đúng yêu cầu người dùng
+// "giữ logic cũ" (xác nhận lại đây KHÔNG phải ý muốn), PHỤC HỒI thiết kế gốc: "Hồ Sơ Đề Nghị Thanh Toán"
+// (requestFiles) giờ chỉ TUỲ CHỌN lúc gửi duyệt — tệp CHỨNG TỪ đã chi (confirmFileUrl) bắt buộc TRỞ LẠI
+// NGAY TẠI bước "Xác Nhận Đã Thanh Toán" (confirm-installment/confirm-lump-sum, qua modal
+// #paymentConfirmFileModal, xem confirmInstallmentViaModal()/confirmLumpSumViaModal() bên dưới). VẪN GIỮ
+// nguyên phần không liên quan: thống nhất 4 đường tạo đề nghị thanh toán về CHUNG 1 cổng LUÔN tạo NHÁP
+// (DRAFT) trước khi gửi duyệt — phần đó KHÔNG đổi.
 'use strict';
 
 const fs = require('fs');
@@ -93,6 +94,23 @@ async function run() {
     await page.waitForTimeout(80);
     await page.setInputFiles(`#paymentManageRequestFilesInput_${id}`, filePaths);
   }
+  // Xác nhận "Đã Thanh Toán" ĐÚNG luồng UI thật, modal #paymentConfirmFileModal (10/2026, phục hồi logic
+  // cũ — bắt buộc tệp chứng từ NGAY TẠI bước xác nhận) — mở modal qua hàm action thật (gán
+  // paymentConfirmTarget), chọn tệp qua input thật, rồi submitPaymentConfirmFile() (upload thật +
+  // callRecordAction). Dùng CHUNG style cho cả từng đợt (confirmPaymentInstallmentAction) lẫn toàn bộ 1
+  // lần (confirmPaymentRequestLumpSumAction).
+  async function confirmInstallmentViaModal(id, index, filePath) {
+    await page.evaluate(({ id, index }) => confirmPaymentInstallmentAction(id, index), { id, index });
+    await page.waitForTimeout(60);
+    await page.setInputFiles('#paymentConfirmFileInput', [filePath]);
+    await page.evaluate(() => submitPaymentConfirmFile());
+  }
+  async function confirmLumpSumViaModal(id, filePath) {
+    await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), id);
+    await page.waitForTimeout(60);
+    await page.setInputFiles('#paymentConfirmFileInput', [filePath]);
+    await page.evaluate(() => submitPaymentConfirmFile());
+  }
   // Đọc TOÀN BỘ hàng đang mở nháp trong "🗂️ Quản Lý Thanh Toán" (id do server sinh, test không biết
   // trước) — dùng ngay sau khi vừa "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán" (điều hướng tự động mở
   // sẵn đúng dòng NHÁP đó).
@@ -120,6 +138,8 @@ async function run() {
   fs.writeFileSync(requestFile1, '%PDF-1.4 fake payment request file 1');
   const requestFile2 = path.join(assetDir, 'payment-request-2.pdf');
   fs.writeFileSync(requestFile2, '%PDF-1.4 fake payment request file 2');
+  const confirmFile = path.join(assetDir, 'payment-confirm-proof.pdf');
+  fs.writeFileSync(confirmFile, '%PDF-1.4 fake payment confirm proof file');
 
   try {
     // ============ Chuẩn bị: 2 hợp đồng "Thanh toán 1 lần" (A, B) + 1 hợp đồng "Thanh toán định kỳ"
@@ -218,31 +238,17 @@ async function run() {
     const prStillDraftAfterServerBlock = await readPr(prAId);
     check('Sau khi bị chặn ở server -> đề nghị VẪN ở DRAFT (không "rò rỉ" sang PENDING)', prStillDraftAfterServerBlock.status === 'DRAFT', prStillDraftAfterServerBlock);
 
-    // ============ Kịch bản 4 (MỚI, v15.3): Điền đủ số tiền nhưng CHƯA đính kèm "Hồ Sơ Đề Nghị Thanh
-    // Toán" -> vẫn bị chặn gửi (client + server); đính kèm tệp rồi mới gửi thành công (DRAFT -> PENDING),
-    // currentStep/history khởi tạo đúng ============
+    // ============ Kịch bản 4 (sửa lại 10/2026, phục hồi logic cũ): Điền đủ số tiền -> "Chuyển Xác Nhận
+    // Thanh Toán" THÀNH CÔNG NGAY dù CHƯA đính kèm "Hồ Sơ Đề Nghị Thanh Toán" (field này giờ chỉ TUỲ
+    // CHỌN — tệp CHỨNG TỪ bắt buộc đúng ở bước "Xác Nhận Đã Thanh Toán", xem Kịch bản 6 bên dưới) ========
     await row2Amount.fill('120.000.000');
-    await clearAlerts();
-    await page.evaluate((id) => submitPaymentRequestAction(id), prAId);
-    await confirmPending();
-    const noFileAlerts = await alerts();
-    const prStillDraftNoFile = await readPr(prAId);
-    check('Đủ số tiền nhưng CHƯA đính kèm "Hồ Sơ Đề Nghị Thanh Toán" -> vẫn bị chặn gửi ở client, còn DRAFT', noFileAlerts.some((a) => a.includes('Hồ Sơ Đề Nghị Thanh Toán')) && prStillDraftNoFile.status === 'DRAFT', { noFileAlerts, prStillDraftNoFile });
-
-    const serverBlockNoFile = await page.evaluate(async (id) => {
-      try { await callRecordAction('paymentRequests', id, 'submit', {}); return { ok: true }; }
-      catch (err) { return { ok: false, message: err.message }; }
-    }, prAId);
-    check('Server ĐỘC LẬP cũng chặn nếu thiếu Hồ Sơ Đề Nghị Thanh Toán, gọi thẳng route submit', !serverBlockNoFile.ok && serverBlockNoFile.message.includes('Hồ Sơ Đề Nghị Thanh Toán'), serverBlockNoFile);
-
-    await attachRequestFilesInManage(prAId, [requestFile1, requestFile2]);
     await clearAlerts();
     await page.evaluate((id) => submitPaymentRequestAction(id), prAId);
     await confirmPending();
     await page.waitForTimeout(200);
     const prAfterSubmit = await readPr(prAId);
-    check('Đính kèm đủ Hồ Sơ Đề Nghị Thanh Toán (2 tệp) -> "Chuyển Xác Nhận Thanh Toán" thành công, chuyển PENDING', prAfterSubmit.status === 'PENDING', prAfterSubmit.status);
-    check('requestFiles lưu đúng 2 tệp vừa chọn', Array.isArray(prAfterSubmit.requestFiles) && prAfterSubmit.requestFiles.length === 2, prAfterSubmit.requestFiles);
+    check('Đủ số tiền, KHÔNG cần đính kèm Hồ Sơ Đề Nghị Thanh Toán -> "Chuyển Xác Nhận Thanh Toán" vẫn THÀNH CÔNG (field giờ tuỳ chọn), chuyển PENDING', prAfterSubmit.status === 'PENDING', prAfterSubmit.status);
+    check('requestFiles vẫn rỗng (không bắt buộc, không tự phát sinh)', Array.isArray(prAfterSubmit.requestFiles) && prAfterSubmit.requestFiles.length === 0, prAfterSubmit.requestFiles);
     check('currentStep khởi tạo = 1, history rỗng ngay lúc gửi duyệt', prAfterSubmit.currentStep === 1 && Array.isArray(prAfterSubmit.history) && prAfterSubmit.history.length === 0, prAfterSubmit);
 
     // ============ Kịch bản 4b (v15.8): nút hành động dời từ "✅ Xác Nhận Đề Nghị Thanh Toán" sang
@@ -299,33 +305,42 @@ async function run() {
     check('Đề nghị đã APPROVED -> Sửa bị server từ chối ("không còn ở trạng thái được sửa")', editBlockedAlerts.some((a) => a.includes('không còn ở trạng thái được sửa')), editBlockedAlerts);
     await page.evaluate(() => cancelEditPaymentRequest());
 
-    // ============ Kịch bản 6 (v15.3 — KHÔNG còn bắt buộc tệp ở bước xác nhận nữa): đề nghị nguồn Hợp
-    // đồng "Thanh toán 1 lần" (contractA, sourcePaymentType === 'ONE_TIME') KHÔNG được xác nhận nhỏ giọt
-    // từng đợt — chỉ xác nhận TOÀN BỘ 1 LẦN (lump-sum), không cần chọn tệp gì, badge từng đợt vẫn hiển thị
-    // đủ (yêu cầu nghiệp vụ #3) ============
+    // ============ Kịch bản 6 (sửa lại 10/2026, phục hồi logic cũ — BẮT BUỘC TRỞ LẠI tệp chứng từ NGAY
+    // TẠI bước xác nhận): đề nghị nguồn Hợp đồng "Thanh toán 1 lần" (contractA, sourcePaymentType ===
+    // 'ONE_TIME') KHÔNG được xác nhận nhỏ giọt từng đợt — chỉ xác nhận TOÀN BỘ 1 LẦN (lump-sum), BẮT
+    // BUỘC đính kèm 1 tệp chứng từ (VD uỷ nhiệm chi) qua modal #paymentConfirmFileModal, badge từng đợt
+    // vẫn hiển thị đủ (yêu cầu nghiệp vụ #3) ============
     const prABeforeConfirm = await readPr(prAId);
     check('Đề nghị nguồn Hợp đồng "Thanh toán 1 lần" -> sourcePaymentType chụp đúng "ONE_TIME"', prABeforeConfirm.sourcePaymentType === 'ONE_TIME', prABeforeConfirm.sourcePaymentType);
 
     const perInstallmentBlockedOnOneTime = await page.evaluate(async (id) => {
-      try { await callRecordAction('paymentRequests', id, 'confirm-installment', { index: 0 }); return { ok: true }; }
+      try { await callRecordAction('paymentRequests', id, 'confirm-installment', { index: 0, fileUrl: '/uploads/test/x.pdf', fileName: 'x.pdf', fileType: 'application/pdf' }); return { ok: true }; }
       catch (err) { return { ok: false, message: err.message }; }
     }, prAId);
-    check('Đề nghị ONE_TIME — xác nhận TỪNG ĐỢT (confirm-installment) bị chặn 409 ("không xác nhận theo từng đợt")', !perInstallmentBlockedOnOneTime.ok && perInstallmentBlockedOnOneTime.message.includes('không xác nhận theo từng đợt'), perInstallmentBlockedOnOneTime);
+    check('Đề nghị ONE_TIME — xác nhận TỪNG ĐỢT (confirm-installment) bị chặn 409 ("không xác nhận theo từng đợt") dù đã kèm tệp', !perInstallmentBlockedOnOneTime.ok && perInstallmentBlockedOnOneTime.message.includes('không xác nhận theo từng đợt'), perInstallmentBlockedOnOneTime);
     const prAStillUnconfirmed = await readPr(prAId);
     check('Sau khi bị chặn -> CẢ 2 đợt vẫn CHƯA xác nhận, đề nghị vẫn APPROVED', prAStillUnconfirmed.status === 'APPROVED' && prAStillUnconfirmed.installments.every((it) => !it.confirmed), prAStillUnconfirmed);
 
-    // Xác nhận lump-sum ĐÚNG luồng UI thật: mở modal xác nhận (showConfirmModal, KHÔNG còn hỏi tệp gì).
+    // Mở modal "Xác Nhận Thanh Toán (Toàn Bộ)" nhưng CHƯA chọn tệp -> bị chặn ngay ở client, chưa gọi API.
     await page.evaluate((id) => confirmPaymentRequestLumpSumAction(id), prAId);
-    await confirmPending();
+    await page.waitForTimeout(60);
+    await clearAlerts();
+    await page.evaluate(() => submitPaymentConfirmFile());
+    const noFileConfirmAlerts = await alerts();
+    check('Mở modal "Xác Nhận Thanh Toán (Toàn Bộ)" nhưng CHƯA chọn tệp chứng từ -> bị chặn ở client, chưa gọi API', noFileConfirmAlerts.some((a) => a.includes('chọn tệp chứng từ')), noFileConfirmAlerts);
+
+    // Xác nhận lump-sum ĐÚNG luồng UI thật: chọn tệp chứng từ ngay trong modal đang mở, bấm Xác Nhận.
+    await page.setInputFiles('#paymentConfirmFileInput', [confirmFile]);
+    await page.evaluate(() => submitPaymentConfirmFile());
     await page.waitForTimeout(150);
     const prAfterLumpConfirm = await readPr(prAId);
     const contractAfterLumpConfirm = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractA.id);
-    check('Xác nhận lump-sum (không cần chọn tệp) thành công -> đề nghị chuyển PAID NGAY', prAfterLumpConfirm.status === 'PAID', prAfterLumpConfirm.status);
-    check('Lump-sum đánh dấu confirmed=true trên CẢ 2 đợt (yêu cầu nghiệp vụ #3 — badge từng đợt vẫn theo dõi đủ dù xác nhận 1 lần)', prAfterLumpConfirm.installments.every((it) => it.confirmed === true), prAfterLumpConfirm.installments);
+    check('Xác nhận lump-sum kèm tệp chứng từ thành công -> đề nghị chuyển PAID NGAY', prAfterLumpConfirm.status === 'PAID', prAfterLumpConfirm.status);
+    check('Lump-sum đánh dấu confirmed=true + lưu đúng confirmFileUrl trên CẢ 2 đợt (yêu cầu nghiệp vụ #3 — badge từng đợt vẫn theo dõi đủ dù xác nhận 1 lần)', prAfterLumpConfirm.installments.every((it) => it.confirmed === true && !!it.confirmFileUrl), prAfterLumpConfirm.installments);
     check('"Thanh toán 1 lần" (ONE_TIME) — lump-sum xong -> GHI NGƯỢC paymentStatus = "Đã thanh toán" (DA_THANH_TOAN, khoá cứng vĩnh viễn) về đúng hợp đồng nguồn', contractAfterLumpConfirm === 'DA_THANH_TOAN', contractAfterLumpConfirm);
 
     const lumpRepeatBlocked = await page.evaluate(async (id) => {
-      try { await callRecordAction('paymentRequests', id, 'confirm-lump-sum', {}); return { ok: true }; }
+      try { await callRecordAction('paymentRequests', id, 'confirm-lump-sum', { fileUrl: '/uploads/test/y.pdf', fileName: 'y.pdf', fileType: 'application/pdf' }); return { ok: true }; }
       catch (err) { return { ok: false, message: err.message }; }
     }, prAId);
     check('Xác nhận lump-sum LẶP LẠI trên đề nghị đã PAID -> bị chặn', !lumpRepeatBlocked.ok, lumpRepeatBlocked);
@@ -412,8 +427,7 @@ async function run() {
 
     // Xác nhận đợt 1/2 (index 0 — mỗi bản ghi tách ra CHỈ có đúng 1 đợt tại index 0) -> đợt này PAID, NHƯNG
     // đợt 2/2 (record khác) vẫn DRAFT -> nguồn PHẢI CHỜ, không ghi ngược sớm (đúng lỗi v15.3 cần fix).
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), d1Inst1.id);
-    await confirmPending();
+    await confirmInstallmentViaModal(d1Inst1.id, 0, confirmFile);
     await page.waitForTimeout(150);
     const d1Inst1Paid = await readPr(d1Inst1.id);
     check('Xác nhận xong đợt 1/2 -> BẢN GHI đợt 1 tự chuyển PAID', d1Inst1Paid.status === 'PAID', d1Inst1Paid.status);
@@ -433,8 +447,7 @@ async function run() {
     check('Đợt 2/2 -> tp_kd duyệt ĐỘC LẬP thành công (APPROVED)', (await readPr(d1Inst2.id)).status === 'APPROVED', (await readPr(d1Inst2.id)).status);
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), d1Inst2.id);
-    await confirmPending();
+    await confirmInstallmentViaModal(d1Inst2.id, 0, confirmFile);
     await page.waitForTimeout(150);
     const d1Inst2Paid = await readPr(d1Inst2.id);
     const contractDAfterCycle1 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id);
@@ -475,8 +488,7 @@ async function run() {
     await confirmPending();
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), d2Inst1.id);
-    await confirmPending();
+    await confirmInstallmentViaModal(d2Inst1.id, 0, confirmFile);
     await page.waitForTimeout(150);
     check('Chu kỳ 2 — đợt 1/2 PAID, đợt 2/2 còn DRAFT -> hợp đồng nguồn VẪN CHO_THANH_TOAN (chưa ghi ngược)', (await readPr(d2Inst1.id)).status === 'PAID' && (await page.evaluate((id) => DB.contracts.find((c) => c.id === id).paymentStatus, contractD.id)) === 'CHO_THANH_TOAN', await readPr(d2Inst1.id));
 
@@ -664,13 +676,12 @@ async function run() {
     check('Duyệt xong -> đề xuất Mua Bán nguồn (officeC) NGAY LÚC NÀY mới chuyển CHO_THANH_TOAN', officeCAfterApprove === 'CHO_THANH_TOAN', officeCAfterApprove);
     await loginAs('ketoan1');
     await goToPaymentApprove();
-    // officeReqs cũng đi qua ĐÚNG 1 cơ chế confirmPaymentInstallment() dùng chung — KHÔNG còn cần tệp gì.
-    await page.evaluate((id) => confirmPaymentInstallmentAction(id, 0), afterFromSourceOffice.pr.id);
-    await confirmPending();
+    // officeReqs cũng đi qua ĐÚNG 1 cơ chế confirmPaymentInstallment() dùng chung — vẫn bắt buộc tệp chứng từ.
+    await confirmInstallmentViaModal(afterFromSourceOffice.pr.id, 0, confirmFile);
     await page.waitForTimeout(150);
     const officePrPaid = await readPr(afterFromSourceOffice.pr.id);
     const officeAfterPaid = await page.evaluate((id) => DB.officeReqs.find((o) => o.id === id).paymentStatus, officeC.id);
-    check('officeReqs (Mua Bán) — xác nhận từng đợt (không cần tệp) -> đề nghị chuyển PAID', officePrPaid.status === 'PAID', officePrPaid);
+    check('officeReqs (Mua Bán) — xác nhận từng đợt (kèm tệp chứng từ) -> đề nghị chuyển PAID', officePrPaid.status === 'PAID', officePrPaid);
     check('officeReqs (Mua Bán) — KHÔNG có paymentType/khái niệm định kỳ nào -> đủ hết đợt vẫn ghi ngược DA_THANH_TOAN như trước (module Mua Bán/Sửa Chữa hoàn toàn không đổi)', officeAfterPaid === 'DA_THANH_TOAN', officeAfterPaid);
 
     // ============ Kịch bản 14: "Yêu Cầu Bổ Sung" đưa đề nghị về NEED_INFO, Sửa & Gửi Lại đưa về PENDING

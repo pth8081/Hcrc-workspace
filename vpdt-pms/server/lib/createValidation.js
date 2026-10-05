@@ -1818,10 +1818,11 @@ const CREATE_MODULE_CONFIGS = {
         };
       });
       payload.amount = payload.installments.reduce((sum, it) => sum + (it.amount || 0), 0);
-      // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) — TUỲ CHỌN ngay lúc tạo (có thể đính kèm sau qua sửa NHÁP
-      // ở "🗂️ Quản Lý Thanh Toán"), nhưng BẮT BUỘC >=1 tệp trước khi "Chuyển Xác Nhận Thanh Toán" (xem
-      // submitPaymentRequest() ở lib/recordActions.js) — quyết định nghiệp vụ MỚI, đảo ngược thiết kế cũ
-      // (trước đây bắt buộc tệp ở bước xác nhận CUỐI).
+      // "Hồ Sơ Đề Nghị Thanh Toán" (multi-file) — TUỲ CHỌN hoàn toàn (đính kèm tham khảo nếu muốn, có thể
+      // thêm sau qua sửa NHÁP ở "🗂️ Quản Lý Thanh Toán") — 10/2026, theo đúng yêu cầu người dùng "giữ
+      // logic cũ": KHÔNG còn bắt buộc ở bước "Chuyển Xác Nhận Thanh Toán" nữa (xem submitPaymentRequest()
+      // ở lib/recordActions.js) — tệp CHỨNG TỪ bắt buộc đúng ở bước xác nhận CUỐI (confirmPaymentInstallment()/
+      // confirmPaymentRequestLumpSum()).
       const requestFiles = Array.isArray(payload.requestFiles) ? payload.requestFiles.slice(0, 20) : [];
       assertUploadedFileUrlList(requestFiles, 'Hồ sơ đề nghị thanh toán');
       payload.requestFiles = requestFiles
