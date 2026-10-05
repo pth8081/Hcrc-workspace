@@ -225,6 +225,11 @@ function defaultProfile(employeeCode) {
     // workEmail (10/2026, đối chiếu "Email công ty" mẫu Excel 90 cột quản lý hồ sơ nhân sự) — khác
     // personalEmail (email cá nhân, tự phục vụ) — workEmail CHỈ HR sửa (HR_ONLY_EDITABLE_FIELDS).
     workEmail: null,
+    // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới — "Điện thoại liên hệ", khác hẳn
+    // emergencyContactPhone là SĐT người liên hệ khẩn cấp) — thu ở Onboarding (hrProcesses.phone), copy 1
+    // lần vào hồ sơ ngay sau khi tạo (cùng cơ chế currentAddress/nationalId ở routes/create.js), rồi HR
+    // sửa trực tiếp qua HR_ONLY_EDITABLE_FIELDS như field hành chính khác.
+    contactPhone: null,
     emergencyContactName: null, emergencyContactPhone: null, emergencyContactRelationship: null,
     // emergencyContactAddress (10/2026, mẫu Excel 90 cột) — cùng nhóm liên hệ khẩn cấp, SENSITIVE_FIELDS
     // + HR_ONLY_EDITABLE_FIELDS như emergencyContactName/Phone/Relationship.
@@ -698,6 +703,55 @@ function getProfileForViewer(profile, viewer, allUsers, managerVisibleFields) {
   return null;
 }
 
+// resolveWiredReadOnlyFields() (10/2026, mẫu Excel mới — báo cáo rà soát 90 trường): 8 cột ĐÃ CÓ dữ liệu
+// thật trong hệ thống nhưng nằm ở collection KHÁC employeeProfiles (users/hrProcesses) — đọc LIVE tại
+// thời điểm xem, KHÔNG sao chép/lưu trùng vào employeeProfiles (cùng tinh thần currentContract ở
+// routes/employeeProfile.js — "đọc sống, không duplicate-store"). Trả về object để gộp (Object.assign)
+// vào response JSON của GET /by-code, /by-username — KHÔNG ghi đè field nào đã có sẵn trên profile.
+// - khoiBan: snapshot ở DB.users (#253), KHÔNG có trên employeeProfiles.
+// - managerUsername/managerName + managerManagerUsername/managerManagerName: 2 cấp quản lý trực tiếp
+//   theo managerUsername của DB.users (Cơ Cấu Tổ Chức) — chỉ đi đúng 2 bước (khác isManagerOf() ở
+//   lib/recordViewScope.js vốn đi NGƯỢC tuỳ ý tới 50 bước để TRẢ LỜI true/false cho 1 cặp cụ thể).
+// - resignationReason/actualEndDate/lastWorkingDate: lấy từ bản ghi hrProcesses OFFBOARDING GẦN NHẤT
+//   khớp employeeUsername (có thể có NHIỀU lần nghỉ/tái tuyển — searchInactiveProfilesForRehire()/
+//   reactivateForRehire() ở trên) — sort theo createdAt, lấy mới nhất. null nếu nhân viên chưa từng có
+//   quy trình Offboarding (đang làm việc bình thường).
+function resolveWiredReadOnlyFields(profile, allUsers, allHrProcesses) {
+  const result = {
+    khoiBan: null,
+    managerUsername: null, managerName: null,
+    managerManagerUsername: null, managerManagerName: null,
+    resignationReason: null, actualEndDate: null, lastWorkingDate: null
+  };
+  if (!profile) return result;
+  const account = profile.username ? (allUsers || []).find(u => u.username === profile.username) : null;
+  if (account) {
+    result.khoiBan = account.khoiBan || null;
+    if (account.managerUsername) {
+      const mgr = (allUsers || []).find(u => u.username === account.managerUsername);
+      result.managerUsername = account.managerUsername;
+      result.managerName = mgr?.name || null;
+      if (mgr?.managerUsername) {
+        const mgr2 = (allUsers || []).find(u => u.username === mgr.managerUsername);
+        result.managerManagerUsername = mgr.managerUsername;
+        result.managerManagerName = mgr2?.name || null;
+      }
+    }
+  }
+  if (profile.username) {
+    const offboardings = (allHrProcesses || [])
+      .filter(p => p.processType === 'OFFBOARDING' && p.employeeUsername === profile.username)
+      .sort((a, b) => (parseVNDateTimeLocal(b.createdAt)?.getTime() || 0) - (parseVNDateTimeLocal(a.createdAt)?.getTime() || 0));
+    const latest = offboardings[0];
+    if (latest) {
+      result.resignationReason = latest.resignationReason || null;
+      result.actualEndDate = latest.actualEndDate || null;
+      result.lastWorkingDate = latest.lastWorkingDate || null;
+    }
+  }
+  return result;
+}
+
 // Trường tự phục vụ được sửa (chính chủ, KHÔNG có hrProfileManage) — không cho tự sửa status/processId/
 // employeeCode/username qua đường này.
 const SELF_EDITABLE_FIELDS = [
@@ -721,7 +775,9 @@ const HR_ONLY_EDITABLE_FIELDS = [
   'lastInternalTransferUnit', 'lastInternalTransferReason',
   'joinDateAtPredecessorUnit', 'joinDateAtHcrc', 'concurrentJobTitle',
   'resignationNoticeDate', 'resignationExpectedDate', 'tenureBaseDate',
-  'careerHistoryNote', 'hrNote'
+  'careerHistoryNote', 'hrNote',
+  // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới) — xem chú thích tại defaultProfile().
+  'contactPhone'
 ];
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
@@ -738,7 +794,7 @@ const PROFILE_FIELD_LABELS = {
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
   socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
   disciplinaryActions: 'Kỷ luật',
-  workSchedule: 'Thời gian làm việc',
+  workSchedule: 'Thời gian làm việc', contactPhone: 'Điện thoại liên hệ',
   // 17 field MỚI (10/2026, mẫu Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — khớp ĐÚNG nhãn đã
   // dùng ở SENSITIVE_FIELD_LABELS cho 6 field trùng (emergencyContactAddress/specialLaborStatus/
   // currentWorkStatusDetail*/hrNote), không đặt tên khác nhau giữa 2 nơi.
@@ -1148,7 +1204,7 @@ module.exports = {
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
-  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer,
+  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
   computeHrReportSummary, computeTenureYears

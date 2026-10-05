@@ -548,7 +548,11 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
-    res.json({ profile: viewable, viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
+    // wiredFields (10/2026, báo cáo rà soát mẫu Excel mới) — 8 cột đọc LIVE từ users/hrProcesses, xem
+    // chú thích đầy đủ tại resolveWiredReadOnlyFields() (lib/employeeProfile.js). CHỈ-XEM, không qua
+    // applyProfileEdit() — gộp thẳng vào response để client hiển thị cùng hồ sơ.
+    const wiredFields = employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []);
+    res.json({ profile: Object.assign({}, viewable, wiredFields), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}`); }
 });
 
@@ -566,7 +570,8 @@ router.get('/by-username/:username', async (req, res) => {
     const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
-    res.json({ profile: viewable, viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
+    const wiredFields = employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []);
+    res.json({ profile: Object.assign({}, viewable, wiredFields), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-username/${req.params.username}`); }
 });
 

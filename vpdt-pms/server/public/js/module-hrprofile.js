@@ -1116,6 +1116,22 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       : `<p class="text-sm text-gray-800 whitespace-pre-wrap">${escapeHtml(profile.careerHistoryNote || '—')}</p>`}
   </div>`;
 
+  // adminInfoBlock3 (10/2026, báo cáo rà soát mẫu Excel mới) — 8 cột ĐỌC LIVE từ users/hrProcesses, gộp
+  // sẵn vào `profile` ở response server (xem resolveWiredReadOnlyFields(), lib/employeeProfile.js) —
+  // TOÀN BỘ CHỈ-XEM ở đây (trừ contactPhone, field THẬT trên employeeProfiles, sửa như field hành chính
+  // khác), không qua applyProfileEdit() vì không thuộc employeeProfiles. Mã/Họ Tên QLTT + QL cấp trên lấy
+  // từ Cơ Cấu Tổ Chức (users.managerUsername), tự cập nhật nếu đổi quản lý — không cần HR tự gõ lại.
+  const managerChainText = [profile.managerUsername, profile.managerName].filter(Boolean).join(' — ');
+  const managerManagerChainText = [profile.managerManagerUsername, profile.managerManagerName].filter(Boolean).join(' — ');
+  const adminInfoBlock3 = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
+    ${editableHrOnly ? textField('Điện thoại liên hệ', 'hrpfF_contactPhone', profile.contactPhone) : roField('Điện thoại liên hệ', profile.contactPhone)}
+    ${roField('Khối/Ban', profile.khoiBan)}
+    ${roField('Mã/Họ Tên QLTT', managerChainText)}
+    ${roField('Mã/Họ Tên QL cấp trên', managerManagerChainText)}
+    ${roField('Lý do nghỉ việc/chuyển việc', profile.resignationReason)}
+    ${roField('Ngày nghỉ việc thực tế', (profile.actualEndDate || profile.lastWorkingDate || '').slice(0, 10))}
+  </div>`;
+
   const manageActionsBlock = (scope !== 'MANAGE' || isReadOnly) ? '' : `<div class="flex flex-wrap items-center gap-2 pb-3 border-b">
     <button type="button" data-op="toggleHrpfManualStatus" class="px-2.5 py-1.5 rounded text-xs font-bold bg-amber-600 text-white hover:bg-amber-700">
       ${profile.status === 'ON_LEAVE' ? '↩️ Chuyển về Đang làm việc' : '🌙 Chuyển sang Nghỉ dài hạn'}
@@ -1286,7 +1302,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${adminInfoBlock3}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${contractBlock}${historyBlock}`;
 }
 
@@ -1493,6 +1509,8 @@ function collectHrpfProfileFormValues(scope) {
     if (document.getElementById('hrpfF_tenureBaseDate')) payload.tenureBaseDate = val('hrpfF_tenureBaseDate') || null;
     if (document.getElementById('hrpfF_careerHistoryNote')) payload.careerHistoryNote = val('hrpfF_careerHistoryNote') || null;
     if (document.getElementById('hrpfF_hrNote')) payload.hrNote = val('hrpfF_hrNote') || null;
+    // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới) — xem adminInfoBlock3.
+    if (document.getElementById('hrpfF_contactPhone')) payload.contactPhone = val('hrpfF_contactPhone') || null;
   }
   return payload;
 }
