@@ -162,6 +162,22 @@ const upload = multer({
 // hàng đợi Onboarding (GET .../onboarding-queue bên dưới, luôn username=null vì chưa qua Onboarding) đây
 // là đường DUY NHẤT có tên hiển thị — bổ sung để tính năng mới hoạt động, đồng thời khớp đúng ý định ban
 // đầu của hrpfIdentitySnapshot() cho cả danh sách "Quản Lý Hồ Sơ" cũ.
+// ensureDeptCode() (10/2026, báo cáo rà soát mẫu Excel mới — "Mã bộ phận") — trả về mã CÓ SẴN trong
+// appData.deptCodeMap nếu đã gán, hoặc TỰ SINH + LƯU mã mới (generateDeptCode(), lib/employeeProfile.js)
+// ngay lần đầu gặp đúng tên bộ phận đó, rồi mới trả về — đúng yêu cầu "tự gán lần đầu dùng đến, không
+// cần HR tự đặt". deptName rỗng (hồ sơ DRAFT chưa gán chức vụ) -> null, không tạo mã "rác".
+async function ensureDeptCode(deptName, deptCodeMap) {
+  if (!deptName) return null;
+  const existing = (deptCodeMap || {})[deptName];
+  if (existing) return existing;
+  const updatedMap = await withLockedAppDataValue('deptCodeMap', (map) => {
+    const m = map || {};
+    if (!m[deptName]) m[deptName] = employeeProfile.generateDeptCode(m);
+    return m;
+  });
+  return updatedMap[deptName];
+}
+
 function stripForList(profile) {
   return {
     employeeCode: profile.employeeCode, username: profile.username, status: profile.status,
@@ -552,7 +568,8 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     // chú thích đầy đủ tại resolveWiredReadOnlyFields() (lib/employeeProfile.js). CHỈ-XEM, không qua
     // applyProfileEdit() — gộp thẳng vào response để client hiển thị cùng hồ sơ.
     const wiredFields = employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []);
-    res.json({ profile: Object.assign({}, viewable, wiredFields), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
+    const deptCode = await ensureDeptCode(profile.dept, appData.deptCodeMap);
+    res.json({ profile: Object.assign({}, viewable, wiredFields, { deptCode }), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}`); }
 });
 
@@ -571,7 +588,8 @@ router.get('/by-username/:username', async (req, res) => {
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
     const wiredFields = employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []);
-    res.json({ profile: Object.assign({}, viewable, wiredFields), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
+    const deptCode = await ensureDeptCode(profile.dept, appData.deptCodeMap);
+    res.json({ profile: Object.assign({}, viewable, wiredFields, { deptCode }), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-username/${req.params.username}`); }
 });
 

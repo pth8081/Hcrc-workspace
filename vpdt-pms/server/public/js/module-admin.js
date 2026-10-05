@@ -497,7 +497,9 @@ const GENERIC_SIMPLE_CATALOGS = {
   legalEntities: { listId: 'legalEntityList', inputId: 'txtLegalEntityName', label: 'đơn vị (pháp nhân)', logPrefix: 'LEGAL_ENTITY' },
   specialLaborStatuses: { listId: 'specialLaborStatusList', inputId: 'txtSpecialLaborStatusName', label: 'đối tượng lao động đặc biệt', logPrefix: 'SPECIAL_LABOR_STATUS' },
   currentWorkStatusDetails: { listId: 'currentWorkStatusDetailList', inputId: 'txtCurrentWorkStatusDetailName', label: 'tình trạng làm việc hiện tại', logPrefix: 'CURRENT_WORK_STATUS_DETAIL' },
-  nationalIdIssuePlaces: { listId: 'nationalIdIssuePlaceList', inputId: 'txtNationalIdIssuePlaceName', label: 'nơi cấp CCCD/CMND', logPrefix: 'NATIONAL_ID_ISSUE_PLACE' }
+  nationalIdIssuePlaces: { listId: 'nationalIdIssuePlaceList', inputId: 'txtNationalIdIssuePlaceName', label: 'nơi cấp CCCD/CMND', logPrefix: 'NATIONAL_ID_ISSUE_PLACE' },
+  // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn các danh mục trên.
+  educationDegrees: { listId: 'educationDegreeList', inputId: 'txtEducationDegreeName', label: 'bằng cấp', logPrefix: 'EDUCATION_DEGREE' }
 };
 // LỖI ĐÃ VÁ (10/2026, người dùng báo "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không add được thông tin
 // vào đâu"): 3 form này dùng data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'" (quy ước
@@ -568,6 +570,7 @@ function renderLegalEntityList() { renderGenericSimpleCatalogList('legalEntities
 function renderSpecialLaborStatusList() { renderGenericSimpleCatalogList('specialLaborStatuses'); }
 function renderCurrentWorkStatusDetailList() { renderGenericSimpleCatalogList('currentWorkStatusDetails'); }
 function renderNationalIdIssuePlaceList() { renderGenericSimpleCatalogList('nationalIdIssuePlaces'); }
+function renderEducationDegreeList() { renderGenericSimpleCatalogList('educationDegrees'); }
 
 // ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label}[] (mục 4a) — TÁCH khỏi DB.jobTitles
 // (Khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType==='STORE' ở form Người Dùng đầy đủ.

@@ -206,6 +206,34 @@ function generateEmployeeCode(list) {
   return code;
 }
 
+// generateDeptCode()/ensureDeptCode() (10/2026, báo cáo rà soát mẫu Excel mới — câu trả lời người dùng
+// cho "Mã bộ phận": "sẽ được định nghĩa kiểu như mã tự sinh đang có của mã phòng" = cùng khuôn
+// generateEmployeeCode() ngay trên — tiền tố + số tuần tự 4 chữ số) — KHÁC employeeCode ở chỗ 1 mã gắn
+// với 1 TÊN BỘ PHẬN (không phải 1 nhân viên): mọi nhân viên cùng Phòng Ban/Siêu Thị dùng CHUNG 1 mã, lưu
+// ở appData riêng "deptCodeMap" (object {<tên bộ phận>: <mã>}), KHÔNG lồng vào employeeProfiles — tự gán
+// mã MỚI (nếu tên bộ phận đó chưa từng có mã) ngay lần đầu được truy vấn (xem ensureDeptCode() ở
+// routes/employeeProfile.js GET /by-code, /by-username), không cần HR tự đặt tay.
+const DEPT_CODE_PREFIX = 'PH';
+const DEPT_CODE_RE = /^PH(\d+)$/;
+function generateDeptCode(deptCodeMap) {
+  const used = new Set(Object.values(deptCodeMap || {}));
+  let maxSeq = 0;
+  for (const code of used) {
+    const m = DEPT_CODE_RE.exec(String(code || ''));
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  }
+  let seq = maxSeq + 1;
+  let code = `${DEPT_CODE_PREFIX}${String(seq).padStart(4, '0')}`;
+  while (used.has(code)) {
+    seq += 1;
+    code = `${DEPT_CODE_PREFIX}${String(seq).padStart(4, '0')}`;
+  }
+  return code;
+}
+
 function findProfile(list, employeeCode) {
   return (list || []).find(p => p.employeeCode === employeeCode) || null;
 }
@@ -1200,7 +1228,7 @@ module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
-  generateEmployeeCode, searchInactiveProfilesForRehire, reactivateForRehire,
+  generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,

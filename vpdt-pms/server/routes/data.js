@@ -260,6 +260,8 @@ const ADMIN_ONLY_KEYS = new Set([
   // Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — 4 danh mục MỞ mới, cùng lý do khoá ghi như
   // jobGrades/resignationReasons/disciplinaryTypes ngay trên: panel CRUD chỉ hiện cho admin.
   'legalEntities', 'specialLaborStatuses', 'currentWorkStatusDetails', 'nationalIdIssuePlaces',
+  // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng lý do khoá ghi như 7 danh mục trên.
+  'educationDegrees',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',

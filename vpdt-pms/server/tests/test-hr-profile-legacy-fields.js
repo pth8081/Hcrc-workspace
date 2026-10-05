@@ -151,8 +151,12 @@ async function main() {
     await page.click('#hrpfDetailBody [data-op="addHrpfDependentRow"]');
     await page.fill('.hrpf-dependent-row .hrpf-dep-name', 'Nguyễn Văn Con');
     await page.fill('.hrpf-dependent-row .hrpf-dep-rel', 'Con');
+    // degree (10/2026, báo cáo rà soát mẫu Excel mới) — đổi từ input text sang <select> nguồn
+    // DB.educationDegrees, harness này không seed danh mục đó nên tự thêm 1 giá trị TRƯỚC KHI thêm dòng
+    // (select render options ngay lúc đó, đặt sau sẽ không có tác dụng).
+    await page.evaluate(() => { DB.educationDegrees = ['Cử nhân']; });
     await page.click('#hrpfDetailBody [data-op="addHrpfEducationRow"]');
-    await page.fill('.hrpf-education-row .hrpf-edu-degree', 'Cử nhân');
+    await page.selectOption('.hrpf-education-row .hrpf-edu-degree', 'Cử nhân');
     await page.fill('.hrpf-education-row .hrpf-edu-school', 'Đại Học Kinh Tế TP.HCM');
     await page.click('[data-op="saveHrpfManageProfile"]');
     await page.waitForTimeout(300);

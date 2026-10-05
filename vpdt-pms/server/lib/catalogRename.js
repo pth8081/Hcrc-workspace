@@ -627,6 +627,8 @@ const CATALOG_HANDLERS = {
   specialLaborStatuses: simpleArrayCatalogHandler('specialLaborStatuses', 'Danh Mục Đối Tượng Lao Động Đặc Biệt'),
   currentWorkStatusDetails: simpleArrayCatalogHandler('currentWorkStatusDetails', 'Danh Mục Tình Trạng Làm Việc Hiện Tại'),
   nationalIdIssuePlaces: simpleArrayCatalogHandler('nationalIdIssuePlaces', 'Danh Mục Nơi Cấp CCCD/CMND'),
+  // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn 7 danh mục GỢI Ý ngay trên.
+  educationDegrees: simpleArrayCatalogHandler('educationDegrees', 'Danh Mục Bằng Cấp'),
   jobTitles: {
     async renameInCatalog(oldValue, newValue) {
       return withLockedAppDataValue('jobTitles', (list) => {

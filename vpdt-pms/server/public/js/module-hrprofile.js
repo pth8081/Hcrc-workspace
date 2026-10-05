@@ -1125,6 +1125,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
   const managerManagerChainText = [profile.managerManagerUsername, profile.managerManagerName].filter(Boolean).join(' — ');
   const adminInfoBlock3 = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
     ${editableHrOnly ? textField('Điện thoại liên hệ', 'hrpfF_contactPhone', profile.contactPhone) : roField('Điện thoại liên hệ', profile.contactPhone)}
+    ${roField('Mã bộ phận', profile.deptCode)}
     ${roField('Khối/Ban', profile.khoiBan)}
     ${roField('Mã/Họ Tên QLTT', managerChainText)}
     ${roField('Mã/Họ Tên QL cấp trên', managerManagerChainText)}
@@ -1336,8 +1337,16 @@ function hrpfDependentRowHtml(d) {
 }
 function hrpfEducationRowHtml(e) {
   const ee = e || {};
+  // degree (10/2026, báo cáo rà soát mẫu Excel mới — câu trả lời người dùng "cho drop list tùy chọn và
+  // đưa vào danh mục") — đổi từ ô gõ tự do sang <select> nguồn DB.educationDegrees (Danh Mục Bằng Cấp,
+  // Quản Lý Danh Mục), cùng khuôn nationalIdIssuePlace/legalEntity. Vẫn giữ giá trị cũ dù không còn nằm
+  // trong danh mục (dữ liệu lịch sử/đã xoá khỏi danh mục) để không âm thầm mất dữ liệu đã lưu.
+  const degreeOptions = Array.from(new Set([...(DB.educationDegrees || []), ...(ee.degree ? [ee.degree] : [])]));
   return `<div class="grid grid-cols-4 gap-1 items-center hrpf-education-row" data-id="${escapeHtml(ee.id || '')}">
-    <input value="${escapeHtml(ee.degree || '')}" placeholder="Bằng cấp" class="border p-1 rounded text-xs hrpf-edu-degree">
+    <select class="border p-1 rounded text-xs bg-white hrpf-edu-degree">
+      <option value="">-- Bằng cấp --</option>
+      ${degreeOptions.map(d => `<option value="${escapeHtml(d)}" ${ee.degree === d ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+    </select>
     <input value="${escapeHtml(ee.major || '')}" placeholder="Chuyên ngành" class="border p-1 rounded text-xs hrpf-edu-major">
     <input value="${escapeHtml(ee.school || '')}" placeholder="Trường" class="border p-1 rounded text-xs hrpf-edu-school">
     <div class="flex items-center gap-1">

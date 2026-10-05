@@ -102,6 +102,21 @@ async function main() {
     assertEqual(result.resignationReason, null);
   });
 
+  // ===== generateDeptCode() — "Mã bộ phận" tự sinh (10/2026, báo cáo rà soát mẫu Excel mới) =====
+  await run.run('generateDeptCode(): map rỗng -> sinh mã đầu tiên PH0001', () => {
+    assertEqual(employeeProfile.generateDeptCode({}), 'PH0001');
+  });
+
+  await run.run('generateDeptCode(): lấy đúng số LỚN NHẤT đã dùng +1 (không phụ thuộc thứ tự chèn)', () => {
+    const map = { 'Phòng A': 'PH0001', 'Phòng B': 'PH0005', 'Phòng C': 'PH0003' };
+    assertEqual(employeeProfile.generateDeptCode(map), 'PH0006');
+  });
+
+  await run.run('generateDeptCode(): bỏ qua mã KHÔNG đúng định dạng PHxxxx (dữ liệu lạ không làm lệch số)', () => {
+    const map = { 'Phòng A': 'PH0002', 'Phòng Lạ': 'ABC123' };
+    assertEqual(employeeProfile.generateDeptCode(map), 'PH0003');
+  });
+
   run.summary();
 }
 
