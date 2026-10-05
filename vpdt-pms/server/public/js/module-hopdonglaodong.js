@@ -640,3 +640,118 @@ async function confirmHrContractImport() {
     alert('⛔ ' + err.message);
   }
 }
+
+// ===== Nhập Excel TẠO MỚI hàng loạt (10/2026) — khoá/match theo Mã Nhân Viên; mã ĐÃ có hợp đồng ACTIVE
+// thì người dùng tự chọn Ghi đè/Huỷ cho dòng đó (mặc định an toàn: Huỷ) — xem
+// lib/laborContractCreateImport.js. Cùng khuôn modal Nhập Excel sửa hàng loạt ở trên, khác ở việc mỗi
+// dòng xem trước có 1 selector hành động (Tạo mới/Ghi đè/Huỷ) thay vì 1 checkbox đơn.
+let hrContractCreateImportPreviewItems = [];
+
+function openHrContractCreateImportModal() {
+  document.getElementById('hrContractCreateImportFile').value = '';
+  document.getElementById('hrContractCreateImportStatus').innerText = '';
+  hrContractCreateImportPreviewItems = [];
+  document.getElementById('hrContractCreateImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrContractCreateImportConfirmBtn').classList.add('hidden');
+  document.getElementById('hrContractCreateImportModal').classList.remove('hidden');
+}
+function closeHrContractCreateImportModal() {
+  document.getElementById('hrContractCreateImportModal').classList.add('hidden');
+}
+
+function renderHrContractCreateImportPreviewBody() {
+  document.getElementById('hrContractCreateImportPreviewBody').innerHTML = hrContractCreateImportPreviewItems.map((it) => {
+    let actionCell;
+    let statusCell = '';
+    if (!it.valid) {
+      actionCell = '<span class="text-gray-400">—</span>';
+      statusCell = `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
+    } else if (it.hasActiveContract) {
+      actionCell = `<select data-op-change="onHrContractCreateImportRowActionChange" data-arg0="${it._idx}" data-arg-value="1" class="border rounded px-1 py-0.5 text-[11px]">
+        <option value="skip" ${it.action === 'skip' ? 'selected' : ''}>Huỷ (giữ nguyên)</option>
+        <option value="overwrite" ${it.action === 'overwrite' ? 'selected' : ''}>Ghi đè hợp đồng ACTIVE</option>
+      </select>`;
+      statusCell = `<span class="text-amber-700">⚠️ Đã có hợp đồng ACTIVE [${escapeHtml(it.existingActiveCode || '')}]</span>`;
+    } else {
+      actionCell = `<select data-op-change="onHrContractCreateImportRowActionChange" data-arg0="${it._idx}" data-arg-value="1" class="border rounded px-1 py-0.5 text-[11px]">
+        <option value="add" ${it.action === 'add' ? 'selected' : ''}>Tạo mới</option>
+        <option value="skip" ${it.action === 'skip' ? 'selected' : ''}>Huỷ (bỏ qua)</option>
+      </select>`;
+      statusCell = it.duplicateInFile ? '<span class="text-amber-700">⚠️ Trùng mã trong file</span>' : '<span class="text-green-700">✅ Sẵn sàng tạo mới</span>';
+    }
+    return `<tr class="${!it.valid || it.hasActiveContract || it.duplicateInFile ? 'bg-amber-50' : ''}">
+      <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
+      <td class="p-1">${escapeHtml(it.fullName || '')}</td>
+      <td class="p-1">${it.valid ? escapeHtml(HRC_CONTRACT_TYPE_LABELS[it.fields.contractType] || it.fields.contractType || '') : '-'}</td>
+      <td class="p-1">${actionCell}</td>
+      <td class="p-1">${statusCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function onHrContractCreateImportFileChange(event) {
+  const file = event.target.files[0];
+  hrContractCreateImportPreviewItems = [];
+  document.getElementById('hrContractCreateImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrContractCreateImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('hrContractCreateImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/labor-contracts/parse-create-import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // Mặc định an toàn (cùng tinh thần module-hrprofile.js): dòng hợp lệ + KHÔNG trùng (không có hợp
+    // đồng ACTIVE, không trùng ngay trong file) -> action='add'; mọi dòng còn lại -> 'skip', người dùng
+    // tự đổi lại qua selector nếu vẫn muốn Ghi đè/Tạo mới.
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      it.action = (it.valid && !it.hasActiveContract && !it.duplicateInFile) ? 'add' : 'skip';
+    });
+    hrContractCreateImportPreviewItems = data.items;
+    const addableCount = data.items.filter(it => it.valid && !it.hasActiveContract).length;
+    const dupActiveCount = data.items.filter(it => it.valid && it.hasActiveContract).length;
+    const dupFileCount = data.items.filter(it => it.duplicateInFile).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${data.items.length} dòng, ${addableCount} dòng sẵn sàng tạo mới`
+      + (dupActiveCount ? `, ${dupActiveCount} dòng ĐÃ có hợp đồng ACTIVE (tự chọn Ghi đè/Huỷ).` : '.')
+      + (dupFileCount ? ` ${dupFileCount} dòng trùng mã trong file.` : '');
+    renderHrContractCreateImportPreviewBody();
+    document.getElementById('hrContractCreateImportPreviewWrap').classList.remove('hidden');
+    if (data.items.some(it => it.valid)) document.getElementById('hrContractCreateImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+function onHrContractCreateImportRowActionChange(idxStr, action) {
+  const it = hrContractCreateImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = action;
+}
+
+async function confirmHrContractCreateImport() {
+  const submitItems = hrContractCreateImportPreviewItems.filter(it => it.valid && it.action !== 'skip');
+  if (!submitItems.length) return alert('Chưa có dòng nào được chọn Tạo mới/Ghi đè.');
+  try {
+    const res = await fetch('/api/records/laborContracts/apply-create-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: submitItems.map(it => ({ employeeCode: it.employeeCode, action: it.action, fields: it.fields })) })
+    });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    (data.created || []).forEach(hrcApplyUpdate);
+    (data.updated || []).forEach(hrcApplyUpdate);
+    let msg = `✅ Đã tạo mới ${data.created.length} hợp đồng, ghi đè ${data.updated.length} hợp đồng.`;
+    if (data.skipped.length) {
+      msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
+    }
+    alert(msg);
+    closeHrContractCreateImportModal();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}

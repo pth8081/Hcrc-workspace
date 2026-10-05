@@ -11,6 +11,7 @@ const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { canManageContracts } = require('../lib/laborContract');
 const { buildImportTemplateWorkbook, parseImportFile } = require('../lib/laborContractImport');
+const { buildCreateTemplateWorkbook, parseCreateImportBuffer } = require('../lib/laborContractCreateImport');
 const { getAllAppData } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
@@ -88,6 +89,49 @@ router.post('/parse-import', uploadRateLimiter, requireContractManage, (req, res
       res.json({ items, fileName: req.file.originalname });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/labor-contracts/parse-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
+// GET /api/labor-contracts/create-template — file mẫu Excel để TẠO MỚI hợp đồng hàng loạt.
+router.get('/create-template', requireContractManage, async (req, res) => {
+  try {
+    const wb = buildCreateTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Tao_Moi_Hop_Dong_Lao_Dong.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/labor-contracts/create-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /api/labor-contracts/parse-create-import — đọc file đã điền, trả về xem trước (KHÔNG lưu gì).
+router.post('/parse-create-import', uploadRateLimiter, requireContractManage, (req, res) => {
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, req.originalUrl);
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const appData = await getAllAppData();
+      const items = await parseCreateImportBuffer(buffer, appData);
+      res.json({ items, fileName: req.file.originalname });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/labor-contracts/parse-create-import');
     } finally {
       fs.unlink(req.file.path, () => {});
     }

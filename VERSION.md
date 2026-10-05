@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**25.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.16 (2026-10-05): Hợp Đồng Lao Động — Nhập Excel TẠO MỚI hợp đồng hàng loạt
+
+Theo yêu cầu người dùng (di trú file quản lý nhân sự cũ, VD 500 nhân viên
+chưa có hợp đồng nào trong hệ thống): thêm tính năng mới **"Nhập Excel TẠO
+MỚI Hợp Đồng Lao Động hàng loạt"**, tách biệt hoàn toàn với tính năng Nhập
+Excel sửa hàng loạt đã có trước đó (CHỈ sửa hợp đồng ACTIVE, không tạo mới).
+
+- `lib/laborContractCreateImport.js` (MỚI): mẫu Excel tạo mới (không có cột
+  Phòng Ban — luôn lấy theo phòng ban người thực hiện import) + đọc file xem
+  trước, mỗi dòng tính `hasActiveContract`/`existingActiveCode` (khoá theo Mã
+  Nhân Viên, dùng `findActiveContractByEmployeeCode()` có sẵn) + đánh dấu
+  trùng trong file (`markDuplicateItems()` dùng chung).
+- `routes/laborContractImport.js`: thêm `GET /create-template` và
+  `POST /parse-create-import`, cùng khuôn 2 route Nhập Excel sửa hàng loạt đã
+  có.
+- `routes/records.js`: thêm `POST /laborContracts/apply-create-import` — mỗi
+  dòng xử lý độc lập theo `action` HR chọn ở màn xem trước: `add` gọi lại
+  ĐÚNG `validateAndPrepareCreate()`+`createForCollectionSerialized()` mà
+  tạo tay đơn lẻ dùng (bảo toàn luật renewalIndex/tối đa 2 lần gia hạn/sinh mã
+  hợp đồng), `overwrite` gọi lại ĐÚNG `applyManualEdit()` lên hợp đồng ACTIVE
+  hiện có, `skip` bỏ qua — không viết lại business rule nào mới.
+- `public/js/module-hopdonglaodong.js` + `public/fragments/hrContractSection.html`:
+  2 nút mới "📥 Tải Mẫu Tạo Mới"/"📤 Nhập Excel Tạo Mới" + modal xem trước có
+  selector hành động Tạo mới/Ghi đè/Huỷ cho từng dòng (mặc định an toàn: Huỷ
+  cho dòng trùng).
+- `tests/test-labor-contract-create-import.js` (MỚI, 15 test) + chạy lại toàn
+  bộ bộ test Hợp Đồng Lao Động/Hồ Sơ Nhân Sự liên quan — không có regression.
+- Cập nhật `deploy/Huong-dan-nghiep-vu.md` (mục 4.5.4) mô tả tính năng mới.
+- **Không cần thao tác deploy gì thêm** ngoài copy code + `pm2 restart` (không
+  đổi schema SQL, không thêm biến môi trường, không thêm dependency npm).
 
 ## v25.15 (2026-10-06): Hồ Sơ Nhân Sự — rà soát mẫu Excel mới (deptCode, Bằng Cấp, 7 field HĐLĐ + 12 cột lịch sử)
 

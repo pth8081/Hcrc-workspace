@@ -9,11 +9,13 @@ const recordActions = require('../lib/recordActions');
 const employeeProfile = require('../lib/employeeProfile');
 const laborContract = require('../lib/laborContract');
 const laborContractImport = require('../lib/laborContractImport');
+const laborContractCreateImport = require('../lib/laborContractCreateImport');
+const { validateAndPrepareCreate } = require('../lib/createValidation');
 const attendance = require('../lib/attendance');
 const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
 const { getAllWorkItems, getWorkItemsBySource, insertWorkItem, withLockedWorkItemById, withLockedWorkItemByIdForDelete, deleteWorkItemById, deleteWorkItemsByIds } = require('../lib/operationWorkItemStore');
-const { createForCollection, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, withAppLock, isUniqueConstraintViolation } = require('../lib/recordStore');
+const { createForCollection, createForCollectionSerialized, insertRecord, withLockedRecordForCollection, withLockedRecordById, deleteRecordForCollection, getAllForCollection, getTrashItems, withAppLock, isUniqueConstraintViolation } = require('../lib/recordStore');
 const { getAllAppData, getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../lib/uploadedFiles');
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
@@ -4994,6 +4996,68 @@ router.post('/laborContracts/apply-import', async (req, res) => {
     res.json({ ok: true, updated, skipped });
   } catch (err) {
     handleError(res, 'laborContracts/apply-import', err);
+  }
+});
+
+// POST /laborContracts/apply-create-import — áp dụng hàng loạt dòng Excel TẠO MỚI đã được HR xem trước
+// (routes/laborContractImport.js::parse-create-import, KHÔNG tự ghi gì ở bước xem trước đó). Theo yêu
+// cầu người dùng (10/2026, di trú 500 nhân viên chưa có hợp đồng nào trong hệ thống): khoá/match theo
+// Mã Nhân Viên, employeeCode ĐÃ có hợp đồng ACTIVE thì HR tự chọn mỗi dòng action='add' (tạo mới — chỉ
+// hợp lệ khi KHÔNG có hợp đồng ACTIVE, do lib/laborContract.js chỉ cho phép 1 hợp đồng ACTIVE/nhân viên
+// — tạo mới quyền đụng độ là lỗi nghiệp vụ thật, không phải race condition), 'overwrite' (ghi đè đúng
+// hợp đồng ACTIVE đó) hoặc 'skip' (bỏ qua, mặc định an toàn khi không chọn gì — xem rowToPreviewItem() ở
+// lib/laborContractCreateImport.js và khuôn hành động module-hrprofile.js đã dùng trước đó).
+// KHÔNG viết lại business rule nào mới: 'add' gọi lại ĐÚNG validateAndPrepareCreate()+
+// createForCollectionSerialized() mà POST /api/create/laborContracts (tạo tay đơn lẻ, routes/create.js)
+// dùng — renewalIndex/luật tối đa 2 lần gia hạn/sinh mã hợp đồng/employeeCode có thật trong Hồ Sơ Nhân
+// Sự đều được bảo vệ y hệt; 'overwrite' gọi lại ĐÚNG applyManualEdit() mà route apply-import (sửa hàng
+// loạt) ngay trên dùng. 1 dòng lỗi KHÔNG chặn các dòng còn lại — trả về created[]/updated[]/skipped[].
+router.post('/laborContracts/apply-create-import', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'Thiếu danh sách dòng cần tạo' });
+    if (items.length > laborContractCreateImport.MAX_ROWS_PER_IMPORT) {
+      return res.status(400).json({ error: `Vượt quá ${laborContractCreateImport.MAX_ROWS_PER_IMPORT} dòng/lần — vui lòng chia nhỏ.` });
+    }
+    const created = [];
+    const updated = [];
+    const skipped = [];
+    for (const row of items) {
+      const employeeCode = String(row?.employeeCode || '').trim();
+      const action = row?.action === 'overwrite' ? 'overwrite' : (row?.action === 'add' ? 'add' : 'skip');
+      if (!employeeCode) { skipped.push({ employeeCode: '', reason: 'Thiếu Mã Nhân Viên' }); continue; }
+      if (action === 'skip') { skipped.push({ employeeCode, reason: 'Bỏ qua theo lựa chọn của người dùng' }); continue; }
+      try {
+        if (action === 'overwrite') {
+          const peekList = await getAllForCollection('laborContracts');
+          const target = laborContract.findActiveContractByEmployeeCode(peekList, employeeCode);
+          if (!target) { skipped.push({ employeeCode, reason: 'Không tìm thấy hợp đồng ĐANG HIỆU LỰC (ACTIVE) để ghi đè — có thể đã bị đóng giữa lúc xem trước và xác nhận' }); continue; }
+          const result = await withLockedRecordForCollection('laborContracts', target.id, (item) => {
+            laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
+            return item;
+          });
+          logLaborContractAction(req, freshUser, 'EDIT', result.code || String(target.id), `Ghi đè hợp đồng lao động [${result.code || target.id}] qua Nhập Excel TẠO MỚI hàng loạt`);
+          updated.push(result);
+        } else {
+          const trashedItems = await getTrashItems('laborContracts');
+          const result = await createForCollectionSerialized('laborContracts', `labor_contract_code:${employeeCode}`, async (list) => {
+            const appData = await getAllAppData();
+            const record = validateAndPrepareCreate('laborContracts', { ...(row?.fields || {}), employeeCode }, freshUser, list, appData, trashedItems);
+            await assertPayloadFileUrlsOwnedByUser(record, freshUser);
+            return record;
+          });
+          logLaborContractAction(req, freshUser, 'CREATE', result.code || employeeCode, `Tạo mới hợp đồng lao động [${result.code || employeeCode}] qua Nhập Excel TẠO MỚI hàng loạt`);
+          created.push(result);
+        }
+      } catch (rowErr) {
+        skipped.push({ employeeCode, reason: rowErr.message || 'Lỗi không xác định' });
+      }
+    }
+    res.json({ ok: true, created, updated, skipped });
+  } catch (err) {
+    handleError(res, 'laborContracts/apply-create-import', err);
   }
 });
 

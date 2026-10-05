@@ -2934,6 +2934,36 @@ còn tự động xoá được hợp đồng lao động nữa.
     hợp đồng ở Hồ Sơ Nhân Sự (mục dưới, "CHỈ XEM") đọc **LIVE** từ Hợp Đồng
     Lao Động mỗi lần hiển thị/xuất, nên sửa hợp đồng ở đây (qua Excel hay
     form) tự hiện lại đúng ngay, không có bản sao dữ liệu nào cần đồng bộ.
+- **Excel Nhập TẠO MỚI hợp đồng hàng loạt (10/2026, theo yêu cầu người dùng —
+  di trú file quản lý nhân sự cũ, VD 500 nhân viên chưa có hợp đồng nào trong
+  hệ thống)** — 2 nút riêng **"📥 Tải Mẫu Tạo Mới"/"📤 Nhập Excel Tạo Mới"**
+  (cạnh 2 nút Nhập Excel sửa hàng loạt ở trên, KHÔNG dùng chung mẫu/màn —
+  khác hẳn về bản chất: mẫu này TẠO hợp đồng mới, mẫu kia CHỈ SỬA hợp đồng đã
+  có):
+  - Khoá/match theo **Mã Nhân Viên** — mã đó phải **đã có trong Hồ Sơ Nhân
+    Sự** (nhập Hồ Sơ Nhân Sự trước), nếu không màn xem trước báo lỗi ngay
+    dòng đó, không tự tạo hồ sơ hộ.
+  - Mỗi dòng hợp lệ ở màn xem trước có 1 ô chọn hành động:
+    - **employeeCode CHƯA có hợp đồng ACTIVE** → mặc định **"Tạo mới"**, tạo
+      hợp đồng DRAFT mới qua **đúng** luồng tạo tay đơn lẻ (sinh mã hợp đồng,
+      validate Lương/Phụ Cấp/Tỷ Lệ Lương Thử Việc, tính Lần Gia Hạn + áp luật
+      "Xác định thời hạn tối đa 2 lần gia hạn" như tạo tay) — không có đường
+      tắt nào bỏ qua các luật này qua Excel.
+    - **employeeCode ĐÃ có hợp đồng ACTIVE** → màn xem trước đánh dấu TRÙNG
+      (hiện rõ mã hợp đồng ACTIVE hiện có), mặc định **"Huỷ"** (an toàn, giữ
+      nguyên hợp đồng cũ) — HR tự đổi sang **"Ghi đè"** nếu muốn áp các cột đã
+      điền lên đúng hợp đồng ACTIVE đó (CHỈ ghi đè field có điền, để trống ô
+      nào = giữ nguyên, cùng khuôn Nhập Excel sửa hàng loạt ở trên).
+    - 2 dòng cùng Mã Nhân Viên trong 1 file cũng được đánh dấu trùng (mặc
+      định Huỷ dòng lặp lại) — tự chọn lại nếu thật sự cần tạo/ghi đè.
+  - Cột trong mẫu: Loại HĐLĐ, Ngày Hiệu Lực (bắt buộc), Ngày Hết Hạn (bắt
+    buộc trừ Vô thời hạn), Lần Gia Hạn (để trống = hệ thống tự tính), Lương Cơ
+    Bản, 7 khoản Phụ Cấp/Hỗ Trợ, 3 khoản Thu Nhập, Tỷ Lệ Lương Thử Việc —
+    **KHÔNG có cột Phòng Ban** (hợp đồng mới luôn lấy theo phòng ban của
+    người thực hiện import, giống tạo tay, điền vào cũng bị bỏ qua).
+  - Bấm "✅ Xác Nhận Tạo/Ghi Đè" mới thật sự ghi; mỗi dòng xử lý độc lập (1
+    dòng lỗi/bị chặn bởi luật nghiệp vụ không chặn các dòng còn lại), giới
+    hạn 300 dòng/lần như Nhập Excel sửa hàng loạt.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có tầng nhân
   viên tự xem hợp đồng lao động của chính mình; thời hạn thử việc theo từng
   loại vị trí (chuyên môn/kỹ thuật/mùa vụ) vẫn dùng chung 1 mốc ước tính 60

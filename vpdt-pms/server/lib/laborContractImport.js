@@ -59,6 +59,14 @@ const EDITABLE_COLUMNS = [
   { header: 'Hỗ Trợ Đi Lại', key: 'transportAllowance', width: 16 },
   { header: 'Hỗ Trợ Điện Thoại', key: 'phoneAllowance', width: 16 },
   { header: 'Phụ Cấp/Hỗ Trợ Khác', key: 'otherAllowance', width: 16 },
+  // 3 khoản thu nhập + tỷ lệ lương thử việc (báo cáo rà soát mẫu Excel mới, 10/2026) — CÙNG khuôn SỬA
+  // như 7 phụ cấp ở trên, xem lib/laborContract.js::INCOME_FIELDS/PROBATION_SALARY_RATES. Thêm MUỘN hơn
+  // 7 phụ cấp (đợt 10/2026 sau) nên để CUỐI danh sách, không chèn giữa — tránh đổi thứ tự cột của mẫu
+  // đã phát hành trước đó.
+  { header: 'Mức Lương Đóng BHXH', key: 'socialInsuranceSalary', width: 16 },
+  { header: 'Thưởng HQCV/Năng Suất', key: 'productivityBonus', width: 16 },
+  { header: 'Khoản Khác', key: 'otherIncome', width: 16 },
+  { header: 'Tỷ Lệ Lương Thử Việc % (85 hoặc 100)', key: 'probationSalaryRate', width: 20 },
   { header: 'Phòng Ban', key: 'dept', width: 20 }
 ];
 const EDITABLE_FIELD_KEYS = EDITABLE_COLUMNS.map(c => c.key);
@@ -93,6 +101,7 @@ function buildImportTemplateWorkbook() {
     startDate: '2026-01-01', endDate: '2027-01-01', baseSalary: 12000000,
     responsibilityAllowance: '', concurrentAllowance: '', hazardAllowance: '',
     lunchAllowance: 500000, transportAllowance: 300000, phoneAllowance: '', otherAllowance: '',
+    socialInsuranceSalary: '', productivityBonus: '', otherIncome: '', probationSalaryRate: '',
     dept: 'Phòng Kinh Doanh'
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
@@ -102,7 +111,7 @@ function buildImportTemplateWorkbook() {
   noteSheet.addRow(['"Mã Nhân Viên": phải khớp ĐÚNG mã nhân viên đang có hợp đồng ĐANG HIỆU LỰC (ACTIVE) trong hệ thống — Excel này CHỈ SỬA hợp đồng đã có, KHÔNG tạo hợp đồng mới.']);
   noteSheet.addRow(['Để TRỐNG 1 ô (khác dòng ví dụ) = GIỮ NGUYÊN giá trị đang có trên hợp đồng, không xoá/không đổi field đó.']);
   noteSheet.addRow(['"Loại HĐLĐ": gõ "Thử việc" / "Xác định thời hạn" / "Vô thời hạn" (hoặc mã PROBATION/FIXED_TERM/INDEFINITE đều được).']);
-  noteSheet.addRow(['Các cột Lương Cơ Bản/Phụ Cấp: để trống nếu không muốn đổi, hoặc gõ số (không cần dấu phân cách hàng nghìn).']);
+  noteSheet.addRow(['Các cột Lương Cơ Bản/Phụ Cấp/3 khoản thu nhập: để trống nếu không muốn đổi, hoặc gõ số (không cần dấu phân cách hàng nghìn). "Tỷ Lệ Lương Thử Việc" chỉ nhận 85 hoặc 100.']);
   noteSheet.addRow(['Sửa xong, dữ liệu sẽ TỰ hiện lại ở khối "Hợp Đồng Lao Động" (chỉ xem) trên màn Hồ Sơ Nhân Sự của đúng nhân viên đó — không cần thêm bước đồng bộ nào.']);
   return wb;
 }
@@ -125,6 +134,8 @@ function buildExportWorkbook(contracts, identityByCode) {
       responsibilityAllowance: c.responsibilityAllowance, concurrentAllowance: c.concurrentAllowance,
       hazardAllowance: c.hazardAllowance, lunchAllowance: c.lunchAllowance,
       transportAllowance: c.transportAllowance, phoneAllowance: c.phoneAllowance, otherAllowance: c.otherAllowance,
+      socialInsuranceSalary: c.socialInsuranceSalary, productivityBonus: c.productivityBonus,
+      otherIncome: c.otherIncome, probationSalaryRate: c.probationSalaryRate,
       dept: c.dept || '',
       code: c.code || '', statusLabel: STATUS_LABELS[c.status] || c.status || '', renewalIndex: c.renewalIndex,
       employeeUsername: c.employeeUsername || '', terminationDate: c.terminationDate || '',
@@ -171,6 +182,10 @@ const HEADER_HINTS = {
   transportAllowance: ['ho tro di lai'],
   phoneAllowance: ['ho tro dien thoai'],
   otherAllowance: ['phu cap/ho tro khac'],
+  socialInsuranceSalary: ['muc luong dong bhxh'],
+  productivityBonus: ['thuong hqcv/nang suat'],
+  otherIncome: ['khoan khac'],
+  probationSalaryRate: ['ty le luong thu viec'],
   dept: ['phong ban']
 };
 
@@ -206,9 +221,15 @@ function validateEditableField(field, rawValue) {
     }
     case 'baseSalary':
     case 'responsibilityAllowance': case 'concurrentAllowance': case 'hazardAllowance':
-    case 'lunchAllowance': case 'transportAllowance': case 'phoneAllowance': case 'otherAllowance': {
+    case 'lunchAllowance': case 'transportAllowance': case 'phoneAllowance': case 'otherAllowance':
+    case 'socialInsuranceSalary': case 'productivityBonus': case 'otherIncome': {
       const n = Number(val);
       if (!Number.isFinite(n) || n < 0) return { present: true, error: `Giá trị "${field}" không hợp lệ (phải là số >= 0)` };
+      return { present: true, value: n };
+    }
+    case 'probationSalaryRate': {
+      const n = Number(val);
+      if (!laborContract.PROBATION_SALARY_RATES.has(n)) return { present: true, error: 'Tỷ lệ hưởng lương thử việc chỉ nhận 85 hoặc 100 (%)' };
       return { present: true, value: n };
     }
     default:
