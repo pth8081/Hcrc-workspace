@@ -322,6 +322,31 @@ function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepO
   });
   return approvers;
 }
+// Hỗ Trợ IT > Phê Duyệt Giá — Bán Buôn, "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng,
+// 10/2026) — CÙNG KHUÔN resolveOperationOrderStoreMixedApprovers() ở trên (tái dùng ĐÚNG
+// resolveOperationOrderStoreMixedApprovalRuleUsernames() bên trong, logic khớp rule/storeDept/users hoàn
+// toàn generic, không có gì riêng cho operationOrders), chỉ khác nguồn dữ liệu rules[] — xem chú thích
+// đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules cho LÝ DO cần tách riêng khỏi
+// itPriceTierWorkflows[...].approvers/approversByPosition cũ (khớp TOÀN CÔNG TY theo chức danh, không
+// phân biệt đúng siêu thị của đề xuất).
+// KHÁC resolveOperationOrderStoreMixedApprovers(): operationOrders STORE chỉ có 1 quy trình duy nhất
+// (không có khái niệm "mức"), nên khớp rule theo ĐÚNG số thứ tự bước là đủ. itPriceApprovals WHOLESALE
+// có THÊM 1 chiều độc lập — 4 MỨC cố định (MARGIN_LT5/MARGIN_GTE5/DISCOUNT_LTE5/DISCOUNT_GT5,
+// itPriceTierWorkflows), MỖI MỨC có quy trình/số bước/người duyệt RIÊNG. Nếu chỉ khớp theo số bước (như
+// operationOrders) thì 1 rule "bước 1" sẽ áp dụng NHẦM cho CẢ 4 mức dù chúng có người duyệt bước 1 khác
+// nhau hoàn toàn -> PHẢI khớp CẢ tier LẪN step (tham số priceTier mới, bắt buộc khớp đúng
+// rule.tier === priceTier) — xem field `tier` mới trên mỗi rule ở defaults.js.
+function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, storeDept, users, stepOrders) {
+  const approvers = {};
+  (stepOrders || []).forEach(stepOrder => {
+    const usernames = new Set();
+    (rules || []).filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder)).forEach(r => {
+      resolveOperationOrderStoreMixedApprovalRuleUsernames(r, storeDept, users).forEach(u => usernames.add(u));
+    });
+    approvers[stepOrder] = [...usernames];
+  });
+  return approvers;
+}
 function resolveOperationOrderWorkflow(item, appData) {
   const locationType = item.orderLocationType === 'STORE' ? 'STORE' : 'HO';
   const tierMap = locationType === 'STORE' ? appData.operationOrderStoreTierWorkflows : appData.operationOrderHOTierWorkflows;
@@ -484,9 +509,24 @@ const MODULE_CONFIGS = {
     // vi cũ 100% (nhánh này giờ chỉ còn chạy khi priceType chắc chắn là RETAIL).
     resolveWfConfig: (item, appData) => {
       if ((item.priceType || 'RETAIL') === 'WHOLESALE') {
-        return appendExtraApprovalLayers(flatWorkflowConfigToSteps(
+        // LỖI ĐÃ VÁ (theo yêu cầu người dùng, 10/2026): NGƯỜI DUYỆT trước đây vẫn đọc thẳng
+        // approvers/approversByPosition của itPriceTierWorkflows[...] — "Theo vị trí" chọn 1 chức danh
+        // KHÔNG kèm phòng ban (VD "Giám Đốc siêu thị") khớp TẤT CẢ người giữ chức danh đó TRÊN TOÀN CÔNG
+        // TY, không phân biệt đúng siêu thị của đề xuất (GĐST siêu thị B vẫn thấy/phải duyệt đề xuất của
+        // siêu thị A, vì bước là ĐỒNG DUYỆT — isStepApprovalComplete() yêu cầu TẤT CẢ người trong danh
+        // sách). Nay mirror ĐÚNG cơ chế đã chạy ổn định của operationOrders/STORE
+        // (resolveOperationOrderWorkflow() ở trên): SỐ BƯỚC vẫn lấy nguyên từ itPriceTierWorkflows (màn
+        // "Quy Trình & Phê Duyệt" không đổi), nhưng NGƯỜI DUYỆT tra hoàn toàn từ
+        // itPriceWholesaleStoreMixedApprovalRules (màn "🏪 QT Giá Bán Buôn (Siêu Thị)" mới) theo đúng
+        // item.dept (= siêu thị/phòng ban của người đề xuất, forceOwnDept — xem lib/createValidation.js).
+        // approvers/approversByPosition cũ trên itPriceTierWorkflows giờ CHỈ còn tác dụng hiển thị tham
+        // khảo ở màn cũ, không còn đọc ở đây nữa (đúng tinh thần đã áp dụng cho operationOrders/STORE).
+        const resolved = flatWorkflowConfigToSteps(
           resolveItPriceTierWorkflowConfig(appData.itPriceTierWorkflows, item.priceTier), appData
-        ), item);
+        );
+        const stepOrders = resolved.steps.map(s => s.order);
+        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.dept, appData.users, stepOrders);
+        return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
       }
       return appendExtraApprovalLayers(flatWorkflowConfigToSteps(
         resolveItPriceDeptWorkflowConfig(appData.itPriceDeptWorkflows, item.dept, 'RETAIL'), appData
@@ -1129,6 +1169,7 @@ module.exports = {
   resolveItPriceTierWorkflowConfig,
   resolveOperationOrderWorkflow,
   resolveOperationOrderStoreMixedApprovers,
+  resolveItPriceWholesaleStoreMixedApprovers,
   // Export cho tests + reuse ở nơi khác nếu cần đọc lại đúng luật "Nhóm Phê Duyệt Cuối" append vào cuối
   // quy trình gốc (xem defaults.js extraApprovalGroups/extraApprovalLevels).
   appendExtraApprovalLayers,

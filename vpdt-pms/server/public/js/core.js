@@ -3113,9 +3113,23 @@ function isApproverInItPriceTierWorkflowMap(wfTierMap, username) {
 // item.priceTier (4 mức cố định), RETAIL tra theo item.dept như cũ 100%. Gộp về 1 hàm để không bỏ sót
 // chỗ nào khi thêm mới (bug mục B dễ bỏ sót nhất trong cả đợt vì rải rác nhiều nơi).
 function resolveItPriceWorkflowConfigForItemClient(p) {
-  const raw = (p.priceType || 'RETAIL') === 'WHOLESALE'
-    ? resolveItPriceTierWorkflowConfigClient(p.priceTier)
-    : resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
+  if ((p.priceType || 'RETAIL') === 'WHOLESALE') {
+    // LỖI ĐÃ VÁ (theo yêu cầu người dùng, 10/2026) — MIRROR ĐÚNG nhánh WHOLESALE của resolveWfConfig()
+    // (lib/workflowEngine.js, MODULE_CONFIGS.itPriceApprovals): approvers giờ tra HOÀN TOÀN từ
+    // DB.itPriceWholesaleStoreMixedApprovalRules (đúng tier + đúng siêu thị của đề xuất qua p.dept),
+    // KHÔNG còn đọc approvers/approversByPosition của itPriceTierWorkflows[...] nữa (chỉ còn dùng lấy
+    // workflowId để biết SỐ BƯỚC — cùng pattern resolveOperationOrderWorkflowConfigForItemClient() STORE
+    // bên dưới, kèm cờ tierConfigMissing để giữ cảnh báo "⚠️ Chưa cấu hình duyệt" khi mức chưa có workflowId).
+    const tierCfg = resolveItPriceTierWorkflowConfigClient(p.priceTier);
+    const baseWf = (tierCfg ? (DB.workflows || []).find(w => w.id === tierCfg.workflowId) : null) || { steps: [{ order: 1, name: 'Duyệt' }] };
+    return appendExtraApprovalLayersClient({
+      workflowId: tierCfg ? tierCfg.workflowId : null,
+      tierConfigMissing: !tierCfg,
+      steps: baseWf.steps,
+      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.dept, baseWf.steps.map(s => s.order))
+    }, p);
+  }
+  const raw = resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu 8-agent song song, mức Cao) — xem chú thích đầy đủ ở
   // appendExtraApprovalLayersClient()/withWfStepsClient() (cùng file): trước đây hàm này trả THẲNG cấu
   // hình phòng ban/mức, không cộng "Nhóm Phê Duyệt Cuối" (ITPRICE_RETAIL/ITPRICE_WHOLESALE).
@@ -3195,6 +3209,25 @@ function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders) {
     (DB.operationOrderStoreMixedApprovalRules || []).filter(r => Number(r.step) === Number(stepOrder)).forEach(r => {
       resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(r, storeDept).forEach(u => usernames.add(u));
     });
+    approvers[stepOrder] = [...usernames];
+  });
+  return approvers;
+}
+// Hỗ Trợ IT > Phê Duyệt Giá — Bán Buôn, MIRROR ĐÚNG resolveItPriceWholesaleStoreMixedApprovers() phía
+// server (lib/workflowEngine.js) — tái dùng ĐÚNG resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()
+// ở trên (logic khớp rule/storeDept hoàn toàn generic). KHÁC computeOperationOrderStoreMixedApproversClient()
+// 1 điểm DUY NHẤT: lọc rule thêm theo ĐÚNG `priceTier` (Bán Buôn có 4 MỨC Margin/Chiết Khấu cố định, MỖI
+// MỨC quy trình/người duyệt riêng — nếu chỉ khớp theo số bước thì rule của 1 mức sẽ bị áp dụng nhầm sang
+// mức khác có cùng số thứ tự bước, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
+function computeItPriceWholesaleStoreMixedApproversClient(priceTier, storeDept, stepOrders) {
+  const approvers = {};
+  (stepOrders || []).forEach(stepOrder => {
+    const usernames = new Set();
+    (DB.itPriceWholesaleStoreMixedApprovalRules || [])
+      .filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder))
+      .forEach(r => {
+        resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(r, storeDept).forEach(u => usernames.add(u));
+      });
     approvers[stepOrder] = [...usernames];
   });
   return approvers;
@@ -4797,6 +4830,10 @@ async function initDatabase(loggingInUser, opts) {
     // "+ Thêm Dòng" tiếp theo ghi đè xoá sạch rule cũ của luồng duyệt Đặt Hàng Tại Siêu Thị.
     DB.operationOrderStoreMixedApprovalRules = Array.isArray(data.operationOrderStoreMixedApprovalRules)
       ? data.operationOrderStoreMixedApprovalRules : [];
+    // itPriceWholesaleStoreMixedApprovalRules (10/2026) — cùng khuôn operationOrderStoreMixedApprovalRules
+    // ở trên, đọc lại y hệt để tránh đúng lỗi "mất dữ liệu sau F5" đã vá cho dòng trên.
+    DB.itPriceWholesaleStoreMixedApprovalRules = Array.isArray(data.itPriceWholesaleStoreMixedApprovalRules)
+      ? data.itPriceWholesaleStoreMixedApprovalRules : [];
     // DB.operationStoreOpenDeptWorkflows/DB.operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người
     // dùng — 2 luồng "Siêu Thị" không có bước phê duyệt nào ở module Vận Hành cả, xem chú thích ở
     // WF_MODULE_CONFIG, module-workflow.js) — OPERATION_KIND_META.wfMap() (module-vanhanh.js) đã tự

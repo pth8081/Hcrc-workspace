@@ -40,8 +40,17 @@ const APP_DATA = {
     'Phòng B': { approvers: { 1: ['duyet_b'] } }
   },
   itPriceTierWorkflows: {
+    // Giữ nguyên để dữ liệu có priceTier hợp lệ — CHÚ Ý: từ khi thêm
+    // itPriceWholesaleStoreMixedApprovalRules (cơ chế tự khớp đúng siêu thị), field approvers này KHÔNG
+    // còn được resolveWfConfig() đọc cho WHOLESALE nữa (chỉ còn tham khảo/legacy).
     TIER1: { approvers: { 1: ['duyet_wholesale'] } }
   },
+  // Thay cho itPriceTierWorkflows.approvers ở trên: rule PERSON, stores rỗng = áp dụng mọi siêu thị/phòng ban
+  // (duyet_wholesale có dept 'Phòng Z', KHÁC dept của item id:3 'Phòng C' — xác nhận rule không đòi khớp dept
+  // khi dùng PERSON mode + stores rỗng, giống cơ chế operationOrderStoreMixedApprovalRules).
+  itPriceWholesaleStoreMixedApprovalRules: [
+    { id: 1, tier: 'TIER1', step: 1, mode: 'PERSON', jobTitle: null, username: 'duyet_wholesale', stores: [] }
+  ],
   // isManagerOf()/extraViewScopeAllows() (lib/recordViewScope.js) đọc appData.users để tra managerUsername
   // theo quan hệ quản lý-nhân viên — cần có mặt ở đây cho kịch bản managerCanView dưới.
   users: USERS

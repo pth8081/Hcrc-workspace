@@ -84,9 +84,15 @@ const state = createMockState({
   // Bán Buôn (mục B đợt sau) — map PHẲNG {tierKey: {workflowId,approvers}}, 2 mức TIER_A/TIER_B có
   // người duyệt RIÊNG hoàn toàn khác nhau, không liên quan gì tới phòng ban.
   itPriceTierWorkflows: {
+    // approvers ở trên giờ CHỈ còn tham khảo (không đọc cho WHOLESALE nữa) — NGƯỜI DUYỆT thật tra từ
+    // itPriceWholesaleStoreMixedApprovalRules ngay dưới (đợt "🏪 QT Giá Bán Buôn (Siêu Thị)", 10/2026).
     MARGIN_LT5: { workflowId: 'wf-tier-a', approvers: { 1: ['tier_a_appr'] } },
     DISCOUNT_GT5: { workflowId: 'wf-tier-b', approvers: { 1: ['tier_b_appr'] } }
   },
+  itPriceWholesaleStoreMixedApprovalRules: [
+    { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', jobTitle: null, username: 'tier_a_appr', stores: [] },
+    { id: 2, tier: 'DISCOUNT_GT5', step: 1, mode: 'PERSON', jobTitle: null, username: 'tier_b_appr', stores: [] }
+  ],
   workflows: [
     { id: 'wf-kd-price', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] },
     { id: 'wf-mkt-retail', steps: [{ order: 1, name: 'Duyệt Bán Lẻ' }] },
