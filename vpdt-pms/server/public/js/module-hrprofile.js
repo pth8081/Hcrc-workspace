@@ -911,6 +911,10 @@ async function onHrpfImportFileChange(event) {
     // action (đợt 10/2026, chống trùng lặp): 'add' (mặc định cho dòng không trùng gì) | 'skip' (mặc định
     // cho dòng trùng — an toàn hơn, HR tự đổi nếu vẫn muốn) | 'overwrite' (chỉ hiện được cho dòng
     // duplicateExisting — ghi đè hồ sơ đã có, xem updateProfileFromImport() ở lib/employeeProfile.js).
+    // LỖI ĐÃ VÁ (theo yêu cầu người dùng, 10/2026): duplicateInFile (2 dòng CÙNG Mã Nhân Viên ngay trong
+    // 1 file đang nhập) TRƯỚC ĐÂY vẫn cho tick "Vẫn thêm" để tạo mới — HR lỡ tick cả 2 dòng sẽ tạo 2 hồ
+    // sơ cùng mã (dòng 2 bị server chặn "đã có hồ sơ" NHƯNG lỗi đó khó hiểu, không rõ do trùng trong
+    // file). Nay CHẶN HẲN action='add' cho dòng duplicateInFile — chỉ còn 'skip', không có lựa chọn khác.
     data.items.forEach((it, idx) => {
       it._idx = idx;
       it.action = it.valid ? ((it.duplicateExisting || it.duplicateInFile) ? 'skip' : 'add') : 'skip';
@@ -919,7 +923,7 @@ async function onHrpfImportFileChange(event) {
     const validCount = data.items.filter(it => it.valid).length;
     const dupCount = data.items.filter(it => it.duplicateExisting || it.duplicateInFile).length;
     statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ`
-      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã chọn "Bỏ qua" sẵn, tự đổi nếu muốn ghi đè/vẫn thêm).` : '.');
+      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã chọn "Bỏ qua" sẵn, tự đổi nếu muốn ghi đè).` : '.');
     document.getElementById('hrpfImportPreviewBody').innerHTML = data.items.map((it) => {
       let actionCell;
       if (!it.valid) {
@@ -930,7 +934,7 @@ async function onHrpfImportFileChange(event) {
           <option value="overwrite">Ghi đè thông tin</option>
         </select> <span class="text-amber-700">⚠️ Đã có hồ sơ</span>`;
       } else if (it.duplicateInFile) {
-        actionCell = `<label class="text-xs"><input type="checkbox" data-op-change="onHrpfImportRowToggle" data-arg0="${it._idx}"> Vẫn thêm</label> <span class="text-amber-700">⚠️ Trùng dòng khác trong file</span>`;
+        actionCell = '<span class="text-gray-500 italic">Bỏ qua (trùng mã trong file)</span>';
       } else {
         actionCell = '<span class="text-emerald-600">✅ Sẽ thêm mới</span>';
       }
@@ -948,11 +952,6 @@ async function onHrpfImportFileChange(event) {
     statusEl.innerText = `⛔ ${err.message}`;
     event.target.value = '';
   }
-}
-// Tick/bỏ tick dòng trùng-ngay-trong-file (đợt 10/2026) — mặc định KHÔNG thêm, HR tự chọn nếu vẫn muốn.
-function onHrpfImportRowToggle(idxStr) {
-  const it = hrpfImportPreviewItems.find(x => x._idx === Number(idxStr));
-  if (it) it.action = it.action === 'add' ? 'skip' : 'add';
 }
 function onHrpfImportRowActionChange(idxStr, value) {
   const it = hrpfImportPreviewItems.find(x => x._idx === Number(idxStr));
