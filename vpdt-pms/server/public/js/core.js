@@ -4534,6 +4534,9 @@ async function initDatabase(loggingInUser, opts) {
     // 1 dòng (lúc đó mới được gán từ response API). educationDegrees (Danh Mục Bằng Cấp, báo cáo rà
     // soát mẫu Excel mới) thêm MỚI cùng đợt, tránh lặp lại đúng lỗi vừa vá cho 7 key kia.
     DB.jobGrades = data.jobGrades || [];
+    // jobTitleGradeDefaults (10/2026, "Chức Danh ↔ Cấp Bậc" gợi ý mặc định) — cùng khuôn đọc-lại-ngay
+    // như jobGrades ở trên, tránh lặp lại đúng bug "F5 mất dữ liệu" đã vá cho 8 key phía trên.
+    DB.jobTitleGradeDefaults = data.jobTitleGradeDefaults || [];
     DB.resignationReasons = data.resignationReasons || [];
     DB.disciplinaryTypes = data.disciplinaryTypes || [];
     DB.legalEntities = data.legalEntities || [];

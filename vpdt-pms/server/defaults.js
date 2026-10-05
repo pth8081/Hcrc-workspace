@@ -122,6 +122,13 @@ const DEFAULTS = {
   // trên node POSITION (lib/orgChart.js) VẪN LÀ CHUỖI TỰ DO (không ép phải khớp đúng 1 giá trị trong danh
   // mục này) — cùng mức ràng buộc "mềm" như jobTitle (gợi ý qua sdd widget, không chặn tự gõ giá trị mới).
   jobGrades: [],
+  // Chức Danh ↔ Cấp Bậc (Gợi ý mặc định, 10/2026, theo yêu cầu người dùng) — {jobTitle, jobGrade}[],
+  // UNIQUE theo jobTitle (1 chức danh chỉ có 1 cấp bậc mặc định). CHỈ dùng để TỰ ĐIỀN gợi ý ô "Cấp Bậc"
+  // khi Thêm/Sửa Vị Trí ở Cơ Cấu Tổ Chức (xem applyJobTitleGradeDefaultSuggestion(), module-orgchart.js)
+  // — KHÔNG ép buộc, giữ đúng tinh thần "mềm" như jobTitle/jobGrade ở trên: admin/HR vẫn gõ/sửa tay cấp
+  // bậc thật sau khi được tự điền, map này không phải nguồn sự thật duy nhất (cùng 1 chức danh có thể có
+  // ngoại lệ khác cấp bậc tuỳ phòng ban/thâm niên).
+  jobTitleGradeDefaults: [],
   // Lý Do Nghỉ Việc (10/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "LIST_LYDO_NGHIVIEC") — danh
   // mục MỞ cho field "Lý do nghỉ việc" (TÁCH khỏi ô "Lý do / Ghi chú" tự do có sẵn trên form Offboarding —
   // xem hrpOffbResignationReason ở module-hrlifecycle.js) để báo cáo thống kê được theo đúng nhóm lý do.

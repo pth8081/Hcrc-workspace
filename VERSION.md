@@ -1,8 +1,38 @@
 # Phiên bản hiện tại
 
-**25.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.21 (2026-10-05): Danh mục "Chức Danh ↔ Cấp Bậc" — tự điền gợi ý Cấp Bậc ở Cơ Cấu Tổ Chức
+
+Theo yêu cầu người dùng: khi khai báo Cơ Cấu Tổ Chức, chức danh thường gắn
+liền với 1 cấp bậc cố định — nên xây 1 danh mục map Chức Danh ↔ Cấp Bậc để
+khi chọn chức danh thì tự nhảy ra cấp bậc, xác nhận hướng "gợi ý mặc định,
+sửa tay được" (không ép buộc, vì cùng 1 chức danh đôi khi khác cấp bậc tuỳ
+phòng ban/thâm niên).
+
+- **Danh mục mới** `DB.jobTitleGradeDefaults` ({jobTitle, jobGrade}[], UNIQUE
+  theo jobTitle) — quản lý ở Hệ Thống → Quản Lý Danh Mục → "🔗 Chức Danh ↔
+  Cấp Bậc (Gợi Ý Mặc Định)" (`public/js/module-admin.js`): Thêm (chặn trùng
+  chức danh), Sửa (đổi cấp bậc mặc định), Xoá. Ô "Chức Danh" gõ-tìm HỖN HỢP
+  cả 2 danh mục (Chức Danh HO/Khối VP + Chức Danh Siêu Thị, gắn nhãn nguồn để
+  phân biệt khi trùng tên) — **phải CHỌN đúng 1 gợi ý có sẵn** (không nhận
+  free-text), resolve về giá trị chức danh THUẦN trước khi lưu
+  (`jtgdResolveJobTitleInput()` — lỗi thật phát hiện ngay lúc viết test: nếu
+  không resolve, DB sẽ lưu nhầm nguyên chuỗi nhãn kèm hậu tố " — HO/Khối
+  VP"/" — Siêu Thị", không bao giờ khớp được jobTitle thật).
+- **Tự điền ở Cơ Cấu Tổ Chức** (`public/js/module-orgchart.js`,
+  `onOrgChartNodeJobTitleChange()`): chọn/gõ xong ô "Chức Danh" khi Thêm/Sửa
+  Vị Trí — nếu khớp 1 dòng trong danh mục trên, ô "Cấp Bậc" tự điền. **CHỈ
+  điền khi ô Cấp Bậc đang RỖNG** — không đè giá trị admin đã tự chọn/sửa tay
+  trước đó (kể cả khi Sửa 1 node đã có cấp bậc khác), đúng yêu cầu "sửa tay
+  được". Đọc thẳng `DB.jobTitleGradeDefaults` (không gọi hàm module-admin.js
+  — cụm tải lười "orgchart-v2" không phụ thuộc "admin-core").
+- Viết test mới `tests/test-job-title-grade-default.js` (11 kịch bản: CRUD
+  catalog qua UI thật + 3 kịch bản tự điền/không đè/không khớp bậy), chạy lại
+  toàn bộ test liên quan (Cơ Cấu Tổ Chức, Quản Lý Danh Mục, CSP) — không phát
+  sinh regression.
 
 ## v25.20 (2026-10-05): Ẩn hẳn UI chọn người duyệt chết ở "Quy Trình & Phê Duyệt" (Đặt Hàng Siêu Thị + Phê Duyệt Giá Bán Buôn)
 

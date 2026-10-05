@@ -722,6 +722,19 @@ function ocOnNodePosTypeChange() {
 function ocPopulateJobGradeDatalist() {
   sddSetOptions('orgChartJobGradeDatalist', (DB.jobGrades || []).map(g => ({ label: g, value: g })));
 }
+// Chức Danh ↔ Cấp Bậc (Gợi ý mặc định, 10/2026, theo yêu cầu người dùng): chọn/gõ xong 1 Chức Danh đã có
+// cấu hình ở DB.jobTitleGradeDefaults (Quản Lý Danh Mục) thì tự điền ô "Cấp Bậc" — CHỈ điền khi ô đó
+// đang RỖNG (không đè giá trị đã có, kể cả khi đang Sửa 1 node đã có Cấp Bậc khác từ trước); vẫn gõ/sửa
+// tay được sau đó, đây thuần là GỢI Ý, không ép buộc (cùng mức ràng buộc "mềm" như sddSetOptions() ở
+// trên). Đọc THẲNG DB.jobTitleGradeDefaults (không gọi hàm nào ở module-admin.js — cụm "orgchart-v2"
+// không chắc đã nạp "admin-core", xem MODULE_LOAD_GROUPS).
+function onOrgChartNodeJobTitleChange() {
+  const jobTitle = (document.getElementById('orgChartNodeJobTitleInput').value || '').trim();
+  const gradeInput = document.getElementById('orgChartNodeJobGradeInput');
+  if (!gradeInput || gradeInput.value.trim() || !jobTitle) return;
+  const match = (DB.jobTitleGradeDefaults || []).find(r => r.jobTitle === jobTitle);
+  if (match) gradeInput.value = match.jobGrade;
+}
 function onOrgChartNodeTypeChange() {
   const type = document.getElementById('orgChartNodeTypeSelect').value;
   document.getElementById('orgChartNodeDeptFields').classList.toggle('hidden', type !== 'DEPARTMENT');

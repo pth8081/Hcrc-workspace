@@ -2830,6 +2830,13 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     Tổ Chức, mở Thêm/Sửa vị trí để gắn), tự snapshot xuống Hồ Sơ Nhân Sự (hiển
     thị chỉ đọc, cạnh Chức Vụ) mỗi lần HR gán/đổi chức vụ cho vị trí đó — cùng
     cơ chế snapshot như Phòng Ban/Chức Danh, không gõ tay trực tiếp trên hồ sơ.
+  - **"Chức Danh ↔ Cấp Bậc" — gợi ý tự điền (10/2026, theo yêu cầu người dùng)**:
+    Hệ Thống → Quản Lý Danh Mục → "🔗 Chức Danh ↔ Cấp Bậc (Gợi Ý Mặc Định)" cho
+    gán sẵn 1 Cấp Bậc mặc định cho 1 Chức Danh (admin tự cấu hình, mỗi chức
+    danh chỉ 1 cấp bậc mặc định). Khi Thêm/Sửa vị trí ở Cơ Cấu Tổ Chức, gõ/chọn
+    đúng Chức Danh đã có cấu hình thì ô "Cấp Bậc" **tự điền sẵn** — thuần là
+    GỢI Ý (CHỈ điền khi ô đang trống, KHÔNG đè Cấp Bậc admin đã tự chọn/sửa tay
+    trước đó), vẫn gõ/sửa tay lại được bình thường sau khi tự điền.
 - **Thâm niên / Kiêm nhiệm chức danh (10/2026, chỉ đọc, tham khảo)**: Chi tiết
   hồ sơ hiện thêm "Thâm niên" (tự tính từ "Ngày Vào Làm Việc" trên tài khoản
   VPDT đã liên kết tới hiện tại, làm tròn 1 chữ số thập phân — không lưu

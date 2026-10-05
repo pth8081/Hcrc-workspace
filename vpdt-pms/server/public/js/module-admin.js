@@ -619,6 +619,111 @@ function renderStoreJobTitleList() {
   `).join('');
 }
 
+// ===== Chức Danh ↔ Cấp Bậc (Gợi ý mặc định, DB.jobTitleGradeDefaults — {jobTitle,jobGrade}[], UNIQUE
+// theo jobTitle, 10/2026 theo yêu cầu người dùng): khi Thêm/Sửa Vị Trí ở Cơ Cấu Tổ Chức, chọn/gõ đúng 1
+// chức danh đã có trong map này thì ô "Cấp Bậc" TỰ ĐIỀN cấp bậc mặc định — xem
+// applyJobTitleGradeDefaultSuggestion() ở module-orgchart.js (đọc THẲNG mảng này, không gọi hàm nào ở
+// đây — module-orgchart.js không chắc đã nạp module-admin.js, xem MODULE_LOAD_GROUPS). Vẫn GÕ TỰ DO/SỬA
+// TAY được sau khi tự điền — đây chỉ là gợi ý, không phải nguồn sự thật duy nhất.
+let editingJobTitleGradeDefaultOriginal = null; // chức danh đang sửa (null = đang ở chế độ Thêm mới)
+
+function jtgdJobTitleOptions() {
+  const office = (DB.jobTitles || []).map(t => ({ label: `${t} — HO/Khối VP`, value: t }));
+  const store = (DB.storeJobTitles || []).map(t => t.label).filter(Boolean).map(t => ({ label: `${t} — Siêu Thị`, value: t }));
+  return [...office, ...store];
+}
+
+// Ô "Chức Danh" hiện nhãn CÓ hậu tố nguồn (" — HO/Khối VP"/" — Siêu Thị", xem jtgdJobTitleOptions() trên)
+// để phân biệt khi 2 danh mục trùng tên — PHẢI resolve về giá trị chức danh THUẦN (không hậu tố) trước
+// khi lưu, nếu không DB.jobTitleGradeDefaults sẽ lưu nhầm nguyên chuỗi nhãn, không bao giờ khớp được
+// jobTitle thật ở orgChartNodeJobTitleInput (applyJobTitleGradeDefaultSuggestion(), module-orgchart.js).
+// Bắt buộc gõ-VÀ-CHỌN đúng 1 gợi ý có sẵn (không nhận free-text) — cùng khuôn
+// mixedApprovalResolveJobTitleInput() (module-workflow.js).
+function jtgdResolveJobTitleInput(rawValue) {
+  const match = jtgdJobTitleOptions().find(o => o.label === String(rawValue || '').trim());
+  return match ? match.value : null;
+}
+
+function cancelEditJobTitleGradeDefault() {
+  editingJobTitleGradeDefaultOriginal = null;
+  const jt = document.getElementById('txtJtgdJobTitle'); if (jt) jt.value = '';
+  const jg = document.getElementById('txtJtgdJobGrade'); if (jg) jg.value = '';
+  const btn = document.getElementById('btnJtgdSubmit'); if (btn) btn.innerText = 'Thêm';
+  const cancelBtn = document.getElementById('btnJtgdCancelEdit'); if (cancelBtn) cancelBtn.classList.add('hidden');
+}
+
+function editJobTitleGradeDefault(jobTitle) {
+  const row = (DB.jobTitleGradeDefaults || []).find(r => r.jobTitle === jobTitle);
+  if (!row) return;
+  editingJobTitleGradeDefaultOriginal = jobTitle;
+  // Ô nhập hiện NHÃN có hậu tố nguồn (" — HO/Khối VP"/" — Siêu Thị") — prefill đúng nhãn đó, không phải
+  // giá trị thuần đã lưu, nếu không jtgdResolveJobTitleInput() lúc Lưu sẽ không khớp được gợi ý nào.
+  const opt = jtgdJobTitleOptions().find(o => o.value === row.jobTitle);
+  document.getElementById('txtJtgdJobTitle').value = opt ? opt.label : row.jobTitle;
+  document.getElementById('txtJtgdJobGrade').value = row.jobGrade;
+  document.getElementById('btnJtgdSubmit').innerText = 'Lưu';
+  document.getElementById('btnJtgdCancelEdit').classList.remove('hidden');
+}
+
+async function saveJobTitleGradeDefault(e) {
+  e.preventDefault();
+  const jobTitle = jtgdResolveJobTitleInput(document.getElementById('txtJtgdJobTitle').value);
+  const jobGrade = document.getElementById('txtJtgdJobGrade').value.trim();
+  if (!jobTitle) return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (HO/Khối VP hoặc Siêu Thị).');
+  if (!jobGrade) return;
+  const list = DB.jobTitleGradeDefaults || (DB.jobTitleGradeDefaults = []);
+  const isEdit = editingJobTitleGradeDefaultOriginal != null;
+  if (isEdit) {
+    const idx = list.findIndex(r => r.jobTitle === editingJobTitleGradeDefaultOriginal);
+    if (idx === -1) { cancelEditJobTitleGradeDefault(); renderJobTitleGradeDefaultList(); return; }
+    // Đổi luôn tên chức danh (không chỉ cấp bậc) -> tự kiểm trùng với 1 dòng KHÁC (không phải chính nó).
+    if (jobTitle !== editingJobTitleGradeDefaultOriginal && list.some(r => r.jobTitle === jobTitle)) {
+      return alert(`Chức danh "${jobTitle}" đã có cấp bậc mặc định khác — sửa trực tiếp dòng đó thay vì tạo trùng.`);
+    }
+    const snapshot = list.map(r => ({ ...r }));
+    list[idx] = { jobTitle, jobGrade };
+    const saved = await syncStorage('jobTitleGradeDefaults');
+    if (!saved) { DB.jobTitleGradeDefaults = snapshot; return; }
+    logSystemAction('USER_MGM', 'UPDATE_JOB_TITLE_GRADE_DEFAULT', `Sửa cấp bậc mặc định [${jobTitle}] -> "${jobGrade}"`, 'SUCCESS', jobTitle);
+  } else {
+    if (list.some(r => r.jobTitle === jobTitle)) {
+      return alert(`Chức danh "${jobTitle}" đã có cấp bậc mặc định — bấm "✏️ Sửa" ở dòng đó để đổi, không thêm trùng.`);
+    }
+    list.push({ jobTitle, jobGrade });
+    const saved = await syncStorage('jobTitleGradeDefaults');
+    if (!saved) { DB.jobTitleGradeDefaults = list.filter(r => r.jobTitle !== jobTitle); return; }
+    logSystemAction('USER_MGM', 'ADD_JOB_TITLE_GRADE_DEFAULT', `Thêm cấp bậc mặc định [${jobTitle}] = "${jobGrade}"`, 'SUCCESS', jobTitle);
+  }
+  cancelEditJobTitleGradeDefault();
+  renderJobTitleGradeDefaultList();
+}
+
+async function deleteJobTitleGradeDefault(jobTitle) {
+  if (!confirm(`Xoá cấp bậc mặc định của chức danh "${jobTitle}"? (Chỉ xoá gợi ý tự điền — KHÔNG đổi cấp bậc đã lưu sẵn ở các vị trí Cơ Cấu Tổ Chức hiện có.)`)) return;
+  const prevList = (DB.jobTitleGradeDefaults || []).map(r => ({ ...r }));
+  DB.jobTitleGradeDefaults = prevList.filter(r => r.jobTitle !== jobTitle);
+  const saved = await syncStorage('jobTitleGradeDefaults');
+  if (!saved) { DB.jobTitleGradeDefaults = prevList; renderJobTitleGradeDefaultList(); return; }
+  logSystemAction('USER_MGM', 'DELETE_JOB_TITLE_GRADE_DEFAULT', `Xoá cấp bậc mặc định [${jobTitle}]`, 'SUCCESS', jobTitle);
+  if (editingJobTitleGradeDefaultOriginal === jobTitle) cancelEditJobTitleGradeDefault();
+  renderJobTitleGradeDefaultList();
+}
+
+function renderJobTitleGradeDefaultList() {
+  const ul = document.getElementById('jobTitleGradeDefaultList');
+  if (!ul) return;
+  sddSetOptions('jtgdJobTitleDatalist', jtgdJobTitleOptions());
+  sddSetOptions('jtgdJobGradeDatalist', (DB.jobGrades || []).map(g => ({ label: g, value: g })));
+  const list = (DB.jobTitleGradeDefaults || []).slice().sort((a, b) => a.jobTitle.localeCompare(b.jobTitle, 'vi'));
+  ul.innerHTML = list.length ? list.map(row => `
+    <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
+      <span class="flex-1"><b>${escapeHtml(row.jobTitle)}</b> → <span class="text-fuchsia-700 font-bold">${escapeHtml(row.jobGrade)}</span></span>
+      <button data-op="editJobTitleGradeDefault" data-arg0="${escapeHtml(row.jobTitle)}" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
+      <button data-op="deleteJobTitleGradeDefault" data-arg0="${escapeHtml(row.jobTitle)}" class="text-red-500 font-bold hover:underline">Xóa</button>
+    </li>
+  `).join('') : `<li class="p-3 text-center text-gray-400 italic text-xs">Chưa có cấu hình nào.</li>`;
+}
+
 // ===== Vị Trí Làm Việc (DB.positionTypes, 10/2026) — danh mục MỞ thay 2 giá trị cứng HO/STORE, xem
 // defaults.js + routes/positionTypes.js. Khác 2 khối trên (mảng chuỗi/{label} phẳng, ghi qua
 // syncStorage() thường + rename qua /api/admin/renameCatalogEntry): mỗi phần tử ở đây là 1 OBJECT
