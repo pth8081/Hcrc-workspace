@@ -4127,6 +4127,36 @@ làm được nay bị chặn:
     Excel (dữ liệu hợp đồng/lương như trên) — các cột CHỈ XEM không có trong
     mẫu Tải Về để nhập, và nhập Excel cũng không sửa được dữ liệu hợp đồng
     (đúng nguyên tắc "sửa lương/phụ cấp chỉ qua Hợp Đồng Lao Động" ở trên).
+- **Mẫu Excel mới + field bổ sung (10/2026, đợt rà soát mẫu Excel mới nhất)** —
+  tiếp tục mở rộng từ mục 90 trường ở trên, THÊM vào (không thay thế):
+  - **Điện Thoại Liên Hệ** (`contactPhone`, KHÁC SĐT người liên hệ khẩn cấp)
+    + **Tên Chủ Tài Khoản Ngân Hàng** (`bankAccountHolderName`, KHÁC tên ngân
+    hàng) — 2 field tự nhập mới trên Chi tiết hồ sơ, đọc/ghi được qua Excel
+    (3 cột ngân hàng số TK/tên NH/tên chủ TK trước đây CÓ trong mẫu Tải Về để
+    nhập nhưng KHÔNG xuất hiện lại khi Xuất Excel — đã vá cùng đợt).
+  - **Danh Mục Bằng Cấp** (Hệ Thống → Quản Lý Danh Mục) — "Trình độ" ở khối
+    Học vấn nay là dropdown chọn từ danh mục này (có nút Sửa) thay vì gõ tay
+    tự do.
+  - **Mã Bộ Phận** tự sinh theo phòng ban (tiền tố "PH" + số tuần tự, cùng
+    khuôn Mã Nhân Viên "BL...") — HR không gõ tay, hệ thống tự cấp lần đầu
+    mỗi phòng ban xuất hiện; cột "Mã Bộ Phận (CHỈ XEM)" ở Xuất Excel CHỈ đọc
+    mã đã cấp, không tự sinh mã mới trong lúc xuất.
+  - **3 khoản thu nhập mới trên Hợp Đồng Lao Động** (Mức Lương Đóng BHXH,
+    Thưởng HQCV/Năng Suất, Khoản Khác — xác nhận là 3 khoản THẬT khác nhau,
+    không trùng ý nghĩa) + **Tỷ Lệ Lương Thử Việc** (chỉ nhận 85% hoặc 100%)
+    — sửa được ở tab Hợp Đồng Lao Động, hiện CHỈ XEM ở Chi tiết hồ sơ/Xuất
+    Excel (đọc LIVE từ hợp đồng ĐANG HIỆU LỰC, cùng khuôn 7 phụ cấp đã có).
+  - **8 cột CHỈ XEM đọc LIVE từ dữ liệu đã có sẵn** (KHÔNG lưu trùng, chỉ hiện
+    trên Chi tiết hồ sơ/Xuất Excel): Khối/Ban, Mã + Họ Tên Quản Lý Trực Tiếp,
+    Mã + Họ Tên Quản Lý Cấp Trên (tra theo chuỗi cấp quản lý ở Users), Lý Do
+    Nghỉ Việc + Ngày Nghỉ Việc Thực Tế (lấy từ hồ sơ Nghỉ Việc OFFBOARDING
+    mới nhất nếu có).
+  - **12 cột lịch sử CHỈ dùng khi Xuất Excel** (không có trong mẫu Tải Về,
+    không hiển thị dạng bảng ở Chi tiết hồ sơ — đã có khu lịch sử riêng ở tab
+    Hợp Đồng Lao Động): "HĐLĐ Lần 1/2/3" (Ngày ký + Ngày hết hạn của tối đa 3
+    hợp đồng CŨ NHẤT theo Ngày hiệu lực) và "Điều Chỉnh Thu Nhập Lần 1/2/3"
+    (Ngày áp dụng + nội dung của tối đa 3 phụ lục CŨ NHẤT theo Ngày áp dụng,
+    lấy từ hợp đồng ĐANG HIỆU LỰC).
 
 **Hợp Đồng Lao Động**
 - Chỉ thêm được **Phụ lục** cho hợp đồng **đang hiệu lực**. Hợp đồng còn Nháp

@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**25.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.15 (2026-10-06): Hồ Sơ Nhân Sự — rà soát mẫu Excel mới (deptCode, Bằng Cấp, 7 field HĐLĐ + 12 cột lịch sử)
+
+Người dùng gửi báo cáo rà soát 90 trường theo mẫu Excel mới nhất, xác nhận 2
+điểm còn mở (Trình độ học vấn → dropdown danh mục; Mã bộ phận tự sinh theo
+Mã Nhân Viên; "Khoản khác" là khoản thu nhập THẬT khác, không trùng Thưởng
+HQCV/Năng Suất) — triển khai theo 4 bước, merge main theo đúng quy trình
+chuẩn (không chờ demo):
+
+- **Bước 1** — nối dây 8 trường CÓ SẴN dữ liệu nhưng nằm ở collection khác
+  (`users`/`hrProcesses`): `resolveWiredReadOnlyFields()` (lib/employeeProfile.js)
+  đọc LIVE Khối/Ban + chuỗi 2 cấp Quản Lý Trực Tiếp (từ `users.managerUsername`)
+  + Lý Do Nghỉ Việc/Ngày Nghỉ Việc Thực Tế (từ hồ sơ Nghỉ Việc OFFBOARDING mới
+  nhất) — không duplicate-store. `contactPhone` (Điện Thoại Liên Hệ) là field
+  THẬT mới, copy 1 lần từ `hrProcesses.phone` lúc tạo Onboarding, sửa được sau.
+- **Bước 2** — Danh Mục Bằng Cấp mới (Hệ Thống → Quản Lý Danh Mục, có nút Sửa)
+  cho "Trình độ" ở khối Học vấn (đổi từ gõ tay sang dropdown); Mã Bộ Phận tự
+  sinh (tiền tố "PH" + số tuần tự, cùng khuôn Mã Nhân Viên) qua
+  `generateDeptCode()` + `ensureDeptCode()`, cấp lần đầu mỗi phòng ban xuất
+  hiện, lưu vào `deptCodeMap` (AppData mới). Phát hiện kèm vá luôn: 7 danh mục
+  (Cấp Bậc, Lý Do Nghỉ Việc, Loại Kỷ Luật, Đơn Vị Pháp Nhân, Đối Tượng Lao
+  Động Đặc Biệt, Tình Trạng Làm Việc Hiện Tại, Nơi Cấp CCCD/CMND) chưa từng
+  được đọc lại trong `initDatabase()` — dữ liệu "biến mất" sau F5 dù Thêm/Sửa
+  vẫn chạy đúng; đã vá cùng đợt.
+- **Bước 3** — 7 field còn thiếu: `bankAccountHolderName` (Tên Chủ Tài Khoản
+  Ngân Hàng, KHÁC tên ngân hàng) trên Hồ Sơ Nhân Sự; 3 khoản thu nhập mới
+  (`socialInsuranceSalary`/`productivityBonus`/`otherIncome`) + tỷ lệ lương
+  thử việc `probationSalaryRate` (chỉ nhận 85/100%) trên Hợp Đồng Lao Động.
+  Phát hiện kèm vá: `INCOME_FIELDS`/`INCOME_FIELD_LABELS`/`PROBATION_SALARY_RATES`
+  (lib/laborContract.js) chưa được export, nên route tạo tay hợp đồng
+  (`POST /api/create/laborContracts`) nhận thẳng string chưa validate/coerce
+  cho 3 khoản thu nhập + tỷ lệ thử việc (khác hẳn 7 phụ cấp cùng nhóm đã có
+  validate đầy đủ) — đã vá, thêm validate Number/chặn âm/chặn tỷ lệ sai ở
+  `lib/createValidation.js`, cùng khuôn phụ cấp.
+- **Bước 4** — mở rộng `lib/employeeProfileImport.js` (Tải Mẫu/Nhập/Xuất Excel
+  Hồ Sơ Nhân Sự): thêm 12 cột lịch sử CHỈ dùng khi Xuất Excel — "HĐLĐ Lần
+  1/2/3" (Ngày ký + Ngày hết hạn của tối đa 3 hợp đồng CŨ NHẤT theo Ngày hiệu
+  lực) và "Điều Chỉnh Thu Nhập Lần 1/2/3" (Ngày áp dụng + nội dung của tối đa
+  3 phụ lục CŨ NHẤT theo Ngày áp dụng, lấy từ hợp đồng ĐANG HIỆU LỰC); thêm 8
+  cột CHỈ XEM đọc LIVE (Mã Bộ Phận/Khối Ban/Quản Lý Trực Tiếp+Cấp Trên/Lý Do
+  Nghỉ Việc) + 4 cột CHỈ XEM mở rộng khối hợp đồng (3 khoản thu nhập + tỷ lệ
+  thử việc). Phát hiện kèm vá: cột Số Tài Khoản/Ngân Hàng/Tên Chủ Tài Khoản
+  CÓ trong mẫu Tải Về để nhập nhưng TRƯỚC ĐÂY không xuất hiện lại khi Xuất
+  Excel (1 chiều, mất dữ liệu khi xuất) — đã vá, đối xứng đủ 2 chiều.
+- Test mới: `tests/test-hr-profile-wired-fields.js`, `tests/test-education-degrees-catalog.js`,
+  `tests/test-labor-contract-income-fields.js`, `tests/test-hr-profile-excel-history-12cols.js`
+  + cập nhật đếm field nhạy cảm (26→27) ở `tests/test-hr-profile.js`/
+  `tests/test-hr-profile-field-visibility.js`.
 
 ## v25.14 (2026-10-06): Quản Lý Danh Mục — bổ sung "✏️ Sửa" cho 7 danh mục còn thiếu
 

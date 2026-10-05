@@ -942,7 +942,7 @@ const hrExportRateLimiter = rateLimit({
 router.get('/export-xlsx', hrExportRateLimiter, requireProfileFullView, async (req, res) => {
   try {
     const appData = await getAllAppData();
-    const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || [], appData.laborContracts || []);
+    const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || [], appData.laborContracts || [], appData.deptCodeMap || {});
     logHrProfileAction(req, 'EXPORT_XLSX', '', `Xuất Excel toàn bộ Hồ Sơ Nhân Sự (${(appData.employeeProfiles || []).length} hồ sơ, gồm CCCD/BHXH/MST/tài khoản ngân hàng)`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Ho_So_Nhan_Su.xlsx"');

@@ -1350,6 +1350,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false },
     { id: 'hrpfCF_bankAccountNo', label: 'Số Tài Khoản Ngân Hàng', required: false },
     { id: 'hrpfCF_bankName', label: 'Ngân Hàng', required: false },
+    { id: 'hrpfCF_bankAccountHolderName', label: 'Tên Chủ Tài Khoản Ngân Hàng', required: false },
     { id: 'hrpfCF_socialInsuranceNo', label: 'Số Sổ BHXH', required: false },
     { id: 'hrpfCF_taxCode', label: 'Mã Số Thuế TNCN', required: false }
   ],
