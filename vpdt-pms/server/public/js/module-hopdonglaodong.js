@@ -84,6 +84,47 @@ function renderHrContractTable() {
 
 function onHrContractFilterChange() { renderHrContractTable(); }
 
+// Xuất Excel (10/2026) — xuất ĐÚNG danh sách đang lọc trên màn (cùng quy ước "Xuất Excel" ở các màn
+// khác: xuất đúng phần đang xem, không phải toàn bộ collection chưa lọc). Cần tra Họ Tên qua
+// /api/hr-profile/employee-directory (laborContracts không tự lưu tên) — tái dùng cache đã có nếu đã
+// từng mở modal "Tạo Hợp Đồng Mới", nạp mới nếu chưa có.
+async function exportHrContractExcel() {
+  const empCodeFilter = (document.getElementById('hrcFilterEmployeeCode')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
+  let list = getHrContractList();
+  if (empCodeFilter) list = list.filter(c => (c.employeeCode || '').toLowerCase().includes(empCodeFilter));
+  if (statusFilter) list = list.filter(c => c.status === statusFilter);
+  if (!list.length) return alert('Chưa có hợp đồng nào để xuất (theo bộ lọc đang chọn).');
+
+  if (!hrcEmployeeDirectoryCache.length) await loadHrcEmployeeDirectory();
+  const nameByCode = {};
+  hrcEmployeeDirectoryCache.forEach(p => { nameByCode[p.employeeCode] = p.fullName; });
+
+  const columns = [
+    { header: 'Mã Nhân Viên', key: 'employeeCode', width: 16 }, { header: 'Họ Và Tên', key: 'fullName', width: 24 },
+    { header: 'Loại HĐLĐ', key: 'contractTypeLabel', width: 20 }, { header: 'Ngày Hiệu Lực', key: 'startDate', width: 16 },
+    { header: 'Ngày Hết Hạn', key: 'endDate', width: 16 }, { header: 'Lương Cơ Bản', key: 'baseSalary', width: 16 },
+    { header: 'Phụ Cấp Trách Nhiệm', key: 'responsibilityAllowance', width: 16 }, { header: 'Phụ Cấp Kiêm Nhiệm', key: 'concurrentAllowance', width: 16 },
+    { header: 'Phụ Cấp Độc Hại Nặng Nhọc', key: 'hazardAllowance', width: 16 }, { header: 'Phụ Cấp Ăn Trưa', key: 'lunchAllowance', width: 16 },
+    { header: 'Hỗ Trợ Đi Lại', key: 'transportAllowance', width: 16 }, { header: 'Hỗ Trợ Điện Thoại', key: 'phoneAllowance', width: 16 },
+    { header: 'Phụ Cấp/Hỗ Trợ Khác', key: 'otherAllowance', width: 16 }, { header: 'Phòng Ban', key: 'dept', width: 20 },
+    { header: 'Mã Hợp Đồng (CHỈ XEM)', key: 'code', width: 20 }, { header: 'Trạng Thái (CHỈ XEM)', key: 'statusLabel', width: 16 },
+    { header: 'Lần Gia Hạn (CHỈ XEM)', key: 'renewalIndex', width: 12 }, { header: 'Ngày Chấm Dứt (CHỈ XEM)', key: 'terminationDate', width: 16 },
+    { header: 'Lý Do Chấm Dứt (CHỈ XEM)', key: 'terminationReason', width: 26 }
+  ];
+  const rows = list.map(c => ({
+    employeeCode: c.employeeCode || '', fullName: nameByCode[c.employeeCode] || '',
+    contractTypeLabel: HRC_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType || '',
+    startDate: c.startDate || '', endDate: c.endDate || '(Vô thời hạn)', baseSalary: c.baseSalary,
+    responsibilityAllowance: c.responsibilityAllowance, concurrentAllowance: c.concurrentAllowance,
+    hazardAllowance: c.hazardAllowance, lunchAllowance: c.lunchAllowance,
+    transportAllowance: c.transportAllowance, phoneAllowance: c.phoneAllowance, otherAllowance: c.otherAllowance,
+    dept: c.dept || '', code: c.code || '', statusLabel: HRC_STATUS_LABELS[c.status] || c.status || '',
+    renewalIndex: c.renewalIndex, terminationDate: c.terminationDate || '', terminationReason: c.terminationReason || ''
+  }));
+  downloadXlsxFromServer('Hop_Dong_Lao_Dong.xlsx', 'Hợp Đồng Lao Động', columns, rows);
+}
+
 // Thay đúng 1 phần tử trong DB.laborContracts bằng bản mới nhất server trả về (mirror
 // hrpApplyProcessUpdate() ở module-hrlifecycle.js) — dùng chung cho MỌI action trả về {item}.
 function hrcApplyUpdate(item) {
@@ -456,6 +497,103 @@ async function deleteHrContractRecord(id) {
     DB.laborContracts = (DB.laborContracts || []).filter(c => c.id !== Number(id));
     closeHrContractDetailModal();
     renderHrContractTable();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+// ===== Nhập Excel hàng loạt (10/2026) — CHỈ sửa hợp đồng ACTIVE đã có (xem lib/laborContractImport.js),
+// cùng khuôn modal hrpfImportModal (module-hrprofile.js: chọn file -> xem trước -> xác nhận). Mỗi dòng
+// hợp lệ gửi lên POST /api/records/laborContracts/apply-import, server tự validate lại từ đầu.
+let hrContractImportPreviewItems = [];
+
+function openHrContractImportModal() {
+  document.getElementById('hrContractImportFile').value = '';
+  document.getElementById('hrContractImportStatus').innerText = '';
+  hrContractImportPreviewItems = [];
+  document.getElementById('hrContractImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrContractImportConfirmBtn').classList.add('hidden');
+  document.getElementById('hrContractImportModal').classList.remove('hidden');
+}
+function closeHrContractImportModal() {
+  document.getElementById('hrContractImportModal').classList.add('hidden');
+}
+
+async function onHrContractImportFileChange(event) {
+  const file = event.target.files[0];
+  hrContractImportPreviewItems = [];
+  document.getElementById('hrContractImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrContractImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('hrContractImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/labor-contracts/parse-import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // Mặc định: dòng hợp lệ + không trùng -> included=true (sẽ áp dụng); dòng trùng ngay trong file (chỉ
+    // dòng ĐẦU được giữ included=true, các dòng lặp lại SAU đó mặc định included=false, tự tick lại nếu
+    // vẫn muốn áp dụng) — cùng tinh thần "cảnh báo trước, người dùng tự xác nhận" ở lib/importDedup.js.
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      it.included = it.valid && !it.duplicateInFile;
+    });
+    hrContractImportPreviewItems = data.items;
+    const validCount = data.items.filter(it => it.valid).length;
+    const dupCount = data.items.filter(it => it.duplicateInFile).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ`
+      + (dupCount ? `, ${dupCount} dòng TRÙNG MÃ NHÂN VIÊN ngay trong file (đã bỏ chọn sẵn, tự tick lại nếu vẫn muốn áp dụng).` : '.');
+    document.getElementById('hrContractImportPreviewBody').innerHTML = data.items.map((it) => {
+      let statusCell;
+      if (!it.valid) {
+        statusCell = `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
+      } else {
+        statusCell = `<label class="text-xs"><input type="checkbox" data-op-change="onHrContractImportRowToggle" data-arg0="${it._idx}" ${it.included ? 'checked' : ''}> Áp dụng</label>`
+          + (it.duplicateInFile ? ' <span class="text-amber-700">⚠️ Trùng mã trong file</span>' : '');
+      }
+      return `<tr class="${!it.valid || it.duplicateInFile ? 'bg-amber-50' : ''}">
+        <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
+        <td class="p-1">${escapeHtml(it.fullName || '')}</td>
+        <td class="p-1">${it.valid ? Object.keys(it.fields).length : '-'}</td>
+        <td class="p-1">${statusCell}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('hrContractImportPreviewWrap').classList.remove('hidden');
+    if (validCount > 0) document.getElementById('hrContractImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+function onHrContractImportRowToggle(idxStr) {
+  const it = hrContractImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.included = !it.included;
+}
+
+// Route áp dụng hàng loạt KHÔNG theo khuôn "1 bản ghi cụ thể" của callRecordAction() (xây dựng URL
+// /api/records/<module>/<id>/<action>) — gọi fetch() thẳng, cùng khuôn loadHrcEmployeeDirectory() ở trên.
+async function confirmHrContractImport() {
+  const submitItems = hrContractImportPreviewItems.filter(it => it.valid && it.included);
+  if (!submitItems.length) return alert('Chưa chọn dòng nào để áp dụng.');
+  try {
+    const res = await fetch('/api/records/laborContracts/apply-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: submitItems.map(it => ({ employeeCode: it.employeeCode, fields: it.fields })) })
+    });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    (data.updated || []).forEach(hrcApplyUpdate);
+    let msg = `✅ Đã cập nhật ${data.updated.length}/${submitItems.length} hợp đồng.`;
+    if (data.skipped.length) {
+      msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
+    }
+    alert(msg);
+    closeHrContractImportModal();
   } catch (err) {
     alert('⛔ ' + err.message);
   }
