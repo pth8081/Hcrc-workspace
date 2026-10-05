@@ -133,7 +133,7 @@ async function main() {
     await page.waitForSelector('#hrpfSelfFieldConfigModal:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(150);
     const selfCbCount = await page.evaluate(() => document.querySelectorAll('.hrpf-self-field-config-cb').length);
-    check('Modal "Trường Xem Của Tôi" liệt kê đủ 20 field nhạy cảm (10/2026: +disciplinaryActions)', selfCbCount === 20);
+    check('Modal "Trường Xem Của Tôi" liệt kê đủ 26 field nhạy cảm (10/2026: +disciplinaryActions +6 field mẫu Excel 90 cột)', selfCbCount === 26);
     await page.check('.hrpf-self-field-config-cb[value="dateOfBirth"]');
     await page.click('#hrpfSelfFieldConfigModal [data-op="saveHrpfSelfFieldConfig"]');
     await page.waitForTimeout(200);
@@ -145,7 +145,7 @@ async function main() {
     await page.waitForSelector('#hrpfFieldConfigModal:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(150);
     const mgrCbCount = await page.evaluate(() => document.querySelectorAll('.hrpf-field-config-cb').length);
-    check('Modal "Trường Xem Của Quản Lý Trực Tiếp" liệt kê đủ 20 field (đã mở rộng 10/2026: +disciplinaryActions)', mgrCbCount === 20);
+    check('Modal "Trường Xem Của Quản Lý Trực Tiếp" liệt kê đủ 26 field (đã mở rộng 10/2026: +disciplinaryActions +6 field mẫu Excel 90 cột)', mgrCbCount === 26);
     await page.check('.hrpf-field-config-cb[value="dependents"]');
     await page.click('#hrpfFieldConfigModal [data-op="saveHrpfFieldConfig"]');
     await page.waitForTimeout(200);

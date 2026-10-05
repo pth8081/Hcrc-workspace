@@ -51,8 +51,56 @@ const COLUMNS = [
   { header: 'Nơi Cấp CCCD/CMND', key: 'nationalIdIssuePlace', width: 20 },
   { header: 'Vị Trí Bàn Làm Việc', key: 'deskLocation', width: 16 },
   { header: 'Ngày Nghỉ Hưu Dự Kiến (YYYY-MM-DD)', key: 'retirementDate', width: 20 },
-  { header: 'BHXH Tại Đơn Vị Này (Có/Không)', key: 'socialInsuranceAtThisUnit', width: 18 }
+  { header: 'BHXH Tại Đơn Vị Này (Có/Không)', key: 'socialInsuranceAtThisUnit', width: 18 },
+  // 17 field MỚI (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su", theo yêu cầu người
+  // dùng) — cùng cơ chế ĐỌC/GHI như các field GĐ1 ở trên qua applyProfileEdit() (createManualProfile()/
+  // updateProfileFromImport()). 4 field enum (legalEntity/specialLaborStatus/currentWorkStatusDetail —
+  // đối chiếu danh mục admin cấu hình) KHÔNG validate chặt ở bước xem trước (preview) — để nguyên giá
+  // trị gõ, lỗi thật (không khớp danh mục) sẽ bị applyProfileEdit() chặn ở bước bulk-import thật, đưa
+  // vào results.skipped kèm lý do rõ ràng, giống mọi lỗi nghiệp vụ khác của route này.
+  { header: 'Địa Chỉ Người Liên Hệ Khẩn Cấp', key: 'emergencyContactAddress', width: 26 },
+  { header: 'Đơn Vị (Pháp Nhân)', key: 'legalEntity', width: 20 },
+  { header: 'Email Liên Hệ Công Việc', key: 'workEmail', width: 22 },
+  { header: 'Đối Tượng Lao Động Đặc Biệt', key: 'specialLaborStatus', width: 22 },
+  { header: 'Tình Trạng Làm Việc Hiện Tại (chi tiết)', key: 'currentWorkStatusDetail', width: 26 },
+  { header: 'Từ Ngày (Tình Trạng Làm Việc) (YYYY-MM-DD)', key: 'currentWorkStatusFrom', width: 22 },
+  { header: 'Đến Ngày (Tình Trạng Làm Việc) (YYYY-MM-DD)', key: 'currentWorkStatusTo', width: 22 },
+  { header: 'Đơn Vị Điều Chuyển Nội Bộ Gần Nhất', key: 'lastInternalTransferUnit', width: 24 },
+  { header: 'Lý Do Điều Chuyển Nội Bộ', key: 'lastInternalTransferReason', width: 24 },
+  { header: 'Ngày Vào Đơn Vị Cũ Cùng Tập Đoàn (YYYY-MM-DD)', key: 'joinDateAtPredecessorUnit', width: 24 },
+  { header: 'Ngày Vào HCRC (YYYY-MM-DD)', key: 'joinDateAtHcrc', width: 18 },
+  { header: 'Kiêm Nhiệm Chức Danh (ghi chú)', key: 'concurrentJobTitle', width: 22 },
+  { header: 'Ngày Nhận Đơn/Thông Tin Nghỉ (YYYY-MM-DD)', key: 'resignationNoticeDate', width: 24 },
+  { header: 'Ngày Dự Kiến Chấm Dứt HĐLĐ (YYYY-MM-DD)', key: 'resignationExpectedDate', width: 22 },
+  { header: 'Ngày Tính Thâm Niên (YYYY-MM-DD)', key: 'tenureBaseDate', width: 20 },
+  { header: 'Quá Trình Công Tác', key: 'careerHistoryNote', width: 30 },
+  { header: 'Ghi Chú Nhân Sự', key: 'hrNote', width: 30 }
 ];
+// ~17 cột CHỈ XEM (10/2026, mẫu Excel 90 trường) — đọc LIVE từ hợp đồng ACTIVE của nhân viên lúc Xuất
+// Excel, KHÔNG xuất hiện trong mẫu Tải Về để nhập (không đưa vào COLUMNS ở trên -> detectColumns() tự
+// nhiên không nhận diện được các cột này nếu người dùng tự thêm vào file nhập, bị BỎ QUA im lặng —
+// đúng thiết kế đã xác nhận "Chỉ XEM, sửa thì bấm sang Hợp Đồng Lao Động", không sửa qua Excel này).
+const CONTRACT_READONLY_COLUMNS = [
+  { header: 'Mã Hợp Đồng (CHỈ XEM)', key: 'contractCode', width: 18 },
+  { header: 'Loại HĐLĐ (CHỈ XEM)', key: 'contractTypeLabel', width: 18 },
+  { header: 'Trạng Thái HĐLĐ (CHỈ XEM)', key: 'contractStatusLabel', width: 18 },
+  { header: 'Ngày Bắt Đầu HĐLĐ (CHỈ XEM)', key: 'contractStartDate', width: 18 },
+  { header: 'Ngày Kết Thúc HĐLĐ (CHỈ XEM)', key: 'contractEndDate', width: 18 },
+  { header: 'Lương Cơ Bản (CHỈ XEM)', key: 'baseSalary', width: 16 },
+  { header: 'Phụ Cấp Trách Nhiệm (CHỈ XEM)', key: 'responsibilityAllowance', width: 16 },
+  { header: 'Phụ Cấp Kiêm Nhiệm (CHỈ XEM)', key: 'concurrentAllowance', width: 16 },
+  { header: 'Phụ Cấp Độc Hại Nặng Nhọc (CHỈ XEM)', key: 'hazardAllowance', width: 16 },
+  { header: 'Phụ Cấp Ăn Trưa (CHỈ XEM)', key: 'lunchAllowance', width: 16 },
+  { header: 'Hỗ Trợ Đi Lại (CHỈ XEM)', key: 'transportAllowance', width: 16 },
+  { header: 'Hỗ Trợ Điện Thoại (CHỈ XEM)', key: 'phoneAllowance', width: 16 },
+  { header: 'Phụ Cấp/Hỗ Trợ Khác (CHỈ XEM)', key: 'otherAllowance', width: 16 },
+  { header: 'Ngày Chấm Dứt HĐLĐ (CHỈ XEM)', key: 'terminationDate', width: 18 },
+  { header: 'Lý Do Chấm Dứt HĐLĐ (CHỈ XEM)', key: 'terminationReason', width: 22 }
+];
+const CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
+const CONTRACT_STATUS_LABELS = {
+  DRAFT: 'Nháp', ACTIVE: 'Đang hiệu lực', EXPIRED: 'Hết hạn', TERMINATED: 'Đã chấm dứt', SUPERSEDED: 'Đã thay thế'
+};
 
 async function buildImportTemplateWorkbook() {
   const wb = new ExcelJS.Workbook();
@@ -67,7 +115,13 @@ async function buildImportTemplateWorkbook() {
     socialInsuranceNo: '0123456789', taxCode: '8012345678',
     nationality: 'Việt Nam', maritalStatus: 'Độc thân', nationalIdIssueDate: '2020-01-15',
     nationalIdIssuePlace: 'Cục Cảnh sát QLHC về TTXH', deskLocation: 'Tầng 3 - Bàn 12',
-    retirementDate: '', socialInsuranceAtThisUnit: 'Có'
+    retirementDate: '', socialInsuranceAtThisUnit: 'Có',
+    emergencyContactAddress: '123 Đường ABC, Q.1, TP.HCM', legalEntity: 'Công ty TNHH HCRC',
+    workEmail: 'nguyenvana@hcrc.vn', specialLaborStatus: '', currentWorkStatusDetail: '',
+    currentWorkStatusFrom: '', currentWorkStatusTo: '', lastInternalTransferUnit: '', lastInternalTransferReason: '',
+    joinDateAtPredecessorUnit: '', joinDateAtHcrc: '2020-01-10', concurrentJobTitle: '',
+    resignationNoticeDate: '', resignationExpectedDate: '', tenureBaseDate: '',
+    careerHistoryNote: '', hrNote: ''
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
   const noteSheet = wb.addWorksheet('Ghi Chú');
@@ -75,7 +129,9 @@ async function buildImportTemplateWorkbook() {
   noteSheet.addRow(['"Mã Nhân Viên" bắt buộc — trùng với hồ sơ đã có hoặc trùng ngay trong file sẽ được CẢNH BÁO ở bước xem trước, HR tự chọn Ghi đè thông tin/Bỏ qua từng dòng, không tự động chặn.']);
   noteSheet.addRow(['"Tài Khoản VPDT" tuỳ chọn — nếu điền, phải khớp ĐÚNG 1 tài khoản đang hoạt động đã có sẵn trong hệ thống; để trống nếu chưa biết, liên kết sau qua nút "🔗 Liên Kết Tài Khoản VPDT" ở Chi tiết hồ sơ.']);
   noteSheet.addRow(['Chưa hỗ trợ nhập "Người phụ thuộc"/"Học vấn" qua Excel — bổ sung sau khi import xong, qua Chi tiết từng hồ sơ.']);
-  noteSheet.addRow(['"Cấp Bậc"/"Kiêm nhiệm chức danh" KHÔNG nhập qua Excel này — Cấp Bậc tự lấy theo Chức Vụ khi HR gán ở Chi tiết hồ sơ (Cơ Cấu Tổ Chức), Kiêm nhiệm chức danh cấu hình ở Quản Lý Người Dùng.']);
+  noteSheet.addRow(['"Cấp Bậc" KHÔNG nhập qua Excel này — tự lấy theo Chức Vụ khi HR gán ở Chi tiết hồ sơ (Cơ Cấu Tổ Chức).']);
+  noteSheet.addRow(['4 cột "Đơn vị (Pháp nhân)"/"Đối tượng lao động đặc biệt"/"Tình trạng làm việc hiện tại" là droplist — chỉ nhận ĐÚNG 1 giá trị có trong danh mục tương ứng (Hệ Thống → Quản Lý Danh Mục); giá trị không khớp sẽ bị BỎ QUA dòng đó khi nhập thật, kèm lý do rõ ràng.']);
+  noteSheet.addRow(['~15 cột ở CUỐI file đánh dấu "(CHỈ XEM)" là dữ liệu Hợp Đồng Lao Động (lương/phụ cấp) — CHỈ xuất hiện khi Xuất Excel để xem/đối chiếu, KHÔNG có trong mẫu Tải Về để nhập — sửa lương/phụ cấp phải qua màn Hợp Đồng Lao Động, không sửa qua Excel này (tránh 2 nguồn dữ liệu lệch nhau).']);
   noteSheet.eachRow(row => { row.font = { italic: true, color: { argb: 'FFDC2626' } }; });
   return wb;
 }
@@ -107,7 +163,25 @@ const HEADER_HINTS = {
   nationalIdIssuePlace: ['noi cap cccd/cmnd', 'noi cap'],
   deskLocation: ['vi tri ban lam viec'],
   retirementDate: ['ngay nghi huu du kien (yyyy-mm-dd)', 'ngay nghi huu du kien', 'ngay nghi huu'],
-  socialInsuranceAtThisUnit: ['bhxh tai don vi nay (co/khong)', 'bhxh tai don vi nay']
+  socialInsuranceAtThisUnit: ['bhxh tai don vi nay (co/khong)', 'bhxh tai don vi nay'],
+  // 17 field MỚI (10/2026, mẫu Excel 90 trường) — xem chú thích đầy đủ tại COLUMNS ở trên.
+  emergencyContactAddress: ['dia chi nguoi lien he khan cap'],
+  legalEntity: ['don vi (phap nhan)', 'don vi phap nhan'],
+  workEmail: ['email lien he cong viec'],
+  specialLaborStatus: ['doi tuong lao dong dac biet'],
+  currentWorkStatusDetail: ['tinh trang lam viec hien tai (chi tiet)', 'tinh trang lam viec hien tai'],
+  currentWorkStatusFrom: ['tu ngay (tinh trang lam viec) (yyyy-mm-dd)', 'tu ngay (tinh trang lam viec)'],
+  currentWorkStatusTo: ['den ngay (tinh trang lam viec) (yyyy-mm-dd)', 'den ngay (tinh trang lam viec)'],
+  lastInternalTransferUnit: ['don vi dieu chuyen noi bo gan nhat'],
+  lastInternalTransferReason: ['ly do dieu chuyen noi bo'],
+  joinDateAtPredecessorUnit: ['ngay vao don vi cu cung tap doan (yyyy-mm-dd)', 'ngay vao don vi cu cung tap doan'],
+  joinDateAtHcrc: ['ngay vao hcrc (yyyy-mm-dd)', 'ngay vao hcrc'],
+  concurrentJobTitle: ['kiem nhiem chuc danh (ghi chu)', 'kiem nhiem chuc danh'],
+  resignationNoticeDate: ['ngay nhan don/thong tin nghi (yyyy-mm-dd)', 'ngay nhan don/thong tin nghi'],
+  resignationExpectedDate: ['ngay du kien cham dut hdld (yyyy-mm-dd)', 'ngay du kien cham dut hdld'],
+  tenureBaseDate: ['ngay tinh tham nien (yyyy-mm-dd)', 'ngay tinh tham nien'],
+  careerHistoryNote: ['qua trinh cong tac'],
+  hrNote: ['ghi chu nhan su']
 };
 
 function detectColumns(headerCells) {
@@ -175,6 +249,23 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
   else if (siauRaw === 'khong') socialInsuranceAtThisUnit = false;
   else if (siauRaw) errors.push('"BHXH Tại Đơn Vị Này" không hợp lệ (chỉ nhận Có/Không, để trống nếu chưa rõ)');
 
+  // 7 field "ngày" thuần mới (10/2026, mẫu Excel 90 trường) — chỉ kiểm ĐỊNH DẠNG ở bước xem trước này
+  // (cheap, không cần danh mục); enum (legalEntity/specialLaborStatus/currentWorkStatusDetail) KHÔNG
+  // validate ở đây — để applyProfileEdit() (bước nhập thật) tự đối chiếu ĐÚNG danh mục admin cấu hình,
+  // tránh 2 nơi validate lệch nhau nếu admin đổi danh mục sau này.
+  const newDateFieldLabels = {
+    currentWorkStatusFrom: 'Từ ngày (tình trạng làm việc)', currentWorkStatusTo: 'Đến ngày (tình trạng làm việc)',
+    joinDateAtPredecessorUnit: 'Ngày vào đơn vị cũ cùng Tập Đoàn', joinDateAtHcrc: 'Ngày vào HCRC',
+    resignationNoticeDate: 'Ngày nhận đơn/thông tin nghỉ', resignationExpectedDate: 'Ngày dự kiến chấm dứt HĐLĐ',
+    tenureBaseDate: 'Ngày tính thâm niên'
+  };
+  const newDateFields = {};
+  for (const [f, label] of Object.entries(newDateFieldLabels)) {
+    const val = parseDateCell(get(f)) || null;
+    if (val && Number.isNaN(new Date(val).getTime())) errors.push(`"${label}" không hợp lệ`);
+    newDateFields[f] = val;
+  }
+
   return {
     employeeCode, username, dateOfBirth, gender,
     nationalId: String(get('nationalId') || '').trim() || null,
@@ -193,6 +284,21 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
     nationalIdIssuePlace: String(get('nationalIdIssuePlace') || '').trim() || null,
     deskLocation: String(get('deskLocation') || '').trim() || null,
     retirementDate, socialInsuranceAtThisUnit,
+    // 17 field MỚI (10/2026, mẫu Excel 90 trường) — 10 field tự do (trim, giữ nguyên hoặc null nếu
+    // rỗng), 3 field enum (legalEntity/specialLaborStatus/currentWorkStatusDetail, không ép rỗng->null
+    // vì applyProfileEdit() tự xử lý chuỗi rỗng), 7 field ngày (newDateFields ở trên) + careerHistoryNote/
+    // hrNote (ghi chú dài, không giới hạn ký tự ở đây — applyProfileEdit() tự cắt về 2000).
+    emergencyContactAddress: String(get('emergencyContactAddress') || '').trim() || null,
+    legalEntity: String(get('legalEntity') || '').trim() || null,
+    workEmail: String(get('workEmail') || '').trim() || null,
+    specialLaborStatus: String(get('specialLaborStatus') || '').trim() || null,
+    currentWorkStatusDetail: String(get('currentWorkStatusDetail') || '').trim() || null,
+    lastInternalTransferUnit: String(get('lastInternalTransferUnit') || '').trim() || null,
+    lastInternalTransferReason: String(get('lastInternalTransferReason') || '').trim() || null,
+    concurrentJobTitle: String(get('concurrentJobTitle') || '').trim() || null,
+    careerHistoryNote: String(get('careerHistoryNote') || '').trim() || null,
+    hrNote: String(get('hrNote') || '').trim() || null,
+    ...newDateFields,
     duplicateExisting, duplicateInFile,
     valid: errors.length === 0,
     errors
@@ -248,7 +354,14 @@ function identitySnapshot(profile, usersByUsername, processesById) {
 
 const STATUS_LABELS = { DRAFT: 'Chuẩn bị (chưa hoàn tất Onboarding)', ACTIVE: 'Đang làm việc', ON_LEAVE: 'Nghỉ dài hạn', INACTIVE: 'Đã nghỉ việc' };
 
-async function buildExportWorkbook(profiles, users, hrProcesses) {
+// findActiveContract() — mirror ĐÚNG lib/laborContract.js::findActiveContractByEmployeeCode() (KHÔNG
+// require thẳng file đó — tránh vòng phụ thuộc mới chỉ vì 1 hàm tìm 1 phần tử, contracts[] do CALLER
+// (routes/employeeProfile.js) đọc sẵn và truyền vào).
+function findActiveContract(contracts, employeeCode) {
+  return (contracts || []).find(c => c.employeeCode === employeeCode && c.status === 'ACTIVE') || null;
+}
+
+async function buildExportWorkbook(profiles, users, hrProcesses, contracts) {
   const usersByUsername = new Map((users || []).map(u => [u.username, u]));
   const processesById = new Map((hrProcesses || []).map(p => [p.id, p]));
   const wb = new ExcelJS.Workbook();
@@ -277,7 +390,28 @@ async function buildExportWorkbook(profiles, users, hrProcesses) {
     { header: 'Vị Trí Bàn Làm Việc', key: 'deskLocation', width: 16 },
     { header: 'Ngày Nghỉ Hưu Dự Kiến', key: 'retirementDate', width: 18 },
     { header: 'BHXH Tại Đơn Vị Này', key: 'socialInsuranceAtThisUnitLabel', width: 16 },
-    { header: 'Cập Nhật Lần Cuối', key: 'updatedAt', width: 20 }
+    // 17 field MỚI (10/2026, mẫu Excel 90 trường) — cùng field key với COLUMNS (mẫu nhập) ở trên, ĐỌC/
+    // GHI được qua Excel này.
+    { header: 'Địa Chỉ Người Liên Hệ Khẩn Cấp', key: 'emergencyContactAddress', width: 26 },
+    { header: 'Đơn Vị (Pháp Nhân)', key: 'legalEntity', width: 20 },
+    { header: 'Email Liên Hệ Công Việc', key: 'workEmail', width: 22 },
+    { header: 'Đối Tượng Lao Động Đặc Biệt', key: 'specialLaborStatus', width: 22 },
+    { header: 'Tình Trạng Làm Việc Hiện Tại (chi tiết)', key: 'currentWorkStatusDetail', width: 26 },
+    { header: 'Từ Ngày (Tình Trạng Làm Việc)', key: 'currentWorkStatusFrom', width: 20 },
+    { header: 'Đến Ngày (Tình Trạng Làm Việc)', key: 'currentWorkStatusTo', width: 20 },
+    { header: 'Đơn Vị Điều Chuyển Nội Bộ Gần Nhất', key: 'lastInternalTransferUnit', width: 24 },
+    { header: 'Lý Do Điều Chuyển Nội Bộ', key: 'lastInternalTransferReason', width: 24 },
+    { header: 'Ngày Vào Đơn Vị Cũ Cùng Tập Đoàn', key: 'joinDateAtPredecessorUnit', width: 22 },
+    { header: 'Ngày Vào HCRC', key: 'joinDateAtHcrc', width: 16 },
+    { header: 'Kiêm Nhiệm Chức Danh (ghi chú)', key: 'concurrentJobTitle', width: 22 },
+    { header: 'Ngày Nhận Đơn/Thông Tin Nghỉ', key: 'resignationNoticeDate', width: 22 },
+    { header: 'Ngày Dự Kiến Chấm Dứt HĐLĐ', key: 'resignationExpectedDate', width: 20 },
+    { header: 'Ngày Tính Thâm Niên', key: 'tenureBaseDate', width: 18 },
+    { header: 'Quá Trình Công Tác', key: 'careerHistoryNote', width: 30 },
+    { header: 'Ghi Chú Nhân Sự', key: 'hrNote', width: 30 },
+    { header: 'Cập Nhật Lần Cuối', key: 'updatedAt', width: 20 },
+    // ~15 cột CHỈ XEM cuối file (10/2026) — đọc LIVE từ hợp đồng ACTIVE, xem CONTRACT_READONLY_COLUMNS.
+    ...CONTRACT_READONLY_COLUMNS
   ];
   styleHeaderRow(sheet.getRow(1));
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hàm này tự gọi sheet.addRow() trực tiếp, không đi qua
@@ -286,6 +420,7 @@ async function buildExportWorkbook(profiles, users, hrProcesses) {
   // "=HYPERLINK(...)" là công thức chạy ngay khi HR mở file xuất. Bọc qua sanitizeRowForFormulaInjection().
   for (const p of profiles || []) {
     const idn = identitySnapshot(p, usersByUsername, processesById);
+    const c = findActiveContract(contracts, p.employeeCode);
     sheet.addRow(sanitizeRowForFormulaInjection({
       employeeCode: p.employeeCode, fullName: idn.fullName, dept: idn.dept, jobTitle: idn.jobTitle,
       username: p.username || '', statusLabel: STATUS_LABELS[p.status] || p.status,
@@ -297,7 +432,23 @@ async function buildExportWorkbook(profiles, users, hrProcesses) {
       nationalIdIssueDate: p.nationalIdIssueDate || '', nationalIdIssuePlace: p.nationalIdIssuePlace || '',
       jobGrade: p.jobGrade || '', deskLocation: p.deskLocation || '', retirementDate: p.retirementDate || '',
       socialInsuranceAtThisUnitLabel: p.socialInsuranceAtThisUnit == null ? '' : (p.socialInsuranceAtThisUnit ? 'Có' : 'Không'),
-      updatedAt: p.updatedAt || ''
+      emergencyContactAddress: p.emergencyContactAddress || '', legalEntity: p.legalEntity || '',
+      workEmail: p.workEmail || '', specialLaborStatus: p.specialLaborStatus || '',
+      currentWorkStatusDetail: p.currentWorkStatusDetail || '', currentWorkStatusFrom: p.currentWorkStatusFrom || '',
+      currentWorkStatusTo: p.currentWorkStatusTo || '', lastInternalTransferUnit: p.lastInternalTransferUnit || '',
+      lastInternalTransferReason: p.lastInternalTransferReason || '', joinDateAtPredecessorUnit: p.joinDateAtPredecessorUnit || '',
+      joinDateAtHcrc: p.joinDateAtHcrc || '', concurrentJobTitle: p.concurrentJobTitle || '',
+      resignationNoticeDate: p.resignationNoticeDate || '', resignationExpectedDate: p.resignationExpectedDate || '',
+      tenureBaseDate: p.tenureBaseDate || '', careerHistoryNote: p.careerHistoryNote || '', hrNote: p.hrNote || '',
+      updatedAt: p.updatedAt || '',
+      contractCode: c?.code || '', contractTypeLabel: c ? (CONTRACT_TYPE_LABELS[c.contractType] || c.contractType) : '',
+      contractStatusLabel: c ? (CONTRACT_STATUS_LABELS[c.status] || c.status) : '',
+      contractStartDate: c?.startDate || '', contractEndDate: c?.endDate || '',
+      baseSalary: c?.baseSalary ?? '', responsibilityAllowance: c?.responsibilityAllowance ?? '',
+      concurrentAllowance: c?.concurrentAllowance ?? '', hazardAllowance: c?.hazardAllowance ?? '',
+      lunchAllowance: c?.lunchAllowance ?? '', transportAllowance: c?.transportAllowance ?? '',
+      phoneAllowance: c?.phoneAllowance ?? '', otherAllowance: c?.otherAllowance ?? '',
+      terminationDate: c?.terminationDate || '', terminationReason: c?.terminationReason || ''
     }));
   }
   return wb;

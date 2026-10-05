@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**25.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.8 (2026-10-05): 90 trường Hồ Sơ Nhân Sự — ĐỢT 2/2 (khối HĐLĐ chỉ xem + thâm niên theo Tập Đoàn + Excel gộp 90 cột) — HOÀN TẤT
+
+Hoàn tất phần "CÒN LẠI" đã nêu ở v25.7, theo đúng 3 yêu cầu người dùng xác nhận (10/2026):
+
+**1. Thâm niên tính từ ngày vào Tập Đoàn (ưu tiên trước ngày vào HCRC)**: `module-hrprofile.js`
+`hrpfResolveTenureBaseDate()` — thứ tự ưu tiên `tenureBaseDate` → `joinDateAtPredecessorUnit` (nhân
+viên chuyển nội bộ từ đơn vị khác cùng Tập Đoàn) → `joinDateAtHcrc` → `DB.users.startDate` (fallback hồ
+sơ cũ). Trường hợp không vào từ Tập Đoàn vẫn tính bình thường theo ngày Onboarding vào HCRC.
+
+**2. Khối Hợp Đồng Lao Động CHỈ XEM trên màn Hồ Sơ Nhân Sự**: hiện read-only ~7 field lương/phụ cấp +
+loại/trạng thái HĐLĐ đang hiệu lực (`#hrpfContractBox`, đọc LIVE từ `laborContracts` qua chính route GET
+`.../history` đã có — không mở route riêng, không lưu trùng dữ liệu, cùng gate quyền
+`hrProfileManage`+`hrContractManage`). Nút "↗️ Sửa ở Hợp Đồng Lao Động" chuyển tab + tự lọc đúng Mã NV.
+
+**3. Excel Tải Mẫu/Nhập/Xuất GỘP đủ 90 cột** (`lib/employeeProfileImport.js`): mở rộng mẫu nhập/xuất có
+sẵn của Hồ Sơ Nhân Sự (không tạo route/tính năng mới) thêm:
+- **17 cột field mới ĐỌC/GHI** (địa chỉ liên hệ khẩn cấp, đơn vị pháp nhân, email công việc, lao động
+  đặc biệt, tình trạng làm việc hiện tại + khoảng ngày, điều chuyển nội bộ, ngày vào đơn vị cũ cùng Tập
+  Đoàn/vào HCRC, kiêm nhiệm chức danh, ngày nghỉ việc, ngày tính thâm niên, quá trình công tác, ghi chú
+  nhân sự) — 3 cột enum (đơn vị pháp nhân/lao động đặc biệt/tình trạng làm việc) KHÔNG validate ở bước
+  xem trước, để `applyProfileEdit()` đối chiếu đúng danh mục admin cấu hình lúc nhập thật (tránh 2 nơi
+  validate lệch nhau).
+- **~15 cột CHỈ XEM** nối cuối file Xuất Excel (mã/loại/trạng thái HĐLĐ, ngày bắt đầu/kết thúc, lương cơ
+  bản + 7 phụ cấp, ngày/lý do chấm dứt) — đọc LIVE từ hợp đồng ACTIVE của từng nhân viên, KHÔNG xuất hiện
+  trong mẫu Tải Về để nhập (sửa phải qua Hợp Đồng Lao Động, không tạo 2 nguồn dữ liệu lệch nhau).
+- `buildExportWorkbook()` nhận thêm tham số `contracts` (giữ tương thích lùi — gọi thiếu tham số này vẫn
+  chạy được, chỉ để trống các cột CHỈ XEM).
+- **Lỗi đã vá** (phát hiện lúc mở rộng): `createManualProfile()`/`updateProfileFromImport()`
+  (`lib/employeeProfile.js`) trước đây chỉ forward 2 field `employmentTypes`/`workSchedules` vào
+  `applyProfileEdit()`, âm thầm bỏ sót 4 danh mục mới (`legalEntities`/`specialLaborStatuses`/
+  `currentWorkStatusDetails`/`nationalIdIssuePlaces`) mà route đã đọc đúng — khiến validate luôn rơi về
+  Set cứng mặc định dù admin đã cấu hình danh mục thật. Nay forward NGUYÊN object `options`.
+- Test mới `tests/test-hr-profile-import-90fields.js` (10 kịch bản: 17 cột mới round-trip qua
+  import/export, 15 cột CHỈ XEM đọc đúng hợp đồng ACTIVE, và xác nhận trực tiếp lỗi options-forwarding
+  đã vá) + `tests/test-hr-profile-90field-ui.js` (Playwright trình duyệt thật: form Sửa hiện đủ 17 field
+  đúng id, lưu thật round-trip, khối HĐLĐ CHỈ XEM hiện đúng dữ liệu, không lỗi JS/CSP).
+
+**Rà soát phát hiện 2 test cũ bị "treo" theo dữ liệu** (từ đợt v25.7 mở rộng `SENSITIVE_FIELDS` 20→26
+field nhưng chưa cập nhật số đếm cứng ở test): `test-hr-profile.js`, `test-hr-profile-field-visibility.js`
+(cả 2 đã sửa đúng số 26) và `test-hr-profile-gd1-fields.js` (giá trị mẫu `nationalIdIssuePlace` không
+khớp danh mục fallback sau khi field này chuyển sang enum ở đợt trước — đã sửa đúng giá trị mẫu).
+
+Chạy lại toàn bộ 21 file test liên quan Hồ Sơ Nhân Sự/Onboarding/Hợp Đồng Lao Động (300+ kịch bản) —
+không còn regression.
+
+**90 trường Hồ Sơ Nhân Sự coi như HOÀN TẤT** cả 2 đợt (data model/danh mục/UI nhập ở v25.7 + khối HĐLĐ
+chỉ xem/thâm niên/Excel gộp ở bản này).
 
 ## v25.7 (2026-10-05): Onboarding "Xác Nhận" → CONFIRMED + nền tảng 90 trường Hồ Sơ Nhân Sự (đợt 1/nhiều)
 
@@ -46,10 +94,8 @@ trùng lặp), ~10 cột đã có field tương ứng trong `employeeProfiles`, 
   `nationalIdIssuePlace` sang enum (`test-hr-onboarding-excel-fields.js`). Chạy lại toàn bộ test HR/
   Onboarding/Labor Contract liên quan (108 kịch bản) — không regression.
 
-**CÒN LẠI (đợt sau, CHƯA xong trong bản này — nêu rõ để không hiểu nhầm "90 trường đã xong")**: khối
-hiển thị READ-ONLY ~30 cột hợp đồng/lương trên màn Hồ Sơ (đã xác nhận thiết kế: chỉ xem, sửa thì bấm sang
-Hợp Đồng Lao Động) + tính năng Tải Mẫu/Nhập/Xuất Excel GỘP 90 cột (auto-fill field trùng với hồ sơ/hợp
-đồng hiện có, field không trùng để lại lịch sử) + cập nhật `Huong-dan-nghiep-vu.md`.
+**Đợt này (v25.7) là 1/2** — phần còn lại (khối hiển thị READ-ONLY hợp đồng/lương trên màn Hồ Sơ + Excel
+Tải Mẫu/Nhập/Xuất GỘP 90 cột + thâm niên theo ngày vào Tập Đoàn) đã hoàn tất ở v25.8 ngay trên.
 
 ## v25.6 (2026-10-05): Vá lỗi "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không thêm được" (data-op-submit bỏ qua data-arg0)
 

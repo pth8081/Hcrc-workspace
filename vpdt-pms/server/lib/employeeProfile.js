@@ -478,8 +478,12 @@ function createManualProfile(list, payload, actorUsername, actorName, options) {
   profile.updatedBy = actorUsername || 'system';
   // skipHistory: true — điền dữ liệu payload ban đầu là 1 phần của "tạo mới" (ghi CREATE riêng ngay
   // dưới đây), không phải 1 lượt "sửa" cần liệt kê từng field trong profileEditHistory.
+  // options (10/2026, mẫu Excel 90 trường) — forward NGUYÊN object (không chỉ 2 field employmentTypes/
+  // workSchedules như trước) để applyProfileEdit() nhận đủ legalEntities/specialLaborStatuses/
+  // currentWorkStatusDetails/nationalIdIssuePlaces CALLER truyền vào — thiếu bước này các catalog mới sẽ
+  // bị rơi về fallback Set cứng dù CALLER đã đọc đúng danh mục thật.
   applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, {
-    skipHistory: true, employmentTypes: options?.employmentTypes, workSchedules: options?.workSchedules
+    ...(options || {}), skipHistory: true
   });
   profile.profileEditHistory = [{
     id: randomUUID(), type: 'CREATE', changedFields: [],
@@ -498,14 +502,17 @@ function createManualProfile(list, payload, actorUsername, actorName, options) {
 // bankName/socialInsuranceNo/taxCode) — KHÔNG bao giờ đụng employeeCode/username/status/dependents/
 // education/chức vụ hay bất kỳ field nào khác của hồ sơ đang có (payload từ Excel không chứa các field
 // đó nên applyProfileEdit() tự bỏ qua, đúng cơ chế "chỉ field có mặt trong payload mới bị đổi").
-function updateProfileFromImport(list, employeeCode, payload, actorUsername, actorName) {
+function updateProfileFromImport(list, employeeCode, payload, actorUsername, actorName, options) {
   const arr = list || [];
   const profile = findProfile(arr, String(employeeCode || '').trim());
   if (!profile) throw new HttpError(404, `Không tìm thấy hồ sơ ứng với Mã Nhân Viên "${employeeCode}" để ghi đè`);
   // Chặn trùng CCCD/CMND y hệt lối tạo mới (loại trừ chính hồ sơ đang ghi đè) — xem
   // assertNationalIdNotDuplicated() ở trên.
   if (payload && 'nationalId' in payload) assertNationalIdNotDuplicated(arr, payload.nationalId, profile.employeeCode);
-  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, {});
+  // options (10/2026, mẫu Excel 90 trường) — CALLER (routes/employeeProfile.js) truyền đúng danh mục
+  // THẬT (employmentTypes/workSchedules/legalEntities/specialLaborStatuses/currentWorkStatusDetails/
+  // nationalIdIssuePlaces) để applyProfileEdit() đối chiếu enum ĐÚNG, không rơi về fallback Set cứng.
+  applyProfileEdit(profile, payload, [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS], actorUsername, actorName, options || {});
   return profile;
 }
 

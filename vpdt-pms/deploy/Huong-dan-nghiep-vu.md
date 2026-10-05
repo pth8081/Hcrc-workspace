@@ -4072,6 +4072,29 @@ làm được nay bị chặn:
 - Tắt module "Hồ Sơ Nhân Sự" (Khối 0 — Quyền Truy Cập Module) nay chặn THẬT
   toàn bộ API hồ sơ, không chỉ ẩn giao diện. Ngoại lệ duy nhất: danh sách
   chọn nhân viên dùng cho module Hợp Đồng Lao Động.
+- **90 trường Hồ Sơ Nhân Sự (10/2026, đối chiếu Excel "Template_Quan_ly_ho_so_nhan_su")**:
+  bổ sung 17 field hành chính/nội bộ mới (địa chỉ liên hệ khẩn cấp, đơn vị
+  pháp nhân, email công việc, lao động đặc biệt, tình trạng làm việc hiện tại
+  + khoảng ngày, điều chuyển nội bộ gần nhất, ngày vào đơn vị cũ cùng Tập
+  Đoàn/vào HCRC, kiêm nhiệm chức danh, ngày nhận đơn/dự kiến nghỉ việc, ngày
+  tính thâm niên, quá trình công tác, ghi chú nhân sự) vào Chi tiết hồ sơ —
+  Đơn vị (pháp nhân)/Lao động đặc biệt/Tình trạng làm việc hiện tại là
+  droplist đối chiếu danh mục (Hệ Thống → Quản Lý Danh Mục).
+  - **Thâm niên** hiển thị trên Chi tiết hồ sơ tính theo thứ tự ưu tiên: Ngày
+    Tính Thâm Niên (nếu có) → Ngày vào đơn vị cũ cùng Tập Đoàn (nhân viên
+    chuyển nội bộ từ 1 đơn vị khác CÙNG Tập Đoàn) → Ngày vào HCRC → Ngày Vào
+    Làm Việc (hồ sơ cũ chưa có 2 field trên). Không phải trường hợp chuyển
+    nội bộ từ Tập Đoàn thì vẫn tính bình thường từ ngày Onboarding vào HCRC.
+  - Chi tiết hồ sơ hiện thêm khối **"Hợp Đồng Lao Động" CHỈ XEM** (mã/loại/
+    trạng thái hợp đồng, ngày bắt đầu/kết thúc, lương cơ bản + 7 phụ cấp của
+    hợp đồng ĐANG HIỆU LỰC) — đọc LIVE, không lưu trùng dữ liệu; sửa lương/
+    phụ cấp phải bấm nút "↗️ Sửa ở Hợp Đồng Lao Động" (chuyển tab, tự lọc
+    đúng Mã Nhân Viên), không sửa được qua màn Hồ Sơ.
+  - **Tải Mẫu/Nhập/Xuất Excel** (nút sẵn có ở "Quản Lý Hồ Sơ") nay gồm đủ 17
+    field mới (đọc/ghi) + thêm ~15 cột đánh dấu "(CHỈ XEM)" ở cuối file Xuất
+    Excel (dữ liệu hợp đồng/lương như trên) — các cột CHỈ XEM không có trong
+    mẫu Tải Về để nhập, và nhập Excel cũng không sửa được dữ liệu hợp đồng
+    (đúng nguyên tắc "sửa lương/phụ cấp chỉ qua Hợp Đồng Lao Động" ở trên).
 
 **Hợp Đồng Lao Động**
 - Chỉ thêm được **Phụ lục** cho hợp đồng **đang hiệu lực**. Hợp đồng còn Nháp
