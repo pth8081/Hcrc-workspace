@@ -450,6 +450,10 @@ async function scenario(name, fn) {
         'Kế Toán': { RETAIL: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } }
       };
       DB.itPriceTierWorkflows = { MARGIN_LT5: { workflowId: 'WF_1STEP', approvers: { 1: ['duyet1'] } } };
+      // approvers ở trên giờ CHỈ còn tham khảo — NGƯỜI DUYỆT thật của WHOLESALE tra từ
+      // itPriceWholesaleStoreMixedApprovalRules (đợt "🏪 QT Giá Bán Buôn (Siêu Thị)", 10/2026, CÙNG CƠ
+      // CHẾ operationOrderStoreMixedApprovalRules ở dưới) — PHẢI khớp đúng `tier`.
+      DB.itPriceWholesaleStoreMixedApprovalRules = [{ id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', username: 'duyet1', stores: [] }];
       DB.itPriceApprovals = [
         { id: 801, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], priceType: 'RETAIL',
           code: 'ITPG-801', productName: 'Giá bán lẻ chờ duyệt', creator: 'someone.else', creatorName: 'Người Đề Xuất',
@@ -481,6 +485,7 @@ async function scenario(name, fn) {
 
       delete DB.itPriceDeptWorkflows['Kế Toán'];
       delete DB.itPriceTierWorkflows;
+      delete DB.itPriceWholesaleStoreMixedApprovalRules;
       DB.itPriceApprovals = [];
       delete DB.operationOrderHOTierWorkflows;
       delete DB.operationOrderStoreTierWorkflows;

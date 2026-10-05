@@ -124,6 +124,7 @@ function setLogSubTab(subTab) {
 function setAdvWorkflowSubTab(subTab) {
   activeAdvWorkflowSubTab = subTab;
   document.getElementById('mixedApprovalSection').classList.toggle('hidden', subTab !== 'MIXED');
+  document.getElementById('itPriceMixedApprovalSection').classList.toggle('hidden', subTab !== 'ITPRICE_MIXED');
   document.getElementById('quickApplySection').classList.toggle('hidden', subTab !== 'QUICKAPPLY');
   document.getElementById('advWorkflowSubGroups').classList.toggle('hidden', subTab !== 'GROUPS');
   document.getElementById('advWorkflowSubSpecialPerm').classList.toggle('hidden', subTab !== 'SPECIALPERM');
@@ -133,6 +134,7 @@ function setAdvWorkflowSubTab(subTab) {
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
   document.getElementById('btnAdvWorkflowSubMixed').className = subTab === 'MIXED' ? activeCls : inactiveCls;
+  document.getElementById('btnAdvWorkflowSubItPriceMixed').className = subTab === 'ITPRICE_MIXED' ? activeCls : inactiveCls;
   document.getElementById('btnAdvWorkflowSubQuickApply').className = subTab === 'QUICKAPPLY' ? activeCls : inactiveCls;
   document.getElementById('btnAdvWorkflowSubGroups').className = subTab === 'GROUPS' ? activeCls : inactiveCls;
   document.getElementById('btnAdvWorkflowSubSpecialPerm').className = subTab === 'SPECIALPERM' ? activeCls : inactiveCls;
@@ -142,6 +144,10 @@ function setAdvWorkflowSubTab(subTab) {
   // MIXED: "🏬 Quy Trình Đặt Hàng Siêu Thị" — cấu hình người duyệt theo bước cho đơn "Đặt Hàng Tại Siêu Thị" (xem
   // module-workflow.js renderMixedApprovalSection()), thay hẳn cơ chế tự khớp dept cũ.
   if (subTab === 'MIXED') { renderMixedApprovalSection(); }
+  // ITPRICE_MIXED: "🏪 QT Giá Bán Buôn (Siêu Thị)" — CÙNG KHUÔN MIXED ở trên nhưng cho đề xuất Phê Duyệt
+  // Giá Bán Buôn (xem module-workflow.js renderItPriceWholesaleMixedApprovalSection()/lib/workflowEngine.js
+  // resolveItPriceWholesaleStoreMixedApprovers()).
+  if (subTab === 'ITPRICE_MIXED') { renderItPriceWholesaleMixedApprovalSection(); }
   // QUICKAPPLY: tiện ích set NHANH số bước (xem module-workflow.js renderQuickApplySection()) — nhiều
   // cấu hình độc lập (mẫu quy trình + danh sách module) thay vì 1 mẫu áp cho toàn bộ.
   if (subTab === 'QUICKAPPLY') { renderQuickApplySection(); }

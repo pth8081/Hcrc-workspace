@@ -66,8 +66,11 @@ function makeWholesaleItem(overrides) {
     applyClaimedBy: null, emergencyRejectStatus: null
   }, overrides);
 }
-function appDataFor(itPriceDeptWorkflows, itPriceTierWorkflows) {
-  return { workflows: [WF_1STEP, WF_2STEP], itPriceDeptWorkflows: itPriceDeptWorkflows || {}, itPriceTierWorkflows: itPriceTierWorkflows || {}, users: USERS };
+function appDataFor(itPriceDeptWorkflows, itPriceTierWorkflows, itPriceWholesaleStoreMixedApprovalRules) {
+  return {
+    workflows: [WF_1STEP, WF_2STEP], itPriceDeptWorkflows: itPriceDeptWorkflows || {}, itPriceTierWorkflows: itPriceTierWorkflows || {},
+    itPriceWholesaleStoreMixedApprovalRules: itPriceWholesaleStoreMixedApprovalRules || [], users: USERS
+  };
 }
 
 // ============================================================
@@ -121,7 +124,14 @@ console.log('\n[2/3] Bán Buôn (WHOLESALE) — các bước phê duyệt theo M
   const appData = appDataFor({}, {
     MARGIN_LT5: { workflowId: 'WF_1STEP', approvers: { 1: [WHOLESALE_LT5.username] } },
     DISCOUNT_GT5: { workflowId: 'WF_1STEP', approvers: { 1: [WHOLESALE_DISCOUNT.username] } }
-  });
+  }, [
+    // itPriceTierWorkflows[...].approvers ở trên giờ CHỈ còn tham khảo (không đọc cho WHOLESALE nữa) —
+    // rule dưới đây mới là nguồn THẬT xác định người duyệt, PHẢI khớp đúng `tier` (xem chú thích tại
+    // defaults.js::itPriceWholesaleStoreMixedApprovalRules) để không bị lẫn người duyệt giữa 2 mức khác nhau
+    // dù CÙNG là "bước 1" — mode PERSON + stores rỗng = áp dụng mọi phòng ban/siêu thị đề xuất.
+    { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', jobTitle: null, username: WHOLESALE_LT5.username, stores: [] },
+    { id: 2, tier: 'DISCOUNT_GT5', step: 1, mode: 'PERSON', jobTitle: null, username: WHOLESALE_DISCOUNT.username, stores: [] }
+  ]);
 
   test('Người duyệt mức MARGIN_LT5 KHÔNG duyệt được hồ sơ mức DISCOUNT_GT5 (403)', () => {
     const item = makeWholesaleItem({ priceTier: 'DISCOUNT_GT5' });

@@ -240,6 +240,7 @@
   <div id="advWorkflowSection" class="hidden space-y-6">
     <div id="advWorkflowSubTabBar" class="sticky z-10 bg-white flex flex-wrap gap-2 border-b pb-2 pt-1">
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="MIXED" id="btnAdvWorkflowSubMixed" class="px-3 py-1.5 rounded text-xs font-bold bg-indigo-700 text-white">🏬 Quy Trình Đặt Hàng Siêu Thị</button>
+      <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="ITPRICE_MIXED" id="btnAdvWorkflowSubItPriceMixed" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🏪 QT Giá Bán Buôn (Siêu Thị)</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="QUICKAPPLY" id="btnAdvWorkflowSubQuickApply" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">⚡ Áp Dụng Nhanh</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="GROUPS" id="btnAdvWorkflowSubGroups" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🖋️ Nhóm Phê Duyệt Trình/HĐ</button>
       <button type="button" data-op="setAdvWorkflowSubTab" data-arg0="SPECIALPERM" id="btnAdvWorkflowSubSpecialPerm" class="px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700">🧩 Nhóm Quyền Đặc Biệt</button>
@@ -301,6 +302,68 @@
             <td class="p-2 border align-top text-center whitespace-nowrap">
               <button type="button" id="maSubmitBtn" data-op="addMixedApprovalRule" class="bg-indigo-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Dòng</button>
               <button type="button" id="maCancelEditBtn" data-op="cancelEditMixedApprovalRule" class="hidden mt-1 text-gray-600 text-[11px] font-bold hover:underline">✕ Huỷ Sửa</button>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng, 10/2026) — sub-tab MỚI, CÙNG KHUÔN
+       #mixedApprovalSection ở trên (chỉ đổi id "ma*"->"ipma*" + dữ liệu DB.itPriceWholesaleStoreMixedApprovalRules) —
+       THAY THẾ cách xác định NGƯỜI DUYỆT của đề xuất Phê Duyệt Giá BÁN BUÔN (itPriceApprovals,
+       priceType='WHOLESALE'), vì "Theo vị trí" (chọn chức danh không kèm phòng ban, VD "Giám Đốc Siêu
+       Thị") khớp TẤT CẢ người giữ chức danh đó TRÊN TOÀN CÔNG TY — không phân biệt đúng siêu thị của đề
+       xuất, xem chú thích đầy đủ ở lib/workflowEngine.js resolveItPriceWholesaleStoreMixedApprovers()/
+       defaults.js itPriceWholesaleStoreMixedApprovalRules. KHÁC #mixedApprovalSection 1 điểm: có THÊM
+       dropdown chọn "Mức" ở đầu (4 mức Margin/Chiết Khấu cố định, mỗi mức quy trình/người duyệt RIÊNG —
+       bảng dưới chỉ hiện dòng của mức đang chọn). Số bước vẫn cấu hình ở "🔄 Quy Trình & Phê Duyệt" (mục
+       "💰 QT Giá Bán Buôn") như cũ — màn này CHỈ chọn AI duyệt từng bước của từng mức. -->
+  <div id="itPriceMixedApprovalSection" class="hidden space-y-4">
+    <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-2">
+      <div class="font-bold text-indigo-900 text-sm flex items-center gap-2">🏪 QT Giá Bán Buôn (Siêu Thị) — Cấu Hình Người Duyệt Theo Bước</div>
+      <p class="text-xs text-indigo-900">Mỗi dòng bên dưới <b>CẤP QUYỀN LUÔN</b> cho đúng người/chức danh đó duyệt đúng Bước đã chọn của đúng MỨC đang xem (không cần bật thêm gì ở "🧩 Nhóm Quyền Đặc Biệt"). Để trống "Siêu Thị Phụ Trách" = <b>Mặc định</b> (áp dụng MỌI siêu thị của đề xuất); chọn 1 hoặc nhiều siêu thị = <b>Ngoại lệ</b> (chỉ áp dụng đúng các siêu thị đó) — cả 2 loại có thể cùng khớp 1 siêu thị, người duyệt sẽ HỢP LẠI với nhau (không loại trừ nhau). Số bước vẫn lấy từ "🔄 Quy Trình & Phê Duyệt" (mục "💰 QT Giá Bán Buôn") theo đúng Mức — màn này chỉ cấu hình AI duyệt.</p>
+      <div class="flex items-center gap-2 pt-1 flex-wrap">
+        <label class="text-xs font-bold text-indigo-900">Đang xem Mức:</label>
+        <select id="ipmaNewTier" data-op-change="renderItPriceWholesaleMixedApprovalSection" class="border rounded px-2 py-1 text-xs bg-white font-semibold"></select>
+      </div>
+    </div>
+
+    <div class="bg-white rounded border overflow-x-auto">
+      <table class="w-full border-collapse text-xs text-left">
+        <thead class="bg-gray-100 text-gray-700 font-bold">
+          <tr>
+            <th class="p-2 border">Bước</th>
+            <th class="p-2 border">Kiểu</th>
+            <th class="p-2 border">Người / Chức Danh</th>
+            <th class="p-2 border">Siêu Thị Phụ Trách</th>
+            <th class="p-2 border text-center">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody id="itPriceMixedApprovalTableBody"></tbody>
+        <tfoot>
+          <tr class="bg-gray-50">
+            <td class="p-2 border align-top"><select id="ipmaNewStep" class="border rounded px-1 py-1 text-xs bg-white"></select></td>
+            <td class="p-2 border align-top">
+              <select id="ipmaNewMode" data-op-change="onItPriceWholesaleMixedApprovalNewModeChange" class="border rounded px-1 py-1 text-xs bg-white">
+                <option value="JOBTITLE">Chức danh</option>
+                <option value="PERSON">Người cụ thể</option>
+              </select>
+            </td>
+            <td class="p-2 border align-top">
+              <div id="ipmaNewJobTitleWrap" class="relative">
+                <input id="ipmaNewJobTitleInput" data-sdd-list="ipmaNewJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh (HO hoặc Siêu Thị)..." class="border rounded px-2 py-1 text-xs w-56">
+                <div id="ipmaNewJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+              </div>
+              <div id="ipmaNewPersonWrap" class="hidden relative">
+                <input id="ipmaNewPersonInput" data-sdd-list="ipmaNewPersonDatalist" autocomplete="off" placeholder="Gõ để tìm người..." class="border rounded px-2 py-1 text-xs w-56">
+                <div id="ipmaNewPersonDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+              </div>
+            </td>
+            <td class="p-2 border align-top"><div id="ipmaNewStoresPicker" class="min-w-[220px]"></div></td>
+            <td class="p-2 border align-top text-center whitespace-nowrap">
+              <button type="button" id="ipmaSubmitBtn" data-op="addItPriceWholesaleMixedApprovalRule" class="bg-indigo-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Dòng</button>
+              <button type="button" id="ipmaCancelEditBtn" data-op="cancelEditItPriceWholesaleMixedApprovalRule" class="hidden mt-1 text-gray-600 text-[11px] font-bold hover:underline">✕ Huỷ Sửa</button>
             </td>
           </tr>
         </tfoot>

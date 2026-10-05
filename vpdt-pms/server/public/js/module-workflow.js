@@ -949,3 +949,237 @@ async function deleteMixedApprovalRule(id) {
   renderMixedApprovalSection();
 }
 
+// ===== "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng, 10/2026) — sub-tab MỚI, CÙNG KHUÔN
+// các hàm Quy Trình Đặt Hàng Siêu Thị ở trên (render/edit/cancel/add/delete), tái dùng ĐÚNG các hàm
+// generic mixedApprovalPersonLabel()/mixedApprovalResolvePersonInput()/mixedApprovalJobTitleOptions()/
+// mixedApprovalResolveJobTitleInput()/mixedApprovalJobTitleSourceBadgeHTML()/mixedApprovalRuleMatchCount()
+// — chỉ khác nguồn dữ liệu (DB.itPriceWholesaleStoreMixedApprovalRules) + DOM id riêng (ipma*) + có THÊM
+// 1 chiều lọc "Mức" (ipmaNewTier, 1 trong 4 mức Margin/Chiết Khấu cố định — xem IT_PRICE_TIER_LABELS/
+// itPriceTierLabel() ở core.js) vì Bán Buôn có quy trình/người duyệt RIÊNG cho MỖI mức (operationOrders
+// chỉ có 1 quy trình nên không cần chiều này) — xem chú thích đầy đủ ở
+// defaults.js::itPriceWholesaleStoreMixedApprovalRules + resolveItPriceWholesaleStoreMixedApprovers()
+// (lib/workflowEngine.js). Bảng chỉ hiện DÒNG của mức đang chọn ở dropdown phía trên bảng.
+let editingItPriceWholesaleMixedApprovalRuleId = null;
+
+// Số bước cho dropdown "Bước" của Mức đang chọn — lấy từ workflowId đã gán ở itPriceTierWorkflows[tier]
+// (màn "🔄 Quy Trình & Phê Duyệt") để biết SỐ BƯỚC thật, cộng thêm 1 bước dự phòng (giống maNewStep ở
+// trên) — nếu mức chưa gán workflowId thì vẫn cho chọn tối thiểu 1 bước (không chặn cấu hình trước).
+function populateItPriceWholesaleStepOptions(tier) {
+  const rules = DB.itPriceWholesaleStoreMixedApprovalRules || [];
+  const usedSteps = rules.filter(r => r.tier === tier).map(r => r.step);
+  const tierCfg = (DB.itPriceTierWorkflows || {})[tier];
+  const wf = tierCfg ? (DB.workflows || []).find(w => w.id === tierCfg.workflowId) : null;
+  const topKnown = Math.max(wf ? wf.steps.length : 0, ...usedSteps, 1);
+  const stepSel = document.getElementById('ipmaNewStep');
+  if (!stepSel) return;
+  const current = stepSel.value;
+  const opts = [];
+  for (let s = 1; s <= topKnown; s++) opts.push(`<option value="${s}">Bước ${s}</option>`);
+  opts.push(`<option value="${topKnown + 1}">+ Bước ${topKnown + 1}</option>`);
+  stepSel.innerHTML = opts.join('');
+  if (current && Number(current) <= topKnown + 1) stepSel.value = current;
+}
+
+function renderItPriceWholesaleMixedApprovalSection() {
+  const wrap = document.getElementById('itPriceMixedApprovalSection');
+  if (!wrap) return;
+  const rules = DB.itPriceWholesaleStoreMixedApprovalRules || (DB.itPriceWholesaleStoreMixedApprovalRules = []);
+
+  const tierSel = document.getElementById('ipmaNewTier');
+  if (tierSel && !tierSel.options.length) {
+    tierSel.innerHTML = Object.keys(IT_PRICE_TIER_LABELS).map(t => `<option value="${t}">${escapeHtml(itPriceTierLabel(t))}</option>`).join('');
+  }
+  const currentTier = tierSel ? (tierSel.value || Object.keys(IT_PRICE_TIER_LABELS)[0]) : Object.keys(IT_PRICE_TIER_LABELS)[0];
+  if (tierSel && !tierSel.value) tierSel.value = currentTier;
+
+  // Đang sửa dở 1 dòng của MỨC KHÁC (vừa đổi dropdown Mức xem khi chưa lưu/huỷ sửa) -> tự huỷ sửa, tránh
+  // lưu nhầm tier cũ vào dòng đang hiện ở mức mới (mirror cảnh báo tương tự ở addMixedApprovalRule()).
+  if (editingItPriceWholesaleMixedApprovalRuleId != null) {
+    const er = rules.find(r => r.id === editingItPriceWholesaleMixedApprovalRuleId);
+    if (!er || er.tier !== currentTier) editingItPriceWholesaleMixedApprovalRuleId = null;
+  }
+
+  const tierRules = rules.filter(r => r.tier === currentTier);
+  const tbody = document.getElementById('itPriceMixedApprovalTableBody');
+  if (tbody) {
+    tbody.innerHTML = tierRules.length ? tierRules.slice().sort((a, b) => a.step - b.step || a.id - b.id).map(row => {
+      const person = row.mode === 'PERSON' ? (DB.users || []).find(u => u.username === row.username) : null;
+      const nameLabel = row.mode === 'JOBTITLE' ? row.jobTitle : (person ? mixedApprovalPersonLabel(person) : row.username);
+      const matchCount = mixedApprovalRuleMatchCount(row);
+      const matchBadge = matchCount > 0
+        ? ` <span class="text-[10px] bg-gray-100 text-gray-600 px-1 rounded font-normal">👤 ${matchCount} người</span>`
+        : ` <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold" title="Không có tài khoản nào đang hoạt động khớp dòng này — bước sẽ không có người duyệt">⚠️ 0 người khớp</span>`;
+      const personInvalidBadge = row.mode === 'PERSON'
+        ? (!person
+            ? ' <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold">⛔ Tài khoản không còn tồn tại — dòng này KHÔNG có tác dụng</span>'
+            : (person.active === false
+                ? ' <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold">⛔ Tài khoản đã bị khoá — dòng này KHÔNG có tác dụng</span>'
+                : ''))
+        : '';
+      const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '') + personInvalidBadge;
+      const hasStores = !!(row.stores && row.stores.length);
+      const storesLabel = hasStores
+        ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
+        : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi siêu thị</span>`;
+      return `
+        <tr class="border-b${hasStores ? ' bg-amber-50' : ''}">
+          <td class="p-2 border"><span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[11px] font-bold">Bước ${row.step}</span></td>
+          <td class="p-2 border">${row.mode === 'JOBTITLE'
+            ? '<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Chức danh</span>'
+            : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
+          <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}${matchBadge}</td>
+          <td class="p-2 border text-xs">${storesLabel}</td>
+          <td class="p-2 border text-center whitespace-nowrap">
+            <button type="button" data-op="editItPriceWholesaleMixedApprovalRule" data-arg0="${row.id}" class="text-indigo-600 text-[11px] font-bold hover:underline mr-2">✏️ Sửa</button>
+            <button type="button" data-op="deleteItPriceWholesaleMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button>
+          </td>
+        </tr>
+      `;
+    }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào cho mức "${escapeHtml(itPriceTierLabel(currentTier))}" — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
+  }
+
+  populateItPriceWholesaleStepOptions(currentTier);
+
+  sddSetOptions('ipmaNewJobTitleDatalist', mixedApprovalJobTitleOptions());
+  sddSetOptions('ipmaNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
+
+  const editingRule = editingItPriceWholesaleMixedApprovalRuleId != null ? rules.find(r => r.id === editingItPriceWholesaleMixedApprovalRuleId) : null;
+  renderMultiSelectDropdown('ipmaNewStoresPicker', DB.stores || [], editingRule ? (editingRule.stores || []) : [], {
+    placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
+    emptyText: 'Mặc định — mọi siêu thị.'
+  });
+
+  onItPriceWholesaleMixedApprovalNewModeChange();
+  updateItPriceWholesaleMixedApprovalFormSubmitUI();
+}
+
+function onItPriceWholesaleMixedApprovalNewModeChange() {
+  const mode = document.getElementById('ipmaNewMode')?.value || 'JOBTITLE';
+  document.getElementById('ipmaNewJobTitleWrap')?.classList.toggle('hidden', mode !== 'JOBTITLE');
+  document.getElementById('ipmaNewPersonWrap')?.classList.toggle('hidden', mode !== 'PERSON');
+}
+
+function editItPriceWholesaleMixedApprovalRule(id) {
+  const rule = (DB.itPriceWholesaleStoreMixedApprovalRules || []).find(r => r.id === id);
+  if (!rule) return;
+  editingItPriceWholesaleMixedApprovalRuleId = id;
+  const stepSel = document.getElementById('ipmaNewStep');
+  if (stepSel) stepSel.value = String(rule.step);
+  const modeSel = document.getElementById('ipmaNewMode');
+  if (modeSel) modeSel.value = rule.mode;
+  onItPriceWholesaleMixedApprovalNewModeChange();
+  if (rule.mode === 'JOBTITLE') {
+    const isStore = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
+    const jt = document.getElementById('ipmaNewJobTitleInput');
+    if (jt) jt.value = `${rule.jobTitle} — ${isStore ? 'Siêu Thị' : 'HO'}`;
+    const pn = document.getElementById('ipmaNewPersonInput'); if (pn) pn.value = '';
+  } else {
+    const person = (DB.users || []).find(u => u.username === rule.username);
+    const pn = document.getElementById('ipmaNewPersonInput');
+    if (pn) pn.value = person ? mixedApprovalPersonLabel(person) : rule.username;
+    const jt = document.getElementById('ipmaNewJobTitleInput'); if (jt) jt.value = '';
+  }
+  renderMultiSelectDropdown('ipmaNewStoresPicker', DB.stores || [], rule.stores || [], {
+    placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
+    emptyText: 'Mặc định — mọi siêu thị.'
+  });
+  updateItPriceWholesaleMixedApprovalFormSubmitUI();
+  document.getElementById('itPriceMixedApprovalSection')?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+function cancelEditItPriceWholesaleMixedApprovalRule() {
+  editingItPriceWholesaleMixedApprovalRuleId = null;
+  const jt = document.getElementById('ipmaNewJobTitleInput'); if (jt) jt.value = '';
+  const pn = document.getElementById('ipmaNewPersonInput'); if (pn) pn.value = '';
+  renderMultiSelectDropdown('ipmaNewStoresPicker', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
+    emptyText: 'Mặc định — mọi siêu thị.'
+  });
+  updateItPriceWholesaleMixedApprovalFormSubmitUI();
+}
+
+function updateItPriceWholesaleMixedApprovalFormSubmitUI() {
+  const btn = document.getElementById('ipmaSubmitBtn');
+  if (btn) btn.textContent = editingItPriceWholesaleMixedApprovalRuleId != null ? '💾 Cập Nhật Dòng' : '+ Thêm Dòng';
+  document.getElementById('ipmaCancelEditBtn')?.classList.toggle('hidden', editingItPriceWholesaleMixedApprovalRuleId == null);
+}
+
+async function addItPriceWholesaleMixedApprovalRule() {
+  const tier = document.getElementById('ipmaNewTier')?.value;
+  if (!tier || !IT_PRICE_TIER_LABELS[tier]) return alert('Chưa chọn Mức hợp lệ.');
+  const step = Number(document.getElementById('ipmaNewStep')?.value);
+  const mode = document.getElementById('ipmaNewMode')?.value === 'PERSON' ? 'PERSON' : 'JOBTITLE';
+  const stores = getMultiSelectValues('ipmaNewStoresPicker');
+  if (!step || step < 1) return alert('Chưa chọn Bước hợp lệ.');
+
+  let jobTitle = null, username = null;
+  if (mode === 'JOBTITLE') {
+    const raw = document.getElementById('ipmaNewJobTitleInput')?.value;
+    const plain = mixedApprovalResolveJobTitleInput(raw);
+    if (!plain) {
+      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh, hoặc Chức Danh Siêu Thị).');
+    }
+    jobTitle = plain;
+  } else {
+    const u = mixedApprovalResolvePersonInput(document.getElementById('ipmaNewPersonInput')?.value);
+    if (!u) return alert('Gõ và CHỌN đúng 1 người có sẵn trong danh sách gợi ý.');
+    username = u.username;
+  }
+
+  const isEdit = editingItPriceWholesaleMixedApprovalRuleId != null;
+  // Phòng trường hợp hiếm (xem addMixedApprovalRule() ở trên để biết lý do đầy đủ): dòng đang sửa dở bị
+  // xoá ở thao tác khác -> báo rõ và tự thoát về chế độ Thêm Mới, không âm thầm coi như thành công.
+  if (isEdit && !(DB.itPriceWholesaleStoreMixedApprovalRules || []).some(r => r.id === editingItPriceWholesaleMixedApprovalRuleId)) {
+    alert('⚠️ Dòng đang sửa không còn tồn tại (có thể vừa bị xoá) — huỷ sửa, vui lòng thêm lại nếu cần.');
+    editingItPriceWholesaleMixedApprovalRuleId = null;
+    renderItPriceWholesaleMixedApprovalSection();
+    return;
+  }
+  const id = isEdit ? editingItPriceWholesaleMixedApprovalRuleId : (Math.max(0, ...(DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id)) + 1);
+  const snapshot = JSON.parse(JSON.stringify(DB.itPriceWholesaleStoreMixedApprovalRules || []));
+  DB.itPriceWholesaleStoreMixedApprovalRules = isEdit
+    ? (DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier, step, mode, jobTitle, username, stores } : r)
+    : [...(DB.itPriceWholesaleStoreMixedApprovalRules || []), { id, tier, step, mode, jobTitle, username, stores }];
+  if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules')) {
+    DB.itPriceWholesaleStoreMixedApprovalRules = snapshot;
+    renderItPriceWholesaleMixedApprovalSection();
+    return;
+  }
+  logSystemAction(
+    'CONFIG', isEdit ? 'UPDATE_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE' : 'ADD_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE',
+    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng QT Giá Bán Buôn (Siêu Thị) [${id}] — Mức "${itPriceTierLabel(tier)}", Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    'SUCCESS', String(id)
+  );
+
+  editingItPriceWholesaleMixedApprovalRuleId = null;
+  const jt = document.getElementById('ipmaNewJobTitleInput'); if (jt) jt.value = '';
+  const pn = document.getElementById('ipmaNewPersonInput'); if (pn) pn.value = '';
+  renderItPriceWholesaleMixedApprovalSection();
+}
+
+async function deleteItPriceWholesaleMixedApprovalRule(id) {
+  const rules = DB.itPriceWholesaleStoreMixedApprovalRules || [];
+  const rule = rules.find(r => r.id === id);
+  if (!rule) return;
+  const remainingSameStep = rules.filter(r => r.id !== id && r.tier === rule.tier && Number(r.step) === Number(rule.step));
+  const isDefaultRow = !(rule.stores && rule.stores.length);
+  let message = `Xoá dòng cấu hình Mức "${itPriceTierLabel(rule.tier)}" - Bước ${rule.step} này?`;
+  if (!remainingSameStep.length) {
+    message = `⚠️ CẢNH BÁO: đây là dòng cấu hình DUY NHẤT của Mức "${itPriceTierLabel(rule.tier)}" - Bước ${rule.step}.\n\n`
+      + `Xoá xong, Bước ${rule.step} của mức này sẽ KHÔNG CÒN AI DUYỆT — mọi đề xuất Bán Buôn ở mức này đi tới bước này sẽ treo lại (chỉ Quản Trị Viên duyệt được).\n\nVẫn xoá?`;
+  } else if (isDefaultRow && !remainingSameStep.some(r => !(r.stores && r.stores.length))) {
+    message = `⚠️ CẢNH BÁO: đây là dòng MẶC ĐỊNH (áp dụng mọi siêu thị) duy nhất của Mức "${itPriceTierLabel(rule.tier)}" - Bước ${rule.step}.\n\n`
+      + `Xoá xong, bước này chỉ còn ${remainingSameStep.length} dòng NGOẠI LỆ (chỉ áp dụng đúng các siêu thị đã khai) — những siêu thị KHÔNG được khai ở các dòng đó sẽ không còn ai duyệt ở bước này.\n\nVẫn xoá?`;
+  }
+  if (!confirm(message)) return;
+  const snapshot = JSON.parse(JSON.stringify(rules));
+  DB.itPriceWholesaleStoreMixedApprovalRules = rules.filter(r => r.id !== id);
+  if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules')) {
+    DB.itPriceWholesaleStoreMixedApprovalRules = snapshot;
+    renderItPriceWholesaleMixedApprovalSection();
+    return;
+  }
+  logSystemAction('CONFIG', 'DELETE_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE', `Xoá dòng QT Giá Bán Buôn (Siêu Thị) [${id}]`, 'SUCCESS', String(id));
+  renderItPriceWholesaleMixedApprovalSection();
+}
+

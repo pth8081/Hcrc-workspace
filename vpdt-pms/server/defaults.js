@@ -717,6 +717,29 @@ const DEFAULTS = {
   // TỔNG QUÁT có chủ đích (theo yêu cầu người dùng) để sau này tái dùng cho Hợp Đồng/Văn Bản Trình — hiện
   // tại CHỈ operationOrders/STORE thực sự đọc field này.
   operationOrderStoreMixedApprovalRules: [],
+  // Hỗ Trợ IT > Phê Duyệt Giá > "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng, 10/2026): CÙNG
+  // KHUÔN operationOrderStoreMixedApprovalRules ở trên (bản sao độc lập, không dùng chung dữ liệu) —
+  // THAY THẾ cách xác định NGƯỜI DUYỆT của đề xuất Bán Buôn (itPriceApprovals, priceType='WHOLESALE').
+  // Lý do cần tách riêng: itPriceTierWorkflows[...].approvers/approversByPosition ("Theo vị trí", chọn
+  // chức danh KHÔNG kèm phòng ban) khớp TẤT CẢ người giữ đúng chức danh trên TOÀN CÔNG TY — 1 GĐST ở siêu
+  // thị B vẫn thấy/duyệt được đề xuất của siêu thị A, và vì bước duyệt là ĐỒNG DUYỆT (isStepApprovalComplete()
+  // yêu cầu TẤT CẢ người trong danh sách phải duyệt), đề xuất của 1 siêu thị còn bị treo chờ GĐST của MỌI
+  // siêu thị khác cùng duyệt. Nay tra NGƯỜI DUYỆT hoàn toàn từ đây thay vì approvers/approversByPosition
+  // của itPriceTierWorkflows (SỐ BƯỚC vẫn lấy nguyên từ đó như cũ, xem
+  // resolveItPriceWholesaleStoreMixedApprovers() ở lib/workflowEngine.js) — mỗi phần tử 1 "dòng" cấu hình:
+  //   { id, tier: 'MARGIN_LT5'|'MARGIN_GTE5'|'DISCOUNT_LTE5'|'DISCOUNT_GT5', step, mode:'JOBTITLE'|'PERSON',
+  //     jobTitle, username, stores[] }
+  // KHÁC operationOrderStoreMixedApprovalRules 1 điểm DUY NHẤT: có thêm field `tier` BẮT BUỘC (operationOrders
+  // STORE chỉ có 1 quy trình nên không cần) — Bán Buôn có 4 MỨC Margin/Chiết Khấu cố định, MỖI MỨC quy
+  // trình/số bước/người duyệt HOÀN TOÀN riêng (VD "giám đốc siêu thị" có thể chỉ là approver bước 1 của
+  // MỨC MARGIN_LT5, không liên quan gì tới bước 1 của MỨC DISCOUNT_GT5) — rule PHẢI khớp ĐÚNG tier mới
+  // được tính, nếu chỉ khớp theo số bước (như operationOrders) thì 1 dòng cấu hình cho 1 mức sẽ bị áp dụng
+  // NHẦM sang cả 3 mức khác có cùng số thứ tự bước. Còn lại cùng ngữ nghĩa stores rỗng = "Mặc định" (tự
+  // khớp đúng siêu thị của đề xuất qua item.dept) / stores có giá trị = "Ngoại lệ" (áp dụng cố định cho
+  // đúng các siêu thị liệt kê, không so dept) như operationOrderStoreMixedApprovalRules.
+  // RETAIL (itPriceDeptWorkflows) KHÔNG đụng tới — đã tự đúng phạm vi theo phòng ban từ trước (mỗi dept
+  // có cấu hình approver RIÊNG do admin tự gán, không có vấn đề "khớp toàn công ty" như WHOLESALE).
+  itPriceWholesaleStoreMixedApprovalRules: [],
   // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ĐƠN HÀNG (operationOrders) ra hệ thống
   // ngoài "dsmart16" (job outbound, xem jobs/operationOrderApiSync.js). Cùng khuôn admin-config phẳng
   // với emailConfig (xác thực linh hoạt: Base URL + 1 header tuỳ chỉnh tên/giá trị, KHÔNG cố định kiểu

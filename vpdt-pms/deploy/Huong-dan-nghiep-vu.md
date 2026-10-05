@@ -1639,6 +1639,30 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     được cấp sẵn CẢ 2 quyền từ chối khẩn cấp mới — chạy đúng 1 lần, admin có
     thể vào cây phân quyền thu hẹp lại sau nếu muốn tách đúng theo vai trò
     thực tế của từng người.
+  - **"🏪 QT Giá Bán Buôn (Siêu Thị)" — người duyệt Phê Duyệt Giá Bán Buôn
+    (10/2026, CÙNG CƠ CHẾ "🏬 Quy Trình Đặt Hàng Siêu Thị" ở mục 4.4 Vận Hành,
+    xem đầy đủ cách khớp Chức danh/Người cụ thể/Siêu Thị Phụ Trách ở đó)**:
+    trước đây "Theo vị trí" (chọn 1 chức danh KHÔNG kèm phòng ban, VD "Giám
+    Đốc Siêu Thị") ở màn "🔄 Quy Trình & Phê Duyệt" (mục "💰 QT Giá Bán Buôn")
+    khớp **TẤT CẢ người giữ chức danh đó trên TOÀN CÔNG TY** — vì bước duyệt
+    là ĐỒNG DUYỆT (đòi TẤT CẢ người trong danh sách phải bấm Duyệt), đề xuất
+    của 1 siêu thị bị **treo chờ GĐST của MỌI siêu thị khác** cùng duyệt dù
+    không liên quan gì tới siêu thị đó. Nay màn "🔄 Quy Trình & Phê Duyệt" (mục
+    "💰 QT Giá Bán Buôn") **CHỈ còn quyết định SỐ BƯỚC** cho từng 1 trong 4 mức
+    Margin/Chiết Khấu cố định — **NGƯỜI DUYỆT từng bước của từng mức** chuyển
+    sang cấu hình ở sub-tab riêng **"🏪 QT Giá Bán Buôn (Siêu Thị)"** (Hệ Thống
+    → 🔀 Nghiệp Vụ Nâng Cao, cạnh "🏬 Quy Trình Đặt Hàng Siêu Thị"). Màn này có
+    THÊM 1 dropdown "Đang xem Mức" ở đầu (chọn 1 trong 4 mức Margin/Chiết
+    Khấu) — bảng bên dưới chỉ hiện đúng dòng cấu hình của mức đang chọn, vì
+    MỖI MỨC có quy trình/người duyệt HOÀN TOÀN RIÊNG (khác "🏬 Quy Trình Đặt
+    Hàng Siêu Thị" chỉ có 1 quy trình duy nhất nên không cần dropdown này).
+    Dòng "Chức danh" + để trống "Siêu Thị Phụ Trách" (Mặc định) tự khớp theo
+    Phòng Ban/Vị Trí Kiêm Nhiệm của từng người giữ đúng chức danh với ĐÚNG
+    siêu thị của đề xuất (VD "Giám Đốc siêu thị" mặc định → đề xuất của Siêu
+    Thị A chỉ GĐST **đang thuộc Siêu Thị A** thấy/duyệt được, GĐST Siêu Thị
+    B/C không còn bị kéo vào nữa). RETAIL (Phê Duyệt Giá Bán Lẻ, theo phòng
+    ban ở `itPriceDeptWorkflows`) KHÔNG đụng tới gì — vẫn hành vi cũ 100%, chỉ
+    WHOLESALE đổi cơ chế người duyệt.
   - **📐 Mẫu Giá dời sang Hệ Thống → Cấu Hình Nghiệp Vụ (10/2026)** — panel
     quản trị Mẫu Giá (thêm/thay/đổi tên/gán cột Margin/xoá) không còn nằm ở
     Hỗ Trợ IT nữa, đã dời sang màn MỚI **⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ**

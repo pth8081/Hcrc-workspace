@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**25.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.18 (2026-10-05): "🏪 QT Giá Bán Buôn (Siêu Thị)" — tự khớp đúng siêu thị cho người duyệt Phê Duyệt Giá Bán Buôn
+
+Theo phản hồi người dùng: ở quy trình Phê Duyệt Giá Bán Buôn, bước 1 gán
+"Theo vị trí" = "Giám Đốc Siêu Thị" (chọn chức danh, không kèm phòng ban) —
+cơ chế này khớp **TẤT CẢ** người giữ chức danh đó trên **TOÀN CÔNG TY**,
+không tự khớp đúng siêu thị của đề xuất như "Trưởng Phòng" ở các quy trình
+theo phòng ban khác. Vì bước là ĐỒNG DUYỆT (đòi TẤT CẢ người trong danh sách
+approver phải bấm Duyệt), đề xuất của 1 siêu thị bị **treo chờ GĐST của MỌI
+siêu thị khác** cùng duyệt. Theo xác nhận của người dùng ("Xây tính năng tự
+khớp đúng siêu thị"), đã xây 1 cơ chế MỚI mirror đúng "🏬 Quy Trình Đặt Hàng
+Siêu Thị" (operationOrders STORE) cho riêng Phê Duyệt Giá Bán Buôn:
+
+- `defaults.js` + `public/js/core.js`: thêm key MỚI
+  `itPriceWholesaleStoreMixedApprovalRules` (mảng rule độc lập, không dùng
+  chung dữ liệu với `operationOrderStoreMixedApprovalRules`) — mỗi rule
+  `{ id, tier, step, mode: 'JOBTITLE'|'PERSON', jobTitle, username, stores[] }`.
+  KHÁC cơ chế gốc 1 điểm DUY NHẤT: có thêm field `tier` BẮT BUỘC (Bán Buôn
+  có 4 MỨC Margin/Chiết Khấu cố định, MỖI MỨC quy trình/người duyệt RIÊNG —
+  nếu chỉ khớp theo số bước như operationOrders thì rule của 1 mức sẽ áp
+  dụng NHẦM sang mức khác có cùng số thứ tự bước).
+- `lib/workflowEngine.js`: hàm MỚI `resolveItPriceWholesaleStoreMixedApprovers()`
+  (tái dùng `resolveOperationOrderStoreMixedApprovalRuleUsernames()` — logic
+  khớp rule/storeDept/users hoàn toàn generic), lọc rule theo CẢ `tier` LẪN
+  `step`. `MODULE_CONFIGS.itPriceApprovals.resolveWfConfig` nhánh WHOLESALE
+  đổi sang gọi hàm này (khớp theo `item.dept` = siêu thị đề xuất,
+  `item.priceTier`) — SỐ BƯỚC vẫn lấy nguyên từ `itPriceTierWorkflows` như cũ
+  (màn "🔄 Quy Trình & Phê Duyệt" không đổi); `approvers`/`approversByPosition`
+  cũ trên đó giờ chỉ còn tham khảo, không còn đọc cho mục đích xác định
+  người duyệt nữa.
+- `public/js/core.js`: `resolveItPriceWorkflowConfigForItemClient()` nhánh
+  WHOLESALE mirror đúng server (gọi `computeItPriceWholesaleStoreMixedApproversClient()`
+  mới, tái dùng `resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()`),
+  kèm cờ `tierConfigMissing` giữ cảnh báo "⚠️ Chưa cấu hình duyệt" khi 1 mức
+  chưa gán `workflowId`.
+- `public/js/module-workflow.js` + `public/fragments/systemSection.html` +
+  `public/js/module-hethong-tabs.js`: sub-tab MỚI "🏪 QT Giá Bán Buôn (Siêu
+  Thị)" (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao, cạnh "🏬 Quy Trình Đặt Hàng Siêu
+  Thị") — CÙNG KHUÔN UI (bảng Bước/Kiểu/Người-Chức danh/Siêu Thị Phụ Trách/
+  Thao Tác, tái dùng các hàm gợi ý chức danh/người dùng chung), chỉ thêm 1
+  dropdown "Đang xem Mức" ở đầu (bảng chỉ hiện dòng của mức đang chọn).
+- Viết test mới `tests/test-itprice-wholesale-mixed-approval.js` (8 kịch
+  bản: JOBTITLE mặc định tự khớp dept, chặn GĐST siêu thị khác, PERSON mode
+  + stores ngoại lệ, cách ly đúng tier/step, admin bypass).
+- Vá 3 test fixture cũ còn giữ cấu hình `itPriceTierWorkflows[...].approvers`
+  (nay chỉ tham khảo) để tiếp tục resolve đúng người duyệt WHOLESALE:
+  `tests/test-it-price-approvals-scope.js`, `tests/test-itprice-approval-and-emergency.js`,
+  `tests/test-approval-hub.js`, `tests/test-it-support.js` (+
+  `tests/testHarness.js`: thêm `itPriceWholesaleStoreMixedApprovalRules` vào
+  whitelist `buildAppDataForCreate()`, thiếu field này sẽ khiến server mock
+  luôn resolve approvers rỗng cho MỌI đề xuất WHOLESALE).
+- `deploy/Huong-dan-nghiep-vu.md`: thêm mô tả đầy đủ cơ chế mới (mục 4.2 Hỗ
+  Trợ IT).
 
 ## v25.17 (2026-10-05): Chặn "Tạo mới" cho dòng trùng-mã-trong-file ở cả 2 màn Nhập Excel (HĐLĐ + Hồ Sơ Nhân Sự)
 

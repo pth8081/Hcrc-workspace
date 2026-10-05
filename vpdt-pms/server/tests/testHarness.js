@@ -67,7 +67,7 @@ function startStaticServer(preferredPort) {
 function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
-    itPriceMasterLists: [], itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, workflows: [],
+    itPriceMasterLists: [], itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, itPriceWholesaleStoreMixedApprovalRules: [], workflows: [],
     uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     // itTicketCategories: "Danh Mục" của #itTicketCategory (CORE_FIELD_MANIFEST.IT_TICKET, optionsKey) —
@@ -123,6 +123,11 @@ function buildAppDataForCreate(moduleKey, state) {
     // thẳng map này qua appData khi item.priceType === 'WHOLESALE', y hệt cách itPriceDeptWorkflows
     // được đọc cho RETAIL ở trên.
     itPriceTierWorkflows: state.itPriceTierWorkflows,
+    // itPriceWholesaleStoreMixedApprovalRules ("🏪 QT Giá Bán Buôn (Siêu Thị)", 10/2026) — CÙNG LÝ DO
+    // operationOrderStoreMixedApprovalRules ngay dưới: thiếu field này ở whitelist appData sẽ khiến
+    // resolveItPriceWholesaleStoreMixedApprovers() (lib/workflowEngine.js) luôn nhận undefined ->
+    // approvers[] rỗng cho MỌI đề xuất WHOLESALE, dù state có seed đúng rule nào cũng vô tác dụng.
+    itPriceWholesaleStoreMixedApprovalRules: state.itPriceWholesaleStoreMixedApprovalRules,
     // priceZones: "Vùng Giá Áp Dụng" (RETAIL, đợt sau) — itPriceApprovals.extraValidate() đối chiếu
     // payload.priceZone với danh mục hệ thống này (mirror routes/create.js: getAllAppData() thật LUÔN có
     // sẵn mọi key AppData, ở đây liệt kê tường minh những gì module cần).
