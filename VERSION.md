@@ -1,8 +1,13 @@
 # Phiên bản hiện tại
 
-**25.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.12 (2026-10-05): Thêm demo script còn thiếu (chụp ảnh nút Xuất Excel Hồ Sơ Onboarding)
+
+Bổ sung `tests/demo-hr-onboarding-queue-export.js` — bỏ sót khỏi commit
+v25.11 (script demo thuần, không đụng code nghiệp vụ).
 
 ## v25.11 (2026-10-05): Hồ Sơ Onboarding (hàng đợi) — thêm "📊 Xuất Excel"
 
