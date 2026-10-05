@@ -907,13 +907,27 @@ async function confirmHrpfImport() {
 // scope 'ME': chính chủ tự sửa — chỉ SELF_EDITABLE_FIELDS (xem lib/employeeProfile.js), không đổi được
 // nationalId/socialInsuranceNo/taxCode/status/username.
 // scope 'MANAGE': HR/admin — sửa thêm được HR_ONLY_EDITABLE_FIELDS + đổi trạng thái tay + liên kết TK.
-// Thâm niên (GĐ1, 10/2026) — tính TRỰC TIẾP client-side từ user.startDate ("Ngày Vào Làm Việc", field
-// đã có sẵn trên DB.users — KHÔNG lưu thêm field mới ở employeeProfile để tránh 2 nguồn dữ liệu lệch
-// nhau, xem computeTenureYears() ở lib/employeeProfile.js cho bản dùng phía server/báo cáo). Chỉ hiển
-// thị tham khảo, không phải field lưu trữ.
-function hrpfTenureDisplay(profile) {
+// Mốc tính thâm niên (CẬP NHẬT 10/2026, theo yêu cầu người dùng): ưu tiên THEO THỨ TỰ —
+//   1. profile.tenureBaseDate — HR tự ghi đè tay 1 mốc cụ thể khi cần (trường hợp đặc biệt không khớp
+//      2 nhánh dưới), xem field mới ở lib/employeeProfile.js (mẫu Excel 90 trường).
+//   2. profile.joinDateAtPredecessorUnit — "Ngày vào đơn vị cũ CÙNG TẬP ĐOÀN": nhân viên chuyển nội bộ
+//      từ 1 đơn vị khác trong Tập Đoàn sang HCRC thì thâm niên tính từ mốc NÀY (không phải ngày vào
+//      HCRC) — đúng yêu cầu "tính năm thâm niên từ ngày vào tập đoàn".
+//   3. profile.joinDateAtHcrc — trường hợp vào thẳng HCRC (KHÔNG qua đơn vị khác trong Tập Đoàn) —
+//      "tính như bình thường là tính từ ngày onboarding vào HCRC".
+//   4. u.startDate (DB.users, "Ngày Vào Làm Việc") — fallback cho hồ sơ CŨ chưa có joinDateAtHcrc (trước
+//      đợt 90 trường) để không đổi hành vi hiển thị thâm niên của dữ liệu đã có.
+// Chỉ hiển thị tham khảo, không phải field tự tính/lưu riêng.
+function hrpfResolveTenureBaseDate(profile) {
+  if (profile.tenureBaseDate) return profile.tenureBaseDate;
+  if (profile.joinDateAtPredecessorUnit) return profile.joinDateAtPredecessorUnit;
+  if (profile.joinDateAtHcrc) return profile.joinDateAtHcrc;
   const u = profile.username ? (DB.users || []).find(x => x.username === profile.username) : null;
-  const start = u?.startDate ? new Date(u.startDate) : null;
+  return u?.startDate || null;
+}
+function hrpfTenureDisplay(profile) {
+  const base = hrpfResolveTenureBaseDate(profile);
+  const start = base ? new Date(base) : null;
   if (!start || Number.isNaN(start.getTime())) return '—';
   const years = (Date.now() - start.getTime()) / (365.25 * 86400000);
   if (years < 0) return '—';
