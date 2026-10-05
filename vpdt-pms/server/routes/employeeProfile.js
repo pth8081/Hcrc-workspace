@@ -435,10 +435,22 @@ router.get('/by-code/:employeeCode/history', async (req, res) => {
     // "HH:mm:ss d/M/yyyy" (định dạng nowVN() — so sánh chuỗi trực tiếp cho kết quả SAI, VD "9:00:00 5/1"
     // > "8:00:00 15/1" theo thứ tự chuỗi dù 15/1 diễn ra SAU 5/1).
     events.sort((x, y) => vnTime(y.time) - vnTime(x.time));
+    // currentContract (10/2026, mẫu Excel 90 trường — khối Hợp Đồng Lao Động CHỈ XEM trên màn Hồ Sơ,
+    // theo xác nhận người dùng "Chỉ XEM, sửa thì bấm sang Hợp Đồng Lao Động") — đọc LIVE hợp đồng ACTIVE
+    // hiện tại, CÙNG gate quyền với toàn bộ route này (không mở route riêng) vì cũng là dữ liệu lương.
+    const activeContract = contracts.find(c => c.status === 'ACTIVE') || null;
+    const currentContract = activeContract ? {
+      code: activeContract.code, contractType: activeContract.contractType, status: activeContract.status,
+      startDate: activeContract.startDate, endDate: activeContract.endDate, baseSalary: activeContract.baseSalary,
+      responsibilityAllowance: activeContract.responsibilityAllowance, concurrentAllowance: activeContract.concurrentAllowance,
+      hazardAllowance: activeContract.hazardAllowance, lunchAllowance: activeContract.lunchAllowance,
+      transportAllowance: activeContract.transportAllowance, phoneAllowance: activeContract.phoneAllowance,
+      otherAllowance: activeContract.otherAllowance
+    } : null;
     // Ghi log TRUY CẬP (không chỉ ghi/sửa) — Lịch Sử Nhân Sự gộp cả lương/hợp đồng, mức nhạy cảm cao
     // nhất theo comment ở trên, người dùng yêu cầu có log để đối chiếu ai đã xem.
     logHrProfileAction(req, 'VIEW_HISTORY', req.params.employeeCode, `Xem Lịch Sử Nhân Sự đầy đủ [${req.params.employeeCode}]`);
-    res.json({ events });
+    res.json({ events, currentContract });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}/history`); }
 });
 

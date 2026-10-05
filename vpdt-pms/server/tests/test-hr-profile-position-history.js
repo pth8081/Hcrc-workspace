@@ -294,6 +294,19 @@ async function main() {
       assertIncludes(types.join(','), 'POSITION', 'Có sự kiện POSITION');
       assertIncludes(types.join(','), 'CONTRACT', 'Có sự kiện CONTRACT');
       assertIncludes(types.join(','), 'CONTRACT_AMENDMENT', 'Có sự kiện CONTRACT_AMENDMENT');
+      // currentContract (10/2026, khối Hợp Đồng Lao Động CHỈ XEM trên màn Hồ Sơ) — đọc LIVE đúng hợp
+      // đồng ACTIVE hiện tại của nhân viên, CÙNG route/quyền với events ở trên.
+      assertEqual(res.body.currentContract?.code, 'HDLD-NV100-1', 'currentContract trả đúng mã hợp đồng ACTIVE');
+      assertEqual(res.body.currentContract?.status, 'ACTIVE', 'currentContract.status đúng ACTIVE');
+    });
+
+    await run.run('GET /by-code/:code/history — currentContract = null khi chưa có hợp đồng ACTIVE nào', async () => {
+      resetAppData();
+      seedProfile({ employeeCode: 'NV101' });
+      LABOR_CONTRACTS = [laborContract.defaultContract({ employeeCode: 'NV101', code: 'HDLD-NV101-1', status: 'DRAFT' })];
+      const res = await api('GET', '/api/hr-profile/by-code/NV101/history', undefined, HR_FULL);
+      assertEqual(res.status, 200, 'Xem được');
+      assertEqual(res.body.currentContract, null, 'Không có hợp đồng ACTIVE -> currentContract null');
     });
 
     await run.run('GET /by-code/:code/history — gộp thêm PROFILE_CREATE/PROFILE_EDIT/REHIRE (9/2026), sắp ĐÚNG mới nhất trước theo THỜI GIAN THẬT (không phải so sánh chuỗi)', async () => {
