@@ -11084,13 +11084,23 @@ bindCspDelegation('budgetSection');
 // Nhân Sự — #hrFeedbackManageContainer (renderHrFeedbackManage()) render TRONG #hrSection, 1 gốc là đủ.
 bindCspDelegation('hrSection');
 // Cơ Cấu Tổ Chức v2 — module con riêng của Nhân Sự (#orgChartSection, parent:'hr' ở BUSINESS_MODULES).
-// 3 modal SỐNG NGOÀI section (giống các modal khác trong app) nên mỗi cái cần 1 gốc riêng: thêm/sửa
+// 4 modal SỐNG NGOÀI section (giống các modal khác trong app) nên mỗi cái cần 1 gốc riêng: thêm/sửa
 // node (#orgChartNodeModal), kết quả sau khi Áp Dụng phiên bản (#orgChartApplyResultModal), so sánh 2
-// version (#orgChartDiffModal) — 4 gốc tổng cộng.
+// version (#orgChartDiffModal), Nhập Excel bản nháp mới (#orgChartImportModal) — 5 gốc tổng cộng.
+//
+// LỖI ĐÃ VÁ (10/2026, người dùng báo "Nhập Excel Cơ Cấu Tổ Chức bị treo, chọn file không có tác dụng"):
+// #orgChartImportModal (thêm cùng tính năng "Nhập Excel (Bản Nháp Mới)") CHƯA TỪNG được bindCspDelegation()
+// riêng dù là 1 gốc <div> độc lập ngoài #orgChartSection (không phải node con của nó) — click nút Hủy/Tạo
+// Bản Nháp cùng chọn file ở input#orgChartImportFileInput bên trong modal này đều không có listener nào
+// bắt được (dialog chọn file của OS vẫn mở được vì đó là hành vi gốc trình duyệt, không qua CSP/JS nào cả
+// — đúng với mô tả "mở được nhưng chọn file không tác động gì"). Không có test Playwright nào bấm thật
+// qua UI nút này (test-orgchart-import-export.js chỉ test thuần lib/orgChartImport.js phía server) nên
+// lỗi lọt qua mọi đợt rà soát trước đây.
 bindCspDelegation('orgChartSection');
 bindCspDelegation('orgChartNodeModal');
 bindCspDelegation('orgChartApplyResultModal');
 bindCspDelegation('orgChartDiffModal');
+bindCspDelegation('orgChartImportModal');
 // Onboarding / Offboarding — module con riêng của Nhân Sự (#hrLifecycleSection, TÁCH khỏi #hrSection,
 // cùng lý do #orgChartSection ở trên) — BỊ THIẾU gốc riêng từ lúc dựng module này (commit 2278c17),
 // khiến MỌI data-op/data-op-change/data-op-input/data-op-submit bên trong (2 sub-tab Onboarding/

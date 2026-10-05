@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**25.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.5 (2026-10-05): Vá lỗi "Nhập Excel Cơ Cấu Tổ Chức" bị treo — thiếu `bindCspDelegation()` cho modal
+
+Người dùng phản ánh: ở Nhân Sự > Cơ Cấu Tổ Chức (phần "định vị nhân sự" — gán vị trí/chức danh cho nhân
+sự theo cây tổ chức), bấm "📤 Nhập Excel (Bản Nháp Mới)" mở được modal, nhưng sau khi chọn file thì
+"không tác động gì", modal như bị "treo" không bấm được gì tiếp.
+
+**Xác nhận gốc rễ qua rà soát code** (không suy diễn): `#orgChartImportModal` là 1 `<div>` gốc ĐỘC LẬP
+sống ngoài `#orgChartSection` trong `public/index.html` (giống 3 modal khác của Cơ Cấu Tổ Chức —
+`orgChartNodeModal`/`orgChartApplyResultModal`/`orgChartDiffModal`), nhưng CHƯA TỪNG được gọi
+`bindCspDelegation('orgChartImportModal')` trong `public/js/core.js` từ lúc tính năng "Nhập Excel" này
+được thêm vào — nút "✕ Hủy"/"✅ Tạo Bản Nháp Mới Từ File" (`data-op`) và ô chọn file
+`#orgChartImportFileInput` (`data-op-change`) bên trong modal đều không có listener nào bắt được sự
+kiện. Dialog chọn file của hệ điều hành vẫn mở được (hành vi gốc trình duyệt, không qua CSP/JS nào cả)
+— đúng khớp với mô tả "mở được nhưng chọn file không tác động gì". Không có test Playwright nào từng
+bấm thật qua UI nút này (`tests/test-orgchart-import-export.js` chỉ test thuần thư viện server-side
+`lib/orgChartImport.js`) nên lỗi lọt qua mọi đợt rà soát trước đây — đã kiểm tra, các catalog Excel khác
+của Nhân Sự (Cấp Bậc/Lý Do Nghỉ Việc/Kỷ Luật...) đều render vào placeholder NẰM TRONG `#systemSection`
+(đã bind từ trước) nên không bị ảnh hưởng, chỉ riêng modal Nhập Excel Cơ Cấu Tổ Chức này bị thiếu.
+
+**Vá**: thêm đúng 1 dòng `bindCspDelegation('orgChartImportModal')` cạnh 3 dòng bind đã có của module
+này (`core.js`). Viết test mới `tests/test-orgchart-import-modal-binding.js` — bấm thật qua UI (mở
+modal → chọn file thật qua `page.setInputFiles()` → xác nhận status/preview/nút Xác Nhận đều phản hồi
+→ bấm Hủy đóng được modal), đã xác minh test THẤT BẠI khi revert bản vá (tái hiện đúng lỗi "treo", status
+rỗng mãi) và PASS sau khi vá — không phải suy luận lý thuyết. Chạy lại toàn bộ 6 bộ test Cơ Cấu Tổ Chức
+hiện có (`test-orgchart-v2.js` 16/16, `test-orgchart-import-export.js` 19/19, `test-orgchart-diagram-tab.js`
+17/17, `test-orgchart-delete-draft-version.js` 5/5, `test-orgchart-headcount-report.js` 5/5,
+`test-orgchart-kpiflow-prune.js` 6/6) + vài test CSP-delegation liên quan khác — không regression.
 
 ## v25.4 (2026-10-05): Thanh Toán — phục hồi logic cũ "bắt buộc tệp chứng từ lúc Xác Nhận" (khôi phục ý muốn người dùng, không phải đảo ngược mới)
 
