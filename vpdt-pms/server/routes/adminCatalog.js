@@ -21,7 +21,11 @@ router.use(requireAuth, blockIfMustChangePassword);
 const VALID_CATALOG_KEYS = new Set([
   'stores', 'jobTitles', 'storeJobTitles', 'depts', 'cats', 'contractTypes',
   'licenseTypes', 'carTaxiCompanies', 'priceZones', 'trainingCategories',
-  'itRenewalCategories', 'carEvaluationIssues'
+  'itRenewalCategories', 'carEvaluationIssues',
+  // 7 danh mục gợi ý (10/2026, rà soát "mọi danh mục đều phải có Sửa") — xem CATALOG_HANDLERS ở
+  // lib/catalogRename.js (simpleArrayCatalogHandler, không cascade).
+  'jobGrades', 'resignationReasons', 'disciplinaryTypes', 'legalEntities',
+  'specialLaborStatuses', 'currentWorkStatusDetails', 'nationalIdIssuePlaces'
 ]);
 
 // POST /api/admin/renameCatalogEntry — body { catalogKey, oldValue, newValue }. Chỉ Quản Trị Viên (khớp
