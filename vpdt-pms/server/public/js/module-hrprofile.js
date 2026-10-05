@@ -182,15 +182,50 @@ const HRPF_HISTORY_TYPE_ICON = {
   POSITION: '🏷️', CONTRACT: '📄', CONTRACT_AMENDMENT: '📋',
   PROFILE_CREATE: '🆕', PROFILE_EDIT: '✏️', REHIRE: '↩️'
 };
+// HRC_ALLOWANCE... nhãn mượn ĐÚNG nhãn tiếng Việt đã có ở module-hopdonglaodong.js (ALLOWANCE_FIELD_LABELS
+// phía server, lib/laborContract.js) — khai lại CỤC BỘ ở đây (không import chéo module) vì chỉ cần hiển
+// thị tĩnh, tránh phụ thuộc thứ tự nạp file giữa 2 module.
+const HRPF_CONTRACT_ALLOWANCE_LABELS = {
+  responsibilityAllowance: 'Phụ cấp trách nhiệm', concurrentAllowance: 'Phụ cấp kiêm nhiệm',
+  hazardAllowance: 'Phụ cấp độc hại nặng nhọc', lunchAllowance: 'Phụ cấp ăn trưa',
+  transportAllowance: 'Hỗ trợ đi lại', phoneAllowance: 'Hỗ trợ điện thoại', otherAllowance: 'Phụ cấp/Hỗ trợ khác'
+};
+const HRPF_CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
+const HRPF_CONTRACT_STATUS_LABELS = {
+  DRAFT: '📝 Nháp', ACTIVE: '✅ Đang hiệu lực', EXPIRED: '⌛ Hết hạn',
+  TERMINATED: '⛔ Đã chấm dứt', SUPERSEDED: '🔄 Đã thay thế'
+};
+// renderHrpfContractBoxHtml() — khối Hợp Đồng Lao Động CHỈ XEM trên màn Hồ Sơ (xem contractBlock ở
+// renderHrpfProfileForm() cho lý do/quyền). currentContract=null -> chưa có hợp đồng ACTIVE nào.
+function renderHrpfContractBoxHtml(currentContract) {
+  if (!currentContract) return '<p class="text-xs text-gray-400 italic">Chưa có hợp đồng lao động đang hiệu lực.</p>';
+  const c = currentContract;
+  const row = (label, val) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> <span class="font-semibold text-gray-800">${escapeHtml(val == null || val === '' ? '—' : String(val))}</span></div>`;
+  const allowanceRows = Object.entries(HRPF_CONTRACT_ALLOWANCE_LABELS)
+    .filter(([f]) => c[f] != null)
+    .map(([f, label]) => row(label, formatMoneyDisplay ? formatMoneyDisplay(String(c[f])) : c[f]));
+  return `<div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+    ${row('Mã hợp đồng', c.code)}
+    ${row('Loại HĐLĐ', HRPF_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType)}
+    ${row('Trạng thái', HRPF_CONTRACT_STATUS_LABELS[c.status] || c.status)}
+    ${row('Ngày bắt đầu', c.startDate)}
+    ${row('Ngày kết thúc', c.endDate || 'Vô thời hạn')}
+    ${row('Lương cơ bản', c.baseSalary != null ? (typeof formatMoneyDisplay === 'function' ? formatMoneyDisplay(String(c.baseSalary)) : c.baseSalary) : null)}
+    ${allowanceRows.join('')}
+  </div>`;
+}
 async function loadHrpfHistory(employeeCode) {
   const box = document.getElementById('hrpfHistoryBox');
+  const contractBox = document.getElementById('hrpfContractBox');
   if (!box) return;
   if (!(currentUser.perms?.hrProfileManage && currentUser.perms?.hrContractManage)) {
     box.classList.add('hidden');
+    if (contractBox) contractBox.classList.add('hidden');
     return;
   }
   box.classList.remove('hidden');
   box.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  if (contractBox) { contractBox.classList.remove('hidden'); contractBox.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>'; }
   try {
     const data = await hrProfileApiCall('GET', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}/history`);
     const events = data.events || [];
@@ -204,8 +239,21 @@ async function loadHrpfHistory(employeeCode) {
         ${e.fileUrl ? `<div class="ml-5"><a href="${attachmentDownloadUrl(e.fileUrl, null, e.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(e.fileName || 'Quyết định')}</a></div>` : ''}
         <div class="text-gray-400 mt-0.5 ml-5">bởi ${escapeHtml(e.by || '')}</div>
       </div>`).join('') : '<p class="text-xs text-gray-400 italic">Chưa có sự kiện nào.</p>';
+    if (contractBox) contractBox.innerHTML = renderHrpfContractBoxHtml(data.currentContract || null);
   } catch (err) {
     box.innerHTML = `<p class="text-xs text-red-500">⛔ ${escapeHtml(err.message)}</p>`;
+    if (contractBox) contractBox.innerHTML = `<p class="text-xs text-red-500">⛔ ${escapeHtml(err.message)}</p>`;
+  }
+}
+// gotoHrpfContractModule() — nút "↗️ Sửa ở Hợp Đồng Lao Động" trên khối CHỈ XEM (contractBlock ở trên) —
+// chuyển tab + tự lọc sẵn đúng Mã NV, đóng modal Hồ Sơ đang mở để màn Hợp Đồng hiện ra ngay không bị che.
+async function gotoHrpfContractModule(employeeCode) {
+  closeHrpfDetailModal();
+  await switchTab('hrContract');
+  const filterInput = document.getElementById('hrcFilterEmployeeCode');
+  if (filterInput) {
+    filterInput.value = employeeCode;
+    if (typeof renderHrContractTable === 'function') renderHrContractTable();
   }
 }
 
@@ -907,13 +955,27 @@ async function confirmHrpfImport() {
 // scope 'ME': chính chủ tự sửa — chỉ SELF_EDITABLE_FIELDS (xem lib/employeeProfile.js), không đổi được
 // nationalId/socialInsuranceNo/taxCode/status/username.
 // scope 'MANAGE': HR/admin — sửa thêm được HR_ONLY_EDITABLE_FIELDS + đổi trạng thái tay + liên kết TK.
-// Thâm niên (GĐ1, 10/2026) — tính TRỰC TIẾP client-side từ user.startDate ("Ngày Vào Làm Việc", field
-// đã có sẵn trên DB.users — KHÔNG lưu thêm field mới ở employeeProfile để tránh 2 nguồn dữ liệu lệch
-// nhau, xem computeTenureYears() ở lib/employeeProfile.js cho bản dùng phía server/báo cáo). Chỉ hiển
-// thị tham khảo, không phải field lưu trữ.
-function hrpfTenureDisplay(profile) {
+// Mốc tính thâm niên (CẬP NHẬT 10/2026, theo yêu cầu người dùng): ưu tiên THEO THỨ TỰ —
+//   1. profile.tenureBaseDate — HR tự ghi đè tay 1 mốc cụ thể khi cần (trường hợp đặc biệt không khớp
+//      2 nhánh dưới), xem field mới ở lib/employeeProfile.js (mẫu Excel 90 trường).
+//   2. profile.joinDateAtPredecessorUnit — "Ngày vào đơn vị cũ CÙNG TẬP ĐOÀN": nhân viên chuyển nội bộ
+//      từ 1 đơn vị khác trong Tập Đoàn sang HCRC thì thâm niên tính từ mốc NÀY (không phải ngày vào
+//      HCRC) — đúng yêu cầu "tính năm thâm niên từ ngày vào tập đoàn".
+//   3. profile.joinDateAtHcrc — trường hợp vào thẳng HCRC (KHÔNG qua đơn vị khác trong Tập Đoàn) —
+//      "tính như bình thường là tính từ ngày onboarding vào HCRC".
+//   4. u.startDate (DB.users, "Ngày Vào Làm Việc") — fallback cho hồ sơ CŨ chưa có joinDateAtHcrc (trước
+//      đợt 90 trường) để không đổi hành vi hiển thị thâm niên của dữ liệu đã có.
+// Chỉ hiển thị tham khảo, không phải field tự tính/lưu riêng.
+function hrpfResolveTenureBaseDate(profile) {
+  if (profile.tenureBaseDate) return profile.tenureBaseDate;
+  if (profile.joinDateAtPredecessorUnit) return profile.joinDateAtPredecessorUnit;
+  if (profile.joinDateAtHcrc) return profile.joinDateAtHcrc;
   const u = profile.username ? (DB.users || []).find(x => x.username === profile.username) : null;
-  const start = u?.startDate ? new Date(u.startDate) : null;
+  return u?.startDate || null;
+}
+function hrpfTenureDisplay(profile) {
+  const base = hrpfResolveTenureBaseDate(profile);
+  const start = base ? new Date(base) : null;
   if (!start || Number.isNaN(start.getTime())) return '—';
   const years = (Date.now() - start.getTime()) / (365.25 * 86400000);
   if (years < 0) return '—';
@@ -1063,6 +1125,21 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     </div>
   </div>`;
 
+  // Khối Hợp Đồng Lao Động (CHỈ XEM, 10/2026 — theo xác nhận người dùng "Chỉ XEM, sửa thì bấm sang Hợp
+  // Đồng Lao Động") — nạp bất đồng bộ CÙNG lúc với Lịch Sử Nhân Sự (loadHrpfHistory() đọc thêm
+  // `currentContract` từ CHÍNH route GET .../history, không gọi route riêng) — cùng 1 điều kiện quyền
+  // (hrProfileManage + hrContractManage) vì đây cũng là dữ liệu lương/hợp đồng nhạy cảm. Đây là nguồn
+  // DUY NHẤT hiển thị ~17 cột lương/phụ cấp/loại HĐ trên màn Hồ Sơ — KHÔNG lưu trùng vào employeeProfiles
+  // (đọc LIVE từ laborContracts mỗi lần mở, tự động khớp đúng hợp đồng đang hiệu lực, không có rủi ro 2
+  // nguồn dữ liệu lệch nhau như đã phân tích với người dùng).
+  const contractBlock = scope !== 'MANAGE' ? '' : `<div class="mt-3 pt-3 border-t">
+    <div class="flex items-center justify-between mb-1">
+      <label class="block text-[11px] font-semibold text-gray-500">📄 Hợp Đồng Lao Động hiện tại (chỉ xem)</label>
+      <button type="button" data-op="gotoHrpfContractModule" data-arg0="${escapeHtml(profile.employeeCode)}" class="text-[11px] text-teal-600 font-bold hover:underline">↗️ Sửa ở Hợp Đồng Lao Động</button>
+    </div>
+    <div id="hrpfContractBox" class="hidden max-h-64 overflow-y-auto border rounded p-2 bg-gray-50"></div>
+  </div>`;
+
   // Lịch Sử Nhân Sự — nạp bất đồng bộ qua loadHrpfHistory() (gọi từ openHrpfDetailModal()), chỉ hiện
   // (kể cả chế độ chỉ xem) khi người xem có ĐỦ CẢ hrProfileManage LẪN hrContractManage/admin — xem chú
   // thích quyền ở route GET .../history (routes/employeeProfile.js).
@@ -1186,7 +1263,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
   return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
-    <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${historyBlock}`;
+    <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${contractBlock}${historyBlock}`;
 }
 
 function hrpfDependentRowHtml(d) {
