@@ -8,6 +8,7 @@ const { HttpError } = require('../lib/httpErrors');
 const recordActions = require('../lib/recordActions');
 const employeeProfile = require('../lib/employeeProfile');
 const laborContract = require('../lib/laborContract');
+const laborContractImport = require('../lib/laborContractImport');
 const attendance = require('../lib/attendance');
 const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
 const { insertTask, withLockedTaskById, deleteTaskById, getAllTasks, migrateDirectiveTaskLinks } = require('../lib/taskStore');
@@ -4952,6 +4953,47 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `laborContracts/${req.params.id}/edit`, err);
+  }
+});
+
+// POST /laborContracts/apply-import — áp dụng hàng loạt dòng Excel đã được HR xem trước + xác nhận
+// (xem routes/laborContractImport.js::parse-import, KHÔNG tự ghi gì ở bước xem trước đó). Mỗi dòng ở
+// đây được xử lý y hệt route /:id/edit đơn lẻ ở trên — tìm lại hợp đồng ACTIVE THEO employeeCode NGAY
+// LÚC NÀY (không tin lại kết quả "xem trước" vì có thể đã đổi giữa lúc xem trước và lúc xác nhận, VD
+// hợp đồng vừa bị đóng/kích hoạt hợp đồng khác) + applyManualEdit() validate lại từ đầu (Zero-Trust).
+// 1 dòng lỗi KHÔNG chặn các dòng còn lại — trả về updated[]/skipped[] cùng khuôn bulk-import Hồ Sơ Nhân
+// Sự (POST /api/hr-profile/bulk-import).
+router.post('/laborContracts/apply-import', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertContractManage(freshUser);
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'Thiếu danh sách dòng cần cập nhật' });
+    if (items.length > laborContractImport.MAX_ROWS_PER_IMPORT) {
+      return res.status(400).json({ error: `Vượt quá ${laborContractImport.MAX_ROWS_PER_IMPORT} dòng/lần — vui lòng chia nhỏ.` });
+    }
+    const updated = [];
+    const skipped = [];
+    for (const row of items) {
+      const employeeCode = String(row?.employeeCode || '').trim();
+      if (!employeeCode) { skipped.push({ employeeCode: '', reason: 'Thiếu Mã Nhân Viên' }); continue; }
+      try {
+        const peekList = await getAllForCollection('laborContracts');
+        const target = laborContract.findActiveContractByEmployeeCode(peekList, employeeCode);
+        if (!target) { skipped.push({ employeeCode, reason: 'Không tìm thấy hợp đồng ĐANG HIỆU LỰC (ACTIVE) cho mã nhân viên này' }); continue; }
+        const result = await withLockedRecordForCollection('laborContracts', target.id, (item) => {
+          laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
+          return item;
+        });
+        logLaborContractAction(req, freshUser, 'EDIT', result.code || String(target.id), `Sửa hợp đồng lao động [${result.code || target.id}] qua Nhập Excel hàng loạt`);
+        updated.push(result);
+      } catch (rowErr) {
+        skipped.push({ employeeCode, reason: rowErr.message || 'Lỗi không xác định' });
+      }
+    }
+    res.json({ ok: true, updated, skipped });
+  } catch (err) {
+    handleError(res, 'laborContracts/apply-import', err);
   }
 });
 

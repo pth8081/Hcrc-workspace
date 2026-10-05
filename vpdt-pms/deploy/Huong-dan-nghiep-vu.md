@@ -2913,6 +2913,27 @@ còn tự động xoá được hợp đồng lao động nữa.
   tiếp của nhân viên đó, nhắc gia hạn/đổi loại hợp đồng/khởi tạo Offboarding
   nếu không tiếp tục sử dụng lao động — không gửi trùng lặp cho cùng 1
   ngưỡng.
+- **Excel Tải Mẫu/Nhập/Xuất (10/2026, theo yêu cầu người dùng)** — 3 nút
+  **"📥 Tải Mẫu"/"📤 Nhập Excel"/"📊 Xuất Excel"** ở đầu màn danh sách:
+  - **Tải Mẫu/Nhập Excel**: CHỈ dùng để **SỬA HÀNG LOẠT** các hợp đồng **ĐANG
+    HIỆU LỰC (ACTIVE)** đã có — **KHÔNG tạo hợp đồng mới** qua Excel (tránh
+    phá vòng đời thử việc → chính thức → gia hạn vốn đang được hệ thống tự
+    quản lý chặt, xem các mục trên). Mỗi dòng khớp theo **Mã Nhân Viên**, áp
+    dụng cho đúng hợp đồng ACTIVE của người đó; không có hợp đồng ACTIVE nào
+    thì dòng đó báo lỗi, HR tự xử lý tay. Cột sửa được: Loại HĐLĐ, Ngày Hiệu
+    Lực/Hết Hạn, Lương Cơ Bản, 7 khoản Phụ Cấp/Hỗ Trợ, Phòng Ban — **để trống
+    1 ô (khác dòng ví dụ) = GIỮ NGUYÊN giá trị đang có**, không xoá/không đổi
+    field đó. Sau khi đọc file, màn xem trước hiện rõ dòng hợp lệ/lỗi/trùng mã
+    ngay trong file (tự bỏ chọn sẵn dòng trùng, HR tự tick lại nếu vẫn muốn
+    áp dụng) — bấm "✅ Xác Nhận Nhập" mới thật sự ghi, mỗi dòng xử lý độc lập
+    (1 dòng lỗi không chặn các dòng còn lại).
+  - **Xuất Excel**: xuất ĐÚNG danh sách đang lọc trên màn (theo Mã Nhân Viên/
+    Trạng Thái đang chọn) — gồm cả cột sửa được lẫn vài cột **CHỈ XEM** để
+    tra soát (Mã HĐ, Trạng Thái, Lần Gia Hạn, Ngày/Lý Do Chấm Dứt).
+  - **"Đồng bộ sang Hồ Sơ Nhân Sự"**: không cần thêm bước nào — khối hiển thị
+    hợp đồng ở Hồ Sơ Nhân Sự (mục dưới, "CHỈ XEM") đọc **LIVE** từ Hợp Đồng
+    Lao Động mỗi lần hiển thị/xuất, nên sửa hợp đồng ở đây (qua Excel hay
+    form) tự hiện lại đúng ngay, không có bản sao dữ liệu nào cần đồng bộ.
 - **Không làm ở đợt này** (đã cân nhắc, không phải bỏ sót): chưa có tầng nhân
   viên tự xem hợp đồng lao động của chính mình; thời hạn thử việc theo từng
   loại vị trí (chuyên môn/kỹ thuật/mùa vụ) vẫn dùng chung 1 mốc ước tính 60

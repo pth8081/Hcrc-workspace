@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**25.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.13 (2026-10-05): Hợp Đồng Lao Động — thêm Excel Tải Mẫu/Nhập/Xuất
+
+Theo yêu cầu người dùng ("cho phép nhập 30 trường để đồng bộ sang hồ sơ nhân
+sự, có tải file mẫu, nhập file mẫu và xuất file mẫu"). Đã xác nhận phạm vi
+qua `AskUserQuestion` trước khi làm: (1) Nhập Excel **CHỈ SỬA** hợp đồng
+**ĐANG HIỆU LỰC (ACTIVE)** đã có, KHÔNG tạo hợp đồng mới (tránh phá vòng đời
+thử việc → chính thức → gia hạn vốn hệ thống đang tự quản lý chặt); (2) khi 1
+nhân viên có nhiều hợp đồng (lịch sử gia hạn), áp dụng cho đúng hợp đồng
+ACTIVE. Về "đồng bộ sang hồ sơ nhân sự": KHÔNG cần xây thêm cơ chế nào — khối
+hiển thị hợp đồng ở Hồ Sơ Nhân Sự (từ v25.8) đã đọc LIVE từ Hợp Đồng Lao Động
+mỗi lần hiển thị/xuất, nên sửa hợp đồng ở đây tự "đồng bộ" ngay.
+
+- `lib/laborContractImport.js` (mới): `buildImportTemplateWorkbook()` (mẫu
+  Nhập — 12 cột sửa được: Loại HĐLĐ, Ngày Hiệu Lực/Hết Hạn, Lương Cơ Bản, 7
+  phụ cấp, Phòng Ban — để trống 1 ô = giữ nguyên), `buildExportWorkbook()`
+  (thêm ~11 cột CHỈ XEM: Mã HĐ/Trạng Thái/Lần Gia Hạn/Ngày-Lý Do Chấm Dứt...),
+  `parseImportFile()` (đọc file, match theo employeeCode vào đúng hợp đồng
+  ACTIVE, validate từng field y hệt `applyManualEdit()`, đánh dấu trùng mã
+  trong file qua `lib/importDedup.js`).
+- `routes/laborContractImport.js` (mới, mount `/api/labor-contracts`): GET
+  `/template`, POST `/parse-import` (multer, chỉ xem trước — không ghi gì).
+- `routes/records.js`: thêm `POST /laborContracts/apply-import` — áp dụng
+  hàng loạt dòng đã xác nhận, mỗi dòng tự tìm lại hợp đồng ACTIVE theo
+  employeeCode NGAY LÚC XÁC NHẬN (không tin lại kết quả xem trước) + gọi lại
+  `applyManualEdit()` validate từ đầu (Zero-Trust) — 1 dòng lỗi không chặn
+  các dòng còn lại, trả về `updated[]`/`skipped[]`.
+- Client (`module-hopdonglaodong.js` + `hrContractSection.html`): 3 nút
+  "📥 Tải Mẫu"/"📤 Nhập Excel"/"📊 Xuất Excel" ở đầu màn danh sách. Nhập Excel
+  có modal xem trước (dòng lỗi/trùng mã, tick chọn dòng áp dụng — mặc định bỏ
+  chọn dòng trùng mã trong file, cùng khuôn modal Nhập Excel Hồ Sơ Nhân Sự).
+  Xuất Excel xuất đúng danh sách đang lọc trên màn (tra Họ Tên qua
+  `/api/hr-profile/employee-directory`).
+- 12 kịch bản test mới (`test-labor-contract-excel.js`, 3 phần: lib thuần,
+  HTTP thật qua recordStore in-memory, logic thuần client) + chạy lại 5 file
+  test Hợp Đồng Lao Động liên quan — không regression.
 
 ## v25.12 (2026-10-05): Thêm demo script còn thiếu (chụp ảnh nút Xuất Excel Hồ Sơ Onboarding)
 
