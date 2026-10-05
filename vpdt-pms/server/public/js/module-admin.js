@@ -492,7 +492,19 @@ const GENERIC_SIMPLE_CATALOGS = {
   resignationReasons: { listId: 'resignationReasonList', inputId: 'txtResignationReasonName', label: 'lý do nghỉ việc', logPrefix: 'RESIGNATION_REASON' },
   disciplinaryTypes: { listId: 'disciplinaryTypeList', inputId: 'txtDisciplinaryTypeName', label: 'loại kỷ luật', logPrefix: 'DISCIPLINARY_TYPE' }
 };
-async function saveGenericSimpleCatalogEntry(key) {
+// LỖI ĐÃ VÁ (10/2026, người dùng báo "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không add được thông tin
+// vào đâu"): 3 form này dùng data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'" (quy ước
+// truyền tham số qua data-argN của cspCollectArgs(), xem core.js) — nhưng nhánh 'submit' của
+// bindCspDelegation() KHÔNG hề gọi cspCollectArgs(), nó LUÔN gọi cứng fn(e) (chỉ truyền SubmitEvent),
+// hoàn toàn bỏ qua data-arg0 (khác 3 nhánh click/change/input kia). Hậu quả: key nhận được chính là
+// SubmitEvent, GENERIC_SIMPLE_CATALOGS[key] luôn undefined -> return sớm NGAY DÒNG ĐẦU, im lặng hoàn
+// toàn (không alert, không fetch, không xoá input) — đúng với mô tả "không có tác dụng gì". Sửa TẠI
+// ĐIỂM HẸP NHẤT (không đổi hành vi submit dùng chung cho ~70 form khác đang dựa vào đúng quy ước fn(e)
+// hiện tại): nhận event thật, tự đọc key từ data-catalog-key đặt ngay trên <form> (e.target khi 'submit'
+// chính là form) thay vì qua data-arg0/cspCollectArgs — xem 3 form tương ứng ở systemSection.html.
+async function saveGenericSimpleCatalogEntry(e) {
+  e.preventDefault();
+  const key = e.target.dataset.catalogKey;
   const cfg = GENERIC_SIMPLE_CATALOGS[key];
   if (!cfg) return;
   const input = document.getElementById(cfg.inputId);

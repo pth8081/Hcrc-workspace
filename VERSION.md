@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**25.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.6 (2026-10-05): Vá lỗi "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không thêm được" (data-op-submit bỏ qua data-arg0)
+
+Người dùng phản ánh (sau khi đã vá v25.5): "các cấu hình danh mục nhân sự như là chức danh, lý do kỷ
+luật là tôi không thể add được thông tin vào đâu" — kiểm tra lại kỹ hơn phát hiện đây là lỗi RIÊNG,
+khác hẳn lỗi v25.5 (orgChartImportModal).
+
+**Xác nhận gốc rễ qua Playwright thật** (đo trực tiếp, không suy diễn): 3 form "Thêm" của Hệ Thống →
+Quản Trị → 🗂️ Quản Lý Danh Mục — "🎚️ Danh Mục Cấp Bậc", "🚪 Danh Mục Lý Do Nghỉ Việc", "⚠️ Danh Mục Loại
+Kỷ Luật" (`jobGrades`/`resignationReasons`/`disciplinaryTypes`) — dùng chung
+`data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'"`. Nhánh `submit` của
+`bindCspDelegation()` (`core.js`) KHÔNG hề gọi `cspCollectArgs()` như 3 nhánh click/change/input khác —
+nó LUÔN gọi cứng `fn(e)` (chỉ truyền `SubmitEvent`), bỏ qua hoàn toàn `data-arg0`. Hậu quả:
+`saveGenericSimpleCatalogEntry()` nhận được `key` CHÍNH LÀ `SubmitEvent` (không phải chuỗi tên danh
+mục), `GENERIC_SIMPLE_CATALOGS[key]` luôn `undefined` → hàm `return` NGAY DÒNG ĐẦU — im lặng hoàn toàn
+(không alert, không gọi API, không xoá ô nhập) — đúng khớp "bấm Thêm không có tác dụng gì". Đây là lỗi
+có từ lúc 3 danh mục này được thêm (10/2026, v23.x), không phải lỗi mới phát sinh — do chưa từng có
+test Playwright bấm thật qua UI nút "Thêm" này (các test cũ chỉ gọi thẳng hàm JS hoặc test phần khác).
+
+**Vá tại điểm hẹp nhất** (không đổi cơ chế dispatch `submit` dùng chung — tránh ảnh hưởng ~70 form
+`data-op-submit` khác đang dựa đúng quy ước `fn(e)` hiện tại):
+- `public/js/module-admin.js`: `saveGenericSimpleCatalogEntry(key)` → `saveGenericSimpleCatalogEntry(e)`,
+  tự đọc `key` từ `e.target.dataset.catalogKey` (`e.target` lúc `submit` chính là `<form>`).
+- `public/fragments/systemSection.html`: 3 `<form>` liên quan đổi `data-arg0="'<key>'"` (bị bỏ qua) sang
+  `data-catalog-key="<key>"` (đọc trực tiếp, không qua `cspCollectArgs()`).
+
+**Test mới** `tests/test-generic-simple-catalog-add-submit.js` — bấm THẬT qua UI cho cả 3 danh mục (mở
+`<details>` đang đóng mặc định bằng click → điền ô → bấm nút "Thêm" THẬT, không gọi thẳng hàm JS) →
+xác nhận gọi đúng `POST /api/data/<key>`, danh sách tự vẽ lại, ô nhập tự xoá. Đã xác minh test THẤT BẠI
+(12/16) khi revert bản vá — tái hiện đúng lỗi "im lặng hoàn toàn" — và PASS (16/16) sau khi vá. Chạy lại
+toàn bộ 15 test liên quan danh mục admin (catalog-bulk-delete, catalog-rename-*, collapse-catalog-
+accordion, form-fields-6-catalogs, hr-discipline-jobgrade-resignation, mixed-approval-jobtitle-mix,
+object-catalog-excel*, pricefile-vppcatalog-ownership, simple-catalog-excel-tools, store-catalog-excel,
+vpp-catalog-template-export) — không regression.
 
 ## v25.5 (2026-10-05): Vá lỗi "Nhập Excel Cơ Cấu Tổ Chức" bị treo — thiếu `bindCspDelegation()` cho modal
 
