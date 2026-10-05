@@ -5024,11 +5024,22 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
     const created = [];
     const updated = [];
     const skipped = [];
+    // LỖI ĐÃ VÁ (theo yêu cầu người dùng, 10/2026): UI xem trước (module-hopdonglaodong.js) đã chặn hẳn
+    // lựa chọn "Tạo mới" cho dòng trùng mã NGAY TRONG FILE (duplicateInFile) — chỉ còn Huỷ. Dòng dưới
+    // đây là lớp chặn THỨ 2 ở server (Zero-Trust, không tin riêng phía client): nếu vẫn có >=2 dòng
+    // action='add' cùng employeeCode trong CÙNG 1 lần gửi (request bị sửa tay/console, hoặc UI có lỗi),
+    // chỉ dòng ĐẦU được tạo — các dòng sau cùng mã bị skip với lý do rõ ràng, không tạo 2 hợp đồng DRAFT
+    // trùng Mã Nhân Viên.
+    const addedEmployeeCodesThisBatch = new Set();
     for (const row of items) {
       const employeeCode = String(row?.employeeCode || '').trim();
       const action = row?.action === 'overwrite' ? 'overwrite' : (row?.action === 'add' ? 'add' : 'skip');
       if (!employeeCode) { skipped.push({ employeeCode: '', reason: 'Thiếu Mã Nhân Viên' }); continue; }
       if (action === 'skip') { skipped.push({ employeeCode, reason: 'Bỏ qua theo lựa chọn của người dùng' }); continue; }
+      if (action === 'add' && addedEmployeeCodesThisBatch.has(employeeCode)) {
+        skipped.push({ employeeCode, reason: 'Trùng Mã Nhân Viên với 1 dòng "Tạo mới" khác trong cùng lần nhập — chỉ dòng đầu được tạo' });
+        continue;
+      }
       try {
         if (action === 'overwrite') {
           const peekList = await getAllForCollection('laborContracts');
@@ -5050,6 +5061,7 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
           });
           logLaborContractAction(req, freshUser, 'CREATE', result.code || employeeCode, `Tạo mới hợp đồng lao động [${result.code || employeeCode}] qua Nhập Excel TẠO MỚI hàng loạt`);
           created.push(result);
+          addedEmployeeCodesThisBatch.add(employeeCode);
         }
       } catch (rowErr) {
         skipped.push({ employeeCode, reason: rowErr.message || 'Lỗi không xác định' });

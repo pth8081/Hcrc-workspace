@@ -672,12 +672,18 @@ function renderHrContractCreateImportPreviewBody() {
         <option value="overwrite" ${it.action === 'overwrite' ? 'selected' : ''}>Ghi đè hợp đồng ACTIVE</option>
       </select>`;
       statusCell = `<span class="text-amber-700">⚠️ Đã có hợp đồng ACTIVE [${escapeHtml(it.existingActiveCode || '')}]</span>`;
+    } else if (it.duplicateInFile) {
+      // Trùng mã NGAY TRONG FILE đang nhập (chưa chắc đã có trong hệ thống) — theo yêu cầu người dùng
+      // (10/2026), KHÔNG cho chọn "Tạo mới" ở đây nữa (tránh tạo 2 hợp đồng DRAFT cùng Mã Nhân Viên do
+      // gõ/copy nhầm dòng) — chỉ còn Huỷ, không có selector để tránh hiểu lầm có lựa chọn khác.
+      actionCell = '<span class="text-gray-500 italic">Huỷ (trùng mã trong file)</span>';
+      statusCell = '<span class="text-amber-700">⚠️ Trùng mã trong file — sửa file để tách dòng nếu vẫn muốn tạo cả 2</span>';
     } else {
       actionCell = `<select data-op-change="onHrContractCreateImportRowActionChange" data-arg0="${it._idx}" data-arg-value="1" class="border rounded px-1 py-0.5 text-[11px]">
         <option value="add" ${it.action === 'add' ? 'selected' : ''}>Tạo mới</option>
         <option value="skip" ${it.action === 'skip' ? 'selected' : ''}>Huỷ (bỏ qua)</option>
       </select>`;
-      statusCell = it.duplicateInFile ? '<span class="text-amber-700">⚠️ Trùng mã trong file</span>' : '<span class="text-green-700">✅ Sẵn sàng tạo mới</span>';
+      statusCell = '<span class="text-green-700">✅ Sẵn sàng tạo mới</span>';
     }
     return `<tr class="${!it.valid || it.hasActiveContract || it.duplicateInFile ? 'bg-amber-50' : ''}">
       <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>

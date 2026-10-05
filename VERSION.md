@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**25.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.17 (2026-10-05): Chặn "Tạo mới" cho dòng trùng-mã-trong-file ở cả 2 màn Nhập Excel (HĐLĐ + Hồ Sơ Nhân Sự)
+
+Theo phản hồi người dùng: màn Nhập Excel TẠO MỚI Hợp Đồng Lao Động (v25.16)
+và màn Nhập Excel Hồ Sơ Nhân Sự trước đây vẫn cho chọn "Tạo mới" cho 2 dòng
+CÙNG Mã Nhân Viên ngay trong 1 file đang nhập (`duplicateInFile`) — khác hẳn
+trùng với dữ liệu ĐÃ CÓ trong hệ thống (đã chặn đúng từ trước). HR lỡ chọn
+"Tạo mới" cho cả 2 dòng sẽ tạo 2 hồ sơ/2 hợp đồng cùng mã.
+
+- `public/js/module-hopdonglaodong.js`: dòng `duplicateInFile` (bất kể có
+  hợp đồng ACTIVE hay không) chỉ còn hiện "Huỷ", không có selector nào khác.
+- `public/js/module-hrprofile.js`: dòng `duplicateInFile` chỉ còn "Bỏ qua",
+  bỏ checkbox "Vẫn thêm" cũ (xoá luôn `onHrpfImportRowToggle()` không còn
+  dùng).
+- `routes/records.js` (`POST /laborContracts/apply-create-import`): thêm lớp
+  chặn THỨ 2 ở server (Zero-Trust) — nếu vẫn có ≥2 dòng `action='add'` cùng
+  Mã Nhân Viên trong CÙNG 1 lần gửi (request bị sửa tay), chỉ dòng đầu được
+  tạo, các dòng sau bị skip rõ lý do. Hồ Sơ Nhân Sự đã tự an toàn từ trước
+  (`createManualProfile()` chặn `employeeCode` trùng trong chính transaction).
+- `tests/test-labor-contract-create-import.js`: thêm 1 test cho lớp chặn
+  server-side trên (16 test, tất cả pass).
+- Full regression toàn bộ test Hợp Đồng Lao Động + Hồ Sơ Nhân Sự liên quan —
+  không regression.
+- **Không cần thao tác deploy gì thêm** ngoài copy code + `pm2 restart`.
 
 ## v25.16 (2026-10-05): Hợp Đồng Lao Động — Nhập Excel TẠO MỚI hợp đồng hàng loạt
 

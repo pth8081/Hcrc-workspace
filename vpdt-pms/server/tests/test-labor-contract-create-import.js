@@ -159,7 +159,8 @@ async function partB() {
 
   const PROFILES = [
     { employeeCode: 'NV9001', username: null, processId: null },
-    { employeeCode: 'NV9002', username: null, processId: null }
+    { employeeCode: 'NV9002', username: null, processId: null },
+    { employeeCode: 'NV9003', username: null, processId: null }
   ];
   const USERS = [
     { username: 'hr1', name: 'Nhân Sự Một', dept: 'Nhân Sự', perms: { hrContractManage: true }, active: true },
@@ -270,6 +271,21 @@ async function partB() {
       assert.strictEqual(r.json.created.length, 0);
       assert.strictEqual(r.json.skipped.length, 1);
       assert.ok(/tối đa 2 lần/.test(r.json.skipped[0].reason), r.json.skipped[0].reason);
+    });
+
+    await test('apply-create-import: 2 dòng action=add CÙNG employeeCode trong 1 lần gửi -> chỉ dòng đầu được tạo, dòng 2 bị skip (theo yêu cầu người dùng, chặn trùng-trong-file)', async () => {
+      const r = await call('hr1', 'POST', '/api/records/laborContracts/apply-create-import', {
+        items: [
+          { employeeCode: 'NV9003', action: 'add', fields: { contractType: 'PROBATION', startDate: '2026-01-01', endDate: '2026-04-01' } },
+          { employeeCode: 'NV9003', action: 'add', fields: { contractType: 'PROBATION', startDate: '2026-02-01', endDate: '2026-05-01' } }
+        ]
+      });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.created.length, 1, JSON.stringify(r.json));
+      assert.strictEqual(r.json.skipped.length, 1, JSON.stringify(r.json));
+      assert.ok(/cùng lần nhập/.test(r.json.skipped[0].reason), r.json.skipped[0].reason);
+      const matches = STORE.laborContracts.filter(c => c.employeeCode === 'NV9003');
+      assert.strictEqual(matches.length, 1, 'không được tạo 2 hợp đồng cùng Mã Nhân Viên từ 1 lần nhập');
     });
 
     await test('apply-create-import: vượt quá MAX_ROWS_PER_IMPORT -> 400', async () => {
