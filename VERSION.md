@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**25.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.19 (2026-10-05): Vá banner cảnh báo còn thiếu ở "Quy Trình & Phê Duyệt" (Phê Duyệt Giá Bán Buôn)
+
+Phát hiện khi người dùng hỏi lại/yêu cầu test kỹ hơn cho v25.18: màn "🔄 Quy
+Trình & Phê Duyệt" (mục Phê Duyệt Giá Bán Buôn) vẫn hiện UI chọn người
+duyệt/"Theo vị trí" như cũ, **không có cảnh báo** rằng danh sách đó đã hết
+tác dụng (nay chỉ còn "🏪 QT Giá Bán Buôn (Siêu Thị)" có tác dụng thật) —
+khác hẳn với "🏬 Quy Trình Đặt Hàng Siêu Thị" (operationOrders STORE) đã có
+banner cảnh báo rõ từ trước. Nếu không vá, admin có thể cấu hình nhầm ở màn
+cũ, tưởng vẫn có tác dụng.
+
+- `public/js/module-itsupport-tier.js`: mở rộng điều kiện hiện
+  `mixedApprovalNoticeHTML` (trước đây CHỈ `activeWfMod === 'OPERATION_ORDER_STORE'`)
+  sang thêm nhánh `ITPRICE_WHOLESALE`, với nội dung cảnh báo trỏ đúng sang
+  sub-tab "🏪 QT Giá Bán Buôn (Siêu Thị)".
+- Viết demo Playwright mới `tests/demo-itprice-wholesale-mixed-approval.js`
+  (chụp ảnh + xác nhận nghiệp vụ thật qua `applyWorkflowAction()`: GĐST Siêu
+  Thị A duyệt được đề xuất của chính siêu thị mình; GĐST Siêu Thị B — CÙNG
+  chức danh, dept khác — bị chặn 403 khi thử duyệt đề xuất của Siêu Thị A).
+- Chạy lại toàn bộ test liên quan tới "Quy Trình & Phê Duyệt"/"Nghiệp Vụ
+  Nâng Cao" (`test-adv-workflow-tab-deep.js`, `test-audit-hethong-round2-workflow-client.js`,
+  `test-quick-apply-workflow-steps.js`, `test-workflow-position-approvers.js`,
+  `test-workflow-reset-dept-config.js` + toàn bộ test của v25.18) — không
+  phát sinh regression (banner chỉ thêm cho đúng 2 module STORE/ITPRICE_WHOLESALE,
+  các module khác — HO, RETAIL... — không bị ảnh hưởng).
 
 ## v25.18 (2026-10-05): "🏪 QT Giá Bán Buôn (Siêu Thị)" — tự khớp đúng siêu thị cho người duyệt Phê Duyệt Giá Bán Buôn
 

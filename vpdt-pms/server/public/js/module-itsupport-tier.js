@@ -18,11 +18,19 @@ function renderItPriceTierWorkflowTab(container) {
   // mẫu quy trình" (số bước) là có tác dụng thật. Người duyệt của đơn "Đặt Hàng Tại Siêu Thị" giờ tra
   // hoàn toàn từ appData.operationOrderStoreMixedApprovalRules (xem lib/workflowEngine.js
   // resolveOperationOrderStoreMixedApprovers()) — cấu hình ở sub-tab "🏬 Quy Trình Đặt Hàng Siêu Thị"
-  // (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/key nội bộ vẫn "mixed") riêng. Banner
-  // này CHỈ hiện cho đúng module STORE (HO và các module khác vẫn đọc approvers ở đây như cũ).
+  // (đổi tên từ "⚙️ Quy Trình Hỗn Hợp" ở v23.66, id/key nội bộ vẫn "mixed") riêng.
+  // ITPRICE_WHOLESALE (đợt "🏪 QT Giá Bán Buôn (Siêu Thị)", 10/2026): CÙNG LÝ DO — LỖI ĐÃ VÁ ngay trong
+  // lúc triển khai (phát hiện khi người dùng hỏi lại, chưa kịp lộ ra production): thiếu banner này khiến
+  // admin vẫn thấy UI chọn người duyệt/"Theo vị trí" ở đây như không có gì đổi, tưởng vẫn có tác dụng,
+  // trong khi resolveWfConfig() (lib/workflowEngine.js, nhánh WHOLESALE) đã đổi sang tra hoàn toàn từ
+  // appData.itPriceWholesaleStoreMixedApprovalRules (cấu hình ở sub-tab "🏪 QT Giá Bán Buôn (Siêu Thị)").
+  // Banner này CHỈ hiện cho đúng 2 module STORE/ITPRICE_WHOLESALE (HO và các module khác vẫn đọc approvers
+  // ở đây như cũ).
   const mixedApprovalNoticeHTML = activeWfMod === 'OPERATION_ORDER_STORE'
     ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Danh sách người duyệt/"Theo vị trí" cấu hình ở các thẻ bên dưới <b>KHÔNG còn tác dụng</b> — người duyệt "Đặt Hàng Tại Siêu Thị" nay cấu hình ở sub-tab <b>"🏬 Quy Trình Đặt Hàng Siêu Thị"</b> (Hệ Thống). Ở đây chỉ còn "Chọn mẫu quy trình" (số bước theo mức giá trị) là có tác dụng thật.</div>`
-    : '';
+    : (activeWfMod === 'ITPRICE_WHOLESALE'
+      ? `<div class="bg-amber-50 border border-amber-300 rounded p-3 text-xs text-amber-900">⚠️ Danh sách người duyệt/"Theo vị trí" cấu hình ở các thẻ bên dưới <b>KHÔNG còn tác dụng</b> — người duyệt Phê Duyệt Giá Bán Buôn nay cấu hình ở sub-tab <b>"🏪 QT Giá Bán Buôn (Siêu Thị)"</b> (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao). Ở đây chỉ còn "Chọn mẫu quy trình" (số bước theo đúng Mức) là có tác dụng thật.</div>`
+      : '');
 
   const wfPickersToRender = [];
   const wfPositionPickersToRender = [];
