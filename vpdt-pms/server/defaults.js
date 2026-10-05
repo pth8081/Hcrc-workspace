@@ -197,6 +197,17 @@ const DEFAULTS = {
   employmentTypes: ['Chính thức', 'Thời vụ', 'Bán thời gian', 'Cộng tác viên'],
   workSchedules: ['Giờ hành chính', 'Ca sáng', 'Ca chiều', 'Ca tối', 'Theo ca xoay'],
 
+  // legalEntities/specialLaborStatuses/currentWorkStatusDetails/nationalIdIssuePlaces (10/2026, đối
+  // chiếu file Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường, theo yêu cầu người dùng) — 4 danh mục
+  // MỞ mới, cùng khuôn flat-array employmentTypes/workSchedules ở trên (admin tự thêm/bớt qua Quản Lý
+  // Danh Mục, GENERIC_SIMPLE_CATALOGS ở module-admin.js). Giá trị mặc định khớp đúng Set hằng tương ứng
+  // ở lib/employeeProfile.js (LEGAL_ENTITIES/CURRENT_WORK_STATUS_DETAILS/NATIONAL_ID_ISSUE_PLACES — các
+  // Set đó giờ CHỈ còn là fallback khi nơi gọi applyProfileEdit() không truyền catalogs thật qua options).
+  legalEntities: ['Công ty TNHH HCRC'],
+  specialLaborStatuses: [],
+  currentWorkStatusDetails: ['Hưu trí', 'HĐ thứ 2', 'Không lương', 'Nghỉ ốm dài ngày', 'Nghỉ thai sản', 'Khác'],
+  nationalIdIssuePlaces: ['Bộ Công An', 'Cục cảnh sát QLHC về TTXH', 'Cục cảnh sát ĐKQL cư trú và DLQG về dân cư'],
+
   // "Danh Mục" của ô Yêu Cầu Hỗ Trợ IT — TRƯỚC ĐÂY gõ cứng <option> trong index.html (IT_TICKET_CATEGORY_LABELS),
   // giờ chuyển thành dữ liệu để admin tự thêm/bớt/đổi nhãn tại màn Biểu Mẫu (CORE_FIELD_MANIFEST.IT_TICKET,
   // optionsKey 'itTicketCategories', optionsIsKeyLabel:true — GIỮ NGUYÊN đúng key hiện có để không mồ côi

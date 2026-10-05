@@ -1,8 +1,55 @@
 # Phiên bản hiện tại
 
-**25.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.7 (2026-10-05): Onboarding "Xác Nhận" → CONFIRMED + nền tảng 90 trường Hồ Sơ Nhân Sự (đợt 1/nhiều)
+
+**Phần B — "Hồ Sơ Onboarding" (Ảnh 2): thêm trạng thái CONFIRMED** (theo yêu cầu người dùng "vẫn lưu tại
+onboarding giống hồ sơ hủy nhưng trạng thái là nhận việc"). Trước đây bấm "Xác Nhận" lúc hồ sơ đang
+PENDING sẽ reset `onboardingQueueStatus` về `null` (hồ sơ "biến mất" khỏi tab hàng đợi). Từ bản này:
+- `onboardingQueueStatus` có thêm giá trị `'CONFIRMED'` — PATCH `/api/hr-profile/by-code/:employeeCode`
+  lúc đang PENDING chuyển thẳng sang CONFIRMED + `status='ACTIVE'` NGAY (không chờ
+  `applyProcessCompletion()`, hàm đó vẫn chạy sau, vô hại/idempotent).
+- Hồ sơ CONFIRMED hiện ở CẢ 2 nơi: "🕐 Hồ Sơ Onboarding" (phục vụ báo cáo "ai đã nhận việc qua đúng quy
+  trình", cùng cách CANCELLED được giữ lại) VÀ "Quản Lý Hồ Sơ" — 2 màn vẫn tách biệt, 1 bản ghi duy nhất.
+- Client (`module-hrprofile.js`): badge mới "✅ Đã nhận việc", nút "👤 Xem Hồ Sơ" cho hồ sơ CONFIRMED.
+- Test cập nhật: `test-hr-onboarding-queue.js` (khẳng định CONFIRMED thay cho null).
+
+**90 trường Hồ Sơ Nhân Sự — ĐỢT 1/NHIỀU (nền tảng data model + danh mục + UI nhập)**: theo yêu cầu người
+dùng, đối chiếu file Excel `Template_Quan_ly_ho_so_nhan_su.xlsx` (sheet `DATA_NHANSU_TONGHOP`, 90 cột).
+Sau khi rà soát 90 cột: ~30 cột thuộc dữ liệu lương/hợp đồng (đã có ở `laborContracts`, KHÔNG tạo field
+trùng lặp), ~10 cột đã có field tương ứng trong `employeeProfiles`, 3 cột dropdown khớp danh mục đã có
+(jobTitles/jobGrades, depts/stores/deptAbbrs, resignationReasons), còn lại **17 field THẬT SỰ MỚI**:
+- `lib/employeeProfile.js`: thêm 17 field vào `defaultProfile()` (mặc định null) +
+  `HR_ONLY_EDITABLE_FIELDS`/`PROFILE_FIELD_LABELS`/`SENSITIVE_FIELDS` (6/17 field nhạy cảm —
+  emergencyContactAddress/specialLaborStatus/currentWorkStatusDetail*/hrNote — mặc định ẨN khỏi quản lý
+  trực tiếp/chính chủ). `applyProfileEdit()` thêm case validate: enum cho `legalEntity`/
+  `specialLaborStatus`/`currentWorkStatusDetail` (đối chiếu danh mục, có fallback Set khi caller không
+  truyền `options.*`); 7 field "ngày" thuần (`currentWorkStatusFrom/To`, `joinDateAtPredecessorUnit`,
+  `joinDateAtHcrc`, `resignationNoticeDate/ExpectedDate`, `tenureBaseDate`); `careerHistoryNote`/`hrNote`
+  giới hạn 2000 ký tự (dài hơn mặc định 300). **`nationalIdIssuePlace` CHUYỂN từ ô gõ tự do sang enum**
+  đối chiếu danh mục (cùng cơ chế) — áp dụng ĐỒNG BỘ ở cả Hồ Sơ Nhân Sự VÀ form Onboarding (xem dưới).
+- 4 danh mục MỞ mới (`defaults.js` + `routes/data.js` ADMIN_ONLY_KEYS): `legalEntities`,
+  `specialLaborStatuses`, `currentWorkStatusDetails`, `nationalIdIssuePlaces` — đăng ký đủ cả
+  `GENERIC_SIMPLE_CATALOGS`/`SIMPLE_CATALOG_EXCEL_CONFIG`/`SIMPLE_CATALOG_BULK_CONFIG` (`module-admin.js`/
+  `core.js`) + panel CRUD mới trong Hệ Thống → Quản Trị → 🗂️ Quản Lý Danh Mục (`systemSection.html`,
+  dùng ĐÚNG mẫu `data-catalog-key` đã vá ở v25.6 — KHÔNG lặp lại lỗi `data-arg0` trên `data-op-submit`).
+- UI nhập 17 field mới trong màn Hồ Sơ Nhân Sự (`module-hrprofile.js::renderHrpfProfileForm()`), nhóm
+  theo đúng khu vực hành chính/nhạy cảm hiện có — dropdown cho field enum, input/textarea cho field tự do.
+- **Form Onboarding** (`hrLifecycleSection.html`): ô "Nơi Cấp CCCD" chuyển từ `<input>` tự do sang
+  `<select>` nguồn `DB.nationalIdIssuePlaces` (đồng bộ validate với Hồ Sơ Nhân Sự) —
+  `routes/create.js` truyền thêm `appData.nationalIdIssuePlaces` vào `applyProfileEdit()`.
+- Test mới `tests/test-hr-profile-90field-catalogs.js` (38 kịch bản: defaultProfile/metadata/4 enum mới/
+  7 field ngày/2 field ghi chú dài/11 field tự do). Cập nhật 2 test cũ bị ảnh hưởng bởi việc chuyển
+  `nationalIdIssuePlace` sang enum (`test-hr-onboarding-excel-fields.js`). Chạy lại toàn bộ test HR/
+  Onboarding/Labor Contract liên quan (108 kịch bản) — không regression.
+
+**CÒN LẠI (đợt sau, CHƯA xong trong bản này — nêu rõ để không hiểu nhầm "90 trường đã xong")**: khối
+hiển thị READ-ONLY ~30 cột hợp đồng/lương trên màn Hồ Sơ (đã xác nhận thiết kế: chỉ xem, sửa thì bấm sang
+Hợp Đồng Lao Động) + tính năng Tải Mẫu/Nhập/Xuất Excel GỘP 90 cột (auto-fill field trùng với hồ sơ/hợp
+đồng hiện có, field không trùng để lại lịch sử) + cập nhật `Huong-dan-nghiep-vu.md`.
 
 ## v25.6 (2026-10-05): Vá lỗi "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không thêm được" (data-op-submit bỏ qua data-arg0)
 

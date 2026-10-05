@@ -429,7 +429,14 @@ router.post('/:module', async (req, res) => {
           employeeProfile.applyProfileEdit(
             arr[idx], onboardingProfileEdits, Object.keys(onboardingProfileEdits),
             freshUser.username, freshUser.name,
-            { employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules }
+            {
+              employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
+              // nationalIdIssuePlaces (10/2026, mẫu Excel 90 trường) — form Onboarding (hrpOnbNationalIdIssuePlace)
+              // ĐÃ chuyển sang <select> nguồn ĐÚNG danh mục này (xem hrLifecycleSection.html/core.js
+              // populateDropdowns()), nên luôn khớp — truyền vào để applyProfileEdit() đối chiếu ĐÚNG
+              // danh mục thật (không rơi về NATIONAL_ID_ISSUE_PLACES fallback cứng).
+              nationalIdIssuePlaces: appData.nationalIdIssuePlaces
+            }
           );
         }
         // Học vấn (Trình độ/Trường/Chuyên ngành) — tạo dòng ĐẦU TIÊN của education[] nếu form Onboarding

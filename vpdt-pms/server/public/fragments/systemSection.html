@@ -1155,6 +1155,69 @@
         </div>
       </details>
 
+      <!-- 4 danh mục MỚI (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — cùng khuôn
+           3 khối Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật ngay trên (saveGenericSimpleCatalogEntry +
+           data-catalog-key, KHÔNG dùng data-arg0 trên submit — xem chú thích lỗi v25.6 ở module-admin.js). -->
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🏢 Danh Mục Đơn Vị (Pháp Nhân)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Đơn vị (pháp nhân)" ở Hồ Sơ Nhân Sự.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="legalEntities" class="flex gap-2">
+            <input id="txtLegalEntityName" placeholder="Tên đơn vị mới, VD: Công ty TNHH HCRC..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="legalEntityList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_legalEntities"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🧑‍🦽 Danh Mục Đối Tượng Lao Động Đặc Biệt</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Đối tượng lao động đặc biệt" ở Hồ Sơ Nhân Sự — chỉ là danh sách gợi ý, vẫn gõ tự do được.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="specialLaborStatuses" class="flex gap-2">
+            <input id="txtSpecialLaborStatusName" placeholder="Tên đối tượng mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="specialLaborStatusList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_specialLaborStatuses"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🩺 Danh Mục Tình Trạng Làm Việc Hiện Tại</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Tình trạng làm việc hiện tại (chi tiết)" ở Hồ Sơ Nhân Sự (VD Hưu trí, Nghỉ thai sản...).</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="currentWorkStatusDetails" class="flex gap-2">
+            <input id="txtCurrentWorkStatusDetailName" placeholder="Tên tình trạng mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="currentWorkStatusDetailList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_currentWorkStatusDetails"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🪪 Danh Mục Nơi Cấp CCCD/CMND</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Nơi cấp CCCD/CMND" ở Hồ Sơ Nhân Sự.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="nationalIdIssuePlaces" class="flex gap-2">
+            <input id="txtNationalIdIssuePlaceName" placeholder="Tên nơi cấp mới..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="nationalIdIssuePlaceList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_nationalIdIssuePlaces"></div>
+        </div>
+      </details>
+
       <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
         <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🏪 Danh Sách Chức Danh (Siêu Thị)</span></summary>
         <div class="p-0 pt-2 space-y-3">

@@ -7,8 +7,10 @@
 //   - "Hủy" (POST .../onboarding-queue/cancel): bắt buộc lý do, chuyển CANCELLED — hồ sơ VẪN Ở LẠI hàng
 //     đợi (không xoá) + cascade huỷ hrProcesses ONBOARDING liên kết (nếu còn IN_PROGRESS).
 //   - "Xác Nhận" (PATCH /api/hr-profile/by-code/:code lúc đang PENDING): người CHỈ có hrOnboardingManage
-//     (không có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn lưu được — sau khi lưu, onboardingQueueStatus->null,
-//     hồ sơ "tốt nghiệp" sang Quản Lý Hồ Sơ. Người này KHÔNG sửa được hồ sơ ngoài hàng đợi.
+//     (không có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn lưu được — sau khi lưu, onboardingQueueStatus->
+//     'CONFIRMED' (KHÁC trước đây là null) + status->'ACTIVE' ngay, hồ sơ lọt vào Quản Lý Hồ Sơ ĐỒNG
+//     THỜI vẫn GIỮ LẠI ở hàng đợi Onboarding (cập nhật 10/2026, theo yêu cầu người dùng, phục vụ báo
+//     cáo "ai đã nhận việc qua đúng quy trình"). Người này KHÔNG sửa được hồ sơ ngoài hàng đợi PENDING.
 //   - Sort: GET .../onboarding-queue luôn trả MỚI TẠO TRƯỚC (createdAt giảm dần).
 //
 // Chạy: node server/tests/test-hr-onboarding-queue.js
@@ -174,24 +176,31 @@ async function main() {
       assertEqual(queue.body.profiles.some(p => p.employeeCode === 'NV001' && p.onboardingQueueStatus === 'CANCELLED'), true, 'Vẫn hiện ở hàng đợi với trạng thái Đã hủy');
     });
 
-    await run.run('"Xác Nhận": hrOnboardingManage-only SỬA + LƯU được hồ sơ PENDING -> tốt nghiệp khỏi hàng đợi', async () => {
+    await run.run('"Xác Nhận": hrOnboardingManage-only SỬA + LƯU được hồ sơ PENDING -> CONFIRMED (đã nhận việc), VẪN giữ ở hàng đợi + hiện thêm ở Quản Lý Hồ Sơ', async () => {
+      // CẬP NHẬT (10/2026, theo yêu cầu người dùng): "Xác Nhận" KHÔNG còn reset onboardingQueueStatus về
+      // null như trước — chuyển sang 'CONFIRMED' (đã nhận việc) + status='ACTIVE' NGAY, hồ sơ VẪN hiện ở
+      // tab "🕐 Hồ Sơ Onboarding" (giống hồ sơ CANCELLED, phục vụ báo cáo) ĐỒNG THỜI lọt vào "Quản Lý Hồ
+      // Sơ" — 2 màn tách biệt nhưng cùng 1 bản ghi duy nhất. Xem PATCH /by-code/:employeeCode (routes/
+      // employeeProfile.js) + chú thích onboardingQueueStatus ở defaultProfile() (lib/employeeProfile.js).
       resetAppData();
       seedQueuedProfile('NV001', 1);
       const res = await api('PATCH', '/api/hr-profile/by-code/NV001', { dateOfBirth: '1995-05-05' }, HR_ONBOARD);
       assertEqual(res.status, 200, JSON.stringify(res.body));
-      assertEqual(res.body.profile.onboardingQueueStatus, null, 'Lưu thành công lúc PENDING -> tốt nghiệp (null)');
+      assertEqual(res.body.profile.onboardingQueueStatus, 'CONFIRMED', 'Lưu thành công lúc PENDING -> CONFIRMED (đã nhận việc)');
+      assertEqual(res.body.profile.status, 'ACTIVE', 'status chuyển ACTIVE ngay lúc Xác Nhận');
       assertEqual(res.body.profile.dateOfBirth, '1995-05-05', 'Field vừa sửa được lưu đúng');
 
-      // Giờ đã tốt nghiệp -> hiện ở Quản Lý Hồ Sơ (HR_MGR xem), KHÔNG còn ở hàng đợi.
+      // Hồ sơ CONFIRMED hiện ở CẢ 2 nơi: Quản Lý Hồ Sơ (đã "tốt nghiệp" khỏi trạng thái DRAFT/PENDING)
+      // VÀ vẫn ở hàng đợi Onboarding (để báo cáo ai đã nhận việc qua đúng quy trình này).
       const managed = await api('GET', '/api/hr-profile', undefined, HR_MGR);
       assertEqual(managed.body.profiles.some(p => p.employeeCode === 'NV001'), true, 'Đã hiện ở Quản Lý Hồ Sơ');
       const queue = await api('GET', '/api/hr-profile/onboarding-queue', undefined, HR_ONBOARD);
-      assertEqual(queue.body.profiles.length, 0, 'Không còn ở hàng đợi');
+      assertEqual(queue.body.profiles.some(p => p.employeeCode === 'NV001' && p.onboardingQueueStatus === 'CONFIRMED'), true, 'Vẫn hiện ở hàng đợi với trạng thái Đã nhận việc');
     });
 
-    await run.run('hrOnboardingManage-only KHÔNG sửa được hồ sơ đã tốt nghiệp/hồ sơ thường (không PENDING)', async () => {
+    await run.run('hrOnboardingManage-only KHÔNG sửa được hồ sơ đã CONFIRMED/hồ sơ thường (không còn PENDING)', async () => {
       resetAppData();
-      seedQueuedProfile('NV001', 1, { onboardingQueueStatus: null, status: 'ACTIVE' }); // đã tốt nghiệp từ trước
+      seedQueuedProfile('NV001', 1, { onboardingQueueStatus: 'CONFIRMED', status: 'ACTIVE' }); // đã Xác Nhận từ trước
       const res = await api('PATCH', '/api/hr-profile/by-code/NV001', { dateOfBirth: '1995-05-05' }, HR_ONBOARD);
       assertEqual(res.status, 403, 'Không phải PENDING -> vẫn cần hrProfileManage/hrProfileEdit như bình thường');
     });

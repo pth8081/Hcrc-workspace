@@ -148,9 +148,14 @@ async function main() {
 
     await test('gender/dateOfBirth/permanentAddress/nationalIdIssueDate/nationalIdIssuePlace/employmentType/workSchedule đủ nhập -> ghi đúng vào hồ sơ', async () => {
       resetAppData(); resetStore();
+      // nationalIdIssuePlace (10/2026, mẫu Excel 90 trường) — CHUYỂN từ ô gõ tự do sang <select> đối
+      // chiếu danh mục (xem case 'nationalIdIssuePlace' ở applyProfileEdit() + routes/create.js truyền
+      // appData.nationalIdIssuePlaces) — đổi giá trị test sang 1 giá trị có trong NATIONAL_ID_ISSUE_PLACES
+      // (fallback mặc định, APP_DATA stub ở trên KHÔNG có key này) thay cho chuỗi tự do "CA Hà Nội" trước
+      // đây — hành vi mới ĐÚNG như người dùng yêu cầu, không phải regression.
       const r = await call('POST', '/api/create/hrProcesses', onboardingPayload({
         gender: 'Nữ', dateOfBirth: '1998-05-20', permanentAddress: 'Số 1, Hà Nội',
-        nationalIdIssueDate: '2015-01-10', nationalIdIssuePlace: 'CA Hà Nội', employmentType: 'Chính thức',
+        nationalIdIssueDate: '2015-01-10', nationalIdIssuePlace: 'Bộ Công An', employmentType: 'Chính thức',
         workSchedule: 'Giờ hành chính'
       }));
       assert.strictEqual(r.status, 200, JSON.stringify(r.json));
@@ -160,7 +165,7 @@ async function main() {
       assert.strictEqual(profile.dateOfBirth, '1998-05-20');
       assert.strictEqual(profile.permanentAddress, 'Số 1, Hà Nội');
       assert.strictEqual(profile.nationalIdIssueDate, '2015-01-10');
-      assert.strictEqual(profile.nationalIdIssuePlace, 'CA Hà Nội');
+      assert.strictEqual(profile.nationalIdIssuePlace, 'Bộ Công An');
       assert.strictEqual(profile.employmentType, 'Chính thức');
       assert.strictEqual(profile.workSchedule, 'Giờ hành chính');
     });
@@ -306,14 +311,19 @@ async function main() {
 
   await test('createManualProfile(): nhận employmentType/workSchedule + nationalIdIssueDate/nationalIdIssuePlace hợp lệ', () => {
     const list = [];
+    // nationalIdIssuePlace (10/2026, mẫu Excel 90 trường "Template_Quan_ly_ho_so_nhan_su") — CHUYỂN từ ô
+    // gõ tự do sang enum đối chiếu danh mục (xem case 'nationalIdIssuePlace' ở applyProfileEdit()), nên
+    // test này đổi sang 1 giá trị có trong NATIONAL_ID_ISSUE_PLACES (fallback mặc định, không truyền
+    // options.nationalIdIssuePlaces) thay cho chuỗi tự do "CA TP.HCM" trước đây — hành vi mới ĐÚNG như
+    // người dùng yêu cầu, không phải regression.
     const created = employeeProfile.createManualProfile(list, {
       employeeCode: 'BL9001', employmentType: 'Cộng tác viên', workSchedule: 'Ca sáng',
-      nationalIdIssueDate: '2020-01-01', nationalIdIssuePlace: 'CA TP.HCM'
+      nationalIdIssueDate: '2020-01-01', nationalIdIssuePlace: 'Bộ Công An'
     }, 'admin', 'Quản Trị');
     assert.strictEqual(created.employmentType, 'Cộng tác viên');
     assert.strictEqual(created.workSchedule, 'Ca sáng');
     assert.strictEqual(created.nationalIdIssueDate, '2020-01-01');
-    assert.strictEqual(created.nationalIdIssuePlace, 'CA TP.HCM');
+    assert.strictEqual(created.nationalIdIssuePlace, 'Bộ Công An');
   });
 
   await test('createManualProfile(): truyền options.employmentTypes/workSchedules -> đối chiếu ĐÚNG danh mục truyền vào (không rơi về fallback mặc định)', () => {

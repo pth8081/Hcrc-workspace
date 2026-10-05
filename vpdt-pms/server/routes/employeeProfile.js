@@ -229,8 +229,11 @@ router.get('/', async (req, res) => {
     if (!employeeProfile.canFullViewProfiles(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền xem danh sách Hồ Sơ Nhân Sự' });
     const list = (await getAppDataValue('employeeProfiles')) || [];
     // Ảnh 2 (9/2026): hồ sơ đang ở "hàng đợi" (PENDING chờ HR Xác Nhận, hoặc CANCELLED đã Hủy) KHÔNG hiện
-    // ở đây nữa — chỉ hiện ở tab riêng "🕐 Hồ Sơ Onboarding" (GET .../onboarding-queue bên dưới), cho tới
-    // khi HR "Xác Nhận" (PATCH .../by-code/:code graduate khỏi hàng đợi, xem chú thích tại route đó).
+    // ở đây — chỉ hiện ở tab riêng "🕐 Hồ Sơ Onboarding" (GET .../onboarding-queue bên dưới). Hồ sơ
+    // CONFIRMED (10/2026 — đã "Xác Nhận", coi như "đã nhận việc", xem PATCH .../by-code/:code) LỌT QUA
+    // filter này một cách tự nhiên (không phải PENDING/CANCELLED) nên tự hiện ở đây — đúng yêu cầu người
+    // dùng "xác nhận thì chuyển vào quản lý hồ sơ" — ĐỒNG THỜI vẫn hiện ở tab hàng đợi Onboarding (không
+    // loại trừ lẫn nhau, xem GET .../onboarding-queue) để phục vụ báo cáo đầy đủ tại đúng chỗ đó.
     const managed = list.filter(p => p.onboardingQueueStatus !== 'PENDING' && p.onboardingQueueStatus !== 'CANCELLED');
     res.json({ profiles: managed.map(stripForList) });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile'); }
@@ -239,15 +242,19 @@ router.get('/', async (req, res) => {
 // GET /api/hr-profile/onboarding-queue — Ảnh 2 (9/2026, theo yêu cầu người dùng): "hàng đợi" hồ sơ nháp
 // vừa đặt chỗ lúc tạo Onboarding (PENDING, chưa được HR mở ra "Xác Nhận"/cập nhật tiếp) + hồ sơ đã bị
 // "Hủy" (CANCELLED, coi như KHÔNG tuyển ứng viên này — GIỮ LẠI, không xoá, để phục vụ báo cáo "không nhận
-// việc" sau này). Luôn sắp xếp MỚI TẠO TRƯỚC (createdAt giảm dần, đúng yêu cầu người dùng). Gác RIÊNG
-// hrOnboardingManage — KHÔNG dùng hrProfileManage/hrProfileFullView (đã xác nhận với người dùng: tab mới
-// này tách biệt hẳn khỏi quyền Hồ Sơ Nhân Sự, dùng đúng quyền quản lý Onboarding đã có sẵn).
+// việc" sau này) + hồ sơ đã "Xác Nhận" (CONFIRMED, 10/2026 theo yêu cầu người dùng — coi như "đã nhận
+// việc", xem chú thích onboardingQueueStatus ở lib/employeeProfile.js::defaultProfile() — GIỮ LẠI ở đây
+// CÙNG LÚC với việc đã lọt vào "Quản Lý Hồ Sơ" (GET / ở trên, filter != PENDING/CANCELLED nên CONFIRMED
+// tự động qua), phục vụ báo cáo đầy đủ 3 trạng thái hàng đợi tại đúng 1 nơi). Luôn sắp xếp MỚI TẠO TRƯỚC
+// (createdAt giảm dần, đúng yêu cầu người dùng). Gác RIÊNG hrOnboardingManage — KHÔNG dùng
+// hrProfileManage/hrProfileFullView (đã xác nhận với người dùng: tab mới này tách biệt hẳn khỏi quyền Hồ
+// Sơ Nhân Sự, dùng đúng quyền quản lý Onboarding đã có sẵn).
 router.get('/onboarding-queue', async (req, res) => {
   try {
     if (!req.freshUser?.perms?.hrOnboardingManage) return res.status(403).json({ error: 'Bạn không có quyền quản lý Onboarding' });
     const list = (await getAppDataValue('employeeProfiles')) || [];
     const queue = list
-      .filter(p => p.onboardingQueueStatus === 'PENDING' || p.onboardingQueueStatus === 'CANCELLED')
+      .filter(p => p.onboardingQueueStatus === 'PENDING' || p.onboardingQueueStatus === 'CANCELLED' || p.onboardingQueueStatus === 'CONFIRMED')
       .map(stripForList)
       .sort((a, b) => vnTime(b.createdAt) - vnTime(a.createdAt));
     res.json({ profiles: queue });
@@ -579,11 +586,23 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       }
       const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
       employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name, {
-        employmentTypes: catalogAppData.employmentTypes, workSchedules: catalogAppData.workSchedules
+        employmentTypes: catalogAppData.employmentTypes, workSchedules: catalogAppData.workSchedules,
+        // 4 catalog MỚI (10/2026, mẫu Excel 90 trường) — xem chú thích case 'legalEntity'/
+        // 'specialLaborStatus'/'currentWorkStatusDetail'/'nationalIdIssuePlace' ở applyProfileEdit().
+        legalEntities: catalogAppData.legalEntities, specialLaborStatuses: catalogAppData.specialLaborStatuses,
+        currentWorkStatusDetails: catalogAppData.currentWorkStatusDetails, nationalIdIssuePlaces: catalogAppData.nationalIdIssuePlaces
       });
-      // "Xác Nhận" (Ảnh 2): lưu thành công lúc đang PENDING = tốt nghiệp khỏi hàng đợi Onboarding, chuyển
-      // hẳn sang "Quản Lý Hồ Sơ" — chỉ đổi cờ hàng đợi, KHÔNG đụng tới profile.status.
-      if (profile.onboardingQueueStatus === 'PENDING') profile.onboardingQueueStatus = null;
+      // "Xác Nhận" (Ảnh 2, 10/2026 — cập nhật theo yêu cầu người dùng): lưu thành công lúc đang PENDING =
+      // coi như ứng viên ĐÃ NHẬN VIỆC — chuyển onboardingQueueStatus sang CONFIRMED (KHÔNG còn reset về
+      // null như trước) để vẫn giữ lại ở tab "🕐 Hồ Sơ Onboarding" phục vụ báo cáo (cùng cách CANCELLED
+      // được giữ lại khi "Hủy"), ĐỒNG THỜI ghi luôn profile.status = 'ACTIVE' ngay lúc này — không chờ
+      // quy trình checklist Onboarding (hrProcesses) hoàn tất mới chuyển như applyProcessCompletion() vẫn
+      // làm (hàm đó vẫn tự chạy sau, gán lại ACTIVE lần nữa — vô hại, idempotent). Hồ sơ vẫn graduate khỏi
+      // hàng đợi PENDING/CANCELLED để hiện ở "Quản Lý Hồ Sơ" (xem GET / ở trên — CONFIRMED lọt qua filter).
+      if (profile.onboardingQueueStatus === 'PENDING') {
+        profile.onboardingQueueStatus = 'CONFIRMED';
+        profile.status = 'ACTIVE';
+      }
       updated = profile;
       return list;
     });
