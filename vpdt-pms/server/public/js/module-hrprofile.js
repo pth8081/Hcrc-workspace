@@ -409,6 +409,30 @@ function renderHrpfOnboardingQueueList() {
     </tr>`;
   }).join('');
 }
+// exportHrpfOnboardingQueueExcel() (10/2026, theo yêu cầu người dùng — tab "🕐 Hồ Sơ Onboarding" CHỈ cần
+// Xuất Excel, không cần Tải Mẫu/Nhập, khác hẳn "Quản Lý Hồ Sơ" đã có đủ 3 nút) — xuất ĐÚNG danh sách
+// đang hiện trên màn (_hrpfOnboardingQueueList, đã nạp qua loadHrpfOnboardingQueue()). Dùng ĐÚNG route
+// dùng chung POST /api/admin/export-xlsx qua downloadXlsxFromServer() (không viết route riêng, không
+// đọc thêm gì từ CSDL — cùng khuôn exportBudgetLineExcel()/exportHrProcessExcel()).
+function exportHrpfOnboardingQueueExcel() {
+  if (!_hrpfOnboardingQueueList.length) return alert('Chưa có hồ sơ nào trong hàng đợi Onboarding để xuất.');
+  const columns = [
+    { header: 'Mã Nhân Viên', key: 'employeeCode', width: 16 }, { header: 'Họ Và Tên', key: 'fullName', width: 24 },
+    { header: 'Phòng Ban', key: 'dept', width: 20 }, { header: 'Chức Danh', key: 'jobTitle', width: 20 },
+    { header: 'Ngày Tạo', key: 'createdAt', width: 18 }, { header: 'Trạng Thái', key: 'statusLabel', width: 16 },
+    { header: 'Lý Do Hủy', key: 'cancelReason', width: 26 }
+  ];
+  const STATUS_LABELS = { PENDING: 'Chờ xác nhận', CANCELLED: 'Đã hủy', CONFIRMED: 'Đã nhận việc' };
+  const rows = _hrpfOnboardingQueueList.map(p => {
+    const idn = hrpfIdentitySnapshot(p);
+    return {
+      employeeCode: p.employeeCode, fullName: idn.fullName || '', dept: idn.dept || '', jobTitle: idn.jobTitle || '',
+      createdAt: p.createdAt || '', statusLabel: STATUS_LABELS[p.onboardingQueueStatus] || p.onboardingQueueStatus,
+      cancelReason: p.onboardingQueueCancelReason || ''
+    };
+  });
+  downloadXlsxFromServer('Ho_So_Onboarding.xlsx', 'Hồ Sơ Onboarding', columns, rows);
+}
 async function hrpfCancelOnboardingQueue(employeeCode) {
   const reason = prompt('Lý do không tuyển ứng viên này (hồ sơ sẽ ở lại đây với trạng thái "Đã hủy"):');
   if (reason == null) return;
