@@ -3680,7 +3680,7 @@ const CREATE_MODULE_CONFIGS = {
     // chạy TRONG withLockedRecordForCollection('hrProcesses', ...) của caller nên vốn đã tuần tự.
     getLockKey: (payload) => `labor_contract_code:${String(payload?.employeeCode || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
-      const { canManageContracts, CONTRACT_TYPES, generateContractCode, ALLOWANCE_FIELDS, ALLOWANCE_FIELD_LABELS } = require('./laborContract');
+      const { canManageContracts, CONTRACT_TYPES, generateContractCode, ALLOWANCE_FIELDS, ALLOWANCE_FIELD_LABELS, INCOME_FIELDS, INCOME_FIELD_LABELS, PROBATION_SALARY_RATES } = require('./laborContract');
       const { findProfile } = require('./employeeProfile');
       if (!canManageContracts(user)) throw new CreateError(403, 'Bạn không có quyền tạo/quản lý hợp đồng lao động');
       if (!payload.employeeCode || !String(payload.employeeCode).trim()) throw new CreateError(400, 'Vui lòng nhập Mã Nhân Viên');
@@ -3726,6 +3726,18 @@ const CREATE_MODULE_CONFIGS = {
         const n = payload[f] === '' || payload[f] == null ? null : Number(payload[f]);
         if (n !== null && (!Number.isFinite(n) || n < 0)) throw new CreateError(400, `${ALLOWANCE_FIELD_LABELS[f]} không hợp lệ`);
         payload[f] = n;
+      }
+      // INCOME_FIELDS + probationSalaryRate (báo cáo rà soát mẫu Excel mới, 10/2026) — CÙNG khuôn
+      // validate như ALLOWANCE_FIELDS ở trên (xem lib/laborContract.js::INCOME_FIELDS).
+      for (const f of INCOME_FIELDS) {
+        const n = payload[f] === '' || payload[f] == null ? null : Number(payload[f]);
+        if (n !== null && (!Number.isFinite(n) || n < 0)) throw new CreateError(400, `${INCOME_FIELD_LABELS[f]} không hợp lệ`);
+        payload[f] = n;
+      }
+      {
+        const n = payload.probationSalaryRate === '' || payload.probationSalaryRate == null ? null : Number(payload.probationSalaryRate);
+        if (n !== null && !PROBATION_SALARY_RATES.has(n)) throw new CreateError(400, 'Tỷ lệ hưởng lương thử việc chỉ nhận 85 hoặc 100 (%)');
+        payload.probationSalaryRate = n;
       }
       payload.dept = payload.dept ? String(payload.dept).trim().slice(0, 100) : null;
       payload.hrProcessId = null; // tạo tay ngoài luồng Onboarding -> không gắn với quy trình nào

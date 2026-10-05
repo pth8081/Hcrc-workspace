@@ -283,6 +283,17 @@ const HRC_ALLOWANCE_FIELDS = [
 // Map field -> id ô sửa dùng chung cho khối DRAFT lẫn ACTIVE (saveHrContractEdit() đọc theo id này).
 const HRC_ALLOWANCE_EDIT_ID_PREFIX = 'hrcEditAllowance_';
 
+// HRC_INCOME_FIELDS (10/2026, báo cáo rà soát mẫu Excel mới) — 3 khoản thu nhập MỚI, CÙNG khuôn hiển
+// thị/sửa như HRC_ALLOWANCE_FIELDS ngay trên nhưng KHÁC NHÓM nghiệp vụ (không phải phụ cấp) — xem chú
+// thích INCOME_FIELDS ở lib/laborContract.js.
+const HRC_INCOME_FIELDS = [
+  ['socialInsuranceSalary', 'Mức lương đóng BHXH'],
+  ['productivityBonus', 'Thưởng HQCV/Lương Năng suất'],
+  ['otherIncome', 'Khoản khác']
+];
+const HRC_INCOME_EDIT_ID_PREFIX = 'hrcEditIncome_';
+const HRC_PROBATION_RATE_EDIT_ID = 'hrcEditProbationSalaryRate';
+
 function buildHrContractDetailHTML(c) {
   const fileRow = c.fileUrl
     ? `<a href="${attachmentDownloadUrl(c.fileUrl, null, c.fileName)}" target="_blank" class="text-teal-600 underline">📎 ${escapeHtml(c.fileName || 'Tệp hợp đồng')}</a>`
@@ -315,6 +326,17 @@ function buildHrContractDetailHTML(c) {
         ${allowanceRows.map(([f, label]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> ${formatMoneyDisplay(c[f])}đ</div>`).join('')}
       </div>
     </div>` : '';
+  // incomeRows/probationSalaryRate (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn allowanceRows
+  // ngay trên, hiển thị gộp khi có ít nhất 1 giá trị.
+  const incomeRows = HRC_INCOME_FIELDS.filter(([f]) => c[f] != null);
+  const incomeSummaryHTML = (incomeRows.length || c.probationSalaryRate != null) ? `
+    <div class="col-span-2 border-t pt-2 mt-1">
+      <div class="text-gray-500 text-[11px] mb-1">Thu nhập khác (tham khảo, không tính vào Lương):</div>
+      <div class="grid grid-cols-2 gap-1">
+        ${incomeRows.map(([f, label]) => `<div><span class="text-gray-500">${escapeHtml(label)}:</span> ${formatMoneyDisplay(c[f])}đ</div>`).join('')}
+        ${c.probationSalaryRate != null ? `<div><span class="text-gray-500">Tỷ lệ lương thử việc:</span> ${c.probationSalaryRate}%</div>` : ''}
+      </div>
+    </div>` : '';
   const allowancesEditHTML = `
     <details class="mt-2">
       <summary class="text-[11px] text-gray-600 cursor-pointer select-none">➕/✏️ Phụ Cấp / Hỗ Trợ (tuỳ chọn, tham khảo — không ảnh hưởng tính Lương)</summary>
@@ -324,6 +346,19 @@ function buildHrContractDetailHTML(c) {
             <label class="block text-[11px] text-gray-500 mb-0.5">${escapeHtml(label)} (đ)</label>
             <input type="text" inputmode="numeric" id="${HRC_ALLOWANCE_EDIT_ID_PREFIX}${f}" value="${c[f] != null ? formatMoneyDisplay(c[f]) : ''}" class="w-full border p-1.5 rounded money-input text-[12px]">
           </div>`).join('')}
+        ${HRC_INCOME_FIELDS.map(([f, label]) => `
+          <div>
+            <label class="block text-[11px] text-gray-500 mb-0.5">${escapeHtml(label)} (đ)</label>
+            <input type="text" inputmode="numeric" id="${HRC_INCOME_EDIT_ID_PREFIX}${f}" value="${c[f] != null ? formatMoneyDisplay(c[f]) : ''}" class="w-full border p-1.5 rounded money-input text-[12px]">
+          </div>`).join('')}
+        <div>
+          <label class="block text-[11px] text-gray-500 mb-0.5">Tỷ lệ lương thử việc</label>
+          <select id="${HRC_PROBATION_RATE_EDIT_ID}" class="w-full border p-1.5 rounded text-[12px] bg-white">
+            <option value="">-- Chưa rõ --</option>
+            <option value="85" ${c.probationSalaryRate === 85 ? 'selected' : ''}>85%</option>
+            <option value="100" ${c.probationSalaryRate === 100 ? 'selected' : ''}>100%</option>
+          </select>
+        </div>
       </div>
     </details>`;
 
@@ -349,6 +384,7 @@ function buildHrContractDetailHTML(c) {
       <div><span class="text-gray-500">Tệp:</span> ${fileRow}</div>
       ${c.status === 'TERMINATED' ? `<div class="col-span-2"><span class="text-gray-500">Lý do chấm dứt:</span> ${escapeHtml(c.terminationReason || '')} (${escapeHtml(c.terminationDate || '')})</div>` : ''}
       ${allowancesSummaryHTML}
+      ${incomeSummaryHTML}
     </div>
 
     ${c.status === 'DRAFT' ? `
@@ -429,6 +465,12 @@ async function saveHrContractEdit(id) {
     const el = document.getElementById(HRC_ALLOWANCE_EDIT_ID_PREFIX + f);
     if (el) payload[f] = getMoneyValue(el);
   }
+  for (const [f] of HRC_INCOME_FIELDS) {
+    const el = document.getElementById(HRC_INCOME_EDIT_ID_PREFIX + f);
+    if (el) payload[f] = getMoneyValue(el);
+  }
+  const probationRateEl = document.getElementById(HRC_PROBATION_RATE_EDIT_ID);
+  if (probationRateEl) payload.probationSalaryRate = probationRateEl.value === '' ? null : Number(probationRateEl.value);
   try {
     const result = await callRecordAction('laborContracts', id, 'edit', payload);
     hrcApplyUpdate(result.item);

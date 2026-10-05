@@ -100,7 +100,7 @@ const NEW_PLAIN_DATE_FIELDS = new Set([
 const SENSITIVE_FIELDS = [
   'dateOfBirth', 'gender', 'personalEmail',
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
-  'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName',
+  'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo', 'bankName', 'bankAccountHolderName',
   'socialInsuranceNo', 'taxCode', 'dependents', 'education',
   'nationality', 'maritalStatus', 'nationalIdIssueDate', 'nationalIdIssuePlace',
   // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
@@ -122,7 +122,9 @@ const SENSITIVE_FIELD_LABELS = {
   emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
-  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
+  // bankAccountHolderName (10/2026, báo cáo rà soát mẫu Excel mới — "Tên tài khoản Ngân hàng") — KHÁC
+  // bankName (tên NGÂN HÀNG, VD "Vietcombank"): đây là tên CHỦ THẺ (in hoa, không dấu).
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', bankAccountHolderName: 'Tên chủ tài khoản ngân hàng', socialInsuranceNo: 'Số BHXH',
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn',
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
@@ -263,6 +265,9 @@ function defaultProfile(employeeCode) {
     // + HR_ONLY_EDITABLE_FIELDS như emergencyContactName/Phone/Relationship.
     emergencyContactAddress: null,
     bankAccountNo: null, bankName: null,
+    // bankAccountHolderName (10/2026, báo cáo rà soát mẫu Excel mới — "Tên tài khoản Ngân hàng", KHÁC
+    // bankName là tên ngân hàng) — tự phục vụ như bankAccountNo/bankName ở trên.
+    bankAccountHolderName: null,
     socialInsuranceNo: null, taxCode: null,
     dependents: [], education: [],
     // disciplinaryActions (10/2026, theo yêu cầu người dùng, đối chiếu mục "Số kỷ luật" ở mẫu Excel
@@ -785,7 +790,7 @@ function resolveWiredReadOnlyFields(profile, allUsers, allHrProcesses) {
 const SELF_EDITABLE_FIELDS = [
   'dateOfBirth', 'gender', 'permanentAddress', 'currentAddress', 'personalEmail',
   'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship',
-  'bankAccountNo', 'bankName', 'dependents', 'education',
+  'bankAccountNo', 'bankName', 'bankAccountHolderName', 'dependents', 'education',
   'nationality', 'maritalStatus'
 ];
 // HR (hrProfileManage/admin) sửa thêm được cả trường định danh pháp lý + trường hành chính (GĐ1).
@@ -814,7 +819,7 @@ const PROFILE_FIELD_LABELS = {
   currentAddress: 'Địa chỉ hiện tại', personalEmail: 'Email cá nhân',
   emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
-  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', bankAccountHolderName: 'Tên chủ tài khoản ngân hàng',
   dependents: 'Người phụ thuộc', education: 'Học vấn',
   nationalId: 'CCCD/CMND', socialInsuranceNo: 'Số BHXH', taxCode: 'Mã số thuế',
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',

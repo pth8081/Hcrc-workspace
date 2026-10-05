@@ -34,7 +34,7 @@ const HRPF_SENSITIVE_FIELD_LABELS = {
   emergencyContactName: 'Người liên hệ khẩn cấp', emergencyContactPhone: 'SĐT liên hệ khẩn cấp',
   emergencyContactRelationship: 'Quan hệ người liên hệ khẩn cấp',
   nationalId: 'CCCD/CMND', permanentAddress: 'Địa chỉ thường trú', currentAddress: 'Địa chỉ hiện tại',
-  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', socialInsuranceNo: 'Số BHXH',
+  bankAccountNo: 'Số tài khoản ngân hàng', bankName: 'Tên ngân hàng', bankAccountHolderName: 'Tên chủ tài khoản ngân hàng', socialInsuranceNo: 'Số BHXH',
   taxCode: 'Mã số thuế', dependents: 'Người phụ thuộc', education: 'Học vấn'
 };
 const HRPF_STATUS_BADGES = {
@@ -293,7 +293,7 @@ function renderHrpfProfileReadOnly(profile, managerVisibleFields) {
     <p class="text-sm text-gray-800">${escapeHtml(val || '—')}</p></div>`;
   const SIMPLE_FIELDS = ['dateOfBirth', 'gender', 'personalEmail', 'emergencyContactName', 'emergencyContactPhone',
     'emergencyContactRelationship', 'nationalId', 'permanentAddress', 'currentAddress', 'bankAccountNo',
-    'bankName', 'socialInsuranceNo', 'taxCode'];
+    'bankName', 'bankAccountHolderName', 'socialInsuranceNo', 'taxCode'];
   const simpleFieldsHtml = SIMPLE_FIELDS.filter(f => visible.has(f))
     .map(f => roField(HRPF_SENSITIVE_FIELD_LABELS[f], profile[f])).join('');
   const dependentsHtml = !visible.has('dependents') ? '' : `<div class="mt-3 pt-3 border-t">
@@ -730,6 +730,7 @@ async function submitHrpfCreateProfile() {
     emergencyContactName: val('hrpfCF_emergencyContactName'), emergencyContactPhone: val('hrpfCF_emergencyContactPhone'),
     emergencyContactRelationship: val('hrpfCF_emergencyContactRelationship'),
     bankAccountNo: val('hrpfCF_bankAccountNo'), bankName: val('hrpfCF_bankName'),
+    bankAccountHolderName: val('hrpfCF_bankAccountHolderName'),
     socialInsuranceNo: val('hrpfCF_socialInsuranceNo'), taxCode: val('hrpfCF_taxCode')
   };
   try {
@@ -1204,6 +1205,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     ${canSee('emergencyContactRelationship') ? textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship) : ''}
     ${canSee('bankAccountNo') ? textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo) : ''}
     ${canSee('bankName') ? textField('Ngân hàng', 'hrpfF_bankName', profile.bankName) : ''}
+    ${canSee('bankAccountHolderName') ? textField('Tên chủ tài khoản ngân hàng', 'hrpfF_bankAccountHolderName', profile.bankAccountHolderName) : ''}
     ${canSee('nationality') ? textField('Quốc tịch', 'hrpfF_nationality', profile.nationality) : ''}
     ${canSee('maritalStatus') ? (isReadOnly ? roField('Tình trạng hôn nhân', profile.maritalStatus) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng hôn nhân</label>
       <select id="hrpfF_maritalStatus" class="w-full border p-1.5 rounded text-sm bg-white">
@@ -1449,6 +1451,7 @@ function collectHrpfProfileFormValues(scope) {
   if (document.getElementById('hrpfF_emergencyContactRelationship')) payload.emergencyContactRelationship = val('hrpfF_emergencyContactRelationship') || null;
   if (document.getElementById('hrpfF_bankAccountNo')) payload.bankAccountNo = val('hrpfF_bankAccountNo') || null;
   if (document.getElementById('hrpfF_bankName')) payload.bankName = val('hrpfF_bankName') || null;
+  if (document.getElementById('hrpfF_bankAccountHolderName')) payload.bankAccountHolderName = val('hrpfF_bankAccountHolderName') || null;
   if (document.getElementById('hrpfF_nationality')) payload.nationality = val('hrpfF_nationality') || null;
   if (document.getElementById('hrpfF_maritalStatus')) payload.maritalStatus = val('hrpfF_maritalStatus') || null;
   if (document.getElementById('hrpfDependentsRows')) {
