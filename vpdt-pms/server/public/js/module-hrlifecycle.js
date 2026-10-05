@@ -352,12 +352,51 @@ function hrProcessProgressLabel(item) {
   return `${done}/${total}`;
 }
 
-function renderHrProcessList() {
-  const container = document.getElementById('hrpListContainer');
-  if (!container) return;
+// getVisibleHrProcessList() — khoanh đúng bộ lọc loại/trạng thái đang chọn trên màn (dùng chung giữa
+// renderHrProcessList() và exportHrProcessExcel(), tránh lặp logic lọc lệch nhau).
+function getVisibleHrProcessList() {
   let visible = (DB.hrProcesses || []).slice().sort((a, b) => b.id - a.id);
   if (hrpListFilterType !== 'ALL') visible = visible.filter(p => p.processType === hrpListFilterType);
   if (hrpListFilterStatus !== 'ALL') visible = visible.filter(p => p.status === hrpListFilterStatus);
+  return visible;
+}
+
+// exportHrProcessExcel() (10/2026, theo yêu cầu người dùng — CHỈ xuất Excel, KHÔNG cần Tải Mẫu/Nhập cho
+// Onboarding/Offboarding) — xuất ĐÚNG danh sách đang hiện trên màn (tôn trọng bộ lọc Loại/Trạng Thái),
+// cùng khuôn exportBudgetLineExcel() (module-ngansach.js): client tự dựng columns/rows từ DB.hrProcesses
+// đã có sẵn (không đọc gì thêm, hrProcesses KHÔNG bị chặn khỏi GET /api/data như employeeProfiles/
+// laborContracts) rồi gọi route dùng chung POST /api/admin/export-xlsx qua downloadXlsxFromServer().
+function exportHrProcessExcel() {
+  const rows = getVisibleHrProcessList();
+  if (!rows.length) return alert('Chưa có quy trình nào để xuất (theo bộ lọc đang chọn).');
+  const columns = [
+    { header: 'Loại', key: 'type', width: 14 }, { header: 'Mã NV / Tài Khoản', key: 'code', width: 16 },
+    { header: 'Họ Và Tên', key: 'fullName', width: 24 }, { header: 'Phòng Ban', key: 'dept', width: 20 },
+    { header: 'Chức Danh', key: 'jobTitle', width: 20 }, { header: 'Vị Trí', key: 'posType', width: 10 },
+    { header: 'Email', key: 'email', width: 22 }, { header: 'SĐT', key: 'phone', width: 14 },
+    { header: 'Giai Đoạn', key: 'stage', width: 24 }, { header: 'Tiến Độ Checklist', key: 'progress', width: 14 },
+    { header: 'Ngày Bắt Đầu/Dự Kiến', key: 'startDate', width: 18 }, { header: 'Ngày Dự Kiến Kết Thúc', key: 'targetEndDate', width: 18 },
+    { header: 'Ngày Nghỉ Thực Tế', key: 'actualEndDate', width: 16 }, { header: 'Trạng Thái', key: 'status', width: 16 },
+    { header: 'Quản Lý Trực Tiếp', key: 'directManager', width: 20 }, { header: 'Ghi Chú', key: 'note', width: 26 }
+  ];
+  const statusLabel = (s) => (s === 'IN_PROGRESS' ? 'Đang thực hiện' : s === 'COMPLETED' ? 'Hoàn tất' : s === 'CANCELLED' ? 'Đã huỷ' : (s || ''));
+  const data = rows.map(p => ({
+    type: p.processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding',
+    code: p.processType === 'ONBOARDING' ? (p.employeeCode || '') : (p.employeeUsername || ''),
+    fullName: p.fullName || '', dept: p.employeeDept || '', jobTitle: p.employeeJobTitle || '',
+    posType: p.employeePosType || '', email: p.email || '', phone: p.phone || '',
+    stage: HR_STAGE_LABELS[p.stage] || p.stage || '', progress: hrProcessProgressLabel(p),
+    startDate: p.startDate || '', targetEndDate: p.targetEndDate || '', actualEndDate: p.actualEndDate || '',
+    status: statusLabel(p.status), directManager: p.directManagerName || p.directManagerUsername || '',
+    note: p.note || p.reason || p.resignationReason || ''
+  }));
+  downloadXlsxFromServer('Onboarding_Offboarding.xlsx', 'Onboarding-Offboarding', columns, data);
+}
+
+function renderHrProcessList() {
+  const container = document.getElementById('hrpListContainer');
+  if (!container) return;
+  const visible = getVisibleHrProcessList();
 
   if (visible.length === 0) {
     container.innerHTML = `<div class="text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có quy trình nào.</div>`;
