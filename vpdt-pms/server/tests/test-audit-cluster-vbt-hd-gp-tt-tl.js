@@ -454,6 +454,11 @@ async function main() {
     const rec = validateAndPrepareCreate('contracts', p, USER_A, [], APP_DATA, []);
     assert.strictEqual(rec.approvalStatus, 'PENDING');
   });
+  await run('11d. LỖI ĐÃ VÁ (10/2026, phản hồi người dùng kèm ảnh): "Nhập Hợp Đồng Đã Ký" KHÔNG còn tự đánh dấu paymentStatus = DA_THANH_TOAN ngay lúc nhập (đánh đồng "đã ký" với "đã thanh toán") — luôn bắt đầu CHUA_THANH_TOAN như hồ sơ thường, phải đi đúng luồng Lập Thanh Toán -> duyệt -> Xác Nhận mới chuyển Đã thanh toán', async () => {
+    const importer = { ...USER_A, perms: { ...USER_A.perms, contractImportSigned: true } };
+    const rec = validateAndPrepareCreate('contracts', importPayload(), importer, [], APP_DATA, []);
+    assert.strictEqual(rec.paymentStatus, 'CHUA_THANH_TOAN');
+  });
 
   // ================= 12. [TB] approvalLevel bị admin xoá -> fallback, không kẹt NHÁP =================
   const draftSub = (level) => ({
