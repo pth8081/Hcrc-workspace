@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**25.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.29 (2026-10-06): Vá gap "Ngành Hàng" không vào được Approval Hub + fix "tạo xong phải vào lại mới thấy" + giảm poll 20s→3s
+
+Theo phản hồi người dùng sau khi demo tính năng "Ngành Hàng" (v25.27):
+
+1. **Vá gap`canAccessApprovalHub()`/`canAccessVanHanhItPriceNav()`/`canAccessOperationModule()`**:
+   người CHỈ được gán duyệt qua Quy Trình Hỗn Hợp (itPriceWholesaleStoreMixedApprovalRules hoặc
+   operationOrderStoreMixedApprovalRules, PERSON/JOBTITLE mode — ví dụ gán theo Ngành Hàng) không có
+   mặt trong map `approvers{}` tĩnh (itPriceDeptWorkflows/itPriceTierWorkflows) nên bị 3 hàm gate này
+   chặn cứng khỏi Trung Tâm Phê Duyệt/sidebar Vận Hành/module Vận Hành — dù GET /api/data và
+   getMyPendingApprovals() đã trả đúng hồ sơ cho họ (chỉ riêng cổng vào tab bị bỏ sót). Thêm 2 hàm quét
+   blanket `isApproverInItPriceWholesaleMixedRules()`/`isApproverInOperationOrderStoreMixedRules()`.
+   Demo thật `demo-itprice-nganhhang-multi-approve.js` xác nhận cả 2 hành vi đã merge ở v25.27: (1) 1
+   người gán được nhiều ngành hàng, (2) 2 người khác nhau mỗi người 1 ngành hàng khác nhau → phải CẢ 2
+   cùng duyệt mới pass (đồng duyệt AND).
+2. **Rà soát toàn hệ thống "tạo xong phải thoát ra vào lại mới thấy"**: audit toàn bộ ~48 điểm
+   `callCreateAction()`. 47/48 đã đúng khuôn mẫu unshift+render ngay. 1 lỗi thật: `submitMhItPriceApproval()`
+   (module-muahang.js, Mua Hàng > Phê Duyệt Giá Bán Lẻ) quên gọi lại `renderMhItPriceList()` sau khi
+   tạo — đã vá + thêm assertion khoá lại hành vi.
+3. **Giảm `APPROVAL_POLL_INTERVAL_MS` từ 20s xuống 3s**: endpoint GET /api/approvals/pending-signature
+   dùng chung lớp cache 3s (`APPDATA_CACHE_TTL_MS`) với GET /api/data — poll nhanh hơn không tốn thêm
+   truy vấn CSDL, chỉ khớp lại đúng tốc độ dữ liệu thực sự mới nhất.
 
 ## v25.27 (2026-10-06): "Ngành Hàng" cho Phê Duyệt Giá Bán Buôn
 
