@@ -3011,12 +3011,23 @@ function clientMatchesPositionPair(user, pair) {
   if (user.jobTitle === pair.jobTitle && user.dept === pair.dept) return true;
   return (user.secondaryPositions || []).some(sp => sp.jobTitle === pair.jobTitle && sp.dept === pair.dept);
 }
+// LỖI ĐÃ VÁ (báo cáo người dùng 10/2026, "Phê Duyệt Giá Bán Lẻ đã cấu hình Theo Vị Trí nhưng khi xem vẫn
+// báo không ai phê duyệt"): sanitizeUsersPermsForViewer() (server, lib/recordViewScope.js) xoá hẳn field
+// `perms` của MỌI người khác trong DB.users với viewer KHÔNG PHẢI admin (chỉ giữ perms của chính người
+// gọi) — nên `u.perms?.canBeApprover` ở đây LUÔN undefined cho người khác từ góc nhìn 1 nhân viên thường,
+// khiến preview/Xem Trước Quy Trình của họ luôn thấy "chưa có người duyệt" dù cấu hình đúng (admin không
+// bị ảnh hưởng vì nhận nguyên perms). Server THẬT (lib/positionApprovers.js, gác quyền duyệt) không qua
+// sanitize này nên không phải lỗ hổng, chỉ là lỗi hiển thị — vẫn phải vá vì gây hiểu lầm nghiêm trọng.
+// Thêm 'canBeApprover' vào APPROVER_FLAG_KEYS (lib/recordViewScope.js) để có sẵn 1 danh sách username AN
+// TOÀN (DB.moduleApproverUsernames.canBeApprover — chỉ username, không lộ cả ma trận quyền) dùng làm lớp
+// dự phòng khi u.perms đã bị xoá.
 function resolvePositionApproverUsernamesClient(positionPairs) {
   const pairs = (positionPairs || []).filter(p => p && p.jobTitle);
   if (!pairs.length) return [];
+  const safeApproverUsernames = DB.moduleApproverUsernames?.canBeApprover || [];
   return (DB.users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => !!(u.perms?.canBeApprover || u.perms?.admin))
+    .filter(u => !!(u.perms?.canBeApprover || u.perms?.admin || safeApproverUsernames.includes(u.username)))
     .filter(u => pairs.some(p => clientMatchesPositionPair(u, p)))
     .map(u => u.username);
 }

@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**25.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.32 (2026-10-06): Vá "Theo vị trí" luôn báo "chưa có người duyệt" với người dùng thường
+
+Theo báo cáo người dùng: "Phê Duyệt Giá Bán Lẻ" đã cấu hình đúng "Theo vị trí" (cả ở Quy Trình & Phê
+Duyệt lẫn Áp Dụng Nhanh, admin xem preview đúng ra người duyệt) nhưng khi nhân viên bấm "🔍 Xem Trước
+Quy Trình" ở form tạo đề xuất vẫn báo "chưa có người duyệt" — kể cả sau khi tải lại trang/vào tab ẩn
+danh (loại hẳn khả năng do cache trình duyệt).
+
+- **Gốc lỗi**: `sanitizeUsersPermsForViewer()` (`lib/recordViewScope.js`) xoá hẳn field `perms` của MỌI
+  người khác trong `DB.users` với viewer KHÔNG PHẢI admin (đúng và cần thiết — tránh lộ ma trận quyền
+  của đồng nghiệp cho nhân viên thường). Nhưng `resolvePositionApproverUsernamesClient()` (client,
+  `core.js`, dùng cho MỌI preview "Theo vị trí" — Phê Duyệt Giá Bán Lẻ, Tài Liệu, Đăng Ký Xe, Mua Sắm/
+  Sửa Chữa VP, VPP, Ngân Sách, Quản Lý HĐ, Đặt Hàng Tại HO...) đọc THẲNG `u.perms?.canBeApprover` của
+  từng người để lọc — với viewer không phải admin, cờ đó LUÔN `undefined` cho người khác, nên preview
+  luôn kết luận "chưa có người duyệt" dù cấu hình/dữ liệu hoàn toàn đúng. Server (nơi gác quyền duyệt
+  THẬT, `lib/positionApprovers.js`) không qua lớp ẩn này nên không phải lỗ hổng, chỉ là lỗi hiển thị —
+  nhưng gây hiểu lầm nghiêm trọng, đúng cảm giác người dùng báo cáo ("chặn không tạo được order" dù thật
+  ra preview mới là cái báo sai, không phải chặn tạo thật).
+- **Vá**: thêm `'canBeApprover'` vào `APPROVER_FLAG_KEYS` (`lib/recordViewScope.js`) — tận dụng đúng cơ
+  chế AN TOÀN đã có sẵn (`computeModuleApproverUsernames()`, chỉ lộ danh sách username đang giữ 1 cờ,
+  không lộ cả ma trận quyền) để mọi viewer đều có `DB.moduleApproverUsernames.canBeApprover`. Đổi
+  `resolvePositionApproverUsernamesClient()` dùng danh sách này làm lớp dự phòng khi `u.perms` đã bị ẩn.
+
+Viết `tests/test-position-preview-sanitized-perms.js` mô phỏng ĐÚNG shape dữ liệu GET /api/data trả cho
+1 viewer không phải admin (xác nhận lỗi tái hiện khi chưa vá, hết lỗi sau khi vá).
 
 ## v25.31 (2026-10-06): Vá nút Duyệt/Từ Chối Tài Liệu Ký (Quản Lý HĐ) hiện cho sai người
 

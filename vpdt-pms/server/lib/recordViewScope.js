@@ -435,7 +435,22 @@ function filterTrainingDocumentProgressForUser(list, user) {
 // bước): Đặt Phòng Họp (đã có sẵn meetingApprove), Đồng Phục (uniformApprove + uniformManage — cùng
 // canApproveUniformClient() client), Công & Phép nghỉ phép/đổi ca (hrLeaveApprove/hrShiftSwapApprove +
 // hrAttendanceManage — cùng canApproveHacLeave()/canApproveHacSwap() client, xem module-conghop.js).
-const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage'];
+// LỖI ĐÃ VÁ (báo cáo người dùng 10/2026, "Phê Duyệt Giá Bán Lẻ đã cấu hình Theo Vị Trí nhưng khi xem vẫn
+// báo không ai phê duyệt"): 'canBeApprover' (cờ "Người duyệt" — điều kiện BẮT BUỘC thứ 2 của "Theo vị
+// trí"/POSITION mode, xem lib/positionApprovers.js::resolvePositionApprovers()) TRƯỚC ĐÂY không có mặt
+// trong danh sách này — resolvePositionApproverUsernamesClient() (client, core.js) đọc thẳng
+// u.perms?.canBeApprover của TỪNG người khác, nhưng sanitizeUsersPermsForViewer() ở trên đã xoá hẳn
+// field perms của MỌI người khác (chỉ giữ của chính người gọi) với viewer KHÔNG PHẢI admin — khiến
+// "Xem Trước Quy Trình"/màn cấu hình xem trước TỪ GÓC NHÌN người dùng thường LUÔN thấy "chưa có người
+// duyệt" cho MỌI bước "Theo vị trí" của MỌI module (itPriceApprovals RETAIL, docs, carRegs, officeReqs,
+// vppRegistrations, budgetEntries, contractManageWorkflow, paymentRequests, operationOrders/HO...), dù
+// cấu hình + dữ liệu hoàn toàn đúng (admin xem vẫn đúng vì isAdmin bỏ qua sanitize). Server (nơi GÁC
+// THẬT quyền duyệt) không bị ảnh hưởng — vẫn luôn đọc appData.users ĐẦY ĐỦ, không qua sanitize này — nên
+// đây CHỈ là lỗi hiển thị preview, không phải lỗ hổng, nhưng gây hiểu lầm nghiêm trọng cho người dùng
+// thường. Thêm vào đây để computeModuleApproverUsernames() tính sẵn 1 danh sách username AN TOÀN (chỉ
+// username, không phải toàn bộ perms) — client đọc qua DB.moduleApproverUsernames.canBeApprover thay vì
+// u.perms?.canBeApprover trực tiếp (xem resolvePositionApproverUsernamesClient(), core.js).
+const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage', 'canBeApprover'];
 function computeModuleApproverUsernames(users) {
   const result = {};
   APPROVER_FLAG_KEYS.forEach(flag => {
