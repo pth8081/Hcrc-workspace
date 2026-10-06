@@ -346,6 +346,323 @@ function renderNVSysAdvWorkflowOverview() {
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ 4 sub-tab độc lập của Nghiệp Vụ Nâng Cao" class="nv-flow-svg">${svg}</svg>`;
 }
 
+// ===================== Sơ đồ "Khâu/Bước + Ai Duyệt" (10/2026, theo yêu cầu người dùng) =====================
+// Dùng cho MỌI module đi qua engine phê duyệt dùng chung theo phòng ban (lib/workflowEngine.js
+// MODULE_CONFIGS: docs/submissions/carRegs/officeReqs/vppRegistrations/contracts/itPriceApprovals/
+// operationOrders/paymentRequests) — khác renderNVFlow() (1 chuỗi ngang đơn giản, gộp cả cụm nhiều bước
+// phòng ban thành 1 node "Duyệt" DUY NHẤT) ở chỗ vẽ RÕ RA từng KHÂU + từng BƯỚC con bên trong Khâu Phê
+// Duyệt, kèm khối chú giải "ai là người phê duyệt" (2 cơ chế 🧭 Theo vị trí / 👤 Theo người cụ thể) và
+// các nhánh rẽ (Từ chối/Yêu cầu bổ sung/...). KHÔNG hard-code tên người duyệt thật (mỗi phòng ban admin
+// tự cấu hình khác nhau) — chỉ vẽ ĐÚNG cơ chế chung, và luôn nhắc người đọc bấm "🔍 Xem Quy Trình" ở màn
+// tạo đề xuất để biết chính xác ai sẽ duyệt hồ sơ CỦA MÌNH theo đúng cấu hình hiện tại.
+function nvApprovalBox(x, y, w, h, opts) {
+  const { title, lines, stroke, fill, dashed, titleColor } = opts;
+  const dash = dashed ? ' stroke-dasharray="6,4"' : '';
+  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="2"${dash}/>`;
+  out += `<text x="${x + w / 2}" y="${y + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="${titleColor || stroke}">${escapeHtml(title)}</text>`;
+  const wrapped = (lines || []).flatMap(l => nvWrapLines(l, Math.floor((w - 16) / 5.6)));
+  wrapped.forEach((line, i) => {
+    out += `<text x="${x + w / 2}" y="${y + 40 + i * 14}" text-anchor="middle" font-size="10.5" fill="#374151">${escapeHtml(line)}</text>`;
+  });
+  return out;
+}
+
+function nvApprovalArrow(x1, y1, x2, y2, opts = {}) {
+  const color = opts.color || '#334155';
+  const dash = opts.dashed ? ' stroke-dasharray="5,4"' : '';
+  let out = `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="2"${dash} marker-end="url(#nva-arrow)"/>`;
+  if (opts.label) {
+    out += `<text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 8}" text-anchor="middle" font-size="9.5" fill="${color}" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(opts.label)}</text>`;
+  }
+  return out;
+}
+
+// spec = { ariaLabel, khau1:{title,lines}, khau2Title?, steps:[{title,lines}], khau3?:{title,lines}|null,
+//          khau4:{title,lines}, branches:[{title,lines,tone:'red'|'amber'}], legendLines?:[string] }
+function renderNVApprovalFlow(spec) {
+  const nodeW = 196, nodeH = 112, gapX = 22, marginX = 26;
+  const steps = spec.steps || [];
+  const hasKhau3 = !!spec.khau3;
+  const cols = 1 + steps.length + (hasKhau3 ? 1 : 0);
+  const totalW = marginX * 2 + cols * nodeW + (cols - 1) * gapX;
+  const row1Y = 54;
+  const colX = (i) => marginX + i * (nodeW + gapX);
+
+  const branches = spec.branches || [];
+  const legendLines = spec.legendLines || [
+    'Mỗi bước trong "Khâu 2" được admin cấu hình theo 1 trong 2 cách:',
+    '🧭 Theo vị trí — chọn 1 cặp "Chức danh + Phòng ban": hệ thống TỰ TRA ai đang giữ đúng chức danh đó trong đúng phòng ban đó tại THỜI ĐIỂM duyệt (đổi nhân sự không cần sửa lại cấu hình).',
+    '👤 Theo người cụ thể — admin chỉ đích danh 1 hoặc nhiều tài khoản; nếu chọn NHIỀU người, đây là ĐỒNG DUYỆT (tất cả phải duyệt xong mới qua bước kế tiếp).',
+    'Muốn biết CHÍNH XÁC ai sẽ duyệt hồ sơ của mình (theo đúng cấu hình hiện tại, không cần đoán hay hỏi admin): bấm nút "🔍 Xem Quy Trình" ngay tại màn tạo đề xuất.',
+  ];
+
+  let svg = `<defs>${nvArrowMarker('nva-arrow', '#334155')}</defs>`;
+
+  // Khâu 1
+  svg += nvApprovalBox(colX(0), row1Y, nodeW, nodeH, { title: spec.khau1.title, lines: spec.khau1.lines, stroke: '#3b82f6', fill: '#eff6ff' });
+  // Bước (Khâu 2)
+  steps.forEach((s, i) => {
+    const x = colX(1 + i);
+    svg += nvApprovalArrow(colX(i) + nodeW, row1Y + nodeH / 2, x, row1Y + nodeH / 2);
+    svg += nvApprovalBox(x, row1Y, nodeW, nodeH, { title: s.title, lines: s.lines, stroke: '#16a34a', fill: '#f0fdf4' });
+  });
+  // Khâu 3 (tuỳ chọn)
+  if (hasKhau3) {
+    const x = colX(1 + steps.length);
+    svg += nvApprovalArrow(colX(steps.length) + nodeW, row1Y + nodeH / 2, x, row1Y + nodeH / 2, { dashed: true, color: '#9ca3af', label: 'nếu có' });
+    svg += nvApprovalBox(x, row1Y, nodeW, nodeH, { title: spec.khau3.title, lines: spec.khau3.lines, stroke: '#a855f7', fill: '#fdf4ff', dashed: true });
+  }
+
+  // Khâu 4 — span dưới cụm các bước
+  const stepsStartX = colX(1), stepsEndX = colX(cols - 1) + nodeW;
+  const k4Y = row1Y + nodeH + 46, k4H = 78;
+  const k4W = Math.max(nodeW * 1.4, stepsEndX - stepsStartX);
+  const k4X = (stepsStartX + stepsEndX) / 2 - k4W / 2;
+  svg += nvApprovalArrow(colX(1) + nodeW / 2, row1Y + nodeH, k4X + k4W * 0.3, k4Y);
+  if (hasKhau3) svg += nvApprovalArrow(colX(cols - 1) + nodeW / 2, row1Y + nodeH, k4X + k4W * 0.7, k4Y, { dashed: true, color: '#9ca3af' });
+  svg += nvApprovalBox(k4X, k4Y, k4W, k4H, { title: spec.khau4.title, lines: spec.khau4.lines, stroke: '#059669', fill: '#ecfdf5' });
+
+  // Nhánh rẽ
+  let brY = k4Y + k4H + 38;
+  let legendY = brY;
+  if (branches.length) {
+    svg += `<text x="${totalW / 2}" y="${brY}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#64748b">⚠️ CÁC NHÁNH KHÁC CÓ THỂ XẢY RA</text>`;
+    const brTop = brY + 14, brH = 84;
+    const brW = (totalW - marginX * 2 - (branches.length - 1) * 20) / branches.length;
+    branches.forEach((b, i) => {
+      const x = marginX + i * (brW + 20);
+      const tone = b.tone === 'amber' ? { stroke: '#b45309', fill: '#fffbeb' } : { stroke: '#b91c1c', fill: '#fef2f2' };
+      svg += nvApprovalBox(x, brTop, brW, brH, { title: b.title, lines: b.lines, stroke: tone.stroke, fill: tone.fill });
+    });
+    legendY = brTop + brH + 30;
+  }
+
+  // Khối chú giải "ai duyệt"
+  const legH = 26 + legendLines.reduce((s, l) => s + nvWrapLines(l, Math.floor((totalW - 60) / 6.2)).length * 15 + 8, 0);
+  svg += `<rect x="${marginX}" y="${legendY}" width="${totalW - marginX * 2}" height="${legH}" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>`;
+  svg += `<text x="${marginX + 18}" y="${legendY + 22}" font-size="12.5" font-weight="700" fill="#0f172a">🔎 Xem Quy Trình — ai là người phê duyệt ở từng bước?</text>`;
+  let ty = legendY + 42;
+  legendLines.forEach((l) => {
+    const wrapped = nvWrapLines(l, Math.floor((totalW - 60) / 6.2));
+    wrapped.forEach((line) => {
+      svg += `<text x="${marginX + 18}" y="${ty}" font-size="10.8" fill="#475569">${escapeHtml(line)}</text>`;
+      ty += 15;
+    });
+    ty += 8;
+  });
+
+  const totalH = legendY + legH + 16;
+  return `<svg viewBox="0 0 ${totalW} ${totalH}" role="img" aria-label="${escapeHtml(spec.ariaLabel || 'Sơ đồ khâu, bước và ai duyệt')}" class="nv-flow-svg">${svg}</svg>`;
+}
+
+// Phê Duyệt Giá Bán Lẻ/Bán Buôn — 2 cơ chế duyệt KHÁC NHAU thật sự (xem lib/workflowEngine.js
+// MODULE_CONFIGS.itPriceApprovals.resolveWfConfig): Bán Lẻ duyệt THEO PHÒNG BAN (itPriceDeptWorkflows,
+// cùng engine dùng chung với Tài Liệu/Đăng Ký Xe...), Bán Buôn duyệt THEO MỨC MARGIN/CHIẾT KHẤU đã chọn
+// (itPriceTierWorkflows) — vẫn CÙNG 1 cơ chế 🧭 Theo vị trí/👤 Theo người cụ thể trong từng bước, chỉ
+// khác CĂN CỨ chọn ra bộ bước nào áp dụng (phòng ban của người đề xuất, hay mức Margin/Chiết Khấu họ
+// chọn khi tạo đề xuất).
+function renderNVItPriceApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Phê Duyệt Giá Bán Lẻ/Bán Buôn: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — ĐỀ XUẤT', lines: ['Bán Lẻ: Mua Hàng · Bán Buôn: Vận Hành', 'Tải bảng giá Excel + Lý do', 'Có thể bấm "🔍 Xem Quy Trình"'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Bán Lẻ: theo cấu hình phòng ban', 'Bán Buôn: theo mức Margin/Chiết Khấu đã chọn', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước', '(admin cấu hình 1-3 bước mỗi phòng ban/mức)'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung do người đề xuất tự chọn, chạy SAU các bước trên'] },
+    khau4: { title: 'KHÂU 4 — IT ÁP GIÁ & HOÀN TẤT', lines: ['Đội Hỗ Trợ IT (quyền itPriceSupport) nhận hồ sơ đã duyệt → áp giá thật vào hệ thống bán hàng → xác nhận hoàn tất'] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Người duyệt bước đang chờ dừng hẳn quy trình', 'Người đề xuất nhận thông báo, phải tạo lại'] },
+      { title: '✉️ YÊU CẦU BỔ SUNG', tone: 'amber', lines: ['Người duyệt HOẶC đội IT yêu cầu nộp thêm tệp', 'Nếu đến giữa chừng: các bước đã duyệt bị vô hiệu, về lại Bước 1'] },
+      { title: '🚨 TỪ CHỐI KHẨN', tone: 'red', lines: ['Chỉ áp dụng SAU Khâu 4, trước khi áp giá', 'Người có quyền itPriceEmergencyRejectApprove xét huỷ'] },
+    ],
+  });
+}
+
+// Tài Liệu — docs (dept-based, appendExtraApprovalLayers -> Khâu 3 CÓ, supportsRequestChanges tức "Yêu
+// Cầu Bổ Sung" trả hẳn về NHÁP để người tải lên sửa toàn bộ nội dung, khác itPriceApprovals.
+function renderNVDocApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Tài Liệu: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — TẢI LÊN', lines: ['Chọn Phòng Ban Trình + Phân Loại', 'Tải tệp tài liệu'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Theo cấu hình phòng ban trình', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung tự chọn, chạy SAU các bước trên'] },
+    khau4: { title: 'KHÂU 4 — ĐÃ DUYỆT', lines: ['Có thể tạo phiên bản mới (version kế tiếp) cho tài liệu này sau này'] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Người duyệt bước đang chờ dừng hẳn quy trình', 'Người tải lên phải tạo hồ sơ mới'] },
+      { title: '✉️ YÊU CẦU BỔ SUNG', tone: 'amber', lines: ['Trả hẳn hồ sơ về NHÁP', 'Người tải lên sửa lại toàn bộ nội dung + tệp, gửi lại từ Bước 1'] },
+    ],
+  });
+}
+
+// Đăng Ký Xe — carRegs (dept-based, Khâu 3 CÓ). Khâu 4 đặc thù: điều phối + lái xe + đánh giá (không
+// đi qua engine duyệt chung nữa, xem applyWorkflowAction() nhánh carRegs/lib/recordActions.js).
+function renderNVCarApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Đăng Ký Xe: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — ĐĂNG KÝ LỊCH TRÌNH', lines: ['Điểm đi/đến, thời gian, mục đích sử dụng'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Theo cấu hình phòng ban đăng ký', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung tự chọn, chạy SAU các bước trên'] },
+    khau4: { title: 'KHÂU 4 — ĐIỀU PHỐI → LÁI XE → ĐÁNH GIÁ', lines: ['Người điều hành xe gán xe+tài xế → lái xe xác nhận & báo KM → người đăng ký đánh giá 1-5 sao'] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Người duyệt bước đang chờ nêu lý do, dừng hẳn'] },
+      { title: '🔄 ĐỔI LỘ TRÌNH SAU KHI ĐÃ DUYỆT', tone: 'amber', lines: ['Người đăng ký đổi lộ trình/ngày giờ', 'Phiếu tự quay lại Bước 1, phải duyệt lại từ đầu'] },
+    ],
+  });
+}
+
+// Văn Phòng Phẩm — vppRegistrations (dept-based, Khâu 3 CÓ). "Chờ duyệt" trong sơ đồ cũ thực ra vẫn là
+// đúng N bước phòng ban như mọi module khác — chỉ khác ở chỗ còn có 1 lớp KIỂM TRA HẠN MỨC tự động chạy
+// TRƯỚC khi vào hàng chờ duyệt (chặn ngay lúc Gửi nếu vượt ngân sách phòng ban).
+function renderNVVppApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Văn Phòng Phẩm: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — CHỌN MẶT HÀNG', lines: ['Từ Danh Mục VPP — hệ thống tự kiểm tra hạn mức ngân sách phòng ban trước khi cho Gửi'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Theo cấu hình phòng ban', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung tự chọn, chạy SAU các bước trên'] },
+    khau4: { title: 'KHÂU 4 — CẤP PHÁT', lines: [''] },
+    branches: [
+      { title: '🚫 VƯỢT HẠN MỨC', tone: 'amber', lines: ['Chặn ngay lúc Gửi phê duyệt (server tự kiểm tra lại), chưa tới bước duyệt nào'] },
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Người duyệt bước đang chờ dừng hẳn — hồ sơ coi như kết thúc'] },
+      { title: '✉️ YÊU CẦU BỔ SUNG', tone: 'amber', lines: ['Trả về NHÁP cho người đăng ký sửa lại rồi gửi lại'] },
+    ],
+  });
+}
+
+// Mua Bán/Sửa Chữa (officeReqs) + Thanh Toán (paymentRequests) — 2 quy trình TÁCH RIÊNG trên cùng 1
+// trang tài liệu, cả 2 đều dept-based + Khâu 3 CÓ — nhưng Thanh Toán KHÔNG có nhánh Từ Chối
+// (disallowReject:true, chỉ có NEED_INFO giữ nguyên quyết định, xem MODULE_CONFIGS.paymentRequests).
+function renderNVOfficeApprovalFlow() {
+  const a = renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Mua Bán/Sửa Chữa: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — ĐỀ XUẤT', lines: ['Mua Sắm (có bảng hạng mục) hoặc Sửa Chữa (1 dòng tổng)'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Theo cấu hình phòng ban × phân hệ Mua Sắm/Sửa Chữa', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung tự chọn, chạy SAU các bước trên'] },
+    khau4: { title: 'KHÂU 4 — TẢI TÀI LIỆU KÝ', lines: ['Bắt buộc phải có mới hiện nút chuyển sang Thanh Toán'] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Người duyệt bước đang chờ dừng hẳn quy trình'] },
+      { title: '✉️ YÊU CẦU BỔ SUNG', tone: 'amber', lines: ['Trả về NHÁP cho người đề xuất sửa lại rồi gửi lại'] },
+    ],
+  });
+  const b = renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Thanh Toán: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — LẬP THANH TOÁN', lines: ['Từ đề xuất đã có Tài Liệu Ký, hoặc tạo thủ công'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Theo cấu hình phòng ban kế toán', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung tự chọn, chạy SAU các bước trên'] },
+    khau4: { title: 'KHÂU 4 — ĐÃ THANH TOÁN', lines: ['Xác nhận đã chi tiền, bắt buộc đính kèm chứng từ — khoá cứng, không sửa/xoá được nữa'] },
+    branches: [
+      { title: '✉️ CẦN THÔNG TIN THÊM', tone: 'amber', lines: ['Thanh Toán KHÔNG có nhánh Từ Chối — chỉ giữ nguyên quyết định chờ bổ sung thông tin'] },
+    ],
+  });
+  return `<div class="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">🛒 Mua Sắm / Sửa Chữa</div>${a}<div class="mt-8 mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">💰 Thanh Toán (luồng riêng, bắt đầu SAU khi có Tài Liệu Ký)</div>${b}`;
+}
+
+// Ngân Sách 2.0 — budgetEntries (dept-based nhưng KHÔNG gọi appendExtraApprovalLayers -> Khâu 3 KHÔNG
+// áp dụng cho module này). Duyệt xong KHÔNG kết thúc — tự sinh thêm dòng "Phê Duyệt"/"Sử Dụng".
+function renderNVBudgetApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Ngân Sách — Đề Xuất: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — ĐỀ XUẤT', lines: ['Người đề xuất nhập dòng ngân sách theo Năm/Tháng riêng từng dòng'] },
+    steps: [
+      { title: 'KHÂU 2 · BƯỚC 1', lines: ['Trưởng phòng/người quản lý ngân sách của phòng ban', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · BƯỚC 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 bước'] },
+    ],
+    khau4: { title: 'KHÂU 3 — TỰ SINH PHÊ DUYỆT & SỬ DỤNG', lines: ['Duyệt xong tự sinh 1 dòng "Phê Duyệt" tương ứng + dòng "Sử Dụng" (cha) — không tự tạo tay'] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Người đề xuất sửa & gửi lại'] },
+      { title: '🔒 KỲ NGÂN SÁCH ĐÃ ĐÓNG SỔ', tone: 'amber', lines: ['Chặn hẳn Duyệt/Từ chối nếu kỳ đã đóng sổ (hết hạn hoặc admin đóng tay)'] },
+    ],
+  });
+}
+
+// Vận Hành — 2 luồng: QLDA (renderNVFlow cũ, KHÔNG có phê duyệt) + Đơn Hàng (operationOrders, CÓ phê
+// duyệt — duyệt theo MỨC GIÁ TRỊ đơn hàng tự tính, KHÔNG theo phòng ban cố định như các module khác,
+// Khâu 3 vẫn CÓ vì appendExtraApprovalLayers() được gọi bên trong resolveOperationOrderWorkflow()).
+// Kết hợp 2 sơ đồ của module Vận Hành: QLDA (renderNVFlow cũ, KHÔNG có phê duyệt) ở trên, Đơn Hàng
+// (CÓ phê duyệt, khâu/bước/ai duyệt) ở dưới — 2 luồng độc lập hoàn toàn trên cùng 1 trang tài liệu.
+function renderNVVanHanhFlow() {
+  const qlda = renderNVFlow({ ariaLabel: 'Quy trình Mở Mới/Sửa Chữa Siêu Thị (QLDA)', chain: [
+    { label: 'Tạo hồ sơ', sub: 'Mở mới hoặc sửa chữa — có hiệu lực NGAY, không qua ai duyệt', kind: 'approved' },
+    { label: 'Danh mục đầu tư', sub: 'Nhập hạng mục, đối chiếu Ngân Sách Phê Duyệt/Còn Lại' },
+    { label: 'Thực hiện', sub: 'Cây công việc nhiều cấp — chỉ công việc lá cập nhật tiến độ' },
+    { label: 'Nghiệm thu', sub: 'Xác nhận từng công việc' },
+  ] });
+  const donHang = renderNVVanHanhOrderApprovalFlow();
+  return `<div class="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">🏬 Mở Mới/Sửa Chữa Siêu Thị (QLDA) — KHÔNG có phê duyệt</div>${qlda}<div class="mt-8 mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">📦 Đơn Hàng — luồng RIÊNG, CÓ phê duyệt</div>${donHang}`;
+}
+
+function renderNVVanHanhOrderApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Đơn Hàng (Vận Hành): khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — TẠO ĐƠN HÀNG', lines: ['Đặt Hàng Tại Siêu Thị hoặc Đặt Hàng Tại HO'] },
+    steps: [
+      { title: 'KHÂU 2 — DUYỆT THEO MỨC GIÁ TRỊ', lines: ['Hệ thống TỰ TÍNH mức theo số tiền đơn hàng (Siêu Thị: 3 mức · HO: 2 mức)', 'Mỗi mức có số bước/người duyệt riêng', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Cuối', 'Lớp duyệt bổ sung tự chọn, chạy SAU bước trên'] },
+    khau4: { title: 'KHÂU 4 — NHẬN HÀNG & HOÀN TẤT', lines: ['Mục "🧾 Duyệt Nhập/Hủy Đơn Hàng" để duyệt nhập/huỷ đơn, không đi qua QLDA'] },
+    branches: [
+      { title: '❌ TỪ CHỐI / ✉️ YÊU CẦU BỔ SUNG', tone: 'amber', lines: ['Người duyệt bước đang chờ từ chối hẳn, hoặc yêu cầu bổ sung đưa về sửa & gửi lại'] },
+    ],
+  });
+}
+
+// Văn Bản Trình — submissions (theo Loại Văn Bản × Phòng Ban, CÙNG cơ chế 🧭/👤 như mọi module, nhưng
+// SNAPSHOT effectiveSteps/effectiveApprovers ngay lúc gửi nếu có — sửa cấu hình sau đó KHÔNG đổi hồ sơ
+// đã gửi). "Nhóm Phê Duyệt Bổ Sung" là lớp phụ RIÊNG của module này (không dùng chung dữ liệu với "Nhóm
+// Phê Duyệt Cuối" ở 7 module kia) nhưng đóng vai trò y hệt — nối thêm bước vào CUỐI quy trình gốc.
+function renderNVSubmissionApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Văn Bản Trình: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — SOẠN THẢO', lines: ['Chọn Phòng Ban Trình, Loại Tờ Trình, Cấp Phê Duyệt Cuối Cùng'] },
+    steps: [
+      { title: 'KHÂU 2 · LỚP 1', lines: ['Theo Loại Văn Bản × Phòng Ban — snapshot ngay lúc gửi', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · LỚP 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 lớp'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Bổ Sung', 'Người trình tự chọn thêm theo Cấp Phê Duyệt Cuối Cùng — nối vào CUỐI quy trình gốc'] },
+    khau4: { title: 'KHÂU 4 — BAN HÀNH / LƯU TRỮ', lines: [''] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Bắt buộc nêu lý do — dừng hẳn, sửa & trình lại từ đầu'] },
+      { title: '💬 NHÓM "XIN Ý KIẾN" (không chặn)', tone: 'amber', lines: ['Kênh tham khảo song song, KHÔNG phải bước duyệt thật — không cần chờ mới đi tiếp'] },
+    ],
+  });
+}
+
+// Hợp Đồng — contracts "Phê Duyệt" (dept-based hoặc snapshot theo contractApprovalGroups RIÊNG, khác
+// dữ liệu nhóm của Văn Bản Trình). Khâu 3 ở đây gọi "Nhóm Phê Duyệt Bổ Sung" cùng cơ chế Cấp Phê Duyệt
+// Cuối Cùng như Văn Bản Trình, nhưng KHÔNG có loại "Xin Ý Kiến". "Quản Lý HĐ/Tài liệu ký" là 1 quy trình
+// PHỤ riêng biệt (đơn giản theo phòng ban, không snapshot) — chỉ nhắc ở Khâu 4, không vẽ diagram riêng.
+function renderNVContractApprovalFlow() {
+  return renderNVApprovalFlow({
+    ariaLabel: 'Quy trình Hợp Đồng: khâu, bước và ai duyệt',
+    khau1: { title: 'KHÂU 1 — SOẠN HỢP ĐỒNG', lines: ['Chọn Phòng Ban Quản Lý, Loại Pháp Lý, Cấp Phê Duyệt Cuối Cùng'] },
+    steps: [
+      { title: 'KHÂU 2 · LỚP 1', lines: ['Theo phòng ban — hoặc snapshot theo Nhóm Phê Duyệt Hợp Đồng', '🧭 Theo vị trí hoặc 👤 Theo người cụ thể'] },
+      { title: 'KHÂU 2 · LỚP 2', lines: ['Chỉ áp dụng nếu mẫu quy trình đã chọn có ≥2 lớp'] },
+    ],
+    khau3: { title: 'KHÂU 3 (TUỲ CHỌN)', lines: ['Nhóm Phê Duyệt Bổ Sung', 'Theo Cấp Phê Duyệt Cuối Cùng — KHÁC Văn Bản Trình: không có loại "Xin Ý Kiến"'] },
+    khau4: { title: 'KHÂU 4 — ĐANG HIỆU LỰC', lines: ['Theo dõi Ngày hết hạn; "Quản Lý HĐ/Tài liệu ký" là quy trình phụ riêng, đơn giản theo phòng ban'] },
+    branches: [
+      { title: '❌ TỪ CHỐI', tone: 'red', lines: ['Trạng thái riêng, hiện ở Dashboard/Tab Phê Duyệt'] },
+      { title: '✏️ CẦN BỔ SUNG (NEEDS_SUPPLEMENT)', tone: 'amber', lines: ['Trạng thái RIÊNG tách khỏi Nháp — người soạn sửa lại rồi gửi lại'] },
+    ],
+  });
+}
+
 function nvFooterCol(title, items) {
   if (!items || !items.length) return '';
   const li = items.map(it => `<li class="py-1.5 border-t first:border-t-0 border-gray-100"><b>${escapeHtml(it.label)}</b> — ${it.text}</li>`).join('');
@@ -380,11 +697,7 @@ const NGHIEP_VU_DOCS = {
   doc: {
     icon: '📄', title: 'Tài Liệu', badge: 'Mở cho mọi nhân viên',
     desc: 'Quản lý văn bản nội bộ theo mã số tự động, mỗi lần cập nhật lại tạo ra 1 phiên bản mới (bản cũ vẫn giữ nguyên để tra cứu), phê duyệt theo đúng quy trình của từng phòng ban.',
-    flow: { ariaLabel: 'Quy trình Tài Liệu: Tạo mới, Duyệt, Bổ Sung', chain: [
-      { label: 'Tạo mới', sub: 'Chọn phòng ban + phân loại, tải file' },
-      { label: 'Chờ duyệt', sub: 'Duyệt theo cấu hình từng phòng ban', kind: 'decision' },
-      { label: 'Đã duyệt', sub: 'Có thể tạo phiên bản mới', kind: 'approved' },
-    ], decision: { atIndex: 1, approveLabel: 'Duyệt xong', rejectLabel: 'Từ chối', rejectBox: { label: 'Trả về sửa', sub: 'Về "Sửa & Gửi Lại"' }, loopBackToIndex: 1, loopBackLabel: 'Sửa & gửi lại → chờ duyệt' } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVDocApprovalFlow',
     steps: [
       { role: 'Người tải lên', text: 'vào tab <b>📂 Tài liệu</b> → điền form "📄 Tải Lên Tài Liệu Mới": chọn Loại thao tác "➕ Nhập mới", Phòng Ban Trình, Phân Loại (mã tài liệu tự sinh theo 2 mục này), Tên/Tiêu Đề, Tệp Tài Liệu, Trích Lục/Tóm Tắt Nội Dung → bấm <b>"Gửi phê duyệt"</b>.' },
       { role: 'Người duyệt', text: 'vào mục <b>✅ Phê Duyệt</b> (sidebar, ngay dưới Trang chủ) → tìm đúng hồ sơ Tài Liệu đang chờ mình duyệt (theo cấu hình luồng duyệt của phòng ban) → bấm Duyệt hoặc Từ chối.' },
@@ -400,11 +713,7 @@ const NGHIEP_VU_DOCS = {
   submission: {
     icon: '📜', title: 'Văn Bản Trình / Tờ Trình', badge: 'Duyệt nhiều lớp',
     desc: 'Tờ trình nội bộ với số lớp phê duyệt tự cấu hình được (không cố định 1 bước) — mỗi lớp là 1 nhóm người duyệt riêng, phải qua hết lớp trước mới tới lớp sau.',
-    flow: { ariaLabel: 'Quy trình Văn Bản Trình', chain: [
-      { label: 'Soạn thảo', sub: 'Bản nháp, chọn số lớp duyệt' },
-      { label: 'Chờ duyệt', sub: 'Duyệt tuần tự từng lớp', kind: 'decision' },
-      { label: 'Đã duyệt', sub: 'Ban hành / lưu trữ', kind: 'approved' },
-    ], decision: { atIndex: 1, approveLabel: 'Đủ các lớp', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Bắt buộc nêu lý do' }, loopBackToIndex: 0, loopBackLabel: 'Sửa & trình lại' } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVSubmissionApprovalFlow',
     steps: [
       { role: 'Người trình', text: 'vào mục <b>📜 Văn bản trình</b> (sidebar) → điền form: Phòng Ban Trình, Loại Tờ Trình, Cấp Phê Duyệt Cuối Cùng, Tên/Trích Yếu Tờ Trình, Độ Khẩn, Tờ Trình (file) → nếu cần chọn thêm Nhóm Phê Duyệt bổ sung/Xin Ý Kiến thì bấm ô "Phê Duyệt" chọn cụ thể từng nhóm → điền Nội Dung Trình Chi Tiết → bấm <b>"Gửi phê duyệt"</b>.' },
       { text: 'Muốn xem trước cả chuỗi các bước duyệt sẽ đi qua (bao gồm cả nhóm bổ sung vừa chọn) trước khi gửi: bấm <b>"🔍 Xem Quy Trình"</b> ngay trên form.' },
@@ -423,13 +732,7 @@ const NGHIEP_VU_DOCS = {
   contract: {
     icon: '📁', title: 'Hợp Đồng', badge: 'Trình duyệt + theo dõi hiệu lực',
     desc: 'Hợp đồng với đối tác/nhà cung cấp — tạo mới, trình duyệt theo lớp (giống Văn Bản Trình), sau khi có hiệu lực thì hệ thống theo dõi để cảnh báo trước khi hết hạn.',
-    flow: { ariaLabel: 'Quy trình Hợp Đồng', chain: [
-      { label: 'Soạn hợp đồng', sub: 'Bản nháp, đính kèm file' },
-      { label: 'Chờ duyệt', sub: 'Trình duyệt theo lớp', kind: 'decision' },
-      { label: 'Đang hiệu lực', sub: 'Theo dõi ngày hết hạn', kind: 'approved' },
-      { label: 'Hết hạn / Thanh lý', sub: 'Kết thúc hiệu lực' },
-    ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Trả về sửa', sub: 'Sửa lại điều khoản' }, loopBackToIndex: 0 },
-      reference: { atIndex: 0, label: 'Danh Mục Đối Tác', sub: 'Loại hợp đồng, đơn vị' } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVContractApprovalFlow',
     steps: [
       { role: 'Người soạn hợp đồng', text: 'vào mục 📄 Hợp Đồng (sidebar) → tab <b>"⏳ Phê Duyệt"</b> → chọn Loại Thao Tác (Tạo Mới hoặc Bổ Sung Phụ Lục cho hợp đồng đã có) → điền Phòng Ban Quản Lý, Loại Pháp Lý, Cấp Phê Duyệt Cuối Cùng, Tên Hợp Đồng, Đối Tác/Bên Ký Kết, Giá Trị Hợp Đồng, Ngày Hiệu Lực → bấm <b>"Gửi phê duyệt"</b>.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ Hợp Đồng đang chờ ở đúng lớp hiện tại → bấm Duyệt hoặc Từ chối.' },
@@ -601,13 +904,7 @@ const NGHIEP_VU_DOCS = {
   car: {
     icon: '🚗', title: 'Đăng Ký Xe', badge: 'Cập nhật 9/2026',
     desc: 'Đăng ký lịch trình công tác cần xe — sau khi duyệt, bộ phận điều phối gán xe và tài xế cụ thể cho chuyến đi; lái xe xác nhận nhận chuyến rồi báo số km khi kết thúc, người đăng ký đánh giá lại chuyến đi sau cùng.',
-    flow: { ariaLabel: 'Quy trình Đăng Ký Xe', chain: [
-      { label: 'Đăng ký lịch trình', sub: 'Điểm đi/đến, thời gian' },
-      { label: 'Duyệt', sub: 'Theo cấu hình phòng ban', kind: 'decision' },
-      { label: 'Điều phối xe', sub: 'Gán xe + tài xế', kind: 'approved' },
-      { label: 'Lái xe xác nhận & kết thúc', sub: 'Nhận chuyến (🚗 LX Đã Xác Nhận Chuyến) → báo km khi xong' },
-      { label: 'Đánh giá & hoàn tất', sub: 'Người đăng ký xác nhận lại' },
-    ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối', sub: 'Nêu lý do' }, loopBackToIndex: 0 } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVCarApprovalFlow',
     steps: [
       { role: 'Người đăng ký', text: 'vào <b>🏢 Hành Chính ▾ → 🚗 Đăng ký xe</b> (sidebar) → tab đầu tiên "🚗 Đăng Ký Xe" → điền form: Đơn Vị, Loại Xe, Số Người Sử Dụng, Mục Đích Sử Dụng, Số KM Dự Kiến, Thời Gian Bắt Đầu/Dự Kiến Về, Lộ Trình Di Chuyển (bấm "+ Thêm Điểm" để thêm từng điểm dừng), Nội Dung Chi Tiết → bấm <b>"Gửi phê duyệt"</b>. Chưa cần chọn biển số/lái xe cụ thể ở bước này.' },
       { role: 'Người duyệt', text: 'mở đúng phiếu đang "Chờ duyệt" theo cấu hình luồng duyệt của phòng ban đăng ký → bấm Duyệt hoặc Từ chối (bắt buộc nêu lý do khi từ chối).' },
@@ -635,12 +932,7 @@ const NGHIEP_VU_DOCS = {
   vpp: {
     icon: '🖇️', title: 'Văn Phòng Phẩm', badge: 'Hành Chính',
     desc: 'Đăng ký mua văn phòng phẩm từ danh mục mặt hàng có sẵn — hệ thống tự kiểm tra ngân sách còn lại của phòng ban (mức mỗi người hoặc tổng phòng, tuỳ cấu hình) trước khi cho gửi.',
-    flow: { ariaLabel: 'Quy trình Văn Phòng Phẩm', chain: [
-      { label: 'Chọn mặt hàng', sub: 'Từ Danh Mục VPP' },
-      { label: 'Kiểm tra ngân sách', sub: 'Tự động, theo phòng ban', kind: 'decision' },
-      { label: 'Duyệt & cấp phát', sub: '', kind: 'approved' },
-    ], decision: { atIndex: 1, approveLabel: 'Đủ hạn mức', rejectLabel: 'Vượt hạn mức', rejectBox: { label: 'Chặn gửi', sub: 'Không cho vượt mức' }, loopBackToIndex: 0, loopBackLabel: 'Giảm số lượng' },
-      reference: { atIndex: 0, label: 'Danh Mục Mặt Hàng', sub: 'Đơn giá, hạn mức' } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVVppApprovalFlow',
     steps: [
       { role: 'Người đăng ký', text: 'vào <b>🏢 Hành Chính ▾ → 🖇️ Văn phòng phẩm</b> (sidebar) → tab <b>"📝 Đăng Ký"</b> → chọn kỳ đăng ký đang mở → tick chọn mặt hàng và nhập Số Lượng cho từng dòng cần (chỉ dòng nhập số lượng > 0 mới tính là đã chọn, có ô tìm nhanh theo tên mặt hàng) → theo dõi tổng tiền ở khung dưới bảng.' },
       { text: 'Bấm "💾 Kết Thúc Chọn (Lưu Nháp)" để lưu tạm, sửa lại được sau; khi đã ưng thì bấm <b>"Gửi phê duyệt"</b> để gửi chính thức. Lỡ gửi nhầm mà CHƯA ai duyệt (còn ở bước 1) thì bấm <b>"🚫 Hủy Đăng Ký"</b> ngay ở danh sách để rút lại.' },
@@ -712,12 +1004,7 @@ const NGHIEP_VU_DOCS = {
   office: {
     icon: '🛒', title: 'Mua Bán / Sửa Chữa / Thanh Toán', badge: 'Tổng Hợp',
     desc: 'Đề xuất mua sắm hoặc sửa chữa, sau khi duyệt và thực hiện thì chi phí thực tế được ghi nhận ở mục Thanh Toán, liên kết ngược về đúng đề xuất gốc.',
-    flow: { ariaLabel: 'Quy trình Mua Bán/Sửa Chữa/Thanh Toán', chain: [
-      { label: 'Đề xuất', sub: 'Mua Sắm (có bảng hạng mục) hoặc Sửa Chữa (1 dòng tổng)' },
-      { label: 'Duyệt theo lớp', sub: '2 luồng workflow RIÊNG theo từng phân hệ', kind: 'decision' },
-      { label: 'Tải Tài Liệu Ký', sub: 'Bắt buộc trước khi chuyển sang Thanh Toán', kind: 'approved' },
-      { label: 'Thanh Toán', sub: 'Nháp → Chờ duyệt → Đã duyệt → Đã thanh toán' },
-    ], decision: { atIndex: 1, rejectBox: { label: 'Bị từ chối / Yêu cầu bổ sung', sub: 'Bổ sung → về Nháp sửa & gửi lại' }, loopBackToIndex: 0 } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVOfficeApprovalFlow',
     steps: [
       { role: 'Người đề xuất', text: 'vào mục 🗂️ Tổng Hợp (sidebar) → chọn tab <b>"🛒 Mua Bán"</b> hoặc <b>"🔧 Sửa Chữa"</b> → điền form: Phòng Ban Trình, Tên Hạng Mục, Số Lượng/Quy Mô, Dự Toán/Tổng Chi Phí, Đối Tác/Nhà Cung Cấp (Mua Sắm có thêm bảng hạng mục con để khai chi tiết từng tài sản) → gửi phê duyệt. Lỡ gửi nhầm mà CHƯA ai duyệt (còn ở bước 1) thì bấm <b>"🚫 Hủy Đề Xuất"</b> ngay ở danh sách để rút lại.' },
       { role: 'Người duyệt', text: 'vào mục ✅ Phê Duyệt (sidebar) → tìm đúng hồ sơ Mua Sắm/Sửa Chữa đang chờ ở đúng phòng ban → bấm Duyệt, Từ chối, hoặc Yêu Cầu Bổ Sung (trả về Nháp cho người đề xuất sửa lại).' },
@@ -740,11 +1027,7 @@ const NGHIEP_VU_DOCS = {
   budget: {
     icon: '💰', title: 'Ngân Sách 2.0', badge: 'Cập nhật v23.3',
     desc: 'Gồm 3 phần việc tách biệt nhau (không đi tuần tự từ đầu tới cuối) — mỗi dòng ngân sách tự có Năm/Tháng riêng, không dùng chung 1 "kỳ ngân sách" cho tất cả. Khi chọn Vị trí là Văn Phòng hoặc Siêu Thị, hệ thống sẽ hỏi thêm để chọn đúng phòng ban/siêu thị. Có thể tải file mẫu, nhập và xuất Excel.',
-    flow: { ariaLabel: 'Quy trình Ngân Sách 2.0: 3 phần việc tách biệt', chain: [
-      { label: 'Đề Xuất', sub: 'Người đề xuất gửi lên', kind: 'decision' },
-      { label: 'Phê Duyệt', sub: 'Tự sinh khi Đề Xuất duyệt xong' },
-      { label: 'Sử Dụng', sub: 'Dòng cha hệ thống tự sinh', kind: 'approved' },
-    ], decision: { atIndex: 0, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVBudgetApprovalFlow',
     steps: [
       { role: 'Người đề xuất', text: 'vào <b>🗂️ Tổng Hợp ▾ → 📊 Ngân Sách</b> (sidebar) → tab <b>📝 Đề Xuất</b> → chọn Vị Trí (🏢 Trụ sở chính (HO) hoặc 🏬 Siêu Thị — chọn xong tự hiện đúng ô Khối Phòng Ban hoặc Siêu Thị tương ứng) → điền Danh Mục, Nội Dung, VAT (%), Năm NS/Tháng NS, số tiền → bấm <b>"➕ Thêm Đề Xuất"</b>.' },
       { role: 'Người quản lý ngân sách', text: 'vẫn ở tab 📝 Đề Xuất, chọn dòng đang chờ trong danh sách → Duyệt hoặc Từ chối. Duyệt xong hệ thống TỰ SINH 1 dòng tương ứng bên tab <b>✅ Phê Duyệt</b> — không tự tạo tay dòng này.' },
@@ -768,12 +1051,7 @@ const NGHIEP_VU_DOCS = {
   vanHanh: {
     icon: '⚙️', title: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị', badge: 'Vận Hành',
     desc: 'Hai luồng: Đơn Hàng (mua hàng vận hành theo đợt, có phê duyệt) và Mở Mới/Sửa Chữa Siêu Thị — "QLDA" (dự án đối chiếu Ngân Sách + cây công việc nhiều cấp theo dõi tiến độ, KHÔNG có bước phê duyệt nào — hồ sơ có hiệu lực ngay lúc tạo).',
-    flow: { ariaLabel: 'Quy trình Mở Mới/Sửa Chữa Siêu Thị (QLDA)', chain: [
-      { label: 'Tạo hồ sơ', sub: 'Mở mới hoặc sửa chữa — có hiệu lực NGAY, không qua ai duyệt', kind: 'approved' },
-      { label: 'Danh mục đầu tư', sub: 'Nhập hạng mục, đối chiếu Ngân Sách Phê Duyệt/Còn Lại' },
-      { label: 'Thực hiện', sub: 'Cây công việc nhiều cấp — chỉ công việc lá cập nhật tiến độ' },
-      { label: 'Nghiệm thu', sub: 'Xác nhận từng công việc' },
-    ] },
+    isCustomFlow: true, customFlowRenderer: 'renderNVVanHanhFlow',
     steps: [
       { role: 'Người đề xuất', text: 'vào mục <b>⚙️ Vận Hành</b> (sidebar) → tab <b>"🏬 QLDA"</b> → chọn "🏬 Mở mới" hoặc "🔧 Sửa chữa" → điền form → Lưu — hồ sơ có hiệu lực NGAY, không có bước phê duyệt nào.' },
       { role: 'Người phụ trách/toàn quyền hồ sơ', text: 'tab "📁 Danh mục đầu tư" → nhập bảng hạng mục đầu tư (đối chiếu Ngân Sách Phê Duyệt/Còn Lại) → bấm <b>Lưu</b> — hoàn tất ngay, không cần chờ ai duyệt.' },
@@ -1057,12 +1335,7 @@ const NGHIEP_VU_DOCS = {
   itPriceApproval: {
     icon: '🏷️', title: 'Phê Duyệt Giá Bán (Bán Lẻ / Bán Buôn)', badge: 'Mua Hàng / Vận Hành / Hỗ Trợ IT',
     desc: 'Đề xuất duyệt bảng giá bán (tải lên tệp Excel nhiều dòng/mặt hàng) — Bán Lẻ và Bán Buôn là 2 QUY TRÌNH KHÁC NHAU thật sự (khác field bắt buộc, khác cấu hình luồng duyệt), không phải cùng 1 luồng dùng chung.',
-    flow: { ariaLabel: 'Quy trình Phê Duyệt Giá Bán: Bán Lẻ theo phòng ban, Bán Buôn theo mức Margin/Chiết Khấu', chain: [
-      { label: 'Tạo đề xuất', sub: 'Tải tệp bảng giá (.xlsx) + Lý do' },
-      { label: 'Duyệt', sub: 'Bán Lẻ: theo phòng ban · Bán Buôn: theo mức Margin/Chiết Khấu', kind: 'decision' },
-      { label: 'IT áp giá', sub: 'Đội Hỗ Trợ IT nhận & áp giá thật', kind: 'approved' },
-      { label: 'Hoàn tất', sub: '' },
-    ], decision: { atIndex: 1, approveLabel: 'Duyệt', rejectLabel: 'Từ chối', rejectBox: { label: 'Bị từ chối', sub: 'Sửa & gửi lại' }, loopBackToIndex: 0 } },
+    isCustomFlow: true, customFlowRenderer: 'renderNVItPriceApprovalFlow',
     steps: [
       { role: 'Người đề xuất (Bán Lẻ)', text: 'vào <b>🔗 Mua Hàng</b> (sidebar) → chọn tab <b>"💲 Phê Duyệt Giá Bán Lẻ"</b> → tải lên tệp bảng giá (.xlsx, khớp đúng Mẫu Giá nếu hệ thống đã có mẫu) + Lý do → bấm <b>"Gửi phê duyệt"</b>.' },
       { role: 'Người đề xuất (Bán Buôn)', text: 'vào <b>⚙️ Vận Hành</b> (sidebar) → chọn tab <b>"💲 Phê Duyệt Giá Bán Buôn"</b> → tải lên tệp bảng giá (.xlsx) + Lý do + BẮT BUỘC chọn thêm Mức Margin/Chiết Khấu, Đơn Vị Áp Dụng, ít nhất 1 siêu thị/cửa hàng đề xuất, Ngày Áp Dụng → bấm <b>"Gửi phê duyệt"</b>.' },

@@ -219,6 +219,23 @@ Kiến Trúc Hệ Thống" và "🧭 Tổng Quan" của Đào Tạo). Module/tí
 vụ MỚI về sau vẫn nên viết thêm `steps` ngay khi thêm entry `NGHIEP_VU_DOCS`,
 theo đúng quy tắc ở mục "Module mới → bắt buộc cập nhật Nghiệp Vụ" (CLAUDE.md).
 
+**Sơ đồ "Khâu/Bước + Ai Duyệt" cho 9 module đi qua engine phê duyệt theo
+phòng ban/mức (từ v25.23)**: `renderNVApprovalFlow()` (module-nghiepvu.js) vẽ
+RÕ RA từng khâu (Đề Xuất → Phê Duyệt Theo Phòng Ban/Mức, tách hẳn từng Bước
+con bên trong → Nhóm Phê Duyệt Cuối/Bổ Sung TUỲ CHỌN nếu module có → Hoàn
+Tất), kèm 1 khối chú giải cố định giải thích 2 cơ chế xác định người duyệt
+(🧭 Theo vị trí/👤 Theo người cụ thể) và nhắc dùng nút "🔍 Xem Quy Trình" để
+biết CHÍNH XÁC ai duyệt hồ sơ của mình — thay cho sơ đồ chuỗi đơn giản cũ gộp
+cả cụm nhiều bước phòng ban vào 1 node "Duyệt" DUY NHẤT. Áp dụng cho 9 mục:
+**Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng Phẩm, Mua Bán/Sửa
+Chữa/Thanh Toán (2 sơ đồ), Ngân Sách, Vận Hành (Đơn Hàng, sơ đồ thứ 2 cạnh
+QLDA cũ), Phê Duyệt Giá Bán Lẻ/Bán Buôn**. Module nào không có lớp "Nhóm Phê
+Duyệt Cuối"/tương đương (VD Ngân Sách) thì tự không vẽ Khâu 3, không bịa ra
+cho đủ khâu. Module mới thêm sau này nếu dùng chung engine phê duyệt theo
+phòng ban (`lib/workflowEngine.js` `MODULE_CONFIGS`) nên ưu tiên dùng lại
+`renderNVApprovalFlow()` thay vì tự vẽ `flow` chuỗi đơn giản, để giữ cùng 1
+kiểu trình bày rõ ràng xuyên suốt.
+
 Đây là bản **tóm tắt trực quan** — mục 3-7 phía dưới của tài liệu này vẫn là
 nguồn tham khảo **đầy đủ và chi tiết nhất** (mỗi trang Nghiệp Vụ đều có link
 trỏ lại đúng mục tương ứng ở cuối trang). **Quy tắc bắt buộc** (xem

@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**25.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.23 (2026-10-06): Sơ đồ "Khâu/Bước + Ai Duyệt" rõ ràng hơn cho 9 quy trình phê duyệt
+
+Theo phản hồi người dùng sau khi xem bản demo hướng dẫn PDF cho quy trình Phê
+Duyệt Giá Bán Lẻ ("quy trình kiểu này rất rõ ràng, nên cập nhật vào tất cả các
+hướng dẫn trong Nghiệp Vụ"): thêm hàm vẽ sơ đồ mới `renderNVApprovalFlow()`
+(`public/js/module-nghiepvu.js`) — vẽ RÕ RA từng Khâu/Bước con bên trong Khâu
+Phê Duyệt (thay vì gộp cả cụm nhiều bước phòng ban vào 1 node "Duyệt" DUY
+NHẤT như sơ đồ chuỗi đơn giản cũ), kèm khối chú giải cố định giải thích 2 cơ
+chế xác định người duyệt (🧭 Theo vị trí/👤 Theo người cụ thể) và nhắc dùng
+nút "🔍 Xem Quy Trình" để biết chính xác ai duyệt hồ sơ của mình.
+
+Áp dụng cho 9 mục Nghiệp Vụ (các module đi qua engine phê duyệt dùng chung
+theo phòng ban/mức, `lib/workflowEngine.js` `MODULE_CONFIGS`): **Tài Liệu,
+Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng Phẩm, Mua Bán/Sửa Chữa/Thanh
+Toán, Ngân Sách 2.0, Vận Hành (Đơn Hàng), Phê Duyệt Giá Bán Lẻ/Bán Buôn** —
+mỗi mục chỉ vẽ Khâu 3 "Nhóm Phê Duyệt Cuối/Bổ Sung" nếu module đó THẬT SỰ có
+lớp này (Ngân Sách không có, không bịa ra cho đủ khâu). Không đụng tới
+`renderNVFlow()` cũ (vẫn dùng cho các mục khác) hay cơ chế `isCustomFlow`/
+`customFlowRenderer` có sẵn — thêm hàm mới hoàn toàn additive, đã chạy lại cả
+3 bộ test Nghiệp Vụ hiện có (160+9+6 = 175 kịch bản) xác nhận không có
+regression.
 
 ## v25.22 (2026-10-05): Mở rộng "chọn nhiều để xoá" sang 7 danh mục dạng OBJECT còn thiếu
 
