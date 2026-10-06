@@ -8687,7 +8687,12 @@ let approvalPollTimer = null;
 // giờ.
 let lastSeenApprovalSignature = null; // null = chưa poll lần nào
 let lastAppliedApprovalSignature = null; // null = chưa từng initDatabase() lại cho lượt polling nào
-const APPROVAL_POLL_INTERVAL_MS = 20 * 1000;
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng "20s là lâu"): 20s không có lý do kỹ thuật nào giữ — endpoint
+// GET /api/approvals/pending-signature dùng CHUNG lớp cache 3s (APPDATA_CACHE_TTL_MS, lib/appData.js/
+// lib/recordStore.js) với GET /api/data, nên MỌI lượt poll trong cùng 1 cửa sổ 3s đều được trả từ cache,
+// không tốn thêm truy vấn CSDL nào dù poll nhanh hơn — hạ xuống ĐÚNG 3s để khớp tốc độ dữ liệu thực sự
+// mới nhất, không có lý do giữ chậm hơn mức cache cho phép.
+const APPROVAL_POLL_INTERVAL_MS = 3 * 1000;
 
 function startApprovalPolling() {
   stopApprovalPolling();
