@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**25.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.30 (2026-10-06): Vá chuông "Thông báo" không mở được (bug ~1 tháng) + click không điều hướng
+
+Theo phản hồi người dùng kèm ảnh chụp màn hình "ấn vào thông báo không hiển thị gì":
+
+1. **Root cause THẬT**: `<button id="btnNotifBell" data-op="toggleNotifDropdown">` (index.html) thiếu
+   `data-arg-event="0"` — CSP dispatcher không truyền event thật, `toggleNotifDropdown(e)` luôn nhận
+   `e=undefined`, `e.stopPropagation()` (dòng đầu hàm) LUÔN throw TypeError. Dropdown chuông
+   KHÔNG BAO GIỜ mở được kể từ khi tính năng ra đời (v16.2, module Lương, 10/9/2026) — bug tồn tại gần
+   1 tháng, không liên quan các thay đổi trong phiên làm việc này. Vá: thêm `data-arg-event="0"` khớp
+   quy ước 10+ nút toggle dropdown sidebar khác.
+2. **Lỗi thứ 2 phát hiện cùng đợt**: `onClickNotifItem()` chỉ đánh dấu đã đọc rồi vẽ lại NGUYÊN danh
+   sách dropdown tại chỗ — `n.linkTo` (lưu sẵn từ lúc tạo, VD `/payroll/my-payslips/:id`) chưa từng
+   được đọc để điều hướng. Vá: luôn ĐÓNG dropdown ngay sau khi bấm (phản hồi rõ ràng) + điều hướng
+   thẳng tới Phiếu Lương Của Tôi khi `linkTo` khớp khuôn đã biết.
+
+Viết `test-notif-click-navigate.js` (real Playwright click) khoá lại cả 2 hành vi.
 
 ## v25.29 (2026-10-06): Vá gap "Ngành Hàng" không vào được Approval Hub + fix "tạo xong phải vào lại mới thấy" + giảm poll 20s→3s
 

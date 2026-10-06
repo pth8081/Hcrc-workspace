@@ -9779,7 +9779,7 @@ async function loadAndRenderNotifDropdown() {
         <button data-op="markAllNotifRead" class="text-[11px] text-blue-600 hover:underline">Đánh dấu tất cả đã đọc</button>
       </div>
       ${list.map(n => `
-        <div data-op="onClickNotifItem" data-arg0="${n.id}" class="px-3 py-2 border-b last:border-0 cursor-pointer hover:bg-gray-50 ${n.isRead ? 'opacity-60' : 'bg-blue-50'}">
+        <div data-op="onClickNotifItem" data-arg0="${n.id}" data-arg1="${escapeHtml(n.linkTo || '')}" class="px-3 py-2 border-b last:border-0 cursor-pointer hover:bg-gray-50 ${n.isRead ? 'opacity-60' : 'bg-blue-50'}">
           <div class="text-xs font-semibold">${escapeHtml(n.title || '')}</div>
           <div class="text-[11px] text-gray-600">${escapeHtml(n.message || '')}</div>
           <div class="text-[10px] text-gray-400 mt-0.5">${escapeHtml(n.createdAt || '')}</div>
@@ -9791,11 +9791,29 @@ async function loadAndRenderNotifDropdown() {
   }
 }
 
-async function onClickNotifItem(id) {
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng "ấn vào thông báo không hiển thị gì"): trước đây bấm vào 1
+// thông báo CHỈ đánh dấu đã đọc rồi vẽ lại NGUYÊN danh sách đó tại chỗ (chỉ khác mỗi item vừa bấm mờ đi)
+// — nhìn qua giống hệt "không có gì xảy ra", đặc biệt rõ với người chỉ có 1-2 thông báo. `n.linkTo`
+// (lib/notifications.js, định dạng đường dẫn kiểu URL — xem routes/payroll.js) được lưu sẵn từ lúc tạo
+// nhưng CHƯA TỪNG được đọc ở phía client để điều hướng — dữ liệu chết. Vá: luôn ĐÓNG dropdown ngay sau
+// khi bấm (phản hồi rõ ràng dù có điều hướng được hay không), và nếu linkTo khớp 1 khuôn đã biết thì
+// điều hướng luôn tới đúng màn liên quan. Khuôn mới cần hỗ trợ thêm chỉ cần thêm 1 nhánh if ở đây.
+async function onClickNotifItem(id, linkTo) {
   try {
     await fetch(`/api/notifications/${id}/read`, { method: 'PATCH', credentials: 'include' });
   } catch (err) { /* không chặn điều hướng nếu đánh dấu đã đọc lỗi */ }
-  await loadAndRenderNotifDropdown();
+  document.getElementById('notifDropdownPanel')?.classList.add('hidden');
+  try {
+    const payslipMatch = /^\/payroll\/my-payslips\/(\d+)$/.exec(linkTo || '');
+    if (payslipMatch) {
+      await switchTab('hrPayroll');
+      setHrPayrollView('SELF');
+      await openHrpPayslipViewModal(Number(payslipMatch[1]));
+    }
+  } catch (err) {
+    console.error('onClickNotifItem: không điều hướng được tới', linkTo, err);
+  }
+  await refreshNotifBadge();
 }
 
 async function markAllNotifRead() {
