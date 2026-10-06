@@ -72,6 +72,10 @@ const { getAllWorkItemsCached } = require('./operationWorkItemStore');
 // resolveApprovedFileUrl() — nguồn sự thật DUY NHẤT cho "file đã phê duyệt" của itPriceApprovals, dùng
 // chung với routes/priceFile.js (route đánh dấu cột) — xem chú thích đầy đủ ở lib/recordActions.js.
 const { resolveApprovedFileUrl } = require('./recordActions');
+// canApproveStep()/resolveWorkflowStepApprovers() — mirror ĐÚNG phép kiểm "người duyệt bước hiện tại"
+// mà nút ✅ Duyệt/❌ Từ Chối đã dùng (routes/workflow.js applyWorkflowAction()) — tái dùng ở đây để cho
+// phép người duyệt TẢI file đang chờ họ quyết định (xem chú thích tại nhánh owning.itPrice bên dưới).
+const { canApproveStep, resolveWorkflowStepApprovers } = require('./workflowEngine');
 
 // Tra ngược fileUrl -> bản ghi sở hữu nó — Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng
 // Tổng Hợp đều dùng chung 1 khuôn quyền tải theo phòng ban ({all,depts}, cờ "<moduleKey>Download" +
@@ -450,11 +454,25 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     // "chỉ file đã duyệt mới tải được". Dùng ĐÚNG 1 nguồn logic chung với routes/priceFile.js (mục 4).
     // Giới hạn này CHỈ áp dụng cho bảng giá (item.files, file Excel) — "Tài liệu bổ sung liên quan"
     // (item.extraFiles, mục A kế hoạch mới) không phải bảng giá, không thuộc luật "chỉ file đã duyệt".
+    //
+    // Ngoại lệ (10/2026, yêu cầu người dùng: "thêm nút tải file từ bước người phê duyệt — người gửi phê
+    // duyệt thì vẫn chỉ xem là được"): NGƯỜI DUYỆT đúng bước hiện tại (hồ sơ còn PENDING) được tải file
+    // MỚI NHẤT — chính là file họ sắp quyết định — dù file đó CHƯA chính thức "đã duyệt". Người đề xuất
+    // (hoặc ai khác không phải approver bước này) vẫn chỉ xem được (mode 'view' không đổi gì). Dùng
+    // canApproveStep()/resolveWorkflowStepApprovers() — ĐÚNG phép kiểm routes/workflow.js
+    // applyWorkflowAction() dùng để gác nút Duyệt thật, không tự suy luận quyền riêng ở đây.
     if (mode === 'download') {
       const isPriceSheet = (owning.item.files || []).some(f => f.fileUrl === fileUrl);
       if (isPriceSheet) {
         const approvedFileUrl = resolveApprovedFileUrl(owning.item);
-        return !!approvedFileUrl && approvedFileUrl === fileUrl;
+        if (approvedFileUrl && approvedFileUrl === fileUrl) return true;
+        const files = owning.item.files || [];
+        const isLatestFile = files.length > 0 && files[files.length - 1].fileUrl === fileUrl;
+        if (isLatestFile && owning.item.status === 'PENDING') {
+          const stepApprovers = resolveWorkflowStepApprovers('itPriceApprovals', owning.item, appData, owning.item.currentStep);
+          if (canApproveStep(user, stepApprovers, owning.item.history, owning.item.currentStep)) return true;
+        }
+        return false;
       }
       return true; // extraFiles (Tài liệu bổ sung liên quan) — không thuộc diện giới hạn "chỉ file đã duyệt"
     }
