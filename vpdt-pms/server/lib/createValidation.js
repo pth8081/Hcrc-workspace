@@ -962,8 +962,29 @@ const CREATE_MODULE_CONFIGS = {
         payload.approvalStatus = 'APPROVED';
         payload.paymentInstallments = [];
         payload.signedFileUrl = payload.fileUrl || null;
-        // Tài liệu đã ký thật ngoài hệ thống, nhập tay để lưu — không cần qua bước duyệt tài liệu ký.
-        payload.signedFileStatus = payload.signedFileUrl ? 'APPROVED' : null;
+        // LỖI ĐÃ VÁ (10/2026, theo yêu cầu người dùng: "muốn có một bước kiểm soát hợp đồng đã ký — vì
+        // nếu nhân viên tải một hợp đồng không đúng lên mà không có TP kiểm soát thì gửi thanh toán luôn
+        // sao được?"): trước đây nhánh này tự APPROVED Tài liệu ký NGAY LÚC NHẬP, cho phép "Chuyển Sang
+        // Thanh Toán" (startContractPayment(), chặn theo signedFileStatus === 'APPROVED') ngay lập tức mà
+        // KHÔNG ai kiểm soát — nhân viên tải nhầm file vẫn gửi thanh toán được bình thường. Hồ sơ hợp
+        // đồng (approvalStatus) vẫn APPROVED NGAY như cũ (đúng mục đích số hoá hợp đồng giấy đã ký sẵn
+        // ngoài hệ thống — không cần duyệt lại "có nên ký hợp đồng này không"), nhưng Tài liệu ký giờ
+        // PHẢI qua ĐÚNG quy trình duyệt Tài Liệu Ký (contractManageDeptWorkflows[dept]) như mọi lần
+        // upload thường — set PENDING + currentStep/history/uploadedBy y hệt uploadContractSignedFile()
+        // (lib/recordActions.js) thay vì tự APPROVED. startContractPayment() đã sẵn chặn cứng
+        // signedFileStatus !== 'APPROVED' nên tự động được bảo vệ, không cần sửa gì thêm ở đó.
+        if (payload.signedFileUrl) {
+          payload.signedFileStatus = 'PENDING';
+          payload.signedFileCurrentStep = 1;
+          payload.signedFileHistory = [];
+          payload.signedFileName = payload.fileName || null;
+          payload.signedFileType = payload.fileType || null;
+          payload.signedCustomData = payload.customData || {};
+          payload.signedUploadedBy = user.username;
+          payload.signedUploadedAt = new Date().toLocaleString('vi-VN');
+        } else {
+          payload.signedFileStatus = null;
+        }
       } else {
         // paymentInstallments áp dụng cho CẢ hợp đồng gốc lẫn phụ lục — phụ lục có thể phát sinh thanh
         // toán riêng (VD bổ sung khối lượng/giá trị), khi đó "Xác nhận đề nghị thanh toán" sẽ hiện đúng

@@ -443,11 +443,14 @@ async function main() {
       /Nhập Hợp Đồng\/Phụ Lục Đã Ký/i, '11a');
     assert.strictEqual(err.status, 403);
   });
-  await run('11b. Có contractImportSigned -> nhập được, hồ sơ APPROVED ngay như thiết kế', async () => {
+  await run('11b. Có contractImportSigned -> nhập được, approvalStatus APPROVED ngay (số hoá hợp đồng giấy), nhưng signedFileStatus PENDING -> vẫn cần TP duyệt Tài liệu ký trước khi chuyển thanh toán (10/2026, theo yêu cầu người dùng: "muốn có bước kiểm soát hợp đồng đã ký, nhân viên tải nhầm file mà không ai duyệt thì gửi thanh toán luôn sao được" — trước đây signedFileStatus tự APPROVED luôn, KHÔNG ai kiểm soát)', async () => {
     const importer = { ...USER_A, perms: { ...USER_A.perms, contractImportSigned: true } };
     const rec = validateAndPrepareCreate('contracts', importPayload(), importer, [], APP_DATA, []);
-    assert.strictEqual(rec.approvalStatus, 'APPROVED');
-    assert.strictEqual(rec.signedFileStatus, 'APPROVED');
+    assert.strictEqual(rec.approvalStatus, 'APPROVED', 'hồ sơ hợp đồng vẫn APPROVED ngay — đúng mục đích số hoá hợp đồng giấy đã ký sẵn, không cần duyệt lại');
+    assert.strictEqual(rec.signedFileStatus, 'PENDING', 'Tài liệu ký PHẢI qua đúng quy trình duyệt (contractManageDeptWorkflows), không còn tự APPROVED');
+    assert.strictEqual(rec.signedFileCurrentStep, 1);
+    assert.deepStrictEqual(rec.signedFileHistory, []);
+    assert.strictEqual(rec.signedUploadedBy, importer.username);
   });
   await run('11c. KHÔNG chặn nhầm: contractCreate vẫn tạo được hợp đồng THƯỜNG (đi hàng chờ duyệt)', async () => {
     const p = importPayload(); p.isSignedImport = false;

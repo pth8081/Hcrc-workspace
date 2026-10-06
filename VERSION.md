@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**25.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.34 (2026-10-06): "Nhập Hợp Đồng/Phụ Lục Đã Ký" — Tài liệu ký phải qua TP duyệt, không còn tự APPROVED
+
+Theo yêu cầu người dùng (sau v25.33 chỉ làm rõ UI): "muốn có một bước kiểm soát hợp đồng đã ký — vì nếu
+nhân viên tải một hợp đồng không đúng lên mà không có TP kiểm soát thì gửi thanh toán luôn sao được?".
+Đây là thay đổi NGHIỆP VỤ thật (không chỉ UI như v25.33):
+
+- **Trước đây**: nhánh `isSignedImport` (`lib/createValidation.js`) set `signedFileStatus = 'APPROVED'`
+  NGAY lúc nhập — hồ sơ vừa nhập có thể "Chuyển Sang Thanh Toán" (`startContractPayment()`, chặn theo
+  `signedFileStatus === 'APPROVED'`) ngay lập tức, KHÔNG ai kiểm soát file vừa tải lên có đúng hợp đồng
+  không.
+- **Vá**: `approvalStatus` hồ sơ hợp đồng VẪN APPROVED NGAY như cũ (đúng mục đích số hoá hợp đồng giấy đã
+  ký sẵn ngoài hệ thống — không cần duyệt lại "có nên ký hợp đồng này không"), nhưng `signedFileStatus`
+  giờ bắt đầu ở `PENDING` + `signedFileCurrentStep = 1` + `signedFileHistory = []` + `signedUploadedBy`/
+  `signedUploadedAt`/`signedFileName`/`signedFileType`/`signedCustomData` — Y HỆT
+  `uploadContractSignedFile()` (upload thường) — thay vì tự APPROVED. Tài liệu ký phải qua đúng quy
+  trình duyệt đã cấu hình (`contractManageDeptWorkflows[dept]`, nút Duyệt/Từ Chối đã đúng người nhờ
+  v25.31) trước khi "Chuyển Sang Thanh Toán" mở ra — `startContractPayment()` đã sẵn chặn cứng
+  `signedFileStatus !== 'APPROVED'` nên tự động được bảo vệ, không cần sửa route thanh toán.
+- Cập nhật lại test cũ `test-audit-cluster-vbt-hd-gp-tt-tl.js` (kịch bản 11b, trước đây khẳng định
+  "APPROVED ngay như thiết kế" — đúng với thiết kế CŨ, nay đổi theo thiết kế MỚI) + thêm Kịch bản 13 đầy
+  đủ (end-to-end Playwright thật) vào `test-contract.js`: nhập hồ sơ → `signedFileStatus` PENDING →
+  "Chuyển Sang Thanh Toán" bị chặn khi CHƯA duyệt → TP thấy đúng nút Duyệt → duyệt xong → thanh toán chạy
+  được, sinh đúng 1 đề nghị. Full regression `test-contract.js` (75/75), `test-payment.js` (110/110),
+  `test-collapse-contract-budget-doc-forms.js`, `test-contract-payment-type-change.js`,
+  `test-approval-hub.js`, `test-csp-deep-interaction.js`, `test-edit-file-ownership-batch2.js`,
+  `test-audit-round2-cluster2.js` — không có regression.
 
 ## v25.33 (2026-10-06): Làm rõ UI màn "Nhập Hợp Đồng/Phụ Lục Đã Ký" — tránh hiểu nhầm là bypass duyệt
 

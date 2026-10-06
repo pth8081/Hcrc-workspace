@@ -16,7 +16,7 @@ function check(name, cond, detail) {
 
 async function run() {
   const h = await startHarness();
-  const { page, loginAs, alerts, clearAlerts, queuePrompt, confirmPending, jsExceptions, stop } = h;
+  const { page, state, loginAs, alerts, clearAlerts, queuePrompt, confirmPending, jsExceptions, stop } = h;
 
   const assetDir = path.join(__dirname, '.tmp-assets');
   fs.mkdirSync(assetDir, { recursive: true });
@@ -565,6 +565,84 @@ async function run() {
     check('Kịch bản 12: Hub "🔍 Xem" (REJECTED) -> nhảy đúng Tab Phê Duyệt', hubNavState.activeSubTab === 'APPROVAL', hubNavState.activeSubTab);
     check('Kịch bản 12: Hub "🔍 Xem" (REJECTED) -> tự set đúng bộ lọc "Bị Từ Chối"', hubNavState.typeFilterValue === 'REJECTED', hubNavState.typeFilterValue);
     check('Kịch bản 12: Hub "🔍 Xem" (REJECTED) -> contract2 hiện ra ngay, không còn link chết', hubNavState.tbodyHTML.includes(contract2.code), null);
+
+    // ============ Kịch bản 13: "📥 Nhập Hợp Đồng/Phụ Lục Đã Ký" (isSignedImport) — approvalStatus
+    // APPROVED ngay (số hoá hợp đồng giấy cũ) NHƯNG signedFileStatus phải PENDING, vẫn cần TP duyệt
+    // Tài liệu ký trước khi "Chuyển Sang Thanh Toán" (LỖI ĐÃ VÁ 10/2026, theo yêu cầu người dùng: "muốn
+    // có bước kiểm soát hợp đồng đã ký — nhân viên tải nhầm file mà không ai duyệt thì gửi thanh toán
+    // luôn sao được?" — trước đây signedFileStatus tự APPROVED ngay lúc nhập, không ai kiểm soát). ============
+    // Cấp quyền contractImportSigned riêng cho kd1 ở CẢ 2 nơi (mock backend state.users — nơi server
+    // thật sự xác minh quyền ở lib/createValidation.js, và DB.users/currentUser phía trình duyệt — nơi
+    // quyết định ẩn/hiện nút "+ Thêm..." client) — CHỈ trong phạm vi 1 bản sao state của RIÊNG bài test
+    // này (mỗi file test có buildState() + browser riêng, không ảnh hưởng _seed.js gốc hay bài test
+    // khác đang cố ý dựa vào "kd1 KHÔNG có contractImportSigned", xem tests/test-collapse-contract-budget-doc-forms.js).
+    const kd1StateUser = state.users.find((u) => u.username === 'kd1');
+    kd1StateUser.perms.contractImportSigned = true;
+    await loginAs('kd1');
+    await page.evaluate(() => { currentUser.perms.contractImportSigned = true; const u = DB.users.find((x) => x.username === 'kd1'); if (u) u.perms.contractImportSigned = true; });
+    await page.evaluate(() => {
+      switchTab('contract');
+      setContractSubTab('MANAGE');
+      openContractManageForm();
+      // setContractSubTab('MANAGE') đã tự set contractOpMode = 'IMPORT_CONTRACT' (option đầu của tab
+      // Quản Lý HĐ) + gọi onContractOpModeChange() — không cần set tay lại như goToContractApproval().
+    });
+    const importOpMode = await page.evaluate(() => document.getElementById('contractOpMode').value);
+    check('Kịch bản 13: mở "+ Thêm Hợp Đồng/Phụ Lục" ở tab Quản Lý HĐ -> đúng mặc định IMPORT_CONTRACT', importOpMode === 'IMPORT_CONTRACT', importOpMode);
+
+    await page.selectOption('#contractType', 'Hợp đồng kinh tế');
+    await page.fill('#contractTitle', 'Hợp đồng đã ký nhập lưu trữ (kịch bản 13)');
+    await page.fill('#contractPartner', 'Đối tác đã ký ngoài hệ thống');
+    await page.fill('#contractAmount', '80000000');
+    await page.fill('#contractStartDate', '2026-01-01');
+    await page.fill('#contractEndDate', '2026-12-31');
+    await page.fill('#contractContent', 'Hợp đồng giấy đã ký trước đây, nhập lại để lưu trữ trong hệ thống.');
+    await page.setInputFiles('#contractFile', signedFile);
+    await clearAlerts();
+    await page.click('#contractSubmitBtn');
+    await page.waitForTimeout(300);
+    const importedAlerts = await alerts();
+    check('Kịch bản 13: nộp thành công -> báo "Đã nhập ... đã ký thành công"', importedAlerts.some((a) => a.includes('đã ký thành công')), importedAlerts);
+
+    const importedContract = await page.evaluate(() => {
+      const c = DB.contracts.find((x) => x.title === 'Hợp đồng đã ký nhập lưu trữ (kịch bản 13)');
+      if (!c) return null;
+      return { approvalStatus: c.approvalStatus, signedFileStatus: c.signedFileStatus, signedFileCurrentStep: c.signedFileCurrentStep, paymentStatus: c.paymentStatus };
+    });
+    check('Kịch bản 13: approvalStatus hồ sơ hợp đồng vẫn APPROVED NGAY (đúng mục đích số hoá hợp đồng giấy)', importedContract?.approvalStatus === 'APPROVED', importedContract);
+    check('Kịch bản 13: signedFileStatus (Tài liệu ký) KHÔNG còn tự APPROVED — phải PENDING, chờ TP duyệt như upload thường', importedContract?.signedFileStatus === 'PENDING' && importedContract?.signedFileCurrentStep === 1, importedContract);
+
+    // Chưa duyệt Tài liệu ký -> "Chuyển Sang Thanh Toán" vẫn bị chặn (startContractPayment() đã sẵn chặn
+    // signedFileStatus !== 'APPROVED', xem lib/recordActions.js) — xác nhận LẠI đúng kịch bản người dùng
+    // lo ngại: "nhân viên tải nhầm file mà không ai duyệt thì gửi thanh toán luôn sao được?".
+    const importedId = await page.evaluate(() => DB.contracts.find((x) => x.title === 'Hợp đồng đã ký nhập lưu trữ (kịch bản 13)').id);
+    await clearAlerts();
+    await page.evaluate((id) => startContractPaymentAction(id), importedId);
+    await confirmPending().catch(() => {});
+    const blockedAlerts = await alerts();
+    const stillNotPaid = await page.evaluate((id) => DB.contracts.find((x) => x.id === id).paymentStatus, importedId);
+    check('Kịch bản 13: "Chuyển Sang Thanh Toán" KHI CHƯA duyệt Tài liệu ký -> bị chặn (chưa ai kiểm soát thì không gửi thanh toán được)', stillNotPaid === 'CHUA_THANH_TOAN', { blockedAlerts, stillNotPaid });
+
+    // tp_kd (đúng người duyệt Tài liệu ký theo contractManageDeptWorkflows['Phòng Kinh Doanh']) phải
+    // THẤY nút Duyệt — y hệt luồng upload thường (v25.31 đã vá), không có vùng tối nào cho luồng Nhập
+    // Đã Ký nữa.
+    await loginAs('tp_kd');
+    await page.evaluate(() => setContractSubTab('MANAGE'));
+    const importedRowHTML = await page.evaluate((id) => buildContractRowHTML(DB.contracts.find((c) => c.id === id), {}), importedId);
+    check('Kịch bản 13: TP (approver Tài liệu ký thật) THẤY nút Duyệt/Từ Chối cho hồ sơ vừa nhập', importedRowHTML.includes('approveSigned') && importedRowHTML.includes('rejectSigned'), importedRowHTML);
+
+    await page.evaluate((id) => approveContractSignedFileAction(id), importedId);
+    await confirmPending();
+    const afterApproveSigned = await page.evaluate((id) => DB.contracts.find((x) => x.id === id).signedFileStatus, importedId);
+    check('Kịch bản 13: TP duyệt Tài liệu ký -> signedFileStatus chuyển APPROVED', afterApproveSigned === 'APPROVED', afterApproveSigned);
+
+    await page.evaluate((id) => startContractPaymentAction(id), importedId);
+    await confirmPending();
+    const afterStartPayment = await page.evaluate((id) => {
+      const reqs = DB.paymentRequests.filter((r) => r.sourceModule === 'CONTRACT' && r.sourceId === id);
+      return { contractPaymentStatus: DB.contracts.find((x) => x.id === id).paymentStatus, paymentRequestCount: reqs.length };
+    }, importedId);
+    check('Kịch bản 13: Sau khi Tài liệu ký ĐƯỢC DUYỆT -> "Chuyển Sang Thanh Toán" chạy được, sinh đúng 1 đề nghị thanh toán', afterStartPayment.paymentRequestCount === 1, afterStartPayment);
 
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {
