@@ -240,6 +240,7 @@ function resetUserForm() {
   document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
   document.getElementById('pMeetingBook').checked = !!defaults.meetingBook;
   document.getElementById('pSubCreate').checked = !!defaults.submissionCreate;
+  document.getElementById('pContractCreate').checked = !!defaults.contractCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
@@ -310,7 +311,7 @@ function resetUserForm() {
   [
     'pUploadAll', 'pDocDownloadAll',
     'pSubDownloadAll',
-    'pContractCreateAll', 'pContractDownloadAll',
+    'pContractDownloadAll',
     'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
     'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(id => {
@@ -497,10 +498,10 @@ function summarizeUserPerms(perms) {
   // LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): trước đây chỉ xét submissionCreate/contractCreate —
   // người CHỈ có quyền Tải (submissionDownload/contractDownload, không có quyền Tạo) bị rơi mất tag này
   // dù vẫn thực sự có quyền thao tác trên module (tải hồ sơ Tờ Trình/Hợp Đồng).
-  // submissionCreate giờ là quyền PHẲNG (boolean, 10/2026 "6-module") — không còn {all,depts} để
-  // hasScope() đọc, kiểm tra trực tiếp thay vì qua hasScope().
+  // submissionCreate/contractCreate giờ là quyền PHẲNG (boolean, 10/2026 "6-module") — không còn
+  // {all,depts} để hasScope() đọc, kiểm tra trực tiếp thay vì qua hasScope().
   if (perms.submissionCreate || hasScope(perms.submissionDownload)) parts.push('📜 Tờ trình');
-  if (hasScope(perms.contractCreate) || hasScope(perms.contractDownload)) parts.push('📄 Hợp đồng');
+  if (perms.contractCreate || hasScope(perms.contractDownload)) parts.push('📄 Hợp đồng');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');

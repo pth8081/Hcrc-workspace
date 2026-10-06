@@ -122,7 +122,12 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   // theo cả quy trình duyệt sang phòng ban đó — né người duyệt lẽ ra phải xem xét hồ sơ này. Kèm đối
   // chiếu danh mục phòng ban/siêu thị thật, cùng khuôn custodianDept ngay bên dưới.
   if (payload.dept !== undefined && payload.dept !== contract.dept) {
-    assertDeptScopeAllowed(user, user.perms?.contractCreate, payload.dept);
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module"): contractCreate giờ là quyền PHẲNG (boolean) —
+    // không còn {all,depts} để đọc. Quyền sửa đã được gác ở check creator/admin phía trên (ownership-
+    // based, không cần contractCreate), nên ở đây chỉ còn cần re-check ĐÚNG phòng ban mới là CHÍNH
+    // phòng ban của người sửa (forceOwnDept, khớp đúng luật lúc TẠO) — truyền scope rỗng {} để
+    // assertDeptScopeAllowed()/scopeAllows() dùng nhánh "cùng phòng là được" có sẵn.
+    assertDeptScopeAllowed(user, {}, payload.dept);
     const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
     if (validDepts.size && !validDepts.has(payload.dept)) {
       throw new HttpError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
@@ -1865,8 +1870,23 @@ function submitSubmissionDraft(user, item) {
 // trong dữ liệu cũ) — createValidation.js chỉ resolve custodianDept = dept cho hồ sơ TẠO/SỬA MỚI từ nay
 // trở đi, không có gì tự điền lại cho hồ sơ cũ đang nằm sẵn trong DB; không có fallback này, hồ sơ cũ sẽ
 // đột ngột không ai thao tác được nữa (scopeAllows(..., undefined) luôn trả false trừ khi admin/scope.all).
+//
+// LÀM GỌN (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng trực tiếp đến quyền thanh toán):
+// contractCreate giờ là quyền PHẲNG (boolean) — scopeAllows(user, user.perms?.contractCreate, dept) CŨ
+// đọc {all,depts} để xác định phạm vi; {all:true} cho phép quản lý thanh toán hợp đồng CỦA BẤT KỲ đơn vị
+// custodian nào (không chỉ đúng phòng ban mình). Từ nay contractCreate CHỈ còn ý nghĩa "có quyền tạo hồ
+// sơ hợp đồng" (luôn tự khoá đúng phòng ban CHÍNH MÌNH, forceOwnDept) — KHÔNG còn khái niệm "phạm vi"
+// riêng để truyền cho scopeAllows(). Giữ ĐÚNG tinh thần cũ "quản lý thanh toán theo phạm vi quyền
+// contractCreate CỦA ĐÚNG ĐƠN VỊ CUSTODIAN": giờ là "có quyền contractCreate (đang giữ cờ này) VÀ đơn vị
+// custodian của hồ sơ CHÍNH LÀ phòng ban của người gọi" — scopeAllows(user, {}, dept) dùng đúng nhánh
+// "cùng phòng là được" có sẵn để kiểm phần dept, cộng thêm check contractCreate tường minh (nếu bỏ qua
+// check này, BẤT KỲ ai cùng phòng ban với custodianDept — kể cả không hề có quyền tạo hồ sơ hợp đồng nào
+// — cũng quản lý được thanh toán, NỚI RỘNG quyền so với trước). custodianDept vẫn được giao tự do cho
+// BẤT KỲ đơn vị nào (xem module-hopdong.js/core.js — không gác theo contractCreate), nên người ở đơn vị
+// ĐƯỢC GIAO (không nhất thiết là đơn vị tạo hồ sơ) vẫn quản lý được thanh toán miễn họ CŨNG giữ
+// contractCreate và cùng phòng ban với custodianDept — đúng kịch bản "giao kế toán phòng khác theo dõi".
 function canManageContractPayment(user, contract) {
-  return !!(user.perms?.admin || scopeAllows(user, user.perms?.contractCreate, contract.custodianDept || contract.dept));
+  return !!(user.perms?.admin || (user.perms?.contractCreate && scopeAllows(user, {}, contract.custodianDept || contract.dept)));
 }
 
 // v15.8 — trước đây contract.paymentStatus/item.paymentStatus chuyển sang CHO_THANH_TOAN NGAY lúc tạo

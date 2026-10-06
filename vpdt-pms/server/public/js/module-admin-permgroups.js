@@ -339,7 +339,7 @@ const PERM_KEY_VN_LABELS = {
   "checklistReportView": "Checklist Đánh Giá Siêu Thị — 📊 Quyền Báo Cáo Checklist (xem báo cáo Checklist Thường mọi siêu thị)",
   "checklistAtvstpExecute": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát, mọi siêu thị)",
   "checklistAtvstpReportView": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Báo Cáo ATVSTP (Dashboard VSATTP, mọi siêu thị)",
-  "contractCreate.all": "Hợp Đồng & Giấy Phép — Tạo mới",
+  "contractCreate": "Hợp Đồng & Giấy Phép — Tạo mới (tự khoá đúng phòng ban)",
   "contractDownload.all": "Hợp Đồng & Giấy Phép — Tải xuống",
   "contractImportSigned": "Hợp Đồng & Giấy Phép — 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab \"Quản Lý HĐ\")",
   "docDownload.all": "Tài Liệu — Tải Tài Liệu",

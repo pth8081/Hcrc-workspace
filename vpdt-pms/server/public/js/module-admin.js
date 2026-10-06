@@ -1523,7 +1523,10 @@ const PERM_DEPT_TABLES = [
   // chuyển thành 1 công tắc phẳng pSubCreate (boolean) riêng, KHÔNG còn hậu tố All/Dept, xem khối
   // 📜 3. Văn Bản Trình trong systemSection.html.
   { tbody: 'pSubDeptTableBody', cols: ['pSubDownload'] },
-  { tbody: 'pContractDeptTableBody', cols: ['pContractCreate', 'pContractDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pContractCreate ("Tạo mới") khỏi bảng phòng ban —
+  // đã chuyển thành 1 công tắc phẳng pContractCreate (boolean) riêng, xem khối 📄 4. Hợp Đồng & Giấy
+  // Phép trong systemSection.html.
+  { tbody: 'pContractDeptTableBody', cols: ['pContractDownload'] },
   // Phòng Họp (10/2026, đã xác nhận): KHÔNG còn bảng phòng ban — gỡ khỏi danh sách này, xem công tắc
   // phẳng pMeetingBook trong khối "📅 5. Phòng Họp" (systemSection.html).
   { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarCreate', 'pCarDownload'] },

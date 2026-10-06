@@ -1879,20 +1879,25 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📄 4. Hợp Đồng & Giấy Phép</span></span>
             <span id="permTreeBadge_contract" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+          <div class="p-3 pt-0 space-y-2">
             <!-- LÀM GỌN (v24.79→v24.80, "Việc D"): bỏ cột "Xem" cũ — xem chú thích đầy đủ tại khối
                  📜 3. Văn Bản Trình ngay phía trên (cùng khuôn, module "Hợp Đồng" trong Phạm Vi Xem
-                 Theo Phòng Ban). Chỉ còn đúng 2 quyền ở đây: Tạo mới + Tải xuống. -->
+                 Theo Phòng Ban).
+                 LÀM GỌN TIẾP (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng quyền thanh
+                 toán): bỏ hẳn bảng phòng ban của cột "Tạo mới" (contractCreate {all,depts}) — chỉ còn 1
+                 công tắc phẳng DUY NHẤT, tự khoá đúng phòng ban người tạo (forceOwnDept, xem
+                 lib/createValidation.js). canManageContractPayment() (quyền "Lập Thanh Toán"/"Tải Tài
+                 Liệu Đã Ký") đã cập nhật để đọc đúng quyền phẳng mới này — ĐƠN VỊ TIẾP NHẬN THEO DÕI &
+                 THANH TOÁN (custodianDept) KHÔNG bị ảnh hưởng, vẫn chọn tự do bất kỳ phòng ban nào lúc
+                 tạo hồ sơ. "Tải xuống" (contractDownload) giữ nguyên bảng theo phòng ban như cũ. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pContractCreate"> ✅ Cho phép tạo hồ sơ hợp đồng (tự khoá đúng phòng ban của mình)
+            </label>
+            <div class="max-h-64 overflow-y-auto overflow-x-auto">
             <table class="w-full text-[11px] border-collapse">
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
                   <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                  <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Tạo mới</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pContractCreateAll" data-op-change="toggleScopeGroup" data-arg0="pContractCreateAll" data-arg1="pContractCreateDept"><span>ALL</span>
-                    </label>
-                  </th>
                   <th class="text-center font-bold text-cyan-700 pb-1 px-1 align-bottom">
                     <span class="block mb-0.5">Tải xuống</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
@@ -1903,6 +1908,7 @@
               </thead>
               <tbody id="pContractDeptTableBody"></tbody>
             </table>
+            </div>
           </div>
           <div class="px-3 pb-3 space-y-1">
             <!-- "Duyệt hợp đồng" (contractApprove) ĐÃ BỎ (11/2026, theo yêu cầu người dùng "Việc A") — quyền

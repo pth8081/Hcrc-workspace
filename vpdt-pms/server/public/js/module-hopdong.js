@@ -169,7 +169,7 @@ function onContractOpModeChange() {
     // Chế độ "Tạo Mới"/"Nhập Hợp Đồng Đã Ký" — tự chọn sẵn + khoá lại đúng phòng ban của người dùng
     // (nếu chỉ có 1 lựa chọn thật sự), thay vì luôn mở khoá vô điều kiện như trước — xem
     // applyOwnDeptAutoSelect() ở core.js.
-    applyOwnDeptAutoSelect(document.getElementById('contractDept'), getScopedDepts(currentUser, currentUser.perms?.contractCreate));
+    applyOwnDeptAutoSelect(document.getElementById('contractDept'), getScopedDepts(currentUser, {}));
     refreshContractCodePreview();
   }
 }
@@ -185,9 +185,12 @@ function refreshContractCodePreview() {
 }
 
 // Danh sách hợp đồng được phép "Bổ Sung Phụ Lục" — chỉ hợp đồng GỐC đã APPROVED, người dùng có quyền
-// tạo hồ sơ hợp đồng cho đúng phòng ban đó (contractCreate scope, khớp getScope() ở
-// CREATE_MODULE_CONFIGS.contracts). Dựng <datalist> (native, thay cho bảng button tự dựng trước đây —
-// xem ghi chú ở contractAddendumTargetWrap) — mỗi option format "<mã> — <tên>", khớp lại bởi
+// tạo hồ sơ hợp đồng CHO ĐÚNG PHÒNG BAN ĐÓ. Làm gọn phân quyền Hợp Đồng (10/2026, "6-module"):
+// contractCreate giờ là quyền PHẲNG boolean (forceOwnDept) — phụ lục luôn tạo với dept = phòng ban
+// CHÍNH MÌNH (khớp createValidation.js chặn payload.dept !== root.dept), nên điều kiện tương đương là
+// "đang giữ contractCreate VÀ hợp đồng gốc CÙNG phòng ban với mình" thay vì scopeAllows(...scope cũ).
+// Dựng <datalist> (native, thay cho bảng button tự dựng trước đây — xem ghi chú ở
+// contractAddendumTargetWrap) — mỗi option format "<mã> — <tên>", khớp lại bởi
 // resolveContractAddendumTargetInput().
 function populateContractAddendumTargets() {
   const hidden = document.getElementById('contractAddendumTarget');
@@ -199,7 +202,7 @@ function populateContractAddendumTargets() {
   // sách dài dần theo thời gian sẽ càng khó lướt tìm đúng hợp đồng cần bổ sung phụ lục.
   const eligible = DB.contracts.filter(c =>
     !c.isAddendum && c.approvalStatus === 'APPROVED' &&
-    (currentUser.perms?.admin || scopeAllows(currentUser, currentUser.perms?.contractCreate, c.dept))
+    (currentUser.perms?.admin || (currentUser.perms?.contractCreate && c.dept === currentUser.dept))
   ).sort((a, b) => String(a.code).localeCompare(String(b.code)));
 
   sddSetOptions('contractAddendumTargetDatalist', eligible.map(c => `${c.code} — ${c.title}`));
@@ -794,7 +797,7 @@ function cancelEditContract() {
   // (KHAC) rồi — vẫn đặt lại tường minh ở đây cho chắc (cùng lý do contractOpMode ở dưới cần gán tay).
   document.getElementById('contractAddendumTarget').value = '';
   document.getElementById('contractApprovalLevel').value = 'KHAC';
-  applyOwnDeptAutoSelect(document.getElementById('contractDept'), getScopedDepts(currentUser, currentUser.perms?.contractCreate));
+  applyOwnDeptAutoSelect(document.getElementById('contractDept'), getScopedDepts(currentUser, {}));
   document.getElementById('contractCustodianDept').disabled = false;
   document.getElementById('contractType').disabled = false;
   document.getElementById('contractFile').required = true;

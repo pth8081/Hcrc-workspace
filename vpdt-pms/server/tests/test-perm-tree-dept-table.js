@@ -2,11 +2,20 @@
 'use strict';
 
 // ==========================================================================
-// Regression test: Phân Quyền > 6 khối "Xem/Tạo mới/Tải Xuống theo phòng ban" (2. Tài Liệu, 3. Văn Bản
-// Trình, 4. Hợp Đồng & Giấy Phép, 5. Phòng Họp, 6. Đăng Ký Xe, 7. Văn Phòng) — đợt 10/2026, đổi từ lưới
+// Regression test: Phân Quyền > các khối "Xem/Tạo mới/Tải Xuống theo phòng ban" (2. Tài Liệu, 3. Văn Bản
+// Trình, 4. Hợp Đồng & Giấy Phép, 6. Đăng Ký Xe, 7. Văn Phòng) — đợt 10/2026, đổi từ lưới
 // checkbox 2-4 cột hẹp cạnh nhau (mỗi cột LẶP LẠI toàn bộ danh sách phòng ban) sang 1 bảng/khối, MỖI DÒNG
 // là 1 phòng ban (tên chỉ hiện 1 lần, đủ rộng không bị "truncate" mất chữ — phản hồi người dùng thật
 // 9/2026, ý tưởng người dùng đề xuất trực tiếp: "theo chiều ngang từng dòng").
+//
+// LƯU Ý (10/2026, "6-module" làm gọn phân quyền): khối "5. Phòng Họp" đã bỏ HẲN bảng phòng ban (gộp
+// meetingView+meetingBookScope thành 1 quyền phẳng boolean DUY NHẤT meetingBook, tự khoá đúng phòng ban
+// người dùng — KHÔNG còn `pMeetingDeptTableBody`/`pMeetingBookDept_N`/`pMeetingViewDept_N` trong DOM nữa,
+// xem systemSection.html "5. Phòng Họp"). Cột "Tạo mới" của khối "4. Hợp Đồng & Giấy Phép" cũng đã gộp
+// tương tự thành quyền phẳng contractCreate (`pContractCreate`, KHÔNG còn `pContractCreateDept_N`) — bảng
+// pContractDeptTableBody giờ CHỈ còn đúng 1 cột "Tải xuống" (pContractDownload). Các scenario dưới đây đã
+// được cập nhật để KHÔNG còn tham chiếu các id/field đã bị gỡ này — thay bằng cột/khối còn giữ bảng
+// phòng ban thật (pContractDownload/pCarView/pCarCreate/pOfficeView/pOfficeCreate).
 //
 // Kiểm tra:
 //   1. renderDeptCheckboxes() render đúng 1 <tr> mỗi phòng ban vào tbody của cả 6 khối, tên phòng ban đủ
@@ -91,10 +100,10 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
   await page.evaluate((depts) => { window.DB = window.DB || {}; DB.depts = depts; }, DEPT_NAMES);
 
   try {
-    await scenario('renderDeptCheckboxes() dựng đúng 1 <tr>/phòng ban cho cả 6 bảng, tên KHÔNG bị cắt (không class truncate)', async () => {
+    await scenario('renderDeptCheckboxes() dựng đúng 1 <tr>/phòng ban cho cả 5 bảng còn lại (Phòng Họp đã gộp phẳng, không còn bảng), tên KHÔNG bị cắt (không class truncate)', async () => {
       const r = await page.evaluate((depts) => {
         renderDeptCheckboxes();
-        const tbodyIds = ['pDocDeptTableBody', 'pSubDeptTableBody', 'pContractDeptTableBody', 'pMeetingDeptTableBody', 'pCarDeptTableBody', 'pOfficeDeptTableBody'];
+        const tbodyIds = ['pDocDeptTableBody', 'pSubDeptTableBody', 'pContractDeptTableBody', 'pCarDeptTableBody', 'pOfficeDeptTableBody'];
         return tbodyIds.map(id => {
           const el = document.getElementById(id);
           if (!el) return { id, missing: true };
@@ -115,25 +124,25 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
     await scenario('Id checkbox từng dòng vẫn đúng khuôn cũ "${prefix}Dept_${idx}" + có data-scope-group', async () => {
       const r = await page.evaluate(() => ({
         upload0: document.getElementById('pUploadDept_0')?.getAttribute('data-scope-group'),
-        contractCreate1: document.getElementById('pContractCreateDept_1')?.getAttribute('data-scope-group'),
+        // contractCreate đã gộp phẳng (10/2026, "6-module") — pContractDeptTableBody giờ CHỈ còn cột
+        // "Tải xuống" (pContractDownload), dùng cột đó thay cho pContractCreateDept_1 đã bị gỡ.
+        contractDownload1: document.getElementById('pContractDownloadDept_1')?.getAttribute('data-scope-group'),
         carView2: document.getElementById('pCarViewDept_2')?.getAttribute('data-scope-group'),
-        meetingBook0: document.getElementById('pMeetingBookDept_0')?.getAttribute('data-scope-group'),
       }));
       if (r.upload0 !== 'pUpload') throw new Error(`pUploadDept_0 data-scope-group sai: ${r.upload0}`);
-      if (r.contractCreate1 !== 'pContractCreate') throw new Error(`pContractCreateDept_1 data-scope-group sai: ${r.contractCreate1}`);
+      if (r.contractDownload1 !== 'pContractDownload') throw new Error(`pContractDownloadDept_1 data-scope-group sai: ${r.contractDownload1}`);
       if (r.carView2 !== 'pCarView') throw new Error(`pCarViewDept_2 data-scope-group sai: ${r.carView2}`);
-      if (r.meetingBook0 !== 'pMeetingBook') throw new Error(`pMeetingBookDept_0 data-scope-group sai: ${r.meetingBook0}`);
     });
 
-    await scenario('Round-trip thật qua UI: tick checkbox trong bảng mới -> collectPermsFromForm() đọc đúng uploadDepts/contractCreate.depts', async () => {
+    await scenario('Round-trip thật qua UI: tick checkbox trong bảng mới -> collectPermsFromForm() đọc đúng uploadDepts/contractDownload.depts', async () => {
       const r = await page.evaluate((depts) => {
         document.getElementById('pUploadDept_1').checked = true; // Phòng Kế Toán
-        document.getElementById('pContractCreateDept_2').checked = true; // Phòng IT
+        document.getElementById('pContractDownloadDept_2').checked = true; // Phòng IT
         const perms = collectPermsFromForm();
-        return { uploadDepts: perms.uploadDepts, contractCreateDepts: perms.contractCreate.depts };
+        return { uploadDepts: perms.uploadDepts, contractDownloadDepts: perms.contractDownload.depts };
       }, DEPT_NAMES);
       if (JSON.stringify(r.uploadDepts) !== JSON.stringify([DEPT_NAMES[1]])) throw new Error(`uploadDepts sai: ${JSON.stringify(r.uploadDepts)}`);
-      if (JSON.stringify(r.contractCreateDepts) !== JSON.stringify([DEPT_NAMES[2]])) throw new Error(`contractCreate.depts sai: ${JSON.stringify(r.contractCreateDepts)}`);
+      if (JSON.stringify(r.contractDownloadDepts) !== JSON.stringify([DEPT_NAMES[2]])) throw new Error(`contractDownload.depts sai: ${JSON.stringify(r.contractDownloadDepts)}`);
     });
 
     await scenario('populatePermsForm() đổ đúng dữ liệu cũ lên ô checkbox trong bảng mới (carCreate/officeView)', async () => {
@@ -174,16 +183,18 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
     });
 
     await scenario('computePermTreeNodeCount()/refreshPermTreeBadges(): tick 1 checkbox phòng ban (không bật ALL) vẫn được badge đếm là ĐÃ CẤP qua data-scope-group, không đếm trùng/đếm riêng lẻ', async () => {
+      // Dùng khối "4. Hợp Đồng & Giấy Phép" (permTreeBadge_contract) thay cho "5. Phòng Họp" — khối
+      // Phòng Họp đã gộp phẳng (10/2026, "6-module"), KHÔNG còn bảng phòng ban nào để tick nữa.
       const r = await page.evaluate(() => {
         document.querySelectorAll('#permFieldsContainer input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-        document.getElementById('pMeetingViewDept_0').checked = true; // chỉ tick 1 phòng ban, KHÔNG bật ALL
+        document.getElementById('pContractDownloadDept_0').checked = true; // chỉ tick 1 phòng ban, KHÔNG bật ALL
         refreshPermTreeBadges();
-        const badge = document.getElementById('permTreeBadge_meeting').textContent;
+        const badge = document.getElementById('permTreeBadge_contract').textContent;
         return badge;
       });
       const [granted, total] = r.split('/').map(Number);
-      if (granted < 1) throw new Error(`Badge "5. Phòng Họp" phải đếm ÍT NHẤT 1 mục đã cấp (do đã tick 1 phòng ban ở cột Xem), được "${r}"`);
-      if (!(total >= 2)) throw new Error(`Badge "5. Phòng Họp" total phải >= 2 (Xem + Đăng ký, chưa tính checkbox "toàn công ty"), được "${r}"`);
+      if (granted < 1) throw new Error(`Badge "4. Hợp Đồng & Giấy Phép" phải đếm ÍT NHẤT 1 mục đã cấp (do đã tick 1 phòng ban ở cột Tải xuống), được "${r}"`);
+      if (!(total >= 2)) throw new Error(`Badge "4. Hợp Đồng & Giấy Phép" total phải >= 2 (Tạo hồ sơ + Tải xuống, chưa tính Nhập Đã Ký), được "${r}"`);
     });
 
     console.log('');

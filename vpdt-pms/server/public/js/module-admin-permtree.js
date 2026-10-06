@@ -159,7 +159,10 @@ function collectPermsFromForm() {
     // (forceOwnDept, xem lib/createValidation.js), cùng khuôn meetingBook.
     submissionCreate: document.getElementById('pSubCreate').checked,
     submissionDownload: scopeFromForm('pSubDownloadAll', 'pSubDownloadDept'),
-    contractCreate: scopeFromForm('pContractCreateAll', 'pContractCreateDept'),
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module", đã xác nhận): bỏ contractCreate {all,depts},
+    // chỉ còn 1 công tắc phẳng pContractCreate — tự khoá đúng phòng ban người tạo hồ sơ (forceOwnDept,
+    // xem lib/createValidation.js). RÀ SOÁT KỸ: ảnh hưởng canManageContractPayment() (lib/recordActions.js).
+    contractCreate: document.getElementById('pContractCreate').checked,
     contractDownload: scopeFromForm('pContractDownloadAll', 'pContractDownloadDept'),
     // contractImportSigned — quyền RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (tạo hồ sơ APPROVED ngay,
     // bỏ qua quy trình Phê Duyệt). Tách khỏi contractCreate, xem contracts.extraValidate ở lib/createValidation.js.
@@ -408,7 +411,7 @@ function populatePermsForm(permsInput) {
 
   document.getElementById('pSubCreate').checked = !!perms.submissionCreate;
   document.getElementById('pSubDownloadAll').checked = !!perms.submissionDownload?.all;
-  document.getElementById('pContractCreateAll').checked = !!perms.contractCreate?.all;
+  document.getElementById('pContractCreate').checked = !!perms.contractCreate;
   document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
   document.getElementById('pContractImportSigned').checked = !!perms.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
@@ -446,7 +449,6 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.uploadDepts, 'pUploadDept');
   setGroupCheckboxes(perms.docDownload?.depts, 'pDocDownloadDept');
   setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
-  setGroupCheckboxes(perms.contractCreate?.depts, 'pContractCreateDept');
   setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
   setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
   setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
@@ -456,7 +458,7 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
   ['pUploadAll', 'pDocDownloadAll',
    'pSubDownloadAll',
-   'pContractCreateAll', 'pContractDownloadAll',
+   'pContractDownloadAll',
    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(allId => {

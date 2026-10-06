@@ -2976,8 +2976,8 @@ function getScopedDepts(user, scope) {
 // options (getScopedDepts() ở trên) — gọi TRỰC TIẾP SAU dòng gán innerHTML của từng ô, KHÔNG tách lịch
 // riêng qua setTimeout/microtask nào (tránh đúng lớp bug thứ tự DOM). KHOÁ (disabled) ô đó khi phạm vi
 // chỉ vỏn vẹn ĐÚNG 1 phòng ban (scopedDepts.length === 1 — tức người dùng không có quyền tạo "thay mặt"
-// phòng ban khác, ví dụ uploadDepts/contractCreate/carCreate/officeCreate KHÔNG mở rộng ngoài phòng
-// ban chính mình — submissionCreate/meetingBook giờ luôn truyền scope RỖNG {} nên LUÔN rơi vào nhánh
+// phòng ban khác, ví dụ uploadDepts/carCreate/officeCreate KHÔNG mở rộng ngoài phòng ban chính mình —
+// submissionCreate/meetingBook/contractCreate giờ luôn truyền scope RỖNG {} nên LUÔN rơi vào nhánh
 // này) để tránh chọn nhầm phòng ban ở đúng nhóm
 // người dùng phổ biến nhất (chỉ có 1 lựa chọn thật sự). Người có phạm vi RỘNG hơn (uploadAll/scope.depts
 // nhiều phòng/admin) vẫn được TIỀN ĐIỀN sẵn đúng phòng ban của mình cho tiện — KHÔNG bị khoá, vẫn chọn
@@ -3861,9 +3861,11 @@ function canApproveContractStep(user, contract) {
 
 // Upload "Tài liệu ký" + bấm nút "Thanh toán" — theo phạm vi quyền contractCreate của ĐƠN VỊ CUSTODIAN
 // (custodianDept, mặc định = dept khi hồ sơ không chọn riêng), khớp đúng canManageContractPayment() ở
-// lib/recordActions.js.
+// lib/recordActions.js. LÀM GỌN (10/2026, "6-module"): contractCreate giờ là quyền PHẲNG boolean — phải
+// giữ ĐÚNG check tường minh user?.perms?.contractCreate && ... (không bỏ qua), nếu không BẤT KỲ ai cùng
+// phòng ban với custodianDept cũng quản lý được thanh toán dù không hề giữ quyền tạo hồ sơ hợp đồng nào.
 function canManageContractPaymentClient(user, contract) {
-  return !!(user?.perms?.admin || scopeAllows(user, user?.perms?.contractCreate, contract.custodianDept || contract.dept));
+  return !!(user?.perms?.admin || (user?.perms?.contractCreate && scopeAllows(user, {}, contract.custodianDept || contract.dept)));
 }
 
 // Khớp đúng canManageOfficePayment() ở lib/recordActions.js.
@@ -4186,7 +4188,9 @@ function defaultNewUserPerms() {
     // submissionCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự
     // khoá đúng phòng ban người trình (forceOwnDept, lib/createValidation.js).
     submissionCreate: false, submissionDownload: emptyScope(),
-    contractCreate: emptyScope(), contractDownload: emptyScope(),
+    // contractCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự khoá
+    // đúng phòng ban người tạo hồ sơ (forceOwnDept, lib/createValidation.js).
+    contractCreate: false, contractDownload: emptyScope(),
     // contractImportSigned — quyền phẳng RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (hồ sơ APPROVED ngay,
     // không qua quy trình Phê Duyệt) — TÁCH khỏi contractCreate, xem lib/createValidation.js.
     contractImportSigned: false,
@@ -4421,8 +4425,7 @@ function migrateLegacyPerms(perms) {
   // submissionView/contractView (cột "Xem" cũ) ĐÃ BỎ (11/2026, "Việc D") — giá trị cũ (nếu còn) đã
   // được quét/gộp vào deptViewScopeConfig.submission/contract.extraViewers ở khối di trú RIÊNG ngay
   // TRƯỚC lời gọi migrateLegacyPerms() này (xem initDatabase()) — xoá hẳn 2 field dư thừa khỏi perms ở
-  // đây. contractCreate (quyền Tạo, KHÔNG đổi — xem task #415) vẫn migrate bình thường từ cờ CỰC CŨ
-  // contractModule (boolean toàn công ty, trước khi có mô hình {all,depts}).
+  // đây.
   if (p.submissionCreate === undefined && p.submissionModule !== undefined) {
     p.submissionCreate = scopeFromFlag(p.submissionModule);
     changed = true;
@@ -4443,6 +4446,17 @@ function migrateLegacyPerms(perms) {
   }
   if (p.contractModule !== undefined) { delete p.contractModule; changed = true; }
   if (p.contractView !== undefined) { delete p.contractView; changed = true; }
+  // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module", đã xác nhận): bỏ contractCreate {all,depts}, chỉ
+  // còn 1 cờ phẳng — cùng khuôn meetingBook/submissionCreate. Chạy SAU khối di trú contractModule ở
+  // trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn). RÀ SOÁT KỸ (ảnh hưởng
+  // canManageContractPayment()): ai ĐÃ có bất kỳ phạm vi nào (all hoặc >=1 depts) đều giữ được quyền
+  // tạo hồ sơ (true) — KHÔNG để rơi về false do lỗi migration, chỉ mất đi phần "phạm vi" (giờ luôn tự
+  // khoá đúng phòng ban mình, không còn chọn hộ phòng ban khác).
+  if (typeof p.contractCreate !== 'boolean') {
+    const oldScope = p.contractCreate;
+    p.contractCreate = !!(oldScope?.all || (Array.isArray(oldScope?.depts) && oldScope.depts.length > 0));
+    changed = true;
+  }
   if (p.carView === undefined) {
     p.carView = scopeFromFlag(p.carModule);
     p.carCreate = scopeFromFlag(p.carModule);
@@ -9573,8 +9587,9 @@ function _dispatchTabRender(tabName) {
 // (2) người ĐÃ tự tạo ít nhất 1 đề nghị thanh toán (createdBy === username — custodian hợp đồng bấm
 // "🧾 Lập Thanh Toán" ở module Hợp Đồng, canManageContractPayment() theo contractCreate scope, KHÔNG
 // nhất thiết có paymentManage, nhưng vẫn cần vào "🗂️ Quản Lý Thanh Toán" để tự lập/sửa đợt & gửi duyệt
-// đề nghị của chính mình). KHÔNG mở toàn bộ module cho MỌI người dùng như scopeHasAny(contractCreate)
-// (scope đó luôn true do "phòng ban của chính mình" mặc định — quá rộng cho 1 module động tới tiền).
+// đề nghị của chính mình). KHÔNG mở toàn bộ module cho MỌI người có contractCreate — quyền đó giờ chỉ
+// còn nghĩa "tạo được hồ sơ hợp đồng trong phòng ban mình" (forceOwnDept), quá rộng cho 1 module động
+// tới tiền nếu dùng trực tiếp làm điều kiện mở cả "🗂️ Quản Lý Thanh Toán".
 function canAccessPaymentModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -10507,7 +10522,10 @@ function populateDropdowns() {
 
   const contractDept = document.getElementById('contractDept');
   if (contractDept) {
-    const contractScopedDepts = getScopedDepts(currentUser, currentUser.perms?.contractCreate);
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module"): contractCreate giờ là quyền PHẲNG (boolean),
+    // không còn {all,depts} để truyền vào getScopedDepts() — truyền {} để tận dụng đúng nhánh "cùng
+    // phòng là được" có sẵn (tự khoá 1 phòng ban DUY NHẤT), cùng khuôn meetingBook/submissionCreate.
+    const contractScopedDepts = getScopedDepts(currentUser, {});
     contractDept.innerHTML = contractScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
     applyOwnDeptAutoSelect(contractDept, contractScopedDepts);
   }

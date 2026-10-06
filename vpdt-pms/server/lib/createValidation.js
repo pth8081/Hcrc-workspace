@@ -855,7 +855,16 @@ const CREATE_MODULE_CONFIGS = {
   },
   contracts: {
     dbKey: 'contracts',
-    getScope: (user) => user.perms?.contractCreate,
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module", đã xác nhận): bỏ hẳn contractCreate {all,depts}
+    // — giờ là 1 quyền phẳng (boolean) DUY NHẤT, luôn tự khoá đúng phòng ban của chính người tạo
+    // (forceOwnDept: true, cùng khuôn meetingBook/submissionCreate). getScope() trả rỗng để
+    // scopeAllows() dùng đúng nhánh "cùng phòng là được" có sẵn — quyền TẠO thật sự gác ở
+    // extraValidate() bên dưới. custodianDept ("Đơn vị tiếp nhận theo dõi & thanh toán") KHÔNG bị ảnh
+    // hưởng — vẫn chọn tự do BẤT KỲ phòng ban nào (xem khối custodianDept bên dưới), vì đó là "giao việc
+    // cho đơn vị khác", không phải "tạo hồ sơ thay mặt đơn vị khác". canManageContractPayment()
+    // (lib/recordActions.js) đã cập nhật để đọc đúng quyền phẳng mới này + custodianDept.
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: null, // Hợp đồng KHÔNG có field creatorName (khớp index.html)
     // Mã hợp đồng GỐC = HCRC-<mã phòng>-<viết tắt Loại Pháp Lý>-<số 3 chữ số>; mã PHỤ LỤC = <mã gốc>-
     // PLHD<số 2 chữ số> (đánh số riêng theo từng hợp đồng gốc) — SINH LẠI Ở SERVER, xem
@@ -883,6 +892,13 @@ const CREATE_MODULE_CONFIGS = {
     // Phụ lục (isAddendum=true, áp dụng cho CẢ 2 luồng trên) chỉ gắn được vào 1 hợp đồng GỐC ĐÃ APPROVED
     // (xem index.html generateAddendumCode()/onContractAddendumTargetChange()).
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được tạo
+      // hồ sơ hợp đồng hay không, cả 2 luồng Phê Duyệt lẫn Nhập Đã Ký) phải gác RIÊNG ở đây (cùng khuôn
+      // meetingBook/submissionCreate.extraValidate). isSignedImport còn đòi thêm contractImportSigned
+      // riêng (xem khối bên dưới) — 2 quyền ĐỘC LẬP, không quyền nào thay thế được quyền kia.
+      if (!user.perms?.admin && !user.perms?.contractCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo hồ sơ hợp đồng');
+      }
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
 
