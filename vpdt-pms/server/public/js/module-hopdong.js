@@ -1136,7 +1136,16 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') && canManageContractPaymentClient(currentUser, c)) {
     secondaryOptions.push({ value: 'uploadSigned', label: (c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') ? `📤 Tải Lại ${signedDocNoun}` : `📤 Tải ${signedDocNoun}` });
   }
-  if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && canManageContractPaymentClient(currentUser, c)) {
+  // LỖI ĐÃ VÁ (10/2026, theo báo cáo người dùng "upload lên lại bỏ qua không sử dụng phê duyệt và bypass
+  // luôn"): 3 nút Duyệt/Từ Chối/Bổ Sung Tài Liệu Ký trước đây hiện cho BẤT KỲ ai có canManageContractPaymentClient()
+  // (quyền quản lý thanh toán/tải tài liệu ký lên — contractCreate theo custodianDept) — SAI đối tượng,
+  // không phải người duyệt THẬT của bước (contractManageDeptWorkflows[dept], xem isApproverForContract-
+  // ManageWorkflowClient() ngay dưới, mirror đúng server isApproverForContractManageWorkflow()). Hậu quả:
+  // CHÍNH người vừa tải tài liệu ký lên (kế toán/custodian) thấy luôn nút Duyệt cho hồ sơ của chính mình,
+  // dù không phải sep_duyet/người được cấu hình — bấm vào bị server từ chối 403 nếu không phải admin/đúng
+  // approver, nhưng admin (thường cũng là tài khoản custodian/upload) luôn bypass được theo đúng thiết kế
+  // admin-override chung toàn hệ thống, tạo cảm giác "duyệt bị bỏ qua". Sửa đúng gate theo approver thật.
+  if (activeContractSubTab === 'MANAGE' && c.signedFileStatus === 'PENDING' && isApproverForContractManageWorkflowClient(currentUser, c)) {
     secondaryOptions.push({ value: 'approveSigned', label: `✅ Duyệt ${signedDocNoun}` });
     secondaryOptions.push({ value: 'rejectSigned', label: `❌ Từ Chối ${signedDocNoun}` });
     secondaryOptions.push({ value: 'requestSignedChanges', label: `🔄 Bổ Sung ${signedDocNoun}` });
