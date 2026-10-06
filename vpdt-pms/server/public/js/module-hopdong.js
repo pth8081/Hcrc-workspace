@@ -1217,6 +1217,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
       <td class="border p-2">${escapeHtml(c.dept)}${(c.custodianDept && c.custodianDept !== c.dept) ? `<div class="text-[10px] text-cyan-700 mt-0.5">📌 Theo dõi &amp; TT: ${escapeHtml(c.custodianDept)}</div>` : ''}</td>
       <td class="border p-2 space-y-1"><div>${statusBadge}</div>${warningBadge ? `<div>${warningBadge}</div>` : ''}</td>
       ${paymentCell}
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${c.createdAt ? escapeHtml(c.createdAt) : (c.id ? escapeHtml(new Date(c.id).toLocaleString('vi-VN')) : '')}</td>
       <td class="border p-2 text-center space-x-1">
         ${buildActionCell(c.id, primaryBtnHTML, secondaryOptions, 'runContractAction')}
       </td>

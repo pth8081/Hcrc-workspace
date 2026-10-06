@@ -949,7 +949,7 @@ function renderCarRegs() {
   const pageCarRegs = paginateList('car', visibleCarRegs, 'renderCarRegs', 'phiếu đăng ký');
 
   if (pageCarRegs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy phiếu đăng ký phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy phiếu đăng ký phù hợp.</td></tr>`;
     return;
   }
 
@@ -1000,6 +1000,7 @@ function renderCarRegs() {
         <td class="border p-2 text-xs">${escapeHtml(c.destination)}<br><span class="text-gray-400">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</span></td>
         <td class="border p-2 text-xs">${escapeHtml(c.purpose || c.reason)}</td>
         <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${c.createdAt ? escapeHtml(c.createdAt) : (c.id ? escapeHtml(new Date(c.id).toLocaleString('vi-VN')) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = canApprove
@@ -1389,7 +1390,10 @@ function openCarProcessModal(carId) {
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
   `).join('');
-  document.getElementById('carModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+  // Quy trình phê duyệt đầy đủ (10/2026, yêu cầu người dùng: "muốn xem ai đã phê duyệt và ai chưa phê
+  // duyệt") — bổ sung CHO (không thay thế) historyHTML phía trên.
+  const wfStepsStatusHTML = buildWorkflowStepsStatusHTML(wfConfig, c.history, c.currentStep, c.status);
+  document.getElementById('carModalHistory').innerHTML = wfStepsStatusHTML + (historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>');
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
   const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);

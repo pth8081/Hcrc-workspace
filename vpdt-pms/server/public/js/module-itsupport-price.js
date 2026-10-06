@@ -1035,6 +1035,7 @@ function buildItPriceRowHtml(p, context) {
       <td class="border p-2 font-medium text-gray-800 break-all">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
       <td class="border p-2">${itPriceStatusBadge(p)}</td>
       <td class="border p-2">${itPriceAppliedBadge(p)}</td>
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${p.createdAt ? escapeHtml(p.createdAt) : (p.id ? escapeHtml(new Date(p.id).toLocaleString('vi-VN')) : '')}</td>
       <td class="border p-2 text-center">
         <button data-op="openItPriceModal" data-arg0="${p.id}" data-arg1="${escapeHtml(context)}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
       </td>
@@ -1044,13 +1045,28 @@ function buildItPriceRowHtml(p, context) {
 
 // renderMhItPriceList()/renderVanHanhItPriceList() — danh sách "đơn của tôi/đơn tôi cần duyệt" đúng
 // kênh (RETAIL ở Mua Hàng, WHOLESALE ở Vận Hành), khớp phạm vi canViewItPriceApproval() y hệt Hỗ Trợ
-// IT — KHÔNG có filter bar (giữ gọn, khác Hỗ Trợ IT vốn cần lọc sâu để xử lý số lượng lớn từ CẢ 2
-// kênh); sắp mới nhất lên đầu vì đây là danh sách "theo dõi phiếu của mình", không phải hàng đợi xử lý.
+// IT. Có filter bar RIÊNG (box thu gọn `<details>`, xem fragment muaHangSection.html/vanHanhSection.html)
+// — mirror ĐÚNG 4 field/logic lọc của renderItPriceApprovals() (statusFilter/fromDate/toDate/keyword),
+// khớp phản hồi người dùng 10/2026 "làm mất tìm kiếm" (trước đó cố tình bỏ filter bar ở 2 màn này để
+// giữ gọn, nhưng người dùng xác nhận vẫn cần tìm kiếm — chỉ cần gọn dạng thu gọn/mở ra khi cần, không
+// cần luôn hiện sẵn như Hỗ Trợ IT); sắp mới nhất lên đầu vì đây là danh sách "theo dõi phiếu của mình",
+// không phải hàng đợi xử lý.
 function renderMhItPriceList() {
   const tbody = document.getElementById('mhItPriceTableBody');
   if (!tbody) return;
+  const statusFilter = document.getElementById('filterStatusMhItPrice')?.value || '';
+  const fromDate = document.getElementById('filterFromDateMhItPrice')?.value || '';
+  const toDate = document.getElementById('filterToDateMhItPrice')?.value || '';
+  const keyword = (document.getElementById('filterKeywordMhItPrice')?.value || '').trim();
   const visible = DB.itPriceApprovals
-    .filter(p => (p.priceType || 'RETAIL') === 'RETAIL' && canViewItPriceApproval(currentUser, p))
+    .filter(p => {
+      if ((p.priceType || 'RETAIL') !== 'RETAIL' || !canViewItPriceApproval(currentUser, p)) return false;
+      if (statusFilter && p.status !== statusFilter) return false;
+      if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
+      const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName], keyword)) return false;
+      return true;
+    })
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
   const page = paginateList('mhItPrice', visible, 'renderMhItPriceList', 'đề xuất');
@@ -1058,20 +1074,39 @@ function renderMhItPriceList() {
   // KHÔNG phải ở Hỗ Trợ IT (xem renderItPriceModalControls()).
   tbody.innerHTML = page.length
     ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
-    : `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có đề xuất nào.</td></tr>`;
+    : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+}
+function onMhItPriceFilterChange() {
+  resetListPage('mhItPrice');
+  renderMhItPriceList();
 }
 function renderVanHanhItPriceList() {
   const tbody = document.getElementById('vanHanhItPriceTableBody');
   if (!tbody) return;
+  const statusFilter = document.getElementById('filterStatusVanHanhItPrice')?.value || '';
+  const fromDate = document.getElementById('filterFromDateVanHanhItPrice')?.value || '';
+  const toDate = document.getElementById('filterToDateVanHanhItPrice')?.value || '';
+  const keyword = (document.getElementById('filterKeywordVanHanhItPrice')?.value || '').trim();
   const visible = DB.itPriceApprovals
-    .filter(p => p.priceType === 'WHOLESALE' && canViewItPriceApproval(currentUser, p))
+    .filter(p => {
+      if (p.priceType !== 'WHOLESALE' || !canViewItPriceApproval(currentUser, p)) return false;
+      if (statusFilter && p.status !== statusFilter) return false;
+      if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
+      const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName], keyword)) return false;
+      return true;
+    })
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
   const page = paginateList('vanHanhItPrice', visible, 'renderVanHanhItPriceList', 'đề xuất');
   // context='APPROVAL' — cùng lý do renderMhItPriceList() ở trên, áp dụng cho Vận Hành.
   tbody.innerHTML = page.length
     ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
-    : `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có đề xuất nào.</td></tr>`;
+    : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+}
+function onVanHanhItPriceFilterChange() {
+  resetListPage('vanHanhItPrice');
+  renderVanHanhItPriceList();
 }
 
 function renderItPriceApprovals() {
@@ -1124,7 +1159,7 @@ function renderItPriceApprovals() {
   const page = paginateList('itPrice', visible, 'renderItPriceApprovals', 'đề xuất');
 
   if (page.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
     return;
   }
 
@@ -1413,6 +1448,11 @@ function renderItPriceModal() {
   const historyRows = (p.history || []).filter(h => h.action === 'APPROVED' || h.action === 'REJECTED').map(h =>
     `<div><b>${h.action === 'APPROVED' ? 'Đã duyệt bởi' : 'Đã từ chối bởi'}:</b> ${escapeHtml(h.approver)} · ${escapeHtml(h.time)}${h.comment ? `<br><span class="text-xs text-gray-500">Lý do: ${escapeHtml(h.comment)}</span>` : ''}</div>`
   ).join('');
+  // Quy trình phê duyệt đầy đủ (10/2026, yêu cầu người dùng: "muốn xem ai đã phê duyệt và ai chưa phê
+  // duyệt") — buildWorkflowStepsStatusHTML() (core.js) tự gắn trạng thái Đã duyệt/Đang chờ/Sắp tới + tên
+  // người duyệt từng bước, bổ sung CHO (không thay thế) historyRows phía trên vốn chỉ liệt kê các lượt
+  // đã xử lý theo trình tự thời gian.
+  const wfStepsStatusHTML = buildWorkflowStepsStatusHTML(resolveItPriceWorkflowConfigForItemClient(p), p.history, p.currentStep, p.status);
 
   document.getElementById('itPriceModalDetails').innerHTML = `
     <div><b>Trạng thái:</b> ${itPriceStatusBadge(p)}</div>
@@ -1423,6 +1463,7 @@ function renderItPriceModal() {
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     <div><b>🏬 ${p.priceType === 'WHOLESALE' ? 'Siêu thị đề xuất' : 'Siêu thị áp dụng'}:</b> ${itPriceStoreScopeLabel(p.storeScope)}</div>
     <div><b>📅 Ngày áp dụng:</b> ${p.effectiveDate ? escapeHtml(p.effectiveDate) : '<span class="text-gray-400">—</span>'} <b class="ml-2">⏳ Hết hiệu lực:</b> ${p.expiryMode === 'OTHER' && p.expiryDate ? escapeHtml(p.expiryDate) : 'Vĩnh viễn'}</div>
+    ${wfStepsStatusHTML}
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
     ${!p.applied && p.applyClaimedBy ? `<div><b>Đang xử lý bởi:</b> ${escapeHtml(p.applyClaimedByName || p.applyClaimedBy)} · ${escapeHtml(p.applyClaimedAt || '')}</div>` : ''}
@@ -2060,7 +2101,7 @@ function renderItTickets() {
   const page = paginateList('itTicket', visible, 'renderItTickets', 'yêu cầu');
 
   if (page.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy yêu cầu phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy yêu cầu phù hợp.</td></tr>`;
     return;
   }
 
@@ -2075,6 +2116,7 @@ function renderItTickets() {
         ${t.approvalStatus ? `<div>${IT_TICKET_APPROVAL_BADGES[t.approvalStatus] ? IT_TICKET_APPROVAL_BADGES[t.approvalStatus](t) : escapeHtml(t.approvalStatus)}</div>` : ''}
       </td>
       <td class="border p-2 text-xs">${t.assigneeName ? escapeHtml(t.assigneeName) : '<span class="text-gray-400 italic">Chưa nhận</span>'}</td>
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${t.createdAt ? escapeHtml(t.createdAt) : (t.id ? escapeHtml(new Date(t.id).toLocaleString('vi-VN')) : '')}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
           const primaryBtnHTML = `<button data-op="runItTicketAction" data-arg0="${t.id}" data-arg1="view" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem / Xử lý</button>`;

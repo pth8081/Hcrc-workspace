@@ -723,7 +723,10 @@ function openVppRegModal(regId) {
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
   `).join('');
-  document.getElementById('vppRegModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+  // Quy trình phê duyệt đầy đủ (10/2026, yêu cầu người dùng: "muốn xem ai đã phê duyệt và ai chưa phê
+  // duyệt") — bổ sung CHO (không thay thế) historyHTML phía trên.
+  const wfStepsStatusHTML = buildWorkflowStepsStatusHTML(wfConfig, r.history, r.currentStep, r.status);
+  document.getElementById('vppRegModalHistory').innerHTML = wfStepsStatusHTML + (historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>');
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, r.currentStep);
   const canApprove = (r.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, r.history, r.currentStep);

@@ -1240,7 +1240,7 @@ function renderOperationList(kind) {
   const pageList = paginateList(meta.pagKey, list, `renderOperation${kind === 'operationOrders' ? 'Order' : kind === 'operationStoreOpenings' ? 'StoreOpening' : 'Repair'}List`, meta.subLabel.toLowerCase());
 
   if (pageList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có ${meta.subLabel.toLowerCase()} nào.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Chưa có ${meta.subLabel.toLowerCase()} nào.</td></tr>`;
     return;
   }
 
@@ -1298,6 +1298,7 @@ function buildOperationRowHTML(kind, o) {
   // quy trình duyệt nội bộ khác hẳn, đã xác nhận với người dùng KHÔNG thuộc phạm vi gỡ bỏ này.
   const dispatcherFnName = kind === 'operationOrders' ? 'runOperationOrderAction' : kind === 'operationStoreOpenings' ? 'runOperationStoreOpenAction' : 'runOperationRepairAction';
   const actionCell = buildActionCell(o.id, primaryBtnHTML, secondaryOptions, dispatcherFnName);
+  const createdAtCellHTML = `<td class="border p-2 text-center whitespace-nowrap text-gray-500">${o.createdAt ? escapeHtml(o.createdAt) : (o.id ? escapeHtml(new Date(o.id).toLocaleString('vi-VN')) : '')}</td>`;
 
   if (kind === 'operationOrders') {
     return `<tr class="hover:bg-gray-50 border-b">
@@ -1306,6 +1307,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.title)}</div><div class="text-xs text-gray-500">NCC: ${escapeHtml(o.supplier || 'N/A')} — ${(o.items || []).length} hạng mục</div></td>
       <td class="border p-2 font-bold text-rose-600">${(o.amount || 0).toLocaleString('vi-VN')} VNĐ<div class="text-[11px] font-normal text-gray-400">${escapeHtml(operationOrderTierLabel((o.orderLocationType === 'STORE' ? 'STORE' : 'HO'), computeOperationOrderTierClient((o.orderLocationType === 'STORE' ? 'STORE' : 'HO'), computeOperationOrderAmountClient(o))))}</div></td>
       <td class="border p-2">${operationStatusBadge(o)}${wfMissingWarningHTML}</td>
+      ${createdAtCellHTML}
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
     </tr>`;
   }
@@ -1316,6 +1318,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.address || '')}</div></td>
       <td class="border p-2"><div class="font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div><div class="text-xs text-gray-500">${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div></td>
       <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}${wfMissingWarningHTML}</td>
+      ${createdAtCellHTML}
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
     </tr>`;
   }
@@ -1325,6 +1328,7 @@ function buildOperationRowHTML(kind, o) {
     <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.title)}</div></td>
     <td class="border p-2 font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</td>
     <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}${wfMissingWarningHTML}</td>
+    ${createdAtCellHTML}
     <td class="border p-2 text-center space-x-1">${actionCell}</td>
   </tr>`;
 }
@@ -1532,6 +1536,14 @@ function openOperationProcessModal(kind, id) {
   document.getElementById('operationProcessModalSub').innerText = `Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`;
   document.getElementById('operationProcessModalDetails').innerHTML = buildOperationDetailsHTML(kind, o);
 
+  const wfConfig = meta.resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
+  // Quy trình phê duyệt đầy đủ (10/2026, yêu cầu người dùng: "muốn xem ai đã phê duyệt và ai chưa phê
+  // duyệt") — buildWorkflowStepsStatusHTML() (core.js), bổ sung CHO (không thay thế) historyHTML phía
+  // dưới vốn chỉ liệt kê các lượt đã xử lý theo trình tự thời gian (kể cả hành động không phải Duyệt/Từ
+  // chối như RECEIVED/CANCELLED...).
+  const wfStepsStatusHTML = buildWorkflowStepsStatusHTML(wfConfig, o.history, o.currentStep, o.status);
+
   const historyHTML = (o.history || []).map(h => `
     <div class="bg-white p-2 rounded border text-xs space-y-1">
       <div class="flex justify-between font-bold text-gray-700">
@@ -1542,10 +1554,8 @@ function openOperationProcessModal(kind, id) {
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
   `).join('');
-  document.getElementById('operationProcessModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+  document.getElementById('operationProcessModalHistory').innerHTML = wfStepsStatusHTML + (historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>');
 
-  const wfConfig = meta.resolveWfConfigForItem(o) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
-  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [] };
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep, operationOrderStoreApproverFilterFor(o));
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
   const controls = document.getElementById('operationProcessModalControls');
