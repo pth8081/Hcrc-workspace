@@ -329,7 +329,7 @@ const PERM_KEY_VN_LABELS = {
   "budgetReportView": "Ngân Sách — 📊 Xem Báo Cáo (không kèm quyền quản lý/tổng hợp/tạo ở trên)",
   "canBeApprover": "Hệ Thống & Chung — ✅ Có thể được chọn làm người duyệt",
   "canViewReports": "Hệ Thống & Chung — 📊 Được xem Báo cáo quản trị",
-  "carCreate.all": "Đăng Ký Xe — Tạo mới",
+  "carCreate": "Đăng Ký Xe — Tạo mới (tự khoá đúng phòng ban)",
   "carDispatch": "Đăng Ký Xe — 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục \"Phần Dành Cho Phòng Hành Chính\" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)",
   "carDownload.all": "Đăng Ký Xe — Tải xuống",
   "carReportView": "Đăng Ký Xe — 📊 Xem Báo Cáo Đăng Ký Xe (toàn công ty, không kèm quyền Xem ở bảng trên)",

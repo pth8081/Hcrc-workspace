@@ -2976,9 +2976,9 @@ function getScopedDepts(user, scope) {
 // options (getScopedDepts() ở trên) — gọi TRỰC TIẾP SAU dòng gán innerHTML của từng ô, KHÔNG tách lịch
 // riêng qua setTimeout/microtask nào (tránh đúng lớp bug thứ tự DOM). KHOÁ (disabled) ô đó khi phạm vi
 // chỉ vỏn vẹn ĐÚNG 1 phòng ban (scopedDepts.length === 1 — tức người dùng không có quyền tạo "thay mặt"
-// phòng ban khác, ví dụ uploadDepts/carCreate/officeCreate KHÔNG mở rộng ngoài phòng ban chính mình —
-// submissionCreate/meetingBook/contractCreate giờ luôn truyền scope RỖNG {} nên LUÔN rơi vào nhánh
-// này) để tránh chọn nhầm phòng ban ở đúng nhóm
+// phòng ban khác, ví dụ uploadDepts/officeCreate KHÔNG mở rộng ngoài phòng ban chính mình —
+// submissionCreate/meetingBook/contractCreate/carCreate giờ luôn truyền scope RỖNG {} nên LUÔN rơi vào
+// nhánh này) để tránh chọn nhầm phòng ban ở đúng nhóm
 // người dùng phổ biến nhất (chỉ có 1 lựa chọn thật sự). Người có phạm vi RỘNG hơn (uploadAll/scope.depts
 // nhiều phòng/admin) vẫn được TIỀN ĐIỀN sẵn đúng phòng ban của mình cho tiện — KHÔNG bị khoá, vẫn chọn
 // tay phòng ban khác bình thường như trước. Không đụng gì tới các <select> phòng ban KHÔNG mang ý nghĩa
@@ -4209,7 +4209,9 @@ function defaultNewUserPerms() {
     // chung cho hành động duyệt thật ở nơi khác) — xem setMeetingSubTab() (module-phonghop.js) +
     // canViewMeeting() (lib/recordViewScope.js).
     meetingReportView: false,
-    carView: emptyScope(), carCreate: emptyScope(), carDownload: emptyScope(), carDispatch: false,
+    // carCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự khoá đúng
+    // phòng ban người tạo phiếu (forceOwnDept, lib/createValidation.js).
+    carView: emptyScope(), carCreate: false, carDownload: emptyScope(), carDispatch: false,
     // carReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "📊 Báo Cáo" Đăng Ký Xe TOÀN CÔNG TY,
     // KHÔNG kèm carView.all (không tự động xem được danh sách phiếu từng hồ sơ ở tab khác) — xem
     // canSeeCarReportClient() (core.js) + canViewCarReg() (lib/recordViewScope.js).
@@ -4461,6 +4463,15 @@ function migrateLegacyPerms(perms) {
     p.carView = scopeFromFlag(p.carModule);
     p.carCreate = scopeFromFlag(p.carModule);
     delete p.carModule;
+    changed = true;
+  }
+  // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module", đã xác nhận): bỏ carCreate {all,depts}, chỉ còn
+  // 1 cờ phẳng — cùng khuôn meetingBook/submissionCreate/contractCreate. Chạy SAU khối di trú carModule
+  // ở trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn). carView/carDownload/
+  // carDispatch/carReportView KHÔNG đổi, vẫn giữ nguyên hình dạng cũ.
+  if (typeof p.carCreate !== 'boolean') {
+    const oldCarScope = p.carCreate;
+    p.carCreate = !!(oldCarScope?.all || (Array.isArray(oldCarScope?.depts) && oldCarScope.depts.length > 0));
     changed = true;
   }
   // Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ hẳn meetingView +
@@ -10580,7 +10591,11 @@ function populateDropdowns() {
 
   const carDept = document.getElementById('carDept');
   if (carDept) {
-    const carScopedDepts = getScopedDepts(currentUser, currentUser.perms?.carCreate);
+    // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module"): carCreate giờ là quyền PHẲNG (boolean),
+    // không còn {all,depts} để truyền vào getScopedDepts() — truyền {} để tận dụng đúng nhánh "cùng
+    // phòng là được" có sẵn (tự khoá 1 phòng ban DUY NHẤT), cùng khuôn meetingBook/submissionCreate/
+    // contractCreate.
+    const carScopedDepts = getScopedDepts(currentUser, {});
     carDept.innerHTML = carScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
     applyOwnDeptAutoSelect(carDept, carScopedDepts);
   }

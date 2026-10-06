@@ -145,22 +145,29 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
       if (JSON.stringify(r.contractDownloadDepts) !== JSON.stringify([DEPT_NAMES[2]])) throw new Error(`contractDownload.depts sai: ${JSON.stringify(r.contractDownloadDepts)}`);
     });
 
-    await scenario('populatePermsForm() đổ đúng dữ liệu cũ lên ô checkbox trong bảng mới (carCreate/officeView)', async () => {
+    await scenario('populatePermsForm() đổ đúng dữ liệu cũ lên ô checkbox trong bảng mới (carDownload/officeView)', async () => {
       const r = await page.evaluate((depts) => {
         // Reset sạch trước khi đổ dữ liệu mới để không dính trạng thái từ scenario trước.
         document.querySelectorAll('#permFieldsContainer input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-        // carView PHẢI có mặt cùng carCreate — migrateLegacyPerms() (core.js) coi "carView === undefined"
+        // carView PHẢI có mặt cùng carDownload — migrateLegacyPerms() (core.js) coi "carView === undefined"
         // là dấu hiệu dữ liệu SHAPE CŨ (trước khi tách Xem/Tạo mới riêng) và sẽ tự GHI ĐÈ carCreate theo
-        // flag carModule cũ (rỗng ở đây), xoá mất giá trị carCreate vừa truyền vào nếu thiếu carView.
+        // flag carModule cũ (rỗng ở đây) — không ảnh hưởng carDownload đang kiểm ở đây, nhưng vẫn giữ
+        // carView để tránh nhánh di trú đó can thiệp ngoài ý muốn. docDownload PHẢI có mặt vì lý do khác:
+        // "p.docDownload === undefined" là dấu hiệu RIÊNG cho 1 nhánh di trú CỰC CŨ hơn nữa (field
+        // downloadAll/downloadDepts DÙNG CHUNG trước khi tách "Tải xuống" theo từng module) — thiếu nó sẽ
+        // bị GHI ĐÈ carDownload về rỗng ngay cả khi đã truyền giá trị thật ở đây.
         populatePermsForm({
           carView: { all: false, depts: [] },
-          carCreate: { all: false, depts: [depts[0], depts[2]] },
+          docDownload: { all: false, depts: [] },
+          // carCreate (10/2026, "6-module"): đã gộp phẳng, KHÔNG còn pCarCreateDept_N — dùng carDownload
+          // (vẫn giữ nguyên {all,depts}) để kiểm tra populatePermsForm() đổ đúng dữ liệu lên bảng mới.
+          carDownload: { all: false, depts: [depts[0], depts[2]] },
           officeView: { all: true, depts: [] },
         });
         return {
-          carCreate0: document.getElementById('pCarCreateDept_0').checked,
-          carCreate1: document.getElementById('pCarCreateDept_1').checked,
-          carCreate2: document.getElementById('pCarCreateDept_2').checked,
+          carCreate0: document.getElementById('pCarDownloadDept_0').checked,
+          carCreate1: document.getElementById('pCarDownloadDept_1').checked,
+          carCreate2: document.getElementById('pCarDownloadDept_2').checked,
           officeViewAll: document.getElementById('pOfficeViewAll').checked,
         };
       }, DEPT_NAMES);

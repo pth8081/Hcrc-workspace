@@ -1147,7 +1147,14 @@ const CREATE_MODULE_CONFIGS = {
   },
   carRegs: {
     dbKey: 'carRegs',
-    getScope: (user) => user.perms?.carCreate,
+    // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module", đã xác nhận): bỏ hẳn carCreate {all,depts} —
+    // giờ là 1 quyền phẳng (boolean) DUY NHẤT, luôn tự khoá đúng phòng ban của chính người tạo
+    // (forceOwnDept: true, cùng khuôn meetingBook/submissionCreate/contractCreate). getScope() trả rỗng
+    // để scopeAllows() dùng đúng nhánh "cùng phòng là được" có sẵn — quyền TẠO thật sự gác ở
+    // extraValidate() bên dưới. carDispatch (Người Điều Hành Xe)/carReportView (Xem Báo Cáo) là 2 quyền
+    // phẳng RIÊNG, ĐỘC LẬP, không bị ảnh hưởng.
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Khớp đúng lỗ hổng đã vá cho meetings ở trên (findMeetingConflict + NaN) — carRegs cũng có
     // startTime/endTime (xem index.html #carStartTime/#carEndTime) nhưng trước đây CHƯA từng được kiểm
@@ -1156,6 +1163,12 @@ const CREATE_MODULE_CONFIGS = {
     // startTime/endTime này để so trùng khung giờ — new Date(...).getTime() trả NaN cho giờ sai định
     // dạng khiến MỌI so sánh thời gian đều false, "chưa từng trùng" với bất kỳ phiếu nào khác.
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được tạo
+      // phiếu đăng ký xe hay không) phải gác RIÊNG ở đây (cùng khuôn meetingBook/submissionCreate/
+      // contractCreate.extraValidate).
+      if (!user.perms?.admin && !user.perms?.carCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đăng ký xe');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAR');
       // Phiếu đăng ký xe có field fileUrl trong mô hình dữ liệu (lib/fileAuthz.js tra ngược
       // carRegs theo fileUrl) — xem assertUploadedFileUrl().

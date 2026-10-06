@@ -1529,7 +1529,10 @@ const PERM_DEPT_TABLES = [
   { tbody: 'pContractDeptTableBody', cols: ['pContractDownload'] },
   // Phòng Họp (10/2026, đã xác nhận): KHÔNG còn bảng phòng ban — gỡ khỏi danh sách này, xem công tắc
   // phẳng pMeetingBook trong khối "📅 5. Phòng Họp" (systemSection.html).
-  { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarCreate', 'pCarDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pCarCreate ("Tạo mới") khỏi bảng phòng ban — đã
+  // chuyển thành 1 công tắc phẳng pCarCreate (boolean) riêng, xem khối 🚗 6. Đăng Ký Xe trong
+  // systemSection.html.
+  { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarDownload'] },
   { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },
 ];
 

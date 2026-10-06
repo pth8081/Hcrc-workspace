@@ -562,7 +562,10 @@ function editCarRegDraft(payload, user, item, appData) {
   // (không phải nhớ thêm 1 lần nữa). Xem assertUploadedFileUrl().
   assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm phiếu đăng ký xe');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
-    assertDeptScopeAllowed(user, user.perms?.carCreate, payload.dept);
+    // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module"): carCreate giờ là quyền PHẲNG (boolean) —
+    // không còn {all,depts} để đọc. Truyền scope rỗng {} để assertDeptScopeAllowed()/scopeAllows() dùng
+    // đúng nhánh "cùng phòng là được" có sẵn (forceOwnDept, khớp đúng luật lúc TẠO).
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   for (const f of CAR_REG_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];

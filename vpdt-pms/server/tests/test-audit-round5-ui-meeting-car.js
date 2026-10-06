@@ -126,7 +126,7 @@ async function main() {
         { id: 1, username: 'admin', name: 'Quản Trị Viên Test', dept: 'Phòng Kinh Doanh', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true }, active: true, isDriver: false, groupIds: [], permOverrides: null },
         // Nhân viên thường của Phòng Kinh Doanh: chỉ đặt phòng + xem lịch họp CỦA PHÒNG MÌNH
         // (tự khoá đúng phòng ban qua forceOwnDept) -> đúng đối tượng bị lỗi "phòng trống giả" của phát hiện #2.
-        { id: 2, username: 'nv_kd', name: 'Nhân Viên KD', dept: 'Phòng Kinh Doanh', jobTitle: 'NV', email: 'nv@test.local', phone: '0900000002', perms: { meetingBook: true, carCreate: { all: false, depts: ['Phòng Kinh Doanh'] }, carView: { all: false, depts: ['Phòng Kinh Doanh'] } }, active: true, isDriver: false, groupIds: [], permOverrides: null },
+        { id: 2, username: 'nv_kd', name: 'Nhân Viên KD', dept: 'Phòng Kinh Doanh', jobTitle: 'NV', email: 'nv@test.local', phone: '0900000002', perms: { meetingBook: true, carCreate: true, carView: { all: false, depts: ['Phòng Kinh Doanh'] } }, active: true, isDriver: false, groupIds: [], permOverrides: null },
         { id: 3, username: 'lx1', name: 'Lái Xe Một', dept: 'Phòng Hành Chính', jobTitle: 'Lái xe', email: 'lx1@test.local', phone: '0900000003', perms: {}, active: true, isDriver: true, groupIds: [], permOverrides: null }
       ],
       carRegs: [

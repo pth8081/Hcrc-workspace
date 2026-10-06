@@ -1960,7 +1960,17 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>🚗 6. Đăng Ký Xe</span></span>
             <span id="permTreeBadge_car" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+          <div class="p-3 pt-0 space-y-2">
+            <!-- Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module", đã xác nhận): bỏ hẳn cột "Tạo mới"
+                 (carCreate {all,depts}) khỏi bảng theo phòng ban — thay bằng 1 công tắc phẳng DUY NHẤT
+                 ngay dưới đây, tự khoá đúng phòng ban người tạo (forceOwnDept, xem lib/createValidation.js
+                 + canManageContractPayment()-style note KHÔNG áp dụng ở đây vì Đăng Ký Xe không có khái
+                 niệm "custodianDept"/thanh toán theo phiếu xe — rủi ro thấp hơn Hợp Đồng/Văn Phòng). Bảng
+                 phía dưới giờ chỉ còn 2 cột Xem/Tải xuống. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pCarCreate"> ✅ Cho phép tạo đăng ký xe (tự khoá đúng phòng ban của mình)
+            </label>
+            <div class="max-h-64 overflow-y-auto overflow-x-auto">
             <table class="w-full text-[11px] border-collapse">
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
@@ -1969,12 +1979,6 @@
                     <span class="block mb-0.5">Xem</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" id="pCarViewAll" data-op-change="toggleScopeGroup" data-arg0="pCarViewAll" data-arg1="pCarViewDept"><span>ALL</span>
-                    </label>
-                  </th>
-                  <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Tạo mới</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pCarCreateAll" data-op-change="toggleScopeGroup" data-arg0="pCarCreateAll" data-arg1="pCarCreateDept"><span>ALL</span>
                     </label>
                   </th>
                   <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
@@ -1987,6 +1991,7 @@
               </thead>
               <tbody id="pCarDeptTableBody"></tbody>
             </table>
+            </div>
           </div>
           <div class="px-3 pb-3 space-y-1.5">
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">

@@ -179,7 +179,8 @@ function collectPermsFromForm() {
     // chỉ còn 1 công tắc phẳng meetingBook (tự khoá đúng phòng ban, xem lib/createValidation.js).
     meetingBook: document.getElementById('pMeetingBook').checked,
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
-    carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
+    // carCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+    carCreate: document.getElementById('pCarCreate').checked,
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     carDispatch: document.getElementById('pCarDispatch').checked,
     carReportView: document.getElementById('pCarReportView').checked,
@@ -424,7 +425,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
   document.getElementById('pMeetingBook').checked = !!perms.meetingBook;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
-  document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
+  // carCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+  document.getElementById('pCarCreate').checked = !!perms.carCreate;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pCarReportView').checked = !!perms.carReportView;
@@ -451,7 +453,6 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
   setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
   setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
-  setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
   setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
@@ -459,7 +460,7 @@ function populatePermsForm(permsInput) {
   ['pUploadAll', 'pDocDownloadAll',
    'pSubDownloadAll',
    'pContractDownloadAll',
-   'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
+   'pCarViewAll', 'pCarDownloadAll',
    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(allId => {
     const deptPrefix = allId.replace(/All$/, 'Dept');

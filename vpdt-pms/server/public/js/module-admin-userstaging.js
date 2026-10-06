@@ -243,6 +243,7 @@ function resetUserForm() {
   document.getElementById('pContractCreate').checked = !!defaults.contractCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
+  document.getElementById('pCarCreate').checked = !!defaults.carCreate;
   document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
@@ -312,7 +313,7 @@ function resetUserForm() {
     'pUploadAll', 'pDocDownloadAll',
     'pSubDownloadAll',
     'pContractDownloadAll',
-    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
+    'pCarViewAll', 'pCarDownloadAll',
     'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(id => {
     const cb = document.getElementById(id);
@@ -498,8 +499,8 @@ function summarizeUserPerms(perms) {
   // LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): trước đây chỉ xét submissionCreate/contractCreate —
   // người CHỈ có quyền Tải (submissionDownload/contractDownload, không có quyền Tạo) bị rơi mất tag này
   // dù vẫn thực sự có quyền thao tác trên module (tải hồ sơ Tờ Trình/Hợp Đồng).
-  // submissionCreate/contractCreate giờ là quyền PHẲNG (boolean, 10/2026 "6-module") — không còn
-  // {all,depts} để hasScope() đọc, kiểm tra trực tiếp thay vì qua hasScope().
+  // submissionCreate/contractCreate/carCreate giờ là quyền PHẲNG (boolean, 10/2026 "6-module") — không
+  // còn {all,depts} để hasScope() đọc, kiểm tra trực tiếp thay vì qua hasScope().
   if (perms.submissionCreate || hasScope(perms.submissionDownload)) parts.push('📜 Tờ trình');
   if (perms.contractCreate || hasScope(perms.contractDownload)) parts.push('📄 Hợp đồng');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
@@ -507,7 +508,7 @@ function summarizeUserPerms(perms) {
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
   if (perms.meetingBook || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
-  if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
+  if (hasScope(perms.carView) || perms.carCreate) parts.push('🚗 Xe');
   if (perms.carDispatch) parts.push('🚘 Điều hành xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
