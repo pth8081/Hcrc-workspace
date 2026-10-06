@@ -169,8 +169,9 @@ function collectPermsFromForm() {
     reportManage: document.getElementById('pReportManage').checked,
     reportAggregate: document.getElementById('pReportAggregate').checked,
     reportEntryCreate: document.getElementById('pReportEntryCreate').checked,
-    meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
-    meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
+    // Làm gọn phân quyền Phòng Họp (10/2026, đã xác nhận): bỏ meetingView/meetingBookScope {all,depts},
+    // chỉ còn 1 công tắc phẳng meetingBook (tự khoá đúng phòng ban, xem lib/createValidation.js).
+    meetingBook: document.getElementById('pMeetingBook').checked,
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
     carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
@@ -415,8 +416,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pReportManage').checked = !!perms.reportManage;
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
-  document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
-  document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
+  document.getElementById('pMeetingBook').checked = !!perms.meetingBook;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
   document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
@@ -446,8 +446,6 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
   setGroupCheckboxes(perms.contractCreate?.depts, 'pContractCreateDept');
   setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
-  setGroupCheckboxes(perms.meetingView?.depts, 'pMeetingViewDept');
-  setGroupCheckboxes(perms.meetingBookScope?.depts, 'pMeetingBookDept');
   setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
   setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
   setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
@@ -457,7 +455,6 @@ function populatePermsForm(permsInput) {
   ['pUploadAll', 'pDocDownloadAll',
    'pSubCreateAll', 'pSubDownloadAll',
    'pContractCreateAll', 'pContractDownloadAll',
-   'pMeetingViewAll', 'pMeetingBookAll',
    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(allId => {

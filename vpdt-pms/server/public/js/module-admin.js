@@ -1521,7 +1521,8 @@ const PERM_DEPT_TABLES = [
   // 📜 3/📄 4 trong systemSection.html.
   { tbody: 'pSubDeptTableBody', cols: ['pSubCreate', 'pSubDownload'] },
   { tbody: 'pContractDeptTableBody', cols: ['pContractCreate', 'pContractDownload'] },
-  { tbody: 'pMeetingDeptTableBody', cols: ['pMeetingView', 'pMeetingBook'] },
+  // Phòng Họp (10/2026, đã xác nhận): KHÔNG còn bảng phòng ban — gỡ khỏi danh sách này, xem công tắc
+  // phẳng pMeetingBook trong khối "📅 5. Phòng Họp" (systemSection.html).
   { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarCreate', 'pCarDownload'] },
   { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },
 ];

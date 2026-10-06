@@ -3872,10 +3872,13 @@ function canManageOfficePaymentClient(user, item) {
   return !!(user?.perms?.admin || (scopeAllows(user, user?.perms?.officeCreate, item.dept) && (!flag || user?.perms?.[flag])));
 }
 
+// Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ bảng phòng ban
+// meetingBookScope {all,depts}, chỉ còn 1 công tắc phẳng meetingBook — tự khoá đúng phòng ban người
+// đăng ký ở server (forceOwnDept, lib/createValidation.js), không còn chọn được phòng ban khác.
 function canBookMeeting(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
-  return scopeHasAny(user, user.perms?.meetingBookScope);
+  return !!user.perms?.meetingBook;
 }
 
 function canApproveMeeting(user) {
@@ -3920,8 +3923,7 @@ function canAccessMeetingModule(user) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'meeting')) return false;
-  return scopeHasAny(user, user.perms?.meetingView) || canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user)
-    || !!user.perms?.meetingReportView;
+  return canBookMeeting(user) || canApproveMeeting(user) || canCancelMeeting(user) || !!user.perms?.meetingReportView;
 }
 
 function canAccessCarModule(user) {
@@ -4193,7 +4195,7 @@ function defaultNewUserPerms() {
     // (module-vpp.js) + canViewVppRegistration() (lib/recordViewScope.js).
     vppReportView: false,
     reportManage: false, reportAggregate: false, reportEntryCreate: false,
-    meetingView: emptyScope(), meetingBookScope: emptyScope(),
+    meetingBook: false,
     meetingApprove: false, meetingCancel: false,
     // meetingReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "📊 Báo Cáo" Phòng Họp, KHÔNG kèm
     // quyền duyệt/hủy lịch họp — bypass CỘNG THÊM song song canApproveMeeting(), KHÔNG sửa hàm đó (dùng
@@ -4436,10 +4438,18 @@ function migrateLegacyPerms(perms) {
     delete p.carModule;
     changed = true;
   }
-  if (p.meetingView === undefined) {
-    p.meetingView = scopeFromFlag(p.meetingBook || p.meetingApprove || p.meetingCancel);
-    p.meetingBookScope = scopeFromFlag(p.meetingBook);
-    delete p.meetingBook;
+  // Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ hẳn meetingView +
+  // meetingBookScope ({all,depts}), gộp lại thành 1 quyền phẳng DUY NHẤT meetingBook (boolean) — tự
+  // khoá đúng phòng ban người đăng ký (forceOwnDept, lib/createValidation.js), không còn "đăng ký hộ
+  // phòng ban khác". Quy đổi: có quyền Đăng ký (book) cũ ở BẤT KỲ phạm vi nào (ALL hoặc ít nhất 1
+  // phòng ban) -> giữ nguyên true để không ai bị mất quyền đang có, cùng khuôn minutesCreate ngay dưới.
+  // Quyền Xem (meetingView) cũ bị xoá hẳn — xem RIÊNG giờ chỉ còn dựa vào "Phạm Vi Xem Theo Phòng Ban"
+  // (deptViewScopeConfig, độc lập hoàn toàn với quyền tạo) + meetingApprove/meetingCancel (không đổi).
+  if (typeof p.meetingBook !== 'boolean') {
+    const oldBookScope = p.meetingBookScope;
+    p.meetingBook = !!(oldBookScope?.all || (Array.isArray(oldBookScope?.depts) && oldBookScope.depts.length > 0));
+    delete p.meetingView;
+    delete p.meetingBookScope;
     changed = true;
   }
   if (p.officeView === undefined) {
@@ -10500,7 +10510,12 @@ function populateDropdowns() {
 
   const meetingDept = document.getElementById('meetingDept');
   if (meetingDept) {
-    const meetingScopedDepts = getScopedDepts(currentUser, currentUser.perms?.meetingBookScope);
+    // Làm gọn phân quyền Phòng Họp (10/2026, đã xác nhận): bỏ meetingBookScope {all,depts} — truyền
+    // scope rỗng {} cho getScopedDepts() nên MỌI người (trừ admin, vẫn thấy hết DB.depts qua
+    // scope?.all/user.perms?.admin) chỉ còn đúng 1 lựa chọn (phòng ban của chính mình), tự khoá qua
+    // applyOwnDeptAutoSelect() có sẵn (scopedDepts.length === 1 -> disabled) — không cần đổi gì thêm ở
+    // <select> hay CSS, cơ chế auto-khoá-1-lựa-chọn đã có sẵn từ trước.
+    const meetingScopedDepts = getScopedDepts(currentUser, {});
     meetingDept.innerHTML = meetingScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
     applyOwnDeptAutoSelect(meetingDept, meetingScopedDepts);
   }

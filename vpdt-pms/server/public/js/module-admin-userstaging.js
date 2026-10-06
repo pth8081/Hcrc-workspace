@@ -238,6 +238,7 @@ function resetUserForm() {
   document.getElementById('pReportManage').checked = !!defaults.reportManage;
   document.getElementById('pReportAggregate').checked = !!defaults.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
+  document.getElementById('pMeetingBook').checked = !!defaults.meetingBook;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
@@ -309,7 +310,6 @@ function resetUserForm() {
     'pUploadAll', 'pDocDownloadAll',
     'pSubCreateAll', 'pSubDownloadAll',
     'pContractCreateAll', 'pContractDownloadAll',
-    'pMeetingViewAll', 'pMeetingBookAll',
     'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
     'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
   ].forEach(id => {
@@ -502,7 +502,7 @@ function summarizeUserPerms(perms) {
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
-  if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
+  if (perms.meetingBook || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
   if (perms.carDispatch) parts.push('🚘 Điều hành xe');
   if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');

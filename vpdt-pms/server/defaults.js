@@ -916,10 +916,11 @@ const DEFAULTS = {
   // checklistTemplates/checklistSubmissions (module TOP-LEVEL "Checklist Đánh Giá Siêu Thị", xem
   // lib/checklist.js): cùng lý do — MIGRATED_COLLECTIONS (dbo.Records), KHÔNG seed ở đây.
 
-  // Phân quyền theo module (submissionView/Create, contractView/Create, meetingView/BookScope,
-  // carView/Create, officeView/Create) dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY
-  // (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính
-  // người dùng luôn được phép mặc định dù không liệt kê ở đây.
+  // Phân quyền theo module (submissionCreate, contractCreate, carView/Create, officeView/Create)
+  // dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH
+  // PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính người dùng luôn được phép mặc định dù
+  // không liệt kê ở đây. Riêng Phòng Họp (meetingBook, 10/2026) đã rút gọn thành 1 quyền phẳng
+  // boolean duy nhất — tự khoá đúng phòng ban, không còn dạng {all,depts}.
   // startDate (Đào Tạo Đợt 6, "ngày vào làm việc") — mốc DUY NHẤT để tính các hạn Giai Đoạn 1/2/3 của Đào
   // Tạo Tân Binh (onboardingProgress, xem lib/createValidation.js/lib/recordActions.js). Rỗng mặc định
   // ở toàn bộ user seed (4 tài khoản dưới đây đều là tài khoản quản trị/cũ, không phải "tân binh" cần
@@ -938,7 +939,7 @@ const DEFAULTS = {
         docDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         submissionCreate: { all: false, depts: ['Phòng Nhân Sự'] }, submissionDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         contractCreate: { all: false, depts: ['Phòng Nhân Sự'] }, contractDownload: { all: false, depts: ['Phòng Nhân Sự'] },
-        meetingView: { all: false, depts: ['Phòng Nhân Sự'] }, meetingBookScope: { all: false, depts: ['Phòng Nhân Sự'] },
+        meetingBook: true,
         meetingApprove: false, meetingCancel: true,
         carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: { all: false, depts: ['Phòng Nhân Sự'] }, carDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: { all: false, depts: ['Phòng Nhân Sự'] }, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
@@ -956,7 +957,7 @@ const DEFAULTS = {
         // (xem ngay phía trên, "Việc D" 11/2026) — KHÔNG còn qua submissionView/contractView.all nữa.
         submissionCreate: { all: false, depts: ['Phòng IT'] }, submissionDownload: { all: false, depts: [] },
         contractCreate: { all: false, depts: ['Phòng IT'] }, contractDownload: { all: false, depts: [] },
-        meetingView: { all: true, depts: [] }, meetingBookScope: { all: false, depts: ['Phòng IT'] },
+        meetingBook: true,
         meetingApprove: true, meetingCancel: true,
         internalPostApprove: true,
         carView: { all: true, depts: [] }, carCreate: { all: false, depts: ['Phòng IT'] }, carDownload: { all: false, depts: [] },
@@ -975,7 +976,7 @@ const DEFAULTS = {
         // (xem ngay phía trên, "Việc D" 11/2026) — KHÔNG còn qua submissionView/contractView.all nữa.
         submissionCreate: { all: true, depts: [] }, submissionDownload: { all: true, depts: [] },
         contractCreate: { all: true, depts: [] }, contractDownload: { all: true, depts: [] },
-        meetingView: { all: true, depts: [] }, meetingBookScope: { all: true, depts: [] },
+        meetingBook: true,
         meetingApprove: true, meetingCancel: true,
         internalPostApprove: true, paymentManage: true,
         carView: { all: true, depts: [] }, carCreate: { all: true, depts: [] }, carDownload: { all: true, depts: [] },

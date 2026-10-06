@@ -988,14 +988,17 @@ function renderMeetings() {
   const toDate = document.getElementById('filterToDateMeeting')?.value || '';
   const keyword = (document.getElementById('filterKeywordMeeting')?.value || '').trim();
 
-  // CẬP NHẬT: lọc theo phạm vi Xem (meetingView) thay vì hiển thị lịch họp của mọi phòng ban.
-  // Người có quyền Phê duyệt/Hủy lịch họp (vai trò quản lý phòng họp dùng chung toàn công ty)
-  // vẫn cần thấy mọi lịch để xử lý, nên được xem toàn bộ bất kể phạm vi phòng ban. 10/2026 (bổ sung
+  // CẬP NHẬT: lọc theo cùng phòng ban (đúng phòng ban của m) thay vì hiển thị lịch họp của mọi phòng
+  // ban. Làm gọn phân quyền Phòng Họp (10/2026, đã xác nhận): bỏ hẳn quyền meetingView {all,depts} riêng
+  // — server (lib/recordViewScope.js canViewMeeting()) đã là nguồn lọc THẬT (GET /api/data chỉ trả về
+  // đúng những lịch user được xem), bản lọc client này chỉ cần mirror ĐÚNG phần "cùng phòng ban" cho giao
+  // diện khớp dữ liệu thật. Người có quyền Phê duyệt/Hủy lịch họp (vai trò quản lý phòng họp dùng chung
+  // toàn công ty) vẫn cần thấy mọi lịch để xử lý, nên được xem toàn bộ bất kể phòng ban. 10/2026 (bổ sung
   // route phê duyệt cuối): dùng canDecideMeetingClient() thay vì canApproveMeeting() đơn thuần — người
   // CHỈ được gán làm approver riêng cho phòng ban của 1 lịch cụ thể (không giữ meetingApprove) giờ cũng
   // phải thấy ĐÚNG lịch đó trong bảng mới duyệt được, mirror server (canViewMeeting(), xem
   // lib/recordViewScope.js — đã thêm nhánh tương ứng, nếu không bảng sẽ ẩn mất dòng dù server đã gửi về).
-  const canViewMeeting = m => scopeAllows(currentUser, currentUser.perms?.meetingView, m.dept) ||
+  const canViewMeeting = m => m.dept === currentUser.dept ||
     m.creator === currentUser.username ||
     canDecideMeetingClient(currentUser, m) || canCancelMeeting(currentUser);
 

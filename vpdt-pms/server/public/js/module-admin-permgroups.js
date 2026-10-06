@@ -5,6 +5,12 @@
 // ==========================================
 function toggleUserPermFormMode(mode) {
   permFormMode = mode;
+  // Luôn mở lại khối "khai báo thông tin" + reset nhãn nút mỗi lần mở form cho 1 người/nhóm MỚI (kể cả
+  // đang ở trạng thái thu gọn từ lần sửa trước) — tránh mở nhầm người khác mà vẫn đang bị thu gọn dở từ
+  // phiên trước, xem closeUserPermForm() ngay dưới.
+  document.getElementById('userBasicInfoFieldsWrap').classList.remove('hidden');
+  const toggleBtn = document.getElementById('btnToggleUserBasicInfo');
+  if (toggleBtn) toggleBtn.innerText = '✕ Thu Gọn Thông Tin';
   document.getElementById('userIdentityFields').classList.toggle('hidden', mode !== 'USER');
   document.getElementById('groupIdentityFields').classList.toggle('hidden', mode !== 'GROUP');
   // Ẩn field nào thì bỏ luôn "required" của field đó — display:none không tự loại field khỏi việc
@@ -152,11 +158,17 @@ function editPermGroup(id) {
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// "✕ Thu Gọn" — chỉ ẩn lại form, KHÔNG reset dữ liệu đang nhập dở (khác "Hủy"/cancelPermFormEdit(),
-// module-admin-submissiongroups.js — hàm đó reset về trạng thái USER rỗng rồi mới ẩn). Cho phép admin
-// thu gọn để nhìn lại bảng danh sách bên dưới rồi mở lại (bấm "Sửa" 1 người/nhóm) không mất dữ liệu.
+// "✕ Thu Gọn Thông Tin" (đổi hành vi 10/2026, yêu cầu người dùng): TRƯỚC ĐÂY ẩn hẳn cả #userPermFormWrap
+// (cây quyền 0-26 + thanh nút Lưu/Hủy biến mất theo luôn) — giờ CHỈ toggle ẩn/hiện đúng khối "khai báo
+// thông tin người dùng" (#userBasicInfoFieldsWrap, xem chú thích tại chỗ khai báo div này trong
+// systemSection.html), KHÔNG đụng #permFieldsContainer/#userPermSaveBar. Không reset dữ liệu đang nhập
+// dở (khác "Hủy"/cancelPermFormEdit(), module-admin-submissiongroups.js — hàm đó reset về trạng thái
+// USER rỗng rồi mới đóng HẲN cả form). Toggle 2 chiều, đổi nhãn nút theo đúng trạng thái hiện tại.
 function closeUserPermForm() {
-  document.getElementById('userPermFormWrap').classList.add('hidden');
+  const wrap = document.getElementById('userBasicInfoFieldsWrap');
+  const collapsed = wrap.classList.toggle('hidden');
+  const toggleBtn = document.getElementById('btnToggleUserBasicInfo');
+  if (toggleBtn) toggleBtn.innerText = collapsed ? '▸ Hiện Thông Tin Người Dùng' : '✕ Thu Gọn Thông Tin';
 }
 
 // Trước đây savePermGroup()/deletePermGroup() mutate thẳng DB.permGroups/DB.users rồi gọi syncStorage()
@@ -364,10 +376,9 @@ const PERM_KEY_VN_LABELS = {
   "licenseCreate": "Giấy Phép — 📤 Tạo / Tải Lên Giấy Phép",
   "licenseView": "Giấy Phép — 👁️ Xem / Tải Giấy Phép",
   "meetingApprove": "Phòng Họp — ✅ Phê duyệt phòng họp (toàn công ty)",
-  "meetingBookScope.all": "Phòng Họp — Đăng ký (book)",
+  "meetingBook": "Phòng Họp — ✅ Cho phép đăng ký phòng họp (tự khoá đúng phòng ban)",
   "meetingCancel": "Phòng Họp — ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)",
   "meetingReportView": "Phòng Họp — 📊 Xem Báo Cáo Phòng Họp (toàn công ty, không kèm quyền duyệt/hủy)",
-  "meetingView.all": "Phòng Họp — Xem",
   "minutesCreate": "Biên Bản Họp & 📋 Công Việc — ✅ Tạo mới (lập) biên bản",
   "minutesDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải tất cả biên bản",
   "minutesEdit": "Biên Bản Họp & 📋 Công Việc — ✏️ Sửa tất cả biên bản",

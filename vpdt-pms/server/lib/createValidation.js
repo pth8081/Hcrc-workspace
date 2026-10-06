@@ -1045,7 +1045,16 @@ const CREATE_MODULE_CONFIGS = {
   },
   meetings: {
     dbKey: 'meetings',
-    getScope: (user) => user.perms?.meetingBookScope,
+    // Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận, xem lib ghi chú tại
+    // defaultNewUserPerms()): bỏ bảng chọn phòng ban (meetingBookScope {all,depts}) + quyền meetingView
+    // riêng, gộp lại thành 1 công tắc phẳng DUY NHẤT `meetingBook` — tự khoá đúng phòng ban của người
+    // đăng ký (forceOwnDept: true, giống khuôn vppRegistrations/itSupportTickets...), KHÔNG cho admin
+    // cấu hình "đăng ký hộ phòng ban khác" nữa. getScope trả về {} vì scopeAllows() luôn tự cho qua khi
+    // dept === user.dept (nhánh "cùng phòng là được", xem scopeAllows() đầu file) — quyền THẬT nằm ở
+    // nhánh kiểm tra user.perms?.meetingBook ngay trong extraValidate bên dưới (CÙNG khuôn
+    // vppRegistrations.extraValidate kiểm tra vppManage).
+    forceOwnDept: true,
+    getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Trùng phòng/khung giờ là kiểm tra khoảng thời gian CHỒNG LẤN — không diễn đạt được bằng 1 UNIQUE
     // INDEX như trùng "Code" ở các module khác, nên chỉ kiểm tra ở tầng ứng dụng (findMeetingConflict)
@@ -1060,6 +1069,9 @@ const CREATE_MODULE_CONFIGS = {
     // NaN cho giờ sai định dạng, mọi phép so sánh với NaN đều false nên findMeetingConflict() (dưới)
     // kết luận "không trùng" cho MỌI trường hợp giờ lỗi định dạng — vượt qua luôn cơ chế khoá-theo-phòng.
     extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.meetingBook) {
+        throw new CreateError(403, 'Bạn không có quyền đăng ký phòng họp');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'MEETING_ROOM');
       // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): payload.room trước đây KHÔNG được đối chiếu với
       // danh mục DB.meetingRooms — client chỉ có 1 <select> chọn từ danh mục, nhưng 1 request tự soạn có

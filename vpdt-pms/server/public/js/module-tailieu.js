@@ -144,7 +144,8 @@ function generateOfficeCode() {
 // Biên Bản Họp KHÔNG có khái niệm phòng ban (kênh chung, không giới hạn theo phòng ban — không có ô
 // chọn trên form) -> currentUser.dept (phòng ban người lập biên bản).
 function generateMinutesCode() { return generateHcrcCode(DB.meetingMinutes, getDeptAbbr(currentUser.dept), 'BBH'); }
-// Đặt Phòng Họp có #meetingDept chọn tự do (trong scope meetingBookScope) — cùng lý do subDept/carDept.
+// Đặt Phòng Họp: #meetingDept giờ tự khoá đúng phòng ban người đăng ký (10/2026, bỏ meetingBookScope),
+// vẫn đọc value của ô này để sinh mã (giữ nguyên hành vi/khuôn mã — chỉ khác nguồn gán giá trị ô).
 function generateMeetingCode() { return generateHcrcCode(DB.meetings, getDeptAbbr(document.getElementById('meetingDept').value), 'DPH'); }
 // Phê Duyệt Giá IT forceOwnDept: true (chỉ hiện readonly #itPriceDeptDisplay = currentUser.dept).
 // Hậu tố BB/BL (10/2026, yêu cầu người dùng — tách Phê Duyệt Giá Bán Buôn/Bán Lẻ khỏi Hỗ Trợ IT) — nằm

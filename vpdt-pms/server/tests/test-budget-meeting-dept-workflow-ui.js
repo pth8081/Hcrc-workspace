@@ -25,11 +25,11 @@ const OUT_DIR = process.env.BUDGET_MEETING_DEPT_WF_DEMO_OUT_DIR || path.join(__d
 // được canAccessBudgetModule(), meeting không đòi quyền tiên quyết nào).
 const DEPT_APPROVER = {
   id: 2, username: 'tp_kd', name: 'Trần Thị Trưởng Phòng KD', dept: 'Phòng Kinh Doanh', jobTitle: 'Trưởng phòng',
-  perms: { budgetCreate: true, meetingBookScope: { all: true } }, active: true
+  perms: { budgetCreate: true, meetingBook: true }, active: true
 };
 const CREATOR = {
   id: 3, username: 'nv_kd', name: 'Nguyễn Văn Nhân Viên', dept: 'Phòng Kinh Doanh', jobTitle: 'Nhân viên',
-  perms: { budgetCreate: true, meetingBookScope: { all: true } }, active: true
+  perms: { budgetCreate: true, meetingBook: true }, active: true
 };
 const WF_1STEP = { id: 'WF_1STEP', name: 'Quy trình 1 bước', steps: [{ order: 1, name: 'Duyệt' }] };
 

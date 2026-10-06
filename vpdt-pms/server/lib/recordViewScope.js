@@ -883,9 +883,15 @@ function filterItSupportTicketsForUser(items, user, appData) {
   return (items || []).filter(t => canViewItSupportTicket(user, t, appData));
 }
 
-// Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows(meetingView) HOẶC chính
-// người tạo HOẶC người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/
-// meetingCancel — không theo phòng ban, luôn cần thấy mọi lịch để xử lý).
+// Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows({}) HOẶC chính người tạo HOẶC
+// người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/meetingCancel — không
+// theo phòng ban, luôn cần thấy mọi lịch để xử lý).
+// Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ hẳn quyền meetingView
+// {all,depts} riêng — scope truyền vào scopeAllows() giờ là {} (rỗng), chỉ còn 2 lớp vẫn hoạt động của
+// hàm đó: (1) cùng phòng ban + deptAutoViewOn('meeting') (cấu hình RIÊNG ở "Phạm Vi Xem Theo Phòng Ban",
+// deptViewScopeConfig — KHÔNG đụng gì ở đây, vẫn độc lập như trước), (2) extraViewScopeAllows (người
+// xem thêm/quản lý trực tiếp). Quyền TẠO (meetingBook, lib/createValidation.js) và quyền XEM giờ tách
+// bạch hoàn toàn — không còn bảng phòng ban nào gán kiểu "xem được phòng ban X" riêng cho Phòng Họp nữa.
 // canViewMeeting() (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): thêm nhánh approver
 // theo meetingDeptWorkflows (appData, optional — các nơi gọi cũ chưa truyền vẫn an toàn nhờ optional
 // chaining, chỉ mất đúng nhánh mới này) — một người được admin gán làm approver riêng cho phòng ban của
@@ -897,7 +903,7 @@ function canViewMeeting(user, meeting, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.meetingView, meeting.dept, 'meeting', appData, meeting.creator)) return true;
+  if (scopeAllows(user, {}, meeting.dept, 'meeting', appData, meeting.creator)) return true;
   if (user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView) return true;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[meeting.dept], appData || {});

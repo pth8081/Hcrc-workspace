@@ -1513,6 +1513,16 @@
       <form data-op-submit="saveUser" class="space-y-4">
         <input id="editUserId" type="hidden">
 
+        <!-- #userBasicInfoFieldsWrap (10/2026, yêu cầu người dùng): bọc riêng khối "khai báo thông tin
+             người dùng" (từ Vị Trí Làm Việc/Tên đăng nhập/Mật khẩu tới Nhóm Phân Quyền bên dưới) để nút
+             "✕ Thu Gọn" (closeUserPermForm(), module-admin-permgroups.js) chỉ ẩn/hiện ĐÚNG khối này —
+             TRƯỚC ĐÂY nút đó ẩn cả #userPermFormWrap (cả cây quyền 0-26 lẫn thanh nút Lưu/Hủy đều biến
+             mất theo), khiến admin không thể vừa thu gọn phần khai báo vừa xem/sửa tiếp cây quyền bên
+             dưới. #permFieldsContainer + #userPermSaveBar (thanh nút nổi) nằm NGOÀI div này, luôn hiện
+             khi form đang mở, bất kể trạng thái thu gọn. pendingNewUsersSection/groupIdentityFields vẫn
+             để NGOÀI (có logic ẩn/hiện riêng theo mode USER/GROUP qua toggleUserPermFormMode(), lồng vào
+             đây sẽ xung đột 2 cơ chế cùng dùng class "hidden" trên cùng phần tử). -->
+        <div id="userBasicInfoFieldsWrap">
         <div id="userIdentityFields" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-3 bg-white p-3 rounded border">
           <div>
             <!-- Vị Trí Làm Việc (10/2026) — danh mục MỞ (Quản Lý Danh Mục), nạp ĐỘNG từ DB.positionTypes
@@ -1633,6 +1643,7 @@
           <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền (chọn được nhiều nhóm cùng lúc)</label>
           <div id="uPermGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
         </div>
+        </div><!-- /#userBasicInfoFieldsWrap -->
 
         <div id="pendingNewUsersSection" class="hidden bg-white p-3 rounded border border-amber-300">
           <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -1692,7 +1703,7 @@
              lớp nào khác. #permFieldsContainer (ngay dưới) được thêm "pb-20" để khối quyền cuối (26) không
              bị thanh nút nổi che mất khi cuộn hết form. Không đổi hành vi bấm nút, chỉ đổi cách hiển thị. -->
         <div id="userPermSaveBar" class="fixed bottom-0 left-0 right-0 md:left-64 z-10 flex justify-end gap-2 bg-white border-t border-gray-200 pt-3 pb-2 px-4 shadow-[0_-2px_6px_rgba(0,0,0,0.06)]">
-          <button type="button" data-op="closeUserPermForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold">✕ Thu Gọn</button>
+          <button type="button" id="btnToggleUserBasicInfo" data-op="closeUserPermForm" class="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-xs font-bold">✕ Thu Gọn Thông Tin</button>
           <button type="button" data-op="cancelPermFormEdit" class="bg-gray-400 text-white px-4 py-1.5 rounded text-xs font-bold">Hủy</button>
           <button type="button" id="btnAddToStagingList" data-op="addUserToStagingList" class="bg-amber-500 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-amber-600">➕ Thêm Vào Danh Sách</button>
           <button type="submit" id="btnSavePermForm" class="bg-purple-600 text-white px-6 py-1.5 rounded text-xs font-bold hover:bg-purple-700">Lưu Người Dùng & Phân Quyền</button>
@@ -1909,43 +1920,28 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📅 5. Phòng Họp</span></span>
             <span id="permTreeBadge_meeting" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 space-y-3">
-            <div class="space-y-1">
-              <span class="font-bold text-emerald-800 block text-[11px]">Toàn công ty (không theo phòng ban):</span>
-              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
-              </label>
-              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                <input type="checkbox" id="pMeetingCancel"> ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)
-              </label>
-              <!-- meetingReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"):
-                   quyền CHỈ XEM tab "📊 Báo Cáo", KHÔNG kèm quyền duyệt/hủy lịch ở trên. -->
-              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
-                <input type="checkbox" id="pMeetingReportView"> 📊 Xem Báo Cáo Phòng Họp (toàn công ty, không kèm quyền duyệt/hủy)
-              </label>
-            </div>
-            <div class="max-h-64 overflow-y-auto overflow-x-auto">
-              <table class="w-full text-[11px] border-collapse">
-                <thead class="sticky top-0 bg-white z-10">
-                  <tr class="border-b">
-                    <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                    <th class="text-center font-bold text-emerald-700 pb-1 px-1 align-bottom">
-                      <span class="block mb-0.5">Xem</span>
-                      <label class="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" id="pMeetingViewAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingViewAll" data-arg1="pMeetingViewDept"><span>ALL</span>
-                      </label>
-                    </th>
-                    <th class="text-center font-bold text-emerald-700 pb-1 px-1 align-bottom">
-                      <span class="block mb-0.5">Đăng ký (book)</span>
-                      <label class="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" id="pMeetingBookAll" data-op-change="toggleScopeGroup" data-arg0="pMeetingBookAll" data-arg1="pMeetingBookDept"><span>ALL</span>
-                      </label>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody id="pMeetingDeptTableBody"></tbody>
-              </table>
-            </div>
+          <div class="p-3 pt-0 space-y-1">
+            <!-- Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ hẳn bảng
+                 phòng ban (meetingView/meetingBookScope {all,depts}) — chỉ còn 1 công tắc phẳng DUY NHẤT
+                 "Cho phép đăng ký phòng họp", tự khoá đúng phòng ban người đăng ký (xem getScope ở
+                 lib/createValidation.js), KHÔNG còn chọn được phòng ban khác/cột "Xem" riêng nữa. Có
+                 quyền này là TỰ ĐỘNG hủy được lịch CỦA CHÍNH MÌNH luôn (không cần tick thêm pMeetingCancel
+                 — quyền đó RIÊNG để hủy/sửa lịch của NGƯỜI KHÁC, toàn công ty, xem canCancelMeeting()). -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pMeetingBook"> ✅ Cho phép đăng ký phòng họp (tự khoá đúng phòng ban của mình)
+            </label>
+            <span class="font-bold text-emerald-800 block text-[11px] mt-2">Toàn công ty (không theo phòng ban):</span>
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pMeetingApprove"> ✅ Phê duyệt phòng họp (toàn công ty)
+            </label>
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pMeetingCancel"> ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)
+            </label>
+            <!-- meetingReportView (10/2026, đợt "checkbox phân quyền Báo Cáo theo module/tab/sub-tab"):
+                 quyền CHỈ XEM tab "📊 Báo Cáo", KHÔNG kèm quyền duyệt/hủy lịch ở trên. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pMeetingReportView"> 📊 Xem Báo Cáo Phòng Họp (toàn công ty, không kèm quyền duyệt/hủy)
+            </label>
           </div>
         </details>
 

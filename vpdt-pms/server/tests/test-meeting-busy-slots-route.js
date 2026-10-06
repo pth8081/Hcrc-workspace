@@ -25,7 +25,7 @@ function stubModule(relPath, exportsObj) {
 // "phòng trống giả" trước khi có route này.
 const NV_KD = {
   username: 'nv_kd', name: 'Nhân Viên KD', dept: 'Phòng Kinh Doanh', active: true,
-  perms: { meetingBookScope: { all: false, depts: ['Phòng Kinh Doanh'] }, meetingView: { all: false, depts: ['Phòng Kinh Doanh'] } }
+  perms: { meetingBook: true }
 };
 const USERS = [NV_KD];
 
