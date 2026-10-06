@@ -196,6 +196,12 @@ function resetOfficeReqForm() {
     officeItems = [];
     addOfficeItemRow();
   }
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_OFFICE_BUY/FIX"> về lại option
+  // đầu tiên nhưng KHÔNG bắn sự kiện 'change', nên khối checkbox "Phê Duyệt Thêm" không tự vẽ lại theo —
+  // gọi lại renderExtraApprovalMount() (đúng moduleKey khớp sub-tab đang mở, mirror lời gọi gốc ở
+  // setOfficeSubTab()) để đồng bộ lại cả 2 khối.
+  renderExtraApprovalMount(activeOfficeSubTab === 'SUA_CHUA' ? 'OFFICE_FIX' : 'OFFICE_BUY', 'extraApprovalMount_OFFICE');
 }
 
 function onOfficeFilterChange() {

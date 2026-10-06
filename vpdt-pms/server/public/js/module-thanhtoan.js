@@ -327,6 +327,11 @@ function cancelEditPaymentRequest() {
   document.getElementById('paymentCreateRequestFilesWrap').classList.remove('hidden');
   clearMultiFileInput('paymentCreateRequestFiles', 'paymentCreateRequestFilesChips');
   form.querySelector('button[type="submit"]').innerText = 'Lập Đề Nghị (Nháp)';
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): form.reset() ở trên đưa <select id="extraApprovalLevel_PAYMENT"> về lại option đầu tiên
+  // NHƯNG KHÔNG bắn sự kiện 'change', nên khối checkbox "Phê Duyệt Thêm" không tự vẽ lại theo — gọi lại
+  // renderExtraApprovalMount() để đồng bộ lại cả 2 khối.
+  renderExtraApprovalMount('PAYMENT', 'extraApprovalMount_PAYMENT');
 }
 
 function openEditPaymentRequest(id) {

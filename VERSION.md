@@ -1,8 +1,43 @@
 # Phiên bản hiện tại
 
-**25.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.37 (2026-10-06): Fix bug "Làm Mới" không đồng bộ lại Phê Duyệt Thêm + đổi thuật ngữ "Khâu" → "Bước" ở Hướng Dẫn Nghiệp Vụ
+
+**1. Fix bug "Làm Mới" (↺) không đồng bộ lại "Phê Duyệt Thêm" theo Cấp Phê Duyệt Cuối Cùng mới** —
+người dùng báo qua ảnh chụp màn hình (Mua Hàng Bán Lẻ): đổi "Cấp Phê Duyệt Cuối Cùng" rồi bấm "Làm
+Mới" thì khối "Phê Duyệt Thêm" vẫn giữ nguyên lựa chọn CŨ, không khớp Cấp vừa reset về — xác nhận Văn
+Bản Trình/Hợp Đồng KHÔNG bị (2 module này dùng khối "Nhóm Phê Duyệt Trình/HĐ" bespoke riêng, không qua
+cơ chế dùng chung bên dưới). Nguyên nhân gốc: `formEl.reset()` (gọi bên trong mọi `resetXxxForm()`)
+đưa `<select id="extraApprovalLevel_<mk>">` về option đầu tiên nhưng KHÔNG bắn sự kiện `change` (đúng
+hành vi chuẩn của `HTMLFormElement.reset()` trên mọi trình duyệt), nên `onExtraApprovalLevelChange()`
+không tự chạy lại, khiến khối checkbox "Phê Duyệt Thêm" (`renderExtraApprovalLayerCheckboxes()`) giữ
+nguyên markup của Cấp vừa bị đổi đi. Đã vá bằng cách gọi lại `renderExtraApprovalMount(moduleKey,
+mountId)` (dựng lại TOÀN BỘ khối dropdown+checkbox về đúng trạng thái sạch, mirror đúng lời gọi ban đầu
+lúc vào tab) ở cuối 7 hàm `resetXxxForm()` dùng chung cơ chế "Nhóm Phê Duyệt Cuối": Đăng Ký Xe (CAR),
+Mua Sắm/Sửa Chữa VP (OFFICE_BUY/OFFICE_FIX), Phê Duyệt Giá Bán Lẻ (ITPRICE_RETAIL)/Bán Buôn
+(ITPRICE_WHOLESALE), Vận Hành Đặt Hàng (OPERATION_ORDER), Tài Liệu (DOC), Thanh Toán (PAYMENT). Văn
+Phòng Phẩm (VPP) KHÔNG cần vá — đã xác nhận qua đọc code: `resetVppRegForm()` không hề đụng tới
+`<select>` Cấp Phê Duyệt Cuối, nên không xảy ra lệch. Viết test mới
+(`tests/test-extra-approval-reset-sync-fix.js`, bấm THẬT nút "↺ Làm Mới" qua 3 module đại diện
+ITPRICE_RETAIL/CAR/DOC, 11/11 pass) xác nhận sau khi bấm "Làm Mới": `<select>` về đúng Cấp mặc định VÀ
+khối checkbox không còn sót lớp của Cấp cũ.
+
+**2. Đổi thuật ngữ "Khâu" → "Bước" trong Hướng Dẫn Nghiệp Vụ** — theo yêu cầu người dùng, thay toàn bộ
+chữ "Khâu"/"KHÂU"/"khâu" bằng "Bước"/"BƯỚC"/"bước" trong `public/js/module-nghiepvu.js` (tiêu đề các ô
+sơ đồ quy trình, chú giải, aria-label — áp dụng cho mọi module có sơ đồ "Khâu/Bước + Ai Duyệt": Phê
+Duyệt Giá, Tài Liệu, Đăng Ký Xe, Văn Phòng Phẩm, Mua Sắm/Sửa Chữa VP, Thanh Toán, Ngân Sách, Vận Hành,
+Văn Bản Trình, Hợp Đồng). Đã xác nhận với người dùng và giữ nguyên hiện tượng trùng chữ ở các ô con
+(VD "BƯỚC 2 · BƯỚC 1") theo đúng lựa chọn người dùng chọn ("đổi đúng y nguyên, giữ trùng chữ") thay vì
+tự ý đổi thêm cách đánh số. 160/160 (test-nghiepvu.js) + 6/6 (test-nghiepvu-csp.js) + 9/9
+(test-nghiepvu-click.js) vẫn pass sau khi đổi.
+
+**Còn để lại (chưa làm, cần người dùng xác nhận trước khi làm đợt sau)**: thêm khối "ai đã duyệt/đang
+chờ duyệt/sắp tới duyệt" (`buildWorkflowStepsStatusHTML()`) vào modal chi tiết của Tài Liệu/Hợp Đồng/
+Thanh Toán — 3 module này dùng cấu trúc modal RIÊNG (không qua khung chung của 6 module đã làm ở
+v25.36), nên cần viết thêm code dựng khối hiển thị MỚI cho từng module thay vì chỉ thêm 1 dòng gọi hàm.
 
 ## v25.36 (2026-10-06): Cột "Thời Gian Tạo" + Quy Trình Phê Duyệt đầy đủ (9 module) + khôi phục tìm kiếm Phê Duyệt Giá
 

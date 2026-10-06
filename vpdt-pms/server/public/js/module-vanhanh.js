@@ -984,6 +984,12 @@ function resetOperationOrderForm() {
   // Mở lại khoá đọc-từ-PDF (yêu cầu mới) — form.reset() ở trên KHÔNG tự gỡ thuộc tính readonly/class đã
   // gán qua JS, phải tự làm tường minh (cùng lý do chip file voFile phải xoá tường minh ở trên).
   applyOperationOrderPoLock(null);
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_OPERATION_ORDER_STORE/HO"> về
+  // lại option đầu tiên NHƯNG KHÔNG bắn sự kiện 'change', nên khối checkbox "Phê Duyệt Thêm" không tự vẽ
+  // lại theo — gọi lại renderExtraApprovalMount() (đúng moduleKey khớp sub-tab ST/HO đang mở, mirror lời
+  // gọi gốc ở setOperationOrderSubTab()) để đồng bộ lại cả 2 khối.
+  renderExtraApprovalMount(`OPERATION_ORDER_${activeOperationOrderSubTab}`, 'extraApprovalMount_OPERATION_ORDER');
 }
 
 // Thu gọn form "Tạo Đơn Hàng Mới" (10/2026, yêu cầu người dùng "thu gọn form nhập") — openOperationOrderForm()

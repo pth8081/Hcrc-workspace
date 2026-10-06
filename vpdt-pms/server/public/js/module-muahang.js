@@ -1021,4 +1021,12 @@ function resetMhItPriceForm() {
   renderMhItPriceMasterListSelect();
   clearSingleFileInput('mhItPriceFileInput', 'mhItPriceFileChip');
   clearMultiFileInput('mhItPriceExtraFiles', 'mhItPriceExtraFilesChip');
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_ITPRICE_RETAIL"> về lại option
+  // đầu tiên NHƯNG KHÔNG bắn sự kiện 'change' (hành vi chuẩn của form.reset()), nên
+  // onExtraApprovalLevelChange() không tự chạy lại, khiến khối checkbox "Phê Duyệt Thêm" GIỮ NGUYÊN lựa
+  // chọn CŨ (khớp cấp vừa bị đổi đi, không khớp cấp vừa reset về). Gọi lại renderExtraApprovalMount() để
+  // dựng lại TOÀN BỘ khối (dropdown + checkbox) về đúng trạng thái sạch — mirror ĐÚNG lời gọi ban đầu lúc
+  // vào tab (dòng ngay trên renderMhItPriceList()).
+  renderExtraApprovalMount('ITPRICE_RETAIL', 'extraApprovalMount_ITPRICE_RETAIL');
 }

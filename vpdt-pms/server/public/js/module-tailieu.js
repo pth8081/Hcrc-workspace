@@ -659,6 +659,11 @@ function resetDocUploadForm() {
   document.getElementById('docOpMode').value = 'NEW';
   onDocOpModeChange();
   clearSingleFileInput('docFile', 'docFileChip');
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_DOC"> về lại option đầu tiên
+  // NHƯNG KHÔNG bắn sự kiện 'change', nên khối checkbox "Phê Duyệt Thêm" không tự vẽ lại theo — gọi lại
+  // renderExtraApprovalMount() để đồng bộ lại cả 2 khối.
+  renderExtraApprovalMount('DOC', 'extraApprovalMount_DOC');
 }
 
 // ============ GIẤY PHÉP (Hành Chính) — phân quyền phẳng licenseCreate/licenseApprove/licenseView (KHÔNG
