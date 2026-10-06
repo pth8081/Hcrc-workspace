@@ -43,7 +43,9 @@ const state = createMockState({
   users: [STAFF_MKT, ADMIN, STAFF_NOPERM],
   itPriceMasterLists: [MASTER_LIST],
   priceZones: [], // cố ý RỖNG — đúng kịch bản lỗi người dùng báo cáo
-  stores: ['Siêu thị Demo']
+  stores: ['Siêu thị Demo'],
+  // nganhHangCatalog ("Ngành Hàng Áp Dụng", đợt sau) — Bán Buôn bắt buộc chọn >=1 ngành hàng hợp lệ.
+  nganhHangCatalog: [{ id: 1, code: 'NH-TEST', name: 'Ngành Hàng Test', dept: '' }]
 });
 
 async function loginAs(page, user) {
@@ -240,6 +242,11 @@ async function main() {
       await storeInput.type('Demo');
       await page.waitForTimeout(150);
       await page.click('#itPriceStoreScopeStoresMultiSelect [data-op="gmsAdd"]');
+      const nganhHangInput = await page.$('#itPriceNganhHangMultiSelect [data-pms-search]');
+      await nganhHangInput.click();
+      await nganhHangInput.type('Test');
+      await page.waitForTimeout(150);
+      await page.click('#itPriceNganhHangMultiSelect [data-op="gmsAdd"]');
       await seedItPricePendingFile(page, 'wholesale-ok');
       await page.evaluate(() => { window.__alerts = []; });
       await page.click('#itPriceCreateForm button[type="submit"]');

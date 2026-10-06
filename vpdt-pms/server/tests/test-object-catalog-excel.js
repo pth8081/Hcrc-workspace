@@ -52,9 +52,9 @@ async function expectHttpError(promiseFn, status, includes) {
 }
 
 async function runServerTests(run) {
-  await run.run('[Server] Registry server có đủ 7 danh mục object, KHÔNG có positionTypes, mỗi entry có allow()', async () => {
+  await run.run('[Server] Registry server có đủ 8 danh mục object, KHÔNG có positionTypes, mỗi entry có allow()', async () => {
     const keys = Object.keys(OBJECT_CATALOG_IMPORT_CONFIG).sort();
-    assert.deepStrictEqual(keys, ['carVehicleTypes', 'deptGroups', 'meetingRoomCatalog', 'publicHolidays', 'shiftTemplates', 'storeJobTitles', 'uniformCatalog']);
+    assert.deepStrictEqual(keys, ['carVehicleTypes', 'deptGroups', 'meetingRoomCatalog', 'nganhHangCatalog', 'publicHolidays', 'shiftTemplates', 'storeJobTitles', 'uniformCatalog']);
     keys.forEach(k => assert.strictEqual(typeof OBJECT_CATALOG_IMPORT_CONFIG[k].allow, 'function', `${k} thiếu allow()`));
     assert.ok(OBJECT_CATALOG_IMPORT_CONFIG.deptGroups.allow({ admin: true }) && !OBJECT_CATALOG_IMPORT_CONFIG.deptGroups.allow({}), 'deptGroups chỉ admin');
   });

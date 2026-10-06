@@ -1680,6 +1680,30 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     B/C không còn bị kéo vào nữa). RETAIL (Phê Duyệt Giá Bán Lẻ, theo phòng
     ban ở `itPriceDeptWorkflows`) KHÔNG đụng tới gì — vẫn hành vi cũ 100%, chỉ
     WHOLESALE đổi cơ chế người duyệt.
+  - **"Ngành Hàng" cho Phê Duyệt Giá Bán Buôn (đợt sau 10/2026)** — thêm 1
+    chiều lọc người duyệt THỨ 2, **HOÀN TOÀN ĐỘC LẬP** với "Siêu Thị Phụ
+    Trách" ở trên (cơ chế Siêu Thị/Phòng Ban giữ nguyên 100%, không đụng gì,
+    theo đúng yêu cầu người dùng):
+    - **Danh Mục Ngành Hàng** (mới, Hệ Thống → Quản Lý Danh Mục): admin tự
+      Thêm/Sửa/Xóa + Tải Mẫu/Nhập/Xuất Excel. Mỗi ngành hàng có tên hiển thị
+      và phòng ban áp dụng tuỳ chọn (để trống = dùng chung mọi phòng ban —
+      ảnh hưởng tới việc ai THẤY ngành hàng nào khi chọn trên form, không
+      liên quan tới việc khớp người duyệt bên dưới).
+    - **"🏷️ Ngành Hàng Áp Dụng"** — trường multi-select MỚI, BẮT BUỘC (chọn
+      ≥1), nằm ngay cạnh "🏬 Siêu Thị Đề Xuất" trên form Phê Duyệt Giá Bán
+      Buôn (Vận Hành). Người tạo đề xuất chọn đề xuất này áp dụng cho (1
+      hoặc nhiều) ngành hàng nào.
+    - **"🏷️ Ngành Hàng Phụ Trách"** — cột MỚI trong "🏪 QT Giá Bán Buôn (Siêu
+      Thị)" (cùng màn cấu hình người duyệt theo bước ở trên): để TRỐNG =
+      **Mặc định** (khớp MỌI ngành hàng); chọn 1 hoặc nhiều ngành hàng = chỉ
+      khớp đúng các ngành hàng đã chọn. Một dòng chỉ được tính là nguồn người
+      duyệt nếu khớp **CẢ 2 điều kiện cùng lúc** (Siêu Thị Phụ Trách VÀ Ngành
+      Hàng Phụ Trách) — VD dòng khai "Siêu thị A" + "Ngành hàng Thực Phẩm"
+      chỉ áp dụng cho đề xuất VỪA chọn Siêu thị A VỪA chọn ngành Thực Phẩm,
+      không áp dụng nếu đề xuất chỉ khớp 1 trong 2. Nếu đề xuất chọn NHIỀU
+      ngành hàng khớp NHIỀU dòng khác nhau, người duyệt từ TẤT CẢ các dòng đó
+      đều phải duyệt (hợp lại rồi mới yêu cầu đủ — giống đúng cơ chế "hợp
+      lại" của Siêu Thị Phụ Trách đã nêu ở trên, không loại trừ nhau).
   - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
     (10/2026)** — ngay sau khi đưa cơ chế trên vào, admin hỏi lại "quy trình
     đang nằm trong Phê Duyệt có nên bỏ đi không, nó còn tác dụng gì không?".

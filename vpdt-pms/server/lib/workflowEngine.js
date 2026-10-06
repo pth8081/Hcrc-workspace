@@ -336,12 +336,29 @@ function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepO
 // operationOrders) thì 1 rule "bước 1" sẽ áp dụng NHẦM cho CẢ 4 mức dù chúng có người duyệt bước 1 khác
 // nhau hoàn toàn -> PHẢI khớp CẢ tier LẪN step (tham số priceTier mới, bắt buộc khớp đúng
 // rule.tier === priceTier) — xem field `tier` mới trên mỗi rule ở defaults.js.
-function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, storeDept, users, stepOrders) {
+//
+// "Ngành Hàng" (10/2026, theo yêu cầu người dùng, xem chú thích đầy đủ ở defaults.js::
+// itPriceWholesaleStoreMixedApprovalRules) — CHIỀU LỌC ĐỘC LẬP THỨ 3 (cùng cấp với tier/step, KHÁC HẲN
+// `stores`): rule.nganhHang RỖNG = áp dụng mọi ngành hàng; CÓ giá trị = chỉ áp dụng khi đề xuất có chọn
+// GIAO với ít nhất 1 mã trong đó. KHÔNG sửa resolveOperationOrderStoreMixedApprovalRuleUsernames() dùng
+// chung với operationOrders (người dùng chốt rõ "bước khoá theo siêu thị và phòng ban vẫn để nguyên") —
+// bọc thêm 1 lớp kiểm tra nganhHang TRƯỚC khi gọi hàm chung đó, độc lập hoàn toàn với logic stores/dept.
+function ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang) {
+  const declared = Array.isArray(rule.nganhHang) ? rule.nganhHang : [];
+  if (!declared.length) return true; // "Mặc định" — áp dụng mọi ngành hàng
+  const selected = Array.isArray(itemNganhHang) ? itemNganhHang : [];
+  return declared.some(code => selected.includes(code));
+}
+function resolveItPriceWholesaleMixedApprovalRuleUsernames(rule, storeDept, itemNganhHang, users) {
+  if (!ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang)) return [];
+  return resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, users);
+}
+function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, storeDept, itemNganhHang, users, stepOrders) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (rules || []).filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder)).forEach(r => {
-      resolveOperationOrderStoreMixedApprovalRuleUsernames(r, storeDept, users).forEach(u => usernames.add(u));
+      resolveItPriceWholesaleMixedApprovalRuleUsernames(r, storeDept, itemNganhHang, users).forEach(u => usernames.add(u));
     });
     approvers[stepOrder] = [...usernames];
   });
@@ -525,7 +542,7 @@ const MODULE_CONFIGS = {
           resolveItPriceTierWorkflowConfig(appData.itPriceTierWorkflows, item.priceTier), appData
         );
         const stepOrders = resolved.steps.map(s => s.order);
-        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.dept, appData.users, stepOrders);
+        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.dept, item.nganhHang, appData.users, stepOrders);
         return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
       }
       return appendExtraApprovalLayers(flatWorkflowConfigToSteps(

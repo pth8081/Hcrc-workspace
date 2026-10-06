@@ -1,8 +1,35 @@
 # Phiên bản hiện tại
 
-**25.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.27 (2026-10-06): "Ngành Hàng" cho Phê Duyệt Giá Bán Buôn
+
+Phần "Ngành Hàng Bán Buôn" đã nêu là làm riêng ở v25.26 — triển khai đầy đủ theo xác nhận của người
+dùng (multi-select giống "Siêu Thị Đề Xuất", KHÔNG đụng tới cơ chế khoá Siêu Thị/Phòng Ban hiện có):
+
+1. **Danh Mục Ngành Hàng mới** (Quản Lý Danh Mục, admin): CRUD đầy đủ (Thêm/Sửa/Xóa) + Tải Mẫu/Nhập/
+   Xuất Excel qua engine "danh mục object" dùng chung (`lib/objectCatalogImport.js`) — mỗi ngành hàng
+   có mã (`code`, khoá ổn định), tên hiển thị, và phòng ban áp dụng tuỳ chọn (để trống = dùng chung
+   mọi phòng ban).
+2. **"Ngành Hàng Áp Dụng"** (bắt buộc, multi-select) trên form Phê Duyệt Giá Bán Buôn (Vận Hành), ngay
+   cạnh "Siêu Thị Đề Xuất" — quyết định ai phải duyệt đề xuất cùng với cấu hình "Ngành Hàng Phụ Trách"
+   dưới đây.
+3. **"Ngành Hàng Phụ Trách"** — cột mới trong "🏪 QT Giá Bán Buôn (Siêu Thị) — Cấu Hình Người Duyệt
+   Theo Bước" (Nghiệp Vụ Nâng Cao): 1 chiều lọc ĐỘC LẬP hoàn toàn với "Siêu Thị Phụ Trách" đã có —
+   một rule chỉ tính là nguồn duyệt nếu khớp CẢ 2 điều kiện cùng lúc (siêu thị VÀ ngành hàng, cùng
+   ngữ nghĩa trống = "Mặc định" khớp mọi giá trị). Nếu đề xuất chọn nhiều ngành hàng khớp nhiều rule
+   khác nhau, TẤT CẢ người duyệt từ các rule đó đều phải duyệt (union-rồi-AND, giống hệt cơ chế Siêu
+   Thị Phụ Trách hiện có). Cơ chế Siêu Thị/Phòng Ban hiện có giữ nguyên 100% theo yêu cầu người dùng.
+
+**Vá kèm (phát hiện trong khi làm, không liên quan trực tiếp tính năng này):**
+- `itPriceWholesaleStoreMixedApprovalRules` (đúng collection vừa mở rộng) trước đây KHÔNG nằm trong
+  `ADMIN_ONLY_KEYS` lẫn `NON_ADMIN_GATED_KEYS` ở `routes/data.js` — bất kỳ tài khoản đăng nhập nào
+  cũng `POST` thẳng để tự gắn mình làm người duyệt giá Bán Buôn. Đã thêm vào `ADMIN_ONLY_KEYS`.
+
+Không ảnh hưởng gì tới deploy ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
+biến môi trường, không thêm dependency (dùng chung cơ chế AppData JSON hiện có).
 
 ## v25.26 (2026-10-06): Rút gọn header "Trạng thái", thêm `createdAt`, nút Chọn tất cả Phân Quyền
 

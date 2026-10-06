@@ -19,11 +19,15 @@ const DEPT = 'Kinh Doanh';
 const GOOD_URL = '/uploads/1717171717171-0123456789abcdef.pdf';
 const PRICE_ITEMS = [{ values: { c0: 'Mặt hàng A', c1: '15000' } }];
 const IT_USER = { username: 'it1', name: 'Người Đề Xuất Giá', dept: DEPT, perms: { itPriceProposeCreateWholesale: true, itPriceProposeCreateRetail: true } };
-const APP_DATA = { formTemplates: {}, stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'], priceZones: ['Miền Bắc', 'Miền Trung', 'Miền Nam'] };
+const APP_DATA = {
+  formTemplates: {}, stores: ['Siêu thị A', 'Siêu thị B', 'Siêu thị C'], priceZones: ['Miền Bắc', 'Miền Trung', 'Miền Nam'],
+  nganhHangCatalog: [{ id: 1, code: 'NH-TEST', name: 'Ngành Hàng Test', dept: '' }]
+};
 
 const basePayload = (over) => ({
   dept: DEPT, reason: 'Áp giá đợt 9', priceType: 'RETAIL', effectiveDate: '2026-09-01', priceZone: 'Miền Bắc',
   files: [{ fileUrl: GOOD_URL, fileName: 'bang-gia.xlsx', items: PRICE_ITEMS, columnLabels: [] }],
+  nganhHang: ['NH-TEST'],
   ...over
 });
 

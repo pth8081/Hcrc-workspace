@@ -29,11 +29,15 @@ async function runServerTests(run) {
   const WHOLESALE_LIST = { id: 2, name: 'Mẫu Bán Buôn', priceType: 'WHOLESALE', columns: [{ key: 'c0', label: 'Tên' }, { key: 'c1', label: 'Giá' }] };
   const LEGACY_LIST = { id: 3, name: 'Mẫu Cũ (chưa gắn kênh)', columns: [{ key: 'c0', label: 'Tên' }, { key: 'c1', label: 'Giá' }] };
 
-  const appDataWith = (lists) => ({ formTemplates: {}, stores: ['Siêu thị A'], priceZones: ['Miền Bắc'], itPriceMasterLists: lists });
+  const appDataWith = (lists) => ({
+    formTemplates: {}, stores: ['Siêu thị A'], priceZones: ['Miền Bắc'], itPriceMasterLists: lists,
+    nganhHangCatalog: [{ id: 1, code: 'NH-TEST', name: 'Ngành Hàng Test', dept: '' }]
+  });
 
   const basePayload = (over) => ({
     dept: DEPT, reason: 'Áp giá', priceType: 'RETAIL', effectiveDate: '2026-09-01',
     files: [{ fileUrl: GOOD_URL, fileName: 'bang-gia.xlsx', items: PRICE_ITEMS, columnLabels: [] }],
+    nganhHang: ['NH-TEST'],
     ...over
   });
 

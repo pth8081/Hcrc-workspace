@@ -548,6 +548,16 @@ function renderItPriceMasterListSelect() {
 // cầu người dùng) KHÔNG còn khái niệm này nữa — đã có "Vùng Giá Áp Dụng" đủ khoanh phạm vi, khối
 // #itPriceWholesaleScopeDateWrap (gồm cả Ngày Áp Dụng/Ngày Hết Hiệu Lực) ẩn hẳn khỏi Bán Lẻ, xem
 // setItPriceSubTab()/resetItPriceForm() ở dưới.
+// Nguồn gợi ý cho ô "🏷️ Ngành Hàng Áp Dụng" — lọc theo đúng phòng ban đề xuất (itPriceApprovals WHOLESALE
+// luôn forceOwnDept, xem lib/createValidation.js): mã KHÔNG khai `dept` (dùng chung mọi phòng ban) HOẶC
+// `dept` khớp ĐÚNG currentUser.dept. Trả {value,label} cho renderMultiSelectDropdown() (value = code, ổn
+// định — tham chiếu lại đúng mã ở itPriceWholesaleStoreMixedApprovalRules[].nganhHang, xem defaults.js).
+function itPriceNganhHangOptionsForCurrentDept() {
+  return (DB.nganhHangCatalog || [])
+    .filter(n => !n.dept || n.dept === currentUser.dept)
+    .map(n => ({ value: n.code, label: n.name }));
+}
+
 function applyItPriceStoreScopeUIForSubTab() {
   const isWholesale = activeItPriceSubTab === 'WHOLESALE';
   const wrap = document.getElementById('itPriceWholesaleScopeDateWrap');
@@ -562,6 +572,11 @@ function applyItPriceStoreScopeUIForSubTab() {
     renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], getMultiSelectValues('itPriceStoreScopeStoresMultiSelect'), {
       placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',
       emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
+    });
+    renderMultiSelectDropdown('itPriceNganhHangMultiSelect', itPriceNganhHangOptionsForCurrentDept(), getMultiSelectValues('itPriceNganhHangMultiSelect'), {
+      placeholder: '🔍 Tìm ngành hàng để thêm... (từ Danh Mục Ngành Hàng)',
+      emptyText: 'Chưa chọn ngành hàng nào.',
+      chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
     });
   }
 }
@@ -610,12 +625,18 @@ async function submitItPriceApproval(e) {
   // đọc từ input nào (3 input đó đã ẩn hẳn khỏi form Bán Lẻ — xem itSupportSection.html). Server vẫn tự
   // xác minh lại y hệt ở itPriceApprovals.extraValidate, không tin giá trị client gửi.
   const isWholesale = activeItPriceSubTab === 'WHOLESALE';
-  let storeScopeMode = 'ALL', storeScopeStores = [], effectiveDate, expiryMode = 'PERMANENT', expiryDate = null;
+  let storeScopeMode = 'ALL', storeScopeStores = [], nganhHang = [], effectiveDate, expiryMode = 'PERMANENT', expiryDate = null;
   if (isWholesale) {
     storeScopeMode = 'OTHER';
     storeScopeStores = getMultiSelectValues('itPriceStoreScopeStoresMultiSelect');
     if (storeScopeStores.length === 0) {
       return alert('⛔ Vui lòng chọn ít nhất 1 siêu thị/cửa hàng đề xuất.');
+    }
+    // "🏷️ Ngành Hàng Áp Dụng" — bắt buộc, chặn sớm cho trải nghiệm mượt (server tự xác minh lại y hệt ở
+    // itPriceApprovals.extraValidate, không tin giá trị client gửi).
+    nganhHang = getMultiSelectValues('itPriceNganhHangMultiSelect');
+    if (nganhHang.length === 0) {
+      return alert('⛔ Vui lòng chọn ít nhất 1 ngành hàng áp dụng.');
     }
     effectiveDate = document.getElementById('itPriceEffectiveDate').value;
     if (!effectiveDate) return alert('⛔ Vui lòng chọn Ngày Áp Dụng.');
@@ -661,6 +682,7 @@ async function submitItPriceApproval(e) {
     extraFiles,
     reason: document.getElementById('itPriceReason').value.trim(),
     storeScope: { mode: storeScopeMode, stores: storeScopeStores },
+    nganhHang,
     effectiveDate,
     expiryMode,
     expiryDate,
@@ -717,7 +739,7 @@ function previewItPriceWorkflow() {
     // thường. Mirror ĐÚNG previewOperationOrderWorkflow() (module-vanhanh.js): dựng 1 bản nháp với
     // dept=currentUser.dept (đơn Bán Buôn luôn forceOwnDept, xem lib/createValidation.js) rồi gọi THẲNG
     // resolveItPriceWorkflowConfigForItemClient() — cùng hàm mà luồng duyệt thật đang dùng.
-    const draft = { priceType: 'WHOLESALE', priceTier: tier, dept: currentUser.dept };
+    const draft = { priceType: 'WHOLESALE', priceTier: tier, dept: currentUser.dept, nganhHang: getMultiSelectValues('itPriceNganhHangMultiSelect') };
     // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
     const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceWorkflowConfigForItemClient(draft), 'ITPRICE_WHOLESALE');
     return openGenericWorkflowPreviewModal(
@@ -770,6 +792,11 @@ function resetItPriceForm() {
   renderMultiSelectDropdown('itPriceStoreScopeStoresMultiSelect', DB.stores || [], [], {
     placeholder: '🔍 Tìm siêu thị/cửa hàng để thêm...',
     emptyText: 'Chưa chọn siêu thị/cửa hàng nào.'
+  });
+  renderMultiSelectDropdown('itPriceNganhHangMultiSelect', itPriceNganhHangOptionsForCurrentDept(), [], {
+    placeholder: '🔍 Tìm ngành hàng để thêm... (từ Danh Mục Ngành Hàng)',
+    emptyText: 'Chưa chọn ngành hàng nào.',
+    chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
   });
   applyItPriceStoreScopeUIForSubTab();
   checkItPriceMarginConsistency(); // itPricePendingFile vừa về null + itPriceTier vừa trắng -> tự ẩn cảnh báo cũ.

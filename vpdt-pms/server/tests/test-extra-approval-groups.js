@@ -224,6 +224,7 @@ async function main() {
   await run.run('itPriceApprovals: RETAIL đã cấu hình Nhóm Phê Duyệt Cuối, WHOLESALE CHƯA cấu hình -> mỗi bên độc lập đúng', async () => {
     const appData = {
       formTemplates: {}, stores: ['Siêu thị A'], priceZones: [],
+      nganhHangCatalog: [{ id: 1, code: 'NH-TEST', name: 'Ngành Hàng Test', dept: '' }],
       extraApprovalGroups_ITPRICE_RETAIL: GROUPS, extraApprovalLevels_ITPRICE_RETAIL: LEVELS
       // extraApprovalGroups_ITPRICE_WHOLESALE / extraApprovalLevels_ITPRICE_WHOLESALE: KHÔNG cấu hình
     };
@@ -239,6 +240,7 @@ async function main() {
     const wholesalePayload = {
       dept: 'Kinh Doanh', reason: 'Áp giá đợt test', priceType: 'WHOLESALE', effectiveDate: '2026-09-01',
       priceTier: 'MARGIN_LT5', wholesaleApplyUnit: 'Đại lý ABC', storeScope: { mode: 'OTHER', stores: ['Siêu thị A'] },
+      nganhHang: ['NH-TEST'],
       files: [{ fileUrl: '/uploads/123-abcdef0123456789.pdf', fileName: 'bang-gia.xlsx', items: [{ values: { c0: 'Mặt hàng A', c1: '15000' } }], columnLabels: [] }],
       approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO']
     };

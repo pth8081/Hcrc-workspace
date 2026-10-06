@@ -688,6 +688,17 @@
               <div id="itPriceStoreScopeStoresMultiSelect" class="border rounded p-2 bg-gray-50"></div>
               <p class="text-gray-400 mt-1">Chọn 1 hoặc nhiều siêu thị/cửa hàng đề xuất giá này.</p>
             </div>
+            <!-- "🏷️ Ngành Hàng Áp Dụng" (10/2026, theo yêu cầu người dùng) — ĐỘC LẬP HOÀN TOÀN với
+                 "🏬 Siêu Thị Đề Xuất" ở trên (khác chiều dữ liệu, khác mục đích): quyết định ai (theo cột
+                 "Ngành Hàng Phụ Trách" ở màn Hệ Thống > Nghiệp Vụ Nâng Cao > "🏪 QT Giá Bán Buôn (Siêu
+                 Thị)") phải duyệt đề xuất này — xem applyItPriceStoreScopeUIForSubTab()/
+                 lib/workflowEngine.js. Nguồn danh sách: DB.nganhHangCatalog (Quản Lý Danh Mục Ngành
+                 Hàng), lọc theo đúng phòng ban đề xuất (dept rỗng = dùng chung mọi phòng ban). -->
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">🏷️ Ngành Hàng Áp Dụng <span class="text-red-500">*</span></label>
+              <div id="itPriceNganhHangMultiSelect" class="border rounded p-2 bg-gray-50"></div>
+              <p class="text-gray-400 mt-1">Chọn 1 hoặc nhiều ngành hàng áp dụng mức giá này — quyết định ai sẽ phải duyệt đề xuất (theo cấu hình "Ngành Hàng Phụ Trách").</p>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label class="block font-semibold text-gray-600 mb-1">📅 Ngày Áp Dụng <span class="text-red-500">*</span></label>

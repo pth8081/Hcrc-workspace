@@ -3126,7 +3126,7 @@ function resolveItPriceWorkflowConfigForItemClient(p) {
       workflowId: tierCfg ? tierCfg.workflowId : null,
       tierConfigMissing: !tierCfg,
       steps: baseWf.steps,
-      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.dept, baseWf.steps.map(s => s.order))
+      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.dept, p.nganhHang, baseWf.steps.map(s => s.order))
     }, p);
   }
   const raw = resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
@@ -3219,14 +3219,29 @@ function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders) {
 // 1 điểm DUY NHẤT: lọc rule thêm theo ĐÚNG `priceTier` (Bán Buôn có 4 MỨC Margin/Chiết Khấu cố định, MỖI
 // MỨC quy trình/người duyệt riêng — nếu chỉ khớp theo số bước thì rule của 1 mức sẽ bị áp dụng nhầm sang
 // mức khác có cùng số thứ tự bước, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
-function computeItPriceWholesaleStoreMixedApproversClient(priceTier, storeDept, stepOrders) {
+//
+// "Ngành Hàng" (10/2026) — MIRROR ĐÚNG ruleMatchesItPriceWholesaleNganhHang()/
+// resolveItPriceWholesaleMixedApprovalRuleUsernames() phía server (lib/workflowEngine.js) — chiều lọc
+// ĐỘC LẬP thứ 3 (KHÔNG đụng resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() dùng chung với
+// operationOrders, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
+function ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang) {
+  const declared = Array.isArray(rule.nganhHang) ? rule.nganhHang : [];
+  if (!declared.length) return true;
+  const selected = Array.isArray(itemNganhHang) ? itemNganhHang : [];
+  return declared.some(code => selected.includes(code));
+}
+function resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(rule, storeDept, itemNganhHang) {
+  if (!ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang)) return [];
+  return resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept);
+}
+function computeItPriceWholesaleStoreMixedApproversClient(priceTier, storeDept, itemNganhHang, stepOrders) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (DB.itPriceWholesaleStoreMixedApprovalRules || [])
       .filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder))
       .forEach(r => {
-        resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(r, storeDept).forEach(u => usernames.add(u));
+        resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(r, storeDept, itemNganhHang).forEach(u => usernames.add(u));
       });
     approvers[stepOrder] = [...usernames];
   });
@@ -4837,6 +4852,10 @@ async function initDatabase(loggingInUser, opts) {
     // ở trên, đọc lại y hệt để tránh đúng lỗi "mất dữ liệu sau F5" đã vá cho dòng trên.
     DB.itPriceWholesaleStoreMixedApprovalRules = Array.isArray(data.itPriceWholesaleStoreMixedApprovalRules)
       ? data.itPriceWholesaleStoreMixedApprovalRules : [];
+    // nganhHangCatalog ("Danh Mục Ngành Hàng", đợt sau) — danh mục cho "Ngành Hàng Áp Dụng" (form Bán
+    // Buôn) + "Ngành Hàng Phụ Trách" (cấu hình rule ở trên) — ĐÚNG khuôn lặp lại y hệt dòng trên, tránh
+    // cùng lỗi "mất dữ liệu sau F5"/catalog luôn rỗng nếu bỏ sót dòng đọc lại này.
+    DB.nganhHangCatalog = Array.isArray(data.nganhHangCatalog) ? data.nganhHangCatalog : [];
     // DB.operationStoreOpenDeptWorkflows/DB.operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người
     // dùng — 2 luồng "Siêu Thị" không có bước phê duyệt nào ở module Vận Hành cả, xem chú thích ở
     // WF_MODULE_CONFIG, module-workflow.js) — OPERATION_KIND_META.wfMap() (module-vanhanh.js) đã tự
@@ -5249,6 +5268,22 @@ const OBJECT_CATALOG_EXCEL_CONFIG = {
       if (e.id != null) merged.id = e.id;
       return merged;
     }
+  },
+  // "🏷️ Danh Mục Ngành Hàng" (10/2026) — matchKey 'code' (KHÔNG phải 'name', xem chú thích đầy đủ ở
+  // defaults.js::nganhHangCatalog/lib/objectCatalogImport.js::nganhHangCatalog) — Nhập Excel gộp theo
+  // ĐÚNG mã, không tạo trùng khi admin chỉ sửa tên hiển thị.
+  nganhHangCatalog: {
+    label: 'Ngành Hàng',
+    dataKey: 'nganhHangCatalog',
+    matchKey: 'code',
+    idField: 'id',
+    renderFn: 'renderNganhHangCatalogList',
+    columns: [
+      { header: 'Mã Ngành Hàng', key: 'code', type: 'text', required: true },
+      { header: 'Tên Ngành Hàng', key: 'name', type: 'text', required: true },
+      { header: 'Phòng Ban Áp Dụng', key: 'dept', type: 'text' }
+    ],
+    beforeMerge: objectCatalogKeepIdMerge
   },
   // Ngày là khoá duy nhất tự nhiên (submitHacHoliday() đã chặn trùng ngày) -> matchKey 'date'.
   publicHolidays: {
@@ -5675,6 +5710,7 @@ const OBJECT_CATALOG_BULK_CONFIG = {
   storeJobTitles: { dbKey: 'storeJobTitles', idField: 'label', kindLabel: 'chức danh siêu thị', labelFn: t => t.label, renderFn: 'renderStoreJobTitleList' },
   sensitiveKeywords: { dbKey: 'sensitiveKeywords', idField: 'id', kindLabel: 'từ khoá nhạy cảm', labelFn: k => k.term, renderFn: 'renderSensitiveKeywordList' },
   jobTitleGradeDefaults: { dbKey: 'jobTitleGradeDefaults', idField: 'jobTitle', kindLabel: 'cấu hình cấp bậc mặc định', labelFn: r => r.jobTitle, renderFn: 'renderJobTitleGradeDefaultList' },
+  nganhHangCatalog: { dbKey: 'nganhHangCatalog', idField: 'id', kindLabel: 'ngành hàng', labelFn: n => `${n.code} — ${n.name}`, renderFn: 'renderNganhHangCatalogList' },
   // meetingRooms: có thêm bước dò lịch sắp tới còn dùng phòng TRƯỚC khi xoá (mirror đúng
   // deleteMeetingRoomCatalogItem() đơn lẻ, module-phonghop.js) — gộp cảnh báo cho CẢ LƯỢT qua preDeleteWarningFn.
   meetingRooms: { dbKey: 'meetingRooms', idField: 'id', kindLabel: 'phòng họp', labelFn: r => r.name, renderFn: 'renderMeetingRoomCatalogList',
