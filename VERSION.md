@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**25.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.35 (2026-10-06): Phê Duyệt Giá — người duyệt bước hiện tại tải được file đang chờ duyệt + sửa font tên file
+
+Theo yêu cầu người dùng: "Trong phê duyệt giá bạn cho mình thêm nút tải file từ bước người phê duyệt
+giúp tôi nhé. Người gửi phê duyệt thì vẫn chỉ xem là được" + "sửa lại font khi upload tên file lên để
+người dùng dễ nhận biết".
+
+- **Trước đây**: nút "⬇️ Tải file gốc" (Phê Duyệt Giá Bán Lẻ/Bán Buôn) chỉ hiện cho file ĐÃ CHÍNH THỨC
+  được duyệt (`resolveApprovedFileId()`) — người duyệt đang xem xét 1 hồ sơ còn PENDING không tải được
+  chính file họ sắp quyết định, phải mở "👁️ Xem" (Khung Xem Bảo Vệ) mới đọc được.
+- **Vá**: đúng người duyệt BƯỚC HIỆN TẠI (hồ sơ còn PENDING, ở tab Phê Duyệt) được tải file MỚI NHẤT dù
+  chưa chính thức "đã duyệt" — người đề xuất vẫn chỉ xem được như cũ.
+  - `lib/fileAuthz.js` (server, điểm gác THẬT): thêm ngoại lệ dùng ĐÚNG `canApproveStep()`/
+    `resolveWorkflowStepApprovers()` (`lib/workflowEngine.js`) — cùng phép kiểm nút Duyệt thật dùng,
+    không tự suy luận quyền riêng.
+  - `public/js/module-itsupport-price.js` (client mirror): cùng điều kiện, chỉ ẩn/hiện nút cho gọn giao
+    diện (server mới là lớp bảo vệ thật).
+- **Font tên file** (2 màn): danh sách Đề Xuất Bán Lẻ/Bán Buôn (cột "Tệp Bảng Giá") và màn admin "Mẫu
+  Giá" (link 📥 tải mẫu, trước đây `text-[11px]` quá nhỏ + `font-normal`) — đổi sang đậm hơn/rõ hơn
+  (`font-medium`/`text-xs`, có `break-all` tránh tràn khi tên file dài).
+
+Thêm kịch bản test vào `tests/test-it-support.js` (24/24 pass: người duyệt bước hiện tại thấy nút tải,
+người đề xuất không thấy, người ngoài phạm vi bị chặn, sau khi duyệt xong vẫn hoạt động bình thường qua
+đúng luật cũ) + demo script `tests/demo-itprice-approver-download.js` (ảnh minh hoạ, đã gửi người dùng
+xác nhận trước khi merge). Full regression `test-csp-deep-interaction.js` (19/19), `test-approval-hub.js`
+(37/37), `test-approval-polling.js` (12/12) — không có regression.
 
 ## v25.34 (2026-10-06): "Nhập Hợp Đồng/Phụ Lục Đã Ký" — Tài liệu ký phải qua TP duyệt, không còn tự APPROVED
 
