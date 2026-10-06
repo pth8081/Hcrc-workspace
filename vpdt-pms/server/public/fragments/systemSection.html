@@ -1189,6 +1189,28 @@
       </details>
 
       <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🔗 Chức Danh ↔ Cấp Bậc (Gợi Ý Mặc Định)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Gán 1 Cấp Bậc mặc định cho 1 Chức Danh — khi Thêm/Sửa Vị Trí ở Cơ Cấu Tổ Chức, chọn đúng chức danh này thì ô "Cấp Bậc" tự điền sẵn (vẫn sửa tay được, chỉ là gợi ý).</p>
+          <form data-op-submit="saveJobTitleGradeDefault" class="flex gap-2 flex-wrap">
+            <div class="relative flex-1 min-w-[140px]">
+              <input id="txtJtgdJobTitle" data-sdd-list="jtgdJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh..." class="border p-1.5 rounded text-xs w-full" required>
+              <div id="jtgdJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div class="relative w-28">
+              <input id="txtJtgdJobGrade" data-sdd-list="jtgdJobGradeDatalist" autocomplete="off" placeholder="Cấp bậc..." class="border p-1.5 rounded text-xs w-full" required>
+              <div id="jtgdJobGradeDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <button type="submit" id="btnJtgdSubmit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+            <button type="button" id="btnJtgdCancelEdit" data-op="cancelEditJobTitleGradeDefault" class="hidden bg-white border px-3 py-1.5 rounded text-xs font-bold text-gray-600 hover:bg-gray-50">Huỷ</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="jobTitleGradeDefaultList" class="divide-y text-xs"></ul>
+          </div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
         <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🚪 Danh Mục Lý Do Nghỉ Việc</span></summary>
         <div class="p-0 pt-2 space-y-3">
           <p class="text-[11px] text-fuchsia-700">Gợi ý cho ô "Lý do nghỉ việc" khi tạo Offboarding (Nhân Sự → Onboarding/Offboarding) — chỉ là danh sách gợi ý, vẫn gõ tự do được.</p>

@@ -111,7 +111,10 @@ async function main() {
       ],
       deptWorkflows: {}, // DOC module — target cho test Áp Dụng Nhanh (chưa cấu hình gì)
       // LT10M gắn WF_2STEP (không phải WF_1STEP) để có đủ 2 bước khớp đúng 2 dòng cấu hình MIXED test A2/A3.
-      operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_2STEP', approvers: {} } },
+      // approvers Bước 1 = ['tp.cntt'] (DỮ LIỆU CŨ, từ TRƯỚC đợt "Dọn UI chết") để test A7 xác nhận
+      // saveItPriceTierWorkflowConfig() GIỮ NGUYÊN giá trị này khi lưu lại mẫu quy trình (không bị xoá
+      // thành {} chỉ vì picker không còn render trong DOM).
+      operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_2STEP', approvers: { 1: ['tp.cntt'] } } },
       operationOrderHOTierWorkflows: {},
       operationOrderStoreMixedApprovalRules: [],
       submissionApprovalGroups: [], submissionApprovalLevels: [],
@@ -239,14 +242,33 @@ async function main() {
   // module-itsupport-tier.js — dùng CHUNG cho mọi module pureTier, kể cả OPERATION_ORDER_STORE, hiển thị
   // ở màn "🔄 Quy Trình & Phê Duyệt" khi chọn đúng module "Vận Hành - Đặt Hàng Tại Siêu Thị") phải dùng
   // ĐÚNG tên mới "🏬 Quy Trình Đặt Hàng Siêu Thị", không còn sót tên cũ "Quy Trình Hỗn Hợp".
+  // Đợt "Dọn UI chết" (10/2026, người dùng hỏi lại + xác nhận "ẩn hẳn"): picker người duyệt/"Theo vị trí"
+  // ở các thẻ bên dưới KHÔNG còn render nữa (không chỉ cảnh báo), nên banner đổi từ "...KHÔNG còn tác
+  // dụng" (coi như vẫn còn hiện UI chết) sang "Màn này chỉ còn dùng để..." — kiểm đúng cụm mới.
   await page.evaluate(async () => { await switchTab('system'); setSystemSubTab('WORKFLOW'); switchWfModule('OPERATION_ORDER_STORE'); });
   await page.waitForTimeout(80);
   const bannerCheck = await page.evaluate(() => {
     const text = document.body.innerText;
-    return { hasNewName: text.includes('Quy Trình Đặt Hàng Siêu Thị'), hasOldName: text.includes('Quy Trình Hỗn Hợp'), hasNoEffectNote: text.includes('KHÔNG còn tác dụng') };
+    return {
+      hasNewName: text.includes('Quy Trình Đặt Hàng Siêu Thị'),
+      hasOldName: text.includes('Quy Trình Hỗn Hợp'),
+      hasNoEffectNote: text.includes('Màn này chỉ còn dùng để'),
+      pickerHidden: !document.querySelector('[id^="wfTierApproverPicker_"]')
+    };
   });
-  record('A6. Banner cảnh báo ở "🔄 Quy Trình & Phê Duyệt" (module Đặt Hàng Tại Siêu Thị) dùng ĐÚNG tên mới, KHÔNG còn sót tên cũ',
-    bannerCheck.hasNewName && bannerCheck.hasNoEffectNote && !bannerCheck.hasOldName, JSON.stringify(bannerCheck));
+  record('A6. Banner cảnh báo ở "🔄 Quy Trình & Phê Duyệt" (module Đặt Hàng Tại Siêu Thị) dùng ĐÚNG tên mới, picker người duyệt chết ĐÃ ẨN HẲN',
+    bannerCheck.hasNewName && bannerCheck.hasNoEffectNote && !bannerCheck.hasOldName && bannerCheck.pickerHidden, JSON.stringify(bannerCheck));
+
+  // A7: bấm "Lưu Cấu Hình [≤ 10 triệu]" (CHỈ còn chọn mẫu quy trình tác dụng thật) ngay trên màn đang
+  // hiện UI đã ẩn picker ở A6 — xác nhận collectItPriceTierWorkflowConfig() GIỮ NGUYÊN approvers CŨ
+  // ({1:['tp.cntt']}, seed ở trên) trong DB, KHÔNG xoá thành {} dù DOM không còn checkbox nào để đọc.
+  await page.click('button[data-op="saveItPriceTierWorkflowConfig"][data-arg0="LT10M"]');
+  await page.waitForTimeout(80);
+  const tierCfgAfterSave = await page.evaluate(() => DB.operationOrderStoreTierWorkflows.LT10M);
+  record('A7. Lưu Cấu Hình [≤ 10 triệu] khi picker đã ẩn -> approvers CŨ ({1:["tp.cntt"]}) được GIỮ NGUYÊN trong DB (không bị xoá thành rỗng)',
+    !!tierCfgAfterSave && JSON.stringify(tierCfgAfterSave.approvers) === JSON.stringify({ 1: ['tp.cntt'] }) && tierCfgAfterSave.workflowId === 'WF_2STEP',
+    JSON.stringify(tierCfgAfterSave));
+
   await page.evaluate(async () => { await switchTab('system'); setSystemSubTab('ADVWORKFLOW'); setAdvWorkflowSubTab('MIXED'); });
   await page.waitForTimeout(50);
 

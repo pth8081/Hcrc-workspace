@@ -1,8 +1,163 @@
 # Phiên bản hiện tại
 
-**25.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.24 (2026-10-06): Vá "Xem Quy Trình" Bán Buôn hiện sai "chưa có người duyệt"
+
+Phát hiện khi xây kịch bản test/tài liệu hướng dẫn cho quy trình Phê Duyệt Giá
+Bán Buôn: nút "🔍 Xem Trước Quy Trình" trên form đề xuất (`previewItPriceWorkflow()`,
+`module-itsupport-price.js`) vẫn đọc người duyệt từ map CŨ `itPriceTierWorkflows[...].approvers`
+(đã lỗi thời từ khi chuyển sang Quy Trình Hỗn Hợp — chỉ còn `workflowId` giữ
+tác dụng để biết SỐ BƯỚC), trong khi người duyệt THẬT được tra qua
+`computeItPriceWholesaleStoreMixedApproversClient()` (mixed-rules, đúng
+tier + đúng siêu thị đề xuất) ở mọi nơi khác kể cả luồng duyệt thật. Modal
+xem trước vì vậy LUÔN hiện "chưa có người duyệt — kiểm tra lại cấu hình quy
+trình" dù cấu hình mixed-rules đã đúng và bước duyệt thật vẫn chạy bình
+thường — gây hiểu lầm cho người đề xuất lẫn admin.
+
+Vá bằng cách dựng 1 bản nháp `{priceType, priceTier, dept: currentUser.dept}`
+(đơn Bán Buôn luôn forceOwnDept) rồi gọi THẲNG `resolveItPriceWorkflowConfigForItemClient()`
+— đúng hàm mà luồng duyệt thật đang dùng — mirror chính xác cách
+`previewOperationOrderWorkflow()` (`module-vanhanh.js`) đã làm cho Đơn Hàng
+Siêu Thị. Cập nhật lại seed của `test-preview-workflow-buttons.js` (thêm
+`itPriceWholesaleStoreMixedApprovalRules`, bỏ `.approvers` khỏi
+`itPriceTierWorkflows` mẫu) để test khớp đúng cơ chế mới — chạy lại xác nhận
+16/16 kịch bản cũ + 8/8 (`test-itprice-wholesale-mixed-approval.js`) + 23/23
+(`test-it-support.js`) + 17/17 (`test-itprice-approval-and-emergency.js`) +
+9/9 (`test-it-price-approvals-scope.js`) đều pass, không có regression.
+
+## v25.23 (2026-10-06): Sơ đồ "Khâu/Bước + Ai Duyệt" rõ ràng hơn cho 9 quy trình phê duyệt
+
+Theo phản hồi người dùng sau khi xem bản demo hướng dẫn PDF cho quy trình Phê
+Duyệt Giá Bán Lẻ ("quy trình kiểu này rất rõ ràng, nên cập nhật vào tất cả các
+hướng dẫn trong Nghiệp Vụ"): thêm hàm vẽ sơ đồ mới `renderNVApprovalFlow()`
+(`public/js/module-nghiepvu.js`) — vẽ RÕ RA từng Khâu/Bước con bên trong Khâu
+Phê Duyệt (thay vì gộp cả cụm nhiều bước phòng ban vào 1 node "Duyệt" DUY
+NHẤT như sơ đồ chuỗi đơn giản cũ), kèm khối chú giải cố định giải thích 2 cơ
+chế xác định người duyệt (🧭 Theo vị trí/👤 Theo người cụ thể) và nhắc dùng
+nút "🔍 Xem Quy Trình" để biết chính xác ai duyệt hồ sơ của mình.
+
+Áp dụng cho 9 mục Nghiệp Vụ (các module đi qua engine phê duyệt dùng chung
+theo phòng ban/mức, `lib/workflowEngine.js` `MODULE_CONFIGS`): **Tài Liệu,
+Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng Phẩm, Mua Bán/Sửa Chữa/Thanh
+Toán, Ngân Sách 2.0, Vận Hành (Đơn Hàng), Phê Duyệt Giá Bán Lẻ/Bán Buôn** —
+mỗi mục chỉ vẽ Khâu 3 "Nhóm Phê Duyệt Cuối/Bổ Sung" nếu module đó THẬT SỰ có
+lớp này (Ngân Sách không có, không bịa ra cho đủ khâu). Không đụng tới
+`renderNVFlow()` cũ (vẫn dùng cho các mục khác) hay cơ chế `isCustomFlow`/
+`customFlowRenderer` có sẵn — thêm hàm mới hoàn toàn additive, đã chạy lại cả
+3 bộ test Nghiệp Vụ hiện có (160+9+6 = 175 kịch bản) xác nhận không có
+regression.
+
+## v25.22 (2026-10-05): Mở rộng "chọn nhiều để xoá" sang 7 danh mục dạng OBJECT còn thiếu
+
+Theo yêu cầu người dùng: "danh mục phải sửa được đảm bảo tất cả các danh mục
+đều phải sửa được chọn xóa nhiều". Soát lại Hệ Thống → Quản Lý Danh Mục (27
+panel) xác nhận: Sửa đã có đủ khắp nơi (đợt v24.x #398); nhưng "chọn nhiều để
+xoá" (`SIMPLE_CATALOG_BULK_CONFIG`, v25 trước) khi đó CHỈ áp dụng cho 11 danh
+mục mảng chuỗi phẳng, cố tình loại trừ mọi danh mục dạng OBJECT nhiều field
+"để đợt sau" — nay triển khai đợt đó:
+
+- **`OBJECT_CATALOG_BULK_CONFIG`** (`public/js/core.js`) — mở rộng khuôn
+  "chọn nhiều để xoá" (thanh "Đã chọn N mục"/"Chọn tất cả"/"Xoá N Mục Đã
+  Chọn") sang danh mục dạng `{...}[]`, khoá định danh theo `idField` cấu hình
+  riêng từng danh mục (không nhất thiết là chính chuỗi hiển thị): áp dụng cho
+  **sensitiveKeywords** (Từ Khoá Nhạy Cảm, khoá `id` số), **storeJobTitles**
+  (Chức Danh Siêu Thị, khoá `label`), **jobTitleGradeDefaults** (Chức Danh↔Cấp
+  Bậc, khoá `jobTitle`), **carVehicleTypes** (Loại Xe Cụ Thể, `module-dangkyxe.js`),
+  **deptGroups** (Khối/Ban, vẽ dạng thẻ `<div>` không phải `<ul>/<li>`, có
+  thêm hook dọn bộ lọc Khối/Ban ở Phân Quyền sau khi xoá) và **meetingRooms**
+  (Phòng Họp, `module-phonghop.js`, cũng vẽ dạng thẻ `<div>` — có thêm bước dò
+  lịch sắp tới còn dùng phòng TRƯỚC khi xoá hàng loạt, gộp cảnh báo cho cả
+  lượt, mirror đúng logic xoá đơn lẻ đã có).
+- **`positionTypes`** (Vị Trí Làm Việc) dùng cơ chế **BESPOKE riêng**
+  (`bulkDeletePositionTypes()`, `module-admin.js`) thay vì
+  `OBJECT_CATALOG_BULK_CONFIG` — vì danh mục này có cấu trúc LỒNG
+  (Địa Điểm/Chức Danh con riêng từng Vị Trí) + REST riêng có kiểm tra ràng
+  buộc server-side (chặn xoá nếu đang gán tài khoản) + 2 mục builtin (HO/Siêu
+  Thị) không được chọn/xoá — không khớp khuôn "ghi đè thẳng cả mảng qua
+  `syncStorage()` 1 lần". Cơ chế mới tự loop gọi tuần tự
+  `DELETE /api/admin/position-types/:key` cho từng Vị Trí đã chọn, BỎ QUA ÊM
+  (không chặn cả lượt) Vị Trí nào server từ chối xoá (đang gán tài khoản),
+  rồi báo rõ qua `alert()` danh sách Vị Trí nào không xoá được + lý do.
+- Không gồm **contractTypeAbbrs** (Viết Tắt Loại Hợp Đồng) — panel này không
+  Thêm/Xoá item nào (chỉ sửa viết tắt của lựa chọn quản lý ở Biểu Mẫu), không
+  có gì để "chọn nhiều xoá".
+- Viết test mới `tests/test-object-catalog-bulk-delete.js` (17 kịch bản: cả 6
+  danh mục OBJECT_CATALOG_BULK_CONFIG + positionTypes bespoke + rollback khi
+  lưu thất bại + xác nhận bar "Chọn tất cả" vẽ đúng dạng `<div>`/`<li>` tuỳ
+  danh mục), chạy lại toàn bộ test Quản Lý Danh Mục/Excel/Phân Quyền liên quan
+  — không phát sinh regression.
+
+## v25.21 (2026-10-05): Danh mục "Chức Danh ↔ Cấp Bậc" — tự điền gợi ý Cấp Bậc ở Cơ Cấu Tổ Chức
+
+Theo yêu cầu người dùng: khi khai báo Cơ Cấu Tổ Chức, chức danh thường gắn
+liền với 1 cấp bậc cố định — nên xây 1 danh mục map Chức Danh ↔ Cấp Bậc để
+khi chọn chức danh thì tự nhảy ra cấp bậc, xác nhận hướng "gợi ý mặc định,
+sửa tay được" (không ép buộc, vì cùng 1 chức danh đôi khi khác cấp bậc tuỳ
+phòng ban/thâm niên).
+
+- **Danh mục mới** `DB.jobTitleGradeDefaults` ({jobTitle, jobGrade}[], UNIQUE
+  theo jobTitle) — quản lý ở Hệ Thống → Quản Lý Danh Mục → "🔗 Chức Danh ↔
+  Cấp Bậc (Gợi Ý Mặc Định)" (`public/js/module-admin.js`): Thêm (chặn trùng
+  chức danh), Sửa (đổi cấp bậc mặc định), Xoá. Ô "Chức Danh" gõ-tìm HỖN HỢP
+  cả 2 danh mục (Chức Danh HO/Khối VP + Chức Danh Siêu Thị, gắn nhãn nguồn để
+  phân biệt khi trùng tên) — **phải CHỌN đúng 1 gợi ý có sẵn** (không nhận
+  free-text), resolve về giá trị chức danh THUẦN trước khi lưu
+  (`jtgdResolveJobTitleInput()` — lỗi thật phát hiện ngay lúc viết test: nếu
+  không resolve, DB sẽ lưu nhầm nguyên chuỗi nhãn kèm hậu tố " — HO/Khối
+  VP"/" — Siêu Thị", không bao giờ khớp được jobTitle thật).
+- **Tự điền ở Cơ Cấu Tổ Chức** (`public/js/module-orgchart.js`,
+  `onOrgChartNodeJobTitleChange()`): chọn/gõ xong ô "Chức Danh" khi Thêm/Sửa
+  Vị Trí — nếu khớp 1 dòng trong danh mục trên, ô "Cấp Bậc" tự điền. **CHỈ
+  điền khi ô Cấp Bậc đang RỖNG** — không đè giá trị admin đã tự chọn/sửa tay
+  trước đó (kể cả khi Sửa 1 node đã có cấp bậc khác), đúng yêu cầu "sửa tay
+  được". Đọc thẳng `DB.jobTitleGradeDefaults` (không gọi hàm module-admin.js
+  — cụm tải lười "orgchart-v2" không phụ thuộc "admin-core").
+- Viết test mới `tests/test-job-title-grade-default.js` (11 kịch bản: CRUD
+  catalog qua UI thật + 3 kịch bản tự điền/không đè/không khớp bậy), chạy lại
+  toàn bộ test liên quan (Cơ Cấu Tổ Chức, Quản Lý Danh Mục, CSP) — không phát
+  sinh regression.
+
+## v25.20 (2026-10-05): Ẩn hẳn UI chọn người duyệt chết ở "Quy Trình & Phê Duyệt" (Đặt Hàng Siêu Thị + Phê Duyệt Giá Bán Buôn)
+
+Người dùng hỏi tiếp sau v25.19 (banner cảnh báo): "Nếu quy trình duyệt giá
+bán buôn và quy trình đặt hàng siêu thị đã tách riêng ra dưới quy trình nâng
+cao rồi thì các quy trình đang nằm ở trong quy trình phê duyệt có nên bỏ đi
+hay không?" — xác nhận (2 câu hỏi): (1) ẩn hẳn UI chọn người duyệt/"Theo vị
+trí" cho CẢ 2 module `OPERATION_ORDER_STORE` và `ITPRICE_WHOLESALE` ở màn
+"🔄 Quy Trình & Phê Duyệt" (chỉ còn giữ "Chọn mẫu quy trình" — phần duy nhất
+còn tác dụng thật); (2) **giữ nguyên dữ liệu approvers/approverMode/
+approversByPosition cũ trong CSDL**, không xoá/migrate, chỉ ẩn UI.
+
+- `public/js/module-itsupport-tier.js` (`renderItPriceTierWorkflowTab()`):
+  thêm cờ `approverUiHidden` (= `OPERATION_ORDER_STORE` hoặc
+  `ITPRICE_WHOLESALE`) — khi bật, mỗi thẻ "Bước N" chỉ còn hiện tên bước,
+  KHÔNG còn render picker người duyệt/toggle "Theo vị trí" nữa (trước đây
+  vẫn render đầy đủ, chỉ cảnh báo bằng banner). Banner cảnh báo đổi nội dung
+  từ "...KHÔNG còn tác dụng" (ngụ ý UI chết vẫn còn hiện bên dưới) sang "Màn
+  này chỉ còn dùng để 'Chọn mẫu quy trình'..." cho đúng với UI đã ẩn.
+- `collectItPriceTierWorkflowConfig()`: khi `approverUiHidden`, KHÔNG đọc
+  `input[data-tier]`/`wfPosModeToggle_` từ DOM nữa (các phần tử này không
+  còn tồn tại — đọc sẽ luôn ra rỗng) mà **giữ nguyên** `approvers`/
+  `approverMode`/`approversByPosition` đã lưu trước đó trong
+  `operationOrderStoreTierWorkflows`/`itPriceTierWorkflows`, chỉ cập nhật
+  `workflowId` (mẫu quy trình) khi bấm "Lưu Cấu Hình" — đúng yêu cầu "giữ
+  nguyên CSDL, chỉ ẩn UI". Không còn cảnh báo "chưa có người duyệt" cho 2
+  module này (màn không còn cách nào để sửa giá trị đó).
+- `OPERATION_ORDER_HO` (Đặt Hàng Tại HO) **không** bị ảnh hưởng — module
+  này chưa có sub-tab "Quy Trình Nâng Cao" riêng nào thay thế, nên UI chọn
+  người duyệt ở đây vẫn là nơi cấu hình DUY NHẤT, giữ nguyên như cũ.
+- `tests/test-adv-workflow-tab-deep.js`: cập nhật A6 (banner đổi nội dung +
+  xác nhận picker `wfTierApproverPicker_*` KHÔNG còn trong DOM), thêm A7 mới
+  (bấm "Lưu Cấu Hình" khi picker đã ẩn -> xác nhận approvers CŨ đã seed
+  trước đó được GIỮ NGUYÊN trong DB, không bị xoá thành rỗng).
+- `tests/demo-itprice-wholesale-mixed-approval.js`: cập nhật assertion banner
+  (cụm mới) + thêm kiểm tra picker ẩn hẳn cho `ITPRICE_WHOLESALE`.
+- Chạy lại 35 file test liên quan (Nghiệp Vụ Nâng Cao, Quy Trình & Phê
+  Duyệt, itPriceApprovals, operationOrders, CSP) — không phát sinh
+  regression.
 
 ## v25.19 (2026-10-05): Vá banner cảnh báo còn thiếu ở "Quy Trình & Phê Duyệt" (Phê Duyệt Giá Bán Buôn)
 

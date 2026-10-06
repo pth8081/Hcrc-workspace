@@ -4534,6 +4534,9 @@ async function initDatabase(loggingInUser, opts) {
     // 1 dòng (lúc đó mới được gán từ response API). educationDegrees (Danh Mục Bằng Cấp, báo cáo rà
     // soát mẫu Excel mới) thêm MỚI cùng đợt, tránh lặp lại đúng lỗi vừa vá cho 7 key kia.
     DB.jobGrades = data.jobGrades || [];
+    // jobTitleGradeDefaults (10/2026, "Chức Danh ↔ Cấp Bậc" gợi ý mặc định) — cùng khuôn đọc-lại-ngay
+    // như jobGrades ở trên, tránh lặp lại đúng bug "F5 mất dữ liệu" đã vá cho 8 key phía trên.
+    DB.jobTitleGradeDefaults = data.jobTitleGradeDefaults || [];
     DB.resignationReasons = data.resignationReasons || [];
     DB.disciplinaryTypes = data.disciplinaryTypes || [];
     DB.legalEntities = data.legalEntities || [];
@@ -5647,6 +5650,132 @@ async function bulkDeleteCatalogItems(catalogKey) {
   catalogBulkSelectedSet(catalogKey).clear();
   rerenderCatalogBulkList(catalogKey);
   if (catalogKey === 'depts' && typeof renderDeptGroupList === 'function') renderDeptGroupList();
+  if (cfg.afterDelete) cfg.afterDelete();
+  if (typeof populateDropdowns === 'function') populateDropdowns();
+}
+
+// OBJECT_CATALOG_BULK_CONFIG — mở rộng SIMPLE_CATALOG_BULK_CONFIG ở trên sang phần "để đợt sau" (danh
+// mục dạng OBJECT nhiều field, khoá định danh KHÔNG phải chính chuỗi hiển thị — 10/2026, theo yêu cầu
+// người dùng "đảm bảo tất cả các danh mục đều phải sửa được chọn xóa nhiều"). Mỗi entry:
+// - idField: tên field định danh DUY NHẤT mỗi item trong DB[dbKey] (số hoặc chuỗi tuỳ danh mục).
+// - labelFn: suy ra chuỗi hiển thị (preview/log) từ 1 item.
+// - renderFn: hàm vẽ lại UI của đúng danh mục đó (gọi lại sau khi xoá/huỷ chọn, giống SIMPLE ở trên).
+// - afterDelete: hook TUỲ CHỌN (side-effect phụ mà bản xoá ĐƠN LẺ của chính danh mục đó có gọi thêm).
+// KHÔNG gồm "positionTypes" (Vị Trí Làm Việc) — cấu trúc LỒNG (locations[]/jobTitles[] con theo từng Vị
+// Trí) + REST riêng có kiểm tra ràng buộc server-side (chặn xoá nếu đang gán tài khoản) + 2 mục builtin
+// (HO/STORE) không được xoá, khác hẳn khuôn "ghi đè thẳng cả mảng qua syncStorage() 1 lần" ở đây — xem
+// bulkDeletePositionTypes() riêng (module-admin.js, tự loop gọi DELETE /api/admin/position-types/:key
+// từng Vị Trí, bỏ qua êm các Vị Trí server từ chối xoá). Cũng không gồm "contractTypeAbbrs" — panel đó
+// không Thêm/Xoá được item nào (chỉ sửa viết tắt của các lựa chọn quản lý ở Biểu Mẫu), không có gì để
+// "chọn nhiều để xoá".
+const OBJECT_CATALOG_BULK_CONFIG = {
+  deptGroups: { dbKey: 'deptGroups', idField: 'id', kindLabel: 'Khối/Ban', labelFn: g => g.name, renderFn: 'renderDeptGroupList',
+    afterDelete: () => { if (typeof refreshPermDeptGroupFilterAfterKhoiBanChange === 'function') refreshPermDeptGroupFilterAfterKhoiBanChange(); } },
+  carVehicleTypes: { dbKey: 'carVehicleTypes', idField: 'id', kindLabel: 'loại xe cụ thể', labelFn: t => t.name, renderFn: 'renderCarVehicleTypeList' },
+  storeJobTitles: { dbKey: 'storeJobTitles', idField: 'label', kindLabel: 'chức danh siêu thị', labelFn: t => t.label, renderFn: 'renderStoreJobTitleList' },
+  sensitiveKeywords: { dbKey: 'sensitiveKeywords', idField: 'id', kindLabel: 'từ khoá nhạy cảm', labelFn: k => k.term, renderFn: 'renderSensitiveKeywordList' },
+  jobTitleGradeDefaults: { dbKey: 'jobTitleGradeDefaults', idField: 'jobTitle', kindLabel: 'cấu hình cấp bậc mặc định', labelFn: r => r.jobTitle, renderFn: 'renderJobTitleGradeDefaultList' },
+  // meetingRooms: có thêm bước dò lịch sắp tới còn dùng phòng TRƯỚC khi xoá (mirror đúng
+  // deleteMeetingRoomCatalogItem() đơn lẻ, module-phonghop.js) — gộp cảnh báo cho CẢ LƯỢT qua preDeleteWarningFn.
+  meetingRooms: { dbKey: 'meetingRooms', idField: 'id', kindLabel: 'phòng họp', labelFn: r => r.name, renderFn: 'renderMeetingRoomCatalogList',
+    preDeleteWarningFn: async (items) => {
+      try {
+        const slots = await fetchMeetingBusySlots();
+        const now = Date.now();
+        const warned = items.filter(item => slots.some(s => s.room === item.name && s.status !== 'CANCELLED' && new Date(s.startTime).getTime() > now));
+        if (!warned.length) return '';
+        return `⚠️ CÒN lịch họp SẮP TỚI đang dùng ${warned.length} phòng sau (chưa bị huỷ): ${warned.map(r => r.name).join(', ')}! Xoá khỏi danh mục sẽ không huỷ các lịch đó, nhưng người đặt lịch mới sẽ không còn chọn được các phòng này nữa.\n\n`;
+      } catch (err) {
+        console.warn('Không dò được lịch sắp tới của các phòng họp trước khi xoá hàng loạt:', err.message);
+        return '';
+      }
+    } }
+};
+
+const objectCatalogBulkSelection = {}; // { [catalogKey]: Set<idFieldValue> } — reset tự nhiên khi tải lại trang.
+function objectCatalogBulkSelectedSet(catalogKey) {
+  if (!objectCatalogBulkSelection[catalogKey]) objectCatalogBulkSelection[catalogKey] = new Set();
+  return objectCatalogBulkSelection[catalogKey];
+}
+function isObjectCatalogItemBulkSelected(catalogKey, idValue) {
+  return objectCatalogBulkSelectedSet(catalogKey).has(idValue);
+}
+function rerenderObjectCatalogBulkList(catalogKey) {
+  const cfg = OBJECT_CATALOG_BULK_CONFIG[catalogKey];
+  if (cfg && typeof window[cfg.renderFn] === 'function') window[cfg.renderFn]();
+}
+function toggleObjectCatalogBulkItem(catalogKey, idValue, el) {
+  const set = objectCatalogBulkSelectedSet(catalogKey);
+  if (el.checked) set.add(idValue); else set.delete(idValue);
+  rerenderObjectCatalogBulkList(catalogKey);
+}
+function toggleObjectCatalogBulkAll(catalogKey, el) {
+  const cfg = OBJECT_CATALOG_BULK_CONFIG[catalogKey];
+  if (!cfg) return;
+  const set = objectCatalogBulkSelectedSet(catalogKey);
+  set.clear();
+  if (el.checked) (DB[cfg.dbKey] || []).forEach(it => set.add(it[cfg.idField]));
+  rerenderObjectCatalogBulkList(catalogKey);
+}
+function clearObjectCatalogBulkSelection(catalogKey) {
+  objectCatalogBulkSelectedSet(catalogKey).clear();
+  rerenderObjectCatalogBulkList(catalogKey);
+}
+// renderObjectCatalogBulkBarHtml(catalogKey, tag) — tag='li' cho danh mục vẽ dạng <ul>/<li> (storeJobTitles,
+// carVehicleTypes, sensitiveKeywords, jobTitleGradeDefaults — mirror renderCatalogBulkBarHtml() ở trên
+// nguyên khuôn); tag='div' cho danh mục vẽ dạng thẻ <div> rời (deptGroups, meetingRooms — không có <ul>
+// bao ngoài nên KHÔNG dùng <li>, xem renderDeptGroupList()/renderMeetingRoomCatalogList()).
+function renderObjectCatalogBulkBarHtml(catalogKey, tag) {
+  const cfg = OBJECT_CATALOG_BULK_CONFIG[catalogKey];
+  if (!cfg) return '';
+  const t = tag === 'div' ? 'div' : 'li';
+  const items = DB[cfg.dbKey] || [];
+  const set = objectCatalogBulkSelectedSet(catalogKey);
+  const allChecked = items.length > 0 && items.every(it => set.has(it[cfg.idField]));
+  let html = '';
+  if (set.size) {
+    html += `<${t} class="flex items-center justify-between bg-amber-50 border border-amber-300 rounded px-2.5 py-1.5 mb-1 text-[11px]">
+      <span class="font-semibold text-gray-700">Đã chọn ${set.size} ${escapeHtml(cfg.kindLabel)}</span>
+      <div class="flex items-center gap-2">
+        <button type="button" data-op="clearObjectCatalogBulkSelection" data-arg0="'${escapeHtml(catalogKey)}'" class="text-gray-500 underline">Bỏ chọn</button>
+        <button type="button" data-op="bulkDeleteObjectCatalogItems" data-arg0="'${escapeHtml(catalogKey)}'" class="bg-red-600 text-white px-2 py-1 rounded font-bold">🗑️ Xoá ${set.size} Mục Đã Chọn</button>
+      </div>
+    </${t}>`;
+  }
+  html += `<${t} class="flex items-center gap-2 px-2 py-1 text-[11px] text-gray-400 ${t === 'li' ? 'border-b' : 'bg-white rounded border'}">
+    <input type="checkbox" data-op-change="toggleObjectCatalogBulkAll" data-arg0="'${escapeHtml(catalogKey)}'" data-arg-el="1" ${allChecked ? 'checked' : ''}>
+    <span class="italic">Chọn tất cả</span>
+  </${t}>`;
+  return html;
+}
+// renderObjectCatalogBulkCheckboxHtml(catalogKey, idValue) — gọi trong .map() của từng render<Xxx>List(),
+// đặt NGAY ĐẦU mỗi dòng/thẻ (trước ✏️ Sửa/🗑️ Xoá hiện có) — tự quyết định bọc nháy đơn hay không theo
+// kiểu dữ liệu thật của idValue (số thì KHÔNG bọc nháy để cspCoerceArg() ép lại đúng Number, xem chú
+// thích hàm đó ở dưới cuối file).
+function renderObjectCatalogBulkCheckboxHtml(catalogKey, idValue) {
+  const argLiteral = typeof idValue === 'number' ? idValue : `'${escapeHtml(String(idValue))}'`;
+  return `<input type="checkbox" data-op-change="toggleObjectCatalogBulkItem" data-arg0="'${escapeHtml(catalogKey)}'" data-arg1="${argLiteral}" data-arg-el="2" ${isObjectCatalogItemBulkSelected(catalogKey, idValue) ? 'checked' : ''} class="w-3.5 h-3.5 shrink-0">`;
+}
+async function bulkDeleteObjectCatalogItems(catalogKey) {
+  const cfg = OBJECT_CATALOG_BULK_CONFIG[catalogKey];
+  if (!cfg) return;
+  const ids = Array.from(objectCatalogBulkSelectedSet(catalogKey));
+  if (!ids.length) return;
+  const idSet = new Set(ids);
+  const items = (DB[cfg.dbKey] || []).filter(it => idSet.has(it[cfg.idField]));
+  if (!items.length) return;
+  const labels = items.map(cfg.labelFn);
+  const preview = labels.slice(0, 8).join(', ') + (labels.length > 8 ? `... (+${labels.length - 8})` : '');
+  const extraWarning = cfg.preDeleteWarningFn ? await cfg.preDeleteWarningFn(items) : '';
+  if (!confirm(`${extraWarning}Xoá ${items.length} ${cfg.kindLabel} đã chọn?\n\n${preview}\n\n⚠️ Hệ thống KHÔNG kiểm tra được hết nơi đang dùng các mục này — hồ sơ/cấu hình liên quan (nếu có) vẫn giữ nguyên dữ liệu cũ và sẽ thành tham chiếu treo, y hệt khi xoá từng mục một. Vẫn tiếp tục xoá?`)) return;
+
+  const prevMain = [...(DB[cfg.dbKey] || [])];
+  DB[cfg.dbKey] = (DB[cfg.dbKey] || []).filter(it => !idSet.has(it[cfg.idField]));
+  const saved = await syncStorage(cfg.dbKey);
+  if (!saved) { DB[cfg.dbKey] = prevMain; rerenderObjectCatalogBulkList(catalogKey); return; }
+  logSystemAction('USER_MGM', 'BULK_DELETE_OBJECT_CATALOG', `Xoá ${items.length} ${cfg.kindLabel}: ${labels.join(', ')}`, 'SUCCESS', String(items.length));
+  objectCatalogBulkSelectedSet(catalogKey).clear();
+  rerenderObjectCatalogBulkList(catalogKey);
   if (cfg.afterDelete) cfg.afterDelete();
   if (typeof populateDropdowns === 'function') populateDropdowns();
 }

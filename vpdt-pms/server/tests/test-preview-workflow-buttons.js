@@ -124,7 +124,12 @@ async function main() {
       vppExcludeGroups: [], vppExcludedJobTitles: [], workflowParticipatingDepts: [], workflowParticipatingPositions: [],
       pwaShortcutModules: [], itPriceMasterLists: [],
       itPriceDeptWorkflows: { 'Phòng A': { RETAIL: { workflowId: 'WF_1STEP', approvers: { 1: ['itretail1'] } } } },
-      itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP', approvers: { 1: ['itwholesale1'] } } },
+      // Bán Buôn: itPriceTierWorkflows[...].approvers giờ KHÔNG còn được đọc cho preview/duyệt thật nữa
+      // (chỉ workflowId — số bước — còn tác dụng, xem resolveItPriceWorkflowConfigForItemClient() nhánh
+      // WHOLESALE, core.js) — người duyệt thật tra từ itPriceWholesaleStoreMixedApprovalRules (Quy Trình
+      // Hỗn Hợp), mirror đúng cách operationOrderStoreMixedApprovalRules test STORE ở dưới.
+      itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP' } },
+      itPriceWholesaleStoreMixedApprovalRules: [{ id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', username: 'itwholesale1', stores: [] }],
       uploadFileTypeConfig: {}, uploadSizeLimitConfig: {}, emailConfig: {}, systemLogs: [], externalApiKeys: [],
       // VPP: forceOwnDept=true (không có ô chọn phòng ban), luôn dùng currentUser.dept = 'Phòng A'.
       vppRegistrations: [], vppDeptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['vpp1'] } } }, vppPeriods: [],

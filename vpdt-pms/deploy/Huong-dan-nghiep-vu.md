@@ -219,6 +219,23 @@ Kiến Trúc Hệ Thống" và "🧭 Tổng Quan" của Đào Tạo). Module/tí
 vụ MỚI về sau vẫn nên viết thêm `steps` ngay khi thêm entry `NGHIEP_VU_DOCS`,
 theo đúng quy tắc ở mục "Module mới → bắt buộc cập nhật Nghiệp Vụ" (CLAUDE.md).
 
+**Sơ đồ "Khâu/Bước + Ai Duyệt" cho 9 module đi qua engine phê duyệt theo
+phòng ban/mức (từ v25.23)**: `renderNVApprovalFlow()` (module-nghiepvu.js) vẽ
+RÕ RA từng khâu (Đề Xuất → Phê Duyệt Theo Phòng Ban/Mức, tách hẳn từng Bước
+con bên trong → Nhóm Phê Duyệt Cuối/Bổ Sung TUỲ CHỌN nếu module có → Hoàn
+Tất), kèm 1 khối chú giải cố định giải thích 2 cơ chế xác định người duyệt
+(🧭 Theo vị trí/👤 Theo người cụ thể) và nhắc dùng nút "🔍 Xem Quy Trình" để
+biết CHÍNH XÁC ai duyệt hồ sơ của mình — thay cho sơ đồ chuỗi đơn giản cũ gộp
+cả cụm nhiều bước phòng ban vào 1 node "Duyệt" DUY NHẤT. Áp dụng cho 9 mục:
+**Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng Phẩm, Mua Bán/Sửa
+Chữa/Thanh Toán (2 sơ đồ), Ngân Sách, Vận Hành (Đơn Hàng, sơ đồ thứ 2 cạnh
+QLDA cũ), Phê Duyệt Giá Bán Lẻ/Bán Buôn**. Module nào không có lớp "Nhóm Phê
+Duyệt Cuối"/tương đương (VD Ngân Sách) thì tự không vẽ Khâu 3, không bịa ra
+cho đủ khâu. Module mới thêm sau này nếu dùng chung engine phê duyệt theo
+phòng ban (`lib/workflowEngine.js` `MODULE_CONFIGS`) nên ưu tiên dùng lại
+`renderNVApprovalFlow()` thay vì tự vẽ `flow` chuỗi đơn giản, để giữ cùng 1
+kiểu trình bày rõ ràng xuyên suốt.
+
 Đây là bản **tóm tắt trực quan** — mục 3-7 phía dưới của tài liệu này vẫn là
 nguồn tham khảo **đầy đủ và chi tiết nhất** (mỗi trang Nghiệp Vụ đều có link
 trỏ lại đúng mục tương ứng ở cuối trang). **Quy tắc bắt buộc** (xem
@@ -1663,6 +1680,20 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     B/C không còn bị kéo vào nữa). RETAIL (Phê Duyệt Giá Bán Lẻ, theo phòng
     ban ở `itPriceDeptWorkflows`) KHÔNG đụng tới gì — vẫn hành vi cũ 100%, chỉ
     WHOLESALE đổi cơ chế người duyệt.
+  - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
+    (10/2026)** — ngay sau khi đưa cơ chế trên vào, admin hỏi lại "quy trình
+    đang nằm trong Phê Duyệt có nên bỏ đi không, nó còn tác dụng gì không?".
+    Xác nhận: phần chọn người duyệt/"Theo vị trí" theo từng bước ở màn "🔄 Quy
+    Trình & Phê Duyệt" (mục "💰 QT Giá Bán Buôn") KHÔNG còn hiện ra nữa (trước
+    đó chỉ cảnh báo "không còn tác dụng" nhưng UI vẫn còn, dễ gây nhầm) — màn
+    này giờ CHỈ còn đúng 1 việc: "Chọn mẫu quy trình" (số bước) cho từng mức.
+    Dữ liệu người duyệt đã lưu TRƯỚC ĐÓ ở màn cũ vẫn được GIỮ NGUYÊN trong CSDL
+    (không xoá/không migrate) — chỉ không còn đường nào sửa/xem lại qua màn
+    cũ nữa; người duyệt thật từ nay tra 100% qua sub-tab "🏪 QT Giá Bán Buôn
+    (Siêu Thị)" ở trên. Cùng đợt: "🏬 Quy Trình Đặt Hàng Siêu Thị" (operationOrders
+    STORE, mục 4.4 Vận Hành) cũng được dọn tương tự — xem ghi chú ở đó.
+    "📦 Đặt Hàng Tại HO" KHÔNG bị ảnh hưởng (chưa có sub-tab riêng thay thế,
+    màn "🔄 Quy Trình & Phê Duyệt" vẫn là nơi cấu hình người duyệt DUY NHẤT).
   - **📐 Mẫu Giá dời sang Hệ Thống → Cấu Hình Nghiệp Vụ (10/2026)** — panel
     quản trị Mẫu Giá (thêm/thay/đổi tên/gán cột Margin/xoá) không còn nằm ở
     Hỗ Trợ IT nữa, đã dời sang màn MỚI **⚙️ Hệ Thống → Cấu Hình Nghiệp Vụ**
@@ -2114,6 +2145,18 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
     cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
     Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
+  - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
+    (10/2026)**: phần chọn người duyệt/"Theo vị trí" theo từng bước ở màn
+    "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị")
+    KHÔNG còn hiện ra nữa (trước đó chỉ cảnh báo "không còn tác dụng" nhưng UI
+    vẫn còn, dễ gây nhầm) — màn này giờ CHỈ còn đúng 1 việc: "Chọn mẫu quy
+    trình" (số bước theo mức giá trị). Dữ liệu người duyệt đã lưu TRƯỚC ĐÓ ở
+    màn cũ vẫn được GIỮ NGUYÊN trong CSDL (không xoá/không migrate) — chỉ
+    không còn đường nào sửa/xem lại qua màn cũ nữa; người duyệt thật từ nay
+    tra 100% qua sub-tab "🏬 Quy Trình Đặt Hàng Siêu Thị" ở trên. "📦 Đặt Hàng
+    Tại HO" KHÔNG bị ảnh hưởng — như đã nêu ở trên, HO chưa có sub-tab riêng
+    thay thế nên màn "🔄 Quy Trình & Phê Duyệt" vẫn là nơi cấu hình người
+    duyệt DUY NHẤT cho HO.
   - **Cảnh báo "⚠️ Chưa cấu hình duyệt"** (9/2026, đợt rà soát chuyên sâu): nếu
     admin CHƯA cấu hình mẫu quy trình (số bước) cho 1 mức giá trị nào đó (màn
     "🔄 Quy Trình & Phê Duyệt"), đơn hàng rơi vào mức đó sẽ hiện rõ cảnh báo
@@ -2804,6 +2847,13 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     Tổ Chức, mở Thêm/Sửa vị trí để gắn), tự snapshot xuống Hồ Sơ Nhân Sự (hiển
     thị chỉ đọc, cạnh Chức Vụ) mỗi lần HR gán/đổi chức vụ cho vị trí đó — cùng
     cơ chế snapshot như Phòng Ban/Chức Danh, không gõ tay trực tiếp trên hồ sơ.
+  - **"Chức Danh ↔ Cấp Bậc" — gợi ý tự điền (10/2026, theo yêu cầu người dùng)**:
+    Hệ Thống → Quản Lý Danh Mục → "🔗 Chức Danh ↔ Cấp Bậc (Gợi Ý Mặc Định)" cho
+    gán sẵn 1 Cấp Bậc mặc định cho 1 Chức Danh (admin tự cấu hình, mỗi chức
+    danh chỉ 1 cấp bậc mặc định). Khi Thêm/Sửa vị trí ở Cơ Cấu Tổ Chức, gõ/chọn
+    đúng Chức Danh đã có cấu hình thì ô "Cấp Bậc" **tự điền sẵn** — thuần là
+    GỢI Ý (CHỈ điền khi ô đang trống, KHÔNG đè Cấp Bậc admin đã tự chọn/sửa tay
+    trước đó), vẫn gõ/sửa tay lại được bình thường sau khi tự điền.
 - **Thâm niên / Kiêm nhiệm chức danh (10/2026, chỉ đọc, tham khảo)**: Chi tiết
   hồ sơ hiện thêm "Thâm niên" (tự tính từ "Ngày Vào Làm Việc" trên tài khoản
   VPDT đã liên kết tới hiện tại, làm tròn 1 chữ số thập phân — không lưu
@@ -4928,9 +4978,22 @@ kèm nút **🗑️ Xoá N Mục Đã Chọn** để xoá cả loạt trong 1 l�
 bấm Xoá từng dòng). Cùng cảnh báo tham chiếu treo như xoá đơn lẻ ở trên.
 Riêng "Phòng Ban" xoá nhiều vẫn dọn đúng cả **Viết tắt** lẫn liên kết
 **Khối/Ban** của TỪNG tên bị xoá (như xoá đơn lẻ, chỉ khác là gộp vào đúng 1
-lượt lưu cho nhiều tên cùng lúc). Danh mục dạng nhiều-field (Khối/Ban, Loại
-Xe Cụ Thể, Vị Trí Làm Việc, Danh Mục Phòng Họp, Từ Khoá Nhạy Cảm...) CHƯA có
-tính năng này (để đợt sau).
+lượt lưu cho nhiều tên cùng lúc).
+
+**☑️ Chọn nhiều để xoá — mở rộng sang danh mục nhiều-field (10/2026, đợt 2)** —
+phần "để đợt sau" ở trên nay đã làm: **Từ Khoá Nhạy Cảm, Chức Danh Siêu Thị,
+Chức Danh ↔ Cấp Bậc, Loại Xe Cụ Thể, Khối/Ban, Danh Mục Phòng Họp** cũng có
+đủ checkbox từng dòng + "Chọn tất cả" + "🗑️ Xoá N Mục Đã Chọn" y hệt khuôn
+trên (Khối/Ban và Phòng Họp vẽ dạng thẻ thay vì danh sách dòng, nhưng thao
+tác chọn/xoá giống hệt). Riêng **Phòng Họp**: xoá nhiều vẫn tự dò lịch họp
+SẮP TỚI còn dùng từng phòng trước khi xoá (như xoá đơn lẻ), gộp cảnh báo cho
+cả lượt vào 1 hộp thoại xác nhận thay vì hỏi từng phòng. **Vị Trí Làm Việc**
+dùng cơ chế chọn-nhiều-xoá RIÊNG (không hoàn toàn giống các danh mục trên) vì
+có Địa Điểm/Chức Danh con lồng theo từng Vị Trí + 2 Vị Trí mặc định HO/Siêu
+Thị không cho xoá: tick chọn nhiều Vị Trí rồi xoá, hệ thống tự BỎ QUA Vị Trí
+nào đang có tài khoản gán (không chặn cả lượt), báo rõ Vị Trí nào không xoá
+được. **Viết Tắt Loại Hợp Đồng** không có tính năng này vì panel đó không
+Thêm/Xoá được mục nào (chỉ sửa viết tắt của lựa chọn quản lý ở Biểu Mẫu).
 
 **LỖI ĐÃ VÁ (10/2026): đổi tên/xoá 1 giá trị danh mục TOÀN CHỮ SỐ** — cơ chế
 điều hướng dùng chung của toàn ứng dụng trước đây tự hiểu nhầm giá trị toàn

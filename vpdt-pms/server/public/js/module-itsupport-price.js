@@ -709,8 +709,17 @@ function previewItPriceWorkflow() {
   if (activeItPriceSubTab === 'WHOLESALE') {
     const tier = document.getElementById('itPriceTier').value;
     if (!tier) return alert('Vui lòng chọn Mức Margin / Chiết Khấu trước khi xem quy trình!');
+    // LỖI ĐÃ VÁ (10/2026, phát hiện khi viết tài liệu hướng dẫn): trước đây dùng thẳng
+    // resolveItPriceTierWorkflowConfigClient(tier) — đọc approvers từ map CŨ itPriceTierWorkflows (đã lỗi
+    // thời, chỉ còn giữ workflowId để biết SỐ BƯỚC kể từ khi chuyển sang Quy Trình Hỗn Hợp, xem
+    // resolveItPriceWorkflowConfigForItemClient() nhánh WHOLESALE) — modal xem trước LUÔN hiện "chưa có
+    // người duyệt" dù người duyệt thật (mixed-rules) đã cấu hình đúng và luồng duyệt thật vẫn chạy bình
+    // thường. Mirror ĐÚNG previewOperationOrderWorkflow() (module-vanhanh.js): dựng 1 bản nháp với
+    // dept=currentUser.dept (đơn Bán Buôn luôn forceOwnDept, xem lib/createValidation.js) rồi gọi THẲNG
+    // resolveItPriceWorkflowConfigForItemClient() — cùng hàm mà luồng duyệt thật đang dùng.
+    const draft = { priceType: 'WHOLESALE', priceTier: tier, dept: currentUser.dept };
     // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
-    const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceTierWorkflowConfigClient(tier), 'ITPRICE_WHOLESALE');
+    const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceWorkflowConfigForItemClient(draft), 'ITPRICE_WHOLESALE');
     return openGenericWorkflowPreviewModal(
       '🔍 Xem Trước Quy Trình Phê Duyệt Giá Bán Buôn',
       `Mức áp dụng: ${itPriceTierLabel(tier)}`,
