@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**25.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.33 (2026-10-06): Làm rõ UI màn "Nhập Hợp Đồng/Phụ Lục Đã Ký" — tránh hiểu nhầm là bypass duyệt
+
+Theo báo cáo tiếp theo của người dùng sau v25.31 (kèm ảnh chụp thao tác thật): "upload tài liệu là tự
+động phê duyệt không qua người duyệt mặc dù ấn xem quy trình đã có người phê duyệt". Rà soát kỹ lại toàn
+bộ luồng (không chỉ suy luận) xác nhận **đây KHÔNG phải lỗi bypass duyệt** — `uploadContractSignedFile()`
+và `applyWorkflowAction()` (lib/recordActions.js, lib/workflowEngine.js) vẫn xác minh đúng người duyệt
+như v25.31 đã vá (có test `test-contract.js` kịch bản 8b xác nhận lại, 67/67 pass).
+
+- **Gốc gây hiểu nhầm thật sự**: người dùng đang thao tác ở màn **"📥 Nhập Hợp Đồng/Phụ Lục Đã Ký"**
+  (chế độ `IMPORT_CONTRACT`/`IMPORT_ADDENDUM`, tab Quản Lý HĐ) — màn này CỐ Ý tạo hồ sơ ở trạng thái ĐÃ
+  DUYỆT NGAY (dùng để số hoá hợp đồng giấy đã ký sẵn ngoài hệ thống, xem `isSignedImport` ở
+  `lib/createValidation.js`), hoàn toàn khác luồng "tải Tài Liệu Ký cho hồ sơ đã có sẵn" mà v25.31 đã vá.
+  Vấn đề là chính form IMPORT đó lại có nút **"🔍 Xem Quy Trình Duyệt Tài Liệu Ký"** (preview 1 quy trình
+  THẬT có cấu hình người duyệt, ví dụ Trưởng Phòng Kế Toán) và nút submit ghi **"Gửi phê duyệt"** — cả 2
+  đều ngầm gợi ý có bước duyệt sắp xảy ra, trong khi bấm xong hồ sơ lập tức APPROVED, không qua ai cả.
+- **Vá (chỉ đổi text/UI, KHÔNG đổi hành vi/dữ liệu)**:
+  - `module-hopdong.js`, `onContractOpModeChange()`: đổi nhãn nút submit thành
+    "💾 Lưu Hồ Sơ Đã Ký (Không Qua Duyệt)" ở 2 chế độ IMPORT_*, giữ nguyên "Gửi phê duyệt" cho NEW/ADDENDUM
+    (hồ sơ thật sự đi qua hàng chờ duyệt).
+  - `module-hopdong.js`, `previewContractManageWorkflow()`: thêm cảnh báo rõ vào footer modal preview —
+    quy trình xem được CHỈ áp dụng cho lần tải Tài Liệu Ký bổ sung SAU NÀY trên hồ sơ đã có sẵn, KHÔNG áp
+    dụng cho hồ sơ đang nhập ở màn này.
+  - `core.js`, `openGenericWorkflowPreviewModal()`: thêm tham số TUỲ CHỌN thứ 5 `footerOverride` (mặc định
+    giữ nguyên câu dặn dò cũ) để `previewContractManageWorkflow()` truyền câu cảnh báo riêng — không đổi
+    gì ở 10+ lời gọi khác (Tài Liệu, Đăng Ký Xe, VPP, Mua Sắm/Sửa Chữa VP, Phê Duyệt Giá, Vận Hành...).
+
+Viết `tests/test-contract-import-mode-ui-clarity.js` xác nhận: nhãn nút đổi đúng theo chế độ, footer cảnh
+báo xuất hiện đúng ở chế độ IMPORT, và tab Phê Duyệt (NEW) không bị ảnh hưởng. Chạy lại toàn bộ
+`test-contract.js` (67/67) + `test-position-preview-sanitized-perms.js` (3/3, cùng đụng tới
+`openGenericWorkflowPreviewModal()`) — không có regression.
 
 ## v25.32 (2026-10-06): Vá "Theo vị trí" luôn báo "chưa có người duyệt" với người dùng thường
 
