@@ -310,7 +310,21 @@ async function run() {
     let signedState1 = await page.evaluate((id) => DB.contracts.find((c) => c.id === id).signedFileStatus, contract1.id);
     check('Tải lên Tài liệu ký -> chuyển trạng thái PENDING (chờ duyệt tài liệu ký)', signedState1 === 'PENDING', signedState1);
 
+    // LỖI ĐÃ VÁ (báo cáo người dùng 10/2026, "upload lên lại bỏ qua không sử dụng phê duyệt và bypass
+    // luôn"): nút ✅ Duyệt/❌ Từ Chối/🔄 Bổ Sung Tài liệu ký trước đây hiện cho BẤT KỲ ai có
+    // canManageContractPaymentClient() (quyền quản lý thanh toán/tải tài liệu ký lên, VD chính kd1 vừa
+    // tải lên) thay vì chỉ đúng người duyệt THẬT theo contractManageDeptWorkflows (tp_kd) — kd1 KHÔNG
+    // được là approver nhưng vẫn thấy nút Duyệt cho hồ sơ của chính mình.
+    await page.evaluate(() => setContractSubTab('MANAGE'));
+    const kd1RowHTML = await page.evaluate((id) => buildContractRowHTML(DB.contracts.find((c) => c.id === id), {}), contract1.id);
+    check('Kịch bản 8b: người KHÔNG phải approver Tài liệu ký (kd1, chỉ có quyền tải lên/quản lý thanh toán) KHÔNG thấy nút Duyệt/Từ Chối/Bổ Sung Tài liệu ký',
+      !kd1RowHTML.includes('approveSigned') && !kd1RowHTML.includes('rejectSigned') && !kd1RowHTML.includes('requestSignedChanges'), kd1RowHTML);
+
     await loginAs('tp_kd');
+    await page.evaluate(() => setContractSubTab('MANAGE'));
+    const tpKdRowHTML = await page.evaluate((id) => buildContractRowHTML(DB.contracts.find((c) => c.id === id), {}), contract1.id);
+    check('Kịch bản 8b: đúng người duyệt Tài liệu ký theo contractManageDeptWorkflows (tp_kd) THẤY đủ nút Duyệt/Từ Chối/Bổ Sung',
+      tpKdRowHTML.includes('approveSigned') && tpKdRowHTML.includes('rejectSigned') && tpKdRowHTML.includes('requestSignedChanges'), tpKdRowHTML);
     await queuePrompt('File bị mờ, không đọc được chữ ký, vui lòng scan lại.');
     await page.evaluate((id) => rejectContractSignedFileAction(id), contract1.id);
     await confirmPending();

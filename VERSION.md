@@ -1,8 +1,31 @@
 # Phiên bản hiện tại
 
-**25.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.31 (2026-10-06): Vá nút Duyệt/Từ Chối Tài Liệu Ký (Quản Lý HĐ) hiện cho sai người
+
+Theo báo cáo người dùng kèm ảnh chụp màn hình "upload lên lại bỏ qua không sử dụng phê duyệt và bypass
+luôn" ở "Quản Lý Hợp Đồng & Giấy Phép":
+
+- **Root cause**: `buildContractRowHTML()` (module-hopdong.js) gate 3 nút "✅ Duyệt/❌ Từ Chối/🔄 Bổ Sung
+  Tài Liệu Ký" bằng `canManageContractPaymentClient()` — quyền quản lý thanh toán/tải tài liệu ký lên
+  (`contractCreate` theo `custodianDept`), SAI đối tượng, không phải người duyệt THẬT của bước
+  (`contractManageDeptWorkflows[dept]`). Hậu quả: CHÍNH người vừa tải tài liệu ký lên (kế toán/custodian)
+  thấy luôn nút Duyệt cho hồ sơ của chính mình, dù không phải người được cấu hình duyệt (VD `sep_duyet`)
+  — nếu người đó cũng là admin (thường gặp lúc test) thì tự duyệt luôn được qua lối thoát admin-override
+  sẵn có của toàn hệ thống, tạo cảm giác "duyệt bị bỏ qua/bypass".
+- **Server-side xác nhận AN TOÀN**: route Duyệt/Từ Chối Tài Liệu Ký (`POST /api/workflow/
+  contractsSignedFile/:id/approve|reject`) đã luôn gác đúng qua `canApproveStep()` (approver THẬT từ
+  `contractManageDeptWorkflows[dept]`, hoặc admin) — đây CHỈ là lỗi hiện SAI nút ở client, không phải lỗ
+  hổng cho phép ghi đè server, nhưng gây hiểu lầm/thao tác nhầm nghiêm trọng cho người dùng thường.
+- **Vá**: đổi gate 3 nút trên thành `isApproverForContractManageWorkflowClient()` (hàm mirror server đã
+  có sẵn, đang dùng cho nút "Duyệt Đổi HTTT" liền kề) — khớp đúng pattern nút Duyệt/Từ chối hợp đồng GỐC
+  (dùng `canApproveContractStep()`) đã làm đúng từ trước.
+
+Thêm kịch bản 8b vào `tests/test-contract.js`: xác nhận người chỉ có quyền tải lên (không phải approver)
+KHÔNG còn thấy nút Duyệt/Từ Chối/Bổ Sung Tài Liệu Ký, trong khi đúng người duyệt theo cấu hình VẪN thấy.
 
 ## v25.30 (2026-10-06): Vá chuông "Thông báo" không mở được (bug ~1 tháng) + click không điều hướng
 
