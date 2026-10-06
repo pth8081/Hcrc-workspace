@@ -4280,7 +4280,13 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   // được ghi nhận đúng vào bản ghi cuối cùng — trước đây "dept" chốt TRƯỚC extraValidate nên mọi thay
   // đổi payload.dept bên trong extraValidate bị record={...payload, dept} ở dưới ghi đè mất, vô tác dụng.
   const finalDept = config.forceOwnDept ? user.dept : payload.dept;
-  const record = { ...payload, id: Date.now(), dept: finalDept };
+  // createdAt (10/2026, theo yêu cầu người dùng "thêm thời gian tạo") — ĐIỂM GÁN DUY NHẤT cho TOÀN BỘ
+  // ~45 module đi qua validateAndPrepareCreate() (submissions/contracts/meetings/carRegs/officeReqs/
+  // licenses/itPriceApprovals/...), tránh phải sửa tay từng extraValidate(). Hồ sơ TẠO TRƯỚC bản vá này
+  // không có field này (hiện trống ở cột "Thời gian tạo" tương ứng, không suy diễn ngược được) — chỉ áp
+  // dụng cho hồ sơ mới từ đây trở đi. KHÔNG tin `payload.createdAt` client có thể tự gửi kèm — luôn ghi
+  // đè bằng giờ server ngay tại đây (gán SAU `...payload` nên luôn thắng).
+  const record = { ...payload, id: Date.now(), dept: finalDept, createdAt: new Date().toLocaleString('vi-VN') };
   record[config.creatorField] = user.username;
   if (config.creatorNameField) record[config.creatorNameField] = user.name;
   return record;

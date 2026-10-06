@@ -1421,20 +1421,32 @@ function buildModuleTabNotesHTML(moduleKey) {
 // dùng yêu cầu — vẫn giữ NGUYÊN id checkbox `${prefix}_${key}` ở mọi tầng, nên
 // readModuleAccessFromForm()/populateModuleAccessForm()/defaultModuleAccess() không cần đổi gì (đã lặp
 // phẳng qua BUSINESS_MODULES, không quan tâm độ sâu).
-function renderModuleAccessNode(m, prefix, depth) {
+function renderModuleAccessNode(m, prefix, depth, wrapId) {
   const children = BUSINESS_MODULES.filter(c => c.parent === m.key);
   // Thu nhỏ dần cỡ chữ theo độ sâu (0: module gốc, 1: module con/tab con, 2+: tab cháu) — giúp phân biệt
   // trực quan đúng 3 cấp "slide bar / tab con / tab cháu" ngay trên cây, không cần đọc chú thích.
   const labelCls = depth === 0 ? 'text-gray-700' : (depth === 1 ? 'text-gray-600 text-[11px]' : 'text-gray-500 text-[10.5px] italic');
+  // Cặp nút "Chọn tất cả"/"Bỏ chọn" riêng cho ĐÚNG module gốc (depth 0) — tick/bỏ tick toàn bộ module
+  // con/cháu nằm trong khối #${wrapId} (xem toggleModuleAccessSubtree() ở dưới), theo yêu cầu người dùng
+  // "chọn all tại từng module để mình có thể chọn nhanh".
+  const subtreeTogglesHTML = depth === 0 ? `
+    <span class="ml-auto flex gap-1.5 text-[10px] font-bold shrink-0">
+      <button type="button" data-op="toggleModuleAccessSubtree" data-arg0="${wrapId}" data-arg1="true" class="text-emerald-700 hover:underline">Chọn tất cả</button>
+      <button type="button" data-op="toggleModuleAccessSubtree" data-arg0="${wrapId}" data-arg1="false" class="text-gray-500 hover:underline">Bỏ chọn</button>
+    </span>
+  ` : '';
   return `
-    <label class="flex items-center gap-1.5 ${labelCls} cursor-pointer">
-      <input type="checkbox" id="${prefix}_${m.key}" checked>
-      <span>${depth >= 2 ? '↳ ' : ''}${escapeHtml(m.label)}</span>
-    </label>
+    <div class="flex items-center gap-1.5">
+      <label class="flex items-center gap-1.5 ${labelCls} cursor-pointer">
+        <input type="checkbox" id="${prefix}_${m.key}" checked>
+        <span>${depth >= 2 ? '↳ ' : ''}${escapeHtml(m.label)}</span>
+      </label>
+      ${subtreeTogglesHTML}
+    </div>
     ${buildModuleTabNotesHTML(m.key)}
     ${children.length ? `
       <div class="pl-4 mt-1 space-y-0.5 border-l-2 border-slate-200">
-        ${children.map(c => renderModuleAccessNode(c, prefix, depth + 1)).join('')}
+        ${children.map(c => renderModuleAccessNode(c, prefix, depth + 1, wrapId)).join('')}
       </div>
     ` : ''}
   `;
@@ -1443,11 +1455,35 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
   const el = document.getElementById(containerId);
   if (!el) return;
   const topLevel = BUSINESS_MODULES.filter(m => !m.parent);
-  el.innerHTML = topLevel.map(m => `
-    <div class="bg-slate-50 px-2 py-1 rounded border">
-      ${renderModuleAccessNode(m, prefix, 0)}
+  // Nút "Chọn tất cả module"/"Bỏ chọn tất cả" (toàn bộ cây, mọi module gốc + con/cháu) + cặp nút riêng
+  // từng module gốc (renderModuleAccessNode() ở trên) — theo yêu cầu người dùng (10/2026) để tick/bỏ tick
+  // nhanh thay vì phải bấm từng checkbox 1 trong cây ~118 dòng.
+  const globalTogglesHTML = `
+    <div class="col-span-full flex items-center gap-3 text-xs font-bold pb-1 mb-1 border-b border-slate-200">
+      <span class="text-gray-500">Toàn bộ module:</span>
+      <button type="button" data-op="toggleModuleAccessSubtree" data-arg0="${containerId}" data-arg1="true" class="text-emerald-700 hover:underline">✅ Chọn tất cả</button>
+      <button type="button" data-op="toggleModuleAccessSubtree" data-arg0="${containerId}" data-arg1="false" class="text-gray-500 hover:underline">❌ Bỏ chọn tất cả</button>
     </div>
-  `).join('');
+  `;
+  el.innerHTML = globalTogglesHTML + topLevel.map(m => {
+    const wrapId = `${containerId}_wrap_${m.key}`;
+    return `
+    <div id="${wrapId}" class="bg-slate-50 px-2 py-1 rounded border">
+      ${renderModuleAccessNode(m, prefix, 0, wrapId)}
+    </div>
+  `;
+  }).join('');
+}
+
+// Tick/bỏ tick HÀNG LOẠT mọi checkbox "0. Quyền Truy Cập Module" nằm TRONG phần tử #wrapId — dùng chung
+// cho cả nút toàn cục (wrapId = containerId, toàn bộ cây) lẫn nút riêng từng module gốc (wrapId = khối
+// module đó, xem renderModuleAccessCheckboxes()/renderModuleAccessNode() ở trên). checked truyền vào dạng
+// chuỗi "true"/"false" (data-arg* luôn là chuỗi) — ép lại thành boolean thật trước khi gán.
+function toggleModuleAccessSubtree(wrapId, checked) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const isChecked = checked === true || checked === 'true';
+  wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = isChecked; });
 }
 
 function readModuleAccessFromForm(prefix = 'pModuleAccess') {

@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**25.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.26 (2026-10-06): Rút gọn header "Trạng thái", thêm `createdAt`, nút Chọn tất cả Phân Quyền
+
+Theo yêu cầu người dùng, 3 việc nhỏ gọn nhẹ (phần đầu của 1 đợt yêu cầu lớn hơn, phần "Ngành Hàng
+Bán Buôn" làm riêng ở bản sau):
+
+1. **Rút gọn header "Trạng Thái..." dài** về "Trạng Thái"/"Trạng thái" đồng nhất ở 9 vị trí: Văn Bản
+   Trình, Hợp Đồng, Mua Sắm/Office, Đăng Ký Xe, Đặt Phòng Họp, Giấy Phép, Mua Hàng (Phê Duyệt Giá Bán
+   Lẻ), IT Hỗ Trợ (ticket + Phê Duyệt Giá), Vận Hành (Công Việc + Phê Duyệt Giá Bán Buôn) — CHỈ đổi
+   chữ header, KHÔNG đổi nội dung ô hiển thị (vẫn đủ badge/lịch sử như cũ). Bảng Vận Hành có 2 cột
+   trạng thái riêng biệt ("Trạng Thái Công Việc"/"Trạng Thái Hạn") — chỉ rút gọn cột đầu, giữ nguyên
+   cột sau để không trùng tên gây hiểu nhầm.
+2. **Thêm `createdAt` (thời gian tạo) thật** vào MỌI hồ sơ tạo qua `validateAndPrepareCreate()`
+   (`lib/createValidation.js`) — 1 điểm gán DUY NHẤT, tự áp dụng cho ~45 module (submissions/
+   contracts/meetings/carRegs/officeReqs/licenses/itPriceApprovals/...) mà không cần sửa tay từng
+   `extraValidate()`. Hồ sơ TẠO TRƯỚC bản vá này không có field — chỉ áp dụng cho hồ sơ mới từ đây.
+   Hiển thị cột "Thời gian tạo" trên từng bảng để bản sau.
+3. **Nút "Chọn tất cả"/"Bỏ chọn"** ở khối "0. Quyền Truy Cập Module" (Phân Quyền → Nhóm Phân Quyền/
+   Người Dùng): 1 cặp nút TOÀN CỤC (tick/bỏ tick cả cây ~118 checkbox) + 1 cặp nút RIÊNG từng module
+   gốc (chỉ tick/bỏ tick đúng module đó + toàn bộ module con/cháu bên trong) — `module-admin.js`,
+   hàm `toggleModuleAccessSubtree()`. Demo thật bằng Playwright xác nhận cả 2 cấp hoạt động đúng.
+
+Không ảnh hưởng gì tới deploy ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
+biến môi trường, không thêm dependency.
 
 ## v25.25 (2026-10-06): "Nhập Hợp Đồng Đã Ký" không còn tự coi là "Đã thanh toán"
 
