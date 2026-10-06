@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**25.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.24 (2026-10-06): Vá "Xem Quy Trình" Bán Buôn hiện sai "chưa có người duyệt"
+
+Phát hiện khi xây kịch bản test/tài liệu hướng dẫn cho quy trình Phê Duyệt Giá
+Bán Buôn: nút "🔍 Xem Trước Quy Trình" trên form đề xuất (`previewItPriceWorkflow()`,
+`module-itsupport-price.js`) vẫn đọc người duyệt từ map CŨ `itPriceTierWorkflows[...].approvers`
+(đã lỗi thời từ khi chuyển sang Quy Trình Hỗn Hợp — chỉ còn `workflowId` giữ
+tác dụng để biết SỐ BƯỚC), trong khi người duyệt THẬT được tra qua
+`computeItPriceWholesaleStoreMixedApproversClient()` (mixed-rules, đúng
+tier + đúng siêu thị đề xuất) ở mọi nơi khác kể cả luồng duyệt thật. Modal
+xem trước vì vậy LUÔN hiện "chưa có người duyệt — kiểm tra lại cấu hình quy
+trình" dù cấu hình mixed-rules đã đúng và bước duyệt thật vẫn chạy bình
+thường — gây hiểu lầm cho người đề xuất lẫn admin.
+
+Vá bằng cách dựng 1 bản nháp `{priceType, priceTier, dept: currentUser.dept}`
+(đơn Bán Buôn luôn forceOwnDept) rồi gọi THẲNG `resolveItPriceWorkflowConfigForItemClient()`
+— đúng hàm mà luồng duyệt thật đang dùng — mirror chính xác cách
+`previewOperationOrderWorkflow()` (`module-vanhanh.js`) đã làm cho Đơn Hàng
+Siêu Thị. Cập nhật lại seed của `test-preview-workflow-buttons.js` (thêm
+`itPriceWholesaleStoreMixedApprovalRules`, bỏ `.approvers` khỏi
+`itPriceTierWorkflows` mẫu) để test khớp đúng cơ chế mới — chạy lại xác nhận
+16/16 kịch bản cũ + 8/8 (`test-itprice-wholesale-mixed-approval.js`) + 23/23
+(`test-it-support.js`) + 17/17 (`test-itprice-approval-and-emergency.js`) +
+9/9 (`test-it-price-approvals-scope.js`) đều pass, không có regression.
 
 ## v25.23 (2026-10-06): Sơ đồ "Khâu/Bước + Ai Duyệt" rõ ràng hơn cho 9 quy trình phê duyệt
 
