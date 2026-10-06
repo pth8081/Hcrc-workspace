@@ -599,7 +599,7 @@
           </div>
           <div class="smtp-only-field">
             <label class="block font-semibold text-gray-600 mb-1">SMTP Port</label>
-            <input id="cfgSmtpPort" type="number" placeholder="587" data-op-change="syncSmtpEncryptionFromPort" class="w-full border p-1.5 rounded">
+            <input id="cfgSmtpPort" type="number" placeholder="587" class="w-full border p-1.5 rounded">
           </div>
           <div class="smtp-only-field">
             <label class="block font-semibold text-gray-600 mb-1">Email Hệ Thống (Sender)</label>
@@ -615,7 +615,7 @@
             <button type="button" data-op="setSmtpEncryption" data-arg0="SSL" id="encBtn_SSL" class="px-3 py-1.5 rounded border font-semibold">SSL <span class="font-normal text-gray-400">(port 465)</span></button>
           </div>
           <input type="hidden" id="cfgSmtpEncryption" value="STARTTLS">
-          <p class="text-[11px] text-gray-400 italic mt-1">Chọn "TLS" hoặc "SSL" sẽ tự chuyển Port sang giá trị chuẩn ở trên — trừ khi Port hiện tại đã là 1 giá trị tuỳ chỉnh khác (sẽ giữ nguyên, sửa tay được như bình thường). Ngược lại, tự gõ thẳng 1 trong 3 Port chuẩn (25/587/465) cũng tự chọn giúp đúng kiểu mã hoá khớp Port đó — VD gõ 465 (cổng SMTPS chuẩn của Postfix) sẽ tự bật "SSL", không cần bấm tay.</p>
+          <p class="text-[11px] text-gray-400 italic mt-1">Port và Mã Hoá Kết Nối là 2 lựa chọn ĐỘC LẬP — bấm nút ở đây không tự đổi Port, gõ Port cũng không tự đổi nút đang chọn. Cặp chuẩn phổ biến: Không mã hoá↔25, TLS↔587 (STARTTLS — bắt tay thường rồi nâng cấp mã hoá), SSL↔465 (mã hoá ngay từ đầu). Nếu máy chủ SMTP của bạn dùng cặp KHÁC chuẩn (VD Postfix nội bộ nghe TLS ngay trên port 465), cứ chọn đúng theo thực tế máy chủ — chọn sai cặp sẽ không gửi được, bấm "Gửi Thử" bên dưới để xem đúng lỗi thật từ máy chủ và tự điều chỉnh lại.</p>
           <label class="flex items-center gap-2 font-semibold text-gray-600 mt-2">
             <input type="checkbox" id="cfgSmtpAllowSelfSigned">
             Chấp nhận chứng chỉ TLS tự ký (self-signed) — bật nếu máy chủ SMTP nội bộ (VD Postfix tự dựng) chưa có chứng chỉ do CA công cộng cấp

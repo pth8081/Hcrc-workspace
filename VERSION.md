@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**25.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.38 (2026-10-06): Fix Cấu Hình Email — Port/Mã Hoá Kết Nối không còn tự ép buộc lẫn nhau
+
+Người dùng báo qua ảnh chụp màn hình (Quản Trị > Cấu Hình Email): cấu hình gửi email ở Postfix nội bộ
+dùng port 465, bấm chọn "TLS" bị lỗi, "bạn đang khoá cứng nút này" — muốn chọn/bỏ chọn tự do để gửi
+được không lỗi. Rà soát code xác nhận đây là bug thật, không phải hiểu nhầm: bản trước có 2 cơ chế tự
+ép buộc chạy ĐỒNG THỜI theo cả 2 chiều —
+1. Bấm 1 trong 3 nút Không mã hoá/TLS/SSL (`setSmtpEncryption()`) tự nhảy Port sang giá trị chuẩn của
+   nút đó (VD bấm "TLS" thì Port tự nhảy từ 465 về 587).
+2. Gõ tay 1 trong 3 Port chuẩn (25/587/465) vào ô Port (`syncSmtpEncryptionFromPort()`) tự nhảy lại Mã
+   Hoá Kết Nối sang kiểu khớp Port đó (gõ 465 thì tự bật lại "SSL").
+
+Ghép 2 chiều ép buộc lại khiến KHÔNG CÓ cách nào đạt được 1 cặp Port+Mã Hoá KHÁC chuẩn dù máy chủ SMTP
+thật của admin cần vậy (VD Postfix nội bộ lắng nghe TLS/STARTTLS ngay trên port 465 thay vì 587 mặc
+định) — mọi thao tác đều bị hệ thống tự "sửa lại" về đúng 1 trong 3 cặp chuẩn (25↔Không mã hoá/
+587↔TLS/465↔SSL), không có lối thoát.
+
+**Đã vá**: gỡ bỏ HẲN cơ chế ép buộc 2 chiều — `setSmtpEncryption()` giờ CHỈ đổi trạng thái nút đang chọn
++ giá trị ô ẩn `cfgSmtpEncryption`, KHÔNG còn động vào Port; xoá hẳn `syncSmtpEncryptionFromPort()` +
+`data-op-change` trên ô Port (`public/js/core.js`, `public/fragments/systemSection.html`). Port và Mã
+Hoá Kết Nối giờ là 2 lựa chọn ĐỘC LẬP hoàn toàn — admin tự chọn đúng cặp khớp với máy chủ thật của mình;
+nếu chọn sai cặp (sẽ không gửi được), nút "Gửi Thử" đã hiện ĐÚNG lỗi thật từ máy chủ SMTP (đã vá từ
+trước, xem `lib/mailer.js`) để admin tự biết cần đổi lại thông số nào. 5 nút preset Loại Email Gateway
+(Postfix/Exchange/Gmail...) KHÔNG đổi gì — vẫn tự điền sẵn đúng cặp gợi ý ban đầu như trước (preset tự
+set Port RỒI MỚI gọi `setSmtpEncryption()`, không phụ thuộc cơ chế vừa gỡ). Đã cập nhật lại đoạn chú
+thích dưới 3 nút cho đúng hành vi mới.
+
+Test mới `tests/test-smtp-encryption-port-independent.js` (9/9 pass) xác nhận: bấm nút không còn tự đổi
+Port, gõ Port không còn tự đổi nút, đạt được cặp "Port 465 + TLS" (chính cặp người dùng cần) qua thao
+tác thật, và 3 nút preset Gmail/Exchange/Postfix vẫn điền đúng như cũ. Chạy lại
+`test-approval-email-config.js` (33/33) + `test-approval-email-config-admin-gate.js` (4/4) xác nhận
+không có regression ở các tính năng dùng chung màn Cấu Hình Email.
 
 ## v25.37 (2026-10-06): Fix bug "Làm Mới" không đồng bộ lại Phê Duyệt Thêm + đổi thuật ngữ "Khâu" → "Bước" ở Hướng Dẫn Nghiệp Vụ
 

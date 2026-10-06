@@ -7258,13 +7258,26 @@ function parseEmailListInput(str) {
   return (str || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
-// Port chuẩn của từng kiểu mã hoá (xem lib/mailer.js) — dùng để tự nhảy Port khi bấm đổi nút mã hoá.
+// Port chuẩn của từng kiểu mã hoá (xem lib/mailer.js) — CHỈ còn dùng làm gợi ý điền sẵn cho 5 nút
+// preset Loại Email Gateway (setEmailGatewayPreset() bên dưới), KHÔNG còn tự ép đổi Port/Mã hoá khi
+// admin bấm tay — xem lý do gỡ bỏ ngay dưới hàm setSmtpEncryption().
 const SMTP_ENCRYPTION_STANDARD_PORTS = { NONE: 25, STARTTLS: 587, SSL: 465 };
-const SMTP_STANDARD_PORTS = Object.values(SMTP_ENCRYPTION_STANDARD_PORTS);
 
-// Bấm 1 trong 3 nút Không mã hoá/TLS/SSL: đổi trạng thái nút đang chọn + tự nhảy Port sang giá trị
-// chuẩn — TRỪ KHI Port hiện tại không phải 1 trong 3 giá trị chuẩn (25/587/465), tức admin đã tự gõ 1
-// port tuỳ chỉnh (vd relay nội bộ dùng port 26/2525) — không vô tình ghi đè mất giá trị đó.
+// Bấm 1 trong 3 nút Không mã hoá/TLS/SSL: CHỈ đổi trạng thái nút đang chọn (+ giá trị ô ẩn
+// cfgSmtpEncryption) — KHÔNG động vào Port.
+//
+// LỖI ĐÃ VÁ (10/2026, báo cáo người dùng — chọn "TLS" ở Postfix đang dùng port 465 bị lỗi, "bạn đang
+// khoá cứng nút này"): bản trước đây tự ép Port nhảy theo cặp chuẩn mỗi khi bấm 1 trong 3 nút (VD bấm
+// "TLS" thì Port tự nhảy 465 -> 587), ĐỒNG THỜI còn có syncSmtpEncryptionFromPort() ở ô Port tự ép
+// NGƯỢC LẠI mã hoá nhảy theo Port (gõ 465 thì tự bật lại "SSL"). Ghép 2 chiều ép buộc này lại khiến
+// admin KHÔNG CÁCH NÀO chọn được 1 cặp Port/Mã hoá khác chuẩn dù máy chủ thật của họ cần vậy (VD Postfix
+// nội bộ lắng nghe STARTTLS ngay trên port 465 thay vì 587 mặc định) — mọi thao tác đều bị hệ thống tự
+// "sửa lại" về đúng 1 trong 3 cặp chuẩn, không có lối thoát. Gỡ bỏ HẲN cơ chế tự ép cả 2 chiều — giờ Port
+// và Mã Hoá Kết Nối là 2 lựa chọn ĐỘC LẬP, admin tự chịu trách nhiệm chọn đúng cặp khớp với máy chủ thật
+// của mình; nếu chọn sai cặp (sẽ không gửi được), nút "Gửi Thử" đã hiện ĐÚNG lỗi thật từ máy chủ SMTP
+// (xem lib/mailer.js) để admin tự biết cần đổi lại thông số nào, thay vì bị UI âm thầm đổi hộ. 5 nút
+// preset Loại Email Gateway (setEmailGatewayPreset() bên dưới) vẫn tự điền sẵn ĐÚNG cặp gợi ý ban đầu
+// như trước — không đổi gì ở nhánh đó.
 function setSmtpEncryption(mode) {
   document.getElementById('cfgSmtpEncryption').value = mode;
   ['NONE', 'STARTTLS', 'SSL'].forEach(m => {
@@ -7272,30 +7285,6 @@ function setSmtpEncryption(mode) {
     if (m === mode) btn.className = 'px-3 py-1.5 rounded border-2 border-amber-600 bg-amber-50 font-semibold text-amber-800';
     else btn.className = 'px-3 py-1.5 rounded border font-semibold text-gray-600 hover:bg-gray-50';
   });
-  const portEl = document.getElementById('cfgSmtpPort');
-  const currentPort = parseInt(portEl.value, 10);
-  if (SMTP_STANDARD_PORTS.includes(currentPort)) {
-    portEl.value = SMTP_ENCRYPTION_STANDARD_PORTS[mode];
-  }
-}
-
-// LỖI ĐÃ VÁ (10/2026, báo cáo người dùng — gateway Postfix port 465 "không gửi được"): đồng bộ CHỈ 1
-// CHIỀU phía trên (bấm nút mã hoá -> tự nhảy Port) — chiều NGƯỢC LẠI (tự gõ thẳng Port chuẩn, VD được
-// báo "port Postfix của mình là 465" nên gõ 465 vào ô Port rồi bấm Lưu luôn, KHÔNG đụng tới 3 nút mã
-// hoá ở trên) trước đây KHÔNG tự đổi gì — "Mã Hoá Kết Nối" vẫn giữ nguyên giá trị mặc định của ô ẩn
-// cfgSmtpEncryption ("STARTTLS") dù Port đã là 465. Kết hợp "Port 465 + STARTTLS" SAI với Postfix chuẩn
-// (465 luôn là SSL/TLS ngay từ khi kết nối — "implicit TLS", KHÔNG phải bắt tay thường rồi nâng cấp
-// sau như STARTTLS/587) — lib/mailer.js dựng đúng 2 kiểu transport khác hẳn nhau (xem
-// encryptionToTransportOptions()), gửi theo STARTTLS tới 1 cổng chờ sẵn TLS ngay từ đầu sẽ treo/lỗi bắt
-// tay, "chưa thể gửi" mà không rõ nguyên nhân. Thêm hàm này (gọi qua data-op-change="..." trên chính ô
-// Port, xem systemSection.html) hoàn thiện nốt chiều còn thiếu — gõ ĐÚNG 1 trong 3 port chuẩn (25/587/
-// 465) thì tự chọn giúp đúng kiểu mã hoá khớp port đó, y hệt logic/độ ưu tiên setSmtpEncryption() ở
-// trên (chỉ áp dụng khi port gõ vào khớp CHÍNH XÁC 1 giá trị chuẩn — port tuỳ chỉnh khác (relay nội bộ
-// dùng 26/2525...) thì không đụng gì tới lựa chọn mã hoá đang có, đúng ý admin).
-function syncSmtpEncryptionFromPort() {
-  const port = parseInt(document.getElementById('cfgSmtpPort').value, 10);
-  const match = Object.entries(SMTP_ENCRYPTION_STANDARD_PORTS).find(([, p]) => p === port);
-  if (match) setSmtpEncryption(match[0]);
 }
 
 // Loại Email Gateway (10/2026, yêu cầu người dùng — có cả Postfix nội bộ VÀ 1 hệ thống Exchange yêu
