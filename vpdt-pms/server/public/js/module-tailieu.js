@@ -851,7 +851,7 @@ function renderLicenses() {
   const pageItems = paginateList('license', filtered, 'renderLicenses', 'giấy phép');
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy giấy phép phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Không tìm thấy giấy phép phù hợp.</td></tr>`;
     return;
   }
 
@@ -910,6 +910,7 @@ function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChi
       <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.issueDate)} → ${escapeHtml(item.expiryDate)}</td>
       <td class="border p-2 text-center">${approvalBadge}</td>
       <td class="border p-2 text-center">${lifecycleBadge}</td>
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${item.createdAt ? escapeHtml(item.createdAt) : (item.id ? escapeHtml(new Date(item.id).toLocaleString('vi-VN')) : '')}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
           const canDownload = !!item.fileUrl && (currentUser.perms?.admin || currentUser.perms?.licenseApprove || currentUser.perms?.licenseView || item.creator === currentUser.username);

@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**25.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.36 (2026-10-06): Cột "Thời Gian Tạo" + Quy Trình Phê Duyệt đầy đủ (9 module) + khôi phục tìm kiếm Phê Duyệt Giá
+
+Theo 3 yêu cầu liên tiếp của người dùng trong cùng phiên làm việc:
+
+**1. Cột "Thời Gian Tạo"** — đã hứa từ v25.26 ("Hiển thị cột 'Thời gian tạo' trên từng bảng để bản
+sau") nhưng bỏ sót suốt 9 bản — nay bổ sung vào bảng danh sách của 9 module: Văn Bản Trình, Hợp Đồng,
+Mua Sắm/Sửa Chữa VP, Đăng Ký Xe, Đặt Phòng Họp, Giấy Phép, Phê Duyệt Giá (cả 3 kênh Hỗ Trợ IT/Mua
+Hàng-Bán Lẻ/Vận Hành-Bán Buôn + tickét Hỗ Trợ Yêu Cầu), Vận Hành (Đơn Hàng + Mở Mới Siêu Thị + Sửa
+Chữa Siêu Thị). Hiển thị `r.createdAt` (field thật, có từ v25.26) — hồ sơ CŨ hơn chưa có field này tự
+suy ra từ `new Date(r.id)` (vì `id` luôn là `Date.now()` lúc tạo, mirror đúng tiền lệ đã có sẵn ở
+module-muahang.js) nên không có khoảng trống dữ liệu nào ở cột mới.
+
+**2. Quy Trình Phê Duyệt đầy đủ (ai đã duyệt / ai chưa duyệt)** — rà soát cho thấy mọi modal xem chi
+tiết hồ sơ chỉ hiện lịch sử các bước ĐÃ XỬ LÝ (tên người đã duyệt), KHÔNG module nào hiện được tên
+người sẽ duyệt ở bước hiện tại/bước sau — người gửi không biết hồ sơ đang chờ ai, người duyệt không
+biết sau mình còn ai. Thêm hàm dùng chung `buildWorkflowStepsStatusHTML(wfConfig, history, currentStep,
+status)` (`public/js/core.js`) hiển thị ĐỦ các bước kèm trạng thái (✅ Đã duyệt — tên+giờ / ⏳ Đang chờ
+duyệt — tên người cần duyệt / ⚪ Sắp tới — tên người sẽ duyệt / ❌ Từ chối), dùng lại đúng
+`resolveEffectiveStepApprovers()`/`getStepApprovalProgressText()` đã có (không tự suy luận quyền
+riêng). Đã nối vào modal chi tiết của 6 module đã có sẵn khối lịch sử tương thích (bổ sung THÊM, không
+thay lịch sử cũ): Phê Duyệt Giá, Đăng Ký Xe, Mua Sắm/Sửa Chữa VP, Văn Phòng Phẩm, Văn Bản Trình, Vận
+Hành (Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị). **Chưa làm**: Tài Liệu (chỉ hiện người duyệt bước CUỐI mỗi
+phiên bản, không có lịch sử từng bước), Hợp Đồng (chưa có khối lịch sử nào), Thanh Toán (chưa có modal
+chi tiết) — 3 module này cần dựng thêm phần hiển thị từ đầu, lớn hơn phạm vi đợt này, để lại cho đợt
+sau nếu người dùng xác nhận cần.
+
+**3. Khôi phục + làm gọn ô Tìm Kiếm & Lọc ở Phê Duyệt Giá (Mua Hàng-Bán Lẻ/Vận Hành-Bán Buôn)** — 2
+màn này trước đây CỐ Ý không có ô lọc (chỉ có ở tab Hỗ Trợ IT) để giữ gọn, nhưng người dùng phản hồi
+vẫn cần tìm kiếm. Thêm lại đúng 4 field lọc (Trạng Thái/Từ Ngày/Đến Ngày/Từ Khóa, mirror y hệt khối ở
+Hỗ Trợ IT) dưới dạng `<details>` thu gọn (giống khuôn Hợp Đồng/Giấy Phép — bấm mới mở ra), không phải
+luôn hiện sẵn — khớp đúng yêu cầu "làm gọn như các module khác".
+
+Test: chạy lại `test-it-support.js` (24/24), `test-submission.js` (23/23), `test-contract.js` (75/75),
+`test-license.js` (15/15), `test-vpp.js` (29/29), `test-meeting-car.js` (104/104), `test-office-reqs-
+scope.js` (9/9), `test-operation-orders-dept-scope.js` (7/7), `test-muahang-permtree.js` (14/14),
+`test-operation-order-noapprover-warning.js` (15/15), `test-operation-order-mixed-approver-preload.js`
+(6/6), `test-meeting-dept-workflow.js` (9/9), `test-approval-hub.js` (37/37), `test-csp-deep-
+interaction.js` (19/19, bấm thật mọi nút/modal, không phát sinh vi phạm CSP) — tất cả pass, không có
+regression. Tự grep CSP (`on[a-z]+="`, ` style="`, `javascript:`, `eval(`) trên toàn bộ file đã sửa —
+sạch.
+
+Không ảnh hưởng gì tới deploy ngoài copy code + `pm2 restart` — không đổi `schema.sql`, không thêm
+biến môi trường, không thêm dependency.
 
 ## v25.35 (2026-10-06): Phê Duyệt Giá — người duyệt bước hiện tại tải được file đang chờ duyệt + sửa font tên file
 

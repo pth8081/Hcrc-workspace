@@ -287,6 +287,7 @@ function renderOfficeReqs() {
         </td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2">${paymentCell}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${o.createdAt ? escapeHtml(o.createdAt) : (o.id ? escapeHtml(new Date(o.id).toLocaleString('vi-VN')) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = canApprove
@@ -455,7 +456,10 @@ function openOfficeProcessModal(officeId) {
       ${h.comment ? `<div class="text-gray-800 bg-amber-50 p-1.5 rounded border italic">"${escapeHtml(h.comment)}"</div>` : ''}
     </div>
   `).join('');
-  document.getElementById('officeModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+  // Quy trình phê duyệt đầy đủ (10/2026, yêu cầu người dùng: "muốn xem ai đã phê duyệt và ai chưa phê
+  // duyệt") — bổ sung CHO (không thay thế) historyHTML phía trên.
+  const wfStepsStatusHTML = buildWorkflowStepsStatusHTML(wfConfig, o.history, o.currentStep, o.status);
+  document.getElementById('officeModalHistory').innerHTML = wfStepsStatusHTML + (historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>');
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, o.currentStep);
   const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);

@@ -1023,7 +1023,7 @@ function renderMeetings() {
   const pageMeetings = paginateList('meeting', visibleMeetings, 'renderMeetings', 'lịch họp');
 
   if (pageMeetings.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Không tìm thấy lịch họp phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy lịch họp phù hợp.</td></tr>`;
     return;
   }
 
@@ -1043,6 +1043,7 @@ function renderMeetings() {
         <td class="border p-2 text-xs">${escapeHtml(m.startTime)}<br>➔ ${escapeHtml(m.endTime)}</td>
         <td class="border p-2">${escapeHtml(m.dept)} (${escapeHtml(m.creatorName)})</td>
         <td class="border p-2">${statusBadge}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${m.createdAt ? escapeHtml(m.createdAt) : (m.id ? escapeHtml(new Date(m.id).toLocaleString('vi-VN')) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const canApprove = canDecideMeetingClient(currentUser, m) && m.status === 'PENDING';

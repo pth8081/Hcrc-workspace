@@ -531,6 +531,7 @@ function renderSubmissionReqs() {
         </td>
         <td class="border p-2">${progressBadge}</td>
         <td class="border p-2 text-center">${taskStatusBadge}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${sub.createdAt ? escapeHtml(sub.createdAt) : (sub.id ? escapeHtml(new Date(sub.id).toLocaleString('vi-VN')) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             // Đang có đề xuất thay thế tệp CHỜ chính người trình xác nhận (xem
@@ -709,7 +710,10 @@ function openProcessSubmissionModal(subId) {
     </div>
   `;
   }).join('');
-  document.getElementById('subModalHistory').innerHTML = historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>';
+  // Quy trình phê duyệt đầy đủ (10/2026, yêu cầu người dùng: "muốn xem ai đã phê duyệt và ai chưa phê
+  // duyệt") — bổ sung CHO (không thay thế) historyHTML phía trên.
+  const wfStepsStatusHTML = buildWorkflowStepsStatusHTML(wfConfig, sub.history, sub.currentStep, sub.status);
+  document.getElementById('subModalHistory').innerHTML = wfStepsStatusHTML + (historyHTML || '<div class="text-gray-400 italic">Chưa có lịch sử xử lý.</div>');
 
   renderSubModalOpinions(sub);
   renderSubModalOpinionWarning(sub, wfConfig);

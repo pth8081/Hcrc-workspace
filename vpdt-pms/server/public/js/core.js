@@ -3594,6 +3594,57 @@ function buildGenericDeptWorkflowPreviewHTML(wfConfig, emptyLabel) {
   return `<div>${stepsHTML}${extraStepsHTML}</div>`;
 }
 
+// Hiển thị ĐẦY ĐỦ các bước phê duyệt kèm TRẠNG THÁI THẬT (Đã duyệt/Đang chờ.../Sắp tới) + TÊN người
+// duyệt từng bước — yêu cầu người dùng 10/2026 ("muốn xem ai đã phê duyệt và ai chưa phê duyệt" ngay
+// trong modal xem chi tiết 1 hồ sơ ĐÃ NỘP). Khác buildGenericDeptWorkflowPreviewHTML() ở trên (chỉ dùng
+// để xem trước TRƯỚC KHI nộp, không có trạng thái vì hồ sơ chưa tồn tại) — hàm này gắn đúng trạng thái
+// thật dựa theo `history` của hồ sơ. wfConfig: BẮT BUỘC đã qua withWfStepsClient() (tức LUÔN có sẵn
+// `.steps` — mọi resolveXxxWorkflowConfigForItemClient() hiện có đều đảm bảo điều này, xem chú thích
+// withWfStepsClient() ở trên), approvers từng bước tra qua resolveEffectiveStepApprovers() như cũ (tự
+// gộp cả lớp phê duyệt thêm "Nhóm Phê Duyệt Cuối" nếu có, vì đã được gộp sẵn vào wfConfig.steps/approvers
+// bởi appendExtraApprovalLayersClient()). history/currentStep/status: của hồ sơ hiện tại.
+function buildWorkflowStepsStatusHTML(wfConfig, history, currentStep, status) {
+  const steps = wfConfig?.steps;
+  if (!Array.isArray(steps) || !steps.length) return '';
+  const userLabel = (username) => {
+    const u = DB.users.find(x => x.username === username);
+    return escapeHtml(u ? u.name : username);
+  };
+  const rowsHTML = steps.map(s => {
+    const approvers = resolveEffectiveStepApprovers(wfConfig, s.order);
+    const namesHTML = approvers.map(userLabel).join(', ') ||
+      '<span class="text-amber-600 italic">(chưa có người duyệt)</span>';
+    const rejectedEntry = (history || []).find(h => h.step === s.order && h.action === 'REJECTED' && !h.invalidated);
+    const approvedEntries = (history || []).filter(h => h.step === s.order && h.action === 'APPROVED' && !h.invalidated);
+    let badgeHTML, detailHTML = '';
+    if (rejectedEntry) {
+      badgeHTML = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs whitespace-nowrap">❌ Từ chối</span>`;
+      detailHTML = `<div class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(rejectedEntry.approver || '')} · ${escapeHtml(rejectedEntry.time || '')}${rejectedEntry.comment ? `<br><span class="text-gray-400">Lý do: ${escapeHtml(rejectedEntry.comment)}</span>` : ''}</div>`;
+    } else if (approvedEntries.length) {
+      const progressText = getStepApprovalProgressText(approvers, history, s.order);
+      badgeHTML = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs whitespace-nowrap">✅ Đã duyệt${escapeHtml(progressText)}</span>`;
+      detailHTML = approvedEntries.map(h => `<div class="text-[11px] text-gray-500 mt-0.5">✓ ${escapeHtml(h.approver || '')} · ${escapeHtml(h.time || '')}${h.comment ? `<br><span class="text-gray-400">Lý do: ${escapeHtml(h.comment)}</span>` : ''}</div>`).join('');
+    } else if (s.order === currentStep && status === 'PENDING') {
+      const progressText = getStepApprovalProgressText(approvers, history, s.order);
+      badgeHTML = `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs whitespace-nowrap">⏳ Đang chờ duyệt${escapeHtml(progressText)}</span>`;
+    } else if (s.order < currentStep) {
+      badgeHTML = `<span class="px-2 py-0.5 bg-gray-200 text-gray-600 rounded font-semibold text-xs whitespace-nowrap">— Đã qua</span>`;
+    } else {
+      badgeHTML = `<span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded font-semibold text-xs whitespace-nowrap">⚪ Sắp tới</span>`;
+    }
+    return `
+      <div class="bg-slate-50 border rounded p-2 mb-1.5">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="font-bold text-gray-800 text-xs">Bước ${s.order}: ${escapeHtml(s.name)}</div>
+          ${badgeHTML}
+        </div>
+        <div class="text-gray-600 mt-0.5 text-xs">Người duyệt: ${namesHTML}</div>
+        ${detailHTML}
+      </div>`;
+  }).join('');
+  return `<div class="mt-1 mb-2"><div class="text-xs font-bold text-gray-500 uppercase mb-1">📶 Quy Trình Phê Duyệt</div>${rowsHTML}</div>`;
+}
+
 // Mở modal xem trước dùng chung (#viewDocModal) cho mọi previewXxxWorkflow() của khuôn 1 tầng ở trên —
 // gom 4 lệnh gán + unhide lặp lại y hệt nhau ở 9 module về 1 chỗ. footerOverride (10/2026, vá hiểu nhầm
 // "Nhập Hợp Đồng/Phụ Lục Đã Ký" tự bypass duyệt): tham số TUỲ CHỌN, mặc định giữ nguyên câu dặn dò cũ —

@@ -156,6 +156,7 @@
                 <th class="border p-2">Tiêu Đề &amp; NCC</th>
                 <th class="border p-2">Số Tiền</th>
                 <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2 text-center whitespace-nowrap">Thời Gian Tạo</th>
                 <th class="border p-2 text-center">Thao Tác</th>
               </tr>
             </thead>
@@ -335,6 +336,7 @@
                 <th class="border p-2">Tên Siêu Thị &amp; Địa Điểm</th>
                 <th class="border p-2">Ngân Sách Phê Duyệt &amp; Ngày Khai Trương</th>
                 <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2 text-center whitespace-nowrap">Thời Gian Tạo</th>
                 <th class="border p-2 text-center">Thao Tác</th>
               </tr>
             </thead>
@@ -407,6 +409,7 @@
                 <th class="border p-2">Siêu Thị &amp; Nội Dung</th>
                 <th class="border p-2">Ngân Sách Phê Duyệt</th>
                 <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2 text-center whitespace-nowrap">Thời Gian Tạo</th>
                 <th class="border p-2 text-center">Thao Tác</th>
               </tr>
             </thead>
@@ -742,6 +745,37 @@
            itsupport-price.js), lọc theo canViewItPriceApproval() y hệt Hỗ Trợ IT, CHỈ khác priceType cố
            định WHOLESALE. Nút "Chi tiết" mở ĐÚNG 1 modal dùng chung (openItPriceModal()) — đội Hỗ Trợ IT
            vẫn là nơi thực sự áp giá/xử lý (nút hành động trong modal chỉ hiện cho người có quyền tương ứng). -->
+      <!-- Thu gọn trong <details> (10/2026, phản hồi người dùng "làm mất tìm kiếm... làm gọn như các
+           module khác, ấn mở ra mới tìm kiếm") — khớp khuôn contractSection.html/licenseSection.html,
+           mirror ĐÚNG 4 field lọc của itSupportSection.html (statusFilter/fromDate/toDate/keyword), chỉ
+           đổi id hậu tố "VanHanhItPrice" + đổi handler sang onVanHanhItPriceFilterChange() (module-
+           itsupport-price.js). -->
+      <details class="filter-box-details bg-gray-50 p-3 rounded border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Lọc Theo Trạng Thái</label>
+            <select id="filterStatusVanHanhItPrice" data-op-change="onVanHanhItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+              <option value="">-- Tất cả trạng thái --</option>
+              <option value="APPROVED">Đã Phê Duyệt</option>
+              <option value="PENDING">Đang Chờ Duyệt</option>
+              <option value="REJECTED">Bị Từ Chối</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label>
+            <input id="filterFromDateVanHanhItPrice" type="date" data-op-change="onVanHanhItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label>
+            <input id="filterToDateVanHanhItPrice" type="date" data-op-change="onVanHanhItPriceFilterChange" class="w-full border p-2 rounded text-sm bg-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
+            <input id="filterKeywordVanHanhItPrice" data-op-input="onVanHanhItPriceFilterChange" placeholder="Mã, tên hàng, người đề xuất..." class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+      </details>
       <div class="bg-white p-3 rounded border space-y-2">
         <h3 class="font-bold text-gray-800 text-sm">📋 Danh Sách Đề Xuất Bán Buôn</h3>
         <div class="overflow-x-auto">
@@ -753,6 +787,7 @@
                 <th class="border p-2">Tệp Bảng Giá</th>
                 <th class="border p-2">Trạng Thái</th>
                 <th class="border p-2">Áp Giá</th>
+                <th class="border p-2 whitespace-nowrap">Thời Gian Tạo</th>
                 <th class="border p-2">Thao Tác</th>
               </tr>
             </thead>
