@@ -1003,9 +1003,18 @@ const CREATE_MODULE_CONFIGS = {
         payload.effectiveApprovers = effectiveWf.approvers;
       }
       // paymentStatus áp dụng cho CẢ hợp đồng gốc lẫn phụ lục (mỗi bản ghi theo dõi thanh toán độc lập
-      // của chính nó) — hồ sơ nhập lại (đã ký sẵn ngoài hệ thống) coi như đã thanh toán từ trước, chỉ hồ
-      // sơ đi qua đúng luồng Phê Duyệt -> Quản Lý HĐ mới bắt đầu ở trạng thái chưa thanh toán.
-      payload.paymentStatus = isSignedImport ? 'DA_THANH_TOAN' : 'CHUA_THANH_TOAN';
+      // của chính nó). LỖI ĐÃ VÁ (phản hồi người dùng thật kèm ảnh chụp màn hình, 10/2026 — "lập thanh
+      // toán mặc định đổi trạng thái đã hoàn thành"): trước đây hồ sơ "📥 Nhập Hợp Đồng Đã Ký" (isSignedImport,
+      // nhập tay hồ sơ đã ký sẵn NGOÀI hệ thống) bị gán cứng paymentStatus = DA_THANH_TOAN NGAY LÚC NHẬP,
+      // đánh đồng "đã ký" với "đã thanh toán" — khiến người dùng nhập xong 1 hợp đồng (chưa hề đụng tới
+      // "🧾 Lập Thanh Toán") đã thấy cột Thanh Toán hiện sẵn "Đã thanh toán", và nếu bấm "🧾 Lập Thanh Toán"
+      // tiếp (hợp đồng Định kỳ vẫn cho phép mở chu kỳ mới dù đang DA_THANH_TOAN) thì nhãn đó vẫn còn
+      // nguyên — nhìn như vừa Lập Thanh Toán là tự động "hoàn thành" ngay, dù luồng NHÁP->PENDING->
+      // APPROVED->PAID của BẢN THÂN đề nghị thanh toán (paymentRequests.status) vẫn đúng 100% (đã xác minh
+      // lại bằng Playwright chạy thật). Nay LUÔN bắt đầu ở CHUA_THANH_TOAN bất kể nhập tay hay tạo mới đi
+      // duyệt — muốn đánh dấu đã thanh toán phải đi đúng luồng 🧾 Lập Thanh Toán -> duyệt -> Xác Nhận như
+      // hợp đồng thường, không còn suy đoán hộ từ việc hồ sơ là "đã ký sẵn" nữa.
+      payload.paymentStatus = 'CHUA_THANH_TOAN';
       // Loại Thanh Toán — "Thanh toán 1 lần" (mặc định, tương thích ngược 100% với hồ sơ cũ chưa từng có
       // field này) hoặc "Thanh toán định kỳ" (cho phép "Lập Thanh Toán" LẶP LẠI mỗi khi 1 chu kỳ hoàn tất
       // — xem startContractPayment()/confirmPaymentInstallment() ở lib/recordActions.js). Gán cứng ở

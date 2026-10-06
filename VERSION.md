@@ -1,8 +1,44 @@
 # Phiên bản hiện tại
 
-**25.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.25 (2026-10-06): "Nhập Hợp Đồng Đã Ký" không còn tự coi là "Đã thanh toán"
+
+Phản hồi người dùng thật kèm ảnh chụp màn hình: hợp đồng vừa "📥 Nhập Hợp
+Đồng Đã Ký" đã hiện ngay cột "Thanh Toán" = "Đã thanh toán", trông như vừa
+"🧾 Lập Thanh Toán" là tự động "hoàn thành" luôn. Đã kiểm tra kỹ (đọc lại
+toàn bộ `startContractPayment()`/`splitPaymentDraftsByInstallment()`/
+`submitPaymentRequest()`/`confirmPaymentInstallment()`/
+`confirmPaymentRequestLumpSum()`, chạy lại 110/110 `tests/test-payment.js`,
+và chạy THẬT bằng Playwright đúng thao tác người dùng mô tả) — luồng NHÁP ->
+PENDING -> APPROVED -> PAID của BẢN THÂN đề nghị thanh toán hoàn toàn đúng,
+không có lỗi. Nguyên nhân thật nằm ở chỗ khác: `lib/createValidation.js`
+(`CREATE_MODULE_CONFIGS.contracts`) gán cứng `payload.paymentStatus =
+isSignedImport ? 'DA_THANH_TOAN' : 'CHUA_THANH_TOAN'` — tức là hồ sơ nhập
+qua chế độ "📥 Nhập Hợp Đồng Đã Ký"/"📎 Nhập Phụ Lục Đã Ký" (`contractOpMode`)
+bị đánh đồng "đã ký" = "đã thanh toán" NGAY LÚC NHẬP, trước khi ai từng bấm
+"🧾 Lập Thanh Toán". Vì hợp đồng Định kỳ vẫn cho phép mở chu kỳ thanh toán
+mới dù `paymentStatus` đang là `DA_THANH_TOAN` (coi như chu kỳ trước đã
+xong), bấm "🧾 Lập Thanh Toán" trên hồ sơ nhập kiểu này không hề đổi lại
+nhãn đó — tạo cảm giác sai là "vừa lập xong đã hoàn thành ngay".
+
+Vá bằng cách LUÔN khởi tạo `paymentStatus = 'CHUA_THANH_TOAN'` bất kể nhập
+tay (đã ký sẵn ngoài hệ thống) hay tạo mới đi duyệt — muốn đánh dấu "Đã
+thanh toán" phải đi đúng luồng 🧾 Lập Thanh Toán -> duyệt theo phòng ban ->
+Xác Nhận Đã Thanh Toán (bắt buộc tệp chứng từ, đúng thiết kế v25.4) như hợp
+đồng thường, không còn suy đoán hộ từ việc hồ sơ "đã ký sẵn". Thêm kịch bản
+test mới (11d, `tests/test-audit-cluster-vbt-hd-gp-tt-tl.js`) khẳng định hồ
+sơ nhập qua `contractImportSigned` luôn ra `CHUA_THANH_TOAN` — chạy lại toàn
+bộ test liên quan Hợp Đồng/Thanh Toán (42/42 + 65/65 + 110/110 + 3/3 + 9/9 +
+15/15 + 58/58 + 20/20) đều pass, không có regression.
+
+**Không ảnh hưởng gì tới deploy ngoài copy code + `pm2 restart`** — không
+đổi `schema.sql`, không thêm biến môi trường, không thêm dependency. Dữ
+liệu hợp đồng CŨ đã nhập trước bản vá này (đang có `paymentStatus =
+DA_THANH_TOAN` do hành vi cũ) KHÔNG bị migrate lại tự động — chỉ hồ sơ nhập
+MỚI sau khi deploy bản này mới áp dụng mặc định đúng.
 
 ## v25.24 (2026-10-06): Vá "Xem Quy Trình" Bán Buôn hiện sai "chưa có người duyệt"
 
