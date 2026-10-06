@@ -141,6 +141,11 @@ function onContractOpModeChange() {
   else if (mode === 'IMPORT_CONTRACT') fileLabel = 'Hợp Đồng Đã Ký (bản scan)';
   else if (mode === 'IMPORT_ADDENDUM') fileLabel = 'Phụ Lục Hợp Đồng Đã Ký (bản scan)';
   document.getElementById('contractFileLabel').innerText = fileLabel;
+  // Nhãn nút Gửi (10/2026, cùng đợt vá hiểu nhầm ở previewContractManageWorkflow()): 2 chế độ IMPORT_*
+  // KHÔNG đi qua bước duyệt nào (luôn APPROVED ngay) nên tuyệt đối không ghi "Gửi phê duyệt" — dễ khiến
+  // người dùng tưởng còn chờ ai đó duyệt. Chỉ áp dụng khi KHÔNG ở chế độ Sửa (openEditContract() tự ghi
+  // đè '💾 Cập Nhật Hợp Đồng' SAU khi gọi hàm này, luôn ép mode='NEW' nên không xung đột ở đây).
+  document.getElementById('contractSubmitBtn').innerText = isImportMode ? '💾 Lưu Hồ Sơ Đã Ký (Không Qua Duyệt)' : 'Gửi phê duyệt';
   document.getElementById('contractCustodianDept').disabled = isAddendumMode;
   document.getElementById('contractType').disabled = isAddendumMode;
   document.getElementById('contractPartner').readOnly = isAddendumMode;
@@ -681,6 +686,13 @@ async function submitContractReq(e) {
 // previewContractApprovalWorkflow() (module-vanbantrinh.js) vốn xem quy trình duyệt hồ sơ hợp đồng ở tab
 // "Phê Duyệt" (DB.contractApprovalDeptWorkflows). Nút gọi hàm này chỉ hiện ở 2 chế độ IMPORT_* — xem
 // onContractOpModeChange().
+//
+// LỖI NGƯỜI DÙNG BÁO CÁO (10/2026, hiểu nhầm là "upload bỏ qua phê duyệt"): nút này nằm ngay trong form
+// "📥 Nhập Hợp Đồng/Phụ Lục Đã Ký" nên người dùng tưởng quy trình xem được ở đây sẽ áp dụng cho hồ sơ sắp
+// nhập — thực ra 2 chế độ IMPORT_* luôn tạo hồ sơ Ở TRẠNG THÁI ĐÃ DUYỆT NGAY (xem comment isSignedImport
+// ở lib/createValidation.js), quy trình xem trước ở đây chỉ áp dụng cho lần "Tải Tài Liệu Ký" bổ sung SAU
+// NÀY trên 1 hồ sơ ĐÃ CÓ sẵn (uploadContractSignedFile()), không liên quan gì tới hồ sơ đang nhập. Thêm
+// câu cảnh báo riêng vào footer modal để không còn gây hiểu nhầm — không đổi hành vi/dữ liệu gì khác.
 function previewContractManageWorkflow() {
   const dept = document.getElementById('contractDept').value;
   if (!dept) return alert('Vui lòng chọn Phòng Ban Quản Lý trước khi xem quy trình!');
@@ -688,7 +700,8 @@ function previewContractManageWorkflow() {
     '🔍 Xem Trước Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ)',
     `Phòng ban: ${dept}`,
     (DB.contractManageDeptWorkflows || {})[dept],
-    `Phòng ban "${dept}" chưa được cấu hình quy trình duyệt Tài liệu ký.`
+    `Phòng ban "${dept}" chưa được cấu hình quy trình duyệt Tài liệu ký.`,
+    '⚠️ Quy trình này CHỈ áp dụng cho lần "Tải Tài Liệu Ký" bổ sung sau này trên 1 hợp đồng đã có sẵn trong hệ thống. Hồ sơ bạn đang NHẬP Ở ĐÂY (Nhập Hợp Đồng/Phụ Lục Đã Ký) sẽ được lưu ở trạng thái ĐÃ DUYỆT ngay khi bấm nút bên dưới, không qua bước duyệt nào.'
   );
 }
 

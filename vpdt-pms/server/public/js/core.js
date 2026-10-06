@@ -3595,11 +3595,15 @@ function buildGenericDeptWorkflowPreviewHTML(wfConfig, emptyLabel) {
 }
 
 // Mở modal xem trước dùng chung (#viewDocModal) cho mọi previewXxxWorkflow() của khuôn 1 tầng ở trên —
-// gom 4 lệnh gán + unhide lặp lại y hệt nhau ở 9 module về 1 chỗ.
-function openGenericWorkflowPreviewModal(title, sub, wfConfig, emptyLabel) {
+// gom 4 lệnh gán + unhide lặp lại y hệt nhau ở 9 module về 1 chỗ. footerOverride (10/2026, vá hiểu nhầm
+// "Nhập Hợp Đồng/Phụ Lục Đã Ký" tự bypass duyệt): tham số TUỲ CHỌN, mặc định giữ nguyên câu dặn dò cũ —
+// chỉ previewContractManageWorkflow() (module-hopdong.js) truyền câu cảnh báo riêng vì màn đó xem trước 1
+// quy trình sẽ KHÔNG áp dụng cho hồ sơ đang nhập (luôn tự duyệt ngay bất kể preview hiện gì). Các lời gọi
+// khác (10+ module) không đổi gì — vẫn 4 tham số như cũ, tự nhận giá trị mặc định.
+function openGenericWorkflowPreviewModal(title, sub, wfConfig, emptyLabel, footerOverride) {
   document.getElementById('viewModalTitle').innerText = title;
   document.getElementById('viewModalSub').innerText = sub;
-  document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi phê duyệt.';
+  document.getElementById('viewModalFooterInfo').innerText = footerOverride || 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi phê duyệt.';
   document.getElementById('viewModalContent').innerHTML = buildGenericDeptWorkflowPreviewHTML(wfConfig, emptyLabel);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
