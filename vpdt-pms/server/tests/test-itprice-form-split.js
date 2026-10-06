@@ -223,6 +223,12 @@ async function main() {
       assertEqual(created.expiryMode, 'PERMANENT', 'Bán Lẻ tự gắn expiryMode=PERMANENT (không hỏi lại)');
       const today = new Date().toLocaleDateString('en-CA');
       assertEqual(created.effectiveDate, today, 'Bán Lẻ tự gắn effectiveDate=hôm nay (không hỏi lại)');
+
+      // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng "tạo xong phải thoát ra vào lại mới thấy") — submitMhItPriceApproval()
+      // từng chỉ unshift vào DB.itPriceApprovals mà KHÔNG gọi lại renderMhItPriceList(), nên bảng
+      // #mhItPriceTableBody vẫn hiện snapshot CŨ ngay sau khi Gửi, phải rời tab rồi vào lại mới thấy.
+      const tableHtml = await page.evaluate(() => document.getElementById('mhItPriceTableBody')?.innerHTML || '');
+      assert(tableHtml.includes(created.code), 'Đề xuất vừa tạo PHẢI hiện NGAY trong bảng Phê Duyệt Giá Bán Lẻ, không cần rời tab/đăng nhập lại');
     });
 
     await run.run('Real click Gửi (Bán Buôn, Vận Hành, điền đủ trường): tạo thành công với đúng storeScope/ngày do người dùng chọn', async () => {
