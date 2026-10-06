@@ -1343,6 +1343,29 @@ function itPriceStoreScopeLabel(storeScope) {
   return stores.length ? escapeHtml(stores.join(', ')) : '<span class="text-gray-400">—</span>';
 }
 
+// Xem trực tiếp 1 file "Tệp Bảng Giá" (p.files[], KHÁC extraFiles) trong Khung Xem Bảo Vệ — mở rộng
+// (10/2026, theo yêu cầu người dùng "cho xem trực tiếp toàn bộ nội dung luôn giống đang làm với hồ sơ
+// đính kèm") cho MỌI file đã nộp, không chỉ file đã phê duyệt — trước đây chỉ xem được dạng BẢNG dữ liệu
+// (columnLabels/items parse sẵn) trong <details>, không có cách mở file .xlsx gốc để xem trực tiếp.
+// KHÔNG đổi giới hạn TẢI (downloadLinkHTML ngay trên, vẫn chỉ file đã duyệt mới tải được — quyết định
+// nghiệp vụ cũ giữ nguyên) — server (lib/fileAuthz.js mode 'view') vốn đã không giới hạn gì thêm ngoài
+// canViewItPriceApproval(), nên phần XEM này không cần sửa gì ở server.
+function viewItPriceMainFile(itemId, fileId, evt) {
+  // Nút nằm TRONG <summary> (toggle mở/đóng <details>) — chặn nổi bọt để bấm "Xem" không vô tình
+  // đóng/mở khối dữ liệu đang xem, cùng khuôn stopEventPropagation() dùng cho nút Tải ngay cạnh.
+  if (evt) evt.stopPropagation();
+  const p = DB.itPriceApprovals.find(x => x.id === itemId);
+  if (!p) return;
+  const f = (p.files || []).find(x => x.id === fileId);
+  if (!f || !f.fileUrl) return;
+  openFileProtectedView({
+    title: `📎 ${f.fileName || p.code} (${p.code})`,
+    sub: `Phòng ban: ${p.dept} | Người đề xuất: ${p.creatorName}`,
+    footerInfo: `Tệp Bảng Giá — Đề xuất duyệt giá: ${p.code}`,
+    fileSrc: f.fileUrl, fileName: f.fileName
+  });
+}
+
 // Xem trước 1 tệp trong danh sách "Tài liệu bổ sung liên quan" (p.extraFiles[idx]) — cùng Khung Xem
 // Bảo Vệ với mọi tệp khác trong hệ thống (mirror viewSubmissionExtraFile()).
 function viewItPriceExtraFile(itemId, idx) {
@@ -1437,6 +1460,9 @@ function renderItPriceModal() {
     // Giới hạn tải (mục 2 kế hoạch): CHỈ file khớp đúng resolveApprovedFileUrlClient(p) mới hiện nút
     // tải — server (lib/fileAuthz.js) chặn cứng phía sau nên đây chỉ là ẩn nút cho gọn giao diện, KHÔNG
     // phải lớp bảo vệ duy nhất. File khác vẫn xem được đầy đủ bảng dữ liệu bên dưới (KHÔNG ẩn nội dung).
+    // "👁️ Xem" (10/2026) — hiện cho MỌI file (không chỉ file đã duyệt), mở Khung Xem Bảo Vệ xem trực
+    // tiếp file .xlsx gốc — KHÁC hẳn downloadLinkHTML (chỉ TẢI mới giới hạn, XEM thì không).
+    const viewLinkHTML = ` · <button type="button" data-op="viewItPriceMainFile" data-arg0="${p.id}" data-arg1="${f.id}" data-arg-event="2" class="text-blue-600 hover:underline font-semibold">👁️ Xem</button>`;
     const downloadLinkHTML = isApprovedFile
       ? ` · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>`
       : ' · <span class="text-gray-400 italic">Chỉ file đã phê duyệt mới tải được</span>';
@@ -1459,7 +1485,7 @@ function renderItPriceModal() {
     return `
       <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
         <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}${tagApproved}
-          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng${downloadLinkHTML}
+          <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng${viewLinkHTML}${downloadLinkHTML}
           </span>
         </summary>
         <div class="p-2 border-t overflow-x-auto">

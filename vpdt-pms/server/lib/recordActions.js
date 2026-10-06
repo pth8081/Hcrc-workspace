@@ -23,6 +23,22 @@ function nowVN() {
   return new Date().toLocaleString('vi-VN');
 }
 
+// Thông báo (fire-and-forget — hàm gọi nó là SYNC, không await được) cho mọi admin ĐANG hoạt động khi 1
+// hành động bị CHẶN vì quy trình duyệt thiếu người duyệt hợp lệ (10/2026, theo yêu cầu người dùng) —
+// dùng ở submitPaymentRequest()/editPaymentRequest() (dept đổi giữa chừng). Mirror đúng tinh thần
+// blockCreateForMissingApprover() ở routes/create.js (route tạo mới qua CREATE_MODULE_CONFIGS, chạy
+// trong context async nên await được trực tiếp) — 2 module paymentRequests không tạo qua route đó (đi
+// qua POST /api/paymentRequests/:id/submit riêng, lib/recordActions.js các hàm SYNC) nên không await
+// được ở đây, chấp nhận "cố gắng gửi, lỗi thì chỉ log" thay vì đảm bảo gửi trước khi trả response.
+function notifyAdminsNoApprover(appData, label, user, message) {
+  const adminUsernames = (appData?.users || []).filter(u => u?.perms?.admin && u.active !== false).map(u => u.username);
+  if (!adminUsernames.length) return;
+  const { notifyUsers } = require('./notifications'); // require trễ — cùng lý do require trễ workflowEngine ở trên
+  notifyUsers(adminUsernames, 'NO_APPROVER', `⚠️ Thiếu người duyệt: ${label}`,
+    `${user?.name || user?.username || 'Người dùng'} vừa bị chặn vì thiếu cấu hình người duyệt hợp lệ. ${message}`,
+    null).catch(err => console.error('notifyUsers (NO_APPROVER) lỗi:', err.message));
+}
+
 // ===================== HỢP ĐỒNG (sửa) =====================
 // Khớp đúng danh sách field mà updateContractReq() ở index.html cho sửa — KHÔNG gồm code/creator/id
 // (không đổi được), KHÔNG gồm customData (form sửa hợp đồng không thu thập lại).
@@ -2268,10 +2284,18 @@ function editPaymentRequest(payload, user, pr, appData) {
     // lại — đổi sang 1 phòng ban CHƯA cấu hình quy trình duyệt sẽ đẩy đề nghị (đã tự reset currentStep=1
     // ở khối bên dưới) vào ngõ cụt PENDING vĩnh viễn y hệt lỗ hổng submitPaymentRequest() từng có.
     if (!isDraft && appData) {
-      const { resolveWorkflowStepApprovers } = require('./workflowEngine'); // require trễ — tránh vòng lặp
-      const step1Approvers = resolveWorkflowStepApprovers('paymentRequests', { ...pr, dept: payload.dept }, appData, 1);
-      if (!step1Approvers.length) {
-        throw new HttpError(409, `Phòng ban "${payload.dept}" chưa được cấu hình quy trình duyệt Đề Nghị Thanh Toán (hoặc bước 1 không có người duyệt nào) — đổi sang phòng ban này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi đổi.`);
+      // LỖI ĐÃ VÁ (10/2026, theo yêu cầu người dùng "chặn gửi nếu chưa có người duyệt, loại trừ cả tài
+      // khoản disable/nghỉ việc"): TRƯỚC ĐÂY dùng resolveWorkflowStepApprovers() — chỉ kiểm ĐÚNG bước 1
+      // và KHÔNG lọc tài khoản đã bị khoá/nghỉ việc (chỉ mode "Theo vị trí" tự lọc, mode "PEOPLE" chọn
+      // tay thì không) — 1 phòng ban cấu hình đúng 1 người duyệt bước 1 nhưng người đó đã bị khoá tài
+      // khoản vẫn "qua được" chặn này, rồi treo thật khi tới lúc duyệt. findMissingApproverStep()
+      // (lib/workflowEngine.js) kiểm TOÀN BỘ các bước của quy trình (không chỉ bước 1) + lọc active.
+      const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+      const missing = findMissingApproverStep('paymentRequests', { ...pr, dept: payload.dept }, appData);
+      if (missing) {
+        const message = `Phòng ban "${payload.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Đề Nghị Thanh Toán chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc) — đổi sang phòng ban này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi đổi.`;
+        notifyAdminsNoApprover(appData, 'Đề Nghị Thanh Toán', user, message);
+        throw new HttpError(409, message);
       }
     }
   }
@@ -2368,10 +2392,14 @@ function submitPaymentRequest(user, pr, appData) {
   // chỉ cảnh báo MỀM ở màn Xem Trước, không chặn lúc gửi. Chặn ngay tại đây (điểm gác THẬT) với thông
   // điệp nói rõ phải làm gì, thay vì để hồ sơ rơi vào ngõ cụt.
   if (appData) {
-    const { resolveWorkflowStepApprovers } = require('./workflowEngine'); // require trễ — tránh vòng lặp
-    const step1Approvers = resolveWorkflowStepApprovers('paymentRequests', pr, appData, 1);
-    if (!step1Approvers.length) {
-      throw new HttpError(409, `Phòng ban "${pr.dept}" chưa được cấu hình quy trình duyệt Đề Nghị Thanh Toán (hoặc bước 1 không có người duyệt nào) — đề nghị gửi đi sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi gửi.`);
+    // Nâng cấp (10/2026): kiểm TOÀN BỘ các bước của quy trình (không chỉ bước 1) + lọc active — xem chú
+    // thích đầy đủ ở khối tương tự tại editPaymentRequest() (deptChanged) phía trên.
+    const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+    const missing = findMissingApproverStep('paymentRequests', pr, appData);
+    if (missing) {
+      const message = `Phòng ban "${pr.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Đề Nghị Thanh Toán chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc) — đề nghị gửi đi sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi gửi.`;
+      notifyAdminsNoApprover(appData, 'Đề Nghị Thanh Toán', user, message);
+      throw new HttpError(409, message);
     }
   }
   pr.status = 'PENDING';

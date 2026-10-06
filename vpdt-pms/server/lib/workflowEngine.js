@@ -1169,9 +1169,38 @@ function resolveWorkflowStepApprovers(moduleKey, item, appData, step) {
   return approvers?.[step] || [];
 }
 
+// Kiểm TOÀN BỘ các bước của 1 quy trình (không chỉ bước đang xét) xem có bước nào KHÔNG có ít nhất 1
+// approver HỢP LỆ hay không — dùng để CHẶN gửi/tạo mới TRƯỚC khi hồ sơ rơi vào ngõ cụt PENDING vô thời
+// hạn ở BẤT KỲ bước nào (không đợi duyệt xong bước trước mới phát hiện bước sau trống). "Hợp lệ" nghĩa
+// là username có trong danh sách approvers[bước] (resolveWfConfig() của module đó, giống hệt
+// applyWorkflowAction() dùng) VÀ chưa bị khoá tài khoản/nghỉ việc (active !== false) — LỖI ĐÃ VÁ ở đây:
+// resolveWorkflowStepApprovers() ở trên (dùng cho guard CŨ của paymentRequests) không hề lọc active,
+// nên 1 approver PEOPLE-mode chọn tay rồi bị khoá tài khoản sau đó vẫn coi là "đã cấu hình" dù thực tế
+// không ai duyệt được (applyWorkflowAction() MỚI là nơi lọc active thật, xem chú thích "LỖI ĐÃ VÁ" ở
+// applyWorkflowAction() phía trên — hàm này mirror đúng cách lọc đó để kiểm TRƯỚC, không đợi tới lúc
+// duyệt mới phát hiện). Trả về {order, name} của bước ĐẦU TIÊN thiếu, hoặc null nếu mọi bước đều ổn —
+// KHÔNG throw, để caller tự quyết định thông điệp/hành vi theo đúng module (xem routes/create.js,
+// lib/recordActions.js::submitPaymentRequest()).
+function findMissingApproverStep(moduleKey, item, appData) {
+  const config = MODULE_CONFIGS[moduleKey];
+  if (!config) return null;
+  const { steps, approvers } = config.resolveWfConfig(item, appData || {});
+  const activeByUsername = new Map((appData?.users || []).filter(u => u && u.username).map(u => [u.username, u]));
+  for (const step of (steps || [])) {
+    const raw = approvers?.[step.order] || [];
+    const valid = raw.filter(username => {
+      const u = activeByUsername.get(username);
+      return !u || u.active !== false;
+    });
+    if (!valid.length) return { order: step.order, name: step.name || `Bước ${step.order}` };
+  }
+  return null;
+}
+
 module.exports = {
   MODULE_CONFIGS,
   resolveWorkflowStepApprovers,
+  findMissingApproverStep,
   WorkflowError,
   applyWorkflowAction,
   assertNotSelfDecidingWorkflowItem,
