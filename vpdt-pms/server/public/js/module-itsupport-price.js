@@ -319,7 +319,7 @@ function renderItPriceMasterListAdmin() {
   const isWholesaleTab = activeBizConfigPriceTab === 'WHOLESALE';
   tbody.innerHTML = lists.map(m => `
     <tr class="hover:bg-gray-50 border-b">
-      <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><a href="${attachmentDownloadUrl(m.fileUrl, null, m.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline font-normal">📥 ${escapeHtml(m.fileName || '')}</a></td>
+      <td class="border p-2 font-semibold">${escapeHtml(m.name)}<br><a href="${attachmentDownloadUrl(m.fileUrl, null, m.fileName)}" target="_blank" class="text-xs text-sky-600 hover:underline font-medium break-all">📥 ${escapeHtml(m.fileName || '')}</a></td>
       <td class="border p-2">${(m.columns || []).map(c => {
         const tag = isWholesaleTab ? (c.key === m.marginColumnKey ? ' 🎯Margin' : (c.key === m.discountColumnKey ? ' 🎯Chiết Khấu' : '')) : '';
         const cls = tag ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-gray-100 text-gray-700';
@@ -1032,7 +1032,7 @@ function buildItPriceRowHtml(p, context) {
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
       <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
-      <td class="border p-2">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
+      <td class="border p-2 font-medium text-gray-800 break-all">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
       <td class="border p-2">${itPriceStatusBadge(p)}</td>
       <td class="border p-2">${itPriceAppliedBadge(p)}</td>
       <td class="border p-2 text-center">
@@ -1448,6 +1448,15 @@ function renderItPriceModal() {
   const files = p.files || [];
   // Xem chú thích resolveApprovedFileIdClient()/resolveApprovedFileUrlClient() (mirror server) ở trên.
   const approvedFileId = resolveApprovedFileIdClient(p);
+  // Ngoại lệ tải file CHƯA chính thức duyệt (10/2026, yêu cầu người dùng: "thêm nút tải file từ bước
+  // người phê duyệt — người gửi phê duyệt thì vẫn chỉ xem là được"): đúng người duyệt BƯỚC HIỆN TẠI
+  // (hồ sơ còn PENDING, đang ở tab Phê Duyệt) được tải file MỚI NHẤT (file họ sắp quyết định) dù chưa
+  // chính thức "đã duyệt" — mirror ĐÚNG điều kiện canApprove ở renderItPriceModalControls() (cùng file)
+  // và phép kiểm server thật (lib/fileAuthz.js, canApproveStep()/resolveWorkflowStepApprovers()).
+  const wfConfigForDownload = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const currentStepApproversForDownload = resolveEffectiveStepApprovers(wfConfigForDownload, p.currentStep);
+  const canDownloadPendingFile = currentItPriceModalContext === 'APPROVAL' && p.status === 'PENDING'
+    && canApproveStep(currentUser, currentStepApproversForDownload, p.history, p.currentStep);
   document.getElementById('itPriceModalFiles').innerHTML = files.map((f, idx) => {
     const isLatest = idx === files.length - 1;
     const tagLatest = isLatest && files.length > 1 ? ' <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded text-xs font-bold">Mới nhất</span>' : '';
@@ -1463,7 +1472,8 @@ function renderItPriceModal() {
     // "👁️ Xem" (10/2026) — hiện cho MỌI file (không chỉ file đã duyệt), mở Khung Xem Bảo Vệ xem trực
     // tiếp file .xlsx gốc — KHÁC hẳn downloadLinkHTML (chỉ TẢI mới giới hạn, XEM thì không).
     const viewLinkHTML = ` · <button type="button" data-op="viewItPriceMainFile" data-arg0="${p.id}" data-arg1="${f.id}" data-arg-event="2" class="text-blue-600 hover:underline font-semibold">👁️ Xem</button>`;
-    const downloadLinkHTML = isApprovedFile
+    const canDownloadThisFile = isApprovedFile || (isLatest && canDownloadPendingFile);
+    const downloadLinkHTML = canDownloadThisFile
       ? ` · <a href="${attachmentDownloadUrl(f.fileUrl, null, f.fileName)}" target="_blank" data-op="stopEventPropagation" data-arg-event="0" class="text-sky-600 hover:underline font-semibold">⬇️ Tải file gốc</a>`
       : ' · <span class="text-gray-400 italic">Chỉ file đã phê duyệt mới tải được</span>';
     // "Đánh dấu cột trước khi tải" (mục 4 kế hoạch) — CHỈ ở đúng file đã duyệt (route mới cũng tự chặn

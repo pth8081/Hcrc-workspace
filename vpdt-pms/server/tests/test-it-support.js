@@ -927,6 +927,76 @@ async function main() {
       assertEqual(created.wrapHidden, true, 'Khối "Tài liệu bổ sung liên quan" phải ẨN trong modal khi không có tệp nào');
     });
 
+    // ===== LỖI ĐÃ VÁ (10/2026, yêu cầu người dùng: "thêm nút tải file từ bước người phê duyệt giúp tôi
+    // nhé, người gửi phê duyệt thì vẫn chỉ xem là được") — trước đây nút "⬇️ Tải file gốc" CHỈ hiện cho
+    // file ĐÃ CHÍNH THỨC được duyệt (resolveApprovedFileId()), nên người duyệt ĐANG xem xét 1 hồ sơ
+    // PENDING không tải được chính file họ sắp quyết định, phải mở "👁️ Xem" (Khung Xem Bảo Vệ) mới đọc
+    // được. Vá (module-itsupport-price.js + lib/fileAuthz.js): đúng người duyệt BƯỚC HIỆN TẠI (hồ sơ còn
+    // PENDING, ở tab Phê Duyệt) được tải file MỚI NHẤT dù chưa chính thức "đã duyệt" — người đề xuất vẫn
+    // chỉ xem được như cũ. =====
+    await run.run('Phê Duyệt Giá: người duyệt BƯỚC HIỆN TẠI (hồ sơ còn PENDING) tải được file đang chờ duyệt — người đề xuất vẫn chỉ xem', async () => {
+      await loginAs(page, STAFF_KD);
+      const created = await page.evaluate(async () => {
+        await switchTab('muaHang');
+        setPurchasingSubTab('ITPRICE');
+        openMhItPriceCreateForm();
+        document.getElementById('mhItPriceMasterListSelect').value = String(1);
+        document.getElementById('mhItPriceReason').value = 'Kiểm thử nút tải file khi còn chờ duyệt';
+        mhItPricePendingFile = {
+          fileUrl: '/uploads/gia-cho-duyet.xlsx',
+          fileName: 'gia-cho-duyet.xlsx',
+          items: [{ values: { code: 'SP002', name: 'Mì gói Hảo Hảo 2', oldPrice: '6000', newPrice: '6500' } }],
+          columnLabels: [
+            { key: 'code', label: 'Mã hàng' },
+            { key: 'name', label: 'Tên mặt hàng' },
+            { key: 'oldPrice', label: 'Giá cũ' },
+            { key: 'newPrice', label: 'Giá mới' }
+          ]
+        };
+        document.getElementById('mhItPriceRetailZone').value = 'Miền Bắc';
+        await submitMhItPriceApproval({ preventDefault() {}, target: { reset() {} } });
+        return DB.itPriceApprovals[0];
+      });
+      assertEqual(created.status, 'PENDING', 'Hồ sơ mới tạo phải ở PENDING để kiểm đúng kịch bản "chưa duyệt"');
+      const pendingId = created.id;
+
+      // Chính người đề xuất (STAFF_KD) mở modal — KHÔNG được thấy nút tải, chỉ thấy ghi chú cũ.
+      const submitterView = await page.evaluate((id) => {
+        openItPriceModal(id, 'APPROVAL');
+        return document.getElementById('itPriceModalFiles').innerHTML;
+      }, pendingId);
+      assert(!submitterView.includes('⬇️ Tải file gốc'), 'Người đề xuất KHÔNG được thấy nút tải file khi hồ sơ còn PENDING (chỉ xem được)');
+      assertIncludes(submitterView, 'Chỉ file đã phê duyệt mới tải được', 'Người đề xuất vẫn thấy đúng ghi chú cũ');
+
+      // Đúng người duyệt bước 1 (approver1, dept Kinh Doanh) — PHẢI thấy nút tải file đang chờ duyệt.
+      await loginAs(page, APPROVER1);
+      const approverView = await page.evaluate((id) => {
+        openItPriceModal(id, 'APPROVAL');
+        return document.getElementById('itPriceModalFiles').innerHTML;
+      }, pendingId);
+      assertIncludes(approverView, '⬇️ Tải file gốc', 'Đúng người duyệt bước hiện tại PHẢI tải được file đang chờ họ quyết định');
+
+      // Người KHÔNG liên quan (PLAIN, không phải đề xuất/không phải approver) — lớp gác THẬT là
+      // canViewItPriceApproval() (chặn cả việc mở modal thấy nội dung hồ sơ, không chỉ nút tải) — kiểm
+      // THẲNG hàm này thay vì qua modal (choreography ẩn/hiện modal là mối quan tâm khác, không phải
+      // trọng tâm bản vá nút tải lần này).
+      await loginAs(page, PLAIN);
+      const outsiderCanView = await page.evaluate((id) => {
+        const p = DB.itPriceApprovals.find((x) => x.id === id);
+        return canViewItPriceApproval(currentUser, p);
+      }, pendingId);
+      assertEqual(outsiderCanView, false, 'Người ngoài phạm vi (không phải đề xuất/approver) không được xem hồ sơ này — canViewItPriceApproval() vẫn đúng');
+
+      // Sau khi duyệt xong (APPROVED) — nút tải vẫn hiện bình thường qua đúng đường CŨ (resolveApprovedFileId),
+      // không bị ảnh hưởng gì bởi ngoại lệ vừa thêm.
+      await page.evaluate(async (id) => { await approveItPriceConfirmed(id); }, pendingId);
+      const afterApproveView = await page.evaluate((id) => {
+        openItPriceModal(id, 'APPROVAL');
+        return document.getElementById('itPriceModalFiles').innerHTML;
+      }, pendingId);
+      assertIncludes(afterApproveView, '⬇️ Tải file gốc', 'Sau khi duyệt xong, nút tải vẫn hiện bình thường qua đúng luật "file đã duyệt" cũ');
+    });
+
     // Đợt audit "form-fields-6" — dropdown "Lọc Theo Danh Mục" (#filterCategoryItTicket) trước đây gõ
     // cứng 5 <option> gốc, lệch với #itTicketCategory (form tạo) mỗi khi admin thêm/bớt/đổi nhãn danh
     // mục ở màn Biểu Mẫu. Kiểm tra ĐÚNG đường admin thật sự dùng (saveCoreFieldOptionsList(), gọi từ
