@@ -139,7 +139,7 @@ stubModule('lib/recordViewScope', {
 stubModule('lib/systemLogStore', { insertSystemLog: async () => {} });
 
 const USERS_HTTP = [
-  { username: 'nguoi_trinh', name: 'Người Trình', dept: DEPT_A, perms: { submissionCreate: { all: false, depts: [DEPT_A] } }, active: true },
+  { username: 'nguoi_trinh', name: 'Người Trình', dept: DEPT_A, perms: { submissionCreate: true }, active: true },
   { username: 'approver1', name: 'Người Duyệt 1', dept: DEPT_A, perms: {}, active: true },
   { username: 'ke_toan1', name: 'Kế Toán 1', dept: DEPT_B, perms: { paymentManage: true }, active: true },
   { username: 'nan_nhan', name: 'Nạn Nhân (chủ file nhạy cảm)', dept: DEPT_A, perms: {}, active: true }

@@ -1519,7 +1519,10 @@ const PERM_DEPT_TABLES = [
   { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pDocDownload'] },
   // LÀM GỌN (11/2026, "Việc D"): bỏ cột pSubView/pContractView ("Xem") — xem chú thích đầy đủ tại khối
   // 📜 3/📄 4 trong systemSection.html.
-  { tbody: 'pSubDeptTableBody', cols: ['pSubCreate', 'pSubDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pSubCreate ("Tạo mới") khỏi bảng phòng ban — đã
+  // chuyển thành 1 công tắc phẳng pSubCreate (boolean) riêng, KHÔNG còn hậu tố All/Dept, xem khối
+  // 📜 3. Văn Bản Trình trong systemSection.html.
+  { tbody: 'pSubDeptTableBody', cols: ['pSubDownload'] },
   { tbody: 'pContractDeptTableBody', cols: ['pContractCreate', 'pContractDownload'] },
   // Phòng Họp (10/2026, đã xác nhận): KHÔNG còn bảng phòng ban — gỡ khỏi danh sách này, xem công tắc
   // phẳng pMeetingBook trong khối "📅 5. Phòng Họp" (systemSection.html).

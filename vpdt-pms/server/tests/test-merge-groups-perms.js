@@ -96,13 +96,15 @@ async function main() {
   // lưu DB — hàm gộp PHẢI loại bỏ field này ngay, không để "hồi sinh" vào perms hiệu lực của user dù chỉ
   // 1 trong N nhóm user thuộc còn sót field cũ.
   await run.run('LỖI ĐÃ VÁ: submissionView/contractView (field đã bỏ) KHÔNG "hồi sinh" qua merge dù 1 nhóm còn sót', () => {
+    // contractCreate dùng làm ví dụ "field hợp lệ khác" (vẫn giữ dạng {all,depts}) — submissionCreate
+    // đã đổi thành quyền phẳng boolean (10/2026, "6-module"), không còn hợp lệ cho mục đích minh hoạ này.
     const merged = mergeGroupsBasePermsServer([
-      { submissionCreate: { all: false, depts: [] } },
+      { contractCreate: { all: false, depts: [] } },
       { submissionView: { all: true, depts: [] }, contractView: { all: true, depts: [] } }
     ]);
     assertEqual('submissionView' in merged, false, 'submissionView phải bị loại khỏi kết quả gộp');
     assertEqual('contractView' in merged, false, 'contractView phải bị loại khỏi kết quả gộp');
-    assertEqual(merged.submissionCreate.all, false, 'field hợp lệ khác vẫn gộp đúng như thường (không ảnh hưởng)');
+    assertEqual(merged.contractCreate.all, false, 'field hợp lệ khác vẫn gộp đúng như thường (không ảnh hưởng)');
   });
 
   run.summary();

@@ -153,7 +153,7 @@ const APP_DATA = {
 };
 
 const USER_A = { username: 'u_a', name: 'Người A', dept: DEPT_A, perms: {
-  submissionCreate: { all: false, depts: [DEPT_A] },
+  submissionCreate: true,
   contractCreate: { all: false, depts: [DEPT_A] },
   uploadAll: false, uploadDepts: [DEPT_A],
   licenseCreate: true

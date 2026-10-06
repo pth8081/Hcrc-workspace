@@ -793,7 +793,14 @@ function normalizeInternalPostMedia(target) {
 const CREATE_MODULE_CONFIGS = {
   submissions: {
     dbKey: 'submissions',
-    getScope: (user) => user.perms?.submissionCreate,
+    // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module", đã xác nhận): bỏ hẳn submissionCreate
+    // {all,depts} (admin chọn phòng ban tạo hộ) — giờ submissionCreate là 1 quyền PHẲNG (boolean) DUY
+    // NHẤT, luôn tự khoá đúng phòng ban của chính người trình (forceOwnDept: true, cùng khuôn
+    // meetingBook/lib/createValidation.js). getScope() trả rỗng để scopeAllows() dùng đúng nhánh
+    // "cùng phòng là được" có sẵn (dept === user.dept) — quyền TẠO thật sự được gác ở extraValidate()
+    // bên dưới (forceOwnDept + getScope rỗng khiến scopeAllows() LUÔN qua, không còn ý nghĩa gác quyền).
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Mã tờ trình = HCRC-<mã phòng>-VBT-<số 3 chữ số>, SINH LẠI Ở SERVER (không tin client) — xem
     // lib/recordCodeGen.js. dept đã được validateAndPrepareCreate() xác minh scope ngay trước đó.
@@ -806,6 +813,11 @@ const CREATE_MODULE_CONFIGS = {
     // do CALLER đọc sẵn từ DB rồi truyền vào (xem validateAndPrepareCreate) — file này không tự đọc DB,
     // để routes/create.js thật VÀ stub test (dùng data in-memory) đều gọi chung được hàm này.
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được
+      // trình hay không) phải gác RIÊNG ở đây (cùng khuôn meetingBook/vppRegistrations.extraValidate).
+      if (!user.perms?.admin && !user.perms?.submissionCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo tờ trình');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'SUBMISSION');
       // Tệp tờ trình + Tài Liệu Bổ Sung Theo Tờ Trình (#subFile/#subExtraFiles ở index.html) —
       // xem assertUploadedFileUrl().

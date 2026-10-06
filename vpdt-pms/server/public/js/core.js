@@ -2976,8 +2976,9 @@ function getScopedDepts(user, scope) {
 // options (getScopedDepts() ở trên) — gọi TRỰC TIẾP SAU dòng gán innerHTML của từng ô, KHÔNG tách lịch
 // riêng qua setTimeout/microtask nào (tránh đúng lớp bug thứ tự DOM). KHOÁ (disabled) ô đó khi phạm vi
 // chỉ vỏn vẹn ĐÚNG 1 phòng ban (scopedDepts.length === 1 — tức người dùng không có quyền tạo "thay mặt"
-// phòng ban khác, ví dụ uploadDepts/submissionCreate/contractCreate/carCreate/officeCreate/
-// meetingBookScope KHÔNG mở rộng ngoài phòng ban chính mình) để tránh chọn nhầm phòng ban ở đúng nhóm
+// phòng ban khác, ví dụ uploadDepts/contractCreate/carCreate/officeCreate KHÔNG mở rộng ngoài phòng
+// ban chính mình — submissionCreate/meetingBook giờ luôn truyền scope RỖNG {} nên LUÔN rơi vào nhánh
+// này) để tránh chọn nhầm phòng ban ở đúng nhóm
 // người dùng phổ biến nhất (chỉ có 1 lựa chọn thật sự). Người có phạm vi RỘNG hơn (uploadAll/scope.depts
 // nhiều phòng/admin) vẫn được TIỀN ĐIỀN sẵn đúng phòng ban của mình cho tiện — KHÔNG bị khoá, vẫn chọn
 // tay phòng ban khác bình thường như trước. Không đụng gì tới các <select> phòng ban KHÔNG mang ý nghĩa
@@ -4182,7 +4183,9 @@ function defaultNewUserPerms() {
     docDownload: emptyScope(),
     // submissionView/contractView (cột "Xem") ĐÃ BỎ (11/2026, "Việc D") — xem canAccessSubmissionModule()/
     // canAccessContractModule() + canViewSubmission()/canViewContract() (lib/recordViewScope.js).
-    submissionCreate: emptyScope(), submissionDownload: emptyScope(),
+    // submissionCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự
+    // khoá đúng phòng ban người trình (forceOwnDept, lib/createValidation.js).
+    submissionCreate: false, submissionDownload: emptyScope(),
     contractCreate: emptyScope(), contractDownload: emptyScope(),
     // contractImportSigned — quyền phẳng RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (hồ sơ APPROVED ngay,
     // không qua quy trình Phê Duyệt) — TÁCH khỏi contractCreate, xem lib/createValidation.js.
@@ -4418,14 +4421,22 @@ function migrateLegacyPerms(perms) {
   // submissionView/contractView (cột "Xem" cũ) ĐÃ BỎ (11/2026, "Việc D") — giá trị cũ (nếu còn) đã
   // được quét/gộp vào deptViewScopeConfig.submission/contract.extraViewers ở khối di trú RIÊNG ngay
   // TRƯỚC lời gọi migrateLegacyPerms() này (xem initDatabase()) — xoá hẳn 2 field dư thừa khỏi perms ở
-  // đây. submissionCreate/contractCreate (quyền Tạo, KHÔNG đổi) vẫn migrate bình thường từ cờ CỰC CŨ
-  // submissionModule/contractModule (boolean toàn công ty, trước khi có mô hình {all,depts}).
+  // đây. contractCreate (quyền Tạo, KHÔNG đổi — xem task #415) vẫn migrate bình thường từ cờ CỰC CŨ
+  // contractModule (boolean toàn công ty, trước khi có mô hình {all,depts}).
   if (p.submissionCreate === undefined && p.submissionModule !== undefined) {
     p.submissionCreate = scopeFromFlag(p.submissionModule);
     changed = true;
   }
   if (p.submissionModule !== undefined) { delete p.submissionModule; changed = true; }
   if (p.submissionView !== undefined) { delete p.submissionView; changed = true; }
+  // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module", đã xác nhận): bỏ submissionCreate
+  // {all,depts}, chỉ còn 1 cờ phẳng — cùng khuôn meetingBook. Chạy SAU khối di trú submissionModule ở
+  // trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn).
+  if (typeof p.submissionCreate !== 'boolean') {
+    const oldScope = p.submissionCreate;
+    p.submissionCreate = !!(oldScope?.all || (Array.isArray(oldScope?.depts) && oldScope.depts.length > 0));
+    changed = true;
+  }
   if (p.contractCreate === undefined && p.contractModule !== undefined) {
     p.contractCreate = scopeFromFlag(p.contractModule);
     changed = true;
@@ -10486,7 +10497,10 @@ function populateDropdowns() {
   // ban khác) — dùng getScopedDepts() dựa trên perms.<module>Create tương ứng.
   const subDept = document.getElementById('subDept');
   if (subDept) {
-    const subScopedDepts = getScopedDepts(currentUser, currentUser.perms?.submissionCreate);
+    // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module"): submissionCreate giờ là quyền PHẲNG
+    // (boolean), không còn {all,depts} để truyền vào getScopedDepts() — truyền {} để tận dụng đúng
+    // nhánh "cùng phòng là được" có sẵn (tự khoá 1 phòng ban DUY NHẤT), cùng khuôn meetingBook.
+    const subScopedDepts = getScopedDepts(currentUser, {});
     subDept.innerHTML = subScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
     applyOwnDeptAutoSelect(subDept, subScopedDepts);
   }

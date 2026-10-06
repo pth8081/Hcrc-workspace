@@ -130,8 +130,9 @@ function generateHcrcCode(records, deptAbbr, moduleAbbr) {
   const seq = computeNextHcrcSeq(records, prefix);
   return `${prefix}${String(seq).padStart(3, '0')}`;
 }
-// Văn Bản Trình có thể trình THAY MẶT phòng ban khác (#subDept chọn tự do trong scope submissionCreate)
-// -> mã phòng LUÔN theo lựa chọn ĐANG CHỌN ở đó, KHÔNG dùng currentUser.dept.
+// Văn Bản Trình (10/2026, "6-module"): #subDept giờ tự khoá đúng phòng ban người trình (forceOwnDept,
+// submissionCreate đã thành quyền phẳng — bỏ "trình thay mặt phòng ban khác") — vẫn đọc theo lựa chọn
+// ĐANG CHỌN ở đó (luôn khớp currentUser.dept) thay vì currentUser.dept trực tiếp, cho gọn code.
 function generateSubCode() { return generateHcrcCode(DB.submissions, getDeptAbbr(document.getElementById('subDept').value), 'VBT'); }
 // Đăng Ký Xe cũng có #carDept chọn tự do (trong scope carCreate, KHÔNG forceOwnDept) — cùng lý do trên.
 function generateCarCode() { return generateHcrcCode(DB.carRegs, getDeptAbbr(document.getElementById('carDept').value), 'DKX'); }

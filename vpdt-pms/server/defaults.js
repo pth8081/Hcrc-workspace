@@ -916,11 +916,11 @@ const DEFAULTS = {
   // checklistTemplates/checklistSubmissions (module TOP-LEVEL "Checklist Đánh Giá Siêu Thị", xem
   // lib/checklist.js): cùng lý do — MIGRATED_COLLECTIONS (dbo.Records), KHÔNG seed ở đây.
 
-  // Phân quyền theo module (submissionCreate, contractCreate, carView/Create, officeView/Create)
-  // dùng dạng { all, depts } — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH
-  // PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính người dùng luôn được phép mặc định dù
-  // không liệt kê ở đây. Riêng Phòng Họp (meetingBook, 10/2026) đã rút gọn thành 1 quyền phẳng
-  // boolean duy nhất — tự khoá đúng phòng ban, không còn dạng {all,depts}.
+  // Phân quyền theo module (contractCreate, carView/Create, officeView/Create) dùng dạng { all, depts }
+  // — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]);
+  // phòng ban của chính người dùng luôn được phép mặc định dù không liệt kê ở đây. Riêng Phòng Họp
+  // (meetingBook, 10/2026) và Văn Bản Trình (submissionCreate, 10/2026, "6-module") đã rút gọn thành 1
+  // quyền phẳng boolean duy nhất — tự khoá đúng phòng ban, không còn dạng {all,depts}.
   // startDate (Đào Tạo Đợt 6, "ngày vào làm việc") — mốc DUY NHẤT để tính các hạn Giai Đoạn 1/2/3 của Đào
   // Tạo Tân Binh (onboardingProgress, xem lib/createValidation.js/lib/recordActions.js). Rỗng mặc định
   // ở toàn bộ user seed (4 tài khoản dưới đây đều là tài khoản quản trị/cũ, không phải "tân binh" cần
@@ -937,7 +937,7 @@ const DEFAULTS = {
         admin: false,
         uploadAll: false, uploadDepts: ['Phòng Nhân Sự'],
         docDownload: { all: false, depts: ['Phòng Nhân Sự'] },
-        submissionCreate: { all: false, depts: ['Phòng Nhân Sự'] }, submissionDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        submissionCreate: true, submissionDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         contractCreate: { all: false, depts: ['Phòng Nhân Sự'] }, contractDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         meetingBook: true,
         meetingApprove: false, meetingCancel: true,
@@ -955,7 +955,7 @@ const DEFAULTS = {
         // Kiểm soát viên cần xem xuyên phòng ban để kiểm toán, nhưng chỉ tạo hồ sơ trong phòng mình.
         // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract.extraViewers
         // (xem ngay phía trên, "Việc D" 11/2026) — KHÔNG còn qua submissionView/contractView.all nữa.
-        submissionCreate: { all: false, depts: ['Phòng IT'] }, submissionDownload: { all: false, depts: [] },
+        submissionCreate: true, submissionDownload: { all: false, depts: [] },
         contractCreate: { all: false, depts: ['Phòng IT'] }, contractDownload: { all: false, depts: [] },
         meetingBook: true,
         meetingApprove: true, meetingCancel: true,
@@ -974,7 +974,7 @@ const DEFAULTS = {
         // Ban Giám Đốc cần toàn quyền xem & tạo trên mọi module để phê duyệt/giám sát toàn công ty.
         // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract.extraViewers
         // (xem ngay phía trên, "Việc D" 11/2026) — KHÔNG còn qua submissionView/contractView.all nữa.
-        submissionCreate: { all: true, depts: [] }, submissionDownload: { all: true, depts: [] },
+        submissionCreate: true, submissionDownload: { all: true, depts: [] },
         contractCreate: { all: true, depts: [] }, contractDownload: { all: true, depts: [] },
         meetingBook: true,
         meetingApprove: true, meetingCancel: true,

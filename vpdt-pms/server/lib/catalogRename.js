@@ -283,8 +283,9 @@ async function cascadePositionPairs(field, oldValue, newValue) {
 // — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2, cascadeStoreRename() trước đây bỏ sót hẳn users.perms:
 //  1) mảng chuỗi phẳng, tên quyền kết thúc bằng "Depts" (VD uploadDepts) — generic theo HẬU TỐ tên key,
 //     không cần whitelist tên cụ thể.
-//  2) object {all, depts:[...]} (contractCreate/officeCreate/carCreate/submissionCreate/meetingBookScope/
-//     operationOrderReceiptManageStore..., xem scopeAllows() ở lib/recordActions.js) — hàm này generic
+//  2) object {all, depts:[...]} (contractCreate/officeCreate/carCreate/operationOrderReceiptManageStore...,
+//     xem scopeAllows() ở lib/recordActions.js — meetingBook/submissionCreate đã rút gọn thành boolean
+//     đơn, không còn rơi vào nhánh này nữa, cùng lý do operationOrderReceiptManageHO dưới đây) — hàm này generic
 //     theo CẤU TRÚC (bất kỳ field nào có .depts là mảng), không cần biết tên field cụ thể, nên đợt "Tách
 //     quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị" (10/2026, operationOrderReceiptManage cũ → tách thành
 //     operationOrderReceiptManageHO boolean + operationOrderReceiptManageStore {all,depts[]}) tự động vẫn

@@ -1757,7 +1757,12 @@ function editSubmissionDraft(payload, user, item, appData, existingCollection) {
   // vẫn giữ nguyên phòng ban cũ — sai lệch vĩnh viễn giữa mã hiển thị và phòng ban thực tế.
   const regenerateCode = payload.dept !== undefined && payload.dept !== item.dept;
   if (regenerateCode) {
-    assertDeptScopeAllowed(user, user.perms?.submissionCreate, payload.dept);
+    // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module"): submissionCreate giờ là quyền PHẲNG
+    // (boolean) — không còn {all,depts} để đọc. Quyền sửa đã được gác ở check creator/admin phía trên
+    // (ownership-based, không cần submissionCreate), nên ở đây chỉ còn cần re-check ĐÚNG phòng ban mới
+    // là CHÍNH phòng ban của người sửa (forceOwnDept, khớp đúng luật lúc TẠO) — truyền scope rỗng {}
+    // để assertDeptScopeAllowed()/scopeAllows() dùng nhánh "cùng phòng là được" có sẵn.
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   for (const f of SUBMISSION_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];

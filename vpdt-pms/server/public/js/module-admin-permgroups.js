@@ -541,7 +541,7 @@ const PERM_KEY_VN_LABELS = {
   "reportEntryCreate": "Báo Cáo Định Kỳ — ✅ Nộp báo cáo (đúng phòng ban mình)",
   "reportManage": "Báo Cáo Định Kỳ — ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)",
   "reportViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Tab Báo Cáo (bỏ qua giới hạn theo quyền module)",
-  "submissionCreate.all": "Văn Bản Trình — Tạo mới",
+  "submissionCreate": "Văn Bản Trình — Tạo mới (tự khoá đúng phòng ban)",
   "submissionDownload.all": "Văn Bản Trình — Tải xuống",
   "taskDelete": "Biên Bản Họp & 📋 Công Việc — 🗑️ Xóa tất cả công việc",
   "taskDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải phiếu giao việc",
