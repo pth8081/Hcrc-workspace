@@ -112,8 +112,8 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
   ];
   test('resolveItPriceWholesaleStoreMixedApprovers(): rule của MARGIN_LT5 bước 1 KHÔNG lẫn sang DISCOUNT_GT5 bước 1 (cùng số bước, khác tier)', () => {
     const users = [duyetLt5, duyetGt5];
-    const approversLt5 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', users, [1]);
-    const approversGt5 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'DISCOUNT_GT5', 'Siêu Thị A', users, [1]);
+    const approversLt5 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', [], users, [1]);
+    const approversGt5 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'DISCOUNT_GT5', 'Siêu Thị A', [], users, [1]);
     assert.deepStrictEqual(approversLt5[1], [duyetLt5.username]);
     assert.deepStrictEqual(approversGt5[1], [duyetGt5.username]);
   });
@@ -128,6 +128,65 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     const item = wholesaleItem({ priceTier: 'DISCOUNT_GT5' });
     const { item: result } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: duyetGt5, comment: '', appData });
     assert.strictEqual(result.status, 'APPROVED');
+  });
+}
+
+// ===================== 7) "Ngành Hàng" (10/2026) — chiều lọc ĐỘC LẬP thứ 3, KHÔNG đụng cơ chế stores/dept =====================
+// Theo yêu cầu người dùng (chốt nguyên văn): "Bước khoá theo siêu thị và phòng ban vẫn để nguyên, thêm
+// cột nữa là theo ngành hảng ... trên form chọn ngành hảng của ai thì người đó phê duyệt" — kiểm tra
+// CẢ 2 mặt: (a) rule declared nganhHang rỗng vẫn áp dụng mọi ngành hàng (hành vi cũ, không hồi quy);
+// (b) 2 rule khác ngành hàng CÙNG bước -> CẢ HAI phải duyệt nếu đề xuất chọn CẢ HAI mã (AND/UNION đúng
+// như cơ chế "Siêu Thị Phụ Trách" đã có, không loại trừ nhau); (c) rule chỉ khớp ĐÚNG mã đã chọn trên đề
+// xuất — không chọn thì không phải duyệt.
+{
+  const truongThucPham = { username: 'truong.tp', name: 'Trưởng Ngành Thực Phẩm', dept: 'Siêu Thị A', perms: {}, active: true };
+  const truongHoaMyPham = { username: 'truong.hmp', name: 'Trưởng Ngành Hóa Mỹ Phẩm', dept: 'Siêu Thị A', perms: {}, active: true };
+  const rules = [
+    { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', username: truongThucPham.username, stores: [], nganhHang: ['NH-TP'] },
+    { id: 2, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', username: truongHoaMyPham.username, stores: [], nganhHang: ['NH-HMP'] }
+  ];
+  const appData = {
+    workflows: [WF_1STEP], users: [truongThucPham, truongHoaMyPham],
+    itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP' } },
+    itPriceWholesaleStoreMixedApprovalRules: rules
+  };
+
+  test('resolveItPriceWholesaleStoreMixedApprovers(): đề xuất chỉ chọn NH-TP -> chỉ Trưởng Ngành Thực Phẩm là approver (không có Trưởng Hóa Mỹ Phẩm)', () => {
+    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', ['NH-TP'], [truongThucPham, truongHoaMyPham], [1]);
+    assert.deepStrictEqual(approvers[1], [truongThucPham.username]);
+  });
+  test('resolveItPriceWholesaleStoreMixedApprovers(): đề xuất chọn CẢ NH-TP lẫn NH-HMP -> CẢ HAI người là approver (UNION, AND-duyệt)', () => {
+    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', ['NH-TP', 'NH-HMP'], [truongThucPham, truongHoaMyPham], [1]);
+    assert.deepStrictEqual(new Set(approvers[1]), new Set([truongThucPham.username, truongHoaMyPham.username]));
+  });
+  test('Trưởng Ngành Thực Phẩm duyệt được đề xuất chỉ chọn NH-TP -> COMPLETED (1 approver khớp)', () => {
+    const item = wholesaleItem({ nganhHang: ['NH-TP'] });
+    const { transition } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: truongThucPham, comment: '', appData });
+    assert.strictEqual(transition.type, 'COMPLETED');
+  });
+  test('Trưởng Ngành Hóa Mỹ Phẩm KHÔNG phải approver của đề xuất chỉ chọn NH-TP -> 403', () => {
+    const item = wholesaleItem({ nganhHang: ['NH-TP'] });
+    assertThrows(() => applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: truongHoaMyPham, comment: '', appData }),
+      403, null, 'Trưởng Hóa Mỹ Phẩm ngoài phạm vi ngành hàng');
+  });
+  test('Đề xuất chọn CẢ 2 ngành hàng -> 1 người duyệt KHÔNG đủ hoàn tất bước (còn thiếu người kia, AND)', () => {
+    const item = wholesaleItem({ nganhHang: ['NH-TP', 'NH-HMP'] });
+    const { transition, item: afterFirst } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: truongThucPham, comment: '', appData });
+    assert.strictEqual(transition.type, 'PARTIAL_APPROVE', 'bước 1 chưa đủ cả 2 người nên phải còn PENDING ở cùng bước');
+    const { transition: transition2 } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item: afterFirst, action: 'APPROVE', user: truongHoaMyPham, comment: '', appData });
+    assert.strictEqual(transition2.type, 'COMPLETED', 'đủ cả 2 người (AND) mới hoàn tất bước');
+  });
+}
+
+// rule mặc định (nganhHang rỗng) vẫn áp dụng mọi ngành hàng — không hồi quy hành vi cũ.
+{
+  const nguoiDuyetMacDinh = { username: 'duyet.macdinh', name: 'Người Duyệt Mặc Định', dept: 'Siêu Thị A', perms: {}, active: true };
+  const rules = [{ id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', username: nguoiDuyetMacDinh.username, stores: [], nganhHang: [] }];
+  test('rule nganhHang RỖNG ("Mặc định") vẫn áp dụng cho đề xuất chọn BẤT KỲ ngành hàng nào', () => {
+    const approvers1 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', ['NH-TP'], [nguoiDuyetMacDinh], [1]);
+    const approvers2 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', ['NH-KHAC'], [nguoiDuyetMacDinh], [1]);
+    assert.deepStrictEqual(approvers1[1], [nguoiDuyetMacDinh.username]);
+    assert.deepStrictEqual(approvers2[1], [nguoiDuyetMacDinh.username]);
   });
 }
 

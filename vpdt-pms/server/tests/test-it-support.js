@@ -93,6 +93,9 @@ const state = createMockState({
     { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'PERSON', jobTitle: null, username: 'tier_a_appr', stores: [] },
     { id: 2, tier: 'DISCOUNT_GT5', step: 1, mode: 'PERSON', jobTitle: null, username: 'tier_b_appr', stores: [] }
   ],
+  // "Ngành Hàng Áp Dụng" (đợt sau 9/2026) — Bán Buôn bắt buộc chọn >=1 ngành hàng hợp lệ đối chiếu
+  // appData.nganhHangCatalog — seed 1 giá trị để các kịch bản Bán Buôn dưới đây chọn được (gmsAdd()).
+  nganhHangCatalog: [{ id: 1, code: 'NH-TEST', name: 'Ngành Hàng Test', dept: '' }],
   workflows: [
     { id: 'wf-kd-price', steps: [{ order: 1, name: 'Trưởng Phòng Duyệt' }] },
     { id: 'wf-mkt-retail', steps: [{ order: 1, name: 'Duyệt Bán Lẻ' }] },
@@ -602,6 +605,7 @@ async function main() {
         // (setItPriceSubTab() ở trên đã tự render sẵn ô multi-select rỗng qua
         // applyItPriceStoreScopeUIForSubTab(), gmsAdd() mô phỏng đúng thao tác click chọn 1 gợi ý).
         gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
+        gmsAdd('itPriceNganhHangMultiSelect', 'NH-TEST');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing';
         document.getElementById('itPriceTier').value = 'MARGIN_LT5';
@@ -695,6 +699,7 @@ async function main() {
       const created = await page.evaluate(async () => {
         await switchTab('vanHanh'); setVanHanhSubTab('ITPRICE'); openItPriceCreateForm();
         gmsAdd('itPriceStoreScopeStoresMultiSelect', 'Siêu thị Demo');
+        gmsAdd('itPriceNganhHangMultiSelect', 'NH-TEST');
         document.getElementById('itPriceMasterListSelect').value = String(1);
         document.getElementById('itPriceReason').value = 'Điều chỉnh giá bán buôn Marketing — chiết khấu lớn';
         document.getElementById('itPriceTier').value = 'DISCOUNT_GT5';

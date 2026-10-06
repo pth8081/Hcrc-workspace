@@ -24,6 +24,27 @@ Báo Cáo — mục này mở rộng ra toàn bộ công việc nói chung):
   (không chỉ test mới viết) + tự kiểm tra CSP chuẩn nếu có sửa HTML/JS mới,
   xác nhận pass thật rồi mới báo cáo xong — không suy luận "chắc đúng" khi
   chưa chạy test xác nhận.
+- **Không làm "treo" nút thao tác trên giao diện** (10/2026, người dùng nhắc
+  lại sau đợt sửa lib/workflowEngine.js/routes/create.js dùng CHUNG cho
+  nhiều module — "chặn gửi phê duyệt khi thiếu người duyệt"): khi sửa 1 hàm/
+  route DÙNG CHUNG cho nhiều nút bấm (Gửi/Lưu/Duyệt...) ở nhiều module khác
+  nhau, phải tự hỏi "nút này ở MÀN NÀO cũng gọi tới đây — bấm xong còn phản
+  hồi đúng (thành công/báo lỗi rõ ràng) hay có thể bị treo/im lặng không
+  phản hồi gì không?". Cụ thể:
+  - Đổi hành vi 1 route/hàm dùng chung (VD từ "cảnh báo mềm" sang "chặn
+    cứng") phải RÀ LẠI toàn bộ nơi gọi tới nó (grep theo tên hàm/route),
+    không chỉ sửa đúng 1 chỗ rồi suy luận các chỗ khác "chắc vẫn ổn".
+  - Test bằng cách gọi THẬT route/hàm đó qua kịch bản giống người dùng bấm
+    nút thật (HTTP thật hoặc Playwright thật), không chỉ test đơn vị hàm
+    logic tách rời — nút bấm trên HTML phải nhận được phản hồi THẬT (thành
+    công/lỗi rõ ràng), không rơi vào trạng thái chờ vô thời hạn.
+  - Nếu đổi route dùng chung khiến 1 số fixture/test cũ (của module KHÁC)
+    không còn tạo được dữ liệu test như trước (VD thiếu cấu hình mà route
+    mới bắt buộc phải có), phải sửa fixture đó cho đúng chứ không bỏ qua
+    hay nới lỏng chặn mới — xem đợt vá thiếu người duyệt làm mẫu (test-
+    operation-order-po-race.js từng "tạo đơn hàng" được dù chưa cấu hình
+    approver, sau khi chặn cứng phải bổ sung cấu hình approver tối thiểu
+    vào fixture đó mới tạo lại được, không phải lỗi của bản vá).
 
 Quy tắc chi tiết hơn cho riêng tính năng Báo Cáo/Excel vẫn giữ nguyên ở mục
 ngay dưới (không bị thay thế, chỉ là 1 trường hợp cụ thể của quy tắc chung

@@ -9,19 +9,59 @@ const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 const employeeProfile = require('../lib/employeeProfile');
 const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
-const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS } = require('../lib/workflowEngine');
+const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS, findMissingApproverStep } = require('../lib/workflowEngine');
 const { insertSystemLog } = require('../lib/systemLogStore');
-// Nhãn hiển thị cho cảnh báo "chưa có người duyệt" generic (xem khối kiểm tra ngay trước res.json() ở
-// dưới) — CHỈ liệt kê module dept/tier-workflow tạo qua route này mà resolveWfConfig() trả đúng khuôn
-// {steps, approvers} (docs/carRegs/officeReqs/vppRegistrations/itPriceApprovals/budgetEntries).
-// operationOrders có khối riêng ở trên (thông điệp phân biệt STORE/HO), KHÔNG lặp lại ở đây.
-// paymentRequests dùng khuôn tương tự nhưng KHÔNG tạo qua route này (đi qua submitPaymentRequest() ở
-// lib/recordActions.js, route riêng POST /api/paymentRequests/:id/submit) — cảnh báo cho module đó xem
-// chú thích tại chỗ gọi submitPaymentRequest() ở routes/records.js.
-const GENERIC_APPROVER_WARNING_LABELS = {
+const { notifyUsers } = require('../lib/notifications');
+// Nhãn hiển thị cho việc CHẶN TẠO MỚI khi quy trình duyệt áp dụng cho hồ sơ có bước THIẾU người duyệt
+// hợp lệ (xem khối kiểm tra ở builderFn bên dưới) — CHỈ liệt kê module dept/tier-workflow tạo qua route
+// này mà resolveWfConfig() trả đúng khuôn {steps, approvers} (docs/carRegs/officeReqs/vppRegistrations/
+// itPriceApprovals/budgetEntries). operationOrders có khối riêng (thông điệp phân biệt STORE/HO), KHÔNG
+// lặp lại ở đây. paymentRequests dùng khuôn tương tự nhưng KHÔNG tạo qua route này (đi qua
+// submitPaymentRequest() ở lib/recordActions.js, route riêng POST /api/paymentRequests/:id/submit) —
+// chặn cho module đó xem chú thích tại chỗ gọi submitPaymentRequest() ở routes/records.js.
+//
+// LỊCH SỬ (10/2026, theo yêu cầu người dùng "chặn gửi nếu chưa có người duyệt, báo đúng bước nào, loại
+// trừ cả tài khoản disable/nghỉ việc"): TRƯỚC ĐÂY khối này chỉ CẢNH BÁO MỀM sau khi hồ sơ đã tạo xong
+// (`warning` trả kèm response, hồ sơ vẫn vào PENDING — chỉ admin bypass duyệt được cho tới khi admin tự
+// phát hiện cảnh báo/Nhật Ký Hệ Thống) — nay đổi hẳn sang CHẶN TẠO (throw CreateError TRƯỚC KHI ghi
+// xuống DB, xem builderFn) + tự động tạo thông báo trong app gửi MỌI admin, theo đúng phương án đã xác
+// nhận. findMissingApproverStep() (lib/workflowEngine.js) kiểm TOÀN BỘ các bước của quy trình (không chỉ
+// bước 1) và LỌC bỏ approver đã bị khoá tài khoản/nghỉ việc — vá luôn lỗ hổng cũ (guard CŨ của
+// paymentRequests dùng resolveWorkflowStepApprovers() không lọc active, xem chú thích ở hàm đó).
+const NO_APPROVER_BLOCK_LABELS = {
   docs: 'Tài liệu', carRegs: 'Đăng ký xe', officeReqs: 'Đề xuất',
-  vppRegistrations: 'Đăng ký VPP', itPriceApprovals: 'Đề xuất giá', budgetEntries: 'Bản ngân sách'
+  vppRegistrations: 'Đăng ký VPP', itPriceApprovals: 'Đề xuất giá', budgetEntries: 'Bản ngân sách',
+  // submissions/contracts (10/2026, mở rộng đủ 10/10 module qua workflowEngine.js tạo được qua route
+  // này — contractsSignedFile KHÔNG tạo qua đây, xem uploadContractSignedFile() ở lib/recordActions.js
+  // cho bản vá tương ứng) — resolveWfConfig() của 2 module này tính approvers từ "Nhóm Phê Duyệt Trình/
+  // HĐ" (effectiveApprovers snapshot lúc tạo, resolveSubmissionWorkflow()/resolveContractApprovalWorkflow()
+  // ở lib/workflowEngine.js) — findMissingApproverStep() dùng ĐÚNG hàm đó nên vẫn khớp chính xác.
+  submissions: 'Văn Bản Trình', contracts: 'Hợp đồng'
 };
+// Gửi thông báo trong app cho mọi admin ĐANG hoạt động (active !== false) + ghi Nhật Ký Hệ Thống, rồi
+// throw CreateError chặn hẳn việc tạo — dùng chung cho cả khối generic lẫn khối operationOrders riêng
+// bên dưới. KHÔNG await notifyUsers() trong lock chính (chỉ await trong try/catch riêng) để 1 lỗi ghi
+// thông báo (hiếm) không che mất lỗi CHÍNH (chưa có người duyệt) người dùng cần thấy.
+async function blockCreateForMissingApprover({ req, freshUser, moduleKey, record, appData, label, message }) {
+  const adminUsernames = (appData.users || []).filter(u => u?.perms?.admin && u.active !== false).map(u => u.username);
+  if (adminUsernames.length) {
+    try {
+      await notifyUsers(adminUsernames, 'NO_APPROVER',
+        `⚠️ Thiếu người duyệt: ${label}`,
+        `${freshUser.name} vừa bị chặn gửi "${label}" vì thiếu cấu hình người duyệt hợp lệ. ${message}`,
+        null);
+    } catch (notifyErr) {
+      console.error('notifyUsers (NO_APPROVER) lỗi:', notifyErr.message);
+    }
+  }
+  await insertSystemLog({
+    username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
+    module: moduleKey.toUpperCase(), actionType: 'CREATE_BLOCKED_NO_APPROVER',
+    targetObject: record.code || String(record.id || ''),
+    description: message, status: 'WARNING'
+  });
+  throw new CreateError(409, message);
+}
 // assertPayloadFileUrlsOwnedByUser() — vá lỗ hổng giả mạo quyền sở hữu file (rà soát bảo mật 9/2026,
 // mức Cao): xem chú thích đầy đủ ở lib/uploadedFiles.js + sql/schema.sql (bảng UploadedFiles).
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
@@ -248,6 +288,34 @@ router.post('/:module', async (req, res) => {
     const builderFn = async (list) => {
       const record = validateAndPrepareCreate(moduleKey, req.body, freshUser, list, appData, trashedItems);
       await assertPayloadFileUrlsOwnedByUser(record, freshUser);
+      // Chặn TẠO MỚI nếu BẤT KỲ bước nào (không chỉ bước 1) của quy trình duyệt áp dụng cho hồ sơ này
+      // KHÔNG có ít nhất 1 người duyệt HỢP LỆ (đã loại tài khoản bị khoá/nghỉ việc) — xem
+      // NO_APPROVER_BLOCK_LABELS/blockCreateForMissingApprover() ở đầu file cho lịch sử/lý do đổi từ
+      // cảnh báo mềm sang chặn cứng. Operation Orders có khối riêng bên dưới (thông điệp STORE/HO khác
+      // nhau) nên loại trừ ở đây để không chạy 2 lần.
+      if (NO_APPROVER_BLOCK_LABELS[moduleKey]) {
+        const wfConfig = WORKFLOW_MODULE_CONFIGS[moduleKey];
+        const missing = wfConfig ? findMissingApproverStep(moduleKey, record, appData) : null;
+        if (missing) {
+          const label = NO_APPROVER_BLOCK_LABELS[moduleKey];
+          const stepLabel = `Bước ${missing.order} (${missing.name})`;
+          const message = `Không thể gửi "${label}" vì ${stepLabel} của quy trình duyệt chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc). Vui lòng liên hệ Quản Trị Viên cấu hình lại quy trình duyệt trước khi gửi.`;
+          await blockCreateForMissingApprover({ req, freshUser, moduleKey, record, appData, label, message });
+        }
+      }
+      // operationOrders — khối RIÊNG (thông điệp phân biệt Đặt Hàng Tại Siêu Thị/HO, khớp đúng tinh thần
+      // 2 bản vá lịch sử ở trên) nhưng CÙNG hành vi: chặn cứng + thông báo admin thay vì chỉ cảnh báo mềm
+      // sau khi đã tạo xong.
+      if (moduleKey === 'operationOrders') {
+        const missing = findMissingApproverStep('operationOrders', record, appData);
+        if (missing) {
+          const stepLabel = `Bước ${missing.order} (${missing.name})`;
+          const message = record.orderLocationType === 'STORE'
+            ? `Không thể gửi đơn hàng "${record.title}" vì chưa có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepLabel} của mức giá trị hiện tại (hoặc người được chọn đã bị khoá tài khoản/nghỉ việc). Vui lòng liên hệ Quản Trị Viên cấu hình lại Người Duyệt trước khi gửi.`
+            : `Không thể gửi đơn hàng "${record.title}" vì ${stepLabel} của mức giá trị hiện tại (Đặt Hàng Tại HO) chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc). Vui lòng liên hệ Quản Trị Viên cấu hình lại Người Duyệt trước khi gửi.`;
+          await blockCreateForMissingApprover({ req, freshUser, moduleKey: 'operationOrders', record, appData, label: 'Đơn hàng Vận Hành', message });
+        }
+      }
       // LỖI ĐÃ VÁ (rà soát chuyên sâu vòng 2, 9/2026, phát hiện #7 cụm Truyền Thông Nội Bộ/Đào Tạo):
       // pageCount THẬT của tài liệu PDF (mẫu số "phải xem hết mọi trang mới được thi") tính lại ở SERVER
       // ngay từ chính tệp vừa tải lên (đọc bằng pdf-lib), KHÔNG tin payload.pageCount người xem tự khai
@@ -457,74 +525,13 @@ router.post('/:module', async (req, res) => {
       });
     }
 
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Trung bình): việc lọc approver theo đúng siêu thị
-    // của đơn "Đặt Hàng Tại Siêu Thị" (nay tra từ appData.operationOrderStoreMixedApprovalRules — "Quy
-    // Trình Hỗn Hợp", xem lib/workflowEngine.js resolveOperationOrderStoreMixedApprovers(), đã thay hẳn
-    // cơ chế cũ filterOperationOrderStoreApprovers()) có thể vô tình lọc RỖNG danh sách duyệt bước 1 nếu
-    // admin cấu hình người/chức danh cho bước đó nhưng KHÔNG ai/dòng nào khớp đúng siêu thị vừa đặt hàng
-    // (VD quên khai siêu thị đó vào "Siêu Thị Phụ Trách") — hồ sơ vẫn tạo được, rơi vào PENDING, nhưng
-    // KHÔNG một người duyệt "thường" nào thấy được
-    // để xử lý (chỉ admin bypass mới duyệt được, xem applyWorkflowAction()) — im lặng "treo" vô thời hạn
-    // nếu admin không tình cờ phát hiện. Vá bằng cách CẢNH BÁO NGAY khi tạo (không chặn tạo — hồ sơ vẫn
-    // hợp lệ, admin vẫn duyệt được bình thường): trả kèm `warning` cho người tạo thấy ngay + ghi 1 dòng
-    // Nhật Ký Hệ Thống mức WARNING để admin tra cứu được kể cả khi bỏ lỡ alert lúc tạo.
-    //
-    // PHÁT HIỆN BỔ SUNG (đợt audit chuyên sâu 12 cụm, mức Trung bình): bản vá đầu chỉ kiểm ĐÚNG BƯỚC
-    // HIỆN TẠI (record.currentStep — luôn = 1 lúc vừa tạo), nên 1 quy trình 2-3 bước mà admin quên cấu
-    // hình người duyệt cho bước 2/3 vẫn im lặng như cũ: đơn chạy bình thường qua bước 1 rồi mới treo ở
-    // bước sau, lúc đó người tạo đã quên hẳn đơn này. Nay quét TẤT CẢ các bước của quy trình áp dụng.
-    //
-    // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #9): bản vá trên CHỈ kiểm đơn
-    // STORE (record.orderLocationType === 'STORE') — đơn HO (thuần theo tier giá trị, KHÔNG có mixed
-    // rules) với tier đã chọn mẫu nhưng approvers[step] rỗng vẫn treo vĩnh viễn không hề cảnh báo, vì
-    // resolveOperationOrderWorkflow() (lib/workflowEngine.js) xử lý được cả 2 loại như nhau — không có lý
-    // do gì để giới hạn cảnh báo chỉ cho STORE. Bỏ điều kiện orderLocationType, áp dụng cho CẢ HO lẫn STORE.
-    let warning = null;
-    if (moduleKey === 'operationOrders') {
-      const resolved = WORKFLOW_MODULE_CONFIGS.operationOrders.resolveWfConfig(record, appData);
-      const emptySteps = (resolved?.steps || []).filter(s => !((resolved?.approvers?.[s.order]) || []).length);
-      if (emptySteps.length) {
-        const stepsLabel = emptySteps.map(s => `Bước ${s.order}${s.name ? ` (${s.name})` : ''}`).join(', ');
-        warning = record.orderLocationType === 'STORE'
-          ? `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepsLabel} của mức giá trị hiện tại — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`
-          : `Đơn hàng "${record.title}" đã tạo thành công nhưng CHƯA có người duyệt nào được cấu hình ở ${stepsLabel} của mức giá trị hiện tại (Đặt Hàng Tại HO) — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
-        await insertSystemLog({
-          username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
-          module: 'OPERATION_ORDER', actionType: 'CREATE_NO_APPROVER_WARNING',
-          targetObject: record.code || String(record.id),
-          description: warning, status: 'WARNING'
-        });
-      }
-    }
+    // Kiểm tra "chưa có người duyệt" (operationOrders + 6 module dept/tier-workflow khác) giờ CHẶN CỨNG
+    // ngay trong builderFn ở trên (TRƯỚC khi ghi xuống DB — xem NO_APPROVER_BLOCK_LABELS/
+    // blockCreateForMissingApprover() đầu file), không còn là cảnh báo mềm sau khi đã tạo xong như trước
+    // (10/2026, theo yêu cầu người dùng). record ở đây LUÔN đã qua được lớp chặn đó nếu module thuộc diện
+    // kiểm tra, nên không cần làm gì thêm ở đây nữa.
 
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Cao — phát hiện #2 "Vận Hành/Mua Hàng/Đăng Ký Xe"):
-    // cảnh báo "chưa có người duyệt" ở trên CHỈ áp dụng cho operationOrders — 6 module dept-workflow khác
-    // cũng tạo qua route này (docs/carRegs/officeReqs/vppRegistrations/itPriceApprovals/budgetEntries) có
-    // thể rơi vào ĐÚNG tình huống approvers[bước] rỗng (dept/tier chưa cấu hình, hoặc phòng ban vừa đổi
-    // tên/xoá) mà không hề cảnh báo — hồ sơ vào PENDING, "kẹt" vô thời hạn không ai thấy để duyệt (chỉ
-    // admin bypass mới duyệt được) cho tới khi admin tình cờ phát hiện. Đăng Ký Xe là ví dụ cụ thể đã xác
-    // nhận qua audit: dept chưa khai carDeptWorkflows -> phiếu xe không ai duyệt được, không 1 dòng log
-    // nào. Dùng chung 1 khối kiểm tra generic (KHÁC operationOrders — giữ nguyên thông điệp phân biệt
-    // STORE/HO ở khối trên vì người dùng đã quen).
-    if (!warning && GENERIC_APPROVER_WARNING_LABELS[moduleKey]) {
-      const cfg = WORKFLOW_MODULE_CONFIGS[moduleKey];
-      const resolved = cfg ? cfg.resolveWfConfig(record, appData) : null;
-      const emptySteps = (resolved?.steps || []).filter(s => !((resolved?.approvers?.[s.order]) || []).length);
-      if (emptySteps.length) {
-        const stepsLabel = emptySteps.map(s => `Bước ${s.order}${s.name ? ` (${s.name})` : ''}`).join(', ');
-        const label = GENERIC_APPROVER_WARNING_LABELS[moduleKey];
-        const identifier = record.code || record.title || String(record.id);
-        warning = `${label} "${identifier}" đã tạo thành công nhưng CHƯA có người duyệt nào được cấu hình ở ${stepsLabel} — vui lòng báo Quản Trị Viên cấu hình lại Người Duyệt (chỉ Admin duyệt được cho tới khi cấu hình đúng).`;
-        await insertSystemLog({
-          username: freshUser.username, fullName: freshUser.name, ipAddress: req.ip || '',
-          module: moduleKey.toUpperCase(), actionType: 'CREATE_NO_APPROVER_WARNING',
-          targetObject: record.code || String(record.id),
-          description: warning, status: 'WARNING'
-        });
-      }
-    }
-
-    res.json({ ok: true, item: record, warning });
+    res.json({ ok: true, item: record });
   } catch (err) {
     if (err instanceof CreateError) return res.status(err.status).json({ error: err.message });
     // In đủ err.stack (trước đây chỉ err.message) — lỗi không mong đợi (không phải CreateError/HttpError)

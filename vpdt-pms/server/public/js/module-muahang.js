@@ -982,6 +982,12 @@ async function submitMhItPriceApproval(e) {
   }
   alert('✅ Đã gửi đề xuất duyệt giá thành công!');
   resetMhItPriceForm();
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng "tạo xong phải thoát ra vào lại mới thấy"): thiếu dòng
+  // render này — DB.itPriceApprovals đã có bản ghi mới (unshift ở trên) nhưng bảng #mhItPriceTableBody
+  // vẫn hiện snapshot CŨ cho tới khi rời tab rồi vào lại (enterMuaHangItPriceForm() mới tự gọi
+  // renderMhItPriceList()) hoặc đăng xuất/đăng nhập lại. Mirror ĐÚNG renderItPriceApprovals() đã gọi ở
+  // nhánh sinh đôi submitItPriceApproval() (module-itsupport-price.js) cho cùng collection này.
+  renderMhItPriceList();
 }
 
 // "🔍 Xem Quy Trình" cho form Bán Lẻ (Mua Hàng, 10/2026) — mirror ĐÚNG nhánh RETAIL của

@@ -1021,6 +1021,17 @@ function renderItPriceWholesaleMixedApprovalSection() {
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
         : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi siêu thị</span>`;
+      // "Ngành Hàng Phụ Trách" (10/2026) — ĐỘC LẬP với storesLabel ở trên (xem chú thích đầy đủ ở
+      // defaults.js::itPriceWholesaleStoreMixedApprovalRules): hiện tên ngành hàng (tra theo code trong
+      // DB.nganhHangCatalog) thay vì mã thô cho dễ đọc; mã mồ côi (danh mục đã xoá/đổi code) vẫn hiện
+      // nguyên mã kèm cảnh báo, không âm thầm biến mất khỏi màn cấu hình.
+      const hasNganhHang = !!(row.nganhHang && row.nganhHang.length);
+      const nganhHangLabel = hasNganhHang
+        ? row.nganhHang.map(code => {
+            const n = (DB.nganhHangCatalog || []).find(x => x.code === code);
+            return n ? escapeHtml(n.name) : `<span class="text-red-600">${escapeHtml(code)} (đã xoá khỏi danh mục)</span>`;
+          }).join(', ')
+        : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi ngành hàng</span>`;
       return `
         <tr class="border-b${hasStores ? ' bg-amber-50' : ''}">
           <td class="p-2 border"><span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[11px] font-bold">Bước ${row.step}</span></td>
@@ -1029,13 +1040,14 @@ function renderItPriceWholesaleMixedApprovalSection() {
             : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
           <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}${matchBadge}</td>
           <td class="p-2 border text-xs">${storesLabel}</td>
+          <td class="p-2 border text-xs bg-emerald-50/30">${nganhHangLabel}</td>
           <td class="p-2 border text-center whitespace-nowrap">
             <button type="button" data-op="editItPriceWholesaleMixedApprovalRule" data-arg0="${row.id}" class="text-indigo-600 text-[11px] font-bold hover:underline mr-2">✏️ Sửa</button>
             <button type="button" data-op="deleteItPriceWholesaleMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button>
           </td>
         </tr>
       `;
-    }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào cho mức "${escapeHtml(itPriceTierLabel(currentTier))}" — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào cho mức "${escapeHtml(itPriceTierLabel(currentTier))}" — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
   }
 
   populateItPriceWholesaleStepOptions(currentTier);
@@ -1048,9 +1060,21 @@ function renderItPriceWholesaleMixedApprovalSection() {
     placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
     emptyText: 'Mặc định — mọi siêu thị.'
   });
+  renderMultiSelectDropdown('ipmaNewNganhHangPicker', itPriceWholesaleNganhHangPickerOptions(), editingRule ? (editingRule.nganhHang || []) : [], {
+    placeholder: '🔍 Tìm ngành hàng (để trống = mặc định mọi ngành hàng)...',
+    emptyText: 'Mặc định — mọi ngành hàng.',
+    chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
+  });
 
   onItPriceWholesaleMixedApprovalNewModeChange();
   updateItPriceWholesaleMixedApprovalFormSubmitUI();
+}
+// Nguồn gợi ý cho ô "Ngành Hàng Phụ Trách" ở màn cấu hình — KHÁC itPriceNganhHangOptionsForCurrentDept()
+// (module-itsupport-price.js, lọc theo dept người đề xuất): đây là màn ADMIN cấu hình chung cho mọi
+// phòng ban, nên hiện TOÀN BỘ danh mục (không lọc dept), kèm tên phòng ban trong ngoặc nếu mã đó CHỈ
+// dùng cho 1 phòng ban cụ thể, để admin dễ phân biệt khi gán.
+function itPriceWholesaleNganhHangPickerOptions() {
+  return (DB.nganhHangCatalog || []).map(n => ({ value: n.code, label: n.dept ? `${n.name} (${n.dept})` : n.name }));
 }
 
 function onItPriceWholesaleMixedApprovalNewModeChange() {
@@ -1083,6 +1107,11 @@ function editItPriceWholesaleMixedApprovalRule(id) {
     placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
     emptyText: 'Mặc định — mọi siêu thị.'
   });
+  renderMultiSelectDropdown('ipmaNewNganhHangPicker', itPriceWholesaleNganhHangPickerOptions(), rule.nganhHang || [], {
+    placeholder: '🔍 Tìm ngành hàng (để trống = mặc định mọi ngành hàng)...',
+    emptyText: 'Mặc định — mọi ngành hàng.',
+    chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
+  });
   updateItPriceWholesaleMixedApprovalFormSubmitUI();
   document.getElementById('itPriceMixedApprovalSection')?.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
@@ -1094,6 +1123,11 @@ function cancelEditItPriceWholesaleMixedApprovalRule() {
   renderMultiSelectDropdown('ipmaNewStoresPicker', DB.stores || [], [], {
     placeholder: '🔍 Tìm siêu thị (để trống = mặc định mọi siêu thị)...',
     emptyText: 'Mặc định — mọi siêu thị.'
+  });
+  renderMultiSelectDropdown('ipmaNewNganhHangPicker', itPriceWholesaleNganhHangPickerOptions(), [], {
+    placeholder: '🔍 Tìm ngành hàng (để trống = mặc định mọi ngành hàng)...',
+    emptyText: 'Mặc định — mọi ngành hàng.',
+    chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
   });
   updateItPriceWholesaleMixedApprovalFormSubmitUI();
 }
@@ -1110,6 +1144,7 @@ async function addItPriceWholesaleMixedApprovalRule() {
   const step = Number(document.getElementById('ipmaNewStep')?.value);
   const mode = document.getElementById('ipmaNewMode')?.value === 'PERSON' ? 'PERSON' : 'JOBTITLE';
   const stores = getMultiSelectValues('ipmaNewStoresPicker');
+  const nganhHang = getMultiSelectValues('ipmaNewNganhHangPicker');
   if (!step || step < 1) return alert('Chưa chọn Bước hợp lệ.');
 
   let jobTitle = null, username = null;
@@ -1138,8 +1173,8 @@ async function addItPriceWholesaleMixedApprovalRule() {
   const id = isEdit ? editingItPriceWholesaleMixedApprovalRuleId : (Math.max(0, ...(DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id)) + 1);
   const snapshot = JSON.parse(JSON.stringify(DB.itPriceWholesaleStoreMixedApprovalRules || []));
   DB.itPriceWholesaleStoreMixedApprovalRules = isEdit
-    ? (DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier, step, mode, jobTitle, username, stores } : r)
-    : [...(DB.itPriceWholesaleStoreMixedApprovalRules || []), { id, tier, step, mode, jobTitle, username, stores }];
+    ? (DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier, step, mode, jobTitle, username, stores, nganhHang } : r)
+    : [...(DB.itPriceWholesaleStoreMixedApprovalRules || []), { id, tier, step, mode, jobTitle, username, stores, nganhHang }];
   if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules')) {
     DB.itPriceWholesaleStoreMixedApprovalRules = snapshot;
     renderItPriceWholesaleMixedApprovalSection();
@@ -1147,7 +1182,7 @@ async function addItPriceWholesaleMixedApprovalRule() {
   }
   logSystemAction(
     'CONFIG', isEdit ? 'UPDATE_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE' : 'ADD_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE',
-    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng QT Giá Bán Buôn (Siêu Thị) [${id}] — Mức "${itPriceTierLabel(tier)}", Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng QT Giá Bán Buôn (Siêu Thị) [${id}] — Mức "${itPriceTierLabel(tier)}", Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}, ngành hàng: ${nganhHang.length ? nganhHang.join(', ') : 'Mặc định (mọi ngành hàng)'}`,
     'SUCCESS', String(id)
   );
 
@@ -1181,5 +1216,102 @@ async function deleteItPriceWholesaleMixedApprovalRule(id) {
   }
   logSystemAction('CONFIG', 'DELETE_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE', `Xoá dòng QT Giá Bán Buôn (Siêu Thị) [${id}]`, 'SUCCESS', String(id));
   renderItPriceWholesaleMixedApprovalSection();
+}
+
+// ===== "🏷️ Danh Mục Ngành Hàng" (10/2026, theo yêu cầu người dùng) — CÙNG KHUÔN renderMeetingRoomCatalogList()
+// (module-phonghop.js, {id,name,short}) nhưng 3 field {id,code,name,dept} — xem chú thích đầy đủ ở
+// defaults.js::nganhHangCatalog/lib/objectCatalogImport.js::nganhHangCatalog. Nguồn cho ô "Ngành Hàng Áp
+// Dụng" (module-itsupport-price.js) + cột "Ngành Hàng Phụ Trách" (renderItPriceWholesaleMixedApprovalSection()
+// ở trên) — SỬA/XOÁ ở đây cascade NGAY LẬP TỨC tới 2 nơi dùng đó vì cả 2 đều tra theo code qua
+// DB.nganhHangCatalog mỗi lần vẽ lại (không snapshot tên tại thời điểm chọn).
+function renderNganhHangCatalogList() {
+  const wrap = document.getElementById('nganhHangCatalogListWrap');
+  if (!wrap) return;
+  const deptSel = document.getElementById('nganhHangCatalogDept');
+  if (deptSel && deptSel.options.length <= 1) {
+    deptSel.innerHTML = '<option value="">-- Dùng chung mọi phòng ban --</option>' +
+      (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  }
+  const items = DB.nganhHangCatalog || [];
+  if (!items.length) {
+    wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có ngành hàng nào trong danh mục.</div>`;
+    return;
+  }
+  wrap.innerHTML = renderObjectCatalogBulkBarHtml('nganhHangCatalog', 'div') + items.map(n => `
+    <div class="bg-white p-2.5 rounded border flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center gap-2">
+        ${renderObjectCatalogBulkCheckboxHtml('nganhHangCatalog', n.id)}
+        <div>
+          <span class="font-bold text-slate-800 text-xs">${escapeHtml(n.code)} — ${escapeHtml(n.name)}</span>
+          <div class="text-[11px] text-gray-500 mt-0.5">${n.dept ? `Phòng ban: ${escapeHtml(n.dept)}` : 'Dùng chung mọi phòng ban'}</div>
+        </div>
+      </div>
+      <div class="space-x-2">
+        <button type="button" data-op="editNganhHangCatalogItem" data-arg0="${n.id}" class="text-blue-600 hover:text-blue-800 text-xs font-bold">✏️ Sửa</button>
+        <button type="button" data-op="deleteNganhHangCatalogItem" data-arg0="${n.id}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xóa</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function saveNganhHangCatalogItem() {
+  const code = document.getElementById('nganhHangCatalogCode').value.trim();
+  const name = document.getElementById('nganhHangCatalogName').value.trim();
+  const dept = document.getElementById('nganhHangCatalogDept').value || '';
+  if (!code) return alert('Vui lòng nhập mã ngành hàng!');
+  if (!name) return alert('Vui lòng nhập tên ngành hàng!');
+  if ((DB.nganhHangCatalog || []).some(n => n.code === code)) return alert('Mã ngành hàng này đã có trong danh mục!');
+  const prevList = (DB.nganhHangCatalog || []).map(n => ({ ...n }));
+  const nextId = (Math.max(0, ...(DB.nganhHangCatalog || []).map(n => n.id)) || 0) + 1;
+  DB.nganhHangCatalog = [...(DB.nganhHangCatalog || []), { id: nextId, code, name, dept }];
+  const saved = await syncStorage('nganhHangCatalog');
+  if (!saved) { DB.nganhHangCatalog = prevList; return; }
+  logSystemAction('CONFIG', 'ADD_NGANH_HANG', `Thêm ngành hàng vào Danh Mục Ngành Hàng [${code} — ${name}]`, 'SUCCESS', code);
+  document.getElementById('nganhHangCatalogCode').value = '';
+  document.getElementById('nganhHangCatalogName').value = '';
+  document.getElementById('nganhHangCatalogDept').value = '';
+  renderNganhHangCatalogList();
+}
+
+async function editNganhHangCatalogItem(id) {
+  const n = (DB.nganhHangCatalog || []).find(x => x.id === id);
+  if (!n) return;
+  const newCode = prompt('Mã Ngành Hàng:', n.code);
+  if (newCode === null) return;
+  const trimmedCode = newCode.trim();
+  if (!trimmedCode) return alert('⛔ Mã ngành hàng không được để trống.');
+  const newName = prompt('Tên Ngành Hàng:', n.name);
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) return alert('⛔ Tên ngành hàng không được để trống.');
+  const newDept = prompt('Phòng Ban Áp Dụng (để trống = dùng chung mọi phòng ban):', n.dept || '');
+  if (newDept === null) return;
+  const trimmedDept = newDept.trim();
+  if (trimmedCode === n.code && trimmedName === n.name && trimmedDept === (n.dept || '')) return;
+  if (DB.nganhHangCatalog.some(x => x.id !== id && x.code === trimmedCode)) return alert('⛔ Mã ngành hàng này đã có trong danh mục!');
+
+  const snapshot = DB.nganhHangCatalog.map(x => ({ ...x }));
+  DB.nganhHangCatalog = DB.nganhHangCatalog.map(x => (x.id === id ? { ...x, code: trimmedCode, name: trimmedName, dept: trimmedDept } : x));
+  const saved = await syncStorage('nganhHangCatalog');
+  if (!saved) { DB.nganhHangCatalog = snapshot; renderNganhHangCatalogList(); return; }
+  logSystemAction('CONFIG', 'EDIT_NGANH_HANG', `Sửa ngành hàng [${n.code}] → [${trimmedCode} — ${trimmedName}]`, 'SUCCESS', trimmedCode);
+  renderNganhHangCatalogList();
+}
+
+// Xoá KHÔNG cascade xoá/sửa các mã đã chọn sẵn ở itPriceApprovals.nganhHang (hồ sơ cũ)/
+// itPriceWholesaleStoreMixedApprovalRules[].nganhHang (dòng cấu hình cũ) — cùng đánh đổi
+// deleteMeetingRoomCatalogItem() (hồ sơ/cấu hình cũ giữ nguyên mã cũ, chỉ không còn chọn được mã này cho
+// hồ sơ/dòng cấu hình MỚI); 2 nơi dùng đều tự hiện cảnh báo rõ khi tra không thấy mã còn tồn tại trong
+// danh mục (xem renderItPriceWholesaleMixedApprovalSection() ở trên).
+async function deleteNganhHangCatalogItem(id) {
+  const item = (DB.nganhHangCatalog || []).find(n => n.id === id);
+  if (!item) return;
+  if (!confirm(`Xoá ngành hàng "${item.code} — ${item.name}" khỏi Danh Mục Ngành Hàng? Đề xuất/dòng cấu hình đã chọn mã này trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mã này nữa.`)) return;
+  const prevList = (DB.nganhHangCatalog || []).map(n => ({ ...n }));
+  DB.nganhHangCatalog = (DB.nganhHangCatalog || []).filter(n => n.id !== id);
+  const saved = await syncStorage('nganhHangCatalog');
+  if (!saved) { DB.nganhHangCatalog = prevList; return; }
+  logSystemAction('CONFIG', 'DELETE_NGANH_HANG', `Xoá ngành hàng [${item.code} — ${item.name}]`, 'SUCCESS', item.code);
+  renderNganhHangCatalogList();
 }
 

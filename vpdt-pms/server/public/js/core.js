@@ -3107,6 +3107,42 @@ function isApproverInItPriceTierWorkflowMap(wfTierMap, username) {
   return Object.values(wfTierMap).some(cfg => isApproverForDeptWorkflow(cfg, username));
 }
 
+// LỖI ĐÃ VÁ (10/2026, demo "Ngành Hàng" nhiều người duyệt): isApproverInItPriceTierWorkflowMap() ở trên
+// CHỈ quét approvers{} TĨNH khai báo trực tiếp trong itPriceTierWorkflows[tier] — người CHỈ được gán
+// duyệt qua Quy Trình Hỗn Hợp (itPriceWholesaleStoreMixedApprovalRules, lọc thêm theo Siêu Thị/Ngành
+// Hàng, xem computeItPriceWholesaleStoreMixedApproversClient() ở trên) KHÔNG có mặt trong approvers{}
+// tĩnh đó nên bị bỏ sót — canAccessApprovalHub()/canAccessVanHanhItPriceNav()/canAccessOperationModule()
+// chặn cứng switchTab() (alert + return sớm, section/table KHÔNG BAO GIỜ được render) dù GET /api/data +
+// getMyPendingApprovals() đã trả đúng hồ sơ cho họ (lớp dữ liệu không có lỗi, chỉ riêng cổng vào tab).
+// Quét BLANKET (không ràng buộc theo 1 siêu thị/ngành hàng/mức cụ thể — mục đích chỉ để biết "có khả
+// năng là approver ở ĐÂU ĐÓ" dùng cấp quyền vào tab, không phải xét đúng cho 1 hồ sơ, cùng triết lý nới
+// quyền như isApproverInWorkflowMap()/isApproverForDeptWorkflow() ở trên).
+function isApproverInItPriceWholesaleMixedRules(username) {
+  if (!username) return false;
+  const user = (DB.users || []).find(u => u && u.username === username && u.active !== false);
+  if (!user) return false;
+  return (DB.itPriceWholesaleStoreMixedApprovalRules || []).some(rule => {
+    if (!rule) return false;
+    if (rule.mode === 'PERSON') return rule.username === username;
+    return !!rule.jobTitle && user.jobTitle === rule.jobTitle;
+  });
+}
+
+// Đối xứng isApproverInItPriceWholesaleMixedRules() ở trên nhưng cho operationOrderStoreMixedApprovalRules
+// (Vận Hành > Đặt Hàng Tại Siêu Thị) — CÙNG lỗi/CÙNG cách vá, người CHỈ được gán duyệt qua rule hỗn hợp
+// (PERSON/JOBTITLE) không giữ bất kỳ quyền operationOrder* nào khác sẽ bị canAccessOperationModule() chặn
+// cứng khỏi module Vận Hành.
+function isApproverInOperationOrderStoreMixedRules(username) {
+  if (!username) return false;
+  const user = (DB.users || []).find(u => u && u.username === username && u.active !== false);
+  if (!user) return false;
+  return (DB.operationOrderStoreMixedApprovalRules || []).some(rule => {
+    if (!rule) return false;
+    if (rule.mode === 'PERSON') return rule.username === username;
+    return !!rule.jobTitle && user.jobTitle === rule.jobTitle;
+  });
+}
+
 // Điểm CHUNG duy nhất mà mọi nơi hiển thị/kiểm quyền của 1 hồ sơ itPriceApprovals CỤ THỂ nên gọi, thay
 // vì tự branch resolveItPriceDeptWorkflowConfigClient()/resolveItPriceTierWorkflowConfigClient() rải
 // rác — MIRROR ĐÚNG nhánh trong resolveWfConfig() (lib/workflowEngine.js, mục B): WHOLESALE tra theo
@@ -3126,7 +3162,7 @@ function resolveItPriceWorkflowConfigForItemClient(p) {
       workflowId: tierCfg ? tierCfg.workflowId : null,
       tierConfigMissing: !tierCfg,
       steps: baseWf.steps,
-      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.dept, baseWf.steps.map(s => s.order))
+      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.dept, p.nganhHang, baseWf.steps.map(s => s.order))
     }, p);
   }
   const raw = resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
@@ -3219,14 +3255,29 @@ function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders) {
 // 1 điểm DUY NHẤT: lọc rule thêm theo ĐÚNG `priceTier` (Bán Buôn có 4 MỨC Margin/Chiết Khấu cố định, MỖI
 // MỨC quy trình/người duyệt riêng — nếu chỉ khớp theo số bước thì rule của 1 mức sẽ bị áp dụng nhầm sang
 // mức khác có cùng số thứ tự bước, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
-function computeItPriceWholesaleStoreMixedApproversClient(priceTier, storeDept, stepOrders) {
+//
+// "Ngành Hàng" (10/2026) — MIRROR ĐÚNG ruleMatchesItPriceWholesaleNganhHang()/
+// resolveItPriceWholesaleMixedApprovalRuleUsernames() phía server (lib/workflowEngine.js) — chiều lọc
+// ĐỘC LẬP thứ 3 (KHÔNG đụng resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() dùng chung với
+// operationOrders, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
+function ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang) {
+  const declared = Array.isArray(rule.nganhHang) ? rule.nganhHang : [];
+  if (!declared.length) return true;
+  const selected = Array.isArray(itemNganhHang) ? itemNganhHang : [];
+  return declared.some(code => selected.includes(code));
+}
+function resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(rule, storeDept, itemNganhHang) {
+  if (!ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang)) return [];
+  return resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept);
+}
+function computeItPriceWholesaleStoreMixedApproversClient(priceTier, storeDept, itemNganhHang, stepOrders) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (DB.itPriceWholesaleStoreMixedApprovalRules || [])
       .filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder))
       .forEach(r => {
-        resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(r, storeDept).forEach(u => usernames.add(u));
+        resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(r, storeDept, itemNganhHang).forEach(u => usernames.add(u));
       });
     approvers[stepOrder] = [...usernames];
   });
@@ -3912,6 +3963,10 @@ function canAccessApprovalHub(user) {
   if (isMemberOfApprovalGroupsArray(DB.contractApprovalGroups, user.username)) return true;
   if (isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)) return true;
   if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)) return true;
+  // LỖI ĐÃ VÁ (10/2026, demo "Ngành Hàng" nhiều người duyệt) — xem chú thích đầy đủ ở định nghĩa
+  // isApproverInItPriceWholesaleMixedRules()/isApproverInOperationOrderStoreMixedRules() ở trên.
+  if (isApproverInItPriceWholesaleMixedRules(user.username)) return true;
+  if (isApproverInOperationOrderStoreMixedRules(user.username)) return true;
   if (isMemberOfAnyExtraApprovalGroup(user, EXTRA_APPROVAL_MODULE_KEYS_CLIENT)) return true;
   return false;
 }
@@ -4837,6 +4892,10 @@ async function initDatabase(loggingInUser, opts) {
     // ở trên, đọc lại y hệt để tránh đúng lỗi "mất dữ liệu sau F5" đã vá cho dòng trên.
     DB.itPriceWholesaleStoreMixedApprovalRules = Array.isArray(data.itPriceWholesaleStoreMixedApprovalRules)
       ? data.itPriceWholesaleStoreMixedApprovalRules : [];
+    // nganhHangCatalog ("Danh Mục Ngành Hàng", đợt sau) — danh mục cho "Ngành Hàng Áp Dụng" (form Bán
+    // Buôn) + "Ngành Hàng Phụ Trách" (cấu hình rule ở trên) — ĐÚNG khuôn lặp lại y hệt dòng trên, tránh
+    // cùng lỗi "mất dữ liệu sau F5"/catalog luôn rỗng nếu bỏ sót dòng đọc lại này.
+    DB.nganhHangCatalog = Array.isArray(data.nganhHangCatalog) ? data.nganhHangCatalog : [];
     // DB.operationStoreOpenDeptWorkflows/DB.operationRepairDeptWorkflows ĐÃ XOÁ khỏi đây (yêu cầu người
     // dùng — 2 luồng "Siêu Thị" không có bước phê duyệt nào ở module Vận Hành cả, xem chú thích ở
     // WF_MODULE_CONFIG, module-workflow.js) — OPERATION_KIND_META.wfMap() (module-vanhanh.js) đã tự
@@ -5249,6 +5308,22 @@ const OBJECT_CATALOG_EXCEL_CONFIG = {
       if (e.id != null) merged.id = e.id;
       return merged;
     }
+  },
+  // "🏷️ Danh Mục Ngành Hàng" (10/2026) — matchKey 'code' (KHÔNG phải 'name', xem chú thích đầy đủ ở
+  // defaults.js::nganhHangCatalog/lib/objectCatalogImport.js::nganhHangCatalog) — Nhập Excel gộp theo
+  // ĐÚNG mã, không tạo trùng khi admin chỉ sửa tên hiển thị.
+  nganhHangCatalog: {
+    label: 'Ngành Hàng',
+    dataKey: 'nganhHangCatalog',
+    matchKey: 'code',
+    idField: 'id',
+    renderFn: 'renderNganhHangCatalogList',
+    columns: [
+      { header: 'Mã Ngành Hàng', key: 'code', type: 'text', required: true },
+      { header: 'Tên Ngành Hàng', key: 'name', type: 'text', required: true },
+      { header: 'Phòng Ban Áp Dụng', key: 'dept', type: 'text' }
+    ],
+    beforeMerge: objectCatalogKeepIdMerge
   },
   // Ngày là khoá duy nhất tự nhiên (submitHacHoliday() đã chặn trùng ngày) -> matchKey 'date'.
   publicHolidays: {
@@ -5675,6 +5750,7 @@ const OBJECT_CATALOG_BULK_CONFIG = {
   storeJobTitles: { dbKey: 'storeJobTitles', idField: 'label', kindLabel: 'chức danh siêu thị', labelFn: t => t.label, renderFn: 'renderStoreJobTitleList' },
   sensitiveKeywords: { dbKey: 'sensitiveKeywords', idField: 'id', kindLabel: 'từ khoá nhạy cảm', labelFn: k => k.term, renderFn: 'renderSensitiveKeywordList' },
   jobTitleGradeDefaults: { dbKey: 'jobTitleGradeDefaults', idField: 'jobTitle', kindLabel: 'cấu hình cấp bậc mặc định', labelFn: r => r.jobTitle, renderFn: 'renderJobTitleGradeDefaultList' },
+  nganhHangCatalog: { dbKey: 'nganhHangCatalog', idField: 'id', kindLabel: 'ngành hàng', labelFn: n => `${n.code} — ${n.name}`, renderFn: 'renderNganhHangCatalogList' },
   // meetingRooms: có thêm bước dò lịch sắp tới còn dùng phòng TRƯỚC khi xoá (mirror đúng
   // deleteMeetingRoomCatalogItem() đơn lẻ, module-phonghop.js) — gộp cảnh báo cho CẢ LƯỢT qua preDeleteWarningFn.
   meetingRooms: { dbKey: 'meetingRooms', idField: 'id', kindLabel: 'phòng họp', labelFn: r => r.name, renderFn: 'renderMeetingRoomCatalogList',
@@ -9861,6 +9937,9 @@ function canAccessVanHanhItPriceNav(user) {
   if (user.perms?.admin) return true;
   return !!user.perms?.itPriceProposeCreateWholesale
     || isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)
+    // LỖI ĐÃ VÁ (10/2026, demo "Ngành Hàng" nhiều người duyệt) — xem chú thích đầy đủ ở định nghĩa
+    // isApproverInItPriceWholesaleMixedRules().
+    || isApproverInItPriceWholesaleMixedRules(user.username)
     || canApproveItPriceEmergencyRejectClient(user, 'WHOLESALE')
     || isMemberOfAnyExtraApprovalGroup(user, ['ITPRICE_WHOLESALE']);
 }
@@ -9891,6 +9970,11 @@ function canAccessOperationModule(user) {
   // thấy nút Duyệt/Từ chối/Từ Chối Khẩn tại "Phê Duyệt Giá Bán Buôn" (context='APPROVAL').
   if (isApproverInItPriceTierWorkflowMap(DB.itPriceTierWorkflows, user.username)
     || canApproveItPriceEmergencyRejectClient(user, 'WHOLESALE')) return true;
+  // LỖI ĐÃ VÁ (10/2026, demo "Ngành Hàng" nhiều người duyệt) — người CHỈ được gán duyệt qua Quy Trình
+  // Hỗn Hợp (itPriceWholesaleStoreMixedApprovalRules hoặc operationOrderStoreMixedApprovalRules, PERSON/
+  // JOBTITLE) không có mặt trong itPriceTierWorkflows tĩnh ở trên — xem chú thích đầy đủ ở định nghĩa
+  // isApproverInItPriceWholesaleMixedRules()/isApproverInOperationOrderStoreMixedRules().
+  if (isApproverInItPriceWholesaleMixedRules(user.username) || isApproverInOperationOrderStoreMixedRules(user.username)) return true;
   // LỖI ĐÃ VÁ (rà soát chuyên sâu 4-agent song song, 9/2026): thiếu nhánh này — người CHỈ thuộc "Nhóm
   // Phê Duyệt Cuối" OPERATION_ORDER_STORE/OPERATION_ORDER_HO không vào được module Vận Hành để xem lại
   // hồ sơ đơn hàng đã xử lý, dù GET /api/data đã trả đúng dữ liệu cho họ từ Fix#1 (đợt vá trước).

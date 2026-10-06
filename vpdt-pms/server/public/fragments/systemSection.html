@@ -337,6 +337,10 @@
             <th class="p-2 border">Kiểu</th>
             <th class="p-2 border">Người / Chức Danh</th>
             <th class="p-2 border">Siêu Thị Phụ Trách</th>
+            <!-- "Ngành Hàng Phụ Trách" (10/2026, theo yêu cầu người dùng) — cột ĐỘC LẬP với "Siêu Thị Phụ
+                 Trách" (KHÔNG thay thế, không đụng ý nghĩa/cách khớp của cột đó), xem chú thích đầy đủ ở
+                 defaults.js::itPriceWholesaleStoreMixedApprovalRules. -->
+            <th class="p-2 border bg-emerald-50">🏷️ Ngành Hàng Phụ Trách</th>
             <th class="p-2 border text-center">Thao Tác</th>
           </tr>
         </thead>
@@ -361,6 +365,7 @@
               </div>
             </td>
             <td class="p-2 border align-top"><div id="ipmaNewStoresPicker" class="min-w-[220px]"></div></td>
+            <td class="p-2 border align-top bg-emerald-50/40"><div id="ipmaNewNganhHangPicker" class="min-w-[220px]"></div></td>
             <td class="p-2 border align-top text-center whitespace-nowrap">
               <button type="button" id="ipmaSubmitBtn" data-op="addItPriceWholesaleMixedApprovalRule" class="bg-indigo-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Dòng</button>
               <button type="button" id="ipmaCancelEditBtn" data-op="cancelEditItPriceWholesaleMixedApprovalRule" class="hidden mt-1 text-gray-600 text-[11px] font-bold hover:underline">✕ Huỷ Sửa</button>
@@ -1424,6 +1429,40 @@
           </div>
           <div id="meetingRoomCatalogListWrap" class="max-h-56 overflow-y-auto space-y-1.5"></div>
           <div id="objectCatalogExcelTools_meetingRoomCatalog"></div>
+        </div>
+      </details>
+
+      <!-- "🏷️ Danh Mục Ngành Hàng" (10/2026, theo yêu cầu người dùng) — nguồn dữ liệu cho ô "Ngành Hàng
+           Áp Dụng" (form đề xuất Bán Buôn, module-itsupport-price.js) + cột "Ngành Hàng Phụ Trách" (màn
+           "🏪 QT Giá Bán Buôn (Siêu Thị)" ở trên, module-workflow.js) — xem chú thích đầy đủ ở
+           defaults.js::nganhHangCatalog. renderNganhHangCatalogList()/saveNganhHangCatalogItem()/
+           editNganhHangCatalogItem()/deleteNganhHangCatalogItem() sống ở module-workflow.js — cùng cụm
+           lazy-load "workflow" (đã nạp sẵn cùng "hethong-tabs"). -->
+      <details class="filter-box-details bg-emerald-50 p-4 rounded border border-emerald-200 space-y-3">
+        <summary class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="font-bold text-gray-800 text-sm flex items-center gap-1"><span class="filter-box-chevron text-gray-400">▸</span><span>🏷️ Danh Mục Ngành Hàng</span></span>
+          <span class="text-[11px] text-gray-500">Nguồn cho ô "Ngành Hàng Áp Dụng" (đề xuất Bán Buôn) và cột "Ngành Hàng Phụ Trách" (cấu hình người duyệt).</span>
+        </summary>
+        <div class="p-0 pt-2 space-y-3">
+          <div id="nganhHangCatalogAdminForm" class="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Mã Ngành Hàng</label>
+              <input id="nganhHangCatalogCode" placeholder="VD: NH-TP" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Ngành Hàng</label>
+              <input id="nganhHangCatalogName" placeholder="VD: Thực Phẩm Tươi Sống" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1 text-xs">Phòng Ban Áp Dụng</label>
+              <select id="nganhHangCatalogDept" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="">-- Dùng chung mọi phòng ban --</option>
+              </select>
+            </div>
+            <button type="button" data-op="saveNganhHangCatalogItem" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Thêm</button>
+          </div>
+          <div id="nganhHangCatalogListWrap" class="max-h-56 overflow-y-auto space-y-1.5"></div>
+          <div id="objectCatalogExcelTools_nganhHangCatalog"></div>
         </div>
       </details>
 

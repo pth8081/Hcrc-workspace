@@ -43,7 +43,9 @@ const state = createMockState({
   users: [STAFF_MKT, ADMIN, STAFF_NOPERM],
   itPriceMasterLists: [MASTER_LIST],
   priceZones: [], // cố ý RỖNG — đúng kịch bản lỗi người dùng báo cáo
-  stores: ['Siêu thị Demo']
+  stores: ['Siêu thị Demo'],
+  // nganhHangCatalog ("Ngành Hàng Áp Dụng", đợt sau) — Bán Buôn bắt buộc chọn >=1 ngành hàng hợp lệ.
+  nganhHangCatalog: [{ id: 1, code: 'NH-TEST', name: 'Ngành Hàng Test', dept: '' }]
 });
 
 async function loginAs(page, user) {
@@ -221,6 +223,12 @@ async function main() {
       assertEqual(created.expiryMode, 'PERMANENT', 'Bán Lẻ tự gắn expiryMode=PERMANENT (không hỏi lại)');
       const today = new Date().toLocaleDateString('en-CA');
       assertEqual(created.effectiveDate, today, 'Bán Lẻ tự gắn effectiveDate=hôm nay (không hỏi lại)');
+
+      // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng "tạo xong phải thoát ra vào lại mới thấy") — submitMhItPriceApproval()
+      // từng chỉ unshift vào DB.itPriceApprovals mà KHÔNG gọi lại renderMhItPriceList(), nên bảng
+      // #mhItPriceTableBody vẫn hiện snapshot CŨ ngay sau khi Gửi, phải rời tab rồi vào lại mới thấy.
+      const tableHtml = await page.evaluate(() => document.getElementById('mhItPriceTableBody')?.innerHTML || '');
+      assert(tableHtml.includes(created.code), 'Đề xuất vừa tạo PHẢI hiện NGAY trong bảng Phê Duyệt Giá Bán Lẻ, không cần rời tab/đăng nhập lại');
     });
 
     await run.run('Real click Gửi (Bán Buôn, Vận Hành, điền đủ trường): tạo thành công với đúng storeScope/ngày do người dùng chọn', async () => {
@@ -240,6 +248,11 @@ async function main() {
       await storeInput.type('Demo');
       await page.waitForTimeout(150);
       await page.click('#itPriceStoreScopeStoresMultiSelect [data-op="gmsAdd"]');
+      const nganhHangInput = await page.$('#itPriceNganhHangMultiSelect [data-pms-search]');
+      await nganhHangInput.click();
+      await nganhHangInput.type('Test');
+      await page.waitForTimeout(150);
+      await page.click('#itPriceNganhHangMultiSelect [data-op="gmsAdd"]');
       await seedItPricePendingFile(page, 'wholesale-ok');
       await page.evaluate(() => { window.__alerts = []; });
       await page.click('#itPriceCreateForm button[type="submit"]');

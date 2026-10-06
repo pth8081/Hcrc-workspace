@@ -182,6 +182,30 @@ const OBJECT_CATALOG_IMPORT_CONFIG = {
       { shiftCode: 'CA1', shiftName: 'Ca Sáng', startTime: '06:00', endTime: '14:00', breakMinutes: 30, isNightShift: false, standardHours: 7.5, isActive: true },
       { shiftCode: 'CA3', shiftName: 'Ca Đêm', startTime: '22:00', endTime: '06:00', breakMinutes: 30, isNightShift: true, standardHours: 7.5, isActive: true }
     ]
+  },
+  // "🏷️ Danh Mục Ngành Hàng" (10/2026, đợt "Ngành Hàng") — {id, code, name, dept} (module-workflow.js
+  // renderNganhHangCatalogList()), xem chú thích đầy đủ ở defaults.js::nganhHangCatalog. matchKey 'code'
+  // (KHÔNG phải 'name') vì code là khoá nghiệp vụ ổn định được itPriceApprovals.nganhHang/
+  // itPriceWholesaleStoreMixedApprovalRules[].nganhHang tham chiếu tới — Nhập Excel dùng code để
+  // gộp/cập nhật đúng dòng, không tạo trùng khi admin chỉ đổi tên hiển thị. 'dept' optional (type 'text',
+  // không dùng 'arrayRef' vì đây là 1 giá trị đơn, không phải danh sách) — để trống = dùng chung mọi
+  // phòng ban, không đối chiếu với danh mục phòng ban (giống cách 'dept' được validate ở nơi dùng thật,
+  // xem itPriceApprovals.extraValidate, lib/createValidation.js — CHỈ kiểm code tồn tại, không ép dept).
+  nganhHangCatalog: {
+    label: 'Danh Mục Ngành Hàng',
+    dataKey: 'nganhHangCatalog',
+    matchKey: 'code',
+    allow: isAdmin,
+    columns: [
+      { header: 'Mã Ngành Hàng', key: 'code', type: 'text', required: true, maxLength: 40, width: 18 },
+      { header: 'Tên Ngành Hàng', key: 'name', type: 'text', required: true, maxLength: 150, width: 34 },
+      { header: 'Phòng Ban Áp Dụng', key: 'dept', type: 'text', maxLength: 150, width: 24,
+        note: 'Để trống = dùng chung cho mọi phòng ban. Có giá trị = CHỈ hiện gợi ý cho đúng phòng ban đó lúc đề xuất.' }
+    ],
+    sampleRows: [
+      { code: 'NH-TP', name: 'Thực Phẩm Tươi Sống', dept: '' },
+      { code: 'NH-HMP', name: 'Hóa Mỹ Phẩm', dept: '' }
+    ]
   }
 };
 

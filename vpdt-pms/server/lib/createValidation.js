@@ -2215,6 +2215,25 @@ const CREATE_MODULE_CONFIGS = {
       }
       payload.storeScope = { mode: storeScopeMode, stores: storeScopeStores };
 
+      // "🏷️ Ngành Hàng Áp Dụng" (10/2026, theo yêu cầu người dùng) — CHỈ áp dụng Bán Buôn, cùng vị trí/
+      // cùng mức bắt buộc với storeScope ở trên nhưng HOÀN TOÀN ĐỘC LẬP (không liên quan gì tới siêu thị
+      // đề xuất) — xem chú thích đầy đủ ở defaults.js::nganhHangCatalog. Chỉ kiểm code có tồn tại trong
+      // danh mục hay không (KHÔNG ép lại đúng field `dept` của từng mã — `dept` trên danh mục chỉ dùng để
+      // LỌC GỢI Ý hiển thị phía client theo đúng phòng ban người đề xuất, không phải quy tắc chặn cứng
+      // server, vì 1 mã "dùng chung" hợp lệ cho mọi phòng ban và người dùng có thể đổi phòng ban sau khi
+      // danh mục đã gán — không muốn biến 1 đề xuất cũ thành không hợp lệ chỉ vì lý do đó).
+      let nganhHang = [];
+      if (priceType === 'WHOLESALE') {
+        const validCodes = new Set((appData?.nganhHangCatalog || []).map(n => String(n?.code || '')));
+        nganhHang = Array.isArray(payload.nganhHang)
+          ? [...new Set(payload.nganhHang.map(c => String(c || '').trim()).filter(Boolean))].filter(c => validCodes.has(c)).slice(0, 50)
+          : [];
+        if (!nganhHang.length) {
+          throw new CreateError(400, 'Vui lòng chọn ít nhất 1 ngành hàng áp dụng hợp lệ');
+        }
+      }
+      payload.nganhHang = nganhHang;
+
       const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
       const effectiveDate = String(payload.effectiveDate || '').trim();
       if (!DATE_RE.test(effectiveDate)) throw new CreateError(400, 'Vui lòng chọn Ngày Áp Dụng hợp lệ');

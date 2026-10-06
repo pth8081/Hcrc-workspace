@@ -746,7 +746,33 @@ const DEFAULTS = {
   // đúng các siêu thị liệt kê, không so dept) như operationOrderStoreMixedApprovalRules.
   // RETAIL (itPriceDeptWorkflows) KHÔNG đụng tới — đã tự đúng phạm vi theo phòng ban từ trước (mỗi dept
   // có cấu hình approver RIÊNG do admin tự gán, không có vấn đề "khớp toàn công ty" như WHOLESALE).
+  // THÊM field `nganhHang[]` (10/2026, theo yêu cầu người dùng "thêm ngành hàng để xác định trưởng phòng
+  // nào được phê duyệt"): CHIỀU LỌC ĐỘC LẬP THỨ 2, HOÀN TOÀN TÁCH BIỆT với `stores` — người dùng xác nhận
+  // rõ "bước khoá theo siêu thị và phòng ban vẫn để nguyên" (KHÔNG sửa ý nghĩa/cách khớp của `stores` dù
+  // nó đang khớp theo item.dept — phòng ban NỘI BỘ của người đề xuất — chứ không phải đúng field "Siêu
+  // Thị Đề Xuất" trên form; đây là hành vi đã có từ trước, giữ nguyên 100%). `nganhHang` rỗng = "Mặc định"
+  // (áp dụng MỌI ngành hàng); có giá trị = "Ngoại lệ" (chỉ áp dụng khi đề xuất có chọn ÍT NHẤT 1 trong các
+  // mã ngành hàng liệt kê — so GIAO, không cần khớp hết). 1 dòng CHỈ được tính là approver của đề xuất khi
+  // khớp CẢ 2 điều kiện `stores` VÀ `nganhHang` (AND giữa 2 chiều) — nhiều dòng cùng khớp thì HỢP (UNION)
+  // người duyệt lại như cũ (xem resolveItPriceWholesaleMixedApprovalRuleUsernames()/
+  // resolveItPriceWholesaleStoreMixedApprovers() ở lib/workflowEngine.js). Giá trị là mã (`code`) tham
+  // chiếu danh mục `nganhHangCatalog` ngay dưới đây — người đề xuất chọn ở field "🏷️ Ngành Hàng Áp Dụng"
+  // (payload.nganhHang, cũng mảng mã) trên form đề xuất Bán Buôn.
   itPriceWholesaleStoreMixedApprovalRules: [],
+  // "🏷️ Danh Mục Ngành Hàng" (10/2026, theo yêu cầu người dùng) — nguồn dữ liệu CHO CẢ 2 nơi dùng field
+  // `nganhHang` ở trên: ô "🏷️ Ngành Hàng Áp Dụng" (form đề xuất Bán Buôn, itPriceApprovals.nganhHang) VÀ
+  // cột "🏷️ Ngành Hàng Phụ Trách" (màn admin itPriceWholesaleStoreMixedApprovalRules.nganhHang). Quản lý
+  // qua engine "object catalog" dùng chung (lib/objectCatalogImport.js, Tải Mẫu/Nhập/Xuất Excel) + CRUD
+  // tay ở Hệ Thống > ⚙️ Quản Trị > 🗂️ Quản Lý Danh Mục (renderNganhHangCatalogList(), module-workflow.js).
+  // Mỗi phần tử: { id, code, name, dept }. `code` là KHOÁ NGHIỆP VỤ ỔN ĐỊNH (dùng để tham chiếu ở 2 nơi
+  // trên, KHÔNG đổi ngầm khi sửa `name` — khác hẳn `name`/`id` của phần lớn danh mục khác, cố ý để sửa tên
+  // hiển thị không làm "mồ côi" các đề xuất/dòng cấu hình đã lưu theo code cũ). `dept` RỖNG = ngành hàng
+  // DÙNG CHUNG cho MỌI phòng ban (hiện trong gợi ý chọn của tất cả); `dept` CÓ giá trị = CHỈ hiện cho đúng
+  // phòng ban đó (người đề xuất thuộc phòng ban khác không thấy mã này trong gợi ý — nhưng server validate
+  // CHỈ kiểm tra code có tồn tại trong danh mục hay không, KHÔNG ép lại đúng dept, vì màn cấu hình người
+  // duyệt không có khái niệm "dept của dòng cấu hình" để so — xem itPriceApprovals.extraValidate,
+  // lib/createValidation.js).
+  nganhHangCatalog: [],
   // Vận Hành > Đơn Hàng > "🔌 Cấu Hình API" — cấu hình đồng bộ ĐƠN HÀNG (operationOrders) ra hệ thống
   // ngoài "dsmart16" (job outbound, xem jobs/operationOrderApiSync.js). Cùng khuôn admin-config phẳng
   // với emailConfig (xác thực linh hoạt: Base URL + 1 header tuỳ chỉnh tên/giá trị, KHÔNG cố định kiểu

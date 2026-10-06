@@ -149,44 +149,43 @@ async function main() {
     resetRecords();
     systemLogEntries.length = 0;
     const r1 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ }), CREATOR_B);
-    check('Tạo đơn vẫn THÀNH CÔNG dù approver lọc rỗng (KHÔNG chặn tạo)', r1.status === 200, r1.body);
-    check('Response PHẢI kèm warning đúng nội dung "chưa có người duyệt"',
-      typeof r1.body?.warning === 'string' && /chưa có người duyệt/i.test(r1.body.warning), r1.body);
-    check('Phải ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING (CREATE_NO_APPROVER_WARNING)',
-      systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING' && systemLogEntries[0].actionType === 'CREATE_NO_APPROVER_WARNING',
+    check('Tạo đơn PHẢI bị CHẶN (409) khi approver lọc rỗng (hành vi MỚI, 10/2026: chặn cứng thay vì chỉ cảnh báo)', r1.status === 409, r1.body);
+    check('Lỗi trả về PHẢI nêu rõ "chưa có người duyệt"',
+      typeof r1.body?.error === 'string' && /chưa có người duyệt/i.test(r1.body.error), r1.body);
+    check('Đơn KHÔNG được ghi xuống DB khi bị chặn', RECORDS.operationOrders.length === 0, RECORDS.operationOrders);
+    check('Phải ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING (CREATE_BLOCKED_NO_APPROVER)',
+      systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING' && systemLogEntries[0].actionType === 'CREATE_BLOCKED_NO_APPROVER',
       systemLogEntries);
 
-    // ===== Kịch bản 2: đơn STORE của Siêu Thị A — approver gd.a khớp đúng dept -> KHÔNG warning. =====
+    // ===== Kịch bản 2: đơn STORE của Siêu Thị A — approver gd.a khớp đúng dept -> tạo được bình thường. =====
     resetRecords();
     systemLogEntries.length = 0;
     const gdACreator = { ...GD_A }; // gd.a tự tạo đơn cho chính siêu thị mình
     const r2 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ }), gdACreator);
-    check('Đơn Siêu Thị A (approver khớp dept) -> KHÔNG có warning',
-      r2.status === 200 && (r2.body?.warning === null || r2.body?.warning === undefined), r2.body);
+    check('Đơn Siêu Thị A (approver khớp dept) -> tạo thành công', r2.status === 200, r2.body);
     check('KHÔNG ghi Nhật Ký Hệ Thống nào khi approver hợp lệ', systemLogEntries.length === 0, systemLogEntries);
 
-    // ===== Kịch bản 3 (ĐÃ CẬP NHẬT, phát hiện #9): đơn HO — operationOrderHOTierWorkflows rỗng (chưa
-    // cấu hình workflowId nào cho tier LT100M) -> approvers[] rỗng -> PHẢI cảnh báo (KHÁC hành vi CŨ
-    // "HO không bao giờ warning"). =====
+    // ===== Kịch bản 3 (ĐÃ CẬP NHẬT, phát hiện #9 + nâng cấp 10/2026): đơn HO — operationOrderHOTierWorkflows
+    // rỗng (chưa cấu hình workflowId nào cho tier LT100M) -> approvers[] rỗng -> PHẢI bị CHẶN (KHÁC hành
+    // vi CŨ "HO không bao giờ warning"/"chỉ cảnh báo mềm"). =====
     resetRecords();
     systemLogEntries.length = 0;
     const r3 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ orderLocationType: 'HO' }), CREATOR_B);
-    check('LỖI ĐÃ VÁ: đơn HO thiếu người duyệt (tier chưa cấu hình workflowId) -> PHẢI có warning (KHÔNG còn miễn trừ HO)',
-      r3.status === 200 && typeof r3.body?.warning === 'string' && /chưa có người duyệt/i.test(r3.body.warning) && /HO/.test(r3.body.warning), r3.body);
+    check('LỖI ĐÃ VÁ: đơn HO thiếu người duyệt (tier chưa cấu hình workflowId) -> PHẢI bị CHẶN (KHÔNG còn miễn trừ HO)',
+      r3.status === 409 && typeof r3.body?.error === 'string' && /chưa có người duyệt/i.test(r3.body.error) && /HO/.test(r3.body.error), r3.body);
+    check('Đơn HO KHÔNG được tạo khi bị chặn', RECORDS.operationOrders.length === 0, RECORDS.operationOrders);
     check('Vẫn ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING cho đơn HO', systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING', systemLogEntries);
 
-    // ===== Kịch bản 3b: đơn HO ĐÃ cấu hình đủ người duyệt -> KHÔNG cảnh báo (tránh cảnh báo oan). =====
+    // ===== Kịch bản 3b: đơn HO ĐÃ cấu hình đủ người duyệt -> tạo bình thường (tránh chặn oan). =====
     resetRecords();
     systemLogEntries.length = 0;
     APP_DATA.operationOrderHOTierWorkflows.LT100M = { workflowId: 'WF_1STEP', approvers: { 1: [GD_A.username] } };
     const r3b = await api(server, 'POST', '/api/create/operationOrders', orderPayload({ orderLocationType: 'HO' }), CREATOR_B);
-    check('Đơn HO đã cấu hình đủ người duyệt -> KHÔNG cảnh báo oan',
-      r3b.status === 200 && (r3b.body?.warning === null || r3b.body?.warning === undefined), r3b.body);
+    check('Đơn HO đã cấu hình đủ người duyệt -> tạo thành công, không bị chặn oan', r3b.status === 200, r3b.body);
 
-    // ===== Kịch bản 4 (BỔ SUNG, đợt audit chuyên sâu 12 cụm — mức Trung bình): quy trình NHIỀU BƯỚC,
-    // bước 1 có người duyệt đầy đủ nhưng BƯỚC 2 chưa ai khớp. Bản vá đầu chỉ kiểm record.currentStep
-    // (luôn = 1 lúc vừa tạo) nên trường hợp này lọt qua im lặng: đơn duyệt xong bước 1 rồi mới treo ở
-    // bước 2, lúc đó người tạo đã quên hẳn đơn. Nay kiểm TẤT CẢ các bước của quy trình. =====
+    // ===== Kịch bản 4 (BỔ SUNG, đợt audit chuyên sâu 12 cụm — mức Trung bình, nâng cấp 10/2026): quy
+    // trình NHIỀU BƯỚC, bước 1 có người duyệt đầy đủ nhưng BƯỚC 2 chưa ai khớp — PHẢI bị CHẶN NGAY LÚC
+    // GỬI (không đợi duyệt xong bước 1 mới phát hiện bước 2 treo) vì kiểm TẤT CẢ các bước của quy trình. =====
     resetRecords();
     systemLogEntries.length = 0;
     APP_DATA.workflows.push({ id: 'WF_2STEP', steps: [{ order: 1, name: 'GĐ Siêu Thị' }, { order: 2, name: 'Quản Lý Vùng' }] });
@@ -196,14 +195,15 @@ async function main() {
       // KHÔNG có dòng nào cho bước 2 -> bước 2 không ai duyệt được.
     ];
     const r4 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({}), CREATOR_B);
-    check('LỖI ĐÃ VÁ: bước 1 có người duyệt nhưng BƯỚC 2 trống -> vẫn PHẢI cảnh báo (kiểm mọi bước, không chỉ bước hiện tại)',
-      r4.status === 200 && typeof r4.body?.warning === 'string' && /chưa có người duyệt/i.test(r4.body.warning), r4.body);
-    check('Cảnh báo nêu ĐÚNG bước đang thiếu người duyệt (Bước 2), không nêu nhầm bước 1',
-      typeof r4.body?.warning === 'string' && r4.body.warning.includes('Bước 2') && !r4.body.warning.includes('Bước 1'), r4.body?.warning);
+    check('LỖI ĐÃ VÁ: bước 1 có người duyệt nhưng BƯỚC 2 trống -> vẫn PHẢI bị CHẶN (kiểm mọi bước, không chỉ bước hiện tại)',
+      r4.status === 409 && typeof r4.body?.error === 'string' && /chưa có người duyệt/i.test(r4.body.error), r4.body);
+    check('Lỗi nêu ĐÚNG bước đang thiếu người duyệt (Bước 2), không nêu nhầm bước 1',
+      typeof r4.body?.error === 'string' && r4.body.error.includes('Bước 2') && !r4.body.error.includes('Bước 1'), r4.body?.error);
+    check('Đơn KHÔNG được tạo khi bị chặn ở bước 2', RECORDS.operationOrders.length === 0, RECORDS.operationOrders);
     check('Ghi đúng 1 dòng Nhật Ký Hệ Thống mức WARNING cho trường hợp thiếu người duyệt ở bước sau',
       systemLogEntries.length === 1 && systemLogEntries[0].status === 'WARNING', systemLogEntries);
 
-    // Bước 1 VÀ bước 2 đều có người -> không cảnh báo gì (tránh cảnh báo oan sau khi mở rộng phạm vi kiểm).
+    // Bước 1 VÀ bước 2 đều có người -> tạo thành công (tránh chặn oan sau khi mở rộng phạm vi kiểm).
     resetRecords();
     systemLogEntries.length = 0;
     APP_DATA.operationOrderStoreMixedApprovalRules = [
@@ -211,8 +211,7 @@ async function main() {
       { id: 2, step: 2, mode: 'PERSON', username: GD_A.username, stores: ['Siêu Thị B'] }
     ];
     const r5 = await api(server, 'POST', '/api/create/operationOrders', orderPayload({}), CREATOR_B);
-    check('Quy trình 2 bước đủ người duyệt cả 2 bước -> KHÔNG cảnh báo oan',
-      r5.status === 200 && (r5.body?.warning === null || r5.body?.warning === undefined), r5.body);
+    check('Quy trình 2 bước đủ người duyệt cả 2 bước -> tạo thành công, không chặn oan', r5.status === 200, r5.body);
   } finally {
     server.close();
   }

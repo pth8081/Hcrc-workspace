@@ -67,8 +67,19 @@ async function withFakeAppLock(lockKeyOrKeys, fn) {
 const DELAY_MS = 25;
 function yieldTurn() { return new Promise((resolve) => setTimeout(resolve, DELAY_MS)); }
 
+// Cấu hình Quy Trình Hỗn Hợp TỐI THIỂU (dòng PERSON mode KHÔNG khai "Siêu Thị Phụ Trách" -> áp dụng mọi
+// siêu thị) để đơn STORE tạo được bình thường — bài test này chỉ quan tâm race condition theo poNumber,
+// không liên quan gì tới approver, nhưng từ bản vá "chặn gửi khi thiếu người duyệt" (10/2026) mọi lần
+// tạo operationOrders đều phải có ít nhất 1 approver hợp lệ ở MỌI bước, nếu không fixture rỗng approvers
+// cũ (gây approvers[1]=[] luôn) sẽ khiến MỌI request ở đây bị chặn 409 trước khi tới được phần logic
+// khoá poNumber đang test — không phải lỗi thật của bản vá khoá poNumber.
 stubModule('lib/appData', {
-  getAllAppData: async () => ({ users: USERS }),
+  getAllAppData: async () => ({
+    users: USERS,
+    operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+    workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+    operationOrderStoreMixedApprovalRules: [{ id: 1, step: 1, mode: 'PERSON', username: ADMIN.username, stores: [] }]
+  }),
   withLockedAppDataValue: async (key, fn) => fn([])
 });
 stubModule('lib/recordStore', {

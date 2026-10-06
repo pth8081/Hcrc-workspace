@@ -93,6 +93,14 @@ const ADMIN_ONLY_KEYS = new Set([
   // operationOrderStoreTierWorkflows ở trên: không cho user thường tự ghi thẳng qua POST
   // /api/data/operationOrderStoreMixedApprovalRules và tự phong mình làm approver.
   'operationOrderStoreMixedApprovalRules',
+  // itPriceWholesaleStoreMixedApprovalRules: LỖI ĐÃ VÁ (phát hiện khi làm đợt "Ngành Hàng" 10/2026) —
+  // cùng bản chất/cùng khuôn operationOrderStoreMixedApprovalRules ở trên (cấu hình người duyệt "🏪 QT
+  // Giá Bán Buôn (Siêu Thị)") nhưng TRƯỚC ĐÂY BỊ BỎ SÓT hoàn toàn khỏi cả ADMIN_ONLY_KEYS lẫn
+  // NON_ADMIN_GATED_KEYS — route generic này KHÔNG có gate quyền nào cho key này, nghĩa là BẤT KỲ tài
+  // khoản đã đăng nhập nào cũng ghi đè được trực tiếp qua POST /api/data/itPriceWholesaleStoreMixedApprovalRules
+  // và tự phong mình (hoặc bất kỳ ai) làm người duyệt giá Bán Buôn của bất kỳ siêu thị/mức nào. Chặn admin-only
+  // ngay tại đây, không đợi sửa riêng.
+  'itPriceWholesaleStoreMixedApprovalRules',
   // itPriceDeptWorkflows: cấu hình người duyệt Phê Duyệt Giá (module Hỗ Trợ IT) theo phòng ban — cùng
   // khuôn carDeptWorkflows/vppDeptWorkflows/budgetDeptWorkflows, chỉ sửa được ở màn Quy Trình & Phê
   // Duyệt (admin), nhưng trước đây BỊ BỎ SÓT khỏi danh sách này: bất kỳ tài khoản đã đăng nhập nào cũng
@@ -235,6 +243,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // storeTypes (10/2026): map phân loại Siêu Thị/Cửa Hàng cho từng tên trong 'stores' — panel gán ngay
   // trong màn Quản Lý Danh Mục Siêu Thị (chỉ admin), cùng lý do khoá ghi như 'stores' ở trên.
   'storeTypes',
+  // nganhHangCatalog (10/2026, đợt "Ngành Hàng"): danh mục nguồn cho ô "🏷️ Ngành Hàng Áp Dụng" (form đề
+  // xuất Bán Buôn) + cột "🏷️ Ngành Hàng Phụ Trách" (màn cấu hình người duyệt) — panel CRUD/Excel chỉ hiện
+  // cho admin (Hệ Thống > ⚙️ Quản Trị > 🗂️ Quản Lý Danh Mục), cùng lý do khoá ghi như 'stores' ở trên.
+  'nganhHangCatalog',
   // depts/cats/licenseTypes/trainingCategories/contractTypeAbbrs: NỐT 5 danh mục còn lại của tab
   // "🗂️ Quản Lý Danh Mục" (chỉ hiện cho admin — cùng panel với stores/jobTitles/storeJobTitles vừa
   // khoá ở trên) nhưng vẫn BỊ BỎ SÓT khỏi danh sách này, nên bất kỳ tài khoản đã đăng nhập nào cũng

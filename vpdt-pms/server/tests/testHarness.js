@@ -67,7 +67,7 @@ function startStaticServer(preferredPort) {
 function createMockState(seed) {
   return Object.assign({
     depts: [], stores: [], cats: [], deptAbbrs: {}, jobTitles: [], permGroups: [], users: [],
-    itPriceMasterLists: [], itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, itPriceWholesaleStoreMixedApprovalRules: [], workflows: [],
+    itPriceMasterLists: [], itPriceDeptWorkflows: {}, itPriceTierWorkflows: {}, itPriceWholesaleStoreMixedApprovalRules: [], nganhHangCatalog: [], workflows: [],
     uniformPeriods: [], uniformIssuances: [], uniformStockAdjustments: [], uniformTransfers: [], uniformCatalog: [],
     itPriceApprovals: [], itSupportTickets: [], reportPeriods: [], reportEntries: [],
     // itTicketCategories: "Danh Mục" của #itTicketCategory (CORE_FIELD_MANIFEST.IT_TICKET, optionsKey) —
@@ -128,6 +128,10 @@ function buildAppDataForCreate(moduleKey, state) {
     // resolveItPriceWholesaleStoreMixedApprovers() (lib/workflowEngine.js) luôn nhận undefined ->
     // approvers[] rỗng cho MỌI đề xuất WHOLESALE, dù state có seed đúng rule nào cũng vô tác dụng.
     itPriceWholesaleStoreMixedApprovalRules: state.itPriceWholesaleStoreMixedApprovalRules,
+    // nganhHangCatalog ("Ngành Hàng Áp Dụng", đợt sau) — itPriceApprovals.extraValidate() đối chiếu
+    // payload.nganhHang (WHOLESALE) với danh mục hệ thống này — thiếu field này ở whitelist sẽ khiến MỌI
+    // đề xuất WHOLESALE bị chặn 400 "chưa chọn ngành hàng áp dụng hợp lệ" dù client đã chọn đúng.
+    nganhHangCatalog: state.nganhHangCatalog,
     // priceZones: "Vùng Giá Áp Dụng" (RETAIL, đợt sau) — itPriceApprovals.extraValidate() đối chiếu
     // payload.priceZone với danh mục hệ thống này (mirror routes/create.js: getAllAppData() thật LUÔN có
     // sẵn mọi key AppData, ở đây liệt kê tường minh những gì module cần).
