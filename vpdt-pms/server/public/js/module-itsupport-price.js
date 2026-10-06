@@ -800,6 +800,12 @@ function resetItPriceForm() {
   });
   applyItPriceStoreScopeUIForSubTab();
   checkItPriceMarginConsistency(); // itPricePendingFile vừa về null + itPriceTier vừa trắng -> tự ẩn cảnh báo cũ.
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_ITPRICE_WHOLESALE"> về lại option
+  // đầu tiên NHƯNG KHÔNG bắn sự kiện 'change' (hành vi chuẩn của form.reset()), nên
+  // onExtraApprovalLevelChange() không tự chạy lại, khiến khối checkbox "Phê Duyệt Thêm" GIỮ NGUYÊN lựa
+  // chọn CŨ. Gọi lại renderExtraApprovalMount() để dựng lại TOÀN BỘ khối về đúng trạng thái sạch.
+  renderExtraApprovalMount('ITPRICE_WHOLESALE', 'extraApprovalMount_ITPRICE_WHOLESALE');
 }
 
 // Thu gọn form "Đề Xuất Duyệt Giá Bán Buôn" (10/2026, Vận Hành) — LOẠI B: openItPriceCreateForm() tự

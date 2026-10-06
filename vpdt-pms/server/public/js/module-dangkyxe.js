@@ -130,6 +130,14 @@ function resetCarRegForm() {
   if (formEl) formEl.reset();
   resetCarRoutePoints();
   document.getElementById('carCode').value = generateCarCode();
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
+  // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_CAR"> về lại option đầu tiên
+  // NHƯNG KHÔNG bắn sự kiện 'change' (hành vi chuẩn của form.reset() với mọi trình duyệt) — nên
+  // onExtraApprovalLevelChange() không tự chạy lại, khiến khối checkbox "Phê Duyệt Thêm" GIỮ NGUYÊN lựa
+  // chọn CŨ (khớp cấp vừa bị đổi đi, không khớp cấp vừa reset về). Gọi lại renderExtraApprovalMount() để
+  // dựng lại TOÀN BỘ khối (dropdown + checkbox) về đúng trạng thái sạch — mirror ĐÚNG lời gọi ban đầu lúc
+  // mở form (module-dangkyxe.js, dòng gọi renderExtraApprovalMount('CAR', ...) khi mở tab/form).
+  renderExtraApprovalMount('CAR', 'extraApprovalMount_CAR');
 }
 
 // ============ Lộ Trình Di Chuyển nhiều điểm (thay 1 ô text tự do) ============
