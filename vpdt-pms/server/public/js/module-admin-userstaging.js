@@ -245,6 +245,7 @@ function resetUserForm() {
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
   document.getElementById('pCarCreate').checked = !!defaults.carCreate;
   document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
+  document.getElementById('pOfficeCreate').checked = !!defaults.officeCreate;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
   document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
@@ -314,7 +315,7 @@ function resetUserForm() {
     'pSubDownloadAll',
     'pContractDownloadAll',
     'pCarViewAll', 'pCarDownloadAll',
-    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
+    'pOfficeViewAll', 'pOfficeDownloadAll'
   ].forEach(id => {
     const cb = document.getElementById(id);
     if (cb) { cb.checked = false; }
@@ -510,7 +511,8 @@ function summarizeUserPerms(perms) {
   if (perms.meetingBook || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
   if (hasScope(perms.carView) || perms.carCreate) parts.push('🚗 Xe');
   if (perms.carDispatch) parts.push('🚘 Điều hành xe');
-  if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
+  // officeCreate (10/2026, "6-module"): giờ là quyền PHẲNG boolean — kiểm tra trực tiếp thay vì qua hasScope().
+  if ((hasScope(perms.officeView) || perms.officeCreate) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
   if (perms.internalNewsCreate || perms.internalRecruitmentCreate) parts.push('📣 Truyền thông (đăng bài)');

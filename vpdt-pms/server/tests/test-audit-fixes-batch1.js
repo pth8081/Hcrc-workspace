@@ -56,7 +56,10 @@ const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám 
 // carRegs trong đúng phòng ban mình (dept: 'Kinh Doanh', khớp PLAIN_KD.dept) nên vẫn cần carCreate:true
 // để không bị 403 ở extraValidate() mới (trước đây dù {all:false,depts:[]} vẫn qua được nhờ nhánh "cùng
 // phòng là được" sẵn có của scopeAllows(), không phụ thuộc giá trị carCreate).
-const PLAIN_KD = { username: 'plain_kd', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', perms: { carCreate: true, officeCreate: { all: false, depts: [] }, officeBuy: true }, active: true };
+// officeCreate (10/2026, "6-module"): tương tự carCreate — bỏ {all,depts}, chỉ còn 1 cờ phẳng. PLAIN_KD
+// tạo officeReqs trong đúng phòng ban mình nên vẫn cần officeCreate:true để không bị 403 ở extraValidate()
+// mới (trước đây dù {all:false,depts:[]} vẫn qua được nhờ nhánh "cùng phòng là được" của scopeAllows()).
+const PLAIN_KD = { username: 'plain_kd', name: 'Nhân Viên Kinh Doanh', dept: 'Kinh Doanh', perms: { carCreate: true, officeCreate: true, officeBuy: true }, active: true };
 // itServiceRenewalManage (10/2026, tách khỏi itManage): IT1 vẫn cần thấy được itServiceRenewals ở các
 // bài test Fix 3a/3b dưới đây — itManage một mình giờ chỉ còn nghĩa xử lý ticket itSupportTickets.
 const IT1 = { username: 'it1', name: 'Đội Hỗ Trợ IT', dept: 'IT', perms: { itManage: true, itServiceRenewalManage: true }, active: true };

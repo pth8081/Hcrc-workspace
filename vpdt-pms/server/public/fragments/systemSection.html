@@ -2020,6 +2020,15 @@
                 <input type="checkbox" id="pOfficeFix"> 🔧 Sửa Chữa
               </label>
             </div>
+            <!-- Làm gọn phân quyền Văn Phòng (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh
+                 hưởng trực tiếp đến quyền thanh toán): bỏ hẳn cột "Tạo mới" (officeCreate {all,depts})
+                 khỏi bảng theo phòng ban — thay bằng 1 công tắc phẳng DUY NHẤT ngay dưới đây, tự khoá
+                 đúng phòng ban người tạo (forceOwnDept, xem lib/createValidation.js +
+                 canManageOfficePayment() đã cập nhật tương ứng). Bảng phía dưới giờ chỉ còn 2 cột
+                 Xem/Tải xuống. -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pOfficeCreate"> ✅ Cho phép tạo đề xuất văn phòng (tự khoá đúng phòng ban của mình)
+            </label>
             <div class="max-h-64 overflow-y-auto overflow-x-auto">
               <table class="w-full text-[11px] border-collapse">
                 <thead class="sticky top-0 bg-white z-10">
@@ -2029,12 +2038,6 @@
                       <span class="block mb-0.5">Xem</span>
                       <label class="inline-flex items-center gap-1 cursor-pointer">
                         <input type="checkbox" id="pOfficeViewAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeViewAll" data-arg1="pOfficeViewDept"><span>ALL</span>
-                      </label>
-                    </th>
-                    <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">
-                      <span class="block mb-0.5">Tạo mới</span>
-                      <label class="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" id="pOfficeCreateAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeCreateAll" data-arg1="pOfficeCreateDept"><span>ALL</span>
                       </label>
                     </th>
                     <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">

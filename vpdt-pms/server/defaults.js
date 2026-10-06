@@ -916,11 +916,12 @@ const DEFAULTS = {
   // checklistTemplates/checklistSubmissions (module TOP-LEVEL "Checklist Đánh Giá Siêu Thị", xem
   // lib/checklist.js): cùng lý do — MIGRATED_COLLECTIONS (dbo.Records), KHÔNG seed ở đây.
 
-  // Phân quyền theo module (carView, officeView/Create) dùng dạng { all, depts }
+  // Phân quyền theo module (carView, officeView) dùng dạng { all, depts }
   // — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]);
   // phòng ban của chính người dùng luôn được phép mặc định dù không liệt kê ở đây. Riêng Phòng Họp
   // (meetingBook, 10/2026), Văn Bản Trình (submissionCreate, 10/2026), Hợp Đồng (contractCreate,
-  // 10/2026) và Đăng Ký Xe (carCreate, 10/2026, "6-module") đã rút gọn thành 1 quyền phẳng boolean duy
+  // 10/2026), Đăng Ký Xe (carCreate, 10/2026) và Văn Phòng (officeCreate, 10/2026, "6-module") đã rút
+  // gọn thành 1 quyền phẳng boolean duy
   // nhất — tự khoá đúng phòng ban, không còn dạng {all,depts}.
   // startDate (Đào Tạo Đợt 6, "ngày vào làm việc") — mốc DUY NHẤT để tính các hạn Giai Đoạn 1/2/3 của Đào
   // Tạo Tân Binh (onboardingProgress, xem lib/createValidation.js/lib/recordActions.js). Rỗng mặc định
@@ -943,7 +944,7 @@ const DEFAULTS = {
         meetingBook: true,
         meetingApprove: false, meetingCancel: true,
         carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: true, carDownload: { all: false, depts: ['Phòng Nhân Sự'] },
-        officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: { all: false, depts: ['Phòng Nhân Sự'] }, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: true, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         officeBuy: true, officeFix: true
       }
     },
@@ -962,7 +963,7 @@ const DEFAULTS = {
         meetingApprove: true, meetingCancel: true,
         internalPostApprove: true,
         carView: { all: true, depts: [] }, carCreate: true, carDownload: { all: false, depts: [] },
-        officeView: { all: true, depts: [] }, officeCreate: { all: false, depts: ['Phòng IT'] }, officeDownload: { all: false, depts: [] },
+        officeView: { all: true, depts: [] }, officeCreate: true, officeDownload: { all: false, depts: [] },
         officeBuy: true, officeFix: true
       }
     },
@@ -981,7 +982,7 @@ const DEFAULTS = {
         meetingApprove: true, meetingCancel: true,
         internalPostApprove: true, paymentManage: true,
         carView: { all: true, depts: [] }, carCreate: true, carDownload: { all: true, depts: [] },
-        officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] }, officeDownload: { all: true, depts: [] },
+        officeView: { all: true, depts: [] }, officeCreate: true, officeDownload: { all: true, depts: [] },
         officeBuy: true, officeFix: true
       }
     }

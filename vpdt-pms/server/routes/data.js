@@ -1160,9 +1160,11 @@ async function loadCarRegsScoped(user, data) {
 }
 
 // Bước 8g — officeReqs: canViewOfficeReq() (lib/recordViewScope.js) cùng khuôn carRegs (4 nhánh: admin,
-// chính người TẠO — Creator, KHÔNG forceOwnDept nên có thể tạo hộ phòng ban khác, xem lib/createValidation.js
-// officeReqs; scopeAllows(officeView, dept): phòng ban mình + officeView.all + officeView.depts[]; đang
-// là người duyệt theo *DeptWorkflows) — chỉ khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
+// chính người TẠO — Creator (từ 10/2026, "6-module": officeCreate giờ forceOwnDept nên item.dept luôn
+// khớp phòng ban thật của Creator — lượt tải riêng theo Creator bên dưới vẫn giữ để an toàn/nhất quán
+// khuôn chung với carRegs, không còn ý nghĩa "vá khoảng trống tạo hộ phòng ban khác" như trước nữa, xem
+// lib/createValidation.js officeReqs); scopeAllows(officeView, dept): phòng ban mình + officeView.all +
+// officeView.depts[]; đang là người duyệt theo *DeptWorkflows) — chỉ khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
 // (officeBuyDeptWorkflows cho MUA_BAN, officeFixDeptWorkflows cho SUA_CHUA, xem
 // MODULE_CONFIGS.officeReqs.resolveWfConfig() ở lib/workflowEngine.js) — quét CẢ 2 map khi tính tập
 // phòng ban approver (có thể "thừa" nếu user chỉ duyệt 1 trong 2 loại ở 1 phòng ban, nhưng
@@ -1197,8 +1199,9 @@ async function loadOfficeReqsScoped(user, data) {
     const items = await getForCollectionByDeptCached('officeReqs', dept);
     for (const r of items) byId.set(r.id, r);
   }));
-  // Creator: officeReqs KHÔNG forceOwnDept (có thể tạo hộ phòng ban khác nếu officeCreate scope cho
-  // phép) — item.dept lúc đó có thể KHÁC phòng ban thật của người tạo, cần 1 lượt riêng theo Creator.
+  // Creator: giữ 1 lượt tải riêng theo Creator để an toàn/nhất quán khuôn chung với carRegs (từ 10/2026,
+  // "6-module", officeCreate đã forceOwnDept nên item.dept giờ luôn khớp phòng ban thật của Creator —
+  // khác trước đây khi officeCreate còn scope {all,depts} cho phép tạo hộ phòng ban khác).
   const ownCreatedItems = await getForCollectionByColumnCached('officeReqs', 'Creator', user?.username);
   for (const r of ownCreatedItems) byId.set(r.id, r);
   return [...byId.values()];

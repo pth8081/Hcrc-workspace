@@ -1214,9 +1214,25 @@ const CREATE_MODULE_CONFIGS = {
   },
   officeReqs: {
     dbKey: 'officeReqs',
-    getScope: (user) => user.perms?.officeCreate,
+    // Làm gọn phân quyền Văn Phòng (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng trực
+    // tiếp đến quyền thanh toán): bỏ hẳn officeCreate {all,depts} — giờ là 1 quyền phẳng (boolean) DUY
+    // NHẤT, luôn tự khoá đúng phòng ban của chính người tạo (forceOwnDept: true, cùng khuôn
+    // meetingBook/submissionCreate/contractCreate/carCreate). getScope() trả rỗng để scopeAllows() dùng
+    // đúng nhánh "cùng phòng là được" có sẵn — quyền TẠO thật sự gác ở extraValidate() bên dưới, CỘNG
+    // THÊM (không thay thế) officeBuy/officeFix theo đúng subType như trước. canManageOfficePayment()
+    // (lib/recordActions.js) đã cập nhật để đọc đúng quyền phẳng mới này — officeReqs KHÔNG có khái
+    // niệm custodianDept (khác Hợp Đồng), nên chỉ cần kiểm officeCreate + cùng phòng ban (item.dept).
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được tạo
+      // đề xuất văn phòng hay không) phải gác RIÊNG ở đây (cùng khuôn meetingBook/submissionCreate/
+      // contractCreate/carCreate.extraValidate), CỘNG THÊM đúng cờ theo subType (officeBuy/officeFix)
+      // như hành vi cũ — 2 lớp kiểm ĐỘC LẬP, không lớp nào thay thế được lớp kia.
+      if (!user.perms?.admin && !user.perms?.officeCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đề xuất văn phòng');
+      }
       const flag = OFFICE_SUBTYPE_TO_PERM_FLAG[payload.subType];
       if (!flag) throw new CreateError(400, `Loại đề xuất văn phòng không hợp lệ: ${payload.subType}`);
       if (!user.perms?.admin && !user.perms?.[flag]) {

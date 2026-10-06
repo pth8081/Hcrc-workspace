@@ -185,7 +185,8 @@ function collectPermsFromForm() {
     carDispatch: document.getElementById('pCarDispatch').checked,
     carReportView: document.getElementById('pCarReportView').checked,
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
-    officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
+    // officeCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+    officeCreate: document.getElementById('pOfficeCreate').checked,
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
     minutesCreate: document.getElementById('pMinutesCreate').checked,
     minutesView: document.getElementById('pMinutesView').checked,
@@ -431,7 +432,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pCarReportView').checked = !!perms.carReportView;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
-  document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
+  // officeCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+  document.getElementById('pOfficeCreate').checked = !!perms.officeCreate;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
 
   populateModuleAccessForm(perms.moduleAccess);
@@ -455,13 +457,12 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
   setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
-  setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
   ['pUploadAll', 'pDocDownloadAll',
    'pSubDownloadAll',
    'pContractDownloadAll',
    'pCarViewAll', 'pCarDownloadAll',
-   'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
+   'pOfficeViewAll', 'pOfficeDownloadAll'
   ].forEach(allId => {
     const deptPrefix = allId.replace(/All$/, 'Dept');
     toggleScopeGroup(allId, deptPrefix);

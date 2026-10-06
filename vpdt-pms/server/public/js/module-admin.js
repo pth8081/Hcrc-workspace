@@ -1533,7 +1533,10 @@ const PERM_DEPT_TABLES = [
   // chuyển thành 1 công tắc phẳng pCarCreate (boolean) riêng, xem khối 🚗 6. Đăng Ký Xe trong
   // systemSection.html.
   { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarDownload'] },
-  { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pOfficeCreate ("Tạo mới") khỏi bảng phòng ban — đã
+  // chuyển thành 1 công tắc phẳng pOfficeCreate (boolean) riêng, xem khối 🏢 7. Văn Phòng trong
+  // systemSection.html.
+  { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeDownload'] },
 ];
 
 // Khối/Ban (10/2026) — tra Khối/Ban đầu tiên (nếu có) chứa Phòng Ban này, dùng để gắn data-dept-group

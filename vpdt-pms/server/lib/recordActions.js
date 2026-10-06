@@ -618,7 +618,10 @@ function editOfficeReqDraft(payload, user, item, appData) {
   assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đề xuất');
   assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
-    assertDeptScopeAllowed(user, user.perms?.officeCreate, payload.dept);
+    // Làm gọn phân quyền Văn Phòng (10/2026, "6-module"): officeCreate giờ là quyền PHẲNG (boolean) —
+    // không còn {all,depts} để đọc. Truyền scope rỗng {} để assertDeptScopeAllowed()/scopeAllows() dùng
+    // đúng nhánh "cùng phòng là được" có sẵn (forceOwnDept, khớp đúng luật lúc TẠO).
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   for (const f of OFFICE_REQ_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
@@ -2166,12 +2169,24 @@ function isCycleGroupFullyResolved(pr, allPaymentRequests) {
   return !list.some(other => other.id !== pr.id && other.cycleGroupId === pr.cycleGroupId && other.status !== 'PAID');
 }
 
-// Upload "Tài liệu ký" + bấm nút "Thanh toán" cho officeReqs (Mua Bán/Sửa Chữa/Đầu Tư, module "Tổng
-// Hợp") — cùng khuôn với uploadContractSignedFile()/startContractPayment() ở trên, chỉ khác phạm vi
-// quyền: officeCreate scope + đúng cờ theo subType (officeBuy/officeFix/officeInvest).
+// Upload "Tài liệu ký" + bấm nút "Thanh toán" cho officeReqs (Mua Bán/Sửa Chữa, module "Tổng Hợp") —
+// cùng khuôn với uploadContractSignedFile()/startContractPayment() ở trên, chỉ khác phạm vi quyền:
+// officeCreate + đúng cờ theo subType (officeBuy/officeFix).
+//
+// LÀM GỌN (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng trực tiếp đến quyền thanh toán):
+// officeCreate giờ là quyền PHẲNG (boolean) — scopeAllows(user, user.perms?.officeCreate, dept) CŨ đọc
+// {all,depts} để xác định phạm vi; {all:true} cho phép quản lý thanh toán đề xuất văn phòng của BẤT KỲ
+// phòng ban nào. Từ nay officeCreate CHỈ còn ý nghĩa "có quyền tạo đề xuất văn phòng" (luôn tự khoá
+// đúng phòng ban CHÍNH MÌNH, forceOwnDept) — KHÔNG còn khái niệm "phạm vi" riêng để truyền cho
+// scopeAllows(). officeReqs KHÔNG có khái niệm custodianDept (khác Hợp Đồng — không ai "giao" đề xuất
+// văn phòng cho đơn vị khác theo dõi), nên công thức đơn giản hơn: giữ officeCreate (đang giữ cờ này)
+// VÀ item.dept CHÍNH LÀ phòng ban của người gọi — scopeAllows(user, {}, dept) dùng đúng nhánh "cùng
+// phòng là được" có sẵn để kiểm phần dept, cộng thêm check officeCreate tường minh (nếu bỏ qua check
+// này, BẤT KỲ ai cùng phòng ban với đề xuất — kể cả không hề có quyền tạo đề xuất văn phòng nào — cũng
+// quản lý được thanh toán, NỚI RỘNG quyền so với trước).
 function canManageOfficePayment(user, item) {
   const flag = OFFICE_SUBTYPE_TO_PERM_FLAG[item.subType];
-  return !!(user.perms?.admin || (scopeAllows(user, user.perms?.officeCreate, item.dept) && (!flag || user.perms?.[flag])));
+  return !!(user.perms?.admin || (user.perms?.officeCreate && scopeAllows(user, {}, item.dept) && (!flag || user.perms?.[flag])));
 }
 
 function uploadOfficeSignedFile(payload, user, item, allPaymentRequests) {

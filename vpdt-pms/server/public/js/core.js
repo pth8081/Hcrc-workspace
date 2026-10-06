@@ -2976,9 +2976,9 @@ function getScopedDepts(user, scope) {
 // options (getScopedDepts() ở trên) — gọi TRỰC TIẾP SAU dòng gán innerHTML của từng ô, KHÔNG tách lịch
 // riêng qua setTimeout/microtask nào (tránh đúng lớp bug thứ tự DOM). KHOÁ (disabled) ô đó khi phạm vi
 // chỉ vỏn vẹn ĐÚNG 1 phòng ban (scopedDepts.length === 1 — tức người dùng không có quyền tạo "thay mặt"
-// phòng ban khác, ví dụ uploadDepts/officeCreate KHÔNG mở rộng ngoài phòng ban chính mình —
-// submissionCreate/meetingBook/contractCreate/carCreate giờ luôn truyền scope RỖNG {} nên LUÔN rơi vào
-// nhánh này) để tránh chọn nhầm phòng ban ở đúng nhóm
+// phòng ban khác, ví dụ uploadDepts KHÔNG mở rộng ngoài phòng ban chính mình —
+// submissionCreate/meetingBook/contractCreate/carCreate/officeCreate giờ luôn truyền scope RỖNG {} nên
+// LUÔN rơi vào nhánh này) để tránh chọn nhầm phòng ban ở đúng nhóm
 // người dùng phổ biến nhất (chỉ có 1 lựa chọn thật sự). Người có phạm vi RỘNG hơn (uploadAll/scope.depts
 // nhiều phòng/admin) vẫn được TIỀN ĐIỀN sẵn đúng phòng ban của mình cho tiện — KHÔNG bị khoá, vẫn chọn
 // tay phòng ban khác bình thường như trước. Không đụng gì tới các <select> phòng ban KHÔNG mang ý nghĩa
@@ -3868,11 +3868,14 @@ function canManageContractPaymentClient(user, contract) {
   return !!(user?.perms?.admin || (user?.perms?.contractCreate && scopeAllows(user, {}, contract.custodianDept || contract.dept)));
 }
 
-// Khớp đúng canManageOfficePayment() ở lib/recordActions.js.
+// Khớp đúng canManageOfficePayment() ở lib/recordActions.js. LÀM GỌN (10/2026, "6-module"): officeCreate
+// giờ là quyền PHẲNG boolean — phải giữ ĐÚNG check tường minh user?.perms?.officeCreate && ... (không
+// bỏ qua), nếu không BẤT KỲ ai cùng phòng ban với đề xuất cũng quản lý được thanh toán dù không hề giữ
+// quyền tạo đề xuất văn phòng nào. officeReqs KHÔNG có custodianDept (khác Hợp Đồng).
 const OFFICE_SUBTYPE_TO_PERM_FLAG_CLIENT = { MUA_BAN: 'officeBuy', SUA_CHUA: 'officeFix' };
 function canManageOfficePaymentClient(user, item) {
   const flag = OFFICE_SUBTYPE_TO_PERM_FLAG_CLIENT[item.subType];
-  return !!(user?.perms?.admin || (scopeAllows(user, user?.perms?.officeCreate, item.dept) && (!flag || user?.perms?.[flag])));
+  return !!(user?.perms?.admin || (user?.perms?.officeCreate && scopeAllows(user, {}, item.dept) && (!flag || user?.perms?.[flag])));
 }
 
 // Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ bảng phòng ban
@@ -4216,7 +4219,9 @@ function defaultNewUserPerms() {
     // KHÔNG kèm carView.all (không tự động xem được danh sách phiếu từng hồ sơ ở tab khác) — xem
     // canSeeCarReportClient() (core.js) + canViewCarReg() (lib/recordViewScope.js).
     carReportView: false,
-    officeView: emptyScope(), officeCreate: emptyScope(), officeDownload: emptyScope(),
+    // officeCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự khoá
+    // đúng phòng ban người tạo đề xuất (forceOwnDept, lib/createValidation.js).
+    officeView: emptyScope(), officeCreate: false, officeDownload: emptyScope(),
     officeBuy: true, officeFix: true,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
@@ -4492,6 +4497,15 @@ function migrateLegacyPerms(perms) {
     const anyOffice = !!(p.officeBuy || p.officeFix);
     p.officeView = scopeFromFlag(anyOffice);
     p.officeCreate = scopeFromFlag(anyOffice);
+    changed = true;
+  }
+  // Làm gọn phân quyền Văn Phòng (10/2026, "6-module", đã xác nhận): bỏ officeCreate {all,depts}, chỉ
+  // còn 1 cờ phẳng — cùng khuôn meetingBook/submissionCreate/contractCreate/carCreate. Chạy SAU khối di
+  // trú officeView ở trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn).
+  // officeView/officeDownload/officeBuy/officeFix KHÔNG đổi, vẫn giữ nguyên hình dạng cũ.
+  if (typeof p.officeCreate !== 'boolean') {
+    const oldOfficeScope = p.officeCreate;
+    p.officeCreate = !!(oldOfficeScope?.all || (Array.isArray(oldOfficeScope?.depts) && oldOfficeScope.depts.length > 0));
     changed = true;
   }
   // Biên bản họp trước đây phân quyền Xem/Tạo theo phòng ban ({all, depts}), nay chuyển thành 1
@@ -10602,7 +10616,11 @@ function populateDropdowns() {
 
   const offDept = document.getElementById('offDept');
   if (offDept) {
-    const offScopedDepts = getScopedDepts(currentUser, currentUser.perms?.officeCreate);
+    // Làm gọn phân quyền Văn Phòng (10/2026, "6-module"): officeCreate giờ là quyền PHẲNG (boolean),
+    // không còn {all,depts} để truyền vào getScopedDepts() — truyền {} để tận dụng đúng nhánh "cùng
+    // phòng là được" có sẵn (tự khoá 1 phòng ban DUY NHẤT), cùng khuôn meetingBook/submissionCreate/
+    // contractCreate/carCreate.
+    const offScopedDepts = getScopedDepts(currentUser, {});
     offDept.innerHTML = offScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
     applyOwnDeptAutoSelect(offDept, offScopedDepts);
   }

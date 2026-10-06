@@ -515,7 +515,7 @@ const PERM_KEY_VN_LABELS = {
   "nghiepVuViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Mục Nghiệp Vụ (bỏ qua giới hạn theo quyền module)",
   "nhanSuManage": "Nhân Sự — 🤝 Quản lý Nhân Sự (quản lý & phản hồi ý kiến)",
   "officeBuy": "Văn Phòng (Mua/Sửa) — 🛒 Mua Bán",
-  "officeCreate.all": "Văn Phòng (Mua/Sửa) — Tạo mới",
+  "officeCreate": "Văn Phòng (Mua/Sửa) — Tạo mới (tự khoá đúng phòng ban)",
   "officeDownload.all": "Văn Phòng (Mua/Sửa) — Tải xuống",
   "officeFix": "Văn Phòng (Mua/Sửa) — 🔧 Sửa Chữa",
   "officeView.all": "Văn Phòng (Mua/Sửa) — Xem",

@@ -13,9 +13,12 @@
 // người dùng — KHÔNG còn `pMeetingDeptTableBody`/`pMeetingBookDept_N`/`pMeetingViewDept_N` trong DOM nữa,
 // xem systemSection.html "5. Phòng Họp"). Cột "Tạo mới" của khối "4. Hợp Đồng & Giấy Phép" cũng đã gộp
 // tương tự thành quyền phẳng contractCreate (`pContractCreate`, KHÔNG còn `pContractCreateDept_N`) — bảng
-// pContractDeptTableBody giờ CHỈ còn đúng 1 cột "Tải xuống" (pContractDownload). Các scenario dưới đây đã
-// được cập nhật để KHÔNG còn tham chiếu các id/field đã bị gỡ này — thay bằng cột/khối còn giữ bảng
-// phòng ban thật (pContractDownload/pCarView/pCarCreate/pOfficeView/pOfficeCreate).
+// pContractDeptTableBody giờ CHỈ còn đúng 1 cột "Tải xuống" (pContractDownload). Cột "Tạo mới" của khối
+// "7. Văn Phòng" cũng đã gộp tương tự thành quyền phẳng officeCreate (`pOfficeCreate`, KHÔNG còn
+// `pOfficeCreateDept_N`) — bảng pOfficeDeptTableBody giờ CHỈ còn 2 cột "Xem"/"Tải xuống"
+// (pOfficeView/pOfficeDownload). Các scenario dưới đây đã được cập nhật để KHÔNG còn tham chiếu các
+// id/field đã bị gỡ này — thay bằng cột/khối còn giữ bảng phòng ban thật
+// (pContractDownload/pCarView/pCarCreate/pOfficeView/pOfficeDownload).
 //
 // Kiểm tra:
 //   1. renderDeptCheckboxes() render đúng 1 <tr> mỗi phòng ban vào tbody của cả 6 khối, tên phòng ban đủ
@@ -176,13 +179,15 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
     });
 
     await scenario('toggleScopeGroup() (bấm "ALL") vẫn khoá đúng checkbox phòng ban trong bảng mới', async () => {
+      // officeCreate đã gộp phẳng (10/2026, "6-module") — không còn pOfficeCreateAll/pOfficeCreateDept_N,
+      // dùng pOfficeDownload (vẫn giữ nguyên {all,depts}) thay thế để kiểm toggleScopeGroup().
       const r = await page.evaluate(() => {
-        document.getElementById('pOfficeCreateAll').checked = true;
-        toggleScopeGroup('pOfficeCreateAll', 'pOfficeCreateDept');
-        const disabledAfterOn = [0, 1, 2].map(i => document.getElementById(`pOfficeCreateDept_${i}`).disabled);
-        document.getElementById('pOfficeCreateAll').checked = false;
-        toggleScopeGroup('pOfficeCreateAll', 'pOfficeCreateDept');
-        const disabledAfterOff = [0, 1, 2].map(i => document.getElementById(`pOfficeCreateDept_${i}`).disabled);
+        document.getElementById('pOfficeDownloadAll').checked = true;
+        toggleScopeGroup('pOfficeDownloadAll', 'pOfficeDownloadDept');
+        const disabledAfterOn = [0, 1, 2].map(i => document.getElementById(`pOfficeDownloadDept_${i}`).disabled);
+        document.getElementById('pOfficeDownloadAll').checked = false;
+        toggleScopeGroup('pOfficeDownloadAll', 'pOfficeDownloadDept');
+        const disabledAfterOff = [0, 1, 2].map(i => document.getElementById(`pOfficeDownloadDept_${i}`).disabled);
         return { disabledAfterOn, disabledAfterOff };
       });
       if (!r.disabledAfterOn.every(Boolean)) throw new Error(`Bật ALL phải khoá hết checkbox phòng ban: ${JSON.stringify(r.disabledAfterOn)}`);
