@@ -1108,7 +1108,7 @@ function renderMhItPriceList() {
       // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — gõ "Lý do" không tìm được): p.reason ("Lý Do Điều
       // Chỉnh Giá", field THẬT trên form nhập — mhItPriceReason/itPriceReason — KHÔNG phải customData)
       // bị bỏ sót hoàn toàn ở đợt mở rộng tìm kiếm trước, dù đã soát customData. Thêm lại ngay đây.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), ...customDataSearchValues(p.customData)], keyword)) return false;
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
@@ -1147,7 +1147,7 @@ function renderVanHanhItPriceList() {
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
       // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả p.reason + customData.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), ...customDataSearchValues(p.customData)], keyword)) return false;
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
@@ -1215,7 +1215,7 @@ function renderItPriceApprovals() {
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
     // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm p.reason + customData.
-    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), ...customDataSearchValues(p.customData)], keyword)) return false;
+    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keyword)) return false;
     return true;
   }));
 
@@ -1442,6 +1442,14 @@ function itPriceStoreScopeLabel(storeScope) {
   return stores.length ? escapeHtml(stores.join(', ')) : '<span class="text-gray-400">—</span>';
 }
 
+// "⏳ Hết hiệu lực" — trường THẬT chọn lúc tạo đề xuất (expiryMode/expiryDate), người dùng báo (kèm ảnh
+// chụp thật, 10/2026) vẫn tìm không được dù ĐÃ hiện ở modal Chi Tiết từ trước (trước đây chỉ viết trực
+// tiếp trong template literal, chưa tách hàm nên không tái dùng được cho search). Tách ra đây để dùng
+// chung cho cả hiển thị lẫn mảng tìm kiếm (mirror itPriceTierLabel()).
+function itPriceExpiryLabel(p) {
+  return p.expiryMode === 'OTHER' && p.expiryDate ? p.expiryDate : 'Vĩnh viễn';
+}
+
 // Xem trực tiếp 1 file "Tệp Bảng Giá" (p.files[], KHÁC extraFiles) trong Khung Xem Bảo Vệ — mở rộng
 // (10/2026, theo yêu cầu người dùng "cho xem trực tiếp toàn bộ nội dung luôn giống đang làm với hồ sơ
 // đính kèm") cho MỌI file đã nộp, không chỉ file đã phê duyệt — trước đây chỉ xem được dạng BẢNG dữ liệu
@@ -1528,7 +1536,7 @@ function renderItPriceModal() {
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     <div><b>🏬 ${p.priceType === 'WHOLESALE' ? 'Siêu thị đề xuất' : 'Siêu thị áp dụng'}:</b> ${itPriceStoreScopeLabel(p.storeScope)}</div>
     ${p.priceType === 'WHOLESALE' ? `<div><b>🏷️ Ngành hàng áp dụng:</b> ${p.nganhHang && p.nganhHang.length ? escapeHtml(itPriceNganhHangNames(p.nganhHang).join(', ')) : '<span class="text-gray-400">—</span>'}</div>` : ''}
-    <div><b>📅 Ngày áp dụng:</b> ${p.effectiveDate ? escapeHtml(p.effectiveDate) : '<span class="text-gray-400">—</span>'} <b class="ml-2">⏳ Hết hiệu lực:</b> ${p.expiryMode === 'OTHER' && p.expiryDate ? escapeHtml(p.expiryDate) : 'Vĩnh viễn'}</div>
+    <div><b>📅 Ngày áp dụng:</b> ${p.effectiveDate ? escapeHtml(p.effectiveDate) : '<span class="text-gray-400">—</span>'} <b class="ml-2">⏳ Hết hiệu lực:</b> ${escapeHtml(itPriceExpiryLabel(p))}</div>
     ${wfStepsStatusHTML}
     ${historyRows}
     ${p.applied ? `<div><b>Đã áp giá:</b> ${escapeHtml(p.appliedByName || '')} · ${escapeHtml(p.appliedAt || '')}</div>` : ''}
