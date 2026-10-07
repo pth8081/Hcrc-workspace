@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**25.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.42 (2026-10-07): Vá 2 lỗi THẬT từ v25.41 — sort mới-nhất-lên-đầu không có tác dụng + tìm kiếm chưa soát trường bổ sung (customData)
+
+Người dùng phản hồi sau khi lên bản thật v25.41 rằng Mục 2 (sắp xếp mới nhất) vẫn không hoạt động, tìm
+kiếm vẫn chưa soát hết trường trên form nhập, và riêng Phê Duyệt Giá Bán Lẻ cũng chưa được — rà soát lại
+code (không chỉ suy luận lý thuyết, đo thật bằng Playwright với đúng format dữ liệu production) và tìm ra
+2 lỗi thật:
+
+1. **Sort "mới nhất lên đầu" không có tác dụng (lỗi gốc)**: `createdAt` trong hệ thống là chuỗi `nowVN()`
+   (`"hh:mm:ss dd/mm/yyyy"`), nhưng helper `sortByCreatedAtDesc()` (thêm ở v25.41) dùng `new Date(chuỗi
+   này)` — luôn ra `Invalid Date` (`NaN`) trên định dạng này, khiến so sánh `tb - ta` luôn `NaN`, và
+   `Array.sort()` coi `NaN` như "bằng nhau" (không đổi chỗ) — toàn bộ 17 module dùng helper này SẮP XẾP
+   KHÔNG CÓ TÁC DỤNG GÌ dù code trông như đã gọi đúng hàm. Đã vá `sortByCreatedAtDesc()` dùng
+   `parseVNDateTime()` (parse đúng `hh:mm:ss dd/mm/yyyy`) trước, chỉ rơi về `new Date()` khi là chuỗi ISO
+   thật — đúng khuôn đã có từ trước ở `core-approvalhub.js`. Áp dụng tương tự cho 2 chỗ sort tự viết tay
+   riêng (không gọi qua helper, do cấu trúc `{kind, item}`) ở Vận Hành (Dự Toán + Nghiệm Thu Hạng Mục), và
+   vá luôn 3 chỗ `.sort()` bằng `String.localeCompare()` trên chuỗi `createdAt` phát hiện thêm khi rà
+   soát (SO SÁNH GIỜ TRƯỚC NGÀY, sai hẳn thứ tự nghiệp vụ) — **Phê Duyệt Giá Bán Lẻ/Bán Buôn** (Mua
+   Hàng/Vận Hành, đúng module người dùng báo lỗi) + Vận Hành (danh sách hạng mục con) + VPP (xuất Excel
+   theo dõi cấp phát).
+2. **Tìm kiếm chưa soát trường bổ sung (customData)**: mọi module có "Trường Bổ Sung" cấu hình động qua
+   Biểu Mẫu (`renderDynamicInputsForModule()`/`collectDynamicFieldsData()`) lưu giá trị vào `customData`
+   — ĐÚNG LÀ TRƯỜNG THẬT trên form nhập nhưng không hiện thành cột riêng trên bảng, nên đợt mở rộng tìm
+   kiếm v25.41 hoàn toàn bỏ sót (chỉ thêm các trường tĩnh đã biết trước, không có trường động). Thêm
+   helper `customDataSearchValues()` (core.js) và ghép vào `matchesKeywordFields()` ở toàn bộ 15
+   module/panel đã làm ở v25.41 + cả 3 nơi của Phê Duyệt Giá Bán Lẻ/Bán Buôn/Hỗ Trợ IT (module riêng,
+   không nằm trong danh sách gốc).
+
+Đính chính: Thanh Toán/Checklist/Đồng Phục/VPP trong danh mục "15 module" ghi ở v25.41 thực ra CHƯA có ô
+tìm kiếm nào để mở rộng (chỉ có sort) — đã sửa đúng theo kế hoạch gốc, các module này vẫn nằm trong danh
+sách "xây mới khung tìm kiếm" của đợt sau (xem mục dưới "Còn lại").
+
+Kiểm tra: viết lại kịch bản Playwright demo cũ dùng ĐÚNG format `createdAt` thật (`"hh:mm:ss dd/mm/yyyy"`,
+trước đó demo cũ dùng ISO nên không phát hiện được lỗi) — xác nhận cả 2 lỗi lặp lại được rồi hết sau khi
+vá; chạy lại 20 bộ test hồi quy liên quan (IT Price/Car/License/VPP/Office/Operation/Contract/Task/
+Submission/Meeting/HR Profile/Labor Contract/Recruitment) — chỉ 1 lỗi pre-existing không liên quan
+(`test-operation-order-report.js`, giả định tháng cứng đã lệch theo ngày hệ thống, đã xác nhận từ trước).
 
 ## v25.41 (2026-10-07): Tìm kiếm toàn trường mở rộng (15 module) + sắp xếp mới-nhất-lên-đầu (17 module) + vá lỗi lộ field Người Dùng khi sửa Nhóm Phân Quyền
 

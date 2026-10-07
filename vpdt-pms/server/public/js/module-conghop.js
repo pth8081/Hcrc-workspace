@@ -276,7 +276,7 @@ function renderHacApproveView() {
   let list = sortByCreatedAtDesc((DB.leaveRequests || []).filter(r => r.status === 'PENDING' && r.employeeCode !== myCode));
   if (kw) {
     if (!hacEmployeeDirectoryCache.length) { loadHacEmployeeDirectory().then(() => renderHacApproveView()); }
-    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), r.reason], kw));
+    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), r.reason, ...customDataSearchValues(r.customData)], kw));
   }
   const body = document.getElementById('hacApproveLeaveBody');
   document.getElementById('hacApproveLeaveEmpty').classList.toggle('hidden', list.length > 0);
@@ -495,7 +495,7 @@ function renderHacManageAttendanceTable() {
   let list = [...(DB.attendanceRecords || [])].sort((a, b) => b.workDate.localeCompare(a.workDate));
   if (filter) {
     if (!hacEmployeeDirectoryCache.length) { loadHacEmployeeDirectory().then(() => renderHacManageAttendanceTable()); }
-    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode)], filter));
+    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), ...customDataSearchValues(r.customData)], filter));
   }
   list = list.slice(0, 300);
   const body = document.getElementById('hacMgrAttendanceBody');

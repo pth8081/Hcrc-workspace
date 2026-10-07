@@ -1144,8 +1144,14 @@ function buildVppReportByDeptExportRows(period) {
 // trước, Hành Chính tự điền tay các cột này sau khi tải file (10/2026, xem CLAUDE.md mục "Tính năng Báo
 // Cáo/Xuất Excel mới").
 function buildVppReportTrackingExportRows(period) {
+  // LỖI ĐÃ VÁ (10/2026, cùng đợt): localeCompare trên chuỗi "hh:mm:ss dd/mm/yyyy" so GIỜ trước NGÀY, sai
+  // thứ tự — parse đúng bằng parseVNDateTime() (mirror sortByCreatedAtDesc() ở core.js).
   const regs = DB.vppRegistrations.filter(r => r.periodId === period.id)
-    .slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    .slice().sort((a, b) => {
+      const ta = a.createdAt ? ((parseVNDateTime(a.createdAt) || new Date(a.createdAt)).getTime() || 0) : 0;
+      const tb = b.createdAt ? ((parseVNDateTime(b.createdAt) || new Date(b.createdAt)).getTime() || 0) : 0;
+      return ta - tb;
+    });
   const rows = [];
   regs.forEach(r => {
     const lastNote = (r.history || []).slice(-1)[0]?.comment || '';

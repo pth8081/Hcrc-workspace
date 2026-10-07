@@ -865,7 +865,7 @@ function renderMeetingMinutes() {
     if (!canViewMeetingMinutesRecord(currentUser, m)) return false;
     if (topicFilter && !(m.title || '').toLowerCase().includes(topicFilter)) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName, m.creator, m.dept, m.content, m.location, m.secretary], keyword)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName, m.creator, m.dept, m.content, m.location, m.secretary, ...customDataSearchValues(m.customData)], keyword)) return false;
 
     return true;
   });

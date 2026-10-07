@@ -1026,7 +1026,7 @@ function renderMeetings() {
     if (deptFilter && m.dept !== deptFilter) return false;
     if (statusFilter && m.status !== statusFilter) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([m.code, m.title, m.creatorName, m.creator, m.dept, m.room, m.agenda, m.equipment], keyword)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.creatorName, m.creator, m.dept, m.room, m.agenda, m.equipment, ...customDataSearchValues(m.customData)], keyword)) return false;
 
     return true;
   });

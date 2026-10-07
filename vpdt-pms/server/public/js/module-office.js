@@ -255,7 +255,7 @@ function renderOfficeReqs() {
     if (deptFilter && o.dept !== deptFilter) return false;
     if (statusFilter && o.status !== statusFilter) return false;
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([o.code, o.title, o.creatorName, o.creator, o.dept, o.reason, o.supplier], keyword)) return false;
+    if (!matchesKeywordFields([o.code, o.title, o.creatorName, o.creator, o.dept, o.reason, o.supplier, ...customDataSearchValues(o.customData)], keyword)) return false;
 
     return true;
   });
