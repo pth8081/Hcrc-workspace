@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**25.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.49 (2026-10-07): Mojibake — script vá DỮ LIỆU CŨ đã lưu sai (v25.45 chỉ chặn tên tệp MỚI)
+
+Người dùng gửi ảnh chụp thật: nhiều hồ sơ Phê Duyệt Giá Bán Lẻ VẪN hiện tên tệp lỗi font (VD "Test gia
+há°±n má»›i.xlsx") dù bản vá v25.45 đã merge — "file upload lên bị lỗi font chữ tất cả các module".
+
+**Nguyên nhân**: v25.45 chỉ chặn được tên tệp **MỚI** tải lên từ sau khi server cập nhật code không
+còn bị lỗi — những bản ghi **ĐÃ LƯU trước đó** (trước khi server production chạy code v25.45) vẫn còn
+nguyên chuỗi SAI đã bị ghi thẳng vào CSDL; hiển thị lại không tự sửa được, phải DECODE LẠI đúng chuỗi
+đã lưu mới ra tên đúng — khác hẳn bug gốc (chặn ghi sai lúc upload), đây là dữ liệu CŨ cần vá riêng.
+
+**Đã thêm**: `scripts/fix-mojibake-filenames.js` — script Node chạy 1 lần (dry-run mặc định, thêm
+`--confirm` để ghi thật), quét mọi field kết thúc bằng "fileName"/"filename" (fileName, bannerFileName,
+cvFileName, signedFileName, sourceFileName, thumbnailFileName...) ở CẢ 2 tầng lưu trữ: mọi bảng riêng
+trong `DEDICATED_TABLES` (cột Payload) VÀ `dbo.AppData` (gồm `employeeProfiles` — không nằm trong bảng
+riêng). An toàn: chỉ coi 1 chuỗi là "nghi mojibake" khi MỌI ký tự có code point ≤ 0xFF (tên tiếng Việt
+ĐÃ ĐÚNG luôn có code point > 0xFF nên không bao giờ khớp, không có rủi ro sửa nhầm tên đã đúng), dùng
+lại chính `fixUploadedFilename()` (v25.45) để decode, idempotent (chạy lại nhiều lần an toàn).
+
+Kiểm tra: viết mới `test-fix-mojibake-filenames-script.js` (không cần SQL Server thật — test trực tiếp
+3 hàm thuần script export ra) — mirror payload thật itPriceApprovals (files[]/extraFiles[].fileName) +
+employeeProfiles (cvFileName, mảng cấp cao nhất) + trường hợp tên ĐÃ ĐÚNG (xác nhận không bị đụng vào)
++ idempotent (chạy lại lần 2 không còn gì để sửa) — 20/20 PASS. Cập nhật mục 13 (điểm 4) ở CẢ 2 file
+hướng dẫn triển khai (PM2 thuần + PM2/Nginx) — script này cần chạy TRÊN SERVER THẬT sau khi deploy code
+(sandbox không có SQL Server thật để tự chạy migration), nhớ `pm2 restart` sau khi `--confirm` để xoá
+cache AppData trong bộ nhớ.
 
 ## v25.48 (2026-10-07): Phê Duyệt Giá — vá nốt "⏳ Hết hiệu lực" chưa tìm kiếm được (cả Bán Lẻ/Bán Buôn)
 
