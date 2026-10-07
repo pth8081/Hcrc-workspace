@@ -382,7 +382,7 @@ function renderHrpfOnboardingQueueList() {
   }
   const tbody = document.getElementById('hrpfOnboardingQueueTableBody');
   document.getElementById('hrpfOnboardingQueueEmpty').classList.toggle('hidden', _hrpfOnboardingQueueList.length > 0);
-  tbody.innerHTML = _hrpfOnboardingQueueList.map(p => {
+  tbody.innerHTML = sortByCreatedAtDesc(_hrpfOnboardingQueueList).map(p => {
     const idn = hrpfIdentitySnapshot(p);
     const isPending = p.onboardingQueueStatus === 'PENDING';
     const isConfirmed = p.onboardingQueueStatus === 'CONFIRMED';
@@ -489,16 +489,15 @@ async function loadHrProfileManageList() {
 }
 
 function renderHrProfileManageList() {
-  const kw = (document.getElementById('hrpfManageSearch')?.value || '').trim().toLowerCase();
+  const kw = (document.getElementById('hrpfManageSearch')?.value || '').trim();
   const rows = _hrpfManageList.filter(p => {
     if (!kw) return true;
     const idn = hrpfIdentitySnapshot(p);
-    return p.employeeCode.toLowerCase().includes(kw) || (p.username || '').toLowerCase().includes(kw) ||
-      idn.fullName.toLowerCase().includes(kw);
+    return matchesKeywordFields([p.employeeCode, p.username, idn.fullName, idn.dept, idn.jobTitle], kw);
   });
   const tbody = document.getElementById('hrpfManageTableBody');
   document.getElementById('hrpfManageEmpty').classList.toggle('hidden', rows.length > 0);
-  tbody.innerHTML = rows.map(p => {
+  tbody.innerHTML = sortByCreatedAtDesc(rows).map(p => {
     const idn = hrpfIdentitySnapshot(p);
     return `<tr class="border-t hover:bg-gray-50">
       <td class="p-2 font-mono">${escapeHtml(p.employeeCode)}</td>

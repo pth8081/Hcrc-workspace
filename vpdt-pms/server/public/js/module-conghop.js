@@ -272,7 +272,12 @@ async function submitHacSwapRequest(e) {
 // ===================== "Duyệt Nghỉ Phép" =====================
 function renderHacApproveView() {
   const myCode = DB.myEmployeeCode;
-  const list = (DB.leaveRequests || []).filter(r => r.status === 'PENDING' && r.employeeCode !== myCode);
+  const kw = (document.getElementById('hacApproveFilterKeyword')?.value || '').trim();
+  let list = sortByCreatedAtDesc((DB.leaveRequests || []).filter(r => r.status === 'PENDING' && r.employeeCode !== myCode));
+  if (kw) {
+    if (!hacEmployeeDirectoryCache.length) { loadHacEmployeeDirectory().then(() => renderHacApproveView()); }
+    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), r.reason], kw));
+  }
   const body = document.getElementById('hacApproveLeaveBody');
   document.getElementById('hacApproveLeaveEmpty').classList.toggle('hidden', list.length > 0);
   body.innerHTML = list.map(r => `
@@ -289,6 +294,11 @@ function renderHacApproveView() {
       </td>
     </tr>
   `).join('');
+}
+
+function resetHacApproveFilters() {
+  document.getElementById('hacApproveFilterKeyword').value = '';
+  renderHacApproveView();
 }
 
 function hacApplyLeaveRequestUpdate(item) {
@@ -463,10 +473,30 @@ function renderHacManageView() {
   initObjectCatalogExcelToolsAll();
 }
 
+// Tra tên theo Mã NV cho tìm kiếm Chấm Công/Duyệt Nghỉ Phép (10/2026) — attendanceRecords/leaveRequests
+// KHÔNG tự lưu tên, chỉ có employeeCode, nên cần nạp riêng qua route chung (cùng route HĐLĐ dùng, xem
+// loadHrcEmployeeDirectory() ở module-hopdonglaodong.js — KHÔNG dùng trực tiếp biến/hàm của module đó
+// vì 2 module nằm ở 2 nhóm tải lười KHÁC NHAU, không đảm bảo cùng nạp — tự cache riêng ở đây).
+let hacEmployeeDirectoryCache = [];
+async function loadHacEmployeeDirectory() {
+  try {
+    const res = await fetch('/api/hr-profile/employee-directory');
+    const json = await res.json();
+    hacEmployeeDirectoryCache = json.directory || [];
+  } catch (e) { hacEmployeeDirectoryCache = []; }
+}
+function hacEmployeeNameByCode(code) {
+  const p = hacEmployeeDirectoryCache.find(x => x.employeeCode === code);
+  return p ? p.fullName : '';
+}
+
 function renderHacManageAttendanceTable() {
-  const filter = (document.getElementById('hacMgrFilterEmployeeCode')?.value || '').trim().toLowerCase();
+  const filter = (document.getElementById('hacMgrFilterEmployeeCode')?.value || '').trim();
   let list = [...(DB.attendanceRecords || [])].sort((a, b) => b.workDate.localeCompare(a.workDate));
-  if (filter) list = list.filter(r => (r.employeeCode || '').toLowerCase().includes(filter));
+  if (filter) {
+    if (!hacEmployeeDirectoryCache.length) { loadHacEmployeeDirectory().then(() => renderHacManageAttendanceTable()); }
+    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode)], filter));
+  }
   list = list.slice(0, 300);
   const body = document.getElementById('hacMgrAttendanceBody');
   document.getElementById('hacMgrAttendanceEmpty').classList.toggle('hidden', list.length > 0);

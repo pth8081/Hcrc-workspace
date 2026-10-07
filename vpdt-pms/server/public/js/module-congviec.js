@@ -1039,12 +1039,12 @@ function renderTasks() {
     if (!canViewTaskRecord(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (sourceFilter && t.sourceType !== sourceFilter) return false;
-    if (!matchesKeywordFields([t.title, t.assignedToName, t.assignedByName, t.sourceCode], keyword)) return false;
+    if (!matchesKeywordFields([t.title, t.assignedToName, t.assignedByName, t.sourceCode, t.description], keyword)) return false;
     return true;
   });
 
   document.getElementById('paginationContainer_task').innerHTML = buildPaginationBoxHTML('task', 'renderTasks');
-  const pageItems = paginateList('task', visible, 'renderTasks', 'công việc');
+  const pageItems = paginateList('task', sortByCreatedAtDesc(visible), 'renderTasks', 'công việc');
 
   if (pageItems.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không có công việc nào phù hợp.</td></tr>`;

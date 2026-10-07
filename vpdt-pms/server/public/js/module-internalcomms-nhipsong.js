@@ -1233,7 +1233,7 @@ function renderRecruitmentJobs() {
     if (filterMonth && j.month !== filterMonth) return false;
     if (filterDept && j.hiringDept !== filterDept) return false;
     if (filterStatus && j.status !== filterStatus) return false;
-    if (!matchesKeywordFields([j.title, j.location], filterKeyword)) return false;
+    if (!matchesKeywordFields([j.title, j.location, j.description, j.requirements, j.contactInfo, j.income, j.workTime], filterKeyword)) return false;
     return true;
   });
 

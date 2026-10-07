@@ -1026,13 +1026,13 @@ function renderMeetings() {
     if (deptFilter && m.dept !== deptFilter) return false;
     if (statusFilter && m.status !== statusFilter) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([m.code, m.title, m.creatorName, m.creator, m.dept, m.room], keyword)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.creatorName, m.creator, m.dept, m.room, m.agenda, m.equipment], keyword)) return false;
 
     return true;
   });
 
   document.getElementById('paginationContainer_meeting').innerHTML = buildPaginationBoxHTML('meeting', 'renderMeetings');
-  const pageMeetings = paginateList('meeting', visibleMeetings, 'renderMeetings', 'lịch họp');
+  const pageMeetings = paginateList('meeting', sortByCreatedAtDesc(visibleMeetings), 'renderMeetings', 'lịch họp');
 
   if (pageMeetings.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy lịch họp phù hợp.</td></tr>`;

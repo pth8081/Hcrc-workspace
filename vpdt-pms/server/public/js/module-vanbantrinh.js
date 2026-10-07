@@ -491,7 +491,7 @@ function renderSubmissionReqs() {
   });
 
   document.getElementById('paginationContainer_sub').innerHTML = buildPaginationBoxHTML('sub', 'renderSubmissionReqs');
-  const pageSubs = paginateList('sub', visibleSubs, 'renderSubmissionReqs', 'tờ trình');
+  const pageSubs = paginateList('sub', sortByCreatedAtDesc(visibleSubs), 'renderSubmissionReqs', 'tờ trình');
 
   if (pageSubs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy tờ trình phù hợp.</td></tr>`;

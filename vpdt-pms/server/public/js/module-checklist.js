@@ -447,8 +447,8 @@ async function finalizeChecklistSubmission() {
 function renderChecklistResultTab() {
   const el = document.getElementById('checklistResultListWrap');
   const user = currentUser;
-  const rows = (DB.checklistSubmissions || []).filter(s => s.status !== 'DRAFT'
-    && ((s.submittedByUsername === user.username) || (s.storeCode === user.dept && user.posType === 'STORE')));
+  const rows = sortByCreatedAtDesc((DB.checklistSubmissions || []).filter(s => s.status !== 'DRAFT'
+    && ((s.submittedByUsername === user.username) || (s.storeCode === user.dept && user.posType === 'STORE'))), 'submittedAt');
   if (!rows.length) { el.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có kết quả nào.</p>'; return; }
   el.innerHTML = rows.map(s => `
     <div class="bg-white border rounded p-3 space-y-1.5">

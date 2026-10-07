@@ -13,6 +13,11 @@ function toggleUserPermFormMode(mode) {
   if (toggleBtn) toggleBtn.innerText = '✕ Thu Gọn Thông Tin';
   document.getElementById('userIdentityFields').classList.toggle('hidden', mode !== 'USER');
   document.getElementById('groupIdentityFields').classList.toggle('hidden', mode !== 'GROUP');
+  // Lỗi thật đã vá (10/2026, xem chú thích tại #userOnlyExtraFieldsWrap trong systemSection.html): 5
+  // khối field (Vị Trí Kiêm Nhiệm/Mở Thêm Mục NV/Mở Thêm Tab BC cá nhân/Là tài xế/Nhóm Phân Quyền) CHỈ
+  // có ý nghĩa cho 1 Người Dùng — trước đây luôn hiện kể cả khi đang sửa 1 Nhóm Phân Quyền, khiến ô
+  // "Nhóm Phân Quyền" tự liệt kê cả chính nhóm đang sửa.
+  document.getElementById('userOnlyExtraFieldsWrap').classList.toggle('hidden', mode !== 'USER');
   // Ẩn field nào thì bỏ luôn "required" của field đó — display:none không tự loại field khỏi việc
   // kiểm tra hợp lệ của trình duyệt, nếu không submit ở chế độ còn lại sẽ bị chặn ngầm.
   // uPassword KHÔNG nằm trong danh sách này — để trống khi SỬA user nghĩa là giữ nguyên mật khẩu cũ

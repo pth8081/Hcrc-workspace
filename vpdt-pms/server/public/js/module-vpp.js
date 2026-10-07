@@ -583,7 +583,7 @@ function renderVppRegistrations() {
   const visible = scopedVppRegs.filter(r => !statusFilter || r.status === statusFilter);
 
   document.getElementById('paginationContainer_vppReg').innerHTML = buildPaginationBoxHTML('vppReg', 'renderVppRegistrations');
-  const page = paginateList('vppReg', visible, 'renderVppRegistrations', 'đăng ký');
+  const page = paginateList('vppReg', sortByCreatedAtDesc(visible), 'renderVppRegistrations', 'đăng ký');
 
   if (page.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có đăng ký nào.</td></tr>`;
@@ -957,7 +957,7 @@ function renderVppPeriods() {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có kỳ đăng ký nào.</td></tr>`;
     return;
   }
-  tbody.innerHTML = DB.vppPeriods.map(p => {
+  tbody.innerHTML = sortByCreatedAtDesc(DB.vppPeriods).map(p => {
     const regCount = DB.vppRegistrations.filter(r => r.periodId === p.id).length;
     const isOpen = vppPeriodIsOpen(p);
     const secondaryOptions = [];

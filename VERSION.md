@@ -1,8 +1,49 @@
 # Phiên bản hiện tại
 
-**25.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.41 (2026-10-07): Tìm kiếm toàn trường mở rộng (15 module) + sắp xếp mới-nhất-lên-đầu (17 module) + vá lỗi lộ field Người Dùng khi sửa Nhóm Phân Quyền
+
+Tiếp nối đợt v25.40, theo yêu cầu người dùng rà soát lại TOÀN BỘ hệ thống (không chỉ 12 module đã làm):
+
+- **Mở rộng tìm kiếm thêm trường** cho 12 panel đã có sẵn ô tìm kiếm nhưng còn thiếu field thực tế có
+  trong form nhập: Biên Bản Họp (nội dung/địa điểm/thư ký), Phòng Họp (nội dung họp/thiết bị), Công Việc
+  (mô tả), Đăng Ký Xe (người trực tiếp sử dụng xe), Hợp Đồng (nội dung hợp đồng), Hỗ Trợ IT Ticket (danh
+  mục), Hỗ Trợ IT Gia Hạn (ghi chú), Giấy Phép (cơ quan cấp phép), Văn Phòng (lý do/nhà cung cấp), Vận
+  Hành — Đơn Hàng/Mở Mới/Sửa Chữa + Báo Cáo (nhà cung cấp/ghi chú/người phụ trách), Hồ Sơ Nhân Sự (phòng
+  ban/chức danh), Tin Tuyển Dụng (mô tả/yêu cầu/liên hệ/thu nhập/thời gian làm việc, phát hiện thêm
+  ngoài phạm vi ban đầu, đã được xác nhận vá luôn).
+- **Nâng cấp 3 màn đang lọc thủ công 1 trường (Mã NV) lên khung tìm nhiều trường**: HĐLĐ (+ Mã HĐLĐ +
+  Họ Tên, tra qua `/api/hr-profile/employee-directory`), Công & Phép — Quản Lý Chấm Công (+ Họ Tên, cache
+  riêng `hacEmployeeDirectoryCache`), Công & Phép — Duyệt Nghỉ Phép (trước đây KHÔNG có ô tìm/lọc nào,
+  nay thêm mới + Họ Tên + Lý do + nút "Xóa Tìm Kiếm").
+- **Sắp xếp "mới nhất lên đầu"** — thêm hàm dùng chung `sortByCreatedAtDesc()` (core.js), áp dụng cho 17
+  module/panel trước đây hiển thị theo đúng thứ tự mảng server trả về (không đảm bảo mới nhất lên đầu
+  sau khi tải lại trang): Biên Bản Họp, Checklist (Kết Quả), Công & Phép (hàng chờ duyệt nghỉ), Công
+  Việc, Đăng Ký Xe, Đồng Phục (4 màn con), Hợp Đồng, Hồ Sơ Nhân Sự (2 màn), Hỗ Trợ IT Ticket, Hỗ Trợ IT
+  Gia Hạn, Văn Phòng, Phòng Họp, Tài Liệu + Giấy Phép, Thanh Toán, Văn Bản Trình, Vận Hành (4 điểm gọi),
+  Văn Phòng Phẩm (2 màn). 6 module đã sắp xếp đúng từ trước (Đào Tạo, Onboarding/Offboarding, Nhịp Sống
+  Nội Bộ, Ngân Sách, HĐLĐ cũ, Lương) giữ nguyên, không đụng tới.
+- **Vá lỗi thật phát hiện qua Playwright** (không phải suy luận): form Sửa **Nhóm Phân Quyền** trước đây
+  vẫn hiện nhầm 5 khối field CHỈ dành cho Người Dùng (Vị Trí Kiêm Nhiệm/Mở Thêm Mục NV/Mở Thêm Tab BC cá
+  nhân/Là tài xế/Nhóm Phân Quyền — ô cuối tự liệt kê cả CHÍNH nhóm đang sửa, có thể tích nhầm khiến 1
+  nhóm "là thành viên của chính nó"). Bọc riêng 5 khối field này vào `#userOnlyExtraFieldsWrap`, ẩn khi
+  `mode !== 'USER'` trong `toggleUserPermFormMode()` — xác nhận lại nút "✕ Thu Gọn Thông Tin" vẫn đúng
+  (không ẩn cây quyền 0-26) ở cả 2 chế độ User/Group.
+
+**Chưa làm trong đợt này** (user yêu cầu nhắc lại sau cùng với tính năng "xem người đã phê duyệt từng
+bước"): xây mới khung "🔍 Tìm Kiếm & Lọc" cho 9 module hiện CHƯA có ô tìm kiếm nào (Thanh Toán, Checklist,
+HR Lifecycle Onboarding/Offboarding, Đào Tạo, Đồng Phục, Ngân Sách, Lương, Mua Hàng BAS, Văn Phòng Phẩm).
+
+Test: CSP self-check sạch trên toàn bộ file sửa; chạy lại 22 bộ test hiện có liên quan (meeting/minutes/
+task/car/contract/office/operation/doc/license/labor-contract/attendance/vpp/permgroups) — pass, trừ 1
+lỗi test cũ không liên quan (`test-operation-order-report.js`, giả định "hôm nay" rơi vào tháng 9/2026
+nhưng hệ thống thật đã sang tháng 10 — xác nhận pre-existing bằng `git stash` A/B, không phải do đợt
+này). Demo Playwright xác nhận bằng dữ liệu thật: 3 phiếu Đăng Ký Xe tạo ở 3 ngày khác nhau hiển thị
+đúng thứ tự mới nhất lên đầu; tìm "Hạnh" (tên người trực tiếp sử dụng xe, field mới thêm) lọc đúng còn 1
+phiếu; sửa Nhóm Phân Quyền không còn lộ field Người Dùng.
 
 ## v25.40 (2026-10-07): Tìm Kiếm & Lọc — mở rộng từ khóa tra MỌI trường + nút "Xóa Tìm Kiếm" (toàn hệ thống)
 

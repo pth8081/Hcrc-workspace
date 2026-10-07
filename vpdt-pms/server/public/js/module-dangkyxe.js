@@ -957,13 +957,13 @@ function renderCarRegs() {
     if (deptFilter && c.dept !== deptFilter) return false;
     if (statusFilter && c.status !== statusFilter) return false;
     if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason], keyword)) return false;
+    if (!matchesKeywordFields([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason, c.directUser], keyword)) return false;
 
     return true;
   });
 
   document.getElementById('paginationContainer_car').innerHTML = buildPaginationBoxHTML('car', 'renderCarRegs');
-  const pageCarRegs = paginateList('car', visibleCarRegs, 'renderCarRegs', 'phiếu đăng ký');
+  const pageCarRegs = paginateList('car', sortByCreatedAtDesc(visibleCarRegs), 'renderCarRegs', 'phiếu đăng ký');
 
   if (pageCarRegs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy phiếu đăng ký phù hợp.</td></tr>`;

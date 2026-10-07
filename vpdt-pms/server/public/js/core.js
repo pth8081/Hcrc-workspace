@@ -1923,6 +1923,23 @@ function applyDashboardCardFilter(fields, resetKey, renderFn) {
   renderFn();
 }
 
+// Sắp xếp "mới nhất lên đầu" dùng chung cho mọi danh sách phiếu chưa tự sắp xếp (10/2026, yêu cầu người
+// dùng — audit phát hiện 17 module hiển thị theo đúng thứ tự mảng trả về từ server, KHÔNG đảm bảo mới
+// nhất lên đầu sau khi tải lại trang). KHÔNG mutate mảng gốc (trả về bản sao) để không ảnh hưởng
+// DB.<collection> dùng chung ở chỗ khác. field mặc định 'createdAt' (string ISO hoặc timestamp number đều
+// so sánh được qua Date parse); nếu 2 bản ghi cùng createdAt (hoặc thiếu field) thì so thêm theo `id` giảm
+// dần làm tie-break (khớp quy ước id tăng dần = tạo sau, đã dùng ở getHrContractList()/
+// getVisibleHrProcessList()) — KHÔNG dùng cho các danh sách đã có logic sắp xếp riêng theo nghiệp vụ
+// (ngày làm việc, mức độ phổ biến, kỳ báo cáo...), những chỗ đó giữ nguyên thứ tự hiện có.
+function sortByCreatedAtDesc(list, field = 'createdAt') {
+  return [...list].sort((a, b) => {
+    const ta = a?.[field] ? new Date(a[field]).getTime() : 0;
+    const tb = b?.[field] ? new Date(b[field]).getTime() : 0;
+    if (tb !== ta) return tb - ta;
+    return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+  });
+}
+
 // Cắt đúng trang hiện tại từ mảng đã lọc + tự vẽ khối phân trang (đếm trang, các nút điều hướng)
 // vào 2 phần tử #pageInfoText_<moduleKey> và #paginationButtons_<moduleKey>. Trả về mảng của riêng
 // trang hiện tại để nơi gọi render ra bảng.

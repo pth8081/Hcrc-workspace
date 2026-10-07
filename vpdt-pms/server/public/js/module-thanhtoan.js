@@ -830,7 +830,7 @@ function renderPaymentRequests() {
   // luôn quyền xác nhận (xem canConfirmPaymentRequestClient() ở core.js) — "Yêu Cầu Bổ Sung" KHÔNG đổi,
   // vẫn gác bằng canManage như cũ.
   const canConfirm = canConfirmPaymentRequestClient(currentUser);
-  tbody.innerHTML = list.map(pr => {
+  tbody.innerHTML = sortByCreatedAtDesc(list).map(pr => {
     // ONE_TIME (Thanh toán 1 lần) — badge từng đợt CHỈ để theo dõi/hiển thị (yêu cầu nghiệp vụ #3), KHÔNG
     // có nút "Xác nhận" riêng cho từng đợt (xác nhận TOÀN BỘ 1 lần, xem nút "💰 Xác Nhận Toàn Bộ" bên dưới
     // — confirmPaymentInstallment() ở server CŨNG tự chặn 409 nếu cố gọi thẳng route, đây không phải lớp
