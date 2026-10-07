@@ -578,9 +578,11 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     // Giữ NGUYÊN khuôn cũ của routes/download.js: quyền "<moduleKey>Download" theo phòng ban.
     // custodianDept chỉ có mặt ở owning của hợp đồng — undefined cho mọi module khác, nên nhánh OR
     // dưới đây là no-op cho các module không có khái niệm custodian.
-    const allowedByDept = canDownloadRecordFile(user, owning.moduleKey, owning.dept, owning.ownerUsername);
+    // owning.record?.published (10/2026, "6-module") — chỉ 'doc' có field này, các moduleKey khác luôn
+    // undefined nên tham số thứ 5 là no-op an toàn cho carRegs/officeReqs/submissions/contracts.
+    const allowedByDept = canDownloadRecordFile(user, owning.moduleKey, owning.dept, owning.ownerUsername, owning.record?.published);
     const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
-      canDownloadRecordFile(user, owning.moduleKey, owning.custodianDept, owning.ownerUsername);
+      canDownloadRecordFile(user, owning.moduleKey, owning.custodianDept, owning.ownerUsername, owning.record?.published);
     return !!(allowedByDept || allowedByCustodian);
   }
 

@@ -273,7 +273,10 @@ async function runPureTests() {
     contractApprovalDeptWorkflows: {}, paymentDeptWorkflows: {}, users: []
   };
   const USER_A = { username: 'u_a', name: 'Người A', dept: DEPT_A, perms: {
-    contractCreate: { all: false, depts: [DEPT_A] }, uploadAll: false, uploadDepts: [DEPT_A],
+    // contractCreate (10/2026, "6-module"): bỏ {all,depts} cũ, nay là quyền phẳng boolean (giữ nguyên
+    // true, không ảnh hưởng test licenses/paymentRequests/docs ở file này). uploadAll: tương tự, có
+    // uploadDepts=[DEPT_A] (đúng phòng mình) cũ -> quy đổi true để giữ quyền tạo tài liệu (test 7a/7a-bis).
+    contractCreate: true, uploadAll: true,
     licenseCreate: true, paymentManage: true
   } };
   const ADMIN = { username: 'admin', name: 'Quản Trị', dept: DEPT_A, perms: { admin: true } };

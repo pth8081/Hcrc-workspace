@@ -16,9 +16,11 @@
 // pContractDeptTableBody giờ CHỈ còn đúng 1 cột "Tải xuống" (pContractDownload). Cột "Tạo mới" của khối
 // "7. Văn Phòng" cũng đã gộp tương tự thành quyền phẳng officeCreate (`pOfficeCreate`, KHÔNG còn
 // `pOfficeCreateDept_N`) — bảng pOfficeDeptTableBody giờ CHỈ còn 2 cột "Xem"/"Tải xuống"
-// (pOfficeView/pOfficeDownload). Các scenario dưới đây đã được cập nhật để KHÔNG còn tham chiếu các
+// (pOfficeView/pOfficeDownload). Cột "Tải Lên" của khối "2. Tài Liệu" cũng đã gộp tương tự thành quyền
+// phẳng uploadAll (TÊN GIỮ NGUYÊN, KHÔNG còn `pUploadDept_N`) — bảng pDocDeptTableBody giờ CHỈ còn đúng
+// 1 cột "Tải Tài Liệu" (pDocDownload). Các scenario dưới đây đã được cập nhật để KHÔNG còn tham chiếu các
 // id/field đã bị gỡ này — thay bằng cột/khối còn giữ bảng phòng ban thật
-// (pContractDownload/pCarView/pCarCreate/pOfficeView/pOfficeDownload).
+// (pDocDownload/pContractDownload/pCarView/pCarCreate/pOfficeView/pOfficeDownload).
 //
 // Kiểm tra:
 //   1. renderDeptCheckboxes() render đúng 1 <tr> mỗi phòng ban vào tbody của cả 6 khối, tên phòng ban đủ
@@ -126,25 +128,27 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
 
     await scenario('Id checkbox từng dòng vẫn đúng khuôn cũ "${prefix}Dept_${idx}" + có data-scope-group', async () => {
       const r = await page.evaluate(() => ({
-        upload0: document.getElementById('pUploadDept_0')?.getAttribute('data-scope-group'),
+        // uploadAll đã gộp phẳng (10/2026, "6-module") — pDocDeptTableBody giờ CHỈ còn cột "Tải Tài
+        // Liệu" (pDocDownload), dùng cột đó thay cho pUploadDept_0 đã bị gỡ.
+        docDownload0: document.getElementById('pDocDownloadDept_0')?.getAttribute('data-scope-group'),
         // contractCreate đã gộp phẳng (10/2026, "6-module") — pContractDeptTableBody giờ CHỈ còn cột
         // "Tải xuống" (pContractDownload), dùng cột đó thay cho pContractCreateDept_1 đã bị gỡ.
         contractDownload1: document.getElementById('pContractDownloadDept_1')?.getAttribute('data-scope-group'),
         carView2: document.getElementById('pCarViewDept_2')?.getAttribute('data-scope-group'),
       }));
-      if (r.upload0 !== 'pUpload') throw new Error(`pUploadDept_0 data-scope-group sai: ${r.upload0}`);
+      if (r.docDownload0 !== 'pDocDownload') throw new Error(`pDocDownloadDept_0 data-scope-group sai: ${r.docDownload0}`);
       if (r.contractDownload1 !== 'pContractDownload') throw new Error(`pContractDownloadDept_1 data-scope-group sai: ${r.contractDownload1}`);
       if (r.carView2 !== 'pCarView') throw new Error(`pCarViewDept_2 data-scope-group sai: ${r.carView2}`);
     });
 
-    await scenario('Round-trip thật qua UI: tick checkbox trong bảng mới -> collectPermsFromForm() đọc đúng uploadDepts/contractDownload.depts', async () => {
+    await scenario('Round-trip thật qua UI: tick checkbox trong bảng mới -> collectPermsFromForm() đọc đúng docDownload.depts/contractDownload.depts', async () => {
       const r = await page.evaluate((depts) => {
-        document.getElementById('pUploadDept_1').checked = true; // Phòng Kế Toán
+        document.getElementById('pDocDownloadDept_1').checked = true; // Phòng Kế Toán
         document.getElementById('pContractDownloadDept_2').checked = true; // Phòng IT
         const perms = collectPermsFromForm();
-        return { uploadDepts: perms.uploadDepts, contractDownloadDepts: perms.contractDownload.depts };
+        return { docDownloadDepts: perms.docDownload.depts, contractDownloadDepts: perms.contractDownload.depts };
       }, DEPT_NAMES);
-      if (JSON.stringify(r.uploadDepts) !== JSON.stringify([DEPT_NAMES[1]])) throw new Error(`uploadDepts sai: ${JSON.stringify(r.uploadDepts)}`);
+      if (JSON.stringify(r.docDownloadDepts) !== JSON.stringify([DEPT_NAMES[1]])) throw new Error(`docDownload.depts sai: ${JSON.stringify(r.docDownloadDepts)}`);
       if (JSON.stringify(r.contractDownloadDepts) !== JSON.stringify([DEPT_NAMES[2]])) throw new Error(`contractDownload.depts sai: ${JSON.stringify(r.contractDownloadDepts)}`);
     });
 

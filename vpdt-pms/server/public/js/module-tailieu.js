@@ -415,7 +415,7 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
         <div class="flex items-start gap-2">
           ${docThumbHTML(doc)}
           <div class="min-w-0">
-            <div class="font-bold text-gray-800">${escapeHtml(doc.title)}</div>
+            <div class="font-bold text-gray-800">${escapeHtml(doc.title)}${doc.published ? ' <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold align-middle">📣 Đã Phát Hành</span>' : ''}</div>
             <div class="text-xs text-gray-500 line-clamp-2 mt-0.5">${escapeHtml(doc.summary)}</div>
           </div>
         </div>
@@ -426,7 +426,7 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
       <td class="border p-2">${progressBadge}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
-          const canDownload = (doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader);
+          const canDownload = (doc.fileUrl || doc.fileData) && canDownloadFile(currentUser, 'doc', doc.dept, doc.uploader, doc.published);
           const secondaryOptions = [];
           let primaryBtnHTML;
           if (canApprove) {
@@ -444,6 +444,11 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
             secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
           }
           if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });
+          // "Phát Hành" (10/2026, "6-module") — RIÊNG TỪNG bản ghi version (đúng hàng này).
+          if (canManageDocPublish(currentUser, doc)) {
+            if (doc.published) secondaryOptions.push({ value: 'unpublish', label: '↩️ Hủy Phát Hành' });
+            else if (doc.status === 'APPROVED') secondaryOptions.push({ value: 'publish', label: '🚀 Phát Hành' });
+          }
           if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
           return buildActionCell(doc.id, primaryBtnHTML, secondaryOptions, 'runDocAction');
         })()}
@@ -464,8 +469,54 @@ function runDocAction(id, action) {
     case 'requestChanges': requestWorkflowChangesAction('docs', id, DB.docs, 'renderDocs', 'người tải lên'); break;
     case 'editDraft': openBosungEditModal('docs', id); break;
     case 'download': downloadDocFile(id); break;
+    case 'publish': publishDocAction(id); break;
+    case 'unpublish': unpublishDocAction(id); break;
     case 'delete': deleteDocAction(id); break;
   }
+}
+
+// "Phát Hành" tài liệu (10/2026, "6-module") — publishDoc()/unpublishDoc() (lib/recordActions.js) tự
+// kiểm quyền docPublish + trạng thái APPROVED. RIÊNG TỪNG bản ghi version (id ở đây là id của ĐÚNG
+// version đang thao tác trong modal "Chi Tiết Tài Liệu", không phải id của bản gốc).
+function publishDocAction(id) {
+  const doc = DB.docs.find(d => d.id === id);
+  if (!doc) return;
+  showConfirmModal({
+    title: 'Phát Hành Tài Liệu',
+    bodyHTML: `Bạn có chắc chắn muốn phát hành phiên bản <b>${escapeHtml(doc.displayCode || doc.code)} (v${escapeHtml(doc.ver)})</b>? Sau khi phát hành, MỌI người có quyền "Xem/Tải tài liệu đã phát hành" sẽ xem/tải được, bất kể phòng ban/quy trình duyệt.`,
+    confirmLabel: 'Phát Hành',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('docs', id, 'publish', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.docs.findIndex(d => d.id === id);
+      if (idx !== -1) DB.docs[idx] = result.item;
+      logSystemAction('DOC', 'PUBLISH_DOC', `Phát hành tài liệu [${result.item.code}]`, 'SUCCESS', result.item.code);
+      renderDocs();
+      viewDocDetails(id);
+    }
+  });
+}
+function unpublishDocAction(id) {
+  const doc = DB.docs.find(d => d.id === id);
+  if (!doc) return;
+  showConfirmModal({
+    title: 'Hủy Phát Hành Tài Liệu',
+    bodyHTML: `Bạn có chắc chắn muốn hủy phát hành phiên bản <b>${escapeHtml(doc.displayCode || doc.code)} (v${escapeHtml(doc.ver)})</b>? Sau khi hủy, chỉ các lớp quyền thông thường (người tải lên/người duyệt/phòng ban...) mới xem/tải được.`,
+    confirmLabel: 'Hủy Phát Hành',
+    onConfirm: async () => {
+      let result;
+      try {
+        result = await callRecordAction('docs', id, 'unpublish', {});
+      } catch (err) { return alert(`⛔ ${err.message}`); }
+      const idx = DB.docs.findIndex(d => d.id === id);
+      if (idx !== -1) DB.docs[idx] = result.item;
+      logSystemAction('DOC', 'UNPUBLISH_DOC', `Hủy phát hành tài liệu [${result.item.code}]`, 'SUCCESS', result.item.code);
+      renderDocs();
+      viewDocDetails(id);
+    }
+  });
 }
 
 function deleteDocAction(id) {
@@ -1903,7 +1954,17 @@ function viewDocDetails(anyDocId) {
     } else {
       approverHTML = `<span class="text-gray-400 italic">Chưa duyệt</span>`;
     }
-    const canDL = (v.fileUrl || v.fileData) && canDownloadFile(currentUser, 'doc', v.dept, v.uploader);
+    const canDL = (v.fileUrl || v.fileData) && canDownloadFile(currentUser, 'doc', v.dept, v.uploader, v.published);
+    // "Phát Hành" (10/2026, "6-module") — RIÊNG TỪNG bản ghi version, không lan sang version khác.
+    const canManagePublish = canManageDocPublish(currentUser, v);
+    const publishBtnHTML = canManagePublish
+      ? (v.published
+          ? `<button type="button" data-op="unpublishDocAction" data-arg0="${v.id}" class="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-bold hover:bg-amber-700 ml-1">↩️ Hủy Phát Hành</button>`
+          : (v.status === 'APPROVED' ? `<button type="button" data-op="publishDocAction" data-arg0="${v.id}" class="px-2 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold hover:bg-emerald-700 ml-1">🚀 Phát Hành</button>` : ''))
+      : '';
+    const publishedBadgeHTML = v.published
+      ? `<div class="mt-1"><span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">📣 Đã Phát Hành</span></div>`
+      : '';
     // Trước đây customData (trường tuỳ biến bắt buộc nhập lúc upload — collectDynamicFieldsData('DOC'),
     // validateRequiredCustomData ở server) không hiển thị lại ở bất kỳ đâu của module Tài Liệu, khác
     // Văn Bản Trình/Hợp Đồng/Văn Phòng Tổng Hợp đều hiện đúng trong Chi Tiết — dữ liệu coi như bị "nuốt"
@@ -1920,10 +1981,11 @@ function viewDocDetails(anyDocId) {
           <div class="text-[10px] text-gray-400">${escapeHtml(v.createdAt || '')}</div>
         </td>
         <td class="border p-2">${approverHTML}</td>
-        <td class="border p-2 text-gray-700">${escapeHtml(v.summary || '')}${customDataHTML}</td>
+        <td class="border p-2 text-gray-700">${escapeHtml(v.summary || '')}${customDataHTML}${publishedBadgeHTML}</td>
         <td class="border p-2 text-center whitespace-nowrap">
           <button type="button" data-op="viewDoc" data-arg0="${v.id}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL ? `<button type="button" data-op="downloadDocFile" data-arg0="${v.id}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
+          ${publishBtnHTML}
         </td>
       </tr>
     `;

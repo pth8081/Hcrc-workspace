@@ -148,9 +148,13 @@ function collectPermsFromForm() {
     meetingReportView: document.getElementById('pMeetingReportView').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
     officeFix: document.getElementById('pOfficeFix').checked,
+    // uploadAll (10/2026, "6-module"): bỏ uploadDepts (mảng), chỉ còn 1 cờ phẳng boolean.
     uploadAll: document.getElementById('pUploadAll').checked,
-    uploadDepts: Array.from(document.querySelectorAll('[id^="pUploadDept_"]:checked')).map(cb => cb.value),
     docDownload: scopeFromForm('pDocDownloadAll', 'pDocDownloadDept'),
+    // "Phát Hành" tài liệu (10/2026, "6-module", mới) — 3 quyền phẳng, không theo phòng ban.
+    docPublish: document.getElementById('pDocPublish').checked,
+    docViewPublished: document.getElementById('pDocViewPublished').checked,
+    docDownloadPublished: document.getElementById('pDocDownloadPublished').checked,
 
     // submissionView/contractView (cột "Xem") ĐÃ BỎ (11/2026, "Việc D") — xem chú thích tại khối
     // 📜 3/📄 4 trong systemSection.html.
@@ -408,8 +412,13 @@ function populatePermsForm(permsInput) {
   document.getElementById('pRebateApprove').checked = !!perms.rebateApprove;
   document.getElementById('pRebateViewReport').checked = !!perms.rebateViewReport;
 
+  // uploadAll (10/2026, "6-module"): bỏ {all,depts} (uploadDepts), chỉ còn 1 cờ phẳng boolean.
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pDocDownloadAll').checked = !!perms.docDownload?.all;
+  // "Phát Hành" tài liệu (10/2026, "6-module", mới) — 3 quyền phẳng, không theo phòng ban.
+  document.getElementById('pDocPublish').checked = !!perms.docPublish;
+  document.getElementById('pDocViewPublished').checked = !!perms.docViewPublished;
+  document.getElementById('pDocDownloadPublished').checked = !!perms.docDownloadPublished;
 
   document.getElementById('pSubCreate').checked = !!perms.submissionCreate;
   document.getElementById('pSubDownloadAll').checked = !!perms.submissionDownload?.all;
@@ -450,7 +459,6 @@ function populatePermsForm(permsInput) {
     }
   };
 
-  setGroupCheckboxes(perms.uploadDepts, 'pUploadDept');
   setGroupCheckboxes(perms.docDownload?.depts, 'pDocDownloadDept');
   setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
   setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
@@ -458,7 +466,7 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
-  ['pUploadAll', 'pDocDownloadAll',
+  ['pDocDownloadAll',
    'pSubDownloadAll',
    'pContractDownloadAll',
    'pCarViewAll', 'pCarDownloadAll',

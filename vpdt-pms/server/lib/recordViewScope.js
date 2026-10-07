@@ -211,6 +211,11 @@ function scopeAllows(user, scope, dept, moduleKey, appData, creatorUsername) {
 function canViewDoc(user, doc, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  // "Phát Hành" (10/2026, "6-module"): tài liệu published=true hiện công khai cho MỌI người có
+  // docViewPublished, hoàn toàn ĐỘC LẬP với 4 lớp bên dưới (uploader/approver/dept/extraViewer) — không
+  // thay thế, chỉ THÊM 1 lối xem phụ. Riêng từng bản ghi version (doc.published), không lan sang
+  // version khác của cùng họ tài liệu.
+  if (doc.published && user.perms?.docViewPublished) return true;
   if (doc.uploader === user.username) return true;
   if (isApproverForApproversMap(MODULE_CONFIGS.docs.resolveWfConfig(doc, appData).approvers, user.username)) return true;
   if (doc.dept && doc.dept === user.dept && deptAutoViewOn(appData, 'doc', 'CREATOR_ONLY')) return true;
@@ -517,11 +522,16 @@ function filterReportEntriesForUser(entries, user, appData) {
   return (entries || []).filter(e => canViewReportEntry(user, e, appData));
 }
 
-// Khớp canDownloadFile(user, moduleKey, dept, ownerUsername) ở public/index.html — dùng cho
+// Khớp canDownloadFile(user, moduleKey, dept, ownerUsername, published) ở public/js/core.js — dùng cho
 // routes/download.js để chặn tải file ngoài phạm vi, không chỉ ẩn ở giao diện.
-function canDownloadRecordFile(user, moduleKey, dept, ownerUsername) {
+// Tham số `published` (10/2026, "6-module", tuỳ chọn — mọi lời gọi cũ bỏ qua tham số này vẫn đúng hành
+// vi 100% vì undefined/false luôn rơi về nhánh scopeAllows() như trước): CHỈ module 'doc' thực sự có ý
+// nghĩa (docDownloadPublished) — các moduleKey khác không có field tương ứng nên nhánh này luôn no-op
+// (user.perms?.[`${moduleKey}DownloadPublished`] luôn undefined), không cần hardcode riêng 'doc' ở đây.
+function canDownloadRecordFile(user, moduleKey, dept, ownerUsername, published) {
   if (!user) return false;
   if (ownerUsername && ownerUsername === user.username) return true;
+  if (published && user.perms?.[`${moduleKey}DownloadPublished`]) return true;
   return scopeAllows(user, user.perms?.[`${moduleKey}Download`], dept);
 }
 

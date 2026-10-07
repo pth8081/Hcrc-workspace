@@ -343,6 +343,9 @@ const PERM_KEY_VN_LABELS = {
   "contractDownload.all": "Hợp Đồng & Giấy Phép — Tải xuống",
   "contractImportSigned": "Hợp Đồng & Giấy Phép — 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab \"Quản Lý HĐ\")",
   "docDownload.all": "Tài Liệu — Tải Tài Liệu",
+  "docDownloadPublished": "Tài Liệu — 📣 Tải tài liệu Đã Phát Hành (mọi phòng ban)",
+  "docPublish": "Tài Liệu — 🚀 Phát Hành / Hủy Phát Hành",
+  "docViewPublished": "Tài Liệu — 📣 Xem tài liệu Đã Phát Hành (mọi phòng ban)",
   "hrAttendanceManage": "Nhân Sự — ⏱️ Quản Lý Chấm Công & Phép Năm (HR)",
   "hrContractManage": "Nhân Sự — 📝 Quản Lý Hợp Đồng Lao Động (HR)",
   "hrLeaveApprove": "Nhân Sự — ✅ Duyệt Đơn Nghỉ Phép (quản lý trực tiếp)",
@@ -552,7 +555,7 @@ const PERM_KEY_VN_LABELS = {
   "uniformApprove": "Đồng Phục — ✔️ Duyệt Kỳ Cấp Phát / Điều Chuyển Kho",
   "uniformManage": "Đồng Phục — 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)",
   "uniformStoreManage": "Đồng Phục — ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)",
-  "uploadAll": "Tài Liệu — Tải lên",
+  "uploadAll": "Tài Liệu — Tải lên (tự khoá đúng phòng ban)",
   "vppManage": "Văn Phòng Phẩm — ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)",
   "vppRegisterCreate": "Văn Phòng Phẩm — 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)",
   "vppReportView": "Văn Phòng Phẩm — 📊 Xem Báo Cáo (không kèm quyền cấu hình Kỳ Đăng Ký)"

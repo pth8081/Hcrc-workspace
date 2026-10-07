@@ -1806,23 +1806,25 @@
             <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><span class="perm-tree-chevron text-gray-400">▸</span><span>📂 2. Tài Liệu</span></span>
             <span id="permTreeBadge_doc" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
-          <div class="p-3 pt-0 max-h-64 overflow-y-auto overflow-x-auto">
+          <div class="p-3 pt-0 space-y-2">
             <!-- LÀM GỌN (v24.75, theo yêu cầu người dùng "bỏ hết các phân quyền lằng nhằng... chỉ giữ
                  lại đúng quyền Tải tài liệu"): bỏ 2 cột "Xem Bản Nháp"/"Xem Đã Duyệt" cũ — người tạo và
                  người đang duyệt LUÔN xem được mặc định (không cần cấp quyền gì), các trường hợp còn lại
                  cấu hình ở Hệ Thống → Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban (module "Tài
-                 Liệu", mô hình 4 trạng thái dùng chung 17 module). Chỉ còn đúng 2 quyền ở đây: Tải Lên
-                 (ai được TẠO tài liệu) + Tải Tài Liệu (ai được TẢI file, tách riêng khỏi quyền xem). -->
+                 Liệu", mô hình 4 trạng thái dùng chung 17 module).
+                 LÀM GỌN TIẾP (10/2026, "6-module", đã xác nhận): bỏ hẳn cặp uploadAll(bool)+
+                 uploadDepts(mảng) cũ (cho phép admin cấp quyền "tải lên hộ phòng ban khác") — uploadAll
+                 GIỮ NGUYÊN TÊN nhưng giờ là 1 công tắc phẳng DUY NHẤT, tự khoá đúng phòng ban người tải
+                 lên (forceOwnDept, xem lib/createValidation.js). Bảng phòng ban bên dưới giờ CHỈ còn
+                 đúng 1 cột "Tải Tài Liệu" (docDownload, giữ nguyên {all,depts} như cũ). -->
+            <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+              <input type="checkbox" id="pUploadAll"> ✅ Cho phép tải lên tài liệu (tự khoá đúng phòng ban của mình)
+            </label>
+            <div class="max-h-64 overflow-y-auto overflow-x-auto">
             <table class="w-full text-[11px] border-collapse">
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
                   <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                  <th class="text-center font-bold text-blue-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Tải Lên</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pUploadAll" data-op-change="toggleScopeGroup" data-arg0="pUploadAll" data-arg1="pUploadDept"><span>ALL</span>
-                    </label>
-                  </th>
                   <th class="text-center font-bold text-rose-700 pb-1 px-1 align-bottom">
                     <span class="block mb-0.5">Tải Tài Liệu</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
@@ -1833,6 +1835,24 @@
               </thead>
               <tbody id="pDocDeptTableBody"></tbody>
             </table>
+            </div>
+            <!-- "Phát Hành" tài liệu (10/2026, "6-module", đã xác nhận) — tính năng MỚI, 3 quyền ĐỘC LẬP
+                 hẳn với uploadAll/docDownload ở trên: docPublish (ai được bấm Phát Hành/Hủy Phát Hành 1
+                 PHIÊN BẢN cụ thể đã APPROVED), docViewPublished/docDownloadPublished (ai được xem/tải
+                 BẤT KỲ phiên bản nào ĐÃ PHÁT HÀNH, bất kể phòng ban/quy trình duyệt — xem canViewDoc()/
+                 canDownloadRecordFile() ở lib/recordViewScope.js, publishDoc()/unpublishDoc() ở
+                 lib/recordActions.js). Không theo phòng ban (dùng chung toàn công ty) nên không cần bảng. -->
+            <div class="border-t pt-2 space-y-1">
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pDocPublish"> 🚀 Phát Hành / Hủy Phát Hành tài liệu
+              </label>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pDocViewPublished"> 👁️ Xem tài liệu đã Phát Hành (mọi phòng ban)
+              </label>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pDocDownloadPublished"> ⬇️ Tải tài liệu đã Phát Hành (mọi phòng ban)
+              </label>
+            </div>
           </div>
         </details>
 

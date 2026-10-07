@@ -920,9 +920,11 @@ const DEFAULTS = {
   // — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]);
   // phòng ban của chính người dùng luôn được phép mặc định dù không liệt kê ở đây. Riêng Phòng Họp
   // (meetingBook, 10/2026), Văn Bản Trình (submissionCreate, 10/2026), Hợp Đồng (contractCreate,
-  // 10/2026), Đăng Ký Xe (carCreate, 10/2026) và Văn Phòng (officeCreate, 10/2026, "6-module") đã rút
-  // gọn thành 1 quyền phẳng boolean duy
-  // nhất — tự khoá đúng phòng ban, không còn dạng {all,depts}.
+  // 10/2026), Đăng Ký Xe (carCreate, 10/2026), Văn Phòng (officeCreate, 10/2026) và Tài Liệu (uploadAll,
+  // 10/2026, "6-module") đã rút gọn thành 1 quyền phẳng boolean duy nhất — tự khoá đúng phòng ban,
+  // không còn dạng {all,depts}. docPublish/docViewPublished/docDownloadPublished (10/2026, "6-module",
+  // mới) — 3 quyền "Phát Hành" tài liệu, ĐỘC LẬP với uploadAll, không theo phòng ban, mặc định false cho
+  // mọi user (chưa seed user nào cần — admin tự gán khi cần qua Phân Quyền).
   // startDate (Đào Tạo Đợt 6, "ngày vào làm việc") — mốc DUY NHẤT để tính các hạn Giai Đoạn 1/2/3 của Đào
   // Tạo Tân Binh (onboardingProgress, xem lib/createValidation.js/lib/recordActions.js). Rỗng mặc định
   // ở toàn bộ user seed (4 tài khoản dưới đây đều là tài khoản quản trị/cũ, không phải "tân binh" cần
@@ -937,7 +939,10 @@ const DEFAULTS = {
       id: 2, username: 'nv_nhansu', pass: '123456', name: 'Nguyễn Văn A', email: 'nhansu@company.com', phone: '0902223334', dept: 'Phòng Nhân Sự', startDate: '',
       perms: {
         admin: false,
-        uploadAll: false, uploadDepts: ['Phòng Nhân Sự'],
+        // uploadAll (10/2026, "6-module"): bỏ {all,depts} (uploadDepts), chỉ còn 1 cờ phẳng boolean, tự
+        // khoá đúng phòng ban — người này đã có uploadDepts=['Phòng Nhân Sự'] (đúng phòng mình) nên giữ
+        // nguyên true để không mất quyền đang có.
+        uploadAll: true,
         docDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         submissionCreate: true, submissionDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         contractCreate: true, contractDownload: { all: false, depts: ['Phòng Nhân Sự'] },
@@ -952,7 +957,9 @@ const DEFAULTS = {
       id: 3, username: 'ks_kiemsoat', pass: '123456', name: 'Lê Văn KS', email: 'kiemsoat@company.com', phone: '0903334445', dept: 'Phòng IT', startDate: '',
       perms: {
         admin: false,
-        uploadAll: false, uploadDepts: [],
+        // uploadAll (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng — không có uploadDepts cũ
+        // nên không có quyền để giữ, vẫn tự xem được tài liệu phòng mình qua forceOwnDept lúc tạo mới.
+        uploadAll: false,
         docDownload: { all: false, depts: [] },
         // Kiểm soát viên cần xem xuyên phòng ban để kiểm toán, nhưng chỉ tạo hồ sơ trong phòng mình.
         // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract.extraViewers
@@ -971,7 +978,9 @@ const DEFAULTS = {
       id: 4, username: 'sep_duyet', pass: '123456', name: 'Phạm Văn BGD', email: 'giamdoc@company.com', phone: '0904445556', dept: 'Ban Giám Đốc', startDate: '',
       perms: {
         admin: false,
-        uploadAll: true, uploadDepts: [],
+        // uploadAll (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng — đã có uploadAll=true từ
+        // trước nên giữ nguyên.
+        uploadAll: true,
         docDownload: { all: true, depts: [] },
         // Ban Giám Đốc cần toàn quyền xem & tạo trên mọi module để phê duyệt/giám sát toàn công ty.
         // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract.extraViewers

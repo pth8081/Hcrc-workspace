@@ -1597,12 +1597,19 @@ const CREATE_MODULE_CONFIGS = {
       payload.startedBy = null; payload.startedByName = null; payload.startedAt = null;
     }
   },
-  // Tài liệu dùng cặp field cũ uploadAll(bool)+uploadDepts(mảng) chứ không phải {all,depts} object
-  // như 5 module trên — quy đổi tại chỗ để dùng chung scopeAllows(). Đây cũng là module HỞ NHẤT
-  // trước Bước 2: dropdown chọn phòng ban ở form tải lên trước đây không hề lọc theo quyền gì cả.
+  // LÀM GỌN (10/2026, "6-module", đã xác nhận): bỏ hẳn cặp field cũ uploadAll(bool)+uploadDepts(mảng)
+  // (trước đây cho phép admin cấp quyền "tải lên hộ phòng ban khác", quy đổi qua scopeAllows() như
+  // {all,depts} object) — giờ CHỈ còn đúng 1 cờ phẳng uploadAll (TÊN GIỮ NGUYÊN, chỉ đổi Ý NGHĨA: trước
+  // là "tải lên được MỌI phòng ban", nay là "được tải lên tài liệu", luôn tự khoá đúng phòng ban của
+  // chính người tải — forceOwnDept, cùng khuôn meetingBook/submissionCreate/contractCreate/carCreate/
+  // officeCreate đã làm ở 5 module trước). getScope() trả rỗng để scopeAllows() LUÔN qua phần "cùng
+  // phòng ban" (dept lúc tạo = user.dept do forceOwnDept ép), quyền TẠO thật sự (có được tải lên hay
+  // không) kiểm RIÊNG bằng check tường minh uploadAll ngay đầu extraValidate bên dưới — không còn ý
+  // nghĩa "module HỞ NHẤT" (dropdown chọn phòng ban tuỳ ý) như chú thích cũ mô tả nữa.
   docs: {
     dbKey: 'docs',
-    getScope: (user) => ({ all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }),
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'uploader', creatorNameField: 'uploaderName',
     // Mã tài liệu GỐC = <viết tắt Phân loại>-<viết tắt Phòng ban>-<số 3 chữ số>, SINH LẠI Ở SERVER —
     // xem lib/recordCodeGen.js. PHIÊN BẢN mới (rootDocId != null) trả null: mã suy từ bản gốc
@@ -1615,6 +1622,9 @@ const CREATE_MODULE_CONFIGS = {
     // thể tự xưng rootDocId của tài liệu bất kỳ (kể cả phòng ban khác), tự đặt versionNumber tuỳ ý (đâm
     // ra 2 version trùng số hoặc "nhảy cóc"), hoặc bổ sung version cho tài liệu gốc CHƯA duyệt xong.
     extraValidate: (payload, collection, user, appData, trashedItems) => {
+      if (!user.perms?.admin && !user.perms?.uploadAll) {
+        throw new CreateError(403, 'Bạn không có quyền tải lên tài liệu');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
       // Tệp tài liệu (#docFile ở index.html) — xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu');
@@ -1680,6 +1690,13 @@ const CREATE_MODULE_CONFIGS = {
       // đặt sẵn status:"APPROVED" cùng history giả để bỏ qua toàn bộ quy trình duyệt.
       payload.status = 'PENDING';
       payload.currentStep = 1;
+      // "Phát Hành" (10/2026, "6-module", đã xác nhận): field published LUÔN bắt đầu false — kể cả bản
+      // GỐC lẫn PHIÊN BẢN mới (payload.rootDocId != null, nhánh phía trên) — không kế thừa published từ
+      // bản trước đó. Chỉ chuyển true qua action riêng publishDoc() (lib/recordActions.js, cần docPublish
+      // + status APPROVED), ÁP DỤNG THEO TỪNG BẢN GHI VERSION (không tự lan sang version khác, kể cả
+      // version mới hơn của cùng họ tài liệu) — xem canViewDoc()/canDownloadRecordFile() đã thêm nhánh
+      // "published && docViewPublished/docDownloadPublished" riêng, độc lập hẳn với mọi lớp quyền cũ.
+      payload.published = false;
       payload.history = [{
         step: 0,
         stepName: 'Tải lên & Trình ký',

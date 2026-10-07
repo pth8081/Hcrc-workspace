@@ -157,7 +157,9 @@ const USER_A = { username: 'u_a', name: 'Người A', dept: DEPT_A, perms: {
   // contractCreate: làm gọn phân quyền Hợp Đồng (10/2026, "6-module") — nay là quyền PHẲNG boolean, tự
   // khoá đúng phòng ban của người dùng (DEPT_A, khớp dept của USER_A) thay vì {all,depts}.
   contractCreate: true,
-  uploadAll: false, uploadDepts: [DEPT_A],
+  // uploadAll (10/2026, "6-module"): bỏ {all,depts} (uploadDepts) — USER_A trước có uploadDepts=[DEPT_A]
+  // (đúng phòng mình) nên quy đổi sang true để giữ nguyên khả năng tạo tài liệu (test 10c dưới).
+  uploadAll: true,
   licenseCreate: true
 } };
 const ADMIN = { username: 'admin', name: 'Quản Trị', dept: DEPT_A, perms: { admin: true } };

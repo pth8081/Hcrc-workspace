@@ -70,7 +70,7 @@ const APP_DATA_REQUIRED = {
   contractApprovalGroups: [], contractApprovalLevels: [APPROVAL_LEVEL_KHAC]
 };
 
-const UPLOADER = { username: 'up1', name: 'Người Tải Lên', dept: DEPT, perms: { uploadAll: true, uploadDepts: [] } };
+const UPLOADER = { username: 'up1', name: 'Người Tải Lên', dept: DEPT, perms: { uploadAll: true } };
 const CONTRACT_USER = { username: 'ct1', name: 'Người Tạo HĐ', dept: DEPT, perms: { contractCreate: true } };
 const CAR_USER = { username: 'car1', name: 'Người Đăng Ký Xe', dept: DEPT, perms: { carCreate: true } };
 const OFFICE_USER = { username: 'of1', name: 'Người Đề Xuất VP', dept: DEPT, perms: { officeCreate: true, officeBuy: true } };
@@ -305,10 +305,22 @@ run('editDocDraft: PHIÊN BẢN gửi ĐÚNG dept/cat hiện tại (không đổ
   recordActions.editDocDraft({ dept: DEPT, cat: 'QUYET_DINH', title: 'Sửa lại tiêu đề' }, UPLOADER, item, APP_DATA_EMPTY);
   assert.strictEqual(item.title, 'Sửa lại tiêu đề');
 });
-run('editDocDraft: TÀI LIỆU GỐC (rootDocId == null) vẫn đổi dept được bình thường như cũ (không bị ảnh hưởng bởi bản vá)', () => {
+// uploadAll (10/2026, "6-module", đã xác nhận): bỏ {all,depts} (uploadDepts) — editDocDraft() đổi dept
+// giờ CHỈ cho phép đúng phòng ban của chính người sửa (forceOwnDept-style, cùng khuôn editContract/
+// editCarRegDraft/editOfficeReqDraft đã áp dụng từ trước), KHÔNG còn do lỗi rootDocId ở trên (2 scenario
+// phía trên) mà do assertDeptScopeAllowed() mới — test này đổi từ "được phép" sang "bị chặn 403" để khớp
+// hành vi mới, tách biệt rõ với lỗi 409 rootDocId.
+run('editDocDraft: TÀI LIỆU GỐC (rootDocId == null) KHÔNG còn đổi dept khác phòng mình được (forceOwnDept, không liên quan lỗi rootDocId)', () => {
   const item = makeDocDraft(); // rootDocId == null (mặc định)
-  recordActions.editDocDraft({ dept: 'Phòng Kế Toán' }, UPLOADER, item, APP_DATA_EMPTY);
-  assert.strictEqual(item.dept, 'Phòng Kế Toán');
+  expectHttpError(() => recordActions.editDocDraft({ dept: 'Phòng Kế Toán' }, UPLOADER, item, APP_DATA_EMPTY),
+    403, 'không có quyền chuyển hồ sơ sang phòng ban');
+  assert.strictEqual(item.dept, DEPT, 'dept cũ phải giữ nguyên, không bị đổi dù request bị chặn');
+});
+run('editDocDraft: TÀI LIỆU GỐC (rootDocId == null) đổi dept về ĐÚNG phòng mình vẫn qua bình thường', () => {
+  const item = makeDocDraft(); // rootDocId == null (mặc định)
+  recordActions.editDocDraft({ dept: DEPT, title: 'Giữ nguyên phòng, chỉ đổi tiêu đề' }, UPLOADER, item, APP_DATA_EMPTY);
+  assert.strictEqual(item.dept, DEPT);
+  assert.strictEqual(item.title, 'Giữ nguyên phòng, chỉ đổi tiêu đề');
 });
 
 run('editContract: javascript: URI ở fileUrl bị từ chối', () => {

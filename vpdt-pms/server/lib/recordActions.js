@@ -486,7 +486,10 @@ function editDocDraft(payload, user, item, appData, existingCollection) {
       throw new HttpError(409, 'Phiên bản của 1 tài liệu đã có không được đổi Phân Loại khác với tài liệu gốc');
     }
   } else if (payload.dept !== undefined && payload.dept !== item.dept) {
-    assertDeptScopeAllowed(user, { all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }, payload.dept);
+    // uploadAll (10/2026, "6-module"): bỏ {all,depts} cũ (uploadDepts), chỉ còn 1 cờ phẳng — scope rỗng
+    // khiến assertDeptScopeAllowed() CHỈ cho qua khi payload.dept === user.dept (hoặc admin), cùng khuôn
+    // editOfficeReqDraft()/editCarRegDraft() đã áp dụng ở 2 module trước.
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "cat không đối chiếu danh mục" + "đổi cat/dept
   // lúc SỬA không sinh lại code/displayCode"): code/displayCode của tài liệu GỐC (rootDocId == null —
@@ -542,6 +545,39 @@ function submitDocDraft(user, item) {
   item.history = item.history || [];
   item.history.push({ step: 0, stepName: 'Gửi lại sau bổ sung', approver: user.name, username: user.username, action: 'RESUBMITTED', comment: '', time: nowVN() });
   resetForResubmit(item, {});
+  return item;
+}
+
+// "Phát Hành" tài liệu (10/2026, "6-module", đã xác nhận) — field published, riêng từng bản ghi
+// version (KHÔNG lan sang version khác của cùng họ tài liệu). docPublish là quyền ĐỘC LẬP hẳn với
+// uploadAll (ai TẢI LÊN không nhất thiết được PHÁT HÀNH, và ngược lại — VD admin/thư ký công bố văn
+// bản công ty sau khi phòng ban khác tải lên & đã duyệt xong). Publish yêu cầu status APPROVED (tài
+// liệu phải qua đúng quy trình duyệt trước khi công khai); Unpublish không yêu cầu gì thêm ngoài đang
+// published=true (ẩn lại bất kỳ lúc nào, kể cả về sau tài liệu có bị thay thế bởi phiên bản mới).
+function publishDoc(user, item) {
+  if (!user.perms?.admin && !user.perms?.docPublish) {
+    throw new HttpError(403, 'Bạn không có quyền phát hành tài liệu');
+  }
+  if (item.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ phát hành được tài liệu đã duyệt xong (APPROVED)');
+  }
+  if (item.published) throw new HttpError(409, 'Tài liệu này đã được phát hành rồi');
+  item.published = true;
+  item.publishedBy = user.username;
+  item.publishedAt = nowVN();
+  item.history = item.history || [];
+  item.history.push({ step: 0, stepName: 'Phát hành', approver: user.name, username: user.username, action: 'PUBLISHED', comment: '', time: nowVN() });
+  return item;
+}
+
+function unpublishDoc(user, item) {
+  if (!user.perms?.admin && !user.perms?.docPublish) {
+    throw new HttpError(403, 'Bạn không có quyền hủy phát hành tài liệu');
+  }
+  if (!item.published) throw new HttpError(409, 'Tài liệu này chưa được phát hành');
+  item.published = false;
+  item.history = item.history || [];
+  item.history.push({ step: 0, stepName: 'Hủy phát hành', approver: user.name, username: user.username, action: 'UNPUBLISHED', comment: '', time: nowVN() });
   return item;
 }
 
@@ -8449,7 +8485,7 @@ function canDecideMeeting(user, item, appData) {
 module.exports = {
   canDecideMeeting,
   editContract,
-  editDocDraft, submitDocDraft,
+  editDocDraft, submitDocDraft, publishDoc, unpublishDoc,
   editCarRegDraft, submitCarRegDraft,
   editOfficeReqDraft, submitOfficeReqDraft, canCancelOfficeReq, cancelOfficeReq,
   editSubmissionDraft, submitSubmissionDraft,

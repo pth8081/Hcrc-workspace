@@ -1516,7 +1516,10 @@ function populateModuleAccessForm(moduleAccess, prefix = 'pModuleAccess') {
 // được nhóm KHÔNG cần 1 container DOM riêng bọc đúng 1 cột (không còn khả thi vì các cột giờ nằm CHUNG 1
 // hàng <tr>, xem chú thích tại đó).
 const PERM_DEPT_TABLES = [
-  { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pDocDownload'] },
+  // LÀM GỌN (10/2026, "6-module"): bỏ luôn cột pUpload ("Tải Lên") khỏi bảng phòng ban — đã chuyển
+  // thành 1 công tắc phẳng pUploadAll (boolean, GIỮ NGUYÊN TÊN cũ) riêng, xem khối 📂 2. Tài Liệu trong
+  // systemSection.html.
+  { tbody: 'pDocDeptTableBody', cols: ['pDocDownload'] },
   // LÀM GỌN (11/2026, "Việc D"): bỏ cột pSubView/pContractView ("Xem") — xem chú thích đầy đủ tại khối
   // 📜 3/📄 4 trong systemSection.html.
   // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pSubCreate ("Tạo mới") khỏi bảng phòng ban — đã

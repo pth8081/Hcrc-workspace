@@ -2052,12 +2052,14 @@ function logSystemAction(module, actionType, description, status = 'SUCCESS', ta
 // ==========================================
 // PHÂN QUYỀN THEO PHÂN HỆ MODULE (Submission/Contract/Meeting/Car/Office)
 // ==========================================
-// Mỗi module nghiệp vụ (Tờ trình, Hợp đồng, Phòng họp, Đăng ký xe, Văn phòng) có phạm vi dữ liệu
-// riêng dạng { all: boolean, depts: string[] } cho hành động XEM và TẠO MỚI — cùng khuôn `uploadAll`/
-// `uploadDepts` (phạm vi TẠO) của module Tài Liệu, thay vì 1 công tắc bật/tắt toàn công ty như trước
-// (khiến ai cũng thấy dữ liệu của mọi phòng ban). Phòng ban của chính người dùng luôn được phép mặc
-// định, kể cả khi admin chưa cấp thêm quyền nào khác. Riêng phạm vi XEM của Tài Liệu (v24.75, theo yêu
-// cầu người dùng "làm gọn") KHÔNG còn dùng mô hình {all,depts} này nữa — chuyển hẳn sang
+// Mỗi module nghiệp vụ (Tờ trình, Hợp đồng, Phòng họp, Đăng ký xe, Văn phòng) CÒN SÓT lại phạm vi
+// dữ liệu riêng dạng { all: boolean, depts: string[] } cho hành động TẢI XUỐNG (download), thay vì 1
+// công tắc bật/tắt toàn công ty như trước (khiến ai cũng thấy dữ liệu của mọi phòng ban). Phòng ban của
+// chính người dùng luôn được phép mặc định, kể cả khi admin chưa cấp thêm quyền nào khác. Quyền TẠO MỚI
+// của cả 6 module (uploadAll/submissionCreate/contractCreate/meetingBook/carCreate/officeCreate) đã rút
+// gọn thành 1 cờ phẳng boolean DUY NHẤT từ đợt "6-module" (10/2026, forceOwnDept, xem
+// lib/createValidation.js), không còn dùng mô hình {all,depts} này nữa. Phạm vi XEM của Tài Liệu
+// (v24.75, theo yêu cầu người dùng "làm gọn") cũng KHÔNG dùng mô hình {all,depts} — chuyển hẳn sang
 // deptViewScopeConfig['doc'] (4 trạng thái dùng chung 17 module, cấu hình ở Hệ Thống → Nghiệp Vụ Nâng
 // Cao → 🔒 Phạm Vi Xem Theo Phòng Ban), xem canViewDoc() ở lib/recordViewScope.js.
 
@@ -3878,6 +3880,14 @@ function canManageOfficePaymentClient(user, item) {
   return !!(user?.perms?.admin || (user?.perms?.officeCreate && scopeAllows(user, {}, item.dept) && (!flag || user?.perms?.[flag])));
 }
 
+// "Phát Hành" tài liệu (10/2026, "6-module") — khớp đúng publishDoc()/unpublishDoc() ở
+// lib/recordActions.js. docPublish ĐỘC LẬP hẳn với uploadAll (ai TẢI LÊN không nhất thiết được PHÁT
+// HÀNH). canShowPublishButton (Publish) còn cần thêm !doc.published + status APPROVED; Unpublish chỉ
+// cần doc.published=true — 2 điều kiện riêng do caller tự kiểm thêm, hàm này chỉ trả quyền GỐC.
+function canManageDocPublish(user, doc) {
+  return !!(user?.perms?.admin || user?.perms?.docPublish);
+}
+
 // Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ bảng phòng ban
 // meetingBookScope {all,depts}, chỉ còn 1 công tắc phẳng meetingBook — tự khoá đúng phòng ban người
 // đăng ký ở server (forceOwnDept, lib/createValidation.js), không còn chọn được phòng ban khác.
@@ -4158,9 +4168,13 @@ function canAccessOfficeModule(user) {
 // — cấp cho ai đó ở module Tài liệu vô tình cũng cho họ tải luôn ở Hợp đồng/Xe/Văn phòng. Nay tách
 // riêng theo từng module (docDownload/submissionDownload/contractDownload/carDownload/
 // officeDownload), moduleKey ứng với 1 trong 5 giá trị: 'doc'|'submission'|'contract'|'car'|'office'.
-function canDownloadFile(user, moduleKey, dept, ownerUsername) {
+// `published` (10/2026, "6-module", tuỳ chọn — khớp canDownloadRecordFile() ở lib/recordViewScope.js):
+// CHỈ module 'doc' có field tương ứng (docDownloadPublished) — các moduleKey khác luôn đọc undefined
+// nên nhánh này là no-op an toàn, mọi lời gọi cũ bỏ qua tham số này vẫn giữ nguyên hành vi.
+function canDownloadFile(user, moduleKey, dept, ownerUsername, published) {
   if (!user) return false;
   if (ownerUsername && ownerUsername === user.username) return true;
+  if (published && user.perms?.[`${moduleKey}DownloadPublished`]) return true;
   return scopeAllows(user, user.perms?.[`${moduleKey}Download`], dept);
 }
 
@@ -4184,7 +4198,11 @@ function defaultNewUserPerms() {
     internalNewsCreate: false, internalRecruitmentCreate: false,
     trainingManage: false, trainingInstruct: false, onboardingEvaluate: false,
     internalPostApprove: false,
-    uploadAll: false, uploadDepts: [],
+    // uploadAll (10/2026, "6-module"): bỏ uploadDepts (mảng), chỉ còn 1 cờ phẳng, tự khoá đúng phòng
+    // ban người tải lên (forceOwnDept). docPublish/docViewPublished/docDownloadPublished (mới) — quyền
+    // "Phát Hành" ĐỘC LẬP hẳn với uploadAll (xem publishDoc()/canViewDoc()/canDownloadRecordFile()).
+    uploadAll: false,
+    docPublish: false, docViewPublished: false, docDownloadPublished: false,
     docDownload: emptyScope(),
     // submissionView/contractView (cột "Xem") ĐÃ BỎ (11/2026, "Việc D") — xem canAccessSubmissionModule()/
     // canAccessContractModule() + canViewSubmission()/canViewContract() (lib/recordViewScope.js).
@@ -4506,6 +4524,18 @@ function migrateLegacyPerms(perms) {
   if (typeof p.officeCreate !== 'boolean') {
     const oldOfficeScope = p.officeCreate;
     p.officeCreate = !!(oldOfficeScope?.all || (Array.isArray(oldOfficeScope?.depts) && oldOfficeScope.depts.length > 0));
+    changed = true;
+  }
+  // Làm gọn phân quyền Tài Liệu (10/2026, "6-module", đã xác nhận): bỏ hẳn cặp uploadAll(bool)+
+  // uploadDepts(mảng) — uploadAll GIỮ NGUYÊN TÊN nhưng giờ là 1 cờ phẳng DUY NHẤT, tự khoá đúng phòng
+  // ban người tải lên (forceOwnDept), cùng khuôn meetingBook/submissionCreate/contractCreate/carCreate/
+  // officeCreate. Quy đổi: có quyền cũ ở BẤT KỲ phạm vi nào (uploadAll=true HOẶC uploadDepts có ít nhất
+  // 1 phòng ban) -> giữ nguyên true để không ai bị mất quyền đang có, chỉ mất phần "phạm vi" (không còn
+  // chọn hộ phòng ban khác). docPublish/docViewPublished/docDownloadPublished là quyền MỚI, không có dữ
+  // liệu cũ để di trú — defaultNewUserPerms()/populatePermsForm() tự set false nếu chưa có.
+  if (Array.isArray(p.uploadDepts)) {
+    if (p.uploadDepts.length > 0 && !p.uploadAll) p.uploadAll = true;
+    delete p.uploadDepts;
     changed = true;
   }
   // Biên bản họp trước đây phân quyền Xem/Tạo theo phòng ban ({all, depts}), nay chuyển thành 1
@@ -10502,12 +10532,12 @@ function getItTicketCategoryLabel(key) {
 function populateDropdowns() {
   const selDept = document.getElementById('selDept');
   if (selDept) {
-    // Dropdown chọn Phòng Ban TRÌNH khi tạo tài liệu — dùng đúng phạm vi TẠO (uploadAll/uploadDepts),
-    // cùng cơ chế getScopedDepts()/scopeAllows() như 5 module Trình/Hợp đồng/Họp/Xe/Văn phòng — khớp
-    // với server (xem lib/createValidation.js CREATE_MODULE_CONFIGS.docs.getScope). Không liên quan gì
-    // tới phạm vi XEM (nay là deptViewScopeConfig['doc'], xem canViewDoc() ở lib/recordViewScope.js).
-    const docCreateScope = { all: !!currentUser.perms?.uploadAll, depts: currentUser.perms?.uploadDepts || [] };
-    const docScopedDepts = getScopedDepts(currentUser, docCreateScope);
+    // Dropdown chọn Phòng Ban TRÌNH khi tạo tài liệu — uploadAll (10/2026, "6-module") giờ là quyền
+    // PHẲNG boolean, tự khoá đúng phòng ban người tải lên (forceOwnDept), scope rỗng {} khiến
+    // getScopedDepts() CHỈ trả về [currentUser.dept], cùng khuôn 5 module Trình/Hợp đồng/Họp/Xe/Văn
+    // phòng đã làm (khớp lib/createValidation.js CREATE_MODULE_CONFIGS.docs.getScope). Không liên quan
+    // gì tới phạm vi XEM (nay là deptViewScopeConfig['doc'], xem canViewDoc() ở lib/recordViewScope.js).
+    const docScopedDepts = getScopedDepts(currentUser, {});
     selDept.innerHTML = '<option value="">-- Chọn Phòng Ban Trình --</option>' +
       docScopedDepts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
     applyOwnDeptAutoSelect(selDept, docScopedDepts);
@@ -10772,7 +10802,8 @@ function populateUserDeptOptions(khoiId, preserveDept) {
 function updateUploadDeptDropdown() {
   const uploadBox = document.getElementById('uploadBox');
 
-  const canUpload = currentUser.perms.admin || currentUser.perms.uploadAll || (currentUser.perms.uploadDepts && currentUser.perms.uploadDepts.length > 0);
+  // uploadAll (10/2026, "6-module"): bỏ hẳn uploadDepts (mảng), chỉ còn 1 cờ phẳng.
+  const canUpload = currentUser.perms.admin || currentUser.perms.uploadAll;
   // Pattern "thu gọn form nhập" (10/2026): #uploadBox giờ LUÔN bắt đầu ẩn (class="hidden" tĩnh ở HTML),
   // chỉ mở khi bấm "+ Tải Lên Tài Liệu" (openUploadBox(), module-tailieu.js) — hàm này (gọi 1 lần mỗi
   // khi vào tab Tài Liệu, xem core.js _dispatchTabRender()) giờ chỉ còn quyết định NÚT "+ Tải Lên..." có
