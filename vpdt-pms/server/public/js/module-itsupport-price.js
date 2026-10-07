@@ -1047,6 +1047,7 @@ function buildItPriceRowHtml(p, context) {
       <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
       <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
       <td class="border p-2 font-medium text-gray-800 break-all">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
+      <td class="border p-2 text-xs">${buildCustomDataColumnHtml(p.customData)}</td>
       <td class="border p-2">${itPriceStatusBadge(p)}</td>
       <td class="border p-2">${itPriceAppliedBadge(p)}</td>
       <td class="border p-2 text-center whitespace-nowrap text-gray-500">${p.createdAt ? escapeHtml(p.createdAt) : (p.id ? escapeHtml(new Date(p.id).toLocaleString('vi-VN')) : '')}</td>
@@ -1097,7 +1098,7 @@ function renderMhItPriceList() {
   // KHÔNG phải ở Hỗ Trợ IT (xem renderItPriceModalControls()).
   tbody.innerHTML = page.length
     ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
-    : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    : `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
 }
 function onMhItPriceFilterChange() {
   resetListPage('mhItPrice');
@@ -1135,7 +1136,7 @@ function renderVanHanhItPriceList() {
   // context='APPROVAL' — cùng lý do renderMhItPriceList() ở trên, áp dụng cho Vận Hành.
   tbody.innerHTML = page.length
     ? page.map(p => buildItPriceRowHtml(p, 'APPROVAL')).join('')
-    : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    : `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
 }
 function onVanHanhItPriceFilterChange() {
   resetListPage('vanHanhItPrice');
@@ -1203,7 +1204,7 @@ function renderItPriceApprovals() {
   const page = paginateList('itPrice', visible, 'renderItPriceApprovals', 'đề xuất');
 
   if (page.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
     return;
   }
 

@@ -1851,6 +1851,25 @@ function customDataSearchValues(customData) {
   });
 }
 
+// Hiển thị gọn các trường "Bổ Sung" (customData, cấu hình động qua Biểu Mẫu) ngay trong 1 cột của
+// bảng danh sách (10/2026, theo yêu cầu người dùng — Phê Duyệt Giá Bán Lẻ/Bán Buôn: cần thấy "Lý do"
+// ngay khi lướt danh sách, không phải mở "Chi tiết" từng dòng mới thấy). Mỗi trường 1 dòng
+// "<nhãn>: <giá trị>" — nhãn đến từ chính tên admin đặt khi tạo trường (VD "Lý do", "Nhà cung cấp"...).
+// Bỏ qua giá trị rỗng; lấy fileName cho trường kiểu Tải tệp/Tải nhiều tệp (không hiện link tải ở đây,
+// chỉ tên gợi nhớ — xem đầy đủ + tải được ở màn "Chi tiết").
+function buildCustomDataColumnHtml(customData) {
+  if (!customData || typeof customData !== 'object') return '<span class="text-gray-400">—</span>';
+  const rows = Object.entries(customData).map(([label, v]) => {
+    let displayVal;
+    if (Array.isArray(v)) displayVal = v.map(x => (x && typeof x === 'object') ? (x.fileName || '') : x).filter(Boolean).join(', ');
+    else if (v && typeof v === 'object') displayVal = v.fileName || '';
+    else displayVal = (v === null || v === undefined) ? '' : String(v);
+    if (!displayVal) return '';
+    return `<div><b>${escapeHtml(label)}:</b> ${escapeHtml(displayVal)}</div>`;
+  }).filter(Boolean);
+  return rows.length ? rows.join('') : '<span class="text-gray-400">—</span>';
+}
+
 // true nếu dateStr nằm trong khoảng [fromDate, toDate] (dạng yyyy-mm-dd từ input type=date); bỏ
 // trống 1 hoặc cả 2 đầu = không giới hạn phía đó.
 //
