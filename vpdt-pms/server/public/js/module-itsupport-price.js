@@ -1042,12 +1042,19 @@ function buildItPriceRowHtml(p, context) {
   const files = p.files || [];
   const latestFile = files[files.length - 1] || {};
   const extraFilesNote = files.length > 1 ? `<br><span class="text-xs text-gray-500">+${files.length - 1} tệp bổ sung</span>` : '';
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng): p.reason ("Lý Do Điều Chỉnh Giá" — field THẬT trên form
+  // nhập, KHÔNG phải customData) trước đây hoàn toàn không hiện ở cột này, dù cột đặt tên "Lý Do / Bổ
+  // Sung" — chỉ hiện đúng trường bổ sung (customData), không hiện đúng trường "Lý do" chính.
+  const customDataHtml = buildCustomDataColumnHtml(p.customData); // '—' (gray) khi customData rỗng
+  const reasonHtml = p.reason ? `<div>${escapeHtml(p.reason)}</div>` : '';
+  // Có p.reason rồi thì bỏ dấu "—" của buildCustomDataColumnHtml() (chỉ còn ý nghĩa khi CẢ 2 đều rỗng).
+  const reasonCellHtml = reasonHtml ? reasonHtml + customDataHtml.replace('<span class="text-gray-400">—</span>', '') : customDataHtml;
   return `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2 font-mono font-bold text-sky-800">${escapeHtml(p.code)}</td>
       <td class="border p-2">${escapeHtml(p.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(p.creatorName)}</span></td>
       <td class="border p-2 font-medium text-gray-800 break-all">📎 ${escapeHtml(latestFile.fileName || '')}${extraFilesNote}</td>
-      <td class="border p-2 text-xs">${buildCustomDataColumnHtml(p.customData)}</td>
+      <td class="border p-2 text-xs max-w-[220px]">${reasonCellHtml}</td>
       <td class="border p-2">${itPriceStatusBadge(p)}</td>
       <td class="border p-2">${itPriceAppliedBadge(p)}</td>
       <td class="border p-2 text-center whitespace-nowrap text-gray-500">${p.createdAt ? escapeHtml(p.createdAt) : (p.id ? escapeHtml(new Date(p.id).toLocaleString('vi-VN')) : '')}</td>
@@ -1085,11 +1092,10 @@ function renderMhItPriceList() {
       if (statusFilter && p.status !== statusFilter) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-      // Mở rộng tìm kiếm (10/2026, theo phản hồi người dùng): trước chỉ soát 3 trường, nay soát thêm
-      // phòng ban, username người đề xuất, Vùng Giá Áp Dụng, Mẫu Giá và mọi trường bổ sung (customData,
-      // xem customDataSearchValues() ở core.js) — khớp đúng mọi trường thật sự có trên hồ sơ/form nhập,
-      // không chỉ 3 trường hiển thị sẵn trên bảng.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, ...customDataSearchValues(p.customData)], keyword)) return false;
+      // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — gõ "Lý do" không tìm được): p.reason ("Lý Do Điều
+      // Chỉnh Giá", field THẬT trên form nhập — mhItPriceReason/itPriceReason — KHÔNG phải customData)
+      // bị bỏ sót hoàn toàn ở đợt mở rộng tìm kiếm trước, dù đã soát customData. Thêm lại ngay đây.
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
@@ -1127,8 +1133,8 @@ function renderVanHanhItPriceList() {
       if (statusFilter && p.status !== statusFilter) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-      // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả customData.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, ...customDataSearchValues(p.customData)], keyword)) return false;
+      // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả p.reason + customData.
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
@@ -1195,8 +1201,8 @@ function renderItPriceApprovals() {
     if (statusFilter && p.status !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-    // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm customData.
-    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, ...customDataSearchValues(p.customData)], keyword)) return false;
+    // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm p.reason + customData.
+    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, ...customDataSearchValues(p.customData)], keyword)) return false;
     return true;
   }));
 
