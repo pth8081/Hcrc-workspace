@@ -1168,6 +1168,32 @@ function notifyOperationApprovalNeeded(kind, item) {
 function onOperationOrderFilterChange() { resetListPage('operationOrder'); renderOperationList('operationOrders'); }
 function onOperationStoreOpenFilterChange() { resetListPage('operationStoreOpen'); renderOperationList('operationStoreOpenings'); }
 function onOperationRepairFilterChange() { resetListPage('operationRepair'); renderOperationList('operationRepairs'); }
+
+function resetOperationOrderFilters() {
+  document.getElementById('filterStatusOperationOrder').value = '';
+  document.getElementById('filterLocationOperationOrder').value = '';
+  document.getElementById('filterFromDateOperationOrder').value = '';
+  document.getElementById('filterToDateOperationOrder').value = '';
+  document.getElementById('filterKeywordOperationOrder').value = '';
+  resetListPage('operationOrder');
+  renderOperationList('operationOrders');
+}
+function resetOperationStoreOpenFilters() {
+  document.getElementById('filterStatusOperationStoreOpen').value = '';
+  document.getElementById('filterFromDateOperationStoreOpen').value = '';
+  document.getElementById('filterToDateOperationStoreOpen').value = '';
+  document.getElementById('filterKeywordOperationStoreOpen').value = '';
+  resetListPage('operationStoreOpen');
+  renderOperationList('operationStoreOpenings');
+}
+function resetOperationRepairFilters() {
+  document.getElementById('filterStatusOperationRepair').value = '';
+  document.getElementById('filterFromDateOperationRepair').value = '';
+  document.getElementById('filterToDateOperationRepair').value = '';
+  document.getElementById('filterKeywordOperationRepair').value = '';
+  resetListPage('operationRepair');
+  renderOperationList('operationRepairs');
+}
 function filterOperationOrderByCard(status) { applyDashboardCardFilter({ filterStatusOperationOrder: status }, 'operationOrder', () => renderOperationList('operationOrders')); }
 function filterOperationStoreOpenByCard(status) { applyDashboardCardFilter({ filterStatusOperationStoreOpen: status }, 'operationStoreOpen', () => renderOperationList('operationStoreOpenings')); }
 function filterOperationRepairByCard(status) { applyDashboardCardFilter({ filterStatusOperationRepair: status }, 'operationRepair', () => renderOperationList('operationRepairs')); }
@@ -1238,7 +1264,7 @@ function renderOperationList(kind) {
     }
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
     if (locationFilter && (o.receivingLocationName || '') !== locationFilter) return false;
-    if (!matchesKeywordFields([o.code, meta.titleField(o), o.creatorName], keyword)) return false;
+    if (!matchesKeywordFields([o.code, meta.titleField(o), o.creatorName, o.creator, o.dept, o.receivingLocationName], keyword)) return false;
     return true;
   });
 
@@ -3596,7 +3622,7 @@ function buildOperationStoreReportComputed() {
   ];
   if (filterKind) rows = rows.filter(r => r.kind === filterKind);
   if (filterRecord) rows = rows.filter(r => `${r.kind}::${r.item.id}` === filterRecord);
-  if (keyword) rows = rows.filter(({ kind, item: o }) => matchesKeywordFields([o.code, OPERATION_KIND_META[kind].titleField(o)], keyword));
+  if (keyword) rows = rows.filter(({ kind, item: o }) => matchesKeywordFields([o.code, OPERATION_KIND_META[kind].titleField(o), o.dept, o.creatorName, o.creator], keyword));
 
   return rows.map(({ kind, item: o }) => {
     const items = getOperationWorkItemsForRecord(kind, o.id);
@@ -3619,6 +3645,13 @@ function buildOperationStoreReportComputed() {
     }
     return { kind, o, items, total, done, doing, notStarted, pct, progressKey, progressLabel };
   }).filter(r => !filterProgress || r.progressKey === filterProgress);
+}
+function resetOpStoreReportFilters() {
+  document.getElementById('opReportFilterKind').value = '';
+  document.getElementById('opReportFilterRecord').value = '';
+  document.getElementById('opReportFilterProgress').value = '';
+  document.getElementById('opReportFilterKeyword').value = '';
+  renderOperationStoreReport();
 }
 // "👁️ Xem Nhanh" (9/2026, theo yêu cầu người dùng) — bấm vào số liệu Tổng CV/Đã Nghiệm Thu/Đang Thực
 // Hiện/Chưa Bắt Đầu ở bảng dưới đây mở modal #operationWorkItemQuickViewModal, liệt kê ĐÚNG các công

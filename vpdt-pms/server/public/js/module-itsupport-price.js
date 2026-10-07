@@ -872,6 +872,14 @@ function onItPriceFilterChange() {
   resetListPage('itPrice');
   renderItPriceApprovals();
 }
+function resetItPriceFilters() {
+  document.getElementById('filterStatusItPrice').value = '';
+  document.getElementById('filterFromDateItPrice').value = '';
+  document.getElementById('filterToDateItPrice').value = '';
+  document.getElementById('filterKeywordItPrice').value = '';
+  resetListPage('itPrice');
+  renderItPriceApprovals();
+}
 
 function filterItPriceByCard(status) {
   applyDashboardCardFilter({ filterStatusItPrice: status }, 'itPrice', renderItPriceApprovals);
@@ -1070,7 +1078,10 @@ function renderMhItPriceList() {
       if (statusFilter && p.status !== statusFilter) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName], keyword)) return false;
+      // Mở rộng tìm kiếm (10/2026, theo phản hồi người dùng): trước chỉ soát 3 trường, nay soát thêm
+      // phòng ban, username người đề xuất, Vùng Giá Áp Dụng và Mẫu Giá — khớp đúng mọi trường thật sự
+      // có trên hồ sơ, không chỉ 3 trường hiển thị sẵn trên bảng.
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName], keyword)) return false;
       return true;
     })
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -1083,6 +1094,14 @@ function renderMhItPriceList() {
     : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
 }
 function onMhItPriceFilterChange() {
+  resetListPage('mhItPrice');
+  renderMhItPriceList();
+}
+function resetMhItPriceFilters() {
+  document.getElementById('filterStatusMhItPrice').value = '';
+  document.getElementById('filterFromDateMhItPrice').value = '';
+  document.getElementById('filterToDateMhItPrice').value = '';
+  document.getElementById('filterKeywordMhItPrice').value = '';
   resetListPage('mhItPrice');
   renderMhItPriceList();
 }
@@ -1099,7 +1118,8 @@ function renderVanHanhItPriceList() {
       if (statusFilter && p.status !== statusFilter) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName], keyword)) return false;
+      // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên.
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName], keyword)) return false;
       return true;
     })
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -1111,6 +1131,14 @@ function renderVanHanhItPriceList() {
     : `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy đề xuất phù hợp.</td></tr>`;
 }
 function onVanHanhItPriceFilterChange() {
+  resetListPage('vanHanhItPrice');
+  renderVanHanhItPriceList();
+}
+function resetVanHanhItPriceFilters() {
+  document.getElementById('filterStatusVanHanhItPrice').value = '';
+  document.getElementById('filterFromDateVanHanhItPrice').value = '';
+  document.getElementById('filterToDateVanHanhItPrice').value = '';
+  document.getElementById('filterKeywordVanHanhItPrice').value = '';
   resetListPage('vanHanhItPrice');
   renderVanHanhItPriceList();
 }
@@ -1157,7 +1185,8 @@ function renderItPriceApprovals() {
     if (statusFilter && p.status !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName], keyword)) return false;
+    // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList().
+    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName], keyword)) return false;
     return true;
   });
 
@@ -2075,6 +2104,13 @@ function onItTicketFilterChange() {
   resetListPage('itTicket');
   renderItTickets();
 }
+function resetItTicketFilters() {
+  document.getElementById('filterStatusItTicket').value = '';
+  document.getElementById('filterCategoryItTicket').value = '';
+  document.getElementById('filterKeywordItTicket').value = '';
+  resetListPage('itTicket');
+  renderItTickets();
+}
 
 // Phạm vi Xem: hẹp hơn Phê Duyệt Giá vì ticket có thể chứa thông tin tài khoản/sự cố cá nhân — chỉ
 // đội Hỗ Trợ IT (itManage/admin) và chính người tạo được xem, không mở rộng cho toàn phòng ban.
@@ -2099,7 +2135,7 @@ function renderItTickets() {
     if (!canViewItTicket(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (categoryFilter && t.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([t.code, t.title, t.creatorName], keyword)) return false;
+    if (!matchesKeywordFields([t.code, t.title, t.creatorName, t.creator, t.dept, t.description], keyword)) return false;
     return true;
   });
 

@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**25.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.40 (2026-10-07): Tìm Kiếm & Lọc — mở rộng từ khóa tra MỌI trường + nút "Xóa Tìm Kiếm" (toàn hệ thống)
+
+Theo yêu cầu người dùng (xem ảnh panel "🔍 Tìm Kiếm & Lọc Đề Xuất Duyệt Giá"): ô "Từ Khóa" ở các panel
+tìm kiếm/lọc trước đây chỉ khớp 2-3 trường hiển thị trên bảng (mã, tên, người tạo...), nay mở rộng
+`matchesKeywordFields([...])` ở **12 panel** để khớp thêm các trường liên quan khác đã có sẵn trong hồ
+sơ (phòng ban, tên tệp, người tạo theo username, vùng giá, đơn vị áp dụng, địa điểm, chủ trì, người tải
+lên...): Văn Bản Trình, Hợp Đồng, Phê Duyệt Giá (Hỗ Trợ IT — cả Bán Lẻ/Mua Hàng + Bán Buôn/Vận Hành),
+Yêu Cầu Hỗ Trợ IT, Đơn Hàng/Mở Mới/Sửa Chữa + Báo Cáo (Vận Hành), Đăng Ký Xe, Giấy Phép, Phòng Họp, Văn
+Phòng (Mua/Sửa), Biên Bản Họp, Tài Liệu, Nhịp Sống HCRC/Góc Chia Sẻ.
+
+Mỗi panel đồng thời được thêm nút **"Xóa Tìm Kiếm"** (cạnh ô Từ Khóa, cùng khuôn với 3 nút
+`resetTaskFilters`/`resetReportsFilters`/`resetLogFilters` đã có từ trước) — bấm 1 lần để xoá sạch mọi
+điều kiện lọc (dropdown/ngày/từ khóa) và trả danh sách về trạng thái ban đầu, không cần xoá tay từng ô.
+2 màn Hợp Đồng Lao Động/Công & Phép (`hrContractSection`/`hrAttendanceSection`) dùng kiểu ô lọc nhanh 1
+dòng khác hẳn (không phải khung "🔍 Tìm Kiếm & Lọc" tiêu chuẩn) nên **không** nằm trong đợt này.
+
+Đã xác nhận lại nút "✕ Thu Gọn Thông Tin" ở form Thêm Người Dùng (Phân Quyền) chỉ ẩn đúng phần khai báo
+thông tin người dùng, KHÔNG ảnh hưởng cây phân quyền 0-24 bên dưới — đúng như đã vá ở v25.x (#411),
+không phát sinh lỗi mới.
+
+Test: chạy lại toàn bộ test hiện có của 12 module trên (submission/contract/itSupport/muaHang/
+vanHanh/car/license/meeting/office/minutes/doc/internalcomms) — đều pass. Phát hiện 1 lỗi TEST (không
+phải lỗi sản phẩm) có từ trước, không liên quan đợt này: `test-internal-media-client.js` 3/28 fail do
+category/chuyên đề chưa được chọn hợp lệ trong fixture dựng bài YouTube — xác nhận bằng `git stash`
+(fail giống nhau có/không có thay đổi của đợt này).
 
 ## v25.39 (2026-10-07): "6-module" — gộp phẳng quyền "Tạo mới" (Phòng Họp/Văn Bản Trình/Hợp Đồng/Đăng Ký Xe/Văn Phòng/Tài Liệu) + tính năng mới "📢 Phát Hành" Tài Liệu
 

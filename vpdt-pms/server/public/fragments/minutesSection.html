@@ -119,7 +119,7 @@
 
     <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
       <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc Biên Bản Họp</h4>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Chủ Đề Họp</label>
           <input id="filterTopicMinutes" data-op-input="onMinutesFilterChange" placeholder="Lọc theo tiêu đề cuộc họp..." class="w-full border p-2 rounded text-sm">
@@ -134,8 +134,9 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-          <input id="filterKeywordMinutes" data-op-input="onMinutesFilterChange" placeholder="Mã, chủ đề, chủ trì..." class="w-full border p-2 rounded text-sm">
+          <input id="filterKeywordMinutes" data-op-input="onMinutesFilterChange" placeholder="Mã, chủ đề, chủ trì, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm">
         </div>
+        <div class="flex items-end"><button data-op="resetMinutesFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
       </div>
     </div>
 

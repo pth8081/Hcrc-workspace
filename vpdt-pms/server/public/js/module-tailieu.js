@@ -20,6 +20,16 @@ function onFilterChange() {
   resetListPage('doc');
   renderDocs();
 }
+function resetDocFilters() {
+  document.getElementById('filterDept').value = '';
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterDocType').value = '';
+  document.getElementById('filterFromDate').value = '';
+  document.getElementById('filterToDate').value = '';
+  document.getElementById('filterKeyword').value = '';
+  resetListPage('doc');
+  renderDocs();
+}
 
 // ---- Sinh Mã Tài Liệu tự động + quản lý version (Cập nhật/Nhập mới) ----
 
@@ -337,12 +347,7 @@ function renderDocs() {
     if (deptFilter && doc.dept !== deptFilter) return false;
     if (statusFilter && doc.status !== statusFilter) return false;
 
-    if (keyword) {
-      const matchCode = (doc.code || '').toLowerCase().includes(keyword);
-      const matchTitle = (doc.title || '').toLowerCase().includes(keyword);
-      const matchSummary = (doc.summary || '').toLowerCase().includes(keyword);
-      if (!matchCode && !matchTitle && !matchSummary) return false;
-    }
+    if (keyword && !matchesKeywordFields([doc.code, doc.title, doc.summary, doc.dept, doc.uploaderName, doc.uploader], keyword)) return false;
 
     if (!isInDateRange(doc.createdAt, fromDate, toDate)) return false;
 
@@ -841,6 +846,16 @@ function filterLicenseByCard(key) {
   if (box) box.open = true;
   applyDashboardCardFilter(map[key] || {}, 'license', renderLicenses);
 }
+function resetLicenseFilters() {
+  document.getElementById('filterLicenseStatus').value = '';
+  document.getElementById('filterLicenseType').value = '';
+  document.getElementById('filterLicenseLifecycle').value = '';
+  document.getElementById('filterLicenseFromDate').value = '';
+  document.getElementById('filterLicenseToDate').value = '';
+  document.getElementById('filterLicenseKeyword').value = '';
+  resetListPage('license');
+  renderLicenses();
+}
 function onLicenseFilterChange() {
   resetListPage('license');
   renderLicenses();
@@ -896,7 +911,7 @@ function renderLicenses() {
     if (lifecycleFilter && computeLicenseLifecycleState(getLicenseFamilyLatest(item.id)) !== lifecycleFilter) return false;
 
     if (keyword) {
-      const hay = [item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber]
+      const hay = [item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber, item.creator, item.creatorName]
         .map(v => (v || '').toLowerCase());
       if (!hay.some(v => v.includes(keyword))) return false;
     }

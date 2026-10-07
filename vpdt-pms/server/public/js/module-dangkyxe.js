@@ -903,6 +903,15 @@ function onCarFilterChange() {
   resetListPage('car');
   renderCarRegs();
 }
+function resetCarFilters() {
+  document.getElementById('filterDeptCar').value = '';
+  document.getElementById('filterStatusCar').value = '';
+  document.getElementById('filterFromDateCar').value = '';
+  document.getElementById('filterToDateCar').value = '';
+  document.getElementById('filterKeywordCar').value = '';
+  resetListPage('car');
+  renderCarRegs();
+}
 
 function filterCarByCard(status) {
   applyDashboardCardFilter({ filterStatusCar: status }, 'car', renderCarRegs);
@@ -948,7 +957,7 @@ function renderCarRegs() {
     if (deptFilter && c.dept !== deptFilter) return false;
     if (statusFilter && c.status !== statusFilter) return false;
     if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([c.code, c.destination, c.creatorName], keyword)) return false;
+    if (!matchesKeywordFields([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason], keyword)) return false;
 
     return true;
   });
