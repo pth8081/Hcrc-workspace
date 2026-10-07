@@ -439,6 +439,15 @@ function onSubFilterChange() {
   resetListPage('sub');
   renderSubmissionReqs();
 }
+function resetSubFilters() {
+  document.getElementById('filterDeptSub').value = '';
+  document.getElementById('filterStatusSub').value = '';
+  document.getElementById('filterFromDateSub').value = '';
+  document.getElementById('filterToDateSub').value = '';
+  document.getElementById('filterKeywordSub').value = '';
+  resetListPage('sub');
+  renderSubmissionReqs();
+}
 
 function filterSubByCard(status) {
   applyDashboardCardFilter({ filterStatusSub: status }, 'sub', renderSubmissionReqs);
@@ -474,7 +483,9 @@ function renderSubmissionReqs() {
     if (deptFilter && sub.dept !== deptFilter) return false;
     if (statusFilter && sub.status !== statusFilter) return false;
     if (!isInDateRange(sub.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([sub.code, sub.title, sub.content, sub.creatorName], keyword)) return false;
+    // Mở rộng tìm kiếm (10/2026, theo phản hồi người dùng): soát thêm phòng ban, username người trình,
+    // loại tờ trình và độ khẩn — không chỉ 4 trường hiển thị sẵn trên bảng.
+    if (!matchesKeywordFields([sub.code, sub.title, sub.content, sub.creatorName, sub.creator, sub.dept, sub.type, sub.priority], keyword)) return false;
 
     return true;
   });

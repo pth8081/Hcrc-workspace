@@ -147,6 +147,18 @@ function setInternalSubTab(subTab) {
   renderInternalPosts();
 }
 
+function resetInternalFilters() {
+  const catEl = document.getElementById('filterCategoryInternal');
+  if (catEl) catEl.value = '';
+  const statusEl = document.getElementById('filterStatusInternal');
+  if (statusEl) statusEl.value = '';
+  document.getElementById('filterFromDateInternal').value = '';
+  document.getElementById('filterToDateInternal').value = '';
+  document.getElementById('filterKeywordInternal').value = '';
+  resetListPage('internal');
+  resetListPage('internalNews');
+  renderInternalPosts();
+}
 function onInternalFilterChange() {
   resetListPage('internal');
   resetListPage('internalNews');
@@ -1728,7 +1740,7 @@ function renderInternalPosts() {
     if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
     if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.dept], keyword)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept], keyword)) return false;
     return true;
   });
 
@@ -1856,7 +1868,7 @@ function renderInternalFeedStyle(type) {
     if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
     if (categoryFilter && p.postCategory !== categoryFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.dept], keyword)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept], keyword)) return false;
     return true;
   });
 

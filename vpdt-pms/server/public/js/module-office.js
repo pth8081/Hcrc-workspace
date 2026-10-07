@@ -208,6 +208,15 @@ function onOfficeFilterChange() {
   resetListPage('office');
   renderOfficeReqs();
 }
+function resetOfficeFilters() {
+  document.getElementById('filterDeptOffice').value = '';
+  document.getElementById('filterStatusOffice').value = '';
+  document.getElementById('filterFromDateOffice').value = '';
+  document.getElementById('filterToDateOffice').value = '';
+  document.getElementById('filterKeywordOffice').value = '';
+  resetListPage('office');
+  renderOfficeReqs();
+}
 
 function filterOfficeByCard(status) {
   applyDashboardCardFilter({ filterStatusOffice: status }, 'office', renderOfficeReqs);
@@ -246,7 +255,7 @@ function renderOfficeReqs() {
     if (deptFilter && o.dept !== deptFilter) return false;
     if (statusFilter && o.status !== statusFilter) return false;
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([o.code, o.title, o.creatorName], keyword)) return false;
+    if (!matchesKeywordFields([o.code, o.title, o.creatorName, o.creator, o.dept], keyword)) return false;
 
     return true;
   });

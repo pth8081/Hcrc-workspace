@@ -973,6 +973,15 @@ function onMeetingFilterChange() {
   resetListPage('meeting');
   renderMeetings();
 }
+function resetMeetingFilters() {
+  document.getElementById('filterDeptMeeting').value = '';
+  document.getElementById('filterStatusMeeting').value = '';
+  document.getElementById('filterFromDateMeeting').value = '';
+  document.getElementById('filterToDateMeeting').value = '';
+  document.getElementById('filterKeywordMeeting').value = '';
+  resetListPage('meeting');
+  renderMeetings();
+}
 
 function filterMeetingByCard(status) {
   applyDashboardCardFilter({ filterStatusMeeting: status }, 'meeting', renderMeetings);
@@ -1017,7 +1026,7 @@ function renderMeetings() {
     if (deptFilter && m.dept !== deptFilter) return false;
     if (statusFilter && m.status !== statusFilter) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([m.code, m.title, m.creatorName], keyword)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.creatorName, m.creator, m.dept, m.room], keyword)) return false;
 
     return true;
   });

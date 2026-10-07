@@ -21,6 +21,14 @@ function onMinutesFilterChange() {
   resetListPage('minutes');
   renderMeetingMinutes();
 }
+function resetMinutesFilters() {
+  document.getElementById('filterTopicMinutes').value = '';
+  document.getElementById('filterFromDateMinutes').value = '';
+  document.getElementById('filterToDateMinutes').value = '';
+  document.getElementById('filterKeywordMinutes').value = '';
+  resetListPage('minutes');
+  renderMeetingMinutes();
+}
 
 function populateMinutesLinkSelect() {
   const sel = document.getElementById('minutesLinkedMeeting');
@@ -857,7 +865,7 @@ function renderMeetingMinutes() {
     if (!canViewMeetingMinutesRecord(currentUser, m)) return false;
     if (topicFilter && !(m.title || '').toLowerCase().includes(topicFilter)) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName], keyword)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName, m.creator, m.dept], keyword)) return false;
 
     return true;
   });
