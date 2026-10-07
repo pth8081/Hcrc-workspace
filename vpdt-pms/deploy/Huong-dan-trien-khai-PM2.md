@@ -1000,14 +1000,23 @@ cầu:
 3. **`server/package.json` đổi `dependencies`** — cần chạy lại `npm install`
    trong thư mục `server/` trước khi restart, nếu không server có thể báo lỗi
    "Cannot find module" ngay khi khởi động.
-4. **Bản cập nhật kèm script di trú dữ liệu 1 lần** (`server/scripts/migrate-*.js`) — một số bản cập
-   nhật lớn (đổi kiến trúc lưu trữ, VD Bước 7 — tách 1 số collection khỏi bảng dùng chung `dbo.Records`
-   sang bảng riêng có cột lọc thật) yêu cầu chạy 1 script Node **SAU KHI** chạy `schema.sql` (bảng mới
-   được tạo) nhưng **TRƯỚC KHI** `pm2 restart` (code mới sẽ đọc từ bảng mới — nếu restart trước khi
-   script chạy xong, app sẽ thấy các collection đó RỖNG). Mỗi script tự nêu rõ cách chạy ở đầu file
-   (`node scripts/<tên-script>.js` xem trước, thêm `--confirm` để chạy thật) — luôn xem README/comment
-   đầu file trước khi chạy, và **luôn sao lưu CSDL trước** (script không xoá dữ liệu cũ nhưng vẫn nên
-   có bản sao lưu đề phòng, đặc biệt lần đầu áp dụng 1 script loại này).
+4. **Bản cập nhật kèm script di trú/vá dữ liệu 1 lần** (`server/scripts/migrate-*.js` HOẶC `fix-*.js`)
+   — một số bản cập nhật lớn (đổi kiến trúc lưu trữ, VD Bước 7 — tách 1 số collection khỏi bảng dùng
+   chung `dbo.Records` sang bảng riêng có cột lọc thật) yêu cầu chạy 1 script Node **SAU KHI** chạy
+   `schema.sql` (bảng mới được tạo) nhưng **TRƯỚC KHI** `pm2 restart` (code mới sẽ đọc từ bảng mới —
+   nếu restart trước khi script chạy xong, app sẽ thấy các collection đó RỖNG). Mỗi script tự nêu rõ
+   cách chạy ở đầu file (`node scripts/<tên-script>.js` xem trước, thêm `--confirm` để chạy thật) —
+   luôn xem README/comment đầu file trước khi chạy, và **luôn sao lưu CSDL trước** (script không xoá
+   dữ liệu cũ nhưng vẫn nên có bản sao lưu đề phòng, đặc biệt lần đầu áp dụng 1 script loại này).
+   - **`scripts/fix-mojibake-filenames.js`** (v25.48, vá lỗi THẬT người dùng báo kèm ảnh chụp màn hình):
+     bản vá v25.45 chỉ chặn được tên tệp tải lên MỚI từ sau khi server cập nhật code không còn bị lỗi
+     font (mojibake, VD "Test gia hạn mới.xlsx" hiện ra "Test gia há°±n má»›i.xlsx") — tên tệp CŨ đã lưu
+     SAI trong CSDL từ trước khi cập nhật vẫn còn nguyên lỗi (hiển thị lại không tự sửa được, phải
+     decode lại đúng chuỗi đã lưu). Script này quét lại toàn bộ bảng dữ liệu + `dbo.AppData` để sửa tên
+     tệp đã lưu sai — chạy **SAU KHI** deploy code v25.45 trở lên, **TRƯỚC HAY SAU** `pm2 restart` đều
+     được (không phụ thuộc bảng mới như các script di trú kiến trúc khác), nhưng nhớ `pm2 restart` lại
+     SAU KHI chạy `--confirm` để xoá cache AppData trong bộ nhớ (script tự nhắc lại điều này sau khi
+     ghi xong).
 5. **`server/public/tailwind.css` đổi** — file này là CSS đã build sẵn
    (`npm run build:css`, đọc `tailwind.config.js` + `tailwind-input.css`,
    xem `package.json` script `build:css`), **KHÔNG** tự sinh lúc chạy server
