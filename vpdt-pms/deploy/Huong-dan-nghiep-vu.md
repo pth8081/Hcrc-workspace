@@ -2169,6 +2169,27 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
     cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
     Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
+  - **Thêm chiều "Mức" — cấu hình người duyệt RIÊNG theo mức giá trị đơn hàng
+    (10/2026, theo yêu cầu người dùng "cần xử lý giống đặt hàng bán buôn")**:
+    màn "🏬 Quy Trình Đặt Hàng Siêu Thị" nay có thêm dropdown **"Đang xem Mức"**
+    (3 mức ≤10tr/>10tr-≤100tr/>100tr, đúng 3 mức đã dùng để quyết định SỐ BƯỚC
+    ở "🔄 Quy Trình & Phê Duyệt") ngay trên bảng, cùng cột **"Mức Áp Dụng"** —
+    **CÙNG CƠ CHẾ "🏪 QT Giá Bán Buôn (Siêu Thị)"** đã có từ trước, nhưng khác 1
+    điểm cốt lõi: Mức ở đây là **TÙY CHỌN** (Bán Buôn là tính năng xây mới nên
+    Mức bắt buộc, còn Đặt Hàng Siêu Thị đã có dữ liệu cấu hình THẬT từ trước)
+    — mọi dòng cấu hình **CŨ** (lưu trước đợt này) hiện badge **"✅ Mọi mức (cấu
+    hình cũ)"** và tiếp tục áp dụng cho **CẢ 3 mức** y hệt hành vi gốc, không
+    cần làm gì thêm, không mất tác dụng. Dòng **MỚI** thêm qua form luôn được
+    gán đúng Mức đang xem ở dropdown. 1 dòng cũ (Mọi mức) + 1 dòng mới gán
+    riêng 1 Mức có thể cùng khớp 1 (Bước, Siêu Thị) → **HỢP LẠI** (union) người
+    duyệt, không loại trừ nhau — dùng để thêm người duyệt RIÊNG cho 1 mức giá
+    trị cao (VD thêm Phó Tổng Giám Đốc duyệt CÙNG Giám Đốc Siêu Thị ở mức
+    >100tr) mà không cần sửa/xoá dòng cấu hình cũ đang áp dụng chung cho mọi
+    mức. Sửa 1 dòng CŨ (Mọi mức) giữ nguyên "Mọi mức" dù đang xem ở Mức nào —
+    KHÔNG bị thu hẹp phạm vi ngoài ý muốn chỉ vì sửa nó trong lúc đang xem 1
+    Mức cụ thể. Xoá 1 dòng cảnh báo rõ **đúng (các) Mức** sẽ mất người duyệt
+    (dòng Mọi mức bị xoá có thể làm mất người duyệt ở cả 3 mức nếu không còn
+    dòng nào khác phủ).
   - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
     (10/2026)**: phần chọn người duyệt/"Theo vị trí" theo từng bước ở màn
     "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị")

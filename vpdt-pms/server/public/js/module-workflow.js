@@ -703,14 +703,61 @@ function mixedApprovalJobTitleSourceBadgeHTML(jobTitle) {
   return '';
 }
 
+// Số bước cho dropdown "Bước" của Mức đang chọn — CÙNG KHUÔN populateItPriceWholesaleStepOptions() bên
+// dưới, lấy từ workflowId đã gán ở operationOrderStoreTierWorkflows[tier] (màn "🔄 Quy Trình & Phê
+// Duyệt") để biết SỐ BƯỚC thật. usedSteps gồm CẢ dòng tier-specific LẪN dòng wildcard (không tier) vì cả
+// 2 loại đều "chiếm" số thứ tự bước của mức đang xem. Tối thiểu VẪN là 3 (giữ nguyên hành vi gốc trước
+// khi có Mức — "Đặt Hàng Tại Siêu Thị" luôn cho chọn tới ít nhất Bước 3 dù workflowId của mức đang xem
+// chưa gán/chưa đủ bước, KHÁC populateItPriceWholesaleStepOptions() (tối thiểu 1) vì đó là tính năng xây
+// mới hoàn toàn, không có quy ước tối thiểu nào cần giữ tương thích ngược).
+function populateMixedApprovalStepOptions(tier) {
+  const rules = DB.operationOrderStoreMixedApprovalRules || [];
+  const usedSteps = rules.filter(r => !r.tier || r.tier === tier).map(r => r.step);
+  const tierCfg = (DB.operationOrderStoreTierWorkflows || {})[tier];
+  const wf = tierCfg ? (DB.workflows || []).find(w => w.id === tierCfg.workflowId) : null;
+  const topKnown = Math.max(3, wf ? wf.steps.length : 0, ...usedSteps, 0);
+  const stepSel = document.getElementById('maNewStep');
+  if (!stepSel) return;
+  const current = stepSel.value;
+  const opts = [];
+  for (let s = 1; s <= topKnown; s++) opts.push(`<option value="${s}">Bước ${s}</option>`);
+  opts.push(`<option value="${topKnown + 1}">+ Bước ${topKnown + 1}</option>`);
+  stepSel.innerHTML = opts.join('');
+  if (current && Number(current) <= topKnown + 1) stepSel.value = current;
+}
+// Dropdown "Đang xem Mức" (10/2026, theo yêu cầu người dùng "Đặt Hàng Siêu Thị cần xử lý giống Bán
+// Buôn") — CÙNG KHUÔN ipmaNewTier/currentTier ở renderItPriceWholesaleMixedApprovalSection() bên dưới,
+// chỉ khác nguồn nhãn (OPERATION_ORDER_STORE_TIERS, core.js, 3 mức LT10M/FROM10M_TO100M/GTE100M thay vì
+// 4 mức Margin/Chiết Khấu). Bảng hiện CẢ dòng của mức đang chọn LẪN dòng CŨ chưa gán tier (wildcard, áp
+// dụng mọi mức — xem defaults.js::operationOrderStoreMixedApprovalRules) để không "biến mất" cấu hình đã
+// có từ trước khi đợt vá này triển khai.
 function renderMixedApprovalSection() {
   const wrap = document.getElementById('mixedApprovalSection');
   if (!wrap) return;
   const rules = DB.operationOrderStoreMixedApprovalRules || (DB.operationOrderStoreMixedApprovalRules = []);
 
+  const tierSel = document.getElementById('maNewTier');
+  if (tierSel && !tierSel.options.length) {
+    tierSel.innerHTML = OPERATION_ORDER_STORE_TIERS.map(t => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('');
+  }
+  const currentTier = tierSel ? (tierSel.value || OPERATION_ORDER_STORE_TIERS[0].key) : OPERATION_ORDER_STORE_TIERS[0].key;
+  if (tierSel && !tierSel.value) tierSel.value = currentTier;
+
+  // Đang sửa dở 1 dòng CÓ TIER của MỨC KHÁC (vừa đổi dropdown Mức xem khi chưa lưu/huỷ sửa) -> tự huỷ
+  // sửa, tránh lưu nhầm. Dòng WILDCARD (không tier) hợp lệ ở MỌI mức nên không bị huỷ khi đổi dropdown.
+  // CHỦ Ý không tự huỷ khi dòng đã biến mất hẳn (!er, VD vừa bị xoá ở thao tác khác) — khác
+  // renderItPriceWholesaleMixedApprovalSection() — để addMixedApprovalRule() tự phát hiện + báo lỗi rõ
+  // ràng "Dòng đang sửa không còn tồn tại" (xem test-mixed-approval-edit-ui.js mục 5); tự huỷ ngay ở đây
+  // sẽ làm addMixedApprovalRule() tưởng đang ở chế độ THÊM MỚI và âm thầm tạo dòng mới thay vì báo lỗi.
+  if (editingMixedApprovalRuleId != null) {
+    const er = rules.find(r => r.id === editingMixedApprovalRuleId);
+    if (er && er.tier && er.tier !== currentTier) editingMixedApprovalRuleId = null;
+  }
+
+  const visibleRules = rules.filter(r => !r.tier || r.tier === currentTier);
   const tbody = document.getElementById('mixedApprovalTableBody');
   if (tbody) {
-    tbody.innerHTML = rules.length ? rules.slice().sort((a, b) => a.step - b.step || a.id - b.id).map(row => {
+    tbody.innerHTML = visibleRules.length ? visibleRules.slice().sort((a, b) => a.step - b.step || a.id - b.id).map(row => {
       const person = row.mode === 'PERSON' ? (DB.users || []).find(u => u.username === row.username) : null;
       const nameLabel = row.mode === 'JOBTITLE' ? row.jobTitle : (person ? mixedApprovalPersonLabel(person) : row.username);
       // Xem trước số người đang khớp dòng này — 0 người = cấu hình "chết" (chức danh chưa ai giữ/người
@@ -738,6 +785,11 @@ function renderMixedApprovalSection() {
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
         : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mặc định — mọi siêu thị</span>`;
+      // "Mức Áp Dụng" (10/2026) — dòng CŨ chưa gán tier hiện badge "Mọi mức" (wildcard, xem chú thích đầy
+      // đủ ở defaults.js::operationOrderStoreMixedApprovalRules); dòng MỚI hiện đúng tên Mức đã chọn.
+      const tierLabel = row.tier
+        ? `<span class="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[11px] font-semibold">${escapeHtml(operationOrderTierLabel('STORE', row.tier))}</span>`
+        : `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">✅ Mọi mức (cấu hình cũ)</span>`;
       return `
         <tr class="border-b${hasStores ? ' bg-amber-50' : ''}">
           <td class="p-2 border"><span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[11px] font-bold">Bước ${row.step}</span></td>
@@ -746,29 +798,17 @@ function renderMixedApprovalSection() {
             : '<span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-bold">Người cụ thể</span>'}</td>
           <td class="p-2 border font-bold">${escapeHtml(nameLabel || '')}${nameBadge}${matchBadge}</td>
           <td class="p-2 border text-xs">${storesLabel}</td>
+          <td class="p-2 border text-xs">${tierLabel}</td>
           <td class="p-2 border text-center whitespace-nowrap">
             <button type="button" data-op="editMixedApprovalRule" data-arg0="${row.id}" class="text-indigo-600 text-[11px] font-bold hover:underline mr-2">✏️ Sửa</button>
             <button type="button" data-op="deleteMixedApprovalRule" data-arg0="${row.id}" class="text-red-600 text-[11px] font-bold hover:underline">🗑 Xoá</button>
           </td>
         </tr>
       `;
-    }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400 italic text-xs">Chưa có dòng cấu hình nào cho mức "${escapeHtml(operationOrderTierLabel('STORE', currentTier))}" — thêm dòng đầu tiên ở khung bên dưới.</td></tr>`;
   }
 
-  // Bước 1..N: luôn cho chọn tới ít nhất Bước 3 (mức cao nhất của QT Vận Hành - Đặt Hàng Tại Siêu Thị
-  // hiện tại) + 1 bước kế tiếp còn trống để dự phòng mở rộng sau này (nhãn "+ Bước N"), không hardcode
-  // đúng 3 — nếu admin đã lỡ cấu hình bước cao hơn (mẫu quy trình nhiều bước hơn) vẫn hiện đủ.
-  const usedSteps = rules.map(r => r.step);
-  const topKnown = Math.max(3, ...usedSteps, 0);
-  const stepSel = document.getElementById('maNewStep');
-  if (stepSel) {
-    const current = stepSel.value;
-    const opts = [];
-    for (let s = 1; s <= topKnown; s++) opts.push(`<option value="${s}">Bước ${s}</option>`);
-    opts.push(`<option value="${topKnown + 1}">+ Bước ${topKnown + 1}</option>`);
-    stepSel.innerHTML = opts.join('');
-    if (current && Number(current) <= topKnown + 1) stepSel.value = current;
-  }
+  populateMixedApprovalStepOptions(currentTier);
 
   sddSetOptions('maNewJobTitleDatalist', mixedApprovalJobTitleOptions());
   sddSetOptions('maNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
@@ -851,10 +891,12 @@ function updateMixedApprovalFormSubmitUI() {
 }
 
 async function addMixedApprovalRule() {
+  const tier = document.getElementById('maNewTier')?.value || null;
   const step = Number(document.getElementById('maNewStep')?.value);
   const mode = document.getElementById('maNewMode')?.value === 'PERSON' ? 'PERSON' : 'JOBTITLE';
   const stores = getMultiSelectValues('maNewStoresPicker');
   if (!step || step < 1) return alert('Chưa chọn Bước hợp lệ.');
+  if (!tier || !OPERATION_ORDER_STORE_TIERS.some(t => t.key === tier)) return alert('Chưa chọn Mức hợp lệ.');
 
   let jobTitle = null, username = null;
   if (mode === 'JOBTITLE') {
@@ -882,10 +924,17 @@ async function addMixedApprovalRule() {
     return;
   }
   const id = isEdit ? editingMixedApprovalRuleId : (Math.max(0, ...(DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id)) + 1);
+  // Dòng MỚI luôn gán đúng Mức đang xem ở dropdown trên bảng; dòng SỬA giữ NGUYÊN Mức gốc của chính nó
+  // (kể cả wildcard không-tier của cấu hình cũ trước khi có tính năng này) — không âm thầm thu hẹp 1 dòng
+  // "Mọi mức" thành 1 mức cụ thể chỉ vì đang sửa nó trong khung xem của đúng mức đó (xem chú thích wildcard
+  // đầy đủ ở defaults.js::operationOrderStoreMixedApprovalRules).
+  const effectiveTier = isEdit
+    ? (DB.operationOrderStoreMixedApprovalRules || []).find(r => r.id === id)?.tier ?? null
+    : tier;
   const snapshot = JSON.parse(JSON.stringify(DB.operationOrderStoreMixedApprovalRules || []));
   DB.operationOrderStoreMixedApprovalRules = isEdit
-    ? (DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id === id ? { id, step, mode, jobTitle, username, stores } : r)
-    : [...(DB.operationOrderStoreMixedApprovalRules || []), { id, step, mode, jobTitle, username, stores }];
+    ? (DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier: effectiveTier, step, mode, jobTitle, username, stores } : r)
+    : [...(DB.operationOrderStoreMixedApprovalRules || []), { id, tier: effectiveTier, step, mode, jobTitle, username, stores }];
   if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
     DB.operationOrderStoreMixedApprovalRules = snapshot;
     renderMixedApprovalSection();
@@ -893,7 +942,7 @@ async function addMixedApprovalRule() {
   }
   logSystemAction(
     'CONFIG', isEdit ? 'UPDATE_MIXED_APPROVAL_RULE' : 'ADD_MIXED_APPROVAL_RULE',
-    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — ${effectiveTier ? `Mức "${operationOrderTierLabel('STORE', effectiveTier)}"` : 'Mọi mức (cấu hình cũ)'}, Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
     'SUCCESS', String(id)
   );
 
@@ -924,14 +973,24 @@ async function deleteMixedApprovalRule(id) {
   // PHÁT HIỆN (đợt audit chuyên sâu 12 cụm, mức Trung bình): xoá dòng cấu hình trước đây chỉ hỏi 1 câu
   // trung tính, KHÔNG hề cảnh báo khi đó là dòng CUỐI CÙNG của 1 bước — bước đó lập tức không còn ai
   // duyệt (mọi đơn "Đặt Hàng Tại Siêu Thị" tới bước này treo, chỉ admin duyệt được) mà admin không hay.
-  const remainingSameStep = rules.filter(r => r.id !== id && Number(r.step) === Number(rule.step));
+  // Tier-aware (10/2026): dòng WILDCARD (không tier) phủ CẢ 3 mức; dòng có tier cụ thể chỉ phủ đúng mức
+  // đó. Xét TỪNG mức bị ảnh hưởng bởi việc xoá dòng này — còn dòng khác (wildcard hoặc đúng mức đó) phủ
+  // cùng Bước hay không — mirror đúng điều kiện khớp rule thật ở resolveOperationOrderStoreMixedApprovers()
+  // (lib/workflowEngine.js) / computeOperationOrderStoreMixedApproversClient() (core.js), thay vì chỉ đếm
+  // số dòng còn lại theo Bước như trước khi có khái niệm Mức.
+  const affectedTiers = rule.tier ? [rule.tier] : OPERATION_ORDER_STORE_TIERS.map(t => t.key);
+  const stillCoveredForTier = (tier) => rules.some(r => r.id !== id && (!r.tier || r.tier === tier) && Number(r.step) === Number(rule.step));
+  const uncoveredTiers = affectedTiers.filter(t => !stillCoveredForTier(t));
+  const remainingSameStep = rules.filter(r => r.id !== id && (!rule.tier || !r.tier || r.tier === rule.tier) && Number(r.step) === Number(rule.step));
   const isDefaultRow = !(rule.stores && rule.stores.length);
-  let message = `Xoá dòng cấu hình Bước ${rule.step} này?`;
-  if (!remainingSameStep.length) {
-    message = `⚠️ CẢNH BÁO: đây là dòng cấu hình DUY NHẤT của Bước ${rule.step}.\n\n`
-      + `Xoá xong, Bước ${rule.step} sẽ KHÔNG CÒN AI DUYỆT — mọi đơn "Đặt Hàng Tại Siêu Thị" đi tới bước này sẽ treo lại (chỉ Quản Trị Viên duyệt được).\n\nVẫn xoá?`;
+  const tierLabelPart = rule.tier ? ` Mức "${operationOrderTierLabel('STORE', rule.tier)}" -` : '';
+  let message = `Xoá dòng cấu hình${tierLabelPart} Bước ${rule.step} này?`;
+  if (uncoveredTiers.length) {
+    const uncoveredLabel = uncoveredTiers.map(t => operationOrderTierLabel('STORE', t)).join(', ');
+    message = `⚠️ CẢNH BÁO: xoá xong, Bước ${rule.step} sẽ KHÔNG CÒN AI DUYỆT ở ${rule.tier ? 'mức' : 'các mức'} "${uncoveredLabel}".\n\n`
+      + `Mọi đơn "Đặt Hàng Tại Siêu Thị" ở ${rule.tier ? 'mức này' : 'các mức trên'} đi tới bước này sẽ treo lại (chỉ Quản Trị Viên duyệt được).\n\nVẫn xoá?`;
   } else if (isDefaultRow && !remainingSameStep.some(r => !(r.stores && r.stores.length))) {
-    message = `⚠️ CẢNH BÁO: đây là dòng MẶC ĐỊNH (áp dụng mọi siêu thị) duy nhất của Bước ${rule.step}.\n\n`
+    message = `⚠️ CẢNH BÁO: đây là dòng MẶC ĐỊNH (áp dụng mọi siêu thị) duy nhất của${tierLabelPart} Bước ${rule.step}.\n\n`
       + `Xoá xong, Bước ${rule.step} chỉ còn ${remainingSameStep.length} dòng NGOẠI LỆ (chỉ áp dụng đúng các siêu thị đã khai) — những siêu thị KHÔNG được khai ở các dòng đó sẽ không còn ai duyệt ở bước này.\n\nVẫn xoá?`;
   }
   if (!confirm(message)) return;
@@ -953,12 +1012,14 @@ async function deleteMixedApprovalRule(id) {
 // các hàm Quy Trình Đặt Hàng Siêu Thị ở trên (render/edit/cancel/add/delete), tái dùng ĐÚNG các hàm
 // generic mixedApprovalPersonLabel()/mixedApprovalResolvePersonInput()/mixedApprovalJobTitleOptions()/
 // mixedApprovalResolveJobTitleInput()/mixedApprovalJobTitleSourceBadgeHTML()/mixedApprovalRuleMatchCount()
-// — chỉ khác nguồn dữ liệu (DB.itPriceWholesaleStoreMixedApprovalRules) + DOM id riêng (ipma*) + có THÊM
-// 1 chiều lọc "Mức" (ipmaNewTier, 1 trong 4 mức Margin/Chiết Khấu cố định — xem IT_PRICE_TIER_LABELS/
-// itPriceTierLabel() ở core.js) vì Bán Buôn có quy trình/người duyệt RIÊNG cho MỖI mức (operationOrders
-// chỉ có 1 quy trình nên không cần chiều này) — xem chú thích đầy đủ ở
-// defaults.js::itPriceWholesaleStoreMixedApprovalRules + resolveItPriceWholesaleStoreMixedApprovers()
-// (lib/workflowEngine.js). Bảng chỉ hiện DÒNG của mức đang chọn ở dropdown phía trên bảng.
+// — chỉ khác nguồn dữ liệu (DB.itPriceWholesaleStoreMixedApprovalRules) + DOM id riêng (ipma*) + Mức ở
+// đây BẮT BUỘC (ipmaNewTier, 1 trong 4 mức Margin/Chiết Khấu cố định — xem IT_PRICE_TIER_LABELS/
+// itPriceTierLabel() ở core.js) vì tính năng Bán Buôn này được xây MỚI từ đầu, không có dữ liệu cũ nào
+// chưa gán Mức cần giữ tương thích ngược. Đặt Hàng Siêu Thị (maNewTier/renderMixedApprovalSection() ở
+// trên) cũng ĐÃ có cùng chiều lọc "Mức" (10/2026, 3 mức LT10M/FROM10M_TO100M/GTE100M) nhưng Mức ở đó là
+// TÙY CHỌN (wildcard !r.tier = áp dụng mọi mức) để không phá vỡ dữ liệu cấu hình cũ trước khi có tính
+// năng — xem chú thích đầy đủ ở defaults.js::operationOrderStoreMixedApprovalRules +
+// resolveOperationOrderStoreMixedApprovers() (lib/workflowEngine.js).
 let editingItPriceWholesaleMixedApprovalRuleId = null;
 
 // Số bước cho dropdown "Bước" của Mức đang chọn — lấy từ workflowId đã gán ở itPriceTierWorkflows[tier]

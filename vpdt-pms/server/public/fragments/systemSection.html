@@ -258,12 +258,14 @@
   <div id="mixedApprovalSection" class="hidden space-y-4">
     <div class="bg-indigo-50 p-4 rounded border border-indigo-200 space-y-2">
       <div class="font-bold text-indigo-900 text-sm flex items-center gap-2">🏬 Quy Trình Đặt Hàng Siêu Thị — Cấu Hình Người Duyệt Theo Bước</div>
-      <p class="text-xs text-indigo-900">Mỗi dòng bên dưới <b>CẤP QUYỀN LUÔN</b> cho đúng người/chức danh đó duyệt đúng Bước đã chọn (không cần bật thêm gì ở "🧩 Nhóm Quyền Đặc Biệt"). Để trống "Siêu Thị Phụ Trách" = <b>Mặc định</b> (áp dụng MỌI siêu thị); chọn 1 hoặc nhiều siêu thị = <b>Ngoại lệ</b> (chỉ áp dụng đúng các siêu thị đó) — cả 2 loại có thể cùng khớp 1 siêu thị, người duyệt sẽ HỢP LẠI với nhau (không loại trừ nhau). Số bước vẫn lấy từ "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") theo mức giá trị đơn hàng — màn này chỉ cấu hình AI duyệt.</p>
+      <p class="text-xs text-indigo-900">Mỗi dòng bên dưới <b>CẤP QUYỀN LUÔN</b> cho đúng người/chức danh đó duyệt đúng Bước đã chọn của đúng MỨC đang xem (không cần bật thêm gì ở "🧩 Nhóm Quyền Đặc Biệt"). Để trống "Siêu Thị Phụ Trách" = <b>Mặc định</b> (áp dụng MỌI siêu thị); chọn 1 hoặc nhiều siêu thị = <b>Ngoại lệ</b> (chỉ áp dụng đúng các siêu thị đó) — cả 2 loại có thể cùng khớp 1 siêu thị, người duyệt sẽ HỢP LẠI với nhau (không loại trừ nhau). Dòng cấu hình TỪ TRƯỚC (chưa gán Mức) hiện badge "✅ Mọi mức" và vẫn áp dụng cho CẢ 3 mức như cũ — chỉ dòng MỚI thêm từ nay mới gán đúng 1 Mức đang xem. Số bước vẫn lấy từ "🔄 Quy Trình & Phê Duyệt" (mục "📦 QT Vận Hành - Đặt Hàng Tại Siêu Thị") theo đúng Mức — màn này chỉ cấu hình AI duyệt.</p>
       <div class="flex items-center gap-2 pt-1 flex-wrap">
         <label class="text-xs font-bold text-indigo-900">Áp dụng cho:</label>
         <select class="border rounded px-2 py-1 text-xs bg-white font-semibold" disabled>
           <option>🏬 Đặt Hàng Tại Siêu Thị</option>
         </select>
+        <label class="text-xs font-bold text-indigo-900 ml-3">Đang xem Mức:</label>
+        <select id="maNewTier" data-op-change="renderMixedApprovalSection" class="border rounded px-2 py-1 text-xs bg-white font-semibold"></select>
       </div>
     </div>
 
@@ -275,6 +277,7 @@
             <th class="p-2 border">Kiểu</th>
             <th class="p-2 border">Người / Chức Danh</th>
             <th class="p-2 border">Siêu Thị Phụ Trách</th>
+            <th class="p-2 border">Mức Áp Dụng</th>
             <th class="p-2 border text-center">Thao Tác</th>
           </tr>
         </thead>
@@ -299,6 +302,7 @@
               </div>
             </td>
             <td class="p-2 border align-top"><div id="maNewStoresPicker" class="min-w-[220px]"></div></td>
+            <td class="p-2 border align-top text-xs text-gray-500 italic">Dòng mới sẽ gán đúng Mức đang xem ở trên.</td>
             <td class="p-2 border align-top text-center whitespace-nowrap">
               <button type="button" id="maSubmitBtn" data-op="addMixedApprovalRule" class="bg-indigo-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-indigo-700">+ Thêm Dòng</button>
               <button type="button" id="maCancelEditBtn" data-op="cancelEditMixedApprovalRule" class="hidden mt-1 text-gray-600 text-[11px] font-bold hover:underline">✕ Huỷ Sửa</button>

@@ -709,8 +709,8 @@ const DEFAULTS = {
   // mục đích này nữa, xem resolveOperationOrderWorkflow()/resolveOperationOrderStoreMixedApprovers() ở
   // lib/workflowEngine.js — SỐ BƯỚC vẫn lấy từ operationOrderStoreTierWorkflows như cũ, chỉ NGƯỜI DUYỆT
   // đổi sang tra ở đây). Mỗi phần tử 1 "dòng" cấu hình:
-  //   { id, step: number, mode: 'JOBTITLE'|'PERSON', jobTitle: string|null, username: string|null,
-  //     stores: string[] }
+  //   { id, tier: 'LT10M'|'FROM10M_TO100M'|'GTE100M'|null, step: number, mode: 'JOBTITLE'|'PERSON',
+  //     jobTitle: string|null, username: string|null, stores: string[] }
   // - stores RỖNG = "Mặc định" (áp dụng MỌI siêu thị); stores CÓ giá trị = "Ngoại lệ" (chỉ áp dụng đúng
   //   các siêu thị liệt kê). Nhiều dòng cùng khớp 1 (bước, siêu thị) thì HỢP (UNION) người duyệt lại,
   //   không loại trừ nhau (phương án B, đã chốt với người dùng).
@@ -723,6 +723,14 @@ const DEFAULTS = {
   // mục 17 admin) như cơ chế "Theo vị trí" (lib/positionApprovers.js) của các module KHÁC. Thiết kế
   // TỔNG QUÁT có chủ đích (theo yêu cầu người dùng) để sau này tái dùng cho Hợp Đồng/Văn Bản Trình — hiện
   // tại CHỈ operationOrders/STORE thực sự đọc field này.
+  // THÊM field `tier` (10/2026, theo yêu cầu người dùng — "Đặt Hàng Siêu Thị cần xử lý giống Bán Buôn":
+  // chọn được Mức link tới đúng quy trình ở "🔄 Quy Trình & Phê Duyệt"), mirror ĐÚNG field `tier` của
+  // itPriceWholesaleStoreMixedApprovalRules ngay dưới (3 mức LT10M/FROM10M_TO100M/GTE100M thay vì 4 mức
+  // Margin/Chiết Khấu — xem OPERATION_ORDER_STORE_TIERS ở lib/workflowEngine.js/core.js). KHÁC Bán Buôn 1
+  // điểm: dòng cấu hình TỪ TRƯỚC khi có field này không có `tier` (undefined) — COI LÀ "mọi mức" (áp dụng
+  // CẢ 3 mức, không migrate dữ liệu) để KHÔNG đổi hành vi của cấu hình admin đã lưu trước đợt này; CHỈ
+  // dòng MỚI thêm qua màn admin từ nay mới được gán `tier` tường minh theo đúng Mức đang xem (xem
+  // resolveOperationOrderStoreMixedApprovers() ở lib/workflowEngine.js — filter `!r.tier || r.tier===tier`).
   operationOrderStoreMixedApprovalRules: [],
   // Hỗ Trợ IT > Phê Duyệt Giá > "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng, 10/2026): CÙNG
   // KHUÔN operationOrderStoreMixedApprovalRules ở trên (bản sao độc lập, không dùng chung dữ liệu) —

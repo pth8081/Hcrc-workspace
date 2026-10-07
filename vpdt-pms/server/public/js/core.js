@@ -3316,11 +3316,14 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeD
     .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
     .map(u => u.username);
 }
-function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders) {
+// Tham số `tier` (10/2026, mirror ĐÚNG bản vá server resolveOperationOrderStoreMixedApprovers() —
+// lib/workflowEngine.js): dòng CŨ chưa gán `tier` (`!r.tier`) vẫn áp dụng cho MỌI mức (wildcard, không
+// migrate dữ liệu); dòng MỚI phải khớp ĐÚNG mức của đơn mới được tính.
+function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders, tier) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
-    (DB.operationOrderStoreMixedApprovalRules || []).filter(r => Number(r.step) === Number(stepOrder)).forEach(r => {
+    (DB.operationOrderStoreMixedApprovalRules || []).filter(r => (!r.tier || r.tier === tier) && Number(r.step) === Number(stepOrder)).forEach(r => {
       resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(r, storeDept).forEach(u => usernames.add(u));
     });
     approvers[stepOrder] = [...usernames];
@@ -3404,7 +3407,7 @@ function resolveOperationOrderWorkflowConfigForItemClient(o) {
     workflowId: tierCfg ? tierCfg.workflowId : null,
     tierConfigMissing: !tierCfg,
     steps: baseWf.steps,
-    approvers: computeOperationOrderStoreMixedApproversClient(o.dept, baseWf.steps.map(s => s.order))
+    approvers: computeOperationOrderStoreMixedApproversClient(o.dept, baseWf.steps.map(s => s.order), tier)
   }, o);
 }
 // operationOrderStoreApproverFilterFor() — TRƯỚC ĐÂY lọc lại approvers theo dept của đơn (mirror

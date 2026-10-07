@@ -195,10 +195,15 @@ async function main() {
   // A4: business logic THẬT (client mirror) — computeOperationOrderStoreMixedApproversClient() (core.js)
   // phải trả đúng người cho từng Bước/Siêu Thị dựa trên 2 dòng vừa thêm qua UI ở trên — đây CHÍNH LÀ hàm
   // dùng để hiển thị/preview approver thật ở màn tạo/duyệt đơn, không phải hàm test tự viết riêng.
+  // Tham số thứ 3 "LT10M" (10/2026, đợt thêm "Mức" cho Đặt Hàng Siêu Thị — xem module-workflow.js
+  // addMixedApprovalRule()): mọi dòng MỚI thêm qua UI nay LUÔN được gán đúng Mức đang xem ở dropdown
+  // "Đang xem Mức" (mặc định mức đầu tiên "LT10M" khi chưa đổi, đúng như A2/A3 ở trên) — khác hẳn
+  // dòng cấu hình CŨ trước khi có tính năng này (wildcard, không tier). Gọi hàm mà KHÔNG truyền tier sẽ
+  // không khớp được dòng cụ thể-mức vừa thêm (tier undefined !== 'LT10M'), nên test phải truyền đúng mức.
   const resolveCheck = await page.evaluate(() => {
     if (typeof computeOperationOrderStoreMixedApproversClient !== 'function') return { hasResolver: false };
-    const q1 = computeOperationOrderStoreMixedApproversClient('Siêu Thị Quận 1', [1, 2]);
-    const q2 = computeOperationOrderStoreMixedApproversClient('Siêu Thị Quận 2', [1, 2]);
+    const q1 = computeOperationOrderStoreMixedApproversClient('Siêu Thị Quận 1', [1, 2], 'LT10M');
+    const q2 = computeOperationOrderStoreMixedApproversClient('Siêu Thị Quận 2', [1, 2], 'LT10M');
     return { hasResolver: true, q1, q2 };
   });
   if (resolveCheck.hasResolver) {
