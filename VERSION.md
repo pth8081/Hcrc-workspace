@@ -1,8 +1,21 @@
 # Phiên bản hiện tại
 
-**25.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.43 (2026-10-07): Phê Duyệt Giá Bán Lẻ/Bán Buôn — thêm cột "Lý Do / Bổ Sung" ngay trên danh sách
+
+Theo yêu cầu người dùng: trường bổ sung (customData, VD "Lý do") trước đây chỉ tra được qua tìm kiếm
+(v25.42) nhưng không hiện ra để lướt mắt — phải mở "Chi tiết" từng dòng mới thấy, không thuận tiện. Thêm
+cột "Lý Do / Bổ Sung" vào bảng danh sách Phê Duyệt Giá Bán Lẻ (Mua Hàng) + Bán Buôn (Vận Hành) + Hỗ Trợ
+IT (`buildItPriceRowHtml()`, dùng chung cho cả 3 màn) — hiện trực tiếp MỌI trường bổ sung đã cấu hình
+(không chỉ riêng "Lý do", vì tên trường do admin tự đặt qua Biểu Mẫu). Thêm helper
+`buildCustomDataColumnHtml()` (core.js) dùng chung, có thể tái dùng cho các module khác nếu cần sau này.
+
+Kiểm tra: Playwright xác nhận cột hiện đúng nội dung customData ở cả Mua Hàng (Bán Lẻ) và Vận Hành (Bán
+Buôn); chạy lại 6 bộ test hồi quy Phê Duyệt Giá liên quan — không có lỗi mới (1 test cũ lỗi do thiếu kết
+nối SQL Server trong sandbox, không liên quan tới thay đổi).
 
 ## v25.42 (2026-10-07): Vá 2 lỗi THẬT từ v25.41 — sort mới-nhất-lên-đầu không có tác dụng + tìm kiếm chưa soát trường bổ sung (customData)
 
