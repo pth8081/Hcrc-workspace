@@ -23,6 +23,7 @@ const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { parseVNDateTime, cancelHrProcess } = require('../lib/recordActions');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026, "dữ liệu nhạy cảm nhân sự"): Hồ Sơ Nhân Sự trước đây không
 // ghi gì vào "Nhật ký hệ thống" — cùng với việc bỏ nhánh admin ở lib/employeeProfile.js, thêm log SERVER-
@@ -840,6 +841,7 @@ router.post('/parse-import', uploadRateLimiter, requireProfileCreate, (req, res)
     }
     if (err) return sendCatchError(res, err, 'POST /api/hr-profile/parse-import');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp Hồ Sơ Nhân Sự cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);

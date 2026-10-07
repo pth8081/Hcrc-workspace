@@ -15,6 +15,7 @@ const { getAllAppData } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -86,6 +87,7 @@ router.post('/parse-import', uploadRateLimiter, requireCreate, (req, res) => {
     }
     if (err) return sendCatchError(res, err, req.originalUrl);
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();

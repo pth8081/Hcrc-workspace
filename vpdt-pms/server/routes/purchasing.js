@@ -32,6 +32,7 @@ const {
 const { verifyFileSignature } = require('../lib/fileSignature');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -548,6 +549,7 @@ router.post('/manual-import', requireManageTerms, uploadRateLimiter, (req, res) 
     }
     if (err) return sendCatchError(res, err, 'POST /api/purchasing/manual-import');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     const startedAt = new Date();
     try {

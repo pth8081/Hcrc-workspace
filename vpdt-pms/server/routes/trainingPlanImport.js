@@ -15,6 +15,7 @@ const { getAllForCollection } = require('../lib/recordStore');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -88,6 +89,7 @@ router.post('/parse-plan-import', uploadRateLimiter, requireTrainingManage, (req
     }
     if (err) return sendCatchError(res, err, 'POST /api/training/parse-plan-import');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp kế hoạch đào tạo cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();

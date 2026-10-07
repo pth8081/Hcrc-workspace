@@ -15,6 +15,7 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { recordUploadedFile } = require('../lib/uploadedFiles');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -62,6 +63,7 @@ router.post('/parse-catalog', uploadRateLimiter, (req, res) => {
     }
     if (err) return sendCatchError(res, err, 'POST /api/vpp/parse-catalog');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp danh mục cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();

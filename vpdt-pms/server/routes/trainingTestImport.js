@@ -15,6 +15,7 @@ const { buildTestImportTemplateWorkbook, parseTestImportFile } = require('../lib
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -84,6 +85,7 @@ router.post('/parse-test-questions', uploadRateLimiter, requireTrainingManage, (
     }
     if (err) return sendCatchError(res, err, 'POST /api/training/parse-test-questions');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp câu hỏi cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
