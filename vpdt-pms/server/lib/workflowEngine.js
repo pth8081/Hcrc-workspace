@@ -311,11 +311,17 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
     .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
     .map(u => u.username);
 }
-function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepOrders) {
+// THÊM chiều "Mức" (10/2026, theo yêu cầu người dùng — Đặt Hàng Siêu Thị cần cấu hình người duyệt RIÊNG
+// theo mức giá trị đơn hàng, cùng khuôn QT Giá Bán Buôn đã có — xem resolveItPriceWholesaleStoreMixedApprovers()
+// ngay dưới): `tier` (param cuối) BẮT BUỘC khớp ĐÚNG `item`'s tier, NHƯNG dòng CŨ chưa gán `tier` (lưu từ
+// trước đợt này) vẫn phải tiếp tục áp dụng cho CẢ 3 mức như hành vi gốc — không có migrate dữ liệu, chỉ
+// coi `!r.tier` là "mọi mức" (wildcard), KHÔNG BAO GIỜ đổi hành vi của dòng đã cấu hình từ trước. Dòng MỚI
+// thêm qua màn admin (module-workflow.js) luôn được gán `tier` tường minh theo đúng Mức đang xem.
+function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepOrders, tier) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
-    (rules || []).filter(r => Number(r.step) === Number(stepOrder)).forEach(r => {
+    (rules || []).filter(r => (!r.tier || r.tier === tier) && Number(r.step) === Number(stepOrder)).forEach(r => {
       resolveOperationOrderStoreMixedApprovalRuleUsernames(r, storeDept, users).forEach(u => usernames.add(u));
     });
     approvers[stepOrder] = [...usernames];
@@ -329,13 +335,13 @@ function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepO
 // đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules cho LÝ DO cần tách riêng khỏi
 // itPriceTierWorkflows[...].approvers/approversByPosition cũ (khớp TOÀN CÔNG TY theo chức danh, không
 // phân biệt đúng siêu thị của đề xuất).
-// KHÁC resolveOperationOrderStoreMixedApprovers(): operationOrders STORE chỉ có 1 quy trình duy nhất
-// (không có khái niệm "mức"), nên khớp rule theo ĐÚNG số thứ tự bước là đủ. itPriceApprovals WHOLESALE
-// có THÊM 1 chiều độc lập — 4 MỨC cố định (MARGIN_LT5/MARGIN_GTE5/DISCOUNT_LTE5/DISCOUNT_GT5,
-// itPriceTierWorkflows), MỖI MỨC có quy trình/số bước/người duyệt RIÊNG. Nếu chỉ khớp theo số bước (như
-// operationOrders) thì 1 rule "bước 1" sẽ áp dụng NHẦM cho CẢ 4 mức dù chúng có người duyệt bước 1 khác
-// nhau hoàn toàn -> PHẢI khớp CẢ tier LẪN step (tham số priceTier mới, bắt buộc khớp đúng
-// rule.tier === priceTier) — xem field `tier` mới trên mỗi rule ở defaults.js.
+// CÙNG CHIỀU "Mức" với resolveOperationOrderStoreMixedApprovers() ở trên (đợt sau cũng đã thêm `tier`
+// cho operationOrders STORE) — itPriceApprovals WHOLESALE có 4 MỨC cố định (MARGIN_LT5/MARGIN_GTE5/
+// DISCOUNT_LTE5/DISCOUNT_GT5, itPriceTierWorkflows) thay vì 3 mức LT10M/FROM10M_TO100M/GTE100M của
+// operationOrders, MỖI MỨC có quy trình/số bước/người duyệt RIÊNG. Nếu chỉ khớp theo số bước thì 1 rule
+// "bước 1" sẽ áp dụng NHẦM cho CẢ 4 mức dù chúng có người duyệt bước 1 khác nhau hoàn toàn -> PHẢI khớp
+// CẢ tier LẪN step (tham số priceTier, bắt buộc khớp đúng rule.tier === priceTier, trừ dòng wildcard
+// `!r.tier`) — xem field `tier` trên mỗi rule ở defaults.js.
 //
 // "Ngành Hàng" (10/2026, theo yêu cầu người dùng, xem chú thích đầy đủ ở defaults.js::
 // itPriceWholesaleStoreMixedApprovalRules) — CHIỀU LỌC ĐỘC LẬP THỨ 3 (cùng cấp với tier/step, KHÁC HẲN
@@ -371,7 +377,7 @@ function resolveOperationOrderWorkflow(item, appData) {
   const resolved = flatWorkflowConfigToSteps(tierMap?.[tier] || null, appData);
   if (locationType === 'STORE') {
     const stepOrders = resolved.steps.map(s => s.order);
-    const approvers = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, item.dept, appData.users, stepOrders);
+    const approvers = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, item.dept, appData.users, stepOrders, tier);
     return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
   }
   return appendExtraApprovalLayers(resolved, item);

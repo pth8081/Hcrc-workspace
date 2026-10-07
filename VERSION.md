@@ -1,8 +1,37 @@
 # Phiên bản hiện tại
 
-**25.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.50 (2026-10-07): Đặt Hàng Siêu Thị — thêm chiều "Mức" cho Quy Trình Hỗn Hợp (giống Bán Buôn)
+
+Người dùng yêu cầu nguyên văn: "đặt hàng siêu thị được cấu hình trong quy trình nâng cao cần xử lý
+giống đặt hàng bán buôn... để tôi có thể chọn được các mức link đến được quy trình đặt hàng trong quy
+trình & phê duyệt". Trước đó: màn "🏬 Quy Trình Đặt Hàng Siêu Thị" (Hệ Thống > Nghiệp Vụ Nâng Cao) cấu
+hình người duyệt theo Bước nhưng KHÔNG phân biệt Mức giá trị đơn hàng (3 mức ≤10tr/>10tr-≤100tr/>100tr
+đã có sẵn ở "🔄 Quy Trình & Phê Duyệt" chỉ để quyết định SỐ BƯỚC) — khác hẳn "🏪 QT Giá Bán Buôn (Siêu
+Thị)" vốn đã cấu hình người duyệt RIÊNG cho từng mức từ trước.
+
+**Đã xác nhận riêng**: Bán Buôn đã link đúng — `resolveItPriceWholesaleStoreMixedApprovers()`
+(lib/workflowEngine.js) khớp nghiêm ngặt `r.tier === priceTier`, không rò rỉ sang mức khác.
+
+**Đã thêm cho Đặt Hàng Siêu Thị**:
+- Dropdown "Đang xem Mức" + cột "Mức Áp Dụng" trên bảng cấu hình (module-workflow.js, systemSection.html).
+- `operationOrderStoreMixedApprovalRules[].tier` — field MỚI, **tuỳ chọn** (khác Bán Buôn — field bắt
+  buộc): dòng cấu hình CŨ (lưu trước đợt này, không có `tier`) coi là "wildcard", tiếp tục áp dụng cho
+  CẢ 3 mức như hành vi gốc, không cần migrate dữ liệu, không mất tác dụng; dòng MỚI luôn gán đúng mức
+  đang xem. Dòng wildcard + dòng gán riêng 1 mức có thể cùng khớp 1 (bước, mức) — HỢP (UNION) người
+  duyệt lại, không loại trừ nhau (admin có thể thêm override riêng 1 mức mà không đụng dòng cũ).
+- `resolveOperationOrderStoreMixedApprovers()` (lib/workflowEngine.js) + mirror client
+  `computeOperationOrderStoreMixedApproversClient()` (core.js) nhận thêm tham số `tier`, filter
+  `(!r.tier || r.tier === tier)`.
+
+**Test mới**: `tests/test-operationorder-store-tier-mixed-approval.js` (16 kịch bản — wildcard/tier cụ
+thể/union/khác-mức-khác-bước, cả server lẫn client mirror). Chạy lại toàn bộ test liên quan Quy Trình
+Hỗn Hợp/Đặt Hàng Siêu Thị (11 bộ cũ) — không regression, trừ 1 lỗi tự gây ra đã sửa ngay (số bước tối
+thiểu của dropdown "Bước" bị giảm nhầm từ 3 xuống 1 khi tách hàm `populateMixedApprovalStepOptions()`,
+đã khôi phục đúng hành vi gốc).
 
 ## v25.49 (2026-10-07): Mojibake — script vá DỮ LIỆU CŨ đã lưu sai (v25.45 chỉ chặn tên tệp MỚI)
 
