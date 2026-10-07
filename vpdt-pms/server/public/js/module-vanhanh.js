@@ -1264,7 +1264,7 @@ function renderOperationList(kind) {
     }
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
     if (locationFilter && (o.receivingLocationName || '') !== locationFilter) return false;
-    if (!matchesKeywordFields([o.code, meta.titleField(o), o.creatorName, o.creator, o.dept, o.receivingLocationName, o.supplier, o.note, o.personInChargeName], keyword)) return false;
+    if (!matchesKeywordFields([o.code, meta.titleField(o), o.creatorName, o.creator, o.dept, o.receivingLocationName, o.supplier, o.note, o.personInChargeName, ...customDataSearchValues(o.customData)], keyword)) return false;
     return true;
   });
 
@@ -1741,7 +1741,14 @@ function renderOperationEstimateList() {
   ];
   // Mới nhất lên đầu (10/2026) — bọc trong {kind, item} nên không dùng thẳng sortByCreatedAtDesc() (chỉ
   // đọc field cấp 1), so sánh trực tiếp o.item.createdAt/id cùng quy ước tie-break.
-  rows.sort((a, b) => (new Date(b.item?.createdAt || 0) - new Date(a.item?.createdAt || 0)) || ((Number(b.item?.id) || 0) - (Number(a.item?.id) || 0)));
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — sort không có tác dụng gì): createdAt là chuỗi nowVN()
+  // ("hh:mm:ss dd/mm/yyyy"), new Date(chuỗi này) luôn ra Invalid Date (NaN) — phải parseVNDateTime()
+  // trước, chỉ rơi về new Date() khi đó thật sự là chuỗi ISO (mirror sortByCreatedAtDesc() ở core.js).
+  rows.sort((a, b) => {
+    const ta = a.item?.createdAt ? ((parseVNDateTime(a.item.createdAt) || new Date(a.item.createdAt)).getTime() || 0) : 0;
+    const tb = b.item?.createdAt ? ((parseVNDateTime(b.item.createdAt) || new Date(b.item.createdAt)).getTime() || 0) : 0;
+    return (tb - ta) || ((Number(b.item?.id) || 0) - (Number(a.item?.id) || 0));
+  });
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có hồ sơ Mở mới/Sửa chữa nào.</td></tr>`;
     return;
@@ -2583,7 +2590,14 @@ async function confirmOperationUseAction(kind, id) {
   alert('✅ Đã xác nhận đưa vào sử dụng!');
 }
 function buildOperationWorkItemRows(items, parentId, depth, mode, canManageExecution, canManageAcceptance, canEditWorkItems) {
-  const children = items.filter(w => w.parentWorkItemId === parentId).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  // LỖI ĐÃ VÁ (10/2026, cùng đợt): localeCompare trên chuỗi "hh:mm:ss dd/mm/yyyy" so GIỜ trước NGÀY, sai
+  // thứ tự — parse đúng bằng parseVNDateTime() (mirror sortByCreatedAtDesc() ở core.js, đổi dấu vì đây
+  // là thứ tự TĂNG DẦN/cũ trước, không phải mới nhất lên đầu).
+  const children = items.filter(w => w.parentWorkItemId === parentId).sort((a, b) => {
+    const ta = a.createdAt ? ((parseVNDateTime(a.createdAt) || new Date(a.createdAt)).getTime() || 0) : 0;
+    const tb = b.createdAt ? ((parseVNDateTime(b.createdAt) || new Date(b.createdAt)).getTime() || 0) : 0;
+    return ta - tb;
+  });
   let html = '';
   children.forEach(w => {
     const hasChildren = items.some(x => x.parentWorkItemId === w.id);
@@ -3629,7 +3643,7 @@ function buildOperationStoreReportComputed() {
   ];
   if (filterKind) rows = rows.filter(r => r.kind === filterKind);
   if (filterRecord) rows = rows.filter(r => `${r.kind}::${r.item.id}` === filterRecord);
-  if (keyword) rows = rows.filter(({ kind, item: o }) => matchesKeywordFields([o.code, OPERATION_KIND_META[kind].titleField(o), o.dept, o.creatorName, o.creator, o.supplier, o.note, o.personInChargeName], keyword));
+  if (keyword) rows = rows.filter(({ kind, item: o }) => matchesKeywordFields([o.code, OPERATION_KIND_META[kind].titleField(o), o.dept, o.creatorName, o.creator, o.supplier, o.note, o.personInChargeName, ...customDataSearchValues(o.customData)], keyword));
 
   return rows.map(({ kind, item: o }) => {
     const items = getOperationWorkItemsForRecord(kind, o.id);

@@ -1233,7 +1233,7 @@ function renderRecruitmentJobs() {
     if (filterMonth && j.month !== filterMonth) return false;
     if (filterDept && j.hiringDept !== filterDept) return false;
     if (filterStatus && j.status !== filterStatus) return false;
-    if (!matchesKeywordFields([j.title, j.location, j.description, j.requirements, j.contactInfo, j.income, j.workTime], filterKeyword)) return false;
+    if (!matchesKeywordFields([j.title, j.location, j.description, j.requirements, j.contactInfo, j.income, j.workTime, ...customDataSearchValues(j.customData)], filterKeyword)) return false;
     return true;
   });
 
@@ -1740,7 +1740,7 @@ function renderInternalPosts() {
     if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
     if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept], keyword)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept, ...customDataSearchValues(p.customData)], keyword)) return false;
     return true;
   });
 
@@ -1868,7 +1868,7 @@ function renderInternalFeedStyle(type) {
     if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
     if (categoryFilter && p.postCategory !== categoryFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept], keyword)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept, ...customDataSearchValues(p.customData)], keyword)) return false;
     return true;
   });
 

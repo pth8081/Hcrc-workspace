@@ -1835,6 +1835,22 @@ function matchesKeywordFields(fields, keyword) {
   return fields.some(f => (f || '').toString().toLowerCase().includes(kw));
 }
 
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — đợt mở rộng tìm kiếm trước bỏ sót trường bổ sung): trả về
+// mảng giá trị dạng chuỗi từ customData (trường cấu hình động qua "Biểu Mẫu"/renderDynamicInputsForModule,
+// lưu key theo NHÃN hiển thị trên form nhập — xem collectDynamicFieldsData()) để ghép vào
+// matchesKeywordFields() — các trường này THẬT SỰ nằm trên form nhập nhưng không hiện thành cột riêng
+// trên bảng sau khi tạo, nên trước đây hoàn toàn không được soát tới dù đúng yêu cầu "tìm trên mọi
+// trường của form nhập". Bỏ qua giá trị rỗng; lấy fileName cho trường kiểu Tải tệp/Tải nhiều tệp (lưu
+// {fileUrl, fileName} hoặc mảng các object đó, không stringify ra "[object Object]").
+function customDataSearchValues(customData) {
+  if (!customData || typeof customData !== 'object') return [];
+  return Object.values(customData).map(v => {
+    if (Array.isArray(v)) return v.map(x => (x && typeof x === 'object') ? (x.fileName || '') : x).join(' ');
+    if (v && typeof v === 'object') return v.fileName || '';
+    return v;
+  });
+}
+
 // true nếu dateStr nằm trong khoảng [fromDate, toDate] (dạng yyyy-mm-dd từ input type=date); bỏ
 // trống 1 hoặc cả 2 đầu = không giới hạn phía đó.
 //
@@ -1932,9 +1948,21 @@ function applyDashboardCardFilter(fields, resetKey, renderFn) {
 // getVisibleHrProcessList()) — KHÔNG dùng cho các danh sách đã có logic sắp xếp riêng theo nghiệp vụ
 // (ngày làm việc, mức độ phổ biến, kỳ báo cáo...), những chỗ đó giữ nguyên thứ tự hiện có.
 function sortByCreatedAtDesc(list, field = 'createdAt') {
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng sau khi lên bản thật — sort không có tác dụng gì): createdAt
+  // trong hệ thống là chuỗi nowVN() ("hh:mm:ss dd/mm/yyyy"), `new Date(chuỗi này)` trả về Invalid Date
+  // (getTime()=NaN) trên mọi trình duyệt — so sánh NaN với NaN qua `tb - ta` luôn ra NaN, V8 coi NaN như
+  // "bằng nhau" (không đổi chỗ) nên .sort() không sắp xếp gì cả, giữ nguyên thứ tự gốc từ server. Phải
+  // thử parseVNDateTime() (core.js, parse đúng "hh:mm:ss dd/mm/yyyy") trước, chỉ rơi về new Date() khi đó
+  // là chuỗi ISO thật (VD startTime từ input datetime-local) — đúng khuôn đã dùng ở core-approvalhub.js.
+  const toTime = (v) => {
+    if (!v) return 0;
+    const parsed = parseVNDateTime(v) || new Date(v);
+    const t = parsed instanceof Date ? parsed.getTime() : NaN;
+    return isNaN(t) ? 0 : t;
+  };
   return [...list].sort((a, b) => {
-    const ta = a?.[field] ? new Date(a[field]).getTime() : 0;
-    const tb = b?.[field] ? new Date(b[field]).getTime() : 0;
+    const ta = toTime(a?.[field]);
+    const tb = toTime(b?.[field]);
     if (tb !== ta) return tb - ta;
     return (Number(b?.id) || 0) - (Number(a?.id) || 0);
   });

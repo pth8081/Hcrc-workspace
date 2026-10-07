@@ -67,7 +67,7 @@ function renderHrContractTable() {
     if (!hrcEmployeeDirectoryCache.length) { loadHrcEmployeeDirectory().then(() => renderHrContractTable()); }
     const nameByCode = {};
     hrcEmployeeDirectoryCache.forEach(p => { nameByCode[p.employeeCode] = p.fullName; });
-    list = list.filter(c => matchesKeywordFields([c.employeeCode, c.code, nameByCode[c.employeeCode]], kw));
+    list = list.filter(c => matchesKeywordFields([c.employeeCode, c.code, nameByCode[c.employeeCode], ...customDataSearchValues(c.customData)], kw));
   }
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
 

@@ -1072,19 +1072,25 @@ function renderMhItPriceList() {
   const fromDate = document.getElementById('filterFromDateMhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateMhItPrice')?.value || '';
   const keyword = (document.getElementById('filterKeywordMhItPrice')?.value || '').trim();
-  const visible = DB.itPriceApprovals
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — Phê Duyệt Giá Bán Lẻ không tự sắp mới nhất lên đầu):
+  // trước đây .sort() ngay sau .filter() dùng String.localeCompare() trên chuỗi createdAt
+  // ("hh:mm:ss dd/mm/yyyy") — so sánh GIỜ (đứng đầu chuỗi) TRƯỚC ngày, "23:59:59 01/10/2026" bị coi "lớn
+  // hơn" (mới hơn) hẳn "00:00:01 05/10/2026", hoàn toàn sai nghiệp vụ. Bọc sortByCreatedAtDesc() (core.js,
+  // parse đúng bằng parseVNDateTime(), trả về mảng MỚI — không mutate) quanh kết quả filter() thay vì tự
+  // viết comparator riêng.
+  const visible = sortByCreatedAtDesc(DB.itPriceApprovals
     .filter(p => {
       if ((p.priceType || 'RETAIL') !== 'RETAIL' || !canViewItPriceApproval(currentUser, p)) return false;
       if (statusFilter && p.status !== statusFilter) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
       // Mở rộng tìm kiếm (10/2026, theo phản hồi người dùng): trước chỉ soát 3 trường, nay soát thêm
-      // phòng ban, username người đề xuất, Vùng Giá Áp Dụng và Mẫu Giá — khớp đúng mọi trường thật sự
-      // có trên hồ sơ, không chỉ 3 trường hiển thị sẵn trên bảng.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName], keyword)) return false;
+      // phòng ban, username người đề xuất, Vùng Giá Áp Dụng, Mẫu Giá và mọi trường bổ sung (customData,
+      // xem customDataSearchValues() ở core.js) — khớp đúng mọi trường thật sự có trên hồ sơ/form nhập,
+      // không chỉ 3 trường hiển thị sẵn trên bảng.
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
-    })
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    }));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
   const page = paginateList('mhItPrice', visible, 'renderMhItPriceList', 'đề xuất');
   // context='APPROVAL' — Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn Cấp làm NGAY tại đây (Mua Hàng),
@@ -1112,17 +1118,18 @@ function renderVanHanhItPriceList() {
   const fromDate = document.getElementById('filterFromDateVanHanhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateVanHanhItPrice')?.value || '';
   const keyword = (document.getElementById('filterKeywordVanHanhItPrice')?.value || '').trim();
-  const visible = DB.itPriceApprovals
+  // LỖI ĐÃ VÁ (10/2026) — mirror đúng bản vá ở renderMhItPriceList() (sort localeCompare theo chuỗi
+  // createdAt "hh:mm:ss dd/mm/yyyy" sai thứ tự vì so GIỜ trước NGÀY; dùng sortByCreatedAtDesc() thay thế).
+  const visible = sortByCreatedAtDesc(DB.itPriceApprovals
     .filter(p => {
       if (p.priceType !== 'WHOLESALE' || !canViewItPriceApproval(currentUser, p)) return false;
       if (statusFilter && p.status !== statusFilter) return false;
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-      // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName], keyword)) return false;
+      // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả customData.
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
-    })
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    }));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
   const page = paginateList('vanHanhItPrice', visible, 'renderVanHanhItPriceList', 'đề xuất');
   // context='APPROVAL' — cùng lý do renderMhItPriceList() ở trên, áp dụng cho Vận Hành.
@@ -1179,16 +1186,18 @@ function renderItPriceApprovals() {
   ];
   document.getElementById('itPriceDashboardCards').innerHTML = buildDashboardCardsHTML(itPriceDashCards, statusFilter, 'filterItPriceByCard');
 
-  const visible = DB.itPriceApprovals.filter(p => {
+  // sortByCreatedAtDesc() thêm vào đây (trước đây màn Hỗ Trợ IT chưa tự sắp mới nhất lên đầu, không
+  // đồng bộ với 2 tab Mua Hàng/Vận Hành bên trên — cùng đợt vá).
+  const visible = sortByCreatedAtDesc(DB.itPriceApprovals.filter(p => {
     if (!canViewItPriceApproval(currentUser, p)) return false;
     if ((p.priceType || 'RETAIL') !== activeItPriceSubTab) return false;
     if (statusFilter && p.status !== statusFilter) return false;
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
-    // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList().
-    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName], keyword)) return false;
+    // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm customData.
+    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, ...customDataSearchValues(p.customData)], keyword)) return false;
     return true;
-  });
+  }));
 
   document.getElementById('paginationContainer_itPrice').innerHTML = buildPaginationBoxHTML('itPrice', 'renderItPriceApprovals');
   const page = paginateList('itPrice', visible, 'renderItPriceApprovals', 'đề xuất');
@@ -2135,7 +2144,7 @@ function renderItTickets() {
     if (!canViewItTicket(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (categoryFilter && t.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([t.code, t.title, t.creatorName, t.creator, t.dept, t.description, t.category], keyword)) return false;
+    if (!matchesKeywordFields([t.code, t.title, t.creatorName, t.creator, t.dept, t.description, t.category, ...customDataSearchValues(t.customData)], keyword)) return false;
     return true;
   });
 

@@ -1039,7 +1039,7 @@ function renderTasks() {
     if (!canViewTaskRecord(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (sourceFilter && t.sourceType !== sourceFilter) return false;
-    if (!matchesKeywordFields([t.title, t.assignedToName, t.assignedByName, t.sourceCode, t.description], keyword)) return false;
+    if (!matchesKeywordFields([t.title, t.assignedToName, t.assignedByName, t.sourceCode, t.description, ...customDataSearchValues(t.customData)], keyword)) return false;
     return true;
   });
 

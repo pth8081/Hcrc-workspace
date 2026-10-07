@@ -1044,7 +1044,7 @@ function renderContracts() {
     if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
     // Mở rộng tìm kiếm (10/2026, theo phản hồi người dùng): soát thêm phòng ban, đơn vị custodian, loại
     // pháp lý và người tạo — không chỉ 3 trường hiển thị sẵn trên bảng.
-    if (!matchesKeywordFields([c.code, c.title, c.partner, c.dept, c.custodianDept, c.type, c.creatorName, c.content], keyword)) return false;
+    if (!matchesKeywordFields([c.code, c.title, c.partner, c.dept, c.custodianDept, c.type, c.creatorName, c.content, ...customDataSearchValues(c.customData)], keyword)) return false;
 
     if (expiryFilter) {
       const diffDays = Math.ceil((new Date(c.endDate) - now) / (1000 * 60 * 60 * 24));

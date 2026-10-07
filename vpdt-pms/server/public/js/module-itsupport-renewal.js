@@ -148,7 +148,7 @@ function renderItServiceRenewals() {
   const filtered = DB.itServiceRenewals.filter(item => {
     if (lifecycleFilter && computeItRenewalLifecycleState(item) !== lifecycleFilter) return false;
     if (categoryFilter && item.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([item.name, item.vendor, item.responsible, item.note], keyword)) return false;
+    if (!matchesKeywordFields([item.name, item.vendor, item.responsible, item.note, ...customDataSearchValues(item.customData)], keyword)) return false;
     return true;
   });
 

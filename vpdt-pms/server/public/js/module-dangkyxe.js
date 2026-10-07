@@ -957,7 +957,7 @@ function renderCarRegs() {
     if (deptFilter && c.dept !== deptFilter) return false;
     if (statusFilter && c.status !== statusFilter) return false;
     if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason, c.directUser], keyword)) return false;
+    if (!matchesKeywordFields([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason, c.directUser, ...customDataSearchValues(c.customData)], keyword)) return false;
 
     return true;
   });

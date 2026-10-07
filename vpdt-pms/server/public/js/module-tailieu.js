@@ -347,7 +347,7 @@ function renderDocs() {
     if (deptFilter && doc.dept !== deptFilter) return false;
     if (statusFilter && doc.status !== statusFilter) return false;
 
-    if (keyword && !matchesKeywordFields([doc.code, doc.title, doc.summary, doc.dept, doc.uploaderName, doc.uploader], keyword)) return false;
+    if (keyword && !matchesKeywordFields([doc.code, doc.title, doc.summary, doc.dept, doc.uploaderName, doc.uploader, ...customDataSearchValues(doc.customData)], keyword)) return false;
 
     if (!isInDateRange(doc.createdAt, fromDate, toDate)) return false;
 
@@ -910,11 +910,7 @@ function renderLicenses() {
     if (statusFilter && item.status !== statusFilter) return false;
     if (lifecycleFilter && computeLicenseLifecycleState(getLicenseFamilyLatest(item.id)) !== lifecycleFilter) return false;
 
-    if (keyword) {
-      const hay = [item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber, item.creator, item.creatorName, item.issuingAuthority]
-        .map(v => (v || '').toLowerCase());
-      if (!hay.some(v => v.includes(keyword))) return false;
-    }
+    if (keyword && !matchesKeywordFields([item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber, item.creator, item.creatorName, item.issuingAuthority, ...customDataSearchValues(item.customData)], keyword)) return false;
 
     if (!isInDateRange(item.createdAt, fromDate, toDate)) return false;
     return true;
