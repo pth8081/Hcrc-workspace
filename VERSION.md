@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**25.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.46 (2026-10-07): Phê Duyệt Giá Bán Buôn (Vận Hành) — vá nốt 3 trường "ẩn" chưa soát tìm kiếm
+
+Người dùng xác nhận các đợt vá trước (customData, `p.reason`) đã đúng cho mọi module khác (VD Hợp
+Đồng), nhưng RIÊNG Phê Duyệt Giá Bán Buôn (Vận Hành, cũng xem được từ Hỗ Trợ IT) vẫn còn trường THẬT
+nhập khi tạo đề xuất mà tìm kiếm chưa soát tới. Rà lại kỹ payload thật của `submitItPriceApproval()`
+(module-itsupport-price.js) — phát hiện 3 trường tĩnh (không phải customData) bị bỏ sót hoàn toàn:
+
+1. **`p.priceTier`** ("Mức Margin/Chiết Khấu áp dụng") — ĐÃ hiện ở modal Chi Tiết nhưng chưa vào mảng
+   tìm kiếm.
+2. **`p.storeScope.stores`** ("🏬 Siêu Thị Đề Xuất") — ĐÃ hiện ở modal Chi Tiết nhưng chưa vào mảng tìm
+   kiếm.
+3. **`p.nganhHang`** ("🏷️ Ngành Hàng Áp Dụng") — nặng nhất: trường này lưu MÃ (không phải tên), và
+   CHƯA TỪNG hiện ở BẤT KỲ đâu (kể cả modal Chi Tiết) kể từ khi tính năng ra đời — đúng nghĩa "trường
+   ẩn" người dùng mô tả. Thêm helper `itPriceNganhHangNames()` tra tên từ `DB.nganhHangCatalog` (mirror
+   cách tra ở module-workflow.js), dùng chung cho cả hiển thị (dòng mới trong modal Chi Tiết) lẫn tìm
+   kiếm.
+
+Áp dụng cho cả 3 hàm render dùng chung field search array (`renderMhItPriceList`/
+`renderVanHanhItPriceList`/`renderItPriceApprovals`) — Bán Lẻ (Mua Hàng) không có 3 trường này
+(luôn null/rỗng) nên không bị ảnh hưởng, chỉ thêm an toàn.
+
+Kiểm tra: viết mới `verify-itprice-hidden-fields-search.js` (Playwright, gọi thật `renderVanHanhItPriceList()`
+qua DOM, seed 1 hồ sơ WHOLESALE với đủ 3 trường) — xác nhận tìm theo "Margin < 5%"/"Siêu Thị Đà Nẵng"/
+"Rau Củ Quả" (tên ngành hàng) đều ra đúng hồ sơ, modal Chi Tiết hiện đúng tên ngành hàng, từ khoá không
+khớp thì không hiện (chặn false-positive). Chạy lại 12 bộ test Phê Duyệt Giá hiện có — không có lỗi
+mới (6 lỗi FAIL trong `test-itprice-download.js` là do sandbox không có SQL Server thật, có từ trước,
+không liên quan bản vá này).
 
 ## v25.45 (2026-10-07): Vá lỗi THẬT — tên tệp tải lên có dấu tiếng Việt bị lỗi font (mojibake) ở 16 route
 
