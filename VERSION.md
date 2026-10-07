@@ -1,8 +1,25 @@
 # Phiên bản hiện tại
 
-**25.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.48 (2026-10-07): Phê Duyệt Giá — vá nốt "⏳ Hết hiệu lực" chưa tìm kiếm được (cả Bán Lẻ/Bán Buôn)
+
+Người dùng gửi ảnh chụp màn hình thật: hồ sơ Phê Duyệt Giá Bán Lẻ hiện rõ "⏳ Hết hiệu lực: Vĩnh viễn"
+ở modal Chi Tiết (cùng "📍 Vùng Giá Áp Dụng" vừa vá ở v25.47), nhưng gõ tìm vẫn không ra. Rà lại: trường
+`expiryMode`/`expiryDate` đã hiện ở modal Chi Tiết từ rất lâu (viết trực tiếp trong template literal)
+nhưng CHƯA TỪNG được đưa vào mảng tìm kiếm — khác với `priceZone` ở v25.47 (đã có trong search, chỉ
+thiếu hiển thị), lần này là chiều ngược lại: ĐÃ hiện nhưng chưa tìm được. Tách logic hiển thị thành hàm
+`itPriceExpiryLabel(p)` (mirror `itPriceTierLabel()`), dùng chung cho cả modal Chi Tiết lẫn mảng tìm
+kiếm ở cả 3 hàm render (`renderMhItPriceList`/`renderVanHanhItPriceList`/`renderItPriceApprovals`) — áp
+dụng đồng thời cho cả Bán Lẻ VÀ Bán Buôn vì đây là field dùng chung (không riêng gì 1 kênh).
+
+Kiểm tra: viết mới `verify-itprice-retail-expiry-search.js` (Playwright, mirror đúng dữ liệu trong ảnh
+chụp — Mẫu Giá "Khuyến Mãi", Lý do "Biovegi", Hết hiệu lực Vĩnh viễn) — xác nhận tìm theo "Vĩnh viễn" ra
+đúng hồ sơ (trước đây không ra), modal Chi Tiết không đổi hành vi hiển thị cũ, hồ sơ có hạn cụ thể
+(expiryMode=OTHER) tìm theo đúng ngày hết hạn cũng ra kết quả, từ khoá không khớp thì không hiện — 5/5
+PASS. Chạy lại 11 bộ test Phê Duyệt Giá hiện có — không có lỗi mới.
 
 ## v25.47 (2026-10-07): Phê Duyệt Giá Bán Lẻ (Mua Hàng) — vá nốt "Vùng Giá Áp Dụng" chưa từng hiện ra
 
