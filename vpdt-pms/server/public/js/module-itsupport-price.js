@@ -1523,6 +1523,7 @@ function renderItPriceModal() {
     <div><b>Áp giá:</b> ${itPriceAppliedBadge(p)}</div>
     ${p.priceType === 'WHOLESALE' ? `<div><b>Mức áp dụng:</b> ${escapeHtml(itPriceTierLabel(p.priceTier))}</div>` : ''}
     ${p.priceType === 'WHOLESALE' ? `<div><b>🏢 Đơn vị áp dụng giá bán buôn:</b> ${p.wholesaleApplyUnit ? escapeHtml(p.wholesaleApplyUnit) : '<span class="text-gray-400">—</span>'}</div>` : ''}
+    ${(p.priceType || 'RETAIL') === 'RETAIL' ? `<div><b>📍 Vùng Giá Áp Dụng:</b> ${p.priceZone ? escapeHtml(p.priceZone) : '<span class="text-gray-400">—</span>'}</div>` : ''}
     ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     <div><b>🏬 ${p.priceType === 'WHOLESALE' ? 'Siêu thị đề xuất' : 'Siêu thị áp dụng'}:</b> ${itPriceStoreScopeLabel(p.storeScope)}</div>

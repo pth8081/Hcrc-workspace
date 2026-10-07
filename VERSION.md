@@ -1,8 +1,26 @@
 # Phiên bản hiện tại
 
-**25.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.47 (2026-10-07): Phê Duyệt Giá Bán Lẻ (Mua Hàng) — vá nốt "Vùng Giá Áp Dụng" chưa từng hiện ra
+
+Người dùng hỏi lại ngay sau bản vá v25.46 (vốn chỉ mới vá Bán Buôn): "Giá bán lẻ bạn chưa xử lý à?".
+Rà lại kỹ payload thật của `submitMhItPriceApproval()` (module-muahang.js) đối chiếu với
+`renderItPriceModal()` — phát hiện đúng 1 trường tĩnh THẬT, chỉ dành riêng cho Bán Lẻ: **`p.priceZone`**
+("📍 Vùng Giá Áp Dụng", chọn khi tạo đề xuất) đã được thêm vào mảng tìm kiếm từ bản vá v25.46 trước đó
+(cùng đợt rà soát 3 trường Bán Buôn), nhưng **chưa từng được hiển thị ở bất kỳ đâu** (không bảng danh
+sách, không modal Chi Tiết) kể từ khi tính năng tách Bán Lẻ/Bán Buôn ra đời — đúng mẫu lỗi "trường ẩn"
+giống `nganhHang` bên Bán Buôn ở bản vá trước, chỉ khác là lần này search đã đúng từ trước, chỉ thiếu
+hiển thị. Thêm 1 dòng hiển thị trong modal Chi Tiết (`renderItPriceModal()`, chỉ hiện khi
+`priceType !== 'WHOLESALE'`), dùng chung cho cả 3 màn xem (Mua Hàng/Hỗ Trợ IT).
+
+Kiểm tra: viết mới `verify-itprice-retail-pricezone.js` (Playwright, seed 1 hồ sơ RETAIL có
+`priceZone='Miền Trung'`) — xác nhận tìm theo "Miền Trung" vẫn ra đúng hồ sơ (search không hỏng), modal
+Chi Tiết giờ hiện đúng "Vùng Giá Áp Dụng: Miền Trung" (trước đây không hiện), hồ sơ WHOLESALE không bị
+hiện nhầm dòng này (field không áp dụng), từ khoá không khớp thì không hiện (chặn false-positive) — 5/5
+PASS. Chạy lại 11 bộ test Phê Duyệt Giá hiện có — không có lỗi mới.
 
 ## v25.46 (2026-10-07): Phê Duyệt Giá Bán Buôn (Vận Hành) — vá nốt 3 trường "ẩn" chưa soát tìm kiếm
 
