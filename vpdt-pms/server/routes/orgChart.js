@@ -23,6 +23,7 @@ const orgChartImport = require('../lib/orgChartImport');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { computeHeadcountReport } = require('../lib/headcountReport');
 const { buildGenericWorkbook } = require('../lib/adminExport');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAllForCollection } = require('../lib/recordStore');
 
 const router = express.Router();
@@ -242,6 +243,7 @@ router.post('/parse-import', uploadRateLimiter, (req, res) => {
     }
     if (err) return sendCatchError(res, err, 'POST /api/org-chart/parse-import');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp Cơ Cấu Tổ Chức cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
     try {
       const ext = path.extname(req.file.originalname).toLowerCase();
       const buffer = fs.readFileSync(req.file.path);

@@ -21,6 +21,7 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { recordUploadedFile } = require('../lib/uploadedFiles');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -77,6 +78,7 @@ router.post('/parse-file', uploadRateLimiter, (req, res) => {
     }
     if (err) return sendCatchError(res, err, 'POST /api/it-price/parse-file');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp bảng giá cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     try {
       const declaredExt = path.extname(req.file.originalname).toLowerCase();
@@ -144,6 +146,7 @@ router.post('/master-list/parse-file', uploadRateLimiter, (req, res) => {
     }
     if (err) return sendCatchError(res, err, 'POST /api/it-price/master-list/parse-file');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp mẫu cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     try {
       const declaredExt = path.extname(req.file.originalname).toLowerCase();

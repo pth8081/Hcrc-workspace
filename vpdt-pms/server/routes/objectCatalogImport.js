@@ -31,6 +31,7 @@ const {
   parseObjectCatalogFile, loadRefValuesForColumns
 } = require('../lib/objectCatalogImport');
 const { buildPositionTypesTemplateWorkbook, parsePositionTypesFile } = require('../lib/positionTypesImport');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 
@@ -67,6 +68,7 @@ function receiveUpload(req, res, label) {
       }
       if (err) { sendCatchError(res, err, label); return resolve(null); }
       if (!req.file) { res.status(400).json({ error: 'Thiếu tệp cần nhập' }); return resolve(null); }
+      req.file.originalname = fixUploadedFilename(req.file.originalname);
       const ext = path.extname(req.file.originalname).toLowerCase();
       try {
         const check = await verifyFileSignature(req.file.buffer, ext);

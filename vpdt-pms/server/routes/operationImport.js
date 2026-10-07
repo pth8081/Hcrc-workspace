@@ -19,6 +19,7 @@ const {
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -49,6 +50,7 @@ function parseUploadedFile(req, res, onOk) {
     }
     if (err) return sendCatchError(res, err, req.originalUrl);
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
     try {
       const buffer = fs.readFileSync(req.file.path);
       const check = await verifyFileSignature(buffer, '.xlsx');

@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**25.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.45 (2026-10-07): Vá lỗi THẬT — tên tệp tải lên có dấu tiếng Việt bị lỗi font (mojibake) ở 16 route
+
+Người dùng báo (kèm ảnh chụp thật): tên tệp tải lên ("Test gia hạn mới.xlsx") hiện ra lỗi font kiểu
+"Test gia há°±n má»›i.xlsx" ở cột "Tệp Bảng Giá" (Phê Duyệt Giá). Đo thật bằng HTTP multipart thật qua
+`FormData`/`Blob`/`fetch` chuẩn Node (y hệt cách trình duyệt gửi) xác nhận bug tái hiện qua chính
+`routes/upload.js` thật, không chỉ suy luận lý thuyết.
+
+**Nguyên nhân gốc**: multer/busboy mặc định đọc tham số `filename=` trong header
+`Content-Disposition` của `multipart/form-data` bằng **latin1** (không cấu hình `defParamCharset`),
+trong khi trình duyệt gửi NGUYÊN BYTE UTF-8 cho `filename=` (không dùng cú pháp mở rộng RFC 5987
+`filename*=UTF-8''...` — cú pháp đó chỉ SERVER dùng khi trả tệp về, xem `routes/priceFile.js`). Mỗi
+ký tự có dấu (VD "ạ" = 3 byte UTF-8) bị tách thành 2-3 ký tự latin1 sai.
+
+**Đã vá**: thêm helper dùng chung `lib/uploadFilename.js::fixUploadedFilename()` (decode lại
+latin1→utf8, tự động GIỮ NGUYÊN nếu decode sinh ký tự lỗi U+FFFD — an toàn cho tên tệp thuần ASCII,
+không làm hỏng tên tệp đã đúng UTF-8 từ trước) — áp dụng ngay sau khi nhận `req.file` ở **16 route**
+multer có echo lại tên tệp cho client: `routes/upload.js` (route gốc người dùng báo lỗi, dùng chung
+cho mọi module đính kèm), `priceFile.js` (2 handler), `budgetTemplateImport.js` (2),
+`purchasing.js`, `operationImport.js`, `vppCatalog.js`, `objectCatalogImport.js`,
+`budgetLinesImport.js`, `orgChart.js`, `storeCatalogImport.js`, `employeeProfile.js`,
+`checklistImport.js`, `trainingRoster.js`, `trainingTestImport.js`, `laborContractImport.js` (2),
+`trainingPlanImport.js`.
+
+Kiểm tra: test mới `tests/test-upload-filename-mojibake.js` gọi THẬT `routes/upload.js` qua HTTP
+multipart thật (multer thật, ghi file thật ra đĩa) — xác nhận tên tệp có dấu ("Test gia hạn mới.xlsx",
+"261006 Test TĂG.xlsx") trả về ĐÚNG, và tên tệp thuần ASCII không bị ảnh hưởng (round-trip identity).
+Chạy lại 9 bộ test liên quan tới upload/multipart hiện có (`test-pricefile-vppcatalog-ownership`,
+`test-upload-type-config-modules`, `test-internal-media-server`, `test-itprice-file-format-reject`,
+`test-purchasing-manual-import-lock`, `test-simple-catalog-excel-tools`, `test-tls-cert-upload`,
+`test-trusted-ca`, `test-hr-profile`) — không có lỗi mới.
 
 ## v25.44 (2026-10-07): Vá lỗi THẬT ở v25.43 — trường "Lý Do Điều Chỉnh Giá" (`reason`) không hiện ở danh sách và không tìm kiếm được
 

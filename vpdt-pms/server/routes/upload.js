@@ -12,6 +12,7 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { recordUploadedFile } = require('../lib/uploadedFiles');
+const { fixUploadedFilename } = require('../lib/uploadFilename');
 
 const router = express.Router();
 
@@ -141,6 +142,7 @@ router.post('/', uploadRateLimiter, (req, res) => {
     // thay vì trả thẳng err.message như trước — xem lib/errorResponse.js.
     if (err) return sendCatchError(res, err, 'POST /api/upload');
     if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
 
     // Kiểm tra riêng theo module (xem admin "Loại Tệp Cho Phép") — SAU khi ALLOWED_EXT (danh sách
     // tổng, dùng ở fileFilter phía trên) đã chặn phần mở rộng nguy hiểm. Module chưa được cấu hình
