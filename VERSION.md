@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**25.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.44 (2026-10-07): Vá lỗi THẬT ở v25.43 — trường "Lý Do Điều Chỉnh Giá" (`reason`) không hiện ở danh sách và không tìm kiếm được
+
+Người dùng gửi ảnh chụp màn hình thật: cột "Lý Do / Bổ Sung" đã hiện ở Phê Duyệt Giá Bán Lẻ/Bán
+Buôn (v25.43), nhưng khi người dùng lập đơn và nhập "Lý do điều chỉnh giá" thì giá trị đó KHÔNG hiện
+ra ở danh sách và KHÔNG tìm kiếm được (gõ "Hải Dương" → "Không tìm thấy đề xuất phù hợp"), dù sort
+mới-nhất-lên-đầu đã đúng.
+
+**Nguyên nhân gốc**: cả 2 lần vá trước (v25.42 tìm kiếm, v25.43 hiển thị cột) đều nhầm "Lý do" của
+người dùng là trường động `customData` (Trường Bổ Sung cấu hình qua Biểu Mẫu). Thực tế `reason` là
+1 trường TĨNH riêng, có sẵn từ lâu (textarea "Lý Do Điều Chỉnh Giá" —
+`#mhItPriceReason`/`#itPriceReason`), lưu vào `p.reason`, KHÔNG thuộc `customData` — nên cả 2 lần vá
+trước đều không soát tới trường này dù đã test kỹ bằng Playwright (do dữ liệu mock test dùng
+`customData` giả thay vì trường `reason` thật, không đúng kịch bản người dùng báo).
+
+**Đã vá** (`module-itsupport-price.js`, dùng chung cho cả 3 màn Mua Hàng/Vận Hành/Hỗ Trợ IT):
+thêm `p.reason` vào mảng `matchesKeywordFields()` ở cả 3 hàm render danh sách
+(`renderMhItPriceList`/`renderVanHanhItPriceList`/`renderItPriceApprovals`); sửa
+`buildItPriceRowHtml()` hiện `p.reason` kết hợp với `customData` (không hiện dấu "—" thừa khi có
+`reason` nhưng không có `customData`).
+
+**Đã rà soát thêm** (theo đề nghị người dùng "khả năng module khác cũng chưa xử lý được"): grep toàn
+bộ các module khác có trường `reason`/`lyDo` dạng payload tĩnh tương tự — xác nhận
+`module-dangkyxe.js` và `module-office.js` đã tìm kiếm đúng trường `reason` từ trước; 1 trường
+`reason` khác ở `module-hopdong.js` (đổi hình thức thanh toán hợp đồng) là 1 hành động RIÊNG, không
+thuộc trường tìm kiếm chính của hồ sơ hợp đồng — không phải lỗi. **Kết luận: lỗi chỉ xảy ra ở riêng
+Phê Duyệt Giá, không lặp lại ở module khác.**
+
+Kiểm tra: Playwright xác nhận lại đúng kịch bản người dùng báo ("Hải Dương") — cột hiện đúng nội
+dung `reason` và tìm kiếm ra đúng hồ sơ, ở cả Mua Hàng (Bán Lẻ) và Vận Hành (Bán Buôn); chạy lại 5
+bộ test hồi quy Phê Duyệt Giá liên quan — không có lỗi mới.
 
 ## v25.43 (2026-10-07): Phê Duyệt Giá Bán Lẻ/Bán Buôn — thêm cột "Lý Do / Bổ Sung" ngay trên danh sách
 
