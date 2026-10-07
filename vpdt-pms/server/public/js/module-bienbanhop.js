@@ -865,13 +865,13 @@ function renderMeetingMinutes() {
     if (!canViewMeetingMinutesRecord(currentUser, m)) return false;
     if (topicFilter && !(m.title || '').toLowerCase().includes(topicFilter)) return false;
     if (!isInDateRange(m.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName, m.creator, m.dept], keyword)) return false;
+    if (!matchesKeywordFields([m.code, m.title, m.chair, m.creatorName, m.creator, m.dept, m.content, m.location, m.secretary], keyword)) return false;
 
     return true;
   });
 
   document.getElementById('paginationContainer_minutes').innerHTML = buildPaginationBoxHTML('minutes', 'renderMeetingMinutes');
-  const pageItems = paginateList('minutes', visible, 'renderMeetingMinutes', 'biên bản');
+  const pageItems = paginateList('minutes', sortByCreatedAtDesc(visible), 'renderMeetingMinutes', 'biên bản');
 
   if (pageItems.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Không tìm thấy biên bản họp phù hợp.</td></tr>`;

@@ -1603,6 +1603,15 @@
           </div>
         </div>
 
+        <!-- #userOnlyExtraFieldsWrap (10/2026, lỗi thật phát hiện qua Playwright: sửa 1 NHÓM PHÂN QUYỀN
+             vẫn lộ nguyên 5 khối field dưới đây — toàn bộ đều CHỈ có ý nghĩa cho 1 NGƯỜI DÙNG, 1 Nhóm
+             không có "Vị Trí Kiêm Nhiệm"/không "Là tài xế"/không thể là thành viên của "Nhóm Phân Quyền"
+             nào — tệ nhất là ô Nhóm Phân Quyền bên dưới tự liệt kê CẢ chính nhóm đang sửa, admin có thể
+             tích nhầm khiến 1 nhóm trở thành "thành viên của chính nó"). Ẩn/hiện theo đúng mode USER/GROUP
+             qua toggleUserPermFormMode() (module-admin-permgroups.js), cùng khuôn userIdentityFields/
+             groupIdentityFields ở trên — KHÔNG lồng vào groupIdentityFields vì khối này nằm TRƯỚC, ngoài
+             phạm vi grid 2 cột của riêng Nhóm. -->
+        <div id="userOnlyExtraFieldsWrap">
         <!-- Vị Trí Kiêm Nhiệm (u.secondaryPositions[]) — CHỈ dùng để tính là approver "Theo vị trí"
              (approverMode POSITION) ở CÁC MODULE KHÁC, KHÔNG đổi Chức Danh/Phòng Ban chính thức ở trên,
              KHÔNG ảnh hưởng Quản Lý Trực Tiếp/KPI (Cơ Cấu Tổ Chức) hay mô hình chấm công (Công & Phép) —
@@ -1643,6 +1652,7 @@
           <label class="block text-xs font-semibold text-gray-600 mb-1">Nhóm Phân Quyền (chọn được nhiều nhóm cùng lúc)</label>
           <div id="uPermGroupsChecklist" class="flex flex-wrap gap-x-4 gap-y-1 max-h-28 overflow-y-auto border rounded p-2 bg-gray-50"></div>
         </div>
+        </div><!-- /#userOnlyExtraFieldsWrap -->
         </div><!-- /#userBasicInfoFieldsWrap -->
 
         <div id="pendingNewUsersSection" class="hidden bg-white p-3 rounded border border-amber-300">

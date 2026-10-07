@@ -148,12 +148,12 @@ function renderItServiceRenewals() {
   const filtered = DB.itServiceRenewals.filter(item => {
     if (lifecycleFilter && computeItRenewalLifecycleState(item) !== lifecycleFilter) return false;
     if (categoryFilter && item.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([item.name, item.vendor, item.responsible], keyword)) return false;
+    if (!matchesKeywordFields([item.name, item.vendor, item.responsible, item.note], keyword)) return false;
     return true;
   });
 
   document.getElementById('paginationContainer_itRenewal').innerHTML = buildPaginationBoxHTML('itRenewal', 'renderItServiceRenewals');
-  const pageItems = paginateList('itRenewal', filtered, 'renderItServiceRenewals', 'dịch vụ');
+  const pageItems = paginateList('itRenewal', sortByCreatedAtDesc(filtered), 'renderItServiceRenewals', 'dịch vụ');
 
   if (pageItems.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy dịch vụ phù hợp.</td></tr>`;

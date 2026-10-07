@@ -57,10 +57,18 @@ function getHrContractList() {
 }
 
 function renderHrContractTable() {
-  const empCodeFilter = (document.getElementById('hrcFilterEmployeeCode')?.value || '').trim().toLowerCase();
+  const kw = (document.getElementById('hrcFilterEmployeeCode')?.value || '').trim();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
   let list = getHrContractList();
-  if (empCodeFilter) list = list.filter(c => (c.employeeCode || '').toLowerCase().includes(empCodeFilter));
+  // Mở rộng tìm kiếm (10/2026) — trước đây chỉ lọc employeeCode theo includes() thủ công, giờ thêm Mã
+  // HĐLĐ + Họ Tên (tra qua hrcEmployeeDirectoryCache, nạp sẵn ở đây nếu chưa có — laborContracts không
+  // tự lưu tên, xem chú thích đầy đủ ở exportHrContractListToExcel() cùng file).
+  if (kw) {
+    if (!hrcEmployeeDirectoryCache.length) { loadHrcEmployeeDirectory().then(() => renderHrContractTable()); }
+    const nameByCode = {};
+    hrcEmployeeDirectoryCache.forEach(p => { nameByCode[p.employeeCode] = p.fullName; });
+    list = list.filter(c => matchesKeywordFields([c.employeeCode, c.code, nameByCode[c.employeeCode]], kw));
+  }
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
 
   const tbody = document.getElementById('hrcTableBody');

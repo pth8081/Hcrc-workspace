@@ -2135,12 +2135,12 @@ function renderItTickets() {
     if (!canViewItTicket(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (categoryFilter && t.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([t.code, t.title, t.creatorName, t.creator, t.dept, t.description], keyword)) return false;
+    if (!matchesKeywordFields([t.code, t.title, t.creatorName, t.creator, t.dept, t.description, t.category], keyword)) return false;
     return true;
   });
 
   document.getElementById('paginationContainer_itTicket').innerHTML = buildPaginationBoxHTML('itTicket', 'renderItTickets');
-  const page = paginateList('itTicket', visible, 'renderItTickets', 'yêu cầu');
+  const page = paginateList('itTicket', sortByCreatedAtDesc(visible), 'renderItTickets', 'yêu cầu');
 
   if (page.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không tìm thấy yêu cầu phù hợp.</td></tr>`;

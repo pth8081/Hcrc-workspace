@@ -255,13 +255,13 @@ function renderOfficeReqs() {
     if (deptFilter && o.dept !== deptFilter) return false;
     if (statusFilter && o.status !== statusFilter) return false;
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([o.code, o.title, o.creatorName, o.creator, o.dept], keyword)) return false;
+    if (!matchesKeywordFields([o.code, o.title, o.creatorName, o.creator, o.dept, o.reason, o.supplier], keyword)) return false;
 
     return true;
   });
 
   document.getElementById('paginationContainer_office').innerHTML = buildPaginationBoxHTML('office', 'renderOfficeReqs');
-  const pageList = paginateList('office', list, 'renderOfficeReqs', 'đề xuất');
+  const pageList = paginateList('office', sortByCreatedAtDesc(list), 'renderOfficeReqs', 'đề xuất');
 
   if (pageList.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;

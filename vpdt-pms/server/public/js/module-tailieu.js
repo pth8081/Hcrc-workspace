@@ -356,7 +356,7 @@ function renderDocs() {
 
   // Phân trang — dùng bộ dùng chung (xem "BỘ TÌM KIẾM / LỌC / PHÂN TRANG DÙNG CHUNG" phía trên).
   document.getElementById('paginationContainer_doc').innerHTML = buildPaginationBoxHTML('doc', 'renderDocs');
-  const pageDocs = paginateList('doc', filtered, 'renderDocs', 'tài liệu');
+  const pageDocs = paginateList('doc', sortByCreatedAtDesc(filtered), 'renderDocs', 'tài liệu');
 
   if (pageDocs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-center p-6 text-gray-500 italic">Không tìm thấy tài liệu phù hợp.</td></tr>`;
@@ -911,7 +911,7 @@ function renderLicenses() {
     if (lifecycleFilter && computeLicenseLifecycleState(getLicenseFamilyLatest(item.id)) !== lifecycleFilter) return false;
 
     if (keyword) {
-      const hay = [item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber, item.creator, item.creatorName]
+      const hay = [item.code, item.displayCode, item.companyName, item.locationName, item.licenseType, item.licenseNumber, item.creator, item.creatorName, item.issuingAuthority]
         .map(v => (v || '').toLowerCase());
       if (!hay.some(v => v.includes(keyword))) return false;
     }
@@ -921,7 +921,7 @@ function renderLicenses() {
   });
 
   document.getElementById('paginationContainer_license').innerHTML = buildPaginationBoxHTML('license', 'renderLicenses');
-  const pageItems = paginateList('license', filtered, 'renderLicenses', 'giấy phép');
+  const pageItems = paginateList('license', sortByCreatedAtDesc(filtered), 'renderLicenses', 'giấy phép');
 
   if (pageItems.length === 0) {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Không tìm thấy giấy phép phù hợp.</td></tr>`;

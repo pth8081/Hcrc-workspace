@@ -461,7 +461,7 @@ function renderUniformPeriodsList() {
     return;
   }
   const canApprove = canApproveUniformClient(currentUser);
-  wrap.innerHTML = filteredPeriods.map(p => `
+  wrap.innerHTML = sortByCreatedAtDesc(filteredPeriods).map(p => `
     <div class="bg-white rounded border overflow-hidden">
       <div class="flex items-center justify-between gap-2 p-3 bg-gray-50 border-b flex-wrap">
         <div>
@@ -832,7 +832,7 @@ function renderUniformIssuancesTable() {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500 italic">Chưa có phiếu cấp phát nào.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = sortByCreatedAtDesc(rows).map(r => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2">${escapeHtml(r.code || '—')}</td>
       <td class="border p-2">${escapeHtml(r.employeeName || '')}</td>
@@ -1237,7 +1237,7 @@ function renderUniformAdjustmentsTable() {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Chưa có thao tác nào.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(r => `
+  tbody.innerHTML = sortByCreatedAtDesc(rows).map(r => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2">${escapeHtml(r.createdAt || '')}</td>
       <td class="border p-2">${r.source === 'EMPLOYEE' ? 'Thu hồi từ NV' : 'Từ kho'}</td>
@@ -1797,7 +1797,7 @@ function renderUniformTransfersTable() {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Chưa có yêu cầu điều chuyển nào.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(t => `
+  tbody.innerHTML = sortByCreatedAtDesc(rows, 'requestedAt').map(t => `
     <tr class="hover:bg-gray-50 border-b">
       <td class="border p-2">${escapeHtml(t.requestedAt || '')}</td>
       <td class="border p-2">${escapeHtml(t.sourceDept)}</td>
