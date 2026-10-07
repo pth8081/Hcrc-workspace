@@ -558,6 +558,19 @@ function itPriceNganhHangOptionsForCurrentDept() {
     .map(n => ({ value: n.code, label: n.name }));
 }
 
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — Phê Duyệt Giá Bán Buôn: "các trường ẩn không hiện ra khi
+// tạo đơn hàng" không tìm kiếm được): p.nganhHang (🏷️ Ngành Hàng Áp Dụng, trường THẬT nhập khi tạo đề
+// xuất Bán Buôn) trước đây lưu MÃ (không phải tên) và CHƯA TỪNG hiện ở modal Chi Tiết lẫn chưa được soát
+// khi tìm kiếm — mirror đúng cách tra tên ở module-workflow.js (dòng hiển thị "Ngành Hàng Phụ Trách" của
+// Quy Trình Giá Bán Buôn Siêu Thị), tái dùng ở cả hiển thị lẫn tìm kiếm bên dưới.
+function itPriceNganhHangNames(codes) {
+  if (!Array.isArray(codes) || !codes.length) return [];
+  return codes.map(code => {
+    const n = (DB.nganhHangCatalog || []).find(x => x.code === code);
+    return n ? n.name : code;
+  });
+}
+
 function applyItPriceStoreScopeUIForSubTab() {
   const isWholesale = activeItPriceSubTab === 'WHOLESALE';
   const wrap = document.getElementById('itPriceWholesaleScopeDateWrap');
@@ -1095,7 +1108,7 @@ function renderMhItPriceList() {
       // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — gõ "Lý do" không tìm được): p.reason ("Lý Do Điều
       // Chỉnh Giá", field THẬT trên form nhập — mhItPriceReason/itPriceReason — KHÔNG phải customData)
       // bị bỏ sót hoàn toàn ở đợt mở rộng tìm kiếm trước, dù đã soát customData. Thêm lại ngay đây.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, ...customDataSearchValues(p.customData)], keyword)) return false;
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
@@ -1134,7 +1147,7 @@ function renderVanHanhItPriceList() {
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
       // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả p.reason + customData.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, ...customDataSearchValues(p.customData)], keyword)) return false;
+      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), ...customDataSearchValues(p.customData)], keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
@@ -1202,7 +1215,7 @@ function renderItPriceApprovals() {
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
     // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm p.reason + customData.
-    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, ...customDataSearchValues(p.customData)], keyword)) return false;
+    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), ...customDataSearchValues(p.customData)], keyword)) return false;
     return true;
   }));
 
@@ -1513,6 +1526,7 @@ function renderItPriceModal() {
     ${p.masterListName ? `<div><b>Mẫu Giá áp dụng:</b> ${escapeHtml(p.masterListName)}${itPriceMasterListDownloadLinkHTML(p.masterListId)}</div>` : ''}
     <div><b>Lý do điều chỉnh:</b> ${p.reason ? escapeHtml(p.reason) : '<span class="text-gray-400">—</span>'}</div>
     <div><b>🏬 ${p.priceType === 'WHOLESALE' ? 'Siêu thị đề xuất' : 'Siêu thị áp dụng'}:</b> ${itPriceStoreScopeLabel(p.storeScope)}</div>
+    ${p.priceType === 'WHOLESALE' ? `<div><b>🏷️ Ngành hàng áp dụng:</b> ${p.nganhHang && p.nganhHang.length ? escapeHtml(itPriceNganhHangNames(p.nganhHang).join(', ')) : '<span class="text-gray-400">—</span>'}</div>` : ''}
     <div><b>📅 Ngày áp dụng:</b> ${p.effectiveDate ? escapeHtml(p.effectiveDate) : '<span class="text-gray-400">—</span>'} <b class="ml-2">⏳ Hết hiệu lực:</b> ${p.expiryMode === 'OTHER' && p.expiryDate ? escapeHtml(p.expiryDate) : 'Vĩnh viễn'}</div>
     ${wfStepsStatusHTML}
     ${historyRows}
