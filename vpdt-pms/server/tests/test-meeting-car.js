@@ -272,7 +272,7 @@ const server = http.createServer(async (req, res) => {
 const bookerUser = {
   username: 'nv_kd1', name: 'Lê Thị Kinh Doanh', dept: 'Phòng Kinh Doanh', role: 'STAFF',
   phone: '0933333333', email: 'kd1@company.com', jobTitle: 'Nhân viên',
-  active: true, perms: { meetingBookScope: { depts: ['Phòng Kinh Doanh'] }, carCreate: { depts: ['Phòng Kinh Doanh'] } }
+  active: true, perms: { meetingBook: true, carCreate: true }
 };
 const roomManagerUser = {
   username: 'qlph1', name: 'Phạm Quản Lý Phòng Họp', dept: 'Phòng Hành Chính', role: 'STAFF',

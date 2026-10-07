@@ -9,9 +9,16 @@
 // Cùng khuôn openMhVendorForm()/closeMhVendorForm() (module-muahang.js):
 // form ẩn mặc định, mở qua "+ Thêm Người Dùng Mới" (openCreateUserForm()) hoặc
 // gián tiếp khi Sửa 1 người (editUser())/Tạo-Sửa 1 nhóm (startCreateGroup()/
-// editPermGroup()), đóng qua "✕ Thu Gọn" (closeUserPermForm(), KHÔNG reset dữ
-// liệu) hoặc "Hủy" (cancelPermFormEdit(), CÓ reset — hành vi cũ, chỉ thêm bước
-// ẩn form).
+// editPermGroup()), đóng HẲN qua "Hủy" (cancelPermFormEdit(), CÓ reset dữ liệu).
+//
+// ĐỔI HÀNH VI (10/2026, yêu cầu người dùng — "Thu Gọn" trước đây ẩn LUÔN cả cây
+// quyền 0-26 lẫn thanh nút Lưu/Hủy, chỉ còn cách bấm lại "Sửa" mới thấy lại):
+// "✕ Thu Gọn Thông Tin" (closeUserPermForm(), KHÔNG reset dữ liệu) giờ CHỈ
+// ẩn/hiện khối "khai báo thông tin người dùng" (#userBasicInfoFieldsWrap —
+// Vị Trí Làm Việc/Tên đăng nhập/Mật khẩu...tới Nhóm Phân Quyền) — #userPermFormWrap
+// (cả form) KHÔNG còn bị ẩn theo, #permFieldsContainer (cây quyền 0-26) và
+// #userPermSaveBar (thanh nút nổi) LUÔN hiện khi form đang mở. Toggle 2 chiều,
+// đổi nhãn nút (#btnToggleUserBasicInfo) theo đúng trạng thái.
 //
 // Cùng hạ tầng test (static server + Playwright + seed DB.* + finishLogin())
 // đã dùng ở test-admin-users-permgroups.js — xem chú thích đầy đủ ở đó.
@@ -153,24 +160,56 @@ async function scenario(name, fn) {
     record('(2) openCreateUserForm(): khối userIdentityFields hiện (đúng mode USER)', r.identityVisible === true);
   });
 
-  await scenario('(3) closeUserPermForm() ("✕ Thu Gọn"): ẩn lại form, KHÔNG xoá dữ liệu đang nhập', async () => {
+  await scenario('(3) closeUserPermForm() ("✕ Thu Gọn Thông Tin"): chỉ ẩn khối thông tin, KHÔNG ẩn cả form/cây quyền, KHÔNG xoá dữ liệu đang nhập', async () => {
     const r = await page.evaluate(() => {
       document.getElementById('uUsername').value = 'dang-nhap-do';
       closeUserPermForm();
       return {
-        hidden: document.getElementById('userPermFormWrap').classList.contains('hidden'),
+        formHidden: document.getElementById('userPermFormWrap').classList.contains('hidden'),
+        infoHidden: document.getElementById('userBasicInfoFieldsWrap').classList.contains('hidden'),
+        permTreeVisible: !document.getElementById('permFieldsContainer').classList.contains('hidden'),
+        saveBarVisible: !document.getElementById('userPermSaveBar').classList.contains('hidden'),
         usernameKept: document.getElementById('uUsername').value,
+        btnLabel: document.getElementById('btnToggleUserBasicInfo').innerText,
       };
     });
-    record('(3) closeUserPermForm(): form ẨN lại', r.hidden === true, JSON.stringify(r));
+    record('(3) closeUserPermForm(): form KHÔNG ẩn (khác hành vi cũ)', r.formHidden === false, JSON.stringify(r));
+    record('(3) closeUserPermForm(): khối thông tin người dùng ẨN', r.infoHidden === true, JSON.stringify(r));
+    record('(3) closeUserPermForm(): cây quyền 0-26 (#permFieldsContainer) VẪN HIỆN', r.permTreeVisible === true, JSON.stringify(r));
+    record('(3) closeUserPermForm(): thanh nút Lưu/Hủy nổi (#userPermSaveBar) VẪN HIỆN', r.saveBarVisible === true, JSON.stringify(r));
     record('(3) closeUserPermForm(): KHÔNG reset dữ liệu (khác cancelPermFormEdit())', r.usernameKept === 'dang-nhap-do', JSON.stringify(r));
+    record('(3) closeUserPermForm(): nhãn nút đổi thành "▸ Hiện Thông Tin Người Dùng"', r.btnLabel === '▸ Hiện Thông Tin Người Dùng', JSON.stringify(r));
+
+    const r2 = await page.evaluate(() => {
+      closeUserPermForm(); // bấm lại lần 2 -> mở lại khối thông tin
+      return {
+        infoHidden: document.getElementById('userBasicInfoFieldsWrap').classList.contains('hidden'),
+        btnLabel: document.getElementById('btnToggleUserBasicInfo').innerText,
+      };
+    });
+    record('(3b) bấm lại "Thu Gọn" lần 2: khối thông tin HIỆN lại (toggle 2 chiều)', r2.infoHidden === false, JSON.stringify(r2));
+    record('(3b) bấm lại lần 2: nhãn nút trở lại "✕ Thu Gọn Thông Tin"', r2.btnLabel === '✕ Thu Gọn Thông Tin', JSON.stringify(r2));
   });
 
-  await scenario('(4) bấm nút thật "✕ Thu Gọn" (data-op="closeUserPermForm") qua CSP dispatch', async () => {
+  await scenario('(4) bấm nút thật "✕ Thu Gọn Thông Tin" (data-op="closeUserPermForm") qua CSP dispatch', async () => {
     await page.evaluate(() => { openCreateUserForm(); });
     await page.click('button[data-op="closeUserPermForm"]');
-    const hidden = await page.evaluate(() => document.getElementById('userPermFormWrap').classList.contains('hidden'));
-    record('(4) bấm nút thật "✕ Thu Gọn" -> form ẩn qua CSP delegation (không lỗi "không tìm thấy hàm")', hidden === true);
+    const r = await page.evaluate(() => ({
+      formHidden: document.getElementById('userPermFormWrap').classList.contains('hidden'),
+      infoHidden: document.getElementById('userBasicInfoFieldsWrap').classList.contains('hidden'),
+      permTreeVisible: !document.getElementById('permFieldsContainer').classList.contains('hidden'),
+    }));
+    record('(4) bấm nút thật -> chỉ khối thông tin ẩn qua CSP delegation (không lỗi "không tìm thấy hàm")', r.infoHidden === true && r.formHidden === false, JSON.stringify(r));
+    record('(4) bấm nút thật -> cây quyền 0-26 VẪN HIỆN sau khi bấm', r.permTreeVisible === true, JSON.stringify(r));
+    // Mở lại form mới (openCreateUserForm) phải reset khối thông tin về hiện + nhãn nút mặc định, dù
+    // lần trước đang ở trạng thái thu gọn — tránh mở nhầm người khác mà vẫn bị thu gọn dở từ phiên trước.
+    await page.evaluate(() => { openCreateUserForm(); });
+    const r3 = await page.evaluate(() => ({
+      infoHidden: document.getElementById('userBasicInfoFieldsWrap').classList.contains('hidden'),
+      btnLabel: document.getElementById('btnToggleUserBasicInfo').innerText,
+    }));
+    record('(4b) openCreateUserForm() sau khi đang thu gọn: tự mở lại khối thông tin', r3.infoHidden === false, JSON.stringify(r3));
+    record('(4b) openCreateUserForm(): nhãn nút reset về "✕ Thu Gọn Thông Tin"', r3.btnLabel === '✕ Thu Gọn Thông Tin', JSON.stringify(r3));
   });
 
   await scenario('(5) bấm nút thật "+ Thêm Người Dùng Mới" (data-op="openCreateUserForm") qua CSP dispatch', async () => {
@@ -181,7 +220,7 @@ async function scenario(name, fn) {
 
   await scenario('(6) editUser(2): mở form + đổ đúng dữ liệu người dùng có sẵn', async () => {
     const r = await page.evaluate(() => {
-      closeUserPermForm();
+      document.getElementById('userPermFormWrap').classList.add('hidden'); // mô phỏng trạng thái đóng hẳn trước đó
       editUser(2);
       return {
         hidden: document.getElementById('userPermFormWrap').classList.contains('hidden'),
@@ -223,7 +262,7 @@ async function scenario(name, fn) {
 
   await scenario('(9) editPermGroup("grp_A"): mở form, đổ đúng dữ liệu nhóm có sẵn', async () => {
     const r = await page.evaluate(() => {
-      closeUserPermForm();
+      document.getElementById('userPermFormWrap').classList.add('hidden'); // mô phỏng trạng thái đóng hẳn trước đó
       editPermGroup('grp_A');
       return {
         hidden: document.getElementById('userPermFormWrap').classList.contains('hidden'),
@@ -236,7 +275,7 @@ async function scenario(name, fn) {
   });
 
   await scenario('(10) bấm nút thật "Sửa" ở bảng Nhóm Phân Quyền (data-op="editPermGroup") qua CSP dispatch', async () => {
-    await page.evaluate(() => { closeUserPermForm(); renderPermGroupsList(); });
+    await page.evaluate(() => { document.getElementById('userPermFormWrap').classList.add('hidden'); renderPermGroupsList(); });
     await page.click('button[data-op="editPermGroup"][data-arg0="grp_A"]');
     const hidden = await page.evaluate(() => document.getElementById('userPermFormWrap').classList.contains('hidden'));
     record('(10) bấm nút thật "Sửa" (bảng Nhóm Phân Quyền) -> form mở qua CSP delegation', hidden === false);

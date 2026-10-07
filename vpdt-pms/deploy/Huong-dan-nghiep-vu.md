@@ -4688,6 +4688,41 @@ cột nằm ngay trên đầu cột đó (trong tiêu đề bảng) — tick ALL
 ô phòng ban trong cột tương ứng như trước, không đổi ý nghĩa/hành vi của bất
 kỳ quyền nào, chỉ đổi cách trình bày.
 
+**"6-module" — gộp phẳng quyền "Tạo mới" của CẢ 6 khối trên (10/2026, đã xác
+nhận với người dùng, SUPERSEDES đoạn ngay trên về cột "Tạo mới")**: cột "Tạo
+mới" theo phòng ban (ALL/chọn riêng từng phòng, admin cấu hình "tạo hộ phòng
+ban khác") đã **bỏ hẳn** khỏi cả 6 bảng "1 dòng = 1 phòng ban" (2. Tài Liệu —
+`uploadAll`, 3. Văn Bản Trình — `submissionCreate`, 4. Hợp Đồng & Giấy Phép —
+`contractCreate`, 5. Phòng Họp — `meetingBook`, 6. Đăng Ký Xe — `carCreate`,
+7. Văn Phòng — `officeCreate`), thay bằng **1 checkbox PHẲNG DUY NHẤT** đặt
+RIÊNG ngay phía trên bảng (không còn nằm trong bảng theo phòng ban nữa) —
+bật lên là được tạo hồ sơ mới cho module đó, và hồ sơ LUÔN tự khoá đúng
+PHÒNG BAN CỦA CHÍNH NGƯỜI TẠO (không còn khái niệm "tạo hộ phòng ban khác",
+kể cả khi client/API tự gửi kèm 1 phòng ban khác — server luôn ghi đè lại
+đúng phòng ban thật của người gọi). Bảng "1 dòng = 1 phòng ban" của 6 khối
+trên từ nay CHỈ còn các cột còn lại (Xem/Tải Xuống/các quyền phụ riêng của
+module, VD "Tải Tài Liệu Đã Ký" của Hợp Đồng) — KHÔNG đổi ý nghĩa/hành vi
+của bất kỳ cột nào khác ngoài "Tạo mới". Quyền quản lý Thanh Toán gắn với
+Hợp Đồng/Văn Phòng (mục "🧾 Lập Thanh Toán", xem 4.2/4.3) vẫn giữ ĐÚNG tinh
+thần cũ: phải vừa có quyền Tạo phẳng tương ứng, vừa cùng phòng ban với hồ
+sơ (hoặc đơn vị custodian được giao, riêng Hợp Đồng) mới quản lý được — chỉ
+đổi hình thức lưu (boolean thay vì `{all, depts}`), không nới/siết quyền.
+
+**Tài Liệu — thêm tính năng "📢 Phát Hành" (10/2026, cùng đợt)**: 3 quyền
+MỚI, ĐỘC LẬP hoàn toàn với `uploadAll` ở trên — **"Phát Hành Tài Liệu"**
+(`docPublish`): sau khi 1 phiên bản tài liệu đã **duyệt xong** (trạng thái
+"Đã duyệt"), người có quyền này thấy nút "📢 Phát Hành" (tuỳ chọn, không bắt
+buộc) để đánh dấu ĐÚNG phiên bản đó là "đã phát hành" — và **"Xem Tài Liệu
+Đã Phát Hành"**/**"Tải Tài Liệu Đã Phát Hành"** (`docViewPublished`/
+`docDownloadPublished`): cho phép xem/tải MỌI tài liệu đã phát hành, BẤT KỂ
+phòng ban/quy trình duyệt gốc của tài liệu đó — 2 quyền này CHỈ THÊM 1 lối
+truy cập mới cho tài liệu ĐÃ phát hành, không thay thế hay nới rộng bất kỳ
+lớp quyền xem/tải nào khác đã có (người tải lên/người duyệt/cùng phòng ban/
+"Tải Tài Liệu" theo bảng ở trên vẫn hoạt động y nguyên). "Phát Hành" tính
+theo **TỪNG phiên bản cụ thể** — phát hành phiên bản 1 không tự động phát
+hành phiên bản 2 mới hơn của cùng 1 tài liệu, và có thể "📕 Hủy Phát Hành"
+bất kỳ lúc nào để ẩn lại.
+
 **Lọc theo Khối/Ban (10/2026)** — ngay phía trên 6 bảng "1 dòng = 1 phòng
 ban" ở trên, có 1 ô "🗂️ Lọc bảng Phòng Ban bên dưới theo Khối/Ban" DÙNG CHUNG
 cho cả 6 bảng cùng lúc (Tài Liệu/Văn Bản Trình/Hợp Đồng & Giấy Phép/Phòng

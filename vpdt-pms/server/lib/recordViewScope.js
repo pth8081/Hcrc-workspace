@@ -211,6 +211,11 @@ function scopeAllows(user, scope, dept, moduleKey, appData, creatorUsername) {
 function canViewDoc(user, doc, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
+  // "Phát Hành" (10/2026, "6-module"): tài liệu published=true hiện công khai cho MỌI người có
+  // docViewPublished, hoàn toàn ĐỘC LẬP với 4 lớp bên dưới (uploader/approver/dept/extraViewer) — không
+  // thay thế, chỉ THÊM 1 lối xem phụ. Riêng từng bản ghi version (doc.published), không lan sang
+  // version khác của cùng họ tài liệu.
+  if (doc.published && user.perms?.docViewPublished) return true;
   if (doc.uploader === user.username) return true;
   if (isApproverForApproversMap(MODULE_CONFIGS.docs.resolveWfConfig(doc, appData).approvers, user.username)) return true;
   if (doc.dept && doc.dept === user.dept && deptAutoViewOn(appData, 'doc', 'CREATOR_ONLY')) return true;
@@ -517,11 +522,16 @@ function filterReportEntriesForUser(entries, user, appData) {
   return (entries || []).filter(e => canViewReportEntry(user, e, appData));
 }
 
-// Khớp canDownloadFile(user, moduleKey, dept, ownerUsername) ở public/index.html — dùng cho
+// Khớp canDownloadFile(user, moduleKey, dept, ownerUsername, published) ở public/js/core.js — dùng cho
 // routes/download.js để chặn tải file ngoài phạm vi, không chỉ ẩn ở giao diện.
-function canDownloadRecordFile(user, moduleKey, dept, ownerUsername) {
+// Tham số `published` (10/2026, "6-module", tuỳ chọn — mọi lời gọi cũ bỏ qua tham số này vẫn đúng hành
+// vi 100% vì undefined/false luôn rơi về nhánh scopeAllows() như trước): CHỈ module 'doc' thực sự có ý
+// nghĩa (docDownloadPublished) — các moduleKey khác không có field tương ứng nên nhánh này luôn no-op
+// (user.perms?.[`${moduleKey}DownloadPublished`] luôn undefined), không cần hardcode riêng 'doc' ở đây.
+function canDownloadRecordFile(user, moduleKey, dept, ownerUsername, published) {
   if (!user) return false;
   if (ownerUsername && ownerUsername === user.username) return true;
+  if (published && user.perms?.[`${moduleKey}DownloadPublished`]) return true;
   return scopeAllows(user, user.perms?.[`${moduleKey}Download`], dept);
 }
 
@@ -883,9 +893,15 @@ function filterItSupportTicketsForUser(items, user, appData) {
   return (items || []).filter(t => canViewItSupportTicket(user, t, appData));
 }
 
-// Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows(meetingView) HOẶC chính
-// người tạo HOẶC người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/
-// meetingCancel — không theo phòng ban, luôn cần thấy mọi lịch để xử lý).
+// Khớp khối lọc trong renderMeetings() (public/index.html): scopeAllows({}) HOẶC chính người tạo HOẶC
+// người có vai trò "quản lý phòng họp" dùng chung toàn công ty (meetingApprove/meetingCancel — không
+// theo phòng ban, luôn cần thấy mọi lịch để xử lý).
+// Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận): bỏ hẳn quyền meetingView
+// {all,depts} riêng — scope truyền vào scopeAllows() giờ là {} (rỗng), chỉ còn 2 lớp vẫn hoạt động của
+// hàm đó: (1) cùng phòng ban + deptAutoViewOn('meeting') (cấu hình RIÊNG ở "Phạm Vi Xem Theo Phòng Ban",
+// deptViewScopeConfig — KHÔNG đụng gì ở đây, vẫn độc lập như trước), (2) extraViewScopeAllows (người
+// xem thêm/quản lý trực tiếp). Quyền TẠO (meetingBook, lib/createValidation.js) và quyền XEM giờ tách
+// bạch hoàn toàn — không còn bảng phòng ban nào gán kiểu "xem được phòng ban X" riêng cho Phòng Họp nữa.
 // canViewMeeting() (10/2026, theo yêu cầu người dùng bổ sung route phê duyệt cuối): thêm nhánh approver
 // theo meetingDeptWorkflows (appData, optional — các nơi gọi cũ chưa truyền vẫn an toàn nhờ optional
 // chaining, chỉ mất đúng nhánh mới này) — một người được admin gán làm approver riêng cho phòng ban của
@@ -897,7 +913,7 @@ function canViewMeeting(user, meeting, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (meeting.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.meetingView, meeting.dept, 'meeting', appData, meeting.creator)) return true;
+  if (scopeAllows(user, {}, meeting.dept, 'meeting', appData, meeting.creator)) return true;
   if (user.perms?.meetingApprove || user.perms?.meetingCancel || user.perms?.meetingReportView) return true;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[meeting.dept], appData || {});

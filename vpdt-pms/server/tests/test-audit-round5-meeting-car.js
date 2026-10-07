@@ -4,7 +4,7 @@
 // bình). Mọi hàm kiểm ở đây đều THUẦN (không đụng DB/network) nên gọi thẳng, không cần stub:
 //
 //   1. [Phòng Họp — Cao] CREATE_MODULE_CONFIGS.meetings (lib/createValidation.js) là module DUY NHẤT
-//      không gán cứng trạng thái ở server -> ai có meetingBookScope cũng tự tạo được lịch
+//      không gán cứng trạng thái ở server -> ai có meetingBook cũng tự tạo được lịch
 //      status:'APPROVED' + approvedBy/approvedByName giả mạo, bỏ qua hẳn quyền meetingApprove.
 //   3. [Đăng Ký Xe — Cao] reassignCarDispatch() đổi loại xe sang TAXI khi phiếu đang IN_PROGRESS xoá
 //      tài xế nhưng KHÔNG đưa status về APPROVED -> phiếu kẹt vĩnh viễn (nhánh đổi tài xế đã vá, nhánh
@@ -31,7 +31,7 @@ function test(name, fn) {
 
 // ===================== 1) Phòng Họp: tạo lịch KHÔNG tự duyệt được =====================
 const MEETING_APP_DATA = { meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }] };
-const BOOKER = { username: 'nv1', name: 'Nhân Viên 1', perms: { meetingBookScope: { all: true } } };
+const BOOKER = { username: 'nv1', name: 'Nhân Viên 1', perms: { meetingBook: true } };
 
 function meetingPayload(overrides) {
   return Object.assign({

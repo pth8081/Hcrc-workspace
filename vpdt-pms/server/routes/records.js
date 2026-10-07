@@ -2450,6 +2450,27 @@ router.post('/docs/:id/submit', async (req, res) => {
   } catch (err) { handleError(res, `docs/${req.params.id}/submit`, err); }
 });
 
+// "Phát Hành" tài liệu (10/2026, "6-module") — publishDoc()/unpublishDoc() (lib/recordActions.js) tự
+// kiểm quyền docPublish + trạng thái APPROVED, xem chú thích đầy đủ ở đó.
+router.post('/docs/:id/publish', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.publishDoc(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `docs/${req.params.id}/publish`, err); }
+});
+router.post('/docs/:id/unpublish', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const result = await withLockedRecordForCollection('docs', itemId, (item) => recordActions.unpublishDoc(freshUser, item));
+    res.json({ ok: true, item: result });
+  } catch (err) { handleError(res, `docs/${req.params.id}/unpublish`, err); }
+});
+
 router.post('/carRegs/:id/update', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });

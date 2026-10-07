@@ -17,9 +17,9 @@ const { startStaticServer, createMockState, launchPage, createRunner, assert, as
 const PORT = 8998;
 
 const CREATOR = { username: 'nv_kd', name: 'Nhân Viên KD', dept: 'Phòng Kinh Doanh', role: 'STAFF',
-  phone: '0900000001', email: 'nv_kd@company.com', jobTitle: 'Nhân viên', perms: { meetingBookScope: { all: true } }, active: true };
+  phone: '0900000001', email: 'nv_kd@company.com', jobTitle: 'Nhân viên', perms: { meetingBook: true }, active: true };
 const OUTSIDER = { username: 'nv_khac', name: 'Nhân Viên Khác', dept: 'Phòng Kỹ Thuật', role: 'STAFF',
-  phone: '0900000002', email: 'nv_khac@company.com', jobTitle: 'Nhân viên', perms: { meetingBookScope: { all: true } }, active: true };
+  phone: '0900000002', email: 'nv_khac@company.com', jobTitle: 'Nhân viên', perms: { meetingBook: true }, active: true };
 
 const MEETING_PENDING = {
   id: 1, code: 'PH-001', dept: 'Phòng Kinh Doanh', room: 'Phòng Họp Lớn A', title: 'Họp KD tuần',

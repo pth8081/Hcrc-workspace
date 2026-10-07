@@ -238,11 +238,23 @@ function resetUserForm() {
   document.getElementById('pReportManage').checked = !!defaults.reportManage;
   document.getElementById('pReportAggregate').checked = !!defaults.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
+  document.getElementById('pMeetingBook').checked = !!defaults.meetingBook;
+  document.getElementById('pSubCreate').checked = !!defaults.submissionCreate;
+  document.getElementById('pContractCreate').checked = !!defaults.contractCreate;
   document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
   document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
+  document.getElementById('pCarCreate').checked = !!defaults.carCreate;
   document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
+  document.getElementById('pOfficeCreate').checked = !!defaults.officeCreate;
   document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
   document.getElementById('pOfficeFix').checked = defaults.officeFix;
+  // uploadAll (10/2026, "6-module"): giờ là cờ phẳng boolean, cùng khuôn pContractCreate/pCarCreate/
+  // pOfficeCreate ở trên — không còn nằm trong mảng "ALL"+toggleScopeGroup ở dưới nữa.
+  document.getElementById('pUploadAll').checked = !!defaults.uploadAll;
+  // "Phát Hành" tài liệu (10/2026, "6-module", mới) — 3 quyền phẳng, không theo phòng ban.
+  document.getElementById('pDocPublish').checked = !!defaults.docPublish;
+  document.getElementById('pDocViewPublished').checked = !!defaults.docViewPublished;
+  document.getElementById('pDocDownloadPublished').checked = !!defaults.docDownloadPublished;
   document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
   document.getElementById('pMinutesView').checked = !!defaults.minutesView;
   document.getElementById('pMinutesEdit').checked = !!defaults.minutesEdit;
@@ -306,12 +318,11 @@ function resetUserForm() {
   toggleOperationOrderReceiptScopeGroup();
 
   [
-    'pUploadAll', 'pDocDownloadAll',
-    'pSubCreateAll', 'pSubDownloadAll',
-    'pContractCreateAll', 'pContractDownloadAll',
-    'pMeetingViewAll', 'pMeetingBookAll',
-    'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
-    'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
+    'pDocDownloadAll',
+    'pSubDownloadAll',
+    'pContractDownloadAll',
+    'pCarViewAll', 'pCarDownloadAll',
+    'pOfficeViewAll', 'pOfficeDownloadAll'
   ].forEach(id => {
     const cb = document.getElementById(id);
     if (cb) { cb.checked = false; }
@@ -492,20 +503,24 @@ function summarizeUserPerms(perms) {
   if (perms.admin) return '<span class="text-purple-700 font-bold">[ADMIN — Toàn quyền hệ thống]</span>';
   const hasScope = (scope) => !!(scope?.all || (scope?.depts || []).length > 0);
   const parts = [];
-  if (perms.uploadAll || (perms.uploadDepts || []).length) parts.push('📄 Tài liệu');
+  // uploadAll (10/2026, "6-module"): giờ là cờ phẳng boolean — kiểm trực tiếp thay vì qua uploadDepts.
+  if (perms.uploadAll) parts.push('📄 Tài liệu');
   // LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): trước đây chỉ xét submissionCreate/contractCreate —
   // người CHỈ có quyền Tải (submissionDownload/contractDownload, không có quyền Tạo) bị rơi mất tag này
   // dù vẫn thực sự có quyền thao tác trên module (tải hồ sơ Tờ Trình/Hợp Đồng).
-  if (hasScope(perms.submissionCreate) || hasScope(perms.submissionDownload)) parts.push('📜 Tờ trình');
-  if (hasScope(perms.contractCreate) || hasScope(perms.contractDownload)) parts.push('📄 Hợp đồng');
+  // submissionCreate/contractCreate/carCreate giờ là quyền PHẲNG (boolean, 10/2026 "6-module") — không
+  // còn {all,depts} để hasScope() đọc, kiểm tra trực tiếp thay vì qua hasScope().
+  if (perms.submissionCreate || hasScope(perms.submissionDownload)) parts.push('📜 Tờ trình');
+  if (perms.contractCreate || hasScope(perms.contractDownload)) parts.push('📄 Hợp đồng');
   if (perms.paymentManage) parts.push('💰 Thanh toán');
   if (perms.vppManage) parts.push('🖇️ Quản lý VPP');
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
-  if (hasScope(perms.meetingView) || hasScope(perms.meetingBookScope) || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
-  if (hasScope(perms.carView) || hasScope(perms.carCreate)) parts.push('🚗 Xe');
+  if (perms.meetingBook || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
+  if (hasScope(perms.carView) || perms.carCreate) parts.push('🚗 Xe');
   if (perms.carDispatch) parts.push('🚘 Điều hành xe');
-  if ((hasScope(perms.officeView) || hasScope(perms.officeCreate)) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
+  // officeCreate (10/2026, "6-module"): giờ là quyền PHẲNG boolean — kiểm tra trực tiếp thay vì qua hasScope().
+  if ((hasScope(perms.officeView) || perms.officeCreate) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
   if (perms.internalNewsCreate || perms.internalRecruitmentCreate) parts.push('📣 Truyền thông (đăng bài)');

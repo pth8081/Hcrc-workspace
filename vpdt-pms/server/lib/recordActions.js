@@ -122,7 +122,12 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   // theo cả quy trình duyệt sang phòng ban đó — né người duyệt lẽ ra phải xem xét hồ sơ này. Kèm đối
   // chiếu danh mục phòng ban/siêu thị thật, cùng khuôn custodianDept ngay bên dưới.
   if (payload.dept !== undefined && payload.dept !== contract.dept) {
-    assertDeptScopeAllowed(user, user.perms?.contractCreate, payload.dept);
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module"): contractCreate giờ là quyền PHẲNG (boolean) —
+    // không còn {all,depts} để đọc. Quyền sửa đã được gác ở check creator/admin phía trên (ownership-
+    // based, không cần contractCreate), nên ở đây chỉ còn cần re-check ĐÚNG phòng ban mới là CHÍNH
+    // phòng ban của người sửa (forceOwnDept, khớp đúng luật lúc TẠO) — truyền scope rỗng {} để
+    // assertDeptScopeAllowed()/scopeAllows() dùng nhánh "cùng phòng là được" có sẵn.
+    assertDeptScopeAllowed(user, {}, payload.dept);
     const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
     if (validDepts.size && !validDepts.has(payload.dept)) {
       throw new HttpError(400, `Phòng ban không hợp lệ: ${payload.dept}`);
@@ -481,7 +486,10 @@ function editDocDraft(payload, user, item, appData, existingCollection) {
       throw new HttpError(409, 'Phiên bản của 1 tài liệu đã có không được đổi Phân Loại khác với tài liệu gốc');
     }
   } else if (payload.dept !== undefined && payload.dept !== item.dept) {
-    assertDeptScopeAllowed(user, { all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }, payload.dept);
+    // uploadAll (10/2026, "6-module"): bỏ {all,depts} cũ (uploadDepts), chỉ còn 1 cờ phẳng — scope rỗng
+    // khiến assertDeptScopeAllowed() CHỈ cho qua khi payload.dept === user.dept (hoặc admin), cùng khuôn
+    // editOfficeReqDraft()/editCarRegDraft() đã áp dụng ở 2 module trước.
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Thấp — "cat không đối chiếu danh mục" + "đổi cat/dept
   // lúc SỬA không sinh lại code/displayCode"): code/displayCode của tài liệu GỐC (rootDocId == null —
@@ -540,6 +548,39 @@ function submitDocDraft(user, item) {
   return item;
 }
 
+// "Phát Hành" tài liệu (10/2026, "6-module", đã xác nhận) — field published, riêng từng bản ghi
+// version (KHÔNG lan sang version khác của cùng họ tài liệu). docPublish là quyền ĐỘC LẬP hẳn với
+// uploadAll (ai TẢI LÊN không nhất thiết được PHÁT HÀNH, và ngược lại — VD admin/thư ký công bố văn
+// bản công ty sau khi phòng ban khác tải lên & đã duyệt xong). Publish yêu cầu status APPROVED (tài
+// liệu phải qua đúng quy trình duyệt trước khi công khai); Unpublish không yêu cầu gì thêm ngoài đang
+// published=true (ẩn lại bất kỳ lúc nào, kể cả về sau tài liệu có bị thay thế bởi phiên bản mới).
+function publishDoc(user, item) {
+  if (!user.perms?.admin && !user.perms?.docPublish) {
+    throw new HttpError(403, 'Bạn không có quyền phát hành tài liệu');
+  }
+  if (item.status !== 'APPROVED') {
+    throw new HttpError(409, 'Chỉ phát hành được tài liệu đã duyệt xong (APPROVED)');
+  }
+  if (item.published) throw new HttpError(409, 'Tài liệu này đã được phát hành rồi');
+  item.published = true;
+  item.publishedBy = user.username;
+  item.publishedAt = nowVN();
+  item.history = item.history || [];
+  item.history.push({ step: 0, stepName: 'Phát hành', approver: user.name, username: user.username, action: 'PUBLISHED', comment: '', time: nowVN() });
+  return item;
+}
+
+function unpublishDoc(user, item) {
+  if (!user.perms?.admin && !user.perms?.docPublish) {
+    throw new HttpError(403, 'Bạn không có quyền hủy phát hành tài liệu');
+  }
+  if (!item.published) throw new HttpError(409, 'Tài liệu này chưa được phát hành');
+  item.published = false;
+  item.history = item.history || [];
+  item.history.push({ step: 0, stepName: 'Hủy phát hành', approver: user.name, username: user.username, action: 'UNPUBLISHED', comment: '', time: nowVN() });
+  return item;
+}
+
 // ----- Đăng Ký Xe (carRegs) -----
 const CAR_REG_DRAFT_EDITABLE_FIELDS = ['dept', 'type', 'passengers', 'directUser', 'directUserPhone', 'purpose', 'km', 'reason', 'customData'];
 
@@ -557,7 +598,10 @@ function editCarRegDraft(payload, user, item, appData) {
   // (không phải nhớ thêm 1 lần nữa). Xem assertUploadedFileUrl().
   assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm phiếu đăng ký xe');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
-    assertDeptScopeAllowed(user, user.perms?.carCreate, payload.dept);
+    // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module"): carCreate giờ là quyền PHẲNG (boolean) —
+    // không còn {all,depts} để đọc. Truyền scope rỗng {} để assertDeptScopeAllowed()/scopeAllows() dùng
+    // đúng nhánh "cùng phòng là được" có sẵn (forceOwnDept, khớp đúng luật lúc TẠO).
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   for (const f of CAR_REG_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
@@ -610,7 +654,10 @@ function editOfficeReqDraft(payload, user, item, appData) {
   assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đề xuất');
   assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
   if (payload.dept !== undefined && payload.dept !== item.dept) {
-    assertDeptScopeAllowed(user, user.perms?.officeCreate, payload.dept);
+    // Làm gọn phân quyền Văn Phòng (10/2026, "6-module"): officeCreate giờ là quyền PHẲNG (boolean) —
+    // không còn {all,depts} để đọc. Truyền scope rỗng {} để assertDeptScopeAllowed()/scopeAllows() dùng
+    // đúng nhánh "cùng phòng là được" có sẵn (forceOwnDept, khớp đúng luật lúc TẠO).
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   for (const f of OFFICE_REQ_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
@@ -1757,7 +1804,12 @@ function editSubmissionDraft(payload, user, item, appData, existingCollection) {
   // vẫn giữ nguyên phòng ban cũ — sai lệch vĩnh viễn giữa mã hiển thị và phòng ban thực tế.
   const regenerateCode = payload.dept !== undefined && payload.dept !== item.dept;
   if (regenerateCode) {
-    assertDeptScopeAllowed(user, user.perms?.submissionCreate, payload.dept);
+    // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module"): submissionCreate giờ là quyền PHẲNG
+    // (boolean) — không còn {all,depts} để đọc. Quyền sửa đã được gác ở check creator/admin phía trên
+    // (ownership-based, không cần submissionCreate), nên ở đây chỉ còn cần re-check ĐÚNG phòng ban mới
+    // là CHÍNH phòng ban của người sửa (forceOwnDept, khớp đúng luật lúc TẠO) — truyền scope rỗng {}
+    // để assertDeptScopeAllowed()/scopeAllows() dùng nhánh "cùng phòng là được" có sẵn.
+    assertDeptScopeAllowed(user, {}, payload.dept);
   }
   for (const f of SUBMISSION_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
@@ -1860,8 +1912,23 @@ function submitSubmissionDraft(user, item) {
 // trong dữ liệu cũ) — createValidation.js chỉ resolve custodianDept = dept cho hồ sơ TẠO/SỬA MỚI từ nay
 // trở đi, không có gì tự điền lại cho hồ sơ cũ đang nằm sẵn trong DB; không có fallback này, hồ sơ cũ sẽ
 // đột ngột không ai thao tác được nữa (scopeAllows(..., undefined) luôn trả false trừ khi admin/scope.all).
+//
+// LÀM GỌN (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng trực tiếp đến quyền thanh toán):
+// contractCreate giờ là quyền PHẲNG (boolean) — scopeAllows(user, user.perms?.contractCreate, dept) CŨ
+// đọc {all,depts} để xác định phạm vi; {all:true} cho phép quản lý thanh toán hợp đồng CỦA BẤT KỲ đơn vị
+// custodian nào (không chỉ đúng phòng ban mình). Từ nay contractCreate CHỈ còn ý nghĩa "có quyền tạo hồ
+// sơ hợp đồng" (luôn tự khoá đúng phòng ban CHÍNH MÌNH, forceOwnDept) — KHÔNG còn khái niệm "phạm vi"
+// riêng để truyền cho scopeAllows(). Giữ ĐÚNG tinh thần cũ "quản lý thanh toán theo phạm vi quyền
+// contractCreate CỦA ĐÚNG ĐƠN VỊ CUSTODIAN": giờ là "có quyền contractCreate (đang giữ cờ này) VÀ đơn vị
+// custodian của hồ sơ CHÍNH LÀ phòng ban của người gọi" — scopeAllows(user, {}, dept) dùng đúng nhánh
+// "cùng phòng là được" có sẵn để kiểm phần dept, cộng thêm check contractCreate tường minh (nếu bỏ qua
+// check này, BẤT KỲ ai cùng phòng ban với custodianDept — kể cả không hề có quyền tạo hồ sơ hợp đồng nào
+// — cũng quản lý được thanh toán, NỚI RỘNG quyền so với trước). custodianDept vẫn được giao tự do cho
+// BẤT KỲ đơn vị nào (xem module-hopdong.js/core.js — không gác theo contractCreate), nên người ở đơn vị
+// ĐƯỢC GIAO (không nhất thiết là đơn vị tạo hồ sơ) vẫn quản lý được thanh toán miễn họ CŨNG giữ
+// contractCreate và cùng phòng ban với custodianDept — đúng kịch bản "giao kế toán phòng khác theo dõi".
 function canManageContractPayment(user, contract) {
-  return !!(user.perms?.admin || scopeAllows(user, user.perms?.contractCreate, contract.custodianDept || contract.dept));
+  return !!(user.perms?.admin || (user.perms?.contractCreate && scopeAllows(user, {}, contract.custodianDept || contract.dept)));
 }
 
 // v15.8 — trước đây contract.paymentStatus/item.paymentStatus chuyển sang CHO_THANH_TOAN NGAY lúc tạo
@@ -2138,12 +2205,24 @@ function isCycleGroupFullyResolved(pr, allPaymentRequests) {
   return !list.some(other => other.id !== pr.id && other.cycleGroupId === pr.cycleGroupId && other.status !== 'PAID');
 }
 
-// Upload "Tài liệu ký" + bấm nút "Thanh toán" cho officeReqs (Mua Bán/Sửa Chữa/Đầu Tư, module "Tổng
-// Hợp") — cùng khuôn với uploadContractSignedFile()/startContractPayment() ở trên, chỉ khác phạm vi
-// quyền: officeCreate scope + đúng cờ theo subType (officeBuy/officeFix/officeInvest).
+// Upload "Tài liệu ký" + bấm nút "Thanh toán" cho officeReqs (Mua Bán/Sửa Chữa, module "Tổng Hợp") —
+// cùng khuôn với uploadContractSignedFile()/startContractPayment() ở trên, chỉ khác phạm vi quyền:
+// officeCreate + đúng cờ theo subType (officeBuy/officeFix).
+//
+// LÀM GỌN (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng trực tiếp đến quyền thanh toán):
+// officeCreate giờ là quyền PHẲNG (boolean) — scopeAllows(user, user.perms?.officeCreate, dept) CŨ đọc
+// {all,depts} để xác định phạm vi; {all:true} cho phép quản lý thanh toán đề xuất văn phòng của BẤT KỲ
+// phòng ban nào. Từ nay officeCreate CHỈ còn ý nghĩa "có quyền tạo đề xuất văn phòng" (luôn tự khoá
+// đúng phòng ban CHÍNH MÌNH, forceOwnDept) — KHÔNG còn khái niệm "phạm vi" riêng để truyền cho
+// scopeAllows(). officeReqs KHÔNG có khái niệm custodianDept (khác Hợp Đồng — không ai "giao" đề xuất
+// văn phòng cho đơn vị khác theo dõi), nên công thức đơn giản hơn: giữ officeCreate (đang giữ cờ này)
+// VÀ item.dept CHÍNH LÀ phòng ban của người gọi — scopeAllows(user, {}, dept) dùng đúng nhánh "cùng
+// phòng là được" có sẵn để kiểm phần dept, cộng thêm check officeCreate tường minh (nếu bỏ qua check
+// này, BẤT KỲ ai cùng phòng ban với đề xuất — kể cả không hề có quyền tạo đề xuất văn phòng nào — cũng
+// quản lý được thanh toán, NỚI RỘNG quyền so với trước).
 function canManageOfficePayment(user, item) {
   const flag = OFFICE_SUBTYPE_TO_PERM_FLAG[item.subType];
-  return !!(user.perms?.admin || (scopeAllows(user, user.perms?.officeCreate, item.dept) && (!flag || user.perms?.[flag])));
+  return !!(user.perms?.admin || (user.perms?.officeCreate && scopeAllows(user, {}, item.dept) && (!flag || user.perms?.[flag])));
 }
 
 function uploadOfficeSignedFile(payload, user, item, allPaymentRequests) {
@@ -8406,7 +8485,7 @@ function canDecideMeeting(user, item, appData) {
 module.exports = {
   canDecideMeeting,
   editContract,
-  editDocDraft, submitDocDraft,
+  editDocDraft, submitDocDraft, publishDoc, unpublishDoc,
   editCarRegDraft, submitCarRegDraft,
   editOfficeReqDraft, submitOfficeReqDraft, canCancelOfficeReq, cancelOfficeReq,
   editSubmissionDraft, submitSubmissionDraft,

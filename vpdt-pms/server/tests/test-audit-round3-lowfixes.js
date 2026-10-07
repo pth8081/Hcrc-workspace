@@ -184,7 +184,7 @@ run('[VÁ LỖI] Admin được đặt tên NHƯNG approver kia CHƯA ký -> v�
 // ============================================================================
 console.log('\n===== 2) validateAndPrepareCreate(): trùng mã với hồ sơ đã xoá =====');
 
-const UPLOADER = { username: 'up1', name: 'Người Tải Lên', dept: DEPT, perms: { uploadAll: true, uploadDepts: [] } };
+const UPLOADER = { username: 'up1', name: 'Người Tải Lên', dept: DEPT, perms: { uploadAll: true } };
 const APP_DATA_EMPTY = { formTemplates: {} };
 const docPayload = (over) => ({ dept: DEPT, title: 'Quy trình ISO', cat: 'Quy trình', ver: '1.0', fileUrl: '/uploads/1717171717171-abc.pdf', ...over });
 

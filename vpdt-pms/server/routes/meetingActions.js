@@ -41,8 +41,8 @@ const ACTIONS = {
 // GET /api/meetings/busy-slots — LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao): lưới "Lịch Họp"
 // (renderMeetingCalendarDayView()/computeMeetingDaySummary()/findMeetingConflict() ở
 // public/js/module-phonghop.js) đọc THẲNG DB.meetings — vốn đã bị GET /api/data lọc theo phạm vi xem
-// (filterMeetingsForUser()/canViewMeeting(), lib/recordViewScope.js: meetingView mặc định hẹp theo
-// phòng ban). Nhưng lưới này tồn tại ĐÚNG để trả lời câu hỏi "phòng nào còn trống" TOÀN CÔNG TY, nên
+// (filterMeetingsForUser()/canViewMeeting(), lib/recordViewScope.js: mặc định hẹp theo phòng ban, xem
+// deptAutoViewOn()). Nhưng lưới này tồn tại ĐÚNG để trả lời câu hỏi "phòng nào còn trống" TOÀN CÔNG TY, nên
 // với người dùng thường nó hiện "Trống" giả ở đúng những khung giờ phòng ban khác đã đặt: người dùng
 // chọn khung giờ đó, bấm gửi, rồi bị server trả 409 "đã có lịch trùng khung giờ" mà trên màn hình
 // không có gì giải thích.
@@ -182,17 +182,19 @@ router.put('/:id', async (req, res) => {
       return res.status(409).json({ error: 'Lịch đã bị huỷ, không thể sửa' });
     }
 
-    // Đối chiếu ĐÚNG các luật như lúc TẠO (createValidation.js meetings.extraValidate) — dept đổi được
-    // (cùng field chọn tự do trong phạm vi meetingBookScope như form Đăng Ký) vẫn phải re-check scope,
-    // phòng phải có trong danh mục thật, giờ phải hợp lệ.
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): kiểm tra meetingBookScope TRƯỚC ĐÂY chạy
-    // VÔ ĐIỀU KIỆN, kể cả với `canManage` (admin/meetingCancel) — trong khi nhánh Hủy thật sự
-    // (POST /:id/cancel) hoàn toàn KHÔNG kiểm tra scope, chỉ cần hasPerm. Route Sửa này được viết ra để
-    // THAY THẾ hẳn quy trình Hủy+Tạo-lại cho đúng nhóm người có `meetingCancel` (thường có ý nghĩa "quản
-    // lý toàn công ty", không nhất thiết có meetingBookScope bao trùm mọi phòng ban) — chặn nhầm nhóm này
-    // đúng bằng quy trình mà route này được sinh ra để loại bỏ. Chỉ áp scope khi người gọi là CHÍNH
-    // creator tự sửa (không phải canManage).
-    if (!canManage && !scopeAllows(freshUser, freshUser.perms?.meetingBookScope, payload.dept)) {
+    // Đối chiếu ĐÚNG các luật như lúc TẠO (createValidation.js meetings — forceOwnDept) — dept đổi được
+    // nhưng vẫn phải re-check, phòng phải có trong danh mục thật, giờ phải hợp lệ.
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Trung bình): kiểm tra scope TRƯỚC ĐÂY chạy VÔ ĐIỀU KIỆN,
+    // kể cả với `canManage` (admin/meetingCancel) — trong khi nhánh Hủy thật sự (POST /:id/cancel) hoàn
+    // toàn KHÔNG kiểm tra scope, chỉ cần hasPerm. Route Sửa này được viết ra để THAY THẾ hẳn quy trình
+    // Hủy+Tạo-lại cho đúng nhóm người có `meetingCancel` (thường có ý nghĩa "quản lý toàn công ty") —
+    // chặn nhầm nhóm này đúng bằng quy trình mà route này được sinh ra để loại bỏ. Chỉ áp scope khi
+    // người gọi là CHÍNH creator tự sửa (không phải canManage).
+    // Làm gọn phân quyền Phòng Họp (10/2026, đã xác nhận): bỏ hẳn meetingBookScope {all,depts} — creator
+    // (không canManage) giờ CHỈ còn đúng 1 lựa chọn phòng ban (của chính mình), truyền scope rỗng {} cho
+    // scopeAllows() để tận dụng nhánh "cùng phòng là được" có sẵn (dept === user.dept), khớp đúng
+    // forceOwnDept ở lib/createValidation.js.
+    if (!canManage && !scopeAllows(freshUser, {}, payload.dept)) {
       return res.status(403).json({ error: 'Bạn không có quyền đặt lịch cho phòng ban này' });
     }
     const appData = await getAllAppData();

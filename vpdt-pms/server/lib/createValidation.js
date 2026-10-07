@@ -793,7 +793,14 @@ function normalizeInternalPostMedia(target) {
 const CREATE_MODULE_CONFIGS = {
   submissions: {
     dbKey: 'submissions',
-    getScope: (user) => user.perms?.submissionCreate,
+    // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module", đã xác nhận): bỏ hẳn submissionCreate
+    // {all,depts} (admin chọn phòng ban tạo hộ) — giờ submissionCreate là 1 quyền PHẲNG (boolean) DUY
+    // NHẤT, luôn tự khoá đúng phòng ban của chính người trình (forceOwnDept: true, cùng khuôn
+    // meetingBook/lib/createValidation.js). getScope() trả rỗng để scopeAllows() dùng đúng nhánh
+    // "cùng phòng là được" có sẵn (dept === user.dept) — quyền TẠO thật sự được gác ở extraValidate()
+    // bên dưới (forceOwnDept + getScope rỗng khiến scopeAllows() LUÔN qua, không còn ý nghĩa gác quyền).
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Mã tờ trình = HCRC-<mã phòng>-VBT-<số 3 chữ số>, SINH LẠI Ở SERVER (không tin client) — xem
     // lib/recordCodeGen.js. dept đã được validateAndPrepareCreate() xác minh scope ngay trước đó.
@@ -806,6 +813,11 @@ const CREATE_MODULE_CONFIGS = {
     // do CALLER đọc sẵn từ DB rồi truyền vào (xem validateAndPrepareCreate) — file này không tự đọc DB,
     // để routes/create.js thật VÀ stub test (dùng data in-memory) đều gọi chung được hàm này.
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được
+      // trình hay không) phải gác RIÊNG ở đây (cùng khuôn meetingBook/vppRegistrations.extraValidate).
+      if (!user.perms?.admin && !user.perms?.submissionCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo tờ trình');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'SUBMISSION');
       // Tệp tờ trình + Tài Liệu Bổ Sung Theo Tờ Trình (#subFile/#subExtraFiles ở index.html) —
       // xem assertUploadedFileUrl().
@@ -843,7 +855,16 @@ const CREATE_MODULE_CONFIGS = {
   },
   contracts: {
     dbKey: 'contracts',
-    getScope: (user) => user.perms?.contractCreate,
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module", đã xác nhận): bỏ hẳn contractCreate {all,depts}
+    // — giờ là 1 quyền phẳng (boolean) DUY NHẤT, luôn tự khoá đúng phòng ban của chính người tạo
+    // (forceOwnDept: true, cùng khuôn meetingBook/submissionCreate). getScope() trả rỗng để
+    // scopeAllows() dùng đúng nhánh "cùng phòng là được" có sẵn — quyền TẠO thật sự gác ở
+    // extraValidate() bên dưới. custodianDept ("Đơn vị tiếp nhận theo dõi & thanh toán") KHÔNG bị ảnh
+    // hưởng — vẫn chọn tự do BẤT KỲ phòng ban nào (xem khối custodianDept bên dưới), vì đó là "giao việc
+    // cho đơn vị khác", không phải "tạo hồ sơ thay mặt đơn vị khác". canManageContractPayment()
+    // (lib/recordActions.js) đã cập nhật để đọc đúng quyền phẳng mới này + custodianDept.
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: null, // Hợp đồng KHÔNG có field creatorName (khớp index.html)
     // Mã hợp đồng GỐC = HCRC-<mã phòng>-<viết tắt Loại Pháp Lý>-<số 3 chữ số>; mã PHỤ LỤC = <mã gốc>-
     // PLHD<số 2 chữ số> (đánh số riêng theo từng hợp đồng gốc) — SINH LẠI Ở SERVER, xem
@@ -871,6 +892,13 @@ const CREATE_MODULE_CONFIGS = {
     // Phụ lục (isAddendum=true, áp dụng cho CẢ 2 luồng trên) chỉ gắn được vào 1 hợp đồng GỐC ĐÃ APPROVED
     // (xem index.html generateAddendumCode()/onContractAddendumTargetChange()).
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được tạo
+      // hồ sơ hợp đồng hay không, cả 2 luồng Phê Duyệt lẫn Nhập Đã Ký) phải gác RIÊNG ở đây (cùng khuôn
+      // meetingBook/submissionCreate.extraValidate). isSignedImport còn đòi thêm contractImportSigned
+      // riêng (xem khối bên dưới) — 2 quyền ĐỘC LẬP, không quyền nào thay thế được quyền kia.
+      if (!user.perms?.admin && !user.perms?.contractCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo hồ sơ hợp đồng');
+      }
       const isSignedImport = !!payload.isSignedImport;
       delete payload.isSignedImport; // chỉ là cờ tạm quyết định nhánh xử lý bên dưới, không lưu vào hồ sơ
 
@@ -1045,7 +1073,16 @@ const CREATE_MODULE_CONFIGS = {
   },
   meetings: {
     dbKey: 'meetings',
-    getScope: (user) => user.perms?.meetingBookScope,
+    // Làm gọn phân quyền Phòng Họp (10/2026, yêu cầu người dùng — đã xác nhận, xem lib ghi chú tại
+    // defaultNewUserPerms()): bỏ bảng chọn phòng ban (meetingBookScope {all,depts}) + quyền meetingView
+    // riêng, gộp lại thành 1 công tắc phẳng DUY NHẤT `meetingBook` — tự khoá đúng phòng ban của người
+    // đăng ký (forceOwnDept: true, giống khuôn vppRegistrations/itSupportTickets...), KHÔNG cho admin
+    // cấu hình "đăng ký hộ phòng ban khác" nữa. getScope trả về {} vì scopeAllows() luôn tự cho qua khi
+    // dept === user.dept (nhánh "cùng phòng là được", xem scopeAllows() đầu file) — quyền THẬT nằm ở
+    // nhánh kiểm tra user.perms?.meetingBook ngay trong extraValidate bên dưới (CÙNG khuôn
+    // vppRegistrations.extraValidate kiểm tra vppManage).
+    forceOwnDept: true,
+    getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Trùng phòng/khung giờ là kiểm tra khoảng thời gian CHỒNG LẤN — không diễn đạt được bằng 1 UNIQUE
     // INDEX như trùng "Code" ở các module khác, nên chỉ kiểm tra ở tầng ứng dụng (findMeetingConflict)
@@ -1060,6 +1097,9 @@ const CREATE_MODULE_CONFIGS = {
     // NaN cho giờ sai định dạng, mọi phép so sánh với NaN đều false nên findMeetingConflict() (dưới)
     // kết luận "không trùng" cho MỌI trường hợp giờ lỗi định dạng — vượt qua luôn cơ chế khoá-theo-phòng.
     extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.meetingBook) {
+        throw new CreateError(403, 'Bạn không có quyền đăng ký phòng họp');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'MEETING_ROOM');
       // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): payload.room trước đây KHÔNG được đối chiếu với
       // danh mục DB.meetingRooms — client chỉ có 1 <select> chọn từ danh mục, nhưng 1 request tự soạn có
@@ -1107,7 +1147,14 @@ const CREATE_MODULE_CONFIGS = {
   },
   carRegs: {
     dbKey: 'carRegs',
-    getScope: (user) => user.perms?.carCreate,
+    // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module", đã xác nhận): bỏ hẳn carCreate {all,depts} —
+    // giờ là 1 quyền phẳng (boolean) DUY NHẤT, luôn tự khoá đúng phòng ban của chính người tạo
+    // (forceOwnDept: true, cùng khuôn meetingBook/submissionCreate/contractCreate). getScope() trả rỗng
+    // để scopeAllows() dùng đúng nhánh "cùng phòng là được" có sẵn — quyền TẠO thật sự gác ở
+    // extraValidate() bên dưới. carDispatch (Người Điều Hành Xe)/carReportView (Xem Báo Cáo) là 2 quyền
+    // phẳng RIÊNG, ĐỘC LẬP, không bị ảnh hưởng.
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Khớp đúng lỗ hổng đã vá cho meetings ở trên (findMeetingConflict + NaN) — carRegs cũng có
     // startTime/endTime (xem index.html #carStartTime/#carEndTime) nhưng trước đây CHƯA từng được kiểm
@@ -1116,6 +1163,12 @@ const CREATE_MODULE_CONFIGS = {
     // startTime/endTime này để so trùng khung giờ — new Date(...).getTime() trả NaN cho giờ sai định
     // dạng khiến MỌI so sánh thời gian đều false, "chưa từng trùng" với bất kỳ phiếu nào khác.
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được tạo
+      // phiếu đăng ký xe hay không) phải gác RIÊNG ở đây (cùng khuôn meetingBook/submissionCreate/
+      // contractCreate.extraValidate).
+      if (!user.perms?.admin && !user.perms?.carCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đăng ký xe');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'CAR');
       // Phiếu đăng ký xe có field fileUrl trong mô hình dữ liệu (lib/fileAuthz.js tra ngược
       // carRegs theo fileUrl) — xem assertUploadedFileUrl().
@@ -1161,9 +1214,25 @@ const CREATE_MODULE_CONFIGS = {
   },
   officeReqs: {
     dbKey: 'officeReqs',
-    getScope: (user) => user.perms?.officeCreate,
+    // Làm gọn phân quyền Văn Phòng (10/2026, "6-module", đã xác nhận — RÀ SOÁT KỸ vì ảnh hưởng trực
+    // tiếp đến quyền thanh toán): bỏ hẳn officeCreate {all,depts} — giờ là 1 quyền phẳng (boolean) DUY
+    // NHẤT, luôn tự khoá đúng phòng ban của chính người tạo (forceOwnDept: true, cùng khuôn
+    // meetingBook/submissionCreate/contractCreate/carCreate). getScope() trả rỗng để scopeAllows() dùng
+    // đúng nhánh "cùng phòng là được" có sẵn — quyền TẠO thật sự gác ở extraValidate() bên dưới, CỘNG
+    // THÊM (không thay thế) officeBuy/officeFix theo đúng subType như trước. canManageOfficePayment()
+    // (lib/recordActions.js) đã cập nhật để đọc đúng quyền phẳng mới này — officeReqs KHÔNG có khái
+    // niệm custodianDept (khác Hợp Đồng), nên chỉ cần kiểm officeCreate + cùng phòng ban (item.dept).
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'creator', creatorNameField: 'creatorName',
     extraValidate: (payload, collection, user, appData) => {
+      // getScope()/forceOwnDept ở trên chỉ còn xác nhận ĐÚNG phòng ban — quyền TẠO thật sự (có được tạo
+      // đề xuất văn phòng hay không) phải gác RIÊNG ở đây (cùng khuôn meetingBook/submissionCreate/
+      // contractCreate/carCreate.extraValidate), CỘNG THÊM đúng cờ theo subType (officeBuy/officeFix)
+      // như hành vi cũ — 2 lớp kiểm ĐỘC LẬP, không lớp nào thay thế được lớp kia.
+      if (!user.perms?.admin && !user.perms?.officeCreate) {
+        throw new CreateError(403, 'Bạn không có quyền tạo đề xuất văn phòng');
+      }
       const flag = OFFICE_SUBTYPE_TO_PERM_FLAG[payload.subType];
       if (!flag) throw new CreateError(400, `Loại đề xuất văn phòng không hợp lệ: ${payload.subType}`);
       if (!user.perms?.admin && !user.perms?.[flag]) {
@@ -1528,12 +1597,19 @@ const CREATE_MODULE_CONFIGS = {
       payload.startedBy = null; payload.startedByName = null; payload.startedAt = null;
     }
   },
-  // Tài liệu dùng cặp field cũ uploadAll(bool)+uploadDepts(mảng) chứ không phải {all,depts} object
-  // như 5 module trên — quy đổi tại chỗ để dùng chung scopeAllows(). Đây cũng là module HỞ NHẤT
-  // trước Bước 2: dropdown chọn phòng ban ở form tải lên trước đây không hề lọc theo quyền gì cả.
+  // LÀM GỌN (10/2026, "6-module", đã xác nhận): bỏ hẳn cặp field cũ uploadAll(bool)+uploadDepts(mảng)
+  // (trước đây cho phép admin cấp quyền "tải lên hộ phòng ban khác", quy đổi qua scopeAllows() như
+  // {all,depts} object) — giờ CHỈ còn đúng 1 cờ phẳng uploadAll (TÊN GIỮ NGUYÊN, chỉ đổi Ý NGHĨA: trước
+  // là "tải lên được MỌI phòng ban", nay là "được tải lên tài liệu", luôn tự khoá đúng phòng ban của
+  // chính người tải — forceOwnDept, cùng khuôn meetingBook/submissionCreate/contractCreate/carCreate/
+  // officeCreate đã làm ở 5 module trước). getScope() trả rỗng để scopeAllows() LUÔN qua phần "cùng
+  // phòng ban" (dept lúc tạo = user.dept do forceOwnDept ép), quyền TẠO thật sự (có được tải lên hay
+  // không) kiểm RIÊNG bằng check tường minh uploadAll ngay đầu extraValidate bên dưới — không còn ý
+  // nghĩa "module HỞ NHẤT" (dropdown chọn phòng ban tuỳ ý) như chú thích cũ mô tả nữa.
   docs: {
     dbKey: 'docs',
-    getScope: (user) => ({ all: !!user.perms?.uploadAll, depts: user.perms?.uploadDepts || [] }),
+    getScope: () => ({}),
+    forceOwnDept: true,
     creatorField: 'uploader', creatorNameField: 'uploaderName',
     // Mã tài liệu GỐC = <viết tắt Phân loại>-<viết tắt Phòng ban>-<số 3 chữ số>, SINH LẠI Ở SERVER —
     // xem lib/recordCodeGen.js. PHIÊN BẢN mới (rootDocId != null) trả null: mã suy từ bản gốc
@@ -1546,6 +1622,9 @@ const CREATE_MODULE_CONFIGS = {
     // thể tự xưng rootDocId của tài liệu bất kỳ (kể cả phòng ban khác), tự đặt versionNumber tuỳ ý (đâm
     // ra 2 version trùng số hoặc "nhảy cóc"), hoặc bổ sung version cho tài liệu gốc CHƯA duyệt xong.
     extraValidate: (payload, collection, user, appData, trashedItems) => {
+      if (!user.perms?.admin && !user.perms?.uploadAll) {
+        throw new CreateError(403, 'Bạn không có quyền tải lên tài liệu');
+      }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'DOC');
       // Tệp tài liệu (#docFile ở index.html) — xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp tài liệu');
@@ -1611,6 +1690,13 @@ const CREATE_MODULE_CONFIGS = {
       // đặt sẵn status:"APPROVED" cùng history giả để bỏ qua toàn bộ quy trình duyệt.
       payload.status = 'PENDING';
       payload.currentStep = 1;
+      // "Phát Hành" (10/2026, "6-module", đã xác nhận): field published LUÔN bắt đầu false — kể cả bản
+      // GỐC lẫn PHIÊN BẢN mới (payload.rootDocId != null, nhánh phía trên) — không kế thừa published từ
+      // bản trước đó. Chỉ chuyển true qua action riêng publishDoc() (lib/recordActions.js, cần docPublish
+      // + status APPROVED), ÁP DỤNG THEO TỪNG BẢN GHI VERSION (không tự lan sang version khác, kể cả
+      // version mới hơn của cùng họ tài liệu) — xem canViewDoc()/canDownloadRecordFile() đã thêm nhánh
+      // "published && docViewPublished/docDownloadPublished" riêng, độc lập hẳn với mọi lớp quyền cũ.
+      payload.published = false;
       payload.history = [{
         step: 0,
         stepName: 'Tải lên & Trình ký',

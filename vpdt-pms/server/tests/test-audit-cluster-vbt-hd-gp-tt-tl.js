@@ -153,9 +153,13 @@ const APP_DATA = {
 };
 
 const USER_A = { username: 'u_a', name: 'Người A', dept: DEPT_A, perms: {
-  submissionCreate: { all: false, depts: [DEPT_A] },
-  contractCreate: { all: false, depts: [DEPT_A] },
-  uploadAll: false, uploadDepts: [DEPT_A],
+  submissionCreate: true,
+  // contractCreate: làm gọn phân quyền Hợp Đồng (10/2026, "6-module") — nay là quyền PHẲNG boolean, tự
+  // khoá đúng phòng ban của người dùng (DEPT_A, khớp dept của USER_A) thay vì {all,depts}.
+  contractCreate: true,
+  // uploadAll (10/2026, "6-module"): bỏ {all,depts} (uploadDepts) — USER_A trước có uploadDepts=[DEPT_A]
+  // (đúng phòng mình) nên quy đổi sang true để giữ nguyên khả năng tạo tài liệu (test 10c dưới).
+  uploadAll: true,
   licenseCreate: true
 } };
 const ADMIN = { username: 'admin', name: 'Quản Trị', dept: DEPT_A, perms: { admin: true } };
@@ -202,17 +206,25 @@ async function main() {
     assert.strictEqual(err.status, 403);
     assert.strictEqual(c.dept, DEPT_A, 'dept KHÔNG được đổi sau khi bị chặn');
   });
-  await run('3b. Đổi dept sang giá trị KHÔNG có trong danh mục depts/stores -> 400 (dù scope cho phép ALL)', async () => {
-    const c = baseContract();
-    const userAll = { ...USER_A, perms: { ...USER_A.perms, contractCreate: { all: true, depts: [] } } };
-    const err = expectThrow(() => recordActions.editContract({ dept: 'Phòng Ma' }, userAll, c, false, undefined, APP_DATA, undefined),
+  await run('3b. Đổi dept sang giá trị KHÔNG có trong danh mục depts/stores -> 400 (dù là admin, bypass hẳn scope)', async () => {
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module"): contractCreate nay là quyền PHẲNG, forceOwnDept
+    // — không còn biến thể "scope all:true" để kiểm "đối chiếu danh mục vẫn áp dụng dù scope rộng". Biến
+    // thể DUY NHẤT còn bypass được nhánh "cùng phòng" là admin (scopeAllows() luôn true cho admin) — dùng
+    // ADMIN ở đây để giữ đúng mục đích test gốc: đối chiếu danh mục áp dụng dù đã qua được bước scope.
+    // approvalStatus: 'DRAFT' — editContract() chỉ mở lối thoát ownership cho ADMIN (không phải người
+    // tạo) khi hồ sơ đang ở DRAFT/REJECTED/NEEDS_SUPPLEMENT (xem ghi chú "escape hatch" ở recordActions.js);
+    // PENDING như baseContract() mặc định sẽ bị chặn 403 NGAY ở bước ownership, chưa kịp tới nhánh dept.
+    const c = { ...baseContract(), approvalStatus: 'DRAFT' };
+    const err = expectThrow(() => recordActions.editContract({ dept: 'Phòng Ma' }, ADMIN, c, false, undefined, APP_DATA, undefined),
       /Phòng ban không hợp lệ/i, '3b');
     assert.strictEqual(err.status, 400);
   });
-  await run('3c. KHÔNG chặn nhầm: đổi dept trong đúng scope + đúng danh mục -> thành công, dựng lại quy trình duyệt', async () => {
+  await run('3c. KHÔNG chặn nhầm: đổi dept sang ĐÚNG phòng ban của chính người sửa (forceOwnDept) -> thành công, dựng lại quy trình duyệt', async () => {
+    // forceOwnDept: phạm vi hợp lệ DUY NHẤT (ngoài admin) là đúng phòng ban của chính người sửa — mô
+    // phỏng 1 người tạo/sửa thuộc DEPT_B (khác USER_A) chuyển hồ sơ (đang ở DEPT_A) về đúng phòng mình.
     const c = baseContract();
-    const userBoth = { ...USER_A, perms: { ...USER_A.perms, contractCreate: { all: false, depts: [DEPT_A, DEPT_B] } } };
-    recordActions.editContract({ dept: DEPT_B }, userBoth, c, false, undefined, APP_DATA, undefined);
+    const userOwnDeptB = { ...USER_A, dept: DEPT_B, perms: { ...USER_A.perms, contractCreate: true } };
+    recordActions.editContract({ dept: DEPT_B }, userOwnDeptB, c, false, undefined, APP_DATA, undefined);
     assert.strictEqual(c.dept, DEPT_B);
     assert.ok(Array.isArray(c.effectiveSteps), 'effectiveSteps phải được dựng lại theo dept mới');
   });

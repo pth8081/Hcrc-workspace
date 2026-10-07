@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**25.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.39 (2026-10-07): "6-module" — gộp phẳng quyền "Tạo mới" (Phòng Họp/Văn Bản Trình/Hợp Đồng/Đăng Ký Xe/Văn Phòng/Tài Liệu) + tính năng mới "📢 Phát Hành" Tài Liệu
+
+Theo yêu cầu người dùng (đã xác nhận phương án trước khi triển khai): đơn giản hoá quyền "Tạo mới" của
+6 module — bỏ hẳn cơ chế `{all, depts}` (admin chọn phòng ban "tạo hộ") cho `meetingBook` (Phòng Họp),
+`submissionCreate` (Văn Bản Trình), `contractCreate` (Hợp Đồng), `carCreate` (Đăng Ký Xe), `officeCreate`
+(Văn Phòng Mua/Sửa) và `uploadAll` (Tài Liệu) — cả 6 giờ là **1 cờ phẳng (boolean) DUY NHẤT mỗi module**,
+LUÔN tự khoá đúng phòng ban của chính người tạo (forceOwnDept — server tự ghi đè `dept`, không tin giá
+trị client gửi, kể cả khi request tự soạn cố tình gửi phòng ban khác). Cột "Tạo mới" theo phòng ban đã
+bỏ hẳn khỏi cả 6 bảng "1 dòng = 1 phòng ban" ở Phân Quyền, thay bằng 1 checkbox phẳng riêng phía trên
+bảng.
+
+**Quan trọng nhất (yêu cầu người dùng "đừng ảnh hưởng logic, nhất là phần thanh toán")**:
+`canManageContractPayment()`/`canManageOfficePayment()` (lib/recordActions.js) đã được rà soát + cập
+nhật đọc đúng cờ phẳng mới, giữ NGUYÊN tinh thần gác quyền cũ — vẫn phải vừa có quyền Tạo tương ứng vừa
+đúng phòng ban (hoặc đơn vị custodian được giao, riêng Hợp Đồng) mới quản lý được thanh toán, không bị
+"nới rộng" hay "siết nhầm" so với trước.
+
+**Tính năng mới "📢 Phát Hành" (Tài Liệu)**: 3 quyền độc lập — `docPublish` (sau khi tài liệu đã duyệt
+xong, bấm "📢 Phát Hành" để công khai ĐÚNG phiên bản đó, hoặc "📕 Hủy Phát Hành" để ẩn lại) và
+`docViewPublished`/`docDownloadPublished` (xem/tải MỌI tài liệu đã phát hành, bất kể phòng ban/quy
+trình duyệt gốc — CHỈ THÊM 1 lối xem phụ, không thay thế các lớp quyền xem/tải cũ). Phát Hành tính theo
+TỪNG phiên bản cụ thể, không lan sang phiên bản khác của cùng 1 tài liệu.
+
+Test mới: `tests/test-doc-upload-publish.js` (23/23 — publishDoc/unpublishDoc, canViewDoc/
+canDownloadRecordFile nhánh published độc lập, cô lập theo version) + `tests/test-6module-flat-create-scope.js`
+(35/35 — xác nhận CẢ 6 module cùng khuôn forceOwnDept + 10 kịch bản riêng cho canManageContractPayment/
+canManageOfficePayment). Full regression: quét toàn bộ file test tham chiếu tới các file đã sửa (233 test
+Node thuần + 15 test Playwright trực tiếp đụng tới UI Phân Quyền/Tài Liệu) — tất cả pass, trừ các lỗi ĐÃ
+XÁC NHẬN pre-existing/không liên quan (kết nối SQL Server cục bộ không có sẵn trong sandbox, 1 test phụ
+thuộc ngày giờ chạy, thiếu hàm `resolveGraphOption` ở môi trường test Graph API, 1 bug 3-cấp quản lý
+gián tiếp đã tồn tại từ trước nhánh này — đối chứng bằng git worktree tại đúng commit gốc). Phát hiện +
+vá thêm 1 lỗ hổng fixture thật trong lúc quét: `tests/test-meeting-room-catalog-validate.js` thiếu
+`meetingBook` khiến cả 5 kịch bản fail do chặn 403 trước khi chạm logic cần kiểm — đã bổ sung.
 
 ## v25.38 (2026-10-06): Fix Cấu Hình Email — Port/Mã Hoá Kết Nối không còn tự ép buộc lẫn nhau
 

@@ -148,15 +148,25 @@ function collectPermsFromForm() {
     meetingReportView: document.getElementById('pMeetingReportView').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
     officeFix: document.getElementById('pOfficeFix').checked,
+    // uploadAll (10/2026, "6-module"): bỏ uploadDepts (mảng), chỉ còn 1 cờ phẳng boolean.
     uploadAll: document.getElementById('pUploadAll').checked,
-    uploadDepts: Array.from(document.querySelectorAll('[id^="pUploadDept_"]:checked')).map(cb => cb.value),
     docDownload: scopeFromForm('pDocDownloadAll', 'pDocDownloadDept'),
+    // "Phát Hành" tài liệu (10/2026, "6-module", mới) — 3 quyền phẳng, không theo phòng ban.
+    docPublish: document.getElementById('pDocPublish').checked,
+    docViewPublished: document.getElementById('pDocViewPublished').checked,
+    docDownloadPublished: document.getElementById('pDocDownloadPublished').checked,
 
     // submissionView/contractView (cột "Xem") ĐÃ BỎ (11/2026, "Việc D") — xem chú thích tại khối
     // 📜 3/📄 4 trong systemSection.html.
-    submissionCreate: scopeFromForm('pSubCreateAll', 'pSubCreateDept'),
+    // Làm gọn phân quyền Văn Bản Trình (10/2026, "6-module", đã xác nhận): bỏ submissionCreate
+    // {all,depts}, chỉ còn 1 công tắc phẳng pSubCreate — tự khoá đúng phòng ban người trình
+    // (forceOwnDept, xem lib/createValidation.js), cùng khuôn meetingBook.
+    submissionCreate: document.getElementById('pSubCreate').checked,
     submissionDownload: scopeFromForm('pSubDownloadAll', 'pSubDownloadDept'),
-    contractCreate: scopeFromForm('pContractCreateAll', 'pContractCreateDept'),
+    // Làm gọn phân quyền Hợp Đồng (10/2026, "6-module", đã xác nhận): bỏ contractCreate {all,depts},
+    // chỉ còn 1 công tắc phẳng pContractCreate — tự khoá đúng phòng ban người tạo hồ sơ (forceOwnDept,
+    // xem lib/createValidation.js). RÀ SOÁT KỸ: ảnh hưởng canManageContractPayment() (lib/recordActions.js).
+    contractCreate: document.getElementById('pContractCreate').checked,
     contractDownload: scopeFromForm('pContractDownloadAll', 'pContractDownloadDept'),
     // contractImportSigned — quyền RIÊNG cho "Nhập Hợp Đồng/Phụ Lục Đã Ký" (tạo hồ sơ APPROVED ngay,
     // bỏ qua quy trình Phê Duyệt). Tách khỏi contractCreate, xem contracts.extraValidate ở lib/createValidation.js.
@@ -169,15 +179,18 @@ function collectPermsFromForm() {
     reportManage: document.getElementById('pReportManage').checked,
     reportAggregate: document.getElementById('pReportAggregate').checked,
     reportEntryCreate: document.getElementById('pReportEntryCreate').checked,
-    meetingView: scopeFromForm('pMeetingViewAll', 'pMeetingViewDept'),
-    meetingBookScope: scopeFromForm('pMeetingBookAll', 'pMeetingBookDept'),
+    // Làm gọn phân quyền Phòng Họp (10/2026, đã xác nhận): bỏ meetingView/meetingBookScope {all,depts},
+    // chỉ còn 1 công tắc phẳng meetingBook (tự khoá đúng phòng ban, xem lib/createValidation.js).
+    meetingBook: document.getElementById('pMeetingBook').checked,
     carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
-    carCreate: scopeFromForm('pCarCreateAll', 'pCarCreateDept'),
+    // carCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+    carCreate: document.getElementById('pCarCreate').checked,
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     carDispatch: document.getElementById('pCarDispatch').checked,
     carReportView: document.getElementById('pCarReportView').checked,
     officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
-    officeCreate: scopeFromForm('pOfficeCreateAll', 'pOfficeCreateDept'),
+    // officeCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+    officeCreate: document.getElementById('pOfficeCreate').checked,
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
     minutesCreate: document.getElementById('pMinutesCreate').checked,
     minutesView: document.getElementById('pMinutesView').checked,
@@ -399,12 +412,17 @@ function populatePermsForm(permsInput) {
   document.getElementById('pRebateApprove').checked = !!perms.rebateApprove;
   document.getElementById('pRebateViewReport').checked = !!perms.rebateViewReport;
 
+  // uploadAll (10/2026, "6-module"): bỏ {all,depts} (uploadDepts), chỉ còn 1 cờ phẳng boolean.
   document.getElementById('pUploadAll').checked = !!perms.uploadAll;
   document.getElementById('pDocDownloadAll').checked = !!perms.docDownload?.all;
+  // "Phát Hành" tài liệu (10/2026, "6-module", mới) — 3 quyền phẳng, không theo phòng ban.
+  document.getElementById('pDocPublish').checked = !!perms.docPublish;
+  document.getElementById('pDocViewPublished').checked = !!perms.docViewPublished;
+  document.getElementById('pDocDownloadPublished').checked = !!perms.docDownloadPublished;
 
-  document.getElementById('pSubCreateAll').checked = !!perms.submissionCreate?.all;
+  document.getElementById('pSubCreate').checked = !!perms.submissionCreate;
   document.getElementById('pSubDownloadAll').checked = !!perms.submissionDownload?.all;
-  document.getElementById('pContractCreateAll').checked = !!perms.contractCreate?.all;
+  document.getElementById('pContractCreate').checked = !!perms.contractCreate;
   document.getElementById('pContractDownloadAll').checked = !!perms.contractDownload?.all;
   document.getElementById('pContractImportSigned').checked = !!perms.contractImportSigned;
   document.getElementById('pPaymentManage').checked = !!perms.paymentManage;
@@ -415,15 +433,16 @@ function populatePermsForm(permsInput) {
   document.getElementById('pReportManage').checked = !!perms.reportManage;
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
-  document.getElementById('pMeetingViewAll').checked = !!perms.meetingView?.all;
-  document.getElementById('pMeetingBookAll').checked = !!perms.meetingBookScope?.all;
+  document.getElementById('pMeetingBook').checked = !!perms.meetingBook;
   document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
-  document.getElementById('pCarCreateAll').checked = !!perms.carCreate?.all;
+  // carCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+  document.getElementById('pCarCreate').checked = !!perms.carCreate;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pCarReportView').checked = !!perms.carReportView;
   document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
-  document.getElementById('pOfficeCreateAll').checked = !!perms.officeCreate?.all;
+  // officeCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
+  document.getElementById('pOfficeCreate').checked = !!perms.officeCreate;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
 
   populateModuleAccessForm(perms.moduleAccess);
@@ -440,26 +459,18 @@ function populatePermsForm(permsInput) {
     }
   };
 
-  setGroupCheckboxes(perms.uploadDepts, 'pUploadDept');
   setGroupCheckboxes(perms.docDownload?.depts, 'pDocDownloadDept');
-  setGroupCheckboxes(perms.submissionCreate?.depts, 'pSubCreateDept');
   setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
-  setGroupCheckboxes(perms.contractCreate?.depts, 'pContractCreateDept');
   setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
-  setGroupCheckboxes(perms.meetingView?.depts, 'pMeetingViewDept');
-  setGroupCheckboxes(perms.meetingBookScope?.depts, 'pMeetingBookDept');
   setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
-  setGroupCheckboxes(perms.carCreate?.depts, 'pCarCreateDept');
   setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
   setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
-  setGroupCheckboxes(perms.officeCreate?.depts, 'pOfficeCreateDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
-  ['pUploadAll', 'pDocDownloadAll',
-   'pSubCreateAll', 'pSubDownloadAll',
-   'pContractCreateAll', 'pContractDownloadAll',
-   'pMeetingViewAll', 'pMeetingBookAll',
-   'pCarViewAll', 'pCarCreateAll', 'pCarDownloadAll',
-   'pOfficeViewAll', 'pOfficeCreateAll', 'pOfficeDownloadAll'
+  ['pDocDownloadAll',
+   'pSubDownloadAll',
+   'pContractDownloadAll',
+   'pCarViewAll', 'pCarDownloadAll',
+   'pOfficeViewAll', 'pOfficeDownloadAll'
   ].forEach(allId => {
     const deptPrefix = allId.replace(/All$/, 'Dept');
     toggleScopeGroup(allId, deptPrefix);

@@ -20,7 +20,11 @@ function test(name, fn) {
 }
 
 const APP_DATA = { meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }, { id: 2, name: 'Phòng Họp Nhỏ B', short: 'B' }] };
-const USER = { username: 'nv1', name: 'Nhân Viên 1' };
+// meetingBook (10/2026, "6-module" — gộp phẳng meetingView+meetingBookScope): extraValidate() giờ chặn
+// 403 "Bạn không có quyền đăng ký phòng họp" NGAY DÒNG ĐẦU nếu thiếu cờ này — bài test này gọi THẲNG
+// extraValidate() (không qua validateAndPrepareCreate()) để kiểm riêng logic đối chiếu danh mục phòng,
+// nên USER cần có cờ này để qua được lớp quyền, mới chạm tới đúng logic cần kiểm.
+const USER = { username: 'nv1', name: 'Nhân Viên 1', dept: 'Phòng Kinh Doanh', perms: { meetingBook: true } };
 
 function basePayload(overrides) {
   return Object.assign({

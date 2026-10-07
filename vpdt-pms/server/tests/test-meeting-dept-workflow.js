@@ -67,7 +67,7 @@ test('canDecideMeeting(): phòng ban chưa cấu hình gì -> chỉ admin/meetin
 });
 
 // ===================== canViewMeeting() — nhánh approver mới =====================
-test('canViewMeeting(): người được gán riêng cho ĐÚNG phòng ban XEM được lịch đó dù không giữ meetingApprove/meetingView phù hợp', () => {
+test('canViewMeeting(): người được gán riêng cho ĐÚNG phòng ban XEM được lịch đó dù không giữ meetingApprove', () => {
   const meeting = { dept: 'Khối Kinh Doanh', creator: 'ai_do_khac' };
   assert.strictEqual(canViewMeeting(DEPT_APPROVER, meeting, appData), true);
 });

@@ -5,6 +5,12 @@
 // ==========================================
 function toggleUserPermFormMode(mode) {
   permFormMode = mode;
+  // Luôn mở lại khối "khai báo thông tin" + reset nhãn nút mỗi lần mở form cho 1 người/nhóm MỚI (kể cả
+  // đang ở trạng thái thu gọn từ lần sửa trước) — tránh mở nhầm người khác mà vẫn đang bị thu gọn dở từ
+  // phiên trước, xem closeUserPermForm() ngay dưới.
+  document.getElementById('userBasicInfoFieldsWrap').classList.remove('hidden');
+  const toggleBtn = document.getElementById('btnToggleUserBasicInfo');
+  if (toggleBtn) toggleBtn.innerText = '✕ Thu Gọn Thông Tin';
   document.getElementById('userIdentityFields').classList.toggle('hidden', mode !== 'USER');
   document.getElementById('groupIdentityFields').classList.toggle('hidden', mode !== 'GROUP');
   // Ẩn field nào thì bỏ luôn "required" của field đó — display:none không tự loại field khỏi việc
@@ -152,11 +158,17 @@ function editPermGroup(id) {
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// "✕ Thu Gọn" — chỉ ẩn lại form, KHÔNG reset dữ liệu đang nhập dở (khác "Hủy"/cancelPermFormEdit(),
-// module-admin-submissiongroups.js — hàm đó reset về trạng thái USER rỗng rồi mới ẩn). Cho phép admin
-// thu gọn để nhìn lại bảng danh sách bên dưới rồi mở lại (bấm "Sửa" 1 người/nhóm) không mất dữ liệu.
+// "✕ Thu Gọn Thông Tin" (đổi hành vi 10/2026, yêu cầu người dùng): TRƯỚC ĐÂY ẩn hẳn cả #userPermFormWrap
+// (cây quyền 0-26 + thanh nút Lưu/Hủy biến mất theo luôn) — giờ CHỈ toggle ẩn/hiện đúng khối "khai báo
+// thông tin người dùng" (#userBasicInfoFieldsWrap, xem chú thích tại chỗ khai báo div này trong
+// systemSection.html), KHÔNG đụng #permFieldsContainer/#userPermSaveBar. Không reset dữ liệu đang nhập
+// dở (khác "Hủy"/cancelPermFormEdit(), module-admin-submissiongroups.js — hàm đó reset về trạng thái
+// USER rỗng rồi mới đóng HẲN cả form). Toggle 2 chiều, đổi nhãn nút theo đúng trạng thái hiện tại.
 function closeUserPermForm() {
-  document.getElementById('userPermFormWrap').classList.add('hidden');
+  const wrap = document.getElementById('userBasicInfoFieldsWrap');
+  const collapsed = wrap.classList.toggle('hidden');
+  const toggleBtn = document.getElementById('btnToggleUserBasicInfo');
+  if (toggleBtn) toggleBtn.innerText = collapsed ? '▸ Hiện Thông Tin Người Dùng' : '✕ Thu Gọn Thông Tin';
 }
 
 // Trước đây savePermGroup()/deletePermGroup() mutate thẳng DB.permGroups/DB.users rồi gọi syncStorage()
@@ -317,7 +329,7 @@ const PERM_KEY_VN_LABELS = {
   "budgetReportView": "Ngân Sách — 📊 Xem Báo Cáo (không kèm quyền quản lý/tổng hợp/tạo ở trên)",
   "canBeApprover": "Hệ Thống & Chung — ✅ Có thể được chọn làm người duyệt",
   "canViewReports": "Hệ Thống & Chung — 📊 Được xem Báo cáo quản trị",
-  "carCreate.all": "Đăng Ký Xe — Tạo mới",
+  "carCreate": "Đăng Ký Xe — Tạo mới (tự khoá đúng phòng ban)",
   "carDispatch": "Đăng Ký Xe — 🚘 Người Điều Hành Xe (được nhập lái xe/loại xe/biển số ở mục \"Phần Dành Cho Phòng Hành Chính\" khi đến lượt phê duyệt — người khác trong luồng duyệt không có quyền này thì không thấy/không sửa được mục đó)",
   "carDownload.all": "Đăng Ký Xe — Tải xuống",
   "carReportView": "Đăng Ký Xe — 📊 Xem Báo Cáo Đăng Ký Xe (toàn công ty, không kèm quyền Xem ở bảng trên)",
@@ -327,10 +339,13 @@ const PERM_KEY_VN_LABELS = {
   "checklistReportView": "Checklist Đánh Giá Siêu Thị — 📊 Quyền Báo Cáo Checklist (xem báo cáo Checklist Thường mọi siêu thị)",
   "checklistAtvstpExecute": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát, mọi siêu thị)",
   "checklistAtvstpReportView": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Báo Cáo ATVSTP (Dashboard VSATTP, mọi siêu thị)",
-  "contractCreate.all": "Hợp Đồng & Giấy Phép — Tạo mới",
+  "contractCreate": "Hợp Đồng & Giấy Phép — Tạo mới (tự khoá đúng phòng ban)",
   "contractDownload.all": "Hợp Đồng & Giấy Phép — Tải xuống",
   "contractImportSigned": "Hợp Đồng & Giấy Phép — 📥 Nhập Hợp Đồng / Phụ Lục ĐÃ KÝ (sub-tab \"Quản Lý HĐ\")",
   "docDownload.all": "Tài Liệu — Tải Tài Liệu",
+  "docDownloadPublished": "Tài Liệu — 📣 Tải tài liệu Đã Phát Hành (mọi phòng ban)",
+  "docPublish": "Tài Liệu — 🚀 Phát Hành / Hủy Phát Hành",
+  "docViewPublished": "Tài Liệu — 📣 Xem tài liệu Đã Phát Hành (mọi phòng ban)",
   "hrAttendanceManage": "Nhân Sự — ⏱️ Quản Lý Chấm Công & Phép Năm (HR)",
   "hrContractManage": "Nhân Sự — 📝 Quản Lý Hợp Đồng Lao Động (HR)",
   "hrLeaveApprove": "Nhân Sự — ✅ Duyệt Đơn Nghỉ Phép (quản lý trực tiếp)",
@@ -364,10 +379,9 @@ const PERM_KEY_VN_LABELS = {
   "licenseCreate": "Giấy Phép — 📤 Tạo / Tải Lên Giấy Phép",
   "licenseView": "Giấy Phép — 👁️ Xem / Tải Giấy Phép",
   "meetingApprove": "Phòng Họp — ✅ Phê duyệt phòng họp (toàn công ty)",
-  "meetingBookScope.all": "Phòng Họp — Đăng ký (book)",
+  "meetingBook": "Phòng Họp — ✅ Cho phép đăng ký phòng họp (tự khoá đúng phòng ban)",
   "meetingCancel": "Phòng Họp — ❌ Người quản lý phòng họp (hủy được lịch của TẤT CẢ mọi người — ai cũng tự hủy được lịch do chính mình đặt, không cần quyền này)",
   "meetingReportView": "Phòng Họp — 📊 Xem Báo Cáo Phòng Họp (toàn công ty, không kèm quyền duyệt/hủy)",
-  "meetingView.all": "Phòng Họp — Xem",
   "minutesCreate": "Biên Bản Họp & 📋 Công Việc — ✅ Tạo mới (lập) biên bản",
   "minutesDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải tất cả biên bản",
   "minutesEdit": "Biên Bản Họp & 📋 Công Việc — ✏️ Sửa tất cả biên bản",
@@ -504,7 +518,7 @@ const PERM_KEY_VN_LABELS = {
   "nghiepVuViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Mục Nghiệp Vụ (bỏ qua giới hạn theo quyền module)",
   "nhanSuManage": "Nhân Sự — 🤝 Quản lý Nhân Sự (quản lý & phản hồi ý kiến)",
   "officeBuy": "Văn Phòng (Mua/Sửa) — 🛒 Mua Bán",
-  "officeCreate.all": "Văn Phòng (Mua/Sửa) — Tạo mới",
+  "officeCreate": "Văn Phòng (Mua/Sửa) — Tạo mới (tự khoá đúng phòng ban)",
   "officeDownload.all": "Văn Phòng (Mua/Sửa) — Tải xuống",
   "officeFix": "Văn Phòng (Mua/Sửa) — 🔧 Sửa Chữa",
   "officeView.all": "Văn Phòng (Mua/Sửa) — Xem",
@@ -530,7 +544,7 @@ const PERM_KEY_VN_LABELS = {
   "reportEntryCreate": "Báo Cáo Định Kỳ — ✅ Nộp báo cáo (đúng phòng ban mình)",
   "reportManage": "Báo Cáo Định Kỳ — ✅ Quản lý kỳ báo cáo (tạo/đóng kỳ sớm)",
   "reportViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Tab Báo Cáo (bỏ qua giới hạn theo quyền module)",
-  "submissionCreate.all": "Văn Bản Trình — Tạo mới",
+  "submissionCreate": "Văn Bản Trình — Tạo mới (tự khoá đúng phòng ban)",
   "submissionDownload.all": "Văn Bản Trình — Tải xuống",
   "taskDelete": "Biên Bản Họp & 📋 Công Việc — 🗑️ Xóa tất cả công việc",
   "taskDownload": "Biên Bản Họp & 📋 Công Việc — ⬇️ Tải phiếu giao việc",
@@ -541,7 +555,7 @@ const PERM_KEY_VN_LABELS = {
   "uniformApprove": "Đồng Phục — ✔️ Duyệt Kỳ Cấp Phát / Điều Chuyển Kho",
   "uniformManage": "Đồng Phục — 📦 Hành Chính (tạo kỳ cấp phát, phân bổ xuống siêu thị)",
   "uniformStoreManage": "Đồng Phục — ✅ Giám Đốc Siêu Thị (xác nhận nhận, cấp phát, báo Hỏng/Hủy, thu hồi từ nhân viên)",
-  "uploadAll": "Tài Liệu — Tải lên",
+  "uploadAll": "Tài Liệu — Tải lên (tự khoá đúng phòng ban)",
   "vppManage": "Văn Phòng Phẩm — ✅ Quản lý (tạo/kết thúc kỳ, báo cáo tổng hợp)",
   "vppRegisterCreate": "Văn Phòng Phẩm — 📝 Người đăng ký (uỷ quyền đăng ký cho phòng mình)",
   "vppReportView": "Văn Phòng Phẩm — 📊 Xem Báo Cáo (không kèm quyền cấu hình Kỳ Đăng Ký)"

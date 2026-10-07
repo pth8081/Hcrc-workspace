@@ -69,7 +69,8 @@ async function scenario(name, fn) {
   await page.waitForTimeout(150);
 
   await scenario('summarizeUserPerms(): submissionCreate=true -> hiện tag "Tờ trình" (hành vi cũ)', async () => {
-    const r = await page.evaluate(() => summarizeUserPerms({ submissionCreate: { all: true, depts: [] } }));
+    // submissionCreate đã đổi thành quyền phẳng boolean (10/2026, "6-module") — không còn {all,depts}.
+    const r = await page.evaluate(() => summarizeUserPerms({ submissionCreate: true }));
     record('tag "Tờ trình" xuất hiện khi có quyền Tạo', r.includes('Tờ trình'), r);
   });
 

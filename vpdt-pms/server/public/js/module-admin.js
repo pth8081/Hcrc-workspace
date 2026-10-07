@@ -1516,14 +1516,30 @@ function populateModuleAccessForm(moduleAccess, prefix = 'pModuleAccess') {
 // được nhóm KHÔNG cần 1 container DOM riêng bọc đúng 1 cột (không còn khả thi vì các cột giờ nằm CHUNG 1
 // hàng <tr>, xem chú thích tại đó).
 const PERM_DEPT_TABLES = [
-  { tbody: 'pDocDeptTableBody', cols: ['pUpload', 'pDocDownload'] },
+  // LÀM GỌN (10/2026, "6-module"): bỏ luôn cột pUpload ("Tải Lên") khỏi bảng phòng ban — đã chuyển
+  // thành 1 công tắc phẳng pUploadAll (boolean, GIỮ NGUYÊN TÊN cũ) riêng, xem khối 📂 2. Tài Liệu trong
+  // systemSection.html.
+  { tbody: 'pDocDeptTableBody', cols: ['pDocDownload'] },
   // LÀM GỌN (11/2026, "Việc D"): bỏ cột pSubView/pContractView ("Xem") — xem chú thích đầy đủ tại khối
   // 📜 3/📄 4 trong systemSection.html.
-  { tbody: 'pSubDeptTableBody', cols: ['pSubCreate', 'pSubDownload'] },
-  { tbody: 'pContractDeptTableBody', cols: ['pContractCreate', 'pContractDownload'] },
-  { tbody: 'pMeetingDeptTableBody', cols: ['pMeetingView', 'pMeetingBook'] },
-  { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarCreate', 'pCarDownload'] },
-  { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeCreate', 'pOfficeDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pSubCreate ("Tạo mới") khỏi bảng phòng ban — đã
+  // chuyển thành 1 công tắc phẳng pSubCreate (boolean) riêng, KHÔNG còn hậu tố All/Dept, xem khối
+  // 📜 3. Văn Bản Trình trong systemSection.html.
+  { tbody: 'pSubDeptTableBody', cols: ['pSubDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pContractCreate ("Tạo mới") khỏi bảng phòng ban —
+  // đã chuyển thành 1 công tắc phẳng pContractCreate (boolean) riêng, xem khối 📄 4. Hợp Đồng & Giấy
+  // Phép trong systemSection.html.
+  { tbody: 'pContractDeptTableBody', cols: ['pContractDownload'] },
+  // Phòng Họp (10/2026, đã xác nhận): KHÔNG còn bảng phòng ban — gỡ khỏi danh sách này, xem công tắc
+  // phẳng pMeetingBook trong khối "📅 5. Phòng Họp" (systemSection.html).
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pCarCreate ("Tạo mới") khỏi bảng phòng ban — đã
+  // chuyển thành 1 công tắc phẳng pCarCreate (boolean) riêng, xem khối 🚗 6. Đăng Ký Xe trong
+  // systemSection.html.
+  { tbody: 'pCarDeptTableBody', cols: ['pCarView', 'pCarDownload'] },
+  // LÀM GỌN TIẾP (10/2026, "6-module"): bỏ luôn cột pOfficeCreate ("Tạo mới") khỏi bảng phòng ban — đã
+  // chuyển thành 1 công tắc phẳng pOfficeCreate (boolean) riêng, xem khối 🏢 7. Văn Phòng trong
+  // systemSection.html.
+  { tbody: 'pOfficeDeptTableBody', cols: ['pOfficeView', 'pOfficeDownload'] },
 ];
 
 // Khối/Ban (10/2026) — tra Khối/Ban đầu tiên (nếu có) chứa Phòng Ban này, dùng để gắn data-dept-group

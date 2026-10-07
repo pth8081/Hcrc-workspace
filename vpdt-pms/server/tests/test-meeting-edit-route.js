@@ -16,7 +16,7 @@
 //   - Đổi sang giờ/phòng đã bị lịch KHÁC chiếm -> 409 (đúng yêu cầu "check trùng tại thời điểm ấn gửi
 //     phê duyệt", tức lúc Lưu, không chỉ lúc tạo ban đầu).
 //   - Phòng họp không có trong danh mục -> 400.
-//   - Phòng ban ngoài phạm vi meetingBookScope -> 403 (re-check giống hệt lúc tạo mới).
+//   - Phòng ban khác phòng ban của mình -> 403 (re-check giống hệt lúc tạo mới, forceOwnDept).
 //
 // Chạy thẳng express router THẬT với lib/recordStore + lib/auth + lib/appData bị stub (cùng khuôn
 // tests/test-meeting-busy-slots-route.js).
@@ -37,15 +37,15 @@ function stubModule(relPath, exportsObj) {
 
 const CREATOR = {
   username: 'nv_kd', name: 'Nhân Viên KD', dept: 'Phòng Kinh Doanh', active: true,
-  perms: { meetingBookScope: { all: false, depts: ['Phòng Kinh Doanh'] } }
+  perms: { meetingBook: true }
 };
 const ROOM_MANAGER = {
   username: 'qlph', name: 'Quản Lý Phòng Họp', dept: 'Phòng Hành Chính', active: true,
-  perms: { meetingCancel: true, meetingBookScope: { all: true } }
+  perms: { meetingCancel: true, meetingBook: true }
 };
 const OUTSIDER = {
   username: 'nv_khac', name: 'Nhân Viên Khác', dept: 'Phòng Kỹ Thuật', active: true,
-  perms: { meetingBookScope: { all: false, depts: ['Phòng Kỹ Thuật'] } }
+  perms: { meetingBook: true }
 };
 let currentActor = CREATOR;
 
@@ -207,7 +207,7 @@ async function main() {
       assert(/danh mục/.test(json.error || ''));
     });
 
-    await run.run('Phòng ban ngoài phạm vi meetingBookScope -> 403 (re-check giống hệt lúc tạo mới)', async () => {
+    await run.run('Phòng ban khác phòng ban của mình -> 403 (re-check giống hệt lúc tạo mới)', async () => {
       MEETINGS = makeMeetings();
       currentActor = CREATOR; // chỉ có scope Phòng Kinh Doanh
       const { status, json } = await put(port, 1, basePayload({ dept: 'Phòng Kỹ Thuật' }));

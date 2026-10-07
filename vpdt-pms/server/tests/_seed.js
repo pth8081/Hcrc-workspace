@@ -23,8 +23,8 @@ const USERS = [
     id: 2, username: 'kd1', pass: '123456', name: 'Nguyễn Văn Kinh Doanh', email: 'kd1@company.com', phone: '0900000002', dept: 'Phòng Kinh Doanh', jobTitle: 'Nhân viên',
     perms: {
       admin: false,
-      contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: { all: false, depts: ['Phòng Kinh Doanh'] }, contractDownload: { all: false, depts: [] },
-      officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: { all: false, depts: ['Phòng Kinh Doanh'] }, officeDownload: { all: false, depts: [] },
+      contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: true, contractDownload: { all: false, depts: [] },
+      officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: true, officeDownload: { all: false, depts: [] },
       officeBuy: true, officeFix: true, officeInvest: true,
       budgetCreate: true
     }
@@ -33,8 +33,8 @@ const USERS = [
     id: 3, username: 'tp_kd', pass: '123456', name: 'Trần Thị Trưởng Phòng KD', email: 'tpkd@company.com', phone: '0900000003', dept: 'Phòng Kinh Doanh', jobTitle: 'Trưởng phòng',
     perms: {
       admin: false,
-      contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: { all: false, depts: ['Phòng Kinh Doanh'] },
-      officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: { all: false, depts: ['Phòng Kinh Doanh'] },
+      contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: true,
+      officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: true,
       officeBuy: true, officeFix: true, officeInvest: true,
       // budgetCreate: cần để vào được module Ngân Sách và xử lý (duyệt) các bản Phê Duyệt/Thực Hiện đang
       // chờ của phòng mình (canAccessBudgetModule() nay đòi 1 trong 3 quyền budget — không còn "xem miễn
@@ -56,7 +56,7 @@ const USERS = [
     // cập Module Phê duyệt Văn phòng!") — có vẻ là 1 lỗi thật của app (báo lại ở phần cuối, KHÔNG tự sửa
     // index.html). Gán thêm officeBuy ở đây để bộ test này vẫn đi hết được luồng Thanh Toán qua đúng
     // đường điều hướng thật (không né bằng cách gọi thẳng hàm bỏ qua UI).
-    perms: { admin: false, paymentManage: true, contractView: { all: true, depts: [] }, officeView: { all: true, depts: [] }, officeCreate: { all: true, depts: [] }, officeBuy: true }
+    perms: { admin: false, paymentManage: true, contractView: { all: true, depts: [] }, officeView: { all: true, depts: [] }, officeCreate: true, officeBuy: true }
   },
   {
     id: 9, username: 'budgetmgr1', pass: '123456', name: 'Ngô Văn Quản Lý NS', email: 'budgetmgr1@company.com', phone: '0900000009', dept: 'Ban Giám Đốc', jobTitle: 'Phó giám đốc',

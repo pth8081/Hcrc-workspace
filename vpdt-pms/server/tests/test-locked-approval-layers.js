@@ -31,7 +31,7 @@ function stubModule(relPath, exportsObj) {
 }
 
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', posType: 'HO', perms: { admin: true }, active: true };
-const CREATOR = { username: 'nv1', name: 'Nhân Viên Trình Ký', dept: 'Phòng Kinh Doanh', posType: 'HO', perms: { submissionCreate: { all: true }, contractCreate: { all: true } }, active: true };
+const CREATOR = { username: 'nv1', name: 'Nhân Viên Trình Ký', dept: 'Phòng Kinh Doanh', posType: 'HO', perms: { submissionCreate: true, contractCreate: true }, active: true };
 const USERS = [ADMIN, CREATOR,
   { username: 'gd1', name: 'Giám Đốc 1', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true },
   { username: 'ptgd1', name: 'Phó TGĐ 1', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true },
