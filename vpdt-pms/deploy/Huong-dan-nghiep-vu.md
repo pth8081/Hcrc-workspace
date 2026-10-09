@@ -604,6 +604,14 @@ hồ: Hỗ Trợ IT - Duyệt Giá hiện đúng "Duyệt giá Bán Buôn"/"Duy�
 Tại Siêu Thị" (theo `orderLocationType`), kể cả mục "Chờ Nhập Hàng" và "Từ
 chối khẩn cấp" của 2 module này.
 
+**10/2026 — sắp xếp mặc định mới nhất lên đầu + nút tự đổi chiều**: danh sách
+cả 2 tab ("⏳ Đang chờ duyệt" lẫn "Đã duyệt/Đã từ chối") mặc định sắp **mới
+nhất lên đầu** (trước đây tab "Đang chờ duyệt" sắp cũ nhất trước — ưu tiên xử
+lý hồ sơ tồn lâu nhất). Nút "⬇️ Mới nhất trước" cạnh ô tìm kiếm cho phép tự đổi
+chiều sang "⬆️ Cũ nhất trước" khi cần quay lại cách sắp cũ; lựa chọn được giữ
+nguyên khi đổi bộ lọc khác (Trạng Thái/Loại/tìm kiếm), chỉ reset về mặc định
+khi tải lại trang.
+
 **10/2026 — mở rộng "tự làm mới" sang badge số Thông Báo (🔔)**: cùng cơ chế
 polling nhẹ như Hộp Thư Phê Duyệt ở trên, số badge chưa đọc trên chuông 🔔 góc
 màn hình nay cũng tự cập nhật định kỳ (không cần bấm F5/tự mở chuông mới thấy
@@ -1704,6 +1712,14 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
       ngành hàng khớp NHIỀU dòng khác nhau, người duyệt từ TẤT CẢ các dòng đó
       đều phải duyệt (hợp lại rồi mới yêu cầu đủ — giống đúng cơ chế "hợp
       lại" của Siêu Thị Phụ Trách đã nêu ở trên, không loại trừ nhau).
+    - **Đổi mã (`code`) 1 ngành hàng ở Danh Mục Ngành Hàng nay TỰ CASCADE**
+      (10/2026) sang cả dòng cấu hình "Ngành Hàng Phụ Trách" lẫn đề xuất đã
+      tạo (kể cả đang PENDING) — trước đây đổi/gõ sai mã làm 2 bên "mồ côi"
+      lẫn nhau, approver bước đó tự mất tác dụng với ngành hàng đó mà không
+      có cảnh báo rõ ràng. **Xoá hẳn** 1 ngành hàng vẫn giữ nguyên đánh đổi cũ
+      (không cascade, dữ liệu cũ giữ nguyên mã), nhưng hộp xác nhận xoá nay
+      nêu rõ **số dòng cấu hình + số đề xuất đang chờ duyệt** đang dùng mã đó,
+      để admin biết trước phạm vi ảnh hưởng.
   - **Dọn hẳn UI chọn người duyệt chết ở màn "🔄 Quy Trình & Phê Duyệt"
     (10/2026)** — ngay sau khi đưa cơ chế trên vào, admin hỏi lại "quy trình
     đang nằm trong Phê Duyệt có nên bỏ đi không, nó còn tác dụng gì không?".
@@ -5619,6 +5635,14 @@ kèm ghi chú. **An toàn khi chưa cấu hình**: nếu admin chưa từng mở
 Lưu, hệ thống **fail-open** — email vẫn gửi như hành vi gốc; chỉ khi admin đã
 lưu rõ ràng giá trị tắt thì email mới thực sự bị chặn (vẫn ghi đầy đủ 1 dòng
 Nhật ký hệ thống, chỉ khác không tốn lượt gọi SMTP thật).
+
+**🔗 Link truy cập trực tiếp (từ 10/2026)**: mọi email "Kết quả duyệt"
+(`result`) đều tự kèm 1 link cuối nội dung, dạng
+`https://<domain>/?gotoModule=<tab>&code=<mã hồ sơ>` — người trình bấm vào sẽ
+được đưa thẳng tới đúng tab chứa hồ sơ của mình (sau khi đăng nhập xong nếu
+chưa đăng nhập; link **luôn đòi đăng nhập**, không có cơ chế xem trước khi
+đăng nhập). Không áp dụng cho email "Cần phê duyệt" hay các sự kiện đặc thù
+khác — người duyệt đã có Hộp Thư Phê Duyệt (mục 2.2) điều hướng riêng.
 
 ### 7.9. API Đối Tác Ngoài (ExtAuth)
 
