@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**25.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.51 (2026-10-09): Chức danh HO + phòng ban — ghép đúng người thay vì khớp "mọi Trưởng Phòng"
+
+Người dùng gửi ảnh chụp 2 màn admin, yêu cầu nguyên văn: "Bạn xem vị trí chức danh trong quy trình đặt
+hàng siêu thị và quy trình bán buôn tôi lấy vị trí chức danh trong quy trình đặc biệt được không? Tôi
+muốn ghép đúng người thay vì vị trí đang lấy là HO (ví dụ trưởng phòng HO thì có nhiều Tp lắm)".
+
+**Phát hiện gốc (không chỉ là bất tiện — là lỗi thật)**: ở dòng cấu hình mode "Chức danh" chọn chức danh
+**HO** trên 2 màn "🏬 Quy Trình Đặt Hàng Siêu Thị"/"🏪 QT Giá Bán Buôn (Siêu Thị)":
+- **"Mặc định"** (không khai Siêu Thị Phụ Trách): tự so `storeDept` của đơn (tên SIÊU THỊ) với `dept`
+  người giữ chức danh (tên PHÒNG BAN HO) — **KHÔNG BAO GIỜ khớp**, 0 approver.
+- **"Ngoại lệ"** (có khai Siêu Thị Phụ Trách): bỏ qua hẳn so `dept` — khớp **MỌI người** giữ đúng chức
+  danh đó trên **TOÀN CÔNG TY** (VD mọi "Trưởng Phòng" bất kể phòng ban nào).
+
+**Đã thêm — field MỚI `jobTitleDept`** (tuỳ chọn, trên dòng mode 'JOBTITLE' của CẢ 2 collection
+`operationOrderStoreMixedApprovalRules`/`itPriceWholesaleStoreMixedApprovalRules`, xem chú thích đầy đủ
+ở `defaults.js`):
+- Ô "Chức Danh" nay gợi ý THÊM các cặp **(chức danh, phòng ban)** lấy từ danh mục **"🧭 Vị Trí Tham Gia
+  Quy Trình"** (`DB.workflowParticipatingPositions`) — CỘNG THÊM vào danh mục chức danh HO/Siêu Thị
+  phẳng cũ (`mixedApprovalJobTitlePairs()`, module-workflow.js), không mất lựa chọn nào đã có.
+- Khi chọn 1 cặp, `jobTitleDept` khớp **CHÍNH XÁC** `user.dept === jobTitleDept` (hoặc
+  `secondaryPositions` cùng cặp jobTitle+dept) — **ĐỘC LẬP HOÀN TOÀN** với `storeDept`/"Siêu Thị Phụ
+  Trách" (áp dụng y hệt dù Mặc định hay Ngoại lệ). Server: `matchesDeptCondition()` trong
+  `resolveOperationOrderStoreMixedApprovalRuleUsernames()` (lib/workflowEngine.js, dùng chung cho cả
+  Bán Buôn qua `resolveItPriceWholesaleMixedApprovalRuleUsernames()`); client mirror: cùng logic trong
+  `resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()` (core.js).
+- **Tương thích ngược 100%**: dòng KHÔNG có `jobTitleDept` (toàn bộ cấu hình đã lưu trước đợt này) giữ
+  NGUYÊN hành vi cũ ở trên, không tự sửa ngầm — admin cần sửa dòng nào muốn ghép đúng phòng ban thì chọn
+  lại đúng cặp. KHÔNG yêu cầu thêm quyền `canBeApprover` (giữ đúng thiết kế đã chốt từ trước cho 2 màn
+  này).
+- `lib/catalogRename.js`: thêm cascade `jobTitleDept` khi đổi tên Phòng Ban/Siêu Thị
+  (`cascadeMixedApprovalRuleJobTitleDept()`, hook vào `cascadeStoreRename()`) — và **nhân tiện vá 1 lỗ
+  hổng liên quan**: `itPriceWholesaleStoreMixedApprovalRules` trước đây **hoàn toàn không được cascade**
+  (dù cùng khuôn dữ liệu với `operationOrderStoreMixedApprovalRules`) khi đổi tên chức danh/siêu thị —
+  nay cả 2 collection cùng cascade qua `MIXED_APPROVAL_RULE_KEYS`.
+
+**Test mới**: `tests/test-mixed-approval-jobtitle-dept.js` (9 kịch bản — mặc định/ngoại lệ/kiêm nhiệm/
+tương thích ngược), mở rộng `tests/test-mixed-approval-jobtitle-mix.js` (gợi ý cặp phòng ban) và
+`tests/test-catalog-rename-server.js` (cascade `jobTitleDept` + cascade Bán Buôn). Chạy lại toàn bộ test
+liên quan Quy Trình Hỗn Hợp/Đặt Hàng Siêu Thị/Bán Buôn/catalogRename — không regression.
 
 ## v25.50 (2026-10-07): Đặt Hàng Siêu Thị — thêm chiều "Mức" cho Quy Trình Hỗn Hợp (giống Bán Buôn)
 

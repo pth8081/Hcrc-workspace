@@ -73,9 +73,17 @@ function resetState() {
     // "🏬 Quy Trình Đặt Hàng Siêu Thị" — PHÁT HIỆN NGHIÊM TRỌNG đợt audit chuyên sâu 12 cụm: đổi tên chức
     // danh/siêu thị trước đây KHÔNG cascade vào đây (xem lib/catalogRename.js cascadeMixedApprovalRule*()).
     operationOrderStoreMixedApprovalRules: [
-      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Trưởng phòng', username: null, stores: [] },
+      { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Trưởng phòng', jobTitleDept: 'Phòng IT', username: null, stores: [] },
       { id: 2, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', username: null, stores: ['Siêu Thị A'] },
       { id: 3, step: 2, mode: 'PERSON', jobTitle: null, username: 'u1', stores: [] }
+    ],
+    // itPriceWholesaleStoreMixedApprovalRules (10/2026) — CÙNG KHUÔN operationOrderStoreMixedApprovalRules
+    // ở trên, trước đây KHÔNG được cascade dù cùng field jobTitle/stores (phát hiện khi thêm cascade cho
+    // jobTitleDept mới — xem lib/catalogRename.js MIXED_APPROVAL_RULE_KEYS) — thêm fixture riêng để xác
+    // nhận collection này nay CŨNG được cascade giống hệt operationOrderStoreMixedApprovalRules.
+    itPriceWholesaleStoreMixedApprovalRules: [
+      { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Trưởng phòng', jobTitleDept: 'Phòng IT', username: null, stores: [] },
+      { id: 2, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', username: null, stores: ['Siêu Thị A'] }
     ]
   };
   RECORDS = {
@@ -293,6 +301,40 @@ async function run(name, fn) {
     const rules = APP_DATA.operationOrderStoreMixedApprovalRules;
     assert.deepStrictEqual(rules.find(r => r.id === 2).stores, ['Siêu Thị A Mới'], 'LỖI ĐÃ VÁ: rename siêu thị phải cascade vào rule.stores[] (danh sách ngoại lệ)');
     assert.deepStrictEqual(rules.find(r => r.id === 1).stores, [], 'Dòng không khai ngoại lệ không bị đụng tới');
+  });
+
+  // 10/2026 — field MỚI `jobTitleDept` (xem defaults.js::operationOrderStoreMixedApprovalRules): dòng
+  // mode 'JOBTITLE' gán cố định 1 phòng ban HO cụ thể, đổi tên phòng ban đó phải cascade field này giống
+  // hệt lớp lỗi jobTitle/stores ở trên (nếu không, dòng cấu hình tra ra TÊN CŨ -> 0 approver).
+  await run('depts: đổi tên -> cascade operationOrderStoreMixedApprovalRules[].jobTitleDept (field MỚI, gán phòng ban HO cho dòng mode JOBTITLE)', async () => {
+    resetState();
+    const res = await renameApi('depts', 'Phòng IT', 'Phòng Công Nghệ Thông Tin');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const rules = APP_DATA.operationOrderStoreMixedApprovalRules;
+    assert.strictEqual(rules.find(r => r.id === 1).jobTitleDept, 'Phòng Công Nghệ Thông Tin', 'jobTitleDept phải cascade sang TÊN MỚI');
+    assert.strictEqual(rules.find(r => r.id === 2).stores[0], 'Siêu Thị A', 'Dòng không liên quan (siêu thị, không phải phòng ban) không bị đụng tới');
+  });
+
+  await run('jobTitles/storeJobTitles/stores/depts: đổi tên -> CŨNG cascade sang itPriceWholesaleStoreMixedApprovalRules (trước đây collection này hoàn toàn KHÔNG được cascade)', async () => {
+    resetState();
+    await renameApi('jobTitles', 'Trưởng phòng', 'Trưởng Phòng Ban');
+    let wsRules = APP_DATA.itPriceWholesaleStoreMixedApprovalRules;
+    assert.strictEqual(wsRules.find(r => r.id === 1).jobTitle, 'Trưởng Phòng Ban', 'jobTitles rename phải cascade sang itPriceWholesaleStoreMixedApprovalRules[].jobTitle');
+
+    resetState();
+    await renameApi('storeJobTitles', 'Giám Đốc Siêu Thị', 'Giám Đốc Siêu Thị (Mới)');
+    wsRules = APP_DATA.itPriceWholesaleStoreMixedApprovalRules;
+    assert.strictEqual(wsRules.find(r => r.id === 2).jobTitle, 'Giám Đốc Siêu Thị (Mới)', 'storeJobTitles rename phải cascade sang itPriceWholesaleStoreMixedApprovalRules[].jobTitle');
+
+    resetState();
+    await renameApi('stores', 'Siêu Thị A', 'Siêu Thị A Mới');
+    wsRules = APP_DATA.itPriceWholesaleStoreMixedApprovalRules;
+    assert.deepStrictEqual(wsRules.find(r => r.id === 2).stores, ['Siêu Thị A Mới'], 'stores rename phải cascade sang itPriceWholesaleStoreMixedApprovalRules[].stores[]');
+
+    resetState();
+    await renameApi('depts', 'Phòng IT', 'Phòng Công Nghệ Thông Tin');
+    wsRules = APP_DATA.itPriceWholesaleStoreMixedApprovalRules;
+    assert.strictEqual(wsRules.find(r => r.id === 1).jobTitleDept, 'Phòng Công Nghệ Thông Tin', 'depts rename phải cascade sang itPriceWholesaleStoreMixedApprovalRules[].jobTitleDept');
   });
 
   await run('Route: khoá danh mục không hợp lệ -> 400', async () => {

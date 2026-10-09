@@ -2169,6 +2169,28 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
     cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
     Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
+  - **Chọn kèm Phòng Ban cho chức danh HO — ghép đúng người (10/2026, theo yêu
+    cầu người dùng "trưởng phòng HO thì có nhiều Tp lắm, tôi muốn ghép đúng
+    người")**: khi chọn **Kiểu = "Chức danh"** và gõ 1 chức danh **HO**, ô gợi
+    ý giờ liệt kê THÊM các cặp **(chức danh, phòng ban)** lấy từ danh mục
+    **"🧭 Vị Trí Tham Gia Quy Trình"** (Quyền Đặc Biệt — mục 4.9), cạnh các chức
+    danh HO phẳng (không phòng ban) và chức danh Siêu Thị như cũ — VD
+    "Trưởng phòng — Phòng CNTT — HO" tách biệt với "Trưởng phòng — Phòng Kinh
+    Doanh — HO", thay vì chỉ có 1 gợi ý "Trưởng phòng — HO" chung chung khớp
+    MỌI trưởng phòng toàn công ty. Chọn đúng 1 cặp này thì dòng cấu hình
+    khớp **CHÍNH XÁC đúng người giữ chức danh ở đúng phòng ban đó** (gồm cả
+    người có "Vị Trí Kiêm Nhiệm" cùng cặp) — **ĐỘC LẬP HOÀN TOÀN** với cột
+    "Siêu Thị Phụ Trách"/Mặc định-Ngoại lệ (áp dụng y hệt dù dòng đang ở chế
+    độ Mặc định hay Ngoại lệ). Đây đồng thời là **bản vá 1 lỗi gốc**: trước
+    đợt này, chức danh HO ở chế độ Mặc định (không khai siêu thị) KHÔNG BAO
+    GIỜ khớp được ai (so sánh nhầm phòng ban HO với tên siêu thị của đơn), còn
+    ở chế độ Ngoại lệ thì khớp **MỌI người** giữ chức danh đó trên toàn công
+    ty (không phân biệt phòng ban) — chọn cặp (chức danh, phòng ban) ở đây sửa
+    cả 2 trường hợp. Dòng cấu hình **ĐÃ LƯU TRƯỚC đợt này** (chỉ chọn chức danh
+    trơn, không phòng ban) **GIỮ NGUYÊN 100% hành vi cũ**, không tự đổi ngầm —
+    admin cần sửa lại dòng nào muốn ghép đúng phòng ban thì chọn lại đúng cặp
+    này. Áp dụng **giống hệt** cho màn **"🏪 QT Giá Bán Buôn (Siêu Thị)"** bên
+    dưới (dùng chung 1 cơ chế).
   - **Thêm chiều "Mức" — cấu hình người duyệt RIÊNG theo mức giá trị đơn hàng
     (10/2026, theo yêu cầu người dùng "cần xử lý giống đặt hàng bán buôn")**:
     màn "🏬 Quy Trình Đặt Hàng Siêu Thị" nay có thêm dropdown **"Đang xem Mức"**

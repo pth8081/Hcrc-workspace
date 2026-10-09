@@ -305,10 +305,25 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // không vô tình duyệt được đơn của siêu thị B). Dòng NGOẠI LỆ (có khai siêu thị, VD "Quản Lý Vùng" phụ
   // trách nhiều siêu thị không thuộc đúng 1 dept cố định nào) thì KHÔNG so dept — bản thân danh sách
   // "Siêu Thị Phụ Trách" của dòng đã là căn cứ duy nhất, không thể tự động khớp dept được.
+  //
+  // THÊM `jobTitleDept` (10/2026, theo yêu cầu người dùng, LỖI THẬT đã phát hiện: "Trưởng phòng HO thì có
+  // nhiều Tp lắm" — chức danh HO trước đây chỉ khớp được kiểu "tất cả hoặc không ai", vì storeDept của
+  // đơn KHÔNG BAO GIỜ trùng tên phòng ban HO của nhân viên (2 nhánh ở trên đều vô dụng với chức danh HO:
+  // nhánh mặc định luôn rỗng, nhánh ngoại lệ thì khớp MỌI người giữ chức danh đó bất kể phòng ban). Khi
+  // dòng gán cố định 1 cặp (chức danh, phòng ban) cụ thể từ danh mục "Vị Trí Tham Gia Quy Trình" (xem
+  // mixedApprovalJobTitlePairs() ở module-workflow.js), khớp ĐÚNG người giữ chức danh đó ở ĐÚNG phòng ban
+  // đã gán — HOÀN TOÀN ĐỘC LẬP với storeDept của đơn (phòng ban HO không liên quan gì tới siêu thị lập
+  // đơn). Dòng cũ không có `jobTitleDept` (undefined) giữ NGUYÊN 2 nhánh hành vi gốc ở trên, không đổi gì.
+  const matchesDeptCondition = (u) => {
+    if (rule.jobTitleDept) {
+      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
+    }
+    return hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept);
+  };
   return (users || [])
     .filter(u => u && u.active !== false)
     .filter(u => u.jobTitle === rule.jobTitle)
-    .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
+    .filter(matchesDeptCondition)
     .map(u => u.username);
 }
 // THÊM chiều "Mức" (10/2026, theo yêu cầu người dùng — Đặt Hàng Siêu Thị cần cấu hình người duyệt RIÊNG

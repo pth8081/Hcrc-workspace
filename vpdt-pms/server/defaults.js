@@ -731,6 +731,25 @@ const DEFAULTS = {
   // CẢ 3 mức, không migrate dữ liệu) để KHÔNG đổi hành vi của cấu hình admin đã lưu trước đợt này; CHỈ
   // dòng MỚI thêm qua màn admin từ nay mới được gán `tier` tường minh theo đúng Mức đang xem (xem
   // resolveOperationOrderStoreMixedApprovers() ở lib/workflowEngine.js — filter `!r.tier || r.tier===tier`).
+  // THÊM field `jobTitleDept` (10/2026, theo yêu cầu người dùng — "chọn chức danh HO lẫn phòng ban cho
+  // đúng người, VD Trưởng Phòng CNTT thay vì Trưởng Phòng chung chung khớp mọi phòng ban"): CHỈ áp dụng
+  // cho dòng mode 'JOBTITLE' có `jobTitle` là chức danh HO — client (module-workflow.js,
+  // mixedApprovalJobTitlePairs()) cho gõ-chọn 1 cặp (chức danh, phòng ban) lấy từ danh mục "🧭 Vị Trí
+  // Tham Gia Quy Trình" (DB.workflowParticipatingPositions, quản lý ở Quyền Đặc Biệt) làm NGUỒN GỢI Ý BỔ
+  // SUNG (CỘNG THÊM, không thay thế DB.jobTitles phẳng cũ — không mất lựa chọn nào đã có trước đây).
+  // Khi `jobTitleDept` có giá trị: khớp CHÍNH XÁC user.dept === jobTitleDept (hoặc secondaryPositions
+  // cùng cặp jobTitle+dept), HOÀN TOÀN ĐỘC LẬP với storeDept/`stores` của đơn/đề xuất — PHÁT HIỆN GỐC:
+  // trước field này, chức danh HO ở mode 'JOBTITLE' không có cách nào tách theo phòng ban (stores rỗng
+  // tự so storeDept của đơn với dept người giữ chức danh — storeDept là tên SIÊU THỊ, không bao giờ khớp
+  // dept HO -> 0 approver; stores có giá trị bỏ qua hẳn so dept -> khớp MỌI người giữ chức danh đó trên
+  // TOÀN CÔNG TY, VD mọi "Trưởng Phòng" bất kể phòng ban). `jobTitleDept` rỗng/absent (dòng cũ trước đợt
+  // này, hoặc dòng mode 'JOBTITLE' chọn chức danh Siêu Thị) giữ NGUYÊN 100% hành vi cũ ở trên — field này
+  // HOÀN TOÀN TƯƠNG THÍCH NGƯỢC, không cần migrate dữ liệu cũ. Xem matchesDeptCondition() ở
+  // resolveOperationOrderStoreMixedApprovalRuleUsernames() (lib/workflowEngine.js) +
+  // resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() (public/js/core.js, mirror client) +
+  // cascadeMixedApprovalRuleJobTitleDept() (lib/catalogRename.js, cascade khi đổi tên phòng ban). CÙNG
+  // field này cũng áp dụng cho itPriceWholesaleStoreMixedApprovalRules ngay dưới (cùng khuôn dữ liệu,
+  // resolveItPriceWholesaleMixedApprovalRuleUsernames() bọc gọi lại hàm trên nên tự động kế thừa).
   operationOrderStoreMixedApprovalRules: [],
   // Hỗ Trợ IT > Phê Duyệt Giá > "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng, 10/2026): CÙNG
   // KHUÔN operationOrderStoreMixedApprovalRules ở trên (bản sao độc lập, không dùng chung dữ liệu) —
