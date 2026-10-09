@@ -111,7 +111,7 @@ router.post('/submissions/:id/give-opinion', async (req, res) => {
         throw new WorkflowError(403, 'Bạn không thuộc danh sách được xin ý kiến ở tờ trình này');
       }
       if (!sub.opinionResponses) sub.opinionResponses = [];
-      const now = new Date().toLocaleString('vi-VN');
+      const now = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       const existing = sub.opinionResponses.find(r => r.username === freshUser.username);
       if (existing) {
         existing.comment = comment;

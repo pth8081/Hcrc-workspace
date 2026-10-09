@@ -899,7 +899,7 @@ async function registerForTrainingClass(classId) {
   try {
     const result = await callCreateAction('trainingRegistrations', {
       code: `DK-LOP-${classId}-${currentUser.username}-${Date.now()}`,
-      classId, registeredAt: new Date().toLocaleString('vi-VN')
+      classId, registeredAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
     });
     newReg = result.item;
   } catch (err) { return alert(`⛔ ${err.message}`); }
@@ -3078,7 +3078,7 @@ async function submitTrainingDocument(e) {
     courseId: document.getElementById('tdCourseId').value,
     customData
   };
-  if (!isEdit) { payload.code = `TL-DT-${Date.now()}`; payload.docType = docType; payload.createdAt = new Date().toLocaleString('vi-VN'); }
+  if (!isEdit) { payload.code = `TL-DT-${Date.now()}`; payload.docType = docType; payload.createdAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); }
   if (docType === 'VIDEO') {
     // VIDEO (Đợt 4) — nhúng Youtube qua link thay vì tải file, không gọi /api/upload. Link+thời lượng
     // VẪN sửa được khi Sửa (khác fileUrl/docType, xem editTrainingDocument() ở lib/recordActions.js).
@@ -3821,7 +3821,7 @@ function onboardingStageBadgeHTML(stageNum, progress, milestones) {
     const cls = m ? (ONBOARDING_STATUS_BADGE_CLASS[m.status.key] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600';
     resultHTML = `<span class="text-[11px] px-1.5 py-0.5 rounded font-bold ${cls}">${m ? m.status.label : ''}</span>`;
   }
-  const dateLabel = m ? m.deadline.toLocaleDateString('vi-VN') : '';
+  const dateLabel = m ? m.deadline.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
   return `<div>${resultHTML}</div><div class="text-[10px] text-gray-400">Hạn: ${dateLabel}</div>`;
 }
 
@@ -4067,7 +4067,7 @@ function renderOnboardingProgressTable() {
     return `<tr class="hover:bg-gray-50">
       <td class="border p-2">${escapeHtml(p.employeeName)}<div class="text-gray-400">(${escapeHtml(p.employeeUsername)})</div></td>
       <td class="border p-2">${escapeHtml(p.pathName)}</td>
-      <td class="border p-2">${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN')) : ''}</td>
+      <td class="border p-2">${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })) : ''}</td>
       <td class="border p-2 text-center">${onboardingStageBadgeHTML(1, p, m)}${canManage ? onboardingLinkedClassResultHintHTML(p, path) : ''}${onboardingStageConfirmCellHTML(p, path, 1, canManage)}</td>
       <td class="border p-2 text-center">${onboardingStageBadgeHTML(2, p, m)}${onboardingStageConfirmCellHTML(p, path, 2, canManage)}</td>
       <td class="border p-2 text-center">${onboardingStageBadgeHTML(3, p, m)}</td>
@@ -4132,7 +4132,7 @@ function renderMyOnboardingCardHTML(p) {
     <div class="flex justify-between items-start flex-wrap gap-2">
       <div>
         <div class="font-bold text-indigo-900">${escapeHtml(p.pathName)}</div>
-        <div class="text-xs text-gray-500">Ngày vào làm: ${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN')) : ''}</div>
+        <div class="text-xs text-gray-500">Ngày vào làm: ${p.startDate ? escapeHtml(new Date(p.startDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })) : ''}</div>
       </div>
       ${certHTML}
     </div>
@@ -4285,7 +4285,7 @@ async function downloadOnboardingCertificatePdf(progressId) {
       loadVendorScript('/vendor/html2canvas/html2canvas.min.js'),
       loadVendorScript('/vendor/jspdf/jspdf.umd.min.js')
     ]);
-    const issuedDate = p.certificateIssuedAt ? new Date(p.certificateIssuedAt).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN');
+    const issuedDate = p.certificateIssuedAt ? new Date(p.certificateIssuedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const stage = document.createElement('div');
     stage.style.cssText = `position:fixed;left:-10000px;top:0;width:${ONBOARDING_CERT_PAGE_W}px;height:${ONBOARDING_CERT_PAGE_H}px;background:#fff;color:#111;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;padding:70px 60px;text-align:center;border:10px double #92400e;`;
     stage.innerHTML = `

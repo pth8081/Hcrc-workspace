@@ -62,7 +62,7 @@ async function submitCarReq(e) {
     reason: reason,
     customData: customData,
     registrantPhone: currentUser.phone || '',
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
     currentStep: 1,
     history: [],
@@ -1017,7 +1017,7 @@ function renderCarRegs() {
         <td class="border p-2 text-xs">${escapeHtml(c.destination)}<br><span class="text-gray-400">${escapeHtml(c.startTime)} ➔ ${escapeHtml(c.endTime)}</span></td>
         <td class="border p-2 text-xs">${escapeHtml(c.purpose || c.reason)}</td>
         <td class="border p-2">${statusBadge}</td>
-        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${c.createdAt ? escapeHtml(c.createdAt) : (c.id ? escapeHtml(new Date(c.id).toLocaleString('vi-VN')) : '')}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${c.createdAt ? escapeHtml(c.createdAt) : (c.id ? escapeHtml(new Date(c.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = canApprove

@@ -34,7 +34,7 @@ const { assertUploadedFileUrl } = require('./createValidation');
 const { localDateStr } = require('./attendance');
 
 function nowVN() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): xem chú thích đầy đủ tại todayISO() ở
 // lib/employeeProfile.js — cùng lỗi giờ UTC thay vì giờ local, ảnh hưởng terminationDate/startDate mặc

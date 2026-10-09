@@ -34,7 +34,7 @@ const { isManagerOf } = require('./recordViewScope');
 const { localDateStr } = require('./attendance');
 
 function nowVN() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Thấp): `new Date().toISOString().slice(0,10)` trả về NGÀY
 // THEO GIỜ UTC, không phải giờ local máy chủ (VN, UTC+7) — cùng lớp lỗi đã được vá bằng localDateStr() ở

@@ -247,12 +247,12 @@ router.post('/terms/:id/activate', requireActivateTerm, async (req, res) => {
       for (const other of others) {
         await withLockedRecordForCollection('rebateTerms', other.id, (t) => ({
           ...t, status: 'ARCHIVED',
-          history: [...(t.history || []), { action: 'ARCHIVED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN'), detail: `Tự lưu trữ khi kích hoạt bản mới hơn (#${termId})` }]
+          history: [...(t.history || []), { action: 'ARCHIVED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), detail: `Tự lưu trữ khi kích hoạt bản mới hơn (#${termId})` }]
         }));
       }
       return withLockedRecordForCollection('rebateTerms', termId, (t) => ({
         ...t, status: 'ACTIVE',
-        history: [...(t.history || []), { action: 'ACTIVATED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN') }]
+        history: [...(t.history || []), { action: 'ACTIVATED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) }]
       }));
     });
     logPurchasing(req, 'ACTIVATE_TERM', updated.termCode, `Kích hoạt điều khoản ${updated.termCode} (v${updated.version})`);
@@ -266,7 +266,7 @@ router.post('/terms/:id/archive', requireManageTerms, async (req, res) => {
   try {
     const updated = await withLockedRecordForCollection('rebateTerms', termId, (t) => {
       vendorRebate.assertValidTermTransition(t, 'ARCHIVED');
-      return { ...t, status: 'ARCHIVED', history: [...(t.history || []), { action: 'ARCHIVED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN') }] };
+      return { ...t, status: 'ARCHIVED', history: [...(t.history || []), { action: 'ARCHIVED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) }] };
     });
     logPurchasing(req, 'ARCHIVE_TERM', updated.termCode, `Lưu trữ điều khoản ${updated.termCode}`);
     res.json({ ok: true, item: updated });
@@ -279,7 +279,7 @@ router.post('/terms/:id/expire', requireManageTerms, async (req, res) => {
   try {
     const updated = await withLockedRecordForCollection('rebateTerms', termId, (t) => {
       vendorRebate.assertValidTermTransition(t, 'EXPIRED');
-      return { ...t, status: 'EXPIRED', history: [...(t.history || []), { action: 'EXPIRED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN') }] };
+      return { ...t, status: 'EXPIRED', history: [...(t.history || []), { action: 'EXPIRED', by: req.freshUser.username, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) }] };
     });
     logPurchasing(req, 'EXPIRE_TERM', updated.termCode, `Đánh dấu hết hạn điều khoản ${updated.termCode}`);
     res.json({ ok: true, item: updated });

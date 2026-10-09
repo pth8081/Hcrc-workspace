@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**25.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.53 (2026-10-09): 4 phản hồi người dùng — %/mã NCC+chính tả PDF/số lượng-thành tiền/định dạng ngày
+
+Người dùng gửi 4 phản hồi (2 ảnh chụp + mô tả), yêu cầu phân tích + báo cáo phương án trước khi làm. Sau
+khi phân tích, người dùng còn gửi kèm 1 file PDF mẫu "HD mua chung" thật (file NCC thứ 2, khác mẫu gốc hệ
+thống đang hỗ trợ) để xác minh đúng lỗi — triển khai cả 4 sau khi xác nhận:
+
+1. **Import Excel ở Phê Duyệt Giá Bán Buôn/Bán Lẻ, cột % bị "làm tròn"** — thực chất là THIẾU NHÂN 100:
+   Excel lưu ô định dạng % dưới dạng PHÂN SỐ gốc (`cell.value = 0.12345` cho ô hiển thị "12.345%"),
+   `lib/xlsxSafeRead.js` trước đây chỉ lấy `cell.value`, bỏ qua `numFmt`. Thêm tuỳ chọn mới
+   `{withNumFmt:true}` cho `streamFirstSheetRows()`/`streamAllSheetsRows()` (mặc định `false`, KHÔNG đụng
+   5 luồng import khác dùng chung file này), `lib/priceFileParser.js` nhân lại ×100 đúng cho ô % (dùng
+   `toFixed(9)` loại nhiễu bit cuối phép nhân dấu phẩy động, không làm tròn số liệu thật).
+2. **Đọc PDF phiếu đặt hàng NCC tự động điền form (Vận Hành > Đặt Hàng Siêu Thị/HO) — mẫu NCC thứ 2 "HD
+   mua chung"**: (a) không lấy được Mã NCC vì mẫu này ghi nhãn đầy đủ "Nhà cung cấp:" thay vì viết tắt
+   "NCC:" — thêm `poFindValueAfterAnyLabel()` thử lần lượt nhiều nhãn (mẫu gốc vẫn khớp ngay ở nhãn đầu,
+   không đổi hành vi); (b) lỗi chính tả sau import — mẫu 2 dùng CÙNG họ phông chữ Việt kiểu cũ nhưng có
+   vài ký tự/từ mojibake KHÁC mẫu gốc, bổ sung thêm vào `PO_CHAR_FIXED_MAP`/`PO_WORD_FIXUPS`
+   (`module-vanhanh.js`, CHỈ THÊM không đổi bảng cũ).
+3. **Số lượng/thành tiền sai khi giá trị lớn (PDF NCC)** — `poParseMoney()` cũ giữ nguyên dấu chấm (coi
+   là thập phân), "100.000.000" (2+ dấu chấm) ra NaN → về 0. Thay bằng `poParseVNNumber()`: tự nhận diện
+   dấu phân cách NGHÌN (theo sau đúng 3 chữ số) khác dấu THẬP PHÂN (theo sau 1-2 chữ số) — đúng cho CẢ 2
+   kiểu dấu NCC có thể dùng (mẫu gốc hay mẫu "HD mua chung" dùng phẩy làm nghìn).
+4. **Định dạng ngày giờ hệ thống phải là dd/mm/yyyy** — vi-VN locale vốn đã đúng thứ tự ngày/tháng, chỉ
+   thiếu đệm số 0 (`"8:5:3 9/10/2026"` thay vì `"08:05:03 09/10/2026"`). Theo xác nhận của người dùng
+   ("làm toàn bộ hệ thống"), thêm option `{day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit',
+   minute:'2-digit', second:'2-digit', hour12:false}` (bản `toLocaleDateString` chỉ cần day/month/year)
+   cho MỌI lệnh `.toLocaleString('vi-VN')`/`.toLocaleDateString('vi-VN')` áp dụng trên Date — ~68 điểm gọi
+   (49 server `lib/*.js`/`routes/*.js`, 19 client `public/js/*.js` sau khi loại trừ các điểm format SỐ
+   TIỀN/SỐ LƯỢNG dùng chung cú pháp). 2 điểm `toLocaleDateString('en-CA')` (so sánh `DATE_RE` server) giữ
+   nguyên, không đụng.
+
+File fixture PDF thật `tests/fixtures/operation-order-po-sample-2.pdf` (người dùng cung cấp, không chứa
+dữ liệu nhạy cảm ngoài tên NCC/địa chỉ/mặt hàng công khai trên phiếu) dùng cho test hồi quy mới
+`tests/test-operation-order-pdf-hdmuachung.js` (24/24) — cùng `tests/test-pricefile-percent-format.js`
+(6/6) và `tests/test-date-format-zero-padding.js` (3/3). Full regression ~25 file liên quan (priceFile/
+object-catalog/vpp/budget/payment/uniform/office/vanhanh) không phát sinh lỗi mới.
 
 ## v25.52 (2026-10-09): 5 phản hồi người dùng (ảnh chụp) — Ngành Hàng/Phê Duyệt Hub/Excel/Email/CSP
 

@@ -507,8 +507,8 @@ function renderMhSyncLogList() {
     <th class="p-1.5 border-b">Bắt Đầu</th><th class="p-1.5 border-b">Kết Thúc</th><th class="p-1.5 border-b">Nguồn</th><th class="p-1.5 border-b">Trạng Thái</th>
     <th class="p-1.5 border-b">Lấy Về</th><th class="p-1.5 border-b">Thêm Mới</th><th class="p-1.5 border-b">Người Chạy</th></tr></thead>
     <tbody>${mhSyncLogs.slice(0, 20).map(l => `<tr class="border-b">
-      <td class="p-1.5 whitespace-nowrap">${l.startedAt ? new Date(l.startedAt).toLocaleString('vi-VN') : ''}</td>
-      <td class="p-1.5 whitespace-nowrap">${l.finishedAt ? new Date(l.finishedAt).toLocaleString('vi-VN') : ''}</td>
+      <td class="p-1.5 whitespace-nowrap">${l.startedAt ? new Date(l.startedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''}</td>
+      <td class="p-1.5 whitespace-nowrap">${l.finishedAt ? new Date(l.finishedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''}</td>
       <td class="p-1.5">${l.sourceSystem === 'MANUAL' ? '📤 Thủ công' : '🔄 DSmart'}</td>
       <td class="p-1.5"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${l.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800' : l.status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}">${escapeHtml(l.status)}</span></td>
       <td class="p-1.5">${l.rowsFetched ?? ''}</td><td class="p-1.5">${l.rowsInserted ?? ''}</td><td class="p-1.5">${escapeHtml(l.triggeredBy || '')}</td>
@@ -615,7 +615,7 @@ function renderMhReportTab() {
       <td class="p-2 text-right">${Number(c.basisAmount).toLocaleString('vi-VN')}đ</td>
       <td class="p-2 text-right font-bold text-fuchsia-700">${Number(c.rebateAmount).toLocaleString('vi-VN')}đ</td>
       <td class="p-2">${escapeHtml(c.calculatedByName || c.calculatedBy || '')}</td>
-      <td class="p-2 whitespace-nowrap">${c.id ? new Date(c.id).toLocaleString('vi-VN') : ''}</td>
+      <td class="p-2 whitespace-nowrap">${c.id ? new Date(c.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''}</td>
     </tr>`;
     }).join('')}</tbody></table>` : '<div class="text-xs text-gray-400 italic">Chưa có số liệu ước tính nào khớp bộ lọc.</div>';
 
@@ -645,7 +645,7 @@ function exportMhReportDetail() {
     const includedInBas = term ? term.includedInBas !== false : true;
     return [vendorByIdName(c.vendorId), c.termCode || '', term?.termType || '', AMOUNT_MODE_LABEL[term?.amountMode] || AMOUNT_MODE_LABEL.PERCENT_TIERED,
       includedInBas ? 'Có' : 'Không', c.periodStart, c.periodEnd, Number(c.basisAmount) || 0, Number(c.rebateAmount) || 0,
-      c.calculatedByName || c.calculatedBy || '', c.id ? new Date(c.id).toLocaleString('vi-VN') : ''];
+      c.calculatedByName || c.calculatedBy || '', c.id ? new Date(c.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''];
   });
   downloadXlsxFromServer('ChiTietDieuKhoanNCC.xlsx', 'Chi Tiết Điều Khoản', columns, data);
 }
@@ -951,7 +951,7 @@ async function submitMhItPriceApproval(e) {
     effectiveDate: new Date().toLocaleDateString('en-CA'),
     expiryMode: 'PERMANENT',
     expiryDate: null,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     customData
   };
   // "Nhóm Phê Duyệt Cuối" (10/2026) — chỉ gửi kèm nếu quy trình ITPRICE_RETAIL đã được admin cấu hình đủ.

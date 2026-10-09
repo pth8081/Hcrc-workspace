@@ -735,7 +735,7 @@ function exportChecklistReportExcel() {
 // Excel — nguồn sự thật) — sửa 1 bên PHẢI soát lại bên kia. Áp dụng cho MỌI mẫu templateKind==='DEDUCTION'
 // (không hardcode riêng tên "VSATTP" — xác nhận người dùng 10/2026).
 // parseSubmittedAtDate() — mirror ĐÚNG parseSubmittedAtDate() ở routes/checklist.js: submittedAt lưu
-// dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN')) — NGÀY Ở TOKEN THỨ 2 (index 1
+// dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) — NGÀY Ở TOKEN THỨ 2 (index 1
 // sau split(' '), không phải token đầu/index 0 — token đầu là GIỜ). Cố ý viết hàm RIÊNG ở đây thay vì tái
 // dùng logic ngày-tháng của applyChecklistReportFilter() phía trên (file này) vì hàm đó đang lấy nhầm
 // token đầu (giờ) làm ngày — bug đã có từ trước, KHÔNG thuộc phạm vi sửa của tính năng này, không đụng

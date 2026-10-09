@@ -886,7 +886,7 @@ async function submitMeetingReq(e) {
     equipment: equipment,
     agenda: agenda,
     customData: customData,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING'
   };
 
@@ -1055,7 +1055,7 @@ function renderMeetings() {
         <td class="border p-2 text-xs">${escapeHtml(m.startTime)}<br>➔ ${escapeHtml(m.endTime)}</td>
         <td class="border p-2">${escapeHtml(m.dept)} (${escapeHtml(m.creatorName)})</td>
         <td class="border p-2">${statusBadge}</td>
-        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${m.createdAt ? escapeHtml(m.createdAt) : (m.id ? escapeHtml(new Date(m.id).toLocaleString('vi-VN')) : '')}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${m.createdAt ? escapeHtml(m.createdAt) : (m.id ? escapeHtml(new Date(m.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const canApprove = canDecideMeetingClient(currentUser, m) && m.status === 'PENDING';

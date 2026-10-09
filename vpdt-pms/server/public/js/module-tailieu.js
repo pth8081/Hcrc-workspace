@@ -629,7 +629,7 @@ async function uploadDoc(e) {
     fileType: uploaded.fileType,
     fileUrl: uploaded.fileUrl,
     thumbnailUrl, thumbnailFileName,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
     currentStep: 1,
     history: [
@@ -639,7 +639,7 @@ async function uploadDoc(e) {
         approver: currentUser.name,
         username: currentUser.username,
         action: 'UPLOADED',
-        time: new Date().toLocaleString('vi-VN')
+        time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }
     ]
   };
@@ -979,7 +979,7 @@ function buildLicenseRowHTML(item, { versionCount = 0, isExpanded = false, isChi
       <td class="border p-2 text-xs text-gray-600">${escapeHtml(item.issueDate)} → ${escapeHtml(item.expiryDate)}</td>
       <td class="border p-2 text-center">${approvalBadge}</td>
       <td class="border p-2 text-center">${lifecycleBadge}</td>
-      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${item.createdAt ? escapeHtml(item.createdAt) : (item.id ? escapeHtml(new Date(item.id).toLocaleString('vi-VN')) : '')}</td>
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${item.createdAt ? escapeHtml(item.createdAt) : (item.id ? escapeHtml(new Date(item.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
           const canDownload = !!item.fileUrl && (currentUser.perms?.admin || currentUser.perms?.licenseApprove || currentUser.perms?.licenseView || item.creator === currentUser.username);
@@ -1361,7 +1361,7 @@ async function uploadLicense(e) {
     companyName, locationName, operatingStatus, licenseType, licenseNumber,
     issueDate, expiryDate, issuingAuthority,
     fileName: uploaded.fileName, fileType: uploaded.fileType, fileUrl: uploaded.fileUrl,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     customData
   };
 

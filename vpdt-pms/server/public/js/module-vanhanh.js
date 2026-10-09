@@ -544,6 +544,11 @@ const PO_CHAR_FIXED_MAP = {
   'Ì': 'è', 'Î': 'ẻ', 'Ï': 'ẽ', 'Ò': 'ề', 'Ó': 'ể', 'Ô': 'ễ', 'Ö': 'ệ',
   'Ø': 'ỉ', 'Ý': 'í', 'Þ': 'ị', 'ß': 'ò', 'á': 'ỏ', 'å': 'ồ', 'é': 'ộ',
   'ï': 'ù', 'ñ': 'ủ', 'ò': 'ũ', 'ó': 'ú', 'ô': 'ụ', 'õ': 'ừ', 'ø': 'ứ', 'ù': 'ự',
+  // 5 ký tự thêm (10/2026, đối chiếu mẫu PDF "HD mua chung" người dùng cung cấp — CÙNG họ phông
+  // TCVN3/.VnTime, chỉ khác ký tự chưa từng gặp ở mẫu 1): 'í':'ớ' (vd "víi"->"với"), '»':'ằ' (vd
+  // "B»ng"->"Bằng"), 'ö':'ử' (vd "Tö"->"Tử" trong "Quốc Tử Giám"), 'Ñ':'ẹ' (vd "kÑp"->"kẹp"), '÷':'ữ'
+  // (vd "s÷a"->"sữa"). Không đụng 35 ký tự đã có ở trên — chỉ bổ sung mã MỚI, không đổi mã cũ.
+  'í': 'ớ', '»': 'ằ', 'ö': 'ử', 'Ñ': 'ẹ', '÷': 'ữ',
 };
 // PO_CHAR_CASE_MAP: ký tự thô mà bản PDF mẫu chỉ thấy xuất hiện ở 1 dạng hoa/thường (không đủ dữ liệu
 // để tách 2 mã riêng như PO_CHAR_FIXED_MAP) — giá trị dưới đây là dạng THƯỜNG, viết hoa theo ngữ cảnh
@@ -560,6 +565,9 @@ const PO_CHAR_CASE_MAP = {
 const PO_WORD_FIXUPS = {
   'lîng': 'lượng', 'H¬ng': 'Hương', 'Ngêi': 'Người', 'Phêng': 'Phường',
   'Trng,': 'Trưng,', 't¬ng': 'tương', 'tríc': 'trước', 'díi': 'dưới',
+  // 5 từ thêm (10/2026, mẫu "HD mua chung") — CÙNG lỗi "mất hẳn ký tự 'ư'" đã ghi chú ở trên, thêm đúng
+  // các từ mới gặp (giữ nguyên 8 từ cũ, không đổi).
+  'D¬ng': 'Dương', 'L¬ng': 'Lương', 'h¬ng': 'hương', 'níng': 'nướng', '§êng': 'Đường',
 };
 function poIsAsciiUpperToken(tok) {
   const letters = Array.from(tok).filter(c => /[A-Za-z]/.test(c));
@@ -616,11 +624,37 @@ function poFindValueAfterLabel(lines, label, offset, fromEnd) {
   }
   return '';
 }
+// LỖI ĐÃ VÁ (10/2026, mẫu "HD mua chung" — không lấy được Mã NCC): mẫu 1 ("NCC:") và mẫu 2 ("Nhà cung
+// cấp:") CÙNG cấu trúc dòng/offset giá trị, chỉ khác đúng chữ nhãn. poFindValueAfterLabel() so khớp
+// CHÍNH XÁC từng ký tự nên không bắt được nhãn khác. Thử LẦN LƯỢT từng nhãn biết trước, nhãn nào khớp
+// trước dùng ngay — 'NCC:' luôn thử TRƯỚC nên hành vi mẫu 1 giữ nguyên 100% (khớp ngay ở lần thử đầu).
+function poFindValueAfterAnyLabel(lines, labels, offset, fromEnd) {
+  for (const label of labels) {
+    const v = poFindValueAfterLabel(lines, label, offset, fromEnd);
+    if (v) return v;
+  }
+  return '';
+}
 function poFindLineWithLabel(lines, label) {
   return lines.find(tokens => tokens.includes(label)) || null;
 }
-function poParseMoney(str) {
-  const n = Number(String(str || '').replace(/[^\d.-]/g, ''));
+// LỖI ĐÃ VÁ (10/2026 — phản hồi người dùng: số lượng/thành tiền sai khi import tới hàng chục nghìn/
+// trăm triệu): poParseMoney() cũ dùng regex giữ nguyên dấu chấm (coi là thập phân) — "100.000.000" có
+// TỚI 2 dấu chấm nên Number() ra NaN -> về 0, "10.000" bị đọc nhầm thành 10 (sai 1000 lần). Đối chiếu 2
+// mẫu PDF thật (mẫu "HD mua chung" dùng dấu PHẨY làm phân cách nghìn — "1,659,588" — mẫu cũ chưa rõ quy
+// ước) cho thấy KHÔNG thể giả định cố định 1 kiểu dấu cho mọi NCC — hàm dưới đây tự nhận diện: dấu phân
+// cách CUỐI CÙNG trong chuỗi là THẬP PHÂN chỉ khi có ĐÚNG 1-2 chữ số theo sau (quy ước tiền tệ thông
+// thường, VD "12.00"/"2,5"); còn lại (luôn đúng 3 chữ số theo sau, VD "...000") là phân cách NGHÌN, bỏ
+// hẳn. Quy tắc này đúng cho CẢ 2 kiểu dấu (chấm/phẩy làm nghìn hay thập phân) mà không cần đoán trước.
+function poParseVNNumber(str) {
+  let s = String(str || '').trim().replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  const lastSep = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
+  if (lastSep === -1) { const n = Number(s); return Number.isFinite(n) ? n : 0; }
+  const intPart = s.slice(0, lastSep).replace(/[.,]/g, '');
+  const fracPart = s.slice(lastSep + 1).replace(/[.,]/g, '');
+  const isDecimal = fracPart.length > 0 && fracPart.length <= 2;
+  const n = Number(isDecimal ? `${intPart}.${fracPart}` : `${intPart}${fracPart}`);
   return Number.isFinite(n) ? n : 0;
 }
 // "27/08/2026" -> "2026-08-27" (input type="date"). Trả '' nếu không đúng định dạng dd/mm/yyyy.
@@ -638,8 +672,10 @@ function poDdMmYyyyHmToIso(dateStr, timeStr) {
   return m ? `${iso}T${m[1].padStart(2, '0')}:${m[2]}` : iso + 'T00:00';
 }
 
-// Parse toàn bộ field cần điền từ mảng dòng (poExtractLines()) — hardcode theo ĐÚNG cấu trúc mẫu
-// 120HT_PO.pdf (đã xác nhận "chỉ 1 mẫu duy nhất"), KHÔNG cố đoán/tổng quát cho bố cục khác.
+// Parse toàn bộ field cần điền từ mảng dòng (poExtractLines()) — hardcode theo cấu trúc chung của các
+// mẫu phiếu đặt hàng NCC đã xác nhận (mẫu 1 "120HT_PO.pdf" + mẫu 2 "HD mua chung", 10/2026 — 2 mẫu khác
+// nhau đúng ở nhãn Nhà Cung Cấp, CÙNG mọi cấu trúc dòng/offset khác), KHÔNG cố đoán/tổng quát cho bố cục
+// khác hẳn ngoài 2 mẫu đã xác nhận.
 function parsePoLinesToFields(lines) {
   const f = {};
   f.poNumber = poFindValueAfterLabel(lines, 'Số Đơn:');
@@ -650,16 +686,18 @@ function parsePoLinesToFields(lines) {
   f.deliveryDate = poDdMmYyyyToIso(poFindValueAfterLabel(lines, 'Ngày giao:'));
   f.ordererName = poFindValueAfterLabel(lines, 'Người đặt:');
   f.stationCode = poFindValueAfterLabel(lines, 'Tại trạm:');
-  f.supplierCode = poFindValueAfterLabel(lines, 'NCC:', 1);
-  f.supplierName = poFindValueAfterLabel(lines, 'NCC:', 2);
+  // LỖI ĐÃ VÁ (10/2026, file "HD mua chung"): mẫu 2 ghi đầy đủ "Nhà cung cấp:" thay vì viết tắt "NCC:"
+  // — thử CẢ 2 nhãn, 'NCC:' luôn thử trước nên mẫu 1 không đổi hành vi.
+  f.supplierCode = poFindValueAfterAnyLabel(lines, ['NCC:', 'Nhà cung cấp:'], 1);
+  f.supplierName = poFindValueAfterAnyLabel(lines, ['NCC:', 'Nhà cung cấp:'], 2);
   f.supplierTaxCode = poFindValueAfterLabel(lines, 'MST:');
   f.receivingLocationCode = poFindValueAfterLabel(lines, 'Nơi nhận:', 1);
   f.receivingLocationName = poFindValueAfterLabel(lines, 'Nơi nhận:', 2);
   f.deliveryAddress = poFindValueAfterLabel(lines, 'Địa chỉ:', 1, true);
-  f.discountAmount = poParseMoney(poFindValueAfterLabel(lines, 'Giá trị chiết khấu'));
-  f.afterDiscountAmount = poParseMoney(poFindValueAfterLabel(lines, 'Thành tiền sau CK:'));
-  f.vatAmount = poParseMoney(poFindValueAfterLabel(lines, 'VAT'));
-  f.paymentTotalAmount = poParseMoney(poFindValueAfterLabel(lines, 'Tổng giá trị thanh toán'));
+  f.discountAmount = poParseVNNumber(poFindValueAfterLabel(lines, 'Giá trị chiết khấu'));
+  f.afterDiscountAmount = poParseVNNumber(poFindValueAfterLabel(lines, 'Thành tiền sau CK:'));
+  f.vatAmount = poParseVNNumber(poFindValueAfterLabel(lines, 'VAT'));
+  f.paymentTotalAmount = poParseVNNumber(poFindValueAfterLabel(lines, 'Tổng giá trị thanh toán'));
 
   // Bảng hạng mục: mỗi dòng hàng thật có đúng 8 token [STT, Tên hàng, Mã hàng, Mã vạch, ĐVT, SL, Đơn
   // giá, Thành tiền] — nhận diện bằng STT/Mã hàng/Mã vạch đều thuần số, ĐVT ngắn (khác hẳn dòng tiêu đề
@@ -672,8 +710,8 @@ function parsePoLinesToFields(lines) {
     if (!unit || unit.length > 4) continue;
     f.items.push({
       name, productCode, barcode, unit,
-      qty: parseFloat(qty) || 0,
-      unitPrice: poParseMoney(unitPrice),
+      qty: poParseVNNumber(qty),
+      unitPrice: poParseVNNumber(unitPrice),
       note: ''
     });
   }
@@ -1330,7 +1368,7 @@ function buildOperationRowHTML(kind, o) {
   // quy trình duyệt nội bộ khác hẳn, đã xác nhận với người dùng KHÔNG thuộc phạm vi gỡ bỏ này.
   const dispatcherFnName = kind === 'operationOrders' ? 'runOperationOrderAction' : kind === 'operationStoreOpenings' ? 'runOperationStoreOpenAction' : 'runOperationRepairAction';
   const actionCell = buildActionCell(o.id, primaryBtnHTML, secondaryOptions, dispatcherFnName);
-  const createdAtCellHTML = `<td class="border p-2 text-center whitespace-nowrap text-gray-500">${o.createdAt ? escapeHtml(o.createdAt) : (o.id ? escapeHtml(new Date(o.id).toLocaleString('vi-VN')) : '')}</td>`;
+  const createdAtCellHTML = `<td class="border p-2 text-center whitespace-nowrap text-gray-500">${o.createdAt ? escapeHtml(o.createdAt) : (o.id ? escapeHtml(new Date(o.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>`;
 
   if (kind === 'operationOrders') {
     return `<tr class="hover:bg-gray-50 border-b">
@@ -1348,7 +1386,7 @@ function buildOperationRowHTML(kind, o) {
       <td class="border p-2 font-mono font-bold text-emerald-800">${escapeHtml(o.code)}</td>
       <td class="border p-2">${escapeHtml(o.dept)}<br><span class="text-xs text-gray-500">${escapeHtml(o.creatorName)}</span></td>
       <td class="border p-2"><div class="font-bold text-gray-800">${escapeHtml(o.storeName)}</div><div class="text-xs text-gray-500">${escapeHtml(o.address || '')}</div></td>
-      <td class="border p-2"><div class="font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div><div class="text-xs text-gray-500">${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div></td>
+      <td class="border p-2"><div class="font-bold text-rose-600">${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div><div class="text-xs text-gray-500">${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Chưa xác định'}</div></td>
       <td class="border p-2">${operationStageBadge(operationRecordStageStatus(kind, o))}${wfMissingWarningHTML}</td>
       ${createdAtCellHTML}
       <td class="border p-2 text-center space-x-1">${actionCell}</td>
@@ -1417,8 +1455,8 @@ function buildOperationDetailsHTML(kind, o) {
         <div class="font-semibold mb-1 text-xs">Thông tin từ phiếu đặt hàng NCC:</div>
         <div class="grid grid-cols-2 gap-2 text-xs bg-white p-2 rounded border">
           ${o.poNumber ? `<div><b>Số Đơn (NCC):</b> ${escapeHtml(o.poNumber)}</div>` : ''}
-          ${o.orderDate ? `<div><b>Ngày đặt:</b> ${new Date(o.orderDate).toLocaleString('vi-VN')}</div>` : ''}
-          ${o.deliveryDate ? `<div><b>Ngày giao:</b> ${new Date(o.deliveryDate).toLocaleDateString('vi-VN')}</div>` : ''}
+          ${o.orderDate ? `<div><b>Ngày đặt:</b> ${new Date(o.orderDate).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</div>` : ''}
+          ${o.deliveryDate ? `<div><b>Ngày giao:</b> ${new Date(o.deliveryDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>` : ''}
           ${o.ordererName ? `<div><b>Người đặt:</b> ${escapeHtml(o.ordererName)}</div>` : ''}
           ${o.stationCode ? `<div><b>Tại trạm:</b> ${escapeHtml(o.stationCode)}</div>` : ''}
           ${o.supplierCode ? `<div><b>Mã NCC:</b> ${escapeHtml(o.supplierCode)}</div>` : ''}
@@ -1459,7 +1497,7 @@ function buildOperationDetailsHTML(kind, o) {
         <div><b>Địa điểm dự kiến:</b> ${escapeHtml(o.address || 'N/A')}</div>
         <div><b>Diện tích dự kiến:</b> ${(o.area || 0).toLocaleString('vi-VN')} m²</div>
         <div><b>Ngân Sách Phê Duyệt (Danh Mục Đầu Tư):</b> ${(o.approvedBudget !== undefined && o.approvedBudget !== null) ? `${Number(o.approvedBudget).toLocaleString('vi-VN')} VNĐ` : '(chưa nhập)'}</div>
-        <div><b>Ngày dự kiến khai trương:</b> ${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}</div>
+        <div><b>Ngày dự kiến khai trương:</b> ${o.expectedOpenDate ? new Date(o.expectedOpenDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Chưa xác định'}</div>
         <div><b>Người phụ trách:</b> ${escapeHtml(o.personInChargeName || o.personInCharge || 'N/A')}</div>
         ${o.note ? `<div class="col-span-2"><b>Ghi chú:</b> ${escapeHtml(o.note)}</div>` : ''}
         ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
@@ -2359,7 +2397,7 @@ function syncOperationWorkItemAncestorsClient(parentWorkItemId) {
     if (newStatus === parent.status) break;
     parent.status = newStatus;
     // Mirror routes/records.js syncOperationWorkItemAncestors() — completedAt cho cha cascade tự động.
-    if (newStatus === 'DANG_NGHIEM_THU' && !parent.completedAt) parent.completedAt = new Date().toLocaleString('vi-VN');
+    if (newStatus === 'DANG_NGHIEM_THU' && !parent.completedAt) parent.completedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     currentParentId = parent.parentWorkItemId;
   }
 }
@@ -2713,7 +2751,7 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
   const assigneeCell = `<td class="border p-2">${escapeHtml(assigneeNames.join(', ') || 'Chưa gán')}</td>`;
 
   if (mode === 'EXECUTION') {
-    const deadlineCell = `<td class="border p-2">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN') : ''}</td>`;
+    const deadlineCell = `<td class="border p-2">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>`;
     const statusCell = `<td class="border p-2">${operationWorkItemStatusBadge(w.status)}</td>`;
     // "Toàn quyền" (canManageExecution) làm được mọi thao tác trên mọi việc; NGOÀI RA đúng người phụ
     // trách (assignedTo[], Mục E) được tự cập nhật tiến độ VIỆC CỦA MÌNH — không được thêm/xoá cây (vẫn
@@ -2804,7 +2842,7 @@ function buildOperationWorkItemRow(w, depth, hasChildren, mode, canManageExecuti
     const expected = computeOperationWorkItemExpectedAcceptanceDate(w);
     if (expected) {
       const isOverdue = w.status === 'DANG_NGHIEM_THU' && expected.getTime() < Date.now();
-      expectedCellContent = `${expected.toLocaleDateString('vi-VN')}${isOverdue ? ' <span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[10px]">⚠️ Quá hạn</span>' : ''}`;
+      expectedCellContent = `${expected.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}${isOverdue ? ' <span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-[10px]">⚠️ Quá hạn</span>' : ''}`;
     }
   }
   const expectedAcceptanceCell = `<td class="border p-2">${expectedCellContent}</td>`;
@@ -3701,7 +3739,7 @@ function openOperationWorkItemQuickViewModal(kind, recordId, filterKey) {
       <td class="border p-1.5">${escapeHtml(w.title)}</td>
       <td class="border p-1.5">${operationWorkItemStatusBadge(w.status)}</td>
       <td class="border p-1.5">${escapeHtml(assignedTo || '(chưa gán)')}</td>
-      <td class="border p-1.5">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN') : ''}</td>
+      <td class="border p-1.5">${w.deadline ? new Date(w.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Không có công việc nào trong nhóm này.</td></tr>`;
 
@@ -3803,7 +3841,7 @@ function renderOperationStoreReportItemStats(computed) {
           <td class="border p-1.5 font-mono font-bold text-cyan-800">${escapeHtml(r.code)}</td>
           <td class="border p-1.5">${escapeHtml(r.kindLabel)}</td>
           <td class="border p-1.5">${escapeHtml(r.title)}</td>
-          <td class="border p-1.5">${r.deadline ? new Date(r.deadline).toLocaleDateString('vi-VN') : ''}</td>
+          <td class="border p-1.5">${r.deadline ? new Date(r.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
           <td class="border p-1.5 text-center font-bold">${r.overdueDays != null ? r.overdueDays : ''}</td>
         </tr>`).join('')}</tbody>
       </table>
@@ -3891,8 +3929,8 @@ function renderOperationStoreReportOverview(computed) {
       <td class="border p-1.5">${escapeHtml(row.acceptorName)}</td>
       <td class="border p-1.5">${operationWorkItemStatusBadge(row.status)}</td>
       <td class="border p-1.5 whitespace-nowrap">${escapeHtml(row.deadlineStatusLabel)}</td>
-      <td class="border p-1.5">${row.startDate ? new Date(row.startDate).toLocaleDateString('vi-VN') : ''}</td>
-      <td class="border p-1.5">${row.deadline ? new Date(row.deadline).toLocaleDateString('vi-VN') : ''}</td>
+      <td class="border p-1.5">${row.startDate ? new Date(row.startDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
+      <td class="border p-1.5">${row.deadline ? new Date(row.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
       <td class="border p-1.5">${escapeHtml(row.acceptedAt)}</td>
     </tr>`).join('');
 }

@@ -917,7 +917,7 @@ function renderAttendanceClockApiKeysTable() {
       <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(k.keyPrefix)}…</td>
       <td class="py-1.5 px-2">${Array.isArray(k.allowedIps) && k.allowedIps.length ? `<span class="font-mono">${k.allowedIps.map(escapeHtml).join(', ')}</span>` : `<span class="text-gray-400 italic">Mọi IP</span>`}</td>
       <td class="py-1.5 px-2">${k.active === false ? `<span class="text-red-600 font-bold">Đã thu hồi</span>` : `<span class="text-green-700 font-bold">Đang hoạt động</span>`}</td>
-      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN') : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
+      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
       <td class="py-1.5 px-2">${k.active === false ? '' : `<button type="button" data-op="revokeAttendanceClockApiKeyAction" data-arg0="${k.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">Thu hồi</button>`}</td>
     </tr>
   `).join('');

@@ -217,7 +217,7 @@ function loadOperationOrderApiConfigToForm() {
     lastSyncEl.textContent = 'Chưa từng chạy đồng bộ lần nào.';
   } else {
     const statusLabel = cfg.lastSyncStatus === 'SUCCESS' ? '✅' : cfg.lastSyncStatus === 'PARTIAL' ? '⚠️' : '⛔';
-    lastSyncEl.textContent = `${statusLabel} Lần đồng bộ gần nhất: ${new Date(cfg.lastSyncAt).toLocaleString('vi-VN')} — ${cfg.lastSyncMessage || ''}`;
+    lastSyncEl.textContent = `${statusLabel} Lần đồng bộ gần nhất: ${new Date(cfg.lastSyncAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} — ${cfg.lastSyncMessage || ''}`;
   }
 }
 
@@ -290,8 +290,8 @@ function renderExternalApiKeysTable() {
         ? `<span class="text-red-600 font-bold">Đã thu hồi</span>`
         : `<span class="text-green-700 font-bold">Đang hoạt động</span>`}</td>
       <td class="py-1.5 px-2">${escapeHtml(k.createdByName || k.createdBy || '')}</td>
-      <td class="py-1.5 px-2">${k.createdAt ? new Date(k.createdAt).toLocaleString('vi-VN') : ''}</td>
-      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN') : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
+      <td class="py-1.5 px-2">${k.createdAt ? new Date(k.createdAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''}</td>
+      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
       <td class="py-1.5 px-2 space-x-1">${k.active === false ? `
         <button type="button" data-op="deleteExternalApiKeyAction" data-arg0="${k.id}" class="bg-gray-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-gray-700">🗑️ Xóa</button>
       ` : `
@@ -475,12 +475,12 @@ function renderTlsCertStatus(status) {
     } else {
       parts.push(`<p><b>Subject:</b> ${escapeHtml(meta.subject || '?')}</p>`);
       parts.push(`<p><b>Issuer:</b> ${escapeHtml(meta.issuer || '?')}</p>`);
-      parts.push(`<p><b>Hiệu lực:</b> ${meta.validFrom ? new Date(meta.validFrom).toLocaleString('vi-VN') : '?'} → ${meta.validTo ? new Date(meta.validTo).toLocaleString('vi-VN') : '?'}</p>`);
+      parts.push(`<p><b>Hiệu lực:</b> ${meta.validFrom ? new Date(meta.validFrom).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '?'} → ${meta.validTo ? new Date(meta.validTo).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '?'}</p>`);
       parts.push(`<p><b>CA Chain:</b> ${meta.hasCaChain ? 'Có' : '<span class="text-gray-400 italic">Không</span>'}</p>`);
     }
   }
   if (status.httpsListener && status.httpsListener.active) {
-    parts.push(`<p class="text-green-700 font-bold mt-1">✅ HTTPS ĐANG CHẠY THẬT tại cổng ${status.httpsListener.port} (từ lúc khởi động gần nhất: ${status.httpsListener.startedAt ? new Date(status.httpsListener.startedAt).toLocaleString('vi-VN') : '?'}).</p>`);
+    parts.push(`<p class="text-green-700 font-bold mt-1">✅ HTTPS ĐANG CHẠY THẬT tại cổng ${status.httpsListener.port} (từ lúc khởi động gần nhất: ${status.httpsListener.startedAt ? new Date(status.httpsListener.startedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '?'}).</p>`);
   } else if (status.hasCertOnDisk) {
     parts.push(`<p class="text-amber-700 font-bold mt-1">⚠️ Đã có chứng chỉ trên đĩa nhưng HTTPS CHƯA chạy — ${status.httpsPortConfigured ? `cần restart (pm2 restart) để áp dụng` : `cần đặt HTTPS_PORT trong .env rồi restart`}.</p>`);
   } else {
@@ -580,9 +580,9 @@ function renderTrustedCaTable(list) {
       <td class="py-1.5 px-2 font-semibold">${escapeHtml(c.name)}</td>
       <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(c.subject)}</td>
       <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(c.issuer)}</td>
-      <td class="py-1.5 px-2">${c.validTo ? new Date(c.validTo).toLocaleDateString('vi-VN') : ''}</td>
+      <td class="py-1.5 px-2">${c.validTo ? new Date(c.validTo).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</td>
       <td class="py-1.5 px-2">${escapeHtml(c.addedByName || c.addedBy || '')}</td>
-      <td class="py-1.5 px-2">${c.addedAt ? new Date(c.addedAt).toLocaleString('vi-VN') : ''}</td>
+      <td class="py-1.5 px-2">${c.addedAt ? new Date(c.addedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''}</td>
       <td class="py-1.5 px-2"><button type="button" data-op="deleteTrustedCaAction" data-arg0="${c.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">🗑️ Xoá</button></td>
     </tr>
   `).join('');

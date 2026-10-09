@@ -21,6 +21,28 @@ const { HttpError } = require('./httpErrors');
 // thị (kết quả công thức/richText/hyperlink...) thay vì in nguyên object.
 function cellText(v) { return cellToText(cellRaw(v)); }
 
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — import % ở Phê Duyệt Giá Bán Buôn/Bán Lẻ bị "làm tròn"):
+// Excel lưu ô định dạng % dưới dạng PHÂN SỐ gốc (numFmt "0.00%" + cell.value = 0.12345 cho ô hiển thị
+// "12.345%"), còn lib/xlsxSafeRead.js trước đây chỉ lấy cell.value nên đọc ra đúng "0.12345" thay vì
+// "12.345" — không phải lỗi toFixed()/Math.round() mà là THIẾU nhân 100. Nay streamFirstSheetRows() có
+// thêm {withNumFmt:true} trả về numFmt gốc theo từng ô để nhân lại cho đúng.
+function isPercentNumFmt(fmt) { return typeof fmt === 'string' && fmt.indexOf('%') !== -1; }
+
+// toFixed(9) CHỈ để loại nhiễu bit cuối của phép nhân dấu phẩy động (VD 0.07*100 JS ra
+// 7.000000000000001, 1.2345*100 ra 123.44999999999999) — 9 chữ số thập phân dư nhiều so với số lẻ % có
+// trong thực tế (hiếm khi quá 4-6 chữ số), nên không cắt mất số liệu thật, chỉ không "để lộ" nhiễu bit.
+function percentFromFraction(n) { return Number((n * 100).toFixed(9)); }
+
+// Biến thể cellText() có biết numFmt của ô — chỉ ô % (numFmt chứa "%") VÀ giá trị gốc là number mới quy
+// đổi, các ô khác (text/ngày/số thường) giữ nguyên hành vi cellText() cũ.
+function cellTextWithFmt(v, numFmt) {
+  const raw = cellRaw(v);
+  if (isPercentNumFmt(numFmt) && typeof raw === 'number' && Number.isFinite(raw)) {
+    return String(percentFromFraction(raw));
+  }
+  return cellToText(raw);
+}
+
 function normalizeHeader(s) {
   return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
     .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -70,13 +92,16 @@ function resolveColumns(headerCells, template) {
   return { columnLabels, idxByKey };
 }
 
-// 1 dòng dữ liệu -> 1 item, hoặc null nếu dòng trắng hoàn toàn (bỏ qua như trước).
-function rowToPriceItem(cells, columnLabels, idxByKey) {
+// 1 dòng dữ liệu -> 1 item, hoặc null nếu dòng trắng hoàn toàn (bỏ qua như trước). `numFmts` (tuỳ chọn,
+// cùng vị trí với `cells`) cho biết ô nào định dạng % để quy đổi đúng (xem cellTextWithFmt() ở trên).
+function rowToPriceItem(cells, columnLabels, idxByKey, numFmts) {
   const values = {};
   let hasData = false;
   columnLabels.forEach((c) => {
     const idx = idxByKey[c.key];
-    const v = (idx !== undefined && idx !== -1) ? cellText(cells[idx]).trim() : '';
+    const v = (idx !== undefined && idx !== -1)
+      ? cellTextWithFmt(cells[idx], numFmts ? numFmts[idx] : null).trim()
+      : '';
     if (v) hasData = true;
     values[c.key] = v.slice(0, 500);
   });
@@ -96,17 +121,17 @@ async function parsePriceFile(buffer, template) {
   let overLimit = false;
   const items = [];
 
-  await streamFirstSheetRows(buffer, (cells) => {
+  await streamFirstSheetRows(buffer, (cells, rowNumber, numFmts) => {
     if (!sawAnyRow) { // dòng đầu tiên đọc được là dòng tiêu đề
       sawAnyRow = true;
       ({ columnLabels, idxByKey } = resolveColumns(cells, template));
       return true;
     }
-    const item = rowToPriceItem(cells, columnLabels, idxByKey);
+    const item = rowToPriceItem(cells, columnLabels, idxByKey, numFmts);
     if (item) items.push(item);
     if (items.length > 1000) { overLimit = true; return false; }
     return true;
-  }, { raw: true });
+  }, { raw: true, withNumFmt: true });
 
   if (!sawAnyRow) throw new HttpError(400, 'File bảng giá trống, không có dữ liệu');
   // Vượt trần thì items chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.

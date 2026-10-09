@@ -1881,7 +1881,7 @@ function buildCustomDataColumnHtml(customData) {
 // parseVNDateTime() - CHUYEN tu module-baocaoquantri.js sang day (Ha tang: nap module theo cum, dot 7):
 // isInDateRange() ngay duoi day (dung chung cho bo loc khoang ngay o hau het module) va nhieu noi khac
 // (core-approvalhub.js...) goi thang ham nay - khong the de nam o 1 file module-*.js duoc nap luoi.
-// Parse nguoc chuoi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN') sinh ra (dinh dang co
+// Parse nguoc chuoi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) sinh ra (dinh dang co
 // dinh cua locale nay) - can thiet vi Date() khong tu parse lai duoc chuoi theo locale vi-VN.
 function parseVNDateTime(str) {
   if (!str || typeof str !== 'string') return null;
@@ -2088,7 +2088,7 @@ function buildActionCell(id, primaryBtnHTML, secondaryOptions, dispatcherFnName)
 function logSystemAction(module, actionType, description, status = 'SUCCESS', target = '') {
   const logEntry = {
     id: Date.now() + Math.random(),
-    timestamp: new Date().toLocaleString('vi-VN'),
+    timestamp: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     username: currentUser ? currentUser.username : 'system_guest',
     fullName: currentUser ? currentUser.name : 'Khách',
     // Chỉ là placeholder hiển thị TẠM ngay khi thao tác (chưa biết IP thật ở phía client) — IP thật

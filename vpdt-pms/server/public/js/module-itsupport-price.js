@@ -455,7 +455,7 @@ async function addItPriceMasterList() {
     // chung/xoá nhầm giữa Bán Lẻ và Bán Buôn.
     priceType: activeBizConfigPriceTab,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name,
-    uploadedAt: new Date().toLocaleString('vi-VN')
+    uploadedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   };
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = [...snapshot, entry];
@@ -487,7 +487,7 @@ async function replaceItPriceMasterListFile(id) {
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? {
     ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey, discountColumnKey,
-    uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN')
+    uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   } : m);
   const saved = await syncStorage('itPriceMasterLists');
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
@@ -699,7 +699,7 @@ async function submitItPriceApproval(e) {
     effectiveDate,
     expiryMode,
     expiryDate,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     customData
   };
   // "Nhóm Phê Duyệt Cuối" (10/2026) — form này chỉ còn chạy cho Bán Buôn (ITPRICE_WHOLESALE).
@@ -1070,7 +1070,7 @@ function buildItPriceRowHtml(p, context) {
       <td class="border p-2 text-xs max-w-[220px]">${reasonCellHtml}</td>
       <td class="border p-2">${itPriceStatusBadge(p)}</td>
       <td class="border p-2">${itPriceAppliedBadge(p)}</td>
-      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${p.createdAt ? escapeHtml(p.createdAt) : (p.id ? escapeHtml(new Date(p.id).toLocaleString('vi-VN')) : '')}</td>
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${p.createdAt ? escapeHtml(p.createdAt) : (p.id ? escapeHtml(new Date(p.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
       <td class="border p-2 text-center">
         <button data-op="openItPriceModal" data-arg0="${p.id}" data-arg1="${escapeHtml(context)}" class="px-2.5 py-1 bg-sky-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Chi tiết</button>
       </td>
@@ -2101,7 +2101,7 @@ async function submitItTicket(e) {
     title: document.getElementById('itTicketTitle').value.trim(),
     category: document.getElementById('itTicketCategory').value,
     description: document.getElementById('itTicketDescription').value.trim(),
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     customData
   };
 
@@ -2197,7 +2197,7 @@ function renderItTickets() {
         ${t.approvalStatus ? `<div>${IT_TICKET_APPROVAL_BADGES[t.approvalStatus] ? IT_TICKET_APPROVAL_BADGES[t.approvalStatus](t) : escapeHtml(t.approvalStatus)}</div>` : ''}
       </td>
       <td class="border p-2 text-xs">${t.assigneeName ? escapeHtml(t.assigneeName) : '<span class="text-gray-400 italic">Chưa nhận</span>'}</td>
-      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${t.createdAt ? escapeHtml(t.createdAt) : (t.id ? escapeHtml(new Date(t.id).toLocaleString('vi-VN')) : '')}</td>
+      <td class="border p-2 text-center whitespace-nowrap text-gray-500">${t.createdAt ? escapeHtml(t.createdAt) : (t.id ? escapeHtml(new Date(t.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
       <td class="border p-2 text-center space-x-1">
         ${(() => {
           const primaryBtnHTML = `<button data-op="runItTicketAction" data-arg0="${t.id}" data-arg1="view" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs hover:opacity-90 font-bold">👁️ Xem / Xử lý</button>`;

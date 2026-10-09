@@ -849,7 +849,7 @@ const CREATE_MODULE_CONFIGS = {
         username: user.username,
         action: 'CREATED',
         comment: 'Khởi tạo và trình duyệt tờ trình mới',
-        time: new Date().toLocaleString('vi-VN')
+        time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }];
     }
   },
@@ -1009,7 +1009,7 @@ const CREATE_MODULE_CONFIGS = {
           payload.signedFileType = payload.fileType || null;
           payload.signedCustomData = payload.customData || {};
           payload.signedUploadedBy = user.username;
-          payload.signedUploadedAt = new Date().toLocaleString('vi-VN');
+          payload.signedUploadedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         } else {
           payload.signedFileStatus = null;
         }
@@ -1502,7 +1502,7 @@ const CREATE_MODULE_CONFIGS = {
       // hoạt động đúng mà không cần sửa thêm — chỉ khác giá trị khởi tạo.
       payload.status = 'APPROVED';
       payload.currentStep = 0;
-      payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN') }];
+      payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) }];
       // Giai đoạn "Danh mục đầu tư" (trước đây gọi "Dự toán") — ĐÃ BỎ HẲN phê duyệt luôn (module ảo
       // operationStoreOpeningEstimate/operationRepairEstimate đã xoá khỏi lib/workflowEngine.js), lập
       // xong là estimateStatus đi thẳng DRAFT -> APPROVED (xem submitOperationEstimate(), lib/recordActions.js).
@@ -1552,7 +1552,7 @@ const CREATE_MODULE_CONFIGS = {
       // Mục H — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
       payload.status = 'APPROVED';
       payload.currentStep = 0;
-      payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN') }];
+      payload.history = [{ step: 0, approver: 'Hệ thống (tự động)', username: 'system', action: 'AUTO_APPROVED', comment: 'Không yêu cầu phê duyệt — hồ sơ tự động hoàn tất ngay khi tạo', time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) }];
       // Giai đoạn "Danh mục đầu tư" — cùng lý do/kỹ thuật đã thêm ở operationStoreOpenings ngay trên.
       payload.estimateStatus = 'DRAFT';
       payload.estimateCurrentStep = 0;
@@ -1703,7 +1703,7 @@ const CREATE_MODULE_CONFIGS = {
         approver: user.name,
         username: user.username,
         action: 'UPLOADED',
-        time: new Date().toLocaleString('vi-VN')
+        time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }];
       // "Nhóm Phê Duyệt Cuối" (10/2026) — xác thực + đông cứng lựa chọn (nếu quy trình DOC đã được admin
       // cấu hình đủ groups+levels ở extraApprovalGroups_DOC/extraApprovalLevels_DOC) — trả null (không
@@ -1777,7 +1777,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.comments = [];
       payload.likes = [];
       payload.readBy = [user.username]; // tác giả tính là đã đọc bài của chính mình (khớp client cũ)
-      payload.createdAt = new Date().toLocaleString('vi-VN'); // mốc tạo chốt Ở SERVER, không tin client
+      payload.createdAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); // mốc tạo chốt Ở SERVER, không tin client
 
       // Tệp đính kèm (tuỳ chọn) — chặn scheme "javascript:" trước khi lưu, xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.attachment?.fileUrl, 'Tệp đính kèm');
@@ -2296,7 +2296,7 @@ const CREATE_MODULE_CONFIGS = {
         fileUrl: String(file.fileUrl), // đã qua assertUploadedFileUrl() ở trên (khuôn + trần độ dài)
         fileName: (String(file.fileName || '').trim() || 'bang-gia.xlsx').slice(0, 200),
         uploadedBy: user.username, uploadedByName: user.name,
-        uploadedAt: new Date().toLocaleString('vi-VN'),
+        uploadedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
         items, columnLabels
       }];
       payload.reason = (payload.reason || '').trim();
@@ -2466,7 +2466,7 @@ const CREATE_MODULE_CONFIGS = {
       // Thời điểm gửi do SERVER gán (không tin client) — khác itSupportTickets ở trên vốn nhận
       // createdAt từ payload; đây là bản ghi 2 phía (nhân viên hỏi/Nhân Sự đáp) nên mốc thời gian
       // phải là mốc server ghi nhận thật.
-      payload.createdAt = new Date().toLocaleString('vi-VN');
+      payload.createdAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       // Trạng thái/phản hồi/cờ chưa đọc LUÔN khởi tạo rỗng ở server — request tự soạn không thể tự
       // xưng đã được Nhân Sự trả lời ngay lúc tạo, cũng không thể tự bật cờ chưa đọc của chính mình.
       payload.status = 'PENDING';
@@ -3386,7 +3386,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.decidedBy = null;
       payload.decidedByName = null;
       payload.decidedAt = null;
-      payload.createdAt = new Date().toLocaleString('vi-VN');
+      payload.createdAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     }
   },
   // "Giấy Phép" (Hành Chính) — quản lý giấy phép kinh doanh/con của công ty theo địa điểm, có versioning
@@ -3474,7 +3474,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.lifecycleStatus = null;
       payload.notifiedThresholds = [];
       payload.history = [{
-        action: 'UPLOADED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
+        action: 'UPLOADED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }];
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'LICENSE');
     }
@@ -3526,7 +3526,7 @@ const CREATE_MODULE_CONFIGS = {
       // licenses/contracts ở trên).
       payload.notifiedThresholds = [];
       payload.history = [{
-        action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN')
+        action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }];
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'IT_RENEWAL');
     }
@@ -3785,7 +3785,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.attachments = [];
       payload.history = [{
         action: 'CREATED', detail: `Tạo quy trình ${processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'} (${payload.tasks.length} việc cần làm)`,
-        actionBy: user.username, actionByName: user.name, actionAt: new Date().toLocaleString('vi-VN')
+        actionBy: user.username, actionByName: user.name, actionAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }];
       validateRequiredCustomData(payload.customData, appData?.formTemplates, processType === 'ONBOARDING' ? 'HR_ONBOARDING' : 'HR_OFFBOARDING');
     }
@@ -3898,7 +3898,7 @@ const CREATE_MODULE_CONFIGS = {
       payload.amendments = [];
       payload.notifiedThresholds = [];
       payload.history = [{
-        action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN'),
+        action: 'CREATED', by: user.username, byName: user.name, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
         detail: 'Tạo tay bởi Nhân Sự (ngoài luồng Onboarding tự động)'
       }];
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'LABOR_CONTRACT');
@@ -4412,7 +4412,7 @@ function validateAndPrepareCreate(moduleKey, payload, user, existingCollection, 
   // không có field này (hiện trống ở cột "Thời gian tạo" tương ứng, không suy diễn ngược được) — chỉ áp
   // dụng cho hồ sơ mới từ đây trở đi. KHÔNG tin `payload.createdAt` client có thể tự gửi kèm — luôn ghi
   // đè bằng giờ server ngay tại đây (gán SAU `...payload` nên luôn thắng).
-  const record = { ...payload, id: Date.now(), dept: finalDept, createdAt: new Date().toLocaleString('vi-VN') };
+  const record = { ...payload, id: Date.now(), dept: finalDept, createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) };
   record[config.creatorField] = user.username;
   if (config.creatorNameField) record[config.creatorNameField] = user.name;
   return record;

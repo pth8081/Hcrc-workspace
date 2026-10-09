@@ -65,7 +65,7 @@ function reportPeriodDeptLabel(p) {
 
 function formatDateTimeVN(iso) {
   if (!iso) return '';
-  try { return new Date(iso).toLocaleString('vi-VN'); } catch { return iso; }
+  try { return new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return iso; }
 }
 
 // Hiển thị deadline dd/mm/yyyy quen thuộc dù lưu nội bộ theo chuẩn ISO yyyy-mm-dd (từ <input
@@ -341,7 +341,7 @@ async function savePrEntryDraft() {
       const result = await callRecordAction('reportEntries', prEntryDraftId, 'update', payload);
       savedEntry = result.item;
     } else {
-      payload.createdAt = new Date().toLocaleString('vi-VN');
+      payload.createdAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       const result = await callCreateAction('reportEntries', payload);
       savedEntry = result.item;
     }
@@ -488,7 +488,7 @@ async function createReportPeriod(e) {
   } catch (err) {
     return alert(`⛔ ${err.message}`);
   }
-  const payload = { name, endTime, deptScope, createdAt: new Date().toLocaleString('vi-VN'), customData };
+  const payload = { name, endTime, deptScope, createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), customData };
   let newPeriod;
   try {
     const result = await callCreateAction('reportPeriods', payload);
