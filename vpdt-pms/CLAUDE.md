@@ -7,6 +7,12 @@ sticky sang fixed) rằng đây là tiêu chuẩn áp dụng cho **MỌI** việ
 không chỉ tính năng Báo Cáo/Xuất Excel (mục ngay dưới vốn chỉ nói riêng về
 Báo Cáo — mục này mở rộng ra toàn bộ công việc nói chung):
 
+**Nhắc lại lần nữa (10/2026, đợt vá 4 vấn đề phân quyền + 1 lỗ hổng Công &
+Phép)**: người dùng nhấn mạnh lại đúng y nguyên 2 ý "làm cẩn thận, đừng ảnh
+hưởng chức năng khác" + "làm đến đâu xong đến đấy" — không phải quy tắc mới,
+chỉ là xác nhận lại tầm quan trọng của 2 ý này áp dụng cho MỌI đợt việc kể cả
+các đợt vá lỗi/phân quyền nhỏ, không chỉ tính năng lớn.
+
 - **Làm cẩn thận**: trước khi đổi 1 cơ chế hiển thị/hành vi đã có (CSS, JS,
   layout...), đo/kiểm tra THẬT bằng công cụ (Playwright, test tự động...)
   thay vì chỉ suy luận lý thuyết rồi tin là đúng — như đợt sticky→fixed này,
