@@ -103,96 +103,9 @@ async function parseItPriceFileForPreview(file) {
     itPricePendingFile = data;
     statusEl.innerText = `✅ Đọc thành công ${data.items.length} dòng giá từ file "${data.fileName}".`;
     renderItPriceFilePreview(data);
-    checkItPriceMarginConsistency();
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
   }
-}
-
-// Đọc 1 giá trị Margin/Chiết Khấu dạng chuỗi từ file (VD "12%", "12", "12,5%", "-3", "1.234,5") -> số
-// thực (%) hoặc null nếu không đọc được thành số.
-// LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): .replace(',', '.') cũ chỉ thay
-// đúng dấu phẩy ĐẦU TIÊN — số dạng "1.234,5" (dấu chấm phân cách nghìn, dấu phẩy thập phân) ra "1.234.5"
-// rồi Number() = NaN, âm thầm bị lọc khỏi mọi tính toán (nums.filter(n => n !== null)) như thể dòng đó
-// không hề có margin. Dùng lại ĐÚNG thuật toán tách dấu phân cách nghìn/thập phân đã kiểm thử ở
-// parseAmount() (lib/purchasingManualImport.js): dấu THẬP PHÂN là dấu xuất hiện SAU CÙNG trong chuỗi khi
-// có cả 2 loại dấu, dấu còn lại là phân cách nghìn (bỏ hẳn).
-function parseItPriceMarginNumber(raw) {
-  if (raw === null || raw === undefined || raw === '') return null;
-  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
-  let s = String(raw).replace(/[^\d.,-]/g, '').trim();
-  if (!s) return null;
-  const lastDot = s.lastIndexOf('.');
-  const lastComma = s.lastIndexOf(',');
-  if (lastDot !== -1 && lastComma !== -1) {
-    const decimalSep = lastDot > lastComma ? '.' : ',';
-    const thousandSep = decimalSep === '.' ? ',' : '.';
-    s = s.split(thousandSep).join('');
-    if (decimalSep === ',') s = s.replace(',', '.');
-  } else if (lastDot !== -1 || lastComma !== -1) {
-    const sep = lastDot !== -1 ? '.' : ',';
-    const parts = s.split(sep);
-    const isThousandsGrouping = parts.length > 2 || (parts.length === 2 && parts[1].length === 3);
-    s = isThousandsGrouping ? parts.join('') : parts.join('.');
-  }
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-// Đếm số dòng "SAI PHÍA" so với mức đã chọn (mốc 5%) — dùng cho cảnh báo ở checkItPriceMarginConsistency()
-// bên dưới. TRƯỚC ĐÂY chỉ so trung bình cộng cả file với mốc 5%, có thể bị vài dòng margin cao che mất
-// khi trung bình hoá cùng nhiều dòng thấp (dòng đó đáng ra phải đi quy trình duyệt MARGIN_GTE5 khác) —
-// nay đếm TỪNG dòng riêng, cảnh báo nếu BẤT KỲ dòng nào sai phía, không chỉ khi trung bình sai.
-function itPriceTierWrongSideCount(tier, nums) {
-  if (tier === 'MARGIN_LT5') return nums.filter(n => n >= 5).length;
-  if (tier === 'MARGIN_GTE5') return nums.filter(n => n < 5).length;
-  if (tier === 'DISCOUNT_LTE5') return nums.filter(n => n > 5).length;
-  if (tier === 'DISCOUNT_GT5') return nums.filter(n => n <= 5).length;
-  return 0;
-}
-
-// Đối chiếu mức Margin/Chiết Khấu người đề xuất TỰ CHỌN (#itPriceTier) với số liệu THẬT trong file bảng
-// giá vừa tải lên (chỉ khi Mẫu Giá đã chọn có gán marginColumnKey/discountColumnKey — xem
-// setItPriceMasterListMarginColumn() ở trên) — quyết định nghiệp vụ 9/2026 (task #82): CHỈ hiện CẢNH BÁO
-// cho người gửi nếu trung bình cộng số liệu thật có vẻ không khớp mức đã chọn, KHÔNG chặn gửi, KHÔNG ràng
-// buộc người duyệt (người duyệt vẫn tự do xử lý y hệt trước đây — hàm này không đụng gì tới luồng
-// server/duyệt). Gọi lại mỗi khi đổi mức áp dụng (data-op-change ở #itPriceTier), đổi Mẫu Giá, đọc xong
-// file mới, hoặc reset/đổi sub-tab.
-// Đợt 10/2026 (theo yêu cầu người dùng): 2 tier MARGIN_* và 2 tier DISCOUNT_* trước đây CÙNG đọc chung 1
-// cột marginColumnKey (không khớp thực tế — Margin và Chiết Khấu là 2 số liệu khác nhau trong file) — nay
-// mỗi nhóm tier đọc đúng cột riêng (marginColumnKey cho MARGIN_*, discountColumnKey cho DISCOUNT_*).
-function itPriceColumnKeyForTier(tier) {
-  return (tier === 'DISCOUNT_LTE5' || tier === 'DISCOUNT_GT5') ? 'discountColumnKey' : 'marginColumnKey';
-}
-function checkItPriceMarginConsistency() {
-  const warnWrap = document.getElementById('itPriceMarginWarningWrap');
-  const warnText = document.getElementById('itPriceMarginWarningText');
-  if (!warnWrap || !warnText) return;
-  const hide = () => warnWrap.classList.add('hidden');
-  if (activeItPriceSubTab !== 'WHOLESALE') return hide();
-  const tier = document.getElementById('itPriceTier')?.value;
-  if (!tier) return hide();
-  const masterListId = document.getElementById('itPriceMasterListSelect')?.value;
-  const list = masterListId ? (DB.itPriceMasterLists || []).find(m => String(m.id) === masterListId) : null;
-  const colField = itPriceColumnKeyForTier(tier);
-  const colKey = list?.[colField];
-  if (!colKey) return hide();
-  const items = itPricePendingFile?.items;
-  if (!items || !items.length) return hide();
-  const nums = items.map(it => parseItPriceMarginNumber(it.values?.[colKey])).filter(n => n !== null);
-  if (!nums.length) return hide();
-  // LỖI ĐÃ VÁ (đợt audit chuyên sâu 12 cụm, mức Trung bình — phát hiện #11): TRƯỚC ĐÂY chỉ so TRUNG BÌNH
-  // CỘNG cả file với mốc 5% — vài dòng margin cao (đáng ra đi quy trình duyệt khác, MARGIN_GTE5) có thể
-  // bị trung bình hoá che mất nếu đa số dòng khác thấp. Đếm SỐ DÒNG sai phía qua itPriceTierWrongSideCount()
-  // ở trên, cảnh báo nếu BẤT KỲ dòng nào vượt mốc, không chỉ khi trung bình vượt (quyết định KHÔNG đổi:
-  // vẫn chỉ cảnh báo, không chặn gửi, không ràng buộc người duyệt).
-  const wrongCount = itPriceTierWrongSideCount(tier, nums);
-  if (!wrongCount) return hide();
-  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-  const min = Math.min(...nums), max = Math.max(...nums);
-  const colLabel = list.columns.find(c => c.key === colKey)?.label || 'Margin/Chiết Khấu';
-  warnText.innerText = `Số liệu cột "${colLabel}" trong file: ${wrongCount}/${nums.length} dòng (nhỏ nhất ${min.toFixed(1)}%, lớn nhất ${max.toFixed(1)}%, trung bình ${avg.toFixed(1)}%) có vẻ KHÔNG khớp với mức "${itPriceTierLabel(tier)}" đã chọn — vui lòng kiểm tra lại trước khi gửi (chỉ để bạn lưu ý, không bắt buộc phải sửa).`;
-  warnWrap.classList.remove('hidden');
 }
 
 async function onItPriceFileChange(event) {
@@ -206,7 +119,7 @@ async function onItPriceFileChange(event) {
   itPricePendingFile = null;
   document.getElementById('itPriceFilePreviewWrap').classList.add('hidden');
   const statusEl = document.getElementById('itPriceFileStatus');
-  if (!file) { statusEl.innerText = ''; checkItPriceMarginConsistency(); return; }
+  if (!file) { statusEl.innerText = ''; return; }
   await parseItPriceFileForPreview(file);
   if (!itPricePendingFile) clearSingleFileInput('itPriceFileInput', 'itPriceFileChip'); // dọn luôn chip — khớp lý do ở module-vpp.js onVppCatalogFileChange().
 }
@@ -217,7 +130,7 @@ async function onItPriceMasterListChange() {
   updateItPriceMasterListDownloadLink();
   const fileInput = document.getElementById('itPriceFileInput');
   const file = fileInput?.files?.[0];
-  if (!file) { checkItPriceMarginConsistency(); return; }
+  if (!file) return;
   await parseItPriceFileForPreview(file);
 }
 
@@ -310,7 +223,8 @@ function renderItPriceMasterListAdmin() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-gray-400 italic">Chưa có Mẫu Giá nào — bấm "+ Thêm Mẫu Giá" để nạp.</td></tr>`;
     return;
   }
-  // Bước chọn cột Margin/Chiết Khấu (đối chiếu số liệu lúc nộp Bán Buôn, xem checkItPriceMarginConsistency())
+  // Bước chọn cột Margin/Chiết Khấu (trước đây dùng để đối chiếu số liệu lúc nộp Bán Buôn — đợt 10/2026
+  // bỏ hẳn bước đối chiếu này theo yêu cầu người dùng, cột vẫn giữ lại để hiển thị tham khảo trong bảng).
   // KHÔNG áp dụng cho Bán Lẻ (Bán Lẻ không có khái niệm tier Margin/Chiết Khấu tự chọn lúc nộp — xem
   // submitItPriceApproval()) — theo xác nhận người dùng (10/2026), ẩn hẳn phần đánh dấu cột Margin/CK +
   // nút "🎯 Cột Margin/CK" khỏi bảng quản trị Mẫu Giá Bán Lẻ (cột "Các Cột Trong Mẫu" của bảng vẫn giữ
@@ -350,18 +264,17 @@ function setBizConfigPriceTab(tab) {
 
 // Cho admin chọn (TUỲ CHỌN) 2 cột RIÊNG trong "columns" đóng vai trò "Margin (%)" và "Chiết Khấu (%)" —
 // dùng lại modal dùng chung "Gán vai trò cột" (#colRoleModal, xem openColumnRoleMappingModal() ở trên).
-// Đợt 10/2026 (theo yêu cầu người dùng, CHỈ áp dụng Bán Buôn — Bán Lẻ đã ẩn hẳn bước này, xem
-// renderItPriceMasterListAdmin()): trước đây chỉ 1 vai trò "margin" dùng chung cho CẢ 4 tier
-// (MARGIN_LT5/MARGIN_GTE5/DISCOUNT_LTE5/DISCOUNT_GT5, xem itPriceTierWrongSideCount()) dù Margin và
-// Chiết Khấu thường là 2 cột số liệu khác nhau trong file thật — nay tách 2 vai trò riêng, mỗi tier đọc
-// đúng cột của mình (xem itPriceColumnKeyForTier()). Bấm Hủy modal = coi như không chọn cột nào, KHÔNG
-// huỷ luôn thao tác thêm/thay Mẫu Giá đang làm dở. Trả về {marginColumnKey, discountColumnKey} (mỗi field
-// có thể null nếu không chọn).
+// CHỈ áp dụng Bán Buôn — Bán Lẻ đã ẩn hẳn bước này, xem renderItPriceMasterListAdmin(). Đợt 10/2026 (theo
+// yêu cầu người dùng): bỏ hẳn bước đối chiếu số liệu thật trong file với mức người đề xuất chọn lúc nộp
+// (trước đây dùng {marginColumnKey, discountColumnKey} để tự so khớp, nay KHÔNG còn đối chiếu/cảnh báo gì
+// nữa) — giữ lại đúng bước gán cột này để hiển thị tham khảo trong bảng Mẫu Giá, không đụng gì khác. Bấm
+// Hủy modal = coi như không chọn cột nào, KHÔNG huỷ luôn thao tác thêm/thay Mẫu Giá đang làm dở. Trả về
+// {marginColumnKey, discountColumnKey} (mỗi field có thể null nếu không chọn).
 async function pickMarginColumnKey(columns) {
   if (!columns || !columns.length) return { marginColumnKey: null, discountColumnKey: null };
   const result = await openColumnRoleMappingModal(columns.map(c => c.label), {
     title: '🎯 Chọn Cột Margin / Chiết Khấu (tuỳ chọn, 2 cột riêng)',
-    hint: 'Nếu file mẫu này có cột thể hiện % Margin và/hoặc % Chiết Khấu, chọn đúng cột tương ứng để hệ thống tự đối chiếu số liệu thật với mức người đề xuất chọn lúc nộp Bán Buôn — CHỈ hiện cảnh báo cho người gửi nếu có vẻ không khớp, KHÔNG chặn gửi và KHÔNG ràng buộc người duyệt. Để trống (bấm Hủy) nếu không dùng.',
+    hint: 'Nếu file mẫu này có cột thể hiện % Margin và/hoặc % Chiết Khấu, chọn đúng cột tương ứng để lưu lại tham khảo trong bảng Mẫu Giá. Để trống (bấm Hủy) nếu không dùng.',
     roles: [
       { key: 'margin', label: 'Cột Margin (%)', required: false },
       { key: 'discount', label: 'Cột Chiết Khấu (%)', required: false }
@@ -812,7 +725,6 @@ function resetItPriceForm() {
     chipClass: 'bg-emerald-100 text-emerald-800', hoverClass: 'hover:bg-emerald-50'
   });
   applyItPriceStoreScopeUIForSubTab();
-  checkItPriceMarginConsistency(); // itPricePendingFile vừa về null + itPriceTier vừa trắng -> tự ẩn cảnh báo cũ.
   // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
   // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_ITPRICE_WHOLESALE"> về lại option
   // đầu tiên NHƯNG KHÔNG bắn sự kiện 'change' (hành vi chuẩn của form.reset()), nên
@@ -945,7 +857,6 @@ function setItPriceSubTab(subTab) {
   const createForm = document.getElementById('itPriceCreateForm');
   if (createForm) {
     applyItPriceStoreScopeUIForSubTab();
-    checkItPriceMarginConsistency(); // rời khỏi Bán Buôn -> tự ẩn cảnh báo (hàm tự kiểm tra activeItPriceSubTab).
     // "Trường Bổ Sung" giờ khác nhau giữa Bán Lẻ/Bán Buôn (2 modKey riêng, xem itPriceDynamicModKey()) —
     // phải vẽ lại đúng bộ field của sub-tab vừa chuyển tới, không còn dùng chung 1 bộ như trước.
     renderDynamicInputsForModule(itPriceDynamicModKey(), 'dynamicFieldsContainer_IT_PRICE');

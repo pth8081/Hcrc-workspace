@@ -4136,7 +4136,6 @@ const OP_CHANGE_ACTIONS = {
   // "💲 Phê Duyệt Giá Bán Buôn" — cùng lý do OP_CLICK_ACTIONS ở trên.
   onItPriceFileChange: (el, e) => onItPriceFileChange(e),
   onItPriceMasterListChange: () => onItPriceMasterListChange(),
-  checkItPriceMarginConsistency: () => checkItPriceMarginConsistency(),
   onItPriceExpiryModeChange: () => onItPriceExpiryModeChange(),
   onMultiFileChosen: el => onMultiFileChosen(el, el.dataset.arg1)
 };

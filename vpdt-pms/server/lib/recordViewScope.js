@@ -1249,9 +1249,27 @@ function resolveEmployeeUsername(employeeCode, employeeProfiles) {
   const profile = (employeeProfiles || []).find(p => p.employeeCode === employeeCode);
   return profile?.username || null;
 }
+// canSeeHacManageAll()/canSeeHacRosterSwapAll() — LỖI ĐÃ VÁ (10/2026, phát hiện qua rà soát phân
+// quyền/module-visibility, "setHrAttendanceView() không tự validate quyền"): 4 hàm canView* Công&Phép
+// dưới đây TRƯỚC ĐÂY chỉ check flat perm (hrAttendanceManage/hrShiftRosterManage/hrShiftSwapApprove),
+// KHÔNG check checkbox Mục 0 tương ứng (hrAttendanceManageTab/hrAttendanceRosterTab) — nghĩa là tắt
+// riêng sub-tab "Quản Lý"/"Phân Ca Siêu Thị" qua Mục 0 (menu client đã ẩn đúng, xem
+// setHrAttendanceView() module-conghop.js) KHÔNG hề cản được GET /api/data vẫn trả về NGUYÊN VẸN dữ
+// liệu chấm công/phép/lịch ca TOÀN CÔNG TY cho bất kỳ ai còn giữ flat perm — chỉ lớp lọc client (tab
+// switcher) là chặn, không phải thật sự server-side. hasModuleAccessServer() định nghĩa Ở DƯỚI trong
+// cùng file này (function declaration — hoisted, gọi được từ đây dù đứng trước lúc đọc code).
+function canSeeHacManageAll(user) {
+  return !!(user?.perms?.admin || (user?.perms?.hrAttendanceManage && hasModuleAccessServer(user, 'hrAttendanceManageTab')));
+}
+function canSeeHacRosterManageAll(user) {
+  return !!(user?.perms?.hrShiftRosterManage && hasModuleAccessServer(user, 'hrAttendanceRosterTab'));
+}
+function canSeeHacSwapApproveAll(user) {
+  return !!(user?.perms?.hrShiftSwapApprove && hasModuleAccessServer(user, 'hrAttendanceRosterTab'));
+}
 function canViewEmployeeAttendanceRecord(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  if (canSeeHacManageAll(user)) return true;
   const empUsername = resolveEmployeeUsername(item.employeeCode, appData?.employeeProfiles);
   if (!empUsername) return false;
   if (empUsername === user.username) return true;
@@ -1273,11 +1291,11 @@ function filterLeaveBalancesForUser(items, user, appData) {
 // hrAttendanceManage/admin.
 function canViewLeaveRequest(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  if (canSeeHacManageAll(user)) return true;
   const empUsername = resolveEmployeeUsername(item.employeeCode, appData?.employeeProfiles);
   if (!empUsername) return false;
   if (empUsername === user.username) return true;
-  return !!(user.perms?.hrLeaveApprove && isManagerOf(user.username, empUsername, appData?.users));
+  return !!(user.perms?.hrLeaveApprove && hasModuleAccessServer(user, 'hrAttendanceApproveTab') && isManagerOf(user.username, empUsername, appData?.users));
 }
 function filterLeaveRequestsForUser(items, user, appData) {
   return (items || []).filter(r => canViewLeaveRequest(user, r, appData));
@@ -1288,8 +1306,8 @@ function filterLeaveRequestsForUser(items, user, appData) {
 // mình, hrAttendanceManage/admin xem hết.
 function canViewShiftRoster(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
-  if (user.perms?.hrShiftRosterManage && item.storeCode === user.dept) return true;
+  if (canSeeHacManageAll(user)) return true;
+  if (canSeeHacRosterManageAll(user) && item.storeCode === user.dept) return true;
   const empUsername = resolveEmployeeUsername(item.employeeCode, appData?.employeeProfiles);
   return !!(empUsername && empUsername === user.username);
 }
@@ -1302,11 +1320,11 @@ function filterShiftRosterForUser(items, user, appData) {
 // trực tiếp) + hrShiftSwapApprove nói chung + hrAttendanceManage/admin.
 function canViewShiftSwapRequest(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.hrAttendanceManage) return true;
+  if (canSeeHacManageAll(user)) return true;
   const requesterUsername = resolveEmployeeUsername(item.requesterEmployeeCode, appData?.employeeProfiles);
   const targetUsername = resolveEmployeeUsername(item.targetEmployeeCode, appData?.employeeProfiles);
   if (requesterUsername === user.username || targetUsername === user.username) return true;
-  if (user.perms?.hrShiftSwapApprove) {
+  if (canSeeHacSwapApproveAll(user)) {
     const roster = (appData?.shiftRoster || []).find(r => r.id === item.requesterRosterId);
     if (roster && roster.storeCode === user.dept) return true;
   }

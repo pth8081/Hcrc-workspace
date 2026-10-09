@@ -79,6 +79,26 @@ function renderHrAttendanceModule() {
 
 const HAC_VIEW_IDS = { SELF: 'Self', APPROVE: 'Approve', ROSTER: 'Roster', MANAGE: 'Manage' };
 function setHrAttendanceView(view) {
+  // LỖ HỔNG THẬT ĐÃ VÁ (10/2026, phát hiện qua rà soát phân quyền/module-visibility): hàm này TRƯỚC ĐÂY
+  // tin tưởng mù quáng tham số `view`, chỉ renderHrAttendanceModule() (gọi trước đó) mới lọc theo quyền
+  // — gọi THẲNG setHrAttendanceView('MANAGE') (VD từ console trình duyệt, không cần request mạng nào)
+  // bỏ qua hoàn toàn lớp lọc đó, hiện ngay dữ liệu "Quản Lý & Cấu Hình" (chấm công/phép năm TOÀN CÔNG
+  // TY, đã nằm sẵn trong DB.attendanceRecords ở trình duyệt của MỌI user có flat perm hrAttendanceManage
+  // dù Mục 0 hrAttendanceManageTab đang tắt) cho người không có quyền xem view đó. Tự tính lại đúng view
+  // được phép NGAY TRONG hàm này, không phụ thuộc renderHrAttendanceModule() đã lọc trước hay chưa —
+  // cùng khuôn "không tin bất kỳ nơi gọi nào" đã áp cho setBudgetLineTab()/setOperationStoreSubTab()/
+  // setItSupportSubTab()/setInternalSubTab().
+  const hacViewAllowed = {
+    SELF: hasModuleAccess(currentUser, 'hrAttendanceSelf'),
+    APPROVE: hasModuleAccess(currentUser, 'hrAttendanceApproveTab') && canApproveHacLeave(currentUser),
+    ROSTER: hasModuleAccess(currentUser, 'hrAttendanceRosterTab') && (canManageHacRoster(currentUser) || canApproveHacSwap(currentUser)),
+    MANAGE: hasModuleAccess(currentUser, 'hrAttendanceManageTab') && canManageHacAttendance(currentUser)
+  };
+  if (!hacViewAllowed[view]) {
+    const fallback = ['SELF', 'APPROVE', 'ROSTER', 'MANAGE'].find(v => hacViewAllowed[v]);
+    if (!fallback) return; // Không có quyền vào BẤT KỲ view nào trong 4 view — không vẽ/hiện gì cả.
+    view = fallback;
+  }
   activeHrAttendanceView = view;
   Object.entries(HAC_VIEW_IDS).forEach(([v, id]) => {
     document.getElementById(`hacView${id}`).classList.toggle('hidden', v !== view);

@@ -1,8 +1,56 @@
 # Phiên bản hiện tại
 
-**25.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.54 (2026-10-09): 4 vấn đề phân quyền (2 ảnh người dùng) + 1 lỗ hổng phát hiện thêm qua rà soát
+
+Người dùng gửi 2 ảnh + mô tả 4 vấn đề về phân quyền/hiển thị menu, yêu cầu phân tích + đưa phương án +
+demo + xác nhận trước khi triển khai (qua `AskUserQuestion`, 3 lựa chọn: tự động cập nhật ngay không cần
+F5; chỉ sửa chỗ đặt nút bật/tắt; mở rộng rà soát sang Ngân Sách + Công & Phép). Sau khi xác nhận, triển
+khai đủ 5 mục:
+
+1. **Phân quyền cho user ĐANG LOGIN không có hiệu lực ngay (phải F5/đăng nhập lại)** — tách khối ẩn/hiện
+   nav cấp 1 trong `finishLogin()` ra hàm riêng `applyNavVisibility(user)` (`public/js/core.js`).
+   `runApprovalPollTick()` (poll ~20s có sẵn) giờ tự so `permsFingerprintFor()` của `currentUser` TRƯỚC/
+   SAU mỗi lượt `initDatabase({silent:true})` — phạm vi quyền của CHÍNH người đang đăng nhập vừa đổi (admin
+   vừa cấp/thu hồi quyền) thì gán lại `currentUser` bằng bản ghi mới nhất trong `DB.users` + gọi lại
+   `applyNavVisibility()` ngay lập tức, không cần F5.
+2. **Bỏ hẳn cảnh báo đối chiếu % Margin/Chiết Khấu khi import Excel ở Phê Duyệt Giá Bán Buôn** — xoá
+   `checkItPriceMarginConsistency()` + 3 hàm phụ (`parseItPriceMarginNumber`/`itPriceTierWrongSideCount`/
+   `itPriceColumnKeyForTier`) và khối `#itPriceMarginWarningWrap` (`module-itsupport-price.js`/
+   `vanHanhSection.html`) — dropdown `#itPriceTier` (mức Margin/Chiết Khấu) VẪN GIỮ (vẫn cần cho routing
+   quy trình duyệt theo tier), chỉ bỏ bước đối chiếu số liệu. Tính năng gán cột Margin/Chiết Khấu cho Mẫu
+   Giá (`pickMarginColumnKey()`) vẫn giữ, chỉ sửa lại mô tả cho đúng (không còn nhắc tới cảnh báo tự động).
+3. **Module/tab bị tắt ở "Mục 0: Quyền Truy Cập Module" nhưng khó tìm thấy công tắc bật/tắt** — checkbox
+   của 3 module hay cần tắt/bật nhất (Tài Liệu/Văn Bản Trình/Hợp Đồng) nay DI CHUYỂN (không sao chép,
+   không đổi cơ chế gác quyền) ra khỏi cây Mục 0 chung, đặt NGAY ĐẦU khối phân quyền riêng của từng module
+   trong Hệ Thống → Phân Quyền (`relocateModuleAccessNodes()`, `module-admin.js` + 3 anchor
+   `#moduleAccessAnchor_doc/submission/contract` trong `systemSection.html`) — để lại 1 dòng ghi chú ngắn
+   ở vị trí cũ trỏ sang chỗ mới.
+4. **Nút "Phê Duyệt" (Approval Hub) ẩn sai cho vài người thật sự có hồ sơ chờ duyệt** —
+   `canAccessApprovalHub()` (`core.js`) thiếu 2 nhánh: approver trong `paymentDeptWorkflows` (Thanh Toán)
+   và 2 flag `itPriceEmergencyRejectApproveWholesale`/`Retail` (duyệt khẩn cấp Phê Duyệt Giá).
+5. **[Phát hiện thêm qua rà soát mở rộng Công & Phép]** `setHrAttendanceView()` (`module-conghop.js`)
+   trước đây tin tưởng mù quáng tham số `view` — gọi thẳng (console/code khác) vẫn vẽ được view "Quản Lý"
+   (dữ liệu chấm công/phép năm company-wide) dù Mục 0 `hrAttendanceManageTab` đã tắt, CHỈ `renderHrAttendanceModule()`
+   (nơi gọi bình thường) mới lọc trước. Đã thêm tự-kiểm-tra NGAY TRONG hàm, cùng khuôn
+   `setBudgetLineTab()`/`setOperationStoreSubTab()`. Vá SÂU HƠN ở tầng server
+   (`lib/recordViewScope.js`): `canViewEmployeeAttendanceRecord()`/`canViewLeaveRequest()`/
+   `canViewShiftRoster()`/`canViewShiftSwapRequest()` trước đây chỉ check flat perm
+   (`hrAttendanceManage`/`hrShiftRosterManage`/`hrShiftSwapApprove`), KHÔNG check Mục 0 tương ứng — nghĩa
+   là tắt Mục 0 chỉ chặn được MENU, dữ liệu company-wide vẫn nằm sẵn trong `DB.attendanceRecords` ở trình
+   duyệt (gọi thẳng `setHrAttendanceView('MANAGE')` từ console là xem được). Thêm 3 helper
+   `canSeeHacManageAll()`/`canSeeHacRosterManageAll()`/`canSeeHacSwapApproveAll()` AND thêm điều kiện
+   `hasModuleAccessServer(user, 'hrAttendanceManageTab'/'hrAttendanceRosterTab')`. (Ngân Sách đã tự kiểm
+   tra đúng từ trước — `setBudgetLineTab()` tự xác thực lại mỗi lần gọi, không có gap.)
+
+Test mới `tests/test-permission-batch-oct2026.js` (14/14) phủ cả 4 mục chính + regression test bổ sung 1
+case cho `tests/test-attendance-records-scope.js` (7/7, mục 5). Full regression ~40 file liên quan
+(approval-hub/muc0/itprice/payment/attendance/conghop/csp) không phát sinh lỗi mới — 3 case fail sẵn có ở
+`test-manager-subordinate-view-scope.js` (nhánh Tài Liệu) xác nhận KHÔNG liên quan đợt này (đã `git stash`
+đối chứng, lỗi giống hệt khi bỏ toàn bộ thay đổi).
 
 ## v25.53 (2026-10-09): 4 phản hồi người dùng — %/mã NCC+chính tả PDF/số lượng-thành tiền/định dạng ngày
 

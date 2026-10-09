@@ -167,6 +167,17 @@ async function main() {
       assert(fullLoadCallCount >= 1, 'hrAttendanceManage phải tải theo nhánh company-wide');
     });
 
+    await run.run('LỖI ĐÃ VÁ (10/2026): hrAttendanceManage NHƯNG Mục 0 hrAttendanceManageTab:false -> KHÔNG còn được company-wide, chỉ thấy đúng CHÍNH MÌNH (không quản lý ai)', async () => {
+      resetData(); resetRecords(); fullLoadCallCount = 0;
+      const blocked = { username: 'hr2_blocked', name: 'Quản Lý Chấm Công (Mục 0 tắt)', dept: 'Nhân Sự', managerUsername: null, perms: { hrAttendanceManage: true, moduleAccess: { hrAttendanceManageTab: false } }, active: true };
+      APP_DATA.users = ALL_USERS_LIST.map(u => ({ ...u }));
+      APP_DATA.users.push(blocked);
+      APP_DATA.employeeProfiles = EMPLOYEE_PROFILES.map(p => ({ ...p }));
+      const res = await api('GET', '/api/data/lazy/attendance', undefined, blocked);
+      const ids = (res.body.attendanceRecords || []).map(r => r.id).sort((a, b) => a - b);
+      assertEqual(ids.join(','), '', 'Mục 0 hrAttendanceManageTab=false phải chặn hẳn nhánh company-wide dù còn flat perm hrAttendanceManage (LỖ HỔNG ĐÃ VÁ: trước đây canViewEmployeeAttendanceRecord() chỉ check flat perm, không check Mục 0)');
+    });
+
     await run.run('admin: nhận ĐỦ toàn công ty', async () => {
       resetData(); resetRecords();
       const res = await api('GET', '/api/data/lazy/attendance', undefined, ADMIN);

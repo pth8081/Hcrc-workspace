@@ -1821,6 +1821,14 @@
             <span id="permTreeBadge_doc" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
+            <!-- Mục 0 "Quyền Truy Cập Module" của ĐÚNG module này — DỜI vào đây (10/2026, theo yêu cầu
+                 người dùng "văn bản trình/tài liệu tắt ở Mục 0 nhưng vẫn hiện menu khi login, phải rà
+                 soát lại chỗ bật/tắt module cho dễ thấy"): checkbox thật (#pModuleAccess_doc) VẪN LÀ 1
+                 node DUY NHẤT trong cây Mục 0 — renderModuleAccessCheckboxes() (module-admin.js) tự di
+                 chuyển (KHÔNG sao chép) đúng node đó vào đây ngay sau khi vẽ xong cây, để lại 1 dòng ghi
+                 chú ngắn ở vị trí cũ trong Mục 0 trỏ người dùng quay lại đây — không có DOM/trạng thái
+                 trùng lặp nào, vẫn chỉ 1 nguồn dữ liệu duy nhất (collectPermsFromForm() đọc id như cũ). -->
+            <div id="moduleAccessAnchor_doc" class="bg-rose-50 border border-rose-200 rounded p-1.5"></div>
             <!-- LÀM GỌN (v24.75, theo yêu cầu người dùng "bỏ hết các phân quyền lằng nhằng... chỉ giữ
                  lại đúng quyền Tải tài liệu"): bỏ 2 cột "Xem Bản Nháp"/"Xem Đã Duyệt" cũ — người tạo và
                  người đang duyệt LUÔN xem được mặc định (không cần cấp quyền gì), các trường hợp còn lại
@@ -1876,6 +1884,10 @@
             <span id="permTreeBadge_sub" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
+            <!-- Mục 0 "Quyền Truy Cập Module" của ĐÚNG module này — xem chú thích đầy đủ tại
+                 #moduleAccessAnchor_doc ở khối 📂 2. Tài Liệu ngay phía trên (cùng cơ chế di chuyển node,
+                 không sao chép). -->
+            <div id="moduleAccessAnchor_submission" class="bg-rose-50 border border-rose-200 rounded p-1.5"></div>
             <!-- LÀM GỌN (v24.79→v24.80, "Việc D", theo yêu cầu người dùng "bỏ hết phân quyền Xem lằng
                  nhằng"): bỏ cột "Xem" cũ — người tạo và người đang duyệt LUÔN xem được mặc định (không
                  cần cấp quyền gì), các trường hợp còn lại cấu hình ở Hệ Thống → Nghiệp Vụ Nâng Cao →
@@ -1914,6 +1926,10 @@
             <span id="permTreeBadge_contract" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
+            <!-- Mục 0 "Quyền Truy Cập Module" của ĐÚNG module này — xem chú thích đầy đủ tại
+                 #moduleAccessAnchor_doc ở khối 📂 2. Tài Liệu (cùng cơ chế di chuyển node, không sao
+                 chép). -->
+            <div id="moduleAccessAnchor_contract" class="bg-rose-50 border border-rose-200 rounded p-1.5"></div>
             <!-- LÀM GỌN (v24.79→v24.80, "Việc D"): bỏ cột "Xem" cũ — xem chú thích đầy đủ tại khối
                  📜 3. Văn Bản Trình ngay phía trên (cùng khuôn, module "Hợp Đồng" trong Phạm Vi Xem
                  Theo Phòng Ban).

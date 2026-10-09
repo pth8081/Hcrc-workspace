@@ -4128,6 +4128,12 @@ function canAccessApprovalHub(user) {
   if (isApproverInItPriceWholesaleMixedRules(user.username)) return true;
   if (isApproverInOperationOrderStoreMixedRules(user.username)) return true;
   if (isMemberOfAnyExtraApprovalGroup(user, EXTRA_APPROVAL_MODULE_KEYS_CLIENT)) return true;
+  // LỖI ĐÃ VÁ (10/2026, rà soát phân quyền/module-visibility): thiếu 2 nhánh sau khiến nút "Phê Duyệt"
+  // vẫn ẩn dù người dùng CÓ hồ sơ Thanh Toán đang chờ mình duyệt theo paymentDeptWorkflows (đúng khuôn
+  // canAccessPaymentModule() ở dưới), hoặc có quyền duyệt khẩn cấp Phê Duyệt Giá Bán Buôn/Bán Lẻ
+  // (itPriceEmergencyRejectApproveWholesale/Retail) nhưng không khớp bất kỳ nhánh nào ở trên.
+  if (isApproverInWorkflowMap(DB.paymentDeptWorkflows, user.username)) return true;
+  if (user.perms?.itPriceEmergencyRejectApproveWholesale || user.perms?.itPriceEmergencyRejectApproveRetail) return true;
   return false;
 }
 
@@ -8776,17 +8782,15 @@ function applyUploadAcceptAttrs() {
   }
 }
 
-function finishLogin(user) {
-  currentUser = user;
-  migrateDashboardHiddenCardsFromLocalStorage();
-
-  document.getElementById('loginSection').classList.add('hidden');
-  document.getElementById('userHeader').classList.remove('hidden');
-  document.getElementById('mobileTopBar').classList.remove('hidden');
-  document.getElementById('userHeader').classList.toggle('sidebar-collapsed', localStorage.getItem('vpdt_sidebar_collapsed') === '1');
-  document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
-  document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
-
+// applyNavVisibility(user): ẩn/hiện toàn bộ nút nav cấp 1 + các updateXNavVisibility() phụ thuộc đúng
+// quyền của `user` — TÁCH RA từ finishLogin() (10/2026, fix "chưa có quyền truy cập module" sau khi
+// admin vừa phân quyền cho user ĐANG đăng nhập): trước đây toàn bộ khối này chỉ chạy ĐÚNG 1 LẦN lúc
+// đăng nhập/F5, còn `currentUser` là snapshot phiên-dài không bao giờ được gán lại — nên dù
+// runApprovalPollTick() (poll ~20s) đã âm thầm tải lại DB.users (có bản ghi quyền MỚI NHẤT của chính
+// mình), menu/sidebar vẫn hiển thị nguyên theo quyền CŨ lúc đăng nhập cho tới khi F5/đăng nhập lại.
+// Tách thành hàm riêng để runApprovalPollTick() gọi lại được NGAY khi phát hiện quyền của chính người
+// đang đăng nhập vừa đổi (so permsFingerprintFor()), không phải chỉ gọi được từ finishLogin().
+function applyNavVisibility(user) {
   document.getElementById('heThongNavWrap').classList.toggle('hidden', !user.perms.admin);
   document.getElementById('btnReportsTab').classList.toggle('hidden', !canAccessReportsModule(user));
   document.getElementById('itSupportNavWrap').classList.toggle('hidden', !canAccessItSupportModule(user));
@@ -8801,7 +8805,7 @@ function finishLogin(user) {
   applyUploadAcceptAttrs();
   // Lưới an toàn chung cho toàn hệ thống (rà soát chuyên sâu 10/2026) — xem chú thích đầy đủ tại định
   // nghĩa populateSystemUsersDatalist() (ngay trước sddSetOptions(), cùng file): nạp ngay #systemUsersDatalist
-  // đúng 1 lần sau đăng nhập, trước khi mở bất kỳ tab nào — module mới thêm ô tìm-kiếm-gõ-chọn dùng
+  // đúng 1 lần sau khi gọi, trước khi mở bất kỳ tab nào — module mới thêm ô tìm-kiếm-gõ-chọn dùng
   // chung datalist này không còn cần tự nhớ gọi lại hàm này nữa.
   populateSystemUsersDatalist();
   document.getElementById('btnDocTab').classList.toggle('hidden', !canAccessDocModule(user));
@@ -8842,6 +8846,20 @@ function finishLogin(user) {
   document.getElementById('btnHrPayrollNav').classList.toggle('hidden', !canAccessHrPayrollModule(user));
   updateHrNavVisibility();
   document.getElementById('btnNghiepVuTab').classList.toggle('hidden', !canAccessNghiepVuModule(user));
+}
+
+function finishLogin(user) {
+  currentUser = user;
+  migrateDashboardHiddenCardsFromLocalStorage();
+
+  document.getElementById('loginSection').classList.add('hidden');
+  document.getElementById('userHeader').classList.remove('hidden');
+  document.getElementById('mobileTopBar').classList.remove('hidden');
+  document.getElementById('userHeader').classList.toggle('sidebar-collapsed', localStorage.getItem('vpdt_sidebar_collapsed') === '1');
+  document.getElementById('userInfo').innerText = `${user.name} (${user.dept})`;
+  document.getElementById('userPhoneInfo').innerText = `📞 ${user.phone || 'Chưa có SĐT'} | ✉️ ${user.email || 'Chưa có Email'}`;
+
+  applyNavVisibility(user);
 
   populateDropdowns();
   switchTab('dashboard');
@@ -9079,6 +9097,11 @@ async function runApprovalPollTick() {
   // render + bộ lọc riêng, tự động đoán "đang đứng đúng sub-tab nào, lọc gì" cho cả 9 module rủi ro cao
   // hơn lợi ích so với phạm vi người dùng đã nêu rõ (Hộp Thư Phê Duyệt + số đếm nav) — để lại làm đợt
   // sau nếu người dùng cần thêm.
+  // Giữ lại chữ ký quyền hạn CŨ của chính mình TRƯỚC khi initDatabase() đè DB.users bằng bản mới nhất
+  // từ server — so sánh lại SAU khi tải xong để biết quyền của chính người đang đăng nhập có vừa bị admin
+  // đổi hay không (xem applyNavVisibility()/permsFingerprintFor() ở trên để biết lý do cần việc này).
+  const oldPermsFingerprint = permsFingerprintFor(currentUser);
+
   try {
     // silent:true (LỚP 1, task #133) — đây là 1 lượt tải NGẦM định kỳ, lỗi mạng/server thoáng qua
     // KHÔNG được hiện alert() chặn màn hình người dùng (trước đây initDatabase() luôn tự alert dù gọi
@@ -9090,6 +9113,20 @@ async function runApprovalPollTick() {
     return; // KHÔNG cập nhật lastAppliedApprovalSignature — lượt poll kế tiếp sẽ tự thử lại.
   }
   lastAppliedApprovalSignature = signature;
+
+  // BUG THẬT đã vá (10/2026, "phân quyền cho user đang login thì phải có hiệu lực NGAY, không cần F5"):
+  // initDatabase() ở trên vừa nạp lại DB.users với bản ghi MỚI NHẤT (gồm cả của CHÍNH người đang đăng
+  // nhập), nhưng `currentUser` là snapshot gán 1 lần lúc đăng nhập — mọi hàm gác quyền (hasModuleAccess/
+  // canAccess*Module...) trong applyNavVisibility()/switchTab() đều đọc `currentUser`, KHÔNG đọc
+  // DB.users, nên menu vẫn hiện theo quyền CŨ cho tới khi F5/đăng nhập lại dù admin vừa cấp/thu hồi
+  // quyền xong. Tìm lại đúng bản ghi của mình trong DB.users vừa tải, nếu phạm vi quyền đã đổi thì gán
+  // lại currentUser + vẽ lại nav NGAY — không cần F5.
+  const freshSelf = (DB.users || []).find(u => u.username === currentUser.username);
+  if (freshSelf && permsFingerprintFor(freshSelf) !== oldPermsFingerprint) {
+    currentUser = freshSelf;
+    applyNavVisibility(currentUser);
+  }
+
   updateApprovalHubBadge();
   if (!document.getElementById('approvalHubSection').classList.contains('hidden')) renderApprovalHub();
 }
