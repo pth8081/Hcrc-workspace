@@ -243,4 +243,30 @@ async function streamAllSheetsRows(buffer, onRow, options = {}) {
   }
 }
 
-module.exports = { streamFirstSheetRows, streamAllSheetsRows, assertDecompressedSizeWithinBudget, MAX_UNCOMPRESSED_BYTES };
+// Ô đọc ở chế độ raw (options.raw ở trên) có thể là Date, number, boolean, hoặc object của exceljs
+// (richText / hyperlink / công thức) — quy về chuỗi hiển thị. Dùng chung cho mọi luồng import đọc raw
+// (trước đây chỉ lib/objectCatalogImport.js có cặp hàm này, lib/priceFileParser.js tự String(cell.value)
+// nên công thức/richText/hyperlink bị in ra "[object Object]" — chuyển về đây để dùng chung, tránh lặp).
+function cellToText(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(p => p.text || '').join('');
+    if (v.text !== undefined) return cellToText(v.text);
+    if (v.result !== undefined) return cellToText(v.result);
+    if (v.error) return '';
+    return '';
+  }
+  return String(v);
+}
+
+// Lấy giá trị "gốc" hữu ích của ô (bỏ lớp công thức) — cần cho time/date/number.
+function cellRaw(v) {
+  if (v && typeof v === 'object' && !(v instanceof Date) && v.result !== undefined) return v.result;
+  return v;
+}
+
+module.exports = {
+  streamFirstSheetRows, streamAllSheetsRows, assertDecompressedSizeWithinBudget, MAX_UNCOMPRESSED_BYTES,
+  cellToText, cellRaw
+};

@@ -11702,6 +11702,13 @@ bindCspDelegation('hrpReopenModal');
 bindCspDelegation('hrpPayslipViewModal');
 bindCspDelegation('checklistSection');
 bindCspDelegation('muaHangSection');
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — nút "👁️ Chi tiết" ở bảng "Danh Sách Đề Xuất Bán Buôn" (Vận
+// Hành > Hỗ Trợ IT) không phản hồi khi bấm, kể cả admin): #vanHanhSection là 1 fragment lazy-load
+// (TAB_SECTION_FRAGMENT) giống hệt checklistSection/muaHangSection ở trên, nhưng CHƯA TỪNG được gọi
+// bindCspDelegation() từ lúc tách module Vận Hành ra fragment riêng (v23.10) — hệ quả: MỌI nút data-op
+// trong TOÀN BỘ tab Vận Hành đều không có listener nào lắng nghe, không riêng nút Chi tiết. Đã xác minh
+// bằng demo thật (tests/demo-vanhanh-itprice-chitiet-unresponsive.js): chỉ cần thêm đúng dòng này là đủ.
+bindCspDelegation('vanHanhSection');
 bindCspDelegation('hacLeaveRequestModal');
 bindCspDelegation('hacSwapRequestModal');
 bindCspDelegation('hacRosterModal');

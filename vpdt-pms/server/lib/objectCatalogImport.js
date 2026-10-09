@@ -51,7 +51,7 @@
 // Entry có `columns: []` = CHƯA CẤU HÌNH -> 2 route trả 501, không lỗi server.
 const ExcelJS = require('exceljs'); // chỉ để SINH file mẫu; đọc file upload đi qua lib/xlsxSafeRead.js
 const { parse: parseCsv } = require('csv-parse/sync');
-const { streamFirstSheetRows } = require('./xlsxSafeRead');
+const { streamFirstSheetRows, cellToText, cellRaw } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 
 const MAX_IMPORT_ROWS = 500; // cùng trần lib/storeCatalogImport.js — danh mục quản trị không bao giờ tới mức này
@@ -227,26 +227,8 @@ function normalizeText(s) {
     .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-// Ô đọc ở chế độ raw (xlsxSafeRead options.raw) có thể là Date, number, boolean, hoặc object của exceljs
-// (richText / hyperlink / công thức) — quy về chuỗi hiển thị.
-function cellToText(v) {
-  if (v === null || v === undefined) return '';
-  if (v instanceof Date) return v.toISOString();
-  if (typeof v === 'object') {
-    if (Array.isArray(v.richText)) return v.richText.map(p => p.text || '').join('');
-    if (v.text !== undefined) return cellToText(v.text);
-    if (v.result !== undefined) return cellToText(v.result);
-    if (v.error) return '';
-    return '';
-  }
-  return String(v);
-}
-
-// Lấy giá trị "gốc" hữu ích của ô (bỏ lớp công thức) — cần cho time/date/number.
-function cellRaw(v) {
-  if (v && typeof v === 'object' && !(v instanceof Date) && v.result !== undefined) return v.result;
-  return v;
-}
+// cellToText()/cellRaw() giờ dùng chung từ lib/xlsxSafeRead.js (xem require ở đầu file) — không định
+// nghĩa lại ở đây nữa, tránh lặp code với lib/priceFileParser.js.
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
