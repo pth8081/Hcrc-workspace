@@ -675,31 +675,51 @@ function mixedApprovalResolvePersonInput(rawValue) {
 
 // LỌC HỖN HỢP chức danh HO lẫn Siêu Thị (theo yêu cầu người dùng, đúng kịch bản "Bước 3 duyệt bởi Phó
 // TGĐ ở HO" cho đơn Siêu Thị >100tr — trước đó ô này CHỈ gõ tìm được DB.storeJobTitles, không thấy được
-// chức danh HO). Khớp người duyệt (resolveOperationOrderStoreMixedApprovers() server + mirror client)
-// vẫn CHỈ so sánh phẳng user.jobTitle === rule.jobTitle — không cần biết chức danh đến từ danh mục nào,
-// nên đây THUẦN là mở rộng nguồn gợi ý ở ô nhập, KHÔNG đụng gì tới cơ chế khớp. Nhãn gợi ý gắn hậu tố
-// " — HO"/" — Siêu Thị" (mirror đúng quy ước nhãn người "${name} (${username}) - ${dept}" ở trên — LUÔN
-// gắn kèm 1 chuỗi phân biệt cố định rồi parse ngược bằng regex khi lưu) để phân biệt khi 2 danh mục lỡ
-// trùng tên, đồng thời giữ chức năng gõ-tìm hoạt động bình thường qua đúng cơ chế sddSetOptions() chung
-// (KHÔNG sửa core.js — chỉ đổi danh sách item truyền vào, giữ nguyên cơ chế sdd* dùng chung toàn hệ thống).
+// chức danh HO). Nhãn gợi ý gắn hậu tố " — HO"/" — Siêu Thị" (mirror đúng quy ước nhãn người
+// "${name} (${username}) - ${dept}" ở trên — LUÔN gắn kèm 1 chuỗi phân biệt cố định rồi tra ngược khi
+// lưu) để phân biệt khi 2 danh mục lỡ trùng tên, đồng thời giữ chức năng gõ-tìm hoạt động bình thường qua
+// đúng cơ chế sddSetOptions() chung (KHÔNG sửa core.js — chỉ đổi danh sách item truyền vào).
+//
+// THÊM cặp (chức danh, phòng ban) từ "Vị Trí Tham Gia Quy Trình" (10/2026, theo yêu cầu người dùng, LỖI
+// THẬT đã phát hiện: "Trưởng phòng HO thì có nhiều Tp lắm" — trước đây chức danh HO chỉ khớp được kiểu
+// "tất cả hoặc không ai": để trống "Siêu Thị Phụ Trách" thì so storeDept của đơn với dept NHÂN VIÊN, mà
+// dept của nhân viên HO là tên phòng ban chứ KHÔNG PHẢI tên siêu thị nên KHÔNG BAO GIỜ khớp — dòng vô
+// tác dụng; khai "Siêu Thị Phụ Trách" (ngoại lệ) thì bỏ hẳn điều kiện so phòng ban — khớp MỌI người giữ
+// đúng chức danh đó trên toàn công ty, dù họ ở phòng ban nào). Nay cho chọn thêm 1 cặp CỤ THỂ từ danh
+// mục "Vị Trí Tham Gia Quy Trình" (DB.workflowParticipatingPositions, "🧭" Hệ Thống > Quyền Đặc Biệt) —
+// cặp CÓ phòng ban (VD "Trưởng phòng — Phòng CNTT") lưu kèm field MỚI `jobTitleDept`, khớp CHÍNH XÁC
+// đúng người giữ chức danh đó ở ĐÚNG phòng ban, không liên quan gì tới storeDept của đơn (xem
+// resolveOperationOrderStoreMixedApprovalRuleUsernames() ở lib/workflowEngine.js). GIỮ NGUYÊN 100% danh
+// sách chức danh HO phẳng cũ (DB.jobTitles, không phòng ban) — CỘNG THÊM chứ không thay thế, để không
+// mất bất kỳ lựa chọn nào admin đã quen dùng; trùng (chức danh, phòng ban) giữa 2 nguồn chỉ hiện 1 lần.
+function mixedApprovalJobTitlePairs() {
+  const seen = new Set();
+  const pairs = [];
+  const addHoPair = (jobTitle, dept) => {
+    const key = jobTitle + '\u0000' + (dept || '');
+    if (seen.has(key)) return;
+    seen.add(key);
+    pairs.push({ jobTitle, jobTitleDept: dept || null, label: `${jobTitle}${dept ? ' — ' + dept : ''} — HO` });
+  };
+  (DB.jobTitles || []).forEach(l => addHoPair(l, null));
+  (DB.workflowParticipatingPositions || []).forEach(p => { if (p && p.jobTitle) addHoPair(p.jobTitle, p.dept); });
+  const storePairs = (DB.storeJobTitles || []).map(j => ({ jobTitle: j.label, jobTitleDept: null, label: `${j.label} — Siêu Thị` }));
+  return [...pairs, ...storePairs];
+}
 function mixedApprovalJobTitleOptions() {
-  return [
-    ...(DB.jobTitles || []).map(l => `${l} — HO`),
-    ...(DB.storeJobTitles || []).map(j => `${j.label} — Siêu Thị`)
-  ];
+  return mixedApprovalJobTitlePairs().map(p => p.label);
 }
 function mixedApprovalResolveJobTitleInput(rawValue) {
-  const m = String(rawValue || '').match(/^(.*) — (HO|Siêu Thị)$/);
-  if (!m) return null;
-  const plain = m[1].trim();
-  const isValid = m[2] === 'HO' ? (DB.jobTitles || []).includes(plain) : (DB.storeJobTitles || []).some(j => j.label === plain);
-  return isValid ? plain : null;
+  const trimmed = String(rawValue || '').trim();
+  const pair = mixedApprovalJobTitlePairs().find(p => p.label === trimmed);
+  return pair ? { jobTitle: pair.jobTitle, jobTitleDept: pair.jobTitleDept } : null;
 }
-// Badge nguồn cho DÒNG ĐÃ LƯU (chỉ có jobTitle THUẦN, không còn hậu tố — tự tra lại đúng danh mục để hiện
-// nhãn tham khảo, không lưu thêm field "nguồn" nào vào data vì bản chất khớp không cần biết nguồn).
-function mixedApprovalJobTitleSourceBadgeHTML(jobTitle) {
+// Badge nguồn cho DÒNG ĐÃ LƯU — jobTitleDept (nếu có) hiện LUÔN kèm tên phòng ban đã gán cố định, để
+// admin thấy ngay dòng này khớp ĐÚNG 1 phòng ban, không phải "mọi người giữ chức danh này".
+function mixedApprovalJobTitleSourceBadgeHTML(jobTitle, jobTitleDept) {
   if ((DB.storeJobTitles || []).some(j => j.label === jobTitle)) return ' <span class="text-[10px] bg-emerald-100 text-emerald-700 px-1 rounded">🏬 Siêu Thị</span>';
-  if ((DB.jobTitles || []).includes(jobTitle)) return ' <span class="text-[10px] bg-sky-100 text-sky-700 px-1 rounded">🏢 HO</span>';
+  if (jobTitleDept) return ` <span class="text-[10px] bg-sky-100 text-sky-700 px-1 rounded font-semibold">🏢 HO — ${escapeHtml(jobTitleDept)}</span>`;
+  if ((DB.jobTitles || []).includes(jobTitle) || (DB.workflowParticipatingPositions || []).some(p => p.jobTitle === jobTitle)) return ' <span class="text-[10px] bg-sky-100 text-sky-700 px-1 rounded">🏢 HO</span>';
   return '';
 }
 
@@ -780,7 +800,7 @@ function renderMixedApprovalSection() {
                 ? ' <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold">⛔ Tài khoản đã bị khoá — dòng này KHÔNG có tác dụng</span>'
                 : ''))
         : '';
-      const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '') + personInvalidBadge;
+      const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle, row.jobTitleDept) : '') + personInvalidBadge;
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
@@ -851,11 +871,11 @@ function editMixedApprovalRule(id) {
   if (modeSel) modeSel.value = rule.mode;
   onMixedApprovalNewModeChange();
   if (rule.mode === 'JOBTITLE') {
-    // Ô gõ-tìm cần đúng nhãn có hậu tố " — HO"/" — Siêu Thị" (xem mixedApprovalJobTitleOptions()) — suy
-    // ngược nguồn giống hệt mixedApprovalJobTitleSourceBadgeHTML() (badge nguồn hiện ở mỗi dòng).
+    // Ô gõ-tìm cần đúng nhãn có hậu tố " — HO"/" — Siêu Thị" (xem mixedApprovalJobTitlePairs()) — dựng
+    // lại ĐÚNG nhãn đã lưu, kèm phòng ban (jobTitleDept) nếu dòng này gán cố định 1 phòng ban cụ thể.
     const isStore = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
     const jt = document.getElementById('maNewJobTitleInput');
-    if (jt) jt.value = `${rule.jobTitle} — ${isStore ? 'Siêu Thị' : 'HO'}`;
+    if (jt) jt.value = isStore ? `${rule.jobTitle} — Siêu Thị` : `${rule.jobTitle}${rule.jobTitleDept ? ' — ' + rule.jobTitleDept : ''} — HO`;
     const pn = document.getElementById('maNewPersonInput'); if (pn) pn.value = '';
   } else {
     const person = (DB.users || []).find(u => u.username === rule.username);
@@ -898,14 +918,15 @@ async function addMixedApprovalRule() {
   if (!step || step < 1) return alert('Chưa chọn Bước hợp lệ.');
   if (!tier || !OPERATION_ORDER_STORE_TIERS.some(t => t.key === tier)) return alert('Chưa chọn Mức hợp lệ.');
 
-  let jobTitle = null, username = null;
+  let jobTitle = null, username = null, jobTitleDept = null;
   if (mode === 'JOBTITLE') {
     const raw = document.getElementById('maNewJobTitleInput')?.value;
-    const plain = mixedApprovalResolveJobTitleInput(raw);
-    if (!plain) {
-      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh, hoặc Chức Danh Siêu Thị).');
+    const resolved = mixedApprovalResolveJobTitleInput(raw);
+    if (!resolved) {
+      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh, Chức Danh Siêu Thị, hoặc Quyền Đặc Biệt > Vị Trí Tham Gia Quy Trình).');
     }
-    jobTitle = plain;
+    jobTitle = resolved.jobTitle;
+    jobTitleDept = resolved.jobTitleDept;
   } else {
     const u = mixedApprovalResolvePersonInput(document.getElementById('maNewPersonInput')?.value);
     if (!u) return alert('Gõ và CHỌN đúng 1 người có sẵn trong danh sách gợi ý.');
@@ -933,8 +954,8 @@ async function addMixedApprovalRule() {
     : tier;
   const snapshot = JSON.parse(JSON.stringify(DB.operationOrderStoreMixedApprovalRules || []));
   DB.operationOrderStoreMixedApprovalRules = isEdit
-    ? (DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier: effectiveTier, step, mode, jobTitle, username, stores } : r)
-    : [...(DB.operationOrderStoreMixedApprovalRules || []), { id, tier: effectiveTier, step, mode, jobTitle, username, stores }];
+    ? (DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier: effectiveTier, step, mode, jobTitle, jobTitleDept, username, stores } : r)
+    : [...(DB.operationOrderStoreMixedApprovalRules || []), { id, tier: effectiveTier, step, mode, jobTitle, jobTitleDept, username, stores }];
   if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
     DB.operationOrderStoreMixedApprovalRules = snapshot;
     renderMixedApprovalSection();
@@ -942,7 +963,7 @@ async function addMixedApprovalRule() {
   }
   logSystemAction(
     'CONFIG', isEdit ? 'UPDATE_MIXED_APPROVAL_RULE' : 'ADD_MIXED_APPROVAL_RULE',
-    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — ${effectiveTier ? `Mức "${operationOrderTierLabel('STORE', effectiveTier)}"` : 'Mọi mức (cấu hình cũ)'}, Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
+    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng Quy Trình Đặt Hàng Siêu Thị [${id}] — ${effectiveTier ? `Mức "${operationOrderTierLabel('STORE', effectiveTier)}"` : 'Mọi mức (cấu hình cũ)'}, Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"${jobTitleDept ? ` (Phòng: ${jobTitleDept})` : ''}` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}`,
     'SUCCESS', String(id)
   );
 
@@ -1077,7 +1098,7 @@ function renderItPriceWholesaleMixedApprovalSection() {
                 ? ' <span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold">⛔ Tài khoản đã bị khoá — dòng này KHÔNG có tác dụng</span>'
                 : ''))
         : '';
-      const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle) : '') + personInvalidBadge;
+      const nameBadge = (row.mode === 'JOBTITLE' ? mixedApprovalJobTitleSourceBadgeHTML(row.jobTitle, row.jobTitleDept) : '') + personInvalidBadge;
       const hasStores = !!(row.stores && row.stores.length);
       const storesLabel = hasStores
         ? `${escapeHtml(row.stores.join(', '))} <span class="text-amber-600 font-semibold">(ngoại lệ)</span>`
@@ -1156,7 +1177,7 @@ function editItPriceWholesaleMixedApprovalRule(id) {
   if (rule.mode === 'JOBTITLE') {
     const isStore = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
     const jt = document.getElementById('ipmaNewJobTitleInput');
-    if (jt) jt.value = `${rule.jobTitle} — ${isStore ? 'Siêu Thị' : 'HO'}`;
+    if (jt) jt.value = isStore ? `${rule.jobTitle} — Siêu Thị` : `${rule.jobTitle}${rule.jobTitleDept ? ' — ' + rule.jobTitleDept : ''} — HO`;
     const pn = document.getElementById('ipmaNewPersonInput'); if (pn) pn.value = '';
   } else {
     const person = (DB.users || []).find(u => u.username === rule.username);
@@ -1208,14 +1229,15 @@ async function addItPriceWholesaleMixedApprovalRule() {
   const nganhHang = getMultiSelectValues('ipmaNewNganhHangPicker');
   if (!step || step < 1) return alert('Chưa chọn Bước hợp lệ.');
 
-  let jobTitle = null, username = null;
+  let jobTitle = null, username = null, jobTitleDept = null;
   if (mode === 'JOBTITLE') {
     const raw = document.getElementById('ipmaNewJobTitleInput')?.value;
-    const plain = mixedApprovalResolveJobTitleInput(raw);
-    if (!plain) {
-      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh, hoặc Chức Danh Siêu Thị).');
+    const resolved = mixedApprovalResolveJobTitleInput(raw);
+    if (!resolved) {
+      return alert('Gõ và CHỌN đúng 1 chức danh có sẵn trong danh sách gợi ý (Quản Lý Danh Mục > Chức Danh, Chức Danh Siêu Thị, hoặc Quyền Đặc Biệt > Vị Trí Tham Gia Quy Trình).');
     }
-    jobTitle = plain;
+    jobTitle = resolved.jobTitle;
+    jobTitleDept = resolved.jobTitleDept;
   } else {
     const u = mixedApprovalResolvePersonInput(document.getElementById('ipmaNewPersonInput')?.value);
     if (!u) return alert('Gõ và CHỌN đúng 1 người có sẵn trong danh sách gợi ý.');
@@ -1234,8 +1256,8 @@ async function addItPriceWholesaleMixedApprovalRule() {
   const id = isEdit ? editingItPriceWholesaleMixedApprovalRuleId : (Math.max(0, ...(DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id)) + 1);
   const snapshot = JSON.parse(JSON.stringify(DB.itPriceWholesaleStoreMixedApprovalRules || []));
   DB.itPriceWholesaleStoreMixedApprovalRules = isEdit
-    ? (DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier, step, mode, jobTitle, username, stores, nganhHang } : r)
-    : [...(DB.itPriceWholesaleStoreMixedApprovalRules || []), { id, tier, step, mode, jobTitle, username, stores, nganhHang }];
+    ? (DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier, step, mode, jobTitle, jobTitleDept, username, stores, nganhHang } : r)
+    : [...(DB.itPriceWholesaleStoreMixedApprovalRules || []), { id, tier, step, mode, jobTitle, jobTitleDept, username, stores, nganhHang }];
   if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules')) {
     DB.itPriceWholesaleStoreMixedApprovalRules = snapshot;
     renderItPriceWholesaleMixedApprovalSection();
@@ -1243,7 +1265,7 @@ async function addItPriceWholesaleMixedApprovalRule() {
   }
   logSystemAction(
     'CONFIG', isEdit ? 'UPDATE_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE' : 'ADD_ITPRICE_WHOLESALE_MIXED_APPROVAL_RULE',
-    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng QT Giá Bán Buôn (Siêu Thị) [${id}] — Mức "${itPriceTierLabel(tier)}", Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}, ngành hàng: ${nganhHang.length ? nganhHang.join(', ') : 'Mặc định (mọi ngành hàng)'}`,
+    `${isEdit ? 'Cập nhật' : 'Thêm'} dòng QT Giá Bán Buôn (Siêu Thị) [${id}] — Mức "${itPriceTierLabel(tier)}", Bước ${step}, ${mode === 'JOBTITLE' ? `chức danh "${jobTitle}"${jobTitleDept ? ` (Phòng: ${jobTitleDept})` : ''}` : `người "${username}"`}, siêu thị: ${stores.length ? stores.join(', ') : 'Mặc định (mọi siêu thị)'}, ngành hàng: ${nganhHang.length ? nganhHang.join(', ') : 'Mặc định (mọi ngành hàng)'}`,
     'SUCCESS', String(id)
   );
 

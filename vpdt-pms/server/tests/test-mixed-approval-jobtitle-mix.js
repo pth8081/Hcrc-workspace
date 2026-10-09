@@ -9,6 +9,14 @@
 // parse ngược đúng chuỗi gốc (không hậu tố) khi lưu — xem module-workflow.js
 // mixedApprovalJobTitleOptions()/mixedApprovalResolveJobTitleInput()/mixedApprovalJobTitleSourceBadgeHTML().
 //
+// CAP NHAT 10/2026 (theo yeu cau nguoi dung "ghep dung nguoi thay vi vi tri dang lay la HO"):
+// mixedApprovalJobTitlePairs() nay GOP THEM DB.workflowParticipatingPositions ("Vi Tri Tham Gia Quy
+// Trinh") lam nguon goi y BO SUNG (cong them, khong thay the DB.jobTitles phang cu). mixedApprovalResolve
+// JobTitleInput() doi kieu tra ve: TU chuoi (jobTitle tho) SANG object {jobTitle, jobTitleDept} (hoac
+// null) -- moi test duoi day cap nhat theo kieu tra ve moi. jobTitleDept duoc dung o server de khop
+// CHINH XAC dung phong ban, doc lap hoan toan voi storeDept -- xem them
+// tests/test-mixed-approval-jobtitle-dept.js cho phan khop nguoi duyet theo dept moi.
+//
 // Cùng hạ tầng test với tests/test-muahang-permtree.js: serve public/index.html tĩnh, mở Chromium
 // (Playwright) thật, KHÔNG cần backend/DB thật (test thuần cấu hình/round-trip JS phía client).
 //
@@ -83,23 +91,46 @@ async function main() {
       check('mixedApprovalJobTitleOptions(): tổng đúng 6 mục (3 HO + 3 Siêu Thị)', opts.length === 6, JSON.stringify(opts));
 
       // ---------- mixedApprovalResolveJobTitleInput(): parse ngược đúng, validate đúng nguồn ----------
-      check('resolveJobTitleInput: chọn "Phó Tổng Giám Đốc — HO" -> trả về ĐÚNG chuỗi gốc "Phó Tổng Giám Đốc" (không hậu tố)',
-        mixedApprovalResolveJobTitleInput('Phó Tổng Giám Đốc — HO') === 'Phó Tổng Giám Đốc');
-      check('resolveJobTitleInput: chọn "Giám Đốc siêu thị — Siêu Thị" -> trả về ĐÚNG "Giám Đốc siêu thị"',
-        mixedApprovalResolveJobTitleInput('Giám Đốc siêu thị — Siêu Thị') === 'Giám Đốc siêu thị');
+      // Từ 10/2026 trả về {jobTitle, jobTitleDept} (hoặc null) thay vì chuỗi thô — các dòng không khai
+      // jobTitleDept (không đến từ "Vị Trí Tham Gia Quy Trình") phải có jobTitleDept === null.
+      const r1 = mixedApprovalResolveJobTitleInput('Phó Tổng Giám Đốc — HO');
+      check('resolveJobTitleInput: chọn "Phó Tổng Giám Đốc — HO" -> trả về ĐÚNG {jobTitle: "Phó Tổng Giám Đốc", jobTitleDept: null}',
+        r1 && r1.jobTitle === 'Phó Tổng Giám Đốc' && r1.jobTitleDept === null, JSON.stringify(r1));
+      const r2 = mixedApprovalResolveJobTitleInput('Giám Đốc siêu thị — Siêu Thị');
+      check('resolveJobTitleInput: chọn "Giám Đốc siêu thị — Siêu Thị" -> trả về ĐÚNG jobTitle "Giám Đốc siêu thị"',
+        r2 && r2.jobTitle === 'Giám Đốc siêu thị' && r2.jobTitleDept === null, JSON.stringify(r2));
+      const r3a = mixedApprovalResolveJobTitleInput('Trùng Tên — HO');
+      const r3b = mixedApprovalResolveJobTitleInput('Trùng Tên — Siêu Thị');
       check('resolveJobTitleInput: "Trùng Tên — HO" và "Trùng Tên — Siêu Thị" đều hợp lệ (phân biệt đúng nguồn, không lẫn)',
-        mixedApprovalResolveJobTitleInput('Trùng Tên — HO') === 'Trùng Tên' && mixedApprovalResolveJobTitleInput('Trùng Tên — Siêu Thị') === 'Trùng Tên');
+        r3a && r3a.jobTitle === 'Trùng Tên' && r3b && r3b.jobTitle === 'Trùng Tên', JSON.stringify({ r3a, r3b }));
       check('resolveJobTitleInput: gõ tự do không có hậu tố -> null (bắt buộc chọn từ gợi ý)',
         mixedApprovalResolveJobTitleInput('Phó Tổng Giám Đốc') === null);
       check('resolveJobTitleInput: hậu tố đúng nhưng chức danh KHÔNG có trong danh mục tương ứng -> null',
         mixedApprovalResolveJobTitleInput('Chức Danh Không Tồn Tại — HO') === null);
       check('resolveJobTitleInput: chuỗi rỗng/undefined -> null, không throw', mixedApprovalResolveJobTitleInput('') === null && mixedApprovalResolveJobTitleInput(undefined) === null);
 
+      // ---------- mixedApprovalJobTitlePairs(): bổ sung "Vị Trí Tham Gia Quy Trình" làm nguồn CỘNG THÊM ----------
+      DB.workflowParticipatingPositions = [
+        { jobTitle: 'Trưởng phòng', dept: 'Phòng CNTT' },
+        { jobTitle: 'Trưởng phòng', dept: 'Phòng Kinh Doanh' }
+      ];
+      const opts2 = mixedApprovalJobTitleOptions();
+      check('mixedApprovalJobTitlePairs(): chức danh phẳng "Trưởng phòng — HO" VẪN còn (không mất lựa chọn cũ)',
+        opts2.includes('Trưởng phòng — HO'), JSON.stringify(opts2));
+      check('mixedApprovalJobTitlePairs(): thêm được 2 cặp (chức danh, phòng ban) từ Vị Trí Tham Gia Quy Trình',
+        opts2.includes('Trưởng phòng — Phòng CNTT — HO') && opts2.includes('Trưởng phòng — Phòng Kinh Doanh — HO'), JSON.stringify(opts2));
+      const r4 = mixedApprovalResolveJobTitleInput('Trưởng phòng — Phòng CNTT — HO');
+      check('resolveJobTitleInput: chọn cặp "Trưởng phòng — Phòng CNTT — HO" -> trả về ĐÚNG jobTitleDept "Phòng CNTT"',
+        r4 && r4.jobTitle === 'Trưởng phòng' && r4.jobTitleDept === 'Phòng CNTT', JSON.stringify(r4));
+      DB.workflowParticipatingPositions = [];
+
       // ---------- mixedApprovalJobTitleSourceBadgeHTML(): badge đúng nguồn cho dòng đã lưu ----------
-      check('sourceBadge: chức danh HO -> badge "🏢 HO"', mixedApprovalJobTitleSourceBadgeHTML('Phó Tổng Giám Đốc').includes('HO'));
-      check('sourceBadge: chức danh Siêu Thị -> badge "🏬 Siêu Thị"', mixedApprovalJobTitleSourceBadgeHTML('Giám Đốc siêu thị').includes('Siêu Thị'));
+      check('sourceBadge: chức danh HO -> badge "🏢 HO"', mixedApprovalJobTitleSourceBadgeHTML('Phó Tổng Giám Đốc', null).includes('HO'));
+      check('sourceBadge: chức danh Siêu Thị -> badge "🏬 Siêu Thị"', mixedApprovalJobTitleSourceBadgeHTML('Giám Đốc siêu thị', null).includes('Siêu Thị'));
       check('sourceBadge: chức danh trùng tên cả 2 danh mục -> ưu tiên hiện Siêu Thị (đã lưu, chỉ 1 badge tham khảo)',
-        mixedApprovalJobTitleSourceBadgeHTML('Trùng Tên').includes('Siêu Thị'));
+        mixedApprovalJobTitleSourceBadgeHTML('Trùng Tên', null).includes('Siêu Thị'));
+      check('sourceBadge: có jobTitleDept -> badge hiện đúng tên phòng ban',
+        mixedApprovalJobTitleSourceBadgeHTML('Trưởng phòng', 'Phòng CNTT').includes('Phòng CNTT'));
 
       // ---------- addMixedApprovalRule(): end-to-end qua đúng DOM thật của sub-tab ----------
       document.getElementById('mixedApprovalSection')?.classList.remove('hidden');
@@ -113,6 +144,8 @@ async function main() {
       check('addMixedApprovalRule(): thêm được dòng Bước 3, chức danh HO "Phó Tổng Giám Đốc" (KHÔNG còn hậu tố "— HO")',
         rules.length === 1 && rules[0].step === 3 && rules[0].mode === 'JOBTITLE' && rules[0].jobTitle === 'Phó Tổng Giám Đốc',
         JSON.stringify(rules));
+      check('addMixedApprovalRule(): dòng không chọn cặp (chức danh, phòng ban) -> jobTitleDept null (tương thích ngược)',
+        rules[0].jobTitleDept === null || rules[0].jobTitleDept === undefined, JSON.stringify(rules));
       check('addMixedApprovalRule(): reset lại input sau khi thêm thành công',
         document.getElementById('maNewJobTitleInput').value === '');
       const tbodyHTML = document.getElementById('mixedApprovalTableBody')?.innerHTML || '';

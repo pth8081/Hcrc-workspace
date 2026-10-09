@@ -3310,10 +3310,19 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeD
   // resolveOperationOrderStoreMixedApprovalRuleUsernames() (lib/workflowEngine.js).
   const isActiveUsername = (username) => (DB.users || []).some(u => u && u.username === username && u.active !== false);
   if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
+  // `jobTitleDept` (10/2026, mirror ĐÚNG bản vá server resolveOperationOrderStoreMixedApprovalRuleUsernames()
+  // — lib/workflowEngine.js, xem chú thích đầy đủ ở đó): dòng gán cố định 1 cặp (chức danh, phòng ban) từ
+  // "Vị Trí Tham Gia Quy Trình" khớp ĐÚNG phòng ban đó, độc lập hoàn toàn với storeDept của đơn.
+  const matchesDeptCondition = (u) => {
+    if (rule.jobTitleDept) {
+      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
+    }
+    return hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept);
+  };
   return (DB.users || [])
     .filter(u => u && u.active !== false)
     .filter(u => u.jobTitle === rule.jobTitle)
-    .filter(u => hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept))
+    .filter(matchesDeptCondition)
     .map(u => u.username);
 }
 // Tham số `tier` (10/2026, mirror ĐÚNG bản vá server resolveOperationOrderStoreMixedApprovers() —
