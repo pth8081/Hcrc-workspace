@@ -692,6 +692,18 @@ function refreshApprovalSurfaces() {
   if (!document.getElementById('approvalHubSection').classList.contains('hidden')) renderApprovalHub();
 }
 
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — danh sách PENDING ở Tab Phê Duyệt KHÔNG sắp theo thời gian
+// mới nhất, mà sắp CŨ nhất trước — xem chú thích cũ ngay dưới renderApprovalHub()): người dùng xác nhận
+// muốn ĐỔI mặc định sang mới nhất lên đầu, VÀ thêm nút tự đổi chiều. 'desc' = mới nhất trước (mặc định
+// mới), 'asc' = cũ nhất trước (hành vi PENDING cũ). State ở module-scope (không phải DOM) vì phải giữ
+// nguyên qua nhiều lần renderApprovalHub() (đổi bộ lọc không được làm mất lựa chọn chiều sắp xếp).
+let approvalHubSortDir = 'desc';
+
+function toggleApprovalHubSortDir() {
+  approvalHubSortDir = approvalHubSortDir === 'desc' ? 'asc' : 'desc';
+  renderApprovalHub();
+}
+
 function renderApprovalHub() {
   const statusFilter = document.getElementById('approvalHubFilterStatus').value || 'PENDING';
   document.getElementById('approvalHubRangeWrap').classList.toggle('hidden', statusFilter === 'PENDING');
@@ -725,16 +737,22 @@ function renderApprovalHub() {
       (it.code || '').toLowerCase().includes(keyword) || (it.title || '').toLowerCase().includes(keyword)
     );
   }
-  // PENDING sắp cũ nhất trước (xử lý hồ sơ tồn lâu nhất trước) — ĐÃ xử lý (getMyProcessedApprovals() đã
-  // tự sắp mới nhất trước) giữ nguyên thứ tự đó. Dùng parseVNDateTime() trước khi so sánh vì createdAt
-  // là chuỗi "HH:MM:SS D/M/YYYY" của vi-VN — new Date(chuỗi_này) luôn ra Invalid Date/NaN nên trước đây
-  // dòng sort này thực chất không sắp xếp được gì (mọi so sánh đều NaN, coi như "bằng nhau").
-  if (statusFilter === 'PENDING') {
-    filtered.sort((a, b) => {
-      const da = parseVNDateTime(a.createdAt) || new Date(a.createdAt);
-      const db = parseVNDateTime(b.createdAt) || new Date(b.createdAt);
-      return da.getTime() - db.getTime();
-    });
+  // Sắp theo approvalHubSortDir (mặc định 'desc' = mới nhất lên đầu, đổi được qua nút toggle ở UI — xem
+  // toggleApprovalHubSortDir() và chú thích approvalHubSortDir ở trên). Áp dụng CHUNG cho cả PENDING lẫn
+  // Đã xử lý — trước đây PENDING bị ép cứng "cũ nhất trước" theo yêu cầu nghiệp vụ cũ (ưu tiên xử lý hồ
+  // sơ tồn lâu), nhưng người dùng xác nhận (10/2026) muốn đổi mặc định sang mới nhất trước, kèm nút tự
+  // đổi chiều khi cần quay lại cách sắp cũ. Dùng parseVNDateTime() trước khi so sánh vì createdAt là
+  // chuỗi "HH:MM:SS D/M/YYYY" của vi-VN — new Date(chuỗi_này) luôn ra Invalid Date/NaN.
+  filtered.sort((a, b) => {
+    const da = parseVNDateTime(a.createdAt) || new Date(a.createdAt);
+    const db = parseVNDateTime(b.createdAt) || new Date(b.createdAt);
+    const diff = da.getTime() - db.getTime();
+    return approvalHubSortDir === 'asc' ? diff : -diff;
+  });
+
+  const sortBtn = document.getElementById('approvalHubSortDirBtn');
+  if (sortBtn) {
+    sortBtn.innerText = approvalHubSortDir === 'desc' ? '⬇️ Mới nhất trước' : '⬆️ Cũ nhất trước';
   }
 
   document.getElementById('approvalHubEmptyNote').classList.toggle('hidden', items.length > 0);

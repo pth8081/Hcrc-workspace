@@ -316,6 +316,52 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng): danh sách PENDING trước đây mặc định sắp CŨ nhất trước
+  // (ưu tiên xử lý hồ sơ tồn lâu) — người dùng xác nhận muốn đổi mặc định sang MỚI nhất trước, kèm 1 nút
+  // tự đổi chiều khi cần quay lại cách sắp cũ. 3 hồ sơ PENDING của duyet1 (TL-001/VBT-001/HD-001) có
+  // createdAt lần lượt 2026-08-20/08-21/08-18 — mới nhất là VBT-001, cũ nhất là HD-001.
+  // ==========================================================================
+  await scenario('renderApprovalHub() sắp mặc định MỚI NHẤT lên đầu + nút đổi chiều hoạt động đúng', async () => {
+    const r = await page.evaluate(() => {
+      // reset về trạng thái sạch (bỏ mọi filter/search còn sót từ scenario trước)
+      document.getElementById('approvalHubFilterType').value = '';
+      document.getElementById('approvalHubSearch').value = '';
+      renderApprovalHub();
+      const codesDefault = [...document.querySelectorAll('#approvalHubTableBody tr')].map(tr => tr.children[1].textContent.trim());
+      const btnLabelDefault = document.getElementById('approvalHubSortDirBtn').textContent.trim();
+
+      // Bấm nút đổi chiều qua ĐÚNG cơ chế CSP delegation thật (data-op), không gọi thẳng hàm JS.
+      document.getElementById('approvalHubSortDirBtn').click();
+      const codesAfterToggle = [...document.querySelectorAll('#approvalHubTableBody tr')].map(tr => tr.children[1].textContent.trim());
+      const btnLabelAfterToggle = document.getElementById('approvalHubSortDirBtn').textContent.trim();
+
+      // Đổi bộ lọc Loại rồi quay lại PENDING — chiều sắp xếp đã chọn phải được GIỮ NGUYÊN (không bị reset
+      // về mặc định chỉ vì renderApprovalHub() được gọi lại do lý do khác).
+      document.getElementById('approvalHubFilterType').value = 'doc';
+      renderApprovalHub();
+      document.getElementById('approvalHubFilterType').value = '';
+      renderApprovalHub();
+      const codesStillAsc = [...document.querySelectorAll('#approvalHubTableBody tr')].map(tr => tr.children[1].textContent.trim());
+
+      // Bấm lần 2 để quay lại mặc định cho các scenario sau không bị ảnh hưởng.
+      document.getElementById('approvalHubSortDirBtn').click();
+      const codesBackToDefault = [...document.querySelectorAll('#approvalHubTableBody tr')].map(tr => tr.children[1].textContent.trim());
+
+      return { codesDefault, btnLabelDefault, codesAfterToggle, btnLabelAfterToggle, codesStillAsc, codesBackToDefault };
+    });
+    record('mặc định (chưa bấm gì): mới nhất lên đầu — VBT-001 (08-21), TL-001 (08-20), HD-001 (08-18)',
+      JSON.stringify(r.codesDefault) === JSON.stringify(['VBT-001', 'TL-001', 'HD-001']), JSON.stringify(r));
+    record('nhãn nút mặc định hiện "Mới nhất trước"', /Mới nhất trước/.test(r.btnLabelDefault), r.btnLabelDefault);
+    record('bấm nút đổi chiều -> đảo ngược thành cũ nhất trước (HD-001, TL-001, VBT-001)',
+      JSON.stringify(r.codesAfterToggle) === JSON.stringify(['HD-001', 'TL-001', 'VBT-001']), JSON.stringify(r));
+    record('nhãn nút đổi thành "Cũ nhất trước" sau khi bấm', /Cũ nhất trước/.test(r.btnLabelAfterToggle), r.btnLabelAfterToggle);
+    record('đổi bộ lọc Loại rồi đổi lại KHÔNG làm mất lựa chọn chiều sắp xếp (vẫn cũ nhất trước)',
+      JSON.stringify(r.codesStillAsc) === JSON.stringify(['HD-001', 'TL-001', 'VBT-001']), JSON.stringify(r));
+    record('bấm nút lần 2 -> quay lại mới nhất trước (khôi phục mặc định cho scenario sau)',
+      JSON.stringify(r.codesBackToDefault) === JSON.stringify(['VBT-001', 'TL-001', 'HD-001']), JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // Regression: Hỗ Trợ IT - Duyệt giá (itPriceApprovals) row action MUST open the
   // detail modal (which has the real "✅ Duyệt"/"❌ Từ chối" buttons + the price
   // table) rather than firing an approve/reject action directly from the hub row.
