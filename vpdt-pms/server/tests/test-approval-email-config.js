@@ -319,6 +319,72 @@ async function scenario(name, fn) {
     record('khối "Sự kiện đặc thù" thật sự có nội dung (SUBMISSION/IT_SUPPORT)', /Văn Bản Trình/.test(r.specialsHTML) && /Hỗ Trợ IT/.test(r.specialsHTML), 'rendered');
   });
 
+  // ==========================================================================
+  // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "khi IT xử lý xong phê duyệt thì gắn link để người gửi có
+  // thể truy cập trực tiếp vào phiếu yêu cầu", tổng quát cho mọi module có phê duyệt): email "Kết quả
+  // duyệt" (family 'result') giờ kèm 1 link ?gotoModule=<tab>&code=<mã> YÊU CẦU ĐĂNG NHẬP (không có cơ
+  // chế bỏ qua đăng nhập nào — quyết định của người dùng) — xem buildApprovalResultLink()/
+  // APPROVAL_EMAIL_LINK_TAB ở core.js. Email "Cần phê duyệt" và các sự kiện đặc thù khác KHÔNG kèm link
+  // (ngoài phạm vi yêu cầu — người duyệt đã có Hub Phê Duyệt điều hướng riêng).
+  // ==========================================================================
+  await scenario('buildApprovalResultLink(): email "Kết quả duyệt" (CAR, NOTIFY_APPROVED) kèm link ?gotoModule=car&code=..., "Cần phê duyệt" thì KHÔNG', async () => {
+    const r = await page.evaluate(() => {
+      DB.approvalEmailConfig = { CAR: { approvalNeeded: true, result: true } };
+      window.__fetchCalls.length = 0;
+      notifyUsersByEmail('CAR', 'NOTIFY_APPROVED', 'XE-009', ['nguoitrinh1'], 'XE-009 đã duyệt', 'Nội dung đã duyệt');
+      notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', 'XE-009', ['duyet1'], 'Cần duyệt XE-009', 'Nội dung cần duyệt');
+      const calls = window.__fetchCalls.filter(c => c.url.includes('/api/send-email')).map(c => JSON.parse(c.body).text);
+      return { resultBody: calls[0], neededBody: calls[1] };
+    });
+    record('email "Kết quả duyệt" kèm đúng link gotoModule=car', /\?gotoModule=car&code=XE-009/.test(r.resultBody), r.resultBody);
+    record('email "Kết quả duyệt" link nêu rõ "yêu cầu đăng nhập"', /yêu cầu đăng nhập/.test(r.resultBody), r.resultBody);
+    record('email "Cần phê duyệt" (family khác "result") KHÔNG kèm link nào', !/gotoModule/.test(r.neededBody), r.neededBody);
+  });
+
+  await scenario('buildApprovalResultLink(): OPERATION_ORDER (alias) vẫn gộp đúng về tab "vanHanh"; LICENSE không có link (không có family result)', async () => {
+    const r = await page.evaluate(() => {
+      DB.approvalEmailConfig = { OPERATION: { result: true }, LICENSE: {} };
+      window.__fetchCalls.length = 0;
+      notifyUsersByEmail('OPERATION_ORDER', 'NOTIFY_APPROVED', 'DH-001', ['nguoitrinh1'], 's', 'b');
+      notifyUsersByEmail('LICENSE', 'NOTIFY_APPROVAL_NEEDED', 'GP-001', ['duyet1'], 's', 'b');
+      const calls = window.__fetchCalls.filter(c => c.url.includes('/api/send-email')).map(c => JSON.parse(c.body).text);
+      return { operationBody: calls[0], licenseBody: calls[1] };
+    });
+    record('OPERATION_ORDER (module alias thật truyền vào) vẫn tra đúng link tab "vanHanh"', /\?gotoModule=vanHanh&code=DH-001/.test(r.operationBody), r.operationBody);
+    record('LICENSE không có family "result" nào từng gửi email -> KHÔNG có link', !/gotoModule/.test(r.licenseBody || ''), r.licenseBody);
+  });
+
+  // ==========================================================================
+  // gotoApprovalResultRecordFromQueryParam(): đầu vào URL ?gotoModule=<tab>&code=<mã> (đúng link vừa
+  // dựng ở trên) — xác nhận điều hướng thật sự chạy (switchTab) + cảnh báo đúng mã hồ sơ, và KHÔNG điều
+  // hướng lung tung nếu tab lạ (không thuộc allowlist APPROVAL_EMAIL_LINK_TAB, đề phòng URL bị sửa tay).
+  // ==========================================================================
+  await scenario('gotoApprovalResultRecordFromQueryParam(): điều hướng đúng tab + báo đúng mã hồ sơ, xoá query param sau khi dùng', async () => {
+    const r = await page.evaluate(async () => {
+      history.replaceState(null, '', window.location.pathname + '?gotoModule=car&code=XE-009');
+      window.__alerts.length = 0;
+      await gotoApprovalResultRecordFromQueryParam();
+      const carSectionVisible = !document.getElementById('carSection').classList.contains('hidden');
+      return { carSectionVisible, alerts: window.__alerts.slice(), urlAfter: window.location.search };
+    });
+    record('switchTab("car") thực sự chạy — section Đăng Ký Xe hiển thị', r.carSectionVisible, JSON.stringify(r));
+    record('hiện đúng 1 cảnh báo nêu mã hồ sơ XE-009', r.alerts.length === 1 && r.alerts[0].includes('XE-009'), JSON.stringify(r));
+    record('query param bị xoá khỏi URL ngay sau khi dùng (F5 không điều hướng lại)', r.urlAfter === '', JSON.stringify(r));
+  });
+
+  await scenario('gotoApprovalResultRecordFromQueryParam(): tab KHÔNG thuộc allowlist (URL bị sửa tay) -> bỏ qua an toàn, không điều hướng/không xoá param', async () => {
+    const r = await page.evaluate(async () => {
+      await switchTab('dashboard');
+      history.replaceState(null, '', window.location.pathname + '?gotoModule=__evil__&code=X');
+      window.__alerts.length = 0;
+      await gotoApprovalResultRecordFromQueryParam();
+      const carSectionVisible = !document.getElementById('carSection').classList.contains('hidden');
+      return { carSectionVisible, alerts: window.__alerts.slice(), urlAfter: window.location.search };
+    });
+    record('tab lạ -> KHÔNG điều hướng sang Đăng Ký Xe', !r.carSectionVisible, JSON.stringify(r));
+    record('tab lạ -> KHÔNG hiện cảnh báo nào', r.alerts.length === 0, JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 

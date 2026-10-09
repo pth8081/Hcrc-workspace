@@ -11,8 +11,15 @@
 // tương ứng, giữ NGUYÊN VĂN dạng chuỗi, không phân biệt cột nào là "giá"/"tên"). Hiển thị/so sánh ở client
 // (public/index.html::itPriceCellHTML()/diffPriceFileItems()) cũng render generic theo columnLabels, không
 // còn định dạng số/căn phải đặc biệt cho cột nào.
-const { streamFirstSheetRows } = require('./xlsxSafeRead');
+const { streamFirstSheetRows, cellToText, cellRaw } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
+
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — import Excel Phê Duyệt Giá ra "[object Object]" ở nhiều ô):
+// trước đây gọi streamFirstSheetRows() KHÔNG có {raw:true}, nên exceljs tự String(cell.value) — với ô
+// công thức (formula) cell.value là {formula, result}, String() ra đúng "[object Object]". Nay đọc raw rồi
+// tự quy đổi bằng cellToText(cellRaw(...)) (giống hệt lib/objectCatalogImport.js) để lấy đúng giá trị hiển
+// thị (kết quả công thức/richText/hyperlink...) thay vì in nguyên object.
+function cellText(v) { return cellToText(cellRaw(v)); }
 
 function normalizeHeader(s) {
   return String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
@@ -26,10 +33,10 @@ function matchColumnsToTemplate(headerCells, template) {
   const columns = Array.isArray(template?.columns) ? template.columns : [];
   if (!columns.length) throw new HttpError(400, 'Mẫu Giá đã chọn không có cột nào, vui lòng liên hệ Quản trị viên');
 
-  const fileLabelsNorm = headerCells.map(normalizeHeader).filter(h => h);
+  const fileLabelsNorm = headerCells.map(cellText).map(normalizeHeader).filter(h => h);
   const missing = columns.filter(c => !fileLabelsNorm.includes(normalizeHeader(c.label))).map(c => c.label);
   const templateLabelSet = new Set(columns.map(c => normalizeHeader(c.label)));
-  const extra = headerCells.map((raw) => ({ raw: String(raw || '').trim(), norm: normalizeHeader(raw) }))
+  const extra = headerCells.map((raw) => ({ raw: cellText(raw).trim(), norm: normalizeHeader(cellText(raw)) }))
     .filter(h => h.norm && !templateLabelSet.has(h.norm)).map(h => h.raw);
   if (missing.length || extra.length) {
     const parts = [];
@@ -38,7 +45,7 @@ function matchColumnsToTemplate(headerCells, template) {
     throw new HttpError(400, `File bảng giá chưa khớp đúng cột theo Mẫu Giá đã chọn (${parts.join('; ')})`);
   }
 
-  const findIdx = (label) => headerCells.findIndex(h => normalizeHeader(h) === normalizeHeader(label));
+  const findIdx = (label) => headerCells.findIndex(h => normalizeHeader(cellText(h)) === normalizeHeader(label));
   const idxByKey = {};
   columns.forEach((c) => { idxByKey[c.key] = findIdx(c.label); });
   return { columnLabels: columns.map(c => ({ key: c.key, label: c.label })), idxByKey };
@@ -54,7 +61,7 @@ function resolveColumns(headerCells, template) {
   // cứng: lấy NGUYÊN VĂN cột của CHÍNH file này (giống hệt parsePriceTemplateColumns() ở dưới).
   const columnLabels = [];
   headerCells.forEach((raw, idx) => {
-    const label = String(raw || '').trim();
+    const label = cellText(raw).trim();
     if (label) columnLabels.push({ key: `c${idx}`, label });
   });
   if (!columnLabels.length) throw new HttpError(400, 'File bảng giá không đọc được cột nào từ dòng tiêu đề');
@@ -69,7 +76,7 @@ function rowToPriceItem(cells, columnLabels, idxByKey) {
   let hasData = false;
   columnLabels.forEach((c) => {
     const idx = idxByKey[c.key];
-    const v = (idx !== undefined && idx !== -1) ? String(cells[idx] ?? '').trim() : '';
+    const v = (idx !== undefined && idx !== -1) ? cellText(cells[idx]).trim() : '';
     if (v) hasData = true;
     values[c.key] = v.slice(0, 500);
   });
@@ -99,7 +106,7 @@ async function parsePriceFile(buffer, template) {
     if (item) items.push(item);
     if (items.length > 1000) { overLimit = true; return false; }
     return true;
-  });
+  }, { raw: true });
 
   if (!sawAnyRow) throw new HttpError(400, 'File bảng giá trống, không có dữ liệu');
   // Vượt trần thì items chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.
@@ -155,11 +162,11 @@ function sanitizeColumnLabels(rawColumnLabels) {
 async function parsePriceTemplateColumns(buffer) {
   let headerCells = null;
   // Chỉ cần ĐÚNG dòng đầu -> trả về false ngay để dừng đọc, không đụng tới phần còn lại của file.
-  await streamFirstSheetRows(buffer, (cells) => { headerCells = cells; return false; });
+  await streamFirstSheetRows(buffer, (cells) => { headerCells = cells; return false; }, { raw: true });
   if (!headerCells || !headerCells.length) throw new HttpError(400, 'File mẫu không có dòng tiêu đề nào');
   const columns = [];
   headerCells.forEach((raw, idx) => {
-    const label = String(raw || '').trim();
+    const label = cellText(raw).trim();
     if (!label) return;
     columns.push({ key: `c${idx}`, label: label.slice(0, 100) });
   });

@@ -6832,8 +6832,39 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
 // thống). Gộp thành 1 dòng Nhật ký hệ thống duy nhất theo đúng phân hệ nghiệp vụ gọi tới
 // (DOC/SUBMISSION/CAR/OFFICE/MEETING/MINUTES/TASK) — để lọc được theo "Lọc Theo Phân Hệ" ở module
 // Log, nhất quán với cách jobs/contractExpiryReminder.js đã làm ở phía server cho nhắc hạn hợp đồng.
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "khi IT xử lý xong 1 phê duyệt thì gắn link để người gửi có
+// thể truy cập trực tiếp vào phiếu yêu cầu", tổng quát hoá cho "mọi module có phê duyệt"): mọi email
+// "Kết quả duyệt" (family 'result' ở APPROVAL_EMAIL_EVENTS) ĐÃ gửi đúng người trình từ lâu nhưng KHÔNG hề
+// kèm link nào — người nhận phải tự nhớ đường vào đúng module/tab mới xem lại được. Quyết định của người
+// dùng: "Bỏ hẳn link không-đăng-nhập, chỉ làm link yêu cầu đăng nhập" — nên CHỈ cần đưa thẳng vào đúng
+// tab (route `/?gotoModule=<tab>&code=<mã>`), KHÔNG cần token/cơ chế bỏ qua đăng nhập nào — ai bấm link
+// mà chưa đăng nhập thì gặp màn đăng nhập bình thường trước, xong mới được điều hướng tiếp (xem
+// gotoApprovalResultRecordFromQueryParam()). Chỉ thêm 1 CHỖ DUY NHẤT (đây) thay vì sửa 88 điểm gọi
+// notifyUsersByEmail()/notifyRecipientsByEmail() rải rác ~13 module — tái dùng ĐÚNG module/targetCode đã
+// truyền sẵn vào mọi lời gọi hiện có.
+const APPROVAL_EMAIL_LINK_TAB = {
+  CAR: 'car', DOC: 'doc', BUDGET: 'budget', OFFICE: 'office', MEETING: 'meeting', VPP: 'vpp',
+  SUBMISSION: 'submission', CONTRACT: 'contract', INTERNAL: 'internal', IT_SUPPORT: 'itSupport',
+  OPERATION: 'vanHanh', OPERATION_ORDER: 'vanHanh', OPERATION_STORE_OPEN: 'vanHanh', OPERATION_REPAIR: 'vanHanh'
+  // LICENSE cố ý KHÔNG có mặt — family 'result' của LICENSE có actionTypes rỗng (xem APPROVAL_EMAIL_EVENTS),
+  // tức KHÔNG CÓ email "Kết quả duyệt" nào thật sự được gửi cho module này để cần gắn link.
+};
+function buildApprovalResultLink(module, actionType, targetCode) {
+  const cls = classifyApprovalEmailEvent(module, actionType);
+  if (!cls || cls.family !== 'result') return '';
+  const tab = APPROVAL_EMAIL_LINK_TAB[module];
+  if (!tab) return '';
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('gotoModule', tab);
+  if (targetCode) url.searchParams.set('code', targetCode);
+  return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${url.toString()}`;
+}
+
 function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
   const valid = (recipients || []).filter(r => r && r.email);
+  bodyText = `${bodyText}${buildApprovalResultLink(module, actionType, targetCode)}`;
 
   // Cổng admin "🔔 Thông Báo Email Phê Duyệt" (DB.approvalEmailConfig) — xem isApprovalEmailSuppressed()
   // ở trên. CHỈ chặn dispatchRealEmail() thật (không tốn lượt gọi SMTP/POST /api/send-email) — VẪN ghi
@@ -8819,7 +8850,30 @@ function finishLogin(user) {
   startApprovalPolling();
   startNotifBadgePolling();
   openTakeTestFromQueryParam();
+  gotoApprovalResultRecordFromQueryParam();
   applyPwaShortcutParam();
+}
+
+// Sau khi bấm link "🔗 Xem trực tiếp hồ sơ" trong email "Kết quả duyệt" (xem buildApprovalResultLink()
+// ở notifyRecipientsByEmail()), app mở kèm ?gotoModule=<tab>&code=<mã> — tự điều hướng thẳng vào đúng
+// tab chứa hồ sơ đó ngay sau khi đăng nhập xong, thay vì bắt người trình tự nhớ đường vào lại. LUÔN đòi
+// đăng nhập trước (route này chỉ chạy SAU finishLogin(), không có cơ chế bỏ qua đăng nhập nào — đúng
+// quyết định của người dùng "bỏ hẳn link không-đăng-nhập, chỉ làm link yêu cầu đăng nhập"). Xoá query
+// param khỏi URL ngay sau khi dùng — tải lại trang (F5) không tự điều hướng lại lần nữa.
+async function gotoApprovalResultRecordFromQueryParam() {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('gotoModule');
+  const allowedTabs = new Set(Object.values(APPROVAL_EMAIL_LINK_TAB));
+  if (!tab || !allowedTabs.has(tab)) return;
+  const code = params.get('code') || '';
+  history.replaceState(null, '', window.location.pathname);
+  try {
+    await switchTab(tab);
+    if (code) alert(`📌 Hồ sơ cần xem có mã: ${code} — tìm đúng mã này trong danh sách bên dưới.`);
+  } catch (err) {
+    console.error('gotoApprovalResultRecordFromQueryParam: không tải được mô-đun đích', tab, err);
+    alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');
+  }
 }
 
 // Sau khi quét mã QR ở lớp offline (hoặc bấm link trực tiếp), app mở kèm ?takeTest=<classId> — tự điều
@@ -11702,6 +11756,13 @@ bindCspDelegation('hrpReopenModal');
 bindCspDelegation('hrpPayslipViewModal');
 bindCspDelegation('checklistSection');
 bindCspDelegation('muaHangSection');
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — nút "👁️ Chi tiết" ở bảng "Danh Sách Đề Xuất Bán Buôn" (Vận
+// Hành > Hỗ Trợ IT) không phản hồi khi bấm, kể cả admin): #vanHanhSection là 1 fragment lazy-load
+// (TAB_SECTION_FRAGMENT) giống hệt checklistSection/muaHangSection ở trên, nhưng CHƯA TỪNG được gọi
+// bindCspDelegation() từ lúc tách module Vận Hành ra fragment riêng (v23.10) — hệ quả: MỌI nút data-op
+// trong TOÀN BỘ tab Vận Hành đều không có listener nào lắng nghe, không riêng nút Chi tiết. Đã xác minh
+// bằng demo thật (tests/demo-vanhanh-itprice-chitiet-unresponsive.js): chỉ cần thêm đúng dòng này là đủ.
+bindCspDelegation('vanHanhSection');
 bindCspDelegation('hacLeaveRequestModal');
 bindCspDelegation('hacSwapRequestModal');
 bindCspDelegation('hacRosterModal');

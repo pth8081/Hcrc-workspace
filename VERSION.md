@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**25.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.52 (2026-10-09): 5 phản hồi người dùng (ảnh chụp) — Ngành Hàng/Phê Duyệt Hub/Excel/Email/CSP
+
+Người dùng gửi 5 ảnh chụp mô tả 5 lỗi/yêu cầu riêng biệt, kèm chỉ dẫn "kiểm tra tất cả, phân tích, gửi
+demo, đưa phương án xác nhận trước khi triển khai". Sau khi phân tích + xác nhận qua AskUserQuestion,
+triển khai cả 5:
+
+1. **"🏷️ Ngành Hàng Phụ Trách" tự biến mất khỏi quy trình** — người dùng xác nhận cơ chế AND-matching
+   (Ngành Hàng Phụ Trách + Siêu Thị Phụ Trách phải khớp CẢ 2) là ĐÚNG thiết kế; lỗi thật là lưu tham
+   chiếu bằng MÃ THÔ không an toàn trước đổi/xoá danh mục. Thêm `cascadeNganhHangCodeRename()`/
+   `diffNganhHangCatalogRenames()` (`lib/catalogRename.js`, mirror đúng khuôn Danh Mục Phòng Họp) — đổi
+   `code` ở Danh Mục Ngành Hàng nay tự cascade sang cả dòng cấu hình approver lẫn đề xuất đã tạo (kể cả
+   PENDING). Xoá hẳn 1 mã vẫn giữ đánh đổi "không cascade" cũ nhưng hộp xác nhận nay nêu rõ số dòng cấu
+   hình + số đề xuất PENDING đang dùng mã đó trước khi xoá.
+2. **Phê Duyệt Hub chưa sắp theo thời gian mới nhất** — đổi mặc định PENDING sang "mới nhất lên đầu"
+   (trước đây cố ý "cũ nhất trước" để ưu tiên xử lý hồ sơ tồn lâu) + thêm nút "⬇️/⬆️" tự đổi chiều sắp
+   xếp, giữ nguyên lựa chọn qua các lần đổi bộ lọc khác (`public/js/core-approvalhub.js`).
+3. **Import Excel Phê Duyệt Giá ra "[object Object]"** — `lib/priceFileParser.js` trước đây
+   `String(cell.value)` trực tiếp; ô công thức có `cell.value = {formula, result}` nên in ra đúng chuỗi
+   lỗi đó. Chuyển `cellToText()`/`cellRaw()` (trước chỉ có ở `objectCatalogImport.js`) thành hàm dùng
+   chung ở `lib/xlsxSafeRead.js`, áp dụng cho mọi nơi từng `String(cell)` trực tiếp trong file này.
+4. **Gắn link truy cập trực tiếp vào email "Kết quả duyệt"** — phát hiện hệ thống ĐÃ CÓ sẵn email "Kết
+   quả duyệt" cho ~13 module (`DB.approvalEmailConfig`, "🔔 Thông Báo Email Phê Duyệt"), chỉ thiếu link.
+   Theo quyết định người dùng ("bỏ hẳn link không-đăng-nhập, chỉ làm link yêu cầu đăng nhập"): thêm
+   `buildApprovalResultLink()` ngay trong `notifyRecipientsByEmail()` (1 chỗ duy nhất, không sửa lại 88
+   điểm gọi rải rác), kèm `gotoApprovalResultRecordFromQueryParam()` điều hướng sau khi đăng nhập.
+5. **Nút "Chi tiết" ở Vận Hành > Hỗ Trợ IT không phản hồi** — `#vanHanhSection` (fragment lazy-load) chưa
+   từng được gọi `bindCspDelegation()` từ lúc tách module Vận Hành ra fragment riêng (v23.10), khiến MỌI
+   nút `data-op` trong toàn bộ tab Vận Hành im lặng, không riêng nút Chi tiết. Thêm đúng 1 dòng
+   `bindCspDelegation('vanHanhSection')` vào `core.js`.
+
+Test mới: `tests/test-nganhhang-catalog-rename-cascade.js` (8/8), `tests/test-pricefile-formula-cell.js`
+(7/7), `tests/test-vanhanh-itprice-chitiet-csp.js` (1/1), mở rộng `tests/test-approval-hub.js` (+6 kịch
+bản sort) và `tests/test-approval-email-config.js` (+7 kịch bản link/điều hướng) — toàn bộ 43/43 mỗi
+file. Full regression ~45 file liên quan (itPrice/catalog-rename/object-catalog/perm-matrix/workflow/
+approval-email/approval-hub...) không phát sinh lỗi mới; 2 thất bại tiền tồn tại không liên quan
+(`test-adv-workflow-tab-deep.js`, `test-preview-workflow-buttons.js`) đã xác minh lại bằng worktree chạy
+ngay trên commit TRƯỚC cả 5 bản vá này — y hệt kết quả, không phải do đợt vá này gây ra.
 
 ## v25.51 (2026-10-09): Chức danh HO + phòng ban — ghép đúng người thay vì khớp "mọi Trưởng Phòng"
 

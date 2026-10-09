@@ -442,6 +442,42 @@ function diffMeetingRoomRenames(oldRooms, newRooms) {
     .map(r => ({ oldValue: oldById.get(r.id).name, newValue: r.name }));
 }
 
+// nganhHangCatalog (🏷️ Danh Mục Ngành Hàng, "Quy Trình Nâng Cao"): mảng OBJECT {id, code, name, dept} —
+// CÙNG DẠNG meetingRooms ở trên (object có `id` ổn định, đổi qua route generic POST /api/data/nganhHangCatalog
+// chứ không qua /api/admin/renameCatalogEntry, nên KHÔNG đi qua CATALOG_HANDLERS/renameCatalogEntry()).
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "chọn Ngành Hàng Phụ Trách cho 1 người thì người đó tự biến
+// mất khỏi quy trình"): 2 nơi dùng đều lưu nguyên MÃ (code) thô, so khớp CHUỖI THÔ, không tham chiếu theo
+// id: itPriceWholesaleStoreMixedApprovalRules[].nganhHang[] (dòng cấu hình approver, "🏪 QT Giá Bán Buôn
+// Siêu Thị") VÀ itPriceApprovals[].nganhHang[] (đề xuất ĐÃ TẠO, "Ngành Hàng Áp Dụng" người đề xuất chọn
+// lúc tạo đơn). editNganhHangCatalogItem() cho phép ĐỔI `code` tự do qua prompt() — trước đây KHÔNG
+// cascade gì, nên chỉ cần gõ sai/đổi mã 1 lần là MỌI dòng cấu hình VÀ mọi đề xuất đã tạo trước đó (dù
+// đang PENDING) đồng loạt "mồ côi": 2 bên không còn khớp mã nào với nhau nữa (rule giữ mã CŨ, không ai
+// chủ động đổi theo), approver bước đó lập tức tra ra 0 người khớp — người dùng thấy đúng như "tự biến
+// mất khỏi quy trình" dù AND-matching nganhHang/stores (xem resolveItPriceWholesaleMixedApprovalRuleUsernames()
+// ở lib/workflowEngine.js) hoàn toàn đúng thiết kế. Cascade CẢ 2 nơi khi đổi `code` (không đổi `name`/
+// `dept` — 2 field đó chỉ để HIỂN THỊ, không có logic nào so khớp theo chúng).
+function renameNganhHangCodeInRule(rule, oldCode, newCode) {
+  if (!Array.isArray(rule.nganhHang) || !rule.nganhHang.includes(oldCode)) return rule;
+  return { ...rule, nganhHang: rule.nganhHang.map(c => (c === oldCode ? newCode : c)) };
+}
+async function cascadeNganhHangCodeRename(oldCode, newCode) {
+  await withLockedAppDataValue('itPriceWholesaleStoreMixedApprovalRules', (list) =>
+    (list || []).map(r => renameNganhHangCodeInRule(r, oldCode, newCode)));
+  await renameFieldValueInCollection('itPriceApprovals', (item) => {
+    if (!Array.isArray(item.nganhHang) || !item.nganhHang.includes(oldCode)) return item;
+    return { ...item, nganhHang: item.nganhHang.map(c => (c === oldCode ? newCode : c)) };
+  });
+}
+
+// So sánh mảng nganhHangCatalog CŨ/MỚI theo `id` để tìm ra (các) cặp (mã cũ -> mã mới) — cùng khuôn
+// diffMeetingRoomRenames() ở trên, tách THUẦN (không side-effect) để test độc lập.
+function diffNganhHangCatalogRenames(oldList, newList) {
+  const oldById = new Map((Array.isArray(oldList) ? oldList : []).filter(n => n && n.id != null).map(n => [n.id, n]));
+  return (Array.isArray(newList) ? newList : [])
+    .filter(n => n && oldById.has(n.id) && oldById.get(n.id).code !== n.code)
+    .map(n => ({ oldValue: oldById.get(n.id).code, newValue: n.code }));
+}
+
 async function cascadeStoreRename(oldValue, newValue) {
   // user.dept dùng CHUNG 1 field cho cả tên phòng ban (HO) lẫn tên siêu thị (phân biệt bằng posType) —
   // so trực tiếp giá trị, không cần lọc posType (1 dept/store name không thể vừa là tên phòng ban vừa
@@ -705,4 +741,7 @@ async function renameCatalogEntry(catalogKey, oldValue, newValue) {
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
 // không đi qua CATALOG_HANDLERS/renameCatalogEntry() ở trên được (route riêng tự cập nhật mảng lồng
 // trong positionTypes[].locations/jobTitles, chỉ cần chạy PHẦN CASCADE ở đây).
-module.exports = { renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename };
+module.exports = {
+  renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename,
+  cascadeNganhHangCodeRename, diffNganhHangCatalogRenames
+};
