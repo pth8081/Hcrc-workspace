@@ -1385,11 +1385,31 @@ async function editNganhHangCatalogItem(id) {
 // itPriceWholesaleStoreMixedApprovalRules[].nganhHang (dòng cấu hình cũ) — cùng đánh đổi
 // deleteMeetingRoomCatalogItem() (hồ sơ/cấu hình cũ giữ nguyên mã cũ, chỉ không còn chọn được mã này cho
 // hồ sơ/dòng cấu hình MỚI); 2 nơi dùng đều tự hiện cảnh báo rõ khi tra không thấy mã còn tồn tại trong
-// danh mục (xem renderItPriceWholesaleMixedApprovalSection() ở trên).
+// danh mục (xem renderItPriceWholesaleMixedApprovalSection() ở trên). ĐỔI TÊN mã (`code`, không phải
+// xoá) giờ ĐÃ cascade đầy đủ sang cả 2 nơi này — xem cascadeNganhHangCodeRename() ở lib/catalogRename.js
+// (gọi tự động từ routes/data.js khi ghi 'nganhHangCatalog', không cần sửa gì ở client) — chỉ riêng thao
+// tác XOÁ HẲN 1 mã mới giữ nguyên đánh đổi "không cascade" này.
+//
+// LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — xoá 1 ngành hàng đang được gán cho dòng cấu hình approver
+// khiến dòng đó lặng lẽ mất tác dụng, chỉ hiện 1 dòng chữ đỏ nhỏ dễ bỏ sót trên màn cấu hình khác): cảnh
+// báo trước đây chỉ nói chung chung "vẫn giữ nguyên dữ liệu" — ĐỔI sang đếm THẬT số dòng cấu hình đang
+// tham chiếu mã này (itPriceWholesaleStoreMixedApprovalRules) + số đề xuất PENDING đang dùng mã này
+// (itPriceApprovals), nêu rõ CON SỐ ngay trong hộp xác nhận TRƯỚC khi xoá, để admin biết chính xác phạm
+// vi ảnh hưởng thay vì chỉ phát hiện ra sau khi 1 approver "tự biến mất khỏi quy trình".
+function countNganhHangCatalogUsage(code) {
+  const ruleCount = (DB.itPriceWholesaleStoreMixedApprovalRules || []).filter(r => Array.isArray(r.nganhHang) && r.nganhHang.includes(code)).length;
+  const pendingOrderCount = (DB.itPriceApprovals || []).filter(p => p.status === 'PENDING' && Array.isArray(p.nganhHang) && p.nganhHang.includes(code)).length;
+  return { ruleCount, pendingOrderCount };
+}
+
 async function deleteNganhHangCatalogItem(id) {
   const item = (DB.nganhHangCatalog || []).find(n => n.id === id);
   if (!item) return;
-  if (!confirm(`Xoá ngành hàng "${item.code} — ${item.name}" khỏi Danh Mục Ngành Hàng? Đề xuất/dòng cấu hình đã chọn mã này trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mã này nữa.`)) return;
+  const { ruleCount, pendingOrderCount } = countNganhHangCatalogUsage(item.code);
+  const usageWarning = (ruleCount > 0 || pendingOrderCount > 0)
+    ? `\n\n⚠️ Mã này đang được dùng ở ${ruleCount} dòng cấu hình approver ("🏪 QT Giá Bán Buôn Siêu Thị") và ${pendingOrderCount} đề xuất đang CHỜ DUYỆT — sau khi xoá, các dòng cấu hình đó sẽ KHÔNG còn khớp được hồ sơ nào (approver coi như mất tác dụng với ngành hàng này), còn các đề xuất đang chờ duyệt vẫn giữ nguyên dữ liệu.`
+    : '';
+  if (!confirm(`Xoá ngành hàng "${item.code} — ${item.name}" khỏi Danh Mục Ngành Hàng? Đề xuất/dòng cấu hình đã chọn mã này trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mã này nữa.${usageWarning}`)) return;
   const prevList = (DB.nganhHangCatalog || []).map(n => ({ ...n }));
   DB.nganhHangCatalog = (DB.nganhHangCatalog || []).filter(n => n.id !== id);
   const saved = await syncStorage('nganhHangCatalog');

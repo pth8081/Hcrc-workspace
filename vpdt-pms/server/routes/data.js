@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2078,6 +2078,15 @@ router.post('/:key', async (req, res) => {
       const oldRooms = (await getAppDataValue('meetingRooms')) || [];
       renamedMeetingRoomPairs = diffMeetingRoomRenames(oldRooms, value);
     }
+    // nganhHangCatalog ("🏷️ Danh Mục Ngành Hàng" — xem cascadeNganhHangCodeRename()/
+    // diffNganhHangCatalogRenames() ở lib/catalogRename.js cho LÝ DO ĐẦY ĐỦ): CÙNG KHUÔN meetingRooms ở
+    // trên — đối chiếu mảng CŨ/MỚI theo id TRƯỚC khi ghi để tìm cặp (mã cũ -> mã mới) do
+    // editNganhHangCatalogItem() đổi field `code`, cascade SAU KHI ghi 'nganhHangCatalog' thành công.
+    let renamedNganhHangPairs = [];
+    if (key === 'nganhHangCatalog' && Array.isArray(value)) {
+      const oldNganhHang = (await getAppDataValue('nganhHangCatalog')) || [];
+      renamedNganhHangPairs = diffNganhHangCatalogRenames(oldNganhHang, value);
+    }
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
@@ -2156,6 +2165,11 @@ router.post('/:key', async (req, res) => {
     // ngay trên — không cascade dữ liệu khác dựa trên 1 thao tác ghi CHƯA xác nhận lưu được).
     for (const { oldValue, newValue } of renamedMeetingRoomPairs) {
       await cascadeMeetingRoomRename(oldValue, newValue);
+    }
+    // nganhHangCatalog — cascade cho từng cặp (mã cũ -> mã mới) phát hiện được ở trên, CHỈ SAU KHI ghi
+    // 'nganhHangCatalog' đã chắc chắn thành công (cùng nguyên tắc meetingRooms ngay trên).
+    for (const { oldValue, newValue } of renamedNganhHangPairs) {
+      await cascadeNganhHangCodeRename(oldValue, newValue);
     }
 
     // Nhật ký hệ thống SERVER-SIDE cho các key QUẢN TRỊ NHẠY CẢM — xem ADMIN_SENSITIVE_KEYS ở đầu file.
