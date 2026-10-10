@@ -96,6 +96,16 @@ async function run() {
     await page.fill('#offAmount', '12000000');
     await page.fill('#offSupplier', 'Công ty Điện Lạnh Test');
     await page.fill('#offReason', 'Hệ thống điều hoà hỏng, cần sửa chữa gấp.');
+    // Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP) — bắt buộc chọn loại + người xác nhận hợp lệ từ đợt
+    // tính năng này trở đi (xem lib/createValidation.js officeReqs.extraValidate) — tp_kd được gán thêm
+    // quyền officeFixTechMechanical ở tests/_seed.js riêng cho mục đích này (mirror đúng pattern
+    // carAssignedDriver ở test-meeting-car.js: set value trực tiếp rồi gọi hàm resolve, không cần giả lập
+    // sự kiện input/change thật).
+    await page.evaluate(() => {
+      document.getElementById('offTechType').value = 'MECHANICAL';
+      document.getElementById('offTechAssignedTo').value = 'Trần Thị Trưởng Phòng KD — Phòng Kinh Doanh (tp_kd)';
+      resolveOfficeTechAssignedToInput(document.getElementById('offTechAssignedTo').value);
+    });
     await clearAlerts();
     await page.evaluate(() => submitOfficeReq({ preventDefault() {}, target: document.getElementById('officeForm') }));
     await page.waitForTimeout(200);
@@ -139,6 +149,12 @@ async function run() {
     await page.fill('#offAmount', '9000000');
     await page.fill('#offSupplier', 'Công ty Xây Dựng Test');
     await page.fill('#offReason', 'Mái tôn bị dột, cần sửa gấp trước mùa mưa.');
+    // Kỹ Thuật Xác Nhận (11/2026) — xem chú thích ở kịch bản 3 phía trên.
+    await page.evaluate(() => {
+      document.getElementById('offTechType').value = 'MECHANICAL';
+      document.getElementById('offTechAssignedTo').value = 'Trần Thị Trưởng Phòng KD — Phòng Kinh Doanh (tp_kd)';
+      resolveOfficeTechAssignedToInput(document.getElementById('offTechAssignedTo').value);
+    });
     await clearAlerts();
     await page.evaluate(() => submitOfficeReq({ preventDefault() {}, target: document.getElementById('officeForm') }));
     await page.waitForTimeout(200);
@@ -183,14 +199,29 @@ async function run() {
     const office3AfterResubmit = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office3.id);
     check('"Sửa & Gửi Lại" -> đề xuất quay lại PENDING, bước 1, nội dung đã cập nhật (kể cả Dự toán)', !!office3AfterResubmit && office3AfterResubmit.status === 'PENDING' && office3AfterResubmit.currentStep === 1 && office3AfterResubmit.title.includes('đã bổ sung báo giá') && office3AfterResubmit.amount === 9500000, office3AfterResubmit);
 
+    // Kỹ Thuật Xác Nhận (11/2026) — từ đợt tính năng này, Sửa Chữa VP có THÊM 1 bước ("🔧 Xác Nhận Kỹ
+    // Thuật") ngay sau bước Trưởng Phòng duyệt; office3 dùng tp_kd làm CẢ Trưởng Phòng lẫn Người Xác
+    // Nhận Kỹ Thuật (xem fixture tests/_seed.js) nên cùng 1 tài khoản phải duyệt ĐỦ 2 LƯỢT mới APPROVED.
     await loginAs('tp_kd');
     await goToOffice('SUA_CHUA');
     await page.evaluate((id) => openOfficeProcessModal(id), office3.id);
     await page.fill('#txtOfficeComment', 'Đã đủ báo giá, đồng ý.');
     await page.evaluate(() => confirmProcessOfficeReq('APPROVE'));
     await confirmPending();
-    const office3Final = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id).status, office3.id);
-    check('Sau khi bổ sung + gửi lại, đề xuất được duyệt lại bình thường -> APPROVED', office3Final === 'APPROVED', office3Final);
+    const office3AfterStep1 = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office3.id);
+    check('Duyệt bước 1 (Trưởng Phòng) xong -> chuyển sang bước 2 (Kỹ Thuật Xác Nhận), vẫn PENDING', office3AfterStep1.status === 'PENDING' && office3AfterStep1.currentStep === 2, office3AfterStep1);
+
+    await page.evaluate((id) => openOfficeProcessModal(id), office3.id);
+    await page.fill('#offTechCondition', 'Mái tôn bị thủng nhiều vị trí, khung sắt còn tốt.');
+    await page.selectOption('#offTechSeverityLevel', 'MEDIUM');
+    await page.fill('#offTechProposedPlan', 'Thay tôn mới toàn bộ, giữ nguyên khung.');
+    await page.fill('#offTechEstimatedCost', '9500000');
+    await clearAlerts();
+    await page.evaluate(() => confirmProcessOfficeReq('APPROVE'));
+    await confirmPending();
+    const office3Final = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office3.id);
+    check('Sau khi duyệt đủ cả 2 bước (Trưởng Phòng + Kỹ Thuật Xác Nhận) -> APPROVED', office3Final.status === 'APPROVED', office3Final.status);
+    check('Bước Kỹ Thuật Xác Nhận ghi đúng dữ liệu đánh giá vào hồ sơ', office3Final.techCondition.includes('thủng nhiều vị trí') && office3Final.techSeverityLevel === 'MEDIUM' && office3Final.techEstimatedCost === 9500000, office3Final);
 
     // ============ Kịch bản 7 (Fix): nút "📤 Tải Tài Liệu Ký" phải còn lại (cho tải lại/sửa) khi ĐÃ có
     // tệp nhưng CHƯA chuyển sang thanh toán, và biến mất đúng lúc ngay khi đã "Chuyển Sang Thanh Toán"

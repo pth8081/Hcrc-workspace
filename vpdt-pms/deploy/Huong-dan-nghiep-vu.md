@@ -1956,6 +1956,35 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
   mà CHƯA ai xử lý gì (còn đúng bước duyệt đầu tiên) thì người tạo (hoặc
   admin) tự hủy được ngay ở danh sách; đã qua ít nhất 1 bước duyệt/đã Phê
   Duyệt xong thì không dùng nút này được nữa.
+  - **🔧 Kỹ Thuật Xác Nhận (11/2026, CHỈ áp dụng Sửa Chữa VP, không áp dụng
+    Mua Sắm)** — bước duyệt mới tự chèn CỐ ĐỊNH ngay SAU bước 1 (Trưởng
+    Phòng duyệt) của quy trình phòng ban hiện có: [Trưởng Phòng duyệt] →
+    [**Kỹ Thuật Xác Nhận**] → [...các bước duyệt chi phí còn lại]. Lúc tạo
+    đề xuất Sửa Chữa, người đề xuất BẮT BUỘC chọn **Loại Kỹ Thuật Xác Nhận**
+    (💻 IT hoặc 🔧 Máy Móc/Thiết Bị) và **Người Xác Nhận Kỹ Thuật** — danh
+    sách chọn CHỈ hiện người đã được admin cấp đúng quyền tương ứng (xem
+    mục cấp quyền bên dưới); không thể tự chọn chính mình. Hồ sơ Sửa Chữa
+    CŨ (tạo trước khi có tính năng này, không có người xác nhận kỹ thuật)
+    KHÔNG bị ảnh hưởng — vẫn giữ nguyên quy trình cũ, không cần làm gì
+    thêm.
+    - **Bước xử lý**: đến đúng lượt, CHỈ người được chọn thấy nút xử lý
+      (người khác, kể cả Trưởng Phòng, không thấy) — phải điền đủ **Hiện
+      Trạng/Kết Quả Kiểm Tra**, **Mức Độ Hư Hỏng** (🟢 Nhẹ/🟠 Trung bình/
+      🔴 Nặng), **Phương Án Đề Xuất**, **Chi Phí Dự Kiến Sau Khảo Sát**
+      (có thể đính kèm tối đa vài ảnh/tài liệu hiện trường) rồi mới bấm
+      "✅ Xác Nhận" để chuyển tiếp — thiếu field nào bị chặn ngay cả ở giao
+      diện lẫn server. Từ chối ở bước này hoạt động y hệt mọi bước khác
+      (chỉ cần lý do, không cần form đánh giá).
+    - **Cấp quyền**: Hệ Thống → Phân Quyền → Sửa Người Dùng → Cây Phân
+      Quyền → mục 7 "🏢 Văn Phòng (Mua/Sửa)" → 2 checkbox mới "💻 Kỹ Thuật
+      Xác Nhận — IT" / "🔧 Kỹ Thuật Xác Nhận — Máy Móc/Thiết Bị" (ngay cạnh
+      "🛒 Mua Bán"/"🔧 Sửa Chữa" sẵn có) — 2 quyền phẳng độc lập, 1 người có
+      thể được tick cả 2 nếu kiêm nhiệm cả IT lẫn kỹ thuật máy móc.
+    - **Xem/tải ảnh hiện trường**: người xác nhận kỹ thuật tự xem/tải được
+      ảnh mình vừa tải lên qua "📂 Quản Lý Tệp File" (mục "🔧 Kỹ Thuật Xác
+      Nhận"); kết quả đánh giá (Hiện Trạng/Mức Độ/Phương Án/Chi Phí) hiển
+      thị READ-ONLY cho MỌI người xem được hồ sơ ngay trong màn xử lý, sau
+      khi đã xác nhận xong.
   - **Thanh Toán** — tổng hợp đề nghị thanh toán tự sinh từ Hợp Đồng/Mua
     Bán/Sửa Chữa (nút "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán") hoặc tạo
     thủ công. **3 sub-tab**:

@@ -39,6 +39,9 @@
      Cơ Cấu Tổ Chức — đợt 10 CSP). -->
 <div id="systemUsersDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 <div id="carDriversDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+<!-- officeFixTechDatalist: ô tìm-kiếm-gõ-chọn "Người Xác Nhận Kỹ Thuật" ở form Sửa Chữa VP (Kỹ Thuật Xác
+     Nhận, 11/2026) — danh sách lọc theo đúng loại IT/Máy Móc qua onOfficeTechTypeChange() (module-office.js). -->
+<div id="officeFixTechDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
 <!-- hrpfPositionDatalist: ô tìm-kiếm-gõ-chọn "Chức Vụ" ở Hồ Sơ Nhân Sự (module-hrprofile.js) — danh
      sách nạp từ GET /api/hr-profile/position-options (mọi node POSITION của bản Cơ Cấu Tổ Chức đang áp
      dụng). Cùng lý do đặt NGAY DƯỚI <body> như 2 dropdown trên. -->
@@ -2448,6 +2451,9 @@
     </div>
     <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
       <div id="officeModalDetails" class="bg-gray-50 p-3 rounded border space-y-2 text-gray-700"></div>
+      <!-- Kỹ Thuật Xác Nhận (11/2026) — 3 trạng thái render động ở openOfficeProcessModal() (module-office.js):
+           khối ĐỌC CHỈ (đã xác nhận), FORM NHẬP (đúng lượt người được chọn), hoặc dòng "đang chờ". -->
+      <div id="officeTechAssessmentWrap" class="hidden"></div>
 
       <div>
         <h4 class="font-bold text-gray-800 mb-2">✍️ Ý Kiến Chỉ Đạo & Ghi Chú Phê Duyệt</h4>

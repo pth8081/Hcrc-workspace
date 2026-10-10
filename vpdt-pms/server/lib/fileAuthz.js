@@ -250,7 +250,11 @@ async function findOwningRecord(fileUrl) {
         || (c.forwardThreads || []).some(n => n.reply?.fileUrl === fileUrl),
       build: c => ({ moduleKey: 'contract', dept: c.dept, custodianDept: c.custodianDept, ownerUsername: c.creator, record: c }) },
     { records: carRegs, fixed: c => c.fileUrl === fileUrl, build: c => ({ moduleKey: 'car', dept: c.dept, ownerUsername: c.creator, record: c }) },
-    { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl, build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
+    // techAssessmentFileUrls[] (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP) — ảnh/tài liệu hiện trường do
+    // người xác nhận kỹ thuật tải lên lúc Duyệt bước kỹ thuật, mảng URL thuần (không phải {fileUrl}).
+    { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl
+        || (Array.isArray(o.techAssessmentFileUrls) && o.techAssessmentFileUrls.includes(fileUrl)),
+      build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
     // images[]/coverImage/videos[] (9/2026, nhiều ảnh + ảnh đại diện + video Nhịp Sống HCRC/Góc Chia Sẻ) —
     // PHẢI tra cả 3 field mới cạnh attachment cũ, nếu không ảnh/video của bài PENDING/REJECTED rơi vào
     // nhánh FAIL-OPEN (ai đăng nhập cũng xem được) thay vì đi qua canViewInternalPost() như attachment.
@@ -596,7 +600,13 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     // file gốc của hồ sơ để tham khảo, không có cờ quyền "<moduleKey>Download" riêng nào cấp được việc này.
     const allowedByForward = (owning.moduleKey === 'submission' || owning.moduleKey === 'contract')
       && isForwardThreadParticipant(user, owning.record);
-    return !!(allowedByDept || allowedByCustodian || allowedByForward);
+    // Kỹ Thuật Xác Nhận (11/2026, officeReqs) — người được chọn làm Người Xác Nhận Kỹ Thuật tự động xem
+    // được hồ sơ (qua canViewOfficeReq()/isApproverForApproversMap(), không cần đổi gì ở mode 'view' bên
+    // dưới) nhưng quyền "<moduleKey>Download" theo phòng ban KHÔNG tự bao gồm approver — họ vẫn cần tải
+    // về được chính ảnh/tài liệu hiện trường mình vừa tải lên, nên thêm thẳng nhánh OR theo field
+    // techAssignedTo (mirror đúng khuôn allowedByForward ở trên).
+    const allowedByTechAssignee = owning.moduleKey === 'office' && owning.record?.techAssignedTo === user.username;
+    return !!(allowedByDept || allowedByCustodian || allowedByForward || allowedByTechAssignee);
   }
 
   // mode 'view' — dùng đúng khuôn canView* của từng module (KHÔNG dùng cờ Download, xem đầu file).

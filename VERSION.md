@@ -1,8 +1,45 @@
 # Phiên bản hiện tại
 
-**25.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.63 (2026-11): Kỹ Thuật Xác Nhận (Sửa Chữa VP)
+
+Bước duyệt mới "🔧 Xác Nhận Kỹ Thuật" tự chèn CỐ ĐỊNH ngay SAU bước 1
+(Trưởng Phòng duyệt) của quy trình Tổng Hợp > Sửa Chữa VP — CHỈ áp dụng Sửa
+Chữa, không áp dụng Mua Sắm. Theo yêu cầu người dùng sau khi xem demo + xác
+nhận phương án.
+
+- **Lúc tạo đề xuất Sửa Chữa**: người đề xuất bắt buộc chọn "Loại Kỹ Thuật
+  Xác Nhận" (💻 IT / 🔧 Máy Móc-Thiết Bị) và "Người Xác Nhận Kỹ Thuật" —
+  danh sách chọn CHỈ hiện người đã được cấp đúng quyền tương ứng, không thể
+  tự chọn chính mình. Hồ sơ Sửa Chữa CŨ (không có người xác nhận kỹ thuật)
+  không bị ảnh hưởng, giữ nguyên quy trình cũ.
+- **Bước xử lý**: đến đúng lượt, CHỈ người được chọn thấy nút xử lý — phải
+  điền đủ Hiện Trạng/Kết Quả Kiểm Tra, Mức Độ Hư Hỏng (Nhẹ/Trung bình/
+  Nặng), Phương Án Đề Xuất, Chi Phí Dự Kiến (kèm ảnh/tài liệu hiện trường
+  tuỳ chọn) rồi mới Xác Nhận để chuyển tiếp; Từ chối hoạt động y hệt mọi
+  bước khác.
+- **Server**: `insertOfficeFixTechStep()` (lib/workflowEngine.js) chèn bước
+  mới với approvers là mảng singleton `[techAssignedTo]` — tái dùng NGUYÊN
+  VẸN mọi cơ chế gác quyền generic sẵn có (canApproveStep/canViewOfficeReq),
+  không cần sửa gì thêm; validate bắt buộc đủ field lúc APPROVE đúng bước
+  kỹ thuật; validate lúc TẠO và lúc "Sửa & Gửi Lại" (lib/createValidation.js,
+  lib/recordActions.js); file ảnh hiện trường qua moduleKey riêng
+  `officeFixTechAssessment` (ownership check ở routes/workflow.js +
+  lib/fileAuthz.js, download quyền riêng cho đúng người xác nhận).
+- **Phân quyền**: 2 quyền phẳng mới `officeFixTechIT`/
+  `officeFixTechMechanical` (cây phân quyền mục 7 "Văn Phòng (Mua/Sửa)",
+  + nhãn Ma Trận Phân Quyền) — 1 người có thể được tick cả 2 nếu kiêm nhiệm.
+- **Client**: field mới trong form tạo Sửa Chữa (officeSection.html) +
+  khối xử lý 3 trạng thái (form nhập/đọc-chỉ/đang chờ) trong modal xử lý
+  (module-office.js) + `insertOfficeFixTechStepClient()` mirror đúng server
+  (core.js) cho badge tiến độ/timeline hiển thị đúng ngay trên danh sách.
+- Đã thêm vào Quản Lý Tệp File, Biểu Mẫu, Hướng Dẫn Nghiệp Vụ (tab 📘 Nghiệp
+  Vụ, mục Tổng Hợp). Viết 18 test đơn vị mới (tests/test-office-tech-
+  confirm.js) + full regression (toàn bộ test Playwright liên quan
+  officeReqs/budget/payment/contract/hr pass).
 
 ## v25.62 (2026-10-10): Chuyển Tiếp Xin Ý Kiến + Quá Hạn Xử Lý (Văn Bản Trình/Hợp Đồng)
 

@@ -1578,7 +1578,10 @@ const UPLOAD_MODULE_LIST = [
   // chuyển tiếp trả lời (pickForwardReplyFile(), core.js). Chưa cấu hình riêng thì rơi về ALLOWED_EXT
   // chung của routes/upload.js (đúng bằng UPLOAD_EXT_UNIVERSE mặc định) — thêm vào đây để admin tự siết
   // lại nếu cần, không đổi hành vi mặc định hiện tại.
-  { key: 'forwardReply', label: '🔀 Chuyển Tiếp Xin Ý Kiến (File Ý Kiến Trả Lời)' }
+  { key: 'forwardReply', label: '🔀 Chuyển Tiếp Xin Ý Kiến (File Ý Kiến Trả Lời)' },
+  // officeFixTechAssessment (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP) — ảnh/tài liệu hiện trường người xác
+  // nhận kỹ thuật tải lên lúc Duyệt bước kỹ thuật (xem openOfficeProcessModal() ở module-office.js).
+  { key: 'officeFixTechAssessment', label: '🔧 Kỹ Thuật Xác Nhận (Ảnh/Tài Liệu Hiện Trường Sửa Chữa)' }
 ];
 
 function renderUploadTypeConfig() {

@@ -378,6 +378,13 @@ router.post('/:module/:id/:action', async (req, res) => {
       await assertPayloadFileUrlsOwnedByUser({ fileUrl: extraFields?.fileUrl }, freshUser);
     }
 
+    // Kỹ Thuật Xác Nhận (11/2026, officeReqs/Sửa Chữa) — ảnh/tài liệu hiện trường do CHÍNH người xác
+    // nhận kỹ thuật vừa tải lên khi Duyệt ở đúng bước kỹ thuật (xem khối validate ở applyWorkflowAction()
+    // trong lib/workflowEngine.js) — cùng lớp kiểm sở hữu tệp như PROPOSE_FILE_REPLACEMENT ở trên.
+    if (moduleKey === 'officeReqs' && action === 'APPROVE' && extraFields?.techAssessmentFileUrls) {
+      await assertPayloadFileUrlsOwnedByUser({ techAssessmentFileUrls: extraFields.techAssessmentFileUrls }, freshUser);
+    }
+
     let transition = null;
 
     // carRegs: cần đọc trước toàn bộ collection để kiểm tra trùng biển số/khung giờ ngay lúc gán biển

@@ -662,6 +662,28 @@ function editOfficeReqDraft(payload, user, item, appData) {
   for (const f of OFFICE_REQ_DRAFT_EDITABLE_FIELDS) {
     if (payload[f] !== undefined) item[f] = payload[f];
   }
+  // Kỹ Thuật Xác Nhận (11/2026) — mirror đúng khuôn validate lúc TẠO (createValidation.js
+  // CREATE_MODULE_CONFIGS.officeReqs.extraValidate), chỉ chạy lại khi người dùng thật sự đổi 1 trong 2
+  // field này lúc Sửa & Gửi Lại (không ép phải validate lại field KHÔNG đổi).
+  if (item.subType === 'SUA_CHUA' && (payload.techType !== undefined || payload.techAssignedTo !== undefined)) {
+    const techType = payload.techType !== undefined ? payload.techType : item.techType;
+    if (techType !== 'IT' && techType !== 'MECHANICAL') {
+      throw new HttpError(400, 'Vui lòng chọn Loại Kỹ Thuật Xác Nhận (IT hoặc Máy Móc/Thiết Bị)');
+    }
+    const permKey = techType === 'IT' ? 'officeFixTechIT' : 'officeFixTechMechanical';
+    const assignedUsername = String(payload.techAssignedTo !== undefined ? payload.techAssignedTo : item.techAssignedTo || '').trim();
+    if (!assignedUsername) throw new HttpError(400, 'Vui lòng chọn Người Xác Nhận Kỹ Thuật');
+    const assignedUser = (appData?.users || []).find(u => u && u.username === assignedUsername && u.active !== false);
+    if (!assignedUser || !assignedUser.perms?.[permKey]) {
+      throw new HttpError(400, 'Người Xác Nhận Kỹ Thuật không hợp lệ (chưa được cấp đúng quyền, hoặc tài khoản đã khoá)');
+    }
+    if (assignedUser.username === user.username) {
+      throw new HttpError(400, 'Không thể tự chọn chính mình làm Người Xác Nhận Kỹ Thuật');
+    }
+    item.techType = techType;
+    item.techAssignedTo = assignedUser.username;
+    item.techAssignedToName = assignedUser.name;
+  }
   // Khớp đúng luật tính lại amount từ items ở createValidation.js CREATE_MODULE_CONFIGS.officeReqs
   // (không tin amount client tự tính) — chỉ áp dụng nhánh "Mua Sắm" (có items), nhánh Sửa Chữa/Đầu Tư
   // nhập tay 1 ô số vẫn phải chặn âm.

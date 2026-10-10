@@ -525,6 +525,8 @@ const PERM_KEY_VN_LABELS = {
   "officeCreate": "Văn Phòng (Mua/Sửa) — Tạo mới (tự khoá đúng phòng ban)",
   "officeDownload.all": "Văn Phòng (Mua/Sửa) — Tải xuống",
   "officeFix": "Văn Phòng (Mua/Sửa) — 🔧 Sửa Chữa",
+  "officeFixTechIT": "Văn Phòng (Mua/Sửa) — 💻 Kỹ Thuật Xác Nhận (IT)",
+  "officeFixTechMechanical": "Văn Phòng (Mua/Sửa) — 🔧 Kỹ Thuật Xác Nhận (Máy Móc/Thiết Bị)",
   "onboardingEvaluate": "Đào Tạo — 🆕 Đánh Giá Tân Binh (Giai đoạn 3, theo đơn vị)",
   "operationOrderCreate": "Vận Hành — 📦 Tạo/Gửi Đơn Hàng",
   "operationOrderReceiptManageHO": "Vận Hành — 🏢 Quyền Phê Duyệt Đặt Hàng HO",

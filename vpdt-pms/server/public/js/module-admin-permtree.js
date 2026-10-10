@@ -148,6 +148,8 @@ function collectPermsFromForm() {
     meetingReportView: document.getElementById('pMeetingReportView').checked,
     officeBuy: document.getElementById('pOfficeBuy').checked,
     officeFix: document.getElementById('pOfficeFix').checked,
+    officeFixTechIT: document.getElementById('pOfficeFixTechIT').checked,
+    officeFixTechMechanical: document.getElementById('pOfficeFixTechMechanical').checked,
     // uploadAll (10/2026, "6-module"): bỏ uploadDepts (mảng), chỉ còn 1 cờ phẳng boolean.
     uploadAll: document.getElementById('pUploadAll').checked,
     docDownload: scopeFromForm('pDocDownloadAll', 'pDocDownloadDept'),
@@ -326,6 +328,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pMeetingReportView').checked = !!perms.meetingReportView;
   document.getElementById('pOfficeBuy').checked = !!perms.officeBuy;
   document.getElementById('pOfficeFix').checked = !!perms.officeFix;
+  document.getElementById('pOfficeFixTechIT').checked = !!perms.officeFixTechIT;
+  document.getElementById('pOfficeFixTechMechanical').checked = !!perms.officeFixTechMechanical;
   document.getElementById('pMinutesCreate').checked = !!perms.minutesCreate;
   document.getElementById('pMinutesView').checked = !!perms.minutesView;
   document.getElementById('pMinutesEdit').checked = !!perms.minutesEdit;

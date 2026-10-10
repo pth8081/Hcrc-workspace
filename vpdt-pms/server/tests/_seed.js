@@ -36,6 +36,10 @@ const USERS = [
       contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: true,
       officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: true,
       officeBuy: true, officeFix: true, officeInvest: true,
+      // officeFixTechMechanical (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP): dùng tp_kd làm Người Xác Nhận
+      // Kỹ Thuật trong test-office-budget.js (kd1 tạo đề xuất Sửa Chữa, không thể tự chọn chính mình) —
+      // không ảnh hưởng vai trò Trưởng Phòng duyệt bước 1 sẵn có của user này.
+      officeFixTechMechanical: true,
       // budgetCreate: cần để vào được module Ngân Sách và xử lý (duyệt) các bản Phê Duyệt/Thực Hiện đang
       // chờ của phòng mình (canAccessBudgetModule() nay đòi 1 trong 3 quyền budget — không còn "xem miễn
       // phí" chỉ nhờ mục 0) — đúng thực tế Trưởng phòng cũng có quyền tự lập/sửa ngân sách phòng mình.

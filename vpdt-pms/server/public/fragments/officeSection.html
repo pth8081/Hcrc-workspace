@@ -48,6 +48,25 @@
             <label class="block font-semibold text-gray-600 mb-1">Thời Gian Cần Sử Dụng</label>
             <input id="offUsageTime" placeholder="VD: Cần luôn / Trong tháng 9..." class="w-full border p-1.5 rounded">
           </div>
+          <!-- Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP) — bước duyệt mới tự chèn NGAY SAU bước 1, xem
+               insertOfficeFixTechStep() ở lib/workflowEngine.js. #offTechAssignedTo dùng widget sdd (KHÔNG
+               dùng <datalist> — xem quy tắc ở CLAUDE.md), danh sách gợi ý lọc theo đúng loại qua
+               onOfficeTechTypeChange() (module-office.js). Toggle hidden ở setOfficeSubTab() (core.js). -->
+          <div id="officeTechFixFields" class="hidden md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Loại Kỹ Thuật Xác Nhận</label>
+              <select id="offTechType" data-op-change="onOfficeTechTypeChange" class="w-full border p-1.5 rounded bg-white">
+                <option value="">-- Chọn loại --</option>
+                <option value="IT">💻 IT</option>
+                <option value="MECHANICAL">🔧 Máy Móc/Thiết Bị</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Người Xác Nhận Kỹ Thuật</label>
+              <input id="offTechAssignedTo" data-sdd-list="officeFixTechDatalist" data-op-input="resolveOfficeTechAssignedToInput" data-arg-value="0" placeholder="Gõ tên người xác nhận kỹ thuật..." autocomplete="off" class="w-full border p-1.5 rounded">
+              <input type="hidden" id="offTechAssignedToUsername">
+            </div>
+          </div>
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết / Mục Đích Mua Sắm</label>
             <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>

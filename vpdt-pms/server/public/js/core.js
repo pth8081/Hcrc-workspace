@@ -702,7 +702,9 @@ const CORE_FIELD_MANIFEST = {
     { id: 'offTitle', label: 'Tên Hạng Mục / Nội Dung Trình', required: true },
     { id: 'offQty', label: 'Số Lượng / Quy Mô', required: true },
     { id: 'offAmount', label: 'Dự Toán / Tổng Chi Phí (VNĐ)', required: true },
-    { id: 'offSupplier', label: 'Đối Tác / Nhà Cung Cấp', required: false }
+    { id: 'offSupplier', label: 'Đối Tác / Nhà Cung Cấp', required: false },
+    { id: 'offTechType', label: 'Loại Kỹ Thuật Xác Nhận', required: true },
+    { id: 'offTechAssignedTo', label: 'Người Xác Nhận Kỹ Thuật', required: true }
   ],
   DOC: [
     { id: 'docCode', label: 'Mã Tài Liệu', required: true },
@@ -1715,6 +1717,13 @@ let currentProcessingCarId = null;
 let carRoutePoints = ['', ''];
 let activeCarSubTab = 'REG';
 let currentProcessingOfficeId = null;
+// Kỹ Thuật Xác Nhận (11/2026) — true khi modal đang mở ĐÚNG lúc bước hiện tại là bước kỹ thuật VÀ
+// currentUser chính là người được chọn (xem openOfficeProcessModal(), module-office.js); đọc lại ở
+// processOfficeReq() để biết có cần thu thập + validate các field kỹ thuật trước khi gửi APPROVE không.
+let currentOfficeTechStepIsMine = false;
+// Nhãn Mức Độ Hư Hỏng dùng chung giữa khối hiển thị READ-ONLY (openOfficeProcessModal()) và nơi khác nếu
+// cần — khớp đúng 3 option cố định ở khối FORM NHẬP cùng hàm.
+const OFFICE_TECH_SEVERITY_LABELS = { LOW: '🟢 Nhẹ', MEDIUM: '🟠 Trung bình', HIGH: '🔴 Nặng' };
 // Tệp .docx đang mở trong Khung Xem Bảo Vệ (nếu có) — dùng cho nút "In có watermark" (xem
 // printWordWithWatermark() ở script cuối trang), reset về null mỗi lần openFileProtectedView() xử lý 1
 // tệp KHÔNG phải Word để nút không vô tình dùng nhầm tệp của lượt xem trước.
@@ -2938,9 +2947,30 @@ function resolveCarWorkflowConfigForItemClient(c) {
 function resolveVppWorkflowConfigForItemClient(r) {
   return appendExtraApprovalLayersClient(withWfStepsClient(DB.vppDeptWorkflows?.[r.dept]), r);
 }
+// Kỹ Thuật Xác Nhận (11/2026, officeReqs/Sửa Chữa) — mirror ĐÚNG insertOfficeFixTechStep() ở server
+// (lib/workflowEngine.js): chèn 1 bước MỚI ngay SAU bước 1 (Trưởng Phòng duyệt), approvers[2] luôn là
+// mảng singleton [item.techAssignedTo] — PHẢI chạy TRƯỚC appendExtraApprovalLayersClient() (cùng thứ tự
+// gọi như server: flatWorkflowConfigToSteps -> insertOfficeFixTechStep -> appendExtraApprovalLayers) để
+// số thứ tự bước khớp đúng giữa client/server.
+function insertOfficeFixTechStepClient(resolved, item) {
+  if (item?.subType !== 'SUA_CHUA' || !item?.techAssignedTo) return resolved;
+  const oldSteps = resolved?.steps || [];
+  if (!oldSteps.length) return resolved;
+  const oldApprovers = resolved?.approvers || {};
+  const steps = [{ ...oldSteps[0], order: 1 }];
+  const approvers = { 1: oldApprovers[oldSteps[0].order] || [] };
+  steps.push({ order: 2, name: '🔧 Xác Nhận Kỹ Thuật', isTechStep: true });
+  approvers[2] = [item.techAssignedTo];
+  for (let i = 1; i < oldSteps.length; i++) {
+    const newOrder = i + 2;
+    steps.push({ ...oldSteps[i], order: newOrder });
+    approvers[newOrder] = oldApprovers[oldSteps[i].order] || [];
+  }
+  return { ...resolved, steps, approvers };
+}
 function resolveOfficeWorkflowConfigForItemClient(o) {
   const wfMap = getOfficeWorkflowMap(o.subType);
-  return appendExtraApprovalLayersClient(withWfStepsClient((wfMap || {})[o.dept]), o);
+  return appendExtraApprovalLayersClient(insertOfficeFixTechStepClient(withWfStepsClient((wfMap || {})[o.dept]), o), o);
 }
 
 // Mirror ĐÚNG EXTRA_APPROVAL_MODULE_KEYS (server, routes/data.js) — 10 moduleKey dùng "Nhóm Phê Duyệt
@@ -10667,6 +10697,13 @@ function setOfficeSubTab(subTab) {
   document.getElementById('offQty').required = !isMuaSam;
   document.getElementById('offAmount').required = !isMuaSam;
   if (isMuaSam && officeItems.length === 0) addOfficeItemRow();
+  // Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP) — field "Kỹ thuật/IT xác nhận" chỉ hiện ở sub-tab Sửa
+  // Chữa (xem module-office.js onOfficeTechTypeChange()/resolveOfficeTechAssignedToInput()).
+  const techFixFields = document.getElementById('officeTechFixFields');
+  if (techFixFields) {
+    techFixFields.classList.toggle('hidden', isMuaSam);
+    if (!isMuaSam) onOfficeTechTypeChange();
+  }
 
   renderDynamicInputsForModule(subTab, 'dynamicFieldsContainer_OFFICE');
   renderOfficeReqs();

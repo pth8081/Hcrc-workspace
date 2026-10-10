@@ -57,7 +57,11 @@ function createMockApi(state) {
     const config = CREATE_MODULE_CONFIGS[moduleKey];
     if (!config) throw new HttpError(400, `Module không hợp lệ: ${moduleKey}`);
     const collection = state.collections[config.dbKey];
-    const appDataForCreate = Object.assign({}, state.appData);
+    // appDataForCreate.users — khớp đúng appData thật ở routes/create.js (getAllAppData() luôn có sẵn
+    // "users"), một số extraValidate() cần tra cứu username->user thật (officeReqs Kỹ Thuật Xác Nhận,
+    // operationEstimate personInCharge, training instructor...) — thiếu field này khiến mọi lookup đó
+    // luôn rỗng, không phải lỗi logic thật của app.
+    const appDataForCreate = Object.assign({}, state.appData, { users: state.users });
     // Khớp routes/create.js — 2 module ngân sách cần tra cứu chéo sang collection khác (không có trong
     // AppData chung, xem chú thích ở routes/create.js).
     if (moduleKey === 'budgetEntries') {

@@ -101,6 +101,19 @@ async function submitOfficeReq(e) {
     supplier = document.getElementById('offSupplier').value.trim();
   }
 
+  // Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP) — bắt buộc chọn loại + người xác nhận hợp lệ (đã lọc
+  // theo đúng quyền officeFixTechIT/officeFixTechMechanical qua onOfficeTechTypeChange(), module-office.js).
+  // Server (lib/createValidation.js officeReqs.extraValidate) validate lại toàn bộ, đây chỉ là chặn sớm
+  // phía client cho trải nghiệm tốt hơn.
+  let techType = '', techAssignedTo = '';
+  if (activeOfficeSubTab === 'SUA_CHUA') {
+    techType = document.getElementById('offTechType').value;
+    techAssignedTo = document.getElementById('offTechAssignedToUsername').value.trim();
+    if (!techType || !techAssignedTo) {
+      return alert('Vui lòng chọn Loại Kỹ Thuật Xác Nhận và Người Xác Nhận Kỹ Thuật hợp lệ (chọn đúng từ danh sách gợi ý)!');
+    }
+  }
+
   let customData;
   try {
     customData = await collectDynamicFieldsData(activeOfficeSubTab);
@@ -119,6 +132,8 @@ async function submitOfficeReq(e) {
     usageTime: usageTime,
     items: items,
     reason: reason,
+    techType: techType || undefined,
+    techAssignedTo: techAssignedTo || undefined,
     customData: customData,
     createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
@@ -195,6 +210,11 @@ function resetOfficeReqForm() {
   if (activeOfficeSubTab === 'MUA_BAN') {
     officeItems = [];
     addOfficeItemRow();
+  } else if (activeOfficeSubTab === 'SUA_CHUA') {
+    // Kỹ Thuật Xác Nhận (11/2026) — formEl.reset() ở trên đã đưa #offTechType/#offTechAssignedTo về
+    // rỗng, chỉ cần repopulate lại danh sách gợi ý theo loại rỗng (onOfficeTechTypeChange() tự xoá
+    // sạch, khớp hành vi "chưa chọn gì" ngay sau khi Làm Mới).
+    onOfficeTechTypeChange();
   }
   // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — "Cấp Phê Duyệt Cuối Cùng" đổi nhưng "Phê Duyệt Thêm" không
   // theo kịp): formEl.reset() ở trên đưa <select id="extraApprovalLevel_OFFICE_BUY/FIX"> về lại option
@@ -202,6 +222,26 @@ function resetOfficeReqForm() {
   // gọi lại renderExtraApprovalMount() (đúng moduleKey khớp sub-tab đang mở, mirror lời gọi gốc ở
   // setOfficeSubTab()) để đồng bộ lại cả 2 khối.
   renderExtraApprovalMount(activeOfficeSubTab === 'SUA_CHUA' ? 'OFFICE_FIX' : 'OFFICE_BUY', 'extraApprovalMount_OFFICE');
+}
+
+// Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP) — lọc danh sách người có đúng quyền
+// officeFixTechIT/officeFixTechMechanical theo loại đang chọn ở #offTechType, mirror ĐÚNG pattern sdd
+// của tài xế xe (carAssignedDriver, module-bienbanhop.js): sddSetOptions() nạp "Tên — Phòng (username)",
+// resolveOfficeTechAssignedToInput() tách username ngược lại từ chuỗi người dùng gõ/chọn.
+function onOfficeTechTypeChange() {
+  const techType = document.getElementById('offTechType')?.value || '';
+  const permKey = techType === 'IT' ? 'officeFixTechIT' : (techType === 'MECHANICAL' ? 'officeFixTechMechanical' : null);
+  const list = permKey ? DB.users.filter(u => u.active !== false && u.perms?.[permKey]) : [];
+  sddSetOptions('officeFixTechDatalist', list.map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
+  // Đổi loại thì xoá lựa chọn cũ — tránh gửi nhầm người KHÔNG thuộc đúng loại vừa đổi sang.
+  const inputEl = document.getElementById('offTechAssignedTo');
+  const hiddenEl = document.getElementById('offTechAssignedToUsername');
+  if (inputEl) inputEl.value = '';
+  if (hiddenEl) hiddenEl.value = '';
+}
+function resolveOfficeTechAssignedToInput(rawValue) {
+  const m = String(rawValue || '').match(/^(.*) — .*\(([^()]+)\)$/);
+  document.getElementById('offTechAssignedToUsername').value = m ? m[2].trim() : '';
 }
 
 function onOfficeFilterChange() {
@@ -460,6 +500,60 @@ function openOfficeProcessModal(officeId) {
   document.getElementById('officeModalDetails').innerHTML = detailsHTML;
   document.getElementById('txtOfficeComment').value = '';
 
+  // Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP, có techAssignedTo — item cũ trước tính năng này không
+  // có field này, giữ nguyên hành vi cũ) — 3 trạng thái: (1) đã xác nhận xong (techCondition đã lưu) ->
+  // khối ĐỌC CHỈ hiển thị cho MỌI người xem được hồ sơ; (2) đang đúng lượt người được chọn xử lý -> khối
+  // FORM NHẬP; (3) còn lại (chưa tới lượt/không phải người được chọn) -> dòng thông tin "đang chờ".
+  currentOfficeTechStepIsMine = false;
+  const techWrap = document.getElementById('officeTechAssessmentWrap');
+  if (techWrap) {
+    if (o.subType === 'SUA_CHUA' && o.techAssignedTo) {
+      const techTypeLabel = o.techType === 'IT' ? '💻 IT' : '🔧 Máy Móc/Thiết Bị';
+      const isTechStepNow = !!(wfConfig.steps && wfConfig.steps[o.currentStep - 1] && wfConfig.steps[o.currentStep - 1].isTechStep);
+      if (o.techCondition) {
+        techWrap.innerHTML = `
+          <div class="border rounded p-3 bg-sky-50 space-y-1.5 text-xs">
+            <div class="font-bold text-sky-800">🔧 Kỹ Thuật Xác Nhận — ${escapeHtml(o.techAssignedToName)} (${techTypeLabel})</div>
+            <div><b>Hiện Trạng:</b> ${escapeHtml(o.techCondition)}</div>
+            <div><b>Mức Độ Hư Hỏng:</b> ${escapeHtml(OFFICE_TECH_SEVERITY_LABELS[o.techSeverityLevel] || o.techSeverityLevel || '')}</div>
+            <div><b>Phương Án Đề Xuất:</b> ${escapeHtml(o.techProposedPlan || '')}</div>
+            <div><b>Chi Phí Dự Kiến:</b> ${(o.techEstimatedCost || 0).toLocaleString('vi-VN')} VNĐ</div>
+            ${Array.isArray(o.techAssessmentFileUrls) && o.techAssessmentFileUrls.length ? `<div><b>Ảnh/Tài Liệu Hiện Trường:</b> ${o.techAssessmentFileUrls.map((u, i) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener" class="text-blue-600 underline mr-2">Tệp ${i + 1}</a>`).join('')}</div>` : ''}
+          </div>`;
+      } else if (isTechStepNow && o.techAssignedTo === currentUser.username && o.status === 'PENDING') {
+        currentOfficeTechStepIsMine = true;
+        techWrap.innerHTML = `
+          <div class="border rounded p-3 bg-amber-50 space-y-2 text-xs">
+            <div class="font-bold text-amber-800">🔧 Kỹ Thuật Xác Nhận (${techTypeLabel}) — điền trước khi bấm "Xác Nhận"</div>
+            <div><label class="block font-semibold mb-0.5">Hiện Trạng / Kết Quả Kiểm Tra <span class="text-red-500">*</span></label>
+              <textarea id="offTechCondition" rows="2" class="w-full border rounded p-1.5"></textarea></div>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="block font-semibold mb-0.5">Mức Độ Hư Hỏng <span class="text-red-500">*</span></label>
+                <select id="offTechSeverityLevel" class="w-full border rounded p-1.5">
+                  <option value="">-- Chọn --</option>
+                  <option value="LOW">🟢 Nhẹ</option>
+                  <option value="MEDIUM">🟠 Trung bình</option>
+                  <option value="HIGH">🔴 Nặng</option>
+                </select></div>
+              <div><label class="block font-semibold mb-0.5">Chi Phí Dự Kiến (VNĐ) <span class="text-red-500">*</span></label>
+                <input id="offTechEstimatedCost" type="text" inputmode="numeric" class="w-full border rounded p-1.5 money-input"></div>
+            </div>
+            <div><label class="block font-semibold mb-0.5">Phương Án Đề Xuất <span class="text-red-500">*</span></label>
+              <textarea id="offTechProposedPlan" rows="2" class="w-full border rounded p-1.5"></textarea></div>
+            <div><label class="block font-semibold mb-0.5">Ảnh/Tài Liệu Hiện Trường (tối đa 5 tệp)</label>
+              <input id="officeTechAssessmentFilesInput" type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf" data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="officeTechAssessmentFilesChip" class="w-full border p-1.5 rounded bg-white">
+              <div id="officeTechAssessmentFilesChip" class="mt-1 flex flex-wrap gap-1"></div></div>
+          </div>`;
+      } else {
+        techWrap.innerHTML = `<div class="border rounded p-2 bg-gray-50 text-xs italic text-gray-600">⏳ Đang chờ Kỹ Thuật Xác Nhận bởi <b>${escapeHtml(o.techAssignedToName)}</b> (${techTypeLabel}).</div>`;
+      }
+      techWrap.classList.remove('hidden');
+    } else {
+      techWrap.classList.add('hidden');
+      techWrap.innerHTML = '';
+    }
+  }
+
   const historyHTML = (o.history || []).map(h => `
     <div class="bg-white p-2 rounded border text-xs space-y-1">
       <div class="flex justify-between font-bold text-gray-700">
@@ -503,6 +597,17 @@ function confirmProcessOfficeReq(actionType) {
   if ((actionType === 'REJECT' || actionType === 'REQUEST_CHANGES') && !comment) {
     return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
+  // Kỹ Thuật Xác Nhận (11/2026) — chặn SỚM ngay tại đây (trước khi mở hộp xác nhận) nếu đang ở đúng bước
+  // kỹ thuật của chính mình mà chưa điền đủ 3 trường bắt buộc; server (lib/workflowEngine.js) validate
+  // lại toàn bộ, đây chỉ là trải nghiệm tốt hơn.
+  if (actionType === 'APPROVE' && currentOfficeTechStepIsMine) {
+    const condition = document.getElementById('offTechCondition')?.value.trim();
+    const severity = document.getElementById('offTechSeverityLevel')?.value;
+    const plan = document.getElementById('offTechProposedPlan')?.value.trim();
+    if (!condition || !severity || !plan) {
+      return alert('Vui lòng điền đủ Hiện Trạng, Mức Độ Hư Hỏng và Phương Án Đề Xuất trước khi Xác Nhận!');
+    }
+  }
   const isApprove = actionType === 'APPROVE';
   const o = DB.officeReqs.find(item => item.id === currentProcessingOfficeId);
   const wfConfigForLabel = o ? resolveOfficeWorkflowConfigForItemClient(o) : {};
@@ -533,10 +638,35 @@ async function processOfficeReq(actionType) {
     return alert(actionType === 'REJECT' ? 'Vui lòng nhập lý do từ chối vào ô Ý kiến chỉ đạo!' : 'Vui lòng nhập lý do cần bổ sung vào ô Ý kiến chỉ đạo!');
   }
 
+  // Kỹ Thuật Xác Nhận (11/2026) — thu thập + upload ảnh/tài liệu hiện trường NGAY TRƯỚC KHI gọi API
+  // Duyệt (cùng pattern chosenCreateFiles ở module-thanhtoan.js submitPaymentRequest()): input file chỉ
+  // giữ FileList cục bộ, upload thật xảy ra ở đây rồi mới gửi URL kèm theo action.
+  let extraFields;
+  if (actionType === 'APPROVE' && currentOfficeTechStepIsMine) {
+    const filesInput = document.getElementById('officeTechAssessmentFilesInput');
+    const chosenFiles = filesInput && filesInput.files ? Array.from(filesInput.files) : [];
+    let techAssessmentFileUrls = [];
+    if (chosenFiles.length) {
+      try {
+        const uploaded = await Promise.all(chosenFiles.map(f => uploadFileToServer(f, 'officeFixTechAssessment')));
+        techAssessmentFileUrls = uploaded.map(u => u.fileUrl);
+      } catch (err) {
+        return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
+      }
+    }
+    extraFields = {
+      techCondition: document.getElementById('offTechCondition').value.trim(),
+      techSeverityLevel: document.getElementById('offTechSeverityLevel').value,
+      techProposedPlan: document.getElementById('offTechProposedPlan').value.trim(),
+      techEstimatedCost: getMoneyValue(document.getElementById('offTechEstimatedCost')),
+      techAssessmentFileUrls
+    };
+  }
+
   const actionUrlMap = { APPROVE: 'approve', REJECT: 'reject', REQUEST_CHANGES: 'request-changes' };
   let result;
   try {
-    result = await callWorkflowAction('officeReqs', o.id, actionUrlMap[actionType], { comment });
+    result = await callWorkflowAction('officeReqs', o.id, actionUrlMap[actionType], { comment, extraFields });
   } catch (e) {
     return alert('⛔ ' + e.message);
   }

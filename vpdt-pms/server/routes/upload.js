@@ -67,13 +67,17 @@ const MODULE_DEFAULT_ALLOWED_EXT = {
   // operationEstimate (tệp đính kèm "danh mục lớn" của Danh Mục Đầu Tư, Vận Hành > QLDA) — theo đúng
   // yêu cầu người dùng "cho phép upload file dạng PDF, docx, xlsx" — CHỈ 3 định dạng này mặc định (admin
   // vẫn tự mở rộng được qua "Quản Lý Tệp File" nếu cần).
-  operationEstimate: ['.pdf', '.docx', '.xlsx']
+  operationEstimate: ['.pdf', '.docx', '.xlsx'],
+  // officeFixTechAssessment (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP) — ảnh/tài liệu hiện trường người xác
+  // nhận kỹ thuật tải lên lúc Duyệt bước kỹ thuật, cùng khuôn checklistAnswerPhoto/trainingTestImage.
+  officeFixTechAssessment: ['.jpg', '.jpeg', '.png', '.webp', '.pdf']
 };
 const MODULE_DEFAULT_MAX_MB = {
   trainingTestImage: 5,
   checklistAnswerPhoto: 5,
   internalImage: 5,
-  internalVideo: INTERNAL_VIDEO_MAX_MB
+  internalVideo: INTERNAL_VIDEO_MAX_MB,
+  officeFixTechAssessment: 5
 };
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });

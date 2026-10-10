@@ -2176,6 +2176,18 @@
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
               <input type="checkbox" id="pOfficeCreate"> ✅ Cho phép tạo đề xuất văn phòng (tự khoá đúng phòng ban của mình)
             </label>
+            <!-- Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP): 2 quyền phẳng độc lập — đánh dấu ai được
+                 chọn làm "Người Xác Nhận Kỹ Thuật" ở form tạo đề xuất Sửa Chữa, lọc theo đúng loại IT/Máy
+                 Móc người đề xuất chọn (xem lib/createValidation.js officeReqs.extraValidate + client
+                 officeFixTechDatalist ở module-office.js). 1 người có thể tick cả 2 nếu kiêm nhiệm. -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t">
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pOfficeFixTechIT"> 💻 Kỹ Thuật Xác Nhận — IT (chọn khi loại = IT)
+              </label>
+              <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
+                <input type="checkbox" id="pOfficeFixTechMechanical"> 🔧 Kỹ Thuật Xác Nhận — Máy Móc/Thiết Bị (chọn khi loại = Máy Móc)
+              </label>
+            </div>
             <div class="max-h-64 overflow-y-auto overflow-x-auto">
               <table class="w-full text-[11px] border-collapse">
                 <thead class="sticky top-0 bg-white z-10">

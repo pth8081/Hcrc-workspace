@@ -1238,6 +1238,36 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.[flag]) {
         throw new CreateError(403, 'Bạn không có quyền tạo đề xuất văn phòng loại này');
       }
+      // Kỹ Thuật Xác Nhận (11/2026, CHỈ Sửa Chữa VP): ngay lúc TẠO, người đề xuất BẮT BUỘC chọn loại kỹ
+      // thuật (IT/Máy Móc-Thiết Bị) + ĐÚNG 1 người đã được admin cấp quyền tương ứng (officeFixTechIT/
+      // officeFixTechMechanical, cây phân quyền mục 7) — hồ sơ sẽ tự chèn thêm 1 bước duyệt bắt buộc
+      // NGAY SAU bước 1 cho đúng người này (xem insertOfficeFixTechStep() ở lib/workflowEngine.js).
+      // Server tự tra lại username/quyền tương ứng, KHÔNG tin tên hiển thị client gửi kèm (mirror đúng
+      // khuôn lái xe carRegs). KHÔNG import hằng số từ workflowEngine.js ở đây — workflowEngine.js đã
+      // require('./createValidation') (xem đầu file), require ngược lại sẽ tạo vòng lặp.
+      if (payload.subType === 'SUA_CHUA') {
+        const techType = payload.techType;
+        if (techType !== 'IT' && techType !== 'MECHANICAL') {
+          throw new CreateError(400, 'Vui lòng chọn Loại Kỹ Thuật Xác Nhận (IT hoặc Máy Móc/Thiết Bị)');
+        }
+        const permKey = techType === 'IT' ? 'officeFixTechIT' : 'officeFixTechMechanical';
+        const assignedUsername = String(payload.techAssignedTo || '').trim();
+        if (!assignedUsername) throw new CreateError(400, 'Vui lòng chọn Người Xác Nhận Kỹ Thuật');
+        const assignedUser = (appData?.users || []).find(u => u && u.username === assignedUsername && u.active !== false);
+        if (!assignedUser || !assignedUser.perms?.[permKey]) {
+          throw new CreateError(400, 'Người Xác Nhận Kỹ Thuật không hợp lệ (chưa được cấp đúng quyền, hoặc tài khoản đã khoá)');
+        }
+        if (assignedUser.username === user.username) {
+          throw new CreateError(400, 'Không thể tự chọn chính mình làm Người Xác Nhận Kỹ Thuật');
+        }
+        payload.techType = techType;
+        payload.techAssignedTo = assignedUser.username;
+        payload.techAssignedToName = assignedUser.name;
+      } else {
+        delete payload.techType;
+        delete payload.techAssignedTo;
+        delete payload.techAssignedToName;
+      }
       // Trường bổ sung (Biểu Mẫu) — cả 2 sub-tab còn lại (MUA_BAN/SUA_CHUA) chung coreKey 'OFFICE' nhưng
       // RIÊNG danh sách trường bổ sung theo đúng subType, khớp modKey client dùng khi gọi
       // collectDynamicFieldsData(activeOfficeSubTab) (xem FORM_TABS ở index.html).

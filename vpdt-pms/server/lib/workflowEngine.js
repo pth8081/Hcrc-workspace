@@ -200,6 +200,11 @@ const OFFICE_SUBTYPE_TO_DBKEY = {
   MUA_BAN: 'officeBuyDeptWorkflows',
   SUA_CHUA: 'officeFixDeptWorkflows'
 };
+// Kỹ Thuật Xác Nhận — Sửa Chữa VP (11/2026): map loại kỹ thuật -> quyền phẳng tương ứng (cây phân
+// quyền, mục 7 "Văn Phòng (Mua/Sửa)") — admin tick cho đúng user, danh sách chọn ở form tạo đề xuất
+// (public/js/module-office.js) lọc theo đúng quyền này. Dùng chung ở lib/createValidation.js
+// (extraValidate lúc tạo/sửa) để xác thực lại username được chọn thật sự có quyền tương ứng.
+const OFFICE_FIX_TECH_TYPE_PERM = { IT: 'officeFixTechIT', MECHANICAL: 'officeFixTechMechanical' };
 
 // ===== Vận Hành > Đơn Hàng — tách "Đặt Hàng Tại Siêu Thị"/"Đặt Hàng Tại HO" (item.orderLocationType,
 // STORE/HO) + đổi hẳn từ quy trình duyệt THEO PHÒNG BAN (operationOrderDeptWorkflows, đã bị xoá — xem
@@ -435,6 +440,34 @@ function resolveContractManageWorkflow(item, appData) {
 // chưa từng được cấu hình đủ groups+levels lúc tạo hồ sơ này).
 // LƯU Ý BẢO TRÌ: mirror ĐÚNG bản client appendExtraApprovalLayersClient() ở public/js/core.js (dùng cho
 // nút "🔍 Xem Quy Trình" preview) — sửa 1 bên PHẢI sửa cả 2 bên.
+// Kỹ Thuật Xác Nhận (Sửa Chữa VP, 11/2026): chèn CỐ ĐỊNH 1 bước NGAY SAU bước 1 (bước đầu tiên của quy
+// trình gốc theo phòng ban, thường là Trưởng Phòng) — CHỈ áp dụng khi subType === 'SUA_CHUA' VÀ hồ sơ
+// đã có techAssignedTo (người đề xuất bắt buộc chọn lúc tạo, xem lib/createValidation.js). Hồ sơ
+// SUA_CHUA cũ tạo TRƯỚC đợt tính năng này không có techAssignedTo -> trả nguyên `resolved`, không chèn
+// gì (không cần migrate dữ liệu). Approvers của bước mới luôn ĐÚNG 1 người (techAssignedTo) —
+// canApproveStep()/isApproverForApproversMap() (lib/recordViewScope.js) dùng CHUNG cơ chế generic với
+// mọi bước khác, không cần sửa gì thêm ở đó (người này cũng tự động XEM được hồ sơ nhờ cơ chế đó).
+// PHẢI chạy TRƯỚC appendExtraApprovalLayers() (nối thêm ở CUỐI) để thứ tự luôn là: [bước gốc 1, Kỹ
+// Thuật Xác Nhận, các bước gốc còn lại, Nhóm Phê Duyệt Cuối]. LƯU Ý BẢO TRÌ: mirror ĐÚNG bản client
+// insertOfficeFixTechStepClient() ở public/js/core.js (dùng cho badge tiến độ + modal xử lý) — sửa 1
+// bên PHẢI sửa cả 2 bên.
+function insertOfficeFixTechStep(resolved, item) {
+  if (item?.subType !== 'SUA_CHUA' || !item?.techAssignedTo) return resolved;
+  const oldSteps = resolved.steps || [];
+  if (!oldSteps.length) return resolved;
+  const oldApprovers = resolved.approvers || {};
+  const steps = [{ ...oldSteps[0], order: 1 }];
+  const approvers = { 1: oldApprovers[oldSteps[0].order] || [] };
+  steps.push({ order: 2, name: '🔧 Xác Nhận Kỹ Thuật', isTechStep: true });
+  approvers[2] = [item.techAssignedTo];
+  for (let i = 1; i < oldSteps.length; i++) {
+    const newOrder = i + 2;
+    steps.push({ ...oldSteps[i], order: newOrder });
+    approvers[newOrder] = oldApprovers[oldSteps[i].order] || [];
+  }
+  return { ...resolved, steps, approvers };
+}
+
 function appendExtraApprovalLayers(resolved, item) {
   const layers = item?.extraApprovalLayers;
   if (!Array.isArray(layers) || !layers.length) return resolved;
@@ -490,7 +523,8 @@ const MODULE_CONFIGS = {
     dbKey: 'officeReqs',
     resolveWfConfig: (item, appData) => {
       const mapKey = OFFICE_SUBTYPE_TO_DBKEY[item.subType] || 'officeBuyDeptWorkflows';
-      return appendExtraApprovalLayers(flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData), item);
+      const base = flatWorkflowConfigToSteps(appData[mapKey]?.[item.dept], appData);
+      return appendExtraApprovalLayers(insertOfficeFixTechStep(base, item), item);
     },
     supportsRequestChanges: true
   },
@@ -1079,6 +1113,34 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     }
   }
 
+  // Kỹ Thuật Xác Nhận (officeReqs/SUA_CHUA, 11/2026) — bước isTechStep (xem insertOfficeFixTechStep() ở
+  // trên) bắt buộc điền ĐỦ form đánh giá kỹ thuật TRƯỚC khi Duyệt (REJECT vẫn dùng nhánh "Từ chối"
+  // thường ở dưới, chỉ cần lý do như mọi bước khác — không có khái niệm "đánh giá" riêng cho từ chối).
+  // KHÔNG dùng chung vòng lặp config.extraFields ở trên (officeReqs không khai config.extraFields):
+  // vòng lặp đó chỉ COPY giá trị truthy, không đủ để BẮT BUỘC có mặt (techEstimatedCost = 0 vẫn là giá
+  // trị hợp lệ dù falsy) và không validate enum/kiểu dữ liệu.
+  if (moduleKey === 'officeReqs' && action === 'APPROVE' && steps[currentStep - 1]?.isTechStep) {
+    const condition = String(extraFields?.techCondition || '').trim();
+    const proposedPlan = String(extraFields?.techProposedPlan || '').trim();
+    const severityLevel = extraFields?.techSeverityLevel;
+    const estimatedCost = Number(extraFields?.techEstimatedCost);
+    if (!condition) throw new WorkflowError(400, 'Vui lòng nhập Hiện Trạng / Kết Quả Kiểm Tra');
+    if (!['LOW', 'MEDIUM', 'HIGH'].includes(severityLevel)) throw new WorkflowError(400, 'Vui lòng chọn Mức Độ Hư Hỏng');
+    if (!proposedPlan) throw new WorkflowError(400, 'Vui lòng nhập Phương Án Đề Xuất');
+    if (!Number.isFinite(estimatedCost) || estimatedCost < 0) throw new WorkflowError(400, 'Chi Phí Dự Kiến Sau Khảo Sát không hợp lệ');
+    const photos = Array.isArray(extraFields?.techAssessmentFileUrls) ? extraFields.techAssessmentFileUrls : [];
+    photos.forEach((u, idx) => assertUploadedFileUrl(u, `Ảnh/tài liệu hiện trường kỹ thuật #${idx + 1}`));
+    item.techCondition = condition;
+    item.techSeverityLevel = severityLevel;
+    item.techProposedPlan = proposedPlan;
+    item.techEstimatedCost = estimatedCost;
+    item.techAssessmentFileUrls = photos;
+    extraSnapshot.techCondition = condition;
+    extraSnapshot.techSeverityLevel = severityLevel;
+    extraSnapshot.techProposedPlan = proposedPlan;
+    extraSnapshot.techEstimatedCost = estimatedCost;
+  }
+
   if (action === 'REJECT') {
     item[statusField] = 'REJECTED';
     item[historyField].push({
@@ -1220,6 +1282,7 @@ function findMissingApproverStep(moduleKey, item, appData) {
 
 module.exports = {
   MODULE_CONFIGS,
+  OFFICE_FIX_TECH_TYPE_PERM,
   resolveWorkflowStepApprovers,
   findMissingApproverStep,
   WorkflowError,
