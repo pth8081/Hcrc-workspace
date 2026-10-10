@@ -487,6 +487,18 @@
         <div class="flex justify-end mt-2">
           <button type="button" data-op="saveWorkflowParticipatingPositions" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">💾 Lưu Vị Trí Tham Gia Quy Trình</button>
         </div>
+        <!-- Tải Mẫu/Nhập/Xuất Excel — BESPOKE (không dùng registry OBJECT_CATALOG_EXCEL_CONFIG generic, xem
+             chú thích đầy đủ ở hàm onWfPositionImportFileChange()/confirmWfPositionImport(),
+             module-admin-specialperm.js, vì danh mục này là CẶP jobTitle+dept không có matchKey đơn trị). -->
+        <div class="border-t pt-2 mt-2 space-y-1.5 text-[11px]">
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" data-op="downloadWfPositionTemplate" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
+            <button type="button" data-op="exportWfPositionExcel" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
+            <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input type="file" accept=".xlsx,.csv" class="hidden" data-op-change="onWfPositionImportFileChange" data-arg-event="1"></label>
+            <span id="wfPositionImportStatus" class="text-gray-500"></span>
+          </div>
+          <div id="wfPositionImportPreview" class="hidden space-y-1.5"></div>
+        </div>
       </div>
     </div>
   </div>

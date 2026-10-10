@@ -453,6 +453,139 @@ async function saveWorkflowParticipatingPositions() {
   alert('✅ Đã lưu danh mục Vị Trí Tham Gia Quy Trình.');
 }
 
+// ============ Tải Mẫu / Nhập / Xuất Excel cho workflowParticipatingPositions ============
+// BESPOKE — KHÔNG đăng ký vào OBJECT_CATALOG_EXCEL_CONFIG (core.js): registry đó + computeObjectCatalogMerge()
+// giả định luôn có 1 `matchKey` đơn trị để "cập nhật nếu trùng / thêm nếu không trùng", nhưng danh mục này
+// là CẶP (jobTitle,dept) và hành vi Nhập Excel đúng ý muốn là THAY THẾ TOÀN BỘ (giống hệt
+// saveWorkflowParticipatingPositions() ở trên), không phải gộp-thêm — xem chú thích đầy đủ tại entry
+// `workflowParticipatingPositions` ở lib/objectCatalogImport.js (server, nguồn xác thực cột). 2 route
+// generic /api/admin/object-catalog/workflowParticipatingPositions/import-template|parse-import vẫn dùng
+// lại được nguyên vẹn (route không đòi hỏi gì về matchKey) — chỉ phần ÁP DỤNG kết quả ở client là viết
+// riêng, gọi thẳng fetch() thay vì onObjectCatalogImportFileChange()/confirmObjectCatalogImport() chung.
+
+// dedupeWfPositionPairs(items) — loại trùng CẶP (jobTitle,dept) không phân biệt hoa/thường/khoảng trắng
+// thừa, GIỮ DÒNG XUẤT HIỆN ĐẦU TIÊN (cùng tinh thần normalizeText() ở lib/objectCatalogImport.js phía
+// server) — hàm THUẦN (không đụng DB/DOM) để test độc lập được. Dùng khi áp dụng kết quả Nhập Excel danh
+// mục này (xem confirmWfPositionImport() bên dưới).
+function dedupeWfPositionPairs(items) {
+  const seen = new Set();
+  const deduped = [];
+  let duplicateCount = 0;
+  (items || []).forEach(it => {
+    const jobTitle = String(it?.jobTitle ?? '').trim();
+    if (!jobTitle) return; // chức danh rỗng: đã bị chặn ở bước parse server (cột bắt buộc), phòng hờ thêm
+    const dept = String(it?.dept ?? '').trim();
+    const key = `${jobTitle.toLowerCase().replace(/\s+/g, ' ')}\u0000${dept.toLowerCase().replace(/\s+/g, ' ')}`;
+    if (seen.has(key)) { duplicateCount++; return; }
+    seen.add(key);
+    deduped.push({ jobTitle, dept });
+  });
+  return { deduped, duplicateCount };
+}
+
+async function downloadWfPositionTemplate() {
+  await downloadFileFromServerGet('/api/admin/object-catalog/workflowParticipatingPositions/import-template', 'Mau_ChucDanhThamGiaQuyTrinh.xlsx');
+}
+
+async function exportWfPositionExcel() {
+  const columns = [
+    { key: 'jobTitle', header: 'Chức Danh' },
+    { key: 'dept', header: 'Phòng Ban (để trống = mọi phòng ban)' }
+  ];
+  const rows = (DB.workflowParticipatingPositions || []).map(p => ({ jobTitle: p.jobTitle || '', dept: p.dept || '' }));
+  await downloadXlsxFromServer('DanhMuc_ChucDanhThamGiaQuyTrinh.xlsx', 'Chức Danh Tham Gia Quy Trình', columns, rows);
+}
+
+// Preview đang dở dang của lần Nhập Excel gần nhất — null khi chưa chọn file/đã huỷ/đã xác nhận xong.
+let _wfPositionImportPreview = null;
+
+function renderWfPositionImportPreview() {
+  const wrap = document.getElementById('wfPositionImportPreview');
+  if (!wrap) return;
+  const state = _wfPositionImportPreview;
+  if (!state) { wrap.innerHTML = ''; wrap.classList.add('hidden'); return; }
+  const errorsHtml = (state.errors || []).length
+    ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-28 overflow-y-auto text-[11px]"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — các dòng này sẽ KHÔNG được nhập:</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
+    : '';
+  const dupHtml = state.duplicateCount
+    ? `<div class="border border-amber-200 bg-amber-50 rounded p-1.5 text-amber-700 text-[11px]">⚠️ ${state.duplicateCount} dòng trùng cặp Chức Danh + Phòng Ban trong file — đã tự loại, chỉ giữ dòng xuất hiện đầu tiên.</div>`
+    : '';
+  const head = '<th class="p-1">Chức Danh</th><th class="p-1">Phòng Ban</th>';
+  const body = state.deduped.map(p => `<tr class="border-t"><td class="p-1">${escapeHtml(p.jobTitle)}</td><td class="p-1">${p.dept ? escapeHtml(p.dept) : '<span class="text-gray-400 italic">(Mọi phòng ban)</span>'}</td></tr>`).join('');
+  const tableHtml = state.deduped.length
+    ? `<div class="border rounded max-h-40 overflow-auto bg-white"><table class="w-full text-[11px]"><thead><tr class="bg-gray-100 text-left">${head}</tr></thead><tbody>${body}</tbody></table></div>`
+    : '';
+  const currentCount = (DB.workflowParticipatingPositions || []).length;
+  const warnHtml = `<div class="border border-amber-300 bg-amber-50 rounded p-1.5 text-amber-800 font-bold text-[11px]">⚠️ Xác nhận sẽ THAY THẾ TOÀN BỘ danh mục hiện có (${currentCount} mục) bằng ${state.deduped.length} mục đọc được từ file — không phải gộp thêm.</div>`;
+  const canConfirm = state.deduped.length > 0;
+  wrap.innerHTML = `${errorsHtml}${dupHtml}${tableHtml}${warnHtml}
+    <div class="flex gap-2 mt-1.5">
+      ${canConfirm ? `<button type="button" data-op="confirmWfPositionImport" class="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Thay Thế (${state.deduped.length} vị trí)</button>` : ''}
+      <button type="button" data-op="cancelWfPositionImport" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+    </div>`;
+  wrap.classList.remove('hidden');
+}
+
+async function onWfPositionImportFileChange(event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // cho phép chọn lại đúng file đó lần sau
+  const statusEl = document.getElementById('wfPositionImportStatus');
+  if (!file) return;
+  _wfPositionImportPreview = null;
+  renderWfPositionImportPreview();
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  let data;
+  try {
+    const res = await fetch('/api/admin/object-catalog/workflowParticipatingPositions/parse-import', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) { if (statusEl) statusEl.innerText = `⛔ ${data.error || 'Không đọc được file Excel'}`; return; }
+  } catch (e) {
+    if (statusEl) statusEl.innerText = `⛔ Không thể kết nối tới máy chủ: ${e.message}`;
+    return;
+  }
+  const items = data.items || [];
+  const { deduped, duplicateCount } = dedupeWfPositionPairs(items);
+  _wfPositionImportPreview = { fileName: data.fileName || file.name, errors: data.errors || [], totalRows: data.totalRows || 0, deduped, duplicateCount };
+  if (statusEl) {
+    statusEl.innerText = `📄 "${_wfPositionImportPreview.fileName}": ${deduped.length} vị trí hợp lệ` +
+      (duplicateCount ? `, ${duplicateCount} dòng trùng cặp (đã tự loại)` : '') +
+      ((data.errors || []).length ? `, ${(data.errors || []).length} lỗi` : '') +
+      ' — kiểm tra bảng bên dưới rồi bấm Xác Nhận.';
+  }
+  renderWfPositionImportPreview();
+}
+
+function cancelWfPositionImport() {
+  _wfPositionImportPreview = null;
+  renderWfPositionImportPreview();
+  const statusEl = document.getElementById('wfPositionImportStatus');
+  if (statusEl) statusEl.innerText = '';
+}
+
+// confirmWfPositionImport() — THAY THẾ TOÀN BỘ DB.workflowParticipatingPositions bằng danh sách đã lọc
+// trùng (state.deduped), cùng khuôn snapshot/rollback như saveWorkflowParticipatingPositions() ở trên.
+async function confirmWfPositionImport() {
+  const state = _wfPositionImportPreview;
+  const statusEl = document.getElementById('wfPositionImportStatus');
+  if (!state || !state.deduped.length) return;
+  const snapshot = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
+  DB.workflowParticipatingPositions = state.deduped;
+  const saved = await syncStorage('workflowParticipatingPositions');
+  if (!saved) {
+    DB.workflowParticipatingPositions = snapshot;
+    if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.';
+    return;
+  }
+  logSystemAction('USER_MGM', 'IMPORT_WORKFLOW_POSITIONS', `Nhập Excel danh mục Vị Trí Tham Gia Quy Trình (THAY THẾ TOÀN BỘ): ${state.deduped.length} vị trí`, 'SUCCESS');
+  _wfPositionImportPreview = null;
+  renderWfPositionImportPreview();
+  if (statusEl) statusEl.innerText = `✅ Đã lưu — thay thế toàn bộ danh mục bằng ${state.deduped.length} vị trí.`;
+  renderWorkflowParticipatingPositionsWidget(); // đồng bộ lại widget builder (chip + ô thêm) theo dữ liệu mới
+}
+
 // ============ Xem trước người THẬT khớp 1 bước "Theo vị trí" (dùng ở màn Quy Trình & Phê Duyệt) ============
 // Mirror ĐÚNG điều kiện lib/positionApprovers.js (server): active !== false, canBeApprover||admin, khớp
 // ĐÚNG 1 trong các cặp (jobTitle,dept) đã chọn cho bước này — CHỈ để xem trước (UX), server luôn tự
