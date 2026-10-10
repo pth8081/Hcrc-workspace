@@ -232,6 +232,46 @@ async function main() {
       assert(res.tierSelectStillThere, '#itPriceTier (dropdown mức Margin/Chiết Khấu) vẫn phải còn — vẫn cần cho routing quy trình duyệt');
       assert(res.noDataOpChangeLeft, 'Thuộc tính data-op-change="checkItPriceMarginConsistency" phải được gỡ khỏi #itPriceTier');
     });
+
+    // ===== F) Rà soát toàn hệ thống (10/2026, theo yêu cầu người dùng) phát hiện thêm: Lương — cùng
+    // lớp lỗi "stuck-fallback" như setHrAttendanceView(), setContractSubTab() đã vá trước đó =====
+    await run.run('F1) setHrPayrollView("MANAGE") gọi TRỰC TIẾP (bỏ qua renderHrPayrollModule()) cho user KHÔNG có quyền Quản Lý -> fallback về SELF, không vẽ dữ liệu lương company-wide', async () => {
+      const result = await page.evaluate(async (u) => {
+        await proceedAfterAuth(u);
+        await switchTab('hrPayroll');
+        setHrPayrollView('MANAGE'); // gọi thẳng, mô phỏng console/code khác gọi tắt không qua renderHrPayrollModule()
+        return {
+          activeView: hrpActiveView,
+          manageHidden: document.getElementById('hrpViewManage').classList.contains('hidden'),
+          selfHidden: document.getElementById('hrpViewSelf').classList.contains('hidden')
+        };
+      }, { username: 'hrp_noperm', name: 'NV Không Quyền Lương', dept: 'Kế Toán', perms: {}, active: true });
+      assertEqual(result.activeView, 'SELF', 'Không có quyền Quản Lý -> phải tự fallback về view được phép (SELF), không giữ nguyên MANAGE');
+      assert(result.manageHidden, 'Khối "Quản Lý Kỳ Lương" phải ẩn');
+      assert(!result.selfHidden, 'Khối "Phiếu Lương Của Tôi" (view fallback) phải hiện');
+    });
+
+    await run.run('F2) setHrPayrollView("MANAGE") cho user CÓ đủ quyền (hrPayrollManage + Mục 0 hrPayrollManageTab) -> vào đúng MANAGE', async () => {
+      const result = await page.evaluate(async (u) => {
+        await proceedAfterAuth(u);
+        await switchTab('hrPayroll');
+        setHrPayrollView('MANAGE');
+        return { activeView: hrpActiveView, manageHidden: document.getElementById('hrpViewManage').classList.contains('hidden') };
+      }, { username: 'hrp_manager', name: 'HR Quản Lý Lương', dept: 'Nhân Sự', perms: { hrPayrollManage: true }, active: true });
+      assertEqual(result.activeView, 'MANAGE', 'Đủ quyền thì phải được VÀO ĐÚNG view yêu cầu, không bị fallback oan');
+      assert(!result.manageHidden, 'Khối "Quản Lý Kỳ Lương" phải hiện cho người đủ quyền');
+    });
+
+    await run.run('F3) setHrPayrollView("MANAGE") cho user có flat perm NHƯNG Mục 0 hrPayrollManageTab:false -> vẫn bị chặn (lỗ hổng đã vá)', async () => {
+      const result = await page.evaluate(async (u) => {
+        await proceedAfterAuth(u);
+        await switchTab('hrPayroll');
+        setHrPayrollView('MANAGE');
+        return { activeView: hrpActiveView, manageHidden: document.getElementById('hrpViewManage').classList.contains('hidden') };
+      }, { username: 'hrp_blocked', name: 'HR Lương Bị Tắt Mục 0', dept: 'Nhân Sự', perms: { hrPayrollManage: true, moduleAccess: { hrPayrollManageTab: false } }, active: true });
+      assertEqual(result.activeView, 'SELF', 'Mục 0 hrPayrollManageTab=false phải chặn được view MANAGE dù còn flat perm hrPayrollManage (LỖ HỔNG NGHIÊM TRỌNG ĐÃ VÁ: trước đây gọi thẳng hàm này sẽ lộ dữ liệu lương toàn công ty)');
+      assert(result.manageHidden, 'Khối "Quản Lý Kỳ Lương" phải ẩn dù user còn flat perm hrPayrollManage');
+    });
   } finally {
     await browser.close();
     server.close();

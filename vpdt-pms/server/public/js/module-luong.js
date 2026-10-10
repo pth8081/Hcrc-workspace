@@ -52,7 +52,26 @@ function renderHrPayrollModule() {
   setHrPayrollView(hrpActiveView);
 }
 
+// LỖI ĐÃ VÁ (10/2026): hàm này KHÔNG được tự ý tin tham số `view` — phải tự kiểm tra lại quyền Mục 0 +
+// hrPayrollManage/hrPayrollApprove NGAY TẠI ĐÂY (mirror renderHrPayrollModule), vì đây là hàm switcher
+// thật sự được gọi trực tiếp từ data-op (bỏ qua wrapper render) — cùng lớp lỗi với setHrAttendanceView()
+// đã vá trước đó. Không tự validate ở đây từng để lộ dữ liệu lương toàn công ty cho bất kỳ ai gọi thẳng
+// setHrPayrollView('MANAGE') (vd qua console), kể cả khi nút đã bị ẩn.
 function setHrPayrollView(view) {
+  const canManage = !!currentUser?.perms?.hrPayrollManage;
+  const canApprove = !!currentUser?.perms?.hrPayrollApprove;
+  const canSelfView = hasModuleAccess(currentUser, 'hrPayrollSelf');
+  const canManageView = hasModuleAccess(currentUser, 'hrPayrollManageTab') && (canManage || canApprove);
+  if (view === 'MANAGE' && !canManageView) view = canSelfView ? 'SELF' : null;
+  if (view === 'SELF' && !canSelfView) view = canManageView ? 'MANAGE' : null;
+  if (!view) {
+    hrpActiveView = view;
+    document.getElementById('btnHrpViewSelf').classList.add('hidden');
+    document.getElementById('btnHrpViewManage').classList.add('hidden');
+    document.getElementById('hrpViewSelf').classList.add('hidden');
+    document.getElementById('hrpViewManage').classList.add('hidden');
+    return;
+  }
   hrpActiveView = view;
   document.getElementById('btnHrpViewSelf').classList.toggle('bg-emerald-600', view === 'SELF');
   document.getElementById('btnHrpViewSelf').classList.toggle('text-white', view === 'SELF');

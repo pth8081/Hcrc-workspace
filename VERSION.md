@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**25.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.55 (2026-10-10): Rà soát toàn hệ thống module/tab/sub-tab — vá 1 lỗ hổng Lương
+
+Người dùng báo trên server thật (production — CHƯA nhận code v25.54, PR còn đang chờ merge do xung đột)
+vẫn thấy module/tab/sub-tab "chưa chọn vẫn không ẩn", không nhớ rõ module nào, yêu cầu tự rà soát lại toàn
+bộ. Dispatch 4 agent song song (đọc code, không sửa) phủ hết các cụm module còn lại chưa kiểm trong đợt
+v25.54 (Hành Chính: Đặt Phòng Họp/Đăng Ký Xe/VPP/Đồng Phục/Giấy Phép; Văn Bản & Tác Nghiệp: Tài Liệu/Văn
+Bản Trình/Hợp Đồng/Biên Bản Họp/Công Việc; Tổng Hợp/Hỗ Trợ IT/Truyền Thông Nội Bộ+9 tab LMS/Báo Cáo Định
+Kỳ; Nhân Sự: Hồ Sơ/HĐLĐ/Lương/Lifecycle/Cơ Cấu Tổ Chức + Mua Hàng/BAS) — tìm đúng 1 lỗ hổng mới, cùng lớp
+lỗi với `setHrAttendanceView()` đã vá ở v25.54 (hàm switcher không tự validate, chỉ wrapper render lọc
+trước):
+
+- **`setHrPayrollView()` (`module-luong.js`) không tự kiểm tra quyền** — chỉ `renderHrPayrollModule()`
+  (nơi gọi bình thường, lúc chuyển tab) tự tính `canManageView`/`canSelfView` rồi ẩn/hiện nút; bản thân
+  hàm switcher chỉ gán `hrpActiveView = view` rồi vẽ thẳng bảng kỳ lương nếu `view !== 'SELF'`. Gọi trực
+  tiếp `setHrPayrollView('MANAGE')` (vd qua console, bỏ qua nút `btnHrpViewManage` đã ẩn) vẫn vẽ ra
+  `DB.payrollPeriods` — dữ liệu lương TOÀN CÔNG TY — dù user không có `hrPayrollManage`/`hrPayrollApprove`
+  hoặc Mục 0 `hrPayrollManageTab` đã tắt. **Mức độ: Nghiêm trọng** (dữ liệu lương nhạy cảm nhất hệ thống).
+  Đã thêm tự-kiểm-tra NGAY TRONG hàm (cùng khuôn `setBudgetLineTab()`/`setHrAttendanceView()`): tính lại
+  `canManageView`/`canSelfView`, nếu `view` yêu cầu không hợp lệ thì tự chuyển sang view còn lại được
+  phép, nếu CẢ 2 đều bị khoá thì ẩn hết UI và dừng (không vẽ dữ liệu).
+
+Tất cả module/sub-tab khác được 4 agent kiểm tra đều ĐÃ tự-validate đúng chuẩn từ các đợt vá trước (v24.74
+→ v25.54) — không có gap nào khác. Lưu ý quan trọng đã nói rõ với người dùng: production CHƯA nhận bất kỳ
+code nào của v25.54 (PR #307 còn xung đột merge chưa xử lý, và production tự redeploy thủ công), nên những
+gì quan sát được trên production trước khi merge+deploy đợt này là hành vi CŨ của các lỗi đã vá, không
+phải lỗi mới phát sinh.
+
+Test mới: 3 case F1-F3 trong `tests/test-permission-batch-oct2026.js` (giờ 17/17), mirror đúng mẫu E1-E3
+(`setHrAttendanceView`). Full regression các test Lương liên quan (`test-payroll*.js`,
+`test-audit-nhansu-congphep-luong.js`, `test-attendance-records-scope.js`) không phát sinh lỗi mới.
 
 ## v25.54 (2026-10-09): 4 vấn đề phân quyền (2 ảnh người dùng) + 1 lỗ hổng phát hiện thêm qua rà soát
 
