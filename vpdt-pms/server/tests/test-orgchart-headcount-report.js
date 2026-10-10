@@ -107,6 +107,49 @@ function runPureTests(run) {
   });
 }
 
+// ===== PHẦN A2: headcountSelfOnly (10/2026, người dùng báo "Ban Tổng Giám Đốc" lộn tổng cả công ty) =====
+// Dựng lại ĐÚNG hình trạng thật người dùng gặp: Công Ty -> Ban Tổng Giám Đốc (headcountSelfOnly=true,
+// có 2 vị trí TRỰC TIẾP: Tổng Giám Đốc + Phó TGĐ) -> Ban Vận Hành Kinh Doanh (DEPARTMENT con, KHÔNG bật
+// cờ, mọi Ban khác trong công ty đều nằm dưới Ban Tổng Giám Đốc theo đúng sơ đồ thật).
+function buildSelfOnlyVersion() {
+  return {
+    nodes: [
+      { nodeId: 1, parentNodeId: null, nodeType: 'COMPANY', nodeName: 'Công Ty HCRC', positionKey: null, displayOrder: 0 },
+      { nodeId: 2, parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Ban Tổng Giám Đốc', headcountSelfOnly: true, positionKey: null, displayOrder: 0 },
+      { nodeId: 3, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Tổng Giám Đốc', requiresDept: false, positionKey: 'PK-TGD', headcountQuota: 1, displayOrder: 0 },
+      { nodeId: 4, parentNodeId: 2, nodeType: 'POSITION', jobTitle: 'Phó Tổng Giám Đốc', requiresDept: false, positionKey: 'PK-PTGD', headcountQuota: 1, displayOrder: 1 },
+      { nodeId: 5, parentNodeId: 2, nodeType: 'DEPARTMENT', nodeName: 'Ban Vận Hành Kinh Doanh', headcountSelfOnly: false, positionKey: null, displayOrder: 2 },
+      { nodeId: 6, parentNodeId: 5, nodeType: 'POSITION', jobTitle: 'Trưởng Ban', requiresDept: true, positionKey: 'PK-TB', headcountQuota: 1, displayOrder: 0 }
+    ]
+  };
+}
+function runSelfOnlyTests(run) {
+  return run.run('headcountSelfOnly=true: "Ban Tổng Giám Đốc" chỉ hiện tổng 2 vị trí trực thuộc, KHÔNG cộng dồn "Ban Vận Hành Kinh Doanh" nằm dưới nó — Công Ty vẫn đúng tổng đầy đủ', async () => {
+    const { computeHeadcountReport } = require('../lib/headcountReport');
+    const version = buildSelfOnlyVersion();
+    const employeeProfiles = [
+      { employeeCode: 'TGD1', username: 'tgd1', positionKey: 'PK-TGD', status: 'ACTIVE' },
+      { employeeCode: 'PTGD1', username: 'ptgd1', positionKey: 'PK-PTGD', status: 'ACTIVE' },
+      { employeeCode: 'TB1', username: 'tb1', positionKey: 'PK-TB', status: 'ACTIVE' }
+    ];
+    const { rows } = computeHeadcountReport(version, employeeProfiles, [], []);
+    const byId = new Map(rows.map(r => [r.nodeId, r]));
+
+    const bantgd = byId.get(2);
+    assertEqual(bantgd.quota, 2, 'Ban Tổng Giám Đốc: quota HIỂN THỊ chỉ = 2 vị trí trực thuộc (1 TGĐ + 1 Phó TGĐ), KHÔNG cộng thêm Ban Vận Hành (quota=1) nằm dưới');
+    assertEqual(bantgd.actualTotal, 2, 'Ban Tổng Giám Đốc: actualTotal HIỂN THỊ chỉ = 2 (TGĐ+Phó TGĐ đang giữ), không cộng Trưởng Ban của Ban Vận Hành');
+    assertEqual(bantgd.variance, 0, 'Ban Tổng Giám Đốc: variance = 2 - 2 = 0 (KHÔNG phải tính trên tổng công ty)');
+
+    const banVanHanh = byId.get(5);
+    assertEqual(banVanHanh.quota, 1, 'Ban Vận Hành Kinh Doanh (không bật cờ): vẫn tính roll-up bình thường như cũ = 1');
+    assertEqual(banVanHanh.actualTotal, 1, 'Ban Vận Hành Kinh Doanh: actualTotal roll-up bình thường = 1 (không bị ảnh hưởng bởi cờ của Ban Tổng Giám Đốc)');
+
+    const company = byId.get(1);
+    assertEqual(company.quota, 3, 'Công Ty: VẪN đúng tổng ĐẦY ĐỦ = 3 (2 của Ban TGĐ + 1 của Ban Vận Hành) — KHÔNG bị ảnh hưởng bởi headcountSelfOnly của node con');
+    assertEqual(company.actualTotal, 3, 'Công Ty: actualTotal vẫn đúng tổng đầy đủ = 3, không bị "hụt" đi phần đã ẩn ở dòng hiển thị của Ban Tổng Giám Đốc');
+  });
+}
+
 // ===== PHẦN B: HTTP qua routes/orgChart.js thật =====
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 const PLAIN = { username: 'nv1', name: 'Nhân Viên Thường', dept: 'Kế Toán', perms: {}, active: true };
@@ -172,6 +215,7 @@ async function main() {
   const run = createRunner();
   try {
     await runPureTests(run);
+    await runSelfOnlyTests(run);
 
     let versionId, posNodeId;
     await run.run('POST /nodes: headcountQuota hợp lệ -> lưu đúng; âm/không phải số -> 400', async () => {
@@ -214,6 +258,16 @@ async function main() {
       assertEqual(res.status, 200, 'Export phải trả 200');
       assert((res.headers.get('content-type') || '').includes('spreadsheetml'), 'Content-Type phải là Excel (.xlsx)');
       assertEqual(res.buf.slice(0, 2).toString('latin1'), 'PK', 'Buffer phải là file zip hợp lệ (magic bytes PK — .xlsx thật)');
+    });
+
+    await run.run('POST/PATCH /nodes: headcountSelfOnly lưu đúng qua API thật (chỉ áp dụng DEPARTMENT, POSITION luôn null)', async () => {
+      const deptNode = await api('POST', `/api/org-chart/versions/${versionId}/nodes`, { parentNodeId: 1, nodeType: 'DEPARTMENT', nodeName: 'Ban Tổng Giám Đốc Test', headcountSelfOnly: true }, ADMIN);
+      assertEqual(deptNode.status, 200, 'Tạo DEPARTMENT kèm headcountSelfOnly=true phải thành công');
+      assertEqual(deptNode.body.node.headcountSelfOnly, true, 'headcountSelfOnly lưu đúng = true lúc tạo');
+      const toggled = await api('PATCH', `/api/org-chart/versions/${versionId}/nodes/${deptNode.body.node.nodeId}`, { headcountSelfOnly: false }, ADMIN);
+      assertEqual(toggled.body.node.headcountSelfOnly, false, 'PATCH tắt lại headcountSelfOnly=false lưu đúng');
+      const posUnderIt = await api('POST', `/api/org-chart/versions/${versionId}/nodes`, { parentNodeId: deptNode.body.node.nodeId, nodeType: 'POSITION', jobTitle: 'VT Test', headcountSelfOnly: true }, ADMIN);
+      assertEqual(posUnderIt.body.node.headcountSelfOnly, null, 'Node POSITION KHÔNG áp dụng headcountSelfOnly dù client cố gửi kèm — luôn null');
     });
   } finally {
     server.close();

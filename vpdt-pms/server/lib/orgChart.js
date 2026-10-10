@@ -173,7 +173,7 @@ function findPositionNodeForUser(version, user) {
 
 // ===== CRUD node (chỉ khi version.status==='DRAFT') =====
 
-function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, headcountQuota, displayOrder }) {
+function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, jobTitle, requiresDept, posType, jobGrade, headcountQuota, headcountSelfOnly, displayOrder }) {
   requireDraft(version);
   if (!NODE_TYPES.has(nodeType)) throw new HttpError(400, 'Loại node không hợp lệ');
   const isRoot = parentNodeId == null;
@@ -194,6 +194,15 @@ function addNode(version, { parentNodeId, nodeType, nodeName, departmentRef, job
     parentNodeId: isRoot ? null : parentNodeId,
     nodeType,
     departmentRef: nodeType === 'DEPARTMENT' ? (departmentRef || null) : null,
+    // headcountSelfOnly (10/2026, theo yêu cầu người dùng — "Ban Tổng Giám Đốc tính Định Biên/Thực Tế
+    // theo số sheet riêng, không cộng dồn các Ban khác nằm dưới nó"): TUỲ CHỌN, CHỈ áp dụng node
+    // DEPARTMENT, mặc định false (giữ nguyên hành vi cộng dồn đệ quy cũ cho MỌI Ban/Phòng). Khi bật,
+    // dòng HIỂN THỊ của riêng node này ở Báo Cáo Định Biên Nhân Sự chỉ tính các vị trí (POSITION) con
+    // TRỰC TIẾP — không đệ quy xuống các DEPARTMENT con. Giá trị cộng lên node CHA (và Công Ty) vẫn LUÔN
+    // là tổng đầy đủ toàn bộ nhánh con như cũ (không bị ảnh hưởng) — xem computeHeadcountReport()
+    // (lib/headcountReport.js), tách riêng "agg" (đệ quy đầy đủ, trả lên cha) khỏi "ownAgg" (chỉ con
+    // trực tiếp, dùng cho dòng hiển thị của CHÍNH node này khi cờ này bật).
+    headcountSelfOnly: nodeType === 'DEPARTMENT' ? !!headcountSelfOnly : null,
     jobTitle: nodeType === 'POSITION' ? jobTitle.trim() : null,
     requiresDept: nodeType === 'POSITION' ? (requiresDept !== false) : null,
     posType: nodeType === 'POSITION' ? (POS_TYPES.has(posType) ? posType : null) : null,
@@ -263,6 +272,9 @@ function editNode(version, nodeId, patch) {
   }
   if (node.nodeType === 'DEPARTMENT' && patch.departmentRef !== undefined) {
     node.departmentRef = patch.departmentRef || null;
+  }
+  if (node.nodeType === 'DEPARTMENT' && patch.headcountSelfOnly !== undefined) {
+    node.headcountSelfOnly = !!patch.headcountSelfOnly;
   }
   if (patch.displayOrder !== undefined && Number.isFinite(patch.displayOrder)) node.displayOrder = patch.displayOrder;
   return node;

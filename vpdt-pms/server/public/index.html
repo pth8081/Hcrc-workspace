@@ -1998,6 +1998,17 @@
             <select id="orgChartNodeDeptRefSelect" class="w-full border p-1.5 rounded text-sm bg-white"></select>
             <p class="text-[11px] text-gray-400 mt-1">Chỉ cần chọn nếu đây là phòng ban thật (dùng để tự tra "ai đang giữ vị trí" bên dưới) — bỏ trống nếu chỉ là node nhóm (VD "Khối Kinh Doanh").</p>
           </div>
+          <!-- headcountSelfOnly (10/2026) — dành cho trường hợp như "Ban Tổng Giám Đốc": mọi Ban/Phòng
+               khác đều nằm bên dưới nó trong sơ đồ, khiến tổng Định Biên/Thực Tế của nó trùng với cả công
+               ty. Mặc định tắt (mọi node vẫn cộng dồn như cũ) — chỉ bật cho đúng node cần tách riêng. Xem
+               lib/headcountReport.js::computeHeadcountReport(). -->
+          <div class="border border-amber-300 bg-amber-50 rounded p-2">
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" id="orgChartNodeHeadcountSelfOnlyCheckbox" class="mt-0.5 w-4 h-4 accent-amber-600">
+              <span class="text-xs text-gray-800">Chỉ tính Định Biên/Thực Tế riêng của node này — không cộng dồn các phòng ban con bên dưới.</span>
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1 pl-6">Dùng cho node kiểu "Ban Tổng Giám Đốc" — nơi mọi Ban/Phòng khác trong công ty đang nằm bên dưới nó. Bật cờ này không ảnh hưởng gì tới Công Ty hay các Ban/Phòng khác (vẫn cộng dồn đầy đủ như trước).</p>
+          </div>
         </div>
         <div id="orgChartNodePositionFields" class="hidden space-y-2">
           <div>

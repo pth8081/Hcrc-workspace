@@ -755,6 +755,7 @@ function openOrgChartAddNodeModal(parentNodeId) {
   document.getElementById('orgChartNodePosTypeSelect').value = '';
   document.getElementById('orgChartNodeJobGradeInput').value = '';
   document.getElementById('orgChartNodeHeadcountQuotaInput').value = '';
+  document.getElementById('orgChartNodeHeadcountSelfOnlyCheckbox').checked = false;
   ocPopulateNodeDeptRefSelect('');
   ocPopulateJobTitleDatalist();
   ocPopulateJobGradeDatalist();
@@ -782,6 +783,7 @@ function openOrgChartEditNodeModal(nodeId) {
   } else {
     ocPopulateJobTitleDatalist();
     document.getElementById('orgChartNodeNameInput').value = node.nodeName || '';
+    document.getElementById('orgChartNodeHeadcountSelfOnlyCheckbox').checked = !!node.headcountSelfOnly;
     ocPopulateNodeDeptRefSelect(node.departmentRef || '');
   }
   onOrgChartNodeTypeChange();
@@ -807,6 +809,7 @@ async function saveOrgChartNodeClick() {
   } else {
     payload.nodeName = document.getElementById('orgChartNodeNameInput').value.trim();
     payload.departmentRef = document.getElementById('orgChartNodeDeptRefSelect').value || null;
+    payload.headcountSelfOnly = document.getElementById('orgChartNodeHeadcountSelfOnlyCheckbox').checked;
     if (!payload.nodeName) return alert('⛔ Vui lòng nhập Tên Hiển Thị.');
   }
   try {

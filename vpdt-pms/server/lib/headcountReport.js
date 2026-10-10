@@ -104,7 +104,14 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
       return { ...stats, hasAnyQuota: stats.quota != null };
     }
     const children = childrenByParent.get(node.nodeId) || [];
+    // agg: LUÔN cộng dồn ĐẦY ĐỦ toàn bộ nhánh con (kể cả khi node này bật headcountSelfOnly) — đây là
+    // giá trị trả LÊN node CHA (và cuối cùng lên Công Ty), không bao giờ bị ảnh hưởng bởi cờ
+    // headcountSelfOnly của bất kỳ node con nào — Công Ty/các Ban khác vẫn đúng như cũ.
+    // ownAgg: CHỈ cộng các con TRỰC TIẾP loại POSITION (không đệ quy xuống DEPARTMENT con) — dùng làm
+    // dòng HIỂN THỊ của CHÍNH node này khi headcountSelfOnly bật (VD "Ban Tổng Giám Đốc": chỉ tính TGĐ +
+    // Phó TGĐ gắn trực tiếp, không cộng luôn các Ban khác nằm dưới nó trong sơ đồ).
     let agg = { ...EMPTY_STATS, hasAnyQuota: false };
+    let ownAgg = { ...EMPTY_STATS, hasAnyQuota: false };
     const rowIndex = rows.length;
     rows.push({
       nodeId: node.nodeId, nodeType: node.nodeType, level,
@@ -112,15 +119,18 @@ function computeHeadcountReport(version, employeeProfiles, hrProcesses, users) {
       quota: 0, active: 0, onLeave: 0, offboarding: 0, secondary: 0, actualTotal: 0, variance: 0
     });
     for (const child of children) {
-      agg = addStats(agg, visit(child, level + 1));
+      const childAgg = visit(child, level + 1);
+      agg = addStats(agg, childAgg);
+      if (child.nodeType === 'POSITION') ownAgg = addStats(ownAgg, childAgg);
     }
-    rows[rowIndex].quota = agg.hasAnyQuota ? agg.quota : null;
-    rows[rowIndex].active = agg.active;
-    rows[rowIndex].onLeave = agg.onLeave;
-    rows[rowIndex].offboarding = agg.offboarding;
-    rows[rowIndex].secondary = agg.secondary;
-    rows[rowIndex].actualTotal = agg.actualTotal;
-    rows[rowIndex].variance = agg.hasAnyQuota ? (agg.quota - agg.actualTotal) : null;
+    const displayAgg = node.headcountSelfOnly ? ownAgg : agg;
+    rows[rowIndex].quota = displayAgg.hasAnyQuota ? displayAgg.quota : null;
+    rows[rowIndex].active = displayAgg.active;
+    rows[rowIndex].onLeave = displayAgg.onLeave;
+    rows[rowIndex].offboarding = displayAgg.offboarding;
+    rows[rowIndex].secondary = displayAgg.secondary;
+    rows[rowIndex].actualTotal = displayAgg.actualTotal;
+    rows[rowIndex].variance = displayAgg.hasAnyQuota ? (displayAgg.quota - displayAgg.actualTotal) : null;
     return agg;
   }
 
