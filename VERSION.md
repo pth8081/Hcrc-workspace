@@ -1,8 +1,64 @@
 # Phiên bản hiện tại
 
-**25.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.62 (2026-10-10): Chuyển Tiếp Xin Ý Kiến + Quá Hạn Xử Lý (Văn Bản Trình/Hợp Đồng)
+
+Hai tính năng mới áp dụng CHUNG cho cả Văn Bản Trình và Hợp Đồng, theo yêu
+cầu người dùng sau khi xem phân tích + mockup demo:
+
+- **🔀 Chuyển Tiếp Xin Ý Kiến**: ở bất kỳ bước phê duyệt nào, người duyệt
+  bước hiện tại chuyển tiếp hồ sơ cho 1 hoặc NHIỀU người cùng lúc
+  (multi-select, cùng/khác phòng ban đều được) để xin ý kiến/thông tin/báo
+  cáo. Người được chuyển tiếp CHỈ có quyền trả lời (bình luận và/hoặc 1
+  file) lại đúng người đã chuyển tiếp cho mình — không có quyền Duyệt/Từ
+  chối thay — và có thể tự chuyển tiếp tiếp cho người khác (nhiều tầng).
+  Chỉ quyết định của người duyệt CHÍNH mới tính vào luồng duyệt chính;
+  nhánh chuyển tiếp chỉ là kênh tham khảo phụ, mỗi nhánh chỉ hiển thị cho
+  đúng 2 người liên quan (không skip-level dù lồng nhiều tầng).
+  - **Server**: `forwardThreads[]` (mảng phẳng) thêm vào submissions/
+    contracts; 2 route mới `POST /:module/:id/forward` và
+    `/forward-reply` (`routes/workflow.js`) gác quyền qua
+    `resolveWorkflowStepApprovers()`/`canApproveStep()` (root forward) hoặc
+    khớp `forwardedTo` (continuation forward); `isForwardThreadParticipant()`
+    (`lib/recordViewScope.js`) cho phép người được chuyển tiếp xem hồ sơ dù
+    khác phòng ban; `lib/fileAuthz.js` mở rộng cho file đính kèm trong
+    nhánh trả lời.
+  - **Client**: modal chọn người (multi-select) + render nhánh đệ quy trong
+    `public/js/core.js`, wire vào `module-vanbantrinh.js`/`module-hopdong.js`;
+    khối Dashboard mới **"📨 Được Nhờ Cho Ý Kiến"** gộp mọi lần được nhờ của
+    cả 2 module; bell notification + email khi có yêu cầu/phản hồi mới;
+    moduleKey upload riêng `forwardReply` cho file đính kèm trong trả lời.
+  - **Hợp Đồng**: nhân tiện xây khối timeline hiển thị từng bước đã duyệt +
+    người duyệt + thời điểm trong modal chi tiết (tái dùng
+    `buildWorkflowStepsStatusHTML()` sẵn có, trước đây chỉ gọi cho Văn Bản
+    Trình dù hàm đã module-agnostic).
+
+- **⏰ Quá Hạn Xử Lý**: admin cấu hình 1 hoặc nhiều ngưỡng NGÀY (riêng từng
+  module: `submissionOverdueDays`/`contractOverdueDays`) ở Cấu Hình Email,
+  mặc định TẮT (mảng rỗng) — khác hẳn `contractExpiryReminderDays` (luôn
+  bật). "Quá hạn" đếm số ngày hồ sơ CHỜ XỬ LÝ ở CÙNG 1 bước hiện tại (tính
+  từ lúc bước trước vừa được duyệt, hoặc từ lúc tạo hồ sơ nếu đang ở bước
+  1) — NGƯỢC HẲN ý nghĩa với cơ chế nhắc hạn hiệu lực hợp đồng (đếm ngày
+  CÒN LẠI tới khi hết hạn). Vượt ngưỡng nhỏ nhất → badge "⚠️ Sắp Quá Hạn";
+  vượt ngưỡng lớn nhất → badge "🔴 Quá Hạn Xử Lý", hiện trên danh sách lẫn
+  chi tiết. Job `jobs/approvalOverdueReminder.js` chạy mỗi 24h, gửi email
+  nhắc người duyệt bước hiện tại + người trình + email CC cố định
+  (`submissionOverdueCcEmails`/`contractOverdueCcEmails`), mỗi ngưỡng chỉ
+  nhắc đúng 1 lần (`item.overdueNotified = {step, thresholds}`, tự reset
+  khi hồ sơ sang bước mới). Hàm tính `lib/approvalOverdue.js::
+  computeApprovalOverdueStatus()` dùng chung giữa job (server) và badge
+  (client mirror trong `public/js/core.js`).
+
+Viết test đầy đủ cho cả 2 tính năng: `tests/test-forward-opinion-workflow.js`
+(13 kịch bản — root/continuation forward, multi-select, forward-reply,
+403/409/400, Hợp Đồng, quyền xem qua forward thread) và
+`tests/test-approval-overdue.js` (15 kịch bản — tính toán thuần + job email,
+idempotent, reset khi đổi bước, gửi thất bại không đánh dấu). Cập nhật
+Nghiệp Vụ (`module-nghiepvu.js`, entry Văn Bản Trình/Hợp Đồng) +
+`deploy/Huong-dan-nghiep-vu.md`.
 
 ## v25.61 (2026-10-10): "Việc D mở rộng" — bỏ quyền phẳng Xem cũ ở Đăng Ký Xe/Văn Phòng
 
