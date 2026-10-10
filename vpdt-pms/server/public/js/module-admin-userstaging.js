@@ -517,10 +517,13 @@ function summarizeUserPerms(perms) {
   if (perms.vppRegisterCreate) parts.push('📝 Người đăng ký VPP');
   if (perms.reportManage || perms.reportAggregate || perms.reportEntryCreate) parts.push('📅 Báo cáo định kỳ');
   if (perms.meetingBook || perms.meetingApprove || perms.meetingCancel) parts.push('📅 Phòng họp');
-  if (hasScope(perms.carView) || perms.carCreate) parts.push('🚗 Xe');
+  // carView ĐÃ BỎ (10/2026, "Việc D" mở rộng) — cùng lý do submissionCreate/contractCreate ở trên: người
+  // CHỈ có quyền Tải (carDownload, không có quyền Tạo) vẫn phải nổi tag này.
+  if (perms.carCreate || hasScope(perms.carDownload)) parts.push('🚗 Xe');
   if (perms.carDispatch) parts.push('🚘 Điều hành xe');
   // officeCreate (10/2026, "6-module"): giờ là quyền PHẲNG boolean — kiểm tra trực tiếp thay vì qua hasScope().
-  if ((hasScope(perms.officeView) || perms.officeCreate) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
+  // officeView ĐÃ BỎ (10/2026, "Việc D" mở rộng) — cùng lý do carView ở trên.
+  if ((perms.officeCreate || hasScope(perms.officeDownload)) && (perms.officeBuy || perms.officeFix)) parts.push('🏢 VP');
   if (perms.minutesCreate) parts.push('📝 Biên bản họp');
   if (perms.canViewReports) parts.push('📊 Báo cáo');
   if (perms.internalNewsCreate || perms.internalRecruitmentCreate) parts.push('📣 Truyền thông (đăng bài)');

@@ -87,7 +87,7 @@ const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRo
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
 const { checkPaymentDeadlineReminders } = require('./jobs/paymentDeadlineReminder');
 const { checkItApprovalDeadlineReminders } = require('./jobs/itApprovalDeadlineReminder');
-const { migrateLegacySubmissionContractViewers } = require('./jobs/legacyViewScopeMigration');
+const { migrateLegacyViewScopeViewers } = require('./jobs/legacyViewScopeMigration');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -490,11 +490,11 @@ async function start() {
     // gửi trùng email nhắc hạn N lần (N = số tiến trình).
     const isSchedulerInstance = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0';
     if (isSchedulerInstance) {
-      // Di trú quyền Xem cũ submissionView/contractView -> deptViewScopeConfig.extraViewers: CHẠY Ở ĐÂY
-      // (server, lúc khởi động) — KHÔNG lặp lại định kỳ như các job nhắc hạn khác (migration tự idempotent,
-      // chạy 1 lần/lần khởi động là đủ, dữ liệu users/perms hiếm khi đổi liên tục giữa các lần khởi động) —
-      // xem chú thích đầy đủ 2 lỗi đã vá ở jobs/legacyViewScopeMigration.js.
-      migrateLegacySubmissionContractViewers();
+      // Di trú quyền Xem cũ submissionView/contractView/carView/officeView -> deptViewScopeConfig.
+      // extraViewers: CHẠY Ở ĐÂY (server, lúc khởi động) — KHÔNG lặp lại định kỳ như các job nhắc hạn
+      // khác (migration tự idempotent, chạy 1 lần/lần khởi động là đủ, dữ liệu users/perms hiếm khi đổi
+      // liên tục giữa các lần khởi động) — xem chú thích đầy đủ ở jobs/legacyViewScopeMigration.js.
+      migrateLegacyViewScopeViewers();
       checkContractExpiryReminders();
       setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
       checkLicenseExpiryReminders();

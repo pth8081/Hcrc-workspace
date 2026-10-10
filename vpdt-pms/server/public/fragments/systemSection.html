@@ -2084,8 +2084,13 @@
                  (carCreate {all,depts}) khỏi bảng theo phòng ban — thay bằng 1 công tắc phẳng DUY NHẤT
                  ngay dưới đây, tự khoá đúng phòng ban người tạo (forceOwnDept, xem lib/createValidation.js
                  + canManageContractPayment()-style note KHÔNG áp dụng ở đây vì Đăng Ký Xe không có khái
-                 niệm "custodianDept"/thanh toán theo phiếu xe — rủi ro thấp hơn Hợp Đồng/Văn Phòng). Bảng
-                 phía dưới giờ chỉ còn 2 cột Xem/Tải xuống. -->
+                 niệm "custodianDept"/thanh toán theo phiếu xe — rủi ro thấp hơn Hợp Đồng/Văn Phòng).
+                 LÀM GỌN TIẾP ("Việc D" mở rộng, theo yêu cầu người dùng "phòng ban nào chỉ được xem phòng
+                 ban đấy, như Văn Bản Trình/Hợp Đồng"): bỏ HẲN cột "Xem" (carView {all,depts}) — người
+                 tạo/lái xe được gán/người duyệt LUÔN xem được mặc định (không cần cấp quyền gì), các
+                 trường hợp còn lại cấu hình ở Hệ Thống → Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng
+                 Ban (module "car", cùng mô hình 4 trạng thái dùng chung các module khác). Bảng phía dưới
+                 giờ chỉ còn 1 cột Tải xuống. -->
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
               <input type="checkbox" id="pCarCreate"> ✅ Cho phép tạo đăng ký xe (tự khoá đúng phòng ban của mình)
             </label>
@@ -2094,12 +2099,6 @@
               <thead class="sticky top-0 bg-white z-10">
                 <tr class="border-b">
                   <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                  <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
-                    <span class="block mb-0.5">Xem</span>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" id="pCarViewAll" data-op-change="toggleScopeGroup" data-arg0="pCarViewAll" data-arg1="pCarViewDept"><span>ALL</span>
-                    </label>
-                  </th>
                   <th class="text-center font-bold text-indigo-700 pb-1 px-1 align-bottom">
                     <span class="block mb-0.5">Tải xuống</span>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
@@ -2143,8 +2142,12 @@
                  hưởng trực tiếp đến quyền thanh toán): bỏ hẳn cột "Tạo mới" (officeCreate {all,depts})
                  khỏi bảng theo phòng ban — thay bằng 1 công tắc phẳng DUY NHẤT ngay dưới đây, tự khoá
                  đúng phòng ban người tạo (forceOwnDept, xem lib/createValidation.js +
-                 canManageOfficePayment() đã cập nhật tương ứng). Bảng phía dưới giờ chỉ còn 2 cột
-                 Xem/Tải xuống. -->
+                 canManageOfficePayment() đã cập nhật tương ứng).
+                 LÀM GỌN TIẾP ("Việc D" mở rộng, theo yêu cầu người dùng "phòng ban nào chỉ được xem phòng
+                 ban đấy, như Văn Bản Trình/Hợp Đồng"): bỏ HẲN cột "Xem" (officeView {all,depts}) — người
+                 tạo/người duyệt LUÔN xem được mặc định, các trường hợp còn lại cấu hình ở Hệ Thống →
+                 Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban (module "office"). Bảng phía dưới giờ
+                 chỉ còn 1 cột Tải xuống. -->
             <label class="flex items-center gap-1.5 text-gray-700 cursor-pointer">
               <input type="checkbox" id="pOfficeCreate"> ✅ Cho phép tạo đề xuất văn phòng (tự khoá đúng phòng ban của mình)
             </label>
@@ -2153,12 +2156,6 @@
                 <thead class="sticky top-0 bg-white z-10">
                   <tr class="border-b">
                     <th class="text-left font-semibold text-gray-600 pb-1 pr-2 align-bottom">Phòng Ban</th>
-                    <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">
-                      <span class="block mb-0.5">Xem</span>
-                      <label class="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" id="pOfficeViewAll" data-op-change="toggleScopeGroup" data-arg0="pOfficeViewAll" data-arg1="pOfficeViewDept"><span>ALL</span>
-                      </label>
-                    </th>
                     <th class="text-center font-bold text-teal-700 pb-1 px-1 align-bottom">
                       <span class="block mb-0.5">Tải xuống</span>
                       <label class="inline-flex items-center gap-1 cursor-pointer">

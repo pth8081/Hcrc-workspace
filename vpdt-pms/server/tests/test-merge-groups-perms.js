@@ -107,6 +107,19 @@ async function main() {
     assertEqual(merged.contractCreate.all, false, 'field hợp lệ khác vẫn gộp đúng như thường (không ảnh hưởng)');
   });
 
+  // "Việc D mở rộng" (10/2026): carView/officeView cùng khuôn cleanup như submissionView/contractView ở
+  // trên — mirror đúng scenario, dùng carDownload/officeDownload (vẫn giữ dạng {all,depts}) làm "field
+  // hợp lệ khác".
+  await run.run('"Việc D mở rộng": carView/officeView (field đã bỏ) KHÔNG "hồi sinh" qua merge dù 1 nhóm còn sót', () => {
+    const merged = mergeGroupsBasePermsServer([
+      { carDownload: { all: false, depts: [] } },
+      { carView: { all: true, depts: [] }, officeView: { all: true, depts: [] } }
+    ]);
+    assertEqual('carView' in merged, false, 'carView phải bị loại khỏi kết quả gộp');
+    assertEqual('officeView' in merged, false, 'officeView phải bị loại khỏi kết quả gộp');
+    assertEqual(merged.carDownload.all, false, 'field hợp lệ khác vẫn gộp đúng như thường (không ảnh hưởng)');
+  });
+
   run.summary();
 }
 

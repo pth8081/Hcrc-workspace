@@ -927,12 +927,12 @@ function renderCarRegs() {
   const toDate = document.getElementById('filterToDateCar')?.value || '';
   const keyword = (document.getElementById('filterKeywordCar')?.value || '').trim();
 
-  // CẬP NHẬT: lọc theo phạm vi Xem (carView) thay vì hiển thị đăng ký xe của mọi phòng ban.
-  const canViewCar = c => scopeAllows(currentUser, currentUser.perms?.carView, c.dept) ||
-    c.creator === currentUser.username ||
-    isApproverForDeptWorkflow(resolveCarWorkflowConfigForItemClient(c), currentUser.username);
-
-  const scopedCarRegs = DB.carRegs.filter(canViewCar);
+  // LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe): bỏ hẳn bộ lọc lại phía CLIENT dùng carView —
+  // DB.carRegs ĐÃ được SERVER lọc đúng theo canViewCarReg() (lib/recordViewScope.js, nay đọc
+  // deptViewScopeConfig['car'] thay cho carView) trước khi gửi về, client chỉ RENDER, không tự lọc lại
+  // (khớp nguyên tắc đã áp dụng cho Tài Liệu ở v24.75 — lọc lại phía client từng là nguồn lỗi DRIFT thật
+  // khi thêm nhánh xem mới ở server mà quên đồng bộ bên client).
+  const scopedCarRegs = DB.carRegs;
   const carDashCards = [
     { key: '', label: 'Tổng Đăng Ký', count: scopedCarRegs.length, colorClass: 'border-l-blue-500' },
     { key: 'PENDING', label: 'Đang Chờ Duyệt', count: scopedCarRegs.filter(c => c.status === 'PENDING').length, colorClass: 'border-l-yellow-500' },
@@ -952,8 +952,6 @@ function renderCarRegs() {
   document.getElementById('carDashboardCards').innerHTML = buildDashboardCardsHTML(carDashCards, statusFilter, 'filterCarByCard');
 
   const visibleCarRegs = DB.carRegs.filter(c => {
-    if (!canViewCar(c)) return false;
-
     if (deptFilter && c.dept !== deptFilter) return false;
     if (statusFilter && c.status !== statusFilter) return false;
     if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
@@ -1692,15 +1690,15 @@ function renderCarReportTab() {
   // chính người đang đăng nhập (filterCarRegsForUser()/canViewCarReg(), lib/recordViewScope.js) — người
   // chỉ duyệt/xem 1 vài phòng ban thấy số liệu THIẾU so với toàn công ty nhưng màn hình trước đây trình
   // bày y như số liệu tổng, không có dấu hiệu nào. Nêu rõ thay vì để hiểu nhầm.
-  const seesAllCarRegs = !!(currentUser?.perms?.admin || currentUser?.perms?.carView?.all);
+  // carView (10/2026, "Việc D" mở rộng) ĐÃ BỎ — không còn danh sách "phòng ban cụ thể" để liệt kê ở đây
+  // (thay bằng deptViewScopeConfig['car'].extraViewers, whitelist DÙNG CHUNG toàn công ty chứ không theo
+  // phòng ban cụ thể), nên bớt đi phần liệt kê tên phòng ban trong câu thông báo, giữ nguyên ý chính.
+  const seesAllCarRegs = !!(currentUser?.perms?.admin || currentUser?.perms?.carReportView);
   const scopeNoteEl = document.getElementById('carReportScopeNote');
   if (scopeNoteEl) {
     scopeNoteEl.classList.toggle('hidden', seesAllCarRegs);
     if (!seesAllCarRegs) {
-      const scopeDepts = (currentUser?.perms?.carView?.depts || []).join(', ');
-      scopeNoteEl.textContent = 'ℹ️ Số liệu dưới đây tính theo PHẠM VI XEM của bạn'
-        + (scopeDepts ? ` (${scopeDepts})` : '')
-        + ', không phải toàn công ty — các phiếu ngoài phạm vi không được tính.';
+      scopeNoteEl.textContent = 'ℹ️ Số liệu dưới đây tính theo PHẠM VI XEM của bạn, không phải toàn công ty — các phiếu ngoài phạm vi không được tính.';
     }
   }
 

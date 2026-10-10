@@ -232,12 +232,11 @@ function renderOfficeReqs() {
   const toDate = document.getElementById('filterToDateOffice')?.value || '';
   const keyword = (document.getElementById('filterKeywordOffice')?.value || '').trim();
 
-  // CẬP NHẬT: lọc theo phạm vi Xem (officeView) thay vì hiển thị đề xuất của mọi phòng ban.
-  const canViewOfficeReq = o => o.subType === activeOfficeSubTab && (
-    scopeAllows(currentUser, currentUser.perms?.officeView, o.dept) ||
-    o.creator === currentUser.username ||
-    isApproverForDeptWorkflow(resolveOfficeWorkflowConfigForItemClient(o), currentUser.username)
-  );
+  // LÀM GỌN (10/2026, "Việc D" mở rộng sang Văn Phòng Mua/Sửa): bỏ hẳn bộ lọc lại phía CLIENT dùng
+  // officeView — DB.officeReqs ĐÃ được SERVER lọc đúng theo canViewOfficeReq() (lib/recordViewScope.js,
+  // nay đọc deptViewScopeConfig['office'] thay cho officeView) trước khi gửi về, chỉ còn cần lọc đúng
+  // subType đang xem (KHÔNG liên quan phân quyền — mỗi sub-tab chỉ hiện đúng loại Mua Bán/Sửa Chữa).
+  const canViewOfficeReq = o => o.subType === activeOfficeSubTab;
 
   const scopedOfficeReqs = DB.officeReqs.filter(canViewOfficeReq);
   const officeDashCards = [

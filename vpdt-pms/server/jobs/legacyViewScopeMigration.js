@@ -1,8 +1,13 @@
-// jobs/legacyViewScopeMigration.js — Di trú + tự dọn quyền phẳng CŨ submissionView/contractView.all
-// (hoặc .depts có phòng ban KHÁC phòng ban chính mình) sang deptViewScopeConfig.submission/
-// contract.extraViewers — CHẠY Ở SERVER lúc khởi động, KHÔNG phụ thuộc việc ai đăng nhập (mirror đúng
-// logic di trú ở public/js/core.js initDatabase(), "Việc D", 11/2026, nhưng vá thêm 2 gap client không
-// tự vá được).
+// jobs/legacyViewScopeMigration.js — Di trú + tự dọn quyền phẳng CŨ submissionView/contractView/
+// carView/officeView.all (hoặc .depts có phòng ban KHÁC phòng ban chính mình) sang
+// deptViewScopeConfig.submission/contract/car/office.extraViewers — CHẠY Ở SERVER lúc khởi động,
+// KHÔNG phụ thuộc việc ai đăng nhập (mirror đúng logic di trú ở public/js/core.js initDatabase(),
+// "Việc D"/"Việc D mở rộng", 11/2026, nhưng vá thêm 2 gap client không tự vá được).
+//
+// "Việc D mở rộng" (10/2026): carView/officeView bị bỏ hẳn (giống submissionView/contractView trước
+// đó) — deptViewScopeConfig.car/office là cơ chế DUY NHẤT còn lại quyết định ai xem được Đăng Ký Xe/
+// Văn Phòng ngoài phòng ban của chính mình. Thêm car/office vào job này để có đúng 2 lớp an toàn mà
+// submission/contract đã có (dọn dư thừa + không phụ thuộc admin đăng nhập).
 //
 // LỖI ĐÃ VÁ #1 (mức Trung bình, rà soát v24.74→v24.90, 10/2026): di trú ở core.js (client) CHỈ lưu lên
 // server khi NGƯỜI VỪA ĐĂNG NHẬP là Admin (ghi "deptViewScopeConfig" yêu cầu quyền Admin ở server, xem
@@ -30,17 +35,18 @@
 // không làm mất quyền xem THẬT nào của họ (vì .depts của họ chỉ từng trùng đúng phòng ban chính họ).
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 
+const LEGACY_PERM_KEY_BY_MODULE = { submission: 'submissionView', contract: 'contractView', car: 'carView', office: 'officeView' };
+
 function computeLegacyViewerSets(users) {
-  const legacy = { submission: new Set(), contract: new Set() };
-  const overBroadLegacy = { submission: new Set(), contract: new Set() };
+  const legacy = { submission: new Set(), contract: new Set(), car: new Set(), office: new Set() };
+  const overBroadLegacy = { submission: new Set(), contract: new Set(), car: new Set(), office: new Set() };
   for (const u of (users || [])) {
     if (!u?.username) continue;
-    const sv = u.perms?.submissionView;
-    if (sv?.all || (Array.isArray(sv?.depts) && sv.depts.some(d => d !== u.dept))) legacy.submission.add(u.username);
-    else if (Array.isArray(sv?.depts) && sv.depts.length && sv.depts.every(d => d === u.dept)) overBroadLegacy.submission.add(u.username);
-    const cv = u.perms?.contractView;
-    if (cv?.all || (Array.isArray(cv?.depts) && cv.depts.some(d => d !== u.dept))) legacy.contract.add(u.username);
-    else if (Array.isArray(cv?.depts) && cv.depts.length && cv.depts.every(d => d === u.dept)) overBroadLegacy.contract.add(u.username);
+    for (const moduleKey of Object.keys(LEGACY_PERM_KEY_BY_MODULE)) {
+      const pv = u.perms?.[LEGACY_PERM_KEY_BY_MODULE[moduleKey]];
+      if (pv?.all || (Array.isArray(pv?.depts) && pv.depts.some(d => d !== u.dept))) legacy[moduleKey].add(u.username);
+      else if (Array.isArray(pv?.depts) && pv.depts.length && pv.depts.every(d => d === u.dept)) overBroadLegacy[moduleKey].add(u.username);
+    }
   }
   return { legacy, overBroadLegacy };
 }
@@ -62,12 +68,15 @@ function reconcileModuleConfig(cfg, correctSet, overBroadSet) {
   return { normalized, changed };
 }
 
-async function migrateLegacySubmissionContractViewers() {
+const VIEW_SCOPE_MODULES = Object.keys(LEGACY_PERM_KEY_BY_MODULE);
+
+async function migrateLegacyViewScopeViewers() {
   try {
     const users = await getAppDataValue('users');
     if (!Array.isArray(users) || !users.length) return;
     const { legacy, overBroadLegacy } = computeLegacyViewerSets(users);
-    if (!legacy.submission.size && !legacy.contract.size && !overBroadLegacy.submission.size && !overBroadLegacy.contract.size) return;
+    const anyLegacyFlag = VIEW_SCOPE_MODULES.some(m => legacy[m].size || overBroadLegacy[m].size);
+    if (!anyLegacyFlag) return;
 
     // Đọc trước KHÔNG khoá, chỉ để kiểm tra có THẬT SỰ cần ghi hay không, TRƯỚC khi vào
     // withLockedAppDataValue() — hàm đó LUÔN ghi lại DataValue + bump UpdatedAt dù giá trị mới trùng giá
@@ -77,22 +86,21 @@ async function migrateLegacySubmissionContractViewers() {
     // =true VĨNH VIỄN, nên legacy.submission/contract CHẮC CHẮN > 0 ở mọi lần chạy, kể cả khi KHÔNG còn
     // gì để sửa thật.
     const peekCfg = (await getAppDataValue('deptViewScopeConfig')) || {};
-    const subPeek = reconcileModuleConfig(peekCfg.submission, legacy.submission, overBroadLegacy.submission);
-    const conPeek = reconcileModuleConfig(peekCfg.contract, legacy.contract, overBroadLegacy.contract);
-    if (!subPeek.changed && !conPeek.changed) return;
+    const anyPeekChanged = VIEW_SCOPE_MODULES.some(m => reconcileModuleConfig(peekCfg[m], legacy[m], overBroadLegacy[m]).changed);
+    if (!anyPeekChanged) return;
 
     await withLockedAppDataValue('deptViewScopeConfig', (current) => {
       const cfg = { ...(current || {}) };
-      const { normalized: subNorm, changed: subChanged } = reconcileModuleConfig(cfg.submission, legacy.submission, overBroadLegacy.submission);
-      const { normalized: conNorm, changed: conChanged } = reconcileModuleConfig(cfg.contract, legacy.contract, overBroadLegacy.contract);
-      if (subChanged) cfg.submission = subNorm;
-      if (conChanged) cfg.contract = conNorm;
+      for (const m of VIEW_SCOPE_MODULES) {
+        const { normalized, changed } = reconcileModuleConfig(cfg[m], legacy[m], overBroadLegacy[m]);
+        if (changed) cfg[m] = normalized;
+      }
       return cfg;
     });
-    console.log('✅ [Di trú quyền Xem cũ] Đã đồng bộ deptViewScopeConfig.submission/contract.extraViewers từ quyền phẳng cũ submissionView/contractView ngay ở server (không phụ thuộc admin đăng nhập).');
+    console.log('✅ [Di trú quyền Xem cũ] Đã đồng bộ deptViewScopeConfig.submission/contract/car/office.extraViewers từ quyền phẳng cũ submissionView/contractView/carView/officeView ngay ở server (không phụ thuộc admin đăng nhập).');
   } catch (err) {
     console.error('⛔ [Di trú quyền Xem cũ] Lỗi khi đồng bộ deptViewScopeConfig:', err.message);
   }
 }
 
-module.exports = { migrateLegacySubmissionContractViewers, computeLegacyViewerSets, reconcileModuleConfig };
+module.exports = { migrateLegacyViewScopeViewers, computeLegacyViewerSets, reconcileModuleConfig };

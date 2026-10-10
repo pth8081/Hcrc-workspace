@@ -3,8 +3,10 @@
 // Regression test cho GET /api/data (routes/data.js) sau Bước 8g: officeReqs tách riêng khỏi vòng lặp
 // tải chung qua loadOfficeReqsScoped(). canViewOfficeReq() (lib/recordViewScope.js) cùng khuôn carRegs
 // (4 nhánh: admin; chính người TẠO — Creator, KHÔNG forceOwnDept nên có thể tạo hộ phòng ban khác;
-// scopeAllows(officeView, dept); đang là người duyệt theo *DeptWorkflows) — khác carRegs ở chỗ CÓ 2 bộ
-// cấu hình duyệt riêng theo subType (officeBuyDeptWorkflows/officeFixDeptWorkflows).
+// scopeAllows(dept, deptViewScopeConfig['office']) (mode DEPT + extraViewers/managerCanView — LÀM GỌN
+// 10/2026 "Việc D" mở rộng: bỏ hẳn quyền phẳng cũ officeView {all,depts}); đang là người duyệt theo
+// *DeptWorkflows) — khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
+// (officeBuyDeptWorkflows/officeFixDeptWorkflows).
 //
 // Chạy: node server/tests/test-office-reqs-scope.js
 'use strict';
@@ -21,19 +23,17 @@ function stubModule(relPath, exportsObj) {
 }
 
 const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng A', perms: {}, active: true };
-const SCOPE_USER = { username: 'scopeuser', name: 'Người Có Phạm Vi Mở Rộng', dept: 'Phòng A', perms: { officeView: { depts: ['Phòng C'] } }, active: true };
 // duyet1 duyệt SUA_CHUA của Phòng D (không phải phòng mình, không phải MUA_BAN).
 const APPROVER_D_FIX = { username: 'duyet1', name: 'Người Duyệt Sửa Chữa Phòng D', dept: 'Phòng A', perms: {}, active: true };
 // creator1 tạo hộ đề xuất cho Phòng B (officeCreate scope riêng cho phép, không forceOwnDept).
 const CREATOR_OTHER_DEPT = { username: 'creator1', name: 'Người Tạo Hộ Phòng B', dept: 'Phòng A', perms: {}, active: true };
-const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng A', perms: { officeView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 // MANAGED_CREATOR_OFFICE: dùng RIÊNG cho kịch bản deptViewScopeConfig.office.managerCanView dưới (được
 // REGULAR_A quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN HỆ QUẢN
 // LÝ với NGƯỜI TẠO từng hồ sơ cụ thể (item.creator, qua scopeAllows()->extraViewScopeAllows()->
 // isManagerOf()), không phải cấp quyền xem toàn công ty cho MỌI user thường.
 const MANAGED_CREATOR_OFFICE = { username: 'nv_cap_duoi_office', name: 'NV Cấp Dưới Của A (Mua Sắm)', dept: 'Phòng B', perms: {}, managerUsername: 'nva', active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D_FIX, CREATOR_OTHER_DEPT, ALL_VIEW, ADMIN, MANAGED_CREATOR_OFFICE];
+const USERS = [REGULAR_A, APPROVER_D_FIX, CREATOR_OTHER_DEPT, ADMIN, MANAGED_CREATOR_OFFICE];
 
 const APP_DATA = {
   officeBuyDeptWorkflows: {},
@@ -146,13 +146,6 @@ async function main() {
       assertEqual(fullLoadCallCount, 0, 'người thường KHÔNG được tải toàn bộ company-wide');
     });
 
-    await run.run('officeView.depts=["Phòng C"]: thấy phòng ban mình + Phòng C', async () => {
-      resetData();
-      const res = await api('GET', '/api/data', undefined, SCOPE_USER);
-      const ids = (res.body.officeReqs || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,3', 'phải thấy đúng Phòng A (mình) + Phòng C (scope)');
-    });
-
     await run.run('Người duyệt Sửa Chữa của Phòng D: PHẢI thấy đề xuất SUA_CHUA của Phòng D dù khác phòng mình', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, APPROVER_D_FIX);
@@ -169,14 +162,6 @@ async function main() {
       assertEqual(ids.join(','), '1,2', 'creator1 phải thấy id1 (phòng mình) + id2 (đề xuất mình tạo cho Phòng B)');
     });
 
-    await run.run('officeView.all: nhận ĐỦ toàn công ty', async () => {
-      resetData(); fullLoadCallCount = 0;
-      const res = await api('GET', '/api/data', undefined, ALL_VIEW);
-      const ids = (res.body.officeReqs || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3,4', 'officeView.all phải thấy đủ cả 4 đề xuất');
-      assert(fullLoadCallCount >= 1, 'officeView.all phải tải theo nhánh company-wide');
-    });
-
     await run.run('admin: nhận ĐỦ toàn công ty', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, ADMIN);
@@ -186,13 +171,13 @@ async function main() {
 
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['office'] trước đây
     // KHÔNG được loadOfficeReqsScoped() đọc — xem chú thích đầy đủ tại loadOfficeReqsScoped() (routes/data.js).
-    await run.run('GET /api/data: deptViewScopeConfig.office.extraViewers=[nva] -> A nhận ĐỦ toàn công ty dù KHÔNG có officeView.all', async () => {
+    await run.run('GET /api/data: deptViewScopeConfig.office.extraViewers=[nva] (thay thế officeView.all cũ)', async () => {
       resetData(); fullLoadCallCount = 0;
       APP_DATA.deptViewScopeConfig = { office: { mode: 'DEPT', extraViewers: [REGULAR_A.username], managerCanView: false } };
       const res = await api('GET', '/api/data', undefined, REGULAR_A);
       const ids = (res.body.officeReqs || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 đề xuất, mọi phòng ban');
-      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide, giống officeView.all');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide');
       delete APP_DATA.deptViewScopeConfig;
     });
 

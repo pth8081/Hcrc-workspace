@@ -350,24 +350,27 @@ không cần sửa code. Mỗi module chọn ĐỘC LẬP 4 trạng thái:
 Ngân Sách, Thanh Toán, Mua Sắm/Sửa Chữa Văn Phòng, Đăng Ký Xe, Hợp Đồng, Tờ
 Trình, Đặt Phòng Họp, Vận Hành (Đặt Hàng ST/HO, Mở Mới Siêu Thị, Sửa Chữa Siêu
 Thị), Báo Cáo Định Kỳ, Checklist Đánh Giá Siêu Thị (đã có sẵn nhánh "cùng siêu
-thị tự động xem" từ trước). **Hợp Đồng/Tờ Trình (từ v24.80, "Việc D")**: ĐÂY
-giờ là đúng và DUY NHẤT nơi cấu hình quyền xem xuyên phòng ban của 2 module
-này — Ma Trận Phân Quyền đã bỏ hẳn cột "Xem" cũ (`submissionView`/
-`contractView`), cùng khuôn đã áp cho Tài Liệu ở v24.75; "Xem xuyên mọi phòng
-ban" (trước đây quyền phẳng `.all`/`.depts`) nay cấu hình qua mục 3 "Chọn
-người xem" (extraViewers) ở màn này.
+thị tự động xem" từ trước). **Hợp Đồng/Tờ Trình (từ v24.80, "Việc D")/Đăng Ký
+Xe/Văn Phòng (từ 10/2026, "Việc D mở rộng")**: ĐÂY giờ là đúng và DUY NHẤT nơi
+cấu hình quyền xem xuyên phòng ban của 4 module này — Ma Trận Phân Quyền đã bỏ
+hẳn cột "Xem" cũ (`submissionView`/`contractView`/`carView`/`officeView`),
+cùng khuôn đã áp cho Tài Liệu ở v24.75; "Xem xuyên mọi phòng ban" (trước đây
+quyền phẳng `.all`/`.depts`) nay cấu hình qua mục 3 "Chọn người xem"
+(extraViewers) ở màn này.
 
-**Di trú tự động (v24.91, vá 2 gap đợt rà soát v24.74→v24.90)**: việc chuyển
-`submissionView`/`contractView.all` cũ sang `extraViewers` giờ chạy THÊM Ở
-SERVER lúc khởi động (`jobs/legacyViewScopeMigration.js`, tự lặp lại mỗi lần
-khởi động, idempotent — chỉ ghi khi thật sự có thay đổi), không còn phụ thuộc
-việc có admin đăng nhập hay chưa (trước đây di trú chỉ chạy ở client và CHỈ
-lưu lên server khi NGƯỜI VỪA ĐĂNG NHẬP là Admin — user thường có quyền hợp lệ
-đăng nhập trước sẽ không được di trú ở phía server, nơi `canViewSubmission()`/
-`canViewContract()` thật sự đọc). Job này cũng tự dọn lại username từng bị
-thêm NHẦM vào `extraViewers` bởi bản vá v24.83 (trước đó, `.depts` chỉ trùng
-đúng phòng ban chính người đó vẫn bị coi là "cần di trú" — dư thừa quyền xem
-xuyên công ty) nếu dữ liệu sai đó đã kịp lưu lên server trước khi có bản vá.
+**Di trú tự động (v24.91, vá 2 gap đợt rà soát v24.74→v24.90; mở rộng 10/2026
+sang Đăng Ký Xe/Văn Phòng)**: việc chuyển `submissionView`/`contractView`/
+`carView`/`officeView.all` cũ sang `extraViewers` giờ chạy THÊM Ở SERVER lúc
+khởi động (`jobs/legacyViewScopeMigration.js`, hàm `migrateLegacyViewScopeViewers()`,
+tự lặp lại mỗi lần khởi động, idempotent — chỉ ghi khi thật sự có thay đổi),
+không còn phụ thuộc việc có admin đăng nhập hay chưa (trước đây di trú chỉ
+chạy ở client và CHỈ lưu lên server khi NGƯỜI VỪA ĐĂNG NHẬP là Admin — user
+thường có quyền hợp lệ đăng nhập trước sẽ không được di trú ở phía server, nơi
+`canViewSubmission()`/`canViewContract()`/`canViewCarReg()`/`canViewOfficeReq()`
+thật sự đọc). Job này cũng tự dọn lại username từng bị thêm NHẦM vào
+`extraViewers` bởi bản vá v24.83 (trước đó, `.depts` chỉ trùng đúng phòng ban
+chính người đó vẫn bị coi là "cần di trú" — dư thừa quyền xem xuyên công ty)
+nếu dữ liệu sai đó đã kịp lưu lên server trước khi có bản vá.
 
 **Mặc định "Chỉ người tạo xem" (6 module mới, admin TỰ CHỌN mở rộng nếu
 muốn)**: Công Việc (dept = cùng phòng NGƯỜI GIAO việc, lớp người-được-giao/
@@ -1319,7 +1322,8 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
   được triển khai, cần xác nhận thiết kế lại trước khi làm.
   **Lịch Xe hiện lái xe bận của TOÀN CÔNG TY (từ đợt rà soát chuyên sâu 2,
   9/2026)** — cùng lỗi/cùng cách vá đã áp dụng cho Lịch Họp ở trên: quyền
-  "Xem xe" (`carView`) mặc định chỉ thấy phiếu của phòng ban mình, nên lưới
+  "Xem xe" (`carView`, **đã bỏ hẳn từ 10/2026** — xem mục "Việc D mở rộng" ở
+  phần Phân Quyền, nay chỉ còn `deptViewScopeConfig.car`) mặc định chỉ thấy phiếu của phòng ban mình, nên lưới
   "🗓️ Lịch Xe" (cả 3 chế độ Ngày/Tuần/Tháng) trước đây hiện lái xe "Trống" giả
   ở đúng những khung giờ phòng ban KHÁC đã đăng ký. Nay lưới đọc thêm dữ liệu
   **chiếm chỗ toàn công ty** (chỉ lái xe/khung giờ/trạng thái, KHÔNG kèm điểm
@@ -4950,7 +4954,8 @@ Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
   `docDownload`) hoặc **không phải boolean** (VD `approverAuthLevel` là mức
   xác thực NONE/PASSWORD/PIN/WEBAUTHN) **không** vào ma trận — vẫn phải sửa
   tay ở cây phân quyền như trước; riêng phần "Toàn Bộ Phòng Ban" (`all`) của
-  quyền phạm vi vẫn xuất được (VD cột "Đăng Ký Xe — Xem" ứng với `carView.all`).
+  quyền phạm vi vẫn xuất được (VD cột "Tài Liệu — Tải Tài Liệu" ứng với
+  `docDownload.all`).
 - **2 file Excel RIÊNG** — "Xuất Excel Người Dùng" (1 dòng = 1 tài khoản) và
   "Xuất Excel Nhóm Phân Quyền" (1 dòng = 1 nhóm) — 2 khái niệm khác nhau,
   không gộp vào 1 file dù máy chủ đã đọc được nhiều sheet trong CÙNG 1 file
@@ -5046,7 +5051,8 @@ nào mà chỉ cần xem số liệu tổng hợp):
 - **`operationStoreReportView`** (khối 22. Vận Hành) — tab Báo Cáo trong
   "🏬 QLDA/Siêu Thị", dùng CHUNG cho cả 2 sub-tab Mở Mới lẫn Sửa Chữa.
 - **`carReportView`** (khối 6. Đăng Ký Xe) — tab Báo Cáo toàn công ty, KHÔNG
-  kèm "Xem" (`carView.all`) ở bảng phạm vi phòng ban.
+  kèm quyền xem danh sách phiếu đăng ký (`carView` — đã bỏ hẳn từ 10/2026,
+  xem "Việc D mở rộng" ở mục 3.0, nay là `deptViewScopeConfig.car`).
 - **`meetingReportView`** (khối 5. Phòng Họp) — tab Báo Cáo toàn công ty,
   KHÔNG kèm quyền Phê duyệt/Hủy lịch họp.
 - **`budgetReportView`** (khối 18. Ngân Sách) — quyền THỨ 4 (cùng cấp

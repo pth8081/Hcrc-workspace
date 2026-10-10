@@ -566,16 +566,23 @@ function filterContractsForUser(contracts, user, appData) {
   return (contracts || []).filter(c => canViewContract(user, c, appData));
 }
 
-// Khớp khối lọc trong renderCarRegs() (public/index.html): scopeAllows(carView) HOẶC chính người tạo
-// HOẶC đang là approver theo carDeptWorkflows của phòng ban hồ sơ đó.
+// Khớp khối lọc trong renderCarRegs() (public/index.html): scopeAllows(dept, deptViewScopeConfig) HOẶC
+// chính người tạo HOẶC đang là approver theo carDeptWorkflows của phòng ban hồ sơ đó.
+//
+// LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe — theo yêu cầu người dùng "phòng ban nào chỉ được
+// xem phòng ban đấy, như Văn Bản Trình/Hợp Đồng"): bỏ hẳn quyền phẳng cũ `carView` — cùng khuôn
+// canViewSubmission()/canViewContract() ở trên, lời gọi scopeAllows() dưới đây giờ truyền `null` (không
+// còn `{all,depts}` để đọc), chỉ còn nhánh "cùng phòng tự động xem" (deptAutoViewOn, mode mặc định DEPT)
+// + deptViewScopeConfig['car'] (extraViewers/managerCanView, qua extraViewScopeAllows()) — xem
+// loadCarRegsScoped() ở routes/data.js đã vá kèm.
 function canViewCarReg(user, carReg, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.carReportView) return true;
   if (carReg.creator === user.username) return true;
-  // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban với
-  // carView — cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).
+  // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban —
+  // cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).
   if (carReg.assignedDriverUsername === user.username) return true;
-  if (scopeAllows(user, user.perms?.carView, carReg.dept, 'car', appData, carReg.creator)) return true;
+  if (scopeAllows(user, null, carReg.dept, 'car', appData, carReg.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.carRegs.resolveWfConfig(carReg, appData).approvers, user.username);
 }
 
@@ -583,14 +590,20 @@ function filterCarRegsForUser(carRegs, user, appData) {
   return (carRegs || []).filter(c => canViewCarReg(user, c, appData));
 }
 
-// Khớp khối lọc trong renderOfficeReqs() (public/index.html): scopeAllows(officeView) HOẶC chính
-// người tạo HOẶC đang là approver theo đúng bộ *DeptWorkflows tương ứng subType (Mua Bán/Sửa Chữa/
-// Đầu Tư — xem OFFICE_SUBTYPE_TO_DBKEY ở lib/workflowEngine.js, dùng lại qua resolveWfConfig).
+// Khớp khối lọc trong renderOfficeReqs() (public/index.html): scopeAllows(dept, deptViewScopeConfig)
+// HOẶC chính người tạo HOẶC đang là approver theo đúng bộ *DeptWorkflows tương ứng subType (Mua Bán/
+// Sửa Chữa/Đầu Tư — xem OFFICE_SUBTYPE_TO_DBKEY ở lib/workflowEngine.js, dùng lại qua resolveWfConfig).
+//
+// LÀM GỌN (10/2026, "Việc D" mở rộng sang Văn Phòng Mua/Sửa — theo yêu cầu người dùng "phòng ban nào chỉ
+// được xem phòng ban đấy, như Văn Bản Trình/Hợp Đồng"): bỏ hẳn quyền phẳng cũ `officeView` — cùng khuôn
+// canViewCarReg() ở trên, lời gọi scopeAllows() dưới đây giờ truyền `null`, chỉ còn nhánh "cùng phòng tự
+// động xem" + deptViewScopeConfig['office'] (extraViewers/managerCanView) — xem loadOfficeReqsScoped()
+// ở routes/data.js đã vá kèm.
 function canViewOfficeReq(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (item.creator === user.username) return true;
-  if (scopeAllows(user, user.perms?.officeView, item.dept, 'office', appData, item.creator)) return true;
+  if (scopeAllows(user, null, item.dept, 'office', appData, item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.officeReqs.resolveWfConfig(item, appData).approvers, user.username);
 }
 

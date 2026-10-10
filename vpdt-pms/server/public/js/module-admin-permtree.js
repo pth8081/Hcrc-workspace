@@ -182,13 +182,15 @@ function collectPermsFromForm() {
     // Làm gọn phân quyền Phòng Họp (10/2026, đã xác nhận): bỏ meetingView/meetingBookScope {all,depts},
     // chỉ còn 1 công tắc phẳng meetingBook (tự khoá đúng phòng ban, xem lib/createValidation.js).
     meetingBook: document.getElementById('pMeetingBook').checked,
-    carView: scopeFromForm('pCarViewAll', 'pCarViewDept'),
+    // carView (cột "Xem") ĐÃ BỎ (10/2026, "Việc D" mở rộng) — xem chú thích đầy đủ tại khối
+    // 🚗 6. Đăng Ký Xe trong systemSection.html.
     // carCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
     carCreate: document.getElementById('pCarCreate').checked,
     carDownload: scopeFromForm('pCarDownloadAll', 'pCarDownloadDept'),
     carDispatch: document.getElementById('pCarDispatch').checked,
     carReportView: document.getElementById('pCarReportView').checked,
-    officeView: scopeFromForm('pOfficeViewAll', 'pOfficeViewDept'),
+    // officeView (cột "Xem") ĐÃ BỎ (10/2026, "Việc D" mở rộng) — xem chú thích đầy đủ tại khối
+    // 🏢 7. Văn Phòng trong systemSection.html.
     // officeCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
     officeCreate: document.getElementById('pOfficeCreate').checked,
     officeDownload: scopeFromForm('pOfficeDownloadAll', 'pOfficeDownloadDept'),
@@ -434,13 +436,11 @@ function populatePermsForm(permsInput) {
   document.getElementById('pReportAggregate').checked = !!perms.reportAggregate;
   document.getElementById('pReportEntryCreate').checked = !!perms.reportEntryCreate;
   document.getElementById('pMeetingBook').checked = !!perms.meetingBook;
-  document.getElementById('pCarViewAll').checked = !!perms.carView?.all;
   // carCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
   document.getElementById('pCarCreate').checked = !!perms.carCreate;
   document.getElementById('pCarDownloadAll').checked = !!perms.carDownload?.all;
   document.getElementById('pCarDispatch').checked = !!perms.carDispatch;
   document.getElementById('pCarReportView').checked = !!perms.carReportView;
-  document.getElementById('pOfficeViewAll').checked = !!perms.officeView?.all;
   // officeCreate (10/2026, "6-module"): bỏ {all,depts}, chỉ còn 1 cờ phẳng boolean.
   document.getElementById('pOfficeCreate').checked = !!perms.officeCreate;
   document.getElementById('pOfficeDownloadAll').checked = !!perms.officeDownload?.all;
@@ -462,15 +462,13 @@ function populatePermsForm(permsInput) {
   setGroupCheckboxes(perms.docDownload?.depts, 'pDocDownloadDept');
   setGroupCheckboxes(perms.submissionDownload?.depts, 'pSubDownloadDept');
   setGroupCheckboxes(perms.contractDownload?.depts, 'pContractDownloadDept');
-  setGroupCheckboxes(perms.carView?.depts, 'pCarViewDept');
   setGroupCheckboxes(perms.carDownload?.depts, 'pCarDownloadDept');
-  setGroupCheckboxes(perms.officeView?.depts, 'pOfficeViewDept');
   setGroupCheckboxes(perms.officeDownload?.depts, 'pOfficeDownloadDept');
   ['pDocDownloadAll',
    'pSubDownloadAll',
    'pContractDownloadAll',
-   'pCarViewAll', 'pCarDownloadAll',
-   'pOfficeViewAll', 'pOfficeDownloadAll'
+   'pCarDownloadAll',
+   'pOfficeDownloadAll'
   ].forEach(allId => {
     const deptPrefix = allId.replace(/All$/, 'Dept');
     toggleScopeGroup(allId, deptPrefix);

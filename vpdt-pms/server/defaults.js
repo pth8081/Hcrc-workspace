@@ -678,14 +678,17 @@ const DEFAULTS = {
   // operationRepair, report) + 5 module mở rộng v24.74 (task, itTicket, itPriceApproval, doc, checklist,
   // vpp — thực ra 6 key vì "IT" tách 2 module con) — xem DEPT_VIEW_SCOPE_MODULES ở lib/recordViewScope.js
   // (nguồn khai báo DUY NHẤT, màn admin tự render theo đúng danh sách này).
-  // LÀM GỌN (11/2026, "Việc D"): 2 seed user duy nhất từng dùng quyền phẳng CŨ submissionView.all/
-  // contractView.all = true (ks_kiemsoat, sep_duyet — xem users[] dưới) được di chuyển vào extraViewers
-  // ở đây để giữ NGUYÊN quyền "xem xuyên mọi phòng ban" sau khi bỏ hẳn submissionView/contractView
-  // khỏi Ma Trận Phân Quyền (1 user seed thứ 3, nv_nhansu, dùng submissionView.depts TRÙNG đúng phòng
-  // ban của chính mình — hoàn toàn dư thừa với mode DEPT mặc định, không cần migrate).
+  // LÀM GỌN (11/2026, "Việc D"; mở rộng 10/2026, "Việc D mở rộng" sang car/office): 2 seed user duy
+  // nhất từng dùng quyền phẳng CŨ submissionView/contractView/carView/officeView.all = true (ks_kiemsoat,
+  // sep_duyet — xem users[] dưới) được di chuyển vào extraViewers ở đây để giữ NGUYÊN quyền "xem xuyên
+  // mọi phòng ban" sau khi bỏ hẳn 4 quyền phẳng đó khỏi Ma Trận Phân Quyền (1 user seed thứ 3, nv_nhansu,
+  // dùng submissionView/carView/officeView.depts TRÙNG đúng phòng ban của chính mình — hoàn toàn dư thừa
+  // với mode DEPT mặc định, không cần migrate).
   deptViewScopeConfig: {
     submission: { mode: 'DEPT', extraViewers: ['ks_kiemsoat', 'sep_duyet'], managerCanView: false },
-    contract: { mode: 'DEPT', extraViewers: ['ks_kiemsoat', 'sep_duyet'], managerCanView: false }
+    contract: { mode: 'DEPT', extraViewers: ['ks_kiemsoat', 'sep_duyet'], managerCanView: false },
+    car: { mode: 'DEPT', extraViewers: ['ks_kiemsoat', 'sep_duyet'], managerCanView: false },
+    office: { mode: 'DEPT', extraViewers: ['ks_kiemsoat', 'sep_duyet'], managerCanView: false }
   },
   // ("operationOrderDeptWorkflows" — quy trình duyệt Đơn Hàng theo phòng ban — đã bị XOÁ HẲN, thay bằng
   // operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows bên dưới, xem chú thích ở đó.
@@ -943,10 +946,12 @@ const DEFAULTS = {
   // checklistTemplates/checklistSubmissions (module TOP-LEVEL "Checklist Đánh Giá Siêu Thị", xem
   // lib/checklist.js): cùng lý do — MIGRATED_COLLECTIONS (dbo.Records), KHÔNG seed ở đây.
 
-  // Phân quyền theo module (carView, officeView) dùng dạng { all, depts }
-  // — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH PHÒNG BAN chỉ định (depts:[...]);
-  // phòng ban của chính người dùng luôn được phép mặc định dù không liệt kê ở đây. Riêng Phòng Họp
-  // (meetingBook, 10/2026), Văn Bản Trình (submissionCreate, 10/2026), Hợp Đồng (contractCreate,
+  // Phân quyền theo module dùng dạng { all, depts } (VD docDownload/submissionDownload/contractDownload/
+  // carDownload/officeDownload) — xem/tạo mới theo TOÀN CÔNG TY (all:true) hoặc chỉ trong DANH SÁCH
+  // PHÒNG BAN chỉ định (depts:[...]); phòng ban của chính người dùng luôn được phép mặc định dù không
+  // liệt kê ở đây. carView/officeView (quyền XEM xuyên phòng ban dạng này) đã BỎ HẲN (10/2026, "Việc D
+  // mở rộng") — xem deptViewScopeConfig.car/office.extraViewers ở trên. Riêng Phòng Họp (meetingBook,
+  // 10/2026), Văn Bản Trình (submissionCreate, 10/2026), Hợp Đồng (contractCreate,
   // 10/2026), Đăng Ký Xe (carCreate, 10/2026), Văn Phòng (officeCreate, 10/2026) và Tài Liệu (uploadAll,
   // 10/2026, "6-module") đã rút gọn thành 1 quyền phẳng boolean duy nhất — tự khoá đúng phòng ban,
   // không còn dạng {all,depts}. docPublish/docViewPublished/docDownloadPublished (10/2026, "6-module",
@@ -975,8 +980,8 @@ const DEFAULTS = {
         contractCreate: true, contractDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         meetingBook: true,
         meetingApprove: false, meetingCancel: true,
-        carView: { all: false, depts: ['Phòng Nhân Sự'] }, carCreate: true, carDownload: { all: false, depts: ['Phòng Nhân Sự'] },
-        officeView: { all: false, depts: ['Phòng Nhân Sự'] }, officeCreate: true, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        carCreate: true, carDownload: { all: false, depts: ['Phòng Nhân Sự'] },
+        officeCreate: true, officeDownload: { all: false, depts: ['Phòng Nhân Sự'] },
         officeBuy: true, officeFix: true
       }
     },
@@ -989,15 +994,16 @@ const DEFAULTS = {
         uploadAll: false,
         docDownload: { all: false, depts: [] },
         // Kiểm soát viên cần xem xuyên phòng ban để kiểm toán, nhưng chỉ tạo hồ sơ trong phòng mình.
-        // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract.extraViewers
-        // (xem ngay phía trên, "Việc D" 11/2026) — KHÔNG còn qua submissionView/contractView.all nữa.
+        // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract/car/
+        // office.extraViewers (xem ngay phía trên, "Việc D"/"Việc D mở rộng") — KHÔNG còn qua
+        // submissionView/contractView/carView/officeView.all nữa.
         submissionCreate: true, submissionDownload: { all: false, depts: [] },
         contractCreate: true, contractDownload: { all: false, depts: [] },
         meetingBook: true,
         meetingApprove: true, meetingCancel: true,
         internalPostApprove: true,
-        carView: { all: true, depts: [] }, carCreate: true, carDownload: { all: false, depts: [] },
-        officeView: { all: true, depts: [] }, officeCreate: true, officeDownload: { all: false, depts: [] },
+        carCreate: true, carDownload: { all: false, depts: [] },
+        officeCreate: true, officeDownload: { all: false, depts: [] },
         officeBuy: true, officeFix: true
       }
     },
@@ -1010,15 +1016,16 @@ const DEFAULTS = {
         uploadAll: true,
         docDownload: { all: true, depts: [] },
         // Ban Giám Đốc cần toàn quyền xem & tạo trên mọi module để phê duyệt/giám sát toàn công ty.
-        // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract.extraViewers
-        // (xem ngay phía trên, "Việc D" 11/2026) — KHÔNG còn qua submissionView/contractView.all nữa.
+        // Quyền Xem xuyên phòng ban nay cấu hình ở deptViewScopeConfig.submission/contract/car/
+        // office.extraViewers (xem ngay phía trên, "Việc D"/"Việc D mở rộng") — KHÔNG còn qua
+        // submissionView/contractView/carView/officeView.all nữa.
         submissionCreate: true, submissionDownload: { all: true, depts: [] },
         contractCreate: true, contractDownload: { all: true, depts: [] },
         meetingBook: true,
         meetingApprove: true, meetingCancel: true,
         internalPostApprove: true, paymentManage: true,
-        carView: { all: true, depts: [] }, carCreate: true, carDownload: { all: true, depts: [] },
-        officeView: { all: true, depts: [] }, officeCreate: true, officeDownload: { all: true, depts: [] },
+        carCreate: true, carDownload: { all: true, depts: [] },
+        officeCreate: true, officeDownload: { all: true, depts: [] },
         officeBuy: true, officeFix: true
       }
     }

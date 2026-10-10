@@ -2,10 +2,11 @@
 //
 // Regression test cho GET /api/data (routes/data.js) sau Bước 8f: carRegs tách riêng khỏi vòng lặp tải
 // chung qua loadCarRegsScoped(). canViewCarReg() (lib/recordViewScope.js) có 4 nhánh — admin; chính lái
-// xe được gán (assignedDriverUsername, không nhất thiết cùng phòng ban); scopeAllows(carView, dept)
-// (phòng ban mình + carView.all + carView.depts[] riêng từng người); đang là người duyệt theo
-// carDeptWorkflows (dept-keyed). routes/data.js gộp {phòng ban mình} ∪ carView.depts[] ∪ {phòng ban
-// approver} rồi tải từng phòng ban + 1 lượt riêng theo AssignedDriverUsername, gộp + khử trùng.
+// xe được gán (assignedDriverUsername, không nhất thiết cùng phòng ban); scopeAllows(dept,
+// deptViewScopeConfig['car']) (phòng ban mình, mode DEPT + extraViewers/managerCanView — LÀM GỌN 10/2026
+// "Việc D" mở rộng: bỏ hẳn quyền phẳng cũ carView {all,depts}, xem canViewCarReg()); đang là người duyệt
+// theo carDeptWorkflows (dept-keyed). routes/data.js gộp {phòng ban mình} ∪ {phòng ban approver} rồi tải
+// từng phòng ban + 1 lượt riêng theo AssignedDriverUsername, gộp + khử trùng.
 //
 // Chạy: node server/tests/test-car-regs-scope.js
 'use strict';
@@ -22,17 +23,15 @@ function stubModule(relPath, exportsObj) {
 }
 
 const REGULAR_A = { username: 'nva', name: 'Nhân Viên A', dept: 'Phòng A', perms: {}, active: true };
-const SCOPE_USER = { username: 'scopeuser', name: 'Người Có Phạm Vi Mở Rộng', dept: 'Phòng A', perms: { carView: { depts: ['Phòng C'] } }, active: true };
 const APPROVER_D = { username: 'duyet1', name: 'Người Duyệt Xe Phòng D', dept: 'Phòng A', perms: {}, active: true };
 const DRIVER_B = { username: 'lixe1', name: 'Lái Xe', dept: 'Phòng A', perms: {}, active: true };
-const ALL_VIEW = { username: 'allview', name: 'Xem Toàn Bộ', dept: 'Phòng A', perms: { carView: { all: true } }, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
 // MANAGED_CREATOR_CAR: dùng RIÊNG cho kịch bản deptViewScopeConfig.car.managerCanView dưới (được REGULAR_A
 // quản lý trực tiếp qua managerUsername) — managerCanView chỉ cấp quyền xem theo QUAN HỆ QUẢN LÝ với
 // NGƯỜI TẠO từng hồ sơ cụ thể (carReg.creator, qua scopeAllows()->extraViewScopeAllows()->isManagerOf()),
 // không phải cấp quyền xem toàn công ty cho MỌI user thường.
 const MANAGED_CREATOR_CAR = { username: 'nv_cap_duoi_car', name: 'NV Cấp Dưới Của A (Xe)', dept: 'Phòng B', perms: {}, managerUsername: 'nva', active: true };
-const USERS = [REGULAR_A, SCOPE_USER, APPROVER_D, DRIVER_B, ALL_VIEW, ADMIN, MANAGED_CREATOR_CAR];
+const USERS = [REGULAR_A, APPROVER_D, DRIVER_B, ADMIN, MANAGED_CREATOR_CAR];
 
 const APP_DATA = {
   // duyet1 là người duyệt CẤU HÌNH của Phòng D (không liên quan phòng ban của chính duyet1, là Phòng A).
@@ -145,13 +144,6 @@ async function main() {
       assertEqual(fullLoadCallCount, 0, 'người thường KHÔNG được tải toàn bộ company-wide');
     });
 
-    await run.run('carView.depts=["Phòng C"] (không phải all): thấy phòng ban mình + Phòng C, KHÔNG thấy Phòng B/D', async () => {
-      resetData();
-      const res = await api('GET', '/api/data', undefined, SCOPE_USER);
-      const ids = (res.body.carRegs || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,3', 'phải thấy đúng Phòng A (mình) + Phòng C (scope), không thừa/thiếu');
-    });
-
     await run.run('Người duyệt carDeptWorkflows của Phòng D (không phải phòng mình): PHẢI thấy xe Phòng D để duyệt', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, APPROVER_D);
@@ -166,14 +158,6 @@ async function main() {
       assertEqual(ids.join(','), '1,2', 'lixe1 phải thấy Phòng A (mình) + xe id2 (được gán lái, dù thuộc Phòng B)');
     });
 
-    await run.run('carView.all: nhận ĐỦ toàn công ty (không mất dữ liệu)', async () => {
-      resetData(); fullLoadCallCount = 0;
-      const res = await api('GET', '/api/data', undefined, ALL_VIEW);
-      const ids = (res.body.carRegs || []).map(r => r.id).sort();
-      assertEqual(ids.join(','), '1,2,3,4', 'carView.all phải thấy đủ cả 4 xe');
-      assert(fullLoadCallCount >= 1, 'carView.all phải tải theo nhánh company-wide');
-    });
-
     await run.run('admin: nhận ĐỦ toàn công ty', async () => {
       resetData();
       const res = await api('GET', '/api/data', undefined, ADMIN);
@@ -183,13 +167,13 @@ async function main() {
 
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['car'] trước đây
     // KHÔNG được loadCarRegsScoped() đọc — xem chú thích đầy đủ tại loadCarRegsScoped() (routes/data.js).
-    await run.run('GET /api/data: deptViewScopeConfig.car.extraViewers=[nva] -> A nhận ĐỦ toàn công ty dù KHÔNG có carView.all', async () => {
+    await run.run('GET /api/data: deptViewScopeConfig.car.extraViewers=[nva] -> A nhận ĐỦ toàn công ty (thay thế carView.all cũ)', async () => {
       resetData(); fullLoadCallCount = 0;
       APP_DATA.deptViewScopeConfig = { car: { mode: 'DEPT', extraViewers: [REGULAR_A.username], managerCanView: false } };
       const res = await api('GET', '/api/data', undefined, REGULAR_A);
       const ids = (res.body.carRegs || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'extraViewers phải thấy đủ cả 4 xe, mọi phòng ban');
-      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide, giống carView.all');
+      assert(fullLoadCallCount >= 1, 'extraViewers phải đi qua nhánh tải company-wide');
       delete APP_DATA.deptViewScopeConfig;
     });
 

@@ -513,7 +513,9 @@ const APPROVER_AUTH_LEVEL_RANK_SERVER = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN
 // nhóm vẫn vô tình "hồi sinh" field chết này vào u.perms. Loại khỏi vòng lặp ngay từ đầu để dù dữ liệu cũ
 // còn sót ở permGroups nào, nó không bao giờ lọt ngược vào perms hiệu lực của user nữa (field này không
 // còn được canView* nào đọc nên không có tác động an toàn, nhưng vẫn gây nhiễu Ma Trận Phân Quyền).
-const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView']);
+// carView/officeView (10/2026, "Việc D" mở rộng sang Đăng Ký Xe/Văn Phòng) ĐÃ BỎ cùng lý do
+// submissionView/contractView ở trên — xem canViewCarReg()/canViewOfficeReq() (lib/recordViewScope.js).
+const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView', 'carView', 'officeView']);
 function mergeGroupsBasePermsServer(groupsPerms) {
   const list = (groupsPerms || []).filter(Boolean);
   if (!list.length) return {};
@@ -1043,15 +1045,14 @@ function isApproverForAnyOperationOrderTier(user, data) {
 
 // Bước 8f — carRegs: canViewCarReg() (lib/recordViewScope.js) có TỚI 4 nhánh — (1) admin, (2) chính
 // LÁI XE được gán (assignedDriverUsername, KHÔNG nhất thiết cùng phòng ban — xe dùng chung công ty), (3)
-// scopeAllows(carView, dept): phòng ban mình + carView.all (xem hết) + carView.depts[] (danh sách phòng
-// ban cụ thể được cấp thêm quyền xem, RIÊNG TỪNG NGƯỜI — không phải cấu hình chung), (4) đang là người
-// duyệt theo carDeptWorkflows (dept-keyed, khác operationOrders là tier-keyed). Khác operationOrders ở
-// chỗ nhánh (3)+(4) đều quy về 1 TẬP PHÒNG BAN cụ thể (không phải "toàn bộ mơ hồ") nên tính được TRƯỚC
-// khi tải: gộp {phòng ban mình} ∪ carView.depts[] ∪ {phòng ban mà mình là approver theo carDeptWorkflows}
-// rồi tải riêng từng phòng ban trong tập đó (mỗi phòng ban vẫn tự cache riêng qua
-// getForCollectionByDeptCached, nhiều người cùng phòng ban vẫn dùng chung 1 lượt đọc) + 1 lượt riêng theo
-// AssignedDriverUsername cho nhánh (2), rồi gộp + khử trùng theo id. carView.all (số ít) vẫn tải
-// company-wide như admin.
+// scopeAllows(dept, deptViewScopeConfig['car']): phòng ban mình (mode DEPT) + extraViewers/managerCanView
+// (10/2026, "Việc D" mở rộng — ĐÃ BỎ quyền phẳng carView.all/.depts cũ), (4) đang là người duyệt theo
+// carDeptWorkflows (dept-keyed, khác operationOrders là tier-keyed). Khác operationOrders ở chỗ nhánh
+// (3)+(4) đều quy về 1 TẬP PHÒNG BAN cụ thể (không phải "toàn bộ mơ hồ") nên tính được TRƯỚC khi tải: gộp
+// {phòng ban mình} ∪ {phòng ban mà mình là approver theo carDeptWorkflows} rồi tải riêng từng phòng ban
+// trong tập đó (mỗi phòng ban vẫn tự cache riêng qua getForCollectionByDeptCached, nhiều người cùng phòng
+// ban vẫn dùng chung 1 lượt đọc) + 1 lượt riêng theo AssignedDriverUsername cho nhánh (2), rồi gộp + khử
+// trùng theo id. extraViewers/managerCanView (số ít) vẫn tải company-wide như admin.
 // paymentRequests: canViewPaymentRequest() (lib/recordViewScope.js) giờ có thêm nhánh "đang là người
 // duyệt theo paymentDeptWorkflows" (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu 10/2026 — trước đây module này là
 // DUY NHẤT trong cả cụm dept-workflow KHÔNG có nhánh này, khiến approver khác phòng ban với đề nghị
@@ -1134,19 +1135,17 @@ function computeCarRegsApproverDepts(user, data) {
   }
   return depts;
 }
+// LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe): bỏ hẳn quyền phẳng cũ `carView` — cùng khuôn
+// loadSubmissionsScoped() ở dưới, chỉ còn company-wide nếu admin/extraViewers/managerCanView, còn lại
+// đúng PHÒNG BAN CHÍNH MÌNH (nếu mode=DEPT) ∪ approverDepts, cộng thêm lượt riêng AssignedDriverUsername.
 async function loadCarRegsScoped(user, data) {
-  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadItPriceApprovalsScoped()
-  // ở trên: deptViewScopeConfig['car'] (extraViewers/managerCanView — xem scopeAllows() ở canViewCarReg())
-  // chưa từng được đọc ở lớp SQL pre-filter này (mảng user.perms?.carView?.all/.depts CŨ vẫn còn, song
-  // song với cấu hình chung 4-state mới — scopeAllows() đọc CẢ 2 nguồn).
   const cfg = moduleViewConfig(data, 'car', 'DEPT');
   const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
-  if (user?.perms?.admin || user?.perms?.carView?.all || isExtraApprovalLayerApprover(user, data, ['CAR']) || isExtraViewer || cfg.managerCanView) {
+  if (user?.perms?.admin || isExtraApprovalLayerApprover(user, data, ['CAR']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('carRegs');
   }
   const depts = new Set();
   if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
-  if (Array.isArray(user?.perms?.carView?.depts)) user.perms.carView.depts.forEach(d => depts.add(d));
   computeCarRegsApproverDepts(user, data).forEach(d => depts.add(d));
 
   const byId = new Map();
@@ -1163,8 +1162,9 @@ async function loadCarRegsScoped(user, data) {
 // chính người TẠO — Creator (từ 10/2026, "6-module": officeCreate giờ forceOwnDept nên item.dept luôn
 // khớp phòng ban thật của Creator — lượt tải riêng theo Creator bên dưới vẫn giữ để an toàn/nhất quán
 // khuôn chung với carRegs, không còn ý nghĩa "vá khoảng trống tạo hộ phòng ban khác" như trước nữa, xem
-// lib/createValidation.js officeReqs); scopeAllows(officeView, dept): phòng ban mình + officeView.all +
-// officeView.depts[]; đang là người duyệt theo *DeptWorkflows) — chỉ khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
+// lib/createValidation.js officeReqs); scopeAllows(dept, deptViewScopeConfig['office']) — ĐÃ BỎ quyền
+// phẳng officeView.all/.depts cũ (10/2026, "Việc D" mở rộng); đang là người duyệt theo *DeptWorkflows) —
+// chỉ khác carRegs ở chỗ CÓ 2 bộ cấu hình duyệt riêng theo subType
 // (officeBuyDeptWorkflows cho MUA_BAN, officeFixDeptWorkflows cho SUA_CHUA, xem
 // MODULE_CONFIGS.officeReqs.resolveWfConfig() ở lib/workflowEngine.js) — quét CẢ 2 map khi tính tập
 // phòng ban approver (có thể "thừa" nếu user chỉ duyệt 1 trong 2 loại ở 1 phòng ban, nhưng
@@ -1181,17 +1181,16 @@ function computeOfficeReqsApproverDepts(user, data) {
   }
   return depts;
 }
+// LÀM GỌN (10/2026, "Việc D" mở rộng sang Văn Phòng Mua/Sửa): bỏ hẳn quyền phẳng cũ `officeView` — cùng
+// khuôn loadCarRegsScoped() ở trên.
 async function loadOfficeReqsScoped(user, data) {
-  // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình) — cùng lý do loadCarRegsScoped() ở trên:
-  // deptViewScopeConfig['office'] (extraViewers/managerCanView) chưa từng được đọc ở lớp SQL pre-filter này.
   const cfg = moduleViewConfig(data, 'office', 'DEPT');
   const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
-  if (user?.perms?.admin || user?.perms?.officeView?.all || isExtraApprovalLayerApprover(user, data, ['OFFICE_BUY', 'OFFICE_FIX']) || isExtraViewer || cfg.managerCanView) {
+  if (user?.perms?.admin || isExtraApprovalLayerApprover(user, data, ['OFFICE_BUY', 'OFFICE_FIX']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('officeReqs');
   }
   const depts = new Set();
   if (cfg.mode === 'DEPT' && user?.dept) depts.add(user.dept);
-  if (Array.isArray(user?.perms?.officeView?.depts)) user.perms.officeView.depts.forEach(d => depts.add(d));
   computeOfficeReqsApproverDepts(user, data).forEach(d => depts.add(d));
 
   const byId = new Map();

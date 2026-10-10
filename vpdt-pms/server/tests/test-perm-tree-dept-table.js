@@ -16,11 +16,17 @@
 // pContractDeptTableBody giờ CHỈ còn đúng 1 cột "Tải xuống" (pContractDownload). Cột "Tạo mới" của khối
 // "7. Văn Phòng" cũng đã gộp tương tự thành quyền phẳng officeCreate (`pOfficeCreate`, KHÔNG còn
 // `pOfficeCreateDept_N`) — bảng pOfficeDeptTableBody giờ CHỈ còn 2 cột "Xem"/"Tải xuống"
-// (pOfficeView/pOfficeDownload). Cột "Tải Lên" của khối "2. Tài Liệu" cũng đã gộp tương tự thành quyền
+// (pOfficeDownload). Cột "Tải Lên" của khối "2. Tài Liệu" cũng đã gộp tương tự thành quyền
 // phẳng uploadAll (TÊN GIỮ NGUYÊN, KHÔNG còn `pUploadDept_N`) — bảng pDocDeptTableBody giờ CHỈ còn đúng
 // 1 cột "Tải Tài Liệu" (pDocDownload). Các scenario dưới đây đã được cập nhật để KHÔNG còn tham chiếu các
 // id/field đã bị gỡ này — thay bằng cột/khối còn giữ bảng phòng ban thật
-// (pDocDownload/pContractDownload/pCarView/pCarCreate/pOfficeView/pOfficeDownload).
+// (pDocDownload/pContractDownload/pCarDownload/pOfficeDownload).
+//
+// LƯU Ý TIẾP (10/2026, "Việc D" mở rộng sang Đăng Ký Xe/Văn Phòng): cột "Xem" (pCarView/pOfficeView,
+// {all,depts}) của 2 khối "6. Đăng Ký Xe"/"7. Văn Phòng" cũng đã BỊ BỎ HẲN — người tạo/lái xe được gán/
+// người duyệt LUÔN xem được mặc định, các trường hợp còn lại cấu hình ở "Phạm Vi Xem Theo Phòng Ban"
+// (deptViewScopeConfig) — 2 bảng này giờ CHỈ còn đúng 1 cột "Tải xuống" (pCarDownload/pOfficeDownload),
+// cùng khuôn pContractDeptTableBody.
 //
 // Kiểm tra:
 //   1. renderDeptCheckboxes() render đúng 1 <tr> mỗi phòng ban vào tbody của cả 6 khối, tên phòng ban đủ
@@ -134,11 +140,11 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
         // contractCreate đã gộp phẳng (10/2026, "6-module") — pContractDeptTableBody giờ CHỈ còn cột
         // "Tải xuống" (pContractDownload), dùng cột đó thay cho pContractCreateDept_1 đã bị gỡ.
         contractDownload1: document.getElementById('pContractDownloadDept_1')?.getAttribute('data-scope-group'),
-        carView2: document.getElementById('pCarViewDept_2')?.getAttribute('data-scope-group'),
+        carDownload2: document.getElementById('pCarDownloadDept_2')?.getAttribute('data-scope-group'),
       }));
       if (r.docDownload0 !== 'pDocDownload') throw new Error(`pDocDownloadDept_0 data-scope-group sai: ${r.docDownload0}`);
       if (r.contractDownload1 !== 'pContractDownload') throw new Error(`pContractDownloadDept_1 data-scope-group sai: ${r.contractDownload1}`);
-      if (r.carView2 !== 'pCarView') throw new Error(`pCarViewDept_2 data-scope-group sai: ${r.carView2}`);
+      if (r.carDownload2 !== 'pCarDownload') throw new Error(`pCarDownloadDept_2 data-scope-group sai: ${r.carDownload2}`);
     });
 
     await scenario('Round-trip thật qua UI: tick checkbox trong bảng mới -> collectPermsFromForm() đọc đúng docDownload.depts/contractDownload.depts', async () => {
@@ -152,34 +158,30 @@ const DEPT_NAMES = ['Phòng Nhân Sự & Hành Chính Tổng Hợp Khối Văn P
       if (JSON.stringify(r.contractDownloadDepts) !== JSON.stringify([DEPT_NAMES[2]])) throw new Error(`contractDownload.depts sai: ${JSON.stringify(r.contractDownloadDepts)}`);
     });
 
-    await scenario('populatePermsForm() đổ đúng dữ liệu cũ lên ô checkbox trong bảng mới (carDownload/officeView)', async () => {
+    await scenario('populatePermsForm() đổ đúng dữ liệu cũ lên ô checkbox trong bảng mới (carDownload/officeDownload)', async () => {
       const r = await page.evaluate((depts) => {
         // Reset sạch trước khi đổ dữ liệu mới để không dính trạng thái từ scenario trước.
         document.querySelectorAll('#permFieldsContainer input[type="checkbox"]').forEach(cb => { cb.checked = false; });
-        // carView PHẢI có mặt cùng carDownload — migrateLegacyPerms() (core.js) coi "carView === undefined"
-        // là dấu hiệu dữ liệu SHAPE CŨ (trước khi tách Xem/Tạo mới riêng) và sẽ tự GHI ĐÈ carCreate theo
-        // flag carModule cũ (rỗng ở đây) — không ảnh hưởng carDownload đang kiểm ở đây, nhưng vẫn giữ
-        // carView để tránh nhánh di trú đó can thiệp ngoài ý muốn. docDownload PHẢI có mặt vì lý do khác:
-        // "p.docDownload === undefined" là dấu hiệu RIÊNG cho 1 nhánh di trú CỰC CŨ hơn nữa (field
-        // downloadAll/downloadDepts DÙNG CHUNG trước khi tách "Tải xuống" theo từng module) — thiếu nó sẽ
-        // bị GHI ĐÈ carDownload về rỗng ngay cả khi đã truyền giá trị thật ở đây.
+        // carView/officeView ĐÃ BỎ HẲN (10/2026, "Việc D" mở rộng) — không còn truyền ở đây nữa.
+        // docDownload PHẢI có mặt: "p.docDownload === undefined" là dấu hiệu RIÊNG cho 1 nhánh di trú CỰC
+        // CŨ (field downloadAll/downloadDepts DÙNG CHUNG trước khi tách "Tải xuống" theo từng module) —
+        // thiếu nó sẽ bị GHI ĐÈ carDownload về rỗng ngay cả khi đã truyền giá trị thật ở đây.
         populatePermsForm({
-          carView: { all: false, depts: [] },
           docDownload: { all: false, depts: [] },
           // carCreate (10/2026, "6-module"): đã gộp phẳng, KHÔNG còn pCarCreateDept_N — dùng carDownload
           // (vẫn giữ nguyên {all,depts}) để kiểm tra populatePermsForm() đổ đúng dữ liệu lên bảng mới.
           carDownload: { all: false, depts: [depts[0], depts[2]] },
-          officeView: { all: true, depts: [] },
+          officeDownload: { all: true, depts: [] },
         });
         return {
           carCreate0: document.getElementById('pCarDownloadDept_0').checked,
           carCreate1: document.getElementById('pCarDownloadDept_1').checked,
           carCreate2: document.getElementById('pCarDownloadDept_2').checked,
-          officeViewAll: document.getElementById('pOfficeViewAll').checked,
+          officeDownloadAll: document.getElementById('pOfficeDownloadAll').checked,
         };
       }, DEPT_NAMES);
       if (!r.carCreate0 || r.carCreate1 || !r.carCreate2) throw new Error(`populatePermsForm() đổ sai carCreate.depts lên bảng: ${JSON.stringify(r)}`);
-      if (!r.officeViewAll) throw new Error('populatePermsForm() không set đúng pOfficeViewAll=true');
+      if (!r.officeDownloadAll) throw new Error('populatePermsForm() không set đúng pOfficeDownloadAll=true');
     });
 
     await scenario('toggleScopeGroup() (bấm "ALL") vẫn khoá đúng checkbox phòng ban trong bảng mới', async () => {

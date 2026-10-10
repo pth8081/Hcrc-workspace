@@ -4029,19 +4029,26 @@ function canAccessCarModule(user) {
   // module bị ẩn khỏi sidebar trước đây). Chỉ mở đúng lối vào sidebar + sub-tab đó — không mở thêm
   // quyền gì khác trong module (họ vẫn không thấy/không duyệt được phiếu của phòng ban khác).
   const isAssignedDriverSomewhere = (DB.carRegs || []).some(c => c.assignedDriverUsername === user.username);
-  return scopeHasAny(user, user.perms?.carView) || isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere
+  // LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe): bỏ hẳn carView — scopeHasAny(user, scope) luôn
+  // trả true khi user.dept có giá trị (BẤT KỂ scope truyền vào là gì), nên nhánh cũ
+  // `scopeHasAny(user, user.perms?.carView)` thực chất chỉ tương đương `if (user.dept) return true`, cùng
+  // lý do canAccessSubmissionModule() ở trên.
+  if (user.dept) return true;
+  return isApproverInWorkflowMap(DB.carDeptWorkflows, user.username) || isAssignedDriverSomewhere
     || !!user.perms?.carReportView || isMemberOfAnyExtraApprovalGroup(user, ['CAR']);
 }
 
 // "📊 Báo Cáo" (sub-tab riêng trong module Đăng Ký Xe) — CHỈ hiện cho người quản lý: admin, người có
-// carView phạm vi TOÀN CÔNG TY (carView.all — thường là Phòng Hành Chính), hoặc người duyệt ở BẤT KỲ
-// phòng ban nào trong carDeptWorkflows. Xe KHÔNG có quyền phẳng kiểu meetingApprove (canApproveMeeting)
-// vì luồng duyệt xe vốn cấu hình theo TỪNG phòng ban — gộp cả 2 điều kiện trên để khớp đúng "ai đang
-// thật sự quản lý/duyệt xe" thay vì để mọi người tạo phiếu đều thấy thống kê toàn công ty.
+// carReportView, hoặc người duyệt ở BẤT KỲ phòng ban nào trong carDeptWorkflows. Xe KHÔNG có quyền phẳng
+// kiểu meetingApprove (canApproveMeeting) vì luồng duyệt xe vốn cấu hình theo TỪNG phòng ban — gộp cả 2
+// điều kiện trên để khớp đúng "ai đang thật sự quản lý/duyệt xe" thay vì để mọi người tạo phiếu đều thấy
+// thống kê toàn công ty.
+// LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe): bỏ nhánh carView.all — carReportView đã được
+// thiết kế ĐỘC LẬP hẳn với carView.all ngay từ đầu (xem chú thích tại checkbox pCarReportView ở
+// systemSection.html: "KHÔNG kèm carView.all"), nên bỏ carView.all khỏi đây không đổi ý đồ thiết kế.
 function canSeeCarReportClient(user) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.carReportView) return true;
-  if (user.perms?.carView?.all) return true;
   return isApproverInWorkflowMap(DB.carDeptWorkflows, user.username);
 }
 
@@ -4235,7 +4242,10 @@ function canAccessOfficeSubTab(user, subType) {
   const isExtraApprover = isMemberOfAnyExtraApprovalGroup(user, [extraKey]);
   if (subType === 'MUA_BAN' && !user.perms?.officeBuy && !isExtraApprover) return false;
   if (subType === 'SUA_CHUA' && !user.perms?.officeFix && !isExtraApprover) return false;
-  return scopeHasAny(user, user.perms?.officeView) || isApproverInWorkflowMap(getOfficeWorkflowMap(subType), user.username) || isExtraApprover;
+  // LÀM GỌN (10/2026, "Việc D" mở rộng sang Văn Phòng Mua/Sửa): bỏ hẳn officeView — cùng lý do
+  // canAccessCarModule() ở trên (scopeHasAny(user, scope) chỉ tương đương `if (user.dept) return true`).
+  if (user.dept) return true;
+  return isApproverInWorkflowMap(getOfficeWorkflowMap(subType), user.username) || isExtraApprover;
 }
 
 function canAccessOfficeModule(user) {
@@ -4312,16 +4322,20 @@ function defaultNewUserPerms() {
     // chung cho hành động duyệt thật ở nơi khác) — xem setMeetingSubTab() (module-phonghop.js) +
     // canViewMeeting() (lib/recordViewScope.js).
     meetingReportView: false,
+    // carView (cột "Xem" cũ) ĐÃ BỎ (10/2026, "Việc D" mở rộng sang Đăng Ký Xe) — xem canAccessCarModule()/
+    // canViewCarReg() (lib/recordViewScope.js).
     // carCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự khoá đúng
     // phòng ban người tạo phiếu (forceOwnDept, lib/createValidation.js).
-    carView: emptyScope(), carCreate: false, carDownload: emptyScope(), carDispatch: false,
+    carCreate: false, carDownload: emptyScope(), carDispatch: false,
     // carReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "📊 Báo Cáo" Đăng Ký Xe TOÀN CÔNG TY,
     // KHÔNG kèm carView.all (không tự động xem được danh sách phiếu từng hồ sơ ở tab khác) — xem
     // canSeeCarReportClient() (core.js) + canViewCarReg() (lib/recordViewScope.js).
     carReportView: false,
+    // officeView (cột "Xem" cũ) ĐÃ BỎ (10/2026, "Việc D" mở rộng sang Văn Phòng) — xem
+    // canAccessOfficeSubTab()/canViewOfficeReq() (lib/recordViewScope.js).
     // officeCreate (10/2026, "6-module", đã xác nhận): bỏ {all,depts}, chỉ còn 1 cờ phẳng — tự khoá
     // đúng phòng ban người tạo đề xuất (forceOwnDept, lib/createValidation.js).
-    officeView: emptyScope(), officeCreate: false, officeDownload: emptyScope(),
+    officeCreate: false, officeDownload: emptyScope(),
     officeBuy: true, officeFix: true,
     minutesCreate: false, minutesView: false, minutesEdit: false, minutesDownload: false,
     taskView: false, taskEdit: false, taskDelete: false, taskDownload: false,
@@ -4459,7 +4473,9 @@ const APPROVER_AUTH_LEVEL_RANK = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
 // mergeGroupsBasePermsServer() (routes/data.js, xem chú thích đầy đủ ở đó): submissionView/contractView
 // đã bỏ hẳn (Việc D) nhưng có thể còn sót trong 1 permGroup chưa từng được Lưu lại sau đợt đó — loại khỏi
 // vòng lặp để không "hồi sinh" field chết vào perms hiệu lực của user khi lưu 1 nhóm KHÁC.
-const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView']);
+// carView/officeView (10/2026, "Việc D" mở rộng sang Đăng Ký Xe/Văn Phòng) ĐÃ BỎ cùng lý do
+// submissionView/contractView ở trên — mirror ĐÚNG mergeGroupsBasePermsServer() (routes/data.js).
+const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView', 'carView', 'officeView']);
 function mergeGroupsBasePerms(groupsPerms) {
   const list = (groupsPerms || []).filter(Boolean);
   if (!list.length) return {};
@@ -4564,16 +4580,19 @@ function migrateLegacyPerms(perms) {
     p.contractCreate = !!(oldScope?.all || (Array.isArray(oldScope?.depts) && oldScope.depts.length > 0));
     changed = true;
   }
-  if (p.carView === undefined) {
-    p.carView = scopeFromFlag(p.carModule);
+  // carView (cột "Xem" cũ) ĐÃ BỎ (10/2026, "Việc D" mở rộng) — giá trị cũ (nếu còn) đã được quét/gộp vào
+  // deptViewScopeConfig.car.extraViewers ở khối di trú RIÊNG ngay TRƯỚC lời gọi migrateLegacyPerms() này
+  // (xem initDatabase()) — xoá hẳn field dư thừa khỏi perms ở đây, cùng khuôn submissionView/contractView.
+  if (p.carCreate === undefined && p.carModule !== undefined) {
     p.carCreate = scopeFromFlag(p.carModule);
-    delete p.carModule;
     changed = true;
   }
+  if (p.carModule !== undefined) { delete p.carModule; changed = true; }
+  if (p.carView !== undefined) { delete p.carView; changed = true; }
   // Làm gọn phân quyền Đăng Ký Xe (10/2026, "6-module", đã xác nhận): bỏ carCreate {all,depts}, chỉ còn
   // 1 cờ phẳng — cùng khuôn meetingBook/submissionCreate/contractCreate. Chạy SAU khối di trú carModule
-  // ở trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn). carView/carDownload/
-  // carDispatch/carReportView KHÔNG đổi, vẫn giữ nguyên hình dạng cũ.
+  // ở trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn). carDownload/carDispatch/
+  // carReportView KHÔNG đổi, vẫn giữ nguyên hình dạng cũ.
   if (typeof p.carCreate !== 'boolean') {
     const oldCarScope = p.carCreate;
     p.carCreate = !!(oldCarScope?.all || (Array.isArray(oldCarScope?.depts) && oldCarScope.depts.length > 0));
@@ -4593,16 +4612,19 @@ function migrateLegacyPerms(perms) {
     delete p.meetingBookScope;
     changed = true;
   }
-  if (p.officeView === undefined) {
+  // officeView (cột "Xem" cũ) ĐÃ BỎ (10/2026, "Việc D" mở rộng) — cùng lý do carView ở trên. Guard đổi từ
+  // `p.officeView === undefined` sang `p.officeCreate === undefined` (officeView không còn tồn tại trong
+  // default perms để dò nữa) — hành vi quy đổi officeCreate KHÔNG đổi.
+  if (p.officeCreate === undefined) {
     const anyOffice = !!(p.officeBuy || p.officeFix);
-    p.officeView = scopeFromFlag(anyOffice);
     p.officeCreate = scopeFromFlag(anyOffice);
     changed = true;
   }
+  if (p.officeView !== undefined) { delete p.officeView; changed = true; }
   // Làm gọn phân quyền Văn Phòng (10/2026, "6-module", đã xác nhận): bỏ officeCreate {all,depts}, chỉ
   // còn 1 cờ phẳng — cùng khuôn meetingBook/submissionCreate/contractCreate/carCreate. Chạy SAU khối di
   // trú officeView ở trên (để bắt được cả 2 lớp dữ liệu cũ: cờ cực cũ VÀ {all,depts} cũ hơn).
-  // officeView/officeDownload/officeBuy/officeFix KHÔNG đổi, vẫn giữ nguyên hình dạng cũ.
+  // officeDownload/officeBuy/officeFix KHÔNG đổi, vẫn giữ nguyên hình dạng cũ.
   if (typeof p.officeCreate !== 'boolean') {
     const oldOfficeScope = p.officeCreate;
     p.officeCreate = !!(oldOfficeScope?.all || (Array.isArray(oldOfficeScope?.depts) && oldOfficeScope.depts.length > 0));
@@ -4863,14 +4885,22 @@ async function initDatabase(loggingInUser, opts) {
     // đương (extraViewers, xem toàn công ty — mô hình mới không còn khái niệm "thêm đúng N phòng cụ thể").
     const legacySubmissionViewers = new Set();
     const legacyContractViewers = new Set();
+    // carView/officeView (10/2026, "Việc D" mở rộng sang Đăng Ký Xe/Văn Phòng) — cùng lý do/cùng logic
+    // "chỉ coi là cần di trú khi .depts có ít nhất 1 phòng ban KHÁC phòng ban hiện tại" như 2 Set ở trên.
+    const legacyCarViewers = new Set();
+    const legacyOfficeViewers = new Set();
     (data.users || []).forEach(u => {
       const sv = u.perms?.submissionView;
       if (sv?.all || (Array.isArray(sv?.depts) && sv.depts.some(d => d !== u.dept))) legacySubmissionViewers.add(u.username);
       const cv = u.perms?.contractView;
       if (cv?.all || (Array.isArray(cv?.depts) && cv.depts.some(d => d !== u.dept))) legacyContractViewers.add(u.username);
+      const crv = u.perms?.carView;
+      if (crv?.all || (Array.isArray(crv?.depts) && crv.depts.some(d => d !== u.dept))) legacyCarViewers.add(u.username);
+      const ofv = u.perms?.officeView;
+      if (ofv?.all || (Array.isArray(ofv?.depts) && ofv.depts.some(d => d !== u.dept))) legacyOfficeViewers.add(u.username);
     });
     let scopeConfigMigrated = false;
-    if (legacySubmissionViewers.size || legacyContractViewers.size) {
+    if (legacySubmissionViewers.size || legacyContractViewers.size || legacyCarViewers.size || legacyOfficeViewers.size) {
       data.deptViewScopeConfig = data.deptViewScopeConfig || {};
       const mergeLegacyViewersInto = (moduleKey, usernames) => {
         if (!usernames.size) return;
@@ -4884,7 +4914,9 @@ async function initDatabase(loggingInUser, opts) {
       };
       mergeLegacyViewersInto('submission', legacySubmissionViewers);
       mergeLegacyViewersInto('contract', legacyContractViewers);
-      if (scopeConfigMigrated) console.log('ℹ️ Đã tự động chuyển quyền "Xem xuyên phòng ban" cũ (submissionView/contractView.all) sang extraViewers ở Hệ Thống → Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban — admin nên vào kiểm tra lại cho đúng ý.');
+      mergeLegacyViewersInto('car', legacyCarViewers);
+      mergeLegacyViewersInto('office', legacyOfficeViewers);
+      if (scopeConfigMigrated) console.log('ℹ️ Đã tự động chuyển quyền "Xem xuyên phòng ban" cũ (submissionView/contractView/carView/officeView.all) sang extraViewers ở Hệ Thống → Nghiệp Vụ Nâng Cao → 🔒 Phạm Vi Xem Theo Phòng Ban — admin nên vào kiểm tra lại cho đúng ý.');
     }
     // moduleApproverUsernames (routes/data.js computeModuleApproverUsernames()): danh sách username
     // đang giữ 1 cờ quyền phê duyệt cụ thể (meetingApprove/internalPostApprove/
@@ -11274,8 +11306,8 @@ function isCarRegPostApproval(c) {
 // Mục 4 (yêu cầu nghiệp vụ 9/2026): "Xem/Tải Phiếu Phê Duyệt" (bản chính thức, có watermark/lịch sử
 // duyệt) CHỈ dành cho người đăng ký (creator), admin, tài xế được gán (assignedDriverUsername), hoặc
 // người đã/đang duyệt hồ sơ này (isApproverForDeptWorkflow) — HẸP HƠN quyền XEM ĐƯỢC DÒNG trong danh
-// sách (canViewCarReg() ở server, đã bao gồm cả người có quyền carView theo phòng ban dù không liên
-// quan trực tiếp tới chuyến này) và HẸP HƠN canDownloadFile() dùng chung cho MỌI module (vốn có
+// sách (canViewCarReg() ở server, đã bao gồm cả đồng nghiệp cùng phòng ban/được cấp "Xem xuyên phòng
+// ban" qua deptViewScopeConfig dù không liên quan trực tiếp tới chuyến này) và HẸP HƠN canDownloadFile() dùng chung cho MỌI module (vốn có
 // fallback ngầm "cùng phòng ban" mặc định) — CHỈ riêng Phiếu Đăng Ký Xe áp dụng giới hạn chặt hơn này
 // theo đúng yêu cầu người dùng, không đổi hành vi canDownloadFile() cho các module khác.
 // GIỚI HẠN ĐÃ BIẾT (ghi nhận ở đợt rà soát chuyên sâu 10/2026, mức Thấp — CHƯA vá, cần thiết kế lại):

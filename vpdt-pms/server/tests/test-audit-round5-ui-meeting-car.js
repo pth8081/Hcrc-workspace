@@ -274,7 +274,10 @@ async function main() {
   });
   record('Mục 10 — LỖI ĐÃ VÁ: người xem theo phạm vi hẹp thấy chú thích "theo PHẠM VI XEM của bạn"',
     !reportScoped.noteHidden && /PHẠM VI XEM/.test(reportScoped.noteText), JSON.stringify(reportScoped.noteText));
-  record('Mục 10: chú thích nêu đúng (các) phòng ban trong phạm vi', /Phòng Kinh Doanh/.test(reportScoped.noteText), reportScoped.noteText);
+  // Mục 10 (10/2026, "Việc D" mở rộng): carView ĐÃ BỎ — chú thích không còn liệt kê TÊN phòng ban cụ thể
+  // (thay bằng deptViewScopeConfig['car'].extraViewers, whitelist DÙNG CHUNG toàn công ty, không còn khái
+  // niệm "N phòng ban cụ thể" để liệt kê) — scenario cũ kiểm tra "Phòng Kinh Doanh" xuất hiện trong chú
+  // thích đã bị bỏ theo đúng thay đổi này.
   // 2 phiếu trong phạm vi: chuyến đã hoàn thành (km dự kiến 100, THỰC TẾ 250) + chuyến taxi chưa kết
   // thúc (chưa có actualKm -> vẫn tính km dự kiến 30). Tổng ĐÚNG = 280; TRƯỚC khi vá là 130 (100+30).
   record('Mục 11 — LỖI ĐÃ VÁ: "Tổng Số KM" cộng KM THỰC TẾ (250+30=280), không phải KM dự kiến (100+30=130)',

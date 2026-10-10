@@ -1,8 +1,72 @@
 # Phiên bản hiện tại
 
-**25.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.61 (2026-10-10): "Việc D mở rộng" — bỏ quyền phẳng Xem cũ ở Đăng Ký Xe/Văn Phòng
+
+Người dùng phát hiện qua ảnh chụp màn Phân Quyền: cột "Xem" cũ vẫn còn ở bảng
+phạm vi phòng ban của Đăng Ký Xe và Văn Phòng (Mua/Sửa), dù "Việc D" trước đó
+(v24.80/v24.75) đã bỏ hẳn cơ chế tương tự cho Văn Bản Trình/Hợp Đồng/Tài Liệu/
+Phòng Họp, thay bằng DUY NHẤT `deptViewScopeConfig` ("Phạm Vi Xem Theo Phòng
+Ban"). Quyền phẳng cũ `carView`/`officeView` {all, depts} vẫn tồn tại song
+song — nghĩa là 1 user có thể được cấp xem xuyên phòng ban qua lối cũ mà admin
+không hề thấy trong màn cấu hình mới, đúng lỗ hổng người dùng lo ngại.
+
+Đã làm (CHÍNH XÁC khuôn "Việc D" đã áp dụng cho Văn Bản Trình/Hợp Đồng):
+
+- **`lib/recordViewScope.js`**: `canViewCarReg()`/`canViewOfficeReq()` bỏ hẳn
+  đọc `user.perms?.carView`/`officeView`, chỉ còn đọc `deptViewScopeConfig`.
+- **`routes/data.js`**: thêm `carView`/`officeView` vào `DEPRECATED_PERM_KEYS`
+  (chặn "sống lại" qua merge Nhóm Phân Quyền); `loadCarRegsScoped()`/
+  `loadOfficeReqsScoped()` bỏ nhánh SQL-prefilter theo `.all`/`.depts` cũ.
+- **`public/js/core.js`**: bỏ hẳn `carView`/`officeView` khỏi object quyền
+  mặc định + `DEPRECATED_PERM_KEYS`; `canAccessCarModule()`/
+  `canAccessOfficeSubTab()` đổi sang `if (user.dept) return true` (tương
+  đương hành vi `scopeHasAny()` cũ, đã xác nhận qua `scopeAllows()` phía
+  client); `migrateLegacyPerms()` tự dọn 2 field này ở hồ sơ user cũ; thêm 1
+  lần di trú `carView`/`officeView.all` cũ sang `deptViewScopeConfig.car/
+  office.extraViewers` trong `initDatabase()` (mirror đúng di trú đã có cho
+  submission/contract).
+- **`jobs/legacyViewScopeMigration.js`** (đổi tên hàm xuất
+  `migrateLegacySubmissionContractViewers` → `migrateLegacyViewScopeViewers`,
+  cập nhật `server.js`): mở rộng di trú ROBUST ở SERVER lúc khởi động (không
+  phụ thuộc admin đăng nhập, tự dọn dư thừa do bug cũ) sang CẢ car/office,
+  không chỉ còn submission/contract.
+- **Dọn 3 file admin UI** (`module-admin-permtree.js`,
+  `module-admin.js` — `PERM_DEPT_TABLES` bỏ cột `pCarView`/`pOfficeView`,
+  `module-admin-permgroups.js` — bỏ nhãn `carView.all`/`officeView.all`) +
+  **`systemSection.html`** bỏ cột "Xem" khỏi 2 bảng phòng ban Đăng Ký Xe/Văn
+  Phòng.
+- **Vá kèm 1 lỗi DRIFT phát hiện trong lúc sửa** (client-side re-filter dữ
+  liệu ĐÃ được server lọc sẵn — đúng mẫu lỗi DRIFT đã từng vá ở Tài Liệu
+  v24.75): `module-dangkyxe.js` bỏ hẳn hàm `canViewCar()` lọc lại phía client
+  (dùng thẳng `DB.carRegs` server đã lọc đúng), `module-office.js` đơn giản
+  hoá `canViewOfficeReq()` chỉ còn lọc theo sub-tab — nếu không vá, 2 file
+  này sẽ lặng lẽ phá vỡ đúng tính năng `extraViewers`/`managerCanView` mà
+  người dùng vừa yêu cầu đảm bảo hoạt động đúng.
+- **`module-admin-userstaging.js`**: tag-summary tự nhận diện quyền Tải (Download)
+  car/office (mirror đúng bản vá tương tự đã có cho submission/contract).
+
+Logic "mặc định mỗi phòng ban chỉ xem đúng phòng ban mình, trừ khi admin cấu
+hình thêm qua `deptViewScopeConfig`" giờ áp dụng ĐỒNG NHẤT cho cả 6 module đã
+qua "Việc D" (Văn Bản Trình, Hợp Đồng, Tài Liệu, Phòng Họp, Đăng Ký Xe, Văn
+Phòng) — không còn module nào có lối "xem xuyên phòng ban" nằm ngoài màn cấu
+hình Nghiệp Vụ Nâng Cao.
+
+Test: cập nhật `test-car-regs-scope.js`/`test-office-reqs-scope.js` (bỏ 2
+scenario carView/officeView.depts/.all cũ mỗi file, còn 7/7), `test-perm-tree-
+dept-table.js` (đổi field kiểm tra sang `carDownload`/`pCarDownloadDept_2`,
+6/6), `test-audit-round5-ui-meeting-car.js` (bỏ 1 assertion về tên phòng ban
+trong chú thích phạm vi xem — nay là danh sách dùng chung toàn công ty, không
+còn liệt kê phòng ban cụ thể, 16/16), và mở rộng `test-legacy-view-scope-
+migration-job.js` thêm 3 scenario car/office (9/9). Toàn bộ 4 file test pass.
+Đã cập nhật `deploy/Huong-dan-nghiep-vu.md` (mục 3.0 + 2 chú thích lịch sử ở
+mục Đăng Ký Xe/Ma Trận Phân Quyền còn nhắc `carView` cũ).
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` (không đổi
+`schema.sql`/biến môi trường/dependencies).
 
 ## v25.60 (2026-10-10): Báo Cáo Định Biên — "Ban Tổng Giám Đốc" tính riêng, không cộng dồn cả công ty
 
