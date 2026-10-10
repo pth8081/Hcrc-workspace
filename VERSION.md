@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**25.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.59 (2026-10-10): Vá lỗi CSP — không đóng được modal "Báo Cáo Định Biên Nhân Sự"
+
+Người dùng báo mở modal "📋 Báo Cáo Định Biên Nhân Sự" (Nhân Sự → Cơ Cấu Tổ
+Chức) xong không bấm đóng được (cả nút ✕ lẫn nút "Đóng"). Nguyên nhân: cùng
+lớp lỗi đã gặp với `orgChartImportModal` trước đây — `#orgChartHeadcountModal`
+là 1 `<div>` gốc độc lập sống NGOÀI `#orgChartSection` trong `index.html`,
+nhưng lúc thêm tính năng này (đợt 10/2026 trước) đã bị BỎ SÓT khỏi cụm
+`bindCspDelegation()` tương ứng — nút mở (nằm trong section đã bind) hoạt
+động bình thường, nhưng 2 nút đóng bên trong modal không có listener nào
+bắt được, không phải do modal bị khoá/treo thật sự.
+
+Đã vá: thêm `bindCspDelegation('orgChartHeadcountModal')` vào
+`public/js/core.js`. Test mới `tests/test-orgchart-headcount-modal-binding.js`
+(5 kịch bản, xác nhận test FAIL đúng ở bước đóng khi tạm bỏ dòng vá, PASS khi
+có) + chạy lại 6 bộ test Cơ Cấu Tổ Chức liên quan đều pass, không regression.
+
+(Lưu ý: đợt này KHÔNG bao gồm bản sửa logic "Ban Tổng Giám Đốc" tính sai tổng
+định biên = tổng công ty — đang chờ người dùng xác nhận phương án qua ảnh demo
+trước khi triển khai, xem trao đổi cùng ngày.)
 
 ## v25.58 (2026-10-10): Hồ Sơ Cá Nhân — tự bật/tắt nhận email "Cần phê duyệt" theo từng phân hệ
 
