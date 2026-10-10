@@ -52,9 +52,11 @@ async function expectHttpError(promiseFn, status, includes) {
 }
 
 async function runServerTests(run) {
-  await run.run('[Server] Registry server có đủ 8 danh mục object, KHÔNG có positionTypes, mỗi entry có allow()', async () => {
+  await run.run('[Server] Registry server có đủ 9 danh mục object, KHÔNG có positionTypes, mỗi entry có allow()', async () => {
     const keys = Object.keys(OBJECT_CATALOG_IMPORT_CONFIG).sort();
-    assert.deepStrictEqual(keys, ['carVehicleTypes', 'deptGroups', 'meetingRoomCatalog', 'nganhHangCatalog', 'publicHolidays', 'shiftTemplates', 'storeJobTitles', 'uniformCatalog']);
+    // workflowParticipatingPositions (nhánh song song riêng, xem test-workflow-participating-positions-excel.js
+    // cho các kiểm tra chi tiết của entry này — KHÔNG đăng ký vào OBJECT_CATALOG_EXCEL_CONFIG phía client).
+    assert.deepStrictEqual(keys, ['carVehicleTypes', 'deptGroups', 'meetingRoomCatalog', 'nganhHangCatalog', 'publicHolidays', 'shiftTemplates', 'storeJobTitles', 'uniformCatalog', 'workflowParticipatingPositions']);
     keys.forEach(k => assert.strictEqual(typeof OBJECT_CATALOG_IMPORT_CONFIG[k].allow, 'function', `${k} thiếu allow()`));
     assert.ok(OBJECT_CATALOG_IMPORT_CONFIG.deptGroups.allow({ admin: true }) && !OBJECT_CATALOG_IMPORT_CONFIG.deptGroups.allow({}), 'deptGroups chỉ admin');
   });

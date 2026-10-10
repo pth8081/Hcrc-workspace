@@ -206,6 +206,56 @@ const OBJECT_CATALOG_IMPORT_CONFIG = {
       { code: 'NH-TP', name: 'Thực Phẩm Tươi Sống', dept: '' },
       { code: 'NH-HMP', name: 'Hóa Mỹ Phẩm', dept: '' }
     ]
+  },
+
+  // Chức Danh Tham Gia Quy Trình (workflowParticipatingPositions, "🧩 Nhóm Quyền Đặc Biệt", khối 17) —
+  // mảng PHẲNG các CẶP {jobTitle, dept} (dept rỗng = áp dụng chức danh đó ở MỌI phòng ban), KHÔNG có field
+  // tên duy nhất như các danh mục khác ở trên (xem public/js/module-admin-specialperm.js —
+  // getWorkflowParticipatingPositions()/saveWorkflowParticipatingPositions()).
+  //
+  // CỐ Ý KHÔNG khai `matchKey`: đây là khoá nghiệp vụ GHÉP 2 TRƯỜNG (jobTitle+dept), không phải 1 trường
+  // đơn trị như các danh mục khác — nếu khai `matchKey: 'jobTitle'` thì cơ chế chống-trùng-trong-1-file ở
+  // parseRowsWithSpec() sẽ coi 2 dòng CÙNG chức danh nhưng KHÁC phòng ban là "trùng" và báo lỗi dòng sau
+  // (SAI — đây là 2 cặp hợp lệ hoàn toàn khác nhau, VD "Trưởng Phòng"+"Kế Toán" và "Trưởng Phòng"+"Kinh
+  // Doanh" phải cùng được giữ). parseObjectCatalogFile() (bên dưới) mặc định `cfg.matchKey || 'name'` khi
+  // 1 entry không khai matchKey — NHƯNG vì danh mục này không có cột nào tên 'name' (chỉ có jobTitle/dept),
+  // `item['name']` luôn `undefined` ở MỌI dòng, nên điều kiện `item[spec.matchKey] !== undefined` ở
+  // parseRowsWithSpec() không bao giờ đúng -> nhánh chống trùng đó KHÔNG BAO GIỜ kích hoạt cho danh mục
+  // này — đúng hiệu quả "không chống trùng ở bước parse" mà không cần sửa parseRowsWithSpec() để nhận
+  // matchKey rỗng/null. Trùng CẶP THẬT (2 dòng Excel cùng jobTitle+dept, không phân biệt hoa/thường/
+  // khoảng trắng thừa) được lọc ở bước ÁP DỤNG phía CLIENT bằng hàm riêng dedupeWfPositionPairs()
+  // (module-admin-specialperm.js, có cảnh báo ở preview, KHÔNG chặn cứng) — KHÔNG dùng được
+  // computeObjectCatalogMerge() dùng chung ở core.js vì hàm đó giả định 1 matchKey đơn trị để "cập nhật
+  // nếu trùng / thêm nếu không trùng", không khớp use-case CẶP 2 field + hành vi THAY THẾ TOÀN BỘ (không
+  // phải gộp-thêm) vốn có của danh mục này (xem saveWorkflowParticipatingPositions() hiện có — luôn ghi
+  // đè nguyên DB.workflowParticipatingPositions bằng danh sách đang sửa).
+  //
+  // QUAN TRỌNG: vì lý do trên, danh mục này KHÔNG đăng ký vào OBJECT_CATALOG_EXCEL_CONFIG (client, core.js)
+  // — registry đó + computeObjectCatalogMerge()/confirmObjectCatalogImport() giả định luôn có matchKey hợp
+  // lệ. Phía client dùng 3 hàm bespoke riêng (downloadWfPositionTemplate()/exportWfPositionExcel()/
+  // onWfPositionImportFileChange()+confirmWfPositionImport(), module-admin-specialperm.js) gọi THẲNG 2
+  // route generic /api/admin/object-catalog/workflowParticipatingPositions/import-template|parse-import
+  // ở đây (route không đòi hỏi gì về matchKey) rồi tự THAY THẾ TOÀN BỘ DB.workflowParticipatingPositions
+  // sau khi tự lọc trùng cặp — không phải gộp-thêm theo matchKey như các danh mục khác.
+  workflowParticipatingPositions: {
+    label: 'Chức Danh Tham Gia Quy Trình',
+    dataKey: 'workflowParticipatingPositions',
+    allow: isAdmin, // ADMIN_ONLY_KEYS ở routes/data.js — isCurrentlyAdmin() THUẦN, không có gate rộng hơn
+                     // kiểu uniformCatalog/isCurrentlyAdminOrUniformManage() (đã đọc lại routes/data.js để
+                     // xác nhận: key này KHÔNG có nhánh mở rộng nào khác ngoài isAdmin).
+    columns: [
+      { header: 'Chức Danh', key: 'jobTitle', type: 'text', required: true, maxLength: 100, width: 30 },
+      { header: 'Phòng Ban (để trống = mọi phòng ban)', key: 'dept', type: 'text', maxLength: 100, width: 36,
+        note: 'Để trống = áp dụng chức danh này ở MỌI phòng ban/đơn vị (VD "Tổng Giám Đốc"). Có giá trị = CHỈ áp dụng khi giữ đúng chức danh VÀ đúng phòng ban/đơn vị đó.' }
+    ],
+    extraGuideLines: [
+      'NHẬP EXCEL cho danh mục này THAY THẾ TOÀN BỘ danh sách hiện có bằng đúng các dòng hợp lệ trong file (KHÔNG PHẢI gộp thêm) — kiểm tra kỹ bảng xem trước rồi mới bấm Xác Nhận.',
+      '2 dòng trùng cả Chức Danh VÀ Phòng Ban (không phân biệt hoa/thường/khoảng trắng thừa) chỉ giữ lại dòng xuất hiện đầu tiên — các dòng trùng sau bị tự loại (có cảnh báo ở bước xem trước, không chặn cứng).'
+    ],
+    sampleRows: [
+      { jobTitle: 'Trưởng Phòng', dept: '' },
+      { jobTitle: 'Giám Đốc Siêu Thị', dept: 'Vận Hành' }
+    ]
   }
 };
 
@@ -587,5 +637,12 @@ module.exports = {
   // lõi dùng lại cho nhánh bespoke (lib/positionTypesImport.js)
   parseRowsWithSpec,
   buildWorkbookForSpec,
-  normalizeText
+  normalizeText,
+  // cấp thấp hơn — dùng cho lib/groupedExcelImport.js (đọc NHIỀU sheet trong 1 file, parseRowsWithSpec
+  // chỉ đọc được sheet đầu qua streamFirstSheetRows()).
+  parseCellByType,
+  mapHeaderColumns,
+  formatCellForExcel,
+  styleHeaderRow,
+  colTypeLabel
 };

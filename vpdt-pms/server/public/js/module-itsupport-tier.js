@@ -499,6 +499,154 @@ function renderWorkflowTemplatesTable() {
   `).join('');
 }
 
+// ───────── Tải Mẫu/Nhập/Xuất Excel cho Mẫu Quy Trình (10/2026) ─────────
+// Server: lib/workflowStepsExcel.js (engine NHÓM nhiều dòng, lib/groupedExcelImport.js) +
+// routes/workflowExcelImport.js — CHỈ build file mẫu/parse+validate, KHÔNG ghi gì vào CSDL. Việc gộp vào
+// DB.workflows (mã trùng -> THAY THẾ, mã mới -> THÊM) + cảnh báo đổi số bước đang dùng ở nơi khác (TÁI
+// DÙNG collectWorkflowTemplateUsages() — cùng tinh thần saveWorkflowTemplate() ở trên) + syncStorage
+// ĐÚNG 1 LẦN đều làm ở CLIENT, ngay dưới đây.
+let workflowStepsImportPreview = null; // {fileName, records:[{id,name,steps}], errors:[{row?,message}]}
+
+const WORKFLOW_STEPS_EXCEL_COLUMNS = [
+  { key: 'code', header: 'Mã WF' },
+  { key: 'name', header: 'Tên Quy Trình' },
+  { key: 'stepOrder', header: 'Thứ Tự Bước' },
+  { key: 'stepName', header: 'Tên Bước' },
+  { key: 'actionLabel', header: 'Nhãn Hành Động' }
+];
+
+// Dựng rows Xuất Excel từ DB.workflows — mỗi BƯỚC 1 dòng (đúng cột file mẫu) — tách riêng để dễ test/tái dùng.
+function buildWorkflowStepsExportRows() {
+  const rows = [];
+  (DB.workflows || []).forEach(wf => {
+    (wf.steps || []).forEach(s => {
+      rows.push({ code: wf.id, name: wf.name, stepOrder: s.order, stepName: s.name, actionLabel: s.actionLabel || '' });
+    });
+  });
+  return rows;
+}
+
+async function downloadWorkflowStepsTemplate() {
+  await downloadFileFromServerGet('/api/admin/workflow-steps-excel/template', 'Mau_Quy_Trinh.xlsx');
+}
+
+async function exportWorkflowStepsExcel() {
+  await downloadXlsxFromServer('DanhSach_Quy_Trinh.xlsx', 'Mẫu Quy Trình', WORKFLOW_STEPS_EXCEL_COLUMNS, buildWorkflowStepsExportRows());
+}
+
+async function onWorkflowStepsImportFileChange(event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // cho phép chọn lại đúng file đó lần sau
+  const statusEl = document.getElementById('workflowStepsImportStatus');
+  if (!file) return;
+  workflowStepsImportPreview = null;
+  renderWorkflowStepsImportPreview();
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  let data;
+  try {
+    const res = await fetch('/api/admin/workflow-steps-excel/parse', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) { if (statusEl) statusEl.innerText = `⛔ ${data.error || 'Không đọc được file Excel'}`; return; }
+  } catch (e) {
+    if (statusEl) statusEl.innerText = `⛔ Không thể kết nối tới máy chủ: ${e.message}`;
+    return;
+  }
+  workflowStepsImportPreview = { fileName: data.fileName || file.name, records: data.records || [], errors: data.errors || [] };
+  const { records, errors } = workflowStepsImportPreview;
+  if (statusEl) {
+    statusEl.innerText = `📄 "${workflowStepsImportPreview.fileName}": ${records.length} mẫu quy trình` +
+      (errors.length ? `, ${errors.length} lỗi` : '') + ' — kiểm tra rồi bấm Xác Nhận.';
+  }
+  renderWorkflowStepsImportPreview();
+}
+
+function renderWorkflowStepsImportPreview() {
+  const wrap = document.getElementById('workflowStepsImportPreview');
+  if (!wrap) return;
+  const state = workflowStepsImportPreview;
+  if (!state) { wrap.innerHTML = ''; wrap.classList.add('hidden'); return; }
+  const errorsHtml = (state.errors || []).length
+    ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-28 overflow-y-auto text-[11px] mb-1.5"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — các dòng/mẫu này sẽ KHÔNG được nhập:</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
+    : '';
+  const rowsHtml = (state.records || []).map(rec => {
+    const existing = DB.workflows.find(w => w.id === rec.id);
+    const status = existing
+      ? (existing.steps.length !== rec.steps.length
+        ? `<span class="text-amber-700 font-bold">✏️ Thay thế (đổi số bước ${existing.steps.length}→${rec.steps.length})</span>`
+        : '<span class="text-blue-600">✏️ Thay thế</span>')
+      : '<span class="text-emerald-600">✅ Mới</span>';
+    return `<tr class="border-t"><td class="p-1 font-mono font-bold">${escapeHtml(rec.id)}</td><td class="p-1">${escapeHtml(rec.name)}</td><td class="p-1 text-center">${rec.steps.length}</td><td class="p-1 whitespace-nowrap">${status}</td></tr>`;
+  }).join('');
+  const tableHtml = (state.records || []).length
+    ? `<div class="border rounded max-h-40 overflow-auto bg-white text-[11px]"><table class="w-full"><thead><tr class="bg-gray-100 text-left"><th class="p-1">Mã WF</th><th class="p-1">Tên Quy Trình</th><th class="p-1">Số Bước</th><th class="p-1">Trạng Thái</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`
+    : '';
+  const canConfirm = (state.records || []).length > 0;
+  wrap.innerHTML = `${errorsHtml}${tableHtml}
+    <div class="flex gap-2 mt-1.5">
+      ${canConfirm ? `<button type="button" data-op="confirmWorkflowStepsImport" class="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Nhập (${state.records.length} mẫu quy trình)</button>` : ''}
+      <button type="button" data-op="cancelWorkflowStepsImport" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+    </div>`;
+  wrap.classList.remove('hidden');
+}
+
+function cancelWorkflowStepsImport() {
+  workflowStepsImportPreview = null;
+  renderWorkflowStepsImportPreview();
+  const statusEl = document.getElementById('workflowStepsImportStatus');
+  if (statusEl) statusEl.innerText = '';
+}
+
+// Xác nhận Nhập Excel: gộp TẤT CẢ mẫu trong preview vào DB.workflows (mã trùng -> THAY THẾ, mã mới ->
+// THÊM) rồi lưu ĐÚNG 1 LẦN qua syncStorage('workflows') — KHÔNG gọi lặp cho từng mẫu. Cảnh báo trước khi
+// áp dụng nếu có mẫu đổi SỐ BƯỚC đang dùng ở nơi khác, cùng tinh thần saveWorkflowTemplate() ở trên (tái
+// dùng collectWorkflowTemplateUsages()) — gộp mọi cảnh báo vào 1 confirm() duy nhất.
+async function confirmWorkflowStepsImport() {
+  const state = workflowStepsImportPreview;
+  const statusEl = document.getElementById('workflowStepsImportStatus');
+  if (!state || !(state.records || []).length) return;
+
+  const riskyChanges = [];
+  state.records.forEach(rec => {
+    const existing = DB.workflows.find(w => w.id === rec.id);
+    if (existing && existing.steps.length !== rec.steps.length) {
+      const usages = collectWorkflowTemplateUsages(rec.id);
+      if (usages.length > 0) {
+        riskyChanges.push(`Mã "${rec.id}" (${existing.steps.length} ➔ ${rec.steps.length} bước) đang dùng ở:\n  - ${usages.join('\n  - ')}`);
+      }
+    }
+  });
+  if (riskyChanges.length > 0) {
+    const proceed = confirm(`⚠️ ${riskyChanges.length} mẫu quy trình đổi SỐ BƯỚC đang được dùng ở nơi khác:\n\n${riskyChanges.join('\n\n')}\n\nSửa số bước có thể làm hồ sơ treo ở bước không có người duyệt hoặc mất cấu hình người duyệt bước bị bớt. Tiếp tục áp dụng TOÀN BỘ ${state.records.length} mẫu trong file?`);
+    if (!proceed) return;
+  } else if (!confirm(`Tìm thấy ${state.records.length} mẫu quy trình, xác nhận nhập?`)) {
+    return;
+  }
+
+  const snapshot = JSON.parse(JSON.stringify(DB.workflows));
+  const next = DB.workflows.map(w => ({ ...w }));
+  let added = 0, updated = 0;
+  state.records.forEach(rec => {
+    const idx = next.findIndex(w => w.id === rec.id);
+    if (idx >= 0) { next[idx] = rec; updated++; } else { next.push(rec); added++; }
+  });
+  DB.workflows = next;
+
+  if (!await syncStorage('workflows')) {
+    DB.workflows = snapshot;
+    if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.';
+    return;
+  }
+  logSystemAction('CONFIG', 'IMPORT_WORKFLOW_TEMPLATES', `Nhập Excel Mẫu Quy Trình: thêm ${added}, thay thế ${updated}`, 'SUCCESS', state.fileName);
+  workflowStepsImportPreview = null;
+  renderWorkflowStepsImportPreview();
+  if (statusEl) statusEl.innerText = `✅ Đã lưu: thêm ${added}, thay thế ${updated} mẫu quy trình.`;
+  renderWorkflowTab();
+  renderQuickApplySection();
+}
+
 // actionLabelVal: nhãn hành động RIÊNG của bước này (VD "Xác Nhận"/"Thẩm Định") — hiện trên chân ký in
 // ("✅ ĐÃ <NHÃN>", xem buildApprovalSignatureColumnHTML() ở core.js) VÀ trên nút bấm của người duyệt bước
 // đó (xem openXxxProcessModal()/confirmProcessXxx() ở từng module) — để trống = mặc định "Phê Duyệt"

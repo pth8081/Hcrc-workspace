@@ -1301,6 +1301,192 @@ async function deleteItPriceWholesaleMixedApprovalRule(id) {
   renderItPriceWholesaleMixedApprovalSection();
 }
 
+// ===== Tải Mẫu/Nhập Excel/Xuất Excel cho 2 màn ở trên (10/2026, theo yêu cầu người dùng) — server:
+// lib/mixedApprovalExcel.js + routes/mixedApprovalExcelImport.js (NGUỒN XÁC THỰC CUỐI CÙNG của cột nằm ở
+// SERVER, registry dưới đây CHỈ để dựng Xuất Excel + preview/mirror merge phía client, PHẢI khớp đúng
+// header/key/type bên đó). KHÁC OBJECT_CATALOG_EXCEL_CONFIG (core.js) đúng 1 điểm quan trọng: cột "Mã
+// Rule" (id) KHÔNG phải matchKey chống-trùng — để trống LUÔN tạo dòng mới, điền đúng mã đã có thì THAY THẾ
+// toàn bộ dòng đó, điền mã KHÔNG khớp thì (cũng) tạo dòng mới (không báo lỗi) — nên KHÔNG tái dùng
+// computeObjectCatalogMerge()/confirmObjectCatalogImport() được, viết riêng applyMixedApprovalImportClient()
+// mirror ĐÚNG applyMixedApprovalImport() ở lib/mixedApprovalExcel.js (sửa 1 bên phải soát lại bên kia).
+//
+// 2 PHA giống hệt luồng object-catalog: (1) parse qua route — CHỈ preview, KHÔNG ghi CSDL; (2) xác nhận —
+// client tự gộp vào DB.<dataKey> MỚI NHẤT tại đúng thời điểm bấm Xác Nhận (không dùng bản đã đọc lúc xem
+// preview) rồi lưu qua syncStorage() (route ghi POST /api/data/<dataKey> đã ADMIN_ONLY_KEYS sẵn).
+const MIXED_APPROVAL_EXCEL_CONFIG = {
+  STORE_ORDER: {
+    label: 'Quy Trình Đặt Hàng Siêu Thị',
+    dataKey: 'operationOrderStoreMixedApprovalRules',
+    urlKind: 'store-order',
+    renderFn: 'renderMixedApprovalSection',
+    tierOptions: OPERATION_ORDER_STORE_TIERS.map(t => ({ value: t.key, label: t.label }))
+  },
+  ITPRICE_WHOLESALE: {
+    label: 'QT Giá Bán Buôn (Siêu Thị)',
+    dataKey: 'itPriceWholesaleStoreMixedApprovalRules',
+    urlKind: 'itprice-wholesale',
+    renderFn: 'renderItPriceWholesaleMixedApprovalSection',
+    tierOptions: Object.keys(IT_PRICE_TIER_LABELS).map(k => ({ value: k, label: IT_PRICE_TIER_LABELS[k] })),
+    hasNganhHang: true
+  }
+};
+// Cột DÙNG CHUNG cho cả 2 kind — PHẢI khớp buildMixedApprovalColumnSpec() ở lib/mixedApprovalExcel.js
+// (header/key/type/thứ tự). formatObjectCatalogCell()/col.type dùng LẠI đúng hệ type của core.js
+// (OBJECT_CATALOG_EXCEL_CONFIG) — không phải danh mục object nhưng cùng quy ước định dạng ô Excel.
+function mixedApprovalExcelColumns(kind) {
+  const cfg = MIXED_APPROVAL_EXCEL_CONFIG[kind];
+  const columns = [
+    { header: 'Mã Rule', key: 'id', type: 'int' },
+    { header: 'Mức Áp Dụng', key: 'tier', type: 'enum', options: cfg.tierOptions },
+    { header: 'Bước Duyệt', key: 'step', type: 'int' },
+    { header: 'Loại Người Duyệt', key: 'mode', type: 'enum', options: [{ value: 'JOBTITLE', label: 'Chức Danh' }, { value: 'PERSON', label: 'Người Cụ Thể' }] },
+    { header: 'Chức Danh', key: 'jobTitle', type: 'text' },
+    { header: 'Phòng Ban (chỉ Chức Danh HO)', key: 'jobTitleDept', type: 'text' },
+    { header: 'Tài Khoản (username)', key: 'username', type: 'text' },
+    { header: 'Siêu Thị Phụ Trách', key: 'stores', type: 'array', sep: ';' }
+  ];
+  if (cfg.hasNganhHang) columns.push({ header: 'Ngành Hàng Phụ Trách', key: 'nganhHang', type: 'arrayRef', sep: ';' });
+  return columns;
+}
+
+// applyMixedApprovalImportClient(kind, parsedItems, existingRules) — MIRROR ĐÚNG applyMixedApprovalImport()
+// ở lib/mixedApprovalExcel.js (server): Mã Rule khớp 1 rule hiện có -> THAY THẾ (giữ nguyên id); để trống
+// hoặc không khớp -> TẠO MỚI id = max(existing + đã gán trong batch) + 1. Trả {rules, report:{updated,
+// created}} — rules là bản sao, KHÔNG mutate existingRules.
+function applyMixedApprovalImportClient(kind, parsedItems, existingRules) {
+  const rules = (existingRules || []).map(r => (r && typeof r === 'object') ? { ...r } : r);
+  const idxById = new Map();
+  let maxId = 0;
+  rules.forEach((r, idx) => {
+    const n = Number(r && r.id);
+    if (Number.isFinite(n)) { idxById.set(n, idx); if (n > maxId) maxId = n; }
+  });
+  const updated = [];
+  const created = [];
+  (parsedItems || []).forEach(parsed => {
+    const { id: rawId, ...fields } = parsed || {};
+    const candidateId = (rawId !== null && rawId !== undefined && rawId !== '') ? Number(rawId) : NaN;
+    const matchIdx = Number.isFinite(candidateId) ? idxById.get(candidateId) : undefined;
+    if (matchIdx !== undefined) {
+      rules[matchIdx] = { ...fields, id: candidateId };
+      updated.push(candidateId);
+    } else {
+      maxId += 1;
+      rules.push({ ...fields, id: maxId });
+      idxById.set(maxId, rules.length - 1);
+      created.push(maxId);
+    }
+  });
+  return { rules, report: { updated, created } };
+}
+
+async function downloadMixedApprovalTemplate(kind) {
+  const cfg = MIXED_APPROVAL_EXCEL_CONFIG[kind];
+  if (!cfg) return;
+  await downloadFileFromServerGet(`/api/admin/mixed-approval-excel/${cfg.urlKind}/template`, `Mau_${cfg.urlKind}.xlsx`);
+}
+
+async function exportMixedApprovalExcel(kind) {
+  const cfg = MIXED_APPROVAL_EXCEL_CONFIG[kind];
+  if (!cfg) return;
+  const columns = mixedApprovalExcelColumns(kind);
+  const rows = (DB[cfg.dataKey] || []).map(item => {
+    const row = {};
+    columns.forEach(col => { row[col.key] = formatObjectCatalogCell(col, item?.[col.key]); });
+    return row;
+  });
+  await downloadXlsxFromServer(`${cfg.urlKind}.xlsx`, cfg.label, columns.map(c => ({ key: c.key, header: c.header })), rows);
+}
+
+// Preview gần nhất theo từng kind: {fileName, items, errors, totalRows}.
+const mixedApprovalImportPreview = {};
+
+function mixedApprovalImportPreviewElId(kind, suffix) {
+  return `mixedApprovalImportPreview_${kind}_${suffix}`;
+}
+
+function renderMixedApprovalImportPreview(kind) {
+  const cfg = MIXED_APPROVAL_EXCEL_CONFIG[kind];
+  const wrap = document.getElementById(mixedApprovalImportPreviewElId(kind, 'wrap'));
+  const state = mixedApprovalImportPreview[kind];
+  if (!cfg || !wrap) return;
+  if (!state) { wrap.innerHTML = ''; wrap.classList.add('hidden'); return; }
+  const { report } = applyMixedApprovalImportClient(kind, state.items, DB[cfg.dataKey] || []);
+  const errorsHtml = (state.errors || []).length
+    ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-28 overflow-y-auto text-[11px]"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — các dòng này sẽ KHÔNG được nhập:</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
+    : '';
+  const canConfirm = state.items.length > 0;
+  wrap.innerHTML = `${errorsHtml}
+    <div class="flex gap-2 pt-1">
+      ${canConfirm ? `<button type="button" data-op="confirmMixedApprovalImport" data-arg0="${escapeHtml(kind)}" class="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Nhập (${report.updated.length} cập nhật, ${report.created.length} mới)</button>` : ''}
+      <button type="button" data-op="cancelMixedApprovalImport" data-arg0="${escapeHtml(kind)}" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+    </div>`;
+  wrap.classList.remove('hidden');
+}
+
+async function onMixedApprovalImportFileChange(kind, event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // cho phép chọn lại đúng file đó lần sau
+  const cfg = MIXED_APPROVAL_EXCEL_CONFIG[kind];
+  const statusEl = document.getElementById(mixedApprovalImportPreviewElId(kind, 'status'));
+  if (!file || !cfg) return;
+  delete mixedApprovalImportPreview[kind];
+  renderMixedApprovalImportPreview(kind);
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  let data;
+  try {
+    const res = await fetch(`/api/admin/mixed-approval-excel/${cfg.urlKind}/parse`, { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) { if (statusEl) statusEl.innerText = `⛔ ${data.error || 'Không đọc được file Excel'}`; return; }
+  } catch (e) {
+    if (statusEl) statusEl.innerText = `⛔ Không thể kết nối tới máy chủ: ${e.message}`;
+    return;
+  }
+  mixedApprovalImportPreview[kind] = { fileName: data.fileName || file.name, items: data.items || [], errors: data.errors || [], totalRows: data.totalRows || 0 };
+  const { report } = applyMixedApprovalImportClient(kind, data.items || [], DB[cfg.dataKey] || []);
+  if (statusEl) {
+    statusEl.innerText = `📄 "${data.fileName || file.name}": ${report.created.length} mới, ${report.updated.length} cập nhật` +
+      ((data.errors || []).length ? `, ${(data.errors || []).length} lỗi` : '') + ' — kiểm tra rồi bấm Xác Nhận.';
+  }
+  renderMixedApprovalImportPreview(kind);
+}
+
+function cancelMixedApprovalImport(kind) {
+  delete mixedApprovalImportPreview[kind];
+  renderMixedApprovalImportPreview(kind);
+  const statusEl = document.getElementById(mixedApprovalImportPreviewElId(kind, 'status'));
+  if (statusEl) statusEl.innerText = '';
+}
+
+// Xác nhận Nhập Excel: gộp preview vào DB[dataKey] MỚI NHẤT tại ĐÚNG thời điểm bấm (không dùng bản đã đọc
+// lúc xem preview — tránh race condition nếu ai đó khác vừa sửa/xoá rule trong lúc admin đang xem preview)
+// rồi lưu ĐÚNG 1 LẦN qua syncStorage(dataKey) — lỗi lưu thì phục hồi nguyên trạng.
+async function confirmMixedApprovalImport(kind) {
+  const cfg = MIXED_APPROVAL_EXCEL_CONFIG[kind];
+  const state = mixedApprovalImportPreview[kind];
+  const statusEl = document.getElementById(mixedApprovalImportPreviewElId(kind, 'status'));
+  if (!cfg || !state) return;
+  const before = DB[cfg.dataKey] || [];
+  const { rules, report } = applyMixedApprovalImportClient(kind, state.items, before);
+  if (!report.updated.length && !report.created.length) { if (statusEl) statusEl.innerText = 'ℹ️ Không có thay đổi nào để lưu.'; return; }
+  const snapshot = JSON.parse(JSON.stringify(before));
+  DB[cfg.dataKey] = rules;
+  const ok = await syncStorage(cfg.dataKey);
+  if (!ok) {
+    DB[cfg.dataKey] = snapshot;
+    if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.';
+    return;
+  }
+  logSystemAction('CONFIG', 'IMPORT_MIXED_APPROVAL_RULES', `Nhập Excel "${cfg.label}": thêm ${report.created.length}, cập nhật ${report.updated.length}`, 'SUCCESS', cfg.dataKey);
+  delete mixedApprovalImportPreview[kind];
+  renderMixedApprovalImportPreview(kind);
+  if (statusEl) statusEl.innerText = `✅ Đã lưu: thêm ${report.created.length}, cập nhật ${report.updated.length} dòng.`;
+  if (typeof window[cfg.renderFn] === 'function') window[cfg.renderFn]();
+}
+
 // ===== "🏷️ Danh Mục Ngành Hàng" (10/2026, theo yêu cầu người dùng) — CÙNG KHUÔN renderMeetingRoomCatalogList()
 // (module-phonghop.js, {id,name,short}) nhưng 3 field {id,code,name,dept} — xem chú thích đầy đủ ở
 // defaults.js::nganhHangCatalog/lib/objectCatalogImport.js::nganhHangCatalog. Nguồn cho ô "Ngành Hàng Áp

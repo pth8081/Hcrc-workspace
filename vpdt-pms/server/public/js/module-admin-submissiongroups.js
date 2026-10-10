@@ -523,6 +523,320 @@ function renderContractApprovalGroups() {
   renderApprovalLevelsTable('contract');
 }
 
+// ===== Tải Mẫu / Nhập Excel / Xuất Excel — "🖋️ Nhóm Phê Duyệt Trình/HĐ" (kind 'submission'/'contract')
+// VÀ "🖊️ Nhóm Phê Duyệt Cuối" (10 kind EXTRA_APPROVAL, DÙNG CHUNG 1 file/1 route gộp cả 10 module) —
+// 10/2026, dựng trên lib/approvalGroupsExcel.js + lib/groupedExcelImport.js (server). CHỈ server trả
+// preview {groupsByModule, levelsByModule, errors} — mọi việc GHI vào DB.<key> + gọi syncStorage() đều ở
+// ĐÂY (client), cùng khuôn "chụp state -> sửa -> await -> phục hồi nếu thất bại" như mọi CRUD khác ở file
+// này (snapshotApprovalAdminState()/syncApprovalAdminKey() ở trên).
+//
+// TIE-BREAK (đã xác nhận với người dùng, giống các màn Excel khác cùng đợt): cột "Mã Nhóm"/"Mã Cấp" khớp
+// ĐÚNG `id` đã có trong DB.<groupsKey>/DB.<levelsKey> của ĐÚNG module đó -> THAY THẾ (giữ nguyên id, ghi
+// đè mọi field khác bằng giá trị trong file); không khớp (kể cả mã TẠM admin tự gõ cho bản ghi mới, xem
+// CODE_NOTE ở lib/approvalGroupsExcel.js) -> TẠO MỚI, id tự sinh qua approvalGroupsGenId() — KHÔNG BAO
+// GIỜ dùng text admin gõ ở cột này làm id thật.
+const EXTRA_APPROVAL_MODULE_KEYS_LIST = Object.keys(EXTRA_APPROVAL_MODULE_LABELS);
+const approvalGroupsExcelPreview = {}; // key: 'submission'|'contract'|'_EXTRA' -> {fileName, groupsByModule, levelsByModule, errors}
+
+function approvalGroupsExcelPreviewKey(kind) {
+  // 10 kind EXTRA_APPROVAL CHIA SẺ đúng 1 bản preview (file gộp cả 10 module) — không phân biệt theo
+  // moduleKey đang xem ở dropdown.
+  return EXTRA_APPROVAL_MODULE_KEYS_LIST.includes(kind) ? '_EXTRA' : kind;
+}
+
+async function downloadApprovalGroupsTemplate(kind) {
+  const fileName = EXTRA_APPROVAL_MODULE_KEYS_LIST.includes(kind) ? 'Mau_NhomPheDuyetCuoi.xlsx' : `Mau_NhomPheDuyet_${kind}.xlsx`;
+  await downloadFileFromServerGet(`/api/admin/approval-groups-excel/${encodeURIComponent(kind)}/template`, fileName);
+}
+
+// Dựng {groupCols, levelCols, groupRows, levelRows} từ DB thật để Xuất Excel — kind EXTRA_APPROVAL lặp
+// qua CẢ 10 module (không chỉ module đang xem ở dropdown), cột "Mã Nhóm"/"Mã Cấp" = id THẬT (Xuất rồi
+// Nhập lại ngay sẽ được coi là THAY THẾ, không tạo trùng).
+function buildApprovalGroupsExportSheets(kind) {
+  const cfg = APPROVAL_GROUPS_ADMIN_CONFIG[kind];
+  const isExtra = EXTRA_APPROVAL_MODULE_KEYS_LIST.includes(kind);
+  const moduleKeys = isExtra ? EXTRA_APPROVAL_MODULE_KEYS_LIST : [null];
+  const yn = (v) => (v ? 'Có' : 'Không');
+
+  const groupCols = [
+    ...(isExtra ? [{ key: 'moduleKey', header: 'Module' }] : []),
+    { key: 'code', header: 'Mã Nhóm' },
+    { key: 'label', header: 'Tên Nhóm' },
+    { key: 'order', header: 'Thứ Tự' },
+    { key: 'actionLabel', header: 'Nhãn Phê Duyệt' },
+    { key: 'singleApprover', header: 'Chỉ 1 Người?' },
+    ...(cfg.hasBlocking ? [{ key: 'blocking', header: 'Chặn Quy Trình?' }] : []),
+    ...(cfg.hasFileReplacement ? [{ key: 'allowFileReplacementProposal', header: 'Đề Xuất Thay File?' }] : []),
+    { key: 'member', header: 'Username Thành Viên' }
+  ];
+  const levelCols = [
+    ...(isExtra ? [{ key: 'moduleKey', header: 'Module' }] : []),
+    { key: 'code', header: 'Mã Cấp' },
+    { key: 'label', header: 'Tên Cấp' },
+    { key: 'order', header: 'Thứ Tự' },
+    { key: 'lockedGroupIds', header: 'Mã Nhóm Bắt Buộc' },
+    { key: 'groupId', header: 'Mã Nhóm Hiển Thị' }
+  ];
+
+  const groupRows = [];
+  const levelRows = [];
+  moduleKeys.forEach(mk => {
+    const gKey = mk ? `extraApprovalGroups_${mk}` : cfg.groupsKey;
+    const lKey = mk ? `extraApprovalLevels_${mk}` : cfg.levelsKey;
+    const groups = (DB[gKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const levels = (DB[lKey] || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    groups.forEach(g => {
+      const base = {
+        moduleKey: mk || '', code: g.id, label: g.label, order: g.order ?? 0,
+        actionLabel: g.actionLabel || '', singleApprover: yn(g.singleApprover)
+      };
+      if (cfg.hasBlocking) base.blocking = yn(g.blocking !== false);
+      if (cfg.hasFileReplacement) base.allowFileReplacementProposal = yn(g.allowFileReplacementProposal);
+      const members = (g.members || []).length ? g.members : [''];
+      members.forEach(m => groupRows.push({ ...base, member: m }));
+    });
+    levels.forEach(lv => {
+      const base = { moduleKey: mk || '', code: lv.id, label: lv.label, order: lv.order ?? 0, lockedGroupIds: (lv.lockedGroupIds || []).join('; ') };
+      const groupIds = Array.isArray(lv.visibleGroupIds) ? lv.visibleGroupIds : [''];
+      groupIds.forEach(gid => levelRows.push({ ...base, groupId: gid }));
+    });
+  });
+  return { groupCols, levelCols, groupRows, levelRows };
+}
+
+async function exportApprovalGroupsExcel(kind) {
+  const { groupCols, levelCols, groupRows, levelRows } = buildApprovalGroupsExportSheets(kind);
+  const fileName = EXTRA_APPROVAL_MODULE_KEYS_LIST.includes(kind) ? 'NhomPheDuyetCuoi.xlsx' : `NhomPheDuyet_${kind}.xlsx`;
+  await downloadMultiSheetXlsxFromServer(fileName, [
+    { sheetName: 'Nhóm', columns: groupCols, rows: groupRows },
+    { sheetName: 'Cấp', columns: levelCols, rows: levelRows }
+  ]);
+}
+
+function approvalGroupsImportStatusElId(kind) {
+  return `apgExcelStatus_${approvalGroupsExcelPreviewKey(kind)}`;
+}
+function approvalGroupsImportPreviewElId(kind) {
+  return `apgExcelPreview_${approvalGroupsExcelPreviewKey(kind)}`;
+}
+
+async function onApprovalGroupsImportFileChange(kind, event) {
+  const file = event.target.files[0];
+  event.target.value = ''; // cho phép chọn lại đúng file đó lần sau
+  if (!file) return;
+  const pk = approvalGroupsExcelPreviewKey(kind);
+  delete approvalGroupsExcelPreview[pk];
+  renderApprovalGroupsImportPreview(kind);
+  const statusEl = document.getElementById(approvalGroupsImportStatusElId(kind));
+  if (statusEl) statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  let data;
+  try {
+    const res = await fetch(`/api/admin/approval-groups-excel/${encodeURIComponent(kind)}/parse`, { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) { if (statusEl) statusEl.innerText = `⛔ ${data.error || 'Không đọc được file Excel'}`; return; }
+  } catch (e) {
+    if (statusEl) statusEl.innerText = `⛔ Không thể kết nối tới máy chủ: ${e.message}`;
+    return;
+  }
+  approvalGroupsExcelPreview[pk] = {
+    fileName: data.fileName || file.name,
+    groupsByModule: data.groupsByModule || {}, levelsByModule: data.levelsByModule || {}, errors: data.errors || []
+  };
+  renderApprovalGroupsImportPreview(kind);
+}
+
+function cancelApprovalGroupsImport(kind) {
+  delete approvalGroupsExcelPreview[approvalGroupsExcelPreviewKey(kind)];
+  renderApprovalGroupsImportPreview(kind);
+}
+
+// Tóm tắt đếm module/nhóm/cấp sẽ bị ảnh hưởng — hiện TRƯỚC khi admin bấm xác nhận lưu.
+function renderApprovalGroupsImportPreview(kind) {
+  const pk = approvalGroupsExcelPreviewKey(kind);
+  const wrap = document.getElementById(approvalGroupsImportPreviewElId(kind));
+  const statusEl = document.getElementById(approvalGroupsImportStatusElId(kind));
+  const state = approvalGroupsExcelPreview[pk];
+  if (!wrap) return;
+  if (!state) { wrap.innerHTML = ''; wrap.classList.add('hidden'); if (statusEl) statusEl.innerText = ''; return; }
+  const moduleKeys = Object.keys({ ...state.groupsByModule, ...state.levelsByModule });
+  const totalGroups = Object.values(state.groupsByModule).reduce((s, arr) => s + arr.length, 0);
+  const totalLevels = Object.values(state.levelsByModule).reduce((s, arr) => s + arr.length, 0);
+  if (statusEl) {
+    statusEl.innerText = `📄 "${state.fileName}": ${totalGroups} nhóm, ${totalLevels} cấp` +
+      (pk === '_EXTRA' ? ` (${moduleKeys.length} quy trình)` : '') +
+      (state.errors.length ? `, ${state.errors.length} lỗi` : '') + ' — kiểm tra rồi bấm Xác Nhận.';
+  }
+  const errorsHtml = state.errors.length
+    ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-32 overflow-y-auto text-[11px]"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — sửa lại file rồi nhập lại (sẽ KHÔNG lưu gì nếu còn lỗi):</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.sheet ? `[${escapeHtml(e.sheet)}] ` : ''}${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
+    : '';
+  const canConfirm = !state.errors.length && (totalGroups > 0 || totalLevels > 0);
+  wrap.innerHTML = `${errorsHtml}
+    <div class="flex gap-2 mt-1.5">
+      ${canConfirm ? `<button type="button" data-op="confirmApprovalGroupsImport" data-arg0="${escapeHtml(kind)}" class="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Nhập (${totalGroups} nhóm, ${totalLevels} cấp)</button>` : ''}
+      <button type="button" data-op="cancelApprovalGroupsImport" data-arg0="${escapeHtml(kind)}" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
+    </div>`;
+  wrap.classList.remove('hidden');
+}
+
+// resolveApprovalGroupRef(text, groups) — "Mã Nhóm Bắt Buộc"/"Mã Nhóm Hiển Thị" ở sheet "Cấp" chấp nhận
+// CẢ id thật LẪN tên nhãn (label) — ưu tiên khớp id trước, không khớp thì thử khớp label (không phân
+// biệt hoa/thường). Trả id thật nếu khớp, null nếu không (caller tự báo lỗi rõ ràng kèm text gốc).
+function resolveApprovalGroupRef(text, groups) {
+  const byId = groups.find(g => g.id === text);
+  if (byId) return byId.id;
+  const norm = String(text || '').trim().toLowerCase();
+  const byLabel = groups.find(g => String(g.label || '').trim().toLowerCase() === norm);
+  return byLabel ? byLabel.id : null;
+}
+
+// Gộp 1 danh sách bản ghi import (groups HOẶC levels, CÙNG 1 module) vào danh sách hiện có theo đúng
+// tie-break (khớp id thật -> THAY THẾ; không khớp -> TẠO MỚI, id tự sinh). buildRecord(imported, idOrNull)
+// trả về bản ghi hoàn chỉnh để lưu (idOrNull = id hiện có nếu THAY THẾ, null nếu TẠO MỚI — hàm tự quyết
+// định dùng id cũ hay approvalGroupsGenId()).
+function mergeApprovalGroupsImportList(existingList, importedList, idPrefix, buildRecord) {
+  const existingById = new Map((existingList || []).map(x => [x.id, x]));
+  const result = (existingList || []).slice();
+  importedList.forEach(imported => {
+    const matchId = existingById.has(imported.code) ? imported.code : null;
+    const id = matchId || approvalGroupsGenId(idPrefix);
+    const record = buildRecord(imported, matchId ? existingById.get(matchId) : null, id);
+    const idx = result.findIndex(x => x.id === id);
+    if (idx !== -1) result[idx] = record; else result.push(record);
+  });
+  return result;
+}
+
+// Xử lý TRỌN VẸN 1 module (groupsKey/levelsKey): gộp Nhóm -> gộp Cấp (resolve lockedGroupIds/
+// visibleGroupIds dựa trên danh sách Nhóm VỪA GỘP, chấp nhận cả id thật lẫn label) -> validate locked⊆visible
+// -> trả {ok, groups, levels, errors} (errors: lỗi resolve/validate phát hiện Ở BƯỚC NÀY, KHÁC errors đã
+// có từ bước parse). KHÔNG đụng DB/network — hàm thuần, dễ test.
+function computeApprovalGroupsModuleMerge(cfg, existingGroups, existingLevels, importedGroups, importedLevels) {
+  const errors = [];
+  const groups = mergeApprovalGroupsImportList(existingGroups, importedGroups, cfg.groupIdPrefix, (imported, old, id) => {
+    const rec = {
+      id, label: imported.label, order: imported.order,
+      singleApprover: !!imported.singleApprover, members: imported.members.slice()
+    };
+    if (imported.actionLabel) rec.actionLabel = imported.actionLabel;
+    if (cfg.hasBlocking) rec.blocking = imported.blocking !== false;
+    if (cfg.hasFileReplacement) rec.allowFileReplacementProposal = !!imported.allowFileReplacementProposal;
+    if (old && old.isSystemDefault) rec.isSystemDefault = true;
+    return rec;
+  });
+
+  const levels = mergeApprovalGroupsImportList(existingLevels, importedLevels, cfg.levelIdPrefix, (imported, old, id) => {
+    let visibleGroupIds = null;
+    if (Array.isArray(imported.visibleGroupIds)) {
+      visibleGroupIds = [];
+      imported.visibleGroupIds.forEach(text => {
+        const gid = resolveApprovalGroupRef(text, groups);
+        if (!gid) errors.push({ sheet: 'Cấp', message: `Mã Cấp "${imported.code}" (${imported.label}): "Mã Nhóm Hiển Thị" = "${text}" không khớp Nhóm nào (đã Nhập ở sheet "Nhóm" hoặc đang có sẵn) — kiểm tra lại chính tả/mã.` });
+        else visibleGroupIds.push(gid);
+      });
+    }
+    const lockedGroupIds = [];
+    (imported.lockedGroupIds || []).forEach(text => {
+      const gid = resolveApprovalGroupRef(text, groups);
+      if (!gid) errors.push({ sheet: 'Cấp', message: `Mã Cấp "${imported.code}" (${imported.label}): "Mã Nhóm Bắt Buộc" = "${text}" không khớp Nhóm nào — kiểm tra lại chính tả/mã.` });
+      else lockedGroupIds.push(gid);
+    });
+    if (Array.isArray(visibleGroupIds)) {
+      const missing = lockedGroupIds.filter(id => !visibleGroupIds.includes(id));
+      if (missing.length) {
+        const names = missing.map(id => groups.find(g => g.id === id)?.label || id).join(', ');
+        errors.push({ sheet: 'Cấp', message: `Mã Cấp "${imported.code}" (${imported.label}): nhóm bắt buộc "${names}" phải nằm trong "Mã Nhóm Hiển Thị" (hoặc để "Mã Nhóm Hiển Thị" trống hết = Tất cả nhóm).` });
+      }
+    }
+    const rec = { id, label: imported.label, order: imported.order, visibleGroupIds, lockedGroupIds };
+    if (old && old.isSystemDefault) rec.isSystemDefault = true;
+    return rec;
+  });
+
+  return { ok: !errors.length, groups, levels, errors };
+}
+
+// Xác nhận Nhập Excel: với MỖI module bị ảnh hưởng (1 module cho 'submission'/'contract', có thể TỚI 10
+// module cho EXTRA_APPROVAL — chỉ những module THỰC SỰ xuất hiện trong file) — gộp groups+levels, lưu
+// groups TRƯỚC rồi levels SAU (Cấp tham chiếu id Nhóm), rollback CỤC BỘ (local state) nếu 1 trong 2 lưu
+// thất bại. KHÔNG atomics 2 collection ở server (hạ tầng ghi hiện có chỉ có 1 collection/request) — nếu
+// lưu Nhóm THÀNH CÔNG nhưng lưu Cấp THẤT BẠI, Nhóm đã lưu vẫn giữ nguyên trên server (chỉ Cấp bị phục hồi
+// cục bộ) — admin thử lại "Xác Nhận Nhập" lần nữa là đủ (Nhóm module đó giờ đã khớp thật, lần lưu Nhóm kế
+// tiếp sẽ là "không đổi gì" an toàn).
+async function confirmApprovalGroupsImport(kind) {
+  const pk = approvalGroupsExcelPreviewKey(kind);
+  const state = approvalGroupsExcelPreview[pk];
+  const statusEl = document.getElementById(approvalGroupsImportStatusElId(kind));
+  if (!state) return;
+  const isExtra = pk === '_EXTRA';
+  const moduleKeys = isExtra
+    ? Object.keys({ ...state.groupsByModule, ...state.levelsByModule })
+    : ['_single'];
+
+  const allErrors = [];
+  const perModule = [];
+  moduleKeys.forEach(mk => {
+    const cfg = isExtra ? APPROVAL_GROUPS_ADMIN_CONFIG[mk] : APPROVAL_GROUPS_ADMIN_CONFIG[kind];
+    if (!cfg) return; // phòng hờ mk không hợp lệ (đã bị chặn ở lớp parse-theo-cột enum, không nên xảy ra)
+    const gKey = cfg.groupsKey, lKey = cfg.levelsKey;
+    const merge = computeApprovalGroupsModuleMerge(
+      cfg, DB[gKey] || [], DB[lKey] || [],
+      state.groupsByModule[mk] || [], state.levelsByModule[mk] || []
+    );
+    if (!merge.ok) allErrors.push(...merge.errors.map(e => ({ ...e, moduleKey: isExtra ? mk : undefined })));
+    perModule.push({ moduleKey: mk, cfg, gKey, lKey, groups: merge.groups, levels: merge.levels });
+  });
+
+  if (allErrors.length) {
+    const html = `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-32 overflow-y-auto text-[11px]"><div class="font-bold text-red-700 mb-0.5">⚠️ ${allErrors.length} lỗi đối chiếu Nhóm/Cấp — CHƯA lưu gì:</div><ul class="list-disc pl-4 text-red-700">${allErrors.map(e => `<li>${e.moduleKey ? `[${escapeHtml(EXTRA_APPROVAL_MODULE_LABELS[e.moduleKey] || e.moduleKey)}] ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`;
+    const wrap = document.getElementById(approvalGroupsImportPreviewElId(kind));
+    if (wrap) { wrap.innerHTML = html; wrap.classList.remove('hidden'); }
+    return;
+  }
+
+  if (!confirm(`Xác nhận lưu Nhập Excel — ảnh hưởng ${perModule.length} quy trình/nhóm, tổng ${perModule.reduce((s, m) => s + m.groups.length, 0)} Nhóm + ${perModule.reduce((s, m) => s + m.levels.length, 0)} Cấp?`)) return;
+
+  if (statusEl) statusEl.innerText = '⏳ Đang lưu...';
+  let okCount = 0;
+  const failedModules = [];
+  for (const m of perModule) {
+    const snapshot = { [m.gKey]: JSON.parse(JSON.stringify(DB[m.gKey] || [])), [m.lKey]: JSON.parse(JSON.stringify(DB[m.lKey] || [])) };
+    DB[m.gKey] = m.groups;
+    const savedGroups = await syncStorage(m.gKey);
+    if (!savedGroups) {
+      DB[m.gKey] = snapshot[m.gKey]; DB[m.lKey] = snapshot[m.lKey];
+      failedModules.push(m.moduleKey);
+      continue;
+    }
+    DB[m.lKey] = m.levels;
+    const savedLevels = await syncStorage(m.lKey);
+    if (!savedLevels) {
+      // Nhóm ĐÃ lưu thành công trên server ở bước trên — chỉ phục hồi Cấp cục bộ (xem chú thích hàm).
+      DB[m.lKey] = snapshot[m.lKey];
+      failedModules.push(m.moduleKey);
+      continue;
+    }
+    okCount++;
+    logSystemAction(m.cfg.logTag, 'IMPORT_APPROVAL_GROUPS_EXCEL',
+      `Nhập Excel Nhóm/Cấp Phê Duyệt: ${m.groups.length} nhóm, ${m.levels.length} cấp`, 'SUCCESS', m.moduleKey);
+  }
+
+  delete approvalGroupsExcelPreview[pk];
+  if (statusEl) {
+    statusEl.innerText = failedModules.length
+      ? `⚠️ Đã lưu ${okCount}/${perModule.length} quy trình — LỖI: ${failedModules.map(mk => EXTRA_APPROVAL_MODULE_LABELS[mk] || mk).join(', ')} (thử Nhập lại file cho các quy trình này).`
+      : `✅ Đã lưu Nhập Excel cho ${okCount} quy trình.`;
+  }
+  renderApprovalGroupsImportPreview(kind);
+
+  // Vẽ lại ĐÚNG đúng bảng đang hiển thị (tránh vẽ nhầm dữ liệu module khác vào chung 1 wrap div của
+  // EXTRA_APPROVAL trong lúc đang lặp lưu nhiều module ở trên).
+  if (isExtra) renderExtraApprovalAdminSection();
+  else { renderApprovalGroupsTable(kind); renderApprovalLevelsTable(kind); }
+}
+
 function cancelPermFormEdit() {
   editingGroupId = null;
   toggleUserPermFormMode('USER');

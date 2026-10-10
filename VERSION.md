@@ -1,8 +1,52 @@
 # Phiên bản hiện tại
 
-**25.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.56 (2026-10-10): Tải Mẫu/Nhập/Xuất Excel cho "Quy Trình & Phê Duyệt" + "Nghiệp Vụ Nâng Cao" (Nhóm A, 6 màn)
+
+Người dùng yêu cầu rà soát toàn bộ màn cấu hình "Quy Trình & Phê Duyệt" +
+"Nghiệp Vụ Nâng Cao" (nhiều công ty cấu hình rất nhiều thông tin, chỉ nhập
+tay từng dòng) và thêm Tải Mẫu/Nhập/Xuất Excel. Sau khi gửi phân tích (sample
+workbook 11 sheet + 7 ảnh demo hiện trạng) và được xác nhận phạm vi (Nhóm A —
+6 màn ưu tiên — trước, Nhóm C 16-module per-department sau nếu cần) + quy
+ước tie-break ("Mã Rule"/"Mã Nhóm"/"Mã Cấp" khớp → thay thế, không khớp →
+tạo mới), triển khai song song 4 agent (isolated git worktree) rồi tích hợp
+tuần tự vào main:
+
+- **🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt** (`DB.workflows`) — Excel theo
+  khuôn "nhiều dòng/1 mã WF" (1 dòng = 1 bước), tự sắp xếp theo Thứ Tự Bước,
+  cảnh báo đổi số bước đang được nơi khác dùng.
+- **🏬 Quy Trình Đặt Hàng Siêu Thị** + **🏪 QT Giá Bán Buôn (Siêu Thị)**
+  (Mixed Approval Rules) — tie-break theo cột "Mã Rule".
+- **🖋️ Nhóm Phê Duyệt Trình/HĐ** + **🖊️ Nhóm Phê Duyệt Cuối** (10 module
+  dùng chung 1 cặp sheet, phân biệt bằng cột "Module") — tie-break theo
+  "Mã Nhóm"/"Mã Cấp".
+- **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`) —
+  khuôn phẳng 1 dòng/cặp Chức Danh+Phòng Ban, nhập lại thay thế toàn bộ.
+
+Hạ tầng mới dùng chung: `lib/groupedExcelImport.js` (engine "nhiều dòng gộp
+1 bản ghi theo mã lặp lại", bổ sung cho `lib/objectCatalogImport.js` cũ vốn
+chỉ xử lý phẳng 1-dòng-1-bản-ghi). Toàn bộ route mới CHỈ parse/validate ở
+server (`routes/workflowExcelImport.js`, `routes/mixedApprovalExcelImport.js`,
+`routes/approvalGroupsExcelImport.js`) — việc gộp dữ liệu + lưu CSDL vẫn làm
+ở client qua đúng hàm lưu hiện có, không có luồng ghi mới. Xem chi tiết tại
+`deploy/Huong-dan-nghiep-vu.md` mục 7.12.
+
+Nhóm C ("Cấu Hình Quy Trình Theo Phòng Ban", 16 module) và Nhóm B (Áp Dụng
+Nhanh, VPP Ngoại Lệ) chưa làm đợt này — độ ưu tiên thấp hơn, để đợt sau nếu
+người dùng yêu cầu.
+
+Test: 7+8+14+9+5 scenario mới (grouped-excel-import/workflow-steps-excel/
+mixed-approval-excel/approval-groups-excel/workflow-participating-positions)
++ 21 scenario object-catalog-excel (cập nhật registry count) đều pass; CSP
+self-check sạch trên toàn bộ file mới/sửa; regression liên quan (extra-
+approval-groups, extra-approval-preview-fix, extra-approval-reset-sync-fix,
+locked-approval-layers, quick-apply-workflow-steps, workflow-position-
+approvers, workflow-reset-dept-config, actionlabel-xss, csp-full-audit) đều
+pass. Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart`
+(không đổi schema SQL, không thêm biến môi trường/dependency mới).
 
 ## v25.55 (2026-10-10): Rà soát toàn hệ thống module/tab/sub-tab — vá 1 lỗ hổng Lương
 
