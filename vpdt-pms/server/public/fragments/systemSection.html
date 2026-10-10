@@ -465,6 +465,15 @@
     <div class="bg-white p-4 rounded border space-y-4">
       <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">🖋️ Nhóm Phê Duyệt Trình (Văn Bản Trình)</h3>
       <p class="text-[11px] text-gray-500 italic">Nhóm tuỳ chọn — người trình tick chọn khi tạo tờ trình, mỗi nhóm chặn quy trình cộng thêm 1 bước duyệt vào cuối quy trình phòng ban (gốc), theo đúng thứ tự; nhóm KHÔNG chặn quy trình (VD "Xin ý kiến") chỉ là kênh tham khảo song song. Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo tờ trình. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người trình phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
+      <!-- Tải Mẫu/Nhập/Xuất Excel (10/2026) — 1 file gộp 2 sheet "Nhóm"+"Cấp" cho CẢ Nhóm Phê Duyệt Trình
+           lẫn Cấp Phê Duyệt Cuối Cùng bên dưới (xem module-admin-submissiongroups.js). -->
+      <div class="flex items-center gap-2 flex-wrap text-[11px]">
+        <button type="button" data-op="downloadApprovalGroupsTemplate" data-arg0="submission" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
+        <button type="button" data-op="exportApprovalGroupsExcel" data-arg0="submission" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
+        <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input type="file" accept=".xlsx" class="hidden" data-op-change="onApprovalGroupsImportFileChange" data-arg0="submission" data-arg-event="1"></label>
+        <span id="apgExcelStatus_submission" class="text-gray-500"></span>
+      </div>
+      <div id="apgExcelPreview_submission" class="hidden space-y-1.5"></div>
       <div id="submissionApprovalGroupsAdminWrap"></div>
       <div class="border-t pt-3">
         <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Văn Bản Trình)</p>
@@ -475,6 +484,13 @@
     <div class="bg-white p-4 rounded border space-y-4">
       <h3 class="font-bold text-gray-800 text-sm flex items-center gap-1.5">📄 Nhóm Phê Duyệt HĐ (Hợp Đồng)</h3>
       <p class="text-[11px] text-gray-500 italic">Nhóm RIÊNG cho quy trình Phê Duyệt Hợp Đồng (không dùng chung với Nhóm Phê Duyệt Trình ở trên) — người tạo hợp đồng chọn khi tạo, mỗi nhóm cộng thêm 1 bước duyệt vào cuối quy trình gốc theo phòng ban (cấu hình ở Hệ Thống → Quy trình phê duyệt → "QT Hợp Đồng - Phê Duyệt"). Đổi tên/thêm/xoá nhóm tự do ở bảng dưới — Tên nhóm là nguồn dữ liệu trực tiếp cho trường "Phê duyệt" ở form tạo hợp đồng. Gán thành viên cho từng nhóm — nhóm nào có NHIỀU HƠN 1 người thì người tạo hợp đồng phải chọn cụ thể 1 người lúc tạo hồ sơ; nhóm tick "Chỉ 1 người" chỉ gán được tối đa 1 người.</p>
+      <div class="flex items-center gap-2 flex-wrap text-[11px]">
+        <button type="button" data-op="downloadApprovalGroupsTemplate" data-arg0="contract" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu</button>
+        <button type="button" data-op="exportApprovalGroupsExcel" data-arg0="contract" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel</button>
+        <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input type="file" accept=".xlsx" class="hidden" data-op-change="onApprovalGroupsImportFileChange" data-arg0="contract" data-arg-event="1"></label>
+        <span id="apgExcelStatus_contract" class="text-gray-500"></span>
+      </div>
+      <div id="apgExcelPreview_contract" class="hidden space-y-1.5"></div>
       <div id="contractApprovalGroupsAdminWrap"></div>
       <div class="border-t pt-3">
         <p class="font-bold text-gray-700 text-[11px] mb-1">Cấp Phê Duyệt Cuối Cùng (Hợp Đồng)</p>
@@ -548,6 +564,18 @@
         <label class="block text-[11px] font-bold text-gray-600 mb-1">Chọn quy trình để xem/sửa</label>
         <select id="extraApprovalModuleKeySelect" data-op-change="setExtraApprovalModuleKey" data-arg-value="0" class="w-full sm:w-auto border rounded p-1.5 text-xs font-semibold"></select>
       </div>
+      <!-- Tải Mẫu/Nhập/Xuất Excel (10/2026) — 1 file DUY NHẤT gộp CẢ 10 quy trình (cột "Module") vì đây
+           CÙNG 1 MÀN, chỉ đổi dropdown module ở trên — không phải xem riêng từng quy trình. "DOC" ở
+           data-arg0 chỉ để gọi đúng route chung (route trả cùng 1 file/kết quả bất kể quy trình nào trong
+           10 quy trình được truyền — xem routes/approvalGroupsExcelImport.js), KHÔNG phải chỉ áp dụng cho
+           riêng "Tài Liệu". -->
+      <div class="flex items-center gap-2 flex-wrap text-[11px] border-t pt-2">
+        <button type="button" data-op="downloadApprovalGroupsTemplate" data-arg0="DOC" class="text-gray-600 font-bold hover:underline">⬇️ Tải Mẫu (gộp cả 10 quy trình)</button>
+        <button type="button" data-op="exportApprovalGroupsExcel" data-arg0="DOC" class="text-gray-600 font-bold hover:underline">📤 Xuất Excel (gộp cả 10 quy trình)</button>
+        <label class="text-gray-600 font-bold hover:underline cursor-pointer">📥 Nhập Excel<input type="file" accept=".xlsx" class="hidden" data-op-change="onApprovalGroupsImportFileChange" data-arg0="DOC" data-arg-event="1"></label>
+        <span id="apgExcelStatus__EXTRA" class="text-gray-500"></span>
+      </div>
+      <div id="apgExcelPreview__EXTRA" class="hidden space-y-1.5"></div>
     </div>
     <div class="bg-white p-4 rounded border space-y-4">
       <h4 class="font-bold text-gray-700 text-xs">✅ Phê Duyệt (Nhóm)</h4>

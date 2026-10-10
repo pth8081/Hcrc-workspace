@@ -55,6 +55,7 @@ const positionTypesRoutes = require('./routes/positionTypes');
 const objectCatalogImportRoutes = require('./routes/objectCatalogImport');
 const mixedApprovalExcelImportRoutes = require('./routes/mixedApprovalExcelImport');
 const workflowExcelImportRoutes = require('./routes/workflowExcelImport');
+const approvalGroupsExcelImportRoutes = require('./routes/approvalGroupsExcelImport');
 const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
 const operationImportRoutes = require('./routes/operationImport');
 const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
@@ -210,6 +211,9 @@ app.use('/api/admin', mixedApprovalExcelImportRoutes);
 // workflowExcelImportRoutes: Tải Mẫu/đọc file Nhập Excel cho "🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt"
 // (DB.workflows, 10/2026, lib/workflowStepsExcel.js) — CHỈ parse/validate, không ghi CSDL.
 app.use('/api/admin', workflowExcelImportRoutes);
+// approvalGroupsExcelImportRoutes: Tải Mẫu/đọc file Nhập Excel cho "🖋️ Nhóm Phê Duyệt Trình/HĐ" +
+// "🖊️ Nhóm Phê Duyệt Cuối" (10/2026, lib/approvalGroupsExcel.js) — CHỈ parse/validate, không ghi CSDL.
+app.use('/api/admin', approvalGroupsExcelImportRoutes);
 app.use('/api/admin/position-types', positionTypesRoutes);
 app.use('/api/stores', storeCatalogImportRoutes);
 app.use('/api/operation', operationImportRoutes);
