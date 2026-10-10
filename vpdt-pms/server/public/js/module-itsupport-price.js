@@ -1003,7 +1003,8 @@ function renderMhItPriceList() {
   const statusFilter = document.getElementById('filterStatusMhItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateMhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateMhItPrice')?.value || '';
-  const keyword = (document.getElementById('filterKeywordMhItPrice')?.value || '').trim();
+  const keywordInputEl = document.getElementById('filterKeywordMhItPrice');
+  const keyword = (keywordInputEl?.value || '').trim();
   // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — Phê Duyệt Giá Bán Lẻ không tự sắp mới nhất lên đầu):
   // trước đây .sort() ngay sau .filter() dùng String.localeCompare() trên chuỗi createdAt
   // ("hh:mm:ss dd/mm/yyyy") — so sánh GIỜ (đứng đầu chuỗi) TRƯỚC ngày, "23:59:59 01/10/2026" bị coi "lớn
@@ -1019,7 +1020,7 @@ function renderMhItPriceList() {
       // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — gõ "Lý do" không tìm được): p.reason ("Lý Do Điều
       // Chỉnh Giá", field THẬT trên form nhập — mhItPriceReason/itPriceReason — KHÔNG phải customData)
       // bị bỏ sót hoàn toàn ở đợt mở rộng tìm kiếm trước, dù đã soát customData. Thêm lại ngay đây.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keyword)) return false;
+      if (!matchesAnyKeyword([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_mhItPrice').innerHTML = buildPaginationBoxHTML('mhItPrice', 'renderMhItPriceList');
@@ -1048,7 +1049,8 @@ function renderVanHanhItPriceList() {
   const statusFilter = document.getElementById('filterStatusVanHanhItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateVanHanhItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateVanHanhItPrice')?.value || '';
-  const keyword = (document.getElementById('filterKeywordVanHanhItPrice')?.value || '').trim();
+  const keywordInputEl = document.getElementById('filterKeywordVanHanhItPrice');
+  const keyword = (keywordInputEl?.value || '').trim();
   // LỖI ĐÃ VÁ (10/2026) — mirror đúng bản vá ở renderMhItPriceList() (sort localeCompare theo chuỗi
   // createdAt "hh:mm:ss dd/mm/yyyy" sai thứ tự vì so GIỜ trước NGÀY; dùng sortByCreatedAtDesc() thay thế).
   const visible = sortByCreatedAtDesc(DB.itPriceApprovals
@@ -1058,7 +1060,7 @@ function renderVanHanhItPriceList() {
       if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
       const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
       // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList() ở trên, gồm cả p.reason + customData.
-      if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keyword)) return false;
+      if (!matchesAnyKeyword([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
       return true;
     }));
   document.getElementById('paginationContainer_vanHanhItPrice').innerHTML = buildPaginationBoxHTML('vanHanhItPrice', 'renderVanHanhItPriceList');
@@ -1104,7 +1106,8 @@ function renderItPriceApprovals() {
   const statusFilter = document.getElementById('filterStatusItPrice')?.value || '';
   const fromDate = document.getElementById('filterFromDateItPrice')?.value || '';
   const toDate = document.getElementById('filterToDateItPrice')?.value || '';
-  const keyword = (document.getElementById('filterKeywordItPrice')?.value || '').trim();
+  const keywordInputEl = document.getElementById('filterKeywordItPrice');
+  const keyword = (keywordInputEl?.value || '').trim();
 
   // Hồ sơ CŨ chưa có field priceType (tạo trước khi tính năng 2 sub-tab ra đời) -> fallback '|| RETAIL',
   // tức "mẫu hiện tại chuyển hết vào Bán Lẻ" — không cần script migrate dữ liệu (mục 1 kế hoạch).
@@ -1126,7 +1129,7 @@ function renderItPriceApprovals() {
     if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
     const latestFileName = (p.files && p.files.length) ? p.files[p.files.length - 1].fileName : '';
     // Mở rộng tìm kiếm (10/2026) — mirror đúng renderMhItPriceList()/renderVanHanhItPriceList(), gồm p.reason + customData.
-    if (!matchesKeywordFields([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keyword)) return false;
+    if (!matchesAnyKeyword([p.code, latestFileName, p.creatorName, p.creator, p.dept, p.priceZone, p.wholesaleApplyUnit, p.masterListName, p.reason, itPriceTierLabel(p.priceTier), ...(p.storeScope?.stores || []), ...itPriceNganhHangNames(p.nganhHang), itPriceExpiryLabel(p), ...customDataSearchValues(p.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
     return true;
   }));
 
@@ -2079,13 +2082,14 @@ function renderItTickets() {
 
   const statusFilter = document.getElementById('filterStatusItTicket')?.value || '';
   const categoryFilter = document.getElementById('filterCategoryItTicket')?.value || '';
-  const keyword = (document.getElementById('filterKeywordItTicket')?.value || '').trim();
+  const keywordInputEl = document.getElementById('filterKeywordItTicket');
+  const keyword = (keywordInputEl?.value || '').trim();
 
   const visible = DB.itSupportTickets.filter(t => {
     if (!canViewItTicket(currentUser, t)) return false;
     if (statusFilter && t.status !== statusFilter) return false;
     if (categoryFilter && t.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([t.code, t.title, t.creatorName, t.creator, t.dept, t.description, t.category, ...customDataSearchValues(t.customData)], keyword)) return false;
+    if (!matchesAnyKeyword([t.code, t.title, t.creatorName, t.creator, t.dept, t.description, t.category, ...customDataSearchValues(t.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
     return true;
   });
 

@@ -58,6 +58,33 @@ async function main() {
     assert.strictEqual(items.length, 5);
   });
 
+  await test('buildImportTemplateWorkbook(): gắn dropdown enum cố định (nodeTypeLabel/requiresDeptLabel/posType) kể cả không truyền danh mục nào', async () => {
+    const wb = await orgChartImport.buildImportTemplateWorkbook();
+    const sheet = wb.getWorksheet('Cơ Cấu Tổ Chức');
+    const dvType = sheet.getCell(`${sheet.getColumn('nodeTypeLabel').letter}2`).dataValidation;
+    assert.ok(dvType && dvType.formulae[0].includes('Công Ty') && dvType.formulae[0].includes('Vị Trí'));
+    const dvReq = sheet.getCell(`${sheet.getColumn('requiresDeptLabel').letter}2`).dataValidation;
+    assert.ok(dvReq && dvReq.formulae[0].includes('Có') && dvReq.formulae[0].includes('Không'));
+    const dvPos = sheet.getCell(`${sheet.getColumn('posType').letter}2`).dataValidation;
+    assert.ok(dvPos && dvPos.formulae[0].includes('HO') && dvPos.formulae[0].includes('STORE'));
+    assert.ok(!sheet.getCell(`${sheet.getColumn('departmentRef').letter}2`).dataValidation, 'không truyền depts/stores thì departmentRef KHÔNG có dropdown');
+  });
+
+  await test('buildImportTemplateWorkbook({depts,stores,jobTitles,storeJobTitles,jobGrades}): gắn dropdown departmentRef/jobTitle gộp HO+Siêu Thị + jobGrade', async () => {
+    const wb = await orgChartImport.buildImportTemplateWorkbook({
+      depts: ['Phòng Kinh Doanh'], stores: ['Siêu Thị Quận 1'],
+      jobTitles: ['Trưởng Phòng'], storeJobTitles: [{ label: 'Thu Ngân' }],
+      jobGrades: ['L7']
+    });
+    const sheet = wb.getWorksheet('Cơ Cấu Tổ Chức');
+    const dvDept = sheet.getCell(`${sheet.getColumn('departmentRef').letter}2`).dataValidation;
+    assert.ok(dvDept && dvDept.formulae[0].includes('Phòng Kinh Doanh') && dvDept.formulae[0].includes('Siêu Thị Quận 1'));
+    const dvJob = sheet.getCell(`${sheet.getColumn('jobTitle').letter}2`).dataValidation;
+    assert.ok(dvJob && dvJob.formulae[0].includes('Trưởng Phòng') && dvJob.formulae[0].includes('Thu Ngân'));
+    const dvGrade = sheet.getCell(`${sheet.getColumn('jobGrade').letter}2`).dataValidation;
+    assert.ok(dvGrade && dvGrade.formulae[0].includes('L7'));
+  });
+
   await test('parseImportExcelBuffer(): file hợp lệ (happy path) -> valid=true, đủ 5 dòng, field đúng', async () => {
     const buffer = await buildBufferWithRows(HAPPY_ROWS);
     const { items, fileErrors, valid } = await orgChartImport.parseImportExcelBuffer(buffer);

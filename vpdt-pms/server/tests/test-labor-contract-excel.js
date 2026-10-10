@@ -41,6 +41,20 @@ async function partA() {
     assert.ok(!headers.some(h => /CHỈ XEM/.test(h)), 'mẫu Nhập KHÔNG được có cột CHỈ XEM');
   });
 
+  await test('buildImportTemplateWorkbook({depts}): gắn dropdown Excel cho cột "Phòng Ban" theo đúng danh mục truyền vào, KHÔNG gọi tham số vẫn chạy được như cũ', () => {
+    const wbNoDepts = laborContractImport.buildImportTemplateWorkbook();
+    const sheetNoDepts = wbNoDepts.getWorksheet('Hợp Đồng Lao Động');
+    const deptColNoDepts = sheetNoDepts.getColumn('dept');
+    assert.ok(!sheetNoDepts.getCell(`${deptColNoDepts.letter}2`).dataValidation, 'gọi không tham số (test cũ) vẫn phải chạy OK, không gắn dropdown nào');
+
+    const wb = laborContractImport.buildImportTemplateWorkbook({ depts: ['Phòng Kế Toán', 'Phòng Kinh Doanh'] });
+    const sheet = wb.getWorksheet('Hợp Đồng Lao Động');
+    const deptCol = sheet.getColumn('dept');
+    const dv = sheet.getCell(`${deptCol.letter}2`).dataValidation;
+    assert.ok(dv && dv.type === 'list', 'cột "Phòng Ban" phải có dropdown khi truyền depts: ' + JSON.stringify(dv));
+    assert.ok(dv.formulae[0].includes('Phòng Kế Toán') && dv.formulae[0].includes('Phòng Kinh Doanh'));
+  });
+
   await test('buildExportWorkbook() có đủ cột sửa-được + cột CHỈ XEM', () => {
     const contract = laborContract.defaultContract({
       id: 1, employeeCode: 'NV9001', code: 'HDLD-NV9001-1', status: 'ACTIVE',

@@ -56,7 +56,8 @@ const upload = multer({
 // GET /api/labor-contracts/template — file mẫu Excel để sửa hàng loạt hợp đồng ACTIVE đã có.
 router.get('/template', requireContractManage, async (req, res) => {
   try {
-    const wb = buildImportTemplateWorkbook();
+    const data = await getAllAppData();
+    const wb = buildImportTemplateWorkbook({ depts: data.depts || [] });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Mau_Hop_Dong_Lao_Dong.xlsx"');
     await wb.xlsx.write(res);

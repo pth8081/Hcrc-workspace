@@ -221,7 +221,11 @@ const upload = multer({
 router.get('/import-template', async (req, res) => {
   if (!requireManageTree(req, res)) return;
   try {
-    const wb = await orgChartImport.buildImportTemplateWorkbook();
+    const [depts, stores, jobTitles, storeJobTitles, jobGrades] = await Promise.all([
+      getAppDataValue('depts'), getAppDataValue('stores'), getAppDataValue('jobTitles'),
+      getAppDataValue('storeJobTitles'), getAppDataValue('jobGrades')
+    ]);
+    const wb = await orgChartImport.buildImportTemplateWorkbook({ depts, stores, jobTitles, storeJobTitles, jobGrades });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Mau_Co_Cau_To_Chuc.xlsx"');
     await wb.xlsx.write(res);

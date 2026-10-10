@@ -75,7 +75,7 @@
       <div id="hacViewApprove" class="hidden space-y-3">
         <h3 class="font-bold text-sm text-gray-800">✅ Đơn Nghỉ Phép Chờ Duyệt (nhân viên thuộc quyền quản lý)</h3>
         <div class="flex items-center gap-2">
-          <input type="text" id="hacApproveFilterKeyword" data-op-input="renderHacApproveView" placeholder="🔍 Mã NV, Họ Tên, Lý do..." class="border rounded px-2 py-1 text-xs w-72">
+          <input type="text" id="hacApproveFilterKeyword" data-multi-paste-search data-op-input="renderHacApproveView" placeholder="🔍 Mã NV, Họ Tên, Lý do..." class="border rounded px-2 py-1 text-xs w-72">
           <button type="button" data-op="resetHacApproveFilters" class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button>
         </div>
         <div class="overflow-x-auto">
@@ -129,7 +129,7 @@
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-bold text-sm text-gray-800">🕐 Chấm Công Toàn Công Ty</h3>
           <div class="flex gap-2">
-            <input type="text" id="hacMgrFilterEmployeeCode" data-op-input="renderHacManageAttendanceTable" placeholder="🔍 Mã NV hoặc Họ Tên..." class="border rounded px-2 py-1 text-xs">
+            <input type="text" id="hacMgrFilterEmployeeCode" data-multi-paste-search data-op-input="renderHacManageAttendanceTable" placeholder="🔍 Mã NV hoặc Họ Tên..." class="border rounded px-2 py-1 text-xs">
             <button type="button" data-op="openHacManualAttendanceModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-700">➕ Bổ Sung Bản Ghi Công</button>
           </div>
         </div>

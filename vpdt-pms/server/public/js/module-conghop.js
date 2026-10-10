@@ -292,11 +292,12 @@ async function submitHacSwapRequest(e) {
 // ===================== "Duyệt Nghỉ Phép" =====================
 function renderHacApproveView() {
   const myCode = DB.myEmployeeCode;
-  const kw = (document.getElementById('hacApproveFilterKeyword')?.value || '').trim();
+  const kwInputEl = document.getElementById('hacApproveFilterKeyword');
+  const kw = (kwInputEl?.value || '').trim();
   let list = sortByCreatedAtDesc((DB.leaveRequests || []).filter(r => r.status === 'PENDING' && r.employeeCode !== myCode));
   if (kw) {
     if (!hacEmployeeDirectoryCache.length) { loadHacEmployeeDirectory().then(() => renderHacApproveView()); }
-    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), r.reason, ...customDataSearchValues(r.customData)], kw));
+    list = list.filter(r => matchesAnyKeyword([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), r.reason, ...customDataSearchValues(r.customData)], kwInputEl?._multiKeywords, kw));
   }
   const body = document.getElementById('hacApproveLeaveBody');
   document.getElementById('hacApproveLeaveEmpty').classList.toggle('hidden', list.length > 0);
@@ -511,11 +512,12 @@ function hacEmployeeNameByCode(code) {
 }
 
 function renderHacManageAttendanceTable() {
-  const filter = (document.getElementById('hacMgrFilterEmployeeCode')?.value || '').trim();
+  const filterInputEl = document.getElementById('hacMgrFilterEmployeeCode');
+  const filter = (filterInputEl?.value || '').trim();
   let list = [...(DB.attendanceRecords || [])].sort((a, b) => b.workDate.localeCompare(a.workDate));
   if (filter) {
     if (!hacEmployeeDirectoryCache.length) { loadHacEmployeeDirectory().then(() => renderHacManageAttendanceTable()); }
-    list = list.filter(r => matchesKeywordFields([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), ...customDataSearchValues(r.customData)], filter));
+    list = list.filter(r => matchesAnyKeyword([r.employeeCode, hacEmployeeNameByCode(r.employeeCode), ...customDataSearchValues(r.customData)], filterInputEl?._multiKeywords, filter));
   }
   list = list.slice(0, 300);
   const body = document.getElementById('hacMgrAttendanceBody');

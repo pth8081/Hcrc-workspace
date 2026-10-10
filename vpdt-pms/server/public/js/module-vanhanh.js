@@ -1255,7 +1255,8 @@ function renderOperationList(kind) {
   const statusFilter = document.getElementById(`filterStatus${fp}`)?.value || '';
   const fromDate = document.getElementById(`filterFromDate${fp}`)?.value || '';
   const toDate = document.getElementById(`filterToDate${fp}`)?.value || '';
-  const keyword = (document.getElementById(`filterKeyword${fp}`)?.value || '').trim();
+  const keywordInputEl = document.getElementById(`filterKeyword${fp}`);
+  const keyword = (keywordInputEl?.value || '').trim();
   // Lọc "Nơi Nhận" (siêu thị/kho nhận hàng) — CHỈ operationOrders có field receivingLocationName (đợt PDF
   // autofill), 2 kind kia không có select tương ứng nên document.getElementById luôn null -> '' -> không
   // lọc gì (an toàn, không cần if riêng). Xem populateOperationOrderLocationOptions() ngay dưới đây.
@@ -1302,7 +1303,7 @@ function renderOperationList(kind) {
     }
     if (!isInDateRange(o.createdAt, fromDate, toDate)) return false;
     if (locationFilter && (o.receivingLocationName || '') !== locationFilter) return false;
-    if (!matchesKeywordFields([o.code, meta.titleField(o), o.creatorName, o.creator, o.dept, o.receivingLocationName, o.supplier, o.note, o.personInChargeName, ...customDataSearchValues(o.customData)], keyword)) return false;
+    if (!matchesAnyKeyword([o.code, meta.titleField(o), o.creatorName, o.creator, o.dept, o.receivingLocationName, o.supplier, o.note, o.personInChargeName, ...customDataSearchValues(o.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
     return true;
   });
 

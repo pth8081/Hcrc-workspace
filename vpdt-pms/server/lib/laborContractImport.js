@@ -21,7 +21,7 @@
 const ExcelJS = require('exceljs');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
-const { sanitizeRowForFormulaInjection } = require('./adminExport');
+const { sanitizeRowForFormulaInjection, applyDropdownValidation } = require('./adminExport');
 const { markDuplicateItems } = require('./importDedup');
 const laborContract = require('./laborContract');
 
@@ -87,7 +87,7 @@ const READONLY_COLUMNS = [
   { header: 'Cập Nhật Bởi (CHỈ XEM)', key: 'updatedBy', width: 16 }
 ];
 
-function buildImportTemplateWorkbook() {
+function buildImportTemplateWorkbook({ depts } = {}) {
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Hợp Đồng Lao Động');
   sheet.columns = [
@@ -96,6 +96,10 @@ function buildImportTemplateWorkbook() {
     ...EDITABLE_COLUMNS
   ];
   styleHeaderRow(sheet.getRow(1));
+  // Dropdown "Phòng Ban" theo danh mục THẬT (10/2026, yêu cầu người dùng: tránh gõ sai chính tả khi
+  // làm file) — chỉ áp khi caller có truyền depts (route /template đã truyền, test THUẦN gọi không
+  // tham số vẫn chạy được như cũ, không bắt buộc).
+  if (depts && depts.length) applyDropdownValidation(sheet, 'dept', depts, { helperColIdx: sheet.columns.length + 50 });
   sheet.addRow({
     employeeCode: 'NV1001', fullName: 'Nguyễn Văn A', contractType: 'Xác định thời hạn',
     startDate: '2026-01-01', endDate: '2027-01-01', baseSalary: 12000000,

@@ -489,11 +489,12 @@ async function loadHrProfileManageList() {
 }
 
 function renderHrProfileManageList() {
-  const kw = (document.getElementById('hrpfManageSearch')?.value || '').trim();
+  const kwInputEl = document.getElementById('hrpfManageSearch');
+  const kw = (kwInputEl?.value || '').trim();
   const rows = _hrpfManageList.filter(p => {
     if (!kw) return true;
     const idn = hrpfIdentitySnapshot(p);
-    return matchesKeywordFields([p.employeeCode, p.username, idn.fullName, idn.dept, idn.jobTitle], kw);
+    return matchesAnyKeyword([p.employeeCode, p.username, idn.fullName, idn.dept, idn.jobTitle], kwInputEl?._multiKeywords, kw);
   });
   const tbody = document.getElementById('hrpfManageTableBody');
   document.getElementById('hrpfManageEmpty').classList.toggle('hidden', rows.length > 0);

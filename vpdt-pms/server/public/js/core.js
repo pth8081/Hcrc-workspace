@@ -1844,6 +1844,60 @@ function matchesKeywordFields(fields, keyword) {
   return fields.some(f => (f || '').toString().toLowerCase().includes(kw));
 }
 
+// DÁN NHIỀU MÃ CÙNG LÚC (10/2026, yêu cầu người dùng: "copy nhiều dòng mã từ Excel, dán vào ô tìm kiếm,
+// tự tách ra và lọc theo tất cả các mã đó"). splitMultiKeyword() tách theo xuống dòng/dấu phẩy/chấm
+// phẩy — dùng ở ĐÚNG 1 nơi: bindMultiPasteSearchInputs() đọc clipboard THÔ (event.clipboardData, còn
+// nguyên ký tự xuống dòng) NGAY lúc bắt sự kiện 'paste', TRƯỚC khi trình duyệt tự ghi vào ô input.
+// LƯU Ý QUAN TRỌNG đã xác minh bằng Playwright thật: dán nhiều dòng vào <input type="text"> 1 dòng
+// khiến Chrome tự NỐI các dòng bằng dấu CÁCH (không giữ \n) — nếu chỉ đọc lại `input.value` sau khi dán
+// rồi tách theo khoảng trắng, sẽ không phân biệt được "dán nhiều mã" với "gõ tay 1 cụm có khoảng trắng"
+// (VD tìm tên người "Nguyễn Văn A" sẽ bị tách nhầm thành 3 từ khoá, đổi hẳn ý nghĩa tìm kiếm cũ). Vì vậy
+// bindMultiPasteSearchInputs() lưu mảng từ khoá đã tách TRỰC TIẾP vào `el._multiKeywords` ngay tại thời
+// điểm paste, KHÔNG suy luận lại từ `.value`; mọi lần gõ/sửa tay SAU đó (sự kiện 'input' không phải do
+// chính paste handler này tạo ra) sẽ xoá `_multiKeywords` để quay lại đúng hành vi so khớp 1 cụm cũ.
+function splitMultiKeyword(raw) {
+  return String(raw || '').split(/\r\n|\r|\n|[,;]+/).map(s => s.trim()).filter(Boolean);
+}
+
+// Thay matchesKeywordFields() tại các nơi ĐÃ wiring dán-nhiều-mã: nếu ô đang giữ `_multiKeywords` (vừa
+// dán nhiều dòng) thì khớp OR giữa từng mã với toàn bộ field; ngược lại (gõ tay bình thường, hoặc dán
+// đúng 1 dòng) giữ NGUYÊN hành vi matchesKeywordFields() cũ (so khớp substring cả cụm).
+function matchesAnyKeyword(fields, multiKeywords, rawValue) {
+  if (multiKeywords && multiKeywords.length) {
+    const hay = fields.map(f => (f || '').toString().toLowerCase()).join(' ');
+    return multiKeywords.some(k => hay.includes(k.toLowerCase()));
+  }
+  return matchesKeywordFields(fields, rawValue);
+}
+
+// Gắn đúng 1 lần cho toàn trang (capture phase trên document — không cần khai báo lại theo từng section
+// như bindCspDelegation(), vì đây không phải dispatch theo data-op mà chỉ là 1 hành vi bổ sung áp dụng
+// cho MỌI ô có đánh dấu data-multi-paste-search, bất kể đang ở section/modal nào). Không phải vi phạm
+// CSP (addEventListener qua JS, không phải thuộc tính onpaste="..." nội tuyến trong HTML).
+function bindMultiPasteSearchInputs() {
+  document.addEventListener('paste', (e) => {
+    const el = e.target;
+    if (!el || !(el instanceof HTMLInputElement) || !el.hasAttribute('data-multi-paste-search')) return;
+    const raw = (e.clipboardData || window.clipboardData || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+    const kws = splitMultiKeyword(raw);
+    if (kws.length > 1) {
+      e.preventDefault();
+      el.value = kws.join(', ');
+      el._multiKeywords = kws;
+      el._justSetByMultiPaste = true;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      el._multiKeywords = null;
+    }
+  }, true);
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el || !(el instanceof HTMLInputElement) || !el.hasAttribute('data-multi-paste-search')) return;
+    if (el._justSetByMultiPaste) { el._justSetByMultiPaste = false; return; }
+    el._multiKeywords = null;
+  }, true);
+}
+
 // LỖI ĐÃ VÁ (10/2026, phản hồi người dùng — đợt mở rộng tìm kiếm trước bỏ sót trường bổ sung): trả về
 // mảng giá trị dạng chuỗi từ customData (trường cấu hình động qua "Biểu Mẫu"/renderDynamicInputsForModule,
 // lưu key theo NHÃN hiển thị trên form nhập — xem collectDynamicFieldsData()) để ghép vào
@@ -13125,4 +13179,8 @@ function getMultiSelectValues(containerId) {
 // lib/securityHeaders.js). #copyrightYear đã có sẵn trong DOM lúc trình duyệt chạy tới đây (nằm TRƯỚC
 // thẻ <script src="/js/core.js"> trong index.html, phân tích HTML tuần tự từ trên xuống).
 document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+
+// Gắn đúng 1 lần cho toàn trang — xem chú thích đầy đủ tại định nghĩa bindMultiPasteSearchInputs() ở
+// trên (tính năng dán nhiều mã cùng lúc vào ô tìm kiếm, 10/2026).
+bindMultiPasteSearchInputs();
 

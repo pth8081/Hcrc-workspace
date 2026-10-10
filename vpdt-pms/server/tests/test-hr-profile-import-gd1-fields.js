@@ -9,7 +9,29 @@
 // Chạy: node server/tests/test-hr-profile-import-gd1-fields.js
 'use strict';
 
+const path = require('path');
 const assert = require('assert');
+
+// buildImportTemplateWorkbook() (10/2026) giờ đọc thêm 3 danh mục catalog (legalEntities/
+// specialLaborStatuses/currentWorkStatusDetails) để gắn dropdown Excel — stub lib/appData TRƯỚC khi
+// require employeeProfileImport, cùng khuôn stubModule() đã dùng ở tests/test-hr-profile.js/demo-hr-
+// profile-90field.js (test THUẦN này không có SQL Server thật để đọc).
+function stubModule(relPath, exportsObj) {
+  const full = require.resolve(path.join(__dirname, '..', relPath));
+  require.cache[full] = {
+    id: full, filename: full, path: path.dirname(full),
+    loaded: true, exports: exportsObj, children: [], paths: []
+  };
+  return exportsObj;
+}
+stubModule('lib/appData', {
+  getAppDataValue: async (key) => ({
+    legalEntities: ['Công ty TNHH HCRC'], specialLaborStatuses: [], currentWorkStatusDetails: ['Hưu trí']
+  }[key] ?? null),
+  getAllAppData: async () => ({}),
+  withLockedAppDataValue: async () => { throw new Error('withLockedAppDataValue không dùng ở test này'); }
+});
+
 const employeeProfileImport = require('../lib/employeeProfileImport');
 let passed = 0, failed = 0;
 async function test(name, fn) {

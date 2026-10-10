@@ -141,7 +141,7 @@
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị (Nơi Nhận)</label><select id="filterLocationOperationOrder" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"><option value="">-- Tất cả nơi nhận --</option></select></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationOrder" type="date" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationOrder" type="date" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationOrder" data-op-input="onOperationOrderFilterChange" placeholder="Mã, tiêu đề, người tạo, nơi nhận..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationOrder" data-multi-paste-search data-op-input="onOperationOrderFilterChange" placeholder="Mã, tiêu đề, người tạo, nơi nhận..." class="w-full border p-2 rounded text-sm"></div>
           <div class="flex items-end"><button data-op="resetOperationOrderFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
         </div>
       </div>
@@ -322,7 +322,7 @@
           </div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationStoreOpen" type="date" data-op-change="onOperationStoreOpenFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationStoreOpen" type="date" data-op-change="onOperationStoreOpenFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationStoreOpen" data-op-input="onOperationStoreOpenFilterChange" placeholder="Mã, tên siêu thị, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationStoreOpen" data-multi-paste-search data-op-input="onOperationStoreOpenFilterChange" placeholder="Mã, tên siêu thị, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm"></div>
           <div class="flex items-end"><button data-op="resetOperationStoreOpenFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
         </div>
       </div>
@@ -396,7 +396,7 @@
           </div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày</label><input id="filterFromDateOperationRepair" type="date" data-op-change="onOperationRepairFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày</label><input id="filterToDateOperationRepair" type="date" data-op-change="onOperationRepairFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationRepair" data-op-input="onOperationRepairFilterChange" placeholder="Mã, siêu thị, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationRepair" data-multi-paste-search data-op-input="onOperationRepairFilterChange" placeholder="Mã, siêu thị, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm"></div>
           <div class="flex items-end"><button data-op="resetOperationRepairFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
         </div>
       </div>
@@ -773,7 +773,7 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label>
-            <input id="filterKeywordVanHanhItPrice" data-op-input="onVanHanhItPriceFilterChange" placeholder="Mã, tên tệp, phòng ban, người đề xuất, đơn vị áp dụng..." class="w-full border p-2 rounded text-sm">
+            <input id="filterKeywordVanHanhItPrice" data-multi-paste-search data-op-input="onVanHanhItPriceFilterChange" placeholder="Mã, tên tệp, phòng ban, người đề xuất, đơn vị áp dụng..." class="w-full border p-2 rounded text-sm">
           </div>
           <div class="flex items-end">
             <button data-op="resetVanHanhItPriceFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button>

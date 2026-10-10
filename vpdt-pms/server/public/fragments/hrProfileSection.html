@@ -29,7 +29,7 @@
     <!-- Quản Lý Hồ Sơ (HR/admin, hoặc 1 trong 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa — 9/2026) -->
     <div id="hrpfViewManage" class="hidden space-y-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <input id="hrpfManageSearch" data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Mã NV, Họ tên, Tài khoản, Phòng ban, Chức danh..." class="border p-1.5 rounded text-xs w-72 bg-white">
+        <input id="hrpfManageSearch" data-multi-paste-search data-op-input="renderHrProfileManageList" autocomplete="off" placeholder="🔍 Mã NV, Họ tên, Tài khoản, Phòng ban, Chức danh..." class="border p-1.5 rounded text-xs w-72 bg-white">
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" id="hrpfManageCreateBtn" data-op="openHrpfCreateModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">➕ Tạo Hồ Sơ Mới</button>
           <button type="button" id="hrpfManageImportBtn" data-op="openHrpfImportModal" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">📤 Nhập Excel</button>

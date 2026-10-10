@@ -133,7 +133,8 @@ function renderItServiceRenewals() {
 
   const lifecycleFilter = document.getElementById('filterItRenewalLifecycle')?.value || '';
   const categoryFilter = document.getElementById('filterItRenewalCategory')?.value || '';
-  const keyword = (document.getElementById('filterItRenewalKeyword')?.value || '').toLowerCase().trim();
+  const keywordInputEl = document.getElementById('filterItRenewalKeyword');
+  const keyword = (keywordInputEl?.value || '').trim();
 
   const dashCards = [
     { key: '__ALL__', label: 'Tổng Dịch Vụ', count: DB.itServiceRenewals.length, colorClass: 'border-l-blue-500' },
@@ -148,7 +149,7 @@ function renderItServiceRenewals() {
   const filtered = DB.itServiceRenewals.filter(item => {
     if (lifecycleFilter && computeItRenewalLifecycleState(item) !== lifecycleFilter) return false;
     if (categoryFilter && item.category !== categoryFilter) return false;
-    if (!matchesKeywordFields([item.name, item.vendor, item.responsible, item.note, ...customDataSearchValues(item.customData)], keyword)) return false;
+    if (!matchesAnyKeyword([item.name, item.vendor, item.responsible, item.note, ...customDataSearchValues(item.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
     return true;
   });
 

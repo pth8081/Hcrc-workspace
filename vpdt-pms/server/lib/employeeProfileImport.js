@@ -12,7 +12,8 @@
 const ExcelJS = require('exceljs');
 const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
-const { sanitizeRowForFormulaInjection } = require('./adminExport');
+const { sanitizeRowForFormulaInjection, applyDropdownValidation } = require('./adminExport');
+const { getAppDataValue } = require('./appData');
 
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
@@ -171,6 +172,23 @@ async function buildImportTemplateWorkbook() {
     careerHistoryNote: '', hrNote: ''
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
+
+  // Dropdown theo danh mục hệ thống (10/2026, yêu cầu người dùng: "các trường có tùy chọn nhiều thì
+  // lấy từ danh mục và làm drop list để khi làm file không bị nhầm") — chỉ áp cho field có danh mục
+  // THẬT trong hệ thống (Quản Lý Danh Mục) hoặc enum cố định, dùng chung applyDropdownValidation()
+  // (lib/adminExport.js). helperColIdx mỗi cột lệch nhau để không đụng cột ẩn của nhau.
+  const [legalEntities, specialLaborStatuses, currentWorkStatusDetails] = await Promise.all([
+    getAppDataValue('legalEntities'), getAppDataValue('specialLaborStatuses'), getAppDataValue('currentWorkStatusDetails')
+  ]);
+  const dropdownTargets = [
+    { key: 'gender', options: [...GENDERS] },
+    { key: 'maritalStatus', options: [...MARITAL_STATUSES] },
+    { key: 'legalEntity', options: legalEntities || [] },
+    { key: 'specialLaborStatus', options: specialLaborStatuses || [] },
+    { key: 'currentWorkStatusDetail', options: currentWorkStatusDetails || [] }
+  ];
+  dropdownTargets.forEach((t, idx) => applyDropdownValidation(sheet, t.key, t.options, { helperColIdx: COLUMNS.length + 50 + idx }));
+
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 100;
   noteSheet.addRow(['"Mã Nhân Viên" bắt buộc — trùng với hồ sơ đã có hoặc trùng ngay trong file sẽ được CẢNH BÁO ở bước xem trước, HR tự chọn Ghi đè thông tin/Bỏ qua từng dòng, không tự động chặn.']);

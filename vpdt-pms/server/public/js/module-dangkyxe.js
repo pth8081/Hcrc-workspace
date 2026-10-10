@@ -925,7 +925,8 @@ function renderCarRegs() {
   const statusFilter = document.getElementById('filterStatusCar')?.value || '';
   const fromDate = document.getElementById('filterFromDateCar')?.value || '';
   const toDate = document.getElementById('filterToDateCar')?.value || '';
-  const keyword = (document.getElementById('filterKeywordCar')?.value || '').trim();
+  const keywordInputEl = document.getElementById('filterKeywordCar');
+  const keyword = (keywordInputEl?.value || '').trim();
 
   // LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe): bỏ hẳn bộ lọc lại phía CLIENT dùng carView —
   // DB.carRegs ĐÃ được SERVER lọc đúng theo canViewCarReg() (lib/recordViewScope.js, nay đọc
@@ -955,7 +956,7 @@ function renderCarRegs() {
     if (deptFilter && c.dept !== deptFilter) return false;
     if (statusFilter && c.status !== statusFilter) return false;
     if (!isInDateRange(c.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason, c.directUser, ...customDataSearchValues(c.customData)], keyword)) return false;
+    if (!matchesAnyKeyword([c.code, c.destination, c.creatorName, c.creator, c.dept, c.purpose, c.reason, c.directUser, ...customDataSearchValues(c.customData)], keywordInputEl?._multiKeywords, keyword)) return false;
 
     return true;
   });

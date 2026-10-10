@@ -57,7 +57,8 @@ function getHrContractList() {
 }
 
 function renderHrContractTable() {
-  const kw = (document.getElementById('hrcFilterEmployeeCode')?.value || '').trim();
+  const kwInputEl = document.getElementById('hrcFilterEmployeeCode');
+  const kw = (kwInputEl?.value || '').trim();
   const statusFilter = document.getElementById('hrcFilterStatus')?.value || '';
   let list = getHrContractList();
   // Mở rộng tìm kiếm (10/2026) — trước đây chỉ lọc employeeCode theo includes() thủ công, giờ thêm Mã
@@ -67,7 +68,7 @@ function renderHrContractTable() {
     if (!hrcEmployeeDirectoryCache.length) { loadHrcEmployeeDirectory().then(() => renderHrContractTable()); }
     const nameByCode = {};
     hrcEmployeeDirectoryCache.forEach(p => { nameByCode[p.employeeCode] = p.fullName; });
-    list = list.filter(c => matchesKeywordFields([c.employeeCode, c.code, nameByCode[c.employeeCode], ...customDataSearchValues(c.customData)], kw));
+    list = list.filter(c => matchesAnyKeyword([c.employeeCode, c.code, nameByCode[c.employeeCode], ...customDataSearchValues(c.customData)], kwInputEl?._multiKeywords, kw));
   }
   if (statusFilter) list = list.filter(c => c.status === statusFilter);
 

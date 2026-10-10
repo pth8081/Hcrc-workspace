@@ -41,9 +41,43 @@ function sanitizeRowForFormulaInjection(row) {
   return safe;
 }
 
+// applyDropdownValidation(sheet, colKey, options) — Excel Data Validation dạng danh sách thả xuống
+// (10/2026, yêu cầu người dùng: "các trường chọn từ danh mục thì cho dropdown trong Excel, tránh gõ sai
+// chính tả"). Dùng CHUNG cho mọi nơi sinh Excel mẫu/nhập/xuất có cột lấy giá trị từ 1 danh mục cố định —
+// cùng tinh thần "formula chuỗi literal nối dấu phẩy" đã có sẵn ở lib/storeCatalogImport.js, CHỈ khác:
+// Excel giới hạn formula kiểu "a,b,c" ở ĐÚNG 255 ký tự — danh mục dài (VD vài chục Phòng Ban/Siêu Thị)
+// sẽ vượt giới hạn này và ÂM THẦM MẤT dropdown nếu cứ nối chuỗi thẳng. Tự chuyển sang tham chiếu 1 CỘT
+// ẨN ngay trong CHÍNH sheet đó (ghi danh sách theo cột, ẩn cột đi) khi vượt ngưỡng, Excel vẫn hiểu
+// dropdown đúng như thường dù số lượng lựa chọn lớn tới đâu.
+// allowBlank: true LUÔN — để trống vẫn hợp lệ (nhiều cột là tuỳ chọn), validation chỉ gợi ý đúng chính
+// tả, KHÔNG thay thế bước validate nghiệp vụ thật ở server/client khi Nhập (xem các route liên quan).
+// `helperColIdx` (tuỳ chọn): chỉ số cột TUYỆT ĐỐI (1-based) dùng làm cột ẩn khi danh sách dài >255 ký tự
+// — truyền khác nhau cho mỗi cột dropdown trong CÙNG 1 sheet (không tự đoán bằng biến module-level, vì
+// hàm này có thể bị gọi rất nhiều lần suốt vòng đời server — dùng biến toàn cục sẽ tăng dần vô hạn).
+function applyDropdownValidation(sheet, colKey, options, { startRow = 2, endRow = 500, helperColIdx } = {}) {
+  const opts = (options || []).map(o => String(o ?? '').trim()).filter(Boolean);
+  if (!opts.length) return;
+  const col = sheet.getColumn(colKey);
+  if (!col || !col.letter) return;
+  const joined = opts.join(',');
+  let formula;
+  if (joined.length <= 255) {
+    formula = `"${joined}"`;
+  } else {
+    const helperCol = sheet.getColumn(helperColIdx || (sheet.columnCount + 50));
+    opts.forEach((opt, i) => { sheet.getCell(helperCol.number, i + 1).value = opt; });
+    helperCol.hidden = true;
+    formula = `$${helperCol.letter}$1:$${helperCol.letter}$${opts.length}`;
+  }
+  for (let r = startRow; r <= endRow; r++) {
+    sheet.getCell(`${col.letter}${r}`).dataValidation = { type: 'list', allowBlank: true, formulae: [formula] };
+  }
+}
+
 // c.numFmt (tuỳ chọn, 10/2026) — ĐỊNH DẠNG CỘT dạng Văn Bản ('@') cho các cột dễ mất số 0 đứng đầu khi
 // Excel tự hiểu nhầm thành số (VD Tài Khoản/Mật Khẩu ở downloadUserTemplate() — xem chú thích ở đó).
-// Không set thì cột giữ định dạng "General" như trước, không đổi hành vi mọi lời gọi khác.
+// c.dropdownOptions (tuỳ chọn, 10/2026) — mảng chuỗi -> tự thêm Data Validation dropdown cho cột đó (xem
+// applyDropdownValidation() ngay trên). Không set thì cột giữ hành vi như trước, không đổi gì.
 function buildGenericWorkbook(sheetName, columns, rows) {
   const wb = new ExcelJS.Workbook();
   // LỖI THẬT đã vá (10/2026, người dùng báo "Xuất Excel Danh Sách Chức Danh (Khối VP/HO)" báo "Không thể
@@ -56,6 +90,7 @@ function buildGenericWorkbook(sheetName, columns, rows) {
   sheet.columns = columns.map(c => ({ header: String(c.header ?? ''), key: String(c.key ?? ''), width: Number(c.width) || 18, style: c.numFmt ? { numFmt: String(c.numFmt) } : undefined }));
   styleHeaderRow(sheet.getRow(1));
   rows.forEach(r => sheet.addRow(sanitizeRowForFormulaInjection(r)));
+  columns.forEach((c, idx) => { if (c.dropdownOptions && c.dropdownOptions.length) applyDropdownValidation(sheet, c.key, c.dropdownOptions, { helperColIdx: columns.length + 50 + idx }); });
   return wb;
 }
 
@@ -250,4 +285,4 @@ async function parseGenericSingleColumnXlsx(buffer) {
 // trên; các hàm dựng workbook RIÊNG của module khác (lib/employeeProfileImport.js, lib/vppExport.js) tự
 // gọi sheet.addRow() trực tiếp, không đi qua buildGenericWorkbook() nên KHÔNG được bảo vệ — export ra để
 // những nơi đó gọi lại đúng 1 luật chung thay vì viết trùng.
-module.exports = { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection, parseGenericSingleColumnXlsx };
+module.exports = { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, USER_IMPORT_COLUMNS, excelFormulaGuard, sanitizeRowForFormulaInjection, parseGenericSingleColumnXlsx, applyDropdownValidation };

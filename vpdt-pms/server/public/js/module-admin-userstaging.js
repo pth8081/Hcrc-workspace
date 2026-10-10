@@ -543,13 +543,9 @@ function renderUsers() {
   const tbody = document.getElementById('userTableBody');
   if (!tbody) return;
 
-  const keyword = (document.getElementById('filterUserKeyword')?.value || '').toLowerCase().trim();
-  const filtered = DB.users.filter(u => {
-    if (!keyword) return true;
-    return (u.username || '').toLowerCase().includes(keyword)
-      || (u.name || '').toLowerCase().includes(keyword)
-      || (u.dept || '').toLowerCase().includes(keyword);
-  });
+  const keywordInputEl = document.getElementById('filterUserKeyword');
+  const keyword = (keywordInputEl?.value || '').trim();
+  const filtered = DB.users.filter(u => matchesAnyKeyword([u.username, u.name, u.dept], keywordInputEl?._multiKeywords, keyword));
 
   const paginationEl = document.getElementById('paginationContainer_user');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('user', 'renderUsers');
@@ -619,6 +615,16 @@ function renderUsers() {
 // Excel, không phải lỗi khi hệ thống đọc lại) — xem thêm cảnh báo lúc xem trước ở
 // renderUsersImportPreview().
 function downloadUserTemplate() {
+  // Dropdown Excel theo danh mục (10/2026, yêu cầu người dùng: "tránh gõ sai chính tả khi làm file") —
+  // GỘP CHUNG cả HO lẫn Siêu Thị vào 1 dropdown duy nhất cho dept/jobtitle (không cascading theo postype
+  // — Excel Data Validation không hỗ trợ "dropdown đổi theo ô khác" đơn giản như dropdown thường; người
+  // dùng đã xác nhận chấp nhận phương án đơn giản này). Validate NGHIỆP VỤ thật khi Nhập vẫn giữ NGUYÊN
+  // ở validateImportedUserRow() (vẫn chặn cứng nếu chọn sai tổ hợp posType/dept) — dropdown chỉ hỗ trợ
+  // gõ đúng chính tả, không thay thế bước kiểm tra đó.
+  const deptDropdownOptions = [...new Set([...(DB.depts || []), ...(DB.stores || [])])];
+  const jobTitleDropdownOptions = [...new Set([...(DB.jobTitles || []), ...((DB.storeJobTitles || []).map(t => t.label))])];
+  const posTypeDropdownOptions = (DB.positionTypes && DB.positionTypes.length) ? DB.positionTypes.map(p => p.key) : ['HO', 'STORE'];
+  const khoiBanDropdownOptions = (DB.deptGroups || []).map(g => g.name);
   downloadXlsxFromServer('user_template.xlsx', 'Mẫu Người Dùng',
     [
       { header: 'username', key: 'username', width: 16, numFmt: '@' },
@@ -626,15 +632,16 @@ function downloadUserTemplate() {
       { header: 'name', key: 'name', width: 22 },
       { header: 'email', key: 'email', width: 24 },
       { header: 'phone', key: 'phone', width: 14 },
-      { header: 'dept', key: 'dept', width: 20 },
-      { header: 'jobtitle', key: 'jobtitle', width: 20 },
-      { header: 'postype', key: 'postype', width: 12 },
+      { header: 'dept', key: 'dept', width: 20, dropdownOptions: deptDropdownOptions },
+      { header: 'jobtitle', key: 'jobtitle', width: 20, dropdownOptions: jobTitleDropdownOptions },
+      { header: 'postype', key: 'postype', width: 12, dropdownOptions: posTypeDropdownOptions },
       { header: 'startdate', key: 'startdate', width: 14 },
       // khoiban (10/2026, Khối/Ban — v24.16) — CHỈ áp dụng khi postype=HO, để trống với Siêu Thị/vị trí
       // tự thêm (khớp đúng readUserFormState()/populateUserKhoiBanOptions() ở module-admin-submissiongroups.js).
-      { header: 'khoiban', key: 'khoiban', width: 18 },
+      { header: 'khoiban', key: 'khoiban', width: 18, dropdownOptions: khoiBanDropdownOptions },
       // permgroups (9/2026) — TÊN Nhóm Phân Quyền (1 hoặc nhiều, phân tách ";"), TUỲ CHỌN — để trống =
-      // user mới không thuộc nhóm nào (giữ nguyên hành vi cũ, mặc định không quyền gì).
+      // user mới không thuộc nhóm nào (giữ nguyên hành vi cũ, mặc định không quyền gì). KHÔNG làm
+      // dropdown vì cột này cho phép NHIỀU giá trị phân tách ";" — dropdown 1-giá-trị không áp dụng được.
       { header: 'permgroups', key: 'permgroups', width: 28 }
     ],
     [
