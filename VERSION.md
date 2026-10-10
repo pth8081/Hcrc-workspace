@@ -1,8 +1,61 @@
 # Phiên bản hiện tại
 
-**25.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.69 (2026-10): Dán nhiều mã vào ô tìm kiếm + dropdown Excel theo danh mục
+
+Theo yêu cầu người dùng (10/2026): (1) các ô tìm kiếm cho phép copy nhiều
+dòng mã từ Excel, dán vào tự động tách và lọc theo tất cả các mã; (2) file
+Excel Tải Mẫu của User/Hồ Sơ Nhân Sự/Hợp Đồng Lao Động/Cơ Cấu Tổ Chức gắn
+dropdown lấy đúng danh mục hệ thống, tránh gõ sai chính tả khi làm file
+hàng loạt.
+
+**Tính năng 1 — dán nhiều mã vào ô tìm kiếm** (12 ô ở 8 module: Vận Hành
+Đặt Hàng/Đăng Ký Xe/Hồ Sơ Nhân Sự/Hợp Đồng Lao Động/Công & Phép/Người
+Dùng/IT Hỗ Trợ/Mua Hàng): `core.js` thêm `splitMultiKeyword()`/
+`matchesAnyKeyword()`/`bindMultiPasteSearchInputs()` — bắt sự kiện `paste`
+ở CAPTURE PHASE để đọc `event.clipboardData` THÔ (Chrome tự nối các dòng
+đã dán bằng dấu cách nếu đọc lại `input.value` sau khi dán, nên phải đọc
+ngay lúc paste), lưu mảng từ khoá vào `el._multiKeywords`. Gõ tay bình
+thường (kể cả cụm có khoảng trắng như tên người) vẫn giữ nguyên hành vi so
+khớp substring cả cụm như cũ — `matchesAnyKeyword()` chỉ bật chế độ khớp-
+OR-nhiều-mã khi có `_multiKeywords`, hoàn toàn tương thích ngược.
+
+**Tính năng 2 — dropdown Excel theo danh mục**: `lib/adminExport.js` thêm
+`applyDropdownValidation(sheet, colKey, options, {helperColIdx})` dùng
+chung — tự chọn literal-list (≤255 ký tự) hoặc cột ẩn + tham chiếu range
+(danh sách dài). Áp dụng cho:
+- **Người Dùng** (`module-admin-userstaging.js::downloadUserTemplate()`):
+  dept/jobtitle gộp CẢ HO lẫn Siêu Thị (union, không cascading theo
+  posType — tránh phức tạp hoá Excel Data Validation), postype (key
+  HO/STORE), khoiban.
+- **Hồ Sơ Nhân Sự** (`lib/employeeProfileImport.js`): legalEntity/
+  specialLaborStatus/currentWorkStatusDetail (từ danh mục catalog) +
+  gender/maritalStatus (enum cố định).
+- **Hợp Đồng Lao Động** (`lib/laborContractImport.js`): dept (route
+  `/template` truyền danh mục thật qua tham số, hàm vẫn chạy bình thường
+  khi gọi không tham số — tương thích test cũ).
+- **Cơ Cấu Tổ Chức** (`lib/orgChartImport.js`): nodeTypeLabel/
+  requiresDeptLabel/posType (enum cố định, luôn có) +
+  departmentRef/jobTitle (gộp HO+Siêu Thị)/jobGrade (chỉ có khi route
+  truyền danh mục).
+
+Dropdown chỉ là GỢI Ý khi làm file — toàn bộ validate nghiệp vụ lúc nhập
+thật (đúng cặp dept↔posType, đúng danh mục...) vẫn giữ nguyên nghiêm ngặt
+như cũ, không bị nới lỏng.
+
+An toàn: grep CSP lại toàn bộ 29 file đã sửa — không có inline handler/
+style mới. Test xác nhận rõ module Người Dùng chỉ bị đụng ở tầng HIỂN THỊ
+(bộ lọc tìm kiếm) — `DB.users` (dữ liệu gốc)/logic tạo-sửa-import tài
+khoản hoàn toàn không đổi. Test mới: `test-multi-paste-search.js` (7 kịch
+bản, paste thật qua clipboard Playwright) + `test-excel-dropdown.js` (4
+kịch bản) + mở rộng `test-hr-profile-import-90fields.js`/
+`test-hr-profile-import-gd1-fields.js`/`test-labor-contract-excel.js`/
+`test-orgchart-import-export.js`. Full regression 74 file test liên quan
+tới mọi module bị đụng tới đều pass (3 fail còn lại xác nhận có sẵn từ
+trước, không liên quan — tái hiện y hệt trên commit trước khi sửa).
 
 ## v25.68 (2026-10): Import Excel Người Dùng — siết thêm 1 lớp test thật cho tính năng sửa dòng lỗi (v25.67)
 

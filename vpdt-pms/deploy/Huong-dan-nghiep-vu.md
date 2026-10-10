@@ -4732,6 +4732,40 @@ làm được nay bị chặn:
 
 ---
 
+## 5g. Đợt cập nhật 10/2026: Dán nhiều mã vào ô tìm kiếm + dropdown Excel theo danh mục
+
+**Dán nhiều mã vào ô tìm kiếm** — 12 ô tìm kiếm ở 8 module (Vận Hành Đặt
+Hàng/Đăng Ký Xe/Hồ Sơ Nhân Sự/Hợp Đồng Lao Động/Công & Phép/Người Dùng/IT
+Hỗ Trợ/Mua Hàng): copy nhiều dòng mã/username từ Excel, dán thẳng vào ô
+tìm kiếm — hệ thống tự tách từng dòng và lọc danh sách theo TẤT CẢ các mã
+đó cùng lúc (khớp 1 trong nhiều mã là đủ), không cần tìm từng mã một. Gõ
+tay bình thường (kể cả cụm có khoảng trắng như tên người) vẫn lọc đúng
+như trước — chỉ khi THỰC SỰ DÁN (Ctrl+V) nhiều dòng mới chuyển sang chế
+độ khớp nhiều mã; gõ thêm 1 ký tự sau khi dán sẽ tự quay lại chế độ tìm
+cụm thường.
+
+**Dropdown Excel theo danh mục hệ thống** — file Excel "Tải Mẫu" của 4
+màn sau giờ có droplist chọn sẵn thay vì ô trống gõ tay tự do, tránh gõ
+sai chính tả khi làm file hàng loạt (ô chưa có giá trị trong droplist vẫn
+cho gõ tay bình thường, không bị khoá cứng):
+- **Người Dùng** (Hệ Thống → Quản Trị → "Tải File Mẫu"): cột Phòng Ban/
+  Chức Danh (gộp cả Văn Phòng lẫn Siêu Thị), Vị Trí Làm Việc (HO/STORE),
+  Khối/Ban.
+- **Hồ Sơ Nhân Sự** (nút "Tải File Mẫu" khi Nhập Excel hàng loạt): cột
+  Giới Tính, Tình Trạng Hôn Nhân, Đơn Vị (Pháp Nhân), Đối Tượng Lao Động
+  Đặc Biệt, Tình Trạng Làm Việc Hiện Tại.
+- **Hợp Đồng Lao Động** (nút "Tải File Mẫu" khi sửa hàng loạt hợp đồng
+  ACTIVE): cột Phòng Ban.
+- **Cơ Cấu Tổ Chức** (nút "Tải File Mẫu" khi nhập hàng loạt cây tổ chức):
+  cột Loại Node, Yêu Cầu Phòng Ban, Vị Trí Làm Việc, Mã Phòng Ban Hệ
+  Thống, Chức Danh, Cấp Bậc.
+
+Dropdown chỉ là GỢI Ý lúc làm file Excel — toàn bộ quy tắc nghiệp vụ khi
+nhập thật (VD đúng cặp phòng ban↔vị trí làm việc của User) vẫn kiểm tra
+nghiêm ngặt như trước, không bị nới lỏng theo giá trị gõ trong file.
+
+---
+
 ## 6. Phân quyền (permission model)
 
 **Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**
