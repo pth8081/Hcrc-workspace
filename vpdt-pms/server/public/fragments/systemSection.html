@@ -267,6 +267,15 @@
         <label class="text-xs font-bold text-indigo-900 ml-3">Đang xem Mức:</label>
         <select id="maNewTier" data-op-change="renderMixedApprovalSection" class="border rounded px-2 py-1 text-xs bg-white font-semibold"></select>
       </div>
+      <!-- Tải Mẫu/Nhập Excel/Xuất Excel (10/2026) — lib/mixedApprovalExcel.js +
+           routes/mixedApprovalExcelImport.js, xem module-workflow.js (MIXED_APPROVAL_EXCEL_CONFIG.STORE_ORDER). -->
+      <div class="flex items-center gap-2 pt-2 flex-wrap border-t border-indigo-200 mt-1">
+        <button type="button" data-op="downloadMixedApprovalTemplate" data-arg0="STORE_ORDER" class="text-indigo-700 text-xs font-bold hover:underline">📥 Tải Mẫu</button>
+        <button type="button" data-op="exportMixedApprovalExcel" data-arg0="STORE_ORDER" class="text-indigo-700 text-xs font-bold hover:underline">📊 Xuất Excel</button>
+        <label class="text-indigo-700 text-xs font-bold hover:underline cursor-pointer">📤 Nhập Excel<input type="file" accept=".xlsx,.csv" class="hidden" data-op-change="onMixedApprovalImportFileChange" data-arg0="STORE_ORDER" data-arg-event="1"></label>
+        <span id="mixedApprovalImportPreview_STORE_ORDER_status" class="text-xs text-indigo-900"></span>
+      </div>
+      <div id="mixedApprovalImportPreview_STORE_ORDER_wrap" class="hidden space-y-1.5"></div>
     </div>
 
     <div class="bg-white rounded border overflow-x-auto">
@@ -331,6 +340,15 @@
         <label class="text-xs font-bold text-indigo-900">Đang xem Mức:</label>
         <select id="ipmaNewTier" data-op-change="renderItPriceWholesaleMixedApprovalSection" class="border rounded px-2 py-1 text-xs bg-white font-semibold"></select>
       </div>
+      <!-- Tải Mẫu/Nhập Excel/Xuất Excel (10/2026) — lib/mixedApprovalExcel.js +
+           routes/mixedApprovalExcelImport.js, xem module-workflow.js (MIXED_APPROVAL_EXCEL_CONFIG.ITPRICE_WHOLESALE). -->
+      <div class="flex items-center gap-2 pt-2 flex-wrap border-t border-indigo-200 mt-1">
+        <button type="button" data-op="downloadMixedApprovalTemplate" data-arg0="ITPRICE_WHOLESALE" class="text-indigo-700 text-xs font-bold hover:underline">📥 Tải Mẫu</button>
+        <button type="button" data-op="exportMixedApprovalExcel" data-arg0="ITPRICE_WHOLESALE" class="text-indigo-700 text-xs font-bold hover:underline">📊 Xuất Excel</button>
+        <label class="text-indigo-700 text-xs font-bold hover:underline cursor-pointer">📤 Nhập Excel<input type="file" accept=".xlsx,.csv" class="hidden" data-op-change="onMixedApprovalImportFileChange" data-arg0="ITPRICE_WHOLESALE" data-arg-event="1"></label>
+        <span id="mixedApprovalImportPreview_ITPRICE_WHOLESALE_status" class="text-xs text-indigo-900"></span>
+      </div>
+      <div id="mixedApprovalImportPreview_ITPRICE_WHOLESALE_wrap" class="hidden space-y-1.5"></div>
     </div>
 
     <div class="bg-white rounded border overflow-x-auto">
