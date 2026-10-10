@@ -20,7 +20,7 @@ const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfM
 const recordCodeGen = require('./recordCodeGen');
 
 function nowVN() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 // Thông báo (fire-and-forget — hàm gọi nó là SYNC, không await được) cho mọi admin ĐANG hoạt động khi 1
@@ -4470,7 +4470,7 @@ function unpublishReportPeriodPdf(user, period) {
   return period;
 }
 
-// Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN') sinh ra (nowVN(), dùng
+// Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) sinh ra (nowVN(), dùng
 // cho mọi task.history[].time) — bản sao server-side của parseVNDateTime() ở public/index.html (LƯU Ý
 // BẢO TRÌ, 2 bản độc lập, phải sửa đồng thời) vì lib/ không dùng chung code với client.
 function parseVNDateTime(str) {
@@ -4931,7 +4931,7 @@ function computeTrainingDocumentProgressUpdate(existing, payload) {
   // THẬT (xem routes/records.js track-progress) khác với giá trị ĐÃ dùng lúc chấm hoàn thành trước đó —
   // không có bảo vệ này, 1 tài liệu cũ (trước khi có pageCount/durationSeconds THẬT, nay = null) sẽ bị
   // "un-complete" oan ngay lượt báo tiến độ TIẾP THEO của người đã hoàn thành thật từ trước.
-  fields.completedAt = (nowCompleted || wasCompleted) ? (existing?.completedAt || new Date().toLocaleString('vi-VN')) : null;
+  fields.completedAt = (nowCompleted || wasCompleted) ? (existing?.completedAt || new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : null;
   return { fields, completedNow: nowCompleted && !wasCompleted };
 }
 

@@ -454,7 +454,7 @@ async function saveVppRegDraft() {
     } else {
       const payload = {
         code: `DK-VPP-${period.code || period.id}-${currentUser.username}-${Date.now()}`,
-        periodId, items, createdAt: new Date().toLocaleString('vi-VN'),
+        periodId, items, createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
         ...extraApprovalFields
       };
       const result = await callCreateAction('vppRegistrations', payload);
@@ -900,7 +900,7 @@ async function createVppPeriod() {
     catalogItems: vppPendingCatalog.items,
     catalogFileUrl: vppPendingCatalog.fileUrl, catalogFileName: vppPendingCatalog.fileName,
     perPersonBudget, deptHeadcounts: collectVppDeptHeadcounts(), deptBudgetRates: collectVppDeptBudgetRates(),
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     customData
   };
 

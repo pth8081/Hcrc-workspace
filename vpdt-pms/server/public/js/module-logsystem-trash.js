@@ -118,7 +118,7 @@ function renderTrashList() {
       <td class="border p-2">${escapeHtml(trashCollectionLabel(entry.collection))}</td>
       <td class="border p-2">${escapeHtml(trashItemLabel(entry))}</td>
       <td class="border p-2">${escapeHtml(entry.deletedByName || entry.deletedBy)}</td>
-      <td class="border p-2">${new Date(entry.deletedAt).toLocaleString('vi-VN')}</td>
+      <td class="border p-2">${new Date(entry.deletedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</td>
       <td class="border p-2 text-center whitespace-nowrap">
         <button type="button" data-op="restoreTrashItem" data-arg0="${entry.trashId}" class="text-emerald-700 font-bold hover:underline mr-3">♻️ Khôi phục</button>
         <button type="button" data-op="permanentlyDeleteTrashItemUI" data-arg0="${entry.trashId}" class="text-red-600 font-bold hover:underline">🗑️ Xóa vĩnh viễn</button>

@@ -43,7 +43,7 @@ const { HttpError } = require('./httpErrors');
 const { isManagerOf } = require('./recordViewScope');
 
 function nowVN() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao — cùng gốc lỗi với applyClockPunch() bên
 // dưới): lấy "ngày" (YYYY-MM-DD) từ 1 Date PHẢI dùng giờ LOCAL của máy chủ (getFullYear/getMonth/getDate)
@@ -168,7 +168,7 @@ function applyClockPunch(existingList, employeeCode, timestampISO, workModelInfo
     // Ngày đã có bản ghi nghỉ phép/công tác (do đơn xin nghỉ đã duyệt) — máy chấm công vẫn có thể quẹt
     // (VD nhân viên ghé qua công ty việc riêng) nhưng KHÔNG ghi đè loại bản ghi đã có, chỉ log lại giờ
     // quẹt vào note để HR biết, tránh biến 1 ngày "LEAVE_PAID" thành "WORK" ngoài ý muốn.
-    record.note = `${record.note ? record.note + '; ' : ''}Có quẹt máy chấm công lúc ${ts.toLocaleString('vi-VN')} (không đổi loại bản ghi)`;
+    record.note = `${record.note ? record.note + '; ' : ''}Có quẹt máy chấm công lúc ${ts.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (không đổi loại bản ghi)`;
     record.updatedAt = nowVN();
     return { record, isNew: !existing };
   }

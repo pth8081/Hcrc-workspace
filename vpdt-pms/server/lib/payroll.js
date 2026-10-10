@@ -47,7 +47,7 @@ const { findActiveContractByEmployeeCode, findContractsByEmployeeCode } = requir
 const { resolveWorkModelForEmployeeCode, findCompletedOffboardingForProfile } = require('./attendance');
 
 function nowVN() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 // Parse ngược chuỗi "HH:MM:SS D/M/YYYY" do nowVN() sinh ra — bản sao độc lập của parseVNDateTime() ở

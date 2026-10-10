@@ -96,7 +96,7 @@ async function doSubmitSubmissionReq(e) {
     fileType: fileType,
     extraFiles: extraFiles,
     customData: customData,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
     currentStep: 1,
     approvalLevel: approvalLevel,
@@ -111,7 +111,7 @@ async function doSubmitSubmissionReq(e) {
         username: currentUser.username,
         action: 'CREATED',
         comment: 'Khởi tạo và trình duyệt tờ trình mới',
-        time: new Date().toLocaleString('vi-VN')
+        time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       }
     ]
   };
@@ -542,7 +542,7 @@ function renderSubmissionReqs() {
         </td>
         <td class="border p-2">${progressBadge}</td>
         <td class="border p-2 text-center">${taskStatusBadge}</td>
-        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${sub.createdAt ? escapeHtml(sub.createdAt) : (sub.id ? escapeHtml(new Date(sub.id).toLocaleString('vi-VN')) : '')}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${sub.createdAt ? escapeHtml(sub.createdAt) : (sub.id ? escapeHtml(new Date(sub.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             // Đang có đề xuất thay thế tệp CHỜ chính người trình xác nhận (xem

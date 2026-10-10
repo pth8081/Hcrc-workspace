@@ -70,7 +70,7 @@ const SCORING_MODES = new Set(['SCORED', 'PASS_FAIL_ONLY']);
 const TEMPLATE_KINDS = new Set(['QA', 'DEDUCTION']);
 
 function nowVN() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 // ===================== Phân quyền (phẳng, làm gọn 11/2026) =====================

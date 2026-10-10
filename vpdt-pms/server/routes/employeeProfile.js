@@ -61,7 +61,7 @@ function requireHrProfileModuleAccess(req, res, next) {
 }
 router.use(requireAuth, blockIfMustChangePassword, requireHrProfileModuleAccess);
 
-// nowVN()/toLocaleString('vi-VN') sinh chuỗi "HH:mm:ss d/M/yyyy" — KHÔNG sort được bằng so sánh chuỗi
+// nowVN()/toLocaleString('vi-VN') sinh chuỗi "HH:mm:ss dd/MM/yyyy" — KHÔNG sort được bằng so sánh chuỗi
 // (localeCompare/</>). 2 helper dưới đây dùng CHUNG cho GET .../history (gộp "Lịch Sử Nhân Sự") để vừa
 // lấy đúng mốc thời gian thật (sort) vừa tách đúng phần "ngày" (hiển thị) từ các trường time dạng này
 // (VD laborContracts[].history[].time, profile.profileEditHistory[].createdAt).
@@ -657,7 +657,7 @@ router.patch('/by-code/:employeeCode/status', async (req, res) => {
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
       employeeProfile.assertValidManualStatusTransition(profile.status, req.body?.status);
       profile.status = req.body.status;
-      profile.updatedAt = new Date().toLocaleString('vi-VN');
+      profile.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       profile.updatedBy = req.freshUser.username;
       updated = profile;
       return list;

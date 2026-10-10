@@ -241,7 +241,7 @@ async function submitItServiceRenewal(e) {
     note: document.getElementById('itRenewalNote').value.trim(),
     fileUrl: uploaded ? uploaded.fileUrl : null,
     fileName: uploaded ? uploaded.fileName : null,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     customData
   };
 

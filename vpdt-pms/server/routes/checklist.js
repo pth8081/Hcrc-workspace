@@ -443,7 +443,7 @@ router.post('/submissions/:id/delete', requireManage, async (req, res) => {
 });
 
 // ===================== XUẤT BÁO CÁO EXCEL THEO ĐÚNG MẪU GỐC (v21.1) =====================
-// submittedAt lưu dạng nowVN() = "HH:MM:SS D/M/YYYY" (new Date().toLocaleString('vi-VN')) — ngày ở
+// submittedAt lưu dạng nowVN() = "HH:MM:SS DD/MM/YYYY" (new Date().toLocaleString('vi-VN', {...})) — ngày ở
 // TOKEN THỨ 2 (sau dấu cách), KHÔNG phải token đầu (giờ). Chỉ dùng để SO SÁNH khoảng ngày, không cần
 // chính xác múi giờ/giây.
 function parseSubmittedAtDate(submittedAt) {

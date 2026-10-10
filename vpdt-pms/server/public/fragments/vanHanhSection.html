@@ -661,7 +661,7 @@
           </div>
           <div id="itPriceTierSelectWrap">
             <label class="block font-semibold text-gray-600 mb-1">Mức Margin / Chiết Khấu <span class="text-red-500">*</span></label>
-            <select id="itPriceTier" data-op-change="checkItPriceMarginConsistency" class="w-full border p-1.5 rounded bg-white">
+            <select id="itPriceTier" class="w-full border p-1.5 rounded bg-white">
               <option value="">-- Chọn mức áp dụng --</option>
               <option value="MARGIN_LT5">Margin &lt; 5%</option>
               <option value="MARGIN_GTE5">Margin ≥ 5%</option>
@@ -669,9 +669,6 @@
               <option value="DISCOUNT_GT5">Chiết khấu &gt; 5%</option>
             </select>
             <p class="text-gray-400 mt-1">Bắt buộc chọn đúng mức áp dụng cho đề xuất này — mỗi mức có quy trình duyệt riêng do admin cấu hình (không theo phòng ban).</p>
-            <div id="itPriceMarginWarningWrap" class="hidden bg-amber-50 border border-amber-300 text-amber-800 rounded p-2 mt-1.5">
-              ⚠️ <span id="itPriceMarginWarningText"></span>
-            </div>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">📎 Tệp Bảng Giá (.xlsx) <span class="text-red-500">*</span></label>

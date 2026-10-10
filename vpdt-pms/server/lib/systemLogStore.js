@@ -23,7 +23,7 @@ function clip(str, maxLen) {
 function toEntry(row) {
   return {
     id: row.Id,
-    timestamp: new Date(row.CreatedAt).toLocaleString('vi-VN'),
+    timestamp: new Date(row.CreatedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     username: row.Username,
     fullName: row.FullName,
     ipAddress: decryptLogField(row.IpAddress),

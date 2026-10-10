@@ -120,7 +120,7 @@ async function submitOfficeReq(e) {
     items: items,
     reason: reason,
     customData: customData,
-    createdAt: new Date().toLocaleString('vi-VN'),
+    createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
     currentStep: 1,
     history: []
@@ -302,7 +302,7 @@ function renderOfficeReqs() {
         </td>
         <td class="border p-2">${statusBadge}</td>
         <td class="border p-2">${paymentCell}</td>
-        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${o.createdAt ? escapeHtml(o.createdAt) : (o.id ? escapeHtml(new Date(o.id).toLocaleString('vi-VN')) : '')}</td>
+        <td class="border p-2 text-center whitespace-nowrap text-gray-500">${o.createdAt ? escapeHtml(o.createdAt) : (o.id ? escapeHtml(new Date(o.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
         <td class="border p-2 text-center space-x-1">
           ${(() => {
             const primaryBtnHTML = canApprove

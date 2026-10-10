@@ -1451,6 +1451,37 @@ function renderModuleAccessNode(m, prefix, depth, wrapId) {
     ` : ''}
   `;
 }
+// RELOCATED_MODULE_ACCESS_KEYS (10/2026, theo yêu cầu người dùng "tắt module ở Mục 0 nhưng vẫn khó tìm
+// thấy nút bật/tắt đó, cần dễ thấy hơn"): "doc"/"submission"/"contract" là 3 module admin hay cần
+// tắt/bật NHẤT trong Mục 0 (gần người dùng cũ hay hỏi "sao tắt Văn Bản Trình ở đây mà vẫn thấy trên
+// menu" — thực ra họ đang tìm SAI chỗ, tắt nhầm quyền phẳng bên trong module thay vì đúng checkbox Mục
+// 0). Giải pháp ĐÃ XÁC NHẬN: KHÔNG đổi cơ chế (vẫn 1 cây Mục 0 duy nhất quyết định hiển thị menu), chỉ
+// DI CHUYỂN (không sao chép) đúng 3 node checkbox này ra khỏi cây chung, đặt NGAY ĐẦU khối phân quyền
+// riêng của từng module (📂 2. Tài Liệu/📜 3. Văn Bản Trình/📄 4. Hợp Đồng & Giấy Phép ở systemSection.html,
+// xem #moduleAccessAnchor_<key>) — admin mở đúng khối quyền của module nào là thấy ngay công tắc
+// bật/tắt hiển thị menu của module đó, không cần nhớ tìm ở 1 mục khác. Node DOM + mọi id con cháu GIỮ
+// NGUYÊN (chỉ đổi cha trong DOM) nên readModuleAccessFromForm()/populateModuleAccessForm() không cần
+// sửa gì — vẫn querySelector theo id như cũ, bất kể node đang nằm ở đâu trên trang.
+const RELOCATED_MODULE_ACCESS_KEYS = {
+  doc: { anchorId: 'moduleAccessAnchor_doc', noteLabel: '📂 Tài Liệu' },
+  submission: { anchorId: 'moduleAccessAnchor_submission', noteLabel: '📜 Văn Bản Trình' },
+  contract: { anchorId: 'moduleAccessAnchor_contract', noteLabel: '📄 Hợp Đồng & Giấy Phép' }
+};
+function relocateModuleAccessNodes(containerId) {
+  Object.entries(RELOCATED_MODULE_ACCESS_KEYS).forEach(([key, cfg]) => {
+    const anchor = document.getElementById(cfg.anchorId);
+    const wrap = document.getElementById(`${containerId}_wrap_${key}`);
+    if (!anchor || !wrap) return; // Khối phân quyền module đó chưa render trong DOM lúc này — bỏ qua, không lỗi.
+    wrap.insertAdjacentHTML('beforebegin', `<div class="col-span-1 bg-slate-50 px-2 py-1 rounded border text-[11px] text-gray-400 italic">(Đã dời vào khối quyền ${escapeHtml(cfg.noteLabel)} riêng, xem bên dưới)</div>`);
+    // el.innerHTML ở trên LUÔN tạo lại node `wrap` MỚI mỗi lượt gọi hàm này — nhưng `anchor` là phần tử
+    // tĩnh trong systemSection.html, KHÔNG bị xoá/tạo lại, nên vẫn còn giữ node CŨ từ lượt gọi trước đó
+    // (nếu có). Xoá sạch trước khi gắn node mới, tránh tích luỹ nhiều node trùng id qua mỗi lần mở lại
+    // form (switchTab vào Hệ Thống nhiều lần, hoặc renderModuleAccessCheckboxes() gọi lại khi Thêm Mới/
+    // Sửa 1 user khác).
+    anchor.innerHTML = '';
+    anchor.appendChild(wrap);
+  });
+}
 function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', prefix = 'pModuleAccess') {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -1473,6 +1504,7 @@ function renderModuleAccessCheckboxes(containerId = 'moduleAccessCheckboxes', pr
     </div>
   `;
   }).join('');
+  relocateModuleAccessNodes(containerId);
 }
 
 // Tick/bỏ tick HÀNG LOẠT mọi checkbox "0. Quyền Truy Cập Module" nằm TRONG phần tử #wrapId — dùng chung

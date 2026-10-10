@@ -79,6 +79,26 @@ function renderHrAttendanceModule() {
 
 const HAC_VIEW_IDS = { SELF: 'Self', APPROVE: 'Approve', ROSTER: 'Roster', MANAGE: 'Manage' };
 function setHrAttendanceView(view) {
+  // LỖ HỔNG THẬT ĐÃ VÁ (10/2026, phát hiện qua rà soát phân quyền/module-visibility): hàm này TRƯỚC ĐÂY
+  // tin tưởng mù quáng tham số `view`, chỉ renderHrAttendanceModule() (gọi trước đó) mới lọc theo quyền
+  // — gọi THẲNG setHrAttendanceView('MANAGE') (VD từ console trình duyệt, không cần request mạng nào)
+  // bỏ qua hoàn toàn lớp lọc đó, hiện ngay dữ liệu "Quản Lý & Cấu Hình" (chấm công/phép năm TOÀN CÔNG
+  // TY, đã nằm sẵn trong DB.attendanceRecords ở trình duyệt của MỌI user có flat perm hrAttendanceManage
+  // dù Mục 0 hrAttendanceManageTab đang tắt) cho người không có quyền xem view đó. Tự tính lại đúng view
+  // được phép NGAY TRONG hàm này, không phụ thuộc renderHrAttendanceModule() đã lọc trước hay chưa —
+  // cùng khuôn "không tin bất kỳ nơi gọi nào" đã áp cho setBudgetLineTab()/setOperationStoreSubTab()/
+  // setItSupportSubTab()/setInternalSubTab().
+  const hacViewAllowed = {
+    SELF: hasModuleAccess(currentUser, 'hrAttendanceSelf'),
+    APPROVE: hasModuleAccess(currentUser, 'hrAttendanceApproveTab') && canApproveHacLeave(currentUser),
+    ROSTER: hasModuleAccess(currentUser, 'hrAttendanceRosterTab') && (canManageHacRoster(currentUser) || canApproveHacSwap(currentUser)),
+    MANAGE: hasModuleAccess(currentUser, 'hrAttendanceManageTab') && canManageHacAttendance(currentUser)
+  };
+  if (!hacViewAllowed[view]) {
+    const fallback = ['SELF', 'APPROVE', 'ROSTER', 'MANAGE'].find(v => hacViewAllowed[v]);
+    if (!fallback) return; // Không có quyền vào BẤT KỲ view nào trong 4 view — không vẽ/hiện gì cả.
+    view = fallback;
+  }
   activeHrAttendanceView = view;
   Object.entries(HAC_VIEW_IDS).forEach(([v, id]) => {
     document.getElementById(`hacView${id}`).classList.toggle('hidden', v !== view);
@@ -917,7 +937,7 @@ function renderAttendanceClockApiKeysTable() {
       <td class="py-1.5 px-2 font-mono text-gray-500">${escapeHtml(k.keyPrefix)}…</td>
       <td class="py-1.5 px-2">${Array.isArray(k.allowedIps) && k.allowedIps.length ? `<span class="font-mono">${k.allowedIps.map(escapeHtml).join(', ')}</span>` : `<span class="text-gray-400 italic">Mọi IP</span>`}</td>
       <td class="py-1.5 px-2">${k.active === false ? `<span class="text-red-600 font-bold">Đã thu hồi</span>` : `<span class="text-green-700 font-bold">Đang hoạt động</span>`}</td>
-      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN') : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
+      <td class="py-1.5 px-2">${k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '<span class="text-gray-400 italic">Chưa dùng</span>'}</td>
       <td class="py-1.5 px-2">${k.active === false ? '' : `<button type="button" data-op="revokeAttendanceClockApiKeyAction" data-arg0="${k.id}" class="bg-red-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-red-700">Thu hồi</button>`}</td>
     </tr>
   `).join('');

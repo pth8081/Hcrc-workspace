@@ -119,9 +119,14 @@ async function assertDecompressedSizeWithinBudget(buffer) {
 //       đúng "ranh giới dòng trống" (lib/budgetTemplateImport.js dựa vào đó để biết chỗ hết dữ liệu).
 //   options.raw — false (mặc định): mỗi ô đổi sang String như code cũ; true: giữ NGUYÊN giá trị gốc
 //     (lib/trainingPlanImport.js cần phân biệt ô kiểu Date thật với chuỗi text).
+//   options.withNumFmt — false (mặc định, giữ nguyên hành vi cũ cho 5 luồng import khác): true thì
+//     onRow() nhận thêm tham số thứ 3 `numFmts` (mảng numFmt gốc của Excel, cùng vị trí với `cells`,
+//     VD "0.00%") — lib/priceFileParser.js cần nó để biết 1 ô % đang lưu dạng PHÂN SỐ (0.12345) hay số
+//     phần trăm thật (12.345), tránh đọc nhầm/làm tròn sai (xem percentFromFraction() ở priceFileParser.js).
 async function streamFirstSheetRows(buffer, onRow, options = {}) {
   const includeEmpty = !!options.includeEmpty;
   const raw = !!options.raw;
+  const withNumFmt = !!options.withNumFmt;
 
   await assertDecompressedSizeWithinBudget(buffer);
 
@@ -157,10 +162,12 @@ async function streamFirstSheetRows(buffer, onRow, options = {}) {
             continue;
           }
           const cells = [];
+          const numFmts = withNumFmt ? [] : null;
           row.eachCell({ includeEmpty: true }, (cell) => {
             cells.push(cell.value == null ? '' : (raw ? cell.value : String(cell.value)));
+            if (numFmts) numFmts.push(cell.numFmt || null);
           });
-          collected.push({ cells, rowNumber: row.number });
+          collected.push({ cells, numFmts, rowNumber: row.number });
         }
         done = true;
       }
@@ -173,7 +180,7 @@ async function streamFirstSheetRows(buffer, onRow, options = {}) {
   });
 
   for (const r of rows) {
-    if (onRow(r.cells, r.rowNumber) === false) break;
+    if (onRow(r.cells, r.rowNumber, r.numFmts || undefined) === false) break;
   }
 }
 

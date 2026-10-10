@@ -2156,7 +2156,7 @@ router.post('/trainingClasses/:id/submit-test', async (req, res) => {
         elapsedSeconds: timing ? timing.elapsedSeconds : null,
         timeLimitSeconds: timing ? timing.limitSeconds : null,
         overTimeLimit: timing ? timing.overTimeLimit : null,
-        submittedAt: new Date().toLocaleString('vi-VN')
+        submittedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       };
       const insertedSubmission = await insertRecord('trainingTestSubmissions', submission);
       // Đợt 10 — CHỈ ghi kết quả Đạt/Không Đạt của LỚP HỌC ngay khi bài test KHÔNG có câu Nghị Luận nào
@@ -3381,9 +3381,9 @@ async function syncOperationWorkItemAncestors(parentWorkItemId, sourceType, sour
       // Mirror updateOperationWorkItemProgress(): completedAt chỉ server tự set lúc chuyển
       // DANG_NGHIEM_THU (dùng tính "Dự Kiến Nghiệm Thu") — cha cascade tự động cũng cần mốc này, không
       // chỉ công việc lá tự tay Nộp Nghiệm Thu mới có.
-      if (newStatus === 'DANG_NGHIEM_THU' && !item.completedAt) item.completedAt = new Date().toLocaleString('vi-VN');
+      if (newStatus === 'DANG_NGHIEM_THU' && !item.completedAt) item.completedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       item.history = item.history || [];
-      item.history.push({ action: `STATUS_${newStatus}`, by: 'system', byName: 'Hệ thống (tự động)', time: new Date().toLocaleString('vi-VN') });
+      item.history.push({ action: `STATUS_${newStatus}`, by: 'system', byName: 'Hệ thống (tự động)', time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) });
       return item;
     });
     currentParentId = parent.parentWorkItemId;
@@ -5123,8 +5123,8 @@ router.post('/laborContracts/:id/activate', async (req, res) => {
       if (otherActive) {
         await withLockedRecordForCollection('laborContracts', otherActive.id, (item) => {
           item.status = 'SUPERSEDED';
-          item.history.push({ action: 'SUPERSEDED', by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN'), detail: `Tự đóng do hợp đồng ${activated.code} được kích hoạt` });
-          item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
+          item.history.push({ action: 'SUPERSEDED', by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), detail: `Tự đóng do hợp đồng ${activated.code} được kích hoạt` });
+          item.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); item.updatedBy = freshUser.username;
           return item;
         });
       }
@@ -5176,8 +5176,8 @@ router.post('/laborContracts/:id/status', async (req, res) => {
         item.terminationDate = req.body.terminationDate || new Date().toISOString().slice(0, 10);
         item.terminationReason = req.body.terminationReason ? String(req.body.terminationReason).trim().slice(0, 300) : null;
       }
-      item.history.push({ action: req.body.status, by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN'), detail: `Chuyển tay sang trạng thái ${req.body.status}` });
-      item.updatedAt = new Date().toLocaleString('vi-VN'); item.updatedBy = freshUser.username;
+      item.history.push({ action: req.body.status, by: freshUser.username, byName: freshUser.name, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), detail: `Chuyển tay sang trạng thái ${req.body.status}` });
+      item.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); item.updatedBy = freshUser.username;
       return item;
     });
     logLaborContractAction(req, freshUser, 'STATUS_CHANGE', result.code || String(itemId), `Đổi trạng thái hợp đồng [${result.code || itemId}] -> ${result.status}`);
@@ -5412,7 +5412,7 @@ router.post('/leaveBalances/:id/adjust', async (req, res) => {
     if (!Number.isFinite(totalDays) || totalDays < 0 || totalDays > 60) throw new HttpError(400, 'Tổng số ngày phép không hợp lệ');
     const result = await withLockedRecordForCollection('leaveBalances', itemId, (item) => {
       item.totalDays = totalDays;
-      item.updatedAt = new Date().toLocaleString('vi-VN');
+      item.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       return item;
     });
     res.json({ ok: true, item: result });

@@ -1,8 +1,124 @@
 # Phiên bản hiện tại
 
-**25.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.55 (2026-10-10): Rà soát toàn hệ thống module/tab/sub-tab — vá 1 lỗ hổng Lương
+
+Người dùng báo trên server thật (production — CHƯA nhận code v25.54, PR còn đang chờ merge do xung đột)
+vẫn thấy module/tab/sub-tab "chưa chọn vẫn không ẩn", không nhớ rõ module nào, yêu cầu tự rà soát lại toàn
+bộ. Dispatch 4 agent song song (đọc code, không sửa) phủ hết các cụm module còn lại chưa kiểm trong đợt
+v25.54 (Hành Chính: Đặt Phòng Họp/Đăng Ký Xe/VPP/Đồng Phục/Giấy Phép; Văn Bản & Tác Nghiệp: Tài Liệu/Văn
+Bản Trình/Hợp Đồng/Biên Bản Họp/Công Việc; Tổng Hợp/Hỗ Trợ IT/Truyền Thông Nội Bộ+9 tab LMS/Báo Cáo Định
+Kỳ; Nhân Sự: Hồ Sơ/HĐLĐ/Lương/Lifecycle/Cơ Cấu Tổ Chức + Mua Hàng/BAS) — tìm đúng 1 lỗ hổng mới, cùng lớp
+lỗi với `setHrAttendanceView()` đã vá ở v25.54 (hàm switcher không tự validate, chỉ wrapper render lọc
+trước):
+
+- **`setHrPayrollView()` (`module-luong.js`) không tự kiểm tra quyền** — chỉ `renderHrPayrollModule()`
+  (nơi gọi bình thường, lúc chuyển tab) tự tính `canManageView`/`canSelfView` rồi ẩn/hiện nút; bản thân
+  hàm switcher chỉ gán `hrpActiveView = view` rồi vẽ thẳng bảng kỳ lương nếu `view !== 'SELF'`. Gọi trực
+  tiếp `setHrPayrollView('MANAGE')` (vd qua console, bỏ qua nút `btnHrpViewManage` đã ẩn) vẫn vẽ ra
+  `DB.payrollPeriods` — dữ liệu lương TOÀN CÔNG TY — dù user không có `hrPayrollManage`/`hrPayrollApprove`
+  hoặc Mục 0 `hrPayrollManageTab` đã tắt. **Mức độ: Nghiêm trọng** (dữ liệu lương nhạy cảm nhất hệ thống).
+  Đã thêm tự-kiểm-tra NGAY TRONG hàm (cùng khuôn `setBudgetLineTab()`/`setHrAttendanceView()`): tính lại
+  `canManageView`/`canSelfView`, nếu `view` yêu cầu không hợp lệ thì tự chuyển sang view còn lại được
+  phép, nếu CẢ 2 đều bị khoá thì ẩn hết UI và dừng (không vẽ dữ liệu).
+
+Tất cả module/sub-tab khác được 4 agent kiểm tra đều ĐÃ tự-validate đúng chuẩn từ các đợt vá trước (v24.74
+→ v25.54) — không có gap nào khác. Lưu ý quan trọng đã nói rõ với người dùng: production CHƯA nhận bất kỳ
+code nào của v25.54 (PR #307 còn xung đột merge chưa xử lý, và production tự redeploy thủ công), nên những
+gì quan sát được trên production trước khi merge+deploy đợt này là hành vi CŨ của các lỗi đã vá, không
+phải lỗi mới phát sinh.
+
+Test mới: 3 case F1-F3 trong `tests/test-permission-batch-oct2026.js` (giờ 17/17), mirror đúng mẫu E1-E3
+(`setHrAttendanceView`). Full regression các test Lương liên quan (`test-payroll*.js`,
+`test-audit-nhansu-congphep-luong.js`, `test-attendance-records-scope.js`) không phát sinh lỗi mới.
+
+## v25.54 (2026-10-09): 4 vấn đề phân quyền (2 ảnh người dùng) + 1 lỗ hổng phát hiện thêm qua rà soát
+
+Người dùng gửi 2 ảnh + mô tả 4 vấn đề về phân quyền/hiển thị menu, yêu cầu phân tích + đưa phương án +
+demo + xác nhận trước khi triển khai (qua `AskUserQuestion`, 3 lựa chọn: tự động cập nhật ngay không cần
+F5; chỉ sửa chỗ đặt nút bật/tắt; mở rộng rà soát sang Ngân Sách + Công & Phép). Sau khi xác nhận, triển
+khai đủ 5 mục:
+
+1. **Phân quyền cho user ĐANG LOGIN không có hiệu lực ngay (phải F5/đăng nhập lại)** — tách khối ẩn/hiện
+   nav cấp 1 trong `finishLogin()` ra hàm riêng `applyNavVisibility(user)` (`public/js/core.js`).
+   `runApprovalPollTick()` (poll ~20s có sẵn) giờ tự so `permsFingerprintFor()` của `currentUser` TRƯỚC/
+   SAU mỗi lượt `initDatabase({silent:true})` — phạm vi quyền của CHÍNH người đang đăng nhập vừa đổi (admin
+   vừa cấp/thu hồi quyền) thì gán lại `currentUser` bằng bản ghi mới nhất trong `DB.users` + gọi lại
+   `applyNavVisibility()` ngay lập tức, không cần F5.
+2. **Bỏ hẳn cảnh báo đối chiếu % Margin/Chiết Khấu khi import Excel ở Phê Duyệt Giá Bán Buôn** — xoá
+   `checkItPriceMarginConsistency()` + 3 hàm phụ (`parseItPriceMarginNumber`/`itPriceTierWrongSideCount`/
+   `itPriceColumnKeyForTier`) và khối `#itPriceMarginWarningWrap` (`module-itsupport-price.js`/
+   `vanHanhSection.html`) — dropdown `#itPriceTier` (mức Margin/Chiết Khấu) VẪN GIỮ (vẫn cần cho routing
+   quy trình duyệt theo tier), chỉ bỏ bước đối chiếu số liệu. Tính năng gán cột Margin/Chiết Khấu cho Mẫu
+   Giá (`pickMarginColumnKey()`) vẫn giữ, chỉ sửa lại mô tả cho đúng (không còn nhắc tới cảnh báo tự động).
+3. **Module/tab bị tắt ở "Mục 0: Quyền Truy Cập Module" nhưng khó tìm thấy công tắc bật/tắt** — checkbox
+   của 3 module hay cần tắt/bật nhất (Tài Liệu/Văn Bản Trình/Hợp Đồng) nay DI CHUYỂN (không sao chép,
+   không đổi cơ chế gác quyền) ra khỏi cây Mục 0 chung, đặt NGAY ĐẦU khối phân quyền riêng của từng module
+   trong Hệ Thống → Phân Quyền (`relocateModuleAccessNodes()`, `module-admin.js` + 3 anchor
+   `#moduleAccessAnchor_doc/submission/contract` trong `systemSection.html`) — để lại 1 dòng ghi chú ngắn
+   ở vị trí cũ trỏ sang chỗ mới.
+4. **Nút "Phê Duyệt" (Approval Hub) ẩn sai cho vài người thật sự có hồ sơ chờ duyệt** —
+   `canAccessApprovalHub()` (`core.js`) thiếu 2 nhánh: approver trong `paymentDeptWorkflows` (Thanh Toán)
+   và 2 flag `itPriceEmergencyRejectApproveWholesale`/`Retail` (duyệt khẩn cấp Phê Duyệt Giá).
+5. **[Phát hiện thêm qua rà soát mở rộng Công & Phép]** `setHrAttendanceView()` (`module-conghop.js`)
+   trước đây tin tưởng mù quáng tham số `view` — gọi thẳng (console/code khác) vẫn vẽ được view "Quản Lý"
+   (dữ liệu chấm công/phép năm company-wide) dù Mục 0 `hrAttendanceManageTab` đã tắt, CHỈ `renderHrAttendanceModule()`
+   (nơi gọi bình thường) mới lọc trước. Đã thêm tự-kiểm-tra NGAY TRONG hàm, cùng khuôn
+   `setBudgetLineTab()`/`setOperationStoreSubTab()`. Vá SÂU HƠN ở tầng server
+   (`lib/recordViewScope.js`): `canViewEmployeeAttendanceRecord()`/`canViewLeaveRequest()`/
+   `canViewShiftRoster()`/`canViewShiftSwapRequest()` trước đây chỉ check flat perm
+   (`hrAttendanceManage`/`hrShiftRosterManage`/`hrShiftSwapApprove`), KHÔNG check Mục 0 tương ứng — nghĩa
+   là tắt Mục 0 chỉ chặn được MENU, dữ liệu company-wide vẫn nằm sẵn trong `DB.attendanceRecords` ở trình
+   duyệt (gọi thẳng `setHrAttendanceView('MANAGE')` từ console là xem được). Thêm 3 helper
+   `canSeeHacManageAll()`/`canSeeHacRosterManageAll()`/`canSeeHacSwapApproveAll()` AND thêm điều kiện
+   `hasModuleAccessServer(user, 'hrAttendanceManageTab'/'hrAttendanceRosterTab')`. (Ngân Sách đã tự kiểm
+   tra đúng từ trước — `setBudgetLineTab()` tự xác thực lại mỗi lần gọi, không có gap.)
+
+Test mới `tests/test-permission-batch-oct2026.js` (14/14) phủ cả 4 mục chính + regression test bổ sung 1
+case cho `tests/test-attendance-records-scope.js` (7/7, mục 5). Full regression ~40 file liên quan
+(approval-hub/muc0/itprice/payment/attendance/conghop/csp) không phát sinh lỗi mới — 3 case fail sẵn có ở
+`test-manager-subordinate-view-scope.js` (nhánh Tài Liệu) xác nhận KHÔNG liên quan đợt này (đã `git stash`
+đối chứng, lỗi giống hệt khi bỏ toàn bộ thay đổi).
+
+## v25.53 (2026-10-09): 4 phản hồi người dùng — %/mã NCC+chính tả PDF/số lượng-thành tiền/định dạng ngày
+
+Người dùng gửi 4 phản hồi (2 ảnh chụp + mô tả), yêu cầu phân tích + báo cáo phương án trước khi làm. Sau
+khi phân tích, người dùng còn gửi kèm 1 file PDF mẫu "HD mua chung" thật (file NCC thứ 2, khác mẫu gốc hệ
+thống đang hỗ trợ) để xác minh đúng lỗi — triển khai cả 4 sau khi xác nhận:
+
+1. **Import Excel ở Phê Duyệt Giá Bán Buôn/Bán Lẻ, cột % bị "làm tròn"** — thực chất là THIẾU NHÂN 100:
+   Excel lưu ô định dạng % dưới dạng PHÂN SỐ gốc (`cell.value = 0.12345` cho ô hiển thị "12.345%"),
+   `lib/xlsxSafeRead.js` trước đây chỉ lấy `cell.value`, bỏ qua `numFmt`. Thêm tuỳ chọn mới
+   `{withNumFmt:true}` cho `streamFirstSheetRows()`/`streamAllSheetsRows()` (mặc định `false`, KHÔNG đụng
+   5 luồng import khác dùng chung file này), `lib/priceFileParser.js` nhân lại ×100 đúng cho ô % (dùng
+   `toFixed(9)` loại nhiễu bit cuối phép nhân dấu phẩy động, không làm tròn số liệu thật).
+2. **Đọc PDF phiếu đặt hàng NCC tự động điền form (Vận Hành > Đặt Hàng Siêu Thị/HO) — mẫu NCC thứ 2 "HD
+   mua chung"**: (a) không lấy được Mã NCC vì mẫu này ghi nhãn đầy đủ "Nhà cung cấp:" thay vì viết tắt
+   "NCC:" — thêm `poFindValueAfterAnyLabel()` thử lần lượt nhiều nhãn (mẫu gốc vẫn khớp ngay ở nhãn đầu,
+   không đổi hành vi); (b) lỗi chính tả sau import — mẫu 2 dùng CÙNG họ phông chữ Việt kiểu cũ nhưng có
+   vài ký tự/từ mojibake KHÁC mẫu gốc, bổ sung thêm vào `PO_CHAR_FIXED_MAP`/`PO_WORD_FIXUPS`
+   (`module-vanhanh.js`, CHỈ THÊM không đổi bảng cũ).
+3. **Số lượng/thành tiền sai khi giá trị lớn (PDF NCC)** — `poParseMoney()` cũ giữ nguyên dấu chấm (coi
+   là thập phân), "100.000.000" (2+ dấu chấm) ra NaN → về 0. Thay bằng `poParseVNNumber()`: tự nhận diện
+   dấu phân cách NGHÌN (theo sau đúng 3 chữ số) khác dấu THẬP PHÂN (theo sau 1-2 chữ số) — đúng cho CẢ 2
+   kiểu dấu NCC có thể dùng (mẫu gốc hay mẫu "HD mua chung" dùng phẩy làm nghìn).
+4. **Định dạng ngày giờ hệ thống phải là dd/mm/yyyy** — vi-VN locale vốn đã đúng thứ tự ngày/tháng, chỉ
+   thiếu đệm số 0 (`"8:5:3 9/10/2026"` thay vì `"08:05:03 09/10/2026"`). Theo xác nhận của người dùng
+   ("làm toàn bộ hệ thống"), thêm option `{day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit',
+   minute:'2-digit', second:'2-digit', hour12:false}` (bản `toLocaleDateString` chỉ cần day/month/year)
+   cho MỌI lệnh `.toLocaleString('vi-VN')`/`.toLocaleDateString('vi-VN')` áp dụng trên Date — ~68 điểm gọi
+   (49 server `lib/*.js`/`routes/*.js`, 19 client `public/js/*.js` sau khi loại trừ các điểm format SỐ
+   TIỀN/SỐ LƯỢNG dùng chung cú pháp). 2 điểm `toLocaleDateString('en-CA')` (so sánh `DATE_RE` server) giữ
+   nguyên, không đụng.
+
+File fixture PDF thật `tests/fixtures/operation-order-po-sample-2.pdf` (người dùng cung cấp, không chứa
+dữ liệu nhạy cảm ngoài tên NCC/địa chỉ/mặt hàng công khai trên phiếu) dùng cho test hồi quy mới
+`tests/test-operation-order-pdf-hdmuachung.js` (24/24) — cùng `tests/test-pricefile-percent-format.js`
+(6/6) và `tests/test-date-format-zero-padding.js` (3/3). Full regression ~25 file liên quan (priceFile/
+object-catalog/vpp/budget/payment/uniform/office/vanhanh) không phát sinh lỗi mới.
 
 ## v25.52 (2026-10-09): 5 phản hồi người dùng (ảnh chụp) — Ngành Hàng/Phê Duyệt Hub/Excel/Email/CSP
 

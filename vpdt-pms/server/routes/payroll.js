@@ -83,7 +83,7 @@ router.put('/rate-config', requireManage, async (req, res) => {
       taxBrackets: Array.isArray(body.taxBrackets) && body.taxBrackets.length ? body.taxBrackets.map(b => ({
         upTo: b.upTo === null || b.upTo === '' ? null : Number(b.upTo), rate: Number(b.rate)
       })) : payroll.defaultRateConfig().taxBrackets,
-      updatedAt: new Date().toLocaleString('vi-VN'), updatedBy: req.freshUser.username
+      updatedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), updatedBy: req.freshUser.username
     });
     for (const [k, v] of Object.entries(next)) {
       if (['taxBrackets', 'updatedAt', 'updatedBy'].includes(k)) continue;
@@ -209,10 +209,10 @@ router.post('/periods/:id/calculate', requireManage, async (req, res) => {
         p.employeeCount = computedList.length; p.skippedCount = skippedList.length;
         p.totalGross = Math.round(totalGross); p.totalNet = Math.round(totalNet);
         p.history = [...(p.history || []), {
-          action: 'CALCULATED', by: req.freshUser.username, byName: req.freshUser.name, time: new Date().toLocaleString('vi-VN'),
+          action: 'CALCULATED', by: req.freshUser.username, byName: req.freshUser.name, time: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
           detail: `Tính lương tự động: ${computedList.length} nhân viên${skippedList.length ? `, bỏ qua ${skippedList.length} người (xem chi tiết)` : ''}`
         }];
-        p.updatedAt = new Date().toLocaleString('vi-VN'); p.updatedBy = req.freshUser.username;
+        p.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); p.updatedBy = req.freshUser.username;
         return p;
       });
       return { updated: updatedPeriod, skipped: skippedList, computedCount: computedList.length };
@@ -365,10 +365,10 @@ router.get('/my-payslips/:periodId', async (req, res) => {
     if (!period || period.status !== 'PUBLISHED' || !payslip) return res.status(404).json({ error: 'Không tìm thấy phiếu lương' });
     if (!payslip.viewedByEmployeeAt) {
       await withLockedRecordById('payslips', payslip.id, (item) => {
-        if (!item.viewedByEmployeeAt) item.viewedByEmployeeAt = new Date().toLocaleString('vi-VN');
+        if (!item.viewedByEmployeeAt) item.viewedByEmployeeAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         return item;
       });
-      payslip.viewedByEmployeeAt = new Date().toLocaleString('vi-VN');
+      payslip.viewedByEmployeeAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     }
     res.json({ payslip, period: { periodName: period.periodName, periodMonth: period.periodMonth, periodYear: period.periodYear, publishedAt: period.publishedAt } });
   } catch (err) { sendCatchError(res, err, `GET /api/payroll/my-payslips/${req.params.periodId}`); }
