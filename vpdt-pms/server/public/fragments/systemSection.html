@@ -177,8 +177,19 @@
              openWorkflowTemplateForm()/closeWorkflowTemplateForm() (module-itsupport-tier.js), KHÔNG đổi
              logic lưu/sửa/xoá mẫu quy trình, chỉ đổi ẩn/hiện khung. editWorkflowTemplate() (nút "Sửa" ở
              bảng bên dưới) tự mở lại form này. -->
-        <button type="button" data-op="openWorkflowTemplateForm" id="btnWorkflowTemplateNew" class="bg-emerald-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">+ Thêm Mẫu Quy Trình</button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- Tải Mẫu/Nhập/Xuất Excel (10/2026) — xem buildWorkflowStepsTemplateWorkbook()/
+               parseWorkflowStepsFile() (lib/workflowStepsExcel.js) + exportWorkflowStepsExcel()/
+               onWorkflowStepsImportFileChange()/confirmWorkflowStepsImport() (module-itsupport-tier.js).
+               KHÔNG đổi logic thêm/sửa/xoá mẫu hiện có — chỉ thêm đường nhập/xuất hàng loạt qua Excel. -->
+          <button type="button" data-op="downloadWorkflowStepsTemplate" class="text-gray-600 font-bold text-[11px] hover:underline">⬇️ Tải Mẫu</button>
+          <button type="button" data-op="exportWorkflowStepsExcel" class="text-gray-600 font-bold text-[11px] hover:underline">📊 Xuất Excel</button>
+          <label class="text-gray-600 font-bold text-[11px] hover:underline cursor-pointer">📥 Nhập Excel<input type="file" accept=".xlsx" class="hidden" data-op-change="onWorkflowStepsImportFileChange" data-arg-event="0"></label>
+          <button type="button" data-op="openWorkflowTemplateForm" id="btnWorkflowTemplateNew" class="bg-emerald-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">+ Thêm Mẫu Quy Trình</button>
+        </div>
       </div>
+      <div id="workflowStepsImportStatus" class="text-[11px] text-gray-500"></div>
+      <div id="workflowStepsImportPreview" class="hidden"></div>
 
       <div id="workflowTemplateFormWrap" class="hidden">
       <form data-op-submit="saveWorkflowTemplate" class="bg-white p-3 rounded border space-y-3">
