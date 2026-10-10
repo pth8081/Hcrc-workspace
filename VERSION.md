@@ -1,8 +1,47 @@
 # Phiên bản hiện tại
 
-**25.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.65 (2026-10): Tải trước nền sau đăng nhập (prefetch lazy modules)
+
+Theo báo cáo người dùng: "thỉnh thoảng bấm vào module vẫn có quyền lại báo
+không có quyền kết nối, bấm vài lần lại được". Điều tra xác nhận ĐÂY KHÔNG
+PHẢI lỗi phân quyền — module hiện tại được tải theo 3 lớp lazy riêng (file
+JS/khung HTML/dữ liệu riêng theo nhóm, xem Lớp 1/2/3a ở các bản trước), chỉ
+tải thật khi người dùng mở ĐÚNG module đó LẦN ĐẦU trong phiên; nếu đúng lúc
+đó gặp lỗi mạng thoáng qua, `switchTab()` hiện "⛔ Không tải được nội dung
+mô-đun..." — dễ bị hiểu nhầm thành lỗi quyền vì cũng chặn không cho vào
+module, dù bản chất là lỗi tải. Bấm lại vài lần thường qua được vì cache
+lỗi tự xoá, lần sau tự thử tải lại.
+
+- **`prefetchLazyTabResources()` (core.js)**: gọi ĐÚNG 1 lần ngay sau
+  `finishLogin()`, KHÔNG `await` (không trì hoãn màn hình chính dù 1ms).
+  Âm thầm tải TRƯỚC — tuần tự từng module 1, không bắn song song toàn bộ,
+  đỡ dồn tải mạng ngay sau đăng nhập — file JS/khung HTML/dữ liệu lazy của
+  MỌI module người dùng CÓ quyền vào (`TAB_PREFETCH_ACCESS`, tái dùng đúng
+  các hàm `canAccess*Module()` sẵn có, không chép lại logic quyền). Module
+  người dùng KHÔNG có quyền thì KHÔNG bị tải thừa.
+- Tái dùng NGUYÊN VẸN `loadTabModuleGroups()`/`loadTabSectionHtml()`/
+  `loadTabData()` đã có (cache theo Promise) — sau khi prefetch xong,
+  `switchTab()` thấy mọi thứ đã sẵn sàng nên vào module NGAY, không còn
+  phải gọi mạng lần đầu lúc người dùng thao tác thật nữa.
+- Lỗi mạng ở 1 module khi prefetch chỉ bỏ qua đúng module đó (log console,
+  KHÔNG alert) — không tệ hơn hành vi cũ, chỉ là không còn được lợi "đã
+  tải sẵn" cho riêng module đó; người dùng bấm tay vào vẫn tự thử tải lại
+  bình thường.
+- Viết test mới `test-prefetch-after-login.js` (11 kịch bản) xác nhận: (1)
+  admin không bấm gì vẫn tự prefetch đủ mọi nhóm lazy, mỗi nhóm đúng 1 lần;
+  (2) bấm tay vào tab đã prefetch không gọi lại mạng; (3) user không có
+  quyền riêng thì KHÔNG prefetch thừa cho module cần quyền, vẫn prefetch
+  đúng cho module mở mặc định. Chạy lại toàn bộ test liên quan lazy-load/
+  login cache (test-lazy-data-groups/test-lazy-load-all-tabs/
+  test-login-cache-first-render/test-notif-badge-polling/test-approval-hub)
+  — không regression.
+
+Không có thay đổi schema/`.env`/dependencies/route server nào — chỉ sửa
+đúng 1 file client `public/js/core.js`, copy code + `pm2 restart` là đủ.
 
 ## v25.64 (2026-10): Vá 15 phát hiện đợt rà soát v25.51→v25.63 (5 Cao + 3 TB + 5 Thấp)
 

@@ -9062,6 +9062,56 @@ function applyNavVisibility(user) {
   document.getElementById('btnNghiepVuTab').classList.toggle('hidden', !canAccessNghiepVuModule(user));
 }
 
+// TAB_PREFETCH_ACCESS (đợt "tải trước nền sau đăng nhập", 10/2026 — xem prefetchLazyTabResources() ngay
+// dưới): bảng tra tabName -> hàm kiểm tra quyền, TÁI DÙNG NGUYÊN VẸN đúng các hàm canAccess*Module()
+// switchTab() đã dùng để quyết có cho vào tab hay không (không chép lại logic quyền ở đây — sửa quyền 1
+// module chỉ cần sửa đúng 1 hàm canAccess*Module() gốc, bảng này tự động theo). CHỈ liệt kê tab THỰC SỰ có
+// tài nguyên lazy cần tải trước (file module-*.js/khung HTML/dữ liệu riêng — hợp từ TAB_MODULE_GROUPS có
+// mảng khác rỗng ∪ TAB_SECTION_FRAGMENT ∪ TAB_DATA_GROUPS, xem 3 bảng ở đầu file) — 'dashboard'/
+// 'approvalHub' không có gì lazy nên không cần mặt ở đây.
+const TAB_PREFETCH_ACCESS = {
+  doc: canAccessDocModule, task: canAccessTaskModule, internal: canAccessInternalModule,
+  submission: canAccessSubmissionModule, contract: canAccessContractModule, meeting: canAccessMeetingModule,
+  minutes: canAccessMeetingMinutesModule, car: canAccessCarModule, vpp: canAccessVppModule,
+  uniform: canAccessUniformModule, license: canAccessLicenseModule, periodicReport: canAccessPeriodicReportModule,
+  office: (user) => canAccessOfficeModule(user) || canAccessPaymentModule(user),
+  reports: canAccessReportsModule, hr: canAccessHrModule, orgChart: canAccessOrgChartModule,
+  hrLifecycle: canAccessHrLifecycleModule, hrProfile: canAccessHrProfileModule,
+  hrReport: () => hrpfCanViewReports(), hrContract: canAccessHrContractModule,
+  hrAttendance: canAccessHrAttendanceModule, hrPayroll: canAccessHrPayrollModule,
+  budget: canAccessBudgetModule, vanHanh: canAccessOperationModule,
+  system: (user) => !!user.perms?.admin, itSupport: canAccessItSupportModule,
+  checklist: canAccessChecklistModule, muaHang: canAccessPurchasingModule, nghiepVu: canAccessNghiepVuModule
+};
+
+// prefetchLazyTabResources() — gọi ĐÚNG 1 LẦN ngay sau finishLogin() (fire-and-forget, KHÔNG await — không
+// trì hoãn màn hình chính dù chỉ 1ms). Âm thầm tải TRƯỚC (module-*.js + khung HTML + dữ liệu lazy riêng,
+// xem chú thích TAB_DATA_GROUPS/TAB_SECTION_FRAGMENT/TAB_MODULE_GROUPS ở đầu file) cho MỌI module người
+// dùng CÓ quyền vào — tuần tự từng tab 1 (KHÔNG bắn song song toàn bộ, đỡ dồn tải mạng ngay sau đăng nhập,
+// nhất là mạng yếu/di động). TÁI DÙNG NGUYÊN VẸN loadTabModuleGroups()/loadTabSectionHtml()/loadTabData()
+// switchTab() đã dùng (kết quả cache theo Promise, idempotent) — sau khi prefetch xong, switchTab() gọi lại
+// đúng 3 hàm này sẽ thấy isTabModuleGroupsSettled()/isSectionHtmlSettled()/isTabDataGroupsSettled() đều
+// true nên vào tab NGAY, không còn phải gọi mạng lần đầu nữa lúc người dùng thao tác thật — tránh đúng lỗi
+// "⛔ Không tải được nội dung mô-đun..." do mạng chập chờn đúng lúc bấm vào 1 tab lần đầu trong phiên (báo
+// cáo người dùng 10/2026: "thỉnh thoảng bấm vào module vẫn có quyền lại báo không có quyền kết nối, bấm
+// vài lần lại được" — té ra không phải lỗi quyền, mà do đúng lỗi tải lần đầu này).
+// Lỗi mạng ở 1 tab CHỈ bỏ qua đúng tab đó (log console, KHÔNG alert — người dùng không hề biết đợt tải nền
+// này đang chạy, không nên làm phiền) — 3 hàm tải trên đã tự xoá cache khi lỗi nên lần sau người dùng bấm
+// tay vào đúng tab đó vẫn tự thử tải lại bình thường (không tệ hơn hành vi cũ, chỉ là KHÔNG còn được lợi
+// "đã tải sẵn" cho riêng tab đó).
+async function prefetchLazyTabResources() {
+  if (!currentUser) return;
+  for (const tabName of Object.keys(TAB_PREFETCH_ACCESS)) {
+    try {
+      if (!TAB_PREFETCH_ACCESS[tabName](currentUser)) continue;
+      if (isTabModuleGroupsSettled(tabName) && isSectionHtmlSettled(tabName) && isTabDataGroupsSettled(tabName)) continue;
+      await Promise.all([loadTabModuleGroups(tabName), loadTabSectionHtml(tabName), loadTabData(tabName)]);
+    } catch (err) {
+      console.error('prefetchLazyTabResources: không tải trước được tab', tabName, err);
+    }
+  }
+}
+
 function finishLogin(user) {
   currentUser = user;
   migrateDashboardHiddenCardsFromLocalStorage();
@@ -9084,6 +9134,7 @@ function finishLogin(user) {
   openTakeTestFromQueryParam();
   gotoApprovalResultRecordFromQueryParam();
   applyPwaShortcutParam();
+  prefetchLazyTabResources(); // Không await — chạy ngầm, không trì hoãn giao diện chính (xem chú thích hàm).
 }
 
 // Sau khi bấm link "🔗 Xem trực tiếp hồ sơ" trong email "Kết quả duyệt" (xem buildApprovalResultLink()
