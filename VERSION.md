@@ -1,8 +1,41 @@
 # Phiên bản hiện tại
 
-**25.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.68 (2026-10): Import Excel Người Dùng — siết thêm 1 lớp test thật cho tính năng sửa dòng lỗi (v25.67)
+
+Theo yêu cầu người dùng: "Import user rất quan trọng, xử lý cẩn thận, lần
+trước sau khi sửa import user là không dùng được hệ thống nữa (không đăng
+nhập được) — phải kiểm tra rất kỹ trường hợp này, test kỹ vào."
+
+Tính năng "sửa ngay trong dòng lỗi" ở v25.67 có đúng 1 phần dây nối MỚI chưa
+từng được test qua thao tác DOM thật: các ô input/select trong khung sửa
+dùng `data-op-input`/`data-op-change` (CSP) — 5 kịch bản test cũ của v25.67
+chỉ gọi thẳng hàm JS (`onUsersImportRowFieldEdit()`), chưa chứng minh cơ chế
+CSP thật sự bắt đúng sự kiện gõ/chọn qua chuột-bàn phím.
+
+Đã bổ sung kịch bản test thứ 6 vào `tests/test-user-import-inline-fix.js`
+(`page.selectOption()`/`page.fill()` — thao tác DOM THẬT, không gọi thẳng
+hàm JS): chọn lại Phòng Ban qua `<select>` thật + gõ lại Email/SĐT qua ô
+input thật, xác nhận CSP dispatch đúng, lỗi được xoá, action tự chuyển
+"Thêm", và `confirmUsersImport()` tạo đúng user với dữ liệu đã sửa. 6/6 kịch
+bản pass.
+
+Đã xác minh thêm (không có thay đổi code sản phẩm nào khác ngoài test, nên
+không có rủi ro mới):
+- Chạy lại `tests/test-user-import-login-e2e.js` (2/2 pass) — test chuyên
+  biệt dựng server Express thật + bcrypt thật để xác nhận đúng kịch bản lo
+  ngại của người dùng: user MỚI tạo qua Import Excel đăng nhập được bằng
+  mật khẩu đã gõ trong file; user bị GHI ĐÈ qua Import Excel vẫn đăng nhập
+  được bằng mật khẩu CŨ (không bị đụng).
+- Đối chiếu lại toàn bộ thay đổi code của v25.67: hàm tạo/lưu user thật
+  (`confirmUsersImport()`) không bị sửa — chỉ thêm code validate/render/sửa
+  dòng lỗi, mọi logic tạo tài khoản + mật khẩu giữ nguyên như trước.
+- Chạy lại toàn bộ test liên quan: `test-user-import-permgroups.js` (7/7),
+  `test-admin-users-permgroups.js` (111/111), `test-user-edit-username-guard.js`
+  (15/15) — không có regression.
 
 ## v25.67 (2026-10): Import Excel Người Dùng — sửa ngay trong dòng lỗi, không cần huỷ nhập lại cả file
 
