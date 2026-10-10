@@ -6889,16 +6889,46 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
     return;
   }
 
-  valid.forEach(r => {
+  // Lớp CÁ NHÂN (Hồ Sơ Cá Nhân > "🔔 Thông Báo Email", 10/2026) — KHÁC lớp admin ở trên (toàn cục, chặn
+  // CẢ module cho MỌI người): đây lọc TỪNG người nhận riêng lẻ, chỉ áp dụng cho family 'approvalNeeded'
+  // (email "Cần phê duyệt" gửi cho người SẼ phê duyệt) — cố ý KHÔNG đụng tới family 'result' (gửi
+  // NGƯỜI TRÌNH, họ cần biết kết quả hồ sơ CỦA CHÍNH MÌNH bất kể có tắt nhận "Cần phê duyệt" của module
+  // đó hay không) hay các family đặc thù khác. r.notifyEmailModules vắng mặt hoàn toàn (user cũ chưa
+  // từng mở màn mới) hoặc không có đúng khoá configModule này -> coi như BẬT (fail-open, giữ hành vi gốc).
+  const cls = classifyApprovalEmailEvent(module, actionType);
+  let sendTo = valid;
+  const personallyOptedOut = [];
+  if (cls && cls.family === 'approvalNeeded') {
+    sendTo = valid.filter(r => {
+      const optedOut = r.notifyEmailModules && r.notifyEmailModules[cls.configModule] === false;
+      if (optedOut) personallyOptedOut.push(r);
+      return !optedOut;
+    });
+  }
+
+  if (personallyOptedOut.length && !sendTo.length) {
+    logSystemAction(
+      module, actionType,
+      `${bodyText} (Email KHÔNG gửi — toàn bộ người nhận đã tự tắt "Nhận Email" phân hệ này ở Hồ Sơ Cá Nhân: ${personallyOptedOut.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})`,
+      'SUPPRESSED',
+      targetCode
+    );
+    return;
+  }
+
+  sendTo.forEach(r => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${r.name || r.email} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
-  dispatchRealEmail(valid, subject, bodyText, { module, targetCode });
+  dispatchRealEmail(sendTo, subject, bodyText, { module, targetCode });
+  const optedOutNote = personallyOptedOut.length
+    ? ` (Đã tự tắt "Nhận Email" ở Hồ Sơ Cá Nhân nên KHÔNG gửi: ${personallyOptedOut.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})`
+    : '';
   logSystemAction(
     module, actionType,
-    valid.length
-      ? `${bodyText} (Đã gửi tới: ${valid.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})`
-      : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)`,
-    valid.length ? 'SUCCESS' : 'WARNING',
+    sendTo.length
+      ? `${bodyText} (Đã gửi tới: ${sendTo.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})${optedOutNote}`
+      : `${bodyText} (Không có người nhận hợp lệ — thiếu email hoặc chưa cấu hình người duyệt)${optedOutNote}`,
+    sendTo.length ? 'SUCCESS' : 'WARNING',
     targetCode
   );
 }
@@ -7985,11 +8015,11 @@ async function saveContractExpiryDeptContacts() {
 // Tab đang hiện trong #profileModal — 4 tab tách riêng (xem setProfileSubTab()), nút Mã PIN/Vân Tay chỉ
 // hiện khi áp dụng cho tài khoản đang đăng nhập (openProfileModal() bật/tắt).
 function setProfileSubTab(tab) {
-  const panels = { INFO: 'profileSubInfo', PASSWORD: 'profileSubPassword', PIN: 'pfPinSection', WEBAUTHN: 'pfWebauthnSection', TOTP: 'pfTotpSection', UNIFORM: 'pfUniformSection' };
+  const panels = { INFO: 'profileSubInfo', PASSWORD: 'profileSubPassword', PIN: 'pfPinSection', WEBAUTHN: 'pfWebauthnSection', TOTP: 'pfTotpSection', UNIFORM: 'pfUniformSection', NOTIFYEMAIL: 'pfNotifyEmailSection' };
   Object.entries(panels).forEach(([key, id]) => {
     document.getElementById(id)?.classList.toggle('hidden', key !== tab);
   });
-  const buttons = { INFO: 'btnProfileSubInfo', PASSWORD: 'btnProfileSubPassword', PIN: 'btnProfileSubPin', WEBAUTHN: 'btnProfileSubWebauthn', TOTP: 'btnProfileSubTotp', UNIFORM: 'btnProfileSubUniform' };
+  const buttons = { INFO: 'btnProfileSubInfo', PASSWORD: 'btnProfileSubPassword', PIN: 'btnProfileSubPin', WEBAUTHN: 'btnProfileSubWebauthn', TOTP: 'btnProfileSubTotp', UNIFORM: 'btnProfileSubUniform', NOTIFYEMAIL: 'btnProfileSubNotifyEmail' };
   Object.entries(buttons).forEach(([key, id]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
@@ -8053,9 +8083,55 @@ function openProfileModal() {
   document.getElementById('pfTotpRevealWrap').classList.add('hidden');
 
   initPwaInstallUI();
+  renderNotifyEmailModulesForm();
 
   setProfileSubTab('INFO');
   document.getElementById('profileModal').classList.remove('hidden');
+}
+
+// renderNotifyEmailModulesForm(): dựng danh sách checkbox "🔔 Thông Báo Email" trong Hồ Sơ Cá Nhân —
+// LUÔN liệt kê đủ 12 phân hệ ở APPROVAL_EMAIL_EVENTS (phương án "đơn giản" người dùng đã chọn, không lọc
+// theo quyền phê duyệt thật của người đang đăng nhập). Mặc định tick sẵn (BẬT) trừ khi
+// currentUser.notifyEmailModules[configModule] === false (đã tự bỏ tick từ trước).
+function renderNotifyEmailModulesForm() {
+  const wrap = document.getElementById('pfNotifyEmailListWrap');
+  if (!wrap) return;
+  const prefs = currentUser.notifyEmailModules || {};
+  wrap.innerHTML = APPROVAL_EMAIL_EVENTS.map(mod => {
+    const checked = prefs[mod.configModule] !== false;
+    return `<label class="flex items-center justify-between px-3 py-2 hover:bg-gray-50 cursor-pointer">
+      <span class="font-semibold text-gray-700">${escapeHtml(mod.label)}</span>
+      <input type="checkbox" class="pf-notify-email-module w-4 h-4 accent-blue-600" data-config-module="${escapeHtml(mod.configModule)}" ${checked ? 'checked' : ''}>
+    </label>`;
+  }).join('');
+}
+
+// saveNotifyEmailModules(): lưu tuỳ chọn nhận email "Cần phê duyệt" riêng của chính người đang đăng nhập
+// qua PATCH /api/auth/me (field notifyEmailModules, validate+lọc khoá hợp lệ ở routes/auth.js).
+async function saveNotifyEmailModules() {
+  const notifyEmailModules = {};
+  document.querySelectorAll('#pfNotifyEmailListWrap .pf-notify-email-module').forEach(cb => {
+    notifyEmailModules[cb.dataset.configModule] = cb.checked;
+  });
+  try {
+    const res = await fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notifyEmailModules })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(body.error || '⛔ Lỗi cập nhật tuỳ chọn nhận email');
+    }
+    const updated = await res.json();
+    currentUser = updated;
+    const userIdx = DB.users.findIndex(u => u.username === currentUser.username);
+    if (userIdx !== -1) DB.users[userIdx] = { ...DB.users[userIdx], ...updated };
+  } catch (err) {
+    return alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+  closeProfileModal();
+  alert('✅ Đã lưu tuỳ chọn nhận email!');
 }
 
 function closeProfileModal() {

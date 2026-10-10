@@ -1,8 +1,79 @@
 # Phiên bản hiện tại
 
-**25.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.58 (2026-10-10): Hồ Sơ Cá Nhân — tự bật/tắt nhận email "Cần phê duyệt" theo từng phân hệ
+
+Người dùng yêu cầu: cho phép TỪNG người tự chọn có muốn nhận email "Cần phê
+duyệt" hay không, thay vì chỉ có 1 cấu hình TOÀN CỤC áp dụng cho mọi người
+(màn Quản Trị > Thông Báo Email Phê Duyệt hiện có). Phương án "đơn giản"
+người dùng đã chọn (bỏ qua việc tự dò quyền phê duyệt thật của từng người,
+vốn phức tạp vì nhiều phân hệ dùng quy trình duyệt ĐỘNG theo phòng ban/chức
+danh chứ không phải 1 quyền tĩnh): **luôn hiện đủ 12 phân hệ cho MỌI tài
+khoản**, mặc định tick sẵn (BẬT).
+
+- Tab mới **"🔔 Thông Báo Email"** trong modal Hồ Sơ Cá Nhân — liệt kê đủ 12
+  phân hệ (nguồn `APPROVAL_EMAIL_EVENTS`, `public/js/core.js`), mỗi dòng 1
+  checkbox "Nhận Email". Lưu qua `PATCH /api/auth/me` (field mới
+  `notifyEmailModules`, theo đúng khuôn tự-sửa-hồ-sơ-của-chính-mình đã có
+  — xem `dashboardHiddenCards`), server lọc đúng 12 khoá hợp lệ + ép kiểu
+  boolean (`routes/auth.js`).
+- `notifyRecipientsByEmail()` (`public/js/core.js`) thêm 1 lớp lọc CÁ NHÂN
+  mới, tách biệt với lớp admin TOÀN CỤC đã có: chỉ chặn đúng người đã tự
+  tắt, chỉ áp dụng cho family **"Cần phê duyệt"** (`approvalNeeded`) — CỐ Ý
+  KHÔNG đụng tới family "Kết quả duyệt" (`result`, gửi người TRÌNH hồ sơ,
+  không liên quan tới việc người đó có tắt nhận "Cần phê duyệt" của phân hệ
+  hay không). Người khác trong cùng danh sách nhận vẫn nhận bình thường.
+  Vắng mặt field `notifyEmailModules` (tài khoản cũ) → fail-open (vẫn gửi).
+
+Test: 10 scenario mới (`test-notify-email-modules.js`, 6 client qua
+Playwright + 4 server qua Express thật) đều pass; chạy lại
+`test-approval-email-config.js` (43), `test-approval-email-config-admin-
+gate.js` (4), `test-auth-login.js` (18), `test-uniform-scenario-roleplay.js`
+(15), `test-admin-users-permgroups.js` (111), `test-admin-webauthn-reset.js`
+(8), `test-auth-single-session.js` (5), `test-username-case-insensitive.js`
+(9) đều pass — không regression. (`test-admin-totp.js` có 4 lỗi
+`resolveGraphOption is not a function` nhưng đã xác nhận lỗi này tồn tại sẵn
+trên baseline sạch trước đợt này, không liên quan.)
+
+## v25.57 (2026-10-10): Checklist Siêu Thị — "Đạt Chung" tính trên số mẫu ĐÃ HOÀN THÀNH, không bắt buộc làm hết
+
+Người dùng báo: hiện tại siêu thị bắt buộc phải làm TẤT CẢ checklist đang có,
+muốn đổi sang siêu thị làm bao nhiêu tuỳ ý rồi tính Đạt chỉ trên số đã làm.
+Sau khi khảo sát (xác nhận hiện trạng: tab Thực Hiện liệt kê toàn bộ mẫu
+STORE_SELF ACTIVE, "Tỉ Lệ Đạt" chỉ tính trên số bài nộp chứ chưa có khái
+niệm "Đạt chung 1 siêu thị") và gửi phương án + demo ảnh, người dùng chốt
+lại thiết kế đơn giản hơn đề xuất ban đầu: **không cần màn chọn trước** — cứ
+để siêu thị làm checklist như bình thường (tab Thực Hiện không đổi gì),
+chỉ đổi cách TÍNH ĐẠT:
+
+- Thêm khối mới **"📋 Đạt Chung Theo Siêu Thị"** ở tab Báo Cáo → Checklist
+  Siêu Thị/Cửa Hàng: với mỗi siêu thị, lấy TOÀN BỘ mẫu "Checklist Thường"
+  (STORE_SELF/QA) ĐÃ có bài nộp trong khoảng ngày đang lọc (mẫu số = số mẫu
+  đã hoàn thành, không phải tổng số mẫu đang ACTIVE) — nếu TẤT CẢ đều Đạt
+  thì "Đạt Chung", có ít nhất 1 mẫu Không đạt thì "Chưa đạt". Mẫu chưa làm
+  trong kỳ không bị trừ gì.
+- Cố ý bỏ qua bộ lọc "Mẫu Checklist" (vẫn gộp mọi mẫu) vì mục đích là tính 1
+  trạng thái chung cho cả siêu thị, không phải riêng 1 mẫu.
+- Hàm mới: `computeChecklistStoreOverallPass()` (`lib/checklist.js`) + mirror
+  client `computeChecklistStoreOverallPassClient()` (`module-checklist.js`).
+
+Phát hiện thêm (KHÔNG sửa, ngoài phạm vi): `applyChecklistReportFilter()`
+(tab Báo Cáo chính) có 1 lỗi có sẵn từ trước — bộ lọc "Từ ngày"/"Đến ngày"
+đang lấy nhầm token GIỜ thay vì token NGÀY của `submittedAt` khi so sánh,
+khiến lọc theo khoảng ngày ở phần bảng phẳng/Top xếp hạng/Coverage có thể
+trả về rỗng. Đã có sẵn 1 hàm đúng `parseChecklistSubmittedAtDate()` (dùng
+cho Dashboard VSATTP) — tính năng "Đạt Chung" mới này dùng đúng hàm đó, lỗi
+cũ không thuộc phạm vi đợt này (đã có chú thích sẵn trong code từ trước, để
+người dùng quyết định có muốn vá riêng không).
+
+Test: 6 scenario thuần hàm tính (`test-checklist-store-overall-pass.js`) +
+5 scenario UI thật qua Playwright xác nhận bộ lọc mẫu không ảnh hưởng khối
+mới (`test-checklist-store-overall-pass-ui.js`) đều pass; chạy lại 9 bộ test
+Checklist hiện có (134 scenario) không phát sinh regression; CSP self-check
+sạch. Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart`.
 
 ## v25.56 (2026-10-10): Tải Mẫu/Nhập/Xuất Excel cho "Quy Trình & Phê Duyệt" + "Nghiệp Vụ Nâng Cao" (Nhóm A, 6 màn)
 

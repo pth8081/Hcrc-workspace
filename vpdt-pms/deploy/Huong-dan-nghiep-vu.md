@@ -3849,6 +3849,33 @@ nộp khớp bộ lọc (mẫu/siêu thị/khoảng ngày) của lượt xem/xu�
 - Server LUÔN tự tính lại từ dữ liệu thật khi xuất/hiển thị (không tin số
   liệu client gửi lên), đúng nguyên tắc chung của mọi báo cáo trong hệ thống.
 
+**"📋 Đạt Chung Theo Siêu Thị" (10/2026, yêu cầu người dùng — thay đổi quan
+trọng về cách tính Đạt)** — trước đây siêu thị phải hoàn thành TẤT CẢ mẫu
+"Checklist Thường" (STORE_SELF) đang ACTIVE, và không có khái niệm "1 trạng
+thái Đạt chung" cho cả siêu thị trong 1 kỳ (chỉ có Đạt/Không đạt riêng từng
+bài nộp). Người dùng xác nhận chốt lại: **siêu thị làm BAO NHIÊU mẫu tuỳ ý
+trong kỳ, KHÔNG bắt buộc hết** — "Đạt" tính TRÊN SỐ MẪU ĐÃ HOÀN THÀNH đó,
+KHÔNG chia cho tổng số mẫu đang có/đang ACTIVE. Mẫu nào CHƯA làm trong kỳ
+không bị trừ gì cả — đơn giản không nằm trong mẫu số (nguyên văn xác nhận:
+"chưa đạt chỉ tính khi CHƯA kết thúc bài của mẫu đó, kết thúc bao nhiêu thì
+tính trên 100% của chính số đó").
+
+- Khối mới ở tab 📊 Báo Cáo → 📋 Checklist Siêu Thị/Cửa Hàng (ngay dưới
+  Dashboard "Đã làm/Chưa làm" ở trên): bảng liệt từng siêu thị ĐÃ có ít nhất
+  1 bài nộp trong khoảng ngày đang lọc — cột Số Mẫu Đã Hoàn Thành/Số Mẫu
+  Đạt/Tỉ Lệ/**Đạt Chung** (✓ Đạt khi tỉ lệ = 100%, ✗ Chưa đạt nếu có ít
+  nhất 1 mẫu đã hoàn thành bị Không đạt).
+- **Cố ý KHÔNG áp dụng bộ lọc "Mẫu Checklist"** ở trên (dù đang chọn cụ thể
+  1 mẫu) — mục đích của khối này là GỘP nhiều mẫu khác nhau của cùng 1 siêu
+  thị lại để tính 1 trạng thái chung, nên luôn tính trên TOÀN BỘ mẫu
+  STORE_SELF/QA, chỉ tôn trọng bộ lọc khoảng ngày. Nếu 1 mẫu có nhiều bài
+  nộp trong cùng kỳ (làm lại sau khi sửa lỗi), lấy bài nộp SAU CÙNG làm đại
+  diện cho mẫu đó.
+- Hàm tính: `computeChecklistStoreOverallPass()` (`lib/checklist.js`, mirror
+  client `computeChecklistStoreOverallPassClient()` ở `module-checklist.js`).
+  Không áp dụng cho mẫu "Kiểm Soát Siêu Thị" (CONTROL_AUDIT/DEDUCTION) — loại
+  đó có Dashboard VSATTP riêng, bản chất đo mức độ tuân thủ khác hẳn.
+
 **Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng)** — tab **📊
 Báo Cáo** giờ chia **2 tab con**, cùng dùng chung đúng 1 quyền
 `checklistReportView` (KHÔNG tách quyền riêng, theo xác nhận người dùng):
@@ -5643,6 +5670,22 @@ Nhật ký hệ thống, chỉ khác không tốn lượt gọi SMTP thật).
 chưa đăng nhập; link **luôn đòi đăng nhập**, không có cơ chế xem trước khi
 đăng nhập). Không áp dụng cho email "Cần phê duyệt" hay các sự kiện đặc thù
 khác — người duyệt đã có Hộp Thư Phê Duyệt (mục 2.2) điều hướng riêng.
+
+**🔔 Thông Báo Email (cá nhân, Hồ Sơ Cá Nhân, từ 10/2026)** — KHÁC lớp admin
+TOÀN CỤC ở trên (áp dụng cho mọi người cùng lúc): mỗi người tự bật/tắt nhận
+email "Cần phê duyệt" theo từng phân hệ CHO RIÊNG MÌNH, qua tab mới **"🔔
+Thông Báo Email"** trong modal "⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin" (góc trên
+bên phải, click tên tài khoản). Luôn hiện đủ 12 phân hệ cho MỌI tài khoản
+(không lọc theo quyền phê duyệt thật đang có — tránh phải tự dò quy trình
+duyệt động theo phòng ban/chức danh của từng phân hệ, vốn phức tạp và không
+đồng nhất giữa các module), mặc định **tick sẵn (BẬT)**. Bỏ tick 1 dòng ->
+không còn nhận email "Cần phê duyệt" của phân hệ đó nữa (hồ sơ vẫn hiện đầy đủ
+trong Hộp Thư Phê Duyệt, chỉ là không có email nhắc) — **không ảnh hưởng tới
+người khác** cũng đang nhận email đó, và **không ảnh hưởng** tới email "Kết
+quả duyệt" (vẫn gửi đầy đủ nếu chính người đó là người trình hồ sơ). 2 lớp bật/
+tắt (admin toàn cục + cá nhân) độc lập, cộng dồn: admin tắt hẳn 1 phân hệ thì
+không ai nhận được nữa bất kể cấu hình cá nhân; admin để bật thì mới tới lượt
+cấu hình cá nhân của từng người quyết định.
 
 ### 7.9. API Đối Tác Ngoài (ExtAuth)
 
