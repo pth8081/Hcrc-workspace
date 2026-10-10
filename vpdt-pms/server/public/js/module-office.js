@@ -231,7 +231,16 @@ function resetOfficeReqForm() {
 function onOfficeTechTypeChange() {
   const techType = document.getElementById('offTechType')?.value || '';
   const permKey = techType === 'IT' ? 'officeFixTechIT' : (techType === 'MECHANICAL' ? 'officeFixTechMechanical' : null);
-  const list = permKey ? DB.users.filter(u => u.active !== false && u.perms?.[permKey]) : [];
+  let list = permKey ? DB.users.filter(u => u.active !== false && u.perms?.[permKey]) : [];
+  // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63, mức Trung bình): loại bớt người ĐANG là approver bước 1
+  // (Trưởng Phòng duyệt) của đúng phòng ban hồ sơ — tránh 1 người tự duyệt cả 2 bước của cùng hồ sơ
+  // (server vẫn là lớp chặn thật, đây chỉ là gợi ý đúng ngay từ UI, mirror resolveEffectiveStepApprovers()).
+  const dept = document.getElementById('offDept')?.value || '';
+  const wfConfig = DB.officeFixDeptWorkflows?.[dept];
+  if (wfConfig) {
+    const step1Approvers = resolveEffectiveStepApprovers(wfConfig, 1);
+    list = list.filter(u => !step1Approvers.includes(u.username));
+  }
   sddSetOptions('officeFixTechDatalist', list.map(u => `${u.name} — ${u.dept || 'Chưa rõ phòng'} (${u.username})`));
   // Đổi loại thì xoá lựa chọn cũ — tránh gửi nhầm người KHÔNG thuộc đúng loại vừa đổi sang.
   const inputEl = document.getElementById('offTechAssignedTo');

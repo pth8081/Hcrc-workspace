@@ -158,7 +158,7 @@ const ITPRICE_HEADER = [...STORE_ORDER_HEADER, 'Ngành Hàng Phụ Trách'];
     ];
     const { rules, report } = applyMixedApprovalImport('STORE_ORDER', parsed, existing);
     assert.deepStrictEqual(existing, existingSnapshot, 'KHÔNG được mutate existingRules gốc');
-    assert.deepStrictEqual(report, { updated: [2], created: [] });
+    assert.deepStrictEqual(report, { updated: [2], created: [], mismatchedIds: [] });
     assert.strictEqual(rules.length, 2);
     assert.deepStrictEqual(rules[0], existing[0], 'Rule id=1 không liên quan phải giữ NGUYÊN');
     assert.deepStrictEqual(rules[1], { id: 2, tier: 'GTE100M', step: 3, mode: 'PERSON', jobTitle: null, jobTitleDept: null, username: 'new.user', stores: ['Siêu Thị A'] });
@@ -173,7 +173,7 @@ const ITPRICE_HEADER = [...STORE_ORDER_HEADER, 'Ngành Hàng Phụ Trách'];
       { id: null, tier: 'FROM10M_TO100M', step: 1, mode: 'JOBTITLE', jobTitle: 'Kế Toán Trưởng', jobTitleDept: null, username: null, stores: [] }
     ];
     const { rules, report } = applyMixedApprovalImport('STORE_ORDER', parsed, existing);
-    assert.deepStrictEqual(report, { updated: [], created: [6] });
+    assert.deepStrictEqual(report, { updated: [], created: [6], mismatchedIds: [] });
     assert.strictEqual(rules.length, 3);
     assert.strictEqual(rules[2].id, 6);
     assert.strictEqual(rules[2].jobTitle, 'Kế Toán Trưởng');
@@ -183,8 +183,21 @@ const ITPRICE_HEADER = [...STORE_ORDER_HEADER, 'Ngành Hàng Phụ Trách'];
     const existing = [{ id: 1, tier: 'LT10M', step: 1, mode: 'JOBTITLE', jobTitle: 'A', jobTitleDept: null, username: null, stores: [] }];
     const parsed = [{ id: 999, tier: 'GTE100M', step: 1, mode: 'JOBTITLE', jobTitle: 'B', jobTitleDept: null, username: null, stores: [] }];
     const { rules, report } = applyMixedApprovalImport('STORE_ORDER', parsed, existing);
-    assert.deepStrictEqual(report, { updated: [], created: [2] });
+    assert.deepStrictEqual(report, { updated: [], created: [2], mismatchedIds: [999] });
     assert.strictEqual(rules[1].id, 2, 'id mới PHẢI tự sinh = max+1, không lấy mã 999 đã gõ sai');
+  });
+
+  await run('[Apply] report.mismatchedIds CHỈ gom Mã Rule có điền nhưng không khớp (TB#2, 10/2026) — để trống KHÔNG tính là mismatch', async () => {
+    const existing = [{ id: 1, tier: 'LT10M', step: 1, mode: 'JOBTITLE', jobTitle: 'A', jobTitleDept: null, username: null, stores: [] }];
+    const parsed = [
+      { id: 1, tier: 'LT10M', step: 2, mode: 'JOBTITLE', jobTitle: 'A2', jobTitleDept: null, username: null, stores: [] }, // khớp -> THAY THẾ
+      { id: 777, tier: 'GTE100M', step: 1, mode: 'JOBTITLE', jobTitle: 'B', jobTitleDept: null, username: null, stores: [] }, // gõ sai -> mismatch
+      { id: null, tier: 'GTE100M', step: 1, mode: 'JOBTITLE', jobTitle: 'C', jobTitleDept: null, username: null, stores: [] } // để trống -> không phải mismatch
+    ];
+    const { report } = applyMixedApprovalImport('STORE_ORDER', parsed, existing);
+    assert.deepStrictEqual(report.updated, [1]);
+    assert.deepStrictEqual(report.created, [2, 3]);
+    assert.deepStrictEqual(report.mismatchedIds, [777], 'CHỈ 777 (gõ sai) được gom, KHÔNG gồm dòng để trống');
   });
 
   await run('[Apply] 2 dòng CÙNG Mã Rule rỗng trong 1 batch -> 2 id MỚI LIÊN TIẾP, không trùng nhau', async () => {
@@ -194,7 +207,7 @@ const ITPRICE_HEADER = [...STORE_ORDER_HEADER, 'Ngành Hàng Phụ Trách'];
       { id: '', tier: 'LT10M', step: 3, mode: 'JOBTITLE', jobTitle: 'C', jobTitleDept: null, username: null, stores: [] }
     ];
     const { rules, report } = applyMixedApprovalImport('STORE_ORDER', parsed, existing);
-    assert.deepStrictEqual(report, { updated: [], created: [4, 5] });
+    assert.deepStrictEqual(report, { updated: [], created: [4, 5], mismatchedIds: [] });
     assert.strictEqual(rules.length, 3);
     assert.strictEqual(rules[1].id, 4);
     assert.strictEqual(rules[2].id, 5);
@@ -204,7 +217,7 @@ const ITPRICE_HEADER = [...STORE_ORDER_HEADER, 'Ngành Hàng Phụ Trách'];
   await run('[Apply] existingRules RỖNG -> id mới bắt đầu từ 1', async () => {
     const parsed = [{ id: null, tier: 'LT10M', step: 1, mode: 'JOBTITLE', jobTitle: 'A', jobTitleDept: null, username: null, stores: [] }];
     const { rules, report } = applyMixedApprovalImport('ITPRICE_WHOLESALE', parsed, []);
-    assert.deepStrictEqual(report, { updated: [], created: [1] });
+    assert.deepStrictEqual(report, { updated: [], created: [1], mismatchedIds: [] });
     assert.strictEqual(rules[0].id, 1);
   });
 

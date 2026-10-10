@@ -697,10 +697,14 @@ function refreshApprovalSurfaces() {
 // muốn ĐỔI mặc định sang mới nhất lên đầu, VÀ thêm nút tự đổi chiều. 'desc' = mới nhất trước (mặc định
 // mới), 'asc' = cũ nhất trước (hành vi PENDING cũ). State ở module-scope (không phải DOM) vì phải giữ
 // nguyên qua nhiều lần renderApprovalHub() (đổi bộ lọc không được làm mất lựa chọn chiều sắp xếp).
-let approvalHubSortDir = 'desc';
+// Thấp (đã vá, audit v25.51→v25.63): đọc lại lựa chọn chiều sắp xếp đã lưu (localStorage, per-browser,
+// giống khuôn 'vpdt_sidebar_collapsed' ở core.js) để KHÔNG bị reset về 'desc' mỗi khi F5/đăng nhập lại.
+const APPROVAL_HUB_SORT_DIR_KEY = 'vpdt_approval_hub_sort_dir';
+let approvalHubSortDir = (localStorage.getItem(APPROVAL_HUB_SORT_DIR_KEY) === 'asc') ? 'asc' : 'desc';
 
 function toggleApprovalHubSortDir() {
   approvalHubSortDir = approvalHubSortDir === 'desc' ? 'asc' : 'desc';
+  localStorage.setItem(APPROVAL_HUB_SORT_DIR_KEY, approvalHubSortDir);
   renderApprovalHub();
 }
 

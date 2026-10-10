@@ -13,6 +13,7 @@ const { HttpError } = require('./httpErrors');
 const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
+const { resolveStepApproverUsernames } = require('./positionApprovers');
 const { materializeReportPeriodPdf, writeMergedPdfFile } = require('./reportPdfMerge');
 // recordCodeGen — dùng lại ĐÚNG hàm sinh mã ở SERVER (lib/recordCodeGen.js, xem chú thích đầu file đó)
 // để SINH LẠI code/displayCode khi editDocDraft()/editContract() cho đổi cat/dept/type của hồ sơ GỐC
@@ -679,6 +680,12 @@ function editOfficeReqDraft(payload, user, item, appData) {
     }
     if (assignedUser.username === user.username) {
       throw new HttpError(400, 'Không thể tự chọn chính mình làm Người Xác Nhận Kỹ Thuật');
+    }
+    // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63, mức Trung bình) — mirror đúng khuôn createValidation.js.
+    const step1Approvers = resolveStepApproverUsernames(
+      appData?.officeFixDeptWorkflows?.[item.dept], 1, appData?.users);
+    if (step1Approvers.includes(assignedUser.username)) {
+      throw new HttpError(400, 'Người Xác Nhận Kỹ Thuật không được là Trưởng Phòng duyệt bước 1 của phòng ban này (đánh giá kỹ thuật cần độc lập)');
     }
     item.techType = techType;
     item.techAssignedTo = assignedUser.username;

@@ -147,6 +147,27 @@ async function main() {
     await assert.rejects(() => parseGroupedExcelFile(SPEC, buffer, '.xlsx'), /không có sheet nào khớp/i);
   });
 
+  await run('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63, DoS): sheet lạ nhiều dòng KHÔNG bị buffer vào RAM (shouldCollectSheet bỏ qua ngay khi đọc)', async () => {
+    const { streamAllSheetsRows } = require('../lib/xlsxSafeRead');
+    const wb = new ExcelJS.Workbook();
+    const wsValid = wb.addWorksheet('Nhóm');
+    wsValid.addRow(['ghi chú']); wsValid.addRow(['Mã Nhóm']); wsValid.addRow(['G1']);
+    const wsJunk = wb.addWorksheet('Sheet Rác');
+    for (let i = 0; i < 5000; i++) wsJunk.addRow([`junk-${i}`, `x`.repeat(50)]);
+    const buffer = await wb.xlsx.writeBuffer();
+
+    let rowsSeenForJunkSheet = 0;
+    let rowsSeenForValidSheet = 0;
+    await streamAllSheetsRows(buffer, (sheetName) => {
+      if (sheetName === 'Sheet Rác') rowsSeenForJunkSheet++;
+      else rowsSeenForValidSheet++;
+      return true;
+    }, { shouldCollectSheet: (name) => name === 'Nhóm' });
+
+    assert.strictEqual(rowsSeenForJunkSheet, 0, 'sheet lạ KHÔNG được gọi onRow() dù chỉ 1 lần — phải bị lọc trước khi buffer');
+    assert.ok(rowsSeenForValidSheet > 0, 'sheet hợp lệ vẫn phải đọc được bình thường');
+  });
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

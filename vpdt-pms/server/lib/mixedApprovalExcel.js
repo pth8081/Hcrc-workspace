@@ -188,14 +188,19 @@ function applyMixedApprovalImport(kind, parsedItems, existingRules) {
 
   const updated = [];
   const created = [];
+  const mismatchedIds = []; // Mã Rule đã điền nhưng KHÔNG khớp dòng nào hiện có -> vẫn tạo dòng mới (đúng
+  // thiết kế, xem chú thích đầu file) nhưng gom lại để cảnh báo admin trước khi xác nhận (lỗi gõ sai Mã
+  // Rule dễ bị tạo trùng dòng trong im lặng nếu không có cảnh báo này).
   (parsedItems || []).forEach(parsed => {
     const { id: rawId, ...fields } = parsed || {};
-    const candidateId = (rawId !== null && rawId !== undefined && rawId !== '') ? Number(rawId) : NaN;
+    const hadRawId = rawId !== null && rawId !== undefined && rawId !== '';
+    const candidateId = hadRawId ? Number(rawId) : NaN;
     const matchIdx = Number.isFinite(candidateId) ? idxById.get(candidateId) : undefined;
     if (matchIdx !== undefined) {
       rules[matchIdx] = { ...fields, id: candidateId };
       updated.push(candidateId);
     } else {
+      if (hadRawId) mismatchedIds.push(rawId);
       maxId += 1;
       const newId = maxId;
       rules.push({ ...fields, id: newId });
@@ -204,7 +209,7 @@ function applyMixedApprovalImport(kind, parsedItems, existingRules) {
     }
   });
 
-  return { rules, report: { updated, created } };
+  return { rules, report: { updated, created, mismatchedIds } };
 }
 
 module.exports = {

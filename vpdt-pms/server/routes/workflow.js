@@ -211,6 +211,16 @@ router.post('/:module/:id/forward', async (req, res) => {
     const parentId = parentNodeId != null ? String(parentNodeId) : null;
 
     const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63): trước đây route này chỉ kiểm canApproveStep() theo
+      // currentStep, không kiểm trạng thái hồ sơ — với bước ĐỒNG duyệt (nhiều approver, chỉ cần 1
+      // người quyết), nếu 1 approver đã REJECT thì currentStep đứng yên ở bước đó nhưng các đồng-
+      // approver KHÁC (chưa tự duyệt) vẫn qua được canApproveStep() -> vẫn tạo được forward MỚI trên
+      // hồ sơ đã bị từ chối/đã xử lý xong. Client (canForwardRoot) có check status==='PENDING' nhưng
+      // chỉ ở UI, gọi thẳng API vẫn vượt qua — chặn cứng lại ở server, cùng khuôn applyWorkflowAction().
+      const statusField = MODULE_CONFIGS[moduleKey].statusField || 'status';
+      if (item[statusField] !== 'PENDING') {
+        throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý, không thể chuyển tiếp xin ý kiến nữa');
+      }
       if (!Array.isArray(item.forwardThreads)) item.forwardThreads = [];
       let step;
       if (parentId) {
@@ -299,6 +309,11 @@ router.post('/:module/:id/forward-reply', async (req, res) => {
     if (fileUrl) assertUploadedFileUrl(fileUrl, 'File ý kiến trả lời');
 
     const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63) — cùng chú thích ở route /forward phía trên.
+      const statusField = MODULE_CONFIGS[moduleKey].statusField || 'status';
+      if (item[statusField] !== 'PENDING') {
+        throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý, không thể trả lời chuyển tiếp nữa');
+      }
       const node = (item.forwardThreads || []).find(n => n.id === String(nodeId));
       if (!node) throw new WorkflowError(404, 'Không tìm thấy nhánh chuyển tiếp');
       if (node.forwardedTo !== freshUser.username) {

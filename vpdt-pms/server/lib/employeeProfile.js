@@ -30,7 +30,7 @@
 //      là chuỗi tự gõ tự do, không đảm bảo trùng khớp bất kỳ quy ước username nào.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { isManagerOf } = require('./recordViewScope');
+const { isManagerOf, hasModuleAccessServer } = require('./recordViewScope');
 const { localDateStr } = require('./attendance');
 
 function nowVN() {
@@ -607,8 +607,14 @@ function reactivateForRehire(list, employeeCode, newStartDate, actorUsername, ac
 // khoản thường nào khác — KHÁC với mọi module còn lại trong hệ thống (admin vẫn bypass bình thường ở nơi
 // khác, đây là 3 NGOẠI LỆ CÓ CHỦ ĐÍCH). Xem thêm lib/laborContract.js::canManageContracts()/
 // lib/payroll.js::canManagePayroll()/canApprovePayroll() (2 module còn lại áp dụng cùng nguyên tắc).
+// LỖI ĐÃ VÁ (đợt audit v25.51→v25.63): nhánh hrProfileManage/hrProfileFullView/hrProfileEdit
+// KHÔNG re-check Mục 0 (hrProfileManageTab) như client đã làm (module-hrprofile.js
+// hrpfCanManageTab) — cùng lớp lỗ hổng đã vá cho Công & Phép (canSeeHacManageAll). Admin tắt
+// tab "Hồ Sơ Nhân Sự" cho 1 user nhưng còn giữ 1 trong 3 quyền trên thì user đó gọi thẳng
+// GET /api/data vẫn đọc được TOÀN BỘ hồ sơ nhân sự công ty dù menu đã ẩn.
 function canViewFullProfile(user, profile) {
-  return !!(user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit
+  return !!(((user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit)
+      && hasModuleAccessServer(user, 'hrProfileManageTab'))
     || (profile.username && user.username === profile.username)
     // Ảnh 2 (9/2026): người chỉ có hrOnboardingManage (KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn cần mở
     // được ĐÚNG hồ sơ đang ở hàng đợi (PENDING) để bấm "Xác Nhận" -> sửa tiếp thông tin ứng viên — KHÔNG

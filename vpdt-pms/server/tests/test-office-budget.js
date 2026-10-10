@@ -103,7 +103,7 @@ async function run() {
     // sự kiện input/change thật).
     await page.evaluate(() => {
       document.getElementById('offTechType').value = 'MECHANICAL';
-      document.getElementById('offTechAssignedTo').value = 'Trần Thị Trưởng Phòng KD — Phòng Kinh Doanh (tp_kd)';
+      document.getElementById('offTechAssignedTo').value = 'Hoàng Thị Kế Toán — Phòng Kế Toán (ketoan1)';
       resolveOfficeTechAssignedToInput(document.getElementById('offTechAssignedTo').value);
     });
     await clearAlerts();
@@ -152,7 +152,7 @@ async function run() {
     // Kỹ Thuật Xác Nhận (11/2026) — xem chú thích ở kịch bản 3 phía trên.
     await page.evaluate(() => {
       document.getElementById('offTechType').value = 'MECHANICAL';
-      document.getElementById('offTechAssignedTo').value = 'Trần Thị Trưởng Phòng KD — Phòng Kinh Doanh (tp_kd)';
+      document.getElementById('offTechAssignedTo').value = 'Hoàng Thị Kế Toán — Phòng Kế Toán (ketoan1)';
       resolveOfficeTechAssignedToInput(document.getElementById('offTechAssignedTo').value);
     });
     await clearAlerts();
@@ -200,8 +200,9 @@ async function run() {
     check('"Sửa & Gửi Lại" -> đề xuất quay lại PENDING, bước 1, nội dung đã cập nhật (kể cả Dự toán)', !!office3AfterResubmit && office3AfterResubmit.status === 'PENDING' && office3AfterResubmit.currentStep === 1 && office3AfterResubmit.title.includes('đã bổ sung báo giá') && office3AfterResubmit.amount === 9500000, office3AfterResubmit);
 
     // Kỹ Thuật Xác Nhận (11/2026) — từ đợt tính năng này, Sửa Chữa VP có THÊM 1 bước ("🔧 Xác Nhận Kỹ
-    // Thuật") ngay sau bước Trưởng Phòng duyệt; office3 dùng tp_kd làm CẢ Trưởng Phòng lẫn Người Xác
-    // Nhận Kỹ Thuật (xem fixture tests/_seed.js) nên cùng 1 tài khoản phải duyệt ĐỦ 2 LƯỢT mới APPROVED.
+    // Thuật") ngay sau bước Trưởng Phòng duyệt; office3 dùng tp_kd (Trưởng Phòng, bước 1) và ketoan1
+    // (Người Xác Nhận Kỹ Thuật, bước 2 — khác phòng ban, "độc lập" đúng yêu cầu đã vá) nên cần 2 TÀI
+    // KHOẢN KHÁC NHAU đăng nhập lần lượt mới APPROVED (không còn cùng 1 người như trước đợt vá).
     await loginAs('tp_kd');
     await goToOffice('SUA_CHUA');
     await page.evaluate((id) => openOfficeProcessModal(id), office3.id);
@@ -211,6 +212,8 @@ async function run() {
     const office3AfterStep1 = await page.evaluate((id) => DB.officeReqs.find((x) => x.id === id), office3.id);
     check('Duyệt bước 1 (Trưởng Phòng) xong -> chuyển sang bước 2 (Kỹ Thuật Xác Nhận), vẫn PENDING', office3AfterStep1.status === 'PENDING' && office3AfterStep1.currentStep === 2, office3AfterStep1);
 
+    await loginAs('ketoan1');
+    await goToOffice('SUA_CHUA');
     await page.evaluate((id) => openOfficeProcessModal(id), office3.id);
     await page.fill('#offTechCondition', 'Mái tôn bị thủng nhiều vị trí, khung sắt còn tốt.');
     await page.selectOption('#offTechSeverityLevel', 'MEDIUM');

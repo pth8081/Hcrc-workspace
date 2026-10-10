@@ -260,14 +260,19 @@ function isForwardThreadParticipant(user, item) {
   return item.forwardThreads.some(n => n.forwardedBy === user.username || n.forwardedTo === user.username);
 }
 
-function canViewSubmission(user, sub, appData) {
+// Tách riêng phần "quyền xem KHÔNG qua forward" để sanitizeForwardThreadsForUser() (bên dưới) biết
+// khi nào CHỈ được xem nhờ đang là participant của 1 cạnh forward (cần ẩn bớt các cạnh khác) — xem
+// chú thích đầy đủ tại sanitizeForwardThreadsForUser().
+function canViewSubmissionWithoutForward(user, sub, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
   if (scopeAllows(user, null, sub.dept, 'submission', appData, sub.creator)) return true;
   if ((sub.opinionRequestees || []).includes(user.username)) return true;
-  if (isForwardThreadParticipant(user, sub)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.submissions.resolveWfConfig(sub, appData).approvers, user.username);
+}
+function canViewSubmission(user, sub, appData) {
+  return canViewSubmissionWithoutForward(user, sub, appData) || isForwardThreadParticipant(user, sub);
 }
 
 function filterDocsForUser(docs, user, appData) {
@@ -275,7 +280,9 @@ function filterDocsForUser(docs, user, appData) {
 }
 
 function filterSubmissionsForUser(submissions, user, appData) {
-  return (submissions || []).filter(s => canViewSubmission(user, s, appData));
+  return (submissions || [])
+    .filter(s => canViewSubmission(user, s, appData))
+    .map(s => sanitizeForwardThreadsForUser(s, user, canViewSubmissionWithoutForward(user, s, appData)));
 }
 
 // Khớp khối lọc trong render bài Truyền Thông Nội Bộ (public/index.html, ~dòng 19311-19317) — bài
@@ -557,7 +564,9 @@ function canDownloadRecordFile(user, moduleKey, dept, ownerUsername, published) 
 // LÀM GỌN (11/2026, "Việc D"): bỏ hẳn quyền phẳng cũ `contractView` — cùng khuôn canViewSubmission() ở
 // trên, 2 lời gọi scopeAllows() dưới đây giờ truyền `null` (không còn `{all,depts}` để đọc), chỉ còn
 // nhánh "cùng phòng tự động xem" + deptViewScopeConfig['contract'] (extraViewers/managerCanView).
-function canViewContract(user, contract, appData) {
+// Xem chú thích ở canViewSubmissionWithoutForward() — cùng mục đích, tách riêng phần "quyền xem KHÔNG
+// qua forward" cho sanitizeForwardThreadsForUser().
+function canViewContractWithoutForward(user, contract, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (contract.creator === user.username) return true;
@@ -570,13 +579,47 @@ function canViewContract(user, contract, appData) {
   // xem được ngay không điều kiện. custodianDept luôn có giá trị cụ thể (mặc định = dept khi không
   // chọn, xem createValidation.js), nên nhánh này là no-op vô hại khi 2 field trùng nhau.
   if (scopeAllows(user, null, contract.custodianDept || contract.dept, 'contract', appData, contract.creator)) return true;
-  if (isForwardThreadParticipant(user, contract)) return true;
   if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
   return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
 }
+function canViewContract(user, contract, appData) {
+  return canViewContractWithoutForward(user, contract, appData) || isForwardThreadParticipant(user, contract);
+}
+
+// LỖI ĐÃ VÁ (đợt audit v25.51→v25.63): isForwardThreadParticipant() chỉ cấp quyền XEM HỒ SƠ (comment
+// gốc tại đó: "việc chỉ hiện ĐÚNG cạnh của mình là trách nhiệm của CLIENT") — nhưng KHÔNG có lớp lọc
+// nào ở SERVER khiến người CHỈ xem được hồ sơ nhờ đang là participant của 1 cạnh forward (không phải
+// admin/creator/approver/trong phạm vi xem phòng ban) nhận về NGUYÊN VẸN mảng forwardThreads[], kể cả
+// các cạnh/nhánh KHÁC không liên quan (ý kiến/nội dung trao đổi riêng của người khác). Cùng khuôn
+// sanitizeInternalPostCommentsForUser()/sanitizeReportPeriodsForUser(): CHỈ ẩn bớt khi quyền xem CHỈ
+// ĐẾN TỪ forward (canViewWithoutForward === false) — người có quyền xem đầy đủ khác vẫn thấy nguyên
+// mảng như cũ (không mất chức năng "xem toàn bộ nhánh" của approver/quản lý).
+//
+// Giữ lại: đúng cạnh user là forwardedBy/forwardedTo + TOÀN BỘ tổ tiên (đi ngược parentNodeId) để có
+// đủ ngữ cảnh "vì sao được nhờ ý kiến" — KHÔNG kéo theo nhánh con của người khác (đệ quy forward tiếp)
+// vì nhánh đó có forwardedBy khác user, tự động không khớp điều kiện giữ lại trừ khi chính user cũng
+// là forwardedTo/forwardedBy của nhánh con đó.
+function sanitizeForwardThreadsForUser(item, user, canViewWithoutForward) {
+  if (!Array.isArray(item.forwardThreads) || !item.forwardThreads.length || canViewWithoutForward) return item;
+  const byId = new Map(item.forwardThreads.map(n => [String(n.id), n]));
+  const visibleIds = new Set();
+  for (const n of item.forwardThreads) {
+    if (n.forwardedBy !== user.username && n.forwardedTo !== user.username) continue;
+    let cur = n;
+    while (cur && !visibleIds.has(String(cur.id))) {
+      visibleIds.add(String(cur.id));
+      cur = cur.parentNodeId != null ? byId.get(String(cur.parentNodeId)) : null;
+    }
+  }
+  const filtered = item.forwardThreads.filter(n => visibleIds.has(String(n.id)));
+  if (filtered.length === item.forwardThreads.length) return item;
+  return { ...item, forwardThreads: filtered };
+}
 
 function filterContractsForUser(contracts, user, appData) {
-  return (contracts || []).filter(c => canViewContract(user, c, appData));
+  return (contracts || [])
+    .filter(c => canViewContract(user, c, appData))
+    .map(c => sanitizeForwardThreadsForUser(c, user, canViewContractWithoutForward(user, c, appData)));
 }
 
 // Khớp khối lọc trong renderCarRegs() (public/index.html): scopeAllows(dept, deptViewScopeConfig) HOẶC
@@ -1223,7 +1266,13 @@ function filterItServiceRenewalsForUser(items, user) {
 // bản "approver khác phòng ban không có paymentManage" từ trước — server giờ mới theo kịp.
 function canViewPaymentRequest(user, item, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.paymentManage) return true;
+  if (user.perms?.admin) return true;
+  // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63): nhánh paymentManage KHÔNG re-check Mục 0
+  // (paymentManageTab) như client đã làm (module-thanhtoan.js) — cùng lớp lỗ hổng đã vá cho
+  // Công & Phép (canSeeHacManageAll). Admin tắt tab "Quản Lý Thanh Toán" cho 1 user nhưng còn
+  // giữ flat-perm paymentManage thì user đó gọi thẳng GET /api/data vẫn đọc được TOÀN BỘ yêu
+  // cầu thanh toán công ty dù menu đã ẩn.
+  if (user.perms?.paymentManage && hasModuleAccessServer(user, 'paymentManageTab')) return true;
   // LỖI ĐÃ VÁ (4-state model 10/2026): Thanh Toán KHÔNG có nhánh "chính người tạo luôn xem" như MỌI
   // hàm canView* chị em khác (budget/office/car/contract/submission/meeting/report đều có) — người tạo
   // đề nghị mất quyền xem lại chính đề nghị mình vừa tạo ngay khi tắt dept-view (mode CREATOR_ONLY) cho
@@ -1369,8 +1418,13 @@ function filterShiftSwapRequestsForUser(items, user, appData) {
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): Lương là dữ liệu nhạy cảm nhân sự — admin KHÔNG còn tự
 // động xem được (kể cả qua GET /api/data) chỉ vì có cờ `admin`, phải được cấp riêng hrPayrollManage/
 // hrPayrollApprove (xem chú thích đầy đủ ở lib/employeeProfile.js::canManageProfiles()).
+// LỖI ĐÃ VÁ (đợt audit v25.51→v25.63): hàm này KHÔNG re-check Mục 0 (hrPayrollManageTab) —
+// cùng lớp lỗ hổng đã vá cho Công & Phép (canSeeHacManageAll) — admin tắt tab "Quản Lý Kỳ
+// Lương" cho 1 user nhưng còn giữ hrPayrollManage/hrPayrollApprove thì user đó gọi thẳng
+// GET /api/data vẫn đọc được TOÀN BỘ phiếu lương/kỳ lương công ty dù menu đã ẩn.
 function canViewAllPayrollData(user) {
-  return !!(user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove);
+  return !!(user?.perms?.admin
+    || ((user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove) && hasModuleAccessServer(user, 'hrPayrollManageTab')));
 }
 function filterPayrollPeriodsForUser(items, user) {
   return canViewAllPayrollData(user) ? (items || []) : [];
@@ -1647,7 +1701,8 @@ module.exports = {
   computeModuleApproverUsernames, sanitizeUsersPermsForViewer, sanitizePermGroupsForViewer,
   filterRecruitmentReferralsForUser,
   canViewReportEntry, filterReportEntriesForUser,
-  canViewContract, filterContractsForUser,
+  canViewContract, filterContractsForUser, canViewContractWithoutForward,
+  canViewSubmissionWithoutForward, sanitizeForwardThreadsForUser,
   canViewCarReg, filterCarRegsForUser,
   canViewOfficeReq, filterOfficeReqsForUser,
   canViewMeeting, filterMeetingsForUser,

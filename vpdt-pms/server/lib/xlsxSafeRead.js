@@ -198,6 +198,14 @@ async function streamFirstSheetRows(buffer, onRow, options = {}) {
 async function streamAllSheetsRows(buffer, onRow, options = {}) {
   const includeEmpty = !!options.includeEmpty;
   const raw = !!options.raw;
+  // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63, DoS): trước đây TOÀN BỘ dòng của MỌI sheet (kể cả sheet
+  // KHÔNG khớp tên nào caller cần, VD 1 sheet rác thêm vào file) đều bị buffer hết vào `collected`
+  // TRƯỚC KHI onRow() thật của caller (nơi lọc "sheet lạ") được gọi — mâu thuẫn với chính thiết kế
+  // "giới hạn số dòng TRONG LÚC đọc" đã công bố ở đầu file. Tham số tuỳ chọn `shouldCollectSheet(name)`
+  // cho phép caller BỎ QUA sheet lạ NGAY TẠI ĐÂY (không đọc/buffer dòng nào của sheet đó) — opt-in, mặc
+  // định không lọc gì (giữ nguyên hành vi cũ cho caller chưa truyền, VD permMatrixExcel.js chấp nhận
+  // MỌI tên sheet theo đúng thiết kế của nó).
+  const shouldCollectSheet = typeof options.shouldCollectSheet === 'function' ? options.shouldCollectSheet : null;
 
   await assertDecompressedSizeWithinBudget(buffer);
 
@@ -222,6 +230,7 @@ async function streamAllSheetsRows(buffer, onRow, options = {}) {
         if (done) continue; // KHÔNG break — xem chú thích ở streamFirstSheetRows() (dọn file tạm exceljs)
         sawSheet = true;
         const sheetName = worksheet.name || `Sheet${worksheet.id || ''}`;
+        if (shouldCollectSheet && !shouldCollectSheet(sheetName)) continue; // bỏ qua sheet lạ, không buffer dòng nào
         let expected = 1;
         for await (const row of worksheet) {
           if (includeEmpty) {

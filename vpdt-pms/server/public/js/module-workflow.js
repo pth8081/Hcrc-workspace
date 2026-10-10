@@ -1363,21 +1363,25 @@ function applyMixedApprovalImportClient(kind, parsedItems, existingRules) {
   });
   const updated = [];
   const created = [];
+  const mismatchedIds = []; // mirror server lib/mixedApprovalExcel.js — Mã Rule điền nhưng không khớp dòng
+  // nào hiện có, dùng để cảnh báo admin ở renderMixedApprovalImportPreview() (có thể là gõ sai).
   (parsedItems || []).forEach(parsed => {
     const { id: rawId, ...fields } = parsed || {};
-    const candidateId = (rawId !== null && rawId !== undefined && rawId !== '') ? Number(rawId) : NaN;
+    const hadRawId = rawId !== null && rawId !== undefined && rawId !== '';
+    const candidateId = hadRawId ? Number(rawId) : NaN;
     const matchIdx = Number.isFinite(candidateId) ? idxById.get(candidateId) : undefined;
     if (matchIdx !== undefined) {
       rules[matchIdx] = { ...fields, id: candidateId };
       updated.push(candidateId);
     } else {
+      if (hadRawId) mismatchedIds.push(rawId);
       maxId += 1;
       rules.push({ ...fields, id: maxId });
       idxById.set(maxId, rules.length - 1);
       created.push(maxId);
     }
   });
-  return { rules, report: { updated, created } };
+  return { rules, report: { updated, created, mismatchedIds } };
 }
 
 async function downloadMixedApprovalTemplate(kind) {
@@ -1415,8 +1419,11 @@ function renderMixedApprovalImportPreview(kind) {
   const errorsHtml = (state.errors || []).length
     ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-28 overflow-y-auto text-[11px]"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — các dòng này sẽ KHÔNG được nhập:</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
     : '';
+  const mismatchHtml = (report.mismatchedIds || []).length
+    ? `<div class="border border-amber-300 bg-amber-50 rounded p-1.5 text-[11px]"><div class="font-bold text-amber-800">⚠️ Mã Rule không khớp dòng nào hiện có (sẽ TẠO DÒNG MỚI, kiểm tra lại nếu bạn định SỬA 1 dòng đã có): ${report.mismatchedIds.map(id => escapeHtml(String(id))).join(', ')}</div></div>`
+    : '';
   const canConfirm = state.items.length > 0;
-  wrap.innerHTML = `${errorsHtml}
+  wrap.innerHTML = `${errorsHtml}${mismatchHtml}
     <div class="flex gap-2 pt-1">
       ${canConfirm ? `<button type="button" data-op="confirmMixedApprovalImport" data-arg0="${escapeHtml(kind)}" class="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">✅ Xác Nhận Nhập (${report.updated.length} cập nhật, ${report.created.length} mới)</button>` : ''}
       <button type="button" data-op="cancelMixedApprovalImport" data-arg0="${escapeHtml(kind)}" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-300">Huỷ</button>
@@ -1472,6 +1479,7 @@ async function confirmMixedApprovalImport(kind) {
   const before = DB[cfg.dataKey] || [];
   const { rules, report } = applyMixedApprovalImportClient(kind, state.items, before);
   if (!report.updated.length && !report.created.length) { if (statusEl) statusEl.innerText = 'ℹ️ Không có thay đổi nào để lưu.'; return; }
+  if (!confirm(`Xác nhận lưu Nhập Excel "${cfg.label}" — thêm ${report.created.length} dòng mới, cập nhật ${report.updated.length} dòng đã có?`)) return;
   const snapshot = JSON.parse(JSON.stringify(before));
   DB[cfg.dataKey] = rules;
   const ok = await syncStorage(cfg.dataKey);

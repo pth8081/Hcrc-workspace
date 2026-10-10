@@ -1,8 +1,60 @@
 # Phiên bản hiện tại
 
-**25.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.64 (2026-10): Vá 15 phát hiện đợt rà soát v25.51→v25.63 (5 Cao + 3 TB + 5 Thấp)
+
+Rà soát chuyên sâu (6 agent song song) toàn bộ thay đổi từ v25.51 đến v25.63,
+tập trung lỗi nghiệp vụ/thao tác/bảo mật. Vá đầy đủ theo đúng thứ tự Cao →
+Trung bình → Thấp, mỗi bản vá kèm test hồi quy mới.
+
+**5 lỗi Cao (bảo mật):**
+- `canViewPaymentRequest()`/`canViewAllPayrollData()`/`canViewFullProfile()`
+  (lib/recordViewScope.js, lib/employeeProfile.js) bỏ qua gác Mục 0
+  (`hasModuleAccessServer`) khi xét quyền quản lý — 1 tài khoản bị thu hồi
+  tab quản lý vẫn xem được toàn bộ Thanh Toán/Lương/Hồ Sơ Nhân Sự qua API
+  trực tiếp.
+- Sửa Chữa VP: thu hồi quyền `officeFixTechIT`/`officeFixTechMechanical`
+  giữa chừng (sau khi đã chọn Người Xác Nhận Kỹ Thuật) không bị chặn lại ở
+  bước APPROVE (lib/workflowEngine.js).
+- Chuyển Tiếp Xin Ý Kiến: `filterSubmissionsForUser()`/`filterContractsForUser()`
+  lộ TẤT CẢ nhánh `forwardThreads[]` cho người chỉ tham gia 1 nhánh (thêm
+  `sanitizeForwardThreadsForUser()`, lib/recordViewScope.js).
+- Route `/forward` và `/forward-reply` (routes/workflow.js) không kiểm tra
+  hồ sơ gốc còn PENDING — vẫn tạo được nhánh xin ý kiến mới trên hồ sơ đã
+  APPROVED/REJECTED xong.
+- `streamAllSheetsRows()` (lib/xlsxSafeRead.js) buffer hết sheet lạ vào RAM
+  trước khi lọc — file Excel có sheet rác nhiều dòng gây DoS bộ nhớ; thêm
+  `options.shouldCollectSheet()` bỏ sheet lạ NGAY lúc đọc.
+
+**3 lỗi Trung bình:**
+- Sửa Chữa VP: chặn chọn Người Xác Nhận Kỹ Thuật trùng với Trưởng Phòng
+  duyệt bước 1 của phòng ban đó (đánh giá kỹ thuật cần độc lập) —
+  lib/createValidation.js + lib/recordActions.js + mirror client
+  module-office.js.
+- Excel Nhập "🏬 Quy Trình Đặt Hàng Siêu Thị"/"🏪 QT Giá Bán Buôn": thêm
+  `confirm()` trước khi ghi (3/4 luồng Excel khác đã có, thiếu luồng này) +
+  cảnh báo "Mã Rule" gõ sai không khớp dòng nào (report.mismatchedIds).
+- Hộp thư "📨 Được Nhờ Cho Ý Kiến": ẩn nút "↩️ Trả Lời"/đổi badge "⏳ Chờ bạn
+  phản hồi" khi hồ sơ gốc đã xử lý xong (không còn PENDING) thay vì luôn
+  hiện "chờ phản hồi" dù xin ý kiến không còn ý nghĩa.
+
+**5 lỗi Thấp:**
+- `nowVNForMigration()` (seedDefaults.js) thiếu zero-pad giờ/phút/giây, khác
+  `nowVN()` dùng ở nơi khác.
+- `approvalHubSortDir` (Phê Duyệt Hub) không lưu localStorage — mất lựa
+  chọn chiều sắp xếp mỗi lần F5.
+- Nhập Excel Nhóm Phê Duyệt Trình/HĐ + Mẫu Quy Trình: đối chiếu mã hiện có
+  phân biệt hoa/thường trong khi gộp dòng trong file lại không — gõ khác
+  hoa/thường mã đã có từng tạo trùng lặp thay vì thay thế.
+- `computeApprovalGroupsModuleMerge()`: dedupe `visibleGroupIds`/
+  `lockedGroupIds` khi admin gõ trùng cùng Mã Nhóm nhiều lần trong 1 ô.
+- Modal chọn người Chuyển Tiếp: loại người ĐÃ được chuyển tiếp (cùng nhánh)
+  khỏi danh sách chọn, tránh chọn trùng.
+
+Không có thay đổi schema/`.env`/dependencies — chỉ cần copy code + `pm2 restart`.
 
 ## v25.63 (2026-11): Kỹ Thuật Xác Nhận (Sửa Chữa VP)
 

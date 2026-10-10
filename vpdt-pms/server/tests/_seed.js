@@ -36,10 +36,6 @@ const USERS = [
       contractView: { all: false, depts: ['Phòng Kinh Doanh'] }, contractCreate: true,
       officeView: { all: false, depts: ['Phòng Kinh Doanh'] }, officeCreate: true,
       officeBuy: true, officeFix: true, officeInvest: true,
-      // officeFixTechMechanical (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP): dùng tp_kd làm Người Xác Nhận
-      // Kỹ Thuật trong test-office-budget.js (kd1 tạo đề xuất Sửa Chữa, không thể tự chọn chính mình) —
-      // không ảnh hưởng vai trò Trưởng Phòng duyệt bước 1 sẵn có của user này.
-      officeFixTechMechanical: true,
       // budgetCreate: cần để vào được module Ngân Sách và xử lý (duyệt) các bản Phê Duyệt/Thực Hiện đang
       // chờ của phòng mình (canAccessBudgetModule() nay đòi 1 trong 3 quyền budget — không còn "xem miễn
       // phí" chỉ nhờ mục 0) — đúng thực tế Trưởng phòng cũng có quyền tự lập/sửa ngân sách phòng mình.
@@ -60,7 +56,12 @@ const USERS = [
     // cập Module Phê duyệt Văn phòng!") — có vẻ là 1 lỗi thật của app (báo lại ở phần cuối, KHÔNG tự sửa
     // index.html). Gán thêm officeBuy ở đây để bộ test này vẫn đi hết được luồng Thanh Toán qua đúng
     // đường điều hướng thật (không né bằng cách gọi thẳng hàm bỏ qua UI).
-    perms: { admin: false, paymentManage: true, contractView: { all: true, depts: [] }, officeView: { all: true, depts: [] }, officeCreate: true, officeBuy: true }
+    // officeFixTechMechanical (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP): dùng ketoan1 làm Người Xác Nhận
+    // Kỹ Thuật trong test-office-budget.js (kd1 tạo đề xuất Sửa Chữa của Phòng Kinh Doanh — KHÔNG được
+    // chọn tp_kd vì tp_kd CHÍNH LÀ approver bước 1/Trưởng Phòng của phòng ban đó, bị chặn bởi lỗ hổng
+    // "tự duyệt cả 2 bước" đã vá, đợt audit v25.51→v25.63 — ketoan1 ở phòng ban khác, không liên quan
+    // gì tới quy trình duyệt Phòng Kinh Doanh nên là lựa chọn "độc lập" hợp lệ).
+    perms: { admin: false, paymentManage: true, contractView: { all: true, depts: [] }, officeView: { all: true, depts: [] }, officeCreate: true, officeBuy: true, officeFixTechMechanical: true }
   },
   {
     id: 9, username: 'budgetmgr1', pass: '123456', name: 'Ngô Văn Quản Lý NS', email: 'budgetmgr1@company.com', phone: '0900000009', dept: 'Ban Giám Đốc', jobTitle: 'Phó giám đốc',

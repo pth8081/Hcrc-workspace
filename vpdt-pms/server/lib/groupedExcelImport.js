@@ -158,10 +158,13 @@ async function parseGroupedExcelFile(spec, buffer, ext) {
   let sawAnySheet = false;
   let overLimit = false;
 
+  // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63, DoS): trước đây sheet lạ chỉ bị bỏ qua TRONG onRow() (đã
+  // buffer hết vào RAM rồi mới lọc) — truyền shouldCollectSheet để xlsxSafeRead.js bỏ qua NGAY từ
+  // bước đọc, không buffer dòng nào của sheet không khớp tên nào trong sheetSpecs.
   await streamAllSheetsRows(buffer, (sheetName, cells, rowNumber) => {
     const normName = normalizeText(sheetName);
     const sheetSpec = byName.get(normName);
-    if (!sheetSpec) return true; // bỏ qua sheet lạ (VD "Hướng Dẫn" của chính file mẫu)
+    if (!sheetSpec) return true; // phòng hờ (thực tế đã bị lọc ở shouldCollectSheet bên dưới)
     sawAnySheet = true;
     let bucket = rowsBySheet.get(normName);
     if (!bucket) { bucket = { idxByKey: null, rows: [], dataRows: 0 }; rowsBySheet.set(normName, bucket); }
@@ -185,7 +188,7 @@ async function parseGroupedExcelFile(spec, buffer, ext) {
     });
     bucket.rows.push({ item, row: rowNumber, rowErrors });
     return true;
-  });
+  }, { shouldCollectSheet: (sheetName) => byName.has(normalizeText(sheetName)) });
 
   if (!sawAnySheet) {
     throw new HttpError(400, `File không có sheet nào khớp tên yêu cầu (${sheetSpecs.map((s) => `"${s.sheetName}"`).join(', ')}) — vui lòng dùng đúng file mẫu (Tải Mẫu), không đổi tên sheet`);

@@ -12613,6 +12613,14 @@ const FORWARD_DB_KEY = { submissions: 'submissions', contracts: 'contracts' };
 const FORWARD_EMAIL_MODULE = { submissions: 'SUBMISSION', contracts: 'CONTRACT' };
 const FORWARD_NOUN = { submissions: 'tờ trình', contracts: 'hợp đồng' };
 
+// isForwardRecordPending(moduleKey, item) — true nếu hồ sơ gốc CÒN ở trạng thái PENDING (mirror
+// MODULE_CONFIGS[moduleKey].statusField ở lib/workflowEngine.js qua APPROVAL_OVERDUE_CONFIG đã có sẵn).
+// Dùng để ẩn nút "↩️ Trả Lời"/badge "⏳ Chờ bạn phản hồi" khi hồ sơ đã duyệt xong/bị từ chối — xin ý
+// kiến không còn ý nghĩa sau khi hồ sơ đã có kết quả cuối (TB#3, đợt vá v25.51→v25.63).
+function isForwardRecordPending(moduleKey, item) {
+  const statusField = APPROVAL_OVERDUE_CONFIG[moduleKey]?.statusField || 'status';
+  return item[statusField] === 'PENDING';
+}
 function forwardItemLookup(moduleKey, itemId) {
   return (DB[FORWARD_DB_KEY[moduleKey]] || []).find(x => x.id === itemId);
 }
@@ -12644,17 +12652,20 @@ function renderForwardBranchHTML(moduleKey, item, step, canForwardRoot) {
   const isAdmin = !!currentUser.perms?.admin;
   const visible = n => n.forwardedBy === my || n.forwardedTo === my || isAdmin;
   const rootNodes = nodes.filter(n => n.step === step && !n.parentNodeId && visible(n));
+  const recordPending = isForwardRecordPending(moduleKey, item);
 
   function renderNode(node) {
     const children = nodes.filter(n => n.parentNodeId === node.id && visible(n));
-    const canReply = node.forwardedTo === my && !node.reply;
+    const canReply = node.forwardedTo === my && !node.reply && recordPending;
     const replyHTML = node.reply
       ? `<div class="bg-emerald-50 border border-emerald-200 rounded p-2 mt-1 text-[11px]">
            💬 ${escapeHtml(node.reply.comment || '')}
            ${node.reply.fileUrl ? `<div class="mt-1"><button type="button" data-op="viewForwardReplyFile" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" data-arg2="'${escapeHtml(node.id)}'" class="text-sky-700 underline font-semibold">📎 Xem file ý kiến</button></div>` : ''}
            <div class="text-gray-400 mt-0.5">${escapeHtml(node.reply.repliedAt || '')}</div>
          </div>`
-      : `<div class="text-amber-600 italic text-[11px] mt-1">⏳ Chưa phản hồi</div>`;
+      : (recordPending
+          ? `<div class="text-amber-600 italic text-[11px] mt-1">⏳ Chưa phản hồi</div>`
+          : `<div class="text-gray-400 italic text-[11px] mt-1">Hồ sơ đã xử lý xong, không còn cần phản hồi</div>`);
     const replyFormHTML = canReply
       ? `<div class="mt-1.5 space-y-1 bg-white border border-purple-100 rounded p-1.5">
            <textarea id="fwdReplyComment_${escapeHtml(node.id)}" rows="2" placeholder="Nhập ý kiến trả lời..." class="w-full border p-1.5 rounded text-[11px]"></textarea>
@@ -12691,9 +12702,21 @@ function renderForwardBranchHTML(moduleKey, item, step, canForwardRoot) {
   `;
 }
 
+// _fwdModalContext — đặt lại mỗi lần openForwardModal() mở modal mới, đọc lại ở renderForwardPeoplePicker()
+// để loại NGAY những người ĐÃ được chuyển tiếp (cùng parentNodeId — cùng 1 "gốc" chuyển tiếp) khỏi danh
+// sách chọn (Thấp, đã vá audit v25.51→v25.63) — tránh chọn lại đúng người vừa nhờ, tạo cạnh trùng lặp vô
+// nghĩa (server vẫn cho tạo vì forwardedBy/forwardedTo khác cặp id, không phải lỗi logic, chỉ là UX thừa).
+let _fwdModalContext = null;
 function renderForwardPeoplePicker(scope, dept, preserveSelected) {
+  const alreadyForwarded = new Set();
+  if (_fwdModalContext) {
+    const { item, parentNodeId } = _fwdModalContext;
+    (item.forwardThreads || []).forEach(n => {
+      if ((n.parentNodeId || null) === (parentNodeId || null)) alreadyForwarded.add(n.forwardedTo);
+    });
+  }
   const candidates = (DB.users || []).filter(u => u && u.username && u.active !== false && u.username !== currentUser.username &&
-    (scope === 'all' || u.dept === dept));
+    !alreadyForwarded.has(u.username) && (scope === 'all' || u.dept === dept));
   renderPeopleMultiSelect('fwdPeoplePicker', candidates, preserveSelected || [], 'fwdPersonCheckbox', {});
 }
 function onForwardScopeChange() {
@@ -12712,6 +12735,7 @@ function onForwardScopeChange() {
 function openForwardModal(moduleKey, itemId, parentNodeId) {
   const item = forwardItemLookup(moduleKey, itemId);
   if (!item) return;
+  _fwdModalContext = { item, parentNodeId: parentNodeId || null };
   const defaultDept = currentUser.dept || item.dept || (DB.depts || [])[0] || '';
   const bodyHTML = `
     <div class="space-y-2">
@@ -12894,21 +12918,25 @@ function renderForwardInbox() {
     list.innerHTML = '<div class="text-gray-400 italic text-center py-6">Chưa có ai nhờ bạn cho ý kiến.</div>';
     return;
   }
-  list.innerHTML = entries.map(({ moduleKey, item, node }) => `
-    <div class="border rounded p-2.5 ${node.reply ? 'bg-gray-50' : 'bg-purple-50 border-purple-200'}">
+  list.innerHTML = entries.map(({ moduleKey, item, node }) => {
+    const pending = isForwardRecordPending(moduleKey, item);
+    const awaitingReply = !node.reply && pending; // TB#3 (10/2026): hồ sơ hết PENDING -> không còn "chờ phản hồi" nữa
+    const badgeText = node.reply ? '✅ Đã phản hồi' : (pending ? '⏳ Chờ bạn phản hồi' : 'ℹ️ Hồ sơ đã xử lý xong');
+    return `
+    <div class="border rounded p-2.5 ${awaitingReply ? 'bg-purple-50 border-purple-200' : 'bg-gray-50'}">
       <div class="flex justify-between items-start gap-2">
         <div>
           <div class="font-bold text-gray-800">${escapeHtml(item.title || '')} <span class="text-gray-400 font-normal">(${escapeHtml(item.code || '')})</span></div>
           <div class="text-gray-500 text-[11px] mt-0.5">${FORWARD_NOUN[moduleKey] === 'hợp đồng' ? '📑 Hợp Đồng' : '📜 Văn Bản Trình'} · Người chuyển tiếp: <b>${escapeHtml(node.forwardedByName || node.forwardedBy)}</b> · ${escapeHtml(node.forwardedAt || '')}</div>
         </div>
-        <span class="shrink-0 px-2 py-0.5 rounded font-bold text-[11px] ${node.reply ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${node.reply ? '✅ Đã phản hồi' : '⏳ Chờ bạn phản hồi'}</span>
+        <span class="shrink-0 px-2 py-0.5 rounded font-bold text-[11px] ${node.reply ? 'bg-emerald-100 text-emerald-800' : (pending ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-gray-600')}">${badgeText}</span>
       </div>
       ${node.message ? `<div class="text-gray-600 italic text-[11px] mt-1">💬 "${escapeHtml(node.message)}"</div>` : ''}
       <div class="mt-1.5">
-        <button type="button" data-op="openForwardInboxEntry" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" class="bg-sky-600 text-white px-2.5 py-1 rounded text-[11px] font-bold hover:bg-sky-700">🔎 Mở Hồ Sơ ${node.reply ? '' : '& Trả Lời'}</button>
+        <button type="button" data-op="openForwardInboxEntry" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" class="bg-sky-600 text-white px-2.5 py-1 rounded text-[11px] font-bold hover:bg-sky-700">🔎 Mở Hồ Sơ ${awaitingReply ? '& Trả Lời' : ''}</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 // openForwardInboxEntry() — đóng hộp thư, mở ĐÚNG modal chi tiết của hồ sơ nguồn (mỗi module tự định

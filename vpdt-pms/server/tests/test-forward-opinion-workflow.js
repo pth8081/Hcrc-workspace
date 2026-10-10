@@ -239,6 +239,44 @@ async function main() {
       assert.ok(canViewSubmission(FORWARDED_TO, sub, APP_DATA), 'Người được chuyển tiếp (khác phòng ban) phải xem được hồ sơ');
       assert.ok(!canViewSubmission(OUTSIDER, sub, APP_DATA), 'Người ngoài cuộc không liên quan KHÔNG được xem thêm nhờ tính năng này');
     });
+
+    await test('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63): hồ sơ đã bị xử lý xong (REJECTED) -> forward route chặn 409, không phụ thuộc currentStep', async () => {
+      resetRecords();
+      RECORDS.submissions[0].status = 'REJECTED';
+      const r1 = await api('POST', '/api/workflow/submissions/1/forward', { targetUsernames: [FORWARDED_TO.username] }, APPROVER);
+      assert.strictEqual(r1.status, 409, JSON.stringify(r1.body));
+      assert.strictEqual((RECORDS.submissions[0].forwardThreads || []).length, 0, 'không được tạo node forward nào trên hồ sơ đã xử lý xong');
+    });
+
+    await test('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63): forward-reply trên hồ sơ đã xử lý xong -> 409', async () => {
+      resetRecords();
+      const r1 = await api('POST', '/api/workflow/submissions/1/forward', { targetUsernames: [FORWARDED_TO.username] }, APPROVER);
+      const nodeId = r1.body.item.forwardThreads[0].id;
+      RECORDS.submissions[0].status = 'APPROVED';
+      const r2 = await api('POST', '/api/workflow/submissions/1/forward-reply', { nodeId, comment: 'Trễ' }, FORWARDED_TO);
+      assert.strictEqual(r2.status, 409, JSON.stringify(r2.body));
+    });
+
+    await test('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63): filterSubmissionsForUser() ẩn nhánh forward KHÔNG liên quan tới người xem (chỉ participant mới xem được)', async () => {
+      resetRecords();
+      // 2 nhánh forward SONG SONG, không liên quan nhau: APPROVER -> FORWARDED_TO, APPROVER -> FORWARDED_TO_2.
+      await api('POST', '/api/workflow/submissions/1/forward', { targetUsernames: [FORWARDED_TO.username] }, APPROVER);
+      const r2 = await api('POST', '/api/workflow/submissions/1/forward', { targetUsernames: [FORWARDED_TO_2.username] }, APPROVER);
+      const subRaw = r2.body.item;
+      assert.strictEqual(subRaw.forwardThreads.length, 2, 'phải có đủ 2 cạnh forward (2 nhánh song song)');
+      const { filterSubmissionsForUser } = require('../lib/recordViewScope');
+
+      const [visibleToForwardedTo2] = filterSubmissionsForUser([subRaw], FORWARDED_TO_2, APP_DATA);
+      assert.strictEqual(visibleToForwardedTo2.forwardThreads.length, 1, 'FORWARDED_TO_2 CHỈ được thấy đúng cạnh của mình, KHÔNG thấy cạnh của FORWARDED_TO');
+      assert.strictEqual(visibleToForwardedTo2.forwardThreads[0].forwardedTo, FORWARDED_TO_2.username);
+
+      const [visibleToForwardedTo] = filterSubmissionsForUser([subRaw], FORWARDED_TO, APP_DATA);
+      assert.strictEqual(visibleToForwardedTo.forwardThreads.length, 1, 'FORWARDED_TO CHỈ được thấy đúng cạnh của mình, KHÔNG thấy cạnh của FORWARDED_TO_2');
+      assert.strictEqual(visibleToForwardedTo.forwardThreads[0].forwardedTo, FORWARDED_TO.username);
+
+      const [visibleToApprover] = filterSubmissionsForUser([subRaw], APPROVER, APP_DATA);
+      assert.strictEqual(visibleToApprover.forwardThreads.length, 2, 'Approver (quyền xem đầy đủ, không CHỈ qua forward) vẫn thấy NGUYÊN mảng, không bị ẩn bớt');
+    });
   } finally {
     server.close();
   }

@@ -110,6 +110,15 @@ test('TẠO: tự chọn chính mình làm người xác nhận kỹ thuật -> 
   }, /400|chính mình/);
 });
 
+test('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63): không được chọn CHÍNH Trưởng Phòng (approver bước 1) làm Người Xác Nhận Kỹ Thuật', () => {
+  const tpWithTechPerm = { username: 'tp1', name: 'Trưởng Phòng A', active: true, perms: { officeFixTechMechanical: true } };
+  const payload = { subType: 'SUA_CHUA', dept: 'Phòng Kinh Doanh', techType: 'MECHANICAL', techAssignedTo: 'tp1' };
+  const appData = { officeFixDeptWorkflows: { 'Phòng Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp1'] } } }, users: [tpWithTechPerm] };
+  assert.throws(() => {
+    CREATE_MODULE_CONFIGS.officeReqs.extraValidate(payload, [], CREATOR, appData);
+  }, /400|độc lập/);
+});
+
 test('TẠO: hợp lệ -> server tự gán lại đúng username/tên (không tin tên client gửi)', () => {
   const payload = { subType: 'SUA_CHUA', dept: 'Phòng Kinh Doanh', techType: 'MECHANICAL', techAssignedTo: 'kt1', techAssignedToName: 'Tên Giả Mạo' };
   CREATE_MODULE_CONFIGS.officeReqs.extraValidate(payload, [], CREATOR, { users: [KY_THUAT] });
@@ -169,6 +178,22 @@ test('APPROVE bước kỹ thuật: người KHÁC (không phải techAssignedTo
   const item = makeOfficeFixItem({ currentStep: 2 });
   assert.throws(() => {
     applyWorkflowAction({ moduleKey: 'officeReqs', item, action: 'APPROVE', user: TRUONG_PHONG, comment: '', extraFields: { techCondition: 'x', techSeverityLevel: 'LOW', techProposedPlan: 'x', techEstimatedCost: 0 }, appData, users: appData.users });
+  }, /403|quyền/);
+});
+
+test('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63): thu hồi quyền officeFixTech* GIỮA CHỪNG (hồ sơ đã ở bước 2) -> không còn duyệt được', () => {
+  const appData = baseAppData();
+  const item = makeOfficeFixItem({ currentStep: 2 });
+  // Giả lập admin đã bỏ quyền officeFixTechMechanical của KY_THUAT sau khi hồ sơ đã tạo (techType mặc
+  // định của makeOfficeFixItem() là MECHANICAL, tài khoản vẫn active).
+  const revokedKyThuat = { ...KY_THUAT, perms: { ...KY_THUAT.perms, officeFixTechMechanical: false } };
+  const appDataRevoked = { ...appData, users: appData.users.map(u => u.username === KY_THUAT.username ? revokedKyThuat : u) };
+  assert.throws(() => {
+    applyWorkflowAction({
+      moduleKey: 'officeReqs', item, action: 'APPROVE', user: revokedKyThuat, comment: '',
+      extraFields: { techCondition: 'x', techSeverityLevel: 'LOW', techProposedPlan: 'x', techEstimatedCost: 0 },
+      appData: appDataRevoked, users: appDataRevoked.users
+    });
   }, /403|quyền/);
 });
 

@@ -822,9 +822,21 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   // ràng" đã dùng cho assertPayloadFileUrlsOwnedByUser()).
   const rawCurrentStepApprovers = approvers?.[currentStep] || [];
   const activeUserByUsername = new Map((users || []).filter(u => u && u.username).map(u => [u.username, u]));
+  // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63): bước "🔧 Xác Nhận Kỹ Thuật" (isTechStep, officeReqs/SUA_CHUA)
+  // dùng approvers singleton [item.techAssignedTo] được chốt NGAY LÚC TẠO/SỬA hồ sơ — nếu admin thu
+  // hồi quyền officeFixTechIT/Mechanical của người đó SAU KHI hồ sơ đã ở bước này (đổi vai trò, chuyển
+  // phòng...) thì vòng lọc active ở trên không phát hiện được (tài khoản vẫn active=true). Thêm 1 lớp
+  // lọc riêng CHỈ cho đúng bước này: người không còn giữ đúng quyền kỹ thuật thì không còn là approver
+  // hợp lệ của bước, cùng tinh thần "coi username không tìm thấy record là an toàn, chỉ chặn khi có
+  // bằng chứng rõ ràng" đã áp dụng cho bộ lọc active ở trên.
+  const isTechStepNow = moduleKey === 'officeReqs' && steps[currentStep - 1]?.isTechStep;
+  const techPermKey = isTechStepNow ? OFFICE_FIX_TECH_TYPE_PERM[item.techType] : null;
   const currentStepApprovers = rawCurrentStepApprovers.filter(username => {
     const u = activeUserByUsername.get(username);
-    return !u || u.active !== false;
+    if (!u) return true;
+    if (u.active === false) return false;
+    if (techPermKey && !u.perms?.[techPermKey]) return false;
+    return true;
   });
   const stepName = steps[currentStep - 1]?.name || `Bước ${currentStep}`;
 

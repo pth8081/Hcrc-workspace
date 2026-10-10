@@ -563,9 +563,11 @@ async function seedStoreSelfDailyChecklistTemplateIfMissing() {
 }
 
 // Cùng định dạng với nowVN() ở lib/recordActions.js (không export sẵn cho seedDefaults.js nên lặp lại
-// nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ).
+// nguyên văn 1 dòng, tránh phải require chéo module chỉ vì 1 hàm định dạng giờ) — PHẢI truyền đủ options
+// zero-pad (2-digit) giống hệt, nếu không ngày/giờ/phút dưới 10 sẽ thiếu số 0 đệm đầu (lỗi đã vá, audit
+// v25.51→v25.63: "08:05:00" bị in ra "8:5:0" chỉ ở các bản ghi do migration này tạo).
 function nowVNForMigration() {
-  return new Date().toLocaleString('vi-VN');
+  return new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 // migrateStuckOperationApprovalStatuses export riêng THÊM vào cho

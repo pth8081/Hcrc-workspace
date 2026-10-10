@@ -697,10 +697,16 @@ function resolveApprovalGroupRef(text, groups) {
 // trả về bản ghi hoàn chỉnh để lưu (idOrNull = id hiện có nếu THAY THẾ, null nếu TẠO MỚI — hàm tự quyết
 // định dùng id cũ hay approvalGroupsGenId()).
 function mergeApprovalGroupsImportList(existingList, importedList, idPrefix, buildRecord) {
+  // Thấp (đã vá, audit v25.51→v25.63): "Mã Nhóm"/"Mã Cấp" gõ khác hoa/thường mã hiện có (VD "grp1" khi mã
+  // thật là "GRP1") từng bị coi là KHÔNG khớp -> tạo trùng lặp dòng mới thay vì thay thế đúng dòng cũ —
+  // đối chiếu KHÔNG phân biệt hoa/thường (so khớp bằng Map theo key đã lowercase), vẫn GIỮ NGUYÊN id gốc
+  // đã có (không đổi hoa/thường theo file nhập, chỉ dùng để xác định THAY THẾ hay TẠO MỚI).
+  const normId = (s) => String(s ?? '').trim().toLowerCase();
   const existingById = new Map((existingList || []).map(x => [x.id, x]));
+  const existingIdByNorm = new Map((existingList || []).map(x => [normId(x.id), x.id]));
   const result = (existingList || []).slice();
   importedList.forEach(imported => {
-    const matchId = existingById.has(imported.code) ? imported.code : null;
+    const matchId = existingIdByNorm.get(normId(imported.code)) ?? null;
     const id = matchId || approvalGroupsGenId(idPrefix);
     const record = buildRecord(imported, matchId ? existingById.get(matchId) : null, id);
     const idx = result.findIndex(x => x.id === id);
@@ -734,14 +740,16 @@ function computeApprovalGroupsModuleMerge(cfg, existingGroups, existingLevels, i
       imported.visibleGroupIds.forEach(text => {
         const gid = resolveApprovalGroupRef(text, groups);
         if (!gid) errors.push({ sheet: 'Cấp', message: `Mã Cấp "${imported.code}" (${imported.label}): "Mã Nhóm Hiển Thị" = "${text}" không khớp Nhóm nào (đã Nhập ở sheet "Nhóm" hoặc đang có sẵn) — kiểm tra lại chính tả/mã.` });
-        else visibleGroupIds.push(gid);
+        // Thấp (đã vá, audit v25.51→v25.63): dedupe khi admin gõ TRÙNG cùng Mã Nhóm/nhãn nhiều lần trong
+        // CÙNG 1 ô (VD "A;A;B") — không có lý do giữ id trùng lặp trong mảng lưu xuống CSDL.
+        else if (!visibleGroupIds.includes(gid)) visibleGroupIds.push(gid);
       });
     }
     const lockedGroupIds = [];
     (imported.lockedGroupIds || []).forEach(text => {
       const gid = resolveApprovalGroupRef(text, groups);
       if (!gid) errors.push({ sheet: 'Cấp', message: `Mã Cấp "${imported.code}" (${imported.label}): "Mã Nhóm Bắt Buộc" = "${text}" không khớp Nhóm nào — kiểm tra lại chính tả/mã.` });
-      else lockedGroupIds.push(gid);
+      else if (!lockedGroupIds.includes(gid)) lockedGroupIds.push(gid);
     });
     if (Array.isArray(visibleGroupIds)) {
       const missing = lockedGroupIds.filter(id => !visibleGroupIds.includes(id));

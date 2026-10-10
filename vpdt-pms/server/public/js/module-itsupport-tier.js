@@ -507,6 +507,17 @@ function renderWorkflowTemplatesTable() {
 // ĐÚNG 1 LẦN đều làm ở CLIENT, ngay dưới đây.
 let workflowStepsImportPreview = null; // {fileName, records:[{id,name,steps}], errors:[{row?,message}]}
 
+// Thấp (đã vá, audit v25.51→v25.63): gộp nhiều dòng CÙNG Mã WF trong 1 file (groupParsedRows() ở
+// lib/groupedExcelImport.js) đã KHÔNG phân biệt hoa/thường (normalizeText()), nhưng bước đối chiếu với
+// DB.workflows hiện có ở dưới lại so khớp "===" phân biệt hoa/thường — gõ "wf_1step" khi mã thật là
+// "WF_1STEP" từng bị coi là mã MỚI, tạo trùng lặp thay vì thay thế đúng mẫu đã có. findExistingWorkflow()
+// so khớp KHÔNG phân biệt hoa/thường, đồng nhất với hành vi gộp dòng — rec vẫn GIỮ NGUYÊN id gốc do admin
+// gõ trong file (không tự đổi hoa/thường cho mã đã có, chỉ dùng để XÁC ĐỊNH là THAY THẾ hay TẠO MỚI).
+function findExistingWorkflowCaseInsensitive(id) {
+  const norm = String(id || '').trim().toLowerCase();
+  return DB.workflows.find(w => String(w.id || '').trim().toLowerCase() === norm);
+}
+
 const WORKFLOW_STEPS_EXCEL_COLUMNS = [
   { key: 'code', header: 'Mã WF' },
   { key: 'name', header: 'Tên Quy Trình' },
@@ -572,7 +583,7 @@ function renderWorkflowStepsImportPreview() {
     ? `<div class="border border-red-200 bg-red-50 rounded p-1.5 max-h-28 overflow-y-auto text-[11px] mb-1.5"><div class="font-bold text-red-700 mb-0.5">⚠️ ${state.errors.length} lỗi — các dòng/mẫu này sẽ KHÔNG được nhập:</div><ul class="list-disc pl-4 text-red-700">${state.errors.map(e => `<li>${e.row ? `Dòng ${escapeHtml(String(e.row))}: ` : ''}${escapeHtml(e.message)}</li>`).join('')}</ul></div>`
     : '';
   const rowsHtml = (state.records || []).map(rec => {
-    const existing = DB.workflows.find(w => w.id === rec.id);
+    const existing = findExistingWorkflowCaseInsensitive(rec.id);
     const status = existing
       ? (existing.steps.length !== rec.steps.length
         ? `<span class="text-amber-700 font-bold">✏️ Thay thế (đổi số bước ${existing.steps.length}→${rec.steps.length})</span>`
@@ -610,7 +621,7 @@ async function confirmWorkflowStepsImport() {
 
   const riskyChanges = [];
   state.records.forEach(rec => {
-    const existing = DB.workflows.find(w => w.id === rec.id);
+    const existing = findExistingWorkflowCaseInsensitive(rec.id);
     if (existing && existing.steps.length !== rec.steps.length) {
       const usages = collectWorkflowTemplateUsages(rec.id);
       if (usages.length > 0) {
@@ -629,8 +640,9 @@ async function confirmWorkflowStepsImport() {
   const next = DB.workflows.map(w => ({ ...w }));
   let added = 0, updated = 0;
   state.records.forEach(rec => {
-    const idx = next.findIndex(w => w.id === rec.id);
-    if (idx >= 0) { next[idx] = rec; updated++; } else { next.push(rec); added++; }
+    const normId = String(rec.id || '').trim().toLowerCase();
+    const idx = next.findIndex(w => String(w.id || '').trim().toLowerCase() === normId);
+    if (idx >= 0) { next[idx] = { ...rec, id: next[idx].id }; updated++; } else { next.push(rec); added++; }
   });
   DB.workflows = next;
 

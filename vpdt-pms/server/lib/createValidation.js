@@ -1260,6 +1260,17 @@ const CREATE_MODULE_CONFIGS = {
         if (assignedUser.username === user.username) {
           throw new CreateError(400, 'Không thể tự chọn chính mình làm Người Xác Nhận Kỹ Thuật');
         }
+        // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63, mức Trung bình): trước đây không chặn chọn CHÍNH
+        // Trưởng Phòng (approver bước 1 của phòng ban này) làm Người Xác Nhận Kỹ Thuật — người đó
+        // duyệt bước 1 rồi tự duyệt luôn bước 2 (Kỹ Thuật Xác Nhận) của CHÍNH hồ sơ mình vừa duyệt,
+        // mất hẳn ý nghĩa "đánh giá kỹ thuật độc lập". Dùng resolveStepApproverUsernames() (lib/
+        // positionApprovers.js, ĐIỂM TRA CỨU DÙNG CHUNG an toàn với cả POSITION/flat mode) để lấy
+        // đúng danh sách approver bước 1 của phòng ban hồ sơ, mirror cách workflowEngine.js tính.
+        const step1Approvers = resolveStepApproverUsernames(
+          appData?.officeFixDeptWorkflows?.[payload.dept], 1, appData?.users);
+        if (step1Approvers.includes(assignedUser.username)) {
+          throw new CreateError(400, 'Người Xác Nhận Kỹ Thuật không được là Trưởng Phòng duyệt bước 1 của phòng ban này (đánh giá kỹ thuật cần độc lập)');
+        }
         payload.techType = techType;
         payload.techAssignedTo = assignedUser.username;
         payload.techAssignedToName = assignedUser.name;
