@@ -2655,6 +2655,22 @@ theo đúng vị trí trong cây**.
   - Số liệu **cộng dồn theo đúng cấp cây** (Vị Trí → Phòng Ban chứa nó → Khối
     → Công Ty) — dòng Phòng Ban/Khối/Công Ty hiện tổng Định Biên/Thực Tế của
     toàn bộ nhánh con, không phải số riêng của chính node đó.
+  - **Ngoại lệ "Chỉ tính riêng node này" (từ 10/2026, theo yêu cầu người dùng
+    về "Ban Tổng Giám Đốc")**: 1 checkbox TUỲ CHỌN trong modal Sửa Phòng
+    Ban/Khối ("☑ Chỉ tính Định Biên/Thực Tế riêng của node này (không cộng
+    dồn các Phòng/Ban con)") — bật checkbox này thì dòng HIỂN THỊ của CHÍNH
+    node đó chỉ cộng các **Vị Trí gắn TRỰC TIẾP** vào nó, KHÔNG cộng thêm số
+    của các Phòng/Ban/Khối con nằm bên dưới trong sơ đồ. Dùng cho trường hợp
+    1 node vừa có vài Vị Trí lãnh đạo gắn trực tiếp VỪA là nút cha cấu trúc
+    của toàn bộ các Ban/Phòng khác (VD "Ban Tổng Giám Đốc" là cha của mọi Ban
+    trong sơ đồ nhưng bản thân chỉ có 2 Vị Trí thật: Tổng Giám Đốc + Phó Tổng
+    Giám Đốc — nếu không bật checkbox này, dòng "Ban Tổng Giám Đốc" sẽ vô tình
+    hiện tổng của CẢ CÔNG TY do mọi nhánh đều là con cháu của nó). Số cộng dồn
+    lên node CHA của nó (và cuối cùng lên Công Ty) **không bị ảnh hưởng** —
+    luôn cộng đầy đủ toàn bộ nhánh con như cũ, chỉ riêng DÒNG HIỂN THỊ của
+    chính node bật checkbox mới bị thu hẹp lại. Mặc định TẮT (không ảnh hưởng
+    bất kỳ Phòng/Ban nào khác chưa từng bật) — chỉ áp dụng cho node Phòng
+    Ban/Khối, không có ở Vị Trí hay Công Ty (Công Ty luôn là tổng toàn bộ).
   - Bấm **"📊 Xuất Excel"** ngay trong bảng báo cáo để tải về — route riêng
     (không qua `/api/admin/export-xlsx` dùng chung, vì cần tính Thực Tế từ dữ
     liệu Hồ Sơ Nhân Sự vốn đã bị chặn khỏi API Báo Cáo chung — cùng lý do như

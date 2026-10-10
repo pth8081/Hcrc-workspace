@@ -11823,6 +11823,12 @@ bindCspDelegation('orgChartNodeModal');
 bindCspDelegation('orgChartApplyResultModal');
 bindCspDelegation('orgChartDiffModal');
 bindCspDelegation('orgChartImportModal');
+// #orgChartHeadcountModal ("📋 Báo Cáo Định Biên Nhân Sự", thêm sau cùng đợt 10/2026 — xem
+// lib/headcountReport.js) CÙNG LỖI với #orgChartImportModal ở trên: 1 <div> gốc độc lập sống NGOÀI
+// #orgChartSection nhưng bị BỎ SÓT khỏi cụm bindCspDelegation() này lúc thêm tính năng — người dùng báo
+// "mở ra lại không đóng được" (cả 2 nút ✕/Đóng đều dùng data-op="closeOrgChartHeadcountModal", không có
+// listener nào bắt được sự kiện click, không phải modal bị khoá/treo thật sự).
+bindCspDelegation('orgChartHeadcountModal');
 // Onboarding / Offboarding — module con riêng của Nhân Sự (#hrLifecycleSection, TÁCH khỏi #hrSection,
 // cùng lý do #orgChartSection ở trên) — BỊ THIẾU gốc riêng từ lúc dựng module này (commit 2278c17),
 // khiến MỌI data-op/data-op-change/data-op-input/data-op-submit bên trong (2 sub-tab Onboarding/

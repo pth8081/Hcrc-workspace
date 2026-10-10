@@ -1,8 +1,64 @@
 # Phiên bản hiện tại
 
-**25.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.60 (2026-10-10): Báo Cáo Định Biên — "Ban Tổng Giám Đốc" tính riêng, không cộng dồn cả công ty
+
+Người dùng báo đúng: dòng "Ban Tổng Giám Đốc" ở Báo Cáo Định Biên Nhân Sự
+hiện tổng = 87 (bằng cả công ty) trong khi thực tế Ban này chỉ có 2 Vị Trí
+(Tổng Giám Đốc + Phó Tổng Giám Đốc) — do mọi Ban/Phòng khác trong sơ đồ đều
+là con cháu cấu trúc của Ban Tổng Giám Đốc, nên thuật toán cộng dồn theo cây
+cũ vô tình cộng luôn cả nhánh. Đã phân tích + gửi demo ảnh, người dùng xác
+nhận phương án checkbox trước khi triển khai.
+
+Đã triển khai (KHÔNG đổi hành vi cộng dồn mặc định của bất kỳ Phòng/Ban nào
+khác — mặc định vẫn TẮT):
+
+- **`lib/orgChart.js`**: thêm field tuỳ chọn `headcountSelfOnly` (boolean,
+  chỉ áp dụng node DEPARTMENT, luôn `null` ở COMPANY/POSITION) — admin bật
+  qua 1 checkbox mới trong modal Sửa Phòng Ban/Khối.
+- **`lib/headcountReport.js`**: tách rõ 2 giá trị cộng dồn — `agg` (luôn cộng
+  ĐẦY ĐỦ toàn bộ nhánh con, trả lên node cha như cũ, không bao giờ bị ảnh
+  hưởng bởi cờ này) và `ownAgg` (chỉ cộng các Vị Trí gắn TRỰC TIẾP vào node).
+  Dòng HIỂN THỊ của 1 node = `ownAgg` khi bật `headcountSelfOnly`, ngược lại
+  vẫn là `agg` như trước — nhờ vậy Công Ty/các Ban khác không đổi gì cả, chỉ
+  riêng dòng "Ban Tổng Giám Đốc" (hoặc bất kỳ node nào admin chủ động bật)
+  mới hiện đúng số thật của chính nó.
+- **`public/index.html` + `public/js/module-orgchart.js`**: checkbox mới
+  trong modal Sửa/Thêm node DEPARTMENT, prefill đúng trạng thái khi sửa, gửi
+  đúng giá trị trong payload Lưu.
+
+Test mới: `tests/test-orgchart-node-headcount-selfonly-ui.js` (6 kịch bản UI
+— prefill, toggle, payload gửi đi) + mở rộng
+`tests/test-orgchart-headcount-report.js` (pure-logic tái hiện đúng kịch bản
+người dùng + HTTP persistence qua route thật, 7/7). Chạy lại toàn bộ 10 bộ
+test Cơ Cấu Tổ Chức liên quan (bao gồm bản vá CSP modal v25.59) đều pass,
+không regression. Đã cập nhật `deploy/Huong-dan-nghiep-vu.md` (mục 4.5.1).
+
+Không cần thao tác deploy gì thêm ngoài copy code + `pm2 restart` (không đổi
+`schema.sql`/`.env.example`/`package.json` dependencies).
+
+## v25.59 (2026-10-10): Vá lỗi CSP — không đóng được modal "Báo Cáo Định Biên Nhân Sự"
+
+Người dùng báo mở modal "📋 Báo Cáo Định Biên Nhân Sự" (Nhân Sự → Cơ Cấu Tổ
+Chức) xong không bấm đóng được (cả nút ✕ lẫn nút "Đóng"). Nguyên nhân: cùng
+lớp lỗi đã gặp với `orgChartImportModal` trước đây — `#orgChartHeadcountModal`
+là 1 `<div>` gốc độc lập sống NGOÀI `#orgChartSection` trong `index.html`,
+nhưng lúc thêm tính năng này (đợt 10/2026 trước) đã bị BỎ SÓT khỏi cụm
+`bindCspDelegation()` tương ứng — nút mở (nằm trong section đã bind) hoạt
+động bình thường, nhưng 2 nút đóng bên trong modal không có listener nào
+bắt được, không phải do modal bị khoá/treo thật sự.
+
+Đã vá: thêm `bindCspDelegation('orgChartHeadcountModal')` vào
+`public/js/core.js`. Test mới `tests/test-orgchart-headcount-modal-binding.js`
+(5 kịch bản, xác nhận test FAIL đúng ở bước đóng khi tạm bỏ dòng vá, PASS khi
+có) + chạy lại 6 bộ test Cơ Cấu Tổ Chức liên quan đều pass, không regression.
+
+(Lưu ý: đợt này KHÔNG bao gồm bản sửa logic "Ban Tổng Giám Đốc" tính sai tổng
+định biên = tổng công ty — đang chờ người dùng xác nhận phương án qua ảnh demo
+trước khi triển khai, xem trao đổi cùng ngày.)
 
 ## v25.58 (2026-10-10): Hồ Sơ Cá Nhân — tự bật/tắt nhận email "Cần phê duyệt" theo từng phân hệ
 
