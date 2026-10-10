@@ -65,7 +65,10 @@ function applyDropdownValidation(sheet, colKey, options, { startRow = 2, endRow 
     formula = `"${joined}"`;
   } else {
     const helperCol = sheet.getColumn(helperColIdx || (sheet.columnCount + 50));
-    opts.forEach((opt, i) => { sheet.getCell(helperCol.number, i + 1).value = opt; });
+    // sheet.getCell(row, col) — KHÔNG phải (col, row). Đảo ngược 2 tham số này (lỗi thật phát hiện qua
+    // test round-trip 10/2026) khiến dữ liệu danh sách bị ghi NGANG vào dòng số `helperCol.number` thay
+    // vì ghi DỌC xuống đúng 1 cột ẩn — tạo ra 1 dòng "rác" lẫn vào vùng dữ liệu thật của sheet.
+    opts.forEach((opt, i) => { sheet.getCell(i + 1, helperCol.number).value = opt; });
     helperCol.hidden = true;
     formula = `$${helperCol.letter}$1:$${helperCol.letter}$${opts.length}`;
   }

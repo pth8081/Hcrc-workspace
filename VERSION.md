@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**25.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.70 (2026-10): Vá 2 lỗi thật phát hiện khi test lại v25.69 (dropdown Excel)
+
+Theo yêu cầu người dùng ("test lại kỹ xem có ảnh hưởng thao tác/logic nghiệp
+vụ không" sau khi merge v25.69) — viết thêm test round-trip (Tải Mẫu → điền
+dữ liệu → Nhập lại) cho đúng nhánh "danh sách dropdown DÀI >255 ký tự" chưa
+được test kỹ ở đợt trước, phát hiện 2 lỗi THẬT:
+
+1. **`lib/adminExport.js::applyDropdownValidation()`** — gọi
+   `sheet.getCell(helperCol.number, i + 1)` SAI thứ tự tham số (ExcelJS dùng
+   `getCell(row, col)`, không phải `(col, row)`), khiến danh sách dropdown
+   DÀI bị ghi NGANG vào 1 dòng dữ liệu thật (dòng số = chỉ số cột ẩn) thay
+   vì ghi DỌC xuống 1 cột ẩn — tạo ra 1 dòng "rác" lẫn ngay vào vùng dữ
+   liệu thật của sheet mẫu tải về.
+2. **`lib/laborContractImport.js`/`lib/orgChartImport.js`** — gọi
+   `applyDropdownValidation()` TRƯỚC khi thêm dòng ví dụ mẫu
+   (`sheet.addRow()`). Vì hàm này tạo sẵn (lazy) các dòng 2-500 ngay khi
+   gán `dataValidation` cho từng dòng, gọi trước khiến `addRow()` sau đó bị
+   đẩy xuống nối tiếp sau dòng 500 (dòng ví dụ mẫu nằm ở dòng ~501+ thay vì
+   dòng 2) — người dùng mở file Tải Mẫu thấy gần 500 dòng trống trước khi
+   thấy dòng ví dụ, dù dropdown ở dòng 2 vẫn hoạt động bình thường (lỗi chỉ
+   lộ ra khi NHÌN vào file, không lộ qua test Nhập lại nguyên file không
+   sửa gì — đây là lý do lọt qua ở đợt test trước, chỉ bắt được khi viết
+   test chủ động điền 1 dòng dữ liệu thật vào ĐÚNG dòng 2 rồi đọc lại).
+
+Cả 2 lỗi chỉ ảnh hưởng ĐÚNG tính năng dropdown Excel mới ở v25.69 (Excel
+Tải Mẫu User/Hồ Sơ Nhân Sự/Hợp Đồng Lao Động/Cơ Cấu Tổ Chức) — không đụng
+tới logic nghiệp vụ/thao tác nút bấm nào khác. Đã vá cả 2 (đổi đúng thứ tự
+tham số + đổi đúng thứ tự gọi hàm), thêm test round-trip mới
+(`test-excel-dropdown-longlist-roundtrip.js`) + 2 assertion chặn tái phát
+(kiểm tra dòng ví dụ mẫu đúng vị trí dòng 2/dòng 2-6) vào
+`test-labor-contract-excel.js`/`test-orgchart-import-export.js`.
 
 ## v25.69 (2026-10): Dán nhiều mã vào ô tìm kiếm + dropdown Excel theo danh mục
 

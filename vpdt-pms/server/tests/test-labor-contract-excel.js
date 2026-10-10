@@ -55,6 +55,13 @@ async function partA() {
     assert.ok(dv.formulae[0].includes('Phòng Kế Toán') && dv.formulae[0].includes('Phòng Kinh Doanh'));
   });
 
+  await test('LỖI THẬT đã vá: buildImportTemplateWorkbook({depts}) phải giữ dòng ví dụ mẫu ĐÚNG dòng 2 (không bị applyDropdownValidation() đẩy xuống dòng 501+)', () => {
+    const wb = laborContractImport.buildImportTemplateWorkbook({ depts: ['Phòng Kế Toán', 'Phòng Kinh Doanh'] });
+    const sheet = wb.getWorksheet('Hợp Đồng Lao Động');
+    assert.strictEqual(sheet.actualRowCount, 2, 'chỉ 2 dòng thật sự có dữ liệu (header + 1 dòng ví dụ) — nếu lệch nghĩa là dòng ví dụ bị đẩy đi chỗ khác');
+    assert.strictEqual(sheet.getRow(2).getCell('employeeCode').value, 'NV1001', 'dòng ví dụ mẫu (NV1001) phải nằm ĐÚNG dòng 2, không bị đẩy xuống dòng 501+');
+  });
+
   await test('buildExportWorkbook() có đủ cột sửa-được + cột CHỈ XEM', () => {
     const contract = laborContract.defaultContract({
       id: 1, employeeCode: 'NV9001', code: 'HDLD-NV9001-1', status: 'ACTIVE',

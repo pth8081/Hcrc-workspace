@@ -48,19 +48,6 @@ async function buildImportTemplateWorkbook({ depts, stores, jobTitles, storeJobT
   const sheet = wb.addWorksheet('Cơ Cấu Tổ Chức');
   sheet.columns = COLUMNS;
   styleHeaderRow(sheet.getRow(1));
-  // Dropdown Excel theo danh mục/enum (10/2026, yêu cầu người dùng: "tải file mẫu cũng sẽ chọn ở ô
-  // Excel theo danh mục drop list để tránh bị nhầm") — enum cố định (nodeTypeLabel/requiresDeptLabel/
-  // posType) luôn gắn được; departmentRef/jobTitle/jobGrade chỉ gắn khi caller có truyền danh mục THẬT
-  // (route /import-template đã truyền — xem routes/orgChart.js), test THUẦN gọi không tham số vẫn chạy
-  // bình thường (không bắt buộc, cùng khuôn lib/laborContractImport.js).
-  const deptDropdownOptions = [...new Set([...(depts || []), ...(stores || [])])];
-  const jobTitleDropdownOptions = [...new Set([...(jobTitles || []), ...((storeJobTitles || []).map(t => t.label))])];
-  applyDropdownValidation(sheet, 'nodeTypeLabel', Object.values(NODE_TYPE_LABELS), { helperColIdx: COLUMNS.length + 50 });
-  applyDropdownValidation(sheet, 'requiresDeptLabel', ['Có', 'Không'], { helperColIdx: COLUMNS.length + 51 });
-  applyDropdownValidation(sheet, 'posType', Object.keys(POS_TYPE_LABELS), { helperColIdx: COLUMNS.length + 52 });
-  if (deptDropdownOptions.length) applyDropdownValidation(sheet, 'departmentRef', deptDropdownOptions, { helperColIdx: COLUMNS.length + 53 });
-  if (jobTitleDropdownOptions.length) applyDropdownValidation(sheet, 'jobTitle', jobTitleDropdownOptions, { helperColIdx: COLUMNS.length + 54 });
-  if (jobGrades && jobGrades.length) applyDropdownValidation(sheet, 'jobGrade', jobGrades, { helperColIdx: COLUMNS.length + 55 });
   const sampleRows = [
     { nodeKey: 'CT', parentKey: '', nodeTypeLabel: 'Công Ty', nodeName: 'Công Ty ABC', departmentRef: '', jobTitle: '', requiresDeptLabel: '', posType: '', jobGrade: '', displayOrder: 0 },
     { nodeKey: 'PKD', parentKey: 'CT', nodeTypeLabel: 'Phòng Ban', nodeName: 'Phòng Kinh Doanh', departmentRef: 'Phòng Kinh Doanh', jobTitle: '', requiresDeptLabel: '', posType: '', jobGrade: '', displayOrder: 0 },
@@ -70,6 +57,22 @@ async function buildImportTemplateWorkbook({ depts, stores, jobTitles, storeJobT
   ];
   sampleRows.forEach(r => sheet.addRow(r));
   for (let i = 2; i <= sampleRows.length + 1; i++) sheet.getRow(i).font = { italic: true, color: { argb: 'FF6B7280' } };
+  // Dropdown Excel theo danh mục/enum (10/2026, yêu cầu người dùng: "tải file mẫu cũng sẽ chọn ở ô
+  // Excel theo danh mục drop list để tránh bị nhầm") — enum cố định (nodeTypeLabel/requiresDeptLabel/
+  // posType) luôn gắn được; departmentRef/jobTitle/jobGrade chỉ gắn khi caller có truyền danh mục THẬT
+  // (route /import-template đã truyền — xem routes/orgChart.js), test THUẦN gọi không tham số vẫn chạy
+  // bình thường (không bắt buộc, cùng khuôn lib/laborContractImport.js). PHẢI gọi SAU sampleRows.forEach
+  // ở trên — LỖI THẬT đã vá (10/2026, phát hiện qua test round-trip): applyDropdownValidation() tạo sẵn
+  // (lazy) các dòng 2..500 ngay khi gọi getCell() trên từng dòng, nên nếu gọi TRƯỚC addRow(), 5 dòng ví
+  // dụ mẫu bị đẩy xuống tận dòng 501-505 thay vì 2-6 như mong đợi.
+  const deptDropdownOptions = [...new Set([...(depts || []), ...(stores || [])])];
+  const jobTitleDropdownOptions = [...new Set([...(jobTitles || []), ...((storeJobTitles || []).map(t => t.label))])];
+  applyDropdownValidation(sheet, 'nodeTypeLabel', Object.values(NODE_TYPE_LABELS), { helperColIdx: COLUMNS.length + 50 });
+  applyDropdownValidation(sheet, 'requiresDeptLabel', ['Có', 'Không'], { helperColIdx: COLUMNS.length + 51 });
+  applyDropdownValidation(sheet, 'posType', Object.keys(POS_TYPE_LABELS), { helperColIdx: COLUMNS.length + 52 });
+  if (deptDropdownOptions.length) applyDropdownValidation(sheet, 'departmentRef', deptDropdownOptions, { helperColIdx: COLUMNS.length + 53 });
+  if (jobTitleDropdownOptions.length) applyDropdownValidation(sheet, 'jobTitle', jobTitleDropdownOptions, { helperColIdx: COLUMNS.length + 54 });
+  if (jobGrades && jobGrades.length) applyDropdownValidation(sheet, 'jobGrade', jobGrades, { helperColIdx: COLUMNS.length + 55 });
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 100;
   const notes = [

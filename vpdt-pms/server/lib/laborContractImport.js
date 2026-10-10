@@ -96,10 +96,6 @@ function buildImportTemplateWorkbook({ depts } = {}) {
     ...EDITABLE_COLUMNS
   ];
   styleHeaderRow(sheet.getRow(1));
-  // Dropdown "Phòng Ban" theo danh mục THẬT (10/2026, yêu cầu người dùng: tránh gõ sai chính tả khi
-  // làm file) — chỉ áp khi caller có truyền depts (route /template đã truyền, test THUẦN gọi không
-  // tham số vẫn chạy được như cũ, không bắt buộc).
-  if (depts && depts.length) applyDropdownValidation(sheet, 'dept', depts, { helperColIdx: sheet.columns.length + 50 });
   sheet.addRow({
     employeeCode: 'NV1001', fullName: 'Nguyễn Văn A', contractType: 'Xác định thời hạn',
     startDate: '2026-01-01', endDate: '2027-01-01', baseSalary: 12000000,
@@ -109,6 +105,14 @@ function buildImportTemplateWorkbook({ depts } = {}) {
     dept: 'Phòng Kinh Doanh'
   });
   sheet.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
+  // Dropdown "Phòng Ban" theo danh mục THẬT (10/2026, yêu cầu người dùng: tránh gõ sai chính tả khi
+  // làm file) — chỉ áp khi caller có truyền depts (route /template đã truyền, test THUẦN gọi không
+  // tham số vẫn chạy được như cũ, không bắt buộc). PHẢI gọi SAU sheet.addRow() ở trên — LỖI THẬT đã vá
+  // (10/2026, phát hiện qua test round-trip): applyDropdownValidation() tạo sẵn (lazy) các dòng
+  // startRow..endRow (2..500) ngay khi gọi getCell() trên từng dòng đó, nên nếu gọi TRƯỚC addRow(), dòng
+  // ví dụ mẫu bị addRow() đẩy xuống tận dòng 501 (nối sau dòng 500 đã "có mặt" dù rỗng) thay vì nằm ở
+  // dòng 2 như mong đợi — người dùng mở file thấy ~500 dòng trống rồi mới tới dòng ví dụ.
+  if (depts && depts.length) applyDropdownValidation(sheet, 'dept', depts, { helperColIdx: sheet.columns.length + 50 });
 
   const noteSheet = wb.addWorksheet('Ghi Chú');
   noteSheet.getColumn(1).width = 110;

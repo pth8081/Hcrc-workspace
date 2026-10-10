@@ -70,6 +70,14 @@ async function main() {
     assert.ok(!sheet.getCell(`${sheet.getColumn('departmentRef').letter}2`).dataValidation, 'không truyền depts/stores thì departmentRef KHÔNG có dropdown');
   });
 
+  await test('LỖI THẬT đã vá: buildImportTemplateWorkbook() phải giữ 5 dòng ví dụ mẫu ĐÚNG dòng 2-6 (không bị applyDropdownValidation() đẩy xuống dòng 501+)', async () => {
+    const wb = await orgChartImport.buildImportTemplateWorkbook({ depts: ['Phòng Kinh Doanh'], stores: [], jobTitles: [], storeJobTitles: [], jobGrades: [] });
+    const sheet = wb.getWorksheet('Cơ Cấu Tổ Chức');
+    assert.strictEqual(sheet.actualRowCount, 6, 'chỉ 6 dòng thật sự có dữ liệu (header + 5 dòng ví dụ) — nếu lệch nghĩa là dòng ví dụ bị đẩy đi chỗ khác');
+    assert.strictEqual(sheet.getRow(2).getCell('nodeKey').value, 'CT', 'dòng ví dụ gốc (CT) phải nằm ĐÚNG dòng 2, không bị đẩy xuống dòng 501+');
+    assert.strictEqual(sheet.getRow(6).getCell('nodeKey').value, 'TGD', 'dòng ví dụ cuối (TGD) phải nằm ĐÚNG dòng 6');
+  });
+
   await test('buildImportTemplateWorkbook({depts,stores,jobTitles,storeJobTitles,jobGrades}): gắn dropdown departmentRef/jobTitle gộp HO+Siêu Thị + jobGrade', async () => {
     const wb = await orgChartImport.buildImportTemplateWorkbook({
       depts: ['Phòng Kinh Doanh'], stores: ['Siêu Thị Quận 1'],
