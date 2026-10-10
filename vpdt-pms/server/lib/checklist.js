@@ -521,6 +521,39 @@ function computeQaTopLists(storeStats, limit) {
   return { topIssues, topHonor };
 }
 
+// ===================== "Đạt Chung Theo Siêu Thị" (10/2026, yêu cầu người dùng) =====================
+// Trước đây siêu thị phải hoàn thành TẤT CẢ mẫu STORE_SELF đang ACTIVE mới coi là "đã làm đủ" — người
+// dùng yêu cầu đổi: siêu thị làm BAO NHIÊU mẫu tuỳ ý trong kỳ (không bắt buộc hết), "Đạt" tính TRÊN SỐ
+// MẪU ĐÃ HOÀN THÀNH đó (mẫu số = số mẫu đã nộp bài, KHÔNG phải tổng số mẫu đang có/đang ACTIVE). Mẫu
+// CHƯA làm trong kỳ không bị trừ gì — đơn giản không nằm trong mẫu số (xác nhận rõ với người dùng: "chưa
+// đạt chỉ tính khi CHƯA kết thúc bài [của mẫu đó], kết thúc bao nhiêu thì tính trên 100% của chính số đó").
+// submissions: ĐÃ lọc sẵn status SUBMITTED + templateType STORE_SELF + templateKind khác DEDUCTION
+// (Dashboard VSATTP tính riêng ở computeVsattpDashboardData()) + đúng khoảng ngày muốn xét — CỐ Ý KHÔNG
+// lọc theo 1 mẫu cụ thể (khác với `rows`/`qaRows` ở applyChecklistReportFilter(), module-checklist.js) vì
+// mục đích là gộp NHIỀU mẫu khác nhau của CÙNG 1 siêu thị lại để tính 1 trạng thái chung.
+// Nếu 1 mẫu có NHIỀU bài nộp trong cùng kỳ (VD làm lại sau khi sửa lỗi), LẤY BÀI NỘP SAU CÙNG làm đại
+// diện — giả định mảng truyền vào giữ nguyên thứ tự nộp bài tăng dần (đúng thứ tự lưu trữ hiện có của
+// DB.checklistSubmissions, không tự sort lại ở đây để tránh phải parse lại ngày giờ một lần nữa).
+function computeChecklistStoreOverallPass(submissions) {
+  const byStoreTemplate = new Map(); // storeCode -> Map(templateId -> bài nộp SAU CÙNG trong kỳ)
+  (submissions || []).forEach(sub => {
+    if (!byStoreTemplate.has(sub.storeCode)) byStoreTemplate.set(sub.storeCode, new Map());
+    byStoreTemplate.get(sub.storeCode).set(sub.templateId, sub);
+  });
+  const result = [];
+  byStoreTemplate.forEach((byTemplate, storeCode) => {
+    const reps = [...byTemplate.values()];
+    const completedCount = reps.length;
+    const passedCount = reps.filter(s => s.isPassed === true).length;
+    result.push({
+      storeCode, completedCount, passedCount,
+      passRate: completedCount > 0 ? (passedCount / completedCount) * 100 : null,
+      overallStatus: completedCount === 0 ? 'NO_DATA' : (passedCount === completedCount ? 'PASS' : 'FAIL')
+    });
+  });
+  return result.sort((a, b) => a.storeCode.localeCompare(b.storeCode));
+}
+
 // ===================== Đối chiếu "đã làm/chưa làm checklist theo ngày/tháng" (10/2026, yêu cầu người
 // dùng — dùng chung cho CẢ tab Báo Cáo Checklist ST/CH LẪN Dashboard VSATTP) =====================
 // submittedAt lưu dạng nowVN() = "HH:MM:SS D/M/YYYY" — NGÀY ở TOKEN THỨ 2 sau split(' '), không phải
@@ -813,5 +846,7 @@ module.exports = {
   computeAnswerResultLabel, computeQaStoreStats, computeQaTopLists,
   parseChecklistSubmittedAtDate, computeChecklistCoverage,
   vsattpViolationCountPerStore, vsattpTopByViolationCount,
+  // 10/2026 ("Đạt Chung Theo Siêu Thị" — siêu thị làm bao nhiêu mẫu tuỳ ý, Đạt tính trên số đã hoàn thành):
+  computeChecklistStoreOverallPass,
   nowVN
 };

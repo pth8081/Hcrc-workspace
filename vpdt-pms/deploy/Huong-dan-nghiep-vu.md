@@ -3849,6 +3849,33 @@ nộp khớp bộ lọc (mẫu/siêu thị/khoảng ngày) của lượt xem/xu�
 - Server LUÔN tự tính lại từ dữ liệu thật khi xuất/hiển thị (không tin số
   liệu client gửi lên), đúng nguyên tắc chung của mọi báo cáo trong hệ thống.
 
+**"📋 Đạt Chung Theo Siêu Thị" (10/2026, yêu cầu người dùng — thay đổi quan
+trọng về cách tính Đạt)** — trước đây siêu thị phải hoàn thành TẤT CẢ mẫu
+"Checklist Thường" (STORE_SELF) đang ACTIVE, và không có khái niệm "1 trạng
+thái Đạt chung" cho cả siêu thị trong 1 kỳ (chỉ có Đạt/Không đạt riêng từng
+bài nộp). Người dùng xác nhận chốt lại: **siêu thị làm BAO NHIÊU mẫu tuỳ ý
+trong kỳ, KHÔNG bắt buộc hết** — "Đạt" tính TRÊN SỐ MẪU ĐÃ HOÀN THÀNH đó,
+KHÔNG chia cho tổng số mẫu đang có/đang ACTIVE. Mẫu nào CHƯA làm trong kỳ
+không bị trừ gì cả — đơn giản không nằm trong mẫu số (nguyên văn xác nhận:
+"chưa đạt chỉ tính khi CHƯA kết thúc bài của mẫu đó, kết thúc bao nhiêu thì
+tính trên 100% của chính số đó").
+
+- Khối mới ở tab 📊 Báo Cáo → 📋 Checklist Siêu Thị/Cửa Hàng (ngay dưới
+  Dashboard "Đã làm/Chưa làm" ở trên): bảng liệt từng siêu thị ĐÃ có ít nhất
+  1 bài nộp trong khoảng ngày đang lọc — cột Số Mẫu Đã Hoàn Thành/Số Mẫu
+  Đạt/Tỉ Lệ/**Đạt Chung** (✓ Đạt khi tỉ lệ = 100%, ✗ Chưa đạt nếu có ít
+  nhất 1 mẫu đã hoàn thành bị Không đạt).
+- **Cố ý KHÔNG áp dụng bộ lọc "Mẫu Checklist"** ở trên (dù đang chọn cụ thể
+  1 mẫu) — mục đích của khối này là GỘP nhiều mẫu khác nhau của cùng 1 siêu
+  thị lại để tính 1 trạng thái chung, nên luôn tính trên TOÀN BỘ mẫu
+  STORE_SELF/QA, chỉ tôn trọng bộ lọc khoảng ngày. Nếu 1 mẫu có nhiều bài
+  nộp trong cùng kỳ (làm lại sau khi sửa lỗi), lấy bài nộp SAU CÙNG làm đại
+  diện cho mẫu đó.
+- Hàm tính: `computeChecklistStoreOverallPass()` (`lib/checklist.js`, mirror
+  client `computeChecklistStoreOverallPassClient()` ở `module-checklist.js`).
+  Không áp dụng cho mẫu "Kiểm Soát Siêu Thị" (CONTROL_AUDIT/DEDUCTION) — loại
+  đó có Dashboard VSATTP riêng, bản chất đo mức độ tuân thủ khác hẳn.
+
 **Dashboard "🥗 Đánh Giá VSATTP" (10/2026, yêu cầu người dùng)** — tab **📊
 Báo Cáo** giờ chia **2 tab con**, cùng dùng chung đúng 1 quyền
 `checklistReportView` (KHÔNG tách quyền riêng, theo xác nhận người dùng):

@@ -621,6 +621,76 @@ function renderChecklistTopList(elId, list, valueKey, valueSuffix) {
     </div>`).join('');
   applyDataStyles(el);
 }
+// "Đạt Chung Theo Siêu Thị" (10/2026) — mirror ĐÚNG computeChecklistStoreOverallPass() (lib/checklist.js):
+// siêu thị làm bao nhiêu mẫu STORE_SELF tuỳ ý trong kỳ, "Đạt" tính TRÊN SỐ MẪU ĐÃ HOÀN THÀNH (không phải
+// tổng số mẫu đang ACTIVE) — sửa 1 bên PHẢI soát lại bên kia.
+function computeChecklistStoreOverallPassClient(submissions) {
+  const byStoreTemplate = new Map(); // storeCode -> Map(templateId -> bài nộp SAU CÙNG trong kỳ)
+  (submissions || []).forEach(sub => {
+    if (!byStoreTemplate.has(sub.storeCode)) byStoreTemplate.set(sub.storeCode, new Map());
+    byStoreTemplate.get(sub.storeCode).set(sub.templateId, sub);
+  });
+  const result = [];
+  byStoreTemplate.forEach((byTemplate, storeCode) => {
+    const reps = [...byTemplate.values()];
+    const completedCount = reps.length;
+    const passedCount = reps.filter(s => s.isPassed === true).length;
+    result.push({
+      storeCode, completedCount, passedCount,
+      passRate: completedCount > 0 ? (passedCount / completedCount) * 100 : null,
+      overallStatus: completedCount === 0 ? 'NO_DATA' : (passedCount === completedCount ? 'PASS' : 'FAIL')
+    });
+  });
+  return result.sort((a, b) => a.storeCode.localeCompare(b.storeCode));
+}
+// Lấy mọi bài nộp STORE_SELF/QA (khác DEDUCTION — Dashboard VSATTP tính riêng) trong đúng khoảng ngày
+// fromDate/toDate — CỐ Ý bỏ qua bộ lọc "Mẫu Checklist" phía trên (mục đích gộp NHIỀU mẫu của 1 siêu thị)
+// — mirror khuôn getChecklistVsattpFilteredSubmissions() bên dưới, dùng parseChecklistSubmittedAtDate()
+// (hàm ĐÃ đúng, khác applyChecklistReportFilter() phía dưới đang lấy nhầm token giờ làm ngày — bug có từ
+// trước, không thuộc phạm vi tính năng này, xem chú thích đầy đủ tại parseChecklistSubmittedAtDate()).
+function getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate) {
+  const templatesById = new Map((DB.checklistTemplates || []).map(t => [t.id, t]));
+  let rows = (DB.checklistSubmissions || []).filter(s => {
+    if (s.status !== 'SUBMITTED') return false;
+    const t = templatesById.get(s.templateId);
+    return t && t.templateType === 'STORE_SELF' && t.templateKind !== 'DEDUCTION';
+  });
+  const from = fromDate ? new Date(fromDate) : null;
+  const to = toDate ? new Date(toDate) : null;
+  if (from || to) {
+    rows = rows.filter(s => {
+      const d = parseChecklistSubmittedAtDate(s.submittedAt);
+      if (!d) return true;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }
+  return rows;
+}
+function renderChecklistStoreOverallPass(storeStats) {
+  const el = document.getElementById('checklistReportStoreOverallWrap');
+  if (!el) return;
+  if (!storeStats.length) {
+    el.innerHTML = '<p class="text-[11px] text-gray-400 italic">Chưa có siêu thị nào nộp checklist "Thường" trong khoảng ngày đang lọc.</p>';
+    return;
+  }
+  const passCount = storeStats.filter(s => s.overallStatus === 'PASS').length;
+  el.innerHTML = `
+    <p class="text-[11px] text-gray-500 mb-2"><span class="font-bold text-emerald-700">${passCount}/${storeStats.length}</span> siêu thị Đạt Chung — tính trên SỐ MẪU ĐÃ HOÀN THÀNH trong kỳ (không phải tổng số mẫu đang có).</p>
+    <table class="w-full text-xs border-collapse">
+      <thead><tr class="border-b text-left text-gray-500">
+        <th class="p-1.5">Siêu Thị</th><th class="p-1.5 text-center">Đã Hoàn Thành</th><th class="p-1.5 text-center">Đạt</th><th class="p-1.5 text-center">Tỉ Lệ</th><th class="p-1.5 text-center">Đạt Chung</th>
+      </tr></thead>
+      <tbody>${storeStats.map(s => `<tr class="border-b">
+        <td class="p-1.5">${escapeHtml(s.storeCode)}</td>
+        <td class="p-1.5 text-center">${s.completedCount}</td>
+        <td class="p-1.5 text-center">${s.passedCount}</td>
+        <td class="p-1.5 text-center">${s.passRate != null ? s.passRate.toFixed(1) + '%' : '—'}</td>
+        <td class="p-1.5 text-center">${s.overallStatus === 'PASS' ? '<span class="text-emerald-700 font-bold">✓ Đạt</span>' : '<span class="text-red-700 font-bold">✗ Chưa đạt</span>'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
 // "Đã làm/Chưa làm checklist theo ngày/tháng" — mirror ĐÚNG computeChecklistCoverage() (lib/checklist.js).
 // allStoreCodes: TOÀN BỘ đơn vị đang hoạt động (DB.stores) — KHÔNG union thêm siêu thị lịch sử.
 function computeChecklistCoverageClient(allStoreCodes, rows) {
@@ -684,6 +754,12 @@ function applyChecklistReportFilter() {
   renderChecklistTopList('checklistReportTopHonor', topHonor, 'passRate', '%');
   const coverage = computeChecklistCoverageClient(DB.stores || [], qaRows);
   renderChecklistCoverageBlock('checklistReportCoverage', coverage);
+
+  // "Đạt Chung Theo Siêu Thị" (10/2026) — CỐ Ý KHÔNG dùng `qaRows` ở trên (đã bị lọc theo 1 mẫu nếu bộ
+  // lọc "Mẫu Checklist" đang chọn cụ thể) vì mục đích của khối này là gộp NHIỀU mẫu khác nhau của CÙNG 1
+  // siêu thị lại — luôn lấy lại TOÀN BỘ mẫu STORE_SELF/QA theo đúng khoảng ngày đang lọc.
+  const storeOverallRows = getChecklistStoreSelfQaRowsForPeriod(fromDate, toDate);
+  renderChecklistStoreOverallPass(computeChecklistStoreOverallPassClient(storeOverallRows));
 
   const total = rows.length;
   const passed = rows.filter(r => r.isPassed === true).length;

@@ -68,6 +68,14 @@
             <div id="checklistReportCoverageByMonth" class="text-[11px] max-h-48 overflow-y-auto"></div>
           </div>
         </div>
+        <!-- "Đạt Chung Theo Siêu Thị" (10/2026, yêu cầu người dùng) — siêu thị làm BAO NHIÊU mẫu STORE_SELF
+             tuỳ ý trong kỳ (không bắt buộc hết), "Đạt" tính TRÊN SỐ MẪU ĐÃ HOÀN THÀNH đó, KHÔNG chia cho
+             tổng số mẫu đang ACTIVE — xem computeChecklistStoreOverallPass()/applyChecklistReportFilter()
+             (module-checklist.js) cho lý do thiết kế đầy đủ. -->
+        <div class="bg-white border rounded p-3">
+          <h4 class="font-bold text-emerald-800 text-xs mb-2">📋 Đạt Chung Theo Siêu Thị (tính trên số mẫu đã hoàn thành trong kỳ)</h4>
+          <div id="checklistReportStoreOverallWrap" class="overflow-x-auto"></div>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="bg-white border rounded p-3">
             <h4 class="font-bold text-red-800 text-xs mb-2">⚠️ Top 5 Siêu Thị Nhiều Không Đạt Nhất</h4>
