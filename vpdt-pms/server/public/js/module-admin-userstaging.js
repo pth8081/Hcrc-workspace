@@ -696,8 +696,16 @@ function normalizeVnCompareKey(s) {
   return String(s || '').trim().normalize('NFC').toLowerCase();
 }
 
-function validateImportedUserRow(r) {
+// fieldErrors (10/2026, tính năng "sửa ngay trong dòng lỗi" — yêu cầu người dùng: "import 100 dòng chỉ
+// 1 dòng lỗi, cho tôi sửa luôn tại chỗ, không phải huỷ nhập lại cả file") — gắn THÊM 1 bản đồ field ->
+// thông điệp lỗi bên cạnh mảng `errors` phẳng vẫn giữ nguyên (hiển thị tóm tắt ở cột "Ghi chú"), để
+// renderUserImportFixRow() (bên dưới) biết CHÍNH XÁC field nào đang sai mà không phải suy luận lại từ
+// chuỗi tiếng Việt. `isExisting`: true nếu username đã trùng 1 tài khoản có sẵn (ghi đè, không tạo mới)
+// — gộp luôn kiểm tra mật khẩu vào đây (trước đây tách riêng ở onUsersImportFileChange(), nay cần 1 hàm
+// DUY NHẤT re-validate được 1 dòng sau khi sửa tại chỗ, không lặp lại logic ở 2 nơi).
+function validateImportedUserRow(r, isExisting) {
   const errors = [];
+  const fieldErrors = {};
   const normalized = {};
 
   const posTypeRaw = String(r.posType || '').trim().toUpperCase();
@@ -706,18 +714,23 @@ function validateImportedUserRow(r) {
     normalized.posType = posTypeEntry.key;
   } else {
     const validKeys = (DB.positionTypes || []).map(t => t.key).join('/') || 'HO/STORE';
-    errors.push(`Vị Trí Làm Việc "${r.posType || ''}" không hợp lệ — phải là ${validKeys}`);
+    const msg = `Vị Trí Làm Việc "${r.posType || ''}" không hợp lệ — phải là ${validKeys}`;
+    errors.push(msg); fieldErrors.posType = msg;
   }
 
   const deptRaw = String(r.dept || '').trim();
   const deptLabel = normalized.posType ? getPosTypeLabel(normalized.posType) : '';
   if (!deptRaw) {
-    errors.push('Thiếu Phòng Ban/Siêu Thị/Địa Điểm');
+    const msg = 'Thiếu Phòng Ban/Siêu Thị/Địa Điểm';
+    errors.push(msg); fieldErrors.dept = msg;
   } else if (normalized.posType) {
     const catalog = getPosTypeLocations(normalized.posType);
     const match = catalog.find(d => normalizeVnCompareKey(d) === normalizeVnCompareKey(deptRaw));
     if (match) normalized.dept = match;
-    else errors.push(`Phòng Ban/Địa Điểm "${deptRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
+    else {
+      const msg = `Phòng Ban/Địa Điểm "${deptRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`;
+      errors.push(msg); fieldErrors.dept = msg;
+    }
   }
 
   // Chức Danh — TUỲ CHỌN (khớp uJobTitle luôn có sẵn "-- Chưa gán --" ở form tay), chỉ chặn khi CÓ điền
@@ -729,7 +742,10 @@ function validateImportedUserRow(r) {
     const catalog = getPosTypeJobTitles(normalized.posType);
     const match = catalog.find(t => normalizeVnCompareKey(t) === normalizeVnCompareKey(jobTitleRaw));
     if (match) normalized.jobTitle = match;
-    else errors.push(`Chức Danh "${jobTitleRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`);
+    else {
+      const msg = `Chức Danh "${jobTitleRaw}" không có trong danh mục của Vị Trí Làm Việc "${deptLabel}"`;
+      errors.push(msg); fieldErrors.jobTitle = msg;
+    }
   }
 
   // Khối/Ban (10/2026, v24.16) — CHỈ áp dụng khi Vị Trí Làm Việc = HO (khớp readUserFormState()/
@@ -742,7 +758,10 @@ function validateImportedUserRow(r) {
   } else {
     const match = (DB.deptGroups || []).find(g => normalizeVnCompareKey(g.name) === normalizeVnCompareKey(khoiBanRaw));
     if (match) normalized.khoiBan = String(match.id);
-    else errors.push(`Khối/Ban "${khoiBanRaw}" không có trong danh mục (chỉ áp dụng khi Vị Trí Làm Việc = HO)`);
+    else {
+      const msg = `Khối/Ban "${khoiBanRaw}" không có trong danh mục (chỉ áp dụng khi Vị Trí Làm Việc = HO)`;
+      errors.push(msg); fieldErrors.khoiBan = msg;
+    }
   }
 
   // Ngày Vào Làm Việc — TUỲ CHỌN (khớp uStartDate "Để trống hợp lệ" ở form tay), chỉ chặn khi CÓ điền mà
@@ -757,7 +776,10 @@ function validateImportedUserRow(r) {
     const d = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
     const isRealDate = !!(m && d && !isNaN(d) && d.getUTCFullYear() === Number(m[1]) && (d.getUTCMonth() + 1) === Number(m[2]) && d.getUTCDate() === Number(m[3]));
     if (isRealDate) normalized.startDate = startDateRaw;
-    else errors.push(`Ngày Vào Làm Việc "${startDateRaw}" không đúng định dạng ngày hợp lệ (YYYY-MM-DD)`);
+    else {
+      const msg = `Ngày Vào Làm Việc "${startDateRaw}" không đúng định dạng ngày hợp lệ (YYYY-MM-DD)`;
+      errors.push(msg); fieldErrors.startDate = msg;
+    }
   }
 
   // Nhóm Phân Quyền (9/2026, rà soát chuyên sâu 4-agent song song) — TUỲ CHỌN (để trống hợp lệ = không
@@ -772,15 +794,31 @@ function validateImportedUserRow(r) {
   } else {
     const names = permGroupsRaw.split(';').map(n => n.trim()).filter(Boolean);
     const groupIds = [];
+    const badNames = [];
     names.forEach(n => {
       const match = (DB.permGroups || []).find(g => normalizeVnCompareKey(g.name) === normalizeVnCompareKey(n));
       if (match) groupIds.push(match.id);
-      else errors.push(`Nhóm Phân Quyền "${n}" không có trong danh mục`);
+      else badNames.push(n);
     });
     normalized.groupIds = groupIds;
+    if (badNames.length) {
+      const msg = badNames.map(n => `Nhóm Phân Quyền "${n}" không có trong danh mục`).join('; ');
+      errors.push(msg); fieldErrors.permGroups = msg;
+    }
   }
 
-  return { errors, normalized };
+  // Mật khẩu — CHỈ có ý nghĩa với dòng THÊM MỚI thật (ghi đè giữ nguyên mật khẩu cũ, không bao giờ đụng
+  // tới). Gộp vào đây (trước đây kiểm tra riêng ở onUsersImportFileChange()) để onUsersImportRowFieldEdit()
+  // re-validate lại được 1 dòng bằng ĐÚNG 1 hàm, không lặp lại logic ở 2 nơi dễ lệch nhau.
+  if (!isExisting) {
+    const passError = validateImportedUserPassword(r.pass);
+    if (passError) {
+      const msg = `Mật khẩu: ${passError}`;
+      errors.push(msg); fieldErrors.pass = msg;
+    }
+  }
+
+  return { errors, fieldErrors, normalized };
 }
 
 // Mirror CHÍNH XÁC lib/passwordPolicy.js validatePasswordStrength() — trước đây import Excel KHÔNG hề
@@ -830,15 +868,8 @@ async function onUsersImportFileChange(evt) {
   // Việt trong file này.
   const existingByUsername = new Map(DB.users.map(u => [normalizeVnCompareKey(u.username), u]));
   usersImportPreviewItems = rows.map((r, idx) => {
-    const { errors, normalized } = validateImportedUserRow(r);
     const existing = existingByUsername.get(normalizeVnCompareKey(r.username));
-    // Mật khẩu CHỈ có ý nghĩa với dòng THÊM MỚI thật (existing giữ nguyên mật khẩu cũ, xem
-    // toOverwrite.forEach() — không bao giờ đụng pass) — không chặn oan dòng ghi đè chỉ vì cột pass để
-    // trống/không đạt chuẩn (người nhập file có thể không biết/không cần quan tâm mật khẩu cũ).
-    if (!existing) {
-      const passError = validateImportedUserPassword(r.pass);
-      if (passError) errors.push(`Mật khẩu: ${passError}`);
-    }
+    const { errors, fieldErrors, normalized } = validateImportedUserRow(r, !!existing);
     // Cảnh báo (KHÔNG chặn — không đủ chắc chắn để coi là lỗi) khi username đọc được là chuỗi TOÀN SỐ:
     // rủi ro thật đã ghi ở downloadUserTemplate() — nếu file không xuất phát từ mẫu (numFmt Văn Bản) và
     // ô đang ở định dạng "General"/"Number", Excel tự cắt mất số 0 đứng đầu (VD SĐT "0987654321" thành
@@ -846,12 +877,35 @@ async function onUsersImportFileChange(evt) {
     // lại số 0 đã mất — chỉ có thể cảnh báo để người nhập tự đối chiếu lại file gốc trước khi xác nhận.
     const usernameLooksNumericOnly = /^[0-9]+$/.test(String(r.username || '').trim());
     return {
-      ...r, _idx: idx, errors, normalized, usernameLooksNumericOnly,
+      ...r, _idx: idx, errors, fieldErrors, normalized, usernameLooksNumericOnly,
       duplicateExisting: !!existing,
       // 'add' (mặc định, không trùng/không lỗi) | 'skip' (mặc định cho dòng trùng/dòng lỗi) | 'overwrite'
       action: (errors.length || r.duplicateInFile || existing) ? 'skip' : 'add'
     };
   });
+  renderUsersImportPreview();
+}
+
+// Sửa NGAY TRONG DÒNG LỖI (10/2026, yêu cầu người dùng: "import 100 dòng chỉ 1 dòng lỗi, cho tôi sửa
+// luôn tại chỗ — department sai thì chọn lại đúng trong danh mục, SĐT/email sai thì gõ lại — không phải
+// huỷ nhập lại cả file"). Gọi qua data-op-input/data-op-change ở renderUserImportFixRow() bên dưới —
+// field là tên cột raw (username/name/email/phone/pass/posType/dept/jobTitle/khoiBan/startDate/
+// permGroups), value là giá trị người dùng vừa gõ/chọn. Re-validate lại NGAY đúng 1 dòng này bằng đúng
+// validateImportedUserRow() (không lặp lại logic riêng), rồi render lại toàn bộ bảng — đổi posType cần
+// nạp lại đúng danh mục dept/jobTitle/khoiBan phụ thuộc nên không thể chỉ vá riêng 1 ô DOM.
+function onUsersImportRowFieldEdit(idxStr, field, value) {
+  const it = usersImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (!it) return;
+  it[field] = value;
+  const { errors, fieldErrors, normalized } = validateImportedUserRow(it, it.duplicateExisting);
+  it.errors = errors; it.fieldErrors = fieldErrors; it.normalized = normalized;
+  // Hết lỗi -> tự chuyển sang trạng thái sẵn sàng (khớp ĐÚNG công thức action mặc định lúc đọc file lần
+  // đầu ở onUsersImportFileChange() — dòng trùng (duplicateInFile/duplicateExisting) vẫn mặc định "Bỏ
+  // qua" như hành vi gốc, chỉ dòng hoàn toàn mới-không-trùng mới tự tick "Thêm"), theo đúng xác nhận của
+  // người dùng ("tự tick Thêm luôn") — không cần tick tay lại sau khi vừa sửa xong.
+  if (!errors.length) {
+    it.action = (it.duplicateInFile || it.duplicateExisting) ? 'skip' : 'add';
+  }
   renderUsersImportPreview();
 }
 
@@ -884,7 +938,7 @@ function renderUsersImportPreview() {
       actionControl = `<input type="checkbox" data-op-change="onUsersImportRowToggle" data-arg0="${it._idx}" ${it.action === 'add' ? 'checked' : ''}>`;
     }
     const posTypeLabel = it.normalized.posType ? getPosTypeLabel(it.normalized.posType) : (it.posType || '');
-    return `<tr class="border-t${hasError ? ' bg-red-50 text-gray-500' : (note ? ' bg-amber-50' : '')}">
+    const mainRow = `<tr class="border-t${hasError ? ' bg-red-50 text-gray-500' : (note ? ' bg-amber-50' : '')}">
       <td class="p-1.5">${actionControl}</td>
       <td class="p-1.5">${escapeHtml(it.username || '')}</td>
       <td class="p-1.5">${escapeHtml(it.name || '')}</td>
@@ -892,8 +946,64 @@ function renderUsersImportPreview() {
       <td class="p-1.5">${escapeHtml(posTypeLabel)}</td>
       <td class="p-1.5 ${hasError ? 'text-red-700 font-semibold' : 'text-amber-700'}">${escapeHtml(note)}</td>
     </tr>`;
+    // "Sửa ngay trong dòng" (10/2026) — CHỈ render cho dòng đang lỗi (renderUserImportFixRow() ngay
+    // dưới): tránh phải huỷ nhập lại cả file chỉ vì 1 dòng sai (xem chú thích đầy đủ tại
+    // onUsersImportRowFieldEdit()).
+    return hasError ? mainRow + renderUserImportFixRow(it) : mainRow;
   }).join('');
   document.getElementById('uImportPreviewWrap').classList.remove('hidden');
+}
+
+// Khung sửa tại chỗ cho 1 dòng ĐANG LỖI — luôn hiện đủ MỌI trường gốc của dòng (không chỉ riêng trường
+// đang báo lỗi): username/name/email/phone/pass có thể không bị chặn bởi validateImportedUserRow() (hệ
+// thống hiện không kiểm tra định dạng SĐT/Email) nhưng người dùng vẫn có thể muốn sửa luôn nhân tiện khi
+// đang mở dòng này ra (yêu cầu thực tế: "số điện thoại sai hoặc thông tin gì đấy sai tôi có thể sửa
+// luôn"). posType/dept/jobTitle/khoiBan dùng ĐÚNG danh mục cascading như form "+ Thêm Người Dùng Mới"
+// (getPosTypeLocations()/getPosTypeJobTitles(), xem module-admin-submissiongroups.js) — chọn trong
+// dropdown thay vì gõ tay nên không thể gõ sai chính tả lần nữa.
+function renderUserImportFixRow(it) {
+  const idx = it._idx;
+  const posTypes = (DB.positionTypes && DB.positionTypes.length) ? DB.positionTypes : [{ key: 'HO', label: 'HO (Văn phòng)' }, { key: 'STORE', label: 'Siêu Thị' }];
+  const rawPosType = String(it.posType || '').trim().toUpperCase();
+  const effectivePosType = it.normalized.posType || (posTypes.find(t => t.key.toUpperCase() === rawPosType) ? rawPosType : (posTypes[0] && posTypes[0].key) || '');
+  const deptOptions = effectivePosType ? getPosTypeLocations(effectivePosType) : [];
+  const jobTitleOptions = effectivePosType ? getPosTypeJobTitles(effectivePosType) : [];
+
+  // Ô ngày (type="date") dùng data-op-change thay vì data-op-input — "input" không bắn đáng tin cậy ở
+  // mọi trình duyệt khi chọn qua lịch popup (khác gõ tay từng ký tự của ô text thường).
+  const textInput = (name, value, placeholder, type) => `<input type="${type || 'text'}" value="${escapeHtml(value || '')}" placeholder="${escapeHtml(placeholder || '')}"
+    data-op-${type === 'date' ? 'change' : 'input'}="onUsersImportRowFieldEdit" data-arg0="${idx}" data-arg1="${name}" data-arg-value="2" class="border rounded text-xs p-1 w-full">`;
+  const selectInput = (name, currentRaw, options, allowEmpty) => `<select data-op-change="onUsersImportRowFieldEdit" data-arg0="${idx}" data-arg1="${name}" data-arg-value="2" class="border rounded text-xs p-1 w-full bg-white">
+    ${allowEmpty ? '<option value="">-- Chưa gán --</option>' : ''}
+    ${options.map(o => `<option value="${escapeHtml(o)}" ${normalizeVnCompareKey(o) === normalizeVnCompareKey(currentRaw) ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+  </select>`;
+  const field2 = (label, controlHtml) => `<div class="min-w-[9rem] flex-1"><div class="text-[10px] text-gray-500 font-semibold mb-0.5">${escapeHtml(label)}</div>${controlHtml}</div>`;
+
+  const parts = [
+    field2('Tên đăng nhập', textInput('username', it.username)),
+    field2('Họ Tên', textInput('name', it.name)),
+    field2('Email', textInput('email', it.email, '', 'email')),
+    field2('Số Điện Thoại', textInput('phone', it.phone)),
+    field2('Vị Trí Làm Việc', `<select data-op-change="onUsersImportRowFieldEdit" data-arg0="${idx}" data-arg1="posType" data-arg-value="2" class="border rounded text-xs p-1 w-full bg-white">
+      ${posTypes.map(t => `<option value="${escapeHtml(t.key)}" ${t.key === effectivePosType ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
+    </select>`),
+    field2('Phòng Ban/Địa Điểm', deptOptions.length ? selectInput('dept', it.dept, deptOptions, false) : textInput('dept', it.dept, '-- Danh mục rỗng, gõ tay --')),
+    field2('Chức Danh (tuỳ chọn)', jobTitleOptions.length ? selectInput('jobTitle', it.jobTitle, jobTitleOptions, true) : textInput('jobTitle', it.jobTitle, '-- Chưa gán --'))
+  ];
+  if (effectivePosType === 'HO') {
+    const khoiBanNames = (DB.deptGroups || []).map(g => g.name);
+    parts.push(field2('Khối/Ban (tuỳ chọn)', khoiBanNames.length ? selectInput('khoiBan', it.khoiBan, khoiBanNames, true) : textInput('khoiBan', it.khoiBan, '-- Chưa có danh mục --')));
+  }
+  parts.push(field2('Ngày Vào Làm (tuỳ chọn)', textInput('startDate', it.startDate, 'YYYY-MM-DD', 'date')));
+  parts.push(field2('Nhóm Phân Quyền (tuỳ chọn)', textInput('permGroups', it.permGroups, 'Tên nhóm;Tên nhóm khác')));
+  if (!it.duplicateExisting) {
+    parts.push(field2('Mật Khẩu', textInput('pass', it.pass, 'Đủ chữ, số, ký tự đặc biệt, ≥8 ký tự')));
+  }
+
+  return `<tr class="border-t bg-red-50"><td colspan="6" class="p-2">
+    <div class="text-[11px] font-bold text-red-700 mb-1.5">✏️ Sửa trực tiếp dòng này — hết lỗi sẽ tự chuyển sang "sẵn sàng nhập":</div>
+    <div class="flex flex-wrap gap-2">${parts.join('')}</div>
+  </td></tr>`;
 }
 
 function onUsersImportRowToggle(idxStr) {

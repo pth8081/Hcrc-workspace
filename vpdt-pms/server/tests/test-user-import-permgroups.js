@@ -39,10 +39,14 @@ async function main() {
       window.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) });
     });
 
+    // isExisting=true ở các lời gọi dưới đây (10/2026, sau khi gộp kiểm tra mật khẩu vào CHUNG
+    // validateImportedUserRow() — xem onUsersImportRowFieldEdit()): các kịch bản này chỉ quan tâm logic
+    // dept/permGroups, không liên quan mật khẩu — tắt nhánh kiểm tra pass (vốn chỉ áp dụng dòng tạo MỚI
+    // thật) để không báo lỗi oan "thiếu mật khẩu" (object truyền vào không có field `pass`).
     await run.run('validateImportedUserRow(): tên nhóm hợp lệ (1 nhóm) -> groupIds đúng, không lỗi', async () => {
       const result = await page.evaluate(() => validateImportedUserRow({
         posType: 'HO', dept: 'Phòng Kế Toán', jobTitle: '', khoiBan: '', startDate: '', permGroups: 'Kế Toán'
-      }));
+      }, true));
       assertEqual(result.errors.length, 0, JSON.stringify(result.errors));
       assertEqual(JSON.stringify(result.normalized.groupIds), JSON.stringify([1]));
     });
@@ -50,7 +54,7 @@ async function main() {
     await run.run('validateImportedUserRow(): nhiều nhóm phân tách ";" -> groupIds đủ cả 2', async () => {
       const result = await page.evaluate(() => validateImportedUserRow({
         posType: 'HO', dept: 'Phòng Kế Toán', jobTitle: '', khoiBan: '', startDate: '', permGroups: 'Kế Toán;Quản Lý Kho'
-      }));
+      }, true));
       assertEqual(result.errors.length, 0, JSON.stringify(result.errors));
       assertEqual(JSON.stringify(result.normalized.groupIds.sort()), JSON.stringify([1, 2]));
     });
@@ -58,7 +62,7 @@ async function main() {
     await run.run('validateImportedUserRow(): để trống permgroups -> groupIds rỗng, hợp lệ (không lỗi)', async () => {
       const result = await page.evaluate(() => validateImportedUserRow({
         posType: 'HO', dept: 'Phòng Kế Toán', jobTitle: '', khoiBan: '', startDate: '', permGroups: ''
-      }));
+      }, true));
       assertEqual(result.errors.length, 0, JSON.stringify(result.errors));
       assertEqual(JSON.stringify(result.normalized.groupIds), JSON.stringify([]));
     });
@@ -66,7 +70,7 @@ async function main() {
     await run.run('validateImportedUserRow(): tên nhóm KHÔNG khớp danh mục -> báo lỗi rõ ràng, chặn dòng', async () => {
       const result = await page.evaluate(() => validateImportedUserRow({
         posType: 'HO', dept: 'Phòng Kế Toán', jobTitle: '', khoiBan: '', startDate: '', permGroups: 'Nhóm Không Tồn Tại'
-      }));
+      }, true));
       assert(result.errors.some(e => e.includes('Nhóm Không Tồn Tại')), JSON.stringify(result.errors));
     });
 
@@ -81,7 +85,7 @@ async function main() {
         dept: 'Phòng Kế Toán'.normalize('NFD'),
         jobTitle: '', khoiBan: '', startDate: '',
         permGroups: 'Kế Toán'.normalize('NFD') + ';' + 'Quản Lý Kho'.normalize('NFD')
-      }));
+      }, true));
       assertEqual(result.errors.length, 0, JSON.stringify(result.errors));
       assertEqual(result.normalized.dept, 'Phòng Kế Toán', 'dept phải trả về đúng chuỗi NFC gốc trong danh mục');
       assertEqual(JSON.stringify(result.normalized.groupIds.sort()), JSON.stringify([1, 2]));

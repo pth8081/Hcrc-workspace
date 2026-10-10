@@ -1197,12 +1197,19 @@ async function scenario(name, fn) {
       await onUsersImportFileChange({ target: { files: [new File(['x'], 'test.xlsx')], value: '' } });
       window.fetch = savedFetch;
       const preview = usersImportPreviewItems.map(it => ({ username: it.username, errors: it.errors, action: it.action }));
-      // Bảng xem trước KHÔNG được vẽ checkbox/select nào cho dòng lỗi (renderUsersImportPreview() đã chạy
-      // qua onUsersImportFileChange() ở trên) — kiểm tra DOM thật, không chỉ dữ liệu JS.
-      const checkboxesInDom = [...document.querySelectorAll('#uImportPreviewBody tr')].map(tr => ({
-        text: tr.textContent.trim().slice(0, 40),
-        hasControl: !!tr.querySelector('input[type=checkbox],select')
-      }));
+      // Bảng xem trước KHÔNG được vẽ checkbox/select Ở CỘT "Nhập?" cho dòng lỗi (renderUsersImportPreview()
+      // đã chạy qua onUsersImportFileChange() ở trên) — kiểm tra DOM thật, không chỉ dữ liệu JS.
+      // ĐỔI Ý (10/2026, tính năng "sửa ngay trong dòng lỗi" — xem renderUserImportFixRow(),
+      // module-admin-userstaging.js): dòng lỗi giờ CÓ thêm 1 <tr colspan=6> ngay dưới chứa đủ ô sửa (cố
+      // ý, mục đích chính của đợt này), nên không còn kiểm tra "CẢ dòng không có control nào" nữa — chỉ
+      // còn đúng cột "Nhập?" (ô đầu tiên của dòng CHÍNH, 6 cột riêng — phân biệt với dòng sửa chỉ có 1 ô
+      // colspan=6) vẫn phải rỗng, đúng tinh thần gốc "không thể tự ý tick Thêm cho 1 dòng đang lỗi".
+      const checkboxesInDom = [...document.querySelectorAll('#uImportPreviewBody tr')]
+        .filter(tr => tr.children.length === 6)
+        .map(tr => ({
+          text: tr.textContent.trim().slice(0, 40),
+          hasControl: !!tr.children[0].querySelector('input[type=checkbox],select')
+        }));
       const usersBefore = DB.users.length;
       const alertsBefore = window.__alerts.length;
       await confirmUsersImport(); // không có dòng nào action='add'/'overwrite' hợp lệ -> phải alert + không ghi gì

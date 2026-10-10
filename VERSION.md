@@ -1,8 +1,39 @@
 # Phiên bản hiện tại
 
-**25.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.67 (2026-10): Import Excel Người Dùng — sửa ngay trong dòng lỗi, không cần huỷ nhập lại cả file
+
+Theo yêu cầu người dùng: "import 100 dòng mà chỉ 1 dòng bị lỗi (department/SĐT/
+email/...) thì cho sửa luôn tại chỗ, không phải huỷ và nhập lại từ đầu."
+
+Trước đây, dòng lỗi trong bảng xem trước Import Excel Người Dùng (Hệ Thống →
+Phân Quyền → Import Excel) chỉ hiện dòng chữ đỏ báo lỗi, không có cách sửa —
+bắt buộc phải sửa lại file Excel gốc rồi tải lên lại toàn bộ.
+
+Đã thêm: mỗi dòng đang lỗi giờ tự hiện thêm 1 khung sửa ngay bên dưới, gồm đủ
+các trường của dòng đó (Tên đăng nhập/Họ Tên/Email/SĐT/Mật khẩu — chỉ dòng
+TẠO MỚI thật mới có ô Mật khẩu, dòng ghi đè tài khoản có sẵn không đụng tới
+mật khẩu cũ — /Vị Trí Làm Việc/Phòng Ban/Chức Danh/Khối-Ban/Ngày Vào Làm/Nhóm
+Phân Quyền). Phòng Ban/Chức Danh/Khối-Ban dùng dropdown lấy ĐÚNG danh mục
+cascading theo Vị Trí Làm Việc (giống hệt form "+ Thêm Người Dùng Mới"), nên
+không thể gõ sai chính tả lần nữa. Sửa xong trường nào, hệ thống tự kiểm tra
+lại NGAY đúng dòng đó — hết lỗi thì dòng tự chuyển sang trạng thái sẵn sàng
+nhập (tự tick "Thêm", trừ dòng trùng username thì vẫn mặc định "Bỏ qua" như
+hành vi gốc) mà không cần tick tay lại hay tải lại file.
+
+Đã thêm test mới `tests/test-user-import-inline-fix.js` (5/5 kịch bản pass):
+xác nhận khung sửa hiện đúng dropdown theo danh mục, sửa field tự xoá lỗi +
+tự chuyển action, dòng ghi đè không có ô mật khẩu và không tự ý chuyển sang
+"Thêm"/"Ghi đè", và `confirmUsersImport()` tạo đúng user với dữ liệu đã sửa.
+Cũng cập nhật 2 bộ test cũ (`test-user-import-permgroups.js`,
+`test-admin-users-permgroups.js`) cho khớp hành vi mới — chạy lại toàn bộ,
+không có regression (111/111 + 46/46 + 6/6 + 7/7 + 5/5 pass).
+
+**Không có thay đổi schema/`.env`/dependencies nào — chỉ sửa 1 file client
+(`public/js/module-admin-userstaging.js`), copy code + `pm2 restart` là đủ.**
 
 ## v25.66 (2026-10): Vá lỗ hổng ẩn menu — nút "Phê Duyệt Giá Bán Lẻ" (Mua Hàng)
 
