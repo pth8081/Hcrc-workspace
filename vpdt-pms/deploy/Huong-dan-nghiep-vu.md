@@ -5762,3 +5762,45 @@ cấp.
   đoán và báo rõ tiến trình hiện tại đã cấu hình đúng hay chưa.
 - Admin-only (`perms.admin`), dùng chung bucket rate-limit upload toàn hệ
   thống, mọi lượt thêm/xoá đều ghi Nhật Ký Hệ Thống (module `SYSTEM`).
+
+### 7.12. Tải Mẫu/Nhập/Xuất Excel cho "Quy Trình & Phê Duyệt" + "Nghiệp Vụ
+Nâng Cao" (10/2026)
+
+6 màn cấu hình quy trình/phê duyệt (vốn chỉ nhập tay từng dòng, nhiều công
+ty cấu hình hàng chục-hàng trăm dòng) nay đều có bộ 3 nút **⬇️ Tải Mẫu / 📥
+Nhập Excel / 📊 Xuất Excel** giống khuôn danh mục object đã có (xem mục 7.x
+Quản Lý Danh Mục) — CHỈ parse/validate ở server, việc gộp vào CSDL + lưu
+làm ở client (tái dùng đúng hàm lưu hiện có, không tạo luồng ghi mới):
+
+1. **🛠️ Định Nghĩa Các Mẫu Bước Phê Duyệt** (Hệ Thống → Quy Trình & Phê
+   Duyệt) — mỗi MÃ WF 1-nhiều dòng (1 dòng/bước), cột `Mã WF/Tên Quy Trình/
+   Thứ Tự Bước/Tên Bước/Nhãn Hành Động`. Nhập lại tự SẮP XẾP theo Thứ Tự
+   Bước (không cần đúng thứ tự dòng trong Excel), báo lỗi nếu trùng Thứ Tự
+   Bước trong cùng mã hoặc mã không có bước nào. Cảnh báo riêng khi đổi SỐ
+   BƯỚC của 1 mẫu đang được phòng ban khác dùng (tái dùng
+   `collectWorkflowTemplateUsages()` có sẵn).
+2. **🏬 Quy Trình Đặt Hàng Siêu Thị** và **🏪 QT Giá Bán Buôn (Siêu Thị)**
+   (Hệ Thống → Nghiệp Vụ Nâng Cao) — Mixed Approval Rules không có khoá tự
+   nhiên nên dùng cột **"Mã Rule"**: khớp đúng ID đang có → THAY THẾ dòng
+   đó; để trống hoặc gõ mã không khớp ai → TẠO MỚI (tự cấp id kế tiếp,
+   nhiều dòng trống trong cùng 1 lượt nhập vẫn ra id khác nhau không
+   trùng).
+3. **🖋️ Nhóm Phê Duyệt Trình/HĐ** (submission/contract) và **🖊️ Nhóm Phê
+   Duyệt Cuối** (10 module: DOC/CAR/OFFICE_BUY/OFFICE_FIX/VPP/PAYMENT/
+   ITPRICE_RETAIL/ITPRICE_WHOLESALE/OPERATION_ORDER_STORE/
+   OPERATION_ORDER_HO) — 2 sheet Nhóm + Cấp, nhiều dòng thành viên/nhóm
+   hiển thị gộp theo **"Mã Nhóm"/"Mã Cấp"**: khớp ID đang có → THAY THẾ,
+   không khớp → TẠO MỚI. 10 module Nhóm Phê Duyệt Cuối dùng CHUNG 1 cặp
+   sheet có thêm cột "Module" để tách theo từng module khi nhập lại.
+4. **🧭 Vị Trí Tham Gia Quy Trình** (`workflowParticipatingPositions`) —
+   khuôn phẳng (1 dòng/cặp Chức Danh + Phòng Ban), KHÔNG dùng khoá trùng
+   lặp (dedup theo cặp jobTitle+dept không phân biệt hoa/thường) vì mỗi
+   chức danh có thể lặp lại ở nhiều phòng ban khác nhau — nhập lại THAY THẾ
+   TOÀN BỘ danh sách (không phải thêm/sửa từng dòng).
+
+Hạ tầng dùng chung mới: `lib/groupedExcelImport.js` (engine "nhiều dòng gộp
+thành 1 bản ghi theo mã lặp lại", dùng cho mục 1 và 3 ở trên — khác
+`lib/objectCatalogImport.js` cũ vốn chỉ xử lý 1-dòng-1-bản-ghi phẳng).
+Nhóm C ("Cấu Hình Quy Trình Theo Phòng Ban" — 16 module riêng từng phòng
+ban) và Nhóm B (Áp Dụng Nhanh, VPP Ngoại Lệ) **chưa làm đợt này** (độ ưu
+tiên thấp hơn/cấu trúc dị hình hơn, để đợt sau nếu cần).
