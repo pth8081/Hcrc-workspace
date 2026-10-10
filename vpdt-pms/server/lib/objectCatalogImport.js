@@ -587,5 +587,12 @@ module.exports = {
   // lõi dùng lại cho nhánh bespoke (lib/positionTypesImport.js)
   parseRowsWithSpec,
   buildWorkbookForSpec,
-  normalizeText
+  normalizeText,
+  // cấp thấp hơn — dùng cho lib/groupedExcelImport.js (đọc NHIỀU sheet trong 1 file, parseRowsWithSpec
+  // chỉ đọc được sheet đầu qua streamFirstSheetRows()).
+  parseCellByType,
+  mapHeaderColumns,
+  formatCellForExcel,
+  styleHeaderRow,
+  colTypeLabel
 };
