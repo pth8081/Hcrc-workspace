@@ -249,12 +249,24 @@ function isApproverForApproversMap(approversMap, username) {
 // nào để đọc), chỉ còn 2 nhánh thật của nó còn hiệu lực: "cùng phòng ban tự động xem" (deptAutoViewOn,
 // mode mặc định DEPT) + deptViewScopeConfig['submission'] (extraViewers/managerCanView, qua
 // extraViewScopeAllows() — xem moduleViewConfig()/loadSubmissionsScoped() ở routes/data.js đã vá kèm).
+// Chuyển Tiếp Xin Ý Kiến (forwardThreads[], routes/workflow.js POST /forward|/forward-reply) — người
+// chuyển tiếp (forwardedBy) hoặc người được chuyển tiếp (forwardedTo) ở BẤT KỲ cạnh nào trong hồ sơ
+// được xem hồ sơ đó, để tải được dữ liệu phục vụ tab "📨 Được Nhờ Cho Ý Kiến" + nhánh dọc trên phiếu
+// chi tiết. Chỉ cấp quyền XEM HỒ SƠ (để forwardThreads[] tải về được) — việc chỉ hiện ĐÚNG cạnh của
+// mình (không xem chéo cấp khác) là trách nhiệm của client khi render nhánh, dựa thẳng vào 2 field
+// forwardedBy/forwardedTo của từng cạnh (dữ liệu đã có sẵn trong item, không cần thêm cờ nào khác).
+function isForwardThreadParticipant(user, item) {
+  if (!user || !Array.isArray(item?.forwardThreads)) return false;
+  return item.forwardThreads.some(n => n.forwardedBy === user.username || n.forwardedTo === user.username);
+}
+
 function canViewSubmission(user, sub, appData) {
   if (!user) return false;
   if (user.perms?.admin) return true;
   if (sub.creator === user.username) return true;
   if (scopeAllows(user, null, sub.dept, 'submission', appData, sub.creator)) return true;
   if ((sub.opinionRequestees || []).includes(user.username)) return true;
+  if (isForwardThreadParticipant(user, sub)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.submissions.resolveWfConfig(sub, appData).approvers, user.username);
 }
 
@@ -558,6 +570,7 @@ function canViewContract(user, contract, appData) {
   // xem được ngay không điều kiện. custodianDept luôn có giá trị cụ thể (mặc định = dept khi không
   // chọn, xem createValidation.js), nên nhánh này là no-op vô hại khi 2 field trùng nhau.
   if (scopeAllows(user, null, contract.custodianDept || contract.dept, 'contract', appData, contract.creator)) return true;
+  if (isForwardThreadParticipant(user, contract)) return true;
   if (isApproverForApproversMap(resolveContractApprovalWorkflow(contract, appData).approvers, user.username)) return true;
   return isApproverForApproversMap(resolveContractManageWorkflow(contract, appData).approvers, user.username);
 }
@@ -1625,6 +1638,7 @@ module.exports = {
   isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
   DEPT_VIEW_SCOPE_MODULES, deptAutoViewOn, moduleViewConfig, extraViewScopeAllows,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
+  isForwardThreadParticipant,
   canViewInternalPost, filterInternalPostsForUser,
   canSeeReportCompilation, canSeeReportPdfCompilation, sanitizeReportPeriodsForUser,
   sanitizeTrainingTestsForUser, filterTrainingTestSubmissionsForUser, filterTrainingRegistrationsForUser,

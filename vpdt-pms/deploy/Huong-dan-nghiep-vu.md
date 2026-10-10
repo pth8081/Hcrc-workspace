@@ -885,6 +885,39 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     cùng duyệt 1 bước). Nhóm chưa gán ai (0 người) thì không gửi được tờ
     trình cho tới khi admin gán thành viên (gán ở đúng dòng nhóm đó, "🖋️ Nhóm
     Phê Duyệt Trình/HĐ" — Hệ Thống → 🔀 Quy Trình Nâng Cao).
+  - **🔀 Chuyển Tiếp Xin Ý Kiến (11/2026, áp dụng chung với Hợp Đồng)** —
+    người duyệt ở bước HIỆN TẠI (bất kỳ bước nào, không cần admin cấu hình
+    trước) chuyển tiếp hồ sơ cho 1 hoặc **nhiều người cùng lúc** (chọn kiểu
+    multi-select, cùng phòng ban hay khác phòng ban đều được) để xin ý kiến/
+    thông tin/báo cáo, kèm ghi chú tuỳ chọn. Người được chuyển tiếp **chỉ có
+    quyền trả lời** (bình luận và/hoặc đính kèm 1 file) lại đúng người đã
+    chuyển tiếp cho mình — **không** có quyền Duyệt/Từ chối thay, và có thể
+    tự chuyển tiếp tiếp cho người khác nữa (nhiều tầng lồng nhau). Dữ liệu
+    lưu dạng mảng phẳng `forwardThreads[]`, mỗi nhánh CHỈ hiển thị cho đúng
+    2 người liên quan (người chuyển tiếp + người nhận) — người ở tầng trên/
+    dưới không thấy nhánh của nhau, kể cả chuyển tiếp lồng nhiều tầng. Quyết
+    định của người duyệt CHÍNH mới tính vào luồng duyệt chính (hiển thị
+    ngang trong quy trình); mọi nhánh chuyển tiếp chỉ là kênh tham khảo phụ,
+    không ảnh hưởng tới việc hồ sơ có qua được bước hay không. Người được
+    chuyển tiếp nhận thông báo chuông + email ngay, và xem lại TOÀN BỘ các
+    lần được nhờ (cả Văn Bản Trình lẫn Hợp Đồng) ở khối **"📨 Được Nhờ Cho Ý
+    Kiến"** trên Dashboard — bấm vào 1 dòng để mở thẳng đúng hồ sơ đó.
+  - **⏰ Quá Hạn Xử Lý (11/2026, áp dụng chung với Hợp Đồng)** — Hệ Thống →
+    Cấu Hình Email có khối **"⏰ Cảnh Báo Quá Hạn Xử Lý Phê Duyệt"**, admin tự
+    khai 1 hoặc nhiều ngưỡng NGÀY cho riêng Văn Bản Trình (field
+    `submissionOverdueDays`, tách biệt hoàn toàn với ngưỡng của Hợp Đồng) —
+    để trống (mặc định) = **tắt hẳn tính năng**, khác hẳn nhắc hạn hiệu lực
+    hợp đồng (luôn bật). "Quá hạn" ở đây đếm **số ngày hồ sơ CHỜ XỬ LÝ ở
+    cùng 1 bước hiện tại** (tính từ lúc bước TRƯỚC vừa được duyệt, hoặc từ
+    lúc tạo hồ sơ nếu đang ở bước 1) — **ngược hẳn** ý nghĩa với
+    `contractExpiryReminderDays` (đếm ngày CÒN LẠI tới khi hết hiệu lực).
+    Ngưỡng NHỎ NHẤT đã vượt → badge "⚠️ Sắp Quá Hạn" (vàng); ngưỡng LỚN NHẤT
+    đã vượt → badge "🔴 Quá Hạn Xử Lý" (đỏ) — hiện ngay trên danh sách lẫn
+    chi tiết hồ sơ. Mỗi ngày hệ thống tự quét và gửi email nhắc (mỗi ngưỡng
+    chỉ nhắc đúng 1 lần) tới người duyệt bước hiện tại + người trình, cộng
+    thêm email CC cố định tuỳ chọn (`submissionOverdueCcEmails`). Hồ sơ sang
+    bước MỚI thì "đồng hồ chờ" tự tính lại từ đầu (không cộng dồn thời gian
+    chờ của bước trước).
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
   **Đổi người thực hiện khi đang "Đang thực hiện" (từ 9/2026)**: sửa lại
@@ -1812,6 +1845,15 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     người** (không bật "Chỉ 1 người") → hiện thêm 1 hộp chọn bắt buộc chọn
     **đúng 1 người cụ thể** trong nhóm duyệt bước đó. Nhóm chưa gán ai (0
     người) thì không tạo được hồ sơ cho tới khi admin gán thành viên.
+  - **🔀 Chuyển Tiếp Xin Ý Kiến / ⏰ Quá Hạn Xử Lý (11/2026)** — 2 tính năng
+    dùng CHUNG cơ chế với Văn Bản Trình (xem mô tả đầy đủ ở mục 4.1 ngay
+    trên): người duyệt bước hiện tại chuyển tiếp hồ sơ cho nhiều người cùng
+    lúc để xin ý kiến (không có quyền duyệt thay); badge/email nhắc quá hạn
+    cấu hình RIÊNG cho Hợp Đồng (`contractOverdueDays`/
+    `contractOverdueCcEmails`, tách biệt ngưỡng của Văn Bản Trình) ở Cấu Hình
+    Email. Nhắc rõ: Quá Hạn Xử Lý **khác** "Cảnh báo hết hạn" ở trên — Quá
+    Hạn Xử Lý đếm ngày chờ DUYỆT ở 1 bước, còn Cảnh báo hết hạn đếm ngày tới
+    khi hợp đồng ĐÃ duyệt hết HIỆU LỰC — 2 cơ chế độc lập.
   - **Loại Thanh Toán** (chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh Đợt Thanh
     Toán): **"Thanh toán 1 lần"** (mặc định) hoặc **"Thanh toán định kỳ"**.
     Khi Tài liệu ký đã duyệt xong, nút **"🧾 Lập Thanh Toán"** mở ra; bấm xong

@@ -520,6 +520,9 @@ function renderSubmissionReqs() {
       progressBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-800 rounded font-semibold text-xs">⏳ Bước ${sub.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
     }
 
+    const overdueBadge = buildApprovalOverdueBadgeHTML('submissions', sub);
+    if (overdueBadge) progressBadge += ` ${overdueBadge}`;
+
     const hasTask = DB.tasks.some(t => t.sourceType === 'SUBMISSION' && t.sourceCode === sub.code);
     const taskStatusBadge = hasTask
       ? `<span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-bold" title="Đã tự động tạo Công việc theo dõi khi phê duyệt">✅ Đã có công việc</span>`
@@ -650,7 +653,9 @@ function openProcessSubmissionModal(subId) {
   document.getElementById('subModalTitle').innerText = `📜 Bút Phê & Xử Lý: ${sub.title} (${sub.code})`;
   document.getElementById('subModalSub').innerText = `Phòng ban: ${sub.dept} | Người trình: ${sub.creatorName} | Độ khẩn: ${sub.priority}`;
 
-  let detailsHTML = `
+  const overdueBadgeHTML = buildApprovalOverdueBadgeHTML('submissions', sub);
+  let detailsHTML = overdueBadgeHTML ? `<div class="mb-1">${overdueBadgeHTML}</div>` : '';
+  detailsHTML += `
     <div class="grid grid-cols-2 gap-2 text-xs">
       <div><b>Loại tờ trình:</b> ${escapeHtml(sub.type)}</div>
       <div><b>Ngày trình:</b> ${escapeHtml(sub.createdAt)}</div>
@@ -728,6 +733,7 @@ function openProcessSubmissionModal(subId) {
 
   renderSubModalOpinions(sub);
   renderSubModalOpinionWarning(sub, wfConfig);
+  renderSubModalForward(sub);
 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, sub.currentStep);
   const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
@@ -1190,6 +1196,19 @@ function renderSubModalOpinionWarning(sub, wfConfig) {
       <b>${escapeHtml(pendingNames)}</b>. Bạn có thể liên hệ để bổ sung ý kiến trước, hoặc vẫn phê duyệt/từ chối ngay ở bước này.
     </div>
   `;
+}
+
+// "Chuyển Tiếp Xin Ý Kiến" (forwardThreads[]) — tự xác định lại canForwardRoot NGAY TẠI ĐÂY (không
+// nhận tham số từ openProcessSubmissionModal()) để hàm tự đứng độc lập, gọi lại được từ
+// refreshForwardHostUI() (core.js) sau mỗi forward/forward-reply thành công mà không cần biết lại
+// wfConfig/canApprove từ nơi gọi — mirror ĐÚNG khuôn canApprove ở openProcessSubmissionModal().
+function renderSubModalForward(sub) {
+  const container = document.getElementById('subModalForward');
+  if (!container) return;
+  const wfConfig = resolveSubmissionWorkflow(sub);
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, sub.currentStep);
+  const canForwardRoot = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
+  container.innerHTML = renderForwardBranchHTML('submissions', sub, sub.currentStep, canForwardRoot);
 }
 
 async function giveSubmissionOpinion() {

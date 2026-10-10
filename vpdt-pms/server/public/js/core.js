@@ -1897,6 +1897,64 @@ function parseVNDateTime(str) {
   return isNaN(dt.getTime()) ? null : dt;
 }
 
+// computeApprovalOverdueStatus() — MIRROR CLIENT-SIDE của lib/approvalOverdue.js (server, dùng cho
+// jobs/approvalOverdueReminder.js) — 2 bản độc lập, PHẢI sửa đồng thời. Cho phép hiện badge "🔴 Quá
+// Hạn Xử Lý"/"⚠️ Sắp Quá Hạn" NGAY trên danh sách/chi tiết (public/js/module-vanbantrinh.js,
+// module-hopdong.js) mà không cần đợi job email chạy nền mới thấy.
+function computeApprovalOverdueStatus(item, config, overdueDays, now) {
+  if (!item) return null;
+  const thresholds = (overdueDays || []).map(Number).filter(d => Number.isFinite(d) && d > 0).sort((a, b) => a - b);
+  if (!thresholds.length) return null;
+
+  const statusField = config?.statusField || 'status';
+  const stepField = config?.currentStepField || 'currentStep';
+  const historyField = config?.historyField || 'history';
+
+  if (item[statusField] !== 'PENDING') return null;
+  if (item.isAddendum) return null;
+
+  const step = item[stepField];
+  const history = item[historyField] || [];
+  let stepStartStr = item.createdAt;
+  if (step > 1) {
+    const approvedEntries = history.filter(h => h.step === step - 1 && h.action === 'APPROVED' && !h.invalidated);
+    if (approvedEntries.length) stepStartStr = approvedEntries[approvedEntries.length - 1].time;
+  }
+  const startDate = parseVNDateTime(stepStartStr);
+  if (!startDate) return null;
+
+  const nowDate = now || new Date();
+  const daysWaited = Math.floor((nowDate.getTime() - startDate.getTime()) / 86400000);
+  if (daysWaited < 0) return null;
+
+  const maxThreshold = thresholds[thresholds.length - 1];
+  const minThreshold = thresholds[0];
+  if (daysWaited >= maxThreshold) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: stepStartStr };
+  if (daysWaited >= minThreshold) return { level: 'APPROACHING', daysWaited, threshold: minThreshold, stepStartAt: stepStartStr };
+  return null;
+}
+
+// config field-name resolution giống hệt MODULE_CONFIGS (lib/workflowEngine.js) — chỉ 'contracts' cần
+// override statusField (data model dùng 'approvalStatus' thay vì 'status' mặc định), currentStep/
+// history đặt tên giống nhau ở cả 2 module nên không cần khai thêm.
+const APPROVAL_OVERDUE_CONFIG = {
+  submissions: { overdueField: 'submissionOverdueDays' },
+  contracts: { statusField: 'approvalStatus', overdueField: 'contractOverdueDays' }
+};
+// Badge "🔴 Quá Hạn Xử Lý"/"⚠️ Sắp Quá Hạn" dùng chung cho danh sách + chi tiết Văn Bản Trình/Hợp Đồng —
+// trả về chuỗi rỗng khi tính năng TẮT (DB.emailConfig.<module>OverdueDays rỗng) hoặc hồ sơ chưa tới
+// ngưỡng nhỏ nhất, để nơi gọi nối thẳng vào HTML mà không cần tự kiểm tra điều kiện.
+function buildApprovalOverdueBadgeHTML(moduleKey, item) {
+  const cfg = APPROVAL_OVERDUE_CONFIG[moduleKey];
+  if (!cfg) return '';
+  const overdueDays = (DB.emailConfig || {})[cfg.overdueField];
+  const st = computeApprovalOverdueStatus(item, cfg, overdueDays);
+  if (!st) return '';
+  return st.level === 'OVERDUE'
+    ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px] whitespace-nowrap">🔴 Quá Hạn Xử Lý (${st.daysWaited} ngày)</span>`
+    : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[11px] whitespace-nowrap">⚠️ Sắp Quá Hạn (${st.daysWaited} ngày)</span>`;
+}
+
 function isInDateRange(dateStr, fromDate, toDate) {
   if (!fromDate && !toDate) return true;
   const d = parseVNDateTime(dateStr) || new Date(dateStr);
@@ -6776,12 +6834,18 @@ const APPROVAL_EMAIL_EVENTS = [
     // allowFileReplacementProposal gán được cho nhóm BẤT KỲ + mở thêm cho đúng bước phê duyệt cuối cùng.
     { key: 'fileProposal', label: 'Người duyệt đề xuất thay thế tệp tờ trình', actionTypes: ['NOTIFY_FILE_PROPOSAL'] },
     { key: 'fileProposalAccepted', label: 'Người trình chấp nhận đề xuất thay thế tệp', actionTypes: ['NOTIFY_FILE_PROPOSAL_ACCEPTED'] },
-    { key: 'fileProposalDeclined', label: 'Người trình TỪ CHỐI đề xuất thay thế tệp (báo lại người đề xuất)', actionTypes: ['NOTIFY_FILE_PROPOSAL_DECLINED'] }
+    { key: 'fileProposalDeclined', label: 'Người trình TỪ CHỐI đề xuất thay thế tệp (báo lại người đề xuất)', actionTypes: ['NOTIFY_FILE_PROPOSAL_DECLINED'] },
+    // Chuyển Tiếp Xin Ý Kiến (forwardThreads[], routes/workflow.js) — 2 sự kiện độc lập hẳn với luồng
+    // duyệt chính: được NHỜ cho ý kiến (gửi người forwardedTo) / được TRẢ LỜI (gửi lại forwardedBy).
+    { key: 'forwardRequested', label: 'Chuyển tiếp xin ý kiến (được nhờ cho ý kiến)', actionTypes: ['NOTIFY_FORWARD_REQUESTED'] },
+    { key: 'forwardReplied', label: 'Đã có phản hồi ý kiến (báo lại người chuyển tiếp)', actionTypes: ['NOTIFY_FORWARD_REPLIED'] }
   ] },
   { configModule: 'CONTRACT', label: '📑 Hợp Đồng', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
     { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'],
-      note: 'Không áp dụng cho luồng duyệt riêng "Tài liệu ký" (Quản Lý HĐ, contractsSignedFile) — luồng đó hiện CHƯA gửi email ở bất kỳ sự kiện nào (Duyệt/Từ chối/Bổ sung).' }
+      note: 'Không áp dụng cho luồng duyệt riêng "Tài liệu ký" (Quản Lý HĐ, contractsSignedFile) — luồng đó hiện CHƯA gửi email ở bất kỳ sự kiện nào (Duyệt/Từ chối/Bổ sung).' },
+    { key: 'forwardRequested', label: 'Chuyển tiếp xin ý kiến (được nhờ cho ý kiến)', actionTypes: ['NOTIFY_FORWARD_REQUESTED'] },
+    { key: 'forwardReplied', label: 'Đã có phản hồi ý kiến (báo lại người chuyển tiếp)', actionTypes: ['NOTIFY_FORWARD_REPLIED'] }
   ] },
   { configModule: 'INTERNAL', label: '📰 Truyền Thông Nội Bộ (Nhịp Sống HCRC)', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
@@ -7728,7 +7792,13 @@ async function saveEmailConfig(e) {
     itRenewalCcEmails: parseEmailListInput(document.getElementById('cfgItRenewalReminderCc').value),
     laborContractExpiryReminderDays: laborContractReminderDays,
     diskSpaceAlertThresholdPercent: parseInt(document.getElementById('cfgDiskAlertThreshold').value, 10) || 85,
-    diskSpaceAlertCcEmails: parseEmailListInput(document.getElementById('cfgDiskAlertCc').value)
+    diskSpaceAlertCcEmails: parseEmailListInput(document.getElementById('cfgDiskAlertCc').value),
+    // Quá Hạn Xử Lý (11/2026) — KHÔNG bắt buộc có giá trị như 4 mục *ReminderDays ở trên (để trống = TẮT
+    // tính năng, xem chú thích defaults.js), nên không có alert "vui lòng nhập ít nhất 1 mốc" ở đây.
+    submissionOverdueDays: parseDaysListInput(document.getElementById('cfgSubmissionOverdueDays').value),
+    submissionOverdueCcEmails: parseEmailListInput(document.getElementById('cfgSubmissionOverdueCc').value),
+    contractOverdueDays: parseDaysListInput(document.getElementById('cfgContractOverdueDays').value),
+    contractOverdueCcEmails: parseEmailListInput(document.getElementById('cfgContractOverdueCc').value)
   };
   const saved = await syncStorage('emailConfig');
   if (!saved) { DB.emailConfig = prevEmailConfig; return; }
@@ -7786,6 +7856,12 @@ function loadEmailConfigToForm() {
     ? DB.emailConfig.laborContractExpiryReminderDays : [60, 45, 30]).join(', ');
   document.getElementById('cfgDiskAlertThreshold').value = DB.emailConfig.diskSpaceAlertThresholdPercent || 85;
   document.getElementById('cfgDiskAlertCc').value = (DB.emailConfig.diskSpaceAlertCcEmails || []).join(', ');
+  // Quá Hạn Xử Lý — KHÔNG có fallback mặc định như 4 mục *ReminderDays ở trên (mảng rỗng = TẮT, hiện ô
+  // trống đúng như đã lưu, không tự điền giá trị mẫu nào).
+  document.getElementById('cfgSubmissionOverdueDays').value = (DB.emailConfig.submissionOverdueDays || []).join(', ');
+  document.getElementById('cfgSubmissionOverdueCc').value = (DB.emailConfig.submissionOverdueCcEmails || []).join(', ');
+  document.getElementById('cfgContractOverdueDays').value = (DB.emailConfig.contractOverdueDays || []).join(', ');
+  document.getElementById('cfgContractOverdueCc').value = (DB.emailConfig.contractOverdueCcEmails || []).join(', ');
   document.getElementById('cfgTestEmailResult').textContent = '';
   loadSmtpAuthStatus();
   contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(DB.contractExpiryDeptContacts || {}));
@@ -10231,6 +10307,24 @@ async function onClickNotifItem(id, linkTo) {
       setHrPayrollView('SELF');
       await openHrpPayslipViewModal(Number(payslipMatch[1]));
     }
+    // '/forward?module=submissions|contracts&code=...' — chuông "Được nhờ cho ý kiến"/"Đã có phản hồi ý
+    // kiến" (routes/workflow.js POST /forward|/forward-reply, notifyUsers() linkTo) — mở thẳng đúng modal
+    // chi tiết đã sẵn khối "🔀 Chuyển Tiếp Xin Ý Kiến" (renderSubModalForward()/renderContractModalForward()),
+    // KHÔNG dùng khuôn '/?gotoModule=...' (đó chỉ đọc lúc TẢI TRANG, bấm chuông là điều hướng SPA).
+    const forwardMatch = /^\/forward\?module=(submissions|contracts)&code=(.+)$/.exec(linkTo || '');
+    if (forwardMatch) {
+      const [, moduleKey, codeRaw] = forwardMatch;
+      const code = decodeURIComponent(codeRaw);
+      if (moduleKey === 'submissions') {
+        await switchTab('submission');
+        const sub = (DB.submissions || []).find(s => s.code === code);
+        if (sub) openProcessSubmissionModal(sub.id);
+      } else {
+        await switchTab('contract');
+        const c = (DB.contracts || []).find(x => x.code === code);
+        if (c) viewContractDetails(c.id);
+      }
+    }
   } catch (err) {
     console.error('onClickNotifItem: không điều hướng được tới', linkTo, err);
   }
@@ -12140,6 +12234,7 @@ bindCspDelegation('viewDocModal');
 // nhận: bấm nút trong bodyHTML không phản ứng gì khi CHƯA bind, chạy đúng sau khi bind — xem báo cáo
 // đợt B). 1 gốc duy nhất.
 bindCspDelegation('genericConfirmModal');
+bindCspDelegation('forwardInboxModal');
 
 // CSP hạ tầng dùng chung (đợt D) — #dashboardSection: nút "⚙️ Tuỳ chỉnh" (mở
 // #dashboardCustomizeModal), thẻ dashboard động trong #dashboardStatsGrid (renderDashboard() ->
@@ -12467,6 +12562,325 @@ function renderLockedLayerSingleApproverCard(containerId, layerKey, layerLabel, 
     </select>
   `;
   container.appendChild(card);
+}
+
+// ============================================================
+// CHUYỂN TIẾP XIN Ý KIẾN (forwardThreads[]) — dùng chung cho Văn Bản Trình (submissions) và Hợp Đồng
+// (contracts), xem routes/workflow.js POST /:module/:id/forward|/forward-reply + lib/recordViewScope.js
+// ::isForwardThreadParticipant(). Mô hình: mảng PHẲNG các "cạnh" (node) — mỗi cạnh chỉ hiện cho ĐÚNG 2
+// người forwardedBy/forwardedTo của chính nó (mirror đúng check phía server), nên hỗ trợ TỰ NHIÊN việc
+// chuyển tiếp lồng nhiều cấp mà không cần biết trước độ sâu. Hỗ trợ CHỌN NHIỀU NGƯỜI 1 lúc (mỗi người
+// tạo 1 cạnh riêng, trả lời độc lập) qua renderPeopleMultiSelect() dùng chung đã có.
+// ============================================================
+const FORWARD_DB_KEY = { submissions: 'submissions', contracts: 'contracts' };
+const FORWARD_EMAIL_MODULE = { submissions: 'SUBMISSION', contracts: 'CONTRACT' };
+const FORWARD_NOUN = { submissions: 'tờ trình', contracts: 'hợp đồng' };
+
+function forwardItemLookup(moduleKey, itemId) {
+  return (DB[FORWARD_DB_KEY[moduleKey]] || []).find(x => x.id === itemId);
+}
+function forwardReplaceItem(moduleKey, updated) {
+  const arr = DB[FORWARD_DB_KEY[moduleKey]];
+  if (!arr) return;
+  const idx = arr.findIndex(x => x.id === updated.id);
+  if (idx !== -1) arr[idx] = updated;
+}
+// Gọi lại đúng hàm render của module ĐANG MỞ (nếu có) sau khi forward/forward-reply thành công — mỗi
+// module tự định nghĩa renderSubModalForward()/renderContractModalForward() (optional, kiểm typeof
+// trước khi gọi — core.js không phụ thuộc cứng vào module-vanbantrinh.js/module-hopdong.js có nạp hay
+// chưa) để vẽ lại ĐÚNG khối "🔀 Chuyển Tiếp Xin Ý Kiến" trong modal xử lý của module đó.
+function refreshForwardHostUI(moduleKey, item) {
+  if (moduleKey === 'submissions' && typeof renderSubModalForward === 'function') renderSubModalForward(item);
+  if (moduleKey === 'contracts' && typeof renderContractModalForward === 'function') renderContractModalForward(item);
+  if (typeof renderForwardInbox === 'function') renderForwardInbox();
+}
+
+// Render khối "🔀 Chuyển Tiếp Xin Ý Kiến" cho ĐÚNG 1 bước (mặc định item.currentStep) — gồm các cạnh
+// gốc (parentNodeId rỗng) + đệ quy cạnh con, CHỈ hiện cạnh mà currentUser là forwardedBy/forwardedTo
+// của CHÍNH cạnh đó (mirror isForwardThreadParticipant() phía server — không lộ nhánh người khác) hoặc
+// đang là admin. `canForwardRoot`: true nếu currentUser đang là approver LIVE của bước này (quyết định
+// có hiện nút "+ Chuyển Tiếp" gốc hay không — việc "chuyển tiếp tiếp" từ 1 cạnh con do chính cạnh đó
+// tự quyết, xem nút trong replyFormHTML bên dưới).
+function renderForwardBranchHTML(moduleKey, item, step, canForwardRoot) {
+  const nodes = item.forwardThreads || [];
+  const my = currentUser.username;
+  const isAdmin = !!currentUser.perms?.admin;
+  const visible = n => n.forwardedBy === my || n.forwardedTo === my || isAdmin;
+  const rootNodes = nodes.filter(n => n.step === step && !n.parentNodeId && visible(n));
+
+  function renderNode(node) {
+    const children = nodes.filter(n => n.parentNodeId === node.id && visible(n));
+    const canReply = node.forwardedTo === my && !node.reply;
+    const replyHTML = node.reply
+      ? `<div class="bg-emerald-50 border border-emerald-200 rounded p-2 mt-1 text-[11px]">
+           💬 ${escapeHtml(node.reply.comment || '')}
+           ${node.reply.fileUrl ? `<div class="mt-1"><button type="button" data-op="viewForwardReplyFile" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" data-arg2="'${escapeHtml(node.id)}'" class="text-sky-700 underline font-semibold">📎 Xem file ý kiến</button></div>` : ''}
+           <div class="text-gray-400 mt-0.5">${escapeHtml(node.reply.repliedAt || '')}</div>
+         </div>`
+      : `<div class="text-amber-600 italic text-[11px] mt-1">⏳ Chưa phản hồi</div>`;
+    const replyFormHTML = canReply
+      ? `<div class="mt-1.5 space-y-1 bg-white border border-purple-100 rounded p-1.5">
+           <textarea id="fwdReplyComment_${escapeHtml(node.id)}" rows="2" placeholder="Nhập ý kiến trả lời..." class="w-full border p-1.5 rounded text-[11px]"></textarea>
+           <div class="flex items-center gap-2">
+             <button type="button" data-op="pickForwardReplyFile" data-arg0="'${escapeHtml(node.id)}'" class="text-[11px] bg-gray-200 px-2 py-1 rounded font-semibold">📎 Đính kèm file</button>
+             <span id="fwdReplyFileLabel_${escapeHtml(node.id)}" class="text-[11px] text-gray-400 italic">Chưa có file</span>
+           </div>
+           <div class="flex gap-2">
+             <button type="button" data-op="submitForwardReply" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" data-arg2="'${escapeHtml(node.id)}'" class="bg-sky-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-sky-700">↩️ Trả Lời</button>
+             <button type="button" data-op="openForwardModal" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" data-arg2="'${escapeHtml(node.id)}'" class="bg-purple-100 text-purple-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-purple-200">🔀 Chuyển Tiếp Tiếp</button>
+           </div>
+         </div>`
+      : '';
+    return `
+      <div class="border-l-2 border-purple-300 pl-2 ml-2 mt-2">
+        <div class="text-[11px] text-gray-700"><b>${escapeHtml(node.forwardedByName || node.forwardedBy)}</b> chuyển tiếp cho <b>${escapeHtml(node.forwardedToName || node.forwardedTo)}</b></div>
+        ${node.message ? `<div class="text-gray-500 italic text-[11px]">Ghi chú: "${escapeHtml(node.message)}"</div>` : ''}
+        ${replyHTML}
+        ${replyFormHTML}
+        ${children.map(renderNode).join('')}
+      </div>
+    `;
+  }
+
+  if (!rootNodes.length && !canForwardRoot) return '';
+  return `
+    <div class="bg-purple-50 border border-purple-200 rounded p-3 mt-2">
+      <div class="flex justify-between items-center mb-1">
+        <h4 class="font-bold text-purple-800 text-xs">🔀 Chuyển Tiếp Xin Ý Kiến — Bước ${step}</h4>
+        ${canForwardRoot ? `<button type="button" data-op="openForwardModal" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" class="bg-purple-600 text-white px-2 py-1 rounded text-[11px] font-bold hover:bg-purple-700">+ Chuyển Tiếp</button>` : ''}
+      </div>
+      ${rootNodes.length ? rootNodes.map(renderNode).join('') : '<div class="text-gray-400 italic text-[11px]">Chưa có chuyển tiếp nào ở bước này.</div>'}
+    </div>
+  `;
+}
+
+function renderForwardPeoplePicker(scope, dept, preserveSelected) {
+  const candidates = (DB.users || []).filter(u => u && u.username && u.active !== false && u.username !== currentUser.username &&
+    (scope === 'all' || u.dept === dept));
+  renderPeopleMultiSelect('fwdPeoplePicker', candidates, preserveSelected || [], 'fwdPersonCheckbox', {});
+}
+function onForwardScopeChange() {
+  const scope = document.getElementById('fwdScope')?.value || 'dept';
+  const dept = document.getElementById('fwdDept')?.value || '';
+  const deptWrap = document.getElementById('fwdDeptWrap');
+  if (deptWrap) deptWrap.classList.toggle('hidden', scope === 'all');
+  const existing = document.getElementById('fwdPeoplePicker');
+  const preserve = existing && existing._pmsSelected ? [...existing._pmsSelected] : [];
+  renderForwardPeoplePicker(scope, dept, preserve);
+}
+
+// openForwardModal(moduleKey, itemId, parentNodeId) — parentNodeId bỏ trống (undefined) = chuyển tiếp
+// GỐC (từ người phê duyệt bước hiện tại); có giá trị = "chuyển tiếp tiếp" từ 1 cạnh đã có (người gọi
+// phải là forwardedTo của CHÍNH cạnh đó — server tự xác minh lại, đây chỉ là UI).
+function openForwardModal(moduleKey, itemId, parentNodeId) {
+  const item = forwardItemLookup(moduleKey, itemId);
+  if (!item) return;
+  const defaultDept = currentUser.dept || item.dept || (DB.depts || [])[0] || '';
+  const bodyHTML = `
+    <div class="space-y-2">
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Phạm vi tìm người</label>
+        <select id="fwdScope" data-op-change="onForwardScopeChange" class="w-full border p-1.5 rounded text-xs">
+          <option value="dept">🏢 Trong phòng ban</option>
+          <option value="all">🌐 Toàn công ty</option>
+        </select>
+      </div>
+      <div id="fwdDeptWrap">
+        <label class="block font-semibold text-gray-600 mb-1">Phòng ban</label>
+        <select id="fwdDept" data-op-change="onForwardScopeChange" class="w-full border p-1.5 rounded text-xs">
+          ${(DB.depts || []).map(d => `<option value="${escapeHtml(d)}" ${d === defaultDept ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Tìm &amp; chọn người (chọn được nhiều người)</label>
+        <div id="fwdPeoplePicker"></div>
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Ghi chú gửi kèm (tuỳ chọn)</label>
+        <textarea id="fwdMessage" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Nhờ xem giúp..."></textarea>
+      </div>
+    </div>
+  `;
+  showConfirmModal({
+    title: '🔀 Chuyển Tiếp Xin Ý Kiến',
+    bodyHTML,
+    confirmLabel: 'Gửi Chuyển Tiếp',
+    onConfirm: () => submitForwardRequest(moduleKey, itemId, parentNodeId)
+  });
+  renderForwardPeoplePicker('dept', defaultDept);
+}
+
+async function submitForwardRequest(moduleKey, itemId, parentNodeId) {
+  const picker = document.getElementById('fwdPeoplePicker');
+  const targetUsernames = picker && picker._pmsSelected ? [...picker._pmsSelected] : [];
+  if (!targetUsernames.length) { alert('⛔ Vui lòng chọn ít nhất 1 người để chuyển tiếp!'); return; }
+  const message = (document.getElementById('fwdMessage')?.value || '').trim();
+
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/${moduleKey}/${itemId}/forward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUsernames, message, parentNodeId: parentNodeId || null })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) {
+    alert('⛔ ' + e.message);
+    return;
+  }
+
+  forwardReplaceItem(moduleKey, result.item);
+  const emailModule = FORWARD_EMAIL_MODULE[moduleKey];
+  const noun = FORWARD_NOUN[moduleKey];
+  const code = result.item.code;
+  const targetList = (result.createdNodes || []).map(n => n.forwardedTo);
+  notifyUsersByEmail(emailModule, 'NOTIFY_FORWARD_REQUESTED', code, targetList,
+    `[VPDT] Bạn được nhờ cho ý kiến về ${noun} ${code}`,
+    `${currentUser.name} nhờ bạn cho ý kiến về "${result.item.title}" (${code}).${message ? ` Ghi chú: ${message}` : ''}`);
+  logSystemAction(emailModule, 'FORWARD_OPINION', `Chuyển tiếp xin ý kiến [${code}] cho ${targetUsernames.length} người`, 'SUCCESS', code);
+
+  alert('✅ Đã gửi chuyển tiếp xin ý kiến!');
+  closeGenericConfirmModal();
+  refreshForwardHostUI(moduleKey, result.item);
+}
+
+// pickForwardReplyFile(nodeId) — chọn + tải lên NGAY 1 file ý kiến (moduleKey upload 'forwardReply' —
+// chưa đăng ký riêng ở MODULE_DEFAULT_ALLOWED_EXT/"Quản Lý Tệp File" nên tạm dùng ALLOWED_EXT chung của
+// routes/upload.js, xem việc #448), lưu fileUrl vào biến tạm theo nodeId để submitForwardReply() đọc.
+window._fwdReplyFiles = window._fwdReplyFiles || {};
+function pickForwardReplyFile(nodeId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const label = document.getElementById(`fwdReplyFileLabel_${nodeId}`);
+    if (label) label.textContent = '⏳ Đang tải lên...';
+    try {
+      const uploaded = await uploadFileToServer(file, 'forwardReply');
+      window._fwdReplyFiles[nodeId] = uploaded;
+      if (label) label.textContent = `📎 ${uploaded.fileName}`;
+    } catch (e) {
+      if (label) label.textContent = 'Chưa có file';
+      alert('⛔ ' + e.message);
+    }
+  };
+  input.click();
+}
+
+async function submitForwardReply(moduleKey, itemId, nodeId) {
+  const comment = (document.getElementById(`fwdReplyComment_${nodeId}`)?.value || '').trim();
+  const fileUrl = window._fwdReplyFiles?.[nodeId]?.fileUrl || null;
+  if (!comment && !fileUrl) { alert('⛔ Vui lòng nhập ý kiến hoặc đính kèm file!'); return; }
+
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/${moduleKey}/${itemId}/forward-reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nodeId, comment, fileUrl })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) {
+    alert('⛔ ' + e.message);
+    return;
+  }
+
+  forwardReplaceItem(moduleKey, result.item);
+  const node = (result.item.forwardThreads || []).find(n => n.id === nodeId);
+  if (node) {
+    const emailModule = FORWARD_EMAIL_MODULE[moduleKey];
+    notifyUsersByEmail(emailModule, 'NOTIFY_FORWARD_REPLIED', result.item.code, [node.forwardedBy],
+      `[VPDT] ${currentUser.name} đã phản hồi ý kiến bạn nhờ`,
+      `${currentUser.name} đã trả lời ý kiến bạn nhờ về "${result.item.title}" (${result.item.code}).`);
+    logSystemAction(emailModule, 'FORWARD_OPINION_REPLY', `Trả lời ý kiến chuyển tiếp [${result.item.code}]`, 'SUCCESS', result.item.code);
+  }
+  delete window._fwdReplyFiles[nodeId];
+  alert('✅ Đã gửi trả lời!');
+  refreshForwardHostUI(moduleKey, result.item);
+}
+
+// Xem file ý kiến đính kèm 1 cạnh chuyển tiếp — dùng chung Khung Xem Bảo Vệ với các tệp khác trong hệ
+// thống (openFileProtectedView(), đã có sẵn toàn cục).
+function viewForwardReplyFile(moduleKey, itemId, nodeId) {
+  const item = forwardItemLookup(moduleKey, itemId);
+  const node = item && (item.forwardThreads || []).find(n => n.id === nodeId);
+  if (!node || !node.reply || !node.reply.fileUrl) return;
+  openFileProtectedView({
+    title: `📎 File ý kiến — ${escapeHtml(node.forwardedToName || node.forwardedTo)}`,
+    sub: `${FORWARD_NOUN[moduleKey]}: ${item.title} (${item.code})`,
+    footerInfo: 'Tệp đính kèm theo nhánh chuyển tiếp xin ý kiến',
+    fileSrc: node.reply.fileUrl
+  });
+}
+
+// renderForwardInbox() — hộp thư "📨 Được Nhờ Cho Ý Kiến": quét forwardThreads[] của CẢ 2 module nơi
+// currentUser là forwardedTo. Hiển thị vào #forwardInboxList nếu fragment/section tương ứng đã nạp
+// (xem index.html "📨 Được Nhờ Cho Ý Kiến" — việc #446) — hàm no-op an toàn nếu phần tử chưa tồn tại
+// (gọi được từ bất kỳ đâu sau mỗi forward/forward-reply mà không cần biết tab nào đang mở).
+function collectForwardInboxEntries() {
+  const entries = [];
+  for (const moduleKey of Object.keys(FORWARD_DB_KEY)) {
+    for (const item of (DB[FORWARD_DB_KEY[moduleKey]] || [])) {
+      for (const node of (item.forwardThreads || [])) {
+        if (node.forwardedTo === currentUser.username) entries.push({ moduleKey, item, node });
+      }
+    }
+  }
+  entries.sort((a, b) => (a.node.reply ? 1 : 0) - (b.node.reply ? 1 : 0));
+  return entries;
+}
+
+function openForwardInboxModal() {
+  document.getElementById('forwardInboxModal')?.classList.remove('hidden');
+  renderForwardInbox();
+}
+function closeForwardInboxModal() {
+  document.getElementById('forwardInboxModal')?.classList.add('hidden');
+}
+// renderForwardInbox() — vẽ lại danh sách NẾU modal đang mở (no-op an toàn khi đóng/chưa từng mở) —
+// gọi được từ bất kỳ đâu sau mỗi forward/forward-reply thành công (xem refreshForwardHostUI()) mà
+// không cần biết modal có đang hiện hay không.
+function renderForwardInbox() {
+  const modal = document.getElementById('forwardInboxModal');
+  const list = document.getElementById('forwardInboxList');
+  if (!modal || !list || modal.classList.contains('hidden')) return;
+  const entries = collectForwardInboxEntries();
+  if (!entries.length) {
+    list.innerHTML = '<div class="text-gray-400 italic text-center py-6">Chưa có ai nhờ bạn cho ý kiến.</div>';
+    return;
+  }
+  list.innerHTML = entries.map(({ moduleKey, item, node }) => `
+    <div class="border rounded p-2.5 ${node.reply ? 'bg-gray-50' : 'bg-purple-50 border-purple-200'}">
+      <div class="flex justify-between items-start gap-2">
+        <div>
+          <div class="font-bold text-gray-800">${escapeHtml(item.title || '')} <span class="text-gray-400 font-normal">(${escapeHtml(item.code || '')})</span></div>
+          <div class="text-gray-500 text-[11px] mt-0.5">${FORWARD_NOUN[moduleKey] === 'hợp đồng' ? '📑 Hợp Đồng' : '📜 Văn Bản Trình'} · Người chuyển tiếp: <b>${escapeHtml(node.forwardedByName || node.forwardedBy)}</b> · ${escapeHtml(node.forwardedAt || '')}</div>
+        </div>
+        <span class="shrink-0 px-2 py-0.5 rounded font-bold text-[11px] ${node.reply ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${node.reply ? '✅ Đã phản hồi' : '⏳ Chờ bạn phản hồi'}</span>
+      </div>
+      ${node.message ? `<div class="text-gray-600 italic text-[11px] mt-1">💬 "${escapeHtml(node.message)}"</div>` : ''}
+      <div class="mt-1.5">
+        <button type="button" data-op="openForwardInboxEntry" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" class="bg-sky-600 text-white px-2.5 py-1 rounded text-[11px] font-bold hover:bg-sky-700">🔎 Mở Hồ Sơ ${node.reply ? '' : '& Trả Lời'}</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// openForwardInboxEntry() — đóng hộp thư, mở ĐÚNG modal chi tiết của hồ sơ nguồn (mỗi module tự định
+// nghĩa modalOpener riêng — submissions dùng openProcessSubmissionModal(), contracts dùng
+// viewContractDetails(), cả 2 đã có sẵn khối "🔀 Chuyển Tiếp Xin Ý Kiến" với form trả lời ngay trong đó).
+function openForwardInboxEntry(moduleKey, itemId) {
+  closeForwardInboxModal();
+  if (moduleKey === 'submissions' && typeof openProcessSubmissionModal === 'function') openProcessSubmissionModal(itemId);
+  else if (moduleKey === 'contracts' && typeof viewContractDetails === 'function') viewContractDetails(itemId);
 }
 // Đóng dropdown đang mở khi click ra ngoài — gắn 1 LẦN DUY NHẤT ở top-level (không gắn lại mỗi lần
 // render, tránh chồng listener) — tự áp dụng cho MỌI khối renderPeopleMultiSelect đang có trên trang

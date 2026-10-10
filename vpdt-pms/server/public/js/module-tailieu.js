@@ -1573,7 +1573,12 @@ const UPLOAD_MODULE_LIST = [
   // hrProfile ở trên. operationStoreOpening (#vsoFile) chỉ văn bản, dùng mặc định UPLOAD_EXT_UNIVERSE.
   { key: 'operationRepair', label: '🔧 Vận Hành — Sửa Chữa (Tài Liệu Đính Kèm)', extUniverse: ['.pdf', '.docx', '.xlsx', '.jpg', '.jpeg', '.png'] },
   { key: 'operationStoreOpening', label: '🏬 Vận Hành — Mở Mới (Tài Liệu Đính Kèm)' },
-  { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ (Tệp PDF)', extUniverse: ['.pdf'] }
+  { key: 'periodicReport', label: '📅 Báo Cáo Định Kỳ (Tệp PDF)', extUniverse: ['.pdf'] },
+  // forwardReply (Chuyển Tiếp Xin Ý Kiến, Văn Bản Trình/Hợp Đồng) — file ý kiến đính kèm khi người được
+  // chuyển tiếp trả lời (pickForwardReplyFile(), core.js). Chưa cấu hình riêng thì rơi về ALLOWED_EXT
+  // chung của routes/upload.js (đúng bằng UPLOAD_EXT_UNIVERSE mặc định) — thêm vào đây để admin tự siết
+  // lại nếu cần, không đổi hành vi mặc định hiện tại.
+  { key: 'forwardReply', label: '🔀 Chuyển Tiếp Xin Ý Kiến (File Ý Kiến Trả Lời)' }
 ];
 
 function renderUploadTypeConfig() {

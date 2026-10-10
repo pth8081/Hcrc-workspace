@@ -4,13 +4,23 @@
 // request tới POST /api/data/submissions để tự duyệt hồ sơ của chính mình.
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction } = require('../lib/workflowEngine');
+const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction, resolveWorkflowStepApprovers, canApproveStep } = require('../lib/workflowEngine');
+const { assertUploadedFileUrl } = require('../lib/createValidation');
 const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
 const { withLockedRecordForCollection, getAllForCollection, withAppLock } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
+// Thông báo EMAIL cho hành động chuyển tiếp/trả lời ý kiến — CỐ Ý KHÔNG gửi ở đây: toàn bộ ~88 điểm gửi
+// email "Cần phê duyệt"/"Xin ý kiến"/... hiện có đều gọi notifyUsersByEmail() phía CLIENT (public/js/
+// core.js, dùng DB.users đã tải sẵn để tra email + tôn trọng cờ tắt email cá nhân/module), KHÔNG có lệ
+// nào gửi email ngay tại route server — giữ đúng quy ước đó, client tự gọi sau khi route này trả về
+// 200 OK (xem submitForward()/submitForwardReply() ở core.js). Chuông thông báo trong app thì NGƯỢC
+// LẠI — lib/notifications.js::notifyUsers() là hàm SERVER thật (ghi thẳng dbo.Records collection
+// 'notifications'), gọi được trực tiếp tại đây.
+const { notifyUsers } = require('../lib/notifications');
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu vòng 2, mức Cao — "propose-file-replacement không xác minh quyền
 // sở hữu tệp"): PROPOSE_FILE_REPLACEMENT (lib/workflowEngine.js) trước đây chỉ kiểm ĐÚNG KHUÔN URL
 // (assertUploadedFileUrl) cho extraFields.fileUrl, không xác minh approver ở bước hiện tại có thật sự
@@ -132,6 +142,192 @@ router.post('/submissions/:id/give-opinion', async (req, res) => {
   } catch (err) {
     if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
     console.error(`POST /api/workflow/submissions/${req.params.id}/give-opinion lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
+// ====== Chuyển Tiếp Xin Ý Kiến (submissions/contracts) ======================================
+// Nhánh "song song" độc lập với luồng duyệt chạy ngang chính (status/currentStep/history) — cùng
+// triết lý với route give-opinion ở trên: KHÔNG đi qua applyWorkflowAction(), không đụng tới
+// status/currentStep/history của hồ sơ. Lưu vào mảng phẳng item.forwardThreads[], mỗi phần tử là
+// 1 "cạnh" (edge) chuyển tiếp riêng — CHỈ 2 người forwardedBy/forwardedTo của đúng cạnh đó nhìn
+// thấy được (lib/recordViewScope.js sẽ dựa vào đúng 2 field này để cấp quyền xem bổ sung, xem task
+// #441) — tự nhiên đáp ứng đúng yêu cầu "không xem được chéo cấp" mà không cần duyệt cây đệ quy.
+const FORWARD_SUPPORTED_MODULES = new Set(['submissions', 'contracts']);
+const MAX_FORWARD_TARGETS = 20;
+const MAX_FORWARD_MESSAGE_LEN = 1000;
+const MAX_FORWARD_REPLY_LEN = 2000;
+
+function nowVN() {
+  return new Date().toLocaleString('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+}
+
+function assertForwardModuleSupported(moduleKey) {
+  if (!FORWARD_SUPPORTED_MODULES.has(moduleKey)) {
+    throw new WorkflowError(400, `Module không hỗ trợ Chuyển Tiếp Xin Ý Kiến: ${moduleKey}`);
+  }
+}
+
+// POST /api/workflow/:module/:id/forward — tạo 1 hoặc nhiều "cạnh" chuyển tiếp mới, gắn vào đúng
+// bước (root forward, người gọi phải là approver LIVE của item.currentStep) hoặc nối tiếp bên dưới
+// 1 cạnh đã có (continuation forward, người gọi phải là forwardedTo của parentNodeId đó — đúng
+// nghĩa "chuyển tiếp tiếp cho người khác" theo yêu cầu, KHÔNG cho phép chuyển tiếp hộ người khác).
+router.post('/:module/:id/forward', async (req, res) => {
+  const moduleKey = req.params.module;
+  const itemId = Number(req.params.id);
+  const { targetUsernames, message, parentNodeId } = req.body || {};
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+
+  try {
+    assertForwardModuleSupported(moduleKey);
+    const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
+
+    const targets = Array.from(new Set((Array.isArray(targetUsernames) ? targetUsernames : [])
+      .map(u => String(u || '').trim()).filter(Boolean)));
+    if (!targets.length) return res.status(400).json({ error: 'Vui lòng chọn ít nhất 1 người để chuyển tiếp' });
+    if (targets.length > MAX_FORWARD_TARGETS) {
+      return res.status(400).json({ error: `Chỉ được chuyển tiếp tối đa ${MAX_FORWARD_TARGETS} người/lượt` });
+    }
+    if (targets.includes(freshUser.username)) {
+      return res.status(400).json({ error: 'Không thể chuyển tiếp cho chính mình' });
+    }
+    const msg = String(message || '').trim();
+    if (msg.length > MAX_FORWARD_MESSAGE_LEN) {
+      return res.status(400).json({ error: `Ghi chú chuyển tiếp tối đa ${MAX_FORWARD_MESSAGE_LEN} ký tự` });
+    }
+
+    const usersList = req.allUsers || [];
+    const targetUserRows = targets.map(username => {
+      const u = usersList.find(x => x.username === username && x.active !== false);
+      if (!u) throw new WorkflowError(400, `Người dùng không hợp lệ hoặc đã ngưng hoạt động: ${username}`);
+      return u;
+    });
+
+    const appData = await getAllAppData();
+    const parentId = parentNodeId != null ? String(parentNodeId) : null;
+
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      if (!Array.isArray(item.forwardThreads)) item.forwardThreads = [];
+      let step;
+      if (parentId) {
+        const parentNode = item.forwardThreads.find(n => n.id === parentId);
+        if (!parentNode) throw new WorkflowError(404, 'Không tìm thấy nhánh chuyển tiếp gốc');
+        if (parentNode.forwardedTo !== freshUser.username) {
+          throw new WorkflowError(403, 'Bạn không phải người được chuyển tiếp ở nhánh này nên không thể chuyển tiếp tiếp');
+        }
+        step = parentNode.step;
+      } else {
+        step = item.currentStep;
+        const approvers = resolveWorkflowStepApprovers(moduleKey, item, appData, step);
+        if (!canApproveStep(freshUser, approvers, item.history, step)) {
+          throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể chuyển tiếp xin ý kiến');
+        }
+      }
+
+      const now = nowVN();
+      const createdNodes = targetUserRows.map(u => {
+        const node = {
+          id: crypto.randomUUID(),
+          step,
+          parentNodeId: parentId,
+          forwardedBy: freshUser.username,
+          forwardedByName: freshUser.name,
+          forwardedTo: u.username,
+          forwardedToName: u.name,
+          message: msg || null,
+          forwardedAt: now,
+          reply: null
+        };
+        item.forwardThreads.push(node);
+        return node;
+      });
+      item._justCreatedForwardNodes = createdNodes; // đọc lại ngay dưới, không lưu vào DB
+      return item;
+    });
+
+    const createdNodes = resultItem._justCreatedForwardNodes || [];
+    delete resultItem._justCreatedForwardNodes;
+
+    const title = resultItem.title || resultItem.code || `#${itemId}`;
+    for (const node of createdNodes) {
+      await notifyUsers([node.forwardedTo], 'FORWARD_OPINION_REQUESTED',
+        'Được nhờ cho ý kiến',
+        `${freshUser.name} nhờ bạn cho ý kiến về "${title}"${msg ? `: ${msg}` : ''}`,
+        // '/forward?module=...&code=...' — DÙNG RIÊNG (không phải khuôn '/?gotoModule=...' của email, vốn
+        // chỉ đọc lúc TẢI TRANG qua gotoApprovalResultRecordFromQueryParam()) vì bấm chuông thông báo là
+        // điều hướng SPA (không tải lại trang) — onClickNotifItem() (core.js) tự parse đúng khuôn này để
+        // mở thẳng modal chi tiết kèm khối "🔀 Chuyển Tiếp Xin Ý Kiến" của đúng hồ sơ.
+        `/forward?module=${moduleKey}&code=${encodeURIComponent(resultItem.code || '')}`);
+    }
+
+    res.json({ ok: true, item: resultItem, createdNodes });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/${moduleKey}/${req.params.id}/forward lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
+// POST /api/workflow/:module/:id/forward-reply — người ĐƯỢC chuyển tiếp (forwardedTo của đúng
+// node) trả lời lại CHÍNH người đã chuyển tiếp cho mình (forwardedBy) — không có quyền trả lời hộ
+// node khác, không có quyền sửa lại reply đã gửi (idempotent theo đúng thiết kế give-opinion:
+// ở đây CHẶN gửi lại, khác give-opinion cho phép sửa — vì đây là 1 lượt hỏi-đáp 1 lần, không phải ý
+// kiến có thể cập nhật nhiều lần theo thời gian).
+router.post('/:module/:id/forward-reply', async (req, res) => {
+  const moduleKey = req.params.module;
+  const itemId = Number(req.params.id);
+  const { nodeId, comment, fileUrl } = req.body || {};
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  if (!nodeId) return res.status(400).json({ error: 'Thiếu nodeId' });
+
+  const cmt = String(comment || '').trim();
+  if (cmt.length > MAX_FORWARD_REPLY_LEN) {
+    return res.status(400).json({ error: `Ý kiến trả lời tối đa ${MAX_FORWARD_REPLY_LEN} ký tự` });
+  }
+  if (!cmt && !fileUrl) {
+    return res.status(400).json({ error: 'Vui lòng nhập ý kiến hoặc đính kèm file' });
+  }
+
+  try {
+    assertForwardModuleSupported(moduleKey);
+    const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
+    if (fileUrl) assertUploadedFileUrl(fileUrl, 'File ý kiến trả lời');
+
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      const node = (item.forwardThreads || []).find(n => n.id === String(nodeId));
+      if (!node) throw new WorkflowError(404, 'Không tìm thấy nhánh chuyển tiếp');
+      if (node.forwardedTo !== freshUser.username) {
+        throw new WorkflowError(403, 'Bạn không phải người được chuyển tiếp ở nhánh này');
+      }
+      if (node.reply) {
+        throw new WorkflowError(409, 'Nhánh này đã được trả lời trước đó');
+      }
+      node.reply = {
+        comment: cmt || null,
+        fileUrl: fileUrl || null,
+        repliedAt: nowVN()
+      };
+      return item;
+    });
+
+    const node = (resultItem.forwardThreads || []).find(n => n.id === String(nodeId));
+    const title = resultItem.title || resultItem.code || `#${itemId}`;
+    if (node) {
+      await notifyUsers([node.forwardedBy], 'FORWARD_OPINION_REPLIED',
+        'Đã có phản hồi ý kiến',
+        `${freshUser.name} đã trả lời ý kiến bạn nhờ về "${title}"`,
+        `/forward?module=${moduleKey}&code=${encodeURIComponent(resultItem.code || '')}`);
+    }
+
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/${moduleKey}/${req.params.id}/forward-reply lỗi:`, err.message);
     res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
   }
 });

@@ -173,6 +173,13 @@ function buildDashboardCards(user) {
   addCard({ key: 'task', icon: '📋', label: 'Công việc cần xử lý', count: taskCount, show: true,
     action: () => switchTab('task') });
 
+  // Chuyển Tiếp Xin Ý Kiến (forwardThreads[], Văn Bản Trình/Hợp Đồng) — đếm ĐÚNG số cạnh CHƯA phản hồi
+  // mà currentUser là forwardedTo (xem collectForwardInboxEntries() — quét cả 2 module), không cần quyền
+  // gì đặc biệt (ai cũng có thể được chuyển tiếp nhờ ý kiến, kể cả không có quyền duyệt module đó).
+  const forwardInboxCount = collectForwardInboxEntries().filter(e => !e.node.reply).length;
+  addCard({ key: 'forwardInbox', icon: '📨', label: 'Được nhờ cho ý kiến', count: forwardInboxCount, show: forwardInboxCount > 0,
+    action: () => openForwardInboxModal() });
+
   return cards;
 }
 

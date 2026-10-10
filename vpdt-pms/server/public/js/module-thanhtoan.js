@@ -1139,8 +1139,10 @@ function viewContractDetails(contractId) {
   document.getElementById('viewModalSub').innerText = `Phòng ban: ${c.dept} | Đối tác: ${c.partner} | Loại: ${c.type}`;
   document.getElementById('viewModalFooterInfo').innerText = `Người tạo: ${c.creator}${c.lastEditedBy ? ` | Sửa lần cuối bởi: ${c.lastEditedBy} lúc ${c.lastEditedAt}` : ''}`;
 
+  const overdueBadgeHTML = buildApprovalOverdueBadgeHTML('contracts', c);
   document.getElementById('viewModalContent').innerHTML = `
     <div class="w-full bg-white p-6 rounded shadow border overflow-y-auto text-sm">
+      ${overdueBadgeHTML ? `<div class="mb-2">${overdueBadgeHTML}</div>` : ''}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div><b>Mã Hợp Đồng / Giấy Phép:</b> ${escapeHtml(c.code)}</div>
         <div><b>Loại Pháp Lý:</b> ${escapeHtml(c.type)}</div>
@@ -1192,9 +1194,26 @@ function viewContractDetails(contractId) {
           </div>
         </div>
       ` : ''}
+      <div class="border-t mt-4 pt-3">
+        ${buildWorkflowStepsStatusHTML(resolveContractApprovalWorkflow(c), c.history, c.currentStep, c.approvalStatus)}
+      </div>
+      <div id="contractDetailForward"></div>
     </div>
   `;
   document.getElementById('viewDocModal').classList.remove('hidden');
+  renderContractModalForward(c);
+}
+
+// renderContractModalForward(c) — khối "🔀 Chuyển Tiếp Xin Ý Kiến" cho Hợp Đồng, tự đứng độc lập (tự
+// tính lại canForwardRoot NGAY TẠI ĐÂY) để gọi lại được từ refreshForwardHostUI() (core.js) sau mỗi
+// forward/forward-reply thành công — mirror đúng khuôn renderSubModalForward() (module-vanbantrinh.js).
+// Phụ lục (isAddendum) KHÔNG cho chuyển tiếp gốc (nhánh phê duyệt riêng phức tạp hơn, chưa cần thiết
+// theo yêu cầu hiện tại — vẫn xem được timeline/forward của hợp đồng GỐC bình thường).
+function renderContractModalForward(c) {
+  const container = document.getElementById('contractDetailForward');
+  if (!container) return;
+  const canForwardRoot = !c.isAddendum && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c);
+  container.innerHTML = renderForwardBranchHTML('contracts', c, c.currentStep, canForwardRoot);
 }
 
 function viewContract(contractId) {

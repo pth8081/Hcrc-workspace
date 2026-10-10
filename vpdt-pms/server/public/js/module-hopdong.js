@@ -1106,6 +1106,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
       : (c.approvalStatus === 'DRAFT' || c.approvalStatus === 'NEEDS_SUPPLEMENT')
         ? `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`
         : `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã duyệt</span>`;
+  const overdueBadge = buildApprovalOverdueBadgeHTML('contracts', c);
 
   const expandToggleHTML = addendumCount > 0
     ? `<button data-op="toggleContractFamily" data-arg0="${c.id}" class="text-cyan-700 font-bold mr-1">${isExpanded ? '▾' : '▸'}</button><span class="text-[10px] bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full">${addendumCount} phụ lục</span>`
@@ -1231,7 +1232,7 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
         <div class="text-xs text-gray-500">${escapeHtml(c.startDate || '')} ➔ ${escapeHtml(c.endDate || '')}</div>
       </td>
       <td class="border p-2">${escapeHtml(c.dept)}${(c.custodianDept && c.custodianDept !== c.dept) ? `<div class="text-[10px] text-cyan-700 mt-0.5">📌 Theo dõi &amp; TT: ${escapeHtml(c.custodianDept)}</div>` : ''}</td>
-      <td class="border p-2 space-y-1"><div>${statusBadge}</div>${warningBadge ? `<div>${warningBadge}</div>` : ''}</td>
+      <td class="border p-2 space-y-1"><div>${statusBadge}</div>${overdueBadge ? `<div>${overdueBadge}</div>` : ''}${warningBadge ? `<div>${warningBadge}</div>` : ''}</td>
       ${paymentCell}
       <td class="border p-2 text-center whitespace-nowrap text-gray-500">${c.createdAt ? escapeHtml(c.createdAt) : (c.id ? escapeHtml(new Date(c.id).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })) : '')}</td>
       <td class="border p-2 text-center space-x-1">

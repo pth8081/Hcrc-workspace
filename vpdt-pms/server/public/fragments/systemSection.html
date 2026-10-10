@@ -813,6 +813,31 @@
         </div>
         <p class="text-[11px] text-gray-400 italic -mt-2">Người nhận mặc định = toàn bộ tài khoản đang có quyền Quản Trị Viên (có email), cộng thêm email CC cố định ở trên. Chỉ CẢNH BÁO qua email khi ổ đĩa chứa thư mục tải file lên vượt ngưỡng — hệ thống KHÔNG tự xoá bất kỳ file nào.</p>
 
+        <div class="border-t pt-2">
+          <div class="font-bold text-gray-700 mb-1">⏰ Cảnh Báo Quá Hạn Xử Lý Phê Duyệt</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Quá Hạn Xử Lý Văn Bản Trình — Sau (số ngày CHỜ ở 1 bước, cách nhau dấu phẩy)</label>
+              <input id="cfgSubmissionOverdueDays" placeholder="3, 5, 7 (để trống = tắt)" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Quá Hạn Văn Bản Trình (tuỳ chọn, cách nhau dấu phẩy)</label>
+              <input id="cfgSubmissionOverdueCc" placeholder="qldh@company.com" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Quá Hạn Xử Lý Hợp Đồng — Sau (số ngày CHỜ ở 1 bước, cách nhau dấu phẩy)</label>
+              <input id="cfgContractOverdueDays" placeholder="3, 5, 7 (để trống = tắt)" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Email CC Cố Định Nhận Cảnh Báo Quá Hạn Hợp Đồng (tuỳ chọn, cách nhau dấu phẩy)</label>
+              <input id="cfgContractOverdueCc" placeholder="phaply@company.com" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <p class="text-[11px] text-gray-400 italic mt-1">Để trống ô "số ngày" của đúng module nào = TẮT HẲN tính năng cho module đó (không hiện nhãn quá hạn trên phiếu, không gửi email) — khác các mục "Nhắc Hết Hạn..." ở trên vốn luôn bật sẵn. Người nhận mặc định = người đang là approver của bước hiện tại + người trình/tạo hồ sơ, cộng thêm email CC ở trên. Cách tính: lấy số NGÀY LỚN NHẤT đã cấu hình làm mốc "🔴 Quá Hạn Xử Lý" hiện thẳng trên phiếu/danh sách; các mốc nhỏ hơn chỉ dùng để gửi email nhắc sớm "⚠️ Sắp Quá Hạn" — đếm số ngày ĐÃ CHỜ tại bước hiện tại (không phải ngày còn lại tới 1 mốc hạn cố định).</p>
+        </div>
+
         <div class="flex flex-wrap gap-2 items-center border-t pt-2">
           <input id="cfgTestEmailTo" type="email" placeholder="Email nhận thử" class="border p-1.5 rounded flex-1 min-w-[180px]">
           <button type="button" data-op="sendTestEmail" id="cfgTestEmailBtn" class="bg-blue-600 text-white px-3 py-1.5 rounded font-bold hover:bg-blue-700">📨 Gửi Thử</button>

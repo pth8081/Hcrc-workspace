@@ -392,7 +392,15 @@ const DEFAULTS = {
     // Giám sát ổ đĩa (jobs/diskSpaceMonitor.js) — cảnh báo qua email khi phân vùng chứa uploads/ đã
     // dùng vượt ngưỡng này (%). diskSpaceAlertCcEmails bổ sung cho danh sách mặc định (mọi tài khoản
     // đang có quyền admin), không thay thế.
-    diskSpaceAlertThresholdPercent: 85, diskSpaceAlertCcEmails: []
+    diskSpaceAlertThresholdPercent: 85, diskSpaceAlertCcEmails: [],
+    // Quá Hạn Xử Lý (jobs/approvalOverdueReminder.js, 11/2026) — NGƯỢC nghĩa với *ExpiryReminderDays ở
+    // trên: đây đếm số NGÀY ĐÃ CHỜ XỬ LÝ tại bước hiện tại (không phải ngày còn lại tới 1 mốc hạn), nên
+    // mặc định để TRỐNG = TẮT HẲN tính năng (khác các mục *ExpiryReminderDays luôn bật sẵn với giá trị
+    // mặc định) — admin phải chủ động bật bằng cách nhập ít nhất 1 ngưỡng. Mốc LỚN NHẤT trong mảng là
+    // ngưỡng "🔴 Quá Hạn Xử Lý" hiện thẳng trên phiếu; các mốc nhỏ hơn chỉ dùng để gửi email nhắc sớm
+    // "⚠️ Sắp Quá Hạn" — xem computeApprovalOverdueStatus() (public/js/core.js, mirror server).
+    submissionOverdueDays: [], submissionOverdueCcEmails: [],
+    contractOverdueDays: [], contractOverdueCcEmails: []
   },
 
   // Người phụ trách nhận thông báo hết hạn hợp đồng RIÊNG theo từng phòng ban — dạng { [dept]:

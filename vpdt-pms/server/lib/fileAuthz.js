@@ -37,6 +37,7 @@ const {
   canViewLicense, canViewItServiceRenewal,
   canViewOperationOrder, canViewOperationStoreOpening, canViewOperationRepair,
   canViewDoc, canViewSubmission, canViewContract, canViewCarReg, canViewOfficeReq,
+  isForwardThreadParticipant,
   canViewTrainingTestQuestionImage,
   canViewLaborContract, canViewPaymentRequest, canViewHrProcess, canViewChecklistSubmission,
   // 5 collection PHÁT HIỆN THIẾU ở đợt rà soát chuyên sâu 4-agent song song (9/2026) — file đính kèm ở
@@ -238,10 +239,16 @@ async function findOwningRecord(fileUrl) {
     // FILE_PROPOSAL_ACCEPTED/FILE_PROPOSAL_DECLINED), nên KHÔNG checker nào khớp -> rơi thẳng vào nhánh
     // FAIL-OPEN ở authorizeFileAccess(): bất kỳ ai đã đăng nhập cũng đọc/tải được nội dung tờ trình được
     // đề xuất thay thế, dù chính tờ trình đó bị giới hạn chặt theo phòng ban.
+    // forwardThreads[].reply.fileUrl (Chuyển Tiếp Xin Ý Kiến, routes/workflow.js POST /forward-reply) —
+    // file ý kiến đính kèm khi người được chuyển tiếp trả lời, mirror ĐÚNG field pendingFileProposal ở
+    // trên (cùng khuôn "thuộc 1 hồ sơ nhưng không phải field cố định sẵn có từ đầu").
     { records: submissions, fixed: s => s.fileUrl === fileUrl || (s.extraFiles || []).some(ef => ef.fileUrl === fileUrl)
-        || s.pendingFileProposal?.fileUrl === fileUrl || (s.history || []).some(h => h.fileUrl === fileUrl),
+        || s.pendingFileProposal?.fileUrl === fileUrl || (s.history || []).some(h => h.fileUrl === fileUrl)
+        || (s.forwardThreads || []).some(n => n.reply?.fileUrl === fileUrl),
       build: s => ({ moduleKey: 'submission', dept: s.dept, ownerUsername: s.creator, record: s }) },
-    { records: contracts, fixed: c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl, build: c => ({ moduleKey: 'contract', dept: c.dept, custodianDept: c.custodianDept, ownerUsername: c.creator, record: c }) },
+    { records: contracts, fixed: c => c.fileUrl === fileUrl || c.signedFileUrl === fileUrl
+        || (c.forwardThreads || []).some(n => n.reply?.fileUrl === fileUrl),
+      build: c => ({ moduleKey: 'contract', dept: c.dept, custodianDept: c.custodianDept, ownerUsername: c.creator, record: c }) },
     { records: carRegs, fixed: c => c.fileUrl === fileUrl, build: c => ({ moduleKey: 'car', dept: c.dept, ownerUsername: c.creator, record: c }) },
     { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl, build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
     // images[]/coverImage/videos[] (9/2026, nhiều ảnh + ảnh đại diện + video Nhịp Sống HCRC/Góc Chia Sẻ) —
@@ -583,7 +590,13 @@ async function authorizeFileAccess(user, fileUrl, mode) {
     const allowedByDept = canDownloadRecordFile(user, owning.moduleKey, owning.dept, owning.ownerUsername, owning.record?.published);
     const allowedByCustodian = owning.custodianDept && owning.custodianDept !== owning.dept &&
       canDownloadRecordFile(user, owning.moduleKey, owning.custodianDept, owning.ownerUsername, owning.record?.published);
-    return !!(allowedByDept || allowedByCustodian);
+    // Chuyển Tiếp Xin Ý Kiến (forwardThreads[]) — chỉ áp dụng cho submission/contract, cho phép TẢI VỀ
+    // (không chỉ xem tại chỗ) đúng mức đã cấp ở mode 'view' (canViewSubmission/canViewContract ở dưới) —
+    // người chỉ xem được hồ sơ NHỜ tham gia 1 nhánh chuyển tiếp vẫn cần tải được file ý kiến đính kèm/
+    // file gốc của hồ sơ để tham khảo, không có cờ quyền "<moduleKey>Download" riêng nào cấp được việc này.
+    const allowedByForward = (owning.moduleKey === 'submission' || owning.moduleKey === 'contract')
+      && isForwardThreadParticipant(user, owning.record);
+    return !!(allowedByDept || allowedByCustodian || allowedByForward);
   }
 
   // mode 'view' — dùng đúng khuôn canView* của từng module (KHÔNG dùng cờ Download, xem đầu file).

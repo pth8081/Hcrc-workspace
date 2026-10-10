@@ -76,6 +76,7 @@ const laborContractImportRoutes = require('./routes/laborContractImport');
 const purchasingRoutes = require('./routes/purchasing');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
+const { checkApprovalOverdueReminders } = require('./jobs/approvalOverdueReminder');
 const { checkLicenseExpiryReminders } = require('./jobs/licenseExpiryReminder');
 const { checkLaborContractExpiryReminders } = require('./jobs/laborContractExpiryReminder');
 const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalReminder');
@@ -497,6 +498,11 @@ async function start() {
       migrateLegacyViewScopeViewers();
       checkContractExpiryReminders();
       setInterval(checkContractExpiryReminders, 24 * 60 * 60 * 1000);
+      // Quá Hạn Xử Lý (11/2026) — đếm số ngày ĐÃ CHỜ tại 1 bước phê duyệt (khác hẳn các job nhắc hạn
+      // trên, vốn đếm ngày CÒN LẠI tới 1 mốc cố định) — xem jobs/approvalOverdueReminder.js. Mặc định
+      // TẮT (emailConfig.submissionOverdueDays/contractOverdueDays rỗng) cho tới khi admin cấu hình.
+      checkApprovalOverdueReminders();
+      setInterval(checkApprovalOverdueReminders, 24 * 60 * 60 * 1000);
       checkLicenseExpiryReminders();
       setInterval(checkLicenseExpiryReminders, 24 * 60 * 60 * 1000);
       checkItServiceRenewalReminders();
