@@ -1,8 +1,46 @@
 # Phiên bản hiện tại
 
-**25.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.66 (2026-10): Vá lỗ hổng ẩn menu — nút "Phê Duyệt Giá Bán Lẻ" (Mua Hàng)
+
+Theo yêu cầu người dùng: rà soát lại TOÀN BỘ tab/sub-tab (menu/sidebar) trong
+hệ thống, xác nhận mọi mục phải tự ẩn khi người dùng không có quyền, và xác
+nhận server có thật sự chặn quyền (không chỉ dựa vào việc ẩn menu phía
+client). Chạy 2 đợt rà soát song song:
+
+- **Phía server (chặn quyền "từ bên ngoài")**: xác nhận `GET /api/data` +
+  `GET /api/data/lazy/:groupKey` đều lọc/zero-out dữ liệu theo
+  `moduleAccess`/perms cho từng collection (không trả nguyên dữ liệu cho mọi
+  tài khoản đã đăng nhập), các route nghiệp vụ nhạy cảm (HR/Lương/HĐLĐ/Chấm
+  công, Mua Hàng, Checklist, Cơ Cấu Tổ Chức...) đều có hàm `canX(req.freshUser)`
+  kiểm tra riêng trả `403` nếu thiếu quyền. Không phát hiện lỗ hổng nào —
+  không có trường hợp "đăng nhập xong gọi API trực tiếp vẫn lấy/sửa được dữ
+  liệu module không có quyền".
+- **Phía client (ẩn menu)**: rà soát toàn bộ ~145 nút tab/sub-tab (toàn hệ
+  thống, qua `applyNavVisibility()` + mọi `update*NavVisibility()`/
+  `set*SubTab()`). Phát hiện ĐÚNG 1 lỗi: nút "💲 Phê Duyệt Giá Bán Lẻ"
+  (`#btnMhSubItPrice`, trong module Mua Hàng) KHÔNG BAO GIỜ bị ẩn dù thiếu
+  quyền `muaHangItprice` — do `setPurchasingSubTab()` (`module-muahang.js`)
+  tính id bằng title-case chuỗi (`ITPRICE` → `"Itprice"`) ra
+  `"btnMhSubItprice"`, không khớp id thật trong HTML là `"btnMhSubItPrice"`
+  (chữ P hoa) — `getElementById()` trả `null`, nút không bao giờ được
+  `classList.toggle('hidden', ...)`. Đã sửa sang bảng tra id tường minh
+  (đúng khuôn `module-vanhanh.js` vốn đã làm đúng cho tính năng tương tự).
+  Lưu ý: đây CHỈ là lỗ hổng hiển thị menu (nút hiện sai) — thao tác tạo đề
+  xuất bên trong form đó vẫn bị chặn riêng bởi `canProposeItPriceType()`,
+  không phải lỗ hổng cho phép thao tác trái phép.
+
+Đã thêm 2 kịch bản test quy hồi vào `tests/test-stuck-subtab-fallback-fix.js`
+(xác nhận nút bị ẩn đúng khi thiếu quyền, kể cả khi có quyền BAS nhưng không
+có quyền ItPrice) — 14/14 kịch bản pass. Chạy lại test liên quan
+(`test-itprice-form-split.js`, `test-itprice-mastertlist-channel-split.js`,
+`test-it-support.js`) không có regression.
+
+**Không có thay đổi schema/`.env`/dependencies nào — chỉ sửa đúng 1 file
+client `public/js/module-muahang.js`, copy code + `pm2 restart` là đủ.**
 
 ## v25.65 (2026-10): Tải trước nền sau đăng nhập (prefetch lazy modules)
 

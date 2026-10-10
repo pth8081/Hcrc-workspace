@@ -86,12 +86,17 @@ function setPurchasingSubTab(tab) {
     tab = fallback ? fallback[0] : null;
   }
   mhSubTab = tab;
-  // "ITPRICE" (Phê Duyệt Giá Bán Lẻ, 10/2026) thêm vào chung vòng lặp ẩn/hiện panel + tô màu nút —
-  // #mhSubItprice khớp đúng khuôn dựng id `mhSub${Titlecase}` (ITPRICE -> "Itprice") của 2 mục cũ.
+  // LỖI ĐÃ VÁ (rà soát phân quyền menu/tab toàn hệ thống, 10/2026): nút #btnMhSubItPrice trong HTML
+  // dùng camelCase "ItPrice" (chữ P hoa), trong khi id dựng bằng `mhSub${Titlecase}` ở đây ra
+  // "btnMhSubItprice" (chữ p thường) — getElementById() không khớp, nút KHÔNG BAO GIỜ bị ẩn dù thiếu
+  // quyền muaHangItprice. Đổi sang bảng tra id tường minh (đúng khuôn module-vanhanh.js đã làm đúng
+  // từ đầu) để tránh suy diễn case-conversion dễ sai lệch với HTML thật.
+  const mhWrapIdMap = { BAS: 'mhSubBas', REPORT: 'mhSubReport', ITPRICE: 'mhSubItprice' };
+  const mhBtnIdMap = { BAS: 'btnMhSubBas', REPORT: 'btnMhSubReport', ITPRICE: 'btnMhSubItPrice' };
   mhTabOrder.forEach(([t, allowed]) => {
-    const wrap = document.getElementById(`mhSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
+    const wrap = document.getElementById(mhWrapIdMap[t]);
     if (wrap) wrap.classList.toggle('hidden', t !== tab);
-    const btn = document.getElementById(`btnMhSub${t.charAt(0) + t.slice(1).toLowerCase()}`);
+    const btn = document.getElementById(mhBtnIdMap[t]);
     if (btn) {
       btn.classList.toggle('hidden', !allowed);
       btn.classList.toggle('bg-emerald-700', t === tab);

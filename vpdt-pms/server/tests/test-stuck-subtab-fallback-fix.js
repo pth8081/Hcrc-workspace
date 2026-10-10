@@ -170,6 +170,24 @@ async function main() {
       });
       assertEqual(state2.active, null, `mhSubTab phải null, thực tế: ${state2.active}`);
       assert(state2.basHidden, 'Panel BAS phải ẩn');
+      assert(await page.evaluate(() => document.getElementById('btnMhSubItPrice').classList.contains('hidden')),
+        'LỖI ĐÃ VÁ (10/2026): nút #btnMhSubItPrice phải ẩn khi thiếu quyền muaHangItprice (trước đây id tính toán sai case khiến nút không bao giờ bị ẩn)');
+    });
+
+    await run.run('setPurchasingSubTab(): có quyền BAS nhưng KHÔNG có muaHangItprice -> nút #btnMhSubItPrice vẫn ẩn (quy hồi lỗi case-id)', async () => {
+      await loginAs(page, { ...MUAHANG_USER, perms: { rebateTermManage: true, moduleAccess: { muaHangBas: true, muaHangReport: false, muaHangItprice: false } } });
+      await page.evaluate(() => { switchTab('muaHang'); });
+      const state2 = await page.evaluate(() => {
+        setPurchasingSubTab('BAS');
+        return {
+          active: mhSubTab,
+          itPriceBtnHidden: document.getElementById('btnMhSubItPrice').classList.contains('hidden'),
+          basBtnHidden: document.getElementById('btnMhSubBas').classList.contains('hidden')
+        };
+      });
+      assertEqual(state2.active, 'BAS', `mhSubTab phải là BAS, thực tế: ${state2.active}`);
+      assert(!state2.basBtnHidden, 'Nút BAS phải hiện (có quyền)');
+      assert(state2.itPriceBtnHidden, 'Nút #btnMhSubItPrice phải ẩn (không có quyền muaHangItprice)');
     });
 
     await run.run('setMhBasSubTab(): mhBasSubTab=null khi cả 3 checkbox con đều tắt, mọi panel ẩn', async () => {
