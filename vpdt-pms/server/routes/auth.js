@@ -17,6 +17,7 @@ const { getPool, sql } = require('../db');
 const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
 const { encryptSecret, decryptSecret } = require('../lib/emailCrypto');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const { DEFAULTS } = require('../defaults');
 
 // Ghi nhật ký hệ thống cho các sự kiện đăng nhập THẤT BẠI/khoá tài khoản — trước đây hoàn toàn không
 // có dòng log nào cho các sự kiện này (chỉ LOGIN_SUCCESS được ghi, từ client sau khi đăng nhập xong,
@@ -530,7 +531,11 @@ router.post('/change-pin', loginRateLimiter, requireAuth, async (req, res) => {
 // trong body — nên không thể dùng route này để sửa hồ sơ người khác hay tự cấp quyền/đổi phòng ban
 // (chỉ nhận đúng 4 field liệt kê dưới, bỏ qua mọi field khác kể cả nếu client cố gửi kèm perms/admin).
 router.patch('/me', requireAuth, async (req, res) => {
-  const { name, email, phone, password, currentPassword, dashboardHiddenCards } = req.body || {};
+  const { name, email, phone, password, currentPassword, dashboardHiddenCards, notifyEmailModules } = req.body || {};
+
+  // Danh sách configModule hợp lệ cho notifyEmailModules bên dưới — dùng LẠI đúng key của
+  // DB.approvalEmailConfig (defaults.js) thay vì tự liệt kê riêng, tránh lệch khi thêm module mới.
+  const NOTIFY_EMAIL_MODULE_KEYS = Object.keys(DEFAULTS.approvalEmailConfig || {});
 
   try {
     // Đổi mật khẩu bắt buộc xác nhận đúng mật khẩu HIỆN TẠI trước — cùng lý do với /change-pin (đổi
@@ -599,6 +604,21 @@ router.patch('/me', requireAuth, async (req, res) => {
       // có chưa tới 15, nên trần 30 phần tử/50 ký tự vẫn dư thừa an toàn cho mọi lựa chọn hợp lệ.
       if (Array.isArray(dashboardHiddenCards) && dashboardHiddenCards.every(k => typeof k === 'string')) {
         updated.dashboardHiddenCards = dashboardHiddenCards.slice(0, 30).map(k => k.slice(0, 50));
+      }
+      // notifyEmailModules: tự bật/tắt NHẬN EMAIL "Cần phê duyệt" riêng của từng người (Hồ Sơ Cá Nhân >
+      // "🔔 Thông Báo Email", 10/2026) — KHÔNG phải quyền, chỉ là tuỳ chọn cá nhân, nên không cần đối
+      // chiếu quyền phê duyệt thật của người này (phương án "đơn giản" người dùng đã chọn: hiện đủ cả 12
+      // phân hệ cho mọi người, ai không liên quan phân hệ nào thì tick/bỏ tick ở đó vô nghĩa, không hại
+      // gì). Chỉ nhận object {configModule: boolean}, lọc đúng 12 khoá hợp lệ + ép kiểu boolean, bỏ qua
+      // khoá lạ (không cho client tự bơm key tuỳ ý vào bản ghi "users"). Mặc định (field vắng mặt hoàn
+      // toàn) coi như TẤT CẢ đều BẬT — xem notifyRecipientsByEmail() (public/js/core.js), chỉ khi lưu RÕ
+      // RÀNG giá trị false mới bị chặn, giống hệt quy ước isApprovalEmailSuppressed() ở cấp admin.
+      if (notifyEmailModules && typeof notifyEmailModules === 'object' && !Array.isArray(notifyEmailModules)) {
+        const sanitized = {};
+        NOTIFY_EMAIL_MODULE_KEYS.forEach(key => {
+          if (typeof notifyEmailModules[key] === 'boolean') sanitized[key] = notifyEmailModules[key];
+        });
+        updated.notifyEmailModules = sanitized;
       }
       if (password) {
         const passwordError = validatePasswordStrength(password);

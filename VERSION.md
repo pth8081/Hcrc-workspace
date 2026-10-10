@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**25.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.58 (2026-10-10): Hồ Sơ Cá Nhân — tự bật/tắt nhận email "Cần phê duyệt" theo từng phân hệ
+
+Người dùng yêu cầu: cho phép TỪNG người tự chọn có muốn nhận email "Cần phê
+duyệt" hay không, thay vì chỉ có 1 cấu hình TOÀN CỤC áp dụng cho mọi người
+(màn Quản Trị > Thông Báo Email Phê Duyệt hiện có). Phương án "đơn giản"
+người dùng đã chọn (bỏ qua việc tự dò quyền phê duyệt thật của từng người,
+vốn phức tạp vì nhiều phân hệ dùng quy trình duyệt ĐỘNG theo phòng ban/chức
+danh chứ không phải 1 quyền tĩnh): **luôn hiện đủ 12 phân hệ cho MỌI tài
+khoản**, mặc định tick sẵn (BẬT).
+
+- Tab mới **"🔔 Thông Báo Email"** trong modal Hồ Sơ Cá Nhân — liệt kê đủ 12
+  phân hệ (nguồn `APPROVAL_EMAIL_EVENTS`, `public/js/core.js`), mỗi dòng 1
+  checkbox "Nhận Email". Lưu qua `PATCH /api/auth/me` (field mới
+  `notifyEmailModules`, theo đúng khuôn tự-sửa-hồ-sơ-của-chính-mình đã có
+  — xem `dashboardHiddenCards`), server lọc đúng 12 khoá hợp lệ + ép kiểu
+  boolean (`routes/auth.js`).
+- `notifyRecipientsByEmail()` (`public/js/core.js`) thêm 1 lớp lọc CÁ NHÂN
+  mới, tách biệt với lớp admin TOÀN CỤC đã có: chỉ chặn đúng người đã tự
+  tắt, chỉ áp dụng cho family **"Cần phê duyệt"** (`approvalNeeded`) — CỐ Ý
+  KHÔNG đụng tới family "Kết quả duyệt" (`result`, gửi người TRÌNH hồ sơ,
+  không liên quan tới việc người đó có tắt nhận "Cần phê duyệt" của phân hệ
+  hay không). Người khác trong cùng danh sách nhận vẫn nhận bình thường.
+  Vắng mặt field `notifyEmailModules` (tài khoản cũ) → fail-open (vẫn gửi).
+
+Test: 10 scenario mới (`test-notify-email-modules.js`, 6 client qua
+Playwright + 4 server qua Express thật) đều pass; chạy lại
+`test-approval-email-config.js` (43), `test-approval-email-config-admin-
+gate.js` (4), `test-auth-login.js` (18), `test-uniform-scenario-roleplay.js`
+(15), `test-admin-users-permgroups.js` (111), `test-admin-webauthn-reset.js`
+(8), `test-auth-single-session.js` (5), `test-username-case-insensitive.js`
+(9) đều pass — không regression. (`test-admin-totp.js` có 4 lỗi
+`resolveGraphOption is not a function` nhưng đã xác nhận lỗi này tồn tại sẵn
+trên baseline sạch trước đợt này, không liên quan.)
 
 ## v25.57 (2026-10-10): Checklist Siêu Thị — "Đạt Chung" tính trên số mẫu ĐÃ HOÀN THÀNH, không bắt buộc làm hết
 

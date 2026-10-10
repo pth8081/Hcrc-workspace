@@ -5671,6 +5671,22 @@ chưa đăng nhập; link **luôn đòi đăng nhập**, không có cơ chế xe
 đăng nhập). Không áp dụng cho email "Cần phê duyệt" hay các sự kiện đặc thù
 khác — người duyệt đã có Hộp Thư Phê Duyệt (mục 2.2) điều hướng riêng.
 
+**🔔 Thông Báo Email (cá nhân, Hồ Sơ Cá Nhân, từ 10/2026)** — KHÁC lớp admin
+TOÀN CỤC ở trên (áp dụng cho mọi người cùng lúc): mỗi người tự bật/tắt nhận
+email "Cần phê duyệt" theo từng phân hệ CHO RIÊNG MÌNH, qua tab mới **"🔔
+Thông Báo Email"** trong modal "⚙️ Cá Nhân Hóa & Cập Nhật Thông Tin" (góc trên
+bên phải, click tên tài khoản). Luôn hiện đủ 12 phân hệ cho MỌI tài khoản
+(không lọc theo quyền phê duyệt thật đang có — tránh phải tự dò quy trình
+duyệt động theo phòng ban/chức danh của từng phân hệ, vốn phức tạp và không
+đồng nhất giữa các module), mặc định **tick sẵn (BẬT)**. Bỏ tick 1 dòng ->
+không còn nhận email "Cần phê duyệt" của phân hệ đó nữa (hồ sơ vẫn hiện đầy đủ
+trong Hộp Thư Phê Duyệt, chỉ là không có email nhắc) — **không ảnh hưởng tới
+người khác** cũng đang nhận email đó, và **không ảnh hưởng** tới email "Kết
+quả duyệt" (vẫn gửi đầy đủ nếu chính người đó là người trình hồ sơ). 2 lớp bật/
+tắt (admin toàn cục + cá nhân) độc lập, cộng dồn: admin tắt hẳn 1 phân hệ thì
+không ai nhận được nữa bất kể cấu hình cá nhân; admin để bật thì mới tới lượt
+cấu hình cá nhân của từng người quyết định.
+
 ### 7.9. API Đối Tác Ngoài (ExtAuth)
 
 `lib/externalAuth.js` + `routes/externalAuthAdmin.js` (quản lý key, admin-only,

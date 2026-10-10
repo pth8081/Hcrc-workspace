@@ -2914,6 +2914,7 @@
       <button type="button" id="btnProfileSubWebauthn" data-op="setProfileSubTab" data-arg0="WEBAUTHN" class="hidden px-3 py-1.5 rounded font-bold">🖐️ Vân Tay/Face ID</button>
       <button type="button" id="btnProfileSubTotp" data-op="setProfileSubTab" data-arg0="TOTP" class="hidden px-3 py-1.5 rounded font-bold">🔐 Xác Thực 2 Lớp</button>
       <button type="button" id="btnProfileSubUniform" data-op="setProfileSubTab" data-arg0="UNIFORM" class="px-3 py-1.5 rounded font-bold">👕 Đồng Phục Của Tôi</button>
+      <button type="button" id="btnProfileSubNotifyEmail" data-op="setProfileSubTab" data-arg0="NOTIFYEMAIL" class="px-3 py-1.5 rounded font-bold">🔔 Thông Báo Email</button>
     </div>
 
     <div id="profileSubInfo" class="text-xs">
@@ -3044,6 +3045,22 @@
       <p class="text-[11px] text-gray-500">Các phiếu đồng phục đã được cấp cho bạn — bấm "Xác nhận đã nhận" sau khi thực nhận đầy đủ.</p>
       <div id="pfUniformListWrap" class="space-y-2">
         <p class="text-center text-gray-500 italic p-4">⏳ Đang tải...</p>
+      </div>
+    </div>
+
+    <!-- "🔔 Thông Báo Email" (10/2026) — cho phép TỪNG người tự bật/tắt nhận email "Cần phê duyệt" theo
+         từng phân hệ, KHÁC hẳn màn admin "Quản Trị > Thông Báo Email Phê Duyệt" (đó là TOÀN CỤC, áp dụng
+         cho MỌI người). LUÔN hiện đủ 12 phân hệ cho MỌI tài khoản (không lọc theo quyền phê duyệt thật
+         của từng người — phương án "đơn giản" người dùng đã chọn, xem renderNotifyEmailModulesForm()):
+         ai không liên quan phân hệ nào thì tick ở đó vô nghĩa, không ảnh hưởng gì. Mặc định TẤT CẢ đều
+         tick sẵn (BẬT) — chỉ khi tự bỏ tick mới bị chặn nhận email "Cần phê duyệt" của đúng phân hệ đó
+         (xem notifyRecipientsByEmail() ở core.js, KHÔNG ảnh hưởng email "Kết quả duyệt" gửi người trình). -->
+    <div id="pfNotifyEmailSection" class="hidden space-y-3 text-xs">
+      <p class="text-[11px] text-gray-500 bg-amber-50 border border-amber-200 rounded p-2">Bỏ tick 1 phân hệ nếu bạn KHÔNG muốn nhận email "Cần phê duyệt" của phân hệ đó nữa (hồ sơ vẫn hiện đủ trong Hub Phê Duyệt, chỉ là không có email nhắc).</p>
+      <div id="pfNotifyEmailListWrap" class="divide-y border rounded"></div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" data-op="closeProfileModal" class="bg-gray-400 text-white px-4 py-2 rounded font-bold">Hủy</button>
+        <button type="button" data-op="saveNotifyEmailModules" class="bg-blue-600 text-white px-5 py-2 rounded font-bold hover:bg-blue-700">Lưu Thay Đổi</button>
       </div>
     </div>
 
