@@ -259,16 +259,35 @@ async function main() {
       assertIncludes(dom, '1.000.000', `Tổng giá trị đã nhập hàng phải là 1.000.000 VNĐ (chỉ đơn A), thực tế:\n${dom}`);
     });
 
-    await run.run('Báo Cáo: nhóm "Giá trị đã phê duyệt theo tháng" tách đúng 3 tháng khác nhau (7, 8, 9/2026)', async () => {
-      const dom = await page.evaluate(() => document.getElementById('opOrderReportApprovedByMonth').innerText);
+    await run.run('Báo Cáo: nhóm "Giá trị đã phê duyệt theo tháng" tách đúng 3 tháng khác nhau (7/2026, 8/2026, tháng hiện tại)', async () => {
+      // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): đơn B KHÔNG patch approvedAt (giữ nguyên mốc "hôm nay" lúc
+      // duyệt ở kịch bản trước) nên nhãn "Tháng X/YYYY" của B luôn là THÁNG CHẠY TEST THẬT, không phải
+      // hằng số "Tháng 9/2026" — trước đây gán cứng "hôm nay = tháng 9/2026" nên test tự đỏ bất kỳ lúc
+      // nào chạy khác tháng 9 (VD chạy vào tháng 10 như bây giờ). Tính nhãn tháng hiện tại NGAY TRONG
+      // page.evaluate() (cùng Date/timezone mà renderOperationOrderReport() dùng để nhóm thật) thay vì
+      // hardcode — logic thật (nhóm theo tháng) không đổi, chỉ sửa cách bài test tự biết "hôm nay" là
+      // tháng nào.
+      const { dom, currentMonthLabel } = await page.evaluate(() => {
+        const now = new Date();
+        return {
+          dom: document.getElementById('opOrderReportApprovedByMonth').innerText,
+          currentMonthLabel: `Tháng ${now.getMonth() + 1}/${now.getFullYear()}`
+        };
+      });
       assertIncludes(dom, 'Tháng 7/2026', `Phải có nhóm Tháng 7/2026 (đơn A), thực tế:\n${dom}`);
       assertIncludes(dom, 'Tháng 8/2026', `Phải có nhóm Tháng 8/2026 (đơn E), thực tế:\n${dom}`);
-      assertIncludes(dom, 'Tháng 9/2026', `Phải có nhóm Tháng 9/2026 (đơn B, duyệt lúc chạy test = hôm nay)`);
+      assertIncludes(dom, currentMonthLabel, `Phải có nhóm ${currentMonthLabel} (đơn B, duyệt lúc chạy test = hôm nay), thực tế:\n${dom}`);
     });
     await run.run('Báo Cáo: nhóm "Giá trị đã nhập hàng theo tháng" chỉ có 1 tháng (7/2026, đơn A)', async () => {
-      const dom = await page.evaluate(() => document.getElementById('opOrderReportReceivedByMonth').innerText);
+      const { dom, currentMonthLabel } = await page.evaluate(() => {
+        const now = new Date();
+        return {
+          dom: document.getElementById('opOrderReportReceivedByMonth').innerText,
+          currentMonthLabel: `Tháng ${now.getMonth() + 1}/${now.getFullYear()}`
+        };
+      });
       assertIncludes(dom, 'Tháng 7/2026', `Phải có nhóm Tháng 7/2026, thực tế:\n${dom}`);
-      assert(!dom.includes('Tháng 8/2026') && !dom.includes('Tháng 9/2026'), `Không được có tháng khác (chỉ A là RECEIVED), thực tế:\n${dom}`);
+      assert(!dom.includes('Tháng 8/2026') && !dom.includes(currentMonthLabel), `Không được có tháng khác (chỉ A là RECEIVED), thực tế:\n${dom}`);
     });
 
     // ===== 5) Lọc "Siêu Thị (Nơi Nhận)" — thu hẹp đúng cả Danh Sách lẫn Báo Cáo =====

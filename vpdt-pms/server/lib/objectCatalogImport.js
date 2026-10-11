@@ -544,6 +544,39 @@ function styleHeaderRow(row) {
   });
 }
 
+// applyCatalogDropdownValidation(sheet, colRef, list, opts) — LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70):
+// 2 engine Tải Mẫu Excel object (buildWorkbookForSpec() ngay dưới) + grouped (lib/groupedExcelImport.js)
+// trước đây nối formula dropdown bằng `"${list.join(',')}"` thẳng, KHÔNG kiểm tra giới hạn Excel 255 ký
+// tự cho formula kiểu danh sách literal — danh mục dài (VD vài chục Phòng Ban/Nhóm Phê Duyệt) vượt
+// ngưỡng này sẽ ÂM THẦM MẤT dropdown khi mở file (Excel không báo lỗi gì, chỉ bỏ qua validation), y hệt
+// lớp lỗi đã vá ở lib/adminExport.js::applyDropdownValidation(). Hàm này áp dụng ĐÚNG kỹ thuật tương tự
+// (tự chuyển sang tham chiếu 1 cột ẩn trong chính sheet khi vượt ngưỡng) — viết riêng ở đây (không gọi
+// thẳng applyDropdownValidation() của lib/adminExport.js) để GIỮ NGUYÊN allowBlank theo `required` của
+// từng cột như code gốc 2 engine này đang làm (adminExport.js luôn allowBlank:true, khác ngữ cảnh).
+// colRef: key (string) hoặc chỉ số cột 1-based (number) — ExcelJS sheet.getColumn() nhận cả 2.
+// helperColIdx: chỉ số cột TUYỆT ĐỐI (1-based) dùng làm cột ẩn khi vượt 255 ký tự — PHẢI khác nhau cho
+// mỗi cột dropdown trong CÙNG 1 sheet (caller tự cộng offset theo index, không dùng biến module-level).
+function applyCatalogDropdownValidation(sheet, colRef, list, { startRow, endRow, required, helperColIdx } = {}) {
+  const opts = (list || []).map(o => String(o ?? '').trim()).filter(Boolean);
+  if (!opts.length) return;
+  const col = sheet.getColumn(colRef);
+  if (!col || !col.letter) return;
+  const joined = opts.join(',');
+  let formula;
+  if (joined.length <= 255) {
+    formula = `"${joined}"`;
+  } else {
+    const helperCol = sheet.getColumn(helperColIdx);
+    // sheet.getCell(row, col) — KHÔNG phải (col, row), xem chú thích cùng lỗi ở lib/adminExport.js.
+    opts.forEach((opt, i) => { sheet.getCell(i + 1, helperCol.number).value = opt; });
+    helperCol.hidden = true;
+    formula = `$${helperCol.letter}$1:$${helperCol.letter}$${opts.length}`;
+  }
+  for (let r = startRow; r <= endRow; r++) {
+    sheet.getCell(`${col.letter}${r}`).dataValidation = { type: 'list', allowBlank: !required, formulae: [formula] };
+  }
+}
+
 // buildWorkbookForSpec(spec) — dựng file mẫu: sheet 1 = tiêu đề + dòng mẫu (+ dropdown cho bool/enum),
 // sheet "Hướng Dẫn" = mô tả từng cột; nếu spec.refValues có dữ liệu thì thêm liệt kê giá trị hợp lệ.
 function buildWorkbookForSpec(spec) {
@@ -560,18 +593,17 @@ function buildWorkbookForSpec(spec) {
   const lastSampleRow = 1 + (spec.sampleRows || []).length;
   for (let r = 2; r <= lastSampleRow; r++) sheet.getRow(r).font = { italic: true, color: { argb: 'FF6B7280' } };
 
-  // Dropdown gợi ý cho bool/enum (cùng cách lib/storeCatalogImport.js làm cho cột "Loại").
-  columns.forEach(c => {
+  // Dropdown gợi ý cho bool/enum (cùng cách lib/storeCatalogImport.js làm cho cột "Loại") — LỖI ĐÃ VÁ
+  // (đợt rà soát v25.1→v25.70): danh mục enum dài (>255 ký tự nối chuỗi) tự chuyển sang cột ẩn, xem
+  // applyCatalogDropdownValidation() ngay trên.
+  columns.forEach((c, idx) => {
     let list = null;
     if (c.type === 'bool') list = ['Có', 'Không'];
     else if (c.type === 'enum') list = (c.options || []).map(optLabel);
     if (!list || !list.length) return;
-    const letter = sheet.getColumn(c.key).letter;
-    for (let r = 2; r <= MAX_IMPORT_ROWS + 1; r++) {
-      sheet.getCell(`${letter}${r}`).dataValidation = {
-        type: 'list', allowBlank: !c.required, formulae: [`"${list.join(',')}"`]
-      };
-    }
+    applyCatalogDropdownValidation(sheet, c.key, list, {
+      startRow: 2, endRow: MAX_IMPORT_ROWS + 1, required: c.required, helperColIdx: columns.length + 50 + idx
+    });
   });
 
   const guide = wb.addWorksheet('Hướng Dẫn');
@@ -644,5 +676,6 @@ module.exports = {
   mapHeaderColumns,
   formatCellForExcel,
   styleHeaderRow,
-  colTypeLabel
+  colTypeLabel,
+  applyCatalogDropdownValidation
 };

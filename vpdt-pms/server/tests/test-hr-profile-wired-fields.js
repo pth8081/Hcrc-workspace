@@ -15,6 +15,73 @@ const { createRunner, assertEqual } = require('./testHarness');
 async function main() {
   const run = createRunner();
 
+  // ===== filterWiredFieldsForViewer() — LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): routes/employeeProfile.js
+  // (GET /by-code, /by-username) trước đây merge thẳng resolveWiredReadOnlyFields() vào response SAU KHI
+  // đã áp lớp ẩn giới hạn cho quản lý trực tiếp (getProfileForViewer()) — 6/8 field wired (khoiBan/
+  // managerManagerUsername/managerManagerName/resignationReason/actualEndDate/lastWorkingDate) LUÔN hiện
+  // bất kể viewMode, bỏ qua managerVisibleFields đang bảo vệ các field nhạy cảm khác. Test THẲNG hàm pure
+  // filterWiredFieldsForViewer() (không cần HTTP/browser) theo đúng cách route gọi: resolveWiredReadOnlyFields()
+  // rồi filterWiredFieldsForViewer(wiredFields, viewMode, managerVisibleFields). =====
+  const SAMPLE_WIRED = {
+    khoiBan: 'Khối Kinh Doanh', managerUsername: 'qltt01', managerName: 'Trưởng Phòng Kinh Doanh',
+    managerManagerUsername: 'gd01', managerManagerName: 'Giám Đốc Kinh Doanh',
+    resignationReason: 'Lý do nghỉ việc BÍ MẬT', actualEndDate: '2024-12-31', lastWorkingDate: '2024-12-30'
+  };
+
+  await run.run('filterWiredFieldsForViewer(viewMode=FULL): trả nguyên vẹn, không ẩn gì (HR/admin/chính chủ luôn thấy đủ)', () => {
+    const result = employeeProfile.filterWiredFieldsForViewer(SAMPLE_WIRED, 'FULL', []);
+    assertEqual(result.khoiBan, 'Khối Kinh Doanh');
+    assertEqual(result.resignationReason, 'Lý do nghỉ việc BÍ MẬT');
+    assertEqual(result.actualEndDate, '2024-12-31');
+    assertEqual(result.managerManagerName, 'Giám Đốc Kinh Doanh');
+  });
+
+  await run.run('filterWiredFieldsForViewer(viewMode=LIMITED, managerVisibleFields=[]): XÁC NHẬN LỖI ĐÃ VÁ — 6 field nhạy cảm PHẢI null, managerUsername/managerName (cấp 1) KHÔNG bị đụng', () => {
+    const result = employeeProfile.filterWiredFieldsForViewer(SAMPLE_WIRED, 'LIMITED', []);
+    assertEqual(result.khoiBan, null);
+    assertEqual(result.managerManagerUsername, null);
+    assertEqual(result.managerManagerName, null);
+    assertEqual(result.resignationReason, null);
+    assertEqual(result.actualEndDate, null);
+    assertEqual(result.lastWorkingDate, null);
+    assertEqual(result.managerUsername, 'qltt01', 'managerUsername (cấp 1, chính là người đang xem) không nằm trong nhóm bị ẩn');
+    assertEqual(result.managerName, 'Trưởng Phòng Kinh Doanh', 'managerName (cấp 1) không nằm trong nhóm bị ẩn');
+  });
+
+  await run.run('filterWiredFieldsForViewer(viewMode=LIMITED, managerVisibleFields đã opt-in từng field): chỉ field được mở mới hiện, các field khác vẫn null', () => {
+    const result = employeeProfile.filterWiredFieldsForViewer(SAMPLE_WIRED, 'LIMITED', ['khoiBan', 'managerManagerName']);
+    assertEqual(result.khoiBan, 'Khối Kinh Doanh');
+    assertEqual(result.managerManagerName, 'Giám Đốc Kinh Doanh');
+    assertEqual(result.managerManagerUsername, null, 'managerManagerUsername KHÔNG nằm trong danh sách mở -> vẫn null dù managerManagerName đã mở (lọc đúng từng field, không theo nhóm)');
+    assertEqual(result.resignationReason, null);
+    assertEqual(result.actualEndDate, null);
+    assertEqual(result.lastWorkingDate, null);
+  });
+
+  await run.run('filterWiredFieldsForViewer(viewMode=LIMITED, mở tất cả 6 field): toàn bộ wiredFields hiện đúng như FULL', () => {
+    const allSix = ['khoiBan', 'managerManagerUsername', 'managerManagerName', 'resignationReason', 'actualEndDate', 'lastWorkingDate'];
+    const result = employeeProfile.filterWiredFieldsForViewer(SAMPLE_WIRED, 'LIMITED', allSix);
+    assertEqual(result.khoiBan, 'Khối Kinh Doanh');
+    assertEqual(result.managerManagerUsername, 'gd01');
+    assertEqual(result.managerManagerName, 'Giám Đốc Kinh Doanh');
+    assertEqual(result.resignationReason, 'Lý do nghỉ việc BÍ MẬT');
+    assertEqual(result.actualEndDate, '2024-12-31');
+    assertEqual(result.lastWorkingDate, '2024-12-30');
+  });
+
+  await run.run('filterWiredFieldsForViewer(): field lạ không thuộc managerVisibleFields (field rác admin gửi lên) không làm lộ gì thêm', () => {
+    const result = employeeProfile.filterWiredFieldsForViewer(SAMPLE_WIRED, 'LIMITED', ['fieldKhongTonTai', 'nationalId']);
+    assertEqual(result.khoiBan, null);
+    assertEqual(result.resignationReason, null);
+  });
+
+  await run.run('SENSITIVE_FIELDS/SENSITIVE_FIELD_LABELS: 6 field wired đã được đăng ký đủ (opt-in qua màn cấu hình admin)', () => {
+    ['resignationReason', 'actualEndDate', 'lastWorkingDate', 'managerManagerUsername', 'managerManagerName', 'khoiBan'].forEach((f) => {
+      assertEqual(employeeProfile.SENSITIVE_FIELDS.includes(f), true, `${f} phải nằm trong SENSITIVE_FIELDS`);
+      assertEqual(typeof employeeProfile.SENSITIVE_FIELD_LABELS[f], 'string', `${f} phải có nhãn tiếng Việt`);
+    });
+  });
+
   await run.run('contactPhone nằm trong HR_ONLY_EDITABLE_FIELDS + PROFILE_FIELD_LABELS, mặc định null ở defaultProfile()', () => {
     assertEqual(employeeProfile.HR_ONLY_EDITABLE_FIELDS.includes('contactPhone'), true);
     assertEqual(typeof employeeProfile.PROFILE_FIELD_LABELS.contactPhone, 'string');

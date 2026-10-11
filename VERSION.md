@@ -1,8 +1,68 @@
 # Phiên bản hiện tại
 
-**25.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.71 (2026-10): Vá 2 lỗi thật + xác nhận 2 lỗi giả đợt rà soát chuyên sâu v25.1→v25.70
+
+Rà soát chuyên sâu (7 agent song song) từ v25.1 (dc511d8) đến v25.70 phát
+hiện 2 lỗi Cao + 4 lỗi Trung bình. Xử lý theo thứ tự Cao → Trung bình, đo
+thật từng cái bằng cách gọi trực tiếp hàm/route sản xuất thật (không chỉ
+suy luận lý thuyết) trước khi kết luận:
+
+**🔴 Cao — 1 lỗi giả, 1 lỗi thật đã vá:**
+1. *Vận Hành > Đặt Hàng — "trộn dữ liệu PDF cũ/mới khi re-upload"* — **LỖI
+   GIẢ**. Gọi thẳng `handleOperationOrderPdfUpload()` thật (không dựng lại
+   sequence tay như test cũ `test-operation-order-po-relock-stale.js`) xác
+   nhận guard "xoá sạch field PO trước khi điền dữ liệu mới" (thêm từ commit
+   `35383d7`, v13.9) đã hoạt động đúng — không còn sót dữ liệu PDF cũ. Viết
+   lại test để gọi đúng hàm thật và assert đúng hành vi hiện tại (đã sửa),
+   thay vì assert ngược "lỗi vẫn còn" như bản cũ.
+2. *Hồ Sơ Nhân Sự — rò rỉ field nhạy cảm qua API* — **LỖI THẬT, đã vá**.
+   `routes/employeeProfile.js` (GET /by-code, /by-username) merge thẳng
+   `resolveWiredReadOnlyFields()` vào response SAU KHI đã áp lớp ẩn giới
+   hạn cho "quản lý trực tiếp xem giới hạn" — 6 field (`resignationReason`/
+   `actualEndDate`/`lastWorkingDate`/`managerManagerUsername`/
+   `managerManagerName`/`khoiBan`) LUÔN hiện bất kể viewMode, bỏ qua cơ chế
+   `managerVisibleFields` đang bảo vệ field nhạy cảm khác. Thêm 6 field này
+   vào `SENSITIVE_FIELDS` (opt-in qua màn cấu hình admin có sẵn, không cần
+   sửa UI) + hàm `filterWiredFieldsForViewer()` áp lại đúng luật ẩn trước
+   khi merge vào response.
+
+**🟡 Trung bình — 1 lỗi giả, 3 lỗi thật đã vá:**
+3. *Dropdown Excel >255 ký tự tái phát* (`groupedExcelImport.js` +
+   `objectCatalogImport.js`) — **LỖI THẬT, đã vá**. Cùng lớp lỗi đã vá ở
+   `lib/adminExport.js` — áp dụng chung 1 hàm
+   `applyCatalogDropdownValidation()` (tự chuyển sang cột ẩn khi danh mục
+   dài) cho cả 2 engine Tải Mẫu Excel.
+4. *File lương/kỳ lương trong Thùng Rác vẫn tải được* — **LỖI GIẢ**. Khu
+   vực Thùng Rác đã gác `admin`-only TRƯỚC khi chạm tới check nhạy cảm
+   (`fileAuthz.js`/`routes/trash.js`), và `hasModuleAccessServer()` luôn
+   bypass tab-hiding cho tài khoản `admin` — thêm re-check tab sẽ là no-op
+   tuyệt đối, không có lỗ hổng thật để vá (khác Cao#2, nơi field bị lộ cho
+   NON-ADMIN).
+5. *Test thời gian gán cứng* (`test-operation-order-report.js`) — **LỖI
+   THẬT, đã vá**. Test hardcode "hôm nay = tháng 9/2026" tự đỏ khi chạy
+   tháng khác — tính nhãn tháng hiện tại động trong `page.evaluate()` thay
+   vì hardcode.
+6. *(docs)* Thiếu hướng dẫn "Nhập Excel hàng loạt"/"Nhập Excel Tạo Mới
+   hàng loạt" cho HĐLĐ ở tab 📘 Hướng Dẫn trong app — đã bổ sung 2 bước vào
+   `NGHIEP_VU_DOCS.hrContract` (file hướng dẫn triển khai
+   `Huong-dan-nghiep-vu.md` đã có sẵn từ trước, chỉ thiếu ở tab trong app).
+
+Phát hiện thêm 1 lỗi môi trường tiền nhiệm, KHÔNG liên quan tới đợt vá này
+(xác nhận bằng git stash toàn bộ thay đổi + chạy lại trên chính commit
+`2dad35c` không đổi gì): `test-hr-profile-field-visibility.js` luôn treo ở
+bước "Hồ Sơ Của Tôi" (`#hrpfMeContainer` không bao giờ hiện) — cần điều tra
+riêng, không thuộc phạm vi đợt vá này.
+
+Test mới: `test-hr-profile-wired-fields-route.js` (HTTP thật qua Express,
+không qua Playwright/browser), bổ sung 5 scenario vào
+`test-hr-profile-wired-fields.js`, `test-excel-dropdown-255-limit.js` (4
+scenario, test cả 2 engine Tải Mẫu thật). Sửa 2 assertion đếm field cứng
+(27→33) ở `test-hr-profile.js`/`test-hr-profile-field-visibility.js` theo
+đúng số field mới.
 
 ## v25.70 (2026-10): Vá 2 lỗi thật phát hiện khi test lại v25.69 (dropdown Excel)
 

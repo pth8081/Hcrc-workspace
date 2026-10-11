@@ -112,7 +112,19 @@ const SENSITIVE_FIELDS = [
   // đã có (địa chỉ) hoặc mang tính cá nhân/y tế-gia đình (lao động đặc biệt, nghỉ thai sản/ốm dài ngày)
   // hoặc ghi chú nội bộ có thể chứa thông tin nhạy cảm (hrNote) — mặc định ẨN như disciplinaryActions.
   'emergencyContactAddress', 'specialLaborStatus',
-  'currentWorkStatusDetail', 'currentWorkStatusFrom', 'currentWorkStatusTo', 'hrNote'
+  'currentWorkStatusDetail', 'currentWorkStatusFrom', 'currentWorkStatusTo', 'hrNote',
+  // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): 3 field "wired" (resolveWiredReadOnlyFields() bên dưới, đọc
+  // LIVE từ hrProcesses OFFBOARDING) trước đây được merge thẳng vào response GET /by-code|/by-username
+  // SAU KHI đã áp lớp ẩn giới hạn cho quản lý trực tiếp (getProfileForViewer()) — nên LUÔN hiện bất kể
+  // viewMode, bỏ qua đúng cơ chế managerVisibleFields đang bảo vệ các field nhạy cảm khác. Thêm vào
+  // SENSITIVE_FIELDS để dùng CHUNG cơ chế ẩn/mở sẵn có (xem filterWiredFieldsForViewer() bên dưới) —
+  // mặc định ẨN với quản lý trực tiếp cho tới khi admin chủ động tick mở ở "🛠️ Trường Xem Của Quản Lý
+  // Trực Tiếp", giống managerManagerUsername/managerManagerName/khoiBan ngay dưới đây.
+  'resignationReason', 'actualEndDate', 'lastWorkingDate',
+  // managerManagerUsername/managerManagerName (quản lý CẤP 2, khác managerUsername/managerName ở cấp 1 —
+  // field đó vốn không lộ thông tin gì mới cho quản lý trực tiếp vì chính là họ) + khoiBan (khối/ban) —
+  // cùng lý do trên, mặc định ẩn tới khi admin mở.
+  'managerManagerUsername', 'managerManagerName', 'khoiBan'
 ];
 // Nhãn hiển thị tiếng Việt cho từng trường — dùng cho màn cấu hình admin (checkbox chọn trường nào mở
 // cho quản lý trực tiếp/chính chủ) lẫn client hiển thị danh sách trường đang cấu hình. Khớp ĐÚNG
@@ -141,7 +153,11 @@ const SENSITIVE_FIELD_LABELS = {
   concurrentJobTitle: 'Kiêm nhiệm chức danh',
   resignationNoticeDate: 'Ngày nhận đơn/thông tin nghỉ', resignationExpectedDate: 'Ngày dự kiến chấm dứt HĐLĐ',
   tenureBaseDate: 'Ngày tính thâm niên',
-  careerHistoryNote: 'Quá trình công tác', hrNote: 'Ghi chú'
+  careerHistoryNote: 'Quá trình công tác', hrNote: 'Ghi chú',
+  // 3 field "wired" đọc live từ hrProcesses OFFBOARDING (xem resolveWiredReadOnlyFields()) + 2 field
+  // quản lý cấp 2 + khối/ban — thêm vào SENSITIVE_FIELDS (đợt vá rò rỉ field nhạy cảm, xem chú thích ở đó).
+  resignationReason: 'Lý do nghỉ việc', actualEndDate: 'Ngày nghỉ việc thực tế', lastWorkingDate: 'Ngày làm việc cuối cùng',
+  managerManagerUsername: 'Tài khoản quản lý cấp 2', managerManagerName: 'Tên quản lý cấp 2', khoiBan: 'Khối/Ban'
 };
 // Lọc input admin gửi lên chỉ giữ đúng các field NẰM TRONG SENSITIVE_FIELDS (chặn gửi field lạ/field
 // định danh-hệ thống — không có ý nghĩa gì để "mở thêm" vì các field đó vốn đã luôn hiện sẵn).
@@ -790,6 +806,25 @@ function resolveWiredReadOnlyFields(profile, allUsers, allHrProcesses) {
   }
   return result;
 }
+// Danh sách con trong wiredFields cần áp lại luật ẩn managerVisibleFields — khớp đúng 6 field vừa thêm
+// vào SENSITIVE_FIELDS ở trên. managerUsername/managerName KHÔNG nằm trong danh sách này: bản thân
+// field đó chính là quản lý trực tiếp đang xem (hoặc rỗng), không lộ thêm thông tin gì cho vai trò này.
+const WIRED_SENSITIVE_FIELDS = ['khoiBan', 'managerManagerUsername', 'managerManagerName', 'resignationReason', 'actualEndDate', 'lastWorkingDate'];
+// LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): routes/employeeProfile.js (GET /by-code, /by-username) trước đây
+// merge thẳng resolveWiredReadOnlyFields() vào response SAU KHI đã gọi getProfileForViewer() áp lớp ẩn
+// giới hạn cho quản lý trực tiếp — 6 field ở WIRED_SENSITIVE_FIELDS vì vậy LUÔN hiện bất kể viewMode,
+// bỏ qua managerVisibleFields đang bảo vệ các field nhạy cảm khác (resignationReason/actualEndDate/
+// lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan — gọi thẳng API vẫn đọc được dù UI
+// không hiển thị). Hàm này áp lại ĐÚNG luật ẩn đó cho nhóm field tính toán riêng (không nằm sẵn trên
+// object `profile` nên getProfileForViewer() không tự lọc được) — route gọi SAU resolveWiredReadOnlyFields(),
+// TRƯỚC khi merge vào response.
+function filterWiredFieldsForViewer(wiredFields, viewMode, managerVisibleFields) {
+  if (viewMode === 'FULL') return wiredFields;
+  const visible = new Set(sanitizeManagerVisibleFields(managerVisibleFields));
+  const result = Object.assign({}, wiredFields);
+  WIRED_SENSITIVE_FIELDS.forEach(f => { if (!visible.has(f)) result[f] = null; });
+  return result;
+}
 
 // Trường tự phục vụ được sửa (chính chủ, KHÔNG có hrProfileManage) — không cho tự sửa status/processId/
 // employeeCode/username qua đường này.
@@ -1243,7 +1278,7 @@ module.exports = {
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
-  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields,
+  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
   computeHrReportSummary, computeTenureYears

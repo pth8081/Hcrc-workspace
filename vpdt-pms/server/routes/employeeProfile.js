@@ -568,7 +568,13 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     // wiredFields (10/2026, báo cáo rà soát mẫu Excel mới) — 8 cột đọc LIVE từ users/hrProcesses, xem
     // chú thích đầy đủ tại resolveWiredReadOnlyFields() (lib/employeeProfile.js). CHỈ-XEM, không qua
     // applyProfileEdit() — gộp thẳng vào response để client hiển thị cùng hồ sơ.
-    const wiredFields = employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []);
+    // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70) — filterWiredFieldsForViewer() áp lại ĐÚNG luật ẩn
+    // managerVisibleFields cho 6/8 field nhạy cảm trong wiredFields (trước đây merge thẳng, luôn hiện
+    // bất kể viewMode — xem chú thích đầy đủ tại lib/employeeProfile.js).
+    const wiredFields = employeeProfile.filterWiredFieldsForViewer(
+      employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []),
+      viewMode, appData.hrProfileManagerVisibleFields
+    );
     const deptCode = await ensureDeptCode(profile.dept, appData.deptCodeMap);
     res.json({ profile: Object.assign({}, viewable, wiredFields, { deptCode }), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-code/${req.params.employeeCode}`); }
@@ -588,7 +594,11 @@ router.get('/by-username/:username', async (req, res) => {
     const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
-    const wiredFields = employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []);
+    // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70) — xem chú thích đầy đủ ở route /by-code phía trên.
+    const wiredFields = employeeProfile.filterWiredFieldsForViewer(
+      employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []),
+      viewMode, appData.hrProfileManagerVisibleFields
+    );
     const deptCode = await ensureDeptCode(profile.dept, appData.deptCodeMap);
     res.json({ profile: Object.assign({}, viewable, wiredFields, { deptCode }), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
   } catch (err) { sendCatchError(res, err, `GET /api/hr-profile/by-username/${req.params.username}`); }

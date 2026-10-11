@@ -37,7 +37,8 @@
 const ExcelJS = require('exceljs');
 const { streamAllSheetsRows } = require('./xlsxSafeRead');
 const {
-  parseCellByType, mapHeaderColumns, formatCellForExcel, styleHeaderRow, colTypeLabel, normalizeText
+  parseCellByType, mapHeaderColumns, formatCellForExcel, styleHeaderRow, colTypeLabel, normalizeText,
+  applyCatalogDropdownValidation
 } = require('./objectCatalogImport');
 const { HttpError } = require('./httpErrors');
 
@@ -71,15 +72,17 @@ function buildGroupedTemplateWorkbook(spec) {
 
     const dataStartRow = 3; // dòng 1 = ghi chú, dòng 2 = tiêu đề
     const dataEndRow = dataStartRow + MAX_GROUPED_IMPORT_ROWS - 1;
+    // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): danh mục enum dài (>255 ký tự nối chuỗi, VD nhiều Nhóm Phê
+    // Duyệt/Phòng Ban) tự chuyển sang cột ẩn qua applyCatalogDropdownValidation() (lib/objectCatalogImport.js)
+    // — trước đây nối thẳng `"${list.join(',')}"` nên vượt ngưỡng 255 ký tự của Excel sẽ ÂM THẦM MẤT dropdown.
     columns.forEach((c, i) => {
       let list = null;
       if (c.type === 'bool') list = ['Có', 'Không'];
       else if (c.type === 'enum') list = (c.options || []).map((o) => (o && typeof o === 'object' ? (o.label ?? o.value) : o));
       if (!list || !list.length) return;
-      const letter = ws.getColumn(i + 1).letter;
-      for (let r = dataStartRow; r <= dataEndRow; r++) {
-        ws.getCell(`${letter}${r}`).dataValidation = { type: 'list', allowBlank: !c.required, formulae: [`"${list.join(',')}"`] };
-      }
+      applyCatalogDropdownValidation(ws, i + 1, list, {
+        startRow: dataStartRow, endRow: dataEndRow, required: c.required, helperColIdx: columns.length + 50 + i
+      });
     });
   });
 
