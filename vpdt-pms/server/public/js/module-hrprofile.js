@@ -851,8 +851,237 @@ const HRPF_REPORT_CARDS = [
 // Nhân Sự > Báo Cáo (9/2026, top-level module con riêng — dời từ view lồng trong Hồ Sơ Nhân Sự, xem
 // chú thích entry 'hrReport' ở BUSINESS_MODULES/core.js). switchTab() đã tự chặn 403 trước khi gọi hàm
 // này (xem hrpfCanViewReports() ở core.js) — chỉ còn việc nạp báo cáo.
+// 11/2026: mở rộng thành 6 sub-tab (Tổng Quan/Tuần/Tháng/Lương/Điều Động/Phụ Thuộc, xem
+// hrReportSection.html) — luôn mở lại đúng "📊 Tổng Quan" mỗi lần vào module (KHÔNG nhớ tab đã chọn lần
+// trước, cùng quy ước setContractSubTab()/setSystemSubTab() không áp dụng ở đây vì đây không phải cấu
+// hình quyền theo module con, chỉ là cách trình bày báo cáo).
+let hrpfReportSubTab = 'OVERVIEW';
 function renderHrReportModule() {
-  loadHrpfReports();
+  setHrpfReportSubTab('OVERVIEW');
+}
+
+const HRPF_REPORT_SUBTABS = ['OVERVIEW', 'WEEKLY', 'MONTHLY', 'SALARY', 'TRANSFERS', 'DEPENDENTS'];
+const HRPF_REPORT_SUBTAB_BTN_IDS = {
+  OVERVIEW: 'btnHrpfReportSubOverview', WEEKLY: 'btnHrpfReportSubWeekly', MONTHLY: 'btnHrpfReportSubMonthly',
+  SALARY: 'btnHrpfReportSubSalary', TRANSFERS: 'btnHrpfReportSubTransfers', DEPENDENTS: 'btnHrpfReportSubDependents'
+};
+function setHrpfReportSubTab(tab) {
+  if (!HRPF_REPORT_SUBTABS.includes(tab)) tab = 'OVERVIEW';
+  hrpfReportSubTab = tab;
+  const activeCls = 'px-3 py-1 rounded text-xs font-bold bg-teal-700 text-white';
+  const inactiveCls = 'px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700';
+  HRPF_REPORT_SUBTABS.forEach(t => {
+    const btn = document.getElementById(HRPF_REPORT_SUBTAB_BTN_IDS[t]);
+    if (btn) btn.className = t === tab ? activeCls : inactiveCls;
+    const panel = document.getElementById(`hrpfReportSub${t}`);
+    if (panel) panel.classList.toggle('hidden', t !== tab);
+  });
+  if (tab === 'OVERVIEW') { loadHrpfDashboardSummary(); loadHrpfReports(); }
+  else if (tab === 'WEEKLY') loadHrpfWeeklyReport();
+  else if (tab === 'MONTHLY') loadHrpfMonthlyReport();
+  else if (tab === 'SALARY') loadHrpfSalaryHistory();
+  else if (tab === 'TRANSFERS') loadHrpfTransfersReport();
+  else if (tab === 'DEPENDENTS') loadHrpfDependentsReport();
+}
+
+// ===== 📊 Tổng Quan — dashboard brief (11/2026) =====
+async function loadHrpfDashboardSummary() {
+  const body = document.getElementById('hrpfDashboardBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await hrProfileApiCall('GET', '/api/hr-profile/reports/dashboard');
+    const card = (icon, value, label, cls) => `<div class="bg-white border rounded-lg p-3 text-center">
+      <div class="text-2xl">${icon}</div>
+      <div class="text-2xl font-bold ${cls || 'text-teal-700'}">${value}</div>
+      <div class="text-[11px] text-gray-500">${label}</div>
+    </div>`;
+    body.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+      ${card('👥', data.totalActive, 'Tổng nhân sự đang làm việc')}
+      ${card('🏢', data.byClassification?.HO ?? 0, 'Khối Văn Phòng (HO)')}
+      ${card('🏬', data.byClassification?.STCH ?? 0, 'Siêu Thị/Cửa Hàng')}
+      ${card('🌴', data.onLeave, 'Đang nghỉ (thai sản/ốm...)')}
+      ${card('🆕', data.onboardingInProgress, 'Đang chuẩn bị gia nhập')}
+      ${card('🚪', data.offboardingInProgress, 'Đang bàn giao nghỉ việc')}
+      ${card('⚠️', data.expiringSoonCount, 'HĐLĐ sắp hết hạn (≤30 ngày)', 'text-amber-700')}
+      ${card('🔀', data.transfersInProbation, 'Đang trong thời gian thử thách')}
+    </div>
+    <p class="text-[11px] text-gray-400 mt-1.5">ℹ️ Xem định biên nhân sự chi tiết (so với thực tế từng vị trí) tại Nhân Sự → Cơ Cấu Tổ Chức → Báo Cáo Định Biên.</p>`;
+  } catch (err) {
+    body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// ===== Helper dùng chung: bảng HTML + nút Xuất Excel cho 5 báo cáo con (11/2026) =====
+function hrpfSimpleTable(columns, rows, emptyMsg) {
+  if (!rows.length) return `<p class="text-xs text-gray-400 italic">${emptyMsg || 'Không có dữ liệu.'}</p>`;
+  return `<div class="bg-white border rounded-lg overflow-x-auto"><table class="w-full text-xs">
+    <thead><tr class="bg-gray-50 border-b">${columns.map(c => `<th class="p-1.5 text-left font-semibold">${escapeHtml(c.header)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r => `<tr class="border-b border-gray-100">${columns.map(c => `<td class="p-1.5">${escapeHtml(c.render ? c.render(r) : String(r[c.key] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table></div>`;
+}
+function hrpfMondayOfWeek(d) {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date.toISOString().slice(0, 10);
+}
+function hrpfSundayOfWeek(mondayStr) {
+  const date = new Date(mondayStr);
+  date.setDate(date.getDate() + 6);
+  return date.toISOString().slice(0, 10);
+}
+
+// ===== 📅 Theo Tuần (11/2026, đối chiếu mẫu Excel "Bao_cao_tuan") =====
+const HRPF_WEEKLY_COLUMNS = [
+  { header: 'Phòng Ban/Siêu Thị', key: 'dept' },
+  { header: 'Khối', key: 'classification', render: r => r.classification === 'HO' ? 'Văn Phòng' : 'Siêu Thị/Cửa Hàng' },
+  { header: 'Đầu tuần', key: 'startOfWeek' }, { header: 'Tăng', key: 'increased' }, { header: 'Giảm', key: 'decreased' },
+  { header: 'Cuối tuần', key: 'endOfWeek' }, { header: 'Luỹ kế tăng (từ đầu năm)', key: 'cumulativeIncreased' },
+  { header: 'Luỹ kế giảm (từ đầu năm)', key: 'cumulativeDecreased' }
+];
+async function fetchHrpfWeeklyReport() {
+  const startEl = document.getElementById('hrpfWeeklyStart');
+  const endEl = document.getElementById('hrpfWeeklyEnd');
+  if (!startEl.value) { startEl.value = hrpfMondayOfWeek(new Date()); endEl.value = hrpfSundayOfWeek(startEl.value); }
+  if (!endEl.value) endEl.value = hrpfSundayOfWeek(startEl.value);
+  const qs = new URLSearchParams({ weekStart: startEl.value, weekEnd: endEl.value });
+  return hrProfileApiCall('GET', `/api/hr-profile/reports/weekly?${qs.toString()}`);
+}
+async function loadHrpfWeeklyReport() {
+  const body = document.getElementById('hrpfWeeklyBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await fetchHrpfWeeklyReport();
+    const rowsWithTotal = [...data.rows, { dept: 'TỔNG CỘNG', classification: '', ...data.totals }];
+    body.innerHTML = hrpfSimpleTable(HRPF_WEEKLY_COLUMNS, rowsWithTotal);
+  } catch (err) { body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`; }
+}
+async function exportHrpfWeeklyReport() {
+  try {
+    const data = await fetchHrpfWeeklyReport();
+    if (!data.rows.length) return alert('Chưa có dữ liệu để xuất.');
+    const cols = HRPF_WEEKLY_COLUMNS.map(c => ({ header: c.header, key: c.key }));
+    const rows = data.rows.map(r => ({ ...r, classification: r.classification === 'HO' ? 'Văn Phòng' : 'Siêu Thị/Cửa Hàng' }));
+    downloadXlsxFromServer(`Bao_Cao_Nhan_Su_Theo_Tuan_${data.weekStart}_${data.weekEnd}.xlsx`, 'Theo Tuần', cols, rows);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// ===== 📆 Theo Tháng (11/2026, đối chiếu mẫu Excel "Bao_cao_thang") =====
+const HRPF_MONTHLY_COLUMNS = [
+  { header: 'Phòng Ban/Siêu Thị', key: 'dept' },
+  { header: 'Khối', key: 'classification', render: r => r.classification === 'HO' ? 'Văn Phòng' : 'Siêu Thị/Cửa Hàng' },
+  { header: 'Số tuyển mới', key: 'newHires' }, { header: 'Số ký tiếp/gia hạn', key: 'renewals' }
+];
+async function fetchHrpfMonthlyReport() {
+  const monthEl = document.getElementById('hrpfMonthlyMonth');
+  if (!monthEl.value) monthEl.value = new Date().toISOString().slice(0, 7);
+  const qs = new URLSearchParams({ month: monthEl.value });
+  return hrProfileApiCall('GET', `/api/hr-profile/reports/monthly?${qs.toString()}`);
+}
+async function loadHrpfMonthlyReport() {
+  const body = document.getElementById('hrpfMonthlyBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await fetchHrpfMonthlyReport();
+    const rowsWithTotal = [...data.rows, { dept: 'TỔNG CỘNG', classification: '', newHires: data.totals.newHires, renewals: data.totals.renewals }];
+    body.innerHTML = hrpfSimpleTable(HRPF_MONTHLY_COLUMNS, rowsWithTotal);
+  } catch (err) { body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`; }
+}
+async function exportHrpfMonthlyReport() {
+  try {
+    const data = await fetchHrpfMonthlyReport();
+    if (!data.rows.length) return alert('Chưa có dữ liệu để xuất.');
+    const cols = HRPF_MONTHLY_COLUMNS.map(c => ({ header: c.header, key: c.key }));
+    const rows = data.rows.map(r => ({ ...r, classification: r.classification === 'HO' ? 'Văn Phòng' : 'Siêu Thị/Cửa Hàng' }));
+    downloadXlsxFromServer(`Bao_Cao_Nhan_Su_Theo_Thang_${data.month}.xlsx`, 'Theo Tháng', cols, rows);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// ===== 💰 Điều Chỉnh Lương (11/2026, đối chiếu mẫu Excel "DATA_DIEUCHINH_LUONG") =====
+const HRPF_SALARY_COLUMNS = [
+  { header: 'Mã NV', key: 'employeeCode' }, { header: 'Phòng Ban', key: 'dept' }, { header: 'Mã HĐLĐ', key: 'contractCode' },
+  { header: 'Loại thay đổi', key: 'amendmentType' }, { header: 'Giá trị cũ', key: 'oldValue' }, { header: 'Giá trị mới', key: 'newValue' },
+  { header: 'Ngày áp dụng', key: 'applyDate' }, { header: 'Ngày hiệu lực', key: 'effectiveDate' }, { header: 'Ghi chú', key: 'note' }
+];
+async function fetchHrpfSalaryHistory() {
+  const qs = new URLSearchParams();
+  const from = document.getElementById('hrpfSalaryFrom').value; if (from) qs.set('from', from);
+  const to = document.getElementById('hrpfSalaryTo').value; if (to) qs.set('to', to);
+  return hrProfileApiCall('GET', `/api/hr-profile/reports/salary-history?${qs.toString()}`);
+}
+async function loadHrpfSalaryHistory() {
+  const body = document.getElementById('hrpfSalaryBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await fetchHrpfSalaryHistory();
+    body.innerHTML = hrpfSimpleTable(HRPF_SALARY_COLUMNS, data.rows);
+  } catch (err) { body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`; }
+}
+async function exportHrpfSalaryHistory() {
+  try {
+    const data = await fetchHrpfSalaryHistory();
+    if (!data.rows.length) return alert('Chưa có dữ liệu để xuất.');
+    downloadXlsxFromServer('Lich_Su_Dieu_Chinh_Luong.xlsx', 'Điều Chỉnh Lương', HRPF_SALARY_COLUMNS.map(c => ({ header: c.header, key: c.key })), data.rows);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// ===== 🔀 Bổ Nhiệm/Điều Động (11/2026, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU THACH") =====
+const HRPF_TRANSFERS_COLUMNS = [
+  { header: 'Mã NV', key: 'employeeCode' }, { header: 'Phòng Ban', key: 'dept' }, { header: 'Loại thao tác', key: 'typeLabel' },
+  { header: 'Đơn vị cũ', key: 'oldUnit' }, { header: 'Đơn vị mới', key: 'newUnit' },
+  { header: 'Điều chuyển từ', key: 'transferFromDate' }, { header: 'Điều chuyển đến', key: 'transferToDate' },
+  { header: 'Thử thách từ', key: 'probationFromDate' }, { header: 'Thử thách đến', key: 'probationToDate' },
+  { header: 'Trạng thái', key: 'statusLabel' }, { header: 'Ghi chú', key: 'note' }
+];
+async function fetchHrpfTransfersReport() {
+  const qs = new URLSearchParams();
+  const from = document.getElementById('hrpfTransferFrom').value; if (from) qs.set('from', from);
+  const to = document.getElementById('hrpfTransferTo').value; if (to) qs.set('to', to);
+  const type = document.getElementById('hrpfTransferType').value; if (type) qs.set('type', type);
+  return hrProfileApiCall('GET', `/api/hr-profile/reports/transfers?${qs.toString()}`);
+}
+async function loadHrpfTransfersReport() {
+  const body = document.getElementById('hrpfTransfersBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await fetchHrpfTransfersReport();
+    body.innerHTML = hrpfSimpleTable(HRPF_TRANSFERS_COLUMNS, data.rows);
+  } catch (err) { body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`; }
+}
+async function exportHrpfTransfersReport() {
+  try {
+    const data = await fetchHrpfTransfersReport();
+    if (!data.rows.length) return alert('Chưa có dữ liệu để xuất.');
+    downloadXlsxFromServer('Bao_Cao_Bo_Nhiem_Dieu_Dong.xlsx', 'Bổ Nhiệm-Điều Động', HRPF_TRANSFERS_COLUMNS.map(c => ({ header: c.header, key: c.key })), data.rows);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
+// ===== 👨‍👩‍👧 Người Phụ Thuộc (11/2026, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC") =====
+const HRPF_DEPENDENTS_COLUMNS = [
+  { header: 'Mã NV', key: 'employeeCode' }, { header: 'Phòng Ban', key: 'dept' }, { header: 'MST người nộp thuế', key: 'taxpayerTaxCode' },
+  { header: 'Họ tên người phụ thuộc', key: 'fullName' }, { header: 'Ngày sinh', key: 'dateOfBirth' }, { header: 'MST người phụ thuộc', key: 'taxCode' },
+  { header: 'Quốc tịch', key: 'nationality' }, { header: 'CMND/Hộ chiếu', key: 'idNumber' }, { header: 'Quan hệ', key: 'relationship' },
+  { header: 'Giảm trừ từ tháng', key: 'deductionFromMonth' }, { header: 'Giảm trừ đến tháng', key: 'deductionToMonth' },
+  { header: 'Tháng cắt giảm trừ', key: 'deductionCutMonth' }, { header: 'Số tiền giảm trừ', key: 'deductionAmount' }, { header: 'Tháng kê khai', key: 'declarationMonth' }
+];
+async function fetchHrpfDependentsReport() {
+  return hrProfileApiCall('GET', '/api/hr-profile/reports/dependents');
+}
+async function loadHrpfDependentsReport() {
+  const body = document.getElementById('hrpfDependentsBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await fetchHrpfDependentsReport();
+    body.innerHTML = hrpfSimpleTable(HRPF_DEPENDENTS_COLUMNS, data.rows);
+  } catch (err) { body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`; }
+}
+async function exportHrpfDependentsReport() {
+  try {
+    const data = await fetchHrpfDependentsReport();
+    if (!data.rows.length) return alert('Chưa có dữ liệu để xuất.');
+    downloadXlsxFromServer('Nguoi_Phu_Thuoc.xlsx', 'Người Phụ Thuộc', HRPF_DEPENDENTS_COLUMNS.map(c => ({ header: c.header, key: c.key })), data.rows);
+  } catch (err) { alert('⛔ ' + err.message); }
 }
 
 async function loadHrpfReports() {
@@ -1299,6 +1528,18 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       : (profile.disciplinaryActions || []).map(hrpfDisciplinaryRowHtml).join('')}</div>
   </div>`;
 
+  // Bổ nhiệm/Điều động (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU
+  // THACH") — cùng khuôn disciplinaryBlock ngay trên (CHỈ scope MANAGE, không bao giờ hiện ở scope ME).
+  const transfersBlock = scope !== 'MANAGE' ? '' : `<div class="mt-3 pt-3 border-t">
+    <div class="flex items-center justify-between mb-1">
+      <label class="block text-[11px] font-semibold text-gray-500">🔀 Bổ nhiệm/Điều động</label>
+      ${isReadOnly ? '' : '<button type="button" data-op="addHrpfTransferRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm dòng</button>'}
+    </div>
+    <div id="hrpfTransferRows" class="space-y-1">${isReadOnly
+      ? ((profile.transfers || []).length ? (profile.transfers || []).map(hrpfTransferRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>')
+      : (profile.transfers || []).map(hrpfTransferRowHtml).join('')}</div>
+  </div>`;
+
   const saveBtn = isReadOnly ? '' : (scope === 'ME'
     ? `<button type="button" data-op="saveHrpfMyProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`
     : `<button type="button" data-op="saveHrpfManageProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`);
@@ -1310,8 +1551,77 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${adminInfoBlock3}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${adminInfoBlock3}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}${transfersBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${contractBlock}${historyBlock}`;
+}
+
+// HRPF_TRANSFER_TYPE_LABELS/HRPF_TRANSFER_STATUS_LABELS (11/2026) — mirror thuần client của
+// TRANSFER_TYPE_LABELS/TRANSFER_STATUS_LABELS ở lib/employeeProfile.js (server là nguồn validate thật,
+// đây chỉ phục vụ hiển thị/chọn trên form — cùng khuôn HRC_STATUS_LABELS ở module-hopdonglaodong.js).
+const HRPF_TRANSFER_TYPE_LABELS = {
+  APPOINTMENT: 'Bổ nhiệm', DISMISSAL: 'Miễn nhiệm', TRANSFER: 'Điều động',
+  TRANSFER_DISMISSAL: 'Điều động & Miễn nhiệm', TRANSFER_APPOINTMENT: 'Điều động & Bổ nhiệm'
+};
+const HRPF_TRANSFER_STATUS_LABELS = { IN_PROBATION: 'Đang thử thách', CONFIRMED: 'Đã xác nhận', CANCELLED: 'Đã huỷ' };
+function hrpfTransferRowHtml(item) {
+  const it = item || {};
+  return `<div class="border rounded p-2 space-y-1 hrpf-transfer-row" data-id="${escapeHtml(it.id || '')}">
+    <div class="grid grid-cols-3 gap-1 items-center">
+      <select class="border p-1 rounded text-xs bg-white hrpf-trf-type">
+        ${Object.entries(HRPF_TRANSFER_TYPE_LABELS).map(([k, label]) => `<option value="${k}" ${it.type === k ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+      <select class="border p-1 rounded text-xs bg-white hrpf-trf-status">
+        <option value="">-- Trạng thái (tự suy ra nếu bỏ trống) --</option>
+        ${Object.entries(HRPF_TRANSFER_STATUS_LABELS).map(([k, label]) => `<option value="${k}" ${it.status === k ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+      <div class="flex justify-end">
+        <button type="button" data-op="removeHrpfRow" data-arg0="transfer" data-arg-el="1" class="text-red-500 hover:text-red-700 text-xs">✕ Xoá dòng</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-1 items-center">
+      <input value="${escapeHtml(it.oldUnit || '')}" placeholder="Đơn vị cũ" class="border p-1 rounded text-xs hrpf-trf-oldunit">
+      <input value="${escapeHtml(it.newUnit || '')}" placeholder="Đơn vị mới" class="border p-1 rounded text-xs hrpf-trf-newunit">
+    </div>
+    <div class="grid grid-cols-2 gap-1 items-center">
+      <div>
+        <label class="block text-[10px] text-gray-400">Thời gian điều chuyển — Từ ngày</label>
+        <input type="date" value="${escapeHtml((it.transferFromDate || '').slice(0, 10))}" class="border p-1 rounded text-xs w-full hrpf-trf-fromdate">
+      </div>
+      <div>
+        <label class="block text-[10px] text-gray-400">Đến ngày (nếu có)</label>
+        <input type="date" value="${escapeHtml((it.transferToDate || '').slice(0, 10))}" class="border p-1 rounded text-xs w-full hrpf-trf-todate">
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-1 items-center">
+      <div>
+        <label class="block text-[10px] text-gray-400">Thời gian thử thách — Từ ngày</label>
+        <input type="date" value="${escapeHtml((it.probationFromDate || '').slice(0, 10))}" class="border p-1 rounded text-xs w-full hrpf-trf-probfrom">
+      </div>
+      <div>
+        <label class="block text-[10px] text-gray-400">Đến ngày</label>
+        <input type="date" value="${escapeHtml((it.probationToDate || '').slice(0, 10))}" class="border p-1 rounded text-xs w-full hrpf-trf-probto">
+      </div>
+    </div>
+    <input value="${escapeHtml(it.note || '')}" placeholder="Ghi chú" class="border p-1 rounded text-xs w-full hrpf-trf-note">
+  </div>`;
+}
+function hrpfTransferRowReadOnlyHtml(item) {
+  const it = item || {};
+  return `<div class="text-xs py-0.5 border-b border-gray-100">
+    <div class="grid grid-cols-3 gap-1">
+      <span class="font-semibold">${escapeHtml(HRPF_TRANSFER_TYPE_LABELS[it.type] || it.type || '—')}</span>
+      <span>${escapeHtml(it.oldUnit || '—')} → ${escapeHtml(it.newUnit || '—')}</span>
+      <span>${escapeHtml(HRPF_TRANSFER_STATUS_LABELS[it.status] || it.status || '—')}</span>
+    </div>
+    <div class="grid grid-cols-2 gap-1 text-gray-400">
+      <span>Điều chuyển: ${escapeHtml((it.transferFromDate || '').slice(0, 10) || '—')} → ${escapeHtml((it.transferToDate || '').slice(0, 10) || '—')}</span>
+      <span>Thử thách: ${escapeHtml((it.probationFromDate || '').slice(0, 10) || '—')} → ${escapeHtml((it.probationToDate || '').slice(0, 10) || '—')}</span>
+    </div>
+    ${it.note ? `<div class="text-gray-500">${escapeHtml(it.note)}</div>` : ''}
+  </div>`;
+}
+function addHrpfTransferRow() {
+  document.getElementById('hrpfTransferRows').insertAdjacentHTML('beforeend', hrpfTransferRowHtml(null));
 }
 
 function hrpfDependentRowHtml(d) {
@@ -1492,6 +1802,20 @@ function collectHrpfProfileFormValues(scope) {
         type: row.querySelector('.hrpf-disc-type').value.trim(),
         note: row.querySelector('.hrpf-disc-note').value.trim() || null
       })).filter(it => it.date || it.type);
+    }
+    if (document.getElementById('hrpfTransferRows')) {
+      payload.transfers = Array.from(document.querySelectorAll('.hrpf-transfer-row')).map(row => ({
+        id: row.dataset.id || undefined,
+        type: row.querySelector('.hrpf-trf-type').value,
+        status: row.querySelector('.hrpf-trf-status').value || undefined,
+        oldUnit: row.querySelector('.hrpf-trf-oldunit').value.trim() || null,
+        newUnit: row.querySelector('.hrpf-trf-newunit').value.trim() || null,
+        transferFromDate: row.querySelector('.hrpf-trf-fromdate').value || null,
+        transferToDate: row.querySelector('.hrpf-trf-todate').value || null,
+        probationFromDate: row.querySelector('.hrpf-trf-probfrom').value || null,
+        probationToDate: row.querySelector('.hrpf-trf-probto').value || null,
+        note: row.querySelector('.hrpf-trf-note').value.trim() || null
+      })).filter(it => it.transferFromDate);
     }
     if (document.getElementById('hrpfF_nationalId')) payload.nationalId = val('hrpfF_nationalId') || null;
     if (document.getElementById('hrpfF_socialInsuranceNo')) payload.socialInsuranceNo = val('hrpfF_socialInsuranceNo') || null;

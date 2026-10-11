@@ -1191,6 +1191,7 @@ const NGHIEP_VU_DOCS = {
       { label: 'Phân quyền chi tiết', text: '3 quyền tách riêng Tạo/Xem toàn bộ/Sửa (kết hợp tự do) bên cạnh quyền "Quản Lý Hồ Sơ Nhân Sự" gộp sẵn cả 3 — admin cấu hình ở Hệ Thống > Phân Quyền.' },
       { label: 'Cấu hình trường xem (opt-in)', text: '2 nút "⚙️" riêng trong Quản Lý Hồ Sơ, cùng nguyên tắc: MẶC ĐỊNH KHÔNG trường nhạy cảm nào hiển thị (đủ 20 field: ngày sinh, giới tính, email cá nhân, liên hệ khẩn cấp, CCCD, địa chỉ, ngân hàng, BHXH, mã số thuế, quốc tịch, tình trạng hôn nhân, ngày/nơi cấp CCCD, người phụ thuộc, học vấn, kỷ luật...) tới khi admin chủ động mở — "Trường Xem Của Quản Lý Trực Tiếp" áp dụng khi quản lý xem hồ sơ cấp dưới, "Trường Xem Của Tôi" áp dụng khi chính nhân viên tự xem/sửa hồ sơ mình — 2 cấu hình độc lập, mở ở màn này không tự mở cho màn kia.' },
       { label: 'Kỷ luật (10/2026)', text: 'khối "⚠️ Kỷ luật" (Ngày/Loại kỷ luật — gõ-hoặc-chọn từ danh mục "Loại Kỷ Luật"/Ghi chú) chỉ HR mới thêm/sửa được (tab "📋 Quản Lý Hồ Sơ"), không hiện ở "👤 Hồ Sơ Của Tôi" dù có cấu hình mở hay không — nhân viên KHÔNG tự xem/sửa kỷ luật của mình qua hệ thống này.' },
+      { label: 'Bổ Nhiệm/Miễn Nhiệm/Điều Động (11/2026)', text: 'khối "🔀 Bổ Nhiệm/Miễn Nhiệm/Điều Động" (cùng khuôn khối Kỷ luật — chỉ HR thêm/sửa, không hiện ở "👤 Hồ Sơ Của Tôi"): mỗi lượt ghi Loại thao tác (Bổ nhiệm/Miễn nhiệm/Điều động/Điều động & Miễn nhiệm/Điều động & Bổ nhiệm), Đơn vị cũ/mới, Thời gian điều chuyển, và tuỳ chọn Thời gian thử thách (Từ ngày/Đến ngày) — có khai thời gian thử thách thì Trạng thái tự "Đang thử thách", không khai thì "Đã xác nhận" ngay; HR tự đổi tay sang "Đã huỷ" nếu cần. Xem toàn công ty + xuất Excel ở tab "📊 Báo Cáo → 🔀 Bổ Nhiệm/Điều Động".' },
       { label: 'Người Phụ Thuộc — 7 trường khai thuế TNCN (10/2026)', text: 'mỗi người phụ thuộc có thêm Quốc tịch, Số CMND/Hộ chiếu, Thời gian tính giảm trừ (Từ tháng/Đến tháng), Tháng cắt giảm trừ, Số tiền giảm trừ, Tháng kê khai — đối chiếu mẫu khai giảm trừ gia cảnh thuế TNCN, đều TUỲ CHỌN (để trống vẫn lưu được).' },
     ], right: [
       { label: 'Lịch Sử Thay Đổi & Chỉnh Sửa', text: 'mọi lần tạo mới/sửa hồ sơ (liệt kê đúng field đã đổi) được ghi lại, gộp chung vào "Lịch Sử Nhân Sự" cùng chức vụ/hợp đồng/tái tuyển — luôn sắp mới nhất lên đầu.' },
@@ -1223,19 +1224,22 @@ const NGHIEP_VU_DOCS = {
   },
   hrReport: {
     icon: '📊', title: 'Báo Cáo (Nhân Sự)', badge: 'Nhân Sự',
-    desc: 'Số liệu tổng hợp nhân sự (vào làm/nghỉ việc/tăng lương/thăng chức/tình trạng hợp đồng), lọc theo khoảng thời gian — module con RIÊNG cấp Nhân Sự (9/2026, trước đó từng nằm lồng bên trong Hồ Sơ Nhân Sự). KHÔNG tạo collection/route mới — vẫn đọc từ Hồ Sơ Nhân Sự + Hợp Đồng Lao Động, chỉ đổi nơi hiển thị cho đúng cấp module.',
+    desc: 'Dashboard brief + 5 báo cáo chi tiết (11/2026, mở rộng theo file mẫu quản lý thủ công của khối Nhân Sự): Tổng Quan (8 chỉ số nhanh), Theo Tuần, Theo Tháng, Điều Chỉnh Lương, Bổ Nhiệm/Điều Động, Người Phụ Thuộc — mỗi báo cáo chi tiết có nút Xuất Excel riêng. KHÔNG tạo collection mới — vẫn đọc từ Hồ Sơ Nhân Sự + Hợp Đồng Lao Động qua 6 route thống kê riêng (route /reports cũ + 6 route /reports/* mới), chỉ tính lại khi mở màn, không lưu gì thêm.',
     flow: { ariaLabel: 'Quy trình xem Báo Cáo Nhân Sự', chain: [
-      { label: 'Chọn khoảng thời gian', sub: 'Từ ngày / Đến ngày (tuỳ chọn)' },
-      { label: 'Lọc tình trạng HĐLĐ', sub: 'Tuỳ chọn, riêng cho danh sách hợp đồng' },
-      { label: 'Xem số liệu', sub: '8 chỉ số + 6 danh sách chi tiết', kind: 'approved' },
+      { label: 'Chọn sub-tab', sub: 'Tổng Quan / Theo Tuần / Theo Tháng / Điều Chỉnh Lương / Bổ Nhiệm-Điều Động / Người Phụ Thuộc' },
+      { label: 'Chọn bộ lọc', sub: 'Khoảng thời gian/tháng/tuần tuỳ sub-tab' },
+      { label: 'Xem số liệu hoặc Xuất Excel', sub: 'Tổng Quan chỉ xem brief; 5 báo cáo còn lại có nút Xuất Excel riêng', kind: 'approved' },
     ] },
     steps: [
-      { text: 'Vào <b>💼 Nhân Sự ▾ → 📊 Báo Cáo</b> (sidebar — nút này nằm CUỐI CÙNG trong dropdown Nhân Sự, nhãn nút thật chỉ là "📊 Báo Cáo", KHÔNG phải "Báo Cáo (Nhân Sự)"; đừng nhầm với mục "📊 Báo Cáo" cấp 1 — module Báo Cáo & Biểu Mẫu dùng chung, đứng riêng trên sidebar) → chọn khoảng thời gian Từ ngày/Đến ngày (tuỳ chọn), lọc tình trạng hợp đồng nếu cần → bấm <b>"🔍 Xem Báo Cáo"</b> để hệ thống tính lại số liệu theo bộ lọc vừa chọn.' },
+      { text: 'Vào <b>💼 Nhân Sự ▾ → 📊 Báo Cáo</b> (sidebar — nút này nằm CUỐI CÙNG trong dropdown Nhân Sự; đừng nhầm với mục "📊 Báo Cáo" cấp 1 — module Báo Cáo & Biểu Mẫu dùng chung, đứng riêng trên sidebar) → chọn 1 trong 6 sub-tab ngay đầu màn.' },
+      { text: 'Tab <b>"📊 Tổng Quan"</b>: xem ngay 8 chỉ số brief (không cần bấm gì) — tổng đang làm việc/đang nghỉ phép dài hạn, tách HO/STCH, Onboarding/Offboarding đang thực hiện, hợp đồng sắp hết hạn, lượt Bổ Nhiệm/Điều Động đang thử thách. Khối lọc + bảng chi tiết cũ (vào làm/nghỉ việc/tăng lương...) vẫn còn ngay dưới, bấm <b>"🔍 Xem Báo Cáo"</b> sau khi chọn khoảng thời gian.' },
+      { text: 'Tab <b>"📅 Theo Tuần"/"📆 Theo Tháng"/"💰 Điều Chỉnh Lương"/"🔀 Bổ Nhiệm/Điều Động"/"👨‍👩‍👧 Người Phụ Thuộc"</b>: chọn bộ lọc tương ứng → bấm <b>"🔍 Xem"</b> để xem bảng, hoặc <b>"📤 Xuất Excel"</b> để tải về file đầy đủ (không cần bấm Xem trước).' },
     ],
     footer: { left: [
-      { label: 'Cần đủ 2 quyền', text: 'CẦN CẢ "Quản Lý Hồ Sơ Nhân Sự" LẪN "Quản Lý Hợp Đồng Lao Động" (hoặc admin) — chỉ có 1 trong 2 sẽ không thấy mục này, vì số liệu gộp cả 2 nguồn (kể cả tăng lương, vốn chỉ Quản Lý Hợp Đồng Lao Động mới xem được).' },
+      { label: 'Cần đủ 2 quyền (hoặc 1 quyền xem riêng)', text: 'CẦN CẢ "Quản Lý Hồ Sơ Nhân Sự" LẪN "Quản Lý Hợp Đồng Lao Động" (hoặc admin) — HOẶC quyền riêng "📊 Xem Báo Cáo Nhân Sự" (<code>hrReportView</code>, dành cho người chỉ cần xem/xuất báo cáo, không cần sửa hồ sơ/hợp đồng). Thiếu đủ điều kiện trên sẽ không thấy mục này, vì số liệu gộp cả 2 nguồn dữ liệu nhạy cảm (kể cả tăng lương).' },
     ], right: [
       { label: 'Không phải báo cáo tổng hợp chung', text: 'tách biệt hoàn toàn khỏi màn "📊 Báo Cáo" (module Báo Cáo & Biểu Mẫu dùng chung) — dữ liệu nhân sự cực nhạy cảm nên có route + màn hình thống kê RIÊNG, gác đúng quyền của module Nhân Sự.' },
+      { label: 'Điều Chỉnh Lương chưa tách từng khoản', text: 'hệ thống ghi mỗi lần điều chỉnh dạng "1 loại thay đổi + giá trị cũ/mới" (qua Phụ Lục Hợp Đồng) — KHÔNG tách riêng lương CB/thưởng/phụ cấp như file Excel quản lý tay cũ.' },
     ] },
   },
   hrAttendance: {

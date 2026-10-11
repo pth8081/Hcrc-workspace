@@ -222,7 +222,7 @@ async function main() {
       const defaultGet = await api('GET', '/api/hr-profile/self-field-config', undefined, HR_MGR);
       assertEqual(defaultGet.status, 200, 'HR phải xem được cấu hình');
       assertEqual(defaultGet.body.visibleFields.length, 0, 'Mặc định chưa cấu hình gì -> rỗng (opt-in)');
-      assertEqual(defaultGet.body.availableFields.length, 33, 'Phải liệt kê đủ 33 field nhạy cảm khả dụng (27 cũ +6 field wired resignationReason/actualEndDate/lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan — đợt vá rò rỉ field nhạy cảm v25.1→v25.70)');
+      assertEqual(defaultGet.body.availableFields.length, 34, 'Phải liệt kê đủ 34 field nhạy cảm khả dụng (27 cũ +6 field wired resignationReason/actualEndDate/lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan +1 field transfers, đợt Bổ Nhiệm/Điều Động 11/2026)');
 
       const putRes = await api('PUT', '/api/hr-profile/self-field-config',
         { visibleFields: ['dependents', 'khong-hop-le-loai-bo'] }, HR_MGR);
@@ -568,7 +568,7 @@ async function main() {
       const defaultGet = await api('GET', '/api/hr-profile/manager-field-config', undefined, HR_MGR);
       assertEqual(defaultGet.status, 200, 'HR phải xem được cấu hình');
       assertEqual(defaultGet.body.visibleFields.length, 0, 'Mặc định chưa cấu hình gì -> rỗng (giữ nguyên hành vi cũ: ẩn hết)');
-      assertEqual(defaultGet.body.availableFields.length, 33, 'Phải liệt kê đủ 33 field nhạy cảm khả dụng (27 cũ +6 field wired resignationReason/actualEndDate/lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan — đợt vá rò rỉ field nhạy cảm v25.1→v25.70)');
+      assertEqual(defaultGet.body.availableFields.length, 34, 'Phải liệt kê đủ 34 field nhạy cảm khả dụng (27 cũ +6 field wired resignationReason/actualEndDate/lastWorkingDate/managerManagerUsername/managerManagerName/khoiBan +1 field transfers, đợt Bổ Nhiệm/Điều Động 11/2026)');
 
       // Trước khi cấu hình: quản lý trực tiếp KHÔNG thấy nationalId/dependents.
       const beforeCfg = await api('GET', '/api/hr-profile/by-code/NV001', undefined, DIRECT_MGR);

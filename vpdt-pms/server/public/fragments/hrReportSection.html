@@ -1,24 +1,106 @@
 
-    <!-- Nhân Sự > Báo Cáo (9/2026) — DỜI từ view lồng bên trong Hồ Sơ Nhân Sự ra module con RIÊNG, ngang
-         hàng Hồ Sơ Nhân Sự/Hợp Đồng Lao Động (theo phản hồi người dùng: không nên nằm lồng trong Hồ Sơ
-         Nhân Sự). Không đổi route/logic — vẫn GET /api/hr-profile/reports, CẦN CẢ hrProfileManage LẪN
-         hrContractManage/admin (vẫn lộ số liệu lương qua mục tăng lương, cùng mức chặt GET .../history)
-         — xem hrpfCanViewReports() ở core.js, renderHrReportModule()/loadHrpfReports() ở module-hrprofile.js. -->
-    <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3">
-      <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày</label>
-        <input type="date" id="hrpfReportFrom" class="border p-1.5 rounded text-xs"></div>
-      <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày</label>
-        <input type="date" id="hrpfReportTo" class="border p-1.5 rounded text-xs"></div>
-      <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng HĐLĐ (lọc riêng danh sách hợp đồng)</label>
-        <select id="hrpfReportContractStatus" class="border p-1.5 rounded text-xs bg-white">
-          <option value="">— Tất cả —</option>
-          <option value="DRAFT">📝 Nháp</option>
-          <option value="ACTIVE">✅ Đang hiệu lực</option>
-          <option value="EXPIRED">⌛ Hết hạn</option>
-          <option value="TERMINATED">⛔ Đã chấm dứt</option>
-          <option value="SUPERSEDED">🔄 Đã thay thế</option>
-        </select>
-      </div>
-      <button type="button" data-op="loadHrpfReports" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem Báo Cáo</button>
+    <!-- Nhân Sự > Báo Cáo (9/2026, đợt 11/2026 mở rộng thành dashboard + 5 sub-tab theo yêu cầu người
+         dùng, đối chiếu file mẫu "Template_Quan_ly_ho_so_nhan_su.xlsx"). Quyền: vẫn CẦN CẢ hrProfileManage
+         LẪN hrContractManage (hoặc hrReportView) — xem canViewHrReports() ở routes/employeeProfile.js,
+         hrpfCanViewReports() ở core.js. renderHrReportModule()/setHrpfReportSubTab() ở module-hrprofile.js. -->
+    <div class="flex flex-wrap gap-1.5 bg-white border rounded-lg p-2">
+      <button type="button" id="btnHrpfReportSubOverview" data-op="setHrpfReportSubTab" data-arg0="OVERVIEW" class="px-3 py-1 rounded text-xs font-bold">📊 Tổng Quan</button>
+      <button type="button" id="btnHrpfReportSubWeekly" data-op="setHrpfReportSubTab" data-arg0="WEEKLY" class="px-3 py-1 rounded text-xs font-bold">📅 Theo Tuần</button>
+      <button type="button" id="btnHrpfReportSubMonthly" data-op="setHrpfReportSubTab" data-arg0="MONTHLY" class="px-3 py-1 rounded text-xs font-bold">📆 Theo Tháng</button>
+      <button type="button" id="btnHrpfReportSubSalary" data-op="setHrpfReportSubTab" data-arg0="SALARY" class="px-3 py-1 rounded text-xs font-bold">💰 Điều Chỉnh Lương</button>
+      <button type="button" id="btnHrpfReportSubTransfers" data-op="setHrpfReportSubTab" data-arg0="TRANSFERS" class="px-3 py-1 rounded text-xs font-bold">🔀 Bổ Nhiệm/Điều Động</button>
+      <button type="button" id="btnHrpfReportSubDependents" data-op="setHrpfReportSubTab" data-arg0="DEPENDENTS" class="px-3 py-1 rounded text-xs font-bold">👨‍👩‍👧 Người Phụ Thuộc</button>
     </div>
-    <div id="hrpfReportBody" class="space-y-3"></div>
+
+    <!-- 📊 Tổng Quan — dashboard brief (11/2026) -->
+    <div id="hrpfReportSubOVERVIEW">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày</label>
+          <input type="date" id="hrpfReportFrom" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày</label>
+          <input type="date" id="hrpfReportTo" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng HĐLĐ (lọc riêng danh sách hợp đồng)</label>
+          <select id="hrpfReportContractStatus" class="border p-1.5 rounded text-xs bg-white">
+            <option value="">— Tất cả —</option>
+            <option value="DRAFT">📝 Nháp</option>
+            <option value="ACTIVE">✅ Đang hiệu lực</option>
+            <option value="EXPIRED">⌛ Hết hạn</option>
+            <option value="TERMINATED">⛔ Đã chấm dứt</option>
+            <option value="SUPERSEDED">🔄 Đã thay thế</option>
+          </select>
+        </div>
+        <button type="button" data-op="loadHrpfReports" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem Báo Cáo</button>
+      </div>
+      <div id="hrpfDashboardBody" class="mt-2"></div>
+      <div id="hrpfReportBody" class="space-y-3 mt-2"></div>
+    </div>
+
+    <!-- 📅 Theo Tuần (11/2026, đối chiếu mẫu Excel "Bao_cao_tuan") -->
+    <div id="hrpfReportSubWEEKLY" class="hidden">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đầu tuần (Thứ Hai)</label>
+          <input type="date" id="hrpfWeeklyStart" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Cuối tuần (Chủ Nhật)</label>
+          <input type="date" id="hrpfWeeklyEnd" class="border p-1.5 rounded text-xs"></div>
+        <button type="button" data-op="loadHrpfWeeklyReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem</button>
+        <button type="button" data-op="exportHrpfWeeklyReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
+      </div>
+      <div id="hrpfWeeklyBody" class="mt-2"></div>
+    </div>
+
+    <!-- 📆 Theo Tháng (11/2026, đối chiếu mẫu Excel "Bao_cao_thang") -->
+    <div id="hrpfReportSubMONTHLY" class="hidden">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tháng</label>
+          <input type="month" id="hrpfMonthlyMonth" class="border p-1.5 rounded text-xs"></div>
+        <button type="button" data-op="loadHrpfMonthlyReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem</button>
+        <button type="button" data-op="exportHrpfMonthlyReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
+      </div>
+      <div id="hrpfMonthlyBody" class="mt-2"></div>
+    </div>
+
+    <!-- 💰 Điều Chỉnh Lương (11/2026, đối chiếu mẫu Excel "DATA_DIEUCHINH_LUONG") -->
+    <div id="hrpfReportSubSALARY" class="hidden">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày hiệu lực</label>
+          <input type="date" id="hrpfSalaryFrom" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày hiệu lực</label>
+          <input type="date" id="hrpfSalaryTo" class="border p-1.5 rounded text-xs"></div>
+        <button type="button" data-op="loadHrpfSalaryHistory" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem</button>
+        <button type="button" data-op="exportHrpfSalaryHistory" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
+      </div>
+      <p class="text-[11px] text-gray-500 mt-1">ℹ️ Danh sách đúng dữ liệu đang có trong Hợp Đồng Lao Động (loại thay đổi + giá trị cũ/mới), không tách riêng từng khoản lương/phụ cấp.</p>
+      <div id="hrpfSalaryBody" class="mt-2"></div>
+    </div>
+
+    <!-- 🔀 Bổ Nhiệm/Điều Động (11/2026, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU THACH") -->
+    <div id="hrpfReportSubTRANSFERS" class="hidden">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Từ ngày điều chuyển</label>
+          <input type="date" id="hrpfTransferFrom" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Đến ngày điều chuyển</label>
+          <input type="date" id="hrpfTransferTo" class="border p-1.5 rounded text-xs"></div>
+        <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Loại thao tác</label>
+          <select id="hrpfTransferType" class="border p-1.5 rounded text-xs bg-white">
+            <option value="">— Tất cả —</option>
+            <option value="APPOINTMENT">Bổ nhiệm</option>
+            <option value="DISMISSAL">Miễn nhiệm</option>
+            <option value="TRANSFER">Điều động</option>
+            <option value="TRANSFER_DISMISSAL">Điều động & Miễn nhiệm</option>
+            <option value="TRANSFER_APPOINTMENT">Điều động & Bổ nhiệm</option>
+          </select>
+        </div>
+        <button type="button" data-op="loadHrpfTransfersReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem</button>
+        <button type="button" data-op="exportHrpfTransfersReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
+      </div>
+      <div id="hrpfTransfersBody" class="mt-2"></div>
+    </div>
+
+    <!-- 👨‍👩‍👧 Người Phụ Thuộc (11/2026, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC") -->
+    <div id="hrpfReportSubDEPENDENTS" class="hidden">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <button type="button" data-op="loadHrpfDependentsReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem</button>
+        <button type="button" data-op="exportHrpfDependentsReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
+      </div>
+      <div id="hrpfDependentsBody" class="mt-2"></div>
+    </div>

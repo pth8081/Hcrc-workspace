@@ -553,6 +553,109 @@ router.get('/reports', hrReportsRateLimiter, async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports'); }
 });
 
+// canViewHrReports() — RÚT GỌN dùng chung cho 6 route báo cáo mới dưới đây (dashboard/tuần/tháng/lương/
+// điều động/phụ thuộc), CÙNG combo quyền y hệt GET /reports ở trên (hrProfileManage+hrContractManage
+// HOẶC hrReportView) — không tạo lớp quyền mới, không nới lỏng hơn route /reports gốc.
+function canViewHrReports(user) {
+  return (employeeProfile.canManageProfiles(user) && canManageContracts(user)) || !!user?.perms?.hrReportView;
+}
+
+// GET /api/hr-profile/reports/dashboard — tổng quan brief (11/2026, theo yêu cầu người dùng "1 phần
+// dạng dashboard... lấy thông tin brief, còn chi tiết thì xuất Excel"). KHÔNG lặp lại Báo Cáo Định Biên
+// (đã có riêng ở Cơ Cấu Tổ Chức) — chỉ số liệu thuộc phạm vi Nhân Sự.
+router.get('/reports/dashboard', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const [profiles, contracts, hrProcesses, storeTypes] = await Promise.all([
+      getAppDataValue('employeeProfiles').then(v => v || []),
+      getAllForCollection('laborContracts'),
+      getAllForCollection('hrProcesses'),
+      getAppDataValue('storeTypes').then(v => v || {})
+    ]);
+    res.json(employeeProfile.computeHrDashboardSummary(profiles, contracts, hrProcesses, storeTypes));
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/dashboard'); }
+});
+
+// GET /api/hr-profile/reports/monthly?month=YYYY-MM — đối chiếu mẫu Excel "Bao_cao_thang" (11/2026).
+router.get('/reports/monthly', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const month = req.query?.month ? String(req.query.month).trim() : '';
+    const [profiles, contracts, storeTypes] = await Promise.all([
+      getAppDataValue('employeeProfiles').then(v => v || []),
+      getAllForCollection('laborContracts'),
+      getAppDataValue('storeTypes').then(v => v || {})
+    ]);
+    const result = employeeProfile.computeMonthlyHrReport(profiles, contracts, { month, storeTypes });
+    logHrProfileAction(req, 'VIEW_REPORT', '', `Xem Báo Cáo Nhân Sự theo tháng (${month || 'tất cả'})`);
+    res.json(result);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/monthly'); }
+});
+
+// GET /api/hr-profile/reports/weekly?weekStart=&weekEnd=&yearStart= — đối chiếu mẫu Excel
+// "Bao_cao_tuan" (11/2026). yearStart tuỳ chọn (mặc định 01/01 cùng năm weekStart, xem
+// computeWeeklyHeadcountFlow()).
+router.get('/reports/weekly', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const weekStart = req.query?.weekStart ? String(req.query.weekStart).trim() : '';
+    const weekEnd = req.query?.weekEnd ? String(req.query.weekEnd).trim() : '';
+    if (!weekStart || !weekEnd) return res.status(400).json({ error: 'Thiếu weekStart/weekEnd' });
+    const yearStart = req.query?.yearStart ? String(req.query.yearStart).trim() : '';
+    const [profiles, contracts, storeTypes] = await Promise.all([
+      getAppDataValue('employeeProfiles').then(v => v || []),
+      getAllForCollection('laborContracts'),
+      getAppDataValue('storeTypes').then(v => v || {})
+    ]);
+    const result = employeeProfile.computeWeeklyHeadcountFlow(profiles, contracts, { weekStart, weekEnd, yearStart, storeTypes });
+    logHrProfileAction(req, 'VIEW_REPORT', '', `Xem Báo Cáo Nhân Sự theo tuần (${weekStart} - ${weekEnd})`);
+    res.json(result);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/weekly'); }
+});
+
+// GET /api/hr-profile/reports/salary-history?from=&to= — đối chiếu mẫu Excel "DATA_DIEUCHINH_LUONG"
+// (11/2026). Xem chú thích giới hạn dữ liệu ở computeSalaryAdjustmentHistory().
+router.get('/reports/salary-history', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const from = req.query?.from ? String(req.query.from).trim() : '';
+    const to = req.query?.to ? String(req.query.to).trim() : '';
+    const [profiles, contracts] = await Promise.all([
+      getAppDataValue('employeeProfiles').then(v => v || []),
+      getAllForCollection('laborContracts')
+    ]);
+    const result = employeeProfile.computeSalaryAdjustmentHistory(profiles, contracts, { from, to });
+    logHrProfileAction(req, 'VIEW_REPORT', '', `Xem Lịch Sử Điều Chỉnh Lương (${from || '...'} - ${to || '...'})`);
+    res.json(result);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/salary-history'); }
+});
+
+// GET /api/hr-profile/reports/transfers?from=&to=&type= — đối chiếu mẫu Excel
+// "DATA_DIEUCHUYEN&THU THACH" (11/2026).
+router.get('/reports/transfers', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const from = req.query?.from ? String(req.query.from).trim() : '';
+    const to = req.query?.to ? String(req.query.to).trim() : '';
+    const type = req.query?.type ? String(req.query.type).trim() : '';
+    const profiles = (await getAppDataValue('employeeProfiles')) || [];
+    const result = employeeProfile.computeTransfersReport(profiles, { from, to, type });
+    logHrProfileAction(req, 'VIEW_REPORT', '', `Xem Báo Cáo Bổ Nhiệm/Điều Động (${from || '...'} - ${to || '...'})`);
+    res.json(result);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/transfers'); }
+});
+
+// GET /api/hr-profile/reports/dependents — đối chiếu mẫu Excel "DATA NGUOI PHU THUOC" (11/2026).
+router.get('/reports/dependents', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const profiles = (await getAppDataValue('employeeProfiles')) || [];
+    const result = employeeProfile.computeDependentsReport(profiles);
+    logHrProfileAction(req, 'VIEW_REPORT', '', 'Xem Báo Cáo Người Phụ Thuộc');
+    res.json(result);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/dependents'); }
+});
+
 // GET /api/hr-profile/by-code/:employeeCode — HR/admin (đủ) hoặc quản lý trực tiếp (giới hạn, xem
 // getProfileForViewer()). Không cho tra cứu tự do — trả 404 luôn nếu không đủ quyền (không phân biệt
 // "hồ sơ không tồn tại" với "không có quyền xem" để tránh dò quét employeeCode).

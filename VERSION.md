@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**25.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.75 (2026-11): Báo Cáo Nhân Sự — dashboard + 5 báo cáo mới + Bổ Nhiệm/Điều Động
+
+Đối chiếu file mẫu quản lý thủ công của khối Nhân Sự (`Template_Quan_ly_ho_so_nhan_su.xlsx`, 11 sheet),
+theo yêu cầu người dùng: giữ nguyên báo cáo đã có, bổ sung đúng phần chưa có — không trùng việc với
+Báo Cáo Định Biên (Cơ Cấu Tổ Chức) hay Báo Cáo Nhân Sự cơ bản đã tồn tại từ trước.
+
+- **Nhân Sự → 📊 Báo Cáo** nay có **6 sub-tab**: 📊 Tổng Quan (dashboard brief 8 chỉ số + khối lọc/bảng
+  cũ), 📅 Theo Tuần, 📆 Theo Tháng, 💰 Điều Chỉnh Lương, 🔀 Bổ Nhiệm/Điều Động, 👨‍👩‍👧 Người Phụ Thuộc.
+  5 báo cáo chi tiết có nút "📤 Xuất Excel" riêng (dùng chung `POST /api/admin/export-xlsx`, không viết
+  route xuất mới).
+- **6 route JSON mới** (`GET /api/hr-profile/reports/dashboard|monthly|weekly|salary-history|transfers|
+  dependents`) — chỉ đọc `employeeProfiles`/`laborContracts`/`hrProcesses`/`storeTypes` có sẵn, tính lại
+  mỗi lần mở, không lưu gì thêm. Gác quyền giống route `/reports` gốc: cần cả "Quản Lý Hồ Sơ Nhân Sự" +
+  "Quản Lý Hợp Đồng Lao Động" (hoặc quyền sẵn có `hrReportView` — không tạo quyền mới).
+- **Hồ Sơ Nhân Sự**: khối "🔀 Bổ Nhiệm/Miễn Nhiệm/Điều Động" mới (`profile.transfers[]`, cùng khuôn khối
+  Kỷ luật đã có — chỉ HR thêm/sửa, field nhạy cảm, không hiện ở Hồ Sơ Của Tôi) — 5 loại thao tác (Bổ
+  nhiệm/Miễn nhiệm/Điều động/Điều động & Miễn nhiệm/Điều động & Bổ nhiệm) + theo dõi riêng thời gian thử
+  thách, trạng thái tự suy ra (Đang thử thách/Đã xác nhận/Đã huỷ).
+- Test mới: `server/tests/test-hr-reports-weekly-monthly-transfers.js` (35 kịch bản — validate
+  `transfers[]`, 6 hàm compute thuần, 6 route HTTP + gác quyền). Toàn bộ test HR liên quan (`test-hr-
+  profile*.js`) đã chạy lại, không có regression (trừ 1 lỗi test pre-existing không liên quan, đã ghi
+  nhận từ trước).
+- Không đổi `schema.sql`/biến môi trường/dependency nào — toàn bộ dữ liệu vẫn đọc từ AppData JSON đã có.
 
 ## v25.74 (2026-10): Văn Phòng Tổng Hợp (Mua Bán/Sửa Chữa) — Tệp Đính Kèm Đề Xuất (tuỳ chọn, nhiều tệp)
 

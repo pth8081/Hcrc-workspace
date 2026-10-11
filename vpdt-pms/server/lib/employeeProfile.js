@@ -68,6 +68,17 @@ const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly h�
 // appData.nationalIdIssuePlaces, admin tự sửa qua Quản Lý Danh Mục, xem defaults.js).
 const CURRENT_WORK_STATUS_DETAILS = new Set(['Hưu trí', 'HĐ thứ 2', 'Không lương', 'Nghỉ ốm dài ngày', 'Nghỉ thai sản', 'Khác']);
 const NATIONAL_ID_ISSUE_PLACES = new Set(['Bộ Công An', 'Cục cảnh sát QLHC về TTXH', 'Cục cảnh sát ĐKQL cư trú và DLQG về dân cư']);
+// TRANSFER_TYPES/TRANSFER_STATUSES (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel
+// "DATA_DIEUCHUYEN&THU THACH" — "Danh Sách Theo Dõi Bổ Nhiệm/Điều Động CB") — mỗi dòng transfers[] là 1
+// lần HR ghi nhận bổ nhiệm/miễn nhiệm/điều động, kèm theo dõi thời gian thử thách (nếu có) riêng với thời
+// gian điều chuyển. 5 loại đúng theo chú giải ở mẫu Excel gốc (cột P, dòng 1-4 + nhãn cột chính dòng 5).
+const TRANSFER_TYPES = new Set(['APPOINTMENT', 'DISMISSAL', 'TRANSFER', 'TRANSFER_DISMISSAL', 'TRANSFER_APPOINTMENT']);
+const TRANSFER_TYPE_LABELS = {
+  APPOINTMENT: 'Bổ nhiệm', DISMISSAL: 'Miễn nhiệm', TRANSFER: 'Điều động',
+  TRANSFER_DISMISSAL: 'Điều động & Miễn nhiệm', TRANSFER_APPOINTMENT: 'Điều động & Bổ nhiệm'
+};
+const TRANSFER_STATUSES = new Set(['IN_PROBATION', 'CONFIRMED', 'CANCELLED']);
+const TRANSFER_STATUS_LABELS = { IN_PROBATION: 'Đang thử thách', CONFIRMED: 'Đã xác nhận', CANCELLED: 'Đã huỷ' };
 // LEGAL_ENTITIES (10/2026 — đối chiếu cột "Pháp nhân" mẫu Excel 90 trường) — cùng khuôn GIÁ TRỊ MẶC
 // ĐỊNH như CURRENT_WORK_STATUS_DETAILS/NATIONAL_ID_ISSUE_PLACES ở trên — nguồn THẬT là
 // appData.legalEntities (admin tự sửa qua Quản Lý Danh Mục, xem defaults.js).
@@ -107,6 +118,9 @@ const SENSITIVE_FIELDS = [
   // Bao_cao_thang) — PHẢI nằm trong danh sách này để mặc định ẨN khỏi quản lý trực tiếp/chính chủ (xem
   // getProfileForViewer() bên dưới: field KHÔNG nằm trong SENSITIVE_FIELDS sẽ LUÔN hiện, không ẩn được).
   'disciplinaryActions',
+  // transfers (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU THACH") — cùng
+  // lý do/mức ẩn với disciplinaryActions ở trên (hồ sơ nhân sự nội bộ, HR-only).
+  'transfers',
   // emergencyContactAddress/specialLaborStatus/currentWorkStatusDetail*/hrNote (10/2026, đối chiếu file
   // Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — cùng nhóm riêng tư/nhạy cảm với emergencyContact*
   // đã có (địa chỉ) hoặc mang tính cá nhân/y tế-gia đình (lao động đặc biệt, nghỉ thai sản/ốm dài ngày)
@@ -141,6 +155,7 @@ const SENSITIVE_FIELD_LABELS = {
   nationality: 'Quốc tịch', maritalStatus: 'Tình trạng hôn nhân',
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
   disciplinaryActions: 'Kỷ luật',
+  transfers: 'Bổ nhiệm/Điều động',
   // 10/2026, đối chiếu file Excel "Template_Quan_ly_ho_so_nhan_su" (90 trường) — xem chú thích đầy đủ tại
   // SENSITIVE_FIELDS/HR_ONLY_EDITABLE_FIELDS ở trên cho lý do phân loại nhạy cảm/ai sửa được từng field.
   emergencyContactAddress: 'Địa chỉ người liên hệ khẩn cấp',
@@ -299,6 +314,9 @@ function defaultProfile(employeeCode) {
     // Bao_cao_thang) — HR-only (HR_ONLY_EDITABLE_FIELDS bên dưới, KHÔNG tự phục vụ), nằm trong
     // SENSITIVE_FIELDS nên mặc định ẨN khỏi quản lý trực tiếp/chính chủ tới khi admin chủ động mở.
     disciplinaryActions: [],
+    // transfers (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU THACH") —
+    // HR-only, cùng mức ẩn/hiện với disciplinaryActions ở trên (SENSITIVE_FIELDS).
+    transfers: [],
     // nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace (GĐ1, 10/2026 — đối chiếu file
     // Excel quản lý thủ công của Nhân Sự, theo yêu cầu người dùng) — tự phục vụ/HR sửa qua
     // SELF_EDITABLE_FIELDS/HR_ONLY_EDITABLE_FIELDS bên dưới, cùng khuôn field cá nhân/định danh đã có.
@@ -850,6 +868,8 @@ const HR_ONLY_EDITABLE_FIELDS = [
   'employmentType', 'workSchedule',
   // disciplinaryActions (10/2026) — chỉ HR mới ghi nhận kỷ luật, KHÔNG đưa vào SELF_EDITABLE_FIELDS.
   'disciplinaryActions',
+  // transfers (11/2026) — chỉ HR mới ghi nhận bổ nhiệm/miễn nhiệm/điều động, KHÔNG tự phục vụ.
+  'transfers',
   // 17 field MỚI (10/2026, đối chiếu file Excel "Template_Quan_ly_ho_so_nhan_su" — 90 trường, theo yêu
   // cầu người dùng) — toàn bộ dữ liệu HÀNH CHÍNH/nội bộ do HR ghi nhận, cùng nhóm nationalIdIssueDate/
   // deskLocation ở trên (KHÔNG đưa vào SELF_EDITABLE_FIELDS — nhân viên không tự khai các mục này).
@@ -876,7 +896,7 @@ const PROFILE_FIELD_LABELS = {
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
   socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
-  disciplinaryActions: 'Kỷ luật',
+  disciplinaryActions: 'Kỷ luật', transfers: 'Bổ nhiệm/Điều động',
   workSchedule: 'Thời gian làm việc', contactPhone: 'Điện thoại liên hệ',
   // 17 field MỚI (10/2026, mẫu Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — khớp ĐÚNG nhãn đã
   // dùng ở SENSITIVE_FIELD_LABELS cho 6 field trùng (emergencyContactAddress/specialLaborStatus/
@@ -940,6 +960,27 @@ function assertValidDisciplinaryAction(item, idx) {
   if (!item || typeof item !== 'object') throw new HttpError(400, `Kỷ luật dòng ${idx + 1} không hợp lệ`);
   if (!item.date || Number.isNaN(new Date(item.date).getTime())) throw new HttpError(400, `Kỷ luật dòng ${idx + 1}: thiếu Ngày hoặc không hợp lệ`);
   if (!item.type || !String(item.type).trim()) throw new HttpError(400, `Kỷ luật dòng ${idx + 1}: thiếu Loại kỷ luật`);
+}
+// assertValidTransfer() (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU
+// THACH") — mỗi dòng transfers[] là 1 lần HR ghi nhận bổ nhiệm/miễn nhiệm/điều động. Thời gian điều
+// chuyển (transferFromDate bắt buộc, transferToDate tuỳ chọn) TÁCH RIÊNG khỏi thời gian thử thách
+// (probationFromDate/probationToDate, cả 2 tuỳ chọn — không phải lần điều động nào cũng có thử thách,
+// VD Miễn nhiệm đơn thuần). status mặc định IN_PROBATION khi có khai thời gian thử thách, CONFIRMED khi
+// không khai gì thêm — client tự set, server chỉ validate thuộc đúng TRANSFER_STATUSES.
+function assertValidTransfer(item, idx) {
+  if (!item || typeof item !== 'object') throw new HttpError(400, `Bổ nhiệm/Điều động dòng ${idx + 1} không hợp lệ`);
+  if (!item.type || !TRANSFER_TYPES.has(item.type)) throw new HttpError(400, `Bổ nhiệm/Điều động dòng ${idx + 1}: thiếu hoặc sai Loại thao tác`);
+  if (!item.transferFromDate || Number.isNaN(new Date(item.transferFromDate).getTime())) {
+    throw new HttpError(400, `Bổ nhiệm/Điều động dòng ${idx + 1}: thiếu Thời gian điều chuyển (Từ ngày) hoặc không hợp lệ`);
+  }
+  for (const f of ['transferToDate', 'probationFromDate', 'probationToDate']) {
+    if (item[f] != null && String(item[f]).trim() !== '' && Number.isNaN(new Date(item[f]).getTime())) {
+      throw new HttpError(400, `Bổ nhiệm/Điều động dòng ${idx + 1}: ${f} không hợp lệ`);
+    }
+  }
+  if (item.status != null && item.status !== '' && !TRANSFER_STATUSES.has(item.status)) {
+    throw new HttpError(400, `Bổ nhiệm/Điều động dòng ${idx + 1}: Trạng thái không hợp lệ`);
+  }
 }
 function assertValidEducation(edu, idx) {
   if (!edu || typeof edu !== 'object') throw new HttpError(400, `Học vấn dòng ${idx + 1} không hợp lệ`);
@@ -1120,6 +1161,28 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         profile.disciplinaryActions = cleaned;
         break;
       }
+      case 'transfers': {
+        if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách Bổ nhiệm/Điều động không hợp lệ');
+        const cleaned = val.slice(0, 50).map((item, i) => {
+          assertValidTransfer(item, i);
+          return {
+            id: item.id || randomUUID(),
+            type: item.type,
+            oldUnit: item.oldUnit ? String(item.oldUnit).trim().slice(0, 200) : null,
+            newUnit: item.newUnit ? String(item.newUnit).trim().slice(0, 200) : null,
+            transferFromDate: item.transferFromDate,
+            transferToDate: item.transferToDate || null,
+            probationFromDate: item.probationFromDate || null,
+            probationToDate: item.probationToDate || null,
+            status: item.status && TRANSFER_STATUSES.has(item.status) ? item.status : (item.probationFromDate ? 'IN_PROBATION' : 'CONFIRMED'),
+            note: item.note ? String(item.note).trim().slice(0, 1000) : null,
+            decidedBy: actorUsername, decidedByName: actorName || actorUsername,
+            createdAt: item.createdAt || new Date().toISOString()
+          };
+        });
+        profile.transfers = cleaned;
+        break;
+      }
       default:
         profile[field] = val == null ? null : String(val).trim().slice(0, 300);
     }
@@ -1279,8 +1342,216 @@ function computeHrReportSummary(profiles, contracts, filters) {
   };
 }
 
+// classifyDept() (11/2026, dùng chung cho computeMonthlyHrReport()/computeWeeklyHeadcountFlow()) — phân
+// loại 1 tên "Đơn vị"/"Bộ phận" thuộc khối HO (Phòng Ban) hay STCH (Siêu Thị/Cửa Hàng), dựa trên danh mục
+// THẬT appData.storeTypes (map tên siêu thị/cửa hàng -> 'ST'|'CH'|'KHO', xem lib/checklist.js dùng cùng
+// map này cho dashboard VSATTP) — tên KHÔNG có trong map này mặc định coi là HO (Phòng Ban văn phòng).
+function classifyDept(dept, storeTypes) {
+  return (storeTypes && Object.prototype.hasOwnProperty.call(storeTypes, dept || '')) ? 'STCH' : 'HO';
+}
+
+// computeMonthlyHrReport() (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "Bao_cao_thang") — số
+// tuyển mới (hợp đồng renewalIndex=0, startDate trong tháng) + số ký tiếp/gia hạn (renewalIndex>0, cùng
+// điều kiện), gộp theo TỪNG PHÒNG BAN (contract.dept) và tổng HO/STCH. month: chuỗi "YYYY-MM".
+function computeMonthlyHrReport(profiles, contracts, options) {
+  const month = options?.month || '';
+  const storeTypes = options?.storeTypes || {};
+  const from = month ? `${month}-01` : '';
+  const to = month ? `${month}-31` : '';
+  const contractList = contracts || [];
+  const byDept = new Map();
+  function bump(dept, field) {
+    const key = dept || '(Chưa rõ)';
+    if (!byDept.has(key)) byDept.set(key, { dept: key, classification: classifyDept(key, storeTypes), newHires: 0, renewals: 0 });
+    byDept.get(key)[field]++;
+  }
+  let totalNewHires = 0, totalRenewals = 0;
+  for (const c of contractList) {
+    if (!isInDateRange(c.startDate, from, to)) continue;
+    if ((c.renewalIndex || 0) === 0) { bump(c.dept, 'newHires'); totalNewHires++; }
+    else { bump(c.dept, 'renewals'); totalRenewals++; }
+  }
+  const rows = Array.from(byDept.values()).sort((a, b) => a.dept.localeCompare(b.dept, 'vi'));
+  const hoRows = rows.filter(r => r.classification === 'HO');
+  const stchRows = rows.filter(r => r.classification === 'STCH');
+  const sumField = (list, f) => list.reduce((s, r) => s + r[f], 0);
+  return {
+    month, rows,
+    totals: { newHires: totalNewHires, renewals: totalRenewals },
+    byClassification: {
+      HO: { newHires: sumField(hoRows, 'newHires'), renewals: sumField(hoRows, 'renewals') },
+      STCH: { newHires: sumField(stchRows, 'newHires'), renewals: sumField(stchRows, 'renewals') }
+    }
+  };
+}
+
+// computeWeeklyHeadcountFlow() (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "Bao_cao_tuan") —
+// biến động nhân sự theo tuần (đầu tuần/tăng/giảm/cuối tuần/luỹ kế tăng-giảm từ đầu kỳ), gộp theo từng
+// phòng ban (dùng dept HIỆN TẠI trên hồ sơ — không truy ngược dept-tại-thời-điểm-đó, cùng giới hạn đã
+// chấp nhận ở computeHrReportSummary()/positionChanges). "Ngày vào" = startDate hợp đồng ĐẦU TIÊN
+// (renewalIndex=0) của nhân viên; "Ngày nghỉ" (xấp xỉ) = updatedAt của hồ sơ khi status chuyển INACTIVE
+// — CÙNG cách tính leavers đã dùng ở computeHrReportSummary(), không phát minh nguồn dữ liệu mới.
+// weekStart/weekEnd/yearStart: chuỗi "YYYY-MM-DD".
+function computeWeeklyHeadcountFlow(profiles, contracts, options) {
+  const weekStart = options?.weekStart || '';
+  const weekEnd = options?.weekEnd || '';
+  const yearStart = options?.yearStart || (weekStart ? `${weekStart.slice(0, 4)}-01-01` : '');
+  const storeTypes = options?.storeTypes || {};
+  const profileList = profiles || [];
+  const contractList = contracts || [];
+
+  const firstContractByCode = new Map();
+  for (const c of contractList) {
+    if ((c.renewalIndex || 0) !== 0 || !c.employeeCode) continue;
+    const existing = firstContractByCode.get(c.employeeCode);
+    if (!existing || (c.startDate || '') < (existing.startDate || '')) firstContractByCode.set(c.employeeCode, c);
+  }
+  const employees = profileList.map(p => {
+    const firstContract = firstContractByCode.get(p.employeeCode);
+    const joinDate = firstContract?.startDate || vnDateOnlyLocal(p.createdAt) || '';
+    const leaveDate = p.status === 'INACTIVE' ? vnDateOnlyLocal(p.updatedAt) : '';
+    return { dept: p.dept || '(Chưa rõ)', joinDate, leaveDate };
+  }).filter(e => e.joinDate);
+
+  const depts = new Set(employees.map(e => e.dept));
+  const dayBefore = weekStart ? new Date(new Date(weekStart).getTime() - 86400000).toISOString().slice(0, 10) : '';
+  function headcountAsOf(list, asOf) {
+    if (!asOf) return 0;
+    return list.filter(e => e.joinDate <= asOf && (!e.leaveDate || e.leaveDate > asOf)).length;
+  }
+  function joinedInRange(list, from, to) { return list.filter(e => isInDateRange(e.joinDate, from, to)).length; }
+  function leftInRange(list, from, to) { return list.filter(e => e.leaveDate && isInDateRange(e.leaveDate, from, to)).length; }
+
+  const rows = Array.from(depts).sort((a, b) => a.localeCompare(b, 'vi')).map(dept => {
+    const list = employees.filter(e => e.dept === dept);
+    return {
+      dept, classification: classifyDept(dept, storeTypes),
+      startOfWeek: headcountAsOf(list, dayBefore),
+      increased: joinedInRange(list, weekStart, weekEnd),
+      decreased: leftInRange(list, weekStart, weekEnd),
+      endOfWeek: headcountAsOf(list, weekEnd),
+      cumulativeIncreased: joinedInRange(list, yearStart, weekEnd),
+      cumulativeDecreased: leftInRange(list, yearStart, weekEnd)
+    };
+  });
+  const sumField = f => rows.reduce((s, r) => s + r[f], 0);
+  return {
+    weekStart, weekEnd, yearStart, rows,
+    totals: {
+      startOfWeek: sumField('startOfWeek'), increased: sumField('increased'), decreased: sumField('decreased'),
+      endOfWeek: sumField('endOfWeek'), cumulativeIncreased: sumField('cumulativeIncreased'), cumulativeDecreased: sumField('cumulativeDecreased')
+    }
+  };
+}
+
+// computeSalaryAdjustmentHistory() (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel
+// "DATA_DIEUCHINH_LUONG") — liệt kê TOÀN BỘ lần điều chỉnh lương (amendments[] loại lương, xem
+// isSalaryAmendmentType()) của mọi hợp đồng, kèm phòng ban tra từ hồ sơ. LƯU Ý: hệ thống ghi mỗi lần
+// điều chỉnh dạng "1 loại thay đổi + giá trị cũ/mới" (KHÔNG tách riêng từng khoản lương CB/thưởng/phụ
+// cấp như mẫu Excel gốc 26 cột) — hàm này xuất ĐÚNG dữ liệu đang có, không bịa thêm cột không có dữ liệu
+// thật (đã thống nhất với người dùng khi phân tích gap).
+function computeSalaryAdjustmentHistory(profiles, contracts, filters) {
+  const from = filters?.from || '';
+  const to = filters?.to || '';
+  const deptByCode = new Map((profiles || []).map(p => [p.employeeCode, p.dept || '']));
+  const rows = [];
+  for (const c of (contracts || [])) {
+    for (const a of (c.amendments || [])) {
+      if (!isSalaryAmendmentType(a.amendmentType)) continue;
+      if (!isInDateRange(a.effectiveDate, from, to)) continue;
+      rows.push({
+        employeeCode: c.employeeCode, dept: deptByCode.get(c.employeeCode) || '',
+        contractCode: c.code, amendmentType: a.amendmentType,
+        oldValue: a.oldValue, newValue: a.newValue,
+        applyDate: a.applyDate || '', effectiveDate: a.effectiveDate, note: a.note || ''
+      });
+    }
+  }
+  rows.sort((x, y) => (y.effectiveDate || '').localeCompare(x.effectiveDate || ''));
+  return { rows, total: rows.length };
+}
+
+// computeTransfersReport() (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel
+// "DATA_DIEUCHUYEN&THU THACH") — liệt kê TOÀN BỘ lần Bổ nhiệm/Miễn nhiệm/Điều động đã ghi nhận
+// (profile.transfers[], xem assertValidTransfer()) trên toàn công ty, lọc theo khoảng ngày điều chuyển
+// và (tuỳ chọn) đúng 1 loại thao tác.
+function computeTransfersReport(profiles, filters) {
+  const from = filters?.from || '';
+  const to = filters?.to || '';
+  const type = filters?.type || '';
+  const rows = [];
+  for (const p of (profiles || [])) {
+    for (const t of (p.transfers || [])) {
+      if (type && t.type !== type) continue;
+      if (!isInDateRange(t.transferFromDate, from, to)) continue;
+      rows.push({
+        employeeCode: p.employeeCode, dept: p.dept || '',
+        type: t.type, typeLabel: TRANSFER_TYPE_LABELS[t.type] || t.type,
+        oldUnit: t.oldUnit || '', newUnit: t.newUnit || '',
+        transferFromDate: t.transferFromDate, transferToDate: t.transferToDate || '',
+        probationFromDate: t.probationFromDate || '', probationToDate: t.probationToDate || '',
+        status: t.status, statusLabel: TRANSFER_STATUS_LABELS[t.status] || t.status, note: t.note || ''
+      });
+    }
+  }
+  rows.sort((x, y) => (y.transferFromDate || '').localeCompare(x.transferFromDate || ''));
+  return { rows, total: rows.length };
+}
+
+// computeDependentsReport() (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA NGUOI PHU
+// THUOC") — làm phẳng profile.dependents[] của TOÀN BỘ nhân viên thành 1 dòng/người phụ thuộc, kèm Mã
+// NV/Phòng Ban/MST người nộp thuế (chính nhân viên) để khớp đúng khuôn mẫu Excel gốc.
+function computeDependentsReport(profiles) {
+  const rows = [];
+  for (const p of (profiles || [])) {
+    for (const d of (p.dependents || [])) {
+      rows.push({
+        employeeCode: p.employeeCode, dept: p.dept || '', taxpayerTaxCode: p.taxCode || '',
+        fullName: d.fullName, dateOfBirth: d.dateOfBirth || '', taxCode: d.taxCode || '',
+        nationality: d.nationality || '', idNumber: d.idNumber || '', relationship: d.relationship,
+        deductionFromMonth: d.deductionFromMonth || '', deductionToMonth: d.deductionToMonth || '',
+        deductionCutMonth: d.deductionCutMonth || '', deductionAmount: d.deductionAmount,
+        declarationMonth: d.declarationMonth || ''
+      });
+    }
+  }
+  return { rows, total: rows.length };
+}
+
+// computeHrDashboardSummary() (11/2026, theo yêu cầu người dùng — "1 phần dạng dashboard... lấy những
+// thông tin brief") — số liệu tổng quan CHỈ thuộc phạm vi module Nhân Sự (không lặp lại Báo Cáo Định
+// Biên vốn đã có màn riêng ở Cơ Cấu Tổ Chức, xem lib/headcountReport.js — dashboard này chỉ dẫn link
+// sang đó ở client, không tính lại). ACTIVE_LIKE = ACTIVE hoặc ON_LEAVE (đang thật sự là nhân sự công ty).
+function computeHrDashboardSummary(profiles, contracts, hrProcesses, storeTypes) {
+  const profileList = profiles || [];
+  const activeLike = profileList.filter(p => p.status === 'ACTIVE' || p.status === 'ON_LEAVE');
+  const byClassification = { HO: 0, STCH: 0 };
+  for (const p of activeLike) byClassification[classifyDept(p.dept, storeTypes)]++;
+
+  const onboardingInProgress = (hrProcesses || []).filter(h => h.processType === 'ONBOARDING' && h.status === 'IN_PROGRESS').length;
+  const offboardingInProgress = (hrProcesses || []).filter(h => h.processType === 'OFFBOARDING' && h.status === 'IN_PROGRESS').length;
+
+  const today = todayISO();
+  const expiringSoonCount = (contracts || []).filter(c => c.status === 'ACTIVE' && c.endDate && c.endDate >= today && c.endDate <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)).length;
+
+  let transfersInProbation = 0;
+  for (const p of profileList) {
+    for (const t of (p.transfers || [])) { if (t.status === 'IN_PROBATION') transfersInProbation++; }
+  }
+
+  return {
+    totalActive: activeLike.length,
+    onLeave: activeLike.filter(p => p.status === 'ON_LEAVE').length,
+    byClassification,
+    onboardingInProgress, offboardingInProgress,
+    expiringSoonCount, transfersInProbation
+  };
+}
+
 module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  TRANSFER_TYPES, TRANSFER_TYPE_LABELS, TRANSFER_STATUSES, TRANSFER_STATUS_LABELS,
+  computeMonthlyHrReport, computeWeeklyHeadcountFlow, computeSalaryAdjustmentHistory, computeTransfersReport, computeDependentsReport, computeHrDashboardSummary,
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,

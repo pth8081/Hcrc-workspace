@@ -4796,7 +4796,65 @@ nghiêm ngặt như trước, không bị nới lỏng theo giá trị gõ trong
 
 ---
 
-## 6. Phân quyền (permission model)
+## 5h. Đợt cập nhật 11/2026: mở rộng Báo Cáo Nhân Sự thành dashboard + 5 báo
+cáo mới + theo dõi Bổ Nhiệm/Miễn Nhiệm/Điều Động
+
+Đối chiếu file mẫu quản lý thủ công của khối Nhân Sự (11/2026, theo yêu cầu
+người dùng): rà lại toàn bộ các báo cáo họ đang quản lý tay ngoài hệ thống,
+giữ nguyên báo cáo đã có (Báo Cáo Định Biên — mục 4.5.1, Báo Cáo Nhân Sự cơ
+bản — mục 4.5.5), bổ sung đúng phần CHƯA có.
+
+**Nhân Sự → 📊 Báo Cáo nay có 6 sub-tab** (trước đây chỉ là 1 màn lọc +
+bảng, không có dashboard):
+
+- **📊 Tổng Quan** — dashboard BRIEF (8 chỉ số, KHÔNG thay cho xem chi tiết
+  qua Excel): tổng nhân sự đang làm việc (gồm Đang nghỉ phép dài hạn) + số
+  đang nghỉ phép dài hạn + tách riêng theo khối **HO (Phòng Ban)**/**STCH
+  (Siêu Thị/Cửa Hàng)** (dựa đúng danh mục Loại Siêu Thị/Cửa Hàng đã có, tên
+  đơn vị không khớp danh mục mặc định coi là HO) + số Onboarding/Offboarding
+  đang thực hiện + số hợp đồng sắp hết hạn (≤30 ngày) + số lượt Bổ Nhiệm/
+  Điều Động đang trong thời gian thử thách. Giữ nguyên khối lọc + bảng chi
+  tiết cũ (nhân sự vào làm/nghỉ việc, hợp đồng mới/gia hạn, tăng lương...)
+  ngay dưới dashboard, không bớt gì.
+- **📅 Theo Tuần** — biến động nhân sự theo từng tuần, gộp theo Phòng Ban:
+  Đầu tuần/Tăng/Giảm/Cuối tuần + luỹ kế Tăng/Giảm từ đầu năm tới cuối tuần
+  đó. Chọn "Đầu tuần"/"Cuối tuần" (Thứ Hai/Chủ Nhật). "Ngày vào" lấy từ hợp
+  đồng ĐẦU TIÊN của nhân viên; "Ngày nghỉ" lấy từ thời điểm hồ sơ chuyển
+  "Đã nghỉ việc" (xấp xỉ, cùng cách tính Báo Cáo Nhân Sự cơ bản).
+- **📆 Theo Tháng** — số tuyển mới + số ký tiếp/gia hạn hợp đồng trong 1
+  tháng, gộp theo từng Phòng Ban VÀ tổng theo khối HO/STCH.
+- **💰 Điều Chỉnh Lương** — toàn bộ lần tăng/giảm lương đã ghi nhận qua Phụ
+  Lục Hợp Đồng (lọc theo Ngày hiệu lực). **Lưu ý**: hệ thống ghi mỗi lần
+  điều chỉnh dạng "1 loại thay đổi + giá trị cũ/mới" — KHÔNG tách riêng
+  từng khoản lương CB/thưởng/phụ cấp như file Excel quản lý tay cũ (đã xác
+  nhận với người dùng lúc phân tích — không bịa thêm cột không có dữ liệu
+  thật).
+- **🔀 Bổ Nhiệm/Điều Động** — xem mục mới ngay dưới (Hồ Sơ Nhân Sự).
+- **👨‍👩‍👧 Người Phụ Thuộc** — làm phẳng toàn bộ người phụ thuộc của mọi
+  nhân viên thành 1 dòng/người, kèm Mã NV + Phòng Ban + MST người nộp thuế.
+
+Cả 5 báo cáo mới đều có nút **"📤 Xuất Excel"** riêng (dùng route xuất Excel
+DÙNG CHUNG `POST /api/admin/export-xlsx`, không viết route mới) — xem đầy đủ
+field ở Excel, màn Tổng Quan chỉ hiện số brief. Gác quyền **GIỐNG Y Báo Cáo
+Nhân Sự cơ bản** — cần cả "🗂️ Quản Lý Hồ Sơ Nhân Sự" **VÀ** "📝 Quản Lý Hợp
+Đồng Lao Động" (hoặc quyền mới **"📊 Xem Báo Cáo Nhân Sự"** — `hrReportView`,
+dành cho người chỉ cần xem/xuất báo cáo, không cần sửa hồ sơ/hợp đồng).
+
+**Hồ Sơ Nhân Sự — khối "🔀 Bổ Nhiệm/Miễn Nhiệm/Điều Động" mới** (chỉ HR, tab
+"📋 Quản Lý Hồ Sơ", cùng khuôn khối "⚠️ Kỷ luật" đã có — field nhạy cảm, mặc
+định ẨN với quản lý trực tiếp, KHÔNG hiện ở "👤 Hồ Sơ Của Tôi"):
+
+- Mỗi lượt ghi: **Loại thao tác** (Bổ nhiệm / Miễn nhiệm / Điều động / Điều
+  động & Miễn nhiệm / Điều động & Bổ nhiệm), Đơn vị cũ/mới, Thời gian điều
+  chuyển (Từ ngày — bắt buộc, Đến ngày — tuỳ chọn), **Thời gian thử thách**
+  (Từ ngày/Đến ngày — tuỳ chọn), Ghi chú.
+- **Trạng thái** tự suy ra: có khai Thời gian thử thách → "Đang thử thách";
+  không khai → "Đã xác nhận" ngay; HR có thể tự đổi tay sang "Đã huỷ".
+- Không tạo danh mục riêng cho 5 loại thao tác (danh sách cố định nhỏ, đúng
+  khuôn mục chú giải sẵn có trong file Excel mẫu — không cần màn quản lý
+  danh mục cho việc này).
+
+
 
 **Hệ Thống → Quản Trị → Phân Quyền** — cây phân quyền chia thành các **khối**
 đánh số, mỗi khối là 1 nhóm quyền gấp gọn được (có badge tóm tắt "đã cấp
