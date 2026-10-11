@@ -124,6 +124,35 @@ async function main() {
       assertEqual(body.profile.lastWorkingDate, '2024-12-30');
       assertEqual(body.profile.managerManagerUsername, 'gd01');
     });
+
+    // LỖI ĐÃ VÁ (11/2026, rà soát theo yêu cầu người dùng sau đợt thêm field transfers/báo cáo mới):
+    // nhân viên KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào tự gọi THẲNG GET /by-code hoặc /by-username với
+    // CHÍNH mã/username của mình (DevTools/curl, không qua UI nào — UI tự xem luôn đi GET /api/hr-profile/me)
+    // trước đây nhận lại NGUYÊN hồ sơ không lọc field nhạy cảm nào (viewMode='FULL' sai), bỏ qua hoàn toàn
+    // cấu hình "Trường Xem Của Tôi" (hrProfileSelfVisibleFields) mà GET /me đang tôn trọng đúng — xem
+    // getProfileForViewer()/lib/employeeProfile.js.
+    await run.run('GET /by-code tự gọi CHÍNH MÌNH (không quyền HR nào, chưa mở selfVisibleFields) -> field nhạy cảm PHẢI null, viewMode=SELF (không còn FULL sai)', async () => {
+      const { status, body } = await callApi(port, 'GET', '/api/hr-profile/by-code/NVWF01', 'nv001emp');
+      assertEqual(status, 200);
+      assertEqual(body.viewMode, 'SELF', 'XÁC NHẬN LỖI ĐÃ VÁ: không còn báo FULL cho tự xem chưa mở field nào');
+      assertEqual(body.profile.dateOfBirth, undefined, 'XÁC NHẬN LỖI ĐÃ VÁ: field nhạy cảm (SENSITIVE_FIELDS) không còn lộ nguyên vẹn qua /by-code tự gọi');
+      assertEqual(body.profile.nationalId, undefined);
+      assertEqual(body.profile.resignationReason, null, 'wiredFields cũng phải lọc đúng theo selfVisibleFields (KHÔNG dùng nhầm managerVisibleFields)');
+    });
+
+    await run.run('GET /by-username tự gọi CHÍNH MÌNH -> cùng mức lọc như /me (đối xứng, đúng selfVisibleFields đã cấu hình)', async () => {
+      const put = await fetch(`http://127.0.0.1:${port}/api/hr-profile/self-field-config`, {
+        method: 'PUT', headers: { 'x-demo-user': 'admin', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibleFields: ['dateOfBirth'] })
+      });
+      assertEqual(put.status, 200);
+
+      const { body } = await callApi(port, 'GET', '/api/hr-profile/by-username/nv001emp', 'nv001emp');
+      assertEqual(body.viewMode, 'SELF');
+      assertEqual(Object.prototype.hasOwnProperty.call(body.profile, 'dateOfBirth'), true, 'field vừa mở qua self-field-config phải CÓ MẶT trong response (không còn bị xoá key)');
+      assertEqual(body.profile.dateOfBirth, null, 'hồ sơ gốc chưa có dữ liệu ngày sinh -> đúng giá trị null (không phải chuỗi/ẩn)');
+      assertEqual(body.profile.nationalId, undefined, 'field CHƯA mở vẫn tiếp tục bị ẩn sau khi mở field khác');
+    });
   } finally {
     server.close();
   }

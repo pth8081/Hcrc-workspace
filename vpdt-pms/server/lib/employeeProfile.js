@@ -655,14 +655,22 @@ function reactivateForRehire(list, employeeCode, newStartDate, actorUsername, ac
 // hrpfCanManageTab) — cùng lớp lỗ hổng đã vá cho Công & Phép (canSeeHacManageAll). Admin tắt
 // tab "Hồ Sơ Nhân Sự" cho 1 user nhưng còn giữ 1 trong 3 quyền trên thì user đó gọi thẳng
 // GET /api/data vẫn đọc được TOÀN BỘ hồ sơ nhân sự công ty dù menu đã ẩn.
-function canViewFullProfile(user, profile) {
+// hasAdminProfileAccess() (11/2026, LỖI ĐÃ VÁ — rà soát theo yêu cầu người dùng sau đợt thêm field
+// transfers/báo cáo mới): ĐÚNG phần "admin/HR thật" của canViewFullProfile() ở dưới, KHÔNG gồm nhánh tự
+// xem chính mình — tách riêng vì canViewFullProfile() còn dùng CHO MỤC ĐÍCH KHÁC (fileAuthz.js — ai tải
+// được file đính kèm hồ sơ, ở đó self access là ĐÚNG ý — chính chủ tải được file CCCD/bằng cấp của mình),
+// còn getProfileForViewer() dưới đây cần phân biệt RÕ 2 trường hợp vì tự xem chính mình phải đi qua lớp
+// lọc selfVisibleFields (GET /me), không phải trả nguyên profile như admin thật.
+function hasAdminProfileAccess(user, profile) {
   return !!(((user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit)
       && hasModuleAccessServer(user, 'hrProfileManageTab'))
-    || (profile.username && user.username === profile.username)
     // Ảnh 2 (9/2026): người chỉ có hrOnboardingManage (KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn cần mở
     // được ĐÚNG hồ sơ đang ở hàng đợi (PENDING) để bấm "Xác Nhận" -> sửa tiếp thông tin ứng viên — KHÔNG
     // mở rộng thêm cho hồ sơ đã tốt nghiệp khỏi hàng đợi (onboardingQueueStatus null) hay đã CANCELLED.
     || (profile.onboardingQueueStatus === 'PENDING' && !!user?.perms?.hrOnboardingManage));
+}
+function canViewFullProfile(user, profile) {
+  return !!(hasAdminProfileAccess(user, profile) || (profile.username && user.username === profile.username));
 }
 function canViewLimitedProfile(user, profile, allUsers) {
   if (canViewFullProfile(user, profile)) return true;
@@ -773,9 +781,21 @@ function resolveProfileDisplayName(profile, users, hrProcesses) {
 // "quản lý trực tiếp xem giới hạn" (xem SENSITIVE_FIELDS ở trên). managerVisibleFields: mảng field
 // (subset SENSITIVE_FIELDS) admin đã cấu hình MỞ THÊM cho quản lý trực tiếp (9/2026) — mặc định [] (giữ
 // nguyên hành vi cũ: ẩn HẾT field nhạy cảm) nếu caller không truyền/chưa cấu hình gì.
-function getProfileForViewer(profile, viewer, allUsers, managerVisibleFields) {
+// LỖI ĐÃ VÁ (11/2026, rà soát theo yêu cầu người dùng): TRƯỚC ĐÂY dùng canViewFullProfile() ở đây — nhánh
+// "tự xem chính mình" của hàm đó khiến GET /by-code/:employeeCode và /by-username/:username (gọi thẳng,
+// KHÔNG qua UI nào — UI tự xem luôn đi GET /api/hr-profile/me) trả NGUYÊN hồ sơ không lọc gì cho chính
+// chủ, kể cả khi KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào — bỏ qua hoàn toàn lớp lọc selfVisibleFields
+// ("Trường Xem Của Tôi", mặc định ẨN hết field nhạy cảm) mà GET /me đang tôn trọng đúng. Nhân viên tự gọi
+// thẳng 2 route trên (DevTools/curl, biết sẵn employeeCode/username của chính mình) vẫn xem được TOÀN BỘ
+// field nhạy cảm (transfers, disciplinaryActions, CCCD, ngân hàng...) dù admin chưa mở field nào — giờ
+// tách riêng: chỉ admin/HR THẬT (hasAdminProfileAccess()) mới nhận nguyên profile; tự xem đi qua ĐÚNG
+// cùng 1 lớp lọc selfVisibleFields như GET /me (stripSelfHiddenFields()).
+function getProfileForViewer(profile, viewer, allUsers, managerVisibleFields, selfVisibleFields) {
   if (!profile) return null;
-  if (canViewFullProfile(viewer, profile)) return profile;
+  if (hasAdminProfileAccess(viewer, profile)) return profile;
+  if (profile.username && viewer?.username === profile.username) {
+    return stripSelfHiddenFields(profile, selfVisibleFields);
+  }
   if (canViewLimitedProfile(viewer, profile, allUsers)) {
     const visible = new Set(sanitizeManagerVisibleFields(managerVisibleFields));
     const limited = Object.assign({}, profile);
@@ -845,9 +865,13 @@ const WIRED_SENSITIVE_FIELDS = ['khoiBan', 'managerManagerUsername', 'managerMan
 // không hiển thị). Hàm này áp lại ĐÚNG luật ẩn đó cho nhóm field tính toán riêng (không nằm sẵn trên
 // object `profile` nên getProfileForViewer() không tự lọc được) — route gọi SAU resolveWiredReadOnlyFields(),
 // TRƯỚC khi merge vào response.
-function filterWiredFieldsForViewer(wiredFields, viewMode, managerVisibleFields) {
+// selfVisibleFields (11/2026, cùng đợt vá getProfileForViewer() ở trên) — viewMode='SELF' (tự xem chính
+// mình, KHÔNG có quyền admin/HR nào) giờ áp đúng luật selfVisibleFields ("Trường Xem Của Tôi"), KHÔNG còn
+// dùng nhầm managerVisibleFields (2 cấu hình độc lập, admin có thể mở khác nhau cho quản lý trực tiếp và
+// cho chính chủ) — tham số tuỳ chọn, bỏ qua thì coi như [] (ẩn hết, an toàn mặc định).
+function filterWiredFieldsForViewer(wiredFields, viewMode, managerVisibleFields, selfVisibleFields) {
   if (viewMode === 'FULL') return wiredFields;
-  const visible = new Set(sanitizeManagerVisibleFields(managerVisibleFields));
+  const visible = new Set(viewMode === 'SELF' ? sanitizeSelfVisibleFields(selfVisibleFields) : sanitizeManagerVisibleFields(managerVisibleFields));
   const result = Object.assign({}, wiredFields);
   WIRED_SENSITIVE_FIELDS.forEach(f => { if (!visible.has(f)) result[f] = null; });
   return result;
@@ -1558,7 +1582,7 @@ module.exports = {
   findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
-  canViewFullProfile, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
+  canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
   canCreateProfiles, canEditProfiles, canFullViewProfiles,
   applyProfileEdit, applyPositionAssignment, assertValidManualStatusTransition, resolveProfileDisplayName,
   computeHrReportSummary, computeTenureYears

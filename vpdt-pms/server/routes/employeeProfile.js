@@ -665,9 +665,14 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     const list = appData.employeeProfiles || [];
     const profile = employeeProfile.findProfile(list, req.params.employeeCode);
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
+    // LỖI ĐÃ VÁ (11/2026, rà soát theo yêu cầu người dùng) — truyền thêm hrProfileSelfVisibleFields để
+    // getProfileForViewer() lọc ĐÚNG field nhạy cảm khi chính chủ tự gọi thẳng route này (trước đây trả
+    // nguyên hồ sơ không lọc gì, bỏ qua hẳn cấu hình "Trường Xem Của Tôi" — xem chú thích đầy đủ tại
+    // getProfileForViewer()/lib/employeeProfile.js).
+    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
+    const isSelf = !!(profile.username && req.freshUser.username === profile.username);
+    const viewMode = employeeProfile.hasAdminProfileAccess(req.freshUser, profile) ? 'FULL' : (isSelf ? 'SELF' : 'LIMITED');
     // wiredFields (10/2026, báo cáo rà soát mẫu Excel mới) — 8 cột đọc LIVE từ users/hrProcesses, xem
     // chú thích đầy đủ tại resolveWiredReadOnlyFields() (lib/employeeProfile.js). CHỈ-XEM, không qua
     // applyProfileEdit() — gộp thẳng vào response để client hiển thị cùng hồ sơ.
@@ -676,7 +681,7 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     // bất kể viewMode — xem chú thích đầy đủ tại lib/employeeProfile.js).
     const wiredFields = employeeProfile.filterWiredFieldsForViewer(
       employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []),
-      viewMode, appData.hrProfileManagerVisibleFields
+      viewMode, appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields
     );
     const deptCode = await ensureDeptCode(profile.dept, appData.deptCodeMap);
     res.json({ profile: Object.assign({}, viewable, wiredFields, { deptCode }), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });
@@ -694,13 +699,15 @@ router.get('/by-username/:username', async (req, res) => {
     const list = appData.employeeProfiles || [];
     const profile = employeeProfile.findProfileByUsername(list, req.params.username);
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields);
+    // LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở route /by-code phía trên.
+    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
-    const viewMode = employeeProfile.canViewFullProfile(req.freshUser, profile) ? 'FULL' : 'LIMITED';
+    const isSelf = !!(profile.username && req.freshUser.username === profile.username);
+    const viewMode = employeeProfile.hasAdminProfileAccess(req.freshUser, profile) ? 'FULL' : (isSelf ? 'SELF' : 'LIMITED');
     // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70) — xem chú thích đầy đủ ở route /by-code phía trên.
     const wiredFields = employeeProfile.filterWiredFieldsForViewer(
       employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []),
-      viewMode, appData.hrProfileManagerVisibleFields
+      viewMode, appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields
     );
     const deptCode = await ensureDeptCode(profile.dept, appData.deptCodeMap);
     res.json({ profile: Object.assign({}, viewable, wiredFields, { deptCode }), viewMode, managerVisibleFields: employeeProfile.sanitizeManagerVisibleFields(appData.hrProfileManagerVisibleFields) });

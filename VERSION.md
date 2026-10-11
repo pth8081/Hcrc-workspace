@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**25.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.76 (2026-11): Vá lỗ hổng tự xem hồ sơ qua API gọi thẳng (bỏ qua "Trường Xem Của Tôi")
+
+Theo yêu cầu người dùng rà soát lại toàn bộ module Nhân Sự sau đợt thêm báo cáo/Bổ Nhiệm-Điều Động
+(v25.75): tìm và vá 1 lỗ hổng nghiệp vụ, đồng thời xác nhận không có nút thao tác nào bị "treo".
+
+- **Lỗ hổng đã vá**: `GET /api/hr-profile/by-code/:employeeCode` và `GET /api/hr-profile/by-username/
+  :username` trước đây dùng `canViewFullProfile()` để quyết định có trả nguyên hồ sơ không — hàm này có
+  nhánh "tự xem chính mình" hợp lệ cho mục đích KHÁC (`lib/fileAuthz.js` — chính chủ tải file CCCD/bằng
+  cấp của mình), nhưng khi dùng lại ở đây khiến nhân viên KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào, tự gọi
+  thẳng 2 route trên (DevTools/curl, biết sẵn mã NV/username của mình — UI tự xem thật luôn đi qua
+  `GET /api/hr-profile/me`, không đi 2 route này) vẫn nhận lại TOÀN BỘ field nhạy cảm (ngày sinh, CCCD,
+  số BHXH, lương, transfers, kỷ luật...) bất kể cấu hình "🛠️ Trường Xem Của Tôi" (`hrProfileSelfVisibleFields`,
+  mặc định ẩn hết) đã mở field gì. Đã tách riêng `hasAdminProfileAccess()` (chỉ admin/HR thật, KHÔNG có
+  nhánh tự xem) và sửa `getProfileForViewer()` để tự xem đi qua ĐÚNG cùng 1 lớp lọc `stripSelfHiddenFields()`
+  như `GET /me` (thêm `viewMode: 'SELF'` mới, trước đây báo nhầm `'FULL'`); `filterWiredFieldsForViewer()`
+  cũng được sửa để lọc đúng `selfVisibleFields` cho trường hợp này (trước đây 6 field "wired" tính toán
+  không bị lọc gì khi tự xem). Không đổi hành vi `canViewFullProfile()`/`fileAuthz.js` (vẫn đúng, có test
+  `test-mucO-payroll-payment-hrprofile-bypass.js` xác nhận không regression).
+- **Rà soát nút thao tác**: xác nhận nút "✕ Xoá dòng" + lưu hồ sơ của khối "🔀 Bổ Nhiệm/Điều Động" mới
+  (thêm ở v25.75) hoạt động đúng — không nút nào bị chặn/treo.
+- Test mới: 2 kịch bản bổ sung vào `server/tests/test-hr-profile-wired-fields-route.js` (gọi HTTP thật,
+  tự xem chính mình chưa mở field nào → field nhạy cảm `null`/ẩn khoá; mở 1 field qua cấu hình → đúng
+  field đó hiện, phần còn lại vẫn ẩn). Toàn bộ test HR liên quan (10 file, ~192 kịch bản) đã chạy lại,
+  không có regression.
+- Không đổi `schema.sql`/biến môi trường/dependency nào.
 
 ## v25.75 (2026-11): Báo Cáo Nhân Sự — dashboard + 5 báo cáo mới + Bổ Nhiệm/Điều Động
 
