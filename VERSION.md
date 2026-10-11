@@ -1,8 +1,83 @@
 # Phiên bản hiện tại
 
-**25.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.72 (2026-10): Vá 5 lỗi Thấp còn lại đợt rà soát chuyên sâu v25.1→v25.70
+
+Tiếp tục đợt rà soát v25.71 (2 Cao + 4 Trung bình đã vá) — xử lý nốt 9 phát
+hiện mức Thấp theo đúng thứ tự, đo thật bằng cách gọi hàm/route thật +
+viết test xác nhận (bao gồm cả cách gây race/giả lập dữ liệu cũ) trước khi
+kết luận, không chỉ suy luận lý thuyết:
+
+1. *Colspan lệch ở 3 bảng rỗng* (Văn Bản Trình/Hợp Đồng/Mua Sắm) — **LỖI
+   THẬT, đã vá**: dòng "Không tìm thấy..." dùng `colspan` không khớp số cột
+   `<th>` thật trong fragment HTML (Hợp Đồng còn phải tính đúng cột "Thanh
+   Toán" chỉ hiện ở sub-tab MANAGE, không phải hằng số cố định).
+2. *Giả định thứ tự bước cứng khi chèn "Xác Nhận Kỹ Thuật"* — không phải
+   lỗi code mà là 1 giả định nghiệp vụ (chèn ngay sau bước 1) phụ thuộc cấu
+   hình quy trình admin tự đặt theo từng phòng ban — không có gì code kiểm
+   tra được là đúng/sai cho MỌI phòng ban, nêu lại với người dùng để xác
+   nhận có cần cấu hình khác không.
+3. *Edge-case "Quá Hạn Xử Lý" khi thiếu lịch sử bước trước* — xác nhận hành
+   vi rơi về `createdAt` khi không tìm thấy mốc APPROVED hợp lệ là THIẾT KẾ
+   CHỦ Ý (đã có test khẳng định rõ, thiên về cảnh báo dư còn hơn bỏ sót),
+   không phải lỗi.
+4. *Race hẹp khi import HĐLĐ hàng loạt (peek không khoá)* — **LỖI THẬT, đã
+   vá**. `POST /laborContracts/apply-import` và nhánh `overwrite` của
+   `apply-create-import` (`routes/records.js`) tìm hợp đồng ACTIVE theo
+   employeeCode bằng 1 lượt đọc KHÔNG khoá (`getAllForCollection`), rồi mới
+   khoá ghi theo `id` đã chụp được — nếu hợp đồng đó vừa bị đóng (TERMINATED/
+   SUPERSEDED) bởi 1 thao tác khác đúng lúc đó, bản sửa vẫn âm thầm áp lên
+   bản ghi không còn ACTIVE. Vá bằng cách xác nhận lại trạng thái NGAY
+   TRONG khoá (dữ liệu `item` ở đó luôn mới nhất) trước khi gọi
+   `applyManualEdit()`, trả lỗi rõ ràng nếu không còn khớp.
+5. *Lọc sai khi nhảy Hồ Sơ→Hợp Đồng nếu từng dán nhiều mã trước đó* — **LỖI
+   THẬT, đã vá**. Ô lọc `#hrcFilterEmployeeCode` có tính năng "dán nhiều mã
+   cùng lúc" (`data-multi-paste-search`, lưu mảng từ khoá vào
+   `el._multiKeywords`) — nút "↗️ Sửa ở Hợp Đồng Lao Động"
+   (`gotoHrpfContractModule()`) gán `.value` TRỰC TIẾP (không qua sự kiện
+   'input' thật) nên KHÔNG tự xoá `_multiKeywords` cũ, khiến bảng lọc nhầm
+   theo danh sách mã CŨ thay vì đúng 1 mã nhân viên vừa nhảy tới. Vá bằng
+   cách tự xoá `_multiKeywords` ngay trong hàm goto.
+6. *HĐLĐ DRAFT trùng khi chạy lại import batch* — **LỖI THẬT, đã vá**. Bước
+   xem trước (`parseCreateImportBuffer()`) chỉ cảnh báo khi employeeCode đã
+   có hợp đồng ACTIVE, bỏ sót trường hợp CHÍNH LẦN CHẠY TRƯỚC đã tạo 1 DRAFT
+   chưa kích hoạt — chạy lại cùng file với action='add' sẽ âm thầm tạo
+   THÊM 1 DRAFT trùng. Vá bằng cách chặn ở ĐÚNG route batch
+   (`apply-create-import`, nhánh `add`) khi employeeCode đã có DRAFT hoặc
+   ACTIVE — KHÔNG đụng route tạo tay đơn lẻ (`POST /api/create/laborContracts`),
+   nơi tạo 2 hợp đồng cho cùng nhân viên vẫn là hành vi được chủ ý cho phép
+   (xác nhận lại bằng `test-labor-contract-code-race.js` đã có từ trước).
+7. *So khớp Mã Nhân Viên không chuẩn hoá hoa/thường* — **LỖI THẬT, đã vá**.
+   employeeCode cho phép HR gõ tay (nhân viên cũ/tái tuyển), không bắt buộc
+   chữ hoa — nhưng `findProfile()`/`findActiveContractByEmployeeCode()`/
+   `findContractsByEmployeeCode()` so khớp `===` (case-sensitive) nên
+   "nv9001" gõ trong Excel không khớp được hồ sơ lưu "NV9001", báo nhầm
+   "không có trong Hồ Sơ Nhân Sự". Chuẩn hoá so khớp không phân biệt hoa/
+   thường ở cả 3 hàm (KHÔNG đổi giá trị gốc đã lưu) + đồng bộ lại các điểm
+   so khớp liên quan mới vá ở mục 4/6 (khoá theo employeeCode, chặn trùng
+   trong cùng batch) cho nhất quán.
+8. *1 dòng `toLocaleString` copy-paste thừa tham số* — **LỖI THẬT (vệ sinh
+   code), đã vá**. Màn xem trước báo cáo (`buildReportPreviewDocumentHTML()`,
+   `module-baocaoquantri-preview.js`) copy nguyên cụm options định dạng
+   NGÀY GIỜ sang gọi `filtered.length.toLocaleString(...)` — `filtered.length`
+   là số dòng, không phải ngày giờ, nên cụm options đó thừa hoàn toàn (xác
+   nhận `Number.prototype.toLocaleString()` âm thầm bỏ qua option lạ nên
+   KHÔNG đổi kết quả hiển thị — chỉ là lỗi vệ sinh code do copy-paste, dọn
+   cho đúng).
+
+**Pre-existing (không phải lỗi mới, không sửa trong đợt này):** chạy full
+regression 431 file test (loại 47 file demo/helper không phải test tự
+động), 406 pass / 25 fail — xác nhận LẠI bằng `git stash` rằng toàn bộ 25
+fail đều fail GIỐNG HỆT trên cây sạch (trước khi có các bản vá Thấp#4-8
+này), đa số do môi trường sandbox (không có SQL Server thật, thiếu secret
+TOTP/2FA, v.v.) chứ không phải lỗi code — không phải regression mới.
+Trong đó 2 file (`test-hr-profile-field-visibility.js`,
+`test-hr-profile-90field-ui.js`) đã biết từ trước (`#hrpfMeContainer`
+không bao giờ render), và `test-preview-workflow-buttons.js` cũng đã ghi
+nhận trước đó (modal state cũ) — không lặp lại chi tiết ở đây.
 
 ## v25.71 (2026-10): Vá 2 lỗi thật + xác nhận 2 lỗi giả đợt rà soát chuyên sâu v25.1→v25.70
 

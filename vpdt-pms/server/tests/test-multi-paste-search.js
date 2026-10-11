@@ -145,6 +145,53 @@ async function main() {
       assert(r.dbUsersUntouched, 'DB.users (dữ liệu gốc) không được bị tính năng tìm kiếm đụng vào/sửa đổi gì — đây chỉ là bộ lọc HIỂN THỊ');
     });
 
+    // ===== Phần D: Thấp#5 (đợt rà soát 10/2026) — nhảy Hồ Sơ→Hợp Đồng sau khi đã dán nhiều mã trước đó =====
+    // gotoHrpfContractModule() (module-hrprofile.js) gán `filterInput.value = employeeCode` TRỰC TIẾP
+    // (không phải paste/gõ tay thật) — nếu không tự xoá `_multiKeywords` còn sót từ lần dán nhiều mã
+    // TRƯỚC ĐÓ trên CÙNG ô input (#hrcFilterEmployeeCode), renderHrContractTable() sẽ lọc nhầm theo
+    // danh sách mã CŨ thay vì đúng 1 mã nhân viên vừa nhảy tới.
+    await page.evaluate(() => {
+      DB.laborContracts = [
+        { id: 1, employeeCode: 'NV001', code: 'HDLD-NV001-1', status: 'ACTIVE', contractType: 'PROBATION', startDate: '2026-01-01', endDate: '2026-04-01' },
+        { id: 2, employeeCode: 'NV002', code: 'HDLD-NV002-1', status: 'ACTIVE', contractType: 'FIXED_TERM', startDate: '2026-02-01', endDate: '2027-02-01' }
+      ];
+      hrcEmployeeDirectoryCache = [
+        { employeeCode: 'NV001', fullName: 'Nguyễn Văn Một' },
+        { employeeCode: 'NV002', fullName: 'Trần Thị Hai' }
+      ];
+      currentUser = { username: 'admin', perms: { admin: true, hrProfileManage: true, hrContractManage: true } };
+      switchTab('hrContract');
+    });
+
+    await run.run('[Thấp#5] Dán nhiều mã vào ô lọc Hợp Đồng (NV001, NV002) -> _multiKeywords lưu đúng cả 2', async () => {
+      const inputSel = '#hrcFilterEmployeeCode';
+      await page.waitForSelector(inputSel);
+      await page.click(inputSel);
+      await page.evaluate(async () => { await navigator.clipboard.writeText('NV001\nNV002'); });
+      await page.keyboard.press('Control+V');
+      await page.waitForTimeout(150);
+      const multiKeywords = await page.$eval(inputSel, el => el._multiKeywords);
+      assertEqual(JSON.stringify(multiKeywords), JSON.stringify(['NV001', 'NV002']));
+    });
+
+    await run.run('[Thấp#5] gotoHrpfContractModule("NV002") sau khi đã dán nhiều mã -> lọc đúng CHỈ 1 hợp đồng NV002, KHÔNG còn dính danh sách mã cũ', async () => {
+      const r = await page.evaluate(async () => {
+        await gotoHrpfContractModule('NV002');
+        const el = document.getElementById('hrcFilterEmployeeCode');
+        const rows = [...document.querySelectorAll('#hrcTableBody tr')];
+        return {
+          value: el.value,
+          multiKeywords: el._multiKeywords,
+          rowCount: rows.length,
+          rowText: rows.map(r => r.textContent).join(' | ')
+        };
+      });
+      assertEqual(r.value, 'NV002', 'Ô lọc phải hiện đúng mã vừa nhảy tới');
+      assertEqual(r.multiKeywords, null, 'LỖI ĐÃ VÁ (Thấp#5): phải tự xoá _multiKeywords cũ khi nhảy từ Hồ Sơ sang với 1 mã mới');
+      assertEqual(r.rowCount, 1, 'Phải lọc còn đúng 1 dòng (NV002), không rơi về lọc theo danh sách mã cũ đã dán trước đó: ' + JSON.stringify(r));
+      assert(r.rowText.includes('NV002') && !r.rowText.includes('NV001'), 'Dòng hiển thị phải đúng hợp đồng NV002, không lẫn NV001: ' + JSON.stringify(r));
+    });
+
     run.summary();
   } finally {
     await browser.close();

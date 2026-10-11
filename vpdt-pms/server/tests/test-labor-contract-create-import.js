@@ -160,7 +160,8 @@ async function partB() {
   const PROFILES = [
     { employeeCode: 'NV9001', username: null, processId: null },
     { employeeCode: 'NV9002', username: null, processId: null },
-    { employeeCode: 'NV9003', username: null, processId: null }
+    { employeeCode: 'NV9003', username: null, processId: null },
+    { employeeCode: 'NV9004', username: null, processId: null }
   ];
   const USERS = [
     { username: 'hr1', name: 'Nhân Sự Một', dept: 'Nhân Sự', perms: { hrContractManage: true }, active: true },
@@ -229,6 +230,20 @@ async function partB() {
       assert.ok(live, 'phải ghi THẬT vào recordStore, không chỉ trả JSON');
     });
 
+    await test('Thấp#6 ĐÃ VÁ: chạy lại batch action=add CÙNG employeeCode (đã có DRAFT từ lần chạy trước) -> bị skip, KHÔNG tạo DRAFT trùng (CHỈ chặn ở route batch này, route tạo tay đơn lẻ vẫn cho phép như cũ — xem test-labor-contract-code-race.js)', async () => {
+      const countBefore = STORE.laborContracts.filter(c => c.employeeCode === 'NV9001').length;
+      assert.strictEqual(countBefore, 1, 'tiền đề: NV9001 phải đang có đúng 1 DRAFT từ test trước');
+      const r = await call('hr1', 'POST', '/api/records/laborContracts/apply-create-import', {
+        items: [{ employeeCode: 'NV9001', action: 'add', fields: { contractType: 'PROBATION', startDate: '2026-03-01', endDate: '2026-06-01' } }]
+      });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      assert.strictEqual(r.json.created.length, 0, 'KHÔNG được tạo thêm — ' + JSON.stringify(r.json));
+      assert.strictEqual(r.json.skipped.length, 1);
+      assert.ok(/đã có hợp đồng/.test(r.json.skipped[0].reason), r.json.skipped[0].reason);
+      const countAfter = STORE.laborContracts.filter(c => c.employeeCode === 'NV9001').length;
+      assert.strictEqual(countAfter, 1, 'vẫn phải đúng 1 bản ghi, không bị nhân đôi DRAFT');
+    });
+
     await test('apply-create-import: action=overwrite áp field mới lên đúng hợp đồng ACTIVE theo employeeCode', async () => {
       const r = await call('hr1', 'POST', '/api/records/laborContracts/apply-create-import', {
         items: [{ employeeCode: 'NV9002', action: 'overwrite', fields: { baseSalary: 13000000 } }]
@@ -264,8 +279,11 @@ async function partB() {
     });
 
     await test('apply-create-import: renewalIndex>=3 với FIXED_TERM vẫn bị chặn qua đường bulk (giữ đúng luật state machine)', async () => {
+      // Dùng employeeCode RIÊNG (NV9004, chưa từng tạo hợp đồng nào ở các test trên) — NV9001 giờ đã có
+      // 1 DRAFT từ test "Thấp#6" ở trên nên sẽ bị chặn bởi lỗi "đã có hợp đồng" TRƯỚC KHI chạm tới lỗi
+      // renewalIndex đang muốn test riêng ở đây (2 lỗi khác nhau, không nên lẫn lộn).
       const r = await call('hr1', 'POST', '/api/records/laborContracts/apply-create-import', {
-        items: [{ employeeCode: 'NV9001', action: 'add', fields: { contractType: 'FIXED_TERM', startDate: '2026-02-01', endDate: '2027-02-01', renewalIndex: 3 } }]
+        items: [{ employeeCode: 'NV9004', action: 'add', fields: { contractType: 'FIXED_TERM', startDate: '2026-02-01', endDate: '2027-02-01', renewalIndex: 3 } }]
       });
       assert.strictEqual(r.status, 200, JSON.stringify(r.json));
       assert.strictEqual(r.json.created.length, 0);

@@ -1058,7 +1058,10 @@ function renderContracts() {
 
   document.getElementById('paginationContainer_contract').innerHTML = buildPaginationBoxHTML('contract', 'renderContracts');
   const pageContracts = paginateList('contract', sortByCreatedAtDesc(visibleContracts), 'renderContracts', 'hợp đồng');
-  const colspan = activeContractSubTab === 'MANAGE' ? 7 : 6;
+  // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): lệch 1 cột so với header thật (contractSection.html có 7 cột
+  // LUÔN hiện + 1 cột "Thanh Toán" (#contractPaymentColHeader) chỉ hiện ở sub-tab MANAGE — trước đây
+  // dùng 7/6, đúng ra phải 8/7, khiến dòng "Không tìm thấy..." không căn giữa hết chiều ngang bảng.
+  const colspan = activeContractSubTab === 'MANAGE' ? 8 : 7;
 
   if (pageContracts.length === 0) {
     tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center p-6 text-gray-500 italic">Không tìm thấy hợp đồng phù hợp.</td></tr>`;

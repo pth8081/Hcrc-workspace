@@ -312,7 +312,10 @@ function renderOfficeReqs() {
   const pageList = paginateList('office', sortByCreatedAtDesc(list), 'renderOfficeReqs', 'đề xuất');
 
   if (pageList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;
+    // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70): header thật (officeSection.html) có 9 cột LUÔN hiện (không
+    // cột nào ẩn/điều kiện), trước đây dùng colspan=8 khiến dòng "Không có đề xuất..." không căn giữa
+    // hết chiều ngang bảng.
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-gray-500 italic">Không có đề xuất nào phù hợp.</td></tr>`;
     return;
   }
 

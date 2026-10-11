@@ -5005,6 +5005,18 @@ router.post('/laborContracts/apply-import', async (req, res) => {
         const target = laborContract.findActiveContractByEmployeeCode(peekList, employeeCode);
         if (!target) { skipped.push({ employeeCode, reason: 'Không tìm thấy hợp đồng ĐANG HIỆU LỰC (ACTIVE) cho mã nhân viên này' }); continue; }
         const result = await withLockedRecordForCollection('laborContracts', target.id, (item) => {
+          // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp): bước "peek" ở trên đọc KHÔNG khoá —
+          // giữa lúc peek và lúc khoá được bản ghi này, hợp đồng có thể vừa bị đóng (TERMINATED/
+          // EXPIRED/SUPERSEDED) bởi 1 thao tác khác (VD HR đóng tay hợp đồng ở tab khác trong lúc đang
+          // chạy import hàng loạt) — applyManualEdit() không tự kiểm trạng thái, nên phải xác nhận LẠI
+          // NGAY TRONG KHOÁ (dữ liệu `item` ở đây luôn là bản mới nhất, không phải snapshot lúc peek)
+          // rằng đây vẫn đúng là hợp đồng ACTIVE của đúng nhân viên trước khi áp dụng sửa đổi. So khớp
+          // KHÔNG phân biệt hoa/thường (xem lib/employeeProfile.js::findProfile(), Thấp#7 cùng đợt) —
+          // findActiveContractByEmployeeCode() ở trên đã match không phân biệt hoa/thường nên `target`
+          // có thể khác HOA/THƯỜNG so với `employeeCode` gõ trong file Excel dù CÙNG 1 nhân viên.
+          if (item.status !== 'ACTIVE' || String(item.employeeCode || '').trim().toLowerCase() !== employeeCode.toLowerCase()) {
+            throw new HttpError(409, 'Hợp đồng không còn ở trạng thái ĐANG HIỆU LỰC (ACTIVE) — có thể đã bị đóng giữa lúc xem trước và lúc xác nhận, vui lòng tải lại và thử lại');
+          }
           laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
           return item;
         });
@@ -5057,7 +5069,9 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
       const action = row?.action === 'overwrite' ? 'overwrite' : (row?.action === 'add' ? 'add' : 'skip');
       if (!employeeCode) { skipped.push({ employeeCode: '', reason: 'Thiếu Mã Nhân Viên' }); continue; }
       if (action === 'skip') { skipped.push({ employeeCode, reason: 'Bỏ qua theo lựa chọn của người dùng' }); continue; }
-      if (action === 'add' && addedEmployeeCodesThisBatch.has(employeeCode)) {
+      // Thấp#7 (cùng đợt): so khớp "trùng trong cùng lần nhập" KHÔNG phân biệt hoa/thường — 2 dòng
+      // "NV9001"/"nv9001" vẫn là CÙNG 1 nhân viên.
+      if (action === 'add' && addedEmployeeCodesThisBatch.has(employeeCode.toLowerCase())) {
         skipped.push({ employeeCode, reason: 'Trùng Mã Nhân Viên với 1 dòng "Tạo mới" khác trong cùng lần nhập — chỉ dòng đầu được tạo' });
         continue;
       }
@@ -5067,6 +5081,12 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
           const target = laborContract.findActiveContractByEmployeeCode(peekList, employeeCode);
           if (!target) { skipped.push({ employeeCode, reason: 'Không tìm thấy hợp đồng ĐANG HIỆU LỰC (ACTIVE) để ghi đè — có thể đã bị đóng giữa lúc xem trước và xác nhận' }); continue; }
           const result = await withLockedRecordForCollection('laborContracts', target.id, (item) => {
+            // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp) — xem chú thích đầy đủ ở route
+            // apply-import ngay trên: peek không khoá nên phải xác nhận lại trạng thái NGAY TRONG khoá,
+            // so khớp employeeCode KHÔNG phân biệt hoa/thường (Thấp#7 cùng đợt).
+            if (item.status !== 'ACTIVE' || String(item.employeeCode || '').trim().toLowerCase() !== employeeCode.toLowerCase()) {
+              throw new HttpError(409, 'Hợp đồng không còn ở trạng thái ĐANG HIỆU LỰC (ACTIVE) — có thể đã bị đóng giữa lúc xem trước và lúc xác nhận, vui lòng tải lại và thử lại');
+            }
             laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
             return item;
           });
@@ -5074,7 +5094,25 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
           updated.push(result);
         } else {
           const trashedItems = await getTrashItems('laborContracts');
-          const result = await createForCollectionSerialized('laborContracts', `labor_contract_code:${employeeCode}`, async (list) => {
+          // Thấp#7 (cùng đợt): khoá theo employeeCode đã CHUẨN HOÁ chữ thường — 2 dòng "NV9001"/
+          // "nv9001" (cùng 1 nhân viên, khác hoa/thường) phải tranh chấp CHUNG 1 khoá, không được chạy
+          // song song dưới 2 lockKey khác nhau (sẽ mở lại đúng race mà dupContract bên dưới định chặn).
+          const result = await createForCollectionSerialized('laborContracts', `labor_contract_code:${employeeCode.toLowerCase()}`, async (list) => {
+            // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp): bước xem trước
+            // (parseCreateImportBuffer(), routes/laborContractImport.js) chỉ cảnh báo
+            // hasActiveContract — bỏ sót trường hợp employeeCode đã có 1 hợp đồng DRAFT (từ CHÍNH lần
+            // chạy import trước đó chưa kích hoạt) nên nếu HR lỡ chạy lại CÙNG file/employeeCode với
+            // action='add' (lần này preview không còn thấy "đã tồn tại" nên mặc định vẫn hiện action
+            // 'add'), server sẽ âm thầm tạo THÊM 1 DRAFT trùng cho cùng 1 nhân viên. Chặn ở ĐÚNG route
+            // batch này (không đụng route tạo tay đơn lẻ POST /api/create/laborContracts — nơi đó tạo 2
+            // hợp đồng cho cùng nhân viên vẫn là hành vi được chủ ý cho phép, xem test-labor-contract-
+            // code-race.js) vì đây là lỗi riêng của tính năng import hàng loạt, không phải quy tắc
+            // nghiệp vụ chung. `list` ở đây đã được khoá THEO ĐÚNG employeeCode (lockKey ngay trên) nên
+            // không có race giữa đọc-kiểm tra-ghi. So khớp KHÔNG phân biệt hoa/thường (Thấp#7 cùng đợt).
+            const dupContract = (list || []).find(c => String(c.employeeCode || '').trim().toLowerCase() === employeeCode.toLowerCase() && (c.status === 'DRAFT' || c.status === 'ACTIVE'));
+            if (dupContract) {
+              throw new HttpError(409, `Nhân viên này đã có hợp đồng ${dupContract.status === 'DRAFT' ? 'Nháp chưa kích hoạt' : 'ĐANG HIỆU LỰC'} (mã ${dupContract.code || dupContract.id}) — có thể đã được tạo ở lần chạy import trước, vui lòng chọn "Ghi đè"/sửa trực tiếp hợp đồng đó thay vì tạo mới`);
+            }
             const appData = await getAllAppData();
             const record = validateAndPrepareCreate('laborContracts', { ...(row?.fields || {}), employeeCode }, freshUser, list, appData, trashedItems);
             await assertPayloadFileUrlsOwnedByUser(record, freshUser);
@@ -5082,7 +5120,7 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
           });
           logLaborContractAction(req, freshUser, 'CREATE', result.code || employeeCode, `Tạo mới hợp đồng lao động [${result.code || employeeCode}] qua Nhập Excel TẠO MỚI hàng loạt`);
           created.push(result);
-          addedEmployeeCodesThisBatch.add(employeeCode);
+          addedEmployeeCodesThisBatch.add(employeeCode.toLowerCase());
         }
       } catch (rowErr) {
         skipped.push({ employeeCode, reason: rowErr.message || 'Lỗi không xác định' });

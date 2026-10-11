@@ -190,7 +190,9 @@ function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, 
   if (!employeeCode) return null;
 
   const errors = [];
-  const profile = profiles.find(p => p.employeeCode === employeeCode);
+  // Thấp#7 (đợt rà soát chuyên sâu 10/2026): so khớp Mã Nhân Viên KHÔNG phân biệt hoa/thường — dùng lại
+  // findProfile()/findActiveContractByEmployeeCode() dùng chung (đã chuẩn hoá), không tự so `===` ở đây.
+  const profile = employeeProfile.findProfile(profiles, employeeCode);
   const fullName = profile ? employeeProfile.resolveProfileDisplayName(profile, users, hrProcesses) : '';
   if (!profile) errors.push('Mã Nhân Viên không có trong Hồ Sơ Nhân Sự — nhập Hồ Sơ Nhân Sự trước khi dùng file này');
 

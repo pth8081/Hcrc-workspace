@@ -253,6 +253,12 @@ async function gotoHrpfContractModule(employeeCode) {
   const filterInput = document.getElementById('hrcFilterEmployeeCode');
   if (filterInput) {
     filterInput.value = employeeCode;
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp): ô này có data-multi-paste-search — nếu
+    // người dùng từng dán nhiều mã trước đó (xem bindMultiPasteSearchInputs() ở core.js), ô vẫn còn giữ
+    // `_multiKeywords` (mảng mã CŨ) vì gán `.value` TRỰC TIẾP ở đây không bắn sự kiện 'input' thật (chỉ
+    // sự kiện 'input' đó mới tự xoá `_multiKeywords`) — khiến renderHrContractTable() lọc nhầm theo DANH
+    // SÁCH MÃ CŨ thay vì đúng 1 mã nhân viên vừa bấm "↗️ Sửa ở Hợp Đồng Lao Động".
+    filterInput._multiKeywords = null;
     if (typeof renderHrContractTable === 'function') renderHrContractTable();
   }
 }

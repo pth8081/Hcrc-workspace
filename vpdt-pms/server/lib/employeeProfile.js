@@ -252,8 +252,17 @@ function generateDeptCode(deptCodeMap) {
   return code;
 }
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp): employeeCode đa số tự sinh in hoa (generateEmployeeCode(),
+// tiền tố "BL") nhưng VẪN cho phép HR gõ tay 1 mã khác (createManualProfile(), nhân viên cũ/tái tuyển —
+// xem chú thích tại đó) — không có gì ép buộc chữ hoa/thường khi gõ tay. So khớp TRƯỚC ĐÂY dùng `===`
+// (case-sensitive) nên "nv9001" (gõ ở Excel import/form nhập tay) không khớp được hồ sơ đã lưu "NV9001",
+// báo nhầm "không có trong Hồ Sơ Nhân Sự" dù nhân viên có thật — chỉ KHÁC NHAU HOA/THƯỜNG. Chuẩn hoá so
+// khớp không phân biệt hoa/thường (KHÔNG đổi giá trị employeeCode gốc đã lưu/hiển thị, chỉ đổi cách SO
+// SÁNH ở đây).
 function findProfile(list, employeeCode) {
-  return (list || []).find(p => p.employeeCode === employeeCode) || null;
+  const code = String(employeeCode || '').trim().toLowerCase();
+  if (!code) return null;
+  return (list || []).find(p => String(p.employeeCode || '').trim().toLowerCase() === code) || null;
 }
 function findProfileByUsername(list, username) {
   if (!username) return null;

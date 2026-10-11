@@ -56,15 +56,23 @@ function canManageContracts(user) {
   return !!user?.perms?.hrContractManage;
 }
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp) — xem chú thích đầy đủ tại
+// lib/employeeProfile.js::findProfile(): employeeCode không bắt buộc chữ hoa/thường khi HR gõ tay, nên
+// 2 hàm tra cứu theo employeeCode dưới đây cũng phải so khớp KHÔNG phân biệt hoa/thường như findProfile()
+// (KHÔNG đổi giá trị employeeCode gốc đã lưu, chỉ đổi cách SO SÁNH).
+function normalizeEmployeeCodeForMatch(code) { return String(code || '').trim().toLowerCase(); }
 function findContractsByEmployeeCode(list, employeeCode) {
-  return (list || []).filter(c => c.employeeCode === employeeCode);
+  const code = normalizeEmployeeCodeForMatch(employeeCode);
+  return (list || []).filter(c => normalizeEmployeeCodeForMatch(c.employeeCode) === code);
 }
 
 // Hợp đồng đang ACTIVE của 1 nhân viên — dùng cho cron cảnh báo hết hạn + tra cứu khi Offboarding hoàn
 // tất. Mỗi thời điểm chỉ nên có ĐÚNG 1 hợp đồng ACTIVE cho 1 employeeCode (hợp đồng trước bị đóng
 // SUPERSEDED/TERMINATED ngay khi hợp đồng kế tiếp phát sinh — xem applyPostProbationDecision()).
 function findActiveContractByEmployeeCode(list, employeeCode) {
-  return (list || []).find(c => c.employeeCode === employeeCode && c.status === 'ACTIVE') || null;
+  const code = normalizeEmployeeCodeForMatch(employeeCode);
+  if (!code) return null;
+  return (list || []).find(c => normalizeEmployeeCodeForMatch(c.employeeCode) === code && c.status === 'ACTIVE') || null;
 }
 
 // Bản ghi MỚI NHẤT (id lớn nhất) thuộc về 1 quy trình Onboarding — dùng để tìm đúng hợp đồng thử việc
