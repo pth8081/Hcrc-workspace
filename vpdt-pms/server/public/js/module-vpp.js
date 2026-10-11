@@ -1319,6 +1319,21 @@ function viewOfficeSignedFile(officeId) {
   });
 }
 
+// Tệp Đính Kèm Đề Xuất (o.extraFiles[], TUỲ CHỌN lúc tạo) — mirror ĐÚNG viewSubmissionExtraFile()
+// (module-vanbantrinh.js), gọi từ khối render ở openOfficeProcessModal() (module-office.js).
+function viewOfficeExtraFile(officeId, idx) {
+  const o = DB.officeReqs.find(x => x.id === officeId);
+  if (!o) return;
+  const ef = (o.extraFiles || [])[idx];
+  if (!ef || !ef.fileUrl) return;
+  openFileProtectedView({
+    title: `📎 ${ef.fileName || o.title} (${o.code})`,
+    sub: `Phân hệ: ${o.subType} | Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`,
+    footerInfo: `Tệp đính kèm đề xuất: ${o.title}`,
+    fileSrc: ef.fileUrl, fileType: ef.fileType, fileName: ef.fileName
+  });
+}
+
 function downloadOfficeApprovalSlip(officeId) {
   const o = DB.officeReqs.find(x => x.id === officeId);
   if (!o) return;

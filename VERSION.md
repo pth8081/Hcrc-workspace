@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**25.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.74 (2026-10): Văn Phòng Tổng Hợp (Mua Bán/Sửa Chữa) — Tệp Đính Kèm Đề Xuất (tuỳ chọn, nhiều tệp)
+
+Theo yêu cầu người dùng (kèm ảnh chụp 2 form Mua Bán/Sửa Chữa): thêm 1 ô
+upload nhiều tệp TUỲ CHỌN (không bắt buộc) vào form tạo Phiếu Đề Xuất của cả
+2 phân hệ Mua Bán và Sửa Chữa trong module Văn Phòng Tổng Hợp (officeReqs).
+
+- **Form tạo** (`public/fragments/officeSection.html`): ô "Tệp Đính Kèm Đề
+  Xuất (Tuỳ Chọn, có thể chọn nhiều tệp)" dùng widget chip nhiều-tệp dùng
+  chung sẵn có (`onMultiFileChosen()`/`clearMultiFileInput()`), áp dụng
+  chung cho cả Mua Bán lẫn Sửa Chữa (nằm ngoài khối điều kiện subType).
+- **`item.extraFiles[]`** (mirror đúng khuôn `submissions.extraFiles` đã có):
+  lưu từng tệp `{fileUrl, fileName, fileType}` lúc gửi phê duyệt
+  (`submitOfficeReq()`, `public/js/module-office.js`), tối đa 20 tệp/hồ sơ,
+  validate ở server qua `assertUploadedFileUrlList()`
+  (`lib/createValidation.js`, `CREATE_MODULE_CONFIGS.officeReqs`).
+- **Màn chi tiết**: khối "📎 Tệp Đính Kèm Đề Xuất" mới trong
+  `openOfficeProcessModal()`, mỗi tệp có nút 👁️ Xem/⬇️ Tải (gác quyền qua
+  `canDownloadRecordFile()` như các tệp khác của hồ sơ).
+- **Bảo mật**: mở rộng checker `officeReqs` trong `findOwningRecord()`
+  (`lib/fileAuthz.js`) để nhận diện tệp qua `extraFiles[]` — tránh rơi vào
+  nhánh FAIL-OPEN (lỗ hổng đã từng vá cho các field tương tự ở module khác).
+- Không đụng tới luồng Bổ Sung/Sửa-và-Gửi-Lại (DRAFT resubmit) của officeReqs
+  — `OFFICE_REQ_DRAFT_EDITABLE_FIELDS` không bao gồm `extraFiles`, đúng phạm
+  vi yêu cầu (chỉ áp dụng lúc TẠO mới).
 
 ## v25.73 (2026-10): Gia Hạn (Extend) + Ngày Mong Muốn Phê Duyệt cho Văn Bản Trình/Hợp Đồng
 

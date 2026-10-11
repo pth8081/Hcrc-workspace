@@ -1309,6 +1309,10 @@ const CREATE_MODULE_CONFIGS = {
       // ghi này, lib/fileAuthz.js tra ngược officeReqs theo CẢ 2 field) — xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đề xuất');
       assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
+      // Tệp Đính Kèm Đề Xuất (11/2026) — TUỲ CHỌN, multi-file, mirror ĐÚNG submissions.extraFiles ở trên
+      // (cùng assertUploadedFileUrlList() + giới hạn 20 tệp/hồ sơ).
+      assertUploadedFileUrlList(payload.extraFiles, 'Tệp đính kèm đề xuất');
+      payload.extraFiles = Array.isArray(payload.extraFiles) ? payload.extraFiles.slice(0, 20) : [];
       // "Mua Sắm" tự tính amount = tổng (Số lượng × Đơn giá) của từng hạng mục ở CLIENT (xem
       // recalcOfficeItemsTotal() ở index.html) rồi gửi kèm cả amount lẫn items — trước đây server tin
       // nguyên payload.amount, không tính lại từ items: request tự soạn gửi items thật (số nhỏ) kèm

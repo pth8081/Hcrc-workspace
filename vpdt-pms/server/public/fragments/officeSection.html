@@ -71,6 +71,14 @@
             <label class="block font-semibold text-gray-600 mb-1">Lý Do Trình & Diễn Giải Chi Tiết / Mục Đích Mua Sắm</label>
             <textarea id="offReason" placeholder="Cần thiết mua mới / lý do hỏng hóc / hiệu quả đầu tư..." class="w-full border p-1.5 rounded h-16" required></textarea>
           </div>
+          <!-- Tệp Đính Kèm Đề Xuất — TUỲ CHỌN (không required), áp dụng chung cho cả Mua Bán/Sửa Chữa,
+               mirror ĐÚNG #subExtraFiles (submissionSection.html): item.extraFiles[], upload qua
+               uploadFileToServer(f, 'office') trong submitOfficeReq() (module-office.js). -->
+          <div class="md:col-span-3">
+            <label class="block font-semibold text-gray-600 mb-1">Tệp Đính Kèm Đề Xuất (Tuỳ Chọn, có thể chọn nhiều tệp)</label>
+            <input id="officeExtraFiles" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" data-op-change="onMultiFileChosen" data-arg-el="0" data-arg1="officeExtraFilesChip" class="w-full border p-1.5 rounded bg-white">
+            <div id="officeExtraFilesChip" class="mt-1 flex flex-wrap gap-1"></div>
+          </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_OFFICE" class="contents"></div>
         </div>

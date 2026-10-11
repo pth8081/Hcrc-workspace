@@ -2007,6 +2007,14 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       Nhận"); kết quả đánh giá (Hiện Trạng/Mức Độ/Phương Án/Chi Phí) hiển
       thị READ-ONLY cho MỌI người xem được hồ sơ ngay trong màn xử lý, sau
       khi đã xác nhận xong.
+  - **📎 Tệp Đính Kèm Đề Xuất (11/2026, tuỳ chọn, cả Mua Sắm lẫn Sửa Chữa)**
+    — ở form tạo Phiếu Đề Xuất có thêm ô "Tệp Đính Kèm Đề Xuất", cho chọn
+    NHIỀU tệp cùng lúc (ảnh/PDF/Word/Excel) ngay lúc tạo — KHÔNG bắt buộc,
+    bỏ trống vẫn gửi phê duyệt bình thường như trước. Ở màn xử lý/xem chi
+    tiết hồ sơ, mọi tệp đã đính kèm hiện trong khối "📎 Tệp Đính Kèm Đề
+    Xuất" với nút Xem/Tải cho từng tệp. Tính năng này chỉ áp dụng lúc TẠO
+    MỚI — luồng "Bổ Sung"/Sửa-và-Gửi-Lại hồ sơ nháp không thêm/sửa được
+    tệp đính kèm đề xuất.
   - **Thanh Toán** — tổng hợp đề nghị thanh toán tự sinh từ Hợp Đồng/Mua
     Bán/Sửa Chữa (nút "🧾 Lập Thanh Toán"/"Chuyển Sang Thanh Toán") hoặc tạo
     thủ công. **3 sub-tab**:

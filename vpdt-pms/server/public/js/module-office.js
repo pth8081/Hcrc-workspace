@@ -121,6 +121,18 @@ async function submitOfficeReq(e) {
     return alert(`⛔ ${err.message}`);
   }
 
+  // Tệp Đính Kèm Đề Xuất — TUỲ CHỌN, áp dụng chung cho cả Mua Bán/Sửa Chữa (mirror ĐÚNG extraFilesInput
+  // ở doSubmitSubmissionReq(), module-vanbantrinh.js).
+  const officeExtraFilesInput = document.getElementById('officeExtraFiles');
+  let officeExtraFiles = [];
+  if (officeExtraFilesInput.files && officeExtraFilesInput.files.length > 0) {
+    try {
+      officeExtraFiles = await Promise.all(Array.from(officeExtraFilesInput.files).map(f => uploadFileToServer(f, 'office')));
+    } catch (err) {
+      return alert(`⛔ Tải tệp đính kèm thất bại: ${err.message}`);
+    }
+  }
+
   const officePayload = {
     code: code,
     subType: activeOfficeSubTab,
@@ -134,6 +146,7 @@ async function submitOfficeReq(e) {
     reason: reason,
     techType: techType || undefined,
     techAssignedTo: techAssignedTo || undefined,
+    extraFiles: officeExtraFiles,
     customData: customData,
     createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
@@ -207,6 +220,9 @@ function resetOfficeReqForm() {
   const formEl = document.getElementById('officeForm');
   if (formEl) formEl.reset();
   document.getElementById('offCode').value = generateOfficeCode();
+  // Tệp Đính Kèm Đề Xuất — form.reset() không tự bắn 'change' nên chip cũ vẫn hiện sai nếu không gọi
+  // tường minh (cùng lý do clearMultiFileInput() ở mọi resetXxxForm() khác).
+  clearMultiFileInput('officeExtraFiles', 'officeExtraFilesChip');
   if (activeOfficeSubTab === 'MUA_BAN') {
     officeItems = [];
     addOfficeItemRow();
@@ -507,6 +523,30 @@ function openOfficeProcessModal(officeId) {
       detailsHTML += `<div><b>${escapeHtml(key)}:</b> ${escapeHtml(o.customData[key])}</div>`;
     }
     detailsHTML += `</div>`;
+  }
+
+  // Tệp Đính Kèm Đề Xuất (o.extraFiles[], TUỲ CHỌN lúc tạo) — mirror ĐÚNG khối sub.extraFiles ở
+  // openProcessSubmissionModal() (module-vanbantrinh.js): mỗi tệp 1 dòng Xem/Tải, canDL gác theo đúng
+  // quyền canDownloadFile('office', ...) đã tính ở trên (biến canDL khai báo ngay dưới đây).
+  const canDL = canDownloadFile(currentUser, 'office', o.dept, o.creator);
+  if (o.extraFiles && o.extraFiles.length > 0) {
+    const extraRows = o.extraFiles.map((ef, idx) => `
+      <div class="flex items-center justify-between gap-2 ${idx > 0 ? 'border-t pt-1.5 mt-1.5' : ''}">
+        <span class="truncate">📎 ${escapeHtml(ef.fileName || '')}</span>
+        <div class="flex gap-1 shrink-0">
+          <button type="button" data-op="viewOfficeExtraFile" data-arg0="${o.id}" data-arg1="${idx}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
+          ${canDL
+            ? `<a href="${attachmentDownloadUrl(ef.fileUrl, null, ef.fileName || `${o.code}-${idx + 1}`)}" download="${escapeHtml(ef.fileName || `${o.code}-${idx + 1}`)}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700">⬇️ Tải</a>`
+            : `<span class="text-[11px] text-gray-400 italic">Không có quyền tải tệp</span>`}
+        </div>
+      </div>
+    `).join('');
+    detailsHTML += `
+      <div class="border-t pt-2 mt-2">
+        <div class="font-semibold mb-1">📎 Tệp Đính Kèm Đề Xuất:</div>
+        <div class="space-y-1 text-xs">${extraRows}</div>
+      </div>
+    `;
   }
 
   document.getElementById('officeModalDetails').innerHTML = detailsHTML;

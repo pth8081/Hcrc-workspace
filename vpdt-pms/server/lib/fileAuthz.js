@@ -253,7 +253,10 @@ async function findOwningRecord(fileUrl) {
     // techAssessmentFileUrls[] (11/2026, Kỹ Thuật Xác Nhận Sửa Chữa VP) — ảnh/tài liệu hiện trường do
     // người xác nhận kỹ thuật tải lên lúc Duyệt bước kỹ thuật, mảng URL thuần (không phải {fileUrl}).
     { records: officeReqs, fixed: o => o.fileUrl === fileUrl || o.signedFileUrl === fileUrl
-        || (Array.isArray(o.techAssessmentFileUrls) && o.techAssessmentFileUrls.includes(fileUrl)),
+        || (Array.isArray(o.techAssessmentFileUrls) && o.techAssessmentFileUrls.includes(fileUrl))
+        // extraFiles[] (11/2026, "Tệp Đính Kèm Đề Xuất" TUỲ CHỌN lúc tạo) — mirror ĐÚNG checker
+        // submissions.extraFiles ở trên, kẻo rơi vào nhánh FAIL-OPEN như lỗ hổng đã vá trước đây.
+        || (o.extraFiles || []).some(ef => ef.fileUrl === fileUrl),
       build: o => ({ moduleKey: 'office', dept: o.dept, ownerUsername: o.creator, record: o }) },
     // images[]/coverImage/videos[] (9/2026, nhiều ảnh + ảnh đại diện + video Nhịp Sống HCRC/Góc Chia Sẻ) —
     // PHẢI tra cả 3 field mới cạnh attachment cũ, nếu không ảnh/video của bài PENDING/REJECTED rơi vào
