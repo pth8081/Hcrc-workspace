@@ -935,7 +935,7 @@ function hrpfSundayOfWeek(mondayStr) {
 // ===== 📅 Theo Tuần (11/2026, đối chiếu mẫu Excel "Bao_cao_tuan") =====
 const HRPF_WEEKLY_COLUMNS = [
   { header: 'Phòng Ban/Siêu Thị', key: 'dept' },
-  { header: 'Khối', key: 'classification', render: r => r.classification === 'HO' ? 'Văn Phòng' : 'Siêu Thị/Cửa Hàng' },
+  { header: 'Khối', key: 'classification', render: r => r.classification === 'HO' ? 'Văn Phòng' : (r.classification === 'STCH' ? 'Siêu Thị/Cửa Hàng' : '') },
   { header: 'Đầu tuần', key: 'startOfWeek' }, { header: 'Tăng', key: 'increased' }, { header: 'Giảm', key: 'decreased' },
   { header: 'Cuối tuần', key: 'endOfWeek' }, { header: 'Luỹ kế tăng (từ đầu năm)', key: 'cumulativeIncreased' },
   { header: 'Luỹ kế giảm (từ đầu năm)', key: 'cumulativeDecreased' }
@@ -970,7 +970,7 @@ async function exportHrpfWeeklyReport() {
 // ===== 📆 Theo Tháng (11/2026, đối chiếu mẫu Excel "Bao_cao_thang") =====
 const HRPF_MONTHLY_COLUMNS = [
   { header: 'Phòng Ban/Siêu Thị', key: 'dept' },
-  { header: 'Khối', key: 'classification', render: r => r.classification === 'HO' ? 'Văn Phòng' : 'Siêu Thị/Cửa Hàng' },
+  { header: 'Khối', key: 'classification', render: r => r.classification === 'HO' ? 'Văn Phòng' : (r.classification === 'STCH' ? 'Siêu Thị/Cửa Hàng' : '') },
   { header: 'Số tuyển mới', key: 'newHires' }, { header: 'Số ký tiếp/gia hạn', key: 'renewals' }
 ];
 async function fetchHrpfMonthlyReport() {

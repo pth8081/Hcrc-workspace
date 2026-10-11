@@ -211,11 +211,11 @@ async function main() {
   console.log('Đã chụp: 1-tong-quan-dashboard.png');
 
   // ===== Ảnh 2: 📅 Theo Tuần =====
-  await page.evaluate((ws, we) => {
+  await page.evaluate(({ ws, we }) => {
     document.getElementById('hrpfWeeklyStart').value = ws;
     document.getElementById('hrpfWeeklyEnd').value = we;
     setHrpfReportSubTab('WEEKLY');
-  }, weekStart, weekEnd);
+  }, { ws: weekStart, we: weekEnd });
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(OUT_DIR, '2-theo-tuan.png'), fullPage: true });
   console.log('Đã chụp: 2-theo-tuan.png');
@@ -279,4 +279,6 @@ async function main() {
   console.log('DONE. Ảnh + file Excel đã lưu tại', OUT_DIR);
 }
 
-main().catch((e) => { console.error('FATAL:', e && e.stack || e); process.exitCode = 1; });
+// process.exit() tường minh ở CẢ 2 nhánh (thành công/lỗi) — browser/server còn mở có thể giữ event
+// loop sống vô thời hạn dù main() đã xong, khiến tiến trình "treo" dù không còn gì chạy thật.
+main().then(() => process.exit(0)).catch((e) => { console.error('FATAL:', e && e.stack || e); process.exit(1); });
