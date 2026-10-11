@@ -4432,6 +4432,12 @@ làm được nay bị chặn:
   CẢ 3 đường ghi: tạo mới, **sửa hồ sơ** (Chi tiết → Lưu) và **Nhập Excel chọn
   "Ghi đè thông tin"** (trước đây chỉ chặn lúc tạo). Trùng CCCD nghĩa là phải
   dùng Tái Tuyển thay vì lập hồ sơ thứ 2.
+- **CCCD phải ĐÚNG 12 số (11/2026)**: số CCCD/CMND nhập ở bất kỳ màn nào
+  (Tạo Hồ Sơ Mới, Chi tiết → Lưu, Nhập Excel "Ghi đè thông tin", form
+  Onboarding) nay bị **chặn cứng** nếu thừa/thiếu số hoặc có ký tự không phải
+  số — hệ thống báo lỗi "Số CCCD/CMND phải gồm đúng 12 số" và yêu cầu nhập
+  lại, không còn chấp nhận số CMND cũ 9 số hay chuỗi gõ sai. Để trống vẫn hợp
+  lệ (chưa thu thập được, bổ sung sau).
 - **Người phụ thuộc / Học vấn**: Ngày sinh phải là ngày thật, không ở tương
   lai; Năm tốt nghiệp là số nguyên trong khoảng 1900 → (năm hiện tại + 10).
 - **Xuất Excel Hồ Sơ Nhân Sự** nay ghi Nhật Ký Hệ Thống (ai xuất, lúc nào) và
@@ -4439,6 +4445,17 @@ làm được nay bị chặn:
 - Tắt module "Hồ Sơ Nhân Sự" (Khối 0 — Quyền Truy Cập Module) nay chặn THẬT
   toàn bộ API hồ sơ, không chỉ ẩn giao diện. Ngoại lệ duy nhất: danh sách
   chọn nhân viên dùng cho module Hợp Đồng Lao Động.
+- **LỖI ĐÃ VÁ (11/2026, rà soát theo yêu cầu người dùng)**: nhân viên tự xem
+  hồ sơ CHÍNH MÌNH bằng cách gọi thẳng API (DevTools/trình duyệt, KHÔNG qua
+  nút bấm nào trên giao diện — màn "Hồ Sơ Của Tôi" luôn đi đường riêng, có
+  lọc đúng cấu hình) trước đây nhận lại NGUYÊN hồ sơ không lọc field nhạy
+  cảm nào (ngày sinh, CCCD, số BHXH, lương, Bổ Nhiệm/Điều Động, kỷ luật...),
+  dù bản thân KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào — bỏ qua hoàn toàn cấu
+  hình **"⚙️ Trường Xem Của Tôi"** (mục trên, mặc định ẨN hết field nhạy
+  cảm). Nay tự xem qua đường này cũng bị lọc ĐÚNG như màn "Hồ Sơ Của Tôi" —
+  chỉ hiện field admin đã chủ động tick mở ở "Trường Xem Của Tôi", không còn
+  lộ nguyên hồ sơ. Không ảnh hưởng tới cách quản lý/HR xem hồ sơ (vẫn đúng
+  như cấu hình "Trường Xem Của Quản Lý Trực Tiếp"/quyền Xem Toàn Bộ đã có).
 - **90 trường Hồ Sơ Nhân Sự (10/2026, đối chiếu Excel "Template_Quan_ly_ho_so_nhan_su")**:
   bổ sung 17 field hành chính/nội bộ mới (địa chỉ liên hệ khẩn cấp, đơn vị
   pháp nhân, email công việc, lao động đặc biệt, tình trạng làm việc hiện tại

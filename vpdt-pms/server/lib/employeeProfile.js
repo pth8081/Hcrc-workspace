@@ -1050,6 +1050,21 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         if (val != null && !GENDERS.has(val)) throw new HttpError(400, 'Giới tính không hợp lệ');
         profile.gender = val || null;
         break;
+      // nationalId (11/2026, theo yêu cầu người dùng) — CHỈ nhận ĐÚNG 12 số (CCCD mới), thừa/thiếu số
+      // hoặc có ký tự không phải số đều chặn cứng + báo nhập lại, không còn rơi về `default:` (trim +
+      // slice 300, không kiểm tra định dạng gì). Rỗng vẫn hợp lệ (chưa thu thập được CCCD, bổ sung sau).
+      // Đây là điểm ghi DUY NHẤT của nationalId (createManualProfile()/updateProfileFromImport()/form
+      // Onboarding ở routes/create.js đều gọi applyProfileEdit() này, không tự gán tay ở nơi khác) nên
+      // áp dụng chặn NHẤT QUÁN cho mọi lối tạo/sửa hồ sơ (tạo tay, PATCH sửa hồ sơ, import Excel,
+      // Onboarding).
+      case 'nationalId': {
+        const trimmedNationalId = val == null ? '' : String(val).trim();
+        if (trimmedNationalId && !/^\d{12}$/.test(trimmedNationalId)) {
+          throw new HttpError(400, 'Số CCCD/CMND phải gồm đúng 12 số — vui lòng kiểm tra và nhập lại');
+        }
+        profile.nationalId = trimmedNationalId || null;
+        break;
+      }
       case 'maritalStatus':
         if (val != null && val !== '' && !MARITAL_STATUSES.has(val)) throw new HttpError(400, 'Tình trạng hôn nhân không hợp lệ');
         profile.maritalStatus = val || null;

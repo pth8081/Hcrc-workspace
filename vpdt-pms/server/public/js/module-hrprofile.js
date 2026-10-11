@@ -1449,7 +1449,12 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
   </div>`;
 
   const hrOnlyFieldsHtml = [
-    canSee('nationalId') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>${editableHrOnly ? textInput('hrpfF_nationalId', profile.nationalId) : roField('', profile.nationalId)}</div>` : '',
+    // nationalId (11/2026, theo yêu cầu người dùng — "giới hạn cccd là 12 số, thừa thiếu đều báo nhập
+    // lại") — maxlength="12" + inputmode="numeric" chỉ là gợi ý nhập liệu (gõ tay trên điện thoại hiện
+    // bàn phím số, không cho gõ dư quá 12 ký tự); CHẶN THẬT vẫn ở server (case 'nationalId' trong
+    // applyProfileEdit(), lib/employeeProfile.js — ĐÚNG 12 số, không hơn không kém) vì client có thể bị
+    // bỏ qua (dán giá trị, DevTools...).
+    canSee('nationalId') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số CCCD/CMND</label>${editableHrOnly ? `<input id="hrpfF_nationalId" value="${escapeHtml(profile.nationalId || '')}" maxlength="12" inputmode="numeric" placeholder="Đúng 12 số" class="w-full border p-1.5 rounded text-sm">` : roField('', profile.nationalId)}</div>` : '',
     canSee('socialInsuranceNo') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số Sổ BHXH</label>${editableHrOnly ? textInput('hrpfF_socialInsuranceNo', profile.socialInsuranceNo) : roField('', profile.socialInsuranceNo)}</div>` : '',
     canSee('taxCode') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Mã số thuế TNCN</label>${editableHrOnly ? textInput('hrpfF_taxCode', profile.taxCode) : roField('', profile.taxCode)}</div>` : '',
     canSee('nationalIdIssueDate') ? `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày cấp CCCD/CMND</label>${editableHrOnly ? dateInput('hrpfF_nationalIdIssueDate', profile.nationalIdIssueDate) : roField('', (profile.nationalIdIssueDate || '').slice(0, 10))}</div>` : '',

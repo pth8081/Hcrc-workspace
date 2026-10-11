@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**25.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.77 (2026-11): CCCD/CMND phải đúng 12 số
+
+Theo yêu cầu người dùng: số CCCD/CMND (`nationalId`, Hồ Sơ Nhân Sự) nay bị
+**chặn cứng** nếu không đúng 12 số, áp dụng NHẤT QUÁN cho mọi lối ghi (Tạo
+Hồ Sơ Mới, Chi tiết → Lưu, Nhập Excel "Ghi đè thông tin", form Onboarding) vì
+tất cả đều đi qua cùng 1 điểm ghi `applyProfileEdit()` (`lib/employeeProfile.js`).
+
+- Thêm `case 'nationalId'` riêng trong `applyProfileEdit()`: thừa/thiếu số,
+  có ký tự không phải số đều báo lỗi "Số CCCD/CMND phải gồm đúng 12 số — vui
+  lòng kiểm tra và nhập lại", không còn rơi về nhánh `default:` (chỉ trim +
+  cắt 300 ký tự, không kiểm tra định dạng). Rỗng vẫn hợp lệ (chưa thu thập
+  được, bổ sung sau). Không còn chấp nhận số CMND cũ 9 số.
+- 2 ô nhập CCCD (Chi tiết hồ sơ + form Onboarding) thêm `maxlength="12"` +
+  `inputmode="numeric"` làm gợi ý nhập liệu — chặn THẬT vẫn ở server.
+- Test mới: `server/tests/test-hr-profile-nationalid-format.js` (9 kịch bản —
+  đúng/thiếu/thừa số, ký tự lạ, khoảng trắng, rỗng, cả qua `createManualProfile()`/
+  `updateProfileFromImport()`). Toàn bộ dữ liệu test cũ đã dùng CCCD 12 số
+  nên không có regression.
+- Không đổi `schema.sql`/biến môi trường/dependency nào.
 
 ## v25.76 (2026-11): Vá lỗ hổng tự xem hồ sơ qua API gọi thẳng (bỏ qua "Trường Xem Của Tôi")
 
