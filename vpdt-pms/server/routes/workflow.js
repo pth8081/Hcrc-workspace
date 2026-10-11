@@ -347,6 +347,270 @@ router.post('/:module/:id/forward-reply', async (req, res) => {
   }
 });
 
+// ====== Gia Hạn Ngày Mong Muốn Phê Duyệt (submissions/contracts) ===========================
+// Theo yêu cầu người dùng (11/2026): "Gia hạn có thể đến cả người được chuyển tiếp... nó sẽ đẩy lên cái
+// người phê duyệt trong nhánh ngang để người phê duyệt biết". 2 nhánh RIÊNG, CÙNG tác động lên
+// item.desiredApprovalDate (field cảnh báo Quá Hạn Xử Lý đọc, xem lib/approvalOverdue.js):
+//   1) Người phê duyệt bước hiện tại (canApproveStep, giống hệt điều kiện /forward root) — GIA HẠN TRỰC
+//      TIẾP ngay (extend-approval-deadline), không cần ai xác nhận.
+//   2) Người được chuyển tiếp (forwardedTo của BẤT KỲ node nào trong forwardThreads — "nhánh ngang")
+//      KHÔNG được gia hạn trực tiếp, chỉ ĐỀ NGHỊ (request-approval-extension) — ghi vào
+//      item.pendingApprovalExtension + báo (chuông+email) cho ĐÚNG người phê duyệt bước hiện tại biết để
+//      tự quyết: confirm-approval-extension (áp dụng, giống hệt tác động của nhánh 1) hoặc
+//      reject-approval-extension (từ chối, không đổi gì). Chỉ 1 đề nghị treo tại 1 thời điểm (chặn đề
+//      nghị MỚI nếu đã có 1 đề nghị đang chờ) — tránh 2 người chuyển tiếp khác nhau đề nghị 2 mốc khác
+//      nhau cùng lúc gây nhầm lẫn cho người phê duyệt.
+// Dùng CHUNG FORWARD_SUPPORTED_MODULES — gia hạn qua nhánh ngang CHỈ có ý nghĩa ở module đã bật Chuyển
+// Tiếp Xin Ý Kiến; nhánh (1) tự áp dụng CHUNG giới hạn này cho gọn (không tách thêm 1 Set thứ 2), đúng
+// yêu cầu "không ảnh hưởng thêm module khác" — không mở ra module nào ngoài submissions/contracts.
+const MAX_EXTENSION_REASON_LEN = 500;
+
+function assertExtensionModuleSupported(moduleKey) {
+  if (!FORWARD_SUPPORTED_MODULES.has(moduleKey)) {
+    throw new WorkflowError(400, `Module không hỗ trợ Gia Hạn Ngày Mong Muốn Phê Duyệt: ${moduleKey}`);
+  }
+}
+
+function parseDesiredDateOrThrow(raw, fieldLabel) {
+  const s = String(raw || '').trim();
+  if (!s) throw new WorkflowError(400, `Vui lòng chọn ${fieldLabel}`);
+  if (Number.isNaN(new Date(s).getTime())) throw new WorkflowError(400, `${fieldLabel} không hợp lệ`);
+  return s;
+}
+
+// POST /api/workflow/:module/:id/extend-approval-deadline — người phê duyệt bước hiện tại tự gia hạn
+// NGAY (không cần xác nhận thêm từ ai).
+router.post('/:module/:id/extend-approval-deadline', async (req, res) => {
+  const moduleKey = req.params.module;
+  const itemId = Number(req.params.id);
+  const { newDesiredApprovalDate, reason } = req.body || {};
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+
+  const rsn = String(reason || '').trim();
+  if (!rsn) return res.status(400).json({ error: 'Vui lòng nhập lý do gia hạn' });
+  if (rsn.length > MAX_EXTENSION_REASON_LEN) {
+    return res.status(400).json({ error: `Lý do gia hạn tối đa ${MAX_EXTENSION_REASON_LEN} ký tự` });
+  }
+
+  try {
+    assertExtensionModuleSupported(moduleKey);
+    const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
+    const newDate = parseDesiredDateOrThrow(newDesiredApprovalDate, 'Ngày mong muốn phê duyệt mới');
+
+    const appData = await getAllAppData();
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      const statusField = MODULE_CONFIGS[moduleKey].statusField || 'status';
+      if (item[statusField] !== 'PENDING') {
+        throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý, không thể gia hạn');
+      }
+      const step = item.currentStep;
+      const approvers = resolveWorkflowStepApprovers(moduleKey, item, appData, step);
+      if (!canApproveStep(freshUser, approvers, item.history, step)) {
+        throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể gia hạn');
+      }
+      const oldDate = item.desiredApprovalDate || null;
+      if (oldDate && !(new Date(newDate).getTime() > new Date(oldDate).getTime())) {
+        throw new WorkflowError(400, 'Ngày mong muốn phê duyệt mới phải sau ngày đã đặt trước đó');
+      }
+      item.desiredApprovalDate = newDate;
+      if (!Array.isArray(item.approvalDeadlineExtensions)) item.approvalDeadlineExtensions = [];
+      item.approvalDeadlineExtensions.push({
+        id: crypto.randomUUID(), oldDate, newDate, reason: rsn,
+        appliedBy: freshUser.username, appliedByName: freshUser.name, appliedAt: nowVN(),
+        viaRequestFrom: null
+      });
+      // Mốc đếm đổi nhưng currentStep không đổi — PHẢI reset "đã nhắc" thủ công ở đây, khác cơ chế tự
+      // reset theo currentStep của job (xem chú thích overdueNotified ở jobs/approvalOverdueReminder.js),
+      // nếu không job sẽ coi các ngưỡng cũ "đã nhắc rồi" dù mốc đếm thật đã dời hẳn sang ngày khác.
+      item.overdueNotified = null;
+      item.pendingApprovalExtension = null;
+      return item;
+    });
+
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/${moduleKey}/${req.params.id}/extend-approval-deadline lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
+// POST /api/workflow/:module/:id/request-approval-extension — người ĐƯỢC chuyển tiếp (forwardedTo của
+// BẤT KỲ node nào, không cần đúng node mới nhất) chỉ ĐỀ NGHỊ gia hạn, không áp dụng ngay — đẩy lên
+// ĐÚNG người phê duyệt bước hiện tại để họ biết và tự quyết (confirm/reject bên dưới).
+router.post('/:module/:id/request-approval-extension', async (req, res) => {
+  const moduleKey = req.params.module;
+  const itemId = Number(req.params.id);
+  const { newDesiredApprovalDate, reason } = req.body || {};
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+
+  const rsn = String(reason || '').trim();
+  if (!rsn) return res.status(400).json({ error: 'Vui lòng nhập lý do đề nghị gia hạn' });
+  if (rsn.length > MAX_EXTENSION_REASON_LEN) {
+    return res.status(400).json({ error: `Lý do đề nghị gia hạn tối đa ${MAX_EXTENSION_REASON_LEN} ký tự` });
+  }
+
+  try {
+    assertExtensionModuleSupported(moduleKey);
+    const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
+    const newDate = parseDesiredDateOrThrow(newDesiredApprovalDate, 'Ngày mong muốn phê duyệt đề nghị');
+
+    const appData = await getAllAppData();
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      const statusField = MODULE_CONFIGS[moduleKey].statusField || 'status';
+      if (item[statusField] !== 'PENDING') {
+        throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý, không thể đề nghị gia hạn');
+      }
+      const isForwardRecipient = (item.forwardThreads || []).some(n => n.forwardedTo === freshUser.username);
+      if (!isForwardRecipient) {
+        throw new WorkflowError(403, 'Bạn không phải người được chuyển tiếp ở hồ sơ này nên không thể đề nghị gia hạn');
+      }
+      if (item.pendingApprovalExtension) {
+        throw new WorkflowError(409, 'Hồ sơ đang có 1 đề nghị gia hạn chờ người phê duyệt xử lý, vui lòng đợi kết quả');
+      }
+      const oldDate = item.desiredApprovalDate || null;
+      if (oldDate && !(new Date(newDate).getTime() > new Date(oldDate).getTime())) {
+        throw new WorkflowError(400, 'Ngày mong muốn phê duyệt đề nghị phải sau ngày đã đặt trước đó');
+      }
+      item.pendingApprovalExtension = {
+        id: crypto.randomUUID(), requestedBy: freshUser.username, requestedByName: freshUser.name,
+        newDesiredApprovalDate: newDate, reason: rsn, requestedAt: nowVN()
+      };
+      return item;
+    });
+
+    // Báo ĐÚNG người phê duyệt bước hiện tại — resolve LẠI (live), không dùng snapshot cũ, khớp quy ước
+    // đã dùng ở route /forward.
+    const step = resultItem.currentStep;
+    const approverUsernames = resolveWorkflowStepApprovers(moduleKey, resultItem, appData, step);
+    const title = resultItem.title || resultItem.code || `#${itemId}`;
+    if (approverUsernames.length) {
+      await notifyUsers(approverUsernames, 'APPROVAL_EXTENSION_REQUESTED',
+        'Đề nghị gia hạn ngày mong muốn phê duyệt',
+        `${freshUser.name} (được chuyển tiếp xin ý kiến) đề nghị gia hạn ngày mong muốn phê duyệt cho "${title}"`,
+        `/forward?module=${moduleKey}&code=${encodeURIComponent(resultItem.code || '')}`);
+    }
+
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/${moduleKey}/${req.params.id}/request-approval-extension lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
+// POST /api/workflow/:module/:id/confirm-approval-extension — người phê duyệt bước hiện tại CHẤP NHẬN
+// đề nghị đang treo — áp dụng y hệt tác động của extend-approval-deadline + báo lại người đã đề nghị.
+router.post('/:module/:id/confirm-approval-extension', async (req, res) => {
+  const moduleKey = req.params.module;
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+
+  try {
+    assertExtensionModuleSupported(moduleKey);
+    const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
+
+    const appData = await getAllAppData();
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      const statusField = MODULE_CONFIGS[moduleKey].statusField || 'status';
+      if (item[statusField] !== 'PENDING') {
+        throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý');
+      }
+      const pending = item.pendingApprovalExtension;
+      if (!pending) throw new WorkflowError(404, 'Không có đề nghị gia hạn nào đang chờ xử lý');
+      const step = item.currentStep;
+      const approvers = resolveWorkflowStepApprovers(moduleKey, item, appData, step);
+      if (!canApproveStep(freshUser, approvers, item.history, step)) {
+        throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể xác nhận gia hạn');
+      }
+      const oldDate = item.desiredApprovalDate || null;
+      item.desiredApprovalDate = pending.newDesiredApprovalDate;
+      if (!Array.isArray(item.approvalDeadlineExtensions)) item.approvalDeadlineExtensions = [];
+      item.approvalDeadlineExtensions.push({
+        id: crypto.randomUUID(), oldDate, newDate: pending.newDesiredApprovalDate, reason: pending.reason,
+        appliedBy: freshUser.username, appliedByName: freshUser.name, appliedAt: nowVN(),
+        viaRequestFrom: pending.requestedBy
+      });
+      item.overdueNotified = null;
+      item.pendingApprovalExtension = null;
+      item._justConfirmedExtensionRequester = pending.requestedBy; // đọc lại ngay dưới, không lưu vào DB
+      return item;
+    });
+
+    const requester = resultItem._justConfirmedExtensionRequester;
+    delete resultItem._justConfirmedExtensionRequester;
+    const title = resultItem.title || resultItem.code || `#${itemId}`;
+    if (requester) {
+      await notifyUsers([requester], 'APPROVAL_EXTENSION_CONFIRMED',
+        'Đề nghị gia hạn đã được chấp nhận',
+        `Người phê duyệt đã chấp nhận đề nghị gia hạn ngày mong muốn phê duyệt cho "${title}"`,
+        `/forward?module=${moduleKey}&code=${encodeURIComponent(resultItem.code || '')}`);
+    }
+
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/${moduleKey}/${req.params.id}/confirm-approval-extension lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
+// POST /api/workflow/:module/:id/reject-approval-extension — người phê duyệt bước hiện tại TỪ CHỐI đề
+// nghị đang treo — không đổi desiredApprovalDate, chỉ xoá đề nghị + báo lại người đã đề nghị.
+router.post('/:module/:id/reject-approval-extension', async (req, res) => {
+  const moduleKey = req.params.module;
+  const itemId = Number(req.params.id);
+  const { reason } = req.body || {};
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  const rsn = String(reason || '').trim();
+  if (rsn.length > MAX_EXTENSION_REASON_LEN) {
+    return res.status(400).json({ error: `Lý do từ chối tối đa ${MAX_EXTENSION_REASON_LEN} ký tự` });
+  }
+
+  try {
+    assertExtensionModuleSupported(moduleKey);
+    const freshUser = req.freshUser;
+    assertWorkflowModuleAccess(freshUser, moduleKey);
+
+    const appData = await getAllAppData();
+    const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {
+      const statusField = MODULE_CONFIGS[moduleKey].statusField || 'status';
+      if (item[statusField] !== 'PENDING') {
+        throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý');
+      }
+      const pending = item.pendingApprovalExtension;
+      if (!pending) throw new WorkflowError(404, 'Không có đề nghị gia hạn nào đang chờ xử lý');
+      const step = item.currentStep;
+      const approvers = resolveWorkflowStepApprovers(moduleKey, item, appData, step);
+      if (!canApproveStep(freshUser, approvers, item.history, step)) {
+        throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể từ chối gia hạn');
+      }
+      item.pendingApprovalExtension = null;
+      item._justRejectedExtension = { requestedBy: pending.requestedBy, rejectReason: rsn };
+      return item;
+    });
+
+    const rejected = resultItem._justRejectedExtension;
+    delete resultItem._justRejectedExtension;
+    const title = resultItem.title || resultItem.code || `#${itemId}`;
+    if (rejected && rejected.requestedBy) {
+      await notifyUsers([rejected.requestedBy], 'APPROVAL_EXTENSION_REJECTED',
+        'Đề nghị gia hạn đã bị từ chối',
+        `Người phê duyệt đã từ chối đề nghị gia hạn ngày mong muốn phê duyệt cho "${title}"${rejected.rejectReason ? `: ${rejected.rejectReason}` : ''}`,
+        `/forward?module=${moduleKey}&code=${encodeURIComponent(resultItem.code || '')}`);
+    }
+
+    res.json({ ok: true, item: resultItem });
+  } catch (err) {
+    if (err instanceof WorkflowError) return res.status(err.status).json({ error: err.message });
+    console.error(`POST /api/workflow/${moduleKey}/${req.params.id}/reject-approval-extension lỗi:`, err.message);
+    res.status(500).json({ error: 'Không thể xử lý yêu cầu' });
+  }
+});
+
 // POST /api/workflow/:module/:id/:action  (module: docs|submissions|carRegs|officeReqs)
 router.post('/:module/:id/:action', async (req, res) => {
   const { module: moduleKey, id, action: rawAction } = req.params;

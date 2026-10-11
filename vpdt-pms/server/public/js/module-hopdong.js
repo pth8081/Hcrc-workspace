@@ -569,6 +569,12 @@ async function submitContractReq(e) {
   const startDate = document.getElementById('contractStartDate').value;
   const endDate = document.getElementById('contractEndDate').value;
   const content = document.getElementById('contractContent').value.trim();
+  // Ngày Mong Muốn Phê Duyệt (11/2026, tuỳ chọn) — chỉ đặt được LÚC TẠO ở đây; sau khi hồ sơ đã vào
+  // hàng chờ PENDING, mọi thay đổi mốc này PHẢI đi qua đúng tính năng "Gia Hạn" (core.js::
+  // openApprovalExtensionModal(), routes/workflow.js) để giữ đúng log lịch sử gia hạn + reset
+  // overdueNotified — CỐ Ý không đọc/gửi field này ở updateContractReq() (nhánh Sửa hồ sơ) để tránh có
+  // 2 đường ghi đè khác nhau lên CÙNG 1 field.
+  const desiredApprovalDate = document.getElementById('contractDesiredApprovalDate')?.value || null;
   const fileInput = document.getElementById('contractFile');
 
   let rootContractId = null;
@@ -631,6 +637,7 @@ async function submitContractReq(e) {
 
   const contractPayload = {
     code, dept, custodianDept, type, title, partner, amount, startDate, endDate, content,
+    desiredApprovalDate,
     customData,
     fileName: uploaded.fileName,
     fileType: uploaded.fileType,

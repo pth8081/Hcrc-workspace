@@ -5,6 +5,14 @@
 // computeApprovalOverdueStatus() (badge hiển thị ngay trên phiếu/danh sách, không đợi job chạy — 2 bản
 // độc lập, phải sửa đồng thời vì lib/ không dùng chung code với client, cùng quy ước nowVN()/
 // parseVNDateTime() đã áp dụng toàn hệ thống).
+//
+// "Ngày Mong Muốn Phê Duyệt" + "Gia Hạn" (11/2026, theo yêu cầu người dùng): người tạo hồ sơ có thể tuỳ
+// chọn đặt 1 mốc `item.desiredApprovalDate` ("YYYY-MM-DD") ngay lúc tạo; người phê duyệt bước hiện tại
+// (hoặc người được Chuyển Tiếp Xin Ý Kiến, qua đề nghị — xem routes/workflow.js) có thể "Gia Hạn" để dời
+// mốc này ra xa hơn. Khi CÓ đặt mốc này, cảnh báo đổi hẳn sang đếm theo ĐÚNG mốc đó cho SUỐT VÒNG ĐỜI hồ
+// sơ (không phân biệt đang ở bước mấy, KHÁC cơ chế step-start-time mặc định vốn reset mỗi khi sang bước
+// mới) — vẫn tôn trọng công tắc tổng `overdueDays` rỗng = tính năng TẮT HẲN (không đọc desiredApprovalDate
+// nếu overdueDays rỗng, giữ đúng nghĩa "tắt hẳn" của admin).
 const { parseVNDateTime } = require('./recordActions');
 
 // item: bản ghi submissions/contracts đã đọc (còn PENDING ở 1 bước). config: { statusField,
@@ -32,6 +40,24 @@ function computeApprovalOverdueStatus(item, config, overdueDays, now) {
   if (item[statusField] !== 'PENDING') return null;
   if (item.isAddendum) return null;
 
+  const nowDate = now || new Date();
+  const maxThreshold = thresholds[thresholds.length - 1];
+  const minThreshold = thresholds[0];
+
+  // "Ngày Mong Muốn Phê Duyệt" có đặt (lúc tạo hoặc qua Gia Hạn) → MỐC ĐẾM đổi hẳn sang mốc này, áp dụng
+  // SUỐT VÒNG ĐỜI hồ sơ, không phụ thuộc bước/lịch sử. daysWaited ở đây = số ngày đã TRỄ so với mốc (âm
+  // = còn sớm). Chuỗi "YYYY-MM-DD" nên new Date() parse đúng giờ 00:00 UTC, nhất quán với quy ước
+  // new Date(isoString) đã dùng ở các nơi khác tính "ngày hết hạn hợp đồng" (vd module-thanhtoan.js).
+  if (item.desiredApprovalDate) {
+    const desiredDate = new Date(item.desiredApprovalDate);
+    if (!Number.isNaN(desiredDate.getTime())) {
+      const daysWaited = Math.floor((nowDate.getTime() - desiredDate.getTime()) / 86400000);
+      if (daysWaited >= 0) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: item.desiredApprovalDate, viaDesiredDate: true };
+      if (daysWaited >= -minThreshold) return { level: 'APPROACHING', daysWaited, threshold: minThreshold, stepStartAt: item.desiredApprovalDate, viaDesiredDate: true };
+      return null;
+    }
+  }
+
   const step = item[stepField];
   const history = item[historyField] || [];
   // Mốc "bắt đầu chờ ở bước hiện tại" = lúc BƯỚC TRƯỚC hoàn tất (entry APPROVED cuối cùng của bước đó —
@@ -45,12 +71,9 @@ function computeApprovalOverdueStatus(item, config, overdueDays, now) {
   const startDate = parseVNDateTime(stepStartStr);
   if (!startDate) return null;
 
-  const nowDate = now || new Date();
   const daysWaited = Math.floor((nowDate.getTime() - startDate.getTime()) / 86400000);
   if (daysWaited < 0) return null;
 
-  const maxThreshold = thresholds[thresholds.length - 1];
-  const minThreshold = thresholds[0];
   if (daysWaited >= maxThreshold) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: stepStartStr };
   if (daysWaited >= minThreshold) return { level: 'APPROACHING', daysWaited, threshold: minThreshold, stepStartAt: stepStartStr };
   return null;

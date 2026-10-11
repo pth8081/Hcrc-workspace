@@ -1976,6 +1976,22 @@ function computeApprovalOverdueStatus(item, config, overdueDays, now) {
   if (item[statusField] !== 'PENDING') return null;
   if (item.isAddendum) return null;
 
+  const nowDate = now || new Date();
+  const maxThreshold = thresholds[thresholds.length - 1];
+  const minThreshold = thresholds[0];
+
+  // "Ngày Mong Muốn Phê Duyệt" có đặt (lúc tạo hoặc qua Gia Hạn) → MỐC ĐẾM đổi hẳn sang mốc này, áp dụng
+  // SUỐT VÒNG ĐỜI hồ sơ, không phụ thuộc bước/lịch sử — xem lib/approvalOverdue.js bản server (MIRROR).
+  if (item.desiredApprovalDate) {
+    const desiredDate = new Date(item.desiredApprovalDate);
+    if (!Number.isNaN(desiredDate.getTime())) {
+      const daysWaited = Math.floor((nowDate.getTime() - desiredDate.getTime()) / 86400000);
+      if (daysWaited >= 0) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: item.desiredApprovalDate, viaDesiredDate: true };
+      if (daysWaited >= -minThreshold) return { level: 'APPROACHING', daysWaited, threshold: minThreshold, stepStartAt: item.desiredApprovalDate, viaDesiredDate: true };
+      return null;
+    }
+  }
+
   const step = item[stepField];
   const history = item[historyField] || [];
   let stepStartStr = item.createdAt;
@@ -1986,12 +2002,9 @@ function computeApprovalOverdueStatus(item, config, overdueDays, now) {
   const startDate = parseVNDateTime(stepStartStr);
   if (!startDate) return null;
 
-  const nowDate = now || new Date();
   const daysWaited = Math.floor((nowDate.getTime() - startDate.getTime()) / 86400000);
   if (daysWaited < 0) return null;
 
-  const maxThreshold = thresholds[thresholds.length - 1];
-  const minThreshold = thresholds[0];
   if (daysWaited >= maxThreshold) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: stepStartStr };
   if (daysWaited >= minThreshold) return { level: 'APPROACHING', daysWaited, threshold: minThreshold, stepStartAt: stepStartStr };
   return null;
@@ -2013,6 +2026,14 @@ function buildApprovalOverdueBadgeHTML(moduleKey, item) {
   const overdueDays = (DB.emailConfig || {})[cfg.overdueField];
   const st = computeApprovalOverdueStatus(item, cfg, overdueDays);
   if (!st) return '';
+  // viaDesiredDate: hồ sơ có đặt "Ngày Mong Muốn Phê Duyệt" (lúc tạo hoặc qua Gia Hạn) — ghi rõ trong
+  // badge để người xem phân biệt với cơ chế đếm theo bước mặc định, tránh hiểu nhầm "trễ X ngày" là
+  // tính từ lúc vào bước hiện tại.
+  if (st.viaDesiredDate) {
+    return st.level === 'OVERDUE'
+      ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px] whitespace-nowrap">🔴 Quá Hạn (theo NMM PD, trễ ${st.daysWaited} ngày)</span>`
+      : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[11px] whitespace-nowrap">⚠️ Sắp Tới Ngày Mong Muốn PD (còn ${Math.abs(st.daysWaited)} ngày)</span>`;
+  }
   return st.level === 'OVERDUE'
     ? `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-[11px] whitespace-nowrap">🔴 Quá Hạn Xử Lý (${st.daysWaited} ngày)</span>`
     : `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[11px] whitespace-nowrap">⚠️ Sắp Quá Hạn (${st.daysWaited} ngày)</span>`;
@@ -12910,6 +12931,138 @@ async function submitForwardRequest(moduleKey, itemId, parentNodeId) {
 
   alert('✅ Đã gửi chuyển tiếp xin ý kiến!');
   closeGenericConfirmModal();
+  refreshForwardHostUI(moduleKey, result.item);
+}
+
+// ============================================================
+// GIA HẠN NGÀY MONG MUỐN PHÊ DUYỆT (desiredApprovalDate) — dùng chung cho Văn Bản Trình/Hợp Đồng, xem
+// routes/workflow.js (4 route extend/request/confirm/reject-approval-extension) + lib/approvalOverdue.js
+// (cảnh báo Quá Hạn Xử Lý đổi hẳn sang đếm theo mốc này khi hồ sơ có đặt). Theo đúng yêu cầu người dùng
+// (11/2026): người phê duyệt bước hiện tại gia hạn TRỰC TIẾP; người được Chuyển Tiếp Xin Ý Kiến (nhánh
+// ngang) chỉ ĐỀ NGHỊ, đẩy lên người phê duyệt thật xác nhận/từ chối. `canApproveCurrentStep` do NƠI GỌI
+// tự tính theo ĐÚNG khuôn "canApprove" đã có sẵn ở từng module (canApproveContractStep()/
+// resolveSubmissionWorkflow()+canApproveStep() ở module-vanbantrinh.js) — hàm này KHÔNG tự tính lại để
+// tránh trùng lặp logic resolve quy trình riêng của từng module.
+// ============================================================
+function renderApprovalExtensionBlock(moduleKey, item, canApproveCurrentStep) {
+  if (!isForwardRecordPending(moduleKey, item)) return '';
+  const my = currentUser.username;
+  const isForwardRecipient = (item.forwardThreads || []).some(n => n.forwardedTo === my);
+  const pending = item.pendingApprovalExtension;
+
+  if (canApproveCurrentStep && pending) {
+    return `
+      <div class="bg-amber-50 border border-amber-300 rounded p-3 mt-2">
+        <div class="font-bold text-amber-800 text-xs mb-1">⏳ Có đề nghị Gia Hạn Ngày Mong Muốn Phê Duyệt đang chờ bạn xử lý</div>
+        <div class="text-[11px] text-gray-700"><b>${escapeHtml(pending.requestedByName || pending.requestedBy)}</b> (được chuyển tiếp xin ý kiến) đề nghị dời sang <b>${escapeHtml(pending.newDesiredApprovalDate)}</b></div>
+        <div class="text-gray-500 italic text-[11px] mt-0.5">Lý do: "${escapeHtml(pending.reason)}"</div>
+        <div class="flex gap-2 mt-2">
+          <button type="button" data-op="confirmApprovalExtensionRequest" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" class="bg-emerald-600 text-white px-3 py-1 rounded text-[11px] font-bold hover:bg-emerald-700">✅ Đồng Ý Gia Hạn</button>
+          <button type="button" data-op="rejectApprovalExtensionRequest" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[11px] font-bold hover:bg-gray-300">❌ Từ Chối</button>
+        </div>
+      </div>
+    `;
+  }
+  if (canApproveCurrentStep) {
+    return `<div class="mt-2"><button type="button" data-op="openApprovalExtensionModal" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" data-arg2="'apply'" class="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded text-[11px] font-bold hover:bg-indigo-200">⏱️ Gia Hạn Ngày Mong Muốn Phê Duyệt</button></div>`;
+  }
+  if (isForwardRecipient) {
+    if (pending) {
+      return `<div class="text-[11px] text-amber-600 italic mt-2">⏳ Đã gửi đề nghị Gia Hạn, đang chờ người phê duyệt xác nhận.</div>`;
+    }
+    return `<div class="mt-2"><button type="button" data-op="openApprovalExtensionModal" data-arg0="${escapeHtml(moduleKey)}" data-arg1="${item.id}" data-arg2="'request'" class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded text-[11px] font-bold hover:bg-indigo-100">⏱️ Đề Nghị Gia Hạn</button></div>`;
+  }
+  return '';
+}
+
+function openApprovalExtensionModal(moduleKey, itemId, mode) {
+  const item = forwardItemLookup(moduleKey, itemId);
+  if (!item) return;
+  const currentLabel = item.desiredApprovalDate ? escapeHtml(item.desiredApprovalDate) : '(chưa đặt)';
+  const bodyHTML = `
+    <div class="space-y-2">
+      <div class="text-[11px] text-gray-600">Ngày mong muốn phê duyệt hiện tại: <b>${currentLabel}</b></div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Ngày mong muốn phê duyệt mới</label>
+        <input type="date" id="apExtNewDate" class="w-full border p-1.5 rounded text-xs">
+      </div>
+      <div>
+        <label class="block font-semibold text-gray-600 mb-1">Lý do ${mode === 'request' ? 'đề nghị ' : ''}gia hạn</label>
+        <textarea id="apExtReason" rows="2" class="w-full border p-1.5 rounded text-xs" placeholder="Lý do cần gia hạn..."></textarea>
+      </div>
+    </div>
+  `;
+  showConfirmModal({
+    title: mode === 'request' ? '⏱️ Đề Nghị Gia Hạn Ngày Mong Muốn Phê Duyệt' : '⏱️ Gia Hạn Ngày Mong Muốn Phê Duyệt',
+    bodyHTML,
+    confirmLabel: mode === 'request' ? 'Gửi Đề Nghị' : 'Xác Nhận Gia Hạn',
+    onConfirm: () => submitApprovalExtension(moduleKey, itemId, mode)
+  });
+}
+
+async function submitApprovalExtension(moduleKey, itemId, mode) {
+  const newDesiredApprovalDate = document.getElementById('apExtNewDate')?.value || '';
+  const reason = (document.getElementById('apExtReason')?.value || '').trim();
+  if (!newDesiredApprovalDate) { alert('⛔ Vui lòng chọn ngày mong muốn phê duyệt mới!'); return; }
+  if (!reason) { alert('⛔ Vui lòng nhập lý do!'); return; }
+
+  const action = mode === 'request' ? 'request-approval-extension' : 'extend-approval-deadline';
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/${moduleKey}/${itemId}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newDesiredApprovalDate, reason })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) {
+    alert('⛔ ' + e.message);
+    return;
+  }
+
+  forwardReplaceItem(moduleKey, result.item);
+  logSystemAction(FORWARD_EMAIL_MODULE[moduleKey],
+    mode === 'request' ? 'APPROVAL_EXTENSION_REQUEST' : 'APPROVAL_EXTENSION',
+    `${mode === 'request' ? 'Đề nghị gia hạn' : 'Gia hạn'} ngày mong muốn phê duyệt [${result.item.code}]`,
+    'SUCCESS', result.item.code);
+
+  alert(mode === 'request' ? '✅ Đã gửi đề nghị Gia Hạn!' : '✅ Đã gia hạn thành công!');
+  closeGenericConfirmModal();
+  refreshForwardHostUI(moduleKey, result.item);
+}
+
+async function confirmApprovalExtensionRequest(moduleKey, itemId) {
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/${moduleKey}/${itemId}/confirm-approval-extension`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) { alert('⛔ ' + e.message); return; }
+  forwardReplaceItem(moduleKey, result.item);
+  logSystemAction(FORWARD_EMAIL_MODULE[moduleKey], 'APPROVAL_EXTENSION_CONFIRM', `Đồng ý đề nghị gia hạn [${result.item.code}]`, 'SUCCESS', result.item.code);
+  alert('✅ Đã xác nhận Gia Hạn!');
+  refreshForwardHostUI(moduleKey, result.item);
+}
+
+async function rejectApprovalExtensionRequest(moduleKey, itemId) {
+  let result;
+  try {
+    const res = await fetch(`/api/workflow/${moduleKey}/${itemId}/reject-approval-extension`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '' })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    result = body;
+  } catch (e) { alert('⛔ ' + e.message); return; }
+  forwardReplaceItem(moduleKey, result.item);
+  logSystemAction(FORWARD_EMAIL_MODULE[moduleKey], 'APPROVAL_EXTENSION_REJECT', `Từ chối đề nghị gia hạn [${result.item.code}]`, 'SUCCESS', result.item.code);
+  alert('✅ Đã từ chối đề nghị gia hạn.');
   refreshForwardHostUI(moduleKey, result.item);
 }
 

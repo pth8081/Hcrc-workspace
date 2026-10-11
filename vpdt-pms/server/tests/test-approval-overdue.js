@@ -116,6 +116,71 @@ async function main() {
     assert.strictEqual(st.daysWaited, 100);
   });
 
+  // --- Phần 1b: "Ngày Mong Muốn Phê Duyệt" (desiredApprovalDate, 11/2026, tính năng Gia Hạn) ---
+  function daysFromNowDateOnly(days) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  await test('Có đặt desiredApprovalDate ĐÃ QUA (8 ngày trước) -> OVERDUE, BẤT KỂ đang ở bước mấy/lịch sử ra sao', () => {
+    const item = { status: 'PENDING', currentStep: 3, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: daysFromNowDateOnly(-8) };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.ok(st);
+    assert.strictEqual(st.level, 'OVERDUE');
+    assert.strictEqual(st.viaDesiredDate, true);
+  });
+
+  await test('desiredApprovalDate còn 2 ngày nữa (trong ngưỡng nhỏ nhất=3) -> APPROACHING', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: daysFromNowDateOnly(2) };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.ok(st);
+    assert.strictEqual(st.level, 'APPROACHING');
+    assert.strictEqual(st.viaDesiredDate, true);
+  });
+
+  await test('desiredApprovalDate còn rất xa (30 ngày) -> null (chưa tới ngưỡng cảnh báo sớm)', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: daysFromNowDateOnly(30) };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.strictEqual(st, null);
+  });
+
+  await test('desiredApprovalDate ƯU TIÊN HƠN mốc step-start-time: hồ sơ mới tạo hôm nay (chưa quá hạn theo step) nhưng đã đặt mốc QUÁ KHỨ -> vẫn OVERDUE', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(0), history: [], desiredApprovalDate: daysFromNowDateOnly(-1) };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.ok(st, 'Nếu dùng mốc step-start-time mặc định (createdAt hôm nay) thì sẽ null — phải ưu tiên desiredApprovalDate');
+    assert.strictEqual(st.level, 'OVERDUE');
+  });
+
+  await test('desiredApprovalDate rỗng/null -> rơi về cơ chế step-start-time mặc định y hệt trước đây (không regression)', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(8), history: [], desiredApprovalDate: null };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.ok(st);
+    assert.strictEqual(st.level, 'OVERDUE');
+    assert.strictEqual(st.viaDesiredDate, undefined);
+  });
+
+  await test('desiredApprovalDate có đặt NHƯNG overdueDays rỗng (tính năng TẮT HẲN) -> vẫn null, tôn trọng công tắc tổng', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: daysFromNowDateOnly(-100) };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, []);
+    assert.strictEqual(st, null);
+  });
+
+  await test('desiredApprovalDate có đặt NHƯNG hồ sơ không còn PENDING -> null', () => {
+    const item = { status: 'APPROVED', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: daysFromNowDateOnly(-100) };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.strictEqual(st, null);
+  });
+
+  await test('desiredApprovalDate là chuỗi không hợp lệ -> fail-open về cơ chế step-start-time mặc định, không throw', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(8), history: [], desiredApprovalDate: 'khong-phai-ngay-hop-le' };
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7]);
+    assert.ok(st);
+    assert.strictEqual(st.level, 'OVERDUE');
+    assert.strictEqual(st.viaDesiredDate, undefined);
+  });
+
   // --- Phần 2: jobs/approvalOverdueReminder.js (stub recordStore/systemLogStore/mailer/emailCrypto/db) ---
   const STORE = { submissions: [], contracts: [] };
   const APP_DATA = {

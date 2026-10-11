@@ -1,8 +1,48 @@
 # Phiên bản hiện tại
 
-**25.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.73 (2026-10): Gia Hạn (Extend) + Ngày Mong Muốn Phê Duyệt cho Văn Bản Trình/Hợp Đồng
+
+Tính năng mới theo yêu cầu người dùng: cho phép gia hạn mốc "Quá Hạn Xử Lý"
+(11/2026) của 1 hồ sơ Văn Bản Trình/Hợp Đồng đang PENDING, tách riêng quyền
+của người duyệt thật và người chỉ được "Chuyển Tiếp Xin Ý Kiến" (Forward).
+
+- **Trường mới `desiredApprovalDate`** ("Ngày Mong Muốn Phê Duyệt", tuỳ chọn,
+  `YYYY-MM-DD` hoặc `null`) — chỉ đặt được lúc TẠO hồ sơ (`submissions`/
+  `contracts`), sau đó CHỈ thay đổi được qua tính năng Gia Hạn bên dưới,
+  không qua route sửa/update thường (tách biệt rõ 2 luồng).
+- **`computeApprovalOverdueStatus()`** (`lib/approvalOverdue.js` + mirror
+  client `public/js/core.js`): khi bật "Quá Hạn Xử Lý" (`overdueDays` có cấu
+  hình) VÀ hồ sơ có đặt `desiredApprovalDate`, cách tính quá hạn chuyển từ
+  "theo thời điểm bắt đầu bước hiện tại" sang "theo ngày mong muốn phê duyệt"
+  cho TOÀN BỘ vòng đời hồ sơ (không reset lại mỗi khi sang bước mới) — badge
+  hiển thị khác (🔴/⚠️ kèm chữ "theo NMM PD") để phân biệt rõ 2 cơ chế.
+- **2 luồng Gia Hạn** (`routes/workflow.js`, 4 route mới, chỉ áp dụng
+  `submissions`/`contracts` — đúng phạm vi tính năng Forward đã có):
+  1. Người duyệt THẬT của bước hiện tại: `POST /:module/:id/extend-approval-deadline`
+     — gia hạn trực tiếp ngay (ngày mới phải muộn hơn ngày cũ nếu có).
+  2. Người được Forward (chỉ có trong `item.forwardThreads[]`, không phải
+     người duyệt thật): CHỈ được `POST /:module/:id/request-approval-extension`
+     — gửi ĐỀ NGHỊ gia hạn (`item.pendingApprovalExtension`, tối đa 1 đề nghị
+     treo cùng lúc), người duyệt thật xác nhận (`confirm-approval-extension`)
+     hoặc từ chối (`reject-approval-extension`) — có thông báo qua
+     `notifyUsers()` ở cả 2 chiều.
+  - Mọi lần gia hạn thành công đều log vào `item.approvalDeadlineExtensions[]`
+    (ai gia hạn, ngày cũ/mới, lý do, qua đề nghị của ai nếu có) và reset
+    `item.overdueNotified = null` để job nhắc quá hạn (`jobs/approvalOverdueReminder.js`)
+    tính lại đúng ngưỡng theo deadline mới.
+- **Client**: form tạo Văn Bản Trình/Hợp Đồng có thêm ô "Ngày Mong Muốn Phê
+  Duyệt (Tuỳ Chọn)"; khối "🔀 Chuyển Tiếp Xin Ý Kiến" ở màn chi tiết có thêm
+  khối Gia Hạn ngay dưới (nút khác nhau tuỳ người xem là approver thật hay
+  người được forward).
+- **Test**: 30 kịch bản mới (`tests/test-approval-extension-routes.js` 16 ca,
+  `tests/test-approval-overdue.js` +7 ca, `tests/test-approval-extension-create-validation.js`
+  7 ca) — toàn bộ pass. Full regression 433 file: 408 pass/25 fail, cả 25 lỗi
+  đã xác nhận qua `git stash` so với baseline sạch là lỗi CÓ SẴN từ trước,
+  không liên quan tới tính năng này (không có regression mới).
 
 ## v25.72 (2026-10): Vá 5 lỗi Thấp còn lại đợt rà soát chuyên sâu v25.1→v25.70
 

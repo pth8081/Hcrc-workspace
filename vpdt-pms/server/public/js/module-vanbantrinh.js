@@ -46,6 +46,7 @@ async function doSubmitSubmissionReq(e) {
   const priority = document.getElementById('subPriority').value;
   const content = document.getElementById('subContent').value.trim();
   const approvalLevel = document.getElementById('subApprovalLevel').value;
+  const desiredApprovalDate = document.getElementById('subDesiredApprovalDate')?.value || null;
   const fileInput = document.getElementById('subFile');
   const extraFilesInput = document.getElementById('subExtraFiles');
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedSubmissionLayers();
@@ -99,6 +100,7 @@ async function doSubmitSubmissionReq(e) {
     createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     status: 'PENDING',
     currentStep: 1,
+    desiredApprovalDate: desiredApprovalDate,
     approvalLevel: approvalLevel,
     selectedApprovalLayers: selectedLayerKeys,
     selectedLayerMembers: selectedLayerMembers,
@@ -1208,7 +1210,12 @@ function renderSubModalForward(sub) {
   const wfConfig = resolveSubmissionWorkflow(sub);
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, sub.currentStep);
   const canForwardRoot = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
-  container.innerHTML = renderForwardBranchHTML('submissions', sub, sub.currentStep, canForwardRoot);
+  // Gia Hạn Ngày Mong Muốn Phê Duyệt (11/2026) — khối SIBLING riêng, KHÔNG sửa renderForwardBranchHTML()
+  // dùng chung (giữ nguyên hàm đó cho mọi nơi gọi khác) — canForwardRoot ĐÚNG NGHĨA "đang là người phê
+  // duyệt bước hiện tại" nên dùng lại luôn làm điều kiện Gia Hạn trực tiếp (xem core.js::
+  // renderApprovalExtensionBlock()).
+  container.innerHTML = renderForwardBranchHTML('submissions', sub, sub.currentStep, canForwardRoot)
+    + renderApprovalExtensionBlock('submissions', sub, canForwardRoot);
 }
 
 async function giveSubmissionOpinion() {

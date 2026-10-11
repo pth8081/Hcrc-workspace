@@ -819,6 +819,17 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền tạo tờ trình');
       }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'SUBMISSION');
+      // "Ngày Mong Muốn Phê Duyệt" (11/2026, tuỳ chọn) — người trình tự đặt mốc MONG MUỐN hồ sơ được
+      // duyệt xong; khi có đặt, lib/approvalOverdue.js::computeApprovalOverdueStatus() đếm cảnh báo Quá
+      // Hạn Xử Lý theo ĐÚNG mốc này (suốt vòng đời hồ sơ) thay vì mốc step-start-time mặc định. Không
+      // bắt buộc — để trống thì cảnh báo vẫn hoạt động y hệt trước đây.
+      if (payload.desiredApprovalDate) {
+        if (Number.isNaN(new Date(payload.desiredApprovalDate).getTime())) {
+          throw new CreateError(400, 'Ngày mong muốn phê duyệt không hợp lệ');
+        }
+      } else {
+        payload.desiredApprovalDate = null;
+      }
       // Tệp tờ trình + Tài Liệu Bổ Sung Theo Tờ Trình (#subFile/#subExtraFiles ở index.html) —
       // xem assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp tờ trình');
@@ -908,6 +919,17 @@ const CREATE_MODULE_CONFIGS = {
       // assertUploadedFileUrl().
       assertUploadedFileUrl(payload.fileUrl, 'Tệp hợp đồng');
       assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
+
+      // "Ngày Mong Muốn Phê Duyệt" (11/2026, tuỳ chọn) — xem chú thích đầy đủ ở submissions.extraValidate
+      // phía trên (cùng cơ chế, dùng chung lib/approvalOverdue.js). Vô hại với nhánh isSignedImport (hồ
+      // sơ APPROVED ngay, không bao giờ hiện cảnh báo Quá Hạn Xử Lý vì hàm đó chỉ xét status PENDING).
+      if (payload.desiredApprovalDate) {
+        if (Number.isNaN(new Date(payload.desiredApprovalDate).getTime())) {
+          throw new CreateError(400, 'Ngày mong muốn phê duyệt không hợp lệ');
+        }
+      } else {
+        payload.desiredApprovalDate = null;
+      }
 
       // Trường bổ sung (Biểu Mẫu) — 2 tab CONTRACT_APPROVAL/CONTRACT_MANAGE chung coreKey 'CONTRACT'
       // nhưng RIÊNG danh sách trường bổ sung (xem FORM_TABS ở index.html), khớp đúng modKey client

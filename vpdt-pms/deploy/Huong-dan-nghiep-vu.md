@@ -918,6 +918,24 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
     thêm email CC cố định tuỳ chọn (`submissionOverdueCcEmails`). Hồ sơ sang
     bước MỚI thì "đồng hồ chờ" tự tính lại từ đầu (không cộng dồn thời gian
     chờ của bước trước).
+  - **Ngày Mong Muốn Phê Duyệt + Gia Hạn (11/2026, áp dụng chung với Hợp
+    Đồng)** — form trình/tạo hồ sơ có thêm 1 ô ngày **TUỲ CHỌN** "Ngày Mong
+    Muốn Phê Duyệt" (không bắt buộc, để trống thì mọi thứ hoạt động y hệt
+    trước đây). Khi có đặt, badge/email "Quá Hạn Xử Lý" ở trên đổi hẳn mốc
+    đếm sang ĐÚNG ngày này cho **SUỐT vòng đời hồ sơ** (không phụ thuộc đang
+    ở bước mấy, khác cơ chế step-start-time mặc định vốn reset mỗi lần sang
+    bước mới). Người duyệt ở bước HIỆN TẠI thấy nút **"⏱️ Gia Hạn Ngày Mong
+    Muốn Phê Duyệt"** ngay trong hồ sơ — bấm vào, nhập ngày mới (bắt buộc
+    SAU ngày đã đặt) + lý do, áp dụng NGAY không cần ai xác nhận thêm. Người
+    được **Chuyển Tiếp Xin Ý Kiến** (mục ngay phía trên) KHÔNG được gia hạn
+    trực tiếp — chỉ thấy nút **"⏱️ Đề Nghị Gia Hạn"**, gửi đề nghị (ngày mới
+    + lý do) lên đúng người duyệt bước hiện tại; người duyệt nhận banner đề
+    nghị ngay trong hồ sơ, tự quyết "✅ Đồng Ý" (áp dụng luôn, giống hệt gia
+    hạn trực tiếp) hoặc "❌ Từ Chối" (giữ nguyên, báo lại người đã đề nghị).
+    Chỉ 1 đề nghị được treo cùng lúc trên 1 hồ sơ. Mỗi lần gia hạn thành
+    công đều ghi lại lịch sử (ngày cũ/mới, lý do, người áp dụng, người đề
+    nghị nếu có) và tự reset "đã nhắc" để job email nhắc quá hạn tính lại
+    đúng từ mốc mới.
 - **Công Việc** — giao việc, theo dõi tiến độ; có thể tự sinh từ ý kiến chỉ
   đạo trong Văn Bản Trình (xác nhận thủ công, không tự động tạo âm thầm).
   **Đổi người thực hiện khi đang "Đang thực hiện" (từ 9/2026)**: sửa lại
@@ -1845,15 +1863,19 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     người** (không bật "Chỉ 1 người") → hiện thêm 1 hộp chọn bắt buộc chọn
     **đúng 1 người cụ thể** trong nhóm duyệt bước đó. Nhóm chưa gán ai (0
     người) thì không tạo được hồ sơ cho tới khi admin gán thành viên.
-  - **🔀 Chuyển Tiếp Xin Ý Kiến / ⏰ Quá Hạn Xử Lý (11/2026)** — 2 tính năng
-    dùng CHUNG cơ chế với Văn Bản Trình (xem mô tả đầy đủ ở mục 4.1 ngay
-    trên): người duyệt bước hiện tại chuyển tiếp hồ sơ cho nhiều người cùng
-    lúc để xin ý kiến (không có quyền duyệt thay); badge/email nhắc quá hạn
-    cấu hình RIÊNG cho Hợp Đồng (`contractOverdueDays`/
+  - **🔀 Chuyển Tiếp Xin Ý Kiến / ⏰ Quá Hạn Xử Lý / ⏱️ Gia Hạn (11/2026)** — 3
+    tính năng dùng CHUNG cơ chế với Văn Bản Trình (xem mô tả đầy đủ ở mục 4.1
+    ngay trên): người duyệt bước hiện tại chuyển tiếp hồ sơ cho nhiều người
+    cùng lúc để xin ý kiến (không có quyền duyệt thay); badge/email nhắc quá
+    hạn cấu hình RIÊNG cho Hợp Đồng (`contractOverdueDays`/
     `contractOverdueCcEmails`, tách biệt ngưỡng của Văn Bản Trình) ở Cấu Hình
-    Email. Nhắc rõ: Quá Hạn Xử Lý **khác** "Cảnh báo hết hạn" ở trên — Quá
-    Hạn Xử Lý đếm ngày chờ DUYỆT ở 1 bước, còn Cảnh báo hết hạn đếm ngày tới
-    khi hợp đồng ĐÃ duyệt hết HIỆU LỰC — 2 cơ chế độc lập.
+    Email; form tạo hợp đồng có ô TUỲ CHỌN "Ngày Mong Muốn Phê Duyệt" — người
+    duyệt bước hiện tại "Gia Hạn" trực tiếp, người được Chuyển Tiếp Xin Ý
+    Kiến chỉ "Đề Nghị Gia Hạn" rồi người duyệt xác nhận. Nhắc rõ: Quá Hạn Xử
+    Lý **khác** "Cảnh báo hết hạn" ở trên — Quá Hạn Xử Lý đếm ngày chờ DUYỆT
+    ở 1 bước (hoặc theo Ngày Mong Muốn Phê Duyệt nếu có đặt), còn Cảnh báo
+    hết hạn đếm ngày tới khi hợp đồng ĐÃ duyệt hết HIỆU LỰC — 2 cơ chế độc
+    lập.
   - **Loại Thanh Toán** (chọn ngay ở form Phê Duyệt/Quản Lý HĐ, cạnh Đợt Thanh
     Toán): **"Thanh toán 1 lần"** (mặc định) hoặc **"Thanh toán định kỳ"**.
     Khi Tài liệu ký đã duyệt xong, nút **"🧾 Lập Thanh Toán"** mở ra; bấm xong

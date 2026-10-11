@@ -49,6 +49,13 @@
                  CORE_FIELD_MANIFEST.SUBMISSION optionsKey) — populateSubmissionPrioritySelect(). -->
             <select id="subPriority" class="w-full border p-1.5 rounded bg-white font-bold text-rose-600"></select>
           </div>
+          <div>
+            <!-- Gia Hạn + Ngày Mong Muốn Phê Duyệt (11/2026) — TUỲ CHỌN, khi có đặt thì cảnh báo "Quá
+                 Hạn Xử Lý" (badge trên danh sách/chi tiết) đổi hẳn sang đếm theo mốc này thay vì mốc bước
+                 duyệt mặc định, xem lib/approvalOverdue.js::computeApprovalOverdueStatus(). -->
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Mong Muốn Phê Duyệt (Tuỳ Chọn)</label>
+            <input id="subDesiredApprovalDate" type="date" class="w-full border p-1.5 rounded bg-white">
+          </div>
           <div class="md:col-span-2">
             <label class="block font-semibold text-gray-600 mb-1">Tờ Trình</label>
             <input id="subFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="subFileChip" class="w-full border p-1 bg-white rounded">

@@ -1213,7 +1213,10 @@ function renderContractModalForward(c) {
   const container = document.getElementById('contractDetailForward');
   if (!container) return;
   const canForwardRoot = !c.isAddendum && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c);
-  container.innerHTML = renderForwardBranchHTML('contracts', c, c.currentStep, canForwardRoot);
+  // Gia Hạn Ngày Mong Muốn Phê Duyệt (11/2026) — khối SIBLING riêng, KHÔNG sửa renderForwardBranchHTML()
+  // dùng chung — xem chú thích đầy đủ ở renderSubModalForward() (module-vanbantrinh.js, cùng khuôn).
+  container.innerHTML = renderForwardBranchHTML('contracts', c, c.currentStep, canForwardRoot)
+    + renderApprovalExtensionBlock('contracts', c, canForwardRoot);
 }
 
 function viewContract(contractId) {

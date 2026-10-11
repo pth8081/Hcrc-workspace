@@ -100,6 +100,15 @@
             <label class="block font-semibold text-gray-600 mb-1">Ngày Hết Hạn</label>
             <input id="contractEndDate" type="date" class="w-full border p-1.5 rounded" required>
           </div>
+          <div>
+            <!-- Gia Hạn + Ngày Mong Muốn Phê Duyệt (11/2026) — TUỲ CHỌN, chỉ đặt được lúc TẠO (thay đổi
+                 về sau phải qua tính năng "Gia Hạn"). Khi có đặt, cảnh báo "Quá Hạn Xử Lý" đổi hẳn sang
+                 đếm theo mốc này thay vì mốc bước duyệt mặc định — xem
+                 lib/approvalOverdue.js::computeApprovalOverdueStatus(). KHÁC HẲN "Ngày Hết Hạn" ở trên
+                 (hiệu lực pháp lý hợp đồng, không liên quan phê duyệt). -->
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Mong Muốn Phê Duyệt (Tuỳ Chọn)</label>
+            <input id="contractDesiredApprovalDate" type="date" class="w-full border p-1.5 rounded">
+          </div>
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1" id="contractFileLabel">Tệp Đính Kèm Hợp Đồng / Giấy Phép</label>
             <input id="contractFile" type="file" accept=".pdf,.docx,.xlsx" data-op-change="onSingleFileChosen" data-arg-el="0" data-arg1="contractFileChip" class="w-full border p-1 bg-white rounded" required>
