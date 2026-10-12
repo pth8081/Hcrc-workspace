@@ -1,8 +1,40 @@
 # Phiên bản hiện tại
 
-**25.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.81 (2026-11): Email thông báo (Cần phê duyệt/Chuyển tiếp/Ticket IT...) giờ tự mở thẳng đúng hồ sơ sau khi đăng nhập
+
+Theo yêu cầu người dùng (kèm ảnh chụp email "Cần phê duyệt" không có link nào): mọi email thông báo phải
+có link, và bấm vào phải vào thẳng được đúng hồ sơ — không chỉ chuyển tab rồi bắt tự tìm mã. Làm theo 3
+giai đoạn, test kỹ từng giai đoạn trước khi sang giai đoạn tiếp:
+
+- **Giai đoạn 1 (nền tảng)**: `gotoApprovalResultRecordFromQueryParam()` (core.js) trước đây chỉ chuyển
+  đúng tab rồi `alert()` "tìm mã X trong danh sách" — nay tự dò đúng bản ghi theo mã (qua
+  `APPROVAL_EMAIL_RECORD_OPENER`, bảng ánh xạ module → hàm "xem/xử lý" sẵn có của đúng module đó) và gọi
+  thẳng hàm mở modal. Có fallback AN TOÀN (về đúng hành vi cũ) nếu không tìm thấy bản ghi, module chưa
+  nạp kịp (vd do quyền truy cập tab bị từ chối), hoặc module chưa có màn "xem chi tiết" nào (Phòng Họp).
+- **Giai đoạn 2**: gắn link cho email "Cần phê duyệt" (family `approvalNeeded`, đúng loại trong ảnh
+  người dùng gửi) ở toàn bộ 10 module đang gửi loại email này. Thêm Giấy Phép vào danh sách module có
+  link (trước đây bị loại trừ vì không có email "Kết quả duyệt", nhưng VẪN CÓ email "Cần phê duyệt").
+  Phòng Họp: chưa có màn chi tiết nào trong hệ thống — tạm thời chỉ chuyển đúng tab (như phương án đã
+  thống nhất với người dùng). Ngân Sách: phát hiện email "Cần phê duyệt" CHƯA từng được gọi gửi ở bất kỳ
+  đâu (lỗ hổng tính năng riêng, đã báo người dùng, KHÔNG xử lý trong đợt này).
+- **Giai đoạn 3**: gắn link cho toàn bộ 15 loại email đặc thù còn lại (Chuyển Tiếp Xin Ý Kiến, Xin Ý
+  Kiến, Đề Xuất Thay Thế Tệp x3, Ticket IT x4, Giá IT khẩn cấp x3, Áp Giá, Yêu Cầu Bổ Sung Thông Tin) —
+  tất cả tái dùng ĐÚNG hàm mở hồ sơ module đó đã có sẵn, không cần xây thêm hàm riêng nào.
+- Hàm `buildApprovalResultLink()` đổi tên thành `buildApprovalEmailLink()` (không còn chỉ áp dụng cho
+  "Kết quả duyệt") — điều kiện gắn link chuyển sang `LINKABLE_EMAIL_FAMILIES` (Set, mở rộng được, không
+  cần sửa logic khi thêm family mới).
+- Test: bổ sung 33 kịch bản mới vào `test-approval-email-config.js` (giờ 85/85, kiểm tra end-to-end thật
+  — mở đúng modal, đúng hồ sơ — cho cả 10 module, không chỉ kiểm nội dung link). Chạy lại ~140 test liên
+  quan tới các module bị ảnh hưởng — toàn bộ pass, các lỗi gặp phải đều xác nhận có sẵn từ trước (đối
+  chiếu qua `git worktree` ở bản gốc trước khi sửa).
+- Giai đoạn 4 (gắn link cho email nhắc hạn từ job chạy nền — Hợp Đồng/Giấy Phép/...) CẦN người dùng đặt
+  `APP_BASE_URL` trong `.env` trước — chưa làm trong đợt này, sẽ làm tiếp sau khi có cấu hình đó.
+- Không đổi `schema.sql`/dependency nào. Cần người dùng đặt biến môi trường mới `APP_BASE_URL` trong
+  `.env` trên server thật TRƯỚC KHI Giai đoạn 4 (đợt sau) có tác dụng — xem `.env.example`.
 
 ## v25.80 (2026-11): 3 lỗi người dùng báo — Chuyển Tiếp không tự tắt popup, popup bị khuất (z-index), Người Xác Nhận Kỹ Thuật không tìm ra ai
 

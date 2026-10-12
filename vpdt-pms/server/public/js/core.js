@@ -7050,15 +7050,81 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
 // notifyUsersByEmail()/notifyRecipientsByEmail() rải rác ~13 module — tái dùng ĐÚNG module/targetCode đã
 // truyền sẵn vào mọi lời gọi hiện có.
 const APPROVAL_EMAIL_LINK_TAB = {
-  CAR: 'car', DOC: 'doc', BUDGET: 'budget', OFFICE: 'office', MEETING: 'meeting', VPP: 'vpp',
+  CAR: 'car', DOC: 'doc', LICENSE: 'license', BUDGET: 'budget', OFFICE: 'office', MEETING: 'meeting', VPP: 'vpp',
   SUBMISSION: 'submission', CONTRACT: 'contract', INTERNAL: 'internal', IT_SUPPORT: 'itSupport',
   OPERATION: 'vanHanh', OPERATION_ORDER: 'vanHanh', OPERATION_STORE_OPEN: 'vanHanh', OPERATION_REPAIR: 'vanHanh'
-  // LICENSE cố ý KHÔNG có mặt — family 'result' của LICENSE có actionTypes rỗng (xem APPROVAL_EMAIL_EVENTS),
-  // tức KHÔNG CÓ email "Kết quả duyệt" nào thật sự được gửi cho module này để cần gắn link.
+  // LICENSE (11/2026, Giai đoạn 2): THÊM LẠI vào đây — family 'result' của LICENSE vẫn rỗng (không có
+  // email "Kết quả duyệt" nào), nhưng family 'approvalNeeded' ("Cần phê duyệt") THÌ CÓ gửi thật (xem
+  // module-tailieu.js) nên vẫn cần có mặt ở đây để gắn link cho đúng loại email đó.
 };
-function buildApprovalResultLink(module, actionType, targetCode) {
+// APPROVAL_EMAIL_RECORD_OPENER: configModule -> cách MỞ THẲNG đúng hồ sơ sau khi đã chuyển đúng tab
+// (xem openLinkedApprovalRecordByCode() ngay dưới) — dbKeys: các collection DB.<key> cần dò theo
+// `code` (vài module như IT_SUPPORT/OPERATION có NHIỀU collection khác nhau tuỳ actionType gốc, dò lần
+// lượt tới khi khớp). open(record, dbKey): gọi đúng hàm "xem chi tiết"/"xử lý" sẵn có của module đó —
+// hàm nào CŨNG tự kiểm tra lại quyền xem của currentUser (không tạo lỗ hổng mới, chỉ tiện truy cập).
+// MEETING cố ý KHÔNG có mặt — module này CHƯA có màn "xem chi tiết 1 phiếu" nào trong hệ thống (xác
+// nhận với người dùng 11/2026), nên tạm thời chỉ dừng ở mức chuyển tab (hành vi cũ) cho tới khi xây màn
+// đó. BUDGET cũng KHÔNG có mặt — family 'approvalNeeded' của Ngân Sách hiện CHƯA có nơi nào gọi gửi
+// email thật (lỗ hổng tính năng riêng, đã báo người dùng, ngoài phạm vi đợt này).
+const APPROVAL_EMAIL_RECORD_OPENER = {
+  CAR: { dbKeys: ['carRegs'], open: (r) => openCarProcessModal(r.id) },
+  DOC: { dbKeys: ['docs'], open: (r) => viewDocDetails(r.id) },
+  LICENSE: { dbKeys: ['licenses'], open: (r) => viewLicenseDetails(r.id) },
+  OFFICE: { dbKeys: ['officeReqs'], open: (r) => openOfficeProcessModal(r.id) },
+  VPP: { dbKeys: ['vppRegistrations'], open: (r) => openVppRegModal(r.id) },
+  SUBMISSION: { dbKeys: ['submissions'], open: (r) => openProcessSubmissionModal(r.id) },
+  CONTRACT: { dbKeys: ['contracts'], open: (r) => viewContractDetails(r.id) },
+  INTERNAL: { dbKeys: ['internalPosts'], open: (r) => viewInternalPostDetail(r.id) },
+  IT_SUPPORT: { dbKeys: ['itPriceApprovals', 'itSupportTickets'], open: (r, dbKey) => dbKey === 'itSupportTickets' ? openItTicketModal(r.id) : openItPriceModal(r.id, 'APPROVAL') },
+  OPERATION: { dbKeys: ['operationOrders', 'operationStoreOpenings', 'operationRepairs'], open: (r, dbKey) => openOperationProcessModal(dbKey, r.id) }
+};
+
+// Tìm đúng module (configModule) khớp tab + mở thẳng hồ sơ theo code — LỖI ĐÃ VÁ (11/2026, yêu cầu
+// người dùng "ấn vào thông báo phải truy cập trực tiếp vào thông tin"): TRƯỚC ĐÂY chỉ chuyển tab rồi
+// alert "tìm mã X trong danh sách" — nay dò đúng collection (APPROVAL_EMAIL_RECORD_OPENER), tìm bản ghi
+// theo `code`, gọi thẳng hàm "xem/xử lý" sẵn có của module đó (tự kiểm tra lại quyền, không lộ gì mới).
+// Không tìm thấy bản ghi (hồ sơ đã xoá/mã sai), module chưa có hàm mở (MEETING), hoặc switchTab() ở trên
+// đã TỪ CHỐI quyền truy cập tab (tự alert + return SỚM, KHÔNG throw — module con do đó CHƯA kịp nạp,
+// opener.open() bên dưới sẽ ReferenceError nếu cứ gọi thẳng) -> mọi trường hợp đều fallback AN TOÀN về
+// hành vi cũ (chỉ báo mã, người dùng tự tìm trong danh sách), không để lỗi JS nào lọt ra ngoài.
+function openLinkedApprovalRecordByCode(tab, code) {
+  const configModule = Object.keys(APPROVAL_EMAIL_RECORD_OPENER).find(m => APPROVAL_EMAIL_LINK_TAB[m] === tab);
+  const opener = configModule && APPROVAL_EMAIL_RECORD_OPENER[configModule];
+  if (opener) {
+    for (const dbKey of opener.dbKeys) {
+      const record = (DB[dbKey] || []).find(r => r && r.code === code);
+      if (record) {
+        try { opener.open(record, dbKey); return; }
+        catch (err) { console.error('openLinkedApprovalRecordByCode: lỗi khi mở hồ sơ, rơi về báo mã', tab, code, err); }
+        break;
+      }
+    }
+  }
+  alert(`📌 Hồ sơ cần xem có mã: ${code} — tìm đúng mã này trong danh sách bên dưới.`);
+}
+
+// LINKABLE_EMAIL_FAMILIES: những "họ" email được gắn kèm link trực tiếp vào hồ sơ — mở rộng DẦN theo
+// từng đợt, KHÔNG cần sửa gì khác ở buildApprovalEmailLink()/APPROVAL_EMAIL_LINK_TAB/
+// APPROVAL_EMAIL_RECORD_OPENER (đã phủ đủ mọi module cần). 'result' có từ trước; 'approvalNeeded'
+// (Giai đoạn 2 — yêu cầu người dùng "ấn vào thông báo phải truy cập trực tiếp vào thông tin", đúng loại
+// email báo người DUYỆT "cần phê duyệt"). Giai đoạn 3 (11/2026) — toàn bộ family đặc thù còn lại của
+// SUBMISSION/CONTRACT/IT_SUPPORT: TẤT CẢ đều tái dùng ĐÚNG opener module đó đã có sẵn ở
+// APPROVAL_EMAIL_RECORD_OPENER (openProcessSubmissionModal/viewContractDetails/openItPriceModal/
+// openItTicketModal) — kể cả forwardRequested/forwardReplied (khối "🔀 Chuyển Tiếp" đã hiện SẴN TRONG
+// modal xử lý chính, xem renderSubModalForward()/renderContractModalForward()) và fileProposal* (CỐ Ý
+// KHÔNG trỏ riêng vào openResolveFileProposalModal() — hàm đó no-op câm lặng nếu pendingFileProposal đã
+// được xử lý xong, đúng trường hợp của 2 email "đã chấp nhận/đã từ chối đề xuất" gửi SAU khi giải quyết
+// xong — mở modal xử lý chính vẫn LUÔN đúng ngữ cảnh bất kể trạng thái đề xuất).
+const LINKABLE_EMAIL_FAMILIES = new Set([
+  'result', 'approvalNeeded',
+  'opinionRequested', 'fileProposal', 'fileProposalAccepted', 'fileProposalDeclined', 'forwardRequested', 'forwardReplied',
+  'applied', 'requestInfo', 'emergencyRejectRequest', 'emergencyRejectApproved', 'emergencyRejectDenied',
+  'ticketApprovalNeeded', 'ticketEscalationApproved', 'ticketEscalationDenied', 'ticketDone'
+]);
+
+function buildApprovalEmailLink(module, actionType, targetCode) {
   const cls = classifyApprovalEmailEvent(module, actionType);
-  if (!cls || cls.family !== 'result') return '';
+  if (!cls || !LINKABLE_EMAIL_FAMILIES.has(cls.family)) return '';
   const tab = APPROVAL_EMAIL_LINK_TAB[module];
   if (!tab) return '';
   const url = new URL(window.location.href);
@@ -7071,7 +7137,7 @@ function buildApprovalResultLink(module, actionType, targetCode) {
 
 function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
   const valid = (recipients || []).filter(r => r && r.email);
-  bodyText = `${bodyText}${buildApprovalResultLink(module, actionType, targetCode)}`;
+  bodyText = `${bodyText}${buildApprovalEmailLink(module, actionType, targetCode)}`;
 
   // Cổng admin "🔔 Thông Báo Email Phê Duyệt" (DB.approvalEmailConfig) — xem isApprovalEmailSuppressed()
   // ở trên. CHỈ chặn dispatchRealEmail() thật (không tốn lượt gọi SMTP/POST /api/send-email) — VẪN ghi
@@ -9229,12 +9295,14 @@ function finishLogin(user) {
   prefetchLazyTabResources(); // Không await — chạy ngầm, không trì hoãn giao diện chính (xem chú thích hàm).
 }
 
-// Sau khi bấm link "🔗 Xem trực tiếp hồ sơ" trong email "Kết quả duyệt" (xem buildApprovalResultLink()
-// ở notifyRecipientsByEmail()), app mở kèm ?gotoModule=<tab>&code=<mã> — tự điều hướng thẳng vào đúng
-// tab chứa hồ sơ đó ngay sau khi đăng nhập xong, thay vì bắt người trình tự nhớ đường vào lại. LUÔN đòi
-// đăng nhập trước (route này chỉ chạy SAU finishLogin(), không có cơ chế bỏ qua đăng nhập nào — đúng
-// quyết định của người dùng "bỏ hẳn link không-đăng-nhập, chỉ làm link yêu cầu đăng nhập"). Xoá query
-// param khỏi URL ngay sau khi dùng — tải lại trang (F5) không tự điều hướng lại lần nữa.
+// Sau khi bấm link "🔗 Xem trực tiếp hồ sơ" trong email (xem buildApprovalEmailLink() ở
+// notifyRecipientsByEmail()), app mở kèm ?gotoModule=<tab>&code=<mã> — tự điều hướng thẳng vào đúng
+// tab chứa hồ sơ đó NGAY SAU KHI mở đúng tab còn tự MỞ THẲNG modal chi tiết/xử lý của chính hồ sơ đó
+// (xem openLinkedApprovalRecordByCode() — LỖI ĐÃ VÁ 11/2026, trước đây chỉ chuyển tab rồi bắt người
+// dùng tự tìm mã trong danh sách), thay vì bắt người nhận tự nhớ đường vào lại. LUÔN đòi đăng nhập
+// trước (route này chỉ chạy SAU finishLogin(), không có cơ chế bỏ qua đăng nhập nào — đúng quyết định
+// của người dùng "bỏ hẳn link không-đăng-nhập, chỉ làm link yêu cầu đăng nhập"). Xoá query param khỏi
+// URL ngay sau khi dùng — tải lại trang (F5) không tự điều hướng lại lần nữa.
 async function gotoApprovalResultRecordFromQueryParam() {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('gotoModule');
@@ -9244,7 +9312,7 @@ async function gotoApprovalResultRecordFromQueryParam() {
   history.replaceState(null, '', window.location.pathname);
   try {
     await switchTab(tab);
-    if (code) alert(`📌 Hồ sơ cần xem có mã: ${code} — tìm đúng mã này trong danh sách bên dưới.`);
+    if (code) openLinkedApprovalRecordByCode(tab, code);
   } catch (err) {
     console.error('gotoApprovalResultRecordFromQueryParam: không tải được mô-đun đích', tab, err);
     alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');

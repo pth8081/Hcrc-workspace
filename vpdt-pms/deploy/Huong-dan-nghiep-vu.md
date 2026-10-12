@@ -5910,13 +5910,17 @@ Lưu, hệ thống **fail-open** — email vẫn gửi như hành vi gốc; ch�
 lưu rõ ràng giá trị tắt thì email mới thực sự bị chặn (vẫn ghi đầy đủ 1 dòng
 Nhật ký hệ thống, chỉ khác không tốn lượt gọi SMTP thật).
 
-**🔗 Link truy cập trực tiếp (từ 10/2026)**: mọi email "Kết quả duyệt"
-(`result`) đều tự kèm 1 link cuối nội dung, dạng
-`https://<domain>/?gotoModule=<tab>&code=<mã hồ sơ>` — người trình bấm vào sẽ
-được đưa thẳng tới đúng tab chứa hồ sơ của mình (sau khi đăng nhập xong nếu
-chưa đăng nhập; link **luôn đòi đăng nhập**, không có cơ chế xem trước khi
-đăng nhập). Không áp dụng cho email "Cần phê duyệt" hay các sự kiện đặc thù
-khác — người duyệt đã có Hộp Thư Phê Duyệt (mục 2.2) điều hướng riêng.
+**🔗 Link truy cập trực tiếp (từ 10/2026, MỞ RỘNG 11/2026)**: TOÀN BỘ email
+phê duyệt — "Kết quả duyệt" (`result`), "Cần phê duyệt" (`approvalNeeded`),
+VÀ 15 sự kiện đặc thù khác (Chuyển Tiếp Xin Ý Kiến, Xin Ý Kiến, Đề Xuất Thay
+Thế Tệp, Ticket IT, Giá IT khẩn cấp, Áp Giá, Yêu Cầu Bổ Sung...) — đều tự kèm
+1 link cuối nội dung, dạng `https://<domain>/?gotoModule=<tab>&code=<mã hồ
+sơ>`. Bấm vào link này giờ không chỉ đưa tới đúng tab mà còn **tự mở thẳng
+đúng modal xem/xử lý của chính hồ sơ đó** (sau khi đăng nhập xong nếu chưa
+đăng nhập; link **luôn đòi đăng nhập**, không có cơ chế xem trước khi đăng
+nhập) — không còn phải tự tìm mã hồ sơ trong danh sách như trước. Riêng
+Phòng Họp (chưa có màn "xem chi tiết 1 phiếu" nào trong hệ thống) chỉ dừng
+ở mức chuyển đúng tab, chưa mở thẳng modal được.
 
 **🔔 Thông Báo Email (cá nhân, Hồ Sơ Cá Nhân, từ 10/2026)** — KHÁC lớp admin
 TOÀN CỤC ở trên (áp dụng cho mọi người cùng lúc): mỗi người tự bật/tắt nhận
