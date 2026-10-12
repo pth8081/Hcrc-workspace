@@ -10,6 +10,7 @@
       <button type="button" id="btnHrpfReportSubSalary" data-op="setHrpfReportSubTab" data-arg0="SALARY" class="px-3 py-1 rounded text-xs font-bold">💰 Điều Chỉnh Lương</button>
       <button type="button" id="btnHrpfReportSubTransfers" data-op="setHrpfReportSubTab" data-arg0="TRANSFERS" class="px-3 py-1 rounded text-xs font-bold">🔀 Bổ Nhiệm/Điều Động</button>
       <button type="button" id="btnHrpfReportSubDependents" data-op="setHrpfReportSubTab" data-arg0="DEPENDENTS" class="px-3 py-1 rounded text-xs font-bold">👨‍👩‍👧 Người Phụ Thuộc</button>
+      <button type="button" id="btnHrpfReportSubSecondaryPositions" data-op="setHrpfReportSubTab" data-arg0="SECONDARY_POSITIONS" class="px-3 py-1 rounded text-xs font-bold">🏷️ Kiêm Nhiệm</button>
     </div>
 
     <!-- 📊 Tổng Quan — dashboard brief (11/2026) -->
@@ -103,4 +104,15 @@
         <button type="button" data-op="exportHrpfDependentsReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
       </div>
       <div id="hrpfDependentsBody" class="mt-2"></div>
+    </div>
+
+    <!-- 🏷️ Kiêm Nhiệm (11/2026, theo yêu cầu người dùng — "kiêm nhiệm chỉ có báo cáo kiêm nhiệm thôi,
+         không tính vào headcount") — snapshot trạng thái hiện tại, không có khoảng ngày để lọc (cùng
+         khuôn Người Phụ Thuộc ngay trên). Nguồn dữ liệu: Chi tiết Hồ Sơ Nhân Sự → 🏷️ Vị Trí Kiêm Nhiệm. -->
+    <div id="hrpfReportSubSECONDARY_POSITIONS" class="hidden">
+      <div class="flex flex-wrap items-end gap-2 bg-white border rounded-lg p-3 mt-2">
+        <button type="button" data-op="loadHrpfSecondaryPositionsReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">🔍 Xem</button>
+        <button type="button" data-op="exportHrpfSecondaryPositionsReport" class="px-2.5 py-1.5 rounded text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800">📤 Xuất Excel</button>
+      </div>
+      <div id="hrpfSecondaryPositionsBody" class="mt-2"></div>
     </div>

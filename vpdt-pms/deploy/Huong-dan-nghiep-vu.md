@@ -3058,13 +3058,28 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     đúng Chức Danh đã có cấu hình thì ô "Cấp Bậc" **tự điền sẵn** — thuần là
     GỢI Ý (CHỈ điền khi ô đang trống, KHÔNG đè Cấp Bậc admin đã tự chọn/sửa tay
     trước đó), vẫn gõ/sửa tay lại được bình thường sau khi tự điền.
-- **Thâm niên / Kiêm nhiệm chức danh (10/2026, chỉ đọc, tham khảo)**: Chi tiết
-  hồ sơ hiện thêm "Thâm niên" (tự tính từ "Ngày Vào Làm Việc" trên tài khoản
-  VPDT đã liên kết tới hiện tại, làm tròn 1 chữ số thập phân — không lưu
-  thành field riêng để tránh lệch dữ liệu nếu không tự cập nhật) và "Kiêm
-  nhiệm chức danh" (đọc lại đúng "Vị Trí Kiêm Nhiệm" đã cấu hình sẵn ở màn
-  Người Dùng — dùng CHUNG 1 nguồn dữ liệu với cơ chế định tuyến phê duyệt theo
-  chức danh kiêm nhiệm, không tạo thêm field trùng lặp).
+- **Thâm niên (10/2026, chỉ đọc, tham khảo)**: Chi tiết hồ sơ hiện "Thâm niên"
+  (tự tính từ "Ngày Vào Làm Việc" trên tài khoản VPDT đã liên kết tới hiện
+  tại, làm tròn 1 chữ số thập phân — không lưu thành field riêng để tránh
+  lệch dữ liệu nếu không tự cập nhật).
+- **Vị Trí Kiêm Nhiệm (11/2026, theo yêu cầu người dùng — "kiêm nhiệm phải
+  xuất phát từ Nhân Sự")**: khối "🏷️ Vị Trí Kiêm Nhiệm" trong Chi tiết hồ sơ
+  (chỉ HR thêm/sửa, cùng khuôn khối Kỷ luật/Bổ Nhiệm — không hiện ở "👤 Hồ Sơ
+  Của Tôi") — HR chọn **NHIỀU vị trí cùng lúc** (kể cả ở phòng ban khác) từ
+  chính node POSITION thật trong Cơ Cấu Tổ Chức đang áp dụng (picker giống hệt
+  "🏷️ Gán/Đổi Chức Vụ"), khác hẳn Chức Vụ chính thức (chỉ 1, quyết định
+  Phòng Ban/Chức Danh "chính"). **Không tính vào biên chế (headcount)** của
+  vị trí được kiêm nhiệm — chỉ phục vụ xem/xuất Excel ở "📊 Báo Cáo → 🏷️ Kiêm
+  Nhiệm" (snapshot hiện tại, không có khoảng ngày để lọc, cùng khuôn Người
+  Phụ Thuộc) và **tự động đồng bộ 1 CHIỀU** sang ô "🏷️ Vị Trí Kiêm Nhiệm" ở
+  Hệ Thống → Quản Lý Người Dùng (dùng để tính người duyệt "Theo vị trí" ở các
+  quy trình phê duyệt khác — xem lib/positionApprovers.js) ngay khi hồ sơ đã
+  liên kết tài khoản VPDT (kể cả lúc liên kết sau nếu kiêm nhiệm đã gán
+  trước). **TRƯỚC ĐÂY (10/2026)** "Vị Trí Kiêm Nhiệm" chỉ nhập tay ở màn
+  Người Dùng, không liên quan gì tới Cơ Cấu Tổ Chức/Hồ Sơ Nhân Sự — ô đó
+  **từ nay chỉ đọc** cho tài khoản đã liên kết hồ sơ (hiện ghi chú trỏ về
+  Chi tiết hồ sơ), vẫn gõ tay được như cũ cho tài khoản KHÔNG liên kết hồ sơ
+  nào (VD tài khoản kỹ thuật/admin hệ thống).
 - **3 trường hành chính mới (10/2026, chỉ HR sửa, KHÔNG qua cơ chế "mở trường
   xem" vì không phải dữ liệu riêng tư — luôn hiển thị như Phòng Ban/Chức
   Danh)**: **Vị trí bàn làm việc**, **Ngày nghỉ hưu dự kiến**, **BHXH tại đơn

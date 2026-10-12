@@ -51,7 +51,11 @@ const router = express.Router();
 // Lao Động — xem chú thích tại chính route đó), người chỉ có hrContractManage có thể đang bị tắt hẳn
 // module hrProfile mà vẫn cần tra mã nhân viên hợp lệ; route đó tự gác quyền riêng và chỉ trả mã + tên
 // (không field nhạy cảm nào).
-const HR_PROFILE_MODULE_EXEMPT_PATHS = new Set(['/employee-directory']);
+// /linked-usernames (11/2026) — dùng bởi màn Sửa Người Dùng (module-admin-userstaging.js) để khoá ô
+// "Vị Trí Kiêm Nhiệm" cho tài khoản ĐÃ liên kết hồ sơ Nhân Sự (nguồn nay là Hồ Sơ Nhân Sự, xem case
+// 'secondaryPositions' ở applyProfileEdit()) — người quản lý Users có thể KHÔNG có bất kỳ quyền Hồ Sơ
+// Nhân Sự nào nên cũng phải nằm ngoài gác module hrProfile, cùng lý do với /employee-directory.
+const HR_PROFILE_MODULE_EXEMPT_PATHS = new Set(['/employee-directory', '/linked-usernames']);
 function requireHrProfileModuleAccess(req, res, next) {
   if (HR_PROFILE_MODULE_EXEMPT_PATHS.has(req.path)) return next();
   if (!hasModuleAccessServer(req.freshUser, 'hrProfile')) {
@@ -332,6 +336,19 @@ router.get('/employee-directory', async (req, res) => {
     }));
     res.json({ directory });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }
+});
+
+// GET /api/hr-profile/linked-usernames (11/2026) — danh sách CỰC nhẹ, CHỈ username (không field nhạy
+// cảm/hồ sơ nào khác) của các tài khoản ĐÃ liên kết hồ sơ Nhân Sự — xem chú thích đầy đủ tại
+// HR_PROFILE_MODULE_EXEMPT_PATHS. KHÔNG đòi bất kỳ quyền Hồ Sơ Nhân Sự nào (chỉ cần đăng nhập, xem
+// router.use() ở đầu file) vì đây chỉ phục vụ UI-lock ở màn KHÁC (Quản Lý Người Dùng), không tiết lộ nội
+// dung hồ sơ gì.
+router.get('/linked-usernames', async (req, res) => {
+  try {
+    const list = (await getAppDataValue('employeeProfiles')) || [];
+    const usernames = [...new Set(list.filter(p => p.username).map(p => p.username))];
+    res.json({ usernames });
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/linked-usernames'); }
 });
 
 // GET /api/hr-profile/position-options — danh sách phẳng mọi vị trí (node POSITION) của bản Cơ Cấu Tổ
@@ -656,6 +673,19 @@ router.get('/reports/dependents', hrReportsRateLimiter, async (req, res) => {
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/dependents'); }
 });
 
+// GET /api/hr-profile/reports/secondary-positions (11/2026, theo yêu cầu người dùng — "kiêm nhiệm chỉ
+// có báo cáo kiêm nhiệm thôi, không tính vào headcount") — cùng khuôn /reports/dependents ở trên (snapshot
+// hiện tại, không có khoảng ngày để lọc).
+router.get('/reports/secondary-positions', hrReportsRateLimiter, async (req, res) => {
+  try {
+    if (!canViewHrReports(req.freshUser)) return res.status(403).json({ error: 'Cần đồng thời quyền Quản Lý Hồ Sơ Nhân Sự và Quản Lý Hợp Đồng Lao Động (hoặc quyền Xem Báo Cáo Nhân Sự) để xem Báo Cáo Nhân Sự' });
+    const profiles = (await getAppDataValue('employeeProfiles')) || [];
+    const result = employeeProfile.computeSecondaryPositionsReport(profiles);
+    logHrProfileAction(req, 'VIEW_REPORT', '', 'Xem Báo Cáo Kiêm Nhiệm');
+    res.json(result);
+  } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/reports/secondary-positions'); }
+});
+
 // GET /api/hr-profile/by-code/:employeeCode — HR/admin (đủ) hoặc quản lý trực tiếp (giới hạn, xem
 // getProfileForViewer()). Không cho tra cứu tự do — trả 404 luôn nếu không đủ quyền (không phân biệt
 // "hồ sơ không tồn tại" với "không có quyền xem" để tránh dò quét employeeCode).
@@ -721,7 +751,10 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     // withLockedAppDataValue chỉ khoá đúng 1 collection truyền vào) — truyền vào applyProfileEdit() để
     // đối chiếu đúng danh mục THẬT admin đang cấu hình (màn Biểu Mẫu), không rơi về Set mặc định cứng.
     const catalogAppData = await getAllAppData();
-    let updated;
+    // orgChartAppliedVersion (11/2026, cho case 'secondaryPositions') — cùng cách set-position đọc bản
+    // Cơ Cấu Tổ Chức đang áp dụng, đọc 1 LẦN ở đây (đỡ phải đọc lại bên trong khối khoá).
+    const applied = orgChart.getAppliedVersion(catalogAppData.orgChartVersions || []);
+    let updated, syncSecondaryPositions = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
@@ -746,8 +779,18 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
         // 4 catalog MỚI (10/2026, mẫu Excel 90 trường) — xem chú thích case 'legalEntity'/
         // 'specialLaborStatus'/'currentWorkStatusDetail'/'nationalIdIssuePlace' ở applyProfileEdit().
         legalEntities: catalogAppData.legalEntities, specialLaborStatuses: catalogAppData.specialLaborStatuses,
-        currentWorkStatusDetails: catalogAppData.currentWorkStatusDetails, nationalIdIssuePlaces: catalogAppData.nationalIdIssuePlaces
+        currentWorkStatusDetails: catalogAppData.currentWorkStatusDetails, nationalIdIssuePlaces: catalogAppData.nationalIdIssuePlaces,
+        orgChartAppliedVersion: applied
       });
+      // secondaryPositions (11/2026) — đồng bộ GHI ĐÈ sang user.secondaryPositions[] NẾU field này thực
+      // sự có mặt trong payload (client gửi lên — tránh đồng bộ dư thừa mỗi lần Lưu Hồ Sơ dù không đụng
+      // tới khối Kiêm Nhiệm) VÀ hồ sơ đã liên kết tài khoản VPDT — cùng khuôn đồng bộ dept/jobTitle ở
+      // set-position bên dưới (2 lock TUẦN TỰ trên 2 collection khác nhau). "Vị Trí Kiêm Nhiệm" ở màn
+      // Sửa Người Dùng từ nay là CHỈ ĐỌC cho tài khoản đã liên kết (xem GET /linked-usernames +
+      // module-admin-userstaging.js::renderSecondaryPositionsWidget()).
+      if (req.body && 'secondaryPositions' in req.body && profile.username) {
+        syncSecondaryPositions = { username: profile.username, secondaryPositions: (profile.secondaryPositions || []).map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) };
+      }
       // "Xác Nhận" (Ảnh 2, 10/2026 — cập nhật theo yêu cầu người dùng): lưu thành công lúc đang PENDING =
       // coi như ứng viên ĐÃ NHẬN VIỆC — chuyển onboardingQueueStatus sang CONFIRMED (KHÔNG còn reset về
       // null như trước) để vẫn giữ lại ở tab "🕐 Hồ Sơ Onboarding" phục vụ báo cáo (cùng cách CANCELLED
@@ -762,6 +805,11 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       updated = profile;
       return list;
     });
+    if (syncSecondaryPositions) {
+      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
+        u.username === syncSecondaryPositions.username ? { ...u, secondaryPositions: syncSecondaryPositions.secondaryPositions } : u
+      ));
+    }
     logHrProfileAction(req, 'EDIT', req.params.employeeCode, `Sửa hồ sơ [${req.params.employeeCode}]`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `PATCH /api/hr-profile/by-code/${req.params.employeeCode}`); }
@@ -810,9 +858,17 @@ router.post('/by-code/:employeeCode/link-account', async (req, res) => {
     // trước, bỏ sót đúng chiều ngược lại này) — tài khoản giữ nguyên dept/jobTitle cũ (thường trống/sai)
     // cho tới khi HR vô tình gán lại chức vụ 1 lần nữa mới kích hoạt sync. Nay đồng bộ luôn ngay khi liên
     // kết nếu hồ sơ đã có positionKey.
-    if (updated.positionKey) {
+    // secondaryPositions (11/2026) — CÙNG LỖI/CÁCH VÁ như positionKey ở trên: hồ sơ có thể đã được gán
+    // vị trí kiêm nhiệm TRƯỚC KHI liên kết tài khoản (HR nhập kiêm nhiệm ngay lúc hồ sơ còn ở dạng
+    // Onboarding/chưa có tài khoản) — đồng bộ luôn ngay khi liên kết, không chờ HR sửa lại khối Kiêm
+    // Nhiệm 1 lần nữa mới kích hoạt.
+    if (updated.positionKey || (updated.secondaryPositions || []).length) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === username ? { ...u, jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : u
+        u.username === username ? {
+          ...u,
+          ...(updated.positionKey ? { jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : {}),
+          ...((updated.secondaryPositions || []).length ? { secondaryPositions: updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) } : {})
+        } : u
       ));
     }
     await syncLaborContractsEmployeeUsername(updated.employeeCode, username, `POST /api/hr-profile/by-code/${req.params.employeeCode}/link-account`);
@@ -840,9 +896,14 @@ router.post('/by-code/:employeeCode/relink-account', async (req, res) => {
       updated = employeeProfile.relinkAccount(list, req.params.employeeCode, username, req.freshUser.username, req.freshUser.name);
       return list;
     });
-    if (updated.positionKey) {
+    // secondaryPositions (11/2026) — xem chú thích đầy đủ ở route link-account phía trên.
+    if (updated.positionKey || (updated.secondaryPositions || []).length) {
       await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === username ? { ...u, jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : u
+        u.username === username ? {
+          ...u,
+          ...(updated.positionKey ? { jobTitle: updated.jobTitle, dept: updated.dept, ...(updated.posType ? { posType: updated.posType } : {}) } : {}),
+          ...((updated.secondaryPositions || []).length ? { secondaryPositions: updated.secondaryPositions.map(sp => ({ jobTitle: sp.jobTitle, dept: sp.dept || '' })) } : {})
+        } : u
       ));
     }
     await syncLaborContractsEmployeeUsername(updated.employeeCode, username, `POST /api/hr-profile/by-code/${req.params.employeeCode}/relink-account`);

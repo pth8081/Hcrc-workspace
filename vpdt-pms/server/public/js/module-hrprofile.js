@@ -860,10 +860,11 @@ function renderHrReportModule() {
   setHrpfReportSubTab('OVERVIEW');
 }
 
-const HRPF_REPORT_SUBTABS = ['OVERVIEW', 'WEEKLY', 'MONTHLY', 'SALARY', 'TRANSFERS', 'DEPENDENTS'];
+const HRPF_REPORT_SUBTABS = ['OVERVIEW', 'WEEKLY', 'MONTHLY', 'SALARY', 'TRANSFERS', 'DEPENDENTS', 'SECONDARY_POSITIONS'];
 const HRPF_REPORT_SUBTAB_BTN_IDS = {
   OVERVIEW: 'btnHrpfReportSubOverview', WEEKLY: 'btnHrpfReportSubWeekly', MONTHLY: 'btnHrpfReportSubMonthly',
-  SALARY: 'btnHrpfReportSubSalary', TRANSFERS: 'btnHrpfReportSubTransfers', DEPENDENTS: 'btnHrpfReportSubDependents'
+  SALARY: 'btnHrpfReportSubSalary', TRANSFERS: 'btnHrpfReportSubTransfers', DEPENDENTS: 'btnHrpfReportSubDependents',
+  SECONDARY_POSITIONS: 'btnHrpfReportSubSecondaryPositions'
 };
 function setHrpfReportSubTab(tab) {
   if (!HRPF_REPORT_SUBTABS.includes(tab)) tab = 'OVERVIEW';
@@ -882,6 +883,7 @@ function setHrpfReportSubTab(tab) {
   else if (tab === 'SALARY') loadHrpfSalaryHistory();
   else if (tab === 'TRANSFERS') loadHrpfTransfersReport();
   else if (tab === 'DEPENDENTS') loadHrpfDependentsReport();
+  else if (tab === 'SECONDARY_POSITIONS') loadHrpfSecondaryPositionsReport();
 }
 
 // ===== 📊 Tổng Quan — dashboard brief (11/2026) =====
@@ -1084,6 +1086,31 @@ async function exportHrpfDependentsReport() {
   } catch (err) { alert('⛔ ' + err.message); }
 }
 
+// ===== 🏷️ Kiêm Nhiệm (11/2026, theo yêu cầu người dùng) — cùng khuôn Người Phụ Thuộc ngay trên =====
+const HRPF_SECONDARY_POSITIONS_COLUMNS = [
+  { header: 'Mã NV', key: 'employeeCode' }, { header: 'Phòng Ban (chính)', key: 'dept' }, { header: 'Chức Danh (chính)', key: 'jobTitle' },
+  { header: 'Vị Trí Kiêm Nhiệm', key: 'secondaryPositionLabel' }, { header: 'Chức Danh Kiêm Nhiệm', key: 'secondaryJobTitle' }, { header: 'Phòng Ban Kiêm Nhiệm', key: 'secondaryDept' },
+  { header: 'Ghi chú', key: 'note' }, { header: 'Người gán', key: 'decidedByName' }, { header: 'Ngày gán', key: 'createdAt' }
+];
+async function fetchHrpfSecondaryPositionsReport() {
+  return hrProfileApiCall('GET', '/api/hr-profile/reports/secondary-positions');
+}
+async function loadHrpfSecondaryPositionsReport() {
+  const body = document.getElementById('hrpfSecondaryPositionsBody');
+  body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
+  try {
+    const data = await fetchHrpfSecondaryPositionsReport();
+    body.innerHTML = hrpfSimpleTable(HRPF_SECONDARY_POSITIONS_COLUMNS, data.rows);
+  } catch (err) { body.innerHTML = `<p class="text-xs text-red-600">⛔ ${escapeHtml(err.message)}</p>`; }
+}
+async function exportHrpfSecondaryPositionsReport() {
+  try {
+    const data = await fetchHrpfSecondaryPositionsReport();
+    if (!data.rows.length) return alert('Chưa có dữ liệu để xuất.');
+    downloadXlsxFromServer('Kiem_Nhiem.xlsx', 'Kiêm Nhiệm', HRPF_SECONDARY_POSITIONS_COLUMNS.map(c => ({ header: c.header, key: c.key })), data.rows);
+  } catch (err) { alert('⛔ ' + err.message); }
+}
+
 async function loadHrpfReports() {
   const body = document.getElementById('hrpfReportBody');
   body.innerHTML = '<p class="text-xs text-gray-400 italic">⏳ Đang tải...</p>';
@@ -1281,11 +1308,15 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
 
   // Cấp bậc/Thâm niên/Vị trí kiêm nhiệm/hành chính (GĐ1, 10/2026 — đối chiếu Excel quản lý thủ công Nhân
   // Sự) — KHÔNG thuộc SENSITIVE_FIELDS nên luôn hiển thị (không qua canSee()), chỉ HR/admin (editableHrOnly)
-  // sửa được deskLocation/retirementDate/socialInsuranceAtThisUnit. jobGrade/Kiêm nhiệm LUÔN chỉ đọc (snapshot
-  // theo Cơ Cấu Tổ Chức/secondaryPositions trên DB.users — xem chú thích applyPositionAssignment()).
-  const secondaryPositionsUser = profile.username ? (DB.users || []).find(x => x.username === profile.username) : null;
-  const secondaryPositionsText = (secondaryPositionsUser?.secondaryPositions || [])
-    .map(sp => `${sp.jobTitle || ''}${sp.dept ? ' — ' + sp.dept : ''}`.trim()).filter(Boolean).join('; ');
+  // sửa được deskLocation/retirementDate/socialInsuranceAtThisUnit. jobGrade LUÔN chỉ đọc (snapshot theo
+  // Cơ Cấu Tổ Chức).
+  // secondaryPositionsText (11/2026, LỖI ĐÃ VÁ theo yêu cầu người dùng "kiêm nhiệm nhập từ Nhân Sự") —
+  // TRƯỚC ĐÂY đọc từ DB.users.secondaryPositions (chỉ hiện đúng khi hồ sơ ĐÃ liên kết tài khoản VPDT, và
+  // DB.users không hề là nguồn dữ liệu CHÍNH THỨC — admin có thể tự gõ tay ở màn Sửa Người Dùng, không
+  // liên quan gì tới Cơ Cấu Tổ Chức). Nay đọc THẲNG profile.secondaryPositions (nguồn chính thức mới, xem
+  // case 'secondaryPositions' ở applyProfileEdit()) — hiện đúng dù hồ sơ CHƯA liên kết tài khoản nào.
+  const secondaryPositionsText = (profile.secondaryPositions || [])
+    .map(sp => sp.positionLabel || sp.jobTitle || '').filter(Boolean).join('; ');
   const siauValue = profile.socialInsuranceAtThisUnit;
   // employmentType/workSchedule (GĐ2, 10/2026 — đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG
   // nhóm dữ liệu hành chính như deskLocation/retirementDate/socialInsuranceAtThisUnit (không thuộc
@@ -1545,6 +1576,25 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       : (profile.transfers || []).map(hrpfTransferRowHtml).join('')}</div>
   </div>`;
 
+  // Vị Trí Kiêm Nhiệm (11/2026, theo yêu cầu người dùng — "kiêm nhiệm nhập từ Nhân Sự, link sang Quản
+  // Lý Người Dùng cho phần phê duyệt, vì phải xuất phát từ nhân sự") — cùng khuôn transfersBlock ngay
+  // trên (CHỈ scope MANAGE), nhưng picker LUÔN chọn từ node POSITION thật trong Cơ Cấu Tổ Chức đang áp
+  // dụng (dùng CHUNG #hrpfPositionDatalist với "🏷️ Gán/Đổi Chức Vụ", xem populateHrpfPositionDatalist()).
+  // Cho phép NHIỀU dòng (kiêm nhiệm nhiều vị trí, kể cả phòng ban khác) — KHÔNG tính vào headcountQuota
+  // của node, CHỈ phục vụ Báo Cáo Kiêm Nhiệm (Nhân Sự → Báo Cáo → 🔀 Kiêm Nhiệm) + tự động đồng bộ 1
+  // CHIỀU sang user.secondaryPositions[] khi hồ sơ đã liên kết tài khoản (xem PATCH /by-code,
+  // routes/employeeProfile.js) — ô "Vị Trí Kiêm Nhiệm" ở màn Sửa Người Dùng từ nay KHOÁ (chỉ đọc) cho
+  // tài khoản đã liên kết, không còn tự nhập tay song song gây lệch 2 nguồn.
+  const secondaryPositionsBlock = scope !== 'MANAGE' ? '' : `<div class="mt-3 pt-3 border-t">
+    <div class="flex items-center justify-between mb-1">
+      <label class="block text-[11px] font-semibold text-gray-500">🏷️ Vị Trí Kiêm Nhiệm</label>
+      ${isReadOnly ? '' : '<button type="button" data-op="addHrpfSecondaryPositionRow" class="text-[11px] font-bold text-teal-700 hover:underline">+ Thêm vị trí</button>'}
+    </div>
+    <div id="hrpfSecondaryPositionRows" class="space-y-1">${isReadOnly
+      ? ((profile.secondaryPositions || []).length ? (profile.secondaryPositions || []).map(hrpfSecondaryPositionRowReadOnlyHtml).join('') : '<p class="text-xs text-gray-400 italic">Không có.</p>')
+      : (profile.secondaryPositions || []).map(hrpfSecondaryPositionRowHtml).join('')}</div>
+  </div>`;
+
   const saveBtn = isReadOnly ? '' : (scope === 'ME'
     ? `<button type="button" data-op="saveHrpfMyProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`
     : `<button type="button" data-op="saveHrpfManageProfile" class="px-3 py-1.5 rounded text-xs font-bold bg-teal-700 text-white hover:bg-teal-800">💾 Lưu Hồ Sơ</button>`);
@@ -1556,7 +1606,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     hàng, BHXH, MST, người phụ thuộc, học vấn...) chỉ hiển thị khi HR/Admin đã cấu hình mở ở
     "🛠️ Trường Xem Của Tôi". Liên hệ HR nếu bạn cần xem/bổ sung trường chưa hiển thị.</p>`;
 
-  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${adminInfoBlock3}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}${transfersBlock}</div>
+  return `${selfHiddenNote}${identityBlock}${adminInfoBlock}${adminInfoBlock2}${adminInfoBlock3}${manageActionsBlock}${positionAssignBlock}<div class="pt-3">${personalBlock}${hrOnlyBlock}${hrNoteBlock}${dependentsBlock}${educationBlock}${disciplinaryBlock}${transfersBlock}${secondaryPositionsBlock}</div>
     <div class="pt-3 mt-1 flex justify-end">${saveBtn}</div>${contractBlock}${historyBlock}`;
 }
 
@@ -1627,6 +1677,39 @@ function hrpfTransferRowReadOnlyHtml(item) {
 }
 function addHrpfTransferRow() {
   document.getElementById('hrpfTransferRows').insertAdjacentHTML('beforeend', hrpfTransferRowHtml(null));
+}
+
+// Vị Trí Kiêm Nhiệm (11/2026) — picker dùng CHUNG #hrpfPositionDatalist với "🏷️ Gán/Đổi Chức Vụ" (đã
+// nạp sẵn 1 lần/phiên qua populateHrpfPositionDatalist(), xem đầu file) — mỗi dòng có 1 ô tìm-kiếm-gõ-
+// chọn RIÊNG (1 div[data-sdd-dropdown] dùng chung được NHIỀU input, xem chú thích sddSetOptions() ở
+// core.js) + 1 ô ẩn giữ positionKey đã resolve, cùng khuôn resolveHrpfAssignPositionInput() ở trên
+// nhưng ghi vào ĐÚNG hàng đang sửa (qua closest(), không ghi nhầm hàng khác).
+function hrpfSecondaryPositionRowHtml(item) {
+  const it = item || {};
+  const displayValue = it.positionLabel ? `${it.positionLabel} (${it.positionKey})` : '';
+  return `<div class="border rounded p-1.5 space-y-1 hrpf-secondaryPosition-row" data-id="${escapeHtml(it.id || '')}">
+    <div class="flex gap-1 items-center">
+      <input value="${escapeHtml(displayValue)}" data-sdd-list="hrpfPositionDatalist" autocomplete="off" data-op-change="resolveHrpfSecondaryPositionInput" data-arg-el="0" placeholder="Gõ để tìm vị trí (Cơ Cấu Tổ Chức)..." class="border p-1 rounded text-xs flex-1 hrpf-secpos-search">
+      <button type="button" data-op="removeHrpfRow" data-arg0="secondaryPosition" data-arg-el="1" class="text-red-500 hover:text-red-700 text-xs shrink-0">✕</button>
+    </div>
+    <input type="hidden" class="hrpf-secpos-key" value="${escapeHtml(it.positionKey || '')}">
+    <input value="${escapeHtml(it.note || '')}" placeholder="Ghi chú (tuỳ chọn)" class="border p-1 rounded text-xs w-full hrpf-secpos-note">
+  </div>`;
+}
+function hrpfSecondaryPositionRowReadOnlyHtml(item) {
+  const it = item || {};
+  return `<div class="text-xs py-0.5 border-b border-gray-100">
+    <span class="font-semibold">${escapeHtml(it.positionLabel || it.jobTitle || '—')}</span>
+    ${it.note ? `<div class="text-gray-500">${escapeHtml(it.note)}</div>` : ''}
+  </div>`;
+}
+function addHrpfSecondaryPositionRow() {
+  document.getElementById('hrpfSecondaryPositionRows').insertAdjacentHTML('beforeend', hrpfSecondaryPositionRowHtml(null));
+}
+function resolveHrpfSecondaryPositionInput(inputEl) {
+  const positionKey = resolveHrpfPositionKeyFromLabel(inputEl.value);
+  const row = inputEl.closest('.hrpf-secondaryPosition-row');
+  if (row) row.querySelector('.hrpf-secpos-key').value = positionKey;
 }
 
 function hrpfDependentRowHtml(d) {
@@ -1821,6 +1904,13 @@ function collectHrpfProfileFormValues(scope) {
         probationToDate: row.querySelector('.hrpf-trf-probto').value || null,
         note: row.querySelector('.hrpf-trf-note').value.trim() || null
       })).filter(it => it.transferFromDate);
+    }
+    if (document.getElementById('hrpfSecondaryPositionRows')) {
+      payload.secondaryPositions = Array.from(document.querySelectorAll('.hrpf-secondaryPosition-row')).map(row => ({
+        id: row.dataset.id || undefined,
+        positionKey: row.querySelector('.hrpf-secpos-key').value || '',
+        note: row.querySelector('.hrpf-secpos-note').value.trim() || null
+      })).filter(it => it.positionKey);
     }
     if (document.getElementById('hrpfF_nationalId')) payload.nationalId = val('hrpfF_nationalId') || null;
     if (document.getElementById('hrpfF_socialInsuranceNo')) payload.socialInsuranceNo = val('hrpfF_socialInsuranceNo') || null;

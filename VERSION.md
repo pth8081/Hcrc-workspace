@@ -1,8 +1,33 @@
 # Phiên bản hiện tại
 
-**25.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.78 (2026-11): Vị Trí Kiêm Nhiệm — nhập từ Hồ Sơ Nhân Sự, đồng bộ sang Quản Lý Người Dùng
+
+Theo yêu cầu người dùng: "vị trí kiêm nhiệm phải xuất phát từ Nhân Sự" — trước đây "Vị Trí Kiêm Nhiệm"
+(`user.secondaryPositions[]`) chỉ nhập tay ở màn Sửa Người Dùng, không liên quan gì tới Cơ Cấu Tổ Chức
+hay Hồ Sơ Nhân Sự, chỉ dùng để tính người duyệt "Theo vị trí" ở các quy trình phê duyệt khác.
+
+- **Hồ Sơ Nhân Sự**: khối mới "🏷️ Vị Trí Kiêm Nhiệm" trong Chi tiết hồ sơ (chỉ HR, cùng khuôn khối Kỷ
+  luật/Bổ Nhiệm) — chọn **NHIỀU** vị trí cùng lúc (kể cả phòng ban khác) từ node POSITION thật trong Cơ
+  Cấu Tổ Chức đang áp dụng (picker giống "Gán/Đổi Chức Vụ"), khác hẳn Chức Vụ chính thức (chỉ 1). **Không
+  tính vào biên chế (headcount)** của vị trí được kiêm — xác nhận rõ với người dùng.
+- **Đồng bộ 1 chiều**: mỗi lần đổi danh sách kiêm nhiệm trên hồ sơ (nếu đã liên kết tài khoản VPDT) tự
+  động ghi đè `user.secondaryPositions[]` — kể cả khi liên kết tài khoản SAU lúc đã gán kiêm nhiệm (cùng
+  lỗi/cách vá đã áp dụng cho Chức Vụ chính thức trước đây). Ô "Vị Trí Kiêm Nhiệm" ở Quản Lý Người Dùng từ
+  nay **chỉ đọc** cho tài khoản đã liên kết hồ sơ (ghi chú trỏ về Hồ Sơ Nhân Sự), vẫn gõ tay được cho tài
+  khoản CHƯA liên kết hồ sơ nào (VD tài khoản kỹ thuật/admin hệ thống).
+- **Báo Cáo mới**: Nhân Sự → 📊 Báo Cáo → "🏷️ Kiêm Nhiệm" (snapshot hiện tại, không có khoảng ngày để
+  lọc, cùng khuôn Người Phụ Thuộc) + Xuất Excel.
+- **2 route server mới**: `GET /api/hr-profile/linked-usernames` (cực nhẹ, chỉ username, không gác quyền
+  Hồ Sơ Nhân Sự nào — dùng cho UI-lock ở màn Quản Lý Người Dùng) và `GET /api/hr-profile/reports/secondary-positions`
+  (gác quyền Báo Cáo Nhân Sự như các báo cáo khác).
+- Test mới: `server/tests/test-hr-profile-secondary-positions.js` (15 kịch bản — validate picker/snapshot/
+  trùng lặp, đồng bộ PATCH/link-account, 2 route mới). Toàn bộ test HR + approver-theo-vị-trí + định biên
+  liên quan đã chạy lại, không có regression.
+- Không đổi `schema.sql`/biến môi trường/dependency nào.
 
 ## v25.77 (2026-11): CCCD/CMND phải đúng 12 số
 

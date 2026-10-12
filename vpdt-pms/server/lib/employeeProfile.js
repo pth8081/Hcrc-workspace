@@ -317,6 +317,17 @@ function defaultProfile(employeeCode) {
     // transfers (11/2026, theo yêu cầu người dùng, đối chiếu mẫu Excel "DATA_DIEUCHUYEN&THU THACH") —
     // HR-only, cùng mức ẩn/hiện với disciplinaryActions ở trên (SENSITIVE_FIELDS).
     transfers: [],
+    // secondaryPositions (11/2026, theo yêu cầu người dùng — "vị trí kiêm nhiệm nhập từ Nhân Sự, link
+    // sang Quản Lý Người Dùng cho phần phê duyệt") — mảng vị trí KIÊM NHIỆM, LUÔN chọn từ node POSITION
+    // thật trong Cơ Cấu Tổ Chức đang áp dụng (cùng cơ chế positionKey ở applyPositionAssignment()), KHÁC
+    // HẲN chức vụ CHÍNH THỨC (chỉ 1, profile.positionKey) — cho phép NHIỀU vị trí cùng lúc, kể cả ở phòng
+    // ban khác. KHÔNG tính vào headcountQuota của node (resolvePositionOccupants()/Báo Cáo Định Biên
+    // không đổi) — CHỈ phục vụ Báo Cáo Kiêm Nhiệm + tự động đồng bộ sang user.secondaryPositions[] (field
+    // "Vị Trí Kiêm Nhiệm" sẵn có ở Quản Lý Người Dùng, trước đây nhập tay — nay đồng bộ 1 CHIỀU từ đây
+    // khi hồ sơ đã liên kết tài khoản, xem routes/employeeProfile.js PATCH /by-code). KHÔNG nằm trong
+    // SENSITIVE_FIELDS (cùng nhóm "luôn hiển thị" như dept/positionLabel — không phải thông tin riêng tư
+    // cá nhân, chỉ HR sửa qua HR_ONLY_EDITABLE_FIELDS bên dưới).
+    secondaryPositions: [],
     // nationality/maritalStatus/nationalIdIssueDate/nationalIdIssuePlace (GĐ1, 10/2026 — đối chiếu file
     // Excel quản lý thủ công của Nhân Sự, theo yêu cầu người dùng) — tự phục vụ/HR sửa qua
     // SELF_EDITABLE_FIELDS/HR_ONLY_EDITABLE_FIELDS bên dưới, cùng khuôn field cá nhân/định danh đã có.
@@ -894,6 +905,9 @@ const HR_ONLY_EDITABLE_FIELDS = [
   'disciplinaryActions',
   // transfers (11/2026) — chỉ HR mới ghi nhận bổ nhiệm/miễn nhiệm/điều động, KHÔNG tự phục vụ.
   'transfers',
+  // secondaryPositions (11/2026) — chỉ HR mới gán vị trí kiêm nhiệm (xem chú thích đầy đủ tại
+  // defaultProfile()), KHÔNG tự phục vụ.
+  'secondaryPositions',
   // 17 field MỚI (10/2026, đối chiếu file Excel "Template_Quan_ly_ho_so_nhan_su" — 90 trường, theo yêu
   // cầu người dùng) — toàn bộ dữ liệu HÀNH CHÍNH/nội bộ do HR ghi nhận, cùng nhóm nationalIdIssueDate/
   // deskLocation ở trên (KHÔNG đưa vào SELF_EDITABLE_FIELDS — nhân viên không tự khai các mục này).
@@ -920,7 +934,7 @@ const PROFILE_FIELD_LABELS = {
   nationalIdIssueDate: 'Ngày cấp CCCD/CMND', nationalIdIssuePlace: 'Nơi cấp CCCD/CMND',
   deskLocation: 'Nơi ngồi làm việc', retirementDate: 'Thời điểm nghỉ hưu',
   socialInsuranceAtThisUnit: 'Đóng BHXH tại đơn vị', employmentType: 'Hình thức làm việc',
-  disciplinaryActions: 'Kỷ luật', transfers: 'Bổ nhiệm/Điều động',
+  disciplinaryActions: 'Kỷ luật', transfers: 'Bổ nhiệm/Điều động', secondaryPositions: 'Vị trí kiêm nhiệm',
   workSchedule: 'Thời gian làm việc', contactPhone: 'Điện thoại liên hệ',
   // 17 field MỚI (10/2026, mẫu Excel "Template_Quan_ly_ho_so_nhan_su" 90 trường) — khớp ĐÚNG nhãn đã
   // dùng ở SENSITIVE_FIELD_LABELS cho 6 field trùng (emergencyContactAddress/specialLaborStatus/
@@ -1220,6 +1234,43 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
           };
         });
         profile.transfers = cleaned;
+        break;
+      }
+      // secondaryPositions (11/2026, theo yêu cầu người dùng) — mỗi phần tử LUÔN resolve từ 1 node
+      // POSITION thật trong bản Cơ Cấu Tổ Chức ĐANG ÁP DỤNG (options.orgChartAppliedVersion — CALLER bắt
+      // buộc phải truyền, cùng cách applyPositionAssignment() đòi orgChartVersion), snapshot lại jobTitle/
+      // dept/positionLabel NGAY LÚC LƯU (không tự cập nhật lại nếu Cơ Cấu Tổ Chức đổi sau đó — cùng triết
+      // lý snapshot với vị trí CHÍNH THỨC, tránh dữ liệu "trôi" nếu node bị đổi tên/xoá ở bản mới hơn).
+      // Chặn trùng với vị trí CHÍNH THỨC hiện tại (kiêm nhiệm đúng vị trí mình đang giữ là vô nghĩa) và
+      // trùng lặp NỘI BỘ trong chính danh sách đang gửi lên.
+      case 'secondaryPositions': {
+        if (!Array.isArray(val)) throw new HttpError(400, 'Danh sách Vị trí kiêm nhiệm không hợp lệ');
+        const orgChartVersion = options && options.orgChartAppliedVersion;
+        const { findNearestDeptAncestor, buildNodeDisplayName } = require('./orgChart'); // require trễ — tránh vòng lặp require (cùng khuôn applyPositionAssignment())
+        const seenKeys = new Set();
+        const cleaned = val.slice(0, 20).map((item, i) => {
+          const positionKey = item && String(item.positionKey || '').trim();
+          if (!positionKey) throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1}: thiếu vị trí`);
+          if (!orgChartVersion) throw new HttpError(400, 'Chưa có bản Cơ Cấu Tổ Chức nào được áp dụng — vào Cơ Cấu Tổ Chức tạo và áp dụng cây tổ chức trước khi gán vị trí kiêm nhiệm');
+          const node = (orgChartVersion.nodes || []).find(n => n.positionKey === positionKey && n.nodeType === 'POSITION');
+          if (!node) throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1}: không tìm thấy vị trí này trong bản Cơ Cấu Tổ Chức đang áp dụng (có thể đã bị xoá/đổi ở bản mới hơn)`);
+          if (positionKey === profile.positionKey) throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1}: trùng với chức vụ CHÍNH THỨC hiện tại — không cần thêm kiêm nhiệm`);
+          if (seenKeys.has(positionKey)) throw new HttpError(400, `Vị trí kiêm nhiệm dòng ${i + 1}: trùng với 1 dòng kiêm nhiệm khác đã chọn`);
+          seenKeys.add(positionKey);
+          let dept = null;
+          if (node.requiresDept !== false) {
+            const deptNode = findNearestDeptAncestor(orgChartVersion, node);
+            dept = deptNode?.departmentRef || null;
+          }
+          return {
+            id: item.id || randomUUID(),
+            positionKey, jobTitle: node.jobTitle, dept, positionLabel: buildNodeDisplayName(orgChartVersion, node),
+            note: item.note ? String(item.note).trim().slice(0, 500) : null,
+            decidedBy: actorUsername, decidedByName: actorName || actorUsername,
+            createdAt: item.createdAt || nowVN()
+          };
+        });
+        profile.secondaryPositions = cleaned;
         break;
       }
       default:
@@ -1557,6 +1608,25 @@ function computeDependentsReport(profiles) {
   return { rows, total: rows.length };
 }
 
+// computeSecondaryPositionsReport() (11/2026, theo yêu cầu người dùng — "kiêm nhiệm chỉ có báo cáo kiêm
+// nhiệm thôi, không tính vào headcount") — snapshot TRẠNG THÁI HIỆN TẠI (không có khoảng ngày để lọc,
+// cùng khuôn computeDependentsReport() ở trên — kiêm nhiệm không phải sự kiện theo mốc thời gian). Bỏ
+// qua hồ sơ INACTIVE (đã nghỉ việc — kiêm nhiệm không còn ý nghĩa).
+function computeSecondaryPositionsReport(profiles) {
+  const rows = [];
+  for (const p of (profiles || [])) {
+    if (p.status === 'INACTIVE') continue;
+    for (const sp of (p.secondaryPositions || [])) {
+      rows.push({
+        employeeCode: p.employeeCode, dept: p.dept || '', jobTitle: p.jobTitle || '',
+        secondaryPositionLabel: sp.positionLabel || '', secondaryJobTitle: sp.jobTitle || '', secondaryDept: sp.dept || '',
+        note: sp.note || '', decidedByName: sp.decidedByName || '', createdAt: sp.createdAt || ''
+      });
+    }
+  }
+  return { rows, total: rows.length };
+}
+
 // computeHrDashboardSummary() (11/2026, theo yêu cầu người dùng — "1 phần dạng dashboard... lấy những
 // thông tin brief") — số liệu tổng quan CHỈ thuộc phạm vi module Nhân Sự (không lặp lại Báo Cáo Định
 // Biên vốn đã có màn riêng ở Cơ Cấu Tổ Chức, xem lib/headcountReport.js — dashboard này chỉ dẫn link
@@ -1590,7 +1660,7 @@ function computeHrDashboardSummary(profiles, contracts, hrProcesses, storeTypes)
 module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
   TRANSFER_TYPES, TRANSFER_TYPE_LABELS, TRANSFER_STATUSES, TRANSFER_STATUS_LABELS,
-  computeMonthlyHrReport, computeWeeklyHeadcountFlow, computeSalaryAdjustmentHistory, computeTransfersReport, computeDependentsReport, computeHrDashboardSummary,
+  computeMonthlyHrReport, computeWeeklyHeadcountFlow, computeSalaryAdjustmentHistory, computeTransfersReport, computeDependentsReport, computeSecondaryPositionsReport, computeHrDashboardSummary,
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,

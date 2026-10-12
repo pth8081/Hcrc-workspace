@@ -5,6 +5,27 @@
 // loạt) thay vì phải chờ round-trip lưu từng người một.
 // ==========================================
 
+// _hrLinkedUsernamesCache (11/2026, theo yêu cầu người dùng — "kiêm nhiệm phải xuất phát từ Nhân Sự,
+// không tự nhập ở đây nữa") — Set|null (null = chưa tải). Tải CỰC NHẹ (chỉ username, xem GET
+// /api/hr-profile/linked-usernames) 1 LẦN/phiên, dùng để biết tài khoản đang sửa có liên kết hồ sơ Nhân
+// Sự hay không — nếu CÓ, khoá ô "Vị Trí Kiêm Nhiệm" (nguồn nay là Chi tiết hồ sơ → 🏷️ Vị Trí Kiêm Nhiệm,
+// tự đồng bộ 1 chiều sang đây, xem PATCH /api/hr-profile/by-code ở routes/employeeProfile.js). Tài khoản
+// CHƯA liên kết hồ sơ nào (VD tài khoản kỹ thuật/admin hệ thống) vẫn gõ tay được như trước — không có hồ
+// sơ nào để lấy nguồn. fetch lỗi (mất mạng...) -> coi như "chưa liên kết" (an toàn, giữ hành vi gõ tay
+// cũ thay vì khoá nhầm khi không chắc chắn).
+let _hrLinkedUsernamesCache = null;
+async function ensureHrLinkedUsernamesLoaded() {
+  if (_hrLinkedUsernamesCache) return _hrLinkedUsernamesCache;
+  try {
+    const res = await fetch('/api/hr-profile/linked-usernames');
+    const data = res.ok ? await res.json() : { usernames: [] };
+    _hrLinkedUsernamesCache = new Set(data.usernames || []);
+  } catch (err) {
+    _hrLinkedUsernamesCache = new Set();
+  }
+  return _hrLinkedUsernamesCache;
+}
+
 // Bọc an toàn TOÀN BỘ việc dựng ô "Vị Trí Kiêm Nhiệm" — wfPositionPairPickerItems()/encodeWfPositionPair()
 // (module-admin-specialperm.js, cụm nạp lười "admin-specialperm") bình thường LUÔN sẵn sàng vì
 // switchTab('system') nạp cụm này ngay khi vào Hệ Thống (xem MODULE_LOAD_GROUPS.hethong-tabs.deps ở
@@ -12,7 +33,12 @@
 // kỳ lý do gì (trang bị cache cũ/JS lỗi ở module khác cùng cụm...) các hàm này chưa sẵn sàng, admin thấy
 // rõ dòng chữ báo lỗi NGAY TRONG ô thay vì 1 ô trống khó hiểu không biết đang lỗi gì — xem phản hồi thực
 // tế từ người dùng: ô hiện trống trơn, không chọn được vị trí nào.
-function renderSecondaryPositionsWidget(existingPositions) {
+// locked (11/2026) — TRUE khi tài khoản đã liên kết hồ sơ Nhân Sự: vẫn gọi renderMultiSelectDropdown()
+// BÌNH THƯỜNG (giữ đúng _gmsSelected nội bộ của widget = existingPositions hiện có, để lượt Lưu Người
+// Dùng sau đó KHÔNG vô tình xoá trắng secondaryPositions — xem getMultiSelectValues() ở core.js đọc
+// thẳng _gmsSelected, không quét DOM) — chỉ KHOÁ TƯƠNG TÁC bằng CSS (pointer-events-none + làm mờ) +
+// thêm ghi chú trỏ về Hồ Sơ Nhân Sự, không xoá/thay đổi cấu trúc DOM nội bộ của widget dùng chung.
+function renderSecondaryPositionsWidget(existingPositions, locked) {
   try {
     const items = wfPositionPairPickerItems();
     const initialSelected = (existingPositions || []).map(encodeWfPositionPair);
@@ -26,6 +52,14 @@ function renderSecondaryPositionsWidget(existingPositions) {
       placeholder: '🔍 Tìm "Chức danh — Phòng ban" để thêm...',
       emptyText: '⛔ Không tải được danh mục vị trí — tải lại trang (F5) rồi thử lại.'
     });
+  }
+  const container = document.getElementById('uSecondaryPositionsMultiSelect');
+  document.getElementById('uSecondaryPositionsLockedNote')?.remove();
+  if (!container) return;
+  container.classList.toggle('opacity-60', !!locked);
+  container.classList.toggle('pointer-events-none', !!locked);
+  if (locked) {
+    container.insertAdjacentHTML('beforebegin', '<p id="uSecondaryPositionsLockedNote" class="text-[10.5px] text-amber-700 mb-1">🔒 Tài khoản đã liên kết Hồ Sơ Nhân Sự — sửa Vị Trí Kiêm Nhiệm tại Chi tiết hồ sơ (🏷️ Vị Trí Kiêm Nhiệm), không sửa được ở đây nữa.</p>');
   }
 }
 // PHÁT HIỆN theo yêu cầu người dùng (10/2026): "mở thêm TỪNG mục cụ thể" ngoài phạm vi quyền module
@@ -382,7 +416,15 @@ function editUser(id) {
     populateUserDeptOptions(user.khoiBan || '', user.dept || '');
   } else document.getElementById('uDept').value = user.dept;
   document.getElementById('uJobTitle').value = user.jobTitle || '';
-  renderSecondaryPositionsWidget(user.secondaryPositions);
+  // locked state (11/2026): render ngay KHÔNG khoá (phản hồi tức thời), rồi kiểm tra liên kết hồ sơ Nhân
+  // Sự ở background và render lại nếu CÓ liên kết — guard so username tránh khoá NHẦM form đang mở của
+  // 1 người khác nếu admin bấm sửa người B trước khi kết quả kiểm tra của người A kịp trả về.
+  renderSecondaryPositionsWidget(user.secondaryPositions, false);
+  ensureHrLinkedUsernamesLoaded().then(set => {
+    if (document.getElementById('uUsername')?.value === user.username) {
+      renderSecondaryPositionsWidget(user.secondaryPositions, set.has(user.username));
+    }
+  });
   renderNVReportExtraKeysWidgets(user);
   document.getElementById('uIsDriver').checked = !!user.isDriver;
   document.getElementById('uStartDate').value = user.startDate || '';
