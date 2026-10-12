@@ -6,7 +6,7 @@
 // định = người tạo + TOÀN BỘ người đang có quyền itServiceRenewalManage/admin (10/2026 tách khỏi itManage),
 // cộng thêm CC tuỳ chọn (itRenewalCcEmails).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -96,7 +96,7 @@ async function checkItServiceRenewalReminders() {
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
           : `còn khoảng ${threshold} ngày là hết hạn`;
         const subject = `[VPDT] Dịch vụ CNTT "${item.name}" ${label}`;
-        const body = `Dịch vụ CNTT "${item.name}" (${item.category}${item.vendor ? `, nhà cung cấp: ${item.vendor}` : ''}) ${label}. Ngày hết hạn: ${item.expiryDate}.${item.responsible ? ` Người phụ trách: ${item.responsible}.` : ''}`;
+        const body = `Dịch vụ CNTT "${item.name}" (${item.category}${item.vendor ? `, nhà cung cấp: ${item.vendor}` : ''}) ${label}. Ngày hết hạn: ${item.expiryDate}.${item.responsible ? ` Người phụ trách: ${item.responsible}.` : ''}${buildReminderEmailLink('itSupport', String(item.id))}`;
 
         const rawRecipients = [];
         if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || item.creator });

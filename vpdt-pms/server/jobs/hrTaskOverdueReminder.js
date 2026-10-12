@@ -11,7 +11,7 @@
 // quan: PENDING/OVERDUE, còn lại DONE/SKIPPED đã đóng hẳn) — task đã OVERDUE sẽ không bị quét lại ở lần
 // chạy sau (idempotent tự nhiên qua điều kiện `status === 'PENDING'`).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -103,7 +103,7 @@ async function checkHrTaskOverdueReminders() {
         for (const task of overdueTasks) {
           const recipients = resolveTaskRecipients(users, item, task);
           const subject = `[VPDT] Việc "${task.taskName}" (${employeeLabel}) đã quá hạn`;
-          const body = `Việc "${task.taskName}" trong quy trình ${item.processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'} của ${employeeLabel} đã quá hạn (hạn: ${task.dueDate}). Vui lòng xử lý sớm để không ảnh hưởng tiến độ chung.`;
+          const body = `Việc "${task.taskName}" trong quy trình ${item.processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'} của ${employeeLabel} đã quá hạn (hạn: ${task.dueDate}). Vui lòng xử lý sớm để không ảnh hưởng tiến độ chung.${buildReminderEmailLink('hrLifecycle', String(item.id))}`;
 
           for (const r of recipients) {
             console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);

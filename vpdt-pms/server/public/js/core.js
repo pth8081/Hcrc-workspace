@@ -7052,7 +7052,18 @@ function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, 
 const APPROVAL_EMAIL_LINK_TAB = {
   CAR: 'car', DOC: 'doc', LICENSE: 'license', BUDGET: 'budget', OFFICE: 'office', MEETING: 'meeting', VPP: 'vpp',
   SUBMISSION: 'submission', CONTRACT: 'contract', INTERNAL: 'internal', IT_SUPPORT: 'itSupport',
-  OPERATION: 'vanHanh', OPERATION_ORDER: 'vanHanh', OPERATION_STORE_OPEN: 'vanHanh', OPERATION_REPAIR: 'vanHanh'
+  OPERATION: 'vanHanh', OPERATION_ORDER: 'vanHanh', OPERATION_STORE_OPEN: 'vanHanh', OPERATION_REPAIR: 'vanHanh',
+  // LABOR_CONTRACT (Giai đoạn 4, 11/2026 — jobs/laborContractExpiryReminder.js): module không đi qua
+  // notifyRecipientsByEmail()/classifyApprovalEmailEvent() (không phải 1 trong ~13 module chính dùng
+  // choke-point đó — job này tự build link qua lib/mailer.js buildReminderEmailLink()) — chỉ cần có mặt
+  // ở đây để openLinkedApprovalRecordByCode() tra ngược tab 'hrContract' ra đúng configModule, KHÔNG cần
+  // đăng ký gì thêm ở LINKABLE_EMAIL_FAMILIES (Set đó chỉ gác buildApprovalEmailLink(), không liên quan).
+  LABOR_CONTRACT: 'hrContract',
+  // REPORT_PERIOD (Giai đoạn 4, 11/2026 — jobs/reportPeriodDeadlineReminder.js): cùng lý do như
+  // LABOR_CONTRACT ở trên (job tự build link, không qua choke-point chính).
+  REPORT_PERIOD: 'periodicReport',
+  // HR_LIFECYCLE (Giai đoạn 4, 11/2026 — jobs/hrTaskOverdueReminder.js): cùng lý do như trên.
+  HR_LIFECYCLE: 'hrLifecycle'
   // LICENSE (11/2026, Giai đoạn 2): THÊM LẠI vào đây — family 'result' của LICENSE vẫn rỗng (không có
   // email "Kết quả duyệt" nào), nhưng family 'approvalNeeded' ("Cần phê duyệt") THÌ CÓ gửi thật (xem
   // module-tailieu.js) nên vẫn cần có mặt ở đây để gắn link cho đúng loại email đó.
@@ -7070,13 +7081,57 @@ const APPROVAL_EMAIL_RECORD_OPENER = {
   CAR: { dbKeys: ['carRegs'], open: (r) => openCarProcessModal(r.id) },
   DOC: { dbKeys: ['docs'], open: (r) => viewDocDetails(r.id) },
   LICENSE: { dbKeys: ['licenses'], open: (r) => viewLicenseDetails(r.id) },
-  OFFICE: { dbKeys: ['officeReqs'], open: (r) => openOfficeProcessModal(r.id) },
+  // paymentRequests (Giai đoạn 4, 11/2026 — jobs/paymentDeadlineReminder.js): "Thanh Toán" là SUB-TAB
+  // bên TRONG tab 'office' (setOfficeSubTab('PAYMENT'), xem canAccessPaymentModule()), KHÔNG phải tab
+  // riêng — nên dùng CHUNG tab 'office' với OFFICE thay vì đăng ký thêm 1 configModule mới (tránh 2
+  // configModule cùng trỏ 1 tab, openLinkedApprovalRecordByCode() chỉ khớp ĐÚNG 1 configModule/tab).
+  // paymentRequests cũng KHÔNG có field `code` (chỉ có title/id, xem lib/createValidation.js) -> dò theo
+  // `id` qua nhánh fallback. Hệ thống CHƯA có modal "xem 1 đề nghị" riêng cho đợt đang chờ xác nhận (chỉ
+  // có form Sửa dành cho NHÁP/người tạo — không khớp ngữ cảnh "đã duyệt, chờ xác nhận chi") nên chỉ dừng
+  // ở mức chuyển đúng tab con "✅ Chờ Duyệt/Xác Nhận" (setPaymentSubTab('APPROVE'), nơi hiện nút "Xác
+  // nhận" cho từng đợt APPROVED) — người dùng tự tìm đúng đề nghị theo tiêu đề trong danh sách đó.
+  OFFICE: {
+    dbKeys: ['officeReqs', 'paymentRequests'],
+    open: (r, dbKey) => {
+      if (dbKey === 'paymentRequests') { setOfficeSubTab('PAYMENT'); return setPaymentSubTab('APPROVE'); }
+      return openOfficeProcessModal(r.id);
+    }
+  },
   VPP: { dbKeys: ['vppRegistrations'], open: (r) => openVppRegModal(r.id) },
   SUBMISSION: { dbKeys: ['submissions'], open: (r) => openProcessSubmissionModal(r.id) },
   CONTRACT: { dbKeys: ['contracts'], open: (r) => viewContractDetails(r.id) },
   INTERNAL: { dbKeys: ['internalPosts'], open: (r) => viewInternalPostDetail(r.id) },
-  IT_SUPPORT: { dbKeys: ['itPriceApprovals', 'itSupportTickets'], open: (r, dbKey) => dbKey === 'itSupportTickets' ? openItTicketModal(r.id) : openItPriceModal(r.id, 'APPROVAL') },
-  OPERATION: { dbKeys: ['operationOrders', 'operationStoreOpenings', 'operationRepairs'], open: (r, dbKey) => openOperationProcessModal(dbKey, r.id) }
+  // itServiceRenewals (Giai đoạn 4, 11/2026 — job nhắc hạn jobs/itServiceRenewalReminder.js): collection
+  // này KHÔNG có field `code` (xem lib/createValidation.js itServiceRenewals, chỉ có id/name/category) —
+  // dò theo `id` qua nhánh fallback riêng ở openLinkedApprovalRecordByCode() ngay dưới (record.code ===
+  // undefined). Phải tự chuyển sang đúng tab con "RENEWAL" trước khi mở modal (switchTab('itSupport')
+  // mặc định dừng ở tab con PRICE).
+  IT_SUPPORT: {
+    dbKeys: ['itPriceApprovals', 'itSupportTickets', 'itServiceRenewals'],
+    open: (r, dbKey) => {
+      if (dbKey === 'itSupportTickets') return openItTicketModal(r.id);
+      if (dbKey === 'itServiceRenewals') { setItSupportSubTab('RENEWAL'); return openItServiceRenewalRenewModal(r.id); }
+      return openItPriceModal(r.id, 'APPROVAL');
+    }
+  },
+  OPERATION: { dbKeys: ['operationOrders', 'operationStoreOpenings', 'operationRepairs'], open: (r, dbKey) => openOperationProcessModal(dbKey, r.id) },
+  LABOR_CONTRACT: { dbKeys: ['laborContracts'], open: (r) => openHrContractDetailModal(r.id) },
+  // reportPeriods KHÔNG có field `code` (chỉ có id/name) -> dò theo `id` qua nhánh fallback. Hệ thống
+  // chưa có modal "xem 1 kỳ báo cáo" — chỉ có form Nhập Báo Cáo (sub-tab ENTRY) chọn kỳ qua dropdown
+  // #prEntryPeriodSelect (xem onPrEntryPeriodChange()) — set thẳng giá trị dropdown rồi gọi lại đúng
+  // handler đó, tái dùng y nguyên cơ chế mở "sửa nháp" đã có (editPrEntryDraft()) thay vì tự vẽ mới.
+  REPORT_PERIOD: {
+    dbKeys: ['reportPeriods'],
+    open: (r) => {
+      setPeriodicReportSubTab('ENTRY');
+      const sel = document.getElementById('prEntryPeriodSelect');
+      if (!sel) return;
+      sel.value = String(r.id);
+      onPrEntryPeriodChange();
+    }
+  },
+  // hrProcesses KHÔNG có field `code` (chỉ có id) -> dò theo `id` qua nhánh fallback.
+  HR_LIFECYCLE: { dbKeys: ['hrProcesses'], open: (r) => openHrProcessDetail(r.id) }
 };
 
 // Tìm đúng module (configModule) khớp tab + mở thẳng hồ sơ theo code — LỖI ĐÃ VÁ (11/2026, yêu cầu
@@ -7092,7 +7147,10 @@ function openLinkedApprovalRecordByCode(tab, code) {
   const opener = configModule && APPROVAL_EMAIL_RECORD_OPENER[configModule];
   if (opener) {
     for (const dbKey of opener.dbKeys) {
-      const record = (DB[dbKey] || []).find(r => r && r.code === code);
+      // itServiceRenewals KHÔNG có field `code` (xem APPROVAL_EMAIL_RECORD_OPENER.IT_SUPPORT ở trên) ->
+      // r.code luôn undefined cho MỌI bản ghi collection này -> dò theo id thay thế. Mọi collection khác
+      // đều có `code` thật nên nhánh fallback này KHÔNG đụng tới hành vi dò theo code đã có.
+      const record = (DB[dbKey] || []).find(r => r && (r.code === code || (r.code === undefined && String(r.id) === String(code))));
       if (record) {
         try { opener.open(record, dbKey); return; }
         catch (err) { console.error('openLinkedApprovalRecordByCode: lỗi khi mở hồ sơ, rơi về báo mã', tab, code, err); }

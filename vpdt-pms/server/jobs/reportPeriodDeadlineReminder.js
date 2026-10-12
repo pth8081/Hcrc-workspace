@@ -10,7 +10,7 @@
 // cáo thường có vòng đời ngắn hơn nhiều so với hợp đồng/giấy phép, không cần cấu hình admin riêng như
 // contractExpiryReminderDays).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -115,7 +115,7 @@ async function checkReportPeriodDeadlineReminders() {
             .map(u => ({ email: u.email, name: u.name || u.username }));
 
           const subject = `[VPDT] Kỳ báo cáo "${period.name}" ${label} — "${dept}" chưa nộp`;
-          const body = `Kỳ báo cáo "${period.name}" ${label} (hạn: ${period.endTime}). Phòng ban "${dept}" CHƯA nộp báo cáo cho kỳ này — vui lòng nộp sớm để tránh thiếu số liệu lúc tổng hợp.`;
+          const body = `Kỳ báo cáo "${period.name}" ${label} (hạn: ${period.endTime}). Phòng ban "${dept}" CHƯA nộp báo cáo cho kỳ này — vui lòng nộp sớm để tránh thiếu số liệu lúc tổng hợp.${buildReminderEmailLink('periodicReport', String(period.id))}`;
 
           for (const r of recipients) {
             console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);

@@ -5922,6 +5922,23 @@ nhập) — không còn phải tự tìm mã hồ sơ trong danh sách như trư
 Phòng Họp (chưa có màn "xem chi tiết 1 phiếu" nào trong hệ thống) chỉ dừng
 ở mức chuyển đúng tab, chưa mở thẳng modal được.
 
+**🔗 Link truy cập trực tiếp cho email NHẮC HẠN tự động (Giai đoạn 4, 11/2026)**:
+toàn bộ 9 job định kỳ (cron) nhắc hạn/quá hạn — Hợp Đồng, Giấy Phép, Phê Duyệt
+IT, Gia Hạn Dịch Vụ CNTT, Hợp Đồng Lao Động, Thanh Toán, Kỳ Báo Cáo Định Kỳ,
+Onboarding/Offboarding quá hạn, Quá Hạn Xử Lý (Văn Bản Trình/Hợp Đồng) — cũng
+tự kèm link tương tự ở cuối nội dung email, **NHƯNG CẦN CẤU HÌNH THÊM 1 BIẾN
+MÔI TRƯỜNG** `APP_BASE_URL` (xem `.env.example`, VD
+`APP_BASE_URL=https://vpdt.congty.com`) vì job chạy nền (cron) không có sẵn
+domain thật như email gửi lúc có người bấm nút trên giao diện. **Nếu CHƯA cấu
+hình `APP_BASE_URL`**: email vẫn gửi đầy đủ như trước, chỉ là KHÔNG có link
+đi kèm (không lỗi, không ảnh hưởng gì khác) — cấu hình xong và khởi động lại
+server (`pm2 restart`) thì các lần gửi SAU đó tự có link, không cần làm gì
+thêm. Hầu hết các job này mở thẳng đúng modal xử lý (tái dùng các opener đã
+có ở Giai đoạn 1-3); 2 trường hợp CHƯA có modal "xem 1 hồ sơ" phù hợp
+(Thanh Toán — chỉ có form Sửa dành riêng cho người tạo; Phòng Họp — chưa có
+màn xem chi tiết) thì link chỉ dừng ở mức chuyển đúng tab/sub-tab liên quan,
+người dùng tự tìm hồ sơ trong danh sách hiện ra.
+
 **🔔 Thông Báo Email (cá nhân, Hồ Sơ Cá Nhân, từ 10/2026)** — KHÁC lớp admin
 TOÀN CỤC ở trên (áp dụng cho mọi người cùng lúc): mỗi người tự bật/tắt nhận
 email "Cần phê duyệt" theo từng phân hệ CHO RIÊNG MÌNH, qua tab mới **"🔔

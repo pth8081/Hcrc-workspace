@@ -1,8 +1,32 @@
 # Phiên bản hiện tại
 
-**25.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.82 (2026-11): Giai đoạn 4 — email NHẮC HẠN tự động (9 job cron) cũng tự kèm link trực tiếp hồ sơ
+
+Hoàn tất giai đoạn cuối của tính năng "link truy cập trực tiếp" (v25.81 mới làm 3 giai đoạn đầu, đúng
+luồng người dùng bấm nút trên giao diện) — giờ cả 9 job định kỳ (cron, không có request HTTP nào để tự
+suy ra domain) cũng gắn link tương tự vào cuối nội dung email:
+
+- `lib/mailer.js`: thêm `buildReminderEmailLink(tab, code)` — đọc domain từ `APP_BASE_URL` (biến môi
+  trường, có từ trước nhưng trước đây CHỈ dùng cho mã QR lớp học — xem `.env.example`), trả về chuỗi
+  rỗng an toàn nếu chưa cấu hình hoặc giá trị không hợp lệ (email vẫn gửi đầy đủ, chỉ thiếu link).
+- Gắn vào cả 9 job: `contractExpiryReminder`, `licenseExpiryReminder`, `itApprovalDeadlineReminder`,
+  `itServiceRenewalReminder`, `laborContractExpiryReminder`, `paymentDeadlineReminder`,
+  `reportPeriodDeadlineReminder`, `hrTaskOverdueReminder`, `approvalOverdueReminder`.
+- `public/js/core.js`: mở rộng `APPROVAL_EMAIL_LINK_TAB`/`APPROVAL_EMAIL_RECORD_OPENER` cho 4 module
+  TRƯỚC ĐÂY CHƯA từng đi qua choke-point email chính (Gia Hạn Dịch Vụ CNTT, Hợp Đồng Lao Động, Kỳ Báo
+  Cáo Định Kỳ, Onboarding/Offboarding) — tái dùng đúng dbKey/opener đã có sẵn ở module IT Hỗ Trợ/Văn
+  Phòng cho 2 trường hợp còn lại (Gia Hạn Dịch Vụ CNTT ghép chung tab `itSupport`, Thanh Toán ghép chung
+  tab `office`, tránh 2 configModule cùng trỏ 1 tab). Dò bản ghi theo `id` (thay `code`) cho các
+  collection không có field `code` (itServiceRenewals, reportPeriods, hrProcesses, paymentRequests).
+- Thanh Toán và Phòng Họp chỉ dừng ở mức chuyển đúng tab/sub-tab (chưa có modal "xem 1 hồ sơ" phù hợp
+  với ngữ cảnh người nhận, xem chi tiết ở `Huong-dan-nghiep-vu.md`).
+- **Yêu cầu cấu hình để có hiệu lực**: đặt `APP_BASE_URL` trong `.env` (VD
+  `APP_BASE_URL=https://vpdt.congty.com`) rồi `pm2 restart` — không bắt buộc, chỉ ảnh hưởng tới việc có
+  link hay không, không ảnh hưởng gì khác.
 
 ## v25.81 (2026-11): Email thông báo (Cần phê duyệt/Chuyển tiếp/Ticket IT...) giờ tự mở thẳng đúng hồ sơ sau khi đăng nhập
 

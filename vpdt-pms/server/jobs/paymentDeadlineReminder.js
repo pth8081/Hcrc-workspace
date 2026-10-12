@@ -14,7 +14,7 @@
 // Theo dõi "đã nhắc ngưỡng nào" Ở TỪNG ĐỢT (installment.notifiedThresholds), không phải ở cả đề nghị,
 // vì mỗi đợt có dueDate riêng — khác contractExpiryReminder.js (1 hợp đồng chỉ có 1 endDate).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -109,7 +109,7 @@ async function checkPaymentDeadlineReminders() {
 
           const installmentLabel = it.description ? `"${it.description}"` : `đợt ${idx + 1}`;
           const subject = `[VPDT] Đề nghị thanh toán "${pr.title}" — ${installmentLabel} ${label}`;
-          const body = `Đề nghị thanh toán "${pr.title}"${pr.sourceCode ? ` (nguồn: ${pr.sourceCode})` : ''} — ${installmentLabel} ${label}. Hạn thanh toán: ${it.dueDate}. Số tiền: ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ.`;
+          const body = `Đề nghị thanh toán "${pr.title}"${pr.sourceCode ? ` (nguồn: ${pr.sourceCode})` : ''} — ${installmentLabel} ${label}. Hạn thanh toán: ${it.dueDate}. Số tiền: ${(it.amount || 0).toLocaleString('vi-VN')} VNĐ.${buildReminderEmailLink('office', String(pr.id))}`;
 
           for (const r of recipients) {
             console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);

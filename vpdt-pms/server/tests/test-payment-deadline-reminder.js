@@ -48,7 +48,8 @@ async function main() {
   const sentMails = [];
   stubModule('lib/mailer', {
     sendMail: async ({ to, subject }) => { sentMails.push({ to, subject }); return { sent: to, failed: [], simulated: false, host: 'smtp.test', port: 587 }; },
-    resolveEncryption: () => 'STARTTLS'
+    resolveEncryption: () => 'STARTTLS',
+    buildReminderEmailLink: () => ''
   });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('db', {
@@ -153,7 +154,8 @@ async function main() {
     const originalSendMail = require('../lib/mailer').sendMail;
     stubModule('lib/mailer', {
       sendMail: async () => { throw new Error('Mất kết nối SMTP giả lập'); },
-      resolveEncryption: () => 'STARTTLS'
+      resolveEncryption: () => 'STARTTLS',
+      buildReminderEmailLink: () => ''
     });
     delete require.cache[require.resolve('../jobs/paymentDeadlineReminder')];
     const { checkPaymentDeadlineReminders: retryJob } = require('../jobs/paymentDeadlineReminder');

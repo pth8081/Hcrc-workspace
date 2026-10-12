@@ -9,7 +9,7 @@
 // user.managerUsername, cùng field phẳng đã dùng ở isManagerOf()/lib/employeeProfile.js). Hợp đồng
 // INDEFINITE (endDate null) không bao giờ hết hạn -> bỏ qua tự nhiên (daysUntil() trả null).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -94,7 +94,7 @@ async function checkLaborContractExpiryReminders() {
         const label = diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : (diffDays === 0 ? 'hết hạn hôm nay' : `còn khoảng ${threshold} ngày là hết hạn`);
         const typeLabel = CONTRACT_TYPE_LABELS[c.contractType] || c.contractType;
         const subject = `[VPDT] Hợp đồng lao động ${c.code} (${typeLabel}) ${label}`;
-        const body = `Hợp đồng lao động "${c.code}" (${typeLabel}) của nhân viên mã ${c.employeeCode} ${label}. Ngày hết hạn: ${c.endDate}. Vui lòng xem xét gia hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục.`;
+        const body = `Hợp đồng lao động "${c.code}" (${typeLabel}) của nhân viên mã ${c.employeeCode} ${label}. Ngày hết hạn: ${c.endDate}. Vui lòng xem xét gia hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục.${buildReminderEmailLink('hrContract', c.code)}`;
 
         const profile = (profiles || []).find(p => p.employeeCode === c.employeeCode);
         const rawRecipients = [...hrEmails];

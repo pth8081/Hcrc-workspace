@@ -67,7 +67,8 @@ async function main() {
       if (onSend) await onSend();
       return { sent: to, failed: [], simulated: false };
     },
-    resolveEncryption: () => 'STARTTLS'
+    resolveEncryption: () => 'STARTTLS',
+    buildReminderEmailLink: () => ''
   });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('db', {

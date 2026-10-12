@@ -306,6 +306,13 @@ Các biến khác trong `.env.example` (`DB_POOL_*`, `APPDATA_CACHE_TTL_MS`) đ�
 có giá trị mặc định hợp lý — chỉ cần điền khi bạn thực sự cần chỉnh khác mặc
 định, xem chú thích trong chính file `.env.example` và mục 11.3.
 
+**Nên đặt `APP_BASE_URL`** (vẫn không bắt buộc, server khởi động bình thường
+nếu bỏ trống) — từ 11/2026, ngoài dùng cho mã QR lớp học, biến này còn quyết
+định email của 9 job nhắc hạn/quá hạn chạy nền (Hợp Đồng, Giấy Phép, Thanh
+Toán...) có kèm link "Xem trực tiếp hồ sơ" hay không — bỏ trống thì các email
+đó vẫn gửi đầy đủ, chỉ thiếu link. Đặt đúng domain công khai của bạn, VD
+`APP_BASE_URL=https://vpdt.congty.com`.
+
 ---
 
 ## 7. Cấu hình gửi email thật (SMTP)

@@ -16,7 +16,7 @@
 // + người trình/tạo hồ sơ, cộng thêm email CC cố định theo đúng module (submissionOverdueCcEmails/
 // contractOverdueCcEmails).
 const { getPool } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -24,9 +24,13 @@ const { getAllAppData } = require('../lib/appData');
 const { MODULE_CONFIGS, resolveWorkflowStepApprovers } = require('../lib/workflowEngine');
 const { computeApprovalOverdueStatus } = require('../lib/approvalOverdue');
 
+// linkTab: tab tương ứng ở APPROVAL_EMAIL_LINK_TAB/APPROVAL_EMAIL_RECORD_OPENER (public/js/core.js, đã
+// đăng ký sẵn từ Giai đoạn 1-3) — dùng để gắn link "Xem trực tiếp hồ sơ" (buildReminderEmailLink()),
+// KHÔNG cần đăng ký gì thêm ở core.js vì cả 2 module này đã có opener mở thẳng modal xử lý
+// (openProcessSubmissionModal/viewContractDetails) từ trước.
 const MODULE_JOBS = [
-  { moduleKey: 'submissions', logModule: 'SUBMISSION', noun: 'tờ trình', overdueDaysField: 'submissionOverdueDays', ccField: 'submissionOverdueCcEmails' },
-  { moduleKey: 'contracts', logModule: 'CONTRACT', noun: 'hợp đồng', overdueDaysField: 'contractOverdueDays', ccField: 'contractOverdueCcEmails' }
+  { moduleKey: 'submissions', logModule: 'SUBMISSION', noun: 'tờ trình', overdueDaysField: 'submissionOverdueDays', ccField: 'submissionOverdueCcEmails', linkTab: 'submission' },
+  { moduleKey: 'contracts', logModule: 'CONTRACT', noun: 'hợp đồng', overdueDaysField: 'contractOverdueDays', ccField: 'contractOverdueCcEmails', linkTab: 'contract' }
 ];
 
 async function checkApprovalOverdueReminders() {
@@ -100,7 +104,7 @@ async function checkApprovalOverdueReminders() {
 
           const label = `đã chờ xử lý ${st.daysWaited} ngày ở bước ${step} (ngưỡng ${st.level === 'OVERDUE' ? '🔴 Quá Hạn Xử Lý' : '⚠️ Sắp Quá Hạn'}: ${st.threshold} ngày)`;
           const subject = `[VPDT] ${jobCfg.noun.charAt(0).toUpperCase() + jobCfg.noun.slice(1)} ${item.code} ${st.level === 'OVERDUE' ? 'đã quá hạn xử lý' : 'sắp quá hạn xử lý'}`;
-          const body = `${jobCfg.noun.charAt(0).toUpperCase() + jobCfg.noun.slice(1)} "${item.title || ''}" (${item.code}) ${label}.`;
+          const body = `${jobCfg.noun.charAt(0).toUpperCase() + jobCfg.noun.slice(1)} "${item.title || ''}" (${item.code}) ${label}.${buildReminderEmailLink(jobCfg.linkTab, item.code)}`;
 
           for (const r of recipients) {
             console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);

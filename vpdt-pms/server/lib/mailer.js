@@ -110,6 +110,34 @@ function resolveEwsOption(emailConfig) {
   };
 }
 
+// buildReminderEmailLink(tab, code) — Giai đoạn 4 (11/2026, "email nhắc hạn từ job chạy nền phải có
+// link truy cập trực tiếp hồ sơ", theo yêu cầu người dùng). KHÁC HẲN buildApprovalEmailLink() phía
+// client (public/js/core.js, dùng cho email gửi LÚC CÓ request thật đang chạy, suy được domain từ
+// window.location.href) — các job trong jobs/*.js chạy ĐỊNH KỲ, KHÔNG có `req` nào để suy ra domain như
+// routes/trainingRoster.js (`process.env.APP_BASE_URL || \`${req.protocol}://${req.get('host')}\``) —
+// BẮT BUỘC đọc thẳng process.env.APP_BASE_URL, không có đường lùi nào khác. Chưa cấu hình APP_BASE_URL
+// (.env, xem .env.example) -> trả về chuỗi rỗng, email VẪN GỬI BÌNH THƯỜNG, chỉ thiếu link — không lỗi.
+// Đích đến dùng CHUNG đúng 1 cơ chế `?gotoModule=<tab>&code=<mã>` + gotoApprovalResultRecordFromQueryParam()
+// (core.js) mà email nghiệp vụ (approvalNeeded/result...) đã dùng — tab truyền vào PHẢI có mặt trong
+// APPROVAL_EMAIL_LINK_TAB (core.js) kèm entry tương ứng trong APPROVAL_EMAIL_RECORD_OPENER để thật sự
+// mở được đúng hồ sơ, không chỉ chuyển tab.
+function buildReminderEmailLink(tab, code) {
+  const base = String(process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (!base || !tab) return '';
+  let url;
+  try {
+    url = new URL(base);
+  } catch (err) {
+    console.error('⛔ APP_BASE_URL cấu hình không hợp lệ (phải là URL đầy đủ, VD https://vpdt.example.com), bỏ qua link:', err.message);
+    return '';
+  }
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('gotoModule', tab);
+  if (code) url.searchParams.set('code', code);
+  return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${url.toString()}`;
+}
+
 function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned }) {
   const resolvedPort = parseInt(port, 10) || 587;
 
@@ -222,4 +250,4 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
   return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort, errorMessage: lastErrorMessage };
 }
 
-module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption };
+module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink };
