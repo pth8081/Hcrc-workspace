@@ -184,6 +184,18 @@ async function main() {
         mixedApprovalRuleMatchCount({ mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: null }) === 2,
         `count=${mixedApprovalRuleMatchCount({ mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: null })}`);
 
+      // ---------- Người dùng báo CẢ 2 màn (🏬 Quy Trình Đặt Hàng Siêu Thị LẪN 🏪 QT Giá Bán Buôn — Siêu
+      // Thị) đều bị — 2 bảng dùng CHUNG mixedApprovalRuleMatchCount() (đã vá ở trên) nhưng render qua 2
+      // hàm RIÊNG, nên kiểm tra thẳng trên bảng THẬT của màn Giá Bán Buôn để xác nhận bản vá áp dụng
+      // đúng ở cả 2 nơi, không chỉ đúng khi gọi hàm trần.
+      DB.itPriceWholesaleStoreMixedApprovalRules = [
+        { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: 'Ban Giám Đốc', stores: [] }
+      ];
+      renderItPriceWholesaleMixedApprovalSection();
+      const ipmaTbodyHTML = document.getElementById('itPriceMixedApprovalTableBody')?.innerHTML || '';
+      check('🏪 QT Giá Bán Buôn (Siêu Thị): dòng JOBTITLE+jobTitleDept hiện ĐÚNG 1 người (không lẫn ptgd.khac ở phòng khác)',
+        ipmaTbodyHTML.includes('1 người') && !ipmaTbodyHTML.includes('2 người'), ipmaTbodyHTML.slice(0, 500));
+
       return { results };
     });
   } finally {
