@@ -92,11 +92,12 @@ function hideHrCreateForms() {
   document.getElementById('hrpCreateOffboardWrap').classList.add('hidden');
 }
 
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát toàn hệ thống ô <select> danh mục dài): hrpOnbDept/
+// hrpOnbStore trước đây là <select> dựng cứng toàn bộ <option> — cuộn dài khi DB.depts/DB.stores nhiều.
+// Nâng cấp sang sddSetOptions() (ô tìm-kiếm-gõ-chọn), cùng khuôn hrpOnbJobTitle đã chuyển đợt trước.
 function populateHrpOnboardingDeptDropdowns() {
-  const deptSel = document.getElementById('hrpOnbDept');
-  if (deptSel) deptSel.innerHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  const storeSel = document.getElementById('hrpOnbStore');
-  if (storeSel) storeSel.innerHTML = (DB.stores || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  sddSetOptions('hrpOnbDeptDatalist', DB.depts || []);
+  sddSetOptions('hrpOnbStoreDatalist', DB.stores || []);
 }
 // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hrpOnbJobTitle trước đây là <select> gõ-cứng-toàn-bộ (không
 // tìm-kiếm được khi danh mục chức danh dài) — nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*" bắt buộc dùng cho

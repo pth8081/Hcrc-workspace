@@ -54,6 +54,11 @@ async function main() {
     const outsider = makeUser({ username: 'outsider_rp', name: 'Nhân Viên Không Quyền', dept: 'Phòng CNTT', perms: {} });
 
     await page.evaluate((seed) => { Object.assign(DB, seed); }, baseCatalogSeed());
+    // "Siêu Thị A" (dept của nv/gdSt ở trên) phải có trong DB.stores để làm Đơn Vị HỢP LỆ cho Kế Hoạch
+    // Đào Tạo ở kịch bản 1 — tpTargetDept giờ là ô tìm-kiếm-gõ-chọn (sdd, 11/2026), gán .value TRỰC TIẾP
+    // chuỗi này (không qua chọn gợi ý) nên KHÔNG còn được <select> cũ "lặng lẽ bỏ qua" nếu không khớp
+    // danh mục — server (mock, mirrors normalizeTrainingPlanFields()) chặn thật nếu không có trong danh mục.
+    await page.evaluate(() => { DB.stores = ['Siêu Thị A']; });
     await page.evaluate((users) => { DB.users = users; }, [trainer, nv, gdSt, outsider]);
     await page.evaluate((u) => finishLogin(u), trainer);
     await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); });

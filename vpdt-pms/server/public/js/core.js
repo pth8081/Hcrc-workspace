@@ -11142,19 +11142,20 @@ function populateDropdowns() {
   // Đơn Vị/Siêu Thị Đăng Tuyển (recruitmentJobs.dept, Đợt 2 Bản Tin Tuyển Dụng) — cùng khuôn paymentDept/
   // contractCustodianDept ở trên: "đăng tin CHO đơn vị nào" chứ không phải "tạo hồ sơ thay mặt đơn vị
   // khác", nên liệt kê TOÀN BỘ DB.depts + DB.stores gộp chung 1 dropdown, không lọc theo scope tạo.
-  const rjDept = document.getElementById('rjDept');
-  if (rjDept) {
-    const currentRjDept = rjDept.value;
-    rjDept.innerHTML = '<option value="">-- Chọn đơn vị/siêu thị --</option>' +
-      [...DB.depts, ...DB.stores].map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-    if ([...DB.depts, ...DB.stores].includes(currentRjDept)) rjDept.value = currentRjDept;
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài): rjDept/rjFilterDept
+  // nâng cấp sang sddSetOptions() (ô tìm-kiếm-gõ-chọn) — giữ nguyên giá trị đang chọn (nếu còn hợp lệ),
+  // khác <select> cũ không cần làm gì thêm vì browser tự giữ .value khi innerHTML đổi (option trùng value
+  // vẫn được chọn lại) — input tự do thì .value đã tự giữ nguyên (không bị sddSetOptions() đụng tới), chỉ
+  // cần xoá đi khi giá trị không còn hợp lệ.
+  if (document.getElementById('rjDept')) {
+    sddSetOptions('rjDeptDatalist', [...DB.depts, ...DB.stores]);
+    const rjDept = document.getElementById('rjDept');
+    if (rjDept.value && ![...DB.depts, ...DB.stores].includes(rjDept.value)) rjDept.value = '';
   }
-  const rjFilterDept = document.getElementById('rjFilterDept');
-  if (rjFilterDept) {
-    const currentFilterDept = rjFilterDept.value;
-    rjFilterDept.innerHTML = '<option value="">-- Tất cả đơn vị/siêu thị --</option>' +
-      [...DB.depts, ...DB.stores].map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-    if ([...DB.depts, ...DB.stores].includes(currentFilterDept)) rjFilterDept.value = currentFilterDept;
+  if (document.getElementById('rjFilterDept')) {
+    sddSetOptions('rjFilterDeptDatalist', [...DB.depts, ...DB.stores]);
+    const rjFilterDept = document.getElementById('rjFilterDept');
+    if (rjFilterDept.value && ![...DB.depts, ...DB.stores].includes(rjFilterDept.value)) rjFilterDept.value = '';
   }
 
   const meetingRoomSel = document.getElementById('meetingRoom');
@@ -11200,10 +11201,9 @@ function populateDropdowns() {
   const uDeptCurrent = document.getElementById('uDept')?.value || '';
   populateUserKhoiBanOptions(uKhoiBanCurrent);
   populateUserDeptOptions(uKhoiBanCurrent, uDeptCurrent);
-  const uStore = document.getElementById('uStore');
-  if (uStore) {
-    uStore.innerHTML = DB.stores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  }
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài): uStore nâng cấp sang
+  // sddSetOptions() (ô tìm-kiếm-gõ-chọn) — xem chú thích đầy đủ tại #uStoreFieldWrap, systemSection.html.
+  if (document.getElementById('uStore')) sddSetOptions('uStoreDatalist', DB.stores);
 
   // uPosType nạp ĐỘNG từ DB.positionTypes (xem populateUserPosTypeOptions() ở trên) — PHẢI chạy TRƯỚC
   // uJobTitle (phụ thuộc uPosType, mục 4a — xem populateUserJobTitleOptions()/onUserPosTypeChange()).
@@ -11320,14 +11320,16 @@ function populateUserKhoiBanOptions(preserveKhoiId) {
 // preserveDept (nếu có) LUÔN được giữ trong danh sách dù không thuộc Khối/Ban đang lọc — tránh mất lựa
 // chọn hiện tại khi mở form sửa 1 người dùng có dữ liệu cũ/lệch (VD Phòng Ban đã bị chuyển sang Khối
 // khác sau khi gán cho người này).
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài): uDept nâng cấp sang
+// sddSetOptions() (ô tìm-kiếm-gõ-chọn) — "— Để trống —" không còn là 1 <option> (không cần thiết với ô
+// gõ tự do, placeholder đã nói rõ "để trống nếu không chọn"), input.value = '' tự nhiên nghĩa là để trống.
 function populateUserDeptOptions(khoiId, preserveDept) {
   const uDept = document.getElementById('uDept');
   if (!uDept) return;
   const group = (DB.deptGroups || []).find(g => String(g.id) === String(khoiId));
   const depts = group ? group.depts.slice() : DB.depts.slice();
   if (preserveDept && !depts.includes(preserveDept)) depts.push(preserveDept);
-  uDept.innerHTML = '<option value="">— Để trống —</option>' +
-    depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  sddSetOptions('uDeptDatalist', depts);
   uDept.value = preserveDept || '';
 }
 

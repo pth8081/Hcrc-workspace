@@ -1,8 +1,36 @@
 # Phiên bản hiện tại
 
-**25.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.79 (2026-11): Đổi toàn bộ ô chọn Phòng Ban/Siêu Thị danh sách dài sang tìm-kiếm-gõ-chọn (sdd)
+
+Theo yêu cầu người dùng: nhiều ô `<select>` Phòng Ban/Siêu Thị (danh mục dài, phải cuộn tìm) được đổi
+sang ô tìm-kiếm-gõ-chọn (cơ chế `sdd*` có sẵn, xem CLAUDE.md) sau khi rà soát TOÀN BỘ hệ thống — không
+đổi nghiệp vụ/luồng dữ liệu, chỉ đổi cách chọn giá trị.
+
+- **Đã đổi**: Onboarding (Phòng Ban/Siêu Thị), Ngân Sách (Đề Xuất/Phê Duyệt + modal "Sửa Dòng Sử Dụng" —
+  tách riêng 1 select ngắn HO/Siêu Thị + ô sdd tương ứng), Quản Lý Người Dùng (Phòng Ban/Siêu Thị — có
+  thêm chặn client vì `user.dept` KHÔNG có kiểm tra danh mục phía server), Tuyển Dụng (Đơn Vị Đăng
+  Tuyển + bộ lọc), Đào Tạo (Đơn Vị Kế Hoạch + bộ lọc dashboard), Checklist (3 ô chọn siêu thị ở tab Thực
+  Hiện: Kiểm Soát/Test Admin/Chọn phạm vi), Cơ Cấu Tổ Chức (Liên kết Phòng Ban thật — có thêm chặn
+  client, cũng không có kiểm tra server), Báo Cáo (bộ lọc Phòng Ban/Siêu Thị dùng chung mọi tab), Danh
+  Mục Ngành Hàng (Phòng Ban Áp Dụng).
+- **An toàn dữ liệu**: đã rà từng field qua `lib/createValidation.js`/`lib/checklist.js` — field nào
+  server ĐÃ validate theo danh mục thật (budgetLines/hrProcesses/recruitmentJobs/trainingPlans/
+  checklist storeCode) thì chuyển thẳng sang ô tự do không rủi ro; field nào KHÔNG có kiểm tra nào
+  (`user.dept`/`user.khoiBan` tương ứng ở `uDept`/`uStore`, và `departmentRef`/`nganhHangCatalog.dept`)
+  được bổ sung THÊM 1 lớp chặn phía client (gõ sai/không khớp gợi ý nào thì chặn lưu, báo rõ lý do).
+- Test: chạy lại toàn bộ regression của các module trên (`test-admin-users-permgroups`, `test-budget-
+  lines`, `test-checklist-execute-tab-admin-audit-test`, `test-form-reset-file-remove`, `test-reports`,
+  `test-orgchart-node-headcount-selfonly-ui`, `test-orgchart-headcount-modal-binding`, `test-internal-
+  recruitment-share`, `test-training-plans`, `test-training-scenario-roleplay`...) — vài test cũ đọc
+  `<select>.options` trực tiếp cho field vừa đổi, đã cập nhật sang đọc `div#...Datalist._sddItems`
+  (không đổi hành vi thật, chỉ đổi cách đọc DOM trong test). 1 thất bại duy nhất gặp phải
+  (`test-form-reset-file-remove.js`, khối "Vận Hành > Đặt Hàng") đã xác nhận ĐÃ CÓ SẴN trên baseline
+  trước khi đổi (không liên quan đợt này) qua `git stash` so sánh trực tiếp.
+- Không đổi `schema.sql`/biến môi trường/dependency nào.
 
 ## v25.78 (2026-11): Vị Trí Kiêm Nhiệm — nhập từ Hồ Sơ Nhân Sự, đồng bộ sang Quản Lý Người Dùng
 

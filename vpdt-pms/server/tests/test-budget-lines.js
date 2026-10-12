@@ -305,7 +305,9 @@ async function run() {
       return {
         deptHidden: document.getElementById('blProposeDeptWrap').classList.contains('hidden'),
         storeHidden: document.getElementById('blProposeStoreWrap').classList.contains('hidden'),
-        storeOptions: document.getElementById('blProposeStore').options.length
+        // blProposeStore đã đổi từ <select> sang ô tìm-kiếm-gõ-chọn (sdd, 11/2026) — số gợi ý nằm ở
+        // div#blProposeStoreDatalist._sddItems (xem sddSetOptions(), core.js), không còn .options.
+        storeOptions: (document.getElementById('blProposeStoreDatalist')._sddItems || []).length
       };
     });
     check('Chọn Vị trí = Siêu Thị -> ô Khối Phòng Ban ẨN, ô Siêu Thị HIỆN', uiAfterStore.deptHidden && !uiAfterStore.storeHidden, uiAfterStore);

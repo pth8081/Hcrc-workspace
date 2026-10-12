@@ -1505,10 +1505,7 @@ function renderNganhHangCatalogList() {
   const wrap = document.getElementById('nganhHangCatalogListWrap');
   if (!wrap) return;
   const deptSel = document.getElementById('nganhHangCatalogDept');
-  if (deptSel && deptSel.options.length <= 1) {
-    deptSel.innerHTML = '<option value="">-- Dùng chung mọi phòng ban --</option>' +
-      (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  }
+  if (deptSel) sddSetOptions('nganhHangCatalogDeptDatalist', DB.depts || []);
   const items = DB.nganhHangCatalog || [];
   if (!items.length) {
     wrap.innerHTML = `<div class="text-xs text-gray-500 italic bg-white p-3 rounded border">Chưa có ngành hàng nào trong danh mục.</div>`;
@@ -1534,9 +1531,10 @@ function renderNganhHangCatalogList() {
 async function saveNganhHangCatalogItem() {
   const code = document.getElementById('nganhHangCatalogCode').value.trim();
   const name = document.getElementById('nganhHangCatalogName').value.trim();
-  const dept = document.getElementById('nganhHangCatalogDept').value || '';
+  const dept = document.getElementById('nganhHangCatalogDept').value.trim() || '';
   if (!code) return alert('Vui lòng nhập mã ngành hàng!');
   if (!name) return alert('Vui lòng nhập tên ngành hàng!');
+  if (dept && !(DB.depts || []).includes(dept)) return alert('⛔ "Phòng Ban Áp Dụng" không hợp lệ — vui lòng gõ và chọn đúng 1 gợi ý từ danh sách, hoặc bỏ trống.');
   if ((DB.nganhHangCatalog || []).some(n => n.code === code)) return alert('Mã ngành hàng này đã có trong danh mục!');
   const prevList = (DB.nganhHangCatalog || []).map(n => ({ ...n }));
   const nextId = (Math.max(0, ...(DB.nganhHangCatalog || []).map(n => n.id)) || 0) + 1;

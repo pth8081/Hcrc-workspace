@@ -937,6 +937,20 @@ function readUserFormState() {
     alert(`Vui lòng chọn ${label}!`);
     return null;
   }
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài): uDept/uStore chuyển
+  // từ <select> (chỉ chọn đúng tên có thật, không gõ tự do được) sang ô tìm-kiếm-gõ-chọn "sdd*" (gõ tự
+  // do + chọn gợi ý) — khác hẳn các ô sdd khác đã vá đợt này (Onboarding/Ngân Sách đều có server đối
+  // chiếu catalog thật, lib/createValidation.js), user.dept KHÔNG được server đối chiếu catalog nào, nên
+  // PHẢI tự chặn ở đây để giữ nguyên bảo đảm "chỉ lưu đúng tên Phòng Ban/Siêu Thị có thật" mà <select> cũ
+  // vốn có sẵn — tránh gõ nhầm/gõ bừa lưu thẳng vào hồ sơ, lệch khỏi Danh Mục Phòng Ban/Siêu Thị thật.
+  if (posType === 'HO' && dept && !(DB.depts || []).includes(dept)) {
+    alert('Phòng Ban không hợp lệ — vui lòng gõ và chọn đúng 1 gợi ý từ danh sách.');
+    return null;
+  }
+  if (posType === 'STORE' && dept && !(DB.stores || []).includes(dept)) {
+    alert('Siêu Thị không hợp lệ — vui lòng gõ và chọn đúng 1 gợi ý từ danh sách (hoặc bấm "+" để thêm siêu thị mới).');
+    return null;
+  }
   const khoiBan = posType === 'HO' ? (document.getElementById('uKhoiBan')?.value || '') : '';
   const jobTitle = document.getElementById('uJobTitle').value || null;
   const secondaryPositions = getMultiSelectValues('uSecondaryPositionsMultiSelect').map(decodeWfPositionPair).filter(Boolean);

@@ -103,7 +103,9 @@ async function main() {
   const adminTestOptions = await page.evaluate(() => Array.from(document.getElementById('checklistAdminTestTemplateSelect').options).map(o => o.textContent));
   record('ADMIN: mẫu VSATTP (CONTROL_AUDIT) xuất hiện trong khối Test, gắn nhãn "[Kiểm Soát]"', adminTestOptions.some(t => t.includes('[Kiểm Soát]') && t.includes('VSATTP')), JSON.stringify(adminTestOptions));
   record('ADMIN: mẫu Tự Đánh Giá (STORE_SELF) vẫn còn trong khối Test, gắn nhãn "[Checklist Thường]"', adminTestOptions.some(t => t.includes('[Checklist Thường]') && t.includes('GĐST/CHT')), JSON.stringify(adminTestOptions));
-  const adminStoreOptions = await page.evaluate(() => Array.from(document.getElementById('checklistAdminTestStoreSelect').options).map(o => o.value));
+  // checklistAdminTestStoreSelect đã đổi từ <select> sang ô tìm-kiếm-gõ-chọn (sdd, 11/2026) — danh sách
+  // gợi ý nằm ở div#...Datalist._sddItems (xem sddSetOptions(), core.js), không còn .options.
+  const adminStoreOptions = await page.evaluate(() => (document.getElementById('checklistAdminTestStoreSelectDatalist')._sddItems || []).map(o => o.value));
   record('ADMIN: ô chọn siêu thị của khối Test liệt kê ĐỦ mọi siêu thị (chọn bất kỳ)', adminStoreOptions.includes('Siêu thị A') && adminStoreOptions.includes('Siêu thị B'));
 
   // ===== 2. Kiểm Soát Viên THẬT (checklistAuditScope tường minh, KHÔNG phải admin) =====
@@ -112,7 +114,8 @@ async function main() {
   const htmlAuditor = await page.evaluate(() => document.getElementById('checklistExecuteListWrap').innerHTML);
   record('Kiểm Soát Viên THẬT: VẪN thấy khối "🔎 Kiểm Soát Siêu Thị" thật (không đổi hành vi cũ)', htmlAuditor.includes('Kiểm Soát Siêu Thị') && htmlAuditor.includes('checklistAuditTemplateSelect'));
   record('Kiểm Soát Viên THẬT: KHÔNG thấy khối "🧪 Test Checklist" (không phải admin)', !htmlAuditor.includes('Test Checklist'));
-  const auditorStoreOptions = await page.evaluate(() => Array.from(document.getElementById('checklistAuditStoreSelect').options).map(o => o.value));
+  // checklistAuditStoreSelect cũng đã đổi sang sdd (11/2026) — xem chú thích tương tự ngay trên.
+  const auditorStoreOptions = await page.evaluate(() => (document.getElementById('checklistAuditStoreSelectDatalist')._sddItems || []).map(o => o.value));
   // 11/2026: checklistAtvstpExecute là quyền PHẲNG — "ai được chọn thì thực hiện TẤT CẢ siêu thị", không
   // còn phạm vi riêng theo siêu thị như checklistAuditScope cũ.
   record('Kiểm Soát Viên THẬT: ô chọn siêu thị của khối Kiểm Soát liệt kê TẤT CẢ siêu thị (quyền phẳng, không còn phạm vi riêng)', auditorStoreOptions.includes('Siêu thị A') && auditorStoreOptions.includes('Siêu thị B'), JSON.stringify(auditorStoreOptions));

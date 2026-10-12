@@ -337,8 +337,8 @@ async function scenario(name, fn) {
 
       // Toggle back to HO with an empty uDept — Khối/Ban (10/2026) đã nới lỏng: Phòng Ban giờ ĐƯỢC PHÉP
       // để trống ở Vị Trí HO (xem scenario (r) — kiểm tra sâu hơn ngay dưới), khác hẳn Siêu Thị vẫn bắt
-      // buộc như cũ. uDept giờ có sẵn <option value=""> đầu tiên (populateUserDeptOptions(), core.js)
-      // nên gán '' chọn ĐÚNG option đó (không còn rơi vào selectedIndex -1 như uStore ở trên).
+      // buộc như cũ. uDept/uStore giờ là ô tìm-kiếm-gõ-chọn (sdd, 11/2026, không còn <select>) — gán ''
+      // trực tiếp vào input.value là đủ để mô phỏng "để trống", không còn khái niệm selectedIndex.
       resetUserForm();
       document.getElementById('uUsername').value = 'nv.ho';
       document.getElementById('uPassword').value = 'Passw0rd!23';
@@ -1435,21 +1435,23 @@ async function scenario(name, fn) {
   await scenario('(q) Form Người Dùng: chọn Khối/Ban LỌC đúng Phòng Ban con; để trống hiện đầy đủ như cũ', async () => {
     const r = await page.evaluate((khoiId) => {
       resetUserForm();
-      const deptOptionsBeforeAny = [...document.getElementById('uDept').options].map(o => o.value);
+      const deptOptionsBeforeAny = (document.getElementById('uDeptDatalist')._sddItems || []).map(o => o.value);
       document.getElementById('uKhoiBan').value = String(khoiId);
       onUserKhoiBanChange();
-      const deptOptionsAfterKhoi = [...document.getElementById('uDept').options].map(o => o.value);
+      const deptOptionsAfterKhoi = (document.getElementById('uDeptDatalist')._sddItems || []).map(o => o.value);
       document.getElementById('uKhoiBan').value = '';
       onUserKhoiBanChange();
-      const deptOptionsAfterClear = [...document.getElementById('uDept').options].map(o => o.value);
+      const deptOptionsAfterClear = (document.getElementById('uDeptDatalist')._sddItems || []).map(o => o.value);
       return { deptOptionsBeforeAny, deptOptionsAfterKhoi, deptOptionsAfterClear };
     }, khoiKinhDoanhId);
-    record('(q) Để trống Khối/Ban ban đầu -> Phòng Ban hiện ĐẦY ĐỦ (khớp DB.depts, có option rỗng đầu)',
-      JSON.stringify(r.deptOptionsBeforeAny) === JSON.stringify(['', 'Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc']), JSON.stringify(r));
+    // uDept đã đổi từ <select> sang ô tìm-kiếm-gõ-chọn (sdd, 11/2026) — danh sách gợi ý KHÔNG còn option
+    // rỗng đầu (để trống = gõ trống trong input, không phải chọn 1 lựa chọn), xem sddSetOptions().
+    record('(q) Để trống Khối/Ban ban đầu -> Phòng Ban hiện ĐẦY ĐỦ (khớp DB.depts)',
+      JSON.stringify(r.deptOptionsBeforeAny) === JSON.stringify(['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc']), JSON.stringify(r));
     record('(q) Chọn "Khối Kinh Doanh" -> Phòng Ban CHỈ còn đúng Phòng Ban con đã gán ("Kinh Doanh")',
-      JSON.stringify(r.deptOptionsAfterKhoi) === JSON.stringify(['', 'Kinh Doanh']), JSON.stringify(r));
+      JSON.stringify(r.deptOptionsAfterKhoi) === JSON.stringify(['Kinh Doanh']), JSON.stringify(r));
     record('(q) Bỏ chọn Khối/Ban -> Phòng Ban hiện lại đầy đủ như trước (không đổi hành vi cũ)',
-      JSON.stringify(r.deptOptionsAfterClear) === JSON.stringify(['', 'Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc']), JSON.stringify(r));
+      JSON.stringify(r.deptOptionsAfterClear) === JSON.stringify(['Kế Toán', 'Kinh Doanh', 'Ban Giám Đốc']), JSON.stringify(r));
   });
 
   await scenario('(r) Cả Khối/Ban và Phòng Ban đều để trống -> saveUser() (Vị Trí HO) vẫn lưu thành công', async () => {
@@ -1481,8 +1483,8 @@ async function scenario(name, fn) {
       document.getElementById('uFullName').value = 'X';
       document.getElementById('uEmail').value = 'x@hcrc.local';
       document.getElementById('uPhone').value = '0900000001';
-      // uStore không có <option value=""> nên gán '' -> selectedIndex -1 (mirror kỹ thuật ở scenario (c)) —
-      // KHÔNG dựa vào lựa chọn mặc định (option đầu tiên tự chọn sẵn khi populateDropdowns() đổ danh sách).
+      // uStore là ô tìm-kiếm-gõ-chọn (sdd, 11/2026) — gán '' trực tiếp vào input.value để mô phỏng "chưa
+      // chọn siêu thị" (mirror kỹ thuật ở scenario (c)).
       document.getElementById('uStore').value = '';
       window.__alerts.length = 0;
       const state = readUserFormState();
@@ -1504,7 +1506,7 @@ async function scenario(name, fn) {
       return {
         khoiBanSelected: document.getElementById('uKhoiBan').value,
         deptSelected: document.getElementById('uDept').value,
-        deptOptions: [...document.getElementById('uDept').options].map(o => o.value),
+        deptOptions: (document.getElementById('uDeptDatalist')._sddItems || []).map(o => o.value),
       };
     }, khoiKinhDoanhId);
     record('(s) editUser() tick đúng Khối/Ban đã lưu', r.khoiBanSelected === String(khoiKinhDoanhId), JSON.stringify(r));

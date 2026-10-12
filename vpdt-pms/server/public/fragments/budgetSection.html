@@ -31,8 +31,11 @@
         <div id="blProposeFormWrap" class="hidden border rounded p-3 bg-gray-50 space-y-2">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blProposeLocation" data-op-change="onBudgetLineLocTypeChange" data-arg0="Propose" class="w-full border p-1.5 rounded bg-white"><option value="HO">🏢 Trụ sở chính (HO)</option><option value="STORE">🏬 Siêu Thị</option></select></div>
-            <div id="blProposeDeptWrap"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blProposeDept" class="w-full border p-1.5 rounded bg-white"></select></div>
-            <div id="blProposeStoreWrap" class="hidden"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label><select id="blProposeStore" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <!-- blProposeDept/blProposeStore (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục
+                 dài) — nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*", xem initBudgetLineFormIfNeeded() ở
+                 module-ngansach.js. Server vẫn đối chiếu ĐÚNG appData.depts/appData.stores (lib/createValidation.js). -->
+            <div id="blProposeDeptWrap"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><input id="blProposeDept" data-sdd-list="blProposeDeptDatalist" autocomplete="off" placeholder="Gõ để tìm phòng ban..." class="w-full border p-1.5 rounded bg-white"><div id="blProposeDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div></div>
+            <div id="blProposeStoreWrap" class="hidden"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label><input id="blProposeStore" data-sdd-list="blProposeStoreDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="w-full border p-1.5 rounded bg-white"><div id="blProposeStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Danh Mục</label><select id="blProposeCategory" class="w-full border p-1.5 rounded bg-white">
               <option value="SOFTWARE">Phần mềm</option><option value="HARDWARE">Phần cứng</option><option value="SERVICE">Dịch vụ</option><option value="SYSTEM">Hệ thống</option>
             </select></div>
@@ -90,8 +93,9 @@
         <div id="blApproveFormWrap" class="hidden border rounded p-3 bg-gray-50 space-y-2">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label><select id="blApproveLocation" data-op-change="onBudgetLineLocTypeChange" data-arg0="Approve" class="w-full border p-1.5 rounded bg-white"><option value="HO">🏢 Trụ sở chính (HO)</option><option value="STORE">🏬 Siêu Thị</option></select></div>
-            <div id="blApproveDeptWrap"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><select id="blApproveDept" class="w-full border p-1.5 rounded bg-white"></select></div>
-            <div id="blApproveStoreWrap" class="hidden"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label><select id="blApproveStore" class="w-full border p-1.5 rounded bg-white"></select></div>
+            <!-- blApproveDept/blApproveStore (11/2026) — xem chú thích đầy đủ ở blProposeDept/blProposeStore phía trên. -->
+            <div id="blApproveDeptWrap"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label><input id="blApproveDept" data-sdd-list="blApproveDeptDatalist" autocomplete="off" placeholder="Gõ để tìm phòng ban..." class="w-full border p-1.5 rounded bg-white"><div id="blApproveDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div></div>
+            <div id="blApproveStoreWrap" class="hidden"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label><input id="blApproveStore" data-sdd-list="blApproveStoreDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="w-full border p-1.5 rounded bg-white"><div id="blApproveStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div></div>
             <div><label class="block font-semibold text-gray-600 mb-1">Danh Mục</label><select id="blApproveCategory" class="w-full border p-1.5 rounded bg-white">
               <option value="SOFTWARE">Phần mềm</option><option value="HARDWARE">Phần cứng</option><option value="SERVICE">Dịch vụ</option><option value="SYSTEM">Hệ thống</option>
             </select></div>

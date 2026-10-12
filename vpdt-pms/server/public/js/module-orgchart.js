@@ -695,10 +695,9 @@ function closeOrgChartDiffModal() {
 
 // ===== Modal Thêm/Sửa node =====
 function ocPopulateNodeDeptRefSelect(selectedValue) {
-  const select = document.getElementById('orgChartNodeDeptRefSelect');
-  const options = ['-- Không liên kết phòng ban thật --', ...(DB.depts || []), ...(DB.stores || [])];
-  select.innerHTML = options.map(d => `<option value="${d.startsWith('--') ? '' : escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  select.value = selectedValue || '';
+  const input = document.getElementById('orgChartNodeDeptRefSelect');
+  sddSetOptions('orgChartNodeDeptRefSelectDatalist', [...(DB.depts || []), ...(DB.stores || [])]);
+  input.value = selectedValue || '';
 }
 // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: trước đây LUÔN gộp chung jobTitles (Khối Văn Phòng) +
 // storeJobTitles (Siêu Thị) bất kể posType của node đang sửa — trong khi node ĐÃ có field posType riêng
@@ -808,9 +807,12 @@ async function saveOrgChartNodeClick() {
     if (quotaRaw !== '' && (!Number.isFinite(payload.headcountQuota) || payload.headcountQuota < 0)) return alert('⛔ Định biên phải là số nguyên không âm.');
   } else {
     payload.nodeName = document.getElementById('orgChartNodeNameInput').value.trim();
-    payload.departmentRef = document.getElementById('orgChartNodeDeptRefSelect').value || null;
+    payload.departmentRef = document.getElementById('orgChartNodeDeptRefSelect').value.trim() || null;
     payload.headcountSelfOnly = document.getElementById('orgChartNodeHeadcountSelfOnlyCheckbox').checked;
     if (!payload.nodeName) return alert('⛔ Vui lòng nhập Tên Hiển Thị.');
+    if (payload.departmentRef && ![...(DB.depts || []), ...(DB.stores || [])].includes(payload.departmentRef)) {
+      return alert('⛔ "Liên kết Phòng Ban thật" không hợp lệ — vui lòng gõ và chọn đúng 1 gợi ý từ danh sách, hoặc bỏ trống.');
+    }
   }
   try {
     if (orgChartNodeModalMode === 'ADD') {

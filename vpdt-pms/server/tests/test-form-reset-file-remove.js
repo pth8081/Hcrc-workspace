@@ -1578,7 +1578,9 @@ async function main() {
 
         await page.fill('#hrpOnbEmployeeCode', 'NV9999');
         await page.fill('#hrpOnbFullName', 'Nguyễn Văn Kiểm Thử');
-        await page.selectOption('#hrpOnbStore', 'Siêu Thị Quận 7');
+        // hrpOnbStore cũng đã đổi sang ô tìm-kiếm-gõ-chọn (sdd, 11/2026) — gõ thẳng đúng nhãn như
+        // hrpOnbJobTitle ngay dưới, không còn <select> để dùng selectOption().
+        await page.fill('#hrpOnbStore', 'Siêu Thị Quận 7');
         // hrpOnbJobTitle giờ là ô tìm-kiếm-gõ-chọn (input tự do + gợi ý) — gõ thẳng đúng nhãn, không
         // cần bấm chọn gợi ý (value đọc lúc submit chính là input.value, khớp cách mọi ô "sdd*" khác
         // hoạt động khi gõ đúng khớp 1 gợi ý).

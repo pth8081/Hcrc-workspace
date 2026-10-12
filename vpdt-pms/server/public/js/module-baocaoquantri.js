@@ -301,8 +301,9 @@ function repopulateReportsDeptFilterOptions(key) {
   const isStoreScoped = key === 'uniform' || key === 'checklist';
   const source = isStoreScoped ? (DB.stores || []) : (DB.depts || []);
   const label = isStoreScoped ? '-- Tất cả siêu thị --' : '-- Tất cả phòng ban --';
-  el.innerHTML = `<option value="">${label}</option>` + source.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  if (source.includes(prevValue)) el.value = prevValue; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
+  el.placeholder = `${label} (gõ để tìm)`;
+  sddSetOptions('reportsDeptFilterDatalist', source);
+  el.value = source.includes(prevValue) ? prevValue : ''; // giữ lựa chọn cũ nếu còn hợp lệ ở danh mục mới
 
   // Đồng Phục: thay bộ lọc 1-siêu-thị bằng chọn NHIỀU siêu thị (yêu cầu người dùng bổ sung — "cộng tổng
   // tồn kho của MỘT NHÓM siêu thị (filter được chọn)") — ẩn hẳn select 1-lựa-chọn, hiện khối checkbox

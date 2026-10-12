@@ -241,7 +241,12 @@
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Đơn Vị (tuỳ chọn)</label>
-              <select id="tpTargetDept" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không nhắm 1 đơn vị cụ thể --</option></select>
+              <!-- tpTargetDept (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài) — nâng
+                   cấp sang ô tìm-kiếm-gõ-chọn "sdd*", xem populateTrainingPlanDeptSelects() ở
+                   module-internalcomms-daotao.js. Server vẫn đối chiếu ĐÚNG catalog thật (targetDept,
+                   lib/createValidation.js). -->
+              <input id="tpTargetDept" data-sdd-list="tpTargetDeptDatalist" autocomplete="off" placeholder="Gõ để tìm đơn vị (để trống nếu không nhắm 1 đơn vị cụ thể)..." class="w-full border p-1.5 rounded bg-white">
+              <div id="tpTargetDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Đối Tượng</label>
@@ -325,7 +330,9 @@
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đơn Vị</label>
-              <select id="tpDashTargetDept" data-op-change="renderTrainingPlanDashboard" class="border p-2 rounded text-sm bg-white"></select>
+              <!-- tpDashTargetDept (11/2026) — xem chú thích đầy đủ tại ô tpTargetDept phía trên. -->
+              <input id="tpDashTargetDept" data-op-input="renderTrainingPlanDashboard" data-op-change="renderTrainingPlanDashboard" data-sdd-list="tpDashTargetDeptDatalist" autocomplete="off" placeholder="Gõ để lọc theo đơn vị..." class="border p-2 rounded text-sm bg-white">
+              <div id="tpDashTargetDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đối Tượng (chứa)</label>
@@ -704,9 +711,14 @@
               <label class="block font-semibold text-gray-600 mb-1">Đợt Tuyển (Tháng)</label>
               <input id="rjMonth" type="month" class="w-full border p-1.5 rounded">
             </div>
+            <!-- rjDept (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài, gộp DB.depts +
+                 DB.stores nên là 1 trong những list dài nhất hệ thống) — nâng cấp sang ô tìm-kiếm-gõ-chọn
+                 "sdd*", xem populateDropdowns() ở core.js. Server vẫn đối chiếu ĐÚNG catalog thật
+                 (hiringDept, lib/createValidation.js::normalizeRecruitmentJobFields()). -->
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Đơn Vị/Siêu Thị Đăng Tuyển</label>
-              <select id="rjDept" class="w-full border p-1.5 rounded bg-white"></select>
+              <input id="rjDept" data-sdd-list="rjDeptDatalist" autocomplete="off" placeholder="Gõ để tìm đơn vị/siêu thị..." class="w-full border p-1.5 rounded bg-white">
+              <div id="rjDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Địa Điểm Làm Việc</label>
@@ -768,9 +780,14 @@
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đợt (Tháng)</label>
               <select id="rjFilterMonth" data-op-change="onRecruitmentJobsFilterChange" class="w-full border p-1.5 rounded bg-white text-xs"></select>
             </div>
+            <!-- rjFilterDept (11/2026) — xem chú thích đầy đủ tại ô rjDept phía trên form Đăng Tin. Thêm
+                 CẢ data-op-input (lọc NGAY khi đang gõ) lẫn data-op-change (lọc khi bấm chọn gợi ý sdd) —
+                 <select> cũ chỉ cần onchange vì không gõ tự do được, ô tìm-kiếm-gõ-chọn cần cả 2 để lọc
+                 mượt như gõ tay thông thường. -->
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Đơn Vị/Siêu Thị</label>
-              <select id="rjFilterDept" data-op-change="onRecruitmentJobsFilterChange" class="w-full border p-1.5 rounded bg-white text-xs"></select>
+              <input id="rjFilterDept" data-op-input="onRecruitmentJobsFilterChange" data-op-change="onRecruitmentJobsFilterChange" data-sdd-list="rjFilterDeptDatalist" autocomplete="off" placeholder="Gõ để lọc theo đơn vị/siêu thị..." class="w-full border p-1.5 rounded bg-white text-xs">
+              <div id="rjFilterDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khoá (vị trí/địa điểm)</label>

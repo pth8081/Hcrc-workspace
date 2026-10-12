@@ -1551,11 +1551,10 @@
               <label class="block font-semibold text-gray-600 mb-1 text-xs">Tên Ngành Hàng</label>
               <input id="nganhHangCatalogName" placeholder="VD: Thực Phẩm Tươi Sống" class="w-full border p-1.5 rounded text-xs">
             </div>
-            <div>
+            <div class="relative">
               <label class="block font-semibold text-gray-600 mb-1 text-xs">Phòng Ban Áp Dụng</label>
-              <select id="nganhHangCatalogDept" class="w-full border p-1.5 rounded text-xs bg-white">
-                <option value="">-- Dùng chung mọi phòng ban --</option>
-              </select>
+              <input id="nganhHangCatalogDept" data-sdd-list="nganhHangCatalogDeptDatalist" autocomplete="off" placeholder="-- Dùng chung mọi phòng ban -- (gõ để tìm)" class="w-full border p-1.5 rounded text-xs bg-white">
+              <div id="nganhHangCatalogDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <button type="button" data-op="saveNganhHangCatalogItem" class="bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-emerald-700">+ Thêm</button>
           </div>
@@ -1666,14 +1665,23 @@
             <label class="block text-xs font-semibold text-gray-600 mb-1">Khối/Ban</label>
             <select id="uKhoiBan" data-op-change="onUserKhoiBanChange" class="w-full border p-1.5 rounded text-xs bg-white"></select>
           </div>
+          <!-- uDept/uStore (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài) — nâng cấp
+               sang ô tìm-kiếm-gõ-chọn "sdd*", xem populateUserDeptOptions()/populateDropdowns() ở core.js.
+               KHÁC hrpOnbDept/blProposeDept (server không đối chiếu catalog cho 2 field này) — thêm chặn
+               RIÊNG ở client (readUserFormState(), module-admin-submissiongroups.js) để giữ nguyên bảo
+               đảm "chỉ chọn đúng tên có thật trong danh mục" mà <select> cũ vốn có sẵn. -->
           <div id="uDeptFieldWrap">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
-            <select id="uDept" class="w-full border p-1.5 rounded text-xs"></select>
+            <input id="uDept" data-sdd-list="uDeptDatalist" autocomplete="off" placeholder="Gõ để tìm phòng ban (để trống nếu không chọn)..." class="w-full border p-1.5 rounded text-xs">
+            <div id="uDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
           </div>
           <div id="uStoreFieldWrap" class="hidden">
             <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
             <div class="flex gap-1">
-              <select id="uStore" class="flex-1 min-w-0 border p-1.5 rounded text-xs"></select>
+              <div class="flex-1 min-w-0">
+                <input id="uStore" data-sdd-list="uStoreDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="w-full border p-1.5 rounded text-xs">
+                <div id="uStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+              </div>
               <button type="button" data-op="promptAddStoreInline" title="Thêm siêu thị mới vào Danh Mục" class="shrink-0 bg-gray-100 border px-2 rounded text-xs font-bold hover:bg-gray-200">+</button>
             </div>
           </div>

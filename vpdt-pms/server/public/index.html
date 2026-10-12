@@ -1998,8 +1998,11 @@
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Liên kết Phòng Ban thật (tuỳ chọn)</label>
-            <select id="orgChartNodeDeptRefSelect" class="w-full border p-1.5 rounded text-sm bg-white"></select>
-            <p class="text-[11px] text-gray-400 mt-1">Chỉ cần chọn nếu đây là phòng ban thật (dùng để tự tra "ai đang giữ vị trí" bên dưới) — bỏ trống nếu chỉ là node nhóm (VD "Khối Kinh Doanh").</p>
+            <div class="relative">
+              <input id="orgChartNodeDeptRefSelect" data-sdd-list="orgChartNodeDeptRefSelectDatalist" autocomplete="off" placeholder="-- Không liên kết phòng ban thật -- (gõ để tìm)" class="w-full border p-1.5 rounded text-sm bg-white">
+              <div id="orgChartNodeDeptRefSelectDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">Chỉ cần chọn nếu đây là phòng ban thật (dùng để tự tra "ai đang giữ vị trí" bên dưới) — bỏ trống nếu chỉ là node nhóm (VD "Khối Kinh Doanh"). Gõ và chọn đúng 1 gợi ý từ danh sách — không tự nhập tên tuỳ ý.</p>
           </div>
           <!-- headcountSelfOnly (10/2026) — dành cho trường hợp như "Ban Tổng Giám Đốc": mọi Ban/Phòng
                khác đều nằm bên dưới nó trong sơ đồ, khiến tổng Định Biên/Thực Tế của nó trùng với cả công

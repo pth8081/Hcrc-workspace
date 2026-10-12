@@ -111,10 +111,10 @@ const budgetLineFormInitDone = { Propose: false, Approve: false };
 function initBudgetLineFormIfNeeded(kind) {
   if (budgetLineFormInitDone[kind]) return;
   budgetLineFormInitDone[kind] = true;
-  const deptSel = blEl(kind, 'Dept');
-  if (deptSel) deptSel.innerHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
-  const storeSel = blEl(kind, 'Store');
-  if (storeSel) storeSel.innerHTML = (DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài): nâng cấp sang
+  // sddSetOptions() (ô tìm-kiếm-gõ-chọn), cùng khuôn hrpOnbDept/hrpOnbStore (module-hrlifecycle.js).
+  sddSetOptions(blId(kind, 'DeptDatalist'), DB.depts || []);
+  sddSetOptions(blId(kind, 'StoreDatalist'), DB.stores || []);
   onBudgetLineLocTypeChange(kind);
   const now = new Date();
   const yearInput = blEl(kind, 'Year');
@@ -514,33 +514,50 @@ function deleteBudgetLineChild(childId) {
     }
   });
 }
+// onBudgetLineUsedParentLocTypeChange() (11/2026) — toggle Khối Phòng Ban/Siêu Thị cùng khuôn
+// onBudgetLineLocTypeChange() ở trên, dùng riêng cho modal "Sửa Dòng Sử Dụng" (2 ô input id riêng, không
+// tái dùng blId() vì modal này không theo khuôn "kind" Propose/Approve).
+function onBudgetLineUsedParentLocTypeChange() {
+  const locType = document.getElementById('blUsedParentLocType').value;
+  document.getElementById('blUsedParentDeptWrap').classList.toggle('hidden', locType !== 'HO');
+  document.getElementById('blUsedParentStoreWrap').classList.toggle('hidden', locType === 'HO');
+}
 function openEditBudgetLineUsedParentModal(parentId) {
   const parent = (DB.budgetLines || []).find(l => l.id === parentId);
   if (!parent) return;
+  const isHO = parent.location === 'HO';
+  // Vị trí (11/2026, LỖI ĐÃ VÁ theo yêu cầu người dùng — rà soát <select> danh mục dài): TRƯỚC ĐÂY 1
+  // <select> DUY NHẤT gộp sentinel "HO" + toàn bộ DB.stores (cuộn dài) — tách lại thành đúng 2 bước như
+  // form Đề Xuất/Phê Duyệt (Vị trí HO/Siêu Thị ngắn, select thường vẫn ổn) + 1 ô tìm-kiếm-gõ-chọn riêng
+  // cho Khối Phòng Ban/Siêu Thị tuỳ bước chọn, thay vì 1 danh sách cuộn dài gộp chung.
   showConfirmModal({
     title: '✏️ Sửa Dòng Sử Dụng',
     bodyHTML: `
       <p class="text-xs text-gray-500 mb-2">Nội dung/Mô tả/Số tiền/Loại/Danh Mục khoá cứng theo dòng Phê Duyệt gốc — chỉ sửa được Vị trí/Khối Phòng Ban/Ghi chú.</p>
       <div class="grid grid-cols-2 gap-2 text-xs">
         <div><label class="block font-semibold text-gray-600 mb-1">Vị trí</label>
-          <select id="blUsedParentLocation" class="w-full border p-1.5 rounded">
-            <option value="HO" ${parent.location === 'HO' ? 'selected' : ''}>🏢 Trụ sở chính (HO)</option>
-            ${(DB.stores || []).map(s => `<option value="${escapeHtml(s)}" ${parent.location === s ? 'selected' : ''}>🏬 ${escapeHtml(s)}</option>`).join('')}
+          <select id="blUsedParentLocType" data-op-change="onBudgetLineUsedParentLocTypeChange" class="w-full border p-1.5 rounded bg-white">
+            <option value="HO" ${isHO ? 'selected' : ''}>🏢 Trụ sở chính (HO)</option>
+            <option value="STORE" ${isHO ? '' : 'selected'}>🏬 Siêu Thị</option>
           </select>
         </div>
-        <div><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label>
-          <select id="blUsedParentDept" class="w-full border p-1.5 rounded">
-            ${(DB.depts || []).map(d => `<option value="${escapeHtml(d)}" ${parent.dept === d ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
-          </select>
+        <div id="blUsedParentDeptWrap" class="${isHO ? '' : 'hidden'}"><label class="block font-semibold text-gray-600 mb-1">Khối Phòng Ban</label>
+          <input id="blUsedParentDept" data-sdd-list="blUsedParentDeptDatalist" autocomplete="off" placeholder="Gõ để tìm phòng ban..." value="${isHO ? escapeHtml(parent.dept || '') : ''}" class="w-full border p-1.5 rounded">
+          <div id="blUsedParentDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
+        <div id="blUsedParentStoreWrap" class="${isHO ? 'hidden' : ''}"><label class="block font-semibold text-gray-600 mb-1">Siêu Thị</label>
+          <input id="blUsedParentStore" data-sdd-list="blUsedParentStoreDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." value="${isHO ? '' : escapeHtml(parent.location || '')}" class="w-full border p-1.5 rounded">
+          <div id="blUsedParentStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
         </div>
         <div class="col-span-2"><label class="block font-semibold text-gray-600 mb-1">Ghi chú</label><input id="blUsedParentNote" class="w-full border p-1.5 rounded" value="${escapeHtml(parent.note || '')}"></div>
       </div>
     `,
     confirmLabel: 'Lưu',
     onConfirm: async () => {
+      const locType = document.getElementById('blUsedParentLocType').value;
       const payload = {
-        location: document.getElementById('blUsedParentLocation').value,
-        dept: document.getElementById('blUsedParentDept').value,
+        location: locType === 'HO' ? 'HO' : document.getElementById('blUsedParentStore').value,
+        dept: locType === 'HO' ? document.getElementById('blUsedParentDept').value : document.getElementById('blUsedParentStore').value,
         note: document.getElementById('blUsedParentNote').value.trim()
       };
       let result;
@@ -553,6 +570,10 @@ function openEditBudgetLineUsedParentModal(parentId) {
       renderBudgetLineUsedList();
     }
   });
+  // sddSetOptions() PHẢI gọi SAU showConfirmModal() — bodyHTML vừa được ghi thẳng vào DOM đồng bộ ở đó
+  // (xem showConfirmModal(), core.js), nên 2 div[data-sdd-dropdown] trên mới tồn tại để gán danh sách gợi ý.
+  sddSetOptions('blUsedParentDeptDatalist', DB.depts || []);
+  sddSetOptions('blUsedParentStoreDatalist', DB.stores || []);
 }
 function deleteBudgetLineUsedParent(parentId) {
   const parent = (DB.budgetLines || []).find(l => l.id === parentId);

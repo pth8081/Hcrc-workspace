@@ -152,7 +152,10 @@ function renderChecklistExecuteTab() {
       <p class="text-[11px] text-teal-600">Bạn không gắn sẵn 1 siêu thị cụ thể — chọn đúng 1 siêu thị trong phạm vi được cấp để thực hiện.</p>
       <div class="flex items-center gap-2 flex-wrap">
         <select id="checklistExecuteScopeTemplateSelect" class="border p-1.5 rounded text-xs">${storeSelfTemplatesAll.map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('')}</select>
-        <select id="checklistExecuteScopeStoreSelect" class="border p-1.5 rounded text-xs">${executeScopeStores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        <div class="relative">
+          <input id="checklistExecuteScopeStoreSelect" data-sdd-list="checklistExecuteScopeStoreSelectDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="border p-1.5 rounded text-xs w-40">
+          <div id="checklistExecuteScopeStoreSelectDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
         <button type="button" data-op="startChecklistExecuteScopeSubmission" class="px-3 py-1.5 bg-teal-600 text-white rounded text-xs font-bold hover:bg-teal-700">Bắt Đầu</button>
       </div>
     </div>`;
@@ -162,7 +165,10 @@ function renderChecklistExecuteTab() {
       <h4 class="font-bold text-rose-800 text-xs">🔎 Kiểm Soát Siêu Thị</h4>
       <div class="flex items-center gap-2 flex-wrap">
         <select id="checklistAuditTemplateSelect" class="border p-1.5 rounded text-xs">${auditTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.templateName)}</option>`).join('')}</select>
-        <select id="checklistAuditStoreSelect" class="border p-1.5 rounded text-xs">${auditStores.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        <div class="relative">
+          <input id="checklistAuditStoreSelect" data-sdd-list="checklistAuditStoreSelectDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="border p-1.5 rounded text-xs w-40">
+          <div id="checklistAuditStoreSelectDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
         <button type="button" data-op="startChecklistAuditSubmission" class="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700">Bắt Đầu Đánh Giá</button>
       </div>
     </div>`;
@@ -173,13 +179,19 @@ function renderChecklistExecuteTab() {
       <p class="text-[11px] text-indigo-600">Tài khoản admin không gắn Vị Trí Siêu Thị/chưa được cấp quyền thật nên chọn tạm 1 siêu thị để test mẫu — không tính là dữ liệu thật của siêu thị đó.</p>
       <div class="flex items-center gap-2 flex-wrap">
         <select id="checklistAdminTestTemplateSelect" class="border p-1.5 rounded text-xs">${adminTestTemplates.map(t => `<option value="${t.id}">${t.templateType === 'CONTROL_AUDIT' ? '[Kiểm Soát] ' : '[Checklist Thường] '}${escapeHtml(t.templateName)}</option>`).join('')}</select>
-        <select id="checklistAdminTestStoreSelect" class="border p-1.5 rounded text-xs">${(DB.stores || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        <div class="relative">
+          <input id="checklistAdminTestStoreSelect" data-sdd-list="checklistAdminTestStoreSelectDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="border p-1.5 rounded text-xs w-40">
+          <div id="checklistAdminTestStoreSelectDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+        </div>
         <button type="button" data-op="startChecklistAdminTestSubmission" class="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700">Bắt Đầu Test</button>
       </div>
     </div>`;
   }
   if (!html) html = '<p class="text-xs text-gray-400 italic">Bạn chưa có checklist nào để thực hiện.</p>';
   el.innerHTML = html;
+  if (showHoScopeBox) sddSetOptions('checklistExecuteScopeStoreSelectDatalist', executeScopeStores);
+  if (auditTemplates.length) sddSetOptions('checklistAuditStoreSelectDatalist', auditStores);
+  if (adminTestTemplates.length) sddSetOptions('checklistAdminTestStoreSelectDatalist', DB.stores || []);
 }
 function startChecklistAdminTestSubmission() {
   const templateId = Number(document.getElementById('checklistAdminTestTemplateSelect').value);

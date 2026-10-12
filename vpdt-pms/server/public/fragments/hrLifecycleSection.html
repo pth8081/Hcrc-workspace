@@ -76,13 +76,21 @@
                 <option value="STORE">Siêu Thị</option>
               </select>
             </div>
+            <!-- hrpOnbDept/hrpOnbStore (11/2026, theo yêu cầu người dùng — rà soát toàn hệ thống các ô
+                 <select> danh mục dài chưa tìm kiếm được) — TRƯỚC ĐÂY là <select> gõ-cứng-toàn-bộ DB.depts/
+                 DB.stores (cuộn dài khi danh mục nhiều), nay nâng cấp sang ô tìm-kiếm-gõ-chọn "sdd*", cùng
+                 khuôn hrpOnbJobTitle ngay dưới (đã chuyển đợt trước) — xem populateHrpOnboardingDeptDropdowns()
+                 ở module-hrlifecycle.js. Server vẫn đối chiếu ĐÚNG danh mục thật (validDepts.includes(...),
+                 lib/createValidation.js) nên gõ tự do không khớp danh mục vẫn bị chặn, không mất an toàn. -->
             <div id="hrpOnbDeptWrap">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Phòng Ban</label>
-              <select id="hrpOnbDept" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+              <input id="hrpOnbDept" data-sdd-list="hrpOnbDeptDatalist" autocomplete="off" placeholder="Gõ để tìm phòng ban..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <div id="hrpOnbDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div id="hrpOnbStoreWrap" class="hidden">
               <label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị</label>
-              <select id="hrpOnbStore" class="w-full border p-1.5 rounded text-xs bg-white"></select>
+              <input id="hrpOnbStore" data-sdd-list="hrpOnbStoreDatalist" autocomplete="off" placeholder="Gõ để tìm siêu thị..." class="w-full border p-1.5 rounded text-xs bg-white">
+              <div id="hrpOnbStoreDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Chức Danh</label>

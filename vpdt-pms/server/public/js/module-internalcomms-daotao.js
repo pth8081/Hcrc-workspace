@@ -121,19 +121,20 @@ function populateTrainingCourseSelects() {
 // Đơn Vị (targetDept, trainingPlans Đợt 5) — cùng khuôn rjDept/rjFilterDept (recruitmentJobs): gộp
 // DB.depts + DB.stores chung 1 danh sách, không lọc theo scope tạo (lập kế hoạch CHO đơn vị nào là lựa
 // chọn tự do của trainingManage, không phải "tạo hồ sơ thay mặt đơn vị khác").
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài): tpTargetDept/
+// tpDashTargetDept nâng cấp sang sddSetOptions() (ô tìm-kiếm-gõ-chọn), cùng khuôn rjDept/rjFilterDept
+// (module-internalcomms-nhipsong.js/core.js) đã chuyển cùng đợt.
 function populateTrainingPlanDeptSelects() {
-  const deptOpts = [...DB.depts, ...DB.stores].map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  const deptOpts = [...DB.depts, ...DB.stores];
   const formSel = document.getElementById('tpTargetDept');
   if (formSel) {
-    const prevValue = formSel.value;
-    formSel.innerHTML = `<option value="">-- Không nhắm 1 đơn vị cụ thể --</option>` + deptOpts;
-    if ([...DB.depts, ...DB.stores].includes(prevValue)) formSel.value = prevValue;
+    sddSetOptions('tpTargetDeptDatalist', deptOpts);
+    if (formSel.value && !deptOpts.includes(formSel.value)) formSel.value = '';
   }
   const dashSel = document.getElementById('tpDashTargetDept');
   if (dashSel) {
-    const prevValue = dashSel.value;
-    dashSel.innerHTML = `<option value="">-- Tất cả đơn vị --</option>` + deptOpts;
-    if ([...DB.depts, ...DB.stores].includes(prevValue)) dashSel.value = prevValue;
+    sddSetOptions('tpDashTargetDeptDatalist', deptOpts);
+    if (dashSel.value && !deptOpts.includes(dashSel.value)) dashSel.value = '';
   }
 }
 
