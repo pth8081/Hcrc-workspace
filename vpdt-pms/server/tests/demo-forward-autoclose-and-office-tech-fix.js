@@ -18,6 +18,17 @@
 //      đây mô phỏng ĐÚNG state mà 1 viewer KHÔNG PHẢI admin thực sự nhận được từ server (users đã bị xoá
 //      field perms của người khác) để chứng minh picker vẫn tìm ra đúng người sau khi vá.
 //
+//   + 1 lỗi z-index phụ phát hiện khi vá lỗi 1: popup Chuyển Tiếp (genericConfirmModal, z-[60] tĩnh) có
+//     thể bị khuất sau modal cha #viewDocModal (z-[65] tĩnh, nâng cho 1 trường hợp lồng NGƯỢC chiều khác
+//     — xem chú thích #viewDocModal, index.html). Vá bằng cách tính z-index ĐỘNG ngay trong
+//     showConfirmModal() (core.js) — luôn nổi cao hơn 1 bậc so với modal cha cao nhất đang mở sẵn.
+//
+//   PHẦN 3 (theo yêu cầu người dùng: "xem ở văn bản trình có bị như vậy không") — kiểm tra Văn Bản Trình
+//   (submissions, host modal RIÊNG #submissionProcessModal z-50 tĩnh, KHÁC hẳn #viewDocModal của Hợp
+//   Đồng) có dính CẢ 2 lỗi trên không. Do closeForwardHostModal()/showConfirmModal() đã sửa chung cho
+//   MỌI moduleKey (không riêng 'contracts'), và z-50 vốn đã THẤP HƠN z-60 mặc định (không cần bump mới
+//   vẫn đúng thứ tự) — demo xác nhận Văn Bản Trình KHÔNG dính lỗi, không cần vá thêm riêng.
+//
 // Dùng testHarness.js (Chromium thật mở public/index.html thật + toàn bộ public/js/*.js thật).
 //
 // Chạy: node server/tests/demo-forward-autoclose-and-office-tech-fix.js
@@ -67,6 +78,16 @@ async function main() {
       creator: 'admin', createdAt: '09:35:41 12/10/2026', currentStep: 1, history: [],
       content: 'Hợp đồng test demo', isAddendum: false, paymentType: 'ONE_TIME', paymentStatus: 'UNPAID',
       customData: {}, signedCustomData: {}, paymentInstallments: [], forwardThreads: []
+    }],
+    // Văn Bản Trình (submissions) — người dùng hỏi riêng có bị lỗi tương tự Hợp Đồng không, kiểm tra
+    // trong PHẦN 3 bên dưới. Dùng host modal RIÊNG #submissionProcessModal (z-50, KHÁC #viewDocModal
+    // z-65 của Hợp Đồng) — closeForwardHostModal() đã xử lý SẴN cả 2 nhánh module trong cùng 1 hàm.
+    submissionTypes: [], submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {},
+    submissions: [{
+      id: 201, code: 'HCRC-VBT-DEMO-001', title: 'Tờ trình test demo', dept: 'Phòng Tài chính Kế toán',
+      creator: 'admin', creatorName: 'Quản Trị Hệ Thống', priority: 'Bình thường', type: 'Khác',
+      createdAt: '09:00:00 12/10/2026', content: 'Nội dung tờ trình test demo', customData: {},
+      status: 'PENDING', currentStep: 1, history: [], forwardThreads: []
     }]
   });
 
@@ -177,6 +198,41 @@ async function main() {
     await page.waitForTimeout(100);
     await shot(page, 'body', '04-sua-chua-nguoi-xac-nhan-ky-thuat-tim-ra-dung-nguoi.png');
     console.log('✅ PHẦN 2: Đăng nhập KHÔNG PHẢI admin (nhân viên Siêu thị Quận 7), chọn loại "IT" -> picker hiện đúng 2 người giữ quyền officeFixTechIT (Lê Văn IT, Phạm Thị Công Nghệ).');
+
+    // ===== PHẦN 3: Văn Bản Trình (submissions) — kiểm tra có dính lỗi tương tự Hợp Đồng không =====
+    await page.evaluate(() => document.getElementById('officeFixTechDatalist')?.classList.add('hidden')); // đóng dropdown gợi ý còn sót từ PHẦN 2, chỉ để ảnh demo gọn
+    await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, ADMIN);
+    await page.evaluate((id) => openProcessSubmissionModal(id), 201);
+    await page.waitForTimeout(150);
+    await shot(page, 'body', '06-truoc-but-phe-to-trinh-dang-mo.png');
+
+    await page.evaluate((id) => openForwardModal('submissions', id), 201);
+    await page.waitForTimeout(150);
+    const submissionZCheck = await page.evaluate(() => {
+      const host = document.getElementById('submissionProcessModal');
+      const popup = document.getElementById('genericConfirmModal');
+      const hostZ = parseInt(getComputedStyle(host).zIndex, 10) || 0;
+      const popupZ = parseInt(getComputedStyle(popup).zIndex, 10) || 0;
+      const topEl = document.elementFromPoint(550, 500);
+      return { hostZ, popupZ, topIsPopup: !!(topEl && topEl.closest('#genericConfirmModal')) };
+    });
+    console.log('Văn Bản Trình — z-index host vs popup Chuyển Tiếp:', JSON.stringify(submissionZCheck));
+    if (!submissionZCheck.topIsPopup) throw new Error('❌ Popup Chuyển Tiếp bị khuất sau Bút Phê Tờ Trình (lỗi z-index TƯƠNG TỰ Hợp Đồng)!');
+    await page.evaluate((username) => pmsAdd('fwdPeoplePicker', username), TARGET_PERSON.username);
+    await page.waitForTimeout(100);
+    await shot(page, 'body', '07-popup-chuyen-tiep-tren-but-phe-to-trinh.png');
+
+    await page.evaluate(() => window.__confirmPending());
+    await page.waitForTimeout(200);
+    const submissionAfterState = await page.evaluate(() => ({
+      hostHidden: document.getElementById('submissionProcessModal').classList.contains('hidden'),
+      confirmModalHidden: document.getElementById('genericConfirmModal').classList.contains('hidden')
+    }));
+    console.log('Văn Bản Trình — trạng thái sau khi "Gửi Chuyển Tiếp":', JSON.stringify(submissionAfterState));
+    if (!submissionAfterState.hostHidden) throw new Error('❌ #submissionProcessModal (Bút Phê Tờ Trình) vẫn còn mở sau khi gửi chuyển tiếp — lỗi TƯƠNG TỰ Hợp Đồng!');
+    if (!submissionAfterState.confirmModalHidden) throw new Error('❌ #genericConfirmModal vẫn còn mở!');
+    await shot(page, 'body', '08-sau-gui-chuyen-tiep-to-trinh-da-tat-het-popup.png');
+    console.log('✅ PHẦN 3: Văn Bản Trình (Tờ Trình) dùng CHUNG closeForwardHostModal()/showConfirmModal() với Hợp Đồng -> đã xác nhận KHÔNG bị lỗi tương tự (cả z-index lẫn auto-close), không cần vá thêm gì riêng.');
 
     console.log('\n🖼️  Ảnh demo đã lưu tại:', OUT_DIR);
     console.log('✅ DEMO THÀNH CÔNG — cả 2 lỗi đã xác nhận được vá đúng qua kịch bản thật (không suy luận).');
