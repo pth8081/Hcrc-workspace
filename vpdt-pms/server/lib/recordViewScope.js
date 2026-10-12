@@ -474,7 +474,12 @@ function filterTrainingDocumentProgressForUser(list, user) {
 // thường. Thêm vào đây để computeModuleApproverUsernames() tính sẵn 1 danh sách username AN TOÀN (chỉ
 // username, không phải toàn bộ perms) — client đọc qua DB.moduleApproverUsernames.canBeApprover thay vì
 // u.perms?.canBeApprover trực tiếp (xem resolvePositionApproverUsernamesClient(), core.js).
-const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage', 'canBeApprover'];
+// officeFixTechIT/officeFixTechMechanical (11/2026, "Người Xác Nhận Kỹ Thuật" ở Vận Hành > Sửa Chữa VP)
+// — LỖI ĐÃ VÁ cùng loại với canBeApprover ở trên (báo cáo người dùng: "đã gán quyền IT/Kỹ Thuật nhưng
+// đăng nhập không tìm ra người nào, bất kỳ cấp nào cũng vậy" — không phải lỗi phạm vi HO/Siêu Thị, mà vì
+// onOfficeTechTypeChange() (module-office.js) từng lọc trực tiếp u.perms?.[permKey] của NGƯỜI KHÁC, luôn
+// undefined với viewer không phải admin do sanitizeUsersPermsForViewer() ở trên).
+const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage', 'canBeApprover', 'officeFixTechIT', 'officeFixTechMechanical'];
 function computeModuleApproverUsernames(users) {
   const result = {};
   APPROVER_FLAG_KEYS.forEach(flag => {

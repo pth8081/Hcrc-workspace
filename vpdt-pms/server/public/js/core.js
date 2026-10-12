@@ -7147,11 +7147,26 @@ function showConfirmModal({ title, bodyHTML, onConfirm, confirmLabel }) {
   document.getElementById('genericConfirmBody').innerHTML = bodyHTML || '';
   document.getElementById('genericConfirmOkBtn').innerText = confirmLabel || 'Đồng Ý';
   _pendingConfirmAction = typeof onConfirm === 'function' ? onConfirm : null;
-  document.getElementById('genericConfirmModal').classList.remove('hidden');
+  const modal = document.getElementById('genericConfirmModal');
+  // LỖI ĐÃ VÁ (11/2026, phát hiện khi vá "Chuyển Tiếp Xin Ý Kiến" không tự tắt popup cha): popup xác
+  // nhận này mở TỪ BÊN TRONG 1 modal "cha" khác đang hiện sẵn (VD openForwardModal() mở từ trong
+  // #viewDocModal/"Chi Tiết Hợp Đồng", z-[65]) thì bị modal cha đè lên, khuất hẳn dù kỹ thuật vẫn "mở"
+  // (display khác none) — z-[60] mặc định của popup này THẤP HƠN z-[65] của #viewDocModal (z-65 vốn
+  // được nâng lên để giải quyết CHIỀU NGƯỢC LẠI — xem chú thích đầy đủ tại #viewDocModal, index.html).
+  // Bump z-index CHÍNH popup này cao hơn 1 bậc so với modal "cha" cao nhất đang hiện sẵn ngay lúc mở
+  // (quét mọi phần tử `.fixed.inset-0` chưa ẩn — khuôn backdrop dùng chung cho mọi modal toàn hệ thống),
+  // reset lại khi đóng (closeGenericConfirmModal()/runConfirmedAction()) để không ảnh hưởng lượt mở KHÁC
+  // không lồng trong modal nào (giữ nguyên z-[60] mặc định — không lật lại lỗi đã vá ở chiều ngược lại).
+  const openModals = [...document.querySelectorAll('.fixed.inset-0:not(.hidden)')].filter(el => el !== modal);
+  const maxZ = openModals.reduce((max, el) => Math.max(max, parseInt(getComputedStyle(el).zIndex, 10) || 0), 0);
+  modal.style.zIndex = maxZ > 0 ? String(maxZ + 1) : '';
+  modal.classList.remove('hidden');
 }
 
 function closeGenericConfirmModal() {
-  document.getElementById('genericConfirmModal').classList.add('hidden');
+  const modal = document.getElementById('genericConfirmModal');
+  modal.classList.add('hidden');
+  modal.style.zIndex = ''; // reset bump tạm (xem showConfirmModal())
   _pendingConfirmAction = null;
 }
 
@@ -7160,7 +7175,9 @@ function closeGenericConfirmModal() {
 // gọi sau đó xoá mất state đang cần dùng.
 function runConfirmedAction() {
   const fn = _pendingConfirmAction;
-  document.getElementById('genericConfirmModal').classList.add('hidden');
+  const modal = document.getElementById('genericConfirmModal');
+  modal.classList.add('hidden');
+  modal.style.zIndex = ''; // reset bump tạm (xem showConfirmModal())
   _pendingConfirmAction = null;
   // LỖI ĐÃ VÁ (đợt rà soát diện rộng 10/2026, phát hiện qua agent audit cơ chế khoá nút chống
   // double-submit): thiếu "return" khiến runCspOp() (core.js, dispatch nút "Đồng Ý" #genericConfirmOkBtn
@@ -12768,6 +12785,18 @@ function refreshForwardHostUI(moduleKey, item) {
   if (typeof renderForwardInbox === 'function') renderForwardInbox();
 }
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "ấn Chuyển Tiếp xong không tự tắt popup"): overlay Chuyển Tiếp
+// (#genericConfirmModal) vốn đã tự tắt NGAY khi bấm "Gửi Chuyển Tiếp" (runConfirmedAction() đóng trước
+// khi gọi submitForwardRequest()) — cái KHÔNG tự tắt là modal "cha" đang mở sẵn bên dưới (Chi Tiết Hợp
+// Đồng #viewDocModal / Bút Phê Tờ Trình #submissionProcessModal), vì refreshForwardHostUI() ở trên chỉ
+// vẽ lại khối "🔀 Chuyển Tiếp" bên trong, không đóng modal cha. Người dùng muốn sau khi chuyển tiếp
+// thành công thì đóng HẾT mọi popup (quay thẳng về danh sách) — đóng đúng modal cha theo moduleKey,
+// cùng khuôn typeof-check với refreshForwardHostUI() (core.js không phụ thuộc cứng module con có nạp).
+function closeForwardHostModal(moduleKey) {
+  if (moduleKey === 'submissions' && typeof closeProcessSubmissionModal === 'function') closeProcessSubmissionModal();
+  if (moduleKey === 'contracts' && typeof closeViewDocModal === 'function') closeViewDocModal();
+}
+
 // Render khối "🔀 Chuyển Tiếp Xin Ý Kiến" cho ĐÚNG 1 bước (mặc định item.currentStep) — gồm các cạnh
 // gốc (parentNodeId rỗng) + đệ quy cạnh con, CHỈ hiện cạnh mà currentUser là forwardedBy/forwardedTo
 // của CHÍNH cạnh đó (mirror isForwardThreadParticipant() phía server — không lộ nhánh người khác) hoặc
@@ -12934,6 +12963,7 @@ async function submitForwardRequest(moduleKey, itemId, parentNodeId) {
   alert('✅ Đã gửi chuyển tiếp xin ý kiến!');
   closeGenericConfirmModal();
   refreshForwardHostUI(moduleKey, result.item);
+  closeForwardHostModal(moduleKey);
 }
 
 // ============================================================

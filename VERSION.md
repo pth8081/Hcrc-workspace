@@ -1,8 +1,34 @@
 # Phiên bản hiện tại
 
-**25.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.80 (2026-11): 3 lỗi người dùng báo — Chuyển Tiếp không tự tắt popup, popup bị khuất (z-index), Người Xác Nhận Kỹ Thuật không tìm ra ai
+
+Theo báo cáo người dùng (kèm ảnh chụp thật), người dùng yêu cầu gửi ảnh demo xác nhận trước khi merge.
+
+- **"Chuyển Tiếp Xin Ý Kiến" không tự tắt popup sau khi gửi xong**: overlay Chuyển Tiếp vốn đã tự tắt
+  ngay khi bấm nút (`runConfirmedAction()`), nhưng modal "cha" đang mở sẵn bên dưới (Chi Tiết Hợp Đồng/
+  Bút Phê Tờ Trình) không được đóng theo. Thêm `closeForwardHostModal()` (core.js), gọi ngay sau
+  `submitForwardRequest()` thành công — đóng đúng modal cha theo module (contracts/submissions).
+- **Lỗi phụ phát hiện khi test kỹ lỗi trên**: popup Chuyển Tiếp (z-index tĩnh z-60) có thể bị khuất phía
+  sau modal cha "Chi Tiết Hợp Đồng" (z-index tĩnh z-65, vốn được nâng cho 1 trường hợp lồng NGƯỢC chiều
+  khác — xem chú thích tại `#viewDocModal`, `index.html`). Vá bằng cách tính z-index ĐỘNG ngay khi mở
+  `showConfirmModal()` — luôn nổi cao hơn 1 bậc so với modal cha cao nhất đang mở sẵn, reset lại khi
+  đóng — không ảnh hưởng tới trường hợp lồng chiều ngược đã vá trước đó.
+- **"Người Xác Nhận Kỹ Thuật" (Vận Hành > Sửa Chữa VP) không tìm ra ai, ở BẤT KỲ cấp đăng nhập nào**:
+  KHÔNG phải lỗi phạm vi HO/Siêu Thị — nguyên nhân thật là server chỉ trả đầy đủ `perms` cho admin và
+  chính người đang xem (`sanitizeUsersPermsForViewer()`), nên lọc trực tiếp `u.perms?.officeFixTechIT`
+  của người khác luôn ra rỗng với bất kỳ ai không phải admin. Thêm `officeFixTechIT`/
+  `officeFixTechMechanical` vào `APPROVER_FLAG_KEYS` (lib/recordViewScope.js) để server tính sẵn danh
+  sách username an toàn (`DB.moduleApproverUsernames`), đổi `onOfficeTechTypeChange()` (module-office.js)
+  sang đọc nguồn này thay vì đọc `perms` trực tiếp — cùng mẫu đã dùng cho `canBeApprover`/`meetingApprove`...
+- Test: chạy lại ~25 bộ test liên quan (forward, office, permission-preview, uniform, submission, meeting,
+  license, vpp, contract-import...) — toàn bộ pass, trừ 1 lỗi có sẵn từ trước (xác nhận qua `git stash`,
+  không liên quan). CSP self-check sạch. Demo ảnh thật (Playwright) xác nhận cả 3 lỗi đã vá đúng trước khi
+  merge, theo đúng yêu cầu người dùng.
+- Không đổi `schema.sql`/biến môi trường/dependency nào.
 
 ## v25.79 (2026-11): Đổi toàn bộ ô chọn Phòng Ban/Siêu Thị danh sách dài sang tìm-kiếm-gõ-chọn (sdd)
 

@@ -247,7 +247,15 @@ function resetOfficeReqForm() {
 function onOfficeTechTypeChange() {
   const techType = document.getElementById('offTechType')?.value || '';
   const permKey = techType === 'IT' ? 'officeFixTechIT' : (techType === 'MECHANICAL' ? 'officeFixTechMechanical' : null);
-  let list = permKey ? DB.users.filter(u => u.active !== false && u.perms?.[permKey]) : [];
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "đã gán quyền IT/Kỹ Thuật nhưng đăng nhập không tìm ra người
+  // nào, mọi cấp HO/Siêu Thị đều vậy"): KHÔNG phải lỗi phạm vi HO/Siêu Thị (Sửa Chữa vốn mở cho cả 2) —
+  // server chỉ trả perms ĐẦY ĐỦ cho admin + chính người gọi (sanitizeUsersPermsForViewer(),
+  // lib/recordViewScope.js), nên lọc trực tiếp u.perms?.[permKey] của người KHÁC luôn ra rỗng với bất kỳ
+  // ai không phải admin. Đổi sang đọc DB.moduleApproverUsernames[permKey] (danh sách username AN TOÀN
+  // tính sẵn ở server, mirror đúng pattern canBeApprover/meetingApprove..., xem APPROVER_FLAG_KEYS ở
+  // lib/recordViewScope.js) rồi mới tra DB.users theo username để lấy tên/phòng hiển thị.
+  const approverUsernames = new Set(permKey ? (DB.moduleApproverUsernames?.[permKey] || []) : []);
+  let list = permKey ? (DB.users || []).filter(u => u.active !== false && approverUsernames.has(u.username)) : [];
   // LỖI ĐÃ VÁ (đợt audit v25.51→v25.63, mức Trung bình): loại bớt người ĐANG là approver bước 1
   // (Trưởng Phòng duyệt) của đúng phòng ban hồ sơ — tránh 1 người tự duyệt cả 2 bước của cùng hồ sơ
   // (server vẫn là lớp chặn thật, đây chỉ là gợi ý đúng ngay từ UI, mirror resolveEffectiveStepApprovers()).
