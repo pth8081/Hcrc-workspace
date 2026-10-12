@@ -1,6 +1,6 @@
 {
   "name": "vpdt-server",
-  "version": "25.82",
+  "version": "25.83",
   "description": "Backend Node.js + MSSQL cho ứng dụng HCRC Workspace, thay thế localStorage",
   "main": "server.js",
   "scripts": {

@@ -170,6 +170,20 @@ async function main() {
       check('mixedApprovalRuleMatchCount(): PERSON trỏ tài khoản đã khoá -> 0',
         mixedApprovalRuleMatchCount({ mode: 'PERSON', username: 'ptgd.nghi' }) === 0);
 
+      // ---------- LỖI ĐÃ VÁ (11/2026, người dùng phát hiện): JOBTITLE + jobTitleDept (dòng gán cố định
+      // 1 cặp chức danh+phòng ban cụ thể từ "Vị Trí Tham Gia Quy Trình") trước đây bị đếm theo MỌI người
+      // giữ đúng chức danh TRÊN TOÀN CÔNG TY, bỏ qua hẳn phòng ban đã gán — y hệt resolveOperationOrderStoreMixedApprovalRuleUsernames()
+      // (lib/workflowEngine.js) đã lọc đúng từ trước, chỉ số xem trước ở bảng cấu hình là sai. ----------
+      // 'ptgd' (Phó Tổng Giám Đốc, dept "Ban Giám Đốc") đã có sẵn ở fixture DB.users phía trên — thêm 1
+      // người CÙNG chức danh nhưng KHÁC phòng ban để phân biệt được 2 trường hợp đếm.
+      DB.users.push({ username: 'ptgd.khac', name: 'Phó TGĐ Phòng Khác', jobTitle: 'Phó Tổng Giám Đốc', dept: 'Phòng Khác', active: true, perms: {} });
+      check('JOBTITLE + jobTitleDept: chỉ đếm đúng người ở ĐÚNG phòng ban đã gán (1 người, không tính ptgd.khac ở phòng khác)',
+        mixedApprovalRuleMatchCount({ mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: 'Ban Giám Đốc' }) === 1,
+        `count=${mixedApprovalRuleMatchCount({ mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: 'Ban Giám Đốc' })}`);
+      check('JOBTITLE KHÔNG có jobTitleDept vẫn giữ hành vi cũ: đếm MỌI người giữ chức danh (2 người, cả 2 phòng ban)',
+        mixedApprovalRuleMatchCount({ mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: null }) === 2,
+        `count=${mixedApprovalRuleMatchCount({ mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: null })}`);
+
       return { results };
     });
   } finally {

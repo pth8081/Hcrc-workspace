@@ -668,6 +668,22 @@ async function deleteQuickApplyConfig(configId) {
 function mixedApprovalPersonLabel(u) {
   return `${u.name} (${u.username}) - ${u.dept || 'Chưa rõ phòng'}`;
 }
+// Mở rộng ô tìm-kiếm-gõ-chọn (maNewJobTitleInput/maNewPersonInput/ipma*) theo đúng độ dài chuỗi DÀI
+// NHẤT đang có trong danh mục hiện tại (theo yêu cầu người dùng, 11/2026 — nhãn kiểu "Trưởng phòng — HO
+// – Phòng Kiểm soát chỉ số Vận hành — HO" bị cắt ngắn ở ô cố định w-56/224px cũ). Gán `.style.width`
+// bằng JS (KHÔNG phải `style="..."` nội tuyến trong HTML — an toàn với CSP hiện hành, cùng khuôn
+// `dd.style.width = ...` đã dùng ở sddRenderRows() ngay trên) nên luôn tự co giãn theo dữ liệu THẬT mỗi
+// lần render lại, không cần đoán trước 1 con số cố định có thể vẫn chưa đủ khi danh mục có tên dài hơn
+// sau này. CHỈ áp dụng RIÊNG cho các ô của 2 màn Cấu Hình Nâng Cao này — KHÔNG đụng sddSetOptions() dùng
+// chung (19 điểm khác trong hệ thống đang dùng ô tìm-kiếm-gõ-chọn, xem CLAUDE.md), tránh ảnh hưởng ngoài
+// phạm vi. Đơn vị `ch` (≈ bề rộng 1 ký tự ở cỡ chữ hiện tại) + đệm cho khoảng trắng/dấu; có sàn tối
+// thiểu để không co lại nhỏ hơn placeholder khi danh mục rỗng/toàn chuỗi ngắn.
+function widenSddInputToLongestOption(inputId, labels) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const maxLen = (labels || []).reduce((m, l) => Math.max(m, String(l || '').length), 0);
+  input.style.width = `${Math.max(maxLen + 2, 24)}ch`;
+}
 function mixedApprovalResolvePersonInput(rawValue) {
   const m = String(rawValue || '').match(/^(.*) \(([^()]+)\) - .*$/);
   return m ? ((DB.users || []).find(u => u.username === m[2].trim()) || null) : null;
@@ -830,8 +846,12 @@ function renderMixedApprovalSection() {
 
   populateMixedApprovalStepOptions(currentTier);
 
-  sddSetOptions('maNewJobTitleDatalist', mixedApprovalJobTitleOptions());
-  sddSetOptions('maNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
+  const maJobTitleOptions = mixedApprovalJobTitleOptions();
+  sddSetOptions('maNewJobTitleDatalist', maJobTitleOptions);
+  widenSddInputToLongestOption('maNewJobTitleInput', maJobTitleOptions);
+  const maPersonOptions = (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u));
+  sddSetOptions('maNewPersonDatalist', maPersonOptions);
+  widenSddInputToLongestOption('maNewPersonInput', maPersonOptions);
 
   // Đang SỬA dở 1 dòng (bấm "✏️ Sửa" nhưng chưa bấm Cập Nhật/Huỷ) thì giữ nguyên siêu thị đã chọn của
   // dòng đó thay vì reset về rỗng — renderMixedApprovalSection() còn được gọi lại từ NHIỀU nơi khác
@@ -978,12 +998,22 @@ async function addMixedApprovalRule() {
 // MẶC ĐỊNH (không khai siêu thị) khớp theo TỪNG siêu thị của đơn nên không có 1 con số duy nhất — đếm
 // tổng số người đang giữ đúng chức danh (chính hoặc kiêm nhiệm) để admin thấy ngay dòng "0 người" (gõ
 // đúng chức danh nhưng chưa ai giữ/đã nghỉ việc), là trường hợp lỗi cấu hình hay gặp nhất.
+// LỖI ĐÃ VÁ (11/2026, người dùng phát hiện "chọn trưởng phòng/giám đốc CỤ THỂ [kèm phòng ban] mà vẫn
+// hiện nhiều người"): hàm này trước đây BỎ QUA hẳn `rule.jobTitleDept` — dòng đã gán cố định 1 cặp
+// (chức danh, phòng ban) từ "Vị Trí Tham Gia Quy Trình" (VD "Trưởng phòng" — "HO – Phòng Kiểm soát chỉ
+// số Vận hành") vẫn bị đếm theo MỌI người giữ đúng chức danh đó trên TOÀN CÔNG TY (VD 12 Trưởng phòng ở
+// 12 phòng ban khác nhau), dù việc gán người duyệt THẬT (resolveOperationOrderStoreMixedApprovalRuleUsernames()
+// — đúng hàm cả đơn hàng/phê duyệt giá bán buôn đều dùng) đã lọc đúng phòng ban từ trước, không hề sai —
+// chỉ RIÊNG con số xem trước ở bảng cấu hình bị sai, gây hiểu nhầm. Nay lọc thêm đúng phòng ban đã gán
+// khi dòng CÓ `jobTitleDept` (mirror chính xác nhánh dept-match của hàm server/client ở trên).
 function mixedApprovalRuleMatchCount(rule) {
   if (rule.mode === 'PERSON') {
     return (DB.users || []).some(u => u && u.username === rule.username && u.active !== false) ? 1 : 0;
   }
   return (DB.users || []).filter(u => u && u.active !== false && (
     u.jobTitle === rule.jobTitle || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle)
+  ) && (
+    !rule.jobTitleDept || u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept)
   )).length;
 }
 
@@ -1134,8 +1164,12 @@ function renderItPriceWholesaleMixedApprovalSection() {
 
   populateItPriceWholesaleStepOptions(currentTier);
 
-  sddSetOptions('ipmaNewJobTitleDatalist', mixedApprovalJobTitleOptions());
-  sddSetOptions('ipmaNewPersonDatalist', (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u)));
+  const ipmaJobTitleOptions = mixedApprovalJobTitleOptions();
+  sddSetOptions('ipmaNewJobTitleDatalist', ipmaJobTitleOptions);
+  widenSddInputToLongestOption('ipmaNewJobTitleInput', ipmaJobTitleOptions);
+  const ipmaPersonOptions = (DB.users || []).filter(u => u.active !== false).map(u => mixedApprovalPersonLabel(u));
+  sddSetOptions('ipmaNewPersonDatalist', ipmaPersonOptions);
+  widenSddInputToLongestOption('ipmaNewPersonInput', ipmaPersonOptions);
 
   const editingRule = editingItPriceWholesaleMixedApprovalRuleId != null ? rules.find(r => r.id === editingItPriceWholesaleMixedApprovalRuleId) : null;
   renderMultiSelectDropdown('ipmaNewStoresPicker', DB.stores || [], editingRule ? (editingRule.stores || []) : [], {

@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**25.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.83 (2026-11): Vá đếm sai số người khớp "Chức Danh + Phòng Ban" + mở rộng ô tìm kiếm Cấu Hình Nâng Cao
+
+Người dùng phát hiện (ảnh chụp màn "🏬 Quy Trình Đặt Hàng Siêu Thị"/"🏪 QT Giá Bán Buôn"): chọn ghép
+"Trưởng phòng" + 1 phòng ban cụ thể (qua "Vị Trí Tham Gia Quy Trình") vẫn hiện "12 người" thay vì đúng số
+người ở phòng ban đó.
+
+- **Lỗi thật**: `mixedApprovalRuleMatchCount()` (`public/js/module-workflow.js`, hàm XEM TRƯỚC số người
+  khớp trên bảng cấu hình) bỏ qua hẳn `rule.jobTitleDept` — đếm MỌI người giữ đúng chức danh trên TOÀN
+  CÔNG TY thay vì chỉ đúng phòng ban đã gán. Việc gán người duyệt THẬT lúc phê duyệt đơn/giá bán buôn
+  (`resolveOperationOrderStoreMixedApprovalRuleUsernames()`, `lib/workflowEngine.js`) vẫn ĐÚNG từ trước —
+  chỉ con số xem trước trên bảng cấu hình sai, gây hiểu nhầm, không ảnh hưởng ai thực sự duyệt được đơn.
+  Đã vá + thêm 2 kịch bản hồi quy mới trong `tests/test-mixed-approval-delete-warning-ui.js` (18/18 pass).
+- **Mở rộng ô tìm kiếm**: ô "Gõ để tìm chức danh"/"Gõ để tìm người" ở cả 2 màn (trước đây cố định 224px)
+  nay tự co giãn theo đúng độ dài chuỗi dài nhất đang có trong danh mục (VD "Trưởng phòng — HO – Phòng
+  Kiểm soát chỉ số Vận hành — HO"), tính lại mỗi lần bảng render lại — không cần đoán trước 1 con số cố
+  định có thể vẫn chưa đủ khi tên phòng ban/chức danh dài hơn sau này.
+- Chạy lại toàn bộ 8 test liên quan tới Cấu Hình Nâng Cao (Quy Trình Đặt Hàng Siêu Thị + QT Giá Bán Buôn):
+  không có regression.
 
 ## v25.82 (2026-11): Giai đoạn 4 — email NHẮC HẠN tự động (9 job cron) cũng tự kèm link trực tiếp hồ sơ
 
