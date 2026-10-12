@@ -69,6 +69,18 @@
               <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
               <input id="hrpOnbFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>
             </div>
+            <!-- Giới Tính (11/2026, theo phản hồi khối Nhân Sự đợt test PM — ĐÃ CÓ SẴN từ trước nhưng nằm
+                 trong khung "Thông Tin Bổ Sung" thu gọn mặc định bên dưới (#hrpOnbExtraPanel) nên HR
+                 không thấy, tưởng là thiếu field. Đưa hẳn ra khu vực chính (thông tin cơ bản, không phải
+                 "tuỳ chọn bổ sung") để luôn hiện sẵn, không cần bấm mở khung — field/logic đọc giữ
+                 NGUYÊN id hrpOnbGender, chỉ đổi vị trí hiển thị trong HTML. -->
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Giới Tính (tuỳ chọn)</label>
+              <select id="hrpOnbGender" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="">-- Chọn --</option>
+                <option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option>
+              </select>
+            </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
               <select id="hrpOnbPosType" data-op-change="onHrpOnboardingPosTypeChange" class="w-full border p-1.5 rounded text-xs bg-white">
@@ -97,13 +109,16 @@
               <input id="hrpOnbJobTitle" data-sdd-list="hrpOnbJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh..." class="w-full border p-1.5 rounded text-xs bg-white">
               <div id="hrpOnbJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
-            <div>
-              <label id="hrpOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu chưa cấp)</label>
-              <input id="hrpOnbEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs">
-            </div>
+            <!-- LỖI ĐÃ VÁ (11/2026, khối Nhân Sự báo "nhấn Tab sau Chức Danh nhảy sang Email, đáng lẽ phải
+                 sang SĐT"): đổi thứ tự DOM — Số Điện Thoại đứng NGAY SAU Chức Danh (không đổi id/logic gì,
+                 chỉ đổi vị trí 2 khối này trong HTML để khớp đúng thứ tự Tab mong muốn). -->
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
               <input id="hrpOnbPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
+            </div>
+            <div>
+              <label id="hrpOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu chưa cấp)</label>
+              <input id="hrpOnbEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs">
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
@@ -136,14 +151,9 @@
           <button type="button" data-op="toggleHrpOnbExtraPanel" class="w-full bg-gray-50 border border-gray-300 text-gray-700 rounded-lg py-2 text-xs font-bold hover:bg-gray-100">
             📋 Thông Tin Bổ Sung (Cá Nhân / Học Vấn / Dự Kiến HĐLĐ &amp; Thu Nhập — tuỳ chọn)</button>
           <div id="hrpOnbExtraPanel" class="hidden border border-gray-200 bg-gray-50 rounded-lg p-3 space-y-3">
+            <!-- Giới Tính (11/2026) ĐÃ DỜI ra khu vực chính ở trên (#hrpOnbGender) — không còn ở đây nữa,
+                 xem chú thích đầy đủ tại vị trí mới. -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label class="block text-xs font-semibold text-gray-600 mb-1">Giới Tính (tuỳ chọn)</label>
-                <select id="hrpOnbGender" class="w-full border p-1.5 rounded text-xs bg-white">
-                  <option value="">-- Chọn --</option>
-                  <option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option>
-                </select>
-              </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Sinh (tuỳ chọn)</label>
                 <input type="date" id="hrpOnbDateOfBirth" class="w-full border p-1.5 rounded text-xs">

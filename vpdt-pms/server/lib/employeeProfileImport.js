@@ -18,6 +18,20 @@ const { getAppDataValue } = require('./appData');
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
 
+// LỖI ĐÃ VÁ (11/2026, khối Nhân Sự báo "ngày trong báo cáo Excel hiện năm-tháng-ngày, phải đổi thành
+// ngày-tháng-năm"): mọi field "ngày thuần" trong hồ sơ (dateOfBirth/retirementDate/contractStartDate...)
+// lưu nội bộ dạng ISO "YYYY-MM-DD" (xem chú thích tại applyProfileEdit() và các hàm liên quan ở
+// lib/employeeProfile.js) — hàm xuất Excel này trước đây ghi THẲNG chuỗi lưu nội bộ vào ô, HR mở file
+// thấy "1990-05-20" thay vì quen mắt "20/05/1990". CHỈ đổi CÁCH HIỂN THỊ ở đúng file Excel XUẤT RA (xem)
+// — KHÔNG đụng gì tới cách lưu nội bộ/mẫu Excel NHẬP (buildImportTemplateWorkbook() vẫn yêu cầu đúng
+// "YYYY-MM-DD" như cũ, để không phá vỡ parseImportExcelBuffer() đang đối chiếu đúng định dạng này).
+// Chuỗi không khớp đúng "YYYY-MM-DD" (rỗng, hoặc dữ liệu cũ lỗi định dạng) trả nguyên vẹn, không đoán mò.
+function toDisplayDateVN(isoDateStr) {
+  const str = String(isoDateStr || '').trim();
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
+}
+
 function styleHeaderRow(row) {
   row.font = { bold: true };
   row.eachCell(cell => {
@@ -529,45 +543,47 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
     const historyRow = {};
     for (let i = 0; i < 3; i++) {
       const hc = histContracts[i];
-      historyRow[`contractHist${i + 1}StartDate`] = hc?.startDate || '';
-      historyRow[`contractHist${i + 1}EndDate`] = hc?.endDate || '';
+      historyRow[`contractHist${i + 1}StartDate`] = toDisplayDateVN(hc?.startDate);
+      historyRow[`contractHist${i + 1}EndDate`] = toDisplayDateVN(hc?.endDate);
       const am = histAmendments[i];
-      historyRow[`amendment${i + 1}ApplyDate`] = am?.applyDate || '';
+      historyRow[`amendment${i + 1}ApplyDate`] = toDisplayDateVN(am?.applyDate);
       historyRow[`amendment${i + 1}Content`] = am ? `${am.amendmentType}: ${am.oldValue || ''} → ${am.newValue || ''}` : '';
     }
     sheet.addRow(sanitizeRowForFormulaInjection({
       employeeCode: p.employeeCode, fullName: idn.fullName, dept: idn.dept, jobTitle: idn.jobTitle,
       username: p.username || '', statusLabel: STATUS_LABELS[p.status] || p.status,
-      dateOfBirth: p.dateOfBirth || '', gender: p.gender || '', nationalId: p.nationalId || '',
+      dateOfBirth: toDisplayDateVN(p.dateOfBirth), gender: p.gender || '', nationalId: p.nationalId || '',
       permanentAddress: p.permanentAddress || '', currentAddress: p.currentAddress || '',
       personalEmail: p.personalEmail || '', contactPhone: p.contactPhone || '', emergencyContactPhone: p.emergencyContactPhone || '',
       bankAccountNo: p.bankAccountNo || '', bankName: p.bankName || '', bankAccountHolderName: p.bankAccountHolderName || '',
       socialInsuranceNo: p.socialInsuranceNo || '', taxCode: p.taxCode || '',
       nationality: p.nationality || '', maritalStatus: p.maritalStatus || '',
-      nationalIdIssueDate: p.nationalIdIssueDate || '', nationalIdIssuePlace: p.nationalIdIssuePlace || '',
-      jobGrade: p.jobGrade || '', deskLocation: p.deskLocation || '', retirementDate: p.retirementDate || '',
+      nationalIdIssueDate: toDisplayDateVN(p.nationalIdIssueDate), nationalIdIssuePlace: p.nationalIdIssuePlace || '',
+      jobGrade: p.jobGrade || '', deskLocation: p.deskLocation || '', retirementDate: toDisplayDateVN(p.retirementDate),
       socialInsuranceAtThisUnitLabel: p.socialInsuranceAtThisUnit == null ? '' : (p.socialInsuranceAtThisUnit ? 'Có' : 'Không'),
       emergencyContactAddress: p.emergencyContactAddress || '', legalEntity: p.legalEntity || '',
       workEmail: p.workEmail || '', specialLaborStatus: p.specialLaborStatus || '',
-      currentWorkStatusDetail: p.currentWorkStatusDetail || '', currentWorkStatusFrom: p.currentWorkStatusFrom || '',
-      currentWorkStatusTo: p.currentWorkStatusTo || '', lastInternalTransferUnit: p.lastInternalTransferUnit || '',
-      lastInternalTransferReason: p.lastInternalTransferReason || '', joinDateAtPredecessorUnit: p.joinDateAtPredecessorUnit || '',
-      joinDateAtHcrc: p.joinDateAtHcrc || '', concurrentJobTitle: p.concurrentJobTitle || '',
-      resignationNoticeDate: p.resignationNoticeDate || '', resignationExpectedDate: p.resignationExpectedDate || '',
-      tenureBaseDate: p.tenureBaseDate || '', careerHistoryNote: p.careerHistoryNote || '', hrNote: p.hrNote || '',
+      currentWorkStatusDetail: p.currentWorkStatusDetail || '', currentWorkStatusFrom: toDisplayDateVN(p.currentWorkStatusFrom),
+      currentWorkStatusTo: toDisplayDateVN(p.currentWorkStatusTo), lastInternalTransferUnit: p.lastInternalTransferUnit || '',
+      lastInternalTransferReason: p.lastInternalTransferReason || '', joinDateAtPredecessorUnit: toDisplayDateVN(p.joinDateAtPredecessorUnit),
+      joinDateAtHcrc: toDisplayDateVN(p.joinDateAtHcrc), concurrentJobTitle: p.concurrentJobTitle || '',
+      resignationNoticeDate: toDisplayDateVN(p.resignationNoticeDate), resignationExpectedDate: toDisplayDateVN(p.resignationExpectedDate),
+      tenureBaseDate: toDisplayDateVN(p.tenureBaseDate), careerHistoryNote: p.careerHistoryNote || '', hrNote: p.hrNote || '',
+      // updatedAt KHÔNG qua toDisplayDateVN — đã là chuỗi "DD/MM/YYYY HH:MM:SS" sẵn (nowVN(), xem
+      // lib/employeeProfile.js), không phải "YYYY-MM-DD" thuần nên hàm trên tự bỏ qua, giữ nguyên.
       updatedAt: p.updatedAt || '',
       deptCode: (deptCodeMap || {})[idn.dept] || '', khoiBan: wired.khoiBan || '',
       managerUsername: wired.managerUsername || '', managerName: wired.managerName || '',
       managerManagerUsername: wired.managerManagerUsername || '', managerManagerName: wired.managerManagerName || '',
-      resignationReason: wired.resignationReason || '', actualEndDateDisplay: wired.actualEndDate || wired.lastWorkingDate || '',
+      resignationReason: wired.resignationReason || '', actualEndDateDisplay: toDisplayDateVN(wired.actualEndDate || wired.lastWorkingDate),
       contractCode: c?.code || '', contractTypeLabel: c ? (CONTRACT_TYPE_LABELS[c.contractType] || c.contractType) : '',
       contractStatusLabel: c ? (CONTRACT_STATUS_LABELS[c.status] || c.status) : '',
-      contractStartDate: c?.startDate || '', contractEndDate: c?.endDate || '',
+      contractStartDate: toDisplayDateVN(c?.startDate), contractEndDate: toDisplayDateVN(c?.endDate),
       baseSalary: c?.baseSalary ?? '', responsibilityAllowance: c?.responsibilityAllowance ?? '',
       concurrentAllowance: c?.concurrentAllowance ?? '', hazardAllowance: c?.hazardAllowance ?? '',
       lunchAllowance: c?.lunchAllowance ?? '', transportAllowance: c?.transportAllowance ?? '',
       phoneAllowance: c?.phoneAllowance ?? '', otherAllowance: c?.otherAllowance ?? '',
-      terminationDate: c?.terminationDate || '', terminationReason: c?.terminationReason || '',
+      terminationDate: toDisplayDateVN(c?.terminationDate), terminationReason: c?.terminationReason || '',
       socialInsuranceSalary: c?.socialInsuranceSalary ?? '', productivityBonus: c?.productivityBonus ?? '',
       otherIncome: c?.otherIncome ?? '', probationSalaryRate: c?.probationSalaryRate ?? '',
       ...historyRow

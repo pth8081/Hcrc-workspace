@@ -255,6 +255,28 @@ async function main() {
       assert.strictEqual(profile.nationalId, null, 'Không nhập CCCD -> phải vẫn null, không bị ghi đè null->null gây nhầm lẫn field "đã sửa"');
     });
 
+    // LỖI ĐÃ VÁ (11/2026, khối Nhân Sự báo "Email liên hệ công việc phải gõ lại ở Hồ Sơ Nhân Sự dù đã
+    // nhập ở Onboarding", trong khi gender/dateOfBirth/currentAddress/nationalId/employmentType/
+    // workSchedule/phone đều đã tự copy từ trước) — cùng cơ chế các field trên, xem routes/create.js.
+    await test('NEW email nhập ở Onboarding (hrpOnbEmail) -> tự copy vào workEmail của hồ sơ nháp employeeProfiles', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload({ email: 'nv.moi@congty.vn' }));
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.ok(profile, 'Phải có hồ sơ nháp ứng với mã vừa tạo');
+      assert.strictEqual(profile.workEmail, 'nv.moi@congty.vn', 'Email nhập ở Onboarding phải tự copy vào workEmail, không phải gõ lại');
+    });
+
+    await test('NEW để trống Email ở Onboarding (nhân viên HO, không bắt buộc) -> workEmail vẫn null như cũ', async () => {
+      resetAppData();
+      STORE.hrProcesses = [];
+      const r = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload({ email: '' }));
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const profile = APP_DATA.employeeProfiles.find(p => p.employeeCode === r.json.item.employeeCode);
+      assert.strictEqual(profile.workEmail, null, 'Để trống Email -> workEmail vẫn null, không bị ghi đè');
+    });
+
     await test('NEW Số CCCD trùng với hồ sơ nhân sự KHÁC đang có -> 409, KHÔNG tạo quy trình (chặn TRƯỚC khi tạo, tránh trạng thái nửa vời)', async () => {
       resetAppData();
       STORE.hrProcesses = [];

@@ -477,9 +477,15 @@ router.post('/:module', async (req, res) => {
         // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới — "Điện thoại liên hệ") — record.phone đã
         // bắt buộc nhập + trim ở hrProcesses.extraValidate (xem lib/createValidation.js dòng ~3475), copy
         // 1 lần vào hồ sơ CÙNG lúc với currentAddress/nationalId, KHÔNG lưu trùng ở nơi khác.
+        // workEmail (11/2026, khối Nhân Sự báo "Email liên hệ công việc phải gõ lại dù đã nhập ở
+        // Onboarding", trong khi MỌI field khác ở đây đều đã tự copy sẵn) — record.email đã validate
+        // đúng định dạng + trim + giới hạn 200 ký tự ở hrProcesses.extraValidate (lib/createValidation.js
+        // dòng ~3670), copy 1 lần vào workEmail CÙNG lúc với các field trên. Khác personalEmail (email cá
+        // nhân, HR tự nhập riêng sau nếu cần) — workEmail là email công ty dùng lúc Onboarding, hợp lý
+        // nhất để tự điền sẵn, HR vẫn sửa lại được bình thường sau nếu công ty cấp email khác.
         if (idx !== -1 && (record.currentAddress || record.nationalId || record.gender || record.dateOfBirth
           || record.permanentAddress || record.nationalIdIssueDate || record.nationalIdIssuePlace
-          || record.employmentType || record.workSchedule || record.phone)) {
+          || record.employmentType || record.workSchedule || record.phone || record.email)) {
           // CHỈ đưa vào payload đúng field client thực sự gửi khác rỗng — applyProfileEdit() coi field
           // "có mặt trong payload" (kể cả giá trị rỗng/undefined) là "cần ghi đè", nên field còn lại
           // (không nhập) PHẢI vắng mặt hẳn khỏi object này để giữ nguyên giá trị cũ, không bị ghi đè null.
@@ -494,6 +500,7 @@ router.post('/:module', async (req, res) => {
           if (record.employmentType) onboardingProfileEdits.employmentType = record.employmentType;
           if (record.workSchedule) onboardingProfileEdits.workSchedule = record.workSchedule;
           if (record.phone) onboardingProfileEdits.contactPhone = record.phone;
+          if (record.email) onboardingProfileEdits.workEmail = record.email;
           // employmentTypes/workSchedules: truyền đúng danh mục THẬT appData.employmentTypes/
           // appData.workSchedules (admin tự sửa qua màn Biểu Mẫu) — appData đã đọc sẵn ở đầu handler
           // (getAllAppData()), record.employmentType/record.workSchedule đã qua đối chiếu CÙNG danh mục

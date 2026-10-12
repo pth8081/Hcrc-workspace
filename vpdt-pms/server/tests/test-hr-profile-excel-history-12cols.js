@@ -83,7 +83,9 @@ async function main() {
     const wb = await employeeProfileImport.buildExportWorkbook([profile], users, hrProcesses, []);
     const sheet = wb.getWorksheet('Hồ Sơ Nhân Sự');
     assert.strictEqual(cellByHeader(sheet, 2, 'Lý Do Nghỉ Việc (CHỈ XEM)'), 'Lý do mới nhất');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Nghỉ Việc Thực Tế (CHỈ XEM)'), '2026-06-02');
+    // 11/2026: xuất Excel giờ hiện ngày dạng DD/MM/YYYY (quen mắt HR) thay vì YYYY-MM-DD lưu nội bộ — xem
+    // toDisplayDateVN() ở lib/employeeProfileImport.js.
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Nghỉ Việc Thực Tế (CHỈ XEM)'), '02/06/2026');
   });
 
   await test('4 cột thu nhập mở rộng (socialInsuranceSalary/productivityBonus/otherIncome/probationSalaryRate) đọc LIVE từ hợp đồng ACTIVE', async () => {
@@ -111,11 +113,11 @@ async function main() {
     ];
     const wb = await employeeProfileImport.buildExportWorkbook([profile], [], [], contracts);
     const sheet = wb.getWorksheet('Hồ Sơ Nhân Sự');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 1 (CHỈ XEM)'), '2024-01-01');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Hết Hạn HĐLĐ Lần 1 (CHỈ XEM)'), '2024-06-30');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 2 (CHỈ XEM)'), '2024-07-01');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Hết Hạn HĐLĐ Lần 2 (CHỈ XEM)'), '2026-06-30');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 3 (CHỈ XEM)'), '2026-07-01');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 1 (CHỈ XEM)'), '01/01/2024');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Hết Hạn HĐLĐ Lần 1 (CHỈ XEM)'), '30/06/2024');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 2 (CHỈ XEM)'), '01/07/2024');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Hết Hạn HĐLĐ Lần 2 (CHỈ XEM)'), '30/06/2026');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 3 (CHỈ XEM)'), '01/07/2026');
     assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Hết Hạn HĐLĐ Lần 3 (CHỈ XEM)'), '');
   });
 
@@ -124,7 +126,7 @@ async function main() {
     const contracts = [{ employeeCode: 'NV5007', status: 'ACTIVE', startDate: '2026-01-01', endDate: null, contractType: 'INDEFINITE' }];
     const wb = await employeeProfileImport.buildExportWorkbook([profile], [], [], contracts);
     const sheet = wb.getWorksheet('Hồ Sơ Nhân Sự');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 1 (CHỈ XEM)'), '2026-01-01');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 1 (CHỈ XEM)'), '01/01/2026');
     assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 2 (CHỈ XEM)'), '');
     assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Ký HĐLĐ Lần 3 (CHỈ XEM)'), '');
   });
@@ -141,10 +143,10 @@ async function main() {
     };
     const wb = await employeeProfileImport.buildExportWorkbook([profile], [], [], [contract]);
     const sheet = wb.getWorksheet('Hồ Sơ Nhân Sự');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Áp Dụng Điều Chỉnh Lần 1 (CHỈ XEM)'), '2025-01-01');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Áp Dụng Điều Chỉnh Lần 1 (CHỈ XEM)'), '01/01/2025');
     assert.ok(cellByHeader(sheet, 2, 'Nội Dung Điều Chỉnh Lần 1 (CHỈ XEM)').includes('Tăng lương lần 1'));
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Áp Dụng Điều Chỉnh Lần 2 (CHỈ XEM)'), '2026-01-01');
-    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Áp Dụng Điều Chỉnh Lần 3 (CHỈ XEM)'), '2026-06-01');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Áp Dụng Điều Chỉnh Lần 2 (CHỈ XEM)'), '01/01/2026');
+    assert.strictEqual(cellByHeader(sheet, 2, 'Ngày Áp Dụng Điều Chỉnh Lần 3 (CHỈ XEM)'), '01/06/2026');
   });
 
   await test('12 cột lịch sử: không có hợp đồng/amendment nào -> toàn bộ 12 cột để trống, không lỗi', async () => {

@@ -125,7 +125,8 @@ async function main() {
     const idx = (label) => headerRow.indexOf(label);
     assert.strictEqual(values[idx('Địa Chỉ Người Liên Hệ Khẩn Cấp')], 'Số 1 Lê Lợi');
     assert.strictEqual(values[idx('Đơn Vị (Pháp Nhân)')], 'Công ty TNHH HCRC');
-    assert.strictEqual(values[idx('Ngày Vào HCRC')], '2020-01-10');
+    // 11/2026: xuất Excel hiện ngày dạng DD/MM/YYYY (quen mắt HR) thay vì YYYY-MM-DD lưu nội bộ.
+    assert.strictEqual(values[idx('Ngày Vào HCRC')], '10/01/2020');
     assert.strictEqual(values[idx('Kiêm Nhiệm Chức Danh (ghi chú)')], 'Kiêm Trưởng nhóm QA');
     assert.strictEqual(values[idx('Mã Hợp Đồng (CHỈ XEM)')], 'HDLD-NV999-1');
     assert.strictEqual(values[idx('Loại HĐLĐ (CHỈ XEM)')], 'Vô thời hạn');

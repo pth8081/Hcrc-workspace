@@ -1,8 +1,31 @@
 # Phiên bản hiện tại
 
-**25.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.84 (2026-11): 4 vá theo phản hồi test PM của khối Nhân Sự (Onboarding/Hồ Sơ Nhân Sự/Báo Cáo)
+
+Đối chiếu file test PM khối Nhân Sự gửi (14 mục) với code hiện tại: 9 mục đã xử lý từ trước, 1 mục chỉ
+là dữ liệu danh mục tự thêm được (Đơn Vị Pháp Nhân TPHN), 1 mục cần quyết định thêm (đổi hẳn ô ngày
+sang 3 ô tách rời — CHƯA làm, chờ xác nhận). 4 mục còn lại đã vá trong đợt này:
+
+- **Giới Tính (Onboarding) hiện mặc định**: trước đây nằm trong khung "📋 Thông Tin Bổ Sung" thu gọn,
+  khiến HR tưởng field chưa tồn tại — đưa hẳn ra khu vực chính, luôn hiện sẵn không cần mở khung.
+- **Tab "Chức Danh" → "Số Điện Thoại"**: trước đây nhấn Tab sau Chức Danh nhảy sang Email thay vì SĐT —
+  đổi thứ tự DOM 2 field, không đổi id/logic.
+- **Email liên hệ công việc tự điền từ Onboarding**: mọi field cá nhân khác (giới tính/ngày sinh/CCCD/
+  địa chỉ/hình thức làm việc/thời gian làm việc/điện thoại) đã tự copy từ Onboarding sang Hồ Sơ Nhân Sự
+  từ trước, riêng email thì chưa — nay copy đồng bộ (`workEmail`), cùng cơ chế đã có (`routes/create.js`).
+- **Ngày trong Excel "Hồ Sơ Nhân Sự" hiện DD/MM/YYYY** thay vì YYYY-MM-DD lưu nội bộ (áp dụng cho toàn bộ
+  ~18 cột ngày: ngày sinh, ngày cấp CCCD, ngày HĐLĐ, ngày điều chỉnh lương, ngày nghỉ việc...) — chỉ đổi
+  hiển thị lúc XUẤT, không đổi cách lưu/mẫu NHẬP (vẫn yêu cầu YYYY-MM-DD để khớp đúng validate khi nhập
+  lại). Xem `toDisplayDateVN()` ở `lib/employeeProfileImport.js`.
+
+Thêm 2 kịch bản hồi quy mới (`test-audit-nhansu-onboarding-contract.js`) + cập nhật assertion định dạng
+ngày ở 2 file test export Excel hiện có — chạy lại toàn bộ test liên quan Onboarding/Hồ Sơ Nhân Sự/Xuất
+Excel (~20 file), không có regression mới (3 lỗi Playwright timeout tiền trạng xác nhận qua git worktree
+là có từ trước, không liên quan đợt vá này).
 
 ## v25.83 (2026-11): Vá đếm sai số người khớp "Chức Danh + Phòng Ban" + mở rộng ô tìm kiếm Cấu Hình Nâng Cao
 
