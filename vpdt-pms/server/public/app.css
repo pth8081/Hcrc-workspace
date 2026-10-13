@@ -605,3 +605,26 @@ button:not(:disabled):active { transform: scale(0.95); filter: brightness(0.8); 
 button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
 .op-locked { pointer-events: none; opacity: .55; cursor: not-allowed; }
 
+/* #wordPrintArea — "In có watermark" cho file Word (.docx, xem printWordWithWatermark() ở
+   module-internalcomms-daotao-viewer.js). 11/2026, theo yêu cầu người dùng: cách CŨ (mammoth -> chụp
+   ảnh html2canvas -> cắt theo chiều cao cố định -> ghép PDF bằng jsPDF) cắt ngang nội dung tùy tiện vì
+   không theo đúng ngắt trang thật của Word — làm lệch layout tờ trình/hợp đồng cần in. Nay in TRỰC TIẾP
+   qua window.print() của trình duyệt (chữ thật, ngắt trang theo CSS chuẩn, không còn bị cắt ảnh tùy
+   tiện) — vẫn còn giới hạn fidelity của mammoth (.docx -> HTML, không trung thực 100% như mở bằng Word
+   thật với layout phức tạp) nhưng người dùng đã xác nhận chấp nhận đánh đổi này, đổi lại KHÔNG cần cài
+   thêm hạ tầng gì (LibreOffice/OnlyOffice).
+   Ẩn hẳn khi xem bình thường trên màn hình (#wordPrintArea không nằm trong luồng hiển thị chính của
+   trang — chỉ #viewDocModal mới hiện nội dung xem), chỉ HIỆN RA khi in (@media print) và ẩn TOÀN BỘ phần
+   còn lại của trang lúc đó, để bản in CHỈ có đúng nội dung tờ trình + watermark chân trang, không dính
+   sidebar/header/modal khác. */
+#wordPrintArea { display: none; }
+@media print {
+  body.word-printing > *:not(#wordPrintArea) { display: none !important; }
+  #wordPrintArea { display: block !important; position: static; }
+  #wordPrintArea .word-print-watermark {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    font-size: 11px; color: rgba(110,110,110,0.9); padding: 2mm 5mm;
+  }
+  @page { margin: 15mm 15mm 20mm 15mm; }
+}
+

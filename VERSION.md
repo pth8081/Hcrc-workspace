@@ -1,8 +1,30 @@
 # Phiên bản hiện tại
 
-**25.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.94 (2026-11): Vá lỗi "In có watermark" (.docx) cắt ngang nội dung tờ trình/hợp đồng
+
+Người dùng báo: tờ trình/hợp đồng cần in bị lệch/mất nội dung khi dùng nút "🖨️ In có watermark" (Tài
+Liệu/Văn Bản Trình, chỉ áp dụng cho file .docx). Nguyên nhân xác nhận qua code: cách cũ (mammoth chuyển
+.docx→HTML → html2canvas chụp toàn bộ nội dung thành 1 ảnh dài → **cắt ảnh theo chiều cao PIXEL cố định**
+1 trang A4 → ghép từng lát vào PDF bằng jsPDF) cắt ngang bảng/đoạn văn/ảnh tùy tiện vì không theo đúng
+ngắt trang thật của Word.
+
+Đã trao đổi với người dùng 2 phương án thay thế (dùng LibreOffice thật phía server — trung thực 100%
+nhưng cần cài thêm hạ tầng; hoặc in TRỰC TIẾP qua `window.print()` của trình duyệt — không cần cài gì
+thêm) — chọn phương án **in trực tiếp qua trình duyệt**: nội dung giờ là chữ thật (không phải ảnh chụp),
+ngắt trang theo đúng CSS chuẩn của trình duyệt (không còn cắt tùy tiện giữa bảng/đoạn văn). Watermark
+("Hệ thống văn phòng số Công ty HCRC" — người dùng xác nhận GIỮ LẠI để đảm bảo toàn vẹn dữ liệu, biết
+tài liệu in từ hệ thống) giờ là 1 dòng CHÂN TRANG cố định lặp lại mỗi trang in (CSS `position: fixed`
+trong `@media print`), chỉ vẽ đè — không đụng nội dung, cùng nguyên tắc đã áp dụng cho watermark PDF gốc
+(`routes/download.js`, `pdf-lib`).
+
+**Giới hạn còn lại (đã trao đổi rõ với người dùng, chấp nhận đánh đổi)**: nội dung vẫn qua mammoth
+(.docx→HTML) để hiển thị trước khi in — không trung thực 100% như mở bằng Word thật với layout phức tạp
+(font/bảng đặc biệt). Muốn đúng 100% như Word thật cần phương án LibreOffice (chưa triển khai, cần cài
+thêm hạ tầng server khi người dùng xác nhận).
 
 ## v25.93 (2026-11): Đặt Lại Mật Khẩu Hàng Loạt + bộ lọc "chưa đổi mật khẩu tạm"
 
