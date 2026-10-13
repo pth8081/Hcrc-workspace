@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**25.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.85 (2026-11): Thêm nút "Kích Hoạt Hàng Loạt" cho Hợp Đồng Lao Động
+
+Theo yêu cầu người dùng (đợt di trú dữ liệu nhân sự cũ — nhân viên đã có sẵn lịch sử hợp đồng thật, cần
+nạp vào hệ thống rồi mới theo quy trình onboarding/sửa qua Hợp Đồng Lao Động về sau). Quy trình nạp
+nhiều đời hợp đồng/nhân viên: "Nhập Excel Tạo Mới" (hàng loạt) chỉ tạo được 1 hợp đồng/nhân viên mỗi
+lần (server chặn tạo 2 hợp đồng Nháp trùng mã nhân viên để tránh trùng do chạy nhầm file) — các đời hợp
+đồng cũ còn lại phải tạo tay qua "➕ Tạo Hợp Đồng Mới" (không bị chặn trùng). Sau khi có đủ các hợp đồng
+Nháp (lịch sử + hiện tại) cho nhiều nhân viên, thay vì bấm tay từng người để kích hoạt đúng hợp đồng
+hiện tại, màn Hợp Đồng Lao Động nay có nút **"⚡ Kích Hoạt Hàng Loạt"**: liệt kê mọi hợp đồng đang Nháp,
+gom theo mã nhân viên, tự tick sẵn đúng hợp đồng có Ngày Hiệu Lực MỚI NHẤT của mỗi nhân viên (các hợp
+đồng Nháp cũ hơn không có ô tick, tránh kích hoạt nhầm làm mất tính liên tục của lịch sử), bấm "Kích
+Hoạt Đã Chọn" sẽ kích hoạt tuần tự tất cả dòng đã tick qua ĐÚNG action `activate` sẵn có (không có route
+batch mới, không có đường tắt bỏ qua validate).
 
 ## v25.84 (2026-11): 4 vá theo phản hồi test PM của khối Nhân Sự (Onboarding/Hồ Sơ Nhân Sự/Báo Cáo)
 

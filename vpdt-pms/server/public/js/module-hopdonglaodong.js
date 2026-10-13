@@ -770,3 +770,124 @@ async function confirmHrContractCreateImport() {
     alert('⛔ ' + err.message);
   }
 }
+
+// ===== Kích Hoạt Hàng Loạt (10/2026, theo yêu cầu người dùng — đợt di trú dữ liệu nhân sự cũ: sau khi
+// tạo nhiều hợp đồng Nháp/nhân viên qua "Nhập Excel Tạo Mới"/"Tạo Hợp Đồng Mới" tay nhiều lần (mỗi nhân
+// viên có thể có vài đời hợp đồng cũ + 1 hợp đồng hiện tại, TẤT CẢ đều ở trạng thái Nháp lúc mới tạo),
+// cần 1 màn kích hoạt NHANH hợp đồng hiện tại cho nhiều nhân viên cùng lúc thay vì bấm tay từng người.
+// KHÔNG viết route batch mới ở server — gọi LẶP LẠI đúng action 'activate' sẵn có (applyActivateManual()
+// ở lib/laborContract.js, qua callRecordAction() như activateHrContract() đã dùng), mỗi hợp đồng 1 lượt
+// khoá/validate riêng (Zero-Trust y hệt kích hoạt tay) — không có đường tắt bỏ qua business rule.
+//
+// Với nhân viên có NHIỀU hợp đồng Nháp (lịch sử), chỉ hợp đồng có Ngày Hiệu Lực MỚI NHẤT mới nên kích
+// hoạt (coi là hợp đồng hiện tại) — các hợp đồng Nháp cũ hơn PHẢI giữ nguyên trạng thái Nháp để tiếp tục
+// tính vào cột "lịch sử" khi xuất Excel Hồ Sơ Nhân Sự (lib/employeeProfileImport.js::oldestContractsForEmployee()
+// không lọc theo trạng thái, nhưng khối "hiện tại" lại chỉ lấy đúng 1 hợp đồng ACTIVE/nhân viên). Vì vậy
+// mặc định CHỈ tick sẵn đúng 1 dòng/nhân viên (mới nhất); các dòng cũ hơn hiện ra để biết nhưng không có
+// ô tick (phòng bấm nhầm kích hoạt hợp đồng cũ, làm mất tính liên tục của lịch sử).
+let hrContractBulkActivateRows = [];
+
+function buildHrContractBulkActivateRows() {
+  const nameByCode = {};
+  hrcEmployeeDirectoryCache.forEach(p => { nameByCode[p.employeeCode] = p.fullName; });
+  const byEmployee = {};
+  (DB.laborContracts || []).filter(c => c.status === 'DRAFT').forEach(c => {
+    const code = c.employeeCode || '(chưa rõ)';
+    (byEmployee[code] = byEmployee[code] || []).push(c);
+  });
+  const rows = [];
+  Object.keys(byEmployee).sort().forEach(code => {
+    // Mới nhất theo Ngày Hiệu Lực lên đầu — dòng đầu (idx 0) là ứng viên "hợp đồng hiện tại".
+    const list = byEmployee[code].slice().sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')));
+    list.forEach((c, idx) => {
+      const ready = !!c.startDate && (c.contractType === 'INDEFINITE' || !!c.endDate);
+      rows.push({
+        id: c.id, employeeCode: code, fullName: nameByCode[code] || '',
+        code: c.code || '', contractType: c.contractType, startDate: c.startDate, endDate: c.endDate,
+        isLatestOfEmployee: idx === 0, otherDraftCount: list.length - 1,
+        ready, checked: ready && idx === 0
+      });
+    });
+  });
+  return rows;
+}
+
+async function openHrContractBulkActivateModal() {
+  if (!hrcEmployeeDirectoryCache.length) await loadHrcEmployeeDirectory();
+  hrContractBulkActivateRows = buildHrContractBulkActivateRows();
+  document.getElementById('hrContractBulkActivateStatus').innerText = '';
+  renderHrContractBulkActivateBody();
+  document.getElementById('hrContractBulkActivateModal').classList.remove('hidden');
+}
+function closeHrContractBulkActivateModal() {
+  document.getElementById('hrContractBulkActivateModal').classList.add('hidden');
+}
+
+function renderHrContractBulkActivateBody() {
+  const tbody = document.getElementById('hrContractBulkActivateBody');
+  const empty = document.getElementById('hrContractBulkActivateEmpty');
+  const confirmBtn = document.getElementById('hrContractBulkActivateConfirmBtn');
+  if (!hrContractBulkActivateRows.length) {
+    tbody.innerHTML = '';
+    empty.classList.remove('hidden');
+    confirmBtn.classList.add('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  tbody.innerHTML = hrContractBulkActivateRows.map((r, idx) => {
+    const checkCell = r.ready
+      ? `<input type="checkbox" data-op-change="onHrContractBulkActivateRowToggle" data-arg0="${idx}" ${r.checked ? 'checked' : ''}>`
+      : `<span class="text-gray-400" title="Thiếu Ngày Hiệu Lực/Ngày Hết Hạn">—</span>`;
+    let noteCell = '';
+    if (!r.ready) noteCell = '<span class="text-red-600">⛔ Thiếu Ngày Hiệu Lực/Ngày Hết Hạn, chưa kích hoạt được</span>';
+    else if (!r.isLatestOfEmployee) noteCell = '<span class="text-gray-500 italic">Hợp đồng Nháp cũ hơn — lịch sử, không nên kích hoạt</span>';
+    else if (r.otherDraftCount > 0) noteCell = `<span class="text-amber-700">⚠️ Còn ${r.otherDraftCount} hợp đồng Nháp cũ hơn (giữ nguyên làm lịch sử)</span>`;
+    return `<tr class="${!r.ready || !r.isLatestOfEmployee ? 'bg-gray-50' : ''}">
+      <td class="p-1 text-center">${checkCell}</td>
+      <td class="p-1 font-mono">${escapeHtml(r.employeeCode)}</td>
+      <td class="p-1">${escapeHtml(r.fullName)}</td>
+      <td class="p-1 font-mono">${escapeHtml(r.code)}</td>
+      <td class="p-1">${escapeHtml(HRC_CONTRACT_TYPE_LABELS[r.contractType] || r.contractType || '')}</td>
+      <td class="p-1">${escapeHtml(r.startDate || '')}</td>
+      <td class="p-1">${escapeHtml(r.endDate || '(Vô thời hạn)')}</td>
+      <td class="p-1">${noteCell}</td>
+    </tr>`;
+  }).join('');
+  confirmBtn.classList.toggle('hidden', !hrContractBulkActivateRows.some(r => r.checked));
+}
+
+function onHrContractBulkActivateRowToggle(idxStr) {
+  const r = hrContractBulkActivateRows[Number(idxStr)];
+  if (r) r.checked = !r.checked;
+  document.getElementById('hrContractBulkActivateConfirmBtn').classList.toggle('hidden', !hrContractBulkActivateRows.some(x => x.checked));
+}
+
+async function confirmHrContractBulkActivate() {
+  const toActivate = hrContractBulkActivateRows.filter(r => r.checked && r.ready);
+  if (!toActivate.length) return alert('Chưa chọn hợp đồng nào để kích hoạt.');
+  if (!confirm(`Kích hoạt ${toActivate.length} hợp đồng đã chọn? Với mỗi nhân viên, hợp đồng ACTIVE cũ (nếu có) sẽ tự đóng (chuyển Đã thay thế).`)) return;
+  const statusEl = document.getElementById('hrContractBulkActivateStatus');
+  let okCount = 0;
+  const failed = [];
+  // Gọi TUẦN TỰ (không Promise.all song song) — mỗi lượt kích hoạt đi qua khoá bản ghi riêng ở server,
+  // chạy tuần tự tránh dồn tải + cho phép cập nhật tiến độ rõ ràng trên màn.
+  for (let i = 0; i < toActivate.length; i++) {
+    const r = toActivate[i];
+    statusEl.innerText = `⏳ Đang kích hoạt ${i + 1}/${toActivate.length}: ${r.employeeCode}...`;
+    try {
+      const result = await callRecordAction('laborContracts', r.id, 'activate', {});
+      hrcApplyUpdate(result.item);
+      okCount++;
+    } catch (err) {
+      failed.push({ employeeCode: r.employeeCode, code: r.code, reason: err.message });
+    }
+  }
+  statusEl.innerText = '';
+  let msg = `✅ Đã kích hoạt ${okCount}/${toActivate.length} hợp đồng.`;
+  if (failed.length) {
+    msg += `\n\n⛔ ${failed.length} hợp đồng lỗi:\n` + failed.map(f => `- ${f.employeeCode} (${f.code}): ${f.reason}`).join('\n');
+  }
+  alert(msg);
+  hrContractBulkActivateRows = buildHrContractBulkActivateRows();
+  renderHrContractBulkActivateBody();
+}

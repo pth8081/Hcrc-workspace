@@ -322,7 +322,11 @@ async function partC() {
   console.log('\n== Phần C: logic thuần client (module-hopdonglaodong.js) ==');
   const vm = require('vm');
   const fs = require('fs');
-  const sandbox = { console };
+  const sandbox = {
+    console,
+    escapeHtml: (s) => String(s == null ? '' : s),
+    document: { getElementById: () => ({ classList: { toggle() {}, add() {}, remove() {} } }) }
+  };
   vm.createContext(sandbox);
   const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/module-hopdonglaodong.js'), 'utf8');
   vm.runInContext(src, sandbox, { filename: 'module-hopdonglaodong.js' });
@@ -339,6 +343,53 @@ async function partC() {
     assert.strictEqual(items[0].action, 'skip');
     assert.strictEqual(items[1].action, 'overwrite');
     assert.strictEqual(items[0].employeeCode, 'NV1', 'khớp đúng theo _idx, không phải index mảng');
+  });
+
+  // Kích Hoạt Hàng Loạt (10/2026) — buildHrContractBulkActivateRows() phải: (1) chỉ lấy hợp đồng DRAFT,
+  // (2) gom theo employeeCode, mỗi nhóm sắp xếp startDate MỚI NHẤT lên đầu, (3) mặc định chỉ tick sẵn
+  // ĐÚNG dòng đầu (mới nhất) của mỗi nhân viên, (4) dòng thiếu startDate/endDate (chưa INDEFINITE) ->
+  // ready=false, không tự tick dù là dòng mới nhất.
+  await test('buildHrContractBulkActivateRows(): lọc DRAFT, gom theo NV, chỉ tick sẵn hợp đồng MỚI NHẤT của mỗi NV', () => {
+    vm.runInContext(`
+      DB = { laborContracts: [
+        { id: 1, employeeCode: 'NV1', status: 'DRAFT', contractType: 'FIXED_TERM', startDate: '2018-01-01', endDate: '2019-12-31', code: 'HDLD-NV1-1' },
+        { id: 2, employeeCode: 'NV1', status: 'DRAFT', contractType: 'FIXED_TERM', startDate: '2020-01-01', endDate: '2021-12-31', code: 'HDLD-NV1-2' },
+        { id: 3, employeeCode: 'NV1', status: 'DRAFT', contractType: 'INDEFINITE', startDate: '2022-01-01', endDate: '', code: 'HDLD-NV1-3' },
+        { id: 4, employeeCode: 'NV2', status: 'DRAFT', contractType: 'PROBATION', startDate: '2026-01-01', endDate: '2026-03-01', code: 'HDLD-NV2-1' },
+        { id: 5, employeeCode: 'NV2', status: 'ACTIVE', contractType: 'FIXED_TERM', startDate: '2025-01-01', endDate: '2026-12-31', code: 'HDLD-NV2-0' },
+        { id: 6, employeeCode: 'NV3', status: 'DRAFT', contractType: 'FIXED_TERM', startDate: '', endDate: '', code: 'HDLD-NV3-1' }
+      ] };
+      hrcEmployeeDirectoryCache = [];
+    `, sandbox);
+    const raw = vm.runInContext('JSON.stringify(buildHrContractBulkActivateRows())', sandbox);
+    const rows = JSON.parse(raw);
+    assert.strictEqual(rows.length, 5, 'phải bỏ qua đúng hợp đồng ACTIVE (id=5), chỉ còn 5 dòng DRAFT');
+    const nv1 = rows.filter(r => r.employeeCode === 'NV1');
+    assert.strictEqual(nv1.length, 3);
+    assert.strictEqual(nv1[0].id, 3, 'dòng đầu của NV1 phải là hợp đồng có startDate mới nhất (2022, id=3)');
+    assert.strictEqual(nv1[0].checked, true, 'dòng mới nhất mặc định được tick');
+    assert.strictEqual(nv1[0].isLatestOfEmployee, true);
+    assert.strictEqual(nv1[0].otherDraftCount, 2);
+    assert.strictEqual(nv1[1].checked, false, 'hợp đồng cũ hơn (id=2) KHÔNG được tự tick');
+    assert.strictEqual(nv1[2].checked, false, 'hợp đồng cũ hơn (id=1) KHÔNG được tự tick');
+    const nv2 = rows.filter(r => r.employeeCode === 'NV2');
+    assert.strictEqual(nv2.length, 1, 'NV2 chỉ có 1 hợp đồng DRAFT (hợp đồng ACTIVE không được liệt kê)');
+    assert.strictEqual(nv2[0].checked, true);
+    const nv3 = rows.filter(r => r.employeeCode === 'NV3');
+    assert.strictEqual(nv3[0].ready, false, 'thiếu Ngày Hiệu Lực -> ready=false');
+    assert.strictEqual(nv3[0].checked, false, 'ready=false thì KHÔNG được tự tick dù là dòng duy nhất/mới nhất');
+  });
+
+  await test('onHrContractBulkActivateRowToggle(): đảo đúng checked của dòng theo index mảng', () => {
+    vm.runInContext(`hrContractBulkActivateRows = [
+      { id: 10, employeeCode: 'NV1', checked: true, ready: true },
+      { id: 11, employeeCode: 'NV2', checked: false, ready: true }
+    ];`, sandbox);
+    vm.runInContext(`onHrContractBulkActivateRowToggle('0')`, sandbox);
+    vm.runInContext(`onHrContractBulkActivateRowToggle('1')`, sandbox);
+    const after = JSON.parse(vm.runInContext('JSON.stringify(hrContractBulkActivateRows)', sandbox));
+    assert.strictEqual(after[0].checked, false);
+    assert.strictEqual(after[1].checked, true);
   });
 }
 

@@ -9,6 +9,7 @@
           <a href="/api/labor-contracts/create-template" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">📥 Tải Mẫu Tạo Mới</a>
           <button type="button" data-op="openHrContractCreateImportModal" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">📤 Nhập Excel Tạo Mới</button>
           <button type="button" data-op="openHrContractCreateModal" class="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-teal-700">➕ Tạo Hợp Đồng Mới</button>
+          <button type="button" data-op="openHrContractBulkActivateModal" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-amber-700">⚡ Kích Hoạt Hàng Loạt</button>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -97,5 +98,39 @@
           </table>
         </div>
         <button type="button" id="hrContractCreateImportConfirmBtn" data-op="confirmHrContractCreateImport" class="hidden bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Tạo/Ghi Đè</button>
+      </div>
+    </div>
+
+    <!-- Modal "Kích Hoạt Hàng Loạt" (10/2026) — danh sách TẤT CẢ hợp đồng Nháp hiện có, gom theo Mã Nhân
+         Viên; mặc định chỉ tick sẵn đúng 1 dòng/nhân viên (hợp đồng Nháp có Ngày Hiệu Lực mới nhất) để
+         tránh kích hoạt nhầm hợp đồng lịch sử — xem chú thích đầy đủ ở buildHrContractBulkActivateRows()
+         (module-hopdonglaodong.js). -->
+    <div id="hrContractBulkActivateModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-bold text-base">⚡ Kích Hoạt Hàng Loạt Hợp Đồng</h3>
+          <button type="button" data-op="closeHrContractBulkActivateModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-2">Liệt kê mọi hợp đồng đang ở trạng thái 📝 Nháp. Với nhân viên có NHIỀU hợp đồng Nháp (di trú lịch sử), hệ thống tự tick sẵn đúng hợp đồng có Ngày Hiệu Lực MỚI NHẤT (coi là hợp đồng hiện tại) — các hợp đồng Nháp cũ hơn KHÔNG có ô tick, giữ nguyên trạng thái Nháp để tiếp tục tính vào lịch sử trên Hồ Sơ Nhân Sự. Bỏ tick dòng nào nếu chưa muốn kích hoạt.</p>
+        <div class="border rounded max-h-96 overflow-y-auto mb-2">
+          <table class="w-full text-[11px]">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr>
+                <th class="p-1 text-center">Kích Hoạt</th>
+                <th class="p-1 text-left">Mã NV</th>
+                <th class="p-1 text-left">Họ Tên</th>
+                <th class="p-1 text-left">Mã HĐ</th>
+                <th class="p-1 text-left">Loại HĐ</th>
+                <th class="p-1 text-left">Ngày Hiệu Lực</th>
+                <th class="p-1 text-left">Ngày Hết Hạn</th>
+                <th class="p-1 text-left">Ghi Chú</th>
+              </tr>
+            </thead>
+            <tbody id="hrContractBulkActivateBody"></tbody>
+          </table>
+          <p id="hrContractBulkActivateEmpty" class="hidden text-center text-gray-400 text-xs py-4">Không có hợp đồng Nháp nào cần kích hoạt.</p>
+        </div>
+        <p id="hrContractBulkActivateStatus" class="text-xs mb-2"></p>
+        <button type="button" id="hrContractBulkActivateConfirmBtn" data-op="confirmHrContractBulkActivate" class="hidden bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✅ Kích Hoạt Đã Chọn</button>
       </div>
     </div>
