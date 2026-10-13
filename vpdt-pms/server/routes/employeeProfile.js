@@ -19,6 +19,8 @@ const employeeProfile = require('../lib/employeeProfile');
 const employeeProfileImport = require('../lib/employeeProfileImport');
 const { canManageContracts } = require('../lib/laborContract');
 const orgChart = require('../lib/orgChart');
+const { assignPositionToProfile } = require('../lib/hrProfilePositionAssign');
+const hrProfilePositionAssignImport = require('../lib/hrProfilePositionAssignImport');
 const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const { parseVNDateTime, cancelHrProcess } = require('../lib/recordActions');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -387,29 +389,89 @@ router.post('/by-code/:employeeCode/set-position', async (req, res) => {
     const positionKey = String(req.body?.positionKey || '').trim();
     if (!positionKey) return res.status(400).json({ error: 'Vui lòng chọn chức vụ từ Cơ Cấu Tổ Chức' });
     const effectiveDate = req.body?.effectiveDate ? String(req.body.effectiveDate).trim() : null;
-    const note = req.body?.note;
-    const fileUrl = req.body?.fileUrl;
-    const fileName = req.body?.fileName;
-    const orgChartVersions = (await getAppDataValue('orgChartVersions')) || [];
-    const applied = orgChart.getAppliedVersion(orgChartVersions);
-    let updated, syncTarget = null;
-    await withLockedAppDataValue('employeeProfiles', async (list) => {
-      const profile = employeeProfile.findProfile(list, req.params.employeeCode);
-      if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
-      const result = employeeProfile.applyPositionAssignment(profile, applied, positionKey, effectiveDate, req.freshUser.username, req.freshUser.name, note, fileUrl, fileName);
-      await assertPayloadFileUrlsOwnedByUser({ fileUrl }, req.freshUser);
-      updated = profile;
-      if (profile.username) syncTarget = { username: profile.username, jobTitle: result.jobTitle, dept: result.dept, posType: result.posType };
-      return list;
+    // assignPositionToProfile() (lib/hrProfilePositionAssign.js) — TÁCH DÙNG CHUNG với route nhập Excel
+    // Gán Chức Vụ hàng loạt mới (POST /position-assign-apply bên dưới), hành vi giữ NGUYÊN 100%.
+    const updated = await assignPositionToProfile(req.params.employeeCode, positionKey, req.freshUser, {
+      effectiveDate, note: req.body?.note, fileUrl: req.body?.fileUrl, fileName: req.body?.fileName
     });
-    if (syncTarget) {
-      await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-        u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
-      ));
-    }
     logHrProfileAction(req, 'SET_POSITION', req.params.employeeCode, `Gán chức vụ cho hồ sơ [${req.params.employeeCode}]: ${updated.positionLabel || positionKey}`);
     res.json({ ok: true, profile: updated });
   } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/set-position`); }
+});
+
+// GET /api/hr-profile/position-assign-template — mẫu Excel để Gán Chức Vụ hàng loạt.
+router.get('/position-assign-template', requireProfileEdit, async (req, res) => {
+  try {
+    const wb = hrProfilePositionAssignImport.buildAssignTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Gan_Chuc_Vu.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/hr-profile/position-assign-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+// POST /api/hr-profile/position-assign-parse-import — đọc file đã điền, trả về xem trước (KHÔNG lưu gì).
+router.post('/position-assign-parse-import', uploadRateLimiter, requireProfileEdit, (req, res) => {
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/hr-profile/position-assign-parse-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần tải lên' });
+    req.file.originalname = fixUploadedFilename(req.file.originalname);
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const buffer = fs.readFileSync(req.file.path);
+      const check = await verifyFileSignature(buffer, ext);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+      const appData = await getAllAppData();
+      const items = await hrProfilePositionAssignImport.parseAssignImportBuffer(buffer, appData);
+      res.json({ items, fileName: req.file.originalname });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/hr-profile/position-assign-parse-import');
+    } finally {
+      fs.unlink(req.file.path, () => {});
+    }
+  });
+});
+
+// POST /api/hr-profile/position-assign-apply — áp dụng hàng loạt Gán Chức Vụ đã HR xem trước. Mỗi dòng
+// đi qua ĐÚNG assignPositionToProfile() (lib/hrProfilePositionAssign.js, DÙNG CHUNG với route gán tay
+// đơn lẻ ở trên) — không viết lại business rule nào, Zero-Trust (không tin cờ positionKey đã khớp ở
+// bước xem trước, applyPositionAssignment() tự validate lại positionKey có thật trong bản Cơ Cấu Tổ
+// Chức đang áp dụng từ đầu). 1 dòng lỗi KHÔNG chặn các dòng còn lại — trả về updated[]/skipped[]. Chạy
+// TUẦN TỰ (không Promise.all) — mỗi dòng tự khoá employeeProfiles rồi users, tránh N luồng tranh chấp
+// khoá cùng lúc.
+router.post('/position-assign-apply', requireProfileEdit, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'Thiếu danh sách dòng cần gán' });
+    if (items.length > hrProfilePositionAssignImport.MAX_ROWS_PER_IMPORT) {
+      return res.status(400).json({ error: `Vượt quá ${hrProfilePositionAssignImport.MAX_ROWS_PER_IMPORT} dòng/lần — vui lòng chia nhỏ.` });
+    }
+    const updated = [];
+    const skipped = [];
+    for (const row of items) {
+      const employeeCode = String(row?.employeeCode || '').trim();
+      const positionKey = String(row?.positionKey || '').trim();
+      if (!employeeCode) { skipped.push({ employeeCode: '(thiếu Mã NV)', reason: 'Thiếu Mã Nhân Viên' }); continue; }
+      if (!positionKey) { skipped.push({ employeeCode, reason: 'Thiếu vị trí (chưa khớp được ở bước xem trước)' }); continue; }
+      try {
+        const profile = await assignPositionToProfile(employeeCode, positionKey, req.freshUser, {});
+        updated.push(profile);
+      } catch (rowErr) {
+        skipped.push({ employeeCode, reason: rowErr.message || 'Lỗi không xác định' });
+      }
+    }
+    if (updated.length) {
+      logHrProfileAction(req, 'BULK_IMPORT', '', `Nhập Excel Gán Chức Vụ hàng loạt: gán ${updated.length}, bỏ qua ${skipped.length} hồ sơ`);
+    }
+    res.json({ ok: true, updated, skipped });
+  } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile/position-assign-apply'); }
 });
 
 // GET /api/hr-profile/by-code/:employeeCode/history — "Lịch Sử Nhân Sự" gộp xuyên suốt hồ sơ: chức vụ

@@ -348,6 +348,9 @@ function setHrProfileView(view) {
   document.getElementById('hrpfManageCreateBtn').classList.toggle('hidden', !hrpfCanCreate());
   document.getElementById('hrpfManageImportBtn').classList.toggle('hidden', !hrpfCanCreate());
   document.getElementById('hrpfManageExportBtn').classList.toggle('hidden', !hrpfCanFullView());
+  // Gán Chức Vụ Hàng Loạt (10/2026) — cùng quyền "🏷️ Gán/Đổi Chức Vụ" tay ở Chi Tiết hồ sơ
+  // (requireProfileEdit phía server, xem hrpfCanEdit()).
+  document.getElementById('hrpfManagePositionAssignBtn').classList.toggle('hidden', !hrpfCanEdit());
   document.getElementById('hrpfManageFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
   document.getElementById('hrpfSelfFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
   document.getElementById('hrpfManageListWrap').classList.toggle('hidden', !hrpfCanFullView());
@@ -1240,6 +1243,100 @@ async function confirmHrpfImport() {
     }
     alert(msg);
     closeHrpfImportModal();
+    loadHrProfileManageList();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+// ===================== Gán Chức Vụ Hàng Loạt (10/2026) =====================
+// Mỗi dòng gọi lại ĐÚNG POST /api/hr-profile/position-assign-apply -> assignPositionToProfile()
+// (lib/hrProfilePositionAssign.js, DÙNG CHUNG với "🏷️ Gán/Đổi Chức Vụ" tay ở Chi Tiết hồ sơ). Cùng
+// khuôn modal Nhập Excel Hồ Sơ Nhân Sự ở trên: chọn file -> xem trước -> xác nhận.
+let hrpfPositionAssignImportPreviewItems = [];
+
+function openHrpfPositionAssignImportModal() {
+  hrpfPositionAssignImportPreviewItems = [];
+  document.getElementById('hrpfPositionAssignImportFileInput').value = '';
+  document.getElementById('hrpfPositionAssignImportStatus').innerText = '';
+  document.getElementById('hrpfPositionAssignImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrpfPositionAssignImportConfirmBtn').classList.add('hidden');
+  document.getElementById('hrpfPositionAssignImportModal').classList.remove('hidden');
+}
+function closeHrpfPositionAssignImportModal() {
+  document.getElementById('hrpfPositionAssignImportModal').classList.add('hidden');
+}
+
+async function onHrpfPositionAssignImportFileChange(event) {
+  const file = event.target.files[0];
+  hrpfPositionAssignImportPreviewItems = [];
+  document.getElementById('hrpfPositionAssignImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrpfPositionAssignImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('hrpfPositionAssignImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/hr-profile/position-assign-parse-import', { method: 'POST', body: formData });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      it.action = (it.valid && !it.duplicateInFile) ? 'add' : 'skip';
+    });
+    hrpfPositionAssignImportPreviewItems = data.items;
+    const addableCount = data.items.filter(it => it.valid && !it.duplicateInFile).length;
+    const dupCount = data.items.filter(it => it.duplicateInFile).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${data.items.length} dòng, ${addableCount} dòng sẵn sàng gán`
+      + (dupCount ? `, ${dupCount} dòng TRÙNG MÃ NHÂN VIÊN trong file (đã bỏ chọn sẵn, tự tick lại nếu vẫn muốn áp dụng).` : '.');
+    document.getElementById('hrpfPositionAssignImportPreviewBody').innerHTML = data.items.map((it) => {
+      let statusCell;
+      if (!it.valid) {
+        statusCell = `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
+      } else {
+        statusCell = `<label class="text-xs"><input type="checkbox" data-op-change="onHrpfPositionAssignImportRowToggle" data-arg0="${it._idx}" ${it.action === 'add' ? 'checked' : ''}> Gán chức vụ: ${escapeHtml(it.positionLabel)}</label>`
+          + (it.duplicateInFile ? ' <span class="text-amber-700">⚠️ Trùng mã trong file</span>' : '');
+      }
+      return `<tr class="${!it.valid || it.duplicateInFile ? 'bg-amber-50' : ''}">
+        <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
+        <td class="p-1">${escapeHtml(it.dept || '')}</td>
+        <td class="p-1">${escapeHtml(it.jobTitle || '')}</td>
+        <td class="p-1">${statusCell}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('hrpfPositionAssignImportPreviewWrap').classList.remove('hidden');
+    if (addableCount > 0) document.getElementById('hrpfPositionAssignImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+function onHrpfPositionAssignImportRowToggle(idxStr) {
+  const it = hrpfPositionAssignImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = (it.action === 'add') ? 'skip' : 'add';
+}
+
+async function confirmHrpfPositionAssignImport() {
+  const submitItems = hrpfPositionAssignImportPreviewItems.filter(it => it.valid && it.action === 'add');
+  if (!submitItems.length) return alert('Chưa chọn dòng nào để gán.');
+  try {
+    const res = await fetch('/api/hr-profile/position-assign-apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: submitItems.map(it => ({ employeeCode: it.employeeCode, positionKey: it.positionKey })) })
+    });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    let msg = `✅ Đã gán chức vụ ${data.updated.length}/${submitItems.length} hồ sơ.`;
+    if (data.skipped.length) {
+      msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
+    }
+    alert(msg);
+    closeHrpfPositionAssignImportModal();
     loadHrProfileManageList();
   } catch (err) {
     alert('⛔ ' + err.message);

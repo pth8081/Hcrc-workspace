@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**25.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.89 (2026-11): Nhập Excel Gán Chức Vụ hàng loạt ở Hồ Sơ Nhân Sự
+
+Theo yêu cầu người dùng (di trú 500 nhân viên) — khép kín nốt 2 trường cuối cùng trong 84 trường chưa có
+đường nhập hàng loạt (Cấp Bậc + chuỗi Mã/Họ Tên Quản Lý Trực Tiếp/Quản Lý Cấp Trên), sau khi Nhập Excel
+Hồ Sơ Nhân Sự + Nhập Excel Quản Lý Người Dùng + Nhập Excel/Tạo Hợp Đồng Mới ở Hợp Đồng Lao Động đã phủ
+hết phần còn lại.
+
+Tab "📋 Quản Lý Hồ Sơ" (Hồ Sơ Nhân Sự) nay có thêm nút **"🏷️ Gán Chức Vụ Hàng Loạt"**: mỗi dòng Excel
+khớp Phòng Ban/Siêu Thị + Chức Danh với ĐÚNG 1 vị trí có thật trong Cơ Cấu Tổ Chức đang áp dụng (tái
+dùng nguyên `orgChart.findPositionNodeForUser()` đã có sẵn, không viết lại logic khớp vị trí mới), rồi
+gọi lại ĐÚNG hàm gán chức vụ dùng chung với nút "🏷️ Gán/Đổi Chức Vụ" tay ở Chi Tiết hồ sơ (tách thành
+`lib/hrProfilePositionAssign.js::assignPositionToProfile()`) — hành vi route tạo tay giữ nguyên 100%,
+không có đường tắt bỏ qua business rule. Giới hạn 500 dòng/lần (đúng quy mô di trú người dùng nêu).
 
 ## v25.88 (2026-11): Tự động liên kết Tài Khoản VPDT khi Nhập Excel Hồ Sơ Nhân Sự
 

@@ -1939,6 +1939,34 @@
     </div>
   </div>
 
+  <!-- Modal "Nhập Excel GÁN CHỨC VỤ hàng loạt" (10/2026, theo yêu cầu người dùng: di trú 500 nhân viên —
+       đây là bước DUY NHẤT còn thiếu đường nhập hàng loạt để điền nốt Cấp Bậc + chuỗi Quản Lý Trực Tiếp/
+       QL Cấp Trên). Mỗi dòng gọi lại ĐÚNG assignPositionToProfile() (lib/hrProfilePositionAssign.js) —
+       DÙNG CHUNG với "🏷️ Gán/Đổi Chức Vụ" tay ở Chi Tiết hồ sơ, không viết lại business rule mới. -->
+  <div id="hrpfPositionAssignImportModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-base text-gray-800">🏷️ Nhập Excel Gán Chức Vụ Hàng Loạt</h3>
+        <button type="button" data-op="closeHrpfPositionAssignImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+      <p class="text-[11px] text-gray-500 mb-2">Dùng cho hồ sơ ĐÃ CÓ SẴN trong Hồ Sơ Nhân Sự — mỗi dòng khớp Phòng Ban/Siêu Thị + Chức Danh với 1 vị trí có thật trong Cơ Cấu Tổ Chức đang áp dụng, tự điền Cấp Bậc + tự tính Quản Lý Trực Tiếp/Quản Lý Cấp Trên theo đúng cây tổ chức.</p>
+      <div class="flex flex-wrap items-center gap-3 mb-2">
+        <a href="/api/hr-profile/position-assign-template" class="text-indigo-600 font-bold text-xs hover:underline">⬇️ Tải Mẫu Excel</a>
+        <input id="hrpfPositionAssignImportFileInput" type="file" accept=".xlsx,.xls" data-op-change="onHrpfPositionAssignImportFileChange" data-arg-event="0" class="text-xs">
+      </div>
+      <p id="hrpfPositionAssignImportStatus" class="text-xs text-gray-500 mb-2"></p>
+      <div id="hrpfPositionAssignImportPreviewWrap" class="hidden border rounded max-h-72 overflow-y-auto mb-2">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-100 text-left sticky top-0"><tr>
+            <th class="p-1">Mã NV</th><th class="p-1">Phòng Ban/Siêu Thị</th><th class="p-1">Chức Danh</th><th class="p-1">Trạng Thái</th>
+          </tr></thead>
+          <tbody id="hrpfPositionAssignImportPreviewBody"></tbody>
+        </table>
+      </div>
+      <button type="button" id="hrpfPositionAssignImportConfirmBtn" data-op="confirmHrpfPositionAssignImport" class="hidden bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Xác Nhận Gán Các Dòng Hợp Lệ</button>
+    </div>
+  </div>
+
   <!-- Cấu hình trường xem của quản lý trực tiếp (9/2026) — chọn field NHẠY CẢM nào (subset
        lib/employeeProfile.js::SENSITIVE_FIELDS) mở thêm cho hrProfileView (KHÔNG có hrProfileManage) xem
        khi tra hồ sơ nhân viên mình quản lý — xem GET/PUT /api/hr-profile/manager-field-config. -->
