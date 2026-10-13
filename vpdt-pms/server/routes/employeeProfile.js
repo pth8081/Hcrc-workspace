@@ -190,6 +190,10 @@ function stripForList(profile) {
     employeeCode: profile.employeeCode, username: profile.username, status: profile.status,
     createdAt: profile.createdAt, updatedAt: profile.updatedAt,
     dept: profile.dept, jobTitle: profile.jobTitle, positionLabel: profile.positionLabel,
+    // jobGrade (10/2026, phục vụ "Xuất Excel" của Gán Chức Vụ Hàng Loạt — module-hrprofile.js) — KHÔNG
+    // nhạy cảm (đã hiện sẵn ở Chi Tiết hồ sơ cho mọi vai trò xem được hồ sơ), bổ sung vào đây để màn
+    // Quản Lý Hồ Sơ xuất được NGAY từ danh sách đã tải, không cần round-trip thêm.
+    jobGrade: profile.jobGrade || null,
     processId: profile.processId,
     onboardingQueueStatus: profile.onboardingQueueStatus || null,
     onboardingQueueCancelReason: profile.onboardingQueueCancelReason || null,
@@ -1129,6 +1133,12 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
 
     const canOverwrite = employeeProfile.canEditProfiles(req.freshUser);
     const results = { created: [], updated: [], skipped: [] };
+    // Hồ sơ MỚI TẠO (không phải ghi đè) có liên kết tài khoản VPDT (tự động hoặc HR tự chọn tay ở bước
+    // xem trước) — thu lại để, SAU KHI đã nhả khoá employeeProfiles, thử tự Gán Chức Vụ nếu Phòng Ban/
+    // Chức Danh của chính tài khoản đó khớp ĐÚNG 1 vị trí có thật trong Cơ Cấu Tổ Chức đang áp dụng (xem
+    // khối "tự động Gán Chức Vụ" ngay dưới — theo câu hỏi người dùng 11/2026: "hồ sơ tự động liên kết
+    // tài khoản mà tài khoản đã có chức vụ/phòng ban rồi thì có tự update không").
+    const newlyLinked = [];
     await withLockedAppDataValue('employeeProfiles', (list) => {
       for (const row of rows) {
         try {
@@ -1153,6 +1163,7 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
               currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
             });
             results.created.push(created.employeeCode);
+            if (created.username) newlyLinked.push({ employeeCode: created.employeeCode, username: created.username });
           }
         } catch (rowErr) {
           results.skipped.push({ employeeCode: row?.employeeCode || '(thiếu Mã NV)', reason: rowErr.message });
@@ -1160,10 +1171,39 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
       }
       return list;
     });
-    if (results.created.length || results.updated.length) {
-      logHrProfileAction(req, 'BULK_IMPORT', '', `Nhập Excel Hồ Sơ Nhân Sự: tạo mới ${results.created.length}, ghi đè ${results.updated.length}, bỏ qua ${results.skipped.length} hồ sơ`);
+    // Tự động Gán Chức Vụ cho hồ sơ vừa liên kết tài khoản (11/2026) — CHỈ khi người thực hiện import
+    // CŨNG có quyền "Sửa Hồ Sơ Nhân Sự" (hrProfileEdit, đúng quyền route gán tay/Gán Chức Vụ Hàng Loạt
+    // yêu cầu — xem requireProfileEdit) để KHÔNG mở lối tắt cho người chỉ có hrProfileCreate thực hiện
+    // được 1 hành động lẽ ra cần hrProfileEdit. CHẠY NGOÀI khối withLockedAppDataValue('employeeProfiles')
+    // ở trên — assignPositionToProfile() tự khoá lại employeeProfiles rồi users, lồng khoá cùng khoá bên
+    // trong 1 lượt withLockedAppDataValue khác sẽ treo (deadlock). Chỉ gán khi Phòng Ban+Chức Danh của
+    // CHÍNH tài khoản vừa liên kết khớp ĐÚNG 1 vị trí thật trong cây — không khớp/khớp nhiều vị trí/chưa
+    // có bản Cơ Cấu Tổ Chức nào áp dụng thì bỏ qua lặng lẽ (hồ sơ vẫn tạo xong, HR tự dùng "Gán Chức Vụ
+    // Hàng Loạt" sau cho các trường hợp này — KHÔNG thay thế hẳn tính năng đó, chỉ giảm thao tác lặp lại
+    // cho những dòng đã khớp sẵn).
+    let autoAssignedCount = 0;
+    if (newlyLinked.length && canOverwrite) {
+      const appliedVersion = orgChart.getAppliedVersion(appData.orgChartVersions || []);
+      if (appliedVersion) {
+        for (const { employeeCode, username } of newlyLinked) {
+          try {
+            const account = (appData.users || []).find(u => u.username === username);
+            if (!account || !account.dept || !account.jobTitle) continue;
+            const node = orgChart.findPositionNodeForUser(appliedVersion, account);
+            if (!node) continue;
+            await assignPositionToProfile(employeeCode, node.positionKey, req.freshUser, {
+              note: 'Tự động gán khi Nhập Excel Hồ Sơ Nhân Sự liên kết tài khoản VPDT đã có sẵn Phòng Ban/Chức Danh khớp Cơ Cấu Tổ Chức'
+            });
+            autoAssignedCount++;
+          } catch (e) { /* bỏ qua lặng lẽ — hồ sơ vẫn tạo xong, HR tự Gán Chức Vụ tay/hàng loạt sau */ }
+        }
+      }
     }
-    res.json({ ok: true, ...results });
+    if (results.created.length || results.updated.length) {
+      logHrProfileAction(req, 'BULK_IMPORT', '', `Nhập Excel Hồ Sơ Nhân Sự: tạo mới ${results.created.length}, ghi đè ${results.updated.length}, bỏ qua ${results.skipped.length} hồ sơ` +
+        (autoAssignedCount ? `, tự động Gán Chức Vụ ${autoAssignedCount} hồ sơ (tài khoản liên kết đã khớp vị trí có thật)` : ''));
+    }
+    res.json({ ok: true, ...results, autoAssignedCount });
   } catch (err) { sendCatchError(res, err, 'POST /api/hr-profile/bulk-import'); }
 });
 

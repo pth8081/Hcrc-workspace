@@ -351,6 +351,7 @@ function setHrProfileView(view) {
   // Gán Chức Vụ Hàng Loạt (10/2026) — cùng quyền "🏷️ Gán/Đổi Chức Vụ" tay ở Chi Tiết hồ sơ
   // (requireProfileEdit phía server, xem hrpfCanEdit()).
   document.getElementById('hrpfManagePositionAssignBtn').classList.toggle('hidden', !hrpfCanEdit());
+  document.getElementById('hrpfManagePositionAssignExportBtn').classList.toggle('hidden', !hrpfCanFullView());
   document.getElementById('hrpfManageFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
   document.getElementById('hrpfSelfFieldConfigBtn').classList.toggle('hidden', !currentUser.perms?.hrProfileManage);
   document.getElementById('hrpfManageListWrap').classList.toggle('hidden', !hrpfCanFullView());
@@ -1238,6 +1239,10 @@ async function confirmHrpfImport() {
   try {
     const data = await hrProfileApiCall('POST', '/api/hr-profile/bulk-import', { items: submitItems });
     let msg = `✅ Đã thêm mới ${data.created.length} + ghi đè ${data.updated.length}/${submitItems.length} hồ sơ.`;
+    // Tự động Gán Chức Vụ (11/2026) — hồ sơ vừa liên kết tài khoản VPDT đã có sẵn Phòng Ban/Chức Danh
+    // khớp đúng 1 vị trí thật trong Cơ Cấu Tổ Chức đang áp dụng được tự điền Cấp Bậc + Quản Lý Trực Tiếp
+    // luôn, không cần chạy riêng "Gán Chức Vụ Hàng Loạt" cho các dòng này nữa.
+    if (data.autoAssignedCount) msg += `\n🏷️ Đã tự động Gán Chức Vụ cho ${data.autoAssignedCount} hồ sơ (tài khoản liên kết đã khớp sẵn vị trí trong Cơ Cấu Tổ Chức).`;
     if (data.skipped.length) {
       msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.employeeCode}: ${s.reason}`).join('\n');
     }
@@ -1341,6 +1346,36 @@ async function confirmHrpfPositionAssignImport() {
   } catch (err) {
     alert('⛔ ' + err.message);
   }
+}
+
+// exportHrpfPositionAssignExcel() (10/2026, theo yêu cầu người dùng) — xuất TRẠNG THÁI Gán Chức Vụ hiện
+// tại của toàn bộ hồ sơ đang hiện ở "Quản Lý Hồ Sơ" (_hrpfManageList đã tải sẵn, KHÔNG gọi thêm API nào
+// — cùng khuôn exportHrProcessExcel() ở module-hrlifecycle.js: client tự dựng columns/rows rồi gọi route
+// dùng chung POST /api/admin/export-xlsx). Dùng để đối chiếu/kiểm tra nhanh "ai đã gán xong, ai còn
+// thiếu" sau mỗi đợt Nhập Excel Gán Chức Vụ hàng loạt, KHÔNG thay thế "📊 Xuất Excel" đầy đủ field cá
+// nhân của Hồ Sơ Nhân Sự (chỉ 7 cột liên quan trực tiếp chức vụ). Quản Lý Trực Tiếp tự tra qua DB.users
+// (username -> managerUsername -> tên) — _hrpfManageList không mang field này (stripForList() không đưa
+// managerUsername vào danh sách rút gọn, chỉ có ở Chi Tiết hồ sơ).
+function exportHrpfPositionAssignExcel() {
+  if (!_hrpfManageList.length) return alert('Chưa có hồ sơ nào để xuất.');
+  const columns = [
+    { header: 'Mã Nhân Viên', key: 'employeeCode', width: 16 }, { header: 'Họ Và Tên', key: 'fullName', width: 24 },
+    { header: 'Phòng Ban/Siêu Thị', key: 'dept', width: 24 }, { header: 'Chức Danh', key: 'jobTitle', width: 22 },
+    { header: 'Cấp Bậc', key: 'jobGrade', width: 12 }, { header: 'Vị Trí (Cơ Cấu Tổ Chức)', key: 'positionLabel', width: 28 },
+    { header: 'Quản Lý Trực Tiếp', key: 'managerName', width: 22 }, { header: 'Trạng Thái Gán', key: 'assignStatus', width: 14 },
+    { header: 'Cập Nhật Lần Cuối', key: 'updatedAt', width: 20 }
+  ];
+  const data = _hrpfManageList.map(p => {
+    const idn = hrpfIdentitySnapshot(p);
+    const account = p.username ? (DB.users || []).find(u => u.username === p.username) : null;
+    const mgr = account?.managerUsername ? (DB.users || []).find(u => u.username === account.managerUsername) : null;
+    return {
+      employeeCode: p.employeeCode, fullName: idn.fullName || '', dept: p.dept || '', jobTitle: p.jobTitle || '',
+      jobGrade: p.jobGrade || '', positionLabel: p.positionLabel || '', managerName: mgr?.name || '',
+      assignStatus: p.positionLabel ? 'Đã gán' : 'Chưa gán', updatedAt: p.updatedAt || ''
+    };
+  });
+  downloadXlsxFromServer('Gan_Chuc_Vu.xlsx', 'Gán Chức Vụ', columns, data);
 }
 
 // ===================== Render form dùng chung (ME / MANAGE) =====================

@@ -2972,6 +2972,16 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   Tịch, Tình Trạng Hôn Nhân, Ngày/Nơi Cấp CCCD, Vị Trí Bàn Làm Việc, Ngày Nghỉ
   Hưu Dự Kiến, BHXH Tại Đơn Vị Này (Cấp Bậc/Kiêm nhiệm chức danh KHÔNG nhập
   qua Excel này, xem 2 mục ngay trên).
+  - **Tự động liên kết Tài Khoản VPDT (11/2026, theo yêu cầu người dùng, phục
+    vụ di trú dữ liệu cũ)**: khi "📤 Nhập Excel" mà cột "Tài Khoản VPDT" để
+    TRỐNG, hệ thống tự tìm 1 tài khoản đang hoạt động có **username TRÙNG
+    ĐÚNG Mã Nhân Viên** để liên kết sẵn (bước xem trước hiện rõ nhãn "🔗 tự
+    động") — không khớp/khớp sai thì giữ trống như cũ, HR tự "Liên Kết Tài
+    Khoản VPDT" tay cho các trường hợp còn lại. Họ Tên/Phòng Ban/Chức Danh
+    của hồ sơ sau khi liên kết hiện ĐÚNG theo tài khoản ngay (các trường này
+    luôn lấy LIVE từ tài khoản liên kết, không cần đồng bộ gì thêm) — riêng
+    **Cấp Bậc** thì KHÔNG tự có theo cách này (xem "🏷️ Gán Chức Vụ Hàng Loạt"
+    ngay dưới, mục Vị Trí Kiêm Nhiệm).
 - **Mã Nhân Viên tự sinh** (9/2026): để trống khi tạo (tay/Onboarding) sẽ tự
   cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
   tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo
@@ -3098,6 +3108,27 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
   **từ nay chỉ đọc** cho tài khoản đã liên kết hồ sơ (hiện ghi chú trỏ về
   Chi tiết hồ sơ), vẫn gõ tay được như cũ cho tài khoản KHÔNG liên kết hồ sơ
   nào (VD tài khoản kỹ thuật/admin hệ thống).
+- **"🏷️ Gán Chức Vụ Hàng Loạt" (10/2026, theo yêu cầu người dùng — di trú 500
+  nhân viên)**: ở "Quản Lý Hồ Sơ", đủ cả 3 nút **Tải Mẫu/Nhập Excel/Xuất
+  Excel** (quyền "✏️ Sửa" hồ sơ, cùng quyền nút "🏷️ Gán/Đổi Chức Vụ" tay ở
+  Chi tiết hồ sơ) — mỗi dòng Excel khớp Phòng Ban/Siêu Thị + Chức Danh với
+  ĐÚNG 1 vị trí có thật trong Cơ Cấu Tổ Chức đang áp dụng rồi gán luôn (tự
+  điền Cấp Bậc + Quản Lý Trực Tiếp/Quản Lý Cấp Trên theo đúng cây, đồng bộ cả
+  Phòng Ban/Chức Danh xuống tài khoản VPDT liên kết nếu có — y hệt "Gán/Đổi
+  Chức Vụ" tay). Khớp sai/không khớp (sai chính tả, vị trí chưa có trong cây)
+  bị báo lỗi rõ ở bước xem trước, không chặn các dòng khớp đúng khác. Nút
+  "📊 Xuất Excel" (quyền "👁️ Xem Toàn Bộ") xuất Mã NV/Họ Tên/Phòng Ban/Chức
+  Danh/Cấp Bậc/Vị Trí/Quản Lý Trực Tiếp/Trạng Thái Gán/Cập Nhật Lần Cuối —
+  tiện rà soát hồ sơ nào còn thiếu Cấp Bậc cần gán tiếp.
+  - **Tự động Gán Chức Vụ khi liên kết tài khoản đã khớp sẵn (11/2026)**: khi
+    "📤 Nhập Excel" Hồ Sơ Nhân Sự **tạo mới** 1 hồ sơ có liên kết tài khoản
+    (tự động hoặc HR tự chọn ở bước xem trước), nếu Phòng Ban/Chức Danh của
+    CHÍNH tài khoản đó đã khớp ĐÚNG 1 vị trí có thật trong Cơ Cấu Tổ Chức
+    đang áp dụng, hệ thống **tự Gán Chức Vụ luôn** (Cấp Bậc tự điền ngay,
+    không cần chạy riêng "🏷️ Gán Chức Vụ Hàng Loạt" cho dòng này nữa) — chỉ
+    áp dụng khi người nhập CŨNG có quyền "✏️ Sửa" hồ sơ. Không khớp/chưa có
+    Cơ Cấu Tổ Chức áp dụng/ghi đè hồ sơ đã có thì bỏ qua lặng lẽ như cũ, vẫn
+    cần dùng "🏷️ Gán Chức Vụ Hàng Loạt" cho các trường hợp này.
 - **3 trường hành chính mới (10/2026, chỉ HR sửa, KHÔNG qua cơ chế "mở trường
   xem" vì không phải dữ liệu riêng tư — luôn hiển thị như Phòng Ban/Chức
   Danh)**: **Vị trí bàn làm việc**, **Ngày nghỉ hưu dự kiến**, **BHXH tại đơn

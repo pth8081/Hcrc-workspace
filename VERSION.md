@@ -1,8 +1,29 @@
 # Phiên bản hiện tại
 
-**25.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.90 (2026-11): Xuất Excel Gán Chức Vụ + tự động Gán Chức Vụ khi liên kết tài khoản đã khớp sẵn vị trí
+
+Theo yêu cầu người dùng ("làm nút xuất excel cho gán chức vụ luôn đi") — bổ sung nút **"📊 Xuất Excel
+Gán Chức Vụ"** ở tab "📋 Quản Lý Hồ Sơ" (Hồ Sơ Nhân Sự), khép kín đủ bộ 3 nút Tải Mẫu/Nhập/Xuất cho tính
+năng "🏷️ Gán Chức Vụ Hàng Loạt" (v25.89) — đọc thẳng danh sách hồ sơ đã tải (`_hrpfManageList`, không
+gọi API thêm), xuất Mã NV/Họ Tên/Phòng Ban/Chức Danh/Cấp Bậc/Vị Trí/Quản Lý Trực Tiếp/Trạng Thái Gán/Cập
+Nhật Lần Cuối qua route dùng chung `POST /api/admin/export-xlsx`.
+
+Đồng thời xử lý câu hỏi người dùng đặt ra ("hồ sơ tự động liên kết tài khoản mà tài khoản đã có chức vụ/
+phòng ban rồi thì có update ngược lại không?"): rà soát cho thấy Họ Tên/Phòng Ban/Chức Danh ĐÃ tự hiện
+đúng ngay khi liên kết (đọc LIVE từ tài khoản, không cần đồng bộ gì thêm) — nhưng **Cấp Bậc** thì KHÔNG,
+vì `users` không có trường này (chỉ `employeeProfiles.jobGrade`, do `applyPositionAssignment()` ghi).
+Nay khi Nhập Excel Hồ Sơ Nhân Sự **tạo mới** 1 hồ sơ có liên kết tài khoản (tự động hoặc HR tự chọn ở
+bước xem trước), nếu Phòng Ban/Chức Danh của CHÍNH tài khoản đó khớp ĐÚNG 1 vị trí có thật trong Cơ Cấu
+Tổ Chức đang áp dụng, hệ thống **tự động Gán Chức Vụ luôn** (gọi lại đúng `assignPositionToProfile()`
+dùng chung với Gán Chức Vụ tay/hàng loạt — không viết lại business rule). Không khớp/chưa có Cơ Cấu Tổ
+Chức áp dụng/ghi đè hồ sơ đã có thì bỏ qua lặng lẽ như cũ — "Gán Chức Vụ Hàng Loạt" vẫn cần dùng cho các
+trường hợp này, tính năng mới chỉ giảm thao tác lặp lại cho dòng đã khớp sẵn. Chỉ áp dụng khi người nhập
+Excel CŨNG có quyền "Sửa Hồ Sơ Nhân Sự" (hrProfileEdit) — người chỉ có quyền tạo (hrProfileCreate) không
+bị kéo theo thực hiện 1 hành động lẽ ra cần quyền cao hơn.
 
 ## v25.89 (2026-11): Nhập Excel Gán Chức Vụ hàng loạt ở Hồ Sơ Nhân Sự
 
