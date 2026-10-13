@@ -1,8 +1,24 @@
 # Phiên bản hiện tại
 
-**25.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.87 (2026-11): Điều hướng bàn phím mũi tên cho ô chọn (select + tìm-kiếm-gõ-chọn)
+
+Theo yêu cầu người dùng (thao tác nhanh bằng bàn phím trong các form Nhân Sự, không phải lúc nào cũng
+với tay sang chuột) — áp dụng TOÀN HỆ THỐNG (không chỉ Nhân Sự, vì đây là cải thiện thuần hành vi bàn
+phím không có rủi ro phá vỡ gì nơi khác):
+
+- **Ô tìm-kiếm-gõ-chọn (sdd*, dùng chung ~20+ điểm)**: thêm điều hướng ArrowDown/ArrowUp (tô sáng dòng,
+  vòng lặp đầu-cuối) + Enter (chọn đúng dòng đang tô sáng) ngay trong danh sách gợi ý đã tự hiện sẵn khi
+  Tab/click vào ô — hành vi combobox chuẩn, không cần với tay sang chuột nữa.
+- **`<select>` thường**: mũi tên lên/xuống nay chủ động MỞ danh sách thả xuống (qua `showPicker()`,
+  hiện chỉ Chrome/Edge hỗ trợ — trình duyệt khác tự bỏ qua, giữ nguyên hành vi cũ) thay vì chỉ âm thầm
+  đổi giá trị mà không cho thấy đang chọn gì.
+
+Đã kiểm tra qua Playwright thật (8 kịch bản mới + toàn bộ 7 test hiện có có đụng tới widget sdd) — không
+regression.
 
 ## v25.86 (2026-11): Nhập Excel hàng loạt Onboarding — "Theo Quy Trình" / "Bỏ Qua Quy Trình"
 

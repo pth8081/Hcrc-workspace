@@ -12697,9 +12697,24 @@ function sddRenderRows(dd, query) {
   const matches = q ? items.filter(it => stripVnDiacritics(it.label.toLowerCase()).includes(q)) : items;
   const shown = matches.slice(0, 50);
   dd._sddShown = shown;
+  // Reset dòng đang tô sáng (điều hướng bàn phím mũi tên, xem khối keydown ArrowDown/ArrowUp/Enter ngay
+  // dưới) mỗi lần render lại danh sách — tránh trỏ nhầm dòng cũ khi người dùng vừa gõ thêm làm đổi kết
+  // quả lọc.
+  dd._sddActiveIdx = -1;
   dd.innerHTML = shown.length
     ? shown.map((it, i) => `<div class="px-2 py-1 hover:bg-sky-50 cursor-pointer truncate" data-sdd-idx="${i}">${escapeHtml(it.label)}</div>`).join('')
     : '<div class="px-2 py-1 text-gray-400 italic">Không tìm thấy.</div>';
+}
+
+// sddSetActiveIdx(dd, idx) — tô sáng ĐÚNG 1 dòng theo idx (phục vụ điều hướng bàn phím mũi tên lên/
+// xuống) + tự cuộn dòng đó vào khung nhìn nếu danh sách dài hơn khung hiển thị.
+function sddSetActiveIdx(dd, idx) {
+  dd._sddActiveIdx = idx;
+  dd.querySelectorAll('[data-sdd-idx]').forEach(row => {
+    const isActive = Number(row.getAttribute('data-sdd-idx')) === idx;
+    row.classList.toggle('bg-sky-100', isActive);
+    if (isActive) row.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 function sddPositionAndShow(dd, input) {
@@ -12733,6 +12748,65 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Escape') return;
   const listId = ev.target.getAttribute && ev.target.getAttribute('data-sdd-list');
   if (listId) document.getElementById(listId)?.classList.add('hidden');
+});
+
+// Mũi tên lên/xuống + Enter trên ô tìm-kiếm-gõ-chọn (sdd*, 10/2026 — theo yêu cầu người dùng: thao tác
+// nhanh bằng bàn phím, không phải lúc nào cũng với tay sang chuột). Danh sách gợi ý đã tự hiện sẵn khi
+// Tab/click vào ô (xem sddHandleTrigger() ở trên, bắt cả 'focusin') — khối này chỉ thêm ĐIỀU HƯỚNG
+// trong danh sách đang hiện: ArrowDown/ArrowUp di chuyển dòng tô sáng (có vòng lặp đầu-cuối), Enter chọn
+// ĐÚNG dòng đang tô sáng — hành vi y hệt combobox chuẩn. CHỈ preventDefault khi THẬT SỰ xử lý (đang có
+// dòng tô sáng lúc Enter, hoặc dropdown đang mở) — Enter khi CHƯA tô sáng dòng nào vẫn giữ hành vi mặc
+// định của ô đó (VD submit form), không chặn nhầm.
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp' && ev.key !== 'Enter') return;
+  const input = ev.target;
+  const listId = input.getAttribute && input.getAttribute('data-sdd-list');
+  if (!listId) return;
+  const dd = document.getElementById(listId);
+  if (!dd || !dd._sddItems) return;
+  if (dd.classList.contains('hidden')) {
+    if (ev.key === 'Enter') return; // danh sách đang đóng -> Enter giữ hành vi mặc định (vd submit form)
+    // ArrowDown/ArrowUp lúc danh sách đang ĐÓNG (vd vừa bấm Escape) -> mở lại đúng theo giá trị đang gõ.
+    ev.preventDefault();
+    sddRenderRows(dd, input.value);
+    sddPositionAndShow(dd, input);
+    sddSetActiveIdx(dd, 0);
+    return;
+  }
+  const shown = dd._sddShown || [];
+  if (!shown.length) return;
+  if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    const next = (dd._sddActiveIdx == null || dd._sddActiveIdx >= shown.length - 1) ? 0 : dd._sddActiveIdx + 1;
+    sddSetActiveIdx(dd, next);
+  } else if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    const prev = (dd._sddActiveIdx == null || dd._sddActiveIdx <= 0) ? shown.length - 1 : dd._sddActiveIdx - 1;
+    sddSetActiveIdx(dd, prev);
+  } else if (ev.key === 'Enter') {
+    if (dd._sddActiveIdx == null || dd._sddActiveIdx < 0) return; // chưa tô sáng dòng nào -> không chặn Enter mặc định
+    ev.preventDefault();
+    const item = shown[dd._sddActiveIdx];
+    if (item) {
+      input.value = item.label;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    dd.classList.add('hidden');
+  }
+});
+
+// Mũi tên lên/xuống trên <select> thường (10/2026, cùng yêu cầu ở trên) — hành vi MẶC ĐỊNH của trình
+// duyệt khi <select> đang ĐÓNG: mũi tên lên/xuống chỉ ÂM THẦM đổi giá trị, KHÔNG hiện lại danh sách để
+// người dùng thấy đang chọn gì giữa các lựa chọn. showPicker() (API mới, hiện chỉ Chrome/Edge hỗ trợ)
+// chủ động MỞ danh sách thả xuống ngay khi bấm mũi tên — trình duyệt KHÔNG hỗ trợ (Firefox/Safari tại
+// thời điểm viết) thì bỏ qua lặng lẽ, giữ nguyên hành vi cũ (không mất gì, chỉ chưa được cải thiện).
+// KHÔNG preventDefault — vẫn giữ hành vi mặc định di chuyển lựa chọn, chỉ CỘNG THÊM việc mở hiển thị.
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+  const el = ev.target;
+  if (!el || el.tagName !== 'SELECT' || typeof el.showPicker !== 'function') return;
+  try { el.showPicker(); } catch (err) { /* thiếu user-gesture hợp lệ hoặc trình duyệt chặn -> bỏ qua */ }
 });
 
 // Bấm chọn 1 gợi ý HOẶC bấm ra ngoài để đóng — gắn 1 LẦN DUY NHẤT (query lại theo [data-sdd-idx]/
