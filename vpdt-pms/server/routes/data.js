@@ -17,7 +17,7 @@ const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBe
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
-const { findProfileByUsername } = require('../lib/employeeProfile');
+const { findProfileByUsername, autoLinkUnlinkedProfiles } = require('../lib/employeeProfile');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
@@ -2174,6 +2174,22 @@ router.post('/:key', async (req, res) => {
       const levelsKey = APPROVAL_GROUPS_TO_LEVELS_KEY[key];
       await syncApprovalLevelsWithGroupsChange(key, value);
       syncedVersions = { [levelsKey]: (await getAppDataValueWithVersion(levelsKey)).version };
+    }
+
+    // Mở rộng tự động liên kết tài khoản VPDT (11/2026, theo yêu cầu người dùng — chiều "tạo/nhập user
+    // MỚI, hồ sơ nhân sự đã có sẵn" tự liên kết NGAY, không cần HR tự mở hồ sơ ra xem + bấm xác nhận như
+    // trước). CHẠY SAU KHI ghi "users" đã chắc chắn thành công (cùng nguyên tắc các cascade khác ở đây) —
+    // quét MỌI hồ sơ CHƯA liên kết, tự liên kết nếu khớp Mã NV với 1 tài khoản VỪA lưu (xem
+    // autoLinkUnlinkedProfiles() ở lib/employeeProfile.js — tái dùng NGUYÊN VẸN luật khớp
+    // findAutoLinkableAccount() đã có, không viết lại rule). Không trả version/conflict gì thêm cho
+    // client — employeeProfiles không nằm trong GET /api/data chung (dữ liệu CỰC NHẠY CẢM, xem
+    // ADMIN_SENSITIVE_KEYS/khối chặn ở đầu file) nên client không giữ bản cache nào để lệch version.
+    if (key === 'users') {
+      await withLockedAppDataValue('employeeProfiles', (profiles) => {
+        const arr = profiles || [];
+        autoLinkUnlinkedProfiles(arr, value, req.user.username);
+        return arr;
+      });
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi

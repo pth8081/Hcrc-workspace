@@ -304,6 +304,29 @@ function findAutoLinkableAccount(employeeCode, existingUsers, existingProfiles) 
   return autoMatch.username;
 }
 
+// autoLinkUnlinkedProfiles() — chiều NGƯỢC LẠI findAutoLinkableAccount() ở trên: gọi SAU KHI "users" vừa
+// được lưu thành công (routes/data.js POST /api/data/users — tạo tay/Nhập Excel/Onboarding đều đi qua
+// CHUNG 1 điểm ghi này), quét MỌI hồ sơ CHƯA liên kết, tự liên kết ngay nếu khớp Mã NV với 1 tài khoản
+// VPDT vừa lưu — không cần HR phải tự mở lại hồ sơ ra xem + bấm xác nhận như gợi ý thủ công ở
+// hrpfFindAutoLinkableAccount() (module-hrprofile.js). TÁI DÙNG NGUYÊN VẸN findAutoLinkableAccount() (cùng
+// 1 luật khớp: username === Mã NV, tài khoản đang hoạt động, hồ sơ/tài khoản chưa bị chiếm bởi bên khác)
+// — không viết lại rule khớp lần thứ 3. Sửa TRỰC TIẾP từng profile trong mảng truyền vào (gọi trong
+// withLockedAppDataValue('employeeProfiles', ...) ở nơi gọi), trả về số hồ sơ vừa được liên kết.
+function autoLinkUnlinkedProfiles(profiles, users, actorUsername) {
+  const arr = profiles || [];
+  let linkedCount = 0;
+  for (const profile of arr) {
+    if (profile.username) continue;
+    const matchUsername = findAutoLinkableAccount(profile.employeeCode, users, arr);
+    if (!matchUsername) continue;
+    profile.username = matchUsername;
+    profile.updatedAt = nowVN();
+    profile.updatedBy = actorUsername || 'system';
+    linkedCount++;
+  }
+  return linkedCount;
+}
+
 function defaultProfile(employeeCode) {
   return {
     employeeCode,
@@ -1693,7 +1716,7 @@ module.exports = {
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
-  findProfile, findProfileByUsername, findAutoLinkableAccount, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  findProfile, findProfileByUsername, findAutoLinkableAccount, autoLinkUnlinkedProfiles, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,

@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**25.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.96 (2026-11): Tự động liên kết tài khoản VPDT NGAY khi tạo/nhập user — chiều "user mới, hồ sơ có sẵn"
+
+Tiếp nối v25.95 — người dùng xác nhận sau khi xem demo thật (chụp ảnh Playwright 2 chiều): chiều "tạo
+Hồ Sơ, tài khoản đã có" đã tự động 100%, nhưng chiều ngược lại "tạo tài khoản VPDT (Nhập Excel/tạo tay/
+Onboarding), hồ sơ đã có sẵn từ trước" trước đây CHỈ gợi ý khi HR tự mở lại Chi Tiết hồ sơ đó ra xem + bấm
+xác nhận — chưa thực sự tự động. Nay thêm `autoLinkUnlinkedProfiles()` (`lib/employeeProfile.js`, TÁI
+DÙNG NGUYÊN VẸN luật khớp `findAutoLinkableAccount()` đã có — không viết lại rule lần 3), gọi SAU KHI
+`POST /api/data/users` (điểm ghi DUY NHẤT của toàn bộ collection `users` — tạo tay/Nhập Excel/Onboarding
+đều đi qua đây) ghi thành công: quét MỌI hồ sơ CHƯA liên kết, tự liên kết ngay nếu khớp Mã Nhân Viên với
+1 tài khoản VPDT đang hoạt động vừa lưu — không cần mở hồ sơ, không cần bấm xác nhận gì thêm.
+
+Giữ nguyên các điều kiện an toàn đã có: tài khoản bị khoá (`active:false`) không tự liên kết; hồ sơ ĐÃ
+liên kết 1 tài khoản khác từ trước không bị ghi đè; username đã bị hồ sơ khác "chiếm" không bị gán nhầm.
+Cascade này chạy trên MỌI lượt lưu "users" (kể cả chỉ sửa 1 field không liên quan của 1 user khác), nên
+quét luôn mọi hồ sơ đang chờ khớp từ trước, không chỉ áp dụng cho đúng user vừa tạo/sửa trong request đó.
+
+Giờ hệ thống tự động liên kết ĐẦY ĐỦ CẢ 2 CHIỀU: (1) tạo/nhập Hồ Sơ Nhân Sự khi tài khoản đã có sẵn
+(v25.88/v25.95), (2) tạo/nhập tài khoản VPDT khi Hồ Sơ Nhân Sự đã có sẵn (v25.96, mục này) — không còn
+cần thao tác thủ công nào ở cả 2 chiều.
 
 ## v25.95 (2026-11): Mở rộng tự động liên kết tài khoản VPDT ra cả tạo tay + hồ sơ cũ
 

@@ -2987,6 +2987,14 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     mở Chi Tiết hồ sơ sẽ thấy ô "Liên Kết Tài Khoản VPDT" tự pre-fill sẵn gợi
     ý kèm dòng "🔗 Gợi ý tự động khớp Mã NV" nếu có tài khoản khớp — chỉ là GỢI
     Ý, HR vẫn phải tự bấm nút "🔗 Liên Kết Tài Khoản VPDT" mới thực sự lưu.
+    **Mở rộng thêm lần 2 (11/2026)**: chiều NGƯỢC LẠI — tạo/nhập tài khoản VPDT
+    MỚI (tạo tay, Nhập Excel Quản Lý Người Dùng, hoặc Onboarding) khi Hồ Sơ
+    Nhân Sự khớp Mã Nhân Viên đã CÓ SẴN từ trước — nay cũng **tự liên kết NGAY
+    lúc lưu tài khoản**, không cần mở lại hồ sơ ra xem + bấm xác nhận nữa. Hệ
+    thống giờ tự động liên kết đủ cả 2 chiều (tạo hồ sơ trước/tạo tài khoản
+    trước, bên nào xong sau sẽ tự khớp bên kia), cùng 1 luật khớp duy nhất
+    (username trùng đúng Mã Nhân Viên + tài khoản đang hoạt động + chưa bị
+    hồ sơ khác chiếm).
 - **Mã Nhân Viên tự sinh** (9/2026): để trống khi tạo (tay/Onboarding) sẽ tự
   cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
   tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo
