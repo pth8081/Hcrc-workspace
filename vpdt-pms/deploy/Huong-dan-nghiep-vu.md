@@ -2981,7 +2981,12 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     của hồ sơ sau khi liên kết hiện ĐÚNG theo tài khoản ngay (các trường này
     luôn lấy LIVE từ tài khoản liên kết, không cần đồng bộ gì thêm) — riêng
     **Cấp Bậc** thì KHÔNG tự có theo cách này (xem "🏷️ Gán Chức Vụ Hàng Loạt"
-    ngay dưới, mục Vị Trí Kiêm Nhiệm).
+    ngay dưới, mục Vị Trí Kiêm Nhiệm). **Mở rộng (11/2026)**: KHÔNG chỉ Nhập
+    Excel — "➕ Tạo Hồ Sơ Mới" (tạo tay) cũng tự liên kết luôn theo đúng cơ chế
+    này nếu để trống Tài Khoản VPDT; 1 hồ sơ ĐÃ CÓ sẵn nhưng CHƯA liên kết thì
+    mở Chi Tiết hồ sơ sẽ thấy ô "Liên Kết Tài Khoản VPDT" tự pre-fill sẵn gợi
+    ý kèm dòng "🔗 Gợi ý tự động khớp Mã NV" nếu có tài khoản khớp — chỉ là GỢI
+    Ý, HR vẫn phải tự bấm nút "🔗 Liên Kết Tài Khoản VPDT" mới thực sự lưu.
 - **Mã Nhân Viên tự sinh** (9/2026): để trống khi tạo (tay/Onboarding) sẽ tự
   cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
   tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo

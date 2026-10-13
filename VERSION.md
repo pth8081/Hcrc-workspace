@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**25.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.95 (2026-11): Mở rộng tự động liên kết tài khoản VPDT ra cả tạo tay + hồ sơ cũ
+
+Người dùng hỏi: tạo hồ sơ (hoặc đã có hồ sơ cũ) + tạo tài khoản VPDT trùng Mã Nhân Viên nhưng không tự
+liên kết — xác nhận đúng: tính năng tự động liên kết (v25.88) trước đây CHỈ áp dụng lúc Nhập Excel hàng
+loạt Hồ Sơ Nhân Sự, không áp dụng cho tạo hồ sơ tay hay hồ sơ đã có từ trước. Nay mở rộng ra ĐỦ 3
+trường hợp, dùng CHUNG đúng 1 logic khớp (`findAutoLinkableAccount()`, tách từ logic Nhập Excel gốc,
+không viết lại business rule):
+
+- **"➕ Tạo Hồ Sơ Mới" (tạo tay)**: không tự gõ Tài Khoản VPDT + có tài khoản đang hoạt động trùng đúng
+  Mã Nhân Viên + tài khoản đó chưa liên kết hồ sơ nào khác → tự liên kết luôn lúc tạo.
+- **Chi Tiết 1 hồ sơ ĐÃ CÓ sẵn, CHƯA liên kết**: nếu có tài khoản khớp, ô "Liên Kết Tài Khoản VPDT" tự
+  pre-fill sẵn kèm dòng gợi ý "🔗 Gợi ý tự động khớp Mã NV" — KHÔNG tự lưu gì, HR vẫn phải tự bấm "🔗 Liên
+  Kết Tài Khoản VPDT" để xác nhận (server tự validate lại từ đầu, Zero-Trust).
 
 ## v25.94 (2026-11): Vá lỗi "In có watermark" (.docx) cắt ngang nội dung tờ trình/hợp đồng
 

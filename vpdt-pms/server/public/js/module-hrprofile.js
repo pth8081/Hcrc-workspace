@@ -76,6 +76,24 @@ function hrpfIdentitySnapshot(profile) {
   return { fullName: '', dept: profile.dept || '', jobTitle: profile.jobTitle || '', email: '', phone: '' };
 }
 
+// hrpfFindAutoLinkableAccount() — Mirror CHÍNH XÁC lib/employeeProfile.js::findAutoLinkableAccount()
+// (11/2026, theo yêu cầu người dùng: "mở rộng cho cả 2 trường hợp" — trước đây tự động liên kết CHỈ áp
+// dụng lúc Nhập Excel, nay THÊM gợi ý ngay trên Chi Tiết hồ sơ ĐÃ CÓ sẵn chưa liên kết, xem renderHrpfProfileForm()
+// chỗ render khối "Liên Kết Tài Khoản VPDT"). CHỈ gợi ý (pre-fill ô nhập) — KHÔNG tự lưu, HR vẫn phải tự
+// bấm "🔗 Liên Kết Tài Khoản VPDT" để xác nhận, và server (POST .../link-account) tự validate lại từ đầu
+// (Zero-Trust, không tin gợi ý phía client). Khớp CHÍNH XÁC username === Mã Nhân Viên + tài khoản đang
+// hoạt động + CHƯA liên kết hồ sơ nào khác (_hrpfManageList đã có đủ field username của mọi hồ sơ, xem
+// stripForList() phía server).
+function hrpfFindAutoLinkableAccount(employeeCode) {
+  const code = String(employeeCode || '').trim();
+  if (!code) return null;
+  const autoMatch = (DB.users || []).find(u => u.username === code && u.active !== false);
+  if (!autoMatch) return null;
+  const clashesWithOtherProfile = (_hrpfManageList || []).some(p => p.username === autoMatch.username && p.employeeCode !== code);
+  if (clashesWithOtherProfile) return null;
+  return autoMatch;
+}
+
 // 3 quyền chi tiết Tạo/Xem toàn bộ/Sửa (9/2026, xem lib/employeeProfile.js canCreateProfiles/
 // canFullViewProfiles/canEditProfiles) — mirror ĐÚNG logic OR-chain phía server để ẩn/hiện nút đúng,
 // KHÔNG phải tầng bảo vệ thật (server luôn enforce lại) chỉ để UI gọn/không gọi API thừa rồi bị 403.
@@ -1551,11 +1569,21 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
       <input type="hidden" id="hrpfRelinkAccountUsername">
       <button type="button" data-op="confirmHrpfRelinkAccount" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">🔁 Xác Nhận Đổi</button>
       <button type="button" data-op="toggleHrpfRelinkAccountInput" class="px-2 py-1.5 rounded text-xs font-bold bg-gray-100 text-gray-600 hover:bg-gray-200">Huỷ</button>`}
-    </div>` : `<div class="flex items-center gap-1">
-      <input id="hrpfLinkAccountInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfLinkAccountInput" data-arg-value="0" placeholder="Gõ tên/tài khoản VPDT để liên kết..." class="border p-1.5 rounded text-xs w-64">
-      <input type="hidden" id="hrpfLinkAccountUsername">
-      <button type="button" data-op="confirmHrpfLinkAccount" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">🔗 Liên Kết Tài Khoản VPDT</button>
-    </div>`}
+    </div>` : (() => {
+      // Gợi ý tự động liên kết (11/2026, mở rộng tự động liên kết sang hồ sơ ĐÃ CÓ sẵn chưa liên kết —
+      // xem hrpfFindAutoLinkableAccount() ở trên) — CHỈ pre-fill sẵn ô nhập, KHÔNG tự lưu gì, HR vẫn phải
+      // tự bấm "🔗 Liên Kết Tài Khoản VPDT" để xác nhận (server Zero-Trust tự validate lại từ đầu).
+      const autoMatch = hrpfFindAutoLinkableAccount(profile.employeeCode);
+      const autoLabel = autoMatch ? `${autoMatch.name} — ${autoMatch.dept || 'Chưa rõ phòng'} (${autoMatch.username})` : '';
+      return `<div class="flex flex-col gap-1">
+      ${autoMatch ? `<div class="text-[11px] text-indigo-700 font-semibold">🔗 Gợi ý tự động khớp Mã NV "${escapeHtml(profile.employeeCode)}" — bấm "Liên Kết" để xác nhận</div>` : ''}
+      <div class="flex items-center gap-1">
+        <input id="hrpfLinkAccountInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpfLinkAccountInput" data-arg-value="0" placeholder="Gõ tên/tài khoản VPDT để liên kết..." value="${escapeHtml(autoLabel)}" class="border p-1.5 rounded text-xs w-64">
+        <input type="hidden" id="hrpfLinkAccountUsername" value="${escapeHtml(autoMatch?.username || '')}">
+        <button type="button" data-op="confirmHrpfLinkAccount" class="px-2.5 py-1.5 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-700">🔗 Liên Kết Tài Khoản VPDT</button>
+      </div>
+    </div>`;
+    })()}
   </div>`;
 
   // Gán/Đổi Chức Vụ — LUÔN chọn từ Cơ Cấu Tổ Chức (không gõ tự do), mỗi lần đổi tự ghi vào

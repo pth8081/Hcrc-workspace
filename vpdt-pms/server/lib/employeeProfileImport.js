@@ -14,6 +14,7 @@ const { streamFirstSheetRows } = require('./xlsxSafeRead');
 const { HttpError } = require('./httpErrors');
 const { sanitizeRowForFormulaInjection, applyDropdownValidation } = require('./adminExport');
 const { getAppDataValue } = require('./appData');
+const { findAutoLinkableAccount } = require('./employeeProfile');
 
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
 const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
@@ -303,9 +304,11 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
   // hoạt động + CHƯA liên kết hồ sơ nào khác — khớp sai/không khớp thì giữ nguyên để trống như cũ, HR tự
   // "Liên Kết Tài Khoản VPDT" tay sau khi nhập (không chặn/báo lỗi gì, chỉ đơn thuần không tự điền được).
   if (!username) {
-    const autoMatch = (existingUsers || []).find(u => u.username === employeeCode && u.active !== false);
-    if (autoMatch && !(existingProfiles || []).some(p => p.username === autoMatch.username && p.employeeCode !== employeeCode)) {
-      username = autoMatch.username;
+    // TÁCH ra lib/employeeProfile.js::findAutoLinkableAccount() (11/2026, dùng chung với tạo hồ sơ tay +
+    // gợi ý liên kết hồ sơ cũ) — hành vi giữ NGUYÊN 100%, chỉ đổi nơi định nghĩa.
+    const autoMatchUsername = findAutoLinkableAccount(employeeCode, existingUsers, existingProfiles);
+    if (autoMatchUsername) {
+      username = autoMatchUsername;
       autoLinkedUsername = true;
     }
   }

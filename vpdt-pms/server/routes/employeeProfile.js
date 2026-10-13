@@ -1005,7 +1005,8 @@ router.post('/', requireProfileCreate, async (req, res) => {
       created = employeeProfile.createManualProfile(list, req.body, req.freshUser.username, req.freshUser.name, {
         employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
         legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
-        currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
+        currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
+        users: appData.users
       });
       if (positionKey) {
         const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
@@ -1160,7 +1161,8 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
             const created = employeeProfile.createManualProfile(list, row, req.freshUser.username, req.freshUser.name, {
               employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
               legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
-              currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
+              currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
+              users: appData.users
             });
             results.created.push(created.employeeCode);
             if (created.username) newlyLinked.push({ employeeCode: created.employeeCode, username: created.username });

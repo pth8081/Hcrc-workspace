@@ -284,6 +284,26 @@ function findProfileByUsername(list, username) {
   return (list || []).find(p => p.username === username) || null;
 }
 
+// findAutoLinkableAccount() — TÁCH NGUYÊN VẸN (copy, KHÔNG đổi hành vi) từ logic tự động liên kết tài
+// khoản VPDT lúc Nhập Excel Hồ Sơ Nhân Sự (10/2026, rowToPreviewItem() ở lib/employeeProfileImport.js)
+// để DÙNG CHUNG cho cả tạo hồ sơ tay ("➕ Tạo Hồ Sơ Mới") lẫn gợi ý liên kết hồ sơ ĐÃ CÓ sẵn chưa liên
+// kết (11/2026, theo yêu cầu người dùng: "mở rộng cho cả 2 trường hợp" — tạo tay + hồ sơ cũ) — chỉ 1
+// nguồn logic khớp duy nhất, tránh lệch nhau giữa 3 nơi dùng. Khớp CHÍNH XÁC username === Mã Nhân Viên
+// (case-sensitive) + tài khoản đang hoạt động + CHƯA liên kết hồ sơ nào khác — hồ sơ đang xét (nếu đã
+// tồn tại, trường hợp gợi ý cho hồ sơ cũ) luôn UNLINKED theo định nghĩa gọi hàm này nên không bao giờ tự
+// khớp nhầm chính nó, không cần loại trừ riêng. Trả về username khớp được, hoặc null nếu không khớp/
+// không áp dụng — KHÔNG ném lỗi, gọi ở đâu cũng chỉ là gợi ý, không chặn luồng chính.
+function findAutoLinkableAccount(employeeCode, existingUsers, existingProfiles) {
+  const code = String(employeeCode || '').trim();
+  if (!code) return null;
+  const autoMatch = (existingUsers || []).find(u => u.username === code && u.active !== false);
+  if (!autoMatch) return null;
+  const clashesWithOtherProfile = (existingProfiles || []).some(p =>
+    p.username === autoMatch.username && p.employeeCode !== code);
+  if (clashesWithOtherProfile) return null;
+  return autoMatch.username;
+}
+
 function defaultProfile(employeeCode) {
   return {
     employeeCode,
@@ -550,9 +570,18 @@ function createManualProfile(list, payload, actorUsername, actorName, options) {
   if (findProfile(arr, employeeCode)) {
     throw new HttpError(400, `Mã Nhân Viên "${employeeCode}" đã có hồ sơ — vui lòng vào "Chi tiết" để sửa thay vì tạo mới`);
   }
-  const username = payload?.username ? String(payload.username).trim() : null;
+  let username = payload?.username ? String(payload.username).trim() : null;
   if (username && findProfileByUsername(arr, username)) {
     throw new HttpError(400, 'Tài khoản VPDT này đã được liên kết với 1 hồ sơ nhân sự khác');
+  }
+  // Tự động liên kết tài khoản VPDT (11/2026, theo yêu cầu người dùng: "mở rộng cho cả 2 trường hợp" —
+  // trước đây CHỈ áp dụng lúc Nhập Excel Hồ Sơ Nhân Sự, nay áp dụng CẢ tạo hồ sơ tay "➕ Tạo Hồ Sơ Mới")
+  // — CHỈ khi payload không tự gõ username (không ghi đè lựa chọn người dùng), dùng chung ĐÚNG 1 logic
+  // khớp với Nhập Excel (findAutoLinkableAccount()). options.users do CALLER truyền vào (appData.users) —
+  // không bắt buộc (nơi gọi cũ chưa truyền vẫn chạy bình thường, chỉ đơn thuần không tự liên kết được).
+  if (!username) {
+    const autoMatchUsername = findAutoLinkableAccount(employeeCode, options?.users, arr);
+    if (autoMatchUsername) username = autoMatchUsername;
   }
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): "Kiểm Tra Nhân Sự Cũ" (searchInactiveProfilesForRehire(),
   // GET /api/hr-profile/search-inactive) trước đây CHỈ LÀ GỢI Ý — HR tự tra cứu CCCD/CMND trước khi tạo,
@@ -1664,7 +1693,7 @@ module.exports = {
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
-  findProfile, findProfileByUsername, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  findProfile, findProfileByUsername, findAutoLinkableAccount, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,
