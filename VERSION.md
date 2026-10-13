@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**25.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.91 (2026-11): Vá lỗi nút ✕ không đóng được modal "Nhập Excel Gán Chức Vụ Hàng Loạt"
+
+Người dùng báo: bấm ✕ ở modal "Nhập Excel Gán Chức Vụ Hàng Loạt" (Hồ Sơ Nhân Sự) không đóng được.
+Nguyên nhân: `#hrpfPositionAssignImportModal` sống NGOÀI `#hrProfileSection` trong DOM (anh em, không
+phải con) nên cần đăng ký root CSP riêng (`bindCspDelegation()`) — bị bỏ sót lúc thêm modal này ở v25.89
+(đúng lỗi đã từng gặp + có chú thích sẵn ở 2 modal khác cùng khu vực, nhưng lại tái phạm ở modal mới).
+Đã rà soát lại toàn bộ modal còn lại trong module Nhân Sự (đối chiếu đầy đủ danh sách `bindCspDelegation()`
+với mọi modal trong `index.html`) — xác nhận đây là modal DUY NHẤT bị bỏ sót, không còn chỗ nào khác bị
+tương tự. Thêm 1 scenario Playwright click THẬT (không gọi hàm tay) để bắt đúng loại lỗi này cho các lần
+thêm modal mới sau này.
 
 ## v25.90 (2026-11): Xuất Excel Gán Chức Vụ + tự động Gán Chức Vụ khi liên kết tài khoản đã khớp sẵn vị trí
 

@@ -66,7 +66,9 @@ async function main() {
   page.on('pageerror', (err) => pageErrors.push(String(err)));
 
   // hrProfileFullView -> hrpfCanFullView() true -> hiện nút Xuất Excel Gán Chức Vụ (và toàn bộ list MANAGE).
-  const HR_MANAGER = { username: 'hrfv1', name: 'Quản Lý Hồ Sơ', dept: 'Phòng Nhân Sự', perms: { hrProfileFullView: true }, active: true };
+  // hrProfileEdit thêm vào (11/2026) để CÙNG tài khoản này test được luôn nút "🏷️ Gán Chức Vụ Hàng Loạt"
+  // (hrpfCanEdit(), mở modal Nhập Excel) — không ảnh hưởng các assertion cũ (đều test hrpfCanFullView()).
+  const HR_MANAGER = { username: 'hrfv1', name: 'Quản Lý Hồ Sơ', dept: 'Phòng Nhân Sự', perms: { hrProfileFullView: true, hrProfileEdit: true }, active: true };
   const MANAGER_ACC = { username: 'tp.ketoan', name: 'Lê Văn Trưởng', dept: 'Phòng Kế Toán', jobTitle: 'Trưởng phòng', active: true };
 
   try {
@@ -174,6 +176,21 @@ async function main() {
     await page.waitForTimeout(100);
     check('Real click nút thật -> gọi đúng exportHrpfPositionAssignExcel()', await page.evaluate(() => window.__exportCalled));
     await page.evaluate(() => { exportHrpfPositionAssignExcel = window.__origExportFn; });
+
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo nút ✕ không đóng được modal "Nhập Excel Gán Chức Vụ Hàng
+    // Loạt"): #hrpfPositionAssignImportModal sống NGOÀI #hrProfileSection trong DOM (anh em, không phải
+    // con, xem chú thích ở core.js) nên cần ĐĂNG KÝ RIÊNG qua bindCspDelegation() — bị bỏ sót lúc thêm
+    // modal này, mọi nút data-op bên trong (kể cả ✕ đóng) âm thầm không phản hồi dù không có lỗi JS nào.
+    // Test THẬT bằng click chuột thật (không gọi hàm tay) để bắt đúng loại lỗi này — gọi hàm tay qua
+    // page.evaluate() sẽ KHÔNG bao giờ phát hiện ra (chỉ click DOM thật mới đi qua bindCspDelegation()).
+    await page.click('[data-op="openHrpfPositionAssignImportModal"]');
+    await page.waitForTimeout(100);
+    check('Click nút "🏷️ Gán Chức Vụ Hàng Loạt" -> modal Nhập Excel hiện ra',
+      await page.evaluate(() => !document.getElementById('hrpfPositionAssignImportModal').classList.contains('hidden')));
+    await page.click('#hrpfPositionAssignImportModal [data-op="closeHrpfPositionAssignImportModal"]');
+    await page.waitForTimeout(100);
+    check('Click nút ✕ -> modal Nhập Excel ĐÓNG lại (bindCspDelegation đã đăng ký đúng root)',
+      await page.evaluate(() => document.getElementById('hrpfPositionAssignImportModal').classList.contains('hidden')));
 
     // Không có quyền hrProfileFullView (chỉ hrProfileCreate) -> nút phải ẩn.
     const HR_CREATOR = { username: 'hrcr1', name: 'Chỉ Tạo Hồ Sơ', dept: 'Phòng Nhân Sự', perms: { hrProfileCreate: true }, active: true };

@@ -12291,6 +12291,12 @@ bindCspDelegation('hrProfileSection');
 bindCspDelegation('hrpfDetailModal');
 bindCspDelegation('hrpfCreateModal');
 bindCspDelegation('hrpfImportModal');
+// #hrpfPositionAssignImportModal (10/2026, "Nhập Excel Gán Chức Vụ Hàng Loạt") — LỖI ĐÃ VÁ (11/2026,
+// người dùng báo nút ✕ không đóng được modal): BỊ BỎ SÓT lúc thêm modal này — đúng y hệt lỗi đã ghi chú
+// ở 2 dòng trên (sống ngoài #hrProfileSection trong DOM, anh em không phải con) nhưng lại tái phạm, dù
+// đã có tiền lệ. Rà lại TOÀN BỘ các modal hrpf* còn lại trong index.html xác nhận không còn modal nào
+// khác bị bỏ sót (danh sách dưới đây đã đủ).
+bindCspDelegation('hrpfPositionAssignImportModal');
 // #hrpfFieldConfigModal (9/2026, "Cấu hình trường xem của quản lý trực tiếp") — CÙNG LỖI y hệt 3 modal
 // trên nếu quên: sống ngoài #hrProfileSection trong DOM (anh em, không phải con), phải đăng ký root
 // riêng ngay khi thêm mới, không thì mọi nút bên trong (Huỷ/Lưu) âm thầm không phản hồi.
