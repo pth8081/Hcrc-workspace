@@ -1184,8 +1184,10 @@ async function onHrpfImportFileChange(event) {
     hrpfImportPreviewItems = data.items;
     const validCount = data.items.filter(it => it.valid).length;
     const dupCount = data.items.filter(it => it.duplicateExisting || it.duplicateInFile).length;
+    const autoLinkedCount = data.items.filter(it => it.autoLinkedUsername).length;
     statusEl.innerText = `✅ Đọc file "${data.fileName}": ${validCount}/${data.items.length} dòng hợp lệ`
-      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã chọn "Bỏ qua" sẵn, tự đổi nếu muốn ghi đè).` : '.');
+      + (dupCount ? `, ${dupCount} dòng NGHI TRÙNG (đã chọn "Bỏ qua" sẵn, tự đổi nếu muốn ghi đè).` : '.')
+      + (autoLinkedCount ? ` 🔗 ${autoLinkedCount} dòng tự động liên kết tài khoản VPDT (trùng Mã Nhân Viên).` : '');
     document.getElementById('hrpfImportPreviewBody').innerHTML = data.items.map((it) => {
       let actionCell;
       if (!it.valid) {
@@ -1200,9 +1202,16 @@ async function onHrpfImportFileChange(event) {
       } else {
         actionCell = '<span class="text-emerald-600">✅ Sẽ thêm mới</span>';
       }
+      // autoLinkedUsername (10/2026, theo yêu cầu người dùng — di trú dữ liệu cũ: Mã Nhân Viên trùng
+      // Tài Khoản VPDT đã có sẵn) — cột "Tài Khoản VPDT" bỏ trống trong Excel nhưng hệ thống tự khớp
+      // được 1 tài khoản đang hoạt động trùng ĐÚNG Mã Nhân Viên, kèm ghi chú rõ để HR biết đây là TỰ
+      // ĐỘNG (không phải do chính Excel ghi) — xem rowToPreviewItem() ở lib/employeeProfileImport.js.
+      const usernameCell = it.autoLinkedUsername
+        ? `${escapeHtml(it.username || '')} <span class="text-sky-600 text-[10px]" title="Tự động liên kết do trùng Mã Nhân Viên">🔗 tự động</span>`
+        : escapeHtml(it.username || '');
       return `<tr class="${it.duplicateExisting || it.duplicateInFile ? 'bg-amber-50' : ''}">
       <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
-      <td class="p-1">${escapeHtml(it.username || '')}</td>
+      <td class="p-1">${usernameCell}</td>
       <td class="p-1">${escapeHtml(it.dateOfBirth || '')}</td>
       <td class="p-1">${escapeHtml(it.gender || '')}</td>
       <td class="p-1">${actionCell}</td>

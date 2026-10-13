@@ -294,7 +294,21 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
   const employeeCode = String(get('employeeCode') || '').trim();
   if (!employeeCode) return null;
 
-  const username = String(get('username') || '').trim() || null;
+  let username = String(get('username') || '').trim() || null;
+  let autoLinkedUsername = false;
+  // Tự động liên kết tài khoản VPDT (10/2026, theo yêu cầu người dùng — di trú dữ liệu cũ: "mã NV và mã
+  // HS như nhau, cái nào không trùng thì chọn tay") — CHỈ áp dụng khi cột "Tài Khoản VPDT" bỏ TRỐNG
+  // trong Excel (không ghi đè nếu người dùng đã tự gõ 1 giá trị khác). Khớp CHÍNH XÁC username === Mã
+  // Nhân Viên (case-sensitive, cùng quy ước so khớp username đã có sẵn ngay dưới đây) + tài khoản đang
+  // hoạt động + CHƯA liên kết hồ sơ nào khác — khớp sai/không khớp thì giữ nguyên để trống như cũ, HR tự
+  // "Liên Kết Tài Khoản VPDT" tay sau khi nhập (không chặn/báo lỗi gì, chỉ đơn thuần không tự điền được).
+  if (!username) {
+    const autoMatch = (existingUsers || []).find(u => u.username === employeeCode && u.active !== false);
+    if (autoMatch && !(existingProfiles || []).some(p => p.username === autoMatch.username && p.employeeCode !== employeeCode)) {
+      username = autoMatch.username;
+      autoLinkedUsername = true;
+    }
+  }
   const gender = String(get('gender') || '').trim() || null;
   const dateOfBirth = parseDateCell(get('dateOfBirth')) || null;
 
@@ -382,7 +396,7 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
     careerHistoryNote: String(get('careerHistoryNote') || '').trim() || null,
     hrNote: String(get('hrNote') || '').trim() || null,
     ...newDateFields,
-    duplicateExisting, duplicateInFile,
+    duplicateExisting, duplicateInFile, autoLinkedUsername,
     valid: errors.length === 0,
     errors
   };

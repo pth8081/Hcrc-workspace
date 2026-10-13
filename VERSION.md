@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**25.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.88 (2026-11): Tự động liên kết Tài Khoản VPDT khi Nhập Excel Hồ Sơ Nhân Sự
+
+Theo yêu cầu người dùng (di trú dữ liệu cũ: "mã nv và mã hs như nhau, cái nào không trùng thì chọn
+tay") — phát hiện kèm theo: rà soát kỹ cho thấy **Họ Và Tên/Phòng Ban/Chức Danh/Cấp Bậc/Mã QLTT** của 1
+hồ sơ Hồ Sơ Nhân Sự KHÔNG lưu trực tiếp, mà luôn lấy LIVE từ tài khoản VPDT đã liên kết (hoặc từ quy
+trình Onboarding, không áp dụng cho di trú) — hồ sơ di trú qua Excel mà CHƯA liên kết tài khoản sẽ hiện
+TRỐNG các trường này khắp hệ thống, dù đã nhập đủ 41 trường cá nhân/pháp lý/ngân hàng.
+
+Khi Nhập Excel Hồ Sơ Nhân Sự, nếu cột "Tài Khoản VPDT" bỏ TRỐNG, hệ thống nay **tự động tìm 1 tài khoản
+đang hoạt động có username TRÙNG ĐÚNG Mã Nhân Viên** để liên kết sẵn (preview hiện rõ nhãn "🔗 tự động")
+— khớp sai/không khớp thì giữ nguyên trống như cũ, HR tự "Liên Kết Tài Khoản VPDT" tay cho các trường
+hợp còn lại. KHÔNG ghi đè nếu Excel đã tự gõ sẵn 1 giá trị khác; không tự liên kết tài khoản đã khoá
+hoặc đã thuộc hồ sơ khác (chống chiếm nhầm).
 
 ## v25.87 (2026-11): Điều hướng bàn phím mũi tên cho ô chọn (select + tìm-kiếm-gõ-chọn)
 
