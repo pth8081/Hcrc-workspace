@@ -1,8 +1,22 @@
 # Phiên bản hiện tại
 
-**25.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.92 (2026-11): Chặn tạo "tài khoản ma" (không có mật khẩu) khi lưu Quản Lý Người Dùng
+
+Người dùng báo (ngay trước khi go-live, vừa Nhập Excel 500+ tài khoản): 1 số tài khoản mới tạo không
+đăng nhập được ("Tài khoản hoặc mật khẩu không chính xác") VÀ không có nhãn "🔑 Chưa đổi mật khẩu tạm".
+Nguyên nhân xác nhận qua code: nếu 1 tài khoản HOÀN TOÀN MỚI (không phải sửa tài khoản đã có) được lưu
+mà cột Mật Khẩu rỗng/không đọc được, `prepareUsersForSave()` (routes/data.js, điểm ghi DUY NHẤT của toàn
+bộ collection `users` — dùng chung cho form tay/Nhập Excel/Onboarding) trước đây vẫn ÂM THẦM tạo tài
+khoản đó thành công với `pass: undefined` — không ai đăng nhập được vĩnh viễn (không có hash nào để so),
+và không có cảnh báo gì cho admin biết.
+
+Nay chặn CỨNG ngay tại điểm ghi: tài khoản MỚI thiếu Mật Khẩu bị từ chối lưu, kèm danh sách rõ ràng từng
+username bị thiếu — áp dụng cho MỌI cách tạo user (không chỉ Nhập Excel). Tài khoản đã lỡ bị tạo hỏng
+trước bản vá này: vào "Sửa" → gõ lại Mật Khẩu mới → Lưu (đường này đã luôn hoạt động đúng).
 
 ## v25.91 (2026-11): Vá lỗi nút ✕ không đóng được modal "Nhập Excel Gán Chức Vụ Hàng Loạt"
 

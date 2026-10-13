@@ -754,6 +754,23 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     };
   }));
 
+  // USER-BULK-04 (11/2026, người dùng báo tài khoản import hàng loạt không đăng nhập được VÀ không có
+  // nhãn "Chưa đổi mật khẩu tạm"): nếu "u.pass" rỗng/undefined cho 1 tài khoản HOÀN TOÀN MỚI (không có
+  // "prior" — không phải sửa tài khoản đã có), nhánh "!u.pass" ở trên giữ "pass: prior ? prior.pass :
+  // undefined" => prior không tồn tại => pass = undefined. Tài khoản được tạo "thành công" (không báo
+  // lỗi gì) nhưng KHÔNG CÓ MẬT KHẨU NÀO CẢ — verifyPassword() (lib/auth.js) trả về false ngay khi thiếu
+  // hash, nên không ai đăng nhập được VĨNH VIỄN, và vì nhánh set mustChangePassword=true chỉ chạy khi
+  // "u.pass" CÓ giá trị nên nhãn cảnh báo cũng không hiện — tài khoản "ma" âm thầm, admin không biết cho
+  // tới khi nhân viên báo không đăng nhập được. Chặn CỨNG ngay tại đây (danh sách rõ ràng từng username,
+  // không chỉ 1 dòng lỗi chung) thay vì âm thầm tạo tài khoản hỏng — admin sửa lại cột Mật Khẩu rồi nhập
+  // lại, không phát hiện ra sau khi đã golive.
+  const missingPasswordUsernames = prepared
+    .filter(u => !u.pass && !existingById.get(u.id))
+    .map(u => u.username || '(thiếu tên đăng nhập)');
+  if (missingPasswordUsernames.length) {
+    throw new HttpError(400, `${missingPasswordUsernames.length} tài khoản MỚI thiếu Mật Khẩu (sẽ tạo thành tài khoản không ai đăng nhập được): ${missingPasswordUsernames.slice(0, 20).join(', ')}${missingPasswordUsernames.length > 20 ? '...' : ''} — vui lòng điền đủ mật khẩu cho các tài khoản này rồi lưu/nhập lại.`);
+  }
+
   // USER-BULK-02: "users" là 1 mảng ghi TOÀN BỘ (whole-blob, xem routes/data.js POST /api/data/:key),
   // khớp theo "id" chứ chưa từng kiểm tra "username" trùng nhau — 2 tài khoản khác id nhưng cùng
   // username khiến routes/auth.js (mọi chỗ users.find(u => u.username === username)) LUÔN chỉ thấy tài
