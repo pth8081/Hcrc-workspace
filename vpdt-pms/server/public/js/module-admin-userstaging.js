@@ -587,7 +587,9 @@ function renderUsers() {
 
   const keywordInputEl = document.getElementById('filterUserKeyword');
   const keyword = (keywordInputEl?.value || '').trim();
-  const filtered = DB.users.filter(u => matchesAnyKeyword([u.username, u.name, u.dept], keywordInputEl?._multiKeywords, keyword));
+  const mustChangeOnly = !!document.getElementById('filterUserMustChangeOnly')?.checked;
+  const filtered = DB.users.filter(u => matchesAnyKeyword([u.username, u.name, u.dept], keywordInputEl?._multiKeywords, keyword) &&
+    (!mustChangeOnly || u.mustChangePassword));
 
   const paginationEl = document.getElementById('paginationContainer_user');
   if (paginationEl) paginationEl.innerHTML = buildPaginationBoxHTML('user', 'renderUsers');
@@ -1129,6 +1131,101 @@ async function confirmUsersImport() {
   }
   alert(`✅ Đã thêm mới ${addCount} + ghi đè ${overwriteCount} tài khoản!`);
   cancelUsersImport();
+  renderUsers();
+}
+
+// ===================== 🔑 Đặt Lại Mật Khẩu Hàng Loạt (11/2026) =====================
+// Theo yêu cầu người dùng (vừa Nhập Excel 500+ tài khoản, cần sửa mật khẩu hàng loạt cho tài khoản ĐÃ
+// CÓ sẵn, không mở "Sửa" từng người) — server CHỈ đọc/trả về xem trước (lib/userPasswordResetImport.js),
+// bước áp dụng thật gán "pass" (mật khẩu thô) lên đúng user khớp trong DB.users rồi gọi lại NGUYÊN
+// syncStorage('users') -> POST /api/data/users -> prepareUsersForSave() như mọi lượt lưu users khác —
+// hash/mustChangePassword/sessionVersion xử lý Y HỆT đường "Sửa" tay đơn lẻ đã chạy đúng từ trước, không
+// viết lại business rule nào mới.
+let upwResetPreviewItems = [];
+
+function toggleUserPasswordResetWrap() {
+  const wrap = document.getElementById('upwResetWrap');
+  wrap.classList.toggle('hidden');
+  if (wrap.classList.contains('hidden')) {
+    upwResetPreviewItems = [];
+    document.getElementById('upwResetPreviewWrap').classList.add('hidden');
+    document.getElementById('upwResetConfirmBtn').classList.add('hidden');
+    document.getElementById('upwResetStatus').innerText = '';
+    document.getElementById('upwResetFileInput').value = '';
+  }
+}
+
+async function onUserPasswordResetFileChange(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  evt.target.value = '';
+
+  const statusEl = document.getElementById('upwResetStatus');
+  statusEl.innerText = 'Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/admin/users/password-reset-parse-import', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { statusEl.innerText = `⛔ ${body.error || 'Không đọc được nội dung file Excel'}`; return; }
+    upwResetPreviewItems = (body.items || []).map((it, idx) => ({ ...it, _idx: idx, include: it.valid && !it.duplicateInFile }));
+  } catch (e) {
+    statusEl.innerText = `⛔ Không thể kết nối tới máy chủ: ${e.message}`;
+    return;
+  }
+  renderUserPasswordResetPreview();
+}
+
+function renderUserPasswordResetPreview() {
+  const items = upwResetPreviewItems;
+  const validCount = items.filter(it => it.valid).length;
+  document.getElementById('upwResetStatus').innerText = `Đọc được ${items.length} dòng, ${validCount} dòng hợp lệ` +
+    (items.length - validCount ? `, ${items.length - validCount} dòng lỗi (bị chặn, không áp dụng).` : '.');
+  document.getElementById('upwResetPreviewWrap').classList.remove('hidden');
+  document.getElementById('upwResetPreviewBody').innerHTML = items.map(it => {
+    const note = !it.valid ? `⛔ ${escapeHtml(it.errors.join('; '))}` : (it.duplicateInFile ? '⚠️ Trùng username với 1 dòng khác trong file này' : '✅');
+    return `
+    <tr class="border-b${!it.valid ? ' bg-red-50' : ''}">
+      <td class="p-1.5 text-center">${it.valid
+        ? `<input type="checkbox" data-op-change="onUserPasswordResetRowToggle" data-arg0="${it._idx}" data-arg-el="1" ${it.include ? 'checked' : ''}>`
+        : ''}</td>
+      <td class="p-1.5 font-mono">${escapeHtml(it.username)}</td>
+      <td class="p-1.5 font-mono">${'•'.repeat(Math.min(it.pass.length, 12))}</td>
+      <td class="p-1.5 text-[11px]">${note}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('upwResetConfirmBtn').classList.toggle('hidden', validCount === 0);
+}
+
+function onUserPasswordResetRowToggle(idxStr, el) {
+  const it = upwResetPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.include = !!el.checked;
+}
+
+async function confirmUserPasswordReset() {
+  const toApply = upwResetPreviewItems.filter(it => it.valid && it.include);
+  if (!toApply.length) return alert('Chưa chọn dòng nào để đặt lại mật khẩu.');
+  if (!confirm(`Xác nhận: đặt lại mật khẩu cho ${toApply.length} tài khoản? Mỗi tài khoản sẽ bị đăng xuất phiên đang mở (nếu có) và phải đổi mật khẩu ngay lần đăng nhập tới.`)) return;
+
+  const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  let appliedCount = 0;
+  const notFound = [];
+  toApply.forEach(({ username, pass }) => {
+    const existing = DB.users.find(u => u.username.trim().toLowerCase() === username.trim().toLowerCase());
+    if (!existing) { notFound.push(username); return; }
+    existing.pass = pass;
+    appliedCount++;
+  });
+
+  const saved = await syncStorage('users', { usersBaseline: usersSnapshot });
+  if (!saved) {
+    DB.users = usersSnapshot;
+    return;
+  }
+  alert(`✅ Đã đặt lại mật khẩu cho ${appliedCount} tài khoản!` +
+    (notFound.length ? `\n⛔ ${notFound.length} tài khoản không còn tồn tại (có thể vừa bị xoá ở nơi khác): ${notFound.join(', ')}` : ''));
+  toggleUserPasswordResetWrap();
   renderUsers();
 }
 

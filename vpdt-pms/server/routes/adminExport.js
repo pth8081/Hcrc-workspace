@@ -16,6 +16,8 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { buildGenericWorkbook, buildMultiSheetWorkbook, parseUsersImportXlsx, parseGenericSingleColumnXlsx } = require('../lib/adminExport');
 const { parseGenericMultiSheetMatrixXlsx } = require('../lib/permMatrixExcel');
+const { buildPasswordResetTemplateWorkbook, parsePasswordResetImportBuffer } = require('../lib/userPasswordResetImport');
+const { getAppDataValue } = require('../lib/appData');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
@@ -112,6 +114,54 @@ router.post('/users/import-xlsx', (req, res) => {
       res.json({ rows });
     } catch (parseErr) {
       sendCatchError(res, parseErr, 'POST /api/admin/users/import-xlsx');
+    }
+  });
+});
+
+// GET /api/admin/users/password-reset-template, POST /api/admin/users/password-reset-parse-import
+// (11/2026, theo yêu cầu người dùng: vừa Nhập Excel 500+ tài khoản xong cần đặt lại mật khẩu hàng loạt
+// cho các tài khoản ĐÃ CÓ, không phải mở "Sửa" từng người) — CHỈ đọc/trả về JSON xem trước (KHÔNG tự
+// ghi gì), client vẫn tự gán "pass" lên đúng user khớp trong DB.users rồi gọi lại NGUYÊN
+// syncStorage('users') -> POST /api/data/users -> prepareUsersForSave() như mọi lượt lưu users khác —
+// không viết lại logic hash/mustChangePassword/sessionVersion nào mới. Cùng quyền admin-only như
+// /users/import-xlsx (đặt lại mật khẩu NHẠY CẢM hơn cả tạo mới, không nới lỏng hơn).
+router.get('/users/password-reset-template', async (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được đặt lại mật khẩu hàng loạt' });
+  }
+  try {
+    const wb = buildPasswordResetTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_Dat_Lai_Mat_Khau.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('GET /api/admin/users/password-reset-template lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tạo file mẫu' });
+  }
+});
+
+router.post('/users/password-reset-parse-import', (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới được đặt lại mật khẩu hàng loạt' });
+  }
+  upload.single('file')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: `Tệp vượt quá dung lượng cho phép (${MAX_MB}MB)` });
+      return res.status(400).json({ error: err.message });
+    }
+    if (err) return sendCatchError(res, err, 'POST /api/admin/users/password-reset-parse-import');
+    if (!req.file) return res.status(400).json({ error: 'Thiếu tệp cần import' });
+
+    try {
+      const check = await verifyFileSignature(req.file.buffer, '.xlsx');
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const users = (await getAppDataValue('users')) || [];
+      const items = await parsePasswordResetImportBuffer(req.file.buffer, users);
+      res.json({ items });
+    } catch (parseErr) {
+      sendCatchError(res, parseErr, 'POST /api/admin/users/password-reset-parse-import');
     }
   });
 });

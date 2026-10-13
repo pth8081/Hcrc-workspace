@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**25.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.93 (2026-11): Đặt Lại Mật Khẩu Hàng Loạt + bộ lọc "chưa đổi mật khẩu tạm"
+
+Theo yêu cầu người dùng (vừa Nhập Excel 500+ tài khoản, cần sửa mật khẩu hàng loạt cho tài khoản ĐÃ CÓ
+sẵn mà không mở "Sửa" từng người) — Hệ Thống → Quản Trị → Phân Quyền, khối "Danh Sách Người Dùng" nay
+có thêm nút **"🔑 Đặt Lại Mật Khẩu Hàng Loạt"**: Tải Mẫu Excel (2 cột Tên Đăng Nhập + Mật Khẩu Mới) →
+Nhập Excel → xem trước (dòng không khớp username có thật/mật khẩu không đủ mạnh bị chặn, nêu rõ lý do)
+→ Xác Nhận. Áp dụng CHỈ cho tài khoản đã tồn tại (không tạo mới) — gán lại đúng field "pass" (mật khẩu
+thô) lên user khớp rồi lưu qua đúng route `POST /api/data/users` dùng chung với mọi cách sửa user khác,
+tái dùng nguyên `prepareUsersForSave()` (hash bcrypt + `mustChangePassword=true` + huỷ phiên đăng nhập
+cũ) — không viết lại business rule nào mới, hành vi y hệt gõ tay ở form Sửa.
+
+Đồng thời thêm bộ lọc **"🔑 Chỉ hiện tài khoản CHƯA đổi mật khẩu tạm"** ngay trên bảng danh sách người
+dùng — lọc nhanh ra ai CHƯA từng đăng nhập/đổi mật khẩu lần đầu, tiện rà soát sau mỗi đợt tạo/nhập hàng
+loạt tài khoản mới (phục vụ chính nhu cầu theo dõi tiến độ golive).
 
 ## v25.92 (2026-11): Chặn tạo "tài khoản ma" (không có mật khẩu) khi lưu Quản Lý Người Dùng
 
