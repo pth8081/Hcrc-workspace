@@ -1,8 +1,28 @@
 # Phiên bản hiện tại
 
-**25.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.86 (2026-11): Nhập Excel hàng loạt Onboarding — "Theo Quy Trình" / "Bỏ Qua Quy Trình"
+
+Theo yêu cầu người dùng: "cho tôi nhập hàng loạt, có option theo quy trình hoặc bỏ qua quy trình" (phục
+vụ di trú dữ liệu nhân sự cũ). Tab Onboarding (💼 Nhân Sự → 🧑‍💼 Onboarding / Offboarding) nay có thêm
+3 nút:
+
+- **"📥 Tải Mẫu (Theo Quy Trình)" + "📤 Nhập Excel (Theo Quy Trình)"** — mỗi dòng Excel tạo 1 quy trình
+  Onboarding ĐẦY ĐỦ checklist (dùng cho nhân viên MỚI, chưa từng onboarding) — đi qua ĐÚNG hàm dùng
+  chung với "+ Tạo Onboarding" tạo tay (tách ra `lib/hrProcessOnboardingCreate.js`, không viết lại
+  nghiệp vụ, không có đường tắt bỏ qua business rule). Giới hạn 300 dòng/lần, cùng khuôn xem trước →
+  xác nhận như Nhập Excel Hợp Đồng Lao Động.
+- **"👉 Bỏ Qua Quy Trình"** — dùng cho nhân viên CŨ đã đang làm việc, KHÔNG xây tính năng mới: chuyển
+  thẳng sang Nhập Excel Hồ Sơ Nhân Sự đã có sẵn, tạo hồ sơ "Đang làm việc" ngay, không sinh checklist.
+
+**Thay đổi kỹ thuật đi kèm**: refactor `routes/create.js` — tách đoạn xử lý riêng của
+`hrProcesses`/ONBOARDING (sinh/đặt chỗ Mã Nhân Viên + hook copy field sang Hồ Sơ Nhân Sự nháp) ra hàm
+dùng chung `createOnboardingProcessRecord()`, để route tạo tay đơn lẻ và route nhập Excel hàng loạt mới
+đi qua ĐÚNG 1 đường xử lý — đã xác nhận hành vi route cũ giữ nguyên 100% qua toàn bộ test hiện có + test
+mới, không có thay đổi hành vi nào cho route tạo tay.
 
 ## v25.85 (2026-11): Thêm nút "Kích Hoạt Hàng Loạt" cho Hợp Đồng Lao Động
 

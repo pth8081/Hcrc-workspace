@@ -2843,13 +2843,31 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
 - **Việc Của Tôi** — 1 sub-view tổng hợp mọi việc CHƯA XONG/QUÁ HẠN đang được
   giao cho chính mình (giao riêng hoặc theo đúng nhãn trách nhiệm), gộp cả
   Onboarding lẫn Offboarding.
-- **"📊 Xuất Excel"** (10/2026, theo yêu cầu người dùng — CHỈ xuất, KHÔNG có
-  Tải Mẫu/Nhập Excel cho Onboarding/Offboarding, khác Hồ Sơ Nhân Sự/Hợp Đồng
-  Lao Động) — xuất ĐÚNG danh sách đang hiện trên màn "Danh Sách Quy Trình",
-  tôn trọng 2 bộ lọc Loại/Trạng Thái đang chọn. File gồm: Loại (Onboarding/
-  Offboarding), Mã NV/Tài Khoản, Họ Tên, Phòng Ban, Chức Danh, Vị Trí, Email,
-  SĐT, Giai Đoạn, Tiến Độ Checklist, Ngày Bắt Đầu/Dự Kiến Kết Thúc/Nghỉ Thực
-  Tế, Trạng Thái, Quản Lý Trực Tiếp, Ghi Chú.
+- **"📊 Xuất Excel"** (10/2026, theo yêu cầu người dùng) — xuất ĐÚNG danh sách
+  đang hiện trên màn "Danh Sách Quy Trình", tôn trọng 2 bộ lọc Loại/Trạng Thái
+  đang chọn. File gồm: Loại (Onboarding/Offboarding), Mã NV/Tài Khoản, Họ Tên,
+  Phòng Ban, Chức Danh, Vị Trí, Email, SĐT, Giai Đoạn, Tiến Độ Checklist, Ngày
+  Bắt Đầu/Dự Kiến Kết Thúc/Nghỉ Thực Tế, Trạng Thái, Quản Lý Trực Tiếp, Ghi
+  Chú.
+- **Nhập Excel hàng loạt Onboarding — 2 lựa chọn** (10/2026, theo yêu cầu
+  người dùng: "cho nhập hàng loạt, có option theo quy trình hoặc bỏ qua quy
+  trình" — phục vụ di trú dữ liệu nhân sự cũ lên hệ thống):
+  - **"📥 Tải Mẫu (Theo Quy Trình)"** + **"📤 Nhập Excel (Theo Quy Trình)"** —
+    dùng cho nhân viên MỚI chưa từng Onboarding qua hệ thống. Mỗi dòng hợp lệ
+    tạo 1 quy trình Onboarding ĐẦY ĐỦ (đủ checklist tasks theo danh mục chuẩn
+    đang bật, hồ sơ Hồ Sơ Nhân Sự nháp vào hàng đợi "🕐 Hồ Sơ Onboarding")
+    — đi qua ĐÚNG hàm dùng chung với "+ Tạo Onboarding" tạo tay, không có
+    đường tắt bỏ qua business rule nào (cùng khuôn xem trước → xác nhận như
+    Nhập Excel Hợp Đồng Lao Động). Mã Nhân Viên để trống cho nhân viên hoàn
+    toàn mới (hệ thống tự sinh), chỉ điền khi là Tái Tuyển (mã của 1 hồ sơ
+    ĐÃ NGHỈ VIỆC). Giới hạn 300 dòng/lần nhập.
+  - **"👉 Bỏ Qua Quy Trình"** — dùng cho nhân viên CŨ đã đang làm việc, không
+    cần qua checklist Onboarding. Nút này chuyển thẳng sang Nhập Excel ở Hồ Sơ
+    Nhân Sự (mục 4.5.3 bên dưới) — tạo hồ sơ "Đang làm việc" (ACTIVE) NGAY,
+    KHÔNG tạo quy trình Onboarding/checklist nào.
+  - Cả 2 nút Nhập Excel/Tải Mẫu Onboarding đều gác quyền **"🆕 Quản Lý
+    Onboarding"** (hrOnboardingManage) y hệt nút "+ Tạo Onboarding" tạo tay —
+    không có quyền riêng mới nào cần cấu hình thêm.
 - **Checklist Mẫu** (sub-view chỉ hiện với quyền **"📋 Quản Lý Checklist
   Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn. Đổi
   danh mục **không ảnh hưởng ngược** các quy trình đã tạo trước đó (checklist

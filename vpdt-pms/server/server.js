@@ -73,6 +73,7 @@ const checklistRoutes = require('./routes/checklist');
 const checklistImportRoutes = require('./routes/checklistImport');
 const budgetLinesImportRoutes = require('./routes/budgetLinesImport');
 const laborContractImportRoutes = require('./routes/laborContractImport');
+const hrProcessImportRoutes = require('./routes/hrProcessImport');
 const purchasingRoutes = require('./routes/purchasing');
 const { isCaptchaEnabled, generateCaptcha } = require('./lib/captcha');
 const { checkContractExpiryReminders } = require('./jobs/contractExpiryReminder');
@@ -248,6 +249,9 @@ app.use('/api/budget-lines', budgetLinesImportRoutes);
 // Nhập/tải mẫu Excel Hợp Đồng Lao Động (routes/laborContractImport.js) — tách riêng vì cần multer, cùng
 // lý do routes/budgetLinesImport.js tách khỏi routes/records.js.
 app.use('/api/labor-contracts', laborContractImportRoutes);
+// Nhập/tải mẫu Excel TẠO MỚI hàng loạt Onboarding "Theo Quy Trình" (routes/hrProcessImport.js) — tách
+// riêng vì cần multer, cùng lý do routes/laborContractImport.js ở trên.
+app.use('/api/hr-processes', hrProcessImportRoutes);
 // Route TẢI file đính kèm dùng chung (khác /uploads/ tĩnh bên dưới — chỗ đó dùng để XEM trong Khung Xem
 // Bảo Vệ): PDF được đóng dấu watermark trước khi trả về, xem chi tiết ở routes/download.js.
 app.use('/api/files/download', requireAuth, blockIfMustChangePassword, downloadRoutes);

@@ -394,6 +394,122 @@ function exportHrProcessExcel() {
   downloadXlsxFromServer('Onboarding_Offboarding.xlsx', 'Onboarding-Offboarding', columns, data);
 }
 
+// ===== "👉 Bỏ Qua Quy Trình" (10/2026, theo yêu cầu người dùng: "có option theo quy trình hoặc bỏ qua
+// quy trình") — KHÔNG xây lại tính năng tạo hồ sơ ACTIVE ngay lập tức, chuyển thẳng sang Nhập Excel Hồ
+// Sơ Nhân Sự đã có sẵn (module-hrprofile.js openHrpfImportModal(), lib/employeeProfileImport.js +
+// POST /api/hr-profile/bulk-import -> createManualProfile(), status=ACTIVE NGAY, KHÔNG tạo hrProcesses
+// nào — đúng nhu cầu "nhân viên cũ đã đang làm việc, không cần qua checklist"). switchTab() tự tải lười
+// khung HTML hrProfileSection (TAB_SECTION_FRAGMENT, core.js) nếu chưa từng mở — await xong mới gọi
+// openHrpfImportModal() để chắc chắn modal đã có mặt trong DOM.
+async function goToHrProfileImportForOnboardingSkip() {
+  await switchTab('hrProfile');
+  openHrpfImportModal();
+}
+
+// ===== Nhập Excel TẠO MỚI hàng loạt Onboarding — "Theo Quy Trình" (10/2026) — mỗi dòng tạo 1 quy trình
+// hrProcesses/ONBOARDING THẬT (đủ checklist), đi qua ĐÚNG POST /api/records/hrProcesses/apply-create-import
+// -> createOnboardingProcessRecord() (lib/hrProcessOnboardingCreate.js, DÙNG CHUNG với "+ Tạo Onboarding"
+// tạo tay ở trên — không có đường tắt bỏ qua business rule). Cùng khuôn modal Nhập Excel Tạo Mới hàng
+// loạt Hợp Đồng Lao Động (module-hopdonglaodong.js): chọn file -> xem trước -> xác nhận.
+let hrpOnbCreateImportPreviewItems = [];
+
+function openHrpOnbCreateImportModal() {
+  document.getElementById('hrpOnbCreateImportFile').value = '';
+  document.getElementById('hrpOnbCreateImportStatus').innerText = '';
+  hrpOnbCreateImportPreviewItems = [];
+  document.getElementById('hrpOnbCreateImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrpOnbCreateImportConfirmBtn').classList.add('hidden');
+  document.getElementById('hrpOnbCreateImportModal').classList.remove('hidden');
+}
+function closeHrpOnbCreateImportModal() {
+  document.getElementById('hrpOnbCreateImportModal').classList.add('hidden');
+}
+
+async function onHrpOnbCreateImportFileChange(event) {
+  const file = event.target.files[0];
+  hrpOnbCreateImportPreviewItems = [];
+  document.getElementById('hrpOnbCreateImportPreviewWrap').classList.add('hidden');
+  document.getElementById('hrpOnbCreateImportConfirmBtn').classList.add('hidden');
+  const statusEl = document.getElementById('hrpOnbCreateImportStatus');
+  if (!file) { statusEl.innerText = ''; return; }
+  statusEl.innerText = '⏳ Đang đọc file...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/hr-processes/onboarding-parse-create-import', { method: 'POST', body: formData });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Lỗi không xác định');
+    // Mặc định an toàn (cùng tinh thần module-hopdonglaodong.js): dòng hợp lệ + KHÔNG trùng trong file
+    // -> action='add'; dòng lỗi/trùng -> 'skip', người dùng tự tick lại nếu vẫn muốn áp dụng.
+    data.items.forEach((it, idx) => {
+      it._idx = idx;
+      it.action = (it.valid && !it.duplicateInFile) ? 'add' : 'skip';
+    });
+    hrpOnbCreateImportPreviewItems = data.items;
+    const addableCount = data.items.filter(it => it.valid && !it.duplicateInFile).length;
+    const dupCount = data.items.filter(it => it.duplicateInFile).length;
+    statusEl.innerText = `✅ Đọc file "${data.fileName}": ${data.items.length} dòng, ${addableCount} dòng sẵn sàng tạo mới`
+      + (dupCount ? `, ${dupCount} dòng TRÙNG MÃ NHÂN VIÊN trong file (đã bỏ chọn sẵn, tự tick lại nếu vẫn muốn áp dụng).` : '.');
+    renderHrpOnbCreateImportPreviewBody();
+    document.getElementById('hrpOnbCreateImportPreviewWrap').classList.remove('hidden');
+    if (data.items.some(it => it.valid)) document.getElementById('hrpOnbCreateImportConfirmBtn').classList.remove('hidden');
+  } catch (err) {
+    statusEl.innerText = `⛔ ${err.message}`;
+    event.target.value = '';
+  }
+}
+
+function renderHrpOnbCreateImportPreviewBody() {
+  document.getElementById('hrpOnbCreateImportPreviewBody').innerHTML = hrpOnbCreateImportPreviewItems.map((it) => {
+    let statusCell;
+    if (!it.valid) {
+      statusCell = `<span class="text-red-600">⛔ ${escapeHtml(it.errors.join('; '))}</span>`;
+    } else {
+      statusCell = `<label class="text-xs"><input type="checkbox" data-op-change="onHrpOnbCreateImportRowToggle" data-arg0="${it._idx}" ${it.action === 'add' ? 'checked' : ''}> Tạo mới</label>`
+        + (it.duplicateInFile ? ' <span class="text-amber-700">⚠️ Trùng mã trong file</span>' : '');
+    }
+    return `<tr class="${!it.valid || it.duplicateInFile ? 'bg-amber-50' : ''}">
+      <td class="p-1">${escapeHtml(it.fullName || '')}</td>
+      <td class="p-1 font-mono">${escapeHtml(it.employeeCode || '(tự sinh)')}</td>
+      <td class="p-1">${it.valid ? escapeHtml(it.fields.employeePosType === 'STORE' ? 'Siêu Thị' : 'Khối VP/HO') : '-'}</td>
+      <td class="p-1">${it.valid ? escapeHtml(it.fields.startDate || '') : '-'}</td>
+      <td class="p-1">${statusCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+function onHrpOnbCreateImportRowToggle(idxStr) {
+  const it = hrpOnbCreateImportPreviewItems.find(x => x._idx === Number(idxStr));
+  if (it) it.action = (it.action === 'add') ? 'skip' : 'add';
+}
+
+async function confirmHrpOnbCreateImport() {
+  const submitItems = hrpOnbCreateImportPreviewItems.filter(it => it.valid && it.action === 'add');
+  if (!submitItems.length) return alert('Chưa chọn dòng nào để tạo mới.');
+  try {
+    const res = await fetch('/api/records/hrProcesses/apply-create-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: submitItems.map(it => ({ fullName: it.fullName, action: 'add', fields: it.fields })) })
+    });
+    if (res.status === 401) { handleSessionExpired(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Lỗi máy chủ (HTTP ${res.status})`);
+    DB.hrProcesses = DB.hrProcesses || [];
+    (data.created || []).forEach(item => DB.hrProcesses.unshift(item));
+    renderHrProcessList();
+    let msg = `✅ Đã tạo ${data.created.length}/${submitItems.length} quy trình Onboarding.`;
+    if (data.skipped.length) {
+      msg += `\n\n⛔ ${data.skipped.length} dòng bị bỏ qua:\n` + data.skipped.map(s => `- ${s.fullName}: ${s.reason}`).join('\n');
+    }
+    alert(msg);
+    closeHrpOnbCreateImportModal();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
 function renderHrProcessList() {
   const container = document.getElementById('hrpListContainer');
   if (!container) return;

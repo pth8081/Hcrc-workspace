@@ -10271,6 +10271,11 @@ function _dispatchTabRender(tabName) {
     document.getElementById('btnHrpViewTemplates').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrTaskTemplateManage));
     document.getElementById('btnHrpCreateOnboarding').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
     document.getElementById('btnHrpCreateOffboarding').classList.toggle('hidden', !canManageHrLifecycleClient('OFFBOARDING'));
+    // Nhập Excel hàng loạt Onboarding (Theo Quy Trình/Bỏ Qua Quy Trình, 10/2026) — cùng quyền "+ Tạo
+    // Onboarding" ở trên (canCreateHrProcess(user,'ONBOARDING') phía server gác lại y hệt).
+    document.getElementById('btnHrpOnbCreateTemplateLink').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
+    document.getElementById('btnHrpOnbCreateImport').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
+    document.getElementById('btnHrpOnbSkipImport').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
     setHrLifecycleView(activeHrLifecycleView);
   }
   if (tabName === 'hrProfile') { renderHrProfileModule(); }

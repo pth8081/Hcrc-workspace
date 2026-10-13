@@ -8,6 +8,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { CREATE_MODULE_CONFIGS, CreateError, validateAndPrepareCreate } = require('../lib/createValidation');
 const { createForCollection, createForCollectionSerialized, getAllForCollection, withAppLock, getTrashItems } = require('../lib/recordStore');
 const employeeProfile = require('../lib/employeeProfile');
+const { createOnboardingProcessRecord } = require('../lib/hrProcessOnboardingCreate');
 const { hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessItPriceApprovalModuleServer } = require('../lib/recordViewScope');
 const { MODULE_CONFIGS: WORKFLOW_MODULE_CONFIGS, findMissingApproverStep } = require('../lib/workflowEngine');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -202,6 +203,22 @@ router.post('/:module', async (req, res) => {
     if (!moduleAccessOk) {
       return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
     }
+    // hrProcesses/ONBOARDING — tách riêng (lib/hrProcessOnboardingCreate.js, DÙNG CHUNG với route Nhập
+    // Excel Tạo Mới hàng loạt "Theo Quy Trình" mới, xem POST /hrProcesses/apply-create-import ở
+    // routes/records.js): sinh/đặt chỗ Mã Nhân Viên + tạo hrProcesses + hook copy field sang
+    // employeeProfiles DRAFT đều nằm trong hàm đó (copy nguyên vẹn từ khối inline cũ từng ở đây, xem
+    // lịch sử git nếu cần đối chiếu), KHÔNG đi qua đường chung bên dưới nữa. OFFBOARDING vẫn đi qua
+    // đường chung như cũ (không có pre-reservation/hook riêng nào), không đổi gì.
+    if (moduleKey === 'hrProcesses' && req.body?.processType === 'ONBOARDING') {
+      try {
+        const record = await createOnboardingProcessRecord(req.body, freshUser, appData);
+        return res.json({ ok: true, item: record });
+      } catch (err) {
+        if (err instanceof CreateError) return res.status(err.status).json({ error: err.message });
+        console.error('POST /api/create/hrProcesses (ONBOARDING) lỗi:', err.stack || err.message);
+        return res.status(500).json({ error: 'Không thể tạo hồ sơ' });
+      }
+    }
     // vppRegistrations cần tra cứu chéo sang collection vppPeriods (kỳ đăng ký còn mở/danh mục mặt
     // hàng hợp lệ) — vppPeriods đã chuyển sang dbo.Records (không còn trong AppData) nên gộp thêm vào
     // đây, CALLER đọc sẵn rồi truyền vào (khớp đúng nguyên tắc appData ở lib/createValidation.js — file
@@ -370,69 +387,9 @@ router.post('/:module', async (req, res) => {
     // INDEX như Code) — dùng đường khoá nghiêm túc theo phòng họp thay vì createForCollection() thường
     // (xem lib/createValidation.js CREATE_MODULE_CONFIGS.meetings.getLockKey +
     // lib/recordStore.js createForCollectionSerialized).
-    // hrProcesses/ONBOARDING (9/2026, theo yêu cầu người dùng): Mã Nhân Viên TỰ SINH ("BL" + số tuần
-    // tự, employeeProfile.generateEmployeeCode()) thay vì HR gõ tay — sinh + ĐẶT CHỖ (push ngay 1 hồ sơ
-    // DRAFT) TRONG CÙNG 1 khoá employeeProfiles, NGAY TRƯỚC KHI tạo hrProcesses, để 2 request tạo
-    // Onboarding gần như cùng lúc không bao giờ nhận trùng mã (xem chú thích generateEmployeeCode()).
-    // Ghi thẳng vào req.body.employeeCode — builderFn ở trên đọc req.body qua closure nên vẫn thấy giá
-    // trị mới này khi validateAndPrepareCreate() chạy ngay sau đây, không cần đổi gì ở
-    // lib/createValidation.js (check "thiếu Mã Nhân Viên" vẫn qua bình thường vì đã có giá trị).
-    // Nếu tạo hrProcesses THẤT BẠI ngay sau đó (lỗi field khác) thì hồ sơ DRAFT vừa đặt chỗ trở thành mồ
-    // côi (processId=null, không ai dùng mã đó nữa) — chấp nhận được (hiếm, không hỏng dữ liệu, chỉ lãng
-    // phí 1 số thứ tự) vì client đã tự kiểm tra các field bắt buộc khác trước khi gửi.
-    //
-    // NGOẠI LỆ — luồng Tái Tuyển (task Kiểm Tra Nhân Sự Cũ, routes/employeeProfile.js reactivateForRehire()):
-    // client CHỦ ĐỘNG gửi kèm employeeCode = mã CŨ của hồ sơ vừa được tái kích hoạt (đã tồn tại sẵn,
-    // KHÔNG phải mã mới) — KHÔNG được tự sinh/đặt chỗ đè lên trong trường hợp này, giữ nguyên client gửi.
-    //
-    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): nhánh "client chủ động gửi
-    // employeeCode" ở trên TRƯỚC ĐÂY nhận NGUYÊN chuỗi client gửi, KHÔNG kiểm tra gì — trong khi người
-    // tạo Onboarding chỉ cần quyền hrOnboardingManage (KHÔNG cần bất kỳ quyền Hồ Sơ Nhân Sự nào). Hệ quả:
-    //   (a) gửi đúng mã của 1 hồ sơ ACTIVE người khác -> quy trình Onboarding mới bám thẳng vào hồ sơ
-    //       đang sống đó (hook sau khi tạo GHI ĐÈ processId, và khi quy trình này hoàn tất
-    //       applyProcessCompletion() ghi đè cả status hồ sơ) — chiếm/phá hồ sơ người khác mà không có
-    //       quyền Hồ Sơ Nhân Sự nào;
-    //   (b) gửi 1 mã KHÔNG tồn tại -> quy trình "mồ côi" không hồ sơ nào đi kèm, mọi hook hồ sơ/phép
-    //       năm/hợp đồng sau đó im lặng không làm gì.
-    // Luồng nghiệp vụ THẬT chỉ có ĐÚNG 2 trường hợp (xem hrLifecycleSection.html + module-hrlifecycle.js):
-    //   1. Nhân viên MỚI hoàn toàn -> để TRỐNG, server tự sinh mã + đặt chỗ hồ sơ DRAFT (nhánh dưới);
-    //   2. Tái Tuyển -> chọn từ "🔍 Kiểm Tra Nhân Sự Cũ" (GET /api/hr-profile/search-inactive) vốn CHỈ
-    //      trả về hồ sơ INACTIVE.
-    // Nên mã client gửi lên BẮT BUỘC phải trỏ đúng 1 hồ sơ INACTIVE (tái tuyển), hoặc 1 hồ sơ DRAFT chưa
-    // gắn quy trình nào (processId=null — hồ sơ đặt chỗ mồ côi do lượt tạo trước lỗi giữa chừng, xem chú
-    // thích ngay trên; cho dùng lại đúng mã đó thay vì bỏ phí).
-    const isOnboarding = moduleKey === 'hrProcesses' && req.body?.processType === 'ONBOARDING';
-    const clientProvidedEmployeeCode = isOnboarding && req.body?.employeeCode ? String(req.body.employeeCode).trim() : '';
-    if (isOnboarding && clientProvidedEmployeeCode) {
-      // appData đã đọc sẵn ở đầu handler (getAllAppData()) — employeeProfiles là key AppData thường.
-      const existing = (appData.employeeProfiles || []).find(p => p.employeeCode === clientProvidedEmployeeCode);
-      if (!existing) {
-        return res.status(400).json({ error: `Mã Nhân Viên "${clientProvidedEmployeeCode}" không có trong Hồ Sơ Nhân Sự — để TRỐNG ô Mã Nhân Viên nếu đây là nhân viên mới (hệ thống tự sinh mã), hoặc chọn lại đúng hồ sơ cũ qua "🔍 Kiểm Tra Nhân Sự Cũ"` });
-      }
-      const reusableDraft = existing.status === 'DRAFT' && existing.processId == null;
-      if (existing.status !== 'INACTIVE' && !reusableDraft) {
-        // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Thấp — #12): 2 đường "Tái Tuyển" xung đột
-        // nhau (route ở Hồ Sơ Nhân Sự — POST .../by-code/:code/rehire — đặt hồ sơ ACTIVE NGAY; đường
-        // Onboarding này lại đòi hồ sơ đang INACTIVE) — nếu HR lỡ dùng Tái Tuyển ở Hồ Sơ Nhân Sự TRƯỚC,
-        // hồ sơ đã chuyển ACTIVE nên quay lại đây tạo Onboarding sẽ rơi đúng vào nhánh lỗi này mà không
-        // biết vì sao/phải làm gì tiếp — thêm hướng dẫn cụ thể cho ĐÚNG trường hợp ACTIVE (khả năng cao
-        // nhất là đã lỡ tái tuyển sai chỗ) thay vì câu chung chung.
-        const guidance = existing.status === 'ACTIVE'
-          ? `Có thể hồ sơ này đã được Tái Tuyển qua màn Hồ Sơ Nhân Sự trước đó — vui lòng dùng chức năng "🔍 Kiểm Tra Nhân Sự Cũ" NGAY TRONG form Onboarding này để tái tuyển (giữ đúng quy trình checklist), thay vì bấm Tái Tuyển ở Hồ Sơ Nhân Sự trước rồi mới quay lại đây.`
-          : 'Để trống ô Mã Nhân Viên nếu đây là nhân viên mới.';
-        return res.status(409).json({ error: `Mã Nhân Viên "${clientProvidedEmployeeCode}" đang gắn với 1 hồ sơ nhân sự khác đang hoạt động — chỉ tạo Onboarding theo mã cũ cho hồ sơ ĐÃ NGHỈ VIỆC (Tái Tuyển). ${guidance}` });
-      }
-    }
-    if (isOnboarding && !clientProvidedEmployeeCode) {
-      await withLockedAppDataValue('employeeProfiles', (list) => {
-        const arr = Array.isArray(list) ? list : [];
-        const code = employeeProfile.generateEmployeeCode(arr);
-        req.body.employeeCode = code;
-        arr.push(employeeProfile.createDraftProfileForOnboarding(code, freshUser.username, freshUser.name));
-        return arr;
-      });
-    }
-
+    // hrProcesses/ONBOARDING: xử lý riêng đã tách sang createOnboardingProcessRecord() (xem nhánh early-
+    // return ngay sau khối kiểm tra moduleAccessOk ở trên) — nhánh này KHÔNG BAO GIỜ chạy tới đây nữa cho
+    // ONBOARDING (đã return sớm). OFFBOARDING (processType khác) vẫn đi tiếp đường chung bên dưới như cũ.
     const record = config.getLockKey
       ? await createForCollectionSerialized(config.dbKey, config.getLockKey(req.body, freshUser), builderFn)
       : familyLockKey
@@ -443,94 +400,9 @@ router.post('/:module', async (req, res) => {
     if (moduleKey === 'licenses') await learnLicenseType(record.licenseType);
     // Tự học "Loại Dịch Vụ" mới vào danh mục gợi ý — xem learnItRenewalCategory() ở đầu file.
     if (moduleKey === 'itServiceRenewals') await learnItRenewalCategory(record.category);
-    // Onboarding mới tạo (giai đoạn PRE_BOARDING) -> hồ sơ (DRAFT vừa đặt chỗ tự sinh mã, HOẶC hồ sơ vừa
-    // được tái kích hoạt qua luồng Tái Tuyển với mã CŨ giữ nguyên — cả 2 trường hợp đều đã tồn tại đúng
-    // employeeCode trong employeeProfiles tại đây) -> gắn/ghi đè processId = id hrProcesses vừa tạo xong
-    // (chưa biết trước lúc đặt chỗ/tái kích hoạt) — LUÔN ghi đè (không chỉ khi trống) vì Tái Tuyển tạo
-    // Onboarding MỚI cho hồ sơ cũ, processId phải trỏ đúng quy trình đang thực hiện HIỆN TẠI, không giữ
-    // processId của đợt làm việc trước. Offboarding KHÔNG cần hook ở đây vì hồ sơ chắc chắn đã tồn tại từ
-    // Onboarding trước đó.
-    if (moduleKey === 'hrProcesses' && record.processType === 'ONBOARDING') {
-      await withLockedAppDataValue('employeeProfiles', (list) => {
-        const arr = Array.isArray(list) ? list : [];
-        const idx = arr.findIndex(p => p.employeeCode === record.employeeCode);
-        // onboardingQueueStatus='PENDING' (Ảnh 2, 9/2026, theo yêu cầu người dùng): MỌI hồ sơ gắn 1 quy
-        // trình Onboarding mới tạo (nhân viên mới HOẶC tái tuyển qua "Kiểm Tra Nhân Sự Cũ" — cả 2 nhánh
-        // đều rơi đúng vào đây) đều vào "hàng đợi" tab "🕐 Hồ Sơ Onboarding" (module-hrprofile.js) trước,
-        // KHÔNG hiện ở "Quản Lý Hồ Sơ" cho tới khi HR "Xác Nhận" — xem chú thích đầy đủ tại
-        // onboardingQueueStatus ở lib/employeeProfile.js::defaultProfile(). 3 field cancel-* reset về null
-        // phòng trường hợp tái dùng lại 1 hồ sơ đã từng bị "Hủy" ở hàng đợi trước đó (reusableDraft path).
-        if (idx !== -1) arr[idx] = {
-          ...arr[idx], processId: record.id, onboardingQueueStatus: 'PENDING',
-          onboardingQueueCancelReason: null, onboardingQueueCancelledAt: null, onboardingQueueCancelledBy: null
-        };
-        // Địa Chỉ (currentAddress)/CCCD (nationalId) — thu thập ngay ở form Onboarding (10/2026, theo yêu
-        // cầu người dùng), KHÔNG còn bắt buộc phải đợi HR điền sau ở Hồ Sơ Nhân Sự. Cả 2 field ĐÃ được
-        // trim/giới hạn độ dài + chặn trùng CCCD ở hrProcesses.extraValidate (lib/createValidation.js) —
-        // chỉ ghi thẳng vào hồ sơ nháp KHI client thực sự gửi giá trị không rỗng (để trống vẫn hợp lệ,
-        // "bổ sung sau ở Hồ Sơ Nhân Sự" như trước). Dùng applyProfileEdit() (không tự gán tay) để đi
-        // đúng cùng 1 đường xử lý field chung (trim/slice/ghi profileEditHistory) như mọi lối ghi
-        // currentAddress/nationalId khác của hồ sơ (PATCH by-code/import Excel/tạo hồ sơ tay).
-        // gender/dateOfBirth/permanentAddress/nationalIdIssueDate/nationalIdIssuePlace/employmentType
-        // (10/2026, đối chiếu file Excel "Trường Thông Tin Tạo Mã") — CÙNG cơ chế currentAddress/
-        // nationalId ở trên, đã trim/validate đầy đủ ở hrProcesses.extraValidate (lib/createValidation.js).
-        // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới — "Điện thoại liên hệ") — record.phone đã
-        // bắt buộc nhập + trim ở hrProcesses.extraValidate (xem lib/createValidation.js dòng ~3475), copy
-        // 1 lần vào hồ sơ CÙNG lúc với currentAddress/nationalId, KHÔNG lưu trùng ở nơi khác.
-        // workEmail (11/2026, khối Nhân Sự báo "Email liên hệ công việc phải gõ lại dù đã nhập ở
-        // Onboarding", trong khi MỌI field khác ở đây đều đã tự copy sẵn) — record.email đã validate
-        // đúng định dạng + trim + giới hạn 200 ký tự ở hrProcesses.extraValidate (lib/createValidation.js
-        // dòng ~3670), copy 1 lần vào workEmail CÙNG lúc với các field trên. Khác personalEmail (email cá
-        // nhân, HR tự nhập riêng sau nếu cần) — workEmail là email công ty dùng lúc Onboarding, hợp lý
-        // nhất để tự điền sẵn, HR vẫn sửa lại được bình thường sau nếu công ty cấp email khác.
-        if (idx !== -1 && (record.currentAddress || record.nationalId || record.gender || record.dateOfBirth
-          || record.permanentAddress || record.nationalIdIssueDate || record.nationalIdIssuePlace
-          || record.employmentType || record.workSchedule || record.phone || record.email)) {
-          // CHỈ đưa vào payload đúng field client thực sự gửi khác rỗng — applyProfileEdit() coi field
-          // "có mặt trong payload" (kể cả giá trị rỗng/undefined) là "cần ghi đè", nên field còn lại
-          // (không nhập) PHẢI vắng mặt hẳn khỏi object này để giữ nguyên giá trị cũ, không bị ghi đè null.
-          const onboardingProfileEdits = {};
-          if (record.currentAddress) onboardingProfileEdits.currentAddress = record.currentAddress;
-          if (record.nationalId) onboardingProfileEdits.nationalId = record.nationalId;
-          if (record.gender) onboardingProfileEdits.gender = record.gender;
-          if (record.dateOfBirth) onboardingProfileEdits.dateOfBirth = record.dateOfBirth;
-          if (record.permanentAddress) onboardingProfileEdits.permanentAddress = record.permanentAddress;
-          if (record.nationalIdIssueDate) onboardingProfileEdits.nationalIdIssueDate = record.nationalIdIssueDate;
-          if (record.nationalIdIssuePlace) onboardingProfileEdits.nationalIdIssuePlace = record.nationalIdIssuePlace;
-          if (record.employmentType) onboardingProfileEdits.employmentType = record.employmentType;
-          if (record.workSchedule) onboardingProfileEdits.workSchedule = record.workSchedule;
-          if (record.phone) onboardingProfileEdits.contactPhone = record.phone;
-          if (record.email) onboardingProfileEdits.workEmail = record.email;
-          // employmentTypes/workSchedules: truyền đúng danh mục THẬT appData.employmentTypes/
-          // appData.workSchedules (admin tự sửa qua màn Biểu Mẫu) — appData đã đọc sẵn ở đầu handler
-          // (getAllAppData()), record.employmentType/record.workSchedule đã qua đối chiếu CÙNG danh mục
-          // này ở hrProcesses.extraValidate nên không thể lệch nhau giữa 2 bước.
-          employeeProfile.applyProfileEdit(
-            arr[idx], onboardingProfileEdits, Object.keys(onboardingProfileEdits),
-            freshUser.username, freshUser.name,
-            {
-              employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
-              // nationalIdIssuePlaces (10/2026, mẫu Excel 90 trường) — form Onboarding (hrpOnbNationalIdIssuePlace)
-              // ĐÃ chuyển sang <select> nguồn ĐÚNG danh mục này (xem hrLifecycleSection.html/core.js
-              // populateDropdowns()), nên luôn khớp — truyền vào để applyProfileEdit() đối chiếu ĐÚNG
-              // danh mục thật (không rơi về NATIONAL_ID_ISSUE_PLACES fallback cứng).
-              nationalIdIssuePlaces: appData.nationalIdIssuePlaces
-            }
-          );
-        }
-        // Học vấn (Trình độ/Trường/Chuyên ngành) — tạo dòng ĐẦU TIÊN của education[] nếu form Onboarding
-        // có nhập (educationEntry đã dựng sẵn ở hrProcesses.extraValidate). CHỈ áp dụng khi hồ sơ đang
-        // trống education[] (idx !== -1 && không có sẵn dòng nào) — tránh ghi đè/nhân đôi nếu hook này lỡ
-        // chạy lại cho cùng 1 employeeCode (VD Tái Tuyển dùng lại hồ sơ cũ đã có sẵn học vấn).
-        if (idx !== -1 && record.educationEntry && (!Array.isArray(arr[idx].education) || arr[idx].education.length === 0)) {
-          employeeProfile.applyProfileEdit(
-            arr[idx], { education: [{ id: require('crypto').randomUUID(), ...record.educationEntry, graduationYear: null }] },
-            ['education'], freshUser.username, freshUser.name
-          );
-        }
-        return arr;
-      });
-    }
+    // (hook copy field Onboarding -> employeeProfiles DRAFT đã dời sang createOnboardingProcessRecord(),
+    // xem lib/hrProcessOnboardingCreate.js — nhánh ONBOARDING không còn chạy tới đây nữa, OFFBOARDING
+    // chưa từng cần hook này.)
 
     // Kiểm tra "chưa có người duyệt" (operationOrders + 6 module dept/tier-workflow khác) giờ CHẶN CỨNG
     // ngay trong builderFn ở trên (TRƯỚC khi ghi xuống DB — xem NO_APPROVER_BLOCK_LABELS/

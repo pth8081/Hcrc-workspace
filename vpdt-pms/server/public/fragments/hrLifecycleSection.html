@@ -24,7 +24,42 @@
         <div class="flex flex-wrap gap-2">
           <button type="button" id="btnHrpCreateOnboarding" data-op="showHrCreateForm" data-arg0="ONBOARDING" class="bg-teal-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-teal-800">+ Tạo Onboarding</button>
           <button type="button" id="btnHrpCreateOffboarding" data-op="showHrCreateForm" data-arg0="OFFBOARDING" class="bg-amber-700 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-800">+ Tạo Offboarding</button>
+          <a id="btnHrpOnbCreateTemplateLink" href="/api/hr-processes/onboarding-create-template" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">📥 Tải Mẫu (Theo Quy Trình)</a>
+          <button type="button" id="btnHrpOnbCreateImport" data-op="openHrpOnbCreateImportModal" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">📤 Nhập Excel (Theo Quy Trình)</button>
+          <button type="button" id="btnHrpOnbSkipImport" data-op="goToHrProfileImportForOnboardingSkip" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700" title="Dùng cho nhân viên CŨ đã đang làm việc — tạo hồ sơ ngay, không cần qua checklist Onboarding">👉 Bỏ Qua Quy Trình</button>
           <button type="button" data-op="exportHrProcessExcel" class="bg-gray-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-gray-700">📊 Xuất Excel</button>
+        </div>
+      </div>
+
+      <!-- Modal "Nhập Excel TẠO MỚI hàng loạt Onboarding — Theo Quy Trình" (10/2026) — mỗi dòng tạo 1
+           quy trình Onboarding THẬT (đủ checklist), đi qua ĐÚNG createOnboardingProcessRecord() (xem
+           lib/hrProcessOnboardingCreate.js) — DÙNG CHUNG với "+ Tạo Onboarding" tạo tay ở trên, không có
+           đường tắt bỏ qua business rule. Nhánh "Bỏ Qua Quy Trình" KHÔNG dùng modal này — xem nút
+           "👉 Bỏ Qua Quy Trình" ở trên, chuyển sang Nhập Excel Hồ Sơ Nhân Sự đã có sẵn. -->
+      <div id="hrpOnbCreateImportModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-base">📤 Nhập Excel TẠO MỚI hàng loạt Onboarding (Theo Quy Trình)</h3>
+            <button type="button" data-op="closeHrpOnbCreateImportModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          </div>
+          <p class="text-[11px] text-gray-500 mb-2">Mỗi dòng hợp lệ tạo 1 quy trình Onboarding ĐẦY ĐỦ (đủ các bước/việc cần làm như tạo tay) — dùng cho nhân viên CHƯA onboarding qua hệ thống. Nếu là nhân viên CŨ đã đang làm việc (không cần qua checklist), dùng nút "👉 Bỏ Qua Quy Trình" thay vì file này.</p>
+          <input type="file" id="hrpOnbCreateImportFile" accept=".xlsx,.xls" data-op-change="onHrpOnbCreateImportFileChange" class="w-full border p-1.5 rounded text-xs mb-2">
+          <p id="hrpOnbCreateImportStatus" class="text-xs mb-2"></p>
+          <div id="hrpOnbCreateImportPreviewWrap" class="hidden border rounded max-h-72 overflow-y-auto mb-2">
+            <table class="w-full text-[11px]">
+              <thead class="bg-gray-50 sticky top-0">
+                <tr>
+                  <th class="p-1 text-left">Họ Tên</th>
+                  <th class="p-1 text-left">Mã NV</th>
+                  <th class="p-1 text-left">Vị Trí</th>
+                  <th class="p-1 text-left">Ngày Vào Làm</th>
+                  <th class="p-1 text-left">Trạng Thái</th>
+                </tr>
+              </thead>
+              <tbody id="hrpOnbCreateImportPreviewBody"></tbody>
+            </table>
+          </div>
+          <button type="button" id="hrpOnbCreateImportConfirmBtn" data-op="confirmHrpOnbCreateImport" class="hidden bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">✅ Xác Nhận Tạo</button>
         </div>
       </div>
 

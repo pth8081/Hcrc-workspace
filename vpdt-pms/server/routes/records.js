@@ -10,6 +10,8 @@ const employeeProfile = require('../lib/employeeProfile');
 const laborContract = require('../lib/laborContract');
 const laborContractImport = require('../lib/laborContractImport');
 const laborContractCreateImport = require('../lib/laborContractCreateImport');
+const { createOnboardingProcessRecord } = require('../lib/hrProcessOnboardingCreate');
+const hrProcessCreateImport = require('../lib/hrProcessCreateImport');
 const { validateAndPrepareCreate } = require('../lib/createValidation');
 const attendance = require('../lib/attendance');
 const { findLockedPayrollPeriodForDate, findLockedPayrollPeriodInRange } = require('../lib/payroll');
@@ -5129,6 +5131,58 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
     res.json({ ok: true, created, updated, skipped });
   } catch (err) {
     handleError(res, 'laborContracts/apply-create-import', err);
+  }
+});
+
+// POST /hrProcesses/apply-create-import — áp dụng hàng loạt dòng Excel TẠO MỚI quy trình Onboarding
+// "Theo Quy Trình" đã được HR xem trước (routes/hrProcessImport.js::onboarding-parse-create-import,
+// KHÔNG tự ghi gì ở bước xem trước đó). Theo yêu cầu người dùng (10/2026: "cho tôi nhập hàng loạt, có
+// option theo quy trình hoặc bỏ qua quy trình"). Mỗi dòng action !== 'skip' đi qua ĐÚNG
+// createOnboardingProcessRecord() (lib/hrProcessOnboardingCreate.js — hàm DÙNG CHUNG với route tạo tay
+// đơn lẻ POST /api/create/hrProcesses) — không viết lại business rule nào mới, mỗi dòng vẫn nhận ĐỦ
+// checklist tasks[] + hồ sơ employeeProfiles nháp PENDING ở hàng đợi Onboarding như tạo tay. 1 dòng lỗi
+// KHÔNG chặn các dòng còn lại — trả về created[]/skipped[]. KHÔNG gộp chung 1 lock lớn (khác route sửa
+// hàng loạt dùng createForCollectionSerialized theo 1 khoá cố định) vì mỗi dòng ở đây đã tự khoá đúng
+// phạm vi riêng của nó bên trong createOnboardingProcessRecord() (khoá employeeProfiles lúc đặt chỗ Mã
+// Nhân Viên, rồi khoá hrProcesses lúc tạo, rồi khoá employeeProfiles lần nữa lúc gắn hook) — chạy TUẦN
+// TỰ (for...of, không Promise.all) để tránh N luồng cùng tranh chấp khoá employeeProfiles cùng lúc.
+router.post('/hrProcesses/apply-create-import', async (req, res) => {
+  try {
+    const { freshUser } = await getFreshUser(req);
+    if (!recordActions.canCreateHrProcess(freshUser, 'ONBOARDING')) {
+      throw new HttpError(403, 'Bạn không có quyền tạo quy trình Onboarding');
+    }
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'Thiếu danh sách dòng cần tạo' });
+    if (items.length > hrProcessCreateImport.MAX_ROWS_PER_IMPORT) {
+      return res.status(400).json({ error: `Vượt quá ${hrProcessCreateImport.MAX_ROWS_PER_IMPORT} dòng/lần — vui lòng chia nhỏ.` });
+    }
+    const created = [];
+    const skipped = [];
+    for (const row of items) {
+      const fullName = String(row?.fullName || '').trim();
+      if (row?.action === 'skip') { skipped.push({ fullName: fullName || '(thiếu Họ Tên)', reason: 'Bỏ qua theo lựa chọn của người dùng' }); continue; }
+      try {
+        const appData = await getAllAppData();
+        const payload = { processType: 'ONBOARDING', ...(row?.fields || {}) };
+        const record = await createOnboardingProcessRecord(payload, freshUser, appData);
+        created.push(record);
+      } catch (rowErr) {
+        skipped.push({ fullName: fullName || '(thiếu Họ Tên)', reason: rowErr.message || 'Lỗi không xác định' });
+      }
+    }
+    // Ghi 1 dòng NHẬT KÝ TỔNG HỢP sau khi xử lý xong (không ghi từng dòng để tránh spam log với file
+    // nhiều dòng) — cùng quy ước POST /api/hr-profile/bulk-import (routes/employeeProfile.js).
+    if (created.length) {
+      insertSystemLog({
+        username: freshUser.username, fullName: freshUser.name || freshUser.username, ipAddress: req.ip,
+        module: 'HR_PROCESS', actionType: 'BULK_IMPORT',
+        targetObject: '', description: `Nhập Excel Tạo Mới hàng loạt Onboarding: tạo mới ${created.length}, bỏ qua ${skipped.length} quy trình`, status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Onboarding Bulk Import):', e.message));
+    }
+    res.json({ ok: true, created, skipped });
+  } catch (err) {
+    handleError(res, 'hrProcesses/apply-create-import', err);
   }
 });
 
