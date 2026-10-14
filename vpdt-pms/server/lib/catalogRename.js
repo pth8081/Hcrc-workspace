@@ -689,6 +689,12 @@ const CATALOG_HANDLERS = {
   nationalIdIssuePlaces: simpleArrayCatalogHandler('nationalIdIssuePlaces', 'Danh Mục Nơi Cấp CCCD/CMND'),
   // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn 7 danh mục GỢI Ý ngay trên.
   educationDegrees: simpleArrayCatalogHandler('educationDegrees', 'Danh Mục Bằng Cấp'),
+  // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà soát
+  // "trường có nút select nhưng đang để nhập tay") — cùng khuôn simpleArrayCatalogHandler, không cascade.
+  relationshipTypes: simpleArrayCatalogHandler('relationshipTypes', 'Danh Mục Quan Hệ'),
+  nationalities: simpleArrayCatalogHandler('nationalities', 'Danh Mục Quốc Tịch'),
+  contractAmendmentTypes: simpleArrayCatalogHandler('contractAmendmentTypes', 'Danh Mục Loại Thay Đổi Hợp Đồng'),
+  contractTerminationReasons: simpleArrayCatalogHandler('contractTerminationReasons', 'Danh Mục Lý Do Chấm Dứt Hợp Đồng'),
   jobTitles: {
     async renameInCatalog(oldValue, newValue) {
       return withLockedAppDataValue('jobTitles', (list) => {

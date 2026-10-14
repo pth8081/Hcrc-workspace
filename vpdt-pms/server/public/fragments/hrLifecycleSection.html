@@ -232,8 +232,13 @@
             <div class="pt-2 border-t border-gray-200">
               <p class="text-[11px] font-bold text-gray-500 mb-1.5">🎓 Học Vấn (nhập đủ Trình Độ + Trường nếu muốn tạo sẵn 1 dòng — HR bổ sung thêm bằng cấp khác sau ở Hồ Sơ Nhân Sự)</p>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <!-- eduDegree (11/2026, rà soát "trường có nút select nhưng đang để nhập tay") — đổi
+                     sang <select> nguồn DB.educationDegrees, cùng danh mục đã dùng ở Hồ Sơ Nhân Sự
+                     (hrpf-edu-degree, module-hrprofile.js). <option> nạp ĐỘNG qua populateDropdowns(). -->
                 <div><label class="block text-xs font-semibold text-gray-600 mb-1">Trình Độ</label>
-                  <input id="hrpOnbEduDegree" placeholder="VD: Đại học" class="w-full border p-1.5 rounded text-xs"></div>
+                  <select id="hrpOnbEduDegree" class="w-full border p-1.5 rounded text-xs bg-white">
+                    <option value="">-- Chọn --</option>
+                  </select></div>
                 <div><label class="block text-xs font-semibold text-gray-600 mb-1">Trường</label>
                   <input id="hrpOnbEduSchool" class="w-full border p-1.5 rounded text-xs"></div>
                 <div><label class="block text-xs font-semibold text-gray-600 mb-1">Chuyên Ngành</label>

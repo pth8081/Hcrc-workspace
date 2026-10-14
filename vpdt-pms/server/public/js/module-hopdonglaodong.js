@@ -430,7 +430,15 @@ function buildHrContractDetailHTML(c) {
       <div class="font-semibold mb-1">📋 Lịch Sử Thay Đổi (Phụ Lục)</div>
       <p class="text-[11px] text-gray-500 mb-1.5">Phần này chỉ LƯU LẠI văn bản/lịch sử thay đổi để tra cứu — không tự cập nhật Lương cơ bản hay bất kỳ field nào khác của hợp đồng. Muốn đổi Lương cơ bản thật sự dùng để tính Lương, dùng khối "💰 Cập Nhật Lương Cơ Bản" ở trên.</p>
       <div class="space-y-1 mb-2">${amendmentsHTML}</div>
-      <input type="text" id="hrcNewAmendmentType" placeholder="Loại thay đổi (VD: Tăng lương)" class="w-full border p-1.5 rounded mb-2">
+      <!-- amendmentType (11/2026, rà soát "trường có nút select nhưng đang để nhập tay") — đổi sang
+           <select> nguồn DB.contractAmendmentTypes, GIỮ NGUYÊN khả năng nhập tay tự do khi chọn "Khác"
+           (xem toggleHrcAmendmentTypeOther()) — không mất tính linh hoạt mô tả tự do kèm cờ "là giá trị
+           tiền" đã có từ trước (VD "đổi chức danh" không phải giá trị tiền). -->
+      <select id="hrcNewAmendmentType" data-op-change="toggleHrcAmendmentTypeOther" class="w-full border p-1.5 rounded mb-2 bg-white">
+        <option value="">-- Chọn loại thay đổi --</option>
+        ${(DB.contractAmendmentTypes || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+      </select>
+      <input type="text" id="hrcNewAmendmentTypeOther" placeholder="Nhập loại thay đổi..." class="hidden w-full border p-1.5 rounded mb-2">
       <!-- "Ngày áp dụng" (quyết định được áp dụng/ban hành từ ngày nào) KHÁC "Ngày hiệu lực" (thời điểm
            thay đổi THẬT SỰ có hiệu lực — có thể trễ hơn ngày áp dụng, VD quyết định tăng lương ký/áp
            dụng 1 ngày nhưng hiệu lực từ đầu tháng sau) — 2 khái niệm riêng theo yêu cầu người dùng
@@ -500,20 +508,58 @@ async function activateHrContract(id) {
   }
 }
 
-async function closeHrContractManual(id) {
-  const reason = prompt('Lý do chấm dứt hợp đồng:');
-  if (reason === null) return;
-  try {
-    const result = await callRecordAction('laborContracts', id, 'status', { status: 'TERMINATED', terminationReason: reason });
-    hrcApplyUpdate(result.item);
-    openHrContractDetailModal(id);
-  } catch (err) {
-    alert('⛔ ' + err.message);
-  }
+// closeHrContractManual() (11/2026, rà soát "trường có nút select nhưng đang để nhập tay") — THAY popup
+// prompt() trình duyệt cũ (không có gợi ý nào, mỗi lần gõ lại từ đầu) bằng modal dùng chung
+// showConfirmModal() + <select> nguồn DB.contractTerminationReasons, vẫn giữ được nhập tay tự do khi
+// chọn "Khác" (xem toggleHrcTerminationReasonOther(), cùng khuôn toggleHrcAmendmentTypeOther() ở trên).
+function toggleHrcTerminationReasonOther() {
+  const sel = document.getElementById('hrcTerminationReasonSelect');
+  const other = document.getElementById('hrcTerminationReasonOther');
+  if (!sel || !other) return;
+  other.classList.toggle('hidden', sel.value !== 'Khác');
+  if (sel.value !== 'Khác') other.value = '';
+}
+function closeHrContractManual(id) {
+  showConfirmModal({
+    title: '🚪 Chấm Dứt Hợp Đồng',
+    bodyHTML: `
+      <p class="text-xs text-gray-600 mb-2">Vui lòng chọn lý do chấm dứt hợp đồng:</p>
+      <select id="hrcTerminationReasonSelect" data-op-change="toggleHrcTerminationReasonOther" class="w-full border p-1.5 rounded text-sm bg-white mb-2">
+        <option value="">-- Chọn lý do --</option>
+        ${(DB.contractTerminationReasons || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+      </select>
+      <input type="text" id="hrcTerminationReasonOther" placeholder="Nhập lý do..." class="hidden w-full border p-1.5 rounded text-sm">
+    `,
+    confirmLabel: 'Xác Nhận Chấm Dứt',
+    onConfirm: async () => {
+      const sel = document.getElementById('hrcTerminationReasonSelect').value;
+      const reason = sel === 'Khác' ? document.getElementById('hrcTerminationReasonOther').value.trim() : sel.trim();
+      if (!reason) return alert('⛔ Vui lòng chọn/nhập lý do chấm dứt hợp đồng.');
+      try {
+        const result = await callRecordAction('laborContracts', id, 'status', { status: 'TERMINATED', terminationReason: reason });
+        hrcApplyUpdate(result.item);
+        openHrContractDetailModal(id);
+      } catch (err) {
+        alert('⛔ ' + err.message);
+      }
+    }
+  });
 }
 
+// toggleHrcAmendmentTypeOther() — hiện/ẩn ô nhập tay #hrcNewAmendmentTypeOther khi chọn "Khác" ở
+// #hrcNewAmendmentType (xem chú thích tại HTML dựng select ngay trên).
+function toggleHrcAmendmentTypeOther() {
+  const sel = document.getElementById('hrcNewAmendmentType');
+  const other = document.getElementById('hrcNewAmendmentTypeOther');
+  if (!sel || !other) return;
+  other.classList.toggle('hidden', sel.value !== 'Khác');
+  if (sel.value !== 'Khác') other.value = '';
+}
 async function submitHrContractAmendment(id) {
-  const amendmentType = document.getElementById('hrcNewAmendmentType').value.trim();
+  const typeSel = document.getElementById('hrcNewAmendmentType').value;
+  const amendmentType = typeSel === 'Khác'
+    ? document.getElementById('hrcNewAmendmentTypeOther').value.trim()
+    : typeSel.trim();
   const effectiveDate = document.getElementById('hrcNewAmendmentDate').value;
   if (!amendmentType || !effectiveDate) return alert('⛔ Vui lòng nhập Loại thay đổi và Ngày hiệu lực.');
   const applyDate = document.getElementById('hrcNewAmendmentApplyDate').value || null;

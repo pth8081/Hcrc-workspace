@@ -1241,7 +1241,9 @@ const CORE_FIELD_MANIFEST = {
     // nút Sửa trường mặc định ở màn Biểu Mẫu, cùng khuôn contractType/carType — xem defaults.js).
     { id: 'hrpOnbEmploymentType', label: 'Hình Thức Làm Việc (tuỳ chọn)', required: false, optionsKey: 'employmentTypes' },
     { id: 'hrpOnbWorkSchedule', label: 'Thời Gian Làm Việc (tuỳ chọn)', required: false, optionsKey: 'workSchedules' },
-    { id: 'hrpOnbEduDegree', label: 'Học Vấn - Trình Độ (tuỳ chọn)', required: false },
+    // eduDegree CÓ optionsKey (11/2026, đồng bộ cùng khuôn "Trình độ" đã dùng <select> ở Hồ Sơ Nhân Sự
+    // — rà soát "trường có nút select nhưng đang để nhập tay") — trỏ DB.educationDegrees.
+    { id: 'hrpOnbEduDegree', label: 'Học Vấn - Trình Độ (tuỳ chọn)', required: false, optionsKey: 'educationDegrees' },
     { id: 'hrpOnbEduSchool', label: 'Học Vấn - Trường (tuỳ chọn)', required: false },
     { id: 'hrpOnbEduMajor', label: 'Học Vấn - Chuyên Ngành (tuỳ chọn)', required: false },
     { id: 'hrpOnbPlannedContractType', label: 'Loại HĐLĐ Dự Kiến (tuỳ chọn)', required: false },
@@ -1341,7 +1343,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpfCF_gender', label: 'Giới Tính', required: false },
     { id: 'hrpfCF_nationalId', label: 'Số CCCD/CMND', required: false },
     { id: 'hrpfCF_nationalIdIssueDate', label: 'Ngày Cấp CCCD/CMND', required: false },
-    { id: 'hrpfCF_nationalIdIssuePlace', label: 'Nơi Cấp CCCD/CMND', required: false },
+    { id: 'hrpfCF_nationalIdIssuePlace', label: 'Nơi Cấp CCCD/CMND', required: false, optionsKey: 'nationalIdIssuePlaces' },
     { id: 'hrpfCF_employmentType', label: 'Hình Thức Làm Việc', required: false, optionsKey: 'employmentTypes' },
     { id: 'hrpfCF_workSchedule', label: 'Thời Gian Làm Việc', required: false, optionsKey: 'workSchedules' },
     { id: 'hrpfCF_permanentAddress', label: 'Địa Chỉ Thường Trú', required: false },
@@ -1349,7 +1351,7 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpfCF_personalEmail', label: 'Email Cá Nhân', required: false },
     { id: 'hrpfCF_emergencyContactName', label: 'Người Liên Hệ Khẩn Cấp', required: false },
     { id: 'hrpfCF_emergencyContactPhone', label: 'SĐT Liên Hệ Khẩn Cấp', required: false },
-    { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false },
+    { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false, optionsKey: 'relationshipTypes' },
     { id: 'hrpfCF_bankAccountNo', label: 'Số Tài Khoản Ngân Hàng', required: false },
     { id: 'hrpfCF_bankName', label: 'Ngân Hàng', required: false },
     { id: 'hrpfCF_bankAccountHolderName', label: 'Tên Chủ Tài Khoản Ngân Hàng', required: false },
@@ -5022,6 +5024,13 @@ async function initDatabase(loggingInUser, opts) {
     DB.currentWorkStatusDetails = data.currentWorkStatusDetails || [];
     DB.nationalIdIssuePlaces = data.nationalIdIssuePlaces || [];
     DB.educationDegrees = data.educationDegrees || [];
+    // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà
+    // soát "trường có nút select nhưng đang để nhập tay") — đọc lại ngay ở đây TỪ ĐẦU, tránh lặp lại
+    // đúng lỗi "F5 mất dữ liệu" đã vá cho các key phía trên.
+    DB.relationshipTypes = data.relationshipTypes || [];
+    DB.nationalities = data.nationalities || [];
+    DB.contractAmendmentTypes = data.contractAmendmentTypes || [];
+    DB.contractTerminationReasons = data.contractTerminationReasons || [];
     // checklistTemplates/checklistSubmissions: thuộc LAZY_DATA_GROUPS (Lớp 3a) — xem assignLazyGroupField()
     // ngay phía trên initDatabase() cho lý do dùng hàm này thay vì gán thẳng `data.x || []`.
     assignLazyGroupField('checklistTemplates', data);
@@ -5540,7 +5549,13 @@ const SIMPLE_CATALOG_EXCEL_CONFIG = {
   currentWorkStatusDetails: { label: 'Tình Trạng Làm Việc Hiện Tại', colLabel: 'Tên Tình Trạng', sample: 'Nghỉ thai sản', renderFn: 'renderCurrentWorkStatusDetailList' },
   nationalIdIssuePlaces: { label: 'Nơi Cấp CCCD/CMND', colLabel: 'Tên Nơi Cấp', sample: 'Cục Cảnh sát QLHC về TTXH', renderFn: 'renderNationalIdIssuePlaceList' },
   // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn 4 danh mục ngay trên.
-  educationDegrees: { label: 'Bằng Cấp', colLabel: 'Tên Bằng Cấp', sample: 'Đại Học', renderFn: 'renderEducationDegreeList' }
+  educationDegrees: { label: 'Bằng Cấp', colLabel: 'Tên Bằng Cấp', sample: 'Đại Học', renderFn: 'renderEducationDegreeList' },
+  // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà soát
+  // "trường có nút select nhưng đang để nhập tay") — cùng khuôn các danh mục ngay trên.
+  relationshipTypes: { label: 'Quan Hệ', colLabel: 'Tên Quan Hệ', sample: 'Vợ/Chồng', renderFn: 'renderRelationshipTypeList' },
+  nationalities: { label: 'Quốc Tịch', colLabel: 'Tên Quốc Tịch', sample: 'Việt Nam', renderFn: 'renderNationalityList' },
+  contractAmendmentTypes: { label: 'Loại Thay Đổi Hợp Đồng', colLabel: 'Tên Loại Thay Đổi', sample: 'Tăng lương', renderFn: 'renderContractAmendmentTypeList' },
+  contractTerminationReasons: { label: 'Lý Do Chấm Dứt Hợp Đồng', colLabel: 'Lý Do', sample: 'Hết hạn hợp đồng', renderFn: 'renderContractTerminationReasonList' }
 };
 
 function renderSimpleCatalogExcelToolsHtml(catalogKey) {
@@ -11505,15 +11520,40 @@ function populateDropdowns() {
       DB.workSchedules.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     if (DB.workSchedules.includes(current)) sel.value = current;
   });
-  // Nơi Cấp CCCD (hrpOnbNationalIdIssuePlace, 10/2026 — mẫu Excel 90 trường) — cùng khuôn 2 khối ngay
-  // trên, CHUYỂN từ ô gõ tự do sang <select> nguồn DB.nationalIdIssuePlaces (xem hrLifecycleSection.html).
-  (() => {
-    const sel = document.getElementById('hrpOnbNationalIdIssuePlace');
+  // Nơi Cấp CCCD (10/2026 — mẫu Excel 90 trường) — cùng khuôn 2 khối ngay trên, CHUYỂN từ ô gõ tự do
+  // sang <select> nguồn DB.nationalIdIssuePlaces. hrpfCF_nationalIdIssuePlace (11/2026, LỖI ĐÃ VÁ: modal
+  // "+ Tạo Hồ Sơ Mới" của Hồ Sơ Nhân Sự bị BỎ SÓT khỏi đây trước đây — vẫn là input gõ tự do dù server
+  // ép enum đúng danh mục này ở applyProfileEdit(), khiến HR gõ sai/dư khoảng trắng là bị lỗi 400 khó
+  // hiểu khi lưu) — thêm vào CÙNG khối với hrpOnbNationalIdIssuePlace, cùng 1 danh mục dùng chung.
+  ['hrpOnbNationalIdIssuePlace', 'hrpfCF_nationalIdIssuePlace'].forEach(id => {
+    const sel = document.getElementById(id);
     if (!sel) return;
     const current = sel.value;
     sel.innerHTML = '<option value="">-- Chọn --</option>' +
       (DB.nationalIdIssuePlaces || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     if ((DB.nationalIdIssuePlaces || []).includes(current)) sel.value = current;
+  });
+  // Trình Độ Học Vấn (hrpOnbEduDegree, Onboarding) — 11/2026, rà soát "trường có nút select nhưng đang
+  // để nhập tay": màn Hồ Sơ Nhân Sự (hrpf-edu-degree, module-hrprofile.js) đã dùng <select> nguồn
+  // DB.educationDegrees từ trước, riêng Onboarding bị bỏ sót — đồng bộ lại cùng danh mục.
+  (() => {
+    const sel = document.getElementById('hrpOnbEduDegree');
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn --</option>' +
+      (DB.educationDegrees || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if ((DB.educationDegrees || []).includes(current)) sel.value = current;
+  })();
+  // Quan Hệ (hrpfCF_emergencyContactRelationship, modal "+ Tạo Hồ Sơ Mới") — 11/2026, danh mục MỚI
+  // relationshipTypes. 2 ô "Quan hệ" còn lại (màn Chi Tiết + dòng Người Phụ Thuộc) dựng ĐỘNG mỗi lần mở
+  // (module-hrprofile.js), tự đọc DB.relationshipTypes trực tiếp lúc dựng HTML — không cần qua đây.
+  (() => {
+    const sel = document.getElementById('hrpfCF_emergencyContactRelationship');
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Chọn --</option>' +
+      (DB.relationshipTypes || []).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    if ((DB.relationshipTypes || []).includes(current)) sel.value = current;
   })();
 
   // Mục Đích Sử Dụng (Đăng Ký Xe) — cùng khuôn carType ở trên nhưng value là KEY.

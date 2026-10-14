@@ -1422,6 +1422,70 @@
         </div>
       </details>
 
+      <!-- 4 danh mục MỚI (11/2026, theo yêu cầu người dùng rà soát "trường có nút select chọn nhưng
+           đang để nhập tay" ở Onboarding/Hồ Sơ Nhân Sự/Quản Lý Hợp Đồng) — cùng khuôn các danh mục ngay
+           trên (saveGenericSimpleCatalogEntry + data-catalog-key), gom chung vào khối "Danh Mục Nhân
+           Sự" (fuchsia) này theo đúng yêu cầu, không tạo khu vực riêng. -->
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>👥 Danh Mục Quan Hệ (Người Liên Hệ/Phụ Thuộc)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Quan hệ" (Người liên hệ khẩn cấp + Người phụ thuộc) ở Hồ Sơ Nhân Sự.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="relationshipTypes" class="flex gap-2">
+            <input id="txtRelationshipTypeName" placeholder="Tên quan hệ mới, VD: Vợ/Chồng..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="relationshipTypeList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_relationshipTypes"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🌏 Danh Mục Quốc Tịch</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Quốc tịch" ở Hồ Sơ Nhân Sự (Thông tin cá nhân + Người phụ thuộc).</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="nationalities" class="flex gap-2">
+            <input id="txtNationalityName" placeholder="Tên quốc tịch mới, VD: Việt Nam..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="nationalityList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_nationalities"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>📝 Danh Mục Loại Thay Đổi Hợp Đồng (Phụ Lục)</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Loại thay đổi" ở Lịch Sử Thay Đổi (Phụ Lục) khi Quản Lý Hợp Đồng Lao Động — chọn "Khác" vẫn nhập tay được như trước.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="contractAmendmentTypes" class="flex gap-2">
+            <input id="txtContractAmendmentTypeName" placeholder="Loại thay đổi mới, VD: Tăng lương..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="contractAmendmentTypeList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_contractAmendmentTypes"></div>
+        </div>
+      </details>
+
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🚪 Danh Mục Lý Do Chấm Dứt Hợp Đồng</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng cho ô "Lý do chấm dứt hợp đồng" khi Quản Lý Hợp Đồng Lao Động — chọn "Khác" vẫn nhập tay được.</p>
+          <form data-op-submit="saveGenericSimpleCatalogEntry" data-catalog-key="contractTerminationReasons" class="flex gap-2">
+            <input id="txtContractTerminationReasonName" placeholder="Lý do mới, VD: Hết hạn hợp đồng..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div class="max-h-32 overflow-y-auto bg-white rounded border">
+            <ul id="contractTerminationReasonList" class="divide-y text-xs"></ul>
+          </div>
+          <div id="simpleCatalogExcelTools_contractTerminationReasons"></div>
+        </div>
+      </details>
+
       <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-300 space-y-3">
         <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>🏪 Danh Sách Chức Danh (Siêu Thị)</span></summary>
         <div class="p-0 pt-2 space-y-3">

@@ -277,6 +277,10 @@ const ADMIN_ONLY_KEYS = new Set([
   'legalEntities', 'specialLaborStatuses', 'currentWorkStatusDetails', 'nationalIdIssuePlaces',
   // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng lý do khoá ghi như 7 danh mục trên.
   'educationDegrees',
+  // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà soát
+  // "trường có nút select nhưng đang để nhập tay") — cùng lý do khoá ghi như các danh mục trên: panel
+  // CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
+  'relationshipTypes', 'nationalities', 'contractAmendmentTypes', 'contractTerminationReasons',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',

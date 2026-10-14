@@ -218,6 +218,21 @@ const DEFAULTS = {
   // độ": chuyển từ gõ tự do sang droplist) — cùng khuôn flat-array GỢI Ý như 4 danh mục ngay trên,
   // dùng cho ô "Trình độ" trong khối Học Vấn ở Hồ Sơ Nhân Sự (education[].degree).
   educationDegrees: ['Trung Cấp', 'Cao Đẳng', 'Đại Học', 'Sau Đại Học'],
+
+  // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, theo yêu
+  // cầu người dùng rà soát "các trường có nút select chọn nhưng đang để nhập tay" ở Onboarding/Hồ Sơ
+  // Nhân Sự/Quản Lý Hợp Đồng) — cùng khuôn flat-array GENERIC_SIMPLE_CATALOGS như 5 danh mục ngay trên,
+  // gom chung vào đúng khối "Danh Mục Nhân Sự" (fuchsia) ở Quản Lý Danh Mục, KHÔNG tạo khu vực riêng.
+  relationshipTypes: ['Vợ/Chồng', 'Con', 'Cha', 'Mẹ', 'Anh/Chị/Em', 'Ông/Bà', 'Khác'],
+  nationalities: ['Việt Nam'],
+  // contractAmendmentTypes: dùng cho ô "Loại thay đổi" ở Lịch Sử Thay Đổi (Phụ Lục) Hợp Đồng Lao Động —
+  // VẪN giữ được ô nhập tay khi chọn "Khác" (xem renderHrcAmendmentTypeSelect() ở module-hopdonglaodong.js),
+  // không mất tính linh hoạt mô tả tự do kèm cờ "là giá trị tiền" đã có từ trước.
+  contractAmendmentTypes: ['Tăng lương', 'Đổi chức danh', 'Gia hạn hợp đồng', 'Đổi phòng ban', 'Khác'],
+  // contractTerminationReasons: dùng cho modal "Lý do chấm dứt hợp đồng" (THAY cho prompt() trình duyệt
+  // cũ) — xem closeHrContractManual() ở module-hopdonglaodong.js.
+  contractTerminationReasons: ['Hết hạn hợp đồng', 'Nghỉ việc tự nguyện', 'Sa thải', 'Thỏa thuận chấm dứt', 'Khác'],
+
   // deptCodeMap (10/2026, báo cáo rà soát mẫu Excel mới — "Mã bộ phận") — object {<tên bộ phận>: <mã>},
   // tự gán MỚI khi gặp tên bộ phận lần đầu (xem ensureDeptCode() ở routes/employeeProfile.js,
   // generateDeptCode() ở lib/employeeProfile.js) — KHÔNG seed tay trước, bắt đầu rỗng.

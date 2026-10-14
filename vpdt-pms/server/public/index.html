@@ -1870,8 +1870,15 @@
              trước, chỉ thiếu ở đúng modal Tạo Mới này. -->
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngày cấp CCCD/CMND</label>
           <input type="date" id="hrpfCF_nationalIdIssueDate" class="w-full border p-1.5 rounded text-sm"></div>
+        <!-- nationalIdIssuePlace (11/2026, LỖI ĐÃ VÁ: server ép enum đúng danh mục nationalIdIssuePlaces
+             — case 'nationalIdIssuePlace' ở applyProfileEdit() — nhưng ô này vẫn là input gõ tự do, nên
+             HR gõ sai/dư khoảng trắng là bị lỗi 400 khó hiểu khi lưu. Đổi sang <select> cùng khuôn
+             hrpfF_nationalIdIssuePlace (màn Chi Tiết) đã làm đúng từ trước — <option> nạp ĐỘNG qua
+             populateDropdowns() vì modal này là HTML TĨNH, không dựng lại mỗi lần mở như màn Chi Tiết. -->
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Nơi cấp CCCD/CMND</label>
-          <input id="hrpfCF_nationalIdIssuePlace" class="w-full border p-1.5 rounded text-sm"></div>
+          <select id="hrpfCF_nationalIdIssuePlace" class="w-full border p-1.5 rounded text-sm bg-white">
+            <option value="">-- Chưa rõ --</option>
+          </select></div>
         <!-- employmentType/workSchedule: <option> nạp ĐỘNG từ DB.employmentTypes/DB.workSchedules qua
              populateDropdowns() (public/js/core.js) — admin tự thêm/bớt lựa chọn qua nút Sửa trường mặc
              định ở màn Biểu Mẫu (optionsKey, xem CORE_FIELD_MANIFEST.HR_PROFILE). -->
@@ -1893,8 +1900,12 @@
           <input id="hrpfCF_emergencyContactName" class="w-full border p-1.5 rounded text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">SĐT liên hệ khẩn cấp</label>
           <input id="hrpfCF_emergencyContactPhone" class="w-full border p-1.5 rounded text-sm"></div>
+        <!-- emergencyContactRelationship (11/2026, rà soát "trường có nút select nhưng đang để nhập
+             tay") — đổi sang <select> nguồn DB.relationshipTypes, nạp ĐỘNG qua populateDropdowns(). -->
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Quan hệ</label>
-          <input id="hrpfCF_emergencyContactRelationship" class="w-full border p-1.5 rounded text-sm"></div>
+          <select id="hrpfCF_emergencyContactRelationship" class="w-full border p-1.5 rounded text-sm bg-white">
+            <option value="">-- Chọn --</option>
+          </select></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Số tài khoản ngân hàng</label>
           <input id="hrpfCF_bankAccountNo" class="w-full border p-1.5 rounded text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Ngân hàng</label>

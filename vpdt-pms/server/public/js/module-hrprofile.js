@@ -1461,6 +1461,15 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>${dateInput(id, val)}</div>`;
   const textField = (label, id, val) => isReadOnly ? roField(label, val)
     : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>${textInput(id, val)}</div>`;
+  // selectField (11/2026, rà soát "trường có nút select nhưng đang để nhập tay") — cùng khuôn textField
+  // ở trên nhưng dựng <select> từ 1 danh mục DB.<catalogKey> (ép chọn đúng giá trị có sẵn, không gõ tự
+  // do) — dùng cho Quan Hệ/Quốc Tịch (relationshipTypes/nationalities).
+  const selectField = (label, id, val, catalogArr, emptyLabel) => isReadOnly ? roField(label, val)
+    : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">${label}</label>
+        <select id="${id}" class="w-full border p-1.5 rounded text-sm bg-white">
+          <option value="">${emptyLabel || '-- Chọn --'}</option>
+          ${(catalogArr || []).map(t => `<option value="${escapeHtml(t)}" ${val === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+        </select></div>`;
 
   const identityBlock = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-3 border-b">
     ${roField('Mã Nhân Viên', profile.employeeCode)}
@@ -1643,11 +1652,11 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     ${canSee('personalEmail') ? textField('Email cá nhân', 'hrpfF_personalEmail', profile.personalEmail) : ''}
     ${canSee('emergencyContactName') ? textField('Người liên hệ khẩn cấp', 'hrpfF_emergencyContactName', profile.emergencyContactName) : ''}
     ${canSee('emergencyContactPhone') ? textField('SĐT liên hệ khẩn cấp', 'hrpfF_emergencyContactPhone', profile.emergencyContactPhone) : ''}
-    ${canSee('emergencyContactRelationship') ? textField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship) : ''}
+    ${canSee('emergencyContactRelationship') ? selectField('Quan hệ', 'hrpfF_emergencyContactRelationship', profile.emergencyContactRelationship, DB.relationshipTypes) : ''}
     ${canSee('bankAccountNo') ? textField('Số tài khoản ngân hàng', 'hrpfF_bankAccountNo', profile.bankAccountNo) : ''}
     ${canSee('bankName') ? textField('Ngân hàng', 'hrpfF_bankName', profile.bankName) : ''}
     ${canSee('bankAccountHolderName') ? textField('Tên chủ tài khoản ngân hàng', 'hrpfF_bankAccountHolderName', profile.bankAccountHolderName) : ''}
-    ${canSee('nationality') ? textField('Quốc tịch', 'hrpfF_nationality', profile.nationality) : ''}
+    ${canSee('nationality') ? selectField('Quốc tịch', 'hrpfF_nationality', profile.nationality, DB.nationalities) : ''}
     ${canSee('maritalStatus') ? (isReadOnly ? roField('Tình trạng hôn nhân', profile.maritalStatus) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng hôn nhân</label>
       <select id="hrpfF_maritalStatus" class="w-full border p-1.5 rounded text-sm bg-white">
         <option value="">-- Chọn --</option>
@@ -1890,13 +1899,22 @@ function resolveHrpfSecondaryPositionInput(inputEl) {
 
 function hrpfDependentRowHtml(d) {
   const dd = d || {};
+  // relationship/nationality (11/2026, rà soát "trường có nút select nhưng đang để nhập tay") — đổi
+  // sang <select> nguồn DB.relationshipTypes/DB.nationalities, cùng khuôn hrpf-edu-degree ở
+  // hrpfEducationRowHtml() ngay dưới — GIỮ giá trị cũ dù không còn trong danh mục (dữ liệu lịch sử),
+  // tránh âm thầm mất dữ liệu đã lưu.
+  const relOptions = Array.from(new Set([...(DB.relationshipTypes || []), ...(dd.relationship ? [dd.relationship] : [])]));
+  const natOptions = Array.from(new Set([...(DB.nationalities || []), ...(dd.nationality ? [dd.nationality] : [])]));
   // 7 field MỚI (10/2026, đối chiếu mẫu Excel "DATA NGUOI PHU THUOC" — tờ khai giảm trừ gia cảnh thuế
   // TNCN) — thêm thành 2 hàng con bên dưới hàng gốc (Họ tên/Quan hệ/Ngày sinh/MST), cùng 1 khối bo viền
   // cho mỗi người phụ thuộc thay vì 1 hàng grid-4 phẳng như trước (quá chật để thêm cột).
   return `<div class="border rounded p-2 space-y-1 hrpf-dependent-row" data-id="${escapeHtml(dd.id || '')}">
     <div class="grid grid-cols-4 gap-1 items-center">
       <input value="${escapeHtml(dd.fullName || '')}" placeholder="Họ tên" class="border p-1 rounded text-xs hrpf-dep-name">
-      <input value="${escapeHtml(dd.relationship || '')}" placeholder="Quan hệ" class="border p-1 rounded text-xs hrpf-dep-rel">
+      <select class="border p-1 rounded text-xs bg-white hrpf-dep-rel">
+        <option value="">-- Quan hệ --</option>
+        ${relOptions.map(r => `<option value="${escapeHtml(r)}" ${dd.relationship === r ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+      </select>
       <input type="date" value="${escapeHtml((dd.dateOfBirth || '').slice(0, 10))}" class="border p-1 rounded text-xs hrpf-dep-dob">
       <div class="flex items-center gap-1">
         <input value="${escapeHtml(dd.taxCode || '')}" placeholder="MST người phụ thuộc" class="border p-1 rounded text-xs flex-1 hrpf-dep-tax">
@@ -1904,7 +1922,10 @@ function hrpfDependentRowHtml(d) {
       </div>
     </div>
     <div class="grid grid-cols-4 gap-1 items-center">
-      <input value="${escapeHtml(dd.nationality || '')}" placeholder="Quốc tịch" class="border p-1 rounded text-xs hrpf-dep-nationality">
+      <select class="border p-1 rounded text-xs bg-white hrpf-dep-nationality">
+        <option value="">-- Quốc tịch --</option>
+        ${natOptions.map(n => `<option value="${escapeHtml(n)}" ${dd.nationality === n ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}
+      </select>
       <input value="${escapeHtml(dd.idNumber || '')}" placeholder="Số CMND/Hộ chiếu" class="border p-1 rounded text-xs hrpf-dep-idnumber">
       <input type="month" value="${escapeHtml(dd.deductionFromMonth || '')}" title="Thời gian tính giảm trừ — Từ tháng" class="border p-1 rounded text-xs hrpf-dep-fromMonth">
       <input type="month" value="${escapeHtml(dd.deductionToMonth || '')}" title="Thời gian tính giảm trừ — Đến tháng" class="border p-1 rounded text-xs hrpf-dep-toMonth">

@@ -499,7 +499,14 @@ const GENERIC_SIMPLE_CATALOGS = {
   currentWorkStatusDetails: { listId: 'currentWorkStatusDetailList', inputId: 'txtCurrentWorkStatusDetailName', label: 'tình trạng làm việc hiện tại', logPrefix: 'CURRENT_WORK_STATUS_DETAIL' },
   nationalIdIssuePlaces: { listId: 'nationalIdIssuePlaceList', inputId: 'txtNationalIdIssuePlaceName', label: 'nơi cấp CCCD/CMND', logPrefix: 'NATIONAL_ID_ISSUE_PLACE' },
   // educationDegrees (10/2026, báo cáo rà soát mẫu Excel mới) — cùng khuôn các danh mục trên.
-  educationDegrees: { listId: 'educationDegreeList', inputId: 'txtEducationDegreeName', label: 'bằng cấp', logPrefix: 'EDUCATION_DEGREE' }
+  educationDegrees: { listId: 'educationDegreeList', inputId: 'txtEducationDegreeName', label: 'bằng cấp', logPrefix: 'EDUCATION_DEGREE' },
+  // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà soát
+  // "trường có nút select nhưng đang để nhập tay" ở Onboarding/Hồ Sơ Nhân Sự/Quản Lý Hợp Đồng) — cùng
+  // khuôn các danh mục trên, gom chung vào khối "Danh Mục Nhân Sự" (fuchsia) ở Quản Lý Danh Mục.
+  relationshipTypes: { listId: 'relationshipTypeList', inputId: 'txtRelationshipTypeName', label: 'quan hệ', logPrefix: 'RELATIONSHIP_TYPE' },
+  nationalities: { listId: 'nationalityList', inputId: 'txtNationalityName', label: 'quốc tịch', logPrefix: 'NATIONALITY' },
+  contractAmendmentTypes: { listId: 'contractAmendmentTypeList', inputId: 'txtContractAmendmentTypeName', label: 'loại thay đổi hợp đồng', logPrefix: 'CONTRACT_AMENDMENT_TYPE' },
+  contractTerminationReasons: { listId: 'contractTerminationReasonList', inputId: 'txtContractTerminationReasonName', label: 'lý do chấm dứt hợp đồng', logPrefix: 'CONTRACT_TERMINATION_REASON' }
 };
 // LỖI ĐÃ VÁ (10/2026, người dùng báo "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không add được thông tin
 // vào đâu"): 3 form này dùng data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'" (quy ước
@@ -571,6 +578,12 @@ function renderSpecialLaborStatusList() { renderGenericSimpleCatalogList('specia
 function renderCurrentWorkStatusDetailList() { renderGenericSimpleCatalogList('currentWorkStatusDetails'); }
 function renderNationalIdIssuePlaceList() { renderGenericSimpleCatalogList('nationalIdIssuePlaces'); }
 function renderEducationDegreeList() { renderGenericSimpleCatalogList('educationDegrees'); }
+// relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà soát
+// "trường có nút select nhưng đang để nhập tay") — cùng khuôn các wrapper trên.
+function renderRelationshipTypeList() { renderGenericSimpleCatalogList('relationshipTypes'); }
+function renderNationalityList() { renderGenericSimpleCatalogList('nationalities'); }
+function renderContractAmendmentTypeList() { renderGenericSimpleCatalogList('contractAmendmentTypes'); }
+function renderContractTerminationReasonList() { renderGenericSimpleCatalogList('contractTerminationReasons'); }
 
 // ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label}[] (mục 4a) — TÁCH khỏi DB.jobTitles
 // (Khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType==='STORE' ở form Người Dùng đầy đủ.
