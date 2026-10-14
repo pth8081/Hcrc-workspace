@@ -7,7 +7,7 @@
 <!-- PWA: manifest sinh động (xem routes/pwaManifest.js) + các thẻ riêng cho iOS Safari (không tự đọc
      manifest.json đầy đủ như Android/Chrome nên cần khai thêm apple-touch-icon/meta bên dưới). -->
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0b1f4d">
+<meta name="theme-color" content="#1c3a7a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -55,7 +55,30 @@
      cuối trang) — gọi khi biết chắc: hoặc lộ ra màn Đăng Nhập thật (không còn phiên hợp lệ), hoặc chuyển
      hẳn sang giao diện chính/hộp thoại bắt đổi mật khẩu (phiên vẫn hợp lệ). -->
 <div id="bootSplash" class="fixed inset-0 z-50 flex items-center justify-center boot-splash-bg">
-  <div class="flex flex-col items-center gap-3">
+  <!-- Chấm sáng lấp lánh (11/2026, demo ảnh đã chốt) — xem .app-stars-deco (app.css). -->
+  <svg class="app-stars-deco" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <filter id="starGlowBoot" x="-200%" y="-200%" width="500%" height="500%">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g stroke="rgba(148,197,255,.2)" stroke-width="0.8">
+      <line x1="320" y1="40" x2="280" y2="75"/>
+      <line x1="80" y1="220" x2="50" y2="260"/>
+      <line x1="280" y1="75" x2="330" y2="110"/>
+    </g>
+    <g fill="#bfe0ff">
+      <circle cx="320" cy="40" r="2" opacity=".7"/>
+      <circle cx="280" cy="75" r="4.5" opacity=".9" filter="url(#starGlowBoot)"/>
+      <circle cx="330" cy="110" r="2" opacity=".55"/>
+      <circle cx="80" cy="220" r="2" opacity=".6"/>
+      <circle cx="50" cy="260" r="4" opacity=".85" filter="url(#starGlowBoot)"/>
+      <circle cx="40" cy="40" r="1.8" opacity=".5"/>
+      <circle cx="350" cy="250" r="1.8" opacity=".5"/>
+    </g>
+  </svg>
+  <div class="relative z-10 flex flex-col items-center gap-3">
     <span class="boot-splash-spinner"></span>
     <span class="boot-splash-label">Đang tải HCRC Workspace…</span>
   </div>
@@ -91,7 +114,7 @@
 <!-- Thanh trên cùng CHỈ hiện trên điện thoại (< 768px, ẩn hẳn từ md trở lên bằng "md:hidden") — nút ☰
      mở/đóng sidebar dạng "off-canvas" (xem CSS #userHeader ở public/app.css). finishLogin()/
      logout() toggle "hidden" y hệt cách đang làm với #userHeader, nên vòng đời ẩn/hiện luôn khớp nhau. -->
-<div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 text-white flex items-center justify-between px-3 py-2.5 shadow">
+<div id="mobileTopBar" class="hidden md:hidden fixed top-0 inset-x-0 z-30 app-topbar-bg text-white flex items-center justify-between px-3 py-2.5 shadow">
   <button type="button" data-op="toggleMobileSidebar" class="text-2xl leading-none px-1" aria-label="Mở menu điều hướng">☰</button>
   <span class="font-bold text-sm flex items-center gap-1.5">
     <svg viewBox="0 0 100 100" fill="none" class="icon-sm" aria-hidden="true">
@@ -116,8 +139,32 @@
        trong dòng chảy sidebar khi bấm, dùng lại NGUYÊN các hàm toggleXDropdown()/closeXDropdown() cũ,
        không đổi 1 dòng JS nào cho phần mở/đóng nhóm). "Hợp Đồng" và "Tổng Hợp" vẫn là 2 nhóm ngang hàng,
        độc lập — không lồng module này vào module kia (giữ nguyên quyết định thiết kế trước đó). -->
-  <aside id="userHeader" class="hidden w-64 shrink-0 bg-slate-900 overflow-y-auto">
-    <div class="p-4 border-b border-slate-700 flex items-center gap-2">
+  <aside id="userHeader" class="hidden w-64 shrink-0 app-sidebar-bg overflow-y-auto">
+    <!-- Chấm sáng lấp lánh (11/2026, demo ảnh đã chốt) — xem .app-stars-deco (app.css). 3 khối con bên
+         dưới (header/nav/footer) đều cần "relative z-10" để luôn nổi lên trên lớp trang trí này. -->
+    <svg class="app-stars-deco" viewBox="0 0 260 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <filter id="starGlowSB" x="-200%" y="-200%" width="500%" height="500%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g stroke="rgba(148,197,255,.2)" stroke-width="0.8">
+        <line x1="210" y1="90" x2="170" y2="140"/>
+        <line x1="40" y1="300" x2="75" y2="350"/>
+        <line x1="170" y1="140" x2="220" y2="190"/>
+      </g>
+      <g fill="#bfe0ff">
+        <circle cx="210" cy="90" r="2" opacity=".7"/>
+        <circle cx="170" cy="140" r="4.5" opacity=".9" filter="url(#starGlowSB)"/>
+        <circle cx="220" cy="190" r="2" opacity=".55"/>
+        <circle cx="40" cy="300" r="2" opacity=".6"/>
+        <circle cx="75" cy="350" r="4" opacity=".85" filter="url(#starGlowSB)"/>
+        <circle cx="230" cy="470" r="1.8" opacity=".5"/>
+        <circle cx="30" cy="560" r="1.8" opacity=".5"/>
+      </g>
+    </svg>
+    <div class="relative z-10 p-4 border-b border-slate-700 flex items-center gap-2">
       <svg viewBox="0 0 100 100" fill="none" class="icon-md" aria-hidden="true">
         <rect x="27" y="47" width="46" height="15" rx="7.5" fill="#38bdf8"/>
         <rect x="27" y="17" width="17" height="66" rx="8.5" fill="#1d4ed8"/>
@@ -129,7 +176,7 @@
       </span>
     </div>
 
-    <nav class="flex-1 p-2 space-y-1">
+    <nav class="relative z-10 flex-1 p-2 space-y-1">
       <button id="btnDashboardTab" data-op="switchTab" data-arg0="dashboard" class="sidebar-item">
         <span class="sidebar-icon">🏠</span><span class="sidebar-label">Trang chủ</span>
       </button>
@@ -351,7 +398,7 @@
       </div>
     </nav>
 
-    <div class="p-3 border-t border-slate-700 space-y-2">
+    <div class="relative z-10 p-3 border-t border-slate-700 space-y-2">
       <!-- Chuông thông báo trong app — GENERIC (không riêng Lương), xem lib/notifications.js. Đặt cạnh
            khối user-info (luôn hiển thị khi đã đăng nhập, không phụ thuộc đang ở tab nào) thay vì 1
            thanh header riêng (app chưa có sẵn header ngang cho nội dung chính, chỉ có sidebar trái). -->
@@ -404,6 +451,30 @@
           <circle cx="70" cy="560" r="3.5"/>
           <circle cx="420" cy="540" r="3.5"/>
           <circle cx="540" cy="470" r="3.5"/>
+        </g>
+      </svg>
+      <!-- Chấm sáng lấp lánh (11/2026, demo ảnh đã chốt) — xem .loginpage-hero-stars (app.css). THÊM
+           cạnh .loginpage-hero-nodes ở trên, không thay thế. -->
+      <svg class="loginpage-hero-stars" viewBox="0 0 600 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <filter id="heroStarGlow" x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g stroke="rgba(148,197,255,.22)" stroke-width="0.8">
+          <line x1="500" y1="90" x2="450" y2="150"/>
+          <line x1="110" y1="500" x2="60" y2="580"/>
+          <line x1="450" y1="150" x2="520" y2="220"/>
+        </g>
+        <g fill="#bfe0ff">
+          <circle cx="500" cy="90" r="2.2" opacity=".7"/>
+          <circle cx="450" cy="150" r="5" opacity=".9" filter="url(#heroStarGlow)"/>
+          <circle cx="520" cy="220" r="2.2" opacity=".55"/>
+          <circle cx="110" cy="500" r="2.2" opacity=".6"/>
+          <circle cx="60" cy="580" r="4.5" opacity=".85" filter="url(#heroStarGlow)"/>
+          <circle cx="330" cy="40" r="1.8" opacity=".5"/>
+          <circle cx="560" cy="620" r="1.8" opacity=".5"/>
         </g>
       </svg>
 

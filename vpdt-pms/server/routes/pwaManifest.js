@@ -80,8 +80,8 @@ router.get('/manifest.json', async (req, res) => {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: '#0b1f4d',
-    theme_color: '#0b1f4d',
+    background_color: '#1c3a7a',
+    theme_color: '#1c3a7a',
     orientation: 'portrait-primary',
     icons: [
       { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

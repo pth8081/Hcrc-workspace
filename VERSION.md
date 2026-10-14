@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**26.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.3 (2026-11): Làm nhạt màu nền xanh navy + thêm chấm sáng lấp lánh (sidebar/đăng nhập/màn tải trang/thanh điện thoại)
+
+Người dùng xem demo ảnh (mockup HTML tĩnh) qua nhiều vòng góp ý trước khi chốt, yêu cầu cuối cùng: giữ
+nguyên đúng tông xanh navy gốc của logo/thương hiệu, chỉ làm NHẠT hơn 1 chút cho đỡ nặng nề, và thêm hiệu
+ứng "chấm sáng lấp lánh" (kiểu chuyển đổi số) rải rác trên nền — áp dụng đồng bộ cho **4 chỗ** đang dùng
+chung 1 tông nền navy đó:
+
+1. **Sidebar** (`#userHeader`) và **thanh trên cùng điện thoại** (`#mobileTopBar`) — thay Tailwind
+   `bg-slate-900` bằng 2 class mới `.app-sidebar-bg`/`.app-topbar-bg` (không sửa trực tiếp `bg-slate-900`
+   vì class đó không dùng ở đâu khác ngoài 2 nơi này, nhưng để tránh ảnh hưởng nếu sau này có chỗ khác
+   dùng lại, vẫn tạo class riêng). Màu hover/active của mục menu (`.sidebar-item`/`.sidebar-subitem`)
+   cũng chỉnh lại (`#2d4268`) cho vẫn nổi rõ trên nền mới nhạt hơn.
+2. **Màn đăng nhập** (`.loginpage-hero`) — nhạt 2 mốc gradient, GIỮ NGUYÊN hoạ tiết chấm-nối
+   `.loginpage-hero-nodes` gốc, chỉ thêm lớp `.loginpage-hero-stars` mới (vài chấm sáng có hiệu ứng mờ-
+   phát-sáng SVG `feGaussianBlur`) rải rộng hơn.
+3. **Màn tải trang lúc mới mở app** (`#bootSplash`/`.boot-splash-bg`) — cùng tông nhạt + cùng hiệu ứng
+   chấm sáng (`.app-stars-deco`, dùng chung với sidebar).
+
+Không đổi màu logo "H"/chữ "HCRC WORKSPACE" (vẫn `#38bdf8`/`#1d4ed8`/`#2563eb` như cũ, chỉ nền xung quanh
+đổi) theo đúng yêu cầu người dùng. Cũng đồng bộ `theme-color`/`background_color`/`theme_color` (thẻ meta
+PWA ở `index.html` + `routes/pwaManifest.js`) sang tông mới để thanh trạng thái Android/màn hình chờ PWA
+không bị lệch tông với giao diện thật.
+
+Thuần CSS/HTML, không đổi route/schema/biến môi trường — chỉ cần copy code + `pm2 restart`.
 
 ## v26.2 (2026-11): Đổi các trường nhập tay sang select danh mục (Onboarding/Hồ Sơ Nhân Sự/Hợp Đồng Lao Động)
 

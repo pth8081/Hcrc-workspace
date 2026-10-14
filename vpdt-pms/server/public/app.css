@@ -78,8 +78,17 @@
 .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
 @media print { .minutes-doc { padding: 0; } }
 
+/* Nền xanh navy (11/2026, theo yêu cầu người dùng xem demo ảnh trước — "nhạt đi một chút" + thêm "chấm
+   sáng lấp lánh kiểu chuyển đổi số") — gộp chung 1 lần cho ĐỦ 4 nơi dùng đúng tông màu cũ
+   (#0b1f4d -> #060f26): màn tải trang (đây), màn đăng nhập (.loginpage-hero), sidebar (#userHeader,
+   xem .app-sidebar-bg) và thanh trên cùng điện thoại (#mobileTopBar, xem .app-topbar-bg). Giữ NGUYÊN
+   đúng góc nghiêng 155deg + các màu điểm nhấn (#38bdf8...) đang dùng, chỉ nhạt 2 mốc gradient. */
 .boot-splash-bg {
-  background: linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
+  /* KHÔNG đặt position ở đây — #bootSplash đã có class Tailwind "fixed" (position:fixed) ngay trong
+     index.html; đặt "position: relative" ở đây từng đè mất "fixed" (cùng độ ưu tiên selector, file
+     này nạp sau nên thắng), khiến khối co lại đúng bằng chiều cao nội dung thay vì phủ kín màn hình.
+     "fixed" đã đủ để làm containing block cho .app-stars-deco (absolute) bên trong, không cần thêm. */
+  background: linear-gradient(155deg, #1c3a7a 0%, #16274f 100%);
 }
 
 .boot-splash-label {
@@ -88,6 +97,18 @@
   color: #a9b8e6;
   letter-spacing: .04em;
 }
+
+/* app-stars-deco (11/2026) — lớp phủ "chấm sáng lấp lánh" DÙNG CHUNG cho cả 3 nơi (màn tải trang/
+   sidebar/màn đăng nhập — KHÔNG áp cho #mobileTopBar vì thanh đó quá mỏng, chấm sáng sẽ chỉ gây rối
+   mắt chứ không đẹp hơn). Luôn là lớp <svg> con ĐẦU TIÊN trong khối nền, z-index thấp hơn nội dung thật
+   bên trong (nội dung tự thêm class "relative z-10" của Tailwind, không cần sửa gì thêm ở CSS này). */
+.app-stars-deco { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+
+/* app-sidebar-bg/app-topbar-bg (11/2026) — THAY cho Tailwind "bg-slate-900" ở #userHeader/#mobileTopBar
+   (xem index.html) — class MỚI riêng, KHÔNG sửa trực tiếp ý nghĩa gốc của "bg-slate-900" (tránh ảnh
+   hưởng nơi khác lỡ dùng lại đúng class đó sau này). Cùng tông nhạt hơn như 2 nơi trên. */
+.app-sidebar-bg { position: relative; background: #1c2b4a; }
+.app-topbar-bg { background: linear-gradient(90deg, #1c3a7a 0%, #16274f 100%); }
 
 .icon-sm {
   width: 1.1rem;
@@ -204,13 +225,16 @@
   padding: 0.55rem 0.75rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.8rem;
   color: #cbd5e1; text-align: left; background: transparent; border: 0; cursor: pointer;
 }
-.sidebar-item:hover, .sidebar-subitem:hover { background: #1e293b; color: #fff; }
+/* 11/2026: nền sidebar nhạt hơn (.app-sidebar-bg, #1c2b4a thay #0f172a cũ) — đổi luôn màu hover theo
+   demo ảnh đã chốt (#2d4268) để vẫn nổi rõ so với nền mới, tránh hoà lẫn như #1e293b cũ (gần tối bằng
+   nền mới, khó phân biệt "đang rê chuột qua"). */
+.sidebar-item:hover, .sidebar-subitem:hover { background: #2d4268; color: #fff; }
 .sidebar-subitem { font-weight: 500; padding: 0.4rem 0.75rem; font-size: 0.75rem; }
 /* Tab đang mở ở sidebar trái — xem setActiveSidebarTab() (gọi từ trong switchTab()). Nền xanh đậm hơn
    :hover (đổi tông, không chỉ đổi độ đậm, để không lẫn với hover) + viền trái màu sky-400 khớp màu logo
    HCRC ở đầu sidebar (xem <svg> phía trên) — đọc rõ là "đang chọn" chứ không phải chỉ đang rê chuột qua. */
 .sidebar-item-active, .sidebar-subitem-active {
-  background: #1e3a5f; color: #fff;
+  background: #2d4268; color: #fff;
   border-left: 3px solid #38bdf8;
   padding-left: calc(0.75rem - 3px);
 }
@@ -383,9 +407,9 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(60% 55% at 18% 8%, rgba(56,189,248,.35), transparent 60%),
-    radial-gradient(70% 60% at 90% 100%, rgba(29,78,216,.55), transparent 55%),
-    linear-gradient(155deg, #0b1f4d 0%, #060f26 100%);
+    radial-gradient(60% 55% at 18% 8%, rgba(56,189,248,.30), transparent 60%),
+    radial-gradient(70% 60% at 90% 100%, rgba(29,78,216,.45), transparent 55%),
+    linear-gradient(155deg, #1c3a7a 0%, #16274f 100%);
   color: #eef3ff;
   display: flex;
   flex-direction: column;
@@ -393,6 +417,10 @@ table { display: block; overflow-x: auto; max-width: 100%; }
   padding: 40px 44px;
 }
 .loginpage-hero-nodes { position: absolute; inset: 0; opacity: .5; pointer-events: none; }
+/* loginpage-hero-stars (11/2026, theo demo ảnh đã chốt "chấm sáng lấp lánh kiểu chuyển đổi số") — lớp
+   THÊM, KHÔNG thay .loginpage-hero-nodes ở trên (giữ nguyên lưới chấm-nối gốc), chỉ bổ sung thêm vài
+   chấm sáng có hiệu ứng mờ-phát-sáng (feGaussianBlur, xem SVG trong index.html) rải rộng hơn. */
+.loginpage-hero-stars { position: absolute; inset: 0; pointer-events: none; }
 .loginpage-hero-top, .loginpage-hero-mid, .loginpage-hero-modules { position: relative; z-index: 1; }
 .loginpage-hero-brand { display: flex; align-items: center; gap: 12px; }
 .loginpage-hero-brand svg { width: 32px; height: 32px; flex-shrink: 0; }
