@@ -1,8 +1,23 @@
 # Phiên bản hiện tại
 
-**25.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.98 (2026-11): Thêm nút "🔗 Copy Link" ở Chi Tiết Tài Liệu
+
+Theo yêu cầu người dùng: copy link gửi qua email để người nhận bấm vào đến thẳng tài liệu thay vì tự tìm
+trong danh sách. Thêm nút "🔗 Copy Link" ở header modal "📋 Chi Tiết Tài Liệu" (`module-tailieu.js::
+copyDocDetailLink()`) — tái dùng NGUYÊN VẸN hạ tầng deep-link `?gotoModule=doc&code=<mã>` đã có sẵn cho
+link email phê duyệt (`core.js::buildApprovalEmailLink()`/`gotoApprovalResultRecordFromQueryParam()` —
+module 'DOC' đã đăng ký sẵn tab + opener `viewDocDetails()` từ trước), không cần route/cơ chế mới nào.
+Luôn dùng mã GỐC của tài liệu (không phải mã phiên bản con) nên link luôn mở đúng modal Chi Tiết đầy đủ
+mọi phiên bản. Người nhận bấm link vẫn BẮT BUỘC đăng nhập, và link KHÔNG cấp thêm quyền xem/tải gì — vẫn
+áp dụng đúng luật phân quyền hiện có (`docViewPublished`/`docDownloadPublished`...).
+
+Nhân dịp này xác nhận lại với người dùng: tài liệu "📣 Đã Phát Hành" KHÔNG tự động cho MỌI người xem/tải
+— vẫn cần cấp riêng 2 quyền `docViewPublished`/`docDownloadPublished` (mặc định `false` cho mọi tài
+khoản), xem mục "Tài Liệu — thêm tính năng Phát Hành" ở `Huong-dan-nghiep-vu.md`.
 
 ## v25.97 (2026-11): Vá lỗi Chức Danh hồ sơ mượn tạm field phê duyệt của tài khoản
 

@@ -5123,6 +5123,20 @@ theo **TỪNG phiên bản cụ thể** — phát hành phiên bản 1 không t�
 hành phiên bản 2 mới hơn của cùng 1 tài liệu, và có thể "📕 Hủy Phát Hành"
 bất kỳ lúc nào để ẩn lại.
 
+**Tài Liệu — nút "🔗 Copy Link" (11/2026, theo yêu cầu người dùng)**: header
+modal "📋 Chi Tiết Tài Liệu" có thêm 1 nút "🔗 Copy Link" — bấm vào sao chép 1
+URL trực tiếp tới ĐÚNG tài liệu đang xem (dạng `?gotoModule=doc&code=<mã>`,
+tái dùng nguyên hạ tầng deep-link đã có cho link email phê duyệt — xem mục
+"Gửi email phê duyệt kèm link trực tiếp" ở trên) vào bộ nhớ tạm, dán được
+ngay vào email/tin nhắn gửi cho người nhận. Người nhận bấm vào link **vẫn
+bắt buộc đăng nhập** (không có đường tắt bỏ qua đăng nhập) — đăng nhập xong
+hệ thống tự chuyển thẳng tab Tài Liệu + mở thẳng đúng modal Chi Tiết của tài
+liệu đó, không cần tự tìm trong danh sách. Lưu ý: link này chỉ giúp ĐI
+THẲNG tới tài liệu nhanh hơn — KHÔNG cấp thêm quyền xem/tải gì (vẫn áp dụng
+đúng luật phân quyền hiện có, xem mục "Phát Hành"/"Xem-Tải Tài Liệu Đã Phát
+Hành" ngay trên: nếu người nhận chưa có quyền xem/tải tài liệu đó, link vẫn
+mở ra modal nhưng các nút Xem/Tải vẫn bị ẩn/chặn như bình thường).
+
 **Lọc theo Khối/Ban (10/2026)** — ngay phía trên 6 bảng "1 dòng = 1 phòng
 ban" ở trên, có 1 ô "🗂️ Lọc bảng Phòng Ban bên dưới theo Khối/Ban" DÙNG CHUNG
 cho cả 6 bảng cùng lúc (Tài Liệu/Văn Bản Trình/Hợp Đồng & Giấy Phép/Phòng

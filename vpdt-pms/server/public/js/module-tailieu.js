@@ -1954,6 +1954,12 @@ function closeViewDocModal() {
   document.getElementById('viewModalPrintBtn').classList.remove('hidden');
 }
 
+// _docDetailLinkCode: mã tài liệu (doc.code, KHÔNG phải displayCode — xem copyDocDetailLink()) của tài
+// liệu đang mở trong modal "Chi Tiết Tài Liệu", dùng để dựng link "🔗 Copy Link" (nút tĩnh ở header modal,
+// index.html — không nằm trong HTML dựng lại mỗi lần viewDocDetails(), nên cần biến module-level này để
+// nút đọc được đúng tài liệu đang mở).
+let _docDetailLinkCode = null;
+
 // Modal "Chi Tiết Tài Liệu" — liệt kê TOÀN BỘ phiên bản của 1 tài liệu (gốc + version con), người tải
 // lên/người phê duyệt cuối/mô tả từng phiên bản. "Người phê duyệt" lấy từ bản ghi APPROVED gần nhất
 // trong lịch sử xử lý của ĐÚNG phiên bản đó (mỗi phiên bản có quy trình duyệt độc lập).
@@ -2010,6 +2016,7 @@ function viewDocDetails(anyDocId) {
     `;
   }).join('');
 
+  _docDetailLinkCode = rootDoc.code;
   document.getElementById('docDetailTitle').innerText = `📋 Chi Tiết Tài Liệu: ${rootDoc.title} (${rootDoc.displayCode || rootDoc.code})`;
   document.getElementById('docDetailBody').innerHTML = `
     <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded border">
@@ -2034,6 +2041,28 @@ function viewDocDetails(anyDocId) {
 
 function closeDocDetailModal() {
   document.getElementById('docDetailModal').classList.add('hidden');
+  _docDetailLinkCode = null;
+}
+
+// "🔗 Copy Link" (11/2026, theo yêu cầu người dùng: gửi link qua email để người nhận bấm vào đến thẳng
+// tài liệu, không phải tự tìm trong danh sách) — TÁI DÙNG NGUYÊN VẸN hạ tầng deep-link ?gotoModule=
+// <tab>&code=<mã> đã có sẵn cho link email phê duyệt (xem buildApprovalEmailLink()/
+// gotoApprovalResultRecordFromQueryParam()/openLinkedApprovalRecordByCode() ở core.js — module 'DOC' đã
+// đăng ký sẵn tab 'doc' + opener viewDocDetails(), không cần thêm route/cơ chế mới). LUÔN đòi đăng nhập
+// trước khi mở (không có đường tắt bỏ qua đăng nhập) — người nhận bấm link sẽ phải login xong mới được
+// tự động chuyển thẳng vào modal "Chi Tiết Tài Liệu" này.
+async function copyDocDetailLink() {
+  if (!_docDetailLinkCode) return;
+  const url = new URL(window.location.href);
+  url.search = ''; url.hash = '';
+  url.searchParams.set('gotoModule', 'doc');
+  url.searchParams.set('code', _docDetailLinkCode);
+  try {
+    await navigator.clipboard.writeText(url.toString());
+    alert('✅ Đã sao chép link tài liệu vào bộ nhớ tạm — dán vào email/tin nhắn gửi cho người nhận (họ vẫn cần đăng nhập hệ thống).');
+  } catch (err) {
+    alert('⛔ Không tự sao chép được — vui lòng bôi đen và sao chép thủ công:\n' + url.toString());
+  }
 }
 
 // In trực tiếp nội dung đang hiển thị trong Protected Viewer (tệp đính kèm hoặc phiếu/chứng từ
