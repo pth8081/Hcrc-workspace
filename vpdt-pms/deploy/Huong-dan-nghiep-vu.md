@@ -2994,7 +2994,14 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
     thống giờ tự động liên kết đủ cả 2 chiều (tạo hồ sơ trước/tạo tài khoản
     trước, bên nào xong sau sẽ tự khớp bên kia), cùng 1 luật khớp duy nhất
     (username trùng đúng Mã Nhân Viên + tài khoản đang hoạt động + chưa bị
-    hồ sơ khác chiếm).
+    hồ sơ khác chiếm). **Lưu ý về Chức Danh sau khi liên kết (11/2026, theo
+    yêu cầu người dùng)**: liên kết CHỈ ghi đúng 1 trường `username` vào hồ sơ
+    — Họ Tên/Phòng Ban/Email/SĐT hiển thị LIVE theo tài khoản (không lưu
+    trùng), riêng **Chức Danh KHÔNG còn mượn tạm Chức Danh của tài khoản**
+    (field đó chỉ phục vụ hiển thị chân ký phê duyệt, xem mục "Quản Lý Danh
+    Sách Chức Danh" ở Hệ Thống) — Chức Danh hồ sơ CHỈ lấy từ **Cơ Cấu Tổ
+    Chức** (mục 4.5, Gán Chức Vụ), chưa gán thì hiện trống cho tới khi HR gán
+    vị trí chính thức.
 - **Mã Nhân Viên tự sinh** (9/2026): để trống khi tạo (tay/Onboarding) sẽ tự
   cấp mã tiền tố **"BL"** + số tuần tự 4 chữ số (BL0001, BL0002...) — vẫn gõ
   tay được nếu muốn giữ mã theo hệ thống HR cũ. Chống trùng khi 2 người tạo

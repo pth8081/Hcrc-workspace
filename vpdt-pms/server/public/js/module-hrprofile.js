@@ -63,13 +63,20 @@ async function hrProfileApiCall(method, path, body) {
 
 // Cross-ref tên/phòng ban/chức danh — employeeProfiles giờ TỰ LƯU chức vụ (profile.dept/jobTitle, chọn
 // từ Cơ Cấu Tổ Chức, xem lib/employeeProfile.js::applyPositionAssignment()) nên LUÔN ưu tiên 2 trường
-// này khi đã có; chỉ rơi về suy từ DB.users (đã liên kết tài khoản)/DB.hrProcesses (snapshot Onboarding)
-// cho hồ sơ CŨ chưa từng gán chức vụ qua cơ chế mới — họ tên vẫn luôn lấy từ DB.users/hrProcesses (hồ sơ
-// không lưu fullName).
+// này khi đã có; Phòng Ban rơi về suy từ DB.users (đã liên kết tài khoản)/DB.hrProcesses (snapshot
+// Onboarding) cho hồ sơ CŨ chưa từng gán chức vụ qua cơ chế mới — họ tên vẫn luôn lấy từ DB.users/
+// hrProcesses (hồ sơ không lưu fullName).
+//
+// LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng): Chức Danh KHÔNG được rơi về u.jobTitle (DB.users) như
+// Phòng Ban — u.jobTitle là field RIÊNG ở màn "Quản Lý Người Dùng" chỉ phục vụ hiển thị tên trên CHÂN KÝ
+// PHÊ DUYỆT (xem chú thích tại #jobTitleList, systemSection.html), KHÔNG phải nguồn chân lý cho "Chức
+// Danh thật" của hồ sơ nhân sự (nguồn DUY NHẤT là Cơ Cấu Tổ Chức qua applyPositionAssignment()) — mượn
+// tạm field này gây hiểu nhầm hồ sơ ĐÃ có chức danh chính thức dù chưa hề được gán vị trí nào. Hồ sơ chưa
+// gán chức vụ qua Cơ Cấu Tổ Chức nay hiện trống ("—") thay vì mượn tạm field phê duyệt của tài khoản.
 function hrpfIdentitySnapshot(profile) {
   if (profile.username) {
     const u = (DB.users || []).find(x => x.username === profile.username);
-    if (u) return { fullName: u.name, dept: profile.dept || u.dept || '', jobTitle: profile.jobTitle || u.jobTitle || '', email: u.email || '', phone: u.phone || '' };
+    if (u) return { fullName: u.name, dept: profile.dept || u.dept || '', jobTitle: profile.jobTitle || '', email: u.email || '', phone: u.phone || '' };
   }
   const proc = (DB.hrProcesses || []).find(p => p.id === profile.processId);
   if (proc) return { fullName: proc.fullName || '', dept: profile.dept || proc.employeeDept || '', jobTitle: profile.jobTitle || proc.employeeJobTitle || '', email: proc.email || '', phone: proc.phone || '' };

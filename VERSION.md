@@ -1,8 +1,19 @@
 # Phiên bản hiện tại
 
-**25.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.97 (2026-11): Vá lỗi Chức Danh hồ sơ mượn tạm field phê duyệt của tài khoản
+
+Người dùng chỉ ra: "Chức Danh" tại màn Quản Lý Người Dùng chỉ phục vụ hiển thị chân ký phê duyệt, KHÔNG
+phải nguồn chân lý cho Chức Danh thật của hồ sơ nhân sự (nguồn DUY NHẤT là **Cơ Cấu Tổ Chức**, qua Gán
+Chức Vụ). `hrpfIdentitySnapshot()` (`module-hrprofile.js`) trước đây khi hồ sơ CHƯA được gán chức vụ
+(`profile.jobTitle` rỗng) lại rơi về mượn tạm `u.jobTitle` của tài khoản liên kết để hiển thị — gây hiểu
+nhầm hồ sơ đã có chức danh chính thức dù chưa hề được gán vị trí nào qua Cơ Cấu Tổ Chức. Đã bỏ hẳn
+fallback này — Chức Danh CHỈ lấy từ `profile.jobTitle`, chưa gán thì hiện trống thay vì mượn tạm field
+phê duyệt. Phòng Ban (dept) không đổi — vẫn rơi về tài khoản như cũ (không có xung đột mục đích như
+Chức Danh).
 
 ## v25.96 (2026-11): Tự động liên kết tài khoản VPDT NGAY khi tạo/nhập user — chiều "user mới, hồ sơ có sẵn"
 
