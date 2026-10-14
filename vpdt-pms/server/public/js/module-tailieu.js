@@ -1473,6 +1473,9 @@ async function renameLicenseType(name) {
 // Tải 1 file lên server (POST /api/upload) — trả về { fileUrl, fileName, fileType, size }. moduleKey
 // (vd 'doc', 'contract'...) cho server biết áp dụng đúng danh sách phần mở rộng cho phép của module
 // nào (xem DB.uploadFileTypeConfig / admin "Loại Tệp Cho Phép") — bỏ trống thì dùng danh sách mặc định.
+// Chữ ký nhị phân (magic bytes) ĐÃ được kiểm tra sớm hơn ngay lúc chọn file (xem delegation 'change'
+// capture-phase + verifyFileSignatureClient() ở core.js) — tới được đây nghĩa là đã qua lớp đó, server
+// (routes/upload.js, verifyFileSignature()) vẫn tự kiểm tra lại y hệt làm lớp chặn thật sự cuối cùng.
 async function uploadFileToServer(file, moduleKey) {
   // Chặn sớm ở client nếu đã cấu hình giới hạn riêng cho module này — đỡ tốn công tải cả file lên rồi
   // mới bị server từ chối (server vẫn tự kiểm tra lại y hệt ở routes/upload.js, đây chỉ là trải nghiệm).

@@ -12207,6 +12207,123 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ==========================================
+// Kiểm tra chữ ký nhị phân (magic bytes) NGAY LÚC CHỌN FILE — lớp CLIENT bổ sung, song song với
+// verifyFileSignature() (lib/fileSignature.js) đã có ở server (routes/upload.js). Trước đây CHỈ server
+// kiểm tra — 1 file giả mạo đuôi (đổi tên file lạ thành .xlsx) vẫn phải TẢI HẾT LÊN SERVER mới biết sai.
+// Theo yêu cầu người dùng (11/2026): báo lỗi NGAY khi vừa chọn file (trước cả khi bấm Gửi/Lưu), đỡ tốn
+// thời gian/băng thông cho trường hợp rõ rành sai ngay từ đầu — nếu qua được lớp này thì vẫn tải lên và
+// server tự kiểm tra lại y hệt (lớp client KHÔNG thay thế lớp server, chỉ là trải nghiệm sớm hơn — client
+// luôn có thể bị qua mặt bằng cách sửa JS/tắt JS).
+//
+// Mirror SIGNATURE_MAP ở lib/fileSignature.js nhưng tự dò byte đầu bằng tay (gói `file-type` ở server là
+// gói Node thuần ESM, không chạy được trên trình duyệt) — chỉ cần vài KB đầu cho mọi định dạng, trừ .csv
+// (đọc toàn bộ nội dung kiểm tra văn bản UTF-8 hợp lệ, cùng logic verifyCsvText() ở server). 'zip' gộp
+// chung docx/xlsx/pptx (không phân biệt được loại nào chỉ bằng byte đầu — giống hệt .doc/.xls/.ppt gộp
+// chung 'cfb' ở server, muốn phân biệt chính xác phải đọc sâu cấu trúc zip/CFB bên trong, không cần thiết
+// cho mục đích chống giả mạo đuôi ở lớp sớm này).
+//
+// Phạm vi THẬT: /api/upload (routes/upload.js, qua uploadFileToServer() — ĐIỂM DUY NHẤT gọi route này)
+// hiện chỉ nhận .pdf/.doc/.docx/.xls/.xlsx/.ppt/.pptx/.png/.jpg/.jpeg/.gif/.webp (ALLOWED_EXT) + .mp4/
+// .webm (riêng "làn video" moduleKey 'internalVideo') — .csv KHÔNG đi qua route này (các route Nhập
+// Excel/CSV khác tự xử lý riêng, chưa gắn lớp kiểm tra client ở đây). Vẫn giữ nhánh .csv để khớp ĐẦY ĐỦ
+// với SIGNATURE_MAP server, phòng khi sau này có module mới dùng chung uploadFileToServer() cho .csv.
+const CLIENT_FILE_SIGNATURE_MAP = {
+  pdf: ['pdf'], png: ['png'], jpg: ['jpg'], jpeg: ['jpg'], gif: ['gif'], webp: ['webp'],
+  doc: ['cfb'], xls: ['cfb'], ppt: ['cfb'],
+  docx: ['zip'], xlsx: ['zip'], pptx: ['zip'],
+  mp4: ['mp4'], webm: ['webm']
+};
+const CLIENT_MAGIC_CHECKABLE_EXTS = new Set(Object.keys(CLIENT_FILE_SIGNATURE_MAP));
+
+function clientBytesEqual(buf, offset, pattern) {
+  if (buf.length < offset + pattern.length) return false;
+  for (let i = 0; i < pattern.length; i++) { if (buf[offset + i] !== pattern[i]) return false; }
+  return true;
+}
+// Dò ĐÚNG 1 định dạng CLIENT_FILE_SIGNATURE_MAP nhận diện được từ vài KB đầu tệp — trả mã định dạng
+// ('pdf'/'png'/...) hoặc null nếu không khớp chữ ký nào đã biết.
+function detectClientFileSignature(buf) {
+  if (clientBytesEqual(buf, 0, [0x25, 0x50, 0x44, 0x46])) return 'pdf';
+  if (clientBytesEqual(buf, 0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) return 'png';
+  if (clientBytesEqual(buf, 0, [0xFF, 0xD8, 0xFF])) return 'jpg';
+  if (clientBytesEqual(buf, 0, [0x47, 0x49, 0x46, 0x38]) &&
+      (clientBytesEqual(buf, 4, [0x37, 0x61]) || clientBytesEqual(buf, 4, [0x39, 0x61]))) return 'gif';
+  if (clientBytesEqual(buf, 0, [0x52, 0x49, 0x46, 0x46]) && clientBytesEqual(buf, 8, [0x57, 0x45, 0x42, 0x50])) return 'webp';
+  if (clientBytesEqual(buf, 0, [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])) return 'cfb';
+  if (clientBytesEqual(buf, 0, [0x50, 0x4B, 0x03, 0x04]) || clientBytesEqual(buf, 0, [0x50, 0x4B, 0x05, 0x06]) || clientBytesEqual(buf, 0, [0x50, 0x4B, 0x07, 0x08])) return 'zip';
+  if (clientBytesEqual(buf, 4, [0x66, 0x74, 0x79, 0x70])) return 'mp4'; // hộp "ftyp" (ISO BMFF)
+  if (clientBytesEqual(buf, 0, [0x1A, 0x45, 0xDF, 0xA3])) {
+    // Header EBML dùng chung cho .webm/.mkv — dò thêm chuỗi ASCII "webm" ngay trong vùng DocType sau
+    // header (heuristic đơn giản, KHÔNG chính xác tuyệt đối như gói file-type ở server — chỉ là lớp UX
+    // sớm, server vẫn kiểm tra lại chính xác).
+    let text = '';
+    for (let i = 0; i < buf.length; i++) text += String.fromCharCode(buf[i]);
+    return text.includes('webm') ? 'webm' : null;
+  }
+  return null;
+}
+// .csv là văn bản thuần, không có magic bytes — kiểm tra buffer có phải UTF-8 hợp lệ, không chứa byte
+// NUL hay không, cùng logic verifyCsvText() ở lib/fileSignature.js (server).
+function verifyClientCsvText(buf) {
+  if (!buf || !buf.length) return { ok: false, reason: 'Tệp .csv rỗng hoặc không đọc được nội dung.' };
+  if (buf.includes(0)) return { ok: false, reason: 'Nội dung file không khớp với định dạng đã khai (.csv) — vui lòng kiểm tra lại file.' };
+  try { new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch (e) { return { ok: false, reason: 'Nội dung file không khớp với định dạng đã khai (.csv) — vui lòng kiểm tra lại file.' }; }
+  return { ok: true };
+}
+function getClientFileExt(filename) {
+  const name = String(filename || '');
+  const idx = name.lastIndexOf('.');
+  return idx > 0 ? name.slice(idx + 1).toLowerCase() : '';
+}
+// verifyFileSignatureClient(file, declaredExt) — mirror verifyFileSignature() ở lib/fileSignature.js
+// (server), chỉ đọc 4100 byte ĐẦU tệp (đủ cho mọi chữ ký đã biết, kể cả vùng DocType EBML của .webm) trừ
+// .csv (đọc TOÀN BỘ để kiểm tra văn bản, cùng khuôn server). Trả { ok, reason } bất đồng bộ.
+async function verifyFileSignatureClient(file, declaredExt) {
+  const ext = String(declaredExt || '').replace(/^\./, '').toLowerCase();
+  if (!ext) return { ok: true };
+  if (ext === 'csv') {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    return verifyClientCsvText(buf);
+  }
+  if (!CLIENT_MAGIC_CHECKABLE_EXTS.has(ext)) return { ok: true };
+  let buf;
+  try { buf = new Uint8Array(await file.slice(0, 4100).arrayBuffer()); }
+  catch (e) { return { ok: true }; } // Không đọc được (hiếm, trình duyệt cũ) -> bỏ qua, để server tự quyết định.
+  const detected = detectClientFileSignature(buf);
+  const allowed = CLIENT_FILE_SIGNATURE_MAP[ext];
+  if (!detected || !allowed.includes(detected)) {
+    return { ok: false, reason: `Nội dung file không khớp với định dạng đã khai (.${ext}) — vui lòng kiểm tra lại file.` };
+  }
+  return { ok: true };
+}
+// Delegation TOÀN TRANG (document, CAPTURE phase — e.stopImmediatePropagation() ở đây chặn MỌI handler
+// khác xử lý ĐÚNG lượt 'change' này, kể cả data-op-change qua bindCspDelegation() lẫn code gọi thẳng
+// addEventListener('change', ...) trên chính input, vì capture luôn chạy TRƯỚC target/bubble phase) — áp
+// dụng cho MỌI <input type="file"> hiện có VÀ render động sau này, không cần sửa 40+ nơi gọi
+// uploadFileToServer() rải khắp module-*.js. Nếu file hợp lệ: tự phát lại ĐÚNG 1 lượt 'change' (đánh dấu
+// data-sig-check-passed để không lặp vô hạn) cho các handler thật xử lý tiếp như chưa từng có lớp này.
+document.addEventListener('change', (e) => {
+  const input = e.target;
+  if (!(input instanceof HTMLInputElement) || input.type !== 'file') return;
+  if (input.dataset.sigCheckPassed === '1') { delete input.dataset.sigCheckPassed; return; }
+  if (!input.files || !input.files.length) return;
+  e.stopImmediatePropagation();
+  (async () => {
+    for (const file of Array.from(input.files)) {
+      const check = await verifyFileSignatureClient(file, getClientFileExt(file.name));
+      if (!check.ok) {
+        alert('⛔ ' + check.reason);
+        input.value = '';
+        return;
+      }
+    }
+    input.dataset.sigCheckPassed = '1';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  })();
+}, true);
+
+// ==========================================
 // "Làm Mới" (reset) form Tạo Mới + chip "✕ Xoá file" — hạ tầng DÙNG CHUNG cho MỌI form tạo-mới-hồ-sơ
 // (Đợt A: Văn Bản Trình/Hợp Đồng/Tài Liệu/Giấy Phép — mẫu tham chiếu cho các đợt sau áp dụng tiếp cho
 // ~12 module còn lại). Xuất phát từ phàn nàn người dùng: đang nhập dở 1 form tạo mới, CHƯA gửi, muốn bỏ
