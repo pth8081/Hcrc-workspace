@@ -97,7 +97,11 @@ async function submitCarReq(e) {
   if (newCarApprovers.length) {
     notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', code, newCarApprovers,
       `[VPDT] Đăng ký xe ${code} cần bạn phê duyệt`,
-      `Phiếu đăng ký xe "${destination}" (${code}) do ${currentUser.name} đăng ký đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Đăng Ký Xe', ticketNumber: code, summary: destination,
+        creatorName: currentUser.name, creatorDept: dept, createdAt: newCar.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
 
   alert('✅ Đã gửi phiếu đăng ký xe thành công!');
@@ -1546,7 +1550,11 @@ async function processCarReg(actionType) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('CAR', 'NOTIFY_APPROVAL_NEEDED', updatedCar.code, transition.nextApprovers,
         `[VPDT] Đăng ký xe ${updatedCar.code} cần bạn phê duyệt`,
-        `Phiếu đăng ký xe "${updatedCar.destination}" (${updatedCar.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: 'Đăng Ký Xe', ticketNumber: updatedCar.code, summary: updatedCar.destination,
+          creatorName: updatedCar.creatorName, creatorDept: updatedCar.dept, createdAt: updatedCar.createdAt,
+          stepName: transition.nextStepName
+        }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đăng ký xe thành công!';

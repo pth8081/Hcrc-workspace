@@ -668,7 +668,11 @@ async function uploadDoc(e) {
   if (newDocApprovers.length) {
     notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', code, newDocApprovers,
       `[VPDT] Tài liệu ${code} cần bạn phê duyệt`,
-      `Tài liệu "${title}" (${code}) do ${currentUser.name} tải lên đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Tài Liệu', ticketNumber: code, summary: title,
+        creatorName: currentUser.name, creatorDept: dept, createdAt: newDoc.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
 
   alert('✅ Tải lên và trình ký tài liệu thành công!');
@@ -1379,7 +1383,11 @@ async function uploadLicense(e) {
   if (approverUsernames.length) {
     notifyUsersByEmail('LICENSE', 'NOTIFY_APPROVAL_NEEDED', code, approverUsernames,
       `[VPDT] Giấy phép ${code} cần bạn phê duyệt`,
-      `Giấy phép "${licenseType}" (${code}) do ${currentUser.name} tải lên đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Giấy Phép', ticketNumber: code, summary: licenseType,
+        creatorName: currentUser.name, creatorDept: newItem.dept, createdAt: newItem.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
 
   alert('✅ Tải lên và trình duyệt giấy phép thành công!');
@@ -1690,7 +1698,11 @@ async function approveDocConfirmed(docId) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('DOC', 'NOTIFY_APPROVAL_NEEDED', updatedDoc.code, transition.nextApprovers,
         `[VPDT] Tài liệu ${updatedDoc.code} cần bạn phê duyệt`,
-        `Tài liệu "${updatedDoc.title}" (${updatedDoc.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: 'Tài Liệu', ticketNumber: updatedDoc.code, summary: updatedDoc.title,
+          creatorName: updatedDoc.uploaderName, creatorDept: updatedDoc.dept, createdAt: updatedDoc.createdAt,
+          stepName: transition.nextStepName
+        }));
     }
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';
@@ -1954,16 +1966,23 @@ function closeViewDocModal() {
   document.getElementById('viewModalPrintBtn').classList.remove('hidden');
 }
 
-// _docDetailLinkCode: mã tài liệu (doc.code, KHÔNG phải displayCode — xem copyDocDetailLink()) của tài
-// liệu đang mở trong modal "Chi Tiết Tài Liệu", dùng để dựng link "🔗 Copy Link" (nút tĩnh ở header modal,
-// index.html — không nằm trong HTML dựng lại mỗi lần viewDocDetails(), nên cần biến module-level này để
-// nút đọc được đúng tài liệu đang mở).
-let _docDetailLinkCode = null;
+// LỖI THIẾT KẾ ĐÃ VÁ (11/2026, theo yêu cầu người dùng xem demo: "tài liệu có NHIỀU phiên bản cùng Đã
+// Phát Hành (VD v1.0 và v3.0), 1 link duy nhất ở header modal không phân biệt được đang chia sẻ đúng bản
+// nào"): bỏ hẳn nút "Copy Link" dùng chung ở header (cùng biến module-level _docDetailLinkCode từng giữ
+// mã tài liệu cho nút đó) — mỗi PHIÊN BẢN giờ có nút "🔗" RIÊNG ở đúng dòng "Thao Tác" của nó (xem
+// rowsHTML bên dưới), dùng ĐÚNG mã của phiên bản đó (v.code, không phải mã gốc displayCode dùng chung
+// cho cả family) nên không còn lẫn giữa các phiên bản — xem copyDocVersionLink() thay thế.
 
 // Modal "Chi Tiết Tài Liệu" — liệt kê TOÀN BỘ phiên bản của 1 tài liệu (gốc + version con), người tải
 // lên/người phê duyệt cuối/mô tả từng phiên bản. "Người phê duyệt" lấy từ bản ghi APPROVED gần nhất
 // trong lịch sử xử lý của ĐÚNG phiên bản đó (mỗi phiên bản có quy trình duyệt độc lập).
-function viewDocDetails(anyDocId) {
+//
+// highlightVersionId (tuỳ chọn, 11/2026): id của ĐÚNG phiên bản vừa đến từ link "🔗" Copy Link theo
+// phiên bản (xem APPROVAL_EMAIL_RECORD_OPENER.DOC.open() ở core.js — gọi SAU KHI switchTab('doc') xong,
+// không phải lúc người dùng bấm "Chi Tiết" bình thường từ danh sách) — cuộn tới + chớp sáng vàng ĐÚNG
+// dòng đó, tránh người nhận link nhầm giữa các phiên bản khác cũng "Đã Phát Hành" đang hiển thị trong
+// cùng bảng lịch sử.
+function viewDocDetails(anyDocId, highlightVersionId) {
   const doc = DB.docs.find(d => d.id === anyDocId);
   if (!doc) return;
   const family = getDocFamily(anyDocId);
@@ -1999,7 +2018,7 @@ function viewDocDetails(anyDocId) {
       : '';
 
     return `
-      <tr class="border-b hover:bg-gray-50">
+      <tr class="border-b hover:bg-gray-50" data-version-row="${v.id}">
         <td class="border p-2 text-center font-bold text-purple-700">${escapeHtml(v.ver)}</td>
         <td class="border p-2">
           <div class="font-semibold text-gray-800">${escapeHtml(v.uploaderName || v.uploader)}</div>
@@ -2011,12 +2030,12 @@ function viewDocDetails(anyDocId) {
           <button type="button" data-op="viewDoc" data-arg0="${v.id}" class="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700">👁️ Xem</button>
           ${canDL ? `<button type="button" data-op="downloadDocFile" data-arg0="${v.id}" class="px-2 py-1 bg-slate-600 text-white rounded text-[11px] font-bold hover:bg-slate-700 ml-1">⬇️ Tải</button>` : ''}
           ${publishBtnHTML}
+          <button type="button" data-op="copyDocVersionLink" data-arg0="${v.id}" title="Sao chép link truy cập thẳng ĐÚNG phiên bản này (gửi qua email/tin nhắn)" class="px-2 py-1 bg-indigo-600 text-white rounded text-[11px] font-bold hover:bg-indigo-700 ml-1">🔗</button>
         </td>
       </tr>
     `;
   }).join('');
 
-  _docDetailLinkCode = rootDoc.code;
   document.getElementById('docDetailTitle').innerText = `📋 Chi Tiết Tài Liệu: ${rootDoc.title} (${rootDoc.displayCode || rootDoc.code})`;
   document.getElementById('docDetailBody').innerHTML = `
     <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-gray-50 p-2 rounded border">
@@ -2037,29 +2056,44 @@ function viewDocDetails(anyDocId) {
     </table>
   `;
   document.getElementById('docDetailModal').classList.remove('hidden');
+  if (highlightVersionId != null) {
+    const row = document.querySelector(`#docDetailBody tr[data-version-row="${highlightVersionId}"]`);
+    if (row) {
+      row.scrollIntoView({ block: 'center' });
+      row.classList.remove('doc-version-row-highlight');
+      void row.offsetWidth; // ép trình duyệt tính lại layout — cho phép CHẠY LẠI animation nếu lỡ mở link 2 lần liên tiếp cùng 1 phiên bản (class cũ chưa kịp gỡ thì animation không tự chạy lại).
+      row.classList.add('doc-version-row-highlight');
+    }
+  }
 }
 
 function closeDocDetailModal() {
   document.getElementById('docDetailModal').classList.add('hidden');
-  _docDetailLinkCode = null;
 }
 
-// "🔗 Copy Link" (11/2026, theo yêu cầu người dùng: gửi link qua email để người nhận bấm vào đến thẳng
-// tài liệu, không phải tự tìm trong danh sách) — TÁI DÙNG NGUYÊN VẸN hạ tầng deep-link ?gotoModule=
-// <tab>&code=<mã> đã có sẵn cho link email phê duyệt (xem buildApprovalEmailLink()/
-// gotoApprovalResultRecordFromQueryParam()/openLinkedApprovalRecordByCode() ở core.js — module 'DOC' đã
-// đăng ký sẵn tab 'doc' + opener viewDocDetails(), không cần thêm route/cơ chế mới). LUÔN đòi đăng nhập
-// trước khi mở (không có đường tắt bỏ qua đăng nhập) — người nhận bấm link sẽ phải login xong mới được
-// tự động chuyển thẳng vào modal "Chi Tiết Tài Liệu" này.
-async function copyDocDetailLink() {
-  if (!_docDetailLinkCode) return;
+// "🔗" Copy Link theo TỪNG PHIÊN BẢN (11/2026, theo yêu cầu người dùng: gửi link qua email để người nhận
+// bấm vào đến thẳng ĐÚNG phiên bản đã share, không phải tự tìm trong danh sách/tự phân biệt bản nào
+// trong số các bản "Đã Phát Hành") — TÁI DÙNG hạ tầng deep-link ?gotoModule=<tab>&code=<mã> đã có sẵn
+// cho link email phê duyệt (buildApprovalEmailLink()/gotoApprovalResultRecordFromQueryParam()/
+// openLinkedApprovalRecordByCode() ở core.js — module 'DOC' đã đăng ký sẵn tab 'doc', không cần thêm
+// route/cơ chế mới), CỘNG THÊM cờ `openView=1` (xem APPROVAL_EMAIL_RECORD_OPENER.DOC.open() ở core.js
+// và gotoApprovalResultRecordFromQueryParam() đọc cờ này từ query string) để báo
+// "đây là link chia sẻ 1 phiên bản cụ thể, không phải chỉ mở modal xem lịch sử suông" — khi người nhận
+// bấm vào, hệ thống tự cuộn tới + chớp sáng ĐÚNG dòng phiên bản này rồi TỰ MỞ LUÔN "👁️ Xem" (người dùng
+// xác nhận: "mở luôn vào xem"), không bắt họ tự bấm thêm lần nữa. Dùng v.code (mã RIÊNG của phiên bản,
+// KHÁC displayCode dùng chung cho cả họ tài liệu) để khớp đúng 1 bản duy nhất, không lẫn các phiên bản
+// khác cũng "Đã Phát Hành" của cùng tài liệu. LUÔN đòi đăng nhập trước khi mở (không có đường tắt).
+async function copyDocVersionLink(docId) {
+  const v = DB.docs.find(d => d.id === docId);
+  if (!v) return;
   const url = new URL(window.location.href);
   url.search = ''; url.hash = '';
   url.searchParams.set('gotoModule', 'doc');
-  url.searchParams.set('code', _docDetailLinkCode);
+  url.searchParams.set('code', v.code);
+  url.searchParams.set('openView', '1');
   try {
     await navigator.clipboard.writeText(url.toString());
-    alert('✅ Đã sao chép link tài liệu vào bộ nhớ tạm — dán vào email/tin nhắn gửi cho người nhận (họ vẫn cần đăng nhập hệ thống).');
+    alert(`✅ Đã sao chép link phiên bản ${v.ver} vào bộ nhớ tạm — dán vào email/tin nhắn gửi cho người nhận (họ vẫn cần đăng nhập hệ thống).`);
   } catch (err) {
     alert('⛔ Không tự sao chép được — vui lòng bôi đen và sao chép thủ công:\n' + url.toString());
   }

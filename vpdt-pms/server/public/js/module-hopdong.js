@@ -675,14 +675,22 @@ async function submitContractReq(e) {
     const approvers = newContract.effectiveApprovers?.[1] || [];
     notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
       `[VPDT] Phụ lục hợp đồng chờ duyệt: ${title}`,
-      `${currentUser.name} vừa tạo phụ lục "${title}" (${newContract.code}), đang chờ phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Phụ Lục Hợp Đồng', ticketNumber: newContract.code, summary: title,
+        creatorName: currentUser.name, creatorDept: newContract.dept, createdAt: newContract.createdAt,
+        stepName: 'Bước 1'
+      }));
     alert('✅ Đã gửi phụ lục, đang chờ phê duyệt!');
   } else {
     logSystemAction('CONTRACT', 'CREATE_CONTRACT', `Tạo hồ sơ hợp đồng [${code} - ${title}]`, 'SUCCESS', code);
     const approvers = newContract.effectiveApprovers?.[1] || [];
     notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', newContract.code, approvers,
       `[VPDT] Hợp đồng chờ duyệt: ${title}`,
-      `${currentUser.name} vừa tạo hồ sơ hợp đồng "${title}" (${newContract.code}), đang chờ phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Hợp Đồng', ticketNumber: newContract.code, summary: title,
+        creatorName: currentUser.name, creatorDept: newContract.dept, createdAt: newContract.createdAt,
+        stepName: 'Bước 1'
+      }));
     alert('✅ Đã gửi hồ sơ hợp đồng, đang chờ phê duyệt!');
   }
   resetContractForm();
@@ -1334,9 +1342,16 @@ function approveContractAction(id) {
       } else if (transition.type === 'ADVANCED') {
         msg = getStepAdvanceMessage(transition.stepApprovers);
         if (transition.nextApprovers.length) {
+          // contracts KHÔNG có field creatorName riêng (xem lib/createValidation.js, creatorNameField:
+          // null — khác mọi module khác) — tra tên qua DB.users theo updated.creator (username).
+          const creatorUser = DB.users.find(u => u.username === updated.creator);
           notifyUsersByEmail('CONTRACT', 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
             `[VPDT] Hợp đồng ${updated.code} cần bạn phê duyệt`,
-            `Hợp đồng "${updated.title}" (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+            buildApprovalNeededEmailBody({
+              ticketType: 'Hợp Đồng', ticketNumber: updated.code, summary: updated.title,
+              creatorName: creatorUser?.name, creatorDept: updated.dept, createdAt: updated.createdAt,
+              stepName: transition.nextStepName
+            }));
         }
       } else if (transition.type === 'PARTIAL_APPROVE') {
         msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';

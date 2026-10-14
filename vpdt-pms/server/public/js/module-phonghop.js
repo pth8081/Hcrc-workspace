@@ -865,7 +865,11 @@ async function submitMeetingReq(e) {
       if (meetingApprovers.length) {
         notifyUsersByEmail('MEETING', 'NOTIFY_APPROVAL_NEEDED', updated.code, meetingApprovers,
           `[VPDT] Lịch phòng họp ${updated.code} cần bạn phê duyệt lại`,
-          `Lịch đặt phòng "${room}" (${updated.code}) do ${currentUser.name} vừa sửa lại đang chờ bạn phê duyệt.`);
+          buildApprovalNeededEmailBody({
+            ticketType: 'Đặt Phòng Họp', ticketNumber: updated.code, summary: room,
+            creatorName: currentUser.name, creatorDept: dept, createdAt: updated.createdAt,
+            stepName: 'Phê duyệt'
+          }));
       }
     }
 
@@ -905,7 +909,11 @@ async function submitMeetingReq(e) {
   if (meetingApprovers.length) {
     notifyUsersByEmail('MEETING', 'NOTIFY_APPROVAL_NEEDED', code, meetingApprovers,
       `[VPDT] Lịch phòng họp ${code} cần bạn phê duyệt`,
-      `Lịch đặt phòng "${room}" (${code}) do ${currentUser.name} đăng ký đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Đặt Phòng Họp', ticketNumber: code, summary: room,
+        creatorName: currentUser.name, creatorDept: dept, createdAt: newMeeting.createdAt,
+        stepName: 'Phê duyệt'
+      }));
   }
 
   alert('✅ Đã gửi đăng ký lịch phòng họp thành công!');

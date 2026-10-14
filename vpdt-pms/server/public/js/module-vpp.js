@@ -522,7 +522,11 @@ async function submitVppRegDraftAction(regId, fromForm) {
       if (approvers.length) {
         notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', updatedReg.code, approvers,
           `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bạn phê duyệt`,
-          `Đăng ký Văn phòng phẩm kỳ "${updatedReg.periodName}" của ${updatedReg.creatorName} đang chờ bạn phê duyệt.`);
+          buildApprovalNeededEmailBody({
+            ticketType: 'Văn Phòng Phẩm', ticketNumber: updatedReg.code, summary: `Kỳ ${updatedReg.periodName}`,
+            creatorName: updatedReg.creatorName, creatorDept: updatedReg.dept, createdAt: updatedReg.createdAt,
+            stepName: 'Bước 1'
+          }));
       }
     }
   });
@@ -808,7 +812,11 @@ async function processVppReg(actionType) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('VPP', 'NOTIFY_APPROVAL_NEEDED', updatedReg.code, transition.nextApprovers,
         `[VPDT] Đăng ký Văn phòng phẩm ${updatedReg.code} cần bạn phê duyệt`,
-        `Đăng ký Văn phòng phẩm của ${updatedReg.creatorName} đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: 'Văn Phòng Phẩm', ticketNumber: updatedReg.code, summary: `Kỳ ${updatedReg.periodName}`,
+          creatorName: updatedReg.creatorName, creatorDept: updatedReg.dept, createdAt: updatedReg.createdAt,
+          stepName: transition.nextStepName
+        }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đăng ký Văn phòng phẩm thành công!';

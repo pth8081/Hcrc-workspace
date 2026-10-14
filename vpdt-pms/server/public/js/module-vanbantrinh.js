@@ -136,7 +136,11 @@ async function doSubmitSubmissionReq(e) {
   if (newSubApprovers.length) {
     notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', code, newSubApprovers,
       `[VPDT] Tờ trình ${code} cần bạn phê duyệt`,
-      `Tờ trình "${title}" (${code}) do ${currentUser.name} trình đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Văn Bản Trình', ticketNumber: code, summary: title,
+        creatorName: currentUser.name, creatorDept: newSub.dept, createdAt: newSub.createdAt,
+        stepName: 'Bước 1', deadline: newSub.desiredApprovalDate, urgency: priority
+      }));
   }
   // "Xin ý kiến" — dùng danh sách từ record đã được SERVER xác minh trả về (newSub.opinionRequestees),
   // không dùng effectiveWf cục bộ, vì server mới là nơi quyết định danh sách cuối cùng.
@@ -1088,7 +1092,11 @@ async function processSubmission(actionType) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('SUBMISSION', 'NOTIFY_APPROVAL_NEEDED', updatedSub.code, transition.nextApprovers,
         `[VPDT] Tờ trình ${updatedSub.code} cần bạn phê duyệt`,
-        `Tờ trình "${updatedSub.title}" (${updatedSub.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: 'Văn Bản Trình', ticketNumber: updatedSub.code, summary: updatedSub.title,
+          creatorName: updatedSub.creatorName, creatorDept: updatedSub.dept, createdAt: updatedSub.createdAt,
+          stepName: transition.nextStepName, deadline: updatedSub.desiredApprovalDate, urgency: updatedSub.priority
+        }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt tờ trình thành công!';

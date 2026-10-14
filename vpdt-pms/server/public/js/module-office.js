@@ -179,7 +179,11 @@ async function submitOfficeReq(e) {
   if (newOffApprovers.length) {
     notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', code, newOffApprovers,
       `[VPDT] Đề xuất văn phòng ${code} cần bạn phê duyệt`,
-      `Đề xuất "${title}" (${code}) do ${currentUser.name} tạo đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Đề Xuất Văn Phòng', ticketNumber: code, summary: title,
+        creatorName: currentUser.name, creatorDept: newOff.dept, createdAt: newOff.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
 
   alert('✅ Đã gửi đề xuất văn phòng thành công!');
@@ -752,7 +756,11 @@ async function processOfficeReq(actionType) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('OFFICE', 'NOTIFY_APPROVAL_NEEDED', updatedOffice.code, transition.nextApprovers,
         `[VPDT] Đề xuất văn phòng ${updatedOffice.code} cần bạn phê duyệt`,
-        `Đề xuất "${updatedOffice.title}" (${updatedOffice.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: 'Đề Xuất Văn Phòng', ticketNumber: updatedOffice.code, summary: updatedOffice.title,
+          creatorName: updatedOffice.creatorName, creatorDept: updatedOffice.dept, createdAt: updatedOffice.createdAt,
+          stepName: transition.nextStepName
+        }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = '✅ Phê duyệt đề xuất văn phòng thành công!';

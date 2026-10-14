@@ -643,7 +643,11 @@ async function submitInternalPost(e) {
       const approvers = getInternalPostApproverUsernames();
       notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVAL_NEEDED', updated.code, approvers,
         `[VPDT] Bài đăng Góc Chia Sẻ chờ duyệt: ${title}`,
-        `${currentUser.name} vừa gửi lại bài "${title}" sau khi bổ sung theo yêu cầu, đang chờ phê duyệt trước khi công khai.`);
+        buildApprovalNeededEmailBody({
+          ticketType: 'Bài Đăng Góc Chia Sẻ', ticketNumber: updated.code, summary: title,
+          creatorName: updated.authorName, creatorDept: updated.dept, createdAt: updated.createdAt,
+          stepName: 'Phê duyệt'
+        }));
     }
     cancelEditInternalPost();
     if (updated.status === 'DRAFT') alert('✅ Đã lưu nháp!');
@@ -696,7 +700,11 @@ async function submitInternalPost(e) {
     const approvers = getInternalPostApproverUsernames();
     notifyUsersByEmail('INTERNAL', 'NOTIFY_APPROVAL_NEEDED', newPost.code, approvers,
       `[VPDT] Bài đăng Góc Chia Sẻ chờ duyệt: ${title}`,
-      `${currentUser.name} vừa đăng bài "${title}" trong Góc Chia Sẻ, đang chờ phê duyệt trước khi công khai.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Bài Đăng Góc Chia Sẻ', ticketNumber: newPost.code, summary: title,
+        creatorName: newPost.authorName, creatorDept: newPost.dept, createdAt: newPost.createdAt,
+        stepName: 'Phê duyệt'
+      }));
     alert('✅ Đã gửi bài, bài viết sẽ hiển thị công khai sau khi được phê duyệt!');
   } else {
     alert('✅ Đã đăng bài thành công!');

@@ -642,7 +642,11 @@ async function submitItPriceApproval(e) {
   if (firstStepApprovers.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
       `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
-      `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Phê Duyệt Giá IT (Bán Buôn)', ticketNumber: code, summary: newItem.wholesaleApplyUnit,
+        creatorName: currentUser.name, creatorDept: newItem.dept, createdAt: newItem.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
   alert('✅ Đã gửi đề xuất duyệt giá thành công!');
 
@@ -1177,7 +1181,13 @@ async function approveItPriceConfirmed(id) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
         `[VPDT] Đề xuất duyệt giá ${updated.code} cần bạn phê duyệt`,
-        `Đề xuất duyệt giá (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: updated.priceType === 'WHOLESALE' ? 'Phê Duyệt Giá IT (Bán Buôn)' : 'Phê Duyệt Giá IT (Bán Lẻ)',
+          ticketNumber: updated.code,
+          summary: updated.wholesaleApplyUnit || (updated.priceZone ? `Khu vực giá: ${updated.priceZone}` : ''),
+          creatorName: updated.creatorName, creatorDept: updated.dept, createdAt: updated.createdAt,
+          stepName: transition.nextStepName
+        }));
     }
   } else if (transition.type === 'PARTIAL_APPROVE') {
     msg = '✅ Đã ghi nhận phê duyệt của bạn — đang chờ các đồng phê duyệt còn lại ở bước này.';

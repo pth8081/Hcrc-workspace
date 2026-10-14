@@ -7023,6 +7023,54 @@ function sendNotificationEmail(recipientEmail, recipientName, subject, messageBo
   logSystemAction('EMAIL', 'SEND_EMAIL_SUCCESS', `Đã gửi email tự động tới [${recipientName} - ${recipientEmail}] với chủ đề: "${subject}"`, 'SUCCESS', recipientEmail);
 }
 
+// buildApprovalNeededEmailBody(opts) — MẪU EMAIL "CẦN PHÊ DUYỆT" DÙNG CHUNG cho TOÀN BỘ ~13 module có
+// phê duyệt (yêu cầu người dùng 11/2026: "làm mẫu gửi chung cho tất cả các module có phê duyệt" theo 1
+// khuôn cố định) — THAY cho câu văn tự do từng module tự viết riêng trước đây cho đúng actionType
+// NOTIFY_APPROVAL_NEEDED (family 'approvalNeeded' — email gửi NGƯỜI SẼ DUYỆT). CÁC FAMILY KHÁC (result/
+// forward*/fileProposal*/ticket*/applied/requestInfo/emergencyReject*...) GIỮ NGUYÊN body tự do như cũ,
+// KHÔNG đụng tới — hàm này chỉ được gọi tại ĐÚNG các điểm notifyUsersByEmail(..., 'NOTIFY_APPROVAL_NEEDED', ...)
+// đã rà soát (grep toàn bộ module-*.js).
+//
+//   - recipientName: CỐ Ý KHÔNG nhận trực tiếp — để lại placeholder APPROVAL_GREETING_PLACEHOLDER,
+//     notifyRecipientsByEmail() tự điền SAU KHI đã chốt danh sách người nhận hợp lệ cuối cùng, vì
+//     dispatchRealEmail() gửi 1 email DÙNG CHUNG `to` cho cả nhóm (không gửi riêng từng người) — chỉ xưng
+//     đúng tên khi gửi cho DUY NHẤT 1 người, nhiều người cùng nhận thì xưng chung "Anh/Chị" (không đoán
+//     sai/chỉ nêu 1 trong nhiều tên).
+//   - deadline/urgency: phần lớn module hiện CHƯA có field SLA/độ khẩn thật (mặc định "Không quy định"/
+//     "Thường") — riêng Văn Bản Trình có `priority` (Độ Khẩn, DB.submissionPriorities) và
+//     `desiredApprovalDate` (Ngày mong muốn duyệt xong), dùng đúng 2 field này làm urgency/deadline thật.
+//   - Link thật (🔗 Xem trực tiếp hồ sơ) do buildApprovalEmailLink() gắn thêm ở notifyRecipientsByEmail()
+//     NGAY SAU dòng "vui lòng truy cập..." (xem APPROVAL_SIGNATURE_PLACEHOLDER ngay dưới), rồi mới tới
+//     chữ ký — giữ ĐÚNG thứ tự khuôn người dùng yêu cầu (nội dung → link → chữ ký).
+const APPROVAL_GREETING_PLACEHOLDER = '{{APPROVAL_GREETING}}';
+const APPROVAL_SIGNATURE_PLACEHOLDER = '{{APPROVAL_SIGNATURE}}';
+const APPROVAL_SIGNATURE_TEXT = 'Trân trọng,\nHệ thống Văn phòng số – Công ty HCRC';
+function buildApprovalNeededEmailBody(opts) {
+  const {
+    ticketType, ticketNumber, summary,
+    creatorName, creatorDept, createdAt,
+    stepName, actionRequired, deadline, urgency
+  } = opts || {};
+  return [
+    `Kính gửi ${APPROVAL_GREETING_PLACEHOLDER},`,
+    '',
+    'Hệ thống Văn phòng điện tử thông báo Anh/Chị có một phiếu cần xử lý với thông tin như sau:',
+    '',
+    `- Loại phiếu: ${ticketType || ''}`,
+    `- Số phiếu: ${ticketNumber || ''}`,
+    `- Trích yếu: ${summary || 'Không có mô tả'}`,
+    `- Người tạo: ${creatorName || 'Không rõ'}${creatorDept ? ' – ' + creatorDept : ''}`,
+    `- Ngày tạo: ${createdAt || ''}`,
+    `- Bước hiện tại: ${stepName || ''}`,
+    `- Yêu cầu: ${actionRequired || 'Phê duyệt'}`,
+    `- Hạn xử lý: ${deadline || 'Không quy định'}`,
+    `- Mức độ: ${urgency || 'Thường'}`,
+    '',
+    'Anh/Chị vui lòng truy cập đường dẫn dưới đây để xem chi tiết và xử lý phiếu:',
+    APPROVAL_SIGNATURE_PLACEHOLDER
+  ].join('\n');
+}
+
 // Gửi + ghi log thông báo email cho 1 nhóm người nhận (theo username hệ thống) — tra email từ
 // DB.users rồi giao cho notifyRecipientsByEmail() xử lý gửi + ghi log dùng chung.
 function notifyUsersByEmail(module, actionType, targetCode, usernames, subject, bodyText) {
@@ -7079,7 +7127,15 @@ const APPROVAL_EMAIL_LINK_TAB = {
 // email thật (lỗ hổng tính năng riêng, đã báo người dùng, ngoài phạm vi đợt này).
 const APPROVAL_EMAIL_RECORD_OPENER = {
   CAR: { dbKeys: ['carRegs'], open: (r) => openCarProcessModal(r.id) },
-  DOC: { dbKeys: ['docs'], open: (r) => viewDocDetails(r.id) },
+  // opts.openView (11/2026, "🔗" Copy Link theo TỪNG PHIÊN BẢN — xem copyDocVersionLink() ở
+  // module-tailieu.js): chỉ link Copy Link mới truyền cờ này — truyền kèm r.id làm highlightVersionId để
+  // viewDocDetails() cuộn/chớp sáng ĐÚNG dòng phiên bản đã share, rồi gọi thêm viewDoc(r.id) để tự mở
+  // LUÔN vào màn xem nội dung (người dùng xác nhận "mở luôn vào xem", không bắt bấm thêm lần nữa). Link
+  // email phê duyệt THƯỜNG (opts rỗng) giữ NGUYÊN hành vi cũ — chỉ mở modal "Chi Tiết Tài Liệu" như trước.
+  DOC: { dbKeys: ['docs'], open: (r, dbKey, opts) => {
+    viewDocDetails(r.id, opts?.openView ? r.id : undefined);
+    if (opts?.openView) viewDoc(r.id);
+  } },
   LICENSE: { dbKeys: ['licenses'], open: (r) => viewLicenseDetails(r.id) },
   // paymentRequests (Giai đoạn 4, 11/2026 — jobs/paymentDeadlineReminder.js): "Thanh Toán" là SUB-TAB
   // bên TRONG tab 'office' (setOfficeSubTab('PAYMENT'), xem canAccessPaymentModule()), KHÔNG phải tab
@@ -7142,7 +7198,12 @@ const APPROVAL_EMAIL_RECORD_OPENER = {
 // đã TỪ CHỐI quyền truy cập tab (tự alert + return SỚM, KHÔNG throw — module con do đó CHƯA kịp nạp,
 // opener.open() bên dưới sẽ ReferenceError nếu cứ gọi thẳng) -> mọi trường hợp đều fallback AN TOÀN về
 // hành vi cũ (chỉ báo mã, người dùng tự tìm trong danh sách), không để lỗi JS nào lọt ra ngoài.
-function openLinkedApprovalRecordByCode(tab, code) {
+// `opts` (11/2026, tính năng "🔗" Copy Link theo TỪNG PHIÊN BẢN của Tài Liệu — xem copyDocVersionLink()
+// ở module-tailieu.js): cờ bổ sung TUỲ CHỌN truyền xuống opener.open(), hiện chỉ DOC dùng tới
+// (opts.openView) để tự mở thẳng luôn vào màn xem nội dung đúng phiên bản vừa chia sẻ, thay vì chỉ
+// cuộn/chớp sáng dòng đó. KHÔNG đổi hành vi của link email phê duyệt thường (opts luôn rỗng ở đường gọi
+// đó) — mọi configModule khác bỏ qua tham số thứ 3 này như trước giờ vẫn vậy.
+function openLinkedApprovalRecordByCode(tab, code, opts) {
   const configModule = Object.keys(APPROVAL_EMAIL_RECORD_OPENER).find(m => APPROVAL_EMAIL_LINK_TAB[m] === tab);
   const opener = configModule && APPROVAL_EMAIL_RECORD_OPENER[configModule];
   if (opener) {
@@ -7152,7 +7213,7 @@ function openLinkedApprovalRecordByCode(tab, code) {
       // đều có `code` thật nên nhánh fallback này KHÔNG đụng tới hành vi dò theo code đã có.
       const record = (DB[dbKey] || []).find(r => r && (r.code === code || (r.code === undefined && String(r.id) === String(code))));
       if (record) {
-        try { opener.open(record, dbKey); return; }
+        try { opener.open(record, dbKey, opts); return; }
         catch (err) { console.error('openLinkedApprovalRecordByCode: lỗi khi mở hồ sơ, rơi về báo mã', tab, code, err); }
         break;
       }
@@ -7195,7 +7256,21 @@ function buildApprovalEmailLink(module, actionType, targetCode) {
 
 function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
   const valid = (recipients || []).filter(r => r && r.email);
-  bodyText = `${bodyText}${buildApprovalEmailLink(module, actionType, targetCode)}`;
+  // Điền placeholder của buildApprovalNeededEmailBody() (mẫu email "Cần phê duyệt" dùng chung, 11/2026)
+  // — KHÔNG ảnh hưởng bodyText của mọi lời gọi khác (family result/forward*/...) vì các placeholder này
+  // chỉ xuất hiện trong body do ĐÚNG hàm đó dựng ra. Xưng tên CHỈ khi gửi cho DUY NHẤT 1 người — xem chú
+  // thích đầy đủ tại buildApprovalNeededEmailBody().
+  if (bodyText && bodyText.includes(APPROVAL_GREETING_PLACEHOLDER)) {
+    const greeting = valid.length === 1 ? `Anh/Chị ${valid[0].name || valid[0].email}` : 'Anh/Chị';
+    bodyText = bodyText.split(APPROVAL_GREETING_PLACEHOLDER).join(greeting);
+  }
+  const link = buildApprovalEmailLink(module, actionType, targetCode);
+  // APPROVAL_SIGNATURE_PLACEHOLDER: chèn đúng vị trí (SAU dòng "vui lòng truy cập...", giữa link và chữ
+  // ký) theo khuôn người dùng yêu cầu — nếu KHÔNG có placeholder (mọi bodyText khác từ trước đến nay)
+  // thì hành vi CŨ giữ nguyên 100% (chỉ nối thêm link ở cuối, không có chữ ký).
+  bodyText = (bodyText && bodyText.includes(APPROVAL_SIGNATURE_PLACEHOLDER))
+    ? bodyText.split(APPROVAL_SIGNATURE_PLACEHOLDER).join(`${link}\n\n${APPROVAL_SIGNATURE_TEXT}`)
+    : `${bodyText}${link}`;
 
   // Cổng admin "🔔 Thông Báo Email Phê Duyệt" (DB.approvalEmailConfig) — xem isApprovalEmailSuppressed()
   // ở trên. CHỈ chặn dispatchRealEmail() thật (không tốn lượt gọi SMTP/POST /api/send-email) — VẪN ghi
@@ -9367,10 +9442,12 @@ async function gotoApprovalResultRecordFromQueryParam() {
   const allowedTabs = new Set(Object.values(APPROVAL_EMAIL_LINK_TAB));
   if (!tab || !allowedTabs.has(tab)) return;
   const code = params.get('code') || '';
+  // openView (11/2026, Copy Link theo phiên bản Tài Liệu) — xem chú thích openLinkedApprovalRecordByCode().
+  const openView = params.get('openView') === '1';
   history.replaceState(null, '', window.location.pathname);
   try {
     await switchTab(tab);
-    if (code) openLinkedApprovalRecordByCode(tab, code);
+    if (code) openLinkedApprovalRecordByCode(tab, code, openView ? { openView: true } : undefined);
   } catch (err) {
     console.error('gotoApprovalResultRecordFromQueryParam: không tải được mô-đun đích', tab, err);
     alert('⛔ Không tải được nội dung mô-đun. Vui lòng kiểm tra kết nối mạng và thử lại.');

@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**26.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.1 (2026-11): "🔗" Copy Link theo TỪNG PHIÊN BẢN tài liệu + mẫu email "Cần phê duyệt" dùng chung
+
+**1. Sửa lại "🔗 Copy Link" của Tài Liệu (SUPERSEDE v25.98)** — người dùng phát hiện qua demo thực tế:
+1 tài liệu có THỂ có NHIỀU phiên bản cùng "📣 Đã Phát Hành" đồng thời (VD v1.0 và v3.0), nên nút "🔗 Copy
+Link" DUY NHẤT ở header modal (v25.98, dùng mã GỐC chung cho cả family) không phân biệt được đang chia
+sẻ đúng phiên bản nào — bấm vào luôn mở modal Chi Tiết đầy đủ mọi phiên bản, người nhận phải tự đoán.
+Đã **bỏ hẳn nút header**, thay bằng 1 nút "🔗" RIÊNG ở đúng dòng "Thao Tác" của MỖI phiên bản
+(`module-tailieu.js::copyDocVersionLink(docId)`), dùng ĐÚNG mã của phiên bản đó (`v.code`, không phải
+`displayCode` dùng chung cho cả family). Link thêm cờ `openView=1` — khi người nhận bấm vào (vẫn LUÔN
+đòi đăng nhập trước, không có đường tắt), hệ thống tự cuộn tới + chớp sáng vàng (`.doc-version-row-
+highlight`, tái dùng animation `permTreeJumpFlash` có sẵn) ĐÚNG dòng phiên bản đã share, RỒI TỰ MỞ LUÔN
+màn xem nội dung "👁️ Xem" (`viewDoc()`) — không bắt người nhận tự bấm thêm lần nữa (yêu cầu người dùng:
+"mở luôn vào xem"). Cờ `openView` là TUỲ CHỌN, truyền qua `core.js::openLinkedApprovalRecordByCode()` ->
+`APPROVAL_EMAIL_RECORD_OPENER.DOC.open()` — link email phê duyệt DOC thông thường (không có cờ này) giữ
+NGUYÊN hành vi cũ 100% (chỉ mở modal Chi Tiết, không tự mở màn xem).
+
+**2. Mẫu email "Cần phê duyệt" DÙNG CHUNG cho TOÀN BỘ ~13 module có phê duyệt** — theo yêu cầu người
+dùng, thay thế câu văn tự do mỗi module từng viết riêng (actionType `NOTIFY_APPROVAL_NEEDED`, 23 điểm gọi
+rải ở 10 file `module-*.js`: Đăng Ký Xe/Tài Liệu/Giấy Phép/Văn Phòng/Văn Phòng Phẩm/Văn Bản Trình/Hợp
+Đồng (+Phụ Lục)/Phòng Họp/Góc Chia Sẻ/Phê Duyệt Giá IT/Vận Hành) bằng 1 khuôn cố định DUY NHẤT
+(`core.js::buildApprovalNeededEmailBody()`): Kính gửi → Loại phiếu/Số phiếu/Trích yếu/Người tạo-Phòng
+ban/Ngày tạo/Bước hiện tại/Yêu cầu/Hạn xử lý/Mức độ → link thật → chữ ký "Hệ thống Văn phòng số – Công ty
+HCRC". Chỉ áp dụng family `approvalNeeded` (gửi NGƯỜI SẼ DUYỆT) — mọi family khác (Kết quả duyệt/Chuyển
+tiếp xin ý kiến/Đề xuất thay tệp/Ticket IT...) GIỮ NGUYÊN body tự do như cũ, không đụng tới.
+
+Xưng tên người nhận (`{{APPROVAL_GREETING}}`) được điền tại ĐÚNG 1 chỗ trong `notifyRecipientsByEmail()`
+(không phải từng module tự đoán) — gửi cho DUY NHẤT 1 người thì xưng đúng tên, gửi cho NHIỀU người (cùng
+1 bước có nhiều người duyệt) thì xưng chung "Anh/Chị" (không đoán sai/chỉ nêu 1 trong nhiều tên, do hạ
+tầng gửi email hiện tại là 1 lượt gửi chung `to` cho cả nhóm, không gửi riêng từng người). Phần lớn module
+CHƯA có field SLA/độ khẩn thật nên "Hạn xử lý"/"Mức độ" mặc định "Không quy định"/"Thường" — riêng Văn
+Bản Trình dùng đúng field thật đã có (`desiredApprovalDate`/`priority`, Độ Khẩn).
 
 ## v26.0 (2026-11): Rà soát + vá kín "quy trình phê duyệt thiếu/khoá người duyệt"
 

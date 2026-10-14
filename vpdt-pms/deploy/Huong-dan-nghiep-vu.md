@@ -5149,19 +5149,29 @@ theo **TỪNG phiên bản cụ thể** — phát hành phiên bản 1 không t�
 hành phiên bản 2 mới hơn của cùng 1 tài liệu, và có thể "📕 Hủy Phát Hành"
 bất kỳ lúc nào để ẩn lại.
 
-**Tài Liệu — nút "🔗 Copy Link" (11/2026, theo yêu cầu người dùng)**: header
-modal "📋 Chi Tiết Tài Liệu" có thêm 1 nút "🔗 Copy Link" — bấm vào sao chép 1
-URL trực tiếp tới ĐÚNG tài liệu đang xem (dạng `?gotoModule=doc&code=<mã>`,
-tái dùng nguyên hạ tầng deep-link đã có cho link email phê duyệt — xem mục
-"Gửi email phê duyệt kèm link trực tiếp" ở trên) vào bộ nhớ tạm, dán được
-ngay vào email/tin nhắn gửi cho người nhận. Người nhận bấm vào link **vẫn
-bắt buộc đăng nhập** (không có đường tắt bỏ qua đăng nhập) — đăng nhập xong
-hệ thống tự chuyển thẳng tab Tài Liệu + mở thẳng đúng modal Chi Tiết của tài
-liệu đó, không cần tự tìm trong danh sách. Lưu ý: link này chỉ giúp ĐI
-THẲNG tới tài liệu nhanh hơn — KHÔNG cấp thêm quyền xem/tải gì (vẫn áp dụng
-đúng luật phân quyền hiện có, xem mục "Phát Hành"/"Xem-Tải Tài Liệu Đã Phát
-Hành" ngay trên: nếu người nhận chưa có quyền xem/tải tài liệu đó, link vẫn
-mở ra modal nhưng các nút Xem/Tải vẫn bị ẩn/chặn như bình thường).
+**Tài Liệu — nút "🔗" Copy Link theo TỪNG PHIÊN BẢN (11/2026, sửa lại theo
+demo thực tế người dùng)**: TRƯỚC ĐÂY (v25.98) chỉ có 1 nút "🔗 Copy Link"
+DUY NHẤT ở header modal "📋 Chi Tiết Tài Liệu", dùng mã GỐC chung cho cả họ
+tài liệu — không phân biệt được khi 1 tài liệu có NHIỀU phiên bản cùng "📣 Đã
+Phát Hành" đồng thời (VD v1.0 và v3.0). Nay BỎ HẲN nút header, thay bằng 1
+nút "🔗" RIÊNG ngay ở dòng "Thao Tác" của **MỖI phiên bản** trong bảng lịch
+sử — bấm vào sao chép đúng URL của PHIÊN BẢN đó (dùng mã riêng của phiên bản,
+không phải mã gốc dùng chung cho cả họ tài liệu) vào bộ nhớ tạm, dán được
+ngay vào email/tin nhắn gửi cho người nhận.
+
+Người nhận bấm vào link **vẫn bắt buộc đăng nhập** (không có đường tắt bỏ
+qua đăng nhập) — đăng nhập xong hệ thống tự chuyển thẳng tab Tài Liệu, mở
+modal Chi Tiết của ĐÚNG tài liệu đó, tự cuộn tới + chớp sáng vàng ĐÚNG dòng
+phiên bản đã được chia sẻ (tránh nhầm với các phiên bản khác cũng đang hiện
+trong cùng bảng lịch sử), **RỒI TỰ MỞ LUÔN màn xem nội dung "👁️ Xem"** của
+đúng phiên bản đó — không cần bấm thêm lần nào nữa. Lưu ý: link này chỉ giúp
+ĐI THẲNG tới đúng phiên bản nhanh hơn — KHÔNG cấp thêm quyền xem/tải gì (vẫn
+áp dụng đúng luật phân quyền hiện có, xem mục "Phát Hành"/"Xem-Tải Tài Liệu
+Đã Phát Hành" ngay trên: nếu người nhận chưa có quyền xem/tải tài liệu đó,
+link vẫn mở ra modal nhưng các nút Xem/Tải vẫn bị ẩn/chặn như bình thường).
+Link email phê duyệt DOC thông thường (gửi người duyệt khi có hồ sơ mới,
+xem mục "Gửi email phê duyệt kèm link trực tiếp" ở trên) KHÔNG đổi gì — vẫn
+chỉ mở modal Chi Tiết như trước, không tự mở màn xem.
 
 **Lọc theo Khối/Ban (10/2026)** — ngay phía trên 6 bảng "1 dòng = 1 phòng
 ban" ở trên, có 1 ô "🗂️ Lọc bảng Phòng Ban bên dưới theo Khối/Ban" DÙNG CHUNG
@@ -6018,6 +6028,45 @@ kèm ghi chú. **An toàn khi chưa cấu hình**: nếu admin chưa từng mở
 Lưu, hệ thống **fail-open** — email vẫn gửi như hành vi gốc; chỉ khi admin đã
 lưu rõ ràng giá trị tắt thì email mới thực sự bị chặn (vẫn ghi đầy đủ 1 dòng
 Nhật ký hệ thống, chỉ khác không tốn lượt gọi SMTP thật).
+
+**Mẫu nội dung email "Cần phê duyệt" — DÙNG CHUNG cho TOÀN BỘ ~13 module có
+phê duyệt (11/2026, theo yêu cầu người dùng)**: mọi email `approvalNeeded`
+(Đăng Ký Xe/Tài Liệu/Giấy Phép/Văn Phòng/Văn Phòng Phẩm/Văn Bản Trình/Hợp
+Đồng — kể cả Phụ Lục/Phòng Họp/Góc Chia Sẻ/Phê Duyệt Giá IT/Vận Hành) đều
+dựng theo 1 khuôn cố định DUY NHẤT, không còn mỗi module tự viết câu văn
+riêng:
+
+```
+Kính gửi Anh/Chị <tên người duyệt>,
+
+Hệ thống Văn phòng điện tử thông báo Anh/Chị có một phiếu cần xử lý với
+thông tin như sau:
+
+- Loại phiếu: <VD: Đăng Ký Xe, Tài Liệu, Hợp Đồng...>
+- Số phiếu: <mã hồ sơ>
+- Trích yếu: <nội dung tóm tắt hồ sơ>
+- Người tạo: <họ tên> – <phòng ban>
+- Ngày tạo: <ngày giờ tạo>
+- Bước hiện tại: <tên/số bước quy trình>
+- Yêu cầu: Phê duyệt
+- Hạn xử lý: <nếu module có SLA thật, hiện tại chỉ Văn Bản Trình có — còn
+  lại hiện "Không quy định">
+- Mức độ: <chỉ Văn Bản Trình có field Độ Khẩn thật — còn lại hiện "Thường">
+
+Anh/Chị vui lòng truy cập đường dẫn dưới đây để xem chi tiết và xử lý phiếu:
+
+🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): <link thật>
+
+Trân trọng,
+Hệ thống Văn phòng số – Công ty HCRC
+```
+
+Xưng tên người nhận: nếu bước đó CHỈ có 1 người duyệt thì xưng đúng tên
+người đó; nếu có NHIỀU người cùng duyệt 1 bước thì xưng chung "Anh/Chị"
+(không đoán sai/chỉ nêu 1 trong nhiều tên — hạ tầng gửi email hiện gửi 1
+lượt chung cho cả nhóm, chưa tách riêng từng người). Mẫu này CHỈ áp dụng
+đúng email "Cần phê duyệt" — các email khác (Kết quả duyệt, Chuyển Tiếp Xin
+Ý Kiến, Đề Xuất Thay Thế Tệp, Ticket IT...) vẫn giữ nguyên nội dung như cũ.
 
 **🔗 Link truy cập trực tiếp (từ 10/2026, MỞ RỘNG 11/2026)**: TOÀN BỘ email
 phê duyệt — "Kết quả duyệt" (`result`), "Cần phê duyệt" (`approvalNeeded`),

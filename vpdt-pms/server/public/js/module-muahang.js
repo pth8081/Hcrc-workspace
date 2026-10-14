@@ -983,7 +983,12 @@ async function submitMhItPriceApproval(e) {
   if (firstStepApprovers.length) {
     notifyUsersByEmail('IT_SUPPORT', 'NOTIFY_APPROVAL_NEEDED', code, firstStepApprovers,
       `[VPDT] Đề xuất duyệt giá ${code} cần bạn phê duyệt`,
-      `Đề xuất duyệt giá (${code}) do ${currentUser.name} đề xuất đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: 'Phê Duyệt Giá IT (Bán Lẻ)', ticketNumber: code,
+        summary: newItem.priceZone ? `Khu vực giá: ${newItem.priceZone}` : 'Bảng giá bán lẻ',
+        creatorName: currentUser.name, creatorDept: newItem.dept, createdAt: newItem.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
   alert('✅ Đã gửi đề xuất duyệt giá thành công!');
   resetMhItPriceForm();

@@ -1199,7 +1199,11 @@ function notifyOperationApprovalNeeded(kind, item) {
   if (approvers.length) {
     notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVAL_NEEDED', item.code, approvers,
       `[VPDT] ${meta.subLabel} ${item.code} cần bạn phê duyệt`,
-      `${meta.subLabel} "${meta.titleField(item)}" (${item.code}) do ${currentUser.name} tạo đang chờ bạn phê duyệt.`);
+      buildApprovalNeededEmailBody({
+        ticketType: meta.subLabel, ticketNumber: item.code, summary: meta.titleField(item),
+        creatorName: item.creatorName, creatorDept: item.dept, createdAt: item.createdAt,
+        stepName: 'Bước 1'
+      }));
   }
 }
 
@@ -1709,7 +1713,11 @@ async function processOperation(actionType) {
     if (transition.nextApprovers.length) {
       notifyUsersByEmail(meta.logModule, 'NOTIFY_APPROVAL_NEEDED', updated.code, transition.nextApprovers,
         `[VPDT] ${meta.subLabel} ${updated.code} cần bạn phê duyệt`,
-        `${meta.subLabel} "${meta.titleField(updated)}" (${updated.code}) đang chờ bạn phê duyệt ở bước "${transition.nextStepName}".`);
+        buildApprovalNeededEmailBody({
+          ticketType: meta.subLabel, ticketNumber: updated.code, summary: meta.titleField(updated),
+          creatorName: updated.creatorName, creatorDept: updated.dept, createdAt: updated.createdAt,
+          stepName: transition.nextStepName
+        }));
     }
   } else if (transition.type === 'COMPLETED') {
     msg = `✅ Phê duyệt ${meta.subLabel.toLowerCase()} thành công!`;
