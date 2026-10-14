@@ -695,6 +695,8 @@ const CATALOG_HANDLERS = {
   nationalities: simpleArrayCatalogHandler('nationalities', 'Danh Mục Quốc Tịch'),
   contractAmendmentTypes: simpleArrayCatalogHandler('contractAmendmentTypes', 'Danh Mục Loại Thay Đổi Hợp Đồng'),
   contractTerminationReasons: simpleArrayCatalogHandler('contractTerminationReasons', 'Danh Mục Lý Do Chấm Dứt Hợp Đồng'),
+  // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn ngay trên.
+  maritalStatuses: simpleArrayCatalogHandler('maritalStatuses', 'Danh Mục Tình Trạng Hôn Nhân'),
   jobTitles: {
     async renameInCatalog(oldValue, newValue) {
       return withLockedAppDataValue('jobTitles', (list) => {

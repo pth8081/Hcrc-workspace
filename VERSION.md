@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**26.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.4 (2026-11): Đưa "Tình trạng hôn nhân" vào Danh Mục Nhân Sự + vá lỗi 4 danh mục trước đó không hiện danh sách
+
+Theo yêu cầu người dùng "đưa luôn Tình trạng hôn nhân vào danh mục" (tiếp nối đợt v26.2 — rà soát các
+trường có select nhưng đang để nhập tay/enum cố định trong code):
+
+1. **Tình Trạng Hôn Nhân** trở thành danh mục admin tự thêm/bớt (`maritalStatuses`), gom vào khối "Danh
+   Mục Nhân Sự" (fuchsia) ở Quản Lý Danh Mục — cùng khuôn `relationshipTypes`/`nationalities`/... của
+   v26.2. Giá trị mặc định: Độc thân/Đã kết hôn/Đã ly hôn (khớp Set cũ, giờ chỉ là fallback).
+2. **Vá lỗi "enum cố định" ở `applyProfileEdit()`** (`lib/employeeProfile.js`) — trước đây validate
+   `maritalStatus` CHỈ đối chiếu Set cố định trong code, admin đổi danh mục không có tác dụng gì. Nay ưu
+   tiên `options.maritalStatuses` (danh mục thật) nếu nơi gọi truyền vào, giống `nationalIdIssuePlace`/
+   `legalEntity` đã vá ở các đợt trước.
+3. **Nhập/Xuất Excel hàng loạt** (`lib/employeeProfileImport.js`) — cột "Tình Trạng Hôn Nhân" chuyển từ
+   enum cố định sang đọc đúng danh mục thật khi gắn droplist Excel; bỏ validate trùng lặp ở bước xem
+   trước (để `applyProfileEdit()` — bước nhập thật — tự đối chiếu, tránh 2 nơi lệch nhau nếu admin đổi
+   danh mục sau này), cùng cách xử lý `legalEntity`/`specialLaborStatus`/`currentWorkStatusDetail`.
+4. **Hồ Sơ Nhân Sự** (`module-hrprofile.js`) — ô "Tình trạng hôn nhân" ở màn Chi Tiết chuyển từ mảng cố
+   định trong code sang đọc `DB.maritalStatuses`.
+5. **LỖI ĐÃ VÁ phát hiện khi làm đợt này**: 4 danh mục thêm ở v26.2 (`relationshipTypes`/`nationalities`/
+   `contractAmendmentTypes`/`contractTerminationReasons`) từng bị BỎ SÓT khỏi dòng gọi render khi mở tab
+   "⚙️ Hệ Thống → 🗂️ Quản Trị" — danh sách hiện trống rỗng cho tới khi admin tự thêm/xoá 1 dòng mới thấy
+   dữ liệu. Đã bổ sung đủ cả 4 + `maritalStatuses` (mới) vào dòng gọi render đó
+   (`module-hethong-tabs.js`).
+
+Thuần dữ liệu + validate, không đổi schema/route công khai — chỉ cần copy code + `pm2 restart`.
 
 ## v26.3 (2026-11): Làm nhạt màu nền xanh navy + thêm chấm sáng lấp lánh (sidebar/đăng nhập/màn tải trang/thanh điện thoại)
 

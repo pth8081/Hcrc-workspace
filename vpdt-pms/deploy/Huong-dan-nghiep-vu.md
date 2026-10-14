@@ -4637,11 +4637,14 @@ làm được nay bị chặn:
   - **"Lý do chấm dứt hợp đồng"** — trước đây là 1 popup hỏi gõ tay của trình
     duyệt (không gợi ý gì), nay là 1 hộp thoại có dropdown chọn từ **Danh Mục
     Lý Do Chấm Dứt Hợp Đồng**, chọn "Khác" vẫn gõ tay được.
-  - Cả 4 danh mục mới (Quan Hệ/Quốc Tịch/Loại Thay Đổi Hợp Đồng/Lý Do Chấm
-    Dứt Hợp Đồng) đều nằm chung trong đúng khối "Danh Mục Nhân Sự" (Hệ Thống
-    → Quản Trị → 🗂️ Quản Lý Danh Mục) cùng các danh mục nhân sự có sẵn
-    (Chức Danh/Cấp Bậc/Bằng Cấp/Nơi Cấp CCCD...), không phải đi tìm ở chỗ
-    khác. Admin tự thêm/sửa/xoá giá trị tại đây.
+  - **"Tình trạng hôn nhân" ở Hồ Sơ Nhân Sự** (11/2026) — trước đây là enum cố
+    định trong code (Độc thân/Đã kết hôn/Đã ly hôn, admin không sửa được), nay
+    là dropdown chọn từ **Danh Mục Tình Trạng Hôn Nhân**, admin tự thêm/bớt.
+  - Cả 5 danh mục mới (Quan Hệ/Quốc Tịch/Loại Thay Đổi Hợp Đồng/Lý Do Chấm
+    Dứt Hợp Đồng/Tình Trạng Hôn Nhân) đều nằm chung trong đúng khối "Danh
+    Mục Nhân Sự" (Hệ Thống → Quản Trị → 🗂️ Quản Lý Danh Mục) cùng các danh
+    mục nhân sự có sẵn (Chức Danh/Cấp Bậc/Bằng Cấp/Nơi Cấp CCCD...), không
+    phải đi tìm ở chỗ khác. Admin tự thêm/sửa/xoá giá trị tại đây.
   - **Cố ý KHÔNG đổi**: "Lý do nghỉ việc" (Offboarding) vẫn giữ kiểu gõ-tìm-
     chọn (có gợi ý nhưng vẫn gõ tự do được) — khác hẳn các ô trên vì lý do
     nghỉ việc thực tế đa dạng, không phù hợp ép chọn cố định.

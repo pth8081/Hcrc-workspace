@@ -30,7 +30,9 @@ const VALID_CATALOG_KEYS = new Set([
   'educationDegrees',
   // relationshipTypes/nationalities/contractAmendmentTypes/contractTerminationReasons (11/2026, rà soát
   // "trường có nút select nhưng đang để nhập tay") — cùng khuôn simpleArrayCatalogHandler, không cascade.
-  'relationshipTypes', 'nationalities', 'contractAmendmentTypes', 'contractTerminationReasons'
+  'relationshipTypes', 'nationalities', 'contractAmendmentTypes', 'contractTerminationReasons',
+  // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn ngay trên.
+  'maritalStatuses'
 ]);
 
 // POST /api/admin/renameCatalogEntry — body { catalogKey, oldValue, newValue }. Chỉ Quản Trị Viên (khớp

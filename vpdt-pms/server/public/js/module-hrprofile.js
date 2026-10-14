@@ -21,8 +21,6 @@ let _hrpfManageDetailReadOnly = false; // true = đang mở #hrpfDetailModal ở
   // KHÔNG phải 1 tầng quyền mới — cùng quyền hrProfileManage như "✏️ Sửa", chỉ khác cách hiển thị)
 
 const HRPF_GENDERS = ['Nam', 'Nữ', 'Khác'];
-// Mirror MARITAL_STATUSES (lib/employeeProfile.js) — GĐ1, 10/2026.
-const HRPF_MARITAL_STATUSES = ['Độc thân', 'Đã kết hôn', 'Đã ly hôn'];
 // Mirror ĐÚNG SENSITIVE_FIELD_LABELS (lib/employeeProfile.js) — dùng để render động
 // renderHrpfProfileReadOnly() (xem "quản lý trực tiếp xem giới hạn" bên dưới) theo đúng field admin đã mở
 // qua managerVisibleFields (server trả kèm, xem GET /by-code|/by-username), KHÔNG hardcode cứng 8 field
@@ -1657,11 +1655,7 @@ function renderHrpfProfileForm(profile, { scope, readOnly, selfVisibleFields } =
     ${canSee('bankName') ? textField('Ngân hàng', 'hrpfF_bankName', profile.bankName) : ''}
     ${canSee('bankAccountHolderName') ? textField('Tên chủ tài khoản ngân hàng', 'hrpfF_bankAccountHolderName', profile.bankAccountHolderName) : ''}
     ${canSee('nationality') ? selectField('Quốc tịch', 'hrpfF_nationality', profile.nationality, DB.nationalities) : ''}
-    ${canSee('maritalStatus') ? (isReadOnly ? roField('Tình trạng hôn nhân', profile.maritalStatus) : `<div><label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Tình trạng hôn nhân</label>
-      <select id="hrpfF_maritalStatus" class="w-full border p-1.5 rounded text-sm bg-white">
-        <option value="">-- Chọn --</option>
-        ${HRPF_MARITAL_STATUSES.map(m => `<option value="${m}" ${profile.maritalStatus === m ? 'selected' : ''}>${m}</option>`).join('')}
-      </select></div>`) : ''}
+    ${canSee('maritalStatus') ? selectField('Tình trạng hôn nhân', 'hrpfF_maritalStatus', profile.maritalStatus, DB.maritalStatuses) : ''}
   </div>`;
 
   const hrOnlyFieldsHtml = [

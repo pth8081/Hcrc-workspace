@@ -53,6 +53,12 @@ function setSystemSubTab(subTab) {
 
   if (subTab === 'ADMIN') {
     renderDeptGroupList(); renderDeptList(); renderCatList(); renderContractTypeAbbrList(); renderJobTitleList(); renderStoreJobTitleList(); renderTrainingCategoryList(); renderSensitiveKeywordList(); renderDeptCheckboxes(); renderModuleAccessCheckboxes(); renderUsers(); loadEmailConfigToForm(); renderApprovalEmailConfigForm(); renderPermGroupsList(); renderPwaShortcutCheckboxes(); renderStoreList(); renderLicenseTypeList(); renderCarVehicleTypeList(); renderCarTaxiCompanyList(); renderCarEvaluationIssueList(); renderPriceZoneList(); renderItRenewalCategoryList(); renderMeetingRoomCatalogList(); renderNganhHangCatalogList(); renderPositionTypeList(); renderJobGradeList(); renderJobTitleGradeDefaultList(); renderResignationReasonList(); renderDisciplinaryTypeList(); renderLegalEntityList(); renderSpecialLaborStatusList(); renderCurrentWorkStatusDetailList(); renderNationalIdIssuePlaceList(); renderEducationDegreeList();
+    // LỖI ĐÃ VÁ (11/2026, phát hiện lúc thêm maritalStatuses): 4 danh mục relationshipTypes/nationalities/
+    // contractAmendmentTypes/contractTerminationReasons (v26.2) từng bị BỎ SÓT khỏi dòng gọi render ngay
+    // trên — <ul> của chúng chỉ trống rỗng y hệt chưa có dữ liệu cho tới khi người dùng tự thêm/xoá 1
+    // dòng (mới trigger renderGenericSimpleCatalogList() qua saveGenericSimpleCatalogEntry()/
+    // deleteGenericSimpleCatalogEntry()) — bổ sung đủ 4 hàm đó + maritalStatuses (MỚI) vào đây.
+    renderRelationshipTypeList(); renderNationalityList(); renderContractAmendmentTypeList(); renderContractTerminationReasonList(); renderMaritalStatusList();
     // 11/2026 LÀM GỌN: checklistExecuteScope (thay checklistReportViewScope/checklistStoreSelfExecuteScope
     // cũ) giờ đọc DB.stores (eager, không còn lazy) thay vì DB.checklistTemplates — bỏ hẳn khối
     // loadDataGroup('checklist') từng cần ở đây (xem renderChecklistExecuteScopeCheckboxes() ở module-admin.js).

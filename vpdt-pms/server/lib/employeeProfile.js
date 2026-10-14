@@ -1131,10 +1131,16 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
         profile.nationalId = trimmedNationalId || null;
         break;
       }
-      case 'maritalStatus':
-        if (val != null && val !== '' && !MARITAL_STATUSES.has(val)) throw new HttpError(400, 'Tình trạng hôn nhân không hợp lệ');
+      // maritalStatus (11/2026, đưa vào danh mục admin tự sửa — cùng khuôn nationalIdIssuePlace/
+      // legalEntity ngay dưới: dùng options.maritalStatuses nếu caller truyền danh mục thật, chỉ
+      // fallback về MARITAL_STATUSES cố định khi không có).
+      case 'maritalStatus': {
+        const allowedMaritalStatuses = (options && Array.isArray(options.maritalStatuses) && options.maritalStatuses.length)
+          ? new Set(options.maritalStatuses) : MARITAL_STATUSES;
+        if (val != null && val !== '' && !allowedMaritalStatuses.has(val)) throw new HttpError(400, 'Tình trạng hôn nhân không hợp lệ');
         profile.maritalStatus = val || null;
         break;
+      }
       case 'nationalIdIssueDate': case 'retirementDate':
         if (val != null && val !== '' && isNaN(new Date(val).getTime())) throw new HttpError(400, `${PROFILE_FIELD_LABELS[field]} không hợp lệ`);
         profile[field] = val || null;

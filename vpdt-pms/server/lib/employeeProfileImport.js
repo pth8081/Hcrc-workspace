@@ -17,7 +17,6 @@ const { getAppDataValue } = require('./appData');
 const { findAutoLinkableAccount } = require('./employeeProfile');
 
 const GENDERS = new Set(['Nam', 'Nữ', 'Khác']);
-const MARITAL_STATUSES = new Set(['Độc thân', 'Đã kết hôn', 'Đã ly hôn']);
 
 // LỖI ĐÃ VÁ (11/2026, khối Nhân Sự báo "ngày trong báo cáo Excel hiện năm-tháng-ngày, phải đổi thành
 // ngày-tháng-năm"): mọi field "ngày thuần" trong hồ sơ (dateOfBirth/retirementDate/contractStartDate...)
@@ -192,12 +191,15 @@ async function buildImportTemplateWorkbook() {
   // lấy từ danh mục và làm drop list để khi làm file không bị nhầm") — chỉ áp cho field có danh mục
   // THẬT trong hệ thống (Quản Lý Danh Mục) hoặc enum cố định, dùng chung applyDropdownValidation()
   // (lib/adminExport.js). helperColIdx mỗi cột lệch nhau để không đụng cột ẩn của nhau.
-  const [legalEntities, specialLaborStatuses, currentWorkStatusDetails] = await Promise.all([
-    getAppDataValue('legalEntities'), getAppDataValue('specialLaborStatuses'), getAppDataValue('currentWorkStatusDetails')
+  const [legalEntities, specialLaborStatuses, currentWorkStatusDetails, maritalStatuses] = await Promise.all([
+    getAppDataValue('legalEntities'), getAppDataValue('specialLaborStatuses'), getAppDataValue('currentWorkStatusDetails'),
+    // maritalStatuses (11/2026, "đưa vào danh mục") — chuyển từ Set cố định sang đọc đúng khuôn
+    // legalEntities/specialLaborStatuses/currentWorkStatusDetails ngay trên.
+    getAppDataValue('maritalStatuses')
   ]);
   const dropdownTargets = [
     { key: 'gender', options: [...GENDERS] },
-    { key: 'maritalStatus', options: [...MARITAL_STATUSES] },
+    { key: 'maritalStatus', options: maritalStatuses || [] },
     { key: 'legalEntity', options: legalEntities || [] },
     { key: 'specialLaborStatus', options: specialLaborStatuses || [] },
     { key: 'currentWorkStatusDetail', options: currentWorkStatusDetails || [] }
@@ -210,7 +212,7 @@ async function buildImportTemplateWorkbook() {
   noteSheet.addRow(['"Tài Khoản VPDT" tuỳ chọn — nếu điền, phải khớp ĐÚNG 1 tài khoản đang hoạt động đã có sẵn trong hệ thống; để trống nếu chưa biết, liên kết sau qua nút "🔗 Liên Kết Tài Khoản VPDT" ở Chi tiết hồ sơ.']);
   noteSheet.addRow(['Chưa hỗ trợ nhập "Người phụ thuộc"/"Học vấn" qua Excel — bổ sung sau khi import xong, qua Chi tiết từng hồ sơ.']);
   noteSheet.addRow(['"Cấp Bậc" KHÔNG nhập qua Excel này — tự lấy theo Chức Vụ khi HR gán ở Chi tiết hồ sơ (Cơ Cấu Tổ Chức).']);
-  noteSheet.addRow(['4 cột "Đơn vị (Pháp nhân)"/"Đối tượng lao động đặc biệt"/"Tình trạng làm việc hiện tại" là droplist — chỉ nhận ĐÚNG 1 giá trị có trong danh mục tương ứng (Hệ Thống → Quản Lý Danh Mục); giá trị không khớp sẽ bị BỎ QUA dòng đó khi nhập thật, kèm lý do rõ ràng.']);
+  noteSheet.addRow(['4 cột "Đơn vị (Pháp nhân)"/"Đối tượng lao động đặc biệt"/"Tình trạng làm việc hiện tại"/"Tình Trạng Hôn Nhân" là droplist — chỉ nhận ĐÚNG 1 giá trị có trong danh mục tương ứng (Hệ Thống → Quản Lý Danh Mục); giá trị không khớp sẽ bị BỎ QUA dòng đó khi nhập thật, kèm lý do rõ ràng.']);
   noteSheet.addRow(['Các cột ở CUỐI file đánh dấu "(CHỈ XEM)" (gồm Mã Bộ Phận/Khối Ban/Quản Lý Trực Tiếp, lương/phụ cấp/thu nhập Hợp Đồng Lao Động, 12 cột lịch sử HĐLĐ Lần 1/2/3 + Điều Chỉnh Thu Nhập Lần 1/2/3) — CHỈ xuất hiện khi Xuất Excel để xem/đối chiếu, KHÔNG có trong mẫu Tải Về để nhập — sửa các dữ liệu này phải qua đúng màn nghiệp vụ (Hợp Đồng Lao Động/Chi tiết hồ sơ), không sửa qua Excel này (tránh 2 nguồn dữ liệu lệch nhau).']);
   noteSheet.eachRow(row => { row.font = { italic: true, color: { argb: 'FFDC2626' } }; });
   return wb;
@@ -335,8 +337,10 @@ function rowToPreviewItem(cells, cols, existingProfiles, existingUsers, seenCode
   if (dateOfBirth && Number.isNaN(new Date(dateOfBirth).getTime())) errors.push('Ngày sinh không hợp lệ');
   if (gender && !GENDERS.has(gender)) errors.push('Giới tính không hợp lệ (chỉ nhận Nam/Nữ/Khác)');
 
+  // maritalStatus (11/2026, đưa vào danh mục) — KHÔNG còn validate ở đây, cùng lý do enum legalEntity/
+  // specialLaborStatus/currentWorkStatusDetail ngay dưới (để applyProfileEdit() tự đối chiếu ĐÚNG danh
+  // mục admin cấu hình, tránh 2 nơi validate lệch nhau nếu admin đổi danh mục sau này).
   const maritalStatus = String(get('maritalStatus') || '').trim() || null;
-  if (maritalStatus && !MARITAL_STATUSES.has(maritalStatus)) errors.push('Tình trạng hôn nhân không hợp lệ (chỉ nhận Độc thân/Đã kết hôn/Đã ly hôn)');
   const nationalIdIssueDate = parseDateCell(get('nationalIdIssueDate')) || null;
   if (nationalIdIssueDate && Number.isNaN(new Date(nationalIdIssueDate).getTime())) errors.push('Ngày cấp CCCD/CMND không hợp lệ');
   const retirementDate = parseDateCell(get('retirementDate')) || null;

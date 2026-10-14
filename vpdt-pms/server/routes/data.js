@@ -281,6 +281,9 @@ const ADMIN_ONLY_KEYS = new Set([
   // "trường có nút select nhưng đang để nhập tay") — cùng lý do khoá ghi như các danh mục trên: panel
   // CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'relationshipTypes', 'nationalities', 'contractAmendmentTypes', 'contractTerminationReasons',
+  // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng lý do khoá ghi như
+  // các danh mục ngay trên.
+  'maritalStatuses',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',

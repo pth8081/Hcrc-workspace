@@ -26,7 +26,9 @@ function stubModule(relPath, exportsObj) {
 }
 stubModule('lib/appData', {
   getAppDataValue: async (key) => ({
-    legalEntities: ['Công ty TNHH HCRC'], specialLaborStatuses: [], currentWorkStatusDetails: ['Hưu trí']
+    legalEntities: ['Công ty TNHH HCRC'], specialLaborStatuses: [], currentWorkStatusDetails: ['Hưu trí'],
+    // maritalStatuses (11/2026, đưa vào danh mục) — cùng khuôn 3 danh mục ngay trên.
+    maritalStatuses: ['Độc thân', 'Đã kết hôn', 'Đã ly hôn']
   }[key] ?? null),
   getAllAppData: async () => ({}),
   withLockedAppDataValue: async () => { throw new Error('withLockedAppDataValue không dùng ở test này'); }
@@ -63,11 +65,14 @@ async function main() {
     assert.strictEqual(it.valid, true);
   });
 
-  await test('parseImportExcelBuffer(): maritalStatus lạ bị đánh dấu lỗi (không chặn cả file)', async () => {
+  // 11/2026: maritalStatus đưa vào danh mục admin tự sửa — KHÔNG còn validate ở bước xem trước này
+  // (cùng khuôn legalEntity/specialLaborStatus/currentWorkStatusDetail, xem chú thích tại
+  // lib/employeeProfileImport.js), để applyProfileEdit() (bước nhập thật) tự đối chiếu đúng danh mục.
+  await test('parseImportExcelBuffer(): maritalStatus lạ KHÔNG bị chặn ở bước xem trước (để applyProfileEdit() tự đối chiếu)', async () => {
     const buffer = await buildBufferWithRow({ maritalStatus: 'Ly thân' });
     const items = await employeeProfileImport.parseImportExcelBuffer(buffer, [], []);
-    assert.strictEqual(items[0].valid, false);
-    assert.ok(/Tình trạng hôn nhân/.test(items[0].errors.join(';')), items[0].errors.join(';'));
+    assert.strictEqual(items[0].valid, true);
+    assert.strictEqual(items[0].maritalStatus, 'Ly thân');
   });
 
   await test('parseImportExcelBuffer(): ngày cấp CCCD không hợp lệ bị đánh dấu lỗi', async () => {

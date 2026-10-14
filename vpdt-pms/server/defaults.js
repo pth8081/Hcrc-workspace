@@ -232,6 +232,10 @@ const DEFAULTS = {
   // contractTerminationReasons: dùng cho modal "Lý do chấm dứt hợp đồng" (THAY cho prompt() trình duyệt
   // cũ) — xem closeHrContractManual() ở module-hopdonglaodong.js.
   contractTerminationReasons: ['Hết hạn hợp đồng', 'Nghỉ việc tự nguyện', 'Sa thải', 'Thỏa thuận chấm dứt', 'Khác'],
+  // maritalStatuses (11/2026, theo yêu cầu người dùng "đưa luôn Tình trạng hôn nhân vào danh mục") —
+  // cùng khuôn flat-array GENERIC_SIMPLE_CATALOGS như các danh mục ngay trên, giá trị mặc định khớp
+  // đúng Set hằng cũ MARITAL_STATUSES ở lib/employeeProfile.js (giờ chỉ còn là fallback).
+  maritalStatuses: ['Độc thân', 'Đã kết hôn', 'Đã ly hôn'],
 
   // deptCodeMap (10/2026, báo cáo rà soát mẫu Excel mới — "Mã bộ phận") — object {<tên bộ phận>: <mã>},
   // tự gán MỚI khi gặp tên bộ phận lần đầu (xem ensureDeptCode() ở routes/employeeProfile.js,

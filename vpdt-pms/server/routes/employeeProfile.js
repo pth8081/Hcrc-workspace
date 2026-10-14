@@ -846,6 +846,9 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
         // 'specialLaborStatus'/'currentWorkStatusDetail'/'nationalIdIssuePlace' ở applyProfileEdit().
         legalEntities: catalogAppData.legalEntities, specialLaborStatuses: catalogAppData.specialLaborStatuses,
         currentWorkStatusDetails: catalogAppData.currentWorkStatusDetails, nationalIdIssuePlaces: catalogAppData.nationalIdIssuePlaces,
+        // maritalStatuses (11/2026, đưa "Tình trạng hôn nhân" vào danh mục) — xem case 'maritalStatus'
+        // ở applyProfileEdit().
+        maritalStatuses: catalogAppData.maritalStatuses,
         orgChartAppliedVersion: applied
       });
       // secondaryPositions (11/2026) — đồng bộ GHI ĐÈ sang user.secondaryPositions[] NẾU field này thực
@@ -1006,6 +1009,7 @@ router.post('/', requireProfileCreate, async (req, res) => {
         employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
         legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
         currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
+        maritalStatuses: appData.maritalStatuses,
         users: appData.users
       });
       if (positionKey) {
@@ -1154,7 +1158,8 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
             const updated = employeeProfile.updateProfileFromImport(list, row.employeeCode, row, req.freshUser.username, req.freshUser.name, {
               employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
               legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
-              currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces
+              currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
+              maritalStatuses: appData.maritalStatuses
             });
             results.updated.push(updated.employeeCode);
           } else {
@@ -1162,6 +1167,7 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
               employmentTypes: appData.employmentTypes, workSchedules: appData.workSchedules,
               legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
               currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
+              maritalStatuses: appData.maritalStatuses,
               users: appData.users
             });
             results.created.push(created.employeeCode);

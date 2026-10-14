@@ -5031,6 +5031,7 @@ async function initDatabase(loggingInUser, opts) {
     DB.nationalities = data.nationalities || [];
     DB.contractAmendmentTypes = data.contractAmendmentTypes || [];
     DB.contractTerminationReasons = data.contractTerminationReasons || [];
+    DB.maritalStatuses = data.maritalStatuses || [];
     // checklistTemplates/checklistSubmissions: thuộc LAZY_DATA_GROUPS (Lớp 3a) — xem assignLazyGroupField()
     // ngay phía trên initDatabase() cho lý do dùng hàm này thay vì gán thẳng `data.x || []`.
     assignLazyGroupField('checklistTemplates', data);
@@ -5555,7 +5556,9 @@ const SIMPLE_CATALOG_EXCEL_CONFIG = {
   relationshipTypes: { label: 'Quan Hệ', colLabel: 'Tên Quan Hệ', sample: 'Vợ/Chồng', renderFn: 'renderRelationshipTypeList' },
   nationalities: { label: 'Quốc Tịch', colLabel: 'Tên Quốc Tịch', sample: 'Việt Nam', renderFn: 'renderNationalityList' },
   contractAmendmentTypes: { label: 'Loại Thay Đổi Hợp Đồng', colLabel: 'Tên Loại Thay Đổi', sample: 'Tăng lương', renderFn: 'renderContractAmendmentTypeList' },
-  contractTerminationReasons: { label: 'Lý Do Chấm Dứt Hợp Đồng', colLabel: 'Lý Do', sample: 'Hết hạn hợp đồng', renderFn: 'renderContractTerminationReasonList' }
+  contractTerminationReasons: { label: 'Lý Do Chấm Dứt Hợp Đồng', colLabel: 'Lý Do', sample: 'Hết hạn hợp đồng', renderFn: 'renderContractTerminationReasonList' },
+  // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn các danh mục trên.
+  maritalStatuses: { label: 'Tình Trạng Hôn Nhân', colLabel: 'Tên Tình Trạng', sample: 'Độc thân', renderFn: 'renderMaritalStatusList' }
 };
 
 function renderSimpleCatalogExcelToolsHtml(catalogKey) {
