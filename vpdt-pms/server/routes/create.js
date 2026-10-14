@@ -33,10 +33,14 @@ const NO_APPROVER_BLOCK_LABELS = {
   docs: 'Tài liệu', carRegs: 'Đăng ký xe', officeReqs: 'Đề xuất',
   vppRegistrations: 'Đăng ký VPP', itPriceApprovals: 'Đề xuất giá', budgetEntries: 'Bản ngân sách',
   // submissions/contracts (10/2026, mở rộng đủ 10/10 module qua workflowEngine.js tạo được qua route
-  // này — contractsSignedFile KHÔNG tạo qua đây, xem uploadContractSignedFile() ở lib/recordActions.js
-  // cho bản vá tương ứng) — resolveWfConfig() của 2 module này tính approvers từ "Nhóm Phê Duyệt Trình/
-  // HĐ" (effectiveApprovers snapshot lúc tạo, resolveSubmissionWorkflow()/resolveContractApprovalWorkflow()
-  // ở lib/workflowEngine.js) — findMissingApproverStep() dùng ĐÚNG hàm đó nên vẫn khớp chính xác.
+  // này) — resolveWfConfig() của 2 module này tính approvers từ "Nhóm Phê Duyệt Trình/HĐ" (effectiveApprovers
+  // snapshot lúc tạo, resolveSubmissionWorkflow()/resolveContractApprovalWorkflow() ở lib/workflowEngine.js)
+  // — findMissingApproverStep() dùng ĐÚNG hàm đó nên vẫn khớp chính xác. "contracts" ở đây CHỈ gác quy
+  // trình Phê Duyệt gốc (approvalStatus) — quy trình "Tài liệu ký" (contractsSignedFile, module ảo RIÊNG,
+  // signedFileStatus) là 1 quy trình KHÁC trên CÙNG hồ sơ, KHÔNG tạo qua route này — xem chặn RIÊNG (cùng
+  // hàm findMissingApproverStep) tại uploadContractSignedFile() (lib/recordActions.js, upload-signed) và
+  // nhánh isSignedImport (lib/createValidation.js, nhập hợp đồng kèm sẵn tài liệu ký — LỖI ĐÃ VÁ 11/2026,
+  // trước đây nhánh isSignedImport bỏ sót kiểm tra này).
   submissions: 'Văn Bản Trình', contracts: 'Hợp đồng'
 };
 // Gửi thông báo trong app cho mọi admin ĐANG hoạt động (active !== false) + ghi Nhật Ký Hệ Thống, rồi
@@ -316,7 +320,7 @@ router.post('/:module', async (req, res) => {
         if (missing) {
           const label = NO_APPROVER_BLOCK_LABELS[moduleKey];
           const stepLabel = `Bước ${missing.order} (${missing.name})`;
-          const message = `Không thể gửi "${label}" vì ${stepLabel} của quy trình duyệt chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc). Vui lòng liên hệ Quản Trị Viên cấu hình lại quy trình duyệt trước khi gửi.`;
+          const message = `Không thể gửi "${label}" vì ${stepLabel} của quy trình duyệt chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại). Vui lòng liên hệ Quản Trị Viên cấu hình lại quy trình duyệt trước khi gửi.`;
           await blockCreateForMissingApprover({ req, freshUser, moduleKey, record, appData, label, message });
         }
       }
@@ -328,8 +332,8 @@ router.post('/:module', async (req, res) => {
         if (missing) {
           const stepLabel = `Bước ${missing.order} (${missing.name})`;
           const message = record.orderLocationType === 'STORE'
-            ? `Không thể gửi đơn hàng "${record.title}" vì chưa có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepLabel} của mức giá trị hiện tại (hoặc người được chọn đã bị khoá tài khoản/nghỉ việc). Vui lòng liên hệ Quản Trị Viên cấu hình lại Người Duyệt trước khi gửi.`
-            : `Không thể gửi đơn hàng "${record.title}" vì ${stepLabel} của mức giá trị hiện tại (Đặt Hàng Tại HO) chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc). Vui lòng liên hệ Quản Trị Viên cấu hình lại Người Duyệt trước khi gửi.`;
+            ? `Không thể gửi đơn hàng "${record.title}" vì chưa có người duyệt nào khớp đúng siêu thị "${record.dept}" ở ${stepLabel} của mức giá trị hiện tại (hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại). Vui lòng liên hệ Quản Trị Viên cấu hình lại Người Duyệt trước khi gửi.`
+            : `Không thể gửi đơn hàng "${record.title}" vì ${stepLabel} của mức giá trị hiện tại (Đặt Hàng Tại HO) chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại). Vui lòng liên hệ Quản Trị Viên cấu hình lại Người Duyệt trước khi gửi.`;
           await blockCreateForMissingApprover({ req, freshUser, moduleKey: 'operationOrders', record, appData, label: 'Đơn hàng Vận Hành', message });
         }
       }

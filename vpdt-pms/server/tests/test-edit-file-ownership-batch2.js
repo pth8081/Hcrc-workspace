@@ -159,7 +159,14 @@ stubModule('lib/appData', {
   // có ĐÚNG id "KHAC" (approvalLevel mặc định của hồ sơ test ở trên) để resolveApprovalLevelRule() không
   // ném lỗi "Cấp phê duyệt cuối cùng không hợp lệ" — trước đây kiểm tra này là hằng số hardcode không phụ
   // thuộc appData, nay đọc thẳng từ đây nên phải seed tối thiểu 1 cấp hợp lệ.
-  getAllAppData: async () => ({ submissionApprovalGroups: [], submissionApprovalLevels: [{ id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }] }),
+  // contractManageDeptWorkflows/users (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"):
+  // uploadContractSignedFile() (lib/recordActions.js) nay gọi findMissingApproverStep('contractsSignedFile',
+  // ...) TRƯỚC khi cho tải lên — "Phòng A" cần có ít nhất 1 người duyệt hợp lệ, không thì bị chặn 409
+  // đúng hành vi mới (đây không phải nghiệp vụ đang kiểm ở file này, chỉ seed tối thiểu để không bị chặn).
+  getAllAppData: async () => ({
+    submissionApprovalGroups: [], submissionApprovalLevels: [{ id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }],
+    users: USERS, contractManageDeptWorkflows: { 'Phòng A': { workflowId: 'WF_1STEP', approvers: { 1: ['u1'] } } }
+  }),
   getAppDataValue: async (key) => APPDATA_STORE[key],
   withLockedAppDataValue: async (key, mutatorFn) => {
     const snapshot = JSON.parse(JSON.stringify(APPDATA_STORE[key]));

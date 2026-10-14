@@ -174,11 +174,11 @@ router.post('/contracts/:id/upload-signed', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const allPaymentRequests = await getAllForCollection('paymentRequests');
+    const [appData, allPaymentRequests] = await Promise.all([getAllAppData(), getAllForCollection('paymentRequests')]);
     const result = await withLockedRecordForCollection('contracts', itemId, async (item) => {
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file").
       const exemptFileUrls = item.signedFileUrl ? [item.signedFileUrl] : [];
-      const updated = recordActions.uploadContractSignedFile(req.body, freshUser, item, allPaymentRequests);
+      const updated = recordActions.uploadContractSignedFile(req.body, freshUser, item, allPaymentRequests, appData);
       await assertPayloadFileUrlsOwnedByUser({ fileUrl: updated.signedFileUrl }, freshUser, { exemptFileUrls });
       return updated;
     });

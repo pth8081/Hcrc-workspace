@@ -1024,6 +1024,21 @@ const CREATE_MODULE_CONFIGS = {
         // (lib/recordActions.js) thay vì tự APPROVED. startContractPayment() đã sẵn chặn cứng
         // signedFileStatus !== 'APPROVED' nên tự động được bảo vệ, không cần sửa gì thêm ở đó.
         if (payload.signedFileUrl) {
+          // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/khoá người
+          // duyệt"): nhánh này đưa thẳng signedFileStatus về PENDING giống uploadContractSignedFile()
+          // (lib/recordActions.js) nhưng TRƯỚC ĐÂY không hề kiểm tra phòng ban này đã có người duyệt
+          // "Tài liệu ký" hợp lệ hay chưa — hồ sơ "nhập kèm tài liệu ký" vẫn tạo được dù sẽ không ai duyệt
+          // được. Chặn NGAY TẠI ĐÂY, cùng hàm findMissingApproverStep('contractsSignedFile', ...) đã
+          // dùng ở uploadContractSignedFile() — 2 đường tạo ra PENDING của CÙNG quy trình này giờ đều
+          // được bảo vệ như nhau.
+          const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+          const missing = findMissingApproverStep('contractsSignedFile', payload, appData);
+          if (missing) {
+            const message = `Phòng ban "${payload.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Tài liệu ký chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại) — nhập kèm tài liệu ký lúc này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi nhập, hoặc để trống Tài liệu ký và tải lên sau.`;
+            const { notifyAdminsNoApprover } = require('./recordActions'); // require trễ — tránh vòng lặp
+            notifyAdminsNoApprover(appData, 'Tài liệu ký Hợp Đồng', user, message);
+            throw new CreateError(409, message);
+          }
           payload.signedFileStatus = 'PENDING';
           payload.signedFileCurrentStep = 1;
           payload.signedFileHistory = [];
@@ -1121,6 +1136,19 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.meetingBook) {
         throw new CreateError(403, 'Bạn không có quyền đăng ký phòng họp');
+      }
+      // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/khoá người
+      // duyệt"): meetings KHÔNG đi qua findMissingApproverStep() (dùng quyền PHẲNG meetingApprove + CỘNG
+      // THÊM cấu hình theo phòng ban, xem canDecideMeeting()/lib/recordActions.js) nên trước đây KHÔNG hề
+      // có lớp chặn nào — nếu chưa từng có ai được cấp meetingApprove (hoặc gán riêng cho phòng ban này),
+      // lịch họp vẫn đăng ký "thành công" rồi treo PENDING vĩnh viễn, không ai duyệt được. forceOwnDept:
+      // true nên dùng ĐÚNG user.dept (không phải payload.dept — chưa chắc client gửi, màn đăng ký không
+      // có ô chọn phòng ban).
+      const { hasAnyValidMeetingApprover, notifyAdminsNoApprover } = require('./recordActions'); // require trễ — tránh vòng lặp
+      if (!hasAnyValidMeetingApprover(user.dept, appData)) {
+        const message = `Phòng ban "${user.dept}" chưa có ai được cấp quyền duyệt lịch họp (meetingApprove) hoặc được gán riêng cho phòng ban này — không thể gửi đăng ký. Vui lòng liên hệ Quản Trị Viên cấu hình trước khi đăng ký.`;
+        notifyAdminsNoApprover(appData, 'Lịch Phòng Họp', user, message);
+        throw new CreateError(409, message);
       }
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'MEETING_ROOM');
       // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): payload.room trước đây KHÔNG được đối chiếu với
@@ -3476,6 +3504,17 @@ const CREATE_MODULE_CONFIGS = {
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.licenseCreate) {
         throw new CreateError(403, 'Bạn không có quyền tạo/tải lên giấy phép');
+      }
+      // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/khoá người
+      // duyệt"): licenses duyệt bằng quyền PHẲNG licenseApprove, KHÔNG đi qua findMissingApproverStep()
+      // (xem canApproveLicense() ở lib/recordActions.js) — trước đây KHÔNG có lớp chặn nào, nếu chưa
+      // từng có ai được cấp licenseApprove, giấy phép vẫn tải lên "thành công" rồi treo PENDING vĩnh
+      // viễn, không ai duyệt được. Áp dụng cho CẢ bản gốc lẫn phiên bản mới (rootLicenseId != null).
+      const { hasAnyValidLicenseApprover, notifyAdminsNoApprover } = require('./recordActions'); // require trễ — tránh vòng lặp
+      if (!hasAnyValidLicenseApprover(appData)) {
+        const message = 'Chưa có ai được cấp quyền duyệt giấy phép (licenseApprove) — không thể tải lên. Vui lòng liên hệ Quản Trị Viên cấu hình trước khi tải lên.';
+        notifyAdminsNoApprover(appData, 'Giấy Phép', user, message);
+        throw new CreateError(409, message);
       }
       const requiredStringFields = [
         ['companyName', 'Tên công ty chủ quản'], ['locationName', 'Tên địa điểm'],

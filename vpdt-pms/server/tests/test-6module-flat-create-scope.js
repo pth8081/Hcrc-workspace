@@ -56,6 +56,12 @@ function expectHttpError(fn, status, msgPart) {
 
 const ADMIN = { username: 'admin', name: 'Admin', dept: DEPT_A, perms: { admin: true } };
 const noPerm = () => ({ username: 'nobody', name: 'Không Quyền', dept: DEPT_A, perms: {} });
+// users (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"): meetings.extraValidate nay
+// gọi thêm hasAnyValidMeetingApprover() TRƯỚC khi cho đăng ký — seed 1 người giữ meetingApprove (active)
+// để các kịch bản "meetings" dưới (quyền tạo, forceOwnDept, admin bypass) không bị chặn oan bởi lớp
+// kiểm MỚI này (không phải nghiệp vụ đang kiểm ở file này — file này kiểm quyền TẠO phẳng, không phải
+// quy trình duyệt).
+APP_DATA.users = [{ username: 'qlph1', name: 'Quản Lý Phòng Họp', dept: DEPT_A, perms: { meetingApprove: true }, active: true }];
 
 // ===================== Khuôn mẫu chung: 6 module cùng 1 danh sách kịch bản =====================
 // { moduleKey, flag, payload(dept), errMsgPart }

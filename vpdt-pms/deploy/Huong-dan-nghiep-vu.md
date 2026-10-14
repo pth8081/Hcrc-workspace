@@ -320,6 +320,32 @@ duyệt cho 1 phòng ban cụ thể dù người đó không giữ `meetingAppro
 Xem Quy Trình" ở form Đăng Ký hiện GỘP (union) cả người giữ `meetingApprove`
 lẫn người được gán riêng cho đúng phòng ban đang chọn trên form.
 
+**Chặn đăng ký khi CHƯA có người duyệt (11/2026, theo yêu cầu người dùng,
+rà soát "quy trình phê duyệt thiếu/khoá người duyệt")**: **Đặt Phòng Họp**
+và **Giấy Phép** trước đây KHÔNG có lớp chặn nào ở bước ĐĂNG KÝ/TẢI LÊN —
+nếu chưa từng có ai được cấp `meetingApprove`/`licenseApprove` (hoặc gán
+riêng phòng ban, riêng Phòng Họp), hồ sơ vẫn tạo "thành công" rồi treo
+PENDING vĩnh viễn. Nay **CHẶN CỨNG** ngay lúc đăng ký/tải lên nếu CHƯA có
+ít nhất 1 tài khoản ĐANG HOẠT ĐỘNG được cấp đúng quyền đó (loại trừ cả tài
+khoản đã khoá/nghỉ việc) — báo lỗi rõ + tự thông báo admin, cùng khuôn đã
+áp dụng cho 10 module khác (Tài Liệu/Đăng Ký Xe/Văn Phòng/VPP/Đề Xuất Giá/
+Bản Ngân Sách/Văn Bản Trình/Hợp Đồng/Đơn Hàng Vận Hành/Đề Nghị Thanh Toán).
+**Lưu ý riêng**: đặc quyền admin (luôn duyệt được MỌI hồ sơ cụ thể khi cần
+gỡ kẹt) KHÔNG được tính là "đã có người duyệt" cho cổng chặn ĐĂNG KÝ MỚI
+này — vì tài khoản `admin` luôn tồn tại vĩnh viễn, nếu tính sẽ vô hiệu hoá
+hẳn mục đích chặn. Phải có ÍT NHẤT 1 người được CẤP RIÊNG đúng quyền
+`meetingApprove`/`licenseApprove` (hoặc gán riêng phòng ban với Phòng Họp)
+thì mới đăng ký/tải lên được.
+
+**Hợp Đồng — quy trình "📎 Tài liệu ký" (mục 4.2 bên dưới) cũng được bảo vệ
+tương tự**: trước đây tải lên/nhập kèm sẵn tài liệu ký vẫn "thành công" dù
+phòng ban chưa cấu hình `contractManageDeptWorkflows`, hoặc người được cấu
+hình đã khoá tài khoản/nghỉ việc/bị xoá — nay chặn cứng + báo admin giống
+hệt các module trên. Đồng thời: 1 username được cấu hình làm người duyệt
+nhưng tài khoản đó đã bị **XOÁ HẲN** (không chỉ khoá) nay cũng bị coi là
+"không hợp lệ" giống hệt tài khoản bị khoá, áp dụng NHẤT QUÁN cho MỌI module
+dùng chung cơ chế quy trình duyệt theo bước (`findMissingApproverStep()`).
+
 Admin cấu hình tất cả các quy trình này tại **Hệ Thống → 🔄 Quy Trình & Phê
 Duyệt** (mục 7) — mỗi module 1 màn riêng, mỗi bước duyệt của mỗi phòng ban/tier
 cấu hình độc lập.

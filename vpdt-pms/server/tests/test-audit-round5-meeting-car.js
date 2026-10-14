@@ -30,7 +30,13 @@ function test(name, fn) {
 }
 
 // ===================== 1) Phòng Họp: tạo lịch KHÔNG tự duyệt được =====================
-const MEETING_APP_DATA = { meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }] };
+// users (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"): meetings.extraValidate nay
+// gọi thêm hasAnyValidMeetingApprover() TRƯỚC khi cho đăng ký — seed 1 người giữ meetingApprove (active)
+// để các kịch bản dưới không bị chặn oan (không phải nghiệp vụ đang kiểm ở file này).
+const MEETING_APP_DATA = {
+  meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }],
+  users: [{ username: 'qlph1', name: 'Quản Lý Phòng Họp', perms: { meetingApprove: true }, active: true }]
+};
 const BOOKER = { username: 'nv1', name: 'Nhân Viên 1', perms: { meetingBook: true } };
 
 function meetingPayload(overrides) {

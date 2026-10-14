@@ -270,7 +270,12 @@ async function runPureTests() {
     cats: ['Quy trình'], contractTypes: ['Hợp đồng kinh tế'], formTemplates: {},
     workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
     contractApprovalGroups: [], contractApprovalLevels: [{ id: 'TGD', label: 'TGĐ', order: 1, visibleGroupIds: [], lockedGroupIds: [] }],
-    contractApprovalDeptWorkflows: {}, paymentDeptWorkflows: {}, users: []
+    contractApprovalDeptWorkflows: {}, paymentDeptWorkflows: {},
+    // users (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"): licenses.extraValidate
+    // nay gọi thêm hasAnyValidLicenseApprover() TRƯỚC khi cho tải lên — seed 1 người giữ licenseApprove
+    // (active) để các kịch bản 3a/3b/3c (kiểm RIÊNG "chỉ root.creator mới tạo phiên bản mới được") không
+    // bị chặn oan bởi lớp kiểm MỚI này trước khi chạm tới luật đang kiểm ở đây.
+    users: [{ username: 'duyetgp', name: 'Người Duyệt Giấy Phép', dept: DEPT_A, perms: { licenseApprove: true }, active: true }]
   };
   const USER_A = { username: 'u_a', name: 'Người A', dept: DEPT_A, perms: {
     // contractCreate (10/2026, "6-module"): bỏ {all,depts} cũ, nay là quyền phẳng boolean (giữ nguyên

@@ -1974,7 +1974,7 @@ function hasActivePaymentRequestForSource(allPaymentRequests, sourceModule, sour
   return (allPaymentRequests || []).some(pr => pr.sourceModule === sourceModule && pr.sourceId === sourceId && pr.status !== 'PAID');
 }
 
-function uploadContractSignedFile(payload, user, contract, allPaymentRequests) {
+function uploadContractSignedFile(payload, user, contract, allPaymentRequests, appData) {
   // Phụ lục CŨNG có "Tài liệu ký" + luồng thanh toán riêng của chính nó (độc lập với hợp đồng gốc) —
   // trước đây chặn cứng contract.isAddendum, khiến phụ lục đã duyệt xong không có cách nào hoàn tất hồ
   // sơ lưu trữ "Phụ lục hợp đồng đã ký".
@@ -1994,6 +1994,22 @@ function uploadContractSignedFile(payload, user, contract, allPaymentRequests) {
   const { fileName, fileType, fileUrl, customData } = payload || {};
   if (!fileName || !fileUrl) throw new HttpError(400, 'Thiếu tệp tài liệu ký');
   assertUploadedFileUrl(fileUrl, 'Tài liệu ký');
+  // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/khoá người duyệt"):
+  // quy trình "Tài liệu ký" (module ảo contractsSignedFile, KHÁC quy trình Phê Duyệt gốc approvalStatus
+  // đã được chặn từ trước ở routes/create.js) TRƯỚC ĐÂY không hề kiểm tra có người duyệt hợp lệ hay
+  // không trước khi đưa về PENDING — hồ sơ vẫn tải lên "thành công" rồi treo lặng lẽ nếu phòng ban chưa
+  // cấu hình contractManageDeptWorkflows, hoặc người được cấu hình đã bị khoá tài khoản/nghỉ việc/xoá.
+  // Chặn NGAY TẠI ĐÂY (trước khi ghi PENDING), cùng khuôn/cùng hàm findMissingApproverStep() đã dùng cho
+  // paymentRequests (submitPaymentRequest()/editPaymentRequest() ở trên) — không viết lại rule khớp mới.
+  if (appData) {
+    const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+    const missing = findMissingApproverStep('contractsSignedFile', contract, appData);
+    if (missing) {
+      const message = `Phòng ban "${contract.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Tài liệu ký chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại) — tải lên lúc này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi tải lên.`;
+      notifyAdminsNoApprover(appData, 'Tài liệu ký Hợp Đồng', user, message);
+      throw new HttpError(409, message);
+    }
+  }
   contract.signedFileName = fileName;
   contract.signedFileType = fileType;
   contract.signedFileUrl = fileUrl;
@@ -2401,7 +2417,7 @@ function editPaymentRequest(payload, user, pr, appData) {
       const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
       const missing = findMissingApproverStep('paymentRequests', { ...pr, dept: payload.dept }, appData);
       if (missing) {
-        const message = `Phòng ban "${payload.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Đề Nghị Thanh Toán chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc) — đổi sang phòng ban này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi đổi.`;
+        const message = `Phòng ban "${payload.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Đề Nghị Thanh Toán chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại) — đổi sang phòng ban này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi đổi.`;
         notifyAdminsNoApprover(appData, 'Đề Nghị Thanh Toán', user, message);
         throw new HttpError(409, message);
       }
@@ -2505,7 +2521,7 @@ function submitPaymentRequest(user, pr, appData) {
     const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
     const missing = findMissingApproverStep('paymentRequests', pr, appData);
     if (missing) {
-      const message = `Phòng ban "${pr.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Đề Nghị Thanh Toán chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc) — đề nghị gửi đi sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi gửi.`;
+      const message = `Phòng ban "${pr.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Đề Nghị Thanh Toán chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại) — đề nghị gửi đi sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi gửi.`;
       notifyAdminsNoApprover(appData, 'Đề Nghị Thanh Toán', user, message);
       throw new HttpError(409, message);
     }
@@ -8511,7 +8527,45 @@ function canDecideMeeting(user, item, appData) {
   return (approvers[1] || []).includes(user.username);
 }
 
+// hasAnyValidMeetingApprover() (11/2026, theo yêu cầu người dùng, rà soát "quy trình phê duyệt thiếu/
+// khoá người duyệt"): meetings KHÔNG đi qua lib/workflowEngine.js::findMissingApproverStep() (dùng quyền
+// PHẲNG meetingApprove + CỘNG THÊM cấu hình theo phòng ban, khác hẳn cơ chế {steps, approvers} theo bước
+// của 10+ module kia) nên cần 1 hàm RIÊNG hỏi đúng câu hỏi tương đương: "CÓ bất kỳ ai hiện ĐANG HOẠT
+// ĐỘNG ĐƯỢC CẤP QUYỀN duyệt lịch họp của phòng ban này không" — dùng NGAY TRƯỚC khi đăng ký
+// (createValidation.js meetings.extraValidate) để chặn tạo mới khi câu trả lời là KHÔNG.
+//
+// CỐ Ý KHÔNG tính admin vào đây (khác canDecideMeeting() ở trên, nơi admin LUÔN được coi là "quyết được"
+// — đặc quyền can thiệp xử lý TỪNG hồ sơ cụ thể khi cần gỡ kẹt). Lý do: admin luôn tồn tại vĩnh viễn
+// trong hệ thống (tài khoản "admin" không thể khoá/xoá, xem prepareUsersForSave() ở routes/data.js) —
+// nếu tính "admin có đặc quyền duyệt" là "đã có người duyệt hợp lệ", hàm này sẽ LUÔN trả về true, chặn
+// không bao giờ kích hoạt được, vô hiệu hoá hoàn toàn mục đích của người dùng ("phải có ÍT NHẤT 1 người
+// ĐƯỢC GÁN quyền phê duyệt phòng họp" — tức được cấp CÔNG KHAI quyền này, không tính đặc quyền ngầm của
+// admin). Admin vẫn luôn xử lý được TỪNG hồ sơ cụ thể nếu lỡ có hồ sơ cũ bị kẹt (canDecideMeeting()), chỉ
+// riêng CỔNG CHẶN TẠO MỚI này đòi hỏi phải có người được cấp quyền THẬT.
+function hasAnyValidMeetingApprover(dept, appData) {
+  const users = appData?.users || [];
+  if (users.some(u => u && u.active !== false && u.perms?.meetingApprove)) return true;
+  const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
+  const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[dept], appData || {});
+  const activeByUsername = new Map(users.filter(u => u?.username).map(u => [u.username, u]));
+  return (approvers[1] || []).some(username => {
+    const u = activeByUsername.get(username);
+    return !!u && u.active !== false;
+  });
+}
+
+// hasAnyValidLicenseApprover() — cùng lý do hasAnyValidMeetingApprover() ở trên (CỐ Ý KHÔNG tính đặc
+// quyền admin, chỉ tính người ĐƯỢC CẤP licenseApprove thật — nếu không hàm luôn trả về true vì admin
+// luôn tồn tại, vô hiệu hoá mục đích chặn), áp dụng cho Giấy Phép (canApproveLicense() bên dưới — quyền
+// PHẲNG licenseApprove toàn công ty, KHÔNG có cấu hình theo phòng ban nào khác cần tra thêm, đơn giản
+// hơn meetings).
+function hasAnyValidLicenseApprover(appData) {
+  return (appData?.users || []).some(u => u && u.active !== false && u.perms?.licenseApprove);
+}
+
 module.exports = {
+  notifyAdminsNoApprover,
+  hasAnyValidMeetingApprover, hasAnyValidLicenseApprover,
   canDecideMeeting,
   editContract,
   editDocDraft, submitDocDraft, publishDoc, unpublishDoc,

@@ -1,8 +1,42 @@
 # Phiên bản hiện tại
 
-**25.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
+MAJOR mới theo đúng quy tắc.)
+
+## v26.0 (2026-11): Rà soát + vá kín "quy trình phê duyệt thiếu/khoá người duyệt"
+
+Người dùng yêu cầu rà soát: "nếu quy trình phê duyệt không có người duyệt (hoặc người duyệt bị khoá tài
+khoản) thì có chặn gửi phê duyệt không?" — xác nhận ĐÚNG cho 10 module chính (Tài Liệu/Đăng Ký Xe/Văn
+Phòng/VPP/Đề Xuất Giá/Bản Ngân Sách/Văn Bản Trình/Hợp Đồng-Phê Duyệt/Đơn Hàng Vận Hành/Đề Nghị Thanh
+Toán, dùng chung `findMissingApproverStep()` ở `lib/workflowEngine.js`), nhưng phát hiện + vá thêm 3 lỗ
+hổng/khoảng trống thật:
+
+1. **Hợp Đồng — quy trình "📎 Tài liệu ký"** (module ảo `contractsSignedFile`, KHÁC quy trình Phê Duyệt
+   gốc `approvalStatus` đã được bảo vệ từ trước): chưa hề gọi `findMissingApproverStep()` ở CẢ 2 đường
+   đưa hồ sơ về PENDING — `uploadContractSignedFile()` (tải lên tài liệu ký) và nhánh "Nhập Hợp Đồng/Phụ
+   Lục Đã Ký" kèm sẵn tài liệu ký lúc nhập (`lib/createValidation.js`). Đã vá cả 2 đường, chặn cứng (409)
+   + tự thông báo admin giống hệt các module khác.
+2. **Tài khoản bị XOÁ HẲN** (khác khoá/`active:false`): `findMissingApproverStep()` trước đây coi 1
+   username KHÔNG CÒN trong `appData.users` là "hợp lệ" (nhánh lỏng lẻo `!u ||`) — không nhất quán với
+   tầng xử lý duyệt thật (`applyWorkflowAction()`, vốn đã coi tài khoản xoá là KHÔNG hợp lệ). Nay bắt
+   buộc phải tìm thấy user THẬT và đang hoạt động mới tính là hợp lệ — áp dụng nhất quán cho mọi module
+   dùng chung hàm này.
+3. **Phòng Họp** và **Giấy Phép** — 2 module duyệt bằng quyền PHẲNG (`meetingApprove`/`licenseApprove`),
+   KHÔNG đi qua `findMissingApproverStep()` nên trước đây KHÔNG có lớp chặn nào — nếu chưa từng có ai
+   được cấp quyền tương ứng, hồ sơ vẫn đăng ký/tải lên "thành công" rồi treo PENDING vĩnh viễn. Nay chặn
+   cứng (409) + thông báo admin nếu CHƯA có ít nhất 1 tài khoản ĐANG hoạt động được cấp đúng quyền đó
+   (`hasAnyValidMeetingApprover()`/`hasAnyValidLicenseApprover()`, `lib/recordActions.js`) — CỐ Ý KHÔNG
+   tính đặc quyền admin vào đây (admin luôn tồn tại vĩnh viễn, tính vào sẽ vô hiệu hoá mục đích chặn;
+   admin vẫn luôn xử lý được từng hồ sơ cụ thể như trước, chỉ riêng cổng chặn TẠO MỚI này đòi quyền thật).
+
+Đã chạy regression rất rộng (~160 file test liên quan tới mọi module đi qua `findMissingApproverStep()`/
+`meetingDeptWorkflows`/`WF_1STEP`, cộng thêm rà soát riêng mọi nơi gọi `CREATE_MODULE_CONFIGS.meetings`/
+`.licenses`) — toàn bộ lỗi phát hiện đều xác nhận PRE-EXISTING (môi trường sandbox: không có SQL Server
+thật, thiếu gói Python `pikepdf`; hoặc flaky đã lặp lại y hệt ở bản gốc trước khi sửa) qua đối chiếu
+git-stash baseline, không liên quan tới thay đổi lần này. Vài fixture test cũ tham chiếu username/
+appData không đầy đủ (dựa vào kẽ hở cũ) đã được cập nhật cho đúng, không nới lỏng chặn mới.
 
 ## v25.99 (2026-11): Thu gọn mặc định 15 khối "🔍 Tìm Kiếm & Lọc" còn sót lại
 

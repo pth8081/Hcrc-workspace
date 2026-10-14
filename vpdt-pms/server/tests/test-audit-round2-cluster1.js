@@ -49,7 +49,12 @@ const NVA_TRUNG_TEN = { username: 'nva_it', name: 'Nguyễn Văn A', dept: 'IT',
 // đúng khuôn "dòng chỉ có tên" phải TIẾP TỤC khớp theo tên như trước khi vá.
 const KHACH_NGOAI = { username: 'doitac1', name: 'Trần Đối Tác', dept: 'Kinh Doanh', perms: {}, active: true };
 
-const USERS = [ADMIN, PLAIN_KD, LICENSE_USER, TRAINER, NVA_MOI, NVA_TRUNG_TEN, KHACH_NGOAI];
+// LICENSE_APPROVER (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"): licenses.extraValidate
+// nay gọi thêm hasAnyValidLicenseApprover() TRƯỚC khi cho tải lên (CỐ Ý không tính ADMIN, xem chú thích
+// tại hasAnyValidLicenseApprover()/lib/recordActions.js) — seed 1 người giữ licenseApprove THẬT để các
+// kịch bản "tự học loại giấy phép" (không liên quan quy trình duyệt) không bị chặn oan.
+const LICENSE_APPROVER = { username: 'duyetgp', name: 'Người Duyệt Giấy Phép', dept: 'Hành Chính', perms: { licenseApprove: true }, active: true };
+const USERS = [ADMIN, PLAIN_KD, LICENSE_USER, LICENSE_APPROVER, TRAINER, NVA_MOI, NVA_TRUNG_TEN, KHACH_NGOAI];
 
 // 5 danh mục ĐANG bị bỏ sót + giá trị gốc để khẳng định lượt ghi bị từ chối KHÔNG làm đổi dữ liệu.
 const ORIGINAL_CATALOGS = {

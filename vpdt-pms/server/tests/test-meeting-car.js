@@ -97,8 +97,11 @@ const server = http.createServer(async (req, res) => {
       // bài test này đều bị chặn "phòng không có trong danh mục" (mock lệch với routes/create.js thật,
       // vốn luôn đọc appData đầy đủ). Chỉ truyền đúng các danh mục cần, KHÔNG truyền cả seedDB để không
       // vô tình kéo theo formTemplates (làm đổi hành vi validateRequiredCustomData của bài test).
+      // users (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"): meetings.extraValidate
+      // nay gọi thêm hasAnyValidMeetingApprover(dept, appData) TRƯỚC khi cho đăng ký — cần appData.users
+      // THẬT (roomManagerUser đã có sẵn meetingApprove:true trong fixture) để không bị chặn oan.
       const item = validateAndPrepareCreate(moduleKey, body, activeServerUser, collection, {
-        meetingRooms: seedDB.meetingRooms
+        meetingRooms: seedDB.meetingRooms, users: seedDB.users
       });
       collection.push(item);
       return sendJson(res, 200, { ok: true, item });

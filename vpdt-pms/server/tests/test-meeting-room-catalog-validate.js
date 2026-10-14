@@ -19,7 +19,13 @@ function test(name, fn) {
   catch (err) { console.log(`FAIL: ${name}\n  -> ${err.message}`); failed++; }
 }
 
-const APP_DATA = { meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }, { id: 2, name: 'Phòng Họp Nhỏ B', short: 'B' }] };
+// users (11/2026, LỖI ĐÃ VÁ "quy trình phê duyệt thiếu/khoá người duyệt"): meetings.extraValidate nay
+// gọi thêm hasAnyValidMeetingApprover() TRƯỚC khi cho đăng ký — seed 1 người giữ meetingApprove (active)
+// để các kịch bản đối chiếu danh mục phòng họp ở file này không bị chặn oan bởi lớp kiểm MỚI này.
+const APP_DATA = {
+  meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }, { id: 2, name: 'Phòng Họp Nhỏ B', short: 'B' }],
+  users: [{ username: 'qlph1', name: 'Quản Lý Phòng Họp', perms: { meetingApprove: true }, active: true }]
+};
 // meetingBook (10/2026, "6-module" — gộp phẳng meetingView+meetingBookScope): extraValidate() giờ chặn
 // 403 "Bạn không có quyền đăng ký phòng họp" NGAY DÒNG ĐẦU nếu thiếu cờ này — bài test này gọi THẲNG
 // extraValidate() (không qua validateAndPrepareCreate()) để kiểm riêng logic đối chiếu danh mục phòng,
@@ -51,8 +57,11 @@ test('LỖI ĐÃ VÁ: room rỗng -> 400 (không lọt qua như chuỗi hợp l�
 });
 
 test('appData.meetingRooms rỗng/thiếu (dữ liệu lạ) -> mọi room đều bị chặn, không fail-open', () => {
+  // users seed ở đây (khác {} hoàn toàn rỗng như trước) để tránh chạm lớp kiểm MỚI
+  // hasAnyValidMeetingApprover() (LỖI ĐÃ VÁ 11/2026) chạy TRƯỚC — kịch bản này kiểm ĐÚNG hành vi
+  // meetingRooms rỗng, không phải thiếu người duyệt.
   assert.throws(
-    () => CREATE_MODULE_CONFIGS.meetings.extraValidate(basePayload(), [], USER, {}),
+    () => CREATE_MODULE_CONFIGS.meetings.extraValidate(basePayload(), [], USER, { users: [{ username: 'qlph1', perms: { meetingApprove: true }, active: true }] }),
     /400|không có trong danh mục/
   );
 });

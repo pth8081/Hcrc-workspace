@@ -1268,14 +1268,23 @@ function resolveWorkflowStepApprovers(moduleKey, item, appData, step) {
 // approver HỢP LỆ hay không — dùng để CHẶN gửi/tạo mới TRƯỚC khi hồ sơ rơi vào ngõ cụt PENDING vô thời
 // hạn ở BẤT KỲ bước nào (không đợi duyệt xong bước trước mới phát hiện bước sau trống). "Hợp lệ" nghĩa
 // là username có trong danh sách approvers[bước] (resolveWfConfig() của module đó, giống hệt
-// applyWorkflowAction() dùng) VÀ chưa bị khoá tài khoản/nghỉ việc (active !== false) — LỖI ĐÃ VÁ ở đây:
-// resolveWorkflowStepApprovers() ở trên (dùng cho guard CŨ của paymentRequests) không hề lọc active,
-// nên 1 approver PEOPLE-mode chọn tay rồi bị khoá tài khoản sau đó vẫn coi là "đã cấu hình" dù thực tế
-// không ai duyệt được (applyWorkflowAction() MỚI là nơi lọc active thật, xem chú thích "LỖI ĐÃ VÁ" ở
-// applyWorkflowAction() phía trên — hàm này mirror đúng cách lọc đó để kiểm TRƯỚC, không đợi tới lúc
-// duyệt mới phát hiện). Trả về {order, name} của bước ĐẦU TIÊN thiếu, hoặc null nếu mọi bước đều ổn —
-// KHÔNG throw, để caller tự quyết định thông điệp/hành vi theo đúng module (xem routes/create.js,
-// lib/recordActions.js::submitPaymentRequest()).
+// applyWorkflowAction() dùng), tài khoản đó CÒN TỒN TẠI, VÀ chưa bị khoá tài khoản/nghỉ việc (active !==
+// false) — LỖI ĐÃ VÁ ở đây: resolveWorkflowStepApprovers() ở trên (dùng cho guard CŨ của paymentRequests)
+// không hề lọc active, nên 1 approver PEOPLE-mode chọn tay rồi bị khoá tài khoản sau đó vẫn coi là "đã
+// cấu hình" dù thực tế không ai duyệt được (applyWorkflowAction() MỚI là nơi lọc active thật, xem chú
+// thích "LỖI ĐÃ VÁ" ở applyWorkflowAction() phía trên — hàm này mirror đúng cách lọc đó để kiểm TRƯỚC,
+// không đợi tới lúc duyệt mới phát hiện).
+//
+// LỖI ĐÃ VÁ LẦN 2 (11/2026, theo yêu cầu người dùng): trước đây `!u || u.active !== false` coi 1 username
+// KHÔNG CÒN TỒN TẠI trong appData.users (tài khoản đã bị XOÁ HẲN, khác hẳn chỉ khoá/active:false) là
+// "hợp lệ" (nhánh `!u` cho qua) — không nhất quán với applyWorkflowAction() (isActiveUsername() ở trên,
+// line ~305, dùng `.some(u => u.username === username && u.active !== false)` — tự động false nếu không
+// tìm thấy user nào khớp, tức tài khoản bị xoá ĐÃ được xử lý đúng ở tầng xử lý duyệt thật, chỉ riêng hàm
+// kiểm TRƯỚC này bị sót). Nay bắt buộc phải TÌM THẤY user VÀ active !== false mới tính là hợp lệ — tài
+// khoản bị xoá hẳn giờ bị chặn giống hệt tài khoản bị khoá, nhất quán với applyWorkflowAction().
+//
+// Trả về {order, name} của bước ĐẦU TIÊN thiếu, hoặc null nếu mọi bước đều ổn — KHÔNG throw, để caller tự
+// quyết định thông điệp/hành vi theo đúng module (xem routes/create.js, lib/recordActions.js::submitPaymentRequest()).
 function findMissingApproverStep(moduleKey, item, appData) {
   const config = MODULE_CONFIGS[moduleKey];
   if (!config) return null;
@@ -1285,7 +1294,7 @@ function findMissingApproverStep(moduleKey, item, appData) {
     const raw = approvers?.[step.order] || [];
     const valid = raw.filter(username => {
       const u = activeByUsername.get(username);
-      return !u || u.active !== false;
+      return !!u && u.active !== false;
     });
     if (!valid.length) return { order: step.order, name: step.name || `Bước ${step.order}` };
   }

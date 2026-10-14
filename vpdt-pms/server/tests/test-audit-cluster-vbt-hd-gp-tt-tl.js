@@ -163,6 +163,20 @@ const USER_A = { username: 'u_a', name: 'Người A', dept: DEPT_A, perms: {
   licenseCreate: true
 } };
 const ADMIN = { username: 'admin', name: 'Quản Trị', dept: DEPT_A, perms: { admin: true } };
+// LỖI ĐÃ VÁ (11/2026, rà soát "quy trình phê duyệt thiếu/khoá người duyệt"): contractManageDeptWorkflows
+// (quy trình "Tài liệu ký", module ảo contractsSignedFile) TRƯỚC ĐÂY không hề cấu hình gì + APP_DATA.users
+// rỗng — kịch bản 11b/11d (isSignedImport) nay BỊ CHẶN ĐÚNG (findMissingApproverStep() mới gọi thêm cho
+// contractsSignedFile, xem lib/createValidation.js) vì không có người duyệt hợp lệ cho DEPT_A, dù trước
+// đây "qua" được chỉ vì chưa ai kiểm tra. Bổ sung ADMIN vào users + cấu hình 1 người duyệt hợp lệ cho
+// DEPT_A để 2 kịch bản đó tiếp tục kiểm đúng ĐIỀU chúng đang kiểm (payload/status sau khi TẠO THÀNH CÔNG),
+// không phải để né tránh chặn mới.
+APP_DATA.users.push(ADMIN);
+APP_DATA.contractManageDeptWorkflows = { [DEPT_A]: { workflowId: 'WF_1STEP', approvers: { 1: [ADMIN.username] } } };
+// LỖI ĐÃ VÁ (11/2026, cùng đợt rà soát ở trên): licenses.extraValidate nay cũng gọi
+// hasAnyValidLicenseApprover() TRƯỚC khi cho tải lên — ADMIN KHÔNG được tính (CỐ Ý, xem chú thích tại
+// hasAnyValidLicenseApprover()/lib/recordActions.js) nên cần 1 người giữ licenseApprove THẬT để kịch
+// bản 10f (sinh mã giấy phép) không bị chặn oan bởi lớp kiểm MỚI này.
+APP_DATA.users.push({ username: 'duyetgp', name: 'Người Duyệt Giấy Phép', dept: DEPT_A, perms: { licenseApprove: true }, active: true });
 
 async function main() {
   // ================= 1. [Cao] Tệp "Đề xuất thay thế tờ trình" FAIL-OPEN =================
@@ -241,7 +255,11 @@ async function main() {
   // người duyệt bước 1 của phòng ban MỚI khi deptChanged (mirror đúng submitPaymentRequest()) — 4a/4c cần
   // paymentDeptWorkflows[DEPT_B] có cấu hình để không bị chặn 409 "không ai duyệt được" (khác 7a bên dưới,
   // vốn CỐ Ý dùng APP_DATA gốc rỗng để kiểm đúng nhánh chặn đó cho submitPaymentRequest()).
-  const APP_DATA_PR_DEPT_B = { ...APP_DATA, paymentDeptWorkflows: { [DEPT_B]: { workflowId: 'WF_1STEP', approvers: { 1: ['sep1'] } } } };
+  // LỖI ĐÃ VÁ LẦN 2 (11/2026): findMissingApproverStep() nay cũng chặn username KHÔNG CÓ trong
+  // appData.users (tài khoản không tồn tại, xem lib/workflowEngine.js) — 'sep1' trước đây "qua" được chỉ
+  // vì fixture này chưa từng khai user nào tên vậy (hành vi LỎNG LẺO cũ, không phải ý định thật của test),
+  // nay phải khai user thật ĐANG hoạt động để đúng ý định "phòng ban ĐÃ cấu hình quy trình hợp lệ".
+  const APP_DATA_PR_DEPT_B = { ...APP_DATA, users: [...APP_DATA.users, { username: 'sep1', name: 'Sếp Phòng B', dept: DEPT_B, perms: {}, active: true }], paymentDeptWorkflows: { [DEPT_B]: { workflowId: 'WF_1STEP', approvers: { 1: ['sep1'] } } } };
   await run('4a. Đổi dept giữa chừng quy trình duyệt -> invalidate lịch sử APPROVED + reset currentStep=1 (trước vá: giữ nguyên bước 2)', async () => {
     const pr = basePr();
     recordActions.editPaymentRequest({ dept: DEPT_B }, KE_TOAN, pr, APP_DATA_PR_DEPT_B);
@@ -365,7 +383,9 @@ async function main() {
   });
   await run('7b. KHÔNG chặn nhầm: phòng ban ĐÃ cấu hình quy trình -> gửi được bình thường', async () => {
     const pr = draftPr();
-    const appDataOk = { ...APP_DATA, paymentDeptWorkflows: { [DEPT_A]: { workflowId: 'WF_1STEP', approvers: { 1: ['sep1'] } } } };
+    // Cùng lý do APP_DATA_PR_DEPT_B ở mục 4 — findMissingApproverStep() nay chặn username không có user
+    // thật trong appData.users, nên khai user 'sep1' ĐANG hoạt động để đúng ý định kịch bản.
+    const appDataOk = { ...APP_DATA, users: [...APP_DATA.users, { username: 'sep1', name: 'Sếp Phòng A', dept: DEPT_A, perms: {}, active: true }], paymentDeptWorkflows: { [DEPT_A]: { workflowId: 'WF_1STEP', approvers: { 1: ['sep1'] } } } };
     recordActions.submitPaymentRequest(USER_A, pr, appDataOk);
     assert.strictEqual(pr.status, 'PENDING');
     assert.strictEqual(pr.currentStep, 1);
