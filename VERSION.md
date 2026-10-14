@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**26.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.6 (2026-11): Kiểm tra chữ ký nhị phân (magic bytes) ngay lúc chọn file — thêm lớp client
+
+Theo yêu cầu người dùng (phát hiện từ câu hỏi "cái phần kiểm tra magic byte bạn chỉ kiểm tra phía
+server à?"): trước đây CHỈ server kiểm tra chữ ký nhị phân thật của file tải lên
+(`lib/fileSignature.js`, `routes/upload.js`) — 1 file đổi đuôi giả mạo (vd đổi tên file lạ thành
+`.xlsx`) vẫn phải tải HẾT LÊN SERVER mới biết sai, tốn thời gian/băng thông cho trường hợp rõ ràng sai
+ngay từ đầu.
+
+Thêm 1 lớp kiểm tra tương tự ở CLIENT (`public/js/core.js`): 1 delegation `'change'` DUY NHẤT ở
+`document` (capture phase) — tự áp dụng cho MỌI `<input type="file">` hiện có và render động sau này,
+KHÔNG cần sửa 40+ nơi gọi `uploadFileToServer()` rải khắp các module. Vừa chọn file sai nội dung so với
+đuôi đã khai (vd nội dung là văn bản thường nhưng đặt tên `.xlsx`, hoặc ảnh jpg đổi tên `.pdf`) → báo
+lỗi ngay (alert + xoá lựa chọn), KHÔNG gửi gì lên server. File đúng thì tự "phát lại" sự kiện để luồng
+xử lý thật (preview, upload...) chạy tiếp bình thường như chưa từng có lớp này.
+
+Mirror đúng `SIGNATURE_MAP` ở server (tự viết tay vì gói `file-type` server dùng là gói Node thuần,
+không chạy được trên trình duyệt) — lớp server GIỮ NGUYÊN, vẫn là lớp chặn thật sự cuối cùng (client
+luôn có thể bị qua mặt bằng cách sửa JS/tắt JS).
+
+Thuần client-side JS, không đổi schema/route/quyền — chỉ cần copy code + `pm2 restart`.
 
 ## v26.5 (2026-11): Thu gọn mặc định khối xem trước bảng giá ở modal Chi Tiết Đề Xuất Giá
 
