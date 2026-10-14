@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**26.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.2 (2026-11): Đổi các trường nhập tay sang select danh mục (Onboarding/Hồ Sơ Nhân Sự/Hợp Đồng Lao Động)
+
+Người dùng rà soát: "có các trường cho phép chọn select nhưng đang để nhập tay ở Onboarding/Hồ Sơ Nhân
+Sự/Quản Lý Hợp Đồng — mỗi lần tạo mới lại mất, bộ phận nhân sự không chọn được". Rà soát + đưa phương án
++ demo ảnh chụp thật trước khi triển khai (theo yêu cầu người dùng), sau khi xác nhận mới merge:
+
+1. **Sửa lỗi 400 khó hiểu**: "Nơi cấp CCCD/CMND" ở modal "➕ Tạo Hồ Sơ Mới" (Hồ Sơ Nhân Sự) là input gõ
+   tự do, nhưng server vẫn ép enum đúng danh mục `nationalIdIssuePlaces` (`applyProfileEdit()`) — HR gõ
+   sai/dư khoảng trắng là bị lỗi 400 không rõ nguyên nhân khi lưu. Đổi sang `<select>` cùng khuôn màn
+   Chi Tiết (vốn đã làm đúng từ trước, chỉ modal Tạo Mới bị bỏ sót).
+2. **Đồng bộ "Trình Độ" ở Onboarding** sang `<select>` nguồn danh mục Bằng Cấp (`educationDegrees`) —
+   Hồ Sơ Nhân Sự đã dùng danh mục này từ trước, Onboarding bị bỏ sót.
+3. **Thêm 4 danh mục mới** (`relationshipTypes`/`nationalities`/`contractAmendmentTypes`/
+   `contractTerminationReasons`), gom chung vào khối "Danh Mục Nhân Sự" (fuchsia) có sẵn ở Quản Lý Danh
+   Mục — không tạo khu vực riêng, theo đúng yêu cầu người dùng.
+4. **"Quan hệ"** (Người liên hệ khẩn cấp + Người phụ thuộc, 3 chỗ: modal Tạo Mới/Chi Tiết/dòng Người
+   Phụ Thuộc) và **"Quốc tịch"** (2 chỗ: Chi Tiết/Người Phụ Thuộc) ở Hồ Sơ Nhân Sự — đổi sang `<select>`.
+5. **"Loại thay đổi"** (Lịch Sử Thay Đổi/Phụ Lục, Hợp Đồng Lao Động) — đổi sang `<select>` nguồn
+   `contractAmendmentTypes`, vẫn giữ nhập tay tự do khi chọn "Khác" (không mất tính linh hoạt mô tả tự
+   do kèm cờ "là giá trị tiền" đã có từ trước).
+6. **"Lý do chấm dứt hợp đồng"** — THAY popup `prompt()` trình duyệt cũ (không gợi ý gì, gõ lại từ đầu
+   mỗi lần) bằng modal dùng chung `showConfirmModal()` + `<select>`, vẫn giữ nhập tay khi chọn "Khác".
+
+**Cố ý KHÔNG đổi** (đã xác nhận với người dùng, không phải bỏ sót): "Lý do nghỉ việc" (Offboarding) giữ
+nguyên kiểu gõ-tìm-chọn (`sdd*`, có gợi ý nhưng vẫn gõ tự do) — đúng tiêu chí "không phải tìm kiếm"
+người dùng loại trừ ngay từ đầu; "Tình trạng hôn nhân" đã là `<select>` sẵn nhưng 3 giá trị còn gõ cứng
+trong code (chưa đưa vào danh mục) — để lại cho đợt sau nếu cần; các ô địa chỉ/trường/chuyên ngành/ghi
+chú giữ nguyên input (đúng là tự do thật, không có danh sách cố định hợp lý).
 
 ## v26.1 (2026-11): "🔗" Copy Link theo TỪNG PHIÊN BẢN tài liệu + mẫu email "Cần phê duyệt" dùng chung
 

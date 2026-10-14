@@ -4619,6 +4619,32 @@ làm được nay bị chặn:
     hợp đồng CŨ NHẤT theo Ngày hiệu lực) và "Điều Chỉnh Thu Nhập Lần 1/2/3"
     (Ngày áp dụng + nội dung của tối đa 3 phụ lục CŨ NHẤT theo Ngày áp dụng,
     lấy từ hợp đồng ĐANG HIỆU LỰC).
+- **Đổi các trường nhập tay sang dropdown chọn danh mục (11/2026, theo yêu cầu
+  người dùng rà soát "trường có nút select nhưng đang để nhập tay")**:
+  - **"Nơi cấp CCCD/CMND" ở modal "➕ Tạo Hồ Sơ Mới"** — LỖI ĐÃ VÁ: trước đây
+    là ô gõ tay tự do dù server vẫn ép đúng danh mục Nơi Cấp CCCD/CMND, khiến
+    HR gõ sai/dư khoảng trắng là bị báo lỗi khi lưu mà không rõ nguyên nhân —
+    nay là dropdown chọn sẵn như màn Chi Tiết.
+  - **"Trình Độ" ở Onboarding** (khối Học Vấn) — nay dùng chung dropdown Danh
+    Mục Bằng Cấp với màn Hồ Sơ Nhân Sự (trước đây 2 nơi lệch nhau).
+  - **"Quan hệ"** (Người liên hệ khẩn cấp + Người phụ thuộc) và **"Quốc
+    tịch"** ở Hồ Sơ Nhân Sự — nay là dropdown chọn từ 2 danh mục mới **Danh
+    Mục Quan Hệ**/**Danh Mục Quốc Tịch**.
+  - **"Loại thay đổi"** (Lịch Sử Thay Đổi/Phụ Lục, Hợp Đồng Lao Động) — nay
+    dropdown chọn từ **Danh Mục Loại Thay Đổi Hợp Đồng**, chọn "Khác" vẫn gõ
+    tay tự do được như trước (không mất tính linh hoạt mô tả kèm cờ "là giá
+    trị tiền").
+  - **"Lý do chấm dứt hợp đồng"** — trước đây là 1 popup hỏi gõ tay của trình
+    duyệt (không gợi ý gì), nay là 1 hộp thoại có dropdown chọn từ **Danh Mục
+    Lý Do Chấm Dứt Hợp Đồng**, chọn "Khác" vẫn gõ tay được.
+  - Cả 4 danh mục mới (Quan Hệ/Quốc Tịch/Loại Thay Đổi Hợp Đồng/Lý Do Chấm
+    Dứt Hợp Đồng) đều nằm chung trong đúng khối "Danh Mục Nhân Sự" (Hệ Thống
+    → Quản Trị → 🗂️ Quản Lý Danh Mục) cùng các danh mục nhân sự có sẵn
+    (Chức Danh/Cấp Bậc/Bằng Cấp/Nơi Cấp CCCD...), không phải đi tìm ở chỗ
+    khác. Admin tự thêm/sửa/xoá giá trị tại đây.
+  - **Cố ý KHÔNG đổi**: "Lý do nghỉ việc" (Offboarding) vẫn giữ kiểu gõ-tìm-
+    chọn (có gợi ý nhưng vẫn gõ tự do được) — khác hẳn các ô trên vì lý do
+    nghỉ việc thực tế đa dạng, không phù hợp ép chọn cố định.
 
 **Hợp Đồng Lao Động**
 - Chỉ thêm được **Phụ lục** cho hợp đồng **đang hiệu lực**. Hợp đồng còn Nháp
