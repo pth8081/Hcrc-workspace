@@ -1,9 +1,20 @@
 # Phiên bản hiện tại
 
-**26.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.5 (2026-11): Thu gọn mặc định khối xem trước bảng giá ở modal Chi Tiết Đề Xuất Giá
+
+Theo yêu cầu người dùng xem demo ảnh trước: khối "Tệp Bảng Giá Đã Tải Lên" (modal Chi Tiết đề xuất giá,
+dùng chung cho cả Phê Duyệt Giá Bán Buôn lẫn Bán Lẻ) trước đây tự mở rộng bảng xem trước cho file mới
+nhất — nay mặc định THU GỌN, chỉ hiện dòng tóm tắt (tên file, nhãn Mới nhất/Bản gốc/File Đã Được Phê
+Duyệt, nút "👁️ Xem"/"⬇️ Tải file gốc"). Bấm vào dòng tên file để mở rộng xem bảng chi tiết, bấm lần nữa
+để đóng lại. Nút Xem/Tải nằm ngay trên dòng tóm tắt nên vẫn bấm được bình thường mà không cần mở rộng.
+
+Thuần CSS/HTML (bỏ thuộc tính `open` mặc định của `<details>`), không đổi logic/quyền truy cập file —
+chỉ cần copy code + `pm2 restart`.
 
 ## v26.4 (2026-11): Đưa "Tình trạng hôn nhân" vào Danh Mục Nhân Sự + vá lỗi 4 danh mục trước đó không hiện danh sách
 
