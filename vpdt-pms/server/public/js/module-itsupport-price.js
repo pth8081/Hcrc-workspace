@@ -1532,7 +1532,7 @@ function renderItPriceModal() {
           </div>
         </div>` : '';
     return `
-      <details class="border rounded bg-white" ${isLatest ? 'open' : ''}>
+      <details class="border rounded bg-white">
         <summary class="p-2 cursor-pointer font-semibold">📎 ${escapeHtml(f.fileName)}${tagLatest}${tagOriginal}${tagApproved}
           <span class="block text-xs font-normal text-gray-500 mt-0.5">Tải lên bởi ${escapeHtml(f.uploadedByName)} · ${escapeHtml(f.uploadedAt)} · ${(f.items || []).length} dòng${viewLinkHTML}${downloadLinkHTML}
           </span>
