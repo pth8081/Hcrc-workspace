@@ -1,8 +1,27 @@
 # Phiên bản hiện tại
 
-**25.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**25.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`.
+
+## v25.99 (2026-11): Thu gọn mặc định 15 khối "🔍 Tìm Kiếm & Lọc" còn sót lại
+
+Người dùng rà soát lại yêu cầu cũ ("thu gọn khối tìm kiếm, cần mới bấm ra") — phát hiện nhiều module vẫn
+còn khối "🔍 Tìm Kiếm & Lọc" LUÔN MỞ mặc định (khác chuẩn `<details class="filter-box-details">` đã áp
+dụng cho Tài Liệu/Giấy Phép/Hợp Đồng/Mua Hàng...). Rà soát toàn hệ thống, thu gọn nốt 15 khối còn lại
+(đổi `<div><h4>...</h4>` → `<details><summary>...</summary>`, không đổi field/id/logic nào bên trong):
+
+- Truyền Thông: Nhịp Sống HCRC + Góc Chia Sẻ (dùng chung 1 khối lọc), Tuyển Dụng → Tin Tuyển Dụng (trước
+  đây còn chưa có cả tiêu đề thu gọn).
+- Văn Bản Trình; Hỗ Trợ IT (Đề Xuất Duyệt Giá + Yêu Cầu Hỗ Trợ); Phòng Họp; Đăng Ký Xe; Văn Phòng; Biên
+  Bản Họp.
+- Vận Hành (6 khối): Đơn Hàng, Lọc Báo Cáo (Đơn Hàng), Lọc Theo Vị Trí (Duyệt Nhập/Hủy), Đề Xuất Mở Mới,
+  Đề Xuất Sửa Chữa, Lọc Báo Cáo (Mở mới/Sửa chữa Siêu Thị).
+
+Cơ chế dùng thẻ HTML gốc `<details>`/`<summary>` (không cần JS toggle riêng, mặc định LUÔN thu gọn) — đã
+chạy regression 82 file test liên quan tới 8 module trên, 78 pass, 4 lỗi còn lại xác nhận PRE-EXISTING
+qua git-stash baseline (không liên quan thay đổi này): 2 lỗi môi trường (SQL Server/file fixture không có
+trong sandbox), 2 lỗi flaky đã lặp lại y hệt ở bản gốc trước khi sửa.
 
 ## v25.98 (2026-11): Thêm nút "🔗 Copy Link" ở Chi Tiết Tài Liệu
 

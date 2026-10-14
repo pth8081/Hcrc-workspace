@@ -769,7 +769,9 @@
         <p id="recruitmentJobNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng tin tuyển dụng — mọi người đều xem được tin và giới thiệu ứng viên bên dưới.</p>
         <div class="space-y-3">
           <h3 class="font-bold text-gray-800">📋 Danh Sách Tin Tuyển Dụng</h3>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-gray-50 p-3 rounded border">
+          <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+            <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc</span></summary>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3">
             <!-- Vị trí đang tuyển (9/2026) — các giá trị title KHÁC NHAU đã có trong DB.recruitmentJobs, cùng khuôn
                  rjFilterMonth (populateRecruitmentJobsTitleFilter()). -->
             <div>
@@ -805,6 +807,7 @@
               </select>
             </div>
           </div>
+          </details>
           <div id="recruitmentJobsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
           <div id="paginationContainer_recruitmentJobs"></div>
         </div>
@@ -1366,9 +1369,9 @@
     </form>
     <p id="internalNoPermNote" class="hidden text-xs text-gray-500 italic bg-gray-50 border rounded p-3">⛔ Bạn không có quyền đăng bài ở phân hệ này — chỉ có thể xem và tương tác (bình luận, thả tim).</p>
 
-    <div id="internalFilterBlock" class="bg-gray-50 p-4 rounded-lg border space-y-3">
-      <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm & Lọc</h4>
-      <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3">
+    <details id="internalFilterBlock" class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+      <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm & Lọc</span></summary>
+      <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-3">
         <!-- Lọc theo Chuyên đề (9/2026) — chỉ Nhịp Sống HCRC/Góc Chia Sẻ, lọc CLIENT-SIDE trên DB.internalPosts
              đã tải (cùng khuôn lọc tháng/phòng ban ở Tuyển Dụng), danh sách lựa chọn đổi theo tab
              (DB.internalNewsCategories/internalShareCategories — populateInternalCategoryFilter()). -->
@@ -1401,7 +1404,7 @@
         </div>
         <div class="flex items-end"><button data-op="resetInternalFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
       </div>
-    </div>
+    </details>
 
     <div id="internalDashboardCards"></div>
 

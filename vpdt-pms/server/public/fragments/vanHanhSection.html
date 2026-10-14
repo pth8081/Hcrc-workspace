@@ -118,9 +118,9 @@
         </form>
       </div>
 
-      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm &amp; Lọc Đơn Hàng</h4>
-        <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm &amp; Lọc Đơn Hàng</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
             <select id="filterStatusOperationOrder" data-op-change="onOperationOrderFilterChange" class="w-full border p-2 rounded text-sm bg-white">
@@ -144,7 +144,7 @@
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationOrder" data-multi-paste-search data-op-input="onOperationOrderFilterChange" placeholder="Mã, tiêu đề, người tạo, nơi nhận..." class="w-full border p-2 rounded text-sm"></div>
           <div class="flex items-end"><button data-op="resetOperationOrderFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
         </div>
-      </div>
+      </details>
 
       <div class="space-y-3">
         <h3 class="font-bold text-gray-800">📋 Danh Sách Đơn Hàng</h3>
@@ -171,14 +171,14 @@
     <!-- ===== SUB-TAB "📊 Báo Cáo" của Đơn Hàng (đợt "Báo Cáo + Nhập Hàng") — xem
          renderOperationOrderReport() ở module-vanhanh.js. ===== -->
     <div id="opOrderReportPanel" class="hidden space-y-4">
-      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-        <h4 class="font-bold text-gray-700 text-sm">🔍 Lọc Báo Cáo</h4>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Lọc Báo Cáo</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Ngày (theo ngày tạo đơn)</label><input id="opReportFromDateOperationOrder" type="date" data-op-change="onOperationOrderReportFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Đến Ngày (theo ngày tạo đơn)</label><input id="opReportToDateOperationOrder" type="date" data-op-change="onOperationOrderReportFilterChange" class="w-full border p-2 rounded text-sm bg-white"></div>
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Siêu Thị (Nơi Nhận)</label><select id="opReportFilterLocation" data-op-change="onOperationOrderReportFilterChange" class="w-full border p-2 rounded text-sm bg-white"><option value="">-- Tất cả nơi nhận --</option></select></div>
         </div>
-      </div>
+      </details>
 
       <!-- "Tổng Chuỗi" (đợt "Tách Đơn Hàng Siêu Thị/HO") — TOÀN BỘ đơn hàng bất kể orderLocationType,
            khớp đúng số liệu màn hình cũ trước đợt tách (KHÔNG đổi ý nghĩa các thẻ này). 2 khối MỚI ngay
@@ -235,15 +235,15 @@
          (operationOrderReceiptManage, scope HO/Siêu Thị), KHÔNG dùng chung quyền duyệt/từ chối đơn hàng
          ở tab Siêu Thị/HO. Xem renderOperationOrderReceiptApprovalTab() ở module-vanhanh.js. ===== -->
     <div id="opOrderReceiptPanel" class="hidden space-y-4">
-      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-        <h4 class="font-bold text-gray-700 text-sm">🔍 Lọc Theo Vị Trí</h4>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Lọc Theo Vị Trí</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">HO / Siêu Thị</label>
             <select id="filterLocationOperationOrderReceipt" data-op-change="onOperationOrderReceiptFilterChange" class="w-full border p-2 rounded text-sm bg-white"><option value="">— Tất cả —</option></select>
           </div>
         </div>
-      </div>
+      </details>
       <div class="overflow-x-auto">
         <table class="w-full border-collapse border text-xs bg-white">
           <thead>
@@ -306,9 +306,9 @@
         </form>
       </div>
 
-      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm &amp; Lọc Đề Xuất Mở Mới</h4>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm &amp; Lọc Đề Xuất Mở Mới</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
             <select id="filterStatusOperationStoreOpen" data-op-change="onOperationStoreOpenFilterChange" class="w-full border p-2 rounded text-sm bg-white">
@@ -325,7 +325,7 @@
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationStoreOpen" data-multi-paste-search data-op-input="onOperationStoreOpenFilterChange" placeholder="Mã, tên siêu thị, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm"></div>
           <div class="flex items-end"><button data-op="resetOperationStoreOpenFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
         </div>
-      </div>
+      </details>
 
       <div class="space-y-3">
         <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Mở Mới Siêu Thị</h3>
@@ -380,9 +380,9 @@
         </form>
       </div>
 
-      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-        <h4 class="font-bold text-gray-700 text-sm">🔍 Tìm Kiếm &amp; Lọc Đề Xuất Sửa Chữa</h4>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Tìm Kiếm &amp; Lọc Đề Xuất Sửa Chữa</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Trạng Thái</label>
             <select id="filterStatusOperationRepair" data-op-change="onOperationRepairFilterChange" class="w-full border p-2 rounded text-sm bg-white">
@@ -399,7 +399,7 @@
           <div><label class="block text-xs font-semibold text-gray-600 mb-1">Từ Khóa</label><input id="filterKeywordOperationRepair" data-multi-paste-search data-op-input="onOperationRepairFilterChange" placeholder="Mã, siêu thị, người tạo, phòng ban..." class="w-full border p-2 rounded text-sm"></div>
           <div class="flex items-end"><button data-op="resetOperationRepairFilters" class="w-full bg-gray-200 text-gray-700 p-2 rounded text-sm font-bold hover:bg-gray-300">Xóa Tìm Kiếm</button></div>
         </div>
-      </div>
+      </details>
 
       <div class="space-y-3">
         <h3 class="font-bold text-gray-800">📋 Danh Sách Đề Xuất Sửa Chữa Siêu Thị</h3>
@@ -494,9 +494,9 @@
 
     <!-- ===== TAB 7: BÁO CÁO — tổng hợp tiến độ nhanh/chậm theo từng hồ sơ Mở mới/Sửa chữa. ===== -->
     <div id="opStoreReportPanel" class="hidden space-y-3">
-      <div class="bg-gray-50 p-4 rounded-lg border space-y-3">
-        <h4 class="font-bold text-gray-700 text-sm">🔍 Lọc Báo Cáo</h4>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <details class="filter-box-details bg-gray-50 p-4 rounded-lg border">
+        <summary class="font-bold text-gray-700 text-sm flex items-center gap-1.5"><span class="filter-box-chevron text-gray-400">▸</span><span>🔍 Lọc Báo Cáo</span></summary>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mt-3">
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Loại Hồ Sơ</label>
             <select id="opReportFilterKind" data-op-change="renderOperationStoreReport" class="w-full border p-2 rounded text-sm bg-white">
@@ -552,7 +552,7 @@
             </select>
           </div>
         </div>
-      </div>
+      </details>
 
       <!-- VHST-6: thống kê + cảnh báo CẤP CÔNG VIỆC (tách riêng "quá hạn chưa bắt đầu" khỏi "quá hạn chưa
            hoàn thành") — dựng bởi renderOperationStoreReportItemStats(), module-vanhanh.js. -->
