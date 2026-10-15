@@ -2007,6 +2007,15 @@ function renderInternalNewsCard(p) {
   // khung, không méo). Áp dụng ĐỒNG NHẤT cả 2 nền tảng (không tách riêng máy tính/điện thoại) — điện
   // thoại vốn đã gần vuông sẵn (cột hẹp + max-h-80 cũ) nên không lệch gì so với trước, máy tính thì nay
   // mới thực sự vuông.
+  //
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "ảnh bị to quá, không vừa màn hình"): #internalPostsContainer
+  // không có max-width riêng -> trên màn hình rộng (laptop/màn ngoài lớn), "w-full" kéo cột rộng cả
+  // nghìn px, "aspect-square" theo đó ép chiều cao ảnh CŨNG cao cả nghìn px (vuông đúng theo chiều rộng
+  // cột) -> ảnh chiếm gần hết màn hình, phải cuộn rất nhiều mới thấy hết 1 bài. Thêm "max-h-[60vh]" (cùng
+  // quy ước max-h-[Nvh] đã dùng ở module-tailieu.js/module-internalcomms-daotao-viewer.js trong hệ
+  // thống) — ảnh vẫn giữ object-cover (không méo), chỉ không còn cao hơn 60% chiều cao màn hình đang
+  // xem, luôn thấy được tiêu đề/nút thao tác ngay bên dưới mà không cần cuộn quá xa. Trên điện thoại/màn
+  // hẹp (cột hẹp hơn nhiều so với 60% chiều cao màn hình) không bị ảnh hưởng gì — vẫn vuông y hệt trước.
   // Carousel tự động (11/2026, "bài có nhiều ảnh tự động next tới hết rồi quay lại ảnh thumbnail") — CHỈ
   // chạy ở máy tính (startInternalFeedCarousels() tự kiểm md breakpoint, xem hàm đó) — gắn id ổn định +
   // data-images (đúng thứ tự getInternalGalleryImages(): ảnh đại diện trước, còn lại theo thứ tự đăng)
@@ -2016,7 +2025,7 @@ function renderInternalNewsCard(p) {
     ? ` data-internal-carousel-post="${p.id}" data-images="${escapeHtml(JSON.stringify(galleryImgs.map(x => x.fileUrl)))}"`
     : '';
   const coverHTML = cover
-    ? `<div class="relative"><img id="internalFeedCoverImg_${p.id}" src="${escapeHtml(cover.fileUrl)}" alt="" class="w-full aspect-square object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}"${carouselDataAttr}>${mediaCountHTML}</div>`
+    ? `<div class="relative"><img id="internalFeedCoverImg_${p.id}" src="${escapeHtml(cover.fileUrl)}" alt="" class="w-full aspect-square max-h-[60vh] object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}"${carouselDataAttr}>${mediaCountHTML}</div>`
     : (videoCount ? `<div class="relative bg-gray-900 text-white text-sm text-center py-6 cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">🎬 Bài viết có ${videoCount} video — bấm để xem</div>` : '');
   const plain = internalPostPlainText(p);
   const snippet = plain.slice(0, 300);

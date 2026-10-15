@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**26.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.10 (2026-11): Nhịp Sống HCRC — sửa ảnh bìa thẻ feed bị quá cao trên màn hình rộng
+
+Người dùng báo ảnh bìa thẻ "Nhịp Sống HCRC" bị hiển thị quá to, không vừa màn hình (kèm ảnh chụp thật).
+Gốc rễ: `#internalPostsContainer` không có max-width riêng — trên màn hình rộng (desktop/laptop lớn),
+`w-full` kéo cột rộng tới cả nghìn px, lớp `aspect-square` (thêm ở v26.7, theo đúng yêu cầu "ảnh mặc
+định tỉ lệ vuông") theo đó ép chiều CAO ảnh cũng lớn tương ứng — ảnh chiếm gần hết màn hình, phải cuộn
+rất nhiều mới thấy hết 1 bài.
+
+Thêm `max-h-[60vh]` vào ảnh bìa thẻ feed (`module-internalcomms-nhipsong.js`, hàm `renderInternalFeedStyle`)
+— ảnh không còn cao hơn 60% chiều cao màn hình đang xem, vẫn giữ `object-cover` (không méo). Đã đo thật
+qua Playwright trên 8 kích thước màn hình theo yêu cầu người dùng (desktop 1440x900/1920x1080, tablet
+dọc/ngang 768x1024, mobile 6.8"/6.7"/6.2"/4.5") — xác nhận: desktop bị bóp đúng về trần 60vh (trước đây
+sẽ cao cả nghìn px), còn điện thoại/tablet (cột vốn hẹp, chưa từng chạm trần 60vh) vẫn giữ nguyên tỉ lệ
+vuông hoàn toàn như trước, không ảnh hưởng gì.
+
+Đã test: full bộ test liên quan (`test-internal-news`, `test-internal-media-client`,
+`test-dashboard-news-thumbnail`, `test-collapse-internalcomms-training-forms`,
+`test-form-reset-file-remove`, `test-formsplit-internalpost-office`, `test-internal-recruitment-share`,
+`test-internal-share-feed-style`) — 2 bộ có vài kịch bản fail (`test-internal-media-client`,
+`test-form-reset-file-remove`) nhưng xác nhận qua `git stash` là lỗi CÓ SẴN TỪ TRƯỚC, không liên quan
+tới thay đổi này (giống hệt kết quả trước/sau thay đổi).
+
+Thuần CSS/client-side, không đổi schema/route/biến môi trường — chỉ cần copy code (kể cả `public/tailwind.css`
+nếu build lại, dù lần này không cần vì chỉ thêm 1 class Tailwind có sẵn trong bản build hiện tại) + `pm2 restart`.
 
 ## v26.9 (2026-11): Cảnh báo hết hạn Hợp Đồng Lao Động — chỉ còn gửi cho Nhân Sự, bỏ quản lý trực tiếp
 
