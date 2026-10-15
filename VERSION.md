@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**26.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.7 (2026-11): Trang chủ + Nhịp Sống HCRC — thumbnail 6x, ảnh vuông, carousel tự động, cuộn về đúng vị trí bài
+
+Theo yêu cầu người dùng (xem demo ảnh trước khi xác nhận):
+
+- **Vá lỗi "cache hiển thị lẫn"** (`renderInternalFeedStyle()`) — trước đây 1 bài đăng có dữ liệu lỗi
+  (thiếu/sai field) làm HỎNG cả lượt gán lại danh sách, để sót nguyên danh sách CŨ hiển thị lẫn với
+  khung lọc/danh sách mới — F5/đóng mở lại app không tự sửa được vì dữ liệu lỗi nằm ở server. Nay bọc
+  try/catch riêng từng bài: 1 bài lỗi chỉ mất đúng bài đó (hiện cảnh báo nhỏ), không ảnh hưởng các bài
+  còn lại.
+- **Trang chủ** — thumbnail "Tin Tức Nổi Bật" phóng to đúng 6 lần (56px → 336px), tỷ lệ vuông, áp dụng
+  cả web lẫn điện thoại.
+- **Nhịp Sống HCRC** (máy tính):
+  - Bắt buộc có ít nhất 1 ảnh đính kèm lúc đăng/gửi duyệt thật (không chặn Lưu Nháp).
+  - Ảnh bìa mặc định tỷ lệ vuông (khớp cách hiển thị trên điện thoại).
+  - Bài có nhiều ảnh tự động chuyển cảnh mỗi 2.5 giây, quay vòng về ảnh đại diện sau khi hết — chỉ chạy
+    ở máy tính, tự dừng khi rời khỏi tab/màn hình.
+- **Nhịp Sống HCRC** (điện thoại) — mở "Xem thêm" từ Trang chủ xem Chi tiết bài rồi thoát ra: tự cuộn
+  về đúng vị trí bài vừa xem trong danh sách, thay vì nhảy về đầu trang.
+
+Có 1 đánh đổi đã trao đổi trước với người dùng và được chấp nhận: thumbnail 6x trên điện thoại (màn
+hình hẹp) khiến chữ tiêu đề/tên người đăng bị bóp hẹp hơn trước — người dùng xác nhận bỏ qua, không
+cần chỉnh thêm bố cục riêng cho điện thoại ở đợt này.
+
+Đã test: CSP full audit + CSP deep interaction + toàn bộ bộ test Nhịp Sống/Dashboard liên quan đều
+pass. Thuần client-side + rebuild `tailwind.css`, không đổi schema/route — chỉ cần copy code (kể cả
+`public/tailwind.css` đã build lại) + `pm2 restart`.
 
 ## v26.6 (2026-11): Kiểm tra chữ ký nhị phân (magic bytes) ngay lúc chọn file — thêm lớp client
 
