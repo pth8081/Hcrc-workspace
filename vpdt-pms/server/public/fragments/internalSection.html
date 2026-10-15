@@ -1408,7 +1408,15 @@
 
     <div id="internalDashboardCards"></div>
 
-    <div id="internalListBlock" class="space-y-3">
+    <!-- Bố cục "gọn giống Facebook" (11/2026, theo yêu cầu người dùng) — CHỈ áp dụng ở ĐÚNG khối danh
+         sách bài (feed thật, dùng chung bởi cả Nhịp Sống HCRC lẫn Góc Chia Sẻ qua #internalPostsContainer),
+         KHÔNG áp dụng ở Trang chủ ("Tin Tức Nổi Bật" vẫn giữ lưới 2 cột, xem core-dashboard.js) — Trang
+         chủ chỉ là khung xem nhanh/widget, còn đây mới là feed thật nên hẹp lại + căn giữa (max-w-2xl
+         mx-auto) đúng tỉ lệ cột giữa Facebook thật, khớp luôn với giới hạn max-h-[60vh] đã thêm cho ảnh
+         bìa thẻ feed (renderInternalFeedStyle(), module-internalcomms-nhipsong.js) — cột hẹp lại khiến
+         ảnh vuông theo w-full cũng tự nhỏ theo, giới hạn 60vh giờ chỉ còn là lưới an toàn cho màn rất
+         rộng, không còn là chốt chặn DUY NHẤT như trước. -->
+    <div id="internalListBlock" class="space-y-3 max-w-2xl mx-auto w-full">
       <h3 id="internalListTitle" class="font-bold text-gray-800">📰 Danh Sách Nhịp Sống HCRC</h3>
       <div id="internalPostsContainer" class="space-y-3"></div>
       <div id="paginationContainer_internal"></div>

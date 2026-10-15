@@ -245,17 +245,35 @@ function renderDashboardNews() {
   // BÊN TRONG cùng khối data-op-seq (click box hay click nút đều nổi bọt tới cùng 1 closest('[data-op-seq]')
   // -> cùng hành vi mở chi tiết, không cần handler riêng), hover đổi nền/viền theo tông fuchsia của
   // Truyền Thông Nội Bộ (cùng màu nhãn loại tin + nút tab con đang chọn ở module này).
-  // Kích thước thumbnail (11/2026, theo yêu cầu người dùng "tăng gấp 6 cả web lẫn điện thoại"): 56px
-  // (w-14/h-14) -> 336px (w-[336px]/h-[336px], đúng 6 lần, KHÔNG phân biệt breakpoint — áp dụng như nhau
-  // trên mọi kích thước màn hình). Tỷ lệ vuông giữ nguyên (w=h) + object-cover như cũ, chỉ phóng to kích
-  // thước thật. Emoji placeholder phóng to tương ứng (text-xl -> text-6xl) để không bị "lọt thỏm" trong
-  // ô vuông lớn hơn nhiều. Class mới (w-[336px]/h-[336px]/text-6xl) cần `npm run build:css` lại —
-  // xem tailwind.config.js (đã quét public/js/**/*.js).
+  //
+  // LỊCH SỬ: đợt 11/2026 trước đó từng tăng thumbnail "gấp 6" lên 1 cỡ CỐ ĐỊNH 336px
+  // (w-[336px]/h-[336px]), KHÔNG phân biệt breakpoint — gây 2 lỗi người dùng báo lại ngay sau đó: (1)
+  // ảnh quá to trên desktop (cả khung tin chiếm gần hết màn hình), (2) NGHIÊM TRỌNG hơn trên điện thoại
+  // hẹp: thumbnail 336px với flex-shrink-0 chiếm gần hết chiều ngang card, đẩy cột chữ bên cạnh (dù đã
+  // có min-w-0 flex-1) co lại gần như BẰNG 0 hoặc ÂM -> chữ bị bẻ dọc từng ký tự 1 dòng (ảnh chụp thật
+  // người dùng gửi xác nhận lỗi này). VÁ LẠI: thumbnail co giãn thật theo breakpoint (w-16/h-16 = 64px
+  // điện thoại nhỏ -> sm:w-20/h-20 = 80px -> md:w-24/h-24 = 96px desktop) — luôn đủ nhỏ để cột chữ có
+  // chỗ, luôn đủ lớn để dễ nhận diện ảnh. Emoji placeholder đổi theo (text-6xl -> text-2xl/text-3xl) cho
+  // khớp cỡ ô mới, không còn "lọt thỏm" lẫn không còn tràn ra ngoài ô nhỏ hơn.
+  //
+  // Khung tin (11/2026, "gọn giống Facebook") — #dashboardNewsSection đổi từ lưới 2 cột
+  // (md:grid-cols-2) sang 1 cột DUY NHẤT, bọc max-w-2xl mx-auto (index.html) — khớp bố cục feed Facebook
+  // thật (1 bài/dòng, cột giữa hẹp lại thay vì chiếm hết chiều ngang màn hình desktop).
+  //
+  // "Sapo" (11/2026, theo yêu cầu người dùng "mỗi trang tin hiện vài dòng sapo") — thêm đoạn trích ngắn
+  // nội dung bài (internalPostPlainText(), module-internalcomms-nhipsong.js — cùng hàm đã dùng làm
+  // snippet feed Nhịp Sống HCRC), cắt bớt + line-clamp-2 (giới hạn tối đa 2 dòng hiển thị, phần dư tự ẩn
+  // kèm "…" CSS, không cần tự cắt chữ cho khớp 100% — tránh lệch dòng nếu font-size người dùng tuỳ chỉnh
+  // khác máy test). Không hiện gì nếu bài không có nội dung (ảnh/video thuần).
+  // Các class mới (sm:w-20/sm:h-20/md:w-24/md:h-24) cần `npm run build:css` lại — xem tailwind.config.js.
   container.innerHTML = posts.map(p => {
     const cover = getInternalPostCoverImage(p);
+    const thumbSizeClasses = 'w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24';
     const thumbHTML = cover
-      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || p.title || '')}" loading="lazy" class="dash-news-thumb w-[336px] h-[336px] rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
-      : `<div class="dash-news-thumb dash-news-thumb-placeholder w-[336px] h-[336px] rounded border border-gray-200 bg-gray-100 text-gray-400 text-6xl flex items-center justify-center flex-shrink-0" aria-hidden="true">🖼️</div>`;
+      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || p.title || '')}" loading="lazy" class="dash-news-thumb ${thumbSizeClasses} rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
+      : `<div class="dash-news-thumb dash-news-thumb-placeholder ${thumbSizeClasses} rounded border border-gray-200 bg-gray-100 text-gray-400 text-2xl sm:text-3xl flex items-center justify-center flex-shrink-0" aria-hidden="true">🖼️</div>`;
+    const snippet = internalPostPlainText(p).slice(0, 220);
+    const snippetHTML = snippet ? `<p class="text-xs text-gray-600 mt-1 line-clamp-2">${escapeHtml(snippet)}</p>` : '';
     return `
     <div data-op-seq="switchTab('internal')|setInternalSubTab('${escapeHtml(p.type)}')|viewInternalPostDetail(${Number(p.id)})" class="dash-news-card group relative flex gap-3 bg-white rounded border border-gray-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-fuchsia-50 hover:border-fuchsia-300">
       ${thumbHTML}
@@ -263,6 +281,7 @@ function renderDashboardNews() {
         <div class="text-[10px] font-bold text-fuchsia-700">${escapeHtml(typeLabel[p.type] || p.type)}${isActivePinned(p) ? ' <span class="text-amber-600">📌 Đã ghim</span>' : ''}</div>
         <div class="font-bold text-gray-800 text-sm break-words">${escapeHtml(p.title)}</div>
         <div class="text-xs text-gray-500 mt-0.5">${escapeHtml(p.authorName)} — ${escapeHtml(p.createdAt)}</div>
+        ${snippetHTML}
       </div>
       <span class="dash-news-more absolute bottom-1.5 right-3 text-xs font-semibold text-fuchsia-700 group-hover:underline">Xem thêm →</span>
     </div>`;

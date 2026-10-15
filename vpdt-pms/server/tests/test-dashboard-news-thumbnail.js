@@ -21,10 +21,13 @@ async function main() {
 
     await page.evaluate(() => {
       DB.internalPosts = [
-        // Bài MỚI có coverImage riêng (khác images[0]) -> thumbnail phải là coverImage
+        // Bài MỚI có coverImage riêng (khác images[0]) -> thumbnail phải là coverImage. Có content ->
+        // dùng để kiểm tra đoạn "sapo" trích ngắn (11/2026).
         { id: 5005, type: 'NEWS', status: 'APPROVED', title: 'Tin có ảnh đại diện', authorName: 'A', createdAt: '1/9/2026',
           images: [{ fileUrl: '/uploads/img-first.png', fileName: 'first.png' }, { fileUrl: '/uploads/img-cover.png', fileName: 'cover.png' }],
-          coverImage: { fileUrl: '/uploads/img-cover.png', fileName: 'cover.png' }, likes: [], comments: [], readBy: [] },
+          coverImage: { fileUrl: '/uploads/img-cover.png', fileName: 'cover.png' },
+          content: 'Đây là nội dung đầy đủ của bài đăng dùng để kiểm tra đoạn trích sapo hiển thị trên thẻ Trang chủ.',
+          likes: [], comments: [], readBy: [] },
         // Bài MỚI chỉ có images[] -> images[0]
         { id: 5004, type: 'NEWS', status: 'APPROVED', title: 'Tin chỉ có images', authorName: 'A', createdAt: '1/9/2026',
           images: [{ fileUrl: '/uploads/img-only.png', fileName: 'only.png' }], likes: [], comments: [], readBy: [] },
@@ -76,9 +79,10 @@ async function main() {
     await run('class hover mới (nền/viền fuchsia) có rule thật trong tailwind.css đã build', async () => {
       const css = fs.readFileSync(path.join(PUBLIC_DIR, 'tailwind.css'), 'utf8');
       ['.hover\\:bg-fuchsia-50:hover', '.hover\\:border-fuchsia-300:hover', '.group:hover .group-hover\\:underline', '.object-cover',
-        // Kích thước thumbnail 6x (11/2026) — w-[336px]/h-[336px]/text-6xl, Tailwind escape dấu ngoặc vuông
-        // thành "\[...\]" trong CSS đã build.
-        '.w-\\[336px\\]', '.h-\\[336px\\]', '.text-6xl']
+        // Kích thước thumbnail responsive (11/2026, vá lỗi "chữ bị vỡ dòng trên mobile" do cỡ cố định
+        // 336px trước đó — xem chú thích tại renderDashboardNews()/core-dashboard.js): w-16/h-16 (mobile)
+        // -> sm:w-20/sm:h-20 -> md:w-24/md:h-24 (desktop), cùng line-clamp-2 cho đoạn sapo mới.
+        '.w-16', '.h-16', '.sm\\:w-20', '.sm\\:h-20', '.md\\:w-24', '.md\\:h-24', '.line-clamp-2']
         .forEach(sel => assert(css.includes(sel), `tailwind.css thiếu rule ${sel}`));
       const cls = await page.evaluate(() => document.querySelector('#dashboardNewsContainer .dash-news-card').className);
       assert(cls.includes('hover:bg-fuchsia-50') && cls.includes('hover:border-fuchsia-300'), 'box phải có class hover mới');
@@ -88,6 +92,43 @@ async function main() {
       const html = await page.evaluate(() => document.getElementById('dashboardNewsContainer').innerHTML);
       assert(!/\son[a-z]+="/i.test(html), 'không được có on*= nội tuyến');
       assert(!/\sstyle="/i.test(html), 'không được có style= nội tuyến');
+    });
+
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo ảnh chụp thật "chữ bị bẻ dọc từng ký tự" trên điện thoại hẹp):
+    // thumbnail cỡ cố định 336px (w-[336px]/h-[336px], flex-shrink-0) chiếm gần hết chiều ngang card trên
+    // màn hình nhỏ, đẩy cột chữ bên cạnh (dù có min-w-0 flex-1) co về gần 0 -> chữ tràn dòng ký tự. Vá:
+    // thumbnail co giãn thật theo breakpoint (w-16 mobile -> sm:w-20 -> md:w-24 desktop), KHÔNG còn 1 cỡ
+    // cố định duy nhất cho mọi màn hình.
+    await run('thumbnail dùng cỡ co giãn theo breakpoint (w-16/sm:w-20/md:w-24), KHÔNG còn cỡ cố định 336px gây vỡ chữ trên mobile', async () => {
+      const cls = await page.evaluate(() => document.querySelector('#dashboardNewsContainer .dash-news-thumb').className);
+      assert(cls.includes('w-16') && cls.includes('h-16'), 'thumbnail phải có cỡ cơ bản w-16/h-16 (mobile)');
+      assert(cls.includes('sm:w-20') && cls.includes('md:w-24'), 'thumbnail phải co giãn lớn dần theo breakpoint sm/md');
+      assert(!cls.includes('w-[336px]') && !cls.includes('h-[336px]'), 'KHÔNG được còn cỡ cố định 336px cũ (gây vỡ chữ trên mobile hẹp)');
+    });
+
+    // "Sapo" (11/2026, theo yêu cầu người dùng "mỗi trang tin hiện vài dòng sapo") — đoạn trích ngắn nội
+    // dung bài, giới hạn hiển thị bằng line-clamp-2 (CSS, không tự cắt số ký tự cho khớp 100% số dòng).
+    await run('bài có content hiện đoạn sapo trích ngắn (line-clamp-2); bài không có content thì không hiện gì', async () => {
+      const info = await page.evaluate(() => [...document.querySelectorAll('#dashboardNewsContainer .dash-news-card')].map(card => {
+        const p = card.querySelector('p.line-clamp-2');
+        return p ? p.textContent : null;
+      }));
+      assert(info[0] && info[0].includes('kiểm tra đoạn trích sapo'), 'bài có content phải hiện đoạn sapo đúng nội dung');
+      assert(info[4] === null, 'bài không có content (Tin không ảnh) không được hiện đoạn <p> sapo nào');
+    });
+
+    // Bố cục khung Tin Tức Nổi Bật ở Trang chủ (11/2026) — GIỮ NGUYÊN lưới 2 cột (md:grid-cols-2), KHÔNG
+    // bọc max-width hẹp kiểu Facebook ở đây (người dùng xác nhận lại sau khi xem demo: bố cục 1 cột hẹp
+    // kiểu Facebook chỉ áp dụng ở tab Nhịp Sống HCRC/Góc Chia Sẻ thật — xem
+    // test-internal-share-feed-style.js/internalSection.html — Trang chủ chỉ là khung xem nhanh/widget
+    // dashboard, giữ 2 cột cho gọn, không cuộn quá dài).
+    await run('khung Tin Tức Nổi Bật ở Trang chủ GIỮ lưới 2 cột (md:grid-cols-2), KHÔNG bọc max-width hẹp (khác tab Nhịp Sống HCRC thật)', async () => {
+      const classes = await page.evaluate(() => ({
+        section: document.getElementById('dashboardNewsSection').className,
+        container: document.getElementById('dashboardNewsContainer').className
+      }));
+      assert(!classes.section.includes('max-w-2xl'), 'dashboardNewsSection KHÔNG được bọc max-w-2xl (chỉ áp dụng ở tab Nhịp Sống HCRC thật, không phải Trang chủ)');
+      assert(classes.container.includes('grid-cols-1') && classes.container.includes('md:grid-cols-2'), 'dashboardNewsContainer phải giữ lưới grid-cols-1 md:grid-cols-2 (1 cột mobile, 2 cột desktop)');
     });
 
     assertEqual(pageErrors.length, 0, `unexpected page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
