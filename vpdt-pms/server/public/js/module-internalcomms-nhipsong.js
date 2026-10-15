@@ -1535,6 +1535,45 @@ function setInternalFeedSort(type, mode) {
   renderInternalPosts();
 }
 
+// Tính danh sách bài ĐÃ LỌC + SẮP XẾP cho ĐÚNG bộ lọc/chế độ sắp xếp hiện tại — tách ra khỏi
+// renderInternalFeedStyle() để scrollToInternalFeedPost() (bên dưới) dùng CHUNG đúng 1 nguồn khi cần xác
+// định bài đang ở TRANG nào, không lặp lại logic lọc/sắp xếp (tránh lệch kết quả giữa 2 nơi).
+// `opts` optional — renderInternalFeedStyle() đã tự đọc DOM filter sẵn nên truyền thẳng vào, nơi gọi
+// khác (scrollToInternalFeedPost) không có sẵn thì để hàm tự đọc lại DOM.
+function computeVisibleInternalFeedPosts(type, opts) {
+  const isShare = type === 'SHARE';
+  const o = opts || {
+    fromDate: document.getElementById('filterFromDateInternal')?.value || '',
+    toDate: document.getElementById('filterToDateInternal')?.value || '',
+    keyword: (document.getElementById('filterKeywordInternal')?.value || '').trim(),
+    statusFilter: isShare ? (document.getElementById('filterStatusInternal')?.value || '') : '',
+    categoryFilter: document.getElementById('filterCategoryInternal')?.value || '',
+    canApprove: canApproveInternalPost(currentUser)
+  };
+
+  const visible = DB.internalPosts.filter(p => {
+    if (p.type !== type) return false;
+    // Bài KHÔNG phải APPROVED (Nháp/Chờ duyệt/Yêu cầu bổ sung/Đã ẩn/Bị từ chối) chỉ hiện với chính tác
+    // giả/người có quyền duyệt — cùng khuôn renderInternalPosts() (server đã lọc trước, đây chỉ phòng hờ).
+    const isRestrictedStatus = p.status && p.status !== 'APPROVED';
+    if (isRestrictedStatus && p.author !== currentUser.username && !o.canApprove) return false;
+    if (o.statusFilter && (p.status || 'APPROVED') !== o.statusFilter) return false;
+    if (o.categoryFilter && p.postCategory !== o.categoryFilter) return false;
+    if (!isInDateRange(p.createdAt, o.fromDate, o.toDate)) return false;
+    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept, ...customDataSearchValues(p.customData)], o.keyword)) return false;
+    return true;
+  });
+
+  return visible.slice().sort((a, b) => {
+    if (internalFeedSortMode[type] === 'popular') {
+      const scoreA = (a.likes?.length || 0) + (a.comments?.length || 0);
+      const scoreB = (b.likes?.length || 0) + (b.comments?.length || 0);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+    }
+    return b.id - a.id; // mới nhất trước
+  });
+}
+
 // ===================== Trạng thái đặc biệt (Đợt 1 Nhịp Sống HCRC/Góc Chia Sẻ) =====================
 // Pill trạng thái dùng CHUNG cho danh sách thường (renderInternalPosts — Đào tạo/Khen thưởng), khung
 // kiểu Facebook của Nhịp Sống HCRC/Góc Chia Sẻ (renderInternalFeedStyle/renderInternalNewsCard) và modal Chi tiết
@@ -1920,27 +1959,7 @@ function renderInternalFeedStyle(type) {
     dashEl.innerHTML = '';
   }
 
-  let visible = DB.internalPosts.filter(p => {
-    if (p.type !== type) return false;
-    // Bài KHÔNG phải APPROVED (Nháp/Chờ duyệt/Yêu cầu bổ sung/Đã ẩn/Bị từ chối) chỉ hiện với chính tác
-    // giả/người có quyền duyệt — cùng khuôn renderInternalPosts() (server đã lọc trước, đây chỉ phòng hờ).
-    const isRestrictedStatus = p.status && p.status !== 'APPROVED';
-    if (isRestrictedStatus && p.author !== currentUser.username && !canApprove) return false;
-    if (statusFilter && (p.status || 'APPROVED') !== statusFilter) return false;
-    if (categoryFilter && p.postCategory !== categoryFilter) return false;
-    if (!isInDateRange(p.createdAt, fromDate, toDate)) return false;
-    if (!matchesKeywordFields([p.title, internalPostPlainText(p), p.authorName, p.author, p.dept, ...customDataSearchValues(p.customData)], keyword)) return false;
-    return true;
-  });
-
-  visible = visible.slice().sort((a, b) => {
-    if (internalFeedSortMode[type] === 'popular') {
-      const scoreA = (a.likes?.length || 0) + (a.comments?.length || 0);
-      const scoreB = (b.likes?.length || 0) + (b.comments?.length || 0);
-      if (scoreB !== scoreA) return scoreB - scoreA;
-    }
-    return b.id - a.id; // mới nhất trước
-  });
+  const visible = computeVisibleInternalFeedPosts(type, { statusFilter, categoryFilter, fromDate, toDate, keyword, canApprove });
 
   // TRƯỚC ĐÂY (NEWS): cắt cứng 5 bài mới nhất, không phân trang — nay phân trang đầy đủ như mọi danh
   // sách khác trong hệ thống, sắp xếp (Mới nhất/Tương tác nhiều) áp dụng TRƯỚC khi cắt trang. Nút phân
@@ -2166,11 +2185,45 @@ function deleteFlaggedCommentAction(postId, commentId) {
 function closeInternalArticleModal() {
   document.getElementById('internalArticleModal').classList.add('hidden');
   // Quay về đúng vị trí thẻ bài vừa xem trong danh sách phía sau (xem chú thích lastViewedInternalPostId
-  // ở đầu file) — scrollIntoView() im lặng bỏ qua nếu thẻ không còn trong DOM (VD bài bị lọc mất sau khi
-  // đổi bộ lọc trong lúc modal đang mở, hiếm gặp), không báo lỗi gì cả.
+  // ở đầu file) — scrollToInternalFeedPost() tự nhảy đúng TRANG chứa bài đó trước khi cuộn (xem chú
+  // thích tại đó), không chỉ scrollIntoView() suông như trước.
   if (lastViewedInternalPostId != null) {
-    document.getElementById(`internalFeedCard_${lastViewedInternalPostId}`)?.scrollIntoView({ block: 'center', behavior: 'auto' });
+    scrollToInternalFeedPost(lastViewedInternalPostId);
   }
+}
+
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "Trang chủ => Xem thêm => thoát ra đang bị nhảy vào Nhịp Sống HCRC"
+// thay vì về đúng bài ban đầu): bản trước đây CHỈ scrollIntoView() thẳng vào #internalFeedCard_<id> —
+// im lặng bỏ qua nếu thẻ đó KHÔNG nằm trong TRANG đang hiển thị (feed có phân trang, 10 bài/trang).
+// Dashboard luôn đẩy bài ĐANG GHIM lên đầu bất kể cũ/mới (renderDashboardNews(), core-dashboard.js),
+// nhưng renderInternalFeedStyle() KHÔNG ưu tiên bài ghim trong sắp xếp "Mới nhất" thường — 1 bài ghim
+// NHƯNG cũ (quá trang 1 theo thứ tự id giảm dần) vẫn hiện NGAY ở Trang chủ, nhưng khi bấm "Xem thêm" rồi
+// thoát ra sẽ rơi vào đúng tình huống "thẻ không nằm ở trang 1" này (cùng lý do: chế độ sắp xếp "Tương
+// tác nhiều"/bộ lọc còn sót từ phiên trước cũng gây y hệt). Vá: tính lại ĐÚNG vị trí (index) của bài trong
+// danh sách đã lọc+sắp xếp HIỆN TẠI (computeVisibleInternalFeedPosts(), dùng chung với
+// renderInternalFeedStyle() để không lệch kết quả), suy ra đúng SỐ TRANG chứa bài đó, tự nhảy sang đúng
+// trang đó (goToListPage()) rồi mới cuộn — nếu bài bị bộ lọc hiện tại loại hẳn (hiếm, đổi bộ lọc ngay
+// lúc modal đang mở) thì bỏ qua im lặng như hành vi cũ.
+function scrollToInternalFeedPost(id) {
+  const existingCard = document.getElementById(`internalFeedCard_${id}`);
+  if (existingCard) { existingCard.scrollIntoView({ block: 'center', behavior: 'auto' }); return; }
+
+  const post = DB.internalPosts.find(p => p.id === id);
+  // TRAINING/RECRUITMENT/REWARD(cũ)/QNA không dùng khung feed #internalPostsContainer này (xem
+  // usesOwnSection ở setInternalSubTab()) — không có "trang" nào để nhảy tới, bỏ qua như trước.
+  if (!post || (post.type !== 'NEWS' && post.type !== 'SHARE')) return;
+
+  const moduleKey = post.type === 'SHARE' ? 'internal' : 'internalNews';
+  const visible = computeVisibleInternalFeedPosts(post.type);
+  const idx = visible.findIndex(p => p.id === id);
+  if (idx === -1) return; // bị bộ lọc hiện tại loại mất, bỏ qua im lặng
+
+  const st = getListPageState(moduleKey);
+  const targetPage = Math.floor(idx / st.pageSize) + 1;
+  if (st.page !== targetPage) {
+    goToListPage(moduleKey, targetPage, 'renderInternalPosts');
+  }
+  document.getElementById(`internalFeedCard_${id}`)?.scrollIntoView({ block: 'center', behavior: 'auto' });
 }
 
 function viewInternalPostDetail(id) {
