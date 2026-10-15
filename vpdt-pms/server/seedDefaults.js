@@ -22,9 +22,9 @@ const KNOWN_DEFAULT_PASSWORDS = ['123456'];
 
 async function seedDefaults() {
   const pool = await getPool();
+  // PHẢI chạy TRƯỚC vòng lặp seed DEFAULTS chính (tự phân biệt "key chưa từng
+  // tồn tại" với "đã tồn tại" — xem chú thích tại migrateItRenewalCategories()).
   await migrateItRenewalCategories(pool);
-  await migrateHrLifecycleV2Perms(pool);
-  await migrateItSupportPermsSplit(pool);
   for (const key of Object.keys(DEFAULTS)) {
     const existing = await pool.request()
       .input('k', sql.NVarChar(100), key)
@@ -38,6 +38,20 @@ async function seedDefaults() {
         .query('INSERT INTO dbo.AppData (DataKey, DataValue) VALUES (@k, @v)');
     }
   }
+
+  // PHẢI chạy SAU vòng lặp seed DEFAULTS ở trên: cả 2 hàm này dùng
+  // withLockedAppDataValue('permGroups'/'users', ...), hàm này CHỈ sửa được
+  // key ĐÃ TỒN TẠI (throw "Key không tồn tại trong AppData" nếu chưa có hàng
+  // nào) — trên CSDL hoàn toàn mới (fresh clone + schema.sql trống), 2 key
+  // này chỉ vừa được tạo ở vòng lặp ngay trên, nên phải gọi 2 hàm này SAU,
+  // không phải TRƯỚC như trước đây (lỗi đã vá, phát hiện lúc khởi động server
+  // mới 100% lần đầu — vòng lặp seed DEFAULTS chạy sau 2 hàm migrate này nên
+  // chưa kịp tạo "permGroups" thì đã bị gọi withLockedAppDataValue('permGroups')
+  // và sập ngay: "⛔ Không thể khởi động server: Key không tồn tại trong
+  // AppData: permGroups"). Các máy chủ ĐANG CHẠY từ trước không gặp lỗi này vì
+  // "permGroups"/"users" đã tồn tại từ trước khi 2 hàm migrate này ra đời.
+  await migrateHrLifecycleV2Perms(pool);
+  await migrateItSupportPermsSplit(pool);
 
   await migratePlaintextPasswords();
   await flagKnownDefaultPasswords();

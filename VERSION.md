@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**26.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.8 (2026-11): Vá lỗi sập server ngay lần khởi động ĐẦU TIÊN trên CSDL hoàn toàn mới ("Key không tồn tại trong AppData: permGroups")
+
+Người dùng dựng 1 server mới hoàn toàn (SQL Server trống, clone code từ server cũ) và gặp lỗi sập ngay
+lúc khởi động: `⛔ Không thể khởi động server: Key không tồn tại trong AppData: permGroups`.
+
+**Gốc rễ** (`server/seedDefaults.js`): `migrateHrLifecycleV2Perms()`/`migrateItSupportPermsSplit()` gọi
+`withLockedAppDataValue('permGroups'/'users', ...)` (`lib/appData.js` — hàm này CHỈ sửa được key ĐÃ TỒN
+TẠI, throw lỗi trên nếu `dbo.AppData` chưa có hàng nào cho key đó) — nhưng 2 hàm migrate này lại chạy
+TRƯỚC vòng lặp seed `DEFAULTS` chính trong `seedDefaults()`, vốn là vòng lặp DUY NHẤT thực sự tạo các
+hàng "permGroups"/"users" cho 1 CSDL hoàn toàn mới. Trên server ĐANG CHẠY từ trước, 2 key này đã tồn tại
+từ lâu (seed từ trước khi 2 hàm migrate này ra đời) nên không ai từng thấy lỗi.
+
+**Xác nhận quan trọng cho người dùng**: đây KHÔNG phải lỗi riêng của việc di trú từ server cũ — bug này
+sẽ xảy ra 100% với BẤT KỲ ai `git clone` code mới + chạy `sql/schema.sql` trên 1 SQL Server trống +
+`npm start` lần đầu tiên, vì `dbo.AppData` khi đó chưa có hàng nào cho bất kỳ key nào.
+
+**Fix**: đổi thứ tự trong `seedDefaults()` — vòng lặp seed `DEFAULTS` chạy TRƯỚC
+`migrateHrLifecycleV2Perms()`/`migrateItSupportPermsSplit()` (giữ nguyên `migrateItRenewalCategories()`
+chạy trước vòng lặp như cũ, theo đúng yêu cầu riêng của hàm đó). Đã viết test
+`tests/test-seed-defaults-fresh-install.js` mô phỏng đúng 1 CSDL hoàn toàn trống, xác nhận test THẬT SỰ
+bắt được lỗi này trên code cũ (tái hiện đúng thông báo lỗi) và pass sau khi vá.
+
+Thuần sửa lỗi logic phía server, không đổi schema/route/biến môi trường — chỉ cần copy code +
+`pm2 restart`.
 
 ## v26.7 (2026-11): Trang chủ + Nhịp Sống HCRC — thumbnail 6x, ảnh vuông, carousel tự động, cuộn về đúng vị trí bài
 
