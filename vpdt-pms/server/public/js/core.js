@@ -12795,12 +12795,14 @@ bindCspDelegation('forwardInboxModal');
 // CSP hạ tầng dùng chung (đợt D) — #dashboardSection: nút "⚙️ Tuỳ chỉnh" (mở
 // #dashboardCustomizeModal), thẻ dashboard động trong #dashboardStatsGrid (renderDashboard() ->
 // handleDashboardCardClick(key)) và thẻ tin tức trong #dashboardNewsContainer (renderDashboardNews() ->
-// 3 lời gọi nối tiếp switchTab()/setInternalSubTab()/viewInternalPostDetail(), mọi tham số literal nên
-// dùng data-op-seq thay vì wrapper riêng). #dashboardCustomizeModal sống NGOÀI section (giống Xe/Vận
-// Hành) nên cần gốc riêng — nút "Đóng" tĩnh + checkbox động trong #dashboardCustomizeList
-// (openDashboardCustomizeModal() -> onDashboardCustomizeToggle(key, this.checked), cần
-// onDashboardCustomizeToggleFromCheckbox() làm wrapper nhận phần tử qua data-arg-el rồi tự đọc .checked,
-// vì tham số thứ 2 là boolean runtime không phải literal).
+// data-op="viewInternalPostDetail" đơn, KHÔNG còn switchTab()/setInternalSubTab() nối chuỗi như trước —
+// 11/2026, theo yêu cầu người dùng "Trang chủ xem tin xong quay ra phải ở lại Trang chủ": modal Chi tiết
+// (#internalArticleModal, index.html) là overlay toàn cục nằm NGOÀI #internalSection nên mở được bình
+// thường dù tab hiện tại vẫn là 'dashboard', đóng modal ra không hề chuyển tab). #dashboardCustomizeModal
+// sống NGOÀI section (giống Xe/Vận Hành) nên cần gốc riêng — nút "Đóng" tĩnh + checkbox động trong
+// #dashboardCustomizeList (openDashboardCustomizeModal() -> onDashboardCustomizeToggle(key, this.checked),
+// cần onDashboardCustomizeToggleFromCheckbox() làm wrapper nhận phần tử qua data-arg-el rồi tự đọc
+// .checked, vì tham số thứ 2 là boolean runtime không phải literal).
 bindCspDelegation('dashboardSection');
 bindCspDelegation('dashboardCustomizeModal');
 

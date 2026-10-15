@@ -62,10 +62,19 @@ async function main() {
       assert(html.includes('Tin cũ PDF &lt;b&gt;x&lt;/b&gt;'), 'tiêu đề phải được escapeHtml');
     });
 
-    await run('mỗi box có nút "Xem thêm →" nằm BÊN TRONG khối data-op-seq', async () => {
+    // LỊCH SỬ: trước đây card dùng data-op-seq="switchTab('internal')|setInternalSubTab(...)|viewInternalPostDetail(...)"
+    // — bấm "Xem thêm" từ Trang chủ sẽ CHUYỂN HẲN sang tab Nhịp Sống HCRC. Theo yêu cầu người dùng (11/2026,
+    // "xem tin xong quay ra phải ở lại Trang chủ"), đổi sang data-op="viewInternalPostDetail" đơn (KHÔNG
+    // còn switchTab/setInternalSubTab) — modal Chi tiết là overlay toàn cục (#internalArticleModal,
+    // index.html, KHÔNG nằm trong #internalSection) nên mở được bình thường dù tab hiện tại vẫn là
+    // 'dashboard', đóng modal ra thì tự nhiên vẫn đang ở Trang chủ vì chưa hề chuyển tab.
+    await run('mỗi box có nút "Xem thêm →" nằm BÊN TRONG khối data-op (KHÔNG còn chuyển tab, ở lại Trang chủ)', async () => {
       const ok = await page.evaluate(() => [...document.querySelectorAll('#dashboardNewsContainer .dash-news-card')]
-        .every(card => { const m = card.querySelector('.dash-news-more'); return m && m.textContent.includes('Xem thêm') && m.closest('[data-op-seq]') === card; }));
+        .every(card => { const m = card.querySelector('.dash-news-more'); return m && m.textContent.includes('Xem thêm') && m.closest('[data-op]') === card; }));
       assert(ok, 'mỗi box phải có .dash-news-more nằm trong đúng box');
+      const noSwitchTab = await page.evaluate(() => [...document.querySelectorAll('#dashboardNewsContainer .dash-news-card')]
+        .every(card => !card.hasAttribute('data-op-seq') && card.getAttribute('data-op') === 'viewInternalPostDetail'));
+      assert(noSwitchTab, 'card KHÔNG được còn data-op-seq/switchTab — chỉ gọi thẳng viewInternalPostDetail, ở lại Trang chủ');
     });
 
     await run('click riêng nút "Xem thêm →" mở đúng chi tiết bài', async () => {
@@ -74,6 +83,30 @@ async function main() {
       await page.waitForTimeout(300);
       const viewed = await page.evaluate(() => window.__viewed.slice());
       assertEqual(viewed[viewed.length - 1], 5003, 'click "Xem thêm" phải gọi viewInternalPostDetail(5003)');
+    });
+
+    // LỖI ĐÃ VÁ (11/2026, người dùng báo "ở Trang chủ xem tin xong quay ra phải ở lại Trang chủ" — trước
+    // đó data-op-seq còn switchTab('internal') khiến đóng modal xong lộ ra tab Nhịp Sống HCRC phía sau).
+    await run('Trang chủ > bấm "Xem thêm" > đóng modal Chi tiết: PHẢI ở lại Trang chủ, KHÔNG bị chuyển sang tab Nhịp Sống HCRC', async () => {
+      // Test trước còn để modal mở (chỉ kiểm tra viewInternalPostDetail được gọi, không đóng lại) — đóng
+      // sạch trước khi bắt đầu, tránh modal cũ chặn click ở đây.
+      await page.evaluate(() => closeInternalArticleModal());
+      await page.waitForTimeout(150);
+      await page.click('#dashboardNewsContainer .dash-news-card:nth-child(3) .dash-news-more');
+      await page.waitForTimeout(300);
+      const modalVisible = await page.evaluate(() => !document.getElementById('internalArticleModal').classList.contains('hidden'));
+      assert(modalVisible, 'modal Chi tiết phải mở ra');
+      const stillOnDashboardWhileModalOpen = await page.evaluate(() => !document.getElementById('dashboardSection').classList.contains('hidden'));
+      assert(stillOnDashboardWhileModalOpen, 'Trang chủ phải VẪN hiển thị phía sau modal (modal là overlay toàn cục, không chuyển tab)');
+
+      await page.evaluate(() => closeInternalArticleModal());
+      await page.waitForTimeout(300);
+      const sectionsVisible = await page.evaluate(() => ({
+        dashboard: !document.getElementById('dashboardSection').classList.contains('hidden'),
+        internal: !document.getElementById('internalSection').classList.contains('hidden')
+      }));
+      assert(sectionsVisible.dashboard, 'đóng modal xong PHẢI vẫn ở Trang chủ (dashboardSection hiển thị)');
+      assert(!sectionsVisible.internal, 'đóng modal xong KHÔNG được bị chuyển sang tab Nhịp Sống HCRC (internalSection phải vẫn ẩn)');
     });
 
     await run('class hover mới (nền/viền fuchsia) có rule thật trong tailwind.css đã build', async () => {

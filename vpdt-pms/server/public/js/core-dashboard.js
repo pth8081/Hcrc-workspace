@@ -275,7 +275,7 @@ function renderDashboardNews() {
     const snippet = internalPostPlainText(p).slice(0, 220);
     const snippetHTML = snippet ? `<p class="text-xs text-gray-600 mt-1 line-clamp-2">${escapeHtml(snippet)}</p>` : '';
     return `
-    <div data-op-seq="switchTab('internal')|setInternalSubTab('${escapeHtml(p.type)}')|viewInternalPostDetail(${Number(p.id)})" class="dash-news-card group relative flex gap-3 bg-white rounded border border-gray-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-fuchsia-50 hover:border-fuchsia-300">
+    <div data-op="viewInternalPostDetail" data-arg0="${Number(p.id)}" class="dash-news-card group relative flex gap-3 bg-white rounded border border-gray-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-fuchsia-50 hover:border-fuchsia-300">
       ${thumbHTML}
       <div class="min-w-0 flex-1">
         <div class="text-[10px] font-bold text-fuchsia-700">${escapeHtml(typeLabel[p.type] || p.type)}${isActivePinned(p) ? ' <span class="text-amber-600">📌 Đã ghim</span>' : ''}</div>

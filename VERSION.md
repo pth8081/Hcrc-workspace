@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**26.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.12 (2026-11): Trang chủ "Xem thêm" — xem tin xong ở lại Trang chủ, không còn bị chuyển sang Nhịp Sống HCRC
+
+Theo yêu cầu người dùng: trước đây bấm "Xem thêm" ở khung "Tin Tức Nổi Bật" (Trang chủ) sẽ tự
+`switchTab('internal')` + `setInternalSubTab(type)` TRƯỚC KHI mở modal Chi tiết — đóng modal ra thì đã
+đứng sẵn ở tab Nhịp Sống HCRC/Góc Chia Sẻ phía sau, không còn ở Trang chủ nữa. Người dùng xác nhận muốn
+ở lại Trang chủ sau khi xem xong.
+
+Đổi card Trang chủ sang gọi thẳng `viewInternalPostDetail(id)` (bỏ hẳn `switchTab`/`setInternalSubTab`
+nối chuỗi) — modal Chi tiết (`#internalArticleModal`) là overlay toàn cục nằm NGOÀI `#internalSection`
+trong `index.html`, nên mở được bình thường dù tab hiện tại vẫn là Trang chủ; đóng modal ra tự nhiên vẫn
+đang ở Trang chủ vì chưa hề chuyển tab.
+
+Logic "tự chuyển đúng trang rồi cuộn về đúng bài" thêm ở v26.11 (`scrollToInternalFeedPost()`) vẫn giữ
+nguyên — không còn dùng cho luồng Trang chủ nữa (đã không còn chuyển tab), nhưng vẫn cần thiết cho các
+lối mở `viewInternalPostDetail()` trực tiếp khác (VD link nhắc nhở trong email,
+`openLinkedApprovalRecordByCode()` ở `core.js`) khi người đang xem feed ở 1 trang khác với bài được mở.
+
+Đã cập nhật test tương ứng (`test-dashboard-news-thumbnail.js` thêm kịch bản xác nhận ở lại Trang chủ;
+`test-internal-feed-scroll-restore-paginated.js` đổi mô phỏng sang mở trực tiếp thay vì qua Trang chủ) —
+toàn bộ test liên quan đều pass.
+
+Thuần client-side, không đổi schema/route/biến môi trường — chỉ cần copy code + `pm2 restart`.
 
 ## v26.11 (2026-11): Trang chủ/Nhịp Sống HCRC — bố cục Facebook cho Nhịp Sống HCRC, ảnh+sapo gọn ở Trang chủ, sửa cuộn về đúng bài
 
