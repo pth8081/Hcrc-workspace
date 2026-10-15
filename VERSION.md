@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**26.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.11 (2026-11): Trang chủ/Nhịp Sống HCRC — bố cục Facebook cho Nhịp Sống HCRC, ảnh+sapo gọn ở Trang chủ, sửa cuộn về đúng bài
+
+Theo yêu cầu người dùng (demo trước khi làm, đã xác nhận đúng phạm vi qua vài vòng chỉnh sửa):
+
+- **Trang chủ (Dashboard) "Tin Tức Nổi Bật"**: GIỮ NGUYÊN lưới 2 cột (không bó hẹp 1 cột) — chỉ đổi
+  thumbnail từ cỡ cố định 336px (gây vỡ chữ trên mobile hẹp, xem v26.10) sang co giãn responsive
+  (w-16 → sm:w-20 → md:w-24), thêm đoạn "sapo" trích ngắn nội dung bài (line-clamp-2).
+- **Tab Nhịp Sống HCRC/Góc Chia Sẻ** (dùng chung khung danh sách): bọc feed trong `max-w-2xl mx-auto` —
+  cột feed hẹp lại, căn giữa màn hình (672px) giống bố cục Facebook thật trên desktop; mobile giữ
+  nguyên full chiều ngang màn hình (khớp cách Facebook hiển thị trên điện thoại).
+- **Sửa lỗi "Trang chủ → Xem thêm → thoát ra không về đúng bài ban đầu"**: gốc rễ là bài ĐANG GHIM ở
+  Trang chủ không được ưu tiên trong sắp xếp "Mới nhất" của Nhịp Sống HCRC — nếu bài đó cũ, nó rơi sang
+  trang 2+ của danh sách (phân trang 10 bài/trang), khiến lúc đóng modal Chi tiết không tìm thấy thẻ để
+  cuộn tới, "rơi" về đầu trang 1 thay vì đúng bài ban đầu. Đã sửa: tự nhận diện đúng trang chứa bài đó
+  (tính lại trên CHÍNH bộ lọc/sắp xếp đang áp dụng) rồi tự chuyển sang trang đó trước khi cuộn.
+
+Đã test: toàn bộ test liên quan (Dashboard, Nhịp Sống HCRC, Góc Chia Sẻ, CSP full audit) đều pass, kèm
+2 bộ test mới xác nhận bắt đúng 2 lỗi thật trước khi vá (cỡ ảnh cố định gây vỡ chữ mobile; bài ghim cũ
+rơi sang trang 2 khiến mất cuộn) rồi pass sau khi sửa.
+
+Thuần CSS/client-side (có rebuild `public/tailwind.css` cho các class responsive mới), không đổi schema/
+route/biến môi trường — chỉ cần copy code (kể cả `tailwind.css` đã build lại) + `pm2 restart`.
 
 ## v26.10 (2026-11): Nhịp Sống HCRC — sửa ảnh bìa thẻ feed bị quá cao trên màn hình rộng
 
