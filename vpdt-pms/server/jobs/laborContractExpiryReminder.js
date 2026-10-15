@@ -3,11 +3,12 @@
 // bản ĐÚNG khuôn jobs/licenseExpiryReminder.js (đọc emailConfig chung, ghi notifiedThresholds trên từng
 // bản ghi, gửi email THẬT qua lib/mailer.js nếu đã cấu hình SMTP thật).
 //
-// Khác Giấy Phép ở người nhận: theo đúng Phần D.2 ("cảnh báo HR + quản lý trực tiếp"), không phải danh
-// sách người có quyền duyệt (Hợp Đồng Lao Động không có bước duyệt) — người nhận = mọi tài khoản có
-// hrContractManage/admin, CỘNG thêm quản lý trực tiếp của CHÍNH nhân viên đó (tra qua employeeProfiles ->
-// user.managerUsername, cùng field phẳng đã dùng ở isManagerOf()/lib/employeeProfile.js). Hợp đồng
-// INDEFINITE (endDate null) không bao giờ hết hạn -> bỏ qua tự nhiên (daysUntil() trả null).
+// Khác Giấy Phép ở người nhận: theo đúng Phần D.2 ("cảnh báo HR"), không phải danh sách người có quyền
+// duyệt (Hợp Đồng Lao Động không có bước duyệt) — người nhận = mọi tài khoản có hrContractManage/admin.
+// Hợp đồng INDEFINITE (endDate null) không bao giờ hết hạn -> bỏ qua tự nhiên (daysUntil() trả null).
+//
+// LỊCH SỬ: trước đây (tới v26.8) còn CỘNG thêm quản lý trực tiếp của nhân viên (tra qua employeeProfiles
+// -> user.managerUsername) — người dùng yêu cầu bỏ hẳn, CHỈ còn cảnh báo cho quản lý nhân sự.
 const { getPool, sql } = require('../db');
 const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
 const { decryptSecret } = require('../lib/emailCrypto');
@@ -76,7 +77,6 @@ async function checkLaborContractExpiryReminders() {
     if (!Array.isArray(contracts) || contracts.length === 0) return;
 
     const users = await getCollection(pool, 'users', []);
-    const profiles = await getCollection(pool, 'employeeProfiles', []);
     const hrEmails = users
       .filter(u => u && u.active !== false && u.email && (u.perms?.admin || u.perms?.hrContractManage))
       .map(u => ({ email: u.email, name: u.name || u.username }));
@@ -96,15 +96,7 @@ async function checkLaborContractExpiryReminders() {
         const subject = `[VPDT] Hợp đồng lao động ${c.code} (${typeLabel}) ${label}`;
         const body = `Hợp đồng lao động "${c.code}" (${typeLabel}) của nhân viên mã ${c.employeeCode} ${label}. Ngày hết hạn: ${c.endDate}. Vui lòng xem xét gia hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục.${buildReminderEmailLink('hrContract', c.code)}`;
 
-        const profile = (profiles || []).find(p => p.employeeCode === c.employeeCode);
         const rawRecipients = [...hrEmails];
-        if (profile?.username) {
-          const employeeUser = users.find(u => u.username === profile.username && u.active !== false);
-          if (employeeUser?.managerUsername) {
-            const manager = users.find(u => u.username === employeeUser.managerUsername && u.active !== false);
-            if (manager?.email) rawRecipients.push({ email: manager.email, name: manager.name || manager.username });
-          }
-        }
         const seenEmails = new Set();
         const recipients = rawRecipients.filter(r => {
           const key = r.email.toLowerCase();
@@ -148,7 +140,7 @@ async function checkLaborContractExpiryReminders() {
           module: 'LABOR_CONTRACT', actionType: 'EXPIRY_REMINDER', targetObject: c.code,
           description: recipients.length
             ? `${totalSendFailure ? 'LỖI gửi nhắc hạn' : 'Đã gửi nhắc hạn'} hợp đồng lao động [${c.code}] (${label}) tới ${recipients.map(r => r.email).join(', ')}${statusSuffix}${totalSendFailure ? ' — sẽ tự thử lại ở lần kiểm tra kế tiếp' : ''}`
-            : `Hợp đồng lao động [${c.code}] (${label}) chưa có người nhận hợp lệ (chưa ai có quyền hrContractManage/quản lý trực tiếp kèm email hợp lệ)`,
+            : `Hợp đồng lao động [${c.code}] (${label}) chưa có người nhận hợp lệ (chưa ai có quyền hrContractManage kèm email hợp lệ)`,
           status: recipients.length ? (sendResult.failed.length && !sendResult.simulated ? 'WARNING' : 'SUCCESS') : 'WARNING'
         });
 

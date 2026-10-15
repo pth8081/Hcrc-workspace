@@ -3297,10 +3297,11 @@ còn tự động xoá được hợp đồng lao động nữa.
 - **Cảnh báo hết hạn tự động** (job chạy mỗi 24h, mặc định ngưỡng 60/45/30
   ngày trước hạn — **admin tự sửa được danh sách ngưỡng** ở Hệ Thống > Quản
   Trị > Cấu Hình Email, mục 7.8, ô riêng cho Hợp Đồng Lao Động, tách biệt
-  ngưỡng của Giấy Phép/Gia Hạn CNTT): gửi email tới HR **CỘNG** quản lý trực
-  tiếp của nhân viên đó, nhắc gia hạn/đổi loại hợp đồng/khởi tạo Offboarding
-  nếu không tiếp tục sử dụng lao động — không gửi trùng lặp cho cùng 1
-  ngưỡng.
+  ngưỡng của Giấy Phép/Gia Hạn CNTT): gửi email tới HR (quyền
+  "hrContractManage"/admin) — **không** gửi cho quản lý trực tiếp của nhân
+  viên đó (đã bỏ theo yêu cầu người dùng, 11/2026) — nhắc gia hạn/đổi loại
+  hợp đồng/khởi tạo Offboarding nếu không tiếp tục sử dụng lao động — không
+  gửi trùng lặp cho cùng 1 ngưỡng.
 - **Excel Tải Mẫu/Nhập/Xuất (10/2026, theo yêu cầu người dùng)** — 3 nút
   **"📥 Tải Mẫu"/"📤 Nhập Excel"/"📊 Xuất Excel"** ở đầu màn danh sách:
   - **Tải Mẫu/Nhập Excel**: CHỈ dùng để **SỬA HÀNG LOẠT** các hợp đồng **ĐANG

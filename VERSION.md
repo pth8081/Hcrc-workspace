@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**26.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.9 (2026-11): Cảnh báo hết hạn Hợp Đồng Lao Động — chỉ còn gửi cho Nhân Sự, bỏ quản lý trực tiếp
+
+Theo yêu cầu người dùng: job nhắc hạn Hợp Đồng Lao Động (`jobs/laborContractExpiryReminder.js`) trước
+đây gửi email cho quản lý nhân sự (quyền `hrContractManage`/admin) **CỘNG THÊM** quản lý trực tiếp của
+chính nhân viên có hợp đồng sắp hết hạn (tra qua `employeeProfiles` -> `user.managerUsername`). Từ nay
+**chỉ còn gửi cho quản lý nhân sự** — đã bỏ hẳn phần tra cứu + gửi cho quản lý trực tiếp.
+
+Đã cập nhật đúng dòng mô tả ở Hệ Thống > Quản Trị > Cấu Hình Email (mục cảnh báo Hợp Đồng Lao Động) và
+tài liệu nghiệp vụ (`deploy/Huong-dan-nghiep-vu.md`, mục 4.5.4) cho khớp hành vi mới.
+
+Viết test mới `tests/test-labor-contract-expiry-reminder-recipients.js` xác nhận: (1) người nhận chỉ
+gồm tài khoản có `hrContractManage`/admin, không còn email quản lý trực tiếp; (2) hợp đồng Vô thời hạn
+không bao giờ bị nhắc hạn. Đã xác nhận test này THẬT SỰ bắt được hành vi cũ (gửi thêm cho quản lý trực
+tiếp) trước khi vá.
+
+Lưu ý: job `jobs/contractExpiryReminder.js` (Hợp Đồng — tài liệu/đối tác, module khác, người nhận =
+người tạo + người phụ trách phòng ban + CC cố định) không liên quan tới yêu cầu này — module đó chưa
+từng gửi cho "quản lý trực tiếp" theo nghĩa cây tổ chức, không cần sửa.
+
+Thuần sửa logic phía server + 2 dòng mô tả UI/tài liệu, không đổi schema/route/biến môi trường — chỉ
+cần copy code + `pm2 restart`.
 
 ## v26.8 (2026-11): Vá lỗi sập server ngay lần khởi động ĐẦU TIÊN trên CSDL hoàn toàn mới ("Key không tồn tại trong AppData: permGroups")
 
