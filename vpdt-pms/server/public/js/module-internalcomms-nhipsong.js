@@ -174,6 +174,13 @@ function filterInternalByCard(status) {
 // editingCustomFieldId ở Biểu Mẫu.
 let editingInternalPostId = null;
 
+// lastViewedInternalPostId (11/2026, theo yêu cầu người dùng — "Trang chủ => Xem thêm => thoát ra sẽ
+// sang trang Nhịp Sống => mong muốn khi thoát sẽ quay về đúng vị trí bài viết ban đầu"): ghi nhớ bài
+// VỪA xem ở modal Chi Tiết (viewInternalPostDetail()) — closeInternalArticleModal() dùng để tự cuộn
+// danh sách phía sau về đúng vị trí thẻ bài đó, thay vì để nguyên ở đầu trang (setInternalSubTab(), bước
+// TRƯỚC KHI mở modal từ Trang chủ, luôn reset cuộn về đầu — xem chú thích ở đó).
+let lastViewedInternalPostId = null;
+
 // ===== Nhịp Sống HCRC/Góc Chia Sẻ — nội dung định dạng + nhiều ảnh/ảnh đại diện/video (9/2026) =====
 // 3 field MỚI images[]/coverImage/videos[] TÁCH BIỆT hẳn khỏi `attachment` cũ (KHÔNG tái dùng/ghi đè — xem
 // chú thích BUG ở submitInternalPost() bên dưới về hậu quả của việc 1 field dùng lẫn lộn 2 mục đích).
@@ -566,6 +573,12 @@ async function submitInternalPost(e) {
   if (content.length > INTERNAL_POST_CONTENT_MAX_LEN_CLIENT) return alert(`⛔ Nội dung quá dài (tối đa ${INTERNAL_POST_CONTENT_MAX_LEN_CLIENT} ký tự kể cả định dạng).`);
   if (internalMediaUploading > 0) return alert('⏳ Đang tải ảnh/video lên, vui lòng đợi tải xong rồi đăng bài.');
   const media = buildInternalMediaPayload();
+  // Bắt buộc có ảnh đính kèm khi đăng Nhịp Sống HCRC (11/2026, theo yêu cầu người dùng) — CHỈ áp dụng
+  // lúc đăng/gửi duyệt THẬT (không chặn "Lưu Nháp", vì nháp vốn là lưu tạm chưa hoàn thiện), và CHỈ cho
+  // NEWS (Nhịp Sống HCRC) — Góc Chia Sẻ/Đào Tạo/Tuyển Dụng/Hỏi Đáp không bắt buộc, giữ nguyên như trước.
+  if (type === 'NEWS' && !isDraftSubmit && media.images.length === 0) {
+    return alert('⛔ Bài đăng Nhịp Sống HCRC bắt buộc phải có ít nhất 1 ảnh đính kèm — vui lòng thêm ảnh trước khi đăng.');
+  }
 
   let training = null;
   if (type === 'TRAINING') {
@@ -1822,12 +1835,52 @@ function renderInternalPosts() {
   }).join('');
 }
 
+// Carousel ảnh bìa tự động trên thẻ feed (11/2026, CHỈ máy tính — theo đúng yêu cầu người dùng, mobile
+// giữ nguyên tĩnh như trước, tránh tốn dữ liệu di động/gây rối mắt trên màn hình nhỏ). Map postId ->
+// intervalId để dọn sạch timer CŨ trước mỗi lượt render mới (clearInternalFeedCarousels(), gọi ngay ĐẦU
+// renderInternalFeedStyle() — tránh timer chồng timer mỗi lần thích/bình luận trigger render lại).
+const internalFeedCarouselTimers = new Map();
+const INTERNAL_FEED_CAROUSEL_INTERVAL_MS = 2500;
+function clearInternalFeedCarousels() {
+  internalFeedCarouselTimers.forEach(id => clearInterval(id));
+  internalFeedCarouselTimers.clear();
+}
+// Khởi động carousel cho MỌI thẻ đang có data-internal-carousel-post trong #internalPostsContainer vừa
+// gán xong — chỉ ở máy tính (md breakpoint Tailwind, 768px, khớp đúng mốc dùng chung toàn hệ thống).
+// "Next trái tới hết rồi quay lại ảnh thumbnail" = tiến dần qua hết mảng data-images rồi vòng về index 0
+// (ĐÚNG ảnh đại diện/thumbnail — getInternalGalleryImages() luôn đặt ảnh đó ở đầu mảng).
+function startInternalFeedCarousels() {
+  if (window.innerWidth < 768) return;
+  document.querySelectorAll('#internalPostsContainer [data-internal-carousel-post]').forEach(img => {
+    const postId = img.getAttribute('data-internal-carousel-post');
+    let urls;
+    try { urls = JSON.parse(img.getAttribute('data-images') || '[]'); } catch (e) { urls = []; }
+    if (urls.length < 2) return;
+    let idx = 0;
+    const timerId = setInterval(() => {
+      // Tự dừng nếu thẻ không còn trong DOM (đã render lại danh sách) HOẶC người dùng đã rời hẳn tab
+      // Truyền Thông Nội Bộ (#internalSection bị ẩn) — tránh chạy ngầm vô ích + tải ảnh thừa khi đang ở
+      // tab khác (clearInternalFeedCarousels() ở đầu renderInternalFeedStyle() chỉ dọn khi quay LẠI đúng
+      // tab này, không bắt được lúc rời đi).
+      if (!img.isConnected || document.getElementById('internalSection')?.classList.contains('hidden')) {
+        clearInterval(timerId);
+        internalFeedCarouselTimers.delete(postId);
+        return;
+      }
+      idx = (idx + 1) % urls.length;
+      img.src = urls[idx];
+    }, INTERNAL_FEED_CAROUSEL_INTERVAL_MS);
+    internalFeedCarouselTimers.set(postId, timerId);
+  });
+}
+
 // Khung "Tin tức" kiểu Facebook: chỉ 5 bài mới nhất (id = Date.now() lúc tạo — dùng trực tiếp để so
 // "mới nhất", không cần parse lại chuỗi createdAt tiếng Việt), có thể đổi sang sắp theo tổng tương tác
 // (thích + bình luận). Mỗi bài có khung bình luận + nút thích NGAY DƯỚI bài — dùng lại nguyên các action
 // 'like'/'comment' đã có sẵn ở server (lib/recordActions.js), không cần đường API mới. "Chi tiết" (mở
 // modal đầy đủ) vẫn giữ nguyên, không đụng tới.
 function renderInternalFeedStyle(type) {
+  clearInternalFeedCarousels();
   const container = document.getElementById('internalPostsContainer');
   if (!container) return;
   const isShare = type === 'SHARE';
@@ -1910,7 +1963,23 @@ function renderInternalFeedStyle(type) {
     return;
   }
 
-  container.innerHTML = sortBarHTML + pageItems.map(p => renderInternalNewsCard(p)).join('');
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "thi thoảng bị cache hiển thị lẫn" — ảnh chụp cho thấy 1 thẻ bài
+  // CŨ còn sót lại phía trên khung lọc + danh sách MỚI bên dưới): trước đây .map(renderInternalNewsCard)
+  // không có try/catch — 1 bài BẤT KỲ gây lỗi JS lúc dựng HTML (dữ liệu thiếu/sai field nào đó) làm
+  // NGUYÊN CẢ lượt gán container.innerHTML bị huỷ giữa chừng (exception ném ra TRƯỚC khi chạy tới dòng
+  // gán), để lại y nguyên nội dung danh sách CŨ từ lượt render trước đó — và vì dữ liệu lỗi đó nằm ở
+  // server (không tự đổi), F5/đóng mở lại app đều không sửa được, lặp lại y hệt mỗi lần vào tab. Bọc
+  // riêng từng bài: 1 bài lỗi chỉ mất đúng bài đó (hiện cảnh báo nhỏ), KHÔNG còn làm hỏng/để sót nguyên
+  // danh sách — luôn đảm bảo container.innerHTML được gán xong hoàn chỉnh mỗi lượt render.
+  container.innerHTML = sortBarHTML + pageItems.map(p => {
+    try {
+      return renderInternalNewsCard(p);
+    } catch (e) {
+      console.error('Lỗi hiển thị 1 bài đăng (bỏ qua, không làm hỏng cả danh sách):', p?.id, e);
+      return `<div class="bg-red-50 border border-red-200 rounded p-3 mb-3 text-xs text-red-700">⚠️ Không hiển thị được 1 bài đăng (mã #${escapeHtml(String(p?.id ?? ''))}) — dữ liệu có thể bị lỗi, vui lòng báo quản trị viên.</div>`;
+    }
+  }).join('');
+  startInternalFeedCarousels();
 }
 
 function renderInternalNewsCard(p) {
@@ -1931,8 +2000,23 @@ function renderInternalNewsCard(p) {
   const mediaCountHTML = (imageCount > 1 || videoCount > 0)
     ? `<span class="internal-media-count absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-[11px] font-bold px-2 py-0.5 rounded">${imageCount > 1 ? `🖼️ ${imageCount}` : ''}${imageCount > 1 && videoCount ? ' · ' : ''}${videoCount ? `🎬 ${videoCount}` : ''}</span>`
     : '';
+  // Tỷ lệ vuông mặc định (11/2026, theo yêu cầu người dùng "ảnh mặc định tỉ lệ vuông, như trên điện
+  // thoại") — THAY "max-h-80" (chiều cao tối đa, chiều rộng co giãn theo cột -> trên máy tính (cột rộng
+  // hơn nhiều so với điện thoại) ảnh bị kéo dẹt ngang, không còn gần vuông như trên điện thoại nữa) bằng
+  // "aspect-square" (luôn đúng 1:1 bất kể độ rộng cột) + giữ nguyên "object-cover" (vẫn cắt ảnh cho khít
+  // khung, không méo). Áp dụng ĐỒNG NHẤT cả 2 nền tảng (không tách riêng máy tính/điện thoại) — điện
+  // thoại vốn đã gần vuông sẵn (cột hẹp + max-h-80 cũ) nên không lệch gì so với trước, máy tính thì nay
+  // mới thực sự vuông.
+  // Carousel tự động (11/2026, "bài có nhiều ảnh tự động next tới hết rồi quay lại ảnh thumbnail") — CHỈ
+  // chạy ở máy tính (startInternalFeedCarousels() tự kiểm md breakpoint, xem hàm đó) — gắn id ổn định +
+  // data-images (đúng thứ tự getInternalGalleryImages(): ảnh đại diện trước, còn lại theo thứ tự đăng)
+  // để JS tìm & đổi src định kỳ, KHÔNG đụng gì nếu bài chỉ có 1 ảnh (carousel chỉ khởi động khi > 1 ảnh).
+  const galleryImgs = getInternalGalleryImages(p);
+  const carouselDataAttr = galleryImgs.length > 1
+    ? ` data-internal-carousel-post="${p.id}" data-images="${escapeHtml(JSON.stringify(galleryImgs.map(x => x.fileUrl)))}"`
+    : '';
   const coverHTML = cover
-    ? `<div class="relative"><img src="${escapeHtml(cover.fileUrl)}" alt="" class="w-full max-h-80 object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">${mediaCountHTML}</div>`
+    ? `<div class="relative"><img id="internalFeedCoverImg_${p.id}" src="${escapeHtml(cover.fileUrl)}" alt="" class="w-full aspect-square object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}"${carouselDataAttr}>${mediaCountHTML}</div>`
     : (videoCount ? `<div class="relative bg-gray-900 text-white text-sm text-center py-6 cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">🎬 Bài viết có ${videoCount} video — bấm để xem</div>` : '');
   const plain = internalPostPlainText(p);
   const snippet = plain.slice(0, 300);
@@ -1973,7 +2057,7 @@ function renderInternalNewsCard(p) {
     : '';
 
   return `
-    <div class="bg-white rounded border hover:shadow mb-3">
+    <div id="internalFeedCard_${p.id}" class="bg-white rounded border hover:shadow mb-3">
       ${coverHTML}
       <div class="p-4">
         <div class="font-bold text-fuchsia-800 text-base cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">${escapeHtml(p.title)}${statusBadgeHTML}</div>
@@ -2072,11 +2156,18 @@ function deleteFlaggedCommentAction(postId, commentId) {
 
 function closeInternalArticleModal() {
   document.getElementById('internalArticleModal').classList.add('hidden');
+  // Quay về đúng vị trí thẻ bài vừa xem trong danh sách phía sau (xem chú thích lastViewedInternalPostId
+  // ở đầu file) — scrollIntoView() im lặng bỏ qua nếu thẻ không còn trong DOM (VD bài bị lọc mất sau khi
+  // đổi bộ lọc trong lúc modal đang mở, hiếm gặp), không báo lỗi gì cả.
+  if (lastViewedInternalPostId != null) {
+    document.getElementById(`internalFeedCard_${lastViewedInternalPostId}`)?.scrollIntoView({ block: 'center', behavior: 'auto' });
+  }
 }
 
 function viewInternalPostDetail(id) {
   const p = DB.internalPosts.find(x => x.id === id);
   if (!p) return;
+  lastViewedInternalPostId = id;
 
   markInternalRead(id);
 

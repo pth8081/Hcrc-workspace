@@ -306,6 +306,9 @@ async function main() {
         document.getElementById('internalPostCategory').value = 'HOAT_DONG_CHUNG';
         document.getElementById('internalContent').innerHTML = '<p>Xem video</p>';
         window.__alerts.length = 0;
+        // 11/2026: Nhịp Sống HCRC (NEWS) nay bắt buộc có ít nhất 1 ảnh đính kèm lúc đăng thật — bài test
+        // này tập trung kiểm video nên seed thẳng 1 ảnh tối thiểu, không ảnh hưởng gì tới phần đang test.
+        if (!internalMediaDraft.images.length) internalMediaDraft.images.push({ fileUrl: '/uploads/test-yt-cover.png', fileName: 'test-yt-cover.png' });
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, submitter: null }));
       const p = await page.evaluate(() => DB.internalPosts.find(x => x.title === 'Bài có YouTube'));

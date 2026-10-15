@@ -31,6 +31,10 @@ async function main() {
         document.getElementById('internalTitle').value = 'Thông báo nghỉ lễ 2/9';
         document.getElementById('internalContent').textContent = 'Công ty nghỉ lễ Quốc khánh từ ngày 1/9 đến 3/9.';
         document.getElementById('internalPostCategory').value = 'HOAT_DONG_CHUNG';
+        // 11/2026: Nhịp Sống HCRC (NEWS) nay BẮT BUỘC có ít nhất 1 ảnh đính kèm lúc đăng thật (không phải
+        // nháp) — xem chú thích ở submitInternalPost(). Seed thẳng internalMediaDraft (bỏ qua luồng upload
+        // thật) như các test media khác trong bộ này.
+        internalMediaDraft.images.push({ fileUrl: '/uploads/test-news-cover.png', fileName: 'test-news-cover.png' });
       });
       await page.evaluate(() => submitInternalPost({ preventDefault() {}, target: { reset() {} } }));
 

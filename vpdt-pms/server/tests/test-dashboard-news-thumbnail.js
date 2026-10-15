@@ -75,7 +75,10 @@ async function main() {
 
     await run('class hover mới (nền/viền fuchsia) có rule thật trong tailwind.css đã build', async () => {
       const css = fs.readFileSync(path.join(PUBLIC_DIR, 'tailwind.css'), 'utf8');
-      ['.hover\\:bg-fuchsia-50:hover', '.hover\\:border-fuchsia-300:hover', '.group:hover .group-hover\\:underline', '.object-cover', '.w-14', '.h-14']
+      ['.hover\\:bg-fuchsia-50:hover', '.hover\\:border-fuchsia-300:hover', '.group:hover .group-hover\\:underline', '.object-cover',
+        // Kích thước thumbnail 6x (11/2026) — w-[336px]/h-[336px]/text-6xl, Tailwind escape dấu ngoặc vuông
+        // thành "\[...\]" trong CSS đã build.
+        '.w-\\[336px\\]', '.h-\\[336px\\]', '.text-6xl']
         .forEach(sel => assert(css.includes(sel), `tailwind.css thiếu rule ${sel}`));
       const cls = await page.evaluate(() => document.querySelector('#dashboardNewsContainer .dash-news-card').className);
       assert(cls.includes('hover:bg-fuchsia-50') && cls.includes('hover:border-fuchsia-300'), 'box phải có class hover mới');

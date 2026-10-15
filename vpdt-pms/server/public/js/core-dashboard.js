@@ -239,17 +239,23 @@ function renderDashboardNews() {
     container.innerHTML = `<div class="md:col-span-2 text-center p-6 text-gray-500 italic bg-white rounded border">Chưa có tin tức nào.</div>`;
     return;
   }
-  // Mỗi box (9/2026): thumbnail nhỏ bên trái (getInternalPostCoverImage() ở core.js — ưu tiên
+  // Mỗi box (9/2026): thumbnail bên trái (getInternalPostCoverImage() ở core.js — ưu tiên
   // coverImage/images[0] của bài mới, lùi về attachment ảnh của bài cũ; không có ảnh thì hiện ô
   // placeholder xám cùng kích thước để không lệch layout), nút "Xem thêm →" cố định góc dưới-phải NẰM
   // BÊN TRONG cùng khối data-op-seq (click box hay click nút đều nổi bọt tới cùng 1 closest('[data-op-seq]')
   // -> cùng hành vi mở chi tiết, không cần handler riêng), hover đổi nền/viền theo tông fuchsia của
   // Truyền Thông Nội Bộ (cùng màu nhãn loại tin + nút tab con đang chọn ở module này).
+  // Kích thước thumbnail (11/2026, theo yêu cầu người dùng "tăng gấp 6 cả web lẫn điện thoại"): 56px
+  // (w-14/h-14) -> 336px (w-[336px]/h-[336px], đúng 6 lần, KHÔNG phân biệt breakpoint — áp dụng như nhau
+  // trên mọi kích thước màn hình). Tỷ lệ vuông giữ nguyên (w=h) + object-cover như cũ, chỉ phóng to kích
+  // thước thật. Emoji placeholder phóng to tương ứng (text-xl -> text-6xl) để không bị "lọt thỏm" trong
+  // ô vuông lớn hơn nhiều. Class mới (w-[336px]/h-[336px]/text-6xl) cần `npm run build:css` lại —
+  // xem tailwind.config.js (đã quét public/js/**/*.js).
   container.innerHTML = posts.map(p => {
     const cover = getInternalPostCoverImage(p);
     const thumbHTML = cover
-      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || p.title || '')}" loading="lazy" class="dash-news-thumb w-14 h-14 rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
-      : `<div class="dash-news-thumb dash-news-thumb-placeholder w-14 h-14 rounded border border-gray-200 bg-gray-100 text-gray-400 text-xl flex items-center justify-center flex-shrink-0" aria-hidden="true">🖼️</div>`;
+      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || p.title || '')}" loading="lazy" class="dash-news-thumb w-[336px] h-[336px] rounded object-cover border border-gray-200 bg-gray-50 flex-shrink-0">`
+      : `<div class="dash-news-thumb dash-news-thumb-placeholder w-[336px] h-[336px] rounded border border-gray-200 bg-gray-100 text-gray-400 text-6xl flex items-center justify-center flex-shrink-0" aria-hidden="true">🖼️</div>`;
     return `
     <div data-op-seq="switchTab('internal')|setInternalSubTab('${escapeHtml(p.type)}')|viewInternalPostDetail(${Number(p.id)})" class="dash-news-card group relative flex gap-3 bg-white rounded border border-gray-200 p-3 pb-7 cursor-pointer transition-colors hover:shadow hover:bg-fuchsia-50 hover:border-fuchsia-300">
       ${thumbHTML}
