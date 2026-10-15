@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**26.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.13 (2026-11): Nhịp Sống HCRC — đoạn nội dung trên thẻ feed giới hạn đúng 3 dòng
+
+Người dùng báo (kèm ảnh chụp thật) nội dung bài trên thẻ feed Nhịp Sống HCRC hiển thị quá dài, tràn
+nhiều dòng trước khi tới "Xem thêm". Gốc rễ: trước đây cắt CỨNG 300 ký tự rồi nối "Xem thêm" ngay trong
+CÙNG 1 thẻ `<p>` — cắt theo SỐ KÝ TỰ không phải SỐ DÒNG, nên với câu/từ dài, 300 ký tự vẫn tràn rất
+nhiều dòng hiển thị thật.
+
+Đổi sang `line-clamp-3` (CSS, giới hạn ĐÚNG 3 dòng hiển thị bất kể độ dài chữ, phần dư tự ẩn kèm "…" do
+trình duyệt lo, không cần tự cắt ký tự) + tách "Xem thêm" RA NGOÀI đoạn bị line-clamp, đặt dòng riêng
+ngay dưới — line-clamp dùng `overflow: hidden`, nếu để "Xem thêm" nằm trong đoạn bị cắt sẽ có nguy cơ bị
+cắt mất luôn (không bấm được) khi nó rơi đúng vào ranh giới dòng 3.
+
+Đã viết test mới `test-internal-feed-snippet-clamp.js` xác nhận: có class `line-clamp-3`, "Xem thêm"
+nằm ngoài vùng bị line-clamp, class có rule thật trong `tailwind.css` đã build, bấm "Xem thêm" vẫn mở
+đúng modal Chi tiết — đã xác nhận test bắt đúng lỗi thật trước khi vá. Toàn bộ test liên quan khác
+(internal news/share, CSP full audit, Dashboard news thumbnail) đều pass.
+
+Thuần CSS/client-side (có rebuild `public/tailwind.css` cho class `line-clamp-3` mới), không đổi schema/
+route/biến môi trường — chỉ cần copy code (kèm `tailwind.css` đã build) + `pm2 restart`.
 
 ## v26.12 (2026-11): Trang chủ "Xem thêm" — xem tin xong ở lại Trang chủ, không còn bị chuyển sang Nhịp Sống HCRC
 

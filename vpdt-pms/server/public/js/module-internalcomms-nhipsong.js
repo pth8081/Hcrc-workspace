@@ -2047,7 +2047,6 @@ function renderInternalNewsCard(p) {
     ? `<div class="relative"><img id="internalFeedCoverImg_${p.id}" src="${escapeHtml(cover.fileUrl)}" alt="" class="w-full aspect-square max-h-[60vh] object-cover cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}"${carouselDataAttr}>${mediaCountHTML}</div>`
     : (videoCount ? `<div class="relative bg-gray-900 text-white text-sm text-center py-6 cursor-pointer" data-op="viewInternalPostDetail" data-arg0="${p.id}">🎬 Bài viết có ${videoCount} video — bấm để xem</div>` : '');
   const plain = internalPostPlainText(p);
-  const snippet = plain.slice(0, 300);
   const commentsHTML = shownComments.length
     ? shownComments.map(c => `
         <div class="flex gap-2 text-sm">
@@ -2094,7 +2093,16 @@ function renderInternalNewsCard(p) {
         ${approveActionsHTML}
         ${rejectReasonHTML}
         ${internalPostInfoRequestBannerHTML(p)}
-        <p class="text-sm text-gray-700 mt-2">${escapeHtml(snippet)}${plain.length > 300 ? '… ' : ' '}<span class="text-fuchsia-700 font-bold cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">Xem thêm</span></p>
+        <!-- LỖI ĐÃ VÁ (11/2026, người dùng báo nội dung bài hiện quá dài trên thẻ feed, tràn nhiều dòng
+             trước khi tới "Xem thêm" — xem ảnh chụp thật): trước đây cắt CỨNG 300 ký tự rồi nối thẳng
+             "Xem thêm" ngay sau trong CÙNG 1 thẻ <p> — với bài ngắn dòng/câu dài, 300 ký tự vẫn tràn rất
+             nhiều dòng hiển thị (cắt theo SỐ KÝ TỰ không phải SỐ DÒNG). Đổi sang "line-clamp-3" (giới hạn
+             ĐÚNG 3 dòng hiển thị bất kể độ dài chữ, phần dư tự ẩn kèm "…" do CSS lo, không cần tự cắt ký
+             tự nữa) + tách "Xem thêm" RA NGOÀI đoạn bị line-clamp (đặt dòng riêng ngay dưới) — line-clamp
+             dùng overflow:hidden, nếu để "Xem thêm" NẰM TRONG đoạn bị cắt sẽ có nguy cơ bị cắt mất luôn
+             (không bấm được) khi nó rơi đúng vào đúng ranh giới dòng 3. -->
+        <p class="text-sm text-gray-700 mt-2 line-clamp-3">${escapeHtml(plain)}</p>
+        <span class="text-fuchsia-700 font-bold text-sm cursor-pointer hover:underline" data-op="viewInternalPostDetail" data-arg0="${p.id}">Xem thêm</span>
         ${editHideActionsHTML}
         <div class="flex items-center justify-between border-t border-b py-1.5 my-2 text-xs text-gray-500">
           <span>❤️ ${likeCount} lượt thích</span>
