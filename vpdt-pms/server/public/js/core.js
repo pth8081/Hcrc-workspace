@@ -2211,13 +2211,21 @@ function handleActionCellDispatch(selectEl, dispatcherFnName, id) {
   if (selectEl.value) { window[dispatcherFnName](id, selectEl.value); }
   selectEl.selectedIndex = 0;
 }
+// 11/2026 (theo báo lỗi người dùng — "các nút Thao Tác không cân đối thẳng tắp"): TRƯỚC ĐÂY trả về
+// chuỗi inline (nút + <select>) rồi để cho <td class="text-center"> của mỗi nơi gọi tự căn giữa — vì
+// nút chính có nhãn ĐỘ DÀI KHÁC NHAU theo từng dòng (VD "✅ Duyệt" ngắn hơn "📄 Chi tiết") và không phải
+// dòng nào cũng có <select> "Khác ▾" (secondaryOptions rỗng thì KHÔNG có), nên cụm nút+dropdown mỗi dòng
+// có độ rộng khác nhau — càng căn giữa càng lệch (cụm rộng/hẹp dạt sang trái/phải khác nhau mỗi dòng,
+// nhìn zic-zắc). Sửa: LUÔN bọc trong 1 <div class="flex items-center gap-1"> — mặc định canh TRÁI
+// (justify-content: flex-start), nên mọi dòng đều bắt đầu từ ĐÚNG 1 mép trái cố định bất kể độ dài nhãn/
+// có hay không có dropdown "Khác ▾" -> cột thẳng hàng. Dùng chung ~15+ module (grep "buildActionCell(").
 function buildActionCell(id, primaryBtnHTML, secondaryOptions, dispatcherFnName) {
   const opts = (secondaryOptions || []).filter(Boolean);
-  if (opts.length === 0) return primaryBtnHTML;
-  return `${primaryBtnHTML}<select data-op-change="handleActionCellDispatch" data-arg-el="0" data-arg1="${dispatcherFnName}" data-arg2="${id}" class="border rounded px-1 py-1 text-[11px] bg-white align-middle ml-1">
+  const selectHTML = opts.length === 0 ? '' : `<select data-op-change="handleActionCellDispatch" data-arg-el="0" data-arg1="${dispatcherFnName}" data-arg2="${id}" class="border rounded px-1 py-1 text-[11px] bg-white">
     <option value="">Khác ▾</option>
     ${opts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
   </select>`;
+  return `<div class="flex items-center gap-1">${primaryBtnHTML}${selectHTML}</div>`;
 }
 
 // Ghi qua API append an toàn (POST /api/log, xem routes/systemLog.js) thay vì đọc/sửa/ghi đè cả mảng
