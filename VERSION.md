@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**26.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.16 (2026-11): UI/UX — căn thẳng cột "Thao Tác" toàn hệ thống + sửa 3 module đặt sai vị trí thanh nút
+
+Người dùng gửi ảnh chụp báo 2 vấn đề UI/UX: (1) cột "Thao Tác" ở các màn danh sách không thẳng hàng,
+yêu cầu rà soát toàn bộ module; (2) module Tài Liệu có thanh nút (Thu Gọn/Làm Mới/Xem Quy Trình/Gửi
+phê duyệt) lộn lên trên các trường nhập, khác vị trí chuẩn (luôn ở cuối form) của các module khác —
+yêu cầu "rà soát kỹ, xử lý một lần, làm cẩn thận tỉ mỉ".
+
+**Cột "Thao Tác" lệch hàng**: `buildActionCell()` (core.js, dùng chung ~15 module) trước đây để nút
+chính + dropdown "Khác ▾" tự căn GIỮA trong ô — vì nhãn nút dài/ngắn khác nhau mỗi dòng (VD "✅ Duyệt"
+ngắn hơn "📄 Chi tiết") và không phải dòng nào cũng có dropdown phụ, càng căn giữa càng lệch (cụm
+nút+dropdown mỗi dòng có độ rộng khác nhau nên dạt trái/phải không đều — đúng hiện tượng "zic-zắc"
+trong ảnh). Sửa: bọc trong 1 `<div class="flex items-center gap-1">` (canh trái mặc định) — mọi dòng
+bắt đầu từ ĐÚNG 1 mép trái cố định, thẳng cột. Sửa 1 chỗ dùng chung nên áp dụng ngay cho toàn bộ ~15
+module (Tài Liệu, Giấy Phép, Hợp Đồng, Đăng Ký Xe, Văn Bản Trình, Công Việc, Biên Bản Họp, Phê Duyệt
+Văn Phòng, Phòng Họp, VPP, Vận Hành, Hỗ Trợ IT, Báo Cáo Định Kỳ...).
+
+**Thanh nút sai vị trí**: rà soát toàn bộ form có `<form>` tự làm CSS grid phát hiện gốc rễ — khi
+`<form>` chính là 1 lưới (grid), cơ chế sắp xếp trường nhập tự động theo Biểu Mẫu
+(`applyFieldOrder()`, chỉ gán `order` cho field có khai trong `CORE_FIELD_MANIFEST`) vô tình đẩy MỌI
+khối KHÔNG nằm trong manifest (gồm thanh nút) lên TRƯỚC các field có gán order — khác hẳn các module
+dùng đúng khuôn "lưới field lồng trong `<form>` thường" (thanh nút nằm ngoài lưới, không bị ảnh
+hưởng). Ngoài module Tài Liệu (đã merge trước đó), rà soát kỹ phát hiện thêm **2 module bị đúng lỗi
+này**: **Giấy Phép** (`licenseForm`) và **Gia Hạn Dịch Vụ CNTT** (`itRenewalCreateForm`) — đã sửa cả 2
+theo đúng khuôn (đổi `<form>` về thường, bọc lưới field vào 1 `<div>` riêng bên trong). Đã kiểm tra
+chéo toàn bộ form "6-module" còn lại (Đăng Ký Xe, Hợp Đồng, Phòng Họp, Văn Phòng, Vận Hành, Văn Bản
+Trình, Mua Hàng, Cấu Hình Công & Phép, Tạo Kỳ Lương, danh mục Loại Xe...) — xác nhận không bị lỗi này.
+
+Đã demo lại đúng kịch bản (ảnh trước/sau) cho cả 2 lỗi trên dữ liệu thật trước khi người dùng xác
+nhận, chạy ~20 bộ test liên quan (Tài Liệu, Giấy Phép, Gia Hạn CNTT, Hợp Đồng, Văn Bản Trình, Công
+Việc, Biên Bản Họp, Đăng Ký Xe, VPP, Báo Cáo Định Kỳ, CSP full audit...) đều pass; 2 lỗi test không
+liên quan xác nhận có sẵn từ trước qua `git stash` so với bản gốc.
+
+Thuần HTML/CSS/JS client-side, không đổi schema/route/biến môi trường — chỉ cần copy code +
+`pm2 restart`.
 
 ## v26.15 (2026-11): Tạo Nhóm Phân Quyền/Người Dùng mới — sửa lỗi "dính" checkbox quyền của lần Sửa trước
 
