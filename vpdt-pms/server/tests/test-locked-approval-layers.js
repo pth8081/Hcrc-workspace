@@ -340,13 +340,30 @@ async function main() {
     { username: 'nv_thuong', perms: {} } // KHÔNG có canBeApprover/admin
   ];
 
-  await runner.run('assertApprovalGroupsMembersCanBeApprover: thêm MỚI người có canBeApprover/admin -> KHÔNG lỗi', () => {
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: thêm MỚI người có canBeApprover -> KHÔNG lỗi', () => {
     assertApprovalGroupsMembersCanBeApprover(
-      [{ id: 'G1', label: 'Nhóm 1', members: ['duyet1', 'admin1'] }],
-      [], // oldValue rỗng -> cả 2 đều là "thêm mới"
+      [{ id: 'G1', label: 'Nhóm 1', members: ['duyet1'] }],
+      [], // oldValue rỗng -> "thêm mới"
       CAN_APPROVE_USERS,
       'mục 11'
     );
+  });
+
+  // LỊCH SỬ (11/2026): trước đây hàm còn nhánh admin bypass (admin1 có perms.admin được coi hợp lệ dù
+  // không có canBeApprover). Theo yêu cầu người dùng, nhánh đó đã bị bỏ (xem chú thích "canBeApprover
+  // KHÔNG còn admin bypass" ở assertApprovalGroupsMembersCanBeApprover(), lib/createValidation.js) — admin
+  // giờ phải được cấp RIÊNG canBeApprover như tài khoản thường mới thêm được vào nhóm phê duyệt.
+  await runner.run('assertApprovalGroupsMembersCanBeApprover: thêm MỚI admin KHÔNG có canBeApprover -> throw (11/2026, không còn admin bypass)', () => {
+    let threw = false;
+    try {
+      assertApprovalGroupsMembersCanBeApprover(
+        [{ id: 'G1', label: 'Nhóm 1', members: ['admin1'] }],
+        [],
+        CAN_APPROVE_USERS,
+        'mục 11'
+      );
+    } catch (err) { threw = true; assertIncludes(err.message, 'admin1', 'Thông báo lỗi phải nêu rõ username vi phạm'); }
+    if (!threw) throw new Error('Phải throw khi thêm MỚI admin chưa có canBeApprover');
   });
 
   await runner.run('assertApprovalGroupsMembersCanBeApprover: thêm MỚI người KHÔNG có canBeApprover -> throw', () => {

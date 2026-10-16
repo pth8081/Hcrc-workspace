@@ -6,8 +6,9 @@
 // nghiệp vụ bằng tay, KHÔNG mock lib/workflowEngine.js hay lib/createValidation.js):
 //
 //   1. resolvePositionApprovers()/resolveStepApproverUsernames() (lib/positionApprovers.js, điểm tra
-//      cứu trung tâm DUY NHẤT) — lọc đúng theo (jobTitle,dept) VÀ canBeApprover/admin/active; PEOPLE
-//      mode (vắng/khác 'POSITION') đọc thẳng approvers[] như cũ.
+//      cứu trung tâm DUY NHẤT) — lọc đúng theo (jobTitle,dept) VÀ canBeApprover/active; PEOPLE
+//      mode (vắng/khác 'POSITION') đọc thẳng approvers[] như cũ. (11/2026: canBeApprover KHÔNG còn
+//      admin bypass — admin phải được cấp riêng canBeApprover như tài khoản thường.)
 //   2. flatWorkflowConfigToSteps() (lib/workflowEngine.js) tự động có hiệu lực cho NHIỀU module khác
 //      nhau (docs/carRegs/budgetEntries — 3 dbKey khác nhau) MÀ KHÔNG cần sửa riêng từng module, thông
 //      qua MODULE_CONFIGS[moduleKey].resolveWfConfig() thật.
@@ -56,19 +57,25 @@ async function main() {
   const run = createRunner();
 
   // ===== 1) resolvePositionApprovers()/resolveStepApproverUsernames() thuần =====
-  await run.run('resolvePositionApprovers(): khớp đúng (jobTitle,dept) VÀ canBeApprover/admin, loại active:false/thiếu quyền/khác dept', () => {
+  // LỊCH SỬ (11/2026): trước đây admin tự động được tính là approver vị trí
+  // dù KHÔNG có canBeApprover (coi "admin" như thay thế canBeApprover). Theo
+  // yêu cầu người dùng, canBeApprover KHÔNG còn admin bypass nữa (xem
+  // lib/positionApprovers.js::resolvePositionApprovers()) -- admin phải được
+  // cấp RIÊNG canBeApprover như tài khoản thường mới được tính là approver
+  // theo vị trí. Test dưới đổi tên + assertion để khớp hành vi MỚI này.
+  await run.run('resolvePositionApprovers(): khớp đúng (jobTitle,dept) VÀ canBeApprover, loại active:false/thiếu quyền/khác dept/admin không có canBeApprover', () => {
     const users = [
       makeUser({ username: 'a1', perms: { canBeApprover: true } }),
       makeUser({ username: 'a2', perms: {} }), // thiếu canBeApprover
       makeUser({ username: 'a3', dept: 'Phòng Nhân Sự', perms: { canBeApprover: true } }), // khác dept
       makeUser({ username: 'a4', perms: { canBeApprover: true }, active: false }), // đã khoá
       makeUser({ username: 'a5', jobTitle: 'Phó phòng', perms: { canBeApprover: true } }), // khác jobTitle
-      makeUser({ username: 'a6', perms: { admin: true } }) // admin thay canBeApprover
+      makeUser({ username: 'a6', perms: { admin: true } }) // admin KHÔNG có canBeApprover -> KHÔNG còn được tính (11/2026)
     ];
     const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], users);
-    assertEqual(result.length, 2, 'Chỉ a1 (canBeApprover) và a6 (admin) hợp lệ');
+    assertEqual(result.length, 1, 'Chỉ a1 (canBeApprover) hợp lệ, a6 (admin thiếu canBeApprover) bị loại');
     assert(result.includes('a1'), 'Phải có a1');
-    assert(result.includes('a6'), 'Phải có a6 (admin thay canBeApprover)');
+    assert(!result.includes('a6'), 'a6 admin nhưng KHÔNG có canBeApprover -> loại (11/2026, không còn admin bypass)');
     assert(!result.includes('a2'), 'a2 thiếu canBeApprover -> loại');
     assert(!result.includes('a3'), 'a3 khác dept -> loại');
     assert(!result.includes('a4'), 'a4 đã khoá (active:false) -> loại');
@@ -85,13 +92,13 @@ async function main() {
     assertEqual(JSON.stringify(result), JSON.stringify(['kn1']), 'Vị trí kiêm nhiệm khớp cặp cấu hình -> phải được tính');
   });
 
-  await run.run('resolvePositionApprovers(): kiêm nhiệm KHÔNG bỏ qua yêu cầu canBeApprover/admin (bất biến bảo mật cốt lõi)', () => {
+  await run.run('resolvePositionApprovers(): kiêm nhiệm KHÔNG bỏ qua yêu cầu canBeApprover (bất biến bảo mật cốt lõi)', () => {
     const kiemNhiemNoPerm = makeUser({
       username: 'kn2', jobTitle: 'Nhân viên', dept: 'Phòng Khác', perms: {},
       secondaryPositions: [{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }]
     });
     const result = resolvePositionApprovers([{ jobTitle: 'Trưởng phòng', dept: 'Phòng IT' }], [kiemNhiemNoPerm]);
-    assertEqual(result.length, 0, 'Khớp kiêm nhiệm nhưng thiếu canBeApprover/admin -> vẫn KHÔNG được tính là approver');
+    assertEqual(result.length, 0, 'Khớp kiêm nhiệm nhưng thiếu canBeApprover -> vẫn KHÔNG được tính là approver');
   });
 
   await run.run('resolvePositionApprovers(): user không có secondaryPositions (undefined) vẫn hoạt động bình thường (tương thích ngược)', () => {
@@ -142,9 +149,9 @@ async function main() {
     assertEqual(JSON.stringify(result), JSON.stringify(['kn3']), 'Kiêm nhiệm "Tổng Giám Đốc" (bất kỳ dept nào) vẫn khớp cặp dept rỗng');
   });
 
-  await run.run('resolvePositionApprovers(): cặp dept RỖNG vẫn yêu cầu canBeApprover/admin (không phá bất biến bảo mật cốt lõi)', () => {
+  await run.run('resolvePositionApprovers(): cặp dept RỖNG vẫn yêu cầu canBeApprover (không phá bất biến bảo mật cốt lõi)', () => {
     const noPerm = makeUser({ username: 'tgd3', jobTitle: 'Tổng Giám Đốc', dept: 'Ban Giám Đốc', perms: {} });
-    assertEqual(resolvePositionApprovers([{ jobTitle: 'Tổng Giám Đốc', dept: '' }], [noPerm]).length, 0, 'Thiếu canBeApprover/admin -> vẫn KHÔNG được tính dù khớp chức danh');
+    assertEqual(resolvePositionApprovers([{ jobTitle: 'Tổng Giám Đốc', dept: '' }], [noPerm]).length, 0, 'Thiếu canBeApprover -> vẫn KHÔNG được tính dù khớp chức danh');
   });
 
   await run.run('resolveStepApproverUsernames(): approverMode vắng/khác POSITION -> đọc thẳng approvers[] cũ (KHÔNG đổi hành vi)', () => {

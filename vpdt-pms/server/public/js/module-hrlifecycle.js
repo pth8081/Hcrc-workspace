@@ -29,9 +29,11 @@ const HR_PROCESS_STATUS_BADGES = {
 
 // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): hrViewAll KHÔNG còn bypass thao tác ghi —
 // tách ra hrProcessManage riêng, khớp đúng canManageHrProcess()/canActOnHrTask() ở lib/recordActions.js.
+// hrProcessManage KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở
+// lib/recordActions.js).
 function canManageHrLifecycleClient(processType) {
   if (!currentUser) return false;
-  if (currentUser.perms?.admin || currentUser.perms?.hrProcessManage) return true;
+  if (currentUser.perms?.hrProcessManage) return true;
   return !!(processType === 'ONBOARDING' ? currentUser.perms?.hrOnboardingManage : currentUser.perms?.hrOffboardingManage);
 }
 
@@ -585,7 +587,9 @@ function renderHrProcessDetailBody(item) {
 
   const taskRows = (item.tasks || []).map(t => {
     const overdue = t.status === 'PENDING' && t.dueDate < today;
-    const canActThis = !!currentUser && (currentUser.perms?.admin || currentUser.perms?.hrProcessManage ||
+    // hrProcessManage KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback()
+    // ở lib/recordActions.js) — itManage/paymentManage dưới đây GIỮ NGUYÊN (quyền module khác).
+    const canActThis = !!currentUser && (currentUser.perms?.hrProcessManage ||
       t.assignedToUsername === currentUser.username ||
       (!t.assignedToUsername && (
         ((t.department === 'HR' || t.department === 'ADMIN') && canManageHrLifecycleClient(item.processType)) ||
@@ -659,8 +663,10 @@ function renderHrProcessDetailBody(item) {
   // tra theo employeeUsername của 1 tài khoản CÓ SẴN (không tự sinh employeeCode/hồ sơ mới nào để mở
   // theo cách này). Gác quyền đối chiếu THẲNG field perms (không gọi hrpfCanFullView() — module-hrprofile.js
   // là 1 cụm tải lười RIÊNG, có thể CHƯA được nạp lúc render nút này) — cùng đúng logic hrpfCanFullView().
+  // LOI DA VA (11/2026): noi nay sot admin bypass du lib/employeeProfile.js::canFullViewProfiles() da bo
+  // tu dot 3 ngoai le Ho So/Hop Dong/Luong (10/2026) -- bo not cho khop.
   const canViewLinkedProfile = item.processType === 'ONBOARDING' &&
-    !!(currentUser.perms?.admin || currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit);
+    !!(currentUser.perms?.hrProfileManage || currentUser.perms?.hrProfileFullView || currentUser.perms?.hrProfileEdit);
 
   document.getElementById('hrpDetailBody').innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2">

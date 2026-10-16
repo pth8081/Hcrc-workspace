@@ -71,7 +71,8 @@ async function renderOrgChartModule() {
   versionBarWrap.classList.remove('hidden');
   subTabsWrap.classList.remove('hidden');
 
-  const canManageTree = !!(currentUser.perms?.admin || currentUser.perms?.orgChartManage);
+  // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
+  const canManageTree = !!(currentUser.perms?.orgChartManage);
   document.getElementById('btnOrgChartCreateDraft').classList.toggle('hidden', !canManageTree);
 
   populateOrgChartVersionSelect();
@@ -115,7 +116,8 @@ async function loadOrgChartCurrentVersion(id) {
     alert(`⛔ ${err.message}`);
     return;
   }
-  const canManageTree = !!(currentUser.perms?.admin || currentUser.perms?.orgChartManage);
+  // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
+  const canManageTree = !!(currentUser.perms?.orgChartManage);
   const isDraft = _ocCurrentVersion.status === 'DRAFT';
   const isArchived = _ocCurrentVersion.status === 'ARCHIVED';
   document.getElementById('btnOrgChartRenameVersion').classList.toggle('hidden', !(isDraft && canManageTree));
@@ -210,7 +212,8 @@ function renderOrgChartTree() {
   const container = document.getElementById('orgChartTreeContainer');
   const version = _ocCurrentVersion;
   if (!version) { container.innerHTML = ''; return; }
-  const canEdit = version.status === 'DRAFT' && !!(currentUser.perms?.admin || currentUser.perms?.orgChartManage);
+  // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
+  const canEdit = version.status === 'DRAFT' && !!(currentUser.perms?.orgChartManage);
   const nodes = version.nodes || [];
   const roots = nodes.filter(n => n.parentNodeId == null).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   if (!roots.length) { container.innerHTML = '<p class="text-xs text-gray-400 italic">Cây trống.</p>'; return; }
@@ -888,7 +891,8 @@ async function renderOrgChartKpiFlowTab() {
     document.getElementById('orgChartKpiEvaluateeSelect').innerHTML = '';
     return;
   }
-  const canManageKpiFlow = !!(currentUser.perms?.admin || currentUser.perms?.orgChartManage || currentUser.perms?.kpiFlowConfigManage);
+  // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
+  const canManageKpiFlow = !!(currentUser.perms?.orgChartManage || currentUser.perms?.kpiFlowConfigManage);
   const positionNodes = (_ocAppliedVersion.nodes || []).filter(n => n.nodeType === 'POSITION');
   const optionsHtml = positionNodes
     .map(n => ({ id: n.nodeId, label: ocBuildNodeDisplayName(_ocAppliedVersion.nodes, n) }))

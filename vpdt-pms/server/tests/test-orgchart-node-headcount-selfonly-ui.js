@@ -102,7 +102,9 @@ async function main() {
     Object.assign(DB, {
       depts: [], stores: [], cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
       jobTitles: [], storeJobTitles: [], positionTypes: [], jobGrades: [], jobTitleGradeDefaults: [],
-      users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true }, active: true, groupIds: [], permOverrides: null }],
+      // 11/2026: canAccessOrgChartModule() KHÔNG còn admin bypass (module Nhân Sự, theo yêu cầu người
+      // dùng) -> thêm orgChartManage để test này (không liên quan gì tới phân quyền) vẫn vào được tab.
+      users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true, orgChartManage: true }, active: true, groupIds: [], permOverrides: null }],
       workflows: [], quickApplyConfigs: [], deptWorkflows: {}, deptGroups: [],
       docs: [], submissions: [], submissionApprovalGroups: [], submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {}, submissionTypes: [],
       contracts: [], contractApprovalGroups: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {}, contractTypes: [],

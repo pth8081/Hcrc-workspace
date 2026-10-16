@@ -116,17 +116,24 @@ async function main() {
 
   try {
     // ===== PHẦN A: quyền =====
-    await run.run('XEM (GET /versions) mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage/admin, chặn người không quyền', async () => {
+    // LỊCH SỬ (11/2026): trước đây routes/orgChart.js::canView() có nhánh perms.admin bypass nên admin
+    // luôn xem được dù không được cấp orgChartManage/nhanSuManage/kpiFlowConfigManage. Theo yêu cầu
+    // người dùng (module Nhân Sự nhạy cảm, admin KHÔNG có quyền gì trong đó theo mặc định), nhánh admin
+    // bypass đã bị bỏ ở CẢ canView()/canManageTree()/canManageKpiFlow() (routes/orgChart.js) — admin giờ
+    // bị chặn y hệt PLAIN nếu không được cấp quyền thật. Test đổi tên + assertion để khớp hành vi mới.
+    await run.run('XEM (GET /versions) mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage, chặn người không quyền (kể cả admin, 11/2026)', async () => {
       resetAppData();
-      for (const u of [ADMIN, ORGCHART_MGR, HR_MGR, KPI_MGR]) {
+      for (const u of [ORGCHART_MGR, HR_MGR, KPI_MGR]) {
         const ok = await api('GET', '/api/org-chart/versions', undefined, u);
         assertEqual(ok.status, 200, `${u.username} phải xem được danh sách version`);
       }
       const denied = await api('GET', '/api/org-chart/versions', undefined, PLAIN);
       assertEqual(denied.status, 403, 'Nhân viên thường không có quyền nào liên quan phải bị chặn xem');
+      const deniedAdmin = await api('GET', '/api/org-chart/versions', undefined, ADMIN);
+      assertEqual(deniedAdmin.status, 403, 'admin KHÔNG còn bypass (11/2026) -> phải bị chặn như PLAIN nếu chưa được cấp quyền riêng');
     });
 
-    await run.run('SỬA CÂY (bootstrap) chỉ orgChartManage/admin — nhanSuManage/kpiFlowConfigManage KHÔNG đủ', async () => {
+    await run.run('SỬA CÂY (bootstrap) chỉ orgChartManage (11/2026: KHÔNG còn admin bypass) — nhanSuManage/kpiFlowConfigManage KHÔNG đủ', async () => {
       resetAppData();
       const deniedHr = await api('POST', '/api/org-chart/bootstrap', { versionName: 'x' }, HR_MGR);
       assertEqual(deniedHr.status, 403, 'nhanSuManage không đủ quyền sửa cây');
@@ -135,7 +142,7 @@ async function main() {
       assertEqual((APP_DATA.orgChartVersions || []).length, 0, 'Không có version nào được tạo sau các lượt bị từ chối');
     });
 
-    await run.run('SỬA LUỒNG KPI (POST kpi-flow) cho orgChartManage/kpiFlowConfigManage/admin, chặn nhanSuManage', async () => {
+    await run.run('SỬA LUỒNG KPI (POST kpi-flow) cho orgChartManage/kpiFlowConfigManage (11/2026: KHÔNG còn admin bypass), chặn nhanSuManage', async () => {
       resetAppData();
       await api('POST', '/api/org-chart/bootstrap', { versionName: 'CCTC' }, ORGCHART_MGR);
       const versionId = APP_DATA.orgChartVersions[0].id;

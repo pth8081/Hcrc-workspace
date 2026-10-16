@@ -480,10 +480,15 @@ function filterTrainingDocumentProgressForUser(list, user) {
 // onOfficeTechTypeChange() (module-office.js) từng lọc trực tiếp u.perms?.[permKey] của NGƯỜI KHÁC, luôn
 // undefined với viewer không phải admin do sanitizeUsersPermsForViewer() ở trên).
 const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage', 'canBeApprover', 'officeFixTechIT', 'officeFixTechMechanical'];
+// KHÔNG còn gộp admin vào danh sách gợi ý (11/2026, theo yêu cầu người dùng — admin xuất hiện trong mọi
+// ô "Người duyệt/Người xác nhận" gợi ý dù CHƯA được cấp đúng quyền cụ thể, gây hiểu lầm). Áp dụng ĐỒNG
+// BỘ cho CẢ 13 cờ ở trên — riêng `canBeApprover` còn là quyền duyệt THẬT (không chỉ hiển thị, xem
+// lib/positionApprovers.js/lib/createValidation.js/public/js/module-ngansach.js/core.js
+// resolvePositionApproverUsernamesClient() — đã bỏ admin bypass ĐỒNG BỘ ở cả 4 nơi đó).
 function computeModuleApproverUsernames(users) {
   const result = {};
   APPROVER_FLAG_KEYS.forEach(flag => {
-    result[flag] = (users || []).filter(u => u.perms?.admin || u.perms?.[flag]).map(u => u.username);
+    result[flag] = (users || []).filter(u => u.perms?.[flag]).map(u => u.username);
   });
   return result;
 }
@@ -1183,9 +1188,11 @@ function filterLicensesForUser(items, user) {
 // chỉ CHÍNH người hỏi và bộ phận Nhân Sự (nhanSuManage/admin) đọc được; KHÔNG có nhánh phòng ban nào
 // (đồng nghiệp/trưởng phòng cùng đơn vị cũng không thấy). Đây là lý do câu hỏi HCRC Đồng Hành phải
 // nằm ở collection riêng chứ không tái dùng internalPosts (bảng tin CÔNG KHAI).
+// KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem chú thích tại canManageHrFeedback()
+// ở lib/recordActions.js).
 function canViewHrFeedback(user, item) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.nhanSuManage) return true;
+  if (user.perms?.nhanSuManage) return true;
   return item.creator === user.username;
 }
 
@@ -1205,7 +1212,9 @@ function canViewHrProcess(user, item) {
   // giữ hrOnboardingManage/hrOffboardingManage vẫn đọc được toàn bộ dữ liệu nhạy cảm (SĐT/email/ngày
   // nghỉ việc/lý do...) qua GET /api/data.
   if (!hasModuleAccessServer(user, 'hrLifecycle')) return false;
-  if (user.perms?.admin || user.perms?.hrViewAll) return true;
+  // hrViewAll KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở
+  // lib/recordActions.js).
+  if (user.perms?.hrViewAll) return true;
   if (item.creator === user.username) return true;
   if (item.directManagerUsername && item.directManagerUsername === user.username) return true;
   if (item.processType === 'ONBOARDING' && user.perms?.hrOnboardingManage) return true;

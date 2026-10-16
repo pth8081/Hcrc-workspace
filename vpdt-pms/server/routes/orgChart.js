@@ -2,11 +2,15 @@
 // Trí. Toàn bộ dữ liệu 1 khoá AppData "orgChartVersions" (mảng version — xem lib/orgChart.js đầu file
 // đó để biết lý do KHÔNG dùng dbo.Records/PositionAssignments-có-lịch-sử như tài liệu thiết kế gốc).
 //
-// Quyền: XEM (mọi GET) mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage/admin — cùng độ mở
+// Quyền: XEM (mọi GET) mở cho orgChartManage/nhanSuManage/kpiFlowConfigManage — cùng độ mở
 // canAccessOrgChartModule() bản cũ (public/js/core.js) mở rộng thêm kpiFlowConfigManage (quyền MỚI,
 // tách riêng theo khuyến nghị tài liệu — 1 người có thể chỉ được giao tinh chỉnh luồng KPI mà không
-// được sửa cây tổ chức). SỬA CÂY (node/version lifecycle) chỉ orgChartManage/admin. SỬA LUỒNG KPI
-// (thêm/bớt quan hệ đánh giá) orgChartManage/kpiFlowConfigManage/admin.
+// được sửa cây tổ chức). SỬA CÂY (node/version lifecycle) chỉ orgChartManage. SỬA LUỒNG KPI
+// (thêm/bớt quan hệ đánh giá) orgChartManage/kpiFlowConfigManage.
+// KHÔNG còn admin bypass ở CẢ 3 hàm dưới (11/2026, mở rộng "Nhân Sự" — xem chú thích tại
+// canManageHrFeedback() ở lib/recordActions.js) — sửa ĐỒNG BỘ với public/js/core.js
+// (canAccessOrgChartModule/canAccessHrLifecycleModule) + public/js/module-orgchart.js (client mirror)
+// để tránh "nút vẫn hiện nhưng bấm vào bị từ chối".
 const express = require('express');
 const multer = require('multer');
 const crypto = require('crypto');
@@ -30,13 +34,13 @@ const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
 
 function canView(perms) {
-  return !!(perms?.admin || perms?.orgChartManage || perms?.nhanSuManage || perms?.kpiFlowConfigManage);
+  return !!(perms?.orgChartManage || perms?.nhanSuManage || perms?.kpiFlowConfigManage);
 }
 function canManageTree(perms) {
-  return !!(perms?.admin || perms?.orgChartManage);
+  return !!(perms?.orgChartManage);
 }
 function canManageKpiFlow(perms) {
-  return !!(perms?.admin || perms?.orgChartManage || perms?.kpiFlowConfigManage);
+  return !!(perms?.orgChartManage || perms?.kpiFlowConfigManage);
 }
 function requireView(req, res) {
   if (!canView(req.freshUser.perms)) { res.status(403).json({ error: 'Bạn không có quyền xem Cơ Cấu Tổ Chức' }); return false; }

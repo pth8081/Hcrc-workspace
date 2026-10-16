@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**26.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.14 (2026-11): Module Nhân Sự — bỏ hẳn "admin bypass" (admin KHÔNG còn tự động có quyền gì trong Nhân Sự)
+
+Người dùng báo (kèm ảnh chụp) 2 vấn đề: (1) ô chọn "Người Xác Nhận Kỹ Thuật" ở đơn sửa chữa VP gợi ý cả
+admin dù admin chưa từng được cấp quyền đó; (2) admin mặc định vào thao tác được TOÀN BỘ các màn Nhân
+Sự dù không có bất kỳ quyền Nhân Sự nào — người dùng nhấn mạnh đây là dữ liệu nhạy cảm, admin phải
+KHÔNG có quyền gì trong Nhân Sự theo mặc định, phải tự cấp riêng như tài khoản thường.
+
+Gốc rễ: ~500 điểm kiểm tra quyền rải khắp code đều viết kiểu `user.perms?.admin || user.perms?.coQuyen`
+— admin luôn bypass qua được dù thiếu quyền cụ thể. Đợt này bỏ hẳn nhánh `|| user.perms?.admin` ở toàn
+bộ 3 phạm vi đã xác nhận với người dùng:
+
+1. **Toàn bộ nhóm menu Nhân Sự** (8 quyền: `nhanSuManage`, `orgChartManage`, `kpiFlowConfigManage`,
+   `hrOnboardingManage`, `hrOffboardingManage`, `hrTaskTemplateManage`, `hrProcessManage`, `hrViewAll`) —
+   admin không còn tự vào được HCRC Đồng Hành, Onboarding/Offboarding, Cơ Cấu Tổ Chức, Cấu Hình KPI,
+   Checklist Mẫu Nhân Sự nếu không được cấp quyền tương ứng.
+2. **Danh sách gợi ý "người duyệt/người xác nhận" toàn hệ thống** (`computeModuleApproverUsernames()`,
+   13 quyền: duyệt họp/bài viết nội bộ/giá CNTT/giấy phép/đồng phục/phép-tăng ca/xác nhận công, + kỹ
+   thuật sửa chữa VP IT/Cơ Khí) — admin không còn tự lọt vào các ô gợi ý này chỉ vì có cờ `admin`.
+3. **`canBeApprover`** (quyền duyệt THEO VỊ TRÍ + điều kiện thành viên "Nhóm Phê Duyệt") — đây là quyền
+   DUYỆT THẬT (không chỉ gợi ý hiển thị), admin không còn tự động là người duyệt theo chức vụ/nhóm phê
+   duyệt chỉ vì có cờ admin — phải được cấp riêng `canBeApprover` như tài khoản thường.
+
+⚠️ **Tác động khi triển khai (đọc kỹ trước khi deploy)**: server hiện tại CHƯA có tài khoản thường nào
+được cấp 8 quyền Nhân Sự ở trên hoặc `canBeApprover` (xác nhận qua dữ liệu seed `defaults.js`) — sau khi
+deploy bản này, các màn HCRC Đồng Hành/Onboarding/Offboarding/Cơ Cấu Tổ Chức/Cấu Hình KPI/Checklist Mẫu
+Nhân Sự và các luồng duyệt theo vị trí/nhóm phê duyệt sẽ KHÔNG ai thao tác được cho tới khi admin tự vào
+**Nhân Sự → Phân Quyền** cấp lại đúng quyền cho tài khoản thật phụ trách — đây là hệ quả đã được người
+dùng xác nhận chấp nhận (tự cấp lại sau khi merge), không phải thiếu sót.
+
+Đã rà soát + sửa lại toàn bộ test hiện có tham chiếu các quyền trên (không chỉ viết test mới) để khớp
+đúng hành vi MỚI này, bao gồm nhiều test fixture trước đây dùng tài khoản admin thuần để test các tính
+năng KHÔNG liên quan tới phân quyền (vd test giao diện modal Cơ Cấu Tổ Chức) — các fixture đó được bổ
+sung đúng quyền cần thiết để không bị chặn nhầm. Đã xác nhận qua `git stash` so với bản gốc: các lỗi
+test còn lại (test-preview-workflow-buttons.js, test-adv-workflow-tab-deep.js, test-hr-onboarding-queue-
+export.js, test-uploads-file-authz.js) đều có từ trước, không liên quan tới đợt sửa này.
+
+Thuần server-side permission logic (JS, không đổi schema/route mới/biến môi trường) — chỉ cần copy code +
+`pm2 restart`, nhưng **bắt buộc** làm thêm bước cấp lại quyền thủ công nêu trên ngay sau khi deploy.
 
 ## v26.13 (2026-11): Nhịp Sống HCRC — đoạn nội dung trên thẻ feed giới hạn đúng 3 dòng
 

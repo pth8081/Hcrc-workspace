@@ -141,7 +141,11 @@ async function main() {
 
     const adminUser = {
       id: 1, username: 'admin', name: 'Quản Trị Viên Test', dept: 'Phòng CNTT', jobTitle: 'Nhân viên',
-      email: 'admin@test.local', phone: '0900000000', perms: { admin: true }, groupIds: [], permOverrides: null
+      email: 'admin@test.local', phone: '0900000000',
+      // 11/2026: canAccessHrModule()/canAccessOrgChartModule() KHÔNG còn admin bypass (module Nhân Sự,
+      // theo yêu cầu người dùng) -> thêm nhanSuManage/orgChartManage để test điều hướng toàn hệ thống
+      // này (không liên quan gì tới phân quyền, chỉ test lazy-load không crash) vẫn vào được 2 mục đó.
+      perms: { admin: true, nhanSuManage: true, orgChartManage: true }, groupIds: [], permOverrides: null
     };
     DB.users.push(adminUser);
     finishLogin(adminUser);

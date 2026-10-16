@@ -564,7 +564,9 @@ function assertApprovalGroupsMembersCanBeApprover(value, oldValue, users, keyLab
     for (const username of g.members) {
       if (grandfathered.has(username)) continue;
       const u = usersByUsername.get(username);
-      const eligible = !!(u && (u.perms?.canBeApprover || u.perms?.admin));
+      // canBeApprover KHÔNG còn admin bypass (11/2026, theo yêu cầu người dùng — cùng chú thích ở
+      // lib/positionApprovers.js::resolvePositionApprovers()).
+      const eligible = !!(u && u.perms?.canBeApprover);
       if (!eligible) {
         throw new CreateError(400, `Vai trò "${g.label || g.id}" (${keyLabel}) — "${username}" chưa có quyền "Người duyệt" (canBeApprover), không thể thêm làm thành viên mới.`);
       }

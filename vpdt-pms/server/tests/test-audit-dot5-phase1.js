@@ -66,18 +66,25 @@ await run.run('sanitizeUsersPermsForViewer(): input rỗng/không phải mảng 
   assertEqual(sanitizeUsersPermsForViewer(undefined, 'nv1', true), undefined);
 });
 
-await run.run('computeModuleApproverUsernames(): gộp đúng admin + cờ quyền cụ thể cho từng module', () => {
+// LỊCH SỬ: trước đây (tới v26.x) computeModuleApproverUsernames() GỘP admin vào MỌI danh sách gợi ý,
+// bất kể admin có thật sự được cấp đúng cờ quyền hay không. 11/2026, theo yêu cầu người dùng (báo "admin
+// mặc định xuất hiện trong picker Người Xác Nhận Kỹ Thuật dù chưa được cấp quyền"), đã bỏ hẳn phần gộp
+// admin — danh sách gợi ý giờ CHỈ còn đúng những ai THẬT SỰ có cờ quyền tương ứng, khớp với admin1
+// (perms chỉ có admin:true, KHÔNG có bất kỳ cờ cụ thể nào) không còn xuất hiện ở bất kỳ danh sách nào.
+await run.run('computeModuleApproverUsernames(): KHÔNG còn gộp admin — chỉ gồm đúng ai có cờ quyền cụ thể', () => {
   const result = computeModuleApproverUsernames(USERS);
-  assert(result.meetingApprove.includes('admin1') && result.meetingApprove.includes('nv1'), 'meetingApprove phải gồm admin + nv1');
-  assertEqual(result.meetingApprove.length, 2);
-  assert(result.licenseApprove.includes('admin1') && result.licenseApprove.includes('nv2'), 'licenseApprove phải gồm admin + nv2');
+  assert(!result.meetingApprove.includes('admin1'), 'admin (không có cờ cụ thể) KHÔNG được lọt vào meetingApprove');
+  assert(result.meetingApprove.includes('nv1'), 'meetingApprove phải gồm nv1');
+  assertEqual(result.meetingApprove.length, 1);
+  assert(!result.licenseApprove.includes('admin1'), 'admin KHÔNG được lọt vào licenseApprove');
+  assert(result.licenseApprove.includes('nv2'), 'licenseApprove phải gồm nv2');
   assert(result.itPriceEmergencyRejectApproveRetail.includes('nv2'), 'itPriceEmergencyRejectApproveRetail phải gồm nv2');
   assert(!result.itPriceEmergencyRejectApproveWholesale.includes('nv2'), 'nv2 chỉ có cờ Retail, không được lọt vào danh sách Wholesale');
   assert(result.internalPostApprove.includes('nv3'), 'internalPostApprove phải gồm nv3');
   assert(!result.internalPostApprove.includes('nv1'), 'nv1 không có cờ internalPostApprove, không được lọt vào danh sách');
 });
 
-await run.run('computeModuleApproverUsernames(): 5 cờ mới cho "Xem Quy Trình" (Đặt Phòng Họp/Đồng Phục/Công&Phép, đợt vá thiếu nút) gộp đúng admin + cờ cụ thể', () => {
+await run.run('computeModuleApproverUsernames(): 5 cờ "Xem Quy Trình" (Đặt Phòng Họp/Đồng Phục/Công&Phép) KHÔNG còn gộp admin, chỉ gồm đúng cờ cụ thể', () => {
   const USERS2 = [
     { username: 'admin1', name: 'Admin', perms: { admin: true } },
     { username: 'hc1', name: 'Hành Chính', perms: { uniformManage: true } },
@@ -87,8 +94,8 @@ await run.run('computeModuleApproverUsernames(): 5 cờ mới cho "Xem Quy Trìn
     { username: 'hr3', name: 'HR 3', perms: { hrShiftSwapApprove: true } },
   ];
   const result = computeModuleApproverUsernames(USERS2);
-  assert(result.uniformManage.includes('admin1') && result.uniformManage.includes('hc1'), 'uniformManage phải gồm admin + hc1');
-  assert(result.uniformApprove.includes('admin1') && result.uniformApprove.includes('hc2'), 'uniformApprove phải gồm admin + hc2');
+  assert(!result.uniformManage.includes('admin1') && result.uniformManage.includes('hc1'), 'uniformManage phải gồm hc1, KHÔNG được gồm admin');
+  assert(!result.uniformApprove.includes('admin1') && result.uniformApprove.includes('hc2'), 'uniformApprove phải gồm hc2, KHÔNG được gồm admin');
   assert(!result.uniformApprove.includes('hc1'), 'hc1 chỉ có uniformManage, không được lọt vào danh sách uniformApprove');
   assert(result.hrAttendanceManage.includes('hr1'), 'hrAttendanceManage phải gồm hr1');
   assert(result.hrLeaveApprove.includes('hr2') && !result.hrLeaveApprove.includes('hr1'), 'hrLeaveApprove chỉ gồm đúng hr2 (hr1 có cờ khác, client tự OR lại)');

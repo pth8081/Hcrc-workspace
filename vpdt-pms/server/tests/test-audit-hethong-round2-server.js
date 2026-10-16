@@ -240,12 +240,21 @@ async function main() {
     await run.run('#9 POST /org-chart/recompute-manager-usernames ghi Nhật Ký Hệ Thống nêu rõ số user bị đổi', async () => {
       resetData();
       APP_DATA.users.push({ id: 6, username: 'u_it', name: 'NV IT', dept: 'Phòng IT', jobTitle: 'Nhân viên', active: true, perms: {} });
-      const res = await api('POST', '/api/org-chart/recompute-manager-usernames', {}, ADMIN);
+      // orgChartManage KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự") — dùng 1 tài khoản có RIÊNG
+      // quyền này thay vì ADMIN chung (ADMIN giờ chỉ có perms.admin, không tự động vào được Cơ Cấu Tổ Chức).
+      const ORG_CHART_MANAGER = { id: 7, username: 'orgchart_mgr', name: 'Quản Lý Cơ Cấu', dept: 'Phòng Nhân Sự', perms: { orgChartManage: true }, active: true };
+      const res = await api('POST', '/api/org-chart/recompute-manager-usernames', {}, ORG_CHART_MANAGER);
       assertEqual(res.status, 200, JSON.stringify(res.body));
       await new Promise(r => setTimeout(r, 30));
       const log = SYSTEM_LOGS.find(l => l.actionType === 'ORGCHART_RECOMPUTE_MANAGERS');
       assert(!!log, 'phải có 1 dòng log actionType=ORGCHART_RECOMPUTE_MANAGERS (trước đây HOÀN TOÀN không có)');
-      assertEqual(log.username, 'admin');
+      assertEqual(log.username, 'orgchart_mgr');
+    });
+
+    await run.run('#9 (mới, 11/2026) ADMIN KHÔNG còn tự động vào được orgChartManage — phải được cấp riêng', async () => {
+      resetData();
+      const res = await api('POST', '/api/org-chart/recompute-manager-usernames', {}, ADMIN);
+      assertEqual(res.status, 403, JSON.stringify(res.body));
     });
 
     await run.run('#9 Người KHÔNG có orgChartManage/admin bị chặn 403 (quyền cũ không đổi)', async () => {

@@ -44,6 +44,12 @@ const MANAGER1 = { username: 'mgr1', name: 'Trưởng Phòng Kế Toán', dept: 
 // Nhân viên ĐANG active — nguồn tra cứu cho Offboarding (employeeUsername).
 const EMP = { username: 'nv.ketoan', name: 'Nguyễn Văn Kế Toán', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', email: 'ketoan@company.com', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true, totpEnabled: true };
+// 11/2026: dùng để test nhánh "CÓ" của canViewLinkedProfile() (hrProfileManage/hrProfileFullView/
+// hrProfileEdit) — TRƯỚC ĐÂY test này login bằng ADMIN vì canViewLinkedProfile() còn bypass admin;
+// nhánh bypass đó đã bị bỏ (xem module-hrlifecycle.js) nên phải có 1 tài khoản được cấp quyền THẬT.
+// Cần CẢ hrOnboardingManage + hrOffboardingManage để canViewHrProcess() cho xem được cả 2 quy trình
+// test (Onboarding NV0001 + Offboarding), không liên quan gì tới canViewLinkedProfile() đang test.
+const HR_PROFILE_VIEWER = { username: 'hr.profileview', name: 'Nhân Sự Có Quyền Xem Hồ Sơ', dept: 'Phòng Nhân Sự', perms: { hrOnboardingManage: true, hrOffboardingManage: true, hrProfileFullView: true }, active: true };
 // Đợt 4 (vá gap #1 Phần B, mục A.6 tài liệu thiết kế) — SUP_MGR đang là managerUsername của SUP_REPORT
 // (còn active) -> Offboarding của SUP_MGR phải bị chặn tự động Hoàn Tất cho tới khi chỉ định người kế
 // nhiệm. SUP_SUCCESSOR dùng làm người kế nhiệm hợp lệ.
@@ -75,7 +81,7 @@ const state = createMockState({
   stores: ['Siêu Thị A'],
   jobTitles: ['Nhân viên', 'Chuyên viên'],
   storeJobTitles: [{ label: 'Nhân viên bán hàng' }],
-  users: [HR1, HR_NOPERM, HR_VIEWER, HR_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
+  users: [HR1, HR_NOPERM, HR_VIEWER, HR_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN, HR_PROFILE_VIEWER, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
   hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES]
 });
 
@@ -228,7 +234,14 @@ async function main() {
       assertIncludes(err, 'đã được đánh dấu hoàn thành rồi', 'Phải chặn hoàn thành trùng');
     });
 
-    await run.run('Bỏ qua task BẮT BUỘC nhãn IT: IT1 (canActOnHrTask=true qua itManage nhưng KHÔNG quản lý quy trình) -> 403; HR1 (quản lý quy trình NHƯNG không có itManage -> canActOnHrTask=false) -> CŨNG 403; chỉ admin (cả 2 điều kiện đều bypass) mới bỏ qua được', async () => {
+    // LỊCH SỬ (11/2026): trước đây admin bypass CẢ canManageHrProcess() lẫn canActOnHrTask() nên luôn
+    // bỏ qua được task bắt buộc dù không liên quan gì tới quy trình. Theo yêu cầu người dùng, cả 2 hàm
+    // đã bỏ nhánh admin bypass (chỉ còn hrProcessManage/creator/hrOnboardingManage/hrOffboardingManage/
+    // itManage/paymentManage/assignedToUsername — xem lib/recordActions.js) — admin giờ bị chặn y hệt
+    // IT1/HR1 ở test này nếu không được cấp quyền thật. Test đổi tên + assertion để khớp hành vi mới;
+    // trường hợp "ai thật sự bỏ qua được" nay đã có 2 test riêng ngay dưới (hrViewAll KHÔNG được,
+    // hrProcessManage ĐƯỢC).
+    await run.run('Bỏ qua task BẮT BUỘC nhãn IT: IT1 (canActOnHrTask=true qua itManage nhưng KHÔNG quản lý quy trình) -> 403; HR1 (quản lý quy trình NHƯNG không có itManage -> canActOnHrTask=false) -> CŨNG 403; admin (KHÔNG còn bypass, 11/2026) -> CŨNG 403', async () => {
       // Tạo thêm quy trình Onboarding riêng để test nhánh "Chuẩn bị máy tính" (nhãn IT, bắt buộc) còn nguyên PENDING.
       const item2 = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item,
         onboardHoPayload({ employeeCode: 'NV0002', fullName: 'Lê Thị Hai' }));
@@ -246,10 +259,11 @@ async function main() {
       }, { id: item2.id, taskId: itTask2.taskId });
       assertIncludes(errHr, 'không có quyền bỏ qua việc này', 'HR1 quản lý quy trình (qua creator) NHƯNG không có itManage -> canActOnHrTask false -> vẫn KHÔNG bỏ qua được task nhãn IT (2 lớp quyền độc lập: quản lý quy trình + thao tác đúng nhãn)');
       await loginAs(page, ADMIN);
-      const result = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Đã có sẵn máy từ đợt trước' }), { id: item2.id, taskId: itTask2.taskId });
-      const skipped = result.item.tasks.find(t => t.taskId === itTask2.taskId);
-      assertEqual(skipped.status, 'SKIPPED', 'admin bypass cả canManageHrProcess lẫn canActOnHrTask -> phải bỏ qua được');
-      assertEqual(skipped.note, 'Đã có sẵn máy từ đợt trước', 'note phải khớp đúng lý do bỏ qua vừa nhập');
+      const errAdmin = await page.evaluate(async (args) => {
+        try { await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Đã có sẵn máy từ đợt trước' }); return null; }
+        catch (e) { return e.message; }
+      }, { id: item2.id, taskId: itTask2.taskId });
+      assertIncludes(errAdmin, 'Chỉ người quản lý quy trình', 'admin KHÔNG còn bypass canManageHrProcess (11/2026) -> vẫn bị chặn như người thường không liên quan');
       await loginAs(page, HR1);
     });
 
@@ -585,10 +599,10 @@ async function main() {
       assert(!html.includes('openHrProfileFromProcess'), 'HR1 thiếu hrProfileManage/hrProfileFullView/hrProfileEdit -> KHÔNG được thấy nút này');
     });
 
-    await run.run('"👤 Xem Hồ Sơ": CÓ hiện với admin, đúng data-arg0 = employeeCode (NV0001), CHỈ hiện cho ONBOARDING (không hiện ở Offboarding)', async () => {
-      await loginAs(page, ADMIN);
+    await run.run('"👤 Xem Hồ Sơ": CÓ hiện với người có hrProfileFullView, đúng data-arg0 = employeeCode (NV0001), CHỈ hiện cho ONBOARDING (không hiện ở Offboarding)', async () => {
+      await loginAs(page, HR_PROFILE_VIEWER);
       const onbHtml = await page.evaluate((id) => { openHrProcessDetail(id); return document.getElementById('hrpDetailBody').innerHTML; }, onboardId);
-      assertIncludes(onbHtml, 'data-op="openHrProfileFromProcess" data-arg0="NV0001"', 'Admin phải thấy nút, đúng employeeCode của quy trình Onboarding');
+      assertIncludes(onbHtml, 'data-op="openHrProfileFromProcess" data-arg0="NV0001"', 'Người có hrProfileFullView phải thấy nút, đúng employeeCode của quy trình Onboarding');
 
       const offbHtml = await page.evaluate((id) => { openHrProcessDetail(id); return document.getElementById('hrpDetailBody').innerHTML; }, offboardId);
       assert(!offbHtml.includes('openHrProfileFromProcess'), 'Offboarding KHÔNG có employeeCode/hồ sơ tự sinh theo cách này -> không hiện nút');

@@ -3253,13 +3253,16 @@ function clientMatchesPositionPair(user, pair) {
 // Thêm 'canBeApprover' vào APPROVER_FLAG_KEYS (lib/recordViewScope.js) để có sẵn 1 danh sách username AN
 // TOÀN (DB.moduleApproverUsernames.canBeApprover — chỉ username, không lộ cả ma trận quyền) dùng làm lớp
 // dự phòng khi u.perms đã bị xoá.
+// KHÔNG còn admin bypass (11/2026, theo yêu cầu người dùng — cùng chú thích ở
+// lib/positionApprovers.js::resolvePositionApprovers()) — DB.moduleApproverUsernames.canBeApprover
+// (lib/recordViewScope.js::computeModuleApproverUsernames()) cũng đã bỏ gộp admin đồng bộ.
 function resolvePositionApproverUsernamesClient(positionPairs) {
   const pairs = (positionPairs || []).filter(p => p && p.jobTitle);
   if (!pairs.length) return [];
   const safeApproverUsernames = DB.moduleApproverUsernames?.canBeApprover || [];
   return (DB.users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => !!(u.perms?.canBeApprover || u.perms?.admin || safeApproverUsernames.includes(u.username)))
+    .filter(u => !!(u.perms?.canBeApprover || safeApproverUsernames.includes(u.username)))
     .filter(u => pairs.some(p => clientMatchesPositionPair(u, p)))
     .map(u => u.username);
 }
@@ -10363,7 +10366,9 @@ function _dispatchTabRender(tabName) {
   // trong DB.* như các module khác — xem lib/orgChart.js).
   if (tabName === 'orgChart') { renderOrgChartModule(); }
   if (tabName === 'hrLifecycle') {
-    document.getElementById('btnHrpViewTemplates').classList.toggle('hidden', !(currentUser.perms?.admin || currentUser.perms?.hrTaskTemplateManage));
+    // hrTaskTemplateManage KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem
+    // canManageHrFeedback() ở lib/recordActions.js).
+    document.getElementById('btnHrpViewTemplates').classList.toggle('hidden', !currentUser.perms?.hrTaskTemplateManage);
     document.getElementById('btnHrpCreateOnboarding').classList.toggle('hidden', !canManageHrLifecycleClient('ONBOARDING'));
     document.getElementById('btnHrpCreateOffboarding').classList.toggle('hidden', !canManageHrLifecycleClient('OFFBOARDING'));
     // Nhập Excel hàng loạt Onboarding (Theo Quy Trình/Bỏ Qua Quy Trình, 10/2026) — cùng quyền "+ Tạo
@@ -10524,9 +10529,9 @@ function canAccessBudgetModule(user) {
 // BUSINESS_MODULES) — module "hr" giờ quay lại đúng 1 quyền chi tiết DUY NHẤT (nhanSuManage), gác luôn
 // tab "Quản Lý & Phản Hồi Ý Kiến" (module chỉ có 1 tab, không cần canAccessHrSubTab() riêng nữa). Lưu ý:
 // tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) KHÔNG dùng hàm này — mở cho mọi người.
+// KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
 function canAccessHrModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'hr')) return false;
   return !!user.perms?.nhanSuManage;
 }
@@ -10535,9 +10540,9 @@ function canAccessHrModule(user) {
 // của "orgChart" đang bật hay tắt (xem chú thích hasModuleAccess()). Quyền vào: orgChartManage HOẶC
 // nhanSuManage HOẶC kpiFlowConfigManage (quyền MỚI, tách riêng cho Tab "Cấu Hình Đánh Giá KPI" theo
 // khuyến nghị tài liệu — 1 người có thể chỉ được giao tinh chỉnh luồng KPI, không cần sửa cây tổ chức).
+// KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
 function canAccessOrgChartModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'orgChart')) return false;
   return !!(user.perms?.orgChartManage || user.perms?.nhanSuManage || user.perms?.kpiFlowConfigManage);
 }
@@ -10547,9 +10552,11 @@ function canAccessOrgChartModule(user) {
 // ít nhất 1 quy trình mà user này là người tạo/quản lý trực tiếp/được giao 1 task riêng — bao quát cả
 // trường hợp 1 người CHỈ được giao đúng 1 task cụ thể (VD Trưởng phòng làm "Quản lý trực tiếp" cho 1
 // nhân viên) dù không có bất kỳ quyền phẳng nào ở trên.
+// KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js)
+// — itManage/paymentManage dưới đây vẫn GIỮ NGUYÊN (không thuộc phạm vi ngoại lệ Nhân Sự, chỉ là 2 quyền
+// module khác được dùng CHUNG ở đây cho người được giao task IT/Tài chính trong quy trình).
 function canAccessHrLifecycleModule(user) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
   if (!hasModuleAccess(user, 'hrLifecycle')) return false;
   if (user.perms?.hrOnboardingManage || user.perms?.hrOffboardingManage || user.perms?.hrViewAll ||
       user.perms?.itManage || user.perms?.paymentManage || user.perms?.nhanSuManage) return true;

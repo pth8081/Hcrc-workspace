@@ -264,25 +264,31 @@ async function main() {
       assertIncludes(threw, 'không có quyền xem câu hỏi này', 'mark-read phải bị chặn với người không liên quan');
     });
 
-    // ===== 7) Admin (KHÔNG có nhanSuManage) vẫn quản lý được nhờ nhánh perms.admin =====
-    await run.run('Admin (không có nhanSuManage) vẫn vào được module Nhân Sự và trả lời được', async () => {
+    // ===== 7) Admin (KHÔNG có nhanSuManage) — LỊCH SỬ (11/2026): trước đây canManageHrFeedback() có
+    // nhánh perms.admin bypass nên admin luôn quản lý được Nhân Sự dù không được cấp quyền. Theo yêu cầu
+    // người dùng (module Nhân Sự nhạy cảm, admin KHÔNG được có quyền gì trong đó theo mặc định), nhánh
+    // admin bypass đã bị bỏ ở CẢ canAccessHrModule() (core.js) VÀ canManageHrFeedback()/canViewHrFeedback()
+    // (lib/recordActions.js, lib/recordViewScope.js) — admin giờ bị chặn y như nhân viên thường chưa
+    // được cấp nhanSuManage. Test dưới đổi hẳn sang xác nhận hành vi BỊ CHẶN này. =====
+    await run.run('Admin (không có nhanSuManage) KHÔNG còn vào được module Nhân Sự / không trả lời được (11/2026, bỏ admin bypass)', async () => {
       await loginAs(page, ADMIN);
-      const result = await page.evaluate(async () => {
+      const result = await page.evaluate(async (id) => {
+        window.__resetCapture();
         const navHidden = document.getElementById('btnHrFeedbackNav').classList.contains('hidden');
         switchTab('hr');
-        const pending = DB.hrFeedback.find(x => x.status === 'PENDING');
-        window.__resetCapture();
-        document.getElementById(`hrFeedbackResponseInput_${pending.id}`).value = 'Đã tiếp nhận, Nhân Sự sẽ rà soát lại.';
-        await submitHrFeedbackResponse(pending.id);
-        const item = DB.hrFeedback.find(x => x.id === pending.id);
-        return { navHidden, received: DB.hrFeedback.length, item, alerts: window.__alerts.slice() };
-      });
-      assertEqual(result.navHidden, false, 'Admin phải thấy nút nav "Nhân Sự" dù không có nhanSuManage');
-      assertEqual(result.received, 2, 'Admin phải xem được toàn bộ câu hỏi công ty');
-      assertEqual(result.item.status, 'ANSWERED', 'Admin trả lời được nhờ nhánh perms.admin của canManageHrFeedback()');
-      assertEqual(result.item.respondedBy, 'admin', 'respondedBy phải là chính admin vừa trả lời');
-      assertEqual(result.item.employeeUnread, true, 'Admin trả lời cũng phải bật cờ chưa đọc cho nhân viên');
-      assertIncludes(result.alerts, 'Đã gửi phản hồi tới nhân viên', 'Phải báo gửi phản hồi thành công');
+        const sectionHidden = document.getElementById('hrSection').classList.contains('hidden');
+        let threw = null;
+        try {
+          await callRecordAction('hrFeedback', id, 'respond', { response: 'Admin thử trả lời dù không có nhanSuManage' });
+        } catch (e) {
+          threw = e.message;
+        }
+        return { navHidden, sectionHidden, alerts: window.__alerts.slice(), threw };
+      }, questionId);
+      assertEqual(result.navHidden, true, 'Admin không có nhanSuManage -> nút nav "Nhân Sự" phải ẩn (11/2026)');
+      assertEqual(result.sectionHidden, true, 'Admin không có nhanSuManage -> màn Nhân Sự phải không mở được');
+      assertIncludes(result.alerts, 'không có quyền truy cập Module Nhân Sự', 'Phải cảnh báo admin không có quyền vào module');
+      assertIncludes(result.threw, 'không có quyền phản hồi', 'Gọi thẳng route respond phải bị server từ chối (403) dù là admin');
     });
 
     // ===== 8) 4 tab cũ của Truyền Thông không vỡ vì có thêm nhánh QNA =====

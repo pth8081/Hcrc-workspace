@@ -381,16 +381,19 @@ const NON_ADMIN_GATED_KEYS = new Map([
     allow: (perms) => !!(perms?.admin || perms?.minutesCreate || perms?.minutesEdit),
     error: 'Chỉ người có quyền Lập/Sửa Biên Bản Họp mới được sửa mẫu danh sách tham dự dùng chung'
   }],
+  // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js)
+  // — phải khớp đúng routes/orgChart.js::canManageTree().
   ['orgChartVersions', {
-    allow: (perms) => !!(perms?.admin || perms?.orgChartManage),
+    allow: (perms) => !!(perms?.orgChartManage),
     error: 'Chỉ người có quyền Quản Lý Cơ Cấu Tổ Chức mới được sửa — vui lòng dùng đúng màn "Cơ Cấu Tổ Chức"'
   }],
   // hrTaskTemplates: danh mục checklist chuẩn Onboarding/Offboarding (Nhân Sự) — sửa được ở màn quản trị
   // riêng (module-hrlifecycle.js), lưu nguyên khối (không qua CRUD record thường) cùng khuôn
   // meetingAttendeeTemplates/kpiEvaluatorConfig ở trên — KHÔNG dùng ADMIN_ONLY_KEYS vì
   // hrTaskTemplateManage (không phải chỉ admin) cũng được sửa danh mục này.
+  // KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở lib/recordActions.js).
   ['hrTaskTemplates', {
-    allow: (perms) => !!(perms?.admin || perms?.hrTaskTemplateManage),
+    allow: (perms) => !!(perms?.hrTaskTemplateManage),
     error: 'Chỉ người có quyền Quản Lý Checklist Mẫu (Nhân Sự) mới được sửa danh mục này'
   }],
   // shiftTemplates/publicHolidays/attendanceHoConfig: 3 danh mục cấu hình của Công & Phép (Phần E, xem

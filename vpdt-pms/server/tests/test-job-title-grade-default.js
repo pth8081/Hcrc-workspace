@@ -96,7 +96,10 @@ async function main() {
       depts: ['Phòng Kinh Doanh'], stores: [], cats: [], deptAbbrs: {}, docCatAbbrs: {}, contractTypeAbbrs: {},
       jobTitles: ['Trưởng Phòng Kinh Doanh', 'Nhân Viên Kinh Doanh'], storeJobTitles: [{ label: 'Giám Đốc siêu thị' }], positionTypes: [],
       jobGrades: ['L1', 'L3', 'L5'], jobTitleGradeDefaults: [],
-      users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true }, active: true, groupIds: [], permOverrides: null }],
+      // 11/2026: canAccessOrgChartModule() KHÔNG còn admin bypass (module Nhân Sự, theo yêu cầu người
+      // dùng) -> thêm orgChartManage để phần test mở modal thêm node Cơ Cấu Tổ Chức ở dưới vẫn vào được
+      // (test này không liên quan gì tới phân quyền, chỉ test cấp bậc mặc định theo chức danh).
+      users: [{ id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', jobTitle: 'Admin', email: 'a@test.local', phone: '0900000000', perms: { admin: true, orgChartManage: true }, active: true, groupIds: [], permOverrides: null }],
       workflows: [], quickApplyConfigs: [], deptWorkflows: {}, deptGroups: [],
       docs: [], submissions: [], submissionApprovalGroups: [], submissionTypeDeptWorkflows: {}, submissionDeptWorkflows: {}, submissionTypes: [],
       contracts: [], contractApprovalGroups: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {}, contractTypes: [],

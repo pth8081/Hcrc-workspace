@@ -55,9 +55,11 @@ function matchesPositionPair(user, pair) {
 function resolvePositionApprovers(positionPairs, users) {
   const pairs = (positionPairs || []).filter(p => p && p.jobTitle);
   if (!pairs.length) return [];
+  // canBeApprover KHÔNG còn admin bypass (11/2026, theo yêu cầu người dùng — admin không còn tự động là
+  // người duyệt theo chức vụ chỉ vì có cờ admin, phải được cấp RIÊNG canBeApprover như tài khoản thường).
   return (users || [])
     .filter(u => u && u.active !== false)
-    .filter(u => !!(u.perms?.canBeApprover || u.perms?.admin))
+    .filter(u => !!u.perms?.canBeApprover)
     .filter(u => pairs.some(p => matchesPositionPair(u, p)))
     .map(u => u.username);
 }

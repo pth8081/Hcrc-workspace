@@ -719,14 +719,16 @@ function switchWfSubmissionType(typeKey) {
   renderWorkflowTab();
 }
 
-// Lấy danh sách ứng viên người duyệt cho 1 bước: những người có cờ "Người duyệt" (perms.canBeApprover)
-// HOẶC admin, HỢP với những người ĐÃ được tick sẵn cho đúng bước này trước đó — để không bao giờ làm
-// "biến mất" một approver đã cấu hình từ trước chỉ vì họ chưa được cấp cờ mới.
+// Lấy danh sách ứng viên người duyệt cho 1 bước: những người có cờ "Người duyệt" (perms.canBeApprover),
+// HỢP với những người ĐÃ được tick sẵn cho đúng bước này trước đó — để không bao giờ làm "biến mất" một
+// approver đã cấu hình từ trước chỉ vì họ chưa được cấp cờ mới.
+// KHÔNG còn admin bypass (11/2026, theo yêu cầu người dùng — cùng chú thích ở
+// lib/positionApprovers.js::resolvePositionApprovers()).
 function getApproverCandidateUsers(currentApproversForStep) {
   const list = Array.isArray(currentApproversForStep) ? currentApproversForStep : (currentApproversForStep ? [currentApproversForStep] : []);
   // Tài khoản đã khoá (active === false) không còn chọn MỚI được làm người duyệt (Yêu cầu 1) — người đã
   // được gán từ trước vẫn hiện đúng nhờ nhánh alreadyAssignedExtra bên dưới (không lọc active ở đó).
-  const eligible = DB.users.filter(u => (u.perms?.canBeApprover || u.perms?.admin) && u.active !== false);
+  const eligible = DB.users.filter(u => u.perms?.canBeApprover && u.active !== false);
   const eligibleUsernames = new Set(eligible.map(u => u.username));
   const alreadyAssignedExtra = DB.users.filter(u => !eligibleUsernames.has(u.username) && list.includes(u.username));
   return [...eligible, ...alreadyAssignedExtra];

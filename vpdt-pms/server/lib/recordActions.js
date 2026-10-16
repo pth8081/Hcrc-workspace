@@ -6389,12 +6389,22 @@ function cancelItTicket(user, ticket) {
 }
 
 // ===================== NHÂN SỰ ("HCRC Đồng Hành" — hỏi & đáp) =====================
+// MỞ RỘNG "admin KHÔNG bypass" ra TOÀN BỘ nhóm menu Nhân Sự (11/2026, theo yêu cầu người dùng — trước
+// đó Hồ Sơ Nhân Sự/Hợp Đồng Lao Động/Lương đã là 3 NGOẠI LỆ CÓ CHỦ ĐÍCH, xem lib/employeeProfile.js:709-715
+// /lib/laborContract.js::canManageContracts()/lib/payroll.js::canManagePayroll()). Nay thêm ĐỦ các cờ còn
+// lại của nhóm Nhân Sự vào cùng danh sách ngoại lệ: nhanSuManage, orgChartManage, kpiFlowConfigManage,
+// hrOnboardingManage, hrOffboardingManage, hrTaskTemplateManage, hrProcessManage, hrViewAll — admin KHÔNG
+// còn tự động có quyền chỉ vì có cờ `admin`, phải được cấp RIÊNG từng quyền như tài khoản thường. Mọi hàm
+// liên quan (đọc/ghi/điều hướng menu) phải sửa ĐỒNG BỘ, không để sót nav-gate bypass trong khi hàm ghi/đọc
+// bên dưới đã chặn — tránh trạng thái "nút vẫn hiện nhưng bấm vào bị từ chối" (xem routes/orgChart.js,
+// public/js/core.js, public/js/module-hrlifecycle.js, public/js/module-orgchart.js — cùng đợt sửa này).
+//
 // nhanSuManage là quyền PHẲNG DUY NHẤT của module Nhân Sự — vừa là quyền VÀO module, vừa là quyền TRẢ
 // LỜI mọi câu hỏi HCRC Đồng Hành (chưa tách theo tab con vì module hiện chỉ có đúng 1 tab "Quản Lý &
 // Phản Hồi Ý Kiến"). Cùng hình dạng canManageItSupport() ở trên — KHÁC Đồng Phục/Ngân Sách (3 quyền
 // phẳng tạo/duyệt/tổng hợp tách biệt).
 function canManageHrFeedback(user) {
-  return !!(user?.perms?.admin || user?.perms?.nhanSuManage);
+  return !!(user?.perms?.nhanSuManage);
 }
 
 // Nhân Sự trả lời 1 câu hỏi — mô hình 1 hỏi – 1 đáp, kết thúc: PENDING -> ANSWERED, KHÔNG trao đổi qua
@@ -6482,7 +6492,9 @@ function markHrFeedbackRead(user, item) {
 // user đang có hrViewAll — an toàn hơn theo đúng nhãn "chỉ xem" hiện tại).
 function canActOnHrTask(user, item, task) {
   if (!user || !task) return false;
-  if (user.perms?.admin || user.perms?.hrProcessManage) return true;
+  // hrProcessManage KHÔNG còn admin bypass (11/2026, cùng đợt mở rộng "Nhân Sự" — xem chú thích
+  // canManageHrFeedback() ở trên).
+  if (user.perms?.hrProcessManage) return true;
   if (task.assignedToUsername) return task.assignedToUsername === user.username;
   switch (task.department) {
     case 'HR':
@@ -6501,12 +6513,12 @@ function canActOnHrTask(user, item, task) {
 // hàm này nữa).
 function canCreateHrProcess(user, processType) {
   if (!user) return false;
-  if (user.perms?.admin) return true;
+  // KHÔNG còn admin bypass (11/2026, cùng đợt mở rộng "Nhân Sự" — xem canManageHrFeedback() ở trên).
   return !!(processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
 }
 function canManageHrProcess(user, item) {
   if (!user || !item) return false;
-  if (user.perms?.admin || user.perms?.hrProcessManage) return true;
+  if (user.perms?.hrProcessManage) return true;
   if (item.creator === user.username) return true;
   return !!(item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
 }
