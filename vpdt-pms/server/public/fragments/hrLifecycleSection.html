@@ -100,21 +100,26 @@
               <input id="hrpOnbEmployeeCode" placeholder="Để trống để tự sinh (BL0001, BL0002...)" class="w-full border p-1.5 rounded text-xs">
               <p class="text-[10px] text-gray-400 mt-0.5">Bình thường để trống — hệ thống tự sinh. Chỉ điền tay khi Tái Tuyển (giữ nguyên mã cũ, xem "🔍 Kiểm Tra Nhân Sự Cũ").</p>
             </div>
+            <!-- LỖI ĐÃ VÁ (11/2026, người dùng báo "ấn Tab không theo thứ tự trái qua phải, trên xuống
+                 dưới"): Email/Quản Lý Trực Tiếp KHÔNG có trong CORE_FIELD_MANIFEST.HR_ONBOARDING nên
+                 KHÔNG được applyFieldOrder() gán CSS order riêng — mặc định order:0 (ngang hàng
+                 hrpOnbEmployeeCode, đứng đầu lưới khi HIỂN THỊ) nhưng 2 khối này trước đây lại nằm Ở VỊ
+                 TRÍ KHÁC XA trong DOM gốc (sau Chức Danh/SĐT) — CSS `order` chỉ đổi được vị trí NHÌN THẤY,
+                 phím Tab vẫn luôn đi theo đúng thứ tự DOM gốc, không theo `order`, nên bấm Tab bị nhảy lung
+                 tung so với bố cục mắt thấy. Dời 2 khối này lên NGAY ĐÂY (khớp đúng vị trí hiển thị ở hàng
+                 1, cột 2-3) để DOM-order = thứ tự Tab = đúng bố cục trái→phải/trên→dưới. -->
+            <div>
+              <label id="hrpOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu chưa cấp)</label>
+              <input id="hrpOnbEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <div class="relative">
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Quản Lý Trực Tiếp (tuỳ chọn)</label>
+              <input id="hrpOnbDirectManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpOnbDirectManagerInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
+              <input id="hrpOnbDirectManagerUsername" type="hidden">
+            </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
               <input id="hrpOnbFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>
-            </div>
-            <!-- Giới Tính (11/2026, theo phản hồi khối Nhân Sự đợt test PM — ĐÃ CÓ SẴN từ trước nhưng nằm
-                 trong khung "Thông Tin Bổ Sung" thu gọn mặc định bên dưới (#hrpOnbExtraPanel) nên HR
-                 không thấy, tưởng là thiếu field. Đưa hẳn ra khu vực chính (thông tin cơ bản, không phải
-                 "tuỳ chọn bổ sung") để luôn hiện sẵn, không cần bấm mở khung — field/logic đọc giữ
-                 NGUYÊN id hrpOnbGender, chỉ đổi vị trí hiển thị trong HTML. -->
-            <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Giới Tính (tuỳ chọn)</label>
-              <select id="hrpOnbGender" class="w-full border p-1.5 rounded text-xs bg-white">
-                <option value="">-- Chọn --</option>
-                <option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option>
-              </select>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Vị Trí</label>
@@ -144,25 +149,16 @@
               <input id="hrpOnbJobTitle" data-sdd-list="hrpOnbJobTitleDatalist" autocomplete="off" placeholder="Gõ để tìm chức danh..." class="w-full border p-1.5 rounded text-xs bg-white">
               <div id="hrpOnbJobTitleDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
-            <!-- LỖI ĐÃ VÁ (11/2026, khối Nhân Sự báo "nhấn Tab sau Chức Danh nhảy sang Email, đáng lẽ phải
-                 sang SĐT"): đổi thứ tự DOM — Số Điện Thoại đứng NGAY SAU Chức Danh (không đổi id/logic gì,
-                 chỉ đổi vị trí 2 khối này trong HTML để khớp đúng thứ tự Tab mong muốn). -->
+            <!-- Số Điện Thoại đứng NGAY SAU Chức Danh (LỖI ĐÃ VÁ 11/2026 trước đó: "Tab sau Chức Danh
+                 nhảy sang Email, đáng lẽ phải sang SĐT" — nay Email đã dời hẳn lên đầu nên thứ tự này tự
+                 nhiên liền mạch, không cần giữ raw tự thủ công gì thêm). -->
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Số Điện Thoại</label>
               <input id="hrpOnbPhone" type="tel" placeholder="0912345678" class="w-full border p-1.5 rounded text-xs" required>
             </div>
             <div>
-              <label id="hrpOnbEmailLabel" class="block text-xs font-semibold text-gray-600 mb-1">Email (để trống nếu chưa cấp)</label>
-              <input id="hrpOnbEmail" type="email" placeholder="name@company.com" class="w-full border p-1.5 rounded text-xs">
-            </div>
-            <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Ngày Vào Làm Việc</label>
               <input id="hrpOnbStartDate" type="date" class="w-full border p-1.5 rounded text-xs" required>
-            </div>
-            <div class="relative">
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Quản Lý Trực Tiếp (tuỳ chọn)</label>
-              <input id="hrpOnbDirectManagerInput" data-sdd-list="systemUsersDatalist" autocomplete="off" data-op-input="resolveHrpOnbDirectManagerInput" data-arg-value="0" placeholder="Gõ tên hoặc tài khoản để tìm..." class="w-full border p-1.5 rounded text-xs">
-              <input id="hrpOnbDirectManagerUsername" type="hidden">
             </div>
             <!-- Địa Chỉ/CCCD (10/2026, theo yêu cầu người dùng) — 2 field ĐÃ có sẵn trong Hồ Sơ Nhân Sự
                  (currentAddress/nationalId, lib/employeeProfile.js) nhưng trước đây form Onboarding không
@@ -175,6 +171,21 @@
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Số CCCD (tuỳ chọn)</label>
               <input id="hrpOnbNationalId" placeholder="Đúng 12 số" maxlength="12" inputmode="numeric" class="w-full border p-1.5 rounded text-xs">
+            </div>
+            <!-- Giới Tính (11/2026, theo phản hồi khối Nhân Sự đợt test PM — ĐÃ CÓ SẴN từ trước nhưng nằm
+                 trong khung "Thông Tin Bổ Sung" thu gọn mặc định bên dưới (#hrpOnbExtraPanel) nên HR
+                 không thấy, tưởng là thiếu field. Đưa hẳn ra khu vực chính (thông tin cơ bản, không phải
+                 "tuỳ chọn bổ sung") để luôn hiện sẵn, không cần bấm mở khung — field/logic đọc giữ NGUYÊN
+                 id hrpOnbGender. 11/2026: dời xuống ĐÚNG VỊ TRÍ CUỐI lưới này (khớp applyFieldOrder() gán
+                 order=10 cho field này — số lớn nhất trong 11 field của lưới, nên LUÔN hiển thị ở ô cuối
+                 cùng bất kể đặt ở đâu trong DOM) — cùng lý do sửa Email/Quản Lý Trực Tiếp ở trên, dời vào
+                 ĐÚNG vị trí DOM để thứ tự Tab khớp bố cục nhìn thấy, không nhảy ngược lên đầu như trước. -->
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Giới Tính (tuỳ chọn)</label>
+              <select id="hrpOnbGender" class="w-full border p-1.5 rounded text-xs bg-white">
+                <option value="">-- Chọn --</option>
+                <option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option>
+              </select>
             </div>
           </div>
 

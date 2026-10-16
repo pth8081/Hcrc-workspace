@@ -1542,6 +1542,10 @@ async function main() {
         // hrProcesses/hrTaskTemplates: không thuộc 3 module gốc — bổ sung tay. DB.stores/DB.storeJobTitles
         // seed thêm nội dung THẤY ĐƯỢC để phân biệt rõ với DB.jobTitles (HO) khi kiểm tra cascading.
         await page.evaluate(() => {
+          // 11/2026: canAccessHrLifecycleModule() KHÔNG còn admin bypass (module Nhân Sự, theo yêu cầu
+          // người dùng) -> cấp riêng hrOnboardingManage để kịch bản này (không liên quan gì tới phân
+          // quyền, chỉ test "Làm Mới" cascading picker) vẫn vào được màn Onboarding/Offboarding.
+          currentUser.perms.hrOnboardingManage = true;
           DB.hrProcesses = []; DB.hrTaskTemplates = [];
           DB.stores = ['Siêu Thị Quận 7'];
           DB.storeJobTitles = [{ label: 'Nhân viên bán hàng' }, { label: 'Quản lý ca' }];
@@ -1632,6 +1636,10 @@ async function main() {
       'Nhân Sự > Offboarding: chọn nhân viên qua sdd-picker + nhập Ngày Nghỉ Việc -> nút gửi MỞ ra, "Làm Mới" xoá sạch sdd-picker (hidden username + info-box) + ngày nghỉ việc + Quản lý trực tiếp + khoá lại nút gửi (updateHrpOffboardingSubmitState() re-compute, KHÔNG dựa vào form.reset() tự bắn change)',
       async () => {
         await page.evaluate(() => {
+          // 11/2026: canAccessHrLifecycleModule() KHÔNG còn admin bypass (module Nhân Sự, theo yêu cầu
+          // người dùng) -> cấp riêng hrOffboardingManage để kịch bản này (không liên quan gì tới phân
+          // quyền, chỉ test "Làm Mới" xoá sạch sdd-picker) vẫn vào được màn Onboarding/Offboarding.
+          currentUser.perms.hrOffboardingManage = true;
           DB.hrProcesses = []; DB.hrTaskTemplates = [];
           switchTab('hrLifecycle');
         });
