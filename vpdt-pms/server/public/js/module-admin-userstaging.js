@@ -241,130 +241,24 @@ function resetUserForm() {
   document.getElementById('uStartDate').value = '';
   renderUPermGroupsChecklist([]);
   updatePermGroupNote(false);
-  // CẬP NHẬT: mặc định AN TOÀN cho user mới — không bật sẵn quyền xem/tạo liên phòng ban nào ở
-  // module nào cả (trước đây hầu hết module nghiệp vụ được bật sẵn = toàn công ty, xem phân tích ở
-  // defaultNewUserPerms()). Mỗi người vẫn luôn thao tác được trong phòng ban của chính mình.
+  // CẬP NHẬT (11/2026, theo báo lỗi người dùng "tạo nhóm/người dùng mới bị dính quyền cũ"): hàm này
+  // TRƯỚC ĐÂY tự liệt kê TAY ~90 dòng `document.getElementById('pXxx').checked = ...` — mỗi lần thêm 1
+  // quyền mới phải nhớ thêm dòng vào ĐÚNG đây NGOÀI populatePermsForm()/collectPermsFromForm()
+  // (module-admin-permtree.js), dễ quên (đã xảy ra 2 lần: 11 ô Nhân Sự — xem lịch sử ở git blame —
+  // rồi lặp lại với Checklist Đánh Giá Siêu Thị/Rebate/các quyền *ReportView thêm sau) — ô nào bị quên
+  // thì GIỮ NGUYÊN trạng thái tick của người/nhóm vừa Sửa gần nhất trong CÙNG phiên (checkbox là DOM
+  // sống dùng chung cho cả Sửa lẫn Tạo mới, không bị phá huỷ giữa 2 lần mở form), khiến người/nhóm MỚI
+  // tạo ra ÂM THẦM thừa hưởng quyền của người/nhóm KHÁC dù admin không hề tick các ô đó cho người mới.
+  // Sửa TẬN GỐC: gọi thẳng populatePermsForm() — hàm DUY NHẤT, luôn được cập nhật đủ field mỗi khi
+  // thêm quyền mới (bắt buộc theo CLAUDE.md) — với bộ mặc định AN TOÀN defaultNewUserPerms() (toàn bộ
+  // false/rỗng). Mọi quyền hiện có VÀ quyền thêm sau này đều tự được đặt lại đúng, không còn phụ thuộc
+  // vào 1 danh sách chép tay thứ 2 có thể lạc hậu.
   const defaults = defaultNewUserPerms();
-  // Render trước 2 khối checkbox tạo động (module con lồng trong mục 0, checkbox phòng ban) rồi mới
-  // đổ giá trị mặc định lên — nếu render sau sẽ ghi đè lại checkedByDefault, mất giá trị vừa gán.
-  renderDeptCheckboxes();
-  renderModuleAccessCheckboxes();
-  document.getElementById('pAdmin').checked = defaults.admin;
-  document.getElementById('pCanBeApprover').checked = !!defaults.canBeApprover;
-  document.getElementById('pApproverAuthLevel').value = defaults.approverAuthLevel || 'NONE';
-  document.getElementById('uPin').value = '';
-  onApproverAuthLevelChange();
+  populatePermsForm(defaults);
   document.getElementById('uWebauthnWrap').classList.add('hidden');
   document.getElementById('uWebauthnListWrap').innerHTML = '';
   document.getElementById('uTotpWrap').classList.add('hidden');
   document.getElementById('uTotpStatusWrap').innerHTML = '';
-  document.getElementById('pCanViewReports').checked = !!defaults.canViewReports;
-  document.getElementById('pInternalNewsCreate').checked = !!defaults.internalNewsCreate;
-  document.getElementById('pInternalRecruitmentCreate').checked = !!defaults.internalRecruitmentCreate;
-  document.getElementById('pTrainingManage').checked = !!defaults.trainingManage;
-  document.getElementById('pTrainingInstruct').checked = !!defaults.trainingInstruct;
-  document.getElementById('pOnboardingEvaluate').checked = !!defaults.onboardingEvaluate;
-  document.getElementById('pInternalPostApprove').checked = !!defaults.internalPostApprove;
-  document.getElementById('pContractImportSigned').checked = !!defaults.contractImportSigned;
-  document.getElementById('pPaymentManage').checked = !!defaults.paymentManage;
-  document.getElementById('pVppManage').checked = !!defaults.vppManage;
-  document.getElementById('pVppRegisterCreate').checked = !!defaults.vppRegisterCreate;
-  document.getElementById('pReportManage').checked = !!defaults.reportManage;
-  document.getElementById('pReportAggregate').checked = !!defaults.reportAggregate;
-  document.getElementById('pReportEntryCreate').checked = !!defaults.reportEntryCreate;
-  document.getElementById('pMeetingBook').checked = !!defaults.meetingBook;
-  document.getElementById('pSubCreate').checked = !!defaults.submissionCreate;
-  document.getElementById('pContractCreate').checked = !!defaults.contractCreate;
-  document.getElementById('pMeetingApprove').checked = defaults.meetingApprove;
-  document.getElementById('pMeetingCancel').checked = defaults.meetingCancel;
-  document.getElementById('pCarCreate').checked = !!defaults.carCreate;
-  document.getElementById('pCarDispatch').checked = !!defaults.carDispatch;
-  document.getElementById('pOfficeCreate').checked = !!defaults.officeCreate;
-  document.getElementById('pOfficeBuy').checked = defaults.officeBuy;
-  document.getElementById('pOfficeFix').checked = defaults.officeFix;
-  // uploadAll (10/2026, "6-module"): giờ là cờ phẳng boolean, cùng khuôn pContractCreate/pCarCreate/
-  // pOfficeCreate ở trên — không còn nằm trong mảng "ALL"+toggleScopeGroup ở dưới nữa.
-  document.getElementById('pUploadAll').checked = !!defaults.uploadAll;
-  // "Phát Hành" tài liệu (10/2026, "6-module", mới) — 3 quyền phẳng, không theo phòng ban.
-  document.getElementById('pDocPublish').checked = !!defaults.docPublish;
-  document.getElementById('pDocViewPublished').checked = !!defaults.docViewPublished;
-  document.getElementById('pDocDownloadPublished').checked = !!defaults.docDownloadPublished;
-  document.getElementById('pMinutesCreate').checked = !!defaults.minutesCreate;
-  document.getElementById('pMinutesView').checked = !!defaults.minutesView;
-  document.getElementById('pMinutesEdit').checked = !!defaults.minutesEdit;
-  document.getElementById('pMinutesDownload').checked = !!defaults.minutesDownload;
-  document.getElementById('pTaskView').checked = !!defaults.taskView;
-  document.getElementById('pTaskEdit').checked = !!defaults.taskEdit;
-  document.getElementById('pTaskDelete').checked = !!defaults.taskDelete;
-  document.getElementById('pTaskDownload').checked = !!defaults.taskDownload;
-  document.getElementById('pItPriceProposeCreateWholesale').checked = !!defaults.itPriceProposeCreateWholesale;
-  document.getElementById('pItPriceProposeCreateRetail').checked = !!defaults.itPriceProposeCreateRetail;
-  document.getElementById('pItManage').checked = !!defaults.itManage;
-  document.getElementById('pItPriceSupport').checked = !!defaults.itPriceSupport;
-  document.getElementById('pItServiceRenewalManage').checked = !!defaults.itServiceRenewalManage;
-  document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked = !!defaults.itPriceEmergencyRejectApproveWholesale;
-  document.getElementById('pItPriceEmergencyRejectApproveRetail').checked = !!defaults.itPriceEmergencyRejectApproveRetail;
-  document.getElementById('pUniformManage').checked = !!defaults.uniformManage;
-  document.getElementById('pUniformApprove').checked = !!defaults.uniformApprove;
-  document.getElementById('pUniformStoreManage').checked = !!defaults.uniformStoreManage;
-  document.getElementById('pBudgetManage').checked = !!defaults.budgetManage;
-  document.getElementById('pBudgetCreate').checked = !!defaults.budgetCreate;
-  document.getElementById('pBudgetAggregate').checked = !!defaults.budgetAggregate;
-  document.getElementById('pLicenseCreate').checked = !!defaults.licenseCreate;
-  document.getElementById('pLicenseApprove').checked = !!defaults.licenseApprove;
-  document.getElementById('pLicenseView').checked = !!defaults.licenseView;
-  // BUG THẬT đã sửa (phát hiện qua báo lỗi "tạo user mới bị dính quyền lạ"): 11 checkbox Nhân Sự thêm ở
-  // các đợt "Nhân Sự Đợt 1-4" (Hồ Sơ/Hợp Đồng/Công & Phép/Onboarding-Offboarding) CHƯA TỪNG được thêm
-  // vào đây — trong khi collectPermsFromForm()/populatePermsForm() (module-admin-permtree.js) đã đọc/
-  // ghi đủ cả 11 field này từ lâu. Hậu quả: editUser() tick đúng các ô này theo user ĐANG SỬA (đúng),
-  // nhưng sau khi "Hủy"/lưu xong quay lại tạo NGƯỜI DÙNG MỚI (resetUserForm()), các ô này VẪN GIỮ
-  // NGUYÊN trạng thái tick của lần sửa TRƯỚC ĐÓ (không có dòng nào ở đây đụng tới, khác MỌI checkbox
-  // quyền khác trong hàm này) — người dùng MỚI tạo ra ÂM THẦM thừa hưởng quyền Nhân Sự (xem hồ sơ/hợp
-  // đồng/lương/chấm công cấp dưới...) của bất kỳ ai admin vừa xem/sửa trước đó trong CÙNG phiên, dù
-  // admin không hề tick các ô này cho người mới — đã xác minh lại bằng kịch bản thực tế (sửa 1 user có
-  // hrProfileManage/hrContractManage/hrAttendanceManage=true, rồi tạo user mới ngay sau đó KHÔNG đụng
-  // tới các ô này -> user mới vẫn được gán permOverrides y hệt 3 quyền đó).
-  document.getElementById('pHrOnboardingManage').checked = !!defaults.hrOnboardingManage;
-  document.getElementById('pHrOffboardingManage').checked = !!defaults.hrOffboardingManage;
-  document.getElementById('pHrTaskTemplateManage').checked = !!defaults.hrTaskTemplateManage;
-  document.getElementById('pHrProcessManage').checked = !!defaults.hrProcessManage;
-  document.getElementById('pHrViewAll').checked = !!defaults.hrViewAll;
-  document.getElementById('pHrProfileView').checked = !!defaults.hrProfileView;
-  document.getElementById('pHrProfileManage').checked = !!defaults.hrProfileManage;
-  document.getElementById('pHrContractManage').checked = !!defaults.hrContractManage;
-  document.getElementById('pHrAttendanceManage').checked = !!defaults.hrAttendanceManage;
-  document.getElementById('pHrLeaveApprove').checked = !!defaults.hrLeaveApprove;
-  document.getElementById('pHrShiftRosterManage').checked = !!defaults.hrShiftRosterManage;
-  document.getElementById('pHrShiftSwapApprove').checked = !!defaults.hrShiftSwapApprove;
-  document.getElementById('pNhanSuManage').checked = !!defaults.nhanSuManage;
-  document.getElementById('pOrgChartManage').checked = !!defaults.orgChartManage;
-  document.getElementById('pKpiFlowConfigManage').checked = !!defaults.kpiFlowConfigManage;
-  document.getElementById('pOperationOrderCreate').checked = !!defaults.operationOrderCreate;
-  document.getElementById('pOperationStoreOpenCreate').checked = !!defaults.operationStoreOpenCreate;
-  document.getElementById('pOperationRepairCreate').checked = !!defaults.operationRepairCreate;
-  document.getElementById('pOperationRecordManageAll').checked = !!defaults.operationRecordManageAll;
-  document.getElementById('pOperationRecordViewAll').checked = !!defaults.operationRecordViewAll;
-  // operationOrderReceiptManageHO/operationOrderReceiptManageStore — reset tường minh về rỗng cho user
-  // MỚI (cùng lý do 11 checkbox Nhân Sự ở trên: tránh "dính" trạng thái tick còn sót lại từ lần sửa user
-  // KHÁC trước đó trong cùng phiên). Tách 2 quyền từ đợt "Tách quyền Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị".
-  document.getElementById('pOperationOrderReceiptHO').checked = !!defaults.operationOrderReceiptManageHO;
-  document.getElementById('pOperationOrderReceiptAll').checked = !!defaults.operationOrderReceiptManageStore?.all;
-  toggleOperationOrderReceiptScopeGroup();
-
-  [
-    'pDocDownloadAll',
-    'pSubDownloadAll',
-    'pContractDownloadAll',
-    'pCarViewAll', 'pCarDownloadAll',
-    'pOfficeViewAll', 'pOfficeDownloadAll'
-  ].forEach(id => {
-    const cb = document.getElementById(id);
-    if (cb) { cb.checked = false; }
-  });
-
-  populateModuleAccessForm(defaults.moduleAccess);
-
-  refreshPermTreeBadges();
 }
 
 // Tài khoản "admin" mặc định (id=1, xem defaults.js) LUÔN toàn quyền và KHÔNG cho sửa quyền qua form
