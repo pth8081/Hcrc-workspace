@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**26.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.15 (2026-11): Tạo Nhóm Phân Quyền/Người Dùng mới — sửa lỗi "dính" checkbox quyền của lần Sửa trước
+
+Người dùng báo (kèm ảnh chụp): bấm "➕ Tạo Nhóm Mới" (hoặc "+ Thêm Người Dùng Mới") ngay sau khi vừa
+Sửa xong 1 người/nhóm khác, 1 số checkbox quyền vẫn còn tick sẵn trong form tạo mới — ví dụ 2 quyền
+"Thực Hiện/Báo Cáo ATVSTP" (Checklist Đánh Giá Siêu Thị) hiện 2/5 thay vì 0/5. Người dùng đánh giá đây
+là lỗi logic nguy hiểm, dễ gây cấp nhầm quyền, yêu cầu form tạo mới phải LUÔN trống sạch mọi checkbox.
+
+Gốc rễ: form Tạo Mới và Sửa dùng CHUNG 1 bộ checkbox vật lý trên DOM. Hàm reset form khi tạo mới
+(`resetUserForm()`) tự liệt kê TAY ~90 dòng gán lại từng checkbox, và bị thiếu 1 số quyền thêm sau này
+(Checklist ATVSTP, Rebate, vài quyền "Xem Báo Cáo") — những ô bị thiếu trong danh sách này giữ nguyên
+trạng thái tick của người/nhóm admin vừa sửa gần nhất, không bị đụng tới. Đây là lần tái phát: code đã
+có sẵn 1 đoạn chú thích ghi lại đúng lỗi này từng xảy ra với 11 ô Nhân Sự trước đây, vá bằng cách thêm
+tay 11 dòng — không triệt để, nên quyền thêm sau lại rơi vào bẫy cũ.
+
+Sửa tận gốc: bỏ hẳn danh sách chép tay, `resetUserForm()` giờ gọi thẳng `populatePermsForm(defaultNewUserPerms())`
+— hàm DUY NHẤT luôn được cập nhật đủ field mỗi khi thêm quyền mới (bắt buộc theo quy tắc `CLAUDE.md`),
+với bộ mặc định AN TOÀN (toàn bộ `false`/rỗng). Đóng hẳn lớp lỗi này — quyền thêm sau này cũng tự được
+reset đúng, không còn phụ thuộc 1 danh sách thứ 2 có thể lạc hậu.
+
+Đã demo lại đúng kịch bản người dùng báo (ảnh trước/sau): Sửa 1 người có tick 2 quyền ATVSTP rồi bấm
+"Tạo Nhóm Mới" — trước khi vá hiện đúng 2/5 còn tick (y hệt ảnh người dùng gửi), sau khi vá hiện 0/5
+sạch hoàn toàn. Đã chạy lại 3 bộ test hiện có liên quan (145 kịch bản: test-admin-users-permgroups.js,
+test-collapse-permform.js, test-itprice-permtree-move.js) đều pass, không ảnh hưởng gì khác.
+
+Thuần client-side (JS), không đổi schema/route/biến môi trường — chỉ cần copy code + `pm2 restart`.
 
 ## v26.14 (2026-11): Module Nhân Sự — bỏ hẳn "admin bypass" (admin KHÔNG còn tự động có quyền gì trong Nhân Sự)
 
