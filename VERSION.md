@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**26.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.17 (2026-11): Onboarding — sửa thứ tự Tab không khớp bố cục nhìn thấy
+
+Người dùng báo (kèm ảnh chụp): ở form "Tạo Quy Trình Onboarding", bấm phím Tab không đi theo thứ tự
+trái→phải/trên→xuống như bố cục hiển thị.
+
+Gốc rễ: lưới nhập liệu dùng CSS `order` để hiển thị field đúng vị trí mong muốn (cơ chế đổi thứ tự
+field theo Biểu Mẫu, `applyFieldOrder()`), nhưng phím Tab của trình duyệt LUÔN đi theo thứ tự field
+trong mã HTML gốc, **không** theo CSS `order` — 3 trường Email/Quản Lý Trực Tiếp/Giới Tính trong mã
+HTML gốc lại nằm ở vị trí khác xa vị trí chúng được hiển thị, nên bấm Tab bị nhảy ngược xuôi liên
+tục. Đã đo thật bằng Playwright (mô phỏng bấm Tab liên tiếp, ghi lại field được focus) để xác nhận
+đúng lỗi trước khi sửa:
+
+- **Trước:** Mã NV → Họ Tên → Giới Tính → Vị Trí → Phòng Ban → Chức Danh → SĐT → Email → Ngày Vào
+  Làm → Quản Lý Trực Tiếp → Địa Chỉ → CCCD
+- **Sau:** Mã NV → Email → Quản Lý Trực Tiếp → Họ Tên → Vị Trí → Phòng Ban → Chức Danh → SĐT → Ngày
+  Vào Làm → Địa Chỉ → CCCD → Giới Tính (khớp hoàn toàn trái→phải, trên→dưới)
+
+Sửa bằng cách dời 3 trường trên về đúng vị trí trong mã HTML khớp vị trí hiển thị — giao diện không
+đổi gì (đã demo ảnh xác nhận trước khi merge), chỉ sửa thứ tự Tab ngầm.
+
+Tiện thể vá 2 kịch bản test cũ (`test-form-reset-file-remove.js`, Onboarding/Offboarding) bị gãy từ
+đợt bỏ admin bypass Nhân Sự trước đó (v26.14) — thiếu cấp quyền hrOnboardingManage/
+hrOffboardingManage cho user test, phát hiện khi chạy lại regression cho đợt này, không liên quan
+tới lỗi Tab.
+
+Thuần HTML/CSS client-side, không đổi schema/route/biến môi trường — chỉ cần copy code +
+`pm2 restart`.
 
 ## v26.16 (2026-11): UI/UX — căn thẳng cột "Thao Tác" toàn hệ thống + sửa 3 module đặt sai vị trí thanh nút
 
