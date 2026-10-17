@@ -58,7 +58,8 @@ function requireFreshJob({ appData, contracts }) {
       resolveEncryption: () => 'none',
       resolveGraphOption: () => null,
       resolveEwsOption: () => null,
-      buildReminderEmailLink: () => ''
+      buildReminderEmailLink: () => '',
+      buildReminderEmailUrl: () => ''
     }
   };
 

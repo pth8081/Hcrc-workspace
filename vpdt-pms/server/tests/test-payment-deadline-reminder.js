@@ -47,9 +47,12 @@ async function main() {
   });
   const sentMails = [];
   stubModule('lib/mailer', {
-    sendMail: async ({ to, subject }) => { sentMails.push({ to, subject }); return { sent: to, failed: [], simulated: false, host: 'smtp.test', port: 587 }; },
+    sendMail: async ({ to, subject, html }) => { sentMails.push({ to, subject, html }); return { sent: to, failed: [], simulated: false, host: 'smtp.test', port: 587 }; },
     resolveEncryption: () => 'STARTTLS',
-    buildReminderEmailLink: () => ''
+    resolveGraphOption: () => null,
+    resolveEwsOption: () => null,
+    buildReminderEmailLink: () => '',
+    buildReminderEmailUrl: () => ''
   });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('db', {
@@ -107,6 +110,9 @@ async function main() {
     const mails = sentMails.filter(m => m.subject.includes('mua bàn ghế'));
     assert.ok(mails.some(m => m.to.includes('nv1@test.vn')), 'Người tạo đề nghị phải nhận được nhắc hạn');
     assert.ok(mails.some(m => m.to.includes('kt1@test.vn')), 'Kế toán giữ quyền paymentManage phải nhận được nhắc hạn');
+    // Bản HTML chuyên nghiệp đi kèm (11/2026, lib/emailTemplate.js) — xem chú thích buildNotificationEmailHtml().
+    assert.ok(mails.every(m => typeof m.html === 'string' && m.html.includes('<!doctype html>')), 'Mỗi email gửi đi phải kèm bản HTML đầy đủ (field html truyền vào sendMail())');
+    assert.ok(mails.every(m => m.html.includes('mua bàn ghế')), 'Bản HTML phải chứa đúng nội dung đề nghị thanh toán');
   });
 
   await test('Kế toán không có email -> không nằm trong danh sách gửi, không gây lỗi', () => {
@@ -155,7 +161,10 @@ async function main() {
     stubModule('lib/mailer', {
       sendMail: async () => { throw new Error('Mất kết nối SMTP giả lập'); },
       resolveEncryption: () => 'STARTTLS',
-      buildReminderEmailLink: () => ''
+      resolveGraphOption: () => null,
+      resolveEwsOption: () => null,
+      buildReminderEmailLink: () => '',
+      buildReminderEmailUrl: () => ''
     });
     delete require.cache[require.resolve('../jobs/paymentDeadlineReminder')];
     const { checkPaymentDeadlineReminders: retryJob } = require('../jobs/paymentDeadlineReminder');

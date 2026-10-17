@@ -6,7 +6,8 @@
 // định = người tạo + TOÀN BỘ người đang có quyền itServiceRenewalManage/admin (10/2026 tách khỏi itManage),
 // cộng thêm CC tuỳ chọn (itRenewalCcEmails).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink, buildReminderEmailUrl } = require('../lib/mailer');
+const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -96,7 +97,13 @@ async function checkItServiceRenewalReminders() {
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
           : `còn khoảng ${threshold} ngày là hết hạn`;
         const subject = `[VPDT] Dịch vụ CNTT "${item.name}" ${label}`;
-        const body = `Dịch vụ CNTT "${item.name}" (${item.category}${item.vendor ? `, nhà cung cấp: ${item.vendor}` : ''}) ${label}. Ngày hết hạn: ${item.expiryDate}.${item.responsible ? ` Người phụ trách: ${item.responsible}.` : ''}${buildReminderEmailLink('itSupport', String(item.id))}`;
+        const plainBody = `Dịch vụ CNTT "${item.name}" (${item.category}${item.vendor ? `, nhà cung cấp: ${item.vendor}` : ''}) ${label}. Ngày hết hạn: ${item.expiryDate}.${item.responsible ? ` Người phụ trách: ${item.responsible}.` : ''}`;
+        const body = `${plainBody}${buildReminderEmailLink('itSupport', String(item.id))}`;
+        const html = buildNotificationEmailHtml({
+          badge: '⏰ Dịch vụ CNTT sắp/đã hết hạn',
+          bodyText: plainBody,
+          ctaUrl: buildReminderEmailUrl('itSupport', String(item.id))
+        });
 
         const rawRecipients = [];
         if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || item.creator });
@@ -122,7 +129,7 @@ async function checkItServiceRenewalReminders() {
           try {
             sendResult = await sendMail({
               to: recipients.map(r => r.email),
-              subject, text: body,
+              subject, text: body, html,
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,

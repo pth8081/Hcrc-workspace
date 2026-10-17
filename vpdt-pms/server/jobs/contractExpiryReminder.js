@@ -11,7 +11,8 @@
 // khỏi Nhật ký hệ thống thật mà không ai biết) — nay ghi qua insertSystemLog() để log thật sự xuất
 // hiện trong Nhật ký hệ thống.
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink, buildReminderEmailUrl } = require('../lib/mailer');
+const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -128,7 +129,13 @@ async function checkContractExpiryReminders() {
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
           : `còn khoảng ${threshold} ngày là hết hạn`;
         const subject = `[VPDT] Hợp đồng ${c.code} ${label}`;
-        const body = `Hợp đồng "${c.title}" (${c.code}, đối tác: ${c.partner || 'N/A'}) ${label}. Ngày hết hạn: ${c.endDate}.${buildReminderEmailLink('contract', c.code)}`;
+        const plainBody = `Hợp đồng "${c.title}" (${c.code}, đối tác: ${c.partner || 'N/A'}) ${label}. Ngày hết hạn: ${c.endDate}.`;
+        const body = `${plainBody}${buildReminderEmailLink('contract', c.code)}`;
+        const html = buildNotificationEmailHtml({
+          badge: '⏰ Hợp đồng sắp/đã hết hạn',
+          bodyText: plainBody,
+          ctaUrl: buildReminderEmailUrl('contract', c.code)
+        });
 
         const rawRecipients = [];
         if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || c.creator });
@@ -162,7 +169,7 @@ async function checkContractExpiryReminders() {
           try {
             sendResult = await sendMail({
               to: recipients.map(r => r.email),
-              subject, text: body,
+              subject, text: body, html,
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,

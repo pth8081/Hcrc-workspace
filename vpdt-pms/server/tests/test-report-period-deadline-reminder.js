@@ -49,7 +49,10 @@ async function main() {
   stubModule('lib/mailer', {
     sendMail: async ({ to, subject }) => { sentMails.push({ to, subject }); return { sent: to, failed: [], simulated: false, host: 'smtp.test', port: 587 }; },
     resolveEncryption: () => 'STARTTLS',
-    buildReminderEmailLink: () => ''
+    resolveGraphOption: () => null,
+    resolveEwsOption: () => null,
+    buildReminderEmailLink: () => '',
+    buildReminderEmailUrl: () => ''
   });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   // db.js thật sẽ cố kết nối SQL Server thật — job này còn cần đọc emailConfig/users/depts trực tiếp

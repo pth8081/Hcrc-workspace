@@ -10,7 +10,8 @@
 // LỊCH SỬ: trước đây (tới v26.8) còn CỘNG thêm quản lý trực tiếp của nhân viên (tra qua employeeProfiles
 // -> user.managerUsername) — người dùng yêu cầu bỏ hẳn, CHỈ còn cảnh báo cho quản lý nhân sự.
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink, buildReminderEmailUrl } = require('../lib/mailer');
+const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -94,7 +95,13 @@ async function checkLaborContractExpiryReminders() {
         const label = diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : (diffDays === 0 ? 'hết hạn hôm nay' : `còn khoảng ${threshold} ngày là hết hạn`);
         const typeLabel = CONTRACT_TYPE_LABELS[c.contractType] || c.contractType;
         const subject = `[VPDT] Hợp đồng lao động ${c.code} (${typeLabel}) ${label}`;
-        const body = `Hợp đồng lao động "${c.code}" (${typeLabel}) của nhân viên mã ${c.employeeCode} ${label}. Ngày hết hạn: ${c.endDate}. Vui lòng xem xét gia hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục.${buildReminderEmailLink('hrContract', c.code)}`;
+        const plainBody = `Hợp đồng lao động "${c.code}" (${typeLabel}) của nhân viên mã ${c.employeeCode} ${label}. Ngày hết hạn: ${c.endDate}. Vui lòng xem xét gia hạn/đổi loại hợp đồng/khởi tạo Offboarding nếu không tiếp tục.`;
+        const body = `${plainBody}${buildReminderEmailLink('hrContract', c.code)}`;
+        const html = buildNotificationEmailHtml({
+          badge: '⏰ Hợp đồng lao động sắp/đã hết hạn',
+          bodyText: plainBody,
+          ctaUrl: buildReminderEmailUrl('hrContract', c.code)
+        });
 
         const rawRecipients = [...hrEmails];
         const seenEmails = new Set();
@@ -113,7 +120,7 @@ async function checkLaborContractExpiryReminders() {
           try {
             sendResult = await sendMail({
               to: recipients.map(r => r.email),
-              subject, text: body,
+              subject, text: body, html,
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,

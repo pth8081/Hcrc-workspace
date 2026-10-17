@@ -16,7 +16,8 @@
 // + người trình/tạo hồ sơ, cộng thêm email CC cố định theo đúng module (submissionOverdueCcEmails/
 // contractOverdueCcEmails).
 const { getPool } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink, buildReminderEmailUrl } = require('../lib/mailer');
+const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -104,7 +105,14 @@ async function checkApprovalOverdueReminders() {
 
           const label = `đã chờ xử lý ${st.daysWaited} ngày ở bước ${step} (ngưỡng ${st.level === 'OVERDUE' ? '🔴 Quá Hạn Xử Lý' : '⚠️ Sắp Quá Hạn'}: ${st.threshold} ngày)`;
           const subject = `[VPDT] ${jobCfg.noun.charAt(0).toUpperCase() + jobCfg.noun.slice(1)} ${item.code} ${st.level === 'OVERDUE' ? 'đã quá hạn xử lý' : 'sắp quá hạn xử lý'}`;
-          const body = `${jobCfg.noun.charAt(0).toUpperCase() + jobCfg.noun.slice(1)} "${item.title || ''}" (${item.code}) ${label}.${buildReminderEmailLink(jobCfg.linkTab, item.code)}`;
+          const plainBody = `${jobCfg.noun.charAt(0).toUpperCase() + jobCfg.noun.slice(1)} "${item.title || ''}" (${item.code}) ${label}.`;
+          const body = `${plainBody}${buildReminderEmailLink(jobCfg.linkTab, item.code)}`;
+          const html = buildNotificationEmailHtml({
+            status: st.level === 'OVERDUE' ? 'danger' : 'warning',
+            badge: st.level === 'OVERDUE' ? '🔴 Quá hạn xử lý' : '⚠️ Sắp quá hạn xử lý',
+            bodyText: plainBody,
+            ctaUrl: buildReminderEmailUrl(jobCfg.linkTab, item.code)
+          });
 
           for (const r of recipients) {
             console.log(`[DMS EMAIL SIMULATOR] To: ${r.name} <${r.email}> | Subject: ${subject}\n  ${body}`);
@@ -115,7 +123,7 @@ async function checkApprovalOverdueReminders() {
             try {
               sendResult = await sendMail({
                 to: recipients.map(r => r.email),
-                subject, text: body,
+                subject, text: body, html,
                 host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
                 user: smtpUser, pass: smtpPass,
                 from: emailConfig.senderEmail,

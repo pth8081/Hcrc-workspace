@@ -68,7 +68,10 @@ async function main() {
       return { sent: to, failed: [], simulated: false };
     },
     resolveEncryption: () => 'STARTTLS',
-    buildReminderEmailLink: () => ''
+    resolveGraphOption: () => null,
+    resolveEwsOption: () => null,
+    buildReminderEmailLink: () => '',
+    buildReminderEmailUrl: () => ''
   });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('db', {

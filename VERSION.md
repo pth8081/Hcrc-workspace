@@ -1,9 +1,63 @@
 # Phiên bản hiện tại
 
-**26.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.21 (2026-11): Mẫu email HTML chuyên nghiệp DÙNG CHUNG cho TOÀN BỘ thông báo hệ thống
+
+Người dùng hỏi lại về mẫu email "Cần phê duyệt" đã làm trước đó (`buildApprovalNeededEmailBody()`,
+commit `695a635`) rồi yêu cầu mở rộng: áp dụng CHO CẢ các thông báo kết quả duyệt, nhắc hạn hợp đồng,
+nhắc hết hạn... — thiết kế 1 mẫu HTML DUY NHẤT, chuyên nghiệp, dùng chung cho TẤT CẢ loại thông báo của
+hệ thống (không chỉ riêng family "Cần phê duyệt" như bản text-only trước đó). Đã gửi bản demo HTML/ảnh
+xem trước (4 ví dụ: Cần phê duyệt/Đã duyệt/Yêu cầu bổ sung/Nhắc hạn) để người dùng duyệt thiết kế trước
+khi triển khai.
+
+Thiết kế đã duyệt: khung bảng (table-based, inline CSS, an toàn cho mọi email client kể cả Outlook
+desktop) gồm header thương hiệu (dải navy + icon 3 thanh xanh "HCRC WORKSPACE"), dải màu + badge theo
+4 trạng thái cố định (🔵 info/xanh dương — cần xử lý/thông tin, 🟢 success/xanh lá — thành công/đã duyệt,
+🟠 warning/hổ phách — cần bổ sung/cảnh báo/nhắc hạn, 🔴 danger/đỏ — từ chối/huỷ), nút CTA (ẩn khi không có
+link hợp lệ), và chữ ký chân trang chung. Rà soát cho thấy pipeline gửi email (`routes/email.js` →
+`lib/mailer.js` → `graphMailer.js`/`ewsMailer.js`/nodemailer) **đã hỗ trợ sẵn field `html` từ trước** —
+không cần sửa gì ở lớp gửi mail phía server, chỉ cần dựng + truyền `html` ở nơi build nội dung thông báo.
+
+- `public/js/core.js`: thêm `EMAIL_STATUS_THEME`/`ACTION_TYPE_EMAIL_META`/`buildNotificationEmailHtml()`
+  (khung chung) + `renderApprovalNeededEmailBodyHtml()` (bảng cấu trúc cho family "Cần phê duyệt", đọc
+  trực tiếp opts gốc qua biến `LAST_APPROVAL_NEEDED_OPTS`, không parse lại văn bản) +
+  `renderPlainEmailBodyHtml()` (đoạn văn thường có escape, dùng cho mọi family tự do còn lại — kết quả
+  duyệt, chuyển tiếp xin ý kiến, ticket IT...). `notifyRecipientsByEmail()` dựng `html` song song với
+  `bodyText` chữ thuần hiện có (KHÔNG đổi gì ở cách dựng `bodyText`) rồi truyền thêm cho
+  `dispatchRealEmail()` (tham số thứ 5, tuỳ chọn). Tách `buildApprovalEmailLink()` thành
+  `buildApprovalEmailUrl()` (URL trần, dùng cho nút CTA) + wrapper giữ nguyên hành vi cũ.
+- `lib/mailer.js`: tách tương tự `buildReminderEmailLink()` thành `buildReminderEmailUrl()` (URL trần)
+  + wrapper, phục vụ nút CTA ở bản HTML phía server.
+- `lib/emailTemplate.js` (**mới**): bản HTML mirror CÙNG thiết kế, chạy được trong Node.js thuần (9 job
+  nhắc hạn chạy nền không `require()` được `core.js` — code đó chạy trong trình duyệt).
+- **9 job nhắc hạn** (`jobs/contractExpiryReminder.js`, `laborContractExpiryReminder.js`,
+  `licenseExpiryReminder.js`, `itServiceRenewalReminder.js`, `approvalOverdueReminder.js`,
+  `itApprovalDeadlineReminder.js`, `paymentDeadlineReminder.js`, `reportPeriodDeadlineReminder.js`,
+  `hrTaskOverdueReminder.js`): dựng thêm `html` qua `lib/emailTemplate.js` và truyền vào `sendMail()`
+  song song với `text` hiện có (badge/status khớp đúng mức nghiêm trọng của từng loại nhắc hạn — VD việc
+  Onboarding/Offboarding quá hạn dùng 🔴 danger, mốc "sắp quá hạn" dùng 🟠 warning).
+
+Test: 2 file mới (`tests/test-notification-email-html.js` — 6 kịch bản qua Playwright cho phần client;
+`tests/test-email-template-server.js` — 8 kịch bản thuần Node cho phần server) + mở rộng
+`tests/test-payment-deadline-reminder.js` xác nhận `html` thật sự được truyền vào `sendMail()`. Đã xác
+nhận bằng `git stash` rằng toàn bộ kịch bản mới FAIL đúng trên code cũ. Nhân đợt này cũng phát hiện +
+vá 1 lỗ hổng chất lượng test có từ trước (8 file test nhắc hạn stub `lib/mailer` thiếu
+`resolveGraphOption`/`resolveEwsOption`, khiến các kịch bản "gửi thành công" thật ra luôn rơi vào nhánh
+lỗi rồi tình cờ vẫn qua được assertion) — đã bổ sung đầy đủ, không đổi code sản phẩm.
+
+Đồng thời gộp bump version cho commit `ca807fe` (đã lên feature branch từ trước, chưa kịp bump): vá nốt
+bản sao chưa fix của lỗi "đổi tài khoản không cập nhật lại Chức Danh/Phòng/SĐT/Email" ở
+`applyTplRowSystemUser()` (`module-bienbanhop.js`, mẫu dòng Danh Sách Tham Dự ở Mẫu Biên Bản) — cùng
+lỗi/cách vá như `applyAttendeeSystemUser()` đã fix ở v26.19, chỉ khác đây là bản sao ở khung "Mẫu" chưa
+được rà tới khi vá lần đó.
+
+**Deploy-impact**: thuần sửa logic phía client (`public/js/core.js`) + server (`lib/mailer.js`, file mới
+`lib/emailTemplate.js`, 9 file `jobs/*.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới,
+KHÔNG đổi `package.json` dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.20 (2026-11): "Thay trang bằng bản mới" cho Tổng Hợp PDF (Báo Cáo Định Kỳ, Điều Hành)
 

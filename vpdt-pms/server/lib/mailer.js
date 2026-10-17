@@ -121,7 +121,10 @@ function resolveEwsOption(emailConfig) {
 // (core.js) mà email nghiệp vụ (approvalNeeded/result...) đã dùng — tab truyền vào PHẢI có mặt trong
 // APPROVAL_EMAIL_LINK_TAB (core.js) kèm entry tương ứng trong APPROVAL_EMAIL_RECORD_OPENER để thật sự
 // mở được đúng hồ sơ, không chỉ chuyển tab.
-function buildReminderEmailLink(tab, code) {
+// buildReminderEmailUrl(): tách riêng phần dựng URL TRẦN (11/2026, phục vụ nút CTA trong bản HTML
+// chuyên nghiệp — lib/emailTemplate.js — nút bấm cần URL thuần, không phải dòng text "🔗 Xem trực
+// tiếp...: <url>"). buildReminderEmailLink() giữ nguyên 100% hành vi/chữ ký cũ, chỉ còn là wrapper.
+function buildReminderEmailUrl(tab, code) {
   const base = String(process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
   if (!base || !tab) return '';
   let url;
@@ -135,7 +138,13 @@ function buildReminderEmailLink(tab, code) {
   url.hash = '';
   url.searchParams.set('gotoModule', tab);
   if (code) url.searchParams.set('code', code);
-  return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${url.toString()}`;
+  return url.toString();
+}
+
+function buildReminderEmailLink(tab, code) {
+  const rawUrl = buildReminderEmailUrl(tab, code);
+  if (!rawUrl) return '';
+  return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${rawUrl}`;
 }
 
 function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned }) {
@@ -250,4 +259,4 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
   return { sent, failed, simulated: false, host: resolvedHost, port: resolvedPort, errorMessage: lastErrorMessage };
 }
 
-module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink };
+module.exports = { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink, buildReminderEmailUrl };

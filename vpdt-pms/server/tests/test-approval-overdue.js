@@ -212,7 +212,8 @@ async function main() {
     resolveEncryption: () => 'STARTTLS',
     resolveGraphOption: () => null,
     resolveEwsOption: () => null,
-    buildReminderEmailLink: () => ''
+    buildReminderEmailLink: () => '',
+    buildReminderEmailUrl: () => ''
   });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('lib/appData', { getAllAppData: async () => APP_DATA });
@@ -282,7 +283,7 @@ async function main() {
     stubModule('lib/mailer', {
       sendMail: async () => { throw new Error('Mất kết nối SMTP giả lập'); },
       resolveEncryption: () => 'STARTTLS', resolveGraphOption: () => null, resolveEwsOption: () => null,
-      buildReminderEmailLink: () => ''
+      buildReminderEmailLink: () => '', buildReminderEmailUrl: () => ''
     });
     delete require.cache[require.resolve('../jobs/approvalOverdueReminder')];
     const { checkApprovalOverdueReminders: retryJob } = require('../jobs/approvalOverdueReminder');

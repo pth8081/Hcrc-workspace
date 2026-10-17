@@ -6,7 +6,8 @@
 // phòng ban riêng như contractExpiryDeptContacts — người nhận mặc định = người tạo giấy phép + TOÀN BỘ
 // người đang có quyền licenseApprove/admin, cộng thêm CC tuỳ chọn (licenseExpiryCcEmails).
 const { getPool, sql } = require('../db');
-const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink } = require('../lib/mailer');
+const { sendMail, resolveEncryption, resolveGraphOption, resolveEwsOption, buildReminderEmailLink, buildReminderEmailUrl } = require('../lib/mailer');
+const { buildNotificationEmailHtml } = require('../lib/emailTemplate');
 const { decryptSecret } = require('../lib/emailCrypto');
 const { getAllForCollection, withLockedRecordById } = require('../lib/recordStore');
 const { insertSystemLog } = require('../lib/systemLogStore');
@@ -119,7 +120,13 @@ async function checkLicenseExpiryReminders() {
           ? (diffDays < 0 ? `đã hết hạn ${Math.abs(diffDays)} ngày` : 'hết hạn hôm nay')
           : `còn khoảng ${threshold} ngày là hết hạn`;
         const subject = `[VPDT] Giấy phép ${l.code} ${label}`;
-        const body = `Giấy phép "${l.licenseName || l.licenseType}" (${l.code}, số ${l.licenseNumber}, địa điểm: ${l.locationName}) ${label}. Ngày hết hạn: ${l.expiryDate}.${buildReminderEmailLink('license', l.code)}`;
+        const plainBody = `Giấy phép "${l.licenseName || l.licenseType}" (${l.code}, số ${l.licenseNumber}, địa điểm: ${l.locationName}) ${label}. Ngày hết hạn: ${l.expiryDate}.`;
+        const body = `${plainBody}${buildReminderEmailLink('license', l.code)}`;
+        const html = buildNotificationEmailHtml({
+          badge: '⏰ Giấy phép sắp/đã hết hạn',
+          bodyText: plainBody,
+          ctaUrl: buildReminderEmailUrl('license', l.code)
+        });
 
         const rawRecipients = [];
         if (creator && creator.email) rawRecipients.push({ email: creator.email, name: creator.name || l.creator });
@@ -145,7 +152,7 @@ async function checkLicenseExpiryReminders() {
           try {
             sendResult = await sendMail({
               to: recipients.map(r => r.email),
-              subject, text: body,
+              subject, text: body, html,
               host: emailConfig.smtpHost, port: emailConfig.smtpPort, encryption: smtpEncryption,
               user: smtpUser, pass: smtpPass,
               from: emailConfig.senderEmail,

@@ -6858,15 +6858,19 @@ async function checkForAppUpdate() {
 // với trước đây, hàm này giờ CHỜ phản hồi thật từ backend rồi ghi THÊM 1 dòng Nhật ký hệ thống riêng
 // xác nhận máy chủ SMTP đã cấu hình có thực sự nhận email hay không (xem logEmailDeliveryResult) —
 // vì dòng log "đã thử gửi" ghi ngay lúc thao tác không phản ánh được điều đó.
-function dispatchRealEmail(recipients, subject, bodyText, context) {
+function dispatchRealEmail(recipients, subject, bodyText, context, html) {
   const addresses = (recipients || []).map(r => (typeof r === 'string' ? r : r?.email)).filter(Boolean);
   if (addresses.length === 0) return;
   const ctxModule = (context && context.module) || 'EMAIL';
   const ctxTarget = (context && context.targetCode) || '';
+  // html (11/2026, tham số thứ 5, tuỳ chọn): bản HTML chuyên nghiệp đi kèm bodyText — xem
+  // buildNotificationEmailHtml()/notifyRecipientsByEmail(). routes/email.js + lib/mailer.js +
+  // graphMailer.js/ewsMailer.js/nodemailer ĐÃ hỗ trợ sẵn field này từ trước (không cần sửa gì phía
+  // server) — gateway nào không có html thì tự fallback gửi text thuần như hành vi gốc.
   fetch('/api/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: addresses, subject, text: bodyText })
+    body: JSON.stringify({ to: addresses, subject, text: bodyText, html })
   })
     .then(res => res.json())
     .then(result => logEmailDeliveryResult(ctxModule, ctxTarget, addresses, result))
@@ -7074,7 +7078,18 @@ function sendNotificationEmail(recipientEmail, recipientName, subject, messageBo
 const APPROVAL_GREETING_PLACEHOLDER = '{{APPROVAL_GREETING}}';
 const APPROVAL_SIGNATURE_PLACEHOLDER = '{{APPROVAL_SIGNATURE}}';
 const APPROVAL_SIGNATURE_TEXT = 'Trân trọng,\nHệ thống Văn phòng số – Công ty HCRC';
+// LAST_APPROVAL_NEEDED_OPTS (11/2026, "mẫu email HTML chuyên nghiệp dùng chung") — opts GỐC (chưa dựng
+// thành chuỗi) của lượt gọi buildApprovalNeededEmailBody() GẦN NHẤT, để notifyRecipientsByEmail() dựng
+// được BẢNG HTML có cấu trúc (Loại phiếu/Số phiếu/...) thay vì phải PARSE LẠI chuỗi text đã ghép — AN
+// TOÀN vì mọi lời gọi thật (23 điểm, grep "buildApprovalNeededEmailBody(" trong module-*.js) đều viết
+// `buildApprovalNeededEmailBody({...})` làm ĐỐI SỐ TRỰC TIẾP của notifyUsersByEmail(...)/
+// notifyRecipientsByEmail(...) ngay sau đó — JS đơn luồng, không có `await` xen giữa 2 lệnh gọi này ở
+// bất kỳ điểm gọi nào, nên biến tạm module-level này KHÔNG BAO GIỜ bị ghi đè bởi 1 lượt gọi KHÁC trước
+// khi notifyRecipientsByEmail() kịp đọc — tự xoá về null NGAY SAU KHI đọc (xem notifyRecipientsByEmail())
+// để không lỡ dùng nhầm cho 1 email family khác gọi ngay sau đó mà KHÔNG qua buildApprovalNeededEmailBody().
+let LAST_APPROVAL_NEEDED_OPTS = null;
 function buildApprovalNeededEmailBody(opts) {
+  LAST_APPROVAL_NEEDED_OPTS = opts || null;
   const {
     ticketType, ticketNumber, summary,
     creatorName, creatorDept, createdAt,
@@ -7098,6 +7113,156 @@ function buildApprovalNeededEmailBody(opts) {
     'Anh/Chị vui lòng truy cập đường dẫn dưới đây để xem chi tiết và xử lý phiếu:',
     APPROVAL_SIGNATURE_PLACEHOLDER
   ].join('\n');
+}
+
+// ===== MẪU EMAIL HTML DÙNG CHUNG (11/2026, theo yêu cầu người dùng: "thiết kế 1 mẫu chuyên nghiệp áp
+// dụng cho TẤT CẢ thông báo của hệ thống" — không chỉ family "Cần phê duyệt" như trước, mà toàn bộ
+// family còn lại (Kết quả duyệt, Xin ý kiến, Chuyển Tiếp, Ticket...) VÀ 9 job nhắc hạn chạy nền
+// (jobs/*.js, bản HTML riêng ở lib/emailTemplate.js — môi trường Node.js không gọi được hàm ở đây)).
+// Vẫn LUÔN gửi kèm bản chữ thuần y hệt trước đây (KHÔNG đổi gì ở phần dựng bodyText) — HTML chỉ là bản
+// hiển thị ĐẸP HƠN cho email client hỗ trợ, không thay thế khả năng đọc được của bản chữ thuần.
+//
+// 4 MÀU TRẠNG THÁI CỐ ĐỊNH áp dụng nhất quán cho MỌI loại thông báo — xanh dương "cần xử lý/thông tin",
+// xanh lá "thành công/đã duyệt", hổ phách "cần bổ sung/cảnh báo", đỏ "từ chối/huỷ". Khớp đúng bản demo
+// đã gửi người dùng duyệt (4 ảnh mẫu: Cần phê duyệt/Đã duyệt/Yêu cầu bổ sung/Nhắc hạn).
+const EMAIL_STATUS_THEME = {
+  info: { accent: '#2563eb', badgeBg: '#dbeafe', badgeFg: '#1d4ed8', button: '#2563eb' },
+  success: { accent: '#16a34a', badgeBg: '#dcfce7', badgeFg: '#15803d', button: '#16a34a' },
+  warning: { accent: '#d97706', badgeBg: '#fef3c7', badgeFg: '#b45309', button: '#d97706' },
+  danger: { accent: '#dc2626', badgeBg: '#fee2e2', badgeFg: '#b91c1c', button: '#dc2626' }
+};
+
+// ACTION_TYPE_EMAIL_META: tra {status, badge} theo ĐÚNG actionType (không theo family — family 'result'
+// dùng chung cho cả 3 actionType Duyệt/Từ chối/Yêu cầu bổ sung, mỗi actionType phải ra màu/nhãn KHÁC
+// nhau). Nhãn badge LẤY LẠI ĐÚNG NGUYÊN VĂN label đã có sẵn ở APPROVAL_EMAIL_EVENTS (màn Quản Trị >
+// Thông Báo Email Phê Duyệt đã dùng, không bịa nhãn mới) — chỉ thêm icon/chọn status cho PHÙ HỢP BẢN
+// CHẤT nghiệp vụ (VD "Huỷ khẩn cấp ĐƯỢC DUYỆT" = hồ sơ giá gốc bị HUỶ — màu đỏ theo kết quả cuối, không
+// phải xanh lá theo mặt chữ "được duyệt"). actionType KHÔNG có mặt ở đây (module TASK/MINUTES — cố ý
+// ngoài phạm vi family theo classifyApprovalEmailEvent(), hoặc actionType tương lai chưa liệt kê) rơi về
+// DEFAULT_EMAIL_META, vẫn được bọc khung chuyên nghiệp đầy đủ, chỉ khác màu/nhãn trung tính.
+const ACTION_TYPE_EMAIL_META = {
+  NOTIFY_APPROVAL_NEEDED: { status: 'info', badge: '⏳ Cần phê duyệt' },
+  NOTIFY_APPROVED: { status: 'success', badge: '✅ Đã duyệt' },
+  NOTIFY_REJECTED: { status: 'danger', badge: '❌ Từ chối' },
+  NOTIFY_REQUEST_CHANGES: { status: 'warning', badge: '✏️ Yêu cầu bổ sung' },
+  NOTIFY_OPINION_REQUESTED: { status: 'info', badge: '💬 Xin ý kiến' },
+  NOTIFY_FILE_PROPOSAL: { status: 'info', badge: '📎 Đề xuất thay tệp tờ trình' },
+  NOTIFY_FILE_PROPOSAL_ACCEPTED: { status: 'success', badge: '✅ Đã chấp nhận thay tệp' },
+  NOTIFY_FILE_PROPOSAL_DECLINED: { status: 'danger', badge: '❌ Từ chối đề xuất thay tệp' },
+  NOTIFY_FORWARD_REQUESTED: { status: 'info', badge: '💬 Chuyển tiếp xin ý kiến' },
+  NOTIFY_FORWARD_REPLIED: { status: 'info', badge: '💬 Đã có phản hồi ý kiến' },
+  NOTIFY_NEED_INFO: { status: 'warning', badge: '✏️ Yêu cầu bổ sung' },
+  NOTIFY_APPLIED: { status: 'success', badge: '✅ Đã áp dụng giá' },
+  NOTIFY_REQUEST_INFO: { status: 'warning', badge: '✏️ Yêu cầu bổ sung thông tin' },
+  NOTIFY_IT_PRICE_EMERGENCY_REJECT_REQUEST: { status: 'warning', badge: '⚠️ Yêu cầu từ chối khẩn cấp' },
+  NOTIFY_IT_PRICE_EMERGENCY_REJECT_APPROVED: { status: 'danger', badge: '❌ Từ chối khẩn cấp được duyệt' },
+  NOTIFY_IT_PRICE_EMERGENCY_REJECT_DENIED: { status: 'info', badge: 'ℹ️ Từ chối khẩn cấp bị từ chối' },
+  NOTIFY_TICKET_APPROVAL_NEEDED: { status: 'info', badge: '⏳ Ticket cần phê duyệt' },
+  NOTIFY_TICKET_ESCALATION_APPROVED: { status: 'success', badge: '✅ Ticket leo thang được duyệt' },
+  NOTIFY_TICKET_ESCALATION_DENIED: { status: 'danger', badge: '❌ Ticket leo thang bị từ chối' },
+  NOTIFY_TICKET_DONE: { status: 'success', badge: '✅ Ticket hoàn tất' }
+};
+const DEFAULT_EMAIL_META = { status: 'info', badge: '🔔 Thông báo' };
+
+// Icon "3 thanh xanh" ở sidebar (public/index.html, ngay cạnh chữ "HCRC WORKSPACE") tái hiện lại bằng
+// bảng (<table>/<td bgcolor>) thay vì <svg>/<img> — email client (đặc biệt Outlook desktop dùng engine
+// Word) hỗ trợ SVG rất kém và THƯỜNG TỰ CHẶN ảnh theo mặc định, dễ vỡ layout hoặc hiện khung trống; khối
+// màu dựng bằng bảng luôn hiển thị đúng ở MỌI email client, kể cả khi người nhận đã tắt tải ảnh.
+function buildEmailHeaderBarsHtml() {
+  return `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td style="width:5px;height:18px;background:#38bdf8;border-radius:3px;"></td><td style="width:3px;"></td>
+    <td style="width:5px;height:24px;background:#60a5fa;border-radius:3px;"></td><td style="width:3px;"></td>
+    <td style="width:5px;height:21px;background:#93c5fd;border-radius:3px;"></td>
+  </tr></table>`;
+}
+
+// Đoạn văn thường (fallback) — dùng cho MỌI bodyText tự do (family result/forward*/ticket*/9 job nhắc
+// hạn...) KHÔNG dựng được bằng buildApprovalNeededEmailBody(). escapeHtml() (đã có sẵn, dùng CHUNG toàn
+// hệ thống) + \n -> <br> giữ đúng cách xuống dòng của bản chữ thuần, không parse/suy đoán cấu trúc gì
+// thêm — an toàn tuyệt đối với bất kỳ nội dung tự do nào từng được viết ở 22 điểm gọi khác.
+function renderPlainEmailBodyHtml(text) {
+  const lines = String(text || '').split('\n').filter((l, i, arr) => l.trim() || (i > 0 && i < arr.length - 1));
+  return `<tr><td style="padding:14px 28px 0;font:400 14px/1.7 -apple-system,Segoe UI,Arial,sans-serif;color:#1e293b;">${
+    lines.map(l => l.trim() ? escapeHtml(l) : '<br>').join('<br>')
+  }</td></tr>`;
+}
+
+// Bảng cấu trúc "Loại phiếu/Số phiếu/Trích yếu/..." — dựng TRỰC TIẾP từ opts GỐC của
+// buildApprovalNeededEmailBody() (qua LAST_APPROVAL_NEEDED_OPTS, xem chú thích ở đó), KHÔNG parse lại
+// chuỗi text đã ghép. greeting: chuỗi đã điền sẵn (đúng tên 1 người hoặc "Anh/Chị" nhiều người).
+function renderApprovalNeededEmailBodyHtml(greeting, opts) {
+  const {
+    ticketType, ticketNumber, summary, creatorName, creatorDept, createdAt,
+    stepName, actionRequired, deadline, urgency
+  } = opts || {};
+  const rows = [
+    ['Loại phiếu', ticketType || ''],
+    ['Số phiếu', ticketNumber || ''],
+    ['Trích yếu', summary || 'Không có mô tả'],
+    ['Người tạo', `${creatorName || 'Không rõ'}${creatorDept ? ' – ' + creatorDept : ''}`],
+    ['Ngày tạo', createdAt || ''],
+    ['Bước hiện tại', stepName || ''],
+    ['Yêu cầu', actionRequired || 'Phê duyệt'],
+    ['Hạn xử lý', deadline || 'Không quy định'],
+    ['Mức độ', urgency || 'Thường']
+  ];
+  const rowsHtml = rows.map(([label, value], idx) => `
+    <tr><td style="padding:12px 16px;font:400 13px -apple-system,Segoe UI,Arial,sans-serif;color:#64748b;width:38%;vertical-align:top;">${escapeHtml(label)}</td>
+    <td style="padding:12px 16px;font:600 13px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;">${escapeHtml(value)}</td></tr>
+    ${idx < rows.length - 1 ? '<tr><td colspan="2" style="padding:0 16px;"><div style="border-top:1px solid #e2e8f0;"></div></td></tr>' : ''}
+  `).join('');
+  return `
+    <tr><td style="padding:14px 28px 0;font:400 14px/1.6 -apple-system,Segoe UI,Arial,sans-serif;color:#1e293b;">
+      Kính gửi ${escapeHtml(greeting)},<br><br>
+      Hệ thống Văn phòng số thông báo Anh/Chị có <b>một phiếu cần xử lý</b> với thông tin như sau:
+    </td></tr>
+    <tr><td style="padding:18px 28px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:8px;">${rowsHtml}</table>
+    </td></tr>
+  `;
+}
+
+// buildNotificationEmailHtml({status, badge, bodyRowsHtml, ctaUrl, ctaText}) — KHUNG CHUNG (header navy +
+// icon thương hiệu, dải màu trạng thái, badge tròn, nội dung, nút hành động, chữ ký) cho MỌI email của
+// hệ thống. Dựng bằng <table> + style NỘI TUYẾN (bắt buộc cho email — CSS ngoài/style tag KHÔNG đáng tin
+// cậy ở nhiều email client, đặc biệt Outlook desktop) — KHÁC hẳn khuôn CSP data-op/data-style dùng cho
+// giao diện ứng dụng (HTML này render trong hộp thư người nhận, không qua CSP của app). ctaUrl rỗng (gia
+// đình không có link, VD module TASK/MINUTES chưa đăng ký LINKABLE_EMAIL_FAMILIES) -> ẩn hẳn nút, không
+// hiện nút trỏ tới "#" vô nghĩa.
+function buildNotificationEmailHtml({ status, badge, bodyRowsHtml, ctaUrl, ctaText }) {
+  const theme = EMAIL_STATUS_THEME[status] || EMAIL_STATUS_THEME.info;
+  const ctaHtml = ctaUrl ? `
+    <tr><td align="center" style="padding:26px 28px 6px;">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${theme.button};border-radius:8px;">
+        <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:13px 32px;font:700 14px -apple-system,Segoe UI,Arial,sans-serif;color:#ffffff;text-decoration:none;">${escapeHtml(ctaText || 'Xem Chi Tiết →')}</a>
+      </td></tr></table>
+    </td></tr>` : '';
+  return `<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:24px;background:#eef1f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;">
+  <tr><td style="background:#152a5c;padding:18px 28px;" align="left">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      <td style="padding-right:8px;">${buildEmailHeaderBarsHtml()}</td>
+      <td style="font:700 16px/1 -apple-system,Segoe UI,Arial,sans-serif;color:#ffffff;letter-spacing:.02em;">HCRC WORKSPACE</td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="height:4px;background:${theme.accent};font-size:0;line-height:0;">&nbsp;</td></tr>
+  <tr><td style="padding:28px 28px 8px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      <td style="background:${theme.badgeBg};color:${theme.badgeFg};font:700 11px/1 -apple-system,Segoe UI,Arial,sans-serif;letter-spacing:.04em;text-transform:uppercase;padding:6px 12px;border-radius:999px;">${escapeHtml(badge)}</td>
+    </tr></table>
+  </td></tr>
+  ${bodyRowsHtml}
+  ${ctaHtml}
+  <tr><td style="padding:28px 28px 24px;">
+    <div style="border-top:1px solid #e2e8f0;padding-top:18px;font:400 12px/1.7 -apple-system,Segoe UI,Arial,sans-serif;color:#94a3b8;">
+      Trân trọng,<br><b style="color:#64748b;">Hệ thống Văn phòng số – Công ty HCRC</b><br>
+      Đây là email tự động, vui lòng không trả lời trực tiếp email này.
+    </div>
+  </td></tr>
+</table>
+</body></html>`;
 }
 
 // Gửi + ghi log thông báo email cho 1 nhóm người nhận (theo username hệ thống) — tra email từ
@@ -7270,7 +7435,10 @@ const LINKABLE_EMAIL_FAMILIES = new Set([
   'ticketApprovalNeeded', 'ticketEscalationApproved', 'ticketEscalationDenied', 'ticketDone'
 ]);
 
-function buildApprovalEmailLink(module, actionType, targetCode) {
+// buildApprovalEmailUrl(): tách riêng phần dựng URL TRẦN (11/2026, phục vụ nút CTA HTML ở
+// buildNotificationEmailHtml() — nút bấm cần URL thuần, không phải dòng text "🔗 Xem trực tiếp...: <url>").
+// buildApprovalEmailLink() giữ nguyên 100% hành vi/chữ ký cũ, chỉ còn là wrapper gọi hàm này.
+function buildApprovalEmailUrl(module, actionType, targetCode) {
   const cls = classifyApprovalEmailEvent(module, actionType);
   if (!cls || !LINKABLE_EMAIL_FAMILIES.has(cls.family)) return '';
   const tab = APPROVAL_EMAIL_LINK_TAB[module];
@@ -7280,7 +7448,13 @@ function buildApprovalEmailLink(module, actionType, targetCode) {
   url.hash = '';
   url.searchParams.set('gotoModule', tab);
   if (targetCode) url.searchParams.set('code', targetCode);
-  return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${url.toString()}`;
+  return url.toString();
+}
+
+function buildApprovalEmailLink(module, actionType, targetCode) {
+  const rawUrl = buildApprovalEmailUrl(module, actionType, targetCode);
+  if (!rawUrl) return '';
+  return `\n\n🔗 Xem trực tiếp hồ sơ (yêu cầu đăng nhập): ${rawUrl}`;
 }
 
 function notifyRecipientsByEmail(module, actionType, targetCode, recipients, subject, bodyText) {
@@ -7300,6 +7474,12 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
   bodyText = (bodyText && bodyText.includes(APPROVAL_SIGNATURE_PLACEHOLDER))
     ? bodyText.split(APPROVAL_SIGNATURE_PLACEHOLDER).join(`${link}\n\n${APPROVAL_SIGNATURE_TEXT}`)
     : `${bodyText}${link}`;
+
+  // Lấy + XOÁ NGAY LAST_APPROVAL_NEEDED_OPTS (xem chú thích đầy đủ tại khai báo biến này, ngay trước
+  // buildApprovalNeededEmailBody()) — phải đọc-và-reset ở ĐÂY, TRƯỚC mọi nhánh return sớm bên dưới
+  // (tắt ở Quản Trị/Hồ Sơ Cá Nhân), để không bao giờ còn sót lại cho 1 lượt gọi KHÔNG LIÊN QUAN sau đó.
+  const approvalOpts = LAST_APPROVAL_NEEDED_OPTS;
+  LAST_APPROVAL_NEEDED_OPTS = null;
 
   // Cổng admin "🔔 Thông Báo Email Phê Duyệt" (DB.approvalEmailConfig) — xem isApprovalEmailSuppressed()
   // ở trên. CHỈ chặn dispatchRealEmail() thật (không tốn lượt gọi SMTP/POST /api/send-email) — VẪN ghi
@@ -7348,7 +7528,22 @@ function notifyRecipientsByEmail(module, actionType, targetCode, recipients, sub
   sendTo.forEach(r => {
     console.log(`[DMS EMAIL SIMULATOR] To: ${r.name || r.email} <${r.email}> | Subject: ${subject}\n  ${bodyText}`);
   });
-  dispatchRealEmail(sendTo, subject, bodyText, { module, targetCode });
+  // Bản HTML chuyên nghiệp đi kèm (11/2026) — ĐỘC LẬP với bodyText ở trên (không parse lại chuỗi đã
+  // ghép): family 'approvalNeeded' dùng approvalOpts (dữ liệu GỐC, có cấu trúc) để ra bảng, mọi family
+  // khác (result/forward*/ticket*/...) dùng NGUYÊN bodyText (đã có link/chữ ký) cho đoạn văn thường.
+  const emailMeta = ACTION_TYPE_EMAIL_META[actionType] || DEFAULT_EMAIL_META;
+  const greetingForHtml = valid.length === 1 ? (valid[0].name || valid[0].email) : 'Anh/Chị';
+  const bodyRowsHtml = approvalOpts
+    ? renderApprovalNeededEmailBodyHtml(greetingForHtml, approvalOpts)
+    : renderPlainEmailBodyHtml(bodyText);
+  const html = buildNotificationEmailHtml({
+    status: emailMeta.status,
+    badge: emailMeta.badge,
+    bodyRowsHtml,
+    ctaUrl: buildApprovalEmailUrl(module, actionType, targetCode),
+    ctaText: 'Xem Chi Tiết →'
+  });
+  dispatchRealEmail(sendTo, subject, bodyText, { module, targetCode }, html);
   const optedOutNote = personallyOptedOut.length
     ? ` (Đã tự tắt "Nhận Email" ở Hồ Sơ Cá Nhân nên KHÔNG gửi: ${personallyOptedOut.map(r => `${r.name || r.email} <${r.email}>`).join(', ')})`
     : '';
