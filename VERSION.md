@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**26.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.20 (2026-11): "Thay trang bằng bản mới" cho Tổng Hợp PDF (Báo Cáo Định Kỳ, Điều Hành)
+
+Người dùng hỏi: báo cáo upload bằng PDF trong module Điều Hành có cho phép sửa trực tiếp được không
+(hiện chỉ xóa được trang). Đã phân tích: sửa NỘI DUNG THẬT trong 1 trang PDF (gõ đè chữ/số liệu) cần
+1 SDK PDF-editor thương mại (PSPDFKit/Nutrient, Apryse/PDFTron...) — tốn phí bản quyền + là dependency
+ngoài hoàn toàn mới, không khả thi ở quy mô hệ thống này. Cũng xác nhận lại: đường nộp báo cáo bằng
+PowerPoint (.pptx) đã bị gỡ bỏ hoàn toàn từ trước (theo yêu cầu người dùng ở 1 đợt trước), chỉ còn nhận
+PDF, nên không có đường nào khác để "sửa nội dung thật" qua PPTX.
+
+Theo lựa chọn của người dùng, đã triển khai phương án thực tế: **thay 1 trang bằng file PDF mới (đúng
+1 trang)** — phòng ban tự chỉnh lại file gốc (Word/Excel/...) rồi xuất lại đúng trang cần sửa thành PDF,
+tải lên để thay thế, không cần nộp lại cả báo cáo.
+
+- `public/js/module-baocaodinhky-trinhchieu.js`: mỗi thẻ trang ở lưới Tổng Hợp PDF thêm nút
+  **🔄 Thay trang** (chọn file, pdf.js tự kiểm đúng 1 trang trước khi tải lên, hiện thumbnail xem
+  trước ngay) và **↩️ Bản gốc** (hiện khi đã thay, huỷ về đúng trang gốc). Dùng ĐÚNG đối tượng trang
+  (không phải vị trí/index) khi xử lý bất đồng bộ — kéo-thả/xoá trang trong lúc đang tải lên vẫn áp
+  đúng kết quả vào đúng ô, không bị lệch.
+- `lib/recordActions.js` (`mergeReportPeriodPdf`): lưu lại `replacement.fileUrl/fileName` kèm theo
+  trang khi bấm "🧩 Tổng Hợp PDF", validate đúng khuôn URL tệp đã tải lên hệ thống.
+- `routes/records.js`: kiểm quyền sở hữu `fileUrl` thay thế TRƯỚC khi lưu (chặn giả mạo đường dẫn tệp
+  của người khác — dùng lại đúng cơ chế bảo mật `assertPayloadFileUrlsOwnedByUser()` đã áp dụng cho
+  mọi action route khác nhận fileUrl từ client, quét sâu tự tìm field lồng trong `pages[]`).
+- `lib/reportPdfMerge.js` (`materializeReportPeriodPdf`): lúc "🚀 Phát Hành PDF", trang có thay thế sẽ
+  LẤY NỘI DUNG từ file thay thế thay vì trang gốc của báo cáo — bắt buộc đúng 1 trang, báo lỗi 400 rõ
+  ràng nếu file thay thế có nhiều hơn 1 trang (server tự ép lại độc lập, không chỉ tin kết quả client
+  đã kiểm bằng pdf.js).
+
+Test: 3 kịch bản mới ở `test-periodic-report-pdf.js` (dùng file PDF thật qua pdf-lib — xác nhận publish
+lấy đúng byte từ file thay thế bằng cách so kích thước trang khác hẳn bản gốc, không chỉ suy luận qua
+field JSON) + 4 kịch bản ở file mới `test-periodic-report-pdf-replace-ownership.js` (quyền sở hữu
+fileUrl lồng 2 cấp trong `pages[].replacement.fileUrl`). Đã xác nhận bằng `git stash` rằng cả 3 kịch
+bản đầu đều FAIL đúng trên code cũ. Chạy lại test Báo Cáo Định Kỳ cũ (PPTX đọc lại dữ liệu cũ) + CSP
+full audit (42 điểm điều hướng) — không phát sinh hồi quy. Demo ảnh trước/sau (dựng từ đúng CSS/HTML
+thật của tính năng) đã gửi người dùng xác nhận trước khi merge.
+
+**Deploy-impact**: thuần sửa logic phía server (`lib/`, `routes/`) + giao diện phía client
+(`public/js/`, `public/app.css`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi
+`package.json` dependencies (dùng lại `pdf-lib`/`pdf.js` đã có sẵn). Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.19 (2026-11): 3 lỗi mới từ file test nhóm QA — cột Thao Tác Lớp Học lệch, chọn gợi ý tài khoản tham dự không ăn, đổi tài khoản không cập nhật lại thông tin
 
