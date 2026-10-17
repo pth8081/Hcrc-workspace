@@ -254,15 +254,22 @@ function updateTplRowNameOnInput(idx, value) {
 // Khớp đúng applyAttendeeSystemUser()/toggleAttendeeHasAccount()/resolveAttendeeAccountInput() ở bảng
 // Thành phần tham dự thật — chỉ khác thao tác trên tplEditRows/renderTplEditRowsTable() thay vì
 // minutesAttendeesRows/renderAttendeesTable(), và không có bảng Ý kiến chỉ đạo nào cần làm mới theo.
+// LỖI ĐÃ VÁ (11/2026, phát hiện qua rà soát chuyên sâu — bản sao chưa vá của applyAttendeeSystemUser()
+// ở trên, cùng 1 gốc rễ): đang liên kết 1 tài khoản rồi đổi Họ Và Tên sang tài khoản KHÁC — "chỉ điền
+// khi trống" khiến Chức Danh/Phòng/SĐT/Email vẫn giữ nguyên của người CŨ (đã tự điền từ lần liên kết
+// trước nên không còn "trống"). switchingAccount = true khi dòng này TRƯỚC ĐÓ đã liên kết 1 username
+// KHÁC — lúc đó ghi đè LUÔN theo tài khoản mới; lần đầu liên kết (a.username đang null) vẫn giữ nguyên
+// hành vi cũ (ưu tiên dữ liệu đã nhập tay riêng cho mẫu này).
 function applyTplRowSystemUser(idx, user) {
   const a = tplEditRows[idx];
   if (!a) return;
+  const switchingAccount = !!a.username && a.username !== user.username;
   a.username = user.username;
   a.name = user.name;
-  a.title = a.title || user.jobTitle || '';
-  a.dept = a.dept || user.dept || '';
-  a.phone = a.phone || user.phone || '';
-  a.email = a.email || user.email || '';
+  a.title = (switchingAccount ? '' : a.title) || user.jobTitle || '';
+  a.dept = (switchingAccount ? '' : a.dept) || user.dept || '';
+  a.phone = (switchingAccount ? '' : a.phone) || user.phone || '';
+  a.email = (switchingAccount ? '' : a.email) || user.email || '';
 }
 
 function toggleTplRowHasAccount(idx, value) {

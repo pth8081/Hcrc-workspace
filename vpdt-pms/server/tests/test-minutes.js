@@ -624,6 +624,76 @@ async function main() {
     JSON.stringify({ tplRowName: domBug.tplRowName, tplRowUsername: domBug.tplRowUsername })
   );
 
+  // ===================== BUG THẬT ĐÃ VÁ (11/2026, phát hiện qua rà soát chuyên sâu "picker Người
+  // Dùng"): applyAttendeeSystemUser()/applyTplRowSystemUser() trước đây CHỈ điền Chức Danh/Phòng/SĐT/
+  // Email khi ô ĐANG TRỐNG — đúng cho LẦN ĐẦU liên kết, nhưng khi ĐỔI Họ Và Tên từ 1 tài khoản đã liên
+  // kết SANG tài khoản KHÁC, 4 field đó không còn trống (đã tự điền từ lần liên kết trước) nên KHÔNG
+  // được ghi đè, vẫn hiện thông tin của người CŨ dù Họ Và Tên đã đổi đúng sang người MỚI. Test CẢ 2
+  // nhánh (Thành Phần Tham Dự thật + Mẫu Danh Sách Tham Dự) — chọn directorUser trước, rồi ĐỔI sang
+  // secretaryUser, xác nhận 4 field phụ thuộc đổi ĐÚNG theo secretaryUser, không còn sót dữ liệu của
+  // directorUser. =====
+  const switchAccountBug = await page.evaluate(({ directorLabel, secretaryLabel, secretaryUser, tplName2 }) => {
+    // --- Nhánh 1: Thành Phần Tham Dự thật ---
+    minutesAttendeesRows = [];
+    addAttendeeRow();
+    toggleAttendeeHasAccount(0, 'YES');
+    renderAttendeesTable();
+    const attendeeInput = document.querySelector('#minutesAttendeesTableBody input[data-op-change="resolveAttendeeAccountInput"]');
+    attendeeInput.value = directorLabel;
+    attendeeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    attendeeInput.dispatchEvent(new Event('change', { bubbles: true }));
+    renderAttendeesTable();
+    const attendeeInput2 = document.querySelector('#minutesAttendeesTableBody input[data-op-change="resolveAttendeeAccountInput"]');
+    attendeeInput2.value = secretaryLabel;
+    attendeeInput2.dispatchEvent(new Event('input', { bubbles: true }));
+    attendeeInput2.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // --- Nhánh 2: Mẫu Danh Sách Tham Dự ---
+    openAttendeeTemplateManagerModal();
+    openAttendeeTemplateEditor(null);
+    document.getElementById('tplEditName').value = tplName2;
+    addTplEditRow();
+    toggleTplRowHasAccount(0, 'YES');
+    renderTplEditRowsTable();
+    const tplInput = document.querySelector('#tplEditRowsTableBody input[data-op-change="resolveTplRowAccountInput"]');
+    tplInput.value = directorLabel;
+    tplInput.dispatchEvent(new Event('input', { bubbles: true }));
+    tplInput.dispatchEvent(new Event('change', { bubbles: true }));
+    renderTplEditRowsTable();
+    const tplInput2 = document.querySelector('#tplEditRowsTableBody input[data-op-change="resolveTplRowAccountInput"]');
+    tplInput2.value = secretaryLabel;
+    tplInput2.dispatchEvent(new Event('input', { bubbles: true }));
+    tplInput2.dispatchEvent(new Event('change', { bubbles: true }));
+
+    return {
+      attendeeTitle: minutesAttendeesRows[0].title, attendeeDept: minutesAttendeesRows[0].dept,
+      attendeePhone: minutesAttendeesRows[0].phone, attendeeEmail: minutesAttendeesRows[0].email,
+      attendeeUsername: minutesAttendeesRows[0].username,
+      tplTitle: tplEditRows[0].title, tplDept: tplEditRows[0].dept,
+      tplPhone: tplEditRows[0].phone, tplEmail: tplEditRows[0].email,
+      tplUsername: tplEditRows[0].username
+    };
+  }, {
+    directorLabel: `${directorUser.name} — ${directorUser.dept} (${directorUser.username})`,
+    secretaryLabel: `${secretaryUser.name} — ${secretaryUser.dept} (${secretaryUser.username})`,
+    secretaryUser,
+    tplName2: 'Mẫu test đổi tài khoản'
+  });
+  record(
+    'BUG THẬT ĐÃ VÁ: "Thành Phần Tham Dự" — đổi sang tài khoản KHÁC phải cập nhật lại Chức Danh/Phòng/SĐT/Email theo người MỚI, không giữ sót dữ liệu người CŨ',
+    switchAccountBug.attendeeUsername === secretaryUser.username &&
+      switchAccountBug.attendeeTitle === secretaryUser.jobTitle && switchAccountBug.attendeeDept === secretaryUser.dept &&
+      switchAccountBug.attendeePhone === secretaryUser.phone && switchAccountBug.attendeeEmail === secretaryUser.email,
+    JSON.stringify(switchAccountBug)
+  );
+  record(
+    'BUG THẬT ĐÃ VÁ: "Quản Lý Mẫu Danh Sách Tham Dự" — đổi sang tài khoản KHÁC phải cập nhật lại Chức Danh/Phòng/SĐT/Email theo người MỚI, không giữ sót dữ liệu người CŨ',
+    switchAccountBug.tplUsername === secretaryUser.username &&
+      switchAccountBug.tplTitle === secretaryUser.jobTitle && switchAccountBug.tplDept === secretaryUser.dept &&
+      switchAccountBug.tplPhone === secretaryUser.phone && switchAccountBug.tplEmail === secretaryUser.email,
+    JSON.stringify(switchAccountBug)
+  );
+
   await browser.close();
   server.close();
 
