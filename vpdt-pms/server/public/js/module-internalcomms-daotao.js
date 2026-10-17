@@ -625,7 +625,7 @@ function renderTrainingClasses() {
         <td class="border p-2">${escapeHtml(c.category)}</td>
         <td class="border p-2">${escapeHtml((c.startTime || '').replace('T', ' '))}${c.location ? `<br><span class="text-gray-400">${escapeHtml(c.location)}</span>` : ''}</td>
         <td class="border p-2">${regs.length}${c.capacity ? '/' + c.capacity : ''}</td>
-        <td class="border p-2 text-center">${actionHTML}${manageHTML}${delHTML}</td>
+        <td class="border p-2 text-center"><div class="flex flex-wrap items-center justify-start gap-1">${actionHTML}${manageHTML}${delHTML}</div></td>
       </tr>`;
   }).join('');
 }

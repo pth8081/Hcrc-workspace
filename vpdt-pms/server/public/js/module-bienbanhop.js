@@ -405,15 +405,25 @@ function updateAttendeeNameOnInput(idx, value) {
 // Ô ĐANG TRỐNG (ưu tiên dữ liệu đã nhập tay/dành riêng cho cuộc họp, ví dụ email liên hệ khác lúc họp
 // — đúng theo yêu cầu "email luôn lấy đúng email đã nhập ở Thành phần tham dự"), lưu liên kết username
 // chính xác. Vẫn sửa tay lại được sau đó bình thường dù đã tự điền hay không.
+//
+// LỖI ĐÃ VÁ (11/2026, phản ánh bởi nhóm testing): dòng ĐANG liên kết 1 tài khoản (VD "Chuyên viên kế
+// toán") rồi đổi Họ Và Tên sang 1 tài khoản KHÁC (VD "Chuyên viên nhân sự") — "chỉ điền khi trống" ở
+// trên khiến Chức Danh/Phòng/SĐT/Email vẫn giữ NGUYÊN của tài khoản CŨ (đã tự điền từ lần liên kết trước
+// nên không còn "trống" để điền lại), dù Họ Và Tên đã đổi đúng. switchingAccount = TRUE khi dòng này
+// TRƯỚC ĐÓ đã liên kết 1 username KHÁC (không phải lần đầu liên kết, không phải chọn lại đúng người cũ)
+// — lúc đó ghi đè LUÔN 4 field theo tài khoản MỚI (không chờ "trống" nữa), vì dữ liệu cũ gần như chắc
+// chắn là của người CŨ, không còn đúng cho người MỚI. Lần đầu liên kết (a.username đang null) vẫn giữ
+// nguyên hành vi "chỉ điền khi trống" như cũ (ưu tiên dữ liệu đã nhập tay riêng cho cuộc họp này).
 function applyAttendeeSystemUser(idx, user) {
   const a = minutesAttendeesRows[idx];
   if (!a) return;
+  const switchingAccount = !!a.username && a.username !== user.username;
   a.username = user.username;
   a.name = user.name;
-  a.title = a.title || user.jobTitle || '';
-  a.dept = a.dept || user.dept || '';
-  a.phone = a.phone || user.phone || '';
-  a.email = a.email || user.email || '';
+  a.title = (switchingAccount ? '' : a.title) || user.jobTitle || '';
+  a.dept = (switchingAccount ? '' : a.dept) || user.dept || '';
+  a.phone = (switchingAccount ? '' : a.phone) || user.phone || '';
+  a.email = (switchingAccount ? '' : a.email) || user.email || '';
 }
 
 // Bật/tắt liên kết tài khoản hệ thống cho 1 người tham dự. Chuyển sang "Không": chỉ gỡ liên kết username,

@@ -13069,6 +13069,24 @@ document.addEventListener('keydown', (ev) => {
   try { el.showPicker(); } catch (err) { /* thiếu user-gesture hợp lệ hoặc trình duyệt chặn -> bỏ qua */ }
 });
 
+// LỖI ĐÃ VÁ (11/2026, phản ánh bởi nhóm testing — "gõ tìm rồi bấm 1 gợi ý: KHÔNG chọn được, ô vẫn giữ
+// nguyên chữ vừa gõ"): bấm CHUỘT THẬT vào 1 dòng gợi ý luôn đi qua trình tự mousedown -> (trình duyệt tự
+// BLUR input đang focus vì chuyển tiêu điểm sang phần tử khác) -> mouseup -> click. Input mất focus
+// trong lúc value[DOM] CÒN LÀ CHỮ ĐANG GÕ (chưa kịp đổi thành label gợi ý — việc đó chỉ xảy ra ở handler
+// 'click' bên dưới, chạy SAU) -> trình duyệt tự bắn 'change' NGUYÊN BẢN của input với giá trị CHỮ ĐANG
+// GÕ đó (không khớp định dạng gợi ý) -> handler data-op-change của module (VD
+// resolveAttendeeAccountInput() ở module-bienbanhop.js) coi là "gõ tự do không khớp", RESET về chưa
+// liên kết + render lại bảng — XOÁ LUÔN input DOM gốc trước khi handler 'click' bên dưới kịp set
+// input.value = item.label (lúc đó input đã rời DOM, set value không còn tác dụng gì). Chặn TRIỆT ĐỂ
+// bằng preventDefault() ngay ở mousedown trên dòng gợi ý — input KHÔNG BAO GIỜ bị blur theo cách này
+// nữa, nên 'change' nguyên bản của trình duyệt không bao giờ bắn sớm, handler 'click' bên dưới luôn là
+// nơi DUY NHẤT thay đổi value/dispatch input+change — khớp đúng quyết định người dùng (dùng cùng 1 widget
+// sdd* cho mọi ô tìm-kiếm-gõ-chọn, sửa 1 lần ở đây áp dụng cho TẤT CẢ các điểm dùng, không riêng Biên
+// Bản Họp). Đã xác nhận bằng Playwright CLICK CHUỘT THẬT (không phải dispatchEvent giả lập) trước/sau.
+document.addEventListener('mousedown', (ev) => {
+  if (ev.target.closest('[data-sdd-idx]')) ev.preventDefault();
+});
+
 // Bấm chọn 1 gợi ý HOẶC bấm ra ngoài để đóng — gắn 1 LẦN DUY NHẤT (query lại theo [data-sdd-idx]/
 // [data-sdd-dropdown] mỗi lần click, cùng triết lý với listener đóng renderPeopleMultiSelect() bên
 // dưới — không gắn lại mỗi lần render, tránh chồng listener).
