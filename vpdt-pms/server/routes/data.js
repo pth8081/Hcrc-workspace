@@ -17,7 +17,7 @@ const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBe
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
-const { findProfileByUsername, autoLinkUnlinkedProfiles } = require('../lib/employeeProfile');
+const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields } = require('../lib/employeeProfile');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
@@ -411,6 +411,27 @@ const NON_ADMIN_GATED_KEYS = new Map([
   ['attendanceHoConfig', {
     allow: (perms) => !!(perms?.admin || perms?.hrAttendanceManage),
     error: 'Chỉ người có quyền Quản Lý Chấm Công (Nhân Sự) mới được sửa cấu hình giờ hành chính'
+  }],
+  // hrProfileManagerVisibleFields/hrProfileSelfVisibleFields: LỖI ĐÃ VÁ (11/2026, rà soát bảo mật
+  // chuyên sâu lần 2, mức Cao) — 2 key cấu hình "field nhạy cảm nào được quản lý trực tiếp/chính chủ
+  // xem" (xem SENSITIVE_FIELDS/sanitizeManagerVisibleFields()/sanitizeSelfVisibleFields() ở
+  // lib/employeeProfile.js) trước đây hoàn toàn KHÔNG có trong ADMIN_ONLY_KEYS lẫn NON_ADMIN_GATED_KEYS
+  // — route generic này không gate quyền gì cho 2 key đó, nghĩa là BẤT KỲ tài khoản đã đăng nhập đều tự
+  // thêm field nhạy cảm (CCCD/tài khoản ngân hàng/lương...) vào danh sách "được xem" rồi tự mở khoá xem
+  // hồ sơ người khác qua GET /api/hr-profile — trong khi route CHÍNH THỨC (PUT /manager-field-config,
+  // PUT /self-field-config ở routes/employeeProfile.js) đã gác đúng bằng requireProfileManage
+  // (canManageProfiles() = chỉ hrProfileManage, KHÔNG admin bypass — khớp đúng tiền lệ "mở rộng Nhân
+  // Sự" các quyền khác trong module này). Gate ở đây khớp Y NGUYÊN canManageProfiles() để không mở rộng
+  // quyền ngoài ý định; sanitize giá trị ghi bằng ĐÚNG 2 hàm sanitizeManagerVisibleFields()/
+  // sanitizeSelfVisibleFields() đã có sẵn (xem nhánh "if (key === ...)" ngay dưới router.post) để không
+  // ai lợi dụng route generic này ghi field KHÔNG thuộc SENSITIVE_FIELDS hoặc dữ liệu không phải mảng.
+  ['hrProfileManagerVisibleFields', {
+    allow: (perms) => !!(perms?.hrProfileManage),
+    error: 'Chỉ người có quyền Quản Lý Hồ Sơ Nhân Sự mới được sửa cấu hình field quản lý trực tiếp được xem'
+  }],
+  ['hrProfileSelfVisibleFields', {
+    allow: (perms) => !!(perms?.hrProfileManage),
+    error: 'Chỉ người có quyền Quản Lý Hồ Sơ Nhân Sự mới được sửa cấu hình field chính chủ được xem'
   }]
 ]);
 
@@ -2116,6 +2137,10 @@ router.post('/:key', async (req, res) => {
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
+    // Lọc lại đúng subset SENSITIVE_FIELDS hợp lệ — xem chú thích đầy đủ tại entry NON_ADMIN_GATED_KEYS
+    // tương ứng ở trên (LỖI ĐÃ VÁ, rà soát bảo mật chuyên sâu lần 2, mức Cao).
+    if (key === 'hrProfileManagerVisibleFields') value = sanitizeManagerVisibleFields(value);
+    if (key === 'hrProfileSelfVisibleFields') value = sanitizeSelfVisibleFields(value);
     // submissionApprovalGroups (mục 11)/contractApprovalGroups (mục 14) — nhóm nào admin bật cờ
     // "Chỉ 1 người" (singleApprover) chỉ được gán tối đa 1 thành viên (xem
     // lib/createValidation.js::assertApprovalGroupsSingleApproverCaps() — đợt "Nhóm Phê Duyệt Trình tự

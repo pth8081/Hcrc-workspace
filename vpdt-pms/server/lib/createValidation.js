@@ -3675,8 +3675,14 @@ const CREATE_MODULE_CONFIGS = {
       const processType = String(payload.processType || '').trim();
       if (!['ONBOARDING', 'OFFBOARDING'].includes(processType)) throw new CreateError(400, 'Loại quy trình không hợp lệ');
       payload.processType = processType;
-      const manageFlag = processType === 'ONBOARDING' ? 'hrOnboardingManage' : 'hrOffboardingManage';
-      if (!user.perms?.admin && !user.perms?.[manageFlag]) {
+      // LỖI ĐÃ VÁ (11/2026, rà soát bảo mật chuyên sâu): nhánh `!user.perms?.admin &&` ở đây còn SÓT lại
+      // từ đợt bỏ admin bypass nhóm Nhân Sự — canCreateHrProcess() (lib/recordActions.js) đã được vá
+      // đúng (không còn admin bypass) và dùng ở luồng Nhập Excel hàng loạt (routes/hrProcessImport.js,
+      // routes/records.js), nhưng luồng tạo tay đơn lẻ POST /api/create/hrProcesses đi qua extraValidate
+      // này lại tự kiểm tra riêng, không gọi canCreateHrProcess() nên bị bỏ sót. Gọi lại ĐÚNG 1 hàm dùng
+      // chung (require trễ — tránh vòng lặp, recordActions.js require createValidation.js ở đầu file).
+      const { canCreateHrProcess } = require('./recordActions');
+      if (!canCreateHrProcess(user, processType)) {
         throw new CreateError(403, `Bạn không có quyền tạo quy trình ${processType === 'ONBOARDING' ? 'Onboarding' : 'Offboarding'}`);
       }
 

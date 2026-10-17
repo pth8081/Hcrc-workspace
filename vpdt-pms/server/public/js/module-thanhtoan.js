@@ -55,7 +55,7 @@ function renderPaymentCreateInstallmentsList(installments) {
     <div class="flex gap-2 items-center" data-installment-row="${idx}">
       <input placeholder="Mô tả đợt (VD: Đợt 1)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded payment-installment-desc">
       <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(it.amount)}" class="w-40 border p-1.5 rounded payment-installment-amount money-input">
-      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded payment-installment-due">
+      <input type="date" value="${escapeHtml(it.dueDate || '')}" class="w-40 border p-1.5 rounded payment-installment-due">
       <button type="button" data-op="removePaymentCreateInstallmentRow" data-arg0="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
     </div>
   `).join('') || '<p class="text-gray-400 italic text-[11px]">Chưa có đợt thanh toán nào — bấm "+ Thêm Đợt".</p>';
@@ -512,7 +512,7 @@ function renderPaymentManageInstallmentsList(prId, installments) {
       <div class="flex gap-2 items-center">
         <input placeholder="Mô tả đợt (VD: Đợt 1)" value="${escapeHtml(it.description || '')}" class="flex-1 border p-1.5 rounded payment-installment-desc">
         <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ) — có thể để trống" value="${it.amount != null ? formatMoneyDisplay(it.amount) : ''}" class="w-48 border p-1.5 rounded payment-installment-amount money-input">
-        <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded payment-installment-due">
+        <input type="date" value="${escapeHtml(it.dueDate || '')}" class="w-40 border p-1.5 rounded payment-installment-due">
         <button type="button" data-op="removePaymentManageInstallmentRow" data-arg0="${prId}" data-arg1="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
       </div>
       <div class="pl-1">

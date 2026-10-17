@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**26.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.18 (2026-11): Đợt rà soát bảo mật chuyên sâu lần 2 — vá 1 Nghiêm Trọng + 1 Cao + 4 Trung Bình
+
+Theo yêu cầu người dùng ("cho nhiều agent rà soát chuyên sâu một lần nữa về an toàn an ninh thông tin,
+cả lỗ hổng nghiệp vụ lẫn UI/UX"): 6 agent song song rà soát toàn bộ hệ thống, mỗi phát hiện Nghiêm
+Trọng/Cao đều được **tự tay đọc lại source để xác nhận** trước khi đưa vào báo cáo tổng hợp cho người
+dùng xác nhận xử lý ("Bạn xử lý từ cao đến thấp nhé"). Đã vá đủ 6/6 lỗ hổng người dùng xác nhận xử lý
+(3 lỗ hổng Thấp còn lại không cần xử lý, giữ nguyên theo đề xuất trước đó — không ảnh hưởng tới quyết
+định của người dùng):
+
+- **[Nghiêm Trọng]** `lib/createValidation.js` — `CREATE_MODULE_CONFIGS.hrProcesses.extraValidate()`
+  (luồng tạo tay đơn lẻ `POST /api/create/hrProcesses`) còn SÓT 1 nhánh admin bypass riêng từ đợt bỏ
+  admin bypass nhóm Nhân Sự (v26.14): `canCreateHrProcess()` (`lib/recordActions.js`) đã được vá đúng
+  (không còn admin bypass) và được dùng ở luồng Nhập Excel hàng loạt, nhưng luồng tạo tay lại tự kiểm
+  tra riêng để lộ admin bypass — bất kỳ tài khoản admin (không có hrOnboardingManage/hrOffboardingManage)
+  vẫn tự tạo tay được quy trình Onboarding/Offboarding. Vá bằng cách gọi lại ĐÚNG 1 hàm dùng chung
+  `canCreateHrProcess()` thay vì tự kiểm tra riêng.
+- **[Cao]** `routes/data.js` — 2 key `hrProfileManagerVisibleFields`/`hrProfileSelfVisibleFields` (cấu
+  hình field nhạy cảm nào được quản lý trực tiếp/chính chủ xem ở Hồ Sơ Nhân Sự) hoàn toàn KHÔNG có
+  trong `ADMIN_ONLY_KEYS` lẫn `NON_ADMIN_GATED_KEYS` — route generic `POST /api/data/:key` không gate
+  quyền gì cho 2 key đó, nghĩa là BẤT KỲ tài khoản đã đăng nhập đều tự mở khoá xem field nhạy cảm
+  (CCCD/tài khoản ngân hàng/lương...) của hồ sơ người khác, trong khi route chính thức
+  (`PUT /manager-field-config`/`PUT /self-field-config`) đã gác đúng quyền `hrProfileManage`. Vá bằng
+  cách thêm gate khớp Y NGUYÊN quyền của route chính thức + áp dụng lại đúng
+  `sanitizeManagerVisibleFields()`/`sanitizeSelfVisibleFields()` đã có sẵn (lọc field ghi vào đúng
+  subset `SENSITIVE_FIELDS`, không cho ghi field tuỳ ý).
+- **[Trung Bình, Nghiệp Vụ]** `lib/recordActions.js` — điều chuyển kho đồng phục giữa siêu thị
+  (`uniformTransfers`): approve/reject/cancel KHÔNG chặn tự duyệt/tự từ chối/tự hủy yêu cầu do CHÍNH
+  MÌNH tạo (1 tài khoản được gán cả `uniformStoreManage` + `uniformApprove`/`uniformManage` — 2 quyền
+  khác nhau nhưng không loại trừ nhau). Vá bằng `assertNotSelfDecidingUniformTransfer()` (cùng khuôn
+  `assertNotSelfDecidingUniformPeriod()` đã có), admin vẫn luôn tự duyệt được (giữ đặc quyền cũ).
+- **[Trung Bình, Nghiệp Vụ]** `lib/recordActions.js` — "Từ chối khẩn cấp" đề xuất giá
+  (`itPriceApprovals`): approve/deny KHÔNG chặn tự quyết định yêu cầu do CHÍNH MÌNH gửi (1 người duyệt
+  bước cuối được gán thêm quyền `itPriceEmergencyRejectApproveWholesale/Retail`). Vá bằng
+  `assertNotSelfDecidingItPriceEmergencyReject()` cùng khuôn trên, admin vẫn luôn tự phê duyệt được.
+- **[Trung Bình, UI/UX, 4 điểm]** `public/js/module-hopdong.js` (dòng 282, 379) +
+  `public/js/module-thanhtoan.js` (dòng 58, 515) — ô ngày hạn (`it.dueDate`) ở danh sách đợt thanh toán
+  render thẳng vào `value="..."` KHÔNG qua `escapeHtml()` như mọi field khác cùng dòng (vi phạm chuẩn
+  CSP/escaping của hệ thống) — bọc `escapeHtml()` cho cả 4 vị trí.
+
+Test: viết mới `server/tests/test-security-audit-round3.js` (16 kịch bản — 10 kịch bản "LỖI ĐÃ VÁ" +
+6 kịch bản xác nhận KHÔNG phá happy path/đặc quyền admin cũ), đã xác nhận bằng `git stash` rằng cả 10
+kịch bản "LỖI ĐÃ VÁ" đều FAIL đúng trên code CŨ (trước khi vá) và PASS trên code mới — không phải suy
+luận. Đã chạy lại đầy đủ bộ test liên quan hiện có (`test-hr-lifecycle.js`, `test-itprice-approval-and-
+emergency.js`, `test-uniform.js`, `test-uniform-transfer-cancel.js`, `test-uniform-phase2.js`,
+`test-contract.js`, `test-payment.js`, `test-audit-round2-cluster4.js`, `test-csp-full-audit.js`) —
+toàn bộ PASS, không có regression. `test-hr-profile-field-visibility.js` có 1 lỗi timeout + 2 lỗi đếm
+field đã xác nhận (bằng `git stash`) là lỗi CÓ SẴN TỪ TRƯỚC, không liên quan tới đợt vá này.
+
+**Deploy-impact**: thuần sửa logic phía server (`lib/`, `routes/`) + sửa hiển thị HTML phía client
+(`public/js/`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi `package.json`
+dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.17 (2026-11): Onboarding — sửa thứ tự Tab không khớp bố cục nhìn thấy
 

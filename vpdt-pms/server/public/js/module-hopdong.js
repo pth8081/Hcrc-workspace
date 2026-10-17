@@ -279,7 +279,7 @@ function renderContractInstallmentsList(installments) {
         <span class="text-gray-500 text-xs">%</span>
       </div>
       <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(amt)}" data-op-input="onContractInstallmentAmountInput" data-arg-el="0" class="w-40 border p-1.5 rounded contract-installment-amount money-input">
-      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded contract-installment-due">
+      <input type="date" value="${escapeHtml(it.dueDate || '')}" class="w-40 border p-1.5 rounded contract-installment-due">
       <button type="button" data-op="removeContractInstallmentRow" data-arg0="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
     </div>
   `;
@@ -376,7 +376,7 @@ function renderCptcInstallmentsList(installments, totalAmount) {
         <span class="text-gray-500 text-xs">%</span>
       </div>
       <input type="text" inputmode="numeric" placeholder="Số tiền (VNĐ)" value="${formatMoneyDisplay(amt)}" data-op-input="onCptcInstallmentAmountInput" data-arg-el="0" class="w-40 border p-1.5 rounded cptc-amount money-input">
-      <input type="date" value="${it.dueDate || ''}" class="w-40 border p-1.5 rounded cptc-due">
+      <input type="date" value="${escapeHtml(it.dueDate || '')}" class="w-40 border p-1.5 rounded cptc-due">
       <button type="button" data-op="removeCptcInstallmentRow" data-arg0="${idx}" class="text-red-500 font-bold hover:underline px-1">✕</button>
     </div>
   `;

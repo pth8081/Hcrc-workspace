@@ -6143,8 +6143,24 @@ function requestItPriceEmergencyReject(user, item, payload) {
   return item;
 }
 
+// Chặn tự phê duyệt/tự từ chối yêu cầu "từ chối khẩn cấp" do CHÍNH MÌNH gửi (LỖI ĐÃ VÁ, rà soát bảo
+// mật chuyên sâu lần 2, mức Trung bình) — requestItPriceEmergencyReject() yêu cầu
+// isFinalStepApproverOfItPrice() (người duyệt bước cuối, HOẶC admin) còn approve/deny yêu cầu
+// canApproveItPriceEmergencyReject (itPriceEmergencyRejectApproveWholesale/Retail, HOẶC admin) — 1
+// người duyệt bước cuối ĐƯỢC GÁN THÊM quyền phê duyệt từ chối khẩn cấp (không loại trừ nhau) tự gửi rồi
+// tự phê duyệt/từ chối ngay yêu cầu của chính mình, không ai kiểm soát độc lập — cùng khuôn
+// assertNotSelfDecidingUniformPeriod()/assertNotSelfDecidingUniformTransfer(), admin vẫn luôn vượt qua
+// được (đặc quyền nhất quán toàn hệ thống).
+function assertNotSelfDecidingItPriceEmergencyReject(user, item) {
+  if (user?.perms?.admin) return;
+  if (item && item.emergencyRejectRequestedBy === user?.username) {
+    throw new HttpError(403, 'Bạn không thể tự phê duyệt/từ chối yêu cầu từ chối khẩn cấp do chính mình gửi');
+  }
+}
+
 function approveItPriceEmergencyReject(user, item) {
   if (!canApproveItPriceEmergencyReject(user, item.priceType)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
+  assertNotSelfDecidingItPriceEmergencyReject(user, item);
   if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
   item.emergencyRejectStatus = 'APPROVED';
   item.emergencyRejectDecidedBy = user.username;
@@ -6162,6 +6178,7 @@ function approveItPriceEmergencyReject(user, item) {
 
 function denyItPriceEmergencyReject(user, item, payload) {
   if (!canApproveItPriceEmergencyReject(user, item.priceType)) throw new HttpError(403, 'Bạn không có quyền phê duyệt từ chối khẩn cấp');
+  assertNotSelfDecidingItPriceEmergencyReject(user, item);
   if (item.emergencyRejectStatus !== 'PENDING') throw new HttpError(409, 'Không có yêu cầu từ chối khẩn cấp nào đang chờ xử lý');
   const comment = (payload?.comment || '').trim().slice(0, 1000);
   if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối yêu cầu này');
@@ -7285,6 +7302,20 @@ function canApproveUniformTransfer(user) {
   return canApproveUniform(user);
 }
 
+// Chặn tự duyệt/tự từ chối/tự hủy yêu cầu điều chuyển do CHÍNH MÌNH tạo (LỖI ĐÃ VÁ, rà soát bảo mật
+// chuyên sâu lần 2, mức Trung bình) — buildUniformTransfer() yêu cầu canManageUniformStore
+// (uniformStoreManage) còn approve/reject/cancel yêu cầu canApproveUniformTransfer (uniformApprove HOẶC
+// uniformManage) — 2 QUYỀN KHÁC NHAU nhưng không loại trừ nhau, 1 tài khoản được gán cả 2 (VD vừa quản
+// lý kho siêu thị vừa quản lý chung đồng phục) tự tạo rồi tự duyệt/từ chối/hủy ngay yêu cầu của chính
+// mình, không ai kiểm soát độc lập — cùng khuôn assertNotSelfDecidingUniformPeriod() ngay phía trên,
+// admin vẫn luôn vượt qua được (đặc quyền nhất quán toàn hệ thống).
+function assertNotSelfDecidingUniformTransfer(user, transfer) {
+  if (user?.perms?.admin) return;
+  if (transfer && transfer.requestedBy === user?.username) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối/hủy yêu cầu điều chuyển kho do chính mình tạo');
+  }
+}
+
 // Giám Đốc Siêu Thị ĐÍCH (canManageUniformStore, đúng user.dept === transfer.targetDept) — KHÔNG dùng
 // chung quyền duyệt (canApproveUniformTransfer) vì đây là hành động của bên NHẬN hàng, khác hẳn bên
 // DUYỆT yêu cầu (thường là Hành Chính, không thuộc bất kỳ siêu thị nào).
@@ -7346,6 +7377,7 @@ function buildUniformTransfer(user, payload, allPeriods, allIssuancesOfSourceSto
 // tính vào allApprovedTransfers tại thời điểm gọi).
 function approveUniformTransfer(user, transfer, sourceStock) {
   if (!canApproveUniformTransfer(user)) throw new HttpError(403, 'Bạn không có quyền duyệt điều chuyển kho');
+  assertNotSelfDecidingUniformTransfer(user, transfer);
   if (transfer.status !== 'PENDING_APPROVAL') throw new HttpError(409, 'Yêu cầu điều chuyển này đã được xử lý trước đó');
   const row = sourceStock ? sourceStock.get(`${transfer.itemName}|||${transfer.size}`) : null;
   const available = row ? row.stock : 0;
@@ -7361,6 +7393,7 @@ function approveUniformTransfer(user, transfer, sourceStock) {
 
 function rejectUniformTransfer(user, transfer, payload) {
   if (!canApproveUniformTransfer(user)) throw new HttpError(403, 'Bạn không có quyền duyệt điều chuyển kho');
+  assertNotSelfDecidingUniformTransfer(user, transfer);
   if (transfer.status !== 'PENDING_APPROVAL') throw new HttpError(409, 'Yêu cầu điều chuyển này đã được xử lý trước đó');
   transfer.status = 'REJECTED';
   transfer.approvedBy = user.username;
@@ -7412,6 +7445,7 @@ function cancelUniformTransfer(user, transfer, payload) {
   if (!canCancelUniformTransfer(user)) {
     throw new HttpError(403, 'Bạn không có quyền hủy điều chuyển kho này');
   }
+  assertNotSelfDecidingUniformTransfer(user, transfer);
   if (transfer.status !== 'APPROVED') {
     throw new HttpError(409, 'Chỉ hủy được điều chuyển đã duyệt nhưng CHƯA được xác nhận nhận hàng (có thể đã bị từ chối/hủy/xác nhận nhận ở nơi khác)');
   }
