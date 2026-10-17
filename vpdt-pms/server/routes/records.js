@@ -2792,6 +2792,11 @@ router.post('/reportPeriods/:id/mergePdf', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
+    // "Thay trang" (11/2026): pages[] có thể kèm replacement.fileUrl (PDF 1 trang tải lên riêng) — kiểm
+    // quyền sở hữu TRƯỚC khi vào khoá (cùng khuôn mọi action route khác nhận fileUrl từ client, chặn giả
+    // mạo fileUrl của người khác — xem assertPayloadFileUrlsOwnedByUser()/collectFileUrlsDeep() quét sâu
+    // tự tìm field replacement.fileUrl mà không cần liệt kê tay).
+    await assertPayloadFileUrlsOwnedByUser({ pages: req.body?.pages }, freshUser);
     const entries = await getAllForCollection('reportEntries');
     const result = await withLockedRecordForCollection('reportPeriods', itemId, (item) =>
       recordActions.mergeReportPeriodPdf(freshUser, item, req.body?.entryIds, req.body?.pages, entries)

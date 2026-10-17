@@ -27,15 +27,41 @@ function ensureEntryPagesCached(entryId) {
   return promise;
 }
 
+// "Thay trang" (11/2026) — cùng khuôn ensureEntryPagesCached() ở trên nhưng cache theo fileUrl (1 file
+// riêng lẻ KHÔNG gắn với reportEntries nào) và luôn đúng 1 trang. Dùng khi mở lại 1 kỳ đã có trang được
+// thay từ trước (loadPrAggPdfThumbnails() bên dưới) — server chỉ lưu lại fileUrl, không lưu dataUrl, nên
+// phải render lại từ file thật mỗi lần mở lại màn Tổng Hợp, giống hệt lý do của ensureEntryPagesCached().
+function ensureReplacementPageCached(fileUrl) {
+  if (prAggPdfReplacementCache.has(fileUrl)) return prAggPdfReplacementCache.get(fileUrl);
+  const promise = (async () => {
+    await ensurePdfJsReady();
+    const pdf = await window.pdfjsLib.getDocument(fileUrl).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 0.35 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas.toDataURL('image/png');
+  })();
+  prAggPdfReplacementCache.set(fileUrl, promise);
+  return promise;
+}
+
 // Gọi khi mở lại 1 kỳ đã từng tổng hợp PDF từ trước — pdfCompilation.pages chỉ lưu {sourceEntryId,
-// sourcePageIndex,...}, KHÔNG lưu ảnh thumbnail (server không nhận/giữ dataUrl), nên phải render lại từ
-// chính file gốc mỗi lần mở lại màn Tổng Hợp.
+// sourcePageIndex, replacement,...}, KHÔNG lưu ảnh thumbnail (server không nhận/giữ dataUrl), nên phải
+// render lại từ chính file gốc (hoặc file thay thế, nếu trang đó đã được thay — "Thay trang" 11/2026)
+// mỗi lần mở lại màn Tổng Hợp.
 async function loadPrAggPdfThumbnails() {
-  const distinctEntryIds = [...new Set(prAggPdfPages.map(p => p.sourceEntryId))];
+  const replacedPages = prAggPdfPages.filter(p => p.replacement?.fileUrl && !p.dataUrl);
+  for (const p of replacedPages) {
+    try { p.dataUrl = await ensureReplacementPageCached(p.replacement.fileUrl); }
+    catch (err) { /* để trống ảnh, thẻ vẫn hiện được tên tệp thay thế */ }
+  }
+  const distinctEntryIds = [...new Set(prAggPdfPages.filter(p => !p.replacement?.fileUrl).map(p => p.sourceEntryId))];
   for (const entryId of distinctEntryIds) {
     try {
       const dataUrls = await ensureEntryPagesCached(entryId);
-      prAggPdfPages.forEach((p) => { if (p.sourceEntryId === entryId && !p.dataUrl) p.dataUrl = dataUrls[p.sourcePageIndex] || ''; });
+      prAggPdfPages.forEach((p) => { if (!p.replacement?.fileUrl && p.sourceEntryId === entryId && !p.dataUrl) p.dataUrl = dataUrls[p.sourcePageIndex] || ''; });
     } catch (err) { /* để trống ảnh, thẻ vẫn hiện được tên trang/phòng ban */ }
   }
   renderPrAggPdfGrid();
@@ -124,19 +150,124 @@ function renderPrAggPdfGrid() {
     rmBtn.onclick = () => { prAggPdfPages.splice(idx, 1); renderPrAggPdfGrid(); };
     card.appendChild(rmBtn);
 
+    if (pg.replacement) card.classList.add('pr-pdf-replaced');
+
     const img = document.createElement('img');
     img.src = pg.dataUrl || '';
-    img.alt = `Trang ${pg.sourcePageIndex + 1} — ${escapeHtml(pg.sourceFileName || '')}`;
+    img.alt = pg.replacement
+      ? `Trang thay thế — ${escapeHtml(pg.replacement.fileName || '')}`
+      : `Trang ${pg.sourcePageIndex + 1} — ${escapeHtml(pg.sourceFileName || '')}`;
     card.appendChild(img);
+
+    // "Thay trang" (11/2026, theo yêu cầu người dùng — "sửa trực tiếp" không khả thi, thay bằng tải lên 1
+    // PDF 1 TRANG đã chỉnh sửa đúng để thay cho trang này): input file ẩn + nút 🔄 kích hoạt nó, giống hệt
+    // khuôn chọn tệp ẩn đã dùng ở các nơi khác trong hệ thống (tránh phải style lại <input type=file> xấu
+    // mặc định). Dùng ĐÚNG đối tượng `pg` (không phải `idx`) khi xử lý bất đồng bộ — kéo-thả/xoá trang có
+    // thể đổi idx trong lúc đang tải lên, pg vẫn luôn trỏ đúng ô cần sửa (xem onReplacePrPdfPageFile()).
+    // Đặt thành 1 THANH CÔNG CỤ riêng dưới ảnh (không chồng lên idx/✕ đã có ở 2 góc trên) để không rối mắt.
+    const replaceInput = document.createElement('input');
+    replaceInput.type = 'file';
+    replaceInput.accept = '.pdf,application/pdf';
+    replaceInput.className = 'hidden';
+    replaceInput.addEventListener('change', async () => {
+      const file = replaceInput.files && replaceInput.files[0];
+      replaceInput.value = '';
+      if (file) await onReplacePrPdfPageFile(pg, file);
+    });
+    card.appendChild(replaceInput);
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'pr-pdf-toolbar';
+
+    const replaceBtn = document.createElement('button');
+    replaceBtn.type = 'button';
+    replaceBtn.className = 'pr-pdf-replace';
+    replaceBtn.textContent = '🔄 Thay trang';
+    replaceBtn.title = 'Thay trang này bằng 1 tệp PDF khác (đúng 1 trang)';
+    replaceBtn.onclick = () => replaceInput.click();
+    toolbar.appendChild(replaceBtn);
+
+    if (pg.replacement) {
+      const revertBtn = document.createElement('button');
+      revertBtn.type = 'button';
+      revertBtn.className = 'pr-pdf-revert';
+      revertBtn.textContent = '↩️ Bản gốc';
+      revertBtn.title = 'Dùng lại trang gốc (bỏ bản đã thay)';
+      revertBtn.onclick = () => revertPrPdfPageReplacement(pg);
+      toolbar.appendChild(revertBtn);
+    }
+    card.appendChild(toolbar);
 
     const src = document.createElement('div');
     src.className = 'pr-pdf-src';
-    src.textContent = `${pg.sourceDept} · tr.${pg.sourcePageIndex + 1}`;
-    src.title = `${pg.sourceCreatorName || ''} — ${pg.sourceFileName || ''} — trang ${pg.sourcePageIndex + 1}`;
+    src.textContent = pg.replacement
+      ? `✏️ Đã thay — ${pg.replacement.fileName || ''}`
+      : `${pg.sourceDept} · tr.${pg.sourcePageIndex + 1}`;
+    src.title = pg.replacement
+      ? `Đã thay trang ${pg.sourcePageIndex + 1} (gốc: ${pg.sourceDept} — ${pg.sourceFileName || ''}) bằng tệp: ${pg.replacement.fileName || ''}`
+      : `${pg.sourceCreatorName || ''} — ${pg.sourceFileName || ''} — trang ${pg.sourcePageIndex + 1}`;
     card.appendChild(src);
 
     grid.appendChild(card);
   });
+}
+
+// "Thay trang" (11/2026, theo yêu cầu người dùng sau khi xác nhận KHÔNG đi hướng sửa nội dung thật trong
+// trang — cần SDK PDF-editor trả phí, không khả thi ở quy mô này): kiểm file chọn ĐÚNG 1 trang bằng
+// pdf.js (cùng kỹ thuật generateDocThumbnail() ở module-tailieu.js), vẽ thumbnail để xem trước NGAY, rồi
+// upload qua đúng đường dùng chung uploadFileToServer(file, 'periodicReport') (CÙNG moduleKey/giới hạn
+// loại tệp .pdf với luồng nộp báo cáo — không mở thêm phạm vi upload nào mới). Server (mergeReportPeriodPdf
+// ở lib/recordActions.js, lúc bấm "🧩 Tổng Hợp PDF") mới là nơi LƯU LẠI replacement — hàm này chỉ cập
+// nhật state client, giống hệt triết lý "sắp/xoá trang chỉ thật sự lưu khi Tổng Hợp" đã có.
+async function onReplacePrPdfPageFile(pg, file) {
+  const statusEl = document.getElementById('prAggPdfStatusLine');
+  statusEl.className = 'text-xs text-gray-500';
+  statusEl.innerText = '⏳ Đang kiểm tra tệp thay thế...';
+  try {
+    await ensurePdfJsReady();
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    if (pdf.numPages !== 1) {
+      throw new Error(`Tệp thay thế phải có đúng 1 trang (tệp vừa chọn có ${pdf.numPages} trang) — vui lòng xuất lại đúng 1 trang cần thay rồi chọn lại`);
+    }
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 0.35 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const dataUrl = canvas.toDataURL('image/png');
+
+    statusEl.innerText = '⏳ Đang tải tệp thay thế lên...';
+    const uploaded = await uploadFileToServer(file, 'periodicReport');
+
+    // Kéo-thả/xoá trang có thể đã xảy ra trong lúc đang tải lên (vài trăm ms) — kiểm `pg` còn thật sự
+    // nằm trong prAggPdfPages trước khi áp kết quả, tránh ghi vào 1 trang đã bị gỡ khỏi bản ghép.
+    if (prAggPdfPages.indexOf(pg) === -1) {
+      statusEl.innerText = '⛔ Trang này đã bị bỏ khỏi bản ghép trong lúc đang tải lên — tệp đã tải không được áp dụng.';
+      return;
+    }
+    pg.replacement = { fileUrl: uploaded.fileUrl, fileName: uploaded.fileName };
+    pg.dataUrl = dataUrl;
+    statusEl.innerText = '✅ Đã thay trang — bấm "🧩 Tổng Hợp PDF" để lưu lại.';
+    renderPrAggPdfGrid();
+  } catch (err) {
+    statusEl.className = 'text-xs text-rose-600';
+    statusEl.innerText = `⛔ ${err.message}`;
+  }
+}
+
+// Bỏ bản đã thay, quay lại đúng trang gốc — dùng lại cache đã render sẵn của ensureEntryPagesCached()
+// (giữ theo entryId, không phải theo trang) nên không cần tải/vẽ lại từ đầu trong đa số trường hợp.
+async function revertPrPdfPageReplacement(pg) {
+  if (!pg || !pg.replacement) return;
+  pg.replacement = null;
+  pg.dataUrl = null;
+  renderPrAggPdfGrid();
+  try {
+    const dataUrls = await ensureEntryPagesCached(pg.sourceEntryId);
+    pg.dataUrl = dataUrls[pg.sourcePageIndex] || '';
+  } catch (err) { /* để trống ảnh, thẻ vẫn hiện được tên/phòng ban */ }
+  renderPrAggPdfGrid();
 }
 
 function updatePrAggPdfActionsWrap(period) {
@@ -182,7 +313,10 @@ async function mergeReportPeriodPdfAction() {
   if (period.pdfCompilation?.status === 'PUBLISHED') {
     return alert('⛔ Bản tổng hợp PDF đã phát hành — vui lòng "Hủy phát hành" trước khi tổng hợp lại.');
   }
-  const pages = prAggPdfPages.map(p => ({ sourceEntryId: p.sourceEntryId, sourcePageIndex: p.sourcePageIndex }));
+  const pages = prAggPdfPages.map(p => ({
+    sourceEntryId: p.sourceEntryId, sourcePageIndex: p.sourcePageIndex,
+    replacement: p.replacement ? { fileUrl: p.replacement.fileUrl, fileName: p.replacement.fileName } : null
+  }));
   let result;
   try {
     result = await callRecordAction('reportPeriods', prAggCurrentPeriodId, 'mergePdf', { entryIds: prAggPdfSelectedIds, pages });

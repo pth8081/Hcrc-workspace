@@ -40,10 +40,13 @@ const state = createMockState({
 
 // Sinh 1 file PDF THẬT (pdf-lib) ra server/uploads/ — publishReportPeriodPdf() thực sự mở/copy/đóng dấu
 // byte thật (không phải chuỗi giả "%PDF..." như 1 vài fixture cũ khác), nên fixture ở đây PHẢI là PDF hợp
-// lệ về cấu trúc, giống hệt điều kiện thật khi nhân viên tải file lên qua /api/upload.
-async function makeFixturePdf(fileName, pageCount) {
+// lệ về cấu trúc, giống hệt điều kiện thật khi nhân viên tải file lên qua /api/upload. pageSize (mặc định
+// 200, "Thay trang" 11/2026 dùng 300 cho fixture thay thế) — kích thước KHÁC HẲN giữa fixture gốc/thay
+// thế để khẳng định CHẮC CHẮN publish lấy đúng byte từ nguồn nào, không chỉ suy luận qua field JSON.
+async function makeFixturePdf(fileName, pageCount, pageSize) {
   const doc = await PDFDocument.create();
-  for (let i = 0; i < pageCount; i++) doc.addPage([200, 200]);
+  const size = pageSize || 200;
+  for (let i = 0; i < pageCount; i++) doc.addPage([size, size]);
   const bytes = await doc.save();
   const filePath = path.join(UPLOAD_DIR, fileName);
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -343,6 +346,91 @@ async function main() {
       assertEqual(result.pdfCompilation.publishedFileName, null, 'publishedFileName phải được xoá');
       assertIncludes(result.alerts, 'Đã hủy phát hành bản ghép PDF', 'Phải có thông báo hủy phát hành PDF thành công');
       assert(fs.existsSync(beforeFilePath), 'File PDF cũ phải CÒN NGUYÊN trên đĩa (mồ côi có chủ đích, không tự xoá khi chỉ đổi trạng thái)');
+    });
+
+    // ===== 10) "Thay trang" (11/2026, theo yêu cầu người dùng — thay vì sửa nội dung thật trong trang):
+    // mergeReportPeriodPdf() phải lưu lại đúng replacement.fileUrl/fileName kèm theo trang, và
+    // publishReportPeriodPdf() -> materializeReportPeriodPdf() (lib/reportPdfMerge.js) phải LẤY NỘI DUNG
+    // từ file thay thế thay vì trang gốc của entry. Dùng kích thước trang KHÁC HẲN (300x300, trong khi 2
+    // fixture gốc đều 200x200) để khẳng định CHẮC CHẮN nội dung byte thật lấy từ file thay thế, không
+    // phải suy luận qua field JSON. State hiện tại: kỳ đang MERGED (1 trang KD + 1 trang HC còn lại sau
+    // scenario 8/9 ở trên) =====
+    await run.run('"Thay trang": Tổng Hợp PDF lưu đúng replacement.fileUrl kèm theo trang', async () => {
+      const repFileUrl = await makeFixturePdf('test_pr_pdf_replacement.pdf', 1, 300);
+      writtenFiles.push(path.join(UPLOAD_DIR, 'test_pr_pdf_replacement.pdf'));
+      const result = await page.evaluate(async ({ pId, kdId, hcId, repUrl }) => {
+        window.__resetCapture();
+        prAggCurrentPeriodId = pId;
+        prAggPdfPages = [
+          { sourceEntryId: kdId, sourcePageIndex: 0, replacement: { fileUrl: repUrl, fileName: 'TrangThayThe.pdf' } },
+          { sourceEntryId: hcId, sourcePageIndex: 0, replacement: null }
+        ];
+        await mergeReportPeriodPdfAction();
+        const p = DB.reportPeriods.find((x) => x.id === pId);
+        return { alerts: window.__alerts, pages: p.pdfCompilation.pages };
+      }, { pId: periodId, kdId: entryKdId, hcId: entryHcId, repUrl: repFileUrl });
+      assertIncludes(result.alerts, 'Đã tổng hợp bản ghép PDF', 'Phải tổng hợp thành công');
+      assertEqual(result.pages[0].replacement?.fileUrl, repFileUrl, 'Trang 1 phải lưu đúng replacement.fileUrl');
+      assertEqual(result.pages[0].replacement?.fileName, 'TrangThayThe.pdf', 'Trang 1 phải lưu đúng replacement.fileName');
+      assertEqual(result.pages[0].sourceEntryId, entryKdId, 'Trang 1 vẫn giữ đúng sourceEntryId gốc (chỉ đổi NỘI DUNG lúc ghép byte, không đổi dấu vết entry/quyền)');
+      assert(!result.pages[1].replacement, 'Trang 2 KHÔNG thay — replacement phải là null/không có');
+    });
+
+    await run.run('"Thay trang": Phát Hành PDF lấy NỘI DUNG từ file thay thế (kích thước trang khác hẳn bản gốc)', async () => {
+      const result = await page.evaluate(async (pId) => {
+        window.__resetCapture();
+        await publishPrPdfCompilation();
+        const p = DB.reportPeriods.find((x) => x.id === pId);
+        return { status: p.pdfCompilation.status, publishedFileUrl: p.pdfCompilation.publishedFileUrl };
+      }, periodId);
+      assertEqual(result.status, 'PUBLISHED', 'Phát hành với trang đã thay vẫn phải thành công bình thường');
+      const filePath = path.join(UPLOAD_DIR, path.basename(result.publishedFileUrl));
+      writtenFiles.push(filePath);
+      const mergedDoc = await PDFDocument.load(fs.readFileSync(filePath));
+      assertEqual(mergedDoc.getPageCount(), 2, 'File ghép phải có đúng 2 trang');
+      const size0 = mergedDoc.getPage(0).getSize();
+      assertEqual(`${size0.width}x${size0.height}`, '300x300', 'Trang 1 phải lấy kích thước/nội dung từ FILE THAY THẾ (300x300), KHÔNG phải trang gốc Kinh Doanh (200x200)');
+      const size1 = mergedDoc.getPage(1).getSize();
+      assertEqual(`${size1.width}x${size1.height}`, '200x200', 'Trang 2 (không thay) vẫn phải lấy đúng kích thước trang gốc Hành Chính (200x200) — không bị ảnh hưởng bởi trang 1 đã thay');
+    });
+
+    // ===== 11) File thay thế có NHIỀU HƠN 1 trang -> phát hành phải bị chặn 400, không đổi trạng thái —
+    // client chỉ kiểm bằng pdf.js lúc chọn file (không đáng tin tuyệt đối), server PHẢI tự ép lại =====
+    await run.run('"Thay trang" bằng file NHIỀU HƠN 1 trang -> Phát Hành bị chặn 400, không đổi trạng thái', async () => {
+      const repMultiUrl = await makeFixturePdf('test_pr_pdf_replacement_multi.pdf', 2, 300);
+      writtenFiles.push(path.join(UPLOAD_DIR, 'test_pr_pdf_replacement_multi.pdf'));
+      await page.evaluate(async (pId) => { await unpublishPrPdfCompilation(); }, periodId);
+      const before = await page.evaluate(async ({ pId, kdId, hcId, repUrl }) => {
+        window.__resetCapture();
+        prAggPdfPages = [
+          { sourceEntryId: kdId, sourcePageIndex: 0, replacement: { fileUrl: repUrl, fileName: 'TrangThayThe2Trang.pdf' } },
+          { sourceEntryId: hcId, sourcePageIndex: 0, replacement: null }
+        ];
+        await mergeReportPeriodPdfAction();
+        const p = DB.reportPeriods.find((x) => x.id === pId);
+        return { status: p.pdfCompilation.status };
+      }, { pId: periodId, kdId: entryKdId, hcId: entryHcId, repUrl: repMultiUrl });
+      assertEqual(before.status, 'MERGED', 'Tổng hợp vẫn cho qua bình thường (chưa mở file thật ở bước này)');
+
+      const result = await page.evaluate(async (pId) => {
+        window.__resetCapture();
+        await publishPrPdfCompilation();
+        const p = DB.reportPeriods.find((x) => x.id === pId);
+        return { statusLine: document.getElementById('prAggPdfStatusLine').innerText, status: p.pdfCompilation.status };
+      }, periodId);
+      assertIncludes(result.statusLine, 'phải có đúng 1 trang', 'Phát hành với file thay thế nhiều hơn 1 trang phải báo lỗi rõ ràng');
+      assertEqual(result.status, 'MERGED', 'Trạng thái KHÔNG được đổi sang PUBLISHED khi phát hành thất bại giữa chừng');
+
+      // Dọn lại state hợp lệ (bỏ replacement lỗi) để không ảnh hưởng gì nếu có bài test chạy sau file này.
+      await page.evaluate(async ({ pId, kdId, hcId }) => {
+        window.__resetCapture();
+        prAggPdfPages = [{ sourceEntryId: kdId, sourcePageIndex: 0 }, { sourceEntryId: hcId, sourcePageIndex: 0 }];
+        await mergeReportPeriodPdfAction();
+        await publishPrPdfCompilation();
+      }, { pId: periodId, kdId: entryKdId, hcId: entryHcId });
+      const after = await page.evaluate((pId) => DB.reportPeriods.find((x) => x.id === pId).pdfCompilation, periodId);
+      if (after.publishedFileUrl) writtenFiles.push(path.join(UPLOAD_DIR, path.basename(after.publishedFileUrl)));
+      assertEqual(after.status, 'PUBLISHED', 'Dọn lại state hợp lệ (bỏ replacement lỗi) phải phát hành lại thành công');
     });
   } finally {
     for (const f of writtenFiles) { try { fs.unlinkSync(f); } catch (e) { /* đã xoá hoặc chưa từng tạo — bỏ qua */ } }

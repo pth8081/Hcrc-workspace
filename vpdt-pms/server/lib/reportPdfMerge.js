@@ -33,9 +33,11 @@ function getFontBytes() {
 }
 
 // pages: period.pdfCompilation.pages hiện có (đã qua mergeReportPeriodPdf(), mỗi phần tử
-// {sourceEntryId, sourcePageIndex,...} — CHỈ 2 field này được dùng ở đây, mọi field khác trong pages[]
-// chỉ để hiển thị, không ảnh hưởng bước ghép thật). entries: TOÀN BỘ reportEntries hiện có, CALLER tự
-// đọc rồi truyền vào (giữ đúng nguyên tắc chung của lib/recordActions.js).
+// {sourceEntryId, sourcePageIndex, replacement?,...} — sourceEntryId/sourcePageIndex/replacement.fileUrl
+// là 3 field được dùng ở đây, mọi field khác trong pages[] chỉ để hiển thị, không ảnh hưởng bước ghép
+// thật. replacement.fileUrl (11/2026, "thay trang bằng bản mới") có mặt thì LUÔN lấy nội dung từ đó thay
+// vì trang gốc của entry — xem nhánh riêng trong vòng lặp bên dưới. entries: TOÀN BỘ reportEntries hiện
+// có, CALLER tự đọc rồi truyền vào (giữ đúng nguyên tắc chung của lib/recordActions.js).
 //
 // Trả về {bytes, pageCount} của file PDF cuối cùng đã ghép + đóng dấu. Đây là nơi DUY NHẤT thật sự ép
 // buộc sourcePageIndex hợp lệ so với số trang THẬT của file — lúc mergeReportPeriodPdf() (tổng hợp) chỉ
@@ -52,6 +54,33 @@ async function materializeReportPeriodPdf(pages, entries) {
     const entry = entriesById.get(page.sourceEntryId);
     if (!entry || entry.entryType !== 'PDF') {
       throw new HttpError(409, `Trang tham chiếu tới báo cáo #${page.sourceEntryId} không còn hợp lệ — vui lòng tổng hợp lại`);
+    }
+    // "Thay trang" (11/2026): page.replacement.fileUrl (đã kiểm khuôn /uploads/... ở
+    // mergeReportPeriodPdf()/quyền sở hữu ở routes/records.js) LUÔN THẮNG nội dung gốc của entry khi có
+    // mặt — trang gốc chỉ còn dùng để xác định entry/quyền ở trên, KHÔNG dùng nội dung nữa. File thay thế
+    // BẮT BUỘC đúng 1 trang (đồng bộ với quy ước "1 slot = 1 trang" của mô hình pages[] hiện có — không
+    // hỗ trợ 1 trang gốc nở ra nhiều trang) — ép buộc THẬT ở đây (client chỉ kiểm bằng pdf.js lúc chọn
+    // file, không đáng tin tuyệt đối, cùng triết lý sourcePageIndex bên dưới).
+    const replacementUrl = page.replacement?.fileUrl;
+    if (replacementUrl) {
+      let repDoc = srcDocCache.get(replacementUrl);
+      if (!repDoc) {
+        const fileName = parseUploadsFileUrl(replacementUrl);
+        if (!fileName) throw new HttpError(400, 'Đường dẫn tệp thay thế không hợp lệ');
+        const filePath = path.join(UPLOAD_DIR, fileName);
+        if (path.dirname(filePath) !== UPLOAD_DIR || !fs.existsSync(filePath)) {
+          throw new HttpError(404, `Không tìm thấy tệp thay thế của báo cáo "${entry.title || entry.id}" — có thể đã bị xoá, vui lòng chọn lại`);
+        }
+        const bytes = fs.readFileSync(filePath);
+        repDoc = await PDFDocument.load(bytes);
+        srcDocCache.set(replacementUrl, repDoc);
+      }
+      if (repDoc.getPageCount() !== 1) {
+        throw new HttpError(400, `Tệp thay thế của báo cáo "${entry.title || entry.id}" phải có đúng 1 trang (hiện có ${repDoc.getPageCount()} trang) — vui lòng xuất lại đúng 1 trang rồi thay lại`);
+      }
+      const [copiedRep] = await merged.copyPages(repDoc, [0]);
+      merged.addPage(copiedRep);
+      continue;
     }
     let srcDoc = srcDocCache.get(entry.fileUrl);
     if (!srcDoc) {

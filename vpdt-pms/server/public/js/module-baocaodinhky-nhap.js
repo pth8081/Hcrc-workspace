@@ -24,11 +24,15 @@ let prAggPendingSlides = null;
 // sourcePageIndex, dataUrl } — dataUrl là ảnh thumbnail render bằng pdf.js NGAY TRONG trình duyệt, chỉ
 // dùng để hiển thị (server không nhận/lưu dataUrl này). prAggPdfEntryPagesCache cache lại danh sách
 // dataUrl từng trang theo entryId (Promise trong lúc đang tải) để không phải render lại khi tick/bỏ tick
-// qua lại nhiều lần.
+// qua lại nhiều lần. "Thay trang" (11/2026) thêm field `replacement: {fileUrl, fileName} | null` — có mặt
+// thì nội dung/thumbnail lấy từ replacement.fileUrl (PDF 1 trang riêng) thay vì trang gốc của entry;
+// prAggPdfReplacementCache cache dataUrl theo fileUrl thay thế (KHÁC prAggPdfEntryPagesCache — file thay
+// thế không gắn với bất kỳ reportEntries nào, cache theo entryId không áp dụng được).
 let prAggPdfSelectedIds = [];
 let prAggPdfPages = [];
 let prAggPdfDragFromIndex = null;
 let prAggPdfEntryPagesCache = new Map();
+let prAggPdfReplacementCache = new Map();
 let prSlideshowSlides = [];
 let prSlideshowIndex = 0;
 let prSlideshowTemplate = 'DEFAULT';

@@ -4439,12 +4439,30 @@ function mergeReportPeriodPdf(user, period, orderedEntryIds, pages, entries) {
   // sourceCreatorName/sourceFileUrl/sourceFileName LUÔN dựng lại từ entry đã xác thực ở trên, TUYỆT ĐỐI
   // không tin trực tiếp field nào từ client cho các giá trị này (nếu không, 1 phiên tổng hợp bị lộ có
   // thể trỏ sourceFileUrl sang bất kỳ tệp nào server đọc được khi publish).
+  // replacement (11/2026, theo yêu cầu người dùng — "thay trang bằng bản mới"): 1 trang trong bản ghép
+  // vẫn GẮN VỚI đúng 1 entry/pageIndex gốc (giữ nguyên dấu vết kiểm tra quyền/thuộc kỳ ở trên) nhưng khi
+  // ghép byte thật (publishReportPeriodPdf -> materializeReportPeriodPdf, lib/reportPdfMerge.js) sẽ LẤY
+  // NỘI DUNG từ replacement.fileUrl (PDF 1 trang người dùng tải lên riêng) thay vì trang gốc của entry —
+  // dùng cho trường hợp 1 trang bị sai/lỗi, phòng ban xuất lại đúng trang đó thành PDF rồi thay vào, không
+  // phải nộp lại cả báo cáo. assertUploadedFileUrl() chỉ kiểm ĐÚNG KHUÔN "/uploads/..." — quyền sở hữu
+  // thật (chặn giả mạo fileUrl của người khác) đã kiểm RIÊNG ở routes/records.js TRƯỚC khi gọi vào đây
+  // (assertPayloadFileUrlsOwnedByUser(), cùng khuôn mọi action route khác nhận fileUrl từ client).
   const cleanedPages = list.map((p, idx) => {
     const entry = entriesById.get(p?.sourceEntryId);
     if (!entry) throw new HttpError(400, `Trang thứ ${idx + 1} tham chiếu tới báo cáo không hợp lệ`);
     const pageIndex = Number(p?.sourcePageIndex);
     if (!Number.isInteger(pageIndex) || pageIndex < 0) {
       throw new HttpError(400, `Trang thứ ${idx + 1} có số trang nguồn không hợp lệ`);
+    }
+    let replacement = null;
+    if (p?.replacement && typeof p.replacement === 'object') {
+      assertUploadedFileUrl(p.replacement.fileUrl, `Tệp thay thế trang thứ ${idx + 1}`);
+      if (p.replacement.fileUrl) {
+        replacement = {
+          fileUrl: p.replacement.fileUrl,
+          fileName: String(p.replacement.fileName || '').trim().slice(0, 255)
+        };
+      }
     }
     return {
       order: idx + 1,
@@ -4453,7 +4471,8 @@ function mergeReportPeriodPdf(user, period, orderedEntryIds, pages, entries) {
       sourceCreatorName: entry.creatorName,
       sourceFileUrl: entry.fileUrl,
       sourceFileName: entry.fileName,
-      sourcePageIndex: pageIndex
+      sourcePageIndex: pageIndex,
+      replacement
     };
   });
 

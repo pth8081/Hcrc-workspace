@@ -562,6 +562,18 @@ input[data-sdd-list] {
 .pr-pdf-page-card .pr-pdf-src {
   font-size: 9px; color: #6b7280; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* "Thay trang" (11/2026) — thẻ có trang đã thay viền/nền nhấn để phân biệt nhanh trang nào không còn
+   nguyên bản gốc. Thanh công cụ 🔄/↩️ nằm RIÊNG dưới ảnh (không chồng lên idx/✕ ở 2 góc trên). */
+.pr-pdf-page-card.pr-pdf-replaced { border-color: #d97706; background: #fffbeb; }
+.pr-pdf-page-card .pr-pdf-toolbar { display: flex; gap: 3px; margin-top: 4px; }
+.pr-pdf-page-card .pr-pdf-replace, .pr-pdf-page-card .pr-pdf-revert {
+  all: unset; cursor: pointer; font-size: 9px; font-weight: 600; border-radius: 4px; padding: 2px 5px;
+  white-space: nowrap;
+}
+.pr-pdf-page-card .pr-pdf-replace { background: #e0f2fe; color: #0369a1; }
+.pr-pdf-page-card .pr-pdf-replace:hover { background: #bae6fd; }
+.pr-pdf-page-card .pr-pdf-revert { background: #fef3c7; color: #92400e; }
+.pr-pdf-page-card .pr-pdf-revert:hover { background: #fde68a; }
 
 /* Module "📘 Nghiệp Vụ" (module-nghiepvu.js, từ v23.1) — BUG THẬT phát hiện qua log console thật trên
    server production (v23.6, kèm ảnh chụp màn hình): các class .nv-* này TRƯỚC ĐÂY được nạp bằng
