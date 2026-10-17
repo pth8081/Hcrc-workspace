@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**26.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.19 (2026-11): 3 lỗi mới từ file test nhóm QA — cột Thao Tác Lớp Học lệch, chọn gợi ý tài khoản tham dự không ăn, đổi tài khoản không cập nhật lại thông tin
+
+Người dùng gửi file `Test_VPDT_10.17.docx` (11 ảnh chụp màn hình) do nhóm testing tự kiểm tra và tổng
+hợp. Rà soát từng ảnh, đối chiếu với code hiện tại:
+
+- **6/11 ảnh (Tài Liệu, Biên Bản Họp, Công Việc, Mua Bán, Sửa Chữa — lệch cột "Thao Tác" + vị trí thanh
+  nút form Tài Liệu)**: đã vá SẴN trong v26.16 (merge trước đó cùng phiên), chỉ chưa deploy lên server
+  thật của người dùng — không cần sửa gì thêm, chỉ cần deploy lại code mới nhất.
+- **2 lỗi MỚI, tìm ra gốc rễ và vá trong bản này:**
+  - `public/js/module-internalcomms-daotao.js` — cột "Thao Tác" ở Danh Sách Lớp Học (Đào Tạo) dùng
+    renderer riêng, KHÔNG qua hàm `buildActionCell()` dùng chung nên lọt khỏi đợt rà soát v26.16. Bọc
+    lại đúng khuôn `<div class="flex flex-wrap items-center justify-start gap-1">` đã áp dụng cho các
+    module khác (left-align thay vì để trình duyệt tự center cụm nút theo độ rộng khác nhau mỗi dòng).
+  - `public/js/core.js` — widget "ô tìm-kiếm-gõ-chọn" (`sdd*`, dùng chung ~19 điểm trong toàn hệ thống,
+    xem CLAUDE.md): bấm CHUỘT THẬT vào 1 dòng gợi ý đi qua trình tự mousedown → (trình duyệt tự BLUR ô
+    đang focus vì chuyển tiêu điểm) → mouseup → click. Lúc blur xảy ra, giá trị DOM của ô VẪN LÀ CHỮ
+    ĐANG GÕ (chưa kịp đổi thành gợi ý — việc đó chỉ xảy ra ở handler `click`, chạy SAU) → trình duyệt tự
+    bắn `change` NGUYÊN BẢN với giá trị chưa chọn đó → mọi nơi dùng widget này để liên kết dữ liệu (VD
+    Thành Phần Tham Dự Biên Bản Họp, qua `resolveAttendeeAccountInput()`) coi là "gõ tự do không khớp",
+    RESET về chưa liên kết + render lại bảng — xoá mất ô input gốc trước khi handler `click` kịp áp giá
+    trị đã chọn. Vá bằng `event.preventDefault()` ngay ở `mousedown` trên dòng gợi ý — ô không còn bị
+    blur theo cách này nữa. Lỗi widget dùng chung nên bản vá có lợi cho toàn bộ ~19 điểm dùng, không
+    riêng Biên Bản Họp.
+  - `public/js/module-bienbanhop.js` — `applyAttendeeSystemUser()`: trước đây chỉ điền Chức Danh/Phòng/
+    SĐT/Email khi ô ĐANG TRỐNG (đúng cho lần đầu liên kết, ưu tiên dữ liệu đã nhập tay riêng cho cuộc
+    họp). Khi ĐỔI Họ Và Tên sang 1 tài khoản KHÁC thì 4 field đó không còn trống (đã tự điền từ lần liên
+    kết trước) nên không được ghi đè, vẫn hiện thông tin của người CŨ dù đã chọn người MỚI. Nay phát hiện
+    đang chuyển từ 1 username đã liên kết sang username khác thì ghi đè LUÔN theo người mới.
+
+Đã dựng lại đúng kịch bản lỗi bằng Playwright CLICK CHUỘT THẬT (không phải `dispatchEvent` giả lập —
+test cũ `test-minutes.js` chỉ dùng cách giả lập nên không bắt được lỗi này) để xác nhận trước/sau khi
+sửa, gửi ảnh demo cho người dùng trước khi merge. Đã chạy CSP full audit (42 điểm điều hướng) + các bộ
+test liên quan (`test-minutes.js` 20/20, `test-hr-profile.js` 32/32, `test-budget-lines.js` 62/62) —
+không phát sinh hồi quy. `test-form-reset-file-remove.js` (14 fail, baseline y hệt trước khi sửa) và
+`test-internal-training.js` (dao động 41-47/53 giữa các lần chạy NGAY CẢ khi không đổi gì) đã xác nhận
+là lỗi/độ không ổn định CÓ SẴN TỪ TRƯỚC, không liên quan tới đợt vá này.
+
+**Deploy-impact**: thuần sửa hiển thị HTML + logic JS phía client (`public/js/`) — KHÔNG đổi
+`schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi `package.json` dependencies. Chỉ cần copy code
+mới + `pm2 restart`.
 
 ## v26.18 (2026-11): Đợt rà soát bảo mật chuyên sâu lần 2 — vá 1 Nghiêm Trọng + 1 Cao + 4 Trung Bình
 
