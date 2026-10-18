@@ -5,10 +5,11 @@
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
 
-## v26.84 (2026-11): [Cao] Re-audit lần 5 — mục 6 (HOÀN TẤT 9 phát hiện mức Cao): vppPeriods.deptHeadcounts/deptBudgetRates không cascade khi đổi tên danh mục
+## v26.84 (2026-11): [Cao] Re-audit lần 5 — mục 6: vppPeriods.deptHeadcounts/deptBudgetRates không cascade khi đổi tên danh mục
 
-Mục thứ 6 trong đợt re-audit lần 5 — ĐÂY LÀ MỤC CUỐI trong 9 phát hiện mức Cao (xử lý theo thứ tự
-Cao → TB → Thấp theo yêu cầu người dùng; tiếp theo sẽ chuyển sang 18 phát hiện mức Trung Bình).
+Mục thứ 6 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng). Còn
+3 phát hiện mức Cao nữa (#122-124: Xoá Onboarding tự TERMINATED HĐLĐ, Export Excel Hồ Sơ Nhân Sự lộ
+lương, hrProfileEdit tự gán chức vụ) trước khi chuyển sang 18 phát hiện mức Trung Bình.
 
 - **`vppPeriods.deptHeadcounts`/`deptBudgetRates` (CẢ 2 ĐỀU là map `{dept: number}` KHOÁ THEO TÊN
   PHÒNG BAN, đặt 1 lần lúc tạo kỳ VPP) hoàn toàn bị bỏ sót khỏi MỌI cascade đổi tên danh mục Phòng
