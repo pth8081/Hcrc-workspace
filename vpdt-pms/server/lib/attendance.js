@@ -681,6 +681,26 @@ function applyRejectShiftSwap(swapRequest, actorUsername, actorName) {
   return Object.assign({}, swapRequest, { status: 'REJECTED', approverUsername: actorUsername, approverName: actorName, decidedAt: nowVN(), updatedAt: nowVN() });
 }
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 5, #141): huỷ 1 dòng shiftRoster (POST /shiftRoster/:id/cancel)
+// HOẶC xoá hẳn (POST /shiftRoster/:id/delete, admin-only) không hề xử lý các shiftSwapRequests CÒN
+// PENDING đang tham chiếu đúng dòng đó (requesterRosterId === roster.id) — đơn vẫn hiển thị "chờ duyệt"
+// vĩnh viễn trong hàng chờ của Quản Lý Siêu Thị/HR (computeMyPendingApprovalKeys() — lib/
+// approvalAggregator.js, nhánh admin/hrAttendanceManage KHÔNG lọc theo roster còn tồn tại hay không, chỉ
+// nhánh hrShiftSwapApprove mới cần roster khớp storeCode), dù duyệt lên sẽ luôn bị chặn ngay
+// (applyApproveShiftSwap() ở trên đã kiểm targetRoster null/CANCELLED) — 1 "ngõ cụt" vô nghĩa đọng lại
+// trong hàng chờ phê duyệt. Tự REJECT các đơn đó NGAY khi dòng roster bị huỷ/xoá — cùng khuôn
+// cancelPendingLeaveRequestsAfterOffboarding() ở trên (map thuần, CHỈ đụng đúng status PENDING, không
+// ghi đè đơn đã APPROVED/REJECTED từ trước).
+function autoRejectShiftSwapsForRemovedRoster(swapRequestList, rosterId, actorUsername) {
+  return (swapRequestList || []).map(s => {
+    if (s.requesterRosterId !== rosterId || s.status !== 'PENDING') return s;
+    return Object.assign({}, s, {
+      status: 'REJECTED', approverUsername: actorUsername || 'system', approverName: 'Hệ Thống (Tự Động)',
+      decidedAt: nowVN(), updatedAt: nowVN()
+    });
+  });
+}
+
 // ===== Offboarding hook: huỷ lịch phân ca tương lai + đơn nghỉ phép còn treo (Phần F) =====
 function cancelFutureRosterAfterOffboarding(rosterList, employeeCode, lastWorkingDate) {
   return (rosterList || []).map(r => {
@@ -705,7 +725,7 @@ module.exports = {
   applyApproveLeaveRequest, applyRejectLeaveRequest, applyCancelLeaveRequest, deductLeaveBalance,
   refundLeaveBalance, buildLeaveAttendanceRecords, buildLeaveCancelAttendanceReverts, listDatesInRange,
   assertValidShiftTemplate, assertValidRosterAssignment, defaultShiftRoster, assertNoRosterConflict, applyCancelRoster,
-  defaultShiftSwapRequest, applyApproveShiftSwap, applyRejectShiftSwap,
+  defaultShiftSwapRequest, applyApproveShiftSwap, applyRejectShiftSwap, autoRejectShiftSwapsForRemovedRoster,
   cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding, cancelRosterForApprovedLeave,
   restoreRosterForCancelledLeave
 };
