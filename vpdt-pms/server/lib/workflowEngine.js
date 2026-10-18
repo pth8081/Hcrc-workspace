@@ -868,6 +868,40 @@ function assertDeptOrTierWorkflowMapShape(key, value) {
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "formTemplates thiếu validate cấu trúc"): `formTemplates`
+// ("📋 Biểu Mẫu", admin tự thêm/sửa trường tuỳ biến bắt buộc/không bắt buộc cho từng module) được ghi
+// qua CHUNG route generic `POST /api/data/:key` như mọi key admin khác — trước bản vá này KHÔNG có mặt
+// trong bất kỳ Set validate cấu trúc nào ở trên (không phải object {dept: cfg} như
+// DEPT_OR_TIER_WORKFLOW_MAP_KEYS, không phải mảng phẳng như PLAIN_OBJECT_ARRAY_KEYS/PLAIN_ARRAY_KEYS,
+// không phải 1 object cấu hình đơn như PLAIN_OBJECT_KEYS — khuôn của nó là "map 2 TẦNG" riêng: object
+// {modKey: [{label,type,required,...}, ...]}). `validateRequiredCustomData()` (lib/createValidation.js,
+// ~35 điểm gọi — gần như MỌI module tạo hồ sơ có "Trường Bổ Sung") đọc
+// `const fields = (formTemplates || {})[modKey] || []; ... fields.map(f => f.label)`. `|| {}`/`|| []`
+// chỉ che được formTemplates/formTemplates[modKey] RỖNG (undefined/null) — nếu admin (hoặc 1 request tự
+// soạn) lưu `formTemplates[modKey]` thành OBJECT/chuỗi/số (giá trị TRUTHY, không rơi về `|| []`) thì
+// `.map()`/`.forEach()` throw NGAY ("is not a function") — CRASH 500 ngay tại `POST /api/create/<module>`
+// của MỌI module có modKey đó, cho tới khi admin sửa lại đúng cấu trúc. Nếu `formTemplates[modKey]` là
+// mảng nhưng có phần tử `null` (hoặc không phải object), `f.label`/`f.type`/`f.required`/`data[f.label]`
+// bên trong `.map()`/`forEach()` cũng throw ("Cannot read properties of null"). CHỈ validate CẤU TRÚC
+// (object 2 tầng, phần tử trong mảng phải là object) — KHÔNG validate sâu xuống field `label`/`type`/
+// `required`/`options` bên trong mỗi field-def, cùng triết lý các Set validate khác ở trên.
+function assertFormTemplatesShape(key, value) {
+  if (key !== 'formTemplates') return;
+  if (!isPlainWorkflowMapObject(value)) {
+    throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là object {tên module: danh sách trường}`);
+  }
+  for (const [modKey, fields] of Object.entries(value)) {
+    if (!Array.isArray(fields)) {
+      throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — danh sách trường của module "${modKey}" phải là 1 mảng`);
+    }
+    fields.forEach((f, idx) => {
+      if (!isPlainWorkflowMapObject(f)) {
+        throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — trường thứ ${idx + 1} của module "${modKey}" phải là object`);
+      }
+    });
+  }
+}
+
 // Chặn TỰ DUYỆT/TỰ XỬ LÝ hồ sơ do chính mình tạo — vá lỗ hổng mức Cao phát hiện ở đợt rà soát bảo mật
 // trước golive (9/2026): canApproveStep() (đầu file) chỉ kiểm "có tên trong danh sách approver bước
 // hiện tại + chưa từng duyệt bước này" — KHÔNG loại trừ chính người tạo/trình hồ sơ, nên 1 trưởng phòng
@@ -1500,5 +1534,6 @@ module.exports = {
   assertDeptOrTierWorkflowMapShape,
   assertPlainObjectArrayShape,
   assertPlainObjectShape,
-  assertPlainArrayShape
+  assertPlainArrayShape,
+  assertFormTemplatesShape
 };

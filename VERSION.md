@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**27.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.11 (2026-11): [Cao] Re-audit lần 6 — mục 3/21: formTemplates thiếu validate cấu trúc
+
+Mục thứ ba (3/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `formTemplates` ("📋 Biểu Mẫu" — admin tự thêm/sửa trường tuỳ biến bắt buộc/không bắt
+buộc cho từng module) được ghi qua CHUNG route generic `POST /api/data/:key` như mọi key admin-only
+khác, nhưng trước bản vá này KHÔNG nằm trong bất kỳ Set validate cấu trúc nào ở `lib/workflowEngine.js`
+— khuôn của nó là "map 2 TẦNG" riêng (`{modKey: [{label,type,required,...}, ...]}`), khác hẳn 4 khuôn đã
+có (`DEPT_OR_TIER_WORKFLOW_MAP_KEYS` — object 1 tầng {dept: cfg}; `PLAIN_OBJECT_ARRAY_KEYS`/
+`PLAIN_ARRAY_KEYS` — mảng phẳng; `PLAIN_OBJECT_KEYS` — 1 object cấu hình đơn). `validateRequiredCustomData()`
+(`lib/createValidation.js`, ~35 điểm gọi — gần như MỌI module tạo hồ sơ có "Trường Bổ Sung") đọc
+`const fields = (formTemplates || {})[modKey] || []` rồi `fields.map(f => f.label)`/`.forEach(...)`
+ngay sau. `|| {}`/`|| []` chỉ che được giá trị RỖNG (undefined/null) — nếu `formTemplates[modKey]` bị
+lưu thành OBJECT/chuỗi/số (giá trị TRUTHY, không rơi về `|| []`), `.map()` throw NGAY ("is not a
+function") — CRASH 500 tại `POST /api/create/<module>` của MỌI module dùng đúng `modKey` đó, cho tới khi
+admin sửa lại đúng cấu trúc. Nếu mảng có phần tử `null`/không phải object, `f.label`/`data[f.label]`
+bên trong cũng throw ("Cannot read properties of null").
+
+**Vá:** thêm hàm mới `assertFormTemplatesShape(key, value)` (`lib/workflowEngine.js`) — yêu cầu
+`formTemplates` phải là 1 object (không phải mảng/null), và mỗi giá trị bên trong (`formTemplates[modKey]`)
+phải là 1 MẢNG có mọi phần tử là object — CHỈ validate cấu trúc đủ để `.map()`/`.forEach()`/`f.label`
+không crash, KHÔNG validate sâu xuống field `label`/`type`/`required`/`options` bên trong mỗi field-def
+(cùng triết lý các Set validate khác). Gọi hàm này ở `routes/data.js` `POST /:key`, ngay sau
+`assertPlainArrayShape()` — chặn 400 rõ ràng ngay lúc LƯU, không để lưu "thành công" rồi hỏng âm thầm ở
+lúc ĐỌC.
+
+**Test:** file mới `tests/test-formtemplates-structure-validate.js` — Phần A test thuần
+`assertFormTemplatesShape()` (11 scenario: hợp lệ/rỗng, mảng/chuỗi/null ở tầng ngoài,
+object/chuỗi/số/phần-tử-null/phần-tử-chuỗi ở tầng trong, key không liên quan không bị ảnh hưởng); Phần B
+test HTTP thật qua `POST /api/data/formTemplates` (mount `routes/data.js` thật) + 1 scenario gọi trực
+tiếp `validateRequiredCustomData()` THẬT (không stub) để minh chứng đúng nguyên nhân gốc rễ (crash
+"is not a function") là lý do phải chặn ở route, không lùi lại. Xác nhận FAIL trên code CŨ (`git stash
+-- lib/workflowEngine.js routes/data.js`, `assertFormTemplatesShape` không tồn tại -> lỗi import ngay +
+3 scenario HTTP trả 200 thay vì 400), PASS trên code đã vá (16/16). Regression:
+`test-congphep-checklist-structure-validate.js` (12/12), `test-deptworkflow-structure-validate.js`
+(18/18), `test-workflowarray-structure-validate.js` (5/5), `test-forms-batch1-4.js` + `test-forms-nav-
+groups.js` (444/444 tổng) — toàn bộ PASS, không regression. Xác nhận không có test nào khác POST qua
+`/api/data/formTemplates` (chỉ dùng trực tiếp làm fixture appData cho mục đích khác, không đi qua route
+này) nên không bị ảnh hưởng.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.10 (2026-11): [Cao] Re-audit lần 6 — mục 2/21: fileAuthz.js trainingDocuments/trainingCourses fail-open
 
