@@ -90,7 +90,15 @@ const DEPT_FIELD_COLLECTIONS = [
   // `dept` bị bỏ sót hoàn toàn. Hậu quả: đổi tên phòng ban của người đã tạo kỳ ngân sách xong, kỳ đó
   // "biến mất" khỏi màn hình của TOÀN BỘ nhân viên phòng ban đó (trừ admin/budgetManage/budgetAggregate/
   // budgetReportView xem được mọi kỳ, không bị ảnh hưởng) — cùng lớp lỗi vừa vá cho reportEntries ở trên.
-  { collection: 'budgetPeriods', fields: ['dept'] }
+  { collection: 'budgetPeriods', fields: ['dept'] },
+  // itSupportTickets.dept (PHÁT HIỆN THIẾU ở re-audit lần 4, mức TB-Thấp): forceOwnDept (snapshot phòng
+  // ban của người tạo ticket, xem lib/createValidation.js itSupportTickets) nhưng bị bỏ sót khỏi danh
+  // sách này — canViewItSupportTicket() (lib/recordViewScope.js) xét quyền xem bằng
+  // `item.dept === user.dept` (nhánh "cùng phòng ban tự động xem", deptAutoViewOn('itTicket')), cùng
+  // lớp lỗi đã vá nhiều lần ở file này (reportEntries/budgetPeriods/operationOrders.dept...). Đổi tên 1
+  // phòng ban mà không cascade sẽ làm các ticket CŨ của phòng ban đó "biến mất" khỏi màn hình của đồng
+  // nghiệp (trừ chính người tạo/approver — canViewItSupportTicket() vẫn cho xem ticket của chính mình).
+  { collection: 'itSupportTickets', fields: ['dept'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
