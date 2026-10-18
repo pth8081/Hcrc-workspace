@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**26.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.72 (2026-11): [TB] Re-audit lần 4 — mục 12: meetings + reportPeriods/reportEntries thiếu Khối 0 ở GET /api/data
+
+- **"meeting" (Đặt Phòng Họp) và "periodicReport" (Báo Cáo Định Kỳ) hoàn toàn vắng mặt khỏi
+  `MODULE_ACCESS_GATED_COLLECTIONS`** (lib/recordViewScope.js) — `canViewMeeting()`/`canViewReportEntry()`/
+  `sanitizeReportPeriodsForUser()` đều cho qua theo nhánh "cùng phòng ban tự động xem"
+  (deptAutoViewOn/scopeAllows) KHÔNG hề gọi `hasModuleAccessServer()`, y hệt lớp lỗi đã vá cho
+  office/budget/license/uniform/checklist ở các bản trước. 2 module này đã có gate Khối 0 đúng ở khâu
+  TẠO MỚI (`EXTRA_CREATE_MODULE_ACCESS_KEY`, routes/create.js) và khâu HÀNH ĐỘNG
+  (`router.use('/meetings'|'/reportPeriods'|'/reportEntries', ...)` ở routes/records.js), nhưng
+  `GET /api/data` (route ĐỌC dùng chung) lại bỏ sót — admin tắt `moduleAccess.meeting`/`periodicReport`
+  cho 1 tài khoản (VD chuyển bộ phận) nhưng tài khoản đó vẫn cùng phòng ban với 1 số lịch đặt phòng/báo
+  cáo cũ thì gọi thẳng `GET /api/data` vẫn đọc được nội dung, dù UI đã ẩn hoàn toàn module đó.
+  - Thêm `meeting: ['meetings']` + `periodicReport: ['reportPeriods', 'reportEntries']` vào
+    `MODULE_ACCESS_GATED_COLLECTIONS` — tự động được 3 nơi dùng chung map này gác: 2 vòng lặp zero-out
+    `GET /api/data` (routes/data.js) + `COLLECTION_TO_MODULE_ACCESS_KEY` tự suy diễn (routes/create.js,
+    routes/reports.js). Gỡ `meetings`/`reportPeriods`/`reportEntries` khỏi `EXTRA_CREATE_MODULE_ACCESS_KEY`
+    (routes/create.js) để không khai trùng, cùng khuôn office/checklist trước đó.
+
+**Test:** file mới `tests/test-khoi0-meeting-periodicreport-gate.js` (7 scenario, HTTP thật qua mount
+`routes/data.js` thật, cùng khuôn `test-khoi0-payment-office-gate.js`). Xác nhận FAIL trên code CŨ
+(`git stash -- lib/recordViewScope.js routes/create.js`, 3/7 passed — đúng 4 scenario "LỖI ĐÃ VÁ" FAIL vì
+`meetings`/`reportPeriods`/`reportEntries` vẫn lộ qua `GET /api/data` dù đã tắt module), PASS trên code
+đã vá (7/7). Chạy lại bộ test liên quan: `test-khoi0-officereqs-vpp-periodicreport-gate.js` (10/10),
+`test-meeting-report.js` (7/7), `test-meeting-car.js` (104/104), `test-meeting-dept-workflow.js` (9/9),
+`test-meeting-edit-route.js` (10/10), `test-meeting-busy-slots-route.js` (4/4),
+`test-meeting-license-no-approver-block.js`, `test-meeting-room-rename-cascade.js` (8/8),
+`test-periodic-report-pdf.js` (13/13), `test-periodic-report-pdf-replace-ownership.js` (4/4),
+`test-report-period-by-tasks-filters.js` (8/8), `test-report-period-deadline-reminder.js`,
+`test-selfapprove-leave-shiftswap-meeting.js`, `test-periodic-report.js` (15/15),
+`test-audit-round5-meeting-car.js` (17/17), `test-audit-round5-ui-meeting-car.js` (16/16),
+`test-budget-meeting-dept-workflow-ui.js` (7/7), `test-collapse-car-meeting-minutes-forms.js` (10/10),
+`test-meeting-room-catalog-validate.js` (5/5) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.71 (2026-11): [TB] Re-audit lần 4 — mục 11: renameCatalogEntry/position-types không ghi System Log
 

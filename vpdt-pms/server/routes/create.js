@@ -133,9 +133,13 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // phía trên, không cần liệt kê lại ở đây nữa — cùng khuôn operationOrders/hrProcesses trước đó.
 // checklistTemplates (module riêng, routes/checklist.js) CŨNG đã dời sang MODULE_ACCESS_GATED_COLLECTIONS.checklist
 // thật (cùng đợt vá checklistSubmissions ở GET /api/data/lazy/checklist) — gỡ khỏi map này, không khai trùng.
+// LỖI ĐÃ VÁ (re-audit lần 4, mức TB): meetings/reportPeriods/reportEntries đã dời sang
+// MODULE_ACCESS_GATED_COLLECTIONS.meeting/periodicReport thật (lib/recordViewScope.js — để GET /api/data(/reports)
+// cũng zero-out đúng, không chỉ riêng route TẠO MỚI này) nên tự động có mặt ở COLLECTION_TO_MODULE_ACCESS_KEY
+// phía trên, không cần liệt kê lại ở đây nữa — cùng khuôn office/checklist trước đó.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
-  budgetTemplates: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
-  reportPeriods: 'periodicReport', reportEntries: 'periodicReport', vppPeriods: 'vpp'
+  budgetTemplates: 'budget', carRegs: 'car', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
+  vppPeriods: 'vpp'
 };
 
 router.use(requireAuth, blockIfMustChangePassword);
