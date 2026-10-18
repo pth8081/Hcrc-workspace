@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**27.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.27 (2026-11): [Thấp] Re-audit lần 6 — mục 19/21: recruitmentReferrals deadline so sánh UTC
+
+Mục thứ mười chín (19/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `CREATE_MODULE_CONFIGS.recruitmentReferrals.extraValidate()` (`lib/createValidation.js`)
+so sánh `job.deadline` bằng `new Date().toISOString().slice(0, 10)` — LUÔN lấy ngày theo giờ UTC. Trên
+máy chủ chạy giờ VN (UTC+7), trong khung 00:00-06:59 sáng giờ VN, ngày UTC vẫn còn là NGÀY HÔM TRƯỚC —
+nếu `deadline` rơi đúng vào ngày hôm trước đó, hệ thống vẫn cho giới thiệu ứng viên dù hạn (giờ VN) đã
+qua. CÙNG LỚP LỖI đã vá trước đó cho `trainingRegistrations`/`bulkRegisterTrainingClass()`.
+
+**Vá:** đổi sang `require('./attendance').localDateStr(new Date())` (đọc giờ LOCAL của máy chủ) — mirror
+đúng khuôn đã áp dụng cho `trainingRegistrations.extraValidate()`.
+
+**Test:** file mới `tests/test-recruitment-referral-deadline-utc.js` — gọi trực tiếp `extraValidate()`
+thuần (không cần SQL Server/HTTP), ép `process.env.TZ='Asia/Ho_Chi_Minh'` + thay `global.Date` tạm thời
+để giả lập "thời điểm hiện tại" là 00:30 sáng giờ VN ngày 01/01/2026 (= 2025-12-31T17:30:00Z theo UTC) —
+4 scenario: deadline hôm trước theo UTC nhưng ĐÃ QUA theo giờ VN -> PHẢI chặn 409 (đây là khai thác
+chính); đối chứng deadline đúng hôm nay/tương lai/không đặt vẫn không bị chặn nhầm. Xác nhận FAIL trên
+code CŨ (`git stash -- lib/createValidation.js`, đúng 1/4 scenario FAIL — "Missing expected exception",
+đúng khai thác đã nêu), PASS trên code đã vá (4/4). Regression: `tests/test-attendance-leave.js`
+(74/74, cùng kỹ thuật ép TZ/Date được dùng ở file đó cho lớp lỗi tương tự),
+`tests/test-recruitment-priority-client.js` (11/11) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.26 (2026-11): [Thấp] Re-audit lần 6 — mục 18/21: routes/purchasing.js dùng vendor.name sai
 
