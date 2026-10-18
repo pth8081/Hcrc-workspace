@@ -122,6 +122,72 @@ test('OWNER_A cố sửa danh mục lớn "Sơn tường" (NGOÀI phạm vi) -> 
   );
 });
 
+// LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "submitOperationEstimate() cho phép hijack hạng mục ngoài phạm
+// vi"): trước đây BẤT KỲ id đã có sẵn trong hồ sơ (existingIds, không lọc theo phạm vi) đều được server
+// GIỮ NGUYÊN khi client gửi lại — ownA (chỉ phụ trách "Nội thất") gửi kèm id của "Sơn tường" (ngoài phạm
+// vi) với parentId trỏ về "Nội thất" (trong phạm vi mình) sẽ vượt được chốt 403 (chốt đó chỉ kiểm parentId
+// MỚI). Server ghi xuống 2 bản ghi TRÙNG id "Sơn tường" — 1 bản gốc giữ nguyên (ngoài phạm vi, không đổi)
+// + 1 bản "chiếm" nội dung/tiền tự đặt của ownA (trong resolved, parentId="Nội thất") — vi phạm bất biến
+// id duy nhất, estimateTotalAmount của "Nội thất" cộng cả số tiền vay mượn từ "Sơn tường".
+test('[VÁ LỖI] OWNER_A hijack "Sơn tường" (ngoài phạm vi) bằng cách tái dùng id + gắn parentId = "Nội thất" (trong phạm vi) -> phải bị 403, KHÔNG được tạo bản ghi trùng id', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const noiThat = first.estimateItems.find((it) => it.content === 'Nội thất');
+  const keTrungBay = first.estimateItems.find((it) => it.content === 'Kệ trưng bày');
+  const sonTuong = first.estimateItems.find((it) => it.content === 'Sơn tường');
+  assert.throws(
+    () => recordActions.submitOperationEstimate(OWNER_A, item, {
+      items: [
+        { id: noiThat.id, content: 'Nội thất', amount: 0 },
+        { id: keTrungBay.id, content: 'Kệ trưng bày', amount: 20000000, parentId: noiThat.id },
+        { id: sonTuong.id, content: 'ĐÃ BỊ OWNER_A CHIẾM', amount: 999999999, parentId: noiThat.id }
+      ]
+    }, 'OPERATION_STORE_OPENING', USERS),
+    /ngoài phạm vi/,
+    'phải bị 403 "ngoài phạm vi" ngay khi phát hiện id tái dùng không thuộc phạm vi gọi'
+  );
+  // Dữ liệu gốc không bị đụng gì (throw TRƯỚC khi ghi vào item.estimateItems) — "Sơn tường" vẫn ĐÚNG 1
+  // bản ghi, không bị trùng id, amount vẫn nguyên giá trị gốc.
+  const sonTuongSau = item.estimateItems.filter((it) => it.id === sonTuong.id);
+  assert.strictEqual(sonTuongSau.length, 1, 'KHÔNG được có 2 bản ghi trùng id "Sơn tường"');
+  assert.strictEqual(sonTuongSau[0].amount, 5000000, 'Giá trị "Sơn tường" phải giữ nguyên, không bị ghi đè');
+});
+
+test('[VÁ LỖI] OWNER_A hijack "Sơn tường" bằng cách biến nó thành top-level "con" của chính mình (gửi parentId nhưng KHÔNG đổi parentId gốc=null) -> phải bị 403', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const noiThat = first.estimateItems.find((it) => it.content === 'Nội thất');
+  const keTrungBay = first.estimateItems.find((it) => it.content === 'Kệ trưng bày');
+  const sonTuong = first.estimateItems.find((it) => it.content === 'Sơn tường');
+  // Biến thể: "Sơn tường" vốn là TOP-LEVEL (parentId gốc = null, không phải con của ai) — payload cố biến
+  // nó thành con giả của "Nội thất". inScope check phải dùng existing.parentId (null) -> so ownerTopIds.has(existing.id),
+  // KHÔNG phải ownerTopIds.has(existing.parentId) (vì parentId gốc là null) -> vẫn đúng ngoài phạm vi -> 403.
+  assert.throws(
+    () => recordActions.submitOperationEstimate(OWNER_A, item, {
+      items: [
+        { id: noiThat.id, content: 'Nội thất', amount: 0 },
+        { id: keTrungBay.id, content: 'Kệ trưng bày', amount: 20000000, parentId: noiThat.id },
+        { id: sonTuong.id, content: 'Sơn tường giả làm con', amount: 777, parentId: noiThat.id }
+      ]
+    }, 'OPERATION_STORE_OPENING', USERS),
+    /ngoài phạm vi/
+  );
+});
+
+test('[ĐỐI CHỨNG] OWNER_A tái dùng id của "Kệ trưng bày" (CON của chính "Nội thất", trong phạm vi mình) -> không bị chặn, vẫn sửa bình thường', () => {
+  const first = buildFixture();
+  const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
+  const noiThat = first.estimateItems.find((it) => it.content === 'Nội thất');
+  const keTrungBay = first.estimateItems.find((it) => it.content === 'Kệ trưng bày');
+  const result = recordActions.submitOperationEstimate(OWNER_A, item, {
+    items: [
+      { id: noiThat.id, content: 'Nội thất', amount: 0 },
+      { id: keTrungBay.id, content: 'Kệ trưng bày OK', amount: 21000000, parentId: noiThat.id }
+    ]
+  }, 'OPERATION_STORE_OPENING', USERS);
+  assert.strictEqual(result.estimateItems.find((it) => it.id === keTrungBay.id).content, 'Kệ trưng bày OK');
+});
+
 test('OWNER_A cố XOÁ chính danh mục lớn "Nội thất" (không gửi lại) -> 403, không cho xoá', () => {
   const first = buildFixture();
   const item = { estimateStatus: 'APPROVED', estimateItems: first.estimateItems, estimateHistory: first.estimateHistory };
