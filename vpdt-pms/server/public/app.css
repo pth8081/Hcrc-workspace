@@ -706,11 +706,16 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
   --hcrc-success: #16a34a; --hcrc-success-bg: #dcfce7; --hcrc-success-ink: #15803d;
   --hcrc-warning: #d97706; --hcrc-warning-bg: #fef3c7; --hcrc-warning-ink: #b45309;
   --hcrc-danger: #dc2626; --hcrc-danger-bg: #fee2e2; --hcrc-danger-ink: #b91c1c;
+  /* --hcrc-neutral — thêm ở Giai đoạn 2c (11/2026): 4 màu info/success/warning/danger đều mang Ý NGHĨA
+     (cần xử lý/thành công/cảnh báo/nguy hiểm), không có màu nào hợp cho trạng thái "trung tính" kiểu
+     "Chưa bắt đầu" (chưa cần hành động, chưa có kết quả gì) — xem .badge-neutral bên dưới, dùng cho
+     trạng thái khởi tạo/nháp/chưa xử lý của BẤT KỲ module nào, không riêng Công Việc. */
+  --hcrc-neutral: #64748b; --hcrc-neutral-bg: #f1f5f9; --hcrc-neutral-ink: #475569;
   --hcrc-border: #e5e9f0;
   --hcrc-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 16px -10px rgba(15,23,42,.18);
 }
 
-.badge-info, .badge-success, .badge-warning, .badge-danger {
+.badge-info, .badge-success, .badge-warning, .badge-danger, .badge-neutral {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 11px; border-radius: 999px;
   font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
@@ -720,6 +725,7 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
 .badge-success { background: var(--hcrc-success-bg); color: var(--hcrc-success-ink); }
 .badge-warning { background: var(--hcrc-warning-bg); color: var(--hcrc-warning-ink); }
 .badge-danger { background: var(--hcrc-danger-bg); color: var(--hcrc-danger-ink); }
+.badge-neutral { background: var(--hcrc-neutral-bg); color: var(--hcrc-neutral-ink); }
 
 .btn-primary, .btn-secondary, .btn-destructive-outline, .btn-ghost, .btn-more {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;

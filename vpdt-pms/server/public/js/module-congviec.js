@@ -1052,11 +1052,15 @@ function renderTasks() {
   }
 
   const sourceLabels = { SUBMISSION: '📜 Văn bản trình', MEETING_MINUTES: '📝 Biên bản họp', MANUAL: '✋ Giao trực tiếp' };
+  // Giai đoạn 2c "HCRC Workspace Refresh" (11/2026): đổi từ class Tailwind rời rạc tự chọn màu (vd
+  // "bg-blue-100 text-blue-800") sang .badge-* DÙNG CHUNG (app.css) — khớp đúng 4 màu trạng thái +
+  // .badge-neutral mới thêm đã chuẩn hoá cho toàn hệ thống (phát hiện #1 trong báo cáo rà soát: mỗi
+  // module tự chọn màu/kiểu badge riêng). Giữ NGUYÊN icon + nhãn tiếng Việt, chỉ đổi class.
   const statusBadges = {
-    TODO: '<span class="px-2 py-0.5 bg-gray-100 text-gray-800 rounded font-bold text-xs">⏳ Chưa bắt đầu</span>',
-    DOING: '<span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-xs">🔵 Đang thực hiện</span>',
-    DONE: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Hoàn thành</span>',
-    CANCELLED: '<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã huỷ</span>'
+    TODO: '<span class="badge-neutral">⏳ Chưa bắt đầu</span>',
+    DOING: '<span class="badge-info">🔵 Đang thực hiện</span>',
+    DONE: '<span class="badge-success">✅ Hoàn thành</span>',
+    CANCELLED: '<span class="badge-danger">❌ Đã huỷ</span>'
   };
 
   tbody.innerHTML = pageItems.map(t => {

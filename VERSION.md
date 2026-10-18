@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**26.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.25 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2c — badge trạng thái Công Việc dùng hệ màu chung
+
+Giai đoạn 2c của lộ trình hiện đại hoá giao diện đã duyệt (tiếp theo v26.24) — **điều chỉnh phạm vi so
+với kế hoạch demo ban đầu** sau khi kiểm tra kỹ hơn trước khi sửa: ảnh demo trước/sau gửi người dùng
+từng cho rằng màn Công Việc hiện badge trạng thái dạng chữ thô "IN_PROGRESS"/"OVERDUE" (do dữ liệu mẫu
+lúc khảo sát dùng nhầm 2 giá trị không thuộc enum thật) — kiểm tra lại `TASK_STATUS_TRANSITIONS`/
+`TASK_STATUS_LABELS` (`lib/recordActions.js`) xác nhận enum trạng thái CÔNG VIỆC thật chỉ có đúng 4 giá
+trị `TODO`/`DOING`/`DONE`/`CANCELLED` ("OVERDUE" chỉ là nhóm lọc PHÁI SINH tính từ hạn chót, không bao
+giờ là giá trị thật của `status`) — mã nguồn trước đó ĐÃ render đủ badge màu cho cả 4 trạng thái thật,
+không phải chữ thô. Premise ban đầu không tái hiện được trên dữ liệu enum thật nên KHÔNG áp dụng y
+nguyên — thay vào đó làm đúng phần còn thiếu thực sự: 4 badge đó dùng class Tailwind rời rạc tự chọn
+màu riêng (`bg-blue-100 text-blue-800`...), chưa dùng hệ thống màu DÙNG CHUNG vừa xây ở Giai đoạn 1.
+
+- `public/js/module-congviec.js` (`renderTasks()`): 4 badge trạng thái đổi sang `.badge-info`/
+  `.badge-success`/`.badge-danger`/`.badge-neutral` (giữ nguyên 100% icon + nhãn tiếng Việt).
+- `public/app.css`: thêm `--hcrc-neutral`/`.badge-neutral` (màu xám trung tính) — biến thể thứ 5 ngoài
+  4 màu info/success/warning/danger, dùng cho trạng thái "chưa bắt đầu/nháp/chưa xử lý" không mang ý
+  nghĩa cần hành động/cảnh báo/nguy hiểm nào, áp dụng được cho bất kỳ module nào khác sau này.
+
+Test: `tests/test-task-status-badges.js` (mới, 3 kịch bản — xác nhận đúng class/màu cho cả 4 trạng thái
+thật + không còn sót class Tailwind cũ). Đã xác nhận bằng `git stash` test mới FAIL đúng trên code cũ.
+Chạy lại `test-task.js` (15 kịch bản) + CSP full-audit + lazy-load toàn bộ tab + test Giai đoạn 1 — không
+hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/module-congviec.js`, `public/app.css`) — KHÔNG đổi
+`schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.24 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2b — nén Quản Lý Tệp File thành bảng
 
