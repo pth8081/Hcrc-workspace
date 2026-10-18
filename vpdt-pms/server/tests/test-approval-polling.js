@@ -183,6 +183,23 @@ async function runPartA(run) {
     assert(keys.includes('payment:111'), 'phải gồm payment:111 (PENDING, đúng phòng ban + đúng approver theo paymentDeptWorkflows)');
   });
 
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "approvalAggregator pushDeptWorkflowKeys thiếu check tự duyệt"):
+  // pushDeptWorkflowKeys() (dùng cho 7+ module dept-workflow: docs/submissions/carRegs/officeReqs/
+  // vppRegistrations/itPriceApprovals/budgetEntries/contracts/operationOrders/paymentRequests) trước
+  // đây CHỈ gọi canApproveStep() — thiếu nửa điều kiện enforcement thật
+  // (assertNotSelfDecidingWorkflowItem(), applyWorkflowAction() luôn gọi CẢ 2) — khiến chính người
+  // tạo/trình hồ sơ (nếu tình cờ cũng nằm trong danh sách approver bước hiện tại) vẫn nhận khoá "có hồ
+  // sơ cần duyệt", bấm Duyệt thật sẽ bị 403 (thông báo giả).
+  await run.run('computeMyPendingApprovalKeys(): người TỰ TẢI LÊN tài liệu (uploader) KHÔNG được tính là approver dù đúng phòng ban + đúng bước duyệt — tránh thông báo giả dẫn tới bấm Duyệt bị 403', async () => {
+    const appData = buildFixtureAppData();
+    // id 4: duyet1 vừa là approver bước 1 (deptWorkflows['Kế Toán']) vừa là uploader (creatorField
+    // thật của docs, xem CREATE_MODULE_CONFIGS.docs.creatorField ở lib/createValidation.js).
+    appData.docs.push({ id: 4, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [], uploader: 'duyet1' });
+    const keys = computeMyPendingApprovalKeys(DUYET1, appData);
+    assert(!keys.includes('doc:4'), 'PHẢI loại doc:4 — duyet1 là người tải lên, không được tự duyệt dù đúng bước');
+    assert(keys.includes('doc:1'), 'đối chứng: doc:1 (uploader khác, không có field uploader trong fixture gốc) vẫn nhận bình thường');
+  });
+
   await run.run('computeMyPendingApprovalKeys(): 6 module/nhánh QUYỀN PHẲNG (không theo bước) đều đúng', async () => {
     const appData = buildFixtureAppData();
     const keys = computeMyPendingApprovalKeys(DUYET1, appData);
