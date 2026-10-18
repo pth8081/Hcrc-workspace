@@ -28,12 +28,30 @@ const RECORD = {
   ]
 };
 
-// Tạo sẵn 1 thư mục tệp mẫu tạm (nội dung không quan trọng — fakeUploadResponse chỉ đọc tên/size, không
-// đọc nội dung thật) — dọn sạch ở finally.
+// Tạo sẵn 1 thư mục tệp mẫu tạm (fakeUploadResponse chỉ đọc tên/size, không đọc nội dung thật khi tới
+// được server) — dọn sạch ở finally.
+//
+// LƯU Ý (rà soát trước go-live, 11/2026): nội dung KHÔNG được tuỳ ý nữa như trước — lớp kiểm tra chữ ký
+// file TOÀN TRANG (core.js, document.addEventListener('change', ..., true), xem verifyFileSignatureClient())
+// chặn MỌI <input type="file"> ngay ở bước chọn file, kể cả input này (data-op-change chuẩn, không phải
+// trường hợp đặc biệt). File .pdf/.docx/.xlsx nội dung thuần text (như trước đây) bị chặn ngay — 'change'
+// không bao giờ tới được onOperationEstimateAttachmentFileChange(), khiến cả 4 kịch bản còn lại treo chờ
+// vô thời hạn (page.waitForFunction timeout) hoặc đếm sai (0 thay vì 3/10). Phải ghi ĐÚNG vài byte chữ ký
+// đầu khớp đuôi khai báo (PDF: "%PDF", .docx/.xlsx: chữ ký ZIP PK\x03\x04 — cùng khuôn
+// CLIENT_FILE_SIGNATURE_MAP ở core.js) để qua được lớp kiểm tra này, giống hệt file thật.
+function sampleFileBuffer(name) {
+  const ext = path.extname(name).toLowerCase();
+  const magicPrefix = {
+    '.pdf': Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2D]), // "%PDF-"
+    '.docx': Buffer.from([0x50, 0x4B, 0x03, 0x04]),       // chữ ký ZIP
+    '.xlsx': Buffer.from([0x50, 0x4B, 0x03, 0x04])        // chữ ký ZIP
+  }[ext] || Buffer.alloc(0);
+  return Buffer.concat([magicPrefix, Buffer.from(`dummy content for ${name}`)]);
+}
 function makeSampleFiles(dir, names) {
   return names.map((name) => {
     const p = path.join(dir, name);
-    fs.writeFileSync(p, `dummy content for ${name}`);
+    fs.writeFileSync(p, sampleFileBuffer(name));
     return p;
   });
 }

@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**26.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.41 (2026-11): Dọn fixture lỗi thời `test-operation-estimate-attachments-multifile.js` (không phải lỗi production)
+
+Mục D trong danh sách "4 file test nghi do sandbox" — điều tra xác nhận đây là fixture lỗi thời (giống
+mục B/C vừa vá ở v26.39/v26.40), KHÔNG phải lỗi code thật, KHÔNG cần sửa gì ở `module-vanhanh.js`.
+
+- `makeSampleFiles()` trong test ghi nội dung TEXT THUẦN (`dummy content for ...`) cho cả file mang đuôi
+  `.pdf`/`.docx`/`.xlsx` — lớp kiểm tra chữ ký file TOÀN TRANG (`core.js`, đã có từ trước, không phải mới
+  thêm ở đợt này) chặn đúng NGAY từ bước chọn file vì nội dung không khớp đuôi khai báo, khiến cả 4 kịch
+  bản còn lại (chọn 3 file/9 file/đã đủ cap/1 file lỗi giữa chừng) không bao giờ thấy `attachments` tăng
+  lên — `onOperationEstimateAttachmentFileChange()` không hề có lỗi, chỉ đơn giản KHÔNG BAO GIỜ được gọi
+  vì sự kiện `change` gốc đã bị chặn trước đó.
+- Sửa `makeSampleFiles()` ghi đúng vài byte chữ ký đầu khớp đuôi khai báo (PDF: `%PDF-`, .docx/.xlsx:
+  chữ ký ZIP `PK\x03\x04`, cùng khuôn `CLIENT_FILE_SIGNATURE_MAP` ở `core.js`) — chỉ đổi 1 file test,
+  KHÔNG đổi bất kỳ code production nào.
+
+Test: `test-operation-estimate-attachments-multifile.js` 6/6 PASS (trước đó 2/6, 4 FAIL dây chuyền từ
+đúng 1 nguyên nhân). Chạy lại `test-operation-estimate-attachments.js` (6) +
+`test-operation-estimate-owner-scope.js` (17) + `test-operation-estimate-import-assignee.js` (5) —
+không hồi quy.
+
+**Deploy-impact**: KHÔNG có — chỉ sửa 1 file test (`server/tests/test-operation-estimate-attachments-multifile.js`),
+không đụng tới bất kỳ file code production nào.
 
 ## v26.40 (2026-11): [Trung Bình] Vá nút "+ Thêm Mẫu Giá"/"🔄 Thay mẫu" bị khoá cứng khi chọn file sai định dạng
 
