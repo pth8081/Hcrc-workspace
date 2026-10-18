@@ -45,6 +45,11 @@ async function main() {
     APP_DATA = {
       users: [{ ...ADMIN }],
       permGroups: [],
+      // depts (Đợt 5, mức Thấp — prepareUsersForSave() giờ validate dept khi THAY ĐỔI so với danh mục,
+      // xem routes/data.js) — seed đủ dept dùng trong file này ('Ban Giám Đốc' cho admin, 'Phòng Mới
+      // Đổi' cho scenario đổi dept admin) để không bị 400 oan.
+      depts: ['Ban Giám Đốc', 'Phòng Mới Đổi'],
+      stores: [],
       employeeProfiles: [
         Object.assign(employeeProfileLib.defaultProfile('NV900'), { status: 'ACTIVE' }),
         Object.assign(employeeProfileLib.defaultProfile('NV901'), { status: 'ACTIVE' }),

@@ -680,9 +680,23 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
   // diện luôn tự tính đúng nên hành vi sai này chỉ lộ ra khi gọi thẳng API).
   const permGroups = (await getAppDataValue('permGroups')) || [];
   const permGroupsById = new Map(permGroups.map(g => [g.id, g.perms]));
+  // Validate "dept" khi THAY ĐỔI/GÁN MỚI (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu lần 2, Đợt 5, mức Thấp) —
+  // validateImportedUserRow() (module-admin-userstaging.js) đã đối chiếu dept với DB.depts/DB.stores
+  // TRƯỚC khi gọi syncStorage('users') cho luồng Nhập Excel, nhưng đó là validate CLIENT-SIDE — điểm ghi
+  // THẬT (prepareUsersForSave(), DÙNG CHUNG cho mọi lượt lưu "users": form Sửa tay, Nhập Excel, Đặt Lại
+  // Mật Khẩu Hàng Loạt) trước đây KHÔNG tự kiểm lại, nên 1 request tự soạn gọi thẳng POST /api/data/users
+  // (hoặc 1 lỗi tương lai ở validateImportedUserRow()) vẫn ghi được dept KHÔNG tồn tại trong danh mục,
+  // làm user đó "mồ côi" khỏi mọi tính năng lọc/duyệt theo phòng ban. CHỈ chặn khi dept THAY ĐỔI so với
+  // giá trị đang lưu (prior.dept) — KHÔNG chặn giữ nguyên dept cũ (dù dept cũ đó đã lỡ không hợp lệ từ
+  // trước, VD phòng ban đã bị xoá hẳn khỏi danh mục) để không "khoá" việc sửa các field KHÁC của user đó;
+  // dept RỖNG ("để trống nếu không chọn", xem placeholder #uDept) vẫn luôn hợp lệ, không bắt buộc.
+  const validDeptValues = new Set([...(await getAppDataValue('depts') || []), ...(await getAppDataValue('stores') || [])]);
 
   const prepared = await Promise.all(incomingUsers.map(async (u) => {
     const prior = existingById.get(u.id);
+    if (u.dept && u.dept !== prior?.dept && !validDeptValues.has(u.dept)) {
+      throw new HttpError(400, `Phòng Ban/Siêu Thị "${u.dept}" (tài khoản "${u.username}") không có trong danh mục — vui lòng chọn đúng tên đã có hoặc thêm mới vào danh mục Phòng Ban/Siêu Thị trước.`);
+    }
     // mustChangePassword/failedLoginAttempts/lockedUntil do SERVER tự quản lý (client không hề gõ ra
     // ở form) — nếu client đang cầm bản DB.users CŨ (vd vừa lưu tạo user xong, chưa tải lại trang) thì
     // object "u" gửi lên sẽ THIẾU các field này. Luôn khôi phục lại từ "prior" khi client không tự

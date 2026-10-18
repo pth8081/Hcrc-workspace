@@ -26,7 +26,9 @@ const NV1 = { id: 2, username: 'nv1', name: 'Nhân Viên 1', dept: 'Phòng A', p
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }, { ...NV1 }], permGroups: [] };
+  // depts (Đợt 5, mức Thấp — prepareUsersForSave() giờ validate dept khi THAY ĐỔI/GÁN MỚI so với danh
+  // mục, xem routes/data.js) — seed đủ dept dùng trong file này để không bị 400 oan.
+  APP_DATA = { users: [{ ...ADMIN }, { ...NV1 }], permGroups: [], depts: ['Ban Giám Đốc', 'Phòng A', 'Phòng B'], stores: [] };
 }
 resetData();
 
@@ -90,7 +92,10 @@ async function main() {
       const payload = [
         { ...ADMIN },
         { ...NV1 },
-        { id: 3, username: 'nv1', name: 'Nhân Viên 3 (trùng username với nv1)', dept: 'Phòng B', perms: {}, active: true }
+        // pass: user MỚI (id chưa có trong APP_DATA.users) BẮT BUỘC có mật khẩu (missingPasswordUsernames
+        // check, routes/data.js) — không liên quan tới username trùng đang test ở đây, chỉ cần điền đủ
+        // để không bị chặn SAI LỚP trước khi tới được đúng luật đang kiểm.
+        { id: 3, username: 'nv1', pass: 'MatKhau@2024', name: 'Nhân Viên 3 (trùng username với nv1)', dept: 'Phòng B', perms: {}, active: true }
       ];
       const res = await api('POST', '/api/data/users', payload);
       assertEqual(res.status, 400, 'phải bị chặn 400 khi có 2 tài khoản trùng username');
@@ -103,7 +108,7 @@ async function main() {
       const payload = [
         { ...ADMIN },
         { ...NV1 },
-        { id: 3, username: 'nv3', name: 'Nhân Viên 3', dept: 'Phòng B', perms: {}, active: true }
+        { id: 3, username: 'nv3', pass: 'MatKhau@2024', name: 'Nhân Viên 3', dept: 'Phòng B', perms: {}, active: true }
       ];
       const res = await api('POST', '/api/data/users', payload);
       assertEqual(res.status, 200, `phải lưu thành công khi username không trùng nhau, got: ${JSON.stringify(res.body)}`);
