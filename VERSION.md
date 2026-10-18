@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.15 (2026-11): [TB] Re-audit lần 6 — mục 7/21: editOfficeReqDraft SUA_CHUA đổi dept không đối chiếu lại techAssignedTo
+
+Mục thứ bảy (7/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `editOfficeReqDraft()` (`lib/recordActions.js`, gác route "Sửa & Gửi Lại" của Đề Xuất
+Văn Phòng) có khối re-validate "Kỹ Thuật Xác Nhận" (bắt buộc cho `subType === 'SUA_CHUA'`, xem đợt
+11/2026) — chặn `techAssignedTo` không được là Trưởng Phòng duyệt bước 1 của phòng ban hồ sơ (đánh giá
+kỹ thuật phải độc lập). Khối đó TRƯỚC ĐÂY chỉ chạy khi `payload.techType !== undefined ||
+payload.techAssignedTo !== undefined` — nếu người dùng CHỈ đổi `payload.dept` (không đụng 2 field kỹ
+thuật), khối validate bị SKIP hoàn toàn, dù `item.dept` đã bị vòng gán `OFFICE_REQ_DRAFT_EDITABLE_FIELDS`
+(chạy TRƯỚC khối này) ghi đè thành phòng ban MỚI — dòng kiểm tra bên trong khối đọc
+`officeFixDeptWorkflows[item.dept]` lúc đó đã đọc nhầm sang phòng ban mới mà không hề kiểm lại.
+`techAssignedTo` đã được xác nhận "độc lập" cho phòng ban CŨ lúc tạo/lần sửa trước, nhưng không được
+đối chiếu lại khi hồ sơ chuyển phòng ban — nếu người đó tình cờ là Trưởng Phòng duyệt bước 1 của phòng
+ban MỚI, bất biến "đánh giá kỹ thuật cần độc lập" bị vi phạm âm thầm.
+
+**Vá:** chụp `deptChanged` (so `payload.dept` với `item.dept` cũ) NGAY TRƯỚC vòng gán
+`OFFICE_REQ_DRAFT_EDITABLE_FIELDS`, rồi thêm vào điều kiện kích hoạt khối validate — dept đổi dù
+`techType`/`techAssignedTo` giữ nguyên vẫn bắt buộc chạy lại toàn bộ khối kiểm tra, dùng đúng
+`item.techAssignedTo` hiện có (không đổi giá trị) đối chiếu lại với phòng ban MỚI.
+
+**Test:** mở rộng `tests/test-office-tech-confirm.js` — thêm 2 scenario: (1) đổi CHỈ `payload.dept`
+sang phòng ban mà `techAssignedTo` hiện tại CHÍNH LÀ Trưởng Phòng duyệt bước 1 của phòng ban đó -> 400,
+dù payload không đụng field tech nào; (2) đối chứng — đổi dept sang phòng ban KHÔNG xung đột -> vẫn áp
+dụng thành công, `techAssignedTo` giữ nguyên, không chặn nhầm. Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordActions.js`, đúng 1/22 scenario FAIL — "Missing expected exception", đúng khai thác đã nêu),
+PASS trên code đã vá (22/22). Regression: `test-audit-round2-cluster2.js` (59/59),
+`test-extra-approval-groups.js` (26/26), `test-office-budget.js` (27/27), `test-office-extra-files.js`
+(9/9) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.14 (2026-11): [TB] Re-audit lần 6 — mục 6/21: Tính Lương Tự Động bỏ sót nhân viên ON_LEAVE
 
