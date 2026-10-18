@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**27.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.6 (2026-11): [Thấp] Re-audit lần 5 — mục 2/4 (Thấp): Tạo Phụ Lục Hợp Đồng không kiểm quyền trên hợp đồng gốc
+
+Mục thứ 2 trong 4 phát hiện mức Thấp của đợt re-audit lần 5 — CÙNG LỚP LỖI với "Tạo phiên bản Tài Liệu
+mới không kiểm quyền trên bản gốc" (re-audit lần 5, mức TB, v27.0) nhưng ở module Hợp Đồng/Phụ Lục:
+
+- `contracts.extraValidate()` (`lib/createValidation.js`) khi tạo Phụ Lục (`isAddendum=true`) trước đây
+  so `payload.dept` (CLIENT tự gửi, KHÔNG đáng tin) với `root.dept` để chặn "phụ lục khác phòng ban với
+  hợp đồng gốc" — trong khi `dept` THỰC SỰ được lưu vào bản ghi lại luôn là `user.dept`
+  (`forceOwnDept: true`, xem `validateAndPrepareCreate()` — `finalDept` luôn = `user.dept`, không đụng
+  gì tới `payload.dept`). 1 tài khoản Phòng B chỉ cần tự soạn request với `dept: "Phòng A"` (khớp
+  `root.dept`) là qua được chốt chặn này dù chưa từng thuộc Phòng A — bản ghi lưu xong vẫn mang dept
+  THẬT (Phòng B) của họ, tạo ra 1 phụ lục lệch phòng ban với hợp đồng gốc mà chốt chặn tưởng như đã kiểm
+  đúng lại không hề cản được.
+- Vá: đổi điều kiện sang `user.dept !== root.dept` (giá trị xác thực, không thể giả mạo) — mirror đúng
+  bản vá v27.0 đã áp dụng cho `docs.extraValidate()`.
+
+**Test:** mở rộng `tests/test-audit-round2-vbt-hd-gp-tt-tl.js` (file đã có sẵn 3 scenario 7a-ter/quater/
+quinquies cho đúng lớp lỗi này ở `docs`, nay thêm 3 scenario tương tự cho `contracts`: 7e/7f/7g) — tài
+khoản Phòng B giả mạo `dept=Phòng A` để tạo phụ lục bị chặn 400 đúng (trước vá: lọt qua); tài khoản
+Phòng B trung thực gửi đúng dept thật của mình vẫn bị chặn 400 như cũ (không đổi hành vi gate); tài
+khoản ĐÚNG Phòng A tạo phụ lục vẫn thành công bình thường (không chặn nhầm). Xác nhận FAIL trên code CŨ
+(`git stash -- lib/createValidation.js`, đúng 1/43 scenario FAIL — scenario "LỖI ĐÃ VÁ" 7e), PASS trên
+code đã vá (43/43). Regression: `test-contract.js` (75/75), `test-collapse-contract-budget-doc-
+forms.js` (20/20), `test-contract-payment-type-change.js` (15/15), `test-contract-signed-file-no-
+approver-block.js` (toàn bộ PASS), `test-hr-contract-amendment-ui.js` (4/4) — toàn bộ PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.5 (2026-11): [Thấp] Re-audit lần 5 — mục 18/18 (cuối TB, bắt đầu Thấp): Offboarding không chặn tạo trùng quy trình
 
