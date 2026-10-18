@@ -4642,6 +4642,20 @@ function isEmptyPermValue(v) {
   if (v === undefined || v === null || v === false || v === '' || v === 'NONE') return true;
   if (Array.isArray(v)) return v.length === 0;
   if (typeof v === 'object' && ('all' in v || 'depts' in v)) return !v.all && (!v.depts || v.depts.length === 0);
+  // moduleAccess (object lồng {moduleKey: boolean}, PHÁT HIỆN mức Cao đợt re-audit lần 3): hasModuleAccess()
+  // đọc "ma[moduleKey] !== false" là CÓ quyền — 1 object toàn true (hoặc rỗng {}) tương đương KHÔNG cấu
+  // hình gì (y hệt thiếu hẳn field). Trước đây object dạng này không khớp nhánh nào ở trên, rơi xuống
+  // `return false` cuối hàm (= "KHÔNG rỗng") dù giá trị không hề giới hạn gì — khiến diffPerms() (bên
+  // dưới) LUÔN ghi permOverrides.moduleAccess = snapshot đầy đủ ngay khi basePerms.moduleAccess===undefined
+  // (nhóm chưa từng cấu hình Mục 0) dù admin không cố ý đổi gì ở đó, chỉ lưu user vì 1 lý do khác (đổi
+  // email/SĐT...). Override "đóng băng" đó tồn tại vĩnh viễn trong DB, vô hiệu hoá âm thầm việc NHÓM tắt
+  // thêm module SAU ĐÓ (mergePermsServer() ở routes/data.js chỉ shallow spread — overrides.moduleAccess
+  // THAY THẾ nguyên object nền mới của nhóm, không merge theo từng key con). Nhận diện CẤU TRÚC (object
+  // phẳng toàn giá trị boolean, không có 'all'/'depts') thay vì so tên field — tự đúng nếu sau này có
+  // thêm field khác cùng khuôn.
+  if (typeof v === 'object' && v !== null && !Array.isArray(v) && Object.values(v).every(x => typeof x === 'boolean')) {
+    return Object.values(v).every(x => x !== false);
+  }
   return false;
 }
 

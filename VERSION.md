@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**26.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.54 (2026-11): [Cao] Re-audit lần 3 — mục 4: permOverrides.moduleAccess bị "đóng băng" sai khi lưu user thuộc nhóm
+
+Tiếp nối v26.51-26.53. Mục thứ 4 trong 8 phát hiện của re-audit lần 3:
+
+- **[Cao] `isEmptyPermValue()`/`diffPerms()` (public/js/core.js) không nhận diện `moduleAccess` (object
+  lồng `{moduleKey: boolean}`, "Mục 0 — Truy Cập Module") là "rỗng" khi không hề giới hạn gì (toàn
+  `true`, hoặc `{}` rỗng).** `hasModuleAccess()` đọc `ma[moduleKey] !== false` là CÓ quyền, nên 1 object
+  toàn `true` tương đương KHÔNG cấu hình gì (y hệt thiếu hẳn field). Trước đây object dạng này không
+  khớp nhánh nào trong `isEmptyPermValue()` (chỉ nhận diện `undefined`/`null`/`false`/`''`/`'NONE'`/mảng
+  rỗng/scope `{all,depts}` rỗng), rơi xuống `return false` cuối hàm = "KHÔNG rỗng" dù giá trị không hề
+  giới hạn gì. Hậu quả: `diffPerms()` LUÔN ghi `permOverrides.moduleAccess` = snapshot module đầy đủ
+  ngay khi `basePerms.moduleAccess === undefined` (nhóm phân quyền CHƯA từng cấu hình Mục 0) — dù admin
+  không cố ý đổi gì ở đó, chỉ lưu user vì 1 lý do hoàn toàn khác (đổi email/SĐT...). Override "đóng băng"
+  đó tồn tại VĨNH VIỄN trong DB, vô hiệu hoá âm thầm việc NHÓM tắt thêm module SAU ĐÓ (`mergePermsServer()`
+  ở routes/data.js chỉ shallow spread 1 cấp — `overrides.moduleAccess` THAY THẾ nguyên object nền mới của
+  nhóm, không merge theo từng key con bên trong). Thêm 1 nhánh mới vào `isEmptyPermValue()`: nhận diện
+  CẤU TRÚC (object phẳng toàn giá trị boolean, không có `'all'`/`'depts'`) → rỗng khi mọi giá trị
+  `!== false`. Không sửa `diffPerms()` trực tiếp — hàm này gọi `isEmptyPermValue()` nên tự động đúng theo.
+
+**Test:** file mới `tests/test-permoverrides-moduleaccess-freeze.js` (7 scenario) — trích xuất CHÍNH XÁC
+nguyên văn 2 hàm `isEmptyPermValue()`/`diffPerms()` từ `public/js/core.js` thật qua `vm` (tránh nạp
+nguyên file lớn có code DOM ở top-level), không chép tay lại logic. Assertion mới đã xác nhận FAIL trên
+code CŨ (`git stash -- public/js/core.js`, 3/7 passed, 4 FAIL đúng các kịch bản dự đoán), PASS trên code
+đã vá (7/7). Chạy lại bộ test liên quan permOverrides/diffPerms/moduleAccess/saveUser: `test-perm-matrix-
+client.js` (46/46), `test-admin-users-permgroups.js` (111/111), `test-perm-matrix-parse.js` (7/7),
+`test-perm-matrix-quickedit-and-bulk-group.js` (43/43), `test-module-access-gate.js` (4/4), `test-module-
+access-gate-create.js` (3/3), `test-muc0-module-access-tree.js` (17/17), `test-workflow-moduleaccess-
+gate.js` (5/5), `test-collapse-permform.js` (28/28), `test-hr-selfservice-module-access-gate.js` (8/8),
+`test-mucO-payroll-payment-hrprofile-bypass.js` (11/11), `test-itprice-permtree-move.js` (6/6),
+`test-permission-batch-oct2026.js` (17/17) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. (Lưu ý: override đã bị "đóng
+băng" sai TRƯỚC khi vá vẫn còn tồn tại trong DB hiện có cho tới khi user đó được lưu lại lần nữa qua
+form — bản vá chỉ chặn việc tạo override sai MỚI, không tự dọn override cũ; không cần thao tác thủ công
+gì thêm vì override cũ chỉ "đóng băng" đúng trạng thái module lúc đó, không gây lỗi cấp bách, sẽ tự hết
+khi user được lưu lại bình thường.)
 
 ## v26.53 (2026-11): [Nghiêm Trọng] Re-audit lần 3 — mục 3: đổi/xoá username không cascade sang members[] Nhóm Phê Duyệt
 
