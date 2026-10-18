@@ -204,6 +204,59 @@ async function main() {
       const res = await api('PATCH', '/api/hr-profile/by-code/NV001', { dateOfBirth: '1995-05-05' }, HR_ONBOARD);
       assertEqual(res.status, 403, 'Không phải PENDING -> vẫn cần hrProfileManage/hrProfileEdit như bình thường');
     });
+
+    // ===== LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường
+    // onboarding queue"): hồ sơ TÁI TUYỂN (PENDING) mang theo lịch sử/dữ liệu nhạy cảm CŨ (kỷ luật, bổ
+    // nhiệm, CCCD, ngân hàng...). Actor CHỈ có hrOnboardingManage trước đây dùng CHUNG allowed-list +
+    // response KHÔNG lọc gì như HR thật — ghi đè/đọc được toàn bộ field này. Nay bị giới hạn đúng
+    // ONBOARDING_QUEUE_EDITABLE_FIELDS + response bị redact. =====
+    await run.run('LỖI ĐÃ VÁ: hrOnboardingManage-only PATCH hồ sơ PENDING (mang lịch sử cũ từ tái tuyển) với field kỷ luật/CCCD/ngân hàng -> KHÔNG được ghi đè, KHÔNG lộ trong response', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001', 1, {
+        nationalId: '079099001111', socialInsuranceNo: 'BH001', taxCode: 'MST001',
+        bankAccountNo: '00112233', bankName: 'Ngân hàng Cũ', bankAccountHolderName: 'Nguyễn Văn Cũ',
+        disciplinaryActions: [{ id: 'd1', type: 'Cảnh cáo' }],
+        transfers: [{ id: 't1', type: 'Điều động' }],
+        secondaryPositions: [{ jobTitle: 'Trưởng nhóm', dept: 'Phòng Kinh Doanh' }],
+        profileEditHistory: [{ by: 'hr1', time: 'x' }], rehireHistory: [{ rehiredBy: 'hr1' }]
+      });
+      const res = await api('PATCH', '/api/hr-profile/by-code/NV001', {
+        dateOfBirth: '1995-05-05', // field hợp lệ, vẫn phải sửa được như cũ
+        nationalId: '079099999999', socialInsuranceNo: 'HACKED', taxCode: 'HACKED',
+        bankAccountNo: 'HACKED', bankName: 'HACKED', bankAccountHolderName: 'Kẻ Tấn Công',
+        disciplinaryActions: [], transfers: [], secondaryPositions: [{ jobTitle: 'Giám Đốc', dept: 'Ban Giám Đốc' }]
+      }, HR_ONBOARD);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profile.dateOfBirth, '1995-05-05', 'Field hợp lệ (dateOfBirth) vẫn sửa được bình thường');
+      // Response KHÔNG được chứa các field nhạy cảm (đã redact) — kiểm bằng 'in' để chắc chắn field biến
+      // mất hẳn khỏi object, không phải chỉ undefined.
+      for (const f of ['nationalId', 'socialInsuranceNo', 'taxCode', 'bankAccountNo', 'bankName', 'bankAccountHolderName', 'disciplinaryActions', 'transfers', 'secondaryPositions', 'profileEditHistory', 'rehireHistory']) {
+        assertEqual(f in res.body.profile, false, `Field "${f}" KHÔNG được xuất hiện trong response cho actor chỉ có hrOnboardingManage`);
+      }
+      // Dữ liệu LƯU THẬT trong DB cũng không bị ghi đè — tra lại qua HR_MGR (toàn quyền, response KHÔNG
+      // redact) để xác nhận giá trị GỐC vẫn còn nguyên, KHÔNG bị đổi theo payload tấn công.
+      const asHrMgr = await api('GET', '/api/hr-profile/by-code/NV001', undefined, HR_MGR);
+      assertEqual(asHrMgr.body.profile.nationalId, '079099001111', 'nationalId KHÔNG bị ghi đè');
+      assertEqual(asHrMgr.body.profile.bankAccountNo, '00112233', 'bankAccountNo KHÔNG bị ghi đè');
+      assertEqual(asHrMgr.body.profile.bankAccountHolderName, 'Nguyễn Văn Cũ', 'bankAccountHolderName KHÔNG bị ghi đè');
+      assertEqual(asHrMgr.body.profile.disciplinaryActions.length, 1, 'disciplinaryActions KHÔNG bị xoá/ghi đè');
+      assertEqual(asHrMgr.body.profile.secondaryPositions.length, 1, 'secondaryPositions KHÔNG bị đổi sang giá trị tấn công');
+      assertEqual(asHrMgr.body.profile.secondaryPositions[0].jobTitle, 'Trưởng nhóm', 'secondaryPositions giữ ĐÚNG giá trị gốc');
+    });
+
+    await run.run('đối chứng: HR thật (hrProfileManage) PATCH CÙNG payload vẫn ghi đè + xem được đầy đủ như cũ (không bị ảnh hưởng bởi bản vá)', async () => {
+      resetAppData();
+      APP_DATA.employeeProfiles.push(Object.assign(employeeProfile.defaultProfile('NV002'), {
+        status: 'ACTIVE', nationalId: '079099002222', bankAccountNo: '00112244'
+      }));
+      const res = await api('PATCH', '/api/hr-profile/by-code/NV002', {
+        nationalId: '079099003333', bankAccountNo: '00112255', disciplinaryActions: [{ id: 'd2', type: 'Khiển trách', date: '2026-01-01' }]
+      }, HR_MGR);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profile.nationalId, '079099003333', 'HR thật vẫn sửa được nationalId như cũ');
+      assertEqual(res.body.profile.bankAccountNo, '00112255', 'HR thật vẫn sửa được bankAccountNo như cũ');
+      assertEqual(res.body.profile.disciplinaryActions.length, 1, 'HR thật vẫn sửa được disciplinaryActions như cũ');
+    });
   } finally {
     server.close();
   }

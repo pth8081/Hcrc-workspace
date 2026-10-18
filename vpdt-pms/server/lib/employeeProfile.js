@@ -1091,6 +1091,36 @@ const HR_ONLY_EDITABLE_FIELDS = [
   // contactPhone (10/2026, báo cáo rà soát mẫu Excel mới) — xem chú thích tại defaultProfile().
   'contactPhone'
 ];
+// LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường onboarding
+// queue"): PATCH /api/hr-profile/by-code/:employeeCode cho actor CHỈ có hrOnboardingManage (không có bất
+// kỳ quyền Hồ Sơ Nhân Sự thật nào — hrProfileManage/hrProfileEdit/hrProfileFullView/hrContractManage)
+// sửa hồ sơ đang PENDING ("Xác Nhận" ứng viên Onboarding) trước đây dùng CHUNG allowed-list đầy đủ
+// [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS] NHƯ HR thật, và trả nguyên object `profile`
+// không lọc gì trong response — actor chỉ có quyền hẹp này ghi đè/đọc được CẢ kỷ luật, bổ nhiệm/điều
+// động, vị trí kiêm nhiệm, CCCD/CMND, số BHXH, mã số thuế, số tài khoản/tên chủ tài khoản ngân hàng — dữ
+// liệu lẽ ra CHỈ HR thật mới được chạm tới. Chặn tường minh: giới hạn allowed-list CHO RIÊNG actor này
+// (loại các field này ra), và lọc lại response bằng redactFieldsForOnboardingQueueActor() bên dưới —
+// xem routes/employeeProfile.js PATCH /by-code/:employeeCode.
+const ONBOARDING_QUEUE_RESTRICTED_FIELDS = [
+  'disciplinaryActions', 'transfers', 'secondaryPositions',
+  'nationalId', 'socialInsuranceNo', 'taxCode',
+  'bankAccountNo', 'bankName', 'bankAccountHolderName',
+  // Lịch sử nội bộ — không cần cho nghiệp vụ "Xác Nhận" ứng viên, có thể gián tiếp lộ lịch sử làm việc
+  // trước đó của hồ sơ TÁI TUYỂN (sửa/tái tuyển trước đây).
+  'profileEditHistory', 'rehireHistory'
+];
+const ONBOARDING_QUEUE_RESTRICTED_FIELDS_SET = new Set(ONBOARDING_QUEUE_RESTRICTED_FIELDS);
+// allowed-list CHO RIÊNG actor chỉ có hrOnboardingManage (không có quyền Hồ Sơ Nhân Sự thật) — bớt đúng
+// các field ở ONBOARDING_QUEUE_RESTRICTED_FIELDS khỏi danh sách đầy đủ HR thật được sửa.
+const ONBOARDING_QUEUE_EDITABLE_FIELDS = [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS]
+  .filter((f) => !ONBOARDING_QUEUE_RESTRICTED_FIELDS_SET.has(f));
+function redactFieldsForOnboardingQueueActor(profile) {
+  if (!profile) return profile;
+  const result = Object.assign({}, profile);
+  for (const f of ONBOARDING_QUEUE_RESTRICTED_FIELDS) delete result[f];
+  return result;
+}
+
 // Nhãn tiếng Việt cho MỌI field sửa được (SELF_EDITABLE_FIELDS + HR_ONLY_EDITABLE_FIELDS) — dùng để ghi
 // "đã đổi trường nào" dễ đọc vào profileEditHistory[] (xem applyProfileEdit()).
 const PROFILE_FIELD_LABELS = {
@@ -1840,6 +1870,7 @@ function computeHrDashboardSummary(profiles, contracts, hrProcesses, storeTypes)
 
 module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
+  ONBOARDING_QUEUE_EDITABLE_FIELDS, redactFieldsForOnboardingQueueActor,
   TRANSFER_TYPES, TRANSFER_TYPE_LABELS, TRANSFER_STATUSES, TRANSFER_STATUS_LABELS,
   computeMonthlyHrReport, computeWeeklyHeadcountFlow, computeSalaryAdjustmentHistory, computeTransfersReport, computeDependentsReport, computeSecondaryPositionsReport, computeHrDashboardSummary,
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,
