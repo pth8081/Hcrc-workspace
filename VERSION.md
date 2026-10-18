@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**27.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.22 (2026-11): [TB] Re-audit lần 6 — mục 14/21: fileAuthz.js docs checker thiếu thumbnailUrl
+
+Mục thứ mười bốn (14/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** checker `docs` ở `findOwningRecord()` (`lib/fileAuthz.js`) trước đây CHỈ soi
+`d.fileUrl` (tệp tài liệu chính), bỏ sót `d.thumbnailUrl` (ảnh trang đầu minh hoạ, field CỐ ĐỊNH THẬT
+qua `assertUploadedFileUrl()` ở `docs.extraValidate` — xem `lib/createValidation.js`, bổ sung 10/2026).
+Không khớp field nào -> `findOwningRecord()` trả null -> rơi FAIL-OPEN ở `authorizeFileAccess()` (return
+true) -> BẤT KỲ ai đã đăng nhập xem/tải được ảnh trang đầu của tài liệu PENDING/DRAFT/phòng ban khác nếu
+biết/đoán đúng URL — cùng lớp lỗi đã vá cho `trainingDocuments`/`trainingCourses` ở mục 9/21 của đợt
+re-audit lần 6 này.
+
+**Vá:** thêm `|| d.thumbnailUrl === fileUrl` vào điều kiện `fixed` của checker `docs`.
+
+**Test:** mở rộng `tests/test-uploads-file-authz.js` — thêm `thumbnailUrl` vào fixture `DOC`, mirror 3
+kịch bản đã có cho `fileUrl` (người ngoài phạm vi bị chặn, chính chủ xem/tải được, người CHỈ có quyền
+XEM vẫn xem được nhưng không tải được). Xác nhận FAIL trên code CŨ (`git stash -- lib/fileAuthz.js`,
+đúng 2/32 scenario FAIL, đúng khai thác đã nêu), PASS trên code đã vá (32/32). Regression:
+`tests/test-license.js` (15/15), `tests/test-career-paths.js` (32/32) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.21 (2026-11): [TB] Re-audit lần 6 — mục 13/21: approvalAggregator pushDeptWorkflowKeys thiếu check tự duyệt
 
