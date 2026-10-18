@@ -45,7 +45,7 @@ const USERS = [ADMIN, TRAINER, NV1];
 const RECORDS = {};
 const COLLECTIONS = [
   'internalPosts', 'trainingClasses', 'trainingTests', 'trainingTestSubmissions', 'trainingRegistrations',
-  'trainingDocuments', 'trainingDocumentProgress'
+  'trainingDocuments', 'trainingDocumentProgress', 'onboardingPaths'
 ];
 const FUTURE = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
 const PAST = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
@@ -274,6 +274,57 @@ async function main() {
       resetRecords();
       const res = await api('POST', '/api/records/trainingDocuments/800/delete', {}, ADMIN);
       assertEqual(res.status, 200);
+    });
+
+    // ===================================================================================
+    // #146 (re-audit lần 5, mức Thấp) — chặn xoá trainingClasses/trainingDocuments còn
+    // onboardingPaths.linkedClassId/stage{1,2}DocIds tham chiếu (trước vá: xoá vô điều kiện, để lại
+    // tham chiếu mồ côi trong Lộ Trình Đào Tạo Tân Binh).
+    // ===================================================================================
+    await run.run('#146 LỖI ĐÃ VÁ: Xoá trainingDocuments còn nằm trong onboardingPaths.stage1DocIds -> 409, không xoá', async () => {
+      resetRecords();
+      DELETED.length = 0;
+      RECORDS.onboardingPaths = [{ id: 1, name: 'Lộ trình Tân binh HO', stage1DocIds: [800], stage2DocIds: [] }];
+      const res = await api('POST', '/api/records/trainingDocuments/800/delete', {}, ADMIN);
+      assertEqual(res.status, 409);
+      assertIncludes(res.body.error, 'lộ trình đào tạo tân binh');
+      assertEqual(RECORDS.trainingDocuments.length, 1, 'Tài liệu phải còn nguyên');
+      assertEqual(DELETED.length, 0);
+    });
+
+    await run.run('#146 LỖI ĐÃ VÁ: Xoá trainingDocuments còn nằm trong onboardingPaths.stage2DocIds -> 409', async () => {
+      resetRecords();
+      RECORDS.onboardingPaths = [{ id: 1, name: 'Lộ trình Tân binh HO', stage1DocIds: [], stage2DocIds: [800] }];
+      const res = await api('POST', '/api/records/trainingDocuments/800/delete', {}, ADMIN);
+      assertEqual(res.status, 409);
+      assertEqual(RECORDS.trainingDocuments.length, 1);
+    });
+
+    await run.run('#146 đối chứng: trainingDocuments KHÔNG nằm trong bất kỳ onboardingPaths nào -> xoá được bình thường (không chặn nhầm)', async () => {
+      resetRecords();
+      RECORDS.onboardingPaths = [{ id: 1, name: 'Lộ trình khác', stage1DocIds: [999], stage2DocIds: [] }];
+      const res = await api('POST', '/api/records/trainingDocuments/800/delete', {}, ADMIN);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.trainingDocuments.length, 0);
+    });
+
+    await run.run('#146 LỖI ĐÃ VÁ: Xoá trainingClasses đang được onboardingPaths.linkedClassId tham khảo -> 409, không xoá', async () => {
+      resetRecords();
+      DELETED.length = 0;
+      RECORDS.onboardingPaths = [{ id: 1, name: 'Lộ trình Tân binh Siêu Thị', linkedClassId: 901 }];
+      const res = await api('POST', '/api/records/trainingClasses/901/delete', {}, ADMIN);
+      assertEqual(res.status, 409);
+      assertIncludes(res.body.error, 'lộ trình đào tạo tân binh');
+      assertEqual(RECORDS.trainingClasses.length, 2, 'Lớp phải còn nguyên');
+      assertEqual(DELETED.length, 0);
+    });
+
+    await run.run('#146 đối chứng: trainingClasses KHÔNG được onboardingPaths nào liên kết -> xoá được bình thường (không chặn nhầm)', async () => {
+      resetRecords();
+      RECORDS.onboardingPaths = [{ id: 1, name: 'Lộ trình khác', linkedClassId: 999 }];
+      const res = await api('POST', '/api/records/trainingClasses/901/delete', {}, ADMIN);
+      assertEqual(res.status, 200);
+      assertEqual(RECORDS.trainingClasses.length, 1);
     });
 
     // ===================================================================================
