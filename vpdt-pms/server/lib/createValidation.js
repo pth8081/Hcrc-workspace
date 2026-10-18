@@ -864,8 +864,16 @@ const CREATE_MODULE_CONFIGS = {
     creatorField: 'creator', creatorNameField: 'creatorName',
     // Mã tờ trình = HCRC-<mã phòng>-VBT-<số 3 chữ số>, SINH LẠI Ở SERVER (không tin client) — xem
     // lib/recordCodeGen.js. dept đã được validateAndPrepareCreate() xác minh scope ngay trước đó.
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "generateCode dùng payload.dept thô chưa ép"): module này
+    // có forceOwnDept: true (record.dept CUỐI CÙNG luôn = user.dept, ép ở finalDept — xem
+    // validateAndPrepareCreate(), bước SAU generateCode) nhưng generateCode lại chạy TRƯỚC đó và đọc
+    // payload.dept THÔ (client gửi, chưa ép) — 1 request tự gửi payload.dept khác phòng ban thật của
+    // mình (dù không ảnh hưởng tới record.dept cuối cùng, forceOwnDept vẫn ép đúng) khiến MÃ sinh ra
+    // mang viết tắt phòng ban SAI (của payload.dept) dù record THẬT lại thuộc phòng ban khác (user.dept)
+    // — nhiễu số thứ tự (computeNextSeqForPrefix) của phòng ban bị "mượn tên" + mã tra cứu gây nhầm lẫn
+    // hồ sơ thuộc phòng ban nào. Dùng ĐÚNG user.dept (mirror licenses.generateCode đã làm đúng).
     generateCode: (payload, collection, user, appData) =>
-      recordCodeGen.generateHcrcCode(collection, appData, payload.dept, 'VBT'),
+      recordCodeGen.generateHcrcCode(collection, appData, user.dept, 'VBT'),
     // Ghi đè effectiveSteps/effectiveApprovers/selectedApprovalLayers/selectedLayerMembers bằng bản
     // server tự dựng lại + xác minh (xem buildEffectiveSubmissionWorkflowServer) — payload là cùng 1
     // object được validateAndPrepareCreate() dùng để tạo record ngay sau đó, nên sửa tại chỗ ở đây là đủ.
@@ -951,12 +959,15 @@ const CREATE_MODULE_CONFIGS = {
     // lib/recordCodeGen.js. Phụ lục kế thừa `type` của hợp đồng gốc (extraValidate ép lại ngay sau đó)
     // nên mã gốc đã mang đúng viết tắt loại rồi, không cần tính lại ở đây. Hợp đồng gốc chưa tồn tại ->
     // trả null, để extraValidate ném đúng lỗi "Hợp đồng gốc không tồn tại" như cũ.
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "generateCode dùng payload.dept thô chưa ép"): cùng lỗi
+    // như submissions ở trên — module này có forceOwnDept: true nhưng nhánh hợp đồng GỐC đọc
+    // payload.dept THÔ (chưa ép) để sinh mã, mang viết tắt phòng ban SAI nếu khác user.dept thật.
     generateCode: (payload, collection, user, appData) => {
       if (payload.isAddendum) {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
         return root ? recordCodeGen.generateAddendumCode(collection, root) : null;
       }
-      return recordCodeGen.generateContractCode(collection, appData, payload.dept, payload.type);
+      return recordCodeGen.generateContractCode(collection, appData, user.dept, payload.type);
     },
     // 2 luồng tạo hồ sơ hợp đồng/phụ lục (status GÁN Ở SERVER theo ĐÚNG luồng, không tin approvalStatus
     // client gửi — khớp internalPosts SHARE ở trên):
@@ -1019,18 +1030,24 @@ const CREATE_MODULE_CONFIGS = {
       // custodianDept ("Đơn vị tiếp nhận theo dõi & thanh toán") — chốt NGAY LÚC TẠO, áp dụng CẢ 2
       // luồng (Phê Duyệt lẫn Nhập Đã Ký) vì canManageContractPayment()/canViewContract() (tương ứng ở
       // lib/recordActions.js/lib/recordViewScope.js) đọc field này bất kể hồ sơ tạo qua luồng nào.
-      // Không chọn -> mặc định CHÍNH đơn vị tạo (payload.dept) theo dõi & thanh toán, khớp đúng yêu cầu
-      // nghiệp vụ "không chọn đơn vị thì mặc định đơn vị mình sẽ theo dõi và thanh toán" — không bao giờ
-      // để trống, tránh phải xử lý null rải rác ở mọi nơi đọc lại field này sau này.
-      payload.custodianDept = (payload.custodianDept && String(payload.custodianDept).trim()) || payload.dept;
-      // Trước đây KHÔNG validate custodianDept khi người tạo CHỦ ĐỘNG chọn 1 đơn vị KHÁC payload.dept —
+      // Không chọn -> mặc định CHÍNH đơn vị tạo (user.dept — module này forceOwnDept: true, record.dept
+      // CUỐI CÙNG luôn = user.dept) theo dõi & thanh toán, khớp đúng yêu cầu nghiệp vụ "không chọn đơn
+      // vị thì mặc định đơn vị mình sẽ theo dõi và thanh toán" — không bao giờ để trống, tránh phải xử
+      // lý null rải rác ở mọi nơi đọc lại field này sau này.
+      // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — cùng gốc với "generateCode dùng payload.dept thô chưa
+      // ép"): trước đây mặc định/so sánh dùng payload.dept (THÔ, client gửi, KHÔNG phải record.dept
+      // thật = user.dept) — 1 request tự gửi payload.dept khác phòng ban mình rồi để trống
+      // custodianDept sẽ bị gán NHẦM theo payload.dept giả đó (không qua catalog-check, vì nhánh if
+      // dưới chỉ validate khi custodianDept !== payload.dept — tự nó cũng so với giá trị giả). Dùng
+      // ĐÚNG user.dept cho cả mặc định lẫn so sánh.
+      payload.custodianDept = (payload.custodianDept && String(payload.custodianDept).trim()) || user.dept;
+      // Trước đây KHÔNG validate custodianDept khi người tạo CHỦ ĐỘNG chọn 1 đơn vị KHÁC user.dept —
       // chỉ là rủi ro nhập liệu (client tự do gõ/gửi thẳng), không leo thang quyền, nhưng đáng chặn cho
-      // sạch dữ liệu. CHỈ validate khi khác payload.dept — trường hợp mặc định (không chọn, giữ nguyên
-      // payload.dept) tin theo ĐÚNG mức đã tin payload.dept (bị ép về phòng ban người tạo ở
-      // validateAndPrepareCreate(), không qua danh mục) để không validate 2 lần cùng 1 giá trị theo 2
-      // tiêu chuẩn khác nhau. Cùng khuôn validDepts ở recruitmentJobs.hiringDept/trainingClasses.targetDept
-      // trong file này — audit Đợt 5, Giai đoạn 4.
-      if (payload.custodianDept !== payload.dept) {
+      // sạch dữ liệu. CHỈ validate khi khác user.dept — trường hợp mặc định (không chọn, giữ nguyên
+      // user.dept) không cần qua danh mục (đã là phòng ban THẬT của chính người tạo). Cùng khuôn
+      // validDepts ở recruitmentJobs.hiringDept/trainingClasses.targetDept trong file này — audit Đợt
+      // 5, Giai đoạn 4.
+      if (payload.custodianDept !== user.dept) {
         const validCustodianDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
         if (!validCustodianDepts.has(payload.custodianDept)) {
           throw new CreateError(400, `Đơn vị tiếp nhận theo dõi & thanh toán không hợp lệ: ${payload.custodianDept}`);
@@ -1806,8 +1823,11 @@ const CREATE_MODULE_CONFIGS = {
     // Mã tài liệu GỐC = <viết tắt Phân loại>-<viết tắt Phòng ban>-<số 3 chữ số>, SINH LẠI Ở SERVER —
     // xem lib/recordCodeGen.js. PHIÊN BẢN mới (rootDocId != null) trả null: mã suy từ bản gốc
     // (<displayCode>-V<n>) đã được extraValidate bên dưới tự tính từ trước, không đụng tới.
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "generateCode dùng payload.dept thô chưa ép"): cùng lỗi
+    // như submissions/contracts — module này có forceOwnDept: true nhưng nhánh tài liệu GỐC đọc
+    // payload.dept THÔ (chưa ép) để sinh mã, mang viết tắt phòng ban SAI nếu khác user.dept thật.
     generateCode: (payload, collection, user, appData) =>
-      payload.rootDocId != null ? null : recordCodeGen.generateDocCode(collection, appData, payload.cat, payload.dept),
+      payload.rootDocId != null ? null : recordCodeGen.generateDocCode(collection, appData, payload.cat, user.dept),
     // Khớp uploadDoc()/getDocFamily()/getDocFamilyLatest() ở index.html — nhánh "Cập nhật" (rootDocId
     // khác null) để CLIENT tự tính cat/displayCode/versionNumber/code rồi gửi nguyên payload lên, server
     // TRƯỚC ĐÂY (module docs không có extraValidate nào) không xác minh lại gì cả: 1 request tự soạn có
