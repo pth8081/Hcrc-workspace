@@ -31,7 +31,15 @@ const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám 
 // NGƯỜI TẠO từng hồ sơ cụ thể (carReg.creator, qua scopeAllows()->extraViewScopeAllows()->isManagerOf()),
 // không phải cấp quyền xem toàn công ty cho MỌI user thường.
 const MANAGED_CREATOR_CAR = { username: 'nv_cap_duoi_car', name: 'NV Cấp Dưới Của A (Xe)', dept: 'Phòng B', perms: {}, managerUsername: 'nva', active: true };
-const USERS = [REGULAR_A, APPROVER_D, DRIVER_B, ADMIN, MANAGED_CREATOR_CAR];
+// DISPATCHER/REPORT_VIEWER: LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "POST /carRegs/:id/reassign thiếu check
+// canViewCarReg") — carDispatch ("Người Điều Hành Xe") huỷ/đổi được BẤT KỲ chuyến nào của ai (xem
+// cancelCarReg()/reassignCarDispatch(), lib/recordActions.js) nên PHẢI thấy company-wide như admin, cả
+// ở canViewCarReg() (lib/recordViewScope.js) LẪN loadCarRegsScoped() (routes/data.js, lớp SQL
+// pre-filter — phải sửa CẢ 2 nếu không bản vá canViewCarReg() vô dụng trên thực tế). carReportView CŨNG
+// bị bỏ sót khỏi loadCarRegsScoped() từ trước (dù ĐÃ có trong canViewCarReg()) — tiện vá luôn, cùng lớp lỗi.
+const DISPATCHER = { username: 'dieuhanh1', name: 'Người Điều Hành Xe', dept: 'Phòng A', perms: { carDispatch: true }, active: true };
+const REPORT_VIEWER = { username: 'baocao1', name: 'Người Xem Báo Cáo Xe', dept: 'Phòng A', perms: { carReportView: true }, active: true };
+const USERS = [REGULAR_A, APPROVER_D, DRIVER_B, ADMIN, MANAGED_CREATOR_CAR, DISPATCHER, REPORT_VIEWER];
 
 const APP_DATA = {
   // duyet1 là người duyệt CẤU HÌNH của Phòng D (không liên quan phòng ban của chính duyet1, là Phòng A).
@@ -163,6 +171,22 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, ADMIN);
       const ids = (res.body.carRegs || []).map(r => r.id).sort();
       assertEqual(ids.join(','), '1,2,3,4', 'admin phải thấy đủ cả 4 xe');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: carDispatch (Người Điều Hành Xe, KHÔNG admin/carReportView) nhận ĐỦ toàn công ty', async () => {
+      resetData(); fullLoadCallCount = 0;
+      const res = await api('GET', '/api/data', undefined, DISPATCHER);
+      const ids = (res.body.carRegs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'carDispatch phải thấy đủ cả 4 xe (huỷ/đổi được của bất kỳ ai nên phải xem được)');
+      assert(fullLoadCallCount >= 1, 'carDispatch phải đi qua nhánh tải company-wide ở lớp SQL pre-filter');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: carReportView (KHÔNG admin/carDispatch) nhận ĐỦ toàn công ty', async () => {
+      resetData(); fullLoadCallCount = 0;
+      const res = await api('GET', '/api/data', undefined, REPORT_VIEWER);
+      const ids = (res.body.carRegs || []).map(r => r.id).sort();
+      assertEqual(ids.join(','), '1,2,3,4', 'carReportView phải thấy đủ cả 4 xe');
+      assert(fullLoadCallCount >= 1, 'carReportView phải đi qua nhánh tải company-wide ở lớp SQL pre-filter');
     });
 
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Trung bình): deptViewScopeConfig['car'] trước đây

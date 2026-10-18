@@ -647,7 +647,18 @@ function filterContractsForUser(contracts, user, appData) {
 // loadCarRegsScoped() ở routes/data.js đã vá kèm.
 function canViewCarReg(user, carReg, appData) {
   if (!user) return false;
-  if (user.perms?.admin || user.perms?.carReportView) return true;
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "POST /carRegs/:id/reassign thiếu check canViewCarReg"):
+  // carDispatch ("Người Điều Hành Xe") đã được tài liệu hoá rõ (VERSION.md v23.82, "Fix 4" — xem
+  // reassignCarDispatch()/cancelCarReg() ở lib/recordActions.js) là huỷ/đổi tài xế-xe được "BẤT KỲ
+  // chuyến nào của ai", không giới hạn phòng ban — ngang hàng admin cho 2 hành động đó. NHƯNG trước
+  // đây carDispatch KHÔNG nằm trong nhánh cấp quyền XEM ở đây (chỉ admin/carReportView được xem toàn
+  // bộ), khiến WRITE vượt quá READ: 1 tài khoản chỉ có carDispatch (không có thêm carReportView) GỌI
+  // THẲNG POST /carRegs/:id/reassign/cancel vẫn sửa được phiếu của phòng ban khác, dù GET /api/data đã
+  // lọc mất chính phiếu đó khỏi màn hình của họ (không thấy để mở modal, phải biết trước id). Thêm
+  // carDispatch vào đây — mirror ĐÚNG khuôn meetingApprove/meetingCancel đã có sẵn ở canViewMeeting()
+  // ngay trên (cùng vai "quản lý tài nguyên chung toàn công ty") — để READ khớp đúng WRITE, không đổi
+  // hành vi 2 action đó (vẫn "bất kỳ chuyến nào của ai" như đã quyết định).
+  if (user.perms?.admin || user.perms?.carReportView || user.perms?.carDispatch) return true;
   if (carReg.creator === user.username) return true;
   // Lái xe được phân công (assignedDriverUsername) luôn xem được phiếu của mình dù khác phòng ban —
   // cần thấy để vào sub-tab "Lái Xe" xác nhận (xem confirmCarDriverAssignment()).

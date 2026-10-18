@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**26.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
-MAJOR mới theo đúng quy tắc.)
+MAJOR mới theo đúng quy tắc. **Lưu ý**: MINOR lại vừa chạm `99` — lần merge KẾ TIẾP phải cuộn sang
+`27.0`, không tiếp tục đếm `.100`.)
+
+## v26.99 (2026-11): [TB] Re-audit lần 5 — mục 12: POST /carRegs/:id/reassign thiếu check canViewCarReg
+
+Mục thứ 12 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5. `canCancelCarReg()`/
+`reassignCarDispatch()` (`lib/recordActions.js`) đã được tài liệu hoá rõ từ v23.82/Fix 4 (mục "Đăng Ký
+Xe: thêm Hủy/Đổi sau duyệt") là `carDispatch` ("Người Điều Hành Xe")/admin huỷ/đổi được **BẤT KỲ chuyến
+nào của ai**, không giới hạn phòng ban — ngang hàng admin cho 2 hành động đó (mirror đúng `meetingApprove`/
+`meetingCancel` của Phòng Họp). NHƯNG `canViewCarReg()` (`lib/recordViewScope.js`) — hàm quyết định ai
+thấy gì qua `GET /api/data` lẫn Khung Xem Bảo Vệ file (`lib/fileAuthz.js`) — trước đây KHÔNG có nhánh
+cho `carDispatch` (chỉ `admin`/`carReportView`), khiến WRITE vượt quá READ: 1 tài khoản chỉ có
+`carDispatch` (không có thêm `carReportView`) gọi thẳng `POST /carRegs/:id/reassign`/`cancel` vẫn sửa
+được phiếu phòng ban khác, dù `GET /api/data` đã lọc mất chính phiếu đó khỏi màn hình của họ (không thấy
+để mở modal, phải biết trước id mới gọi được).
+
+- Vá: thêm `user.perms?.carDispatch` vào nhánh cấp quyền XEM company-wide của `canViewCarReg()` — mirror
+  đúng khuôn `meetingApprove`/`meetingCancel` đã có sẵn ở `canViewMeeting()`. KHÔNG đổi hành vi 2 action
+  đã quyết định ("bất kỳ chuyến nào của ai"), chỉ làm READ khớp đúng WRITE.
+- Phát hiện kèm (CÙNG LỚP LỖI, tiện vá luôn): `loadCarRegsScoped()` (`routes/data.js`) — lớp SQL
+  pre-filter quyết định TRƯỚC những gì được tải về (trước khi `canViewCarReg()` kịp lọc lại) — chưa từng
+  tải company-wide cho `carDispatch` LẪN `carReportView` (dù `carReportView` đã có trong
+  `canViewCarReg()` từ trước). Thiếu bản vá này thì bản vá `canViewCarReg()` vô dụng trên thực tế: cả 2
+  role vẫn chỉ nhận đúng tập {phòng ban mình} ∪ approverDepts từ SQL. Thêm cả `carDispatch` và
+  `carReportView` vào điều kiện tải company-wide ở đây.
+
+**Test:** mở rộng `tests/test-car-regs-scope.js` (dedicated test cho `GET /api/data` + carRegs scope) —
+thêm 2 fixture user (`DISPATCHER`, `REPORT_VIEWER`) + 2 scenario mới: carDispatch/carReportView nhận đủ
+company-wide (không chỉ phòng ban mình). Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordViewScope.js routes/data.js`, đúng 2/9 scenario FAIL — mỗi role chỉ thấy đúng 1 xe phòng ban
+mình thay vì đủ 4), PASS trên code đã vá (9/9). Regression:
+`test-khoi0-carregs-vppregistrations-gate.js` (7/7), `test-dept-view-scope.js` (54/54),
+`test-report-permission-rollout.js` (20/20), `test-meeting-car.js` (104/104),
+`test-carreg-reassign-inprogress.js` (6/6) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.98 (2026-11): [TB] Re-audit lần 5 — mục 11: Lỗi 409 trùng biển số/tài xế lộ mã phiếu xe phòng ban khác
 
