@@ -1833,6 +1833,7 @@ function canAccessItPriceApprovalModuleServer(user, priceType, data) {
 
 module.exports = {
   isManagerOf, computeSubordinateUsernames, assertNoManagerCycle, hasOwnWorkItemInSource,
+  resolveEmployeeUsername,
   DEPT_VIEW_SCOPE_MODULES, deptAutoViewOn, moduleViewConfig, extraViewScopeAllows,
   canViewDoc, canViewSubmission, filterDocsForUser, filterSubmissionsForUser,
   isForwardThreadParticipant,

@@ -23,7 +23,7 @@ const { assertPayloadFileUrlsOwnedByUser, collectFileUrlsDeep } = require('../li
 // sanitizeInternalPostCommentsForUser: cùng hàm mà routes/data.js dùng để lọc GET /api/data (qua
 // filterInternalPostsForUser) — MỌI response trả về bản ghi internalPosts đã mutate ở file này cũng
 // PHẢI đi qua nó, xem chú thích ở withInternalPostAction() bên dưới.
-const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer, canAccessItPriceApprovalModuleServer, canAccessHrFeedbackModuleServer } = require('../lib/recordViewScope');
+const { sanitizeInternalPostCommentsForUser, canViewInternalPost, assertNoManagerCycle, hasModuleAccessServer, canAccessItPriceApprovalModuleServer, canAccessHrFeedbackModuleServer, resolveEmployeeUsername } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 // MODULE_CONFIGS.operationOrders.resolveWfConfig: dùng LẠI đúng hàm resolveOperationOrderWorkflow() mà
 // routes/create.js đã dùng để cảnh báo "chưa có người duyệt" lúc TẠO — xem chú thích đầy đủ ở route
@@ -6002,9 +6002,22 @@ router.post('/shiftRoster/:id/delete', async (req, res) => {
 // (lib/attendance.js) — hàm gác quyền riêng của module tự phục vụ, không nằm trong "họ"
 // assertNotSelfDeciding*/assertNotSelfHandling* nên bị sót ở đợt v26.50 "chặn admin tự duyệt ở TẤT CẢ
 // module". Thêm `requesterUsername` (item.creator) — không được là chính người duyệt, bất kể cấp quyền nào.
-function assertShiftSwapApprover(freshUser, roster, requesterUsername) {
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "assertShiftSwapApprover chặn sai phía"): bản vá ở chú
+// thích ngay trên CHỈ chặn phía NGƯỜI TẠO ĐƠN (requesterUsername/item.creator) tự duyệt — bỏ sót hoàn
+// toàn phía NGƯỜI NHẬN CA (targetEmployeeCode, xem defaultShiftSwapRequest()/applyApproveShiftSwap() ở
+// lib/attendance.js). Nếu người được chọn làm người NHẬN ca lại chính là 1 Quản Lý Siêu Thị
+// (hrShiftSwapApprove đúng siêu thị của dòng roster đó) hoặc hrAttendanceManage/admin, họ hoàn toàn tự
+// DUYỆT được đơn mà chính mình là bên NHẬN LỢI (được thêm 1 ca làm/lương) — không qua bất kỳ sự xét
+// duyệt độc lập nào, khác hẳn ý định ban đầu "Quản Lý Siêu Thị/HR duyệt hộ 2 bên liên quan". Thêm
+// `targetUsername` (suy ra từ item.targetEmployeeCode qua resolveEmployeeUsername(),
+// lib/recordViewScope.js — ĐÚNG hàm canViewShiftSwapRequest() đã dùng để xác định "2 bên liên quan" lúc
+// XEM, nay tái dùng để chặn lúc QUYẾT ĐỊNH) — chặn luôn cả phía này.
+function assertShiftSwapApprover(freshUser, roster, requesterUsername, targetUsername) {
   if (requesterUsername && freshUser.username === requesterUsername) {
     throw new HttpError(403, 'Bạn không thể tự duyệt yêu cầu đổi ca do chính mình tạo');
+  }
+  if (targetUsername && freshUser.username === targetUsername) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt yêu cầu đổi ca mà chính mình là người nhận ca');
   }
   const allowed = freshUser.perms?.admin || freshUser.perms?.hrAttendanceManage
     || (freshUser.perms?.hrShiftSwapApprove && roster && roster.storeCode === freshUser.dept);
@@ -6038,7 +6051,7 @@ router.post('/shiftSwapRequests/:id/approve', async (req, res) => {
       let updatedRosterId = null, updatedRosterPatch = null;
       const swapResult = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
         const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
-        assertShiftSwapApprover(freshUser, targetRoster, item.creator);
+        assertShiftSwapApprover(freshUser, targetRoster, item.creator, resolveEmployeeUsername(item.targetEmployeeCode, employeeProfiles));
         const targetProfile = employeeProfiles.find(p => p.employeeCode === item.targetEmployeeCode);
         if (!targetProfile || targetProfile.status !== 'ACTIVE') {
           throw new HttpError(400, `Nhân viên nhận ca (mã "${item.targetEmployeeCode}") không còn đang hoạt động — không thể duyệt đổi ca này`);
@@ -6061,10 +6074,13 @@ router.post('/shiftSwapRequests/:id/reject', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    const rosterList = await getAllForCollection('shiftRoster');
+    const [rosterList, employeeProfiles] = await Promise.all([
+      getAllForCollection('shiftRoster'),
+      getAllForCollection('employeeProfiles')
+    ]);
     const result = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
       const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
-      assertShiftSwapApprover(freshUser, targetRoster, item.creator);
+      assertShiftSwapApprover(freshUser, targetRoster, item.creator, resolveEmployeeUsername(item.targetEmployeeCode, employeeProfiles));
       return attendance.applyRejectShiftSwap(item, freshUser.username, freshUser.name);
     });
     res.json({ ok: true, item: result });

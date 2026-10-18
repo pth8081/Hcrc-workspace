@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**27.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.13 (2026-11): [TB] Re-audit lần 6 — mục 5/21: assertShiftSwapApprover chặn sai phía
+
+Mục thứ năm (5/21) của đợt re-audit lần 6 — mục đầu tiên mức Trung Bình (9 mục Cao đã xong ở v27.9-v27.12).
+
+**Nguyên nhân:** `assertShiftSwapApprover()` (`routes/records.js`, gác route
+`POST /shiftSwapRequests/:id/approve|reject`) được vá ở đợt trước (re-audit lần 4) để chặn chính
+NGƯỜI TẠO ĐƠN (`requesterUsername`/`item.creator`) tự duyệt đơn đổi ca của mình — nhưng bản vá đó chỉ xử
+lý ĐÚNG 1 PHÍA của giao dịch 2 chiều này. `shiftSwapRequests` luôn có 2 bên liên quan thật
+(`canViewShiftSwapRequest()`, `lib/recordViewScope.js`, đã nhận diện đúng cả 2 bên từ trước): người TẠO
+đơn (`requesterEmployeeCode`, cho đi ca của mình) và người NHẬN ca (`targetEmployeeCode`, được thêm 1
+ca làm — xem `defaultShiftSwapRequest()`/`applyApproveShiftSwap()`, `lib/attendance.js`). Nếu người
+được chọn làm NGƯỜI NHẬN CA lại chính là 1 Quản Lý Siêu Thị (`hrShiftSwapApprove` đúng siêu thị của
+dòng roster đó) hoặc `hrAttendanceManage`/`admin`, họ hoàn toàn tự DUYỆT được đơn mà chính mình là bên
+NHẬN LỢI (thêm 1 ca làm/lương) — dù không phải người tạo đơn, không qua bất kỳ sự xét duyệt độc lập
+nào, khác hẳn ý định ban đầu "Quản Lý Siêu Thị/HR duyệt hộ 2 bên liên quan" (không phải "tự duyệt cho
+chính mình bằng vai người nhận").
+
+**Vá:** thêm tham số `targetUsername` cho `assertShiftSwapApprover()` — chặn thêm nhánh
+`freshUser.username === targetUsername`, cùng khuôn nhánh `requesterUsername` đã có. `targetUsername`
+suy ra từ `item.targetEmployeeCode` qua `resolveEmployeeUsername()` — hàm NÀY đã có sẵn ở
+`lib/recordViewScope.js` (dùng cho `canViewShiftSwapRequest()`/`canViewShiftRoster()`/`canViewLeaveRequest()`),
+nay export thêm để `routes/records.js` tái dùng đúng 1 nguồn sự thật thay vì tự suy diễn lại logic tra
+cứu employeeCode -> username lần thứ 2 (route `approve` đã có sẵn `employeeProfiles`; route `reject`
+trước đây KHÔNG cần đọc collection này, nay thêm `getAllForCollection('employeeProfiles')` song song với
+`shiftRoster`).
+
+**Test:** mở rộng `tests/test-selfapprove-leave-shiftswap-meeting.js` (phần 3,
+`assertShiftSwapApprover()` qua HTTP thật) — thêm 1 hồ sơ `employeeProfiles` mới (NV3 -> `storeMgr1`,
+Quản Lý Siêu Thị có `hrShiftSwapApprove`) + 3 scenario: (1) `storeMgr1` là NGƯỜI NHẬN CA (không phải
+người tạo) của 1 đơn do `store1` tạo -> `POST .../approve` phải 403; (2) tương tự cho `.../reject`; (3)
+đối chứng — `storeMgr1` vẫn duyệt được 1 đơn HOÀN TOÀN không liên quan tới mình (không phải người tạo,
+không phải người nhận) -> 200, không chặn nhầm. Xác nhận FAIL trên code CŨ (`git stash -- routes/
+records.js lib/recordViewScope.js`, đúng 2/15 scenario FAIL — cả 2 trả 200 thay vì 403, đúng khai thác
+đã nêu), PASS trên code đã vá (15/15). Regression: `test-approval-hub.js` (55/55),
+`test-approvalneeded-email-uniform-leave-swap-training.js` (11/11), `test-attendance-leave.js` (72/72),
+`test-audit-nhansu-congphep-luong.js` (21/21), `test-khoi0-checklist-contract-attendance-internalpost-
+gate.js` (24/24), `test-reports.js` (24/24), `test-shiftroster-cancel-swap-cleanup.js` (5/5) — toàn bộ
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.12 (2026-11): [Cao] Re-audit lần 6 — mục 4/21: approvalAggregator canApproveMeeting lỗi thời
 

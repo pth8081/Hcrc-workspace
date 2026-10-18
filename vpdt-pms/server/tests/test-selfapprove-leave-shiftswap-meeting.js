@@ -92,7 +92,11 @@ async function partShiftSwap() {
 
   const EMPLOYEE_PROFILES = [
     { employeeCode: 'NV1', username: 'store1', status: 'ACTIVE' },
-    { employeeCode: 'NV2', username: 'store2', status: 'ACTIVE' }
+    { employeeCode: 'NV2', username: 'store2', status: 'ACTIVE' },
+    // NV3 -> storeMgr1: LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "assertShiftSwapApprover chặn sai phía") —
+    // dùng để kiểm storeMgr1 (hrShiftSwapApprove) KHÔNG tự duyệt được khi chính mình là NGƯỜI NHẬN CA
+    // (targetEmployeeCode), không chỉ khi là người TẠO đơn (đã chặn từ trước).
+    { employeeCode: 'NV3', username: 'storeMgr1', status: 'ACTIVE' }
   ];
   let STORE;
   let nextId;
@@ -193,6 +197,33 @@ async function partShiftSwap() {
       STORE.shiftSwapRequests.push({ id: 4, requesterRosterId: 1, requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', creator: 'admin', status: 'PENDING', history: [] });
       const r = await call('admin', 'POST', '/api/records/shiftSwapRequests/4/reject', {});
       assert.strictEqual(r.status, 403, JSON.stringify(r.json));
+    });
+
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "assertShiftSwapApprover chặn sai phía"): 2 bản vá trên CHỈ
+    // chặn phía NGƯỜI TẠO ĐƠN (creator) tự duyệt — bỏ sót hoàn toàn phía NGƯỜI NHẬN CA
+    // (targetEmployeeCode). storeMgr1 (hrShiftSwapApprove, đúng siêu thị) KHÔNG phải người tạo đơn #5
+    // dưới đây (store1 tạo), nhưng CHÍNH LÀ người nhận ca (targetEmployeeCode: NV3 -> storeMgr1) — phải
+    // bị chặn giống hệt trường hợp tự tạo đơn.
+    await test('LỖI ĐÃ VÁ: hrShiftSwapApprove (Quản Lý Siêu Thị) KHÔNG tự duyệt được yêu cầu đổi ca mà CHÍNH MÌNH là người NHẬN ca (không phải người tạo)', async () => {
+      resetStore();
+      STORE.shiftSwapRequests.push({ id: 5, requesterRosterId: 1, requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV3', creator: 'store1', status: 'PENDING', history: [] });
+      const r = await call('storeMgr1', 'POST', '/api/records/shiftSwapRequests/5/approve', {});
+      assert.strictEqual(r.status, 403, JSON.stringify(r.json));
+      assert.ok(/không thể tự duyệt/.test(r.json?.error || ''), JSON.stringify(r.json));
+    });
+
+    await test('LỖI ĐÃ VÁ: hrShiftSwapApprove (Quản Lý Siêu Thị) KHÔNG tự TỪ CHỐI được yêu cầu đổi ca mà chính mình là người nhận ca (cùng chặn như approve)', async () => {
+      resetStore();
+      STORE.shiftSwapRequests.push({ id: 6, requesterRosterId: 1, requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV3', creator: 'store1', status: 'PENDING', history: [] });
+      const r = await call('storeMgr1', 'POST', '/api/records/shiftSwapRequests/6/reject', {});
+      assert.strictEqual(r.status, 403, JSON.stringify(r.json));
+    });
+
+    await test('đối chứng: hrShiftSwapApprove vẫn duyệt được đơn KHÔNG liên quan tới chính mình (không phải người tạo, không phải người nhận ca)', async () => {
+      resetStore();
+      STORE.shiftSwapRequests.push({ id: 7, requesterRosterId: 1, requesterEmployeeCode: 'NV1', targetEmployeeCode: 'NV2', creator: 'store1', status: 'PENDING', history: [] });
+      const r = await call('storeMgr1', 'POST', '/api/records/shiftSwapRequests/7/approve', {});
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
     });
   } finally {
     server.close();
