@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**26.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.53 (2026-11): [Nghiêm Trọng] Re-audit lần 3 — mục 3: đổi/xoá username không cascade sang members[] Nhóm Phê Duyệt
+
+Tiếp nối v26.51-26.52. Mục thứ 3 (mức Nghiêm Trọng — mức cao nhất trong 8 phát hiện của re-audit lần 3):
+
+- **[Nghiêm Trọng] Đổi tên/xoá vĩnh viễn 1 tài khoản không cascade sang `members[]` của 12 "Nhóm Phê
+  Duyệt" (submissionApprovalGroups/contractApprovalGroups/10 extraApprovalGroups_<module> — "Cấp Phê
+  Duyệt Cuối Cùng" cho 10 quy trình khác).** Mỗi nhóm lưu `members: []` = USERNAME THÔ, so khớp trực
+  tiếp (`lib/recordViewScope.js`: `g.members.includes(user.username)`), KHÔNG lưu theo id/key bất biến.
+  `routes/data.js` khi lưu `key === 'users'` đã có cascade rename/xoá username sang `employeeProfiles`
+  (`diffUserRenamesAndDeletions`/`cascadeUsernameChangesToProfiles`) nhưng CHƯA bao giờ cascade sang
+  `members[]` của 12 danh sách này. Kịch bản: 1 Tổng Giám Đốc đang là thành viên DUY NHẤT của nhóm
+  `TGD` (`singleApprover: true`, `blocking: true`) đổi username (hoặc tài khoản bị xoá vĩnh viễn) — nhóm
+  `TGD` mất hẳn người duyệt hợp lệ (username cũ còn lại trong `members` là "ma"), mọi hồ sơ tới bước đó
+  (Cấp Phê Duyệt Cuối Cùng của 12 quy trình dùng chung cơ chế này) treo vĩnh viễn tới khi admin tự sửa
+  lại `members` bằng tay. Thêm `cascadeUsernameChangesToApprovalGroups()` (lib/catalogRename.js) — đổi
+  tên: thay username cũ bằng mới TRONG `members[]` (giữ đúng vị trí/thứ tự nhóm); xoá vĩnh viễn: gỡ
+  username đó khỏi `members[]` (KHÔNG xoá cả nhóm — các thành viên khác vẫn giữ nguyên). Gọi NGAY SAU
+  `cascadeUsernameChangesToProfiles()` trong cùng khối `if (key === 'users')` đã có.
+
+**Test:** file mới `tests/test-approvalgroup-username-cascade.js` (4 scenario, pure-unit — giả lập
+`withLockedAppDataValue()` qua stub `lib/appData`). Assertion mới đã xác nhận FAIL trên code CŨ
+(`git stash` — hàm chưa tồn tại), PASS trên code đã vá. Chạy lại `test-approval-groups-excel-dedupe.js`
+(4/4), `test-approval-groups-excel.js` (9/9), `test-catalog-rename-locked-accounts.js` (40/40),
+`test-user-save-autolink-profile.js`, `test-user-import-login-e2e.js` (7/7) — tất cả PASS. (Lưu ý:
+`test-extra-approval-groups.js` có 1/26 FAIL — xác nhận qua `git stash` là lỗi CŨ có từ trước, không
+liên quan đến đợt này, chưa xử lý ở đợt này.)
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.52 (2026-11): [Trung Bình-Cao] Re-audit lần 3 — mục 2: lỗi 409 trùng CCCD lộ employeeCode+trạng thái
 
