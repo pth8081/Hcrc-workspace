@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**26.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.97 (2026-11): [TB] Re-audit lần 5 — mục 10: vppExcludedJobTitles/deptGroups thiếu validate -> crash giữa lượt rename
+
+Mục thứ 10 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — cùng lớp lỗi với "workflows + 2
+mixed-approval-rules" (lần 4) và "5 key cấu hình Công&Phép/Checklist" (lần 5, mục đã vá trước) nhưng
+điểm crash LẦN NÀY không nằm ở nơi ĐỌC dữ liệu, mà ở 1 CASCADE RENAME hoàn toàn khác:
+
+- `cascadeDeptRename()`/`cascadeJobTitleRename()` (`lib/catalogRename.js`, chạy từ
+  `POST /api/admin/renameCatalogEntry`) lần lượt gọi `(list || []).map(...)` trên `deptGroups` và
+  `vppExcludedJobTitles` để cập nhật 2 danh sách này khi đổi tên 1 phòng ban/chức danh. 2 key này trước
+  đây KHÔNG được validate cấu trúc khi lưu qua `POST /api/data/<key>` (dù đã là `ADMIN_ONLY_KEYS`) — lưu
+  sai thành OBJECT (vẫn truthy, qua được `|| []`) làm `.map()` throw NGAY GIỮA LƯỢT đổi tên 1 danh mục
+  KHÁC (phòng ban/chức danh), dù request đổi tên đó không liên quan gì tới ai đã lưu sai `deptGroups`/
+  `vppExcludedJobTitles` trước đó — phần cascade TRƯỚC đó trong cùng hàm (depts/jobTitles, deptAbbrs/
+  deptCodeMap, users...) đã lưu xong, cascade SAU key lỗi chưa kịp chạy → nửa cascade hoàn tất.
+- `deptGroups` (`{id,name,depts:[]}[]`) — cùng khuôn mảng-object với `workflows`/`shiftTemplates`...,
+  thêm thẳng vào `PLAIN_OBJECT_ARRAY_KEYS` có sẵn (`lib/workflowEngine.js`), không cần hàm mới.
+- `vppExcludedJobTitles` (mảng CHUỖI PHẲNG, KHÁC khuôn mảng-object ở trên) — thêm hàm MỚI
+  `assertPlainArrayShape()`/`PLAIN_ARRAY_KEYS` (chỉ ép `Array.isArray`, KHÔNG ép từng phần tử phải là
+  object vì phần tử ở đây là string), gọi từ `POST /api/data/:key` cùng vị trí các assert khác.
+
+**Test:** mở rộng `tests/test-congphep-checklist-structure-validate.js` (dedicated test cho lớp lỗi
+validate-cấu-trúc này) — thêm 10 scenario mới (6 Phần A thuần hàm, 4 Phần B HTTP thật). Xác nhận FAIL
+trên code CŨ (`git stash -- lib/workflowEngine.js routes/data.js`, đúng 6/22 Phần A + 2/12 Phần B
+FAIL), PASS trên code đã vá (22/22 + 12/12). Regression:
+`test-workflowarray-structure-validate.js` (5/5), `test-catalog-rename-server.js` (30/30),
+`test-deptworkflow-structure-validate.js` (18/18) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.96 (2026-11): [TB/Thấp] Re-audit lần 5 — mục 9: deptCodeMap + jobTitleGradeDefaults không cascade
 
