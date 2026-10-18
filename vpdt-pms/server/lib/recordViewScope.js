@@ -1662,7 +1662,20 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // trách nhiệm/nhà cung cấp, dù UI đã ẩn hoàn toàn. paymentRequests/officeReqs giờ TỰ ĐỘNG có mặt ở
   // COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js, suy ra từ map này) — đã gỡ khỏi
   // EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn operationOrders/hrProcesses trước đó.
-  office: ['paymentRequests', 'officeReqs']
+  office: ['paymentRequests', 'officeReqs'],
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): checklistSubmissions — canViewChecklistSubmission() ở trên có
+  // nhánh "chính người nộp" (submittedByUsername === user.username) VÀ nhánh "cùng siêu thị tự động xem"
+  // (deptAutoViewOn) KHÔNG hề gọi hasModuleAccessServer() — admin tắt moduleAccess.checklist cho 1 tài
+  // khoản (còn giữ checklistExecute) vẫn đọc được TOÀN BỘ bài Checklist của chính mình/siêu thị mình qua
+  // GET /api/data/lazy/checklist (route HÀNH ĐỘNG ở routes/checklist.js đã gác đúng từ trước qua
+  // requireChecklistModuleAccess(), chỉ riêng route ĐỌC dùng chung này bị bỏ sót). checklistTemplates
+  // cũng thêm vào đây cho đồng bộ (tự động có mặt ở COLLECTION_TO_MODULE_ACCESS_KEY, routes/create.js —
+  // đã gỡ khỏi EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn office/operationOrders ở
+  // trên). CHÚ Ý: routes/reports.js phải loại trừ RIÊNG checklistSubmissions khỏi gate suy ra từ map này
+  // — xem chú thích filterChecklistSubmissionsForReportCrossView() ở dưới: "xem chéo Báo Cáo" (qua
+  // reportViewAll/reportExtraKeys) CỐ Ý không phụ thuộc moduleAccess.checklist, chỉ GET /api/data(/lazy)
+  // mới cần gate này.
+  checklist: ['checklistTemplates', 'checklistSubmissions']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này
