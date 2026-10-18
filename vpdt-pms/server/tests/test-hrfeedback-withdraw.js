@@ -61,5 +61,21 @@ test('LỖI ĐÃ VÁ (liên quan): Nhân Sự KHÔNG trả lời được câu h
   assert.throws(() => respondToHrFeedback(HR, item, { response: 'Trả lời nhầm vào câu đã rút' }), /409|đã bị người gửi rút lại/);
 });
 
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Trung bình — "respondToHrFeedback thiếu chặn tự trả lời"): nhanSuManage
+// vừa là quyền VÀO module vừa là quyền TRẢ LỜI (canManageHrFeedback()), nên 1 tài khoản có nhanSuManage
+// có thể TỰ GỬI câu hỏi (mở cho mọi nhân viên) rồi TỰ TRẢ LỜI chính câu hỏi đó.
+test('LỖI ĐÃ VÁ: Nhân Sự (có nhanSuManage) KHÔNG tự trả lời được câu hỏi do CHÍNH MÌNH gửi', () => {
+  const HR_AS_CREATOR = { username: 'hr1', name: 'Nhân Sự', perms: { nhanSuManage: true } };
+  const item = makeFeedback({ creator: 'hr1', creatorName: 'Nhân Sự' });
+  assert.throws(() => respondToHrFeedback(HR_AS_CREATOR, item, { response: 'Tự trả lời câu hỏi của chính mình' }), /403|tự trả lời/);
+});
+
+test('ĐỐI CHỨNG: Nhân Sự vẫn trả lời bình thường câu hỏi do NGƯỜI KHÁC gửi', () => {
+  const item = makeFeedback();
+  const updated = respondToHrFeedback(HR, item, { response: 'Trả lời hợp lệ' });
+  assert.strictEqual(updated.status, 'ANSWERED');
+  assert.strictEqual(updated.respondedBy, 'hr1');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;
