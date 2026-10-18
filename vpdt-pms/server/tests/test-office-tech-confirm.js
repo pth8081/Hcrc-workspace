@@ -229,5 +229,43 @@ test('Sửa & Gửi Lại: KHÔNG đổi field tech -> không re-validate gì (g
   assert.strictEqual(updated.title, 'Sửa điều hòa (bổ sung)');
 });
 
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "editOfficeReqDraft SUA_CHUA đổi dept không đối chiếu lại
+// techAssignedTo"): điều kiện re-validate gốc chỉ xét payload.techType/techAssignedTo — đổi CHỈ
+// payload.dept (không đụng 2 field tech) khiến item.dept đã bị ghi đè thành phòng ban MỚI nhưng
+// techAssignedTo hiện tại KHÔNG được đối chiếu lại với officeFixDeptWorkflows[phòng ban MỚI] — nếu
+// người đó tình cờ là Trưởng Phòng duyệt bước 1 của phòng ban mới, bất biến "đánh giá kỹ thuật cần độc
+// lập" bị vi phạm âm thầm.
+test('LỖI ĐÃ VÁ: đổi dept (KHÔNG đụng field tech) sang phòng ban mà techAssignedTo hiện tại CHÍNH LÀ Trưởng Phòng duyệt bước 1 -> 400', () => {
+  const movingCreator = { username: 'nv1', name: 'Nhân Viên E', dept: 'Phòng Mới', active: true, perms: { officeCreate: true, officeFix: true } };
+  const item = makeOfficeFixItem({ status: 'DRAFT', dept: 'Phòng Kinh Doanh' });
+  const appData = {
+    officeFixDeptWorkflows: {
+      'Phòng Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp1'] } },
+      // kt1 (techAssignedTo hiện tại của item, xem makeOfficeFixItem()) là Trưởng Phòng duyệt bước 1
+      // của ĐÚNG phòng ban mới này -> phải bị chặn dù payload CHỈ đổi dept.
+      'Phòng Mới': { workflowId: 'wf1', approvers: { 1: ['kt1'] } }
+    },
+    users: [KY_THUAT]
+  };
+  assert.throws(() => {
+    editOfficeReqDraft({ dept: 'Phòng Mới' }, movingCreator, item, appData);
+  }, /400|độc lập/);
+});
+
+test('đối chứng: đổi dept sang phòng ban KHÔNG xung đột -> vẫn áp dụng thành công, techAssignedTo giữ nguyên (không chặn nhầm)', () => {
+  const movingCreator = { username: 'nv1', name: 'Nhân Viên E', dept: 'Phòng An Toàn', active: true, perms: { officeCreate: true, officeFix: true } };
+  const item = makeOfficeFixItem({ status: 'DRAFT', dept: 'Phòng Kinh Doanh' });
+  const appData = {
+    officeFixDeptWorkflows: {
+      'Phòng Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp1'] } },
+      'Phòng An Toàn': { workflowId: 'wf1', approvers: { 1: ['tp2'] } }
+    },
+    users: [KY_THUAT]
+  };
+  const updated = editOfficeReqDraft({ dept: 'Phòng An Toàn' }, movingCreator, item, appData);
+  assert.strictEqual(updated.dept, 'Phòng An Toàn');
+  assert.strictEqual(updated.techAssignedTo, KY_THUAT.username);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

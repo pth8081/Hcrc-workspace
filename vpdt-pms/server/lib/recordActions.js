@@ -654,7 +654,12 @@ function editOfficeReqDraft(payload, user, item, appData) {
   // đường ghi THẬT qua uploadOfficeSignedFile() bên dưới (đã kiểm khuôn ở đó).
   assertUploadedFileUrl(payload.fileUrl, 'Tệp đính kèm đề xuất');
   assertUploadedFileUrl(payload.signedFileUrl, 'Tài liệu ký');
-  if (payload.dept !== undefined && payload.dept !== item.dept) {
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "editOfficeReqDraft SUA_CHUA đổi dept không đối chiếu
+  // lại techAssignedTo"): phải chụp lại TRƯỚC khi vòng gán OFFICE_REQ_DRAFT_EDITABLE_FIELDS bên dưới ghi
+  // đè item.dept — dùng để quyết định có cần CHẠY LẠI khối validate Kỹ Thuật Xác Nhận ngay dưới hay
+  // không (xem chú thích đầy đủ tại đó).
+  const deptChanged = payload.dept !== undefined && payload.dept !== item.dept;
+  if (deptChanged) {
     // Làm gọn phân quyền Văn Phòng (10/2026, "6-module"): officeCreate giờ là quyền PHẲNG (boolean) —
     // không còn {all,depts} để đọc. Truyền scope rỗng {} để assertDeptScopeAllowed()/scopeAllows() dùng
     // đúng nhánh "cùng phòng là được" có sẵn (forceOwnDept, khớp đúng luật lúc TẠO).
@@ -666,7 +671,17 @@ function editOfficeReqDraft(payload, user, item, appData) {
   // Kỹ Thuật Xác Nhận (11/2026) — mirror đúng khuôn validate lúc TẠO (createValidation.js
   // CREATE_MODULE_CONFIGS.officeReqs.extraValidate), chỉ chạy lại khi người dùng thật sự đổi 1 trong 2
   // field này lúc Sửa & Gửi Lại (không ép phải validate lại field KHÔNG đổi).
-  if (item.subType === 'SUA_CHUA' && (payload.techType !== undefined || payload.techAssignedTo !== undefined)) {
+  //
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "đổi dept không đối chiếu lại techAssignedTo"): điều
+  // kiện gốc chỉ xét payload.techType/techAssignedTo — nếu người dùng CHỈ đổi payload.dept (không đụng
+  // gì tới 2 field kỹ thuật) thì khối này bị SKIP hoàn toàn, dù item.dept (đã bị vòng gán ở trên ghi đè
+  // thành phòng ban MỚI) nay dùng để tra officeFixDeptWorkflows[item.dept] ở dòng check step1Approvers
+  // dưới. Hậu quả: techAssignedTo đã được xác nhận "độc lập, không phải Trưởng Phòng duyệt bước 1" CHO
+  // ĐÚNG phòng ban CŨ lúc tạo/lần sửa trước, nhưng không hề được đối chiếu lại khi hồ sơ chuyển sang
+  // phòng ban MỚI — nếu người đó tình cờ là Trưởng Phòng duyệt bước 1 của phòng ban MỚI, bất biến "đánh
+  // giá kỹ thuật cần độc lập" bị vi phạm âm thầm. Thêm `deptChanged` vào điều kiện — dept đổi dù
+  // techType/techAssignedTo giữ nguyên vẫn bắt buộc chạy lại toàn bộ khối kiểm tra này.
+  if (item.subType === 'SUA_CHUA' && (payload.techType !== undefined || payload.techAssignedTo !== undefined || deptChanged)) {
     const techType = payload.techType !== undefined ? payload.techType : item.techType;
     if (techType !== 'IT' && techType !== 'MECHANICAL') {
       throw new HttpError(400, 'Vui lòng chọn Loại Kỹ Thuật Xác Nhận (IT hoặc Máy Móc/Thiết Bị)');
