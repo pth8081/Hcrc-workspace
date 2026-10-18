@@ -2622,6 +2622,23 @@ function cancelTrainingRegistrationAction(regId) {
     if (idx !== -1) DB.trainingRegistrations[idx] = updated;
     logSystemAction('INTERNAL', 'CANCEL_TRAINING_REG', `${updated.result === 'CANCELLED' ? 'Huỷ' : 'Gửi yêu cầu huỷ'} đăng ký lớp học [id ${regId}]`, 'SUCCESS');
     alert(updated.result === 'CANCELLED' ? '✅ Đã huỷ đăng ký thành công!' : '✅ Đã gửi yêu cầu huỷ, chờ Nhân Sự phụ trách đào tạo duyệt.');
+    // Email "Cần phê duyệt" (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — trước đây CHƯA
+    // có email nào cho sự kiện này) — CHỈ gửi khi thật sự còn pendingCancellation (nhánh admin huỷ NGAY,
+    // không tạo yêu cầu chờ, không cần báo ai — xem cancelTrainingRegistration(), lib/recordActions.js).
+    if (updated.pendingCancellation) {
+      const cls = (DB.trainingClasses || []).find(c => c.id === updated.classId);
+      const cancelApprovers = getFlatApproverUsernames(['trainingManage']);
+      if (cancelApprovers.length) {
+        notifyUsersByEmail('TRAINING', 'NOTIFY_APPROVAL_NEEDED', String(updated.id), cancelApprovers,
+          `[VPDT] Yêu cầu huỷ đăng ký lớp học của ${currentUser.name} cần bạn phê duyệt`,
+          buildApprovalNeededEmailBody({
+            ticketType: 'Đào Tạo - Huỷ Đăng Ký', ticketNumber: String(updated.id),
+            summary: `${cls?.title || '(lớp đã xoá)'}${reason ? ' — Lý do: ' + reason : ''}`,
+            creatorName: currentUser.name, creatorDept: currentUser.dept, createdAt: updated.pendingCancellation.requestedAt,
+            stepName: 'Duyệt huỷ đăng ký'
+          }));
+      }
+    }
     renderTrainingMyRegs();
     renderTrainingClasses();
   }).catch(err => alert(`⛔ ${err.message}`));

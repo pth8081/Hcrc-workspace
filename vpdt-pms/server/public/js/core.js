@@ -7014,7 +7014,31 @@ const APPROVAL_EMAIL_EVENTS = [
   { configModule: 'OPERATION', label: '🏬 Vận Hành (Đơn Hàng / Mở Mới / Sửa Chữa Siêu Thị)', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
     { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối / Yêu cầu bổ sung)', actionTypes: ['NOTIFY_APPROVED', 'NOTIFY_REJECTED', 'NOTIFY_REQUEST_CHANGES'] }
-  ], moduleAliases: ['OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'] }
+  ], moduleAliases: ['OPERATION_ORDER', 'OPERATION_STORE_OPEN', 'OPERATION_REPAIR'] },
+  // 4 module mới (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent 6): trước đây KHÔNG
+  // có bất kỳ email nào ở sự kiện "Cần phê duyệt" cho 4 luồng này (không phải lỗi quên bật cấu hình — code
+  // gửi email chưa từng tồn tại). "result" (Duyệt/Từ chối) của cả 4 vẫn CHƯA làm trong đợt này (ngoài
+  // phạm vi — chỉ bù đúng phần "Cần phê duyệt" đã lọt vào Approval Hub ở đợt này).
+  { configModule: 'UNIFORM', label: '👔 Đồng Phục (Kỳ Cấp Phát / Điều Chuyển Kho)', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối)', actionTypes: [],
+      note: 'Chưa có email cho sự kiện này — Duyệt/Từ chối Đồng Phục hiện không gửi email ở bất kỳ đâu.' }
+  ] },
+  { configModule: 'HR_LEAVE', label: '🏖️ Nghỉ Phép', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối)', actionTypes: [],
+      note: 'Chưa có email cho sự kiện này — Duyệt/Từ chối Nghỉ Phép hiện không gửi email ở bất kỳ đâu.' }
+  ] },
+  { configModule: 'HR_SWAP', label: '🔄 Đổi Ca', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt (Duyệt / Từ chối)', actionTypes: [],
+      note: 'Chưa có email cho sự kiện này — Duyệt/Từ chối Đổi Ca hiện không gửi email ở bất kỳ đâu.' }
+  ] },
+  { configModule: 'TRAINING', label: '🎓 Đào Tạo (Huỷ Đăng Ký)', families: [
+    { key: 'approvalNeeded', label: 'Cần phê duyệt huỷ đăng ký', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
+    { key: 'result', label: 'Kết quả duyệt huỷ (Duyệt / Từ chối)', actionTypes: [],
+      note: 'Chưa có email cho sự kiện này — Duyệt/Từ chối huỷ đăng ký hiện không gửi email ở bất kỳ đâu.' }
+  ] }
 ];
 
 // Dựng sẵn bảng tra "<module thật>|<actionType>" -> {configModule, family} 1 LẦN lúc nạp trang (từ
@@ -7313,10 +7337,16 @@ const APPROVAL_EMAIL_LINK_TAB = {
   // LABOR_CONTRACT ở trên (job tự build link, không qua choke-point chính).
   REPORT_PERIOD: 'periodicReport',
   // HR_LIFECYCLE (Giai đoạn 4, 11/2026 — jobs/hrTaskOverdueReminder.js): cùng lý do như trên.
-  HR_LIFECYCLE: 'hrLifecycle'
+  HR_LIFECYCLE: 'hrLifecycle',
   // LICENSE (11/2026, Giai đoạn 2): THÊM LẠI vào đây — family 'result' của LICENSE vẫn rỗng (không có
   // email "Kết quả duyệt" nào), nhưng family 'approvalNeeded' ("Cần phê duyệt") THÌ CÓ gửi thật (xem
   // module-tailieu.js) nên vẫn cần có mặt ở đây để gắn link cho đúng loại email đó.
+  // UNIFORM/HR_LEAVE/HR_SWAP/TRAINING (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình): cùng
+  // lý do LICENSE ở trên — family 'approvalNeeded' giờ CÓ gửi thật (module-dongphuc.js/module-conghop.js/
+  // module-internalcomms-daotao.js), cần có mặt để gắn link đúng tab. Không có APPROVAL_EMAIL_RECORD_OPENER
+  // tương ứng (chỉ chuyển tab, không tự mở thẳng đúng hồ sơ) — cùng mức "chưa xây màn xem chi tiết qua
+  // link" như MEETING/BUDGET đã ghi chú ở dưới, không phải thiếu sót riêng của 4 module này.
+  UNIFORM: 'uniform', HR_LEAVE: 'hrAttendance', HR_SWAP: 'hrAttendance', TRAINING: 'internal'
 };
 // APPROVAL_EMAIL_RECORD_OPENER: configModule -> cách MỞ THẲNG đúng hồ sơ sau khi đã chuyển đúng tab
 // (xem openLinkedApprovalRecordByCode() ngay dưới) — dbKeys: các collection DB.<key> cần dò theo
