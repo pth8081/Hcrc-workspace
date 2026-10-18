@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**26.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.66 (2026-11): [Cao] Re-audit lần 4 — mục 6: prepareUsersForSave() bỏ qua tái tính perms khi groupIds toàn "treo"
+
+Mục thứ 6 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] `prepareUsersForSave()` (routes/data.js, `POST /api/data/users`) có bất biến đã nêu rõ ở chú
+  thích đầu hàm: "Quyền hiệu lực (perms) của user CÓ groupId PHẢI luôn tính từ quyền nhóm + permOverrides
+  tại thời điểm ghi" — nhưng điều kiện tái tính CŨ là `if (groupsPerms.length)`, trong đó `groupsPerms`
+  là kết quả tra `permGroups` THẬT theo từng id, loại bỏ hẳn id KHÔNG tồn tại.** Nếu MỌI id trong
+  `groupIds` đều "treo" (nhóm đã bị admin xoá khỏi `permGroups` nhưng user chưa được gỡ khỏi nhóm đó),
+  `groupsPerms` rỗng → nhánh `if` KHÔNG chạy → `record.perms` RƠI THẲNG về nguyên `u.perms` client gửi
+  lên — đúng hành vi chỉ nên áp dụng cho user KHÔNG có `groupId`. Khai thác: 1 request tự soạn
+  `groupIds:['<id không tồn tại>']` kèm `perms:{admin:true}` được server ghi thẳng, tự phong toàn quyền.
+  - Sửa điều kiện thành `if (groupIds.length)` — LUÔN tái tính phía server bất kể còn nhóm hợp lệ nào
+    hay không (`mergeGroupsBasePermsServer([])` trả `{}` khi `groupsPerms` rỗng, `permOverrides` vẫn áp
+    đúng lên base rỗng như cũ).
+
+- **Dọn kèm 2 fixture lỗi thời phát hiện khi chạy regression** (cả 2 đều fail giống nhau có/không có bản
+  vá trên — xác nhận bằng `git stash`, không phải do đợt vá này gây ra):
+  - `tests/test-orgchart-headcount-report.js`: đã nêu ở v26.65.
+  - `tests/test-audit-hethong-cluster-server.js`: thiếu `contractApprovalGroups`/`contractApprovalLevels`
+    trong fixture `resetData()` — `cascadeUsernameChangesToApprovalGroups()` (lib/catalogRename.js, task
+    #91) quét cả danh sách này khi lưu "users", thêm SAU khi fixture được viết. Đổi luôn
+    `withLockedAppDataValue()` (stub của file này) sang coi 1 key AppData chưa khai là mảng rỗng thay vì
+    `throw`, để không còn lặp lại lỗi "thiếu key" mỗi khi `APPROVAL_GROUP_MEMBER_MAP_KEYS` (hoặc tương tự)
+    mở rộng thêm trong tương lai.
+
+**Test:** file mới `tests/test-permgroup-dangling-groupids.js` (4 scenario: groupIds toàn treo + perms tự
+soạn admin:true -> KHÔNG được tự phong, perms = base rỗng; cùng kịch bản kèm permOverrides -> vẫn áp đúng
+lên base rỗng; 1/2 groupIds treo còn 1 hợp lệ -> tính đúng theo nhóm còn lại; user không groupId -> hành
+vi cũ giữ nguyên). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash -- routes/data.js`, 2/4
+passed, đúng 2 scenario "LỖI ĐÃ VÁ" FAIL), PASS trên code đã vá (4/4). Chạy lại bộ test liên quan:
+`test-audit-hethong-cluster-server.js` (19/19, sau khi sửa 2 fixture lỗi thời), `test-merge-groups-perms.js`
+(7/7), `test-user-save-autolink-profile.js` (toàn bộ pass), `test-org-chart-manager-visibility.js`
+(16/16), `test-users-session-version-strip.js` (4/4), `test-user-edit-username-guard.js` (15/15),
+`test-username-case-insensitive.js` (9/9), `test-user-username-uniqueness.js` (2/2) — tất cả PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.65 (2026-11): [Cao] Re-audit lần 4 — mục 5: orgChart hoàn toàn không gate "Khối 0" ở server
 

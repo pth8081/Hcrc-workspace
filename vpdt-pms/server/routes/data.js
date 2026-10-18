@@ -772,7 +772,16 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
       // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
       const groupIds = record.groupIds || (record.groupId ? [record.groupId] : []);
       const groupsPerms = groupIds.map(id => permGroupsById.get(id)).filter(Boolean);
-      if (groupsPerms.length) {
+      // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): điều kiện CŨ `if (groupsPerms.length)` bỏ qua tái tính nếu
+      // TOÀN BỘ groupIds đều "treo" (nhóm đã bị xoá khỏi permGroups nhưng user chưa được gỡ khỏi nhóm đó
+      // — VD admin xoá nhóm trong lúc user vẫn đang thuộc nhóm) — groupsPerms rỗng khiến nhánh if không
+      // chạy, record.perms RƠI THẲNG về nguyên "u.perms" client gửi lên (hành vi chỉ dành ĐÚNG cho user
+      // KHÔNG groupId, xem nhánh else thiếu ở trên) — vi phạm bất biến "quyền hiệu lực của user CÓ
+      // groupId PHẢI LUÔN tính từ server, không bao giờ tin client" đã nêu ở chú thích đầu hàm này. 1
+      // request tự soạn groupIds:[<id không tồn tại>] kèm perms:{admin:true} sẽ được ghi thẳng. Xét theo
+      // groupIds.length (không phải groupsPerms.length) — vẫn LUÔN server tự tính dù base rỗng khi không
+      // còn nhóm hợp lệ nào (mergeGroupsBasePermsServer([]) = {}), permOverrides vẫn áp đúng như cũ.
+      if (groupIds.length) {
         record.groupIds = groupIds;
         record.perms = mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), record.permOverrides);
       }

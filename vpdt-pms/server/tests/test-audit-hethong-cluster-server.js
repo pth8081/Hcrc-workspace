@@ -70,7 +70,15 @@ function resetData() {
     // viết TRƯỚC tính năng đó, thiếu key này khiến withLockedAppDataValue() throw ("Key không tồn tại
     // trong AppData"), kéo theo MỌI kịch bản lưu "users" trong file này FAIL 500 dù logic đang test hoàn
     // toàn không liên quan tới employeeProfiles.
-    employeeProfiles: []
+    employeeProfiles: [],
+    // LỖI ĐÃ VÁ (fixture lỗi thời, phát hiện khi chạy regression cho re-audit lần 4 mục "prepareUsersForSave
+    // groupIds treo"): cascadeUsernameChangesToApprovalGroups() (routes/data.js, task #91) cũng đọc/ghi
+    // contractApprovalGroups/contractApprovalLevels (cùng khuôn submissionApprovalGroups/Levels ở trên)
+    // khi lưu "users" — thêm SAU khi fixture này được viết, thiếu 2 key này khiến withLockedAppDataValue()
+    // throw ("Key không tồn tại trong AppData") y hệt lý do employeeProfiles ở trên, không phải lỗi do
+    // bản vá groupIds treo gây ra (xác nhận bằng git stash — fail giống nhau có/không có bản vá đó).
+    contractApprovalGroups: [],
+    contractApprovalLevels: []
   };
   VERSIONS = {};
   Object.keys(APP_DATA).forEach(k => { VERSIONS[k] = `v-${k}-0`; });
@@ -97,7 +105,14 @@ stubModule('lib/appData', {
     return { conflict: false, version: VERSIONS[key] };
   },
   withLockedAppDataValue: async (key, mutatorFn) => {
-    if (!(key in APP_DATA)) throw new Error(`Key không tồn tại trong AppData: ${key}`);
+    // LỖI ĐÃ VÁ (fixture lỗi thời, phát hiện khi chạy regression cho re-audit lần 4 mục "prepareUsersForSave
+    // groupIds treo"): cascadeUsernameChangesToApprovalGroups() (lib/catalogRename.js, APPROVAL_GROUP_MEMBER_MAP_KEYS)
+    // quét MỘT danh sách khoá AppData mở rộng dần theo thời gian (extraApprovalGroups_<MODULE>/...) mỗi
+    // khi lưu "users" — fixture này không thể liệt kê thủ công toàn bộ danh sách đó (sẽ lại lỗi thời mỗi
+    // khi danh sách mở rộng thêm), nên coi 1 key CHƯA khai trong resetData() là mảng rỗng thay vì throw
+    // (khớp đúng hành vi thật khi key đó chưa từng được ghi gì trong AppData — xem defaults.js khởi tạo
+    // rỗng cho mọi key chưa dùng), KHÔNG làm thay đổi hành vi của bất kỳ kịch bản đang test nào.
+    if (!(key in APP_DATA)) APP_DATA[key] = [];
     const next = await mutatorFn(APP_DATA[key]);
     APP_DATA[key] = next;
     VERSIONS[key] = `v-${key}-${Date.now()}-${Math.random()}`;
