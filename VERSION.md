@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**27.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.19 (2026-11): [TB] Re-audit lần 6 — mục 11/21: sensitiveKeywords thiếu validate cấu trúc
+
+Mục thứ mười một (11/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** CÙNG LỚP LỖI với 7 key đã vá ở các lần re-audit trước (`workflows`, 2
+mixed-approval-rules, `shiftTemplates`/`publicHolidays`/`attendanceClockApiKeys`/`hrTaskTemplates`,
+`deptGroups`) — route generic `POST /api/data/:key` chỉ gate QUYỀN (`sensitiveKeywords` đã có trong
+danh sách admin-only của `routes/data.js`) nhưng KHÔNG validate cấu trúc, và `sensitiveKeywords` bị BỎ
+SÓT khỏi `PLAIN_OBJECT_ARRAY_KEYS`. `scanCommentForSensitiveContent()` (`lib/recordActions.js`) đọc
+`for (const kw of sensitiveKeywords || [])` — `|| []` chỉ che được giá trị falsy; lưu thành OBJECT (vẫn
+truthy) khiến `for...of` throw "is not iterable" ngay khi có BẤT KỲ bình luận Truyền Thông Nội Bộ nào
+được đăng (crash 500 cho toàn bộ người dùng, tới khi admin sửa lại đúng cấu trúc).
+
+**Vá:** thêm `'sensitiveKeywords'` vào `PLAIN_OBJECT_ARRAY_KEYS` (`lib/workflowEngine.js`) — route
+generic tự động chặn sớm (400) nếu lưu sai cấu trúc, không cần sửa gì thêm ở `routes/data.js` (dispatch
+gọi `assertPlainObjectArrayShape(key, value)` vô điều kiện cho mọi key).
+
+**Test:** mở rộng `tests/test-congphep-checklist-structure-validate.js` (file đã có đúng khuôn Phần A
+đơn vị + Phần B HTTP cho 7 key cùng lớp) — thêm 5 scenario: 3 đơn vị
+(`assertPlainObjectArrayShape('sensitiveKeywords', ...)` hợp lệ/OBJECT/phần tử không phải object) + 2 HTTP
+qua `POST /api/data/sensitiveKeywords` (OBJECT -> 400, mảng hợp lệ -> 200). Xác nhận FAIL trên code CŨ
+(`git stash -- lib/workflowEngine.js`, đúng 2/39 scenario FAIL — 1 ở Phần A, 1 ở Phần B HTTP, đúng khai
+thác đã nêu), PASS trên code đã vá (39/39). Regression: `tests/test-workflowarray-structure-validate.js`
+(5/5), `tests/test-formtemplates-structure-validate.js` (5/5),
+`tests/test-audit-round4-internal-data-gate.js` (16/16) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.18 (2026-11): [TB] Re-audit lần 6 — mục 10/21: respondToHrFeedback thiếu chặn tự trả lời
 

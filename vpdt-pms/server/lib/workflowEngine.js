@@ -794,9 +794,17 @@ function isPlainWorkflowMapObject(v) {
 // nếu `list` không phải mảng, `.map()` throw NGAY GIỮA LƯỢT đổi tên đó (đã lưu xong mảng `depts` +
 // `deptAbbrs`/`deptCodeMap`, cascade các collection SAU deptGroups trong cùng hàm chưa kịp chạy) —
 // request đổi tên phòng ban trả 500 dù hoàn toàn không liên quan tới ai đã lưu sai deptGroups trước đó.
+// sensitiveKeywords (mảng {term, category}, Truyền Thông Nội Bộ — xem defaults.js): LỖI ĐÃ VÁ (re-audit
+// lần 6, mức TB — "sensitiveKeywords thiếu validate cấu trúc"). CÙNG LỚP LỖI với các key ở trên: route
+// generic POST /api/data/:key chỉ gate QUYỀN (ADMIN_SENSITIVE_KEYS, routes/data.js) KHÔNG validate cấu
+// trúc. scanCommentForSensitiveContent() (lib/recordActions.js) đọc `for (const kw of sensitiveKeywords
+// || [])` — `|| []` chỉ che được falsy, lưu thành OBJECT (không phải mảng) vẫn là giá trị truthy khiến
+// `for...of` throw "is not iterable" NGAY khi có BẤT KỲ bình luận Truyền Thông Nội Bộ nào được đăng (500
+// toàn bộ người dùng), tới khi admin sửa lại đúng cấu trúc.
 const PLAIN_OBJECT_ARRAY_KEYS = new Set([
   'workflows', 'operationOrderStoreMixedApprovalRules', 'itPriceWholesaleStoreMixedApprovalRules',
-  'shiftTemplates', 'publicHolidays', 'attendanceClockApiKeys', 'hrTaskTemplates', 'deptGroups'
+  'shiftTemplates', 'publicHolidays', 'attendanceClockApiKeys', 'hrTaskTemplates', 'deptGroups',
+  'sensitiveKeywords'
 ]);
 function assertPlainObjectArrayShape(key, value) {
   if (!PLAIN_OBJECT_ARRAY_KEYS.has(key)) return;
