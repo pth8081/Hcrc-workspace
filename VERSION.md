@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.92 (2026-11): [TB] Re-audit lần 5 — mục 5: Admin xoá+đọc lại dữ liệu riêng tư HR qua Thùng Rác
+
+Mục thứ 5 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — cùng lớp lỗi với 1 lỗ hổng NGHIÊM
+TRỌNG đã vá ở đợt audit 9/2026 (`SENSITIVE_TRASH_COLLECTION_CHECKS`, `routes/trash.js`) nhưng bị bỏ sót
+2 collection khi đợt đó chốt danh sách.
+
+- `assertAdmin()` (chỉ cờ `admin`) là ĐỦ để xem/khôi phục/xoá vĩnh viễn Thùng Rác của MỌI collection —
+  đợt vá 9/2026 đã xiết THÊM cho 4 collection cực nhạy cảm (laborContracts/employeeProfiles/payslips/
+  payrollPeriods, dữ liệu SỐNG đã khoá đúng, KHÔNG còn admin tự bypass từ v23.28) nhưng **2 collection
+  khác cũng KHÔNG còn admin bypass trên dữ liệu SỐNG** (quyết định "mở rộng Nhân Sự", 11/2026) **bị bỏ
+  sót**:
+  - **hrFeedback** ("HCRC Đồng Hành") — dữ liệu RIÊNG TƯ nhất trong toàn hệ thống (`canViewHrFeedback()`,
+    `lib/recordViewScope.js`, CHỈ cho `nhanSuManage` hoặc chính người hỏi xem, không nhánh phòng ban
+    nào khác). 1 tài khoản CHỈ có cờ `admin` xoá xong 1 câu hỏi/tâm sự riêng tư của nhân viên lại đọc
+    được NGUYÊN VẸN qua GET /api/trash.
+  - **hrProcesses** (Onboarding/Offboarding) — chứa CCCD/SĐT/email/lý do nghỉ việc (`canViewHrProcess()`,
+    CHỈ cho `hrViewAll`/`hrOnboardingManage`/`hrOffboardingManage` xem TOÀN BỘ, không như dữ liệu SỐNG
+    còn có creator/directManager/task-assignee nhưng các điều kiện đó không áp dụng được ở gate CẤP
+    COLLECTION như Thùng Rác).
+- Thêm 2 entry vào `SENSITIVE_TRASH_COLLECTION_CHECKS`: `hrFeedback: nhanSuManage`,
+  `hrProcesses: hrViewAll || hrOnboardingManage || hrOffboardingManage` — tự động áp dụng cho CẢ 3 hành
+  động (xem/khôi phục/xoá vĩnh viễn) vì cả 3 route đều gọi chung `assertSensitiveTrashCollectionAllowed()`.
+
+**Test:** `tests/test-trash-sensitive-collections.js` (file test CŨ của đợt 9/2026 — mở rộng thêm 2
+collection mới + cập nhật số liệu "ADMIN_HR thấy TẤT CẢ" từ 6 lên 8 mục, theo đúng CLAUDE.md "mở rộng
+test có sẵn cho đúng phạm vi, không tạo file gần trùng lặp"). Xác nhận FAIL trên code CŨ (`git stash --
+routes/trash.js`, 7/32 scenario FAIL đúng các "LỖI ĐÃ VÁ" mới), PASS trên code đã vá (32/32). Regression:
+`test-audit-hethong-cluster-server.js` (19/19), `test-audit-hethong-round2-server.js` (18/18),
+`test-audit-round3-lowfixes.js` (23/23), `test-catalogrename-positiontypes-systemlog.js` (8/8) — toàn
+bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.91 (2026-11): [TB] Re-audit lần 5 — mục 4: Admin vẫn tự duyệt ở Công Việc + leo thang ticket IT
 

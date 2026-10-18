@@ -30,11 +30,25 @@ function assertAdmin(user) {
 // đó trong response. attendanceRecords CỐ Ý không có mặt trong map dưới đây — canViewAttendanceRecordsForUser()
 // (lib/recordViewScope.js) bản thân đã cho phép `admin` xem (không thuộc nhóm "admin không tự bypass"
 // như 4 collection còn lại), nên assertAdmin() ở trên là ĐỦ, giữ nguyên hành vi cũ cho collection này.
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "Admin xoá+đọc lại dữ liệu riêng tư HR qua Thùng Rác"):
+// 2 collection sau CÙNG LỚP LỖI với 4 collection ở trên nhưng bị bỏ sót khỏi map này — dữ liệu SỐNG của
+// cả 2 đã khoá đúng, KHÔNG còn admin tự bypass (quyết định 11/2026 "mở rộng Nhân Sự"), nhưng Thùng Rác
+// (chỉ gác đúng 1 lớp `admin`) vẫn cho 1 tài khoản CHỈ có cờ admin (không có nhanSuManage/hrViewAll/
+// hrOnboardingManage/hrOffboardingManage) xoá rồi đọc lại NGUYÊN payload qua GET /api/trash:
+//   - hrFeedback ("HCRC Đồng Hành"): canViewHrFeedback() (lib/recordViewScope.js) CHỈ cho nhanSuManage
+//     (hoặc chính người hỏi) xem — đây là dữ liệu "RIÊNG TƯ theo đúng nghĩa hẹp nhất trong toàn hệ
+//     thống" (câu hỏi/tâm sự cá nhân gửi riêng cho Nhân Sự, không có nhánh phòng ban nào khác thấy).
+//   - hrProcesses (Onboarding/Offboarding): canViewHrProcess() CHỈ cho hrViewAll (hoặc
+//     hrOnboardingManage/hrOffboardingManage đúng processType, hoặc creator/directManager/task-assignee
+//     — không áp dụng được ở gate CẤP COLLECTION như Thùng Rác) xem TOÀN BỘ — chứa CCCD/SĐT/email/lý do
+//     nghỉ việc của nhân viên.
 const SENSITIVE_TRASH_COLLECTION_CHECKS = {
   laborContracts: (user) => !!user.perms?.hrContractManage,
   employeeProfiles: (user) => !!(user.perms?.hrProfileManage || user.perms?.hrProfileFullView || user.perms?.hrProfileEdit),
   payslips: (user) => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove),
-  payrollPeriods: (user) => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove)
+  payrollPeriods: (user) => !!(user.perms?.hrPayrollManage || user.perms?.hrPayrollApprove),
+  hrFeedback: (user) => !!user.perms?.nhanSuManage,
+  hrProcesses: (user) => !!(user.perms?.hrViewAll || user.perms?.hrOnboardingManage || user.perms?.hrOffboardingManage)
 };
 
 // Gọi SAU assertAdmin() — chỉ xiết THÊM cho 5 collection nhạy cảm, các collection khác giữ nguyên
@@ -42,7 +56,7 @@ const SENSITIVE_TRASH_COLLECTION_CHECKS = {
 function assertSensitiveTrashCollectionAllowed(user, collection) {
   const check = SENSITIVE_TRASH_COLLECTION_CHECKS[collection];
   if (check && !check(user)) {
-    throw new HttpError(403, 'Bạn không có quyền quản lý riêng của dữ liệu nhân sự này (hrContractManage/hrProfileManage/hrPayrollManage/hrAttendanceManage) nên không được thao tác với mục này trong Thùng Rác');
+    throw new HttpError(403, 'Bạn không có quyền quản lý riêng của dữ liệu nhân sự này (hrContractManage/hrProfileManage/hrPayrollManage/nhanSuManage/hrViewAll/hrOnboardingManage/hrOffboardingManage) nên không được thao tác với mục này trong Thùng Rác');
   }
 }
 
