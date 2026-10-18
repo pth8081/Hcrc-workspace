@@ -10,9 +10,10 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
-const { getTrashItems, getTrashItemCollection, restoreTrashItemWithFamily, permanentlyDeleteTrashItem } = require('../lib/recordStore');
+const { getTrashItems, getTrashItemCollection, restoreTrashItemWithFamily, permanentlyDeleteTrashItem, getAllForCollection, withLockedRecordForCollection } = require('../lib/recordStore');
 const { consumeApprovalGrant } = require('../lib/approvalAuth');
 const { insertSystemLog } = require('../lib/systemLogStore');
+const recordActions = require('../lib/recordActions');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -108,6 +109,20 @@ router.post('/:id/restore', async (req, res) => {
     const collection = await getTrashItemCollection(trashId);
     if (collection) assertSensitiveTrashCollectionAllowed(req.freshUser, collection);
     const result = await restoreTrashItemWithFamily(trashId);
+    // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Thùng Rác khôi phục không đồng bộ lại liên kết chéo module"):
+    // khôi phục 1 quy trình Nhân Sự (hrProcesses) không đồng bộ lại linkedTicketId trên các task với
+    // itSupportTickets — xem chú thích đầy đủ tại resyncHrProcessLinkedTicketsOnRestore() (lib/
+    // recordActions.js). Gỡ ngay sau khi khôi phục thành công, best-effort (lỗi ở bước này không làm
+    // hỏng lượt khôi phục đã commit — chỉ log lại, cùng tinh thần mọi cleanup chéo collection khác).
+    if (result.collection === 'hrProcesses' && result.item) {
+      try {
+        const tickets = await getAllForCollection('itSupportTickets');
+        result.item = await withLockedRecordForCollection('hrProcesses', result.item.id, (item) =>
+          recordActions.resyncHrProcessLinkedTicketsOnRestore(item, tickets));
+      } catch (e) {
+        console.error(`${trashId}/restore: lỗi đồng bộ lại linkedTicketId sau khôi phục hrProcesses:`, e.message);
+      }
+    }
     // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Thấp): khôi phục 1 hồ sơ từ
     // Thùng Rác KHÔNG để lại dấu vết nào ở Nhật ký hệ thống (client cũng không tự ghi) — 1 hồ sơ đã bị
     // xoá bỗng xuất hiện trở lại mà không ai truy được ai khôi phục, lúc nào. Ghi log SERVER-SIDE ngay

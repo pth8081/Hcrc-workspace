@@ -6945,6 +6945,42 @@ function clearLinkedTicketOnHrProcessTask(user, item, ticket) {
   return item;
 }
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 5, #142 "Thùng Rác khôi phục không đồng bộ lại liên kết chéo
+// module"): khôi phục 1 quy trình Nhân Sự (hrProcesses) từ Thùng Rác không đồng bộ lại liên kết chéo
+// với itSupportTickets. Chiều "huỷ ticket -> gỡ linkedTicketId trên task" đã vá ở v27.1
+// (clearLinkedTicketOnHrProcessTask() ngay trên) nhưng chiều NGƯỢC "huỷ/xoá QUY TRÌNH -> huỷ ticket
+// con" (closeItTicketOnHrProcessClosed()/cleanupItTicketsOnHrProcessClosed(), routes/records.js, re-
+// audit lần 3) CỐ Ý KHÔNG đồng thời gỡ linkedTicketId trên task — lúc đó quy trình chuyển CANCELLED
+// hoặc bị XOÁ HẲN, không ai còn tác động lên task để cần tạo ticket mới nên gỡ linkedTicketId lúc đó là
+// vô nghĩa. NHƯNG nếu quy trình sau đó được KHÔI PHỤC từ Thùng Rác (chỉ áp dụng nhánh XOÁ HẲN — nhánh
+// CANCELLED không đi qua Thùng Rác), nó quay lại ĐÚNG trạng thái trước khi xoá (thường vẫn IN_PROGRESS)
+// nhưng task vẫn giữ linkedTicketId trỏ tới ticket ĐÃ CANCELLED — createItTicketForHrTask() chặn cứng
+// `task.linkedTicketId != null`, task kẹt vĩnh viễn không tạo lại được ticket mới dù ticket cũ đã chết
+// từ lâu. Gọi NGAY SAU khi khôi phục thành công (routes/trash.js) — gỡ linkedTicketId của MỌI task mà
+// ticket liên kết KHÔNG CÒN TỒN TẠI hoặc đã CANCELLED (giữ nguyên nếu ticket vẫn TODO/DOING/DONE — chỉ
+// những task đó mới thật sự "kẹt"). Hàm THUẦN, idempotent.
+function resyncHrProcessLinkedTicketsOnRestore(item, ticketList) {
+  const ticketById = new Map((ticketList || []).map(t => [t.id, t]));
+  let changed = false;
+  for (const task of (item.tasks || [])) {
+    if (task.linkedTicketId == null) continue;
+    const ticket = ticketById.get(task.linkedTicketId);
+    if (!ticket || ticket.status === 'CANCELLED') {
+      task.linkedTicketId = null;
+      changed = true;
+    }
+  }
+  if (changed) {
+    item.history = item.history || [];
+    item.history.push({
+      action: 'IT_TICKET_LINKS_RESYNCED',
+      detail: 'Khôi phục từ Thùng Rác: gỡ liên kết ticket Hỗ Trợ IT đã huỷ/không còn tồn tại trên các việc cần làm',
+      actionBy: 'system', actionByName: 'Hệ Thống (Tự Động)', actionAt: nowVN()
+    });
+  }
+  return item;
+}
+
 // ===================== ĐỒNG PHỤC (module con của Hành Chính) =====================
 // Hành Chính (uniformManage) tạo "Kỳ Cấp Phát" (uniformPeriods, đi qua engine chung ở
 // lib/createValidation.js) phân bổ đồng phục xuống 1 hoặc nhiều siêu thị. Mỗi siêu thị có 1 Giám Đốc
@@ -8836,6 +8872,7 @@ module.exports = {
   clearLinkedTicketOnHrProcessTask,
   closeItTicketOnHrProcessClosed,
   closeItTicketOnHrTaskSettled,
+  resyncHrProcessLinkedTicketsOnRestore,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod, editUniformPeriod,
