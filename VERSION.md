@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**26.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.62 (2026-11): [Cao] Re-audit lần 4 — mục 2: admin vẫn tự duyệt được ở 3 chỗ (Công & Phép/Đổi Ca/Phòng Họp)
+
+Mục thứ 2 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] 3 hàm gác quyền duyệt RIÊNG của module tự phục vụ vẫn cho admin/quyền-phẳng `return true`
+  NGAY, không so sánh với người tạo hồ sơ — ngược hẳn quyết định "chặn admin tự duyệt ở TẤT CẢ module,
+  không có ngoại lệ" (v26.50).** Sót vì cả 3 hàm KHÔNG nằm trong "họ"
+  `assertNotSelfDeciding*`/`assertNotSelfHandling*` (lib/workflowEngine.js/lib/recordActions.js) bị
+  quét theo tên ở đợt đó:
+  1. `canApproveLeaveRequest()` (lib/attendance.js) — nhánh `admin` giờ thêm điều kiện
+     `approver.username !== employeeProfileUsername`, cùng khuôn nhánh `hrAttendanceManage` ngay cạnh
+     (đã đúng từ trước).
+  2. `assertShiftSwapApprover()` (routes/records.js) — thêm tham số `requesterUsername` (= `item.creator`),
+     chặn NGAY TỪ ĐẦU hàm bất kể cấp quyền nào nếu `freshUser.username === requesterUsername`. Áp dụng
+     cho CẢ `approve` lẫn `reject` (cùng khuôn `assertNotSelfDecidingBudgetLine()` chặn cả 2 hướng quyết định).
+  3. `canDecideMeeting()` (lib/recordActions.js) — thêm `if (item.creator && user.username === item.creator) return false;`
+     trước nhánh admin/`meetingApprove`. Khác action `'cancel'` ngay cạnh (routes/meetingActions.js) vốn
+     ĐÃ có nhánh kiểm `creator` cho người KHÔNG có quyền — `'approve'` trước đây hoàn toàn không kiểm
+     `creator` cho AI, kể cả admin.
+
+**Test:** file mới `tests/test-selfapprove-leave-shiftswap-meeting.js` (12 scenario — pure-unit cho
+`canApproveLeaveRequest()`/`canDecideMeeting()`, HTTP thật qua `routes/records.js` cho
+`assertShiftSwapApprover()`). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash -- lib/attendance.js
+routes/records.js lib/recordActions.js`, 6/12 passed, đúng 6 scenario "LỖI ĐÃ VÁ" FAIL), PASS trên code
+đã vá (12/12). Chạy lại bộ test Công & Phép/Phòng Họp liên quan: `test-attendance-leave.js` (72/72),
+`test-meeting-dept-workflow.js` (9/9), `test-meeting-license-no-approver-block.js` (toàn bộ pass),
+`test-budget-meeting-dept-workflow-ui.js` (7/7), `test-audit-round4-formapproval.js` (20/20) — tất cả
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.61 (2026-11): [Cao] Re-audit lần 4 — mục 1: race condition trùng CCCD khi tạo Onboarding đồng thời
 
