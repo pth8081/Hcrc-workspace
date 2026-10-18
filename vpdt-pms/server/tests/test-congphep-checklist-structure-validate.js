@@ -131,6 +131,19 @@ test('key KHÔNG thuộc PLAIN_ARRAY_KEYS (VD depts) -> assertPlainArrayShape kh
   assertPlainArrayShape('depts', { not: 'an array, nhưng depts không nằm trong danh sách này' });
 });
 
+// sensitiveKeywords (re-audit lần 6, mức TB — "sensitiveKeywords thiếu validate cấu trúc"): CÙNG khuôn
+// mảng-object như deptGroups/hrTaskTemplates ở trên, tái dùng PLAIN_OBJECT_ARRAY_KEYS/
+// assertPlainObjectArrayShape() có sẵn, không cần hàm mới.
+test('sensitiveKeywords hợp lệ (mảng object) -> không throw', () => {
+  assertPlainObjectArrayShape('sensitiveKeywords', [{ term: 'từ nhạy cảm', category: 'Khác' }]);
+});
+test('LỖI ĐÃ VÁ: sensitiveKeywords là OBJECT (truthy) -> throw 400 (trước đây crash 500 ở scanCommentForSensitiveContent() for...of)', () => {
+  expectThrows400(() => assertPlainObjectArrayShape('sensitiveKeywords', { 0: { term: 'x' } }));
+});
+test('sensitiveKeywords có 1 phần tử KHÔNG phải object -> throw 400', () => {
+  expectThrows400(() => assertPlainObjectArrayShape('sensitiveKeywords', ['hack']));
+});
+
 console.log(`\n${passed}/${passed + failed} scenario(s) passed (Phần A).`);
 
 // ===== PHẦN B: HTTP thật qua POST /api/data/:key =====
@@ -148,7 +161,7 @@ const ADMIN = { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ph�
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }], shiftTemplates: [], publicHolidays: [], attendanceClockApiKeys: [], hrTaskTemplates: [], attendanceHoConfig: { startTime: '08:00' }, deptGroups: [], vppExcludedJobTitles: [] };
+  APP_DATA = { users: [{ ...ADMIN }], shiftTemplates: [], publicHolidays: [], attendanceClockApiKeys: [], hrTaskTemplates: [], attendanceHoConfig: { startTime: '08:00' }, deptGroups: [], vppExcludedJobTitles: [], sensitiveKeywords: [] };
 }
 resetData();
 
@@ -291,6 +304,19 @@ async function main() {
       const res = await api('POST', '/api/data/vppExcludedJobTitles', ['Bảo vệ', 'Lái xe']);
       assertEqual(res.status, 200, 'phải lưu được');
       assertEqual(APP_DATA.vppExcludedJobTitles.length, 2, 'phải lưu đúng 2 chức danh');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/sensitiveKeywords với OBJECT -> 400 (trước đây crash 500 ở scanCommentForSensitiveContent() for...of khi có bình luận Truyền Thông Nội Bộ)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/sensitiveKeywords', { 0: { term: 'x', category: 'Khác' } });
+      assertEqual(res.status, 400, `phải trả 400 — nhận status=${res.status}`);
+      assertEqual(JSON.stringify(APP_DATA.sensitiveKeywords), JSON.stringify([]), 'dữ liệu cũ không bị ghi đè khi request bị từ chối');
+    });
+    await run.run('POST /api/data/sensitiveKeywords với mảng hợp lệ -> 200, lưu đúng', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/sensitiveKeywords', [{ term: 'từ nhạy cảm', category: 'Khác' }]);
+      assertEqual(res.status, 200, 'phải lưu được');
+      assertEqual(APP_DATA.sensitiveKeywords.length, 1, 'phải lưu đúng 1 từ khoá');
     });
 
     run.summary();
