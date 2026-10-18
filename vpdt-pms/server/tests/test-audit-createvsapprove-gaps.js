@@ -119,13 +119,22 @@ function test(name, fn) {
     assert.strictEqual(result.pendingExtension, null);
   });
 
-  test('#4 Công Việc: admin vẫn tự duyệt được yêu cầu gia hạn dù tự giao việc cho bản thân (đặc quyền nhất quán)', () => {
+  // ĐỔI QUYẾT ĐỊNH (re-audit lần 5, mức Trung Bình — "Admin vẫn tự duyệt ở Công Việc"): scenario này
+  // TRƯỚC ĐÂY khẳng định admin CÓ "đặc quyền nhất quán" tự duyệt được yêu cầu do chính mình gửi khi tự
+  // giao việc cho bản thân — đây CHÍNH LÀ lỗ hổng mà re-audit lần 5 phát hiện (module Công Việc bị bỏ
+  // sót khi quyết định "Chặn admin tự duyệt ở TẤT CẢ module, không có ngoại lệ" áp cho mọi
+  // assertNotSelfDecidingXxx() khác). Sửa lại đúng theo CLAUDE.md "sửa fixture cho đúng chứ không bỏ
+  // qua hay nới lỏng chặn mới" — assertion đổi từ "vẫn duyệt được" sang "giờ bị chặn 403", cùng khuôn
+  // 2 scenario #4 ngay trên.
+  test('#4 Công Việc: LỖI ĐÃ VÁ — admin KHÔNG còn tự duyệt được yêu cầu gia hạn khi tự giao việc cho bản thân (đã bỏ admin-bypass)', () => {
     const task = {
       assignedBy: 'admin1', assignedTo: 'admin1', status: 'IN_PROGRESS',
       pendingExtension: { newDeadline: '2026-12-31', reason: 'bận', requestedBy: 'admin1', requestedByName: 'Admin' }
     };
-    const result = recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task);
-    assert.strictEqual(result.deadline, '2026-12-31');
+    assert.throws(
+      () => recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task),
+      /403|tự duyệt/
+    );
   });
 }
 
