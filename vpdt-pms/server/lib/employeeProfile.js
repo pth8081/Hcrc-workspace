@@ -374,6 +374,42 @@ function cascadeUsernameChangesToProfiles(profiles, renamed, deletedUsernames, a
   return changedCount;
 }
 
+// cascadeUsernameChangesToManagerUsername() — LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): "managerUsername"
+// (DB.users[].managerUsername — quản lý trực tiếp, đọc/ghi bởi isManagerOf() ở lib/recordViewScope.js,
+// hasDirectReports()/assignHrSuccessor() ở lib/recordActions.js, computeManagerUsernameUpdates() ở
+// lib/orgChart.js) tham chiếu TRỰC TIẾP username của 1 tài khoản KHÁC — y hệt employeeProfile.username
+// ở cascadeUsernameChangesToProfiles() ngay trên, nhưng CHƯA BAO GIỜ được cascade khi tài khoản đó bị
+// ĐỔI TÊN hoặc XOÁ VĨNH VIỄN. Đổi tên 1 trưởng phòng (sửa #uUsername, module-admin-userstaging.js —
+// KHÔNG bị khoá readonly) để lại managerUsername "treo" ở TOÀN BỘ nhân viên cấp dưới — deptViewScopeConfig
+// managerCanView (lib/recordViewScope.js), assignHrSuccessor()/hasDirectReports() đều âm thầm mất tác
+// dụng cho các cấp dưới đó (isManagerOf() không còn khớp được username cũ với BẤT KỲ ai trong DB.users),
+// không có cảnh báo nào, cho tới khi admin tự phát hiện và sửa tay lại từng người. Xoá vĩnh viễn 1
+// trưởng phòng còn tệ hơn: managerUsername trỏ tới username KHÔNG CÒN TỒN TẠI, "mồ côi" vĩnh viễn.
+//
+// KHÁC cascadeUsernameChangesToProfiles() (sửa 1 collection RIÊNG, employeeProfiles, cần
+// withLockedAppDataValue riêng) — managerUsername nằm NGAY TRONG CHÍNH mảng "users" đang được lưu, nên
+// hàm này sửa TRỰC TIẾP lên mảng đó (gọi TRƯỚC khi ghi xuống CSDL ở routes/data.js, không cần khoá
+// riêng — đã nằm trong đúng 1 lượt ghi "users" duy nhất). Xoá hẳn (null) cho trường hợp bị XOÁ vĩnh
+// viễn — cùng nguyên tắc "gỡ liên kết, không suy đoán bừa" như cascadeUsernameChangesToProfiles()
+// (admin/orgChart tự gán lại quản lý mới khi cần, không tự động suy ra ai là quản lý thay thế).
+function cascadeUsernameChangesToManagerUsername(users, renamed, deletedUsernames) {
+  const arr = Array.isArray(users) ? users : [];
+  let changedCount = 0;
+  const renameMap = new Map((renamed || []).map(r => [r.oldValue, r.newValue]));
+  const deletedSet = new Set(deletedUsernames || []);
+  for (const u of arr) {
+    if (!u || !u.managerUsername) continue;
+    if (renameMap.has(u.managerUsername)) {
+      u.managerUsername = renameMap.get(u.managerUsername);
+      changedCount++;
+    } else if (deletedSet.has(u.managerUsername)) {
+      u.managerUsername = null;
+      changedCount++;
+    }
+  }
+  return changedCount;
+}
+
 function defaultProfile(employeeCode) {
   return {
     employeeCode,
@@ -1787,7 +1823,7 @@ module.exports = {
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, findAutoLinkableAccount, autoLinkUnlinkedProfiles, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
-  diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles,
+  diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles, cascadeUsernameChangesToManagerUsername,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,

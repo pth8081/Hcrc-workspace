@@ -17,7 +17,7 @@ const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBe
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
-const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles } = require('../lib/employeeProfile');
+const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles, cascadeUsernameChangesToManagerUsername } = require('../lib/employeeProfile');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
@@ -867,6 +867,17 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
     }
     seenIds.set(u.id, true);
   }
+
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): managerUsername (quản lý trực tiếp) tham chiếu TRỰC TIẾP
+  // username của 1 tài khoản KHÁC NGAY TRONG mảng "users" này — chưa từng được cascade khi tài khoản đó
+  // bị đổi tên/xoá (xem chú thích đầy đủ tại cascadeUsernameChangesToManagerUsername(),
+  // lib/employeeProfile.js). PHẢI chạy TRƯỚC assertNoManagerCycle() ngay dưới: nếu không, đổi tên 1
+  // quản lý trong CÙNG lượt lưu sẽ bị assertNoManagerCycle() từ chối NHẦM ("quản lý trực tiếp không tồn
+  // tại") vì managerUsername của cấp dưới vẫn còn trỏ tới TÊN CŨ lúc hàm đó kiểm tra — "existing" (bản
+  // ghi CŨ, đã đọc ở đầu hàm này) + "prepared" (bản ghi MỚI, đã chuẩn hoá username ở trên) là đúng cặp
+  // cũ/mới cần so để tính renamed/deletedUsernames, không cần đọc lại DB.
+  const { renamed: managerRenamed, deletedUsernames: managerDeleted } = diffUserRenamesAndDeletions(existing, prepared);
+  cascadeUsernameChangesToManagerUsername(prepared, managerRenamed, managerDeleted);
 
   assertAtLeastOneAdmin(prepared);
   assertNoManagerCycle(prepared);
