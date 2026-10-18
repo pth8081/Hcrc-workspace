@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.14 (2026-11): [TB] Re-audit lần 6 — mục 6/21: Tính Lương Tự Động bỏ sót nhân viên ON_LEAVE
+
+Mục thứ sáu (6/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `POST /api/payroll/periods/:id/calculate` (`routes/payroll.js`) trước đây chỉ gom
+nhân viên vào vòng tính lương qua 2 nhánh: `activeProfiles` (status === `'ACTIVE'`) và
+`offboardedMidPeriodProfiles` (status === `'INACTIVE'` + Offboarding hoàn tất giữa kỳ, vá ở đợt trước).
+Nhân viên ở status `'ON_LEAVE'` ("Nghỉ dài hạn" — HR đổi tay qua
+`assertValidManualStatusTransition()`, `lib/employeeProfile.js`, VẪN LÀ nhân sự công ty THẬT chỉ tạm
+không đi làm, cùng nhóm "activeLike" với ACTIVE ở `summarizeHeadcount()`) không khớp CẢ 2 nhánh — vòng
+`for (const profile of [...activeProfiles, ...offboardedMidPeriodProfiles])` không bao giờ chạm tới họ,
+nên họ biến mất HOÀN TOÀN khỏi CẢ kết quả tính lương LẪN `skippedList` — không ai biết kỳ lương đó
+"quên" tính cho họ (khác các trường hợp bị skip khác, vốn luôn có 1 dòng lý do rõ ràng trong
+`skippedList` để kế toán biết và xử lý).
+
+**Vá:** đổi `activeProfiles` thành lọc `status === 'ACTIVE' || status === 'ON_LEAVE'`.
+`resolveWorkModelForEmployeeCode()` (`lib/attendance.js`) đã CỐ Ý không chặn `ON_LEAVE` từ trước (chỉ
+chặn `INACTIVE`, xem chú thích tại hàm đó) nên việc đưa `ON_LEAVE` vào vòng tính là an toàn:
+`computeEmployeePayslip()` tính dựa trên `attendanceRecords` thật trong kỳ đúng như mọi nhân viên
+ACTIVE khác (nếu có bản ghi `LEAVE_UNPAID` sẽ tự trừ đúng như thiết kế sẵn có); trường hợp hiếm hồ sơ
+chưa liên kết tài khoản sẽ tự rơi vào `skippedList` với lý do rõ ràng — không còn im lặng biến mất.
+
+**Test:** mở rộng `tests/test-payroll.js` — thêm 1 scenario mới (NV009, status `ON_LEAVE`, có tài
+khoản + hợp đồng ACTIVE hợp lệ, cùng khuôn scenario LUONG-07/08 ngay trên): xác nhận
+`POST .../calculate` trả 200, NV009 KHÔNG nằm trong `skipped`, VÀ có payslip THẬT với `BASIC_SALARY`
+đúng theo hợp đồng — không chỉ "không crash" mà phải ra kết quả đúng như nhân viên ACTIVE. Xác nhận
+FAIL trên code CŨ (`git stash -- routes/payroll.js`, assertion "NV009 phải có payslip" thất bại đúng
+như mô tả — biến mất khỏi cả 2 nơi), PASS trên code đã vá (29/29 toàn file). Regression:
+`test-audit-nhansu-congphep-luong.js` (21/21), `test-purchasing-unsupported-calcbasis-termtype-
+periodtype.js` (15/15) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.13 (2026-11): [TB] Re-audit lần 6 — mục 5/21: assertShiftSwapApprover chặn sai phía
 
