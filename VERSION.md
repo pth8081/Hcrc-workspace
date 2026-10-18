@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**26.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.39 (2026-11): [NGHIÊM TRỌNG] Vá lỗi bấm 1 lần chạy 2 lần (double-dispatch) toàn bộ nút data-op trong Vận Hành
+
+Phát hiện lúc điều tra `tests/test-collapse-operation-forms.js` (mục mức Thấp "nghi do sandbox" còn lại
+trong đợt rà soát trước go-live) — hoá ra KHÔNG phải lỗi môi trường test, mà là lỗi thật trong code, mức
+độ nghiêm trọng cao hơn hẳn phân loại "Thấp" ban đầu vì ảnh hưởng tới số liệu nghiệp vụ thật.
+
+- **Nguyên nhân gốc**: `#vanHanhSection` (Vận Hành) từ đợt vá "Chi tiết" (10/2026, v24.x) được gán CẢ
+  `bindCspDelegation('vanHanhSection')` (core.js — dispatch chung qua `window[fnName]`) LẪN
+  `bindOperationDelegation('vanHanhSection')` (module-vanhanh.js — registry riêng `OP_CLICK_ACTIONS`/
+  `OP_CHANGE_ACTIONS`/`OP_INPUT_ACTIONS`/`OP_SUBMIT_ACTIONS`) — 2 hệ thống delegation ĐỘC LẬP cùng gắn
+  listener `click`/`change`/`input`/`submit` lên ĐÚNG 1 gốc DOM. Với bất kỳ `data-op` nào có mặt ở CẢ 2
+  registry (VD `addOperationOrderItemRow` — và vì các hàm top-level trong `module-vanhanh.js` cũng chính
+  là `window[fnName]`, điều này đúng cho GẦN NHƯ MỌI entry trong `OP_CLICK_ACTIONS`), cả 2 listener đều
+  tìm thấy hàm và đều gọi — chạy 2 LẦN mỗi cú bấm. Khoá chống double-submit `opInFlight` không chặn được
+  vì hầu hết hành động này là hàm ĐỒNG BỘ (không trả Promise) nên `runCspOp()` không có gì để gắn cờ
+  TRƯỚC khi listener thứ 2 (đăng ký sau) kiểm tra.
+- **Biểu hiện thật đã xác nhận bằng demo (Playwright thật, không chỉ suy luận)**: bấm "➕ Thêm Hạng Mục"
+  ở form "Tạo Đơn Hàng" 1 LẦN → thêm 2 dòng hạng mục trống (1→3→5 sau 2 lần bấm) — người dùng tạo đơn hàng
+  thật trên production sẽ luôn có dòng hạng mục trống dư thừa lẫn trong danh sách mà không biết, ảnh
+  hưởng trực tiếp tới số liệu đơn hàng/giá trị PO. Cùng lớp lỗi nhiều khả năng ảnh hưởng tới các hành động
+  đồng bộ khác trong `OP_CLICK_ACTIONS`/`OP_CHANGE_ACTIONS`/`OP_INPUT_ACTIONS` (VD `removeOperationOrderItemRow`,
+  `setVanHanhSubTab`...) — tất cả nằm trong đúng 1 gốc `#vanHanhSection` bị double-bind.
+- **Fix**: bỏ dòng `bindCspDelegation('vanHanhSection')` (core.js) — thay vào đó, `bindOperationDelegation()`
+  (module-vanhanh.js) tự fallback sang đúng `cspDispatchOp()` chung khi registry riêng không có entry
+  (giữ nguyên tác dụng gốc của dòng cũ — "bắt mọi nút data-op mới thêm mà quên đăng ký vào OP_*_ACTIONS",
+  lý do nó từng được thêm để vá nút "Chi tiết" Phê Duyệt Giá Bán Buôn) nhưng không còn double-dispatch.
+  Nhân tiện fix này cũng tự bảo vệ luôn 10 modal con của Vận Hành (`operationEstimateModal`/
+  `operationWorkItemModal`/...) trước đây CHƯA từng có lớp dự phòng tương tự.
+
+Test: `test-collapse-operation-forms.js` (10/10, trước đó 9/10 FAIL đúng kịch bản 3 dòng hạng mục —
+xác nhận bằng `git stash`: fail 9/10 trên code cũ, pass 10/10 trên code đã vá) + toàn bộ 76 file test liên
+quan Vận Hành/Phê Duyệt Giá (`test-collapse-*.js`, `test-itprice-*.js`, `test-operation-*.js`,
+`test-vanhanh-itprice-chitiet-csp.js` — xác nhận nút "Chi tiết" vẫn hoạt động đúng sau khi đổi cách vá) +
+CSP self-check (không có `onclick=`/`style="..."` tĩnh/`eval`/`new Function` mới) + `test-lazy-load-all-tabs.js`
+(46/46) — không hồi quy. 3 file lỗi không liên quan (`demo-itprice-context-buttons.js`,
+`demo-operation-order-pdf-autofill.js`, `test-operation-order-multifile-batch.js`) đã xác nhận cũng FAIL
+y hệt trên code CŨ (file PDF mẫu từ phiên trước không còn/lỗi môi trường sandbox khác, không liên quan).
+
+**Deploy-impact**: thuần client (`public/js/core.js` + `public/js/module-vanhanh.js`) — KHÔNG đổi
+`schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.38 (2026-11): [Thấp] Vá race condition "Loại Giấy Phép" tự học bị đè bởi nhịp poll Approval Hub
 

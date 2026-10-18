@@ -12801,7 +12801,15 @@ bindCspDelegation('muaHangSection');
 // bindCspDelegation() từ lúc tách module Vận Hành ra fragment riêng (v23.10) — hệ quả: MỌI nút data-op
 // trong TOÀN BỘ tab Vận Hành đều không có listener nào lắng nghe, không riêng nút Chi tiết. Đã xác minh
 // bằng demo thật (tests/demo-vanhanh-itprice-chitiet-unresponsive.js): chỉ cần thêm đúng dòng này là đủ.
-bindCspDelegation('vanHanhSection');
+//
+// LỖI MỚI do chính dòng trên gây ra, VỪA VÁ (rà soát trước go-live, 11/2026, qua
+// test-collapse-operation-forms.js — bấm "➕ Thêm Hạng Mục" 1 lần nhưng thêm 2 dòng): bindCspDelegation()
+// ở đây và bindOperationDelegation() (module-vanhanh.js, registry OP_CLICK_ACTIONS riêng của Vận Hành)
+// CÙNG gắn listener 'click'/'change'/'input'/'submit' lên ĐÚNG 1 gốc #vanHanhSection -> mọi data-op có
+// mặt ở CẢ 2 nơi (VD addOperationOrderItemRow — hàm đồng bộ, opInFlight không khoá kịp) bị chạy 2 LẦN.
+// Đã bỏ dòng bindCspDelegation('vanHanhSection') này — bindOperationDelegation() giờ tự fallback sang
+// đúng cspDispatchOp() chung khi registry riêng không có entry (xem chú thích đầy đủ tại
+// bindOperationDelegation(), module-vanhanh.js), giữ nguyên tác dụng của dòng cũ mà không double-dispatch.
 bindCspDelegation('hacLeaveRequestModal');
 bindCspDelegation('hacSwapRequestModal');
 bindCspDelegation('hacRosterModal');

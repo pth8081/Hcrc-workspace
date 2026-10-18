@@ -4181,6 +4181,22 @@ const OP_SUBMIT_ACTIONS = {
 // MODULE_LOAD_GROUPS nên chắc chắn đã có sẵn) nhận (el, fn, args) tổng quát, không phụ thuộc cách fn
 // được tra cứu — gọi lại y hệt nó thay vì tự fn(...) là đủ, giữ nguyên đúng args cũ (el,e)/(e) từng
 // hàm đang nhận, không đổi chữ ký bất kỳ hàm OP_*_ACTIONS nào.
+// LỖI THẬT phát hiện lúc rà soát chuyên sâu trước go-live (11/2026, qua test-collapse-operation-forms.js
+// — bấm "➕ Thêm Hạng Mục" 1 LẦN nhưng thêm 2 dòng): #vanHanhSection từng được gán CẢ bindCspDelegation()
+// (core.js, dispatch chung qua window[fnName]) LẪN bindOperationDelegation() này (registry riêng
+// OP_CLICK_ACTIONS/OP_CHANGE_ACTIONS/OP_INPUT_ACTIONS/OP_SUBMIT_ACTIONS) — 2 listener 'click' ĐỘC LẬP
+// trên CÙNG 1 gốc DOM, cả 2 đều khớp `[data-op="addOperationOrderItemRow"]` và đều gọi được hàm (vì hàm
+// top-level trong file này cũng chính là window['addOperationOrderItemRow']) -> chạy 2 LẦN mỗi cú bấm.
+// Khoá opInFlight không chặn được vì addOperationOrderItemRow() là hàm ĐỒNG BỘ (không trả Promise) nên
+// runCspOp() không có gì để gắn cờ trước khi listener thứ 2 (đăng ký sau, bindOperationDelegation) kiểm
+// tra. Đúng loại lỗi đã tự cảnh báo ở chú thích ngay phía trên OP_CLICK_ACTIONS ("gắn lại nhiều lần -> 1
+// cú bấm chạy hành động nhiều lần") — chỉ là xảy ra giữa 2 HỆ THỐNG delegation khác nhau, không phải gắn
+// lại cùng 1 hệ thống. Fix: KHÔNG còn gọi bindCspDelegation('vanHanhSection') nữa (xem core.js, đã xoá
+// dòng đó) — thay vào đó, mỗi nhánh dưới đây tự FALLBACK sang đúng cspDispatchOp() chung (core.js) khi
+// registry riêng của module này không có entry, giữ nguyên tác dụng "bắt mọi nút data-op mới thêm mà
+// quên đăng ký vào OP_*_ACTIONS" (lý do bindCspDelegation('vanHanhSection') từng được thêm — xem lịch sử
+// comment cũ) nhưng không double-dispatch, và nhân tiện cũng bảo vệ luôn 10 modal con
+// (operationEstimateModal/operationWorkItemModal/...) trước đây CHƯA từng có lớp dự phòng này.
 function bindOperationDelegation(rootId) {
   const root = document.getElementById(rootId);
   if (!root) return;
@@ -4189,28 +4205,46 @@ function bindOperationDelegation(rootId) {
     if (!el || !root.contains(el)) return;
     if (el.dataset.opInFlight === '1') return;
     const fn = OP_CLICK_ACTIONS[el.dataset.op];
-    if (fn) runCspOp(el, fn, [el, e]);
+    if (fn) { runCspOp(el, fn, [el, e]); return; }
+    cspDispatchOp(el, e, 'data-op');
   });
   root.addEventListener('change', (e) => {
     const el = e.target.closest('[data-op-change]');
     if (!el || !root.contains(el)) return;
     if (el.dataset.opInFlight === '1') return;
     const fn = OP_CHANGE_ACTIONS[el.dataset.opChange];
-    if (fn) runCspOp(el, fn, [el, e]);
+    if (fn) { runCspOp(el, fn, [el, e]); return; }
+    cspDispatchOp(el, e, 'data-op-change');
   });
   root.addEventListener('input', (e) => {
     const el = e.target.closest('[data-op-input]');
     if (!el || !root.contains(el)) return;
     if (el.dataset.opInFlight === '1') return;
     const fn = OP_INPUT_ACTIONS[el.dataset.opInput];
-    if (fn) runCspOp(el, fn, [el, e]);
+    if (fn) { runCspOp(el, fn, [el, e]); return; }
+    cspDispatchOp(el, e, 'data-op-input');
   });
   root.addEventListener('submit', (e) => {
     const el = e.target.closest('[data-op-submit]');
     if (!el || !root.contains(el)) return;
-    if (el.dataset.opInFlight === '1') return;
     const fn = OP_SUBMIT_ACTIONS[el.dataset.opSubmit];
-    if (fn) runCspOp(el, fn, [e]);
+    if (fn) {
+      if (el.dataset.opInFlight === '1') return;
+      runCspOp(el, fn, [e]);
+      return;
+    }
+    // Nhanh hiem (registry rieng khong co entry): mo phong dung khuon nhanh data-op-submit cua
+    // bindCspDelegation() (core.js) — preventDefault() VÔ ĐIỀU KIỆN trước (xem chú thích tại đó: form
+    // AJAX không bao giờ được submit gốc, kể cả lượt bấm thứ 2 lúc đang khoá opInFlight).
+    e.preventDefault();
+    if (el.dataset.opInFlight === '1') return;
+    const fnName = el.getAttribute('data-op-submit');
+    const fn2 = window[fnName];
+    if (typeof fn2 === 'function') { runCspOp(el, fn2, [e]); return; }
+    ensureFnReady(fnName).then(() => {
+      const fn3 = window[fnName];
+      if (typeof fn3 === 'function') runCspOp(el, fn3, [e]);
+    }).catch(err => reportCspDispatchFailure('CSP dispatch (submit): không tải được mô-đun cho hàm', fnName, err));
   });
 }
 // BUG THẬT phát hiện lúc kiểm tra lại VHST-5 sau phản hồi người dùng ("🔗 Liên kết" không dùng được):
