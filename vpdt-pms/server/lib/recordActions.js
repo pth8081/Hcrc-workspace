@@ -4853,6 +4853,28 @@ function canManageTrainingClass(user, cls) {
   return !!(user?.perms?.trainingInstruct && cls?.instructorUsername && cls.instructorUsername === user.username);
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "Tự chấm/tự xác nhận/tự cấp chứng chỉ đào tạo cho chính
+// mình"): 7 hành động Đào Tạo dưới đây (setTrainingRegistrationResult()/gradeTrainingTestEssayAnswers()/
+// confirmOnboardingStage()/evaluateOnboardingStage3()/reevaluateOnboardingStage3()/
+// issueOnboardingCertificate()/confirmCareerPathForEmployee()) chỉ gác bằng canManageTraining()/
+// canManageTrainingClass()/canEvaluateOnboardingStage3() (trainingManage/trainingInstruct/
+// onboardingEvaluate/admin) — KHÔNG hề kiểm actor có PHẢI LÀ chính người đang được chấm/xác nhận/cấp
+// chứng chỉ hay không. 1 tài khoản vừa có quyền quản lý đào tạo (VD giảng viên nội bộ kiêm quản lý đào
+// tạo = trainingManage, hoặc quản lý trực tiếp = onboardingEvaluate) nhưng ĐANG đồng thời là học
+// viên/nhân viên mới ở CHÍNH lớp/lộ trình/hồ sơ đó có thể tự chấm Đạt bài test/kết quả lớp của mình, tự
+// xác nhận Giai đoạn 1/2 Tân Binh hoặc Cấp bậc Thăng Tiến của mình, tự đánh giá Giai đoạn 3 của mình, rồi
+// tự cấp luôn Chứng Chỉ Hoàn Thành — không ai khác xác nhận lại. canEvaluateOnboardingStage3() càng dễ
+// lọt vì so dept TRỰC TIẾP (traineeUser.dept === user.dept) — dept của CHÍNH MÌNH luôn trùng với dept của
+// mình, nên điều kiện "cùng phòng ban" KHÔNG loại trừ được trường hợp tự đánh giá.
+// Cùng tinh thần "không ai tự duyệt được thứ do chính mình tạo" (các assertNotSelfDecidingXxx() khác
+// trong file này) — chặn CỨNG, không phân biệt admin (khớp quyết định 11/2026 "Chặn admin tự duyệt ở
+// TẤT CẢ module, không có ngoại lệ").
+function assertNotSelfInTrainingAction(user, targetUsername, actionLabel) {
+  if (targetUsername && targetUsername === user?.username) {
+    throw new HttpError(403, `Bạn không thể tự ${actionLabel} cho chính mình — cần người quản lý đào tạo khác thực hiện`);
+  }
+}
+
 // Đợt 9 — học viên tự gửi KHÔNG còn huỷ có hiệu lực ngay nữa: chỉ tạo 1 yêu cầu đang chờ
 // (pendingCancellation), phải được trainingManage/admin duyệt mới thật sự chuyển sang CANCELLED (xem
 // approveCancelTrainingRegistration() ngay dưới) — tránh học viên tự ý bỏ lớp giữa chừng phá vỡ sĩ
@@ -5029,6 +5051,7 @@ function setTrainingRegistrationResult(payload, user, reg, cls) {
   if (!canManageTrainingClass(user, cls)) {
     throw new HttpError(403, 'Bạn không có quyền ghi nhận kết quả cho lớp học này');
   }
+  assertNotSelfInTrainingAction(user, reg.creator, 'ghi nhận kết quả học tập');
   if (reg.result === 'CANCELLED') {
     throw new HttpError(409, 'Đăng ký này đã bị huỷ, không thể ghi nhận kết quả');
   }
@@ -5557,6 +5580,7 @@ function gradeTrainingTestEssayAnswers(user, sub, test, cls, rawEssayGrades) {
   if (!canManageTrainingClass(user, cls)) {
     throw new HttpError(403, 'Bạn không có quyền chấm bài nghị luận của lớp học này');
   }
+  assertNotSelfInTrainingAction(user, sub.username, 'chấm bài nghị luận');
   if (sub.gradingStatus !== 'PENDING_ESSAY_GRADING') {
     throw new HttpError(409, 'Bài làm này không ở trạng thái chờ chấm nghị luận');
   }
@@ -5638,6 +5662,7 @@ function confirmCareerPathForEmployee(payload, user, path, allRegistrations, exi
   if (!targetUsername) throw new HttpError(400, 'Thiếu người cần xác nhận');
   const targetUser = (users || []).find(u => u.username === targetUsername);
   if (!targetUser) throw new HttpError(404, 'Không tìm thấy nhân viên này');
+  assertNotSelfInTrainingAction(user, targetUsername, 'xác nhận cấp bậc lộ trình thăng tiến');
 
   const stages = Array.isArray(path.stages) ? path.stages : [];
   const stageIndex = Number(payload?.stageIndex);
@@ -5735,6 +5760,7 @@ function editOnboardingPath(payload, user, path, appData) {
 // gắn với bất kỳ Chương Trình/Lớp Học nào nữa (cùng khuôn Giai đoạn 3 vốn đã luôn thuần nhập tay).
 function confirmOnboardingStage(payload, user, progress, path) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền xác nhận giai đoạn đào tạo tân binh');
+  assertNotSelfInTrainingAction(user, progress.employeeUsername, 'xác nhận giai đoạn đào tạo tân binh');
   const stage = Number(payload?.stage);
   if (stage !== 1 && stage !== 2) throw new HttpError(400, 'Giai đoạn không hợp lệ (chỉ nhận 1 hoặc 2)');
   const resultField = `stage${stage}Result`;
@@ -5767,6 +5793,7 @@ function evaluateOnboardingStage3(payload, user, progress, users) {
   if (!canEvaluateOnboardingStage3(user, traineeUser)) {
     throw new HttpError(403, 'Bạn không có quyền đánh giá Giai đoạn 3 cho nhân viên này (khác phòng ban/siêu thị hoặc không có quyền)');
   }
+  assertNotSelfInTrainingAction(user, progress.employeeUsername, 'đánh giá Giai đoạn 3 đào tạo tân binh');
   if (progress.stage1Result !== 'CONFIRMED' || progress.stage2Result !== 'CONFIRMED') {
     throw new HttpError(409, 'Nhân viên cần được xác nhận hoàn thành cả Giai đoạn 1 và Giai đoạn 2 trước khi đánh giá Giai đoạn 3');
   }
@@ -5797,6 +5824,7 @@ function reevaluateOnboardingStage3(payload, user, progress, users) {
   if (!canEvaluateOnboardingStage3(user, traineeUser)) {
     throw new HttpError(403, 'Bạn không có quyền đánh giá Giai đoạn 3 cho nhân viên này (khác phòng ban/siêu thị hoặc không có quyền)');
   }
+  assertNotSelfInTrainingAction(user, progress.employeeUsername, 'đánh giá lại Giai đoạn 3 đào tạo tân binh');
   if (progress.stage3Evaluation !== 'FAILED') {
     throw new HttpError(409, progress.stage3Evaluation === 'PASSED'
       ? 'Giai đoạn 3 của nhân viên này đã ĐẠT — không có gì để đánh giá lại'
@@ -5832,6 +5860,7 @@ function reevaluateOnboardingStage3(payload, user, progress, users) {
 // khác trong module Đào Tạo).
 function issueOnboardingCertificate(user, progress) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền cấp chứng chỉ hoàn thành đào tạo tân binh');
+  assertNotSelfInTrainingAction(user, progress.employeeUsername, 'cấp chứng chỉ hoàn thành đào tạo tân binh');
   if (progress.stage1Result !== 'CONFIRMED' || progress.stage2Result !== 'CONFIRMED' || progress.stage3Evaluation !== 'PASSED') {
     throw new HttpError(409, 'Nhân viên chưa hoàn thành cả 3 giai đoạn — chưa thể cấp chứng chỉ hoàn thành');
   }

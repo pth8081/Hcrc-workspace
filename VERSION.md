@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**26.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.89 (2026-11): [TB] Re-audit lần 5 — mục 2: Tự chấm/tự xác nhận/tự cấp chứng chỉ đào tạo cho chính mình
+
+Mục thứ 2 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5.
+
+- **7 hành động của cụm "Đào Tạo"** (gác bằng `canManageTraining()`/`canManageTrainingClass()`/
+  `canEvaluateOnboardingStage3()` — trainingManage/trainingInstruct/onboardingEvaluate/admin) chỉ kiểm
+  QUYỀN, **không hề kiểm actor có PHẢI LÀ chính người đang được chấm/xác nhận/cấp chứng chỉ hay không**:
+  1. `setTrainingRegistrationResult()` — chấm tay kết quả Đạt/Không đạt 1 lớp OFFLINE không gán test.
+  2. `gradeTrainingTestEssayAnswers()` — chấm điểm câu hỏi Nghị Luận của 1 bài test đã nộp.
+  3. `confirmOnboardingStage()` — xác nhận hoàn thành Giai đoạn 1/2 Tân Binh.
+  4. `evaluateOnboardingStage3()` — đánh giá Giai đoạn 3 Tân Binh. `canEvaluateOnboardingStage3()` so
+     dept TRỰC TIẾP (`traineeUser.dept === user.dept`) — dept của CHÍNH MÌNH luôn trùng dept của mình,
+     nên điều kiện "cùng phòng ban" KHÔNG loại trừ được trường hợp tự đánh giá.
+  5. `reevaluateOnboardingStage3()` — đánh giá lại Giai đoạn 3 sau khi FAILED.
+  6. `issueOnboardingCertificate()` — cấp Chứng Chỉ Hoàn Thành đào tạo tân binh.
+  7. `confirmCareerPathForEmployee()` — xác nhận 1 cấp bậc Lộ Trình Thăng Tiến.
+
+  1 tài khoản vừa có quyền quản lý đào tạo (VD giảng viên nội bộ kiêm quản lý đào tạo = trainingManage,
+  hoặc quản lý trực tiếp = onboardingEvaluate) nhưng ĐANG đồng thời là học viên/nhân viên mới ở CHÍNH
+  lớp/lộ trình/hồ sơ đó có thể tự chấm Đạt bài test/kết quả lớp của mình, tự xác nhận Giai đoạn 1/2 Tân
+  Binh hoặc Cấp bậc Thăng Tiến của mình, tự đánh giá Giai đoạn 3 của mình, rồi tự cấp luôn Chứng Chỉ
+  Hoàn Thành — không ai khác xác nhận lại.
+  - Thêm `assertNotSelfInTrainingAction(user, targetUsername, actionLabel)` (`lib/recordActions.js`,
+    ngay sau `canManageTrainingClass()`) — chặn CỨNG (403) khi `targetUsername === user.username`,
+    không phân biệt actor có `admin` hay không — cùng khuôn các `assertNotSelfDecidingXxx()` khác đã bỏ
+    hẳn nhánh admin-bypass theo quyết định 11/2026 "Chặn admin tự duyệt ở TẤT CẢ module, không có ngoại
+    lệ". Gọi từ cả 7 hàm trên, đúng vị trí target identity: `reg.creator`/`sub.username`/
+    `progress.employeeUsername`/`targetUsername` (payload).
+
+**Test:** `tests/test-training-self-grading-blocked.js` (mới, 13 scenario — gọi THẲNG 7 hàm lib, cùng
+khuôn `test-hrprofile-export-salary-permission.js`). Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordActions.js`, 7/13 scenario FAIL đúng 7 "LỖI ĐÃ VÁ"), PASS trên code đã vá (13/13). Regression:
+`test-audit-round2-internalcomms-training-pure.js` (30/30), `test-audit-round4-internal-training.js`
+(47/47), `test-career-paths.js` (28/28, gồm đúng scenario admin-override KHÔNG bị ảnh hưởng vì admin
+test ≠ target employee), `test-onboarding.js` (23/23, tương tự), `test-training-essay-dragdrop-server.js`
+(23/23), `test-training-essay-grade-testid.js` (4/4), `test-training-scenario-roleplay.js` (17/17) —
+toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.88 (2026-11): [TB] Re-audit lần 5 — mục 1: paymentRequests gác sai key 'office' thay vì 'payment'
 
