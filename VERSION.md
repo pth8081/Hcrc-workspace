@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**26.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.55 (2026-11): [Cao] Re-audit lần 3 — mục 5: reportEntries.dept không có trong bất kỳ cascade rename nào
+
+Tiếp nối v26.51-26.54. Mục thứ 5 trong 8 phát hiện của re-audit lần 3:
+
+- **[Cao] `reportEntries` (Báo Cáo Định Kỳ, `forceOwnDept` — xem `lib/createValidation.js`) lưu field
+  `dept` nhưng KHÔNG có mặt trong `DEPT_FIELD_COLLECTIONS` (lib/catalogRename.js)** — đổi tên 1 phòng
+  ban/siêu thị KHÔNG cascade sang field này. `canViewReportEntry()` (lib/recordViewScope.js) so trực
+  tiếp `entry.dept === user.dept` để cho xem báo cáo ĐÃ GỬI của cả phòng ban (không riêng người tạo).
+  Hậu quả: sau khi đổi tên phòng ban, các báo cáo ĐÃ GỬI trước đó "biến mất" khỏi màn hình của cả phòng
+  ban (dept cũ không còn khớp user.dept mới) — chỉ chính người tạo (`entry.creator`) vẫn xem được bình
+  thường qua nhánh riêng, nên lỗi dễ bị bỏ sót (admin đổi tên xong tự kiểm tra bằng tài khoản của chính
+  mình — vẫn thấy báo cáo mình tạo — tưởng nhầm là ổn). Cùng lớp lỗi đã vá nhiều lần ở file này
+  (checklistSubmissions/shiftRoster.storeCode, operationOrders.dept...). Thêm 1 dòng
+  `{ collection: 'reportEntries', fields: ['dept'] }` vào `DEPT_FIELD_COLLECTIONS` — cơ chế cascade đã
+  tổng quát sẵn, không cần sửa gì khác.
+
+**Test:** file mới `tests/test-reportentries-dept-rename-cascade.js` (3 scenario, gọi THẬT router
+`routes/adminCatalog.js` qua HTTP, cùng khuôn `test-catalog-rename-round2-extras.js`). Assertion mới đã
+xác nhận FAIL trên code CŨ (`git stash -- lib/catalogRename.js`, 0/3 passed), PASS trên code đã vá
+(3/3). Chạy lại bộ test cascade rename liên quan: `test-catalog-rename-round2-extras.js` (8/8),
+`test-catalog-rename-server.js` (26/26), `test-catalog-rename-locked-accounts.js` (40/40),
+`test-meeting-room-rename-cascade.js` (8/8), `test-mixed-approval-jobtitle-dept.js` (9/9),
+`test-position-types.js` (10/10) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Báo cáo ĐÃ GỬI từ TRƯỚC khi
+vá, mang tên phòng ban CŨ (nếu phòng ban đó đã từng được đổi tên trước khi có bản vá này), vẫn còn mang
+dept cũ cho tới khi admin chạy lại chức năng "Đổi tên Phòng Ban/Siêu Thị" 1 lần nữa (đổi tên CHÍNH XÁC
+về tên hiện tại rồi đổi lại, hoặc chờ lần đổi tên kế tiếp) — không có dữ liệu nào bị mất, chỉ là chưa
+được cascade lại hồi tố; không cần thao tác thủ công gì khác ngoài lưu ý này.
 
 ## v26.54 (2026-11): [Cao] Re-audit lần 3 — mục 4: permOverrides.moduleAccess bị "đóng băng" sai khi lưu user thuộc nhóm
 
