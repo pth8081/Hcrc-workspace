@@ -411,9 +411,15 @@ async function main() {
     expectThrow(() => recordActions.setLicenseRenewing(SELF, { ...approved }, { renewing: true }), /không thể tự xử lý/i, '9c-1');
     expectThrow(() => recordActions.revokeLicense(SELF, { ...approved }, { reason: 'x' }), /không thể tự xử lý/i, '9c-2');
   });
-  await run('9d. KHÔNG chặn nhầm: người duyệt KHÁC vẫn duyệt được; admin vẫn giữ đặc quyền vượt cấu hình', async () => {
+  await run('9d. KHÔNG chặn nhầm: người duyệt KHÁC (không phải người tải lên) vẫn duyệt được', async () => {
     assert.strictEqual(recordActions.approveLicense(OTHER_APPROVER, license()).status, 'APPROVED');
-    assert.strictEqual(recordActions.approveLicense({ ...ADMIN, username: 'nguoi_tai_len' }, license()).status, 'APPROVED');
+  });
+  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
+  // module", không có ngoại lệ): trước đây admin được bỏ qua chặn này (9d cũ) ngay cả khi CHÍNH là
+  // người tải lên, nay KHÔNG còn nữa — admin tự duyệt giấy phép chính mình tải lên cũng bị chặn 403.
+  await run('9e. admin KHÔNG còn tự duyệt được giấy phép do CHÍNH MÌNH tải lên (đã chặn CẢ admin)', async () => {
+    const err = expectThrow(() => recordActions.approveLicense({ ...ADMIN, username: 'nguoi_tai_len' }, license()), /không thể tự xử lý/i, '9e');
+    assert.strictEqual(err.status, 403);
   });
 
   // ================= 10. [TB] code/displayCode SINH LẠI Ở SERVER =================

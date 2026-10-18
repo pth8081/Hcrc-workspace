@@ -145,12 +145,17 @@ async function main() {
     assertEqual(t3.status, 'CANCELLED', 'Người khác (không tự tạo) phải hủy được');
   });
 
-  await run.run('Admin vẫn luôn tự duyệt/từ chối được (đặc quyền nhất quán toàn hệ thống, không đổi hành vi cũ)', async () => {
+  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
+  // module", không có ngoại lệ): trước đây admin được bỏ qua chặn này, nay KHÔNG còn nữa.
+  await run.run('Admin KHÔNG còn tự duyệt/từ chối được (đã chặn CẢ admin, theo quyết định MỚI 11/2026)', async () => {
     const ADMIN = { username: 'admin1', name: 'Admin', perms: { admin: true } };
     const t = makeTransfer({ requestedBy: ADMIN.username, requestedByName: ADMIN.name });
     const row = new Map([['Áo đồng phục nam|||M', { stock: 10 }]]);
-    recordActions.approveUniformTransfer(ADMIN, t, row);
-    assertEqual(t.status, 'APPROVED', 'Admin vẫn phải tự duyệt được (không phá đặc quyền admin cũ)');
+    let err = null;
+    try { recordActions.approveUniformTransfer(ADMIN, t, row); } catch (e) { err = e; }
+    assert(err, 'Admin tự duyệt phải bị chặn');
+    assertEqual(err.status, 403, 'Phải trả 403');
+    assertEqual(t.status, 'PENDING_APPROVAL', 'Trạng thái KHÔNG được đổi khi bị chặn');
   });
 
   // ===================================================================================
@@ -198,11 +203,16 @@ async function main() {
     assertEqual(i2.emergencyRejectStatus, 'DENIED', 'Người khác (không tự gửi) phải từ chối được');
   });
 
-  await run.run('Admin vẫn luôn tự phê duyệt được (đặc quyền nhất quán toàn hệ thống, không đổi hành vi cũ)', async () => {
+  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
+  // module", không có ngoại lệ): trước đây admin được bỏ qua chặn này, nay KHÔNG còn nữa.
+  await run.run('Admin KHÔNG còn tự phê duyệt được (đã chặn CẢ admin, theo quyết định MỚI 11/2026)', async () => {
     const ADMIN = { username: 'admin1', name: 'Admin', perms: { admin: true } };
     const item = makeEmergencyRejectItem({ emergencyRejectRequestedBy: ADMIN.username, emergencyRejectRequestedByName: ADMIN.name });
-    recordActions.approveItPriceEmergencyReject(ADMIN, item);
-    assertEqual(item.emergencyRejectStatus, 'APPROVED', 'Admin vẫn phải tự phê duyệt được (không phá đặc quyền admin cũ)');
+    let err = null;
+    try { recordActions.approveItPriceEmergencyReject(ADMIN, item); } catch (e) { err = e; }
+    assert(err, 'Admin tự phê duyệt phải bị chặn');
+    assertEqual(err.status, 403, 'Phải trả 403');
+    assertEqual(item.emergencyRejectStatus, 'PENDING', 'Trạng thái KHÔNG được đổi khi bị chặn');
   });
 
   // ===================================================================================

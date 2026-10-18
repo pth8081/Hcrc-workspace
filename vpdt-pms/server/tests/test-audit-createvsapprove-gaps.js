@@ -41,10 +41,12 @@ function test(name, fn) {
     assert.strictEqual(result.approvalStatus, 'APPROVED');
   });
 
-  test('#1 Đồng Phục: admin vẫn tự duyệt được kỳ do chính mình tạo (đặc quyền nhất quán)', () => {
+  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
+  // module", không có ngoại lệ): trước đây admin được bỏ qua chặn này, nay KHÔNG còn nữa — admin tự
+  // duyệt hồ sơ chính mình tạo cũng bị chặn 403 như mọi tài khoản khác.
+  test('#1 Đồng Phục: admin KHÔNG còn tự duyệt được kỳ do chính mình tạo (đã chặn CẢ admin) -> 403', () => {
     const period = { creator: 'admin1', approvalStatus: 'PENDING_APPROVAL' };
-    const result = recordActions.approveUniformPeriod(ADMIN, period);
-    assert.strictEqual(result.approvalStatus, 'APPROVED');
+    assert.throws(() => recordActions.approveUniformPeriod(ADMIN, period), /403|tự duyệt/);
   });
 }
 
@@ -68,10 +70,14 @@ function test(name, fn) {
     assert.strictEqual(result.status, 'CONTACTED');
   });
 
-  test('#3 Tuyển Dụng: admin vẫn tự cập nhật được trạng thái ứng viên do chính mình giới thiệu', () => {
+  // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
+  // module", không có ngoại lệ): trước đây admin được bỏ qua chặn này, nay KHÔNG còn nữa.
+  test('#3 Tuyển Dụng: admin KHÔNG còn tự cập nhật được trạng thái ứng viên do chính mình giới thiệu -> 403', () => {
     const referral = { referrerUsername: 'admin1', status: 'NEW' };
-    const result = recordActions.setRecruitmentReferralStatus({ status: 'HIRED' }, ADMIN, referral);
-    assert.strictEqual(result.status, 'HIRED');
+    assert.throws(
+      () => recordActions.setRecruitmentReferralStatus({ status: 'HIRED' }, ADMIN, referral),
+      /403|tự cập nhật/
+    );
   });
 }
 

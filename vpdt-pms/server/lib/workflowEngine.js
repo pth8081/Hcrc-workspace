@@ -796,9 +796,14 @@ function assertDeptOrTierWorkflowMapShape(key, value) {
 // mới thêm vào MODULE_CONFIGS. "contractsSignedFile" (module ẢO, dbKey='contracts') tự động tra đúng
 // sang creatorField của "contracts" qua dbKey, không cần khai riêng.
 //
-// Admin KHÔNG bị chặn (giữ nguyên đặc quyền vượt mọi cấu hình approver, nhất quán với canApproveStep()/
-// isStepApprovalComplete() ở trên và toàn bộ phần còn lại của hệ thống) — khác budgetLines (chặn CẢ
-// admin), vì đây là quyết định phạm vi hẹp của riêng module budgetLines, không áp dụng ngược lại đây.
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ
+// module", không có ngoại lệ): trước đây Admin KHÔNG bị chặn ở đây (giữ đặc quyền vượt mọi cấu hình
+// approver, nhất quán với canApproveStep()/isStepApprovalComplete() ở trên) — nay BỎ hẳn nhánh bypass đó
+// để khớp đúng assertNotSelfDecidingBudgetLine() (lib/recordActions.js, vốn đã chặn CẢ admin từ trước,
+// giờ là khuôn CHUẨN áp dụng lại cho cả cụm module dùng engine này: docs/submissions/carRegs/officeReqs/
+// contracts/contractsSignedFile/itPriceApprovals/budgetEntries/operationOrders/paymentRequests). Admin
+// vẫn GIỮ NGUYÊN mọi đặc quyền khác (vượt cấu hình approver theo phòng ban, xem canApproveStep() đầu
+// file) — CHỈ riêng "tự duyệt hồ sơ CHÍNH MÌNH tạo/trình" là bị chặn như mọi tài khoản khác.
 //
 // MODULE_CONFIGS[moduleKey].allowSelfDeciding — ngoại lệ cho module đã có SẴN nghiệp vụ hợp lệ tự tạo +
 // tự xử lý (hiện chỉ paymentRequests — xem chú thích ngay tại entry đó ở MODULE_CONFIGS phía trên). Phát
@@ -813,7 +818,6 @@ function assertDeptOrTierWorkflowMapShape(key, value) {
 // chặn tự xử lý, cho module mà "người tạo bản ghi gốc" KHÁC "người trình lượt duyệt này" (hiện chỉ
 // contractsSignedFile — signedUploadedBy, xem chú thích tại entry đó).
 function assertNotSelfDecidingWorkflowItem(moduleKey, item, user) {
-  if (user?.perms?.admin) return;
   const allowSelfDeciding = MODULE_CONFIGS[moduleKey]?.allowSelfDeciding;
   const allowed = typeof allowSelfDeciding === 'function' ? allowSelfDeciding(item) : !!allowSelfDeciding;
   if (allowed) return;

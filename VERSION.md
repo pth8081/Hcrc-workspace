@@ -1,9 +1,67 @@
 # Phiên bản hiện tại
 
-**26.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.50 (2026-11): [Cao — rủi ro cao, theo dõi sau deploy] Chặn admin tự duyệt ở TẤT CẢ module
+
+**Quyết định TRỰC TIẾP của người dùng** (không phải phát hiện audit): khi được hỏi có nên mở rộng việc
+chặn admin tự duyệt (trước đó chỉ áp dụng cho 1 số module tài chính) ra TẤT CẢ module hay không, người
+dùng chọn rõ **"Chặn admin tự duyệt ở TẤT CẢ module"** — không có ngoại lệ. Đây là đợt rủi ro/phạm vi
+rộng NHẤT trong cả loạt rà soát chuyên sâu lần 2, nên tách hẳn thành 1 đợt merge riêng (dễ rollback nếu
+cần) và KHUYẾN NGHỊ theo dõi kỹ sau khi deploy — hành vi "admin luôn tự duyệt được" đã tồn tại từ đầu,
+có thể có quy trình nội bộ ĐANG dựa vào đặc quyền này (VD admin kiêm luôn người tạo + người duyệt ở
+phòng ban nhỏ).
+
+**Thay đổi:** rà theo đúng pattern (không chỉ theo tên hàm) tìm ra ĐỦ 8 hàm `assertNotSelfDeciding*`/
+`assertNotSelfHandling*` (1 hàm thứ 8 — `assertNotSelfHandlingItPriceApply` — mang tên KHÁC "assertNotSelfDeciding*"
+nên dễ bị bỏ sót nếu chỉ grep theo tên) từng có nhánh `if (user?.perms?.admin) return;` (admin luôn vượt
+qua chặn tự duyệt) — BỎ HẲN nhánh đó ở cả 8 hàm, khớp đúng khuôn `assertNotSelfDecidingBudgetLine()`
+(module Ngân Sách 2.0, vốn đã chặn CẢ admin từ trước, giờ là khuôn CHUẨN áp dụng ngược lại cho cả hệ
+thống):
+
+1. `assertNotSelfDecidingWorkflowItem()` (lib/workflowEngine.js) — dùng chung cho 9 module qua 1 engine:
+   docs/submissions/carRegs/officeReqs/contracts/contractsSignedFile/itPriceApprovals (duyệt thường)/
+   budgetEntries/operationOrders/paymentRequests.
+2. `assertNotSelfDecidingInternalPost()` — internalPosts (Nhịp Sống HCRC/Góc Chia Sẻ/Tin Tức).
+3. `assertNotSelfDecidingRecruitmentReferral()` — recruitmentReferrals (Tuyển Dụng).
+4. `assertNotSelfHandlingItPriceApply()` — itPriceApprovals (bước "IT áp giá" — khác hẳn #1, nằm NGOÀI
+   applyWorkflowAction()).
+5. `assertNotSelfDecidingItPriceEmergencyReject()` — itPriceApprovals (yêu cầu "từ chối khẩn cấp").
+6. `assertNotSelfDecidingUniformPeriod()` — uniformPeriods (Đồng Phục, kỳ cấp phát).
+7. `assertNotSelfDecidingUniformTransfer()` — uniformTransfers (Đồng Phục, điều chuyển kho).
+8. `assertNotSelfDecidingLicense()` — licenses (Giấy Phép).
+
+Admin vẫn GIỮ NGUYÊN mọi đặc quyền KHÁC (vượt cấu hình approver theo phòng ban, xem toàn bộ hồ sơ công
+ty...) — CHỈ riêng "tự duyệt/tự xử lý hồ sơ CHÍNH MÌNH tạo/trình/giới thiệu/tải lên" là bị chặn như mọi
+tài khoản khác. Ngoại lệ `paymentRequests.allowSelfDeciding` (đề nghị thanh toán "thủ công",
+`sourceModule==='MANUAL'`) KHÔNG đổi — ngoại lệ đó xét theo BẢN GHI (item), không xét theo vai trò người
+dùng, nên vẫn áp dụng y hệt cho cả admin lẫn user thường như trước.
+
+**Test:** file mới `tests/test-admin-self-approve-blocked.js` (11 scenario, pure-unit — bao phủ cả 3 hàm
+chưa có test riêng: `assertNotSelfDecidingWorkflowItem()` qua 3 module đại diện (docs/paymentRequests/
+contractsSignedFile, xác nhận NGOẠI LỆ MANUAL của paymentRequests không đổi), `assertNotSelfDecidingInternalPost()`
+qua `approveInternalPost()`/`rejectInternalPost()`, `assertNotSelfHandlingItPriceApply()` qua
+`claimPriceApply()`) + cập nhật 3 file test cũ từng assert "admin vẫn tự duyệt được" (nay đổi thành
+"admin KHÔNG còn tự duyệt được" — 403): `tests/test-audit-createvsapprove-gaps.js` (Đồng Phục + Tuyển
+Dụng), `tests/test-security-audit-round3.js` (điều chuyển Đồng Phục + từ chối khẩn cấp Hỗ Trợ IT),
+`tests/test-audit-cluster-vbt-hd-gp-tt-tl.js` (Giấy Phép — tách riêng khỏi scenario "người duyệt khác"
+vẫn giữ nguyên). Tất cả assertion mới đã xác nhận FAIL trên code CŨ (`git stash`), PASS trên code đã vá.
+Chạy lại đầy đủ regression liên quan: `test-contract.js` (75/75), `test-submission.js` (23/23),
+`test-license.js`/`test-license-cancel.js` (15/15, 7/7), `test-uniform.js`/`test-uniform-phase2.js`
+(38/38, 28/28), `test-budget-lines.js` (62/62), `test-contract-signed-file-no-approver-block.js`,
+`test-recruitment-priority-server.js` (9/9), `test-operation-order-noapprover-warning.js`/
+`test-operation-order-po-race.js`, `test-carreg-change-route.js`, `test-submissions-scope.js`,
+`test-budget-entries-scope.js`, `test-itprice-approval-and-emergency.js`, `test-payment.js`,
+`test-internalpost-comment-own-edit-delete.js`/`test-internalpost-share-video-restriction.js` — tất cả
+PASS, không có regression ở happy path (người duyệt KHÁC vẫn duyệt được bình thường ở mọi module).
+
+**Deploy-impact:** KHÔNG cần thao tác gì ngoài copy code + `pm2 restart` (không đổi schema.sql/.env.example/
+package.json dependencies). **Khuyến nghị theo dõi sát sau deploy** — nếu có phản hồi "admin không duyệt
+được hồ sơ của chính mình" từ người dùng thật, đây là hành vi MỚI CHỦ ĐÍCH (không phải lỗi) — admin cần
+nhờ 1 approver khác duyệt, hoặc cấu hình thêm người duyệt độc lập cho phòng ban/module đó.
 
 ## v26.49 (2026-11): [Thấp] Rà soát chuyên sâu lần 2 trước go-live — Đợt 5: audit-trail xoá + dọn dẹp + dept validation import
 
