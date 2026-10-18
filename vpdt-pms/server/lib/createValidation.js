@@ -1782,7 +1782,17 @@ const CREATE_MODULE_CONFIGS = {
         if (!latest || latest.status === 'PENDING' || latest.status === 'DRAFT') {
           throw new CreateError(409, 'Không thể cập nhật khi phiên bản mới nhất của tài liệu này đang chờ xử lý (chờ duyệt hoặc chờ sửa & trình lại)');
         }
-        if (payload.dept !== root.dept) {
+        // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Tạo phiên bản Tài Liệu mới không kiểm quyền trên bản
+        // gốc"): trước đây so `payload.dept` (CLIENT tự gửi, KHÔNG đáng tin — xem chú thích "Khớp
+        // uploadDoc()..." ở trên: client tự tính cả payload rồi gửi nguyên) với `root.dept`, trong khi
+        // giá trị THỰC SỰ được lưu vào bản ghi lại là `user.dept` (forceOwnDept: true, xem
+        // validateAndPrepareCreate() — `finalDept` luôn = user.dept, không đụng gì tới payload.dept).
+        // Nghĩa là 1 tài khoản Phòng B chỉ cần tự soạn request với `dept: "Phòng A"` (khớp root.dept)
+        // là qua được chốt chặn này dù chưa từng thuộc Phòng A — bản ghi lưu xong vẫn mang dept THẬT
+        // (Phòng B) của họ, tạo ra 1 "phiên bản" lệch phòng ban với bản gốc mà không ai phát hiện qua
+        // chốt chặn tưởng như đã kiểm đúng. So với `user.dept` (giá trị xác thực, không thể giả mạo)
+        // mới đúng ý nghĩa "chỉ đúng phòng ban của tài liệu gốc mới được tạo phiên bản mới".
+        if (user.dept !== root.dept) {
           throw new CreateError(400, 'Phòng ban của phiên bản mới phải khớp với tài liệu gốc');
         }
         // cat/displayCode/versionNumber/code PHẢI tự tính lại ở server, không tin giá trị client gửi.
