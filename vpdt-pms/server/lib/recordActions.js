@@ -8608,6 +8608,14 @@ function renewItServiceRenewal(user, item, payload) {
 // niệm "quyền tạo hồ sơ" (meetingCreate) làm điều kiện tiên quyết, nên không cần thêm gate phụ nào, mirror
 // đúng carDeptWorkflows/vppDeptWorkflows — chỉ cần có mặt trong danh sách approver bước 1 là đủ).
 function canDecideMeeting(user, item, appData) {
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): trước đây admin/meetingApprove đều `return true` NGAY, không so
+  // sánh gì với item.creator — admin tự đặt phòng họp (module tự phục vụ "Đặt Phòng Họp") rồi tự duyệt
+  // lịch của chính mình. Khác action 'cancel' ngay cạnh (routes/meetingActions.js) vốn ĐÃ có nhánh kiểm
+  // creator cho người KHÔNG có quyền — 'approve' trước đây hoàn toàn không kiểm creator cho AI, kể cả
+  // admin. Cùng lớp lỗi vừa vá ở canApproveLeaveRequest()/assertShiftSwapApprover() — hàm gác quyền
+  // riêng của module, không nằm trong "họ" assertNotSelfDeciding*/assertNotSelfHandling* bị quét theo
+  // tên ở đợt v26.50.
+  if (item.creator && user.username === item.creator) return false;
   if (user.perms?.admin || user.perms?.meetingApprove) return true;
   const { flatWorkflowConfigToSteps } = require('./workflowEngine'); // require trễ — tránh vòng lặp
   const { approvers } = flatWorkflowConfigToSteps(appData?.meetingDeptWorkflows?.[item.dept], appData || {});

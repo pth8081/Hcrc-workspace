@@ -5742,7 +5742,16 @@ router.post('/shiftRoster/:id/cancel', async (req, res) => {
 router.post('/shiftRoster/:id/delete', (req, res) => deleteAdminOnly(req, res, 'shiftRoster'));
 
 // shiftSwapRequests: Quản Lý Siêu Thị (đúng siêu thị của ca liên quan) hoặc HR duyệt/từ chối đổi ca.
-function assertShiftSwapApprover(freshUser, roster) {
+// LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): trước đây admin/hrAttendanceManage/hrShiftSwapApprove đều cho
+// qua NGAY không so sánh gì với người đã tạo đơn (item.creator) — admin tự tạo yêu cầu đổi ca cho chính
+// mình rồi tự duyệt luôn, không qua Quản Lý Siêu Thị/HR. Cùng lớp lỗi vừa vá ở canApproveLeaveRequest()
+// (lib/attendance.js) — hàm gác quyền riêng của module tự phục vụ, không nằm trong "họ"
+// assertNotSelfDeciding*/assertNotSelfHandling* nên bị sót ở đợt v26.50 "chặn admin tự duyệt ở TẤT CẢ
+// module". Thêm `requesterUsername` (item.creator) — không được là chính người duyệt, bất kể cấp quyền nào.
+function assertShiftSwapApprover(freshUser, roster, requesterUsername) {
+  if (requesterUsername && freshUser.username === requesterUsername) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt yêu cầu đổi ca do chính mình tạo');
+  }
   const allowed = freshUser.perms?.admin || freshUser.perms?.hrAttendanceManage
     || (freshUser.perms?.hrShiftSwapApprove && roster && roster.storeCode === freshUser.dept);
   if (!allowed) throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu đổi ca này');
@@ -5775,7 +5784,7 @@ router.post('/shiftSwapRequests/:id/approve', async (req, res) => {
       let updatedRosterId = null, updatedRosterPatch = null;
       const swapResult = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
         const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
-        assertShiftSwapApprover(freshUser, targetRoster);
+        assertShiftSwapApprover(freshUser, targetRoster, item.creator);
         const targetProfile = employeeProfiles.find(p => p.employeeCode === item.targetEmployeeCode);
         if (!targetProfile || targetProfile.status !== 'ACTIVE') {
           throw new HttpError(400, `Nhân viên nhận ca (mã "${item.targetEmployeeCode}") không còn đang hoạt động — không thể duyệt đổi ca này`);
@@ -5801,7 +5810,7 @@ router.post('/shiftSwapRequests/:id/reject', async (req, res) => {
     const rosterList = await getAllForCollection('shiftRoster');
     const result = await withLockedRecordForCollection('shiftSwapRequests', itemId, (item) => {
       const targetRoster = rosterList.find(r => r.id === item.requesterRosterId);
-      assertShiftSwapApprover(freshUser, targetRoster);
+      assertShiftSwapApprover(freshUser, targetRoster, item.creator);
       return attendance.applyRejectShiftSwap(item, freshUser.username, freshUser.name);
     });
     res.json({ ok: true, item: result });
