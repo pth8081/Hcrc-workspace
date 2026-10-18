@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**26.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.95 (2026-11): [TB] Re-audit lần 5 — mục 8: positionTypes ghi qua /api/data né check "đang dùng"
+
+Mục thứ 8 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5. `DELETE /api/admin/position-types/:key`
+(`routes/positionTypes.js`) CHẶN CỨNG xoá 1 "Vị Trí Làm Việc" nếu (a) là 1 trong 2 giá trị builtin
+(HO/Siêu Thị — luôn phải có ít nhất 2 giá trị gốc) hoặc (b) đang có tài khoản gán `posType` đó — xoá
+hẳn 1 Vị Trí kéo theo mất luôn cả nhánh `locations[]`/`jobTitles[]` con của nó, rủi ro cao hơn 1 giá
+trị danh mục đơn lẻ nên CHẶN CỨNG (400) thay vì chỉ cảnh báo.
+
+- `positionTypes` cũng nằm trong `ADMIN_ONLY_KEYS` (`routes/data.js`) — route generic
+  `POST /api/data/positionTypes` nhận NGUYÊN mảng thay thế và chỉ gate QUYỀN (admin-only), hoàn toàn
+  không soát chiếu gì với "users" trước khi ghi đè. Gọi thẳng route này với 1 mảng ĐÃ LOẠI BỎ 1 entry
+  (dù builtin hay đang có người dùng) là xoá được ngay — né sạch 2 lớp chặn ở route riêng.
+- Vá: `assertPositionTypesSafeToSave()` (mới, `lib/createValidation.js`) — so khớp theo `key` ổn định
+  giữa mảng CŨ (đọc lại ngay trước khi ghi, cùng khuôn `oldSubmissionTypes`/`oldRooms` đã có ở
+  `routes/data.js`) và mảng MỚI client gửi, tìm entry BỊ LOẠI BỎ, áp đúng 2 điều kiện chặn y hệt route
+  DELETE cho mỗi entry đó. Gọi NGAY TRƯỚC khi ghi đè `positionTypes` ở `POST /api/data/:key`.
+
+**Test:** `tests/test-positiontypes-generic-route-inuse-check.js` (mới, 6 scenario — HTTP thật qua
+mount `routes/data.js`, cùng khuôn `test-deptcodemap-admin-gate.js`). Xác nhận FAIL trên code CŨ
+(`git stash -- routes/data.js lib/createValidation.js`, đúng 3/6 scenario FAIL — 2 builtin + 1 đang
+dùng), PASS trên code đã vá (6/6). Regression: `test-position-types.js` (10/10),
+`test-catalogrename-positiontypes-systemlog.js` (8/8), `test-catalog-rename-position-pairs.js` (6/6),
+`test-quick-apply-auto-dept-position.js` (15/15), `test-workflow-participating-positions.js` (6/6),
+`test-deptcodemap-admin-gate.js` (3/3), `test-extra-approval-groups.js` (26/26),
+`test-audit-hethong-cluster-server.js` (22/22) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.94 (2026-11): [TB] Re-audit lần 5 — mục 7: ADMIN_SENSITIVE_KEYS thiếu log 21 key cấu hình
 
