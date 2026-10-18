@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**26.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.38 (2026-11): [Thấp] Vá race condition "Loại Giấy Phép" tự học bị đè bởi nhịp poll Approval Hub
+
+Phát hiện ở đợt rà soát chuyên sâu toàn hệ thống trước go-live — mục mức Thấp đầu tiên trong danh sách
+còn lại, xử lý theo yêu cầu người dùng.
+
+- `public/js/module-tailieu.js` (`uploadLicense()`): bản cập nhật lạc quan `DB.licenseTypes` (để ô gợi ý
+  "Loại Giấy Phép" thấy ngay giá trị vừa gõ, không cần tải lại trang) trước đây nằm NGAY SAU validate,
+  TRƯỚC 3 bước `await` (`uploadFileToServer`/`collectDynamicFieldsData`/`callCreateAction`). Nếu đúng lúc
+  giữa các `await` đó, nhịp poll Hộp Thư Phê Duyệt (gọi lại `initDatabase()` mỗi 3 giây) ghi đè thẳng
+  `DB.licenseTypes = data.licenseTypes || []` bằng snapshot server CŨ (chưa kịp thấy giá trị vừa học),
+  bản cập nhật lạc quan bị mất — loại giấy phép vừa gõ "biến mất" khỏi gợi ý trong cùng phiên (dù đã lưu
+  đúng trên server, F5 lại thấy đúng). Dời cập nhật xuống SAU KHI server xác nhận tạo xong (`newItem` tồn
+  tại) VÀ không còn `await` nào phía sau trước khi hàm return — nhịp poll không còn cơ hội chen vào giữa.
+
+Test: fix này cũng khiến `tests/test-license.js` (đã có sẵn, trước đây 1/15 FAIL — "licenseCreate tải
+lên giấy phép mới, happy path") nay PASS ĐỦ 15/15 — xác nhận đây là CÙNG lỗi thật, không phải lỗ hổng của
+mock như suy đoán ban đầu lúc chỉ chạy thử trong sandbox. Đã xác nhận bằng `git stash` — fail đúng (14/15)
+trên code cũ. Chạy lại `test-license-cancel.js` (7) + `test-license-expiry-reminder-family.js` (3) + CSP
+full-audit (3) + lazy-load toàn bộ tab (46) — không hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/module-tailieu.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm
+biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.37 (2026-11): [TOÀN VẸN DỮ LIỆU, Trung Bình] Vá khe hở TOCTOU khi xoá nhánh cây Công Việc Thực Hiện (Vận Hành)
 

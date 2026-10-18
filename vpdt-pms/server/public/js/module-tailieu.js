@@ -1343,20 +1343,6 @@ async function uploadLicense(e) {
     return alert(`⛔ Tải tệp lên thất bại: ${err.message}`);
   }
 
-  // Tự học thêm vào Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) nếu là loại chưa từng gõ trước đây —
-  // admin vẫn quản lý/dọn danh mục này riêng ở màn Quản Lý Danh Mục (xem saveLicenseType()/deleteLicenseType()).
-  //
-  // KHÔNG còn syncStorage('licenseTypes') ở đây: từ khi "licenseTypes" nằm trong ADMIN_ONLY_KEYS
-  // (routes/data.js — danh mục này thuộc tab Quản Lý Danh Mục chỉ admin thấy, trước đây bất kỳ tài
-  // khoản đã đăng nhập nào cũng GHI ĐÈ/XOÁ TRẮNG được cả danh mục qua POST /api/data/licenseTypes),
-  // lượt ghi đè nguyên mảng đó đã đóng với người dùng thường. Việc LƯU chuyển hẳn về server, ở đúng
-  // luồng tạo giấy phép và chỉ THÊM 1 giá trị (không sửa/xoá gì) — xem learnLicenseType() ở
-  // routes/create.js. Dòng dưới chỉ cập nhật bản chụp TRONG BỘ NHỚ của tab hiện tại để ô gợi ý thấy
-  // ngay giá trị vừa gõ mà không phải tải lại trang.
-  if (licenseType && !(DB.licenseTypes || []).includes(licenseType)) {
-    DB.licenseTypes = [...(DB.licenseTypes || []), licenseType];
-  }
-
   let customData;
   try {
     customData = await collectDynamicFieldsData('LICENSE');
@@ -1381,6 +1367,29 @@ async function uploadLicense(e) {
   }
 
   DB.licenses.unshift(newItem);
+  // Tự học thêm vào Danh Mục "Các Loại Giấy Phép" (DB.licenseTypes) nếu là loại chưa từng gõ trước đây —
+  // admin vẫn quản lý/dọn danh mục này riêng ở màn Quản Lý Danh Mục (xem saveLicenseType()/deleteLicenseType()).
+  //
+  // KHÔNG còn syncStorage('licenseTypes') ở đây: từ khi "licenseTypes" nằm trong ADMIN_ONLY_KEYS
+  // (routes/data.js — danh mục này thuộc tab Quản Lý Danh Mục chỉ admin thấy, trước đây bất kỳ tài
+  // khoản đã đăng nhập nào cũng GHI ĐÈ/XOÁ TRẮNG được cả danh mục qua POST /api/data/licenseTypes),
+  // lượt ghi đè nguyên mảng đó đã đóng với người dùng thường. Việc LƯU chuyển hẳn về server, ở đúng
+  // luồng tạo giấy phép và chỉ THÊM 1 giá trị (không sửa/xoá gì) — xem learnLicenseType() ở
+  // routes/create.js. Dòng dưới chỉ cập nhật bản chụp TRONG BỘ NHỚ của tab hiện tại để ô gợi ý thấy
+  // ngay giá trị vừa gõ mà không phải tải lại trang.
+  //
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Thấp): bản cập nhật này
+  // TRƯỚC ĐÂY nằm NGAY SAU validate, TRƯỚC các bước await (uploadFileToServer/collectDynamicFieldsData/
+  // callCreateAction) — nếu đúng lúc giữa các await đó, nhịp poll Hộp Thư Phê Duyệt (initDatabase() gọi
+  // lại mỗi 3s, xem APPROVAL_POLL_INTERVAL_MS) ghi đè THẲNG `DB.licenseTypes = data.licenseTypes || []`
+  // bằng snapshot server CŨ (chưa kịp thấy giá trị vừa học), bản cập nhật lạc quan ở trên bị MẤT — loại
+  // giấy phép vừa gõ "biến mất" khỏi gợi ý trong cùng phiên dù đã lưu đúng trên server (F5 lại thấy đúng).
+  // Dời xuống đây — SAU KHI server đã xác nhận tạo xong (`newItem` tồn tại, nghĩa là learnLicenseType()
+  // ở server cũng đã chạy xong) VÀ không còn `await` nào phía sau trước khi hàm return — nhịp poll không
+  // còn cơ hội chen vào giữa nữa.
+  if (licenseType && !(DB.licenseTypes || []).includes(licenseType)) {
+    DB.licenseTypes = [...(DB.licenseTypes || []), licenseType];
+  }
   logSystemAction('LICENSE', 'UPLOAD_LICENSE', `Tải lên giấy phép ${mode === 'UPDATE' ? 'phiên bản mới' : 'mới'} [${code} - ${licenseType}]`, 'SUCCESS', code);
 
   const approverUsernames = DB.moduleApproverUsernames?.licenseApprove || [];
