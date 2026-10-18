@@ -314,6 +314,31 @@ async function main() {
       assertIncludes([true], basic.note.includes('nghỉ việc'), 'Dòng Lương cơ bản phải có ghi chú ngày nghỉ việc để kế toán tự rà soát/điều chỉnh');
     });
 
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "Tính Lương Tự Động bỏ sót nhân viên ON_LEAVE"): trước
+    // đây chỉ lọc status==='ACTIVE' — nhân viên ON_LEAVE ("Nghỉ dài hạn", vẫn LÀ nhân sự công ty thật,
+    // chỉ tạm không đi làm — xem lib/employeeProfile.js) không rơi vào activeProfiles LẪN
+    // offboardedMidPeriodProfiles, biến mất HOÀN TOÀN khỏi cả payslip VÀ skippedList — không ai biết kỳ
+    // này "quên" tính cho họ. resolveWorkModelForEmployeeCode() không chặn ON_LEAVE (chỉ chặn INACTIVE),
+    // nên 1 khi được đưa vào vòng tính, NV009 phải ra được payslip THẬT (có tài khoản + hợp đồng hợp lệ
+    // như mọi nhân viên ACTIVE khác) — không phải chỉ "không crash".
+    await run.run('LỖI ĐÃ VÁ: nhân viên ON_LEAVE (Nghỉ dài hạn) PHẢI có payslip trong kỳ lương, không bị biến mất hoàn toàn', async () => {
+      resetAppData();
+      const period = seedDraftPeriod();
+      USERS.push({ username: 'emp9', name: 'Nhân Viên Chín (Nghỉ dài hạn)', dept: 'Phòng Kinh Doanh', posType: 'OFFICE', perms: {}, active: true });
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV009', username: 'emp9', status: 'ON_LEAVE', dependents: [] });
+      RECORDS.laborContracts.push({ id: 9, employeeCode: 'NV009', status: 'ACTIVE', baseSalary: 8000000, dept: 'Phòng Kinh Doanh' });
+
+      const res = await api('POST', `/api/payroll/periods/${period.id}/calculate`, {}, HR_MGR);
+      assertEqual(res.status, 200, 'Tính lương phải thành công');
+      assertIncludes([false], res.body.skipped.some(s => s.employeeCode === 'NV009'), 'NV009 (ON_LEAVE, có tài khoản + hợp đồng hợp lệ) KHÔNG được rơi vào danh sách bị bỏ qua');
+
+      const payslips = await api('GET', `/api/payroll/periods/${period.id}/payslips`, undefined, HR_MGR);
+      const slip = payslips.body.payslips.find(p => p.employeeCode === 'NV009');
+      assertIncludes([true], !!slip, 'NV009 (ON_LEAVE) PHẢI có payslip trong kỳ — trước đây biến mất hoàn toàn khỏi cả payslip và skippedList');
+      const basic = slip.details.find(d => d.componentCode === 'BASIC_SALARY');
+      assertEqual(basic.amount, 8000000, 'Lương cơ bản phải đúng theo hợp đồng, tính như mọi nhân viên ACTIVE khác');
+    });
+
     // LỖI ĐÃ VÁ (rà soát chuyên sâu Nhân Sự, 9/2026): chiều NGƯỢC LẠI với LUONG-07/08 ở trên — nhân viên
     // MỚI VÀO LÀM giữa kỳ trước đây KHÔNG có cảnh báo tương tự, vẫn cộng đủ 1 tháng BASIC_SALARY mà không
     // ai biết cần rà soát/điều chỉnh.

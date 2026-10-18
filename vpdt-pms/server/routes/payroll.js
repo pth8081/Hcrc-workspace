@@ -163,7 +163,18 @@ router.post('/periods/:id/calculate', requireManage, async (req, res) => {
       // lý nhánh này, xem lib/payroll.js) — LƯU Ý: hệ thống KHÔNG tự bịa công thức trừ lương tương ứng
       // những ngày sau lastWorkingDate, payslip sinh ra sẽ có ghi chú để kế toán tự rà soát/điều chỉnh.
       const { start: periodStart, end: periodEnd } = payroll.periodDateRange(period);
-      const activeProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'ACTIVE');
+      // LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "Tính Lương Tự Động bỏ sót nhân viên ON_LEAVE"):
+      // trước đây chỉ lọc status==='ACTIVE' — nhân viên ON_LEAVE ("Nghỉ dài hạn", xem
+      // assertValidManualStatusTransition()/lib/employeeProfile.js — vẫn LÀ nhân sự công ty THẬT, chỉ
+      // tạm không đi làm, cùng nhóm "activeLike" với ACTIVE ở summarizeHeadcount()) không rơi vào
+      // activeProfiles LẪN offboardedMidPeriodProfiles bên dưới — biến mất HOÀN TOÀN khỏi cả kết quả
+      // tính lương VÀ skippedList, không ai biết kỳ này "quên" tính cho họ. resolveWorkModelForEmployeeCode()
+      // (lib/attendance.js) đã CỐ Ý không chặn ON_LEAVE (chỉ chặn INACTIVE, xem chú thích ở đó) nên đưa
+      // họ vào đây an toàn — computeEmployeePayslip() tính dựa trên attendanceRecords thật trong kỳ
+      // (LEAVE_UNPAID/LEAVE_PAID... nếu có) đúng như mọi nhân viên ACTIVE khác; nếu hồ sơ chưa liên kết
+      // tài khoản (hiếm, vì ON_LEAVE luôn từng là ACTIVE có tài khoản trước đó) sẽ tự rơi vào skippedList
+      // với lý do rõ ràng ("Không xác định được mô hình chấm công") — không còn im lặng biến mất.
+      const activeProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'ACTIVE' || p.status === 'ON_LEAVE');
       const offboardedMidPeriodProfiles = (appData.employeeProfiles || []).filter(p => p.status === 'INACTIVE' &&
         (appData.hrProcesses || []).some(h => h.processType === 'OFFBOARDING' && h.status === 'COMPLETED' &&
           h.employeeUsername === p.username && h.lastWorkingDate >= periodStart && h.lastWorkingDate <= periodEnd));
