@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.4 (2026-11): [TB] Re-audit lần 5 — mục 17: Thùng Rác khôi phục không đồng bộ lại liên kết chéo module
+
+Mục thứ 17 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — phần còn lại của "họ lỗi" liên kết
+2 chiều hrProcesses ↔ itSupportTickets (v27.1 đã vá chiều "huỷ ticket → gỡ linkedTicketId trên task"),
+lần này lộ ra đúng ở thao tác KHÔI PHỤC từ Thùng Rác:
+
+- `closeItTicketOnHrProcessClosed()`/`cleanupItTicketsOnHrProcessClosed()` (re-audit lần 3) tự huỷ
+  ticket Hỗ Trợ IT con khi quy trình Nhân Sự nguồn bị huỷ/xoá, nhưng CỐ Ý không gỡ `linkedTicketId` trên
+  task (lúc đó quy trình đã CANCELLED hoặc bị xoá hẳn — không ai còn tác động lên task đó để cần tạo
+  ticket mới). Đúng với nhánh CANCELLED, nhưng SAI với nhánh XOÁ HẲN rồi được KHÔI PHỤC từ Thùng Rác:
+  quy trình quay lại ĐÚNG trạng thái trước khi xoá (thường vẫn `IN_PROGRESS`) nhưng task vẫn giữ
+  `linkedTicketId` trỏ tới ticket ĐÃ `CANCELLED` — `createItTicketForHrTask()` chặn cứng
+  `task.linkedTicketId != null`, task kẹt vĩnh viễn không tạo lại được ticket mới dù ticket cũ đã chết.
+- Vá: thêm `resyncHrProcessLinkedTicketsOnRestore(item, ticketList)` (mới, `lib/recordActions.js`) —
+  gọi ngay sau `POST /api/trash/:id/restore` thành công khi `collection === 'hrProcesses'` (`routes/
+  trash.js`) — quét MỌI task còn `linkedTicketId`, gỡ về `null` nếu ticket liên kết KHÔNG CÒN TỒN TẠI
+  hoặc đã `CANCELLED` (giữ nguyên nếu ticket vẫn TODO/DOING/DONE — chỉ những task thật sự "kẹt" mới bị
+  đụng tới), ghi 1 dòng `history` tổng hợp khi có thay đổi. Lỗi ở bước này không làm hỏng lượt khôi phục
+  đã commit — chỉ log lại, cùng tinh thần mọi cleanup chéo collection khác trong đợt này.
+
+**Test:** file mới `tests/test-trash-restore-hrprocess-itticket-resync.js` (8 scenario, gọi thẳng router
+THẬT `routes/trash.js`) — khôi phục hrProcesses gỡ đúng `linkedTicketId` của task có ticket CANCELLED,
+giữ nguyên task có ticket còn sống (TODO), cũng gỡ khi ticket đã bị xoá vĩnh viễn (không chỉ CANCELLED),
+không đụng gì khi cả 2 ticket còn sống (idempotent, không thêm history thừa), và khôi phục collection
+khác (docs) không bị ảnh hưởng. Xác nhận FAIL trên code CŨ (`git stash -- lib/recordActions.js
+routes/trash.js`, đúng 3/8 scenario FAIL), PASS trên code đã vá (8/8). Regression: `test-trash-
+sensitive-collections.js` (32/32), `test-trash-operation-orders-label.js` (4/4), `test-hrprocess-cancel-
+itticket-cleanup.js` (9/9), `test-hrprocess-task-settle-itticket-cleanup.js` (5/5), `test-hrprocess-
+delete-permission.js` (7/7), `test-audit-nhansu-onboarding-contract.js` (29/29) — toàn bộ PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.3 (2026-11): [TB] Re-audit lần 5 — mục 16: Huỷ/xoá shiftRoster không xử lý shiftSwapRequests PENDING
 
