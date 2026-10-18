@@ -307,7 +307,14 @@ const ADMIN_ONLY_KEYS = new Set([
   // diskSpaceMonitorState: PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 2 — state nội bộ do
   // jobs/diskSpaceMonitor.js tự quản lý (thời điểm cảnh báo hết dung lượng đĩa gần nhất), không có màn
   // hình nào cần client ghi tay — trước đây bất kỳ ai đã đăng nhập cũng ghi được để ỉm/spam cảnh báo.
-  'diskSpaceMonitorState'
+  'diskSpaceMonitorState',
+  // deptCodeMap: PHÁT HIỆN THIẾU ở đợt re-audit lần 3 (cùng lớp lỗi với itPriceWholesaleStoreMixedApprovalRules
+  // đã vá) — object {<tên bộ phận>: <mã bộ phận>} do SERVER TỰ quản lý (ensureDeptCode(), routes/employeeProfile.js,
+  // ghi qua withLockedAppDataValue() khi xuất Excel Hồ Sơ Nhân Sự), KHÔNG có màn hình nào cho client ghi
+  // tay qua đây — trước đây bất kỳ tài khoản đã đăng nhập nào cũng ghi đè được qua
+  // POST /api/data/deptCodeMap, làm sai lệch cột "Mã bộ phận" ở file Excel xuất chính thức + logic tự
+  // sinh mã mới (generateDeptCode() dedup theo Object.values(deptCodeMap)).
+  'deptCodeMap'
 ]);
 
 // ===== Nhật ký hệ thống SERVER-SIDE cho thao tác quản trị nhạy cảm (đợt audit chuyên sâu cụm "Hệ

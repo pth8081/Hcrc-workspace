@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**26.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.51 (2026-11): [Trung Bình] Re-audit lần 3 (6 agent song song) — mục 1: deptCodeMap thiếu gate quyền
+
+Sau khi hoàn tất Đợt 3-5 + "Chặn admin tự duyệt ở TẤT CẢ module", theo yêu cầu người dùng lặp lại chu
+trình rà soát cho đến khi hết lỗi, chạy lại 6 agent song song (business-logic/root-admin/search-filter
+leakage/permission-config/business-process-config/cross-module-integration). Phát hiện 8 lỗi mới (đã
+liệt kê đầy đủ, xử lý tuần tự theo mức độ) — đây là mục ĐẦU TIÊN đã vá xong trong đợt này.
+
+- **[Trung Bình] `deptCodeMap` (object {tên bộ phận: mã bộ phận}) thiếu gate quyền ở `POST /api/data/:key`.**
+  Key này nằm trong `DEFAULTS` nên qua được kiểm `VALID_KEYS`, nhưng KHÔNG có trong `ADMIN_ONLY_KEYS`
+  lẫn `NON_ADMIN_GATED_KEYS` (routes/data.js) — cùng lớp lỗi với `itPriceWholesaleStoreMixedApprovalRules`
+  đã vá trước đó (lọt lưới khỏi cả 2 danh sách). `deptCodeMap` CHỈ do SERVER tự quản lý
+  (`ensureDeptCode()`, routes/employeeProfile.js, ghi qua `withLockedAppDataValue()` khi xuất Excel Hồ
+  Sơ Nhân Sự) — KHÔNG có màn hình nào cho client ghi tay qua route generic. Trước đây bất kỳ tài khoản
+  đã đăng nhập nào cũng ghi đè được qua `POST /api/data/deptCodeMap`, làm sai lệch cột "Mã bộ phận" ở
+  file Excel xuất chính thức + logic tự sinh mã mới (`generateDeptCode()` dedup theo
+  `Object.values(deptCodeMap)`). Thêm `'deptCodeMap'` vào `ADMIN_ONLY_KEYS`.
+
+**Test:** file mới `tests/test-deptcodemap-admin-gate.js` (3 scenario, chạy thật `routes/data.js` qua
+HTTP, cùng khuôn `test-workflow-participating-positions.js`) — xác nhận non-admin bị 403, admin vẫn ghi
+được, key lạ vẫn 400. Assertion mới đã xác nhận FAIL trên code CŨ (`git stash`), PASS trên code đã vá.
+Chạy lại `test-initdatabase-key-coverage.js` (4/4), `test-workflow-participating-positions.js` (6/6),
+`test-hr-profile-excel-history-12cols.js` (10/10, gọi `buildExportWorkbook()` trực tiếp — không qua
+route, không bị ảnh hưởng) — tất cả PASS.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.50 (2026-11): [Cao — rủi ro cao, theo dõi sau deploy] Chặn admin tự duyệt ở TẤT CẢ module
 
