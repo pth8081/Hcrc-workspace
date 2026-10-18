@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**26.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.65 (2026-11): [Cao] Re-audit lần 4 — mục 5: orgChart hoàn toàn không gate "Khối 0" ở server
+
+Mục thứ 5 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] `routes/orgChart.js` ("Cơ Cấu Tổ Chức" + "Cấu Hình Luồng Đánh Giá KPI Theo Vị Trí") là router
+  RIÊNG (không qua `routes/records.js` chung, không qua `GET /api/data` — dữ liệu tự quản lý qua khoá
+  AppData riêng `orgChartVersions`) nên trước đây chỉ có `router.use(requireAuth, blockIfMustChangePassword)`
+  — HOÀN TOÀN không gọi `hasModuleAccessServer()`.** Admin tắt `moduleAccess.orgChart` cho 1 tài khoản
+  (còn giữ `orgChartManage`/`nhanSuManage`/`kpiFlowConfigManage`) vẫn gọi thẳng được MỌI route (xem/sửa
+  cây tổ chức, cấu hình luồng đánh giá KPI) qua API trực tiếp dù tab đã ẩn hoàn toàn trên giao diện.
+  - Thêm middleware `requireOrgChartModuleAccess` vào `router.use()` đầu file (mirror đúng khuôn
+    `requireChecklistModuleAccess()` ở `routes/checklist.js`/`requireHrPayrollModuleAccess()` ở
+    `routes/payroll.js`) — gác TRƯỚC mọi route, cả 7 nhóm route (versions/nodes/import/export/
+    headcount-report/kpi-flow/kpi-evaluators) đều tự động được bảo vệ vì nằm sau middleware này.
+  - Không cần sửa `MODULE_ACCESS_GATED_COLLECTIONS`/`routes/data.js`/`routes/reports.js` (module này
+    không đi qua các route đó).
+
+- **Dọn kèm 1 fixture lỗi thời phát hiện khi chạy regression**: `tests/test-orgchart-headcount-report.js`
+  dùng `ADMIN` (chỉ `perms.admin=true`) cho mọi thao tác Phần B (tạo/sửa node, xem báo cáo định biên) —
+  hợp lệ lúc viết (10/2026), nhưng `routes/orgChart.js` đã bỏ hẳn admin bypass ở cả 3 hàm
+  `canView`/`canManageTree`/`canManageKpiFlow` từ 11/2026 (xem chú thích đầu file đó; `test-orgchart-v2.js`
+  đã cập nhật đúng từ trước). Fixture chưa theo kịp nên 5/7 scenario của file này đã FAIL từ TRƯỚC khi có
+  đợt vá này (xác nhận bằng `git stash` — fail giống nhau có/không có bản vá Khối 0) — không phải lỗi do
+  đợt vá gây ra, nhưng tiện sửa luôn cùng đợt regression (thêm `orgChartManage: true` vào fixture `ADMIN`).
+
+**Test:** file mới `tests/test-khoi0-orgchart-gate.js` (6 scenario: tắt module -> 403 ở GET /versions +
+POST /bootstrap (sửa cây) + GET /kpi-flow + GET /kpi-evaluators/:username; bật module -> không 403 oan ở
+2 route đại diện). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash -- routes/orgChart.js`, 2/6
+passed, đúng 4 scenario "LỖI ĐÃ VÁ" FAIL), PASS trên code đã vá (6/6). Chạy lại TOÀN BỘ bộ test orgChart
+liên quan: `test-orgchart-v2.js` (16/16), `test-orgchart-delete-draft-version.js` (5/5),
+`test-orgchart-headcount-report.js` (7/7, sau khi sửa fixture), `test-orgchart-import-export.js` (22/22),
+`test-orgchart-kpiflow-prune.js` (6/6), `test-orgchart-node-headcount-selfonly-ui.js` (6/6),
+`test-orgchart-diagram-tab.js` (17/17), `test-orgchart-import-modal-binding.js` (7/7),
+`test-orgchart-headcount-modal-binding.js` (5/5) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.64 (2026-11): [Cao] Re-audit lần 4 — mục 4: checklistSubmissions thiếu gate "Khối 0" ở GET /api/data/lazy/checklist
 
