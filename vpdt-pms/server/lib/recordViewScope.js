@@ -1676,6 +1676,20 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // reportViewAll/reportExtraKeys) CỐ Ý không phụ thuộc moduleAccess.checklist, chỉ GET /api/data(/lazy)
   // mới cần gate này.
   checklist: ['checklistTemplates', 'checklistSubmissions'],
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): "car" (Đăng Ký Xe) đã có gate Khối 0 đúng ở khâu TẠO MỚI
+  // (EXTRA_CREATE_MODULE_ACCESS_KEY, routes/create.js) VÀ khâu HÀNH ĐỘNG (`router.use('/carRegs', ...)`
+  // ở routes/records.js), nhưng canViewCarReg() (ngay trên) KHÔNG hề gọi hasModuleAccessServer() —
+  // nhánh "cùng phòng ban tự động xem" (scopeAllows mode DEPT) cho qua KHÔNG cần quyền chi tiết nào,
+  // y hệt office/budget/license/uniform/checklist/vanHang/muaHang/hrAttendance ở trên, nên phải mirror
+  // vào đây để GET /api/data(/reports) zero-out đúng. carRegs giờ TỰ ĐỘNG có mặt ở
+  // COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js VÀ routes/reports.js) — đã gỡ khỏi
+  // EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn office/checklist/meeting ở trên.
+  car: ['carRegs'],
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức TB): "vpp" (Văn Phòng Phẩm) — cùng lớp lỗi như "car" ngay trên, chỉ
+  // riêng vppRegistrations (hồ sơ đăng ký con) bị lộ; vppPeriods (kỳ cha) CỐ Ý không thêm vào đây —
+  // không có canView riêng, vốn mở đọc cho mọi người đã đăng nhập như 1 danh mục dùng chung (giống
+  // meetingRooms), chỉ GHI mới cần Khối 0 (đã có ở EXTRA_CREATE_MODULE_ACCESS_KEY, routes/create.js).
+  vpp: ['vppRegistrations'],
   // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): "meeting" (Đặt Phòng Họp) và "periodicReport" (Báo Cáo Định Kỳ)
   // đã có gate Khối 0 đúng ở khâu TẠO MỚI (EXTRA_CREATE_MODULE_ACCESS_KEY, routes/create.js) VÀ khâu
   // HÀNH ĐỘNG (`router.use('/meetings'|'/reportPeriods'|'/reportEntries', ...)` ở routes/records.js),

@@ -137,8 +137,11 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // MODULE_ACCESS_GATED_COLLECTIONS.meeting/periodicReport thật (lib/recordViewScope.js — để GET /api/data(/reports)
 // cũng zero-out đúng, không chỉ riêng route TẠO MỚI này) nên tự động có mặt ở COLLECTION_TO_MODULE_ACCESS_KEY
 // phía trên, không cần liệt kê lại ở đây nữa — cùng khuôn office/checklist trước đó.
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao/TB): carRegs/vppRegistrations đã dời sang
+// MODULE_ACCESS_GATED_COLLECTIONS.car/vpp thật (lib/recordViewScope.js) nên tự động có mặt ở
+// COLLECTION_TO_MODULE_ACCESS_KEY phía trên — gỡ khỏi map này, không khai trùng.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
-  budgetTemplates: 'budget', carRegs: 'car', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
+  budgetTemplates: 'budget', hrProcesses: 'hrLifecycle',
   vppPeriods: 'vpp'
 };
 

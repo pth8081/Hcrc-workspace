@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**26.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.79 (2026-11): [Cao/TB] Re-audit lần 5 — mục 1: carRegs/vppRegistrations thiếu Khối 0 ở MODULE_ACCESS_GATED_COLLECTIONS
+
+Mục đầu tiên trong đợt re-audit lần 5 (6 agent song song, 35 phát hiện: 9 Cao, ~22 TB, 4 Thấp — xử lý
+theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng).
+
+- **`canViewCarReg()`/`canViewVppRegistration()` (lib/recordViewScope.js) KHÔNG hề gọi
+  `hasModuleAccessServer()`** — cùng lớp lỗi "Khối 0" đã vá ở office/budget/license/uniform/checklist/
+  meeting/periodicReport các đợt trước, chỉ riêng carRegs (Đăng Ký Xe) và vppRegistrations (Văn Phòng
+  Phẩm) bị bỏ sót. Nhánh "cùng phòng ban tự động xem" (`scopeAllows`/`deptAutoViewOn`) hoặc "chính
+  người tạo" cho qua KHÔNG cần quyền module nào — admin tắt `moduleAccess.car`/`moduleAccess.vpp` cho
+  1 tài khoản (VD chuyển bộ phận) nhưng tài khoản đó vẫn cùng phòng ban/vẫn là người tạo của hồ sơ xe/
+  VPP cũ thì gọi thẳng `GET /api/data` vẫn đọc được nội dung, dù UI đã ẩn hoàn toàn menu.
+  - Thêm `car: ['carRegs']` + `vpp: ['vppRegistrations']` vào `MODULE_ACCESS_GATED_COLLECTIONS`
+    (lib/recordViewScope.js) — tự động được 3 nơi dùng chung map này gác: 2 vòng lặp zero-out
+    `GET /api/data`/`GET /api/data/lazy/:groupKey` (routes/data.js) + `COLLECTION_TO_MODULE_ACCESS_KEY`
+    tự suy diễn (routes/create.js cho khâu tạo mới, routes/reports.js cho khâu Báo Cáo).
+  - Gỡ `carRegs: 'car'`/`vppRegistrations: 'vpp'` khỏi `EXTRA_CREATE_MODULE_ACCESS_KEY` (routes/
+    create.js) để không khai trùng — map tự suy diễn ở trên đã phủ cả 2 collection này rồi.
+  - **`vppPeriods` CỐ Ý không thêm vào `MODULE_ACCESS_GATED_COLLECTIONS`** — không có `canView` riêng,
+    vốn mở đọc cho mọi người đã đăng nhập như 1 danh mục dùng chung (giống `meetingRooms`), chỉ GHI
+    mới cần Khối 0 (đã có sẵn ở `EXTRA_CREATE_MODULE_ACCESS_KEY`, không đổi).
+
+**Test:** `tests/test-khoi0-carregs-vppregistrations-gate.js` (mới, 7 scenario — cùng khuôn
+`test-khoi0-meeting-periodicreport-gate.js`: mount `routes/data.js` thật với stub tối giản, seed 1 bản
+ghi carRegs + 3 bản ghi vppRegistrations theo khuôn `canViewVppRegistration()` mặc định
+`CREATOR_ONLY`). Xác nhận FAIL trên code CŨ (`git stash -- lib/recordViewScope.js routes/create.js`,
+4/7 scenario FAIL đúng 2 cấu trúc map + 2 hành vi zero-out "LỖI ĐÃ VÁ"), PASS trên code đã vá (7/7).
+Regression: `test-khoi0-payment-office-gate.js` (6/6), `test-khoi0-meeting-periodicreport-gate.js`
+(7/7), `test-meeting-car.js` (104/104), `test-workflow-participating-positions.js` (6/6),
+`test-extra-approval-groups.js` (26/26), `test-module-access-gate-create.js` (3/3),
+`test-vpp-registrations-scope.js` (7/7), `test-carreg-change-route.js`/`test-carreg-driver-view-info.js`/
+`test-carreg-evaluation-rating.js`/`test-carreg-reassign-inprogress.js`, `test-vpp.js` (29/29),
+`test-collapse-vpp-uniform-forms.js` (8/8), `test-office-vpp-cancel-step1.js` — toàn bộ PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.78 (2026-11): [Báo Cáo] Khối "🔍 Tra Cứu Chi Tiết" biến mất khi 0 hồ sơ khớp bộ lọc — HOÀN TẤT toàn bộ 22 phát hiện re-audit lần 4
 
