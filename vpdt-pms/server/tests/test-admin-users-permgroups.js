@@ -1576,17 +1576,51 @@ async function scenario(name, fn) {
       /Vui lòng nhập Email hoặc Họ và Tên/.test(r.alerts[0] || ''), JSON.stringify(r));
   });
 
-  await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[] đang gán (không để lại "ma")', async () => {
+  await scenario('(v) deleteDept(): xoá 1 Phòng Ban cũng tự gỡ khỏi mọi deptGroups[].depts[]/workflowParticipatingDeptGroups[].depts[]/workflowParticipatingPositions[] đang gán (không để lại "ma")', async () => {
     if (khoiKinhDoanhId == null) { record('(v) deleteDept() cascade vào deptGroups', false, 'skipped: no group id'); return; }
     const r = await page.evaluate((khoiId) => {
-      const before = DB.deptGroups.find(g => g.id === khoiId).depts.slice();
+      // LỖI ĐÃ VÁ (re-audit lần 3, mức Thấp): seed thêm 1 nhóm workflowParticipatingDeptGroups ("Đơn Vị
+      // Tham Gia Quy Trình") có "Kinh Doanh" trong depts[] — scenario (n) đã seed sẵn
+      // workflowParticipatingPositions với 1 cặp {jobTitle:'Nhân viên', dept:'Kinh Doanh'} từ trước, tái
+      // dùng đúng dữ liệu đó ở đây (không seed lại, xác nhận cleanup không phụ thuộc thứ tự chạy).
+      DB.workflowParticipatingDeptGroups = [{ id: 1, name: 'Nhóm Ngân Sách', depts: ['Kinh Doanh', 'Kế Toán'], moduleKeys: ['DOC'] }];
+      const beforeDeptGroups = DB.deptGroups.find(g => g.id === khoiId).depts.slice();
+      const beforeWfDeptGroups = DB.workflowParticipatingDeptGroups[0].depts.slice();
+      const beforeWfPositions = (DB.workflowParticipatingPositions || []).slice();
       deleteDept('Kinh Doanh');
-      const after = DB.deptGroups.find(g => g.id === khoiId).depts.slice();
-      return { before, after, deptsAfter: DB.depts.slice() };
+      const afterDeptGroups = DB.deptGroups.find(g => g.id === khoiId).depts.slice();
+      const afterWfDeptGroups = DB.workflowParticipatingDeptGroups[0].depts.slice();
+      const afterWfPositions = (DB.workflowParticipatingPositions || []).slice();
+      return { beforeDeptGroups, afterDeptGroups, beforeWfDeptGroups, afterWfDeptGroups, beforeWfPositions, afterWfPositions, deptsAfter: DB.depts.slice() };
     }, khoiKinhDoanhId);
     record('(v) Xoá Phòng Ban "Kinh Doanh" khỏi DB.depts thành công', !r.deptsAfter.includes('Kinh Doanh'), JSON.stringify(r));
     record('(v) Tên Phòng Ban vừa xoá cũng bị gỡ khỏi deptGroups[].depts[] tương ứng (trước có, sau không còn "ma")',
-      r.before.includes('Kinh Doanh') && !r.after.includes('Kinh Doanh'), JSON.stringify(r));
+      r.beforeDeptGroups.includes('Kinh Doanh') && !r.afterDeptGroups.includes('Kinh Doanh'), JSON.stringify(r));
+    record('(v) LỖI ĐÃ VÁ: cũng bị gỡ khỏi workflowParticipatingDeptGroups[].depts[] ("Đơn Vị Tham Gia Quy Trình"), phòng ban KHÁC ("Kế Toán") không bị đụng',
+      r.beforeWfDeptGroups.includes('Kinh Doanh') && !r.afterWfDeptGroups.includes('Kinh Doanh') && r.afterWfDeptGroups.includes('Kế Toán'), JSON.stringify(r));
+    record('(v) LỖI ĐÃ VÁ: cặp {jobTitle,dept} mang dept="Kinh Doanh" trong workflowParticipatingPositions[] cũng bị gỡ, cặp dept KHÁC ("Kế Toán") giữ nguyên',
+      r.beforeWfPositions.some(p => p.dept === 'Kinh Doanh') &&
+      !r.afterWfPositions.some(p => p.dept === 'Kinh Doanh') &&
+      r.afterWfPositions.some(p => p.dept === 'Kế Toán'), JSON.stringify(r));
+  });
+
+  await scenario('(v2) deleteJobTitle(): xoá 1 Chức Danh cũng tự gỡ khỏi workflowParticipatingPositions[] (không để lại "ma")', async () => {
+    const r = await page.evaluate(() => {
+      DB.jobTitles = [...(DB.jobTitles || []), 'Giám Sát Tạm'];
+      DB.workflowParticipatingPositions = [
+        { jobTitle: 'Giám Sát Tạm', dept: 'Kế Toán' },
+        { jobTitle: 'Trưởng phòng', dept: 'Kế Toán' }
+      ];
+      const before = DB.workflowParticipatingPositions.slice();
+      deleteJobTitle('Giám Sát Tạm');
+      const after = DB.workflowParticipatingPositions.slice();
+      return { before, after, jobTitlesAfter: DB.jobTitles.slice() };
+    });
+    record('(v2) Xoá Chức Danh "Giám Sát Tạm" khỏi DB.jobTitles thành công', !r.jobTitlesAfter.includes('Giám Sát Tạm'), JSON.stringify(r));
+    record('(v2) LỖI ĐÃ VÁ: cặp {jobTitle,dept} mang chức danh đã xoá cũng bị gỡ khỏi workflowParticipatingPositions[], cặp chức danh KHÁC giữ nguyên',
+      r.before.some(p => p.jobTitle === 'Giám Sát Tạm') &&
+      !r.after.some(p => p.jobTitle === 'Giám Sát Tạm') &&
+      r.after.some(p => p.jobTitle === 'Trưởng phòng'), JSON.stringify(r));
   });
 
   await browser.close();
