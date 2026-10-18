@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.52 (2026-11): [Trung Bình-Cao] Re-audit lần 3 — mục 2: lỗi 409 trùng CCCD lộ employeeCode+trạng thái
+
+Tiếp nối v26.51 (deptCodeMap). Mục thứ 2 trong 8 phát hiện của re-audit lần 3:
+
+- **[Trung Bình-Cao] `POST /api/hr-profile` (tạo Hồ Sơ Nhân Sự) lộ `employeeCode` + trạng thái
+  ACTIVE/INACTIVE của người khác qua lỗi 409 trùng CCCD/CMND, cho tài khoản KHÔNG có quyền xem hồ sơ.**
+  Route này chỉ đòi `requireProfileCreate` (`canCreateProfiles()`/`hrProfileCreate`) — tách biệt rõ với
+  `canFullViewProfiles()`/`canEditProfiles()` (xem hồ sơ người khác). Nhưng `assertNationalIdNotDuplicated()`
+  (lib/employeeProfile.js) trước đây LUÔN nêu nguyên văn `employeeCode` + trạng thái trong thông báo 409
+  khi CCCD/CMND trùng với hồ sơ đã có, bất kể actor có quyền xem hay không — 1 tài khoản chỉ có
+  `hrProfileCreate` có thể dò CCCD/CMND (biết trước/brute-force theo khoảng số hợp lệ) để biết: (1) CCCD
+  đó có tồn tại trong hệ thống, (2) `employeeCode` gắn với nó, (3) người đó đang làm hay đã nghỉ việc —
+  đúng loại dữ liệu mà quyền `hrProfileCreate` (hẹp hơn quyền xem) cố ý không cho biết. `GET /by-code/:code`
+  (route chi tiết) đã chặn đúng qua `getProfileForViewer()` — chỉ riêng route TẠO MỚI là có khoảng hở.
+  Thêm tham số `canViewFull` (bắt buộc, không mặc định) vào `assertNationalIdNotDuplicated()` — actor
+  KHÔNG có quyền xem VÀ hồ sơ trùng đang ACTIVE → thông báo CHUNG, không nêu employeeCode/trạng thái. Hồ
+  sơ trùng đang INACTIVE vẫn giữ nguyên thông báo đầy đủ (đã chủ đích lộ employeeCode+tên+dept+ngày sinh
+  cho CÙNG permission tier `hrProfileCreate` qua `GET /api/hr-profile/search-inactive`/Tái Tuyển từ
+  trước — không phải lỗ hổng mới, giữ nguyên để không phá luồng "Kiểm Tra Nhân Sự Cũ" đã có). 3 điểm gọi
+  (`POST /`, `POST /bulk-import` nhánh tạo mới, `PATCH /by-code/:code`) đều đã truyền đúng giá trị —
+  2 điểm sau LUÔN có quyền edit/overwrite trước khi chạm tới đây (hardcode `true`), điểm đầu tính đúng
+  `canFullViewProfiles() || canEditProfiles()` của actor thật.
+
+**Test:** file mới `tests/test-hrprofile-nationalid-dup-leak.js` (7 scenario, pure-unit — gọi thẳng
+`assertNationalIdNotDuplicated()`/`createManualProfile()`). Assertion mới đã xác nhận FAIL trên code CŨ
+(`git stash`), PASS trên code đã vá. Chạy lại `test-hr-profile.js` (32/32 — xác nhận scenario
+"chặn CỨNG trùng CCCD" cũ vẫn đúng, không coincidentally pass sai lý do), `test-hr-profile-bulk-import-autoassign.js`
+(7/7), `test-hr-profile-nationalid-format.js` (9/9), `test-hr-profile-import-autolink-username.js` (6/6),
+`test-hr-profile-autolink-extended.js`, `test-hr-profile-wired-fields-route.js` (5/5),
+`test-hr-profile-position-assign-import.js` (12/12) — tất cả PASS.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.51 (2026-11): [Trung Bình] Re-audit lần 3 (6 agent song song) — mục 1: deptCodeMap thiếu gate quyền
 
