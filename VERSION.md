@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**26.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.40 (2026-11): [Trung Bình] Vá nút "+ Thêm Mẫu Giá"/"🔄 Thay mẫu" bị khoá cứng khi chọn file sai định dạng
+
+Phát hiện lúc điều tra `test-it-price-master-list-add.js` (mục C trong danh sách "4 file test nghi do
+sandbox" còn lại — hoá ra cũng KHÔNG phải lỗi sandbox, cùng lớp với mục B đã vá ở v26.39).
+
+- `pickAndParseMasterListFile()` (module-itsupport-price.js — input file DUY NHẤT trong hệ thống tự
+  dựng 1 Promise riêng, chỉ `resolve()` khi bắt được sự kiện `change` trên input, KHÔNG dùng
+  `data-op-change` như 40+ nơi khác) đã được vá (10/2026) cho trường hợp người dùng bấm "Hủy" hộp thoại
+  chọn file. Nhưng còn 1 đường vào THỨ 2 gây treo Promise y hệt: chọn 1 file có NỘI DUNG không khớp đuôi
+  khai báo (VD `.txt` đổi tên thành `.xlsx`) — lớp kiểm tra chữ ký file TOÀN TRANG (`core.js`,
+  `document.addEventListener('change', ..., true)`, CAPTURE phase) chặn đúng sự kiện `change` gốc, tự
+  `alert()` + xoá `input.value` rồi **KHÔNG re-dispatch gì cả** (đúng, vì file không hợp lệ) — nhưng cũng
+  không báo lại cho `pickAndParseMasterListFile()` đang chờ đúng sự kiện đó. Promise treo vĩnh viễn, kéo
+  theo `opInFlight` của nút gọi hàm (`+ Thêm Mẫu Giá`/`🔄 Thay mẫu`) khoá cứng mãi — bấm lại không còn
+  phản ứng gì, giống hệt hiện tượng "Hủy hộp thoại" đã báo trước đó nhưng qua 1 đường khác chưa được vá.
+- Fix: lớp kiểm tra chữ ký (`core.js`) giờ tự phát thêm 1 custom event `file-signature-rejected` trên
+  chính input lúc từ chối (vô hại với 40+ nơi khác dùng chung lớp này — không ai lắng nghe sự kiện mới
+  này); `pickAndParseMasterListFile()` lắng nghe đúng event đó để `resolve(null)` kịp thời, cùng khuôn xử
+  lý `cancel` đã có.
+
+Test: thêm 1 kịch bản regression mới vào `test-it-price-master-list-add.js` (chọn file sai chữ ký ->
+không khoá cứng nút, bấm lại vẫn mở được hộp thoại) + sửa 2 buffer giả lập `.xlsx` ở 2 kịch bản "happy
+path" (RETAIL/WHOLESALE) cho ĐÚNG chữ ký ZIP (`PK\x03\x04`) — trước đây dùng buffer văn bản thuần, bị lớp
+kiểm tra chữ ký (thêm sau khi viết test này) chặn nhầm, khiến CẢ 3 kịch bản còn lại (happy path RETAIL,
+modal Margin/Chiết Khấu Bán Buôn, "🔄 Thay mẫu") FAIL dây chuyền từ đúng 1 nguyên nhân gốc này (nút bị
+khoá cứng sau kịch bản đầu). Xác nhận bằng `git stash`: 3/7 PASS trên code cũ (đúng 4 FAIL dây chuyền),
+7/7 PASS trên code đã vá. Chạy lại `test-itprice-file-format-reject.js` (6) + `test-itprice-download.js`
+(19) + `test-itprice-scope-dates.js` (25) + `test-itprice-permtree-move.js` (6) +
+`test-vanhanh-itprice-chitiet-csp.js` (1) + CSP self-check + `test-lazy-load-all-tabs.js` (46/46) — không
+hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/core.js` + `public/js/module-itsupport-price.js`) — KHÔNG
+đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.39 (2026-11): [NGHIÊM TRỌNG] Vá lỗi bấm 1 lần chạy 2 lần (double-dispatch) toàn bộ nút data-op trong Vận Hành
 

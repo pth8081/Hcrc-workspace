@@ -12541,6 +12541,19 @@ async function verifyFileSignatureClient(file, declaredExt) {
 // dụng cho MỌI <input type="file"> hiện có VÀ render động sau này, không cần sửa 40+ nơi gọi
 // uploadFileToServer() rải khắp module-*.js. Nếu file hợp lệ: tự phát lại ĐÚNG 1 lượt 'change' (đánh dấu
 // data-sig-check-passed để không lặp vô hạn) cho các handler thật xử lý tiếp như chưa từng có lớp này.
+//
+// LỖI THẬT phát hiện lúc điều tra test-it-price-master-list-add.js (rà soát trước go-live, 11/2026):
+// nhánh "file KHÔNG khớp chữ ký" trước đây chỉ alert() + xoá input.value RỒI return — KHÔNG hề báo lại
+// cho phía đang CHỦ ĐỘNG CHỜ sự kiện 'change' gốc bị chặn ở đây. 39+ nơi dùng data-op-change (qua
+// bindCspDelegation()) không sao vì chúng là handler ĐĂNG KÝ SẴN, không "chờ" gì — không thấy 'change'
+// nào thì coi như chưa chọn file, không có trạng thái gì bị treo. NHƯNG pickAndParseMasterListFile()
+// (module-itsupport-price.js — input file DUY NHẤT KHÔNG dùng data-op-change, tự dựng 1 Promise CHỈ
+// resolve() khi bắt được 'change') lại ĐANG CHỜ ĐÚNG sự kiện 'change' bị nuốt mất ở đây — chọn 1 file có
+// nội dung không khớp đuôi khai báo (VD .txt đổi tên thành .xlsx) khiến Promise đó treo VĨNH VIỄN, kéo
+// theo opInFlight của nút "+ Thêm Mẫu Giá"/"🔄 Thay mẫu" bị khoá cứng mãi — CÙNG lớp lỗi "Hủy hộp thoại"
+// đã vá trước đó (xem chú thích tại pickAndParseMasterListFile()), chỉ khác đường vào. Phát thêm 1 custom
+// event 'file-signature-rejected' NGAY TRÊN CHÍNH input lúc từ chối — vô hại với 40+ nơi khác (không ai
+// lắng nghe), nhưng cho phép pickAndParseMasterListFile() tự resolve(null) đúng lúc.
 document.addEventListener('change', (e) => {
   const input = e.target;
   if (!(input instanceof HTMLInputElement) || input.type !== 'file') return;
@@ -12553,6 +12566,7 @@ document.addEventListener('change', (e) => {
       if (!check.ok) {
         alert('⛔ ' + check.reason);
         input.value = '';
+        input.dispatchEvent(new Event('file-signature-rejected'));
         return;
       }
     }

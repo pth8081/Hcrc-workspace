@@ -103,6 +103,34 @@ async function main() {
       await page.waitForTimeout(200);
     });
 
+    await run.run('LỖI THẬT (cùng lớp "Hủy hộp thoại" nhưng đường vào khác): chọn file có NỘI DUNG không khớp đuôi .xlsx khai báo -> bị lớp kiểm tra chữ ký chặn (alert đúng), nhưng KHÔNG được làm nút khoá cứng mãi — bấm lại vẫn phải mở lại được hộp thoại', async () => {
+      const [chooser] = await Promise.all([
+        page.waitForEvent('filechooser', { timeout: 3000 }),
+        page.click('[data-op="addItPriceMasterList"]'),
+      ]);
+      // Nội dung thuần văn bản, không khớp chữ ký ZIP mà .xlsx cần (xem CLIENT_FILE_SIGNATURE_MAP,
+      // core.js) -> lớp kiểm tra chữ ký TOÀN TRANG phải chặn + alert, KHÔNG để lộ xuống onchange thật.
+      await chooser.setFiles({ name: 'gia-gia.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('day khong phai file xlsx thuc') });
+      await page.waitForTimeout(300);
+
+      const afterReject = await page.evaluate(() => ({
+        inFlight: document.querySelector('[data-op="addItPriceMasterList"]').dataset.opInFlight,
+        alerts: window.__alerts
+      }));
+      assert(afterReject.inFlight !== '1', 'Sau khi bị chặn do sai chữ ký file, nút KHÔNG được ở trạng thái "đang xử lý" mãi mãi');
+      assert(afterReject.alerts.some(a => a.includes('không khớp với định dạng đã khai')), 'Phải có alert báo đúng lý do (sai chữ ký file)');
+
+      const [chooser2] = await Promise.all([
+        page.waitForEvent('filechooser', { timeout: 3000 }),
+        page.click('[data-op="addItPriceMasterList"]'),
+      ]);
+      assert(!!chooser2, 'Bấm lại "+ Thêm Mẫu Giá" sau khi bị chặn sai chữ ký 1 lần vẫn phải mở lại được hộp thoại chọn file');
+      await page.evaluate(() => {
+        document.getElementById('itPriceMasterListFileInput').dispatchEvent(new Event('cancel'));
+      });
+      await page.waitForTimeout(200);
+    });
+
     await run.run('Happy path: chọn file thật -> parse xong -> đặt tên -> lưu đúng vào DB.itPriceMasterLists với priceType đang mở (RETAIL)', async () => {
       await stubParseFileRoute(page, { columns: [{ key: 'c0', label: 'Tên hàng' }, { key: 'c1', label: 'Giá' }] });
       await page.evaluate(() => { window.__promptAnswer = 'Mẫu giá test Q4/2026'; });
@@ -111,7 +139,9 @@ async function main() {
         page.waitForEvent('filechooser', { timeout: 3000 }),
         page.click('[data-op="addItPriceMasterList"]'),
       ]);
-      await chooser.setFiles({ name: 'gia-test.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('fake-xlsx-content') });
+      // Buffer phải bắt đầu đúng 4 byte chữ ký ZIP (PK\x03\x04) để qua được lớp kiểm tra chữ ký file
+      // TOÀN TRANG (core.js, CLIENT_FILE_SIGNATURE_MAP['xlsx'] = ['zip']) — .xlsx thật cũng là 1 file ZIP.
+      await chooser.setFiles({ name: 'gia-test.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.concat([Buffer.from([0x50, 0x4B, 0x03, 0x04]), Buffer.from('fake-xlsx-content')]) });
       // Đợt 10/2026 (theo yêu cầu người dùng): bước chọn cột Margin/Chiết Khấu (modal #colRoleModal) giờ
       // CHỈ hỏi khi đang ở Bán Buôn (activeBizConfigPriceTab === 'WHOLESALE') — kịch bản này đang ở mặc
       // định Bán Lẻ nên modal KHÔNG được mở, luồng thêm mẫu phải hoàn tất thẳng không cần thao tác gì
@@ -148,7 +178,7 @@ async function main() {
         page.waitForEvent('filechooser', { timeout: 3000 }),
         page.click('[data-op="addItPriceMasterList"]'),
       ]);
-      await chooser.setFiles({ name: 'gia-wholesale-test.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('fake-xlsx-content') });
+      await chooser.setFiles({ name: 'gia-wholesale-test.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.concat([Buffer.from([0x50, 0x4B, 0x03, 0x04]), Buffer.from('fake-xlsx-content')]) });
       await page.waitForSelector('#colRoleModal:not(.hidden)', { timeout: 3000 });
       const roleFields = await page.evaluate(() => ({
         hasMargin: !!document.getElementById('colRoleSel_margin'),

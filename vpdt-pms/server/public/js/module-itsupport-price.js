@@ -313,6 +313,16 @@ async function setItPriceMasterListMarginColumn(id) {
 // treo mãi — nút "+ Thêm Mẫu Giá"/"🔄 Thay mẫu" bị khoá cứng, bấm lại sau đó KHÔNG còn phản ứng gì (đúng
 // hiện tượng người dùng báo, dễ dính chỉ với 1 lần lỡ tay bấm Hủy hộp thoại). "cancel" là sự kiện chuẩn
 // trên input[type=file] (mọi trình duyệt hiện đại) bắn ra đúng khi đóng hộp thoại mà KHÔNG chọn file nào.
+// LỖI THẬT phát hiện lúc điều tra test-it-price-master-list-add.js (rà soát trước go-live, 11/2026):
+// cùng lớp lỗi "Hủy hộp thoại" đã vá ở trên (Promise chỉ resolve() khi bắt được 'change'), nhưng với 1
+// đường vào KHÁC — chọn 1 file có NỘI DUNG không khớp đuôi khai báo (VD .txt đổi tên thành .xlsx). Lớp
+// kiểm tra chữ ký file TOÀN TRANG (core.js, document.addEventListener('change', ..., true)) chặn đúng sự
+// kiện 'change' gốc ở CAPTURE phase trước khi tới được `input.onchange` ở trên — tự alert() + xoá input
+// rồi KHÔNG re-dispatch 'change' nào cả (đúng, vì file không hợp lệ) nhưng cũng không có gì báo lại cho
+// Promise đang chờ ở đây -> treo VĨNH VIỄN, kéo theo opInFlight của nút "+ Thêm Mẫu Giá"/"🔄 Thay mẫu"
+// khoá cứng mãi — giống hệt hiện tượng "Hủy hộp thoại" nhưng KHÔNG được vá cùng đợt đó. core.js giờ tự
+// phát thêm 1 custom event 'file-signature-rejected' trên CHÍNH input lúc từ chối — lắng nghe đúng event
+// đó để resolve(null) kịp thời, cùng khuôn xử lý 'cancel' ở dưới.
 function pickAndParseMasterListFile() {
   return new Promise((resolve) => {
     const input = document.getElementById('itPriceMasterListFileInput');
@@ -323,8 +333,10 @@ function pickAndParseMasterListFile() {
       settled = true;
       input.onchange = null;
       input.oncancel = null;
+      input.removeEventListener('file-signature-rejected', onSigRejected);
       resolve(value);
     };
+    const onSigRejected = () => finish(null);
     input.onchange = async () => {
       const file = input.files[0];
       if (!file) return finish(null);
@@ -341,6 +353,7 @@ function pickAndParseMasterListFile() {
       }
     };
     input.oncancel = () => finish(null);
+    input.addEventListener('file-signature-rejected', onSigRejected);
     input.click();
   });
 }
