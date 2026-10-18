@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**26.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.94 (2026-11): [TB] Re-audit lần 5 — mục 7: ADMIN_SENSITIVE_KEYS thiếu log 21 key cấu hình
+
+Mục thứ 7 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5. `ADMIN_SENSITIVE_KEYS`
+(`routes/data.js`) là danh sách key quyết định `POST /api/data/:key` có tự ghi 1 dòng Nhật Ký Hệ
+Thống server-side (`actionType: 'ADMIN_DATA_WRITE'`) ngay sau khi lưu thành công hay không — độc lập
+với việc client có tự gọi `POST /api/log` hay không (xem chú thích đầu file, đợt vá mức Cao trước đó).
+Danh sách này được soạn tay, tách biệt khỏi `ADMIN_ONLY_KEYS` (danh sách quyết định CHẶN GHI), và đã bị
+lệch: 21 key đã nằm trong `ADMIN_ONLY_KEYS` (chặn ghi đúng — chỉ admin mới ghi được) nhưng bị bỏ sót
+khỏi `ADMIN_SENSITIVE_KEYS` (không ghi log), nên đổi các cấu hình phê duyệt này qua gọi thẳng API (bỏ
+qua giao diện) không để lại dấu vết nào, trong khi các key cùng lớp khác (`submissionApprovalGroups`,
+`contractApprovalGroups`, `operationOrderStoreMixedApprovalRules`...) vẫn được ghi log đầy đủ:
+
+- `itPriceWholesaleStoreMixedApprovalRules` ("⚙️ Quy Trình Hỗn Hợp" — người duyệt giá Bán Buôn) — cùng
+  khuôn/cùng mức nhạy cảm với `operationOrderStoreMixedApprovalRules` (đã có log), nhưng bị bỏ sót
+  riêng lẻ.
+- `extraApprovalGroups_<MODULE>`/`extraApprovalLevels_<MODULE>` ("Nhóm Phê Duyệt Cuối" mở rộng, 10/2026)
+  — **20 key** (10 quy trình × 2 key: `DOC`, `CAR`, `OFFICE_BUY`, `OFFICE_FIX`, `VPP`, `PAYMENT`,
+  `ITPRICE_RETAIL`, `ITPRICE_WHOLESALE`, `OPERATION_ORDER_STORE`, `OPERATION_ORDER_HO`) — bị bỏ sót
+  TOÀN BỘ vì `EXTRA_APPROVAL_MODULE_KEYS` chỉ được sinh ra ở vị trí khác trong file (sau
+  `ADMIN_SENSITIVE_KEYS`), không được đăng ký ngược lại.
+- Vá: thêm `itPriceWholesaleStoreMixedApprovalRules` trực tiếp vào `ADMIN_SENSITIVE_KEYS`; với 20 key
+  mở rộng, đăng ký NGAY tại vòng lặp sinh `EXTRA_APPROVAL_MODULE_KEYS` (không chép lại danh sách 10
+  moduleKey ở nơi khác — tránh lệch nếu sau này thêm quy trình thứ 11).
+
+**Test:** mở rộng `tests/test-audit-hethong-cluster-server.js` (dedicated test cho đúng cơ chế
+`ADMIN_SENSITIVE_KEYS`/`logAdminSensitiveDataWrite()`) — thêm 3 scenario mới (#2b): ghi
+`extraApprovalGroups_DOC`/`extraApprovalLevels_DOC` phải sinh log, CẢ 10 quy trình mở rộng (không chỉ
+DOC) đều sinh log, và `itPriceWholesaleStoreMixedApprovalRules` phải sinh log. Xác nhận FAIL trên code
+CŨ (`git stash -- routes/data.js`, đúng 3/22 scenario FAIL — các scenario khác không liên quan vẫn
+PASS), PASS trên code đã vá (22/22). Regression: `test-extra-approval-groups.js` (26/26),
+`test-audit-hethong-round2-server.js` (18/18), `test-workflowarray-structure-validate.js` (5/5),
+`test-deptcodemap-admin-gate.js` (3/3), `test-itprice-wholesale-mixed-approval.js` (14/14),
+`test-mixed-approval-excel.js` (15/15), `test-extra-approval-preview-fix.js` (24/24) — toàn bộ PASS,
+không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.93 (2026-11): [TB] Re-audit lần 5 — mục 6: Xoá uniformPeriods không kiểm tham chiếu → tồn kho âm
 

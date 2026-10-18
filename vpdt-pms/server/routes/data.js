@@ -339,6 +339,11 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   'budgetApprovedDeptWorkflows', 'meetingDeptWorkflows', 'deptViewScopeConfig',
   'itPriceDeptWorkflows', 'itPriceTierWorkflows',
   'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows', 'operationOrderStoreMixedApprovalRules',
+  // itPriceWholesaleStoreMixedApprovalRules: LỖI ĐÃ VÁ (re-audit lần 5, mức TB) — cùng khuôn/cùng mức
+  // nhạy cảm với operationOrderStoreMixedApprovalRules ngay trên (cấu hình người duyệt giá Bán Buôn) —
+  // TRƯỚC ĐÂY bị bỏ sót khỏi ADMIN_SENSITIVE_KEYS dù đã nằm trong ADMIN_ONLY_KEYS: đổi người duyệt giá ở
+  // đây không để lại dòng nhật ký hệ thống nào nếu gọi thẳng API (bỏ qua giao diện).
+  'itPriceWholesaleStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
   'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'externalApiKeys', 'attendanceClockApiKeys',
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions', 'workflowParticipatingDeptGroups',
@@ -1003,6 +1008,15 @@ EXTRA_APPROVAL_MODULE_KEYS.forEach(mk => {
   APPROVAL_GROUPS_TO_LEVELS_KEY[groupsKey] = levelsKey;
   APPROVAL_LEVELS_TO_GROUPS_KEY[levelsKey] = groupsKey;
   EXTRA_APPROVAL_GROUPS_KEYS.add(groupsKey);
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "ADMIN_SENSITIVE_KEYS thiếu log nhiều key cấu hình"): 10 quy
+  // trình × 2 key "Nhóm Phê Duyệt Cuối" này cùng khuôn/cùng mức nhạy cảm với
+  // submissionApprovalGroups/submissionApprovalLevels/contractApprovalGroups/contractApprovalLevels đã
+  // có log ở ADMIN_SENSITIVE_KEYS (đầu file) — nhưng vì EXTRA_APPROVAL_MODULE_KEYS chỉ sinh ra ở ĐÂY nên
+  // trước đây KHÔNG được đăng ký vào đó, khiến đổi/xoá nhóm phê duyệt của bất kỳ 1 trong 10 quy trình này
+  // qua gọi thẳng API (bỏ qua giao diện) không để lại dòng nhật ký hệ thống nào. Đăng ký bổ sung ngay khi
+  // sinh key, không lặp lại danh sách 10 moduleKey ở nơi khác.
+  ADMIN_SENSITIVE_KEYS.add(groupsKey);
+  ADMIN_SENSITIVE_KEYS.add(levelsKey);
 });
 
 // Mật khẩu SMTP là write-only ở giao diện (ô luôn hiện trống, xem index.html) — client gửi lên field

@@ -393,6 +393,41 @@ async function main() {
       assertEqual(SYSTEM_LOGS.length, 0, 'depts không nằm trong ADMIN_SENSITIVE_KEYS -> không ghi log ở đường này');
     });
 
+    // ====================== 2b) LỖI ĐÃ VÁ (re-audit lần 5, mức TB) — ADMIN_SENSITIVE_KEYS thiếu log
+    // 21 key cấu hình "Nhóm Phê Duyệt"/"Quy Trình Hỗn Hợp" mở rộng (10 quy trình extraApprovalGroups_*/
+    // extraApprovalLevels_* + itPriceWholesaleStoreMixedApprovalRules) — TRƯỚC ĐÂY các key này đã nằm
+    // trong ADMIN_ONLY_KEYS (chặn ghi đúng) nhưng bị bỏ sót khỏi ADMIN_SENSITIVE_KEYS (log), nên đổi
+    // người duyệt của 1 trong 10 quy trình "Nhóm Phê Duyệt Cuối" hoặc đổi người duyệt giá Bán Buôn qua
+    // gọi thẳng API không để lại dấu vết nào. ======================
+    await run.run('#2b (TB) extraApprovalGroups_DOC/extraApprovalLevels_DOC (Nhóm Phê Duyệt Cuối mở rộng) PHẢI sinh log server-side', async () => {
+      resetData();
+      await api('POST', '/api/data/extraApprovalGroups_DOC', [{ id: 'GRP_X', label: 'Đồng trình VBT', order: 0, members: [] }], ADMIN);
+      await api('POST', '/api/data/extraApprovalLevels_DOC', [{ id: 'LV_X', label: 'Cấp duyệt VBT', order: 1, visibleGroupIds: null, lockedGroupIds: [] }], ADMIN);
+      assert(SYSTEM_LOGS.some(l => l.targetObject === 'extraApprovalGroups_DOC'), 'ghi extraApprovalGroups_DOC phải có log (trước đây bị bỏ sót)');
+      assert(SYSTEM_LOGS.some(l => l.targetObject === 'extraApprovalLevels_DOC'), 'ghi extraApprovalLevels_DOC phải có log (trước đây bị bỏ sót)');
+    });
+
+    await run.run('#2b (TB) extraApprovalGroups_*/extraApprovalLevels_* CẢ 10 quy trình mở rộng đều sinh log, không chỉ DOC', async () => {
+      resetData();
+      const otherModules = ['CAR', 'OFFICE_BUY', 'OFFICE_FIX', 'VPP', 'PAYMENT', 'ITPRICE_RETAIL', 'ITPRICE_WHOLESALE', 'OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'];
+      for (const mk of otherModules) {
+        await api('POST', `/api/data/extraApprovalGroups_${mk}`, [{ id: `GRP_${mk}`, label: 'Nhóm mẫu', order: 0, members: [] }], ADMIN);
+      }
+      for (const mk of otherModules) {
+        assert(SYSTEM_LOGS.some(l => l.targetObject === `extraApprovalGroups_${mk}`), `ghi extraApprovalGroups_${mk} phải có log`);
+      }
+    });
+
+    await run.run('#2b (TB) itPriceWholesaleStoreMixedApprovalRules (Quy Trình Hỗn Hợp Bán Buôn) PHẢI sinh log server-side', async () => {
+      resetData();
+      await api('POST', '/api/data/itPriceWholesaleStoreMixedApprovalRules', [
+        { id: 'R1', dept: 'Siêu Thị A', steps: [{ type: 'PERSON', username: 'admin' }] }
+      ], ADMIN);
+      const entry = SYSTEM_LOGS.find(l => l.targetObject === 'itPriceWholesaleStoreMixedApprovalRules');
+      assert(entry, 'ghi itPriceWholesaleStoreMixedApprovalRules phải có log (trước đây bị bỏ sót, dù đã admin-only)');
+      assertEqual(entry.actionType, 'ADMIN_DATA_WRITE', 'actionType cố định cho đường ghi này');
+    });
+
     // ====================== 8) operationOrderApiConfig chỉ admin đọc ======================
     await run.run('#8 (TB) operationOrderApiConfig bị ẩn HOÀN TOÀN với tài khoản không phải admin', async () => {
       resetData();
