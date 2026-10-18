@@ -3748,6 +3748,13 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // PHÁT HIỆN mức Thấp (re-audit lần 5, #143): CHỈ OFFBOARDING đi qua đường chung này (ONBOARDING tách
+    // riêng sang createOnboardingProcessRecord() — đã tự khoá riêng, xem routes/create.js), nên khoá
+    // theo employeeUsername là ĐỦ ở đây — createForCollectionSerialized() (lib/recordStore.js) giữ khoá
+    // NÀY xong mới đọc existingCollection (tham số `collection` ở extraValidate ngay dưới) nên check
+    // trùng quy trình IN_PROGRESS ở đó luôn thấy đúng dữ liệu mới nhất, chặn được cả race thật (2 request
+    // OFFBOARDING gần như đồng thời cho CÙNG 1 nhân viên).
+    getLockKey: (payload) => `hr_process_offboarding:${String(payload?.employeeUsername || '').trim()}`,
     extraValidate: (payload, collection, user, appData) => {
       const processType = String(payload.processType || '').trim();
       if (!['ONBOARDING', 'OFFBOARDING'].includes(processType)) throw new CreateError(400, 'Loại quy trình không hợp lệ');
@@ -3909,6 +3916,25 @@ const CREATE_MODULE_CONFIGS = {
         payload.employeeJobTitle = employee.jobTitle || '';
         payload.email = employee.email || '';
         payload.employeePosType = null; payload.employeeCode = null;
+
+        // PHÁT HIỆN mức Thấp (re-audit lần 5, #143 "Offboarding không chặn tạo trùng quy trình"): KHÔNG
+        // hề kiểm tra nhân viên này đã có 1 quy trình Offboarding khác ĐANG CHẠY (IN_PROGRESS) hay chưa
+        // trước khi tạo thêm — 2 người Nhân Sự (hoặc 1 người bấm 2 lần) đều tạo được quy trình Offboarding
+        // CHO CÙNG 1 NHÂN VIÊN, sinh 2 bộ tasks[]/ticket IT trùng lặp hoàn toàn, rối loạn tiến độ xử lý
+        // (không rõ quy trình nào là "chính thức"). Khác hẳn ONBOARDING — đã có cơ chế riêng chống trùng
+        // CCCD NGAY TỪ GỐC (createOnboardingProcessRecord(), lib/hrProcessOnboardingCreate.js, tách khỏi
+        // đường chung này — xem routes/create.js). Chỉ chặn quy trình CÒN IN_PROGRESS (không chặn quy
+        // trình COMPLETED/CANCELLED trước đó — nhân viên có thể được tuyển lại rồi nghỉ việc lần sau, mỗi
+        // lần là 1 quy trình riêng biệt hợp lệ). Dùng `collection` (existingCollection — CHÍNH hrProcesses,
+        // tham số thứ 2 của extraValidate) chứ KHÔNG dùng appData: collection được createForCollectionSerialized()
+        // (lib/recordStore.js, qua getLockKey ngay trên) đọc TƯƠI SAU KHI đã giữ khoá theo employeeUsername
+        // — bắt buộc để chặn ĐÚNG race thật (2 request gần như đồng thời), đọc qua appData (snapshot TRƯỚC
+        // khi vào khoá) sẽ không thấy được bản ghi vừa được request khác ghi xong ngay trước đó.
+        const dupOffboarding = (collection || []).find(p =>
+          p.processType === 'OFFBOARDING' && p.employeeUsername === employee.username && p.status === 'IN_PROGRESS');
+        if (dupOffboarding) {
+          throw new CreateError(409, `Nhân viên này đã có 1 quy trình Offboarding đang thực hiện (quy trình #${dupOffboarding.id}) — vui lòng xử lý/huỷ quy trình cũ trước khi tạo mới`);
+        }
 
         const lastWorkingDate = String(payload.lastWorkingDate || '').trim();
         if (!lastWorkingDate || Number.isNaN(new Date(lastWorkingDate).getTime())) {

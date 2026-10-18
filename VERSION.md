@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.5 (2026-11): [Thấp] Re-audit lần 5 — mục 18/18 (cuối TB, bắt đầu Thấp): Offboarding không chặn tạo trùng quy trình
+
+Mục đầu tiên trong 4 phát hiện mức Thấp của đợt re-audit lần 5 (18 phát hiện TB đã hoàn tất hết ở v27.4):
+
+- Tạo quy trình Offboarding (`POST /api/create/hrProcesses`, `processType=OFFBOARDING`) trước đây
+  KHÔNG kiểm tra nhân viên đã có 1 quy trình Offboarding khác ĐANG CHẠY (`IN_PROGRESS`) hay chưa — 2
+  người Nhân Sự (hoặc 1 người bấm 2 lần) đều tạo được quy trình Offboarding cho CÙNG 1 nhân viên, sinh 2
+  bộ `tasks[]`/ticket IT trùng lặp hoàn toàn. Khác hẳn ONBOARDING — đã có cơ chế riêng chống trùng CCCD
+  ngay từ gốc (`createOnboardingProcessRecord()`, tách khỏi đường chung này — xem `routes/create.js`),
+  OFFBOARDING vẫn đi qua đường chung CHƯA từng có `getLockKey` (không khoá race) VÀ chưa từng có check
+  trùng logic nào.
+- Vá: thêm check trong `extraValidate()` (`CREATE_MODULE_CONFIGS.hrProcesses`, `lib/createValidation.js`)
+  đối chiếu với tham số `collection` (CHÍNH `existingCollection` mà `createForCollectionSerialized()` —
+  `lib/recordStore.js` — đọc TƯƠI SAU KHI đã giữ khoá, không dùng `appData` vì đó chỉ là snapshot chụp
+  TRƯỚC khi vào khoá) — chặn 409 nếu nhân viên đã có quy trình Offboarding `IN_PROGRESS`. Thêm
+  `getLockKey: (payload) => \`hr_process_offboarding:${payload.employeeUsername}\`` để OFFBOARDING đi
+  qua `createForCollectionSerialized()` (khoá THẬT), đóng cả khe hở race (2 request gần như đồng thời).
+  Chỉ chặn `IN_PROGRESS` — quy trình `COMPLETED`/`CANCELLED` trước đó không bị chặn (nhân viên có thể
+  được tuyển lại rồi nghỉ việc lần sau, mỗi lần là 1 quy trình riêng biệt hợp lệ).
+
+**Test:** file mới `tests/test-offboarding-duplicate-process-race.js` (9 scenario, mirror khuôn
+`test-onboarding-nationalid-race.js` — hàng đợi mutex THẬT theo lockKey, gọi thẳng router `routes/
+create.js`) — chặn tạo lần 2 tuần tự khi lần 1 còn `IN_PROGRESS`; chặn ĐÚNG cả race thật (2 request gần
+như đồng thời cho CÙNG 1 nhân viên, chỉ 1 thành công); 2 nhân viên KHÁC nhau vẫn tạo đồng thời bình
+thường (không bị khoá chung chặn nhầm); quy trình cũ đã `CANCELLED` không chặn tạo quy trình mới hợp lệ.
+Xác nhận FAIL trên code CŨ (`git stash -- lib/createValidation.js`, đúng 5/9 scenario FAIL), PASS trên
+code đã vá (9/9). Regression: `test-onboarding-nationalid-race.js` (6/6), `test-hrprocess-cancel-
+itticket-cleanup.js` (9/9), `test-hrprocess-task-settle-itticket-cleanup.js` (5/5), `test-hrprocess-
+delete-permission.js` (7/7), `test-hr-process-onboarding-create-import.js` (13/13), `test-audit-
+nhansu-onboarding-contract.js` (29/29), `test-onboarding.js` (23/23) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.4 (2026-11): [TB] Re-audit lần 5 — mục 17: Thùng Rác khôi phục không đồng bộ lại liên kết chéo module
 
