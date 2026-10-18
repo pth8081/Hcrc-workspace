@@ -80,7 +80,17 @@ const DEPT_FIELD_COLLECTIONS = [
   // (dept cũ không còn khớp user.dept mới) — cùng lớp lỗi đã vá nhiều lần ở file này (checklistSubmissions/
   // shiftRoster.storeCode, operationOrders.dept...). Chỉ chính người tạo (entry.creator) không bị ảnh
   // hưởng (canViewReportEntry() vẫn cho xem báo cáo của chính mình bất kể dept).
-  { collection: 'reportEntries', fields: ['dept'] }
+  { collection: 'reportEntries', fields: ['dept'] },
+  // budgetPeriods.dept (PHÁT HIỆN THIẾU ở đợt re-audit lần 3, mức Cao): "kỳ ngân sách" có 2 field phòng
+  // ban HOÀN TOÀN KHÁC NHAU, dễ nhầm — `deptScope` (phạm vi phòng ban PHẢI nộp, admin tự chọn khi tạo
+  // kỳ, ĐÃ được cascade qua renameDeptScopeDepts() ở dưới) và `dept` (forceOwnDept — snapshot phòng ban
+  // của NGƯỜI TẠO kỳ, xem lib/createValidation.js). canViewBudgetPeriod() (lib/recordViewScope.js) lại
+  // xét quyền XEM bằng field THỨ HAI này: `item.dept === user.dept`. Trước đây chỉ có đúng 1 dòng
+  // `renameFieldValueInCollection('budgetPeriods', renameDeptScopeDepts)` cascade deptScope — field
+  // `dept` bị bỏ sót hoàn toàn. Hậu quả: đổi tên phòng ban của người đã tạo kỳ ngân sách xong, kỳ đó
+  // "biến mất" khỏi màn hình của TOÀN BỘ nhân viên phòng ban đó (trừ admin/budgetManage/budgetAggregate/
+  // budgetReportView xem được mọi kỳ, không bị ảnh hưởng) — cùng lớp lỗi vừa vá cho reportEntries ở trên.
+  { collection: 'budgetPeriods', fields: ['dept'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
