@@ -3873,19 +3873,22 @@ function buildWorkflowStepsStatusHTML(wfConfig, history, currentStep, status) {
     const approvedEntries = (history || []).filter(h => h.step === s.order && h.action === 'APPROVED' && !h.invalidated);
     let badgeHTML, detailHTML = '';
     if (rejectedEntry) {
-      badgeHTML = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs whitespace-nowrap">❌ Từ chối</span>`;
+      badgeHTML = `<span class="badge-danger">❌ Từ chối</span>`;
       detailHTML = `<div class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(rejectedEntry.approver || '')} · ${escapeHtml(rejectedEntry.time || '')}${rejectedEntry.comment ? `<br><span class="text-gray-400">Lý do: ${escapeHtml(rejectedEntry.comment)}</span>` : ''}</div>`;
     } else if (approvedEntries.length) {
       const progressText = getStepApprovalProgressText(approvers, history, s.order);
-      badgeHTML = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs whitespace-nowrap">✅ Đã duyệt${escapeHtml(progressText)}</span>`;
+      badgeHTML = `<span class="badge-success">✅ Đã duyệt${escapeHtml(progressText)}</span>`;
       detailHTML = approvedEntries.map(h => `<div class="text-[11px] text-gray-500 mt-0.5">✓ ${escapeHtml(h.approver || '')} · ${escapeHtml(h.time || '')}${h.comment ? `<br><span class="text-gray-400">Lý do: ${escapeHtml(h.comment)}</span>` : ''}</div>`).join('');
     } else if (s.order === currentStep && status === 'PENDING') {
       const progressText = getStepApprovalProgressText(approvers, history, s.order);
-      badgeHTML = `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs whitespace-nowrap">⏳ Đang chờ duyệt${escapeHtml(progressText)}</span>`;
+      // LÀM NHẤT QUÁN (Giai đoạn 3 batch D): "đang chờ duyệt" đổi từ vàng (amber) sang info (xanh dương),
+      // khớp quy ước ĐÃ chuẩn hoá ở mọi badge trạng thái khác trong hệ thống (mẫu email v26.21 + mọi
+      // statusBadge/progressBadge đã migrate — "cần bổ sung" mới là warning, không phải "đang chờ duyệt").
+      badgeHTML = `<span class="badge-info">⏳ Đang chờ duyệt${escapeHtml(progressText)}</span>`;
     } else if (s.order < currentStep) {
-      badgeHTML = `<span class="px-2 py-0.5 bg-gray-200 text-gray-600 rounded font-semibold text-xs whitespace-nowrap">— Đã qua</span>`;
+      badgeHTML = `<span class="badge-neutral">— Đã qua</span>`;
     } else {
-      badgeHTML = `<span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded font-semibold text-xs whitespace-nowrap">⚪ Sắp tới</span>`;
+      badgeHTML = `<span class="badge-neutral">⚪ Sắp tới</span>`;
     }
     return `
       <div class="bg-slate-50 border rounded p-2 mb-1.5">
@@ -13922,7 +13925,7 @@ function renderForwardInbox() {
           <div class="font-bold text-gray-800">${escapeHtml(item.title || '')} <span class="text-gray-400 font-normal">(${escapeHtml(item.code || '')})</span></div>
           <div class="text-gray-500 text-[11px] mt-0.5">${FORWARD_NOUN[moduleKey] === 'hợp đồng' ? '📑 Hợp Đồng' : '📜 Văn Bản Trình'} · Người chuyển tiếp: <b>${escapeHtml(node.forwardedByName || node.forwardedBy)}</b> · ${escapeHtml(node.forwardedAt || '')}</div>
         </div>
-        <span class="shrink-0 px-2 py-0.5 rounded font-bold text-[11px] ${node.reply ? 'bg-emerald-100 text-emerald-800' : (pending ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-gray-600')}">${badgeText}</span>
+        <span class="shrink-0 ${node.reply ? 'badge-success' : (pending ? 'badge-info' : 'badge-neutral')}">${badgeText}</span>
       </div>
       ${node.message ? `<div class="text-gray-600 italic text-[11px] mt-1">💬 "${escapeHtml(node.message)}"</div>` : ''}
       <div class="mt-1.5">

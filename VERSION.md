@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.32 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch D — badge chi tiết từng bước duyệt (core.js) + Hộp Thư Chuyển Tiếp Xin Ý Kiến
+
+Batch cuối của Giai đoạn 3, tập trung vào core.js — file nạp EAGER dùng cho MỌI module, nên chỉ chọn
+ĐÚNG 2 hàm/khối là badge trạng thái thuần (không đụng các khối màu khác trong core.js mang ý nghĩa khác:
+cảnh báo quá hạn, bảng màu lookup dùng cho việc khác, tag file đính kèm, số dòng diff +/-).
+
+- `buildWorkflowStepsStatusHTML()`: badge chi tiết TỪNG BƯỚC duyệt trong modal — dùng chung cho 7 module
+  (Đăng Ký Xe, Phê Duyệt Giá, Văn Phòng, Hợp Đồng/Thanh Toán, Văn Bản Trình, Vận Hành, VPP). Đổi sang
+  `.badge-*` — **SỬA 1 LỆCH MÀU phát hiện trong đợt này**: "⏳ Đang chờ duyệt" (bước hiện tại) trước đây
+  dùng vàng (amber), không khớp quy ước "đang chờ duyệt" = info (xanh dương) đã chuẩn hoá ở MỌI badge
+  khác từ Giai đoạn 3a (mẫu email v26.21 + mọi statusBadge/progressBadge đã migrate) — nay đồng bộ lại
+  đúng info. "Đã qua"/"Sắp tới" (các bước chưa tới/đã lướt qua) gộp chung `.badge-neutral`.
+  Đã rà lại CẢ 7 nơi gọi hàm này (grep theo tên hàm) — không đổi chữ ký/tham số, chỉ đổi HTML trả về,
+  không có nơi gọi nào phụ thuộc vào class CSS cụ thể của badge nên an toàn cho tất cả 7 module.
+- `renderForwardInbox()` (Hộp Thư Chuyển Tiếp Xin Ý Kiến): "Đã phản hồi" → success, "Chờ bạn phản hồi" →
+  info (khớp quy ước "chờ phản hồi" = info ở HCRC Đồng Hành, batch B), "Hồ sơ đã xử lý xong" (không còn
+  chờ gì nữa) → neutral.
+
+Test: `tests/test-giai-doan-3-batch-d-badges.js` (mới, 3 kịch bản). Đã xác nhận bằng `git stash` test mới
+FAIL đúng (0/3) trên code cũ. Chạy lại `test-contract.js` (75) + `test-contract-payment-type-change.js`
+(15) + `test-contract-signed-file-no-approver-block.js` + `test-office-tech-confirm.js` (20) +
+`test-forward-opinion-workflow.js` (16) + `test-vpp.js` (29) + `test-car-dashboard-status-filter.js` (6)
++ `test-operation-order-receiving.js` (24) + CSP full-audit (3) + lazy-load toàn bộ tab (46) — không hồi
+quy ở bất kỳ module nào trong 7 module dùng chung hàm này.
+
+**Deploy-impact**: thuần client (`public/js/core.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi
+trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới + `pm2 restart`.
+
+Với batch D, Giai đoạn 3 "HCRC Workspace Refresh" đã bao phủ toàn bộ 13 file có khối badge trạng thái
+copy-paste lặp lại được phát hiện trong báo cáo rà soát ban đầu (Tài liệu/Văn Bản Trình, Đăng Ký Xe/
+Phòng Họp/VPP, Văn Phòng/Vận Hành/Ngân Sách, Onboarding-Offboarding/HCRC Đồng Hành/Báo Cáo Định Kỳ,
+Approval Hub/Phê Duyệt Giá-Hỗ Trợ IT, và core.js dùng chung).
 
 ## v26.31 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch C — badge Hộp Thư Duyệt Tổng Hợp + Phê Duyệt Giá/Hỗ Trợ Yêu Cầu
 
