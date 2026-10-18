@@ -4457,6 +4457,36 @@ async function cleanupLaborContractOnOnboardingClosed(hrProcessItem, actorUser, 
   }
 }
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 3): huỷ/xoá quy trình Onboarding HOẶC Offboarding không hề
+// đóng lại ticket Hỗ Trợ IT đã tự sinh từ 1 task nhãn IT của CHÍNH quy trình đó (createItTicketForHrTask(),
+// sourceType==='HR_PROCESS_TASK' — xem lib/recordActions.js) — ticket còn TODO/DOING vẫn "sống" vĩnh
+// viễn dù hồ sơ nhân sự liên quan đã không còn áp dụng. Áp dụng cho CẢ 2 processType (khác
+// cleanupDraftProfileOnOnboardingClosed()/cleanupLaborContractOnOnboardingClosed() ở trên — CHỈ riêng
+// ONBOARDING, vì labor contract/draft profile chỉ phát sinh ở nhánh đó; ticket IT thì cả Onboarding lẫn
+// Offboarding đều tạo được, xem HR_ONBOARDING_STAGES/HR_OFFBOARDING_STAGES).
+async function cleanupItTicketsOnHrProcessClosed(hrProcessItem, actorUser, req, routeLabel) {
+  if (!hrProcessItem) return false;
+  try {
+    const list = await getAllForCollection('itSupportTickets');
+    const openTickets = (list || []).filter(t =>
+      t.sourceType === 'HR_PROCESS_TASK' && t.sourceId === hrProcessItem.id && t.status !== 'DONE' && t.status !== 'CANCELLED');
+    for (const t of openTickets) {
+      await withLockedRecordForCollection('itSupportTickets', t.id, (item) =>
+        recordActions.closeItTicketOnHrProcessClosed(item, hrProcessItem));
+      insertSystemLog({
+        username: actorUser?.username || 'system', fullName: actorUser?.name || 'system', ipAddress: req?.ip || '',
+        module: 'HR', actionType: 'AUTO_CANCEL_IT_TICKET', targetObject: String(t.id),
+        description: `Tự huỷ ticket Hỗ Trợ IT #${t.id} (${t.status}) khi quy trình Nhân Sự #${hrProcessItem.id} (${hrProcessItem.fullName || ''}) liên kết bị huỷ/xoá`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (tự huỷ ticket IT mồ côi):', e.message));
+    }
+    return openTickets.length > 0;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi dọn ticket Hỗ Trợ IT khi đóng quy trình Nhân Sự:`, err.message);
+    return false;
+  }
+}
+
 router.post('/hrProcesses/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -4467,6 +4497,7 @@ router.post('/hrProcesses/:id/delete', async (req, res) => {
     await deleteRecordForCollection('hrProcesses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
     await cleanupDraftProfileOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
     await cleanupLaborContractOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
+    await cleanupItTicketsOnHrProcessClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/delete`, err);
@@ -4538,7 +4569,10 @@ router.post('/hrProcesses/:id/cancel', async (req, res) => {
     // Đóng Hợp Đồng Lao Động tự sinh (DRAFT/ACTIVE) còn "mồ côi" khi huỷ quy trình — xem
     // cleanupLaborContractOnOnboardingClosed() ở trên.
     const laborContractClosed = await cleanupLaborContractOnOnboardingClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);
-    res.json({ ok: true, item: result, draftProfileRemoved, laborContractClosed });
+    // Huỷ ticket Hỗ Trợ IT tự sinh còn mở (TODO/DOING) khi huỷ quy trình — xem
+    // cleanupItTicketsOnHrProcessClosed() ở trên (áp dụng cho cả Onboarding/Offboarding).
+    const itTicketsClosed = await cleanupItTicketsOnHrProcessClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);
+    res.json({ ok: true, item: result, draftProfileRemoved, laborContractClosed, itTicketsClosed });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/cancel`, err);
   }

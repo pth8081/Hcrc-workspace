@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**26.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.58 (2026-11): [Trung Bình] Re-audit lần 3 — mục 8: huỷ/xoá Onboarding/Offboarding không đóng ticket IT liên kết
+
+Tiếp nối v26.51-26.57. Mục thứ 8 (cuối cùng) trong 8 phát hiện của re-audit lần 3:
+
+- **[Trung Bình] Ticket Hỗ Trợ IT sinh ra từ 1 task nhãn IT trong quy trình Onboarding/Offboarding**
+  (`sourceType==='HR_PROCESS_TASK'` — `createItTicketForHrTask()`, lib/recordActions.js) **không hề
+  được đóng lại khi huỷ (`POST /hrProcesses/:id/cancel`) hoặc xoá hẳn (`POST /hrProcesses/:id/delete`)
+  quy trình nguồn** — ticket còn TODO/DOING vẫn "sống" vĩnh viễn trong hàng chờ IT dù hồ sơ nhân sự liên
+  quan đã không còn áp dụng (ứng viên rút đơn, nhân viên nghỉ việc xử lý xong qua đường khác...), dễ
+  khiến IT xử lý nhầm đối tượng hoặc tồn đọng ticket vô nghĩa vĩnh viễn. Khác 2 mục trước (v26.57 —
+  CHỈ Onboarding, vì hợp đồng/hồ sơ nháp chỉ phát sinh ở nhánh đó), lỗi này áp dụng cho CẢ Onboarding
+  VÀ Offboarding (cả 2 đều tạo được ticket IT từ task nhãn IT). Thêm `closeItTicketOnHrProcessClosed()`
+  (lib/recordActions.js) — tự huỷ (CANCELLED) mọi ticket tra theo `sourceId=hrProcessId` còn TODO/DOING
+  (bỏ qua ticket đã DONE/CANCELLED từ trước, không ghi đè kết quả xử lý thật). Gọi qua
+  `cleanupItTicketsOnHrProcessClosed()` (routes/records.js) ở CẢ 2 route `/hrProcesses/:id/cancel` VÀ
+  `/hrProcesses/:id/delete` — cùng khuôn `cleanupDraftProfileOnOnboardingClosed()`/
+  `cleanupLaborContractOnOnboardingClosed()` đã có (ghi có tác dụng phụ chéo collection, lỗi không làm
+  hỏng thao tác chính, chỉ log + ghi nhật ký hệ thống).
+
+**Test:** file mới `tests/test-hrprocess-cancel-itticket-cleanup.js` (6 scenario — cả Onboarding VÀ
+Offboarding, ticket TODO/DOING/DONE, cancel VÀ delete — dựng Express app THẬT mount `routes/create.js`
++ `routes/records.js`, tầng lưu trữ in-memory, cùng khuôn `test-onboarding-cancel-labor-contract-
+cleanup.js`). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash -- lib/recordActions.js
+routes/records.js`, 0/6 passed), PASS trên code đã vá (6/6). Chạy lại bộ test Hỗ Trợ IT/Nhân Sự liên
+quan: `test-it-support.js` (24/24), `test-it-reminder-lost-update.js` (3/3), `test-it-approval-
+deadline-reminder.js` (6/6), `test-it-approval-deadline-reminder-no-recipients.js` (5/5),
+`test-audit-nhansu-onboarding-contract.js` (29/29), `test-hr-lifecycle.js` (39/39),
+`test-onboarding-cancel-labor-contract-cleanup.js` (5/5), `test-audit-hethong-round2-server.js`
+(18/18) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Ticket "mồ côi" đã tồn tại
+TỪ TRƯỚC bản vá này (do Onboarding/Offboarding đã bị huỷ/xoá trước đó) KHÔNG tự được dọn hồi tố — IT
+cần tự rà soát `itSupportTickets` có `sourceType='HR_PROCESS_TASK'` còn TODO/DOING mà `sourceId` trỏ
+tới 1 `hrProcesses` đã CANCELLED (hoặc không còn tồn tại) và huỷ tay nếu có. Đây cũng là mục cuối cùng
+trong 8 phát hiện của đợt re-audit lần 3 — còn lại Task #90 (Thấp, chưa làm) và #95 (điều tra lỗi cũ
+không liên quan, riêng).
 
 ## v26.57 (2026-11): [Cao] Re-audit lần 3 — mục 7: huỷ/xoá Onboarding không dọn Hợp Đồng Lao Động tự sinh
 

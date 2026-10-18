@@ -6778,6 +6778,27 @@ const HR_LIFECYCLE_TICKET_SOURCE_COLLECTION = {
   HR_PROCESS_TASK: 'hrProcesses'
 };
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 3): huỷ/xoá quy trình Onboarding/Offboarding (cancelHrProcess()
+// ở trên, hoặc xoá hẳn qua route /hrProcesses/:id/delete) KHÔNG hề đóng lại ticket Hỗ Trợ IT đã tự sinh
+// từ 1 task nhãn IT của CHÍNH quy trình đó (createItTicketForHrTask() ở trên, sourceType==='HR_PROCESS_TASK')
+// — ticket còn TODO/DOING vẫn "sống" vĩnh viễn trong hàng chờ IT dù hồ sơ nhân sự liên quan đã không còn
+// áp dụng (ứng viên rút đơn, nhân viên nghỉ việc xử lý xong qua đường khác...), IT dễ xử lý nhầm đối
+// tượng hoặc tồn đọng vô nghĩa. Gọi qua cleanupItTicketsOnHrProcessClosed() ở routes/records.js (tra MỌI
+// ticket theo sourceId=hrProcessItem.id) cho CẢ Onboarding lẫn Offboarding. Hàm THUẦN, không kiểm quyền
+// riêng (actor đã được xác nhận có quyền huỷ/xoá CHÍNH quy trình Nhân Sự ở route gọi tới) — idempotent,
+// bỏ qua ticket đã DONE/CANCELLED từ trước (không ghi đè lịch sử xử lý thật đã có).
+function closeItTicketOnHrProcessClosed(ticket, hrProcessItem) {
+  if (!ticket || ticket.status === 'DONE' || ticket.status === 'CANCELLED') return ticket;
+  ticket.status = 'CANCELLED';
+  ticket.comments = ticket.comments || [];
+  ticket.comments.push({
+    id: Date.now(), username: 'system', name: 'Hệ Thống (Tự Động)',
+    content: `🔒 Tự huỷ ticket — quy trình Nhân Sự #${hrProcessItem.id} (${hrProcessItem.fullName || ''}) liên kết đã bị huỷ/xoá`,
+    time: nowVN()
+  });
+  return ticket;
+}
+
 // Ghi lại kết quả IT báo cáo vào ĐÚNG task đã sinh ra ticket này, khi ticket vừa chuyển DONE (gọi từ
 // routes/records.js NGAY SAU updateItTicketStatus() thành công) — hàm THUẦN, route tự khoá đúng
 // collection theo HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[ticket.sourceType] rồi truyền item (cả quy
@@ -8680,6 +8701,7 @@ module.exports = {
   canActOnHrTask, canCreateHrProcess, canManageHrProcess, computeHrProcessProgress,
   completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment, assignHrSuccessor,
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
+  closeItTicketOnHrProcessClosed,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod, editUniformPeriod,
