@@ -27,6 +27,18 @@ const { cascadeStoreRename, cascadeCustomPosTypeJobTitleRename } = require('../l
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { slugifyKey } = require('../lib/positionTypesImport');
+const { insertSystemLog } = require('../lib/systemLogStore');
+
+// LỖI ĐÃ VÁ (re-audit lần 4, mức TB): toàn bộ route ghi ở file này (tạo/đổi nhãn/xoá Vị Trí Làm Việc +
+// 2 cascade rename địa điểm/chức danh con) KHÔNG ghi bất kỳ dòng Nhật ký hệ thống nào — khác hẳn
+// routes/adminCatalog.js (đã vá cùng đợt) và logAdminSensitiveDataWrite() ở routes/data.js. Ghi log
+// server-side fire-and-forget ngay sau mỗi lượt ghi thành công, cùng khuôn các route admin khác.
+function logPositionTypeAction(req, actionType, targetObject, description) {
+  insertSystemLog({
+    username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+    module: 'CONFIG', actionType, targetObject, description, status: 'SUCCESS'
+  }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (Vị Trí Làm Việc):', e.message));
+}
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -71,6 +83,7 @@ router.post('/', async (req, res) => {
       if (arr.some(t => t.key === key)) throw new HttpError(400, `Vị Trí Làm Việc "${label}" đã tồn tại`);
       return [...arr, { key, label, builtin: false, locations: [], jobTitles: [] }];
     });
+    logPositionTypeAction(req, 'POSITION_TYPE_CREATE', key, `Tạo Vị Trí Làm Việc mới "${label}" (key: ${key})`);
     res.json({ ok: true, positionTypes: updated });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -94,6 +107,7 @@ router.patch('/:key', async (req, res) => {
       next[idx] = { ...next[idx], label };
       return next;
     });
+    logPositionTypeAction(req, 'POSITION_TYPE_RENAME', key, `Đổi nhãn Vị Trí Làm Việc "${key}" thành "${label}"`);
     res.json({ ok: true, positionTypes: updated });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -123,6 +137,7 @@ router.delete('/:key', async (req, res) => {
       if (!arr.some(t => t.key === key)) throw new HttpError(404, `Không tìm thấy Vị Trí Làm Việc "${key}"`);
       return arr.filter(t => t.key !== key);
     });
+    logPositionTypeAction(req, 'POSITION_TYPE_DELETE', key, `Xoá Vị Trí Làm Việc "${key}"`);
     res.json({ ok: true, positionTypes: updated });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -158,6 +173,7 @@ router.post('/:key/locations/rename', async (req, res) => {
       return arr.map(x => (x.key === key ? { ...x, locations: locations.map(v => (v === oldValue ? newValue : v)) } : x));
     });
     await cascadeStoreRename(oldValue, newValue);
+    logPositionTypeAction(req, 'POSITION_TYPE_LOCATION_RENAME', key, `Vị Trí Làm Việc "${key}": đổi tên địa điểm "${oldValue}" → "${newValue}"`);
     res.json({ ok: true, positionTypes: updated });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
@@ -184,6 +200,7 @@ router.post('/:key/job-titles/rename', async (req, res) => {
       return arr.map(x => (x.key === key ? { ...x, jobTitles: jobTitles.map(v => (v === oldValue ? newValue : v)) } : x));
     });
     await cascadeCustomPosTypeJobTitleRename(key, oldValue, newValue);
+    logPositionTypeAction(req, 'POSITION_TYPE_JOBTITLE_RENAME', key, `Vị Trí Làm Việc "${key}": đổi tên chức danh "${oldValue}" → "${newValue}"`);
     res.json({ ok: true, positionTypes: updated });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });

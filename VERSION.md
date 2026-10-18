@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**26.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.71 (2026-11): [TB] Re-audit lần 4 — mục 11: renameCatalogEntry/position-types không ghi System Log
+
+- **`POST /api/admin/renameCatalogEntry` (routes/adminCatalog.js) và toàn bộ route ghi của "Vị Trí Làm
+  Việc" (routes/positionTypes.js: tạo mới/đổi nhãn/xoá + 2 route cascade rename địa điểm/chức danh con)
+  KHÔNG ghi bất kỳ dòng nào vào Nhật ký hệ thống** — khác hẳn `logAdminSensitiveDataWrite()` (ghi log
+  cho mọi `POST /api/data/:key` thuộc `ADMIN_SENSITIVE_KEYS`, routes/data.js) hay `insertSystemLog()` ở
+  routes/trash.js/routes/attendanceClockAdmin.js. Hệ quả: đổi tên 1 giá trị danh mục CÓ cascade sang
+  hàng loạt hồ sơ (VD "Phòng Ban", "Siêu Thị", "Loại Pháp Lý HĐ"...), hay tạo/đổi nhãn/xoá cả 1 Vị Trí
+  Làm Việc, không để lại dấu vết "ai làm, lúc nào" — admin không tra lại được thao tác này sau này.
+  - Thêm `insertSystemLog()` fire-and-forget (lỗi ghi log không làm hỏng thao tác chính đã thành công,
+    cùng khuôn mọi route admin khác) ngay sau mỗi lượt ghi thành công:
+    - `routes/adminCatalog.js`: `module: 'CONFIG'`, `actionType: 'CATALOG_RENAME'`, mô tả nêu rõ
+      `catalogKey` + giá trị cũ/mới.
+    - `routes/positionTypes.js`: 5 `actionType` riêng theo từng route —
+      `POSITION_TYPE_CREATE`/`POSITION_TYPE_RENAME`/`POSITION_TYPE_DELETE`/
+      `POSITION_TYPE_LOCATION_RENAME`/`POSITION_TYPE_JOBTITLE_RENAME`.
+
+**Test:** file mới `tests/test-catalogrename-positiontypes-systemlog.js` (8 scenario, HTTP thật qua
+express mount đúng 2 router này, bắt lời gọi `insertSystemLog()` qua stub). Xác nhận FAIL trên code CŨ
+(`git stash -- routes/adminCatalog.js routes/positionTypes.js`, 2/8 passed — đúng 6 scenario "LỖI ĐÃ VÁ"
+FAIL vì không ghi log nào), PASS trên code đã vá (8/8). Chạy lại bộ test liên quan:
+`test-catalog-bulk-delete.js` (17/17), `test-catalog-rename-hr-suggestion-catalogs.js` (25/25),
+`test-catalog-rename-locked-accounts.js` (41/41), `test-catalog-rename-position-pairs.js` (6/6),
+`test-catalog-rename-round2-extras.js` (8/8), `test-catalog-rename-server.js` (26/26),
+`test-position-types.js` (10/10), `test-nganhhang-catalog-rename-cascade.js` (8/8),
+`test-submissiontype-catalog-rename-cascade.js` (7/7) — tất cả PASS, không regression (3 file dùng
+`lib/systemLogStore` thật có in cảnh báo "Lỗi kết nối SQL Server" vì sandbox không có SQL Server thật —
+đây là lỗi ghi log bị `.catch()` nuốt đúng như thiết kế fire-and-forget, không làm hỏng test/thao tác
+chính, cùng hành vi mọi `insertSystemLog()` khác trong hệ thống).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.70 (2026-11): [TB] Re-audit lần 4 — mục 10: checklistTemplates.templateCode + trainingPlans race condition
 

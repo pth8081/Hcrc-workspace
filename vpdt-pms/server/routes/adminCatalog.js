@@ -7,6 +7,7 @@ const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { isCurrentlyAdmin } = require('../lib/adminAuth');
 const { renameCatalogEntry } = require('../lib/catalogRename');
 const { HttpError } = require('../lib/httpErrors');
+const { insertSystemLog } = require('../lib/systemLogStore');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
@@ -56,6 +57,19 @@ router.post('/renameCatalogEntry', async (req, res) => {
     }
 
     const updatedCatalog = await renameCatalogEntry(catalogKey, trimmedOld, trimmedNew);
+
+    // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): đổi tên 1 giá trị danh mục CÓ cascade sang hàng loạt collection
+    // khác (xem lib/catalogRename.js) nhưng KHÔNG để lại dấu vết nào ở Nhật ký hệ thống — khác hẳn thao
+    // tác ghi đè cả collection qua POST /api/data/:key (đã ghi log qua logAdminSensitiveDataWrite() ở
+    // routes/data.js). Ghi log server-side NGAY tại đây, fire-and-forget, cùng khuôn insertSystemLog() ở
+    // routes/trash.js/routes/attendanceClockAdmin.js — lỗi ghi log không làm hỏng lượt đổi tên đã thành công.
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'CONFIG', actionType: 'CATALOG_RENAME', targetObject: catalogKey,
+      description: `Đổi tên danh mục "${catalogKey}": "${trimmedOld}" → "${trimmedNew}"`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (đổi tên danh mục):', e.message));
+
     res.json({ ok: true, catalog: updatedCatalog });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
