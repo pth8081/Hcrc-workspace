@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**27.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.30 (2026-11): [Cao] Re-audit lần 7 — mục 1/9: submitOperationEstimate() cho phép hijack hạng mục Danh mục đầu tư ngoài phạm vi
+
+Mục đầu tiên (1/9) của đợt re-audit lần 7 (đợt thứ 2 trong 5 đợt re-audit theo yêu cầu).
+
+**Nguyên nhân:** `submitOperationEstimate()` (`lib/recordActions.js`) cho người chỉ phụ trách 1 "danh
+mục lớn" (`ownerTopIds != null`, không có `canManageOperationRecord()`) tái sử dụng BẤT KỲ `id` đã tồn
+tại sẵn trong hồ sơ (`existingIds`, không lọc theo phạm vi) mà không đối chiếu hạng mục đó TRƯỚC KHI sửa
+có thuộc phạm vi của chính người gọi hay không — chốt chặn 403 duy nhất ở đó chỉ kiểm `parentId` MỚI có
+nằm trong `ownerTopIds`. Kết quả: 1 request tự soạn gửi kèm `id` của hạng mục THUỘC PHẠM VI NGƯỜI KHÁC
+(biết được qua `GET /api/data` không redact khi cùng phòng ban/có quyền xem khác) kèm `parentId` trỏ về
+danh mục lớn CỦA MÌNH sẽ vượt qua chốt 403, tạo ra 2 bản ghi TRÙNG `id` trong `estimateItems` (1 bản gốc
+giữ nguyên dưới owner thật + 1 bản "chiếm" nội dung/tiền tự đặt dưới owner tấn công) — vi phạm bất biến
+`id` duy nhất và thao túng `estimateTotalAmount`/ngân sách của danh mục bị lợi dụng.
+
+**Vá:** thêm đối chiếu phạm vi TRƯỚC KHI chấp nhận tái dùng 1 `rawId` có sẵn — khi `ownerTopIds != null`,
+tra `existingById.get(rawId)` (đã khai báo sớm hơn ở đầu hàm) và kiểm `existing.parentId == null ?
+ownerTopIds.has(existing.id) : ownerTopIds.has(existing.parentId)`; không thuộc phạm vi → 403 ngay (cùng
+triết lý "chặn tường minh, không âm thầm bỏ qua" đã áp dụng cho phần còn lại của hàm).
+
+**Test:** mở rộng `tests/test-operation-estimate-owner-scope.js` — 3 scenario mới: (1) hijack hạng mục
+"Sơn tường" (ngoài phạm vi) bằng cách tái dùng `id` + gắn `parentId` trong phạm vi → phải 403, dữ liệu
+gốc không bị trùng `id`/không đổi giá trị; (2) biến thể "Sơn tường" (top-level, `parentId` gốc = null)
+giả làm con → cũng phải 403; (3) đối chứng: tái dùng `id` của con THẬT trong phạm vi mình vẫn hoạt động
+bình thường (không chặn oan). Xác nhận FAIL trên code CŨ (`git stash -- lib/recordActions.js`, đúng 2/20
+scenario FAIL — "Missing expected exception", khớp 2 khai thác đã nêu), PASS trên code đã vá (20/20).
+Regression: toàn bộ 9 file test liên quan Danh Mục Đầu Tư/Vận Hành
+(`demo-operation-estimate-attachment-perms.js`, `demo-operation-estimate-attachments-and-filter.js`,
+`test-audit-dot5-phase2.js` 10/10, `test-dept-view-scope.js` 54/54, `test-muc0-module-access-tree.js`
+17/17, `test-operation-danhmuc-dautu-units.js` 47/47, `test-operation-estimate-attachments-multifile.js`
+6/6, `test-operation-estimate-attachments.js` 6/6, `test-operation-estimate-import-assignee.js` 5/5) —
+toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.29 (2026-11): [Thấp] Re-audit lần 6 — mục 21/21 (HẾT đợt): generateCode dùng payload.dept thô chưa ép
 

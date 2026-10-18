@@ -1007,6 +1007,10 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
   }
   const rawItems = Array.isArray(payload?.items) ? payload.items : [];
   const existingIds = new Set(existingItems.map(it => it.id).filter(Boolean));
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "submitOperationEstimate() cho phép hijack hạng mục ngoài
+  // phạm vi"): existingById cần có SỚM (trước khi quyết định có cho tái dùng 1 rawId hay không) để đối
+  // chiếu phạm vi hạng mục đó TRƯỚC KHI sửa — xem khối kiểm tra ở vòng map prelim ngay dưới.
+  const existingById = new Map(existingItems.map((it) => [it.id, it]));
   let nextId = Date.now();
   const genId = () => { while (existingIds.has(nextId)) nextId += 1; existingIds.add(nextId); return nextId++; };
   // idMap: id CLIENT gửi lên (có thể là id thật giữ nguyên, hoặc id tạm client tự gán cho dòng mới thêm
@@ -1026,7 +1030,28 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
     }
     const amount = Number.isFinite(rawAmount) ? rawAmount : 0;
     const rawId = Number(it?.id);
-    const id = (Number.isFinite(rawId) && existingIds.has(rawId)) ? rawId : genId();
+    let canReuseRawId = Number.isFinite(rawId) && existingIds.has(rawId);
+    // LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "submitOperationEstimate() cho phép hijack hạng mục ngoài
+    // phạm vi"): trước đây BẤT KỲ rawId nào tồn tại sẵn trong hồ sơ (existingIds, KHÔNG lọc theo phạm
+    // vi) đều được giữ nguyên — người chỉ phụ trách 1 "danh mục lớn" (ownerTopIds != null) có thể gửi
+    // kèm 1 id hạng mục THUỘC PHẠM VI NGƯỜI KHÁC (biết được qua GET /api/data không redact khi cùng
+    // phòng ban/có quyền xem khác) kèm parentId trong phạm vi mình -> vượt chốt 403 ở khối kiểm
+    // ownerTopIds bên dưới (khối đó chỉ kiểm parentId MỚI, không kiểm rawId có thuộc phạm vi hay
+    // không) -> tạo ra 2 bản ghi trùng id (bản gốc của chủ thật + bản "chiếm" nội dung/tiền tự đặt của
+    // kẻ tấn công), phá vỡ bất biến id duy nhất + thao túng estimateTotalAmount. Chặn tường minh: khi
+    // ownerTopIds != null, CHỈ cho tái dùng rawId nếu hạng mục đó (TRƯỚC KHI sửa) đã thuộc phạm vi của
+    // chính người gọi — nếu không, 403 ngay (không âm thầm cấp id mới, vì vẫn sẽ bị khối kiểm dưới chặn
+    // nhưng nên báo lỗi rõ ràng ngay tại đây, đúng id client cố tình gửi).
+    if (canReuseRawId && ownerTopIds) {
+      const existingOwned = existingById.get(rawId);
+      const inScope = !!existingOwned && (existingOwned.parentId == null
+        ? ownerTopIds.has(existingOwned.id)
+        : ownerTopIds.has(existingOwned.parentId));
+      if (!inScope) {
+        throw new HttpError(403, `Bạn không có quyền sửa hạng mục "${content}" (ngoài phạm vi danh mục lớn bạn đang phụ trách)`);
+      }
+    }
+    const id = canReuseRawId ? rawId : genId();
     if (Number.isFinite(rawId)) idMap.set(rawId, id);
     return { id, content, description: String(it?.description || '').trim(), amount, note: String(it?.note || '').trim(), rawParentId: it?.parentId, rawAssignedTo: it?.assignedTo, rawAttachments: it?.attachments };
   }).filter(Boolean);
@@ -1096,7 +1121,7 @@ function submitOperationEstimate(user, item, payload, sourceType, users) {
   // — cùng khuôn "Người Phụ Trách Công Việc"). Người chỉ phụ trách 1 phần (ownerTopIds != null) KHÔNG được
   // tự đổi field này — LUÔN ghi đè lại bằng giá trị hiện có trên hồ sơ, bỏ qua hoàn toàn giá trị payload
   // gửi lên (không tin client, và đây là field họ không có quyền sửa theo đúng phương án đã xác nhận).
-  const existingById = new Map(existingItems.map((it) => [it.id, it]));
+  // (existingById đã khai báo sớm hơn ở đầu hàm — xem bản vá re-audit lần 7, mức Cao.)
   resolved.forEach((it) => {
     if (it.parentId != null) return;
     if (ownerTopIds) {
