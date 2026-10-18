@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**27.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.2 (2026-11): [TB] Re-audit lần 5 — mục 15: skip/complete-task/auto-COMPLETED không dọn ticket IT con
+
+Mục thứ 15 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — CÙNG HỌ LỖI với v27.1 (#140,
+"Huỷ ticket IT không gỡ `linkedTicketId` trên task HR") nhưng chiều NGƯỢC LẠI: thay vì huỷ trực tiếp 1
+ticket mà không báo lại cho task, đây là xử lý trực tiếp 1 TASK (bỏ qua chính ticket IT đã sinh từ nó):
+
+- `completeHrTask()`/`skipHrTask()` (`lib/recordActions.js`, qua `POST /hrProcesses/:id/complete-task`
+  và `/skip-task`) đánh dấu 1 task DONE/SKIPPED trực tiếp — không hề kiểm tra `task.linkedTicketId`.
+  Nếu task đó đã có ticket Hỗ Trợ IT tự sinh (`createItTicketForHrTask()`, sourceType==='HR_PROCESS_TASK')
+  còn TODO/DOING, ticket đó vẫn "sống" vĩnh viễn trong hàng chờ IT dù việc thực tế đã xong/bị bỏ qua
+  qua đường khác — IT dễ xử lý nhầm đối tượng hoặc tồn đọng vô nghĩa. Hệ quả này xảy ra cả khi 1 lượt
+  complete/skip-task khiến TOÀN BỘ quy trình auto-chuyển COMPLETED (`computeHrProcessProgress()`) — đây
+  chính là nhánh "auto-COMPLETED" nêu trong tên phát hiện, không phải 1 đường code riêng cần xử lý
+  thêm, vì auto-COMPLETED chỉ là hệ quả của chính lượt complete/skip-task đang xử lý.
+- Vá: thêm `closeItTicketOnHrTaskSettled(ticket, task)` (mới, `lib/recordActions.js`, mirror
+  `closeItTicketOnHrProcessClosed()` của v26.x nhưng đổi nội dung comment đúng ngữ cảnh "1 TASK vừa xử
+  lý trực tiếp", không phải cả quy trình bị huỷ/xoá) + `cleanupSettledTaskItTickets(hrProcessItem,
+  actorUser, req, routeLabel)` (mới, `routes/records.js`) — quét MỌI ticket của quy trình mà TASK NGUỒN
+  đã DONE/SKIPPED nhưng ticket vẫn còn mở, CHỈ đụng đúng những ticket đó (không đụng ticket của task
+  khác chưa xử lý xong). Gọi sau MỖI lần `complete-task`/`skip-task` thành công — nhờ quét lại toàn bộ
+  task đã settled trong `item.tasks` (không chỉ riêng task vừa act), cơ chế này tự phủ đúng cả trường
+  hợp auto-COMPLETED mà không cần thêm nhánh riêng. Lỗi ở bước dọn ticket (hiếm) không làm hỏng việc
+  complete/skip-task đã commit — cùng khuôn try/catch-chỉ-log như mọi cleanup chéo collection khác.
+
+**Test:** file mới `tests/test-hrprocess-task-settle-itticket-cleanup.js` (5 scenario) — complete-task
+trực tiếp cho task có ticket TODO → ticket tự huỷ; skip-task trực tiếp cho task có ticket DOING → ticket
+tự huỷ (comment đúng "bỏ qua"); hoàn thành task cuối khiến cả quy trình auto-COMPLETED trong cùng 1 lượt
+gọi → ticket vẫn được dọn, VÀ ticket của task khác chưa xử lý xong vẫn giữ nguyên TODO (không bị đụng
+nhầm); ticket đã DONE từ trước không bị ghi đè (idempotent); task không có ticket liên kết không lỗi.
+Xác nhận FAIL trên code CŨ (`git stash -- lib/recordActions.js routes/records.js`, đúng 3/5 scenario
+FAIL — 3 scenario "LỖI ĐÃ VÁ"), PASS trên code đã vá (5/5). Regression: `test-hrprocess-cancel-itticket-
+cleanup.js` (9/9), `test-it-support.js` (24/24), `test-itsupportticket-dept-rename-cascade.js` (3/3),
+`test-audit-nhansu-onboarding-contract.js` (29/29), `test-hrprocess-delete-permission.js` (7/7),
+`test-onboarding-cancel-labor-contract-cleanup.js` (5/5), `test-onboarding-nationalid-race.js` (6/6),
+`test-onboarding.js` (23/23), `test-task-itticket-self-approve-blocked.js` (7/7), `test-hr-process-
+onboarding-create-import.js` (13/13) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.1 (2026-11): [TB] Re-audit lần 5 — mục 14: Huỷ ticket IT không gỡ linkedTicketId trên task HR
 

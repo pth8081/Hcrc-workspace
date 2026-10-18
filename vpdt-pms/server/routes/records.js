@@ -4606,6 +4606,46 @@ async function cleanupItTicketsOnHrProcessClosed(hrProcessItem, actorUser, req, 
   }
 }
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 5, #140): completeHrTask()/skipHrTask() ở trên đánh dấu 1 task
+// DONE/SKIPPED TRỰC TIẾP (không qua chính ticket Hỗ Trợ IT đã tự sinh từ task đó —
+// createItTicketForHrTask(), sourceType==='HR_PROCESS_TASK', sourceTaskId=task.taskId) nhưng KHÔNG đụng
+// gì tới ticket đó — ticket còn TODO/DOING vẫn "sống" vĩnh viễn dù việc đã xong/bị bỏ qua qua đường
+// khác (kể cả khi việc đó khiến TOÀN BỘ quy trình auto-chuyển COMPLETED qua computeHrProcessProgress() —
+// auto-COMPLETED chỉ là hệ quả của từng task lần lượt được đánh DONE/SKIPPED, KHÔNG phải 1 nhánh riêng
+// cần xử lý thêm: quét lại MỌI task DONE/SKIPPED của item sau MỖI lần complete-task/skip-task đã tự phủ
+// đúng lúc quy trình auto-complete). Quét MỌI ticket của quy trình này mà TASK NGUỒN đã DONE/SKIPPED
+// nhưng ticket vẫn còn mở — CHỈ đụng đúng những ticket đó (KHÔNG đụng ticket của task khác chưa xử lý
+// xong). Cùng khuôn cleanupItTicketsOnHrProcessClosed() ở trên (ghi có tác dụng phụ chéo collection, lỗi
+// KHÔNG được làm hỏng thao tác chính đã commit, chỉ log).
+async function cleanupSettledTaskItTickets(hrProcessItem, actorUser, req, routeLabel) {
+  if (!hrProcessItem) return false;
+  try {
+    const settledTasks = new Map(
+      (hrProcessItem.tasks || []).filter(t => t.status === 'DONE' || t.status === 'SKIPPED').map(t => [t.taskId, t])
+    );
+    if (settledTasks.size === 0) return false;
+    const list = await getAllForCollection('itSupportTickets');
+    const openTickets = (list || []).filter(t =>
+      t.sourceType === 'HR_PROCESS_TASK' && t.sourceId === hrProcessItem.id &&
+      t.status !== 'DONE' && t.status !== 'CANCELLED' && settledTasks.has(t.sourceTaskId));
+    for (const t of openTickets) {
+      const task = settledTasks.get(t.sourceTaskId);
+      await withLockedRecordForCollection('itSupportTickets', t.id, (item) =>
+        recordActions.closeItTicketOnHrTaskSettled(item, task));
+      insertSystemLog({
+        username: actorUser?.username || 'system', fullName: actorUser?.name || 'system', ipAddress: req?.ip || '',
+        module: 'HR', actionType: 'AUTO_CANCEL_IT_TICKET', targetObject: String(t.id),
+        description: `Tự huỷ ticket Hỗ Trợ IT #${t.id} (${t.status}) khi việc "${task?.taskName || ''}" của quy trình Nhân Sự #${hrProcessItem.id} (${hrProcessItem.fullName || ''}) được đánh dấu ${task?.status === 'SKIPPED' ? 'bỏ qua' : 'hoàn thành'} trực tiếp`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (tự huỷ ticket IT khi task xử lý trực tiếp):', e.message));
+    }
+    return openTickets.length > 0;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi dọn ticket Hỗ Trợ IT khi task được xử lý trực tiếp:`, err.message);
+    return false;
+  }
+}
+
 router.post('/hrProcesses/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -4637,6 +4677,9 @@ router.post('/hrProcesses/:id/complete-task', async (req, res) => {
     await syncLeavePayoutInfoOnSettlementTask(result, req.body?.taskId, `hrProcesses/${itemId}/complete-task`);
     await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/complete-task`);
     await syncUserAccountOnOffboardingCompletion(result, `hrProcesses/${itemId}/complete-task`);
+    // Huỷ ticket Hỗ Trợ IT tự sinh còn mở của chính task vừa hoàn thành trực tiếp — xem
+    // cleanupSettledTaskItTickets() ở trên.
+    await cleanupSettledTaskItTickets(result, freshUser, req, `hrProcesses/${itemId}/complete-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/complete-task`, err);
@@ -4654,6 +4697,9 @@ router.post('/hrProcesses/:id/skip-task', async (req, res) => {
     await syncLaborContractOnHrProcessCompletion(result, `hrProcesses/${itemId}/skip-task`);
     await syncOffboardingToAttendanceAndLeave(result, `hrProcesses/${itemId}/skip-task`);
     await syncUserAccountOnOffboardingCompletion(result, `hrProcesses/${itemId}/skip-task`);
+    // Huỷ ticket Hỗ Trợ IT tự sinh còn mở của chính task vừa bị bỏ qua trực tiếp — xem
+    // cleanupSettledTaskItTickets() ở trên.
+    await cleanupSettledTaskItTickets(result, freshUser, req, `hrProcesses/${itemId}/skip-task`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/skip-task`, err);
