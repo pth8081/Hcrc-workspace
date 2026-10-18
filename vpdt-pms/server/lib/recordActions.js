@@ -5655,9 +5655,42 @@ function gradeTrainingTestEssayAnswers(user, sub, test, cls, rawEssayGrades) {
 // field rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO, xem normalizeCareerPathFields() ở
 // lib/createValidation.js). Cùng quyền canManageTraining() như lúc tạo.
 const CAREER_PATH_EDITABLE_FIELDS = ['name', 'stages'];
-function editCareerPath(payload, user, path, appData) {
+function editCareerPath(payload, user, path, appData, existingConfirmations) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa lộ trình thăng tiến');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');
+
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Trung bình — "editCareerPath không kiểm careerPathConfirmations"):
+  // trước đây `stages` (điều kiện/thứ tự cấp bậc) sửa TỰ DO dù đã có nhân viên được xác nhận hoàn thành
+  // 1 cấp bậc cụ thể (careerPathConfirmations, xem confirmCareerPathForEmployee() ở dưới) — xác nhận cũ
+  // là "đã đạt yêu cầu requiredCourseIds CŨ của cấp đó" nhưng không snapshot lại requiredCourseIds, nên
+  // đổi tiêu chuẩn cấp đã xác nhận (hoặc xoá hẳn cấp đó/đổi chỗ) khiến xác nhận cũ hiển thị "đã đạt" dù
+  // KHÔNG còn khớp tiêu chuẩn MỚI — mốc tiến độ sai lệch này còn làm điều kiện tiên quyết (gác tuần tự)
+  // cho việc xác nhận cấp TIẾP THEO dù nhân viên chưa thật sự đạt chuẩn mới.
+  // Chặn: nếu `stages` được sửa VÀ lộ trình này đã có >=1 careerPathConfirmations, mọi cấp bậc từ 0 đến
+  // cấp CAO NHẤT đã có người được xác nhận (maxConfirmedIndex) phải giữ NGUYÊN requiredCourseIds (so
+  // sánh không phân biệt thứ tự phần tử) và không được xoá/dời chỗ — chỉ cho SỬA TÊN các cấp đó hoặc
+  // THÊM cấp mới ở phía sau (mirror editTrainingClass() chặn đổi courseId khi đã có học viên Đạt).
+  if (payload.stages !== undefined) {
+    const confirmationsForPath = (existingConfirmations || []).filter(c => c.pathId === path.id);
+    if (confirmationsForPath.length) {
+      const maxConfirmedIndex = Math.max(...confirmationsForPath.map(c => Number(c.stageIndex) || 0));
+      const oldStages = Array.isArray(path.stages) ? path.stages : [];
+      const newStages = Array.isArray(payload.stages) ? payload.stages : [];
+      if (newStages.length < maxConfirmedIndex + 1) {
+        throw new HttpError(409, `Không thể xoá/dời chỗ Cấp ${maxConfirmedIndex + 1} vì đã có nhân viên được xác nhận hoàn thành cấp này. Chỉ có thể thêm cấp mới ở phía sau.`);
+      }
+      const courseIdsOf = s => Array.isArray(s?.requiredCourseIds)
+        ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite).sort((a, b) => a - b) : [];
+      for (let i = 0; i <= maxConfirmedIndex; i++) {
+        const oldIds = JSON.stringify(courseIdsOf(oldStages[i]));
+        const newIds = JSON.stringify(courseIdsOf(newStages[i]));
+        if (oldIds !== newIds) {
+          throw new HttpError(409, `Cấp ${i + 1} đã có nhân viên được xác nhận hoàn thành — không thể đổi chương trình bắt buộc của cấp này (chỉ có thể thêm cấp mới ở phía sau).`);
+        }
+      }
+    }
+  }
+
   for (const field of CAREER_PATH_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) path[field] = payload[field];
   }
