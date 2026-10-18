@@ -3267,7 +3267,11 @@ function registerInternalPostTraining(user, post) {
   // đăng ký được sau khi hạn đăng ký đã qua. registerDeadline là input type="date" (YYYY-MM-DD) — so
   // sánh chuỗi ISO ngày (cùng khuôn period.endDate ở VPP/Báo Cáo), không dùng nowVN() (định dạng
   // dd/mm/yyyy tiếng Việt, so sánh chuỗi sai thứ tự).
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "registerInternalPostTraining deadline so sánh UTC"):
+  // `new Date().toISOString().slice(0,10)` trả về NGÀY THEO GIỜ UTC — trong khung 00:00-06:59 sáng giờ
+  // VN, so sánh sai khiến vẫn đăng ký được dù đã thật sự quá registerDeadline (giờ local). Mirror ĐÚNG
+  // bulkRegisterTrainingClass()/trainingRegistrations.extraValidate (lib/createValidation.js).
+  const todayStr = require('./attendance').localDateStr(new Date());
   if (post.training.registerDeadline && todayStr > post.training.registerDeadline) {
     throw new HttpError(409, 'Đã hết hạn đăng ký khóa đào tạo này');
   }
