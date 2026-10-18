@@ -966,6 +966,118 @@ async function cascadeUsernameChangesToApprovalGroups(renamed, deletedUsernames)
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "Đổi tên/xoá username không cascade sang approvers PEOPLE/PERSON
+// mode"): cascadeUsernameChangesToApprovalGroups() ở trên CHỈ phủ members[] của 12 "Nhóm Phê Duyệt" —
+// hoàn toàn KHÔNG phủ 2 cơ chế chọn-người-duyệt-trực-tiếp khác, cùng bản chất dễ vỡ (tham chiếu username
+// THÔ, không qua id bất biến) nhưng CHƯA TỪNG được cascade:
+//   1) approvers[stepOrder] = [username,...] — "chọn tay" (PEOPLE mode, KHÔNG phải approverMode:'POSITION'
+//      — xem resolveStepApproverUsernames(), lib/positionApprovers.js; chốt chặn thật canApproveStep(),
+//      lib/workflowEngine.js) — nằm lồng BÊN TRONG mọi cfg của POSITION_PAIR_CONFIG_MAP_KEYS (17 map
+//      *DeptWorkflows/*TierWorkflows), CÙNG VỊ TRÍ với approversByPosition (đã cascade đúng ở
+//      cascadePositionPairs()/renamePositionPairsDeep() — chỉ nhánh approvers[] bị bỏ sót).
+//   2) rule.username (mode 'PERSON') của operationOrderStoreMixedApprovalRules/
+//      itPriceWholesaleStoreMixedApprovalRules (MIXED_APPROVAL_RULE_KEYS) — resolveOperationOrderStore-
+//      MixedApprovalRuleUsernames() (lib/workflowEngine.js) đọc isActiveUsername(rule.username) so CHUỖI
+//      THÔ với username hiện tại.
+// Hậu quả giống nhau cả 2: đổi tên 1 tài khoản -> username CŨ còn lại trong approvers[]/rule.username
+// không còn khớp AI (isActiveUsername()/canApproveStep() đều so theo username HIỆN TẠI) -> bước duyệt
+// "chọn tay" đó mất hẳn approver hợp lệ, hồ sơ PENDING treo tới khi admin tự sửa lại tay — ẢNH HƯỞNG RỘNG:
+// mọi module dùng PEOPLE/PERSON mode (Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn Phòng, VPP,
+// Ngân Sách, Thanh Toán, Phòng Họp, Hỗ Trợ IT Bán Lẻ/Bán Buôn, Đặt Hàng Siêu Thị/HO). Xoá vĩnh viễn: với
+// approvers[] (so khớp chuỗi thô, không tự lọc theo trạng thái tài khoản) phải GỠ username đó khỏi mảng —
+// không gỡ thì username cũ "ma" vẫn nằm trong mảng, và NẾU username đó về sau bị cấp LẠI cho 1 tài khoản
+// khác hoàn toàn (tái sử dụng), người mới sẽ tự động trở thành approver hợp lệ ngoài ý admin (lỗ hổng
+// toàn vẹn phân quyền, không chỉ mất chức năng) — cùng rủi ro "tái sử dụng username" mà
+// cascadeUsernameChangesToApprovalGroups() ở trên không gặp phải (đã đổi/gỡ members[] tương tự). Với
+// rule.username (PERSON mode, isActiveUsername() đã tự lọc theo "còn tồn tại trong users[] + active !==
+// false") — xoá vĩnh viễn tự nhiên làm isActiveUsername() trả về false (0 approver), KHÔNG cần gỡ tường
+// minh để AN TOÀN, nhưng vẫn chủ động đặt về null cho SẠCH DỮ LIỆU (tránh admin nhìn thấy 1 username đã
+// không còn tồn tại nằm "treo" trong cấu hình).
+function renameApproversUsernamesMap(map, oldUsername, newUsername, deletedUsername) {
+  let changed = false;
+  const next = {};
+  for (const [stepOrder, usernames] of Object.entries(map)) {
+    if (!Array.isArray(usernames)) { next[stepOrder] = usernames; continue; }
+    let arr = usernames;
+    let arrChanged = false;
+    if (oldUsername != null && arr.includes(oldUsername)) {
+      arr = arr.map(u => (u === oldUsername ? newUsername : u));
+      arrChanged = true;
+    }
+    if (deletedUsername != null && arr.includes(deletedUsername)) {
+      arr = arr.filter(u => u !== deletedUsername);
+      arrChanged = true;
+    }
+    if (arrChanged) changed = true;
+    next[stepOrder] = arrChanged ? arr : usernames;
+  }
+  return changed ? next : map;
+}
+
+// Quét ĐỆ QUY, đổi/gỡ username trong MỌI map `approvers` tìm thấy ở bất kỳ độ sâu nào — mirror ĐÚNG
+// renamePositionPairsDeep() (xem chú thích tại đó), chỉ khác tên field mục tiêu ('approvers' thay
+// 'approversByPosition') và hình dạng value (mảng username phẳng thay mảng {jobTitle,dept}).
+function renameApproversUsernamesDeep(node, oldUsername, newUsername, deletedUsername) {
+  if (!node || typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    let changed = false;
+    const next = node.map(child => {
+      const renamed = renameApproversUsernamesDeep(child, oldUsername, newUsername, deletedUsername);
+      if (renamed !== child) changed = true;
+      return renamed;
+    });
+    return changed ? next : node;
+  }
+  let changed = false;
+  const next = {};
+  for (const [key, val] of Object.entries(node)) {
+    const renamed = (key === 'approvers' && val && typeof val === 'object' && !Array.isArray(val))
+      ? renameApproversUsernamesMap(val, oldUsername, newUsername, deletedUsername)
+      : renameApproversUsernamesDeep(val, oldUsername, newUsername, deletedUsername);
+    if (renamed !== val) changed = true;
+    next[key] = renamed;
+  }
+  return changed ? next : node;
+}
+
+function renameMixedApprovalRuleUsername(rule, oldUsername, newUsername, deletedUsername) {
+  if (!rule || rule.mode !== 'PERSON') return rule;
+  if (oldUsername != null && rule.username === oldUsername) return { ...rule, username: newUsername };
+  if (deletedUsername != null && rule.username === deletedUsername) return { ...rule, username: null };
+  return rule;
+}
+
+// renamed: [{oldValue, newValue}]. deletedUsernames: [username,...]. Gọi CẠNH
+// cascadeUsernameChangesToApprovalGroups() ở routes/data.js (cùng điểm gọi, cùng dữ liệu renamed/
+// deletedUsernames đã tính sẵn).
+async function cascadeUsernameChangesToWorkflowApprovers(renamed, deletedUsernames) {
+  for (const mapKey of POSITION_PAIR_CONFIG_MAP_KEYS) {
+    await withLockedAppDataValue(mapKey, (map) => {
+      let current = map;
+      for (const { oldValue, newValue } of renamed || []) {
+        current = renameApproversUsernamesDeep(current, oldValue, newValue, null);
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        current = renameApproversUsernamesDeep(current, null, null, deletedUsername);
+      }
+      return current;
+    });
+  }
+  for (const key of MIXED_APPROVAL_RULE_KEYS) {
+    await withLockedAppDataValue(key, (list) => {
+      if (!Array.isArray(list)) return list;
+      let current = list;
+      for (const { oldValue, newValue } of renamed || []) {
+        current = current.map(r => renameMixedApprovalRuleUsername(r, oldValue, newValue, null));
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        current = current.map(r => renameMixedApprovalRuleUsername(r, null, null, deletedUsername));
+      }
+      return current;
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -975,5 +1087,5 @@ module.exports = {
   renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename,
   cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
-  cascadeUsernameChangesToApprovalGroups
+  cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers
 };

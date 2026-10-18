@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2373,6 +2373,10 @@ router.post('/:key', async (req, res) => {
       // extraApprovalGroups_<module>) — LỖI ĐÃ VÁ, đợt re-audit lần 3, mức Nghiêm Trọng — xem chú thích
       // đầy đủ tại cascadeUsernameChangesToApprovalGroups() (lib/catalogRename.js).
       await cascadeUsernameChangesToApprovalGroups(renamed, deletedUsernames);
+      // approvers[stepOrder] (PEOPLE mode, 17 map *DeptWorkflows/*TierWorkflows) + rule.username (PERSON
+      // mode, 2 map MixedApprovalRules) — LỖI ĐÃ VÁ, re-audit lần 7, mức Cao — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToWorkflowApprovers() (lib/catalogRename.js).
+      await cascadeUsernameChangesToWorkflowApprovers(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
