@@ -624,11 +624,26 @@ function cancelOnboardingQueueProfile(list, employeeCode, reason, actorUsername,
 // là có ngay 2 hồ sơ (kể cả 2 hồ sơ ACTIVE) cùng 1 CCCD — đúng tình huống mà bản vá lúc TẠO định chặn.
 // Tách thành hàm dùng chung, gọi ở CẢ 3 điểm ghi. exceptEmployeeCode: mã hồ sơ ĐANG được sửa (loại trừ
 // chính nó khỏi phép so trùng — sửa hồ sơ mà giữ nguyên CCCD cũ không phải là trùng).
-function assertNationalIdNotDuplicated(list, rawNationalId, exceptEmployeeCode) {
+//
+// LỖI ĐÃ VÁ (đợt re-audit lần 3, mức Trung Bình-Cao): actor CHỈ có canCreateProfiles() (hrProfileCreate,
+// KHÔNG có canFullViewProfiles()/canEditProfiles() — route POST /api/hr-profile chỉ đòi requireProfileCreate)
+// trước đây nhận NGUYÊN VĂN employeeCode + trạng thái INACTIVE của người khác qua thông báo 409 này, dù
+// bị cấm xem danh sách/chi tiết hồ sơ (GET /by-code/:code đã chặn đúng qua getProfileForViewer() —
+// route NÀY là kẽ hở riêng). canViewFull (bắt buộc truyền, không có mặc định — buộc mọi điểm gọi MỚI
+// phải cân nhắc đúng) = true khi actor có canFullViewProfiles()/canEditProfiles() — luôn giữ nguyên
+// thông báo đầy đủ. canViewFull = false CHỈ hạ chi tiết khi dup.status KHÁC 'INACTIVE' (ACTIVE) — hồ sơ
+// INACTIVE trùng CCCD đã được chủ đích lộ employeeCode/tên/dept/DOB CHO ĐÚNG permission tier này qua
+// GET /api/hr-profile/search-inactive (requireProfileCreateOrEdit, searchInactiveProfilesForRehire())
+// — không phải lỗ hổng MỚI, giữ nguyên thông báo đầy đủ cho nhánh đó để không đổi hành vi "Kiểm Tra Nhân
+// Sự Cũ"/Tái Tuyển đã có.
+function assertNationalIdNotDuplicated(list, rawNationalId, exceptEmployeeCode, canViewFull) {
   const nationalId = String(rawNationalId || '').trim();
   if (!nationalId) return;
   const dup = (list || []).find(p => p.nationalId === nationalId && p.employeeCode !== exceptEmployeeCode);
   if (!dup) return;
+  if (!canViewFull && dup.status !== 'INACTIVE') {
+    throw new HttpError(409, `CCCD/CMND "${nationalId}" đã tồn tại trong hệ thống — vui lòng liên hệ bộ phận Nhân Sự có quyền xem hồ sơ để xác minh trước khi tạo mới.`);
+  }
   throw new HttpError(409, `CCCD/CMND "${nationalId}" đã có hồ sơ [${dup.employeeCode}]${dup.status === 'INACTIVE' ? ' (ĐÃ NGHỈ VIỆC — dùng chức năng "Kiểm Tra Nhân Sự Cũ"/Tái Tuyển thay vì tạo mới)' : ''} — vui lòng kiểm tra lại, mỗi người chỉ được có 1 hồ sơ nhân sự duy nhất`);
 }
 
@@ -661,7 +676,7 @@ function createManualProfile(list, payload, actorUsername, actorName, options) {
   // hết lịch sử. Chặn CỨNG ở đây (áp dụng cho CẢ 2 lối tạo — form tay lẫn Excel import hàng loạt, vì cả
   // 2 đều gọi chung hàm này) khi CCCD/CMND đã có ở BẤT KỲ hồ sơ nào khác (ACTIVE lẫn INACTIVE — hồ sơ
   // INACTIVE trùng CCCD nghĩa là phải Tái Tuyển, không phải tạo mới).
-  assertNationalIdNotDuplicated(arr, payload?.nationalId, null);
+  assertNationalIdNotDuplicated(arr, payload?.nationalId, null, !!options?.canViewFull);
   const profile = defaultProfile(employeeCode);
   profile.status = 'ACTIVE';
   profile.username = username;
@@ -698,8 +713,10 @@ function updateProfileFromImport(list, employeeCode, payload, actorUsername, act
   const profile = findProfile(arr, String(employeeCode || '').trim());
   if (!profile) throw new HttpError(404, `Không tìm thấy hồ sơ ứng với Mã Nhân Viên "${employeeCode}" để ghi đè`);
   // Chặn trùng CCCD/CMND y hệt lối tạo mới (loại trừ chính hồ sơ đang ghi đè) — xem
-  // assertNationalIdNotDuplicated() ở trên.
-  if (payload && 'nationalId' in payload) assertNationalIdNotDuplicated(arr, payload.nationalId, profile.employeeCode);
+  // assertNationalIdNotDuplicated() ở trên. canViewFull=true: hàm này CHỈ được gọi khi actor đã có
+  // canEditProfiles() thật (routes/employeeProfile.js chặn action='overwrite' nếu thiếu quyền này
+  // TRƯỚC KHI gọi tới đây) — không phải kẽ hở hrProfileCreate-only.
+  if (payload && 'nationalId' in payload) assertNationalIdNotDuplicated(arr, payload.nationalId, profile.employeeCode, true);
   // options (10/2026, mẫu Excel 90 trường) — CALLER (routes/employeeProfile.js) truyền đúng danh mục
   // THẬT (employmentTypes/workSchedules/legalEntities/specialLaborStatuses/currentWorkStatusDetails/
   // nationalIdIssuePlaces) để applyProfileEdit() đối chiếu enum ĐÚNG, không rơi về fallback Set cứng.

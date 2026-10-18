@@ -836,8 +836,10 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): đường sửa này đi vòng hoàn
       // toàn lớp chặn trùng CCCD/CMND vốn chỉ có ở lối TẠO (createManualProfile()) — xem
       // lib/employeeProfile.js::assertNationalIdNotDuplicated().
+      // canViewFull=true: route này chỉ chạy tới đây khi đã qua gate canEditProfiles()/canEditViaOnboardingQueue
+      // ở trên (không phải kẽ hở hrProfileCreate-only — xem chú thích đầy đủ tại assertNationalIdNotDuplicated()).
       if (req.body && 'nationalId' in req.body) {
-        employeeProfile.assertNationalIdNotDuplicated(list, req.body.nationalId, profile.employeeCode);
+        employeeProfile.assertNationalIdNotDuplicated(list, req.body.nationalId, profile.employeeCode, true);
       }
       const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
       employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name, {
@@ -1010,7 +1012,11 @@ router.post('/', requireProfileCreate, async (req, res) => {
         legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
         currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
         maritalStatuses: appData.maritalStatuses,
-        users: appData.users
+        users: appData.users,
+        // canViewFull (LỖI ĐÃ VÁ, đợt re-audit lần 3) — actor chỉ có canCreateProfiles() (hrProfileCreate,
+        // route này KHÔNG đòi quyền xem) không được nhận NGUYÊN VĂN employeeCode/trạng thái của người
+        // khác qua lỗi 409 trùng CCCD — xem assertNationalIdNotDuplicated() ở lib/employeeProfile.js.
+        canViewFull: employeeProfile.canFullViewProfiles(req.freshUser) || employeeProfile.canEditProfiles(req.freshUser)
       });
       if (positionKey) {
         const result = employeeProfile.applyPositionAssignment(created, applied, positionKey, null, req.freshUser.username, req.freshUser.name, null);
@@ -1168,7 +1174,9 @@ router.post('/bulk-import', requireProfileCreate, async (req, res) => {
               legalEntities: appData.legalEntities, specialLaborStatuses: appData.specialLaborStatuses,
               currentWorkStatusDetails: appData.currentWorkStatusDetails, nationalIdIssuePlaces: appData.nationalIdIssuePlaces,
               maritalStatuses: appData.maritalStatuses,
-              users: appData.users
+              users: appData.users,
+              // canViewFull — cùng lý do route POST / phía trên (xem chú thích tại đó).
+              canViewFull: employeeProfile.canFullViewProfiles(req.freshUser) || canOverwrite
             });
             results.created.push(created.employeeCode);
             if (created.username) newlyLinked.push({ employeeCode: created.employeeCode, username: created.username });
