@@ -15,10 +15,22 @@ const { getAllForCollection, insertRecord, withLockedRecordForCollection, withAp
 const { assertUploadedFileUrl } = require('../lib/createValidation');
 const { assertPayloadFileUrlsOwnedByUser } = require('../lib/uploadedFiles');
 const { getAppDataValueCached } = require('../lib/appData');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 const checklist = require('../lib/checklist');
 const { buildQaReportWorkbook, buildDeductionReportWorkbook, buildVsattpDashboardWorkbook } = require('../lib/checklistReportExport');
 
-router.use(requireAuth, blockIfMustChangePassword);
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026): module "Checklist Đánh Giá Siêu Thị" là
+// router RIÊNG (không qua routes/records.js chung) nên KHÔNG tự động được hưởng vòng lặp zero-out Khối 0
+// ở routes/data.js — admin tắt moduleAccess.checklist cho 1 tài khoản ở màn Phân Quyền trước đây KHÔNG hề
+// cản được họ gọi thẳng các route dưới đây (vẫn còn đủ quyền chi tiết checklistExecute/...). Mirror đúng
+// khuôn requireHrPayrollModuleAccess() ở routes/payroll.js.
+function requireChecklistModuleAccess(req, res, next) {
+  if (!hasModuleAccessServer(req.freshUser, 'checklist')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+  }
+  next();
+}
+router.use(requireAuth, blockIfMustChangePassword, requireChecklistModuleAccess);
 
 // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Thấp — "moduleKey do client tự khai"): ràng buộc "ảnh minh
 // chứng CHỈ nhận ảnh" của Checklist trước đây nằm HOÀN TOÀN ở POST /api/upload, và quyết định theo đúng

@@ -689,6 +689,21 @@ router.post('/minutes/:id/delete', async (req, res) => {
 function assertCanViewInternalPost(user, post) {
   if (!canViewInternalPost(user, post)) throw new HttpError(403, 'Bạn không có quyền xem bài viết này');
 }
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Trung Bình): internalPosts có mặt
+// đúng ở MODULE_ACCESS_GATED_COLLECTIONS (GET /api/data đã zero-out đúng khi moduleAccess.internal=false)
+// nhưng KHÔNG route tự phục vụ nào dưới đây (đọc/ghi trực tiếp bằng id, không qua GET đã zero-out) từng
+// kiểm Khối 0 — admin tắt hẳn module Truyền Thông Nội Bộ cho 1 tài khoản vẫn tương tác (thích/đánh dấu
+// đã đọc/bình luận/đăng ký đào tạo/duyệt...) với bài bất kỳ qua API trực tiếp. Gác NGAY ở router.use
+// (TRƯỚC khi chạm DB, mirror đúng khuôn router.use('/carRegs'|'/vppRegistrations'|hrAttendance cluster,
+// ...) ở trên) thay vì nhúng vào assertCanViewInternalPost() — hàm đó cần đọc ĐÚNG bản ghi để xét quyền
+// xem theo nội dung bài (dept/trạng thái), không thể gác Khối 0 (chỉ phụ thuộc moduleAccess, không phụ
+// thuộc bản ghi nào) sớm hơn nếu nhúng chung.
+router.use('/internalPosts', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'internal')) {
+    return res.status(403).json({ error: 'Module Truyền Thông Nội Bộ đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 
 async function withInternalPostAction(req, res, action, mutator) {
   const itemId = Number(req.params.id);
@@ -1294,6 +1309,16 @@ router.post('/carRegs/:id/change-route', async (req, res) => {
   } catch (err) {
     handleError(res, `carRegs/${req.params.id}/change-route`, err);
   }
+});
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Trung Bình): vppPeriods (kỳ đăng ký
+// CHA, khác vppRegistrations — hồ sơ đăng ký CON đã gác đúng Khối 0 ở router.use ngay dưới) hoàn toàn
+// chưa có lớp Khối 0 ở tầng hành động — admin tắt moduleAccess.vpp cho 1 tài khoản (còn giữ vppManage)
+// vẫn xoá/đóng kỳ VPP qua API trực tiếp. Mirror ĐÚNG khuôn router.use('/vppRegistrations', ...) ngay dưới.
+router.use('/vppPeriods', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'vpp')) {
+    return res.status(403).json({ error: 'Module Văn Phòng Phẩm đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
 });
 // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Thấp): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ
 // ĐIỀU KIỆN 1 kỳ VPP dù đang có vppRegistrations trỏ periodId vào nó — mồ côi dữ liệu (đơn đăng ký cũ
@@ -5042,7 +5067,15 @@ router.post('/itServiceRenewals/:id/renew', async (req, res) => {
 // Đa số bản ghi được HỆ THỐNG tự tạo/đóng qua sync*() ở trên — các route dưới đây phục vụ HR thao tác
 // TAY: sửa field (điền lương/ngày hết hạn cho bản nháp tự tạo sau quyết định "Ký chính thức"), kích
 // hoạt, bổ sung phụ lục/thay đổi, đóng tay, xoá (admin-only, cùng khuôn deleteAdminOnly() ở trên).
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Cao): hrContract có mặt đúng ở
+// MODULE_ACCESS_GATED_COLLECTIONS (GET /api/data đã zero-out đúng) nhưng KHÔNG route nào trong cụm
+// laborContracts bên dưới (edit/apply-import/apply-create-import/activate/add-amendment/status/delete)
+// từng kiểm Khối 0 — chỉ kiểm quyền chi tiết hrContractManage qua assertContractManage() này. Admin tắt
+// moduleAccess.hrContract cho 1 tài khoản (còn giữ hrContractManage) vẫn sửa/kích hoạt/xoá hợp đồng lao
+// động của bất kỳ ai qua API trực tiếp. Gộp kiểm tra NGAY TRONG hàm này (dùng chung cho mọi route gọi
+// nó) thay vì thêm 7 chỗ router.use riêng — mirror đúng tinh thần router.use('/carRegs', ...).
 function assertContractManage(freshUser) {
+  if (!hasModuleAccessServer(freshUser, 'hrContract')) throw new HttpError(403, 'Module Hợp Đồng Lao Động đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại');
   if (!laborContract.canManageContracts(freshUser)) throw new HttpError(403, 'Bạn không có quyền quản lý Hợp Đồng Lao Động');
 }
 
@@ -5375,6 +5408,24 @@ router.post('/laborContracts/:id/status', async (req, res) => {
 router.post('/laborContracts/:id/delete', (req, res) => deleteWithGuard(req, res, 'laborContracts', assertContractManage));
 
 // ===================== NHÂN SỰ > Công & Phép (Đợt 3/4 — xem lib/attendance.js) =====================
+
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Cao): hrAttendance có mặt đúng ở
+// MODULE_ACCESS_GATED_COLLECTIONS (GET /api/data đã zero-out đúng cho cả 5 collection dưới đây) nhưng
+// TOÀN BỘ route tự phục vụ/duyệt (cancel/approve/reject/edit/adjust) chỉ kiểm quyền chi tiết
+// (hrAttendanceManage/hrLeaveApprove/hrShiftSwapApprove...) qua canApproveLeaveRequest()/tương đương ở
+// lib/attendance.js — các hàm đó KHÔNG gọi hasModuleAccessServer(). Admin tắt moduleAccess.hrAttendance
+// cho 1 tài khoản (còn giữ quyền chi tiết) vẫn duyệt/từ chối đơn nghỉ phép/đổi ca, điều chỉnh quỹ phép,
+// sửa chấm công, huỷ lịch phân ca của bất kỳ ai qua API trực tiếp. Mirror ĐÚNG khuôn
+// router.use('/carRegs', ...)/router.use('/vppRegistrations', ...). (Các cờ Mục 0 chi tiết hơn theo
+// sub-tab — hrAttendanceManageTab/hrAttendanceRosterTab/hrAttendanceApproveTab, xem canSeeHacManageAll()
+// ở lib/recordViewScope.js — vẫn giữ nguyên, không đổi; gate này chỉ thêm đúng 1 lớp Khối 0 tổng quát
+// còn thiếu ở tầng hành động.)
+router.use(['/leaveRequests', '/attendanceRecords', '/leaveBalances', '/shiftRoster', '/shiftSwapRequests'], (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'hrAttendance')) {
+    return res.status(403).json({ error: 'Module Công & Phép đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 
 // leaveRequests: nhân viên tự huỷ đơn PENDING/APPROVED-chưa-tới-ngày của CHÍNH MÌNH.
 router.post('/leaveRequests/:id/cancel', async (req, res) => {

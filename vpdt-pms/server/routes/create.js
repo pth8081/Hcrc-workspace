@@ -118,9 +118,21 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // mặt ở COLLECTION_TO_MODULE_ACCESS_KEY qua MODULE_ACCESS_GATED_COLLECTIONS.budget, xem lib/recordViewScope.js)
 // nhưng budgetTemplates CỐ Ý không nằm trong danh sách đó (catalog dùng chung, không lọc theo phòng ban)
 // — vẫn cần Khối 0 riêng ở khâu TẠO nên liệt kê ở đây.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026): 4 collection sau CŨNG rơi đúng vào lớp lỗi
+// đã ghi chú ở trên (Khối 0 chỉ chặn tầng HÀNH ĐỘNG ở routes/records.js, chưa chặn tầng TẠO MỚI ở route
+// chung này) — tắt moduleAccess.periodicReport/vpp/checklist cho 1 tài khoản (còn giữ quyền chi tiết
+// reportManage/reportEntryCreate/vppManage/checklistManage) vẫn TẠO MỚI được qua route này.
+// - reportPeriods/reportEntries: mọi route HÀNH ĐỘNG (merge/publish/close/sửa) đã gác đúng 'periodicReport'
+//   qua router.use('/reportPeriods'|'/reportEntries', ...) ở routes/records.js — chỉ bước TẠO bị bỏ sót.
+// - vppPeriods: vppRegistrations (hồ sơ đăng ký con) đã gác đúng cả tạo+hành động từ trước; vppPeriods
+//   (kỳ đăng ký cha) lại bị bỏ sót hoàn toàn (xem thêm router.use('/vppPeriods', ...) mới thêm ở
+//   routes/records.js cho route /close).
+// - checklistTemplates: module riêng hẳn (routes/checklist.js, xem requireChecklistModuleAccess() ở đó
+//   — tầng HÀNH ĐỘNG mới được vá CÙNG đợt này), nhưng route TẠO vẫn đi qua handler CHUNG ở đây.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
   budgetTemplates: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
-  paymentRequests: 'office', officeReqs: 'office'
+  paymentRequests: 'office', officeReqs: 'office',
+  reportPeriods: 'periodicReport', reportEntries: 'periodicReport', vppPeriods: 'vpp', checklistTemplates: 'checklist'
 };
 
 router.use(requireAuth, blockIfMustChangePassword);

@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**26.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.44 (2026-11): [Cao] Rà soát chuyên sâu lần 2 trước go-live — Đợt 1: vá 6 lỗ hổng Khối 0 còn thiếu
+
+Phát hiện qua 6 agent audit song song (phân quyền/root-admin/lọc-tìm-kiếm/cấu hình nghiệp vụ/bảng liên
+kết/hệ thống liên kết chéo module). Đợt này xử lý 4 phát hiện Cao + 2 Trung Bình từ agent "Phân quyền &
+Khối 0 gating" — cùng lớp lỗi đã vá nhiều lần trước đó (admin tắt moduleAccess cho 1 tài khoản ở màn
+Phân Quyền không cản được họ gọi thẳng API nếu còn quyền chi tiết), lần này rơi vào 6 module khác:
+
+- **[Cao] Checklist Đánh Giá Siêu Thị** (`routes/checklist.js`): router RIÊNG (không qua routes/records.js
+  chung) nên KHÔNG tự động hưởng vòng zero-out Khối 0 — chưa từng gác ở server. Thêm
+  `requireChecklistModuleAccess()` ở đầu router (mirror `requireHrPayrollModuleAccess()`,
+  routes/payroll.js) + thêm `checklistTemplates: 'checklist'` vào `EXTRA_CREATE_MODULE_ACCESS_KEY`.
+- **[Cao] Hợp Đồng Lao Động** (`laborContracts`): `assertContractManage()` chỉ kiểm `hrContractManage`,
+  thiếu `hasModuleAccessServer(user,'hrContract')` — gộp kiểm tra vào đúng hàm này (dùng chung cho 7
+  route edit/apply-import/apply-create-import/activate/add-amendment/status/delete).
+- **[Cao] Công & Phép** (`leaveRequests`/`attendanceRecords`/`leaveBalances`/`shiftRoster`/
+  `shiftSwapRequests`): mọi route hành động (duyệt/từ chối/huỷ/sửa/điều chỉnh) chỉ kiểm quyền chi tiết
+  qua `canApproveLeaveRequest()`/tương đương (lib/attendance.js), không hàm nào gọi
+  `hasModuleAccessServer`. Thêm 1 `router.use([...5 collection], ...)` gác `moduleAccess.hrAttendance`.
+- **[Cao] Báo Cáo Định Kỳ** (`reportPeriods`/`reportEntries`) + **vppPeriods** +
+  **checklistTemplates**: route TẠO MỚI (`routes/create.js`) không gác Khối 0 — bất đối xứng với route
+  hành động đã gác đúng ở `records.js`. Thêm cả 4 key vào `EXTRA_CREATE_MODULE_ACCESS_KEY`.
+- **[Trung Bình] vppPeriods** (kỳ đăng ký CHA, khác `vppRegistrations` — hồ sơ con đã gác đúng từ
+  trước): route `/delete`/`/close` chưa từng gác Khối 0. Thêm `router.use('/vppPeriods', ...)`.
+- **[Trung Bình] internalPosts**: 15/16 route tự phục vụ (like/mark-read/comment/duyệt/đăng ký đào
+  tạo...) chỉ kiểm `canViewInternalPost()` (phụ thuộc NỘI DUNG bài, không phụ thuộc moduleAccess) —
+  thiếu Khối 0 hoàn toàn. Thêm `router.use('/internalPosts', ...)` gác `moduleAccess.internal` NGAY
+  trước khi chạm DB (không nhúng vào `assertCanViewInternalPost()` vì hàm đó cần đọc đúng bản ghi mới
+  xét được quyền xem theo nội dung — Khối 0 chỉ phụ thuộc moduleAccess, gác sớm hơn được).
+
+Test: `tests/test-khoi0-checklist-contract-attendance-internalpost-gate.js` (mới, 24 kịch bản, mount
+THẬT `routes/records.js` + `routes/checklist.js` + `routes/create.js`, chỉ stub `lib/auth` +
+`lib/appData` — mirror đúng khuôn 2 file `test-khoi0-*-gate.js` đã có). Xác nhận bằng `git stash`: 14/24
+FAIL đúng trên code cũ (10/24 pass — các case "không bị 403 oan" tất nhiên vẫn pass cả 2 phía), 24/24
+PASS trên code đã vá. Chạy lại `test-checklist.js` (55) + `test-labor-contract.js` (27) +
+`test-attendance-leave.js` (72) + `test-attendance-records-scope.js` (7) + `test-vpp.js` (29) +
+`test-vpp-registrations-scope.js` (7) + `test-periodic-report.js` (15) + `test-internal-media-client.js`
+(28) + `test-audit-round5-checklist.js` (8) + `test-audit-round5-minutes-task-vpp.js` (15) +
+`test-office-vpp-cancel-step1.js` (12) + `test-leave-balance-year-rollover.js` (6) +
+`test-shiftroster-cancel-on-leave-approve.js` (5) + 2 file `test-khoi0-*-gate.js` cũ (10+9) — không hồi
+quy. Thuần server (`routes/checklist.js`/`routes/create.js`/`routes/records.js`) — không đụng client
+nên không cần CSP check.
+
+**Deploy-impact**: thuần server — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường, KHÔNG đổi
+dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.43 (2026-11): Mục F — dọn 4 file test còn lại có fixture/assertion lỗi thời (không phải lỗi production)
 
