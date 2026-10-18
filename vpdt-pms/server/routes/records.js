@@ -4429,6 +4429,34 @@ async function cleanupDraftProfileOnOnboardingClosed(hrProcessItem, actorUser, r
   }
 }
 
+// PHÁT HIỆN mức Cao (re-audit lần 3): huỷ/xoá quy trình Onboarding SAU khi hợp đồng thử việc đã tự sinh
+// (templateId=1/7, xem syncLaborContractOnHrTaskEvent() ở trên) không hề đóng hợp đồng đó lại — xem
+// applyOnboardingCancelTermination() ở lib/laborContract.js cho đầy đủ hậu quả (employeeCode tái sử
+// dụng nhận nhầm hợp đồng ACTIVE "mồ côi" của người cũ). Tra MỌI hợp đồng theo hrProcessId (không theo
+// employeeCode) còn ở DRAFT/ACTIVE và đóng lại — cùng khuôn cleanupDraftProfileOnOnboardingClosed() ở
+// trên (ghi có tác dụng phụ chéo collection, lỗi KHÔNG được làm hỏng thao tác chính đã commit, chỉ log).
+async function cleanupLaborContractOnOnboardingClosed(hrProcessItem, actorUser, req, routeLabel) {
+  if (!hrProcessItem || hrProcessItem.processType !== 'ONBOARDING') return false;
+  try {
+    const list = await getAllForCollection('laborContracts');
+    const orphans = (list || []).filter(c => c.hrProcessId === hrProcessItem.id && (c.status === 'DRAFT' || c.status === 'ACTIVE'));
+    for (const orphan of orphans) {
+      await withLockedRecordForCollection('laborContracts', orphan.id, (item) =>
+        laborContract.applyOnboardingCancelTermination(item, hrProcessItem));
+      insertSystemLog({
+        username: actorUser?.username || 'system', fullName: actorUser?.name || 'system', ipAddress: req?.ip || '',
+        module: 'HR', actionType: 'AUTO_TERMINATE_CONTRACT', targetObject: orphan.code || String(orphan.id),
+        description: `Tự đóng Hợp Đồng Lao Động [${orphan.code || orphan.id}] (${orphan.status}) khi quy trình Onboarding #${hrProcessItem.id} (${hrProcessItem.fullName || ''}) bị huỷ/xoá — tránh hợp đồng "mồ côi"`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (tự đóng hợp đồng mồ côi):', e.message));
+    }
+    return orphans.length > 0;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi dọn Hợp Đồng Lao Động khi đóng quy trình Onboarding:`, err.message);
+    return false;
+  }
+}
+
 router.post('/hrProcesses/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
@@ -4438,6 +4466,7 @@ router.post('/hrProcesses/:id/delete', async (req, res) => {
     const preItem = preList.find(p => p.id === itemId);
     await deleteRecordForCollection('hrProcesses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
     await cleanupDraftProfileOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
+    await cleanupLaborContractOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/delete`, err);
@@ -4506,7 +4535,10 @@ router.post('/hrProcesses/:id/cancel', async (req, res) => {
     // Dọn hồ sơ nhân sự còn ở trạng thái Nháp đã đặt chỗ lúc tạo quy trình — xem
     // cleanupDraftProfileOnOnboardingClosed() ở trên.
     const draftProfileRemoved = await cleanupDraftProfileOnOnboardingClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);
-    res.json({ ok: true, item: result, draftProfileRemoved });
+    // Đóng Hợp Đồng Lao Động tự sinh (DRAFT/ACTIVE) còn "mồ côi" khi huỷ quy trình — xem
+    // cleanupLaborContractOnOnboardingClosed() ở trên.
+    const laborContractClosed = await cleanupLaborContractOnOnboardingClosed(result, freshUser, req, `hrProcesses/${itemId}/cancel`);
+    res.json({ ok: true, item: result, draftProfileRemoved, laborContractClosed });
   } catch (err) {
     handleError(res, `hrProcesses/${req.params.id}/cancel`, err);
   }
