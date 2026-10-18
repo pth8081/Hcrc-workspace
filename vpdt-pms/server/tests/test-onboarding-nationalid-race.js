@@ -40,7 +40,10 @@ function check(name, cond, detail) {
 
 const HR1 = { username: 'hr1', name: 'Nhân Sự 1', dept: 'Nhân Sự', perms: { hrOnboardingManage: true }, active: true };
 const HR2 = { username: 'hr2', name: 'Nhân Sự 2', dept: 'Nhân Sự', perms: { hrOnboardingManage: true }, active: true };
-const USERS = [HR1, HR2];
+// HR3 (re-audit lần 5, #145): CÙNG hrOnboardingManage như HR1/HR2 nhưng CÓ THÊM hrProfileEdit — đúng
+// tier được phép xem chi tiết hồ sơ INACTIVE trùng CCCD (mirror requireProfileCreateOrEdit).
+const HR3 = { username: 'hr3', name: 'Nhân Sự 3 (có hrProfileEdit)', dept: 'Nhân Sự', perms: { hrOnboardingManage: true, hrProfileEdit: true }, active: true };
+const USERS = [HR1, HR2, HR3];
 
 let APP_DATA_STORE = {};
 function resetAppData() {
@@ -222,6 +225,30 @@ async function main() {
     check('2 Onboarding ĐỀU không nhập CCCD vẫn tạo đồng thời bình thường',
       r5.status === 200 && r6.status === 200 && RECORDS.hrProcesses.length === 2,
       { r5Status: r5.status, r6Status: r6.status, count: RECORDS.hrProcesses.length });
+
+    // ===== LỖI ĐÃ VÁ (re-audit lần 5, mức Thấp — "Tạo Onboarding lộ mã NV đã nghỉ việc qua CCCD"):
+    // assertNationalIdNotDuplicated() CHỦ Ý luôn lộ employeeCode + "ĐÃ NGHỈ VIỆC" cho hồ sơ INACTIVE
+    // trùng CCCD BẤT KỂ canViewFull — an toàn ở 2 nơi gọi gốc (route gác đúng tier hrProfileCreate/Edit/
+    // Manage), nhưng route tạo Onboarding chỉ gác canCreateHrProcess() (hrOnboardingManage), KHÔNG đòi
+    // tier đó. HR1 (CHỈ hrOnboardingManage) dò CCCD của 1 nhân viên CŨ (INACTIVE) không được thấy
+    // employeeCode/trạng thái; HR3 (hrOnboardingManage + hrProfileEdit) thì được (đúng tier). =====
+    resetAppData(); resetRecords();
+    APP_DATA_STORE.employeeProfiles.push({
+      employeeCode: 'NV999', nationalId: '079099009999', status: 'INACTIVE', fullName: 'Người Đã Nghỉ'
+    });
+    const rInactiveLeak = await api(server, onboardingPayload({ fullName: 'Ứng Viên G', nationalId: '079099009999' }), HR1);
+    check('LỖI ĐÃ VÁ: HR1 (CHỈ hrOnboardingManage) dò CCCD trùng hồ sơ INACTIVE -> 409 KHÔNG lộ employeeCode/trạng thái nghỉ việc',
+      rInactiveLeak.status === 409 && !/NV999/.test(rInactiveLeak.body?.error || '') && !/NGHỈ VIỆC/.test(rInactiveLeak.body?.error || ''),
+      rInactiveLeak.body);
+
+    resetAppData(); resetRecords();
+    APP_DATA_STORE.employeeProfiles.push({
+      employeeCode: 'NV999', nationalId: '079099009999', status: 'INACTIVE', fullName: 'Người Đã Nghỉ'
+    });
+    const rInactiveDetail = await api(server, onboardingPayload({ fullName: 'Ứng Viên H', nationalId: '079099009999' }), HR3);
+    check('đối chứng: HR3 (có thêm hrProfileEdit, đúng tier "Kiểm Tra Nhân Sự Cũ") vẫn thấy ĐÚNG chi tiết employeeCode/trạng thái (không mất chức năng đã có)',
+      rInactiveDetail.status === 409 && /NV999/.test(rInactiveDetail.body?.error || '') && /NGHỈ VIỆC/.test(rInactiveDetail.body?.error || ''),
+      rInactiveDetail.body);
   } finally {
     server.close();
   }

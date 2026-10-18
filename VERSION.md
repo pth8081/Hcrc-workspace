@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.7 (2026-11): [Thấp] Re-audit lần 5 — mục 3/4 (Thấp): Tạo Onboarding lộ mã NV đã nghỉ việc qua CCCD
+
+Mục thứ 3 trong 4 phát hiện mức Thấp của đợt re-audit lần 5:
+
+- `assertNationalIdNotDuplicated()` (`lib/employeeProfile.js`) CHỦ Ý luôn lộ `employeeCode` + "ĐÃ NGHỈ
+  VIỆC" cho hồ sơ `INACTIVE` trùng CCCD BẤT KỂ tham số `canViewFull` — an toàn ở 2 nơi gọi GỐC
+  (`createManualProfile()`/`applyProfileEdit()`) vì cả 2 đều được ROUTE gác đúng tier
+  `hrProfileCreate`/`hrProfileEdit`/`hrProfileManage`, tier NÀY cũng đủ quyền tra "Kiểm Tra Nhân Sự Cũ"
+  (`GET /api/hr-profile/search-inactive`, `requireProfileCreateOrEdit`) nên không phải lỗ hổng mới. Lối
+  tạo Onboarding (`createOnboardingProcessRecord()` qua `lib/createValidation.js`) lại gọi CHUNG hàm
+  này nhưng KHÔNG truyền `canViewFull` — và được gác bằng 1 tier HOÀN TOÀN KHÁC
+  (`canCreateHrProcess()` — `hrOnboardingManage`/`hrProcessManage`/`admin`, KHÔNG đòi
+  `hrProfileCreate`/`hrProfileEdit`/`hrProfileManage`). 1 actor CHỈ có `hrOnboardingManage` có thể dò
+  CCCD bất kỳ qua form tạo Onboarding để biết `employeeCode` + tình trạng nghỉ việc của 1 nhân viên CŨ
+  dù không có quyền xem/tra cứu hồ sơ nhân sự.
+- Vá: tại callsite này, tính đúng tier `canCreateProfiles(user) || canEditProfiles(user)` (mirror đúng
+  `requireProfileCreateOrEdit`) — nếu actor THẬT SỰ cũng thuộc tier đó, gọi hàm chung như cũ
+  (`canViewFull=true`, giữ nguyên chi tiết); ngược lại, tự kiểm tra tồn tại trùng CCCD và ném thông báo
+  gọn (không `employeeCode`/trạng thái), bất kể hồ sơ trùng `ACTIVE` hay `INACTIVE` — không sửa hành vi
+  của hàm chung (giữ nguyên cho 2 nơi gọi gốc).
+
+**Test:** mở rộng `tests/test-onboarding-nationalid-race.js` (thêm fixture `HR3` có thêm
+`hrProfileEdit` + 2 scenario mới) — `HR1` (chỉ `hrOnboardingManage`) dò CCCD trùng hồ sơ `INACTIVE` bị
+409 KHÔNG lộ `employeeCode`/trạng thái nghỉ việc; đối chứng `HR3` (có thêm `hrProfileEdit`, đúng tier)
+vẫn thấy ĐÚNG chi tiết như cũ (không mất chức năng "Kiểm Tra Nhân Sự Cũ" đã có). Xác nhận FAIL trên code
+CŨ (`git stash -- lib/createValidation.js`, đúng 1/8 scenario FAIL), PASS trên code đã vá (8/8).
+Regression: `test-hrprofile-nationalid-dup-leak.js` (7/7 — xác nhận hàm chung + 2 nơi gọi gốc KHÔNG đổi
+hành vi), `test-hr-process-onboarding-create-import.js` (13/13), `test-audit-nhansu-onboarding-
+contract.js` (29/29), `test-onboarding.js` (23/23) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.6 (2026-11): [Thấp] Re-audit lần 5 — mục 2/4 (Thấp): Tạo Phụ Lục Hợp Đồng không kiểm quyền trên hợp đồng gốc
 
