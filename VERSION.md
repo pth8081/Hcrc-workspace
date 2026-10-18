@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**26.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.91 (2026-11): [TB] Re-audit lần 5 — mục 4: Admin vẫn tự duyệt ở Công Việc + leo thang ticket IT
+
+Mục thứ 4 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5. Cả 2 phần đều CÙNG MỘT nguyên nhân:
+module bị bỏ sót khi quyết định "Chặn admin tự duyệt ở TẤT CẢ module, không có ngoại lệ" (11/2026) được
+áp dụng cho mọi `assertNotSelfDecidingXxx()` khác trong hệ thống.
+
+- **Công Việc — Gia hạn/Huỷ việc** (`resolvePendingTaskAction()`, `lib/recordActions.js`): đợt vá đầu
+  (9/2026) đã thêm chặn "tự duyệt yêu cầu do chính mình gửi" (`task.assignedTo === user.username`) NHƯNG
+  VẪN cho admin vượt qua nhánh chặn đó ("admin vẫn luôn vượt qua được"). `requestExtension()`/
+  `cancelOrRequestCancelTask()` cho admin tự GỬI yêu cầu gia hạn/huỷ cho BẤT KỲ task nào (nhánh
+  `|| user.perms?.admin`), nên 1 tài khoản admin có thể tự gửi yêu cầu RỒI tự duyệt luôn bằng ĐÚNG tài
+  khoản đó — không ai kiểm soát độc lập.
+  - Bỏ hẳn admin-bypass trong nhánh chặn tự duyệt, khớp đúng khuôn mọi `assertNotSelfDecidingXxx()`
+    khác.
+
+- **Hỗ Trợ IT — Leo Thang Phê Duyệt** (`escalateItTicket()`/`approveItTicketEscalation()`/
+  `denyItTicketEscalation()`, `lib/recordActions.js`): nhánh admin-bypass ở approve/deny ĐÚNG cho mục
+  đích "gỡ kẹt hộ" (approver gốc nghỉ việc/khoá tài khoản, ticket kẹt vĩnh viễn ở PENDING) — nhưng trước
+  đây KHÔNG lưu lại AI đã gửi yêu cầu leo thang, nên KHÔNG loại trừ được đúng người đó. 1 tài khoản admin
+  (`canManageItSupport()` luôn đúng cho admin) có thể tự `escalateItTicket()` tới người khác X RỒI LẬP
+  TỨC tự `approveItTicketEscalation()`/`denyItTicketEscalation()` bằng admin-bypass — vô hiệu hoá hoàn
+  toàn mục đích "xin ý kiến người có trách nhiệm cụ thể trước khi tiếp tục xử lý".
+  - Thêm field `escalatedBy`/`escalatedByName` (ghi lại NGAY lúc `escalateItTicket()` chạy) +
+    `assertNotSelfDecidingItTicketEscalation()` chặn CỨNG (không phân biệt admin) khi
+    `ticket.escalatedBy === user.username` — giữ NGUYÊN nhánh admin-bypass cho người KHÁC can thiệp gỡ
+    kẹt, chỉ loại trừ đúng người đã gửi yêu cầu.
+
+**Test:** `tests/test-task-itticket-self-approve-blocked.js` (mới, 7 scenario — gọi THẲNG
+`requestExtension()`/`resolvePendingTaskAction()`/`escalateItTicket()`/`approveItTicketEscalation()`/
+`denyItTicketEscalation()`). Xác nhận FAIL trên code CŨ (`git stash`, 4/7 scenario FAIL đúng 4 "LỖI ĐÃ
+VÁ"), PASS trên code đã vá (7/7). Sửa 1 test fixture CŨ theo đúng CLAUDE.md "sửa fixture cho đúng chứ
+không nới lỏng chặn mới": `test-audit-createvsapprove-gaps.js` scenario #4 từng khẳng định "admin vẫn
+tự duyệt được yêu cầu gia hạn — đặc quyền nhất quán" — đổi assertion sang "giờ bị chặn 403" (28/28 PASS
+sau sửa). Regression: `test-audit-round2-cluster3.js`/`test-audit-round2-cluster4.js` (28/28),
+`test-it-support.js` (24/24), `test-operation-vhst-refix2.js` (12/12) — toàn bộ PASS, không regression.
+3 FAIL trong `test-audit-round2-cluster3.js` (race condition tạo Ngân Sách song song) đã xác nhận qua
+git-stash là lỗi CŨ tồn tại trước đợt này, không liên quan.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.90 (2026-11): [TB] Re-audit lần 5 — mục 3: Thiếu validate cấu trúc 5 key cấu hình Công&Phép/Checklist
 

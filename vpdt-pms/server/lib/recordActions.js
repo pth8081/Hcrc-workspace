@@ -4089,8 +4089,16 @@ function resolvePendingTaskAction(kind, verb, user, task) {
   // GIAO cho bản thân khá phổ biến với người có taskEdit, khi đó assignedBy === assignedTo === chính họ,
   // nên điều kiện assignedBy===user ở trên vẫn vô tình cho họ tự duyệt luôn yêu cầu gia hạn/huỷ do chính
   // mình xin — task.assignedTo lúc này chính là người ĐÃ GỬI yêu cầu pending đang xét, xem
-  // requestExtension()/cancelOrRequestCancelTask() ở trên) — admin vẫn luôn vượt qua được.
-  if (!user.perms?.admin && task.assignedTo === user.username) {
+  // requestExtension()/cancelOrRequestCancelTask() ở trên).
+  // ĐỔI QUYẾT ĐỊNH (re-audit lần 5, mức Trung Bình — "Admin vẫn tự duyệt ở Công Việc"): lúc vá lần đầu
+  // (9/2026) vẫn cho admin vượt qua nhánh chặn này ("admin vẫn luôn vượt qua được") — NHƯNG đây chính là
+  // module BỊ BỎ SÓT khi quyết định "Chặn admin tự duyệt ở TẤT CẢ module, không có ngoại lệ" (11/2026)
+  // được áp dụng cho MỌI assertNotSelfDecidingXxx() khác trong file này (bỏ hẳn nhánh admin-bypass).
+  // requestExtension()/cancelOrRequestCancelTask() CHO PHÉP admin tự gửi yêu cầu gia hạn/huỷ cho BẤT KỲ
+  // task nào (nhánh `|| user.perms?.admin`) — 1 tài khoản admin có thể tự gửi yêu cầu RỒI tự duyệt luôn
+  // yêu cầu đó bằng ĐÚNG tài khoản đó, không ai kiểm soát độc lập. Bỏ hẳn admin-bypass ở đây, khớp đúng
+  // khuôn các assertNotSelfDecidingXxx() khác.
+  if (task.assignedTo === user.username) {
     throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối yêu cầu do chính mình gửi (việc tự giao cho bản thân)');
   }
   // Công việc có thể đã bị huỷ trực tiếp (isAssignerOrAdmin, xem cancelOrRequestCancelTask()) SAU khi
@@ -6428,6 +6436,16 @@ function escalateItTicket(user, ticket, payload, usersList) {
   ticket.approvalApproverName = approver.name;
   ticket.approvalReason = reason;
   ticket.approvalComment = '';
+  // escalatedBy/escalatedByName (re-audit lần 5, mức Trung Bình — "leo thang ticket IT"): trước đây
+  // KHÔNG lưu lại AI đã gửi yêu cầu leo thang này — approveItTicketEscalation()/denyItTicketEscalation()
+  // bên dưới chỉ kiểm approvalApprover===user HOẶC user.perms?.admin, không có cách nào loại trừ ĐÚNG
+  // người vừa gửi yêu cầu. 1 tài khoản admin (canManageItSupport() luôn đúng cho admin) có thể tự gửi
+  // yêu cầu leo thang tới 1 người khác (approver X) RỒI LẬP TỨC tự duyệt/từ chối chính yêu cầu đó bằng
+  // nhánh admin-bypass — vô hiệu hoá hoàn toàn mục đích "xin ý kiến người có trách nhiệm CỤ THỂ trước
+  // khi tiếp tục xử lý" (xem chú thích đầu hàm này). Lưu lại để assertNotSelfDecidingXxx() ngay dưới
+  // chặn đúng trường hợp này.
+  ticket.escalatedBy = user.username;
+  ticket.escalatedByName = user.name;
   // escalatedAt (mới, rà soát chuyên sâu đợt 4, 9/2026): mốc thời gian gửi yêu cầu — dùng cho
   // jobs/itApprovalDeadlineReminder.js tính "đã treo bao lâu" để chủ động nhắc người phê duyệt, thay vì
   // chỉ hiện badge chờ trên giao diện như trước (không job nào nhắc chủ động).
@@ -6443,8 +6461,19 @@ function escalateItTicket(user, ticket, payload, usersList) {
 // applyPriceApproval()/releasePriceApplyClaim() ở trên). Không có lối thoát này, 1 ticket leo thang cho
 // người sau đó nghỉ việc/bị khoá tài khoản sẽ kẹt vĩnh viễn ở approvalStatus='PENDING' (updateItTicketStatus()
 // chặn mọi chuyển trạng thái khi còn PENDING) mà không ai gỡ được.
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "leo thang ticket IT"): nhánh admin-bypass ở trên ĐÚNG
+// cho trường hợp "gỡ kẹt hộ" (admin KHÁC người đã gửi yêu cầu can thiệp khi approver gốc không xử lý
+// được) — nhưng KHÔNG loại trừ chính người VỪA GỬI yêu cầu leo thang (escalateItTicket()) tự duyệt/từ
+// chối lại yêu cầu của chính mình bằng admin-bypass đó. Thêm assertNotSelfDecidingXxx() ngay dưới —
+// cùng khuôn các chặn tự duyệt khác trong file này (không có ngoại lệ admin, quyết định 11/2026).
+function assertNotSelfDecidingItTicketEscalation(user, ticket) {
+  if (ticket.escalatedBy === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối yêu cầu phê duyệt do chính mình gửi');
+  }
+}
 function approveItTicketEscalation(user, ticket) {
   if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  assertNotSelfDecidingItTicketEscalation(user, ticket);
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
   ticket.approvalStatus = 'APPROVED';
   ticket.approvalComment = '';
@@ -6455,6 +6484,7 @@ function approveItTicketEscalation(user, ticket) {
 
 function denyItTicketEscalation(user, ticket, payload) {
   if (!user.perms?.admin && ticket.approvalApprover !== user.username) throw new HttpError(403, 'Bạn không phải người được yêu cầu phê duyệt ở đây');
+  assertNotSelfDecidingItTicketEscalation(user, ticket);
   if (ticket.approvalStatus !== 'PENDING') throw new HttpError(409, 'Yêu cầu phê duyệt này không còn ở trạng thái chờ xử lý');
   const comment = (payload?.comment || '').trim().slice(0, 1000);
   if (!comment) throw new HttpError(400, 'Vui lòng nhập lý do từ chối');
