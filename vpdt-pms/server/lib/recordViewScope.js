@@ -1635,7 +1635,18 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // đọc được budgetEntries (kể cả bản NHÁP)/budgetLines/budgetPeriods qua GET /api/data(/lazy) VÀ
   // GET /api/reports/* nếu còn quyền chi tiết (budgetManage/budgetCreate...). budgetTemplates KHÔNG liệt
   // kê ở đây — đó là catalog dùng chung thật sự (không có dept/deptScope), không cần gác theo module.
-  budget: ['budgetEntries', 'budgetLines', 'budgetPeriods']
+  budget: ['budgetEntries', 'budgetLines', 'budgetPeriods'],
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Cao): "license" (Giấy Phép)
+  // và "uniform" (Đồng Phục) — 2 module con của Hành Chính — HOÀN TOÀN vắng mặt khỏi danh sách này, dù
+  // canViewLicense()/filterUniform*ForUser() ở trên đều KHÔNG tự kiểm moduleAccess (chỉ kiểm quyền chi
+  // tiết + creator/siêu thị liên quan). Admin tắt moduleAccess.license/uniform cho 1 tài khoản (còn giữ
+  // quyền chi tiết licenseView/uniformManage/...) vẫn đọc được TOÀN BỘ giấy phép/hồ sơ đồng phục công ty
+  // qua GET /api/data(/reports) y hệt chưa từng bị khoá. Thêm vào đây để (a) GET /api/data zero-out đúng,
+  // (b) COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js) tự gác đúng route TẠO MỚI — còn các route HÀNH
+  // ĐỘNG (duyệt/từ chối/hủy/sửa nháp/cấp phát...) ở routes/records.js vẫn cần middleware router.use()
+  // riêng (mirror khuôn router.use('/carRegs', ...)), xem chú thích tại đó.
+  license: ['licenses'],
+  uniform: ['uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này

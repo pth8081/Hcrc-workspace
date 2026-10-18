@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.35 (2026-11): [BẢO MẬT, Cao] Vá "Khối 0" hoàn toàn vắng mặt ở Giấy Phép + Đồng Phục
+
+Phát hiện ở đợt rà soát chuyên sâu toàn hệ thống trước go-live. Khác các module khác (carRegs/budgetLines/
+itSupportTickets/hrProcesses...) đã được vá đúng "Khối 0" (moduleAccess) qua nhiều đợt trước, **Giấy
+Phép và Đồng Phục trước đây CHƯA TỪNG có bất kỳ gate Khối 0 nào** — admin tắt module này cho 1 tài khoản
+(VD khi chuyển phòng ban) nhưng còn giữ quyền chi tiết (licenseView/licenseApprove/uniformManage/
+uniformStoreManage...) thì tài khoản đó vẫn thao tác/xem dữ liệu đầy đủ qua API trực tiếp, y hệt chưa
+từng bị khoá — "khoá cứng module" chỉ ẩn được tab ở giao diện, không thực sự khoá.
+
+- `lib/recordViewScope.js` (`MODULE_ACCESS_GATED_COLLECTIONS`): thêm `license: ['licenses']` và
+  `uniform: ['uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers']` —
+  tự động gác đúng `GET /api/data`/`GET /api/data/lazy/*`/`GET /api/reports/*` (qua vòng lặp zero-out
+  dùng chung) VÀ route TẠO MỚI (`POST /api/create/licenses`/`uniformPeriods` qua
+  `COLLECTION_TO_MODULE_ACCESS_KEY`, tự suy ra từ dict này ở `routes/create.js`).
+- `routes/records.js`: thêm 5 middleware `router.use()` mirror đúng khuôn `router.use('/carRegs', ...)`
+  đã dùng cho mọi module khác — `/licenses` (gác 7 route hành động: delete/approve/reject/cancel/
+  set-renewing/revoke/unrevoke) và riêng 4 collection Đồng Phục (`/uniformPeriods`, `/uniformIssuances`,
+  `/uniformStockAdjustments`, `/uniformTransfers` — 4 middleware RIÊNG vì 4 path prefix khác nhau, không
+  gộp được) gác toàn bộ route sửa/duyệt/cấp phát/điều chuyển/xác nhận.
+
+Test: `tests/test-khoi0-license-uniform-gate.js` (mới, 9 kịch bản — mount THẬT `routes/records.js` qua
+Express thật, chỉ stub `lib/auth` để bơm `req.freshUser`, vì middleware Khối 0 chạy TRƯỚC mọi handler
+khác). Đã xác nhận bằng `git stash` — 7/9 kịch bản FAIL đúng trên code cũ (2 kịch bản còn lại là đối
+chứng "không bị 403 oan khi module vẫn bật", đúng ở cả 2 bản). Chạy lại toàn bộ 9 file test Giấy Phép/
+Đồng Phục hiện có (test-license-cancel/expiry-reminder-family/license, test-uniform-ack/issuance-ack-on-
+behalf/phase2/scenario-roleplay/transfer-cancel/uniform) + 3 file test Khối 0 khác (test-module-access-
+gate, -create, test-muc0-module-access-tree) + CSP full-audit (3) + lazy-load toàn bộ tab (46) — không
+hồi quy, không mất chức năng cho tài khoản có quyền module thật. (`test-license.js` có 1/15 fail từ
+trước — xác nhận là lỗ hổng của bộ MOCK test, không phải lỗi sản phẩm, không liên quan đợt vá này.)
+
+**Deploy-impact**: thuần server (`lib/recordViewScope.js`, `routes/records.js`) — KHÔNG đổi `schema.sql`,
+KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.34 (2026-11): [BẢO MẬT, NGHIÊM TRỌNG] Vá rò rỉ dữ liệu Lương cho tài khoản admin không có quyền Lương
 

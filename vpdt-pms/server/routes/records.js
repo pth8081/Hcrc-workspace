@@ -4482,6 +4482,36 @@ router.post('/hrProcesses/:id/create-it-ticket', async (req, res) => {
 });
 
 // ===================== ĐỒNG PHỤC =====================
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Cao): TOÀN BỘ route hành động
+// bên dưới (4 collection uniformPeriods/uniformIssuances/uniformStockAdjustments/uniformTransfers)
+// trước đây KHÔNG hề gác hasModuleAccessServer() — admin tắt module "Đồng Phục" cho 1 tài khoản (còn
+// giữ uniformManage/uniformStoreManage/uniformApprove) vẫn tạo/duyệt/cấp phát/điều chuyển đồng phục đầy
+// đủ qua API trực tiếp. 4 middleware DUY NHẤT chặn TRƯỚC TIÊN cho mỗi khối (4 path prefix khác nhau,
+// không gộp được thành 1 router.use), mirror ĐÚNG khuôn router.use('/carRegs', ...).
+router.use('/uniformPeriods', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'uniform')) {
+    return res.status(403).json({ error: 'Module Đồng Phục đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/uniformIssuances', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'uniform')) {
+    return res.status(403).json({ error: 'Module Đồng Phục đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/uniformStockAdjustments', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'uniform')) {
+    return res.status(403).json({ error: 'Module Đồng Phục đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/uniformTransfers', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'uniform')) {
+    return res.status(403).json({ error: 'Module Đồng Phục đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 router.post('/uniformPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformPeriods'));
 
 // POST /api/records/uniformPeriods/:id/edit — sửa tên/ghi chú 1 kỳ cấp phát đã tạo. CỐ Ý CHỈ cho sửa
@@ -4801,6 +4831,17 @@ router.post('/uniformTransfers/:id/cancel', async (req, res) => {
 // getLicenseFamily()/getLicenseFamilyLatest() ở client vẫn gom theo rootLicenseId, còn nhánh "Cập nhật"
 // luôn báo "Giấy phép gốc không tồn tại" cho cả họ đó). Cùng khoá `license_family:<rootId>` mà
 // routes/create.js dùng khi tạo phiên bản mới — chặn race "tạo phiên bản" đan xen "xoá cả họ".
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Cao): TOÀN BỘ 7 route hành
+// động /licenses/... bên dưới (delete/approve/reject/cancel/set-renewing/revoke/unrevoke) trước đây
+// KHÔNG gác hasModuleAccessServer() — admin tắt module "Giấy Phép" cho 1 tài khoản (còn giữ
+// licenseCreate/licenseApprove/licenseView) vẫn thao tác đầy đủ qua API trực tiếp. Mirror ĐÚNG khuôn
+// router.use('/carRegs', ...).
+router.use('/licenses', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'license')) {
+    return res.status(403).json({ error: 'Module Giấy Phép đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 router.post('/licenses/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
