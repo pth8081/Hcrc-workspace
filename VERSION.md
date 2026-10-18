@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.74 (2026-11): [TB] Re-audit lần 4 — mục 14: xoá Văn Bản Trình không đóng Công Việc tự sinh từ chỉ đạo cuối
+
+- **Xoá Văn Bản Trình (`POST /api/records/submissions/:id/delete`) không đóng lại Công Việc tự sinh
+  khi bước duyệt CUỐI CÙNG có kèm ý kiến chỉ đạo** (`buildTaskFromSubmissionComment()`,
+  lib/recordActions.js — `sourceType:'SUBMISSION'`, `sourceCode`=mã tờ trình) — Công Việc còn
+  TODO/DOING vẫn "sống" vĩnh viễn dù tờ trình nguồn đã bị xoá, "Xem chi tiết" (index.html) trỏ về 1 mã
+  tờ trình không còn tồn tại. Route xoá trước đây dùng thẳng `deleteAdminOnly()` chung, không cascade
+  gì cả — cùng lớp lỗi "bảng liên kết" đã vá cho ticket Hỗ Trợ IT khi huỷ/xoá quy trình Nhân Sự
+  (`closeItTicketOnHrProcessClosed()`, routes/records.js).
+  - Thêm `closeTaskOnSubmissionDeleted(task, submission)` (lib/recordActions.js) — tự huỷ
+    (`status: 'CANCELLED'`, kèm 1 dòng `history` hệ thống), idempotent (bỏ qua nếu đã
+    DONE/CANCELLED, không ghi đè kết quả đã xử lý thật). KHÔNG chặn hẳn việc xoá tờ trình như
+    `assertCanDeleteMinutes()` (biên bản họp) — tờ trình chỉ sinh ĐÚNG 1 Công Việc CHƯA GÁN người
+    nhận, dọn tự động an toàn hơn chặn xoá.
+  - Viết lại route `/submissions/:id/delete` (routes/records.js) để bắt được object tờ trình NGAY
+    TRƯỚC khi xoá (qua closure trong `checkFn` của `deleteRecordForCollection()`), sau đó gọi
+    `cleanupTasksOnSubmissionDeleted()` (hàm mới, cùng khuôn `cleanupItTicketsOnHrProcessClosed()`) —
+    lọc Công Việc theo `sourceType==='SUBMISSION' && sourceCode===submission.code`, tự huỷ + ghi
+    Nhật ký hệ thống (`module:'SUBMISSION'`, `actionType:'AUTO_CANCEL_TASK'`).
+
+**Test:** file mới `tests/test-submission-delete-task-cleanup.js` (6 scenario, HTTP thật qua mount
+`routes/records.js`, stub `lib/taskStore`/`lib/recordStore` lưu trữ in-memory, cùng khuôn
+`test-hrprocess-cancel-itticket-cleanup.js`). Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordActions.js routes/records.js`, 4/6 passed — đúng 2 scenario "LỖI ĐÃ VÁ" FAIL vì Công Việc
+vẫn giữ TODO/DOING sau khi xoá tờ trình nguồn), PASS trên code đã vá (6/6). Chạy lại bộ test liên
+quan: `test-audit-cluster-license-cascade-download-limit.js` (12/12),
+`test-audit-round2-internalcomms-training-routes.js` (16/16), `test-checklist.js` (55/55),
+`test-edit-file-ownership-batch2.js` (45/45), `test-trash-operation-orders-label.js` (4/4),
+`test-task.js` (15/15), `test-task-status-badges.js` (3/3),
+`test-hrprocess-cancel-itticket-cleanup.js` (6/6) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.73 (2026-11): [TB] Re-audit lần 4 — mục 13: lỗi 409 trùng lịch phòng họp lộ mã hồ sơ cuộc họp phòng ban khác
 
