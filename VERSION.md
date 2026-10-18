@@ -1,9 +1,58 @@
 # Phiên bản hiện tại
 
-**26.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.87 (2026-11): [Cao] Re-audit lần 5 — mục 9 (mục Cao cuối cùng): hrProfileEdit tự gán chức vụ cho chính mình để tự nâng quyền duyệt
+
+Mục thứ 9, ĐÂY LÀ MỤC CUỐI trong các phát hiện mức Cao của đợt re-audit lần 5 — từ v26.88 trở đi
+chuyển sang xử lý 18 phát hiện mức Trung Bình (#126-142).
+
+- **POST `/api/hr-profile/by-code/:employeeCode/set-position`** (+ Gán Chức Vụ hàng loạt qua Excel,
+  cả 2 dùng chung `applyPositionAssignment()`) **và PATCH `/api/hr-profile/by-code/:employeeCode`**
+  (field `secondaryPositions` — "Vị Trí Kiêm Nhiệm", `applyProfileEdit()`) đều chỉ đòi
+  `canEditProfiles()` (hrProfileManage/hrProfileEdit) — **KHÔNG hề chặn khi hồ sơ đang sửa CHÍNH LÀ hồ
+  sơ đã liên kết tài khoản của NGƯỜI ĐANG THỰC HIỆN hành động**. 1 nhân viên chỉ được cấp
+  `hrProfileEdit` (để duy trì hồ sơ nhân sự, KHÔNG có `admin`) nhưng đã có sẵn `canBeApprover` (cấp
+  cho 1 vị trí hợp lệ khác, VD Trưởng Phòng Kế Toán duyệt Văn Phòng Phẩm) có thể **tự đổi chức vụ
+  CHÍNH THỨC của mình** (hoặc tự thêm Vị Trí Kiêm Nhiệm) sang **BẤT KỲ node nào trong Cơ Cấu Tổ Chức**
+  — kể cả node cấp cao (VD "Giám Đốc") — đồng bộ GHI ĐÈ cả `users.jobTitle/dept` của chính tài khoản
+  mình — để tự khớp đúng (jobTitle, dept) của bước phê duyệt "Theo vị trí"
+  (`resolvePositionApprovers()`, `lib/positionApprovers.js`) mà KHÔNG hề được thực sự bổ nhiệm, từ đó
+  tự nâng quyền duyệt các bước (Ngân Sách/Thanh Toán/Hợp Đồng...) mà mình chưa từng được giao.
+  - Thêm `assertNotSelfAssigningPosition(profile, actorUsername)` (`lib/employeeProfile.js`) — chặn
+    CỨNG (403) khi `profile.username === actorUsername` (hồ sơ đang sửa đã liên kết ĐÚNG tài khoản của
+    người đang thực hiện), không phân biệt actor có `admin` hay không — cùng khuôn các
+    `assertNotSelfDecidingXxx()` khác đã bỏ hẳn nhánh admin-bypass theo quyết định 11/2026 "Chặn admin
+    tự duyệt ở TẤT CẢ module, không có ngoại lệ".
+  - Gọi từ **CẢ** `applyPositionAssignment()` (vị trí CHÍNH THỨC) **LẪN** case `'secondaryPositions'`
+    trong `applyProfileEdit()` (Vị Trí Kiêm Nhiệm) — 2 đường DUY NHẤT khớp (jobTitle, dept) vào
+    `resolvePositionApprovers()`.
+  - Hồ sơ CHƯA liên kết tài khoản nào (`profile.username === null`, VD hồ sơ Onboarding chưa xác nhận)
+    không có khái niệm "tự gán" — HR vẫn gán chức vụ bình thường cho hồ sơ đó, không bị chặn oan.
+
+**Test:** `tests/test-hrprofile-self-position-assign.js` (mới, 5 scenario — gọi THẲNG
+`applyPositionAssignment()`/`applyProfileEdit()`, cùng khuôn `test-hrprofile-export-salary-permission.js`).
+Xác nhận FAIL trên code CŨ (`git stash -- lib/employeeProfile.js`, 2/5 scenario FAIL đúng 2 "LỖI ĐÃ
+VÁ"), PASS trên code đã vá (5/5). Regression (18 file, toàn bộ liên quan `applyPositionAssignment`/
+`applyProfileEdit`/`secondaryPositions`/workflow position-approver): `test-audit-nhansu-hoso.js`
+(33/33), `test-audit-nhansu-onboarding-contract.js` (29/29), `test-workflow-position-approvers.js`
+(22/22), `test-mixed-approval-jobtitle-dept.js` (9/9), `test-orgchart-headcount-report.js` (7/7),
+`test-hr-profile-90field-catalogs.js` (38/38), `test-hr-profile-gd1-fields.js` (14/14),
+`test-hr-profile-identity-jobtitle-source.js`, `test-hr-profile-nationalid-format.js` (9/9),
+`test-hr-profile-wired-fields.js` (18/18), `test-hr-reports-weekly-monthly-transfers.js` (35/35),
+`test-hr-discipline-jobgrade-resignation.js`, `test-hr-onboarding-excel-fields.js` (22/22),
+`test-admin-users-permgroups.js` (120/120), `test-edit-file-ownership-batch2.js` (45/45),
+`test-operation-order-mixed-approver-preload.js` (6/6), `test-operation-order-store-approver-scope.js`
+(15/15), `test-hr-profile.js` (32/32), `test-hr-profile-secondary-positions.js` (15/15),
+`test-hr-profile-position-assign-import.js` (12/12), `test-hr-profile-position-history.js` (20/20),
+`test-secondarypositions-rename-cascade.js` (5/5), `test-hr-profile-import-90fields.js` (10/10),
+`test-hr-profile-import-gd1-fields.js` (6/6), `test-hr-profile-bulk-import-autoassign.js` (7/7) — toàn
+bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.86 (2026-11): [Cao] Re-audit lần 5 — mục 8: Xuất Excel Hồ Sơ Nhân Sự lộ lương không cần hrContractManage
 
