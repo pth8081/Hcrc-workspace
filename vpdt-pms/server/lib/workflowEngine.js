@@ -767,7 +767,28 @@ function isPlainWorkflowMapObject(v) {
 // CHỈ validate CẤU TRÚC (mảng, mỗi phần tử là object) — KHÔNG validate sâu xuống từng field bên trong
 // (id/name/steps/step/tier/...), cùng triết lý DEPT_OR_TIER_WORKFLOW_MAP_KEYS ở trên (tránh chặn nhầm
 // cấu hình hợp lệ nếu sau này thêm field mới).
-const PLAIN_OBJECT_ARRAY_KEYS = new Set(['workflows', 'operationOrderStoreMixedApprovalRules', 'itPriceWholesaleStoreMixedApprovalRules']);
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "Thiếu validate cấu trúc 5 key cấu hình Công&Phép/
+// Checklist"): 4 key sau CÙNG LỚP LỖI với 'workflows'/2 mixed-approval-rules ở trên (route generic
+// POST /api/data/:key chỉ gate QUYỀN qua NON_ADMIN_GATED_KEYS/ADMIN_ONLY_KEYS, KHÔNG validate cấu trúc)
+// nhưng BỊ BỎ SÓT khỏi PLAIN_OBJECT_ARRAY_KEYS lúc đó (chỉ xét đúng 3 key gốc phát hiện ở re-audit lần
+// 4):
+//   - shiftTemplates/publicHolidays (Công & Phép, lib/attendance.js): đọc qua `(appData?.X || [])` rồi
+//     `.find()`/`.some()` ngay sau (isHolidayDate()/applyClockPunch()) — `|| []` chỉ che được falsy, lưu
+//     thành OBJECT vẫn là giá trị truthy, `.find/.some is not a function` throw ngay khi có BẤT KỲ chấm
+//     công/tính ngày nghỉ nào, đến khi admin sửa lại đúng.
+//   - attendanceClockApiKeys (Công & Phép, routes/attendanceClockPunch.js::findMatchingApiKey()): CÙNG
+//     lỗ hổng `(await getAppDataValue(...)) || []` rồi `.filter()` — NGHIÊM TRỌNG HƠN vì route này KHÔNG
+//     qua requireAuth (máy chấm công vật lý tự xác thực bằng API key riêng), lưu sai cấu trúc 1 lần là
+//     CHẶN ĐỨNG mọi lượt chấm công vật lý của TOÀN CÔNG TY tới khi admin sửa lại.
+//   - hrTaskTemplates ("Checklist" chuẩn Onboarding/Offboarding, Nhân Sự — lib/createValidation.js
+//     tạo hrProcesses): `(appData?.hrTaskTemplates || []).filter(...)` — lưu sai cấu trúc chặn đứng
+//     MỌI lượt tạo quy trình Onboarding/Offboarding mới công ty (crash 500 ngay tại POST /api/create/hrProcesses).
+// Thêm cả 4 vào PLAIN_OBJECT_ARRAY_KEYS (cùng khuôn mảng-object với 3 key gốc) — route generic tự động
+// chặn sớm (400) nếu lưu sai cấu trúc, không cần sửa gì thêm ở routes/data.js.
+const PLAIN_OBJECT_ARRAY_KEYS = new Set([
+  'workflows', 'operationOrderStoreMixedApprovalRules', 'itPriceWholesaleStoreMixedApprovalRules',
+  'shiftTemplates', 'publicHolidays', 'attendanceClockApiKeys', 'hrTaskTemplates'
+]);
 function assertPlainObjectArrayShape(key, value) {
   if (!PLAIN_OBJECT_ARRAY_KEYS.has(key)) return;
   if (!Array.isArray(value)) {
@@ -778,6 +799,19 @@ function assertPlainObjectArrayShape(key, value) {
       throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phần tử thứ ${idx + 1} phải là object`);
     }
   });
+}
+
+// attendanceHoConfig (Công & Phép) — khuôn KHÁC HẲN (1 OBJECT cấu hình DUY NHẤT, không phải mảng) nên
+// không dùng chung PLAIN_OBJECT_ARRAY_KEYS ở trên — lưu nhầm thành mảng/chuỗi/số KHÔNG throw ngay (đọc
+// property trên mảng/chuỗi chỉ trả undefined, không crash) nhưng ÂM THẦM hỏng toàn bộ cấu hình giờ hành
+// chính (startTime/endTime/lateGraceMinutes đều về mặc định ẩn, không cảnh báo) — cùng triết lý "chặn
+// sớm 400 thay vì hỏng âm thầm" như các key khác ở trên.
+const PLAIN_OBJECT_KEYS = new Set(['attendanceHoConfig']);
+function assertPlainObjectShape(key, value) {
+  if (!PLAIN_OBJECT_KEYS.has(key)) return;
+  if (!isPlainWorkflowMapObject(value)) {
+    throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là 1 object cấu hình`);
+  }
 }
 
 function assertDeptOrTierWorkflowMapShape(key, value) {
@@ -1428,5 +1462,6 @@ module.exports = {
   OPERATION_ORDER_STORE_TIERS,
   OPERATION_ORDER_HO_TIERS,
   assertDeptOrTierWorkflowMapShape,
-  assertPlainObjectArrayShape
+  assertPlainObjectArrayShape,
+  assertPlainObjectShape
 };

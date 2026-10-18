@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**26.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.90 (2026-11): [TB] Re-audit lần 5 — mục 3: Thiếu validate cấu trúc 5 key cấu hình Công&Phép/Checklist
+
+Mục thứ 3 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5. Cùng lớp lỗi với 'workflows'/2
+mixed-approval-rules đã vá ở re-audit lần 4 (v26.4x, mức Cao) — route generic `POST /api/data/:key` chỉ
+gate QUYỀN (NON_ADMIN_GATED_KEYS/ADMIN_ONLY_KEYS), KHÔNG validate CẤU TRÚC — nhưng 5 key sau của cụm
+Công & Phép/Checklist bị bỏ sót khỏi đợt vá đó:
+
+- **shiftTemplates/publicHolidays** (Công & Phép, `lib/attendance.js`): đọc qua
+  `(appData?.X || []).find()/.some()` — `|| []` chỉ che được falsy, lưu thành OBJECT (vẫn truthy) khiến
+  `.find/.some is not a function` throw ngay khi có BẤT KỲ chấm công/tính ngày nghỉ nào.
+- **attendanceClockApiKeys** (Công & Phép, `routes/attendanceClockPunch.js::findMatchingApiKey()`): CÙNG
+  lỗ hổng — NGHIÊM TRỌNG HƠN vì route này KHÔNG qua `requireAuth` (máy chấm công vật lý tự xác thực
+  bằng API key riêng), lưu sai cấu trúc 1 lần là **chặn đứng mọi lượt chấm công vật lý của TOÀN CÔNG TY**
+  tới khi admin sửa lại.
+- **hrTaskTemplates** ("Checklist" chuẩn Onboarding/Offboarding, Nhân Sự — `lib/createValidation.js`
+  tạo `hrProcesses`): `(appData?.hrTaskTemplates || []).filter(...)` — lưu sai cấu trúc **chặn đứng mọi
+  lượt tạo quy trình Onboarding/Offboarding mới** (crash 500 ngay tại `POST /api/create/hrProcesses`).
+- **attendanceHoConfig** (Công & Phép) — khuôn KHÁC HẲN (1 OBJECT cấu hình DUY NHẤT, không phải mảng):
+  lưu sai kiểu KHÔNG crash (đọc property trên mảng/chuỗi chỉ trả `undefined`) nhưng ÂM THẦM hỏng toàn bộ
+  cấu hình giờ hành chính công ty (startTime/endTime/lateGraceMinutes về mặc định ẩn), không cảnh báo gì.
+
+**Đã vá:** thêm `shiftTemplates`/`publicHolidays`/`attendanceClockApiKeys`/`hrTaskTemplates` vào
+`PLAIN_OBJECT_ARRAY_KEYS` (`lib/workflowEngine.js`, cùng khuôn `workflows`/2 mixed-approval-rules) +
+hàm mới `assertPlainObjectShape()`/`PLAIN_OBJECT_KEYS` (riêng `attendanceHoConfig`, khuôn object không
+phải mảng) — gọi từ `routes/data.js` `POST /:key`, ngay sau 2 lệnh validate cấu trúc đã có.
+
+**Test:** `tests/test-congphep-checklist-structure-validate.js` (mới, 23 scenario — Phần A test thuần
+2 hàm validate, Phần B test HTTP thật qua `POST /api/data/:key`, cùng khuôn
+`test-workflowarray-structure-validate.js`). Xác nhận FAIL trên code CŨ (`git stash`, 11/23 scenario
+FAIL đúng các "LỖI ĐÃ VÁ"), PASS trên code đã vá (23/23). Regression: `test-workflowarray-structure-validate.js`
+(5/5, xác nhận không phá vỡ validate cũ), `test-attendance-leave.js` (72/72),
+`test-audit-nhansu-congphep-luong.js` (21/21), `test-audit-nhansu-onboarding-contract.js` (29/29),
+`test-hr-lifecycle.js` (39/39), `test-hr-onboarding-excel-fields.js` (22/22),
+`test-hr-process-onboarding-create-import.js` (13/13), `test-hrprocess-cancel-itticket-cleanup.js`,
+`test-onboarding-cancel-labor-contract-cleanup.js`, `test-onboarding-nationalid-race.js` (6/6),
+`test-object-catalog-excel.js` (21/21), `test-object-catalog-excel-wiring.js` (23/23),
+`test-conghop-holiday-edit-ui.js` (7/7), `test-conghop-shift-template-edit-ui.js` (7/7) — toàn bộ PASS,
+không regression. `test-form-reset-file-remove.js` (14/34 FAIL) đã xác nhận qua git-stash là lỗi CŨ tồn
+tại trước đợt này (không liên quan 5 key đã sửa), không phải regression mới.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.89 (2026-11): [TB] Re-audit lần 5 — mục 2: Tự chấm/tự xác nhận/tự cấp chứng chỉ đào tạo cho chính mình
 
