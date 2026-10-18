@@ -399,6 +399,30 @@ async function runPureTests() {
     }, USER_A, [], APP_DATA, []);
     assert.strictEqual(rec.code, 'QT-KD-001');
   });
+  // ----- LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Tạo phiên bản Tài Liệu mới không kiểm quyền trên bản
+  // gốc"): extraValidate trước đây so payload.dept (CLIENT tự gửi, KHÔNG đáng tin) với root.dept, trong
+  // khi dept THẬT SỰ được lưu lại luôn là user.dept (forceOwnDept). 1 tài khoản Phòng B chỉ cần tự soạn
+  // request với dept: DEPT_A (khớp root.dept) là qua được chốt chặn này dù chưa từng thuộc Phòng A. -----
+  const rootDocKD = { id: 60, code: 'QT-KD-001', displayCode: 'QT-KD-001', rootDocId: null, dept: DEPT_A, cat: 'Quy trình', uploader: 'u_a', status: 'APPROVED', versionNumber: 1 };
+  const docVersionPayload = (dept) => ({
+    rootDocId: 60, dept, cat: 'Quy trình', title: 'TL', ver: '2.0', fileUrl: '/uploads/y.pdf', fileName: 'y.pdf'
+  });
+  const USER_B = { username: 'u_b', name: 'Người B', dept: DEPT_B, perms: { uploadAll: true } };
+  await run('7a-ter. LỖI ĐÃ VÁ: tài khoản Phòng B tự soạn dept=Phòng A (GIẢ MẠO khớp root.dept) để tạo phiên bản -> vẫn 400 (so theo user.dept THẬT, không tin payload.dept)', () => {
+    const err = expectThrow(() => validateAndPrepareCreate('docs', docVersionPayload(DEPT_A), USER_B, [rootDocKD], APP_DATA, []),
+      /Phòng ban của phiên bản mới phải khớp với tài liệu gốc/i, '7a-ter');
+    assert.strictEqual(err.status, 400);
+  });
+  await run('7a-quater. Tài khoản Phòng B trung thực gửi dept=Phòng B (đúng dept thật của mình) -> vẫn 400 như cũ (không đổi hành vi gate dept-mismatch)', () => {
+    expectThrow(() => validateAndPrepareCreate('docs', docVersionPayload(DEPT_B), USER_B, [rootDocKD], APP_DATA, []),
+      /Phòng ban của phiên bản mới phải khớp với tài liệu gốc/i, '7a-quater');
+  });
+  await run('7a-quinquies. KHÔNG chặn nhầm: tài khoản ĐÚNG Phòng A (cùng phòng root) tạo phiên bản mới -> thành công', () => {
+    const rec = validateAndPrepareCreate('docs', docVersionPayload(DEPT_A), USER_A, [rootDocKD], APP_DATA, []);
+    assert.strictEqual(rec.code, 'QT-KD-001-V2');
+    assert.strictEqual(rec.versionNumber, 2);
+  });
+
   await run('7b. TẠO contracts (gốc): type KHÔNG có trong appData.contractTypes -> 400', () => {
     const err = expectThrow(() => validateAndPrepareCreate('contracts', {
       dept: DEPT_A, custodianDept: DEPT_A, type: 'Loại Bịa', title: 'HĐ', partner: 'X', amount: 1000,

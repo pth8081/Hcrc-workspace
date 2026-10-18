@@ -1,10 +1,43 @@
 # Phiên bản hiện tại
 
-**26.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
-MAJOR mới theo đúng quy tắc. **Lưu ý**: MINOR lại vừa chạm `99` — lần merge KẾ TIẾP phải cuộn sang
-`27.0`, không tiếp tục đếm `.100`.)
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
+`27.0` theo đúng quy tắc.)
+
+## v27.0 (2026-11): [TB] Re-audit lần 5 — mục 13: Tạo phiên bản Tài Liệu mới không kiểm quyền trên bản gốc
+
+Mục thứ 13 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — CÙNG LỚP LỖI với "licenses:
+ai có licenseCreate cũng tạo được phiên bản mới cho giấy phép của NGƯỜI KHÁC" đã vá ở re-audit lần 2
+(xem `tests/test-audit-round2-vbt-hd-gp-tt-tl.js`, mục 3), nhưng lần này điểm hở nằm ở chính PHÉP SO
+SÁNH, không phải thiếu hẳn 1 lớp kiểm:
+
+- `docs.extraValidate()` (`lib/createValidation.js`) khi tạo 1 PHIÊN BẢN MỚI (`payload.rootDocId !=
+  null`) so `payload.dept` (field CLIENT TỰ GỬI trong request — client tự tính cả payload rồi gửi
+  nguyên, xem chú thích "Khớp uploadDoc()..." ngay phía trên) với `root.dept`, trong khi dept THỰC SỰ
+  được lưu vào bản ghi cuối cùng lại luôn là `user.dept` (`forceOwnDept: true` —
+  `validateAndPrepareCreate()` tính `finalDept` SAU `extraValidate`, không đụng gì tới `payload.dept`).
+  Hậu quả: 1 tài khoản Phòng B (có `uploadAll`) chỉ cần tự soạn request với `dept: "Phòng A"` (khớp
+  đúng `root.dept`) là qua được chốt chặn này dù chưa từng thuộc Phòng A — bản ghi lưu xong vẫn mang
+  dept THẬT (Phòng B) của họ, tạo ra 1 "phiên bản" lệch phòng ban với bản gốc mà chốt chặn tưởng như đã
+  kiểm đúng không hề phát hiện.
+- Vá: so `user.dept` (giá trị xác thực từ phiên đăng nhập, không thể giả mạo qua request body) với
+  `root.dept` thay cho `payload.dept`. **Không áp dụng check theo creator/uploader** như `licenses` đã
+  làm (`root.creator !== user.username`) — client docs (`populateDocUpdateTargets()`,
+  `module-tailieu.js`) xác nhận thiết kế của `docs` là THEO PHÒNG BAN (ai trong phòng ban đó cũng cập
+  nhật được tài liệu chung của phòng, không riêng người tải lên đầu tiên), khác hẳn `licenses` (chỉ
+  đúng người tạo/admin) — giữ đúng thiết kế đã có, chỉ sửa phép so sánh dùng field SAI.
+
+**Test:** mở rộng `tests/test-audit-round2-vbt-hd-gp-tt-tl.js` (dedicated test cho cụm "Văn Bản Trình/
+Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu", đã có sẵn 3 scenario cho lỗi tương tự ở `licenses`) — thêm 3
+scenario mới (7a-ter/quater/quinquies): tài khoản Phòng B giả mạo `dept` khớp root → vẫn 400; tài khoản
+Phòng B trung thực → vẫn 400 (hành vi cũ giữ nguyên); tài khoản ĐÚNG Phòng A → tạo được bình thường.
+Xác nhận FAIL trên code CŨ (`git stash -- lib/createValidation.js`, đúng 1/40 scenario FAIL — chính
+scenario giả mạo dept), PASS trên code đã vá (40/40). Regression: `test-doc.js` (21/21),
+`test-audit-cluster-vbt-hd-gp-tt-tl.js` (43/43), `test-6module-flat-create-scope.js` (35/35),
+`test-doc-upload-publish.js` (23/23), `test-doc-detail-copy-link.js` (toàn bộ PASS) — không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.99 (2026-11): [TB] Re-audit lần 5 — mục 12: POST /carRegs/:id/reassign thiếu check canViewCarReg
 
