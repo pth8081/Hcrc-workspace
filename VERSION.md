@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**26.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.37 (2026-11): [TOÀN VẸN DỮ LIỆU, Trung Bình] Vá khe hở TOCTOU khi xoá nhánh cây Công Việc Thực Hiện (Vận Hành)
+
+Phát hiện ở đợt rà soát chuyên sâu toàn hệ thống trước go-live. Đây là lỗi cuối cùng trong 7 phát hiện
+(1 Nghiêm Trọng + 2 Cao + 4 Trung Bình) từ đợt rà soát — tất cả đã vá xong.
+
+- `lib/operationWorkItemStore.js` (`withLockedWorkItemByIdForDelete()`): bản vá trước (đợt audit 8-agent
+  song song) chỉ khoá UPDLOCK/HOLDLOCK đúng dòng GỐC đang xoá — danh sách công việc CON CHÁU cùng nhánh
+  (để `deleteOperationWorkItem()` kiểm bất biến "không xoá được công việc đã nghiệm thu") vẫn do CALLER
+  (`routes/records.js`) tự đọc qua `getWorkItemsBySource()` THƯỜNG, không khoá, không nằm trong cùng giao
+  dịch. Khe hở: nếu đúng lúc giữa bước đọc con cháu không khoá và câu DELETE cuối cùng, 1 người KHÁC
+  "Nghiệm thu" 1 công việc con trong CÙNG nhánh và commit trước, transaction xoá vẫn thấy snapshot CŨ
+  (chưa thấy nghiệm thu) nên không chặn — xoá nhầm công việc vừa nghiệm thu xong. Nay đọc + khoá UPDLOCK/
+  HOLDLOCK LUÔN toàn bộ work item cùng SourceType/SourceId NGAY TRONG transaction trước khi quyết định
+  danh sách xoá, truyền kèm cho caller qua tham số thứ 2 — không còn đọc gì KHÔNG khoá trước khi xoá.
+- `routes/records.js` (`POST /operationWorkItems/:id/delete`): dùng thẳng danh sách đã khoá thay vì tự
+  gọi `getWorkItemsBySource()` riêng.
+
+Test: `tests/test-operation-workitem-delete-toctou.js` (mới, 3 kịch bản — giả lập tối thiểu `sql.Transaction`/
+`sql.Request` để xác nhận cấu trúc bản vá: có câu SELECT khoá UPDLOCK/HOLDLOCK đọc toàn bộ work item cùng
+nguồn NGAY TRONG transaction, đúng thứ tự đọc-khoá-xong-rồi-mới-xoá, không đọc lại thừa). **Giới hạn đã
+biết**: sandbox không có SQL Server thật nên không mô phỏng được race THẬT giữa 2 transaction song song
+(cần khoá hàng thật của SQL Server) — test chỉ xác nhận đúng cấu trúc/thứ tự câu lệnh của bản vá, không
+phải bản thân race condition. Đã xác nhận bằng `git stash` — 2/3 kịch bản FAIL đúng trên code cũ (kịch
+bản 404 không đổi hành vi nên pass cả 2 bản). Chạy lại 7 file test Công Việc Thực Hiện/Vận Hành hiện có
+(deadline-status/dependencies/multilevel-cascade/progress-frequency/quickview/sourceid-schema +
+operation-order-delete-dsmart16-orphan-warning) + CSP full-audit (3) + lazy-load toàn bộ tab (46) —
+không hồi quy.
+
+**Deploy-impact**: thuần server (`lib/operationWorkItemStore.js`, `routes/records.js`) — KHÔNG đổi
+`schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.36 (2026-11): [BẢO MẬT, Trung Bình] Vá Khối 0 thiếu ở route tự phục vụ của Tổng Hợp/VPP/Báo Cáo Định Kỳ
 

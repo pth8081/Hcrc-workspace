@@ -172,6 +172,18 @@ async function withLockedWorkItemById(id, mutatorFn) {
 // `computeIdsToDeleteFn(item)` (async, có thể throw HttpError nếu không hợp lệ) nhận item GỐC vừa đọc lại
 // mới nhất để tự quyết định danh sách id cần xoá (bao gồm cả tra descendant/quyền — logic nghiệp vụ vẫn ở
 // lib/recordActions.js deleteOperationWorkItem(), hàm này chỉ lo đúng phần khoá+xoá atomic).
+//
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Trung bình — TOCTOU hẹp còn
+// SÓT LẠI từ đợt vá trên): bản vá trên chỉ khoá ĐÚNG dòng GỐC đang xoá — danh sách con cháu CÙNG NHÁNH
+// (để deleteOperationWorkItem() kiểm "không công việc con nào đã nghiệm thu") trước đây vẫn do CALLER
+// (routes/records.js) tự đọc qua getWorkItemsBySource() THƯỜNG (không khoá, không nằm trong `tx`). Nếu
+// đúng giữa lúc đọc danh sách con cháu KHÔNG khoá đó và lúc câu DELETE cuối cùng chạy, 1 người KHÁC gọi
+// "Nghiệm thu" cho 1 công việc CON trong CÙNG nhánh và COMMIT trước, deleteOperationWorkItem() vẫn kiểm
+// trên snapshot CŨ (chưa thấy nghiệm thu) nên không chặn — câu DELETE cuối cùng xoá nhầm công việc VỪA
+// nghiệm thu xong, vi phạm đúng bất biến "không xoá được công việc đã nghiệm thu". Nay đọc + khoá LUÔN
+// toàn bộ work item CÙNG SourceType/SourceId (cả cây, không chỉ nhánh — đơn giản & rẻ hơn tính trước tập
+// con cháu để khoá đúng tập con) NGAY TRONG `tx` TRƯỚC khi gọi computeIdsToDeleteFn(), truyền kèm tham
+// số thứ 2 `allLockedItems` cho caller tự lọc đúng nhánh — không còn đọc gì KHÔNG khoá nữa trước DELETE.
 async function withLockedWorkItemByIdForDelete(rootId, computeIdsToDeleteFn) {
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
@@ -185,7 +197,13 @@ async function withLockedWorkItemByIdForDelete(rootId, computeIdsToDeleteFn) {
       throw new HttpError(404, 'Không tìm thấy công việc');
     }
     const item = toWorkItem(readResult.recordset[0]);
-    const idsToDelete = await computeIdsToDeleteFn(item);
+    const allReq = new sql.Request(tx);
+    const allResult = await allReq
+      .input('sourceType', sql.NVarChar(30), item.sourceType)
+      .input('sourceId', sql.BigInt, item.sourceId)
+      .query('SELECT Payload FROM dbo.OperationWorkItems WITH (UPDLOCK, HOLDLOCK) WHERE SourceType = @sourceType AND SourceId = @sourceId ORDER BY CreatedAt ASC, Id ASC');
+    const allLockedItems = allResult.recordset.map(toWorkItem);
+    const idsToDelete = await computeIdsToDeleteFn(item, allLockedItems);
     const list = Array.from(new Set((idsToDelete || []).map(Number).filter(Number.isFinite)));
     if (list.length) {
       const delReq = new sql.Request(tx);

@@ -3630,18 +3630,22 @@ router.post('/operationWorkItems/:id/accept', async (req, res) => {
 // giữa 2 bước có thể khiến công việc ĐÃ NGHIỆM THU XONG vẫn bị xoá. Nay dùng withLockedWorkItemByIdForDelete()
 // (lib/operationWorkItemStore.js) — khoá UPDLOCK/HOLDLOCK dòng gốc, đọc lại descendantIds/sourceRecord
 // MỚI NHẤT bên trong, rồi DELETE cả nhánh NGAY TRONG CÙNG 1 giao dịch với bước đọc-kiểm tra.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Trung bình — TOCTOU hẹp còn
+// sót lại): `all` trước đây tự đọc qua getWorkItemsBySource() THƯỜNG (không khoá, không nằm trong cùng
+// giao dịch với bước DELETE) — nay dùng thẳng `allLockedItems` (tham số thứ 2) mà
+// withLockedWorkItemByIdForDelete() đã khoá UPDLOCK/HOLDLOCK NGAY TRONG transaction, xem chú thích đầy
+// đủ tại đó — không còn đọc gì không khoá trước khi quyết định danh sách xoá nữa.
 router.post('/operationWorkItems/:id/delete', async (req, res) => {
   const itemId = Number(req.params.id);
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
     let capturedItem = null;
-    const { idsDeleted } = await withLockedWorkItemByIdForDelete(itemId, async (item) => {
+    const { idsDeleted } = await withLockedWorkItemByIdForDelete(itemId, async (item, allLockedItems) => {
       capturedItem = item;
-      const all = await getWorkItemsBySource(item.sourceType, item.sourceId);
-      const descendantIds = collectOperationWorkItemDescendantIds(all, itemId);
+      const descendantIds = collectOperationWorkItemDescendantIds(allLockedItems, itemId);
       const sourceRecord = await getOperationWorkItemSourceRecord(item);
-      const descendants = all.filter(w => descendantIds.includes(w.id));
+      const descendants = allLockedItems.filter(w => descendantIds.includes(w.id));
       return recordActions.deleteOperationWorkItem(freshUser, item, descendantIds, sourceRecord, descendants);
     });
     // VHST-5: dọn sạch dependsOnWorkItemIds[] ở các công việc KHÁC còn lại có trỏ tới (nhánh) vừa xoá.
