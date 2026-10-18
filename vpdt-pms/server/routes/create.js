@@ -129,9 +129,12 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 //   routes/records.js cho route /close).
 // - checklistTemplates: module riêng hẳn (routes/checklist.js, xem requireChecklistModuleAccess() ở đó
 //   — tầng HÀNH ĐỘNG mới được vá CÙNG đợt này), nhưng route TẠO vẫn đi qua handler CHUNG ở đây.
+// LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): paymentRequests/officeReqs đã dời sang
+// MODULE_ACCESS_GATED_COLLECTIONS.office thật (lib/recordViewScope.js — để GET /api/data(/reports) cũng
+// zero-out đúng, không chỉ riêng route TẠO MỚI này) nên tự động có mặt ở COLLECTION_TO_MODULE_ACCESS_KEY
+// phía trên, không cần liệt kê lại ở đây nữa — cùng khuôn operationOrders/hrProcesses trước đó.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
   budgetTemplates: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
-  paymentRequests: 'office', officeReqs: 'office',
   reportPeriods: 'periodicReport', reportEntries: 'periodicReport', vppPeriods: 'vpp', checklistTemplates: 'checklist'
 };
 
