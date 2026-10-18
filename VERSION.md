@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**26.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.76 (2026-11): [TB-Thấp] Re-audit lần 4 — mục 16: itSupportTickets.dept thiếu trong cascade rename
+
+- **`itSupportTickets.dept` (forceOwnDept — snapshot phòng ban người tạo ticket, xem
+  lib/createValidation.js) KHÔNG có trong `DEPT_FIELD_COLLECTIONS`** (lib/catalogRename.js) — đổi tên
+  1 phòng ban/siêu thị KHÔNG cascade sang field này. `canViewItSupportTicket()`
+  (lib/recordViewScope.js) so trực tiếp `item.dept === user.dept` (nhánh "cùng phòng ban tự động xem",
+  `deptAutoViewOn('itTicket')`) để cho xem ticket của CẢ phòng ban (không riêng người tạo) — đổi tên
+  phòng ban mà không cascade sẽ làm các ticket CŨ của phòng ban đó "biến mất" khỏi màn hình của đồng
+  nghiệp (dept cũ không còn khớp user.dept mới), chỉ chính người tạo/approver vẫn xem được bình
+  thường — cùng lớp lỗi đã vá nhiều lần ở file này (reportEntries/budgetPeriods/operationOrders.dept...).
+  - Thêm `{ collection: 'itSupportTickets', fields: ['dept'] }` vào `DEPT_FIELD_COLLECTIONS`.
+
+**Test:** file mới `tests/test-itsupportticket-dept-rename-cascade.js` (3 scenario, cùng khuôn
+`test-reportentries-dept-rename-cascade.js` — gọi thẳng router thật `routes/adminCatalog.js`). Xác
+nhận FAIL trên code CŨ (`git stash -- lib/catalogRename.js`, 0/3 passed), PASS trên code đã vá (3/3).
+Chạy lại bộ test liên quan: `test-catalog-rename-round2-extras.js` (8/8), `test-catalog-rename-server.js`
+(26/26), `test-reportentries-dept-rename-cascade.js` (3/3), `test-catalog-rename-hr-suggestion-catalogs.js`
+(25/25), `test-catalog-rename-locked-accounts.js` (41/41), `test-catalog-rename-position-pairs.js`
+(6/6) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.75 (2026-11): [TB] Re-audit lần 4 — mục 15: reportPeriods/:id/delete không kiểm reportEntries tham chiếu
 
