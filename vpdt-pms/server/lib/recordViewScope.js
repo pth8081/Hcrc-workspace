@@ -1650,7 +1650,19 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // ĐỘNG (duyệt/từ chối/hủy/sửa nháp/cấp phát...) ở routes/records.js vẫn cần middleware router.use()
   // riêng (mirror khuôn router.use('/carRegs', ...)), xem chú thích tại đó.
   license: ['licenses'],
-  uniform: ['uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers']
+  uniform: ['uniformPeriods', 'uniformIssuances', 'uniformStockAdjustments', 'uniformTransfers'],
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): "office" (Tổng Hợp — paymentRequests/officeReqs) đã có gate
+  // Khối 0 đúng ở khâu TẠO MỚI (EXTRA_CREATE_MODULE_ACCESS_KEY, routes/create.js) VÀ khâu HÀNH ĐỘNG
+  // (`router.use('/paymentRequests'|'/officeReqs', ...)` ở routes/records.js), nhưng canViewPaymentRequest()/
+  // canViewOfficeReq() ở trên KHÔNG hề gọi hasModuleAccessServer() — nhánh "cùng phòng ban tự động xem"
+  // (deptAutoViewOn/scopeAllows) cho qua KHÔNG cần quyền chi tiết nào, y hệt budget/license/uniform/
+  // vanHang/muaHang/hrAttendance ở trên, nên phải mirror vào đây để GET /api/data(/reports) zero-out
+  // đúng. Admin tắt moduleAccess.office cho 1 tài khoản (VD chuyển bộ phận) nhưng vẫn cùng dept với 1 số
+  // đề nghị thanh toán/mua sắm-sửa chữa cũ thì gọi thẳng GET /api/data vẫn đọc được số tiền/đơn vị chịu
+  // trách nhiệm/nhà cung cấp, dù UI đã ẩn hoàn toàn. paymentRequests/officeReqs giờ TỰ ĐỘNG có mặt ở
+  // COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js, suy ra từ map này) — đã gỡ khỏi
+  // EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn operationOrders/hrProcesses trước đó.
+  office: ['paymentRequests', 'officeReqs']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này

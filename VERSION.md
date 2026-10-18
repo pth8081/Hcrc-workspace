@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**26.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.63 (2026-11): [Cao] Re-audit lần 4 — mục 3: paymentRequests + officeReqs thiếu gate "Khối 0" ở GET /api/data
+
+Mục thứ 3 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] `canViewPaymentRequest()`/`canViewOfficeReq()` (lib/recordViewScope.js) có nhánh "cùng phòng
+  ban tự động xem" (`deptAutoViewOn`/`scopeAllows`) KHÔNG hề gọi `hasModuleAccessServer()` — admin tắt
+  `moduleAccess.office` cho 1 tài khoản (VD khi chuyển bộ phận) nhưng tài khoản đó vẫn cùng phòng ban với
+  1 số đề nghị thanh toán/mua sắm-sửa chữa cũ thì gọi thẳng `GET /api/data` vẫn đọc được số tiền/đơn vị
+  chịu trách nhiệm/nhà cung cấp của các hồ sơ đó, dù UI đã ẩn hoàn toàn module Tổng Hợp.** Cùng lớp lỗi
+  đã vá cho Giấy Phép/Đồng Phục (v26.48-50) — 2 collection này chưa từng được thêm vào
+  `MODULE_ACCESS_GATED_COLLECTIONS` (lib/recordViewScope.js), map DUY NHẤT cấp nguồn cho cả 3 nơi gác
+  Khối 0: 2 vòng lặp zero-out `GET /api/data`/`GET /api/data/lazy/:groupKey` (routes/data.js) +
+  `COLLECTION_TO_MODULE_ACCESS_KEY` tự suy diễn ở `POST /api/create/:module` (routes/create.js) +
+  `GET /api/reports/:collection` (routes/reports.js).
+  - Thêm `office: ['paymentRequests', 'officeReqs']` vào `MODULE_ACCESS_GATED_COLLECTIONS`.
+  - Gỡ `paymentRequests: 'office', officeReqs: 'office'` khỏi `EXTRA_CREATE_MODULE_ACCESS_KEY`
+    (routes/create.js) — map auto-suy-diễn ở trên đã có 2 key này rồi, giữ lại sẽ khai trùng (cùng khuôn
+    đã làm cho `operationOrders`/`hrProcesses` trước đó).
+  - `canViewPaymentRequest()`/`canViewOfficeReq()` tự thân KHÔNG sửa gì — gác qua map chung đã đủ, đúng
+    khuôn Giấy Phép/Đồng Phục/Vận Hành/Mua Hàng/Công & Phép ở trên.
+
+**Test:** file mới `tests/test-khoi0-payment-office-gate.js` (6 scenario: cấu trúc map + 4 scenario HTTP
+thật mount `routes/data.js` xác nhận `GET /api/data` zero-out đúng `data.paymentRequests`/
+`data.officeReqs` khi `moduleAccess.office=false` dù cùng phòng ban/chính người tạo, không chặn oan khi
+bật/không có field/admin luôn bypass). Không lặp lại phần route hành động (submit/upload-signed) đã có ở
+`test-khoi0-officereqs-vpp-periodicreport-gate.js`. Assertion mới đã xác nhận FAIL trên code CŨ
+(`git stash -- lib/recordViewScope.js routes/create.js`, 3/6 passed, đúng 3 scenario "LỖI ĐÃ VÁ" FAIL),
+PASS trên code đã vá (6/6). Chạy lại bộ test liên quan:
+`test-khoi0-officereqs-vpp-periodicreport-gate.js` (10/10), `test-khoi0-license-uniform-gate.js` (9/9),
+`test-module-access-gate.js` (4/4), `test-module-access-gate-create.js` (3/3), `test-office-reqs-scope.js`
+(7/7), `test-payment-requests-dept-scope.js` (9/9), `test-6module-flat-create-scope.js` (35/35) — tất cả
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.62 (2026-11): [Cao] Re-audit lần 4 — mục 2: admin vẫn tự duyệt được ở 3 chỗ (Công & Phép/Đổi Ca/Phòng Họp)
 
