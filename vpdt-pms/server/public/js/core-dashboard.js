@@ -198,15 +198,20 @@ function renderDashboard() {
 
   const grid = document.getElementById('dashboardStatsGrid');
   document.getElementById('dashboardEmptyNote').classList.toggle('hidden', visibleCards.length > 0);
-  grid.innerHTML = visibleCards.map(c => `
-    <div data-op="handleDashboardCardClick" data-arg0="${c.key}" class="dash-card bg-white border rounded-lg p-4 shadow-sm border-l-4 ${c.count > 0 ? 'border-l-amber-500' : 'border-l-slate-300'} flex justify-between items-center cursor-pointer transition-all hover:scale-[1.02]">
-      <div>
-        <p class="text-xs text-gray-500 uppercase font-bold">${escapeHtml(c.label)}</p>
-        <h3 class="text-2xl font-bold ${c.count > 0 ? 'text-amber-600' : 'text-gray-400'}">${c.count}</h3>
-      </div>
-      <div class="text-2xl">${c.icon}</div>
-    </div>
-  `).join('');
+  // Giai đoạn 2d "HCRC Workspace Refresh" (11/2026, kế hoạch đã duyệt): đổi sang .stat-card dùng chung
+  // (app.css, Giai đoạn 1) — icon trong khung bo góc + shadow nhẹ thay cho khối chữ phẳng cũ (dải màu
+  // trái border-l-4). count > 0 ("cần chú ý ngay") dùng màu warning, count = 0 dùng neutral (nhạt đi,
+  // dồn mắt vào thẻ thật sự cần xử lý) — xem .stat-card-icon.warning/.neutral, .stat-card-num.warning/
+  // .neutral ngay dưới .stat-card gốc.
+  grid.innerHTML = visibleCards.map(c => {
+    const tone = c.count > 0 ? 'warning' : 'neutral';
+    return `
+    <div data-op="handleDashboardCardClick" data-arg0="${c.key}" class="stat-card dash-card cursor-pointer transition-all hover:scale-[1.02]">
+      <div class="stat-card-icon ${tone}">${c.icon}</div>
+      <div class="stat-card-num ${tone}">${c.count}</div>
+      <div class="stat-card-label">${escapeHtml(c.label)}</div>
+    </div>`;
+  }).join('');
 
   renderDashboardNews();
 }

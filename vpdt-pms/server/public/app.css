@@ -754,6 +754,13 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
 }
 .stat-card-num { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: #0f172a; }
 .stat-card-label { font-size: 11.5px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
+/* .warning/.neutral — biến thể tông màu cho .stat-card-icon/.stat-card-num (Giai đoạn 2d, Dashboard):
+   "cần chú ý ngay" (count > 0) dùng warning, "không có gì cần xử lý" (count = 0) dùng neutral (nhạt đi
+   để mắt dồn vào thẻ thật sự cần chú ý) — dùng được cho stat-card ở bất kỳ màn nào khác sau này. */
+.stat-card-icon.warning { background: var(--hcrc-warning-bg); color: var(--hcrc-warning-ink); }
+.stat-card-icon.neutral { background: var(--hcrc-neutral-bg); color: var(--hcrc-neutral-ink); }
+.stat-card-num.warning { color: var(--hcrc-warning); }
+.stat-card-num.neutral { color: var(--hcrc-neutral); }
 
 .empty-state {
   text-align: center; padding: 40px 20px;

@@ -1,9 +1,33 @@
 # Phiên bản hiện tại
 
-**26.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.26 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2d — stat-card cho Dashboard (hoàn tất đợt 2)
+
+Giai đoạn 2d, hoàn tất đợt "Giai đoạn 2" của lộ trình hiện đại hoá giao diện đã duyệt — 4/4 màn ưu tiên
+cao nhất đã xong (2a Hệ Thống > Quản Trị, 2b Quản Lý Tệp File, 2c Công Việc, 2d Dashboard).
+
+- `public/js/core-dashboard.js` (`renderDashboard()`): 6 ô thống kê Trang chủ đổi từ khối "border-l-4
+  màu phẳng" sang `.stat-card` dùng chung (Giai đoạn 1) — icon trong khung bo góc riêng, số liệu lớn rõ,
+  tông màu theo mức độ cần chú ý: `warning` khi còn mục chờ xử lý (count > 0), `neutral` khi không có gì
+  chờ (count = 0, nhạt đi để mắt dồn vào thẻ thật sự cần xử lý). `data-op`/`data-arg0` giữ nguyên 100%.
+- `public/app.css`: thêm biến thể `.stat-card-icon.warning/.neutral` + `.stat-card-num.warning/.neutral`
+  — dùng được cho stat-card ở bất kỳ màn nào khác sau này, không riêng Dashboard.
+- Kiểm tra lại khối "📣 Tin Tức Nổi Bật" (placeholder ảnh cam-vàng từng bị coi là lỗi màu lạc tông trong
+  ảnh demo) — xác nhận đó CHỈ là trạng thái "ảnh lỗi tải" của dữ liệu mẫu lúc khảo sát (URL ảnh không có
+  thật), code gốc đã có placeholder xám trung tính đúng chuẩn khi không có ảnh thật — KHÔNG cần sửa gì.
+
+Test: `tests/test-dashboard-stat-cards.js` (mới, 3 kịch bản — đúng tông theo count, data-op giữ nguyên,
+đối chứng khung Tin Tức Nổi Bật không bị đụng). Đã xác nhận bằng `git stash` test mới FAIL đúng trên code
+cũ. Chạy lại `test-dashboard-news-thumbnail.js` (10 kịch bản) + CSP full-audit + lazy-load toàn bộ tab —
+không hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/core-dashboard.js`, `public/app.css`) — KHÔNG đổi
+`schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.25 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2c — badge trạng thái Công Việc dùng hệ màu chung
 
