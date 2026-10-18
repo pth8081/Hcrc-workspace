@@ -32,10 +32,16 @@ router.use(requireAuth, blockIfMustChangePassword);
 // getMyPendingApprovals() (client) đọc, xem cross-reference ở lib/approvalAggregator.js. Các map CẤU
 // HÌNH quy trình (deptWorkflows, carDeptWorkflows, budgetDeptWorkflows...) KHÔNG nằm trong danh sách
 // này — vẫn còn nguyên trong dbo.AppData, đã có sẵn trong cachedAppData.data bên dưới.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Cao): 6 collection sau thêm vào —
+// khớp đúng 5 khối mới ở computeMyPendingApprovalKeys() (uniformPeriods/uniformTransfers/leaveRequests/
+// shiftSwapRequests/trainingRegistrations) + shiftRoster (tra storeCode để kiểm quyền hrShiftSwapApprove
+// đúng siêu thị). ('tasks' KHÔNG cần thêm — vẫn còn ở dbo.AppData, đã có sẵn trong cachedAppData.data;
+// employeeProfiles/users cũng vậy.)
 const RECORD_COLLECTIONS_NEEDED = [
   'docs', 'submissions', 'carRegs', 'officeReqs', 'vppRegistrations', 'itPriceApprovals',
   'budgetEntries', 'contracts', 'meetings', 'internalPosts', 'licenses', 'paymentRequests',
-  'operationOrders', 'operationStoreOpenings', 'operationRepairs'
+  'operationOrders', 'operationStoreOpenings', 'operationRepairs',
+  'uniformPeriods', 'uniformTransfers', 'leaveRequests', 'shiftSwapRequests', 'shiftRoster', 'trainingRegistrations'
 ];
 
 // GET /api/approvals/pending-signature -> { count, keys }. "keys" là dữ liệu client THỰC SỰ cần để so

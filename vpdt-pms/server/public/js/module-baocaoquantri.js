@@ -160,10 +160,19 @@ const REPORT_NAV_TREE = [
   // sau). "hr"/"hrLifecycle" đều là key BUSINESS_MODULES THẬT (đã có sẵn checkbox module-access riêng)
   // nên isReportNavNodeVisible()/L2 filter tự gác đúng theo đúng quyền hiện có, không cần sửa gì thêm ở
   // 2 hàm đó — đúng nguyên tắc "vẫn phân quyền theo module như hiện tại, không thêm lớp quyền mới".
+  // leaveRequest/shiftSwapRequest (gap-fill, đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình
+  // — Agent 6): 2 collection Công & Phép có luồng tạo/duyệt hồ sơ thật nhưng trước đây vắng mặt ở Báo
+  // Cáo. employeeProfiles/laborContracts/payslips/attendanceRecords vẫn KHÔNG đưa vào (đúng ngoại lệ đã
+  // nêu ở CLAUDE.md — nhóm cực nhạy cảm, cần route thống kê riêng nếu làm sau); leaveRequests/
+  // shiftSwapRequests KHÔNG thuộc nhóm đó (vẫn qua GET /api/data/lazy/attendance, lọc đúng quyền xem
+  // thật — filterLeaveRequestsForUser()/filterShiftSwapRequestsForUser(), lib/recordViewScope.js) nên
+  // dùng khuôn DB.<collection> bình thường như mọi entry khác.
   {
     key: 'hr', label: '👤 Nhân Sự', children: [
       { key: 'hr', label: '🤝 HCRC Đồng Hành' },
-      { key: 'hrLifecycle', label: '🆕 Onboarding / Offboarding' }
+      { key: 'hrLifecycle', label: '🆕 Onboarding / Offboarding' },
+      { key: 'leaveRequest', label: '🏖️ Nghỉ Phép' },
+      { key: 'shiftSwapRequest', label: '🔄 Đổi Ca' }
     ]
   },
   // "vanHanh" là key BUSINESS_MODULES THẬT (module-access checkbox riêng); "operationStoreOpen"/
@@ -682,6 +691,28 @@ const REPORT_MODULE_CONFIGS = {
       () => DB.hrProcesses.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt || r.id, from, to))),
     statusOf: r => r.status,
     statusBuckets: [['IN_PROGRESS', 'Đang thực hiện', 'bg-yellow-500'], ['COMPLETED', 'Hoàn tất', 'bg-green-500'], ['CANCELLED', 'Đã huỷ', 'bg-red-500']]
+  },
+  // leaveRequests/shiftSwapRequests KHÔNG có field "dept" thật (khoá theo employeeCode, xem
+  // defaultLeaveRequest()/defaultShiftSwapRequest() ở lib/attendance.js) -> deptBreakdown:false, cùng
+  // khuôn trainingClasses/trainingRegistrations ở trên.
+  leaveRequest: {
+    title: '🏖️ Báo Cáo Nghỉ Phép',
+    getRecords: (dept, from, to) => fetchReportRecords('leaveRequests', dept, from, to,
+      () => DB.leaveRequests.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false,
+    statusOf: r => r.status,
+    statusBuckets: [['PENDING', 'Đang chờ', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500'], ['CANCELLED', 'Đã huỷ', 'bg-gray-500']]
+  },
+  shiftSwapRequest: {
+    title: '🔄 Báo Cáo Đổi Ca',
+    getRecords: (dept, from, to) => fetchReportRecords('shiftSwapRequests', dept, from, to,
+      () => DB.shiftSwapRequests.filter(r => isInDateRange(r.createdAt, from, to))),
+    deptBreakdown: false,
+    statusOf: r => r.status,
+    // applyApproveShiftSwap()/applyRejectShiftSwap() (lib/attendance.js) chỉ sinh đúng 3 trạng thái này
+    // cho BẢN GHI shiftSwapRequests — "SWAPPED" là trạng thái của dòng shiftRoster bị đổi, KHÔNG phải của
+    // chính đơn đổi ca, không liệt kê nhầm vào đây.
+    statusBuckets: [['PENDING', 'Đang chờ', 'bg-yellow-500'], ['APPROVED', 'Đã duyệt', 'bg-green-500'], ['REJECTED', 'Từ chối', 'bg-red-500']]
   },
   // "vanHanh" (key trùng node cha, cùng khuôn "office" ở trên) = Đơn Hàng, luồng DUY NHẤT trong 3 luồng
   // Vận Hành còn giữ quy trình duyệt/trạng thái thật (status) — 2 luồng Mở Mới/Sửa Chữa (bên dưới) bản

@@ -1,9 +1,70 @@
 # Phiên bản hiện tại
 
-**26.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.45 (2026-11): [Cao] Rà soát chuyên sâu lần 2 trước go-live — Đợt 2: hoàn thiện Approval Hub + gap-fill Báo Cáo Nghỉ Phép/Đổi Ca
+
+Tiếp nối Đợt 1 (v26.44). Agent "Approval Hub & bảng liên kết" (đợt rà soát 6-agent song song) phát hiện
+Approval Hub (`getMyPendingApprovals()`/`computeMyPendingApprovalKeys()`, dùng cho cả màn "Phê Duyệt" lẫn
+polling tự làm mới) **CHƯA từng tổng hợp 5 luồng duyệt sau** — người duyệt phải tự vào ĐÚNG module liên
+quan kiểm tra thủ công, không "tự hiện ra" như 9 module khác đã có trong Hub, dễ bị bỏ sót hồ sơ cần xử
+lý khi go-live với lượng người dùng/hồ sơ lớn hơn:
+
+- **[Cao] Đồng Phục** — kỳ cấp phát (`uniformPeriods`, PENDING_APPROVAL) + điều chuyển kho
+  (`uniformTransfers`, PENDING_APPROVAL), gác bằng `canApproveUniformClient()`.
+- **[Cao] Nghỉ Phép** (`leaveRequests`, PENDING) — gác bằng `canApproveHacLeave()`, loại trừ đúng đơn của
+  CHÍNH người duyệt (không tự duyệt đơn của mình).
+- **[Cao] Đổi Ca** (`shiftSwapRequests`, PENDING) — gác bằng `canApproveHacSwap()`.
+- **[Trung Bình] Đào Tạo — Huỷ Đăng Ký** (`trainingRegistrations.pendingCancellation`) — gác bằng
+  `admin || trainingManage`.
+- **[Trung Bình] Công Việc — Gia Hạn/Huỷ** (`tasks.pendingExtension`/`pendingCancellation`) — chỉ hiện
+  cho ĐÚNG người giao việc (`assignedBy`) hoặc admin.
+
+Sửa ĐỦ CẢ 2 lớp (bắt buộc đồng bộ, xem chú thích đầu file `lib/approvalAggregator.js`):
+`public/js/core-approvalhub.js::getMyPendingApprovals()` (client, màn "Phê Duyệt") +
+`lib/approvalAggregator.js::computeMyPendingApprovalKeys()` (server, polling tự làm mới — thêm
+`uniformPeriods`/`uniformTransfers`/`leaveRequests`/`shiftSwapRequests`/`shiftRoster`/
+`trainingRegistrations` vào `RECORD_COLLECTIONS_NEEDED` ở `routes/approvals.js` để polling đọc được đủ
+dữ liệu). Lớp server dùng ĐÚNG điều kiện kiểm quyền chặt hơn thật (VD `shiftSwapRequests` phải khớp đúng
+siêu thị qua `assertShiftSwapApprover`) khác với lớp client (chỉ copy đúng điều kiện hiển thị lỏng hơn
+module gốc đang dùng) — khác biệt này đã tồn tại từ trước ở các luồng khác, không phải lỗi mới.
+
+**Gap-fill Báo Cáo** (cùng đợt, mức Trung Bình): 2 collection trên (Nghỉ Phép/Đổi Ca) có luồng tạo/duyệt
+hồ sơ thật nhưng trước đây vắng mặt khỏi 📊 Báo Cáo — thêm 2 entry mới dưới nhóm "👤 Nhân Sự"
+(`REPORT_MODULE_CONFIGS.leaveRequest`/`shiftSwapRequest`, `module-baocaoquantri.js`), không có field
+`dept` thật nên `deptBreakdown:false` (cùng khuôn Đào Tạo/Tuyển Dụng đã gap-fill trước đó). Thêm `'attendance'`
+vào `TAB_DATA_GROUPS.reports` (`core.js`) để mở tab Báo Cáo cũng tự tải kèm dữ liệu Công & Phép — tránh
+đúng lớp lỗi đã vá cho Đồng Phục trước đây (mở Báo Cáo TRƯỚC KHI từng mở tab Công & Phép thật trong phiên
+thì 2 mảng này rỗng, báo cáo âm thầm hiện 0 bản ghi).
+
+**CHƯA xử lý trong đợt này — cần xác nhận riêng trước khi làm** (phát hiện cùng Agent 6, mức Thấp/tính
+năng bổ sung, không phải lỗ hổng bảo mật/sai dữ liệu): 4/5 luồng trên (Đồng Phục/Nghỉ Phép/Đổi Ca/Đào Tạo
+huỷ đăng ký) hoàn toàn CHƯA có bất kỳ email thông báo nào khi có hồ sơ mới cần duyệt — khác các module
+khác (Tài liệu/Văn bản trình/Đăng ký xe/...) đã có sẵn khung cấu hình admin bật/tắt
+(`APPROVAL_EMAIL_EVENTS`, `core.js`). Thêm email cho 4 luồng này là việc XÂY MỚI (thêm điểm gọi
+`notifyUsersByEmail()` thật ở đúng nơi tạo hồ sơ của 4 module, xác định đúng danh sách người duyệt tại
+thời điểm tạo, đăng ký vào `APPROVAL_EMAIL_EVENTS` để admin cấu hình được) — không phải bật lại 1 cấu hình
+có sẵn, nên tách thành việc riêng, chờ xác nhận trước khi triển khai ngay trước go-live.
+
+**Test:** mở rộng `tests/test-approval-hub.js` (14 assertion mới, xác nhận ĐỦ cả 6 mục [2 Đồng Phục + 1
+Nghỉ Phép + 1 Đổi Ca + 1 Đào Tạo-huỷ + 1 Công Việc] hiện đúng cho người có quyền, loại trừ đúng cho đơn
+tự tạo/người ngoài luồng) + `tests/test-reports.js` (3 assertion mới cho 2 entry Báo Cáo mới + cập nhật 1
+assertion cấu trúc nav cũ). Cả 2 đã xác nhận FAIL đúng ở phần mới trên code CŨ (`git stash`) và PASS trên
+code đã vá. Chạy lại đầy đủ: `test-approval-hub.js` (55/55), `test-reports.js` (21/21),
+`test-approval-polling.js` (12/12 — xác nhận polling không bị crash/lộ chéo dữ liệu khi đọc thêm 6
+collection mới), `test-attendance-leave.js` (72/72), `test-uniform.js`/`test-uniform-phase2.js`/
+`test-uniform-transfer-cancel.js`, `test-internal-training.js`,
+`test-audit-round2-internalcomms-training-pure.js`, `test-task.js`, `test-createtask-active-assignee.js`,
+`test-shiftroster-cancel-on-leave-approve.js` — tất cả PASS, không có regression ở module khác.
+
+**Deploy-impact:** chỉ đổi code JS (client + server) — không đổi `schema.sql`, không thêm biến môi
+trường, không cần `npm install`. Copy code + `pm2 restart` là đủ. Hiệu ứng ngay khi deploy: người duyệt
+Đồng Phục/Nghỉ Phép/Đổi Ca/Đào Tạo/Công Việc sẽ bắt đầu thấy các hồ sơ chờ duyệt tương ứng xuất hiện ở
+màn "Phê Duyệt" (trước đây hoàn toàn không thấy ở đây, phải tự vào module gốc) — không có hồ sơ MỚI nào
+sinh ra, chỉ là HIỂN THỊ ĐÚNG những gì đã tồn tại sẵn.
 
 ## v26.44 (2026-11): [Cao] Rà soát chuyên sâu lần 2 trước go-live — Đợt 1: vá 6 lỗ hổng Khối 0 còn thiếu
 

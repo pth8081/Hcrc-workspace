@@ -305,7 +305,9 @@ async function main() {
       const nav = await page.evaluate(() => REPORT_NAV_TREE.map((n) => ({ key: n.key, children: (n.children || []).map((c) => c.key) })));
       const hrNode = nav.find((n) => n.key === 'hr');
       const vanHanhNode = nav.find((n) => n.key === 'vanHanh');
-      assert(hrNode && JSON.stringify(hrNode.children) === JSON.stringify(['hr', 'hrLifecycle']), `node "hr" phải có đúng 2 con [hr, hrLifecycle], got: ${JSON.stringify(hrNode)}`);
+      // Gap-fill (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent 6): thêm 2 con
+      // "leaveRequest"/"shiftSwapRequest" (Nghỉ Phép/Đổi Ca) — trước đây chỉ có đúng 2 con.
+      assert(hrNode && JSON.stringify(hrNode.children) === JSON.stringify(['hr', 'hrLifecycle', 'leaveRequest', 'shiftSwapRequest']), `node "hr" phải có đúng 4 con [hr, hrLifecycle, leaveRequest, shiftSwapRequest], got: ${JSON.stringify(hrNode)}`);
       assert(vanHanhNode && JSON.stringify(vanHanhNode.children) === JSON.stringify(['vanHanh', 'operationStoreOpen', 'operationRepair', 'checklist']), `node "vanHanh" phải có đúng 4 con (thêm "checklist" từ v23.29), got: ${JSON.stringify(vanHanhNode)}`);
     });
 
@@ -328,6 +330,47 @@ async function main() {
         return { total: all.length, cntt: cntt.length };
       });
       assertEqual(stats.total, 3, 'hrProcesses total mismatch'); assertEqual(stats.cntt, 2, 'hrProcesses CNTT-only mismatch (should be COMPLETED+CANCELLED)');
+    });
+
+    // Gap-fill (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent 6): Nghỉ Phép/Đổi Ca
+    // trước đây hoàn toàn vắng mặt ở Báo Cáo dù có luồng tạo/duyệt hồ sơ thật. Không có field "dept" thật
+    // (khoá theo employeeCode) nên dept-filter KHÔNG áp dụng (deptBreakdown:false) — chỉ kiểm tổng số +
+    // đếm đúng theo trạng thái.
+    await page.evaluate(() => {
+      Object.assign(DB, {
+        leaveRequests: [
+          { id: 601, employeeCode: 'NV01', status: 'PENDING', leaveType: 'ANNUAL', fromDate: '2026-03-01', toDate: '2026-03-02', createdAt: '2026-03-01T09:00:00' },
+          { id: 602, employeeCode: 'NV02', status: 'APPROVED', leaveType: 'SICK', fromDate: '2026-03-05', toDate: '2026-03-05', createdAt: '2026-03-02T09:00:00' },
+          { id: 603, employeeCode: 'NV03', status: 'REJECTED', leaveType: 'UNPAID', fromDate: '2026-03-10', toDate: '2026-03-10', createdAt: '2026-03-03T09:00:00' }
+        ],
+        shiftSwapRequests: [
+          { id: 701, requesterEmployeeCode: 'NV01', targetEmployeeCode: 'NV02', requesterRosterId: 1, status: 'PENDING', createdAt: '2026-03-01T09:00:00' },
+          { id: 702, requesterEmployeeCode: 'NV03', targetEmployeeCode: 'NV04', requesterRosterId: 2, status: 'APPROVED', createdAt: '2026-03-02T09:00:00' }
+        ]
+      });
+    });
+
+    await run('Báo Cáo Nghỉ Phép: đếm đúng PENDING/APPROVED/REJECTED (không có dept thật, không lọc theo phòng ban)', async () => {
+      await page.evaluate(() => { selectReportsNavL1('hr'); selectReportsNavL2('leaveRequest'); });
+      const stats = await page.evaluate(async () => {
+        const all = await REPORT_MODULE_CONFIGS.leaveRequest.getRecords('', '2026-01-01', '2026-12-31');
+        return { total: all.length, pending: all.filter((r) => r.status === 'PENDING').length, approved: all.filter((r) => r.status === 'APPROVED').length, rejected: all.filter((r) => r.status === 'REJECTED').length };
+      });
+      assertEqual(stats.total, 3, 'leaveRequests total mismatch');
+      assertEqual(stats.pending, 1, 'leaveRequests PENDING count mismatch');
+      assertEqual(stats.approved, 1, 'leaveRequests APPROVED count mismatch');
+      assertEqual(stats.rejected, 1, 'leaveRequests REJECTED count mismatch');
+    });
+
+    await run('Báo Cáo Đổi Ca: đếm đúng PENDING/APPROVED (không có dept thật, không lọc theo phòng ban)', async () => {
+      await page.evaluate(() => selectReportsNavL2('shiftSwapRequest'));
+      const stats = await page.evaluate(async () => {
+        const all = await REPORT_MODULE_CONFIGS.shiftSwapRequest.getRecords('', '2026-01-01', '2026-12-31');
+        return { total: all.length, pending: all.filter((r) => r.status === 'PENDING').length, approved: all.filter((r) => r.status === 'APPROVED').length };
+      });
+      assertEqual(stats.total, 2, 'shiftSwapRequests total mismatch');
+      assertEqual(stats.pending, 1, 'shiftSwapRequests PENDING count mismatch');
+      assertEqual(stats.approved, 1, 'shiftSwapRequests APPROVED count mismatch');
     });
 
     await run('Báo Cáo Vận Hành: 3 luồng Đơn Hàng/Mở Mới/Sửa Chữa đếm đúng độc lập nhau', async () => {

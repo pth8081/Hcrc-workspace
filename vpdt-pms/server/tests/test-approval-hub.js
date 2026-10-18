@@ -547,6 +547,123 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // Đợt rà soát chuyên sâu lần 2 trước go-live (11/2026, mức Cao — Agent 6): getMyPendingApprovals()
+  // trước đây CHƯA tổng hợp 5 luồng duyệt sau (người duyệt phải tự vào từng module kiểm tra thủ công,
+  // không "tự hiện ra" trong Hub như các luồng khác) — LỖI ĐÃ VÁ, phủ cả 5 luồng trong 1 scenario:
+  // Đồng Phục (kỳ cấp phát + điều chuyển kho), Nghỉ Phép, Đổi Ca, Đào Tạo (huỷ đăng ký), Công Việc
+  // (gia hạn/huỷ). Dùng 1 user "duyet2" riêng (KHÔNG phải duyet1 ở các scenario trên) chỉ có ĐÚNG các
+  // quyền cần cho 5 luồng này, để không lẫn với các mục đã test ở trên và để chứng minh aggregator lọc
+  // đúng theo quyền/điều kiện riêng của từng luồng (không phải admin bypass).
+  // ==========================================================================
+  await scenario('Approval Hub tổng hợp đủ 5 luồng còn thiếu: Đồng Phục/Nghỉ Phép/Đổi Ca/Đào Tạo-huỷ/Công Việc', async () => {
+    const r = await page.evaluate(() => {
+      // --- Đồng Phục: canApproveUniformClient() (uniformApprove/uniformManage/admin). 1 kỳ cấp phát
+      // PENDING_APPROVAL phải được tính, 1 kỳ đã APPROVED thì không. ---
+      DB.uniformPeriods = [
+        { id: 901, dept: 'Kế Toán', approvalStatus: 'PENDING_APPROVAL', name: 'Kỳ cấp phát Q4', createdAt: '2026-08-26' },
+        { id: 902, dept: 'Kế Toán', approvalStatus: 'APPROVED', name: 'Kỳ đã duyệt xong (không được tính)', createdAt: '2026-08-10' },
+      ];
+      DB.uniformTransfers = [
+        { id: 911, sourceDept: 'Kế Toán', targetDept: 'Kinh Doanh', itemName: 'Áo sơ mi size M', status: 'PENDING_APPROVAL', requestedAt: '2026-08-26' },
+      ];
+
+      // --- Nghỉ Phép: canApproveHacLeave() (hrAttendanceManage/hrLeaveApprove/admin) — PHẢI loại trừ
+      // đơn của CHÍNH người duyệt (so theo DB.myEmployeeCode), dù status vẫn PENDING. ---
+      DB.leaveRequests = [
+        { id: 921, employeeCode: 'NV-DUYET2', status: 'PENDING', leaveType: 'ANNUAL', fromDate: '2026-09-01', toDate: '2026-09-02', dept: 'Kế Toán', createdAt: '2026-08-26' },
+        { id: 922, employeeCode: 'NV-KHAC-LEAVE', status: 'PENDING', leaveType: 'SICK', fromDate: '2026-09-03', toDate: '2026-09-03', dept: 'Kế Toán', createdAt: '2026-08-26' },
+      ];
+
+      // --- Đổi Ca: canApproveHacSwap() (hrAttendanceManage/hrShiftSwapApprove/admin). ---
+      DB.shiftRoster = [{ id: 931, employeeCode: 'NV-KHAC-LEAVE', workDate: '2026-09-05', shiftTemplateId: 1, storeCode: 'Siêu Thị A', status: 'ACTIVE' }];
+      DB.shiftSwapRequests = [
+        { id: 941, requesterRosterId: 931, requesterEmployeeCode: 'NV-SWAP-REQ', targetEmployeeCode: 'NV-SWAP-TARGET', status: 'PENDING', dept: 'Kế Toán', createdAt: '2026-08-26' },
+      ];
+
+      // --- Đào Tạo - Huỷ Đăng Ký: user.perms.admin || trainingManage, đọc r.pendingCancellation. ---
+      DB.trainingClasses = [{ id: 951, title: 'Lớp PCCC', code: 'LH-001' }];
+      DB.trainingRegistrations = [
+        { id: 961, classId: 951, creatorName: 'Nhân Viên A', dept: 'Kế Toán', pendingCancellation: { requestedAt: '2026-08-26', reason: 'Trùng lịch' } },
+      ];
+
+      // --- Công Việc - Gia Hạn/Huỷ: chỉ hiện cho ĐÚNG người giao việc (assignedBy) hoặc admin. ---
+      DB.tasks = [
+        { id: 971, title: 'Việc cần gia hạn', dept: 'Kế Toán', assignedBy: 'duyet2', sourceCode: 'CV-001',
+          pendingExtension: { requestedAt: '2026-08-26', requestedByName: 'X' }, pendingCancellation: null },
+        { id: 972, title: 'Việc KHÔNG do duyet2 giao (loại trừ)', dept: 'Kế Toán', assignedBy: 'someone.else', sourceCode: 'CV-002',
+          pendingExtension: { requestedAt: '2026-08-26', requestedByName: 'X' }, pendingCancellation: null },
+      ];
+
+      const duyet2 = {
+        username: 'duyet2', name: 'Người Duyệt Hai', dept: 'Kế Toán', role: 'NHANVIEN', jobTitle: null,
+        perms: { admin: false, moduleAccess: {}, uniformApprove: true, hrAttendanceManage: true, trainingManage: true },
+      };
+      DB.users.push(duyet2);
+      finishLogin(duyet2);
+      DB.myEmployeeCode = 'NV-DUYET2';
+      const itemsForApprover = getMyPendingApprovals(currentUser);
+
+      // Người hoàn toàn ngoài 5 luồng này (không admin, không quyền nào liên quan) -> KHÔNG được thấy gì.
+      const outsider = { username: 'khong.lien.quan.5luong', name: 'Y', dept: 'Nhân Sự', role: 'NHANVIEN', jobTitle: null, perms: { admin: false, moduleAccess: {} } };
+      DB.users.push(outsider);
+      finishLogin(outsider);
+      DB.myEmployeeCode = null;
+      const itemsForOutsider = getMyPendingApprovals(currentUser);
+
+      // Đăng nhập lại đúng "duyet1" + dọn sạch dữ liệu vừa seed cho các scenario sau.
+      finishLogin(DB.users.find(u => u.username === 'duyet1'));
+      DB.myEmployeeCode = null;
+      DB.uniformPeriods = []; DB.uniformTransfers = []; DB.leaveRequests = []; DB.shiftRoster = []; DB.shiftSwapRequests = [];
+      DB.trainingClasses = []; DB.trainingRegistrations = []; DB.tasks = [];
+
+      const findByCode = code => itemsForApprover.find(it => String(it.code) === String(code));
+      return {
+        approverCount: itemsForApprover.length,
+        approverTypesSorted: itemsForApprover.map(it => it.type).sort(),
+        approverCodesSorted: itemsForApprover.map(it => String(it.code)).sort(),
+        uniformPeriodItem: findByCode(901),
+        uniformTransferItem: findByCode(911),
+        leaveItem: findByCode('NV-KHAC-LEAVE'),
+        swapItem: findByCode('NV-SWAP-REQ'),
+        trainingCancelItem: findByCode(961),
+        taskItem: findByCode('CV-001'),
+        outsiderCount: itemsForOutsider.length,
+      };
+    });
+    record('duyet2 thấy đúng 6 mục (2 Đồng Phục + 1 Nghỉ Phép + 1 Đổi Ca + 1 Đào Tạo-huỷ + 1 Công Việc), không lẫn mục khác',
+      r.approverCount === 6, JSON.stringify(r));
+    record('đủ cả 6 type: leaveRequest/shiftSwapRequest/taskPending/trainingCancel/uniformPeriod/uniformTransfer',
+      JSON.stringify(r.approverTypesSorted) === JSON.stringify(['leaveRequest', 'shiftSwapRequest', 'taskPending', 'trainingCancel', 'uniformPeriod', 'uniformTransfer']),
+      JSON.stringify(r));
+    record('Đồng Phục - kỳ cấp phát PENDING_APPROVAL (901) được tính, có nút Duyệt/Từ chối đúng action',
+      !!r.uniformPeriodItem && r.uniformPeriodItem.actions.some(a => a.fn === 'approveUniformPeriodAction' && a.args[0] === 901),
+      JSON.stringify(r.uniformPeriodItem));
+    record('Đồng Phục - điều chuyển kho PENDING_APPROVAL (911) được tính, có nút Duyệt/Từ chối đúng action',
+      !!r.uniformTransferItem && r.uniformTransferItem.actions.some(a => a.fn === 'approveUniformTransferAction' && a.args[0] === 911),
+      JSON.stringify(r.uniformTransferItem));
+    record('Đồng Phục - kỳ đã APPROVED (902) KHÔNG xuất hiện trong danh sách',
+      !r.approverCodesSorted.includes('902'), JSON.stringify(r));
+    record('Nghỉ Phép - đơn của người KHÁC (NV-KHAC-LEAVE) được tính, có nút Duyệt/Từ chối đúng action',
+      !!r.leaveItem && r.leaveItem.actions.some(a => a.fn === 'approveHacLeaveRequest' && a.args[0] === 922),
+      JSON.stringify(r.leaveItem));
+    record('Nghỉ Phép - đơn của CHÍNH người duyệt (NV-DUYET2) KHÔNG xuất hiện (không tự duyệt đơn của mình)',
+      !r.approverCodesSorted.includes('NV-DUYET2'), JSON.stringify(r));
+    record('Đổi Ca - yêu cầu PENDING (NV-SWAP-REQ) được tính, có nút Duyệt/Từ chối đúng action',
+      !!r.swapItem && r.swapItem.actions.some(a => a.fn === 'approveHacSwapRequest' && a.args[0] === 941),
+      JSON.stringify(r.swapItem));
+    record('Đào Tạo - yêu cầu huỷ đăng ký (961) được tính, có nút Duyệt Huỷ đúng action',
+      !!r.trainingCancelItem && r.trainingCancelItem.actions.some(a => a.fn === 'approveCancelTrainingRegAction' && a.args[0] === 961),
+      JSON.stringify(r.trainingCancelItem));
+    record('Công Việc - việc do CHÍNH duyet2 giao đang xin gia hạn (CV-001) được tính, nút mở đúng modal xử lý',
+      !!r.taskItem && r.taskItem.actions.some(a => a.fn === 'openExtensionApproveModal' && a.args[0] === 971),
+      JSON.stringify(r.taskItem));
+    record('Công Việc - việc do người KHÁC giao (CV-002) KHÔNG xuất hiện',
+      !r.approverCodesSorted.includes('CV-002'), JSON.stringify(r));
+    record('Người hoàn toàn ngoài 5 luồng (không quyền nào liên quan, không admin) thấy đúng 0 mục',
+      r.outsiderCount === 0, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // Access gating: a user in NO approval flow at all cannot open the hub.
   // ==========================================================================
   await scenario('canAccessApprovalHub()/switchTab() gate out a user with no approval flow at all', async () => {

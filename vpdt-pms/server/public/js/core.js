@@ -152,7 +152,12 @@ const TAB_DATA_GROUPS = {
   hrAttendance: ['attendance'],
   hrPayroll: ['payroll'],
   checklist: ['checklist'],
-  reports: ['uniform']
+  // 'attendance' (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent 6): thêm 2 entry
+  // Nghỉ Phép/Đổi Ca vào Báo Cáo (module-baocaoquantri.js REPORT_MODULE_CONFIGS.leaveRequest/
+  // shiftSwapRequest) đọc thẳng DB.leaveRequests/DB.shiftSwapRequests — CÙNG LỖI ĐÃ VÁ như 'uniform' ở
+  // trên (mở Báo Cáo TRƯỚC KHI từng mở tab Công & Phép thật trong phiên thì 2 mảng này rỗng, báo cáo âm
+  // thầm hiện 0 bản ghi thay vì báo lỗi) nếu không thêm vào đây.
+  reports: ['uniform', 'attendance']
 };
 
 const _loadedDataGroups = {}; // groupKey -> Promise (cache, idempotent - goi lai khong tai lai qua mang)
