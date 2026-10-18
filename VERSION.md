@@ -1,9 +1,52 @@
 # Phiên bản hiện tại
 
-**27.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.16 (2026-11): [Điều tra] Re-audit lần 6 — mục 8/21: licenses tạo phiên bản mới "thiếu getLockKey" — XÁC NHẬN FALSE POSITIVE
+
+Mục thứ tám (8/21) của đợt re-audit lần 6. Finding ban đầu: `CREATE_MODULE_CONFIGS.licenses`
+(`lib/createValidation.js`) không có `getLockKey`, nên 2 request tạo PHIÊN BẢN MỚI (`rootLicenseId`
+khác null) gần như đồng thời có thể cùng đọc "bản mới nhất" giống nhau, dẫn tới trùng
+`versionNumber`/`code` hoặc lỗi DB thô.
+
+**Điều tra:** đọc `routes/create.js` (~dòng 397-411) xác nhận `licenses` KHÔNG dùng `getLockKey` thật,
+nhưng có cơ chế khoá RIÊNG đã tồn tại từ trước (xác nhận qua `git log -S "license_family"`, có từ lâu,
+không liên quan bất kỳ đợt vá nào trong phiên làm việc này) — `familyLockKey`: khi
+`moduleKey === 'licenses' && req.body.rootLicenseId != null`, request đi qua
+`withAppLock('license_family:<rootId>', () => createForCollection(...))`, dùng khoá NGHIÊM TÚC
+(`sp_getapplock` cấp Transaction, cùng cơ chế `createForCollectionSerialized()`) bọc quanh TOÀN BỘ
+chuỗi đọc "family hiện có" → kiểm tra "bản mới nhất còn PENDING?" → ghi phiên bản mới.
+
+**Xác nhận THẬT bằng race giả lập** (không chỉ suy luận tĩnh) — viết `tests/test-license-version-race.js`
+(mirror khuôn `test-offboarding-duplicate-process-race.js`/`test-onboarding-nationalid-race.js`: hàng đợi
+mutex theo lockKey + gọi thẳng router THẬT `routes/create.js`). Lần viết đầu tiên của test có lỗi harness
+(chờ TRƯỚC khi đọc "existing", không có điểm nhường lượt THẬT giữa đọc và ghi trong `builderFn` của bản
+giả lập) khiến test LUÔN PASS dù có hay không có khoá bảo vệ — vô giá trị. Sửa harness: đọc "existing"
+NGAY (mirror SELECT thật của `getAllDedicatedRecords()`), RỒI MỚI chờ (mirror round-trip DB thật) TRƯỚC
+khi gọi `builderFn` — mirror đúng khe hở race thật giữa đọc và ghi của hệ thống thật. Sau khi sửa: thử
+nghiệm có kiểm soát bằng cách tạm tắt `familyLockKey` cho `licenses` (sửa tạm `routes/create.js`, CHỈ để
+kiểm chứng, đã hoàn trả nguyên vẹn ngay sau) → test đúng như kỳ vọng FAIL (3/7, lộ trùng
+`versionNumber=2`/trùng `code`) — xác nhận race THẬT SỰ xảy ra nếu không có khoá. Hoàn trả
+`routes/create.js` về nguyên bản (`git diff` rỗng) → chạy lại test trên code THẬT: **7/7 PASS** — xác
+nhận `familyLockKey` đã bảo vệ ĐẦY ĐỦ đúng lớp lỗi finding nêu (gồm cả việc request thua cuộc nhận lỗi
+nghiệp vụ rõ ràng 409 "đang chờ duyệt", không phải lỗi DB thô).
+
+**Kết luận:** finding #155 là **false positive** — không cần thêm `getLockKey` (sẽ tạo 2 lớp khoá trùng
+lặp không cần thiết). Không có thay đổi code sản xuất nào trong mục này — chỉ thêm
+`tests/test-license-version-race.js` làm regression-guard thường trực xác nhận bảo vệ hiện có không bị
+vô tình gỡ bỏ trong tương lai.
+
+**Regression:** `test-license-cancel.js` (7/7), `test-license-expiry-reminder-family.js` (3/3),
+`test-license.js` (15/15), `test-khoi0-license-uniform-gate.js` (9/9),
+`test-audit-cluster-license-cascade-download-limit.js` (12/12), `test-locked-approval-layers.js`
+(23/23), `test-offboarding-duplicate-process-race.js` (9/9), `test-onboarding-nationalid-race.js` (8/8)
+— toàn bộ PASS, không regression (không có production code nào bị đổi ở mục này).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart` (thực chất chỉ thêm 1 file
+test, không ảnh hưởng runtime).
 
 ## v27.15 (2026-11): [TB] Re-audit lần 6 — mục 7/21: editOfficeReqDraft SUA_CHUA đổi dept không đối chiếu lại techAssignedTo
 
