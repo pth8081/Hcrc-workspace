@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.70 (2026-11): [TB] Re-audit lần 4 — mục 10: checklistTemplates.templateCode + trainingPlans race condition
+
+Mục đầu tiên mức Trung Bình trong 22 phát hiện của re-audit lần 4 (đã hoàn tất toàn bộ 9 mục mức Cao ở
+các bản trước):
+
+- **[TB] `checklistTemplates`/`trainingPlans` (lib/createValidation.js) đều KHÔNG có `getLockKey` nên
+  đi qua `createForCollection()` thường (không khoá), dù mỗi collection đều có 1 check chống trùng dựa
+  trên SNAPSHOT đọc TRƯỚC khi ghi** — `checklistTemplates` so `templateCode` (409 "Mã checklist ... đã
+  tồn tại"), `trainingPlans` so khoá Tháng+Chương Trình+Đơn Vị qua `trainingPlanDedupKey()` (409 "Đã có
+  dòng kế hoạch đào tạo..."). 2 request tạo MỚI gần như đồng thời, CÙNG khoá so trùng, đều đọc được
+  collection "chưa có gì trùng" trước khi cái nào kịp ghi — cả 2 đều qua được check rồi cùng tạo, vi
+  phạm đúng bất biến mà check đó định bảo vệ.
+  - Thêm `getLockKey` cho CẢ 2 — cùng khuôn `operationOrders.getLockKey` (khoá theo giá trị so trùng khi
+    có, khoá riêng biệt mỗi lần gọi khi không có gì cần chống trùng): `checklistTemplates` khoá theo
+    `templateCode`, `trainingPlans` tái dùng NGUYÊN `trainingPlanDedupKey()` đã có (không viết lại công
+    thức).
+
+**Test:** file mới `tests/test-checklisttemplate-trainingplan-race.js` (8 scenario, cùng khuôn
+`test-operation-order-po-race.js` — router THẬT `routes/create.js`, mutex thật theo lockKey + cửa sổ
+"nhường lượt" chèn giữa đọc-và-ghi ở CẢ NHÁNH `createForCollection` KHÔNG khoá lẫn
+`createForCollectionSerialized` CÓ khoá, để dựng lại đúng cửa sổ đua thật — nếu chỉ thêm độ trễ ở nhánh
+có khoá như bản gốc `test-operation-order-po-race.js` thì race không bao giờ biểu hiện được ở nhánh
+KHÔNG khoá do thiếu điểm nhường lượt tự nhiên). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash
+-- lib/createValidation.js`, 2/8 passed, đúng 6 scenario "LỖI ĐÃ VÁ" FAIL — cả 2 request cùng tạo thành
+công, vi phạm bất biến chống trùng), PASS trên code đã vá (8/8). Chạy lại bộ test liên quan:
+`test-operation-order-po-race.js` (4/4, xác nhận cách thêm độ trễ mới không phá bản vá cũ),
+`test-checklist.js` (55/55), `test-checklist-import.js` (17/17), `test-training-plans.js` (20/22 — 2
+FAIL Playwright timeout xác nhận lỗi CŨ có từ trước bằng `git stash`, không liên quan đợt vá),
+`test-khoi0-checklist-contract-attendance-internalpost-gate.js` (24/24),
+`test-khoi0-checklist-lazy-data-gate.js` (7/7) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.69 (2026-11): [Cao] Re-audit lần 4 — mục 9 (CUỐI, mức Cao): managerUsername không cascade khi đổi tên/xoá tài khoản
 
