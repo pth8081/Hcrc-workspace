@@ -231,7 +231,14 @@ async function findOwningRecord(fileUrl) {
   // KHÁC cũng chỉ tham chiếu qua customData — muốn đóng triệt để cần thêm sổ ghi nhận "ai tải file nào"
   // ngay tại /api/upload (xem đề xuất ở báo cáo audit), chưa làm trong đợt vá này.
   const checkers = [
-    { records: docs, fixed: d => d.fileUrl === fileUrl, build: d => ({ moduleKey: 'doc', dept: d.dept, ownerUsername: d.uploader, record: d }) },
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "fileAuthz.js docs checker thiếu thumbnailUrl"): checker này
+    // trước đây CHỈ soi d.fileUrl (tệp tài liệu chính), bỏ sót d.thumbnailUrl (ảnh trang đầu minh hoạ,
+    // field CỐ ĐỊNH THẬT qua assertUploadedFileUrl() ở extraValidate — xem lib/createValidation.js
+    // docs.extraValidate, dòng ~1798-1803). Không khớp field nào -> findOwningRecord() trả null -> rơi
+    // FAIL-OPEN ở authorizeFileAccess() (return true) -> BẤT KỲ ai đăng nhập xem/tải được ảnh trang đầu
+    // của tài liệu PENDING/DRAFT/phòng ban khác nếu biết/đoán đúng URL (cùng lớp lỗi đã vá cho
+    // trainingDocuments/trainingCourses ở mục #9 re-audit lần 6 này).
+    { records: docs, fixed: d => d.fileUrl === fileUrl || d.thumbnailUrl === fileUrl, build: d => ({ moduleKey: 'doc', dept: d.dept, ownerUsername: d.uploader, record: d }) },
     // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "Văn Bản Trình/Hợp Đồng/Giấy Phép/Thanh Toán/Tài Liệu", mức
     // Cao): trước đây checker này CHỈ soi s.fileUrl + s.extraFiles[] — tệp "Đề xuất thay thế tờ trình"
     // (PROPOSE_FILE_REPLACEMENT, xem lib/workflowEngine.js) chỉ được tham chiếu ở

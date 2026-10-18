@@ -33,7 +33,9 @@ const DEPT_A = 'Kinh Doanh';   // phòng ban sở hữu hồ sơ
 const DEPT_B = 'Marketing';    // phòng ban NGOÀI phạm vi
 
 const DOC = {
-  id: 'doc-1', fileUrl: '/uploads/doc-a.pdf', dept: DEPT_A,
+  // thumbnailUrl: re-audit lần 6 (mức TB — "fileAuthz.js docs checker thiếu thumbnailUrl") — ảnh trang
+  // đầu minh hoạ, field CỐ ĐỊNH THẬT qua assertUploadedFileUrl() (lib/createValidation.js docs.extraValidate).
+  id: 'doc-1', fileUrl: '/uploads/doc-a.pdf', thumbnailUrl: '/uploads/doc-a-thumb.jpg', dept: DEPT_A,
   uploader: 'owner_doc', status: 'APPROVED'
 };
 const POST_PENDING = {
@@ -216,6 +218,21 @@ async function main() {
 
   await run('...nhưng người đó KHÔNG tải được — quyền Tải vẫn tách riêng như cũ', async () => {
     assert.strictEqual(await authorizeFileAccess(VIEWER_NO_DOWNLOAD, DOC.fileUrl, 'download'), false);
+  });
+
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "fileAuthz.js docs checker thiếu thumbnailUrl"): mirror ĐÚNG 3
+  // kịch bản trên nhưng cho thumbnailUrl thay vì fileUrl — trước đây checker docs chỉ soi fileUrl nên
+  // thumbnailUrl rơi vào FAIL-OPEN chung (authorizeFileAccess() trả true cho MỌI người, kể cả OUTSIDER).
+  await run('LỖI ĐÃ VÁ: người ngoài phạm vi KHÔNG xem được ẢNH TRANG ĐẦU (thumbnailUrl) của tài liệu', async () => {
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, DOC.thumbnailUrl, 'view'), false);
+  });
+  await run('đối chứng: chính chủ (uploader) vẫn xem/tải được ảnh trang đầu của tài liệu mình', async () => {
+    assert.strictEqual(await authorizeFileAccess(OWNER_DOC, DOC.thumbnailUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(OWNER_DOC, DOC.thumbnailUrl, 'download'), true);
+  });
+  await run('đối chứng: người CHỈ có quyền XEM vẫn xem được ảnh trang đầu (không chặn nhầm quyền Xem đã có)', async () => {
+    assert.strictEqual(await authorizeFileAccess(VIEWER_NO_DOWNLOAD, DOC.thumbnailUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(VIEWER_NO_DOWNLOAD, DOC.thumbnailUrl, 'download'), false);
   });
 
   // ===== 4) Module có khuôn quyền riêng (không theo phòng ban) =====
