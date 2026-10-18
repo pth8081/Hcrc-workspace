@@ -602,6 +602,31 @@ function assertPositionTypesSafeToSave(value, oldValue, users) {
   }
 }
 
+// shiftTemplates ("Ca Làm Việc", Công & Phép — danh mục JSON-blob, KHÔNG phải collection riêng + delete
+// route, ghi thẳng qua POST /api/data/shiftTemplates): LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp —
+// "shiftTemplates không kiểm tham chiếu từ shiftRoster"). applyClockPunch() (lib/attendance.js, mô hình
+// SHIFT_BASED) đọc `(appData?.shiftTemplates || []).find(t => t.id === roster.shiftTemplateId)` để tính
+// isLate/isEarlyLeave — xoá 1 ca khỏi danh mục này dù còn dòng shiftRoster đang tham chiếu (lịch phân ca
+// tương lai hoặc hiện tại, status !== 'CANCELLED') KHÔNG làm crash gì (template undefined, các điều kiện
+// if (template) đơn giản bị skip) nhưng ÂM THẦM mất khả năng xác định đi muộn/về sớm cho mọi lượt chấm
+// công rơi vào ca đó — admin không có cách nào biết đã xoá nhầm, lỗi chỉ lộ ra khi xem lại chấm công.
+// CÙNG khuôn assertPositionTypesSafeToSave() ở trên: đối chiếu mảng CŨ/MỚI theo `id` ổn định để tìm
+// entry BỊ LOẠI BỎ, chặn cứng (400) nếu còn ÍT NHẤT 1 dòng shiftRoster CHƯA HUỶ tham chiếu tới id đó —
+// không validate gì thêm với các entry chỉ SỬA field (không đổi id), vì isLate/isEarlyLeave của các
+// lượt chấm công TƯƠNG LAI vẫn tính lại đúng theo giá trị MỚI, không có gì bị mất.
+function assertShiftTemplatesSafeToSave(value, oldValue, shiftRoster) {
+  if (!Array.isArray(value)) return; // shape đã bị assertPlainObjectArrayShape() chặn riêng
+  const newIds = new Set(value.filter(t => t && t.id != null).map(t => t.id));
+  const removed = (Array.isArray(oldValue) ? oldValue : []).filter(t => t && t.id != null && !newIds.has(t.id));
+  if (!removed.length) return;
+  for (const t of removed) {
+    const inUseCount = (shiftRoster || []).filter(r => r.shiftTemplateId === t.id && r.status !== 'CANCELLED').length;
+    if (inUseCount > 0) {
+      throw new CreateError(400, `Không thể xoá: đang có ${inUseCount} lịch phân ca tham chiếu Ca Làm Việc "${t.shiftName || t.shiftCode || t.id}" — đổi ca cho các dòng đó trước khi xoá.`);
+    }
+  }
+}
+
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
 // ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
 // (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
@@ -5166,7 +5191,7 @@ module.exports = {
   assertApprovalGroupsMembersCanBeApprover,
   // Export cho routes/data.js POST /api/data/:key — chặn xoá builtin/đang-dùng của positionTypes qua
   // route generic (re-audit lần 5, mức TB).
-  assertPositionTypesSafeToSave,
+  assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

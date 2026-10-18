@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.25 (2026-11): [Thấp] Re-audit lần 6 — mục 17/21: shiftTemplates không kiểm tham chiếu từ shiftRoster
+
+Mục thứ mười bảy (17/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `shiftTemplates` ("Ca Làm Việc", Công & Phép) là danh mục JSON-blob trong AppData
+(KHÔNG phải collection riêng + delete route), ghi thẳng qua route generic `POST /api/data/shiftTemplates`
+mà không hề kiểm tham chiếu. `applyClockPunch()` (`lib/attendance.js`, mô hình SHIFT_BASED) đọc
+`(appData?.shiftTemplates || []).find(t => t.id === roster.shiftTemplateId)` để tính isLate/isEarlyLeave
+khi chấm công — xoá 1 Ca khỏi danh mục dù còn dòng `shiftRoster` CHƯA HUỶ tham chiếu KHÔNG làm crash gì
+(`template` undefined, các điều kiện `if (template)` đơn giản bị skip) nhưng ÂM THẦM mất khả năng xác
+định đi muộn/về sớm cho mọi lượt chấm công rơi vào ca đó — admin không có cách nào biết đã xoá nhầm.
+
+**Vá:** thêm `assertShiftTemplatesSafeToSave(value, oldValue, shiftRoster)` (`lib/createValidation.js`,
+cùng khuôn `assertPositionTypesSafeToSave()`) — đối chiếu mảng CŨ/MỚI theo `id` ổn định để tìm entry BỊ
+LOẠI BỎ, chặn cứng (400) nếu còn ÍT NHẤT 1 dòng `shiftRoster` chưa huỷ (`status !== 'CANCELLED'`) tham
+chiếu tới id đó. Gọi từ `POST /api/data/:key` (`routes/data.js`) NGAY TRƯỚC khi ghi đè — đọc `shiftRoster`
+qua `getAllForCollectionCached()` (collection đã migrate, khác `positionTypes`/`users` đọc qua
+`getAppDataValue()`). Chỉ sửa field (không đổi `id`) vẫn lưu được tự do — isLate/isEarlyLeave của lượt
+chấm công TƯƠNG LAI tính lại đúng theo giá trị mới, không có gì bị mất.
+
+**Test:** file mới `tests/test-shifttemplates-generic-route-inuse-check.js` (cùng khuôn
+`test-positiontypes-generic-route-inuse-check.js`) — 5 scenario: xoá ca đang có roster tham chiếu -> 400;
+đối chứng xoá sau khi roster đã CANCELLED -> 200; đối chứng xoá ca không ai tham chiếu -> 200; đối chứng
+chỉ sửa field -> 200; đối chứng người không có quyền -> 403 (giữ đúng gate cũ). Xác nhận FAIL trên code
+CŨ (`git stash -- lib/createValidation.js routes/data.js`, đúng 1/5 scenario FAIL — 200 thay vì 400, đúng
+khai thác đã nêu), PASS trên code đã vá (5/5). Regression: `tests/test-position-types.js` (10/10),
+`tests/test-positiontypes-generic-route-inuse-check.js` (6/6),
+`tests/test-congphep-checklist-structure-validate.js` (17/17), `tests/test-attendance-leave.js` (74/74)
+— toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.24 (2026-11): [Thấp] Re-audit lần 6 — mục 16/21: shiftSwapRequests tạo mới thiếu getLockKey
 
