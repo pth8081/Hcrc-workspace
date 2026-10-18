@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**26.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.81 (2026-11): [Cao] Re-audit lần 5 — mục 3: Khối 0 không cascade theo module cha ở server
+
+Mục thứ 3 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng).
+
+- **`MODULE_ACCESS_PARENTS` (lib/recordViewScope.js, dùng bởi `hasModuleAccessServer()`) trước đây CHỈ
+  khai 5 module con của "hr"** (hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle) — một comment
+  cạnh đó khẳng định "car/meeting/vpp/budget/orgChart đã có quyền chi tiết riêng chặn đúng ở server,
+  không đi qua `hasModuleAccessServer()`" — ĐÚNG lúc viết, nhưng SAI từ lâu: nhiều đợt vá sau đó (mục 1-2
+  đợt này, và các đợt trước) đã wire cả car/meeting/vpp/license/uniform/budget/orgChart qua ĐÚNG
+  `hasModuleAccessServer(user, '<module con>')`, chỉ riêng việc cascade THEO MODULE CHA (hanhchinh/
+  office/hr, xem `BUSINESS_MODULES` ở public/js/core.js) thì CHƯA ai thêm vào map này.
+  - Hậu quả: admin tắt `moduleAccess.hanhchinh` (tắt cả CỤM "Hành Chính" 1 lần qua checkbox "Mục 0")
+    nhưng KHÔNG tắt riêng từng car/meeting/vpp/license/uniform thì server vẫn cho qua — trong khi client
+    `hasModuleAccess()` (core.js, đi theo chuỗi `parent`) đã khoá đúng cả 5, gây lệch hành vi: UI ẩn hết
+    nhưng API vẫn đọc/thao tác được. Tương tự cho `office` → budget/payment, `hr` → orgChart.
+  - Thêm 3 cặp cha/con vào `MODULE_ACCESS_PARENTS`: `hanhchinh` → car/meeting/vpp/license/uniform,
+    `office` → budget/payment, `hr` → orgChart. (`payment` chưa có bất kỳ `hasModuleAccessServer()` nào
+    gọi tới — xem mục TB riêng #126 "paymentRequests gác sai key 'office' thay vì 'payment'" — entry
+    `payment: 'office'` thêm sẵn cho đủ, chưa đổi hành vi gì vì chưa ai consult key đó.)
+  - Xoá comment lỗi thời, viết lại giải thích đúng hiện trạng + lý do thêm 3 cặp cha/con.
+  - Xuất thêm `MODULE_ACCESS_PARENTS` ra `module.exports` (trước đây chỉ dùng nội bộ trong cùng file)
+    để test có thể kiểm thẳng cấu trúc map.
+
+**Test:** `tests/test-khoi0-parent-cascade-gate.js` (mới, 11 scenario — Phần A mount `routes/data.js`
+thật, seed 1 bản ghi mỗi collection (carRegs/meetings/vppRegistrations/licenses/uniformPeriods/
+budgetEntries) theo đúng phòng ban RIÊNG của từng user test (tránh nhiễu do nhánh "cùng phòng ban tự
+động xem"), kiểm `GET /api/data` + `GET /api/data/lazy/uniform`; Phần B mount `routes/orgChart.js` thật,
+kiểm `GET /api/org-chart/versions`). Xác nhận FAIL trên code CŨ (`git stash -- lib/recordViewScope.js`,
+5/11 scenario FAIL đúng cấu trúc map + 4 cascade "LỖI ĐÃ VÁ" — car/budget/uniform/orgChart đều lọt qua
+khi chỉ tắt module CHA), PASS trên code đã vá (11/11). Regression:
+`test-hr-selfservice-module-access-gate.js` (8/8, xác nhận cascade `hr`→5 module con HR cũ không bị ảnh
+hưởng), `test-khoi0-orgchart-gate.js` (6/6), `test-khoi0-license-uniform-gate.js` (9/9),
+`test-khoi0-carregs-vppregistrations-gate.js` (7/7), `test-khoi0-meeting-periodicreport-gate.js` (7/7),
+`test-khoi0-meetingminutes-gate.js` (10/10), `test-khoi0-payment-office-gate.js` (6/6),
+`test-module-access-gate.js` (4/4), `test-module-access-gate-create.js` (3/3), `test-meeting-car.js`
+(104/104), `test-extra-approval-groups.js` (26/26), `test-vpp-registrations-scope.js` (7/7) — toàn bộ
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.80 (2026-11): [Cao] Re-audit lần 5 — mục 2: meetingMinutes hoàn toàn chưa có Khối 0
 
