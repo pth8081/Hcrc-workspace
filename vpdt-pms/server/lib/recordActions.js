@@ -6581,6 +6581,16 @@ function canManageHrFeedback(user) {
 // báo cho nhân viên biết câu hỏi của họ đã có trả lời.
 function respondToHrFeedback(user, item, payload) {
   if (!canManageHrFeedback(user)) throw new HttpError(403, 'Bạn không có quyền phản hồi ý kiến ở đây');
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Trung bình — "respondToHrFeedback thiếu chặn tự trả lời"): nhanSuManage
+  // là quyền PHẲNG DUY NHẤT của module (vừa là quyền VÀO module, vừa là quyền TRẢ LỜI mọi câu hỏi — xem
+  // canManageHrFeedback() ở trên), nên 1 tài khoản có nhanSuManage hoàn toàn có thể TỰ GỬI câu hỏi (ai
+  // cũng gửi được, "MỞ CHO TOÀN BỘ NHÂN VIÊN") rồi TỰ TRẢ LỜI/đóng câu hỏi của chính mình bằng chính tài
+  // khoản đó — vi phạm chính sách "chặn tự duyệt/tự xử lý TẤT CẢ module" (quyết định 11/2026, đã áp dụng
+  // đồng loạt cho các hàm assertNotSelfDecidingXxx() khác trong file này). Không có ngoại lệ admin, đúng
+  // khuôn assertNotSelfDecidingItTicketEscalation() ở trên.
+  if (item.creator === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự trả lời câu hỏi do chính mình gửi');
+  }
   if (item.status === 'ANSWERED') throw new HttpError(409, 'Câu hỏi này đã được phản hồi');
   // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): thêm withdrawHrFeedback() (WITHDRAWN, xem dưới) mà
   // guard cũ chỉ chặn đúng ANSWERED — Nhân Sự vẫn trả lời được 1 câu hỏi người gửi ĐÃ TỰ RÚT LẠI, tạo

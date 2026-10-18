@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**27.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.18 (2026-11): [TB] Re-audit lần 6 — mục 10/21: respondToHrFeedback thiếu chặn tự trả lời
+
+Mục thứ mười (10/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `nhanSuManage` là quyền PHẲNG DUY NHẤT của module "HCRC Đồng Hành" (Phản Hồi Ý Kiến) —
+vừa là quyền VÀO module, vừa là quyền TRẢ LỜI mọi câu hỏi (`canManageHrFeedback()`). Trong khi đó, module
+này MỞ CHO TOÀN BỘ NHÂN VIÊN gửi câu hỏi, không loại trừ ai. Vì vậy 1 tài khoản có `nhanSuManage` hoàn
+toàn có thể TỰ GỬI 1 câu hỏi rồi TỰ TRẢ LỜI/đóng chính câu hỏi đó bằng cùng tài khoản — vi phạm chính sách
+"chặn tự duyệt/tự xử lý TẤT CẢ module" đã áp dụng đồng loạt cho các hàm `assertNotSelfDecidingXxx()` khác
+trong `lib/recordActions.js` (quyết định 11/2026, không có ngoại lệ admin).
+
+**Vá:** thêm chặn `if (item.creator === user.username) throw new HttpError(403, ...)` ngay đầu
+`respondToHrFeedback()` (`lib/recordActions.js`), trước cả 2 guard trạng thái ANSWERED/WITHDRAWN đã có —
+mirror đúng khuôn `assertNotSelfDecidingItTicketEscalation()`.
+
+**Test:** mở rộng `tests/test-hrfeedback-withdraw.js` (unit test thuần, gọi thẳng hàm) — thêm 2 scenario:
+(1) Nhân Sự tự gửi câu hỏi rồi tự trả lời bằng cùng tài khoản -> 403; (2) đối chứng — Nhân Sự trả lời câu
+hỏi do người khác gửi vẫn thành công như trước. Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordActions.js`, đúng 1/9 scenario FAIL — "Missing expected exception", đúng khai thác đã nêu),
+PASS trên code đã vá (9/9). Regression: `tests/test-hr-feedback.js` (12/12),
+`tests/test-audit-round4-internal-data-gate.js` (16/16), `tests/test-audit-hethong-round2-server.js`
+(18/18), `tests/test-trash-sensitive-collections.js` (32/32) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.17 (2026-11): [TB] Re-audit lần 6 — mục 9/21: editCareerPath không kiểm careerPathConfirmations
 
