@@ -2801,6 +2801,20 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (re-audit lần 4, mức Trung Bình): trước đây collection này KHÔNG có getLockKey nên đi
+    // qua createForCollection() thường (không khoá) — 2 request tạo template MỚI gần như đồng thời,
+    // CÙNG templateCode (VD double-click, hoặc 2 admin cùng soạn 1 mã trước khi kịp thấy mã kia vừa
+    // dùng) đều đọc "chưa có mã này" trước khi cái nào kịp ghi (check dupe ở extraValidate dưới đây),
+    // cả 2 đều qua được rồi cùng tạo — vi phạm bất biến "1 templateCode chỉ 1 mẫu đang tồn tại" mà check
+    // dupe đó định bảo vệ. Khoá theo đúng templateCode (cùng khuôn operationOrders.getLockKey ở trên) —
+    // tính từ payload RAW (chưa qua extraValidate chuẩn hoá), templateCode rỗng/thiếu (sẽ bị extraValidate
+    // từ chối 400 ngay sau) thì không có gì cần chống trùng, dùng khoá riêng biệt mỗi lần gọi.
+    getLockKey: (payload) => {
+      const templateCode = String(payload?.templateCode || '').trim();
+      return templateCode
+        ? `checklist_template_code:${templateCode}`
+        : `checklist_template_code:none:${Date.now()}:${Math.random()}`;
+    },
     extraValidate: (payload, collection, user) => {
       if (!canManageChecklistTemplates(user)) {
         throw new CreateError(403, 'Bạn không có quyền tạo Checklist Đánh Giá Siêu Thị');
@@ -2956,6 +2970,21 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (re-audit lần 4, mức Trung Bình): trước đây collection này KHÔNG có getLockKey nên đi
+    // qua createForCollection() thường (không khoá) — 2 request tạo kế hoạch MỚI gần như đồng thời,
+    // CÙNG Tháng+Chương Trình+Đơn Vị (đúng khoá dupKey mà extraValidate dưới đây dùng để chặn 409) đều
+    // đọc "chưa có dòng nào trùng" trước khi cái nào kịp ghi, cả 2 đều qua được rồi cùng tạo — vi phạm
+    // đúng bất biến "chặn HẲN trùng" mà check 409 đó định bảo vệ (khác đường Excel vốn chỉ CẢNH BÁO, có
+    // thể cố ý giữ trùng). Dùng LẠI nguyên hàm trainingPlanDedupKey() đã có (không viết lại công thức) —
+    // cùng khuôn operationOrders.getLockKey ở trên: không có dupKey (courseId thiếu, sẽ bị extraValidate
+    // từ chối 400 nếu field này bắt buộc, hoặc hợp lệ bỏ qua dedup nếu không) thì dùng khoá riêng biệt
+    // mỗi lần gọi, không tranh chấp với ai.
+    getLockKey: (payload) => {
+      const dupKey = trainingPlanDedupKey(payload);
+      return dupKey
+        ? `training_plan_dedup:${dupKey}`
+        : `training_plan_dedup:none:${Date.now()}:${Math.random()}`;
+    },
     extraValidate: (payload, collection, user, appData) => {
       if (!user.perms?.admin && !user.perms?.trainingManage) {
         throw new CreateError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
