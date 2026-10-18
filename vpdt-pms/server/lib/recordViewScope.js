@@ -1722,10 +1722,27 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này
 // TRƯỚC ĐÂY không mirror đúng quy tắc đó (chỉ so sánh đúng moduleKey được truyền vào), nên tắt riêng
 // module cha "hr" sẽ không chặn được các route tự phục vụ của 5 module con này ở server dù client đã ẩn
-// tab đúng. Chỉ cần khai các module con hiện đang được enforce ở server tại đây — không cần liệt kê đủ
-// mọi cặp cha/con của BUSINESS_MODULES vì các module con còn lại (car/meeting/vpp/budget/orgChart) đã
-// có quyền chi tiết riêng chặn đúng ở server rồi, không đi qua hasModuleAccessServer().
-const MODULE_ACCESS_PARENTS = { hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr', hrContract: 'hr', hrLifecycle: 'hr' };
+// tab đúng.
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): comment CŨ ngay trên (nay đã xoá) từng nói "car/meeting/vpp/
+// budget/orgChart đã có quyền chi tiết riêng chặn đúng ở server, không đi qua hasModuleAccessServer()"
+// — ĐÚNG lúc viết (hàm hasModuleAccessServer() chưa tồn tại ở car/meeting/vpp...), nhưng SAI từ lâu:
+// nhiều đợt vá sau đó đã wire cả car/meeting/vpp/license/uniform/budget/payment/orgChart qua ĐÚNG
+// hasModuleAccessServer(user, '<module con>') (router.use('/carRegs'|'/meetings'|'/vppRegistrations'|
+// '/vppPeriods'|'/licenses'|'/uniformPeriods'|...'), ở routes/records.js, GET /api/data qua
+// MODULE_ACCESS_GATED_COLLECTIONS) — chỉ riêng việc cascade THEO CHA (hanhchinh/office/hr) thì CHƯA ai
+// thêm vào map này. Admin tắt moduleAccess.hanhchinh (tắt cả cụm Hành Chính 1 lần, xem checkbox cấp
+// "Mục 0") nhưng KHÔNG tắt riêng từng car/meeting/vpp/license/uniform thì server vẫn cho qua — trong
+// khi client hasModuleAccess() đã khoá đúng cả 5 (đi theo chuỗi `parent`), gây lệch hành vi UI ẩn
+// nhưng API vẫn thao tác được. Mirror ĐÚNG 3 cặp cha/con client đang có cho các module con đã
+// enforce ở server: hanhchinh -> car/meeting/vpp/license/uniform, office -> budget/payment,
+// hr -> orgChart. Không cần liệt kê đủ mọi cặp cha/con của BUSINESS_MODULES — chỉ các module con
+// hiện đang được enforce qua hasModuleAccessServer() ở server mới cần có mặt tại đây.
+const MODULE_ACCESS_PARENTS = {
+  hrProfile: 'hr', hrAttendance: 'hr', hrPayroll: 'hr', hrContract: 'hr', hrLifecycle: 'hr',
+  car: 'hanhchinh', meeting: 'hanhchinh', vpp: 'hanhchinh', license: 'hanhchinh', uniform: 'hanhchinh',
+  budget: 'office', payment: 'office',
+  orgChart: 'hr'
+};
 function hasModuleAccessServer(user, moduleKey) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -1846,6 +1863,6 @@ module.exports = {
   filterRebateCalculationsForReportView,
   sanitizeInternalPostCommentsForUser,
   canDownloadRecordFile,
-  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
+  hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, MODULE_ACCESS_PARENTS, canAccessHrFeedbackModuleServer,
   canAccessItPriceApprovalModuleServer
 };
