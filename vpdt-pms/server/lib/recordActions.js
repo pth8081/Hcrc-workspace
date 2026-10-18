@@ -8311,7 +8311,10 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
   if (newPlate && newPlate !== item.assignedPlate) {
     const conflict = findCarPlateConflict(existingCarRegs, item.id, newPlate, item.startTime, item.endTime);
     if (conflict) {
-      throw new HttpError(409, `Biển số "${newPlate}" đã được gán cho phiếu "${conflict.code}" trùng khung giờ này`);
+      // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Lỗi 409 trùng biển số/tài xế lộ mã phiếu xe phòng ban
+      // khác") — xem chú thích đầy đủ tại findCarPlateConflict() ở lib/workflowEngine.js (cùng lỗi,
+      // cùng lý do, mirror findMeetingConflict() đã vá ở lib/createValidation.js).
+      throw new HttpError(409, `Biển số "${newPlate}" đã được gán cho 1 chuyến khác trùng khung giờ này`);
     }
   }
   const assignedVehicleType = String(payload?.assignedVehicleType || '').trim();
@@ -8325,7 +8328,8 @@ function reassignCarDispatch(user, item, payload, existingCarRegs, users, carVeh
     if (!driverUser) throw new HttpError(400, 'Không tìm thấy tài khoản lái xe này (hoặc đã bị khoá)');
     const driverConflict = findCarDriverConflict(existingCarRegs, item.id, driverUser.username, item.startTime, item.endTime);
     if (driverConflict) {
-      throw new HttpError(409, `Tài xế "${driverUser.name}" đã được phân công cho phiếu "${driverConflict.code}" trùng khung giờ này`);
+      // LỖI ĐÃ VÁ (re-audit lần 5, mức TB) — cùng lý do bỏ conflict.code ở findCarPlateConflict() ngay trên.
+      throw new HttpError(409, `Tài xế "${driverUser.name}" đã được phân công cho 1 chuyến khác trùng khung giờ này`);
     }
     item.assignedDriverUsername = driverUser.username;
     item.assignedDriver = driverUser.name;

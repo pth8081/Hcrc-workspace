@@ -1208,7 +1208,15 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
     if (moduleKey === 'carRegs' && newPlate && newPlate !== item.assignedPlate) {
       const conflict = findCarPlateConflict(existingCollection, item.id, newPlate, item.startTime, item.endTime);
       if (conflict) {
-        throw new WorkflowError(409, `Biển số "${newPlate}" đã được gán cho phiếu "${conflict.code}" trùng khung giờ này`);
+        // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Lỗi 409 trùng biển số/tài xế lộ mã phiếu xe phòng ban
+        // khác"): KHÔNG nêu conflict.code trong thông báo — cùng lớp lỗi/cùng khuôn findMeetingConflict()
+        // đã vá ở lib/createValidation.js (re-audit lần 4). Người đang duyệt/phân công phiếu NÀY có thể
+        // hoàn toàn không có quyền xem phiếu đăng ký xe phòng ban KHÁC (canViewCarReg() ở
+        // lib/recordViewScope.js gác riêng theo phòng ban/người tạo), nhưng check trùng biển số này đọc
+        // TOÀN BỘ existingCollection không lọc quyền (đúng — phải biết mọi phiếu đang dùng biển số đó để
+        // chặn trùng thật). Nêu mã phiếu cụ thể sẽ lộ sự tồn tại + mã hồ sơ của 1 phiếu xe phòng ban
+        // khác cho người không có quyền xem nó.
+        throw new WorkflowError(409, `Biển số "${newPlate}" đã được gán cho 1 chuyến khác trùng khung giờ này`);
       }
     }
     // Lái xe PHẢI là 1 tài khoản hệ thống có thật (không cho gõ tên tự do nữa) — để đúng tài khoản đó
@@ -1222,7 +1230,8 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       if (driverUser.username !== item.assignedDriverUsername) {
         const driverConflict = findCarDriverConflict(existingCollection, item.id, driverUser.username, item.startTime, item.endTime);
         if (driverConflict) {
-          throw new WorkflowError(409, `Tài xế "${driverUser.name}" đã được phân công cho phiếu "${driverConflict.code}" trùng khung giờ này`);
+          // LỖI ĐÃ VÁ (re-audit lần 5, mức TB) — cùng lý do bỏ conflict.code ở findCarPlateConflict() ngay trên.
+          throw new WorkflowError(409, `Tài xế "${driverUser.name}" đã được phân công cho 1 chuyến khác trùng khung giờ này`);
         }
       }
       item.assignedDriverUsername = driverUser.username;

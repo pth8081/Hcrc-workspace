@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**26.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.98 (2026-11): [TB] Re-audit lần 5 — mục 11: Lỗi 409 trùng biển số/tài xế lộ mã phiếu xe phòng ban khác
+
+Mục thứ 11 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — cùng lớp lỗi/cùng khuôn với
+`findMeetingConflict()` đã vá ở re-audit lần 4 (`lib/createValidation.js`, task #109), nhưng lần này ở
+`findCarPlateConflict()`/`findCarDriverConflict()` (`lib/workflowEngine.js`, module Đăng Ký Xe):
+
+- `findCarPlateConflict()`/`findCarDriverConflict()` đọc TOÀN BỘ `existingCarRegs` không lọc quyền
+  (đúng — phải biết mọi phiếu đang dùng biển số/tài xế đó mới chặn trùng thật), nhưng câu thông báo
+  409 ở CẢ 4 điểm gọi (nhánh DUYỆT ở `applyWorkflowAction()`/`lib/workflowEngine.js`, VÀ nhánh
+  "Phân Công Lại" `reassignCarDispatch()`/`lib/recordActions.js`, mỗi hàm 2 điểm cho biển số + tài xế)
+  đều nêu THẲNG `conflict.code`/`driverConflict.code` (mã phiếu xe đang trùng). Người đang duyệt/phân
+  công phiếu NÀY có thể hoàn toàn không có quyền xem phiếu đăng ký xe phòng ban KHÁC
+  (`canViewCarReg()`, `lib/recordViewScope.js`), nên thông báo lỗi lộ sự tồn tại + mã hồ sơ của 1
+  phiếu xe mình không có quyền xem.
+- Vá: bỏ `conflict.code`/`driverConflict.code` khỏi cả 4 câu thông báo, đổi thành "đã được gán cho 1
+  chuyến khác trùng khung giờ này"/"đã được phân công cho 1 chuyến khác trùng khung giờ này" — vẫn báo
+  đúng 409 + lý do (trùng khung giờ), chỉ không còn lộ mã hồ sơ cụ thể.
+
+**Test:** mở rộng `tests/test-carreg-reassign-inprogress.js` (dedicated test THUẦN cho
+`reassignCarDispatch()`) — thêm 2 scenario mới: đổi biển số/đổi tài xế trùng 1 phiếu xe phòng ban khác,
+xác nhận lỗi 409 trả về KHÔNG chứa mã phiếu đó. Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordActions.js lib/workflowEngine.js`, đúng 2/6 scenario FAIL, message leak đúng mã phiếu
+XE-002/XE-003), PASS trên code đã vá (6/6). Regression: `test-audit-round5-meeting-car.js` (17/17),
+`test-meeting-car.js` (104/104), `test-car-busy-slots-route.js` (5/5), `test-audit-round2-cluster4.js`
+(28/28) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.97 (2026-11): [TB] Re-audit lần 5 — mục 10: vppExcludedJobTitles/deptGroups thiếu validate -> crash giữa lượt rename
 
