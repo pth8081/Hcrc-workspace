@@ -478,6 +478,30 @@ function diffNganhHangCatalogRenames(oldList, newList) {
     .map(n => ({ oldValue: oldById.get(n.id).code, newValue: n.code }));
 }
 
+// submissionTypes ("Loại Tờ Trình", CORE_FIELD_MANIFEST.SUBMISSION subType, optionsKey:'submissionTypes',
+// optionsIsKeyLabel:true — xem saveCoreFieldOptionsList() ở core.js) — mảng {key, label}[], `key` ỔN
+// ĐỊNH (dùng để tra submissionTypeDeptWorkflows[key], không cascade khi đổi label — mirror hẳn
+// contractTypes/carTypes). PHÁT HIỆN mức Cao (đợt rà soát chuyên sâu lần 2 trước go-live, Agent "bảng
+// liên kết"): KHÁC contractTypes/carTypes, các bản ghi `submissions` LỊCH SỬ lưu field `type` = NGUYÊN
+// CHUỖI LABEL (không phải key, xem lib/createValidation.js dòng ~262 `submissionTypes.find(t => t.label
+// === type)` + core.js dòng ~11743) — đổi label 1 loại tờ trình (admin gõ lại chuỗi trong ô "Tuỳ chọn"
+// màn Biểu Mẫu) để lại MỌI văn bản trình đã tạo trước đó với field `type` mang tên CŨ, không còn khớp
+// bất kỳ entry nào trong danh mục hiện tại — vỡ cả hiển thị (hiện "Loại: <trống>"/không nhận ra) lẫn tra
+// cứu cấu hình quy trình theo loại (getSubmissionDeptWorkflowConfig() rơi về fallback mặc định, bỏ qua
+// cấu hình riêng đã đặt cho loại đó dù key workflow vẫn còn nguyên nhờ saveCoreFieldOptionsList() đã sửa
+// giữ đúng key cũ khi phát hiện đổi label cùng vị trí). Cùng khuôn diffNganhHangCatalogRenames() ở trên,
+// chỉ khác so theo `key` (ổn định) + field cần so là `label` (không phải `code`).
+function diffSubmissionTypeCatalogRenames(oldList, newList) {
+  const oldByKey = new Map((Array.isArray(oldList) ? oldList : []).filter(t => t && t.key != null).map(t => [t.key, t]));
+  return (Array.isArray(newList) ? newList : [])
+    .filter(t => t && oldByKey.has(t.key) && oldByKey.get(t.key).label !== t.label)
+    .map(t => ({ oldValue: oldByKey.get(t.key).label, newValue: t.label }));
+}
+async function cascadeSubmissionTypeRename(oldLabel, newLabel) {
+  await renameFieldValueInCollection('submissions', (item) =>
+    (item.type === oldLabel ? { ...item, type: newLabel } : item));
+}
+
 async function cascadeStoreRename(oldValue, newValue) {
   // user.dept dùng CHUNG 1 field cho cả tên phòng ban (HO) lẫn tên siêu thị (phân biệt bằng posType) —
   // so trực tiếp giá trị, không cần lọc posType (1 dept/store name không thể vừa là tên phòng ban vừa
@@ -751,5 +775,6 @@ async function renameCatalogEntry(catalogKey, oldValue, newValue) {
 // trong positionTypes[].locations/jobTitles, chỉ cần chạy PHẦN CASCADE ở đây).
 module.exports = {
   renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename,
-  cascadeNganhHangCodeRename, diffNganhHangCatalogRenames
+  cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
+  cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames
 };

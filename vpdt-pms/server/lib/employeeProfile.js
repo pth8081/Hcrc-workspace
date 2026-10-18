@@ -327,6 +327,53 @@ function autoLinkUnlinkedProfiles(profiles, users, actorUsername) {
   return linkedCount;
 }
 
+// diffUserRenamesAndDeletions() (dot ra soat chuyen sau lan 2 truoc go-live, muc Cao - Agent "bang lien
+// ket"): PHAT HIEN - employeeProfile.username lien ket TRUC TIEP tung username ADMIN, hoan toan KHONG
+// co cascade nao khi tai khoan lien ket bi DOI TEN (sua truong #uUsername o form Sua Nguoi Dung,
+// module-admin-userstaging.js - KHONG bi khoa readonly) hoac bi XOA VINH VIEN (deleteUser()). Ho so
+// nhan su do "treo" lien ket toi 1 username khong con ton tai/da doi ten - vo hieu moi tinh nang tra
+// theo username (luong/cham cong/nghi phep/resolveEmployeeUsername() o lib/recordViewScope.js...) cho
+// DEN KHI HR tu phat hien + mo lai ho so lien ket tay lai. Mirror dung khuon diffNganhHangCatalogRenames()/
+// diffSubmissionTypeCatalogRenames() (lib/catalogRename.js) - so sanh theo `id` on dinh de tim cap
+// (username cu -> username moi), tach rieng danh sach username bi XOA HAN (id khong con trong newUsers).
+function diffUserRenamesAndDeletions(oldUsers, newUsers) {
+  const oldById = new Map((Array.isArray(oldUsers) ? oldUsers : []).filter(u => u && u.id != null).map(u => [u.id, u]));
+  const newIds = new Set((Array.isArray(newUsers) ? newUsers : []).filter(u => u && u.id != null).map(u => u.id));
+  const renamed = (Array.isArray(newUsers) ? newUsers : [])
+    .filter(u => u && oldById.has(u.id) && oldById.get(u.id).username !== u.username)
+    .map(u => ({ oldValue: oldById.get(u.id).username, newValue: u.username }));
+  const deletedUsernames = [...oldById.values()].filter(u => !newIds.has(u.id)).map(u => u.username);
+  return { renamed, deletedUsernames };
+}
+
+// cascadeUsernameChangesToProfiles(): sua TRUC TIEP tung profile trong mang truyen vao (goi trong
+// withLockedAppDataValue('employeeProfiles', ...) o noi goi, cung khuon autoLinkUnlinkedProfiles() o
+// tren) - doi username theo dung cap (cu -> moi) phat hien duoc, va GO LIEN KET (username = null, KHONG
+// xoa ho so) cho ho so dang tro toi 1 username DA BI XOA HAN - ho so nhan su khong bao gio bi mat du tai
+// khoan lien ket co bien dong gi, chi can HR lien ket lai (hoac autoLinkUnlinkedProfiles() tu lien ket
+// lai neu sau do co tai khoan moi trung Ma NV). Tra ve so ho so vua duoc dong bo.
+function cascadeUsernameChangesToProfiles(profiles, renamed, deletedUsernames, actorUsername) {
+  const arr = profiles || [];
+  let changedCount = 0;
+  const renameMap = new Map(renamed.map(r => [r.oldValue, r.newValue]));
+  const deletedSet = new Set(deletedUsernames || []);
+  for (const profile of arr) {
+    if (!profile.username) continue;
+    if (renameMap.has(profile.username)) {
+      profile.username = renameMap.get(profile.username);
+      profile.updatedAt = nowVN();
+      profile.updatedBy = actorUsername || 'system';
+      changedCount++;
+    } else if (deletedSet.has(profile.username)) {
+      profile.username = null;
+      profile.updatedAt = nowVN();
+      profile.updatedBy = actorUsername || 'system';
+      changedCount++;
+    }
+  }
+  return changedCount;
+}
+
 function defaultProfile(employeeCode) {
   return {
     employeeCode,
@@ -1723,6 +1770,7 @@ module.exports = {
   sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, stripSelfHiddenFields,
   generateEmployeeCode, generateDeptCode, searchInactiveProfilesForRehire, reactivateForRehire,
   findProfile, findProfileByUsername, findAutoLinkableAccount, autoLinkUnlinkedProfiles, defaultProfile, createDraftProfileForOnboarding, ensureDraftProfile, linkAccount, relinkAccount, createManualProfile, updateProfileFromImport, applyProcessCompletion,
+  diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles,
   cancelOnboardingQueueProfile,
   assertNationalIdNotDuplicated,
   canViewFullProfile, hasAdminProfileAccess, canViewLimitedProfile, canManageProfiles, getProfileForViewer, resolveWiredReadOnlyFields, filterWiredFieldsForViewer,

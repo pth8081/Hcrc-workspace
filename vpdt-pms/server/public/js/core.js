@@ -1623,9 +1623,37 @@ async function saveCoreFieldOptionsList(fieldDef, newLabels) {
   if (fieldDef.optionsIsKeyLabel) {
     const existing = DB[fieldDef.optionsKey] || [];
     const usedKeys = new Set();
-    DB[fieldDef.optionsKey] = newLabels.map(label => {
+    // Buoc 1: match CHINH XAC theo label (nhan khong doi/chi doi thu tu/bi xoa - hanh vi goc).
+    const slots = newLabels.map(label => {
       const match = existing.find(e => e.label === label && !usedKeys.has(e.key));
-      if (match) { usedKeys.add(match.key); return match; }
+      if (match) { usedKeys.add(match.key); return { key: match.key, label }; }
+      return null; // chua khop - co the la nhan MOI, hoac 1 nhan DA DOI TEN (xem Buoc 2)
+    });
+    // Buoc 2 (LOI DA VA, dot ra soat chuyen sau lan 2 truoc go-live, muc Cao - Agent "bang lien ket"):
+    // truoc day 1 nhan DOI TEN (khong chi them/xoa) luon roi thang sang nhanh "sinh key moi" o Buoc 3 -
+    // key CU (van duoc submissionTypeDeptWorkflows tra toi) mo coi vinh vien, mat cau hinh quy trinh
+    // rieng cua loai do; cac `submissions` DA TAO (luu nguyen chuoi label CU, khong phai key - xem
+    // lib/catalogRename.js cascadeSubmissionTypeRename()) cung khong con khop bat ky entry nao. Uu tien
+    // coi 1 vi tri CHUA khop o Buoc 1 la DOI TEN (giu nguyen key) neu DUNG vi tri do (cung index) o danh
+    // sach CU cung la 1 entry CHUA bi tieu thu - khop dung cach admin thao tac that (editor la 1 o nhap
+    // text DUY NHAT, phan tach bang dau phay, xem #fldOptions o module-formbuilder-nav.js - sua 1 doan
+    // giua chuoi giu nguyen vi tri cac doan con lai). Khong doan xa hon 1 vi tri (VD admin vua doi ten
+    // VUA chen/xoa dong khac cung luc) - roi ve sinh key moi nhu cu, khong sai du lieu, chi mat co hoi
+    // giu cascade o dung truong hop hiem/phuc tap hon nay. routes/data.js (diffSubmissionTypeCatalogRenames())
+    // tu so sanh lai theo key TRUOC/SAU de cascade submissions.type - PHAI giu dung key cu o day thi
+    // cascade do moi phat hien duoc cap (label cu -> label moi) can doi.
+    slots.forEach((slot, i) => {
+      if (slot) return;
+      const oldAtSamePos = existing[i];
+      if (oldAtSamePos && !usedKeys.has(oldAtSamePos.key)) {
+        usedKeys.add(oldAtSamePos.key);
+        slots[i] = { key: oldAtSamePos.key, label: newLabels[i] };
+      }
+    });
+    // Buoc 3: con lai that su la nhan MOI - sinh key moi (hanh vi goc).
+    DB[fieldDef.optionsKey] = slots.map((slot, i) => {
+      if (slot) return slot;
+      const label = newLabels[i];
       let base = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .replace(/đ/g, 'd').replace(/Đ/g, 'D')
         .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'LOAI';

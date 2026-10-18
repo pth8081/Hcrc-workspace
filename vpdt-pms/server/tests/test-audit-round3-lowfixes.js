@@ -267,6 +267,17 @@ run('Collection không có khái niệm "họ" (vd carRegs) -> null, không nhó
   assert.strictEqual(familyRootId('carRegs', { id: 30 }), null);
 });
 
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent "bảng liên kết"): licenses có
+// versioning CÙNG cơ chế docs (rootLicenseId) nhưng trước đây bị bỏ sót khỏi familyRootId() — khôi phục
+// 1 phiên bản/giấy phép gốc từ Thùng Rác chỉ khôi phục ĐÚNG 1 bản ghi, bỏ sót các bản ghi khác cùng "họ".
+run('licenses: bản GỐC (rootLicenseId null) -> id gốc là chính id của nó', () => {
+  assert.strictEqual(familyRootId('licenses', { id: 40, rootLicenseId: null }), 40);
+});
+
+run('licenses: 1 PHIÊN BẢN (rootLicenseId khác null) -> id gốc là rootLicenseId', () => {
+  assert.strictEqual(familyRootId('licenses', { id: 41, rootLicenseId: 40 }), 40);
+});
+
 // ============================================================================
 // 4) recordActions.js — mergeReportPeriodByTasks(): cảnh báo khoảng trống ranh giới kỳ
 // ============================================================================
