@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**27.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.33 (2026-11): [TB] Re-audit lần 7 — mục 4/9: contracts.extraValidate isSignedImport dùng payload.dept thô cho findMissingApproverStep
+
+Mục thứ tư (4/9) của đợt re-audit lần 7.
+
+**Nguyên nhân:** sót lại từ bản vá v27.29 (chỉ sửa 4 vị trí dept-spoofing khác trong cùng hàm). Nhánh
+`isSignedImport` của `contracts.extraValidate` (`lib/createValidation.js`, ~dòng 1131-1138) gọi
+`findMissingApproverStep('contractsSignedFile', payload, appData)` — truyền thẳng `payload` (còn
+`payload.dept` THÔ, chưa bị `forceOwnDept` ép) cho `resolveContractManageWorkflow()` (đọc `item.dept` để
+tra `contractManageDeptWorkflows`). 1 request tự gửi `payload.dept = "phòng có approver hợp lệ"` để vượt
+chốt chặn "chưa có người duyệt hợp lệ" — trong khi record THẬT sau khi lưu lại mang `dept = user.dept`
+(phòng KHÔNG có approver hợp lệ) — tạo ra đúng hồ sơ `signedFileStatus=PENDING` mồ côi mà chốt chặn này
+được thêm vào (11/2026) để ngăn.
+
+**Vá:** truyền `{ ...payload, dept: user.dept }` cho `findMissingApproverStep()` + dùng `user.dept`
+trong message lỗi, thay cho `payload.dept` thô.
+
+**Test:** mở rộng `tests/test-contract-signed-file-no-approver-block.js` (Phần B) — 2 scenario mới:
+`payload.dept` giả mạo sang phòng CÓ người duyệt (dept thật KHÔNG có) vẫn phải chặn 409 + message nêu
+đúng phòng thật; đối chứng cấu hình thêm approver cho đúng dept thật thì tạo thành công bình thường. Xác
+nhận FAIL trên code CŨ (`git stash -- lib/createValidation.js`, 2/11 scenario FAIL — khai thác thành
+công, tạo hồ sơ mồ côi), PASS trên code đã vá (11/11). Regression:
+`tests/test-locked-approval-layers.js` (23/23), `tests/test-contract-import-mode-ui-clarity.js` (6/6),
+`tests/test-contract-payment-type-change.js` (15/15), `tests/test-submissions-scope.js` (7/7),
+`tests/test-docs-scope.js` (9/9), `tests/test-generatecode-payload-dept-spoofing.js` (7/7) — toàn bộ
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.32 (2026-11): [Cao] Re-audit lần 7 — mục 3/9 (HẾT phần Cao): Đổi tên/xoá username không cascade sang approvers PEOPLE/PERSON mode
 
