@@ -3256,10 +3256,11 @@ function canApproveInternalPost(user) {
 }
 
 // LỖI ĐÃ VÁ (rà soát chuyên sâu mới, mức Trung bình — "tự duyệt bài đăng do chính mình tạo"): mirror
-// ĐÚNG tinh thần assertNotSelfDecidingLicense() ở trên — admin KHÔNG bị chặn, áp cho MỌI quyết định
-// (duyệt/từ chối/yêu cầu bổ sung).
+// ĐÚNG tinh thần assertNotSelfDecidingLicense() ở trên, áp cho MỌI quyết định (duyệt/từ chối/yêu cầu
+// bổ sung).
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
+// không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
 function assertNotSelfDecidingInternalPost(user, post) {
-  if (user?.perms?.admin) return;
   if (post && post.author === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối bài đăng do chính mình tạo');
   }
@@ -5910,10 +5911,10 @@ const RECRUITMENT_REFERRAL_STATUSES = new Set(['NEW', 'CONTACTED', 'HIRED', 'REJ
 // Chặn người TỰ giới thiệu ứng viên (referral.referrerUsername) rồi TỰ quyết định luôn trạng thái hồ sơ
 // đó (rà soát chuyên sâu 9/2026, phát hiện #3 — giới thiệu ứng viên mở cho mọi người, không cần quyền
 // riêng, nên 1 người có internalRecruitmentCreate hoàn toàn có thể tự giới thiệu rồi tự xử lý luôn ứng
-// viên của chính mình) — cùng khuôn assertNotSelfDecidingLicense()/assertNotSelfDecidingUniformPeriod(),
-// admin vẫn luôn vượt qua được.
+// viên của chính mình) — cùng khuôn assertNotSelfDecidingLicense()/assertNotSelfDecidingUniformPeriod().
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
+// không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
 function assertNotSelfDecidingRecruitmentReferral(user, referral) {
-  if (user?.perms?.admin) return;
   if (referral && referral.referrerUsername === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự cập nhật trạng thái ứng viên do chính mình giới thiệu');
   }
@@ -6002,10 +6003,11 @@ function hasPendingItPriceEmergencyReject(item) {
 // được người KHÁC duyệt độc lập, nhưng lượt "tự xác nhận đã áp giá đúng vào hệ thống ngoài app" thì
 // không có ai kiểm tra chéo nếu người tạo đề xuất (itPriceProposeCreateWholesale/Retail) cũng có quyền
 // itPriceSupport. Chặn
-// tường minh ở CẢ 3 hàm dưới đây (nhận xử lý/xác nhận áp giá/yêu cầu bổ sung), admin vẫn được bỏ qua
-// (nhất quán với mọi chỗ khác dùng assertNotSelfDecidingWorkflowItem()).
+// tường minh ở CẢ 3 hàm dưới đây (nhận xử lý/xác nhận áp giá/yêu cầu bổ sung). ĐỔI QUYẾT ĐỊNH (11/2026,
+// theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module", không có ngoại lệ): bỏ
+// hẳn nhánh admin-bypass đã có trước đây (trước đây nhất quán với assertNotSelfDecidingWorkflowItem() —
+// nay NGƯỢC LẠI, nhất quán với khuôn CHUẨN MỚI chặn CẢ admin).
 function assertNotSelfHandlingItPriceApply(user, item) {
-  if (user?.perms?.admin) return;
   if (item.creator && item.creator === user.username) {
     throw new HttpError(403, 'Bạn không thể tự xử lý bước áp giá cho đề xuất do chính mình tạo');
   }
@@ -6168,10 +6170,10 @@ function requestItPriceEmergencyReject(user, item, payload) {
 // canApproveItPriceEmergencyReject (itPriceEmergencyRejectApproveWholesale/Retail, HOẶC admin) — 1
 // người duyệt bước cuối ĐƯỢC GÁN THÊM quyền phê duyệt từ chối khẩn cấp (không loại trừ nhau) tự gửi rồi
 // tự phê duyệt/từ chối ngay yêu cầu của chính mình, không ai kiểm soát độc lập — cùng khuôn
-// assertNotSelfDecidingUniformPeriod()/assertNotSelfDecidingUniformTransfer(), admin vẫn luôn vượt qua
-// được (đặc quyền nhất quán toàn hệ thống).
+// assertNotSelfDecidingUniformPeriod()/assertNotSelfDecidingUniformTransfer().
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
+// không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
 function assertNotSelfDecidingItPriceEmergencyReject(user, item) {
-  if (user?.perms?.admin) return;
   if (item && item.emergencyRejectRequestedBy === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự phê duyệt/từ chối yêu cầu từ chối khẩn cấp do chính mình gửi');
   }
@@ -7029,10 +7031,10 @@ function canApproveUniform(user) {
 
 // Chặn tự duyệt/tự từ chối kỳ do CHÍNH MÌNH tạo (rà soát chuyên sâu 9/2026, phát hiện #1 — uniformManage
 // vừa tạo vừa duyệt được cùng 1 kỳ mà không ai kiểm soát độc lập) — cùng khuôn
-// assertNotSelfDecidingLicense()/assertNotSelfDecidingInternalPost() đã dùng cho các module tương tự,
-// admin vẫn luôn vượt qua được (đặc quyền nhất quán toàn hệ thống).
+// assertNotSelfDecidingLicense()/assertNotSelfDecidingInternalPost() đã dùng cho các module tương tự.
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
+// không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
 function assertNotSelfDecidingUniformPeriod(user, period) {
-  if (user?.perms?.admin) return;
   if (period && period.creator === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối kỳ cấp phát đồng phục do chính mình tạo');
   }
@@ -7326,10 +7328,10 @@ function canApproveUniformTransfer(user) {
 // (uniformStoreManage) còn approve/reject/cancel yêu cầu canApproveUniformTransfer (uniformApprove HOẶC
 // uniformManage) — 2 QUYỀN KHÁC NHAU nhưng không loại trừ nhau, 1 tài khoản được gán cả 2 (VD vừa quản
 // lý kho siêu thị vừa quản lý chung đồng phục) tự tạo rồi tự duyệt/từ chối/hủy ngay yêu cầu của chính
-// mình, không ai kiểm soát độc lập — cùng khuôn assertNotSelfDecidingUniformPeriod() ngay phía trên,
-// admin vẫn luôn vượt qua được (đặc quyền nhất quán toàn hệ thống).
+// mình, không ai kiểm soát độc lập — cùng khuôn assertNotSelfDecidingUniformPeriod() ngay phía trên.
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
+// không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
 function assertNotSelfDecidingUniformTransfer(user, transfer) {
-  if (user?.perms?.admin) return;
   if (transfer && transfer.requestedBy === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối/hủy yêu cầu điều chuyển kho do chính mình tạo');
   }
@@ -8377,12 +8379,11 @@ function canApproveLicense(user) {
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu cụm "…/Giấy Phép", mức Trung bình): module này KHÔNG đi qua
 // lib/workflowEngine.js nên cũng không có assertNotSelfDecidingWorkflowItem() — 1 người được cấp CẢ
 // licenseCreate lẫn licenseApprove (rất phổ biến: cùng 1 bộ phận Hành Chính tải lên + duyệt) tự duyệt
-// được chính giấy phép mình vừa tải lên, vô hiệu hoá hoàn toàn bước duyệt của module. Mirror ĐÚNG tinh
-// thần assertNotSelfDecidingWorkflowItem(): admin KHÔNG bị chặn (giữ nguyên đặc quyền vượt cấu hình,
-// nhất quán với toàn hệ thống), áp cho MỌI quyết định trên hồ sơ (duyệt/từ chối/gia hạn/thu hồi/khôi
-// phục), không chỉ APPROVE.
+// được chính giấy phép mình vừa tải lên, vô hiệu hoá hoàn toàn bước duyệt của module. Áp cho MỌI quyết
+// định trên hồ sơ (duyệt/từ chối/gia hạn/thu hồi/khôi phục), không chỉ APPROVE.
+// ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
+// không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
 function assertNotSelfDecidingLicense(user, item) {
-  if (user?.perms?.admin) return;
   if (item && item.creator === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự xử lý (duyệt/từ chối/gia hạn/thu hồi) giấy phép do chính mình tải lên');
   }
