@@ -5914,6 +5914,32 @@ router.post('/leaveBalances/:id/adjust', async (req, res) => {
 });
 router.post('/leaveBalances/:id/delete', (req, res) => deleteAdminOnly(req, res, 'leaveBalances'));
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 5, #141): xem chú thích đầy đủ tại
+// autoRejectShiftSwapsForRemovedRoster() (lib/attendance.js) — huỷ/xoá 1 dòng shiftRoster không hề dọn
+// các shiftSwapRequests PENDING tham chiếu đúng dòng đó, đơn kẹt vĩnh viễn trong hàng chờ duyệt dù duyệt
+// lên chắc chắn bị chặn. Dùng CHUNG cho cả route /cancel (dưới) lẫn /delete (thay deleteAdminOnly() cũ —
+// phải tách route riêng để có itemId SAU KHI xoá thành công, cùng khuôn hrProcesses/:id/delete).
+async function cleanupShiftSwapRequestsOnRosterRemoved(rosterId, actorUser, req, routeLabel) {
+  try {
+    const list = await getAllForCollection('shiftSwapRequests');
+    const pending = (list || []).filter(s => s.requesterRosterId === rosterId && s.status === 'PENDING');
+    for (const s of pending) {
+      await withLockedRecordForCollection('shiftSwapRequests', s.id, (item) =>
+        attendance.autoRejectShiftSwapsForRemovedRoster([item], rosterId, actorUser?.username)[0]);
+      insertSystemLog({
+        username: actorUser?.username || 'system', fullName: actorUser?.name || 'system', ipAddress: req?.ip || '',
+        module: 'HR', actionType: 'AUTO_REJECT_SHIFT_SWAP', targetObject: String(s.id),
+        description: `Tự từ chối yêu cầu đổi ca #${s.id} khi dòng phân ca #${rosterId} liên kết bị huỷ/xoá`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (tự từ chối đổi ca mồ côi):', e.message));
+    }
+    return pending.length > 0;
+  } catch (err) {
+    console.error(`${routeLabel}: lỗi dọn shiftSwapRequests khi huỷ/xoá dòng phân ca:`, err.message);
+    return false;
+  }
+}
+
 // shiftRoster: Quản Lý Siêu Thị/HR huỷ 1 dòng phân ca.
 router.post('/shiftRoster/:id/cancel', async (req, res) => {
   const itemId = Number(req.params.id);
@@ -5927,12 +5953,24 @@ router.post('/shiftRoster/:id/cancel', async (req, res) => {
       }
       return attendance.applyCancelRoster(item, freshUser.username);
     });
+    await cleanupShiftSwapRequestsOnRosterRemoved(itemId, freshUser, req, `shiftRoster/${itemId}/cancel`);
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `shiftRoster/${req.params.id}/cancel`, err);
   }
 });
-router.post('/shiftRoster/:id/delete', (req, res) => deleteAdminOnly(req, res, 'shiftRoster'));
+router.post('/shiftRoster/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    await deleteRecordForCollection('shiftRoster', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await cleanupShiftSwapRequestsOnRosterRemoved(itemId, freshUser, req, `shiftRoster/${itemId}/delete`);
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `shiftRoster/${req.params.id}/delete`, err);
+  }
+});
 
 // shiftSwapRequests: Quản Lý Siêu Thị (đúng siêu thị của ca liên quan) hoặc HR duyệt/từ chối đổi ca.
 // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): trước đây admin/hrAttendanceManage/hrShiftSwapApprove đều cho

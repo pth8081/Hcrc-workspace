@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.3 (2026-11): [TB] Re-audit lần 5 — mục 16: Huỷ/xoá shiftRoster không xử lý shiftSwapRequests PENDING
+
+Mục thứ 16 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — cùng HỌ LỖI "để lại bản ghi mồ côi
+khi huỷ/xoá bản ghi nguồn" với nhiều mục trước (ticket IT, hợp đồng lao động...), lần này ở module Công
+& Phép — Đổi Ca:
+
+- `POST /shiftRoster/:id/cancel` (Quản Lý Siêu Thị/HR huỷ 1 dòng phân ca) và `POST /shiftRoster/:id/
+  delete` (admin xoá hẳn) trước đây không hề xử lý các `shiftSwapRequests` CÒN `PENDING` đang tham chiếu
+  đúng dòng đó (`requesterRosterId === roster.id`). Đơn đổi ca vẫn hiển thị "chờ duyệt" vĩnh viễn trong
+  hàng chờ phê duyệt của Quản Lý Siêu Thị/HR (`computeMyPendingApprovalKeys()` — `lib/
+  approvalAggregator.js`, nhánh `admin`/`hrAttendanceManage` không lọc theo roster còn tồn tại hay
+  không) — dù bấm duyệt chắc chắn bị chặn ngay (`applyApproveShiftSwap()` đã kiểm `targetRoster` null/
+  `CANCELLED`), tạo ra 1 "ngõ cụt" vô nghĩa đọng lại trong hàng chờ.
+- Vá: thêm `autoRejectShiftSwapsForRemovedRoster()` (mới, `lib/attendance.js`) + `cleanupShiftSwapRequestsOnRosterRemoved()`
+  (mới, `routes/records.js`, dùng chung cho cả 2 route) — tự chuyển các `shiftSwapRequests` `PENDING`
+  tham chiếu đúng dòng roster vừa huỷ/xoá sang `REJECTED` (ghi `approverName: 'Hệ Thống (Tự Động)'`),
+  CHỈ đụng đúng đơn `PENDING` của đúng dòng đó — không đụng đơn của dòng roster khác, không ghi đè đơn đã
+  `APPROVED`/`REJECTED` từ trước (idempotent). Route `/delete` đổi từ `deleteAdminOnly()` chung sang route
+  riêng (cùng khuôn `hrProcesses/:id/delete`) để có `itemId` sau khi xoá thành công, dùng chạy cleanup.
+
+**Test:** file mới `tests/test-shiftroster-cancel-swap-cleanup.js` (5 scenario) — huỷ roster có đơn
+PENDING liên kết → đơn tự REJECTED; xoá hẳn (admin) cũng vậy; huỷ 1 roster KHÔNG đụng đơn PENDING của
+roster KHÁC; đơn đã APPROVED/REJECTED từ trước không bị ghi đè; huỷ roster không có đơn nào tham chiếu
+vẫn hoạt động bình thường. Xác nhận FAIL trên code CŨ (`git stash -- lib/attendance.js routes/
+records.js`, đúng 2/5 scenario FAIL — 2 scenario "LỖI ĐÃ VÁ"), PASS trên code đã vá (5/5). Regression:
+`test-attendance-leave.js` (72/72), `test-khoi0-checklist-contract-attendance-internalpost-gate.js`
+(24/24), `test-audit-nhansu-congphep-luong.js` (21/21), `test-selfapprove-leave-shiftswap-meeting.js`
+(12/12), `test-approvalneeded-email-uniform-leave-swap-training.js` (11/11), `test-approval-hub.js`
+(55/55), `test-reports.js` (24/24) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.2 (2026-11): [TB] Re-audit lần 5 — mục 15: skip/complete-task/auto-COMPLETED không dọn ticket IT con
 
