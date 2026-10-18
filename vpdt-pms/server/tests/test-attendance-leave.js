@@ -156,11 +156,23 @@ async function partA() {
     assert.strictEqual(v.daysCount, 2, 'Phải loại đúng Thứ 7 (07/03) + Chủ Nhật (08/03), chỉ còn 06/03 (T6) + 09/03 (T2)');
   });
 
-  await test('LỖI ĐÃ VÁ (#3): UNPAID cũng loại Thứ 7/CN giống ANNUAL; SICK/PERSONAL giữ nguyên đếm theo ngày lịch (ngoài phạm vi vá)', () => {
+  await test('LỖI ĐÃ VÁ (#3): UNPAID cũng loại Thứ 7/CN giống ANNUAL; SICK giữ nguyên đếm theo ngày lịch (ngoài phạm vi vá)', () => {
     const vUnpaid = attendance.assertValidLeaveRequest({ leaveType: 'UNPAID', fromDate: '2026-03-06', toDate: '2026-03-09' });
     assert.strictEqual(vUnpaid.daysCount, 2, 'UNPAID cùng công thức loại Thứ 7/CN như ANNUAL');
+    const vSick = attendance.assertValidLeaveRequest({ leaveType: 'SICK', fromDate: '2026-03-06', toDate: '2026-03-09' });
+    assert.strictEqual(vSick.daysCount, 4, 'SICK KHÔNG nằm trong phạm vi vá #3 — vẫn đếm theo ngày lịch như trước');
+  });
+
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức TB/Thấp — "PERSONAL leave daysCount sai lệch"): PERSONAL trước đây
+  // CHƯA nằm trong công thức loại Thứ 7/CN/lễ ở assertValidLeaveRequest() (lúc vá #3 ở trên, payroll.js
+  // CHƯA gộp LEAVE_PERSONAL cùng nhóm khấu trừ với LEAVE_UNPAID) — nhưng buildLeaveAttendanceRecords()
+  // ĐÃ được vá thêm PERSONAL vào danh sách loại cuối tuần/lễ ở 1 đợt audit sau đó (xem chú thích tại đó)
+  // để khớp đúng việc payroll.js nay đếm chung LEAVE_UNPAID+LEAVE_PERSONAL để trừ lương — khiến daysCount
+  // hiển thị trên đơn (vẫn đếm đủ ngày lịch) không khớp số ngày công thực sự bị trừ lương (qua attendance
+  // records, không qua field này — nên KHÔNG sai tiền lương, chỉ sai hiển thị/report).
+  await test('LỖI ĐÃ VÁ: PERSONAL nay CŨNG loại Thứ 7/CN giống ANNUAL/UNPAID (khớp đúng buildLeaveAttendanceRecords() đã vá từ trước)', () => {
     const vPersonal = attendance.assertValidLeaveRequest({ leaveType: 'PERSONAL', fromDate: '2026-03-06', toDate: '2026-03-09' });
-    assert.strictEqual(vPersonal.daysCount, 4, 'PERSONAL KHÔNG nằm trong phạm vi vá #3 — vẫn đếm theo ngày lịch như trước');
+    assert.strictEqual(vPersonal.daysCount, 2, 'Phải loại đúng Thứ 7 (07/03) + Chủ Nhật (08/03), chỉ còn 06/03 (T6) + 09/03 (T2) — khớp số ngày công thực bị trừ lương');
   });
 
   await test('LỖI ĐÃ VÁ (#3): ANNUAL/UNPAID loại thêm publicHolidays đã cấu hình, không chỉ Thứ 7/CN', () => {

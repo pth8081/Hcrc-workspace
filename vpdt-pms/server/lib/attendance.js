@@ -333,13 +333,26 @@ function assertValidLeaveRequest(payload, appData) {
   // (kể cả Thứ 7/CN/ngày lễ) cho MỌI loại nghỉ theo ngày — 1 đơn nộp Thứ Sáu→Thứ Hai bị tính đủ 4 ngày
   // thay vì đúng 2 ngày làm việc, khiến ANNUAL trừ sai quỹ phép năm (deductLeaveBalance()) VÀ UNPAID trừ
   // sai lương (qua số bản ghi LEAVE_UNPAID sinh ra ở buildLeaveAttendanceRecords() — xem chú thích tại
-  // đó). CHỈ áp dụng cho ANNUAL/UNPAID (2 loại thực sự dùng daysCount để trừ quỹ/trừ lương theo NGÀY) —
-  // SICK/PERSONAL giữ NGUYÊN đếm theo ngày lịch như trước (ngoài phạm vi đợt vá này, không có yêu cầu xác
-  // nhận từ người dùng để đổi). LƯU Ý PHẠM VI: loại Thứ 7/CN áp dụng chung cho cả 2 mô hình chấm công —
+  // đó). TẠI THỜI ĐIỂM ĐÓ chỉ áp dụng cho ANNUAL/UNPAID (2 loại duy nhất dùng daysCount để trừ quỹ/trừ
+  // lương theo NGÀY) — SICK/PERSONAL giữ NGUYÊN đếm theo ngày lịch (ngoài phạm vi đợt vá đó). PERSONAL
+  // đã được bổ sung vào điều kiện này ở đợt re-audit lần 6 ngay dưới (payroll.js sau đó gộp
+  // LEAVE_PERSONAL cùng nhóm LEAVE_UNPAID) — SICK vẫn giữ nguyên đếm theo ngày lịch. LƯU Ý PHẠM VI: loại
+  // Thứ 7/CN áp dụng chung cho cả 2 mô hình chấm công —
   // nhân viên SHIFT_BASED (siêu thị) có thể có lịch nghỉ khác Thứ 7/CN thật (quản lý riêng qua
   // shiftRoster), nhưng hệ thống hiện CHƯA tra được lịch phân ca tương lai ngay lúc tạo đơn nghỉ; giữ theo
   // đúng yêu cầu rà soát, có thể tinh chỉnh riêng cho SHIFT_BASED ở đợt sau nếu phát sinh vướng mắc thực tế.
-  const daysCount = (leaveType === 'ANNUAL' || leaveType === 'UNPAID')
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức TB/Thấp — "PERSONAL leave daysCount sai lệch"): PERSONAL trước đây
+  // KHÔNG nằm trong điều kiện này (comment cũ ở trên ghi "SICH/PERSONAL giữ nguyên đếm theo ngày lịch,
+  // ngoài phạm vi đợt vá này" — đúng tại THỜI ĐIỂM ĐÓ, trước khi payroll.js gộp LEAVE_PERSONAL vào cùng
+  // nhóm khấu trừ với LEAVE_UNPAID). buildLeaveAttendanceRecords() ngay dưới ĐÃ được vá thêm PERSONAL vào
+  // danh sách loại Thứ 7/CN/lễ (đợt rà soát chuyên sâu 9/2026, mức TB — xem chú thích đầy đủ tại đó) để
+  // khớp đúng việc payroll.js nay đếm chung LEAVE_UNPAID+LEAVE_PERSONAL để trừ lương — nhưng daysCount ở
+  // ĐÂY (lưu trên đơn, hiển thị cho người dùng + dùng trong report) lại bị BỎ SÓT, không cập nhật đồng
+  // bộ: 1 đơn PERSONAL trùm cuối tuần (VD Thứ Sáu→Thứ Hai) hiển thị "4 ngày" dù chỉ 2 ngày công thực bị
+  // trừ lương (qua attendance records, không qua daysCount này) — sai lệch hiển thị/report, KHÔNG sai
+  // tiền lương (payroll không đọc field này). SICK vẫn CỐ Ý giữ nguyên đếm theo ngày lịch (không bị gộp
+  // khấu trừ ở payroll.js).
+  const daysCount = (leaveType === 'ANNUAL' || leaveType === 'UNPAID' || leaveType === 'PERSONAL')
     ? countLeaveDaysExcludingRestDays(fromDate, toDate, appData?.publicHolidays)
     : calendarDaysCount;
   if (daysCount <= 0) throw new HttpError(400, 'Khoảng nghỉ này không có ngày làm việc nào (toàn bộ rơi vào Thứ 7/Chủ Nhật/ngày lễ) — vui lòng kiểm tra lại');
