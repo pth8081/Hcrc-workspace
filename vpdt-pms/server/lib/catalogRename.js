@@ -72,7 +72,15 @@ const DEPT_FIELD_COLLECTIONS = [
   // còn khớp user.dept mới), dữ liệu lặng lẽ "biến mất" khỏi màn hình mà không có lỗi/cảnh báo nào —
   // cùng lớp lỗ hổng đã vá nhiều lần ở file này (operationOrders.dept/uniformPeriods.dept/budgetLines.dept).
   { collection: 'checklistSubmissions', fields: ['storeCode'] },
-  { collection: 'shiftRoster', fields: ['storeCode'] }
+  { collection: 'shiftRoster', fields: ['storeCode'] },
+  // reportEntries (Báo Cáo Định Kỳ, forceOwnDept — xem lib/createValidation.js): PHÁT HIỆN THIẾU ở đợt
+  // re-audit lần 3 — canViewReportEntry() (lib/recordViewScope.js) so trực tiếp `entry.dept === user.dept`
+  // để cho phép xem báo cáo ĐÃ GỬI của toàn phòng ban (không riêng người tạo). Đổi tên 1 phòng ban mà
+  // không cascade field này sẽ làm các báo cáo ĐÃ GỬI trước đó "biến mất" khỏi màn hình của cả phòng ban
+  // (dept cũ không còn khớp user.dept mới) — cùng lớp lỗi đã vá nhiều lần ở file này (checklistSubmissions/
+  // shiftRoster.storeCode, operationOrders.dept...). Chỉ chính người tạo (entry.creator) không bị ảnh
+  // hưởng (canViewReportEntry() vẫn cho xem báo cáo của chính mình bất kể dept).
+  { collection: 'reportEntries', fields: ['dept'] }
 ];
 
 // *DeptWorkflows: nhiều map cấu hình duyệt theo BƯỚC/PHÒNG BAN nằm rải rác ở AppData, mỗi map khoá
