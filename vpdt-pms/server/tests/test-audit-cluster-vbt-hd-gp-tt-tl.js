@@ -376,8 +376,12 @@ async function main() {
   });
   await run('7a. paymentDeptWorkflows RỖNG (mặc định) -> chặn 409 khi "Chuyển Xác Nhận Thanh Toán" (trước vá: gửi được rồi kẹt PENDING vĩnh viễn)', async () => {
     const pr = draftPr();
+    // LƯU Ý (dọn fixture/assertion lỗi thời, rà soát trước go-live 11/2026): thông điệp lỗi đã được
+    // viết lại chi tiết hơn ở 1 đợt vá sau đó (lib/workflowEngine.js, "chặn gửi phê duyệt khi thiếu
+    // người duyệt" — dùng CHUNG cho mọi module, không riêng Thanh Toán) — hành vi THẬT (409 + hồ sơ ở
+    // nguyên DRAFT) không đổi, chỉ đổi CÂU CHỮ, nên cập nhật lại regex khớp đúng câu chữ mới.
     const err = expectThrow(() => recordActions.submitPaymentRequest(USER_A, pr, APP_DATA),
-      /chưa được cấu hình quy trình duyệt/i, '7a');
+      /chưa có người duyệt hợp lệ/i, '7a');
     assert.strictEqual(err.status, 409);
     assert.strictEqual(pr.status, 'DRAFT', 'hồ sơ phải ở nguyên NHÁP sau khi bị chặn');
   });

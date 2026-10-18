@@ -63,7 +63,14 @@ function resetData() {
       enabled: true, baseUrl: 'https://dsmart16.noi-bo.example/api/orders',
       headerName: 'X-Api-Key', headerValueEnc: 'ENC(...)', syncIntervalMinutes: 60
     },
-    depts: ['Phòng A', 'Phòng IT']
+    depts: ['Phòng A', 'Phòng IT'],
+    // BUG THẬT đã vá (rà soát trước go-live, 11/2026): routes/data.js (POST /api/data/users) từ 11/2026
+    // tự cascade qua withLockedAppDataValue('employeeProfiles', ...) SAU KHI ghi "users" thành công (tự
+    // liên kết tài khoản VPDT mới với hồ sơ nhân sự sẵn có, xem autoLinkUnlinkedProfiles()) — fixture này
+    // viết TRƯỚC tính năng đó, thiếu key này khiến withLockedAppDataValue() throw ("Key không tồn tại
+    // trong AppData"), kéo theo MỌI kịch bản lưu "users" trong file này FAIL 500 dù logic đang test hoàn
+    // toàn không liên quan tới employeeProfiles.
+    employeeProfiles: []
   };
   VERSIONS = {};
   Object.keys(APP_DATA).forEach(k => { VERSIONS[k] = `v-${k}-0`; });

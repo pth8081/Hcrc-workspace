@@ -1,9 +1,56 @@
 # Phiên bản hiện tại
 
-**26.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.43 (2026-11): Mục F — dọn 4 file test còn lại có fixture/assertion lỗi thời (không phải lỗi production)
+
+Hoàn tất mục cuối cùng của đợt rà soát chuyên sâu trước go-live. Cả 4 file đều KHÔNG phải lỗi code thật
+— chỉ sửa fixture/assertion của chính file test, KHÔNG đụng tới bất kỳ file code production nào.
+
+- **`test-audit-hethong-cluster-server.js`** (5 kịch bản FAIL, "Key không tồn tại trong AppData:
+  employeeProfiles"): `routes/data.js` (POST /api/data/users) từ 11/2026 tự cascade qua
+  `withLockedAppDataValue('employeeProfiles', ...)` SAU KHI ghi "users" thành công (tự liên kết tài
+  khoản VPDT mới với hồ sơ nhân sự sẵn có) — fixture viết TRƯỚC tính năng đó, thiếu key này. Thêm
+  `employeeProfiles: []` vào fixture AppData.
+- **`test-audit-cluster-vbt-hd-gp-tt-tl.js`** (1 kịch bản FAIL, regex lỗi thời): thông điệp lỗi "chặn
+  409 thiếu người duyệt" (Thanh Toán) đã được viết lại chi tiết hơn ở 1 đợt vá sau đó
+  (`lib/workflowEngine.js`, dùng CHUNG mọi module) — hành vi THẬT (409 + hồ sơ ở nguyên DRAFT) không đổi,
+  chỉ đổi câu chữ. Cập nhật lại regex khớp đúng câu chữ mới.
+- **`test-internal-media-client.js`** (4 kịch bản FAIL ban đầu, lúc vá xong lộ thêm FLAKY ngẫu nhiên ở
+  2-3 kịch bản khác): 2 nguyên nhân CHỒNG LẤN:
+  1. `#filterCategoryInternal` nằm trong `<details class="filter-box-details">` ĐÓNG mặc định — phải mở
+     `<details>` trước khi `selectOption()` (Playwright coi nội dung `<details>` đóng là "không visible"
+     dù wrapper không có class "hidden" riêng).
+  2. **Phát hiện sâu hơn lúc gỡ FLAKY xuất hiện sau khi vá (1)**: `finishLogin()` tự khởi động
+     `startApprovalPolling()` (poll mỗi 3s, `core.js`) — đúng 3s thật trôi qua trong lúc bài test 28 kịch
+     bản này chạy (nhiều `page.click`/`setInputFiles`/`waitForFunction` tốn thời gian thật), poll gọi
+     `initDatabase({silent:true})` ĐÈ TOÀN BỘ `DB.*` bằng snapshot TĨNH của mock GET /api/data (không có
+     `internalPosts`/`internalNewsCategories` mà chính bài test gán tay sau đăng nhập) — xoá trắng
+     `DB.internalPosts` giữa chừng, kéo theo nhiều kịch bản sau FAIL/treo khó hiểu và NGẪU NHIÊN tuỳ thời
+     điểm thật poll rơi vào đâu. Đây là hạn chế của BẢN MÔ PHỎNG (server thật GET /api/data luôn phản ánh
+     đúng DB sống, không như mock) — KHÔNG phải lỗi production. Dừng hẳn poll ngay sau đăng nhập trong
+     bài test này (`stopApprovalPolling()`, đúng cách production tự dừng khi đăng xuất).
+- **`test-recruitment-priority-client.js`** (1 kịch bản FAIL): `#rjFilterTitle` cùng lớp `<details>` như
+  mục (1) ở trên — mở `<details>` trước khi `selectOption()`.
+
+Test: cả 4 file PASS đủ (19/19, 42/42, 28/28, 11/11) — xác nhận bằng `git stash`: fail đúng số lượng
+tương ứng (14/19, 41/42, 24/28, 10/11) trên code cũ. `test-internal-media-client.js` chạy lại riêng 4
+lần liên tiếp sau khi vá nguyên nhân (2) để xác nhận hết hẳn FLAKY (28/28 cả 4 lần, trước đó dao động
+24-26/28 tuỳ lần chạy).
+
+**Lưu ý cho đợt sau**: nguyên nhân (2) ở trên (poll 3s đua với mutation DB.* thủ công trong test) là hạn
+chế CHUNG của mọi test dùng `tests/_harness.js` + gọi `finishLogin()` trực tiếp (không riêng file này) —
+bất kỳ file test NÀO đủ dài (nhiều thao tác Playwright thật, đủ 3s) đều có thể dính FLAKY tương tự, dù
+hiếm gặp vì cần đúng thời điểm. Khuyến nghị đợt sau: xem xét thêm `stopApprovalPolling()` chung vào
+`tests/_harness.js::setup()` (sau `finishLogin()`) để dọn tận gốc cho MỌI file dùng chung, thay vì vá
+riêng lẻ từng file phát hiện được — phạm vi ngoài đợt rà soát "F" lần này (chỉ đúng 4 file được giao).
+
+**Deploy-impact**: KHÔNG có — chỉ sửa 4 file test (`server/tests/test-audit-hethong-cluster-server.js`,
+`test-audit-cluster-vbt-hd-gp-tt-tl.js`, `test-internal-media-client.js`,
+`test-recruitment-priority-client.js`), không đụng tới bất kỳ file code production nào.
 
 ## v26.42 (2026-11): Dọn 2 fixture lỗi thời `test-internal-training.js` (không phải lỗi production)
 

@@ -23,6 +23,16 @@ async function main() {
     }, baseCatalogSeed());
     await page.evaluate((u) => { DB.users = [u]; }, admin);
     await page.evaluate((u) => finishLogin(u), admin);
+    // LỖI THẬT phát hiện lúc rà soát trước go-live (11/2026, qua debug thủ công — FLAKY hiếm gặp tuỳ tốc
+    // độ máy chạy test): finishLogin() tự khởi động startApprovalPolling() (runApprovalPollTick() mỗi 3s,
+    // core.js) — đúng 3s thật trôi qua TRONG LÚC bài test này chạy (nhiều page.click/setInputFiles/
+    // waitForFunction tốn thời gian thật), poll gọi initDatabase({silent:true}) ĐÈ TOÀN BỘ DB.* bằng bản
+    // GET /api/data CŨ của mock backend (snapshot tĩnh từ baseCatalogSeed(), KHÔNG có internalPosts/
+    // internalNewsCategories mà chính bài test này gán tay sau khi đăng nhập) -> DB.internalPosts bị xoá
+    // trắng về [] giữa chừng bài test, kéo theo nhiều kịch bản sau đó FAIL/treo khó hiểu. Đây là hạn chế
+    // của BẢN MÔ PHỎNG (mock GET /api/data không phản ánh đúng DB.* sống như server thật luôn làm) — dừng
+    // hẳn nhịp poll này ngay sau đăng nhập, đúng cách production tự dừng khi đăng xuất (stopApprovalPolling()).
+    await page.evaluate(() => { if (typeof stopApprovalPolling === 'function') stopApprovalPolling(); });
     // Thu gọn form nhập (10/2026) — #internalPostForm giờ bắt đầu ẨN mỗi khi đổi sub-tab, phải tự mở
     // qua openInternalPostForm() (nút "+ Đăng Bài Mới") trước khi tương tác trực tiếp các field thật
     // bằng Playwright (fill/click/setInputFiles đều cần phần tử VISIBLE, khác hẳn page.evaluate() gán
@@ -221,10 +231,16 @@ async function main() {
       assertEqual(JSON.stringify(opts), JSON.stringify(['', 'HOAT_DONG_CHUNG', 'VAN_HOA']), 'danh sách lựa chọn');
       const visibleWrap = await page.evaluate(() => !document.getElementById('internalCategoryFilterWrap').classList.contains('hidden'));
       assert(visibleWrap, 'ô lọc chuyên đề phải hiện ở tab NEWS');
+      // Ô lọc nằm TRONG <details id="internalFilterBlock" class="filter-box-details"> ("🔍 Tìm Kiếm &
+      // Lọc"), ĐÓNG mặc định — bỏ class "hidden" ở wrapper KHÔNG đủ để Playwright coi select là "visible"
+      // (ancestor <details> đóng vẫn ẩn toàn bộ nội dung bên trong, kể cả không có class "hidden" riêng).
+      // Phải mở <details> trước khi selectOption(), đúng hành vi người dùng thật (bấm mở khối lọc ra).
+      await page.evaluate(() => { document.getElementById('internalFilterBlock').open = true; });
       await page.selectOption('#filterCategoryInternal', 'VAN_HOA');
       const html = await page.evaluate(() => document.getElementById('internalPostsContainer').innerHTML);
       assert(html.includes('Bài có ảnh + video') && !html.includes('Bài cũ'), 'chỉ còn bài chuyên đề VAN_HOA');
       await page.selectOption('#filterCategoryInternal', '');
+      console.log('DEBUG after reset:', await page.evaluate(() => DB.internalPosts.map(p => p.title)));
     });
 
     await run('sửa bài nháp: nạp lại nội dung HTML + ảnh/đại diện/video vào form', async () => {

@@ -85,6 +85,11 @@ async function main() {
     await run('lọc "Vị trí đang tuyển": các tiêu đề khác nhau, chọn "Bảo vệ" chỉ còn 2 tin Bảo vệ', async () => {
       const opts = await page.evaluate(() => [...document.querySelectorAll('#rjFilterTitle option')].map(o => o.value));
       assertEqual(JSON.stringify(opts), JSON.stringify(['', 'Bảo vệ', 'Kho', 'Thu ngân']), 'danh sách vị trí (không trùng, sắp A-Z)');
+      // #rjFilterTitle nằm TRONG <details class="filter-box-details"> ("🔍 Tìm Kiếm & Lọc"), ĐÓNG mặc
+      // định — phải mở <details> trước khi selectOption() (Playwright coi nội dung trong <details> đóng
+      // là "không visible" dù không có class "hidden" riêng), đúng hành vi người dùng thật phải bấm mở
+      // khối lọc ra trước khi chọn.
+      await page.evaluate(() => { document.getElementById('rjFilterTitle').closest('details').open = true; });
       await page.selectOption('#rjFilterTitle', 'Bảo vệ');
       assertEqual(JSON.stringify(await order()), JSON.stringify([103, 101]), 'chỉ còn Bảo vệ');
       await page.selectOption('#rjFilterTitle', '');
