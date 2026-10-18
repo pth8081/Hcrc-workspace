@@ -184,6 +184,10 @@ async function main() {
     getAppDataValue: async () => ({}),
     getAppDataValueCached: async () => ({})
   });
+  // operationWorkItems — lib/fileAuthz.js tra thêm collection này qua lib/operationWorkItemStore.js,
+  // module ĐỌC THẲNG DB thật (không qua lib/recordStore) — thiếu stub này khiến authorizeFileAccess()
+  // cố nối SQL Server thật, cùng khuôn đã áp dụng ở tests/test-internal-media-server.js.
+  stubModule('../lib/operationWorkItemStore', { getAllWorkItems: async () => [], getAllWorkItemsCached: async () => [], getWorkItemsBySource: async () => [] });
   const { authorizeFileAccess } = require('../lib/fileAuthz');
   const optImgUrl = TEST_WITH_OPTION_IMAGES.questions[0].options[0].imageUrl;
 

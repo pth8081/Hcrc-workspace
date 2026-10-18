@@ -154,6 +154,12 @@ stubModule('../lib/appData', {
   getAppDataValue: async () => ({}),
   getAppDataValueCached: async () => ({})
 });
+// operationWorkItems (cây công việc Thực hiện/Nghiệm thu Vận Hành) — lib/fileAuthz.js tra thêm
+// collection này (đợt rà soát chuyên sâu 9/2026) qua lib/operationWorkItemStore.js, module ĐỌC THẲNG
+// DB thật (không qua lib/recordStore), nên phải stub riêng — thiếu bước này khiến MỌI lời gọi
+// authorizeFileAccess() ở dưới cố nối SQL Server thật và lỗi ngay (không có SQL Server khi chạy test),
+// cùng khuôn đã áp dụng ở tests/test-internal-media-server.js.
+stubModule('../lib/operationWorkItemStore', { getAllWorkItems: async () => [], getAllWorkItemsCached: async () => [], getWorkItemsBySource: async () => [] });
 
 const { authorizeFileAccess, parseUploadsFileUrl, uploadsAuthz } = require('../lib/fileAuthz');
 

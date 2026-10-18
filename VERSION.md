@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**26.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.33 (2026-11): Vá 4 file test hồi quy bị treo (nối SQL Server thật) + 1 kỳ vọng test đã lỗi thời
+
+Thuần sửa test, KHÔNG đụng code sản phẩm. Phát hiện khi điều tra `test-itprice-download.js` báo fail
+12/18 — root cause thật là lỗ hổng chung ở 4 file test (không phải lỗi code sản phẩm lẫn môi trường):
+
+- **Nguyên nhân gốc**: `lib/fileAuthz.js` (đợt rà soát chuyên sâu 9/2026) có gọi thêm
+  `getAllWorkItemsCached()` từ `lib/operationWorkItemStore.js` — module này đọc THẲNG SQL Server thật
+  (không qua `lib/recordStore.js` như mọi collection khác), nên 4 file test "thuần Node, cắm bản giả vào
+  require.cache cho `lib/recordStore`/`lib/appData` trước khi require `lib/fileAuthz`" (khuôn chung của
+  `tests/test-uploads-file-authz.js`) BỊ BỎ SÓT bản giả cho `lib/operationWorkItemStore` — mọi lời gọi
+  `authorizeFileAccess()` trong các file này cố nối SQL Server thật và lỗi ngay trong sandbox (không có
+  SQL Server). `tests/test-internal-media-server.js` đã tự vá đúng (có sẵn bản giả này) — chỉ 4 file còn
+  lại thiếu: `test-itprice-download.js`, `test-uploads-file-authz.js`,
+  `test-training-essay-dragdrop-server.js`, `test-training-question-images.js`. Đã rà lại TOÀN BỘ 6 file
+  dùng chung khuôn stub này (grep `stubModule('../lib/recordStore'`) — 2 file còn lại
+  (`test-audit-round2-cluster6.js`, `test-internal-media-server.js`) không cần vá (1 đã có sẵn, 1 không
+  đi qua nhánh gọi `getAllWorkItemsCached()`).
+- **1 kỳ vọng test lỗi thời** (`test-itprice-download.js`, phát hiện SAU KHI vá lỗi trên — bài test mới
+  chạy được lần đầu thì lộ ra): kịch bản "hồ sơ PENDING không ai tải được file" đã VIẾT TRƯỚC đợt tính
+  năng 10/2026 "thêm nút tải file từ bước người phê duyệt" (xem chú thích đầy đủ tại nhánh `owning.itPrice`
+  ở `lib/fileAuthz.js`) — code sản phẩm THẬT SỰ cho phép người duyệt ĐÚNG BƯỚC hiện tại tải file mới nhất
+  khi hồ sơ còn PENDING (để xem trước khi quyết định), người đề xuất/IT thì vẫn chỉ xem được. Đây là hành
+  vi CÓ CHỦ Ý (đã tài liệu hoá rõ trong code), không phải lỗ hổng — sửa lại ĐÚNG kỳ vọng test, KHÔNG đụng
+  code sản phẩm. Thêm 1 kịch bản đối chứng: người duyệt KHÔNG đúng bước hiện tại vẫn bị chặn tải.
+
+Test: chạy lại cả 4 file đã vá + `test-internal-media-server.js` (28) + `test-audit-round2-cluster6.js`
+(37/39, 2 fail còn lại là `resolveGraphOption is not a function` — lỗi KHÁC HẲN, không liên quan gửi
+email, đã xác nhận bằng git-stash là có từ trước, KHÔNG thuộc phạm vi đợt vá này) + CSP full-audit (3) +
+lazy-load toàn bộ tab (46). Kết quả: `test-itprice-download.js` 19/19, `test-uploads-file-authz.js` 27/27,
+`test-training-essay-dragdrop-server.js` 23/23, `test-training-question-images.js` 16/16 — không hồi quy.
+
+**Deploy-impact**: KHÔNG có — chỉ sửa file trong `server/tests/`, không đụng bất kỳ file production nào
+(`public/`, `routes/`, `lib/`). Không cần copy gì lên server thật, không ảnh hưởng người dùng cuối.
 
 ## v26.32 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch D — badge chi tiết từng bước duyệt (core.js) + Hộp Thư Chuyển Tiếp Xin Ý Kiến
 

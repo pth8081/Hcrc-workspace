@@ -74,6 +74,12 @@ stubModule('../lib/appData', {
   getAppDataValue: async () => ({}),
   getAppDataValueCached: async () => ({})
 });
+// operationWorkItems (cây công việc Thực hiện/Nghiệm thu Vận Hành) — lib/fileAuthz.js tra thêm
+// collection này (đợt rà soát chuyên sâu 9/2026) qua lib/operationWorkItemStore.js, module ĐỌC THẲNG
+// DB thật (không qua lib/recordStore), nên phải stub riêng — thiếu bước này khiến MỌI lời gọi
+// authorizeFileAccess() ở dưới cố nối SQL Server thật và lỗi ngay (không có SQL Server khi chạy test),
+// cùng khuôn đã áp dụng ở tests/test-internal-media-server.js.
+stubModule('../lib/operationWorkItemStore', { getAllWorkItems: async () => [], getAllWorkItemsCached: async () => [], getWorkItemsBySource: async () => [] });
 
 const { authorizeFileAccess } = require('../lib/fileAuthz');
 const { resolveApprovedFileId, resolveApprovedFileUrl } = require('../lib/recordActions');
@@ -102,11 +108,24 @@ async function main() {
   // # 1. lib/fileAuthz.js mode 'download' — chỉ file đã phê duyệt mới tải được
   // ###############################################################################################
 
-  await run('[1] Hồ sơ CHƯA APPROVED (PENDING): không file nào tải được, kể cả người đề xuất/IT/người duyệt', async () => {
+  // LƯU Ý (sửa 11/2026, phát hiện khi sửa lỗi stub operationWorkItemStore thiếu khiến bài test này
+  // không chạy được vì cố nối SQL Server thật): từ đợt "thêm nút tải file từ bước người phê duyệt"
+  // (10/2026, xem chú thích đầy đủ tại nhánh owning.itPrice ở lib/fileAuthz.js), NGƯỜI DUYỆT đúng bước
+  // hiện tại ĐƯỢC PHÉP tải file MỚI NHẤT khi hồ sơ còn PENDING (để xem trước khi quyết định) — đây là
+  // hành vi CÓ CHỦ Ý, không phải lỗ hổng. Người đề xuất/IT (không phải approver bước này) vẫn chỉ xem
+  // được như cũ. Bài test trước đây (viết trước đợt 10/2026) khẳng định "không ai tải được" đã lỗi thời
+  // so với code thật — sửa lại đúng kỳ vọng hiện tại, KHÔNG sửa code sản phẩm.
+  await run('[1] Hồ sơ CHƯA APPROVED (PENDING): người đề xuất/IT không tải được, CHỈ người duyệt đúng bước hiện tại tải được (xem file trước khi quyết định)', async () => {
     ITEMS = [baseItem({ status: 'PENDING' })];
-    for (const user of [CREATOR, IT_MANAGER, APPROVER]) {
+    for (const user of [CREATOR, IT_MANAGER]) {
       assert.strictEqual(await authorizeFileAccess(user, '/uploads/file-goc.xlsx', 'download'), false, `${user.username} không được tải file khi hồ sơ chưa duyệt`);
     }
+    assert.strictEqual(await authorizeFileAccess(APPROVER, '/uploads/file-goc.xlsx', 'download'), true, 'approver1 là người duyệt đúng bước 1 hiện tại -> được tải file mới nhất dù hồ sơ còn PENDING');
+  });
+
+  await run('[1] Hồ sơ PENDING: người duyệt KHÔNG đúng bước hiện tại (hoặc hồ sơ chưa cấu hình người duyệt) vẫn KHÔNG tải được', async () => {
+    ITEMS = [baseItem({ status: 'PENDING', currentStep: 2 })];
+    assert.strictEqual(await authorizeFileAccess(APPROVER, '/uploads/file-goc.xlsx', 'download'), false, 'approver1 chỉ được cấu hình cho bước 1, hồ sơ đang ở bước 2 -> không được tải');
   });
 
   await run('[1] Hồ sơ CHƯA APPROVED vẫn XEM được (mode view không bị giới hạn thêm)', async () => {
