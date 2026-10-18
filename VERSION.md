@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**26.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.82 (2026-11): [Cao] Re-audit lần 5 — mục 4: orgChartVersions lộ nguyên vẹn qua GET /api/data
+
+Mục thứ 4 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng).
+
+- **`orgChartVersions` (AppData key thô, lib/orgChart.js — lưu toàn bộ cây Cơ Cấu Tổ Chức + Luồng Đánh
+  Giá KPI Theo Vị Trí) chưa từng được lọc/xoá ở `GET /api/data`** — `const data = { ...cachedAppData.data }`
+  (routes/data.js, đầu handler) spread TẤT CẢ key AppData, nên key này lộ NGUYÊN VẸN cho BẤT KỲ ai đã
+  đăng nhập gọi thẳng `GET /api/data`, bất kể `orgChartManage`/`nhanSuManage`/`kpiFlowConfigManage`/
+  `moduleAccess.orgChart` — route THẬT duy nhất client sử dụng (`GET /api/org-chart/versions*`, routes/
+  orgChart.js) đã gác đúng cả 2 lớp quyền từ trước (kể cả cascade `hr`→`orgChart` vừa vá ở mục 3), chỉ
+  riêng đường `GET /api/data` chung này bị bỏ sót — cùng lớp lỗi đã vá cho `employeeProfiles` trước đó.
+  - Thêm `delete data.orgChartVersions;` ngay sau khối `employeeProfiles` — client KHÔNG hề đọc
+    `DB.orgChartVersions` (module-orgchart.js luôn gọi route riêng), nên xoá hẳn, không cần giữ field
+    dẫn xuất nào (khác `employeeProfiles` còn giữ `myEmployeeCode`).
+
+**Test:** `tests/test-orgchartversions-leak-main-data.js` (mới, 3 scenario — mount THẬT `routes/data.js`
+với stub tối giản, seed 1 version orgChart, xác nhận field `orgChartVersions` KHÔNG CÒN xuất hiện trong
+response dù user thường hay admin). Xác nhận FAIL trên code CŨ (`git stash -- routes/data.js`, 2/3
+scenario FAIL đúng 2 "LỖI ĐÃ VÁ"), PASS trên code đã vá (3/3). Regression: `test-khoi0-orgchart-gate.js`
+(6/6), `test-khoi0-parent-cascade-gate.js` (11/11), `test-module-access-gate.js` (4/4),
+`test-khoi0-payment-office-gate.js` (6/6), `test-khoi0-meeting-periodicreport-gate.js` (7/7), 9 file
+`test-orgchart-*.js` hiện có (delete-draft-version/diagram-tab/headcount-modal-binding/headcount-report/
+import-export/import-modal-binding/kpiflow-prune/node-headcount-selfonly-ui/v2 — tất cả PASS),
+`test-khoi0-checklist-contract-attendance-internalpost-gate.js` (24/24),
+`test-khoi0-checklist-lazy-data-gate.js` (7/7), `test-khoi0-license-uniform-gate.js` (9/9),
+`test-khoi0-officereqs-vpp-periodicreport-gate.js` (10/10), `test-khoi0-meetingminutes-gate.js` (10/10)
+— toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.81 (2026-11): [Cao] Re-audit lần 5 — mục 3: Khối 0 không cascade theo module cha ở server
 
