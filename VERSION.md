@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.35 (2026-11): [Thấp] Re-audit lần 7 — mục 6/9: vppRegistrations hạn đăng ký so sánh UTC (3 vị trí)
+
+Mục thứ sáu (6/9) của đợt re-audit lần 7.
+
+**Nguyên nhân:** cả 3 vị trí kiểm "kỳ đăng ký VPP đã hết hạn chưa" đều so
+`new Date().toISOString().slice(0, 10)` (ngày UTC) với `period.endDate` — LUÔN lấy ngày theo giờ UTC.
+Trên máy chủ chạy giờ VN (UTC+7), trong khung 00:00-06:59 sáng giờ VN, ngày UTC vẫn còn là NGÀY HÔM
+TRƯỚC — nếu `period.endDate` rơi đúng vào ngày hôm trước đó, hệ thống vẫn cho tạo/gửi/sửa đăng ký VPP
+dù hạn (giờ VN) đã qua. CÙNG LỚP LỖI đã vá cho `trainingRegistrations`/`recruitmentReferrals`/
+`registerInternalPostTraining` (v27.27/v27.28) nhưng bị bỏ sót hoàn toàn ở `vppRegistrations` — 3 vị
+trí: `CREATE_MODULE_CONFIGS.vppRegistrations.extraValidate` (tạo nháp, `lib/createValidation.js`),
+`submitVppRegistration()` (Gửi) và `updateVppRegistrationDraft()` (Sửa nháp) — cả 2 ở
+`lib/recordActions.js`.
+
+**Vá:** đổi cả 3 sang `require('./attendance').localDateStr(new Date())` — mirror đúng khuôn đã áp
+dụng cho `trainingRegistrations.extraValidate()`/`recruitmentReferrals.extraValidate()`/
+`registerInternalPostTraining()`.
+
+**Test:** file mới `tests/test-vppregistrations-deadline-utc.js` (6 scenario, cùng kỹ thuật ép
+`process.env.TZ='Asia/Ho_Chi_Minh'` + thay `global.Date` tạm thời đã dùng ở các test UTC-deadline trước
+đó) — cả 3 vị trí (tạo/gửi/sửa) đều có 1 scenario khai thác (endDate hôm trước theo UTC nhưng đã qua
+theo giờ VN -> phải chặn 409) + 1 đối chứng (endDate hôm nay/tương lai vẫn hoạt động bình thường). Xác
+nhận FAIL trên code CŨ (`git stash`, 3/6 scenario FAIL — khai thác thành công ở cả 3 vị trí), PASS trên
+code đã vá (6/6). Regression: `tests/test-vpp.js` (29/29), `tests/test-vpp-registrations-scope.js`
+(7/7), `tests/test-vpp-dept-headcount-missing-block.js` (7/7),
+`tests/test-khoi0-carregs-vppregistrations-gate.js` (7/7), `tests/test-office-vpp-cancel-step1.js`
+(12/12) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.34 (2026-11): [TB] Re-audit lần 7 — mục 5/9 (HẾT phần TB): approveCancelTrainingRegistration/rejectCancelTrainingRegistration thiếu chặn tự duyệt
 

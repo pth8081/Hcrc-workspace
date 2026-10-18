@@ -4216,7 +4216,10 @@ function submitVppRegistration(user, item, period, siblingRegs, excludedJobTitle
   assertCanStillRegisterVpp(user, excludedJobTitles);
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp (có thể đã gửi hoặc đã bị xử lý)');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "vppRegistrations hạn đăng ký so sánh UTC"): xem chú thích
+  // đầy đủ tại CREATE_MODULE_CONFIGS.vppRegistrations.extraValidate (lib/createValidation.js) — dùng
+  // đúng localDateStr(new Date()) thay cho new Date().toISOString().slice(0, 10).
+  const todayStr = require('./attendance').localDateStr(new Date());
   const pastEndDate = !!(period.endDate && todayStr > period.endDate);
   if (period.status !== 'OPEN' || pastEndDate) {
     throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc, không thể gửi đăng ký nữa');
@@ -4295,7 +4298,10 @@ function updateVppRegistrationDraft(user, item, payload, period, excludedJobTitl
   assertCanStillRegisterVpp(user, excludedJobTitles);
   if (item.status !== 'DRAFT') throw new HttpError(409, 'Đăng ký này không còn ở trạng thái nháp, không thể sửa');
   if (!period) throw new HttpError(404, 'Không tìm thấy kỳ đăng ký');
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "vppRegistrations hạn đăng ký so sánh UTC"): xem chú thích
+  // đầy đủ tại CREATE_MODULE_CONFIGS.vppRegistrations.extraValidate (lib/createValidation.js) — dùng
+  // đúng localDateStr(new Date()) thay cho new Date().toISOString().slice(0, 10).
+  const todayStr = require('./attendance').localDateStr(new Date());
   const pastEndDate = !!(period.endDate && todayStr > period.endDate);
   if (period.status !== 'OPEN' || pastEndDate) {
     throw new HttpError(409, 'Kỳ đăng ký này đã kết thúc, không thể sửa đăng ký nữa');
