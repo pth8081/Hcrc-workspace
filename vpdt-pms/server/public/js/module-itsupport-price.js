@@ -925,30 +925,30 @@ function canViewItPriceApproval(user, p) {
 // getMyPendingApprovals() (core-approvalhub.js, luon nap san) goi thang ham nay o MOI switchTab().
 
 function itPriceStatusBadge(p) {
-  if (p.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+  if (p.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
   if (p.status === 'APPROVED') {
-    if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 IT yêu cầu bổ sung</span>`;
+    if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="badge-warning">🟠 IT yêu cầu bổ sung</span>`;
     // autoApproved (server tự đặt, xem itPriceApprovals.extraValidate) — badge riêng để phân biệt với
     // duyệt tay bình thường, giữ minh bạch cho người xem danh sách biết hồ sơ này KHÔNG qua ai duyệt.
-    if (p.autoApproved) return `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">🤖 Tự động duyệt</span>`;
-    return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
+    if (p.autoApproved) return `<span class="badge-success">🤖 Tự động duyệt</span>`;
+    return `<span class="badge-success">✅ Đã phê duyệt</span>`;
   }
-  if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ bổ sung</span>`;
+  if (itPriceHasUnresolvedInfoRequest(p)) return `<span class="badge-warning">🟠 Chờ bổ sung</span>`;
   const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ name: 'Duyệt' }] };
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
-  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
+  return `<span class="badge-info">⏳ Bước ${p.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, p.history, p.currentStep))}</span>`;
 }
 
 function itPriceAppliedBadge(p) {
   if (p.status !== 'APPROVED') return '<span class="text-gray-400 text-xs">—</span>';
   if (p.applied) {
-    return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`;
+    return `<span class="badge-success">✅ Đã áp giá${p.appliedByName ? ` (${escapeHtml(p.appliedByName)})` : ''}</span>`;
   }
   if (p.applyClaimedBy) {
-    return `<span class="px-2 py-0.5 bg-sky-100 text-sky-800 rounded font-bold text-xs">🖐️ Đang xử lý${p.applyClaimedByName ? ` (${escapeHtml(p.applyClaimedByName)})` : ''}</span>`;
+    return `<span class="badge-info">🖐️ Đang xử lý${p.applyClaimedByName ? ` (${escapeHtml(p.applyClaimedByName)})` : ''}</span>`;
   }
-  return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chưa áp giá</span>`;
+  return `<span class="badge-warning">⏳ Chưa áp giá</span>`;
 }
 
 // buildItPriceRowHtml(p) — 1 dòng <tr> dùng CHUNG cho cả 3 màn hiện danh sách Phê Duyệt Giá (Hỗ Trợ
@@ -2002,10 +2002,10 @@ const IT_TICKET_CATEGORY_LABELS_DEFAULT = {
   ACCOUNT: '🔑 Tài khoản / Đăng nhập', OTHER: '❓ Khác'
 };
 const IT_TICKET_STATUS_BADGES = {
-  TODO: '<span class="px-2 py-0.5 bg-gray-100 text-gray-800 rounded font-bold text-xs">🕒 Chưa xử lý</span>',
-  DOING: '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🔧 Đang xử lý</span>',
-  DONE: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Hoàn thành</span>',
-  CANCELLED: '<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã hủy</span>'
+  TODO: '<span class="badge-neutral">🕒 Chưa xử lý</span>',
+  DOING: '<span class="badge-info">🔧 Đang xử lý</span>',
+  DONE: '<span class="badge-success">✅ Hoàn thành</span>',
+  CANCELLED: '<span class="badge-danger">❌ Đã hủy</span>'
 };
 
 async function submitItTicket(e) {
@@ -2182,9 +2182,9 @@ function closeItTicketEscalateForm() { showItTicketEscalateForm = false; renderI
 // Nhãn trạng thái leo thang phê duyệt (xem escalateItTicket() ở lib/recordActions.js) — tách biệt hoàn
 // toàn khỏi IT_TICKET_STATUS_BADGES (t.status: TODO/DOING/DONE/CANCELLED).
 const IT_TICKET_APPROVAL_BADGES = {
-  PENDING: (t) => `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ ${escapeHtml(t.approvalApproverName)} duyệt</span>`,
-  APPROVED: (t) => `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ ${escapeHtml(t.approvalApproverName)} đã duyệt</span>`,
-  REJECTED: (t) => `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ ${escapeHtml(t.approvalApproverName)} đã từ chối</span>`
+  PENDING: (t) => `<span class="badge-info">⏳ Chờ ${escapeHtml(t.approvalApproverName)} duyệt</span>`,
+  APPROVED: (t) => `<span class="badge-success">✅ ${escapeHtml(t.approvalApproverName)} đã duyệt</span>`,
+  REJECTED: (t) => `<span class="badge-danger">❌ ${escapeHtml(t.approvalApproverName)} đã từ chối</span>`
 };
 
 function openItTicketModal(id) {

@@ -41,10 +41,10 @@ function buildStepLabelForHub(wfConfig, currentStep) {
 // nhưng vài module đã có sẵn cờ trạng thái con hữu ích hơn (đang chờ bổ sung thông tin) nên tận dụng
 // luôn thay vì hiện chung 1 nhãn vô nghĩa.
 function approvalHubPendingBadge() {
-  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Đang Chờ Duyệt</span>`;
+  return `<span class="badge-info">⏳ Đang Chờ Duyệt</span>`;
 }
 function approvalHubNeedInfoBadge() {
-  return `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🟠 Chờ Bổ Sung</span>`;
+  return `<span class="badge-warning">🟠 Chờ Bổ Sung</span>`;
 }
 
 // cfg.typeLabel (dùng ở addDeptWorkflowItems()/scan() bên dưới): chuỗi tĩnh (đa số module) HOẶC hàm
@@ -321,7 +321,7 @@ function getMyPendingApprovals(user) {
         typeLabel: `📦 Vận Hành - ${o.orderLocationType === 'HO' ? 'Đặt Hàng Tại HO' : 'Đặt Hàng Tại Siêu Thị'} (Chờ Nhập Hàng)`,
         code: o.code, title: o.title, dept: o.dept,
         stepLabel: '📥 Chờ xác nhận nhập hàng', createdAt: o.approvedAt || o.createdAt,
-        statusBadge: `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ Nhập Hàng</span>`,
+        statusBadge: `<span class="badge-info">📥 Chờ Nhập Hàng</span>`,
         actions: [
           { label: '✅ Nhập Hàng', fn: 'openOperationOrderReceiptActionModal', args: [o.id, 'RECEIVE'], primary: true },
           { label: '🚫 Hủy Nhập', fn: 'openOperationOrderReceiptActionModal', args: [o.id, 'CANCEL'] }
@@ -429,8 +429,8 @@ function getMyProcessedApprovals(user, status, sinceMs) {
   if (!user || (status !== 'APPROVED' && status !== 'REJECTED')) return [];
   const items = [];
   const statusBadge = status === 'APPROVED'
-    ? `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã Duyệt</span>`
-    : `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã Từ Chối</span>`;
+    ? `<span class="badge-success">✅ Đã Duyệt</span>`
+    : `<span class="badge-danger">❌ Đã Từ Chối</span>`;
 
   // sinceMs = 0/falsy -> "Tất cả thời gian" (không lọc). parseVNDateTime() không parse được (thiếu mốc
   // thời gian ở vài module cũ, xem internalShare REJECTED bên dưới) -> vẫn giữ lại, an toàn hơn ẩn nhầm.

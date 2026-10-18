@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**26.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.31 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch C — badge Hộp Thư Duyệt Tổng Hợp + Phê Duyệt Giá/Hỗ Trợ Yêu Cầu
+
+Tiếp tục Giai đoạn 3 — batch C gồm 2 file dùng CHUNG cho nhiều module (core-approvalhub.js — Hộp Thư
+Duyệt Tổng Hợp gộp dữ liệu từ 9+ module khác, và module-itsupport-price.js — Phê Duyệt Giá + Hỗ Trợ Yêu
+Cầu IT), đổi badge trạng thái sang `.badge-*` DÙNG CHUNG. Chỉ đổi ĐÚNG các hàm/object badge trạng thái
+thuần (không đụng các span màu khác mang ý nghĩa khác như số dòng diff +/-, tag file, cảnh báo quá hạn).
+
+- `public/js/core-approvalhub.js`: `approvalHubPendingBadge()` (đang chờ duyệt → info) +
+  `approvalHubNeedInfoBadge()` (chờ bổ sung → warning) — dùng CHUNG cho mọi mục trong Hộp Thư Duyệt Tổng
+  Hợp. Badge "📥 Chờ Nhập Hàng" (operationOrderReceipt) → info, khớp đúng `operationStatusBadge()`'s
+  AWAITING_RECEIPT đã đổi ở batch A. `getMyProcessedApprovals()`: Đã Duyệt → success, Đã Từ Chối →
+  danger.
+- `public/js/module-itsupport-price.js`: `itPriceStatusBadge()` (REJECTED→danger, APPROVED→success —
+  gồm cả nhánh "🤖 Tự động duyệt" giữ NGUYÊN icon riêng để phân biệt nhưng cùng dùng success vì vẫn là
+  kết quả tốt, "🟠 IT yêu cầu bổ sung"/"Chờ bổ sung"→warning, đang ở bước→info) + `itPriceAppliedBadge()`
+  (đã áp giá→success, đang xử lý→info, chưa áp giá→warning) + `IT_TICKET_STATUS_BADGES`
+  (TODO→neutral/DOING→info/DONE→success/CANCELLED→danger, khớp đúng quy ước Công Việc) +
+  `IT_TICKET_APPROVAL_BADGES` (leo thang phê duyệt: chờ duyệt→info/đã duyệt→success/đã từ chối→danger).
+
+Test: `tests/test-giai-doan-3-batch-c-badges.js` (mới, 5 kịch bản). Đã xác nhận bằng `git stash` test mới
+FAIL đúng (0/5) trên code cũ. Chạy lại `test-approval-hub.js` (43) + 9 file test itPrice (test-itprice-
+approval-and-emergency/file-format-reject/form-split/mastertlist-channel-split/permtree-move/scope-dates/
+supplement-invalidate/wholesale-mixed-approval + test-vanhanh-itprice-chitiet-csp) + `test-it-support.js`
+(24) + 3 file test nhắc hạn phê duyệt IT + CSP full-audit (3) + lazy-load toàn bộ tab (46) — không hồi
+quy. (Phát hiện phụ: `test-itprice-download.js` đang có 12/18 FAIL — xác nhận bằng `git stash` đây là lỗi
+ĐÃ CÓ TỪ TRƯỚC, không liên quan tới đợt sửa này, không đụng tới trong đợt này.)
+
+**Deploy-impact**: thuần client (`public/js/core-approvalhub.js`, `public/js/module-itsupport-price.js`)
+— KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.30 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch B — badge Onboarding/Offboarding + HCRC Đồng Hành + Báo Cáo Định Kỳ
 
