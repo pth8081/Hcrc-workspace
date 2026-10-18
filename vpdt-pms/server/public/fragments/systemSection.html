@@ -2843,15 +2843,23 @@
         </div>
       </div>
 
+      <!-- Giai đoạn 2 "HCRC Workspace Refresh" (11/2026, kế hoạch đã duyệt): gộp 4 nút 4 màu rời rạc
+           (Tải File Mẫu/Export/Import/Đặt Lại Mật Khẩu) vào 1 menu "⋯" — xem .action-menu-panel/
+           .action-menu-item (app.css) + toggleActionMenu()/closeActionMenu() (core.js). Hành vi/data-op
+           của từng mục giữ NGUYÊN 100%, chỉ đổi cách trình bày — mỗi mục tự đóng menu ngay khi bấm qua
+           data-op-seq="closeActionMenu(...)|<hành động gốc>" (đúng khuôn dropdown sidebar đã có sẵn). -->
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 my-3 border-t pt-3">
         <h4 class="font-bold text-sm text-gray-800">Danh Sách Người Dùng & Quyền Hạn</h4>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <button type="button" data-op="downloadUserTemplate" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📄 Tải File Mẫu (.xlsx)</button>
-          <button type="button" data-op="exportUsersExcel" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-emerald-700 transition">📤 Export Excel</button>
-          <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import Excel <input id="uImportExcelInput" type="file" accept=".xlsx" data-op-change="onUsersImportFileChange" data-arg-event="0" class="hidden">
-          </label>
-          <button type="button" data-op="toggleUserPasswordResetWrap" class="bg-amber-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-amber-700 transition">🔑 Đặt Lại Mật Khẩu Hàng Loạt</button>
+        <div class="action-menu-trigger-wrap">
+          <button type="button" data-op="toggleActionMenu" data-arg0="userListActionsMenu" data-arg-event="1" class="btn-more" title="Thao tác khác">⋯</button>
+          <div id="userListActionsMenu" class="hidden action-menu-panel">
+            <button type="button" data-op-seq="closeActionMenu(userListActionsMenu)|downloadUserTemplate()" class="action-menu-item">📄 Tải File Mẫu (.xlsx)</button>
+            <button type="button" data-op-seq="closeActionMenu(userListActionsMenu)|exportUsersExcel()" class="action-menu-item">📤 Export Excel</button>
+            <label class="action-menu-item cursor-pointer" data-op-seq="closeActionMenu(userListActionsMenu)">
+              📥 Import Excel <input id="uImportExcelInput" type="file" accept=".xlsx" data-op-change="onUsersImportFileChange" data-arg-event="0" class="hidden">
+            </label>
+            <button type="button" data-op-seq="closeActionMenu(userListActionsMenu)|toggleUserPasswordResetWrap()" class="action-menu-item">🔑 Đặt Lại Mật Khẩu Hàng Loạt</button>
+          </div>
         </div>
       </div>
 
@@ -2913,16 +2921,25 @@
           <h4 class="font-bold text-sm text-gray-800">🧮 Ma Trận Phân Quyền (gán quyền hàng loạt qua Excel)</h4>
           <p class="text-[11px] text-gray-500 italic">Xuất ra Excel toàn bộ quyền dạng bật/tắt hiện có của Người Dùng hoặc Nhóm Phân Quyền, sửa hàng loạt trên Excel rồi nhập lại. Chỉ áp dụng cho quyền dạng Có/Không (Y/N) — quyền theo danh sách phòng ban cụ thể vẫn phải sửa tay ở trên.</p>
         </div>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <button type="button" data-op="downloadPermMatrixUsers" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📤 Xuất Excel Người Dùng</button>
-          <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import Người Dùng <input type="file" accept=".xlsx" data-op-change="onPermMatrixImportFileChange" data-arg-event="0" data-arg0="users" class="hidden">
-          </label>
-          <button type="button" data-op="downloadPermMatrixGroups" class="bg-gray-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-gray-700 transition">📤 Xuất Excel Nhóm Phân Quyền</button>
-          <label class="bg-blue-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-blue-700 cursor-pointer transition">
-            📥 Import Nhóm Phân Quyền <input type="file" accept=".xlsx" data-op-change="onPermMatrixImportFileChange" data-arg-event="0" data-arg0="groups" class="hidden">
-          </label>
-          <button type="button" data-op="togglePermMatrixQuickEdit" class="bg-purple-600 text-white px-2.5 py-1.5 rounded font-semibold hover:bg-purple-700 transition">🖊️ Sửa Nhanh Trên Web (không cần Excel)</button>
+        <!-- Giai đoạn 2 "HCRC Workspace Refresh" (11/2026): gộp 5 nút 5 màu vào 1 menu "⋯", giữ
+             NGUYÊN hành vi/data-op của từng mục — xem chú thích đầy đủ tại cụm "Danh Sách Người Dùng &
+             Quyền Hạn" ngay phía trên (cùng khuôn). Chỉ "🖊️ Sửa Nhanh Trên Web" giữ làm nút chính
+             (primary) riêng — đây là thao tác người dùng dùng thường xuyên nhất trong cụm này. -->
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <button type="button" data-op="togglePermMatrixQuickEdit" class="btn-primary">🖊️ Sửa Nhanh Trên Web</button>
+          <div class="action-menu-trigger-wrap">
+            <button type="button" data-op="toggleActionMenu" data-arg0="permMatrixActionsMenu" data-arg-event="1" class="btn-more" title="Thao tác khác">⋯</button>
+            <div id="permMatrixActionsMenu" class="hidden action-menu-panel">
+              <button type="button" data-op-seq="closeActionMenu(permMatrixActionsMenu)|downloadPermMatrixUsers()" class="action-menu-item">📤 Xuất Excel Người Dùng</button>
+              <label class="action-menu-item cursor-pointer" data-op-seq="closeActionMenu(permMatrixActionsMenu)">
+                📥 Import Người Dùng <input type="file" accept=".xlsx" data-op-change="onPermMatrixImportFileChange" data-arg-event="0" data-arg0="users" class="hidden">
+              </label>
+              <button type="button" data-op-seq="closeActionMenu(permMatrixActionsMenu)|downloadPermMatrixGroups()" class="action-menu-item">📤 Xuất Excel Nhóm Phân Quyền</button>
+              <label class="action-menu-item cursor-pointer" data-op-seq="closeActionMenu(permMatrixActionsMenu)">
+                📥 Import Nhóm Phân Quyền <input type="file" accept=".xlsx" data-op-change="onPermMatrixImportFileChange" data-arg-event="0" data-arg0="groups" class="hidden">
+              </label>
+            </div>
+          </div>
         </div>
 
         <!-- Sửa Nhanh Trên Web (10/2026) — tick trực tiếp thay vì Xuất/Sửa Excel/Nhập lại. Chỉ 1 "khối"

@@ -10153,6 +10153,31 @@ document.addEventListener('click', (ev) => {
   if (!panel.contains(ev.target) && ev.target !== btn && !btn?.contains(ev.target)) panel.classList.add('hidden');
 });
 
+// toggleActionMenu(id, event)/closeActionMenu(id) — menu "⋯" DÙNG CHUNG cho TOÀN BỘ hệ thống (Giai
+// đoạn 2, "HCRC Workspace Refresh" — kế hoạch hiện đại hoá giao diện người dùng đã duyệt sau đợt rà
+// soát 50 màn hình, 11/2026). Generic hoá đúng khuôn toggleHrDropdown()/toggleMuaHangDropdown() ở trên
+// (vốn mỗi dropdown sidebar tự viết 1 cặp hàm + 1 listener riêng) — vì Giai đoạn 2+ cần lặp lại mẫu
+// "gộp hành động phụ vào 1 nút ⋯" ở RẤT NHIỀU màn khác nhau, viết 1 cặp hàm DÙNG CHUNG qua id thay vì
+// copy-paste lại cho từng màn. Chỉ cho phép 1 action-menu mở tại 1 thời điểm (đóng mọi menu khác khi mở
+// menu mới) — khớp hành vi dropdown sidebar hiện có. Xem .action-menu-panel/.action-menu-item (app.css).
+function toggleActionMenu(id, e) {
+  e?.stopPropagation();
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  const willOpen = panel.classList.contains('hidden');
+  document.querySelectorAll('.action-menu-panel').forEach(p => { if (p !== panel) p.classList.add('hidden'); });
+  panel.classList.toggle('hidden', !willOpen);
+}
+function closeActionMenu(id) {
+  document.getElementById(id)?.classList.add('hidden');
+}
+document.addEventListener('click', (ev) => {
+  document.querySelectorAll('.action-menu-panel:not(.hidden)').forEach((panel) => {
+    const trigger = document.querySelector(`[data-op="toggleActionMenu"][data-arg0="${panel.id}"]`);
+    if (!panel.contains(ev.target) && ev.target !== trigger && !trigger?.contains(ev.target)) panel.classList.add('hidden');
+  });
+});
+
 // "Hợp Đồng" — cùng khuôn Điều Hành/Hành Chính, bọc 2 sub-tab Phê Duyệt/Quản Lý HĐ & Giấy Phép (module
 // "contract", xem HTML #hopDongNavWrap). Không có hàm updateXNavVisibility riêng như Điều Hành/Hành
 // Chính/Tổng Hợp vì 2 sub-tab này dùng CHUNG 1 điều kiện quyền (canAccessContractModule — không có

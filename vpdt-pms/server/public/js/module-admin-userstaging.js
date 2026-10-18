@@ -436,7 +436,10 @@ async function toggleUserActive(id) {
 // Quản trị. Trước đây đếm số field "truthy" trong perms, dễ gây hiểu nhầm vì mảng/đối tượng rỗng
 // vẫn được coi là truthy dù không thực sự cấp quyền gì.
 function summarizeUserPerms(perms) {
-  if (perms.admin) return '<span class="text-purple-700 font-bold">[ADMIN — Toàn quyền hệ thống]</span>';
+  // Giai đoạn 2 "HCRC Workspace Refresh" (11/2026): badge pill .badge-danger (app.css) thay cho chữ
+  // ngoặc vuông thô — ADMIN là quyền cao nhất/rủi ro nhất hệ thống nên dùng đúng màu danger, khớp quy
+  // ước 4 màu trạng thái đã chuẩn hoá (không còn mỗi nơi tự chọn màu riêng).
+  if (perms.admin) return '<span class="badge-danger">👑 ADMIN — Toàn quyền hệ thống</span>';
   const hasScope = (scope) => !!(scope?.all || (scope?.depts || []).length > 0);
   const parts = [];
   // uploadAll (10/2026, "6-module"): giờ là cờ phẳng boolean — kiểm trực tiếp thay vì qua uploadDepts.

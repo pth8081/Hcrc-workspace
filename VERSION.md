@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**26.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.23 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2a — gọn hoá nút Hệ Thống > Quản Trị
+
+Giai đoạn 2a của lộ trình hiện đại hoá giao diện đã duyệt (tiếp theo v26.22) — áp dụng đúng điểm tác
+động cao nhất đã phát hiện ở đợt rà soát: cụm "Danh Sách Người Dùng & Quyền Hạn" (4 nút: Tải File Mẫu/
+Export Excel/Import Excel/Đặt Lại Mật Khẩu Hàng Loạt) và "Ma Trận Phân Quyền" (5 nút: Xuất/Import Excel
+Người Dùng, Xuất/Import Excel Nhóm Phân Quyền, Sửa Nhanh Trên Web) ở Hệ Thống > Quản Trị từng có 9 nút
+9 màu không theo quy ước nào.
+
+- `public/js/core.js`: thêm `toggleActionMenu(id, event)`/`closeActionMenu(id)` — menu "⋯" DÙNG CHUNG
+  (không viết riêng cho từng màn), cùng khuôn `toggleHrDropdown()`/`toggleMuaHangDropdown()` đã có sẵn
+  cho dropdown sidebar. Chỉ 1 menu mở tại 1 thời điểm; click ra ngoài tự đóng; bấm 1 mục tự đóng ngay
+  (qua `data-op-seq="closeActionMenu(id)|<hành động gốc>"`, giữ NGUYÊN 100% hành vi/`data-op` gốc).
+- `public/app.css`: thêm `.action-menu-trigger-wrap`/`.action-menu-panel`/`.action-menu-item`.
+- `public/fragments/systemSection.html`: 2 cụm nút trên gọn còn 1 nút chính (primary, "Sửa Nhanh Trên
+  Web") + 1 nút "⋯" mỗi cụm — không đổi `data-op`/hành vi bất kỳ hành động nào, chỉ đổi cách trình bày.
+- `public/js/module-admin-userstaging.js`: badge `[ADMIN — Toàn quyền hệ thống]` (chữ ngoặc vuông thô)
+  → `.badge-danger` (pill đỏ, khớp quy ước "quyền cao nhất/rủi ro nhất = màu danger").
+
+**LỖI PHÁT HIỆN + VÁ NGAY TRONG ĐỢT NÀY** (qua chụp ảnh kiểm tra thật trước khi merge, không chỉ tin
+`classList`): `.action-menu-panel { display: flex }` đặt trực tiếp đã ĐÈ MẤT `display: none` của class
+`.hidden` (Tailwind) trên CÙNG phần tử — 2 class cùng độ ưu tiên (1-class selector), `app.css` nạp SAU
+`tailwind.css` nên luôn thắng bất kể thứ tự class trong HTML, khiến panel hiện ra ngay từ đầu dù có class
+"hidden". Đã sửa: `.action-menu-panel` mặc định `display:none`, chỉ bật `flex` qua `:not(.hidden)` (độ
+ưu tiên cao hơn 1 bậc, luôn thắng `.hidden` dù thứ tự nạp file nào).
+
+Test: `tests/test-action-menu-admin-users.js` (mới, 5 kịch bản — gồm cả kiểm `getComputedStyle().display`
+THẬT thay vì chỉ `classList`, đúng lớp lỗi vừa vá) + xác nhận bằng `git stash` rằng test FAIL đúng trên
+code cũ. Chạy lại đầy đủ test liên quan màn Quản Trị (`test-admin-users-permgroups`, `test-excel-dropdown`,
+`test-perm-matrix-client`, `test-perm-matrix-quickedit-and-bulk-group`, `test-user-import-inline-fix` —
+267 kịch bản) + CSP full-audit + lazy-load toàn bộ tab — không hồi quy. Demo ảnh trước/sau đã xác nhận
+bằng ảnh chụp thật (không chỉ suy luận qua code).
+
+**Deploy-impact**: thuần client (`public/js/core.js`, `public/app.css`,
+`public/fragments/systemSection.html`, `public/js/module-admin-userstaging.js`) — KHÔNG đổi `schema.sql`,
+KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.22 (2026-11): "HCRC Workspace Refresh" Giai đoạn 1 — nền tảng CSS dùng chung cho hiện đại hoá giao diện
 
