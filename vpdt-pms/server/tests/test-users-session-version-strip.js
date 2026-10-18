@@ -36,7 +36,9 @@ const NV1 = { id: 2, username: 'nv1', name: 'Nhân Viên 1', dept: 'Phòng A', p
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }, { ...NV1 }], permGroups: [] };
+  // depts (Đợt 5, mức Thấp — prepareUsersForSave() giờ validate dept khi THAY ĐỔI/GÁN MỚI so với danh
+  // mục, xem routes/data.js) — seed đủ dept dùng trong file này để không bị 400 oan.
+  APP_DATA = { users: [{ ...ADMIN }, { ...NV1 }], permGroups: [], depts: ['Ban Giám Đốc', 'Phòng A', 'Phòng B'], stores: [] };
 }
 resetData();
 
@@ -132,17 +134,25 @@ async function main() {
       assertEqual(saved.sessionVersion, 8, `đặt PIN mới phải tăng sessionVersion (7 -> 8) để đăng xuất phiên cũ, got: ${saved.sessionVersion}`);
     });
 
-    await run.run('POST /api/data/users — tạo user MỚI không có sessionVersion (không lấy nhầm giá trị client gửi)', async () => {
+    await run.run('POST /api/data/users — tạo user MỚI có mật khẩu -> sessionVersion tự tính = 1 (KHÔNG lấy nhầm giá trị 42 do client tự gửi)', async () => {
+      // Kịch bản ĐÃ CẬP NHẬT (Đợt 5, phát hiện phụ khi vá dept validation — KHÔNG liên quan tới dept):
+      // trước đây user MỚI không bắt buộc có mật khẩu nên sessionVersion giữ nguyên "undefined" (không
+      // qua nhánh đặt mật khẩu ở dưới). Từ khi có chốt chặn "USER-BULK-04" (missingPasswordUsernames,
+      // ngay dưới) bắt buộc MỌI user MỚI phải có mật khẩu, user MỚI LUÔN đi qua nhánh đặt mật khẩu ->
+      // sessionVersion LUÔN được tính lại = (prior?.sessionVersion || 0) + 1 = 1 (prior không tồn tại) —
+      // đây là hành vi ĐÚNG/nhất quán (mật khẩu MỚI luôn vô hiệu hoá phiên cũ, dù "phiên cũ" ở đây chưa
+      // từng tồn tại), KHÔNG phải regression. Điều thực sự cần kiểm vẫn giữ nguyên: giá trị 42 client tự
+      // gửi KHÔNG được dùng trực tiếp — server LUÔN tự tính lại.
       resetData();
       const payload = [
         { ...ADMIN },
         { ...NV1 },
-        { id: 3, username: 'nv3', name: 'Nhân Viên 3', dept: 'Phòng B', perms: {}, active: true, sessionVersion: 42 }
+        { id: 3, username: 'nv3', pass: 'MatKhau@2024', name: 'Nhân Viên 3', dept: 'Phòng B', perms: {}, active: true, sessionVersion: 42 }
       ];
       const res = await api('POST', '/api/data/users', payload);
       assertEqual(res.status, 200, `phải lưu thành công, got: ${JSON.stringify(res.body)}`);
       const saved = APP_DATA.users.find(u => u.username === 'nv3');
-      assertEqual(saved.sessionVersion, undefined, `user MỚI không có "prior" -> sessionVersion phải là undefined, KHÔNG lấy 42 do client tự gửi, got: ${saved.sessionVersion}`);
+      assertEqual(saved.sessionVersion, 1, `user MỚI có mật khẩu -> sessionVersion phải tự tính = 1, KHÔNG lấy 42 do client tự gửi, got: ${saved.sessionVersion}`);
     });
 
     run.summary();

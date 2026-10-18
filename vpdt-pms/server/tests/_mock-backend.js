@@ -73,11 +73,12 @@ function __mockNormalizeInternalPostContentAndMedia(target) {
 function __mockValidateInternalPostCreate(payload, user) {
   const type = payload.type;
   payload.code = `${__MOCK_INTERNAL_TYPE_PREFIX[type] || 'BD'}-${Date.now()}`;
+  // mirrors canCreateInternalPostType() (lib/createValidation.js) — nhánh REWARD đã xoá (dead, xem
+  // chú thích tại hàm gốc).
   const allowed = !!(
     user.perms?.admin || type === 'SHARE' ||
     (type === 'NEWS' && user.perms?.internalNewsCreate) ||
-    (type === 'TRAINING' && user.perms?.trainingManage) ||
-    (type === 'REWARD' && user.perms?.internalRewardCreate)
+    (type === 'TRAINING' && user.perms?.trainingManage)
   );
   if (!allowed) throw __mockHttpError(403, 'Bạn không có quyền đăng bài ở phân hệ này');
   __mockNormalizeInternalPostContentAndMedia(payload);

@@ -1,9 +1,65 @@
 # Phiên bản hiện tại
 
-**26.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.49 (2026-11): [Thấp] Rà soát chuyên sâu lần 2 trước go-live — Đợt 5: audit-trail xoá + dọn dẹp + dept validation import
+
+3 phát hiện mức Thấp (đợt rà soát 6-agent song song), gói cuối cùng trước khi chuyển sang đợt
+"chặn admin tự duyệt ở TẤT CẢ module":
+
+- **[Thấp] ~30 collection dùng chung điểm xoá (`deleteRecordForCollection()`, lib/recordStore.js) không
+  có log chung nào trong Nhật Ký Hệ Thống.** Chỉ vài route tự thêm 1 dòng `insertSystemLog()` RIÊNG cho
+  lý do nghiệp vụ cụ thể (VD cảnh báo `operationOrders` đã đồng bộ dsmart16) — còn lại hoàn toàn không có
+  dấu vết "ai xoá, lúc nào, hồ sơ nào". Thêm `logRecordDelete()` — ghi 1 dòng `SystemLogs` generic
+  (`module: 'RECORD'`, `actionType: 'DELETE'`) tại ĐÚNG 1 điểm, tự áp dụng cho MỌI collection qua đây
+  (cả nhánh có Thùng Rác `moveDedicatedRecordToTrash()` lẫn nhánh AppData xoá vĩnh viễn), FIRE-AND-FORGET
+  (không `await`, chỉ `.catch` log lỗi ra console) để 1 lượt ghi log thất bại không làm hỏng/rollback
+  lượt xoá THẬT đã commit. Chấp nhận log THIẾU địa chỉ IP (31 điểm gọi hiện tại chỉ mang `{username,
+  name}`, không có `req.ip`) để không phải sửa cả 31 điểm gọi — phạm vi rộng không cần thiết cho 1 phát
+  hiện mức Thấp.
+- **[Thấp] Dọn dẹp code chết: nhánh `REWARD` trong `canCreateInternalPostType()` (lib/createValidation.js).**
+  `internalRewardCreate` đã đổi tên thành `internalRecruitmentCreate` từ lâu (module Tuyển Dụng thay thế
+  "Khen Thưởng" cũ) — không ai còn giữ được quyền `internalRewardCreate` (tự động migrate), và client
+  cũng không còn nút tạo bài loại REWARD (chỉ còn hiển thị lại bài CŨ). Xoá nhánh dead code (hành vi
+  không đổi — admin vẫn qua được nhờ nhánh `perms.admin`), đồng bộ luôn bản mirror ở `tests/_mock-backend.js`.
+  Thêm nhãn thiếu `checklistStoreSelfExecute` (tên CŨ của `checklistExecute`, vẫn được đọc fallback cho
+  user chưa lưu lại qua form mới) vào `PERM_KEY_VN_LABELS` (module-admin-permgroups.js) — tránh hiện
+  `Q_checklistStoreSelfExecute` thô trên Ma Trận Phân Quyền.
+- **[Thấp] `prepareUsersForSave()` (routes/data.js) không validate `dept` khi lưu "users".**
+  `validateImportedUserRow()` (module-admin-userstaging.js) đã đối chiếu `dept` với `DB.depts`/`DB.stores`
+  TRƯỚC khi gọi `syncStorage('users')` cho luồng Nhập Excel — nhưng đó là validate CLIENT-SIDE. Điểm ghi
+  THẬT (`prepareUsersForSave()`, dùng chung cho mọi lượt lưu "users": form Sửa tay, Nhập Excel, Đặt Lại
+  Mật Khẩu Hàng Loạt) trước đây không tự kiểm lại, nên 1 request tự soạn gọi thẳng `POST /api/data/users`
+  vẫn ghi được `dept` không tồn tại trong danh mục. Thêm validate: CHỈ chặn khi `dept` THAY ĐỔI/GÁN MỚI
+  so với giá trị đang lưu (`prior.dept`) — KHÔNG chặn giữ nguyên `dept` cũ (dù đã lỡ "mồ côi" từ trước,
+  VD phòng ban đã bị xoá hẳn khỏi danh mục) để không "khoá" việc sửa các field KHÁC của user đó; `dept`
+  RỖNG ("để trống nếu không chọn") vẫn luôn hợp lệ.
+
+**Test:** file mới `tests/test-record-delete-systemlog.js` (3 scenario, pure-unit — giả lập tối thiểu
+`sql.Transaction`/`sql.Request`/`getPool`, mirror khuôn `test-operation-workitem-delete-toctou.js`) + mở
+rộng `tests/test-user-import-login-e2e.js` (5 scenario mới — dept hợp lệ/không hợp lệ/mồ côi/rỗng) +
+`tests/test-perm-matrix-client.js` (xác nhận nhãn mới không trùng, test "(k)" sẵn có). Tất cả assertion
+mới đã xác nhận FAIL trên code CŨ (`git stash`), PASS trên code đã vá. Chạy lại đầy đủ các bộ test liên
+quan: `test-trash-sensitive-collections.js` (21/21), `test-trash-operation-orders-label.js` (4/4),
+`test-operation-workitem-delete-toctou.js` (3/3), `test-khoi0-license-uniform-gate.js` (9/9),
+`test-docs-scope.js` (9/9), `test-license-cancel.js` (7/7), `test-perm-matrix-client.js` (46/46),
+`test-audit-round3-internalposts-edit.js`/`test-formsplit-internalpost-office.js`/
+`test-internalpost-comment-own-edit-delete.js`/`test-internalpost-share-video-restriction.js`/
+`test-khoi0-checklist-contract-attendance-internalpost-gate.js` (đều PASS, các bài Nhịp Sống HCRC/REWARD
+không bị ảnh hưởng). **Phát hiện phụ (không phải regression của đợt này)**: thêm validate dept lộ ra 5
+fixture test cũ (`test-user-save-autolink-profile.js`/`test-user-username-uniqueness.js`/
+`test-username-case-insensitive.js`/`test-users-session-version-strip.js`/`test-user-import-login-e2e.js`)
+chưa từng seed danh mục `depts`/`stores` — đã bổ sung seed đúng theo nguyên tắc "sửa fixture cho đúng,
+không nới lỏng chặn mới" (CLAUDE.md). Riêng `test-users-session-version-strip.js` còn lộ 1 fixture
+ĐÃ CŨ (không liên quan dept): thiếu `pass` cho user MỚI khiến bị chặn ở lớp "USER-BULK-04" (yêu cầu mật
+khẩu, có từ trước) TRƯỚC KHI chạm tới dept — xác nhận qua `git stash` (lỗi giống hệt trên code GỐC chưa
+đụng gì) — đã bổ sung `pass` cho fixture, và 1 assertion cũ (`sessionVersion` phải `undefined` cho user
+mới) đã lỗi thời từ khi "USER-BULK-04" bắt buộc mật khẩu cho mọi user mới (mật khẩu mới → `sessionVersion`
+luôn tự tính = 1, không còn `undefined`) — sửa assertion khớp đúng hành vi hiện tại, không phải hành vi
+mới của đợt này.
 
 ## v26.48 (2026-11): [Cao/Thấp] Rà soát chuyên sâu lần 2 trước go-live — Đợt 4: Agent-4 (2 phát hiện còn lại)
 

@@ -30,7 +30,10 @@ const ADMIN = { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }], permGroups: [] };
+  // depts (Đợt 5, mức Thấp — prepareUsersForSave() giờ validate dept khi THAY ĐỔI/GÁN MỚI so với danh
+  // mục, xem routes/data.js) — seed đủ các dept dùng trong file này ('Ban Giám Đốc' cho admin, 'Phòng
+  // Nhân Sự' cho user mới import, 'Phòng A' cho user ghi đè sẵn có) để không bị 400 oan.
+  APP_DATA = { users: [{ ...ADMIN }], permGroups: [], depts: ['Ban Giám Đốc', 'Phòng Nhân Sự', 'Phòng A'], stores: [] };
 }
 resetData();
 
@@ -142,6 +145,65 @@ async function main() {
 
       const loginOldPass = await fetch(`http://127.0.0.1:${PORT}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'nv.old', password: 'MatKhauCu@2024' }) });
       assertEqual(loginOldPass.status, 200, 'Sau khi import overwrite (không đụng mật khẩu), phải vẫn đăng nhập được bằng mật khẩu CŨ');
+    });
+
+    // 3 scenario dưới đây (Đợt 5, mức Thấp) — prepareUsersForSave() (routes/data.js) giờ validate dept
+    // khi THAY ĐỔI/GÁN MỚI so với danh mục DB.depts/DB.stores, chặn đúng khe hở "Nhập Excel chỉ validate
+    // CLIENT-SIDE (validateImportedUserRow()), điểm ghi THẬT không tự kiểm lại".
+    await run.run('(Đợt 5) Import/tạo user MỚI với dept KHÔNG có trong danh mục -> 400, nêu rõ tên dept + username', async () => {
+      resetData();
+      const desired = [
+        { ...APP_DATA.users[0], pass: undefined },
+        { id: 777, username: 'nv.baddept', pass: 'MatKhau@2024', name: 'NV Dept Sai', email: 'bad@company.com', phone: '0900000001', dept: 'Phòng Không Tồn Tại', jobTitle: null, posType: 'HO', startDate: '', khoiBan: '', perms: {} }
+      ];
+      const saveRes = await fetch(`http://127.0.0.1:${PORT}/api/data/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(desired) });
+      const body = await saveRes.json().catch(() => ({}));
+      assertEqual(saveRes.status, 400, `Phải bị chặn 400, không phải ${saveRes.status}: ${JSON.stringify(body)}`);
+      assert((body.error || '').includes('Phòng Không Tồn Tại'), `Thông báo lỗi phải nêu rõ tên dept sai: ${JSON.stringify(body)}`);
+      assert((body.error || '').includes('nv.baddept'), `Thông báo lỗi phải nêu rõ username: ${JSON.stringify(body)}`);
+    });
+
+    await run.run('(Đợt 5) User ĐÃ CÓ với dept "mồ côi" (không còn trong danh mục) — sửa field KHÁC (name), GIỮ NGUYÊN dept cũ -> vẫn lưu được, KHÔNG bị chặn oan', async () => {
+      resetData();
+      // Giả lập 1 user cũ còn sót dept không có trong danh mục hiện tại (VD phòng ban đã bị xoá hẳn từ
+      // trước, không phải đổi tên — cascadeStoreRename() chỉ xử lý ĐỔI TÊN, không xử lý XOÁ HẲN).
+      APP_DATA.users.push({ id: 888, username: 'nv.orphandept', name: 'NV Mồ Côi Dept', email: 'orphan@company.com', phone: '0900000002', dept: 'Phòng Đã Xoá Từ Lâu', jobTitle: null, posType: 'HO', startDate: '', khoiBan: '', perms: {} });
+      const desired = APP_DATA.users.map(u => ({ ...u, pass: undefined }));
+      const target = desired.find(u => u.username === 'nv.orphandept');
+      target.name = 'NV Mồ Côi Dept (Đã Sửa Tên)'; // KHÔNG đụng field dept.
+      const saveRes = await fetch(`http://127.0.0.1:${PORT}/api/data/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(desired) });
+      const body = await saveRes.json().catch(() => ({}));
+      assertEqual(saveRes.status, 200, `Giữ nguyên dept cũ (dù mồ côi) khi sửa field khác phải vẫn lưu được: ${JSON.stringify(body)}`);
+    });
+
+    await run.run('(Đợt 5) User ĐÃ CÓ dept "mồ côi" — ĐỔI SANG dept khác CŨNG không có trong danh mục -> vẫn bị chặn 400 (không phải chỉ giữ nguyên mới được miễn)', async () => {
+      resetData();
+      APP_DATA.users.push({ id: 999, username: 'nv.orphandept2', name: 'NV Mồ Côi 2', email: 'orphan2@company.com', phone: '0900000003', dept: 'Phòng Đã Xoá Từ Lâu', jobTitle: null, posType: 'HO', startDate: '', khoiBan: '', perms: {} });
+      const desired = APP_DATA.users.map(u => ({ ...u, pass: undefined }));
+      const target = desired.find(u => u.username === 'nv.orphandept2');
+      target.dept = 'Phòng Khác Cũng Sai'; // ĐỔI sang 1 giá trị KHÁC vẫn sai, không phải giữ nguyên.
+      const saveRes = await fetch(`http://127.0.0.1:${PORT}/api/data/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(desired) });
+      assertEqual(saveRes.status, 400, 'Đổi dept mồ côi sang 1 giá trị MỚI cũng sai phải vẫn bị chặn (không phải "đã từng sai thì sai tiếp cũng được")');
+    });
+
+    await run.run('(Đợt 5) Đổi dept sang giá trị HỢP LỆ (có trong danh mục) -> lưu thành công', async () => {
+      resetData();
+      const desired = [
+        { ...APP_DATA.users[0], pass: undefined, dept: 'Phòng Nhân Sự' } // admin đổi dept sang 1 giá trị hợp lệ khác.
+      ];
+      const saveRes = await fetch(`http://127.0.0.1:${PORT}/api/data/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(desired) });
+      const body = await saveRes.json().catch(() => ({}));
+      assertEqual(saveRes.status, 200, `Đổi dept sang giá trị hợp lệ phải lưu được: ${JSON.stringify(body)}`);
+    });
+
+    await run.run('(Đợt 5) dept RỖNG ("để trống nếu không chọn") -> luôn hợp lệ, không bị chặn', async () => {
+      resetData();
+      const desired = [
+        { ...APP_DATA.users[0], pass: undefined, dept: '' }
+      ];
+      const saveRes = await fetch(`http://127.0.0.1:${PORT}/api/data/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(desired) });
+      const body = await saveRes.json().catch(() => ({}));
+      assertEqual(saveRes.status, 200, `dept rỗng phải luôn hợp lệ: ${JSON.stringify(body)}`);
     });
   } finally {
     server.close();

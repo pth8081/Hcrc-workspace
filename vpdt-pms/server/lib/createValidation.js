@@ -634,13 +634,18 @@ const HR_TASK_DEPARTMENTS = ['HR', 'IT', 'ADMIN', 'FINANCE', 'MANAGER'];
 // quyền đó sau đó vẫn tự publish lại được bài NHÁP/NEED_INFO cũ của mình (SỬA + gửi lại) như chưa từng
 // bị thu hồi quyền, vì editInternalPost() chỉ kiểm tác giả/trạng thái, không kiểm lại loại bài. SHARE
 // luôn true (ai cũng đăng được, chỉ cần qua duyệt PENDING) — khớp canCreateInternalPost() ở client.
+// DỌN DẸP (đợt rà soát chuyên sâu lần 2 trước go-live, Đợt 5, mức Thấp): nhánh `type === 'REWARD'` đã
+// XOÁ — `internalRewardCreate` đã đổi tên thành `internalRecruitmentCreate` từ lâu (tự động migrate qua
+// normalizeUserPermissions(), xem recruitmentJobs ở CREATE_MODULE_CONFIGS phía dưới), không ai còn giữ
+// được quyền đó nữa; đồng thời client cũng KHÔNG còn nút tạo bài loại REWARD (đã thay bằng module Tuyển
+// Dụng, chỉ còn vài bài CŨ hiển thị lại — xem module-internalcomms-nhipsong.js). Nhánh này vốn đã dead
+// (luôn false với mọi user thường), xoá không đổi hành vi (admin vẫn qua được nhờ nhánh `perms.admin`).
 function canCreateInternalPostType(user, type) {
   return !!(
     user.perms?.admin ||
     type === 'SHARE' ||
     (type === 'NEWS' && user.perms?.internalNewsCreate) ||
-    (type === 'TRAINING' && user.perms?.trainingManage) ||
-    (type === 'REWARD' && user.perms?.internalRewardCreate)
+    (type === 'TRAINING' && user.perms?.trainingManage)
   );
 }
 

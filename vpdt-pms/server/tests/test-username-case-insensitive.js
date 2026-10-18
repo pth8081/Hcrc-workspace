@@ -29,7 +29,9 @@ const ADMIN = { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ban
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }], permGroups: [] };
+  // depts (Đợt 5, mức Thấp — prepareUsersForSave() giờ validate dept khi THAY ĐỔI/GÁN MỚI so với danh
+  // mục, xem routes/data.js) — seed đủ dept dùng trong file này để không bị 400 oan.
+  APP_DATA = { users: [{ ...ADMIN }], permGroups: [], depts: ['Ban Giám Đốc', 'Phòng A'], stores: [] };
 }
 resetData();
 

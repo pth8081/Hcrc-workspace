@@ -339,6 +339,11 @@ const PERM_KEY_VN_LABELS = {
   "carDownload.all": "Đăng Ký Xe — Tải xuống",
   "carReportView": "Đăng Ký Xe — 📊 Xem Báo Cáo Đăng Ký Xe (toàn công ty, không kèm quyền Xem ở bảng trên)",
   "checklistExecute": "Checklist Đánh Giá Siêu Thị — ✅ Quyền Thực Hiện Checklist (Checklist Thường, đúng siêu thị đang gán)",
+  // checklistStoreSelfExecute: tên CŨ của checklistExecute (trước đợt làm gọn 11/2026) — KHÔNG còn gán
+  // được qua UI (ô tick mới chỉ ghi checklistExecute), nhưng lib/checklist.js/core.js vẫn đọc fallback
+  // cho dữ liệu user CŨ chưa được lưu lại qua form mới (xem canExecuteChecklistGeneral()) — thiếu nhãn
+  // khiến các user đó hiện "Q_checklistStoreSelfExecute" thô trên Ma Trận Phân Quyền.
+  "checklistStoreSelfExecute": "Checklist Đánh Giá Siêu Thị — ✅ Quyền Thực Hiện Checklist (tên CŨ, đã đổi thành checklistExecute)",
   "checklistExecuteScope.all": "Checklist Đánh Giá Siêu Thị — ✅ Quyền Thực Hiện Checklist — ALL (không gắn siêu thị, thực hiện được mọi siêu thị)",
   "checklistReportView": "Checklist Đánh Giá Siêu Thị — 📊 Quyền Báo Cáo Checklist (xem báo cáo Checklist Thường mọi siêu thị)",
   "checklistAtvstpExecute": "Checklist Đánh Giá Siêu Thị — 🥗 Quyền Thực Hiện ATVSTP (Kiểm Soát, mọi siêu thị)",

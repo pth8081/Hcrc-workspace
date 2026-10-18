@@ -18,6 +18,7 @@ const path = require('path');
 const { getPool, sql } = require('../db');
 const { getAppDataValue, withLockedAppDataValue } = require('./appData');
 const { HttpError } = require('./httpErrors');
+const { insertSystemLog } = require('./systemLogStore');
 
 // Collection quản lý bởi recordStore.js (KHÔNG còn ở AppData JSON blob) — thêm dần theo đúng lộ trình
 // đã thống nhất, mỗi bước 1 collection (Bước 6c: submissions, Bước 6d: docs, Bước 6e: carRegs, Bước 6f:
@@ -851,6 +852,37 @@ async function withLockedDedicatedRecordById(collection, id, mutatorFn, opts) {
   }
 }
 
+// Nhật ký hệ thống SERVER-SIDE cho MỌI lượt xoá đi qua deleteRecordForCollection() — PHÁT HIỆN mức Thấp
+// (đợt rà soát chuyên sâu lần 2 trước go-live, Đợt 5): ~30 collection dùng chung điểm xoá này (xem
+// deleteRecordForCollection()/moveDedicatedRecordToTrash() bên dưới) trước đây KHÔNG có log chung nào —
+// chỉ vài route tự thêm 1 dòng insertSystemLog() RIÊNG cho lý do nghiệp vụ cụ thể (VD cảnh báo
+// operationOrders đã đồng bộ dsmart16, xem routes/records.js), còn lại HOÀN TOÀN không có dấu vết "ai
+// xoá, lúc nào, hồ sơ nào" trong Nhật Ký Hệ Thống (mục 📊 Hệ Thống > Nhật Ký). Thêm 1 dòng log CHUNG,
+// generic, tại ĐÚNG 1 điểm (mirror khuôn logAdminSensitiveDataWrite() ở routes/data.js: module 'CONFIG'
+// generic, actionType/targetObject/description nêu rõ tên thật) — tự áp dụng cho MỌI collection qua đây,
+// không cần sửa từng route riêng lẻ. FIRE-AND-FORGET (không await, chỉ .catch log lỗi ra console) — một
+// lượt ghi Nhật Ký Hệ Thống thất bại (VD SQL Server tạm mất kết nối) KHÔNG được làm hỏng/rollback lượt
+// xoá THẬT vừa commit thành công, đúng tinh thần "không làm treo nút thao tác" đã thống nhất.
+// ipAddress: actor hiện tại (31 điểm gọi deleteRecordForCollection() ở routes/records.js, routes/checklist.js,
+// routes/payroll.js, routes/trash.js) chỉ mang {username, name} — KHÔNG có req.ip. Chấp nhận log THIẾU
+// IP ở log này (khác distinct với logAdminSensitiveDataWrite() có req) để KHÔNG phải sửa 31 điểm gọi
+// (phạm vi rộng, rủi ro không cần thiết cho 1 phát hiện mức Thấp) — actor.ipAddress (nếu caller nào SAU
+// NÀY truyền thêm) vẫn được ưu tiên dùng nếu có.
+function logRecordDelete(collection, id, item, actor, trashed) {
+  insertSystemLog({
+    username: actor?.username || 'unknown',
+    fullName: actor?.name || null,
+    ipAddress: actor?.ipAddress || '',
+    module: 'RECORD',
+    actionType: 'DELETE',
+    targetObject: item?.code || String(id),
+    description: trashed
+      ? `Đã xoá "${collection}" #${id}${item?.code ? ` (mã: ${item.code})` : ''} — đã chuyển vào Thùng Rác, có thể khôi phục lại.`
+      : `Đã XOÁ VĨNH VIỄN "${collection}" #${id}${item?.code ? ` (mã: ${item.code})` : ''} — KHÔNG qua Thùng Rác, không thể khôi phục.`,
+    status: 'SUCCESS'
+  }).catch(e => console.error(`Lỗi ghi nhật ký hệ thống (xoá "${collection}" #${id}):`, e.message));
+}
+
 // Cùng khuôn moveRecordToTrash() (bên dưới) — vẫn dùng CHUNG dbo.TrashBin (cột Collection ở đó đã đủ
 // phân biệt bảng nguồn để restoreTrashItem() biết đường phục hồi đúng chỗ, xem sửa đổi restoreTrashItem()).
 async function moveDedicatedRecordToTrash(collection, id, actor, checkFn) {
@@ -890,6 +922,7 @@ async function moveDedicatedRecordToTrash(collection, id, actor, checkFn) {
     await tx.commit();
     invalidateCollectionCache(collection);
     invalidateTrashCache();
+    logRecordDelete(collection, id, item, actor, true);
   } catch (err) {
     await tx.rollback().catch(() => {});
     throw err;
@@ -1660,14 +1693,19 @@ async function withLockedRecordForCollection(collection, id, mutatorFn, opts) {
 async function deleteRecordForCollection(collection, id, checkFn, actor) {
   if (DEDICATED_TABLES[collection]) return moveDedicatedRecordToTrash(collection, id, actor, checkFn);
   if (MIGRATED_COLLECTIONS.has(collection)) return moveRecordToTrash(collection, id, actor, checkFn);
+  let deletedItem;
   await withLockedAppDataValue(collection, (list) => {
     const arr = Array.isArray(list) ? list : [];
     const idx = arr.findIndex(it => it.id === id);
     if (idx === -1) throw new HttpError(404, 'Không tìm thấy hồ sơ');
     if (checkFn) checkFn(arr[idx]);
+    deletedItem = arr[idx];
     arr.splice(idx, 1);
     return arr;
   });
+  // Nhánh AppData (collection chưa "tốt nghiệp" lên bảng riêng) KHÔNG đi qua Thùng Rác — xoá VĨNH VIỄN
+  // ngay (xem chú thích logRecordDelete() ở trên), khác nhánh moveDedicatedRecordToTrash() ở trên.
+  logRecordDelete(collection, id, deletedItem, actor, false);
 }
 
 module.exports = {
