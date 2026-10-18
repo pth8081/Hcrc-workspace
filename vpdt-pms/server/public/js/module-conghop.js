@@ -41,6 +41,45 @@ function canApproveHacLeave(user) { return !!(user?.perms?.admin || user?.perms?
 function canManageHacRoster(user) { return !!(user?.perms?.admin || user?.perms?.hrAttendanceManage || user?.perms?.hrShiftRosterManage); }
 function canApproveHacSwap(user) { return !!(user?.perms?.admin || user?.perms?.hrAttendanceManage || user?.perms?.hrShiftSwapApprove); }
 
+// resolveHacApproverRecipientsByFlag() (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — thêm
+// email "Cần phê duyệt" cho Nghỉ Phép/Đổi Ca, trước đây CHƯA có email nào): Nghỉ Phép/Đổi Ca KHÔNG có
+// quy trình phẳng-toàn-công-ty như hầu hết module khác (uniform/car/...) — hrLeaveApprove/hrShiftSwapApprove
+// chỉ được duyệt đúng theo quan hệ quản lý/siêu thị (isManagerOf()/roster.storeCode, xem
+// canApproveLeaveRequest()/assertShiftSwapApprover() ở server, lib/attendance.js + routes/records.js), và
+// client KHÔNG đọc được u.perms của người khác (sanitizeUsersPermsForViewer() ẩn với viewer không phải
+// admin) — nên KHÔNG tự lọc đúng 100% như server được. Đây là danh sách NGƯỜI NHẬN EMAIL (best-effort,
+// không phải quyết định phân quyền), dùng DB.moduleApproverUsernames (danh sách an toàn đã lọc sẵn theo
+// cờ quyền, xem computeModuleApproverUsernames() lib/recordViewScope.js) + user.managerUsername (field
+// công khai, không bị ẩn) để dò lên cây quản lý — CHƯA kiểm thêm hasModuleAccessServer('hrAttendanceApproveTab')
+// như server làm (chấp nhận có thể gửi dư 1 vài trường hợp hiếm quản lý bị khoá riêng tab đó, không phải
+// lỗ hổng bảo mật vì đây chỉ là gửi thông báo, không phải cấp quyền duyệt).
+function resolveHacManagerChainApprovers(username, approveFlag) {
+  const flagList = DB.moduleApproverUsernames?.[approveFlag] || [];
+  const result = new Set();
+  let cur = (DB.users || []).find(u => u.username === username);
+  for (let i = 0; i < 50 && cur?.managerUsername; i++) {
+    if (flagList.includes(cur.managerUsername)) result.add(cur.managerUsername);
+    cur = (DB.users || []).find(u => u.username === cur.managerUsername);
+  }
+  return [...result];
+}
+// Nghỉ Phép: hrAttendanceManage/admin luôn duyệt được MỌI đơn (company-wide) + quản lý trực tiếp/gián
+// tiếp có hrLeaveApprove.
+function resolveHacLeaveEmailRecipients() {
+  return [...new Set([
+    ...resolveHacManagerChainApprovers(currentUser.username, 'hrLeaveApprove'),
+    ...(DB.moduleApproverUsernames?.hrAttendanceManage || [])
+  ])];
+}
+// Đổi Ca: hrAttendanceManage/admin luôn duyệt được MỌI yêu cầu + hrShiftSwapApprove ĐÚNG siêu thị của
+// người xin đổi (roster.storeCode === requester.dept, xem assertShiftSwapApprover() — dùng currentUser.dept
+// làm đại diện vì roster luôn thuộc đúng siêu thị của chính người tạo yêu cầu).
+function resolveHacSwapEmailRecipients() {
+  const flagList = DB.moduleApproverUsernames?.hrShiftSwapApprove || [];
+  const sameStore = (DB.users || []).filter(u => flagList.includes(u.username) && u.dept === currentUser.dept).map(u => u.username);
+  return [...new Set([...sameStore, ...(DB.moduleApproverUsernames?.hrAttendanceManage || [])])];
+}
+
 // "Xem Quy Trình" cho 2 modal tự phục vụ (Nộp Đơn Nghỉ Phép/Xin Đổi Ca) — Công&Phép KHÔNG có dept-
 // workflow nhiều bước, mỗi loại chỉ 1 cờ quyền phẳng toàn công ty (+ hrAttendanceManage luôn duyệt
 // được cả 2), dùng openSimpleApproverPreviewModal() thay vì openGenericWorkflowPreviewModal().
@@ -233,9 +272,21 @@ async function submitHacLeaveRequest(e) {
   }
   payload.customData = customData;
   try {
-    await callCreateAction('leaveRequests', payload);
+    const result = await callCreateAction('leaveRequests', payload);
+    const newLeave = result.item;
     closeHacLeaveRequestModal();
     alert('✅ Đã gửi đơn nghỉ phép, chờ quản lý trực tiếp/HR duyệt.');
+    const leaveApprovers = resolveHacLeaveEmailRecipients();
+    if (leaveApprovers.length) {
+      notifyUsersByEmail('HR_LEAVE', 'NOTIFY_APPROVAL_NEEDED', newLeave.id, leaveApprovers,
+        `[VPDT] Đơn nghỉ phép của ${currentUser.name} cần bạn phê duyệt`,
+        buildApprovalNeededEmailBody({
+          ticketType: 'Nghỉ Phép', ticketNumber: String(newLeave.id),
+          summary: `${HAC_LEAVE_TYPE_LABELS[leaveType] || leaveType} (${newLeave.fromDate} → ${newLeave.toDate})${reason ? ' — ' + reason : ''}`,
+          creatorName: currentUser.name, creatorDept: currentUser.dept, createdAt: newLeave.createdAt,
+          stepName: 'Duyệt nghỉ phép'
+        }));
+    }
     await initDatabase(currentUser);
     renderHacSelfView();
   } catch (err) {
@@ -279,9 +330,22 @@ async function submitHacSwapRequest(e) {
     return alert(`⛔ ${err.message}`);
   }
   try {
-    await callCreateAction('shiftSwapRequests', { requesterRosterId, targetEmployeeCode, reason, customData });
+    const roster = (DB.shiftRoster || []).find(r => r.id === requesterRosterId);
+    const result = await callCreateAction('shiftSwapRequests', { requesterRosterId, targetEmployeeCode, reason, customData });
+    const newSwap = result.item;
     closeHacSwapRequestModal();
     alert('✅ Đã gửi yêu cầu đổi ca, chờ Quản Lý Siêu Thị/HR duyệt.');
+    const swapApprovers = resolveHacSwapEmailRecipients();
+    if (swapApprovers.length) {
+      notifyUsersByEmail('HR_SWAP', 'NOTIFY_APPROVAL_NEEDED', newSwap.id, swapApprovers,
+        `[VPDT] Yêu cầu đổi ca của ${currentUser.name} cần bạn phê duyệt`,
+        buildApprovalNeededEmailBody({
+          ticketType: 'Đổi Ca', ticketNumber: String(newSwap.id),
+          summary: `${currentUser.name} → ${targetEmployeeCode}${roster ? ` (ca ngày ${roster.workDate} tại ${roster.storeCode})` : ''}${reason ? ' — ' + reason : ''}`,
+          creatorName: currentUser.name, creatorDept: currentUser.dept, createdAt: newSwap.createdAt,
+          stepName: 'Duyệt đổi ca'
+        }));
+    }
     await initDatabase(currentUser);
     renderHacSelfView();
   } catch (err) {

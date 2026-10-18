@@ -1,9 +1,58 @@
 # Phiên bản hiện tại
 
-**26.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.46 (2026-11): [Trung Bình] Rà soát chuyên sâu lần 2 trước go-live — Đợt 2b: thêm email "Cần phê duyệt" cho Đồng Phục/Nghỉ Phép/Đổi Ca/Đào Tạo
+
+Tiếp nối Đợt 2 (v26.45, hoàn thiện Approval Hub). Rà soát sâu hơn phát hiện 4/5 luồng vừa được bổ sung
+vào Approval Hub ở Đợt 2 (trừ Công Việc, đã có sẵn từ trước) **CHƯA TỪNG có bất kỳ email thông báo nào**
+— không phải lỗi quên bật cấu hình (`APPROVAL_EMAIL_EVENTS`), mà code gửi email cho 4 luồng này chưa bao
+giờ được viết. Người dùng xác nhận làm luôn trong đợt này. Thêm điểm gọi `notifyUsersByEmail(...,
+'NOTIFY_APPROVAL_NEEDED', ...)` thật tại đúng nơi tạo hồ sơ của từng module:
+
+- **Đồng Phục** (`module-dongphuc.js`, `submitUniformPeriod()`/`submitUniformTransfer()`) — gửi đúng
+  người có `uniformApprove`/`uniformManage` (cờ phẳng toàn công ty, `getFlatApproverUsernames()`).
+- **Nghỉ Phép** (`module-conghop.js`, `submitHacLeaveRequest()`) — gửi quản lý trực tiếp/gián tiếp CÓ
+  `hrLeaveApprove` (dò lên cây `managerUsername`) + toàn bộ `hrAttendanceManage` (duyệt company-wide).
+  Hàm mới `resolveHacLeaveEmailRecipients()`/`resolveHacManagerChainApprovers()`.
+- **Đổi Ca** (`module-conghop.js`, `submitHacSwapRequest()`) — gửi đúng `hrShiftSwapApprove` CÙNG siêu
+  thị với người xin đổi + `hrAttendanceManage`. Hàm mới `resolveHacSwapEmailRecipients()`.
+- **Đào Tạo — Huỷ Đăng Ký** (`module-internalcomms-daotao.js`, `cancelTrainingRegistrationAction()`) —
+  CHỈ gửi khi thật sự tạo `pendingCancellation` (nhánh admin huỷ NGAY không cần duyệt, không gửi gì) —
+  gửi đúng `trainingManage`. Thêm `trainingManage` vào `APPROVER_FLAG_KEYS`
+  (`lib/recordViewScope.js`) để có `DB.moduleApproverUsernames.trainingManage` an toàn phía client (các
+  cờ còn lại đã có từ trước — client không đọc được `perms` của người khác).
+
+Đăng ký cả 4 module mới (`UNIFORM`/`HR_LEAVE`/`HR_SWAP`/`TRAINING`) vào `APPROVAL_EMAIL_EVENTS` +
+`APPROVAL_EMAIL_LINK_TAB` (`core.js`) — admin bật/tắt được từng module ở màn Quản Trị > 🔔 Thông Báo
+Email Phê Duyệt (mặc định TẮT, giống mọi family `approvalNeeded` khác), email có kèm link về đúng tab
+(`uniform`/`hrAttendance`/`internal`) — CHƯA có "mở thẳng đúng hồ sơ" (giống MEETING/BUDGET trước đây,
+cần xây thêm màn xem chi tiết riêng nếu làm sau, không phải thiếu sót của đợt này).
+
+**Test:** file mới `tests/test-approvalneeded-email-uniform-leave-swap-training.js` (11 scenario) —
+monkeypatch `notifyUsersByEmail()` thành spy, xác nhận ĐÚNG module/actionType/danh sách người nhận cho
+cả 5 trường hợp (2 Đồng Phục + Nghỉ Phép có loại trừ người có cờ nhưng không phải quản lý trực tiếp +
+Đổi Ca có loại trừ siêu thị khác + Đào Tạo có đối chứng nhánh admin-huỷ-ngay KHÔNG gửi email). Xác nhận
+10/10 assertion mới FAIL trên code CŨ (`git stash`), PASS trên code đã vá. Cập nhật 1 assertion cũ ở
+`test-approval-email-config.js` (12 → 16 module trong bảng cấu hình). Chạy lại đầy đủ:
+`test-approval-hub.js` (55/55), `test-approval-polling.js` (12/12), `test-approval-email-config.js`
+(85/85), `test-approval-email-config-admin-gate.js` (4/4), `test-approval-needed-email-template.js`
+(6/6), `test-attendance-leave.js` (72/72), `test-uniform.js`/`test-uniform-phase2.js`/
+`test-uniform-transfer-cancel.js`, `test-internal-training.js`,
+`test-audit-round2-internalcomms-training-pure.js`, `test-position-preview-sanitized-perms.js`,
+`test-reports.js` (21/21) — tất cả PASS, không regression ở module khác.
+
+**Deploy-impact:** chỉ đổi code JS (client + server) — không đổi `schema.sql`, không thêm biến môi
+trường, không cần `npm install`. Copy code + `pm2 restart` là đủ. Hiệu ứng ngay khi deploy: người duyệt
+Đồng Phục/Nghỉ Phép/Đổi Ca/Đào Tạo sẽ bắt đầu nhận được email "Cần phê duyệt" khi có hồ sơ mới — **gửi
+NGAY theo mặc định fail-open** (giống mọi module khác — `isApprovalEmailSuppressed()` chỉ chặn khi admin
+đã LƯU rõ ràng giá trị tắt cho đúng module/family đó ở màn cấu hình; `defaultOn:false` ở trên chỉ quyết
+định checkbox hiện tắt/bật lúc admin MỞ màn đó ra xem, không tự chặn gửi nếu admin chưa từng mở). Admin
+muốn TẠM TẮT 1-4 module này trước khi quen với lượng email mới thì vào Quản Trị > 🔔 Thông Báo Email Phê
+Duyệt, bỏ tích rồi lưu lại.
 
 ## v26.45 (2026-11): [Cao] Rà soát chuyên sâu lần 2 trước go-live — Đợt 2: hoàn thiện Approval Hub + gap-fill Báo Cáo Nghỉ Phép/Đổi Ca
 

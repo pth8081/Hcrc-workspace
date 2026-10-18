@@ -315,7 +315,9 @@ async function scenario(name, fn) {
       r.licenseResultExists && r.licenseResultDisabled === true, JSON.stringify({ exists: r.licenseResultExists, disabled: r.licenseResultDisabled }));
     record('SUBMISSION "Xin ý kiến" (đặc thù) mặc định CÓ tích', r.submissionOpinionRequested === true, JSON.stringify({ submissionOpinionRequested: r.submissionOpinionRequested }));
     record('IT_SUPPORT "Ticket hoàn tất" (đặc thù) mặc định CÓ tích', r.itSupportTicketDone === true, JSON.stringify({ itSupportTicketDone: r.itSupportTicketDone }));
-    record('bảng chính vẽ đủ 1 dòng / module (12 module có email phê duyệt)', r.rowCount === 12, JSON.stringify({ rowCount: r.rowCount }));
+    // Gap-fill (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình): thêm 4 module mới
+    // (UNIFORM/HR_LEAVE/HR_SWAP/TRAINING) — trước đây 12, giờ 16.
+    record('bảng chính vẽ đủ 1 dòng / module (16 module có email phê duyệt)', r.rowCount === 16, JSON.stringify({ rowCount: r.rowCount }));
     record('khối "Sự kiện đặc thù" thật sự có nội dung (SUBMISSION/IT_SUPPORT)', /Văn Bản Trình/.test(r.specialsHTML) && /Hỗ Trợ IT/.test(r.specialsHTML), 'rendered');
   });
 

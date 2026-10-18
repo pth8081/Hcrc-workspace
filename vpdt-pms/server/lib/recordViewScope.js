@@ -479,7 +479,11 @@ function filterTrainingDocumentProgressForUser(list, user) {
 // đăng nhập không tìm ra người nào, bất kỳ cấp nào cũng vậy" — không phải lỗi phạm vi HO/Siêu Thị, mà vì
 // onOfficeTechTypeChange() (module-office.js) từng lọc trực tiếp u.perms?.[permKey] của NGƯỜI KHÁC, luôn
 // undefined với viewer không phải admin do sanitizeUsersPermsForViewer() ở trên).
-const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage', 'canBeApprover', 'officeFixTechIT', 'officeFixTechMechanical'];
+// trainingManage (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — thêm email "Cần phê
+// duyệt" cho yêu cầu huỷ đăng ký lớp học) — cần có mặt ở đây để resolveTrainingCancelApproverUsernames()
+// (module-internalcomms-daotao.js) đọc được danh sách người duyệt mà không phải tự quét u.perms của
+// NGƯỜI KHÁC (bị ẩn với viewer không phải admin, cùng lý do các cờ còn lại ở trên).
+const APPROVER_FLAG_KEYS = ['meetingApprove', 'internalPostApprove', 'itPriceEmergencyRejectApproveWholesale', 'itPriceEmergencyRejectApproveRetail', 'licenseApprove', 'uniformApprove', 'uniformManage', 'hrLeaveApprove', 'hrShiftSwapApprove', 'hrAttendanceManage', 'canBeApprover', 'officeFixTechIT', 'officeFixTechMechanical', 'trainingManage'];
 // KHÔNG còn gộp admin vào danh sách gợi ý (11/2026, theo yêu cầu người dùng — admin xuất hiện trong mọi
 // ô "Người duyệt/Người xác nhận" gợi ý dù CHƯA được cấp đúng quyền cụ thể, gây hiểu lầm). Áp dụng ĐỒNG
 // BỘ cho CẢ 13 cờ ở trên — riêng `canBeApprover` còn là quyền duyệt THẬT (không chỉ hiển thị, xem

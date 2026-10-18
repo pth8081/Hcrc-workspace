@@ -418,6 +418,21 @@ async function submitUniformPeriod() {
 
   DB.uniformPeriods.unshift(newPeriod);
   logSystemAction('UNIFORM', 'CREATE_UNIFORM_PERIOD', `Tạo kỳ cấp phát đồng phục [${newPeriod.name}]`, 'SUCCESS', newPeriod.name);
+  // Email "Cần phê duyệt" (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — trước đây CHƯA
+  // có email nào cho sự kiện này) — kỳ cấp phát LUÔN tạo ra ở approvalStatus PENDING_APPROVAL (xem
+  // extraValidate() uniformPeriods, lib/createValidation.js), gửi đúng những người có uniformApprove/
+  // uniformManage (canApproveUniformClient() — quyền phẳng toàn công ty, không theo phòng ban/siêu thị).
+  const periodApprovers = getFlatApproverUsernames(['uniformApprove', 'uniformManage']);
+  if (periodApprovers.length) {
+    notifyUsersByEmail('UNIFORM', 'NOTIFY_APPROVAL_NEEDED', newPeriod.name, periodApprovers,
+      `[VPDT] Kỳ cấp phát đồng phục "${newPeriod.name}" cần bạn phê duyệt`,
+      buildApprovalNeededEmailBody({
+        ticketType: 'Đồng Phục - Kỳ Cấp Phát', ticketNumber: newPeriod.name,
+        summary: `Phân bổ cho ${newPeriod.allocations.length} siêu thị`,
+        creatorName: currentUser.name, creatorDept: currentUser.dept, createdAt: newPeriod.createdAt,
+        stepName: 'Duyệt kỳ cấp phát'
+      }));
+  }
   alert('✅ Đã tạo kỳ cấp phát đồng phục!');
   resetUniformPeriodForm();
   closeUniformCreatePeriodForm();
@@ -1571,6 +1586,19 @@ async function submitUniformTransfer() {
 
   DB.uniformTransfers.unshift(newTransfer);
   logSystemAction('UNIFORM', 'CREATE_UNIFORM_TRANSFER', `Yêu cầu điều chuyển [${newTransfer.itemName}] từ ${newTransfer.sourceDept} sang ${newTransfer.targetDept}`, 'SUCCESS', newTransfer.itemName);
+  // Email "Cần phê duyệt" (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — cùng lý do kỳ
+  // cấp phát ở trên) — buildUniformTransfer() (lib/recordActions.js) LUÔN tạo ở status PENDING_APPROVAL.
+  const transferApprovers = getFlatApproverUsernames(['uniformApprove', 'uniformManage']);
+  if (transferApprovers.length) {
+    notifyUsersByEmail('UNIFORM', 'NOTIFY_APPROVAL_NEEDED', String(newTransfer.id), transferApprovers,
+      `[VPDT] Yêu cầu điều chuyển đồng phục cần bạn phê duyệt`,
+      buildApprovalNeededEmailBody({
+        ticketType: 'Đồng Phục - Điều Chuyển Kho', ticketNumber: String(newTransfer.id),
+        summary: `${newTransfer.itemName}${newTransfer.size ? ` (size ${newTransfer.size})` : ''} x${newTransfer.qty}: ${newTransfer.sourceDept} → ${newTransfer.targetDept}`,
+        creatorName: currentUser.name, creatorDept: newTransfer.sourceDept, createdAt: newTransfer.requestedAt,
+        stepName: 'Duyệt điều chuyển kho'
+      }));
+  }
   alert('✅ Đã gửi yêu cầu điều chuyển kho, chờ duyệt!');
   resetUniformTransferForm();
   closeUniformTransferForm();
