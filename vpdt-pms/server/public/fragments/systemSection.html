@@ -3398,13 +3398,29 @@
     </div>
   </div>
 
-  <!-- Màn hình 6: Quản Lý Tệp File — loại tệp + giới hạn dung lượng cho phép tải lên (theo từng module nghiệp vụ) -->
+  <!-- Màn hình 6: Quản Lý Tệp File — loại tệp + giới hạn dung lượng cho phép tải lên (theo từng module
+       nghiệp vụ). Giai đoạn 2b "HCRC Workspace Refresh" (11/2026, kế hoạch đã duyệt): đổi từ 25 card
+       xếp dọc (trang cực dài, phát hiện #5 trong báo cáo rà soát) sang 1 bảng gọn + ô tìm kiếm — hành
+       vi/data-op của từng checkbox/ô giới hạn dung lượng giữ NGUYÊN 100%, chỉ đổi cách trình bày (xem
+       renderUploadTypeConfig()/filterUploadTypeConfig(), module-tailieu.js). -->
   <div id="uploadTypeSection" class="hidden space-y-4">
     <div class="bg-teal-50 p-4 rounded border border-teal-200">
       <h3 class="font-bold text-teal-900 text-base flex items-center gap-1">📎 Quản Lý Tệp File</h3>
       <p class="text-xs text-teal-800 mt-1">Chọn định dạng tệp được phép tải lên cho từng module nghiệp vụ — server sẽ chặn các định dạng không được tick. Tick lại toàn bộ (giống mặc định) coi như không giới hạn riêng. Có thể đặt thêm giới hạn dung lượng (MB) riêng cho từng module — để trống thì dùng đúng giới hạn chung toàn hệ thống.</p>
     </div>
-    <div id="uploadTypeConfigList" class="space-y-3"></div>
+    <input type="text" id="uploadTypeConfigSearch" data-op-input="filterUploadTypeConfig" placeholder="🔍 Tìm module…" class="w-full border p-2 rounded text-xs">
+    <div class="bg-white rounded border overflow-x-auto">
+      <table class="w-full text-xs border-collapse">
+        <thead>
+          <tr class="bg-gray-50 text-left">
+            <th class="p-2.5 border-b font-bold text-gray-600">Module</th>
+            <th class="p-2.5 border-b font-bold text-gray-600">Định Dạng Cho Phép</th>
+            <th class="p-2.5 border-b font-bold text-gray-600 w-56">Giới Hạn Dung Lượng (MB)</th>
+          </tr>
+        </thead>
+        <tbody id="uploadTypeConfigList"></tbody>
+      </table>
+    </div>
   </div>
   <!-- /#systemSection — thẻ đóng đặt Ở ĐÂY (không phải ngay sau #systemSubTabBar) chính là fix cho lỗi
        "thanh chuyển tab con Hệ Thống mất khi cuộn": xem chú thích đầy đủ ở đầu #systemSubTabBar. -->

@@ -1595,6 +1595,9 @@ const UPLOAD_MODULE_LIST = [
   { key: 'officeFixTechAssessment', label: '🔧 Kỹ Thuật Xác Nhận (Ảnh/Tài Liệu Hiện Trường Sửa Chữa)' }
 ];
 
+// Giai đoạn 2b "HCRC Workspace Refresh" (11/2026): đổi từ 25 card xếp dọc sang 1 bảng gọn (xem
+// #uploadTypeSection, systemSection.html) — mỗi hàng = 1 module, giữ NGUYÊN 100% data-op/hành vi của
+// từng checkbox/ô giới hạn dung lượng, chỉ đổi khung bọc ngoài (div card -> tr/td).
 function renderUploadTypeConfig() {
   const container = document.getElementById('uploadTypeConfigList');
   const config = DB.uploadFileTypeConfig || {};
@@ -1603,22 +1606,31 @@ function renderUploadTypeConfig() {
     const extUniverse = m.extUniverse || UPLOAD_EXT_UNIVERSE;
     const allowed = Array.isArray(config[m.key]) && config[m.key].length ? config[m.key] : extUniverse;
     const checkboxesHTML = extUniverse.map(ext => `
-      <label class="inline-flex items-center gap-1 mr-4 mb-1 text-xs">
+      <label class="inline-flex items-center gap-1 mr-3 mb-1 text-xs">
         <input type="checkbox" data-op-change="toggleUploadTypeExtFromCheckbox" data-arg0="${m.key}" data-arg1="${ext}" data-arg-el="2" ${allowed.includes(ext) ? 'checked' : ''}>
         ${ext}
       </label>`).join('');
     const currentSize = Number(sizeConfig[m.key]) > 0 ? Number(sizeConfig[m.key]) : '';
     return `
-      <div class="bg-white p-3 rounded border">
-        <div class="font-bold text-sm text-gray-800 mb-2">${m.label}</div>
-        <div class="flex flex-wrap mb-2">${checkboxesHTML}</div>
-        <div class="flex items-center gap-2 text-xs">
-          <label class="text-gray-600">Giới hạn dung lượng riêng (MB):</label>
+      <tr class="border-b last:border-b-0 align-top">
+        <td class="p-2.5 font-bold text-gray-800 whitespace-nowrap">${m.label}</td>
+        <td class="p-2.5"><div class="flex flex-wrap">${checkboxesHTML}</div></td>
+        <td class="p-2.5">
           <input type="number" min="1" step="1" placeholder="Mặc định chung" value="${currentSize}"
-            data-op-change="updateUploadSizeLimit" data-arg0="${m.key}" data-arg-value="1" class="w-28 border p-1 rounded">
-        </div>
-      </div>`;
+            data-op-change="updateUploadSizeLimit" data-arg0="${m.key}" data-arg-value="1" class="w-full border p-1.5 rounded">
+        </td>
+      </tr>`;
   }).join('');
+}
+
+// filterUploadTypeConfig() — ô tìm kiếm module ở #uploadTypeSection (Giai đoạn 2b), đúng khuôn
+// filterPermTree() (module-admin-permtree.js): lọc theo TOÀN BỘ nội dung text của hàng (tên module +
+// nhãn định dạng, VD gõ ".pdf" vẫn lọc ra đúng các module có định dạng đó) — không chỉ lọc theo tên.
+function filterUploadTypeConfig() {
+  const q = (document.getElementById('uploadTypeConfigSearch')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#uploadTypeConfigList tr').forEach(row => {
+    row.classList.toggle('hidden', !!q && !row.innerText.toLowerCase().includes(q));
+  });
 }
 
 // Tự lưu ngay khi đổi ô giới hạn dung lượng (cùng khuôn toggleUploadTypeExt() ngay trên) — để trống

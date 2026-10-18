@@ -60,7 +60,7 @@ async function main() {
 
     await run.run('checklistAnswerPhoto: chỉ hiện checkbox ẢNH (.jpg/.jpeg/.png/.webp), KHÔNG có .pdf/.docx/.xlsx', async () => {
       const exts = await page.evaluate(() => {
-        const blocks = Array.from(document.querySelectorAll('#uploadTypeConfigList > div'));
+        const blocks = Array.from(document.querySelectorAll('#uploadTypeConfigList > tr'));
         const block = blocks.find(b => b.querySelector('.font-bold')?.innerText.includes('Checklist Đánh Giá Siêu Thị (Ảnh Minh Chứng)'));
         return Array.from(block.querySelectorAll('input[type="checkbox"]')).map(cb => cb.dataset.arg1);
       });
@@ -69,7 +69,7 @@ async function main() {
 
     await run.run('operationOrder: chỉ hiện checkbox .pdf (khớp accept=".pdf" thật của #voFile)', async () => {
       const exts = await page.evaluate(() => {
-        const blocks = Array.from(document.querySelectorAll('#uploadTypeConfigList > div'));
+        const blocks = Array.from(document.querySelectorAll('#uploadTypeConfigList > tr'));
         const block = blocks.find(b => b.querySelector('.font-bold')?.innerText.includes('Vận Hành — Đơn Hàng'));
         return Array.from(block.querySelectorAll('input[type="checkbox"]')).map(cb => cb.dataset.arg1);
       });
@@ -78,7 +78,7 @@ async function main() {
 
     await run.run('hrLifecycle: dùng universe ĐẦY ĐỦ (12 định dạng chung) vì input thật chưa từng giới hạn — không âm thầm siết hẹp', async () => {
       const exts = await page.evaluate(() => {
-        const blocks = Array.from(document.querySelectorAll('#uploadTypeConfigList > div'));
+        const blocks = Array.from(document.querySelectorAll('#uploadTypeConfigList > tr'));
         const block = blocks.find(b => b.querySelector('.font-bold')?.innerText.includes('Onboarding/Offboarding'));
         return Array.from(block.querySelectorAll('input[type="checkbox"]')).length;
       });

@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**26.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.24 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2b — nén Quản Lý Tệp File thành bảng
+
+Giai đoạn 2b của lộ trình hiện đại hoá giao diện đã duyệt (tiếp theo v26.23) — màn "Hệ Thống > 📎 Quản
+Lý Tệp File" (`UPLOAD_MODULE_LIST`, 25 module) trước đây render 25 card xếp dọc liên tục (trang cực dài,
+phát hiện #5 nổi bật nhất trong báo cáo rà soát — "danh sách thẻ lặp thay vì bảng").
+
+- `public/js/module-tailieu.js` (`renderUploadTypeConfig()`): đổi khung bọc mỗi module từ `<div>` card
+  sang `<tr>` trong 1 bảng duy nhất (cột Module/Định Dạng Cho Phép/Giới Hạn Dung Lượng) — giữ NGUYÊN
+  100% `data-op-change` của từng checkbox định dạng (`toggleUploadTypeExtFromCheckbox`) và ô giới hạn
+  dung lượng (`updateUploadSizeLimit`), chỉ đổi cách trình bày.
+- Thêm `filterUploadTypeConfig()` + ô tìm kiếm `#uploadTypeConfigSearch` — lọc theo TOÀN BỘ nội dung
+  hàng (tên module lẫn nhãn định dạng, VD gõ ".pdf" lọc ra đúng các module có định dạng đó), đúng khuôn
+  `filterPermTree()` đã có sẵn ở Hệ Thống > Quản Trị.
+- `public/fragments/systemSection.html`: bọc `<table>` + `<thead>` quanh `#uploadTypeConfigList` (nay
+  là `<tbody>`), thêm ô tìm kiếm phía trên bảng.
+
+Test: `tests/test-upload-type-config-table-filter.js` (mới, 5 kịch bản — tbody thật/mỗi module 1 hàng,
+lọc theo tên, lọc theo định dạng, xoá từ khoá hiện lại, đối chứng checkbox/ô dung lượng vẫn đúng data-op)
++ cập nhật selector `#uploadTypeConfigList > div` → `> tr` ở `tests/test-upload-type-config-modules.js`
+(17 kịch bản cũ, thuần cập nhật selector theo cấu trúc DOM mới có chủ đích, không đổi logic test). Đã
+xác nhận bằng `git stash` test mới FAIL đúng trên code cũ. Chạy lại CSP full-audit + lazy-load toàn bộ
+tab + bộ test Giai đoạn 1/2a — không hồi quy. Demo ảnh trước/sau đã xác nhận bằng ảnh chụp thật.
+
+**Deploy-impact**: thuần client (`public/js/module-tailieu.js`, `public/fragments/systemSection.html`)
+— KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới
++ `pm2 restart`.
 
 ## v26.23 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2a — gọn hoá nút Hệ Thống > Quản Trị
 
