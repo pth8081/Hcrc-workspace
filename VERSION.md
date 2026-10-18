@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**26.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.60 (2026-11): [Thấp] Re-audit lần 3 — mục cuối: xoá dept/jobTitle không dọn workflowParticipatingDeptGroups/Positions
+
+Tiếp nối v26.51-26.59 — ĐÂY LÀ MỤC CUỐI CÙNG trong 8 phát hiện của đợt re-audit lần 3. Toàn bộ backlog
+re-audit lần 3 đã xử lý xong (còn Task #95 — điều tra 1 lỗi test CŨ không liên quan, tách riêng).
+
+- **[Thấp] `deleteDept()`/`deleteJobTitle()` (public/js/module-admin.js) không dọn
+  `workflowParticipatingDeptGroups[].depts[]`/`workflowParticipatingPositions[]`** ("Đơn Vị/Vị Trí Tham
+  Gia Quy Trình", module-admin-specialperm.js) khi xoá hẳn 1 Phòng Ban/Chức Danh — `deleteDept()` trước
+  đây CHỈ dọn `DB.deptGroups[].depts[]` ("Khối/Ban"), không dọn 2 danh mục cấu hình quy trình này; để
+  lại tên/cặp "ma" (Phòng Ban/Chức Danh đã xoá nhưng vẫn hiện trên UI cấu hình). Không gây crash, không
+  ảnh hưởng nghiệp vụ thật (chỉ gây nhầm lẫn thị giác cho admin khi mở lại 2 màn cấu hình đó) — đúng mức
+  Thấp đã xếp hạng. Thêm cleanup cùng khuôn `DB.deptGroups` đã có: `deleteDept(name)` gỡ `name` khỏi
+  `workflowParticipatingDeptGroups[].depts[]` + gỡ mọi cặp `{jobTitle, dept}` có `dept === name` khỏi
+  `workflowParticipatingPositions[]`; `deleteJobTitle(name)` gỡ mọi cặp có `jobTitle === name`. Cả 2 đều
+  `await syncStorage(...)` kèm rollback nếu lưu thất bại, đúng khuôn đã áp dụng cho `deptGroups`.
+
+**Test:** mở rộng `tests/test-admin-users-permgroups.js` (kịch bản (v), seed thêm 1 nhóm
+`workflowParticipatingDeptGroups` + tái dùng `workflowParticipatingPositions` đã seed ở (n); thêm kịch
+bản (v2) mới cho `deleteJobTitle()`). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash --
+public/js/module-admin.js`, 112/115 passed, đúng 3 assertion mới FAIL), PASS trên code đã vá
+(115/115). Chạy lại `test-audit-hethong-cluster-client.js` (13/13), `test-job-title-grade-default.js`
+(11/11) — tất cả PASS, không regression. CSP: grep file đã sửa không khớp
+`on[a-z]+="`/` style="`/`javascript:`/`eval(`/`new Function(` — sạch.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Tên/cặp "ma" đã tồn tại TỪ
+TRƯỚC bản vá này (do đã xoá Phòng Ban/Chức Danh trước đó) KHÔNG tự được dọn hồi tố — admin có thể tự
+vào "Đơn Vị/Vị Trí Tham Gia Quy Trình" xoá tay nếu thấy còn sót, không bắt buộc vì không gây lỗi gì.
 
 ## v26.59 (2026-11): [Cao] Re-audit lần 3 — mục 7 (đã đánh lại số): budgetLines thiếu trong findPendingApprovalsForUsername()
 

@@ -46,17 +46,31 @@ async function deleteDept(name) {
   const prevDepts = [...DB.depts];
   const prevDeptAbbrs = { ...DB.deptAbbrs };
   const prevDeptGroups = DB.deptGroups.map(g => ({ ...g, depts: [...g.depts] }));
+  // LỖI ĐÃ VÁ (re-audit lần 3, mức Thấp): xoá Phòng Ban trước đây chỉ dọn DB.deptGroups[].depts[] (Khối/
+  // Ban), KHÔNG dọn workflowParticipatingDeptGroups[].depts[] ("Đơn Vị Tham Gia Quy Trình", NHIỀU NHÓM,
+  // module-admin-specialperm.js) lẫn workflowParticipatingPositions[] (danh mục cặp {jobTitle, dept}),
+  // để lại Phòng Ban đã xoá "ma" trong 2 danh mục cấu hình đó — không gây lỗi crash, chỉ là tên đã xoá
+  // vẫn hiện trên UI cấu hình, gây nhầm lẫn cho admin.
+  const prevWfDeptGroups = (DB.workflowParticipatingDeptGroups || []).map(g => ({ ...g, depts: [...g.depts] }));
+  const prevWfPositions = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.depts = DB.depts.filter(d => d !== name);
   delete DB.deptAbbrs[name];
   // Khối/Ban (10/2026) — dọn luôn tên Phòng Ban vừa xoá khỏi mọi deptGroups[].depts[] đang gán, tránh
   // hiện "ma" (Phòng Ban đã xoá nhưng vẫn liệt kê là con của 1 Khối/Ban).
   const affectedGroups = DB.deptGroups.filter(g => g.depts.includes(name));
   if (affectedGroups.length) affectedGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
-  const [savedDepts, savedAbbrs, savedGroups] = await Promise.all([
-    syncStorage('depts'), syncStorage('deptAbbrs'), affectedGroups.length ? syncStorage('deptGroups') : Promise.resolve(true)
+  const affectedWfGroups = (DB.workflowParticipatingDeptGroups || []).filter(g => (g.depts || []).includes(name));
+  if (affectedWfGroups.length) affectedWfGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
+  const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.dept === name);
+  if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.dept !== name);
+  const [savedDepts, savedAbbrs, savedGroups, savedWfGroups, savedWfPositions] = await Promise.all([
+    syncStorage('depts'), syncStorage('deptAbbrs'), affectedGroups.length ? syncStorage('deptGroups') : Promise.resolve(true),
+    affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups') : Promise.resolve(true),
+    wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
   ]);
-  if (!savedDepts || !savedAbbrs || !savedGroups) {
+  if (!savedDepts || !savedAbbrs || !savedGroups || !savedWfGroups || !savedWfPositions) {
     DB.depts = prevDepts; DB.deptAbbrs = prevDeptAbbrs; DB.deptGroups = prevDeptGroups;
+    DB.workflowParticipatingDeptGroups = prevWfDeptGroups; DB.workflowParticipatingPositions = prevWfPositions;
     renderDeptList(); renderDeptGroupList();
     return;
   }
@@ -456,9 +470,21 @@ async function saveJobTitle(e) {
 async function deleteJobTitle(name) {
   if (!confirmCatalogValueDeletion('chức danh', name, 'Chức danh này có thể đang được dùng ở bước duyệt "Theo vị trí"/"Quy Trình Đặt Hàng Siêu Thị" và ở chính hồ sơ tài khoản người dùng.')) return;
   const prevJobTitles = [...DB.jobTitles];
+  // LỖI ĐÃ VÁ (re-audit lần 3, mức Thấp): xoá Chức Danh trước đây không dọn workflowParticipatingPositions[]
+  // (danh mục cặp {jobTitle, dept}, "Đơn Vị Tham Gia Quy Trình" > tab "Theo vị trí" — module-admin-
+  // specialperm.js), để lại cặp "ma" mang chức danh đã xoá — không gây lỗi crash, chỉ là tên đã xoá vẫn
+  // hiện trên UI cấu hình, gây nhầm lẫn cho admin. Cùng lớp lỗi vừa vá cho deleteDept() ở trên.
+  const prevWfPositions = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.jobTitles = DB.jobTitles.filter(t => t !== name);
-  const saved = await syncStorage('jobTitles');
-  if (!saved) { DB.jobTitles = prevJobTitles; renderJobTitleList(); return; }
+  const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.jobTitle === name);
+  if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.jobTitle !== name);
+  const [saved, savedWfPositions] = await Promise.all([
+    syncStorage('jobTitles'), wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+  ]);
+  if (!saved || !savedWfPositions) {
+    DB.jobTitles = prevJobTitles; DB.workflowParticipatingPositions = prevWfPositions;
+    renderJobTitleList(); return;
+  }
   logSystemAction('USER_MGM', 'DELETE_JOB_TITLE', `Xóa chức danh [${name}]`, 'SUCCESS', name);
   renderJobTitleList();
   populateDropdowns();
