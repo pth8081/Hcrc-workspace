@@ -4924,6 +4924,51 @@ function migrateLegacyPerms(perms) {
     changed = true;
   }
 
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): 5 quyền sau (Checklist Đánh Giá Siêu Thị — "làm gọn" 11/2026 —
+  // + tách Duyệt Nhập/Hủy Đơn Hàng HO/Siêu Thị — 10/2026) TRƯỚC ĐÂY chỉ được suy diễn INLINE ngay tại
+  // populatePermsForm() (module-admin-permtree.js), KHÔNG đi qua migrateLegacyPerms() như mọi quyền di
+  // trú khác ở trên — chỉ để HIỂN THỊ đúng hiệu lực thật lên checkbox, KHÔNG BAO GIỜ được ghi thật vào
+  // "perms" cho tới khi admin chủ động bấm Lưu. Hậu quả: diffPerms() (xem chú thích đầu hàm đó) so
+  // formPerms[key] (giá trị SUY DIỄN đang hiện sẵn trên checkbox do populatePermsForm() tự tính) với
+  // basePerms[key] (RAW từ DB.permGroups — permGroups KHÔNG được tự di trú + tự lưu ngầm như DB.users,
+  // xem initDatabase()) — basePerms[key] vẫn luôn undefined dù chính NHÓM đó thực chất đã "có" quyền
+  // này qua field cũ. Lưu 1 user/nhóm vì lý do HOÀN TOÀN KHÁC (VD sửa email) mà KHÔNG hề đụng tới
+  // checkbox này vẫn khiến giá trị suy diễn bị coi "khác" base và bị ĐÓNG BĂNG VĨNH VIỄN vào
+  // permOverrides riêng của người/nhóm đó — về sau nhóm có migrate/sửa lại đúng quyền này cũng không
+  // còn tác dụng với người bị đóng băng override sai này. Di trú ĐÚNG qua hàm này (ghi THẲNG vào "p",
+  // đặt changed=true, xoá field cũ đã hết tác dụng) để basePerms tính qua migrateLegacyPerms(g.perms)
+  // ngay tại các điểm gọi diffPerms() cũng thấy field này tường minh — không còn khoảng trống gây đóng
+  // băng sai. populatePermsForm() nay chỉ còn đọc trực tiếp perms.<key> (đã migrate ở bước gọi hàm này
+  // đầu hàm đó), không tự suy diễn riêng nữa — xem module-admin-permtree.js.
+  if (p.checklistExecute === undefined) {
+    p.checklistExecute = !!p.checklistStoreSelfExecute;
+    changed = true;
+  }
+  if (p.checklistStoreSelfExecute !== undefined) { delete p.checklistStoreSelfExecute; changed = true; }
+  if (p.checklistAtvstpExecute === undefined) {
+    const oldAuditScope = p.checklistAuditScope;
+    p.checklistAtvstpExecute = !!(oldAuditScope?.all || (oldAuditScope?.depts || []).length);
+    changed = true;
+  }
+  if (p.checklistAuditScope !== undefined) { delete p.checklistAuditScope; changed = true; }
+  if (p.checklistAtvstpReportView === undefined) {
+    const oldReportScope = p.checklistReportViewScope;
+    p.checklistAtvstpReportView = !!(p.checklistReportView && (!oldReportScope || oldReportScope.all));
+    changed = true;
+  }
+  if (p.checklistReportViewScope !== undefined) { delete p.checklistReportViewScope; changed = true; }
+  if (p.operationOrderReceiptManageHO === undefined) {
+    const legacyReceipt = p.operationOrderReceiptManage;
+    p.operationOrderReceiptManageHO = !!(legacyReceipt?.all || (legacyReceipt?.depts || []).includes('HO'));
+    changed = true;
+  }
+  if (p.operationOrderReceiptManageStore === undefined) {
+    const legacyReceipt = p.operationOrderReceiptManage;
+    p.operationOrderReceiptManageStore = { all: !!legacyReceipt?.all, depts: (legacyReceipt?.depts || []).filter(d => d !== 'HO') };
+    changed = true;
+  }
+  if (p.operationOrderReceiptManage !== undefined) { delete p.operationOrderReceiptManage; changed = true; }
+
   return { perms: p, changed };
 }
 

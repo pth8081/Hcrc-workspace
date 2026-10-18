@@ -763,7 +763,11 @@ function buildPermMatrixRowChanges(kind, target, row) {
   // "override" riêng của người này — đảm bảo quyền hiệu lực CUỐI CÙNG luôn đủ đúng phần nhóm mới cấp,
   // dù cột Q_ tương ứng trong Excel vẫn còn giá trị cũ (chưa kịp cập nhật tay theo nhóm mới).
   const newGroups = (kind === 'users' ? newGroupIds : []).map(gid => DB.permGroups.find(g => g.id === gid)).filter(Boolean);
-  const groupBase = newGroups.length ? mergeGroupsBasePerms(newGroups.map(g => g.perms)) : null;
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao) — cùng lý do readUserFormState() ở module-admin-submissiongroups.js:
+  // di trú g.perms (migrateLegacyPerms()) TRƯỚC khi gộp làm groupBase, để diffPerms() không đóng băng sai
+  // override cho các field chỉ suy diễn được từ field cũ (operationOrderReceiptManageHO/Store,
+  // checklistExecute/checklistAtvstpExecute/checklistAtvstpReportView).
+  const groupBase = newGroups.length ? mergeGroupsBasePerms(newGroups.map(g => migrateLegacyPerms(g.perms).perms)) : null;
   const newPermOverrides = groupBase ? diffPerms(formPerms, groupBase) : null;
   const newPerms = groupBase ? mergePerms(groupBase, newPermOverrides) : formPerms;
 
