@@ -1675,7 +1675,21 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // — xem chú thích filterChecklistSubmissionsForReportCrossView() ở dưới: "xem chéo Báo Cáo" (qua
   // reportViewAll/reportExtraKeys) CỐ Ý không phụ thuộc moduleAccess.checklist, chỉ GET /api/data(/lazy)
   // mới cần gate này.
-  checklist: ['checklistTemplates', 'checklistSubmissions']
+  checklist: ['checklistTemplates', 'checklistSubmissions'],
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): "meeting" (Đặt Phòng Họp) và "periodicReport" (Báo Cáo Định Kỳ)
+  // đã có gate Khối 0 đúng ở khâu TẠO MỚI (EXTRA_CREATE_MODULE_ACCESS_KEY, routes/create.js) VÀ khâu
+  // HÀNH ĐỘNG (`router.use('/meetings'|'/reportPeriods'|'/reportEntries', ...)` ở routes/records.js),
+  // nhưng canViewMeeting()/canViewReportEntry()/sanitizeReportPeriodsForUser() ở trên KHÔNG hề gọi
+  // hasModuleAccessServer() — nhánh "cùng phòng ban tự động xem" (deptAutoViewOn/scopeAllows) cho qua
+  // KHÔNG cần quyền chi tiết nào, y hệt office/budget/license/uniform/checklist/vanHang/muaHang/
+  // hrAttendance ở trên, nên phải mirror vào đây để GET /api/data(/lazy/reports) zero-out đúng. Admin
+  // tắt moduleAccess.meeting/periodicReport cho 1 tài khoản (VD chuyển bộ phận) nhưng vẫn cùng phòng
+  // ban với 1 số lịch đặt phòng/báo cáo cũ thì gọi thẳng GET /api/data vẫn đọc được nội dung, dù UI đã
+  // ẩn hoàn toàn. meetings/reportPeriods/reportEntries giờ TỰ ĐỘNG có mặt ở COLLECTION_TO_MODULE_ACCESS_KEY
+  // (routes/create.js VÀ routes/reports.js, cả 2 tự suy ra từ map này) — đã gỡ khỏi
+  // EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn office/checklist ở trên.
+  meeting: ['meetings'],
+  periodicReport: ['reportPeriods', 'reportEntries']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này
