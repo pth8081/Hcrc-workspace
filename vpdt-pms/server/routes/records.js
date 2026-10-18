@@ -1028,6 +1028,27 @@ router.post('/tasks/:id/delete', async (req, res) => {
 function assertAdminForDelete(user) {
   if (!user.perms?.admin) throw new HttpError(403, 'Chỉ Quản Trị Viên mới có quyền xóa dữ liệu ở module này');
 }
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): Xoá quy trình Onboarding/Offboarding (hrProcesses) trước đây
+// CHỈ gác đúng assertAdminForDelete() ở trên — như MỌI collection khác dùng hàm này — nhưng xoá ở ĐÂY
+// không đơn thuần là xoá dữ liệu: cascadeCleanupLaborContractOnOnboardingClosed() ngay dưới tự TERMINATE
+// Hợp Đồng Lao Động ACTIVE liên kết (hành động nhân sự THẬT, không thể hoàn tác qua UI thường), và
+// cleanupDraftProfileOnOnboardingClosed()/cleanupItTicketsOnHrProcessClosed() cũng cascade sang dữ liệu
+// nhạy cảm khác. canActOnHrTask()/canCreateHrProcess()/canManageHrProcess() (lib/recordActions.js) đã
+// CỐ Ý bỏ hẳn admin bypass cho MỌI hành động khác trên module này từ đợt "mở rộng Nhân Sự" (11/2026,
+// comment "KHÔNG còn admin bypass") — chỉ riêng route XOÁ này bị bỏ sót, vẫn cho 1 admin hệ thống chung
+// (VD IT/Sys admin không có bất kỳ quyền Nhân Sự nào) tự ý xoá + kéo theo chấm dứt hợp đồng lao động
+// của người khác. Gác THÊM đúng quyền Nhân Sự phù hợp (hrProcessManage/hrOnboardingManage/
+// hrOffboardingManage theo processType, mirror canManageHrProcess()) — CỘNG THÊM assertAdminForDelete()
+// chứ không thay hẳn (giữ đúng khuôn "quyền tối cao" admin-only đã áp dụng nhất quán cho mọi collection
+// khác ở file này, chỉ siết CHẶT hơn riêng cho module Nhân Sự nhạy cảm).
+function assertHrProcessDeletePermission(user, item) {
+  assertAdminForDelete(user);
+  const hasHrAuthority = !!(user.perms?.hrProcessManage ||
+    (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage));
+  if (!hasHrAuthority) {
+    throw new HttpError(403, 'Cần có quyền Nhân Sự phù hợp (hrOnboardingManage/hrOffboardingManage/hrProcessManage) mới được xoá quy trình này — quyền Quản Trị Viên chung không đủ');
+  }
+}
 // Chặn xoá Hợp đồng/Mua Bán-Sửa Chữa-Đầu Tư nếu còn Đề nghị thanh toán tham chiếu tới hồ sơ này (xem
 // startContractPayment()/startOfficePayment() ở lib/recordActions.js, gắn sourceModule/sourceId khi
 // tạo) — trước đây không kiểm tra: xoá xong, đề nghị thanh toán vẫn còn nguyên nhưng sourceId không
@@ -4569,7 +4590,7 @@ router.post('/hrProcesses/:id/delete', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const preList = await getAllForCollection('hrProcesses');
     const preItem = preList.find(p => p.id === itemId);
-    await deleteRecordForCollection('hrProcesses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('hrProcesses', itemId, () => assertHrProcessDeletePermission(freshUser, preItem), { username: freshUser.username, name: freshUser.name });
     await cleanupDraftProfileOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
     await cleanupLaborContractOnOnboardingClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);
     await cleanupItTicketsOnHrProcessClosed(preItem, freshUser, req, `hrProcesses/${itemId}/delete`);

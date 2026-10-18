@@ -74,7 +74,11 @@ stubModule('lib/systemLogStore', {
 });
 
 const USERS = [
-  { username: 'admin', name: 'Quản Trị Viên', dept: 'Nhân Sự', perms: { admin: true }, active: true },
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): route /hrProcesses/:id/delete nay gác THÊM quyền Nhân Sự phù
+  // hợp (hrProcessManage/hrOnboardingManage/hrOffboardingManage) CỘNG THÊM admin — admin chung không
+  // còn đủ 1 mình (xem assertHrProcessDeletePermission() ở routes/records.js) — thêm hrProcessManage
+  // vào fixture này để kịch bản "XOÁ (admin)" ngay dưới vẫn tạo được dữ liệu test như trước.
+  { username: 'admin', name: 'Quản Trị Viên', dept: 'Nhân Sự', perms: { admin: true, hrProcessManage: true }, active: true },
   { username: 'onb1', name: 'Phụ Trách Onboarding', dept: 'Nhân Sự', perms: { hrOnboardingManage: true }, active: true },
   { username: 'off1', name: 'Phụ Trách Offboarding', dept: 'Nhân Sự', perms: { hrOffboardingManage: true }, active: true },
   { username: 'it1', name: 'Nhân Viên IT', dept: 'IT', perms: { itManage: true }, active: true },

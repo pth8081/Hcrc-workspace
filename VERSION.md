@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**26.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.85 (2026-11): [Cao] Re-audit lần 5 — mục 7: Xoá quy trình Onboarding/Offboarding chỉ cần cờ admin chung
+
+Mục thứ 7 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng). Còn
+2 phát hiện mức Cao nữa (#123-124) trước khi chuyển sang 18 phát hiện mức Trung Bình.
+
+- **`POST /api/records/hrProcesses/:id/delete` (xoá quy trình Onboarding/Offboarding) trước đây CHỈ
+  gác `assertAdminForDelete()` — y hệt mọi collection khác dùng hàm này (docs/contracts/vppPeriods/...)
+  — nhưng xoá ở ĐÂY không đơn thuần là xoá dữ liệu**: cascade TERMINATE Hợp Đồng Lao Động ACTIVE liên
+  kết (`cleanupLaborContractOnOnboardingClosed()`) + dọn hồ sơ nháp (`cleanupDraftProfileOnOnboardingClosed()`)
+  + tự huỷ ticket Hỗ Trợ IT mồ côi (`cleanupItTicketsOnHrProcessClosed()`) — những hành động nhân sự
+  THẬT, không thể hoàn tác qua UI thường. `canActOnHrTask()`/`canCreateHrProcess()`/
+  `canManageHrProcess()` (lib/recordActions.js) đã CỐ Ý bỏ hẳn admin bypass cho MỌI hành động khác trên
+  module này từ đợt "mở rộng Nhân Sự" (11/2026) — chỉ riêng route XOÁ bị bỏ sót, vẫn cho 1 admin hệ
+  thống chung (VD IT/Sys admin không có bất kỳ quyền Nhân Sự nào) tự ý xoá + kéo theo chấm dứt hợp đồng
+  lao động của người khác.
+  - Thêm `assertHrProcessDeletePermission(user, item)` (routes/records.js) — gác THÊM đúng quyền Nhân
+    Sự phù hợp (`hrProcessManage`, hoặc `hrOnboardingManage`/`hrOffboardingManage` theo `processType`,
+    mirror `canManageHrProcess()`) CỘNG THÊM `assertAdminForDelete()` — không thay hẳn (vẫn cần admin
+    như mọi collection khác dùng hàm này, chỉ siết CHẶT hơn riêng cho module Nhân Sự nhạy cảm).
+
+**Test:** `tests/test-hrprocess-delete-permission.js` (mới, 7 scenario — mount THẬT `routes/records.js`
+với stub tối giản, 4 user: admin thuần/admin+hrOnboardingManage+hrOffboardingManage/admin+CHỈ
+hrOffboardingManage/chỉ hrOnboardingManage không-admin, kiểm cả 2 processType). Xác nhận FAIL trên code
+CŨ (`git stash -- routes/records.js`, 3/7 scenario FAIL đúng 3 "LỖI ĐÃ VÁ" — admin chung vẫn xoá được
+cả 2 processType, và admin+hrOffboardingManage xoá được CẢ ONBOARDING dù không có hrOnboardingManage),
+PASS trên code đã vá (7/7). Regression: 3 file test cũ gọi route xoá này với fixture "admin" THUẦN
+(`test-audit-nhansu-onboarding-contract.js`, `test-hrprocess-cancel-itticket-cleanup.js`,
+`test-onboarding-cancel-labor-contract-cleanup.js`) ban đầu FAIL đúng 1 scenario mỗi file (admin không
+còn đủ quyền) — đã sửa fixture (thêm `hrProcessManage: true` vào user "admin" của riêng 3 file test đó,
+theo đúng quy tắc CLAUDE.md "sửa fixture cho đúng chứ không nới lỏng chặn mới"), chạy lại cả 3 PASS
+100% (29/29, 6/6, 5/5). `test-hr-onboarding-queue-export.js` FAIL với lỗi Playwright timeout không liên
+quan (xác nhận lại bằng `git stash` — FAIL giống nhau trên CẢ code cũ và code đã vá, flakiness sandbox
+từ trước, không phải regression của đợt này). Các test Onboarding/Offboarding khác đều PASS:
+`test-hr-onboarding-excel-fields.js` (22/22), `test-hr-onboarding-queue.js` (7/7),
+`test-hr-process-onboarding-create-import.js` (13/13), `test-onboarding-nationalid-race.js` (6/6),
+`test-onboarding-path-edit.js` (7/7), `test-onboarding.js` (23/23).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. **Lưu ý vận hành**: sau khi
+deploy, tài khoản admin hệ thống KHÔNG có `hrOnboardingManage`/`hrOffboardingManage`/`hrProcessManage`
+sẽ KHÔNG còn xoá được quy trình Onboarding/Offboarding (vẫn thao tác các hành động khác bình thường nếu
+đã có quyền tương ứng) — cần cấp thêm quyền Nhân Sự phù hợp cho tài khoản nào thực sự cần xoá.
 
 ## v26.84 (2026-11): [Cao] Re-audit lần 5 — mục 6: vppPeriods.deptHeadcounts/deptBudgetRates không cascade khi đổi tên danh mục
 
