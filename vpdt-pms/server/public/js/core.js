@@ -4198,7 +4198,16 @@ function canApproveMeeting(user) {
 // được admin gán làm approver riêng cho ĐÚNG phòng ban của lịch đó (bước 1) cũng duyệt được. KHÁC
 // canApproveMeeting() (vẫn dùng riêng cho Report/danh sách email, không cần biết 1 lịch cụ thể nào).
 // CHỈ dùng để ẩn/hiện nút (UX) — server luôn tự xác minh lại, sửa 1 bên phải sửa cả 2 bên.
+// LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "Approval Hub client mirror thiếu loại trừ creator cho Phòng
+// Họp"): mirror này trước đây KHÔNG loại trừ creator như canDecideMeeting() thật (lib/recordActions.js,
+// đã vá re-audit lần 4 — `if (item.creator && user.username === item.creator) return false` NGAY ĐẦU,
+// trước cả nhánh admin/meetingApprove). 1 người có meetingApprove/admin tự đặt lịch họp của chính mình
+// sẽ thấy nút "✅ Duyệt" ở Approval Hub (getMyPendingApprovals(), core-approvalhub.js) dù bấm vào sẽ
+// luôn nhận 403 từ server (canDecideMeeting() đã chặn đúng tự duyệt) — không phải lỗ hổng bảo mật
+// (server enforce đúng) nhưng là nút/thông báo giả gây hiểu lầm. Loại trừ creator ĐẦU TIÊN, mirror
+// đúng thứ tự ưu tiên của hàm thật.
 function canDecideMeetingClient(user, meeting) {
+  if (meeting?.creator && user?.username === meeting.creator) return false;
   if (canApproveMeeting(user)) return true;
   const wfConfig = DB.meetingDeptWorkflows?.[meeting?.dept];
   return resolveEffectiveStepApprovers(wfConfig, 1).includes(user?.username);

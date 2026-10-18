@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**27.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.36 (2026-11): [Thấp] Re-audit lần 7 — mục 7/9: Approval Hub client mirror thiếu loại trừ creator cho Phòng Họp
+
+Mục thứ bảy (7/9) của đợt re-audit lần 7.
+
+**Nguyên nhân:** `canDecideMeetingClient(user, meeting)` (`public/js/core.js`) là mirror phía client
+(chỉ dùng để ẩn/hiện nút "✅ Duyệt" ở Approval Hub) của `canDecideMeeting()` thật phía server
+(`lib/recordActions.js`, đã vá re-audit lần 4 — loại trừ creator `if (item.creator && user.username
+=== item.creator) return false` NGAY DÒNG ĐẦU, trước cả nhánh admin/`meetingApprove`). Mirror client
+trước đây KHÔNG có bước loại trừ creator này — chỉ kiểm `canApproveMeeting(user)` (quyền phẳng) rồi mới
+tới approver theo bước 1 của workflow phòng ban. Hậu quả: 1 người có `meetingApprove`/admin tự đặt lịch
+họp của CHÍNH MÌNH sẽ thấy nút "✅ Duyệt" lịch đó ở Approval Hub (`getMyPendingApprovals()`,
+`core-approvalhub.js` gate cả khối bằng `canApproveMeeting(user)`, không lọc theo từng lịch), dù bấm
+vào sẽ luôn nhận 403 từ server (server vẫn enforce đúng, không phải lỗ hổng bảo mật) — chỉ là nút/thông
+báo giả gây hiểu lầm người dùng.
+
+**Vá:** `canDecideMeetingClient()` thêm `if (meeting?.creator && user?.username === meeting.creator)
+return false;` làm dòng ĐẦU TIÊN, mirror đúng thứ tự ưu tiên của `canDecideMeeting()` thật. Đồng thời
+sửa `getMyPendingApprovals()` (`core-approvalhub.js`) đổi từ gate cả khối bằng `canApproveMeeting(user)`
+sang lọc TỪNG lịch bằng đúng `canDecideMeetingClient(user, m)` — nếu không sửa chỗ này, bước loại trừ
+creator mới thêm ở `canDecideMeetingClient()` sẽ không có tác dụng (khối vẫn hiện hết các lịch PENDING
+cho người có quyền phẳng, không hỏi lại hàm mirror cho từng lịch).
+
+**Test:** file mới `tests/test-meeting-approval-hub-self-decide.js` (7 scenario, trích nguyên văn
+`canBookMeeting`/`canApproveMeeting`/`canDecideMeetingClient`/`canCancelMeeting` từ `public/js/core.js`
+qua `vm` sandbox — không cần Playwright/DOM, cùng kỹ thuật
+`tests/test-diffperms-legacy-migration-freeze.js`): user có `meetingApprove`/admin là chính creator ->
+phải trả về `false` (khai thác), đối chứng creator là người khác -> vẫn `true`; approver bước 1 theo
+workflow phòng ban là chính creator -> phải `false`, đối chứng creator khác -> vẫn `true`; user thường
+không quyền gì -> luôn `false`. Xác nhận FAIL trên code CŨ (`git stash`, 3/7 scenario FAIL — khai thác
+thành công ở cả 2 nhánh admin/meetingApprove và nhánh approver-bước-1), PASS trên code đã vá (7/7).
+Regression: `tests/test-approval-hub.js` (55/55, bao gồm scenario PH-001 cũ "aggregator EXCLUDES the
+pending meeting booking (duyet1 lacks meetingApprove perm)" vẫn PASS không đổi) — không regression. Đã
+`grep` lại diff xác nhận không có `onclick=`/` style="` nội tuyến (chỉ sửa logic JS, không đổi HTML).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.35 (2026-11): [Thấp] Re-audit lần 7 — mục 6/9: vppRegistrations hạn đăng ký so sánh UTC (3 vị trí)
 

@@ -180,16 +180,19 @@ function getMyPendingApprovals(user) {
     { status: 'signedFileStatus', currentStep: 'signedFileCurrentStep', history: 'signedFileHistory' }
   );
 
-  if (canApproveMeeting(user)) {
-    (DB.meetings || []).filter(m => m.status === 'PENDING').forEach(m => {
-      items.push({
-        type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
-        stepLabel: '', createdAt: m.createdAt,
-        statusBadge: approvalHubPendingBadge(),
-        actions: [{ label: '✅ Duyệt', fn: 'approveMeeting', args: [m.id], primary: true }]
-      });
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "Approval Hub client mirror thiếu loại trừ creator cho Phòng
+  // Họp"): trước đây gate CẢ KHỐI bằng canApproveMeeting(user) (quyền phẳng đơn thuần, không biết lịch
+  // cụ thể nào) — 1 người có meetingApprove/admin thấy TẤT CẢ lịch PENDING, kể cả lịch do CHÍNH MÌNH
+  // đặt (server canDecideMeeting() đã chặn tự duyệt từ re-audit lần 4). Lọc TỪNG lịch bằng đúng
+  // canDecideMeetingClient(user, m) (đã thêm loại trừ creator ở core.js) thay cho gate 1 lần.
+  (DB.meetings || []).filter(m => m.status === 'PENDING' && canDecideMeetingClient(user, m)).forEach(m => {
+    items.push({
+      type: 'meeting', typeLabel: '📅 Phòng họp', code: m.code, title: m.title, dept: m.dept,
+      stepLabel: '', createdAt: m.createdAt,
+      statusBadge: approvalHubPendingBadge(),
+      actions: [{ label: '✅ Duyệt', fn: 'approveMeeting', args: [m.id], primary: true }]
     });
-  }
+  });
 
   if (canApproveInternalPost(user)) {
     (DB.internalPosts || []).filter(p => p.type === 'SHARE' && p.status === 'PENDING').forEach(p => {
