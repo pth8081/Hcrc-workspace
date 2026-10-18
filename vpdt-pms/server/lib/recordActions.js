@@ -3037,6 +3037,27 @@ function buildTaskFromSubmissionComment(sub, user, comment) {
   };
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 4, mức TB): xoá Văn Bản Trình không đóng lại Công Việc tự sinh từ chỉ đạo ở
+// bước duyệt CUỐI CÙNG (buildTaskFromSubmissionComment() ngay trên, sourceType='SUBMISSION',
+// sourceCode=mã tờ trình) — Công Việc còn TODO/DOING vẫn "sống" vĩnh viễn dù tờ trình nguồn đã bị xoá,
+// "Xem chi tiết" (index.html) trỏ về 1 mã tờ trình không còn tồn tại. Cùng khuôn
+// closeItTicketOnHrProcessClosed() (dưới) — tự huỷ (idempotent, bỏ qua nếu đã DONE/CANCELLED), KHÔNG
+// chặn hẳn việc xoá tờ trình như assertCanDeleteMinutes() (biên bản họp có thể còn nhiều người cùng xử
+// lý tiếp Công Việc đã giao, nhưng tờ trình chỉ sinh ĐÚNG 1 Công Việc CHƯA GÁN người nhận — dọn tự động
+// an toàn hơn là chặn xoá tờ trình vì vẫn còn 1 việc chưa ai nhận).
+function closeTaskOnSubmissionDeleted(task, submission) {
+  if (!task || task.status === 'DONE' || task.status === 'CANCELLED') return task;
+  task.pendingExtension = null;
+  task.pendingCancellation = null;
+  task.status = 'CANCELLED';
+  task.history = Array.isArray(task.history) ? task.history : [];
+  task.history.push({
+    action: 'CANCELLED', by: 'system', byName: 'Hệ Thống (Tự Động)', time: nowVN(),
+    note: `Tự huỷ — Văn Bản Trình nguồn [${submission.code || submission.id}] đã bị xoá`
+  });
+  return task;
+}
+
 // ===================== TRUYỀN THÔNG NỘI BỘ (tương tác — Bước 6j) =====================
 // Xem/tương tác (đánh dấu đã đọc, thích, bình luận, đăng ký đào tạo) mở cho MỌI người dùng đã đăng
 // nhập — khớp đúng canCreateInternalPost() ở index.html (chỉ ĐĂNG bài mới cần quyền riêng theo type,
@@ -8674,6 +8695,7 @@ module.exports = {
   computePaymentRequestOverallStatus, countPaymentInstallmentWarnings, isCycleGroupFullyResolved,
   canEditMinutes, canDeleteMinutes, editMinutes, assertCanDeleteMinutes,
   canCreateMinutes, createMinutes, buildTasksFromDirectives, assignMinutesTasks, buildTaskFromSubmissionComment,
+  closeTaskOnSubmissionDeleted,
   markInternalPostRead, toggleInternalPostLike, toggleInternalPostCommentLike, addInternalPostComment,
   scanCommentForSensitiveContent, dismissInternalCommentFlag, deleteInternalPostComment, editInternalPostComment,
   registerInternalPostTraining, unregisterInternalPostTraining,

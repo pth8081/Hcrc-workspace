@@ -1085,7 +1085,48 @@ router.post('/docs/:id/delete', async (req, res) => {
     handleError(res, `docs/${req.params.id}/delete`, err);
   }
 });
-router.post('/submissions/:id/delete', (req, res) => deleteAdminOnly(req, res, 'submissions'));
+// PHÁT HIỆN mức Trung Bình (re-audit lần 4): xoá Văn Bản Trình không đóng lại Công Việc tự sinh từ chỉ
+// đạo ở bước duyệt CUỐI CÙNG (buildTaskFromSubmissionComment(), lib/recordActions.js —
+// sourceType='SUBMISSION', sourceCode=mã tờ trình) — Công Việc còn TODO/DOING vẫn "sống" vĩnh viễn dù
+// tờ trình nguồn đã bị xoá. Cùng khuôn cleanupItTicketsOnHrProcessClosed() ở dưới (closeTaskOnSubmissionDeleted()
+// tự huỷ, idempotent — bỏ qua nếu đã DONE/CANCELLED).
+async function cleanupTasksOnSubmissionDeleted(submission, actorUser, req) {
+  if (!submission) return false;
+  try {
+    const tasks = await getAllTasks();
+    const openTasks = (tasks || []).filter(t =>
+      t.sourceType === 'SUBMISSION' && t.sourceCode === submission.code && t.status !== 'DONE' && t.status !== 'CANCELLED');
+    for (const t of openTasks) {
+      await withLockedTaskById(t.id, (task) => recordActions.closeTaskOnSubmissionDeleted(task, submission));
+      insertSystemLog({
+        username: actorUser?.username || 'system', fullName: actorUser?.name || 'system', ipAddress: req?.ip || '',
+        module: 'SUBMISSION', actionType: 'AUTO_CANCEL_TASK', targetObject: String(t.id),
+        description: `Tự huỷ Công Việc #${t.id} (${t.status}) khi Văn Bản Trình nguồn [${submission.code || submission.id}] bị xoá`,
+        status: 'SUCCESS'
+      }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (tự huỷ Công Việc mồ côi):', e.message));
+    }
+    return openTasks.length > 0;
+  } catch (err) {
+    console.error('submissions/:id/delete: lỗi dọn Công Việc khi xoá Văn Bản Trình:', err.message);
+    return false;
+  }
+}
+router.post('/submissions/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    let deletedSubmission = null;
+    await deleteRecordForCollection('submissions', itemId, (item) => {
+      assertAdminForDelete(freshUser);
+      deletedSubmission = item;
+    }, { username: freshUser.username, name: freshUser.name });
+    await cleanupTasksOnSubmissionDeleted(deletedSubmission, freshUser, req);
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `submissions/${req.params.id}/delete`, err);
+  }
+});
 // Xóa hợp đồng GỐC kèm cascade toàn bộ phụ lục của nó — trước đây chỉ xóa đúng 1 dòng qua
 // deleteAdminOnly() chung, để lại phụ lục với rootContractId trỏ vào 1 id không còn tồn tại (hiển thị
 // mã hợp đồng gốc là "?" ở Chi tiết). Xóa 1 PHỤ LỤC (không phải gốc) thì không cần cascade gì thêm.
