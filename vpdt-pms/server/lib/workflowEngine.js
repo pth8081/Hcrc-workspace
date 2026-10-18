@@ -785,9 +785,18 @@ function isPlainWorkflowMapObject(v) {
 //     MỌI lượt tạo quy trình Onboarding/Offboarding mới công ty (crash 500 ngay tại POST /api/create/hrProcesses).
 // Thêm cả 4 vào PLAIN_OBJECT_ARRAY_KEYS (cùng khuôn mảng-object với 3 key gốc) — route generic tự động
 // chặn sớm (400) nếu lưu sai cấu trúc, không cần sửa gì thêm ở routes/data.js.
+// deptGroups ("Khối/Ban", 10/2026, {id,name,depts:[]}[]): LỖI ĐÃ VÁ (re-audit lần 5, mức TB —
+// "vppExcludedJobTitles/deptGroups thiếu validate -> crash giữa lượt rename"). CÙNG LỚP LỖI với
+// workflows/2 mixed-approval-rules đã vá ở trên: lưu sai cấu trúc (không phải mảng, hoặc phần tử không
+// phải object) qua POST /api/data/deptGroups trước đây không bị chặn gì — bản lưu sai đó nằm im cho
+// tới khi 1 ADMIN KHÁC đổi tên 1 phòng ban BẤT KỲ (POST /api/admin/renameCatalogEntry, catalogKey
+// 'depts') và cascadeDeptRename() chạy tới đoạn `(list || []).map(g => ...)` (lib/catalogRename.js) —
+// nếu `list` không phải mảng, `.map()` throw NGAY GIỮA LƯỢT đổi tên đó (đã lưu xong mảng `depts` +
+// `deptAbbrs`/`deptCodeMap`, cascade các collection SAU deptGroups trong cùng hàm chưa kịp chạy) —
+// request đổi tên phòng ban trả 500 dù hoàn toàn không liên quan tới ai đã lưu sai deptGroups trước đó.
 const PLAIN_OBJECT_ARRAY_KEYS = new Set([
   'workflows', 'operationOrderStoreMixedApprovalRules', 'itPriceWholesaleStoreMixedApprovalRules',
-  'shiftTemplates', 'publicHolidays', 'attendanceClockApiKeys', 'hrTaskTemplates'
+  'shiftTemplates', 'publicHolidays', 'attendanceClockApiKeys', 'hrTaskTemplates', 'deptGroups'
 ]);
 function assertPlainObjectArrayShape(key, value) {
   if (!PLAIN_OBJECT_ARRAY_KEYS.has(key)) return;
@@ -799,6 +808,24 @@ function assertPlainObjectArrayShape(key, value) {
       throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phần tử thứ ${idx + 1} phải là object`);
     }
   });
+}
+
+// vppExcludedJobTitles (mảng CHUỖI PHẲNG, không phải mảng object — KHÔNG dùng chung
+// PLAIN_OBJECT_ARRAY_KEYS ở trên vì phần tử là string, không phải object): LỖI ĐÃ VÁ (re-audit lần 5,
+// mức TB, CÙNG rủi ro deptGroups ở trên nhưng khuôn dữ liệu khác). cascadeJobTitleRename()
+// (lib/catalogRename.js) chạy `(list || []).map(jt => ...)` khi đổi tên 1 chức danh HO (POST
+// /api/admin/renameCatalogEntry, catalogKey 'jobTitles') — nếu vppExcludedJobTitles trước đó bị lưu
+// sai cấu trúc (không phải mảng) qua POST /api/data/vppExcludedJobTitles, `.map()` throw NGAY GIỮA
+// LƯỢT đổi tên chức danh đó (mảng jobTitles + cascade users/employeeProfiles đã chạy trước, cascade
+// SAU vppExcludedJobTitles trong cùng hàm chưa kịp chạy) — chỉ cần Array.isArray (phần tử KHÔNG ép
+// phải là string, cùng triết lý "chỉ chặn ở mức đủ để .map()/.includes() không crash", không validate
+// sâu từng phần tử).
+const PLAIN_ARRAY_KEYS = new Set(['vppExcludedJobTitles']);
+function assertPlainArrayShape(key, value) {
+  if (!PLAIN_ARRAY_KEYS.has(key)) return;
+  if (!Array.isArray(value)) {
+    throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là 1 mảng (danh sách)`);
+  }
 }
 
 // attendanceHoConfig (Công & Phép) — khuôn KHÁC HẲN (1 OBJECT cấu hình DUY NHẤT, không phải mảng) nên
@@ -1463,5 +1490,6 @@ module.exports = {
   OPERATION_ORDER_HO_TIERS,
   assertDeptOrTierWorkflowMapShape,
   assertPlainObjectArrayShape,
-  assertPlainObjectShape
+  assertPlainObjectShape,
+  assertPlainArrayShape
 };

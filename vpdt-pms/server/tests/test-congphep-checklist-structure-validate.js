@@ -20,6 +20,17 @@
 // Đã vá: thêm 4 key mảng vào PLAIN_OBJECT_ARRAY_KEYS (lib/workflowEngine.js) + assertPlainObjectShape()/
 // PLAIN_OBJECT_KEYS mới (riêng attendanceHoConfig) — gọi từ routes/data.js POST /:key.
 //
+// MỞ RỘNG (re-audit lần 5, mức TB — "vppExcludedJobTitles/deptGroups thiếu validate -> crash giữa lượt
+// rename"): 2 key NỮA cùng lớp lỗi, phát hiện khi lưu sai cấu trúc làm CRASH 500 KHÔNG PHẢI ở nơi ĐỌC
+// dữ liệu như 4 key trên, mà ở 1 CASCADE RENAME KHÁC hoàn toàn không liên quan — xem chú thích đầy đủ
+// tại lib/catalogRename.js cascadeDeptRename()/cascadeJobTitleRename():
+//   - deptGroups ({id,name,depts:[]}[]): cascadeDeptRename() chạy `(list || []).map()` khi đổi tên 1
+//     phòng ban — lưu sai cấu trúc (không phải mảng) qua POST /api/data/deptGroups làm cascade đó throw
+//     giữa lúc đang xử lý 1 request đổi tên PHÒNG BAN hoàn toàn khác. CÙNG khuôn mảng-object nên tái
+//     dùng PLAIN_OBJECT_ARRAY_KEYS/assertPlainObjectArrayShape() có sẵn, không cần hàm mới.
+//   - vppExcludedJobTitles (mảng CHUỖI PHẲNG, KHÁC khuôn mảng-object ở trên): cascadeJobTitleRename()
+//     cũng `(list || []).map()` khi đổi tên 1 chức danh HO — cần hàm MỚI assertPlainArrayShape()/
+//     PLAIN_ARRAY_KEYS (chỉ ép Array.isArray, không ép phần tử phải là object vì phần tử ở đây là string).
 // PHẦN A: test THUẦN 2 hàm assertPlainObjectArrayShape()/assertPlainObjectShape() (không cần boot DB).
 // PHẦN B: test HTTP thật qua POST /api/data/:key (mount routes/data.js) — cùng khuôn
 // test-workflowarray-structure-validate.js.
@@ -29,7 +40,7 @@ const assert = require('assert');
 const http = require('http');
 const path = require('path');
 const express = require('express');
-const { assertPlainObjectArrayShape, assertPlainObjectShape } = require('../lib/workflowEngine');
+const { assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape } = require('../lib/workflowEngine');
 const { createRunner, assertEqual } = require('./testHarness');
 
 let passed = 0, failed = 0;
@@ -97,6 +108,29 @@ test('key KHÔNG thuộc 2 danh sách trên (VD paymentDeptWorkflows) -> không 
   assertPlainObjectShape('paymentDeptWorkflows', { 'Phòng IT': { workflowId: 'WF_1', approvers: {} } });
 });
 
+test('deptGroups hợp lệ (mảng object) -> không throw', () => {
+  assertPlainObjectArrayShape('deptGroups', [{ id: 1, name: 'Khối Kinh Doanh', depts: ['Phòng IT'] }]);
+});
+test('LỖI ĐÃ VÁ: deptGroups là OBJECT (truthy) -> throw 400 (trước đây crash 500 ở cascadeDeptRename() .map())', () => {
+  expectThrows400(() => assertPlainObjectArrayShape('deptGroups', { 1: { name: 'Khối Kinh Doanh' } }));
+});
+test('deptGroups có 1 phần tử KHÔNG phải object -> throw 400', () => {
+  expectThrows400(() => assertPlainObjectArrayShape('deptGroups', ['hack']));
+});
+
+test('vppExcludedJobTitles hợp lệ (mảng chuỗi) -> không throw', () => {
+  assertPlainArrayShape('vppExcludedJobTitles', ['Bảo vệ', 'Lái xe']);
+});
+test('LỖI ĐÃ VÁ: vppExcludedJobTitles là OBJECT (truthy) -> throw 400 (trước đây crash 500 ở cascadeJobTitleRename() .map())', () => {
+  expectThrows400(() => assertPlainArrayShape('vppExcludedJobTitles', { 0: 'Bảo vệ' }));
+});
+test('vppExcludedJobTitles là CHUỖI -> throw 400', () => {
+  expectThrows400(() => assertPlainArrayShape('vppExcludedJobTitles', 'Bảo vệ'));
+});
+test('key KHÔNG thuộc PLAIN_ARRAY_KEYS (VD depts) -> assertPlainArrayShape không throw gì (giữ nguyên hành vi cũ)', () => {
+  assertPlainArrayShape('depts', { not: 'an array, nhưng depts không nằm trong danh sách này' });
+});
+
 console.log(`\n${passed}/${passed + failed} scenario(s) passed (Phần A).`);
 
 // ===== PHẦN B: HTTP thật qua POST /api/data/:key =====
@@ -114,7 +148,7 @@ const ADMIN = { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ph�
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }], shiftTemplates: [], publicHolidays: [], attendanceClockApiKeys: [], hrTaskTemplates: [], attendanceHoConfig: { startTime: '08:00' } };
+  APP_DATA = { users: [{ ...ADMIN }], shiftTemplates: [], publicHolidays: [], attendanceClockApiKeys: [], hrTaskTemplates: [], attendanceHoConfig: { startTime: '08:00' }, deptGroups: [], vppExcludedJobTitles: [] };
 }
 resetData();
 
@@ -231,6 +265,32 @@ async function main() {
       const res = await api('POST', '/api/data/attendanceHoConfig', { startTime: '08:30', endTime: '17:30', breakMinutes: 60, standardHoursPerDay: 8, lateGraceMinutes: 5 });
       assertEqual(res.status, 200, 'phải lưu được');
       assertEqual(APP_DATA.attendanceHoConfig.startTime, '08:30', 'phải lưu đúng giá trị mới');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/deptGroups với OBJECT -> 400 (trước đây crash 500 ở cascadeDeptRename() giữa lượt đổi tên phòng ban khác)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/deptGroups', { 1: { name: 'Khối Kinh Doanh' } });
+      assertEqual(res.status, 400, `phải trả 400 — nhận status=${res.status}`);
+      assertEqual(JSON.stringify(APP_DATA.deptGroups), JSON.stringify([]), 'dữ liệu cũ không bị ghi đè khi request bị từ chối');
+    });
+    await run.run('POST /api/data/deptGroups với mảng hợp lệ -> 200, lưu đúng', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/deptGroups', [{ id: 1, name: 'Khối Kinh Doanh', depts: ['Phòng IT'] }]);
+      assertEqual(res.status, 200, 'phải lưu được');
+      assertEqual(APP_DATA.deptGroups.length, 1, 'phải lưu đúng 1 khối');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/vppExcludedJobTitles với OBJECT -> 400 (trước đây crash 500 ở cascadeJobTitleRename() giữa lượt đổi tên chức danh khác)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/vppExcludedJobTitles', { 0: 'Bảo vệ' });
+      assertEqual(res.status, 400, `phải trả 400 — nhận status=${res.status}`);
+      assertEqual(JSON.stringify(APP_DATA.vppExcludedJobTitles), JSON.stringify([]), 'dữ liệu cũ không bị ghi đè khi request bị từ chối');
+    });
+    await run.run('POST /api/data/vppExcludedJobTitles với mảng chuỗi hợp lệ -> 200, lưu đúng', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/vppExcludedJobTitles', ['Bảo vệ', 'Lái xe']);
+      assertEqual(res.status, 200, 'phải lưu được');
+      assertEqual(APP_DATA.vppExcludedJobTitles.length, 2, 'phải lưu đúng 2 chức danh');
     });
 
     run.summary();

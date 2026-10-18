@@ -15,7 +15,7 @@ const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
-const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape } = require('../lib/workflowEngine');
+const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles, cascadeUsernameChangesToManagerUsername } = require('../lib/employeeProfile');
 const {
@@ -2192,6 +2192,10 @@ router.post('/:key', async (req, res) => {
     // attendanceHoConfig (re-audit lần 5, mức Trung Bình) — xem chú thích đầy đủ tại
     // assertPlainObjectShape()/PLAIN_OBJECT_KEYS ở lib/workflowEngine.js.
     assertPlainObjectShape(key, value);
+    // vppExcludedJobTitles (re-audit lần 5, mức Trung Bình — "thiếu validate -> crash giữa lượt rename"):
+    // mảng CHUỖI PHẲNG (khác khuôn mảng-object ở assertPlainObjectArrayShape() trên) — xem chú thích đầy
+    // đủ tại assertPlainArrayShape()/PLAIN_ARRAY_KEYS ở lib/workflowEngine.js.
+    assertPlainArrayShape(key, value);
 
     // meetingRooms: LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính") — đổi tên 1 phòng họp ở đây
     // (editMeetingRoomCatalogItem(), module-phonghop.js) trước đây KHÔNG cascade sang meetings.room (lưu
