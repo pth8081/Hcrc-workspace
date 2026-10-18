@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**26.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.73 (2026-11): [TB] Re-audit lần 4 — mục 13: lỗi 409 trùng lịch phòng họp lộ mã hồ sơ cuộc họp phòng ban khác
+
+- **Thông báo lỗi 409 "Phòng đã có lịch trùng khung giờ này" lúc tạo/sửa/duyệt lịch Đặt Phòng Họp nêu
+  kèm `conflict.code` (mã hồ sơ) của cuộc họp đang chiếm phòng** — nhưng `findMeetingConflict()`
+  (lib/createValidation.js) đọc TOÀN BỘ collection `meetings` không lọc theo quyền xem (đúng — phải
+  biết lịch của MỌI phòng ban để chặn trùng thật), trong khi `canViewMeeting()`
+  (lib/recordViewScope.js) gác quyền XEM 1 lịch cụ thể theo phòng ban/người tạo/tham dự. Hệ quả: 1
+  nhân viên phòng ban A đặt/sửa lịch trùng giờ với 1 cuộc họp của phòng ban B (họ KHÔNG có quyền xem)
+  vẫn nhận lại đúng mã hồ sơ của cuộc họp đó qua thông báo lỗi — lộ sự tồn tại + mã cuộc họp phòng ban
+  khác cho người không có quyền xem nó.
+  - Bỏ `(${conflict.code})` khỏi CẢ 4 điểm phát sinh thông báo này: `lib/createValidation.js`
+    (`meetings.extraValidate`, lúc TẠO MỚI), `routes/meetingActions.js` (nhánh `approve` — check lại
+    trùng phòng tại thời điểm duyệt; `PUT /:id` early-conflict trước khi vào khoá; `PUT /:id` in-lock
+    conflict khi sửa) — chỉ còn nêu lý do trùng khung giờ, không còn nêu mã hồ sơ cụ thể.
+
+**Test:** file mới `tests/test-meeting-conflict-code-leak.js` (5 scenario — Phần A test thuần
+`validateAndPrepareCreate('meetings', ...)` lúc tạo mới, Phần B HTTP thật qua mount
+`routes/meetingActions.js` cho PUT sửa + POST approve). Xác nhận FAIL trên code CŨ (`git stash --
+lib/createValidation.js routes/meetingActions.js`, 2/5 passed — đúng 3 scenario "LỖI ĐÃ VÁ" FAIL vì
+thông báo lộ nguyên mã hồ sơ cuộc họp phòng ban khác), PASS trên code đã vá (5/5). Chạy lại bộ test
+liên quan: `test-meeting-car.js` (104/104), `test-meeting-edit-route.js` (10/10),
+`test-meeting-busy-slots-route.js` (4/4), `test-meeting-dept-workflow.js` (9/9),
+`test-meeting-room-catalog-validate.js` (5/5), `test-meeting-license-no-approver-block.js`,
+`test-audit-round5-meeting-car.js` (17/17), `test-selfapprove-leave-shiftswap-meeting.js` (12/12),
+`test-meeting-room-rename-cascade.js` (8/8) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.72 (2026-11): [TB] Re-audit lần 4 — mục 12: meetings + reportPeriods/reportEntries thiếu Khối 0 ở GET /api/data
 

@@ -109,7 +109,9 @@ router.post('/:id/:action', async (req, res) => {
           (freshMeetings || []).filter(m => m.id !== item.id), item.room, item.startTime, item.endTime
         );
         if (conflict) {
-          throw new HttpError(409, `Phòng "${item.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
+          // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): bỏ conflict.code khỏi thông báo — xem chú thích đầy đủ tại
+          // findMeetingConflict() ở lib/createValidation.js (cùng lớp lỗi, cùng đợt vá).
+          throw new HttpError(409, `Phòng "${item.room}" đã có lịch trùng khung giờ này`);
         }
       } else if (item.status === 'CANCELLED') {
         throw new HttpError(409, 'Lịch này đã bị huỷ trước đó');
@@ -218,7 +220,9 @@ router.put('/:id', async (req, res) => {
 
     const earlyConflict = findMeetingConflict(allMeetings.filter((m) => m.id !== itemId), payload.room, payload.startTime, payload.endTime);
     if (earlyConflict) {
-      return res.status(409).json({ error: `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${earlyConflict.code})` });
+      // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): bỏ earlyConflict.code khỏi thông báo — cùng lý do findMeetingConflict()
+      // ở lib/createValidation.js (cùng đợt vá).
+      return res.status(409).json({ error: `Phòng "${payload.room}" đã có lịch trùng khung giờ này` });
     }
 
     const attendeesNum = Number(payload.attendees);
@@ -232,7 +236,9 @@ router.put('/:id', async (req, res) => {
       const freshMeetings = await getAllForCollection('meetings');
       const conflict = findMeetingConflict(freshMeetings.filter((m) => m.id !== itemId), payload.room, payload.startTime, payload.endTime);
       if (conflict) {
-        throw new HttpError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
+        // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): bỏ conflict.code khỏi thông báo — cùng lý do findMeetingConflict()
+        // ở lib/createValidation.js (cùng đợt vá).
+        throw new HttpError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này`);
       }
       item.dept = payload.dept;
       item.room = payload.room;
