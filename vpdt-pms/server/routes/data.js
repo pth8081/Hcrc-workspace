@@ -15,7 +15,7 @@ const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
-const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape } = require('../lib/workflowEngine');
+const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles, cascadeUsernameChangesToManagerUsername } = require('../lib/employeeProfile');
 const {
@@ -2208,6 +2208,10 @@ router.post('/:key', async (req, res) => {
     // mảng CHUỖI PHẲNG (khác khuôn mảng-object ở assertPlainObjectArrayShape() trên) — xem chú thích đầy
     // đủ tại assertPlainArrayShape()/PLAIN_ARRAY_KEYS ở lib/workflowEngine.js.
     assertPlainArrayShape(key, value);
+    // formTemplates (re-audit lần 6, mức Cao — "formTemplates thiếu validate cấu trúc"): khuôn "map 2
+    // tầng" {modKey: [{label,type,required,...}, ...]} riêng, khác hẳn 4 khuôn trên — xem chú thích đầy
+    // đủ tại assertFormTemplatesShape() ở lib/workflowEngine.js.
+    assertFormTemplatesShape(key, value);
 
     // meetingRooms: LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính") — đổi tên 1 phòng họp ở đây
     // (editMeetingRoomCatalogItem(), module-phonghop.js) trước đây KHÔNG cascade sang meetings.room (lưu
