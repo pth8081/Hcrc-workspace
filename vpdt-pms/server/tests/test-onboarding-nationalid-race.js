@@ -249,6 +249,57 @@ async function main() {
     check('đối chứng: HR3 (có thêm hrProfileEdit, đúng tier "Kiểm Tra Nhân Sự Cũ") vẫn thấy ĐÚNG chi tiết employeeCode/trạng thái (không mất chức năng đã có)',
       rInactiveDetail.status === 409 && /NV999/.test(rInactiveDetail.body?.error || '') && /NGHỈ VIỆC/.test(rInactiveDetail.body?.error || ''),
       rInactiveDetail.body);
+
+    // ===== LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường
+    // onboarding queue"): tái tuyển (employeeCode trỏ hồ sơ INACTIVE) trước đây KHÔNG đối chiếu danh tính
+    // gì — HR1 (CHỈ hrOnboardingManage, không có bất kỳ quyền Hồ Sơ Nhân Sự nào) tự gửi employeeCode của
+    // 1 người đã nghỉ việc BẤT KỲ (biết/đoán được, mã dạng tuần tự) + CCCD/Ngày sinh KHÔNG khớp hồ sơ đó
+    // -> vẫn "tái tuyển" được, mở khoá PATCH /by-code đọc/ghi hồ sơ CŨ không liên quan. Nay bắt buộc
+    // CCCD HOẶC Ngày sinh (payload) phải khớp ĐÚNG hồ sơ INACTIVE đó. =====
+    resetAppData(); resetRecords();
+    APP_DATA_STORE.employeeProfiles.push({
+      employeeCode: 'NV777', nationalId: '079099007777', dateOfBirth: '1990-05-20', status: 'INACTIVE', fullName: 'Người Cũ 777'
+    });
+    const rHijackNoMatch = await api(server, onboardingPayload({
+      fullName: 'Kẻ Tấn Công Mạo Danh', employeeCode: 'NV777', nationalId: '079099999999', dateOfBirth: '2000-01-01'
+    }), HR1);
+    check('LỖI ĐÃ VÁ: tái tuyển bằng employeeCode của hồ sơ INACTIVE nhưng CCCD/Ngày sinh KHÔNG khớp -> 403, không cho tái tuyển',
+      rHijackNoMatch.status === 403 && /không khớp/.test(rHijackNoMatch.body?.error || ''),
+      rHijackNoMatch.body);
+    check('LỖI ĐÃ VÁ: request bị chặn ở trên không được tạo hrProcesses/đổi gì trên hồ sơ NV777',
+      RECORDS.hrProcesses.length === 0 && APP_DATA_STORE.employeeProfiles.find(p => p.employeeCode === 'NV777')?.status === 'INACTIVE',
+      { hrProcesses: RECORDS.hrProcesses, profile: APP_DATA_STORE.employeeProfiles.find(p => p.employeeCode === 'NV777') });
+
+    resetAppData(); resetRecords();
+    APP_DATA_STORE.employeeProfiles.push({
+      employeeCode: 'NV778', nationalId: '079099007778', dateOfBirth: '1991-06-21', status: 'INACTIVE', fullName: 'Người Cũ 778'
+    });
+    const rHijackNoIdentityAtAll = await api(server, onboardingPayload({
+      fullName: 'Kẻ Tấn Công Không Gửi Gì', employeeCode: 'NV778'
+    }), HR1);
+    check('LỖI ĐÃ VÁ: tái tuyển bằng employeeCode của hồ sơ INACTIVE, KHÔNG gửi CCCD/Ngày sinh gì cả -> 403',
+      rHijackNoIdentityAtAll.status === 403 && /không khớp/.test(rHijackNoIdentityAtAll.body?.error || ''),
+      rHijackNoIdentityAtAll.body);
+
+    resetAppData(); resetRecords();
+    APP_DATA_STORE.employeeProfiles.push({
+      employeeCode: 'NV779', nationalId: '079099007779', dateOfBirth: '1992-07-22', status: 'INACTIVE', fullName: 'Người Cũ 779'
+    });
+    const rRehireNidMatch = await api(server, onboardingPayload({
+      fullName: 'Người Cũ 779 Tái Tuyển', employeeCode: 'NV779', nationalId: '079099007779', dateOfBirth: '2000-01-01'
+    }), HR1);
+    check('đối chứng: CCCD khớp (dù Ngày sinh KHÔNG khớp) -> vẫn tái tuyển được bình thường (không chặn oan)',
+      rRehireNidMatch.status === 200, rRehireNidMatch.body);
+
+    resetAppData(); resetRecords();
+    APP_DATA_STORE.employeeProfiles.push({
+      employeeCode: 'NV780', nationalId: '079099007780', dateOfBirth: '1993-08-23', status: 'INACTIVE', fullName: 'Người Cũ 780'
+    });
+    const rRehireDobMatch = await api(server, onboardingPayload({
+      fullName: 'Người Cũ 780 Tái Tuyển', employeeCode: 'NV780', nationalId: '079099999999', dateOfBirth: '1993-08-23'
+    }), HR1);
+    check('đối chứng: Ngày sinh khớp (dù CCCD KHÔNG khớp) -> vẫn tái tuyển được bình thường (không chặn oan)',
+      rRehireDobMatch.status === 200, rRehireDobMatch.body);
   } finally {
     server.close();
   }

@@ -1,9 +1,57 @@
 # Phiên bản hiện tại
 
-**27.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.31 (2026-11): [Cao] Re-audit lần 7 — mục 2/9: hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường onboarding queue
+
+Mục thứ hai (2/9) của đợt re-audit lần 7.
+
+**Nguyên nhân:** 2 lỗ hổng cùng gốc, kết hợp thành 1 chuỗi khai thác:
+
+1. `createOnboardingProcessRecord()` (`lib/hrProcessOnboardingCreate.js`) khi "tái tuyển" (client gửi
+   `employeeCode` khớp 1 hồ sơ `INACTIVE`) KHÔNG đối chiếu danh tính gì — khác hẳn đường "Kiểm Tra Nhân
+   Sự Cũ" chính thức (`searchInactiveProfilesForRehire()`, tra theo CCCD/CMND + Ngày sinh). 1 actor chỉ
+   có `hrOnboardingManage` (không có bất kỳ quyền Hồ Sơ Nhân Sự nào) biết/đoán được mã nhân viên của BẤT
+   KỲ người đã nghỉ việc nào (mã dạng tuần tự, dễ đoán) có thể "tái tuyển" hồ sơ đó dù không phải người
+   đang ứng tuyển thật.
+2. `PATCH /api/hr-profile/by-code/:employeeCode` (`routes/employeeProfile.js`) cho actor chỉ có
+   `hrOnboardingManage` sửa hồ sơ `PENDING` ("Xác Nhận") dùng CHUNG allowed-list đầy đủ
+   `[...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS]` NHƯ HR thật, và trả nguyên object `profile`
+   không lọc gì trong response.
+
+Kết hợp 2 lỗ hổng: actor chỉ có `hrOnboardingManage` "tái tuyển" bất kỳ hồ sơ `INACTIVE` nào (không đối
+chiếu danh tính) rồi `PATCH` để đọc/ghi toàn bộ field chỉ HR thật mới được chạm tới — kỷ luật, bổ
+nhiệm/điều động, vị trí kiêm nhiệm, CCCD/CMND, số BHXH, mã số thuế, số tài khoản/tên chủ tài khoản ngân
+hàng, lịch sử sửa/tái tuyển của hồ sơ CŨ.
+
+**Vá:** 3 vị trí —
+1. `lib/hrProcessOnboardingCreate.js`: tái tuyển (`existing.status === 'INACTIVE'`) bắt buộc CCCD/CMND
+   HOẶC Ngày sinh (payload client gửi) khớp ĐÚNG hồ sơ đó — không khớp field nào thì 403, buộc dùng
+   đúng "Kiểm Tra Nhân Sự Cũ" để tra cứu trước.
+2. `lib/employeeProfile.js`: thêm `ONBOARDING_QUEUE_EDITABLE_FIELDS` (allowed-list riêng, bớt
+   `disciplinaryActions`/`transfers`/`secondaryPositions`/`nationalId`/`socialInsuranceNo`/`taxCode`/
+   `bankAccountNo`/`bankName`/`bankAccountHolderName` khỏi danh sách đầy đủ HR thật được sửa) +
+   `redactFieldsForOnboardingQueueActor()` (lọc response, thêm redact cả `profileEditHistory`/
+   `rehireHistory`).
+3. `routes/employeeProfile.js` PATCH `/by-code/:employeeCode`: dùng allowed-list + redact response riêng
+   cho actor chỉ có `hrOnboardingManage` (HR thật — `canEditProfiles()` — không đổi hành vi, vẫn nhận
+   nguyên allowed-list + response như cũ).
+
+**Test:** mở rộng `tests/test-onboarding-nationalid-race.js` (4 scenario mới cho đối chiếu danh tính khi
+tái tuyển) và `tests/test-hr-onboarding-queue.js` (2 scenario mới: whitelist + redact response cho actor
+chỉ có `hrOnboardingManage`, đối chứng HR thật không bị ảnh hưởng). Xác nhận FAIL trên code CŨ
+(`git stash`, 3/13 scenario FAIL ở file đầu — tái tuyển không đối chiếu danh tính vẫn thành công; 1/9
+scenario FAIL ở file sau — field nhạy cảm vẫn bị ghi đè/lộ qua response), PASS trên code đã vá (13/13 +
+9/9). Regression: `tests/demo-hr-profile.js`, `tests/test-audit-nhansu-hoso.js` (33/33),
+`tests/test-employeeprofile-relink-account.js` (6/6), `tests/test-hr-onboarding-excel-fields.js`
+(22/22), `tests/test-hr-process-onboarding-create-import.js` (13/13) — toàn bộ PASS, không regression.
+(`tests/test-hr-discipline-jobgrade-resignation.js` crash ở `lib/createValidation.js:4034` — xác nhận
+LỖI CŨ, có mặt cả khi stash hết thay đổi của đợt này, không liên quan bản vá này.)
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.30 (2026-11): [Cao] Re-audit lần 7 — mục 1/9: submitOperationEstimate() cho phép hijack hạng mục Danh mục đầu tư ngoài phạm vi
 

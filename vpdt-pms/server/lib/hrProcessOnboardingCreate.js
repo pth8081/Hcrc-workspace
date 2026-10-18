@@ -43,6 +43,26 @@ async function createOnboardingProcessRecord(payload, freshUser, appData) {
         : 'Để trống ô Mã Nhân Viên nếu đây là nhân viên mới.';
       throw new CreateError(409, `Mã Nhân Viên "${clientProvidedEmployeeCode}" đang gắn với 1 hồ sơ nhân sự khác đang hoạt động — chỉ tạo Onboarding theo mã cũ cho hồ sơ ĐÃ NGHỈ VIỆC (Tái Tuyển). ${guidance}`);
     }
+    // LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường onboarding
+    // queue"): tái tuyển (existing.status === 'INACTIVE') trước đây CHẤP NHẬN bất kỳ employeeCode client
+    // gửi mà KHÔNG đối chiếu danh tính gì — khác hẳn đường "Kiểm Tra Nhân Sự Cũ" chính thức
+    // (searchInactiveProfilesForRehire(), tra theo CCCD/CMND + Ngày sinh). 1 actor chỉ có hrOnboardingManage
+    // (không có bất kỳ quyền Hồ Sơ Nhân Sự nào) đoán/biết mã nhân viên của BẤT KỲ người đã nghỉ việc nào
+    // (mã dạng tuần tự, dễ đoán) có thể "tái tuyển" hồ sơ đó dù không phải người đang ứng tuyển thật — hồ
+    // sơ chuyển sang onboardingQueueStatus=PENDING, mở khoá được PATCH /by-code (xem routes/employeeProfile.js)
+    // để đọc/ghi dữ liệu hồ sơ CŨ. Bắt buộc đối chiếu CCCD/CMND HOẶC Ngày sinh (payload client gửi, cùng 2
+    // field searchInactiveProfilesForRehire() đã dùng) khớp ĐÚNG hồ sơ INACTIVE trước khi cho tái tuyển qua
+    // đường tạo Onboarding trực tiếp này — không khớp field nào (thiếu cả 2, hoặc có nhập nhưng SAI cả 2)
+    // thì chặn 403, buộc dùng đúng "Kiểm Tra Nhân Sự Cũ" để tra cứu trước.
+    if (existing.status === 'INACTIVE') {
+      const payloadNid = String(payload?.nationalId || '').trim();
+      const payloadDob = String(payload?.dateOfBirth || '').trim();
+      const nidMatches = !!payloadNid && !!existing.nationalId && payloadNid === existing.nationalId;
+      const dobMatches = !!payloadDob && !!existing.dateOfBirth && payloadDob === existing.dateOfBirth;
+      if (!nidMatches && !dobMatches) {
+        throw new CreateError(403, `Không thể Tái Tuyển hồ sơ "${clientProvidedEmployeeCode}" — CCCD/CMND hoặc Ngày sinh trong form không khớp hồ sơ cũ. Vui lòng dùng "Kiểm Tra Nhân Sự Cũ" trong form Onboarding để tra đúng hồ sơ trước khi Tái Tuyển.`);
+      }
+    }
   }
 
   // PHÁT HIỆN mức Cao (re-audit lần 4): assertNationalIdNotDuplicated() (gọi bên trong extraValidate()

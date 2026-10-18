@@ -820,7 +820,7 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     // orgChartAppliedVersion (11/2026, cho case 'secondaryPositions') — cùng cách set-position đọc bản
     // Cơ Cấu Tổ Chức đang áp dụng, đọc 1 LẦN ở đây (đỡ phải đọc lại bên trong khối khoá).
     const applied = orgChart.getAppliedVersion(catalogAppData.orgChartVersions || []);
-    let updated, syncSecondaryPositions = null;
+    let updated, syncSecondaryPositions = null, isOnboardingQueueOnlyActor = false;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
@@ -829,10 +829,12 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       // đợi (PENDING) — đây chính là hành động "Xác Nhận" (mở hồ sơ, cập nhật tiếp thông tin ứng viên, lưu
       // lại). KHÔNG mở rộng thêm cho hồ sơ đã tốt nghiệp khỏi hàng đợi hay hồ sơ CANCELLED — người này vẫn
       // không sửa được hồ sơ ACTIVE/ON_LEAVE/INACTIVE thông thường nếu không có hrProfileManage/hrProfileEdit.
+      const hasFullEditAccess = employeeProfile.canEditProfiles(req.freshUser);
       const canEditViaOnboardingQueue = profile.onboardingQueueStatus === 'PENDING' && !!req.freshUser?.perms?.hrOnboardingManage;
-      if (!employeeProfile.canEditProfiles(req.freshUser) && !canEditViaOnboardingQueue) {
+      if (!hasFullEditAccess && !canEditViaOnboardingQueue) {
         throw new HttpError(403, 'Chỉ HR/Admin mới sửa được hồ sơ người khác');
       }
+      isOnboardingQueueOnlyActor = !hasFullEditAccess;
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Cao): đường sửa này đi vòng hoàn
       // toàn lớp chặn trùng CCCD/CMND vốn chỉ có ở lối TẠO (createManualProfile()) — xem
       // lib/employeeProfile.js::assertNationalIdNotDuplicated().
@@ -841,7 +843,15 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       if (req.body && 'nationalId' in req.body) {
         employeeProfile.assertNationalIdNotDuplicated(list, req.body.nationalId, profile.employeeCode, true);
       }
-      const allowed = [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
+      // LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — "hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường
+      // onboarding queue"): actor CHỈ có hrOnboardingManage (isOnboardingQueueOnlyActor=true, không có
+      // bất kỳ quyền Hồ Sơ Nhân Sự thật nào) trước đây dùng CHUNG allowed-list đầy đủ như HR thật — ghi
+      // đè được cả kỷ luật/bổ nhiệm/vị trí kiêm nhiệm/CCCD/BHXH/MST/ngân hàng của hồ sơ (kể cả hồ sơ TÁI
+      // TUYỂN mang theo toàn bộ lịch sử cũ). Dùng allowed-list RIÊNG, hẹp hơn, cho actor này — xem
+      // ONBOARDING_QUEUE_EDITABLE_FIELDS (lib/employeeProfile.js).
+      const allowed = isOnboardingQueueOnlyActor
+        ? employeeProfile.ONBOARDING_QUEUE_EDITABLE_FIELDS
+        : [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
       employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name, {
         employmentTypes: catalogAppData.employmentTypes, workSchedules: catalogAppData.workSchedules,
         // 4 catalog MỚI (10/2026, mẫu Excel 90 trường) — xem chú thích case 'legalEntity'/
@@ -882,7 +892,15 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       ));
     }
     logHrProfileAction(req, 'EDIT', req.params.employeeCode, `Sửa hồ sơ [${req.params.employeeCode}]`);
-    res.json({ ok: true, profile: updated });
+    // LỖI ĐÃ VÁ (re-audit lần 7, mức Cao — xem chú thích ở khối gán `allowed` phía trên): response trước
+    // đây trả NGUYÊN object `profile` không lọc gì — actor chỉ có hrOnboardingManage đọc được cả field
+    // chỉ HR thật mới được xem (kỷ luật, bổ nhiệm, CCCD, BHXH, MST, ngân hàng, lịch sử sửa/tái tuyển) dù
+    // applyProfileEdit() ở trên đã không cho họ SỬA các field này — vẫn lộ qua READ. Lọc lại bằng
+    // redactFieldsForOnboardingQueueActor() cho đúng actor này (HR thật vẫn nhận nguyên profile như cũ).
+    const responseProfile = isOnboardingQueueOnlyActor
+      ? employeeProfile.redactFieldsForOnboardingQueueActor(updated)
+      : updated;
+    res.json({ ok: true, profile: responseProfile });
   } catch (err) { sendCatchError(res, err, `PATCH /api/hr-profile/by-code/${req.params.employeeCode}`); }
 });
 
