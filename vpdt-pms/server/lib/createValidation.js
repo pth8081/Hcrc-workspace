@@ -3842,8 +3842,28 @@ const CREATE_MODULE_CONFIGS = {
         payload.currentAddress = payload.currentAddress ? String(payload.currentAddress).trim().slice(0, 300) : '';
         payload.nationalId = payload.nationalId ? String(payload.nationalId).trim().slice(0, 300) : '';
         if (payload.nationalId) {
-          const { assertNationalIdNotDuplicated } = require('./employeeProfile');
-          assertNationalIdNotDuplicated(appData?.employeeProfiles, payload.nationalId, payload.employeeCode);
+          // PHÁT HIỆN mức Thấp (re-audit lần 5, #145 "Tạo Onboarding lộ mã NV đã nghỉ việc qua CCCD"):
+          // assertNationalIdNotDuplicated() gọi KHÔNG truyền canViewFull (mặc định falsy) — nhưng hàm đó
+          // CHỦ Ý luôn lộ employeeCode + "ĐÃ NGHỈ VIỆC" cho hồ sơ INACTIVE trùng CCCD BẤT KỂ canViewFull
+          // (xem chú thích tại hàm đó, lib/employeeProfile.js), vì 2 nơi gọi GỐC (createManualProfile()/
+          // applyProfileEdit()) đều đã được ROUTE gác đúng tier hrProfileCreate/hrProfileEdit/
+          // hrProfileManage — tier NÀY cũng đủ quyền tra "Kiểm Tra Nhân Sự Cũ" (GET /api/hr-profile/
+          // search-inactive, requireProfileCreateOrEdit), nên lộ thêm employeeCode qua lỗi 409 ở đó
+          // không phải lỗ hổng mới. Lối tạo Onboarding này lại gác bằng 1 tier HOÀN TOÀN KHÁC
+          // (canCreateHrProcess() — hrOnboardingManage/hrProcessManage/admin, KHÔNG đòi hrProfileCreate/
+          // hrProfileEdit/hrProfileManage) — 1 actor CHỈ có hrOnboardingManage có thể dò CCCD bất kỳ qua
+          // form tạo Onboarding để biết employeeCode + tình trạng nghỉ việc của 1 nhân viên CŨ dù không
+          // có quyền xem/tra cứu hồ sơ nhân sự. Chỉ cho thấy chi tiết khi actor THẬT SỰ cũng thuộc tier
+          // đó (mirror đúng requireProfileCreateOrEdit) — ngược lại rơi về thông báo gọn, không lộ
+          // employeeCode/trạng thái, bất kể hồ sơ trùng ACTIVE hay INACTIVE.
+          const { assertNationalIdNotDuplicated, canCreateProfiles, canEditProfiles } = require('./employeeProfile');
+          const canSeeProfileDetail = canCreateProfiles(user) || canEditProfiles(user);
+          if (canSeeProfileDetail) {
+            assertNationalIdNotDuplicated(appData?.employeeProfiles, payload.nationalId, payload.employeeCode, true);
+          } else {
+            const dup = (appData?.employeeProfiles || []).find(p => p.nationalId === payload.nationalId && p.employeeCode !== payload.employeeCode);
+            if (dup) throw new CreateError(409, `CCCD/CMND "${payload.nationalId}" đã tồn tại trong hệ thống — vui lòng liên hệ bộ phận Nhân Sự có quyền xem hồ sơ để xác minh trước khi tạo mới.`);
+          }
         }
 
         // Đối chiếu file Excel "Trường Thông Tin Tạo Mã" (10/2026, theo yêu cầu người dùng) — bổ sung các
