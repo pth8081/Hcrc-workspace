@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**26.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.28 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3b — badge Đăng Ký Xe + Phòng Họp + Văn Phòng Phẩm
+
+Tiếp tục Giai đoạn 3 (lan rộng dần sang các module còn lại theo đúng lộ trình đã duyệt) — 3 module có
+badge trạng thái dạng Tailwind rời rạc đổi sang `.badge-*` DÙNG CHUNG, cùng khuôn Giai đoạn 3a.
+
+- `public/js/module-dangkyxe.js` (bảng Đăng Ký Xe): 8 trạng thái (`APPROVED/IN_PROGRESS/
+  AWAITING_EVALUATION/COMPLETED/REJECTED/CANCELLED/DRAFT` + đang ở 1 bước) đổi sang
+  `.badge-success/.badge-info/.badge-warning/.badge-danger` — giữ đúng quy ước đã chuẩn hoá: "cần bổ
+  sung" (DRAFT) = warning, "đang chờ duyệt ở 1 bước" = info.
+- `public/js/module-phonghop.js` (bảng Phòng Họp): `APPROVED` → success, `CANCELLED` → danger, đang chờ
+  duyệt → info (**đổi từ vàng sang xanh dương**, khớp đúng quy ước chung).
+- `public/js/module-vpp.js`: 2 hàm helper `vppRegStatusBadge()` (đăng ký VPP: `DRAFT/APPROVED/REJECTED/
+  CANCELLED` + đang chờ) và `vppPeriodStatusBadge()` (kỳ cấp phát: đang mở/đã kết thúc) đổi sang
+  `.badge-*`. **Lưu ý ngữ nghĩa**: `DRAFT` ở VPP nghĩa là "Nháp — chưa gửi" (KHÁC nghĩa `DRAFT` ở Đăng
+  Ký Xe/Tài liệu/Văn Bản Trình là "cần bổ sung — bị trả về sửa lại") → map sang `.badge-neutral`, không
+  phải `.badge-warning` như các module khác dùng cho `DRAFT`. "Đã kết thúc" (kỳ đóng) cũng dùng
+  `.badge-neutral`.
+
+Test: `tests/test-giai-doan-3b-badges.js` (mới, 5 kịch bản — gộp cả 3 module vào 1 file vì mỗi module
+chỉ có vài dòng badge đơn giản). Đã xác nhận bằng `git stash` test mới FAIL đúng (0/5) trên code cũ.
+Chạy lại `test-car-dashboard-status-filter.js` (6) + `test-meeting-edit-ui.js` (7) + `test-vpp.js` (29) +
+CSP full-audit (3) + lazy-load toàn bộ tab (46) — không hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/module-dangkyxe.js`, `public/js/module-phonghop.js`,
+`public/js/module-vpp.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi
+dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.27 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3a — badge Tài liệu + Văn Bản Trình
 

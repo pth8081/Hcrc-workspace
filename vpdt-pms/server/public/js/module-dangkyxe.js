@@ -980,15 +980,19 @@ function renderCarRegs() {
     const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, c.currentStep);
     const canApprove = (c.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, c.history, c.currentStep);
 
+    // Giai đoạn 3b "HCRC Workspace Refresh" (11/2026): badge trạng thái đổi sang .badge-* DÙNG CHUNG.
+    // IN_PROGRESS (LX đã xác nhận, đang di chuyển) + pending-ở-bước đều là "đang xử lý" -> info.
+    // AWAITING_EVALUATION (chờ đánh giá sau chuyến) cần hành động từ người quản lý -> warning.
+    // CANCELLED -> danger (khớp quy ước đã dùng ở Công Việc: huỷ/từ chối cùng bucket).
     let statusBadge = '';
-    if (c.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
-    else if (c.status === 'IN_PROGRESS') statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">🚗 LX Đã Xác Nhận Chuyến</span>`;
-    else if (c.status === 'AWAITING_EVALUATION') statusBadge = `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">⏳ Chờ đánh giá (${c.driverReportedKm ?? c.actualKm ?? 0} KM)</span>`;
-    else if (c.status === 'COMPLETED') statusBadge = `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Hoàn thành (${c.actualKm ?? 0} KM)</span>`;
-    else if (c.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
-    else if (c.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy chuyến</span>`;
-    else if (c.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
-    else statusBadge = `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
+    if (c.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã phê duyệt</span>`;
+    else if (c.status === 'IN_PROGRESS') statusBadge = `<span class="badge-info">🚗 LX Đã Xác Nhận Chuyến</span>`;
+    else if (c.status === 'AWAITING_EVALUATION') statusBadge = `<span class="badge-warning">⏳ Chờ đánh giá (${c.driverReportedKm ?? c.actualKm ?? 0} KM)</span>`;
+    else if (c.status === 'COMPLETED') statusBadge = `<span class="badge-success">✅ Hoàn thành (${c.actualKm ?? 0} KM)</span>`;
+    else if (c.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối</span>`;
+    else if (c.status === 'CANCELLED') statusBadge = `<span class="badge-danger">🚫 Đã hủy chuyến</span>`;
+    else if (c.status === 'DRAFT') statusBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Bước ${c.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, c.history, c.currentStep))}</span>`;
     // Vừa "Đổi Lộ Trình" (hành động cuối cùng trong lịch sử là ROUTE_CHANGED, chưa ai duyệt lại vòng
     // mới) — thêm nhãn phụ để người duyệt/người đăng ký phân biệt với 1 phiếu PENDING bình thường,
     // tránh nhầm là hồ sơ mới chưa từng đổi gì. Xem changeCarRegRoute() ở lib/recordActions.js.

@@ -548,12 +548,15 @@ function previewVppWorkflow() {
   );
 }
 
+// Giai đoạn 3b "HCRC Workspace Refresh" (11/2026): badge trạng thái đổi sang .badge-* DÙNG CHUNG.
+// DRAFT ở đây là "Nháp" (chưa gửi duyệt, khác hẳn nghĩa "cần bổ sung sau khi bị trả về" ở Tài liệu/Văn
+// Bản Trình/Đăng Ký Xe) -> badge-neutral, không phải warning.
 function vppRegStatusBadge(r) {
-  if (r.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
-  if (r.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
-  if (r.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
-  if (r.status === 'CANCELLED') return `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy</span>`;
-  return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`;
+  if (r.status === 'DRAFT') return `<span class="badge-neutral">📝 Nháp</span>`;
+  if (r.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt</span>`;
+  if (r.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
+  if (r.status === 'CANCELLED') return `<span class="badge-danger">🚫 Đã hủy</span>`;
+  return `<span class="badge-info">⏳ Chờ duyệt</span>`;
 }
 
 function onVppFilterChange() {
@@ -954,8 +957,8 @@ function resetVppNewPeriodForm() {
 }
 
 function vppPeriodStatusBadge(p) {
-  if (!vppPeriodIsOpen(p)) return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">🔒 Đã kết thúc</span>`;
-  return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">🟢 Đang mở</span>`;
+  if (!vppPeriodIsOpen(p)) return `<span class="badge-neutral">🔒 Đã kết thúc</span>`;
+  return `<span class="badge-success">🟢 Đang mở</span>`;
 }
 
 function renderVppPeriods() {

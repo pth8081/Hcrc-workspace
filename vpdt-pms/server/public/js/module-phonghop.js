@@ -1048,10 +1048,11 @@ function renderMeetings() {
   }
 
   tbody.innerHTML = pageMeetings.map(m => {
+    // Giai đoạn 3b "HCRC Workspace Refresh" (11/2026): badge trạng thái đổi sang .badge-* DÙNG CHUNG.
     let statusBadge = '';
-    if (m.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt lịch</span>`;
-    else if (m.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã hủy lịch</span>`;
-    else statusBadge = `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">⏳ Đang chờ duyệt</span>`;
+    if (m.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã duyệt lịch</span>`;
+    else if (m.status === 'CANCELLED') statusBadge = `<span class="badge-danger">❌ Đã hủy lịch</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Đang chờ duyệt</span>`;
 
     return `
       <tr class="hover:bg-gray-50 border-b">
