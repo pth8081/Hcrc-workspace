@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.23 (2026-11): [TB/Thấp] Re-audit lần 6 — mục 15/21: PERSONAL leave daysCount sai lệch
+
+Mục thứ mười lăm (15/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `assertValidLeaveRequest()` (`lib/attendance.js`) tính `daysCount` loại trừ Thứ 7/CN/
+ngày lễ CHỈ cho `ANNUAL`/`UNPAID` (vá ở 1 đợt audit trước — đúng tại thời điểm đó, vì `PERSONAL` chưa
+dùng `daysCount` để trừ gì). Sau đó, `lib/payroll.js` đã gộp `LEAVE_PERSONAL` vào CÙNG nhóm khấu trừ
+lương với `LEAVE_UNPAID` (`unpaidDays = records.filter(r => ['LEAVE_UNPAID',
+'LEAVE_PERSONAL'].includes(r.recordType)).length`), và `buildLeaveAttendanceRecords()` cũng ĐÃ được vá
+thêm `PERSONAL` vào danh sách loại cuối tuần/lễ khi sinh `AttendanceRecords` — NHƯNG `daysCount` ở
+`assertValidLeaveRequest()` (lưu trên đơn, hiển thị cho người dùng + dùng trong report) lại bị BỎ SÓT,
+không cập nhật đồng bộ theo 2 chỗ trên. Hậu quả: 1 đơn PERSONAL trùm cuối tuần (VD Thứ Sáu→Thứ Hai) hiển
+thị "4 ngày" dù chỉ 2 ngày công thực bị trừ lương — sai lệch hiển thị/report, KHÔNG sai tiền lương
+(payroll không đọc field `daysCount` của đơn, chỉ đếm số bản ghi `AttendanceRecords` — đã đúng từ trước).
+
+**Vá:** thêm `leaveType === 'PERSONAL'` vào điều kiện gọi `countLeaveDaysExcludingRestDays()` ở
+`assertValidLeaveRequest()`, khớp đúng `ANNUAL`/`UNPAID`. `SICK` vẫn giữ nguyên đếm theo ngày lịch (không
+bị gộp khấu trừ ở `payroll.js`). Cập nhật lại comment cũ (đã ghi "SICK/PERSONAL ngoài phạm vi vá") cho
+khớp trạng thái mới, tránh gây hiểu nhầm cho người đọc sau.
+
+**Test:** sửa `tests/test-attendance-leave.js` — đổi scenario cũ dùng `SICK` thay `PERSONAL` cho phần
+"đếm theo ngày lịch không đổi" (vì PERSONAL nay ĐÃ đổi), thêm 1 scenario mới xác nhận PERSONAL Thứ
+Sáu→Thứ Hai nay đúng 2 ngày (không còn 4). Xác nhận FAIL trên code CŨ (`git stash -- lib/attendance.js`,
+đúng 1/73 scenario FAIL, đúng khai thác đã nêu), PASS trên code đã vá (73/73). Regression:
+`tests/test-payroll.js` (28/28), `tests/test-onboarding.js` (23/23) — toàn bộ PASS, không regression
+(xác nhận `deductLeaveBalance()` CHỈ gọi cho `ANNUAL` — thay đổi này không ảnh hưởng bất kỳ quỹ phép
+nào).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.22 (2026-11): [TB] Re-audit lần 6 — mục 14/21: fileAuthz.js docs checker thiếu thumbnailUrl
 
