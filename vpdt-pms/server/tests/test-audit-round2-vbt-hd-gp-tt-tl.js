@@ -407,7 +407,10 @@ async function runPureTests() {
   const docVersionPayload = (dept) => ({
     rootDocId: 60, dept, cat: 'Quy trình', title: 'TL', ver: '2.0', fileUrl: '/uploads/y.pdf', fileName: 'y.pdf'
   });
-  const USER_B = { username: 'u_b', name: 'Người B', dept: DEPT_B, perms: { uploadAll: true } };
+  // contractCreate: true (re-audit lần 5, #144) — thêm để kịch bản 7e/7f/7g (phụ lục hợp đồng) ngay dưới
+  // không bị chặn oan ở lớp "có quyền tạo hợp đồng không" TRƯỚC khi chạm tới chốt chặn dept-mismatch
+  // đang kiểm ở đây.
+  const USER_B = { username: 'u_b', name: 'Người B', dept: DEPT_B, perms: { uploadAll: true, contractCreate: true } };
   await run('7a-ter. LỖI ĐÃ VÁ: tài khoản Phòng B tự soạn dept=Phòng A (GIẢ MẠO khớp root.dept) để tạo phiên bản -> vẫn 400 (so theo user.dept THẬT, không tin payload.dept)', () => {
     const err = expectThrow(() => validateAndPrepareCreate('docs', docVersionPayload(DEPT_A), USER_B, [rootDocKD], APP_DATA, []),
       /Phòng ban của phiên bản mới phải khớp với tài liệu gốc/i, '7a-ter');
@@ -430,6 +433,36 @@ async function runPureTests() {
       approvalLevel: 'TGD', selectedApprovalLayers: [], selectedLayerMembers: {}, paymentInstallments: []
     }, USER_A, [], APP_DATA, []), /Loại pháp lý hợp đồng không hợp lệ/i, '7b');
     assert.strictEqual(err.status, 400);
+  });
+
+  // ----- LỖI ĐÃ VÁ (re-audit lần 5, mức Thấp — "Tạo Phụ Lục Hợp Đồng không kiểm quyền trên hợp đồng
+  // gốc"): CÙNG LỚP LỖI với 7a-ter/quater/quinquies ở trên (docs) nhưng áp dụng cho contracts/isAddendum
+  // — extraValidate trước đây so payload.dept (CLIENT tự gửi, KHÔNG đáng tin) với root.dept, trong khi
+  // dept THẬT SỰ được lưu lại luôn là user.dept (forceOwnDept). 1 tài khoản Phòng B chỉ cần tự soạn
+  // request với dept: DEPT_A (khớp root.dept) là qua được chốt chặn này dù chưa từng thuộc Phòng A. -----
+  const rootContractKD = {
+    id: 70, code: 'HCRC-KD-HDKT-001', dept: DEPT_A, custodianDept: DEPT_A, type: 'Hợp đồng kinh tế',
+    isAddendum: false, approvalStatus: 'APPROVED', creator: 'u_a', amount: 100000000
+  };
+  const addendumPayload = (dept) => ({
+    isAddendum: true, rootContractId: 70, dept, custodianDept: DEPT_A, title: 'Phụ lục 1', partner: 'X', amount: 1000,
+    startDate: '2026-01-01', endDate: '2026-12-31', fileUrl: '/uploads/pl.pdf', fileName: 'pl.pdf',
+    approvalLevel: 'TGD', selectedApprovalLayers: [], selectedLayerMembers: {}, paymentInstallments: []
+  });
+  await run('7e. LỖI ĐÃ VÁ: tài khoản Phòng B tự soạn dept=Phòng A (GIẢ MẠO khớp root.dept) để tạo phụ lục -> vẫn 400 (so theo user.dept THẬT, không tin payload.dept)', () => {
+    const err = expectThrow(() => validateAndPrepareCreate('contracts', addendumPayload(DEPT_A), USER_B, [rootContractKD], APP_DATA, []),
+      /Phòng ban của phụ lục phải khớp với hợp đồng gốc/i, '7e');
+    assert.strictEqual(err.status, 400);
+  });
+  await run('7f. Tài khoản Phòng B trung thực gửi dept=Phòng B (đúng dept thật của mình) -> vẫn 400 như cũ (không đổi hành vi gate dept-mismatch)', () => {
+    expectThrow(() => validateAndPrepareCreate('contracts', addendumPayload(DEPT_B), USER_B, [rootContractKD], APP_DATA, []),
+      /Phòng ban của phụ lục phải khớp với hợp đồng gốc/i, '7f');
+  });
+  await run('7g. KHÔNG chặn nhầm: tài khoản ĐÚNG Phòng A (cùng phòng root) tạo phụ lục -> thành công', () => {
+    const rec = validateAndPrepareCreate('contracts', addendumPayload(DEPT_A), USER_A, [rootContractKD], APP_DATA, []);
+    assert.strictEqual(rec.isAddendum, true);
+    assert.strictEqual(rec.rootContractId, 70);
+    assert.strictEqual(rec.type, 'Hợp đồng kinh tế');
   });
 
   // ----- editDocDraft(): đổi cat lúc SỬA phải sinh lại code/displayCode -----

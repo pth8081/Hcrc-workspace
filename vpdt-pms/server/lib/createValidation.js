@@ -1021,7 +1021,18 @@ const CREATE_MODULE_CONFIGS = {
         const root = (collection || []).find(c => c.id === payload.rootContractId && !c.isAddendum);
         if (!root) throw new CreateError(400, 'Hợp đồng gốc không tồn tại');
         if (root.approvalStatus !== 'APPROVED') throw new CreateError(409, 'Chỉ được bổ sung phụ lục cho hợp đồng đã được phê duyệt');
-        if (payload.dept !== root.dept) throw new CreateError(400, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
+        // LỖI ĐÃ VÁ (re-audit lần 5, mức Thấp — "Tạo Phụ Lục Hợp Đồng không kiểm quyền trên hợp đồng
+        // gốc"): CÙNG LỚP LỖI với "Tạo phiên bản Tài Liệu mới không kiểm quyền trên bản gốc" (re-audit
+        // lần 5, mức TB, xem docs.extraValidate ở trên — v27.0) — trước đây so `payload.dept` (CLIENT tự
+        // gửi, KHÔNG đáng tin) với `root.dept`, trong khi giá trị THỰC SỰ được lưu vào bản ghi lại là
+        // `user.dept` (forceOwnDept: true, xem validateAndPrepareCreate() — `finalDept` luôn = user.dept,
+        // không đụng gì tới payload.dept). 1 tài khoản Phòng B chỉ cần tự soạn request với
+        // `dept: "Phòng A"` (khớp root.dept) là qua được chốt chặn này dù chưa từng thuộc Phòng A — bản
+        // ghi lưu xong vẫn mang dept THẬT (Phòng B) của họ, tạo ra 1 phụ lục lệch phòng ban với hợp đồng
+        // gốc mà chốt chặn tưởng như đã kiểm đúng lại không hề cản được. So với `user.dept` (giá trị xác
+        // thực, không thể giả mạo) mới đúng ý nghĩa "chỉ đúng phòng ban của hợp đồng gốc mới được bổ
+        // sung phụ lục".
+        if (user.dept !== root.dept) throw new CreateError(400, 'Phòng ban của phụ lục phải khớp với hợp đồng gốc');
         payload.type = root.type;
         // Đơn vị theo dõi & thanh toán của phụ lục PHẢI khớp hợp đồng gốc — cùng 1 hồ sơ hợp đồng chỉ
         // nên có 1 đơn vị custodian xuyên suốt (gốc + mọi phụ lục), tránh phụ lục "trôi" sang custodian
