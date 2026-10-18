@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**26.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.61 (2026-11): [Cao] Re-audit lần 4 — mục 1: race condition trùng CCCD khi tạo Onboarding đồng thời
+
+Bắt đầu đợt re-audit lần 4 (6 agent song song, phạm vi giống 2 đợt trước). Mục đầu tiên trong 22 phát
+hiện (Cao → Trung Bình → Thấp theo đúng thứ tự người dùng xác nhận):
+
+- **[Cao] `assertNationalIdNotDuplicated()` (gọi trong `extraValidate` của `CREATE_MODULE_CONFIGS.
+  hrProcesses`) so khớp trên `appData.employeeProfiles` — 1 SNAPSHOT đọc đúng 1 LẦN ở ĐẦU request
+  (`routes/create.js`, TRƯỚC khi vào `lib/hrProcessOnboardingCreate.js::createOnboardingProcessRecord()`),
+  không bao giờ được làm mới.** 2 quy trình Onboarding cho 2 ứng viên KHÁC `employeeCode` nhưng CÙNG 1
+  số CCCD/CMND, gửi gần như đồng thời, đều đọc được snapshot "chưa ai trùng CCCD" TRƯỚC khi bên nào kịp
+  GHI CCCD của mình xong (việc ghi CCCD vào `employeeProfiles` chỉ xảy ra SAU KHI `hrProcesses` đã tạo
+  xong, ở 1 khối `withLockedAppDataValue('employeeProfiles', ...)` TÁCH BIỆT hẳn khỏi bước kiểm tra) —
+  cả 2 đều qua được chặn trùng, tạo ra 2 hồ sơ nhân sự khác `employeeCode` nhưng cùng CCCD, phá vỡ bất
+  biến "1 CCCD = 1 nhân viên". Khác lỗi rò rỉ thông tin đã vá ở v26.52 (lỗi đó là lộ `employeeCode`/
+  trạng thái qua thông báo 409) — đây là bypass hẳn việc chặn trùng.
+  Chỉ thêm `getLockKey` cho riêng bước tạo `hrProcesses` (kiểu `operationOrders.getLockKey`) KHÔNG đủ:
+  nó chỉ serialize bước TẠO, không serialize giữa bước KIỂM TRA (đọc snapshot cũ) và bước GHI CCCD thật
+  (dùng key AppData khác). Mirror đúng khuôn đã ĐÚNG từ trước ở `createManualProfile()`
+  (`routes/employeeProfile.js` — gọi `assertNationalIdNotDuplicated()` với `list` là tham số FRESH của
+  CHÍNH `withLockedAppDataValue()` bao quanh, không phải snapshot `appData` cũ): gộp cả sinh/dành mã +
+  bước tạo `hrProcesses` + ghi CCCD sau khi tạo thành MỘT khối `withLockedAppDataValue('employeeProfiles', ...)`
+  DUY NHẤT trong `createOnboardingProcessRecord()` — mọi lần kiểm tra trùng CCCD LUÔN đọc đúng dữ liệu
+  MỚI NHẤT. `withLockedAppDataValue()` tự rollback TOÀN BỘ (kể cả mã nhân viên vừa sinh) nếu bất kỳ bước
+  nào bên trong throw (transaction thật ở `lib/appData.js`) — không còn để lại hồ sơ DRAFT "mồ côi"
+  mang mã đã dành nếu tạo `hrProcesses` thất bại vì lý do khác (cải thiện phụ, không phải mục tiêu chính).
+
+**Test:** file mới `tests/test-onboarding-nationalid-race.js` (6 scenario — gọi thẳng router thật
+`routes/create.js`, mock `lib/recordStore`/`lib/appData` bằng hàng đợi mutex THẬT theo từng key + yield
+giữa lúc lấy snapshot và lúc xử lý để buộc 2 request bắn gần như đồng thời thực sự tranh chấp cùng 1
+cửa sổ thời gian, cùng khuôn `test-operation-order-po-race.js`). Assertion mới đã xác nhận FAIL trên
+code CŨ (`git stash -- lib/hrProcessOnboardingCreate.js`, 2/6 passed — cả 2 request cùng thành công,
+tạo 2 hồ sơ cùng CCCD), PASS trên code đã vá (6/6). Chạy lại bộ test Onboarding liên quan:
+`test-audit-nhansu-onboarding-contract.js` (29/29), `test-onboarding-cancel-labor-contract-cleanup.js`
+(5/5), `test-hrprocess-cancel-itticket-cleanup.js` (6/6), `test-hr-lifecycle.js` (39/39),
+`test-hr-process-onboarding-create-import.js` (13/13) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.60 (2026-11): [Thấp] Re-audit lần 3 — mục cuối: xoá dept/jobTitle không dọn workflowParticipatingDeptGroups/Positions
 
