@@ -369,6 +369,19 @@ async function deleteUser(id) {
   if (u.perms?.admin && remainingAdmins === 0) {
     return alert('⛔ Không thể xoá: đây là tài khoản Quản Trị Viên (Admin) DUY NHẤT còn lại — hệ thống bắt buộc phải còn ít nhất 1 tài khoản Admin. Hãy gán quyền Admin cho 1 tài khoản khác trước khi xoá tài khoản này.');
   }
+  // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent "bảng liên kết"):
+  // toggleUserActive() (khoá tạm) đã cảnh báo đúng nếu tài khoản còn là NGƯỜI DUYỆT của hồ sơ đang chờ
+  // (xem findPendingApprovalsForUsername() ngay dưới) — deleteUser() (XOÁ VĨNH VIỄN) trước đây KHÔNG có
+  // cảnh báo này, dù hậu quả NẶNG HƠN khoá tạm nhiều (tài khoản biến mất hẳn, không có cách "mở khoá lại"
+  // để cứu — các hồ sơ đang chờ người này duyệt kẹt vĩnh viễn, admin phải tự phát hiện + đổi người duyệt
+  // trong Quy Trình & Phê Duyệt mới gỡ được). Cùng khuôn cảnh báo (không chặn cứng, vẫn cho xoá nếu admin
+  // xác nhận) như toggleUserActive() — không đổi mức độ chặt chẽ của thao tác xoá, chỉ bổ sung cảnh báo.
+  const pendingApprovalsBeforeDelete = findPendingApprovalsForUsername(u.username);
+  if (pendingApprovalsBeforeDelete.length) {
+    const lines = pendingApprovalsBeforeDelete.slice(0, 10).map(p => `• ${p.typeLabel} ${p.code || ''} — ${p.title} (${p.stepLabel})`).join('\n');
+    const more = pendingApprovalsBeforeDelete.length > 10 ? `\n...và ${pendingApprovalsBeforeDelete.length - 10} hồ sơ khác.` : '';
+    if (!confirm(`⚠️ Tài khoản "${u.username}" hiện đang là NGƯỜI DUYỆT của ${pendingApprovalsBeforeDelete.length} hồ sơ đang chờ xử lý:\n\n${lines}${more}\n\nSau khi XOÁ VĨNH VIỄN, các hồ sơ này sẽ KẸT LẠI (không ai duyệt được đến khi admin đổi người duyệt trong Quy Trình & Phê Duyệt) — KHÔNG thể "mở khoá lại" như khoá tạm. Vẫn muốn xoá?`)) return;
+  }
   if (!confirm(`Bạn có chắc chắn muốn xóa người dùng "${u.username}" (${u.name})?`)) return;
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
   DB.users = DB.users.filter(item => item.id !== id);

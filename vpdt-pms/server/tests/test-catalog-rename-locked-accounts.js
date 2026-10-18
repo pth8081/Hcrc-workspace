@@ -312,6 +312,38 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // (2d-2e) LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao): deleteUser() (XOÁ VĨNH
+  // VIỄN) trước đây KHÔNG có cảnh báo findPendingApprovalsForUsername() như toggleUserActive() (khoá
+  // tạm) ở trên — cùng khuôn (2b)/(2c), chỉ khác hàm gọi.
+  // ==========================================================================
+  await scenario('(2d) deleteUser() deleting an approver shows a warning naming their pending records, then still deletes (confirm=true)', async () => {
+    const r = await page.evaluate(async () => {
+      window.__confirms.length = 0;
+      window.__confirmAnswer = true;
+      window.__fetchHandlers['POST /api/data/users'] = () => ({ status: 200, body: { ok: true } });
+      await deleteUser(3);
+      return { confirms: window.__confirms.slice(), stillExists: !!DB.users.find(x => x.username === 'locked_approver') };
+    });
+    const warningConfirm = r.confirms.find(c => c.includes('NGƯỜI DUYỆT'));
+    record('(2d) a confirm() naming "NGƯỜI DUYỆT" was shown, mentioning both pending records, warning về XOÁ VĨNH VIỄN',
+      !!warningConfirm && warningConfirm.includes('DOC-1') && warningConfirm.includes('VBT-1') && warningConfirm.includes('XOÁ VĨNH VIỄN'), JSON.stringify(r));
+    record('(2d) after confirming (true) cả 2 lần, tài khoản bị xoá khỏi DB.users',
+      r.stillExists === false, JSON.stringify(r));
+  });
+
+  await scenario('(2e) deleteUser() deleting a NON-approver shows only the normal delete confirm (no "NGƯỜI DUYỆT" warning)', async () => {
+    const r = await page.evaluate(async () => {
+      window.__confirms.length = 0;
+      window.__confirmAnswer = true;
+      window.__fetchHandlers['POST /api/data/users'] = () => ({ status: 200, body: { ok: true } });
+      await deleteUser(4);
+      return { confirms: window.__confirms.slice(), stillExists: !!DB.users.find(x => x.username === 'locked_not_approver') };
+    });
+    record('(2e) no "NGƯỜI DUYỆT" warning confirm was shown', !r.confirms.some(c => c.includes('NGƯỜI DUYỆT')), JSON.stringify(r));
+    record('(2e) account still ends up deleted', r.stillExists === false, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // (3) renameStore()/renameJobTitle() + Excel import preview/confirm.
   // ==========================================================================
   await scenario('(3a) renameStore() calls POST /api/admin/renameCatalogEntry and updates DB.stores from the response', async () => {

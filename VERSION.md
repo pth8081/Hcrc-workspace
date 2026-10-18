@@ -1,9 +1,65 @@
 # Phiên bản hiện tại
 
-**26.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.47 (2026-11): [Cao] Rà soát chuyên sâu lần 2 trước go-live — Đợt 3: 4 lỗ hổng "bảng liên kết" (Agent 5)
+
+Tiếp nối Đợt 2/2b. Agent "bảng liên kết" (đợt rà soát 6-agent song song) phát hiện 4 lỗ hổng mức Cao,
+đều thuộc nhóm "đổi/xoá 1 giá trị gốc không cascade sang mọi nơi đang tham chiếu":
+
+- **[Cao] Đổi tên "Loại Tờ Trình" (`submissionTypes`) không cascade.** Khác `contractTypes`/`carTypes`
+  (cũng dạng `{key,label}[]` nhưng mọi nơi tra theo `key` ổn định, không cần cascade khi đổi label) —
+  `submissions` LỊCH SỬ lưu field `type` = NGUYÊN CHUỖI LABEL (không phải key). Sâu hơn: màn Biểu Mẫu
+  sửa danh sách lựa chọn qua 1 ô text DUY NHẤT (`saveCoreFieldOptionsList()`, core.js) — trước đây hàm
+  này KHÔNG phân biệt được "đổi tên tại chỗ" với "xoá cũ + thêm mới", luôn sinh KEY MỚI cho nhãn không
+  khớp y nguyên chữ, mồ côi `submissionTypeDeptWorkflows[keyCũ]` (mất cấu hình quy trình riêng) NGOÀI
+  việc để lại `submissions` cũ với `type` không còn khớp entry nào. Sửa 2 lớp: (1) `saveCoreFieldOptionsList()`
+  giờ ưu tiên coi 1 vị trí chưa khớp là ĐỔI TÊN (giữ nguyên key) nếu đúng vị trí đó ở danh sách cũ cũng
+  là 1 entry chưa tiêu thụ — khớp đúng cách admin thao tác thật (sửa 1 đoạn giữa chuỗi, giữ nguyên vị
+  trí các đoạn còn lại); (2) `routes/data.js` (key `submissionTypes`) đối chiếu mảng cũ/mới theo `key`
+  NGAY TRƯỚC khi ghi (mirror khuôn `meetingRooms`/`nganhHangCatalog` đã có), cascade
+  `cascadeSubmissionTypeRename()` (lib/catalogRename.js) đổi `submissions.type` đúng theo cặp phát hiện
+  được, CHỈ SAU KHI ghi thành công.
+- **[Cao] `deleteUser()` (xoá vĩnh viễn) không kiểm hồ sơ đang chờ người đó duyệt.** `toggleUserActive()`
+  (khoá tạm) đã cảnh báo đúng qua `findPendingApprovalsForUsername()` — `deleteUser()` thì không, dù hậu
+  quả NẶNG HƠN (không có "mở khoá lại" để cứu). Thêm cùng cảnh báo (không chặn cứng, vẫn xoá được nếu
+  admin xác nhận) vào `deleteUser()` (module-admin-userstaging.js).
+- **[Cao] `employeeProfile.username` không tự đồng bộ khi tài khoản liên kết đổi tên/bị xoá.** Trường
+  `#uUsername` ở form Sửa Người Dùng KHÔNG bị khoá readonly — admin đổi được username bất kỳ lúc nào.
+  Trước đây không có cascade nào theo chiều này (chỉ có chiều ngược — `autoLinkUnlinkedProfiles()` tự
+  liên kết hồ sơ CHƯA liên kết với tài khoản MỚI khớp Mã NV) — hồ sơ nhân sự "treo" liên kết tới 1
+  username không còn tồn tại/đã đổi tên, vô hiệu mọi tra cứu theo username (lương/chấm công/nghỉ phép...).
+  Thêm `diffUserRenamesAndDeletions()`/`cascadeUsernameChangesToProfiles()` (lib/employeeProfile.js) —
+  đối chiếu `users` cũ/mới theo `id` ổn định NGAY TRƯỚC khi `prepareUsersForSave()` chuẩn hoá, cascade
+  SAU KHI ghi `users` thành công: đổi đúng username theo cặp phát hiện được, GỠ liên kết (username=null,
+  KHÔNG xoá hồ sơ) cho hồ sơ trỏ tới username đã bị xoá vĩnh viễn.
+- **[Cao] Khôi phục Giấy Phép từ Thùng Rác bỏ sót "họ" phiên bản.** `licenses` có versioning CÙNG cơ chế
+  `docs` (`rootLicenseId`) nhưng `familyRootId()` (lib/recordStore.js) — hàm quyết định "họ" nào được
+  khôi phục CÙNG LÚC khi `restoreTrashItemWithFamily()` chạy — bị bỏ sót nhánh `licenses`, luôn trả
+  `null` cho collection này. Khôi phục 1 phiên bản/giấy phép gốc từ Thùng Rác trước đây chỉ khôi phục
+  đúng 1 bản ghi, bỏ sót các bản ghi khác cùng "họ" còn kẹt lại. Thêm nhánh `licenses` (mirror `docs`).
+
+**Test:** file mới `tests/test-submissiontype-catalog-rename-cascade.js` (7 scenario, pure-unit —
+`diffSubmissionTypeCatalogRenames()`/`cascadeSubmissionTypeRename()`) + `tests/test-employeeprofile-username-desync-cascade.js`
+(8 scenario, pure-unit) + mở rộng `tests/test-forms-batch1.js` (5 scenario mới — xác nhận
+`saveCoreFieldOptionsList()` giữ đúng key khi đổi tên tại chỗ) + `tests/test-catalog-rename-locked-accounts.js`
+(4 scenario mới — cảnh báo `deleteUser()`) + `tests/test-audit-round3-lowfixes.js` (2 scenario mới —
+`familyRootId('licenses', ...)`). Tất cả assertion mới đã xác nhận FAIL trên code CŨ (`git stash`), PASS
+trên code đã vá. Chạy lại đầy đủ các bộ test liên quan: `test-catalog-rename-server.js` (26/26),
+`test-nganhhang-catalog-rename-cascade.js`/`test-meeting-room-rename-cascade.js` (8/8 mỗi file),
+`test-forms-batch1.js` (34/34), `test-it-support.js` (24/24), `test-submission.js`/`test-submissions-scope.js`/
+`test-submission-status-badges.js`, `test-action-menu-admin-users.js`/`test-admin-users-permgroups.js`
+(111/111), `test-employeeprofile-relink-account.js`/`test-hr-profile-autolink-extended.js`/
+`test-hr-profile-import-autolink-username.js`/`test-hr-profile.js`, `test-license.js`/`test-license-cancel.js`/
+`test-license-expiry-reminder-family.js`/`test-audit-cluster-license-cascade-download-limit.js`/
+`test-trash-sensitive-collections.js`/`test-trash-operation-orders-label.js`/`test-khoi0-license-uniform-gate.js`
+— tất cả PASS, không có regression ở module khác.
+
+**Deploy-impact:** chỉ đổi code JS (client + server) — không đổi `schema.sql`, không thêm biến môi
+trường, không cần `npm install`. Copy code + `pm2 restart` là đủ.
 
 ## v26.46 (2026-11): [Trung Bình] Rà soát chuyên sâu lần 2 trước go-live — Đợt 2b: thêm email "Cần phê duyệt" cho Đồng Phục/Nghỉ Phép/Đổi Ca/Đào Tạo
 

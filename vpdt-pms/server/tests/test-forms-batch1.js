@@ -208,6 +208,45 @@ async function main() {
         selHtml.includes('🖥️ Phần cứng') && selHtml.includes('🖨️ Máy in'), selHtml);
     }
 
+    // ---------- 5b) SUBMISSION: đổi TÊN 1 "Loại Tờ Trình" tại chỗ (cùng vị trí) phải GIỮ NGUYÊN key ----------
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent "bảng liên kết"): khác
+    // kịch bản IT_TICKET ở trên (chỉ thêm mục MỚI, không có mục nào ĐỔI TÊN), ở đây mô phỏng ĐÚNG hành
+    // vi admin đổi tên 1 loại CÓ SẴN (sửa trực tiếp 1 đoạn trong ô text — xem #fldOptions) — trước đây
+    // saveCoreFieldOptionsList() không phân biệt được "đổi tên tại chỗ" với "xoá cũ + thêm mới hoàn
+    // toàn khác", luôn sinh KEY MỚI cho nhãn không khớp y nguyên chữ, mồ côi submissionTypeDeptWorkflows
+    // đang tra theo key cũ + khiến mọi `submissions` đã tạo với type=label cũ không còn khớp entry nào.
+    {
+      activeFormTab = 'SUBMISSION';
+      switchFormTab('SUBMISSION');
+      editCoreField('SUBMISSION', 'subType');
+      document.getElementById('fldOptions').value = 'Đề xuất, Thông báo';
+      await addCustomField({ preventDefault() {} });
+      const deXuatBefore = DB.submissionTypes.find(t => t.label === 'Đề xuất');
+      const thongBaoBefore = DB.submissionTypes.find(t => t.label === 'Thông báo');
+      check('SUBMISSION: tạo lần đầu — 2 loại có key ổn định riêng',
+        !!deXuatBefore && !!thongBaoBefore && deXuatBefore.key !== thongBaoBefore.key,
+        JSON.stringify(DB.submissionTypes));
+
+      // Đổi tên "Đề xuất" -> "Đề nghị" TẠI ĐÚNG VỊ TRÍ CŨ (vị trí 1/2), giữ "Thông báo" y nguyên + thêm
+      // "Góp ý" MỚI ở cuối — mô phỏng đúng 1 lượt sửa thật của admin (mở lại form Sửa rồi gõ lại 1 đoạn
+      // trong chuỗi, giống y hệt cách editCoreField() được gọi lại ở mỗi lượt sửa thật trên UI).
+      editCoreField('SUBMISSION', 'subType');
+      document.getElementById('fldOptions').value = 'Đề nghị, Thông báo, Góp ý';
+      await addCustomField({ preventDefault() {} });
+      const deNghiAfter = DB.submissionTypes.find(t => t.label === 'Đề nghị');
+      const thongBaoAfter = DB.submissionTypes.find(t => t.label === 'Thông báo');
+      const gopYAfter = DB.submissionTypes.find(t => t.label === 'Góp ý');
+      check('SUBMISSION: đổi tên "Đề xuất" -> "Đề nghị" GIỮ NGUYÊN key cũ (không mồ côi submissionTypeDeptWorkflows/submissions)',
+        !!deNghiAfter && deNghiAfter.key === deXuatBefore.key, JSON.stringify({ deNghiAfter, deXuatBefore }));
+      check('SUBMISSION: "Thông báo" không đổi gì vẫn giữ đúng key cũ',
+        !!thongBaoAfter && thongBaoAfter.key === thongBaoBefore.key, JSON.stringify({ thongBaoAfter, thongBaoBefore }));
+      check('SUBMISSION: "Góp ý" là loại THẬT SỰ MỚI, được sinh key riêng không trùng 2 key cũ',
+        !!gopYAfter && gopYAfter.key !== deXuatBefore.key && gopYAfter.key !== thongBaoBefore.key, JSON.stringify(gopYAfter));
+      check('SUBMISSION: đúng 3 loại sau khi đổi (không dư/sót "Đề xuất" cũ)',
+        DB.submissionTypes.length === 3 && !DB.submissionTypes.some(t => t.label === 'Đề xuất'),
+        JSON.stringify(DB.submissionTypes));
+    }
+
     // ---------- 6) Không có nút/thao tác XOÁ nào cho trường mặc định ở cả 5 tab mới ----------
     ['TASK', 'VPP', 'LICENSE', 'IT_PRICE_RETAIL', 'IT_PRICE_WHOLESALE', 'IT_TICKET'].forEach(key => {
       activeFormTab = key;

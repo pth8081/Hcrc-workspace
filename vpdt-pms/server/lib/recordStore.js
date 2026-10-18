@@ -1154,6 +1154,14 @@ async function restoreTrashItem(trashId) {
 function familyRootId(collection, item) {
   if (collection === 'docs') return item.rootDocId == null ? item.id : item.rootDocId;
   if (collection === 'contracts') return item.isAddendum ? item.rootContractId : item.id;
+  // licenses (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent "bảng liên kết"):
+  // licenses có versioning CÙNG cơ chế docs (bản gốc rootLicenseId=null, phiên bản con trỏ về id bản
+  // gốc qua rootLicenseId — xem lib/createValidation.js licenses.extraValidate) nhưng bị BỎ SÓT ở đây,
+  // khiến restoreTrashItemWithFamily() luôn trả rootId=null cho licenses -> CHỈ khôi phục đúng 1 phiên
+  // bản đang xin khôi phục, bỏ sót mọi phiên bản khác cùng "họ" còn kẹt trong Thùng Rác (đối xứng với
+  // routes/records.js, nơi XOÁ 1 giấy phép ĐÃ cascade cả họ vào Thùng Rác cùng lúc — xem familyRootId
+  // dùng CHUNG ở đó, routes/records.js dòng ~4923).
+  if (collection === 'licenses') return item.rootLicenseId == null ? item.id : item.rootLicenseId;
   return null;
 }
 

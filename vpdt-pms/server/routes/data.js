@@ -17,7 +17,7 @@ const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBe
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
-const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields } = require('../lib/employeeProfile');
+const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles } = require('../lib/employeeProfile');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterInternalPostsForUser, sanitizeReportPeriodsForUser,
   filterReportEntriesForUser, filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2134,6 +2134,26 @@ router.post('/:key', async (req, res) => {
       const oldNganhHang = (await getAppDataValue('nganhHangCatalog')) || [];
       renamedNganhHangPairs = diffNganhHangCatalogRenames(oldNganhHang, value);
     }
+    // submissionTypes ("Loại Tờ Trình" — xem cascadeSubmissionTypeRename()/diffSubmissionTypeCatalogRenames()
+    // ở lib/catalogRename.js cho LÝ DO ĐẦY ĐỦ): CÙNG KHUÔN nganhHangCatalog ở trên — đối chiếu mảng
+    // CŨ/MỚI theo `key` ổn định (saveCoreFieldOptionsList() ở core.js đã sửa để giữ nguyên key cũ khi
+    // phát hiện đổi label cùng vị trí) để tìm cặp (label cũ -> label mới), cascade SAU KHI ghi
+    // 'submissionTypes' đã chắc chắn thành công.
+    let renamedSubmissionTypePairs = [];
+    if (key === 'submissionTypes' && Array.isArray(value)) {
+      const oldSubmissionTypes = (await getAppDataValue('submissionTypes')) || [];
+      renamedSubmissionTypePairs = diffSubmissionTypeCatalogRenames(oldSubmissionTypes, value);
+    }
+    // employeeProfile.username desync (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent
+    // "bảng liên kết" — xem diffUserRenamesAndDeletions()/cascadeUsernameChangesToProfiles() ở
+    // lib/employeeProfile.js cho LÝ DO ĐẦY ĐỦ): đọc "users" CŨ (TRƯỚC khi prepareUsersForSave() chuẩn
+    // hoá) để đối chiếu theo `id` ổn định, tìm cặp (username cũ -> username mới) do admin đổi tên tài
+    // khoản + danh sách username bị XOÁ VĨNH VIỄN — cascade SAU KHI ghi 'users' đã chắc chắn thành
+    // công (cùng nguyên tắc meetingRooms/nganhHangCatalog/submissionTypes ở trên).
+    let oldUsersForProfileCascade = [];
+    if (key === 'users' && Array.isArray(value)) {
+      oldUsersForProfileCascade = (await getAppDataValue('users')) || [];
+    }
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
@@ -2220,8 +2240,14 @@ router.post('/:key', async (req, res) => {
     // client — employeeProfiles không nằm trong GET /api/data chung (dữ liệu CỰC NHẠY CẢM, xem
     // ADMIN_SENSITIVE_KEYS/khối chặn ở đầu file) nên client không giữ bản cache nào để lệch version.
     if (key === 'users') {
+      const { renamed, deletedUsernames } = diffUserRenamesAndDeletions(oldUsersForProfileCascade, value);
       await withLockedAppDataValue('employeeProfiles', (profiles) => {
         const arr = profiles || [];
+        // Dời/gỡ liên kết CŨ trước (nếu có) rồi mới tự liên kết MỚI — tránh trường hợp hiếm nhưng có
+        // thể xảy ra: username VỪA bị xoá đồng thời là Mã NV của 1 user KHÁC vừa được tạo trong CÙNG
+        // lượt lưu này (autoLinkUnlinkedProfiles() cần thấy đúng field username đã gỡ, không phải giá
+        // trị cũ còn sót, để không coi nhầm hồ sơ đó là "đã liên kết" rồi bỏ qua).
+        cascadeUsernameChangesToProfiles(arr, renamed, deletedUsernames, req.user.username);
         autoLinkUnlinkedProfiles(arr, value, req.user.username);
         return arr;
       });
@@ -2237,6 +2263,11 @@ router.post('/:key', async (req, res) => {
     // 'nganhHangCatalog' đã chắc chắn thành công (cùng nguyên tắc meetingRooms ngay trên).
     for (const { oldValue, newValue } of renamedNganhHangPairs) {
       await cascadeNganhHangCodeRename(oldValue, newValue);
+    }
+    // submissionTypes — cascade cho từng cặp (label cũ -> label mới) phát hiện được ở trên, CHỈ SAU KHI
+    // ghi 'submissionTypes' đã chắc chắn thành công (cùng nguyên tắc meetingRooms/nganhHangCatalog ở trên).
+    for (const { oldValue, newValue } of renamedSubmissionTypePairs) {
+      await cascadeSubmissionTypeRename(oldValue, newValue);
     }
 
     // Nhật ký hệ thống SERVER-SIDE cho các key QUẢN TRỊ NHẠY CẢM — xem ADMIN_SENSITIVE_KEYS ở đầu file.
