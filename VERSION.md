@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**26.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.34 (2026-11): [BẢO MẬT, NGHIÊM TRỌNG] Vá rò rỉ dữ liệu Lương cho tài khoản admin không có quyền Lương
+
+Phát hiện ở đợt rà soát chuyên sâu toàn hệ thống trước go-live (4 agent song song rà soát mọi module/
+tab/sub-tab). Đây là lỗi mức Nghiêm Trọng duy nhất tìm được trong đợt rà soát — vá đầu tiên, tách riêng
+khỏi các phát hiện Cao/Trung Bình khác (sẽ vá tiếp theo thứ tự ưu tiên).
+
+- `lib/recordViewScope.js` (`canViewAllPayrollData()`): bỏ nhánh `user?.perms?.admin ||` còn SÓT LẠI từ
+  trước đợt chính sách "3 dữ liệu nhạy cảm nhất không cho admin tự động xem" (Hồ Sơ Nhân Sự/Hợp Đồng Lao
+  Động/Lương, 10/2026). Hàm này gác route tải dữ liệu lười `GET /api/data/lazy/payroll` — trước khi vá,
+  **bất kỳ tài khoản có cờ `admin` (dù KHÔNG được cấp riêng `hrPayrollManage`/`hrPayrollApprove`) vẫn tải
+  được nguyên vẹn toàn bộ phiếu lương + kỳ lương công ty** (lương cơ bản, phụ cấp, netPay từng nhân viên)
+  qua đường tải lười khi mở tab Lương, dù mọi nút thao tác thật (Tính Lương/Duyệt/Công Bố...) đã bị chặn
+  đúng 403 qua route REST riêng (`lib/payroll.js::canViewAllPayroll()`, vốn đã KHÔNG có bypass admin từ
+  đầu — chỉ riêng hàm gác đường tải lười bị bỏ sót khi chính sách này ra đời). Nay đồng bộ lại đúng.
+  Đã rà thêm `filterLaborContractsForUser()`/`canViewFullProfile()` (2 dữ liệu nhạy cảm còn lại) — xác
+  nhận KHÔNG có bypass admin tương tự, chỉ riêng hàm Lương này bị sót.
+
+Test: `tests/test-mucO-payroll-payment-hrprofile-bypass.js` — kịch bản cũ "admin luôn bypass bất kể Mục 0"
+đã khẳng định SAI đúng hành vi lỗ hổng (test cũ coi lỗ hổng là hành vi mong đợi) — sửa lại đúng kỳ vọng
+(admin KHÔNG có quyền Lương riêng → KHÔNG còn xem được), thêm assertion `filterPayrollPeriodsForUser`/
+`filterPayslipsForUser` trả rỗng. Đã xác nhận bằng `git stash` — test mới FAIL đúng (10/11) trên code cũ.
+Chạy lại `test-payroll.js` (27) + 4 file test Lương khác + CSP full-audit (3) + lazy-load toàn bộ tab
+(46) — không hồi quy, không mất chức năng cho tài khoản có quyền Lương thật.
+
+**Deploy-impact**: thuần server (`lib/recordViewScope.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi
+trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới + `pm2 restart`. **Khuyến nghị**: nếu hệ thống
+ĐÃ từng chạy thật với bản cũ, nên rà soát lại xem tài khoản admin nào đã từng mở tab Lương mà không có
+quyền Lương riêng, để đánh giá rủi ro lộ dữ liệu đã xảy ra (log hệ thống nếu có bật từ trước).
 
 ## v26.33 (2026-11): Vá 4 file test hồi quy bị treo (nối SQL Server thật) + 1 kỳ vọng test đã lỗi thời
 

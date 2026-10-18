@@ -1436,9 +1436,14 @@ function filterShiftSwapRequestsForUser(items, user, appData) {
 // cùng lớp lỗ hổng đã vá cho Công & Phép (canSeeHacManageAll) — admin tắt tab "Quản Lý Kỳ
 // Lương" cho 1 user nhưng còn giữ hrPayrollManage/hrPayrollApprove thì user đó gọi thẳng
 // GET /api/data vẫn đọc được TOÀN BỘ phiếu lương/kỳ lương công ty dù menu đã ẩn.
+// LỖI ĐÃ VÁ (rà soát chuyên sâu trước go-live, 11/2026): nhánh `user?.perms?.admin ||` còn SÓT LẠI từ
+// trước đợt chính sách "3 dữ liệu nhạy cảm nhất" (10/2026) ở trên — chính sách đó đã bỏ admin bypass
+// đúng ở lib/payroll.js::canViewAllPayroll() (route REST thao tác thật), nhưng hàm NÀY (gác route tải
+// lười GET /api/data/lazy/payroll) chưa được cập nhật theo, khiến tài khoản CHỈ có cờ admin (không có
+// hrPayrollManage/hrPayrollApprove) vẫn đọc được nguyên vẹn mọi phiếu lương/kỳ lương qua đường tải lười
+// dù mọi nút thao tác thật đều đã bị chặn đúng — bỏ hẳn nhánh admin, mirror ĐÚNG canViewAllPayroll().
 function canViewAllPayrollData(user) {
-  return !!(user?.perms?.admin
-    || ((user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove) && hasModuleAccessServer(user, 'hrPayrollManageTab')));
+  return !!((user?.perms?.hrPayrollManage || user?.perms?.hrPayrollApprove) && hasModuleAccessServer(user, 'hrPayrollManageTab'));
 }
 function filterPayrollPeriodsForUser(items, user) {
   return canViewAllPayrollData(user) ? (items || []) : [];

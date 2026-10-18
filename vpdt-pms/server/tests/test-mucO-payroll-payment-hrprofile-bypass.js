@@ -23,7 +23,10 @@ function check(label, cond) {
   const userManageTabOff = { username: 'u1', perms: { hrPayrollManage: true, moduleAccess: { hrPayrollManageTab: false } } };
   const userManageTabOn = { username: 'u2', perms: { hrPayrollManage: true, moduleAccess: { hrPayrollManageTab: true } } };
   const userApproveTabOff = { username: 'u3', perms: { hrPayrollApprove: true, moduleAccess: { hrPayrollManageTab: false } } };
-  const userAdmin = { username: 'u4', perms: { admin: true, moduleAccess: { hrPayrollManageTab: false } } };
+  // admin KHÔNG có hrPayrollManage/hrPayrollApprove riêng — Lương là 1 trong 3 dữ liệu nhạy cảm nhất
+  // (cùng Hồ Sơ/Hợp Đồng), admin "toàn quyền" KHÔNG còn tự động bypass ở đây (khác paymentRequests ở
+  // mục 2 bên dưới — paymentRequests không thuộc nhóm 3 dữ liệu nhạy cảm nhất nên admin vẫn bypass đúng).
+  const userAdminNoPayrollPerm = { username: 'u4', perms: { admin: true, moduleAccess: { hrPayrollManageTab: false } } };
   const items = [{ id: 'p1' }, { id: 'p2' }];
 
   check('LỖ HỔNG ĐÃ VÁ: hrPayrollManage nhưng Mục 0 hrPayrollManageTab=false -> KHÔNG được xem toàn bộ kỳ lương/phiếu lương',
@@ -35,8 +38,15 @@ function check(label, cond) {
     && filterPayrollPeriodsForUser(items, userManageTabOn).length === 2);
   check('hrPayrollApprove nhưng Mục 0 tắt -> cũng bị chặn (không chỉ riêng Manage)',
     canViewAllPayrollData(userApproveTabOff) === false);
-  check('admin luôn bypass bất kể Mục 0',
-    canViewAllPayrollData(userAdmin) === true);
+  // LỖ HỔNG ĐÃ VÁ (rà soát chuyên sâu trước go-live, 11/2026): trước đây admin LUÔN bypass ở hàm này bất
+  // kể có hrPayrollManage/hrPayrollApprove hay không — đi NGƯỢC chính sách "3 dữ liệu nhạy cảm nhất"
+  // (lib/payroll.js::canViewAllPayroll() đã đúng từ đầu, KHÔNG cho admin bypass) — tài khoản chỉ có cờ
+  // admin (không có quyền Lương riêng) vẫn đọc được nguyên vẹn mọi phiếu lương/kỳ lương qua GET
+  // /api/data/lazy/payroll dù mọi nút thao tác thật đã bị chặn đúng. Nay khớp đúng canViewAllPayroll().
+  check('admin KHÔNG có hrPayrollManage/hrPayrollApprove riêng -> KHÔNG còn bypass xem toàn bộ Lương (khớp lib/payroll.js::canViewAllPayroll())',
+    canViewAllPayrollData(userAdminNoPayrollPerm) === false
+    && filterPayrollPeriodsForUser(items, userAdminNoPayrollPerm).length === 0
+    && filterPayslipsForUser(items, userAdminNoPayrollPerm).length === 0);
 }
 
 // ---- 2) canViewPaymentRequest() ----
