@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.21 (2026-11): [TB] Re-audit lần 6 — mục 13/21: approvalAggregator pushDeptWorkflowKeys thiếu check tự duyệt
+
+Mục thứ mười ba (13/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `pushDeptWorkflowKeys()` (`lib/approvalAggregator.js`) — dùng cho TẤT CẢ module theo
+BƯỚC quy trình phòng ban (`docs`, `submissions`, `carRegs`, `officeReqs` x2 subType,
+`vppRegistrations`, `itPriceApprovals`, `budgetEntries`, `contracts` x2 luồng, `operationOrders`,
+`paymentRequests`) — chỉ gọi `canApproveStep()` để quyết định có đẩy khoá "có hồ sơ cần duyệt" vào kết
+quả hay không. Đây chỉ là NỬA điều kiện enforcement THẬT: `applyWorkflowAction()`
+(`lib/workflowEngine.js`, nơi ghi Duyệt/Từ chối thật) luôn gọi CẢ `canApproveStep()` LẪN
+`assertNotSelfDecidingWorkflowItem()` trước khi cho phép. Thiếu nửa sau ở `pushDeptWorkflowKeys()`
+khiến Approval Hub/endpoint polling (`GET /api/approvals/pending-signature`) báo "có hồ sơ cần duyệt"
+cho ĐÚNG người đã tạo/trình hồ sơ đó (nếu họ tình cờ cũng nằm trong danh sách approver bước hiện tại) —
+bấm Duyệt thật sẽ nhận 403 "không thể tự xử lý", một thông báo giả.
+
+**Vá:** thêm `require('./workflowEngine').assertNotSelfDecidingWorkflowItem` và gọi nó ngay sau
+`canApproveStep()` trong `pushDeptWorkflowKeys()` — bắt exception (không throw ra ngoài, đúng ngữ nghĩa
+"ẩn khỏi danh sách cần duyệt" của hàm tổng hợp này) rồi bỏ qua record đó. Vì `assertNotSelfDecidingWorkflowItem()`
+tự đọc `MODULE_CONFIGS[moduleKey]?.allowSelfDeciding` (hàm hoặc cờ tĩnh), ngoại lệ đã có từ trước của
+`paymentRequests` (`sourceModule === 'MANUAL'` được CỐ Ý tự duyệt) tự động được giữ nguyên, không cần
+sửa gì thêm.
+
+**Test:** mở rộng `tests/test-approval-polling.js` — thêm 1 scenario: `duyet1` vừa là approver bước 1
+(đúng `deptWorkflows`) vừa là `uploader` (creator field thật của `docs`) của 1 bản ghi `docs` PENDING
+khác -> phải bị loại khỏi kết quả `computeMyPendingApprovalKeys()`, đối chứng bản ghi `docs` gốc (không
+tự tạo) vẫn nhận bình thường. Xác nhận FAIL trên code CŨ (`git stash -- lib/approvalAggregator.js`, đúng
+1/16 scenario FAIL — "Missing expected exception", đúng khai thác đã nêu), PASS trên code đã vá (16/16).
+Regression: `tests/test-meeting-car.js` (104/104), `tests/test-meeting-report.js` (7/7),
+`tests/test-shiftroster-cancel-swap-cleanup.js` (5/5) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.20 (2026-11): [TB] Re-audit lần 6 — mục 12/21: payrollRateConfig thiếu validate
 

@@ -22,7 +22,7 @@
 // nhịp poll có thể giữ NGUYÊN số lượng nhưng đổi hẳn NỘI DUNG — polling phía client (core.js
 // startApprovalPolling()) cần phát hiện đúng trường hợp này nên phải so KHOÁ, không so ĐẾM.
 
-const { MODULE_CONFIGS, canApproveStep } = require('./workflowEngine');
+const { MODULE_CONFIGS, canApproveStep, assertNotSelfDecidingWorkflowItem } = require('./workflowEngine');
 const {
   canApproveInternalPost, canApproveLicense, canManagePaymentRequests,
   canApproveItPriceEmergencyReject, isApproverForOperationOrderReceipt,
@@ -56,6 +56,15 @@ function pushDeptWorkflowKeys(keys, moduleKey, records, appData, user, keyPrefix
     const step = rec[currentStepField];
     const currentStepApprovers = wfConfig.approvers ? (wfConfig.approvers[step] || []) : [];
     if (!canApproveStep(user, currentStepApprovers, rec[historyField], step)) return;
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "approvalAggregator pushDeptWorkflowKeys thiếu check tự
+    // duyệt"): canApproveStep() ở trên chỉ là NỬA điều kiện enforcement thật (applyWorkflowAction() ở
+    // lib/workflowEngine.js luôn gọi CẢ canApproveStep() LẪN assertNotSelfDecidingWorkflowItem() trước
+    // khi cho ghi Duyệt/Từ chối — xem các dòng gọi ở applyWorkflowAction()). Thiếu nửa sau ở đây khiến
+    // Approval Hub/endpoint polling báo "có hồ sơ cần duyệt" cho ĐÚNG người đã tạo/trình hồ sơ đó (nếu
+    // họ tình cờ cũng nằm trong danh sách approver bước hiện tại) — bấm Duyệt thật sẽ nhận 403 "không
+    // thể tự xử lý" dù Hub vừa báo có việc, một thông báo giả. Bắt exception (không phải throw ra
+    // ngoài) rồi BỎ QUA record đó — đúng ngữ nghĩa "ẩn khỏi danh sách cần duyệt", không phải lỗi.
+    try { assertNotSelfDecidingWorkflowItem(moduleKey, rec, user); } catch (err) { return; }
     keys.push(`${keyPrefix}:${rec.id}`);
   });
 }
