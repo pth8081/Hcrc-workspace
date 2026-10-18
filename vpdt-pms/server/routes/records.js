@@ -4108,6 +4108,24 @@ router.post('/itSupportTickets/:id/cancel', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     const result = await withLockedRecordForCollection('itSupportTickets', itemId, (item) =>
       recordActions.cancelItTicket(freshUser, item));
+    // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Huỷ ticket IT không gỡ linkedTicketId trên task HR"): ticket
+    // sinh ra từ 1 task nhãn IT trong quy trình Onboarding/Offboarding (sourceType, xem
+    // createItTicketForHrTask() ở lib/recordActions.js) vừa chuyển CANCELLED -> gỡ linkedTicketId trên
+    // ĐÚNG task (qua sourceTaskId) để task đó tạo lại được ticket mới nếu cần — cùng khuôn nhánh ghi
+    // ngược khi ticket chuyển DONE ở POST /itSupportTickets/:id/update-status ngay trên. Lỗi ở bước ghi
+    // ngược (hiếm — hồ sơ liên kết đã bị xoá...) KHÔNG làm hỏng việc huỷ ticket (đã commit xong ở bước
+    // trên) — chỉ log lại để tra cứu sau, cùng tinh thần nhánh update-status.
+    if (result.status === 'CANCELLED' && result.sourceType && result.sourceId != null) {
+      const linkedCollection = recordActions.HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[result.sourceType];
+      if (linkedCollection) {
+        try {
+          await withLockedRecordForCollection(linkedCollection, result.sourceId, (item) =>
+            recordActions.clearLinkedTicketOnHrProcessTask(freshUser, item, result));
+        } catch (linkErr) {
+          console.error(`itSupportTickets/${itemId}/cancel: lỗi ghi ngược hồ sơ ${linkedCollection}/${result.sourceId}:`, linkErr.message);
+        }
+      }
+    }
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `itSupportTickets/${req.params.id}/cancel`, err);

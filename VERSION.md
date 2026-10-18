@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.1 (2026-11): [TB] Re-audit lần 5 — mục 14: Huỷ ticket IT không gỡ linkedTicketId trên task HR
+
+Mục thứ 14 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — chiều NGƯỢC LẠI với phát hiện đã
+vá ở re-audit lần 3 (`closeItTicketOnHrProcessClosed()` — huỷ/xoá QUY TRÌNH Nhân Sự tự huỷ ticket IT
+con mồ côi, xem `tests/test-hrprocess-cancel-itticket-cleanup.js`):
+
+- `createItTicketForHrTask()` (`lib/recordActions.js`) sinh 1 ticket Hỗ Trợ IT từ 1 task nhãn IT trong
+  quy trình Onboarding/Offboarding, gán `task.linkedTicketId = ticket.id` và CHẶN CỨNG tạo ticket thứ 2
+  cho cùng task (`task.linkedTicketId != null` → 409 "Việc này đã có ticket Hỗ Trợ IT liên kết rồi").
+  NHƯNG `cancelItTicket()` — huỷ TRỰC TIẾP 1 ticket (`POST /itSupportTickets/:id/cancel`, KHÔNG đụng gì
+  tới quy trình Nhân Sự nguồn) — trước đây chỉ đổi `ticket.status = 'CANCELLED'`, không hề ghi ngược gì
+  về task đã sinh ra nó. Hậu quả: task vẫn giữ `linkedTicketId` trỏ tới 1 ticket đã CHẾT (huỷ, không
+  phải hoàn tất) — HR/người được giao task KHÔNG BAO GIỜ tạo lại được ticket mới cho đúng task đó nữa,
+  dù việc IT thực tế CHƯA TỪNG được làm, task kẹt vĩnh viễn ở trạng thái "đã có ticket liên kết".
+- Vá: thêm `clearLinkedTicketOnHrProcessTask()` (mới, `lib/recordActions.js`) — gỡ `linkedTicketId` về
+  `null` trên đúng task (tra theo `ticket.sourceTaskId`), gọi NGAY SAU `cancelItTicket()` thành công ở
+  `POST /itSupportTickets/:id/cancel` (`routes/records.js`), cùng khuôn nhánh ghi ngược khi ticket
+  chuyển DONE ở `POST /itSupportTickets/:id/update-status` (đã có sẵn, `applyItTicketCompletionToHrProcessTask()`).
+  Lỗi ở bước ghi ngược (hiếm — hồ sơ liên kết đã bị xoá...) không làm hỏng việc huỷ ticket đã commit.
+
+**Test:** mở rộng `tests/test-hrprocess-cancel-itticket-cleanup.js` (dedicated test cho đúng lớp lỗi
+"HR process ↔ IT ticket cleanup", đã có 6 scenario cho chiều process→ticket) — thêm 3 scenario mới:
+huỷ trực tiếp ticket gỡ được `linkedTicketId`, tạo lại được ticket MỚI sau đó (trước vá: vẫn 409), và
+đối chứng ticket đã DONE không bị huỷ nên `linkedTicketId` giữ nguyên. Xác nhận FAIL trên code CŨ
+(`git stash -- lib/recordActions.js routes/records.js`, đúng 2/9 scenario FAIL — 2 scenario "LỖI ĐÃ
+VÁ"), PASS trên code đã vá (9/9). Regression: `test-hr-lifecycle.js` (39/39), `test-it-support.js`
+(24/24), `test-audit-round5-meeting-car.js` (17/17) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.0 (2026-11): [TB] Re-audit lần 5 — mục 13: Tạo phiên bản Tài Liệu mới không kiểm quyền trên bản gốc
 
