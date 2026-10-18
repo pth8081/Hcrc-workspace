@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**27.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.8 (2026-11): [Thấp] Re-audit lần 5 — mục 4/4 (cuối cùng): Xoá lớp/tài liệu đào tạo không kiểm onboardingPaths tham chiếu
+
+Mục cuối cùng (4/4) trong 4 phát hiện mức Thấp — hoàn tất TOÀN BỘ 18 phát hiện của đợt re-audit lần 5:
+
+- `onboardingPaths` (Lộ Trình Đào Tạo Tân Binh) từng tham chiếu `trainingCourses` qua
+  `stage{1,2}RequiredCourseIds` nhưng đã bỏ hẳn (10/2026, chuyển Giai đoạn 1/2 sang nội dung nhập tay).
+  Đợt sau đó (cũng 10/2026) lại THÊM 2 tham chiếu MỚI, khác hẳn bản chất courseId đã bỏ:
+  `stage1DocIds`/`stage2DocIds` (trỏ `trainingDocuments`, tài liệu tham khảo) và `linkedClassId` (trỏ
+  `trainingClasses`, tham khảo kết quả thi thật). `POST /trainingDocuments/:id/delete` và `POST
+  /trainingClasses/:id/delete` (đã kiểm tham chiếu `trainingClasses.documentIds`/`trainingRegistrations`
+  từ đợt audit trước) KHÔNG hề biết tới 2 tham chiếu mới này — xoá được vô điều kiện, để lại
+  `stage1DocIds`/`stage2DocIds`/`linkedClassId` mồ côi trong lộ trình tân binh (tài liệu/lớp tham khảo
+  "biến mất" âm thầm khỏi màn hiển thị, không ai biết).
+- Vá: thêm bước kiểm `onboardingPaths` TRƯỚC khi xoá ở cả 2 route — `trainingDocuments` chặn 409 nếu
+  còn nằm trong `stage1DocIds` HOẶC `stage2DocIds` của bất kỳ lộ trình nào; `trainingClasses` chặn 409
+  nếu còn được bất kỳ lộ trình nào tham khảo qua `linkedClassId` — cùng khuôn chặn tham chiếu đã áp
+  dụng cho `trainingRegistrations`/`documentIds` ngay trên.
+
+**Test:** mở rộng `tests/test-audit-round2-internalcomms-training-routes.js` (thêm `onboardingPaths`
+vào `COLLECTIONS` + 5 scenario mới, đánh số `#146`) — chặn xoá tài liệu còn trong `stage1DocIds`/
+`stage2DocIds`; chặn xoá lớp còn được `linkedClassId` tham khảo; 2 đối chứng xác nhận không chặn nhầm
+khi KHÔNG có lộ trình nào tham chiếu. Xác nhận FAIL trên code CŨ (`git stash -- routes/records.js`,
+đúng 3/21 scenario FAIL trong file đó), PASS trên code đã vá (21/21). Regression: `test-audit-nhansu-
+onboarding-contract.js` (29/29), `test-audit-round4-internal-training.js` (47/47), `test-internal-
+training.js` (53/53) — toàn bộ PASS, không regression. (`test-training-plans.js` có 2/22 FAIL — xác
+nhận lỗi NÀY ĐÃ TỒN TẠI TỪ TRƯỚC, không liên quan tới thay đổi của đợt vá này, thuộc luồng Nhập Kế Hoạch
+Từ Excel hoàn toàn khác module.)
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
+
+**TỔNG KẾT ĐỢT RE-AUDIT LẦN 5:** toàn bộ 31 phát hiện (9 Cao + 18 Trung Bình + 4 Thấp) đã được vá, viết
+test, xác nhận FAIL/PASS đúng quy trình, và merge vào main (9 Cao hoàn tất trước v27.0; 18 Trung Bình
+hoàn tất v26.94-v27.4; 4 Thấp hoàn tất v27.5-v27.8). Chờ người dùng xác nhận trước khi tiến hành đợt rà
+soát/audit tiếp theo (lần 6).
 
 ## v27.7 (2026-11): [Thấp] Re-audit lần 5 — mục 3/4 (Thấp): Tạo Onboarding lộ mã NV đã nghỉ việc qua CCCD
 

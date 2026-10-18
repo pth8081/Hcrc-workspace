@@ -1642,6 +1642,20 @@ router.post('/trainingDocuments/:id/delete', async (req, res) => {
       const names = referencing.map(c => c.title || c.code || `#${c.id}`).join(', ');
       throw new HttpError(409, `Không thể xóa tài liệu này vì còn nằm trong giáo trình bắt buộc của ${referencing.length} lớp ONLINE chưa kết thúc (${names}). Vui lòng gỡ tài liệu khỏi các lớp đó trước.`);
     }
+    // PHÁT HIỆN mức Thấp (re-audit lần 5, #146 "Xoá lớp/tài liệu đào tạo không kiểm onboardingPaths tham
+    // chiếu"): onboardingPaths.stage1DocIds/stage2DocIds (xem normalizeOnboardingPathFields(), lib/
+    // createValidation.js — thêm từ đợt "10/2026 sau", KHÁC hẳn requiredCourseIds đã bỏ hẳn trước đó) có
+    // thể trỏ tới ĐÚNG tài liệu này — xoá hẳn mà không kiểm để lại tham chiếu mồ côi, lộ trình tân binh
+    // "biến mất" tài liệu tham khảo mà không ai biết. Cùng khuôn chặn 409 kiểm tham chiếu đã áp dụng cho
+    // trainingClasses ngay trên.
+    const onboardingPaths = await getAllForCollection('onboardingPaths');
+    const referencingPaths = onboardingPaths.filter(p =>
+      (Array.isArray(p.stage1DocIds) && p.stage1DocIds.includes(itemId)) ||
+      (Array.isArray(p.stage2DocIds) && p.stage2DocIds.includes(itemId)));
+    if (referencingPaths.length) {
+      const names = referencingPaths.map(p => p.name || `#${p.id}`).join(', ');
+      throw new HttpError(409, `Không thể xóa tài liệu này vì còn gắn kèm trong ${referencingPaths.length} lộ trình đào tạo tân binh (${names}). Vui lòng gỡ tài liệu khỏi lộ trình đó trước.`);
+    }
     await deleteRecordForCollection('trainingDocuments', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
@@ -1658,6 +1672,15 @@ router.post('/trainingClasses/:id/delete', async (req, res) => {
     const referencing = regs.filter(r => r.classId === itemId);
     if (referencing.length) {
       throw new HttpError(409, `Không thể xóa lớp học này vì còn ${referencing.length} đăng ký gắn với nó (kể cả đã huỷ/đã có kết quả). Vui lòng xử lý/xoá các đăng ký đó trước.`);
+    }
+    // PHÁT HIỆN mức Thấp (re-audit lần 5, #146): xem chú thích đầy đủ tại route xoá trainingDocuments ở
+    // trên — onboardingPaths.linkedClassId (THAM KHẢO kết quả thi thật ở đúng lớp này, xem module-
+    // internalcomms-daotao.js) có thể trỏ tới ĐÚNG lớp này.
+    const onboardingPaths = await getAllForCollection('onboardingPaths');
+    const referencingPaths = onboardingPaths.filter(p => p.linkedClassId === itemId);
+    if (referencingPaths.length) {
+      const names = referencingPaths.map(p => p.name || `#${p.id}`).join(', ');
+      throw new HttpError(409, `Không thể xóa lớp học này vì còn được liên kết tham khảo trong ${referencingPaths.length} lộ trình đào tạo tân binh (${names}). Vui lòng gỡ liên kết khỏi lộ trình đó trước.`);
     }
     await deleteRecordForCollection('trainingClasses', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
