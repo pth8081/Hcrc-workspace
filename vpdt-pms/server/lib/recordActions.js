@@ -6906,6 +6906,25 @@ function applyItTicketCompletionToHrProcessTask(user, item, ticket, users) {
   return item;
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "Huỷ ticket IT không gỡ linkedTicketId trên task HR"): HUỶ ticket
+// (cancelItTicket(), KHÁC hẳn chuyển DONE ở applyItTicketCompletionToHrProcessTask() ngay trên) trước
+// đây không hề ghi ngược gì về task đã sinh ra nó — task.linkedTicketId vẫn trỏ ĐÚNG ticket vừa bị
+// CANCELLED. Hậu quả: createItTicketForHrTask() chặn cứng `task.linkedTicketId != null` -> 409 "Việc
+// này đã có ticket Hỗ Trợ IT liên kết rồi" — HR/người được giao task KHÔNG BAO GIỜ tạo lại được ticket
+// mới cho đúng task đó nữa, dù việc IT thực tế CHƯA TỪNG được làm (ticket bị huỷ, không phải hoàn
+// tất) — task kẹt vĩnh viễn ở trạng thái "đã có ticket" trong khi ticket đó đã chết. Gọi NGAY SAU
+// cancelItTicket() thành công (routes/records.js, cùng khuôn applyItTicketCompletionToHrProcessTask()
+// ngay trên) để gỡ linkedTicketId về null, cho phép tạo ticket mới nếu cần. Hàm THUẦN, idempotent —
+// bỏ qua nếu không còn tìm thấy task hoặc task không còn trỏ đúng ticket này (VD đã được tạo lại ticket
+// khác sau đó, dù về lý thuyết không xảy ra vì mỗi task chỉ 1 ticket "sống" tại 1 thời điểm).
+function clearLinkedTicketOnHrProcessTask(user, item, ticket) {
+  const task = (item.tasks || []).find(t => t.taskId === ticket.sourceTaskId);
+  if (!task || task.linkedTicketId !== ticket.id) return item;
+  task.linkedTicketId = null;
+  item.history.push({ action: 'IT_TICKET_CANCELLED', detail: `Ticket Hỗ Trợ IT liên kết đã bị hủy, có thể tạo ticket mới: ${task.taskName}`, actionBy: user.username, actionByName: user.name, actionAt: nowVN() });
+  return item;
+}
+
 // ===================== ĐỒNG PHỤC (module con của Hành Chính) =====================
 // Hành Chính (uniformManage) tạo "Kỳ Cấp Phát" (uniformPeriods, đi qua engine chung ở
 // lib/createValidation.js) phân bổ đồng phục xuống 1 hoặc nhiều siêu thị. Mỗi siêu thị có 1 Giám Đốc
@@ -8794,6 +8813,7 @@ module.exports = {
   canActOnHrTask, canCreateHrProcess, canManageHrProcess, computeHrProcessProgress,
   completeHrTask, skipHrTask, reassignHrTask, cancelHrProcess, addHrProcessAttachment, assignHrSuccessor,
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
+  clearLinkedTicketOnHrProcessTask,
   closeItTicketOnHrProcessClosed,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,

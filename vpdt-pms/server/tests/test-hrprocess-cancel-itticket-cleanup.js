@@ -259,6 +259,60 @@ async function main() {
       assert.strictEqual(rc.status, 200, JSON.stringify(rc.json));
       assert.strictEqual(rc.json.itTicketsClosed, false);
     });
+
+    // ===== MỞ RỘNG (re-audit lần 5, mức TB — "Huỷ ticket IT không gỡ linkedTicketId trên task HR"):
+    // CHIỀU NGƯỢC LẠI với toàn bộ các scenario trên (huỷ QUY TRÌNH -> tự huỷ ticket con) — ở đây huỷ
+    // TRỰC TIẾP 1 ticket (POST /itSupportTickets/:id/cancel, KHÔNG đụng gì tới quy trình Nhân Sự),
+    // trước đây không ghi ngược linkedTicketId trên task đã sinh ra nó, khiến task kẹt vĩnh viễn
+    // "đã có ticket liên kết" dù ticket đó đã CANCELLED (việc chưa từng được làm). =====
+    await test('LỖI ĐÃ VÁ: huỷ TRỰC TIẾP 1 ticket IT (không huỷ quy trình) -> gỡ linkedTicketId trên task, không còn kẹt', async () => {
+      resetAppData(); STORE.hrProcesses = []; STORE.itSupportTickets = [];
+      const created = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload());
+      const processId = created.json.item.id;
+      const itTask = created.json.item.tasks.find(t => t.templateId === 1);
+      const rt = await call('it1', 'POST', `/api/records/hrProcesses/${processId}/create-it-ticket`, { taskId: itTask.taskId });
+      assert.strictEqual(rt.status, 200, JSON.stringify(rt.json));
+      const ticketId = rt.json.ticket.id;
+      assert.strictEqual(STORE.hrProcesses.find(p => p.id === processId).tasks.find(t => t.taskId === itTask.taskId).linkedTicketId, ticketId, 'task phải đã gắn linkedTicketId sau khi tạo ticket');
+
+      const rcancel = await call('it1', 'POST', `/api/records/itSupportTickets/${ticketId}/cancel`, {});
+      assert.strictEqual(rcancel.status, 200, JSON.stringify(rcancel.json));
+      assert.strictEqual(rcancel.json.item.status, 'CANCELLED');
+
+      const taskAfter = STORE.hrProcesses.find(p => p.id === processId).tasks.find(t => t.taskId === itTask.taskId);
+      assert.strictEqual(taskAfter.linkedTicketId, null, 'LỖI ĐÃ VÁ: linkedTicketId phải được gỡ về null khi ticket bị huỷ, không còn kẹt vĩnh viễn');
+    });
+
+    await test('LỖI ĐÃ VÁ: sau khi gỡ linkedTicketId, tạo được ticket MỚI cho đúng task đó (trước vá: 409 "đã có ticket liên kết")', async () => {
+      resetAppData(); STORE.hrProcesses = []; STORE.itSupportTickets = [];
+      const created = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload());
+      const processId = created.json.item.id;
+      const itTask = created.json.item.tasks.find(t => t.templateId === 1);
+      const rt1 = await call('it1', 'POST', `/api/records/hrProcesses/${processId}/create-it-ticket`, { taskId: itTask.taskId });
+      assert.strictEqual(rt1.status, 200, JSON.stringify(rt1.json));
+      const ticket1Id = rt1.json.ticket.id;
+      await call('it1', 'POST', `/api/records/itSupportTickets/${ticket1Id}/cancel`, {});
+
+      const rt2 = await call('it1', 'POST', `/api/records/hrProcesses/${processId}/create-it-ticket`, { taskId: itTask.taskId });
+      assert.strictEqual(rt2.status, 200, JSON.stringify(rt2.json), 'phải tạo được ticket MỚI, không còn bị chặn "đã có ticket liên kết"');
+      assert.notStrictEqual(rt2.json.ticket.id, ticket1Id, 'ticket mới phải là 1 bản ghi khác, không trùng ticket đã huỷ');
+    });
+
+    await test('đối chứng: ticket IT ĐÃ DONE bị gọi cancel -> vẫn 409 (hàm cancelItTicket cũ không đổi), KHÔNG đụng linkedTicketId', async () => {
+      resetAppData(); STORE.hrProcesses = []; STORE.itSupportTickets = [];
+      const created = await call('onb1', 'POST', '/api/create/hrProcesses', onboardingPayload());
+      const processId = created.json.item.id;
+      const itTask = created.json.item.tasks.find(t => t.templateId === 1);
+      const rt = await call('it1', 'POST', `/api/records/hrProcesses/${processId}/create-it-ticket`, { taskId: itTask.taskId });
+      const ticketId = rt.json.ticket.id;
+      await call('it1', 'POST', `/api/records/itSupportTickets/${ticketId}/claim`, {});
+      await call('it1', 'POST', `/api/records/itSupportTickets/${ticketId}/update-status`, { status: 'DONE', resolutionNote: 'Đã xong' });
+
+      const rcancel = await call('it1', 'POST', `/api/records/itSupportTickets/${ticketId}/cancel`, {});
+      assert.strictEqual(rcancel.status, 409, JSON.stringify(rcancel.json));
+      const taskAfter = STORE.hrProcesses.find(p => p.id === processId).tasks.find(t => t.taskId === itTask.taskId);
+      assert.strictEqual(taskAfter.linkedTicketId, ticketId, 'ticket đã DONE không huỷ được nên linkedTicketId giữ nguyên (ghi nhận đúng ticket đã hoàn tất thật)');
+    });
   } finally {
     server.close();
   }
