@@ -635,6 +635,29 @@ async function cascadeStoreRename(oldValue, newValue) {
   });
 }
 
+// jobTitleGradeDefaults ({jobTitle,jobGrade}[], UNIQUE theo jobTitle — "Chức Danh ↔ Cấp Bậc", gợi ý
+// mặc định khi Thêm/Sửa Vị Trí ở Cơ Cấu Tổ Chức, xem module-admin.js/module-orgchart.js): LỖI ĐÃ VÁ
+// (re-audit lần 5, mức TB — "deptCodeMap + jobTitleGradeDefaults không cascade"). `jobTitle` ở đây có
+// thể trỏ tới MỘT trong 2 nguồn — jobTitles (HO/Khối VP) hoặc storeJobTitles (Siêu Thị, xem
+// jtgdJobTitleOptions() — lưu giá trị THUẦN, không kèm hậu tố nguồn) — nên gọi từ CẢ
+// cascadeJobTitleRename() VÀ cascadeStoreJobTitleRename() ngay dưới, không riêng 1 bên. Đổi tên chức
+// danh mà không cascade để lại 1 dòng "mồ côi": gợi ý tự điền Cấp Bậc
+// (applyJobTitleGradeDefaultSuggestion(), module-orgchart.js) im lặng mất tác dụng cho tên MỚI, trong
+// khi dòng cấu hình cũ vẫn hiện trên màn Quản Lý Danh Mục như đã cấu hình (gây hiểu lầm admin tưởng đã
+// gán cấp bậc mặc định cho chức danh không còn tồn tại). Nếu tên MỚI đã trùng 1 dòng khác (2 chức danh
+// gộp về cùng 1 tên) — GIỮ dòng đã có sẵn, bỏ dòng cũ (orphan) thay vì tạo trùng key (khớp đúng ràng
+// buộc UNIQUE theo jobTitle mà saveJobTitleGradeDefault() đã áp phía client).
+async function cascadeJobTitleGradeDefaultRename(oldValue, newValue) {
+  await withLockedAppDataValue('jobTitleGradeDefaults', (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    if (!arr.some(r => r && r.jobTitle === oldValue)) return arr;
+    if (arr.some(r => r && r.jobTitle === newValue)) {
+      return arr.filter(r => !(r && r.jobTitle === oldValue));
+    }
+    return arr.map(r => (r && r.jobTitle === oldValue ? { ...r, jobTitle: newValue } : r));
+  });
+}
+
 // jobTitles (Khối Văn Phòng/HO): cascade users[].jobTitle CHỈ cho user KHÔNG phải posType STORE
 // (posType STORE dùng danh mục storeJobTitles riêng, xem cascadeStoreJobTitleRename() bên dưới) +
 // vppExcludedJobTitles[] (mảng chuỗi phẳng, so khớp chuỗi thô, xem isUserVppExcluded() ở index.html).
@@ -648,6 +671,7 @@ async function cascadeJobTitleRename(oldValue, newValue) {
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, false);
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
   await cascadePositionPairs('jobTitle', oldValue, newValue);
+  await cascadeJobTitleGradeDefaultRename(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, false);
@@ -661,6 +685,7 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
   ));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, true);
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
+  await cascadeJobTitleGradeDefaultRename(oldValue, newValue);
   // Cặp "Theo vị trí" lưu jobTitle THUẦN (không phân biệt nguồn HO/Siêu Thị, cùng lý do
   // cascadeMixedApprovalRuleJobTitle() ở trên) — dùng chung 1 hàm cho cả 2 danh mục chức danh.
   await cascadePositionPairs('jobTitle', oldValue, newValue);
@@ -705,6 +730,15 @@ async function renameAbbrMapKey(appDataKey, oldValue, newValue) {
 async function cascadeDeptRename(oldValue, newValue) {
   await cascadeStoreRename(oldValue, newValue);
   await renameAbbrMapKey('deptAbbrs', oldValue, newValue);
+  // deptCodeMap: LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "deptCodeMap + jobTitleGradeDefaults không
+  // cascade"). Object {<tên bộ phận> -> <mã bộ phận>} do ensureDeptCode() tự quản lý (lib/employeeProfile.js,
+  // routes/employeeProfile.js) — CÙNG KHUÔN deptAbbrs ngay trên (map khoá theo ĐÚNG tên phòng ban), nên
+  // tái dùng NGUYÊN renameAbbrMapKey(). Trước đây đổi tên phòng ban để mã bộ phận "rơi mất" dưới key CŨ:
+  // cột "Mã bộ phận" ở Excel Hồ Sơ Nhân Sự xuất ra RỖNG cho mọi nhân viên thuộc phòng ban vừa đổi tên
+  // (buildExportWorkbook() tra deptCodeMap[idn.dept] theo tên MỚI, không khớp key cũ), và generateDeptCode()
+  // tự sinh THÊM 1 mã mới cho tên mới lần truy vấn kế tiếp (ensureDeptCode() không thấy key MỚI nên coi
+  // như phòng ban chưa từng có mã) — vừa mất mã cũ vừa phát sinh mã trùng nghĩa cho cùng 1 phòng ban.
+  await renameAbbrMapKey('deptCodeMap', oldValue, newValue);
   // deptGroups[].depts[] (10/2026, "Khối/Ban") — tên Phòng Ban con lưu THEO CHUỖI bên trong từng nhóm,
   // phải cascade cùng lúc để không giữ tên đã lỗi thời (khác user.khoiBan vốn lưu theo `id` bất biến,
   // không cần cascade khi ĐỔI TÊN Khối/Ban — chỉ cascade khi đổi tên PHÒNG BAN như ở đây).

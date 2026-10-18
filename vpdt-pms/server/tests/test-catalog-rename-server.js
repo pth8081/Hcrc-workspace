@@ -43,6 +43,10 @@ function resetState() {
   APP_DATA = {
     depts: ['Phòng IT', 'Phòng Nhân Sự'],
     deptAbbrs: { 'Phòng IT': 'IT' },
+    // deptCodeMap — LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "deptCodeMap + jobTitleGradeDefaults không
+    // cascade"), CÙNG KHUÔN deptAbbrs ngay trên (map khoá theo ĐÚNG tên phòng ban, do ensureDeptCode()
+    // tự quản lý, xem lib/employeeProfile.js/routes/employeeProfile.js).
+    deptCodeMap: { 'Phòng IT': 'IT01' },
     cats: ['Nội bộ', 'Đối ngoại'],
     docCatAbbrs: { 'Nội bộ': 'NB' },
     licenseTypes: ['Giấy phép A', 'Giấy phép B'],
@@ -84,6 +88,13 @@ function resetState() {
     itPriceWholesaleStoreMixedApprovalRules: [
       { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Trưởng phòng', jobTitleDept: 'Phòng IT', username: null, stores: [] },
       { id: 2, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', username: null, stores: ['Siêu Thị A'] }
+    ],
+    // jobTitleGradeDefaults — LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "deptCodeMap + jobTitleGradeDefaults
+    // không cascade"): {jobTitle,jobGrade}[], jobTitle có thể trỏ tới chức danh HO (jobTitles) HOẶC
+    // Siêu Thị (storeJobTitles) — 2 dòng dưới đây khớp đúng 2 nguồn.
+    jobTitleGradeDefaults: [
+      { jobTitle: 'Trưởng phòng', jobGrade: 'Cấp 3' },
+      { jobTitle: 'Giám Đốc Siêu Thị', jobGrade: 'Cấp 5' }
     ]
   };
   RECORDS = {
@@ -181,6 +192,17 @@ async function run(name, fn) {
     assert.strictEqual(APP_DATA.deptAbbrs['Phòng IT'], undefined, 'Key cũ phải biến mất, không để lại rác');
     assert.ok(renameFieldCalls.includes('docs'), 'Phải cascade cả DEPT_FIELD_COLLECTIONS (docs.dept)');
     assert.strictEqual(RECORDS.docs[0].dept, 'Phòng Công Nghệ Thông Tin');
+  });
+
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "deptCodeMap + jobTitleGradeDefaults không cascade"): trước đây
+  // cascadeDeptRename() chỉ dời key deptAbbrs, KHÔNG dời deptCodeMap (cùng khuôn map khoá-theo-tên-phòng-ban)
+  // — mã bộ phận "rơi mất" dưới tên cũ, cột "Mã bộ phận" ở Excel Hồ Sơ Nhân Sự xuất RỖNG cho phòng vừa đổi tên.
+  await run('depts: đổi tên -> dời key deptCodeMap (LỖI ĐÃ VÁ, cùng khuôn deptAbbrs)', async () => {
+    resetState();
+    const res = await renameApi('depts', 'Phòng IT', 'Phòng Công Nghệ Thông Tin');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(APP_DATA.deptCodeMap['Phòng Công Nghệ Thông Tin'], 'IT01', 'Mã bộ phận phải dời sang key mới');
+    assert.strictEqual(APP_DATA.deptCodeMap['Phòng IT'], undefined, 'Key cũ phải biến mất, không để lại mã mồ côi');
   });
 
   await run('depts: đổi tên -> DỜI KEY của MỌI map cấu hình duyệt theo phòng ban, gồm cả `deptWorkflows` (Tài Liệu) vốn bị sót', async () => {
@@ -292,6 +314,42 @@ async function run(name, fn) {
     const rules = APP_DATA.operationOrderStoreMixedApprovalRules;
     assert.strictEqual(rules.find(r => r.id === 2).jobTitle, 'Giám Đốc Siêu Thị (Mới)', 'LỖI ĐÃ VÁ: rename chức danh Siêu Thị phải cascade vào rule.jobTitle');
     assert.strictEqual(rules.find(r => r.id === 1).jobTitle, 'Trưởng phòng', 'Dòng chức danh HO khác KHÔNG được đụng tới');
+  });
+
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "deptCodeMap + jobTitleGradeDefaults không cascade"):
+  // cascadeJobTitleRename()/cascadeStoreJobTitleRename() trước đây KHÔNG dọn jobTitleGradeDefaults —
+  // đổi tên chức danh để lại 1 dòng "mồ côi", gợi ý tự điền Cấp Bậc (module-orgchart.js) im lặng mất
+  // tác dụng cho tên MỚI dù admin vẫn thấy dòng cấu hình (tên CŨ) hiện trên màn Quản Lý Danh Mục.
+  await run('jobTitles: đổi tên -> cascade jobTitleGradeDefaults[].jobTitle (LỖI ĐÃ VÁ, nguồn HO)', async () => {
+    resetState();
+    const res = await renameApi('jobTitles', 'Trưởng phòng', 'Trưởng Phòng Ban');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const row = APP_DATA.jobTitleGradeDefaults.find(r => r.jobTitle === 'Trưởng Phòng Ban');
+    assert.ok(row, 'Phải có dòng mang TÊN MỚI');
+    assert.strictEqual(row.jobGrade, 'Cấp 3', 'Cấp bậc đã cấu hình phải giữ nguyên, chỉ đổi jobTitle');
+    assert.ok(!APP_DATA.jobTitleGradeDefaults.some(r => r.jobTitle === 'Trưởng phòng'), 'Không được để lại dòng mồ côi dưới tên cũ');
+    assert.ok(APP_DATA.jobTitleGradeDefaults.some(r => r.jobTitle === 'Giám Đốc Siêu Thị'), 'Dòng chức danh KHÁC không bị đụng tới');
+  });
+
+  await run('storeJobTitles: đổi tên -> cascade jobTitleGradeDefaults[].jobTitle (LỖI ĐÃ VÁ, nguồn Siêu Thị)', async () => {
+    resetState();
+    const res = await renameApi('storeJobTitles', 'Giám Đốc Siêu Thị', 'Giám Đốc Siêu Thị (Mới)');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const row = APP_DATA.jobTitleGradeDefaults.find(r => r.jobTitle === 'Giám Đốc Siêu Thị (Mới)');
+    assert.ok(row, 'Phải có dòng mang TÊN MỚI');
+    assert.strictEqual(row.jobGrade, 'Cấp 5', 'Cấp bậc đã cấu hình phải giữ nguyên, chỉ đổi jobTitle');
+    assert.ok(!APP_DATA.jobTitleGradeDefaults.some(r => r.jobTitle === 'Giám Đốc Siêu Thị'), 'Không được để lại dòng mồ côi dưới tên cũ');
+    assert.ok(APP_DATA.jobTitleGradeDefaults.some(r => r.jobTitle === 'Trưởng phòng'), 'Dòng chức danh KHÁC (nguồn HO) không bị đụng tới');
+  });
+
+  await run('jobTitles: đổi tên TRÙNG vào 1 chức danh đã có cấu hình Cấp Bậc -> giữ dòng đã có, bỏ dòng cũ (không tạo trùng key)', async () => {
+    resetState();
+    // "Trưởng phòng" đổi tên gộp về đúng "Giám Đốc Siêu Thị" (đã có cấu hình Cấp 5 từ trước).
+    const res = await renameApi('jobTitles', 'Trưởng phòng', 'Giám Đốc Siêu Thị');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const rows = APP_DATA.jobTitleGradeDefaults.filter(r => r.jobTitle === 'Giám Đốc Siêu Thị');
+    assert.strictEqual(rows.length, 1, 'KHÔNG được tạo 2 dòng trùng jobTitle (vi phạm UNIQUE theo jobTitle)');
+    assert.strictEqual(rows[0].jobGrade, 'Cấp 5', 'Giữ dòng đã có sẵn (Cấp 5), bỏ dòng cũ (Cấp 3) thay vì ghi đè lộn xộn');
   });
 
   await run('stores: đổi tên -> cascade operationOrderStoreMixedApprovalRules[].stores[] (danh sách ngoại lệ)', async () => {
