@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**26.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.59 (2026-11): [Cao] Re-audit lần 3 — mục 7 (đã đánh lại số): budgetLines thiếu trong findPendingApprovalsForUsername()
+
+Tiếp nối v26.51-26.58. Một trong 8 phát hiện của re-audit lần 3 (mục `budgetLines` — xử lý sau cùng vì
+cần phân tích kỹ để tách bạch với quyết định UI có chủ đích "Approval Hub bỏ Ngân Sách"):
+
+- **[Cao] `findPendingApprovalsForUsername()` (public/js/core-approvalhub.js) — dùng để CẢNH BÁO admin
+  trước khi khoá/xoá vĩnh viễn 1 tài khoản (xem `module-admin-userstaging.js`) nếu tài khoản đó đang là
+  người duyệt CHỈ ĐỊNH TÊN của bất kỳ hồ sơ PENDING nào — đã quét `DB.budgetEntries` (module Ngân Sách
+  CŨ) nhưng CHƯA từng quét `DB.budgetLines` (Ngân Sách 2.0, module ĐANG hoạt động).** Lưu ý: việc
+  Approval Hub (`getMyPendingApprovals()`) không hiển thị mục "Ngân Sách" là QUYẾT ĐỊNH CÓ CHỦ ĐÍCH từ
+  v23.0 (budgetLines đã có nút Duyệt/Từ chối ngay trong module Ngân Sách, không cần Approval Hub) —
+  KHÔNG liên quan tới lỗi này. Lỗi thật nằm ở việc `findPendingApprovalsForUsername()` phục vụ mục đích
+  KHÁC (cảnh báo xoá/khoá tài khoản) nhưng vô tình thiếu `budgetLines`: admin khoá/xoá 1 username đang
+  là approver CHỈ ĐỊNH TÊN duy nhất của 1 dòng ngân sách PENDING (ở bước PROPOSED qua
+  `budgetDeptWorkflows`, hoặc bước APPROVED qua `budgetApprovedDeptWorkflows` — 2 map RIÊNG, xem
+  `canDecideBudgetLineProposal()`/`canDecideBudgetLineFinal()`, lib/recordActions.js) mà KHÔNG được
+  cảnh báo gì — dòng ngân sách đó treo vĩnh viễn ở `SUBMITTED`. Thêm 1 khối quét riêng cho `budgetLines`
+  (không dùng chung `scan()` sẵn có — trạng thái chờ là `status==='SUBMITTED'` không phải `'PENDING'`,
+  và 2 stage PROPOSED/APPROVED dùng 2 map cấu hình khác nhau, không có `currentStep` nhiều bước).
+
+**Test:** mở rộng `tests/test-catalog-rename-locked-accounts.js` (kịch bản (2a), seed thêm 2 dòng
+`budgetLines` PENDING với `locked_approver` là named-approver ở cả 2 stage) — assertion mới đã xác
+nhận FAIL trên code CŨ (`git stash -- public/js/core-approvalhub.js`, chỉ tìm thấy 5/7, thiếu đúng 2
+dòng budgetLines), PASS trên code đã vá (41/41 toàn file). Chạy lại bộ test Ngân Sách liên quan:
+`test-budget-lines.js` (62/62), `test-budget-lines-dept-scope.js` (6/6), `test-budget-lines-excel.js`
+(18/18), `test-audit-budgetlines-race.js` (4/4), `test-budget-meeting-dept-workflow-ui.js` (7/7),
+`test-audit-round2-vbt-hd-gp-tt-tl.js` (37/37), `test-admin-users-permgroups.js` (111/111) — tất cả
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Đây cũng là phát hiện cuối
+cùng trong 8 mục của đợt re-audit lần 3 còn lại Task #90 (Thấp, xoá dept/jobTitle không dọn
+workflowParticipatingDeptGroups/Positions) chưa xử lý.
 
 ## v26.58 (2026-11): [Trung Bình] Re-audit lần 3 — mục 8: huỷ/xoá Onboarding/Offboarding không đóng ticket IT liên kết
 

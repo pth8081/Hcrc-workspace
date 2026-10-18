@@ -169,7 +169,14 @@ async function scenario(name, fn) {
     DB.deptWorkflows = { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['locked_approver'] } } };
     DB.submissionDeptWorkflows = {}; DB.submissionTypeDeptWorkflows = {}; DB.submissionApprovalGroups = [];
     DB.carDeptWorkflows = {}; DB.officeBuyDeptWorkflows = {}; DB.officeFixDeptWorkflows = {}; DB.officeInvestDeptWorkflows = {};
-    DB.vppDeptWorkflows = {}; DB.itPriceDeptWorkflows = {}; DB.budgetDeptWorkflows = {};
+    DB.vppDeptWorkflows = {}; DB.itPriceDeptWorkflows = {};
+    // LỖI ĐÃ VÁ (đợt re-audit lần 3, mức Cao): budgetLines (Ngân Sách 2.0, module ĐANG hoạt động —
+    // khác budgetEntries cũ ở dưới) bị bỏ sót khỏi findPendingApprovalsForUsername() — seed 2 bản ghi
+    // SUBMITTED (1 stage PROPOSED dùng budgetDeptWorkflows, 1 stage APPROVED dùng
+    // budgetApprovedDeptWorkflows — 2 map RIÊNG) với "locked_approver" là người duyệt CHỈ ĐỊNH TÊN ở
+    // CẢ 2 bước.
+    DB.budgetDeptWorkflows = { 'Phòng IT': { approvers: { 1: ['locked_approver'] } } };
+    DB.budgetApprovedDeptWorkflows = { 'Phòng IT': { approvers: { 1: ['locked_approver'] } } };
     DB.contractApprovalDeptWorkflows = {}; DB.contractApprovalGroups = []; DB.contractManageDeptWorkflows = {};
     DB.docs = [{
       id: 101, code: 'DOC-1', displayCode: 'DOC-1', title: 'Tài liệu test', dept: 'Phòng IT',
@@ -183,6 +190,10 @@ async function scenario(name, fn) {
     }];
     DB.carRegs = []; DB.officeReqs = []; DB.vppRegistrations = []; DB.itPriceApprovals = [];
     DB.budgetEntries = []; DB.contracts = [];
+    DB.budgetLines = [
+      { id: 601, content: 'NS-PROPOSED-1', dept: 'Phòng IT', stage: 'PROPOSED', status: 'SUBMITTED' },
+      { id: 602, content: 'NS-APPROVED-1', dept: 'Phòng IT', stage: 'APPROVED', status: 'SUBMITTED' }
+    ];
     DB.internalPosts = []; DB.licenses = [];
     // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent "bảng liên kết"):
     // Thanh Toán/Vận Hành-Đơn Hàng/Phòng Họp trước đây bị bỏ sót khỏi findPendingApprovalsForUsername()
@@ -292,12 +303,16 @@ async function scenario(name, fn) {
     });
     // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình): trước đây chỉ 2 (doc +
     // submission) — giờ thêm 3 (payment/operationOrder/meeting), đủ 5.
-    record('(2a) exactly 5 pending records found for locked_approver (doc + submission + payment + operationOrder + meeting)',
-      r.found.length === 5, JSON.stringify(r));
+    // LỖI ĐÃ VÁ (đợt re-audit lần 3, mức Cao): thêm 2 nữa (budgetLines PROPOSED + APPROVED), đủ 7.
+    record('(2a) exactly 7 pending records found for locked_approver (doc + submission + payment + operationOrder + meeting + budgetLines PROPOSED + budgetLines APPROVED)',
+      r.found.length === 7, JSON.stringify(r));
     record('(2a) each result carries typeLabel/code/title/stepLabel',
       r.found.every(p => p.typeLabel && p.code && p.title && p.stepLabel), JSON.stringify(r));
     record('(2a) includes "TT-1" (Thanh toán), "DH-1" (Vận Hành - Đơn hàng), "PH-1" (Phòng họp)',
       ['TT-1', 'DH-1', 'PH-1'].every(code => r.found.some(p => p.code === code)), JSON.stringify(r));
+    record('(2a) includes budgetLines id=601 (PROPOSED) and id=602 (APPROVED), each with đúng typeLabel riêng',
+      r.found.some(p => p.code === '601' && p.typeLabel.includes('Đề Xuất')) &&
+      r.found.some(p => p.code === '602' && p.typeLabel.includes('Phê Duyệt')), JSON.stringify(r));
     record('(2a) a user who is NOT a named approver anywhere gets an empty list',
       r.notApprover.length === 0, JSON.stringify(r));
   });

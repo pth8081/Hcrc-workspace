@@ -524,6 +524,28 @@ function findPendingApprovalsForUsername(username) {
     typeLabel: '📊 Ngân Sách', codeOf: r => r.code, titleOf: r => r.periodName || r.code
   });
 
+  // budgetLines (Ngân Sách 2.0 — module ĐANG hoạt động, khác budgetEntries cũ ở trên) — PHÁT HIỆN THIẾU
+  // ở đợt re-audit lần 3, mức Cao: 1 username bị khoá/xoá có thể đang là approver CHỈ ĐỊNH TÊN duy nhất
+  // của 1 trong 2 bước (budgetDeptWorkflows cho stage PROPOSED/budgetApprovedDeptWorkflows cho stage
+  // APPROVED, xem canDecideBudgetLineProposal()/canDecideBudgetLineFinal() ở lib/recordActions.js) mà
+  // KHÔNG hề được cảnh báo gì — dòng ngân sách đó treo vĩnh viễn ở SUBMITTED sau khi khoá/xoá. KHÔNG
+  // dùng chung scan() ở trên được: trạng thái chờ là status==='SUBMITTED' (không phải 'PENDING'), và 2
+  // stage dùng 2 map cấu hình RIÊNG theo CHÍNH field "stage" (không có currentStep nhiều bước — luôn
+  // hardcode bước 1, cùng khuôn block meetings ngay dưới). budgetLines không có field "code" riêng
+  // (xem normalizeBudgetLineCoreFields(), lib/createValidation.js) — dùng content làm tiêu đề, id làm mã.
+  (DB.budgetLines || []).forEach(line => {
+    if (line.status !== 'SUBMITTED') return;
+    const isProposed = line.stage === 'PROPOSED';
+    const wfConfig = isProposed ? DB.budgetDeptWorkflows?.[line.dept] : DB.budgetApprovedDeptWorkflows?.[line.dept];
+    const approvers = normalizeApproversList(resolveEffectiveStepApprovers(wfConfig, 1));
+    if (!approvers.includes(username)) return;
+    results.push({
+      typeLabel: isProposed ? '📊 Ngân Sách - Đề Xuất' : '📊 Ngân Sách - Phê Duyệt',
+      code: String(line.id), title: line.content || String(line.id),
+      stepLabel: buildStepLabelForHub(wfConfig, 1)
+    });
+  });
+
   scan(
     (DB.contracts || []).filter(c => !c.isAddendum),
     c => resolveContractApprovalWorkflow(c),
