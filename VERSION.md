@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**27.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.29 (2026-11): [Thấp] Re-audit lần 6 — mục 21/21 (HẾT đợt): generateCode dùng payload.dept thô chưa ép
+
+Mục cuối cùng (21/21) của đợt re-audit lần 6 — hoàn tất toàn bộ đợt re-audit này.
+
+**Nguyên nhân:** `submissions`/`contracts`/`docs` đều có `forceOwnDept: true` — `dept` CUỐI CÙNG lưu
+vào record LUÔN là `user.dept` (ép ở `finalDept`, tính trong `validateAndPrepareCreate()` NGAY SAU
+`extraValidate`/`generateCode`). Nhưng `generateCode()` của cả 3 module lại chạy TRƯỚC đó và đọc
+`payload.dept` THÔ (giá trị client gửi, CHƯA bị ép) để tính viết tắt phòng ban trong mã hồ sơ
+(`HCRC-<mã phòng>-...`) — 1 request tự gửi `payload.dept` khác phòng ban thật của mình (dù không ảnh
+hưởng tới `dept` cuối cùng của record, `forceOwnDept` vẫn ép đúng) khiến MÃ sinh ra mang viết tắt phòng
+ban SAI (của `payload.dept` giả) dù record THẬT lại thuộc phòng ban khác (`user.dept`) — nhiễu số thứ
+tự (`computeNextSeqForPrefix`) của phòng ban bị "mượn tên" + mã tra cứu gây nhầm lẫn hồ sơ thuộc phòng
+ban nào. `licenses.generateCode` đã dùng đúng `user.dept` từ trước — là mẫu tham chiếu cho bản vá này.
+
+CÙNG GỐC (không tách finding riêng): `contracts.extraValidate` tính mặc định/so sánh `custodianDept`
+("Đơn vị tiếp nhận theo dõi & thanh toán") cũng dùng `payload.dept` thô — không chọn `custodianDept` thì
+bị gán NHẦM theo `payload.dept` giả (lẽ ra phải mặc định = phòng ban THẬT của người tạo); và nhánh
+validate "khác đơn vị mặc định thì phải qua danh mục" chỉ so với `payload.dept` (cũng là giá trị giả)
+nên tự nó bị vô hiệu khi `custodianDept` trùng đúng `payload.dept` giả mạo.
+
+**Vá:** 4 vị trí trong `lib/createValidation.js` — đổi `payload.dept` → `user.dept`: (1)
+`submissions.generateCode` (gọi `recordCodeGen.generateHcrcCode`), (2) `contracts.generateCode` (nhánh
+hợp đồng GỐC, gọi `recordCodeGen.generateContractCode`; nhánh phụ lục không đụng tới dept, giữ nguyên),
+(3) `docs.generateCode` (nhánh tài liệu GỐC, gọi `recordCodeGen.generateDocCode`; nhánh phiên bản mới
+vẫn trả `null` như cũ), (4) `contracts.extraValidate` — mặc định `payload.custodianDept = ... || user.dept`
+và so sánh `if (payload.custodianDept !== user.dept)`.
+
+**Test:** file mới `tests/test-generatecode-payload-dept-spoofing.js` (gọi trực tiếp
+`CREATE_MODULE_CONFIGS.<module>.generateCode()`/`.extraValidate()`, không cần SQL Server/HTTP) — 7
+scenario: `submissions`/`contracts`(gốc)/`docs`(gốc) generateCode với `payload.dept` giả mạo khác
+`user.dept` thật -> mã PHẢI mang viết tắt `user.dept`, KHÔNG mang viết tắt `payload.dept` giả (3 khai
+thác chính); đối chứng `contracts` phụ lục + `docs` phiên bản mới vẫn hoạt động đúng như cũ (không đụng
+dept); `custodianDept` không chọn -> mặc định ĐÚNG `user.dept` (khai thác thứ 4); `custodianDept` trùng
+`payload.dept` giả (khác `user.dept` thật) -> PHẢI qua catalog-check, không bị skip nhầm (khai thác thứ
+5). Xác nhận FAIL trên code CŨ (`git stash -- lib/createValidation.js`, đúng 4/7 scenario FAIL khớp 4
+khai thác đã nêu — mã mang viết tắt `BGD` giả thay vì `KD` thật ở cả 3 generateCode, `custodianDept` mặc
+định ra giá trị giả), PASS trên code đã vá (7/7). Regression:
+`tests/test-locked-approval-layers.js` (23/23), `tests/test-contract-import-mode-ui-clarity.js` (6/6),
+`tests/test-contract-payment-type-change.js` (15/15),
+`tests/test-contract-signed-file-no-approver-block.js` (All passed), `tests/test-submissions-scope.js`
+(7/7), `tests/test-docs-scope.js` (9/9) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.28 (2026-11): [Thấp] Re-audit lần 6 — mục 20/21: registerInternalPostTraining deadline so sánh UTC
 
