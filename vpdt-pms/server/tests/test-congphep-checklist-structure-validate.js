@@ -103,6 +103,21 @@ test('attendanceHoConfig là NULL -> throw 400', () => {
   expectThrows400(() => assertPlainObjectShape('attendanceHoConfig', null));
 });
 
+// payrollRateConfig (re-audit lần 6, mức TB — "payrollRateConfig thiếu validate"): CÙNG khuôn OBJECT
+// DUY NHẤT như attendanceHoConfig, CỘNG THÊM validate riêng field con taxBrackets (mảng).
+test('payrollRateConfig hợp lệ (object, taxBrackets là mảng) -> không throw', () => {
+  assertPlainObjectShape('payrollRateConfig', { bhxhPercent: 8, taxBrackets: [{ upTo: 5000000, rate: 5 }] });
+});
+test('payrollRateConfig hợp lệ KHÔNG gửi taxBrackets (sửa riêng field khác) -> không throw', () => {
+  assertPlainObjectShape('payrollRateConfig', { bhxhPercent: 8 });
+});
+test('LỖI ĐÃ VÁ: payrollRateConfig là MẢNG -> throw 400 (trước đây lưu được, hỏng cấu hình)', () => {
+  expectThrows400(() => assertPlainObjectShape('payrollRateConfig', [{ bhxhPercent: 8 }]));
+});
+test('LỖI ĐÃ VÁ: payrollRateConfig.taxBrackets là OBJECT (truthy) -> throw 400 (trước đây crash 500 ở computeTaxFromBrackets() for...of khi tính lương)', () => {
+  expectThrows400(() => assertPlainObjectShape('payrollRateConfig', { taxBrackets: { 0: { upTo: 5000000, rate: 5 } } }));
+});
+
 test('key KHÔNG thuộc 2 danh sách trên (VD paymentDeptWorkflows) -> không throw gì (giữ nguyên hành vi cũ)', () => {
   assertPlainObjectArrayShape('paymentDeptWorkflows', { 'Phòng IT': { workflowId: 'WF_1', approvers: {} } });
   assertPlainObjectShape('paymentDeptWorkflows', { 'Phòng IT': { workflowId: 'WF_1', approvers: {} } });
@@ -161,7 +176,7 @@ const ADMIN = { id: 1, username: 'admin', name: 'Quản Trị Viên', dept: 'Ph�
 
 let APP_DATA;
 function resetData() {
-  APP_DATA = { users: [{ ...ADMIN }], shiftTemplates: [], publicHolidays: [], attendanceClockApiKeys: [], hrTaskTemplates: [], attendanceHoConfig: { startTime: '08:00' }, deptGroups: [], vppExcludedJobTitles: [], sensitiveKeywords: [] };
+  APP_DATA = { users: [{ ...ADMIN }], shiftTemplates: [], publicHolidays: [], attendanceClockApiKeys: [], hrTaskTemplates: [], attendanceHoConfig: { startTime: '08:00' }, deptGroups: [], vppExcludedJobTitles: [], sensitiveKeywords: [], payrollRateConfig: { bhxhPercent: 8 } };
 }
 resetData();
 
@@ -304,6 +319,24 @@ async function main() {
       const res = await api('POST', '/api/data/vppExcludedJobTitles', ['Bảo vệ', 'Lái xe']);
       assertEqual(res.status, 200, 'phải lưu được');
       assertEqual(APP_DATA.vppExcludedJobTitles.length, 2, 'phải lưu đúng 2 chức danh');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/payrollRateConfig với MẢNG -> 400 (trước đây lưu được, hỏng cấu hình)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/payrollRateConfig', [{ bhxhPercent: 8 }]);
+      assertEqual(res.status, 400, `phải trả 400 — nhận status=${res.status}`);
+    });
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/payrollRateConfig với taxBrackets là OBJECT -> 400 (trước đây crash 500 ở computeTaxFromBrackets() khi tính lương)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/payrollRateConfig', { bhxhPercent: 8, taxBrackets: { 0: { upTo: 5000000, rate: 5 } } });
+      assertEqual(res.status, 400, `phải trả 400 — nhận status=${res.status}`);
+      assertEqual(APP_DATA.payrollRateConfig.bhxhPercent, 8, 'dữ liệu cũ không bị ghi đè khi request bị từ chối');
+    });
+    await run.run('POST /api/data/payrollRateConfig với object + taxBrackets hợp lệ -> 200, lưu đúng', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/payrollRateConfig', { bhxhPercent: 10.5, taxBrackets: [{ upTo: 5000000, rate: 5 }] });
+      assertEqual(res.status, 200, 'phải lưu được');
+      assertEqual(APP_DATA.payrollRateConfig.bhxhPercent, 10.5, 'phải lưu đúng giá trị mới');
     });
 
     await run.run('LỖI ĐÃ VÁ: POST /api/data/sensitiveKeywords với OBJECT -> 400 (trước đây crash 500 ở scanCommentForSensitiveContent() for...of khi có bình luận Truyền Thông Nội Bộ)', async () => {

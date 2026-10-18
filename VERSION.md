@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**27.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.20 (2026-11): [TB] Re-audit lần 6 — mục 12/21: payrollRateConfig thiếu validate
+
+Mục thứ mười hai (12/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `payrollRateConfig` (% BHXH/BHYT/BHTN, biểu thuế TNCN, trần đóng BHXH — Nhân Sự >
+Lương) có 1 route RIÊNG an toàn (`PUT /api/payroll/rate-config`, luôn ép `taxBrackets` thành mảng qua
+`Array.isArray(...) ? ... : payroll.defaultRateConfig().taxBrackets`), nhưng `POST /api/data/:key` (route
+generic, vẫn còn là "đường lùi" ghi thô admin-only cho key này) KHÔNG validate cấu trúc gì — `key` này
+chỉ nằm trong danh sách gate QUYỀN, không nằm trong `PLAIN_OBJECT_KEYS`/`PLAIN_OBJECT_ARRAY_KEYS`.
+`computeTaxFromBrackets()` (`lib/payroll.js`) đọc `for (const b of (brackets || []))` — `|| []` chỉ che
+được falsy; lưu `taxBrackets` thành OBJECT (vẫn truthy) qua đường lùi đó khiến `for...of` throw "is not
+iterable" NGAY khi tính lương (`POST /periods/:id/calculate`) — chặn đứng việc tính lương TOÀN CÔNG TY.
+
+**Vá:** thêm `'payrollRateConfig'` vào `PLAIN_OBJECT_KEYS` (`lib/workflowEngine.js`, cùng khuôn OBJECT
+DUY NHẤT như `attendanceHoConfig`), CỘNG THÊM 1 lớp validate riêng cho field con `taxBrackets` ngay
+trong `assertPlainObjectShape()`: nếu payload CÓ gửi `taxBrackets` thì phải là `Array` (không ép khi
+không gửi — admin có thể sửa riêng từng field, không bắt buộc gửi đủ toàn bộ object mỗi lần).
+
+**Test:** mở rộng `tests/test-congphep-checklist-structure-validate.js` — thêm 7 scenario: 4 đơn vị
+(`payrollRateConfig` hợp lệ có/không `taxBrackets`, là MẢNG -> 400, `taxBrackets` là OBJECT -> 400) + 3
+HTTP qua `POST /api/data/payrollRateConfig` (MẢNG -> 400, `taxBrackets` OBJECT -> 400, hợp lệ -> 200).
+Xác nhận FAIL trên code CŨ (`git stash -- lib/workflowEngine.js`, đúng 4/46 scenario FAIL — 2 ở Phần A, 2
+ở Phần B HTTP, đúng khai thác đã nêu), PASS trên code đã vá (46/46). Regression: `tests/test-payroll.js`
+(28/28), `tests/test-workflowarray-structure-validate.js` (5/5),
+`tests/test-formtemplates-structure-validate.js` (5/5) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.19 (2026-11): [TB] Re-audit lần 6 — mục 11/21: sensitiveKeywords thiếu validate cấu trúc
 

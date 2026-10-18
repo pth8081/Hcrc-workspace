@@ -841,11 +841,23 @@ function assertPlainArrayShape(key, value) {
 // property trên mảng/chuỗi chỉ trả undefined, không crash) nhưng ÂM THẦM hỏng toàn bộ cấu hình giờ hành
 // chính (startTime/endTime/lateGraceMinutes đều về mặc định ẩn, không cảnh báo) — cùng triết lý "chặn
 // sớm 400 thay vì hỏng âm thầm" như các key khác ở trên.
-const PLAIN_OBJECT_KEYS = new Set(['attendanceHoConfig']);
+// payrollRateConfig (Lương — lib/payroll.js): LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "payrollRateConfig
+// thiếu validate"). CÙNG khuôn OBJECT DUY NHẤT như attendanceHoConfig ở trên (bị bỏ sót), nhưng còn cần
+// thêm 1 lớp validate RIÊNG cho field con `taxBrackets`: computeTaxFromBrackets() đọc
+// `for (const b of (brackets || []))` — `|| []` chỉ che được falsy, lưu `taxBrackets` thành OBJECT (vẫn
+// truthy) khiến `for...of` throw "is not iterable" NGAY khi tính lương (POST
+// /periods/:id/calculate) — chặn đứng việc tính lương TOÀN CÔNG TY tới khi admin sửa lại. Chỉ ép
+// Array.isArray (không validate sâu từng bậc thuế, cùng triết lý các key khác trong file này) và CHỈ áp
+// dụng khi payload thật sự CÓ gửi `taxBrackets` (admin có thể sửa riêng từng field, không bắt buộc gửi
+// đủ toàn bộ object mỗi lần).
+const PLAIN_OBJECT_KEYS = new Set(['attendanceHoConfig', 'payrollRateConfig']);
 function assertPlainObjectShape(key, value) {
   if (!PLAIN_OBJECT_KEYS.has(key)) return;
   if (!isPlainWorkflowMapObject(value)) {
     throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là 1 object cấu hình`);
+  }
+  if (key === 'payrollRateConfig' && value.taxBrackets !== undefined && !Array.isArray(value.taxBrackets)) {
+    throw new WorkflowError(400, `Dữ liệu "${key}.taxBrackets" không hợp lệ — phải là 1 mảng (danh sách bậc thuế)`);
   }
 }
 
