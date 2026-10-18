@@ -250,8 +250,14 @@ async function main() {
   });
 
   await run.run('officeReqs: MUA_BAN (OFFICE_BUY) đã cấu hình, SUA_CHUA (OFFICE_FIX) CHƯA -> mapping subType đúng', async () => {
+    // techUser: "Kỹ Thuật Xác Nhận" (11/2026, CHỈ Sửa Chữa VP) — PHÁT HIỆN ở đợt re-audit lần 3 (Task
+    // #95): fixture này được viết TRƯỚC tính năng này ra đời, chưa có appData.users/payload.techType/
+    // techAssignedTo nên luôn FAIL ở bước validate MỚI (lib/createValidation.js dòng ~1305) — KHÔNG phải
+    // lỗi logic thật, chỉ là fixture lỗi thời (cùng lớp đã gặp ở test-operation-order-po-race.js, xem
+    // CLAUDE.md). Bổ sung đúng 1 user có quyền officeFixTechIT + 2 field payload bắt buộc.
+    const techUser = { username: 'techit1', name: 'NV Kỹ Thuật IT', dept: 'IT', active: true, perms: { officeFixTechIT: true } };
     const appData = {
-      formTemplates: {},
+      formTemplates: {}, users: [techUser],
       extraApprovalGroups_OFFICE_BUY: GROUPS, extraApprovalLevels_OFFICE_BUY: LEVELS
       // extraApprovalGroups_OFFICE_FIX / extraApprovalLevels_OFFICE_FIX: KHÔNG cấu hình
     };
@@ -265,7 +271,7 @@ async function main() {
     assertEqual(recMuaBan.extraApprovalLevel, 'L1', 'MUA_BAN (OFFICE_BUY) đã cấu hình -> phải đông cứng đúng level');
 
     const recSuaChua = validateAndPrepareCreate('officeReqs',
-      { dept: 'Hành Chính', subType: 'SUA_CHUA', amount: 5000000, approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'] },
+      { dept: 'Hành Chính', subType: 'SUA_CHUA', amount: 5000000, approvalLevel: 'L1', selectedExtraApprovalLayerKeys: ['CEO'], techType: 'IT', techAssignedTo: 'techit1' },
       muaBanUser, [], appData);
     assertEqual(recSuaChua.extraApprovalLevel, undefined, 'SUA_CHUA (OFFICE_FIX) chưa cấu hình -> KHÔNG được gắn field này');
   });
