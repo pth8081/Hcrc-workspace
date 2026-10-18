@@ -390,19 +390,23 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
   const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, doc.currentStep);
   const canApprove = (doc.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, doc.history, doc.currentStep);
 
+  // Giai đoạn 3a "HCRC Workspace Refresh" (11/2026): badge trạng thái đổi sang .badge-* DÙNG CHUNG
+  // (app.css) thay cho class Tailwind rời rạc tự chọn màu — khớp đúng quy ước 4 màu đã chuẩn hoá ở mẫu
+  // email (v26.21): "đang chờ duyệt" dùng info (không còn vàng) khớp đúng ⏳ "Cần phê duyệt" ở email,
+  // "cần bổ sung" dùng warning (khớp ✏️ "Yêu cầu bổ sung"), đã duyệt/từ chối giữ nguyên success/danger.
   let progressBadge = '';
   if (doc.status === 'APPROVED') {
-    progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
+    progressBadge = `<span class="badge-success">✅ Đã phê duyệt hoàn tất</span>`;
   } else if (doc.status === 'REJECTED') {
-    progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+    progressBadge = `<span class="badge-danger">❌ Bị từ chối / Trả về</span>`;
   } else if (doc.status === 'DRAFT') {
     // "Bổ Sung" (REQUEST_CHANGES) — người duyệt trả hồ sơ về NHÁP để người tải lên sửa lại toàn bộ nội
     // dung + tệp rồi gửi lại (xem openBosungEditModal()/lib/recordActions.js editDocDraft()).
-    progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
+    progressBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
   } else {
     const stepName = wf.steps[doc.currentStep - 1]?.name || `Bước ${doc.currentStep}`;
     const progressText = getStepApprovalProgressText(currentStepApprovers, doc.history, doc.currentStep);
-    progressBadge = `<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded font-semibold text-xs">⏳ Đang ở Bước ${doc.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
+    progressBadge = `<span class="badge-info">⏳ Đang ở Bước ${doc.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
   }
 
   const codeText = escapeHtml(doc.displayCode || doc.code);

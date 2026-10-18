@@ -511,19 +511,23 @@ function renderSubmissionReqs() {
     const currentStepApprovers = resolveEffectiveStepApprovers(resolvedWf, sub.currentStep);
     const canApprove = (sub.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, sub.history, sub.currentStep);
 
+    // Giai đoạn 3a "HCRC Workspace Refresh" (11/2026): badge trạng thái đổi sang .badge-* DÙNG CHUNG
+    // (app.css), cùng đợt + cùng khuôn với renderDocs() (module-tailieu.js). "Chờ xác nhận thay thế"
+    // gộp chung bucket info với "đang chờ duyệt" (cả 2 đều là "cần phản hồi/xử lý từ 1 phía"), không
+    // giữ riêng màu tím (purple) để không lệch khỏi đúng 4+1 màu đã chuẩn hoá.
     let progressBadge = '';
     if (sub.status === 'APPROVED') {
-      progressBadge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt hoàn tất</span>`;
+      progressBadge = `<span class="badge-success">✅ Đã phê duyệt hoàn tất</span>`;
     } else if (sub.status === 'REJECTED') {
-      progressBadge = `<span class="px-2 py-1 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Bị từ chối / Trả về</span>`;
+      progressBadge = `<span class="badge-danger">❌ Bị từ chối / Trả về</span>`;
     } else if (sub.status === 'DRAFT') {
-      progressBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
+      progressBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
     } else if (sub.pendingFileProposal) {
-      progressBadge = `<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded font-bold text-xs">📄 Chờ người trình xác nhận thay thế tờ trình</span>`;
+      progressBadge = `<span class="badge-info">📄 Chờ người trình xác nhận thay thế tờ trình</span>`;
     } else {
       const stepName = wf.steps[sub.currentStep - 1]?.name || `Bước ${sub.currentStep}`;
       const progressText = getStepApprovalProgressText(currentStepApprovers, sub.history, sub.currentStep);
-      progressBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-800 rounded font-semibold text-xs">⏳ Bước ${sub.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
+      progressBadge = `<span class="badge-info">⏳ Bước ${sub.currentStep}/${wf.steps.length}: ${escapeHtml(stepName)}${escapeHtml(progressText)}</span>`;
     }
 
     const overdueBadge = buildApprovalOverdueBadgeHTML('submissions', sub);

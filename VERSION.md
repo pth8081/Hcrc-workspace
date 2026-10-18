@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**26.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.27 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3a — badge Tài liệu + Văn Bản Trình
+
+Bắt đầu Giai đoạn 3 (lan rộng dần sang các module còn lại, theo đúng lộ trình đã duyệt) — mở đầu bằng
+màn đại diện cho mẫu bảng dữ liệu lặp lại NHIỀU NHẤT trong hệ thống (phát hiện trong báo cáo rà soát):
+Tài liệu + Văn Bản Trình, cùng dùng 1 khối badge trạng thái copy-paste gần như y hệt nhau.
+
+- `public/js/module-tailieu.js` (`renderDocs()`) + `public/js/module-vanbantrinh.js`
+  (`renderSubmissions()`): badge trạng thái đổi sang `.badge-success/.badge-danger/.badge-warning/
+  .badge-info` DÙNG CHUNG — **đổi màu "đang chờ duyệt ở 1 bước" từ vàng sang info (xanh dương)**, khớp
+  đúng quy ước đã dùng ở mẫu email (v26.21: ⏳ "Cần phê duyệt" = info, không phải warning — "cần bổ
+  sung"/DRAFT mới là warning). Văn Bản Trình có thêm nhánh `pendingFileProposal` (trước đây màu tím
+  riêng) gộp về cùng bucket info, giữ đúng 4+1 màu đã chuẩn hoá, không thêm màu thứ 6.
+
+Test: `tests/test-doc-status-badges.js` + `tests/test-submission-status-badges.js` (mới, 4 kịch bản —
+đúng class cho từng trạng thái, không còn sót class Tailwind cũ). Đã xác nhận bằng `git stash` cả 2 test
+FAIL đúng trên code cũ. Chạy lại `test-doc.js` (21) + `test-submission.js` (23) +
+`test-submissions-scope.js` (7) + CSP full-audit + lazy-load toàn bộ tab — không hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/module-tailieu.js`, `public/js/module-vanbantrinh.js`) —
+KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới +
+`pm2 restart`.
 
 ## v26.26 (2026-11): "HCRC Workspace Refresh" Giai đoạn 2d — stat-card cho Dashboard (hoàn tất đợt 2)
 
