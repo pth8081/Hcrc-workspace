@@ -3340,7 +3340,11 @@ const CREATE_MODULE_CONFIGS = {
       if (job.status !== 'OPEN') throw new CreateError(409, 'Tin tuyển dụng này đã đóng, không nhận thêm giới thiệu');
       // Tin có ghi "Hạn nộp" hiển thị cho nhân viên (public/index.html) nhưng trước đây không có gì tự
       // đóng tin theo hạn đó — quá hạn tin vẫn OPEN, giới thiệu vẫn được nhận dù hiển thị "đã hết hạn".
-      const todayStr = new Date().toISOString().slice(0, 10);
+      // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "recruitmentReferrals deadline so sánh UTC"):
+      // `new Date().toISOString().slice(0,10)` trả về NGÀY THEO GIỜ UTC — trong khung 00:00-06:59 sáng
+      // giờ VN, so sánh sai khiến vẫn giới thiệu được dù đã thật sự quá deadline (giờ local). Mirror
+      // ĐÚNG bulkRegisterTrainingClass()/trainingRegistrations.extraValidate ở trên.
+      const todayStr = require('./attendance').localDateStr(new Date());
       if (job.deadline && todayStr > job.deadline) {
         throw new CreateError(409, 'Tin tuyển dụng này đã hết hạn giới thiệu');
       }
