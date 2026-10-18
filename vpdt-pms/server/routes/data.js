@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -2251,6 +2251,16 @@ router.post('/:key', async (req, res) => {
         getAppDataValue('positionTypes'), getAppDataValue('users')
       ]);
       assertPositionTypesSafeToSave(value, oldPositionTypes, allUsersForPositionTypes);
+    }
+    // shiftTemplates: LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "shiftTemplates không kiểm tham chiếu từ
+    // shiftRoster") — xem chú thích đầy đủ tại assertShiftTemplatesSafeToSave() ở lib/createValidation.js.
+    // shiftRoster là collection đã migrate (dbo.Records, KHÔNG phải AppData) nên đọc qua
+    // getAllForCollectionCached(), khác positionTypes/users ở trên.
+    if (key === 'shiftTemplates' && Array.isArray(value)) {
+      const [oldShiftTemplates, allShiftRoster] = await Promise.all([
+        getAppDataValue('shiftTemplates'), getAllForCollectionCached('shiftRoster')
+      ]);
+      assertShiftTemplatesSafeToSave(value, oldShiftTemplates, allShiftRoster);
     }
     // employeeProfile.username desync (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent
     // "bảng liên kết" — xem diffUserRenamesAndDeletions()/cascadeUsernameChangesToProfiles() ở
