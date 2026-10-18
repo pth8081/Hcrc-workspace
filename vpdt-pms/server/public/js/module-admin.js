@@ -261,9 +261,31 @@ async function promptAddStoreInline() {
 async function deleteStore(name) {
   if (!confirmCatalogValueDeletion('siêu thị', name)) return;
   const prevStores = [...DB.stores];
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Thấp): deleteDept()/deleteJobTitle() ở trên đã dọn
+  // workflowParticipatingDeptGroups[].depts[] + workflowParticipatingPositions[] từ đợt re-audit lần 3,
+  // nhưng deleteStore()/deleteStoreJobTitle() (ngay dưới) bị bỏ sót — BẤT ĐỐI XỨNG, dù 1 tên siêu thị
+  // hoàn toàn có thể xuất hiện ở CẢ 2 danh mục này (cascadeStoreRename() ở lib/catalogRename.js đã
+  // cascade ĐỔI TÊN cho cả 2, xem cascadeWorkflowParticipatingDepts()/cascadeWorkflowParticipatingPositionPairs() —
+  // XOÁ thì phải dọn tương tự, không chỉ đổi tên). Để lại "ma" (tên siêu thị đã xoá) trong 2 danh mục
+  // cấu hình đó — không gây lỗi crash, chỉ là tên đã xoá vẫn hiện trên UI cấu hình, gây nhầm lẫn cho
+  // admin. Cùng khuôn deleteDept() ở trên.
+  const prevWfDeptGroups = (DB.workflowParticipatingDeptGroups || []).map(g => ({ ...g, depts: [...(g.depts || [])] }));
+  const prevWfPositions = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.stores = DB.stores.filter(s => s !== name);
-  const saved = await syncStorage('stores');
-  if (!saved) { DB.stores = prevStores; renderStoreList(); return; }
+  const affectedWfGroups = (DB.workflowParticipatingDeptGroups || []).filter(g => (g.depts || []).includes(name));
+  if (affectedWfGroups.length) affectedWfGroups.forEach(g => { g.depts = g.depts.filter(d => d !== name); });
+  const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.dept === name);
+  if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.dept !== name);
+  const [saved, savedWfGroups, savedWfPositions] = await Promise.all([
+    syncStorage('stores'),
+    affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups') : Promise.resolve(true),
+    wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+  ]);
+  if (!saved || !savedWfGroups || !savedWfPositions) {
+    DB.stores = prevStores; DB.workflowParticipatingDeptGroups = prevWfDeptGroups; DB.workflowParticipatingPositions = prevWfPositions;
+    renderStoreList();
+    return;
+  }
   logSystemAction('USER_MGM', 'DELETE_STORE', `Xóa siêu thị [${name}]`, 'SUCCESS', name);
   renderStoreList();
   populateDropdowns();
@@ -637,9 +659,23 @@ async function saveStoreJobTitle(e) {
 async function deleteStoreJobTitle(label) {
   if (!confirmCatalogValueDeletion('chức danh siêu thị', label, 'Chức danh này có thể đang được dùng ở bước duyệt "Theo vị trí"/"Quy Trình Đặt Hàng Siêu Thị" và ở chính hồ sơ tài khoản người dùng.')) return;
   const prevList = DB.storeJobTitles.map(t => ({ ...t }));
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Thấp): cùng lớp lỗi vừa vá ở deleteStore() ngay trên — chức danh
+  // siêu thị cũng có thể xuất hiện trong workflowParticipatingPositions[].jobTitle (xem
+  // wfPosBuilderJobTitleOptions() ở module-admin-specialperm.js, gộp cả DB.storeJobTitles làm nguồn gợi
+  // ý) nhưng deleteStoreJobTitle() trước đây không dọn, để lại cặp "ma" mang chức danh đã xoá — cùng
+  // khuôn deleteJobTitle() ở trên (dept KHÔNG áp dụng ở đây — chỉ cascade đúng field jobTitle).
+  const prevWfPositions = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.storeJobTitles = DB.storeJobTitles.filter(t => t.label !== label);
-  const saved = await syncStorage('storeJobTitles');
-  if (!saved) { DB.storeJobTitles = prevList; renderStoreJobTitleList(); return; }
+  const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.jobTitle === label);
+  if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.jobTitle !== label);
+  const [saved, savedWfPositions] = await Promise.all([
+    syncStorage('storeJobTitles'), wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+  ]);
+  if (!saved || !savedWfPositions) {
+    DB.storeJobTitles = prevList; DB.workflowParticipatingPositions = prevWfPositions;
+    renderStoreJobTitleList();
+    return;
+  }
   logSystemAction('USER_MGM', 'DELETE_STORE_JOB_TITLE', `Xóa chức danh siêu thị [${label}]`, 'SUCCESS', label);
   renderStoreJobTitleList();
   populateDropdowns();

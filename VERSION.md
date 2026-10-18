@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**26.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.77 (2026-11): [Thấp] Re-audit lần 4 — mục 17 (CUỐI): deleteStore/deleteStoreJobTitle không dọn workflowParticipatingDeptGroups/Positions
+
+ĐÂY LÀ MỤC CUỐI CÙNG trong 22 phát hiện của đợt re-audit lần 4 (khởi đầu từ v26.63). Toàn bộ backlog
+re-audit lần 4 đã xử lý xong.
+
+- **`deleteStore()`/`deleteStoreJobTitle()` (public/js/module-admin.js) không dọn
+  `workflowParticipatingDeptGroups[].depts[]`/`workflowParticipatingPositions[]`** — BẤT ĐỐI XỨNG với
+  `deleteDept()`/`deleteJobTitle()` (đã vá ở re-audit lần 3, v26.60): tên siêu thị/chức danh siêu thị
+  hoàn toàn có thể xuất hiện trong 2 danh mục cấu hình quy trình đó (`wfPosBuilderDeptOptions()`/
+  `wfPosBuilderJobTitleOptions()` ở module-admin-specialperm.js gộp cả `DB.stores`/`DB.storeJobTitles`
+  làm nguồn gợi ý cho widget TỰ DỰNG "Vị Trí Tham Gia Quy Trình"; `cascadeStoreRename()` ở
+  lib/catalogRename.js cũng đã cascade ĐỔI TÊN cho cả 2 từ trước — chỉ riêng bước XOÁ bị bỏ sót). Xoá
+  siêu thị/chức danh siêu thị để lại tên/cặp "ma" trong 2 danh mục cấu hình đó — không gây crash, chỉ
+  gây nhầm lẫn thị giác cho admin khi mở lại màn cấu hình.
+  - `deleteStore(name)`: thêm cleanup cùng khuôn `deleteDept()` — gỡ `name` khỏi
+    `workflowParticipatingDeptGroups[].depts[]` + gỡ mọi cặp `{jobTitle, dept}` có `dept === name`
+    khỏi `workflowParticipatingPositions[]`.
+  - `deleteStoreJobTitle(label)`: thêm cleanup cùng khuôn `deleteJobTitle()` — gỡ mọi cặp có
+    `jobTitle === label` khỏi `workflowParticipatingPositions[]`.
+  - Cả 2 đều `await syncStorage(...)` kèm rollback nếu lưu thất bại, đúng khuôn đã áp dụng cho
+    `deptGroups`/`workflowParticipatingPositions` ở `deleteDept()`/`deleteJobTitle()`.
+
+**Test:** mở rộng `tests/test-admin-users-permgroups.js` (kịch bản (v3) cho `deleteStore()`, (v4) cho
+`deleteStoreJobTitle()`, cùng khuôn (v)/(v2) đã có). Xác nhận FAIL trên code CŨ (`git stash --
+public/js/module-admin.js`, 117/120 passed, đúng 3 assertion mới FAIL), PASS trên code đã vá
+(120/120). Chạy lại `test-audit-hethong-cluster-client.js` (13/13), `test-job-title-grade-default.js`
+(11/11) — tất cả PASS, không regression. CSP: grep file đã sửa không khớp
+`on[a-z]+="`/` style="`/`javascript:`/`eval(`/`new Function(` — sạch.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Tên/cặp "ma" đã tồn tại TỪ
+TRƯỚC bản vá này (do đã xoá siêu thị/chức danh siêu thị trước đó) KHÔNG tự được dọn hồi tố — admin có
+thể tự vào "Đơn Vị/Vị Trí Tham Gia Quy Trình" xoá tay nếu thấy còn sót, không bắt buộc vì không gây
+lỗi gì.
 
 ## v26.76 (2026-11): [TB-Thấp] Re-audit lần 4 — mục 16: itSupportTickets.dept thiếu trong cascade rename
 
