@@ -1185,7 +1185,12 @@ const CREATE_MODULE_CONFIGS = {
       payload.attendees = Number.isFinite(attendees) && attendees >= 1 ? Math.floor(attendees) : 1;
       const conflict = findMeetingConflict(collection, payload.room, payload.startTime, payload.endTime);
       if (conflict) {
-        throw new CreateError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này (${conflict.code})`);
+        // LỖI ĐÃ VÁ (re-audit lần 4, mức TB): KHÔNG nêu conflict.code trong thông báo — người gửi request
+        // này có thể hoàn toàn không có quyền xem lịch họp đó (canViewMeeting() ở lib/recordViewScope.js
+        // gác riêng theo phòng ban/người tạo/tham dự), nhưng check trùng phòng này đọc TOÀN BỘ collection
+        // không lọc quyền (đúng — phải biết lịch của MỌI phòng ban để chặn trùng thật). Nêu mã lịch cụ thể
+        // sẽ lộ sự tồn tại + mã hồ sơ của 1 cuộc họp phòng ban khác cho người không có quyền xem nó.
+        throw new CreateError(409, `Phòng "${payload.room}" đã có lịch trùng khung giờ này`);
       }
       // LỖI ĐÃ VÁ (rà soát chuyên sâu 10/2026, mức Cao): meetings là module DUY NHẤT trong
       // CREATE_MODULE_CONFIGS KHÔNG gán cứng trạng thái ở server (carRegs/officeReqs/docs/submissions/
