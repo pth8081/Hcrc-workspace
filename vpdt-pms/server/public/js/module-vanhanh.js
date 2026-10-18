@@ -263,13 +263,13 @@ function setOperationStoreSubTab(tab) {
 // migrateApprovedOperationOrdersToAwaitingReceipt() (seedDefaults.js) chưa kịp chạy xong sau khi nâng
 // cấp — hồ sơ thật sự không nên còn kẹt ở đây lâu dài. ---
 function operationStatusBadge(o) {
-  if (o.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
-  if (o.status === 'AWAITING_RECEIPT') return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">📥 Chờ nhập hàng</span>`;
-  if (o.status === 'RECEIVED') return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã nhập hàng</span>`;
-  if (o.status === 'RECEIPT_CANCELLED') return `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy nhập</span>`;
-  if (o.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
-  if (o.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
-  return `<span class="px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}</span>`;
+  if (o.status === 'DRAFT') return `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
+  if (o.status === 'AWAITING_RECEIPT') return `<span class="badge-info">📥 Chờ nhập hàng</span>`;
+  if (o.status === 'RECEIVED') return `<span class="badge-success">✅ Đã nhập hàng</span>`;
+  if (o.status === 'RECEIPT_CANCELLED') return `<span class="badge-danger">🚫 Đã hủy nhập</span>`;
+  if (o.status === 'APPROVED') return `<span class="badge-success">✅ Đã phê duyệt</span>`;
+  if (o.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
+  return `<span class="badge-info">⏳ Bước ${o.currentStep}</span>`;
 }
 // Quần thể được phép Nhập Hàng/Hủy Nhập ở sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" — MIRROR đúng
 // lib/recordActions.js isApproverForOperationOrderReceipt() (server luôn tự kiểm lại, đây chỉ là lớp UI

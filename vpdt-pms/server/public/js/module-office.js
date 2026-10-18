@@ -355,11 +355,11 @@ function renderOfficeReqs() {
     const canApprove = (o.status === 'PENDING') && canApproveStep(currentUser, currentStepApprovers, o.history, o.currentStep);
 
     let statusBadge = '';
-    if (o.status === 'APPROVED') statusBadge = `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phê duyệt</span>`;
-    else if (o.status === 'REJECTED') statusBadge = `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
-    else if (o.status === 'DRAFT') statusBadge = `<span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded font-bold text-xs">✏️ Cần bổ sung — chờ sửa lại</span>`;
-    else if (o.status === 'CANCELLED') statusBadge = `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold text-xs">🚫 Đã hủy</span>`;
-    else statusBadge = `<span class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-bold text-xs">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
+    if (o.status === 'APPROVED') statusBadge = `<span class="badge-success">✅ Đã phê duyệt</span>`;
+    else if (o.status === 'REJECTED') statusBadge = `<span class="badge-danger">❌ Từ chối</span>`;
+    else if (o.status === 'DRAFT') statusBadge = `<span class="badge-warning">✏️ Cần bổ sung — chờ sửa lại</span>`;
+    else if (o.status === 'CANCELLED') statusBadge = `<span class="badge-danger">🚫 Đã hủy</span>`;
+    else statusBadge = `<span class="badge-info">⏳ Bước ${o.currentStep}/${wf.steps.length}${escapeHtml(getStepApprovalProgressText(currentStepApprovers, o.history, o.currentStep))}</span>`;
 
     const canDL = o.status === 'APPROVED' && canDownloadFile(currentUser, 'office', o.dept, o.creator);
     const paymentCell = o.status === 'APPROVED'

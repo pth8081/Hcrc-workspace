@@ -232,9 +232,9 @@ function editBudgetLineDraft(id, stage) {
 }
 
 function budgetLineStatusBadge(item) {
-  if (item.status === 'SUBMITTED') return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">⏳ Chờ duyệt</span>`;
-  if (item.status === 'APPROVED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã duyệt</span>`;
-  if (item.status === 'REJECTED') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Từ chối</span>`;
+  if (item.status === 'SUBMITTED') return `<span class="badge-info">⏳ Chờ duyệt</span>`;
+  if (item.status === 'APPROVED') return `<span class="badge-success">✅ Đã duyệt</span>`;
+  if (item.status === 'REJECTED') return `<span class="badge-danger">❌ Từ chối</span>`;
   return '';
 }
 function budgetLineLocationLabel(loc) { return loc === 'HO' ? '🏢 HO' : `🏬 ${escapeHtml(loc || '')}`; }
@@ -363,10 +363,10 @@ function deleteBudgetLineDraft(id) {
 // (lib/recordActions.js) nay trả về 'OVER_BUDGET' riêng khi usedTotal > totalAmount — thêm badge đỏ
 // tương ứng ở đây.
 function budgetLineUsageStatusBadge(status) {
-  if (status === 'OVER_BUDGET') return `<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">⚠️ Vượt ngân sách</span>`;
-  if (status === 'USED') return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã dùng hết</span>`;
-  if (status === 'PARTIALLY_USED') return `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded font-bold text-xs">🟡 Dùng 1 phần</span>`;
-  return `<span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded font-bold text-xs">⚪ Chưa dùng</span>`;
+  if (status === 'OVER_BUDGET') return `<span class="badge-danger">⚠️ Vượt ngân sách</span>`;
+  if (status === 'USED') return `<span class="badge-success">✅ Đã dùng hết</span>`;
+  if (status === 'PARTIALLY_USED') return `<span class="badge-warning">🟡 Dùng 1 phần</span>`;
+  return `<span class="badge-neutral">⚪ Chưa dùng</span>`;
 }
 
 function renderBudgetLineUsedList() {

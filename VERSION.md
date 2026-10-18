@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**26.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.29 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch A — badge Văn Phòng + Vận Hành + Ngân Sách
+
+Tiếp tục Giai đoạn 3 (lan rộng dần sang các module còn lại theo đúng lộ trình đã duyệt) — batch A gồm 3
+module tiếp theo dùng pattern `statusBadge` đơn giản (không phải khối `progressBadge` copy-paste lớn như
+3a), đổi sang `.badge-*` DÙNG CHUNG.
+
+- `public/js/module-office.js` (`renderOfficeReqs()`, Mua Sắm/Sửa Chữa VP): 5 trạng thái đổi sang
+  `.badge-success/.badge-danger/.badge-warning/.badge-info` — **đổi `CANCELLED` từ xám trung tính
+  (`bg-slate-200`) sang danger**, khớp đúng quy ước đã dùng ở Đăng Ký Xe/Phòng Họp (Giai đoạn 3b: huỷ =
+  danger, không phải neutral, vì đây là huỷ SAU KHI đã nộp/đang xử lý, khác "Nháp" chưa gửi của VPP).
+- `public/js/module-vanhanh.js` (`operationStatusBadge()`, Đơn Hàng Vận Hành): 6 trạng thái + "đang ở
+  bước" đổi sang `.badge-*` — `RECEIVED` (đã nhập hàng, trạng thái kết thúc) = success,
+  `AWAITING_RECEIPT` (chờ nhập hàng) = info, `RECEIPT_CANCELLED` = danger.
+- `public/js/module-ngansach.js`: 2 hàm — `budgetLineStatusBadge()` (SUBMITTED/APPROVED/REJECTED) và
+  `budgetLineUsageStatusBadge()` (mức sử dụng ngân sách: OVER_BUDGET/USED/PARTIALLY_USED/chưa dùng) đổi
+  sang `.badge-*`. Hàm thứ 2 là ngữ nghĩa KHÁC (mức sử dụng, không phải trạng thái phê duyệt) nhưng vẫn
+  khớp đúng 4+1 màu đã chuẩn hoá: vượt ngân sách = danger, dùng hết = success, dùng 1 phần = warning,
+  chưa dùng = neutral (MỚI, không có màu trước đây — trước đây dùng `bg-gray-100` chưa chuẩn hoá).
+
+Test: `tests/test-giai-doan-3-batch-a-badges.js` (mới, 5 kịch bản — gộp cả 3 module). Đã xác nhận bằng
+`git stash` test mới FAIL đúng (0/5) trên code cũ. Chạy lại `test-office-reqs-scope.js` (7) +
+`test-office-budget.js` (27) + `test-office-tech-confirm.js` (20) + `test-office-vpp-cancel-step1.js`
+(12) + `test-operation-orders-dept-scope.js` (7) + `test-operation-order-receiving.js` (24) +
+`test-operation-store-lifecycle.js` (100) + `test-budget-lines.js` (62) + `test-budget-lines-dept-scope.js`
+(6) + `test-budget-lines-excel.js` (18) + `test-audit-budgetlines-race.js` (4) +
+`test-budget-entries-scope.js` (9) + CSP full-audit (3) + lazy-load toàn bộ tab (46) — không hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/module-office.js`, `public/js/module-vanhanh.js`,
+`public/js/module-ngansach.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG đổi
+dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.28 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3b — badge Đăng Ký Xe + Phòng Họp + Văn Phòng Phẩm
 
