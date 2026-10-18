@@ -43,27 +43,46 @@ async function createOnboardingProcessRecord(payload, freshUser, appData) {
         : 'Để trống ô Mã Nhân Viên nếu đây là nhân viên mới.';
       throw new CreateError(409, `Mã Nhân Viên "${clientProvidedEmployeeCode}" đang gắn với 1 hồ sơ nhân sự khác đang hoạt động — chỉ tạo Onboarding theo mã cũ cho hồ sơ ĐÃ NGHỈ VIỆC (Tái Tuyển). ${guidance}`);
     }
-  } else {
-    await withLockedAppDataValue('employeeProfiles', (list) => {
-      const arr = Array.isArray(list) ? list : [];
+  }
+
+  // PHÁT HIỆN mức Cao (re-audit lần 4): assertNationalIdNotDuplicated() (gọi bên trong extraValidate()
+  // của validateAndPrepareCreate() ngay dưới) trước đây so khớp trên `appData.employeeProfiles` — 1
+  // SNAPSHOT đọc đúng 1 LẦN ở ĐẦU request (routes/create.js, TRƯỚC khi vào hàm này), không bao giờ được
+  // làm mới. 2 request tạo Onboarding cho 2 ứng viên KHÁC employeeCode nhưng CÙNG 1 số CCCD/CMND, gửi
+  // gần như đồng thời, đều đọc được appData.employeeProfiles "chưa ai trùng CCCD" TRƯỚC khi bên nào kịp
+  // GHI CCCD của mình xong (việc ghi CCCD vào employeeProfiles chỉ xảy ra SAU KHI hrProcesses đã tạo
+  // xong, ở khối withLockedAppDataValue THỨ 2 cũ, tách biệt hẳn) — cả 2 cùng qua được chặn trùng, tạo ra
+  // 2 hồ sơ nhân sự khác employeeCode nhưng cùng CCCD. Chỉ thêm getLockKey cho RIÊNG bước tạo hrProcesses
+  // (kiểu operationOrders.getLockKey) KHÔNG đủ: nó chỉ serialize bước TẠO, không serialize giữa bước
+  // KIỂM TRA (đọc appData.employeeProfiles cũ) và bước GHI CCCD thật (dùng key AppData khác). Mirror
+  // ĐÚNG khuôn đã đúng từ trước ở createManualProfile() (routes/employeeProfile.js POST '/' — gọi
+  // assertNationalIdNotDuplicated() với `list` là tham số FRESH của CHÍNH withLockedAppDataValue() bao
+  // quanh, không phải snapshot appData cũ): gộp cả sinh/dành mã + bước tạo hrProcesses + ghi CCCD sau khi
+  // tạo thành MỘT khối `withLockedAppDataValue('employeeProfiles', ...)` DUY NHẤT — mọi lần kiểm tra
+  // trùng CCCD LUÔN đọc đúng dữ liệu MỚI NHẤT (đã có CCCD của request trước đó, nếu request đó đã hoàn
+  // tất trước khi request này được cấp khoá). withLockedAppDataValue() tự rollback TOÀN BỘ (kể cả mã
+  // nhân viên vừa sinh) nếu bất kỳ bước nào bên trong throw (xem transaction thật ở lib/appData.js) —
+  // không còn để lại hồ sơ DRAFT "mồ côi" mang mã đã dành nếu tạo hrProcesses thất bại vì lý do khác.
+  let record;
+  await withLockedAppDataValue('employeeProfiles', async (list) => {
+    const arr = Array.isArray(list) ? list : [];
+
+    if (!clientProvidedEmployeeCode) {
       const code = employeeProfile.generateEmployeeCode(arr);
       payload.employeeCode = code;
       arr.push(employeeProfile.createDraftProfileForOnboarding(code, freshUser.username, freshUser.name));
-      return arr;
-    });
-  }
+    }
 
-  const builderFn = async (list) => {
-    const record = validateAndPrepareCreate('hrProcesses', payload, freshUser, list, appData, trashedItems);
-    await assertPayloadFileUrlsOwnedByUser(record, freshUser);
-    return record;
-  };
-  const record = config.getLockKey
-    ? await createForCollectionSerialized(config.dbKey, config.getLockKey(payload, freshUser), builderFn)
-    : await createForCollection(config.dbKey, builderFn);
+    const freshAppData = { ...appData, employeeProfiles: arr };
+    const builderFn = async (hrList) => {
+      const rec = validateAndPrepareCreate('hrProcesses', payload, freshUser, hrList, freshAppData, trashedItems);
+      await assertPayloadFileUrlsOwnedByUser(rec, freshUser);
+      return rec;
+    };
+    record = config.getLockKey
+      ? await createForCollectionSerialized(config.dbKey, config.getLockKey(payload, freshUser), builderFn)
+      : await createForCollection(config.dbKey, builderFn);
 
-  await withLockedAppDataValue('employeeProfiles', (list) => {
-    const arr = Array.isArray(list) ? list : [];
     const idx = arr.findIndex(p => p.employeeCode === record.employeeCode);
     if (idx !== -1) arr[idx] = {
       ...arr[idx], processId: record.id, onboardingQueueStatus: 'PENDING',
