@@ -1410,7 +1410,27 @@ router.use('/reportEntries', (req, res, next) => {
   next();
 });
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
-router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
+// LỖI ĐÃ VÁ (re-audit lần 4, mức TB): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ ĐIỀU KIỆN
+// 1 kỳ Báo Cáo Định Kỳ dù đang có reportEntries trỏ periodId vào nó — mồ côi dữ liệu (báo cáo NHÁP/đã
+// nộp không còn tra được kỳ gốc, kẹt vĩnh viễn ở submit/update), cùng khuôn vppPeriods/budgetPeriods
+// ngay trên (2 route "liền kề" đã có đúng check này, riêng reportPeriods bị bỏ sót).
+router.post('/reportPeriods/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const entries = await getAllForCollection('reportEntries');
+    const referencing = entries.filter(e => e.periodId === itemId);
+    if (referencing.length) {
+      throw new HttpError(409, `Không thể xóa kỳ Báo Cáo Định Kỳ này vì còn ${referencing.length} báo cáo gắn với nó. Vui lòng xử lý/xoá các báo cáo đó trước.`);
+    }
+    await deleteRecordForCollection('reportPeriods', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `reportPeriods/${req.params.id}/delete`, err);
+  }
+});
 router.post('/reportEntries/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportEntries'));
 // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ
 // ĐIỀU KIỆN 1 kỳ ngân sách dù đang có budgetEntries trỏ periodId vào nó — không chỉ mồ côi dữ liệu (hồ sơ

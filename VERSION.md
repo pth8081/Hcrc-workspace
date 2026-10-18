@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**26.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.75 (2026-11): [TB] Re-audit lần 4 — mục 15: reportPeriods/:id/delete không kiểm reportEntries tham chiếu
+
+- **`POST /api/records/reportPeriods/:id/delete` dùng thẳng `deleteAdminOnly()` chung — xoá được VÔ
+  ĐIỀU KIỆN 1 kỳ Báo Cáo Định Kỳ dù đang có `reportEntries` trỏ `periodId` vào nó**, mồ côi dữ liệu
+  (báo cáo NHÁP/đã nộp không còn tra được kỳ gốc, kẹt vĩnh viễn ở submit/update) — cùng lớp lỗi đã vá
+  cho `vppPeriods/:id/delete`/`budgetPeriods/:id/delete` (2 route "liền kề" trong CÙNG file đã có đúng
+  check này từ trước, riêng `reportPeriods` bị bỏ sót).
+  - Viết lại route này theo đúng khuôn 2 route kia: kiểm `getAllForCollection('reportEntries')` lọc
+    theo `periodId === itemId`, chặn 409 "còn N báo cáo gắn với nó" nếu còn tham chiếu, chỉ xoá khi
+    danh sách rỗng.
+
+**Test:** file mới `tests/test-reportperiod-delete-referencing-entries.js` (6 scenario, HTTP thật qua
+mount `routes/records.js`, stub `lib/recordStore` lưu trữ in-memory). Xác nhận FAIL trên code CŨ
+(`git stash -- routes/records.js`, 4/6 passed — đúng 2 scenario "LỖI ĐÃ VÁ" FAIL vì kỳ vẫn xoá được dù
+còn báo cáo DRAFT/SUBMITTED tham chiếu), PASS trên code đã vá (6/6). Chạy lại bộ test liên quan:
+`test-periodic-report.js` (15/15), `test-periodic-report-pdf.js` (13/13),
+`test-periodic-report-pdf-replace-ownership.js` (4/4), `test-report-period-by-tasks-filters.js` (8/8),
+`test-report-period-deadline-reminder.js`, `test-khoi0-officereqs-vpp-periodicreport-gate.js` (10/10),
+`test-khoi0-meeting-periodicreport-gate.js` (7/7) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.74 (2026-11): [TB] Re-audit lần 4 — mục 14: xoá Văn Bản Trình không đóng Công Việc tự sinh từ chỉ đạo cuối
 
