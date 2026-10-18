@@ -1703,7 +1703,20 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // (routes/create.js VÀ routes/reports.js, cả 2 tự suy ra từ map này) — đã gỡ khỏi
   // EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn office/checklist ở trên.
   meeting: ['meetings'],
-  periodicReport: ['reportPeriods', 'reportEntries']
+  periodicReport: ['reportPeriods', 'reportEntries'],
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): "minutes" (Biên Bản Họp) — hoàn toàn chưa có Khối 0 ở BẤT KỲ
+  // đâu (khác car/vpp/meeting ngay trên, vốn đã có gate ở khâu tạo mới/hành động, chỉ riêng GET
+  // /api/data bị sót). canAccessMeetingMinutesModule() (public/js/core.js) đã dùng ĐÚNG
+  // hasModuleAccess(user, 'minutes') để ẩn cả tab, nhưng canViewMeetingMinutes() (ngay trên, server) +
+  // canViewMeetingMinutesRecord() (client) chỉ xét admin/minutesView/creator/tham dự viên — KHÔNG hề
+  // gọi hasModuleAccessServer()/hasModuleAccess(). Admin tắt moduleAccess.minutes cho 1 tài khoản (VD
+  // chuyển bộ phận) nhưng tài khoản đó vẫn là người lập/tham dự 1 số biên bản cũ thì gọi thẳng GET
+  // /api/data vẫn đọc được toàn văn nội dung họp (kể cả chỉ đạo/thành phần tham dự), dù UI đã ẩn tab.
+  // Thêm vào đây để zero-out đúng ở GET /api/data; đồng thời routes/records.js đã thêm
+  // `router.use('/minutes', ...)` chặn TRƯỚC TIÊN cho create/edit/assign-tasks/delete (meetingMinutes
+  // KHÔNG đi qua routes/create.js nên COLLECTION_TO_MODULE_ACCESS_KEY tự suy diễn từ map này KHÔNG áp
+  // dụng được cho khâu tạo mới — phải gác tay riêng, khác car/vpp/meeting).
+  minutes: ['meetingMinutes']
 };
 // hrProfile/hrAttendance/hrPayroll/hrContract/hrLifecycle đều là module con (parent: 'hr', xem
 // BUSINESS_MODULES ở public/js/core.js) — client hasModuleAccess() khoá cả con khi cha tắt, hàm này
