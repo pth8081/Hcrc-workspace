@@ -6879,6 +6879,26 @@ function closeItTicketOnHrProcessClosed(ticket, hrProcessItem) {
   return ticket;
 }
 
+// PHÁT HIỆN mức Trung Bình (re-audit lần 5, #140): completeHrTask()/skipHrTask() ở dưới đánh dấu 1 task
+// DONE/SKIPPED TRỰC TIẾP (không qua chính ticket IT đã tự sinh từ task đó — createItTicketForHrTask())
+// nhưng KHÔNG đụng gì tới ticket đó — ticket còn TODO/DOING vẫn "sống" vĩnh viễn trong hàng chờ IT dù
+// việc đã xong/bị bỏ qua qua đường khác (kể cả khi việc đó khiến TOÀN BỘ quy trình auto-chuyển
+// COMPLETED — computeHrProcessProgress() ở dưới — vì auto-COMPLETED chỉ là hệ quả của từng task lần
+// lượt được đánh DONE/SKIPPED). Mirror closeItTicketOnHrProcessClosed() ở trên nhưng đổi nội dung
+// thông báo đúng ngữ cảnh "1 TASK vừa được xử lý trực tiếp", không phải cả quy trình bị huỷ/xoá. Hàm
+// THUẦN, idempotent (bỏ qua ticket đã DONE/CANCELLED từ trước, không ghi đè lịch sử xử lý thật đã có).
+function closeItTicketOnHrTaskSettled(ticket, task) {
+  if (!ticket || ticket.status === 'DONE' || ticket.status === 'CANCELLED') return ticket;
+  ticket.status = 'CANCELLED';
+  ticket.comments = ticket.comments || [];
+  ticket.comments.push({
+    id: Date.now(), username: 'system', name: 'Hệ Thống (Tự Động)',
+    content: `🔒 Tự huỷ ticket — việc "${task?.taskName || ''}" đã được đánh dấu ${task?.status === 'SKIPPED' ? 'bỏ qua' : 'hoàn thành'} trực tiếp (không qua ticket này)`,
+    time: nowVN()
+  });
+  return ticket;
+}
+
 // Ghi lại kết quả IT báo cáo vào ĐÚNG task đã sinh ra ticket này, khi ticket vừa chuyển DONE (gọi từ
 // routes/records.js NGAY SAU updateItTicketStatus() thành công) — hàm THUẦN, route tự khoá đúng
 // collection theo HR_LIFECYCLE_TICKET_SOURCE_COLLECTION[ticket.sourceType] rồi truyền item (cả quy
@@ -8815,6 +8835,7 @@ module.exports = {
   createItTicketForHrTask, HR_LIFECYCLE_TICKET_SOURCE_COLLECTION, applyItTicketCompletionToHrProcessTask,
   clearLinkedTicketOnHrProcessTask,
   closeItTicketOnHrProcessClosed,
+  closeItTicketOnHrTaskSettled,
   canManageUniform, canManageUniformStore, computeUniformStock, computeUniformStockBreakdown, computeEmployeeUniformHolding,
   computeAllEmployeeUniformHoldings,
   canApproveUniform, approveUniformPeriod, rejectUniformPeriod, editUniformPeriod,
