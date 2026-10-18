@@ -4748,7 +4748,35 @@ router.use('/uniformTransfers', (req, res, next) => {
   }
   next();
 });
-router.post('/uniformPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'uniformPeriods'));
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "Xoá uniformPeriods không kiểm tham chiếu -> tồn kho
+// âm"): trước đây dùng thẳng deleteAdminOnly() nên xoá được VÔ ĐIỀU KIỆN 1 kỳ cấp phát đồng phục dù đã
+// có allocations[] ĐÃ XÁC NHẬN (status 'CONFIRMED', xem confirmUniformAllocation() ở
+// lib/recordActions.js) — computeUniformStock() (cùng file) cộng "allocated" từ allocations CONFIRMED
+// của MỌI kỳ (period.allocations[].items[], lọc theo dept+status), trong khi uniformIssuances/
+// uniformStockAdjustments/uniformTransfers trừ kho khớp theo itemName/size/dept — KHÔNG hề tham chiếu
+// periodId. Xoá kỳ đã CONFIRMED làm "nguồn cung" (allocated) biến mất khỏi phép tính nhưng phần đã cấp
+// phát/điều chỉnh/điều chuyển dựa trên nguồn cung đó vẫn còn nguyên -> tồn kho tính lại ÂM cho đúng mặt
+// hàng/size/siêu thị đó, không có cách quay lại (không có action "huỷ xác nhận phân bổ"). Mirror ĐÚNG
+// khuôn reportPeriods/budgetPeriods ở trên (chặn 409 TRƯỚC khi xoá, không chặn kỳ CHƯA có allocation
+// nào được xác nhận — vẫn xoá được như cũ).
+router.post('/uniformPeriods/:id/delete', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    assertAdminForDelete(freshUser);
+    const periods = await getAllForCollection('uniformPeriods');
+    const period = periods.find(p => p.id === itemId);
+    const confirmedCount = (period?.allocations || []).filter(a => a.status === 'CONFIRMED').length;
+    if (confirmedCount) {
+      throw new HttpError(409, `Không thể xóa kỳ cấp phát đồng phục này vì đã có ${confirmedCount} siêu thị xác nhận nhận hàng (đã cộng vào tồn kho) — xoá sẽ làm tồn kho tính sai (có thể âm). Chỉ xoá được kỳ chưa có siêu thị nào xác nhận.`);
+    }
+    await deleteRecordForCollection('uniformPeriods', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    res.json({ ok: true });
+  } catch (err) {
+    handleError(res, `uniformPeriods/${req.params.id}/delete`, err);
+  }
+});
 
 // POST /api/records/uniformPeriods/:id/edit — sửa tên/ghi chú 1 kỳ cấp phát đã tạo. CỐ Ý CHỈ cho sửa
 // name/note, KHÔNG đụng allocations[] (xem editUniformPeriod() ở recordActions.js).
