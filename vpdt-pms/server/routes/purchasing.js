@@ -229,7 +229,10 @@ router.post('/terms/:id/activate', requireActivateTerm, async (req, res) => {
     const preVendors = await getAllForCollection('vendors');
     const preVendor = preVendors.find(v => v.id === preTarget.vendorId);
     if (preVendor && preVendor.status !== 'ACTIVE') {
-      throw new HttpError(409, `Nhà cung cấp "${preVendor.name}" hiện không ở trạng thái Hoạt động — không thể kích hoạt điều khoản`);
+      // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "routes/purchasing.js dùng vendor.name sai"): vendors
+      // lưu tên ở field `vendorName`, không có field `name` -> thông báo hiện "Nhà cung cấp "undefined"..."
+      // thay vì tên NCC thật (chỉ UX, không phải bảo mật).
+      throw new HttpError(409, `Nhà cung cấp "${preVendor.vendorName}" hiện không ở trạng thái Hoạt động — không thể kích hoạt điều khoản`);
     }
     const updated = await withAppLock(`rebate_term_activate:${preTarget.vendorId}:${preTarget.termCode}`, async () => {
       const terms = await getAllForCollection('rebateTerms');
@@ -332,7 +335,9 @@ router.post('/terms/:id/calculate', requireManageTerms, async (req, res) => {
     // cho NCC INACTIVE, nhưng route Tính Ước Tính này trước đây không đối chiếu lại — 1 điều khoản
     // ACTIVE tạo lúc NCC còn hoạt động vẫn tính được ước tính bình thường sau khi NCC bị ngừng hợp tác.
     if (vendor.status !== 'ACTIVE') {
-      return res.status(409).json({ error: `Nhà cung cấp "${vendor.name}" hiện không ở trạng thái Hoạt động — không thể tính ước tính rebate` });
+      // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "routes/purchasing.js dùng vendor.name sai"): cùng lỗi
+      // như rebate_term_activate ở trên — field thật là `vendorName`, không phải `name`.
+      return res.status(409).json({ error: `Nhà cung cấp "${vendor.vendorName}" hiện không ở trạng thái Hoạt động — không thể tính ước tính rebate` });
     }
 
     // GROWTH_REBATE (10/2026) cần so sánh basisAmount kỳ này với kỳ LIỀN TRƯỚC cùng độ dài — mở rộng

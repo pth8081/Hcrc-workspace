@@ -171,6 +171,27 @@ async function main() {
       const created = STORE.rebateTerms.filter(t => t.vendorId === 1 && t.termCode === 'DK-NEW');
       assert.strictEqual(created.length, 1, `Chỉ được tạo đúng 1 bản ghi, nhận ${created.length}`);
     });
+
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "routes/purchasing.js dùng vendor.name sai"): vendors lưu
+    // tên ở field `vendorName`, không có field `name` — 2 thông báo lỗi dưới đây trước đây hiện
+    // "Nhà cung cấp "undefined"..." thay vì tên NCC thật.
+    await test('LỖI ĐÃ VÁ: Kích Hoạt điều khoản của NCC đã INACTIVE -> 409 nêu ĐÚNG tên NCC thật (không phải "undefined")', async () => {
+      resetStore();
+      STORE.vendors = [{ id: 1, vendorCode: 'NCC01', vendorName: 'NCC Một', status: 'INACTIVE' }];
+      const res = await api('POST', '/api/purchasing/terms/11/activate');
+      assert.strictEqual(res.status, 409, JSON.stringify(res.body));
+      assert.ok(res.body.error.includes('NCC Một'), `Thông báo phải nêu đúng tên NCC "NCC Một", nhận: ${res.body.error}`);
+      assert.ok(!res.body.error.includes('undefined'), `Thông báo KHÔNG được chứa "undefined", nhận: ${res.body.error}`);
+    });
+
+    await test('LỖI ĐÃ VÁ: Tính Ước Tính Rebate cho điều khoản của NCC đã INACTIVE -> 409 nêu ĐÚNG tên NCC thật (không phải "undefined")', async () => {
+      resetStore();
+      STORE.vendors = [{ id: 1, vendorCode: 'NCC01', vendorName: 'NCC Một', status: 'INACTIVE' }];
+      const res = await api('POST', '/api/purchasing/terms/10/calculate', { periodStart: '2026-03-01', periodEnd: '2026-03-31' });
+      assert.strictEqual(res.status, 409, JSON.stringify(res.body));
+      assert.ok(res.body.error.includes('NCC Một'), `Thông báo phải nêu đúng tên NCC "NCC Một", nhận: ${res.body.error}`);
+      assert.ok(!res.body.error.includes('undefined'), `Thông báo KHÔNG được chứa "undefined", nhận: ${res.body.error}`);
+    });
   } finally {
     server.close();
   }
