@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**26.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.36 (2026-11): [BẢO MẬT, Trung Bình] Vá Khối 0 thiếu ở route tự phục vụ của Tổng Hợp/VPP/Báo Cáo Định Kỳ
+
+Phát hiện ở đợt rà soát chuyên sâu toàn hệ thống trước go-live — cùng lớp lỗi như v26.35 nhưng nhẹ hơn:
+3 module này ĐÃ có gate Khối 0 đúng ở route TẠO MỚI và DUYỆT/TỪ CHỐI, chỉ riêng route TỰ PHỤC VỤ (người
+tạo tự sửa nháp/gửi lại/hủy hồ sơ của chính mình, hoặc người quản lý tự đóng/mở kỳ) bị bỏ sót.
+
+- `routes/records.js`: thêm 5 middleware `router.use()` mirror đúng khuôn `router.use('/carRegs', ...)`:
+  - `/officeReqs` (gác `upload-signed`/`start-payment`/`delete`/`update`/`submit`/`cancel`) — admin tắt
+    module "Tổng Hợp" cho 1 tài khoản vẫn tự sửa/gửi lại/hủy/tải tài liệu ký/chuyển thanh toán hồ sơ của
+    chính mình qua API trực tiếp.
+  - `/vppRegistrations` (gác `submit`/`update`/`cancel`/`delete`) — tương tự cho đăng ký VPP.
+  - `/reportPeriods` + `/reportEntries` (2 middleware riêng, gác toàn bộ route đóng/mở kỳ, tổng hợp,
+    công bố/hủy công bố báo cáo, nhập/sửa báo cáo).
+
+Test: `tests/test-khoi0-officereqs-vpp-periodicreport-gate.js` (mới, 10 kịch bản — cùng khuôn mount thật
+`routes/records.js` như test Giấy Phép/Đồng Phục ở trên). Đã xác nhận bằng `git stash` — 7/10 kịch bản
+FAIL đúng trên code cũ (3 còn lại là đối chứng "không 403 oan"). Chạy lại 12 file test officeReqs/VPP/
+Báo Cáo Định Kỳ/Khối 0 hiện có (test-office-reqs-scope/budget/tech-confirm/vpp-cancel-step1/extra-files,
+test-vpp, test-periodic-report/-pdf/-pdf-replace-ownership, test-report-period-by-tasks-filters/
+-deadline-reminder, test-module-access-gate/-create) + CSP full-audit (3) + lazy-load toàn bộ tab (46) —
+không hồi quy.
+
+**Deploy-impact**: thuần server (`routes/records.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi
+trường mới, KHÔNG đổi dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.35 (2026-11): [BẢO MẬT, Cao] Vá "Khối 0" hoàn toàn vắng mặt ở Giấy Phép + Đồng Phục
 

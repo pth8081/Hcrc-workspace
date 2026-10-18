@@ -301,6 +301,18 @@ async function withOfficeReqAction(req, res, action, mutator) {
   }
 }
 
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Trung bình): route TẠO MỚI
+// (routes/create.js, qua EXTRA_CREATE_MODULE_ACCESS_KEY) và DUYỆT/TỪ CHỐI (routes/workflow.js) của
+// officeReqs đã gác Khối 0 đúng từ trước, nhưng các route TỰ PHỤC VỤ bên dưới (upload-signed/
+// start-payment/delete/update/submit/cancel) thì KHÔNG — admin tắt module "Tổng Hợp" cho 1 tài khoản
+// (còn giữ quyền tạo cũ) vẫn tự sửa/gửi lại/hủy/tải tài liệu ký/chuyển thanh toán hồ sơ của chính mình
+// qua API trực tiếp. Mirror ĐÚNG khuôn router.use('/carRegs', ...).
+router.use('/officeReqs', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'office')) {
+    return res.status(403).json({ error: 'Module Tổng Hợp đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 // uploadOfficeSignedFile() cần allPaymentRequests (v15.8, xem lib/recordActions.js) — không dùng chung
 // withOfficeReqAction() ở trên nữa (chữ ký mutator khác, cần thêm 1 tham số).
 router.post('/officeReqs/:id/upload-signed', async (req, res) => {
@@ -1302,6 +1314,34 @@ router.post('/vppPeriods/:id/delete', async (req, res) => {
   } catch (err) {
     handleError(res, `vppPeriods/${req.params.id}/delete`, err);
   }
+});
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Trung bình): route TẠO MỚI
+// (routes/create.js, qua EXTRA_CREATE_MODULE_ACCESS_KEY) và DUYỆT/TỪ CHỐI (routes/workflow.js) của VPP
+// đã gác Khối 0 đúng từ trước, nhưng các route TỰ PHỤC VỤ bên dưới (submit/update/cancel/delete) thì
+// KHÔNG — admin tắt module "Văn Phòng Phẩm" cho 1 tài khoản (còn giữ quyền tạo cũ) vẫn tự sửa/gửi lại/
+// hủy đăng ký nháp của chính mình qua API trực tiếp. Mirror ĐÚNG khuôn router.use('/carRegs', ...).
+router.use('/vppRegistrations', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'vpp')) {
+    return res.status(403).json({ error: 'Module Văn Phòng Phẩm đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+// LỖI ĐÃ VÁ (rà soát chuyên sâu toàn hệ thống trước go-live, 11/2026, mức Trung bình): TOÀN BỘ route
+// hành động /reportPeriods|reportEntries/... bên dưới (đóng/mở kỳ, tổng hợp, công bố/hủy công bố, nhập/
+// sửa báo cáo...) trước đây KHÔNG gác Khối 0 — admin tắt module "Báo Cáo Định Kỳ" cho 1 tài khoản còn
+// giữ quyền chi tiết (reportManage/reportAggregate) vẫn thao tác đầy đủ qua API trực tiếp. Mirror ĐÚNG
+// khuôn router.use('/carRegs', ...). 2 path prefix riêng (reportPeriods/reportEntries) nên 2 middleware.
+router.use('/reportPeriods', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'periodicReport')) {
+    return res.status(403).json({ error: 'Module Báo Cáo Định Kỳ đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+router.use('/reportEntries', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'periodicReport')) {
+    return res.status(403).json({ error: 'Module Báo Cáo Định Kỳ đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
 });
 router.post('/vppRegistrations/:id/delete', (req, res) => deleteAdminOnly(req, res, 'vppRegistrations'));
 router.post('/reportPeriods/:id/delete', (req, res) => deleteAdminOnly(req, res, 'reportPeriods'));
