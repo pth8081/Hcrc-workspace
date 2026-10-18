@@ -9,6 +9,14 @@
 //   xem dữ liệu HR nhạy cảm", xem canViewLaborContract()/canViewFullProfile()/canViewAllPayroll() ở
 //   lib/recordViewScope.js + lib/employeeProfile.js) ngay khi hồ sơ bị xoá.
 //
+// LỖI ĐÃ VÁ THÊM (re-audit lần 5, mức Trung Bình — "Admin xoá+đọc lại dữ liệu riêng tư HR qua Thùng
+// Rác"): CÙNG LỚP LỖI trên nhưng bị bỏ sót ở đợt vá 9/2026, với 2 collection khác (cũng KHÔNG còn admin
+// bypass trên dữ liệu SỐNG từ quyết định "mở rộng Nhân Sự" 11/2026):
+//   - hrFeedback ("HCRC Đồng Hành" — RIÊNG TƯ nhất trong hệ thống, canViewHrFeedback() CHỈ cho
+//     nhanSuManage hoặc chính người hỏi xem).
+//   - hrProcesses (Onboarding/Offboarding — CCCD/SĐT/email/lý do nghỉ việc, canViewHrProcess() CHỈ cho
+//     hrViewAll/hrOnboardingManage/hrOffboardingManage xem TOÀN BỘ).
+//
 // Test này gọi thẳng router THẬT (routes/trash.js) — chỉ giả lập tầng lưu trữ (lib/recordStore) + auth.
 //
 // Chạy: node server/tests/test-trash-sensitive-collections.js
@@ -40,7 +48,9 @@ function defaultTrash() {
     { trashId: 3, collection: 'payslips', originalId: 30, code: 'PS-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 30, netPay: 20000000 } },
     { trashId: 4, collection: 'payrollPeriods', originalId: 40, code: 'PP-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 40 } },
     { trashId: 5, collection: 'attendanceRecords', originalId: 50, code: 'AR-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 50 } },
-    { trashId: 6, collection: 'docs', originalId: 60, code: 'DOC-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 60, title: 'Tài liệu thường' } }
+    { trashId: 6, collection: 'docs', originalId: 60, code: 'DOC-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 60, title: 'Tài liệu thường' } },
+    { trashId: 7, collection: 'hrFeedback', originalId: 70, code: 'HFB-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 70, content: 'Tâm sự riêng tư của nhân viên' } },
+    { trashId: 8, collection: 'hrProcesses', originalId: 80, code: 'HRP-1', deletedBy: 'admin1', deletedByName: 'Admin', deletedAt: '2026-01-01', item: { id: 80, fullName: 'Nguyễn Văn A', nationalId: '079099001234' } }
   ];
 }
 function resetTrash() { TRASH = defaultTrash(); }
@@ -73,7 +83,7 @@ stubModule('lib/systemLogStore', { insertSystemLog: async () => {} });
 // ADMIN_PLAIN: chỉ cờ admin, KHÔNG có quyền HR chuyên biệt nào — đúng kịch bản lỗ hổng.
 const ADMIN_PLAIN = { username: 'adminPlain', perms: { admin: true } };
 // ADMIN_HR: cờ admin + đủ mọi quyền HR chuyên biệt.
-const ADMIN_HR = { username: 'adminHr', perms: { admin: true, hrContractManage: true, hrProfileManage: true, hrPayrollManage: true, hrAttendanceManage: true } };
+const ADMIN_HR = { username: 'adminHr', perms: { admin: true, hrContractManage: true, hrProfileManage: true, hrPayrollManage: true, hrAttendanceManage: true, nhanSuManage: true, hrViewAll: true } };
 const USERS = [ADMIN_PLAIN, ADMIN_HR];
 let CURRENT_USERNAME = ADMIN_PLAIN.username;
 
@@ -130,6 +140,16 @@ async function main() {
       check(`GET ?collection=${collection}: admin có ${perm} -> 200`, r.status === 200 && r.body.items.length === 1, r.body);
     }
 
+    // LỖI ĐÃ VÁ (re-audit lần 5): hrFeedback/hrProcesses — cùng khuôn 4 collection ở trên.
+    for (const [collection, perm] of [['hrFeedback', 'nhanSuManage'], ['hrProcesses', 'hrViewAll']]) {
+      resetTrash();
+      r = await api('GET', `/api/trash?collection=${collection}`, ADMIN_PLAIN);
+      check(`GET ?collection=${collection}: admin THƯỜNG (không ${perm}) bị chặn 403`, r.status === 403, r.body);
+      resetTrash();
+      r = await api('GET', `/api/trash?collection=${collection}`, ADMIN_HR);
+      check(`GET ?collection=${collection}: admin có ${perm} -> 200`, r.status === 200 && r.body.items.length === 1, r.body);
+    }
+
     // attendanceRecords: giữ NGUYÊN admin bypass (đúng luật riêng của attendance).
     resetTrash();
     r = await api('GET', '/api/trash?collection=attendanceRecords', ADMIN_PLAIN);
@@ -149,7 +169,27 @@ async function main() {
 
     resetTrash();
     r = await api('GET', '/api/trash', ADMIN_HR);
-    check('GET / (mọi collection): admin đủ quyền HR thấy TẤT CẢ 6 mục', r.status === 200 && r.body.items.length === 6, r.body);
+    check('GET / (mọi collection): admin đủ quyền HR thấy TẤT CẢ 8 mục', r.status === 200 && r.body.items.length === 8, r.body);
+
+    // ===== LỖI ĐÃ VÁ (re-audit lần 5): restore/delete vĩnh viễn hrFeedback/hrProcesses =====
+    resetTrash();
+    r = await api('POST', '/api/trash/7/restore', ADMIN_PLAIN);
+    check('restore hrFeedback: admin THƯỜNG (không nhanSuManage) bị chặn 403', r.status === 403, r.body);
+    check('restore hrFeedback: KHÔNG bị xoá khỏi Thùng Rác sau khi chặn', TRASH.some(t => t.trashId === 7), TRASH);
+
+    resetTrash();
+    r = await api('POST', '/api/trash/7/restore', ADMIN_HR);
+    check('restore hrFeedback: admin có nhanSuManage -> 200', r.status === 200, r.body);
+
+    resetTrash();
+    r = await api('DELETE', '/api/trash/8', ADMIN_PLAIN);
+    check('delete hrProcesses: admin THƯỜNG (không hrViewAll) bị chặn 403', r.status === 403, r.body);
+    check('delete hrProcesses: KHÔNG bị xoá vĩnh viễn sau khi chặn', TRASH.some(t => t.trashId === 8), TRASH);
+
+    resetTrash();
+    r = await api('DELETE', '/api/trash/8', ADMIN_HR);
+    check('delete hrProcesses: admin có hrViewAll -> 200', r.status === 200, r.body);
+    check('delete hrProcesses: đã xoá vĩnh viễn', !TRASH.some(t => t.trashId === 8), TRASH);
 
     // ===== POST /api/trash/:id/restore =====
     resetTrash();
