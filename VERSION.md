@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**26.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.69 (2026-11): [Cao] Re-audit lần 4 — mục 9 (CUỐI, mức Cao): managerUsername không cascade khi đổi tên/xoá tài khoản
+
+Mục thứ 9, CUỐI cùng trong 9 phát hiện mức Cao của re-audit lần 4 (6 mục Trung Bình/Thấp + Báo Cáo còn
+lại tiếp tục ở các đợt kế tiếp):
+
+- **[Cao] `DB.users[].managerUsername` (quản lý trực tiếp — đọc bởi `isManagerOf()` ở
+  lib/recordViewScope.js, `hasDirectReports()`/`assignHrSuccessor()` ở lib/recordActions.js,
+  `computeManagerUsernameUpdates()` ở lib/orgChart.js) tham chiếu TRỰC TIẾP username của 1 tài khoản
+  KHÁC, nhưng CHƯA BAO GIỜ được cascade khi tài khoản đó bị ĐỔI TÊN hoặc XOÁ VĨNH VIỄN.** Cùng lớp lỗi
+  "bảng liên kết" đã vá cho `employeeProfile.username` (đợt rà soát chuyên sâu lần 2,
+  `cascadeUsernameChangesToProfiles()`) nhưng KHÁC ở chỗ `managerUsername` nằm NGAY TRONG chính mảng
+  "users" đang lưu (không phải 1 collection riêng). Đổi tên 1 trưởng phòng để lại `managerUsername`
+  "treo" ở TOÀN BỘ cấp dưới — `deptViewScopeConfig.managerCanView`, `assignHrSuccessor()`/
+  `hasDirectReports()` đều âm thầm mất tác dụng, không có cảnh báo nào. Xoá vĩnh viễn còn tệ hơn:
+  `managerUsername` trỏ tới username không còn tồn tại, "mồ côi" vĩnh viễn.
+  - Thêm `cascadeUsernameChangesToManagerUsername(users, renamed, deletedUsernames)` (lib/employeeProfile.js)
+    — sửa TRỰC TIẾP mảng "users" đang lưu (đổi theo cặp cũ→mới khi rename, gỡ về `null` khi xoá — cùng
+    nguyên tắc "gỡ liên kết, không suy đoán" như `cascadeUsernameChangesToProfiles()`).
+  - Gọi hàm này NGAY TRONG `prepareUsersForSave()` (routes/data.js), TRƯỚC `assertNoManagerCycle()` —
+    bắt buộc đúng thứ tự này: nếu cascade chạy SAU (như các cascade collection khác, submissionApprovalGroups/
+    employeeProfiles), `assertNoManagerCycle()` sẽ từ chối NHẦM ngay khi đổi tên 1 quản lý trong CÙNG
+    lượt lưu (managerUsername của cấp dưới vẫn còn trỏ TÊN CŨ lúc hàm đó kiểm tra "quản lý có tồn tại
+    trong danh sách không").
+
+**Test:** file mới `tests/test-managerusername-rename-delete-cascade.js` — Phần A (5 scenario test
+thuần `cascadeUsernameChangesToManagerUsername()`, cùng khuôn `test-employeeprofile-username-desync-cascade.js`)
++ Phần B (3 scenario HTTP thật qua `POST /api/data/users`, mount `routes/data.js` thật): xác nhận đổi
+tên/xoá 1 quản lý cập nhật đúng `managerUsername` của MỌI cấp dưới trong CÙNG lượt lưu, lưu vì lý do
+khác không bị đụng oan. Assertion mới đã xác nhận FAIL trên code CŨ (`git stash -- lib/employeeProfile.js
+routes/data.js`, 1/3 HTTP + 0/5 thuần passed — đúng lỗi 400 "Quản lý trực tiếp... không tồn tại" bị từ
+chối NHẦM khi đổi tên, mô tả ở trên), PASS trên code đã vá (5/5 + 3/3). Chạy lại bộ test liên quan:
+`test-org-chart-manager-visibility.js` (16/16), `test-audit-hethong-round2-server.js` (18/18),
+`test-audit-hethong-cluster-server.js` (19/19), `test-orgchart-v2.js` (16/16),
+`test-orgchart-delete-draft-version.js` (5/5), `test-docs-scope.js` (9/9),
+`test-payment-requests-dept-scope.js` (9/9), `test-hr-lifecycle.js` (39/39),
+`test-user-save-autolink-profile.js`, `test-users-session-version-strip.js` (4/4),
+`test-employeeprofile-username-desync-cascade.js` (8/8), `test-permgroup-dangling-groupids.js` (4/4),
+`test-user-username-uniqueness.js` (2/2), `test-user-edit-username-guard.js` (15/15) — tất cả PASS.
+`test-manager-subordinate-view-scope.js` có 3/13 FAIL — xác nhận bằng `git stash` là lỗi CŨ có từ
+trước (y hệt số lượng/thông điệp FAIL có/không có bản vá này), không liên quan tới đợt vá — không phải
+regression do bản vá gây ra.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.68 (2026-11): [Cao] Re-audit lần 4 — mục 8: key "workflows" + 2 mixed-approval-rules thiếu validate cấu trúc → crash 500
 
