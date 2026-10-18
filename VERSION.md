@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**27.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.24 (2026-11): [Thấp] Re-audit lần 6 — mục 16/21: shiftSwapRequests tạo mới thiếu getLockKey
+
+Mục thứ mười sáu (16/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `CREATE_MODULE_CONFIGS.shiftSwapRequests` (`lib/createValidation.js`) không có
+`getLockKey` (đi qua `createForCollection()` thường, không khoá gì) VÀ `extraValidate` cũng không hề
+kiểm đã có đơn PENDING khác cho ĐÚNG dòng roster đó — nộp 2 đơn xin đổi ca cho CÙNG 1 ca (gần như đồng
+thời, hoặc chỉ cần bấm nút 2 lần tuần tự) đều tạo được, để lại rác nhiều đơn PENDING trùng cho cùng 1
+ca trong Hộp Thư Phê Duyệt (giảm nhẹ vì `applyApproveShiftSwap()` tự chặn gán ca 2 lần ở bước duyệt,
+không gây sai dữ liệu chấm công/lương, chỉ gây rác/nhầm lẫn khi duyệt).
+
+**Vá:** thêm `getLockKey: (payload) => \`shift_swap_roster:${Number(payload?.requesterRosterId) || 0}\``
+(mirror `payroll_period` cùng file) + thêm check trong `extraValidate` (sau khi khoá đã giữ, đọc
+`collection` fresh): nếu đã có 1 đơn `status === 'PENDING'` cho cùng `requesterRosterId` -> 409 rõ ràng
+"đã có 1 đơn xin đổi ca đang chờ duyệt".
+
+**Test:** mở rộng `tests/test-attendance-leave.js` (Phần B, HTTP thật qua `routes/create.js`) — thêm 1
+scenario: nộp đơn thứ 2 cho CÙNG dòng roster đang có đơn PENDING -> 409. Xác nhận FAIL trên code CŨ
+(`git stash -- lib/createValidation.js`, đúng 1/74 scenario FAIL — 200 thay vì 409, đúng khai thác đã
+nêu; xác nhận thêm: đơn thứ 2 "rác" vẫn tồn tại PENDING trong khi đơn đầu được duyệt bình thường, đúng
+mô tả "để rác PENDING" của finding), PASS trên code đã vá (74/74). Regression:
+`tests/test-shiftroster-cancel-swap-cleanup.js` (5/5), `tests/test-selfapprove-leave-shiftswap-meeting.js`
+(15/15), `tests/test-approval-hub.js` (55/55) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.23 (2026-11): [TB/Thấp] Re-audit lần 6 — mục 15/21: PERSONAL leave daysCount sai lệch
 

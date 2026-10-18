@@ -4377,6 +4377,15 @@ const CREATE_MODULE_CONFIGS = {
     forceOwnDept: true,
     getScope: () => ({}),
     creatorField: 'creator', creatorNameField: 'creatorName',
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "shiftSwapRequests tạo mới thiếu getLockKey"): trước đây
+    // collection này KHÔNG có getLockKey (đi qua createForCollection() thường, không khoá gì) VÀ
+    // extraValidate cũng không hề kiểm đã có đơn PENDING khác cho ĐÚNG dòng roster đó — 2 request xin
+    // đổi ca cho CÙNG 1 ca gần như đồng thời (hoặc tuần tự, nhấn nút 2 lần) đều tạo được, để lại rác
+    // nhiều đơn PENDING trùng cho cùng 1 ca (giảm nhẹ vì applyApproveShiftSwap() tự chặn gán 2 lần ở
+    // bước duyệt, nhưng Hộp Thư Phê Duyệt của người duyệt bị rác nhiều đơn thừa, dễ gây nhầm lẫn/duyệt
+    // sai đơn). Thêm getLockKey theo requesterRosterId (mirror payroll_period ở trên) + check PENDING
+    // đã tồn tại ngay trong extraValidate (sau khi khoá đã giữ, đọc `collection` fresh).
+    getLockKey: (payload) => `shift_swap_roster:${Number(payload?.requesterRosterId) || 0}`,
     extraValidate: (payload, collection, user, appData) => {
       const attendance = require('./attendance');
       const { findProfileByUsername, findProfile } = require('./employeeProfile');
@@ -4386,6 +4395,9 @@ const CREATE_MODULE_CONFIGS = {
       const roster = (appData.shiftRoster || []).find(r => r.id === built.requesterRosterId);
       if (!roster || roster.employeeCode !== profile.employeeCode) throw new CreateError(404, 'Không tìm thấy ca làm việc của bạn cần đổi');
       if (roster.status === 'CANCELLED') throw new CreateError(400, 'Ca làm việc này đã bị huỷ, không thể xin đổi');
+      if ((collection || []).some(r => r.requesterRosterId === built.requesterRosterId && r.status === 'PENDING')) {
+        throw new CreateError(409, 'Ca làm việc này đã có 1 đơn xin đổi ca đang chờ duyệt — vui lòng chờ xử lý xong đơn đó trước khi nộp đơn mới');
+      }
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu mới, mức Cao): targetEmployeeCode TRƯỚC ĐÂY không hề được đối
       // chiếu với employeeProfiles — gõ nhầm mã (không tồn tại) hoặc chọn đúng mã 1 người ĐÃ NGHỈ VIỆC
       // vẫn tạo được đơn, và khi duyệt applyApproveShiftSwap() gán thẳng ca cho mã đó, khiến 1 ca trực

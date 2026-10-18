@@ -666,6 +666,15 @@ async function partB() {
       swapRequestId = r.json.item.id;
     });
 
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Thấp — "shiftSwapRequests tạo mới thiếu getLockKey"): trước đây
+    // không có bước kiểm nào chặn nộp 2 đơn xin đổi ca cho CÙNG 1 dòng roster khi đơn đầu còn PENDING —
+    // tạo rác nhiều đơn trùng trong Hộp Thư Phê Duyệt của người duyệt.
+    await test('LỖI ĐÃ VÁ: nộp thêm 1 đơn xin đổi ca KHÁC cho CÙNG dòng roster đang có đơn PENDING -> 409', async () => {
+      const r = await call('store1', 'POST', '/api/create/shiftSwapRequests', { requesterRosterId: rosterId, targetEmployeeCode: 'NV1', reason: 'Nộp trùng' });
+      assert.strictEqual(r.status, 409, JSON.stringify(r.json));
+      assert.match(r.json.error, /đã có 1 đơn xin đổi ca đang chờ duyệt/);
+    });
+
     await test('POST /api/records/shiftSwapRequests/:id/approve — Quản Lý Siêu Thị B (khác siêu thị) bị chặn 403', async () => {
       const r = await call('storeMgrB', 'POST', `/api/records/shiftSwapRequests/${swapRequestId}/approve`, {});
       assert.strictEqual(r.status, 403);
