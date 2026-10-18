@@ -350,8 +350,18 @@ async function findOwningRecord(fileUrl) {
     { records: vppRegistrations, fixed: () => false, build: r => ({ vppRegistration: true, item: r }) },
     // 6 collection Đào Tạo/Thăng Tiến — xem chú thích đầy đủ ở khai báo import hasModuleAccessServer.
     { records: trainingClasses, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
-    { records: trainingCourses, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
-    { records: trainingDocuments, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
+    // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "fileAuthz.js trainingDocuments/trainingCourses fail-open"):
+    // trước đây CẢ 2 checker này dùng `fixed: () => false` dựa trên giả định SAI là chỉ mang file qua
+    // customData (giống trainingClasses/trainingPlans/careerPaths/onboardingPaths thật sự KHÔNG có field
+    // file cố định) — nhưng trainingCourses.thumbnailUrl (normalizeTrainingCourseFields()) VÀ
+    // trainingDocuments.fileUrl/.thumbnailUrl (trainingDocuments.extraValidate, lib/createValidation.js)
+    // đều là field file CỐ ĐỊNH ở cấp cao nhất, qua đúng assertUploadedFileUrl() như mọi field file khác.
+    // Vì KHÔNG khớp Lượt 1 (fixed luôn false) VÀ KHÔNG nằm trong customData (Lượt 2), 2 field này rơi
+    // thẳng vào FAIL-OPEN chung ở authorizeFileAccess() — ảnh thumbnail Kho Tài Liệu/Chương Trình Đào
+    // Tạo đọc được bởi BẤT KỲ ai đã đăng nhập, kể cả tài khoản bị admin tắt hẳn moduleAccess.internal
+    // (không gọi được GET /api/data để thấy 2 collection này) nhưng biết/đoán đúng URL /uploads/<file>.
+    { records: trainingCourses, fixed: c => c.thumbnailUrl === fileUrl, build: c => ({ internalTrainingGroup: true, item: c }) },
+    { records: trainingDocuments, fixed: d => d.fileUrl === fileUrl || d.thumbnailUrl === fileUrl, build: c => ({ internalTrainingGroup: true, item: c }) },
     { records: trainingPlans, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
     { records: careerPaths, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) },
     { records: onboardingPaths, fixed: () => false, build: c => ({ internalTrainingGroup: true, item: c }) }
