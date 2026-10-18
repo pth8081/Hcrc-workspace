@@ -279,6 +279,32 @@ function applyOffboardingTermination(contract, hrProcessItem) {
   return contract;
 }
 
+// PHÁT HIỆN mức Cao (re-audit lần 3): templateId=1 ("Gửi thư mời nhận việc & hợp đồng lao động") tự tạo
+// 1 hợp đồng DRAFT ngay lúc hoàn thành (buildProbationDraftPayload() ở trên), templateId=7 kích hoạt
+// DRAFT -> ACTIVE — nhưng huỷ quy trình Onboarding (cancelHrProcess(), lib/recordActions.js) SAU 1 trong
+// 2 mốc đó KHÔNG hề đóng/xoá hợp đồng đã tự sinh, để lại "mồ côi" ở DRAFT hoặc ACTIVE. Nếu employeeCode
+// của ứng viên bị huỷ sau đó được TÁI SỬ DỤNG cho người mới (tạo onboarding mới trùng mã, sau khi hồ sơ
+// DRAFT cũ đã bị dọn — xem cleanupDraftProfileOnOnboardingClosed() ở routes/records.js),
+// findActiveContractByEmployeeCode() (dùng cho payroll, lib/payroll.js) sẽ nhận NHẦM hợp đồng ACTIVE
+// "mồ côi" của NGƯỜI CŨ làm hợp đồng của người MỚI — tính lương sai đối tượng. Gọi khi huỷ/xoá quy trình
+// Onboarding (routes/records.js), cho MỌI hợp đồng tra theo đúng hrProcessId (không theo employeeCode
+// — tránh đóng nhầm hợp đồng của 1 lần Onboarding KHÁC cùng employeeCode nếu có, dù hiếm) còn ở DRAFT/
+// ACTIVE. Khác applyOffboardingTermination() (chỉ xử lý ACTIVE, vì Offboarding luôn xảy ra SAU khi hợp
+// đồng đã ACTIVE): ở đây DRAFT cũng cần đóng vì Onboarding có thể bị huỷ TRƯỚC khi hợp đồng vừa tạo kịp
+// kích hoạt (templateId=7 chưa hoàn thành).
+function applyOnboardingCancelTermination(contract, hrProcessItem) {
+  if (!contract || (contract.status !== 'DRAFT' && contract.status !== 'ACTIVE')) return contract;
+  contract.status = 'TERMINATED';
+  contract.terminationDate = todayISO();
+  contract.terminationReason = 'Quy trình Onboarding liên kết đã bị huỷ/xoá — tự đóng hợp đồng tự sinh để tránh "mồ côi"';
+  contract.history.push({
+    action: 'TERMINATED', by: 'system', byName: 'Hệ Thống (Tự Động)', time: nowVN(),
+    detail: `Tự đóng khi quy trình Onboarding #${hrProcessItem.id} liên kết bị huỷ/xoá`
+  });
+  contract.updatedAt = nowVN(); contract.updatedBy = 'system';
+  return contract;
+}
+
 // Trường HR sửa tay được (tạo mới thủ công/sửa hợp đồng đã có) — KHÔNG gồm code/employeeCode/
 // hrProcessId/status/renewalIndex/history/amendments/notifiedThresholds (đổi qua các hàm riêng ở trên/
 // dưới, không cho ghi đè tự do qua đây).
@@ -452,5 +478,6 @@ module.exports = {
   canManageContracts, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
   generateContractCode, defaultContract,
   buildProbationDraftPayload, applyActivateProbation, applyPostProbationDecision, applyOffboardingTermination,
+  applyOnboardingCancelTermination,
   applyManualEdit, applyActivateManual, addAmendment, assertValidManualStatusTransition, assertValidTerminationDate
 };

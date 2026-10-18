@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**26.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.57 (2026-11): [Cao] Re-audit lần 3 — mục 7: huỷ/xoá Onboarding không dọn Hợp Đồng Lao Động tự sinh
+
+Tiếp nối v26.51-26.56. Mục thứ 7 trong 8 phát hiện của re-audit lần 3:
+
+- **[Cao] Huỷ/xoá quy trình Onboarding SAU khi hợp đồng thử việc đã tự sinh (templateId=1 "Gửi thư mời
+  nhận việc & hợp đồng lao động", templateId=7 "Đón tiếp, ký hợp đồng chính thức" — xem
+  syncLaborContractOnHrTaskEvent(), routes/records.js) không hề đóng hợp đồng đó lại**, để lại hợp đồng
+  "mồ côi" ở trạng thái DRAFT hoặc ACTIVE. Nếu `employeeCode` của ứng viên bị huỷ sau đó được TÁI SỬ
+  DỤNG cho người mới (tạo Onboarding mới trùng mã, sau khi hồ sơ DRAFT cũ đã được dọn —
+  `cleanupDraftProfileOnOnboardingClosed()`), `findActiveContractByEmployeeCode()` (dùng cho payroll —
+  `lib/payroll.js`) sẽ nhận NHẦM hợp đồng ACTIVE "mồ côi" của NGƯỜI CŨ làm hợp đồng của người MỚI —
+  tính lương sai đối tượng. Thêm `applyOnboardingCancelTermination()` (`lib/laborContract.js`) — đóng
+  (TERMINATED) mọi hợp đồng tra theo đúng `hrProcessId` còn ở DRAFT/ACTIVE (DRAFT cũng cần đóng, vì
+  Onboarding có thể bị huỷ TRƯỚC khi hợp đồng vừa tạo kịp kích hoạt). Gọi qua
+  `cleanupLaborContractOnOnboardingClosed()` (routes/records.js) ở CẢ 2 route `/hrProcesses/:id/cancel`
+  VÀ `/hrProcesses/:id/delete` (cùng khuôn `cleanupDraftProfileOnOnboardingClosed()` đã có — ghi có tác
+  dụng phụ chéo collection, lỗi không làm hỏng thao tác chính, chỉ log + ghi nhật ký hệ thống).
+
+**Test:** file mới `tests/test-onboarding-cancel-labor-contract-cleanup.js` (5 scenario, dựng Express
+app THẬT mount `routes/create.js` + `routes/records.js`, tầng lưu trữ in-memory — cùng khuôn
+`test-audit-nhansu-onboarding-contract.js`). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash --
+lib/laborContract.js routes/records.js`, 0/5 passed), PASS trên code đã vá (5/5). Chạy lại bộ test Nhân
+Sự/Hợp Đồng Lao Động liên quan: `test-audit-nhansu-onboarding-contract.js` (29/29),
+`test-hr-lifecycle.js` (39/39), `test-labor-contract.js` (27/27), `test-labor-contract-allowances.js`
+(10/10), `test-labor-contract-code-after-delete.js` (6/6), `test-labor-contract-code-race.js` (4/4),
+`test-labor-contract-create-import.js` (19/19), `test-labor-contract-employeecode-case-insensitive.js`
+(7/7), `test-labor-contract-excel.js` (14/14), `test-labor-contract-expiry-reminder-recipients.js`
+(2/2), `test-labor-contract-import-race-active-check.js` (3/3), `test-labor-contract-income-fields.js`
+(13/13), `test-trash-sensitive-collections.js` (21/21) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Hợp đồng "mồ côi" đã tồn tại
+TỪ TRƯỚC bản vá này (do Onboarding đã bị huỷ/xoá trước đó) KHÔNG tự được dọn hồi tố — admin cần tự rà
+soát `laborContracts` có `status` DRAFT/ACTIVE mà `hrProcessId` trỏ tới 1 `hrProcesses` đã CANCELLED
+(hoặc không còn tồn tại) và đóng tay nếu có, không có script dọn tự động kèm bản vá này.
 
 ## v26.56 (2026-11): [Cao] Re-audit lần 3 — mục 6: budgetPeriods.dept (field riêng, khác deptScope) không được cascade rename
 
