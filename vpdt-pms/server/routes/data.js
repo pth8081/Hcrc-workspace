@@ -1146,7 +1146,10 @@ function isApproverForAnyOperationOrderTier(user, data) {
   return false;
 }
 
-// Bước 8f — carRegs: canViewCarReg() (lib/recordViewScope.js) có TỚI 4 nhánh — (1) admin, (2) chính
+// Bước 8f — carRegs: canViewCarReg() (lib/recordViewScope.js) có TỚI 4 nhánh — (1) admin/carReportView/
+// carDispatch (carDispatch thêm ở re-audit lần 5, mức TB — "Người Điều Hành Xe" huỷ/đổi được BẤT KỲ
+// chuyến nào nên cũng phải XEM được company-wide, mirror meetingApprove/meetingCancel ở canViewMeeting()
+// — xem chú thích đầy đủ ở canViewCarReg()), (2) chính
 // LÁI XE được gán (assignedDriverUsername, KHÔNG nhất thiết cùng phòng ban — xe dùng chung công ty), (3)
 // scopeAllows(dept, deptViewScopeConfig['car']): phòng ban mình (mode DEPT) + extraViewers/managerCanView
 // (10/2026, "Việc D" mở rộng — ĐÃ BỎ quyền phẳng carView.all/.depts cũ), (4) đang là người duyệt theo
@@ -1241,10 +1244,19 @@ function computeCarRegsApproverDepts(user, data) {
 // LÀM GỌN (10/2026, "Việc D" mở rộng sang Đăng Ký Xe): bỏ hẳn quyền phẳng cũ `carView` — cùng khuôn
 // loadSubmissionsScoped() ở dưới, chỉ còn company-wide nếu admin/extraViewers/managerCanView, còn lại
 // đúng PHÒNG BAN CHÍNH MÌNH (nếu mode=DEPT) ∪ approverDepts, cộng thêm lượt riêng AssignedDriverUsername.
+// LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "POST /carRegs/:id/reassign thiếu check canViewCarReg"): lớp SQL
+// pre-filter này QUYẾT ĐỊNH TRƯỚC những gì được tải về, rồi canViewCarReg()/filterCarRegsForUser() mới
+// lọc lại — carDispatch/carReportView (vừa thêm vào canViewCarReg() ở lib/recordViewScope.js, xem chú
+// thích đầy đủ ở đó) PHẢI được tải company-wide ở ĐÂY nữa, nếu không bản vá canViewCarReg() vô dụng
+// trên thực tế: carDispatch/carReportView vẫn chỉ nhận đúng tập {phòng ban mình} ∪ approverDepts từ SQL,
+// không bao giờ có cơ hội thấy phiếu phòng ban khác dù canViewCarReg() giờ đã cho phép — và "Người Điều
+// Hành Xe" (carDispatch) không thể tự mở modal "Đổi tài xế-xe"/"Hủy chuyến" cho phiếu phòng ban khác
+// (phiếu đó chưa từng xuất hiện trong DB.carRegs phía client) dù route ghi vẫn cho phép hành động đó.
 async function loadCarRegsScoped(user, data) {
   const cfg = moduleViewConfig(data, 'car', 'DEPT');
   const isExtraViewer = !!(user?.username && cfg.extraViewers.includes(user.username));
-  if (user?.perms?.admin || isExtraApprovalLayerApprover(user, data, ['CAR']) || isExtraViewer || cfg.managerCanView) {
+  if (user?.perms?.admin || user?.perms?.carDispatch || user?.perms?.carReportView ||
+    isExtraApprovalLayerApprover(user, data, ['CAR']) || isExtraViewer || cfg.managerCanView) {
     return getAllForCollectionCached('carRegs');
   }
   const depts = new Set();
