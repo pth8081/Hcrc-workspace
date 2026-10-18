@@ -213,6 +213,13 @@ router.get('/:collection', async (req, res) => {
       if (!canAccessHrFeedbackModuleServer(req.freshUser)) {
         return res.status(403).json({ error: 'Bạn không có quyền truy cập dữ liệu báo cáo này' });
       }
+    } else if (collection === 'checklistSubmissions') {
+      // CỐ Ý KHÔNG áp gate moduleAccess.checklist ở đây (dù checklistSubmissions nay đã có mặt ở
+      // MODULE_ACCESS_GATED_COLLECTIONS.checklist — lib/recordViewScope.js, để GET /api/data/lazy/checklist
+      // zero-out đúng): "xem chéo Báo Cáo" (filterChecklistSubmissionsForReportCrossView(), xem chú thích
+      // đầy đủ tại đó) là tính năng CỐ Ý cho người KHÔNG thuộc module Checklist (reportViewAll/
+      // reportExtraKeys chứa 'checklist') vẫn xem được báo cáo qua màn Báo Cáo tổng hợp — áp gate này sẽ
+      // chặn nhầm đúng nhóm người tính năng đó nhắm tới.
     } else {
       const moduleAccessKey = COLLECTION_TO_MODULE_ACCESS_KEY[collection];
       if (moduleAccessKey && !hasModuleAccessServer(req.freshUser, moduleAccessKey)) {

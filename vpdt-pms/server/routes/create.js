@@ -127,15 +127,15 @@ const COLLECTION_TO_MODULE_ACCESS_KEY = Object.entries(MODULE_ACCESS_GATED_COLLE
 // - vppPeriods: vppRegistrations (hồ sơ đăng ký con) đã gác đúng cả tạo+hành động từ trước; vppPeriods
 //   (kỳ đăng ký cha) lại bị bỏ sót hoàn toàn (xem thêm router.use('/vppPeriods', ...) mới thêm ở
 //   routes/records.js cho route /close).
-// - checklistTemplates: module riêng hẳn (routes/checklist.js, xem requireChecklistModuleAccess() ở đó
-//   — tầng HÀNH ĐỘNG mới được vá CÙNG đợt này), nhưng route TẠO vẫn đi qua handler CHUNG ở đây.
 // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): paymentRequests/officeReqs đã dời sang
 // MODULE_ACCESS_GATED_COLLECTIONS.office thật (lib/recordViewScope.js — để GET /api/data(/reports) cũng
 // zero-out đúng, không chỉ riêng route TẠO MỚI này) nên tự động có mặt ở COLLECTION_TO_MODULE_ACCESS_KEY
 // phía trên, không cần liệt kê lại ở đây nữa — cùng khuôn operationOrders/hrProcesses trước đó.
+// checklistTemplates (module riêng, routes/checklist.js) CŨNG đã dời sang MODULE_ACCESS_GATED_COLLECTIONS.checklist
+// thật (cùng đợt vá checklistSubmissions ở GET /api/data/lazy/checklist) — gỡ khỏi map này, không khai trùng.
 const EXTRA_CREATE_MODULE_ACCESS_KEY = {
   budgetTemplates: 'budget', carRegs: 'car', meetings: 'meeting', vppRegistrations: 'vpp', hrProcesses: 'hrLifecycle',
-  reportPeriods: 'periodicReport', reportEntries: 'periodicReport', vppPeriods: 'vpp', checklistTemplates: 'checklist'
+  reportPeriods: 'periodicReport', reportEntries: 'periodicReport', vppPeriods: 'vpp'
 };
 
 router.use(requireAuth, blockIfMustChangePassword);

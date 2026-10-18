@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**26.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.64 (2026-11): [Cao] Re-audit lần 4 — mục 4: checklistSubmissions thiếu gate "Khối 0" ở GET /api/data/lazy/checklist
+
+Mục thứ 4 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] `canViewChecklistSubmission()` (lib/recordViewScope.js) có nhánh "chính người nộp"
+  (`submittedByUsername === user.username`) VÀ nhánh "cùng siêu thị tự động xem" (`deptAutoViewOn`)
+  KHÔNG hề gọi `hasModuleAccessServer()` — admin tắt `moduleAccess.checklist` cho 1 tài khoản (còn giữ
+  `checklistExecute`) vẫn đọc được TOÀN BỘ bài Checklist của chính mình/siêu thị mình qua
+  `GET /api/data/lazy/checklist`, dù route HÀNH ĐỘNG (`routes/checklist.js`, `requireChecklistModuleAccess()`)
+  đã gác đúng từ trước.** Cùng lớp lỗi đã vá cho paymentRequests/officeReqs (v26.63) — 2 collection
+  (`checklistTemplates`/`checklistSubmissions`) chưa từng được thêm vào `MODULE_ACCESS_GATED_COLLECTIONS`.
+  - Thêm `checklist: ['checklistTemplates', 'checklistSubmissions']` vào `MODULE_ACCESS_GATED_COLLECTIONS`
+    (lib/recordViewScope.js) — tự động gác vòng lặp zero-out `GET /api/data/lazy/:groupKey` (routes/data.js).
+  - Gỡ `checklistTemplates: 'checklist'` khỏi `EXTRA_CREATE_MODULE_ACCESS_KEY` (routes/create.js, map
+    auto-suy-diễn ở trên đã có key này rồi, tránh khai trùng — cùng khuôn paymentRequests/officeReqs).
+  - **Lưu ý riêng cho `checklistSubmissions`**: collection này CÒN xuất hiện ở `GET /api/reports/checklistSubmissions`
+    (routes/reports.js) phục vụ tính năng "xem chéo Báo Cáo" CỐ Ý (`filterChecklistSubmissionsForReportCrossView()`
+    — người có `reportViewAll`/`reportExtraKeys` chứa `'checklist'` xem được báo cáo dù KHÔNG thuộc module
+    Checklist). Nếu để `COLLECTION_TO_MODULE_ACCESS_KEY` tự suy diễn áp thẳng vào route Báo Cáo này sẽ
+    CHẶN NHẦM đúng nhóm người tính năng đó nhắm tới — thêm carve-out riêng (`else if (collection ===
+    'checklistSubmissions')`, mirror khuôn carve-out `hrFeedback` đã có) để route Báo Cáo KHÔNG áp gate
+    `moduleAccess.checklist`, chỉ `GET /api/data(/lazy)` mới cần.
+
+**Test:** file mới `tests/test-khoi0-checklist-lazy-data-gate.js` (7 scenario: cấu trúc map + 4 scenario
+HTTP thật mount `routes/data.js` xác nhận `GET /api/data/lazy/checklist` zero-out đúng
+`checklistSubmissions`/`checklistTemplates` khi `moduleAccess.checklist=false` dù chính người nộp/cùng
+siêu thị, không chặn oan khi bật/không có field/admin luôn bypass, + 1 scenario xác nhận "xem chéo Báo
+Cáo" KHÔNG bị gãy). Không lặp lại phần route hành động (submit/clone) đã có ở
+`test-khoi0-checklist-contract-attendance-internalpost-gate.js`. Assertion mới đã xác nhận FAIL trên code
+CŨ (`git stash -- lib/recordViewScope.js routes/create.js routes/reports.js`, 4/7 passed, đúng 3 scenario
+"LỖI ĐÃ VÁ" FAIL), PASS trên code đã vá (7/7). Chạy lại bộ test liên quan:
+`test-khoi0-checklist-contract-attendance-internalpost-gate.js` (24/24),
+`test-khoi0-officereqs-vpp-periodicreport-gate.js` (10/10), `test-khoi0-license-uniform-gate.js` (9/9),
+`test-khoi0-payment-office-gate.js` (6/6), `test-module-access-gate.js` (4/4),
+`test-module-access-gate-create.js` (3/3), `test-checklist-report-crossview.js` (8/8),
+`test-checklist-submissions-scope.js` (8/8), `test-checklist.js` (55/55) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.63 (2026-11): [Cao] Re-audit lần 4 — mục 3: paymentRequests + officeReqs thiếu gate "Khối 0" ở GET /api/data
 
