@@ -1623,6 +1623,50 @@ async function scenario(name, fn) {
       r.after.some(p => p.jobTitle === 'Trưởng phòng'), JSON.stringify(r));
   });
 
+  await scenario('(v3) LỖI ĐÃ VÁ (re-audit lần 4, mức Thấp): deleteStore() cũng tự gỡ khỏi workflowParticipatingDeptGroups[].depts[]/workflowParticipatingPositions[] (BẤT ĐỐI XỨNG với deleteDept() đã vá ở (v) — không để lại "ma")', async () => {
+    const r = await page.evaluate(() => {
+      DB.stores = [...(DB.stores || []), 'Siêu Thị Tạm'];
+      DB.workflowParticipatingDeptGroups = [{ id: 1, name: 'Nhóm Vận Hành', depts: ['Siêu Thị Tạm', 'Siêu Thị Quận 1'], moduleKeys: ['CAR'] }];
+      DB.workflowParticipatingPositions = [
+        { jobTitle: 'Giám Đốc Siêu Thị', dept: 'Siêu Thị Tạm' },
+        { jobTitle: 'Giám Đốc Siêu Thị', dept: 'Siêu Thị Quận 1' }
+      ];
+      const beforeWfDeptGroups = DB.workflowParticipatingDeptGroups[0].depts.slice();
+      const beforeWfPositions = DB.workflowParticipatingPositions.slice();
+      deleteStore('Siêu Thị Tạm');
+      const afterWfDeptGroups = DB.workflowParticipatingDeptGroups[0].depts.slice();
+      const afterWfPositions = DB.workflowParticipatingPositions.slice();
+      return { beforeWfDeptGroups, afterWfDeptGroups, beforeWfPositions, afterWfPositions, storesAfter: DB.stores.slice() };
+    });
+    record('(v3) Xoá siêu thị "Siêu Thị Tạm" khỏi DB.stores thành công', !r.storesAfter.includes('Siêu Thị Tạm'), JSON.stringify(r));
+    record('(v3) LỖI ĐÃ VÁ: cũng bị gỡ khỏi workflowParticipatingDeptGroups[].depts[], siêu thị KHÁC ("Siêu Thị Quận 1") không bị đụng',
+      r.beforeWfDeptGroups.includes('Siêu Thị Tạm') && !r.afterWfDeptGroups.includes('Siêu Thị Tạm') && r.afterWfDeptGroups.includes('Siêu Thị Quận 1'), JSON.stringify(r));
+    record('(v3) LỖI ĐÃ VÁ: cặp {jobTitle,dept} mang dept="Siêu Thị Tạm" trong workflowParticipatingPositions[] cũng bị gỡ, cặp dept KHÁC giữ nguyên',
+      r.beforeWfPositions.some(p => p.dept === 'Siêu Thị Tạm') &&
+      !r.afterWfPositions.some(p => p.dept === 'Siêu Thị Tạm') &&
+      r.afterWfPositions.some(p => p.dept === 'Siêu Thị Quận 1'), JSON.stringify(r));
+  });
+
+  await scenario('(v4) LỖI ĐÃ VÁ (re-audit lần 4, mức Thấp): deleteStoreJobTitle() cũng tự gỡ khỏi workflowParticipatingPositions[] (không để lại "ma")', async () => {
+    const r = await page.evaluate(() => {
+      DB.storeJobTitles = [...(DB.storeJobTitles || []), { label: 'Giám Sát Tạm (ST)' }];
+      DB.workflowParticipatingPositions = [
+        { jobTitle: 'Giám Sát Tạm (ST)', dept: 'Siêu Thị Quận 1' },
+        { jobTitle: 'Giám Đốc Siêu Thị', dept: 'Siêu Thị Quận 1' }
+      ];
+      const before = DB.workflowParticipatingPositions.slice();
+      deleteStoreJobTitle('Giám Sát Tạm (ST)');
+      const after = DB.workflowParticipatingPositions.slice();
+      return { before, after, storeJobTitlesAfter: DB.storeJobTitles.slice() };
+    });
+    record('(v4) Xoá chức danh siêu thị "Giám Sát Tạm (ST)" khỏi DB.storeJobTitles thành công',
+      !r.storeJobTitlesAfter.some(t => t.label === 'Giám Sát Tạm (ST)'), JSON.stringify(r));
+    record('(v4) LỖI ĐÃ VÁ: cặp {jobTitle,dept} mang chức danh siêu thị đã xoá cũng bị gỡ khỏi workflowParticipatingPositions[], cặp chức danh KHÁC giữ nguyên',
+      r.before.some(p => p.jobTitle === 'Giám Sát Tạm (ST)') &&
+      !r.after.some(p => p.jobTitle === 'Giám Sát Tạm (ST)') &&
+      r.after.some(p => p.jobTitle === 'Giám Đốc Siêu Thị'), JSON.stringify(r));
+  });
+
   await browser.close();
   server.close();
 
