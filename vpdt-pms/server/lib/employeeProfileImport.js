@@ -484,7 +484,22 @@ function oldestAmendmentsOfContract(contract, limit) {
 // deptCodeMap: appData.deptCodeMap THẬT do CALLER đọc sẵn — CHỈ đọc, KHÔNG tự sinh mã mới cho bộ phận
 // chưa từng được cấp mã (tránh ghi dữ liệu trong 1 thao tác đọc/xuất báo cáo, xem chú thích
 // WIRED_READONLY_COLUMNS ở trên).
-async function buildExportWorkbook(profiles, users, hrProcesses, contracts, deptCodeMap) {
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): tham số `includeContractData` (mặc định true — MỌI lời gọi cũ
+// không truyền tham số này, kể cả test, vẫn giữ nguyên hành vi) — CONTRACT_READONLY_COLUMNS (Lương Cơ
+// Bản/các khoản phụ cấp/thu nhập — trường VỐN chỉ admin/hrContractManage được đọc, xem
+// canViewLaborContract() ở lib/recordViewScope.js) VÀ HISTORY_READONLY_COLUMNS (nội dung điều chỉnh
+// hợp đồng — amendment{i}Content có thể LÀ CHÍNH thay đổi lương, VD "SALARY_CHANGE: 10000000 →
+// 12000000") đều nguồn gốc TỪ HỢP ĐỒNG LAO ĐỘNG, không phải Hồ Sơ Nhân Sự thuần — route gọi hàm này
+// (GET /api/hr-profile/export-xlsx) trước đây chỉ gác canFullViewProfiles() (hrProfileManage/
+// hrProfileFullView/hrProfileEdit), KHÔNG đòi hrContractManage, nên 1 tài khoản CHỈ quản lý Hồ Sơ Nhân
+// Sự (không có bất kỳ quyền Hợp Đồng Lao Động nào) vẫn tải được NGUYÊN VẸN lương/phụ cấp của TOÀN BỘ
+// nhân viên qua file Excel — cùng lớp lỗ hổng mà GET .../by-code/:employeeCode/history VÀ GET .../reports
+// đã chặn đúng từ trước (đòi CẢ hrProfileManage LẪN hrContractManage). KHÔNG chặn hẳn CẢ route (khác
+// history/reports vốn mixed không tách cột được) — chỉ ẨN ĐÚNG 2 nhóm cột nguồn hợp đồng này khỏi
+// `sheet.columns`, các cột Hồ Sơ Nhân Sự thuần (CCCD/địa chỉ/ngân hàng/BHXH/MST...) vẫn xuất bình
+// thường cho người chỉ có hrProfileManage/hrProfileFullView/hrProfileEdit — không đánh đổi mất hẳn tính
+// năng của họ chỉ vì thiếu đúng 1 quyền không liên quan tới phần dữ liệu họ cần.
+async function buildExportWorkbook(profiles, users, hrProcesses, contracts, deptCodeMap, includeContractData = true) {
   const employeeProfile = require('./employeeProfile');
   const usersByUsername = new Map((users || []).map(u => [u.username, u]));
   const processesById = new Map((hrProcesses || []).map(p => [p.id, p]));
@@ -545,10 +560,12 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
     // WIRED_READONLY_COLUMNS ở trên.
     ...WIRED_READONLY_COLUMNS,
     // ~19 cột CHỈ XEM đọc LIVE từ hợp đồng ACTIVE, xem CONTRACT_READONLY_COLUMNS (10/2026, đã mở rộng
-    // thêm 4 cột thu nhập/tỷ lệ lương thử việc).
-    ...CONTRACT_READONLY_COLUMNS,
+    // thêm 4 cột thu nhập/tỷ lệ lương thử việc) — CHỈ thêm khi người xuất có hrContractManage (xem chú
+    // thích đầy đủ ở khai báo includeContractData phía trên).
+    ...(includeContractData ? CONTRACT_READONLY_COLUMNS : []),
     // 12 cột lịch sử (báo cáo rà soát mẫu Excel mới, 10/2026) — xem HISTORY_READONLY_COLUMNS ở trên.
-    ...HISTORY_READONLY_COLUMNS
+    // amendment{i}Content có thể chứa chính nội dung thay đổi LƯƠNG — cùng điều kiện includeContractData.
+    ...(includeContractData ? HISTORY_READONLY_COLUMNS : [])
   ];
   styleHeaderRow(sheet.getRow(1));
   // PHÁT HIỆN ở đợt audit chuyên sâu lần 2: hàm này tự gọi sheet.addRow() trực tiếp, không đi qua

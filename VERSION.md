@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**26.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.86 (2026-11): [Cao] Re-audit lần 5 — mục 8: Xuất Excel Hồ Sơ Nhân Sự lộ lương không cần hrContractManage
+
+Mục thứ 8 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng). Còn
+1 phát hiện mức Cao nữa (#124: hrProfileEdit tự gán chức vụ) trước khi chuyển sang 18 phát hiện mức
+Trung Bình.
+
+- **`GET /api/hr-profile/export-xlsx` trước đây CHỈ gác `requireProfileFullView` (hrProfileManage/
+  hrProfileFullView/hrProfileEdit) — KHÔNG đòi `hrContractManage`** — nhưng `buildExportWorkbook()`
+  (lib/employeeProfileImport.js) LUÔN kèm ~19 cột CHỈ XEM nguồn từ Hợp Đồng Lao Động (Lương Cơ Bản/phụ
+  cấp/thu nhập — trường VỐN chỉ admin/hrContractManage được đọc, xem `canViewLaborContract()` ở
+  lib/recordViewScope.js) + 12 cột lịch sử (`amendment{i}Content` có thể LÀ CHÍNH thay đổi lương, VD
+  "SALARY_CHANGE: 10000000 → 15000000"). 1 tài khoản CHỈ quản lý Hồ Sơ Nhân Sự (không có bất kỳ quyền
+  Hợp Đồng Lao Động nào) vẫn tải được NGUYÊN VẸN lương của TOÀN BỘ nhân viên qua 1 file Excel — cùng
+  lớp lỗ hổng mà `GET .../by-code/:employeeCode/history` và `GET .../reports` đã chặn đúng từ trước
+  (đòi CẢ `hrProfileManage` LẪN `hrContractManage`).
+  - Thêm tham số `includeContractData` (mặc định `true` — MỌI lời gọi cũ không truyền tham số này, kể
+    cả test, vẫn giữ nguyên hành vi) vào `buildExportWorkbook()` — CHỈ thêm 2 nhóm cột nguồn hợp đồng
+    (`CONTRACT_READONLY_COLUMNS`/`HISTORY_READONLY_COLUMNS`) vào `sheet.columns` khi `true`.
+  - Route `export-xlsx` truyền `canManageContracts(req.freshUser)` làm tham số này — KHÔNG chặn hẳn cả
+    route (khác `history`/`reports` vốn mixed không tách cột được dễ) — chỉ ẨN đúng 2 nhóm cột nhạy
+    cảm, các cột Hồ Sơ Nhân Sự thuần (CCCD/địa chỉ/ngân hàng/BHXH/MST...) vẫn xuất bình thường cho
+    người chỉ có `hrProfileManage`/`hrProfileFullView`/`hrProfileEdit`.
+
+**Test:** `tests/test-hrprofile-export-salary-permission.js` (mới, 5 scenario — gọi THẲNG
+`buildExportWorkbook()`, cùng khuôn `test-hr-profile-import-90fields.js`). Xác nhận FAIL trên code CŨ
+(`git stash -- lib/employeeProfileImport.js`, 2/5 scenario FAIL đúng 2 "LỖI ĐÃ VÁ" — cột lương/lịch sử
+điều chỉnh vẫn xuất hiện dù `includeContractData=false`), PASS trên code đã vá (5/5). Regression:
+`test-hr-profile-import-90fields.js` (10/10), `test-hr-profile-excel-history-12cols.js` (10/10),
+`test-hr-profile-import-gd1-fields.js` (6/6), `demo-hr-profile-90field.js`,
+`test-audit-nhansu-hoso.js` (33/33, gồm đúng 2 scenario `#11 export-xlsx`), `test-hr-profile.js`
+(32/32, gồm đúng scenario `export-xlsx` quyền truy cập) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.85 (2026-11): [Cao] Re-audit lần 5 — mục 7: Xoá quy trình Onboarding/Offboarding chỉ cần cờ admin chung
 
