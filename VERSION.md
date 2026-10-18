@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**27.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.26 (2026-11): [Thấp] Re-audit lần 6 — mục 18/21: routes/purchasing.js dùng vendor.name sai
+
+Mục thứ mười tám (18/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** 2 thông báo lỗi 409 ở `routes/purchasing.js` (`POST /terms/:id/activate` khi NCC
+INACTIVE, và `POST /terms/:id/calculate` khi NCC INACTIVE) đọc `preVendor.name`/`vendor.name` — nhưng
+object `vendors` lưu tên ở field `vendorName`, không có field `name`. Kết quả: thông báo hiện
+`Nhà cung cấp "undefined" hiện không ở trạng thái Hoạt động...` thay vì tên NCC thật. Chỉ ảnh hưởng
+UX (thông báo lỗi khó hiểu), không phải lỗ hổng bảo mật — logic chặn 409 vẫn đúng.
+
+**Vá:** đổi `.name` → `.vendorName` ở cả 2 chỗ.
+
+**Test:** mở rộng `tests/test-purchasing-activate-lock-scope.js` — thêm 2 scenario: Kích Hoạt điều khoản
+của NCC INACTIVE -> 409 nêu đúng tên "NCC Một" (không chứa "undefined"); Tính Ước Tính Rebate cho điều
+khoản của NCC INACTIVE -> cùng xác nhận. Xác nhận FAIL trên code CŨ (`git stash -- routes/purchasing.js`,
+đúng 2/5 scenario FAIL — thông báo chứa "undefined", đúng khai thác đã nêu), PASS trên code đã vá (5/5).
+Regression: `tests/test-purchasing-manual-import-lock.js` (3/3),
+`tests/test-purchasing-sync-lock-and-items.js` (7/7), `tests/test-purchasing-vendor-taxcode-lock.js`
+(3/3) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.25 (2026-11): [Thấp] Re-audit lần 6 — mục 17/21: shiftTemplates không kiểm tham chiếu từ shiftRoster
 
