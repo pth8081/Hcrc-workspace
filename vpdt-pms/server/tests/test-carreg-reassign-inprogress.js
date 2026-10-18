@@ -9,6 +9,15 @@
 //
 // reassignCarDispatch() là hàm THUẦN (không đụng DB/network) — gọi thẳng, không cần stub gì.
 //
+// MỞ RỘNG (re-audit lần 5, mức TB — "Lỗi 409 trùng biển số/tài xế lộ mã phiếu xe phòng ban khác"):
+// findCarPlateConflict()/findCarDriverConflict() (lib/workflowEngine.js) đọc TOÀN BỘ existingCarRegs
+// không lọc quyền (đúng — phải biết mọi phiếu đang dùng biển số/tài xế đó để chặn trùng thật), nhưng
+// thông báo 409 ở reassignCarDispatch() trước đây nêu THẲNG conflict.code (mã phiếu xe) — người đang
+// đổi biển số/tài xế cho phiếu NÀY có thể hoàn toàn không có quyền xem phiếu đăng ký xe phòng ban KHÁC
+// (canViewCarReg() ở lib/recordViewScope.js), nên lộ mã phiếu đó là lộ sự tồn tại + mã hồ sơ của 1
+// phiếu xe mình không có quyền xem — cùng lớp lỗi/cùng khuôn findMeetingConflict() đã vá ở
+// lib/createValidation.js (re-audit lần 4). Vá bằng cách bỏ conflict.code khỏi câu thông báo.
+//
 // Chạy: node server/tests/test-carreg-reassign-inprogress.js
 'use strict';
 const assert = require('assert');
@@ -66,6 +75,40 @@ test('Đối chứng: TRƯỚC khi vá, tài xế CŨ không kết thúc chuyế
   const reassigned = reassignCarDispatch(DISPATCHER, item, { assignedDriverUsername: DRIVER_NEW.username }, [item], USERS, []);
   assert.throws(() => endCarTrip(DRIVER_OLD, reassigned, { km: 10 }), (err) => err.status === 403 || err.status === 409,
     'Tài xế cũ không còn được phân công nên không kết thúc chuyến được nữa (đúng — trách nhiệm đã chuyển)');
+});
+
+test('LỖI ĐÃ VÁ: đổi biển số trùng 1 phiếu xe PHÒNG BAN KHÁC cùng khung giờ -> 409 KHÔNG nêu mã phiếu đó', () => {
+  const item = makeItem();
+  item.assignedPlate = '51A-22222'; // khác biển số mục tiêu để chắc chắn đi vào nhánh kiểm tra trùng
+  const otherDeptItem = {
+    id: 2, code: 'XE-002', dept: 'Phòng Khác', status: 'APPROVED',
+    startTime: '2026-09-20T09:00:00', endTime: '2026-09-20T11:00:00', // chồng khung giờ với item
+    assignedPlate: '51A-11111', assignedDriverUsername: '', assignedDriver: ''
+  };
+  let caught = null;
+  try {
+    reassignCarDispatch(DISPATCHER, item, { assignedPlate: '51A-11111' }, [item, otherDeptItem], USERS, []);
+  } catch (err) { caught = err; }
+  assert.ok(caught, 'phải throw lỗi trùng biển số');
+  assert.strictEqual(caught.status, 409);
+  assert.ok(!caught.message.includes('XE-002'), `thông báo KHÔNG được chứa mã phiếu xe phòng ban khác, nhận: "${caught.message}"`);
+});
+
+test('LỖI ĐÃ VÁ: đổi tài xế trùng 1 phiếu xe PHÒNG BAN KHÁC cùng khung giờ -> 409 KHÔNG nêu mã phiếu đó', () => {
+  const item = makeItem();
+  item.assignedDriverUsername = ''; item.assignedDriver = ''; // khác tài xế mục tiêu để đi vào nhánh kiểm tra trùng
+  const otherDeptItem = {
+    id: 3, code: 'XE-003', dept: 'Phòng Khác', status: 'APPROVED',
+    startTime: '2026-09-20T09:00:00', endTime: '2026-09-20T11:00:00', // chồng khung giờ với item
+    assignedPlate: '', assignedDriverUsername: DRIVER_NEW.username, assignedDriver: DRIVER_NEW.name
+  };
+  let caught = null;
+  try {
+    reassignCarDispatch(DISPATCHER, item, { assignedDriverUsername: DRIVER_NEW.username }, [item, otherDeptItem], USERS, []);
+  } catch (err) { caught = err; }
+  assert.ok(caught, 'phải throw lỗi trùng tài xế');
+  assert.strictEqual(caught.status, 409);
+  assert.ok(!caught.message.includes('XE-003'), `thông báo KHÔNG được chứa mã phiếu xe phòng ban khác, nhận: "${caught.message}"`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
