@@ -426,6 +426,41 @@ async function main() {
       await page.evaluate(() => { currentUser.reportExtraKeys = []; });
     });
 
+    // ===== LỖI ĐÃ VÁ (re-audit lần 4, mục Báo Cáo): khối "🔍 2. Tra Cứu Chi Tiết" biến mất hoàn toàn
+    // (return '' ẨN cả khối) khi 0 hồ sơ khớp bộ lọc ngày/phòng ban hiện tại (buildReportDetailColumns()
+    // suy cột TỪ chính `records`, rỗng thì 0 cột — chỉ đúng khi module KHÔNG có config.statusOf, VD
+    // "muaHang"/RebateCalculations — module CÓ statusOf như "contract" luôn còn đúng 1 cột "__status"
+    // nên không tái hiện được bug này), và nút "👁️ Xem Trước & Xuất" báo nhầm lý do "Vui lòng chọn ít
+    // nhất 1 trường..." (SAI — khối chọn trường lúc đó đã bị ẩn, không có checkbox nào để chọn). Gọi
+    // THẲNG renderReportDetailSection()/buildReportPreviewDocumentHTML() với 1 config TỐI GIẢN (không
+    // statusOf, giống "muaHang") + records=[] — không cần dựng lại toàn bộ nghiệp vụ/quyền xem của 1
+    // module Mua Hàng thật, 2 hàm này không phụ thuộc gì khác ngoài moduleKey/records/config.
+    await run('LỖI ĐÃ VÁ: 0 hồ sơ khớp bộ lọc (module KHÔNG có statusOf -> 0 cột) -> khối "🔍 2. Tra Cứu Chi Tiết" VẪN HIỆN (không còn bị ẩn hoàn toàn), kèm thông báo rõ lý do', async () => {
+      const html = await page.evaluate(() => renderReportDetailSection('__testNoStatusOf', [], { title: 'Test' }));
+      assert(html.includes('🔍 2. Tra Cứu Chi Tiết'), 'LỖI ĐÃ VÁ: khối "🔍 2. Tra Cứu Chi Tiết" không còn bị ẩn hoàn toàn khi 0 hồ sơ khớp bộ lọc');
+      assert(html.includes('Không có hồ sơ nào khớp bộ lọc hiện tại'), `phải có thông báo rõ lý do (không hồ sơ khớp bộ lọc), got: ${html}`);
+    });
+
+    await run('LỖI ĐÃ VÁ: nút "Xem Trước & Xuất" khi 0 hồ sơ khớp bộ lọc -> báo ĐÚNG lý do (không hồ sơ), KHÔNG còn báo nhầm "chọn ít nhất 1 trường"', async () => {
+      // renderReportDetailSection() ở scenario trên đã gán reportDetailContext={moduleKey:'__testNoStatusOf', records:[], ...}.
+      const built = await page.evaluate(() => buildReportPreviewDocumentHTML('__testNoStatusOf'));
+      assert(!!built.error, 'phải trả về lỗi (không có html) khi 0 hồ sơ khớp bộ lọc');
+      assert(/Không có hồ sơ nào khớp bộ lọc hiện tại/.test(built.error), `thông báo phải nêu đúng lý do "không có hồ sơ khớp bộ lọc", got: "${built.error}"`);
+      assert(!/chọn ít nhất 1 trường/.test(built.error), `LỖI: vẫn còn thông báo nhầm "chọn ít nhất 1 trường" (sai lý do thật — khối chọn trường đã bị ẩn), got: "${built.error}"`);
+    });
+
+    await run('đối chứng: CÙNG module KHÔNG statusOf nhưng CÓ 1 bản ghi khớp bộ lọc -> khối hiện cột/kết quả bình thường (không bị ảnh hưởng ngược bởi bản vá)', async () => {
+      const html = await page.evaluate(() => renderReportDetailSection('__testNoStatusOf2', [{ id: 1, title: 'Ghi nhận A', amount: 1000 }], { title: 'Test 2' }));
+      assert(html.includes('🔍 2. Tra Cứu Chi Tiết'), 'vẫn phải hiện khối như cũ khi có hồ sơ');
+      assert(!html.includes('Không có hồ sơ nào khớp bộ lọc hiện tại'), 'không được báo nhầm "không có hồ sơ" khi thực ra đang có 1 bản ghi');
+      const built = await page.evaluate(() => buildReportPreviewDocumentHTML('__testNoStatusOf2'));
+      assert(!built.error || !/Không có hồ sơ/.test(built.error), `không được còn báo "không có hồ sơ" khi records không rỗng, got: ${JSON.stringify(built)}`);
+    });
+
+    // Khôi phục reportDetailContext về đúng tab contract (seed thật) — tránh ảnh hưởng ngược bất kỳ
+    // assertion nào khác chạy SAU nếu file này được mở rộng thêm về sau.
+    await page.evaluate(() => { selectReportsNavL1('contract'); });
+
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);
   } finally {
     await teardown({ server, browser });

@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**26.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.78 (2026-11): [Báo Cáo] Khối "🔍 Tra Cứu Chi Tiết" biến mất khi 0 hồ sơ khớp bộ lọc — HOÀN TẤT toàn bộ 22 phát hiện re-audit lần 4
+
+Mục cuối cùng của báo cáo re-audit lần 4 (22/22 phát hiện đã xử lý xong, từ v26.63 đến v26.78).
+
+- **`renderReportDetailSection()` (public/js/module-baocaoquantri-preview.js) trả về `''` (ẨN HOÀN
+  TOÀN khối "🔍 2. Tra Cứu Chi Tiết") khi 0 hồ sơ khớp bộ lọc ngày/phòng ban hiện tại** —
+  `buildReportDetailColumns()` suy CỘT từ chính `records` đang có, module KHÔNG có `config.statusOf`
+  (VD "Mua Hàng (BAS)"/RebateCalculations) thì `records` rỗng kéo theo 0 cột nào suy ra được. Người
+  dùng tưởng tính năng đã biến mất/hỏng, không biết phải điều chỉnh bộ lọc ở đâu.
+  - Thêm nhánh render riêng khi `columns.length === 0`: vẫn giữ khối `<details>` (thấy tiêu đề, mở ra
+    được) kèm thông báo rõ "Không có hồ sơ nào khớp bộ lọc hiện tại... vui lòng điều chỉnh bộ lọc".
+- **`buildReportPreviewDocumentHTML()` báo NHẦM lý do** khi rơi vào đúng tình huống trên — do
+  `reportDetailSelectedCols[moduleKey]` chưa từng được gán (columns rỗng), hàm kết luận "Vui lòng chọn
+  ít nhất 1 trường ở khối 'Tra Cứu Chi Tiết'..." — SAI, vì khối đó đã bị ẩn hoàn toàn, không có
+  checkbox nào để chọn.
+  - Thêm check `!ctx.records.length` NGAY TRƯỚC check cũ, trả lỗi đúng lý do: "Không có hồ sơ nào khớp
+    bộ lọc hiện tại — vui lòng điều chỉnh khoảng ngày/phòng ban ở trên rồi thử lại." Check "chọn ít
+    nhất 1 trường" cũ vẫn giữ nguyên cho đúng tình huống của nó (có hồ sơ, admin tự bỏ chọn hết cột).
+
+**Test:** mở rộng `tests/test-reports.js` (3 scenario mới — gọi thẳng `renderReportDetailSection()`/
+`buildReportPreviewDocumentHTML()` với 1 config tối giản không `statusOf` + `records=[]`, không cần
+dựng lại toàn bộ nghiệp vụ/quyền xem module Mua Hàng thật). Xác nhận FAIL trên code CŨ (`git stash --
+public/js/module-baocaoquantri-preview.js`, 22/24 passed — đúng 2 scenario "LỖI ĐÃ VÁ" FAIL, tái hiện
+đúng thông báo sai cũ), PASS trên code đã vá (24/24). Chạy lại `test-report-preview-tolocalestring.js`
+(4/4) — PASS, không regression. CSP: grep file đã sửa không khớp
+`on[a-z]+="`/` style="`/`javascript:`/`eval(`/`new Function(` — sạch.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.77 (2026-11): [Thấp] Re-audit lần 4 — mục 17 (CUỐI): deleteStore/deleteStoreJobTitle không dọn workflowParticipatingDeptGroups/Positions
 

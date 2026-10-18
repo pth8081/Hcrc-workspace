@@ -22,6 +22,13 @@ function buildReportPreviewLauncherHTML(moduleKey) {
 function buildReportPreviewDocumentHTML(moduleKey) {
   const ctx = reportDetailContext;
   if (!ctx || ctx.moduleKey !== moduleKey) return { error: 'Chưa có dữ liệu — vui lòng thử lại.' };
+  // LỖI ĐÃ VÁ (re-audit lần 4, mục Báo Cáo): 0 hồ sơ khớp bộ lọc ngày/phòng ban hiện tại ("ctx.records"
+  // rỗng) khiến buildReportDetailColumns() không suy ra được CỘT nào -> reportDetailSelectedCols[moduleKey]
+  // không bao giờ được gán (xem renderReportDetailSection() ở dưới) -> cols ở đây luôn rỗng -> trước đây
+  // rơi vào thông báo "Vui lòng chọn ít nhất 1 trường..." — SAI LÝ DO THẬT (khối "🔍 Tra Cứu Chi Tiết"
+  // lúc này đã bị ẨN HOÀN TOÀN, không có checkbox nào để chọn) và đánh lạc hướng người dùng đi tìm nút
+  // chọn trường không tồn tại, thay vì nói đúng nguyên nhân là chưa có hồ sơ nào khớp bộ lọc.
+  if (!ctx.records.length) return { error: 'Không có hồ sơ nào khớp bộ lọc hiện tại — vui lòng điều chỉnh khoảng ngày/phòng ban ở trên rồi thử lại.' };
   const config = ctx.config;
   const selectedKeys = reportDetailSelectedCols[moduleKey] || [];
   const cols = selectedKeys.map(k => ctx.columns.find(c => c.key === k)).filter(Boolean);
@@ -88,7 +95,24 @@ function renderReportDetailSection(moduleKey, records, config) {
   if (!reportDetailSelectedCols[moduleKey] && columns.length) reportDetailSelectedCols[moduleKey] = columns.slice(0, 6).map(c => c.key);
   const selectedSet = new Set(reportDetailSelectedCols[moduleKey] || []);
 
-  if (!columns.length) return '';
+  // LỖI ĐÃ VÁ (re-audit lần 4, mục Báo Cáo): trước đây return '' (ẨN HOÀN TOÀN khối này) khi 0 hồ sơ
+  // khớp bộ lọc ngày/phòng ban ở trên (columns suy ra từ chính `records`, rỗng thì không còn cột nào) —
+  // người dùng tưởng tính năng "🔍 2. Tra Cứu Chi Tiết" đã biến mất/hỏng, không biết phải điều chỉnh bộ
+  // lọc ở đâu. Giữ nguyên khối <details> (vẫn thấy tiêu đề + có thể mở ra) kèm thông báo rõ nguyên
+  // nhân, cùng tinh thần "không im lặng" đã áp dụng cho buildReportPreviewDocumentHTML() ở trên.
+  if (!columns.length) {
+    return `
+      <details class="bg-white rounded border text-xs">
+        <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 rounded">
+          <span class="font-bold text-gray-800 text-sm">🔍 2. Tra Cứu Chi Tiết</span>
+          <span class="text-[11px] text-gray-500">Lọc theo nhiều điều kiện + tự chọn cột hiển thị</span>
+        </summary>
+        <div class="p-3 pt-0">
+          <p class="text-[12px] text-gray-500 italic text-center py-4">Không có hồ sơ nào khớp bộ lọc hiện tại (khoảng ngày/phòng ban ở trên) — vui lòng điều chỉnh bộ lọc để xem/lọc chi tiết.</p>
+        </div>
+      </details>
+    `;
+  }
 
   return `
     <details class="bg-white rounded border text-xs">
