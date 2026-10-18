@@ -1662,7 +1662,22 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // trách nhiệm/nhà cung cấp, dù UI đã ẩn hoàn toàn. paymentRequests/officeReqs giờ TỰ ĐỘNG có mặt ở
   // COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js, suy ra từ map này) — đã gỡ khỏi
   // EXTRA_CREATE_MODULE_ACCESS_KEY để không khai trùng, cùng khuôn operationOrders/hrProcesses trước đó.
-  office: ['paymentRequests', 'officeReqs'],
+  //
+  // LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình): paymentRequests VẪN gác bằng key "office" ở đây dù
+  // "payment" (Thanh Toán — public/js/core.js BUSINESS_MODULES, `{key:'payment', parent:'office'}`) đã
+  // là module con RIÊNG từ 10/2026 (checkbox Mục 0 riêng, 3 tab con paymentCreateTab/paymentManageTab/
+  // paymentApproveTab) — KHÔNG CÒN dùng chung checkbox "Tổng Hợp" với officeReqs (Mua Bán/Sửa Chữa) như
+  // trước. hasModuleAccessServer() đã cascade ĐÚNG cha/con qua MODULE_ACCESS_PARENTS.payment='office'
+  // (tắt office -> payment cũng tắt), nhưng gác NGƯỢC (chỉ check 'office', không check 'payment') thì
+  // admin tắt RIÊNG moduleAccess.payment cho 1 tài khoản (giữ moduleAccess.office=true cho Mua Bán/Sửa
+  // Chữa) vẫn đọc/tạo/duyệt được paymentRequests qua GET /api/data(/reports)/POST tạo mới/mọi route
+  // HÀNH ĐỘNG ở routes/records.js — y hệt chưa từng bị tắt, dù UI đã ẩn hẳn Thanh Toán. Tách
+  // paymentRequests ra khỏi "office" (chỉ còn officeReqs — ĐÚNG module Mua Bán/Sửa Chữa) sang khoá
+  // "payment" RIÊNG — tự động kéo theo COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js)/report-gate
+  // (routes/reports.js) đổi đúng theo map này; routes/records.js router.use('/paymentRequests', ...)
+  // sửa riêng (không suy ra từ map này) — xem chú thích tại đó.
+  office: ['officeReqs'],
+  payment: ['paymentRequests'],
   // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): checklistSubmissions — canViewChecklistSubmission() ở trên có
   // nhánh "chính người nộp" (submittedByUsername === user.username) VÀ nhánh "cùng siêu thị tự động xem"
   // (deptAutoViewOn) KHÔNG hề gọi hasModuleAccessServer() — admin tắt moduleAccess.checklist cho 1 tài
