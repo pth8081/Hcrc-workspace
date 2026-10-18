@@ -192,10 +192,18 @@ async function main() {
       // A real <input type=file> can only be populated via Playwright's setInputFiles — write a
       // throwaway file so the change handler has a real File object to build FormData from (its
       // content is irrelevant since /api/training/parse-roster is mocked to return the preset above).
+      //
+      // BUG THẬT đã vá (rà soát trước go-live, 11/2026): nội dung KHÔNG được tuỳ ý ("dummy") nữa như
+      // trước — lớp kiểm tra chữ ký file TOÀN TRANG (core.js, document.addEventListener('change', ...,
+      // true), xem verifyFileSignatureClient()) chặn MỌI <input type="file"> ngay ở bước chọn file (kể
+      // cả input này, data-op-change="onTrainingRosterFileChange" chuẩn) nếu nội dung không khớp đuôi
+      // khai báo — 'change' không bao giờ tới được handler thật, khiến bước này và MỌI kịch bản sau đó
+      // (dùng chung classId được tạo xuyên suốt file) đều treo/lỗi dây chuyền. Ghi đúng chữ ký ZIP
+      // (PK\x03\x04 — .xlsx cũng là 1 file ZIP, xem CLIENT_FILE_SIGNATURE_MAP ở core.js) để qua được.
       const fs = require('fs');
       const os = require('os');
       const tmpPath = require('path').join(os.tmpdir(), 'roster-upload-test.xlsx');
-      fs.writeFileSync(tmpPath, 'dummy');
+      fs.writeFileSync(tmpPath, Buffer.concat([Buffer.from([0x50, 0x4B, 0x03, 0x04]), Buffer.from('dummy')]));
       await page.setInputFiles('#trRosterFileInput', tmpPath);
       await page.waitForFunction(() => document.getElementById('trRosterFileStatus').innerText.includes('Đọc file'));
       const statusText = await page.evaluate(() => document.getElementById('trRosterFileStatus').innerText);
@@ -712,7 +720,12 @@ async function main() {
       const fs = require('fs');
       const os = require('os');
       const tmpImgPath = require('path').join(os.tmpdir(), 'training-doc-image-test.png');
-      fs.writeFileSync(tmpImgPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]));
+      // BUG THẬT đã vá (rà soát trước go-live, 11/2026): chữ ký PNG thật dài ĐÚNG 8 byte
+      // (0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A — xem detectClientFileSignature(), core.js), fixture cũ
+      // chỉ viết 6/8 byte đầu -> lớp kiểm tra chữ ký file TOÀN TRANG không nhận diện được, chặn nhầm file
+      // này ngay từ bước chọn file (handler thật không bao giờ được gọi) -> "expected the IMAGE document
+      // to be created" luôn FAIL.
+      fs.writeFileSync(tmpImgPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
       await page.setInputFiles('#tdFile', tmpImgPath);
       await page.evaluate(() => submitTrainingDocument({ preventDefault() {}, target: { reset() {} } }));
       const doc = await page.evaluate(() => DB.trainingDocuments.find((d) => d.title === 'Sơ Đồ Quy Trình'));

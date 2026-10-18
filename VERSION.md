@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**26.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.42 (2026-11): Dọn 2 fixture lỗi thời `test-internal-training.js` (không phải lỗi production)
+
+Mục E — file CUỐI trong danh sách "4 file test nghi do sandbox" ban đầu. Cùng kết luận như mục B/C/D:
+KHÔNG phải lỗi code thật, KHÔNG sửa gì ở `module-internalcomms-daotao.js`/`core.js` — 2 fixture nội dung
+file giả không khớp chữ ký declared, bị lớp kiểm tra chữ ký file TOÀN TRANG (`core.js`, có từ trước)
+chặn ngay từ bước chọn file, gây 12/53 kịch bản FAIL dây chuyền (các kịch bản sau dùng chung `classId`
+được tạo xuyên suốt file, 1 bước hỏng kéo theo nhiều bước sau "Không tìm thấy lớp học"/`undefined`):
+
+- Kịch bản "bulk-add qua Excel-upload (Cách 2)": file viết content chuỗi `'dummy'` thuần cho đuôi
+  `.xlsx` — sửa thành đúng chữ ký ZIP (`PK\x03\x04`).
+- Kịch bản "tạo tài liệu IMAGE (file upload)": file `.png` chỉ viết 6/8 byte chữ ký PNG thật (thiếu
+  `0x1A 0x0A`) — lớp kiểm tra không nhận diện được, sửa đủ 8 byte.
+
+Test: `test-internal-training.js` 53/53 PASS (trước đó 41/53, xác nhận bằng `git stash`). Rà soát thêm
+~20 file test khác liên quan Đào Tạo/Nhịp Sống Nội Bộ dùng upload file để tìm quy mô ảnh hưởng của lớp
+kiểm tra chữ ký này — phát hiện 1 số file KHÁC cũng đang fail (`test-internal-media-client.js`,
+`test-training-course-card-thumbnail.js`, `test-training-essay-dragdrop-ui.js`, `test-training-plans.js`,
+`test-training-question-images-ui.js`, `test-trainingdocuments-encrypted-pdf-pagecount.js`) — đã xác
+nhận bằng cách chạy lại ở ĐÚNG commit trước khi bắt đầu đợt rà soát 11/2026 này (`git worktree` tạm):
+fail GIỐNG Y NGUYÊN số lượng, nghĩa là lỗi preexisting, KHÔNG liên quan tới bất kỳ thay đổi nào trong đợt
+này — để riêng cho 1 đợt rà soát khác (ngoài phạm vi 4 file ban đầu được giao), không xử lý ở đây.
+
+**Deploy-impact**: KHÔNG có — chỉ sửa 1 file test (`server/tests/test-internal-training.js`), không
+đụng tới bất kỳ file code production nào.
 
 ## v26.41 (2026-11): Dọn fixture lỗi thời `test-operation-estimate-attachments-multifile.js` (không phải lỗi production)
 
