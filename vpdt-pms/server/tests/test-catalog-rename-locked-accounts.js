@@ -183,7 +183,25 @@ async function scenario(name, fn) {
     }];
     DB.carRegs = []; DB.officeReqs = []; DB.vppRegistrations = []; DB.itPriceApprovals = [];
     DB.budgetEntries = []; DB.contracts = [];
-    DB.internalPosts = []; DB.meetings = []; DB.licenses = []; DB.paymentRequests = [];
+    DB.internalPosts = []; DB.licenses = [];
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent "bảng liên kết"):
+    // Thanh Toán/Vận Hành-Đơn Hàng/Phòng Họp trước đây bị bỏ sót khỏi findPendingApprovalsForUsername()
+    // dù cả 3 đều đã có lớp named-approver theo phòng ban — seed 1 bản ghi PENDING cho mỗi module, với
+    // "locked_approver" là người duyệt CHỈ ĐỊNH TÊN ở bước/mức hiện tại.
+    DB.paymentDeptWorkflows = { 'Phòng IT': { workflowId: 'WF_1STEP', approvers: { 1: ['locked_approver'] } } };
+    DB.paymentRequests = [{
+      id: 301, sourceCode: 'TT-1', title: 'Thanh toán test', dept: 'Phòng IT',
+      status: 'PENDING', currentStep: 1, history: []
+    }];
+    DB.operationOrderHOTierWorkflows = { LT100M: { approvers: { 1: ['locked_approver'] } } };
+    DB.operationOrderStoreTierWorkflows = {};
+    DB.operationOrders = [{
+      id: 401, code: 'DH-1', title: 'Đơn hàng test', dept: 'Phòng IT',
+      status: 'PENDING', currentStep: 1, history: [],
+      orderLocationType: 'HO', amount: 5000000, paymentTotalAmount: 0
+    }];
+    DB.meetingDeptWorkflows = { 'Phòng IT': { approvers: { 1: ['locked_approver'] } } };
+    DB.meetings = [{ id: 501, code: 'PH-1', title: 'Họp test', dept: 'Phòng IT', status: 'PENDING' }];
     // Seed cho các danh mục MỚI có nút "✏️ Sửa" (đợt "tất cả các danh mục đều phải sửa được").
     DB.cats = ['Nội bộ']; DB.deptAbbrs = {}; DB.docCatAbbrs = {};
     DB.licenseTypes = ['Giấy phép A'];
@@ -266,16 +284,20 @@ async function scenario(name, fn) {
   // ==========================================================================
   // (2) findPendingApprovalsForUsername() + toggleUserActive() warning.
   // ==========================================================================
-  await scenario('(2a) findPendingApprovalsForUsername() finds the doc + submission where locked_approver is a named approver', async () => {
+  await scenario('(2a) findPendingApprovalsForUsername() finds the doc + submission + payment/operationOrder/meeting where locked_approver is a named approver', async () => {
     const r = await page.evaluate(() => {
       const found = findPendingApprovalsForUsername('locked_approver');
       const notApprover = findPendingApprovalsForUsername('locked_not_approver');
       return { found, notApprover };
     });
-    record('(2a) exactly 2 pending records found for locked_approver (1 doc + 1 submission)',
-      r.found.length === 2, JSON.stringify(r));
+    // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình): trước đây chỉ 2 (doc +
+    // submission) — giờ thêm 3 (payment/operationOrder/meeting), đủ 5.
+    record('(2a) exactly 5 pending records found for locked_approver (doc + submission + payment + operationOrder + meeting)',
+      r.found.length === 5, JSON.stringify(r));
     record('(2a) each result carries typeLabel/code/title/stepLabel',
       r.found.every(p => p.typeLabel && p.code && p.title && p.stepLabel), JSON.stringify(r));
+    record('(2a) includes "TT-1" (Thanh toán), "DH-1" (Vận Hành - Đơn hàng), "PH-1" (Phòng họp)',
+      ['TT-1', 'DH-1', 'PH-1'].every(code => r.found.some(p => p.code === code)), JSON.stringify(r));
     record('(2a) a user who is NOT a named approver anywhere gets an empty list',
       r.notApprover.length === 0, JSON.stringify(r));
   });

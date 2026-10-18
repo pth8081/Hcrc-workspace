@@ -715,6 +715,67 @@ const { assertUploadedFileUrl, CREATE_MODULE_CONFIGS } = require('./createValida
 
 const nowVN = () => new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
+// ===== Validate cấu trúc *DeptWorkflows/*TierWorkflows khi lưu qua POST /api/data/:key =====
+// PHÁT HIỆN mức Thấp/Trung Bình (đợt rà soát chuyên sâu lần 2 trước go-live, Agent-4): route generic
+// routes/data.js POST /:key trước đây chỉ gate QUYỀN (ADMIN_ONLY_KEYS) cho các map cấu hình quy trình
+// theo phòng ban/mức, KHÔNG validate CẤU TRÚC — resolveStepApproverUsernames() (lib/positionApprovers.js)
+// và flatWorkflowConfigToSteps()/resolveXxxWorkflow() ở file này đủ "defensive" (optional chaining +
+// `|| {}`/`|| []`) nên KHÔNG crash server nếu lưu sai cấu trúc (VD mảng thay vì object, hoặc 1 phần tử
+// không phải object) — nhưng ÂM THẦM biến mọi approver của phòng ban/mức đó thành RỖNG, hồ sơ PENDING
+// không ai duyệt được (trừ Admin) mà không có cảnh báo nào, rất khó phát hiện nguyên nhân sau đó. Chặn
+// NGAY ở route (400 rõ ràng) thay vì để lưu "thành công" rồi hỏng âm thầm.
+//
+// DEPT_OR_TIER_WORKFLOW_MAP_KEYS: toàn bộ map {[dept hoặc tier]: cfg} — tổng hợp từ DEPT_WORKFLOW_MAP_KEYS
+// (lib/catalogRename.js, 13 key dept-keyed) + 3 map tier-keyed cùng khuôn (itPriceTierWorkflows/
+// operationOrderStoreTierWorkflows/operationOrderHOTierWorkflows). KHÔNG gồm các map/mảng khác khuôn đã
+// tự validate riêng (submissionApprovalGroups/contractApprovalGroups/extraApprovalGroups_*... — mảng rule,
+// xem assertApprovalGroupsSingleApproverCaps() ở lib/createValidation.js) hay chỉ validate theo tên chứ
+// không theo cấu trúc dept-keyed (operationOrderStoreMixedApprovalRules/itPriceWholesaleStoreMixedApprovalRules
+// — mảng rule, deptViewScopeConfig/quickApplyConfigs — khuôn khác hẳn). CHỈ validate CẤU TRÚC (object hay
+// không), KHÔNG validate sâu xuống approvers/approverMode/approversByPosition — cấu trúc BÊN TRONG mỗi
+// cfg khác nhau tuỳ module (itPriceDeptWorkflows còn lồng thêm RETAIL/WHOLESALE) nên cố định luật sâu hơn
+// dễ chặn nhầm cấu hình hợp lệ của 1 module nào đó.
+const DEPT_OR_TIER_WORKFLOW_MAP_KEYS = new Set([
+  'deptWorkflows', 'submissionDeptWorkflows', 'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows',
+  'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
+  'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'budgetApprovedDeptWorkflows', 'paymentDeptWorkflows',
+  'meetingDeptWorkflows', 'itPriceTierWorkflows', 'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows'
+]);
+// submissionTypeDeptWorkflows: LỒNG SÂU HƠN 1 CẤP ({typeKey: {dept: cfg}}, xem NESTED_DEPT_WORKFLOW_MAP_KEYS
+// ở lib/catalogRename.js) — validate riêng cả 2 cấp bên dưới, không dùng chung Set ở trên.
+const NESTED_DEPT_WORKFLOW_MAP_KEY = 'submissionTypeDeptWorkflows';
+
+function isPlainWorkflowMapObject(v) {
+  return v != null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function assertDeptOrTierWorkflowMapShape(key, value) {
+  if (DEPT_OR_TIER_WORKFLOW_MAP_KEYS.has(key)) {
+    if (!isPlainWorkflowMapObject(value)) {
+      throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là object {tên phòng ban/mức: cấu hình}`);
+    }
+    for (const [subKey, cfg] of Object.entries(value)) {
+      if (!isPlainWorkflowMapObject(cfg)) {
+        throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — cấu hình của "${subKey}" phải là object`);
+      }
+    }
+  } else if (key === NESTED_DEPT_WORKFLOW_MAP_KEY) {
+    if (!isPlainWorkflowMapObject(value)) {
+      throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là object {loại tờ trình: {phòng ban: cấu hình}}`);
+    }
+    for (const [typeKey, deptMap] of Object.entries(value)) {
+      if (!isPlainWorkflowMapObject(deptMap)) {
+        throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — cấu hình của loại "${typeKey}" phải là object {phòng ban: cấu hình}`);
+      }
+      for (const [dept, cfg] of Object.entries(deptMap)) {
+        if (!isPlainWorkflowMapObject(cfg)) {
+          throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — cấu hình của loại "${typeKey}" / phòng ban "${dept}" phải là object`);
+        }
+      }
+    }
+  }
+}
+
 // Chặn TỰ DUYỆT/TỰ XỬ LÝ hồ sơ do chính mình tạo — vá lỗ hổng mức Cao phát hiện ở đợt rà soát bảo mật
 // trước golive (9/2026): canApproveStep() (đầu file) chỉ kiểm "có tên trong danh sách approver bước
 // hiện tại + chưa từng duyệt bước này" — KHÔNG loại trừ chính người tạo/trình hồ sơ, nên 1 trưởng phòng
@@ -1330,5 +1391,6 @@ module.exports = {
   computeOperationOrderAmount,
   computeOperationOrderTier,
   OPERATION_ORDER_STORE_TIERS,
-  OPERATION_ORDER_HO_TIERS
+  OPERATION_ORDER_HO_TIERS,
+  assertDeptOrTierWorkflowMapShape
 };

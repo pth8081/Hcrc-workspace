@@ -453,11 +453,21 @@ function getMyPendingApprovals(user) {
 // không ai hay biết. CỐ TÌNH KHÔNG dùng canApproveStep() (hàm đó tự động cho phép perms.admin duyệt MỌI
 // hồ sơ — dùng ở đây sẽ báo sai "mọi hồ sơ đang chờ" mỗi khi khoá 1 admin, trong khi ý nghĩa cần kiểm
 // tra là "có tên TRỰC TIẾP trong danh sách approver của bước" không liên quan gì tới cờ admin). Chỉ quét
-// đúng 9 module có bước phê duyệt theo TÊN cụ thể đã chốt phạm vi (Văn Bản Trình, Hợp Đồng x2 luồng, Tài
-// Liệu, Đăng Ký Xe, Văn Phòng Tổng Hợp x3 subType, VPP, Ngân Sách, Hỗ Trợ IT-Duyệt Giá) — KHÔNG tính các
-// quyền phẳng (Phòng Họp/Giấy Phép/Góc Chia Sẻ/Thanh Toán...) vì khoá tài khoản đã tự động chặn các
-// quyền đó ngay lập tức rồi (chỉ chặn được ĐĂNG NHẬP, không "gỡ" họ khỏi 1 bước quy trình đã chỉ định
-// tên sẵn — đó mới là vấn đề cần cảnh báo ở đây).
+// đúng các module có bước phê duyệt theo TÊN cụ thể (Văn Bản Trình, Hợp Đồng x2 luồng, Tài Liệu, Đăng Ký
+// Xe, Văn Phòng Tổng Hợp x3 subType, VPP, Ngân Sách, Hỗ Trợ IT-Duyệt Giá) — KHÔNG tính các quyền PHẲNG
+// THUẦN (Giấy Phép/Góc Chia Sẻ...) vì khoá tài khoản đã tự động chặn các quyền đó ngay lập tức rồi (chỉ
+// chặn được ĐĂNG NHẬP, không "gỡ" họ khỏi 1 bước quy trình đã chỉ định tên sẵn — đó mới là vấn đề cần
+// cảnh báo ở đây).
+// LỖI ĐÃ VÁ (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent "bảng liên kết"): Thanh
+// Toán/Vận Hành-Đơn Hàng/Phòng Họp trước đây bị liệt vào nhóm "quyền phẳng" ở chú thích trên và CỐ Ý bỏ
+// qua — ĐÚNG lúc hàm này được viết (khi cả 3 module này chỉ có đúng 1 quyền phẳng toàn công ty), nhưng cả
+// 3 module đó SAU ĐÓ đều được bổ sung thêm lớp "người duyệt CHỈ ĐỊNH TÊN theo phòng ban" (paymentDeptWorkflows/
+// operationOrderHOTierWorkflows+operationOrderStoreTierWorkflows/meetingDeptWorkflows, xem
+// resolvePaymentApprovalWorkflow()/resolveOperationOrderWorkflowConfigForItemClient()/canDecideMeetingClient()
+// ở core.js) — ĐÚNG lớp rủi ro hàm này tồn tại để cảnh báo (1 username bị khoá/xoá có thể đang là người
+// duyệt CHỈ ĐỊNH TÊN riêng cho 1 phòng ban, không phải ai có quyền phẳng cũng thay được), nhưng chưa bao
+// giờ được thêm vào đây khi 3 module này chuyển đổi. Thêm cả 3 — giữ đúng tinh thần CHỈ xét named-approver
+// (không dùng flat bypass canApproveMeeting()/canManagePaymentRequestsClient() ở đây).
 function findPendingApprovalsForUsername(username) {
   if (!username) return [];
   const results = [];
@@ -527,6 +537,30 @@ function findPendingApprovalsForUsername(username) {
     { typeLabel: '📝 Hợp đồng (Tài liệu ký)', codeOf: r => r.code, titleOf: r => r.title },
     { status: 'signedFileStatus', currentStep: 'signedFileCurrentStep' }
   );
+
+  // 3 module bổ sung (LỖI ĐÃ VÁ ở trên — Thanh Toán/Vận Hành-Đơn Hàng/Phòng Họp đều đã có lớp người
+  // duyệt CHỈ ĐỊNH TÊN theo phòng ban, không còn thuần quyền phẳng).
+  scan(DB.paymentRequests, pr => resolvePaymentApprovalWorkflow(pr), {
+    typeLabel: '💰 Thanh toán', codeOf: r => r.sourceCode || String(r.id), titleOf: r => r.title
+  });
+
+  scan(DB.operationOrders, o => resolveOperationOrderWorkflowConfigForItemClient(o), {
+    typeLabel: '📦 Vận Hành - Đơn hàng', codeOf: r => r.code, titleOf: r => r.title
+  });
+
+  // meetings: CHỈ xét lớp named-approver theo phòng ban (DB.meetingDeptWorkflows[dept], LUÔN đúng bước
+  // 1 — meetings KHÔNG có field "currentStep" như các module nhiều bước khác, khớp nhánh thứ 2 của
+  // canDecideMeetingClient() ở core.js, hardcode step=1 — KHÔNG dùng chung scan() ở trên vì helper đó
+  // đọc rec.currentStep, luôn undefined cho meetings) — KHÔNG dùng canApproveMeeting() (quyền phẳng
+  // meetingApprove/admin, người khác giữ quyền đó vẫn duyệt được ngay sau khi khoá/xoá, không cần cảnh
+  // báo gì thêm — đúng tinh thần loại trừ quyền phẳng đã nêu ở đầu hàm).
+  (DB.meetings || []).forEach(m => {
+    if (m.status !== 'PENDING') return;
+    const wfConfig = DB.meetingDeptWorkflows?.[m.dept];
+    const approvers = normalizeApproversList(resolveEffectiveStepApprovers(wfConfig, 1));
+    if (!approvers.includes(username)) return;
+    results.push({ typeLabel: '📅 Phòng họp', code: m.code, title: m.title, stepLabel: buildStepLabelForHub(wfConfig, 1) });
+  });
 
   return results;
 }

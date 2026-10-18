@@ -1,9 +1,56 @@
 # Phiên bản hiện tại
 
-**26.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.48 (2026-11): [Cao/Thấp] Rà soát chuyên sâu lần 2 trước go-live — Đợt 4: Agent-4 (2 phát hiện còn lại)
+
+Tiếp nối Đợt 3. 2 phát hiện còn lại của Agent-4 (đợt rà soát 6-agent song song):
+
+- **[Cao] `findPendingApprovalsForUsername()` bỏ sót 3 module đã có lớp người duyệt chỉ định tên.**
+  Hàm này (dùng để cảnh báo admin TRƯỚC khi khoá `toggleUserActive()`/xoá `deleteUser()` 1 tài khoản
+  đang là NGƯỜI DUYỆT CHỈ ĐỊNH TÊN theo phòng ban trong 1 hồ sơ PENDING) vốn loại trừ các module "thuần
+  quyền phẳng" (khoá không làm ai kẹt, vì quyền phẳng là CHIA SẺ) — nhưng `paymentRequests`
+  (`paymentDeptWorkflows`), `operationOrders` (`operationOrderHOTierWorkflows`/
+  `operationOrderStoreTierWorkflows`) và `meetings` (`meetingDeptWorkflows`) đã được bổ sung lớp người
+  duyệt CHỈ ĐỊNH TÊN theo phòng ban/mức từ trước đó, mà hàm này chưa được cập nhật theo — khoá/xoá 1 tài
+  khoản đang là approver chỉ định của 1 trong 3 module này không còn được cảnh báo, hồ sơ PENDING "kẹt"
+  âm thầm. Thêm 2 lời gọi `scan()` (dùng lại helper sẵn có, vì `paymentRequests`/`operationOrders` có
+  field `currentStep` thật) cho `paymentRequests`/`operationOrders`, và 1 khối riêng cho `meetings` (viết
+  tay — meeting KHÔNG có field `currentStep`, luôn đúng bước 1, khác hẳn 2 module kia).
+- **[Thấp/Trung Bình] `POST /api/data/:key` không validate CẤU TRÚC cho 16 map cấu hình quy trình theo
+  phòng ban/mức (`*DeptWorkflows`/`*TierWorkflows`).** Route generic này trước đây chỉ gate QUYỀN
+  (`ADMIN_ONLY_KEYS`) cho các key này, không kiểm cấu trúc — code tiêu thụ
+  (`resolveStepApproverUsernames()`/`flatWorkflowConfigToSteps()`...) đủ "defensive" (optional chaining +
+  `|| {}`/`|| []`) nên không crash server nếu lưu sai cấu trúc (VD mảng thay object, hoặc 1 phần tử không
+  phải object), nhưng ÂM THẦM làm RỖNG approver của phòng ban/mức đó — hồ sơ PENDING không ai duyệt được
+  (trừ Admin) mà không có cảnh báo nào, rất khó tìm nguyên nhân. Thêm `assertDeptOrTierWorkflowMapShape()`
+  (lib/workflowEngine.js) — validate 13 map dept-keyed + 3 map tier-keyed (`itPriceTierWorkflows`/
+  `operationOrderStoreTierWorkflows`/`operationOrderHOTierWorkflows`) phải là object {key: object}, và
+  `submissionTypeDeptWorkflows` (lồng sâu hơn 1 cấp — `{typeKey: {dept: cfg}}`) phải đúng khuôn 2 cấp —
+  trả 400 rõ ràng ngay tại route nếu sai, thay vì lưu "thành công" rồi hỏng âm thầm. CHỈ validate cấu trúc
+  (object hay không), KHÔNG validate sâu xuống `approvers`/`approverMode`/`approversByPosition` (khác
+  nhau tuỳ module, VD `itPriceDeptWorkflows` còn lồng thêm `RETAIL`/`WHOLESALE`) để không chặn nhầm cấu
+  hình hợp lệ.
+
+**Test:** mở rộng `tests/test-catalog-rename-locked-accounts.js` (scenario 2a: seed thêm
+`paymentDeptWorkflows`/`paymentRequests`, `operationOrderHOTierWorkflows`/`operationOrders`,
+`meetingDeptWorkflows`/`meetings`, xác nhận `findPendingApprovalsForUsername()` tìm đủ 5 hồ sơ — doc +
+submission + payment + operationOrder + meeting) + file mới
+`tests/test-deptworkflow-structure-validate.js` (18 scenario, pure-unit — bao gồm cả 2 cfg khuôn CŨ/MỚI
+của `itPriceDeptWorkflows` và các cấp lồng của `submissionTypeDeptWorkflows`). Tất cả assertion mới đã
+xác nhận FAIL trên code CŨ (`git stash`), PASS trên code đã vá. Chạy lại đầy đủ các bộ test liên quan:
+`test-approval-hub.js` (55/55), `test-approval-polling.js` (12/12), `test-meeting-dept-workflow.js` (9/9),
+`test-payment.js` (110/110), `test-budget-meeting-dept-workflow-ui.js` (7/7),
+`test-quick-apply-workflow-steps.js` (44/44), `test-workflow-position-approvers.js` (22/22),
+`test-workflow-reset-dept-config.js` (12/12), `test-workflow-participating-positions.js` (6/6),
+`test-itprice-approval-and-emergency.js` (17/17), `test-itprice-wholesale-mixed-approval.js` (14/14),
+`test-operation-order-noapprover-warning.js` (15/15), `test-contract-payment-type-change.js` (15/15) —
+tất cả PASS, không có regression ở module khác. (Lưu ý: `test-adv-workflow-tab-deep.js` FAIL ở bước B5
+cả TRƯỚC và SAU khi áp dụng đợt này — xác nhận là lỗi/stale có từ trước, không liên quan đến đợt này,
+chưa xử lý ở đợt này.)
 
 ## v26.47 (2026-11): [Cao] Rà soát chuyên sâu lần 2 trước go-live — Đợt 3: 4 lỗ hổng "bảng liên kết" (Agent 5)
 
