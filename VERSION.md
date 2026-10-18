@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**26.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.56 (2026-11): [Cao] Re-audit lần 3 — mục 6: budgetPeriods.dept (field riêng, khác deptScope) không được cascade rename
+
+Tiếp nối v26.51-26.55. Mục thứ 6 trong 8 phát hiện của re-audit lần 3:
+
+- **[Cao] `budgetPeriods` ("kỳ ngân sách") có 2 field phòng ban HOÀN TOÀN KHÁC NHAU, dễ nhầm** —
+  `deptScope` (phạm vi phòng ban PHẢI nộp, admin tự chọn khi tạo kỳ) và `dept` (`forceOwnDept` —
+  snapshot phòng ban của NGƯỜI TẠO kỳ, xem `lib/createValidation.js`). `canViewBudgetPeriod()`
+  (lib/recordViewScope.js) lại xét quyền XEM bằng field THỨ HAI: `item.dept === user.dept`. Trước đây
+  `cascadeStoreRename()` chỉ có đúng 1 dòng `renameFieldValueInCollection('budgetPeriods',
+  renameDeptScopeDepts)` cascade `deptScope` — field `dept` bị bỏ sót hoàn toàn khỏi
+  `DEPT_FIELD_COLLECTIONS`. Hậu quả: đổi tên phòng ban của người đã tạo kỳ ngân sách xong, kỳ đó "biến
+  mất" khỏi màn hình của TOÀN BỘ nhân viên phòng ban đó (trừ admin/budgetManage/budgetAggregate/
+  budgetReportView xem được mọi kỳ, không bị ảnh hưởng) — cùng lớp lỗi vừa vá cho `reportEntries.dept`
+  ở v26.55. Thêm `{ collection: 'budgetPeriods', fields: ['dept'] }` vào `DEPT_FIELD_COLLECTIONS` —
+  chạy SONG SONG với dòng `renameDeptScopeDepts` đã có (2 field độc lập, không xung đột).
+
+**Test:** file mới `tests/test-budgetperiods-dept-rename-cascade.js` (3 scenario, gọi THẬT router
+`routes/adminCatalog.js` qua HTTP, cố ý dựng fixture với `dept` và `deptScope.depts` trỏ tới 2 phòng
+ban KHÁC nhau để xác nhận không lẫn field). Assertion mới đã xác nhận FAIL trên code CŨ (`git stash --
+lib/catalogRename.js`, 0/3 passed), PASS trên code đã vá (3/3). Chạy lại bộ test cascade rename +
+budget liên quan: `test-catalog-rename-round2-extras.js` (8/8), `test-catalog-rename-server.js`
+(26/26), `test-catalog-rename-locked-accounts.js` (40/40), `test-meeting-room-rename-cascade.js`
+(8/8), `test-mixed-approval-jobtitle-dept.js` (9/9), `test-position-types.js` (10/10),
+`test-reportentries-dept-rename-cascade.js` (3/3), `test-audit-hethong-round2-server.js` (18/18),
+`test-report-permission-rollout.js` (20/20) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. Kỳ ngân sách ĐÃ TẠO trước
+khi vá, với người tạo thuộc 1 phòng ban đã từng đổi tên TRƯỚC bản vá này, vẫn còn mang `dept` cũ cho
+tới khi admin chạy lại chức năng "Đổi tên Phòng Ban/Siêu Thị" 1 lần nữa — không mất dữ liệu, chỉ chưa
+được cascade lại hồi tố; không cần thao tác thủ công nào khác.
 
 ## v26.55 (2026-11): [Cao] Re-audit lần 3 — mục 5: reportEntries.dept không có trong bất kỳ cascade rename nào
 
