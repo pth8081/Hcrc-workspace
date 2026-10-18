@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**26.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.96 (2026-11): [TB/Thấp] Re-audit lần 5 — mục 9: deptCodeMap + jobTitleGradeDefaults không cascade
+
+Mục thứ 9 trong 18 phát hiện mức Trung Bình/Thấp của đợt re-audit lần 5 — 2 lỗ hổng cùng lớp "map/mảng
+khoá theo tên hiển thị, thiếu cascade khi đổi tên danh mục gốc", phát hiện ở `lib/catalogRename.js`:
+
+- **`deptCodeMap`** (object `{<tên phòng ban> -> <mã bộ phận>}`, do `ensureDeptCode()` tự quản lý —
+  `lib/employeeProfile.js`/`routes/employeeProfile.js`): `cascadeDeptRename()` đã dời key `deptAbbrs`
+  (cùng khuôn) khi đổi tên phòng ban nhưng BỎ SÓT `deptCodeMap`. Đổi tên phòng ban làm mã bộ phận "rơi
+  mất" dưới tên cũ — cột "Mã bộ phận" ở Excel Hồ Sơ Nhân Sự xuất RỖNG cho mọi nhân viên thuộc phòng ban
+  vừa đổi tên, và `generateDeptCode()` tự sinh THÊM 1 mã MỚI cho tên mới ở lần truy vấn kế tiếp (tưởng
+  phòng ban chưa từng có mã) — vừa mất mã cũ vừa phát sinh mã trùng nghĩa.
+  - Vá: thêm `renameAbbrMapKey('deptCodeMap', ...)` vào `cascadeDeptRename()` (tái dùng NGUYÊN helper
+    đã dùng cho `deptAbbrs`, không viết logic mới).
+- **`jobTitleGradeDefaults`** (`{jobTitle,jobGrade}[]`, UNIQUE theo `jobTitle` — "Chức Danh ↔ Cấp Bậc",
+  gợi ý tự điền Cấp Bậc khi Thêm/Sửa Vị Trí ở Cơ Cấu Tổ Chức): `jobTitle` có thể trỏ tới chức danh HO
+  (`jobTitles`) HOẶC Siêu Thị (`storeJobTitles`) — cả `cascadeJobTitleRename()` và
+  `cascadeStoreJobTitleRename()` đều BỎ SÓT collection này. Đổi tên chức danh để lại 1 dòng "mồ côi":
+  gợi ý tự điền Cấp Bậc (`applyJobTitleGradeDefaultSuggestion()`, `module-orgchart.js`) im lặng mất tác
+  dụng cho tên MỚI, trong khi dòng cấu hình cũ vẫn hiện trên màn Quản Lý Danh Mục như đã cấu hình (gây
+  hiểu lầm admin tưởng đã gán cấp bậc mặc định cho 1 chức danh không còn tồn tại).
+  - Vá: thêm `cascadeJobTitleGradeDefaultRename()` (mới), gọi từ CẢ 2 hàm cascade trên. Nếu tên MỚI đã
+    trùng 1 dòng khác (2 chức danh gộp về cùng 1 tên) — giữ dòng đã có sẵn, bỏ dòng cũ (orphan) thay vì
+    tạo trùng key, khớp đúng ràng buộc UNIQUE theo `jobTitle` mà `saveJobTitleGradeDefault()` đã áp
+    phía client.
+  - **Không đụng tới cascade `jobGrade`** (đổi tên 1 Cấp Bậc trong danh mục `jobGrades`): đây là quyết
+    định THIẾT KẾ đã có từ trước (`simpleArrayCatalogHandler`, nhóm 7+ danh mục "gợi ý tự do" — xem chú
+    thích ở `lib/catalogRename.js`), không phải lỗ hổng của đợt này.
+
+**Test:** mở rộng `tests/test-catalog-rename-server.js` (dedicated test cho `lib/catalogRename.js` +
+`routes/adminCatalog.js`) — thêm fixture `deptCodeMap`/`jobTitleGradeDefaults` + 4 scenario mới: dời
+key `deptCodeMap` khi đổi tên phòng ban, cascade `jobTitleGradeDefaults[].jobTitle` khi đổi tên chức
+danh HO, khi đổi tên chức danh Siêu Thị, và trường hợp gộp trùng tên (giữ dòng đã có, không tạo trùng
+key). Xác nhận FAIL trên code CŨ (`git stash -- lib/catalogRename.js`, đúng 3/30 scenario FAIL — 2 lỗi
+chính, scenario gộp-trùng-tên vẫn PASS vì chưa có cascade để mà xung đột), PASS trên code đã vá
+(30/30). Regression: `test-position-types.js` (10/10), `test-catalog-rename-position-pairs.js` (6/6),
+`test-deptcodemap-admin-gate.js` (3/3), `test-quick-apply-auto-dept-position.js` (15/15),
+`test-workflow-participating-positions.js` (6/6), `test-secondarypositions-rename-cascade.js` (5/5) —
+toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.95 (2026-11): [TB] Re-audit lần 5 — mục 8: positionTypes ghi qua /api/data né check "đang dùng"
 
