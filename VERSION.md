@@ -1,9 +1,55 @@
 # Phiên bản hiện tại
 
-**27.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.32 (2026-11): [Cao] Re-audit lần 7 — mục 3/9 (HẾT phần Cao): Đổi tên/xoá username không cascade sang approvers PEOPLE/PERSON mode
+
+Mục thứ ba (3/9) của đợt re-audit lần 7 — hoàn tất toàn bộ 3 finding mức Cao của đợt này.
+
+**Nguyên nhân:** `cascadeUsernameChangesToApprovalGroups()` (`lib/catalogRename.js`) — vá ở re-audit lần
+3 — chỉ phủ `members[]` của 12 "Nhóm Phê Duyệt". Hệ thống còn 2 cơ chế chọn-người-duyệt-trực-tiếp khác,
+cùng bản chất tham chiếu username THÔ (không qua id bất biến) nhưng CHƯA TỪNG được cascade:
+
+1. `approvers[stepOrder] = [username,...]` (PEOPLE mode — xem `resolveStepApproverUsernames()`,
+   `lib/positionApprovers.js`; chốt chặn thật `canApproveStep()`, `lib/workflowEngine.js`) — nằm lồng
+   bên trong mọi cfg của 17 map `*DeptWorkflows`/`*TierWorkflows`, CÙNG VỊ TRÍ với `approversByPosition`
+   (đã cascade đúng từ trước ở `cascadePositionPairs()`/`renamePositionPairsDeep()` — chỉ nhánh
+   `approvers[]` bị bỏ sót).
+2. `rule.username` (mode `'PERSON'`) của `operationOrderStoreMixedApprovalRules`/
+   `itPriceWholesaleStoreMixedApprovalRules` — `resolveOperationOrderStoreMixedApprovalRuleUsernames()`
+   (`lib/workflowEngine.js`) so CHUỖI THÔ `isActiveUsername(rule.username)` với username hiện tại.
+
+Đổi tên 1 tài khoản để lại username CŨ trong `approvers[]`/`rule.username` không còn khớp ai → bước
+duyệt "chọn tay" đó mất hẳn approver hợp lệ, hồ sơ PENDING treo tới khi admin tự sửa lại tay — ẢNH
+HƯỞNG RỘNG: mọi module dùng PEOPLE/PERSON mode (Tài Liệu, Văn Bản Trình, Hợp Đồng, Đăng Ký Xe, Văn
+Phòng, VPP, Ngân Sách, Thanh Toán, Phòng Họp, Hỗ Trợ IT Bán Lẻ/Bán Buôn, Đặt Hàng Siêu Thị/HO). Nghiêm
+trọng hơn với `approvers[]` (so khớp chuỗi thô, KHÔNG tự lọc theo trạng thái tài khoản như
+`isActiveUsername()` đã làm cho PERSON mode): xoá vĩnh viễn 1 username mà không gỡ khỏi `approvers[]`
+để lại username "ma" — nếu username đó về sau bị TÁI SỬ DỤNG cho 1 tài khoản khác hoàn toàn, người mới
+tự động trở thành approver hợp lệ ngoài ý admin (lỗ hổng toàn vẹn phân quyền, không chỉ mất chức năng).
+
+**Vá:** thêm hàm mới `cascadeUsernameChangesToWorkflowApprovers(renamed, deletedUsernames)`
+(`lib/catalogRename.js`) — quét ĐỆ QUY (mirror đúng `renamePositionPairsDeep()`) đổi/gỡ username trong
+mọi map `approvers` tìm thấy ở BẤT KỲ độ sâu nào, áp dụng cho `POSITION_PAIR_CONFIG_MAP_KEYS` (17 map);
+đồng thời đổi/đặt-null `rule.username` (mode PERSON) cho `MIXED_APPROVAL_RULE_KEYS` (2 map). Gọi hàm
+này ngay cạnh `cascadeUsernameChangesToApprovalGroups()` ở `routes/data.js` (POST `/api/data/users`),
+dùng lại `renamed`/`deletedUsernames` đã tính sẵn.
+
+**Test:** file mới `tests/test-workflowapprover-username-cascade.js` (9 scenario, cùng khuôn
+`test-approvalgroup-username-cascade.js`) — đổi tên cascade đúng vào map 1 cấp/lồng sâu
+(`submissionTypeDeptWorkflows`)/không lồng theo dept (`itPriceTierWorkflows`)/cả 2 `MixedApprovalRules`;
+xoá vĩnh viễn gỡ khỏi `approvers[]` + đặt null `rule.username`; `approversByPosition` (field khác) không
+bị đụng; username không liên quan/tham số rỗng không đổi gì. Xác nhận FAIL trên code CŨ (`git stash`,
+9/9 FAIL — hàm chưa tồn tại), PASS trên code đã vá (9/9). Regression:
+`tests/test-approvalgroup-username-cascade.js` (4/4), `tests/test-audit-hethong-cluster-server.js`
+(22/22), `tests/test-secondarypositions-rename-cascade.js` (5/5),
+`tests/test-managerusername-rename-delete-cascade.js` (qua HTTP thật `POST /api/data/users`, 3/3) —
+toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.31 (2026-11): [Cao] Re-audit lần 7 — mục 2/9: hrOnboardingManage đọc/ghi hồ sơ INACTIVE qua đường onboarding queue
 
