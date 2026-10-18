@@ -26,7 +26,7 @@ const { MODULE_CONFIGS, canApproveStep } = require('./workflowEngine');
 const {
   canApproveInternalPost, canApproveLicense, canManagePaymentRequests,
   canApproveItPriceEmergencyReject, isApproverForOperationOrderReceipt,
-  canApproveUniform, canApproveUniformTransfer
+  canApproveUniform, canApproveUniformTransfer, canDecideMeeting
 } = require('./recordActions');
 const { canApproveLeaveRequest } = require('./attendance');
 
@@ -36,15 +36,6 @@ const { canApproveLeaveRequest } = require('./attendance');
 function resolveEmployeeUsername(employeeCode, employeeProfiles) {
   const profile = (employeeProfiles || []).find(p => p.employeeCode === employeeCode);
   return profile?.username || null;
-}
-
-// canApproveMeeting(user) — KHÔNG có sẵn hàm export nào ở server (routes/meetingActions.js chỉ viết
-// inline `!!(freshUser.perms?.admin || freshUser.perms?.meetingApprove)`, không tách hàm riêng) — PHẢI
-// giữ giống hệt CẢ 2 nơi đó lẫn canApproveMeeting() client (public/js/core.js, ~dòng 2171).
-function canApproveMeeting(user) {
-  if (!user) return false;
-  if (user.perms?.admin) return true;
-  return !!user.perms?.meetingApprove;
 }
 
 // Mirror addDeptWorkflowItems() (core-approvalhub.js, ~dòng 58) cho ĐÚNG 1 module: đẩy "<keyPrefix>:<id>"
@@ -110,9 +101,19 @@ function computeMyPendingApprovalKeys(user, appData) {
   // 2 lời gọi addDeptWorkflowItems() tương ứng ở getMyPendingApprovals() (core-approvalhub.js).
 
   // ----- 2) Module theo 1 QUYỀN PHẲNG, không có khái niệm bước -----
-  if (canApproveMeeting(user)) {
-    (appData.meetings || []).filter(m => m.status === 'PENDING').forEach(m => keys.push(`meeting:${m.id}`));
-  }
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "approvalAggregator canApproveMeeting lỗi thời"): hàm cũ
+  // canApproveMeeting(user) (đã XOÁ) chỉ kiểm `admin || meetingApprove` KHÔNG theo TỪNG hồ sơ — mirror
+  // SAI/CŨ của canDecideMeeting() (lib/recordActions.js, hàm THẬT đang gác route "approve" ở
+  // routes/meetingActions.js): (1) KHÔNG loại trừ chính người tạo lịch họp (self-approval) -> false
+  // positive, người vừa tự đặt phòng họp của chính mình thấy ngay badge "Phê Duyệt (1)" dù bấm Duyệt sẽ
+  // bị 403 thật; (2) KHÔNG tính nhánh meetingDeptWorkflows[dept] (admin gán RIÊNG người duyệt cho 1
+  // phòng ban dù người đó KHÔNG có quyền phẳng meetingApprove) -> false negative, người được gán duyệt
+  // riêng cho phòng ban mình không BAO GIỜ nhận được khoá "meeting:<id>" (không có thông báo hồ sơ mới
+  // cần duyệt, phải tự F5/tự vào Hub mới thấy). Nay gọi THẲNG canDecideMeeting(user, m, appData) — ĐÚNG
+  // hàm enforcement thật, cho TỪNG hồ sơ — khớp đúng triết lý "không tự suy diễn lại logic quyền" nêu ở
+  // đầu file.
+  (appData.meetings || []).filter(m => m.status === 'PENDING' && canDecideMeeting(user, m, appData))
+    .forEach(m => keys.push(`meeting:${m.id}`));
   if (canApproveInternalPost(user)) {
     (appData.internalPosts || []).forEach(p => {
       if (p.type === 'SHARE' && p.status === 'PENDING') keys.push(`internalShare:${p.id}`);
