@@ -30,9 +30,9 @@ function getHrFeedbackCategoryLabel(key) {
   return HR_FEEDBACK_CATEGORY_LABELS_DEFAULT[key] || key;
 }
 const HR_FEEDBACK_STATUS_BADGES = {
-  PENDING: '<span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-xs">🕒 Chờ phản hồi</span>',
-  ANSWERED: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Đã phản hồi</span>',
-  WITHDRAWN: '<span class="px-2 py-0.5 bg-gray-200 text-gray-600 rounded font-bold text-xs">🚫 Đã rút lại</span>'
+  PENDING: '<span class="badge-info">🕒 Chờ phản hồi</span>',
+  ANSWERED: '<span class="badge-success">✅ Đã phản hồi</span>',
+  WITHDRAWN: '<span class="badge-neutral">🚫 Đã rút lại</span>'
 };
 
 // ----- Phía NHÂN VIÊN (tab HCRC Đồng Hành trong Truyền Thông) -----

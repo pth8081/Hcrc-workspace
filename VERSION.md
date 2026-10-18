@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**26.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.30 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch B — badge Onboarding/Offboarding + HCRC Đồng Hành + Báo Cáo Định Kỳ
+
+Tiếp tục Giai đoạn 3 — batch B gồm 3 module nữa đổi badge trạng thái sang `.badge-*` DÙNG CHUNG.
+
+- `public/js/module-hrlifecycle.js` (Onboarding/Offboarding): `HR_TASK_STATUS_BADGES` (checklist từng
+  việc nhỏ: PENDING/DONE/OVERDUE/SKIPPED) + `HR_PROCESS_STATUS_BADGES` (cả hồ sơ: IN_PROGRESS/COMPLETED/
+  CANCELLED) đổi sang `.badge-*`. SKIPPED và PENDING cùng dùng `.badge-neutral` (không phân biệt được
+  nữa bằng màu, chỉ còn bằng chữ) — hợp lý vì cả 2 đều là "chưa có kết quả", khác hẳn DONE/OVERDUE.
+- `public/js/module-hcrcdonghanh.js` (hỏi & đáp chế độ/quy định): `HR_FEEDBACK_STATUS_BADGES`
+  (PENDING/ANSWERED/WITHDRAWN) đổi sang `.badge-*` — "chờ phản hồi" đổi sang info (khớp quy ước "đang
+  chờ xử lý" = info), "đã rút lại" (nhân viên tự rút câu hỏi, không phải bị từ chối) dùng neutral.
+- `public/js/module-baocaodinhky-nhap.js`: `prEntryStatusBadge()` (Nháp/Đã gửi — Nháp dùng neutral,
+  khớp đúng nghĩa "chưa gửi" của VPP, KHÁC nghĩa "cần bổ sung" ở Đăng Ký Xe/Tài liệu) +
+  `prPeriodStatusBadge()` (4 trạng thái kỳ báo cáo: đang mở/đã phát hành = success, đã tổng hợp — còn 1
+  bước nữa trước khi phát hành = info, đã kết thúc chưa xử lý gì = neutral) đổi sang `.badge-*`.
+
+Test: `tests/test-giai-doan-3-batch-b-badges.js` (mới, 5 kịch bản — gọi thẳng các object/hàm badge, không
+cần dựng bảng). Đã xác nhận bằng `git stash` test mới FAIL đúng (0/5) trên code cũ. Chạy lại
+`test-hr-lifecycle.js` (39) + `test-hrfeedback-withdraw.js` (7) + `test-periodic-report.js` (15) +
+`test-periodic-report-pdf.js` (13) + `test-periodic-report-pdf-replace-ownership.js` (4) +
+`test-report-period-by-tasks-filters.js` (8) + `test-report-period-deadline-reminder.js` (6) + CSP
+full-audit (3) + lazy-load toàn bộ tab (46) — không hồi quy.
+
+**Deploy-impact**: thuần client (`public/js/module-hrlifecycle.js`, `public/js/module-hcrcdonghanh.js`,
+`public/js/module-baocaodinhky-nhap.js`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi trường mới, KHÔNG
+đổi dependencies. Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.29 (2026-11): "HCRC Workspace Refresh" Giai đoạn 3, batch A — badge Văn Phòng + Vận Hành + Ngân Sách
 

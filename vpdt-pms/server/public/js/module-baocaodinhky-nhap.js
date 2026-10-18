@@ -396,8 +396,8 @@ async function submitPrEntryAction(entryId, fromForm) {
 }
 
 function prEntryStatusBadge(e) {
-  if (e.status === 'DRAFT') return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">📝 Nháp</span>`;
-  return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">✅ Đã gửi</span>`;
+  if (e.status === 'DRAFT') return `<span class="badge-neutral">📝 Nháp</span>`;
+  return `<span class="badge-success">✅ Đã gửi</span>`;
 }
 
 // Phạm vi xem: reportManage/reportAggregate/admin xem MỌI phòng ban. Còn lại xem được báo cáo ĐÃ GỬI
@@ -513,10 +513,10 @@ async function createReportPeriod(e) {
 }
 
 function prPeriodStatusBadge(p) {
-  if (reportPeriodIsOpen(p)) return `<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">🟢 Đang mở</span>`;
-  if (p.compilation?.status === 'PUBLISHED') return `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-xs">📣 Đã phát hành</span>`;
-  if (p.compilation?.status === 'MERGED') return `<span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-xs">🧩 Đã tổng hợp</span>`;
-  return `<span class="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-xs">🔒 Đã kết thúc</span>`;
+  if (reportPeriodIsOpen(p)) return `<span class="badge-success">🟢 Đang mở</span>`;
+  if (p.compilation?.status === 'PUBLISHED') return `<span class="badge-success">📣 Đã phát hành</span>`;
+  if (p.compilation?.status === 'MERGED') return `<span class="badge-info">🧩 Đã tổng hợp</span>`;
+  return `<span class="badge-neutral">🔒 Đã kết thúc</span>`;
 }
 
 function renderPrPeriodsTable() {

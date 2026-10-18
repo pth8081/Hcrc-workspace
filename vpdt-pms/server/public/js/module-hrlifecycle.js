@@ -16,15 +16,15 @@ const HR_STAGE_LABELS = {
 };
 const HR_DEPT_LABELS = { HR: '👤 Nhân Sự', IT: '💻 IT', ADMIN: '🏢 Hành Chính', FINANCE: '💰 Tài Chính', MANAGER: '👔 Quản Lý Trực Tiếp' };
 const HR_TASK_STATUS_BADGES = {
-  PENDING: '<span class="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-bold">Chưa làm</span>',
-  DONE: '<span class="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-[10px] font-bold">✅ Xong</span>',
-  OVERDUE: '<span class="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold">⚠️ Quá hạn</span>',
-  SKIPPED: '<span class="px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded text-[10px] font-bold">Đã bỏ qua</span>'
+  PENDING: '<span class="badge-neutral">Chưa làm</span>',
+  DONE: '<span class="badge-success">✅ Xong</span>',
+  OVERDUE: '<span class="badge-danger">⚠️ Quá hạn</span>',
+  SKIPPED: '<span class="badge-neutral">Đã bỏ qua</span>'
 };
 const HR_PROCESS_STATUS_BADGES = {
-  IN_PROGRESS: '<span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-xs">🔄 Đang thực hiện</span>',
-  COMPLETED: '<span class="px-2 py-0.5 bg-green-100 text-green-800 rounded font-bold text-xs">✅ Hoàn tất</span>',
-  CANCELLED: '<span class="px-2 py-0.5 bg-red-100 text-red-800 rounded font-bold text-xs">❌ Đã huỷ</span>'
+  IN_PROGRESS: '<span class="badge-info">🔄 Đang thực hiện</span>',
+  COMPLETED: '<span class="badge-success">✅ Hoàn tất</span>',
+  CANCELLED: '<span class="badge-danger">❌ Đã huỷ</span>'
 };
 
 // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): hrViewAll KHÔNG còn bypass thao tác ghi —
