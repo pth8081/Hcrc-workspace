@@ -2286,7 +2286,13 @@ const CREATE_MODULE_CONFIGS = {
       const periods = appData?.vppPeriods || [];
       const period = periods.find(p => p.id === periodId);
       if (!period) throw new CreateError(404, 'Không tìm thấy kỳ đăng ký');
-      const todayStr = new Date().toISOString().slice(0, 10);
+      // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "vppRegistrations hạn đăng ký so sánh UTC"): trước đây
+      // so `new Date().toISOString().slice(0, 10)` — LUÔN lấy ngày theo giờ UTC. Trên máy chủ chạy giờ
+      // VN (UTC+7), trong khung 00:00-06:59 sáng giờ VN, ngày UTC vẫn còn là NGÀY HÔM TRƯỚC — nếu
+      // period.endDate rơi đúng vào ngày hôm trước đó, vẫn đăng ký được dù hạn (giờ VN) đã qua. CÙNG LỚP
+      // LỖI đã vá cho trainingRegistrations/recruitmentReferrals/registerInternalPostTraining — dùng
+      // đúng localDateStr(new Date()) (lib/attendance.js, đọc giờ LOCAL của máy chủ).
+      const todayStr = require('./attendance').localDateStr(new Date());
       const pastEndDate = !!(period.endDate && todayStr > period.endDate);
       if (period.status !== 'OPEN' || pastEndDate) {
         throw new CreateError(409, 'Kỳ đăng ký này đã kết thúc, không thể đăng ký thêm');
