@@ -768,6 +768,63 @@ async function renameCatalogEntry(catalogKey, oldValue, newValue) {
   return updatedCatalog;
 }
 
+// submissionApprovalGroups/contractApprovalGroups/10 extraApprovalGroups_<module> ("Nhóm Phê Duyệt
+// Trình/HĐ/Cuối Cùng" — xem defaults.js): mỗi nhóm lưu members[] = USERNAME THÔ (so khớp trực tiếp ở
+// lib/recordViewScope.js: g.members.includes(user.username)), KHÔNG lưu theo id/key bất biến — PHÁT
+// HIỆN NGHIÊM TRỌNG ở đợt re-audit lần 3: đổi tên/xoá vĩnh viễn 1 tài khoản (routes/data.js, lưu
+// "users") trước đây KHÔNG cascade sang members[] của BẤT KỲ nhóm nào trong 12 danh sách này — 1 Tổng
+// Giám Đốc đổi username (hoặc bị xoá vĩnh viễn) đang là thành viên DUY NHẤT của 1 nhóm blocking (VD
+// "TGD", singleApprover:true) làm nhóm đó mất hẳn người duyệt hợp lệ (username cũ còn lại trong members
+// là "ma"), mọi hồ sơ tới bước đó treo vĩnh viễn tới khi admin tự sửa lại members tay. Đổi tên: thay
+// username cũ bằng mới TRONG members[] (giữ đúng vị trí/thứ tự nhóm). Xoá vĩnh viễn: gỡ username đó
+// khỏi members[] (KHÔNG xoá cả nhóm — các thành viên khác của nhóm vẫn giữ nguyên).
+const APPROVAL_GROUP_MEMBER_MAP_KEYS = [
+  'submissionApprovalGroups', 'contractApprovalGroups',
+  'extraApprovalGroups_DOC', 'extraApprovalGroups_CAR', 'extraApprovalGroups_OFFICE_BUY',
+  'extraApprovalGroups_OFFICE_FIX', 'extraApprovalGroups_VPP', 'extraApprovalGroups_PAYMENT',
+  'extraApprovalGroups_ITPRICE_RETAIL', 'extraApprovalGroups_ITPRICE_WHOLESALE',
+  'extraApprovalGroups_OPERATION_ORDER_STORE', 'extraApprovalGroups_OPERATION_ORDER_HO'
+];
+
+function renameMemberInGroups(groups, oldUsername, newUsername) {
+  if (!Array.isArray(groups)) return groups;
+  let changed = false;
+  const next = groups.map(g => {
+    if (!g || !Array.isArray(g.members) || !g.members.includes(oldUsername)) return g;
+    changed = true;
+    return { ...g, members: g.members.map(m => (m === oldUsername ? newUsername : m)) };
+  });
+  return changed ? next : groups;
+}
+
+function removeMemberFromGroups(groups, deletedUsername) {
+  if (!Array.isArray(groups)) return groups;
+  let changed = false;
+  const next = groups.map(g => {
+    if (!g || !Array.isArray(g.members) || !g.members.includes(deletedUsername)) return g;
+    changed = true;
+    return { ...g, members: g.members.filter(m => m !== deletedUsername) };
+  });
+  return changed ? next : groups;
+}
+
+// renamed: [{oldValue, newValue}] (xem diffUserRenamesAndDeletions(), lib/employeeProfile.js).
+// deletedUsernames: [username,...].
+async function cascadeUsernameChangesToApprovalGroups(renamed, deletedUsernames) {
+  for (const mapKey of APPROVAL_GROUP_MEMBER_MAP_KEYS) {
+    await withLockedAppDataValue(mapKey, (groups) => {
+      let current = groups;
+      for (const { oldValue, newValue } of renamed || []) {
+        current = renameMemberInGroups(current, oldValue, newValue);
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        current = removeMemberFromGroups(current, deletedUsername);
+      }
+      return current;
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -776,5 +833,6 @@ async function renameCatalogEntry(catalogKey, oldValue, newValue) {
 module.exports = {
   renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename,
   cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
-  cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames
+  cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
+  cascadeUsernameChangesToApprovalGroups
 };

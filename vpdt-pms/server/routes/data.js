@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2277,6 +2277,10 @@ router.post('/:key', async (req, res) => {
         autoLinkUnlinkedProfiles(arr, value, req.user.username);
         return arr;
       });
+      // members[] của 12 "Nhóm Phê Duyệt" (submissionApprovalGroups/contractApprovalGroups/10
+      // extraApprovalGroups_<module>) — LỖI ĐÃ VÁ, đợt re-audit lần 3, mức Nghiêm Trọng — xem chú thích
+      // đầy đủ tại cascadeUsernameChangesToApprovalGroups() (lib/catalogRename.js).
+      await cascadeUsernameChangesToApprovalGroups(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
