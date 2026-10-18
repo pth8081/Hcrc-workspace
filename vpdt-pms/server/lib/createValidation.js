@@ -1128,10 +1128,20 @@ const CREATE_MODULE_CONFIGS = {
           // được. Chặn NGAY TẠI ĐÂY, cùng hàm findMissingApproverStep('contractsSignedFile', ...) đã
           // dùng ở uploadContractSignedFile() — 2 đường tạo ra PENDING của CÙNG quy trình này giờ đều
           // được bảo vệ như nhau.
+          // LỖI ĐÃ VÁ (re-audit lần 7, mức TB — "contracts.extraValidate isSignedImport dùng payload.dept
+          // thô cho findMissingApproverStep"): sót lại từ bản vá v27.29 (chỉ sửa 4 vị trí khác cùng lỗi
+          // dept-spoofing trong hàm này). contracts có forceOwnDept: true nên dept THẬT của record CUỐI
+          // CÙNG luôn là user.dept (finalDept, tính SAU extraValidate ở validateAndPrepareCreate()) —
+          // nhưng tại ĐÂY payload.dept vẫn là giá trị THÔ client gửi. resolveContractManageWorkflow()
+          // (lib/workflowEngine.js) đọc `item.dept` để tra contractManageDeptWorkflows — truyền payload
+          // thẳng (dept giả) cho phép 1 request tự gửi payload.dept = "phòng có approver hợp lệ" để vượt
+          // chốt chặn này, trong khi record thật sau khi lưu lại mang dept = user.dept (phòng KHÔNG có
+          // approver hợp lệ) — tạo ra đúng hồ sơ signedFileStatus=PENDING mồ côi mà chốt chặn này được
+          // thêm vào để ngăn. Dùng user.dept (mirror đúng cách v27.29 đã sửa 4 vị trí khác).
           const { findMissingApproverStep } = require('./workflowEngine'); // require trễ — tránh vòng lặp
-          const missing = findMissingApproverStep('contractsSignedFile', payload, appData);
+          const missing = findMissingApproverStep('contractsSignedFile', { ...payload, dept: user.dept }, appData);
           if (missing) {
-            const message = `Phòng ban "${payload.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Tài liệu ký chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại) — nhập kèm tài liệu ký lúc này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi nhập, hoặc để trống Tài liệu ký và tải lên sau.`;
+            const message = `Phòng ban "${user.dept}" — Bước ${missing.order} (${missing.name}) của quy trình duyệt Tài liệu ký chưa có người duyệt hợp lệ (chưa cấu hình, hoặc người được chọn đã bị khoá tài khoản/nghỉ việc/không còn tồn tại) — nhập kèm tài liệu ký lúc này sẽ không ai duyệt được. Vui lòng liên hệ Quản Trị Viên cấu hình tại Hệ Thống > Quy Trình Duyệt trước khi nhập, hoặc để trống Tài liệu ký và tải lên sau.`;
             const { notifyAdminsNoApprover } = require('./recordActions'); // require trễ — tránh vòng lặp
             notifyAdminsNoApprover(appData, 'Tài liệu ký Hợp Đồng', user, message);
             throw new CreateError(409, message);

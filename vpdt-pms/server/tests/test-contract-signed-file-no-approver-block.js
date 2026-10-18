@@ -192,13 +192,13 @@ async function partB() {
     return { status: res.status, body: payload };
   }
 
-  function signedImportPayload() {
-    return {
+  function signedImportPayload(overrides) {
+    return Object.assign({
       isSignedImport: true, isAddendum: false, dept: 'Phòng Kế Toán', custodianDept: 'Phòng Kế Toán',
       type: 'Mua bán', title: 'Hợp đồng demo đã ký', partner: 'Đối tác demo',
       amount: 1000000, startDate: '2026-11-01', endDate: '2027-11-01', paymentType: 'LUMP_SUM',
       fileUrl: '/uploads/hopdong-goc.pdf', fileName: 'hopdong-goc.pdf', fileType: 'application/pdf'
-    };
+    }, overrides || {});
   }
 
   try {
@@ -213,6 +213,29 @@ async function partB() {
     const r2 = await api('POST', '/api/create/contracts', signedImportPayload(), CUSTODIAN_IMPORT);
     check('[5 — đối chứng] Cùng kịch bản nhưng ĐÃ cấu hình người duyệt hợp lệ -> tạo thành công, signedFileStatus=PENDING',
       r2.status === 200 && RECORDS.contracts.length === 1 && RECORDS.contracts[0].signedFileStatus === 'PENDING' && RECORDS.contracts[0].approvalStatus === 'APPROVED', r2.body);
+
+    // ===== LỖI ĐÃ VÁ (re-audit lần 7, mức TB — "contracts.extraValidate isSignedImport dùng payload.dept
+    // thô cho findMissingApproverStep"): CUSTODIAN_IMPORT.dept THẬT = 'Phòng Kế Toán' (forceOwnDept:true
+    // nên dept CUỐI CÙNG của record luôn ép về đây, KHÔNG đổi được). 'Phòng Khác' CÓ cấu hình người duyệt
+    // hợp lệ, 'Phòng Kế Toán' (dept thật) KHÔNG có. Payload tự gửi dept='Phòng Khác' (giả mạo) để chốt
+    // chặn findMissingApproverStep (đọc payload.dept TRƯỚC KHI bị ép) tưởng nhầm là có người duyệt — PHẢI
+    // vẫn bị chặn 409 vì record THẬT lưu dept='Phòng Kế Toán' (không có approver).
+    resetAll(); notifications.length = 0;
+    APP_DATA.depts.push('Phòng Khác');
+    APP_DATA.contractManageDeptWorkflows['Phòng Khác'] = { workflowId: 'WF_1STEP', approvers: { 1: [TP_KETOAN_DANGLAM.username] } };
+    APP_DATA.users.push(TP_KETOAN_DANGLAM);
+    const r3 = await api('POST', '/api/create/contracts', signedImportPayload({ dept: 'Phòng Khác' }), CUSTODIAN_IMPORT);
+    check('[LỖI ĐÃ VÁ] payload.dept giả mạo sang phòng CÓ người duyệt, dept thật (Phòng Kế Toán) KHÔNG có -> vẫn phải chặn 409',
+      r3.status === 409 && RECORDS.contracts.length === 0 && /chưa có người duyệt hợp lệ/.test(r3.body?.error || ''), r3.body);
+    check('[LỖI ĐÃ VÁ] Thông báo admin phải nêu ĐÚNG phòng ban thật (Phòng Kế Toán), không phải phòng giả mạo (Phòng Khác)',
+      /Phòng Kế Toán/.test(r3.body?.error || '') && !/Phòng Khác/.test(r3.body?.error || ''), r3.body);
+
+    // Đối chứng: cấu hình thêm người duyệt hợp lệ cho ĐÚNG dept thật (Phòng Kế Toán) -> tạo thành công
+    // bình thường dù payload vẫn cố gửi dept giả 'Phòng Khác' (không ảnh hưởng gì, record vẫn ép đúng).
+    APP_DATA.contractManageDeptWorkflows['Phòng Kế Toán'] = { workflowId: 'WF_1STEP', approvers: { 1: [TP_KETOAN_DANGLAM.username] } };
+    const r4 = await api('POST', '/api/create/contracts', signedImportPayload({ dept: 'Phòng Khác' }), CUSTODIAN_IMPORT);
+    check('[đối chứng] dept thật (Phòng Kế Toán) ĐÃ có người duyệt -> tạo thành công bình thường, record ép đúng dept thật',
+      r4.status === 200 && RECORDS.contracts.some(c => c.dept === 'Phòng Kế Toán' && c.signedFileStatus === 'PENDING'), r4.body);
   } finally {
     server.close();
   }
