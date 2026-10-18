@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**26.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.93 (2026-11): [TB] Re-audit lần 5 — mục 6: Xoá uniformPeriods không kiểm tham chiếu → tồn kho âm
+
+Mục thứ 6 trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 — cùng lớp lỗi với reportPeriods/
+budgetPeriods (đã vá ở các đợt trước) nhưng tham chiếu ở đây KHÔNG phải 1 collection khác trỏ `periodId`
+vào, mà là chính phép tính tồn kho dùng dữ liệu của kỳ.
+
+- `POST /api/records/uniformPeriods/:id/delete` trước đây dùng thẳng `deleteAdminOnly()` chung — xoá
+  được VÔ ĐIỀU KIỆN 1 kỳ cấp phát đồng phục dù đã có `allocations[]` **ĐÃ XÁC NHẬN** (status
+  `'CONFIRMED'`, qua `confirmUniformAllocation()`, `lib/recordActions.js`). `computeUniformStock()`
+  (cùng file) cộng `allocated` từ allocations CONFIRMED của **MỌI** kỳ (lọc theo dept), trong khi
+  `uniformIssuances`/`uniformStockAdjustments`/`uniformTransfers` trừ kho khớp theo
+  **itemName/size/dept** — hoàn toàn KHÔNG tham chiếu `periodId`. Xoá 1 kỳ đã CONFIRMED làm "nguồn
+  cung" (allocated) biến mất khỏi phép tính nhưng phần đã cấp phát/điều chỉnh/điều chuyển dựa trên
+  nguồn cung đó vẫn còn nguyên trong collection khác → tồn kho tính lại **ÂM** cho đúng mặt hàng/size/
+  siêu thị đó — và không có đường quay lại (không có action "huỷ xác nhận phân bổ").
+- Thêm reference-check TRƯỚC khi xoá (mirror đúng khuôn `reportPeriods`/`budgetPeriods`): đếm số
+  allocation có `status === 'CONFIRMED'`, chặn 409 nêu rõ số siêu thị đã xác nhận nếu còn ≥1. Kỳ CHƯA
+  có allocation nào được xác nhận (toàn `PENDING_CONFIRM`, hoặc chưa phân bổ gì) vẫn xoá được như cũ.
+
+**Test:** `tests/test-uniformperiod-delete-confirmed-allocation.js` (mới, 6 scenario — HTTP thật qua
+mount `routes/records.js`, cùng khuôn `test-reportperiod-delete-referencing-entries.js`). Xác nhận
+FAIL trên code CŨ (`git stash -- routes/records.js`, 2/6 scenario FAIL đúng 2 "LỖI ĐÃ VÁ"), PASS trên
+code đã vá (6/6). Regression: `test-uniform.js` (38/38), `test-uniform-phase2.js` (28/28),
+`test-uniform-scenario-roleplay.js` (15/15), `test-uniform-transfer-cancel.js` (8/8),
+`test-khoi0-license-uniform-gate.js` (9/9), `test-audit-createvsapprove-gaps.js` (28/28),
+`test-audit-round2-cluster5.js` (34/34) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.92 (2026-11): [TB] Re-audit lần 5 — mục 5: Admin xoá+đọc lại dữ liệu riêng tư HR qua Thùng Rác
 
