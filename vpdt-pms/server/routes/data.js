@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -2222,6 +2222,15 @@ router.post('/:key', async (req, res) => {
     if (key === 'submissionTypes' && Array.isArray(value)) {
       const oldSubmissionTypes = (await getAppDataValue('submissionTypes')) || [];
       renamedSubmissionTypePairs = diffSubmissionTypeCatalogRenames(oldSubmissionTypes, value);
+    }
+    // positionTypes: LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "positionTypes ghi qua /api/data né check
+    // 'đang dùng'") — xem chú thích đầy đủ tại assertPositionTypesSafeToSave() ở lib/createValidation.js.
+    // Đọc "positionTypes"/"users" NGAY TRƯỚC khi ghi đè, cùng khuôn oldSubmissionTypes ngay trên.
+    if (key === 'positionTypes' && Array.isArray(value)) {
+      const [oldPositionTypes, allUsersForPositionTypes] = await Promise.all([
+        getAppDataValue('positionTypes'), getAppDataValue('users')
+      ]);
+      assertPositionTypesSafeToSave(value, oldPositionTypes, allUsersForPositionTypes);
     }
     // employeeProfile.username desync (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent
     // "bảng liên kết" — xem diffUserRenamesAndDeletions()/cascadeUsernameChangesToProfiles() ở

@@ -574,6 +574,34 @@ function assertApprovalGroupsMembersCanBeApprover(value, oldValue, users, keyLab
   }
 }
 
+// positionTypes ("Vị Trí Làm Việc", 10/2026): LỖI ĐÃ VÁ (re-audit lần 5, mức TB — "positionTypes ghi
+// qua /api/data né check 'đang dùng'"). DELETE /api/admin/position-types/:key (routes/positionTypes.js)
+// CHẶN CỨNG xoá 1 Vị Trí Làm Việc nếu (a) là 1 trong 2 giá trị builtin (HO/Siêu Thị — luôn phải có ít
+// nhất 2 giá trị gốc) hoặc (b) đang có tài khoản gán posType đó (users.posType === key) — xem chú thích
+// đầy đủ ở route DELETE đó. NHƯNG 'positionTypes' cũng nằm trong ADMIN_ONLY_KEYS (routes/data.js), tức
+// POST /api/data/positionTypes nhận NGUYÊN mảng thay thế mà KHÔNG soát chiếu gì với "users" trước khi
+// ghi đè — gọi thẳng route generic này với 1 mảng đã loại bỏ 1 entry (dù builtin hay đang có người
+// dùng) là xoá được ngay, né hoàn toàn 2 lớp chặn ở route riêng. Gọi từ routes/data.js's POST
+// /api/data/:key NGAY TRƯỚC khi ghi đè — oldValue/users đọc lại qua getAppDataValue() (cùng khuôn
+// oldGroupsValue ở assertApprovalGroupsMembersCanBeApprover() trên) để so khớp theo `key` ổn định, tìm
+// entry BỊ LOẠI BỎ giữa 2 lượt lưu, áp đúng 2 điều kiện chặn y hệt route DELETE.
+function assertPositionTypesSafeToSave(value, oldValue, users) {
+  if (!Array.isArray(value)) return; // shape đã bị assertPlainObjectArrayShape() chặn riêng (nếu đăng ký)
+  const newKeys = new Set(value.filter(t => t && typeof t.key === 'string').map(t => t.key));
+  const removed = (Array.isArray(oldValue) ? oldValue : []).filter(t => t && typeof t.key === 'string' && !newKeys.has(t.key));
+  if (!removed.length) return;
+  const BUILTIN_POSITION_TYPE_KEYS = new Set(['HO', 'STORE']);
+  for (const t of removed) {
+    if (BUILTIN_POSITION_TYPE_KEYS.has(t.key)) {
+      throw new CreateError(400, 'Không thể xoá Vị Trí Làm Việc mặc định (HO/Siêu Thị)');
+    }
+    const inUseCount = (users || []).filter(u => u.posType === t.key).length;
+    if (inUseCount > 0) {
+      throw new CreateError(400, `Không thể xoá: đang có ${inUseCount} tài khoản gán Vị Trí Làm Việc "${t.label || t.key}" — đổi Vị Trí của họ trước khi xoá.`);
+    }
+  }
+}
+
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
 // ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
 // (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
@@ -5036,6 +5064,9 @@ module.exports = {
   // Export cho routes/data.js POST /api/data/:key — "Việc C" (11/2026): chặn thêm MỚI thành viên nhóm
   // phê duyệt chưa có quyền canBeApprover (grandfather thành viên cũ, xem chú thích đầy đủ ở hàm).
   assertApprovalGroupsMembersCanBeApprover,
+  // Export cho routes/data.js POST /api/data/:key — chặn xoá builtin/đang-dùng của positionTypes qua
+  // route generic (re-audit lần 5, mức TB).
+  assertPositionTypesSafeToSave,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,
