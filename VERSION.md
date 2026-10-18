@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.12 (2026-11): [Cao] Re-audit lần 6 — mục 4/21: approvalAggregator canApproveMeeting lỗi thời
+
+Mục thứ tư (4/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `lib/approvalAggregator.js::computeMyPendingApprovalKeys()` (nguồn tính "Hộp Thư Phê
+Duyệt" tự làm mới qua polling, `GET /api/approvals/pending-signature`) dùng hàm nội bộ cũ
+`canApproveMeeting(user)` — chỉ kiểm quyền PHẲNG (`admin || meetingApprove`) cho MỌI lịch họp PENDING,
+không phân biệt theo từng hồ sơ. Đây là bản MIRROR CŨ, đã lệch khỏi hàm enforcement THẬT
+`canDecideMeeting(user, item, appData)` (`lib/recordActions.js`, hàm THẬT gác route "approve" ở
+`routes/meetingActions.js`, đã được cập nhật 2 lần sau đó mà mirror này không theo kịp):
+1. **False positive (tự duyệt):** `canDecideMeeting()` loại trừ chính người tạo lịch họp
+   (`item.creator && user.username === item.creator`) — mirror cũ KHÔNG có nhánh này, nên 1 người vừa tự
+   đặt phòng họp của chính mình (module "Đặt Phòng Họp" tự phục vụ) thấy NGAY badge "Phê Duyệt (1)" dù
+   bấm Duyệt sẽ bị 403 thật (thông báo giả).
+2. **False negative (bỏ sót):** `canDecideMeeting()` còn có nhánh `meetingDeptWorkflows[dept]` (admin gán
+   RIÊNG người duyệt cho 1 phòng ban cụ thể dù người đó KHÔNG có quyền phẳng `meetingApprove`) — mirror
+   cũ không hề biết tới nhánh này, nên người được gán duyệt riêng theo phòng ban KHÔNG BAO GIỜ nhận được
+   khoá `meeting:<id>` (không có thông báo "hồ sơ mới cần duyệt", phải tự F5/tự vào Hub mới thấy).
+
+**Vá:** xoá hẳn hàm `canApproveMeeting(user)` lỗi thời, import + dùng THẲNG `canDecideMeeting` (đã export
+sẵn từ `lib/recordActions.js`) cho TỪNG lịch họp PENDING — khớp đúng triết lý "không tự suy diễn lại
+logic quyền, TÁI SỬ DỤNG hàm enforcement thật" đã nêu ngay đầu `lib/approvalAggregator.js`.
+
+**Test:** mở rộng `tests/test-approval-polling.js` — thêm 3 scenario mới (cùng vị trí/cùng khuôn với cặp
+scenario `payment:<id>`/`paymentDeptWorkflows` đã có): (1) `duyet1` tự tạo lịch họp của chính mình ->
+KHÔNG nhận `meeting:<id>` dù có `meetingApprove`; (2) approver được gán riêng qua `meetingDeptWorkflows`
+(không có `meetingApprove`/`admin`) -> PHẢI nhận `meeting:<id>`; (3) đối chứng — `meetingApprove` nhưng
+KHÔNG phải người tạo -> vẫn nhận bình thường (không chặn nhầm). Xác nhận FAIL trên code CŨ (`git stash --
+lib/approvalAggregator.js`, đúng 2/15 scenario FAIL — (1) và (2) — scenario đối chứng (3) vẫn PASS, đúng
+như kỳ vọng "chặn nhầm" không phải lỗi của bản cũ), PASS trên code đã vá (15/15). Regression:
+`test-budget-meeting-dept-workflow-ui.js` (7/7), `test-meeting-dept-workflow.js` (9/9),
+`test-meeting-license-no-approver-block.js`, `test-selfapprove-leave-shiftswap-meeting.js` (12/12),
+`test-shiftroster-cancel-swap-cleanup.js` (5/5), `test-meeting-car.js` (104/104),
+`test-meeting-edit-route.js` (10/10), `test-meeting-conflict-code-leak.js` (5/5) — toàn bộ PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.11 (2026-11): [Cao] Re-audit lần 6 — mục 3/21: formTemplates thiếu validate cấu trúc
 

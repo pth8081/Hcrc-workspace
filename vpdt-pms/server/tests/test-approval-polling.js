@@ -247,6 +247,35 @@ async function runPartA(run) {
     assert(!keys.includes('payment:111'), 'PHẢI KHÔNG nhận payment:111 — có paymentManage nhưng khác phòng ban VÀ không được liệt kê ở bước duyệt (tránh thông báo giả dẫn tới bấm vào bị 403)');
     assert(keys.includes('payment:112'), 'vẫn nhận payment:112 (NEED_INFO) vì có cờ phẳng paymentManage, không đổi hành vi cũ cho nhánh này');
   });
+
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "approvalAggregator canApproveMeeting lỗi thời"): mirror CŨ
+  // canApproveMeeting(user) (đã XOÁ) chỉ kiểm quyền PHẲNG (admin/meetingApprove) cho CẢ hồ sơ, bỏ sót
+  // CẢ 2 nhánh của canDecideMeeting() THẬT (lib/recordActions.js, hàm gác route "approve" thật ở
+  // routes/meetingActions.js) — (a) tự loại trừ chính người tạo lịch họp; (b) cấu hình RIÊNG theo phòng
+  // ban (meetingDeptWorkflows). 3 scenario dưới đây khớp đúng cặp scenario payment:<id>/paymentDeptWorkflows
+  // ngay trên — cùng lớp lỗi, module khác.
+  await run.run('computeMyPendingApprovalKeys(): tự mình đặt lịch họp (creator) KHÔNG được tính là approver dù có meetingApprove — tránh thông báo giả dẫn tới bấm Duyệt bị 403', async () => {
+    const appData = buildFixtureAppData();
+    appData.meetings.push({ id: 82, dept: 'Kế Toán', status: 'PENDING', creator: 'duyet1' });
+    const keys = computeMyPendingApprovalKeys(DUYET1, appData);
+    assert(!keys.includes('meeting:82'), 'PHẢI KHÔNG nhận meeting:82 — duyet1 chính là người tạo lịch họp này');
+    assert(keys.includes('meeting:81'), 'meeting:81 (không phải do duyet1 tạo) vẫn phải nhận như cũ');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): approver được gán RIÊNG theo meetingDeptWorkflows (KHÔNG có meetingApprove) PHẢI nhận khoá meeting:<id>', async () => {
+    const appData = buildFixtureAppData();
+    appData.meetingDeptWorkflows = { 'Kế Toán': { workflowId: 'WF_1STEP', approvers: { 1: ['phonghop.buoc'] } } };
+    const stepOnlyApprover = { username: 'phonghop.buoc', name: 'Duyệt Phòng Họp Chỉ Theo Bước', dept: 'Kế Toán', perms: {} };
+    const keys = computeMyPendingApprovalKeys(stepOnlyApprover, appData);
+    assert(keys.includes('meeting:81'), 'approver chỉ được gán theo meetingDeptWorkflows (không có meetingApprove/admin) vẫn phải nhận khoá meeting:81 — trước đây canApproveMeeting() cũ không hề biết tới nhánh này');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): meetingApprove nhưng KHÔNG phải người tạo lịch họp -> vẫn nhận bình thường (đối chứng, không chặn nhầm)', async () => {
+    const appData = buildFixtureAppData();
+    appData.meetings.push({ id: 83, dept: 'Kế Toán', status: 'PENDING', creator: 'nguoi.khac' });
+    const keys = computeMyPendingApprovalKeys(DUYET1, appData);
+    assert(keys.includes('meeting:83'), 'duyet1 KHÔNG phải người tạo lịch họp 83 -> vẫn phải nhận khoá bình thường');
+  });
 }
 
 // ==========================================================================
