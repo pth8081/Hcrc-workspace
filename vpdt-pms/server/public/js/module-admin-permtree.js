@@ -383,33 +383,22 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationRecordViewAll').checked = !!perms.operationRecordViewAll;
   document.getElementById('pOperationOrderReportView').checked = !!perms.operationOrderReportView;
   document.getElementById('pOperationStoreReportView').checked = !!perms.operationStoreReportView;
-  // Tương thích ngược: user chưa được re-save qua UI mới vẫn còn field operationOrderReceiptManage cũ
-  // (gộp chung HO + siêu thị trong 1 danh sách depts[]) — tự tách ra để hiện đúng, admin bấm Lưu là dọn
-  // sạch về 2 field mới (xem chú thích đầy đủ ở lib/recordActions.js isApproverForOperationOrderReceipt()).
-  const legacyReceipt = perms.operationOrderReceiptManage;
-  const receiptHO = perms.operationOrderReceiptManageHO !== undefined
-    ? perms.operationOrderReceiptManageHO
-    : !!(legacyReceipt?.all || (legacyReceipt?.depts || []).includes('HO'));
-  const receiptStore = perms.operationOrderReceiptManageStore !== undefined
-    ? perms.operationOrderReceiptManageStore
-    : { all: !!legacyReceipt?.all, depts: (legacyReceipt?.depts || []).filter(d => d !== 'HO') };
-  document.getElementById('pOperationOrderReceiptHO').checked = !!receiptHO;
-  document.getElementById('pOperationOrderReceiptAll').checked = !!receiptStore?.all;
-  setOperationOrderReceiptScopeCheckboxes(receiptStore?.depts);
-  // Checklist Đánh Giá Siêu Thị — 11/2026 LÀM GỌN: hiện ĐÚNG hiệu lực thật (kể cả fallback legacy, mirror
-  // canExecuteChecklistGeneralClient()/canExecuteChecklistAtvstpClient()/canViewChecklistReportsAtvstpClient()
-  // ở core.js) để admin thấy quyền tài khoản ĐANG CÓ trước khi lưu — lưu lại sẽ ghi THẲNG vào field mới,
-  // hoàn tất di chuyển cho đúng 1 tài khoản đó (không cần sửa tay nếu không đổi gì).
-  document.getElementById('pChecklistExecute').checked = perms.checklistExecute !== undefined ? !!perms.checklistExecute : !!perms.checklistStoreSelfExecute;
+  // operationOrderReceiptManageHO/Store, checklistExecute/checklistAtvstpExecute/checklistAtvstpReportView:
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao) — fallback suy diễn từ field cũ (operationOrderReceiptManage/
+  // checklistStoreSelfExecute/checklistAuditScope/checklistReportViewScope) đã dời VÀO migrateLegacyPerms()
+  // (core.js, ghi thật vào "perms" + đặt changed=true) thay vì chỉ tính INLINE ngay tại đây như trước —
+  // "perms" ở đây LUÔN đã qua migrateLegacyPerms() (xem dòng đầu hàm này) nên giờ chỉ cần đọc trực tiếp,
+  // không tự suy diễn lại nữa (tránh lệch 2 nơi tính + tránh diffPerms() đóng băng override sai, xem
+  // chú thích đầy đủ tại migrateLegacyPerms()).
+  document.getElementById('pOperationOrderReceiptHO').checked = !!perms.operationOrderReceiptManageHO;
+  document.getElementById('pOperationOrderReceiptAll').checked = !!perms.operationOrderReceiptManageStore?.all;
+  setOperationOrderReceiptScopeCheckboxes(perms.operationOrderReceiptManageStore?.depts);
+  document.getElementById('pChecklistExecute').checked = !!perms.checklistExecute;
   document.getElementById('pChecklistExecuteScopeAll').checked = !!perms.checklistExecuteScope?.all;
   setChecklistExecuteScopeCheckboxes(perms.checklistExecuteScope?.depts);
   document.getElementById('pChecklistReportView').checked = !!perms.checklistReportView;
-  const oldAuditScope = perms.checklistAuditScope;
-  document.getElementById('pChecklistAtvstpExecute').checked = perms.checklistAtvstpExecute !== undefined
-    ? !!perms.checklistAtvstpExecute : !!(oldAuditScope?.all || (oldAuditScope?.depts || []).length);
-  const oldReportScope = perms.checklistReportViewScope;
-  document.getElementById('pChecklistAtvstpReportView').checked = perms.checklistAtvstpReportView !== undefined
-    ? !!perms.checklistAtvstpReportView : !!(perms.checklistReportView && (!oldReportScope || oldReportScope.all));
+  document.getElementById('pChecklistAtvstpExecute').checked = !!perms.checklistAtvstpExecute;
+  document.getElementById('pChecklistAtvstpReportView').checked = !!perms.checklistAtvstpReportView;
   document.getElementById('pNghiepVuViewAll').checked = !!perms.nghiepVuViewAll;
   document.getElementById('pReportViewAll').checked = !!perms.reportViewAll;
   document.getElementById('pRebateTermManage').checked = !!perms.rebateTermManage;

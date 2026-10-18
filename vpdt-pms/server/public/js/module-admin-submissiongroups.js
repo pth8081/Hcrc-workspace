@@ -966,7 +966,13 @@ function readUserFormState() {
   // khi 1 trong các nhóm đổi quyền sau này (savePermGroup()) vẫn tự động cập nhật đúng cho người này mà
   // không mất phần tuỳ chỉnh riêng.
   const groups = groupIds.map(id => DB.permGroups.find(g => g.id === id)).filter(Boolean);
-  const basePerms = groups.length ? mergeGroupsBasePerms(groups.map(g => g.perms)) : null;
+  // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): DB.permGroups KHÔNG được tự di trú + tự lưu ngầm như DB.users
+  // (xem initDatabase()) — g.perms RAW có thể còn thiếu hẳn 1 số field MỚI mà chỉ suy diễn được từ field
+  // cũ (operationOrderReceiptManageHO/Store, checklistExecute/checklistAtvstpExecute/checklistAtvstpReportView,
+  // xem migrateLegacyPerms() ở core.js). Di trú NGAY TRƯỚC khi gộp làm basePerms để diffPerms() so sánh
+  // đúng — không còn khoảng trống khiến giá trị suy diễn (hiện sẵn trên checkbox do populatePermsForm()
+  // đọc) bị coi "khác" base rồi đóng băng sai vào permOverrides dù admin không đụng tới checkbox đó.
+  const basePerms = groups.length ? mergeGroupsBasePerms(groups.map(g => migrateLegacyPerms(g.perms).perms)) : null;
   const formPerms = collectPermsFromForm();
   const permOverrides = basePerms ? diffPerms(formPerms, basePerms) : null;
   const perms = basePerms ? mergePerms(basePerms, permOverrides) : formPerms;

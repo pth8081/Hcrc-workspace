@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**26.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.67 (2026-11): [Cao] Re-audit lần 4 — mục 7: diffPerms() đóng băng override sai do field suy diễn từ legacy migration
+
+Mục thứ 7 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] 5 quyền (checklistExecute, checklistAtvstpExecute, checklistAtvstpReportView,
+  operationOrderReceiptManageHO, operationOrderReceiptManageStore) TRƯỚC ĐÂY chỉ được suy diễn INLINE
+  ngay tại `populatePermsForm()` (module-admin-permtree.js) — KHÔNG đi qua `migrateLegacyPerms()` như
+  mọi quyền di trú khác (core.js) — chỉ để HIỂN THỊ đúng hiệu lực thật lên checkbox, KHÔNG BAO GIỜ được
+  ghi thật vào "perms" cho tới khi admin chủ động bấm Lưu.** Hậu quả: `diffPerms()` so `formPerms[key]`
+  (giá trị SUY DIỄN đang hiện sẵn trên checkbox) với `basePerms[key]` (RAW từ `DB.permGroups` —
+  permGroups KHÔNG được tự di trú + tự lưu ngầm như `DB.users`, xem `initDatabase()`) —
+  `basePerms[key]` vẫn luôn `undefined` dù chính NHÓM thực chất "có" quyền này qua field cũ. Lưu 1
+  user/nhóm vì lý do HOÀN TOÀN KHÁC (VD sửa email, không đụng checkbox này) vẫn khiến giá trị suy diễn
+  bị coi "khác" base và ĐÓNG BĂNG VĨNH VIỄN vào `permOverrides` riêng của người/nhóm đó — về sau nhóm
+  migrate/sửa lại đúng quyền này cũng không còn tác dụng với người bị đóng băng sai đó.
+  - Dời cả 5 fallback trên VÀO `migrateLegacyPerms()` (ghi THẲNG vào perms + đặt `changed=true`, xoá
+    field cũ đã hết tác dụng) — `populatePermsForm()` nay chỉ còn đọc trực tiếp `perms.<key>` (đã migrate
+    ở đầu hàm đó), không tự suy diễn riêng nữa.
+  - 2 điểm gọi `diffPerms()` với `basePerms` tính từ `DB.permGroups` (`readUserFormState()` ở
+    module-admin-submissiongroups.js, `buildPermMatrixRowChanges()` ở module-admin-permgroups.js) nay di
+    trú `g.perms` qua `migrateLegacyPerms()` NGAY TRƯỚC khi gộp làm `basePerms` — khớp đúng giá trị
+    suy diễn admin đang thấy trên form, không còn khoảng trống gây đóng băng sai.
+
+**Test:** file mới `tests/test-diffperms-legacy-migration-freeze.js` (10 scenario, trích xuất nguyên văn
+`isEmptyPermValue()`/`diffPerms()`/`mergePerms()`/`mergeGroupsBasePerms()`/`migrateLegacyPerms()` từ
+core.js thật qua vm — cùng khuôn `test-permoverrides-moduleaccess-freeze.js`): xác nhận 5 field được
+migrate thật (ghi + xoá field cũ), kịch bản đóng băng sai không còn xảy ra sau khi basePerms cũng được
+di trú, có 1 scenario "đối chứng" dựng lại hành vi CŨ để xác nhận test có ý nghĩa (FAIL nếu bỏ bước di
+trú basePerms), và xác nhận admin chủ động đổi checkbox khác base vẫn ghi override đúng (không mất khả
+năng override thật). Chạy lại bộ test liên quan: `test-permoverrides-moduleaccess-freeze.js` (7/7),
+`test-perm-matrix-client.js` (46/46), `test-internal-training.js` (53/53),
+`test-admin-users-permgroups.js` (115/115, Playwright thật), `test-perm-tree-store-scope-widget.js`
+(9/9, Playwright thật) — tất cả PASS, không regression. Tự kiểm tra CSP (`grep on[a-z]*="`) trên 4 file
+đã sửa — không có vi phạm (chỉ đổi logic JS thuần, không đụng HTML).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.66 (2026-11): [Cao] Re-audit lần 4 — mục 6: prepareUsersForSave() bỏ qua tái tính perms khi groupIds toàn "treo"
 
