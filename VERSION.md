@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**26.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.84 (2026-11): [Cao] Re-audit lần 5 — mục 6 (HOÀN TẤT 9 phát hiện mức Cao): vppPeriods.deptHeadcounts/deptBudgetRates không cascade khi đổi tên danh mục
+
+Mục thứ 6 trong đợt re-audit lần 5 — ĐÂY LÀ MỤC CUỐI trong 9 phát hiện mức Cao (xử lý theo thứ tự
+Cao → TB → Thấp theo yêu cầu người dùng; tiếp theo sẽ chuyển sang 18 phát hiện mức Trung Bình).
+
+- **`vppPeriods.deptHeadcounts`/`deptBudgetRates` (CẢ 2 ĐỀU là map `{dept: number}` KHOÁ THEO TÊN
+  PHÒNG BAN, đặt 1 lần lúc tạo kỳ VPP) hoàn toàn bị bỏ sót khỏi MỌI cascade đổi tên danh mục Phòng
+  Ban/Siêu Thị** — khác `uniformPeriods.allocations[].dept`/`reportPeriods.deptScope.depts[]` (đã
+  cascade từ trước, nhưng đó là FIELD bên trong phần tử mảng, không phải chính KHOÁ của object).
+  `resolveVppDeptBudget()` (lib/vppCatalog.js) tra `period.deptBudgetRates[dept]`/
+  `period.deptHeadcounts[dept]` theo ĐÚNG tên phòng ban HIỆN TẠI của người đăng ký — đổi tên 1 phòng
+  ban mà không dời khoá sẽ làm quỹ/đầu người CHỐT của phòng đó "biến mất" (tra ra `undefined`) ngay
+  sau khi đổi tên, dù kỳ VPP không hề bị admin sửa gì: ngân sách phòng ban bị tính SAI (rơi về
+  `perPersonBudget` mặc định nếu khác mức riêng, hoặc 0 đầu người khiến mọi đăng ký của phòng đó bị
+  chặn hẳn ở bước "Gửi phê duyệt").
+  - Thêm `renameVppPeriodDeptKeyedMaps(item, oldValue, newValue)` (lib/catalogRename.js) — dời ĐÚNG
+    KHOÁ (không phải field) của cả 2 map, giữ nguyên value, gọi qua
+    `renameFieldValueInCollection('vppPeriods', ...)` trong `cascadeStoreRename()` — cùng khuôn
+    `renameUniformPeriodAllocations()`/`renameDeptScopeDepts()` ngay trên nó, tự áp dụng cho cả rename
+    "depts" VÀ "stores" (field dùng chung).
+
+**Test:** `tests/test-vppperiods-dept-rename-cascade.js` (mới, 4 scenario — gọi THẲNG router thực
+`routes/adminCatalog.js` qua `POST /api/admin/renameCatalogEntry`, cùng khuôn
+`test-budgetperiods-dept-rename-cascade.js`, 2 kỳ VPP: 1 có khoá TRÙNG tên sắp đổi ở cả 2 map, 1 đối
+chứng KHÔNG liên quan). Xác nhận FAIL trên code CŨ (`git stash -- lib/catalogRename.js`, 3/4 scenario
+FAIL đúng 3 "LỖI ĐÃ VÁ" — depts/stores rename đều không dời khoá, giá trị cũ "biến mất" thành
+`undefined`), PASS trên code đã vá (4/4). Regression:
+`test-budgetperiods-dept-rename-cascade.js` (3/3), `test-reportentries-dept-rename-cascade.js` (3/3),
+`test-itsupportticket-dept-rename-cascade.js` (3/3), `test-secondarypositions-rename-cascade.js` (5/5),
+`test-vpp-dept-headcount-missing-block.js` (7/7), `test-vpp.js` (29/29),
+`test-vpp-registrations-scope.js` (7/7) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.83 (2026-11): [Cao] Re-audit lần 5 — mục 5: secondaryPositions dept/jobTitle không cascade khi đổi tên danh mục
 

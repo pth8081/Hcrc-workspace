@@ -427,6 +427,37 @@ async function cascadeEmployeeProfilesJobTitle(oldValue, newValue, isStore) {
   }));
 }
 
+// vppPeriods.deptHeadcounts/deptBudgetRates: CẢ 2 ĐỀU là map {dept: number} KHOÁ THEO TÊN PHÒNG BAN
+// (đặt 1 lần lúc tạo kỳ, xem CREATE_MODULE_CONFIGS.vppPeriods ở lib/createValidation.js) — KHÁC
+// uniformPeriods.allocations[]/reportPeriods.deptScope ngay trên/dưới (mảng phần tử có FIELD .dept),
+// tên phòng ban ở đây là chính KHOÁ của object nên phải dời khoá (đổi key, giữ nguyên value) thay vì
+// đổi field bên trong phần tử. PHÁT HIỆN (re-audit lần 5, mức Cao): hoàn toàn bị bỏ sót khỏi mọi
+// cascade — resolveVppDeptBudget() (lib/vppCatalog.js) tra `period.deptBudgetRates[dept]`/
+// `period.deptHeadcounts[dept]` theo ĐÚNG tên phòng ban hiện tại của người đăng ký; đổi tên 1 phòng ban
+// mà không dời khoá sẽ làm quỹ/đầu người CHỐT của phòng đó "biến mất" (tra ra undefined, falls back về
+// `perPersonBudget` mặc định hoặc 0 đầu người) ngay sau khi đổi tên, dù kỳ VPP không hề bị admin sửa gì
+// — ngân sách phòng ban bị tính SAI (quá rộng nếu fallback mặc định cao hơn mức riêng, hoặc 0 đầu người
+// khiến mọi đăng ký của phòng đó bị chặn hẳn ở bước "Gửi phê duyệt").
+function renameVppPeriodDeptKeyedMaps(item, oldValue, newValue) {
+  let changed = false;
+  const next = { ...item };
+  if (item.deptHeadcounts && typeof item.deptHeadcounts === 'object' && oldValue in item.deptHeadcounts) {
+    const map = { ...item.deptHeadcounts };
+    map[newValue] = map[oldValue];
+    delete map[oldValue];
+    next.deptHeadcounts = map;
+    changed = true;
+  }
+  if (item.deptBudgetRates && typeof item.deptBudgetRates === 'object' && oldValue in item.deptBudgetRates) {
+    const map = { ...item.deptBudgetRates };
+    map[newValue] = map[oldValue];
+    delete map[oldValue];
+    next.deptBudgetRates = map;
+    changed = true;
+  }
+  return changed ? next : item;
+}
+
 // reportPeriods.deptScope/budgetPeriods.deptScope: {all, depts:[<tên phòng ban thô>]} đặt 1 lần lúc tạo
 // kỳ (xem lib/createValidation.js dòng ~1434/2451) — PHÁT HIỆN THIẾU ở đợt audit chuyên sâu lần 3: đổi
 // tên 1 phòng ban KHÔNG cascade field này, nên 1 kỳ báo cáo/ngân sách đang mở đã giới hạn theo phòng ban
@@ -595,6 +626,7 @@ async function cascadeStoreRename(oldValue, newValue) {
   await renameFieldValueInCollection('uniformPeriods', (item) => renameUniformPeriodAllocations(item, oldValue, newValue));
   await renameFieldValueInCollection('reportPeriods', (item) => renameDeptScopeDepts(item, oldValue, newValue));
   await renameFieldValueInCollection('budgetPeriods', (item) => renameDeptScopeDepts(item, oldValue, newValue));
+  await renameFieldValueInCollection('vppPeriods', (item) => renameVppPeriodDeptKeyedMaps(item, oldValue, newValue));
   await cascadeMixedApprovalRuleStores(oldValue, newValue);
   await cascadeMixedApprovalRuleJobTitleDept(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
