@@ -151,7 +151,14 @@ function runSelfOnlyTests(run) {
 }
 
 // ===== PHẦN B: HTTP qua routes/orgChart.js thật =====
-const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true }, active: true };
+// LỖI ĐÃ VÁ (fixture lỗi thời, phát hiện khi chạy regression cho re-audit lần 4 mục "orgChart Khối 0"):
+// ADMIN trước đây chỉ có perms.admin=true — hợp lệ lúc file này được viết (10/2026), nhưng
+// routes/orgChart.js đã bỏ hẳn admin bypass ở cả 3 hàm canView/canManageTree/canManageKpiFlow từ 11/2026
+// (xem chú thích đầu file đó + test-orgchart-v2.js đã cập nhật đúng từ trước) — fixture này chưa được
+// cập nhật theo nên MỌI route Phần B (dùng ADMIN để tạo/sửa node + xem báo cáo định biên) đều nhận 403
+// kể từ đó, không phải lỗi do bản vá Khối 0 hiện tại gây ra. Thêm orgChartManage để khớp đúng quyền thật
+// cần có cho các thao tác này (cùng khuôn fixture đã sửa cho test-operation-order-po-race.js trước đó).
+const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true, orgChartManage: true }, active: true };
 const PLAIN = { username: 'nv1', name: 'Nhân Viên Thường', dept: 'Kế Toán', perms: {}, active: true };
 let USERS = [ADMIN, PLAIN];
 let APP_DATA;

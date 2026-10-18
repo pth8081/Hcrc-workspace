@@ -29,9 +29,22 @@ const { computeHeadcountReport } = require('../lib/headcountReport');
 const { buildGenericWorkbook } = require('../lib/adminExport');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
 const { getAllForCollection } = require('../lib/recordStore');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 const router = express.Router();
-router.use(requireAuth, blockIfMustChangePassword);
+
+// LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): module này là router RIÊNG (không qua routes/records.js chung)
+// nên KHÔNG tự động được hưởng vòng lặp zero-out Khối 0 ở routes/data.js — admin tắt moduleAccess.orgChart
+// cho 1 tài khoản ở màn Phân Quyền TRƯỚC ĐÂY hoàn toàn không cản được họ gọi thẳng MỌI route dưới đây
+// (vẫn còn đủ quyền chi tiết orgChartManage/nhanSuManage/kpiFlowConfigManage). Mirror đúng khuôn
+// requireChecklistModuleAccess() ở routes/checklist.js/requireHrPayrollModuleAccess() ở routes/payroll.js.
+function requireOrgChartModuleAccess(req, res, next) {
+  if (!hasModuleAccessServer(req.freshUser, 'orgChart')) {
+    return res.status(403).json({ error: 'Bạn không có quyền truy cập module này' });
+  }
+  next();
+}
+router.use(requireAuth, blockIfMustChangePassword, requireOrgChartModuleAccess);
 
 function canView(perms) {
   return !!(perms?.orgChartManage || perms?.nhanSuManage || perms?.kpiFlowConfigManage);
