@@ -294,6 +294,54 @@ function renamePositionPairsDeep(node, field, oldValue, newValue) {
   return changed ? next : node;
 }
 
+// users[].secondaryPositions[]/employeeProfiles[].secondaryPositions[] ("Vị Trí Kiêm Nhiệm", 11/2026 —
+// xem applyProfileEdit() case 'secondaryPositions' ở lib/employeeProfile.js): mỗi phần tử
+// {positionKey, jobTitle, dept, positionLabel, ...} SNAPSHOT jobTitle/dept từ 1 node Cơ Cấu Tổ Chức
+// NGAY LÚC GÁN — "không tự cập nhật nếu Cơ Cấu Tổ Chức đổi sau đó" (đúng ý, vì đó là thay đổi CẤU
+// TRÚC cây, không phải đổi TÊN danh mục), nhưng vẫn phải cascade khi đổi TÊN 1 giá trị danh mục
+// Phòng Ban/Siêu Thị/Chức Danh — cùng triết lý snapshot với vị trí CHÍNH THỨC (user.dept/jobTitle +
+// employeeProfiles.dept/jobTitle, đã cascade qua cascadeStoreRename()/cascadeEmployeeProfilesJobTitle()
+// từ trước). PHÁT HIỆN (re-audit lần 5, mức Cao): hoàn toàn bị bỏ sót khỏi MỌI cascade — đổi tên 1
+// Phòng Ban/Siêu Thị/Chức Danh để lại secondaryPositions[].dept/jobTitle mang tên CŨ, khiến
+// resolvePositionApprovers() (lib/positionApprovers.js, so khớp CHUỖI THÔ cả 2 field với
+// secondaryPositions[]) không còn nhận ra người đang kiêm nhiệm vị trí đó nữa — bước duyệt "Theo vị
+// trí" treo đúng với NHỮNG NGƯỜI KIÊM NHIỆM (khác người giữ chức vụ CHÍNH THỨC, vẫn hoạt động đúng vì
+// đã cascade riêng), và headcountReport() (lib/headcountReport.js) đếm sai đầu người theo node. Cascade
+// KHÔNG phân biệt jobTitle thuộc danh mục HO/Siêu Thị (mỗi secondaryPosition không lưu posType riêng) —
+// cùng khuôn workflowParticipatingPositions[] ngay dưới (dùng CHUNG 1 hàm cho cả 2 lượt gọi
+// cascadeJobTitleRename()/cascadeStoreJobTitleRename(), xem chú thích tại 2 hàm đó).
+function renameSecondaryPositionsList(list, field, oldValue, newValue) {
+  if (!Array.isArray(list)) return list;
+  let changed = false;
+  const next = list.map(sp => {
+    if (sp && typeof sp === 'object' && sp[field] === oldValue) { changed = true; return { ...sp, [field]: newValue }; }
+    return sp;
+  });
+  return changed ? next : list;
+}
+async function cascadeSecondaryPositions(field, oldValue, newValue) {
+  await withLockedAppDataValue('users', (list) => {
+    if (!Array.isArray(list)) return list;
+    let changed = false;
+    const next = list.map(u => {
+      const renamed = renameSecondaryPositionsList(u.secondaryPositions, field, oldValue, newValue);
+      if (renamed !== u.secondaryPositions) { changed = true; return { ...u, secondaryPositions: renamed }; }
+      return u;
+    });
+    return changed ? next : list;
+  });
+  await withLockedAppDataValue('employeeProfiles', (list) => {
+    if (!Array.isArray(list)) return list;
+    let changed = false;
+    const next = list.map(p => {
+      const renamed = renameSecondaryPositionsList(p.secondaryPositions, field, oldValue, newValue);
+      if (renamed !== p.secondaryPositions) { changed = true; return { ...p, secondaryPositions: renamed }; }
+      return p;
+    });
+    return changed ? next : list;
+  });
+}
+
 // field: 'jobTitle' (đổi tên Chức Danh HO/Siêu Thị) hoặc 'dept' (đổi tên Phòng Ban/Siêu Thị).
 async function cascadePositionPairs(field, oldValue, newValue) {
   for (const mapKey of POSITION_PAIR_CONFIG_MAP_KEYS) {
@@ -303,6 +351,7 @@ async function cascadePositionPairs(field, oldValue, newValue) {
     if (!Array.isArray(list)) return list;
     return list.map(p => (p && typeof p === 'object' && p[field] === oldValue ? { ...p, [field]: newValue } : p));
   });
+  await cascadeSecondaryPositions(field, oldValue, newValue);
 }
 
 // users[].perms.*: nhiều quyền phẳng giới hạn theo danh sách phòng ban/siêu thị, dưới 2 khuôn khác nhau

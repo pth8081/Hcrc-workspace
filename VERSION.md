@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**26.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.83 (2026-11): [Cao] Re-audit lần 5 — mục 5: secondaryPositions dept/jobTitle không cascade khi đổi tên danh mục
+
+Mục thứ 5 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng).
+
+- **`users[].secondaryPositions[]`/`employeeProfiles[].secondaryPositions[]` ("Vị Trí Kiêm Nhiệm",
+  11/2026 — mỗi phần tử `{positionKey, jobTitle, dept, positionLabel, ...}` SNAPSHOT từ 1 node Cơ Cấu
+  Tổ Chức NGAY LÚC GÁN, xem `applyProfileEdit()` case `'secondaryPositions'` ở lib/employeeProfile.js)
+  hoàn toàn bị bỏ sót khỏi MỌI cascade đổi tên danh mục (Phòng Ban/Siêu Thị/Chức Danh HO/Chức Danh Siêu
+  Thị)** — khác vị trí CHÍNH THỨC (`user.dept`/`jobTitle` + `employeeProfiles.dept`/`jobTitle`) đã
+  cascade đúng từ lâu qua `cascadeStoreRename()`/`cascadeEmployeeProfilesJobTitle()`. Hậu quả:
+  `resolvePositionApprovers()` (lib/positionApprovers.js, so khớp CHUỖI THÔ cả 2 field với
+  `secondaryPositions[]`) không còn nhận ra người đang kiêm nhiệm vị trí đó sau khi đổi tên — bước
+  duyệt "Theo vị trí" treo đúng với NHỮNG NGƯỜI KIÊM NHIỆM (người giữ chức vụ chính thức không bị ảnh
+  hưởng, vì field đó đã cascade đúng), và `headcountReport()` (lib/headcountReport.js) đếm sai đầu
+  người theo node.
+  - Thêm `cascadeSecondaryPositions(field, oldValue, newValue)` (lib/catalogRename.js) — cascade cả
+    `users[].secondaryPositions[]` VÀ `employeeProfiles[].secondaryPositions[]`, gọi từ bên trong
+    `cascadePositionPairs()` (hàm dùng CHUNG bởi cả 4 lượt cascade dept/store/jobTitle/storeJobTitle
+    rename) — tự động áp dụng cho cả 4 mà không cần sửa từng nơi gọi riêng.
+  - KHÔNG phân biệt `jobTitle` thuộc danh mục HO/Siêu Thị (mỗi `secondaryPosition` không lưu `posType`
+    riêng của chính nó) — cùng khuôn `workflowParticipatingPositions[]` (dùng CHUNG 1 hàm cho cả 2 lượt
+    gọi `cascadeJobTitleRename()`/`cascadeStoreJobTitleRename()`, tên Chức Danh 2 danh mục này trong
+    thực tế không trùng lặp nên an toàn).
+
+**Test:** `tests/test-secondarypositions-rename-cascade.js` (mới, 5 scenario — gọi THẲNG router thực
+`routes/adminCatalog.js` qua `POST /api/admin/renameCatalogEntry`, cùng khuôn
+`test-budgetperiods-dept-rename-cascade.js`, với 2 user: 1 có `secondaryPositions[].dept/jobTitle`
+TRÙNG tên sắp đổi, 1 đối chứng KHÔNG liên quan để xác nhận không bị đụng oan). Xác nhận FAIL trên code
+CŨ (`git stash -- lib/catalogRename.js`, 4/5 scenario FAIL đúng 4 "LỖI ĐÃ VÁ" — depts/jobTitles/
+storeJobTitles/stores rename đều không cascade `secondaryPositions[]`), PASS trên code đã vá (5/5).
+Regression: `test-budgetperiods-dept-rename-cascade.js` (3/3), `test-reportentries-dept-rename-cascade.js`
+(3/3), `test-itsupportticket-dept-rename-cascade.js` (3/3), `test-approvalgroup-username-cascade.js`
+(4/4), `test-managerusername-rename-delete-cascade.js` (3/3),
+`test-catalogrename-positiontypes-systemlog.js` (8/8), `test-nganhhang-catalog-rename-cascade.js` (8/8),
+`test-submissiontype-catalog-rename-cascade.js` (7/7), `test-meeting-room-rename-cascade.js` (8/8),
+`test-orgchart-headcount-report.js` (7/7), `test-vpp-dept-headcount-missing-block.js` (7/7) — toàn bộ
+PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.82 (2026-11): [Cao] Re-audit lần 5 — mục 4: orgChartVersions lộ nguyên vẹn qua GET /api/data
 
