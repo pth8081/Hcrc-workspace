@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**26.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.22 (2026-11): "HCRC Workspace Refresh" Giai đoạn 1 — nền tảng CSS dùng chung cho hiện đại hoá giao diện
+
+Người dùng yêu cầu rà soát chuyên sâu TOÀN BỘ giao diện (50 màn hình, 4 đợt khảo sát song song qua
+Playwright thật, chụp ảnh + ghi nhận cơ hội hiện đại hoá) rồi gửi kế hoạch + demo trước/sau để xem xét
+(xem Artifact "HCRC Workspace Refresh" đã gửi — 5 phát hiện lặp lại xuyên suốt: badge trạng thái không
+đồng nhất, card/bảng phẳng thiếu chiều sâu, nút bấm không theo hệ màu, empty-state sơ sài, danh sách
+thẻ lặp thay vì bảng). Người dùng duyệt hướng thiết kế + yêu cầu triển khai tuần tự theo lộ trình 3 giai
+đoạn đã đề xuất.
+
+**Giai đoạn 1 (bản ghi này)**: thêm class CSS dùng chung vào `public/app.css` — `.badge-info/.success/
+.warning/.danger` (pill trạng thái), `.btn-primary/.btn-secondary/.btn-destructive-outline/.btn-ghost/
+.btn-more` (hệ nút bấm có ý nghĩa rõ ràng), `.stat-card` (+ `.stat-card-icon/-num/-label`), `.empty-state`
+(+ `.empty-state-icon`) — dùng lại ĐÚNG 4 màu trạng thái + ngôn ngữ thiết kế đã duyệt cho mẫu email
+thông báo (v26.21, `buildNotificationEmailHtml()`), không phát minh bảng màu mới. **CHƯA gắn các class
+này vào bất kỳ màn hình thật nào** — Giai đoạn 1 chỉ xây công cụ, an toàn tuyệt đối, không có rủi ro hồi
+quy. Việc áp dụng từng màn (Hệ Thống > Quản Trị, Quản Lý Tệp File, Công Việc, Dashboard trước tiên theo
+đúng thứ tự đã đề xuất) sẽ ở các bản ghi Giai đoạn 2 tiếp theo.
+
+Test: `tests/test-design-system-foundation.js` (mới, 7 kịch bản) xác nhận màu/hình dạng từng class đúng
+thiết kế đã duyệt + đối chứng Dashboard vẫn render y nguyên không lỗi JS. Đã xác nhận bằng `git stash`
+rằng 5/7 kịch bản FAIL đúng trên code cũ. Chạy lại CSP full-audit (42 điểm điều hướng) + lazy-load toàn
+bộ tab (46 kịch bản) + CSP deep-interaction (19 kịch bản) — không có hồi quy.
+
+**Deploy-impact**: thuần CSS tĩnh (`public/app.css`) — KHÔNG đổi `schema.sql`, KHÔNG thêm biến môi
+trường mới, KHÔNG đổi `package.json` dependencies, KHÔNG cần build lại `tailwind.css` (app.css là file
+tĩnh riêng, không qua bước build Tailwind). Chỉ cần copy code mới + `pm2 restart`.
 
 ## v26.21 (2026-11): Mẫu email HTML chuyên nghiệp DÙNG CHUNG cho TOÀN BỘ thông báo hệ thống
 

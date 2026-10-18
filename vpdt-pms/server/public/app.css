@@ -674,3 +674,90 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
   @page { margin: 15mm 15mm 20mm 15mm; }
 }
 
+/* ===== GIAI ĐOẠN 1 — HỆ THỐNG THIẾT KẾ DÙNG CHUNG (11/2026) =====
+   Theo kế hoạch "HCRC Workspace Refresh" người dùng đã duyệt (rà soát 50 màn hình, gửi demo trước/sau,
+   xác nhận "làm tuần tự theo lộ trình") — đây là GIAI ĐOẠN 1: chỉ thêm class CSS dùng chung, KHÔNG đổi
+   bất kỳ HTML/JS màn hình nào đang chạy (các class dưới đây CHƯA được dùng ở đâu cả cho tới khi Giai
+   đoạn 2 áp dụng từng màn) — an toàn tuyệt đối, không có rủi ro hồi quy ở giai đoạn này.
+
+   Dùng lại ĐÚNG 4 màu trạng thái + ngôn ngữ thiết kế đã duyệt cho mẫu email thông báo
+   (buildNotificationEmailHtml(), public/js/core.js) — không phát minh bảng màu mới:
+   info #2563eb · success #16a34a · warning #d97706 · danger #dc2626.
+
+   4 nhóm component:
+   1. .badge-info/.badge-success/.badge-warning/.badge-danger — pill trạng thái DÙNG CHUNG cho mọi
+      module, thay cho mỗi module tự chọn màu/kiểu badge riêng (phát hiện #1 trong báo cáo rà soát).
+   2. .btn-primary/.btn-secondary/.btn-destructive-outline/.btn-ghost/.btn-more — hệ nút bấm có ý
+      nghĩa rõ ràng, thay cho mỗi nút 1 màu tuỳ hứng không theo quy ước (phát hiện #3). .btn-more là
+      nút hình vuông chỉ chứa icon "⋯", dùng làm điểm neo cho menu "Thao tác khác" gộp các hành động
+      phụ — xem dropdownCspMenu()/tương đương ở core.js khi áp dụng thật ở Giai đoạn 2.
+   3. .stat-card (+ .stat-card-icon/.stat-card-num/.stat-card-label) — ô thống kê có icon + shadow nhẹ,
+      thay cho khối màu phẳng hiện tại (phát hiện #2).
+   4. .empty-state (+ .empty-state-icon) — khung "chưa có dữ liệu" có icon + hướng dẫn + CTA, thay cho
+      1 dòng chữ nghiêng xám đơn điệu (phát hiện #4).
+
+   Đặt SAU khối @media print ở trên (cuối file) để chắc chắn đè được mọi class Tailwind cùng độ ưu tiên
+   nằm TRƯỚC nó trong tailwind.css (app.css load SAU tailwind.css, xem <link> ở index.html) — khớp đúng
+   nguyên tắc "class thành phần (component) phải thắng class tiện ích (utility) còn sót lại khi migrate
+   dần từng màn ở Giai đoạn 2", không cần !important. */
+
+:root {
+  --hcrc-info: #2563eb; --hcrc-info-bg: #dbeafe; --hcrc-info-ink: #1d4ed8;
+  --hcrc-success: #16a34a; --hcrc-success-bg: #dcfce7; --hcrc-success-ink: #15803d;
+  --hcrc-warning: #d97706; --hcrc-warning-bg: #fef3c7; --hcrc-warning-ink: #b45309;
+  --hcrc-danger: #dc2626; --hcrc-danger-bg: #fee2e2; --hcrc-danger-ink: #b91c1c;
+  --hcrc-border: #e5e9f0;
+  --hcrc-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 16px -10px rgba(15,23,42,.18);
+}
+
+.badge-info, .badge-success, .badge-warning, .badge-danger {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 11px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+  line-height: 1.4; white-space: nowrap;
+}
+.badge-info { background: var(--hcrc-info-bg); color: var(--hcrc-info-ink); }
+.badge-success { background: var(--hcrc-success-bg); color: var(--hcrc-success-ink); }
+.badge-warning { background: var(--hcrc-warning-bg); color: var(--hcrc-warning-ink); }
+.badge-danger { background: var(--hcrc-danger-bg); color: var(--hcrc-danger-ink); }
+
+.btn-primary, .btn-secondary, .btn-destructive-outline, .btn-ghost, .btn-more {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 9px; padding: 9px 16px; font-size: 13.5px; font-weight: 600;
+  border: 1px solid transparent; line-height: 1.3; cursor: pointer;
+  transition: filter .12s ease, background-color .12s ease;
+}
+.btn-primary { background: var(--hcrc-info); color: #fff; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-secondary { background: #fff; color: #0f172a; border-color: var(--hcrc-border); }
+.btn-secondary:hover { background: #f8fafc; }
+.btn-destructive-outline { background: #fff; color: var(--hcrc-danger); border-color: #fecaca; }
+.btn-destructive-outline:hover { background: var(--hcrc-danger-bg); }
+.btn-ghost { background: transparent; color: #475569; border-color: transparent; }
+.btn-ghost:hover { background: #f1f5f9; }
+.btn-more { width: 34px; height: 34px; padding: 0; background: #fff; border-color: var(--hcrc-border); color: #475569; }
+.btn-more:hover { background: #f8fafc; }
+
+.stat-card {
+  background: #fff; border: 1px solid var(--hcrc-border); border-radius: 14px;
+  padding: 16px 18px; box-shadow: var(--hcrc-shadow); position: relative; overflow: hidden;
+}
+.stat-card-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; margin-bottom: 10px;
+}
+.stat-card-num { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: #0f172a; }
+.stat-card-label { font-size: 11.5px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
+
+.empty-state {
+  text-align: center; padding: 40px 20px;
+  background: #f8fafc; border: 1px dashed var(--hcrc-border); border-radius: 14px;
+}
+.empty-state-icon {
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--hcrc-info-bg); color: var(--hcrc-info-ink);
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 20px;
+}
+.empty-state h5 { margin: 0 0 5px; font-size: 14.5px; font-weight: 700; color: #0f172a; }
+.empty-state p { margin: 0 0 16px; font-size: 13px; color: #94a3b8; }
+
