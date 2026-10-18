@@ -333,6 +333,118 @@ function getMyPendingApprovals(user) {
       if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
     }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "vanhanh" cho mục AWAITING_RECEIPT', err));
   }
+
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Cao): 5 luồng phê duyệt sau đây
+  // (Đồng Phục/Nghỉ Phép/Đổi Ca/Huỷ Đăng Ký Đào Tạo/Gia Hạn-Huỷ Công Việc) hoàn toàn chưa có mặt ở Hub
+  // dù đều là quyền phê duyệt THẬT (canApproveUniformClient()/canApproveHacLeave()/canApproveHacSwap()/
+  // trainingManage/assignedBy) — người duyệt không thấy số đếm/hồ sơ tổng hợp, phải tự nhớ vào từng
+  // module riêng kiểm tra, dễ bỏ sót hồ sơ treo nhiều ngày. COPY Y HỆT điều kiện hiện nút Duyệt ở render
+  // function gốc của từng module (đúng nguyên tắc đầu file này), KHÔNG tạo logic duyệt mới. 4 module này
+  // (dongphuc/conghop/internalcomms-daotao/congviec) đều thuộc cụm nạp LƯỜI — guard `typeof` + tự nạp nền
+  // rồi refreshApprovalSurfaces(), mirror ĐÚNG khuôn "vanhanh"/canManageOperationOrderReceiptClient() ở
+  // trên (không throw ReferenceError nếu cụm chưa từng mở trong phiên).
+  if (typeof canApproveUniformClient === 'function') {
+    if (canApproveUniformClient(user)) {
+      (DB.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL').forEach(p => {
+        items.push({
+          type: 'uniformPeriod', typeLabel: '👔 Đồng Phục - Kỳ Cấp Phát', code: p.code || String(p.id), title: p.name, dept: p.dept,
+          stepLabel: '', createdAt: p.createdAt,
+          statusBadge: approvalHubPendingBadge(),
+          actions: [
+            { label: '✅ Duyệt', fn: 'approveUniformPeriodAction', args: [p.id], primary: true },
+            { label: '❌ Từ chối', fn: 'rejectUniformPeriodAction', args: [p.id] }
+          ]
+        });
+      });
+      (DB.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL').forEach(t => {
+        items.push({
+          type: 'uniformTransfer', typeLabel: '👔 Đồng Phục - Điều Chuyển Kho', code: String(t.id), title: `${t.sourceDept} → ${t.targetDept}: ${t.itemName}`, dept: t.sourceDept,
+          stepLabel: '', createdAt: t.requestedAt,
+          statusBadge: approvalHubPendingBadge(),
+          actions: [
+            { label: '✅ Duyệt', fn: 'approveUniformTransferAction', args: [t.id], primary: true },
+            { label: '❌ Từ chối', fn: 'rejectUniformTransferAction', args: [t.id] }
+          ]
+        });
+      });
+    }
+  } else if (typeof loadModuleGroup === 'function') {
+    loadModuleGroup('dongphuc').then(() => {
+      if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
+    }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "dongphuc"', err));
+  }
+
+  if (typeof canApproveHacLeave === 'function') {
+    const myCode = DB.myEmployeeCode;
+    if (canApproveHacLeave(user)) {
+      (DB.leaveRequests || []).filter(r => r.status === 'PENDING' && r.employeeCode !== myCode).forEach(r => {
+        items.push({
+          type: 'leaveRequest', typeLabel: '🏖️ Nghỉ Phép', code: r.employeeCode, title: `${r.employeeCode}: ${HAC_LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType} (${r.fromDate} → ${r.toDate})`, dept: r.dept,
+          stepLabel: '', createdAt: r.createdAt,
+          statusBadge: approvalHubPendingBadge(),
+          actions: [
+            { label: '✅ Duyệt', fn: 'approveHacLeaveRequest', args: [r.id], primary: true },
+            { label: '❌ Từ chối', fn: 'rejectHacLeaveRequest', args: [r.id] }
+          ]
+        });
+      });
+    }
+    if (canApproveHacSwap(user)) {
+      (DB.shiftSwapRequests || []).filter(s => s.status === 'PENDING').forEach(s => {
+        items.push({
+          type: 'shiftSwapRequest', typeLabel: '🔄 Đổi Ca', code: s.requesterEmployeeCode, title: `${s.requesterEmployeeCode} ↔ ${s.targetEmployeeCode}`, dept: s.dept,
+          stepLabel: '', createdAt: s.createdAt,
+          statusBadge: approvalHubPendingBadge(),
+          actions: [
+            { label: '✅ Duyệt', fn: 'approveHacSwapRequest', args: [s.id], primary: true },
+            { label: '❌ Từ chối', fn: 'rejectHacSwapRequest', args: [s.id] }
+          ]
+        });
+      });
+    }
+  } else if (typeof loadModuleGroup === 'function') {
+    loadModuleGroup('conghop').then(() => {
+      if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
+    }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "conghop"', err));
+  }
+
+  if (typeof approveCancelTrainingRegAction === 'function') {
+    if (user.perms?.admin || user.perms?.trainingManage) {
+      (DB.trainingRegistrations || []).filter(r => r.pendingCancellation).forEach(r => {
+        const cls = (DB.trainingClasses || []).find(c => c.id === r.classId);
+        items.push({
+          type: 'trainingCancel', typeLabel: '🎓 Đào Tạo - Huỷ Đăng Ký', code: String(r.id), title: `${r.creatorName}: ${cls?.title || '(lớp đã xoá)'}`, dept: r.dept,
+          stepLabel: '', createdAt: r.pendingCancellation.requestedAt,
+          statusBadge: approvalHubPendingBadge(),
+          actions: [
+            { label: '✅ Duyệt Huỷ', fn: 'approveCancelTrainingRegAction', args: [r.id], primary: true },
+            { label: '❌ Từ chối', fn: 'rejectCancelTrainingRegAction', args: [r.id] }
+          ]
+        });
+      });
+    }
+  } else if (typeof loadModuleGroup === 'function') {
+    loadModuleGroup('internalcomms-daotao').then(() => {
+      if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
+    }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "internalcomms-daotao"', err));
+  }
+
+  if (typeof openExtensionApproveModal === 'function') {
+    (DB.tasks || []).filter(t => (t.pendingExtension || t.pendingCancellation) && (t.assignedBy === user.username || user.perms?.admin)).forEach(t => {
+      items.push({
+        type: 'taskPending', typeLabel: t.pendingExtension ? '✅ Công Việc - Gia Hạn' : '✅ Công Việc - Huỷ',
+        code: t.sourceCode || String(t.id), title: t.title, dept: t.dept,
+        stepLabel: '', createdAt: (t.pendingExtension || t.pendingCancellation)?.requestedAt,
+        statusBadge: approvalHubPendingBadge(),
+        actions: [{ label: '✍️ Xử lý / Duyệt', fn: t.pendingExtension ? 'openExtensionApproveModal' : 'openCancelApproveModal', args: [t.id], primary: true }]
+      });
+    });
+  } else if (typeof loadModuleGroup === 'function') {
+    loadModuleGroup('congviec').then(() => {
+      if (typeof refreshApprovalSurfaces === 'function') refreshApprovalSurfaces();
+    }).catch(err => console.error('getMyPendingApprovals: không tải được cụm "congviec"', err));
+  }
+
   return items;
 }
 

@@ -25,8 +25,18 @@
 const { MODULE_CONFIGS, canApproveStep } = require('./workflowEngine');
 const {
   canApproveInternalPost, canApproveLicense, canManagePaymentRequests,
-  canApproveItPriceEmergencyReject, isApproverForOperationOrderReceipt
+  canApproveItPriceEmergencyReject, isApproverForOperationOrderReceipt,
+  canApproveUniform, canApproveUniformTransfer
 } = require('./recordActions');
+const { canApproveLeaveRequest } = require('./attendance');
+
+// resolveEmployeeUsername() — bản copy nhỏ của lib/recordViewScope.js (cùng tên, không export sẵn ở đó)
+// — thuần tra cứu dữ liệu (employeeCode -> username qua employeeProfiles), KHÔNG phải quyết định quyền
+// nên không vi phạm nguyên tắc "không tự suy diễn lại logic quyền" ở đầu file.
+function resolveEmployeeUsername(employeeCode, employeeProfiles) {
+  const profile = (employeeProfiles || []).find(p => p.employeeCode === employeeCode);
+  return profile?.username || null;
+}
 
 // canApproveMeeting(user) — KHÔNG có sẵn hàm export nào ở server (routes/meetingActions.js chỉ viết
 // inline `!!(freshUser.perms?.admin || freshUser.perms?.meetingApprove)`, không tách hàm riêng) — PHẢI
@@ -140,6 +150,38 @@ function computeMyPendingApprovalKeys(user, appData) {
       keys.push(`operationOrderReceipt:${o.id}`);
     }
   });
+
+  // LỖI ĐÃ VÁ (rà soát chuyên sâu lần 2 trước go-live, 11/2026, mức Cao): 5 luồng phê duyệt sau đây
+  // (Đồng Phục/Nghỉ Phép/Đổi Ca/Huỷ Đăng Ký Đào Tạo/Gia Hạn-Huỷ Công Việc) chưa từng có khoá nào ở đây —
+  // khớp đúng 5 khối mới thêm ở getMyPendingApprovals() (core-approvalhub.js): endpoint polling (GET
+  // /api/approvals/pending-signature) trước đây KHÔNG BAO GIỜ phát hiện hồ sơ mới ở 5 luồng này, dù Hub
+  // (sau khi vá) đã hiện đúng — nhãn "Phê Duyệt (N)" trên nav không tăng, poll không kích hoạt
+  // initDatabase() làm mới Hub cho tới khi người dùng tự F5/tự chuyển qua màn Hub.
+  if (canApproveUniform(user)) {
+    (appData.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL').forEach(p => keys.push(`uniformPeriod:${p.id}`));
+  }
+  if (canApproveUniformTransfer(user)) {
+    (appData.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL').forEach(t => keys.push(`uniformTransfer:${t.id}`));
+  }
+  (appData.leaveRequests || []).filter(r => r.status === 'PENDING').forEach(r => {
+    const empUsername = resolveEmployeeUsername(r.employeeCode, appData.employeeProfiles);
+    if (empUsername === user.username) return; // tự mình xin nghỉ, không tự duyệt được (khớp điều kiện client)
+    if (canApproveLeaveRequest(user, appData.users, empUsername)) keys.push(`leaveRequest:${r.id}`);
+  });
+  // Đổi ca — mirror ĐÚNG assertShiftSwapApprover() (routes/records.js): hrShiftSwapApprove CHỈ duyệt
+  // được đúng siêu thị mình quản lý (roster.storeCode === user.dept), chặt hơn điều kiện hiện nút Duyệt
+  // ở client (canApproveHacSwap() — module-conghop.js, cố tình KHÔNG lọc theo siêu thị, xem chú thích ở
+  // getMyPendingApprovals()) — giữ đúng enforcement thật ở đây để khoá polling không báo sai.
+  (appData.shiftSwapRequests || []).filter(s => s.status === 'PENDING').forEach(s => {
+    const roster = (appData.shiftRoster || []).find(r => r.id === s.requesterRosterId);
+    const allowed = user?.perms?.admin || user?.perms?.hrAttendanceManage
+      || (user?.perms?.hrShiftSwapApprove && roster && roster.storeCode === user.dept);
+    if (allowed) keys.push(`shiftSwapRequest:${s.id}`);
+  });
+  if (user?.perms?.admin || user?.perms?.trainingManage) {
+    (appData.trainingRegistrations || []).filter(r => r.pendingCancellation).forEach(r => keys.push(`trainingCancel:${r.id}`));
+  }
+  (appData.tasks || []).filter(t => (t.pendingExtension || t.pendingCancellation) && (t.assignedBy === user.username || user?.perms?.admin)).forEach(t => keys.push(`taskPending:${t.id}`));
 
   return [...new Set(keys)].sort();
 }
