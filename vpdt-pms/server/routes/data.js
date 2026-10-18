@@ -1812,6 +1812,17 @@ router.get('/', async (req, res) => {
       data.myEmployeeCode = myProfile ? myProfile.employeeCode : null;
       delete data.employeeProfiles;
     }
+    // LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): orgChartVersions (AppData key thô, lib/orgChart.js) là
+    // KHOÁ DUY NHẤT lưu toàn bộ cây Cơ Cấu Tổ Chức + Luồng Đánh Giá KPI Theo Vị Trí (node/version
+    // lifecycle, quan hệ đánh giá KPI giữa các vị trí) — `const data = { ...cachedAppData.data }` ở đầu
+    // handler này spread TẤT CẢ key AppData, nên key này CHƯA TỪNG bị lọc/xoá ở đây lộ NGUYÊN VẸN cho
+    // BẤT KỲ ai đã đăng nhập gọi GET /api/data, bất kể orgChartManage/nhanSuManage/kpiFlowConfigManage/
+    // moduleAccess.orgChart (routes/orgChart.js — nguồn DUY NHẤT client thực sự đọc dữ liệu này qua
+    // GET /api/org-chart/versions* — đã gác đúng cả 2 lớp từ trước, xem requireOrgChartModuleAccess()).
+    // Client KHÔNG hề đọc `DB.orgChartVersions` (module-orgchart.js luôn gọi route riêng), nên xoá hẳn
+    // field này khỏi response chung — cùng khuôn employeeProfiles/systemLogs ở trên, không cần giữ lại
+    // field dẫn xuất nào (khác employeeProfiles còn giữ `myEmployeeCode`).
+    delete data.orgChartVersions;
     // tasks: cùng dạng lỗ hổng như 9 collection ở trên — trước đây hoàn toàn KHÔNG được lọc lại ở
     // server (chỉ ẩn ở renderTasks() qua canViewTaskRecord()), để lộ toàn bộ Công Việc công ty (kể cả
     // nội dung "Ý kiến chỉ đạo" nhạy cảm) cho bất kỳ ai gọi thẳng GET /api/data.
