@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**26.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.88 (2026-11): [TB] Re-audit lần 5 — mục 1: paymentRequests gác sai key 'office' thay vì 'payment'
+
+Mục đầu tiên trong 18 phát hiện mức Trung Bình của đợt re-audit lần 5 (toàn bộ 9 mục Cao đã xử lý xong
+ở v26.79-v26.87).
+
+- Đợt vá trước (re-audit lần 4, v26.4x) đã gộp chung `paymentRequests` vào Khối 0 key **"office"**
+  (`MODULE_ACCESS_GATED_COLLECTIONS.office`, `lib/recordViewScope.js`) cùng `officeReqs` — nhưng
+  **"payment" (Thanh Toán) đã là module con RIÊNG của "office" (Tổng Hợp) từ 10/2026** (checkbox Mục 0
+  riêng, 3 tab con paymentCreateTab/paymentManageTab/paymentApproveTab — `public/js/core.js`
+  `BUSINESS_MODULES`), KHÁC hẳn `officeReqs` (Mua Bán/Sửa Chữa — vẫn đúng dùng chung checkbox "office").
+  Hậu quả: admin tắt RIÊNG `moduleAccess.payment` cho 1 tài khoản (vẫn giữ `office=true` để họ tiếp tục
+  dùng Mua Bán/Sửa Chữa) — UI ẩn đúng tab Thanh Toán, nhưng server **KHÔNG chặn**: GET `/api/data`(/reports)
+  vẫn trả `paymentRequests` cùng phòng ban, `router.use('/paymentRequests', ...)`
+  (`routes/records.js`) và route Duyệt/Từ chối chung (`WORKFLOW_MODULE_ACCESS_KEYS`, `routes/workflow.js`)
+  vẫn cho sửa/duyệt bình thường — ngược hẳn ý định admin.
+  - Tách `MODULE_ACCESS_GATED_COLLECTIONS`: `office: ['officeReqs']` (giữ nguyên), thêm
+    `payment: ['paymentRequests']` (mới) — `MODULE_ACCESS_PARENTS.payment = 'office'` (đã có từ #118)
+    vẫn cascade đúng: tắt `office` vẫn tắt theo `payment`, chỉ THÊM khả năng tắt RIÊNG `payment` mà
+    không ảnh hưởng `officeReqs`.
+  - `routes/records.js`: `router.use('/paymentRequests', ...)` đổi `hasModuleAccessServer(user,'office')`
+    → `'payment'`.
+  - `routes/workflow.js`: `WORKFLOW_MODULE_ACCESS_KEYS.paymentRequests` đổi `'office'` → `'payment'`.
+  - `COLLECTION_TO_MODULE_ACCESS_KEY` (`routes/create.js`/`routes/reports.js`) tự suy diễn lại đúng từ
+    map trên — không cần sửa thêm.
+
+**Test:** `tests/test-khoi0-payment-office-gate.js` (file test CŨ của #99 — sửa fixture/assertion theo
+đúng CLAUDE.md "sửa fixture cho đúng chứ không nới lỏng chặn mới": scenario #1 đổi kỳ vọng
+`office->paymentRequests` từ `true` sang `false`, thêm 2 scenario MỚI kiểm `moduleAccess.payment=false`
+(office vẫn `true`) chặn đúng `paymentRequests` nhưng KHÔNG ảnh hưởng `officeReqs`). Xác nhận FAIL trên
+code CŨ (`git stash`, 2/8 scenario FAIL đúng 2 "LỖI ĐÃ VÁ"), PASS trên code đã vá (8/8). Regression (50+
+file test liên quan paymentRequests/workflow/moduleAccess): toàn bộ PASS — `test-khoi0-parent-cascade-gate.js`,
+`test-muc0-module-access-tree.js`, `test-mucO-payroll-payment-hrprofile-bypass.js`,
+`test-payment-requests-dept-scope.js`, `test-payment.js` (110/110), `test-payment-source-race.js`,
+`test-payment-deadline-reminder.js`, `test-extra-approval-groups.js` (26/26), `test-workflow-reset-dept-config.js`,
+`test-contract.js` (75/75), và ~40 file khác — không regression. 2 file có FAIL từ trước
+(`test-audit-round2-cluster6.js` mục email, `test-preview-workflow-buttons.js` mục operationOrders/
+contracts) đã xác nhận qua git-stash là lỗi CŨ tồn tại trước đợt này, không liên quan thay đổi.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`. **Lưu ý cho admin**: sau khi
+deploy, rà lại 1 lần cấu hình Mục 0 hiện có — trước đây tắt `office` để "chặn Thanh Toán" thì nay vẫn
+đúng (cascade), nhưng nếu trước đây có tài khoản admin TƯỞNG đã tắt `payment` riêng (qua checkbox Thanh
+Toán) mà `office` vẫn `true`, hành vi THỰC THI phía server sẽ ĐỔI từ "không chặn" (lỗi cũ) sang "chặn
+đúng" (ý định ban đầu của admin) — không phải lỗi mới, chỉ là Khối 0 giờ khớp đúng ý UI.
 
 ## v26.87 (2026-11): [Cao] Re-audit lần 5 — mục 9 (mục Cao cuối cùng): hrProfileEdit tự gán chức vụ cho chính mình để tự nâng quyền duyệt
 

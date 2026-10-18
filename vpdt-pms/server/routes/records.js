@@ -98,8 +98,13 @@ router.use('/submissions', (req, res, next) => {
   }
   next();
 });
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình): gác nhầm key "office" (Mua Bán/Sửa Chữa) thay vì
+// "payment" (Thanh Toán — module con RIÊNG của Tổng Hợp từ 10/2026) — xem chú thích đầy đủ tại
+// MODULE_ACCESS_GATED_COLLECTIONS.payment (lib/recordViewScope.js). hasModuleAccessServer(user,'payment')
+// đã tự cascade kiểm luôn cha 'office' (MODULE_ACCESS_PARENTS), nên đổi sang 'payment' vẫn giữ đúng
+// hành vi "tắt Tổng Hợp cũng tắt Thanh Toán", chỉ THÊM đúng khả năng tắt RIÊNG Thanh Toán.
 router.use('/paymentRequests', (req, res, next) => {
-  if (!hasModuleAccessServer(req.freshUser, 'office')) {
+  if (!hasModuleAccessServer(req.freshUser, 'payment')) {
     return res.status(403).json({ error: 'Module Thanh Toán đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
   }
   next();

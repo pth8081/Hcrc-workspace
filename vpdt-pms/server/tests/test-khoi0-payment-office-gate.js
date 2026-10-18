@@ -16,6 +16,20 @@
 // test-khoi0-officereqs-vpp-periodicreport-gate.js — chỉ tập trung đúng phần MỚI: (a) cấu trúc map, và
 // (b) hành vi zero-out THẬT ở GET /api/data khi mount routes/data.js thật.
 //
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — "paymentRequests gác sai key 'office' thay vì 'payment'"):
+// đợt vá TRÊN (re-audit lần 4) gộp chung paymentRequests VÀO key "office" — nhưng "payment" (Thanh Toán)
+// đã là module con RIÊNG của "office" (Tổng Hợp) từ 10/2026 (checkbox Mục 0 riêng, 3 tab con, xem
+// public/js/core.js BUSINESS_MODULES `{key:'payment', parent:'office'}`), KHÁC officeReqs (Mua Bán/Sửa
+// Chữa — vẫn đúng dùng chung checkbox "office"). Gộp chung khiến admin tắt RIÊNG moduleAccess.payment
+// (giữ office=true cho Mua Bán/Sửa Chữa) KHÔNG chặn được paymentRequests qua GET /api/data/router.use
+// .../workflow.js — ngược hẳn UI đã ẩn đúng Thanh Toán. Đã tách `office: ['officeReqs']` +
+// `payment: ['paymentRequests']` (lib/recordViewScope.js) — MODULE_ACCESS_PARENTS.payment='office' vẫn
+// cascade đúng (tắt office vẫn tắt luôn payment, test bên dưới giữ nguyên các assertion liên quan đến
+// office=false cho cả 2 collection). Đồng thời sửa routes/records.js (router.use('/paymentRequests'))
+// và routes/workflow.js (WORKFLOW_MODULE_ACCESS_KEYS.paymentRequests) từ 'office' sang 'payment'.
+// Assertion cấu trúc map ở scenario #1 sửa lại cho đúng (KHÔNG còn 'office'->paymentRequests), thêm 2
+// scenario MỚI (#2b/#2c) kiểm đúng hành vi tách biệt: tắt RIÊNG payment không ảnh hưởng officeReqs.
+//
 // Chạy: node server/tests/test-khoi0-payment-office-gate.js
 'use strict';
 const http = require('http');
@@ -36,7 +50,10 @@ const OFFICE_OFF = { username: 'nv1', name: 'NV 1', dept: 'Phòng A', perms: { m
 const OFFICE_ON = { username: 'nv2', name: 'NV 2', dept: 'Phòng A', perms: { moduleAccess: { office: true } }, active: true };
 const NO_MODULE_ACCESS_FIELD = { username: 'nv3', name: 'NV 3', dept: 'Phòng A', perms: {}, active: true };
 const ADMIN = { username: 'admin', name: 'Quản Trị Viên', dept: 'Ban Giám Đốc', perms: { admin: true, moduleAccess: { office: false } }, active: true };
-const ALL_USERS_LIST = [OFFICE_OFF, OFFICE_ON, NO_MODULE_ACCESS_FIELD, ADMIN];
+// PAYMENT_OFF_ONLY (re-audit lần 5): office=true (Mua Bán/Sửa Chữa vẫn mở) nhưng tắt RIÊNG payment —
+// kịch bản MỚI mà lỗi "gác nhầm key" từng không chặn được.
+const PAYMENT_OFF_ONLY = { username: 'nv4', name: 'NV 4', dept: 'Phòng A', perms: { moduleAccess: { office: true, payment: false } }, active: true };
+const ALL_USERS_LIST = [OFFICE_OFF, OFFICE_ON, NO_MODULE_ACCESS_FIELD, ADMIN, PAYMENT_OFF_ONLY];
 
 let APP_DATA;
 function resetData() {
@@ -122,12 +139,15 @@ async function main() {
   const run = createRunner();
 
   try {
-    await run.run('MODULE_ACCESS_GATED_COLLECTIONS: đã thêm key "office" -> ["paymentRequests", "officeReqs"]', async () => {
+    await run.run('LỖI ĐÃ VÁ: MODULE_ACCESS_GATED_COLLECTIONS tách đúng — "office"->officeReqs, "payment"->paymentRequests (KHÔNG còn gộp chung)', async () => {
       delete require.cache[require.resolve('../lib/recordViewScope')];
-      const { MODULE_ACCESS_GATED_COLLECTIONS } = require('../lib/recordViewScope');
+      const { MODULE_ACCESS_GATED_COLLECTIONS, MODULE_ACCESS_PARENTS } = require('../lib/recordViewScope');
       const officeCols = MODULE_ACCESS_GATED_COLLECTIONS.office || [];
-      assertEqual(officeCols.includes('paymentRequests'), true, 'thiếu office->paymentRequests');
+      const paymentCols = MODULE_ACCESS_GATED_COLLECTIONS.payment || [];
+      assertEqual(officeCols.includes('paymentRequests'), false, 'paymentRequests KHÔNG còn được gác qua key "office" nữa');
       assertEqual(officeCols.includes('officeReqs'), true, 'thiếu office->officeReqs');
+      assertEqual(paymentCols.includes('paymentRequests'), true, 'thiếu payment->paymentRequests');
+      assertEqual(MODULE_ACCESS_PARENTS.payment, 'office', 'payment phải vẫn cascade theo cha "office"');
     });
 
     await run.run('moduleAccess.office=false -> data.paymentRequests RỖNG dù cùng phòng ban với hồ sơ', async () => {
@@ -148,6 +168,19 @@ async function main() {
       const res = await api('GET', '/api/data', undefined, OFFICE_ON);
       assertEqual((res.body.paymentRequests || []).length, 1, 'paymentRequests không bị chặn oan khi module bật');
       assertEqual((res.body.officeReqs || []).length, 1, 'officeReqs không bị chặn oan khi module bật');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: moduleAccess.payment=false (office=true) -> data.paymentRequests RỖNG dù cùng phòng ban', async () => {
+      resetData();
+      const res = await api('GET', '/api/data', undefined, PAYMENT_OFF_ONLY);
+      assertEqual(res.status, 200, 'phải trả 200');
+      assertEqual((res.body.paymentRequests || []).length, 0, 'paymentRequests phải bị chặn khi tắt RIÊNG moduleAccess.payment');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: moduleAccess.payment=false (office=true) -> data.officeReqs KHÔNG bị ảnh hưởng (2 module tách biệt)', async () => {
+      resetData();
+      const res = await api('GET', '/api/data', undefined, PAYMENT_OFF_ONLY);
+      assertEqual((res.body.officeReqs || []).length, 1, 'officeReqs không được dùng key "office" của payment — vẫn phải thấy bình thường');
     });
 
     await run.run('KHÔNG có field moduleAccess nào (mặc định mở hết) -> vẫn thấy paymentRequests/officeReqs', async () => {

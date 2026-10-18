@@ -46,11 +46,17 @@ router.use(requireAuth, blockIfMustChangePassword);
 // vào MODULE_ACCESS_GATED_COLLECTIONS dùng chung ở GET /api/data — phát hiện này chỉ về đường GHI/hành
 // động, không đổi phạm vi lọc ĐỌC dữ liệu) từ dbKey của MODULE_CONFIGS sang đúng khoá moduleAccess tương
 // ứng (BUSINESS_MODULES, public/js/core.js).
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Trung Bình — cùng gốc với MODULE_ACCESS_GATED_COLLECTIONS.payment,
+// lib/recordViewScope.js): paymentRequests gác NHẦM 'office' (Mua Bán/Sửa Chữa) thay vì 'payment'
+// (Thanh Toán — module con RIÊNG của Tổng Hợp từ 10/2026, checkbox Mục 0 riêng) — admin tắt RIÊNG
+// moduleAccess.payment cho 1 tài khoản (còn giữ office=true) vẫn Duyệt/Từ chối được paymentRequests
+// qua route generic này. hasModuleAccessServer(user,'payment') tự cascade kiểm cha 'office'
+// (MODULE_ACCESS_PARENTS), nên đổi khoá vẫn giữ đúng "tắt Tổng Hợp cũng tắt Thanh Toán".
 const WORKFLOW_MODULE_ACCESS_KEYS = {
   docs: 'doc', submissions: 'submission', carRegs: 'car', officeReqs: 'office',
   vppRegistrations: 'vpp', contracts: 'contract', contractsSignedFile: 'contract',
   budgetEntries: 'budget', operationOrders: 'vanHanh',
-  paymentRequests: 'office'
+  paymentRequests: 'payment'
   // itPriceApprovals CỐ Ý không có mặt ở đây nữa — xem nhánh riêng trong assertWorkflowModuleAccess()
   // ngay dưới (LỖI ĐÃ VÁ, đợt audit chuyên sâu 8-agent song song, mức Cao).
 };
