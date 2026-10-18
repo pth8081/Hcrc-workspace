@@ -324,6 +324,77 @@ async function main() {
       await page.evaluate((c) => { DB.careerPathConfirmations.push(c); }, confirmation);
     });
 
+    // ===================== Re-audit lần 6 (TB): editCareerPath không kiểm careerPathConfirmations =====
+    // Tại điểm này pathId đã có careerPathConfirmations ở CẢ 2 cấp (staff.it: stage 0 + stage 1) —
+    // maxConfirmedIndex = 1 cho lộ trình này.
+
+    await run('editing stage 0 requiredCourseIds after it already has a confirmation is rejected (409)', async () => {
+      let errMsg = null;
+      await page.evaluate(async (pid) => {
+        try {
+          await callRecordAction('careerPaths', pid, 'edit', {
+            stages: [{ name: 'Trưởng Nhóm', requiredCourseIds: [999999] }, { name: 'Trưởng Phòng', requiredCourseIds: [1] }]
+          });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      }, pathId);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('Cấp 1 đã có nhân viên được xác nhận hoàn thành'), `expected a confirmed-stage-locked error, got: ${errMsg}`);
+    });
+
+    await run('removing the last confirmed stage (shrinking stages[] below maxConfirmedIndex+1) is rejected (409)', async () => {
+      let errMsg = null;
+      await page.evaluate(async (pid) => {
+        try {
+          await callRecordAction('careerPaths', pid, 'edit', { stages: [{ name: 'Trưởng Nhóm', requiredCourseIds: [1] }] });
+        } catch (err) { window.__lastCreateErr = err.message; }
+      }, pathId);
+      errMsg = await page.evaluate(() => window.__lastCreateErr);
+      assert(errMsg && errMsg.includes('Không thể xoá/dời chỗ Cấp 2'), `expected a cannot-remove-confirmed-stage error, got: ${errMsg}`);
+    });
+
+    await run('renaming an already-confirmed stage (requiredCourseIds unchanged) still succeeds — only the requiredCourseIds of confirmed stages are locked', async () => {
+      const path = await page.evaluate(async ({ pid, ids }) => {
+        await callRecordAction('careerPaths', pid, 'edit', {
+          stages: [
+            { name: 'Trưởng Nhóm (API)', requiredCourseIds: [ids.courseA] },
+            { name: 'Trưởng Phòng (API)', requiredCourseIds: [ids.courseB] }
+          ]
+        });
+        return DB.careerPaths.find((p) => p.id === pid);
+      }, { pid: pathId, ids: { courseA: courseAId, courseB: courseBId } });
+      assertEqual(path.stages[0].name, 'Trưởng Nhóm (API)', 'stage 0 name should update');
+      assertEqual(path.stages[1].name, 'Trưởng Phòng (API)', 'stage 1 name should update');
+    });
+
+    await run('appending a brand-new 3rd stage after the 2 confirmed stages still succeeds', async () => {
+      const path = await page.evaluate(async ({ pid, ids }) => {
+        await callRecordAction('careerPaths', pid, 'edit', {
+          stages: [
+            { name: 'Trưởng Nhóm (API)', requiredCourseIds: [ids.courseA] },
+            { name: 'Trưởng Phòng (API)', requiredCourseIds: [ids.courseB] },
+            { name: 'Giám Đốc Vận Hành', requiredCourseIds: [ids.courseB] }
+          ]
+        });
+        return DB.careerPaths.find((p) => p.id === pid);
+      }, { pid: pathId, ids: { courseA: courseAId, courseB: courseBId } });
+      assertEqual(path.stages.length, 3, 'expected a 3rd stage to be appended');
+      assertEqual(path.stages[2].name, 'Giám Đốc Vận Hành', 'stage 2 (new) name mismatch');
+      // Trả lại đúng tên 2 cấp cũ như trước khi vào nhóm test này — các kịch bản renderCareerPaths() phía
+      // sau đọc đúng chữ "Trưởng Nhóm"/"Trưởng Phòng" (không có hậu tố "(API)"), và chỉ cần đúng 2 cấp.
+      await page.evaluate(async ({ pid, ids }) => {
+        await callRecordAction('careerPaths', pid, 'edit', {
+          stages: [
+            { name: 'Trưởng Nhóm', requiredCourseIds: [ids.courseA] },
+            { name: 'Trưởng Phòng', requiredCourseIds: [ids.courseB] }
+          ]
+        });
+      }, { pid: pathId, ids: { courseA: courseAId, courseB: courseBId } });
+      const restored = await page.evaluate((pid) => DB.careerPaths.find((p) => p.id === pid), pathId);
+      assertEqual(restored.stages.length, 2, 'stages must be restored to exactly 2 for the rest of the suite');
+      assertEqual(restored.stages[0].name, 'Trưởng Nhóm', 'stage 0 name must be restored for the rest of the suite');
+      assertEqual(restored.stages[1].name, 'Trưởng Phòng', 'stage 1 name must be restored for the rest of the suite');
+    });
+
     await run('SAFETY: confirming stages never touches user.jobTitle (stays 100% manual via Quản Lý Người Dùng)', async () => {
       const jobTitle = await page.evaluate(() => DB.users.find((u) => u.username === 'staff.it').jobTitle);
       assertEqual(jobTitle, 'Nhân viên', 'jobTitle must remain exactly as it was before any confirmation — never auto-updated by this feature');

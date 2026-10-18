@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.17 (2026-11): [TB] Re-audit lần 6 — mục 9/21: editCareerPath không kiểm careerPathConfirmations
+
+Mục thứ chín (9/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `editCareerPath()` (`lib/recordActions.js`) sửa `stages[]` (tên + `requiredCourseIds`
+của từng cấp bậc lộ trình thăng tiến) HOÀN TOÀN TỰ DO, không đối chiếu với `careerPathConfirmations` đã
+tồn tại. `confirmCareerPathForEmployee()` khi xác nhận 1 cấp bậc KHÔNG snapshot lại `requiredCourseIds`
+của cấp đó vào bản ghi xác nhận — chỉ lưu `stageIndex`/`stageName`. Vì vậy, nếu sửa lộ trình SAU KHI đã
+có nhân viên được xác nhận 1 cấp (đổi `requiredCourseIds` của cấp đó, hoặc xoá/dời chỗ cấp đó), xác nhận
+cũ vẫn hiển thị "Đã xác nhận" dù không còn khớp tiêu chuẩn MỚI — và mốc sai lệch này còn làm điều kiện
+tiên quyết (gác tuần tự) cho việc xác nhận cấp TIẾP THEO, cho qua dù nhân viên chưa thật sự đạt chuẩn mới
+của cấp trước.
+
+**Vá:** `editCareerPath()` nhận thêm tham số `existingConfirmations` (route `POST /careerPaths/:id/edit`
+nạp `careerPathConfirmations` qua `getAllForCollection()` truyền vào). Khi payload có sửa `stages`: tính
+`maxConfirmedIndex` (cấp cao nhất đã có bất kỳ xác nhận nào cho lộ trình này) — chặn 409 nếu mảng `stages`
+mới ngắn hơn `maxConfirmedIndex + 1` (xoá/dời chỗ cấp đã xác nhận), và chặn 409 nếu `requiredCourseIds`
+(so sánh không phân biệt thứ tự) của bất kỳ cấp từ 0 đến `maxConfirmedIndex` bị đổi. Vẫn cho phép tự do:
+sửa TÊN các cấp đã xác nhận (không ảnh hưởng điều kiện Đạt), và thêm cấp MỚI ở phía sau — mirror đúng
+khuôn `editTrainingClass()` chặn đổi `courseId` khi lớp đã có học viên Đạt.
+
+**Test:** mở rộng `tests/test-career-paths.js` (Playwright qua `_mock-backend.js`, đồng bộ sửa
+`__mockEditCareerPath()` mirror đúng logic server) — thêm 4 scenario: (1) đổi `requiredCourseIds` của cấp
+đã xác nhận -> 409; (2) xoá cấp cuối đã xác nhận (mảng `stages` mới ngắn hơn) -> 409; (3) chỉ đổi TÊN của
+2 cấp đã xác nhận (giữ nguyên `requiredCourseIds`) -> vẫn thành công; (4) thêm cấp thứ 3 mới ở phía sau 2
+cấp đã xác nhận -> vẫn thành công. Xác nhận FAIL trên code CŨ (`git stash` 4 file liên quan, đúng 2/32
+scenario FAIL — 2 scenario chặn 409 không còn áp dụng, khớp đúng khai thác đã nêu), PASS trên code đã vá
+(32/32). Regression: `test-onboarding.js` (23/23), `test-audit-round4-internal-data-gate.js` (16/16),
+`test-audit-round5-ui-meeting-car.js` (16/16) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.16 (2026-11): [Điều tra] Re-audit lần 6 — mục 8/21: licenses tạo phiên bản mới "thiếu getLockKey" — XÁC NHẬN FALSE POSITIVE
 

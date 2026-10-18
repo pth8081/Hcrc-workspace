@@ -1708,8 +1708,9 @@ router.post('/careerPaths/:id/edit', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     const appData = await getAllAppData();
+    const existingConfirmations = await getAllForCollection('careerPathConfirmations');
     const result = await withLockedRecordForCollection('careerPaths', itemId, (item) =>
-      recordActions.editCareerPath(req.body, freshUser, item, appData));
+      recordActions.editCareerPath(req.body, freshUser, item, appData, existingConfirmations));
     res.json({ ok: true, item: result });
   } catch (err) {
     handleError(res, `careerPaths/${req.params.id}/edit`, err);

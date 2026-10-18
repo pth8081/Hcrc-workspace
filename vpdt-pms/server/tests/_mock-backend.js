@@ -1184,8 +1184,30 @@ function __mockValidateCareerPathCreate(payload, user) {
 
 // mirrors editCareerPath() ở lib/recordActions.js — CÙNG validate/normalize như lúc tạo (stages[] mỗi
 // cấp cần name + ít nhất 1 requiredCourseIds hợp lệ), chỉ khác creator/dept không bị đụng tới.
+//
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Trung bình — mirror đúng bản vá editCareerPath() thật): chặn sửa
+// requiredCourseIds/xoá-dời-chỗ các cấp bậc đã có DB.careerPathConfirmations (xem giải thích đầy đủ ở
+// editCareerPath(), lib/recordActions.js) — chỉ cho sửa TÊN các cấp đã xác nhận hoặc thêm cấp mới ở sau.
 function __mockEditCareerPath(payload, user, path) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa lộ trình thăng tiến');
+  if (payload.stages !== undefined) {
+    const confirmationsForPath = (DB.careerPathConfirmations || []).filter((c) => c.pathId === path.id);
+    if (confirmationsForPath.length) {
+      const maxConfirmedIndex = Math.max(...confirmationsForPath.map((c) => Number(c.stageIndex) || 0));
+      const oldStages = Array.isArray(path.stages) ? path.stages : [];
+      const newStages = Array.isArray(payload.stages) ? payload.stages : [];
+      if (newStages.length < maxConfirmedIndex + 1) {
+        throw __mockHttpError(409, `Không thể xoá/dời chỗ Cấp ${maxConfirmedIndex + 1} vì đã có nhân viên được xác nhận hoàn thành cấp này. Chỉ có thể thêm cấp mới ở phía sau.`);
+      }
+      const courseIdsOf = (s) => Array.isArray(s?.requiredCourseIds)
+        ? [...new Set(s.requiredCourseIds.map(Number))].filter(Number.isFinite).sort((a, b) => a - b) : [];
+      for (let i = 0; i <= maxConfirmedIndex; i++) {
+        if (JSON.stringify(courseIdsOf(oldStages[i])) !== JSON.stringify(courseIdsOf(newStages[i]))) {
+          throw __mockHttpError(409, `Cấp ${i + 1} đã có nhân viên được xác nhận hoàn thành — không thể đổi chương trình bắt buộc của cấp này (chỉ có thể thêm cấp mới ở phía sau).`);
+        }
+      }
+    }
+  }
   if (payload.name !== undefined) path.name = payload.name;
   if (payload.stages !== undefined) path.stages = payload.stages;
   if (!path.name || !String(path.name).trim()) throw __mockHttpError(400, 'Thiếu tên lộ trình thăng tiến');
