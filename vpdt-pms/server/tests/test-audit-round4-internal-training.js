@@ -168,6 +168,47 @@ run('Từ chối yêu cầu huỷ vẫn là đường gỡ yêu cầu treo cho h
   assert.strictEqual(out.result, 'PASSED', 'Từ chối yêu cầu huỷ KHÔNG được đụng tới kết quả');
 });
 
+// ============================================================================
+// 2b) TB (re-audit lần 7) — approveCancelTrainingRegistration/rejectCancelTrainingRegistration thiếu
+// chặn tự duyệt: nhân viên có trainingManage (không phải admin) tự đăng ký lớp (reg.creator = chính
+// mình), tạo pendingCancellation (không phải admin -> không tự huỷ ngay), rồi tự gọi approve-cancel/
+// reject-cancel bằng chính quyền trainingManage của mình -> PHẢI bị chặn 403, cần người QUẢN LÝ ĐÀO TẠO
+// KHÁC thực hiện (khớp đúng 7 hành động Đào Tạo khác cùng bản chất đã dùng
+// assertNotSelfInTrainingAction()).
+// ============================================================================
+console.log('\n===== 2b) approveCancelTrainingRegistration/rejectCancelTrainingRegistration: chặn tự duyệt =====');
+
+const TRAINER_SELF = { username: 'dt2', name: 'Cán Bộ Đào Tạo Tự Đăng Ký', dept: 'Hành Chính', perms: { trainingManage: true } };
+
+run('LỖI ĐÃ VÁ: TRAINER_SELF (có trainingManage) tự DUYỆT yêu cầu huỷ đăng ký CỦA CHÍNH MÌNH -> 403, không cho tự huỷ', () => {
+  const reg = seedReg({ creator: TRAINER_SELF.username, creatorName: TRAINER_SELF.name, pendingCancellation: { reason: 'Bận việc', requestedBy: TRAINER_SELF.username, requestedByName: TRAINER_SELF.name, requestedAt: 'x' } });
+  expectHttpError(() => recordActions.approveCancelTrainingRegistration({}, TRAINER_SELF, reg), 403, 'tự duyệt yêu cầu huỷ đăng ký');
+  assert.strictEqual(reg.result, 'REGISTERED', 'Đăng ký KHÔNG được chuyển CANCELLED khi bị chặn tự duyệt');
+  assert.ok(reg.pendingCancellation, 'pendingCancellation PHẢI còn treo, chưa bị xử lý');
+});
+
+run('LỖI ĐÃ VÁ: TRAINER_SELF tự TỪ CHỐI yêu cầu huỷ CỦA CHÍNH MÌNH -> 403', () => {
+  const reg = seedReg({ creator: TRAINER_SELF.username, creatorName: TRAINER_SELF.name, pendingCancellation: { reason: 'Bận việc', requestedBy: TRAINER_SELF.username, requestedByName: TRAINER_SELF.name, requestedAt: 'x' } });
+  expectHttpError(() => recordActions.rejectCancelTrainingRegistration({}, TRAINER_SELF, reg), 403, 'tự từ chối yêu cầu huỷ đăng ký');
+  assert.ok(reg.pendingCancellation, 'pendingCancellation PHẢI còn treo, chưa bị xử lý');
+});
+
+run('LỖI ĐÃ VÁ: ADMIN (có perms.admin) cũng KHÔNG được tự duyệt huỷ đăng ký của chính mình -> 403 (khớp quyết định "chặn admin tự duyệt ở TẤT CẢ module")', () => {
+  const reg = seedReg({ creator: ADMIN.username, creatorName: ADMIN.name, pendingCancellation: { reason: 'Bận việc', requestedBy: ADMIN.username, requestedByName: ADMIN.name, requestedAt: 'x' } });
+  expectHttpError(() => recordActions.approveCancelTrainingRegistration({}, ADMIN, reg), 403);
+});
+
+run('đối chứng: TRAINER (KHÁC reg.creator) vẫn duyệt/từ chối được bình thường, không bị chặn oan', () => {
+  const regApprove = seedReg({ creator: TRAINER_SELF.username, creatorName: TRAINER_SELF.name, pendingCancellation: { reason: 'Bận việc', requestedBy: TRAINER_SELF.username, requestedByName: TRAINER_SELF.name, requestedAt: 'x' } });
+  const outApprove = recordActions.approveCancelTrainingRegistration({}, TRAINER, regApprove);
+  assert.strictEqual(outApprove.result, 'CANCELLED');
+
+  const regReject = seedReg({ creator: TRAINER_SELF.username, creatorName: TRAINER_SELF.name, pendingCancellation: { reason: 'Bận việc', requestedBy: TRAINER_SELF.username, requestedByName: TRAINER_SELF.name, requestedAt: 'x' } });
+  const outReject = recordActions.rejectCancelTrainingRegistration({}, TRAINER, regReject);
+  assert.strictEqual(outReject.pendingCancellation, null);
+  assert.strictEqual(outReject.result, 'REGISTERED');
+});
+
 run('Ghi nhận kết quả THỦ CÔNG tự dọn luôn yêu cầu huỷ đang treo', () => {
   const reg = seedReg();
   const cls = { id: 900, testId: null, instructorUsername: GIANGVIEN.username };

@@ -4965,6 +4965,18 @@ function approveCancelTrainingRegistration(payload, user, reg) {
     throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu huỷ đăng ký lớp học');
   }
   if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức TB — "approveCancelTrainingRegistration/rejectCancelTrainingRegistration
+  // thiếu chặn tự duyệt"): khác 7 hành động Đào Tạo khác cùng bản chất (setTrainingRegistrationResult/
+  // gradeTrainingTestEssayAnswers/confirmOnboardingStage/evaluateOnboardingStage3/
+  // reevaluateOnboardingStage3/issueOnboardingCertificate/confirmCareerPathForEmployee — đều đã có
+  // assertNotSelfInTrainingAction()), hàm này chỉ kiểm quyền trainingManage/admin, KHÔNG so reg.creator
+  // với user.username. Nhân viên có trainingManage (không phải admin) tự đăng ký 1 lớp học, gọi /cancel
+  // (tạo pendingCancellation vì không phải admin), rồi tự gọi /approve-cancel bằng chính quyền
+  // trainingManage của mình -> tự huỷ đăng ký ngay lập tức, vô hiệu hoàn toàn mục đích pendingCancellation
+  // (giữ sĩ số/kế hoạch lớp, ảnh hưởng điều kiện "Đạt" của Lộ Trình Thăng Tiến/Tân Binh). Chặn CỨNG,
+  // không phân biệt admin (khớp quyết định 11/2026 "Chặn admin tự duyệt ở TẤT CẢ module, không có ngoại
+  // lệ" — cùng khuôn assertNotSelfInTrainingAction() đã áp dụng cho 7 hành động kia).
+  assertNotSelfInTrainingAction(user, reg.creator, 'duyệt yêu cầu huỷ đăng ký');
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu 9/2026, mức Cao — cụm Đào Tạo): trước đây hàm này KHÔNG kiểm lại
   // reg.result (khác hẳn cancelTrainingRegistration() ngay trên đã có check 409 tương tự), nên 1 yêu cầu
   // huỷ gửi lúc còn REGISTERED mà tới khi duyệt học viên ĐÃ thi xong (PASSED/FAILED, có thể do tự động
@@ -4989,6 +5001,9 @@ function rejectCancelTrainingRegistration(payload, user, reg) {
     throw new HttpError(403, 'Bạn không có quyền từ chối yêu cầu huỷ đăng ký lớp học');
   }
   if (!reg.pendingCancellation) throw new HttpError(404, 'Không tìm thấy yêu cầu huỷ đang chờ duyệt');
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức TB) — cùng lý do với approveCancelTrainingRegistration() ở trên:
+  // chặn tự quyết định (duyệt HOẶC từ chối) yêu cầu huỷ do chính mình gửi, không có ngoại lệ admin.
+  assertNotSelfInTrainingAction(user, reg.creator, 'từ chối yêu cầu huỷ đăng ký');
   reg.pendingCancellation = null;
   return reg;
 }

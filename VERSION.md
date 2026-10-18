@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**27.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.34 (2026-11): [TB] Re-audit lần 7 — mục 5/9 (HẾT phần TB): approveCancelTrainingRegistration/rejectCancelTrainingRegistration thiếu chặn tự duyệt
+
+Mục thứ năm (5/9) của đợt re-audit lần 7 — hoàn tất toàn bộ 2 finding mức TB của đợt này.
+
+**Nguyên nhân:** khác 7 hành động Đào Tạo khác cùng bản chất (`setTrainingRegistrationResult`/
+`gradeTrainingTestEssayAnswers`/`confirmOnboardingStage`/`evaluateOnboardingStage3`/
+`reevaluateOnboardingStage3`/`issueOnboardingCertificate`/`confirmCareerPathForEmployee` — đều đã có
+`assertNotSelfInTrainingAction()`), `approveCancelTrainingRegistration()`/
+`rejectCancelTrainingRegistration()` (`lib/recordActions.js`) chỉ kiểm quyền `trainingManage`/`admin`,
+KHÔNG so `reg.creator` với `user.username`. Nhân viên có `trainingManage` (không phải admin) tự đăng ký
+1 lớp học, gọi `/cancel` (tạo `pendingCancellation` vì không phải admin), rồi tự gọi `/approve-cancel`
+bằng chính quyền `trainingManage` của mình → tự huỷ đăng ký ngay lập tức, vô hiệu hoàn toàn mục đích
+`pendingCancellation` (giữ sĩ số/kế hoạch lớp đã chốt, ảnh hưởng điều kiện "Đạt" của Lộ Trình Thăng
+Tiến/Tân Binh).
+
+**Vá:** thêm `assertNotSelfInTrainingAction(user, reg.creator, ...)` vào đầu cả 2 hàm — chặn CỨNG,
+không phân biệt admin (khớp quyết định 11/2026 "Chặn admin tự duyệt ở TẤT CẢ module, không có ngoại
+lệ" — cùng khuôn đã áp dụng cho 7 hành động kia).
+
+**Test:** mở rộng `tests/test-audit-round4-internal-training.js` (mục 2b mới, 5 scenario) — tự duyệt/tự
+từ chối yêu cầu huỷ của chính mình (cả actor thường có `trainingManage` lẫn admin) đều phải 403; đối
+chứng người KHÁC `reg.creator` vẫn duyệt/từ chối được bình thường. Xác nhận FAIL trên code CŨ
+(`git stash -- lib/recordActions.js`, 3/51 scenario FAIL — khai thác tự duyệt thành công), PASS trên
+code đã vá (51/51). Regression: `tests/test-internal-training.js` (53/53),
+`tests/test-approvalneeded-email-uniform-leave-swap-training.js` (11/11) — toàn bộ PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.33 (2026-11): [TB] Re-audit lần 7 — mục 4/9: contracts.extraValidate isSignedImport dùng payload.dept thô cho findMissingApproverStep
 
