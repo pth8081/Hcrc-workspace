@@ -1243,8 +1243,17 @@ const hrExportRateLimiter = rateLimit({
 router.get('/export-xlsx', hrExportRateLimiter, requireProfileFullView, async (req, res) => {
   try {
     const appData = await getAllAppData();
-    const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || [], appData.laborContracts || [], appData.deptCodeMap || {});
-    logHrProfileAction(req, 'EXPORT_XLSX', '', `Xuất Excel toàn bộ Hồ Sơ Nhân Sự (${(appData.employeeProfiles || []).length} hồ sơ, gồm CCCD/BHXH/MST/tài khoản ngân hàng)`);
+    // LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): requireProfileFullView() ở trên (hrProfileManage/
+    // hrProfileFullView/hrProfileEdit) KHÔNG đòi hrContractManage — buildExportWorkbook() trước đây
+    // LUÔN kèm cột Lương/phụ cấp/lịch sử điều chỉnh hợp đồng (nguồn từ laborContracts, trường vốn chỉ
+    // admin/hrContractManage được đọc, xem canViewLaborContract() ở lib/recordViewScope.js và chú thích
+    // đầy đủ tại khai báo includeContractData ở lib/employeeProfileImport.js) bất kể người xuất có
+    // hrContractManage hay không — cùng lớp lỗ hổng đã chặn đúng ở GET .../history và GET .../reports
+    // (đòi CẢ hrProfileManage LẪN hrContractManage). Truyền đúng cờ canManageContracts() để ẩn 2 nhóm
+    // cột đó nếu thiếu quyền, KHÔNG chặn hẳn cả route (vẫn xuất đầy đủ dữ liệu Hồ Sơ Nhân Sự thuần).
+    const canIncludeContractData = canManageContracts(req.freshUser);
+    const wb = await employeeProfileImport.buildExportWorkbook(appData.employeeProfiles || [], appData.users || [], appData.hrProcesses || [], appData.laborContracts || [], appData.deptCodeMap || {}, canIncludeContractData);
+    logHrProfileAction(req, 'EXPORT_XLSX', '', `Xuất Excel toàn bộ Hồ Sơ Nhân Sự (${(appData.employeeProfiles || []).length} hồ sơ, gồm CCCD/BHXH/MST/tài khoản ngân hàng${canIncludeContractData ? '/Lương' : ''})`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Ho_So_Nhan_Su.xlsx"');
     await wb.xlsx.write(res);
