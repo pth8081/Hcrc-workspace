@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**26.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.68 (2026-11): [Cao] Re-audit lần 4 — mục 8: key "workflows" + 2 mixed-approval-rules thiếu validate cấu trúc → crash 500
+
+Mục thứ 8 trong 22 phát hiện của re-audit lần 4:
+
+- **[Cao] 3 key MẢNG (`workflows`, `operationOrderStoreMixedApprovalRules`,
+  `itPriceWholesaleStoreMixedApprovalRules`) KHÔNG nằm trong `DEPT_OR_TIER_WORKFLOW_MAP_KEYS` (khuôn
+  object `{dept/tier: cfg}` đã validate từ đợt rà soát chuyên sâu lần 2, task #81) nên chưa từng được
+  validate cấu trúc khi lưu qua `POST /api/data/:key`.** Code tiêu thụ dùng `(value || []).find(...)`/
+  `(value || []).filter(...)` (lib/workflowEngine.js, lib/createValidation.js) — `|| []` chỉ che được
+  giá trị falsy; lưu `value` thành 1 OBJECT (hoặc giá trị khác, miễn TRUTHY) thay vì mảng vẫn làm
+  `.find`/`.filter is not a function` throw ngay khi có request đọc/duyệt hồ sơ dùng tới quy trình đó —
+  crash 500 (không phải lỗi 400 rõ ràng ngay lúc lưu).
+  - Thêm `assertPlainObjectArrayShape()` + `PLAIN_OBJECT_ARRAY_KEYS` (lib/workflowEngine.js) — validate
+    value phải là MẢNG, mỗi phần tử phải là object (không sâu hơn, cùng triết lý
+    `assertDeptOrTierWorkflowMapShape()` đã có) — gọi thêm 1 dòng ngay sau hàm đó ở
+    `POST /api/data/:key` (routes/data.js).
+
+**Test:** file mới `tests/test-workflowarray-structure-validate.js` — Phần A (15 scenario test thuần
+hàm `assertPlainObjectArrayShape()`, cùng khuôn `test-deptworkflow-structure-validate.js`) + Phần B (5
+scenario HTTP thật qua `POST /api/data/:key`, mount `routes/data.js` thật): xác nhận lưu OBJECT/mảng-
+chứa-phần-tử-không-phải-object nhận 400 rõ ràng, lưu mảng hợp lệ vẫn thành công. Lưu ý: body-parser
+(`express.json()`, `strict:true`) đã tự chặn body JSON không phải object/mảng ở tầng ngoài route (chuỗi/
+số/null đứng 1 mình), nên Phần B chỉ test đúng 2 kịch bản còn lọt qua được tới route thật (object thay
+mảng, mảng chứa phần tử không phải object) — kịch bản chuỗi/số/null đã test đủ ở Phần A thuần. Assertion
+mới đã xác nhận FAIL trên code CŨ (`git stash -- lib/workflowEngine.js routes/data.js`, 2/5 HTTP + 0/15
+thuần passed — 3 scenario HTTP "LỖI ĐÃ VÁ" nhận 200 thay vì 400, đúng hành vi lưu-"thành-công"-rồi-crash-
+sau mô tả ở trên), PASS trên code đã vá (15/15 + 5/5). Chạy lại bộ test liên quan:
+`test-deptworkflow-structure-validate.js` (18/18), `test-itprice-wholesale-mixed-approval.js` (14/14),
+`test-mixed-approval-jobtitle-dept.js` (9/9), `test-mixed-approval-jobtitle-mix.js` (21/21),
+`test-operationorder-store-tier-mixed-approval.js` (4/4), `test-quick-apply-workflow-steps.js` (44/44),
+`test-workflow-steps-excel.js` (8/8), `test-mixed-approval-excel.js` (15/15),
+`test-mixed-approval-inactive-user.js` (9/9), `test-audit-hethong-cluster-server.js` (19/19),
+`test-module-access-gate.js` (4/4) — tất cả PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.67 (2026-11): [Cao] Re-audit lần 4 — mục 7: diffPerms() đóng băng override sai do field suy diễn từ legacy migration
 

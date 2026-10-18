@@ -15,7 +15,7 @@ const { getAllTasksCached } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
-const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape } = require('../lib/workflowEngine');
+const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
 const { findProfileByUsername, autoLinkUnlinkedProfiles, sanitizeManagerVisibleFields, sanitizeSelfVisibleFields, diffUserRenamesAndDeletions, cascadeUsernameChangesToProfiles } = require('../lib/employeeProfile');
 const {
@@ -2148,6 +2148,10 @@ router.post('/:key', async (req, res) => {
     // sâu lần 2 — Agent-4, xem chú thích đầy đủ tại assertDeptOrTierWorkflowMapShape() ở lib/workflowEngine.js)
     // — chạy NGAY SAU gate quyền ở trên, TRƯỚC khi đọc/ghi gì khác, để từ chối sớm (400) nếu cấu trúc hỏng.
     assertDeptOrTierWorkflowMapShape(key, value);
+    // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): 'workflows'/operationOrderStoreMixedApprovalRules/
+    // itPriceWholesaleStoreMixedApprovalRules là MẢNG (khác khuôn object của 2 hàm trên) — xem chú
+    // thích đầy đủ tại assertPlainObjectArrayShape()/PLAIN_OBJECT_ARRAY_KEYS ở lib/workflowEngine.js.
+    assertPlainObjectArrayShape(key, value);
 
     // meetingRooms: LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính") — đổi tên 1 phòng họp ở đây
     // (editMeetingRoomCatalogItem(), module-phonghop.js) trước đây KHÔNG cascade sang meetings.room (lưu

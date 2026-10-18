@@ -749,6 +749,37 @@ function isPlainWorkflowMapObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): 3 key sau KHÔNG nằm trong DEPT_OR_TIER_WORKFLOW_MAP_KEYS (khuôn
+// object {dept/tier: cfg}) — chúng là MẢNG, nên chưa từng được assertDeptOrTierWorkflowMapShape() ở
+// trên bao phủ, dù comment tại đó đã nêu tên nhưng chỉ dừng ở "biết tồn tại", không có validate thật:
+//   - 'workflows' (DB.workflows, "🔄 Quy Trình & Phê Duyệt" — khuôn [{id,name,steps:[{order,name}]}]):
+//     resolveSubmissionWorkflow()/resolveContractManageWorkflow() (và nhiều chỗ khác — xem
+//     lib/createValidation.js) đọc `(appData.workflows || []).find(w => w.id === ...)`. `|| []` chỉ che
+//     được falsy — lưu "workflows" thành 1 OBJECT (hoặc string/number) thay vì mảng vẫn là giá trị
+//     truthy, `.find is not a function` throw ngay, crash 500 ở MỌI route tạo/duyệt hồ sơ Văn Bản
+//     Trình/Hợp Đồng... cho tới khi admin sửa lại đúng.
+//   - operationOrderStoreMixedApprovalRules/itPriceWholesaleStoreMixedApprovalRules ("⚙️ Quy Trình Hỗn
+//     Hợp"/"🏪 QT Giá Bán Buôn (Siêu Thị)" — khuôn mảng rule [{step,tier?,...}]):
+//     resolveOperationOrderStoreMixedApprovers()/resolveItPriceWholesaleStoreMixedApprovers() đọc
+//     `(rules || []).filter(...)` — cùng lỗ hổng `|| []` ở trên (object truthy -> `.filter is not a
+//     function`), VÀ nếu là mảng nhưng có phần tử null/không phải object thì `r.tier`/`r.step` bên
+//     trong `.filter()`/`.forEach()` cũng throw ("Cannot read properties of null").
+// CHỈ validate CẤU TRÚC (mảng, mỗi phần tử là object) — KHÔNG validate sâu xuống từng field bên trong
+// (id/name/steps/step/tier/...), cùng triết lý DEPT_OR_TIER_WORKFLOW_MAP_KEYS ở trên (tránh chặn nhầm
+// cấu hình hợp lệ nếu sau này thêm field mới).
+const PLAIN_OBJECT_ARRAY_KEYS = new Set(['workflows', 'operationOrderStoreMixedApprovalRules', 'itPriceWholesaleStoreMixedApprovalRules']);
+function assertPlainObjectArrayShape(key, value) {
+  if (!PLAIN_OBJECT_ARRAY_KEYS.has(key)) return;
+  if (!Array.isArray(value)) {
+    throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là 1 mảng (danh sách)`);
+  }
+  value.forEach((item, idx) => {
+    if (!isPlainWorkflowMapObject(item)) {
+      throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phần tử thứ ${idx + 1} phải là object`);
+    }
+  });
+}
+
 function assertDeptOrTierWorkflowMapShape(key, value) {
   if (DEPT_OR_TIER_WORKFLOW_MAP_KEYS.has(key)) {
     if (!isPlainWorkflowMapObject(value)) {
@@ -1396,5 +1427,6 @@ module.exports = {
   computeOperationOrderTier,
   OPERATION_ORDER_STORE_TIERS,
   OPERATION_ORDER_HO_TIERS,
-  assertDeptOrTierWorkflowMapShape
+  assertDeptOrTierWorkflowMapShape,
+  assertPlainObjectArrayShape
 };
