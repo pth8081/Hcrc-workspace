@@ -589,6 +589,20 @@ async function insertMinutesTasks(createdTasks) {
   for (const c of createdTasks) await insertTask(c.item);
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 5, mức Cao): TOÀN BỘ route /minutes/... bên dưới (lập mới, sửa, giao việc,
+// xoá) trước đây KHÔNG gác hasModuleAccessServer() ("Khối 0") — admin tắt hẳn moduleAccess.minutes cho
+// 1 tài khoản chỉ ẩn được tab ở giao diện (canAccessMeetingMinutesModule() client đã đúng), gọi thẳng
+// API vẫn lập/sửa/xoá biên bản họp được. meetingMinutes KHÔNG đi qua routes/create.js (route tạo mới
+// nằm ngay dưới, dùng createForCollection() trực tiếp) nên COLLECTION_TO_MODULE_ACCESS_KEY tự suy diễn
+// từ MODULE_ACCESS_GATED_COLLECTIONS.minutes (lib/recordViewScope.js, đã vá cùng đợt) KHÔNG áp dụng
+// được ở khâu tạo mới — phải gác tay riêng. Mirror ĐÚNG khuôn router.use('/carRegs', ...) ở trên.
+router.use('/minutes', (req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'minutes')) {
+    return res.status(403).json({ error: 'Module Biên Bản Họp đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
+
 // POST /api/records/minutes — lập biên bản họp mới
 router.post('/minutes', async (req, res) => {
   try {

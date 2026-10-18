@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**26.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**26.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR vừa chạm `99` ở v25.99, cuộn sang
 MAJOR mới theo đúng quy tắc.)
+
+## v26.80 (2026-11): [Cao] Re-audit lần 5 — mục 2: meetingMinutes hoàn toàn chưa có Khối 0
+
+Mục thứ 2 trong đợt re-audit lần 5 (xử lý theo thứ tự Cao → TB → Thấp theo yêu cầu người dùng).
+
+- **"minutes" (Biên Bản Họp) hoàn toàn chưa có Khối 0 ở BẤT KỲ đâu** — khác car/vpp/meeting (mục 1,
+  v26.79 — đã có gate ở khâu tạo mới/hành động, chỉ GET /api/data bị sót), minutes thiếu CẢ 2 lớp:
+  - `canViewMeetingMinutes()` (lib/recordViewScope.js, server) + `canViewMeetingMinutesRecord()`
+    (public/js/core.js, client) chỉ xét admin/`minutesView`/người tạo/thành phần tham dự — KHÔNG hề
+    gọi `hasModuleAccessServer()`/`hasModuleAccess()`. Admin tắt `moduleAccess.minutes` cho 1 tài
+    khoản (VD chuyển bộ phận) nhưng tài khoản đó vẫn là người lập/tham dự 1 số biên bản cũ thì gọi
+    thẳng `GET /api/data` vẫn đọc được toàn văn nội dung họp (kể cả chỉ đạo/thành phần tham dự), dù
+    `canAccessMeetingMinutesModule()` đã ẩn đúng cả tab trên UI.
+  - Toàn bộ route `/minutes/...` ở routes/records.js (lập mới, sửa, giao việc, xoá) hoàn toàn không
+    gác gì ngoài `requireAuth` + quyền chi tiết (`minutesCreate`/creator/admin), độc lập với
+    `moduleAccess.minutes`. `meetingMinutes` KHÔNG đi qua routes/create.js (route tạo mới nằm thẳng ở
+    routes/records.js, dùng `createForCollection()` trực tiếp) nên
+    `COLLECTION_TO_MODULE_ACCESS_KEY` tự suy diễn từ `MODULE_ACCESS_GATED_COLLECTIONS` (khác car/vpp/
+    meeting) không tự gác được khâu tạo mới.
+  - Thêm `minutes: ['meetingMinutes']` vào `MODULE_ACCESS_GATED_COLLECTIONS` (lib/recordViewScope.js)
+    — gác đúng `GET /api/data`/`GET /api/data/lazy/:groupKey` qua 2 vòng lặp zero-out dùng chung
+    (routes/data.js) + tự động có mặt ở `COLLECTION_TO_MODULE_ACCESS_KEY` (routes/reports.js, cho
+    khâu Báo Cáo).
+  - Thêm 1 middleware DUY NHẤT `router.use('/minutes', ...)` (routes/records.js, mirror ĐÚNG khuôn
+    `router.use('/carRegs', ...)`) chặn TRƯỚC TIÊN cho toàn bộ route `/minutes/...` — vì
+    `COLLECTION_TO_MODULE_ACCESS_KEY` của routes/create.js không áp dụng được ở khâu tạo mới
+    (meetingMinutes không đi qua routes/create.js).
+
+**Test:** `tests/test-khoi0-meetingminutes-gate.js` (mới, 10 scenario — mount THẬT cả `routes/data.js`
+VÀ `routes/records.js`, seed 1 bản ghi meetingMinutes do chính tài khoản bị khoá module lập, kiểm cả
+GET /api/data zero-out LẪN 403 ở tạo mới/sửa/giao việc/xoá). Xác nhận FAIL trên code CŨ (`git stash --
+lib/recordViewScope.js routes/records.js`, 6/10 scenario FAIL đúng cấu trúc map + 1 zero-out + 3 route
+hành động/tạo mới "LỖI ĐÃ VÁ" — 3 route edit/assign-tasks/delete trả 500 do chạm thẳng tới DB-layer stub
+chủ đích ném lỗi, chứng minh chúng KHÔNG bị chặn ở Khối 0 trên code cũ), PASS trên code đã vá (10/10).
+Regression: `test-module-access-gate.js` (4/4), `test-module-access-gate-create.js` (3/3),
+`test-khoi0-meeting-periodicreport-gate.js` (7/7), `test-khoi0-carregs-vppregistrations-gate.js` (7/7),
+`test-meeting-car.js` (104/104), `test-extra-approval-groups.js` (26/26),
+`test-collapse-car-meeting-minutes-forms.js` (10/10), `test-minutes-reassign-pending-directive.js`
+(4/4), `test-minutes-task-file-ownership.js` (10/10), `test-minutes.js` (22/22),
+`test-audit-round5-minutes-task-vpp.js` (15/15) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v26.79 (2026-11): [Cao/TB] Re-audit lần 5 — mục 1: carRegs/vppRegistrations thiếu Khối 0 ở MODULE_ACCESS_GATED_COLLECTIONS
 
