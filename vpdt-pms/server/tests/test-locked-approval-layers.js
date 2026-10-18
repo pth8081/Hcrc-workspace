@@ -37,7 +37,11 @@ const USERS = [ADMIN, CREATOR,
   { username: 'ptgd1', name: 'Phó TGĐ 1', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true },
   { username: 'ptgd2', name: 'Phó TGĐ 2', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true },
   { username: 'tgd1', name: 'Tổng Giám Đốc', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true },
-  { username: 'ngoainhom', name: 'Người Ngoài Nhóm', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true }
+  { username: 'ngoainhom', name: 'Người Ngoài Nhóm', dept: 'Ban Giám Đốc', posType: 'HO', perms: {}, active: true },
+  // Dùng riêng cho kịch bản dept-spoofing (re-audit lần 6) — approver THẬT của 'Phòng Kinh Doanh' trong
+  // submissionDeptWorkflows/contractApprovalDeptWorkflows test riêng, phải là user ACTIVE có thật để
+  // findMissingApproverStep() (routes/create.js) không coi bước 1 là "thiếu người duyệt hợp lệ".
+  { username: 'kd_truong', name: 'Trưởng Phòng Kinh Doanh', dept: 'Phòng Kinh Doanh', posType: 'HO', perms: {}, active: true }
 ];
 
 let RECORDS;
@@ -255,6 +259,41 @@ async function main() {
     assertIncludes(res.body.error, 'Chưa gán thành viên', 'Thông báo lỗi phải nêu rõ chưa gán ai cho lớp bắt buộc');
   });
 
+  // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "Dept-spoofing trong snapshot quy trình duyệt lúc tạo
+  // submissions/contracts"): buildEffectiveSubmissionWorkflowServer()/
+  // buildEffectiveContractApprovalWorkflowServer() trước đây nhận payload.dept (giá trị THÔ, client
+  // gửi, CHƯA bị forceOwnDept ép — chỉ ép thành user.dept ở finalDept, bước CUỐI của
+  // validateAndPrepareCreate(), SAU extraValidate()) để resolve submissionDeptWorkflows/
+  // contractApprovalDeptWorkflows -> snapshot effectiveApprovers (GHI THẲNG vào record, không bao giờ
+  // tính lại). CREATOR thật thuộc "Phòng Kinh Doanh" tự soạn payload.dept = "Ban Giám Đốc" (phòng có
+  // approver khác/đồng phạm) sẽ khiến effectiveApprovers snapshot SAI theo phòng giả mạo, dù dept lưu
+  // vào record vẫn đúng "Phòng Kinh Doanh" (forceOwnDept) — nếu đồng phạm nằm trong effectiveApprovers
+  // đó, họ tự duyệt được hồ sơ không thuộc quy trình thật của Phòng Kinh Doanh. Nay dùng user.dept.
+  function deptSpoofAppData() {
+    const data = baseAppData();
+    data.workflows = [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Sếp duyệt' }] }];
+    data.submissionDeptWorkflows = {
+      'Phòng Kinh Doanh': { workflowId: 'WF_1STEP', approvers: { 1: ['kd_truong'] } },
+      'Ban Giám Đốc': { workflowId: 'WF_1STEP', approvers: { 1: ['gd1'] } }
+    };
+    data.contractApprovalDeptWorkflows = {
+      'Phòng Kinh Doanh': { workflowId: 'WF_1STEP', approvers: { 1: ['kd_truong'] } },
+      'Ban Giám Đốc': { workflowId: 'WF_1STEP', approvers: { 1: ['gd1'] } }
+    };
+    return data;
+  }
+
+  await runner.run('Submissions: spoof payload.dept sang phòng khác (có approver khác trong submissionDeptWorkflows) -> dept lưu vẫn ĐÚNG phòng thật (forceOwnDept), effectiveApprovers snapshot theo quy trình phòng THẬT, KHÔNG theo phòng giả mạo', async () => {
+    APP_DATA = deptSpoofAppData();
+    const res = await api('POST', '/api/create/submissions', submissionPayload({
+      dept: 'Ban Giám Đốc', // CREATOR thật thuộc 'Phòng Kinh Doanh' — payload.dept bị giả mạo sang 'Ban Giám Đốc'
+      approvalLevel: 'KHAC', selectedApprovalLayers: [], selectedLayerMembers: {}
+    }), CREATOR);
+    assertEqual(res.status, 200, `Tạo tờ trình phải thành công: ${JSON.stringify(res.body)}`);
+    assertEqual(res.body.item.dept, 'Phòng Kinh Doanh', 'dept lưu vào record phải là phòng THẬT của người tạo (forceOwnDept), không phải phòng giả mạo gửi lên trong payload');
+    assertEqual(JSON.stringify(res.body.item.effectiveApprovers[1]), JSON.stringify(['kd_truong']), 'effectiveApprovers bước 1 phải snapshot theo quy trình của PHÒNG THẬT (Phòng Kinh Doanh -> kd_truong), KHÔNG theo quy trình phòng giả mạo trong payload (Ban Giám Đốc -> gd1)');
+  });
+
   // ===================== CONTRACTS =====================
 
   await runner.run('Contracts: lớp locked nhóm ĐÚNG 1 người (GD_PGD) -> tự chọn, không cần selectedLayerMembers', async () => {
@@ -293,6 +332,17 @@ async function main() {
     }), CREATOR);
     assertEqual(res.status, 400, `Phải bị chặn 400: ${JSON.stringify(res.body)}`);
     assertIncludes(res.body.error, 'Chưa gán thành viên', 'Thông báo lỗi phải nêu rõ chưa gán ai cho lớp bắt buộc');
+  });
+
+  await runner.run('Contracts: spoof payload.dept sang phòng khác (có approver khác trong contractApprovalDeptWorkflows) -> dept lưu vẫn ĐÚNG phòng thật (forceOwnDept), effectiveApprovers snapshot theo quy trình phòng THẬT, KHÔNG theo phòng giả mạo', async () => {
+    APP_DATA = deptSpoofAppData();
+    const res = await api('POST', '/api/create/contracts', contractPayload({
+      dept: 'Ban Giám Đốc', // CREATOR thật thuộc 'Phòng Kinh Doanh' — payload.dept bị giả mạo sang 'Ban Giám Đốc'
+      approvalLevel: 'KHAC', selectedApprovalLayers: [], selectedLayerMembers: {}
+    }), CREATOR);
+    assertEqual(res.status, 200, `Tạo hợp đồng phải thành công: ${JSON.stringify(res.body)}`);
+    assertEqual(res.body.item.dept, 'Phòng Kinh Doanh', 'dept lưu vào record phải là phòng THẬT của người tạo (forceOwnDept), không phải phòng giả mạo gửi lên trong payload');
+    assertEqual(JSON.stringify(res.body.item.effectiveApprovers[1]), JSON.stringify(['kd_truong']), 'effectiveApprovers bước 1 phải snapshot theo quy trình của PHÒNG THẬT (Phòng Kinh Doanh -> kd_truong), KHÔNG theo quy trình phòng giả mạo trong payload (Ban Giám Đốc -> gd1)');
   });
 
   // ===================== singleApprover cap (assertApprovalGroupsSingleApproverCaps) =====================

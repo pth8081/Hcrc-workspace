@@ -872,8 +872,17 @@ const CREATE_MODULE_CONFIGS = {
       // type/priority/title/content — xem normalizeSubmissionCoreFields() ở đầu file. PHẢI chạy TRƯỚC
       // buildEffectiveSubmissionWorkflowServer() vì hàm đó tra quy trình theo ĐÚNG payload.type.
       normalizeSubmissionCoreFields(payload, appData || {});
+      // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "Dept-spoofing trong snapshot quy trình duyệt lúc tạo
+      // submissions/contracts"): forceOwnDept: true nên dept THẬT lưu vào record luôn là `user.dept`
+      // (finalDept, tính ở validateAndPrepareCreate() SAU extraValidate) — nhưng payload.dept ở ĐÂY vẫn
+      // là giá trị THÔ client gửi, CHƯA bị ép. Dùng payload.dept để resolve effectiveSteps/
+      // effectiveApprovers (snapshot GHI THẲNG vào record, không bao giờ tính lại) nghĩa là 1 tài khoản
+      // Phòng B tự soạn `dept: "Phòng A"` sẽ snapshot ĐÚNG người duyệt của Phòng A vào hồ sơ, dù hồ sơ
+      // lưu xong vẫn mang dept thật (Phòng B) — nếu người gửi (hoặc đồng phạm) nằm trong quy trình duyệt
+      // Phòng A, họ tự duyệt được hồ sơ của chính mình, vượt hẳn quy trình duyệt thật của Phòng B. Dùng
+      // user.dept (giá trị xác thực, không thể giả mạo) — mirror đúng meetings.extraValidate ở dưới.
       const effectiveWf = buildEffectiveSubmissionWorkflowServer(
-        payload.type, payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
+        payload.type, user.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
       );
       payload.selectedApprovalLayers = effectiveWf.layerKeys;
       payload.selectedLayerMembers = payload.selectedLayerMembers || {};
@@ -1123,8 +1132,20 @@ const CREATE_MODULE_CONFIGS = {
             throw new CreateError(400, `Tổng các đợt thanh toán (${sum.toLocaleString('vi-VN')}) phải khớp với giá trị hợp đồng (${total.toLocaleString('vi-VN')})`);
           }
         }
+        // LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "Dept-spoofing trong snapshot quy trình duyệt lúc tạo
+        // submissions/contracts"): cùng gốc với bản vá dept-spoofing ở nhánh addendum phía trên (v27.6)
+        // nhưng ở ĐÂY còn nghiêm trọng hơn — không chỉ sai mã/dept hiển thị mà SNAPSHOT THẲNG
+        // effectiveSteps/effectiveApprovers (người duyệt THẬT, GHI CỨNG vào record, không bao giờ tính
+        // lại) theo payload.dept (client gửi, CHƯA bị ép — chỉ ép thành user.dept ở finalDept, bước CUỐI
+        // của validateAndPrepareCreate()). 1 tài khoản Phòng B tự soạn `dept: "Phòng A"` sẽ snapshot
+        // ĐÚNG người duyệt của Phòng A vào hồ sơ — hồ sơ lưu xong vẫn mang dept thật (Phòng B) nhưng
+        // effectiveApprovers lại là người Phòng A; nếu người gửi (hoặc đồng phạm) nằm trong quy trình
+        // duyệt Phòng A, họ tự duyệt được hồ sơ của chính mình — vượt hẳn quy trình duyệt thật của
+        // Phòng B. Dùng user.dept (giá trị xác thực) — áp dụng cho CẢ hợp đồng gốc lẫn phụ lục (nhánh
+        // isAddendum đã ép payload.type=root.type nhưng KHÔNG đụng payload.dept, nên vẫn đi qua đúng
+        // đoạn code này).
         const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
-          payload.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
+          user.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
         );
         payload.approvalStatus = 'PENDING';
         payload.currentStep = 1;

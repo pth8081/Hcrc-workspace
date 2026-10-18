@@ -92,6 +92,16 @@ const OP_STORE = {
   ]
 };
 
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Cao — "fileAuthz.js trainingDocuments/trainingCourses fail-open"):
+// trainingCourses.thumbnailUrl VÀ trainingDocuments.fileUrl/.thumbnailUrl là field file CỐ ĐỊNH ở cấp
+// cao nhất (assertUploadedFileUrl() ở lib/createValidation.js), nhưng checker cũ của 2 collection này ở
+// lib/fileAuthz.js dùng `fixed: () => false` (nhầm với trainingClasses/trainingPlans/careerPaths/
+// onboardingPaths — các collection ĐÓ thật sự không có field file cố định, chỉ mang file qua
+// customData) — rơi thẳng vào FAIL-OPEN chung, đọc được bởi BẤT KỲ ai đã đăng nhập dù bị tắt hẳn
+// moduleAccess.internal.
+const TRAINING_COURSE = { id: 'tc-1', name: 'Kỹ năng bán hàng', thumbnailUrl: '/uploads/training-course-thumb.jpg' };
+const TRAINING_DOC = { id: 'td-1', title: 'Quy trình chuẩn', fileUrl: '/uploads/training-doc.pdf', thumbnailUrl: '/uploads/training-doc-thumb.jpg' };
+
 const COLLECTIONS = {
   docs: [DOC],
   internalPosts: [POST_PENDING],
@@ -103,7 +113,9 @@ const COLLECTIONS = {
   hrProcesses: [HR_PROCESS],
   checklistSubmissions: [CHECKLIST_SUBMISSION],
   operationStoreOpenings: [OP_STORE],
-  operationRepairs: []
+  operationRepairs: [],
+  trainingCourses: [TRAINING_COURSE],
+  trainingDocuments: [TRAINING_DOC]
 };
 
 // ===================== Người dùng =====================
@@ -353,6 +365,25 @@ async function main() {
       'Người nộp bài phải tự xem được ảnh trừ điểm của chính mình');
     assert.strictEqual(await authorizeFileAccess({ username: 'gs_a', posType: 'STORE', dept: DEPT_A, perms: {} }, url, 'view'), true,
       'Cùng siêu thị vẫn xem được, đúng luật như answers[].attachments');
+  });
+
+  // ===== 4d) trainingCourses/trainingDocuments (re-audit lần 6, mức Cao) =====
+  await run('trainingCourses.thumbnailUrl: KHÔNG rơi vào FAIL-OPEN chung — vẫn gác đúng Khối 0 (moduleAccess.internal)', async () => {
+    const noAccess = { username: 'no_internal', dept: DEPT_B, perms: { moduleAccess: { internal: false } } };
+    const withAccess = { username: 'with_internal', dept: DEPT_B, perms: {} };
+    assert.strictEqual(await authorizeFileAccess(noAccess, TRAINING_COURSE.thumbnailUrl, 'view'), false,
+      'Tài khoản bị tắt moduleAccess.internal KHÔNG được xem — nếu rơi vào fail-open chung sẽ trả true sai');
+    assert.strictEqual(await authorizeFileAccess(withAccess, TRAINING_COURSE.thumbnailUrl, 'view'), true,
+      'Tài khoản còn moduleAccess.internal vẫn xem bình thường — không chặn nhầm');
+  });
+
+  await run('trainingDocuments.fileUrl/.thumbnailUrl: KHÔNG rơi vào FAIL-OPEN chung — vẫn gác đúng Khối 0', async () => {
+    const noAccess = { username: 'no_internal2', dept: DEPT_B, perms: { moduleAccess: { internal: false } } };
+    const withAccess = { username: 'with_internal2', dept: DEPT_B, perms: {} };
+    assert.strictEqual(await authorizeFileAccess(noAccess, TRAINING_DOC.fileUrl, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess(noAccess, TRAINING_DOC.thumbnailUrl, 'view'), false);
+    assert.strictEqual(await authorizeFileAccess(withAccess, TRAINING_DOC.fileUrl, 'view'), true);
+    assert.strictEqual(await authorizeFileAccess(withAccess, TRAINING_DOC.thumbnailUrl, 'view'), true);
   });
 
   // ===== 5) Fail-open có chủ ý cho file không tra ra hồ sơ nào =====

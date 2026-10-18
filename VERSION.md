@@ -1,9 +1,100 @@
 # Phiên bản hiện tại
 
-**27.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.10 (2026-11): [Cao] Re-audit lần 6 — mục 2/21: fileAuthz.js trainingDocuments/trainingCourses fail-open
+
+Mục thứ hai (2/21) của đợt re-audit lần 6.
+
+**Nguyên nhân:** `lib/fileAuthz.js::findOwningRecord()` tra ngược 1 `fileUrl` đang được yêu cầu xem/tải
+về đúng bản ghi sở hữu nó, qua 2 lượt: Lượt 1 chỉ xét field file CỐ ĐỊNH (`fixed` predicate riêng từng
+collection); Lượt 2 xét `customData` ("Trường Bổ Sung"). Nếu KHÔNG khớp cả 2 lượt ở BẤT KỲ collection
+nào, `authorizeFileAccess()` cố ý FAIL-OPEN (cho phép) — chủ đích ban đầu là một số collection (VD ảnh
+đại diện, logo) không có khái niệm "hồ sơ sở hữu" nên không thể rà được. 6 collection Đào Tạo/Thăng Tiến
+(`trainingClasses`/`trainingCourses`/`trainingDocuments`/`trainingPlans`/`careerPaths`/`onboardingPaths`)
+được cố ý gán `fixed: () => false` với giả định là chỉ mang file qua `customData` — đúng với 4/6
+collection, nhưng SAI với `trainingCourses.thumbnailUrl` (`normalizeTrainingCourseFields()`) và
+`trainingDocuments.fileUrl`/`.thumbnailUrl` (`trainingDocuments.extraValidate`, cả 2 đều ở
+`lib/createValidation.js`) — đây LÀ field file cố định ở cấp cao nhất, đã qua `assertUploadedFileUrl()`
+như mọi field file khác trong hệ thống. Vì checker luôn trả `false` ở Lượt 1 và 2 field này không nằm
+trong `customData`, chúng không khớp BẤT KỲ lượt nào và rơi thẳng vào FAIL-OPEN chung — ảnh thumbnail
+Kho Tài Liệu Đào Tạo/Chương Trình Đào Tạo đọc được bởi BẤT KỲ ai đã đăng nhập qua `/uploads/<file>`, kể
+cả tài khoản bị admin tắt hẳn `moduleAccess.internal` (không gọi được `GET /api/data` để thấy 2
+collection này) nhưng biết/đoán đúng URL.
+
+**Vá:** đổi `fixed` của 2 checker này từ `() => false` sang predicate thật — `trainingCourses`:
+`c => c.thumbnailUrl === fileUrl`; `trainingDocuments`: `d => d.fileUrl === fileUrl || d.thumbnailUrl
+=== fileUrl`. Dispatch ở `authorizeFileAccess()` (`owning.internalTrainingGroup`) không cần đổi gì —
+đã gọi chung `hasModuleAccessServer(user, 'internal')` bất kể file khớp ở Lượt 1 hay Lượt 2. 4 collection
+còn lại (`trainingClasses`/`trainingPlans`/`careerPaths`/`onboardingPaths`) xác nhận lại KHÔNG có field
+file cố định nào (chỉ id tham chiếu tới collection khác) — giữ nguyên `fixed: () => false`, chỉ khớp qua
+`customData` như trước.
+
+**Test:** mở rộng `tests/test-uploads-file-authz.js` — thêm fixture `TRAINING_COURSE`/`TRAINING_DOC` vào
+`COLLECTIONS` + 2 scenario mới: tài khoản bị tắt `moduleAccess.internal` KHÔNG xem được
+`thumbnailUrl`/`fileUrl` của 2 collection này (trước đây trả `true` sai do fail-open); tài khoản còn
+quyền vẫn xem bình thường (không chặn nhầm). Xác nhận FAIL trên code CŨ (`git stash -- lib/fileAuthz.js`,
+đúng 2/29 scenario FAIL với `true !== false`), PASS trên code đã vá (29/29). Regression: toàn bộ
+`tests/test-audit-cluster-license-cascade-download-limit.js`, `test-audit-cluster-vbt-hd-gp-tt-tl.js`,
+`test-audit-round2-cluster2.js`, `test-audit-round2-cluster6.js` (2 FAIL về `/api/send-email`/
+`resolveGraphOption` — xác nhận lỗi NÀY ĐÃ TỒN TẠI TỪ TRƯỚC, tái hiện y hệt khi stash lại bản vá, không
+liên quan tới thay đổi này), `test-edit-file-ownership-batch2/3.js`, `test-edit-file-ownership-
+operationorders.js`, `test-internal-media-server.js`, `test-it-support.js`, `test-itprice-download.js`,
+`test-office-extra-files.js`, `test-training-essay-dragdrop-server.js`, `test-training-question-
+images.js` — toàn bộ PASS, không regression mới.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
+
+## v27.9 (2026-11): [Cao] Re-audit lần 6 — mục 1/21: Dept-spoofing trong snapshot quy trình duyệt lúc tạo Văn Bản Trình/Hợp Đồng
+
+Mục đầu tiên (1/21) của đợt re-audit lần 6 (6 agent song song, theo yêu cầu người dùng làm thêm 4-5
+đợt rà soát nữa).
+
+**Nguyên nhân:** `submissions`/`contracts` đều có `forceOwnDept: true` (`CREATE_MODULE_CONFIGS` ở
+`lib/createValidation.js`) — nghĩa là `dept` THẬT lưu vào record luôn bị ép thành `user.dept`
+(`finalDept`), nhưng việc ép này chỉ diễn ra ở BƯỚC CUỐI của `validateAndPrepareCreate()`, SAU khi
+`extraValidate()` của từng module đã chạy xong. Trong `extraValidate()` của `submissions`/`contracts`,
+hàm `buildEffectiveSubmissionWorkflowServer()`/`buildEffectiveContractApprovalWorkflowServer()` (dựng
+`effectiveSteps`/`effectiveApprovers` — snapshot người duyệt THẬT, GHI CỨNG vào record, không bao giờ
+tính lại sau này) lại nhận **`payload.dept`** — giá trị THÔ, client tự gửi, CHƯA bị ép — để tra
+`submissionDeptWorkflows`/`contractApprovalDeptWorkflows` theo phòng ban.
+
+**Khai thác:** 1 tài khoản thuộc "Phòng Kinh Doanh" tự soạn request `POST /api/create/submissions`
+(hoặc `/contracts`) với `body.dept = "Ban Giám Đốc"` (hoặc bất kỳ phòng nào khác có cấu hình quy trình
+duyệt khác). Vì `extraValidate()` dùng đúng `payload.dept` giả mạo này để snapshot approvers, record lưu
+xong sẽ có `dept` hiển thị ĐÚNG "Phòng Kinh Doanh" (do `forceOwnDept` ép ở bước cuối) nhưng
+`effectiveApprovers`/`effectiveSteps` lại là người duyệt của "Ban Giám Đốc" — nếu người gửi (hoặc đồng
+phạm) nằm trong quy trình duyệt "Ban Giám Đốc", họ tự duyệt được hồ sơ của chính mình, vượt hẳn quy
+trình duyệt thật áp dụng cho "Phòng Kinh Doanh". Đây là biến thể NẶNG HƠN các lỗi dept-spoofing đã vá
+trước đó (tạo phiên bản Tài Liệu v27.0, Phụ Lục Hợp Đồng v27.6) — 2 bản vá trước chỉ sai LABEL hiển
+thị/kiểm quyền trên bản gốc, còn lỗi này SNAPSHOT THẲNG người duyệt thật vào record.
+
+**Vá:** đổi 2 lời gọi trong `lib/createValidation.js` — `buildEffectiveSubmissionWorkflowServer(payload.type,
+payload.dept, ...)` → `buildEffectiveSubmissionWorkflowServer(payload.type, user.dept, ...)` (nhánh
+`submissions.extraValidate`); `buildEffectiveContractApprovalWorkflowServer(payload.dept, ...)` →
+`buildEffectiveContractApprovalWorkflowServer(user.dept, ...)` (nhánh `contracts.extraValidate`, áp
+dụng cho CẢ hợp đồng gốc lẫn phụ lục — nhánh `isAddendum` chỉ ép lại `payload.type`, không đụng
+`payload.dept`, nên vẫn đi qua đúng đoạn code này). Dùng `user.dept` — giá trị xác thực từ session, client
+không thể giả mạo — khớp đúng cách `meetings.extraValidate` đã làm từ trước.
+
+**Test:** mở rộng `tests/test-locked-approval-layers.js` — thêm user cố định `kd_truong` (approver thật
+của "Phòng Kinh Doanh") + helper `deptSpoofAppData()` (cấu hình `submissionDeptWorkflows`/
+`contractApprovalDeptWorkflows` khác nhau cho "Phòng Kinh Doanh" vs "Ban Giám Đốc") + 2 scenario mới:
+CREATOR (thuộc "Phòng Kinh Doanh") gửi `payload.dept = "Ban Giám Đốc"` cho cả `submissions` và
+`contracts` → xác nhận `record.dept` vẫn là "Phòng Kinh Doanh" (forceOwnDept không đổi) NHƯNG
+`effectiveApprovers[1]` phải là `kd_truong` (quy trình phòng THẬT), không phải `gd1` (đồng phạm, quy
+trình phòng giả mạo). Xác nhận FAIL trên code CŨ (`git stash -- lib/createValidation.js`, đúng 2/23
+scenario FAIL với thông báo rõ ràng "expected kd_truong, got gd1" — chứng minh lỗi THẬT), PASS trên code
+đã vá (23/23). Regression: `test-audit-round2-vbt-hd-gp-tt-tl.js`, `test-contract.js`, `test-submission.js`
+(23/23), `test-submissions-scope.js`, `test-submission-delete-task-cleanup.js`,
+`test-submission-status-badges.js`, `test-submissiontype-catalog-rename-cascade.js`,
+`test-checklist-submissions-scope.js`, `test-workflow-position-approvers.js` — toàn bộ PASS, không
+regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.8 (2026-11): [Thấp] Re-audit lần 5 — mục 4/4 (cuối cùng): Xoá lớp/tài liệu đào tạo không kiểm onboardingPaths tham chiếu
 
