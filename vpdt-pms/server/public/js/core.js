@@ -2018,7 +2018,11 @@ function computeApprovalOverdueStatus(item, config, overdueDays, now) {
   // "Ngày Mong Muốn Phê Duyệt" có đặt (lúc tạo hoặc qua Gia Hạn) → MỐC ĐẾM đổi hẳn sang mốc này, áp dụng
   // SUỐT VÒNG ĐỜI hồ sơ, không phụ thuộc bước/lịch sử — xem lib/approvalOverdue.js bản server (MIRROR).
   if (item.desiredApprovalDate) {
-    const desiredDate = new Date(item.desiredApprovalDate);
+    // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "approvalOverdue.js so sánh UTC-midnight thay vì VN-local"):
+    // MIRROR đúng bản server (lib/approvalOverdue.js) — `new Date("YYYY-MM-DD")` luôn parse là 00:00
+    // UTC = 07:00 sáng VN-local CÙNG NGÀY, khiến badge "🔴 Quá Hạn Xử Lý" hiện sớm 7 giờ. Neo mốc vào
+    // 17:00 UTC CÙNG NGÀY (= 00:00 VN-local của NGÀY KẾ TIẾP) để khớp đúng ý nghĩa "hạn chót = hết ngày".
+    const desiredDate = new Date(item.desiredApprovalDate + 'T17:00:00Z');
     if (!Number.isNaN(desiredDate.getTime())) {
       const daysWaited = Math.floor((nowDate.getTime() - desiredDate.getTime()) / 86400000);
       if (daysWaited >= 0) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: item.desiredApprovalDate, viaDesiredDate: true };
