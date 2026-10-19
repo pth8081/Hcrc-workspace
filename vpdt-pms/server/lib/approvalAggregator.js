@@ -221,8 +221,14 @@ function computeMyPendingApprovalKeys(user, appData) {
     try { assertShiftSwapApprover(user, roster, s.creator, targetUsername); } catch (err) { return; }
     keys.push(`shiftSwapRequest:${s.id}`);
   });
+  // LỖI ĐÃ VÁ (re-audit lần 10, mức Thấp — "Approval Hub thiếu loại trừ tự-liên-quan cho Đào Tạo-huỷ"):
+  // mirror đúng assertNotSelfInTrainingAction() (lib/recordActions.js, server ÁP DỤNG THẬT ở
+  // approveCancelTrainingRegistration()/rejectCancelTrainingRegistration() — chặn CỨNG, không có ngoại
+  // lệ admin) — người gửi yêu cầu huỷ (r.creator) không được tự duyệt/từ chối yêu cầu do chính mình
+  // gửi, dù có trainingManage/admin. Trước đây chỉ gate phẳng theo quyền, khiến badge/Hub đếm dư các
+  // yêu cầu chắc chắn bị 403 khi bấm Duyệt/Từ chối thật (cùng lớp lỗi đã vá cho uniform/shiftSwap).
   if (user?.perms?.admin || user?.perms?.trainingManage) {
-    (appData.trainingRegistrations || []).filter(r => r.pendingCancellation).forEach(r => keys.push(`trainingCancel:${r.id}`));
+    (appData.trainingRegistrations || []).filter(r => r.pendingCancellation && r.creator !== user.username).forEach(r => keys.push(`trainingCancel:${r.id}`));
   }
   (appData.tasks || []).filter(t => (t.pendingExtension || t.pendingCancellation) && (t.assignedBy === user.username || user?.perms?.admin)).forEach(t => keys.push(`taskPending:${t.id}`));
 

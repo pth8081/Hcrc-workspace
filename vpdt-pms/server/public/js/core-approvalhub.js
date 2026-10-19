@@ -437,7 +437,12 @@ function getMyPendingApprovals(user) {
 
   if (typeof approveCancelTrainingRegAction === 'function') {
     if (user.perms?.admin || user.perms?.trainingManage) {
-      (DB.trainingRegistrations || []).filter(r => r.pendingCancellation).forEach(r => {
+      // LỖI ĐÃ VÁ (re-audit lần 10, mức Thấp — "Approval Hub thiếu loại trừ tự-liên-quan cho Đào Tạo-
+      // huỷ"): mirror đúng assertNotSelfInTrainingAction() (lib/recordActions.js, server ÁP DỤNG THẬT —
+      // chặn CỨNG, không có ngoại lệ admin) — người gửi yêu cầu huỷ (r.creator) không được tự duyệt/từ
+      // chối yêu cầu do chính mình gửi, dù có trainingManage/admin. Cùng lớp lỗi đã vá cho Uniform/
+      // Shift-Swap (re-audit lần 9).
+      (DB.trainingRegistrations || []).filter(r => r.pendingCancellation && r.creator !== user.username).forEach(r => {
         const cls = (DB.trainingClasses || []).find(c => c.id === r.classId);
         items.push({
           type: 'trainingCancel', typeLabel: '🎓 Đào Tạo - Huỷ Đăng Ký', code: String(r.id), title: `${r.creatorName}: ${cls?.title || '(lớp đã xoá)'}`, dept: r.dept,
