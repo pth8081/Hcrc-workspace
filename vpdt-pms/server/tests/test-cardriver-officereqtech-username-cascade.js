@@ -49,6 +49,14 @@ function resetState() {
       { id: 30, status: 'OPEN', escalatedBy: 'nv_old', escalatedByName: 'Nguyễn Văn Old', approvalApprover: 'nv_old', approvalApproverName: 'Nguyễn Văn Old' },
       { id: 31, status: 'OPEN', escalatedBy: null, approvalApprover: null }, // chưa escalate — không liên quan
       { id: 32, status: 'OPEN', escalatedBy: 'nv_khac', approvalApprover: 'nv_khac' } // không liên quan
+    ],
+    // LỖI ĐÃ VÁ (re-audit lần 10, mục 9/14, mức TB — "trainingClasses.instructorUsername không cascade
+    // username rename/xoá"): username THÔ gán giảng viên — điều kiện DUY NHẤT cấp quyền trainingInstruct
+    // quản lý lớp học (canManageTrainingClass(), lib/recordActions.js).
+    trainingClasses: [
+      { id: 40, status: 'SCHEDULED', instructorUsername: 'nv_old', instructor: 'Nguyễn Văn Old' },
+      { id: 41, status: 'SCHEDULED', instructorUsername: null }, // chưa gán giảng viên — không liên quan
+      { id: 42, status: 'SCHEDULED', instructorUsername: 'nv_khac', instructor: 'Khác' } // không liên quan
     ]
   };
 }
@@ -96,12 +104,27 @@ async function main() {
     assert.strictEqual(STORE.itSupportTickets.find(r => r.id === 32).escalatedBy, 'nv_khac', 'Bản ghi không liên quan phải giữ nguyên');
   });
 
+  await test('LỖI ĐÃ VÁ (re-audit lần 10, mục 9/14): đổi tên "nv_old" -> "nv_new" cascade đúng trainingClasses.instructorUsername, giữ nguyên field hiển thị instructor + bản ghi không liên quan', async () => {
+    resetState();
+    await cascadeUsernameChangesToCarDriverAndOfficeReqTech([{ oldValue: 'nv_old', newValue: 'nv_new' }], []);
+    assert.strictEqual(STORE.trainingClasses.find(r => r.id === 40).instructorUsername, 'nv_new');
+    assert.strictEqual(STORE.trainingClasses.find(r => r.id === 40).instructor, 'Nguyễn Văn Old', 'KHÔNG đổi tên hiển thị (instructor) — chỉ field username');
+    assert.strictEqual(STORE.trainingClasses.find(r => r.id === 42).instructorUsername, 'nv_khac', 'Bản ghi không liên quan phải giữ nguyên');
+  });
+
   await test('xoá vĩnh viễn "nv_old": null hoá assignedDriverUsername/techAssignedTo (gỡ người được phân công, không suy đoán ai thay thế)', async () => {
     resetState();
     await cascadeUsernameChangesToCarDriverAndOfficeReqTech([], ['nv_old']);
     assert.strictEqual(STORE.carRegs.find(r => r.id === 1).assignedDriverUsername, null);
     assert.strictEqual(STORE.officeReqs.find(r => r.id === 10).techAssignedTo, null);
     assert.strictEqual(STORE.carRegs.find(r => r.id === 3).assignedDriverUsername, 'nv_khac');
+  });
+
+  await test('LỖI ĐÃ VÁ (re-audit lần 10, mục 9/14): xoá vĩnh viễn "nv_old": null hoá trainingClasses.instructorUsername (gỡ giảng viên, không suy đoán ai thay thế)', async () => {
+    resetState();
+    await cascadeUsernameChangesToCarDriverAndOfficeReqTech([], ['nv_old']);
+    assert.strictEqual(STORE.trainingClasses.find(r => r.id === 40).instructorUsername, null);
+    assert.strictEqual(STORE.trainingClasses.find(r => r.id === 42).instructorUsername, 'nv_khac', 'Bản ghi không liên quan phải giữ nguyên');
   });
 
   await test('LỖI ĐÃ VÁ (re-audit lần 10): xoá vĩnh viễn "nv_old": null hoá cả 5 field itPriceApprovals/itSupportTickets', async () => {
@@ -124,6 +147,7 @@ async function main() {
     assert.strictEqual(STORE.officeReqs.find(r => r.id === 11).techAssignedTo, null);
     assert.strictEqual(STORE.itPriceApprovals.find(r => r.id === 21).emergencyRejectRequestedBy, null, 'bản ghi chưa ai thao tác -> không đổi gì, không crash');
     assert.strictEqual(STORE.itSupportTickets.find(r => r.id === 31).escalatedBy, null, 'bản ghi chưa escalate -> không đổi gì, không crash');
+    assert.strictEqual(STORE.trainingClasses.find(r => r.id === 41).instructorUsername, null, 'bản ghi chưa gán giảng viên -> không đổi gì, không crash');
   });
 
   await test('username KHÔNG xuất hiện ở bất kỳ bản ghi nào -> không đổi gì', async () => {
