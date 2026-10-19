@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.58 (2026-11): [TB] Re-audit lần 9 — mục 10/12: approvalOverdue.js so sánh UTC-midnight thay vì VN-local
+
+Mục thứ mười (10/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `computeApprovalOverdueStatus()` (`lib/approvalOverdue.js`, nhánh `desiredApprovalDate`
+— "Ngày Mong Muốn Phê Duyệt") parse `item.desiredApprovalDate` ("YYYY-MM-DD") qua `new Date(...)` —
+theo đặc tả ECMA-262, chuỗi ngày-không-giờ LUÔN parse là 00:00 UTC, trong khi máy chủ/người dùng chạy
+giờ VN (UTC+7) nên 00:00 UTC = 07:00 SÁNG VN-local CÙNG NGÀY. Hồ sơ bị đánh dấu "🔴 Quá Hạn Xử Lý" sớm 7
+giờ — ngay từ sáng sớm của chính "Ngày Mong Muốn", trong khi cả ngày đó đáng lẽ vẫn còn nguyên để xử lý
+(đúng ý nghĩa "hạn chót = hết ngày đó"). Ảnh hưởng CẢ 2 nơi: `jobs/approvalOverdueReminder.js` (gửi
+email nhắc quá hạn) và mirror client `public/js/core.js::computeApprovalOverdueStatus()` (badge hiển
+thị ngay trên phiếu/danh sách Văn Bản Trình/Hợp Đồng).
+
+**Bản vá:** neo mốc `desiredDate` vào `item.desiredApprovalDate + 'T17:00:00Z'` (= 00:00 VN-local của
+NGÀY KẾ TIẾP, vì VN = UTC+7) thay vì `new Date(item.desiredApprovalDate)` trần — sửa ĐỒNG THỜI cả 2 bản
+(server `lib/approvalOverdue.js` + client `public/js/core.js`, đúng quy ước bảo trì "2 bản độc lập,
+PHẢI sửa đồng thời" đã ghi ngay trong file). `daysWaited` (OVERDUE) giờ chỉ `>= 0` khi "Ngày Mong Muốn"
+đã TRÔI QUA HẲN theo giờ VN-local, không còn lệch 7 giờ.
+
+**Test:** thêm 3 kịch bản mới vào `tests/test-approval-overdue.js` dùng tham số `now` tường minh để
+kiểm CHÍNH XÁC ranh giới giờ (không chỉ ngày) — 10:00 sáng và 23:00 tối VN-local của ĐÚNG ngày mong
+muốn đều phải CHƯA OVERDUE, 00:01 sáng VN-local ngày kế tiếp PHẢI ĐÃ OVERDUE. Xác nhận 2/26 scenario
+FAIL trên code cũ (đúng 2 kịch bản biên giờ mới, không ảnh hưởng 23 kịch bản ngày-nguyên cũ) và 26/26
+PASS trên code mới. Chạy lại regression: `test-approval-extension-create-validation.js` (7/7),
+`test-approval-extension-routes.js` (16/16) — tất cả PASS, không có regression. Tự kiểm cú pháp cả 2
+file (`node -c`) — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/approvalOverdue.js` + `public/js/core.js`), không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.57 (2026-11): [TB] Re-audit lần 9 — mục 9/12: core.js #meetingDept khoá sai cho meetingCancel non-admin khi sửa phòng ban khác
 

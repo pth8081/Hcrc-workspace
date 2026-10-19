@@ -181,6 +181,34 @@ async function main() {
     assert.strictEqual(st.viaDesiredDate, undefined);
   });
 
+  // --- LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "approvalOverdue.js so sánh UTC-midnight thay vì VN-local"):
+  // `new Date("YYYY-MM-DD")` luôn parse là 00:00 UTC = 07:00 sáng VN-local CÙNG NGÀY — hồ sơ bị đánh
+  // dấu OVERDUE sớm 7 giờ (ngay từ sáng SỚM của chính "Ngày Mong Muốn", trong khi cả ngày đó vẫn còn
+  // nguyên để xử lý theo đúng ý nghĩa "hạn chót"). Dùng `now` tường minh (tham số thứ 4, viết sẵn để
+  // test không phụ thuộc đồng hồ hệ thống) để kiểm CHÍNH XÁC ranh giới giờ, không chỉ ngày. ---
+  await test('LỖI ĐÃ VÁ: 10:00 sáng VN-local (= 03:00 UTC) của ĐÚNG "Ngày Mong Muốn" -> CHƯA OVERDUE (chỉ tối đa APPROACHING, ngày đó vẫn còn nguyên để xử lý)', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: '2026-06-15' };
+    const now = new Date('2026-06-15T03:00:00Z'); // 10:00 sáng VN-local ngày 15/6
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7], now);
+    assert.ok(!st || st.level !== 'OVERDUE', 'KHÔNG được là OVERDUE — bug cũ sẽ đánh OVERDUE sai ngay từ 07:00 sáng cùng ngày');
+  });
+
+  await test('LỖI ĐÃ VÁ: 23:00 tối VN-local (= 16:00 UTC) của ĐÚNG "Ngày Mong Muốn" -> VẪN CHƯA OVERDUE (chưa hết ngày VN-local)', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: '2026-06-15' };
+    const now = new Date('2026-06-15T16:00:00Z'); // 23:00 tối VN-local ngày 15/6, còn 1 giờ nữa mới hết ngày
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7], now);
+    assert.ok(!st || st.level !== 'OVERDUE', 'KHÔNG được là OVERDUE — còn chưa tới 00:00 VN-local của ngày kế tiếp');
+  });
+
+  await test('LỖI ĐÃ VÁ: 00:01 sáng VN-local của NGÀY KẾ TIẾP (= 17:01 UTC của chính ngày mong muốn) -> ĐÃ OVERDUE (hết đúng ngày hạn chót)', () => {
+    const item = { status: 'PENDING', currentStep: 1, createdAt: daysAgoStr(1), history: [], desiredApprovalDate: '2026-06-15' };
+    const now = new Date('2026-06-15T17:01:00Z'); // 00:01 sáng VN-local ngày 16/6 — vừa qua hạn chót
+    const st = computeApprovalOverdueStatus(item, SUB_CONFIG, [3, 5, 7], now);
+    assert.ok(st, 'Phải ĐÃ quá hạn ngay khi sang ngày kế tiếp theo giờ VN-local');
+    assert.strictEqual(st.level, 'OVERDUE');
+    assert.strictEqual(st.viaDesiredDate, true);
+  });
+
   // --- Phần 2: jobs/approvalOverdueReminder.js (stub recordStore/systemLogStore/mailer/emailCrypto/db) ---
   const STORE = { submissions: [], contracts: [] };
   const APP_DATA = {

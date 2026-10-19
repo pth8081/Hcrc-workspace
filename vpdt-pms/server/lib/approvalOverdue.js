@@ -49,7 +49,15 @@ function computeApprovalOverdueStatus(item, config, overdueDays, now) {
   // = còn sớm). Chuỗi "YYYY-MM-DD" nên new Date() parse đúng giờ 00:00 UTC, nhất quán với quy ước
   // new Date(isoString) đã dùng ở các nơi khác tính "ngày hết hạn hợp đồng" (vd module-thanhtoan.js).
   if (item.desiredApprovalDate) {
-    const desiredDate = new Date(item.desiredApprovalDate);
+    // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "approvalOverdue.js so sánh UTC-midnight thay vì VN-local"):
+    // `new Date("YYYY-MM-DD")` (không giờ/zone) LUÔN parse theo đặc tả ECMA-262 là 00:00 UTC của ngày
+    // đó — trên máy chủ VN (UTC+7), 00:00 UTC = 07:00 SÁNG VN-local CÙNG NGÀY, không phải 00:00 VN-local
+    // như admin/người tạo kỳ vọng khi chọn "Ngày Mong Muốn Phê Duyệt". Hậu quả: hồ sơ bị đánh dấu
+    // "🔴 Quá Hạn Xử Lý" sớm 7 giờ — ngay từ 07:00 sáng của chính ngày mong muốn, trong khi hồ sơ vẫn
+    // còn nguyên cả ngày đó để xử lý theo đúng ý nghĩa "Ngày Mong Muốn" (hạn chót = HẾT ngày đó). Neo
+    // mốc vào 17:00 UTC CÙNG NGÀY (= 00:00 VN-local của NGÀY KẾ TIẾP, VN=UTC+7) — daysWaited >= 0 (OVERDUE)
+    // chỉ true khi ngày mong muốn đã TRÔI QUA HẲN theo giờ VN, không còn lệch 7 giờ nữa.
+    const desiredDate = new Date(item.desiredApprovalDate + 'T17:00:00Z');
     if (!Number.isNaN(desiredDate.getTime())) {
       const daysWaited = Math.floor((nowDate.getTime() - desiredDate.getTime()) / 86400000);
       if (daysWaited >= 0) return { level: 'OVERDUE', daysWaited, threshold: maxThreshold, stepStartAt: item.desiredApprovalDate, viaDesiredDate: true };
