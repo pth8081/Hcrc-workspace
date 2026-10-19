@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.58** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.59 (2026-11): [TB] Re-audit lần 9 — mục 11/12: Approval Hub client thiếu loại trừ tự-liên-quan cho Uniform/Shift-Swap
+
+Mục thứ mười một (11/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** Server (`lib/recordActions.js::assertNotSelfDecidingUniformPeriod()`/
+`assertNotSelfDecidingUniformTransfer()`, `lib/attendance.js::assertShiftSwapApprover()`) đã chặn ĐÚNG
+từ re-audit lần 7 (mục `#177`) — người tạo kỳ cấp phát/điều chuyển kho Đồng Phục, người tự xin đổi ca,
+hoặc người là phía NHẬN ca trong 1 yêu cầu Đổi Ca đều không tự duyệt được, API trả 403. Nhưng mirror
+phía client `public/js/core-approvalhub.js::getMyPendingApprovals()` (nguồn liệt kê "Phê Duyệt" trên
+Approval Hub) KHÔNG áp 3 điều kiện loại trừ này — 3 luồng vẫn hiện nguyên trong danh sách kèm nút
+"✅ Duyệt" cho đúng người không được phép duyệt, bấm vào luôn nhận lỗi 403 từ server (không mất an toàn
+dữ liệu vì server đã chặn, nhưng gây trải nghiệm sai — hiện nút thao tác chắc chắn thất bại).
+
+**Bản vá:** `getMyPendingApprovals()` — thêm `&& p.creator !== user.username` vào filter
+`uniformPeriods` (PENDING_APPROVAL), thêm `&& t.requestedBy !== user.username` vào filter
+`uniformTransfers` (PENDING_APPROVAL), và viết lại filter `shiftSwapRequests` thành hàm đủ 3 điều kiện:
+loại bản ghi do CHÍNH người duyệt tạo (`s.creator === user.username`), loại bản ghi mà CHÍNH người
+duyệt là phía nhận ca (`s.targetEmployeeCode === DB.myEmployeeCode`), và giữ nguyên điều kiện phạm vi
+siêu thị đã có (`user.perms?.admin || user.perms?.hrAttendanceManage || s.dept === user.dept`) — đúng 3
+điều kiện mirror 1:1 với `assertShiftSwapApprover()` phía server.
+
+**Test:** mở rộng scenario có sẵn "Approval Hub tổng hợp đủ 5 luồng còn thiếu" trong
+`tests/test-approval-hub.js` — thêm 4 fixture mới (kỳ Đồng Phục/điều chuyển kho do chính người duyệt
+"duyet2" tạo, 1 yêu cầu Đổi Ca do chính duyet2 xin, 1 yêu cầu Đổi Ca mà duyet2 là phía nhận ca) + 4
+assertion mới xác nhận cả 4 bản ghi này KHÔNG xuất hiện trong danh sách của duyet2 (riêng Đổi Ca dùng
+đếm số lượng item type `shiftSwapRequest` còn lại, vì field `code` hiển thị là mã nhân viên — không
+phải id bản ghi — nên 2 bản ghi loại trừ trùng mã với bản ghi hợp lệ, so trực tiếp theo `code` sẽ không
+phản ánh đúng). Xác nhận 6/58 assertion FAIL trên code cũ (đúng 6 assertion liên quan trực tiếp tới bản
+vá — count tổng, type list, 2 assertion Đồng Phục mới, 1 assertion Nghỉ Phép đã có từ trước nhưng trùng
+giá trị "NV-DUYET2" với bản ghi Đổi Ca mới nên cũng bị ảnh hưởng, 1 assertion Đổi Ca mới), 58/58 PASS
+trên code mới. Chạy lại regression 5 file liên quan khác có chạm `getMyPendingApprovals()`/
+`renderApprovalHub()`: `test-approval-polling.js` (22/22), `test-audit-round2-vbt-hd-gp-tt-tl.js`
+(43/43), `test-giai-doan-3-batch-c-badges.js` (5/5), `test-meeting-approval-hub-self-decide.js` (7/7),
+`test-vpp.js` (29/29) — tất cả PASS, không có regression. Tự kiểm cú pháp (`node -c`) + CSP grep — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/public/js/core-approvalhub.js`, không đổi `schema.sql`/biến môi
+trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.58 (2026-11): [TB] Re-audit lần 9 — mục 10/12: approvalOverdue.js so sánh UTC-midnight thay vì VN-local
 

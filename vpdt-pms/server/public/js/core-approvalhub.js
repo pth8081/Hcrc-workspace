@@ -353,7 +353,12 @@ function getMyPendingApprovals(user) {
   // trên (không throw ReferenceError nếu cụm chưa từng mở trong phiên).
   if (typeof canApproveUniformClient === 'function') {
     if (canApproveUniformClient(user)) {
-      (DB.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL').forEach(p => {
+      // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Approval Hub client thiếu loại trừ tự-liên-quan cho
+      // Uniform/Shift-Swap"): mirror đúng assertNotSelfDecidingUniformPeriod()/
+      // assertNotSelfDecidingUniformTransfer() (lib/recordActions.js, đã ÁP DỤNG THẬT ở server) —
+      // người có canApproveUniformClient() tự tạo kỳ cấp phát/điều chuyển của chính mình vẫn thấy mục
+      // "cần duyệt" ở Hub dù bấm Duyệt sẽ luôn 403, làm badge đếm sai + hiện nút chắc chắn lỗi.
+      (DB.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL' && p.creator !== user.username).forEach(p => {
         items.push({
           type: 'uniformPeriod', typeLabel: '👔 Đồng Phục - Kỳ Cấp Phát', code: p.code || String(p.id), title: p.name, dept: p.dept,
           stepLabel: '', createdAt: p.createdAt,
@@ -364,7 +369,7 @@ function getMyPendingApprovals(user) {
           ]
         });
       });
-      (DB.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL').forEach(t => {
+      (DB.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL' && t.requestedBy !== user.username).forEach(t => {
         items.push({
           type: 'uniformTransfer', typeLabel: '👔 Đồng Phục - Điều Chuyển Kho', code: String(t.id), title: `${t.sourceDept} → ${t.targetDept}: ${t.itemName}`, dept: t.sourceDept,
           stepLabel: '', createdAt: t.requestedAt,
@@ -398,7 +403,21 @@ function getMyPendingApprovals(user) {
       });
     }
     if (canApproveHacSwap(user)) {
-      (DB.shiftSwapRequests || []).filter(s => s.status === 'PENDING').forEach(s => {
+      // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Approval Hub client thiếu loại trừ tự-liên-quan cho
+      // Uniform/Shift-Swap"): mirror đúng assertShiftSwapApprover() (lib/attendance.js, server ÁP DỤNG
+      // THẬT) — người xin đổi ca (s.creator) hoặc chính người NHẬN ca (s.targetEmployeeCode, so theo
+      // DB.myEmployeeCode — cùng khuôn leaveRequest ngay trên) không được tự duyệt đơn liên quan tới
+      // mình, và hrShiftSwapApprove (KHÔNG phải admin/hrAttendanceManage) CHỈ duyệt đúng siêu thị mình
+      // quản lý (s.dept — forceOwnDept gán sẵn đúng dept của người xin đổi lúc tạo, chính là
+      // roster.storeCode). Trước đây chỉ gate phẳng canApproveHacSwap(), khiến badge/Hub đếm dư các
+      // đơn chắc chắn bị 403 khi bấm Duyệt thật.
+      (DB.shiftSwapRequests || []).filter(s => {
+        if (s.status !== 'PENDING') return false;
+        if (s.creator === user.username) return false;
+        if (s.targetEmployeeCode === DB.myEmployeeCode) return false;
+        if (!user.perms?.admin && !user.perms?.hrAttendanceManage && s.dept !== user.dept) return false;
+        return true;
+      }).forEach(s => {
         items.push({
           type: 'shiftSwapRequest', typeLabel: '🔄 Đổi Ca', code: s.requesterEmployeeCode, title: `${s.requesterEmployeeCode} ↔ ${s.targetEmployeeCode}`, dept: s.dept,
           stepLabel: '', createdAt: s.createdAt,
