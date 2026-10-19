@@ -1298,6 +1298,33 @@ async function cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, delete
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 9, mức Thấp — "submissions[].opinionRequestees không cascade username"):
+// `submissions[].opinionRequestees` (mảng username admin gán tay, mời "Xin Ý Kiến" — lớp KHÔNG chặn
+// quy trình, blocking:false, xem canViewSubmissionWithoutForward()/canViewSubmission(),
+// lib/recordViewScope.js — so khớp RAW `sub.opinionRequestees.includes(user.username)`) hoàn toàn chưa
+// được cascade khi đổi tên/xoá username, cùng lớp lỗi với effectiveApprovers/extraApprovalLayers (đã vá
+// ở cascadeUsernameChangesToRecordApproverSnapshots() trên) nhưng bị sót vì opinionRequestees KHÔNG
+// nằm trong RECORD_EFFECTIVE_APPROVERS_COLLECTIONS/RECORD_EXTRA_APPROVAL_LAYERS_COLLECTIONS (không
+// phải field "quyết định ai duyệt", chỉ là kênh xem tham khảo song song, nhưng vẫn so khớp username thô
+// giống y hệt). Hậu quả 2 chiều: (1) đổi tên đăng nhập -> mất quyền xem/cho ý kiến hồ sơ ĐANG PENDING đã
+// được mời (vẫn là cùng 1 người, chỉ đổi username); (2) xoá vĩnh viễn rồi cấp LẠI đúng username cho 1
+// nhân viên khác -> nhân viên MỚI thừa kế nhầm quyền xem hồ sơ đó. Dùng lại renameApproversUsernamesArray()
+// đã có sẵn (cùng khuôn mảng whitelist phẳng như deptViewScopeConfig.extraViewers ở trên).
+async function cascadeUsernameChangesToSubmissionOpinionRequestees(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  await renameFieldValueInCollection('submissions', (item) => {
+    if (!Array.isArray(item.opinionRequestees)) return item;
+    let requestees = item.opinionRequestees;
+    for (const { oldValue, newValue } of renamed || []) {
+      requestees = renameApproversUsernamesArray(requestees, oldValue, newValue, null);
+    }
+    for (const deletedUsername of deletedUsernames || []) {
+      requestees = renameApproversUsernamesArray(requestees, null, null, deletedUsername);
+    }
+    return requestees === item.opinionRequestees ? item : { ...item, opinionRequestees: requestees };
+  });
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1309,5 +1336,5 @@ module.exports = {
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
   cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
   cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers,
-  cascadeUsernameChangesToCarDriverAndOfficeReqTech
+  cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees
 };
