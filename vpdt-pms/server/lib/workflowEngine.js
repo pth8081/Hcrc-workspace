@@ -615,12 +615,16 @@ const MODULE_CONFIGS = {
     blockApproveIf: (item) => ((item.infoRequests || []).some(r => !r.response))
       ? 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể duyệt/từ chối.'
       : null,
-    // itPriceAllowSelfApprove (11/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở
+    // itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở
     // assertNotSelfDecidingWorkflowItem() phía trên): gỡ chặn tự duyệt cho ĐÚNG người được admin tick
-    // quyền này, áp dụng chung CẢ Bán Buôn lẫn Bán Lẻ (không tách theo item.priceType) — khớp đúng thiết
-    // kế "gộp theo module" đã chốt với người dùng. Không tự cấp quyền duyệt: canApproveStep() vẫn phải
-    // qua trước đó (người này phải thật sự nằm trong danh sách approver bước hiện tại).
-    allowSelfDeciding: (item, user) => !!user?.perms?.itPriceAllowSelfApprove
+    // quyền này — TÁCH RIÊNG theo item.priceType (ĐỔI QUYẾT ĐỊNH 11/2026: ban đầu gộp chung 1 quyền, sau
+    // đó người dùng yêu cầu tách lại vì Bán Buôn/Bán Lẻ do 2 bộ phận khác nhau thực hiện — khớp đúng
+    // khuôn itPriceProposeCreateWholesale/Retail + itPriceEmergencyRejectApproveWholesale/Retail đã tách
+    // sẵn từ trước). Không tự cấp quyền duyệt: canApproveStep() vẫn phải qua trước đó (người này phải
+    // thật sự nằm trong danh sách approver bước hiện tại).
+    allowSelfDeciding: (item, user) => (item.priceType === 'WHOLESALE')
+      ? !!user?.perms?.itPriceAllowSelfApproveWholesale
+      : !!user?.perms?.itPriceAllowSelfApproveRetail
   },
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách của phòng ban mình theo appData.budgetDeptWorkflows
   // (cùng khuôn docs/carRegs/officeReqs/itPriceApprovals ở trên). supportsRequestChanges (không phải

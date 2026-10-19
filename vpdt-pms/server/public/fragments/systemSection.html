@@ -2730,13 +2730,16 @@
                 <input type="checkbox" id="pItPriceEmergencyRejectApproveWholesale"> 🚨 Phê duyệt từ chối khẩn cấp Bán Buôn
               </label>
             </div>
-            <!-- Ghi chú dẫn chiếu (11/2026, theo phản hồi người dùng xem demo — "chưa thấy tự duyệt giá
-                 Bán Buôn ở đây?"): checkbox pItPriceAllowSelfApprove (1 quyền DUY NHẤT, áp dụng CẢ Bán
-                 Buôn lẫn Bán Lẻ — xem lib/workflowEngine.js) đặt vật lý ở mục "26. Mua Hàng — Phê Duyệt
-                 Giá" bên dưới (gần vị trí quyền Bán Lẻ), KHÔNG lặp lại checkbox ở đây để tránh 2 checkbox
-                 cùng ghi 1 field dễ lệch trạng thái — chỉ thêm dòng ghi chú dẫn chiếu cho admin đang xem
-                 mục Vận Hành (nơi 2 quyền Bán Buôn ở trên nằm) không bỏ sót. -->
-            <p class="text-[11px] text-amber-700 italic bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền "Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá" (áp dụng CẢ Bán Buôn lẫn Bán Lẻ) nằm ở mục <b>"26. Mua Hàng — Phê Duyệt Giá"</b> bên dưới, không lặp lại checkbox ở đây.</p>
+            <!-- pItPriceAllowSelfApproveWholesale (11/2026, ĐỔI QUYẾT ĐỊNH theo yêu cầu người dùng —
+                 ban đầu gộp chung 1 quyền Buôn+Lẻ, sau đó người dùng yêu cầu TÁCH RIÊNG vì "2 bộ phận
+                 khác nhau thực hiện" — khớp đúng khuôn itPriceProposeCreateWholesale/Retail +
+                 itPriceEmergencyRejectApproveWholesale/Retail đã tách sẵn ngay phía trên): gỡ chặn tự
+                 duyệt CHỈ cho giá Bán Buôn, KHÔNG liên quan gì tới quyền Bán Lẻ ở mục "26. Mua Hàng —
+                 Phê Duyệt Giá" bên dưới (2 quyền hoàn toàn độc lập từ nay). -->
+            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa đề xuất vừa duyệt giá Bán Buôn (VD chỉ có 1 chuyên viên phụ trách). Không ảnh hưởng người khác, không liên quan quyền Bán Lẻ.</p>
+            <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pItPriceAllowSelfApproveWholesale"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Bán Buôn Do Chính Mình Tạo
+            </label>
           </div>
         </details>
 
@@ -2832,18 +2835,19 @@
                 <input type="checkbox" id="pItPriceEmergencyRejectApproveRetail"> 🚨 Phê duyệt từ chối khẩn cấp Bán Lẻ
               </label>
             </div>
-            <!-- pItPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi xác
-                 nhận rủi ro qua demo/trao đổi): CHỈ gỡ chặn "người đề xuất giá không được tự duyệt/tự áp
-                 giá/tự xử lý từ chối khẩn cấp" cho ĐÚNG người được tick quyền này — KHÔNG tự cấp quyền
-                 duyệt/xử lý giá, người đó vẫn phải là approver hợp lệ theo cấu hình phòng ban/mức Margin-
-                 Chiết Khấu (Hệ Thống → Quy Trình & Phê Duyệt) hoặc có itPriceSupport/quyền duyệt từ chối
-                 khẩn cấp ở trên mới dùng được. GỘP CHUNG 1 quyền cho CẢ Bán Buôn LẪN Bán Lẻ (không tách
-                 riêng như 2 quyền phía trên) — xem MODULE_CONFIGS.itPriceApprovals.allowSelfDeciding
-                 (lib/workflowEngine.js) + assertNotSelfHandlingItPriceApply()/assertNotSelfDecidingItPrice
-                 EmergencyReject() (lib/recordActions.js). -->
-            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa đề xuất vừa duyệt giá (VD chỉ có 1 chuyên viên phụ trách giá). Áp dụng CẢ Bán Buôn lẫn Bán Lẻ, không ảnh hưởng người khác, chỉ gỡ chặn tự duyệt cho ĐÚNG tài khoản được tick.</p>
+            <!-- pItPriceAllowSelfApproveRetail (11/2026, ĐỔI QUYẾT ĐỊNH theo yêu cầu người dùng — ban
+                 đầu gộp chung 1 quyền Buôn+Lẻ, sau đó người dùng yêu cầu TÁCH RIÊNG vì "2 bộ phận khác
+                 nhau thực hiện". CHỈ gỡ chặn "người đề xuất giá Bán Lẻ không được tự duyệt/tự áp giá/tự
+                 xử lý từ chối khẩn cấp" cho ĐÚNG người được tick quyền này — KHÔNG tự cấp quyền duyệt/xử
+                 lý giá, người đó vẫn phải là approver hợp lệ theo cấu hình phòng ban (Hệ Thống → Quy
+                 Trình & Phê Duyệt) hoặc có itPriceSupport/quyền duyệt từ chối khẩn cấp ở trên mới dùng
+                 được. KHÔNG liên quan gì tới quyền Bán Buôn ở mục "22. Vận Hành" phía trên (2 quyền hoàn
+                 toàn độc lập) — xem MODULE_CONFIGS.itPriceApprovals.allowSelfDeciding (lib/workflowEngine.js)
+                 + assertNotSelfHandlingItPriceApply()/assertNotSelfDecidingItPriceEmergencyReject()
+                 (lib/recordActions.js). -->
+            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa đề xuất vừa duyệt giá Bán Lẻ (VD chỉ có 1 chuyên viên phụ trách). Không ảnh hưởng người khác, không liên quan quyền Bán Buôn.</p>
             <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pItPriceAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Do Chính Mình Tạo (áp dụng cả Bán Buôn lẫn Bán Lẻ)
+              <input type="checkbox" id="pItPriceAllowSelfApproveRetail"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Bán Lẻ Do Chính Mình Tạo
             </label>
           </div>
         </details>

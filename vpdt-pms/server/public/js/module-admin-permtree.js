@@ -215,15 +215,17 @@ function collectPermsFromForm() {
     itServiceRenewalManage: document.getElementById('pItServiceRenewalManage').checked,
     itPriceEmergencyRejectApproveWholesale: document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked,
     itPriceEmergencyRejectApproveRetail: document.getElementById('pItPriceEmergencyRejectApproveRetail').checked,
-    // itPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ ở
-    // MODULE_CONFIGS.itPriceApprovals.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN "người đề xuất
-    // giá không được tự duyệt/tự áp giá/tự xử lý từ chối khẩn cấp" (assertNotSelfDecidingWorkflowItem()/
-    // assertNotSelfHandlingItPriceApply()/assertNotSelfDecidingItPriceEmergencyReject()) cho ĐÚNG người
-    // được admin gán quyền này — DÙNG CHUNG 1 quyền cho CẢ Bán Buôn lẫn Bán Lẻ (gộp theo module, không
-    // tách riêng như itPriceProposeCreate/itPriceEmergencyRejectApprove). KHÔNG tự động cấp quyền duyệt/
-    // xử lý giá — người này vẫn phải có đủ quyền duyệt/itPriceSupport hiện có mới dùng được, quyền này
-    // chỉ gỡ đúng lớp chặn "nhưng bạn là người đề xuất" khi họ ĐÃ là approver/người xử lý hợp lệ.
-    itPriceAllowSelfApprove: document.getElementById('pItPriceAllowSelfApprove').checked,
+    // itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú
+    // thích đầy đủ ở MODULE_CONFIGS.itPriceApprovals.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN
+    // "người đề xuất giá không được tự duyệt/tự áp giá/tự xử lý từ chối khẩn cấp"
+    // (assertNotSelfDecidingWorkflowItem()/assertNotSelfHandlingItPriceApply()/assertNotSelfDecidingItPrice
+    // EmergencyReject()) cho ĐÚNG người được admin gán quyền này — TÁCH RIÊNG theo Bán Buôn/Bán Lẻ (ĐỔI
+    // QUYẾT ĐỊNH: ban đầu gộp 1 quyền, người dùng yêu cầu tách lại vì 2 bộ phận khác nhau thực hiện),
+    // khớp đúng khuôn itPriceProposeCreateWholesale/Retail + itPriceEmergencyRejectApproveWholesale/Retail
+    // đã tách sẵn. KHÔNG tự động cấp quyền duyệt/xử lý giá — người này vẫn phải có đủ quyền duyệt/
+    // itPriceSupport hiện có mới dùng được.
+    itPriceAllowSelfApproveWholesale: document.getElementById('pItPriceAllowSelfApproveWholesale').checked,
+    itPriceAllowSelfApproveRetail: document.getElementById('pItPriceAllowSelfApproveRetail').checked,
     uniformManage: document.getElementById('pUniformManage').checked,
     uniformApprove: document.getElementById('pUniformApprove').checked,
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
@@ -363,7 +365,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pItServiceRenewalManage').checked = !!perms.itServiceRenewalManage;
   document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked = !!perms.itPriceEmergencyRejectApproveWholesale;
   document.getElementById('pItPriceEmergencyRejectApproveRetail').checked = !!perms.itPriceEmergencyRejectApproveRetail;
-  document.getElementById('pItPriceAllowSelfApprove').checked = !!perms.itPriceAllowSelfApprove;
+  document.getElementById('pItPriceAllowSelfApproveWholesale').checked = !!perms.itPriceAllowSelfApproveWholesale;
+  document.getElementById('pItPriceAllowSelfApproveRetail').checked = !!perms.itPriceAllowSelfApproveRetail;
   document.getElementById('pUniformManage').checked = !!perms.uniformManage;
   document.getElementById('pUniformApprove').checked = !!perms.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;

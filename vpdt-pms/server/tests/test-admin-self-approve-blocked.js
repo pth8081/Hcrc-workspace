@@ -126,12 +126,15 @@ test('claimPriceApply(): admin KHÔNG phải creator -> nhận xử lý được
   assert.strictEqual(item.applyClaimedBy, 'admin');
 });
 
-// ===== 6) operationOrderAllowSelfApprove/itPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của
-// người dùng, sau khi đã cảnh báo rõ rủi ro qua demo/trao đổi — CHỈ mở cho đúng 2 module Đặt Hàng ST/HO
-// và Phê Duyệt Giá Buôn/Lẻ, KHÔNG mở cho các module "rủi ro cao" khác như payslips/kỷ luật/hợp đồng lao
-// động/ngân sách...). Quyền MỚI, mặc định tắt (defaultNewUserPerms(), core.js) — admin phải chủ động
-// tick mới gỡ được chặn tự duyệt, và KHÔNG tự cấp quyền duyệt (canApproveStep()/canSupportItPrice() vẫn
-// phải qua trước). =====
+// ===== 6) operationOrderAllowSelfApprove/itPriceAllowSelfApproveWholesale/itPriceAllowSelfApproveRetail
+// (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo rõ rủi ro qua demo/trao đổi — CHỈ
+// mở cho đúng 2 module Đặt Hàng ST/HO và Phê Duyệt Giá Buôn/Lẻ, KHÔNG mở cho các module "rủi ro cao"
+// khác như payslips/kỷ luật/hợp đồng lao động/ngân sách...). Quyền MỚI, mặc định tắt (defaultNewUserPerms(),
+// core.js) — admin phải chủ động tick mới gỡ được chặn tự duyệt, và KHÔNG tự cấp quyền duyệt
+// (canApproveStep()/canSupportItPrice() vẫn phải qua trước). ĐỔI QUYẾT ĐỊNH (11/2026): giá Bán Buôn/Bán
+// Lẻ ban đầu gộp chung 1 quyền, sau đó người dùng yêu cầu TÁCH RIÊNG vì "2 bộ phận khác nhau thực hiện"
+// — xác nhận độc lập tuyệt đối (quyền Wholesale KHÔNG tự mở Retail và ngược lại). Đặt Hàng ST/HO vẫn
+// gộp chung 1 quyền (chưa có yêu cầu tách). =====
 
 test('assertNotSelfDecidingWorkflowItem("operationOrders"): creator KHÔNG có operationOrderAllowSelfApprove -> 403 (mặc định vẫn chặn)', () => {
   const item = { creator: 'nv.mua' };
@@ -145,7 +148,7 @@ test('assertNotSelfDecidingWorkflowItem("operationOrders"): creator CÓ operatio
   assertNotSelfDecidingWorkflowItem('operationOrders', item, SELF_ALLOWED); // không throw = pass
 });
 
-test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): creator KHÔNG có itPriceAllowSelfApprove -> 403 (mặc định vẫn chặn, cả RETAIL lẫn WHOLESALE)', () => {
+test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): creator KHÔNG có quyền tương ứng -> 403 (mặc định vẫn chặn, cả RETAIL lẫn WHOLESALE)', () => {
   const itemRetail = { creator: 'nv.gia', priceType: 'RETAIL' };
   const itemWholesale = { creator: 'nv.gia', priceType: 'WHOLESALE' };
   const SELF = { username: 'nv.gia', name: 'NV Giá', perms: {} };
@@ -153,36 +156,57 @@ test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): creator KHÔNG có 
   expectThrows403(() => assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemWholesale, SELF), /tự xử lý/);
 });
 
-test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): creator CÓ itPriceAllowSelfApprove -> không throw, áp dụng CẢ RETAIL lẫn WHOLESALE (1 quyền gộp chung)', () => {
+test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): itPriceAllowSelfApproveRetail=true -> KHÔNG throw cho RETAIL, VẪN 403 cho WHOLESALE (2 quyền độc lập)', () => {
   const itemRetail = { creator: 'nv.gia', priceType: 'RETAIL' };
   const itemWholesale = { creator: 'nv.gia', priceType: 'WHOLESALE' };
-  const SELF_ALLOWED = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceAllowSelfApprove: true } };
-  assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemRetail, SELF_ALLOWED);
-  assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemWholesale, SELF_ALLOWED);
+  const SELF_RETAIL_ONLY = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceAllowSelfApproveRetail: true } };
+  assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemRetail, SELF_RETAIL_ONLY);
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemWholesale, SELF_RETAIL_ONLY), /tự xử lý/);
 });
 
-test('claimPriceApply(): itPriceAllowSelfApprove=true -> người đề xuất tự nhận xử lý áp giá được', () => {
-  const item = { creator: 'nv.gia', status: 'APPROVED', applied: false, emergencyRejectStatus: null, applyClaimedBy: null };
-  const SELF_SUPPORT = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceSupport: true, itPriceAllowSelfApprove: true } };
+test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): itPriceAllowSelfApproveWholesale=true -> KHÔNG throw cho WHOLESALE, VẪN 403 cho RETAIL (2 quyền độc lập)', () => {
+  const itemRetail = { creator: 'nv.gia', priceType: 'RETAIL' };
+  const itemWholesale = { creator: 'nv.gia', priceType: 'WHOLESALE' };
+  const SELF_WHOLESALE_ONLY = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceAllowSelfApproveWholesale: true } };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemRetail, SELF_WHOLESALE_ONLY), /tự xử lý/);
+  assertNotSelfDecidingWorkflowItem('itPriceApprovals', itemWholesale, SELF_WHOLESALE_ONLY);
+});
+
+test('claimPriceApply(): itPriceAllowSelfApproveRetail=true -> người đề xuất tự nhận xử lý áp giá Bán Lẻ được', () => {
+  const item = { creator: 'nv.gia', status: 'APPROVED', applied: false, emergencyRejectStatus: null, applyClaimedBy: null, priceType: 'RETAIL' };
+  const SELF_SUPPORT = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceSupport: true, itPriceAllowSelfApproveRetail: true } };
   claimPriceApply(SELF_SUPPORT, item);
   assert.strictEqual(item.applyClaimedBy, 'nv.gia');
 });
 
-test('approveItPriceEmergencyReject(): itPriceAllowSelfApprove=true -> người gửi yêu cầu từ chối khẩn cấp tự phê duyệt được yêu cầu của chính mình', () => {
+test('claimPriceApply(): itPriceAllowSelfApproveRetail=true NHƯNG đề xuất là WHOLESALE -> vẫn 403 (quyền không chéo nhau)', () => {
+  const item = { creator: 'nv.gia', status: 'APPROVED', applied: false, emergencyRejectStatus: null, applyClaimedBy: null, priceType: 'WHOLESALE' };
+  const SELF_SUPPORT = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceSupport: true, itPriceAllowSelfApproveRetail: true } };
+  expectThrows403(() => claimPriceApply(SELF_SUPPORT, item), /tự xử lý/);
+});
+
+test('claimPriceApply(): itPriceAllowSelfApproveWholesale=true -> người đề xuất tự nhận xử lý áp giá Bán Buôn được', () => {
+  const item = { creator: 'nv.gia', status: 'APPROVED', applied: false, emergencyRejectStatus: null, applyClaimedBy: null, priceType: 'WHOLESALE' };
+  const SELF_SUPPORT = { username: 'nv.gia', name: 'NV Giá', perms: { itPriceSupport: true, itPriceAllowSelfApproveWholesale: true } };
+  claimPriceApply(SELF_SUPPORT, item);
+  assert.strictEqual(item.applyClaimedBy, 'nv.gia');
+});
+
+test('approveItPriceEmergencyReject(): itPriceAllowSelfApproveRetail=true -> người gửi yêu cầu từ chối khẩn cấp Bán Lẻ tự phê duyệt được yêu cầu của chính mình', () => {
   // requestItPriceEmergencyReject() cần isFinalStepApproverOfItPrice() -> dùng admin=true để qua điều
-  // kiện đó (không liên quan tới itPriceAllowSelfApprove, đang test riêng lớp chặn tự PHÊ DUYỆT yêu cầu).
+  // kiện đó (không liên quan tới itPriceAllowSelfApprove*, đang test riêng lớp chặn tự PHÊ DUYỆT yêu cầu).
   const item = {
     status: 'APPROVED', applied: false, applyClaimedBy: null, priceType: 'RETAIL', currentStep: 2, history: [],
     emergencyRejectStatus: null
   };
-  const SELF = { username: 'nv.gia', name: 'NV Giá', perms: { admin: true, itPriceEmergencyRejectApproveRetail: true, itPriceAllowSelfApprove: true } };
+  const SELF = { username: 'nv.gia', name: 'NV Giá', perms: { admin: true, itPriceEmergencyRejectApproveRetail: true, itPriceAllowSelfApproveRetail: true } };
   requestItPriceEmergencyReject(SELF, item, { reason: 'Phát hiện sai giá sau khi duyệt' });
   assert.strictEqual(item.emergencyRejectRequestedBy, 'nv.gia');
   const result = approveItPriceEmergencyReject(SELF, item);
-  assert.strictEqual(result.status, 'REJECTED', 'tự phê duyệt yêu cầu từ chối khẩn cấp của chính mình thành công khi có itPriceAllowSelfApprove');
+  assert.strictEqual(result.status, 'REJECTED', 'tự phê duyệt yêu cầu từ chối khẩn cấp của chính mình thành công khi có itPriceAllowSelfApproveRetail');
 });
 
-test('approveItPriceEmergencyReject(): KHÔNG có itPriceAllowSelfApprove -> vẫn 403 khi tự phê duyệt yêu cầu do chính mình gửi (hành vi CHUẨN không đổi)', () => {
+test('approveItPriceEmergencyReject(): KHÔNG có quyền tương ứng -> vẫn 403 khi tự phê duyệt yêu cầu do chính mình gửi (hành vi CHUẨN không đổi)', () => {
   const item = {
     status: 'APPROVED', applied: false, applyClaimedBy: null, priceType: 'RETAIL', currentStep: 2, history: [],
     emergencyRejectStatus: null

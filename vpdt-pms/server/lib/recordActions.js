@@ -6203,13 +6203,16 @@ function hasPendingItPriceEmergencyReject(item) {
 // theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module", không có ngoại lệ): bỏ
 // hẳn nhánh admin-bypass đã có trước đây (trước đây nhất quán với assertNotSelfDecidingWorkflowItem() —
 // nay NGƯỢC LẠI, nhất quán với khuôn CHUẨN MỚI chặn CẢ admin).
-// itPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo rõ rủi
-// ro + người dùng xác nhận CHỈ mở cho đúng Phê Duyệt Giá Buôn/Lẻ — KHÔNG mở cho các module "rủi ro cao"
-// khác): admin gán quyền này cho đúng người/chức danh cần "vừa đề xuất vừa áp giá" (VD chỉ có 1 chuyên
-// viên phụ trách giá) — KHÔNG tự cấp quyền áp giá, canSupportItPrice()/itPriceSupport vẫn phải qua
-// trước đó (gọi TRƯỚC hàm này ở claimPriceApply()/applyPriceApproval()/requestPriceInfoFromIt() dưới).
+// itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã
+// cảnh báo rõ rủi ro + người dùng xác nhận CHỈ mở cho đúng Phê Duyệt Giá Buôn/Lẻ — KHÔNG mở cho các
+// module "rủi ro cao" khác): admin gán quyền này cho đúng người/chức danh cần "vừa đề xuất vừa áp giá"
+// (VD chỉ có 1 chuyên viên phụ trách giá) — KHÔNG tự cấp quyền áp giá, canSupportItPrice()/itPriceSupport
+// vẫn phải qua trước đó (gọi TRƯỚC hàm này ở claimPriceApply()/applyPriceApproval()/requestPriceInfoFromIt()
+// dưới). TÁCH RIÊNG theo item.priceType (ĐỔI QUYẾT ĐỊNH 11/2026: ban đầu gộp chung 1 quyền, người dùng
+// yêu cầu tách lại vì Bán Buôn/Bán Lẻ do 2 bộ phận khác nhau thực hiện).
 function assertNotSelfHandlingItPriceApply(user, item) {
-  if (user?.perms?.itPriceAllowSelfApprove) return;
+  const bypassPerm = (item.priceType === 'WHOLESALE') ? 'itPriceAllowSelfApproveWholesale' : 'itPriceAllowSelfApproveRetail';
+  if (user?.perms?.[bypassPerm]) return;
   if (item.creator && item.creator === user.username) {
     throw new HttpError(403, 'Bạn không thể tự xử lý bước áp giá cho đề xuất do chính mình tạo');
   }
@@ -6375,12 +6378,14 @@ function requestItPriceEmergencyReject(user, item, payload) {
 // assertNotSelfDecidingUniformPeriod()/assertNotSelfDecidingUniformTransfer().
 // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
 // không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
-// itPriceAllowSelfApprove — cùng quyền gỡ chặn dùng chung cho cả 3 lớp tự xử lý giá (xem chú thích đầy
-// đủ ở assertNotSelfHandlingItPriceApply() ngay phía trên): người gửi yêu cầu từ chối khẩn cấp VẪN có
-// thể tự phê duyệt/từ chối yêu cầu đó nếu được admin gán quyền này (và vẫn phải có
-// itPriceEmergencyRejectApproveWholesale/Retail hợp lệ mới gọi được tới đây).
+// itPriceAllowSelfApproveWholesale/Retail — cùng quyền gỡ chặn dùng chung cho cả 3 lớp tự xử lý giá (xem
+// chú thích đầy đủ ở assertNotSelfHandlingItPriceApply() ngay phía trên, kể cả lý do TÁCH theo
+// item.priceType): người gửi yêu cầu từ chối khẩn cấp VẪN có thể tự phê duyệt/từ chối yêu cầu đó nếu
+// được admin gán quyền này (và vẫn phải có itPriceEmergencyRejectApproveWholesale/Retail hợp lệ mới gọi
+// được tới đây).
 function assertNotSelfDecidingItPriceEmergencyReject(user, item) {
-  if (user?.perms?.itPriceAllowSelfApprove) return;
+  const bypassPerm = (item?.priceType === 'WHOLESALE') ? 'itPriceAllowSelfApproveWholesale' : 'itPriceAllowSelfApproveRetail';
+  if (user?.perms?.[bypassPerm]) return;
   if (item && item.emergencyRejectRequestedBy === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự phê duyệt/từ chối yêu cầu từ chối khẩn cấp do chính mình gửi');
   }
