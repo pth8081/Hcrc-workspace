@@ -372,6 +372,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(notFound.status, 404);
   });
 
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "externalAuthVerify so khớp username phân biệt hoa/thường"):
+  // trước đây route này so khớp CHÍNH XÁC (u.username === account) — không đồng bộ với POST
+  // /verify-credentials (đã dùng findUserByUsernameCI() từ 10/2026). Ứng dụng đối tác tra cứu đúng
+  // username nhưng VIẾT HOA/THƯỜNG khác với bản lưu thật (EMP.username = 'nv1') -> nhận 404 oan dù tài
+  // khoản tồn tại.
+  await run('GET /api/external/users?account=...: so khớp KHÔNG phân biệt hoa/thường (khớp findUserByUsernameCI() ở POST /verify-credentials)', async () => {
+    resetAppData();
+    const created = await createKeyAsAdmin('App Tra Cứu Không Phân Biệt Hoa Thường');
+    const found = await directoryApi(created.body.apiKey, `?account=${EMP.username.toUpperCase()}`);
+    assert.strictEqual(found.status, 200, 'PHẢI tìm thấy dù account viết HOA (username lưu thật là chữ thường)');
+    assert.strictEqual(found.body.username, EMP.username);
+  });
+
   await run('GET /api/external/users: key đã bị thu hồi -> 401', async () => {
     resetAppData();
     const created = await createKeyAsAdmin('App Sẽ Thu Hồi 2');

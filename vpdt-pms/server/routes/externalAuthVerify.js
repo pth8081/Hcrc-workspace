@@ -187,7 +187,13 @@ router.get('/users', async (req, res) => {
     const account = String(req.query?.account || '').trim();
 
     if (account) {
-      const user = users.find(u => u.username === account);
+      // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "externalAuthVerify so khớp username phân biệt hoa/
+      // thường"): trước đây dùng so khớp CHÍNH XÁC (u.username === account) — không đồng bộ với
+      // POST /verify-credentials ngay trên (đã dùng findUserByUsernameCI() từ 10/2026, cùng lý do/cơ
+      // chế đăng nhập không phân biệt hoa/thường ở routes/auth.js POST /login). Hậu quả: ứng dụng đối
+      // tác tra cứu "?account=Nguyenvana" (hoa/thường khác username lưu thật "nguyenvana") nhận 404 dù
+      // tài khoản tồn tại — không phải lỗ hổng bảo mật, chỉ là lệch hành vi gây lỗi tích hợp khó debug.
+      const user = findUserByUsernameCI(users, account);
       if (!user) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
       logExternalAuth(req, { apiKeyName: apiKey.name, username: account, actionType: 'DIRECTORY_LOOKUP', description: 'Tra cứu 1 hồ sơ danh bạ qua API ngoài', status: 'SUCCESS' });
       return res.json(toDirectoryProfile(user, storeNames));

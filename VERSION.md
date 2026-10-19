@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**27.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.38 (2026-11): [Thấp] Re-audit lần 7 — mục 9/9 (HẾT đợt): externalAuthVerify so khớp username phân biệt hoa/thường
+
+Mục thứ chín (9/9) của đợt re-audit lần 7 — hoàn tất toàn bộ 9 finding của đợt này.
+
+**Nguyên nhân:** `GET /api/external/users?account=<username>` (`routes/externalAuthVerify.js:190`) so
+khớp CHÍNH XÁC (`users.find(u => u.username === account)`) — không đồng bộ với `POST /verify-credentials`
+ngay phía trên trong CÙNG file (đã dùng `findUserByUsernameCI()` từ 10/2026, cùng lý do/cơ chế đăng nhập
+không phân biệt hoa/thường ở `routes/auth.js POST /login`). Hậu quả: ứng dụng đối tác tra cứu đúng
+username nhưng viết HOA/thường khác với bản lưu thật nhận 404 oan dù tài khoản tồn tại — không phải lỗ
+hổng bảo mật, chỉ là lệch hành vi gây lỗi tích hợp khó debug cho đối tác ngoài.
+
+**Vá:** đổi dòng 190 sang `findUserByUsernameCI(users, account)` (hàm đã import sẵn ở đầu file, dùng
+chung cho `POST /verify-credentials`) — 2 endpoint trong cùng file giờ nhất quán hành vi tra cứu.
+
+**Test:** mở rộng `tests/test-external-auth.js` (+1 scenario, 31/31 tổng) — tra cứu `?account=` với
+username viết HOA toàn bộ (fixture lưu thật chữ thường `nv1`) phải trả 200 đúng hồ sơ. Phát hiện thú vị
+khi viết test: mock `findUserByUsernameCI()` sẵn có trong file ĐÃ đúng ngữ nghĩa không phân biệt hoa/
+thường từ trước — nhưng code route cũ gọi `.find()` thẳng, bỏ qua mock đó hoàn toàn, nên bug tồn tại
+"ẩn" dưới 1 test tưởng đã phủ đúng hành vi. Xác nhận FAIL trên code CŨ (`git stash`, 1/31 scenario FAIL),
+PASS trên code đã vá (31/31) — toàn bộ 30 scenario khác (API key admin, verify-credentials, revoke/
+regenerate, allowedIps...) không đổi, không regression. Đã `grep` lại diff xác nhận không có
+`onclick=`/` style="` nội tuyến (chỉ sửa 1 dòng logic server, không đổi HTML).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.37 (2026-11): [Thấp] Re-audit lần 7 — mục 8/9: approvalAggregator 3 luồng mới (uniform/shiftSwap) thiếu loại trừ tự-liên-quan
 
