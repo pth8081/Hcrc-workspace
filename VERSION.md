@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**27.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.66 (2026-11): [Cao] Re-audit lần 10 — mục 6/14: Khối-0 zero-out loop xoá luôn dữ liệu Nhóm Phê Duyệt Cuối cho 5 module
+
+Mục thứ sáu (6/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** vòng lặp "zero-out" theo `moduleAccess` (cả ở `GET /api/data` chính và vòng lặp
+lazy-mirror `GET /api/data/lazy/:key`, routes/data.js) chặn cứng theo
+`MODULE_ACCESS_GATED_COLLECTIONS` — nếu `moduleAccess.<module>=false`, toàn bộ mảng của collection đó
+bị XOÁ TRẮNG (trả rỗng) bất kể user có lý do hợp lệ khác để xem. Trước bản vá này, collection `docs` đã
+có 1 ngoại lệ riêng cho approver thuộc Nhóm Phê Duyệt Cuối (`isExtraApprovalLayerApprover()`) nhưng 5
+collection còn lại dùng cùng cơ chế Nhóm Phê Duyệt Cuối (`carRegs`/CAR, `officeReqs`/OFFICE_BUY+
+OFFICE_FIX, `vppRegistrations`/VPP, `paymentRequests`/PAYMENT, `operationOrders`/OPERATION_ORDER_STORE+
+OPERATION_ORDER_HO) lại SÓT ngoại lệ này. Hậu quả: admin cấu hình 1 người làm "Người Duyệt Cấp Cuối"
+(extraApprovalGroups_<MODULE>) cho 1 trong 5 module trên, nhưng nếu người đó KHÔNG được cấp
+`moduleAccess` của đúng module đó (trường hợp thường gặp — người duyệt cấp cuối thường ở phòng/ban
+khác, không thuộc nghiệp vụ gốc) -> hồ sơ cần họ duyệt bị XOÁ TRẮNG khỏi `GET /api/data`/lazy-mirror
+ngay từ Khối 0, họ KHÔNG BAO GIỜ thấy được hồ sơ để duyệt dù đã được admin chỉ định đúng.
+
+**Bản vá:** thêm 5 dòng ngoại lệ (mirroring đúng pattern `docs` đã có) vào CẢ 2 vòng lặp zero-out
+chính + lazy-mirror trong `routes/data.js`:
+```js
+if (col === 'carRegs' && isExtraApprovalLayerApprover(req.freshUser, data, ['CAR'])) continue;
+if (col === 'officeReqs' && isExtraApprovalLayerApprover(req.freshUser, data, ['OFFICE_BUY', 'OFFICE_FIX'])) continue;
+if (col === 'vppRegistrations' && isExtraApprovalLayerApprover(req.freshUser, data, ['VPP'])) continue;
+if (col === 'paymentRequests' && isExtraApprovalLayerApprover(req.freshUser, data, ['PAYMENT'])) continue;
+if (col === 'operationOrders' && isExtraApprovalLayerApprover(req.freshUser, data, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'])) continue;
+```
+Giữ nguyên ngoại lệ `docs` đã có, không đụng logic các collection khác.
+
+**Test:** `tests/test-khoi0-extraapprovallayer-5modules-gate.js` (mới, test HTTP thật mount
+`routes/data.js`, 7 scenario: 5 "approver vẫn thấy hồ sơ" cho đúng 5 module + 1 "outsider vẫn bị xoá
+trắng" (control âm) + 1 "admin luôn bypass"). Xác nhận 5/7 FAIL trên code cũ (2/7 pass — outsider +
+admin control không liên quan tới bản vá), 7/7 PASS trên code mới. Chạy lại regression các file Khối-0/
+Nhóm Phê Duyệt Cuối liên quan: `test-khoi0-carregs-vppregistrations-gate.js` (7/7),
+`test-khoi0-payment-office-gate.js` (8/8), `test-khoi0-parent-cascade-gate.js` (11/11),
+`test-extra-approval-groups.js` (26/26) — tất cả PASS, không có regression. Tự kiểm cú pháp
+(`node -c routes/data.js`) và CSP (không HTML/JS client bị đụng ở bản vá này).
+
+**Ảnh hưởng deploy:** chỉ sửa `routes/data.js`, không đổi `schema.sql`/`.env.example`/dependencies —
+copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.65 (2026-11): [Cao] Re-audit lần 10 — mục 5/14: forwardThreads[].forwardedBy/forwardedTo không cascade username (submissions+contracts)
 

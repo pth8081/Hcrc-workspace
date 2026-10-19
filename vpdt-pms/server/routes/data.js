@@ -1885,6 +1885,20 @@ router.get('/', async (req, res) => {
         // vĩnh viễn ở bước họ phụ trách nếu họ là approver DUY NHẤT của lớp đó. Mirror ĐÚNG khuôn
         // hrFeedback ở trên: nới gate bằng OR thay vì zero vô điều kiện.
         if (col === 'docs' && isExtraApprovalLayerApprover(req.freshUser, data, ['DOC'])) continue;
+        // carRegs/officeReqs/vppRegistrations/paymentRequests/operationOrders — LỖI ĐÃ VÁ (re-audit lần
+        // 10, mức Cao — "Khối-0 zero-out loop xoá luôn dữ liệu Nhóm Phê Duyệt Cuối cho 5 module"): CÙNG
+        // lỗi/CÙNG cách vá như nhánh 'docs' ngay trên — loadCarRegsScoped()/loadOfficeReqsScoped()/
+        // loadVppRegistrationsScoped()/loadPaymentRequestsScoped()/canSeeAllOperationOrders() (trên) đã
+        // tính đúng isExtraApprovalLayerApprover() để NẠP hồ sơ cho người CHỈ là approver "Nhóm Phê
+        // Duyệt Cuối" của module đó, nhưng vòng lặp này lại XOÁ SẠCH ngay sau đó nếu admin tắt
+        // moduleAccess tương ứng (hợp lý nghiệp vụ — họ không dùng module đó hàng ngày, chỉ được thêm
+        // vào nhóm phê duyệt cuối) — nếu họ là approver DUY NHẤT của lớp đó, hồ sơ kẹt PENDING vĩnh viễn
+        // không ai thấy để xử lý. Nới gate bằng OR thay vì zero vô điều kiện, đúng khuôn nhánh 'docs'.
+        if (col === 'carRegs' && isExtraApprovalLayerApprover(req.freshUser, data, ['CAR'])) continue;
+        if (col === 'officeReqs' && isExtraApprovalLayerApprover(req.freshUser, data, ['OFFICE_BUY', 'OFFICE_FIX'])) continue;
+        if (col === 'vppRegistrations' && isExtraApprovalLayerApprover(req.freshUser, data, ['VPP'])) continue;
+        if (col === 'paymentRequests' && isExtraApprovalLayerApprover(req.freshUser, data, ['PAYMENT'])) continue;
+        if (col === 'operationOrders' && isExtraApprovalLayerApprover(req.freshUser, data, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'])) continue;
         // submissions/contracts — xem chú thích đầy đủ ở isApprovalGroupMemberForModule() phía trên.
         if (col === 'submissions' && isApprovalGroupMemberForModule(req.freshUser, data, 'submissionApprovalGroups')) continue;
         if (col === 'contracts' && isApprovalGroupMemberForModule(req.freshUser, data, 'contractApprovalGroups')) continue;
@@ -2092,6 +2106,13 @@ router.get('/lazy/:groupKey', async (req, res) => {
         if (col === 'hrFeedback' && canAccessHrFeedbackModuleServer(req.freshUser)) continue;
         // docs — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
         if (col === 'docs' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['DOC'])) continue;
+        // carRegs/officeReqs/vppRegistrations/paymentRequests/operationOrders — xem chú thích đầy đủ ở
+        // vòng lặp tương ứng trong GET /api/data chính phía trên (re-audit lần 10, mức Cao).
+        if (col === 'carRegs' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['CAR'])) continue;
+        if (col === 'officeReqs' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['OFFICE_BUY', 'OFFICE_FIX'])) continue;
+        if (col === 'vppRegistrations' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['VPP'])) continue;
+        if (col === 'paymentRequests' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['PAYMENT'])) continue;
+        if (col === 'operationOrders' && isExtraApprovalLayerApprover(req.freshUser, groupAppData, ['OPERATION_ORDER_STORE', 'OPERATION_ORDER_HO'])) continue;
         // submissions/contracts — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính
         // phía trên (hiện KHÔNG thuộc bất kỳ LAZY_DATA_GROUPS nào, giữ nhánh này để an toàn nếu sau này
         // đổi sang lazy-load, tránh lặp lại đúng lỗi đã vá).
