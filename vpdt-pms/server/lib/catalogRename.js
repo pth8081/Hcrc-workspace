@@ -1454,6 +1454,54 @@ async function cascadeUsernameChangesToForwardThreads(renamed, deletedUsernames)
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 10, mục 11/14, mức TB — "operationStoreOpenings/operationRepairs
+// estimateItems[].assignedToUsernames không cascade"): mỗi "danh mục lớn" (estimateItems[], parentId
+// rỗng) của hồ sơ Mở Mới/Sửa Chữa (Vận Hành > Siêu Thị) có thể gán 1 mảng `assignedToUsernames`
+// ("Người Phụ Trách danh mục lớn") — mảng này là điều kiện DUY NHẤT cấp quyền XEM cả hồ sơ cho người
+// KHÔNG có quyền quản lý/cùng phòng ban nào khác (hasOwnEstimateCategoryInSource(),
+// lib/recordViewScope.js) VÀ quyền TẢI FILE đính kèm của đúng danh mục đó (lib/fileAuthz.js) — chưa
+// từng được cascade khi đổi tên/xoá username, cùng lớp lỗi với forwardThreads/opinionRequestees. Hậu
+// quả: (1) đổi tên đăng nhập người phụ trách -> MẤT NGAY quyền xem hồ sơ/tải file của đúng danh mục
+// mình phụ trách; (2) xoá vĩnh viễn rồi cấp lại username cho nhân viên MỚI -> nhân viên đó THỪA KẾ
+// quyền xem/tải file của người CŨ. `assignedToNames` (mảng TÊN hiển thị song hành, CÙNG chỉ số với
+// assignedToUsernames) giữ nguyên khi đổi tên đăng nhập (tên thật của người đó không đổi) — chỉ bị gỡ
+// (splice cùng chỉ số) khi username bị xoá vĩnh viễn, vì khi đó không còn phần tử nào trong
+// assignedToUsernames để tên đó song hành (khác field 1-giá-trị khác: đây là 2 MẢNG song song, không
+// có khái niệm "null hoá 1 chỗ" — phải gỡ hẳn khỏi cả 2 mảng ở cùng vị trí).
+const OPERATION_ESTIMATE_ASSIGNEE_COLLECTIONS = ['operationStoreOpenings', 'operationRepairs'];
+async function cascadeUsernameChangesToOperationEstimateAssignees(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  for (const collection of OPERATION_ESTIMATE_ASSIGNEE_COLLECTIONS) {
+    await renameFieldValueInCollection(collection, (item) => {
+      if (!Array.isArray(item.estimateItems) || !item.estimateItems.length) return item;
+      let changed = false;
+      const nextEstimateItems = item.estimateItems.map((it) => {
+        if (!it || !Array.isArray(it.assignedToUsernames) || !it.assignedToUsernames.length) return it;
+        let itemChanged = false;
+        const nextUsernames = [];
+        const nextNames = [];
+        it.assignedToUsernames.forEach((username, idx) => {
+          let next = username;
+          for (const { oldValue, newValue } of renamed || []) {
+            if (username === oldValue) { next = newValue; break; }
+          }
+          if (next === username && (deletedUsernames || []).includes(username)) {
+            itemChanged = true;
+            return; // xoá vĩnh viễn -> gỡ hẳn khỏi cả 2 mảng song song (không có chỗ "null hoá")
+          }
+          if (next !== username) itemChanged = true;
+          nextUsernames.push(next);
+          nextNames.push((it.assignedToNames || [])[idx] ?? null);
+        });
+        if (!itemChanged) return it;
+        changed = true;
+        return { ...it, assignedToUsernames: nextUsernames, assignedToNames: nextNames };
+      });
+      return changed ? { ...item, estimateItems: nextEstimateItems } : item;
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1466,5 +1514,6 @@ module.exports = {
   cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
   cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers,
   cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees,
-  cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads
+  cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads,
+  cascadeUsernameChangesToOperationEstimateAssignees
 };

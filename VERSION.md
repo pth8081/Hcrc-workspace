@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.71 (2026-11): [TB] Re-audit lần 10 — mục 11/14: operationStoreOpenings/operationRepairs estimateItems[].assignedToUsernames không cascade
+
+Mục thứ mười một (11/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** mỗi "danh mục lớn" (`estimateItems[]`, `parentId` rỗng) của hồ sơ Mở Mới/Sửa Chữa
+(Vận Hành > Siêu Thị) có thể gán 1 mảng `assignedToUsernames` ("Người Phụ Trách danh mục lớn") — mảng
+này là điều kiện DUY NHẤT cấp quyền XEM cả hồ sơ cho người KHÔNG có quyền quản lý/cùng phòng ban nào
+khác (`hasOwnEstimateCategoryInSource()`, lib/recordViewScope.js) VÀ quyền TẢI FILE đính kèm đúng danh
+mục đó (lib/fileAuthz.js) — chưa từng được cascade khi đổi tên/xoá username, cùng lớp lỗi với
+forwardThreads/opinionRequestees. Hậu quả: đổi tên đăng nhập người phụ trách -> MẤT NGAY quyền xem hồ
+sơ/tải file của đúng danh mục mình phụ trách; xoá vĩnh viễn rồi cấp lại username cho nhân viên MỚI ->
+nhân viên đó THỪA KẾ quyền xem/tải file của người CŨ.
+
+**Bản vá:** thêm `cascadeUsernameChangesToOperationEstimateAssignees()` (lib/catalogRename.js), quét
+`operationStoreOpenings`/`operationRepairs` qua `renameFieldValueInCollection()`: đổi tên — thay giá trị
+trong `assignedToUsernames[]` tại đúng vị trí, giữ nguyên `assignedToNames[]` song hành (tên thật của
+người đó không đổi khi đổi username); xoá vĩnh viễn — gỡ HẲN khỏi CẢ 2 mảng song song ở cùng vị trí
+(khác field 1-giá-trị khác: đây là mảng, không có khái niệm "null hoá 1 chỗ"). Wire vào `routes/data.js`,
+gọi ngay sau `cascadeUsernameChangesToForwardThreads()`.
+
+**Test:** `tests/test-operation-estimate-assignee-username-cascade.js` (mới, 6 scenario, test thuần
+không cần SQL Server) — xác nhận cascade đúng cả 2 collection, giữ nguyên `assignedToNames`, gỡ đúng
+vị trí khi xoá vĩnh viễn, bỏ qua an toàn với danh mục con/mảng rỗng/bản ghi cũ chưa có field này. Xác
+nhận 6/6 FAIL trên code cũ (`... is not a function`), 6/6 PASS trên code mới. Chạy lại regression 6
+file liên quan: `test-operation-estimate-owner-scope.js` (20/20), `test-operation-estimate-import-assignee.js`
+(5/5), `test-operation-estimate-attachments.js` (6/6), `test-operation-estimate-attachments-multifile.js`
+(6/6), `test-operation-danhmuc-dautu-units.js` (47/47), `test-operation-store-lifecycle.js` (100/100) —
+tất cả PASS, không regression. Tự kiểm cú pháp (`node -c`) cả 2 file.
+
+**Ảnh hưởng deploy:** chỉ sửa `lib/catalogRename.js`/`routes/data.js`, không đổi `schema.sql`/
+`.env.example`/dependencies — copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.70 (2026-11): [TB/Thấp] Re-audit lần 10 — mục 10/14: careerPathConfirmations.username/.confirmedBy không cascade username
 
