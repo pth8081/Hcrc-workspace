@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**27.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.45 (2026-11): [TB] Re-audit lần 8 — mục 7/10: officeReqs SUA_CHUA create dùng payload.dept thô cho check Kỹ Thuật Xác Nhận độc lập
+
+Mục thứ bảy (7/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** `CREATE_MODULE_CONFIGS.officeReqs.extraValidate()` (`lib/createValidation.js`) có
+`forceOwnDept: true` — dept THẬT lưu vào bản ghi cuối cùng luôn là `user.dept` (xem
+`validateAndPrepareCreate()`: `finalDept` chỉ chốt SAU KHI `extraValidate()` đã chạy xong). Nhưng bước
+chặn "Người Xác Nhận Kỹ Thuật không được là Trưởng Phòng duyệt bước 1" lại tra
+`appData.officeFixDeptWorkflows[payload.dept]` — dùng NGUYÊN giá trị thô client gửi, CHƯA bị ép. Một
+request tự soạn gửi `payload.dept` là 1 phòng ban khác (bịa hoặc có thật nhưng không xung đột) khiến
+`step1Approvers` tra sai phòng ban, không còn chứa đúng Trưởng Phòng của phòng ban THẬT (`user.dept`) —
+chọn thẳng Trưởng Phòng của phòng ban mình làm "Người Xác Nhận Kỹ Thuật" (mất ý nghĩa đánh giá độc lập)
+mà vẫn qua được validate. Cùng lớp lỗi đã vá ở `contracts.extraValidate` (re-audit lần 7, mục #173).
+
+**Vá:** đổi `appData?.officeFixDeptWorkflows?.[payload.dept]` → `appData?.officeFixDeptWorkflows?.[user.dept]`
+tại đúng 1 điểm tra cứu này — không đổi hành vi nào khác của hàm.
+
+**Test:** `tests/test-office-tech-confirm.js` — fixture `CREATOR` bổ sung `dept: 'Phòng Kinh Doanh'`
+(khớp đúng giả định forceOwnDept thực tế, trước đây thiếu field này khiến test cũ "không được chọn
+chính Trưởng Phòng" vô tình PASS nhờ trùng giá trị `payload.dept`/`officeFixDeptWorkflows` key, không
+thực sự xác nhận đọc đúng `user.dept`) + 2 scenario mới: payload.dept bịa để né check vẫn PHẢI bị chặn;
+đối chứng trường hợp hợp lệ thật không bị chặn nhầm. Xác nhận FAIL trên code CŨ (1/24 FAIL khi stash lại
+đúng 1 dòng sửa ở `lib/createValidation.js`), PASS trên code đã vá (24/24). Regression: toàn bộ
+`test-office-budget.js`/`test-office-extra-files.js`/`test-office-reqs-scope.js`/
+`test-extra-approval-groups.js`/`test-extra-approval-preview-fix.js`/`test-extra-approval-reset-sync-fix.js`/
+`test-csp-deep-interaction.js`/`test-csp-full-audit.js` — toàn bộ PASS, không ảnh hưởng hành vi cũ.
+
+**Deploy-impact:** không cần migrate dữ liệu, không đổi route/API contract — chỉ copy code + `pm2 restart`.
 
 ## v27.44 (2026-11): [TB] Re-audit lần 8 — mục 6/10: PUT /api/meetings/:id không đối chiếu danh mục dept khi canManage (dept-spoofing)
 

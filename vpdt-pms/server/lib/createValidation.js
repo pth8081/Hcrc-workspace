@@ -1440,8 +1440,18 @@ const CREATE_MODULE_CONFIGS = {
         // mất hẳn ý nghĩa "đánh giá kỹ thuật độc lập". Dùng resolveStepApproverUsernames() (lib/
         // positionApprovers.js, ĐIỂM TRA CỨU DÙNG CHUNG an toàn với cả POSITION/flat mode) để lấy
         // đúng danh sách approver bước 1 của phòng ban hồ sơ, mirror cách workflowEngine.js tính.
+        // LỖI ĐÃ VÁ (re-audit lần 8, mức TB — "dùng payload.dept thô cho check Kỹ Thuật Xác Nhận độc
+        // lập"): officeReqs có forceOwnDept: true nên dept THẬT lưu vào bản ghi CUỐI CÙNG luôn là
+        // `user.dept` (xem validateAndPrepareCreate() — extraValidate() chạy TRƯỚC khi finalDept được
+        // chốt, payload.dept lúc này VẪN còn là giá trị thô client tự gửi, chưa bị ép). Dùng
+        // `payload.dept` (có thể là 1 chuỗi bịa/phòng ban khác) để tra `officeFixDeptWorkflows` khiến
+        // check tự trúng SAI phòng ban — 1 request tự soạn gửi `dept` khác đi (VD phòng chưa cấu hình
+        // workflow, hoặc phòng không có Trưởng Phòng này) sẽ luôn qua được bước chặn này dù người được
+        // chọn làm Kỹ Thuật Xác Nhận THẬT RA chính là Trưởng Phòng duyệt bước 1 của phòng ban THẬT
+        // (user.dept) — mất tác dụng "đánh giá kỹ thuật độc lập". Dùng đúng `user.dept`, cùng khuôn
+        // contracts.extraValidate đã vá (re-audit lần 7, mục #173).
         const step1Approvers = resolveStepApproverUsernames(
-          appData?.officeFixDeptWorkflows?.[payload.dept], 1, appData?.users);
+          appData?.officeFixDeptWorkflows?.[user.dept], 1, appData?.users);
         if (step1Approvers.includes(assignedUser.username)) {
           throw new CreateError(400, 'Người Xác Nhận Kỹ Thuật không được là Trưởng Phòng duyệt bước 1 của phòng ban này (đánh giá kỹ thuật cần độc lập)');
         }
