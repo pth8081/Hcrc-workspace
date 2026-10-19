@@ -247,7 +247,56 @@ async function migrateDirectiveTaskLinks(minutesCode, migrations) {
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 9, mức Cao — "Cascade username rename/xoá không phủ creator/uploader/
+// assignedBy"): Công Việc (dbo.Tasks) KHÔNG đi qua CREATE_MODULE_CONFIGS/renameFieldValueInCollection()
+// như 48 module khác (xem cascadeUsernameChangesToRecordCreatorFields(), lib/catalogRename.js) vì có
+// tầng lưu trữ RIÊNG (dbo.Tasks, không phải dbo.Records) — bị bỏ sót hoàn toàn khỏi MỌI cascade username
+// trước giờ. `assignedBy` đóng vai trò "người tạo" cho mục đích quyền XEM (canViewTaskRecord(),
+// lib/recordViewScope.js, defaultMode CREATOR_ONLY — so khớp `t.assignedBy === user.username` + nhánh
+// `extraViewScopeAllows(..., t.assignedBy)`/dept-auto-view theo phòng ban CỦA assignedBy). Đổi username
+// của người GIAO việc khiến chính họ mất quyền xem lại Công Việc mình đã giao (dù vẫn giữ nguyên account);
+// xoá vĩnh viễn rồi cấp lại ĐÚNG username đó cho người khác khiến người mới "thừa kế" nhầm quyền xem các
+// Công Việc CREATOR_ONLY của người cũ. CHỈ cascade `assignedBy` (đúng field đóng vai trò creator ở đây)
+// — KHÔNG đụng `assignedTo`/`collaborators[]` (người ĐƯỢC giao/cộng tác — nằm NGOÀI phạm vi phát hiện
+// này, nulling có thể làm "treo" Công Việc không còn ai nhận, cần đánh giá riêng nếu phát hiện thêm).
+// Đổi tên -> giữ đúng người; xoá vĩnh viễn -> null hoá (gỡ "người giao", không suy đoán ai thay thế),
+// cùng khuôn cascadeUsernameChangesToProfiles() (lib/employeeProfile.js) đã làm cho employeeProfiles.username.
+async function cascadeUsernameChangesToTaskAssignedBy(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return 0;
+  const renameMap = new Map((renamed || []).map(r => [r.oldValue, r.newValue]));
+  const deletedSet = new Set(deletedUsernames || []);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq.query('SELECT Id, Payload FROM dbo.Tasks WITH (UPDLOCK, HOLDLOCK)');
+    let changedCount = 0;
+    for (const row of readResult.recordset) {
+      const task = toTask(row);
+      let nextAssignedBy = task.assignedBy;
+      if (renameMap.has(task.assignedBy)) nextAssignedBy = renameMap.get(task.assignedBy);
+      else if (deletedSet.has(task.assignedBy)) nextAssignedBy = null;
+      if (nextAssignedBy === task.assignedBy) continue;
+      changedCount++;
+      const updated = { ...task, assignedBy: nextAssignedBy };
+      const cols = extractColumns(updated);
+      const writeReq = new sql.Request(tx);
+      writeReq.input('id', sql.BigInt, row.Id);
+      writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated));
+      writeReq.input('assignedBy', sql.NVarChar(100), cols.assignedBy);
+      await writeReq.query('UPDATE dbo.Tasks SET Payload = @payload, AssignedBy = @assignedBy WHERE Id = @id');
+    }
+    await tx.commit();
+    if (changedCount) invalidateTasksCache();
+    return changedCount;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 module.exports = {
   getAllTasks, getAllTasksCached, insertTask, withLockedTaskById, deleteTaskById, migrateLegacyTasks,
-  findTaskBySource, migrateDirectiveTaskLinks, queryTasksInRange
+  findTaskBySource, migrateDirectiveTaskLinks, queryTasksInRange, cascadeUsernameChangesToTaskAssignedBy
 };

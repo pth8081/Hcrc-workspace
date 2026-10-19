@@ -1,9 +1,64 @@
 # Phiên bản hiện tại
 
-**27.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.49 (2026-11): [Cao] Re-audit lần 9 — mục 1/12: Cascade username rename/xoá không phủ creator/uploader/assignedBy
+
+Mục đầu tiên (1/12) của đợt re-audit lần 9 (6 agent song song, đợt 4/5 của yêu cầu "rà soát 4-5 lần").
+
+**Nguyên nhân:** 3 cascade username đã có (`cascadeUsernameChangesToApprovalGroups`/
+`WorkflowApprovers`/`RecordApproverSnapshots`, `lib/catalogRename.js`) chỉ phủ field QUYẾT ĐỊNH NGƯỜI
+DUYỆT — hoàn toàn không chạm field "ai TẠO/TẢI LÊN hồ sơ" (`creator`/`uploader`/`author`/`createdBy`/
+`uploaderUsername`/`referrerUsername` tuỳ module — xem `creatorField` ở từng entry
+`CREATE_MODULE_CONFIGS`, `lib/createValidation.js`), là field QUYẾT ĐỊNH QUYỀN XEM ở rất nhiều hàm
+`canView*()` CREATOR_ONLY (`lib/recordViewScope.js` — `canViewDoc()`/`canViewItSupportTicket()`/
+`canViewItPriceApproval()`/`canViewVppRegistration()`/...). Hậu quả 2 chiều: (1) đổi username -> MẤT
+quyền xem hồ sơ CHÍNH MÌNH đã tạo (ảnh hưởng rộng nhất ở các module mặc định CREATOR_ONLY — Tài Liệu/
+Hỗ Trợ IT/Phê Duyệt Giá/VPP/Văn Bản Trình...); (2) xoá vĩnh viễn rồi CẤP LẠI đúng username đó cho 1
+nhân viên khác -> nhân viên MỚI "thừa kế" nhầm quyền xem hồ sơ CREATOR_ONLY của người CŨ (so khớp chuỗi
+creator trùng). Công Việc (`dbo.Tasks`) có tầng lưu trữ RIÊNG (không thuộc `dbo.Records`) nên bị bỏ sót
+hoàn toàn khỏi MỌI cascade username từ trước tới giờ — `assignedBy` (đóng vai trò "người tạo" cho mục
+đích quyền xem, `canViewTaskRecord()`) cũng gặp đúng lỗi này.
+
+**Vá:**
+- `lib/catalogRename.js::cascadeUsernameChangesToRecordCreatorFields(renamed, deletedUsernames)` — dùng
+  LẠI chính metadata `creatorField`/`dbKey` đã khai sẵn ở 48 entry `CREATE_MODULE_CONFIGS` (require trễ
+  — không có vòng lặp require), tự động khớp mọi module hiện có VÀ module mới thêm sau này miễn có khai
+  `creatorField` — không hard-code lại danh sách field/collection tay.
+- `lib/taskStore.js::cascadeUsernameChangesToTaskAssignedBy(renamed, deletedUsernames)` — Công Việc xử
+  lý riêng (giao dịch trực tiếp trên `dbo.Tasks`, mirror đúng khuôn `renameFieldValueInCollection()` ở
+  DEDICATED_TABLES). CHỈ cascade `assignedBy` — KHÔNG đụng `assignedTo`/`collaborators[]` (ngoài phạm vi
+  phát hiện này, nulling có thể "treo" Công Việc không còn ai nhận).
+- Cả 2 hàm: đổi tên -> giữ đúng người; xoá vĩnh viễn -> null hoá (gỡ "người tạo"/"người giao", không suy
+  đoán ai thay thế), cùng khuôn `cascadeUsernameChangesToProfiles()` đã làm cho `employeeProfiles.username`.
+- Gọi cả 2 ngay sau `cascadeUsernameChangesToRecordApproverSnapshots()` ở `routes/data.js`.
+
+**Test:** file mới `tests/test-record-creator-field-username-cascade.js` (9 scenario) — Phần A (thuần,
+stub `renameFieldValueInCollection`) xác nhận cascade đúng vào 6 tên field khác nhau (uploader/creator/
+author/createdBy/uploaderUsername/referrerUsername) khi đổi tên, null hoá khi xoá, không đụng bản ghi
+không liên quan; Phần B (giả lập tối thiểu `sql.Transaction`/`sql.Request` cho `dbo.Tasks`) xác nhận
+`tasks.assignedBy` cascade đúng, `assignedTo` KHÔNG bị đụng. Xác nhận FAIL trên code CŨ (0/9 — cả 2 hàm
+chưa tồn tại), PASS trên code đã vá (9/9).
+
+**Regression — blast-radius rộng (thêm 1 phụ thuộc MỚI, `lib/taskStore`, vào đường lưu `users` dùng
+chung):** 9 file test stub `lib/taskStore`/`lib/recordStore` KHÔNG ĐẦY ĐỦ và có POST thật tới
+`/api/data/users` bị vỡ (thiếu `cascadeUsernameChangesToTaskAssignedBy` trong stub) —
+`test-managerusername-rename-delete-cascade.js`/`test-audit-hethong-cluster-server.js`/
+`test-permgroup-dangling-groupids.js`/`test-user-import-login-e2e.js`/`test-user-password-reset-bulk.js`/
+`test-user-save-autolink-profile.js`/`test-user-username-uniqueness.js`/`test-username-case-insensitive.js`/
+`test-users-session-version-strip.js` — đã bổ sung đúng stub thiếu vào cả 9 file (không nới lỏng gì
+khác). Sau khi sửa: cả 9 file PASS 100%, cộng thêm `test-record-approver-snapshot-username-cascade.js`/
+`test-workflowapprover-username-cascade.js`/`test-approvalgroup-username-cascade.js`/
+`test-catalog-rename-server.js`/`test-admin-users-permgroups.js`/`test-perm-matrix-client.js`/
+`test-perm-matrix-quickedit-and-bulk-group.js`/`test-car-regs-scope.js`/
+`test-khoi0-parent-cascade-gate.js`/`test-module-access-gate.js`/`test-docs-scope.js` — toàn bộ PASS,
+không ảnh hưởng hành vi cũ.
+
+**Deploy-impact:** không đổi route/API contract, không cần migrate dữ liệu — chỉ copy code +
+`pm2 restart`.
 
 ## v27.48 (2026-11): [Thấp] Re-audit lần 8 — mục 10/10 (HẾT đợt 3/5): hrProcesses.employeeJobTitle không cascade khi đổi tên Chức Danh
 

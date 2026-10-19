@@ -123,7 +123,9 @@ stubModule('lib/appData', {
   }
 });
 stubModule('lib/systemLogStore', { insertSystemLog: async () => {}, clearAllSystemLogs: async () => {}, getRecentSystemLogs: async () => [] });
-stubModule('lib/taskStore', { getAllTasksCached: async () => [] });
+// cascadeUsernameChangesToTaskAssignedBy() (re-audit lần 9, lib/taskStore.js) gọi hàm này khi lưu
+// 'users' có đổi tên/xoá username — không liên quan tới bài test này, no-op để không vỡ route thật.
+stubModule('lib/taskStore', { getAllTasksCached: async () => [], cascadeUsernameChangesToTaskAssignedBy: async () => 0 });
 stubModule('lib/operationWorkItemStore', { getAllWorkItemsCached: async () => [] });
 stubModule('lib/recordStore', {
   MIGRATED_COLLECTIONS: new Set(),
