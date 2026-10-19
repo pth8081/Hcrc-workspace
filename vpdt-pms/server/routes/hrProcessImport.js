@@ -16,9 +16,23 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
+// LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Khối 0 thiếu ở routes/laborContractImport.js +
+// hrProcessImport.js"): file router RIÊNG này (mount độc lập tại app.use('/api/hr-processes', ...),
+// xem server.js) hoàn toàn KHÔNG gác Module Access Gate — chỉ gác đúng 1 lớp quyền nghiệp vụ
+// (requireOnboardingCreate() ở dưới), cùng lớp lỗi đã vá cho routes/meetingActions.js (xem chú thích
+// tại đó) và routes/laborContractImport.js (cùng đợt). Tắt moduleAccess.hrLifecycle cho 1 tài khoản
+// (còn giữ quyền canCreateHrProcess) vẫn tải mẫu/xem trước Excel tạo Onboarding hàng loạt qua API
+// trực tiếp.
+router.use((req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'hrLifecycle')) {
+    return res.status(403).json({ error: 'Module Onboarding/Offboarding đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 
 function requireOnboardingCreate(req, res, next) {
   if (!canCreateHrProcess(req.freshUser, 'ONBOARDING')) return res.status(403).json({ error: 'Bạn không có quyền tạo quy trình Onboarding' });

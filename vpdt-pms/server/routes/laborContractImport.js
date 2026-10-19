@@ -17,9 +17,22 @@ const { verifyFileSignature } = require('../lib/fileSignature');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
+const { hasModuleAccessServer } = require('../lib/recordViewScope');
 
 const router = express.Router();
 router.use(requireAuth, blockIfMustChangePassword);
+// LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Khối 0 thiếu ở routes/laborContractImport.js +
+// hrProcessImport.js"): file router RIÊNG này (mount độc lập tại app.use('/api/labor-contracts', ...),
+// xem server.js) hoàn toàn KHÔNG gác Module Access Gate — chỉ gác đúng 1 lớp quyền nghiệp vụ
+// (requireContractManage() ở dưới), cùng lớp lỗi đã vá cho routes/meetingActions.js (xem chú thích tại
+// đó): tắt moduleAccess.hrContract cho 1 tài khoản (còn giữ quyền canManageContracts) vẫn tải
+// mẫu/xem trước Excel Hợp Đồng Lao Động qua API trực tiếp.
+router.use((req, res, next) => {
+  if (!hasModuleAccessServer(req.freshUser, 'hrContract')) {
+    return res.status(403).json({ error: 'Module Hợp Đồng Lao Động đã bị khoá cho tài khoản của bạn — liên hệ Quản Trị Viên nếu cần mở lại' });
+  }
+  next();
+});
 
 function requireContractManage(req, res, next) {
   if (!canManageContracts(req.freshUser)) return res.status(403).json({ error: 'Bạn không có quyền quản lý Hợp Đồng Lao Động' });

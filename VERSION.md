@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.52 (2026-11): [TB] Re-audit lần 9 — mục 4/12: Khối 0 thiếu ở routes/laborContractImport.js + hrProcessImport.js
+
+Mục thứ tư (4/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** 2 router RIÊNG `routes/laborContractImport.js` (mount tại `/api/labor-contracts`) và
+`routes/hrProcessImport.js` (mount tại `/api/hr-processes`, xem `server.js`) — phục vụ tải mẫu Excel +
+xem trước file đã điền cho "Nhập Excel sửa hàng loạt Hợp Đồng Lao Động" và "Nhập Excel tạo mới hàng
+loạt Onboarding" — chỉ gác đúng 1 lớp quyền chi tiết (`requireContractManage()`/`requireOnboardingCreate()`)
+sau `requireAuth`, hoàn toàn KHÔNG có Module Access Gate ("Khối 0"). Cùng lớp lỗi đã vá cho
+`routes/meetingActions.js` ở re-audit lần 5 (file router mount độc lập, không đi qua
+`routes/records.js`/`routes/create.js` nên không tự "thừa hưởng" Khối 0 đã gác ở 2 file đó) — tắt
+`moduleAccess.hrContract`/`moduleAccess.hrLifecycle` cho 1 tài khoản (còn giữ quyền chi tiết
+`hrContractManage`/`hrOnboardingManage`) vẫn tải được mẫu/xem trước Excel qua API trực tiếp.
+
+**Bản vá:** thêm 1 middleware DUY NHẤT `router.use((req, res, next) => {...})` ngay sau
+`requireAuth, blockIfMustChangePassword` ở đầu mỗi router, gọi `hasModuleAccessServer(req.freshUser,
+'hrContract')`/`hasModuleAccessServer(req.freshUser, 'hrLifecycle')` — mirror đúng khuôn middleware đã
+vá cho `routes/meetingActions.js`. Cả 2 khoá module (`hrContract`, `hrLifecycle`) đã có sẵn trong
+`MODULE_ACCESS_PARENTS` (`lib/recordViewScope.js`) và được dùng y hệt ở nơi khác trong hệ thống
+(`routes/employeeProfile.js`/`routes/records.js`) — không thêm khoá module mới.
+
+**Test:** `tests/test-khoi0-laborcontractimport-hrprocessimport-gate.js` (6 kịch bản — mount thẳng 2
+router thật qua HTTP, gồm cả xác nhận admin (`perms.admin=true`) vẫn bypass Khối 0 đúng theo
+`hasModuleAccessServer()` hiện có, và user chưa từng cấu hình `moduleAccess` vẫn coi là mở). Xác nhận
+test FAIL trên code cũ (2/6 scenario trả 200 thay vì 403) và PASS trên code mới. Chạy lại regression:
+7 file test Khối 0/module-access khác + 3 file test sẵn có đang exercise trực tiếp 2 router này
+(`test-hr-process-onboarding-create-import.js`/`test-labor-contract-create-import.js`/
+`test-labor-contract-excel.js`) — tất cả PASS, không có regression.
+
+**Ảnh hưởng deploy:** chỉ code `server/`, không đổi `schema.sql`/biến môi trường/`package.json`
+dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.51 (2026-11): [TB] Re-audit lần 9 — mục 3/12: deptViewScopeConfig.extraViewers không cascade username
 
