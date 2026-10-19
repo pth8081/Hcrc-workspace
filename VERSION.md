@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.64 (2026-11): [Cao] Re-audit lần 10 — mục 4/14: Cascade username rename không phủ itPriceApprovals.emergencyRejectRequestedBy + itSupportTickets.escalatedBy/approvalApprover
+
+Mục thứ tư (4/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** 5 field "chỉ định 1 người cụ thể" của 2 module Hỗ Trợ IT/Phê Duyệt Giá — ghi
+`item.<field> = user.username` ad-hoc ngoài creatorField/approver-map — chưa từng được cascade khi đổi
+tên/xoá username, dù cùng bản chất so khớp username thô như `carRegs.assignedDriverUsername`/
+`officeReqs.techAssignedTo` đã vá ở re-audit lần 9: `itPriceApprovals.emergencyRejectRequestedBy` (so
+khớp ở `assertNotSelfDecidingItPriceEmergencyReject()` để chặn CHÍNH người gửi yêu cầu "Từ Chối Khẩn
+Cấp" tự quyết định yêu cầu của mình), `itSupportTickets.escalatedBy` (so khớp ở
+`approveItTicketEscalation()`/`denyItTicketEscalation()` — tồn tại ĐÚNG để chặn admin escalate ticket
+cho người khác rồi tự dùng quyền admin-bypass tự duyệt luôn), `itSupportTickets.approvalApprover`
+(field quyết định AI được approve/deny escalation), và mức thấp hơn
+`itPriceApprovals.applyClaimedBy`/`appliedBy` ("ai đã nhận xử lý"/"ai đã áp giá" — lock xử lý, không
+phải self-approval). Đổi tên đăng nhập -> field cũ không khớp username mới -> chặn tự quyết định/quyền
+duyệt mất tác dụng hoặc mất đối tượng hợp lệ; xoá vĩnh viễn rồi cấp lại username -> người MỚI thừa kế
+nhầm quyền/trở thành "chặn tự quyết định" sai đối tượng.
+
+**Bản vá:** thêm 5 entry vào `SINGLE_USERNAME_ASSIGNMENT_FIELDS` (lib/catalogRename.js — mảng cấu
+hình đã dùng cho carRegs/officeReqs từ re-audit lần 9, cascade qua
+`cascadeUsernameChangesToCarDriverAndOfficeReqTech()`, đã được gọi sẵn ở `routes/data.js`, không cần
+wiring thêm) — đổi tên giữ nguyên; xoá vĩnh viễn null hoá. KHÔNG đụng các field tên hiển thị song hành
+(`emergencyRejectRequestedByName`/`escalatedByName`/`approvalApproverName`/`applyClaimedByName`/
+`appliedByName`).
+
+**Test:** mở rộng `tests/test-cardriver-officereqtech-username-cascade.js` — thêm fixture
+`itPriceApprovals`/`itSupportTickets` + 2 scenario mới (đổi tên cascade đúng cả 5 field, giữ nguyên
+field *Name hiển thị; xoá vĩnh viễn null hoá cả 5 field), cập nhật scenario "null -> không đổi gì" phủ
+luôn 2 collection mới. Xác nhận 2/7 FAIL trên code cũ (đúng 2 scenario mới), 7/7 PASS trên code mới.
+Chạy lại regression: `test-it-price-approvals-scope.js` (9/9), `test-itprice-download.js` (19/19),
+`test-admin-self-approve-blocked.js` (11/11), `test-it-support.js` (24/24),
+`test-itprice-approval-and-emergency.js` (17/17), `test-itprice-supplement-invalidate.js` (9/9),
+`test-task-itticket-self-approve-blocked.js` (7/7) — tất cả PASS, không có regression. Tự kiểm cú
+pháp (`node -c`) + CSP grep — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/catalogRename.js`), không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.63 (2026-11): [Cao] Re-audit lần 10 — mục 3/14: operationWorkItems.assignedTo[]/acceptorUsername không cascade username (bảng riêng dbo.OperationWorkItems)
 

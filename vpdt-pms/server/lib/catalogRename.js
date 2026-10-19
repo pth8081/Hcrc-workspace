@@ -1274,9 +1274,39 @@ async function cascadeUsernameChangesToDeptViewScopeExtraViewers(renamed, delete
 // `creatorNameField`) ở cascadeUsernameChangesToRecordCreatorFields() phía trên. Xoá vĩnh viễn -> null
 // hoá (gỡ "người được phân công", không suy đoán ai thay thế), cùng khuôn mọi cascade field 1-giá-trị
 // khác trong file này.
+// LỖI ĐÃ VÁ (re-audit lần 10, mức Cao — "Cascade username rename không phủ itPriceApprovals.
+// emergencyRejectRequestedBy + itSupportTickets.escalatedBy/approvalApprover"): 5 field "chỉ định 1
+// người cụ thể" sau của 2 module Hỗ Trợ IT/Phê Duyệt Giá cũng chưa từng được cascade, dù cùng bản chất
+// so khớp username thô như carRegs/officeReqs ngay trên — ghi `item.<field> = user.username` ad-hoc
+// ngoài creatorField/approver-map nên bị sót qua các cascade khác:
+// - `itPriceApprovals.emergencyRejectRequestedBy` — so khớp ở assertNotSelfDecidingItPriceEmergencyReject()
+//   (lib/recordActions.js, dòng ~6358) để chặn CHÍNH người gửi yêu cầu "Từ Chối Khẩn Cấp" tự quyết định
+//   yêu cầu của mình. Đổi tên đăng nhập người gửi -> field cũ KHÔNG khớp username mới -> chặn tự quyết
+//   định mất tác dụng (người đó tự duyệt/từ chối được yêu cầu khẩn cấp của chính mình nếu có quyền
+//   itPriceEmergencyRejectApprove).
+// - `itSupportTickets.escalatedBy` — so khớp ở approveItTicketEscalation()/denyItTicketEscalation()
+//   (lib/recordActions.js, dòng ~6593) — tồn tại ĐÚNG để chặn admin escalate ticket cho người khác rồi
+//   tự dùng quyền admin bypass tự duyệt luôn escalation đó. Cùng hậu quả khi đổi tên.
+// - `itSupportTickets.approvalApprover` — field quyết định AI được approve/deny escalation (dòng
+//   ~6598,6609) — đổi tên đăng nhập approver -> field cũ không khớp -> approver hợp lệ MẤT quyền
+//   quyết định escalation đang chờ, không ai khác (ngoài admin) xử lý được.
+// - `itPriceApprovals.applyClaimedBy`/`appliedBy` — "ai đã nhận xử lý"/"ai đã áp giá" (dòng
+//   ~6202-6252) — mức thấp hơn (lock xử lý, không phải self-approval), nhưng cùng bản chất field
+//   username ad-hoc nên vá cùng đợt cho nhất quán.
+// Hậu quả 2 chiều giống mọi cascade field 1-giá-trị khác trong file: (1) đổi tên -> mất quyền/chặn dựa
+// trên field đó; (2) xoá vĩnh viễn rồi cấp lại username cho người khác -> người MỚI thừa kế nhầm quyền/
+// trở thành "chặn tự quyết định" sai đối tượng. Không có field tên hiển thị song hành nào cần giữ
+// nguyên riêng cho 5 field này (không như assignedDriver/techAssignedToName) — các field *Name tương
+// ứng (emergencyRejectRequestedByName/escalatedByName/approvalApproverName/applyClaimedByName/
+// appliedByName) chỉ là TÊN hiển thị, không phải username, không nằm trong mảng dưới nên không bị đụng.
 const SINGLE_USERNAME_ASSIGNMENT_FIELDS = [
   { collection: 'carRegs', field: 'assignedDriverUsername' },
-  { collection: 'officeReqs', field: 'techAssignedTo' }
+  { collection: 'officeReqs', field: 'techAssignedTo' },
+  { collection: 'itPriceApprovals', field: 'emergencyRejectRequestedBy' },
+  { collection: 'itPriceApprovals', field: 'applyClaimedBy' },
+  { collection: 'itPriceApprovals', field: 'appliedBy' },
+  { collection: 'itSupportTickets', field: 'escalatedBy' },
+  { collection: 'itSupportTickets', field: 'approvalApprover' }
 ];
 async function cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, deletedUsernames) {
   if (!(renamed || []).length && !(deletedUsernames || []).length) return;
