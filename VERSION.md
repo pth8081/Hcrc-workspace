@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.46 (2026-11): [TB] Re-audit lần 8 — mục 8/10: Mirror lệch — nút "Sửa & Gửi Lại" không hiện cho Admin ở Tài Liệu/Văn Bản Trình
+
+Mục thứ tám (8/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** `editDocDraft()`/`editSubmissionDraft()` (`lib/recordActions.js`, vá từ đợt rà soát
+vòng 2) đã mở lối thoát cho ADMIN sửa hồ sơ NHÁP (status `DRAFT`, bị trả về bổ sung qua
+`REQUEST_CHANGES`) của NGƯỜI KHÁC — phòng trường hợp người tải lên/người trình đã nghỉ việc, không còn
+ai sửa được nữa. Nhưng điều kiện HIỆN nút "✏️ Sửa & Gửi Lại" ở `module-tailieu.js:452` và
+`module-vanbantrinh.js:585` chỉ xét `uploader`/`creator === currentUser.username`, KHÔNG có nhánh admin
+— admin muốn dùng quyền server đã cấp phải tự gọi API trực tiếp (DevTools/Postman), lệch hẳn với UI.
+`module-internalcomms-nhipsong.js` (nút tương đương của Nhịp Sống) đã làm đúng mẫu
+`(p.author === currentUser.username || currentUser.perms?.admin)` từ đầu.
+
+**Vá:** thêm `|| currentUser.perms?.admin` vào đúng 2 điều kiện hiện nút này, cùng khuôn
+`module-internalcomms-nhipsong.js`.
+
+**Test:** file mới `tests/test-editdraft-admin-mirror.js` (7 scenario, Playwright qua testHarness) —
+admin thấy nút trên NHÁP của người khác (cả Tài Liệu + Văn Bản Trình), nhân viên thường (không phải
+uploader/creator, không admin) vẫn KHÔNG thấy (đối chứng, không nới lỏng quá tay), chính người
+tạo/tải lên vẫn thấy như cũ. Xác nhận FAIL trên code CŨ (2/7 FAIL đúng 2 case admin), PASS trên code đã
+vá (7/7). Regression: `test-doc-status-badges.js`/`test-submission-status-badges.js`/
+`test-doc-thumbnail.js`/`test-lazy-load-all-tabs.js`/`test-upload-type-config-modules.js`/
+`test-upload-type-config-table-filter.js`/`test-word-print-watermark.js`/`test-code-format-hcrc.js`/
+`test-actionlabel-xss.js`/`test-csp-full-audit.js`/`test-submission.js` — toàn bộ PASS. (Đã xác nhận
+riêng `test-form-reset-file-remove.js` có 14/34 FAIL giống hệt CẢ TRƯỚC KHI áp dụng bản vá này — lỗi cũ,
+không liên quan môdule Tài Liệu/Văn Bản Trình, không phải do thay đổi này gây ra.)
+
+**Deploy-impact:** chỉ đổi JS phía client (file tĩnh), không đổi route/API/schema — chỉ copy code +
+`pm2 restart` (hoặc chỉ cần clear cache trình duyệt nếu phục vụ file tĩnh qua CDN/cache lâu).
 
 ## v27.45 (2026-11): [TB] Re-audit lần 8 — mục 7/10: officeReqs SUA_CHUA create dùng payload.dept thô cho check Kỹ Thuật Xác Nhận độc lập
 

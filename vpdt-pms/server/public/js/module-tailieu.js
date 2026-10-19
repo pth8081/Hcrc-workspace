@@ -447,9 +447,15 @@ function buildDocRowHTML(doc, { versionCount = 0, isExpanded = false, isChild = 
           } else {
             primaryBtnHTML = `<button data-op="runDocAction" data-arg0="${doc.id}" data-arg1="view" class="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-semibold" title="Xem chi tiết & lịch sử phiên bản">📋 Chi tiết</button>`;
           }
-          // "Sửa & Gửi Lại" — chỉ chính người tải lên, chỉ khi hồ sơ đang cần bổ sung (NHÁP do
+          // "Sửa & Gửi Lại" — chính người tải lên HOẶC admin, chỉ khi hồ sơ đang cần bổ sung (NHÁP do
           // REQUEST_CHANGES, xem openBosungEditModal()).
-          if (doc.status === 'DRAFT' && doc.uploader === currentUser.username) {
+          // LỖI ĐÃ VÁ (re-audit lần 8, mức TB — "Mirror lệch: nút Sửa & Gửi Lại không hiện cho Admin"):
+          // server (editDocDraft(), lib/recordActions.js) đã mở lối thoát cho admin sửa NHÁP của người
+          // khác (phòng trường hợp người tải lên đã nghỉ việc) từ đợt vá rà soát vòng 2, nhưng điều kiện
+          // hiện nút ở đây CHƯA theo kịp — admin vẫn không thấy nút, phải gọi API trực tiếp mới sửa được.
+          // Thêm `|| currentUser.perms?.admin`, cùng khuôn `module-internalcomms-nhipsong.js` (dòng kiểm
+          // tra NEED_INFO/DRAFT của Nhịp Sống đã làm đúng từ đầu).
+          if (doc.status === 'DRAFT' && (doc.uploader === currentUser.username || currentUser.perms?.admin)) {
             secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
           }
           if (canDownload) secondaryOptions.push({ value: 'download', label: '⬇️ Tải' });

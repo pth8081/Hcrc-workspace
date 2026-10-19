@@ -580,9 +580,14 @@ function renderSubmissionReqs() {
             if (canDL && (sub.fileUrl || (sub.extraFiles && sub.extraFiles.length))) {
               secondaryOptions.push({ value: 'downloadAll', label: '📎 Tải All' });
             }
-            // "Sửa & Gửi Lại" — chỉ chính người trình, chỉ khi đang cần bổ sung (NHÁP do
+            // "Sửa & Gửi Lại" — chính người trình HOẶC admin, chỉ khi đang cần bổ sung (NHÁP do
             // confirmProcessSubmission('REQUEST_CHANGES'), xem openBosungEditModal()).
-            if (sub.status === 'DRAFT' && sub.creator === currentUser.username) {
+            // LỖI ĐÃ VÁ (re-audit lần 8, mức TB — "Mirror lệch: nút Sửa & Gửi Lại không hiện cho Admin"):
+            // server (editSubmissionDraft(), lib/recordActions.js) đã mở lối thoát cho admin sửa NHÁP của
+            // người khác (phòng trường hợp người trình đã nghỉ việc) từ đợt vá rà soát vòng 2, nhưng điều
+            // kiện hiện nút ở đây CHƯA theo kịp — admin vẫn không thấy nút, phải gọi API trực tiếp mới sửa
+            // được. Thêm `|| currentUser.perms?.admin`, cùng khuôn module-tailieu.js (sửa cùng đợt).
+            if (sub.status === 'DRAFT' && (sub.creator === currentUser.username || currentUser.perms?.admin)) {
               secondaryOptions.push({ value: 'editDraft', label: '✏️ Sửa & Gửi Lại' });
             }
             if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
