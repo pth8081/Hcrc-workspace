@@ -317,8 +317,13 @@ function getMyPendingApprovals(user) {
   // updateApprovalHubBadge() bên dưới): nếu cụm "vanhanh" chưa từng mở trong phiên, bỏ qua nhóm này ở
   // LẦN GỌI NÀY (không throw ReferenceError làm hỏng toàn bộ Hub) + âm thầm nạp nền rồi tự làm mới lại
   // Hub/badge ngay khi xong, không bao giờ bỏ sót vĩnh viễn.
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Thiếu chặn tự duyệt ở receiveOperationOrderGoods/
+  // cancelOperationOrderReceipt"): mirror đúng assertNotSelfHandlingOperationOrderReceipt()
+  // (lib/recordActions.js) — người TẠO đơn hàng không được tự xác nhận/hủy nhập hàng của chính mình,
+  // dù có quyền operationOrderReceiptManageHO/Store (2 quyền độc lập, không loại trừ việc này). KHÔNG
+  // có ngoại lệ admin (cùng chính sách "không tự duyệt ở TẤT CẢ module" đã áp dụng toàn hệ thống).
   if (typeof canManageOperationOrderReceiptClient === 'function') {
-    (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
+    (DB.operationOrders || []).filter(o => o.status === 'AWAITING_RECEIPT' && o.creator !== user.username && canManageOperationOrderReceiptClient(o, user)).forEach(o => {
       items.push({
         type: 'operationOrderReceipt',
         typeLabel: `📦 Vận Hành - ${o.orderLocationType === 'HO' ? 'Đặt Hàng Tại HO' : 'Đặt Hàng Tại Siêu Thị'} (Chờ Nhập Hàng)`,

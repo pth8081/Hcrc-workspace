@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**27.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.55 (2026-11): [TB] Re-audit lần 9 — mục 7/12: Thiếu chặn tự duyệt ở receiveOperationOrderGoods/cancelOperationOrderReceipt
+
+Mục thứ bảy (7/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `isApproverForOperationOrderReceipt()`/`receiveOperationOrderGoods()`/
+`cancelOperationOrderReceipt()` (`lib/recordActions.js:849-910`) — bước "Nhập Hàng"/"Hủy Nhập" sau khi
+đơn hàng đã duyệt xong (AWAITING_RECEIPT) — trước đây KHÔNG loại trừ `item.creator === user.username`,
+khác MỌI hành động xác nhận/hoàn tất SAU DUYỆT khác trong file này (`claimPriceApply()`,
+`assertNotSelfDecidingXxx()`...) đều có lớp chặn tự xử lý hồ sơ của chính mình. Người TẠO đơn hàng, nếu
+đồng thời có quyền `operationOrderReceiptManageHO`/`Store` (2 quyền độc lập, không loại trừ việc tạo
+đơn — hoàn toàn có thể xảy ra với 1 nhân viên phòng mua hàng/vận hành), tự xác nhận/hủy nhập hàng do
+chính mình đặt mà không ai kiểm chứng độc lập hàng THẬT có về hay không.
+
+**Bản vá:** thêm `assertNotSelfHandlingOperationOrderReceipt()` (`lib/recordActions.js`), gọi ngay sau
+bước kiểm quyền ở cả 2 hàm. KHÔNG mở ngoại lệ admin (theo đúng chính sách "không tự duyệt ở TẤT CẢ
+module, không ngoại lệ" người dùng đã xác nhận trước đây) — cùng khuôn
+`assertNotSelfHandlingItPriceApply()` đã có. Mirror client: `canManageOperationOrderReceiptClient()`
+(`module-vanhanh.js`) tự nó KHÔNG đổi (vẫn đúng câu hỏi "có quyền quản lý receipt hay không") — thêm
+điều kiện `o.creator !== user.username` ngay tại 2 nơi GỌI hàm đó để quyết định hiện/giấu mục "Chờ Nhập
+Hàng": `getMyPendingApprovals()` (`core-approvalhub.js`, badge + danh sách Approval Hub) và
+`renderOperationOrderReceiptApprovalTab()` (`module-vanhanh.js`, sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng"
+tập trung).
+
+**Test:** 4 kịch bản mới thêm vào `tests/test-operation-order-receiving.js` (đã có từ trước, test
+đúng 2 hàm này) — người tạo có quyền vẫn bị chặn tự xác nhận/hủy nhập (cả 2 hàm), admin là người tạo
+cũng bị chặn (không ngoại lệ), người KHÁC (không phải creator) không bị ảnh hưởng oan. Xác nhận 3/28
+test FAIL trên code cũ, 28/28 PASS trên code mới. Chạy lại regression: `test-operation-order-report.js`
+(21/21), `test-approval-polling.js` (22/22), `test-operation-order-location-tiers.js` (34/34),
+`test-approval-hub.js` (Playwright thật, 55/55 — có scenario "Chờ Nhập Hàng" với creator KHÁC approver,
+không bị ảnh hưởng) — tất cả PASS, không có regression.
+
+**Ảnh hưởng deploy:** chỉ code `server/`, không đổi `schema.sql`/biến môi trường/`package.json`
+dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.54 (2026-11): [TB] Re-audit lần 9 — mục 6/12: Cascade rename thiếu carRegs.assignedDriverUsername + officeReqs.techAssignedTo
 
