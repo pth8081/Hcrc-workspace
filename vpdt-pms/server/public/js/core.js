@@ -4567,13 +4567,13 @@ function defaultNewUserPerms() {
     itPriceProposeCreateWholesale: false, itPriceProposeCreateRetail: false,
     itManage: false, itPriceSupport: false, itServiceRenewalManage: false,
     itPriceEmergencyRejectApproveWholesale: false, itPriceEmergencyRejectApproveRetail: false,
-    // operationOrderAllowSelfApprove/itPriceAllowSelfApproveWholesale/itPriceAllowSelfApproveRetail
-    // (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ ở MODULE_CONFIGS.
-    // operationOrders/itPriceApprovals.allowSelfDeciding, lib/workflowEngine.js): mặc định TẮT cho mọi
-    // tài khoản mới — admin phải chủ động tick mới gỡ được chặn "tự duyệt hồ sơ do chính mình tạo" cho
-    // đúng các module này. Giá Bán Buôn/Bán Lẻ TÁCH 2 quyền riêng (2 bộ phận khác nhau thực hiện), Đặt
-    // Hàng ST/HO vẫn gộp chung 1 quyền (chưa có yêu cầu tách).
-    operationOrderAllowSelfApprove: false,
+    // operationOrderAllowSelfApproveHO/Store, itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu
+    // cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ ở MODULE_CONFIGS.operationOrders/
+    // itPriceApprovals.allowSelfDeciding, lib/workflowEngine.js): mặc định TẮT cho mọi tài khoản mới —
+    // admin phải chủ động tick mới gỡ được chặn "tự duyệt hồ sơ do chính mình tạo" cho đúng các module
+    // này. CẢ 4 mục (Đặt Hàng ST/Đặt Hàng HO/Giá Buôn/Giá Lẻ) đều TÁCH quyền riêng (ĐỔI QUYẾT ĐỊNH: ban
+    // đầu Đặt Hàng ST/HO gộp chung, người dùng yêu cầu tách tiếp vì "4 mục này độc lập mà").
+    operationOrderAllowSelfApproveHO: false, operationOrderAllowSelfApproveStore: false,
     itPriceAllowSelfApproveWholesale: false, itPriceAllowSelfApproveRetail: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,

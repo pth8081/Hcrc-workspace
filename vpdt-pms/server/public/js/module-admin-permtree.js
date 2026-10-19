@@ -285,15 +285,16 @@ function collectPermsFromForm() {
     // thật dài/tên dài khiến lưới checkbox 2-3 cột bị ngắn tên, không nhìn thấy hết (phản hồi người dùng).
     // scopeFromMultiSelectDropdown() (core.js) đọc lại từ getMultiSelectValues() thay vì query checkbox.
     operationOrderReceiptManageStore: scopeFromMultiSelectDropdown('pOperationOrderReceiptAll', 'pOperationOrderReceiptDeptContainer'),
-    // operationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy
-    // đủ ở MODULE_CONFIGS.operationOrders.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN "người tạo
-    // đơn hàng không được tự duyệt/tự xác nhận nhập hàng/hủy nhập" (assertNotSelfDecidingWorkflowItem()/
-    // assertNotSelfHandlingOperationOrderReceipt()) cho ĐÚNG người được admin gán quyền này — áp dụng
-    // CẢ Đặt Hàng ST lẫn HO, CẢ bước duyệt theo mức giá trị LẪN bước Xác Nhận Nhập Hàng/Hủy Nhập. KHÔNG
-    // tự động cấp quyền duyệt — người này vẫn phải là approver hợp lệ theo cấu hình mức giá trị/quyền
-    // operationOrderReceiptManageHO/Store hiện có mới dùng được, quyền này chỉ gỡ đúng lớp chặn "nhưng
-    // bạn là người tạo" khi họ ĐÃ là approver hợp lệ.
-    operationOrderAllowSelfApprove: document.getElementById('pOperationOrderAllowSelfApprove').checked,
+    // operationOrderAllowSelfApproveHO/Store (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú
+    // thích đầy đủ ở MODULE_CONFIGS.operationOrders.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN
+    // "người tạo đơn hàng không được tự duyệt/tự xác nhận nhập hàng/hủy nhập"
+    // (assertNotSelfDecidingWorkflowItem()/assertNotSelfHandlingOperationOrderReceipt()) cho ĐÚNG người
+    // được admin gán quyền này — TÁCH RIÊNG theo Đặt Hàng ST/HO (ĐỔI QUYẾT ĐỊNH: ban đầu gộp 1 quyền,
+    // người dùng yêu cầu tách tiếp theo đúng tinh thần đã tách Giá Buôn/Lẻ), CẢ bước duyệt theo mức giá
+    // trị LẪN bước Xác Nhận Nhập Hàng/Hủy Nhập. KHÔNG tự động cấp quyền duyệt — người này vẫn phải là
+    // approver hợp lệ theo cấu hình mức giá trị/quyền operationOrderReceiptManageHO/Store hiện có.
+    operationOrderAllowSelfApproveHO: document.getElementById('pOperationOrderAllowSelfApproveHO').checked,
+    operationOrderAllowSelfApproveStore: document.getElementById('pOperationOrderAllowSelfApproveStore').checked,
     // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — 11/2026 LÀM GỌN: cấu hình/quản lý mẫu đã dời
     // hẳn vào Hệ Thống > Cấu Hình Nghiệp Vụ (CHỈ admin, không còn checkbox ở đây). Còn đúng 4 quyền
     // PHẲNG: checklistExecute (+ checklistExecuteScope, nguồn siêu thị DB.stores, CÙNG widget
@@ -415,7 +416,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationOrderReceiptHO').checked = !!perms.operationOrderReceiptManageHO;
   document.getElementById('pOperationOrderReceiptAll').checked = !!perms.operationOrderReceiptManageStore?.all;
   setOperationOrderReceiptScopeCheckboxes(perms.operationOrderReceiptManageStore?.depts);
-  document.getElementById('pOperationOrderAllowSelfApprove').checked = !!perms.operationOrderAllowSelfApprove;
+  document.getElementById('pOperationOrderAllowSelfApproveHO').checked = !!perms.operationOrderAllowSelfApproveHO;
+  document.getElementById('pOperationOrderAllowSelfApproveStore').checked = !!perms.operationOrderAllowSelfApproveStore;
   document.getElementById('pChecklistExecute').checked = !!perms.checklistExecute;
   document.getElementById('pChecklistExecuteScopeAll').checked = !!perms.checklistExecuteScope?.all;
   setChecklistExecuteScopeCheckboxes(perms.checklistExecuteScope?.depts);

@@ -682,11 +682,16 @@ const MODULE_CONFIGS = {
     // HO) — không gọi lại ở đây, tránh append 2 lần.
     resolveWfConfig: (item, appData) => resolveOperationOrderWorkflow(item, appData),
     supportsRequestChanges: true,
-    // operationOrderAllowSelfApprove (11/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở
+    // operationOrderAllowSelfApproveStore/HO (11/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở
     // assertNotSelfDecidingWorkflowItem() phía trên): gỡ chặn tự duyệt cho ĐÚNG người được admin tick
-    // quyền này, áp dụng chung CẢ Đặt Hàng ST lẫn HO. Không tự cấp quyền duyệt: canApproveStep() vẫn
-    // phải qua trước đó (người này phải thật sự nằm trong danh sách approver đúng mức giá trị hiện tại).
-    allowSelfDeciding: (item, user) => !!user?.perms?.operationOrderAllowSelfApprove
+    // quyền này — TÁCH RIÊNG theo item.orderLocationType (ĐỔI QUYẾT ĐỊNH 11/2026: ban đầu gộp 1 quyền,
+    // người dùng yêu cầu tách tiếp theo đúng tinh thần đã tách Giá Buôn/Lẻ — "4 mục này độc lập mà" —
+    // Đặt Hàng ST/Đặt Hàng HO/Giá Buôn/Giá Lẻ đều là 4 quyền tách riêng từ nay). Không tự cấp quyền
+    // duyệt: canApproveStep() vẫn phải qua trước đó (người này phải thật sự nằm trong danh sách approver
+    // đúng mức giá trị hiện tại).
+    allowSelfDeciding: (item, user) => (item.orderLocationType === 'STORE')
+      ? !!user?.perms?.operationOrderAllowSelfApproveStore
+      : !!user?.perms?.operationOrderAllowSelfApproveHO
   },
   // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED, đề nghị chung cho CẢ Hợp đồng/Mua
   // Bán/Sửa Chữa/thủ công, xem lib/recordActions.js submitPaymentRequest()) giờ đi qua quy trình duyệt

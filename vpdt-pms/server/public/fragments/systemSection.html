@@ -2705,18 +2705,25 @@
               </div>
               <div id="pOperationOrderReceiptDeptContainer" class="pl-1"></div>
             </div>
-            <!-- pOperationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi
-                 xác nhận rủi ro qua demo/trao đổi): CHỈ gỡ chặn "người tạo đơn hàng không được tự duyệt/
-                 tự xác nhận nhập hàng" cho ĐÚNG người được tick quyền này — KHÔNG tự cấp quyền duyệt/xác
-                 nhận, người đó vẫn phải là approver hợp lệ theo mức giá trị (Hệ Thống → Quy Trình & Phê
-                 Duyệt) hoặc có quyền Phê Duyệt Đặt Hàng HO/Siêu Thị ở trên mới dùng được. Dùng cho đúng
-                 tình huống "1 người vừa tạo vừa là người duyệt hợp lệ duy nhất" (VD siêu thị nhỏ chỉ có 1
-                 quản lý) — xem MODULE_CONFIGS.operationOrders.allowSelfDeciding (lib/workflowEngine.js) +
-                 assertNotSelfHandlingOperationOrderReceipt() (lib/recordActions.js). -->
-            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa tạo vừa duyệt (VD siêu thị chỉ có 1 quản lý). Không ảnh hưởng người khác, chỉ gỡ chặn tự duyệt cho ĐÚNG tài khoản được tick.</p>
-            <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pOperationOrderAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xác Nhận Đơn Hàng Do Chính Mình Tạo (áp dụng cả Đặt Hàng ST lẫn HO)
-            </label>
+            <!-- pOperationOrderAllowSelfApproveHO/Store (11/2026, theo yêu cầu TRỰC TIẾP của người dùng,
+                 sau khi xác nhận rủi ro qua demo/trao đổi — ĐỔI QUYẾT ĐỊNH: ban đầu gộp 1 quyền ST+HO,
+                 người dùng yêu cầu TÁCH RIÊNG vì "4 mục này độc lập" — Đặt Hàng ST/Đặt Hàng HO/Giá Buôn/
+                 Giá Lẻ đều tách quyền tự duyệt riêng từ nay): CHỈ gỡ chặn "người tạo đơn hàng không được
+                 tự duyệt/tự xác nhận nhập hàng" cho ĐÚNG người được tick quyền này — KHÔNG tự cấp quyền
+                 duyệt/xác nhận, người đó vẫn phải là approver hợp lệ theo mức giá trị (Hệ Thống → Quy
+                 Trình & Phê Duyệt) hoặc có quyền Phê Duyệt Đặt Hàng HO/Siêu Thị ở trên mới dùng được.
+                 Dùng cho đúng tình huống "1 người vừa tạo vừa là người duyệt hợp lệ duy nhất" (VD siêu
+                 thị nhỏ chỉ có 1 quản lý) — xem MODULE_CONFIGS.operationOrders.allowSelfDeciding
+                 (lib/workflowEngine.js) + assertNotSelfHandlingOperationOrderReceipt() (lib/recordActions.js). -->
+            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa tạo vừa duyệt. Không ảnh hưởng người khác, không liên quan nhau giữa ST/HO, chỉ gỡ chặn tự duyệt cho ĐÚNG tài khoản được tick.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationOrderAllowSelfApproveHO"> ⚠️ Cho Phép Tự Duyệt/Tự Xác Nhận Đơn Hàng HO Do Chính Mình Tạo
+              </label>
+              <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pOperationOrderAllowSelfApproveStore"> ⚠️ Cho Phép Tự Duyệt/Tự Xác Nhận Đơn Hàng Siêu Thị Do Chính Mình Tạo
+              </label>
+            </div>
             <!-- pItPriceProposeCreateWholesale/pItPriceEmergencyRejectApproveWholesale (10/2026, dời từ
                  mục "15. Hỗ Trợ IT" sang đây, theo yêu cầu người dùng — Phê Duyệt Giá Bán Buôn thuộc
                  nghiệp vụ Vận Hành). Việc DUYỆT thật sự (không nằm ở đây) vẫn theo mức Margin-Chiết Khấu

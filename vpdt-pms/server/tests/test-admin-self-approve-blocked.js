@@ -126,26 +126,38 @@ test('claimPriceApply(): admin KHÔNG phải creator -> nhận xử lý được
   assert.strictEqual(item.applyClaimedBy, 'admin');
 });
 
-// ===== 6) operationOrderAllowSelfApprove/itPriceAllowSelfApproveWholesale/itPriceAllowSelfApproveRetail
+// ===== 6) operationOrderAllowSelfApproveHO/Store/itPriceAllowSelfApproveWholesale/itPriceAllowSelfApproveRetail
 // (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo rõ rủi ro qua demo/trao đổi — CHỈ
 // mở cho đúng 2 module Đặt Hàng ST/HO và Phê Duyệt Giá Buôn/Lẻ, KHÔNG mở cho các module "rủi ro cao"
 // khác như payslips/kỷ luật/hợp đồng lao động/ngân sách...). Quyền MỚI, mặc định tắt (defaultNewUserPerms(),
 // core.js) — admin phải chủ động tick mới gỡ được chặn tự duyệt, và KHÔNG tự cấp quyền duyệt
-// (canApproveStep()/canSupportItPrice() vẫn phải qua trước). ĐỔI QUYẾT ĐỊNH (11/2026): giá Bán Buôn/Bán
-// Lẻ ban đầu gộp chung 1 quyền, sau đó người dùng yêu cầu TÁCH RIÊNG vì "2 bộ phận khác nhau thực hiện"
-// — xác nhận độc lập tuyệt đối (quyền Wholesale KHÔNG tự mở Retail và ngược lại). Đặt Hàng ST/HO vẫn
-// gộp chung 1 quyền (chưa có yêu cầu tách). =====
+// (canApproveStep()/canSupportItPrice() vẫn phải qua trước). ĐỔI QUYẾT ĐỊNH (11/2026): CẢ 4 mục (Đặt
+// Hàng ST/Đặt Hàng HO/Giá Buôn/Giá Lẻ) ban đầu gộp theo cặp (ST+HO 1 quyền, Buôn+Lẻ 1 quyền), sau đó
+// người dùng yêu cầu TÁCH RIÊNG CẢ 4 vì "4 mục này độc lập mà" — xác nhận độc lập tuyệt đối giữa từng
+// cặp (HO không tự mở Store, Wholesale không tự mở Retail, và ngược lại). =====
 
-test('assertNotSelfDecidingWorkflowItem("operationOrders"): creator KHÔNG có operationOrderAllowSelfApprove -> 403 (mặc định vẫn chặn)', () => {
-  const item = { creator: 'nv.mua' };
+test('assertNotSelfDecidingWorkflowItem("operationOrders"): creator KHÔNG có quyền tương ứng -> 403 (mặc định vẫn chặn, cả STORE lẫn HO)', () => {
+  const itemStore = { creator: 'nv.mua', orderLocationType: 'STORE' };
+  const itemHO = { creator: 'nv.mua', orderLocationType: 'HO' };
   const SELF = { username: 'nv.mua', name: 'NV Mua Hàng', perms: {} };
-  expectThrows403(() => assertNotSelfDecidingWorkflowItem('operationOrders', item, SELF), /tự xử lý/);
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('operationOrders', itemStore, SELF), /tự xử lý/);
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('operationOrders', itemHO, SELF), /tự xử lý/);
 });
 
-test('assertNotSelfDecidingWorkflowItem("operationOrders"): creator CÓ operationOrderAllowSelfApprove -> không throw', () => {
-  const item = { creator: 'nv.mua' };
-  const SELF_ALLOWED = { username: 'nv.mua', name: 'NV Mua Hàng', perms: { operationOrderAllowSelfApprove: true } };
-  assertNotSelfDecidingWorkflowItem('operationOrders', item, SELF_ALLOWED); // không throw = pass
+test('assertNotSelfDecidingWorkflowItem("operationOrders"): operationOrderAllowSelfApproveStore=true -> KHÔNG throw cho STORE, VẪN 403 cho HO (2 quyền độc lập)', () => {
+  const itemStore = { creator: 'nv.mua', orderLocationType: 'STORE' };
+  const itemHO = { creator: 'nv.mua', orderLocationType: 'HO' };
+  const SELF_STORE_ONLY = { username: 'nv.mua', name: 'NV Mua Hàng', perms: { operationOrderAllowSelfApproveStore: true } };
+  assertNotSelfDecidingWorkflowItem('operationOrders', itemStore, SELF_STORE_ONLY);
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('operationOrders', itemHO, SELF_STORE_ONLY), /tự xử lý/);
+});
+
+test('assertNotSelfDecidingWorkflowItem("operationOrders"): operationOrderAllowSelfApproveHO=true -> KHÔNG throw cho HO, VẪN 403 cho STORE (2 quyền độc lập)', () => {
+  const itemStore = { creator: 'nv.mua', orderLocationType: 'STORE' };
+  const itemHO = { creator: 'nv.mua', orderLocationType: 'HO' };
+  const SELF_HO_ONLY = { username: 'nv.mua', name: 'NV Mua Hàng', perms: { operationOrderAllowSelfApproveHO: true } };
+  expectThrows403(() => assertNotSelfDecidingWorkflowItem('operationOrders', itemStore, SELF_HO_ONLY), /tự xử lý/);
+  assertNotSelfDecidingWorkflowItem('operationOrders', itemHO, SELF_HO_ONLY);
 });
 
 test('assertNotSelfDecidingWorkflowItem("itPriceApprovals"): creator KHÔNG có quyền tương ứng -> 403 (mặc định vẫn chặn, cả RETAIL lẫn WHOLESALE)', () => {

@@ -874,13 +874,16 @@ function isApproverForOperationOrderReceipt(user, item) {
 // nhau), tự xác nhận/hủy nhập hàng do chính mình đặt mà không ai kiểm chứng độc lập hàng THẬT có về hay
 // không. KHÔNG mở ngoại lệ admin (theo đúng chính sách "không tự duyệt ở TẤT CẢ module, không ngoại
 // lệ" người dùng đã xác nhận trước đây) — cùng khuôn assertNotSelfHandlingItPriceApply() ở trên.
-// operationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo
-// rõ rủi ro + người dùng xác nhận CHỈ mở cho đúng Đặt Hàng ST/HO — KHÔNG mở cho các module "rủi ro cao"
-// khác): admin gán quyền này cho đúng người/chức danh cần "vừa tạo vừa xác nhận nhập hàng" (VD siêu thị
-// chỉ có 1 quản lý) — KHÔNG tự cấp quyền xác nhận, isApproverForOperationOrderReceipt() vẫn phải qua
-// trước đó (gọi TRƯỚC hàm này ở receiveOperationOrderGoods()/cancelOperationOrderReceipt() bên dưới).
+// operationOrderAllowSelfApproveStore/HO (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã
+// cảnh báo rõ rủi ro + người dùng xác nhận CHỈ mở cho đúng Đặt Hàng ST/HO — KHÔNG mở cho các module
+// "rủi ro cao" khác): admin gán quyền này cho đúng người/chức danh cần "vừa tạo vừa xác nhận nhập hàng"
+// (VD siêu thị chỉ có 1 quản lý) — KHÔNG tự cấp quyền xác nhận, isApproverForOperationOrderReceipt()
+// vẫn phải qua trước đó (gọi TRƯỚC hàm này ở receiveOperationOrderGoods()/cancelOperationOrderReceipt()
+// bên dưới). TÁCH RIÊNG theo item.orderLocationType (ĐỔI QUYẾT ĐỊNH 11/2026: ban đầu gộp chung 1 quyền,
+// người dùng yêu cầu tách tiếp theo đúng tinh thần đã tách Giá Buôn/Lẻ).
 function assertNotSelfHandlingOperationOrderReceipt(user, item) {
-  if (user?.perms?.operationOrderAllowSelfApprove) return;
+  const bypassPerm = (item.orderLocationType === 'STORE') ? 'operationOrderAllowSelfApproveStore' : 'operationOrderAllowSelfApproveHO';
+  if (user?.perms?.[bypassPerm]) return;
   if (item.creator && item.creator === user.username) {
     throw new HttpError(403, 'Bạn không thể tự xác nhận/hủy nhập hàng cho đơn hàng do chính mình tạo');
   }
