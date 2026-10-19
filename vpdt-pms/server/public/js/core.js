@@ -4567,6 +4567,14 @@ function defaultNewUserPerms() {
     itPriceProposeCreateWholesale: false, itPriceProposeCreateRetail: false,
     itManage: false, itPriceSupport: false, itServiceRenewalManage: false,
     itPriceEmergencyRejectApproveWholesale: false, itPriceEmergencyRejectApproveRetail: false,
+    // operationOrderAllowSelfApproveHO/Store, itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu
+    // cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ ở MODULE_CONFIGS.operationOrders/
+    // itPriceApprovals.allowSelfDeciding, lib/workflowEngine.js): mặc định TẮT cho mọi tài khoản mới —
+    // admin phải chủ động tick mới gỡ được chặn "tự duyệt hồ sơ do chính mình tạo" cho đúng các module
+    // này. CẢ 4 mục (Đặt Hàng ST/Đặt Hàng HO/Giá Buôn/Giá Lẻ) đều TÁCH quyền riêng (ĐỔI QUYẾT ĐỊNH: ban
+    // đầu Đặt Hàng ST/HO gộp chung, người dùng yêu cầu tách tiếp vì "4 mục này độc lập mà").
+    operationOrderAllowSelfApproveHO: false, operationOrderAllowSelfApproveStore: false,
+    itPriceAllowSelfApproveWholesale: false, itPriceAllowSelfApproveRetail: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
     // budgetReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "Báo Cáo" Ngân Sách (budgetLines),

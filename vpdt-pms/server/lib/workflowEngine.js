@@ -614,7 +614,17 @@ const MODULE_CONFIGS = {
     // trước khi quyết định (đúng yêu cầu nghiệp vụ: không phê duyệt trong lúc còn yêu cầu bổ sung treo).
     blockApproveIf: (item) => ((item.infoRequests || []).some(r => !r.response))
       ? 'Đề xuất đang có yêu cầu bổ sung chưa được người đề xuất phản hồi (tải tệp bổ sung), chưa thể duyệt/từ chối.'
-      : null
+      : null,
+    // itPriceAllowSelfApproveWholesale/Retail (11/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở
+    // assertNotSelfDecidingWorkflowItem() phía trên): gỡ chặn tự duyệt cho ĐÚNG người được admin tick
+    // quyền này — TÁCH RIÊNG theo item.priceType (ĐỔI QUYẾT ĐỊNH 11/2026: ban đầu gộp chung 1 quyền, sau
+    // đó người dùng yêu cầu tách lại vì Bán Buôn/Bán Lẻ do 2 bộ phận khác nhau thực hiện — khớp đúng
+    // khuôn itPriceProposeCreateWholesale/Retail + itPriceEmergencyRejectApproveWholesale/Retail đã tách
+    // sẵn từ trước). Không tự cấp quyền duyệt: canApproveStep() vẫn phải qua trước đó (người này phải
+    // thật sự nằm trong danh sách approver bước hiện tại).
+    allowSelfDeciding: (item, user) => (item.priceType === 'WHOLESALE')
+      ? !!user?.perms?.itPriceAllowSelfApproveWholesale
+      : !!user?.perms?.itPriceAllowSelfApproveRetail
   },
   // Ngân Sách — Trưởng phòng duyệt bản ngân sách của phòng ban mình theo appData.budgetDeptWorkflows
   // (cùng khuôn docs/carRegs/officeReqs/itPriceApprovals ở trên). supportsRequestChanges (không phải
@@ -671,7 +681,17 @@ const MODULE_CONFIGS = {
     // appendExtraApprovalLayers() đã gọi BÊN TRONG resolveOperationOrderWorkflow() (cả nhánh STORE lẫn
     // HO) — không gọi lại ở đây, tránh append 2 lần.
     resolveWfConfig: (item, appData) => resolveOperationOrderWorkflow(item, appData),
-    supportsRequestChanges: true
+    supportsRequestChanges: true,
+    // operationOrderAllowSelfApproveStore/HO (11/2026, theo yêu cầu người dùng — xem chú thích đầy đủ ở
+    // assertNotSelfDecidingWorkflowItem() phía trên): gỡ chặn tự duyệt cho ĐÚNG người được admin tick
+    // quyền này — TÁCH RIÊNG theo item.orderLocationType (ĐỔI QUYẾT ĐỊNH 11/2026: ban đầu gộp 1 quyền,
+    // người dùng yêu cầu tách tiếp theo đúng tinh thần đã tách Giá Buôn/Lẻ — "4 mục này độc lập mà" —
+    // Đặt Hàng ST/Đặt Hàng HO/Giá Buôn/Giá Lẻ đều là 4 quyền tách riêng từ nay). Không tự cấp quyền
+    // duyệt: canApproveStep() vẫn phải qua trước đó (người này phải thật sự nằm trong danh sách approver
+    // đúng mức giá trị hiện tại).
+    allowSelfDeciding: (item, user) => (item.orderLocationType === 'STORE')
+      ? !!user?.perms?.operationOrderAllowSelfApproveStore
+      : !!user?.perms?.operationOrderAllowSelfApproveHO
   },
   // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED, đề nghị chung cho CẢ Hợp đồng/Mua
   // Bán/Sửa Chữa/thủ công, xem lib/recordActions.js submitPaymentRequest()) giờ đi qua quy trình duyệt
@@ -963,9 +983,17 @@ function assertFormTemplatesShape(key, value) {
 // MODULE_CONFIGS[moduleKey].extraSelfDecidingField — field THỨ 2 (ngoài creatorField suy từ dbKey) cần
 // chặn tự xử lý, cho module mà "người tạo bản ghi gốc" KHÁC "người trình lượt duyệt này" (hiện chỉ
 // contractsSignedFile — signedUploadedBy, xem chú thích tại entry đó).
+//
+// allowSelfDeciding(item, user) (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo rõ
+// rủi ro + người dùng xác nhận CHỈ mở cho đúng 2 module operationOrders/itPriceApprovals — KHÔNG mở cho
+// các module "rủi ro cao" khác như payslips/hồ sơ kỷ luật/hợp đồng lao động/ngân sách...): tham số
+// `user` MỚI THÊM (trước đây hàm chỉ nhận `item`) để cho phép quyết định theo QUYỀN của người đang
+// duyệt (operationOrderAllowSelfApprove/itPriceAllowSelfApprove), không chỉ theo dữ liệu tĩnh của bản
+// ghi như paymentRequests (sourceModule==='MANUAL'). Hàm cũ chỉ đọc `item` vẫn hoạt động bình thường
+// (tham số thứ 2 bị bỏ qua nếu hàm không khai báo nhận nó).
 function assertNotSelfDecidingWorkflowItem(moduleKey, item, user) {
   const allowSelfDeciding = MODULE_CONFIGS[moduleKey]?.allowSelfDeciding;
-  const allowed = typeof allowSelfDeciding === 'function' ? allowSelfDeciding(item) : !!allowSelfDeciding;
+  const allowed = typeof allowSelfDeciding === 'function' ? allowSelfDeciding(item, user) : !!allowSelfDeciding;
   if (allowed) return;
   const dbKey = MODULE_CONFIGS[moduleKey]?.dbKey || moduleKey;
   const creatorField = CREATE_MODULE_CONFIGS[dbKey]?.creatorField;

@@ -1,9 +1,51 @@
 # Phiên bản hiện tại
 
-**27.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.76 (2026-11): 4 quyền "Cho Phép Tự Duyệt Do Chính Mình Tạo" — độc lập hoàn toàn (Đặt Hàng HO/Siêu Thị, Giá Bán Buôn/Bán Lẻ)
+
+Theo yêu cầu TRỰC TIẾP của người dùng, sau khi xác nhận hệ thống đang chặn
+cứng (đúng thiết kế) người TẠO hồ sơ tự duyệt chính hồ sơ đó ở MỌI module —
+nhưng điều này có thể gây "treo" ở đơn vị chỉ có 1 người vừa tạo vừa là
+người duyệt hợp lệ duy nhất (VD 1 siêu thị nhỏ chỉ có 1 quản lý). Người dùng
+đồng ý CHỈ mở ngoại lệ cho đúng 4 khu vực nghiệp vụ rủi ro thấp (ĐẶT HÀNG và
+GIÁ BÁN), sau khi đã được cảnh báo rõ các module rủi ro cao hơn (lương, kỷ
+luật, hợp đồng lao động, ngân sách...) vẫn PHẢI giữ nguyên chặn cứng.
+
+**Quyết định cuối cùng của người dùng (qua 3 vòng xác nhận)**: 4 quyền này
+phải **ĐỘC LẬP HOÀN TOÀN với nhau** (không gộp chung) vì chúng thuộc 4 bộ
+phận/nghiệp vụ khác nhau — bật quyền này không ảnh hưởng/không liên quan gì
+tới quyền kia:
+
+- `operationOrderAllowSelfApproveHO` — Đặt Hàng Tại HO.
+- `operationOrderAllowSelfApproveStore` — Đặt Hàng Tại Siêu Thị.
+- `itPriceAllowSelfApproveWholesale` — Phê Duyệt Giá Bán Buôn.
+- `itPriceAllowSelfApproveRetail` — Phê Duyệt Giá Bán Lẻ.
+
+Mỗi quyền mặc định TẮT, admin tick tay riêng cho từng tài khoản cần dùng ở
+"Hệ Thống → Phân Quyền → Cây Phân Quyền" (checkbox "⚠️ Cho Phép Tự Duyệt/Tự
+Xác Nhận/Tự Xử Lý ... Do Chính Mình Tạo" — mục "22. Vận Hành" cho 3 quyền
+đầu, mục "26. Mua Hàng — Phê Duyệt Giá" cho quyền Bán Lẻ). Quyền CHỈ gỡ đúng
+lớp chặn "bạn là người tạo" — KHÔNG tự cấp thêm quyền xử lý/duyệt nào khác
+(vẫn cần đúng quyền nghiệp vụ tương ứng mới thao tác được).
+
+**Thay đổi code:**
+- `lib/workflowEngine.js`: `MODULE_CONFIGS.operationOrders`/`itPriceApprovals`
+  `.allowSelfDeciding` rẽ nhánh theo `item.orderLocationType`/`item.priceType`.
+- `lib/recordActions.js`: `assertNotSelfHandlingOperationOrderReceipt()`/
+  `assertNotSelfHandlingItPriceApply()`/`assertNotSelfDecidingItPriceEmergencyReject()`
+  rẽ nhánh tương tự cho từng bước xử lý liên quan.
+- `public/fragments/systemSection.html` + `module-admin-permtree.js` +
+  `module-admin-permgroups.js` + `core.js`: 4 checkbox độc lập + nhãn + default.
+
+**Kiểm tra:** git-stash fail-on-old xác nhận mọi scenario mới ĐỀU fail đúng
+trên code cũ rồi pass trên code mới (từng vòng: 1 quyền gộp → tách Bán Buôn/
+Bán Lẻ → tách Đặt Hàng HO/Siêu Thị); regression toàn bộ test vận hành/giá
+liên quan đều pass; label Ma Trận Phân Quyền không trùng; CSP sạch. Demo ảnh
+đã gửi người dùng xác nhận trước khi merge.
 
 ## v27.75 (2026-11): Font Inter tự lưu trên server — không còn phụ thuộc Google Fonts CDN (chạy offline/mạng nội bộ được)
 

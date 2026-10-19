@@ -144,6 +144,50 @@ test('applyWorkflowAction operationOrders — quyền Duyệt/Từ chối KHÔNG
   );
 });
 
+// operationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ
+// ở MODULE_CONFIGS.operationOrders.allowSelfDeciding, lib/workflowEngine.js): người TẠO đơn hàng ĐỒNG
+// THỜI là approver hợp lệ của bước hiện tại (VD siêu thị chỉ có 1 quản lý vừa tạo vừa duyệt) — mặc định
+// vẫn bị chặn (hành vi CHUẨN cho mọi người khác), CHỈ tự duyệt được khi admin gán thêm quyền MỚI này.
+test('applyWorkflowAction operationOrders — người TẠO đơn ĐỒNG THỜI là approver hợp lệ: mặc định vẫn bị chặn tự duyệt (không có operationOrderAllowSelfApprove)', () => {
+  const item = freshOrder({ creator: APPROVER_STEP1 });
+  const selfApprover = makeUser(APPROVER_STEP1);
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: selfApprover, comment: '', appData }),
+    403, 'tự xử lý', 'operationOrders APPROVE bởi chính người tạo (chưa có operationOrderAllowSelfApprove)'
+  );
+  assert.strictEqual(item.status, 'PENDING', 'không được đổi trạng thái khi bị chặn');
+});
+
+// Đợt "Tách Đặt Hàng HO/Siêu Thị" (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "tách ra Đặt hàng HO
+// và siêu thị cũng tách ra nhé, vì 4 mục này độc lập"): operationOrderAllowSelfApprove (1 quyền gộp) đã
+// XOÁ HẲN, tách thành operationOrderAllowSelfApproveHO/operationOrderAllowSelfApproveStore (2 quyền ĐỘC
+// LẬP). Fixture freshOrder() ở file này mặc định orderLocationType='HO' nên test APPROVE dùng đúng key HO.
+test('applyWorkflowAction operationOrders — operationOrderAllowSelfApproveHO=true -> người TẠO đơn HO ĐỒNG THỜI là approver tự duyệt được', () => {
+  const item = freshOrder({ creator: APPROVER_STEP1 });
+  const selfApproverAllowed = makeUser(APPROVER_STEP1, { perms: { operationOrderAllowSelfApproveHO: true } });
+  const { item: result, transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: selfApproverAllowed, comment: '', appData });
+  assert.strictEqual(transition.type, 'COMPLETED');
+  assert.strictEqual(result.status, 'AWAITING_RECEIPT', 'tự duyệt thành công khi có quyền operationOrderAllowSelfApproveHO');
+});
+
+test('applyWorkflowAction operationOrders — operationOrderAllowSelfApproveStore=true (quyền KHÁC, không phải HO) KHÔNG áp dụng cho đơn HO -> vẫn 403 (2 quyền độc lập)', () => {
+  const item = freshOrder({ creator: APPROVER_STEP1 });
+  const wrongPerm = makeUser(APPROVER_STEP1, { perms: { operationOrderAllowSelfApproveStore: true } });
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: wrongPerm, comment: '', appData }),
+    403, 'tự xử lý', 'operationOrderAllowSelfApproveStore không được lấn sang đơn HO'
+  );
+});
+
+test('applyWorkflowAction operationOrders — admin là người tạo đơn: VẪN bị chặn tự duyệt nếu KHÔNG có operationOrderAllowSelfApproveHO (không có ngoại lệ admin mặc định)', () => {
+  const item = freshOrder({ creator: 'admin' });
+  const selfAdmin = makeUser('admin', { perms: { admin: true } });
+  assertThrows(
+    () => applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: selfAdmin, comment: '', appData }),
+    403, 'tự xử lý', 'admin tự tạo đơn vẫn phải bị chặn tự duyệt khi chưa có operationOrderAllowSelfApproveHO'
+  );
+});
+
 test('applyWorkflowAction — module KHÁC (carRegs) HOÀN TOÀN không bị ảnh hưởng: Duyệt xong bước cuối vẫn dừng ở APPROVED như trước (không tự AWAITING_RECEIPT)', () => {
   const item = { id: 9, dept: DEPT, status: 'PENDING', currentStep: 1, history: [] };
   const user = makeUser(APPROVER_STEP1, { perms: { admin: true } });
@@ -282,6 +326,61 @@ test('receiveOperationOrderGoods(): người KHÁC (không phải creator) có q
   const otherManager = makeUser('nv.khac', { perms: { operationOrderReceiptManageHO: true } });
   const result = recordActions.receiveOperationOrderGoods(otherManager, item, appData);
   assert.strictEqual(result.status, 'RECEIVED', 'người khác (không phải creator) không bị ảnh hưởng bởi bản vá');
+});
+
+// operationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — sau khi đã cảnh báo
+// rõ rủi ro + xác nhận CHỈ mở cho đúng Đặt Hàng ST/HO): quyền MỚI, mặc định tắt, admin chủ động gán cho
+// đúng người cần "vừa tạo vừa xác nhận nhập hàng" (VD siêu thị chỉ có 1 quản lý). KHÔNG tự cấp quyền xác
+// nhận — vẫn phải có operationOrderReceiptManageHO/Store hợp lệ, quyền mới chỉ gỡ đúng lớp chặn "nhưng
+// bạn là người tạo".
+// ĐỢT "Tách Đặt Hàng HO/Siêu Thị" (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "tách ra Đặt hàng HO
+// và siêu thị cũng tách ra nhé, vì 4 mục này độc lập"): quyền gộp operationOrderAllowSelfApprove đã XOÁ
+// HẲN, tách thành operationOrderAllowSelfApproveHO/operationOrderAllowSelfApproveStore (2 quyền ĐỘC LẬP,
+// khớp đúng item.orderLocationType — xem assertNotSelfHandlingOperationOrderReceipt() ở lib/recordActions.js).
+test('receiveOperationOrderGoods(): operationOrderAllowSelfApproveHO=true -> người TẠO đơn HO tự xác nhận nhập hàng được', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const selfManagerAllowed = makeUser('nv.mua', { perms: { operationOrderReceiptManageHO: true, operationOrderAllowSelfApproveHO: true } });
+  const result = recordActions.receiveOperationOrderGoods(selfManagerAllowed, item, appData);
+  assert.strictEqual(result.status, 'RECEIVED', 'được tự xác nhận khi có quyền operationOrderAllowSelfApproveHO');
+});
+
+test('receiveOperationOrderGoods(): operationOrderAllowSelfApproveHO=true NHƯNG thiếu operationOrderReceiptManageHO -> vẫn 403 (quyền mới KHÔNG tự cấp quyền xác nhận)', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const selfNoManage = makeUser('nv.mua', { perms: { operationOrderAllowSelfApproveHO: true } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(selfNoManage, item, appData), 403, 'không có quyền', 'operationOrderAllowSelfApproveHO không tự cấp quyền operationOrderReceiptManageHO');
+});
+
+test('receiveOperationOrderGoods(): operationOrderAllowSelfApproveStore=true (quyền KHÁC, không phải HO) KHÔNG áp dụng cho đơn HO -> vẫn 403 (2 quyền độc lập)', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const wrongPerm = makeUser('nv.mua', { perms: { operationOrderReceiptManageHO: true, operationOrderAllowSelfApproveStore: true } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(wrongPerm, item, appData), 403, 'tự xác nhận', 'operationOrderAllowSelfApproveStore không được lấn sang đơn HO');
+});
+
+test('receiveOperationOrderGoods(): operationOrderAllowSelfApproveStore=true -> người TẠO đơn Siêu Thị tự xác nhận nhập hàng được', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Siêu Thị Quận 1', creator: 'nv.st.mua' });
+  const selfManagerAllowed = makeUser('nv.st.mua', { perms: { operationOrderReceiptManageStore: { all: true, depts: [] }, operationOrderAllowSelfApproveStore: true } });
+  const result = recordActions.receiveOperationOrderGoods(selfManagerAllowed, item, appData);
+  assert.strictEqual(result.status, 'RECEIVED', 'được tự xác nhận khi có quyền operationOrderAllowSelfApproveStore');
+});
+
+test('receiveOperationOrderGoods(): operationOrderAllowSelfApproveHO=true (quyền KHÁC, không phải Store) KHÔNG áp dụng cho đơn Siêu Thị -> vẫn 403 (2 quyền độc lập)', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Siêu Thị Quận 1', creator: 'nv.st.mua' });
+  const wrongPerm = makeUser('nv.st.mua', { perms: { operationOrderReceiptManageStore: { all: true, depts: [] }, operationOrderAllowSelfApproveHO: true } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(wrongPerm, item, appData), 403, 'tự xác nhận', 'operationOrderAllowSelfApproveHO không được lấn sang đơn Siêu Thị');
+});
+
+test('cancelOperationOrderReceipt(): operationOrderAllowSelfApproveHO=true -> người TẠO đơn HO tự hủy nhập được', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const selfManagerAllowed = makeUser('nv.mua', { perms: { operationOrderReceiptManageHO: true, operationOrderAllowSelfApproveHO: true } });
+  const result = recordActions.cancelOperationOrderReceipt(selfManagerAllowed, item, { reason: 'Giao thiếu hàng' }, appData);
+  assert.strictEqual(result.status, 'RECEIPT_CANCELLED', 'được tự hủy nhập khi có quyền operationOrderAllowSelfApproveHO');
+});
+
+test('cancelOperationOrderReceipt(): operationOrderAllowSelfApproveStore=true -> người TẠO đơn Siêu Thị tự hủy nhập được', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'STORE', dept: 'Siêu Thị Quận 1', creator: 'nv.st.mua' });
+  const selfManagerAllowed = makeUser('nv.st.mua', { perms: { operationOrderReceiptManageStore: { all: true, depts: [] }, operationOrderAllowSelfApproveStore: true } });
+  const result = recordActions.cancelOperationOrderReceipt(selfManagerAllowed, item, { reason: 'Giao thiếu hàng' }, appData);
+  assert.strictEqual(result.status, 'RECEIPT_CANCELLED', 'được tự hủy nhập khi có quyền operationOrderAllowSelfApproveStore');
 });
 
 test('cancelOperationOrderReceipt(): LỖI ĐÃ VÁ — người TẠO đơn hàng KHÔNG được tự hủy nhập đơn do chính mình tạo dù có đủ quyền + lý do hợp lệ', () => {
