@@ -559,6 +559,17 @@ async function runPureTests() {
     const updatedSubmit = recordActions.submitSubmissionDraft(ADMIN, item);
     assert.strictEqual(updatedSubmit.status, 'PENDING');
   });
+  await run('9h. [Thấp, re-audit lần 10, mục 13/14] submitSubmissionDraft(): opinionResponses CŨ (góp cho vòng duyệt trước) bị dọn sạch khi "Gửi Lại" — khớp đúng cơ chế editSubmissionDraft() đã có ở 9g', () => {
+    const item = {
+      id: 8, code: 'HCRC-KD-VBT-008', dept: DEPT_A, creator: USER_A.username, status: 'DRAFT',
+      type: 'Tờ trình khác', title: 'TT', content: 'ND', fileUrl: '/uploads/x.pdf', fileName: 'x.pdf', extraFiles: [],
+      approvalLevel: 'TGD', selectedApprovalLayers: [], selectedLayerMembers: {}, history: [],
+      opinionResponses: [{ username: 'nv_gop_y', name: 'NV Góp Ý', comment: 'Ý kiến cho vòng trước', respondedAt: '2026-01-01' }]
+    };
+    const updatedSubmit = recordActions.submitSubmissionDraft(USER_A, item);
+    assert.strictEqual(updatedSubmit.status, 'PENDING');
+    assert.deepStrictEqual(updatedSubmit.opinionResponses, [], '9h: opinionResponses phải rỗng — ý kiến vòng cũ không còn phản ánh đúng nội dung vừa gửi lại');
+  });
 }
 
 async function main() {

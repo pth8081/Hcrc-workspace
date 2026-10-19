@@ -1980,6 +1980,15 @@ function submitSubmissionDraft(user, item) {
   item.history = item.history || [];
   item.history.push({ step: 0, approver: user.name, username: user.username, action: 'RESUBMITTED', comment: 'Đã sửa lại và trình lại sau khi được yêu cầu bổ sung', time: nowVN() });
   resetForResubmit(item, {});
+  // LỖI ĐÃ VÁ (re-audit lần 10, mục 13/14, mức Thấp — "opinionResponses không được invalidate nhất
+  // quán ở submitSubmissionDraft/RESOLVE_FILE_PROPOSAL"): editSubmissionDraft() (ngay phía trên) đã
+  // dọn opinionResponses khi NỘI DUNG tờ trình đổi (sửa lại sau REQUEST_CHANGES), nhưng route gửi lại
+  // KHÔNG sửa gì thêm (bấm "Gửi Lại" thẳng, đi qua đây — chỉ gọi resetForResubmit() dùng CHUNG với
+  // docs/contracts, các module đó không có khái niệm opinionResponses) lại bỏ sót — ý kiến góp cho tờ
+  // trình ở vòng duyệt CŨ vẫn hiển thị lẫn như hợp lệ cho vòng duyệt MỚI. Cùng tinh thần "vô hiệu hoá dữ
+  // liệu vòng cũ" như APPROVED history (resetForResubmit() đã làm) — dọn luôn ở đây, KHÔNG sửa
+  // resetForResubmit() dùng chung (docs/contracts không có field này).
+  item.opinionResponses = [];
   return item;
 }
 

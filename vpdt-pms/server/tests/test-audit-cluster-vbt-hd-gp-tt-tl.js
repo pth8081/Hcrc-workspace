@@ -368,6 +368,32 @@ async function main() {
     assert.strictEqual(out.item.status, 'APPROVED');
   });
 
+  // ================= 17. [Thấp] opinionResponses — RESOLVE_FILE_PROPOSAL (re-audit lần 10, mục 13/14) =
+  // Ý kiến đã góp cho tệp CŨ không còn phản ánh đúng tệp MỚI — chỉ reset ở nhánh "Đồng ý" (agree, tệp
+  // thực sự đổi + gửi lại từ bước 1), KHÔNG đụng nhánh "Không đồng ý" (file không đổi, chưa gửi lại).
+  await run('17a. RESOLVE_FILE_PROPOSAL (agree): opinionResponses CŨ bị dọn sạch khi tệp được thay thế + gửi lại', async () => {
+    const item = { ...subWithProposal(), opinionResponses: [{ username: 'nv_gop_y', name: 'NV Góp Ý', comment: 'Ý kiến cho bản cũ', respondedAt: '2026-01-01' }] };
+    const out = applyWorkflowAction({
+      moduleKey: 'submissions', item, action: 'RESOLVE_FILE_PROPOSAL',
+      user: { username: 'nguoi_trinh_da_nghi_viec', name: 'Người Trình', perms: {} },
+      comment: 'Đồng ý thay thế', extraFields: { agree: true }, appData: APP_DATA, users: []
+    });
+    assert.deepStrictEqual(out.item.opinionResponses, [], '17a: opinionResponses phải rỗng sau khi tệp được thay thế + gửi lại');
+    assert.strictEqual(out.item.fileUrl, '/uploads/dx.pdf', '17a: tệp phải được thay bằng tệp đề xuất');
+    assert.strictEqual(out.item.status, 'PENDING');
+    assert.strictEqual(out.item.currentStep, 1);
+  });
+  await run('17b. RESOLVE_FILE_PROPOSAL (KHÔNG đồng ý): opinionResponses GIỮ NGUYÊN — tệp không đổi, chưa gửi lại vòng mới', async () => {
+    const item = { ...subWithProposal(), opinionResponses: [{ username: 'nv_gop_y', name: 'NV Góp Ý', comment: 'Ý kiến cho bản gốc', respondedAt: '2026-01-01' }] };
+    const out = applyWorkflowAction({
+      moduleKey: 'submissions', item, action: 'RESOLVE_FILE_PROPOSAL',
+      user: { username: 'nguoi_trinh_da_nghi_viec', name: 'Người Trình', perms: {} },
+      comment: 'Không đồng ý', extraFields: { agree: false }, appData: APP_DATA, users: []
+    });
+    assert.strictEqual(out.item.opinionResponses.length, 1, '17b: KHÔNG chặn oan — tệp vẫn là bản gốc, ý kiến cũ vẫn hợp lệ');
+    assert.strictEqual(out.item.status, 'DRAFT');
+  });
+
   // ================= 7. [TB] Thanh Toán: chặn gửi vào ngõ cụt =================
   const draftPr = () => ({
     id: 2, createdBy: USER_A.username, dept: DEPT_A, title: 'ĐNTT nháp', status: 'DRAFT',
