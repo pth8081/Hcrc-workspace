@@ -525,10 +525,30 @@ function assertValidDetailAdjustment(payload) {
   return { componentCode, amount: Math.round(amount), note };
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 10, mức Cao — "PATCH payslips/:id/details thiếu chặn tự duyệt/tự chỉnh lương"):
+// applyApprove() ở trên đã so period.creator với actorUsername để chặn tự duyệt CẢ KỲ, nhưng điều chỉnh
+// TỪNG DÒNG lương nhập tay (thưởng/phạt/tạm ứng/phụ cấp) ở applyAdjustPayslipDetail() KHÔNG hề có chặn
+// tương ứng — payslip.employeeCode chưa từng được so với employeeCode của CHÍNH actor. Vì
+// POST /periods/:id/calculate tự sinh payslip cho MỌI nhân viên ACTIVE/ON_LEAVE (không loại trừ người
+// giữ hrPayrollManage, họ cũng là 1 nhân viên bình thường), 1 tài khoản có hrPayrollManage có thể tự
+// thêm dòng thưởng/tự xoá dòng phạt/tạm ứng TRÊN PHIẾU LƯƠNG CỦA CHÍNH MÌNH trong lúc kỳ còn DRAFT, rồi
+// gửi duyệt — người duyệt khác (hrPayrollApprove) chỉ xem tổng số, không có gì đánh dấu "dòng này do
+// chính người giữ quyền quản lý tự thêm trên phiếu của họ". CỐ Ý KHÔNG có ngoại lệ admin (cùng nguyên
+// tắc applyApprove() ngay trên — Lương là 1 trong 3 mảng dữ liệu nhạy cảm nhất, admin KHÔNG tự động có
+// quyền quản lý/duyệt module này). actorOwnEmployeeCode do routes/payroll.js tự tra qua
+// findProfileByUsername(appData.employeeProfiles, actorUsername) rồi truyền vào — tham số tuỳ chọn ở
+// cuối để KHÔNG phá vỡ các lời gọi test hiện có đang gọi hàm thuần không truyền tham số này.
+function assertNotSelfAdjustingPayslip(payslip, actorOwnEmployeeCode) {
+  if (actorOwnEmployeeCode && payslip.employeeCode === actorOwnEmployeeCode) {
+    throw new HttpError(403, 'Bạn không thể tự điều chỉnh dòng lương nhập tay trên phiếu lương của chính mình — cần một người khác có quyền quản lý Lương (hrPayrollManage) thực hiện thay');
+  }
+}
+
 // Áp 1 dòng điều chỉnh tay lên payslip (mutate tại chỗ) — nếu componentCode đã có dòng tay trước đó thì
 // THAY THẾ (amount=0 hoặc rỗng -> caller tự lọc bỏ dòng, xem routes/payroll.js), không cộng dồn nhiều lần
 // bấm lưu cùng 1 mã (tránh kế toán bấm lưu 2 lần = cộng đôi tiền).
-function applyAdjustPayslipDetail(payslip, payload, actorUsername, taxContext) {
+function applyAdjustPayslipDetail(payslip, payload, actorUsername, taxContext, actorOwnEmployeeCode) {
+  assertNotSelfAdjustingPayslip(payslip, actorOwnEmployeeCode);
   const { componentCode, amount, note } = assertValidDetailAdjustment(payload);
   const details = (payslip.details || []).filter(d => !(d.componentCode === componentCode && d.isManualAdjustment));
   if (amount !== 0) details.push({ componentCode, amount, note, isManualAdjustment: true, createdAt: nowVN(), createdBy: actorUsername });
@@ -617,6 +637,7 @@ module.exports = {
   computeTaxFromBrackets, periodDateRange, computeEmployeePayslip, defaultPayslip,
   assertValidNewPeriod, defaultPeriod, assertCanDeletePeriod,
   applySubmitForApproval, applyApprove, applyReject, applyFinalize, applyPublish, applyReopen,
+  assertNotSelfAdjustingPayslip,
   assertValidDetailAdjustment, applyAdjustPayslipDetail, mergeManualAdjustmentsIntoPayslip,
   recomputePersonalIncomeTax, recomputePayslipTotals
 };

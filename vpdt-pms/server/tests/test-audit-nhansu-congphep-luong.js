@@ -449,6 +449,51 @@ async function main() {
       assert.strictEqual(tax, expected, 'Thuế phải tính lại có trừ 1 người phụ thuộc');
     });
 
+    console.log('\n== Re-audit lần 10, mức Cao — applyAdjustPayslipDetail() phải chặn tự điều chỉnh dòng lương của chính mình ==');
+
+    await test('applyAdjustPayslipDetail() ném 403 khi actorOwnEmployeeCode === payslip.employeeCode', () => {
+      const rateConfig = payroll.defaultRateConfig();
+      const payslip = {
+        employeeCode: 'NV-KT1',
+        details: [{ componentCode: 'BASIC_SALARY', amount: 20000000, isManualAdjustment: false }],
+        grossIncome: 20000000, totalDeduction: 0, netPay: 20000000
+      };
+      assert.throws(() => {
+        payroll.applyAdjustPayslipDetail(payslip, { componentCode: 'BONUS_OTHER', amount: 50000000 }, 'ketoan1', { rateConfig, dependentCount: 0 }, 'NV-KT1');
+      }, /tự điều chỉnh/, 'Phải chặn khi actorOwnEmployeeCode khớp payslip.employeeCode');
+      // Payslip KHÔNG bị đổi gì (ném lỗi trước khi mutate).
+      assert.strictEqual(payslip.details.length, 1);
+    });
+
+    await test('applyAdjustPayslipDetail() vẫn chạy bình thường khi actorOwnEmployeeCode khác payslip.employeeCode (hoặc null — actor chưa liên kết hồ sơ)', () => {
+      const rateConfig = payroll.defaultRateConfig();
+      const payslip1 = { employeeCode: 'NV1', details: [], grossIncome: 0, totalDeduction: 0, netPay: 0 };
+      payroll.applyAdjustPayslipDetail(payslip1, { componentCode: 'KPI_BONUS', amount: 1000000 }, 'ketoan1', { rateConfig, dependentCount: 0 }, 'NV-KT1');
+      assert.strictEqual(payslip1.details.filter(d => d.isManualAdjustment).length, 1, 'Khác employeeCode -> không chặn');
+      const payslip2 = { employeeCode: 'NV1', details: [], grossIncome: 0, totalDeduction: 0, netPay: 0 };
+      payroll.applyAdjustPayslipDetail(payslip2, { componentCode: 'KPI_BONUS', amount: 1000000 }, 'ketoan1', { rateConfig, dependentCount: 0 }, null);
+      assert.strictEqual(payslip2.details.filter(d => d.isManualAdjustment).length, 1, 'actorOwnEmployeeCode=null (chưa liên kết hồ sơ) -> không chặn');
+    });
+
+    await test('qua HTTP: PATCH /payslips/:id/details -> 403 khi ketoan1 (hrPayrollManage) tự điều chỉnh phiếu lương CỦA CHÍNH MÌNH', async () => {
+      resetAppData();
+      APP_DATA.employeeProfiles.push({ employeeCode: 'NV-KT1', username: 'ketoan1', status: 'ACTIVE', dependents: [] });
+      STORE.payrollPeriods = [{ id: 3101, periodName: 'Lương Tháng 05/2026', periodMonth: 5, periodYear: 2026, status: 'DRAFT', history: [] }];
+      STORE.payslips = [
+        { id: 4201, periodId: 3101, employeeCode: 'NV-KT1', employeeUsername: 'ketoan1', details: [], grossIncome: 20000000, totalDeduction: 0, netPay: 20000000 },
+        { id: 4202, periodId: 3101, employeeCode: 'NV1', employeeUsername: 'store1', details: [], grossIncome: 20000000, totalDeduction: 0, netPay: 20000000 }
+      ];
+      const selfAdjust = await call('ketoan1', 'PATCH', '/api/payroll/payslips/4201/details', { componentCode: 'BONUS_OTHER', amount: 50000000, note: 'Tự thưởng' });
+      assert.strictEqual(selfAdjust.status, 403, JSON.stringify(selfAdjust.json));
+      assert.ok(/tự điều chỉnh/.test(selfAdjust.json.error), JSON.stringify(selfAdjust.json));
+      assert.strictEqual(STORE.payslips.find(p => p.id === 4201).details.length, 0, 'Payslip của ketoan1 KHÔNG bị đổi gì sau lần tự điều chỉnh bị chặn');
+
+      // Đối chứng: ketoan1 điều chỉnh phiếu của NGƯỜI KHÁC (NV1/store1) vẫn hoạt động bình thường (không bị chặn nhầm).
+      const othersAdjust = await call('ketoan1', 'PATCH', '/api/payroll/payslips/4202/details', { componentCode: 'BONUS_OTHER', amount: 5000000, note: 'Thưởng NV1' });
+      assert.strictEqual(othersAdjust.status, 200, JSON.stringify(othersAdjust.json));
+      assert.strictEqual(othersAdjust.json.item.details.filter(d => d.isManualAdjustment).length, 1);
+    });
+
     console.log('\n== #12 — Tính Lương Tự Động phải atomic (không mất dữ liệu kỳ lương) ==');
 
     await test('#12 lỗi giữa chừng khi ghi lại payslip -> payslip CŨ của kỳ còn nguyên (rollback), API báo lỗi', async () => {
