@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**27.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.42 (2026-11): [Cao] Re-audit lần 8 — mục 4/10: resolvePendingTaskAction tự duyệt gia hạn Công Việc do chính mình gửi (admin bypass qua requestExtension)
+
+Mục thứ tư (4/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** `requestExtension()` (`lib/recordActions.js`) cho phép admin tự gửi yêu cầu gia hạn
+cho task của NGƯỜI KHÁC (`task.assignedTo === user.username || user.perms?.admin`) — khi đó
+`pendingExtension.requestedBy` là CHÍNH admin, nhưng `task.assignedTo` vẫn là người nhận việc gốc
+(KHÁC admin). `resolvePendingTaskAction()` chỉ chặn tự duyệt bằng điều kiện `task.assignedTo ===
+user.username` (đã vá đúng cho trường hợp "tự giao việc cho bản thân" ở re-audit lần 5) — không hề so
+với `pending.requestedBy` (người THỰC SỰ gửi yêu cầu đang xét). Vì `task.assignedTo` là người khác,
+điều kiện này không bắt được: admin tự gửi yêu cầu gia hạn cho task người khác RỒI tự duyệt luôn yêu
+cầu CHÍNH MÌNH đã gửi, dời hạn/tăng `extensionCount` mà không qua bất kỳ xét duyệt độc lập của người
+giao việc (`assignedBy`) nào — vi phạm thẳng chính sách "chặn tự duyệt ở TẤT CẢ module, không ngoại
+lệ" đã công bố ngay trong comment của hàm.
+
+**Vá:** thêm điều kiện chặn `pending.requestedBy === user.username` (bên cạnh `task.assignedTo ===
+user.username` đã có) trong `resolvePendingTaskAction()` — so với người THỰC SỰ gửi yêu cầu, không chỉ
+`assignedTo`.
+
+**Test:** mở rộng `tests/test-audit-createvsapprove-gaps.js` (+2 scenario, 30/30 tổng, mục "#4b"): admin
+tự gửi yêu cầu gia hạn cho task NGƯỜI KHÁC rồi tự duyệt -> 403 (khai thác); đối chứng admin duyệt yêu
+cầu do NGƯỜI KHÁC gửi (không phải chính mình) vẫn thành công bình thường. Xác nhận FAIL trên code CŨ
+(`git stash`, 1/30 scenario FAIL), PASS trên code đã vá (30/30). Regression: `tests/test-task.js`
+(15/15), `tests/test-task-itticket-self-approve-blocked.js` (7/7 — xác nhận không trùng/không phá vỡ
+scenario "tự giao việc cho bản thân" đã có từ trước), `tests/test-audit-round2-cluster4.js` (28/28),
+`tests/demo-createvsapprove-fixes.js` (chạy sạch, không lỗi) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.41 (2026-11): [Cao] Re-audit lần 8 — mục 3/10: shiftRoster tạo mới thiếu chặn đúng siêu thị (store-spoofing)
 
