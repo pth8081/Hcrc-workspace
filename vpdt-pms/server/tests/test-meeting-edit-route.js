@@ -99,7 +99,12 @@ stubModule('lib/auth', {
 stubModule('lib/appData', {
   getAllAppData: async () => ({
     meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }, { id: 2, name: 'Phòng Họp Nhỏ B', short: 'B' }],
-    formTemplates: {}
+    formTemplates: {},
+    // Re-audit lần 8 (mức TB) — "PUT /api/meetings/:id không đối chiếu danh mục dept khi canManage":
+    // danh mục dept/store THẬT, dùng để kiểm payload.dept khi canManage (admin/meetingCancel) đổi lịch
+    // sang phòng ban KHÁC chính mình (nhánh !canManage không cần danh mục này vì đã bị ép đúng user.dept).
+    depts: ['Phòng Kinh Doanh', 'Phòng Kỹ Thuật', 'Phòng Hành Chính'],
+    stores: []
   })
 });
 
@@ -213,6 +218,23 @@ async function main() {
       const { status, json } = await put(port, 1, basePayload({ dept: 'Phòng Kỹ Thuật' }));
       assertEqual(status, 403);
       assert(/phòng ban/.test(json.error || ''));
+    });
+
+    await run.run('LỖI ĐÃ VÁ (re-audit lần 8, mức TB — dept-spoofing khi canManage): Người quản lý phòng họp (meetingCancel) đổi dept sang 1 phòng ban KHÔNG CÓ trong danh mục -> 400, không được ghi bừa vào hồ sơ', async () => {
+      MEETINGS = makeMeetings();
+      currentActor = ROOM_MANAGER;
+      const { status, json } = await put(port, 1, basePayload({ dept: 'Phòng Bịa Đặt Không Tồn Tại' }));
+      assertEqual(status, 400, JSON.stringify(json));
+      assert(/phòng ban/i.test(json.error || ''), JSON.stringify(json));
+      assertEqual(MEETINGS.find((m) => m.id === 1).dept, 'Phòng Kinh Doanh', 'dept hồ sơ KHÔNG được đổi khi payload.dept không hợp lệ');
+    });
+
+    await run.run('Người quản lý phòng họp (meetingCancel) đổi dept sang 1 phòng ban KHÁC HỢP LỆ (có trong danh mục) vẫn làm được (canManage không bị ép forceOwnDept như creator thường)', async () => {
+      MEETINGS = makeMeetings();
+      currentActor = ROOM_MANAGER;
+      const { status, json } = await put(port, 1, basePayload({ dept: 'Phòng Kỹ Thuật' }));
+      assertEqual(status, 200, JSON.stringify(json));
+      assertEqual(json.item.dept, 'Phòng Kỹ Thuật');
     });
 
     await run.run('Không tìm thấy lịch họp (id lạ) -> 404', async () => {

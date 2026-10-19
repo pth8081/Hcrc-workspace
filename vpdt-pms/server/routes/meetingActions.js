@@ -200,6 +200,21 @@ router.put('/:id', async (req, res) => {
       return res.status(403).json({ error: 'Bạn không có quyền đặt lịch cho phòng ban này' });
     }
     const appData = await getAllAppData();
+    // LỖI ĐÃ VÁ (re-audit lần 8, mức TB — "PUT /api/meetings/:id không đối chiếu danh mục dept khi
+    // canManage"): nhánh canManage (admin/meetingCancel) ở trên được PHÉP bỏ qua scopeAllows() (đúng
+    // thiết kế — route Sửa thay thế hẳn quy trình Hủy+Tạo-lại cho nhóm "quản lý toàn công ty", xem chú
+    // thích ngay trên) nhưng do đó KHÔNG hề còn bước nào đối chiếu payload.dept với danh mục phòng ban/
+    // siêu thị thật — khác hẳn editContract() (lib/recordActions.js) đã validate catalog riêng NGOÀI
+    // scope check. Một request tự soạn có thể gửi payload.dept là CHUỖI BỊA, ghi thẳng vào item.dept
+    // (dòng gán bên dưới) không qua bất kỳ kiểm tra nào. Nhánh !canManage không cần thêm vì
+    // scopeAllows(freshUser, {}, payload.dept) chỉ qua khi payload.dept === freshUser.dept — vốn luôn là
+    // 1 phòng ban thật của chính người dùng đó.
+    if (canManage) {
+      const validDepts = new Set([...(appData.depts || []), ...(appData.stores || [])]);
+      if (validDepts.size && !validDepts.has(payload.dept)) {
+        return res.status(400).json({ error: `Phòng ban không hợp lệ: ${payload.dept}` });
+      }
+    }
     const validRoomNames = (appData.meetingRooms || []).map((r) => r.name);
     if (!validRoomNames.includes(payload.room)) {
       return res.status(400).json({ error: `Phòng họp "${payload.room}" không có trong danh mục — vui lòng chọn lại` });
