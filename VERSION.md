@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.44 (2026-11): [TB] Re-audit lần 8 — mục 6/10: PUT /api/meetings/:id không đối chiếu danh mục dept khi canManage (dept-spoofing)
+
+Mục thứ sáu (6/10) của đợt re-audit lần 8 — bắt đầu phần Trung Bình.
+
+**Nguyên nhân:** `PUT /api/meetings/:id` (`routes/meetingActions.js`) cho phép `canManage` (admin/
+`meetingCancel` — "Người quản lý phòng họp") bỏ qua `scopeAllows(freshUser, {}, payload.dept)` khi sửa
+lịch họp, ĐÚNG THIẾT KẾ vì route Sửa này thay thế hẳn quy trình Hủy+Tạo-lại cho nhóm "quản lý toàn công
+ty" (không nên bị ép `forceOwnDept` như creator thường). Nhưng vì vậy `payload.dept` của nhóm này KHÔNG
+còn qua bất kỳ kiểm tra nào nữa — khác hẳn `editContract()` (`lib/recordActions.js`) có bước đối chiếu
+danh mục `appData.depts`/`appData.stores` RIÊNG, NẰM NGOÀI scope check. Một request tự soạn (`canManage`)
+gửi `payload.dept` là chuỗi bịa bất kỳ sẽ được ghi thẳng vào `item.dept`, gây nhiễu dữ liệu báo cáo/Khối
+Phòng Ban và có thể né cơ chế gác quyền theo dept ở nơi khác đọc field này.
+
+**Vá:** thêm 1 bước đối chiếu danh mục (`new Set([...appData.depts, ...appData.stores])`, cùng khuôn
+`editContract()`) chỉ áp dụng cho nhánh `canManage` — nhánh `!canManage` không cần vì `scopeAllows()` đã
+ép `payload.dept === freshUser.dept` (luôn là phòng ban thật). `canManage` vẫn được tự do chọn BẤT KỲ
+phòng ban hợp lệ nào (không giới hạn về đúng phòng mình), chỉ không được chọn phòng ban KHÔNG có thật.
+
+**Test:** `tests/test-meeting-edit-route.js` — thêm 2 scenario mới: (1) `meetingCancel` đổi `dept` sang
+chuỗi bịa không có trong danh mục → 400, hồ sơ KHÔNG bị đổi; (2) đối chứng — đổi `dept` sang 1 phòng ban
+HỢP LỆ khác chính mình vẫn thành công như cũ (xác nhận không siết quá tay). Xác nhận FAIL trên code CŨ
+(1/12 FAIL — case bịa dept lọt qua 200), PASS trên code đã vá (12/12). Regression: toàn bộ 17 file test
+liên quan module Phòng Họp/Xe (`test-meeting-*.js`, `test-khoi0-meeting*.js`, `test-audit-round5-*meeting-car.js`,
+`test-collapse-car-meeting-minutes-forms.js`, `test-budget-meeting-dept-workflow-ui.js`,
+`test-selfapprove-leave-shiftswap-meeting.js`) + `test-approval-polling.js` (mount cùng router) — toàn
+bộ PASS, không ảnh hưởng hành vi cũ.
+
+**Deploy-impact:** không cần migrate dữ liệu, không đổi route/API contract (chỉ siết chặt 1 input không
+hợp lệ trước đây lọt qua) — chỉ copy code + `pm2 restart`.
 
 ## v27.43 (2026-11): [Cao] Re-audit lần 8 — mục 5/10 (HẾT phần Cao): Cascade rename username không chạm snapshot approver đông cứng (effectiveApprovers/extraApprovalLayers)
 
