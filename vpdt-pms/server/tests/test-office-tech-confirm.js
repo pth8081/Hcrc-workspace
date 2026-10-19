@@ -26,7 +26,12 @@ const TRUONG_PHONG = { username: 'tp1', name: 'Trưởng Phòng A', active: true
 const KY_THUAT = { username: 'kt1', name: 'Kỹ Thuật B', active: true, perms: { officeFixTechMechanical: true } };
 const KY_THUAT_IT = { username: 'kt2', name: 'Kỹ Thuật IT C', active: true, perms: { officeFixTechIT: true } };
 const CAP_DUYET = { username: 'cd1', name: 'Cấp Duyệt Chi Phí D', active: true };
-const CREATOR = { username: 'nv1', name: 'Nhân Viên E', active: true, perms: { officeCreate: true, officeFix: true, officeBuy: true } };
+// LỖI ĐÃ VÁ (re-audit lần 8, mức TB — "officeReqs SUA_CHUA create dùng payload.dept thô cho check Kỹ
+// Thuật Xác Nhận độc lập"): extraValidate() giờ tra officeFixDeptWorkflows[user.dept] (ĐÚNG phòng ban
+// THẬT của người tạo, khớp forceOwnDept) thay vì payload.dept thô — CREATOR cần có `dept` khớp với
+// payload.dept='Phòng Kinh Doanh' mà các test TẠO bên dưới vẫn dùng (đúng giả định thực tế: forceOwnDept
+// luôn ép dept bản ghi cuối cùng = user.dept, nên 2 giá trị này LUÔN khớp ở ngoài đời thật).
+const CREATOR = { username: 'nv1', name: 'Nhân Viên E', dept: 'Phòng Kinh Doanh', active: true, perms: { officeCreate: true, officeFix: true, officeBuy: true } };
 
 function baseAppData() {
   return {
@@ -117,6 +122,25 @@ test('LỖ HỔNG ĐÃ VÁ (audit v25.51→v25.63): không được chọn CHÍN
   assert.throws(() => {
     CREATE_MODULE_CONFIGS.officeReqs.extraValidate(payload, [], CREATOR, appData);
   }, /400|độc lập/);
+});
+
+test('LỖI ĐÃ VÁ (re-audit lần 8, mức TB — "dùng payload.dept thô cho check Kỹ Thuật Xác Nhận độc lập"): CREATOR (dept THẬT = Phòng Kinh Doanh, forceOwnDept) tự soạn payload.dept = 1 phòng ban KHÁC (không xung đột) để né check "không được chọn chính Trưởng Phòng bước 1" -> VẪN phải bị chặn, vì dept dùng để tra workflow phải là user.dept THẬT, không phải payload.dept client gửi', () => {
+  const tpWithTechPerm = { username: 'tp1', name: 'Trưởng Phòng A', active: true, perms: { officeFixTechMechanical: true } };
+  // payload.dept = 'Phòng Bịa Đặt' KHÔNG có cấu hình workflow nào (hoặc là 1 phòng ban khác không xung
+  // đột) — nếu hàm vẫn tra theo payload.dept (lỗi cũ) thì step1Approvers sẽ rỗng, check này không chặn
+  // gì cả dù tp1 THẬT RA chính là Trưởng Phòng duyệt bước 1 của Phòng Kinh Doanh (dept THẬT của CREATOR).
+  const payload = { subType: 'SUA_CHUA', dept: 'Phòng Bịa Đặt', techType: 'MECHANICAL', techAssignedTo: 'tp1' };
+  const appData = { officeFixDeptWorkflows: { 'Phòng Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp1'] } } }, users: [tpWithTechPerm] };
+  assert.throws(() => {
+    CREATE_MODULE_CONFIGS.officeReqs.extraValidate(payload, [], CREATOR, appData);
+  }, /400|độc lập/);
+});
+
+test('đối chứng: payload.dept spoofed KHÔNG ảnh hưởng tới trường hợp hợp lệ thật (techAssignedTo KHÔNG phải Trưởng Phòng của dept THẬT) -> vẫn tạo được bình thường', () => {
+  const payload = { subType: 'SUA_CHUA', dept: 'Phòng Bịa Đặt', techType: 'MECHANICAL', techAssignedTo: 'kt1' };
+  const appData = { officeFixDeptWorkflows: { 'Phòng Kinh Doanh': { workflowId: 'wf1', approvers: { 1: ['tp1'] } } }, users: [KY_THUAT] };
+  CREATE_MODULE_CONFIGS.officeReqs.extraValidate(payload, [], CREATOR, appData);
+  assert.strictEqual(payload.techAssignedTo, 'kt1');
 });
 
 test('TẠO: hợp lệ -> server tự gán lại đúng username/tên (không tin tên client gửi)', () => {
