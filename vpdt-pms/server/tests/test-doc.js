@@ -549,6 +549,41 @@ async function main() {
       );
     }
 
+    // ================= Scenario 6b (re-audit lần 9, mức Thấp — "openBosungEditModal() docs không khoá
+    // Dept/Phân Loại khi sửa version"): editDocDraft() (lib/recordActions.js:482-488) chặn hẳn đổi
+    // dept/cat cho PHIÊN BẢN (item.rootDocId != null, ép giữ nguyên theo tài liệu gốc) — modal "Sửa &
+    // Gửi Lại" phải khoá (disabled) 2 select này khi là phiên bản, và vẫn mở bình thường cho tài liệu
+    // GỐC (rootDocId == null, hành vi cũ, đã phủ ở Scenario 6 phía trên qua doc.id gốc). =================
+    {
+      const rootForVersion = { id: 9101, code: 'HC-ROOT-V2TEST', dept: 'Phòng Kinh Doanh', cat: 'Biểu Mẫu', title: 'Tài liệu gốc (test khoá version)', ver: 'v1.0', status: 'APPROVED', currentStep: 0, history: [], uploader: 'nv.taitailieu', uploaderName: 'Người Tải Lên', fileName: 'goc.pdf', fileType: 'application/pdf', fileUrl: '/uploads/goc.pdf', rootDocId: null };
+      const versionNeedsFix = { id: 9102, code: 'HC-ROOT-V2TEST-V2', dept: 'Phòng Kinh Doanh', cat: 'Biểu Mẫu', title: 'Phiên bản v2 (cần bổ sung)', ver: 'v2.0', status: 'DRAFT', currentStep: 0, history: [{ action: 'REQUEST_CHANGES', comment: 'Thiếu phụ lục đính kèm.' }], uploader: 'nv.taitailieu', uploaderName: 'Người Tải Lên', fileName: 'v2.pdf', fileType: 'application/pdf', fileUrl: '/uploads/v2.pdf', rootDocId: 9101 };
+      DB.docs.push(rootForVersion, versionNeedsFix);
+
+      openBosungEditModal('docs', versionNeedsFix.id);
+      const bsDeptVersion = document.getElementById('bsDept');
+      const bsCatVersion = document.getElementById('bsCat');
+      check(
+        'Scenario 6b: PHIÊN BẢN (rootDocId != null) -> #bsDept VÀ #bsCat đều bị khoá (disabled)',
+        bsDeptVersion.disabled === true && bsCatVersion.disabled === true,
+        `bsDept.disabled=${bsDeptVersion.disabled} bsCat.disabled=${bsCatVersion.disabled}`
+      );
+      check(
+        'Scenario 6b: value của #bsDept/#bsCat khi bị khoá vẫn đúng giá trị hiện tại của phiên bản (không rỗng/sai)',
+        bsDeptVersion.value === 'Phòng Kinh Doanh' && bsCatVersion.value === 'Biểu Mẫu',
+        `bsDept.value=${bsDeptVersion.value} bsCat.value=${bsCatVersion.value}`
+      );
+
+      // Tài liệu GỐC (rootDocId == null) — regression: KHÔNG được bị khoá oan, vẫn sửa được như cũ.
+      openBosungEditModal('docs', rootForVersion.id);
+      const bsDeptRoot = document.getElementById('bsDept');
+      const bsCatRoot = document.getElementById('bsCat');
+      check(
+        'Scenario 6b: TÀI LIỆU GỐC (rootDocId == null) -> #bsDept/#bsCat KHÔNG bị khoá (hành vi cũ giữ nguyên)',
+        bsDeptRoot.disabled === false && bsCatRoot.disabled === false,
+        `bsDept.disabled=${bsDeptRoot.disabled} bsCat.disabled=${bsCatRoot.disabled}`
+      );
+    }
+
     // ===================== LÀM GỌN (v24.75): tab Tài Liệu (client) KHÔNG còn tự lọc lại quyền XEM nữa
     // — DB.docs đã được SERVER chốt đúng phạm vi (canViewDoc() ở lib/recordViewScope.js) trước khi trả
     // về, renderDocs() chỉ RENDER nguyên mảng này (xem chú thích tại renderDocs()). Test dưới chỉ còn
