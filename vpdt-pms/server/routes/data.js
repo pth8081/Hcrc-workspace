@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees, cascadeUsernameChangesToUniformTransferRequestedBy } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees, cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2410,6 +2410,10 @@ router.post('/:key', async (req, res) => {
       // 10, mức Cao — xem chú thích đầy đủ tại cascadeUsernameChangesToWorkItemAssignment()
       // (lib/operationWorkItemStore.js).
       await cascadeUsernameChangesToWorkItemAssignment(renamed, deletedUsernames);
+      // forwardThreads[].forwardedBy/forwardedTo (submissions+contracts, "Chuyển Tiếp Xin Ý Kiến") —
+      // LỖI ĐÃ VÁ, re-audit lần 10, mức Cao — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToForwardThreads() (lib/catalogRename.js).
+      await cascadeUsernameChangesToForwardThreads(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi

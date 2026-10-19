@@ -1387,6 +1387,53 @@ async function cascadeUsernameChangesToUniformTransferRequestedBy(renamed, delet
   });
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 10, mức Cao — "forwardThreads[].forwardedBy/forwardedTo không cascade
+// username (submissions+contracts)"): mỗi node "Chuyển Tiếp Xin Ý Kiến" (tạo qua POST /api/workflow/
+// :module/:id/forward|/forward-reply, routes/workflow.js) lưu username THÔ vào forwardedBy/forwardedTo,
+// dùng NGUYÊN làm điều kiện duy nhất cấp quyền XEM cả hồ sơ (isForwardThreadParticipant()/
+// sanitizeForwardThreadsForUser(), lib/recordViewScope.js) + quyền TẢI FILE đính kèm
+// (lib/fileAuthz.js, allowedByForward) + quyền trả lời/xin gia hạn tiếp (routes/workflow.js, so trực
+// tiếp freshUser.username với forwardedTo/forwardedBy) — chưa từng được cascade khi đổi tên/xoá
+// username, cùng lớp lỗi với opinionRequestees/extraViewers/effectiveApprovers nhưng bị sót vì
+// forwardThreads không nằm trong RECORD_EFFECTIVE_APPROVERS_COLLECTIONS/
+// RECORD_EXTRA_APPROVAL_LAYERS_COLLECTIONS (không phải field "ai duyệt", mà là field "ai được chuyển
+// tiếp xin ý kiến"). Hậu quả: (1) đổi tên đăng nhập người ĐÃ được chuyển tiếp trên hồ sơ PENDING -> MẤT
+// NGAY quyền xem/tải file/trả lời (dù vẫn là chính người đó); (2) xoá vĩnh viễn rồi cấp lại username cho
+// nhân viên MỚI -> nhân viên đó THỪA KẾ quyền xem hồ sơ/tải file của luồng chuyển tiếp CŨ (bỏ qua hẳn
+// rule xem theo dept/creator/approver thông thường) — nghiêm trọng hơn field 1-giá-trị khác vì liên
+// quan trực tiếp quyền XEM dữ liệu nhạy cảm. Đổi tên -> giữ nguyên NODE, chỉ đổi 2 field username (id
+// node là UUID độc lập — crypto.randomUUID(), routes/workflow.js — parentNodeId tham chiếu THEO id này,
+// KHÔNG theo username, nên null hoá forwardedBy/forwardedTo khi xoá vĩnh viễn KHÔNG làm đứt gãy chuỗi
+// tham chiếu cha-con, không cần gỡ hẳn node). Xoá vĩnh viễn -> null hoá CẢ 2 field độc lập (gỡ "người
+// chuyển tiếp"/"người được chuyển tiếp", không suy đoán ai thay thế) — node vẫn còn để KHÔNG phá vỡ
+// parentNodeId của các node con kế tiếp trong cùng luồng.
+async function cascadeUsernameChangesToForwardThreads(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  for (const collection of RECORD_EFFECTIVE_APPROVERS_COLLECTIONS) {
+    await renameFieldValueInCollection(collection, (item) => {
+      if (!Array.isArray(item.forwardThreads) || !item.forwardThreads.length) return item;
+      let changed = false;
+      const nextThreads = item.forwardThreads.map((node) => {
+        if (!node) return node;
+        let nextForwardedBy = node.forwardedBy;
+        let nextForwardedTo = node.forwardedTo;
+        for (const { oldValue, newValue } of renamed || []) {
+          if (nextForwardedBy === oldValue) nextForwardedBy = newValue;
+          if (nextForwardedTo === oldValue) nextForwardedTo = newValue;
+        }
+        for (const deletedUsername of deletedUsernames || []) {
+          if (nextForwardedBy === deletedUsername) nextForwardedBy = null;
+          if (nextForwardedTo === deletedUsername) nextForwardedTo = null;
+        }
+        if (nextForwardedBy === node.forwardedBy && nextForwardedTo === node.forwardedTo) return node;
+        changed = true;
+        return { ...node, forwardedBy: nextForwardedBy, forwardedTo: nextForwardedTo };
+      });
+      return changed ? { ...item, forwardThreads: nextThreads } : item;
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1399,5 +1446,5 @@ module.exports = {
   cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
   cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers,
   cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees,
-  cascadeUsernameChangesToUniformTransferRequestedBy
+  cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads
 };
