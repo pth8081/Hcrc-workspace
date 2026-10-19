@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**27.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.39 (2026-11): [Cao] Re-audit lần 8 — mục 1/10: hrProcesses OFFBOARDING tự tạo + tự xử lý quy trình nghỉ việc của chính mình
+
+Mục đầu tiên (1/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** `employeeUsername` khi tạo quy trình OFFBOARDING (`lib/createValidation.js`,
+`CREATE_MODULE_CONFIGS.hrProcesses.extraValidate`) được chọn tự do từ `appData.users`, không chặn
+`=== chính người gọi API`. Người có `hrOffboardingManage` tự tạo quy trình Offboarding cho chính mình,
+rồi vì `canManageHrProcess()`/`canActOnHrTask()` (`lib/recordActions.js`) cho `creator`/
+`hrOffboardingManage`/`hrProcessManage` toàn quyền quản lý/xử lý task — có thể tự hoàn thành/bỏ qua mọi
+task bắt buộc (thu hồi tài sản, chốt công/phép, khoá tài khoản...), tự ghi `resignationReason` theo ý
+muốn, tự chỉ định "người kế nhiệm", và tự huỷ quy trình bất kỳ lúc nào để trì hoãn/vô hiệu hoá việc thu
+hồi quyền truy cập — không ai xác nhận độc lập.
+
+**Vá:**
+1. `lib/createValidation.js`: chặn tạo ngay tại `extraValidate()` nếu `employee.username === user.username`
+   (403 "Không thể tự tạo quy trình Offboarding cho chính mình").
+2. `lib/recordActions.js`: thêm chặn TUYỆT ĐỐI (không cho `hrProcessManage`/admin/creator bypass) ở đầu
+   `canManageHrProcess()` và `canActOnHrTask()` khi `item.processType === 'OFFBOARDING' &&
+   item.employeeUsername === user.username` — phòng cả dữ liệu cũ/đường gọi khác không đi qua
+   `extraValidate`, đúng quyết định 11/2026 "chặn tự duyệt ở TẤT CẢ module, không ngoại lệ".
+   `employeeUsername` luôn `null` ở ONBOARDING nên không ảnh hưởng nhánh đó.
+
+**Test:** file mới `tests/test-hrprocess-offboarding-self-process.js` (8 scenario, 2 phần — Phần A gọi
+router thật `POST /api/create/hrProcesses`, Phần B gọi trực tiếp `canManageHrProcess()`/
+`canActOnHrTask()`): tự tạo Offboarding cho chính mình -> 403, đối chứng tạo cho người khác -> vẫn
+thành công; `canManageHrProcess()`/`canActOnHrTask()` chặn tuyệt đối dù có `hrProcessManage`+admin+là
+creator khi `employeeUsername` là chính mình, đối chứng vẫn cho phép xử lý quy trình của người khác,
+đối chứng ONBOARDING không bị ảnh hưởng. Xác nhận FAIL trên code CŨ (`git stash`, 4/8 scenario FAIL),
+PASS trên code đã vá (8/8). Regression: `tests/test-offboarding-duplicate-process-race.js` (9/9),
+`tests/test-hrprocess-delete-permission.js` (7/7), `tests/test-hrprocess-cancel-itticket-cleanup.js`
+(9/9), `tests/test-hrprocess-task-settle-itticket-cleanup.js` (5/5), `tests/test-hr-lifecycle.js`
+(39/39) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.38 (2026-11): [Thấp] Re-audit lần 7 — mục 9/9 (HẾT đợt): externalAuthVerify so khớp username phân biệt hoa/thường
 
