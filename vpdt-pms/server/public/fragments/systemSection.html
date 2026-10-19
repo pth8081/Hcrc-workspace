@@ -2705,6 +2705,18 @@
               </div>
               <div id="pOperationOrderReceiptDeptContainer" class="pl-1"></div>
             </div>
+            <!-- pOperationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi
+                 xác nhận rủi ro qua demo/trao đổi): CHỈ gỡ chặn "người tạo đơn hàng không được tự duyệt/
+                 tự xác nhận nhập hàng" cho ĐÚNG người được tick quyền này — KHÔNG tự cấp quyền duyệt/xác
+                 nhận, người đó vẫn phải là approver hợp lệ theo mức giá trị (Hệ Thống → Quy Trình & Phê
+                 Duyệt) hoặc có quyền Phê Duyệt Đặt Hàng HO/Siêu Thị ở trên mới dùng được. Dùng cho đúng
+                 tình huống "1 người vừa tạo vừa là người duyệt hợp lệ duy nhất" (VD siêu thị nhỏ chỉ có 1
+                 quản lý) — xem MODULE_CONFIGS.operationOrders.allowSelfDeciding (lib/workflowEngine.js) +
+                 assertNotSelfHandlingOperationOrderReceipt() (lib/recordActions.js). -->
+            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa tạo vừa duyệt (VD siêu thị chỉ có 1 quản lý). Không ảnh hưởng người khác, chỉ gỡ chặn tự duyệt cho ĐÚNG tài khoản được tick.</p>
+            <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pOperationOrderAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xác Nhận Đơn Hàng Do Chính Mình Tạo (áp dụng cả Đặt Hàng ST lẫn HO)
+            </label>
             <!-- pItPriceProposeCreateWholesale/pItPriceEmergencyRejectApproveWholesale (10/2026, dời từ
                  mục "15. Hỗ Trợ IT" sang đây, theo yêu cầu người dùng — Phê Duyệt Giá Bán Buôn thuộc
                  nghiệp vụ Vận Hành). Việc DUYỆT thật sự (không nằm ở đây) vẫn theo mức Margin-Chiết Khấu
@@ -2813,6 +2825,19 @@
                 <input type="checkbox" id="pItPriceEmergencyRejectApproveRetail"> 🚨 Phê duyệt từ chối khẩn cấp Bán Lẻ
               </label>
             </div>
+            <!-- pItPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi xác
+                 nhận rủi ro qua demo/trao đổi): CHỈ gỡ chặn "người đề xuất giá không được tự duyệt/tự áp
+                 giá/tự xử lý từ chối khẩn cấp" cho ĐÚNG người được tick quyền này — KHÔNG tự cấp quyền
+                 duyệt/xử lý giá, người đó vẫn phải là approver hợp lệ theo cấu hình phòng ban/mức Margin-
+                 Chiết Khấu (Hệ Thống → Quy Trình & Phê Duyệt) hoặc có itPriceSupport/quyền duyệt từ chối
+                 khẩn cấp ở trên mới dùng được. GỘP CHUNG 1 quyền cho CẢ Bán Buôn LẪN Bán Lẻ (không tách
+                 riêng như 2 quyền phía trên) — xem MODULE_CONFIGS.itPriceApprovals.allowSelfDeciding
+                 (lib/workflowEngine.js) + assertNotSelfHandlingItPriceApply()/assertNotSelfDecidingItPrice
+                 EmergencyReject() (lib/recordActions.js). -->
+            <p class="text-[11px] text-amber-700 italic pt-1 border-t bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền đặc biệt — chỉ gán khi THẬT SỰ cần 1 người vừa đề xuất vừa duyệt giá (VD chỉ có 1 chuyên viên phụ trách giá). Áp dụng CẢ Bán Buôn lẫn Bán Lẻ, không ảnh hưởng người khác, chỉ gỡ chặn tự duyệt cho ĐÚNG tài khoản được tick.</p>
+            <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pItPriceAllowSelfApprove"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Do Chính Mình Tạo (áp dụng cả Bán Buôn lẫn Bán Lẻ)
+            </label>
           </div>
         </details>
         </div>

@@ -4567,6 +4567,11 @@ function defaultNewUserPerms() {
     itPriceProposeCreateWholesale: false, itPriceProposeCreateRetail: false,
     itManage: false, itPriceSupport: false, itServiceRenewalManage: false,
     itPriceEmergencyRejectApproveWholesale: false, itPriceEmergencyRejectApproveRetail: false,
+    // operationOrderAllowSelfApprove/itPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người
+    // dùng — xem chú thích đầy đủ ở MODULE_CONFIGS.operationOrders/itPriceApprovals.allowSelfDeciding,
+    // lib/workflowEngine.js): mặc định TẮT cho mọi tài khoản mới — admin phải chủ động tick mới gỡ được
+    // chặn "tự duyệt hồ sơ do chính mình tạo" cho đúng 2 module này.
+    operationOrderAllowSelfApprove: false, itPriceAllowSelfApprove: false,
     uniformManage: false, uniformApprove: false, uniformStoreManage: false,
     budgetManage: false, budgetCreate: false, budgetAggregate: false,
     // budgetReportView (10/2026, cùng đợt trên): quyền CHỈ XEM tab "Báo Cáo" Ngân Sách (budgetLines),

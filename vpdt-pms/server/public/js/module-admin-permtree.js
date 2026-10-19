@@ -215,6 +215,15 @@ function collectPermsFromForm() {
     itServiceRenewalManage: document.getElementById('pItServiceRenewalManage').checked,
     itPriceEmergencyRejectApproveWholesale: document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked,
     itPriceEmergencyRejectApproveRetail: document.getElementById('pItPriceEmergencyRejectApproveRetail').checked,
+    // itPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy đủ ở
+    // MODULE_CONFIGS.itPriceApprovals.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN "người đề xuất
+    // giá không được tự duyệt/tự áp giá/tự xử lý từ chối khẩn cấp" (assertNotSelfDecidingWorkflowItem()/
+    // assertNotSelfHandlingItPriceApply()/assertNotSelfDecidingItPriceEmergencyReject()) cho ĐÚNG người
+    // được admin gán quyền này — DÙNG CHUNG 1 quyền cho CẢ Bán Buôn lẫn Bán Lẻ (gộp theo module, không
+    // tách riêng như itPriceProposeCreate/itPriceEmergencyRejectApprove). KHÔNG tự động cấp quyền duyệt/
+    // xử lý giá — người này vẫn phải có đủ quyền duyệt/itPriceSupport hiện có mới dùng được, quyền này
+    // chỉ gỡ đúng lớp chặn "nhưng bạn là người đề xuất" khi họ ĐÃ là approver/người xử lý hợp lệ.
+    itPriceAllowSelfApprove: document.getElementById('pItPriceAllowSelfApprove').checked,
     uniformManage: document.getElementById('pUniformManage').checked,
     uniformApprove: document.getElementById('pUniformApprove').checked,
     uniformStoreManage: document.getElementById('pUniformStoreManage').checked,
@@ -274,6 +283,15 @@ function collectPermsFromForm() {
     // thật dài/tên dài khiến lưới checkbox 2-3 cột bị ngắn tên, không nhìn thấy hết (phản hồi người dùng).
     // scopeFromMultiSelectDropdown() (core.js) đọc lại từ getMultiSelectValues() thay vì query checkbox.
     operationOrderReceiptManageStore: scopeFromMultiSelectDropdown('pOperationOrderReceiptAll', 'pOperationOrderReceiptDeptContainer'),
+    // operationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — xem chú thích đầy
+    // đủ ở MODULE_CONFIGS.operationOrders.allowSelfDeciding, lib/workflowEngine.js): gỡ CHẶN "người tạo
+    // đơn hàng không được tự duyệt/tự xác nhận nhập hàng/hủy nhập" (assertNotSelfDecidingWorkflowItem()/
+    // assertNotSelfHandlingOperationOrderReceipt()) cho ĐÚNG người được admin gán quyền này — áp dụng
+    // CẢ Đặt Hàng ST lẫn HO, CẢ bước duyệt theo mức giá trị LẪN bước Xác Nhận Nhập Hàng/Hủy Nhập. KHÔNG
+    // tự động cấp quyền duyệt — người này vẫn phải là approver hợp lệ theo cấu hình mức giá trị/quyền
+    // operationOrderReceiptManageHO/Store hiện có mới dùng được, quyền này chỉ gỡ đúng lớp chặn "nhưng
+    // bạn là người tạo" khi họ ĐÃ là approver hợp lệ.
+    operationOrderAllowSelfApprove: document.getElementById('pOperationOrderAllowSelfApprove').checked,
     // Checklist Đánh Giá Siêu Thị (xem lib/checklist.js) — 11/2026 LÀM GỌN: cấu hình/quản lý mẫu đã dời
     // hẳn vào Hệ Thống > Cấu Hình Nghiệp Vụ (CHỈ admin, không còn checkbox ở đây). Còn đúng 4 quyền
     // PHẲNG: checklistExecute (+ checklistExecuteScope, nguồn siêu thị DB.stores, CÙNG widget
@@ -345,6 +363,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pItServiceRenewalManage').checked = !!perms.itServiceRenewalManage;
   document.getElementById('pItPriceEmergencyRejectApproveWholesale').checked = !!perms.itPriceEmergencyRejectApproveWholesale;
   document.getElementById('pItPriceEmergencyRejectApproveRetail').checked = !!perms.itPriceEmergencyRejectApproveRetail;
+  document.getElementById('pItPriceAllowSelfApprove').checked = !!perms.itPriceAllowSelfApprove;
   document.getElementById('pUniformManage').checked = !!perms.uniformManage;
   document.getElementById('pUniformApprove').checked = !!perms.uniformApprove;
   document.getElementById('pUniformStoreManage').checked = !!perms.uniformStoreManage;
@@ -393,6 +412,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationOrderReceiptHO').checked = !!perms.operationOrderReceiptManageHO;
   document.getElementById('pOperationOrderReceiptAll').checked = !!perms.operationOrderReceiptManageStore?.all;
   setOperationOrderReceiptScopeCheckboxes(perms.operationOrderReceiptManageStore?.depts);
+  document.getElementById('pOperationOrderAllowSelfApprove').checked = !!perms.operationOrderAllowSelfApprove;
   document.getElementById('pChecklistExecute').checked = !!perms.checklistExecute;
   document.getElementById('pChecklistExecuteScopeAll').checked = !!perms.checklistExecuteScope?.all;
   setChecklistExecuteScopeCheckboxes(perms.checklistExecuteScope?.depts);

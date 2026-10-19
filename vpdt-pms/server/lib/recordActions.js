@@ -874,7 +874,13 @@ function isApproverForOperationOrderReceipt(user, item) {
 // nhau), tự xác nhận/hủy nhập hàng do chính mình đặt mà không ai kiểm chứng độc lập hàng THẬT có về hay
 // không. KHÔNG mở ngoại lệ admin (theo đúng chính sách "không tự duyệt ở TẤT CẢ module, không ngoại
 // lệ" người dùng đã xác nhận trước đây) — cùng khuôn assertNotSelfHandlingItPriceApply() ở trên.
+// operationOrderAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo
+// rõ rủi ro + người dùng xác nhận CHỈ mở cho đúng Đặt Hàng ST/HO — KHÔNG mở cho các module "rủi ro cao"
+// khác): admin gán quyền này cho đúng người/chức danh cần "vừa tạo vừa xác nhận nhập hàng" (VD siêu thị
+// chỉ có 1 quản lý) — KHÔNG tự cấp quyền xác nhận, isApproverForOperationOrderReceipt() vẫn phải qua
+// trước đó (gọi TRƯỚC hàm này ở receiveOperationOrderGoods()/cancelOperationOrderReceipt() bên dưới).
 function assertNotSelfHandlingOperationOrderReceipt(user, item) {
+  if (user?.perms?.operationOrderAllowSelfApprove) return;
   if (item.creator && item.creator === user.username) {
     throw new HttpError(403, 'Bạn không thể tự xác nhận/hủy nhập hàng cho đơn hàng do chính mình tạo');
   }
@@ -6197,7 +6203,13 @@ function hasPendingItPriceEmergencyReject(item) {
 // theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module", không có ngoại lệ): bỏ
 // hẳn nhánh admin-bypass đã có trước đây (trước đây nhất quán với assertNotSelfDecidingWorkflowItem() —
 // nay NGƯỢC LẠI, nhất quán với khuôn CHUẨN MỚI chặn CẢ admin).
+// itPriceAllowSelfApprove (11/2026, theo yêu cầu TRỰC TIẾP của người dùng, sau khi đã cảnh báo rõ rủi
+// ro + người dùng xác nhận CHỈ mở cho đúng Phê Duyệt Giá Buôn/Lẻ — KHÔNG mở cho các module "rủi ro cao"
+// khác): admin gán quyền này cho đúng người/chức danh cần "vừa đề xuất vừa áp giá" (VD chỉ có 1 chuyên
+// viên phụ trách giá) — KHÔNG tự cấp quyền áp giá, canSupportItPrice()/itPriceSupport vẫn phải qua
+// trước đó (gọi TRƯỚC hàm này ở claimPriceApply()/applyPriceApproval()/requestPriceInfoFromIt() dưới).
 function assertNotSelfHandlingItPriceApply(user, item) {
+  if (user?.perms?.itPriceAllowSelfApprove) return;
   if (item.creator && item.creator === user.username) {
     throw new HttpError(403, 'Bạn không thể tự xử lý bước áp giá cho đề xuất do chính mình tạo');
   }
@@ -6363,7 +6375,12 @@ function requestItPriceEmergencyReject(user, item, payload) {
 // assertNotSelfDecidingUniformPeriod()/assertNotSelfDecidingUniformTransfer().
 // ĐỔI QUYẾT ĐỊNH (11/2026, theo yêu cầu TRỰC TIẾP của người dùng — "Chặn admin tự duyệt ở TẤT CẢ module",
 // không có ngoại lệ): bỏ hẳn nhánh admin-bypass đã có trước đây, khớp khuôn assertNotSelfDecidingBudgetLine().
+// itPriceAllowSelfApprove — cùng quyền gỡ chặn dùng chung cho cả 3 lớp tự xử lý giá (xem chú thích đầy
+// đủ ở assertNotSelfHandlingItPriceApply() ngay phía trên): người gửi yêu cầu từ chối khẩn cấp VẪN có
+// thể tự phê duyệt/từ chối yêu cầu đó nếu được admin gán quyền này (và vẫn phải có
+// itPriceEmergencyRejectApproveWholesale/Retail hợp lệ mới gọi được tới đây).
 function assertNotSelfDecidingItPriceEmergencyReject(user, item) {
+  if (user?.perms?.itPriceAllowSelfApprove) return;
   if (item && item.emergencyRejectRequestedBy === user?.username) {
     throw new HttpError(403, 'Bạn không thể tự phê duyệt/từ chối yêu cầu từ chối khẩn cấp do chính mình gửi');
   }
