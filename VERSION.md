@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**27.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.54 (2026-11): [TB] Re-audit lần 9 — mục 6/12: Cascade rename thiếu carRegs.assignedDriverUsername + officeReqs.techAssignedTo
+
+Mục thứ sáu (6/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `carRegs.assignedDriverUsername` (tài xế được phân công, gán lúc duyệt — xem
+`canConfirmCarDriverAssignment()`/`canEndCarTrip()`, `lib/recordActions.js:8275,8330-8334`) và
+`officeReqs.techAssignedTo` (kỹ thuật viên độc lập xác nhận, chốt NGAY LÚC TẠO/SỬA hồ sơ SUA_CHUA —
+xem `lib/workflowEngine.js:462`, `approvers[2] = [item.techAssignedTo]`) — 2 field "chỉ định đúng 1
+người cụ thể" so khớp username THÔ — chưa từng được cascade khi đổi tên/xoá tài khoản, dù cùng bản
+chất dễ vỡ như creator/approver đã vá ở nhiều cascade khác trong `lib/catalogRename.js`. Hậu quả: (1)
+đổi tên đăng nhập -> tài xế/kỹ thuật viên đó tự MẤT quyền xác nhận hồ sơ của chính mình (bước duyệt
+"Kỹ Thuật Xác Nhận" mất hẳn approver hợp lệ, chỉ admin còn duyệt được); (2) xoá vĩnh viễn rồi cấp LẠI
+đúng username cho người khác -> người MỚI thừa kế nhầm quyền xác nhận hồ sơ CŨ.
+
+**Bản vá:** thêm `cascadeUsernameChangesToCarDriverAndOfficeReqTech()` (`lib/catalogRename.js`), gọi
+cùng chỗ với các cascade username khác ở `routes/data.js`. CHỈ cascade đúng field USERNAME
+(`assignedDriverUsername`/`techAssignedTo`) — KHÔNG đụng field tên hiển thị song hành
+(`carRegs.assignedDriver`/`officeReqs.techAssignedToName`, chỉ lưu TÊN người, không cần đồng bộ theo
+đổi username), cùng nguyên tắc `creatorField` (không đụng `creatorNameField`) đã áp dụng ở
+`cascadeUsernameChangesToRecordCreatorFields()`. Xoá vĩnh viễn -> null hoá (gỡ "người được phân công",
+không suy đoán ai thay thế).
+
+**Test:** `tests/test-cardriver-officereqtech-username-cascade.js` (5 kịch bản — đổi tên cascade đúng
+cả 2 collection cùng lúc, giữ nguyên field tên hiển thị, xoá vĩnh viễn null hoá, bản ghi chưa phân công/
+không liên quan giữ nguyên, sớm return khi không có gì để cascade). Xác nhận test FAIL trên code cũ
+(`cascadeUsernameChangesToCarDriverAndOfficeReqTech is not a function`) và PASS trên code mới. Chạy
+lại regression: 6 cascade test khác (`test-managerusername-rename-delete-cascade.js`/
+`test-record-approver-snapshot-username-cascade.js`/`test-workflowapprover-username-cascade.js`/
+`test-approvalgroup-username-cascade.js`/`test-record-creator-field-username-cascade.js`/
+`test-deptviewscope-extraviewers-username-cascade.js`) + `test-catalog-rename-server.js` +
+`test-khoi0-carregs-vppregistrations-gate.js` + `test-khoi0-officereqs-vpp-periodicreport-gate.js` +
+`test-collapse-contract-budget-doc-forms.js` — tất cả PASS, không có regression.
+
+**Ảnh hưởng deploy:** chỉ code `server/`, không đổi `schema.sql`/biến môi trường/`package.json`
+dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.53 (2026-11): [TB] Re-audit lần 9 — mục 5/12: module-hopdong.js nút Sửa không hiện cho admin khi recovery DRAFT/REJECTED/NEEDS_SUPPLEMENT
 
