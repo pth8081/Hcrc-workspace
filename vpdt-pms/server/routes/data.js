@@ -12,7 +12,7 @@ const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached, cascadeUsernameChangesToTaskAssignedBy } = require('../lib/taskStore');
-const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
+const { getAllWorkItemsCached, cascadeUsernameChangesToWorkItemAssignment } = require('../lib/operationWorkItemStore');
 const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
@@ -2405,6 +2405,11 @@ router.post('/:key', async (req, res) => {
       // duyệt ở assertNotSelfDecidingUniformTransfer()) — LỖI ĐÃ VÁ, re-audit lần 10, mức Cao — xem chú
       // thích đầy đủ tại cascadeUsernameChangesToUniformTransferRequestedBy() (lib/catalogRename.js).
       await cascadeUsernameChangesToUniformTransferRequestedBy(renamed, deletedUsernames);
+      // operationWorkItems.assignedTo[]/acceptorUsername (bảng riêng dbo.OperationWorkItems, không qua
+      // renameFieldValueInCollection() như các collection JSON-blob thường) — LỖI ĐÃ VÁ, re-audit lần
+      // 10, mức Cao — xem chú thích đầy đủ tại cascadeUsernameChangesToWorkItemAssignment()
+      // (lib/operationWorkItemStore.js).
+      await cascadeUsernameChangesToWorkItemAssignment(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi

@@ -1,9 +1,55 @@
 # Phiên bản hiện tại
 
-**27.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.63** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.63 (2026-11): [Cao] Re-audit lần 10 — mục 3/14: operationWorkItems.assignedTo[]/acceptorUsername không cascade username (bảng riêng dbo.OperationWorkItems)
+
+Mục thứ ba (3/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** `operationWorkItems` (cây công việc "Thực hiện" của Vận Hành) lưu ở bảng SQL RIÊNG
+(`dbo.OperationWorkItems`, qua `lib/operationWorkItemStore.js`), nằm NGOÀI cơ chế
+`renameFieldValueInCollection()` (dbo.Records) mà mọi cascade username trong `lib/catalogRename.js`
+dựa vào — cùng tình trạng với `dbo.Tasks` (đã có cascade riêng
+`cascadeUsernameChangesToTaskAssignedBy()`, `lib/taskStore.js`) nhưng `operationWorkItems` chưa từng
+được vá tương tự. 2 field username quyết định quyền trên 1 work item hoàn toàn chưa được cascade:
+`assignedTo[]` (mảng username được phân công — `isWorkItemAssignee()` cấp quyền tự cập nhật tiến độ,
+xem `updateOperationWorkItemProgress()`, lib/recordActions.js) và `acceptorUsername` (1 username — cấp
+quyền "nghiệm thu"/accept, xem `acceptOperationWorkItem()`, lib/recordActions.js). Đổi tên đăng nhập ->
+người đó MẤT quyền tự cập nhật/nghiệm thu việc mình phụ trách; xoá vĩnh viễn rồi cấp LẠI đúng username
+cho nhân viên khác -> nhân viên MỚI THỪA KẾ quyền cập nhật/tự nghiệm thu công việc vận hành không liên
+quan tới họ.
+
+**Bản vá:** thêm `cascadeUsernameChangesToWorkItemAssignment()` (`lib/operationWorkItemStore.js`) —
+đọc TOÀN BỘ `Payload` qua `UPDLOCK/HOLDLOCK` trong 1 transaction (cùng khuôn
+`cascadeUsernameChangesToTaskAssignedBy()`), đổi tên/gỡ username khỏi `assignedTo[]` (giữ vị trí khi
+đổi tên, gỡ hẳn khỏi mảng khi xoá vĩnh viễn) + null hoá `acceptorUsername` khi xoá vĩnh viễn — CHỈ ghi
+lại cột `Payload` (2 field này không có cột SQL riêng, không như `AssignedBy` của Tasks). Wire vào
+`routes/data.js`, gọi ngay sau `cascadeUsernameChangesToUniformTransferRequestedBy()`.
+
+**Test:** `tests/test-operationworkitem-assignment-username-cascade.js` (mới, 5 scenario, giả lập
+`sql.Transaction`/`sql.Request`/`getPool` tối thiểu — cùng khuôn Phần B của
+`test-record-creator-field-username-cascade.js`). Xác nhận 5/5 FAIL trên code cũ (`... is not a
+function`), 5/5 PASS trên code mới. Rà soát phát hiện 9 file test HIỆN CÓ tự stub nguyên module
+`lib/operationWorkItemStore` (chỉ khai `getAllWorkItemsCached`) và THẬT SỰ gọi tới đường lưu
+`POST /api/data/users` (đổi tên/xoá username) — bị vỡ vì stub thiếu export mới
+(`test-audit-hethong-cluster-server.js`, `test-managerusername-rename-delete-cascade.js`,
+`test-permgroup-dangling-groupids.js`, `test-user-import-login-e2e.js`,
+`test-user-password-reset-bulk.js`, `test-user-save-autolink-profile.js`,
+`test-user-username-uniqueness.js`, `test-username-case-insensitive.js`,
+`test-users-session-version-strip.js`) — đã bổ sung `cascadeUsernameChangesToWorkItemAssignment: async
+() => 0` vào đúng 9 stub đó (không đổi hành vi test, chỉ bổ sung export thiếu), xác nhận cả 9 file PASS
+lại đầy đủ sau khi sửa. Quét toàn bộ 47 file còn stub module này — không file nào khác thực sự gọi tới
+đường username-save nên không cần sửa thêm. Chạy lại regression 5 file liên quan khác tới
+operationWorkItems: `test-operation-workitem-delete-toctou.js` (3/3),
+`test-operation-workitem-multilevel-cascade.js` (3/3), `test-operation-workitem-quickview.js` (5/5),
+`test-operation-workitem-sourceid-schema.js` (5/5), `test-operation-store-lifecycle.js` (100/100) —
+tất cả PASS. Tự kiểm cú pháp (`node -c`) + CSP grep — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/operationWorkItemStore.js` + `routes/data.js`), không
+đổi `schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.62 (2026-11): [Cao] Re-audit lần 10 — mục 2/14: uniformTransfers.requestedBy không cascade username rename/xoá
 
