@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.64** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.65** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.65 (2026-11): [Cao] Re-audit lần 10 — mục 5/14: forwardThreads[].forwardedBy/forwardedTo không cascade username (submissions+contracts)
+
+Mục thứ năm (5/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** mỗi node "Chuyển Tiếp Xin Ý Kiến" (tạo qua `POST /api/workflow/:module/:id/forward|
+/forward-reply`, routes/workflow.js) lưu username THÔ vào `forwardedBy`/`forwardedTo`, dùng NGUYÊN làm
+điều kiện duy nhất cấp quyền XEM cả hồ sơ (`isForwardThreadParticipant()`/
+`sanitizeForwardThreadsForUser()`, lib/recordViewScope.js) + quyền TẢI FILE đính kèm (lib/fileAuthz.js,
+`allowedByForward`) + quyền trả lời/xin gia hạn tiếp (routes/workflow.js, so trực tiếp
+`freshUser.username` với `forwardedTo`/`forwardedBy`) — chưa từng được cascade khi đổi tên/xoá username,
+cùng lớp lỗi với `opinionRequestees`/`extraViewers`/`effectiveApprovers` nhưng bị sót vì
+`forwardThreads` không nằm trong `RECORD_EFFECTIVE_APPROVERS_COLLECTIONS`/
+`RECORD_EXTRA_APPROVAL_LAYERS_COLLECTIONS`. Hậu quả: (1) đổi tên đăng nhập người ĐÃ được chuyển tiếp
+trên hồ sơ PENDING -> MẤT NGAY quyền xem/tải file/trả lời; (2) xoá vĩnh viễn rồi cấp lại username cho
+nhân viên MỚI -> nhân viên đó THỪA KẾ quyền xem hồ sơ/tải file của luồng chuyển tiếp CŨ (bỏ qua hẳn
+rule xem theo dept/creator/approver thông thường) — nghiêm trọng hơn field 1-giá-trị khác vì liên quan
+trực tiếp quyền XEM dữ liệu nhạy cảm.
+
+**Bản vá:** thêm `cascadeUsernameChangesToForwardThreads()` (lib/catalogRename.js), quét
+`submissions`/`contracts` qua `renameFieldValueInCollection()`: đổi tên giữ nguyên NODE, chỉ đổi 2
+field username (`forwardedBy`/`forwardedTo` độc lập nhau); xoá vĩnh viễn NULL HOÁ cả 2 field (KHÔNG gỡ
+hẳn node) — `node.id` là UUID độc lập (`crypto.randomUUID()`), `parentNodeId` tham chiếu THEO id này,
+KHÔNG theo username, nên null hoá username không làm đứt gãy chuỗi tham chiếu cha-con của các node
+chuyển tiếp tiếp theo trong cùng luồng. Wire vào `routes/data.js`, gọi ngay sau
+`cascadeUsernameChangesToWorkItemAssignment()`.
+
+**Test:** `tests/test-forwardthreads-username-cascade.js` (mới, 6 scenario, test thuần không cần SQL
+Server) — xác nhận cascade đúng cả 2 field độc lập, giữ nguyên field *Name hiển thị, KHÔNG đụng
+`parentNodeId`/không gỡ node khi xoá vĩnh viễn (chỉ null hoá), bỏ qua an toàn với mảng rỗng/bản ghi cũ
+chưa có field này. Xác nhận 6/6 FAIL trên code cũ (`... is not a function`), 6/6 PASS trên code mới.
+Chạy lại regression 4 file liên quan: `test-forward-opinion-workflow.js` (16/16),
+`test-approval-extension-routes.js` (16/16), `test-approval-email-config.js` (85/85),
+`test-approval-needed-email-template.js` (6/6) — tất cả PASS, không có regression. Tự kiểm cú pháp
+(`node -c`) + CSP grep — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/catalogRename.js` + `routes/data.js`), không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.64 (2026-11): [Cao] Re-audit lần 10 — mục 4/14: Cascade username rename không phủ itPriceApprovals.emergencyRejectRequestedBy + itSupportTickets.escalatedBy/approvalApprover
 
