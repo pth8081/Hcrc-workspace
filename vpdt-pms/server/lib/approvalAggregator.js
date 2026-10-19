@@ -26,9 +26,10 @@ const { MODULE_CONFIGS, canApproveStep, assertNotSelfDecidingWorkflowItem } = re
 const {
   canApproveInternalPost, canApproveLicense, canManagePaymentRequests,
   canApproveItPriceEmergencyReject, isApproverForOperationOrderReceipt,
-  canApproveUniform, canApproveUniformTransfer, canDecideMeeting
+  canApproveUniform, canApproveUniformTransfer, canDecideMeeting,
+  assertNotSelfDecidingUniformPeriod, assertNotSelfDecidingUniformTransfer
 } = require('./recordActions');
-const { canApproveLeaveRequest } = require('./attendance');
+const { canApproveLeaveRequest, assertShiftSwapApprover } = require('./attendance');
 
 // resolveEmployeeUsername() — bản copy nhỏ của lib/recordViewScope.js (cùng tên, không export sẵn ở đó)
 // — thuần tra cứu dữ liệu (employeeCode -> username qua employeeProfiles), KHÔNG phải quyết định quyền
@@ -167,26 +168,47 @@ function computeMyPendingApprovalKeys(user, appData) {
   // /api/approvals/pending-signature) trước đây KHÔNG BAO GIỜ phát hiện hồ sơ mới ở 5 luồng này, dù Hub
   // (sau khi vá) đã hiện đúng — nhãn "Phê Duyệt (N)" trên nav không tăng, poll không kích hoạt
   // initDatabase() làm mới Hub cho tới khi người dùng tự F5/tự chuyển qua màn Hub.
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "approvalAggregator 3 luồng mới (uniform/shiftSwap) thiếu
+  // loại trừ tự-liên-quan"): 3 khối uniformPeriod/uniformTransfer/shiftSwapRequest ngay dưới trước đây
+  // CHỈ kiểm quyền PHẲNG (canApproveUniform/canApproveUniformTransfer/allowed thủ công) — KHÔNG loại trừ
+  // chính người tạo/yêu cầu như enforcement thật đã có từ lâu (assertNotSelfDecidingUniformPeriod()/
+  // assertNotSelfDecidingUniformTransfer() ở approveUniformPeriod()/approveUniformTransfer() —
+  // lib/recordActions.js; assertShiftSwapApprover() ở routes/shiftSwapRequests/:id/approve — nay đã dời
+  // sang lib/attendance.js để tái dùng được ở đây). Hậu quả: người có uniformApprove/uniformManage tự
+  // tạo kỳ cấp phát/điều chuyển của chính mình, hoặc người có hrShiftSwapApprove/hrAttendanceManage/admin
+  // là chính bên tạo/nhận ca của 1 yêu cầu đổi ca, đều thấy khoá "cần duyệt" ở Approval Hub/endpoint
+  // polling dù bấm Duyệt thật sẽ luôn bị 403 (server vẫn enforce đúng, không phải lỗ hổng bảo mật) — chỉ
+  // là thông báo giả. Gọi THẲNG đúng hàm assert thật qua try/catch (cùng khuôn pushDeptWorkflowKeys() ở
+  // trên) — khớp triết lý "không tự suy diễn lại logic quyền" nêu ở đầu file; với shiftSwapRequest, gọi
+  // assertShiftSwapApprover() THAY HẲN cho việc tự tính lại biến `allowed` (hàm đã bao gồm đúng cả 2
+  // nhánh loại trừ requester/target LẪN điều kiện quyền phẳng/dept, không cần tính riêng nữa).
   if (canApproveUniform(user)) {
-    (appData.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL').forEach(p => keys.push(`uniformPeriod:${p.id}`));
+    (appData.uniformPeriods || []).filter(p => p.approvalStatus === 'PENDING_APPROVAL').forEach(p => {
+      try { assertNotSelfDecidingUniformPeriod(user, p); } catch (err) { return; }
+      keys.push(`uniformPeriod:${p.id}`);
+    });
   }
   if (canApproveUniformTransfer(user)) {
-    (appData.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL').forEach(t => keys.push(`uniformTransfer:${t.id}`));
+    (appData.uniformTransfers || []).filter(t => t.status === 'PENDING_APPROVAL').forEach(t => {
+      try { assertNotSelfDecidingUniformTransfer(user, t); } catch (err) { return; }
+      keys.push(`uniformTransfer:${t.id}`);
+    });
   }
   (appData.leaveRequests || []).filter(r => r.status === 'PENDING').forEach(r => {
     const empUsername = resolveEmployeeUsername(r.employeeCode, appData.employeeProfiles);
     if (empUsername === user.username) return; // tự mình xin nghỉ, không tự duyệt được (khớp điều kiện client)
     if (canApproveLeaveRequest(user, appData.users, empUsername)) keys.push(`leaveRequest:${r.id}`);
   });
-  // Đổi ca — mirror ĐÚNG assertShiftSwapApprover() (routes/records.js): hrShiftSwapApprove CHỈ duyệt
-  // được đúng siêu thị mình quản lý (roster.storeCode === user.dept), chặt hơn điều kiện hiện nút Duyệt
-  // ở client (canApproveHacSwap() — module-conghop.js, cố tình KHÔNG lọc theo siêu thị, xem chú thích ở
-  // getMyPendingApprovals()) — giữ đúng enforcement thật ở đây để khoá polling không báo sai.
+  // Đổi ca — mirror ĐÚNG assertShiftSwapApprover() (lib/attendance.js, routes/records.js tái dùng cho
+  // chính route duyệt thật): hrShiftSwapApprove CHỈ duyệt được đúng siêu thị mình quản lý
+  // (roster.storeCode === user.dept), chặt hơn điều kiện hiện nút Duyệt ở client (canApproveHacSwap() —
+  // module-conghop.js, cố tình KHÔNG lọc theo siêu thị, xem chú thích ở getMyPendingApprovals()) — giữ
+  // đúng enforcement thật ở đây để khoá polling không báo sai.
   (appData.shiftSwapRequests || []).filter(s => s.status === 'PENDING').forEach(s => {
     const roster = (appData.shiftRoster || []).find(r => r.id === s.requesterRosterId);
-    const allowed = user?.perms?.admin || user?.perms?.hrAttendanceManage
-      || (user?.perms?.hrShiftSwapApprove && roster && roster.storeCode === user.dept);
-    if (allowed) keys.push(`shiftSwapRequest:${s.id}`);
+    const targetUsername = resolveEmployeeUsername(s.targetEmployeeCode, appData.employeeProfiles);
+    try { assertShiftSwapApprover(user, roster, s.creator, targetUsername); } catch (err) { return; }
+    keys.push(`shiftSwapRequest:${s.id}`);
   });
   if (user?.perms?.admin || user?.perms?.trainingManage) {
     (appData.trainingRegistrations || []).filter(r => r.pendingCancellation).forEach(r => keys.push(`trainingCancel:${r.id}`));

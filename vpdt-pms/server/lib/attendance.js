@@ -601,6 +601,39 @@ function defaultShiftSwapRequest(payload, requesterEmployeeCode) {
   };
 }
 
+// assertShiftSwapApprover() — DI CHUYỂN từ routes/records.js sang đây (re-audit lần 7, mức Thấp —
+// "approvalAggregator 3 luồng mới (uniform/shiftSwap) thiếu loại trừ tự-liên-quan") để
+// lib/approvalAggregator.js tái dùng được ĐÚNG hàm enforcement thật này (trước đó định nghĩa cục bộ ở
+// routes/records.js nên lib/ không gọi được — lib/ không được phép require ngược routes/). Hành vi giữ
+// NGUYÊN 100%, chỉ đổi file chứa — xem lịch sử vá đầy đủ ở phần chú thích ngay trên hàm.
+// LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): trước đây admin/hrAttendanceManage/hrShiftSwapApprove đều cho
+// qua NGAY không so sánh gì với người đã tạo đơn (item.creator) — admin tự tạo yêu cầu đổi ca cho chính
+// mình rồi tự duyệt luôn, không qua Quản Lý Siêu Thị/HR. Cùng lớp lỗi vừa vá ở canApproveLeaveRequest()
+// — hàm gác quyền riêng của module tự phục vụ, không nằm trong "họ" assertNotSelfDeciding*/
+// assertNotSelfHandling* nên bị sót ở đợt v26.50 "chặn admin tự duyệt ở TẤT CẢ module". Thêm
+// `requesterUsername` (item.creator) — không được là chính người duyệt, bất kể cấp quyền nào.
+// LỖI ĐÃ VÁ (re-audit lần 6, mức Trung Bình — "assertShiftSwapApprover chặn sai phía"): bản vá ở chú
+// thích ngay trên CHỈ chặn phía NGƯỜI TẠO ĐƠN (requesterUsername/item.creator) tự duyệt — bỏ sót hoàn
+// toàn phía NGƯỜI NHẬN CA (targetEmployeeCode, xem defaultShiftSwapRequest()/applyApproveShiftSwap() ở
+// trên). Nếu người được chọn làm người NHẬN ca lại chính là 1 Quản Lý Siêu Thị (hrShiftSwapApprove
+// đúng siêu thị của dòng roster đó) hoặc hrAttendanceManage/admin, họ hoàn toàn tự DUYỆT được đơn mà
+// chính mình là bên NHẬN LỢI (được thêm 1 ca làm/lương) — không qua bất kỳ sự xét duyệt độc lập nào,
+// khác hẳn ý định ban đầu "Quản Lý Siêu Thị/HR duyệt hộ 2 bên liên quan". Thêm `targetUsername` (suy ra
+// từ item.targetEmployeeCode qua resolveEmployeeUsername(), lib/recordViewScope.js — ĐÚNG hàm
+// canViewShiftSwapRequest() đã dùng để xác định "2 bên liên quan" lúc XEM, nay tái dùng để chặn lúc
+// QUYẾT ĐỊNH) — chặn luôn cả phía này.
+function assertShiftSwapApprover(freshUser, roster, requesterUsername, targetUsername) {
+  if (requesterUsername && freshUser.username === requesterUsername) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt yêu cầu đổi ca do chính mình tạo');
+  }
+  if (targetUsername && freshUser.username === targetUsername) {
+    throw new HttpError(403, 'Bạn không thể tự duyệt yêu cầu đổi ca mà chính mình là người nhận ca');
+  }
+  const allowed = freshUser.perms?.admin || freshUser.perms?.hrAttendanceManage
+    || (freshUser.perms?.hrShiftSwapApprove && roster && roster.storeCode === freshUser.dept);
+  if (!allowed) throw new HttpError(403, 'Bạn không có quyền duyệt yêu cầu đổi ca này');
+}
+
 // Áp dụng duyệt đổi ca — đổi 1 CHIỀU (xem ghi chú đầu file mục 4): gán lại employeeCode của ĐÚNG dòng
 // roster người xin đổi sang targetEmployeeCode, giữ nguyên workDate/shiftTemplateId/storeCode, đánh dấu
 // Status='SWAPPED' để phân biệt với 'SCHEDULED' gốc (vẫn có thể truy vết ai đã từng đứng ca này).
@@ -738,7 +771,7 @@ module.exports = {
   applyApproveLeaveRequest, applyRejectLeaveRequest, applyCancelLeaveRequest, deductLeaveBalance,
   refundLeaveBalance, buildLeaveAttendanceRecords, buildLeaveCancelAttendanceReverts, listDatesInRange,
   assertValidShiftTemplate, assertValidRosterAssignment, defaultShiftRoster, assertNoRosterConflict, applyCancelRoster,
-  defaultShiftSwapRequest, applyApproveShiftSwap, applyRejectShiftSwap, autoRejectShiftSwapsForRemovedRoster,
+  defaultShiftSwapRequest, assertShiftSwapApprover, applyApproveShiftSwap, applyRejectShiftSwap, autoRejectShiftSwapsForRemovedRoster,
   cancelFutureRosterAfterOffboarding, cancelPendingLeaveRequestsAfterOffboarding, cancelRosterForApprovedLeave,
   restoreRosterForCancelledLeave
 };

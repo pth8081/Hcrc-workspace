@@ -1,9 +1,56 @@
 # Phiên bản hiện tại
 
-**27.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.37 (2026-11): [Thấp] Re-audit lần 7 — mục 8/9: approvalAggregator 3 luồng mới (uniform/shiftSwap) thiếu loại trừ tự-liên-quan
+
+Mục thứ tám (8/9) của đợt re-audit lần 7.
+
+**Nguyên nhân:** 3 khối `uniformPeriod`/`uniformTransfer`/`shiftSwapRequest` trong
+`computeMyPendingApprovalKeys()` (`lib/approvalAggregator.js` — mirror SERVER của
+`getMyPendingApprovals()`, dùng cho endpoint polling `GET /api/approvals/pending-signature`) CHỈ kiểm
+quyền PHẲNG (`canApproveUniform`/`canApproveUniformTransfer`/tính tay biến `allowed` cho
+shiftSwapRequest) — KHÔNG loại trừ chính người tạo/yêu cầu/nhận ca như enforcement thật đã có từ lâu:
+`assertNotSelfDecidingUniformPeriod()`/`assertNotSelfDecidingUniformTransfer()` (dùng ở
+`approveUniformPeriod()`/`approveUniformTransfer()`, `lib/recordActions.js`) và `assertShiftSwapApprover()`
+(dùng ở route `POST /shiftSwapRequests/:id/approve|reject`, trước đây định nghĩa cục bộ ở
+`routes/records.js`). Hậu quả: người có `uniformApprove`/`uniformManage` tự tạo kỳ cấp phát/điều chuyển
+của chính mình, hoặc người có `hrShiftSwapApprove`/`hrAttendanceManage`/admin là chính bên tạo HOẶC bên
+NHẬN ca của 1 yêu cầu đổi ca, đều thấy khoá "cần duyệt" ở Approval Hub/nav badge dù bấm Duyệt thật sẽ
+luôn bị 403 (server vẫn enforce đúng, không phải lỗ hổng bảo mật) — chỉ là thông báo giả, cùng lớp lỗi
+đã vá cho `meeting:<id>` ở re-audit lần 6.
+
+**Vá:**
+- `uniformPeriod`/`uniformTransfer`: gọi qua try/catch đúng `assertNotSelfDecidingUniformPeriod()`/
+  `assertNotSelfDecidingUniformTransfer()` (import từ `lib/recordActions.js`, nay export thêm 2 hàm
+  này) — cùng khuôn `pushDeptWorkflowKeys()` đã dùng cho `assertNotSelfDecidingWorkflowItem()`.
+- `shiftSwapRequest`: DI CHUYỂN `assertShiftSwapApprover()` từ `routes/records.js` sang
+  `lib/attendance.js` (export thêm) — vì `lib/` không được phép `require` ngược `routes/`. Hành vi giữ
+  nguyên 100%, chỉ đổi file chứa; 2 lời gọi ở `routes/records.js` đổi thành
+  `attendance.assertShiftSwapApprover(...)`. Khối `shiftSwapRequest` ở `approvalAggregator.js` gọi
+  THẲNG hàm này qua try/catch, THAY HẲN việc tự tính lại biến `allowed` (hàm thật đã bao gồm đúng cả 2
+  nhánh loại trừ requester/target LẪN điều kiện quyền phẳng/dept).
+
+**Test:** mở rộng `tests/test-approval-polling.js` (+6 scenario, 22/22 tổng): tự tạo kỳ cấp phát đồng
+phục (creator) -> loại, đối chứng creator khác -> vẫn nhận; tự tạo điều chuyển kho (requestedBy) -> loại,
+đối chứng -> vẫn nhận; tự tạo yêu cầu đổi ca (creator) -> loại; chính mình là người NHẬN ca
+(targetEmployeeCode) -> loại; đối chứng không phải creator/target -> vẫn nhận; đối chứng
+hrShiftSwapApprove khác siêu thị -> vẫn loại (regression không liên quan tự-liên-quan, xác nhận
+`assertShiftSwapApprover()` dời file không đổi hành vi). Xác nhận FAIL trên code CŨ (`git stash` 4 file
+lib/routes liên quan, 4/22 scenario FAIL — khai thác thành công ở cả 3 luồng), PASS trên code đã vá
+(22/22). Regression: `tests/test-shiftroster-cancel-swap-cleanup.js` (5/5),
+`tests/test-uniform-transfer-cancel.js` (8/8), `tests/test-uniform.js` (38/38),
+`tests/test-uniform-phase2.js` (28/28), `tests/test-uniform-scenario-roleplay.js` (15/15),
+`tests/test-selfapprove-leave-shiftswap-meeting.js` (15/15 — xác nhận 2 route approve/reject thật vẫn
+đúng sau khi dời `assertShiftSwapApprover()` sang `lib/attendance.js`),
+`tests/test-khoi0-license-uniform-gate.js` (9/9), `tests/test-approval-hub.js` (55/55) — toàn bộ PASS,
+không regression. Đã `grep` lại diff xác nhận không có `onclick=`/` style="` nội tuyến (chỉ sửa logic
+server, không đổi HTML).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.36 (2026-11): [Thấp] Re-audit lần 7 — mục 7/9: Approval Hub client mirror thiếu loại trừ creator cho Phòng Họp
 

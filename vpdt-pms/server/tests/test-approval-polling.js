@@ -293,6 +293,85 @@ async function runPartA(run) {
     const keys = computeMyPendingApprovalKeys(DUYET1, appData);
     assert(keys.includes('meeting:83'), 'duyet1 KHÔNG phải người tạo lịch họp 83 -> vẫn phải nhận khoá bình thường');
   });
+
+  // LỖI ĐÃ VÁ (re-audit lần 7, mức Thấp — "approvalAggregator 3 luồng mới (uniform/shiftSwap) thiếu
+  // loại trừ tự-liên-quan"): 3 khối uniformPeriod/uniformTransfer/shiftSwapRequest trước đây CHỈ kiểm
+  // quyền PHẲNG, không loại trừ chính người tạo/yêu cầu/nhận ca — cùng lớp lỗi với meeting:<id> ở trên
+  // nhưng ở 3 module khác. Nay gọi thẳng assertNotSelfDecidingUniformPeriod()/
+  // assertNotSelfDecidingUniformTransfer()/assertShiftSwapApprover() (hàm enforcement thật).
+  const UNIFORM_APPROVER = {
+    username: 'dongphuc.duyet', name: 'Duyệt Đồng Phục', dept: 'Hành Chính',
+    perms: { uniformApprove: true }
+  };
+  await run.run('computeMyPendingApprovalKeys(): tự tạo kỳ cấp phát đồng phục (creator) KHÔNG được tính dù có uniformApprove — tránh thông báo giả dẫn tới bấm Duyệt bị 403', async () => {
+    const appData = buildFixtureAppData();
+    appData.uniformPeriods = [
+      { id: 201, approvalStatus: 'PENDING_APPROVAL', creator: 'dongphuc.duyet' },
+      { id: 202, approvalStatus: 'PENDING_APPROVAL', creator: 'nguoi.khac' }
+    ];
+    const keys = computeMyPendingApprovalKeys(UNIFORM_APPROVER, appData);
+    assert(!keys.includes('uniformPeriod:201'), 'PHẢI KHÔNG nhận uniformPeriod:201 — dongphuc.duyet chính là người tạo kỳ này');
+    assert(keys.includes('uniformPeriod:202'), 'đối chứng: uniformPeriod:202 (người tạo khác) vẫn phải nhận bình thường');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): tự tạo yêu cầu điều chuyển kho đồng phục (requestedBy) KHÔNG được tính dù có uniformApprove — tránh thông báo giả dẫn tới bấm Duyệt bị 403', async () => {
+    const appData = buildFixtureAppData();
+    appData.uniformTransfers = [
+      { id: 211, status: 'PENDING_APPROVAL', requestedBy: 'dongphuc.duyet' },
+      { id: 212, status: 'PENDING_APPROVAL', requestedBy: 'nguoi.khac' }
+    ];
+    const keys = computeMyPendingApprovalKeys(UNIFORM_APPROVER, appData);
+    assert(!keys.includes('uniformTransfer:211'), 'PHẢI KHÔNG nhận uniformTransfer:211 — dongphuc.duyet chính là người yêu cầu điều chuyển này');
+    assert(keys.includes('uniformTransfer:212'), 'đối chứng: uniformTransfer:212 (người yêu cầu khác) vẫn phải nhận bình thường');
+  });
+
+  const SIEUTHI_APPROVER = {
+    username: 'quanly.sieuthi', name: 'Quản Lý Siêu Thị ABC', dept: 'Siêu Thị ABC',
+    perms: { hrShiftSwapApprove: true }
+  };
+  await run.run('computeMyPendingApprovalKeys(): tự tạo yêu cầu đổi ca (creator) KHÔNG được tính dù hrShiftSwapApprove đúng siêu thị — tránh thông báo giả dẫn tới bấm Duyệt bị 403', async () => {
+    const appData = buildFixtureAppData();
+    appData.shiftRoster = [{ id: 301, storeCode: 'Siêu Thị ABC' }];
+    appData.employeeProfiles = [{ employeeCode: 'EMP-TARGET', username: 'nhanvien.target' }];
+    appData.shiftSwapRequests = [
+      { id: 221, status: 'PENDING', requesterRosterId: 301, creator: 'quanly.sieuthi', targetEmployeeCode: 'EMP-TARGET' }
+    ];
+    const keys = computeMyPendingApprovalKeys(SIEUTHI_APPROVER, appData);
+    assert(!keys.includes('shiftSwapRequest:221'), 'PHẢI KHÔNG nhận shiftSwapRequest:221 — quanly.sieuthi chính là người tạo yêu cầu đổi ca này');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): chính mình là người NHẬN ca (targetEmployeeCode) của yêu cầu đổi ca KHÔNG được tính dù hrShiftSwapApprove đúng siêu thị — tránh thông báo giả dẫn tới bấm Duyệt bị 403', async () => {
+    const appData = buildFixtureAppData();
+    appData.shiftRoster = [{ id: 301, storeCode: 'Siêu Thị ABC' }];
+    appData.employeeProfiles = [{ employeeCode: 'EMP-MANAGER', username: 'quanly.sieuthi' }];
+    appData.shiftSwapRequests = [
+      { id: 222, status: 'PENDING', requesterRosterId: 301, creator: 'nguoi.khac', targetEmployeeCode: 'EMP-MANAGER' }
+    ];
+    const keys = computeMyPendingApprovalKeys(SIEUTHI_APPROVER, appData);
+    assert(!keys.includes('shiftSwapRequest:222'), 'PHẢI KHÔNG nhận shiftSwapRequest:222 — quanly.sieuthi chính là người NHẬN ca của yêu cầu này');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): hrShiftSwapApprove đúng siêu thị, KHÔNG phải creator/target -> vẫn nhận bình thường (đối chứng, không chặn nhầm)', async () => {
+    const appData = buildFixtureAppData();
+    appData.shiftRoster = [{ id: 301, storeCode: 'Siêu Thị ABC' }];
+    appData.employeeProfiles = [{ employeeCode: 'EMP-TARGET', username: 'nhanvien.target' }];
+    appData.shiftSwapRequests = [
+      { id: 223, status: 'PENDING', requesterRosterId: 301, creator: 'nguoi.khac', targetEmployeeCode: 'EMP-TARGET' }
+    ];
+    const keys = computeMyPendingApprovalKeys(SIEUTHI_APPROVER, appData);
+    assert(keys.includes('shiftSwapRequest:223'), 'quanly.sieuthi không phải creator/target -> vẫn phải nhận khoá bình thường');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): hrShiftSwapApprove KHÁC siêu thị (roster.storeCode khác dept) -> KHÔNG nhận, dù không phải creator/target (đối chứng regression, không liên quan tự-liên-quan)', async () => {
+    const appData = buildFixtureAppData();
+    appData.shiftRoster = [{ id: 301, storeCode: 'Siêu Thị XYZ' }];
+    appData.employeeProfiles = [{ employeeCode: 'EMP-TARGET', username: 'nhanvien.target' }];
+    appData.shiftSwapRequests = [
+      { id: 224, status: 'PENDING', requesterRosterId: 301, creator: 'nguoi.khac', targetEmployeeCode: 'EMP-TARGET' }
+    ];
+    const keys = computeMyPendingApprovalKeys(SIEUTHI_APPROVER, appData);
+    assert(!keys.includes('shiftSwapRequest:224'), 'PHẢI KHÔNG nhận shiftSwapRequest:224 — roster thuộc siêu thị khác, quanly.sieuthi không có quyền trên siêu thị đó');
+  });
 }
 
 // ==========================================================================
