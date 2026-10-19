@@ -1220,6 +1220,43 @@ async function cascadeUsernameChangesToRecordCreatorFields(renamed, deletedUsern
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "deptViewScopeConfig.extraViewers không cascade username"):
+// `deptViewScopeConfig[moduleKey].extraViewers` (whitelist username DÙNG CHUNG TOÀN CÔNG TY, "3. Chọn
+// người xem" — xem extraViewScopeAllows(), lib/recordViewScope.js) so khớp RAW username
+// (`cfg.extraViewers.includes(user.username)`) cho 16+ module (DEPT_VIEW_SCOPE_MODULES, cùng file) —
+// hoàn toàn chưa từng được cascade khi đổi tên/xoá tài khoản, cùng lớp lỗi với members[] của Nhóm Phê
+// Duyệt (cascadeUsernameChangesToApprovalGroups() ở trên) nhưng bị sót vì extraViewers nằm trong 1 map
+// CẤU HÌNH ADMIN (deptViewScopeConfig), không phải hồ sơ nghiệp vụ. Hậu quả 2 chiều: (1) đổi tên đăng
+// nhập -> mất quyền "xem xuyên phòng ban" đã được admin cấp (user vẫn là chính người đó, chỉ đổi tên
+// đăng nhập); (2) xoá vĩnh viễn rồi cấp LẠI đúng username đó cho 1 nhân viên khác -> nhân viên MỚI
+// "thừa kế" nhầm quyền xem xuyên phòng ban của người CŨ. Dùng lại renameApproversUsernamesArray() đã có
+// sẵn ở trên (cùng khuôn: đổi tên giữ nguyên vị trí trong mảng, xoá vĩnh viễn thì gỡ hẳn khỏi mảng —
+// mảng whitelist KHÔNG có khái niệm "để trống/null" như field 1-giá-trị). deptViewScopeConfig LUÔN tồn
+// tại sẵn trong AppData (seed mặc định ở defaults.js, seedDefaults.js tự tạo nếu CSDL hoàn toàn mới)
+// nên gọi withLockedAppDataValue() thẳng, không cần guard "key chưa tồn tại" như vài cascade khác.
+async function cascadeUsernameChangesToDeptViewScopeExtraViewers(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  await withLockedAppDataValue('deptViewScopeConfig', (map) => {
+    if (!map || typeof map !== 'object') return map;
+    let changed = false;
+    const next = {};
+    for (const [moduleKey, raw] of Object.entries(map)) {
+      if (!raw || typeof raw !== 'object' || !Array.isArray(raw.extraViewers)) { next[moduleKey] = raw; continue; }
+      let extraViewers = raw.extraViewers;
+      for (const { oldValue, newValue } of renamed || []) {
+        extraViewers = renameApproversUsernamesArray(extraViewers, oldValue, newValue, null);
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        extraViewers = renameApproversUsernamesArray(extraViewers, null, null, deletedUsername);
+      }
+      if (extraViewers === raw.extraViewers) { next[moduleKey] = raw; continue; }
+      changed = true;
+      next[moduleKey] = { ...raw, extraViewers };
+    }
+    return changed ? next : map;
+  });
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1230,5 +1267,5 @@ module.exports = {
   cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
   cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
-  cascadeUsernameChangesToRecordCreatorFields
+  cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers
 };

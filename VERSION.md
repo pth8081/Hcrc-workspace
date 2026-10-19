@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**27.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.51** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.51 (2026-11): [TB] Re-audit lần 9 — mục 3/12: deptViewScopeConfig.extraViewers không cascade username
+
+Mục thứ ba (3/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `deptViewScopeConfig[moduleKey].extraViewers` (whitelist username DÙNG CHUNG TOÀN
+CÔNG TY cho 16+ module — Ngân Sách, Thanh Toán, Mua Sắm/Sửa Chữa VP, Đăng Ký Xe, Hợp Đồng, Tờ Trình,
+Phòng Họp, Vận Hành..., tính năng "🔒 Phạm Vi Xem Theo Phòng Ban" > "3. Chọn người xem", xem
+`extraViewScopeAllows()`/`moduleViewConfig()`, `lib/recordViewScope.js`) so khớp RAW username
+(`cfg.extraViewers.includes(user.username)`) — chưa từng được cascade khi đổi tên/xoá tài khoản, cùng
+lớp lỗi với `members[]` của Nhóm Phê Duyệt (đã vá ở re-audit lần 3) nhưng bị sót vì `extraViewers` nằm
+trong 1 map CẤU HÌNH ADMIN (`deptViewScopeConfig`), không phải hồ sơ nghiệp vụ như các cascade trước.
+
+**Hậu quả 2 chiều:** (1) đổi tên đăng nhập 1 tài khoản đang nằm trong whitelist -> MẤT quyền "xem xuyên
+phòng ban" đã được admin cấp riêng (vẫn là chính người đó, chỉ đổi username); (2) xoá vĩnh viễn tài
+khoản đó rồi CẤP LẠI đúng username cho 1 nhân viên khác -> nhân viên MỚI "thừa kế" nhầm quyền xem xuyên
+phòng ban của người CŨ.
+
+**Bản vá:** thêm `cascadeUsernameChangesToDeptViewScopeExtraViewers()` (`lib/catalogRename.js`), gọi
+cùng chỗ với các cascade username khác ở `routes/data.js` (ngay sau khi lưu "users" có đổi tên/xoá tài
+khoản). Dùng lại `renameApproversUsernamesArray()` đã có sẵn (cùng khuôn với `extraApprovalLayers[].
+approvers`) — đổi tên thì giữ đúng vị trí trong mảng, xoá vĩnh viễn thì gỡ hẳn khỏi mảng (mảng whitelist
+không có khái niệm "null hoá" như field 1-giá-trị). Bỏ qua an toàn giá trị dạng `boolean` (cấu hình CŨ
+trước khi có 4 trạng thái, không có `extraViewers`) và module chưa từng được admin cấu hình.
+`deptViewScopeConfig` luôn tồn tại sẵn trong AppData (seed mặc định ở `defaults.js`) nên gọi
+`withLockedAppDataValue()` thẳng, không cần guard "key chưa tồn tại".
+
+**Test:** `tests/test-deptviewscope-extraviewers-username-cascade.js` (6 kịch bản — đổi tên cascade
+đúng 2 module cùng lúc, xoá vĩnh viễn gỡ khỏi mảng nhưng giữ module, giá trị boolean legacy không
+crash, module/username không liên quan giữ nguyên, sớm return khi không có gì để cascade). Xác nhận
+test FAIL trên code cũ (`cascadeUsernameChangesToDeptViewScopeExtraViewers is not a function`) và PASS
+trên code mới. Chạy lại regression: 9 file test đã sửa fixture ở mục 1/12 (lib/taskStore stub) +
+`test-record-approver-snapshot-username-cascade.js`/`test-workflowapprover-username-cascade.js`/
+`test-approvalgroup-username-cascade.js`/`test-catalog-rename-server.js`/
+`test-record-creator-field-username-cascade.js`/`test-payroll-probation-salary-rate.js` — tất cả PASS,
+không có regression.
+
+**Ảnh hưởng deploy:** chỉ code `server/`, không đổi `schema.sql`/biến môi trường/`package.json`
+dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.50 (2026-11): [Cao] Re-audit lần 9 — mục 2/12: computeEmployeePayslip() bỏ qua probationSalaryRate
 
