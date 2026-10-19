@@ -865,6 +865,20 @@ function isApproverForOperationOrderReceipt(user, item) {
   if (scope?.all) return true;
   return !!(Array.isArray(scope?.depts) && scope.depts.includes(item.dept));
 }
+// LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Thiếu chặn tự duyệt ở receiveOperationOrderGoods/
+// cancelOperationOrderReceipt"): isApproverForOperationOrderReceipt()/receiveOperationOrderGoods()/
+// cancelOperationOrderReceipt() ở trên/dưới trước đây KHÔNG loại trừ item.creator === user.username —
+// khác MỌI hành động xác nhận/hoàn tất SAU DUYỆT khác trong file này (claimPriceApply(), assertNotSelf-
+// Decidingxxx()...) đều có lớp chặn tự xử lý hồ sơ của chính mình. Người TẠO đơn hàng, nếu đồng thời có
+// quyền operationOrderReceiptManageHO/Store (hoàn toàn có thể xảy ra — 2 quyền độc lập, không loại trừ
+// nhau), tự xác nhận/hủy nhập hàng do chính mình đặt mà không ai kiểm chứng độc lập hàng THẬT có về hay
+// không. KHÔNG mở ngoại lệ admin (theo đúng chính sách "không tự duyệt ở TẤT CẢ module, không ngoại
+// lệ" người dùng đã xác nhận trước đây) — cùng khuôn assertNotSelfHandlingItPriceApply() ở trên.
+function assertNotSelfHandlingOperationOrderReceipt(user, item) {
+  if (item.creator && item.creator === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự xác nhận/hủy nhập hàng cho đơn hàng do chính mình tạo');
+  }
+}
 // payload (tham số MỚI, tuỳ chọn — LỖI ĐÃ VÁ đợt audit chuyên sâu mới, mức Trung bình): "Thực Nhận"
 // (qtyReceived) trước đây CHỈ sửa được qua editOperationOrderDraft() lúc đơn còn DRAFT ("Yêu Cầu Bổ
 // Sung", TRƯỚC khi hàng thật về) — route "Nhập Hàng" (chính xác lúc hàng về kho thật) trước đây không
@@ -878,6 +892,7 @@ function receiveOperationOrderGoods(user, item, payload, appData) {
   if (!isApproverForOperationOrderReceipt(user, item, appData)) {
     throw new HttpError(403, 'Bạn không có quyền xác nhận nhập hàng cho đơn hàng này');
   }
+  assertNotSelfHandlingOperationOrderReceipt(user, item);
   if (Array.isArray(payload?.items) && Array.isArray(item.items) && payload.items.length === item.items.length) {
     item.items = item.items.map((it, idx) => {
       const raw = payload.items[idx]?.qtyReceived;
@@ -900,6 +915,7 @@ function cancelOperationOrderReceipt(user, item, payload, appData) {
   if (!isApproverForOperationOrderReceipt(user, item, appData)) {
     throw new HttpError(403, 'Bạn không có quyền hủy nhập cho đơn hàng này');
   }
+  assertNotSelfHandlingOperationOrderReceipt(user, item);
   const reason = String(payload?.reason || '').trim();
   if (!reason) throw new HttpError(400, 'Vui lòng nhập lý do hủy nhập');
   item.status = 'RECEIPT_CANCELLED';

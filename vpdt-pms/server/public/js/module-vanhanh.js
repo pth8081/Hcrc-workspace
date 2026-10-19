@@ -3414,7 +3414,11 @@ async function confirmOperationOrderReceiptAction() {
 function renderOperationOrderReceiptApprovalTab() {
   const tbody = document.getElementById('opOrderReceiptTableBody');
   if (!tbody) return;
-  const visible = DB.operationOrders.filter(o => o.status === 'AWAITING_RECEIPT' && canManageOperationOrderReceiptClient(o));
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Thiếu chặn tự duyệt ở receiveOperationOrderGoods/
+  // cancelOperationOrderReceipt"): mirror đúng assertNotSelfHandlingOperationOrderReceipt()
+  // (lib/recordActions.js) — người TẠO đơn hàng không được tự xác nhận/hủy nhập hàng của chính mình,
+  // KHÔNG có ngoại lệ admin (cùng chính sách "không tự duyệt ở TẤT CẢ module").
+  const visible = DB.operationOrders.filter(o => o.status === 'AWAITING_RECEIPT' && o.creator !== currentUser.username && canManageOperationOrderReceiptClient(o));
 
   // Ô lọc vị trí — CHỈ đổ đúng các vị trí (HO/tên siêu thị) đang THỰC SỰ có hồ sơ nhìn thấy được (không
   // đổ cứng toàn bộ DB.depts + 'HO': quyền operationOrderReceiptManage có thể chỉ cấp 1-2 mục cụ thể,

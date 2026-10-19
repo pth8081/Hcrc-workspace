@@ -258,6 +258,39 @@ test('receiveOperationOrderGoods(): người KHÔNG phải admin/approver bị c
   assertThrows(() => recordActions.receiveOperationOrderGoods(outsider, item, appData), 403, 'không có quyền', 'receiveOperationOrderGoods người ngoài quyền');
 });
 
+// LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Thiếu chặn tự duyệt ở receiveOperationOrderGoods/
+// cancelOperationOrderReceipt"): isApproverForOperationOrderReceipt() TRƯỚC ĐÓ không loại trừ
+// item.creator === user.username — người TẠO đơn hàng, nếu ĐỒNG THỜI có quyền operationOrderReceipt-
+// Manage (2 quyền độc lập, không loại trừ nhau), tự xác nhận/hủy nhập hàng do chính mình đặt mà không
+// ai kiểm chứng độc lập. KHÔNG có ngoại lệ admin (perms.admin=true VẪN bị chặn nếu chính admin là
+// creator — khớp đúng chính sách "không tự duyệt ở TẤT CẢ module, không ngoại lệ").
+test('receiveOperationOrderGoods(): LỖI ĐÃ VÁ — người TẠO đơn hàng, dù có operationOrderReceiptManageHO=true, KHÔNG được tự xác nhận nhập hàng đơn do chính mình tạo', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const selfManager = makeUser('nv.mua', { perms: { operationOrderReceiptManageHO: true } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(selfManager, item, appData), 403, 'tự xác nhận', 'receiveOperationOrderGoods phải chặn tự xử lý đơn của chính mình');
+  assert.strictEqual(item.status, 'AWAITING_RECEIPT', 'không được đổi status khi bị chặn');
+});
+
+test('receiveOperationOrderGoods(): LỖI ĐÃ VÁ — chính admin là người tạo đơn hàng cũng KHÔNG được tự xác nhận nhập hàng (không có ngoại lệ admin)', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', creator: 'admin' });
+  const selfAdmin = makeUser('admin', { perms: { admin: true } });
+  assertThrows(() => recordActions.receiveOperationOrderGoods(selfAdmin, item, appData), 403, 'tự xác nhận', 'admin tự tạo đơn vẫn phải bị chặn tự xác nhận nhập hàng');
+});
+
+test('receiveOperationOrderGoods(): người KHÁC (không phải creator) có quyền vẫn xác nhận được bình thường (không bị chặn oan)', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const otherManager = makeUser('nv.khac', { perms: { operationOrderReceiptManageHO: true } });
+  const result = recordActions.receiveOperationOrderGoods(otherManager, item, appData);
+  assert.strictEqual(result.status, 'RECEIVED', 'người khác (không phải creator) không bị ảnh hưởng bởi bản vá');
+});
+
+test('cancelOperationOrderReceipt(): LỖI ĐÃ VÁ — người TẠO đơn hàng KHÔNG được tự hủy nhập đơn do chính mình tạo dù có đủ quyền + lý do hợp lệ', () => {
+  const item = freshOrder({ status: 'AWAITING_RECEIPT', orderLocationType: 'HO', creator: 'nv.mua' });
+  const selfManager = makeUser('nv.mua', { perms: { operationOrderReceiptManageHO: true } });
+  assertThrows(() => recordActions.cancelOperationOrderReceipt(selfManager, item, { reason: 'abc' }, appData), 403, 'tự xác nhận', 'cancelOperationOrderReceipt phải chặn tự xử lý đơn của chính mình');
+  assert.strictEqual(item.status, 'AWAITING_RECEIPT', 'không được đổi status khi bị chặn');
+});
+
 test('cancelOperationOrderReceipt(): thiếu lý do -> 400', () => {
   const item = freshOrder({ status: 'AWAITING_RECEIPT' });
   const admin = makeUser('admin', { perms: { admin: true } });
