@@ -1078,6 +1078,83 @@ async function cascadeUsernameChangesToWorkflowApprovers(renamed, deletedUsernam
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "Cascade rename username không chạm snapshot approver đông cứng
+// (effectiveApprovers/extraApprovalLayers)"): cascadeUsernameChangesToWorkflowApprovers() ở trên CHỈ
+// cascade approvers[]/rule.username trong các MAP CẤU HÌNH (*DeptWorkflows/*TierWorkflows/
+// MixedApprovalRules) — là nơi quyết định người duyệt cho hồ sơ SẼ TẠO SAU NÀY. Nhưng `submissions`/
+// `contracts` (quy trình "Phê Duyệt") SNAPSHOT `effectiveApprovers` (cùng hình dạng `{stepOrder:
+// [username,...]}` — xem buildEffectiveSubmissionWorkflowServer()/buildEffectiveContractApprovalWorkflow
+// Server(), lib/createValidation.js) NGAY LÚC TẠO, đông cứng vào TỪNG BẢN GHI, không bao giờ tính lại —
+// và 7 module khác (docs/carRegs/officeReqs/vppRegistrations/paymentRequests/itPriceApprovals/
+// operationOrders, qua prepareExtraApprovalSelectionForCreate()) cũng snapshot tương tự vào
+// `extraApprovalLayers[].approvers` (mảng `{layerKey, label, approvers: [username,...]}`). Đổi tên/xoá
+// username không cascade tới các snapshot này khiến chính người được chỉ định duyệt (chỉ đổi tên đăng
+// nhập, vẫn là cùng 1 người) không còn tự duyệt được hồ sơ ĐANG PENDING của luồng mình phụ trách — bước
+// duyệt treo tới khi admin tự sửa tay, hoặc (xoá vĩnh viễn) không ai duyệt được nữa ngoài admin.
+const RECORD_EFFECTIVE_APPROVERS_COLLECTIONS = ['submissions', 'contracts'];
+const RECORD_EXTRA_APPROVAL_LAYERS_COLLECTIONS = ['docs', 'carRegs', 'officeReqs', 'vppRegistrations', 'paymentRequests', 'itPriceApprovals', 'operationOrders'];
+
+// Đổi/gỡ username trong 1 mảng username PHẲNG — cùng logic renameApproversUsernamesMap() ở trên
+// (field `approvers` của config map) nhưng áp cho `layer.approvers` (mảng phẳng, không lồng theo
+// stepOrder).
+function renameApproversUsernamesArray(arr, oldUsername, newUsername, deletedUsername) {
+  if (!Array.isArray(arr)) return arr;
+  let next = arr;
+  if (oldUsername != null && next.includes(oldUsername)) {
+    next = next.map(u => (u === oldUsername ? newUsername : u));
+  }
+  if (deletedUsername != null && next.includes(deletedUsername)) {
+    next = next.filter(u => u !== deletedUsername);
+  }
+  return next;
+}
+
+function renameExtraApprovalLayersApprovers(layers, oldUsername, newUsername, deletedUsername) {
+  if (!Array.isArray(layers)) return layers;
+  let changed = false;
+  const next = layers.map(layer => {
+    if (!layer || !Array.isArray(layer.approvers)) return layer;
+    const renamedApprovers = renameApproversUsernamesArray(layer.approvers, oldUsername, newUsername, deletedUsername);
+    if (renamedApprovers === layer.approvers) return layer;
+    changed = true;
+    return { ...layer, approvers: renamedApprovers };
+  });
+  return changed ? next : layers;
+}
+
+async function cascadeUsernameChangesToRecordApproverSnapshots(renamed, deletedUsernames) {
+  // Không có gì để cascade (lưu 'users' vì lý do khác — tạo mới, đổi password/PIN, sửa field khác...)
+  // -> bỏ qua NGAY, không quét qua 9 collection (renameFieldValueInCollection() đọc TOÀN BỘ bảng, tốn
+  // kém nếu gọi vô ích mỗi lần lưu users dù không có username nào đổi/xoá).
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  for (const collection of RECORD_EFFECTIVE_APPROVERS_COLLECTIONS) {
+    await renameFieldValueInCollection(collection, (item) => {
+      if (!item.effectiveApprovers || typeof item.effectiveApprovers !== 'object') return item;
+      let approvers = item.effectiveApprovers;
+      for (const { oldValue, newValue } of renamed || []) {
+        approvers = renameApproversUsernamesMap(approvers, oldValue, newValue, null);
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        approvers = renameApproversUsernamesMap(approvers, null, null, deletedUsername);
+      }
+      return approvers === item.effectiveApprovers ? item : { ...item, effectiveApprovers: approvers };
+    });
+  }
+  for (const collection of RECORD_EXTRA_APPROVAL_LAYERS_COLLECTIONS) {
+    await renameFieldValueInCollection(collection, (item) => {
+      if (!Array.isArray(item.extraApprovalLayers)) return item;
+      let layers = item.extraApprovalLayers;
+      for (const { oldValue, newValue } of renamed || []) {
+        layers = renameExtraApprovalLayersApprovers(layers, oldValue, newValue, null);
+      }
+      for (const deletedUsername of deletedUsernames || []) {
+        layers = renameExtraApprovalLayersApprovers(layers, null, null, deletedUsername);
+      }
+      return layers === item.extraApprovalLayers ? item : { ...item, extraApprovalLayers: layers };
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1087,5 +1164,5 @@ module.exports = {
   renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename,
   cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
-  cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers
+  cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots
 };

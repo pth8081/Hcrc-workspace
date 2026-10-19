@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2377,6 +2377,11 @@ router.post('/:key', async (req, res) => {
       // mode, 2 map MixedApprovalRules) — LỖI ĐÃ VÁ, re-audit lần 7, mức Cao — xem chú thích đầy đủ tại
       // cascadeUsernameChangesToWorkflowApprovers() (lib/catalogRename.js).
       await cascadeUsernameChangesToWorkflowApprovers(renamed, deletedUsernames);
+      // effectiveApprovers (submissions/contracts) + extraApprovalLayers[].approvers (7 module khác) —
+      // snapshot ĐÃ ĐÔNG CỨNG trên TỪNG BẢN GHI cụ thể, khác 2 cascade map cấu hình ngay trên — LỖI ĐÃ
+      // VÁ, re-audit lần 8, mức Cao — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToRecordApproverSnapshots() (lib/catalogRename.js).
+      await cascadeUsernameChangesToRecordApproverSnapshots(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi

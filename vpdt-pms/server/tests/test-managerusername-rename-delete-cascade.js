@@ -130,7 +130,11 @@ stubModule('lib/recordStore', {
   getAllForCollectionCached: async () => [],
   getForCollectionByDeptCached: async () => [],
   getForCollectionByUsernameCached: async () => [],
-  getForCollectionByColumnCached: async () => []
+  getForCollectionByColumnCached: async () => [],
+  // cascadeUsernameChangesToRecordApproverSnapshots() (re-audit lần 8, lib/catalogRename.js) gọi hàm
+  // này khi lưu 'users' có đổi tên/xoá username — không liên quan tới bài test này (managerUsername),
+  // no-op để không vỡ route thật.
+  renameFieldValueInCollection: async () => {}
 });
 
 let CURRENT_USER = ADMIN;
