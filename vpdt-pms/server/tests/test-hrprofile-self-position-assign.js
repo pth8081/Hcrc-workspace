@@ -88,6 +88,48 @@ function freshProfile(overrides) {
     assert.strictEqual(profile.secondaryPositions[0].jobTitle, 'Giám Đốc');
   });
 
+  // LỖI ĐÃ VÁ (re-audit lần 10, mục 8/14, mức TB — "PATCH by-code thiếu chặn tự sửa disciplinaryActions/
+  // transfers"): applyProfileEdit() case 'disciplinaryActions'/'transfers' GHI ĐÈ TOÀN BỘ mảng mỗi lần
+  // lưu, chưa từng chặn khi actor === profile.username — xem assertNotSelfEditingDisciplinaryOrTransfers()
+  // (lib/employeeProfile.js).
+  await test('LỖI ĐÃ VÁ: applyProfileEdit() case disciplinaryActions — actor tự XOÁ TRẮNG kỷ luật của chính mình bị chặn 403', () => {
+    const profile = freshProfile({ username: 'ketoan1', disciplinaryActions: [{ id: 'x1', date: '2026-01-01', type: 'Khiển trách', note: null, decidedBy: 'hr.admin', decidedByName: 'Admin', createdAt: '2026-01-01T00:00:00.000Z' }] });
+    assert.throws(
+      () => employeeProfile.applyProfileEdit(profile, { disciplinaryActions: [] }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'ketoan1', 'Nguyễn Kế Toán', {}),
+      /không được tự ghi nhận kỷ luật/i
+    );
+    assert.strictEqual(profile.disciplinaryActions.length, 1, 'kỷ luật KHÔNG bị xoá dù throw — chặn TRƯỚC khi mutate');
+  });
+
+  await test('LỖI ĐÃ VÁ: applyProfileEdit() case transfers — actor tự thêm 1 dòng Bổ nhiệm/Điều động cho chính mình bị chặn 403', () => {
+    const profile = freshProfile({ username: 'ketoan1', transfers: [] });
+    assert.throws(
+      () => employeeProfile.applyProfileEdit(profile, { transfers: [{ type: 'APPOINTMENT', newUnit: 'Phòng Kinh Doanh', transferFromDate: '2026-01-01' }] }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'ketoan1', 'Nguyễn Kế Toán', {}),
+      /không được tự ghi nhận.*bổ nhiệm/i
+    );
+    assert.strictEqual(profile.transfers.length, 0);
+  });
+
+  await test('applyProfileEdit() case disciplinaryActions/transfers — HR khác ghi nhận cho hồ sơ người khác vẫn hoạt động bình thường (không chặn oan)', () => {
+    const profile = freshProfile({ username: 'ketoan1', disciplinaryActions: [], transfers: [] });
+    employeeProfile.applyProfileEdit(profile,
+      { disciplinaryActions: [{ date: '2026-01-01', type: 'Khiển trách' }], transfers: [{ type: 'APPOINTMENT', newUnit: 'Phòng Kinh Doanh', transferFromDate: '2026-01-01' }] },
+      employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr.admin', 'Admin Nhân Sự', {});
+    assert.strictEqual(profile.disciplinaryActions.length, 1);
+    assert.strictEqual(profile.transfers.length, 1);
+  });
+
+  await test('applyProfileEdit() — hồ sơ CHƯA liên kết tài khoản (username null) thì không có khái niệm "tự sửa", HR tự ghi nhận cho hồ sơ chưa link vẫn qua được', () => {
+    const profile = freshProfile({ username: null, disciplinaryActions: [] });
+    assert.doesNotThrow(() => employeeProfile.applyProfileEdit(profile, { disciplinaryActions: [{ date: '2026-01-01', type: 'Khiển trách' }] }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'hr.admin', 'Admin Nhân Sự', {}));
+  });
+
+  await test('applyProfileEdit() — actor sửa field KHÁC (không phải disciplinaryActions/transfers) trên hồ sơ của chính mình vẫn hoạt động bình thường (không chặn oan)', () => {
+    const profile = freshProfile({ username: 'ketoan1', hrNote: null });
+    assert.doesNotThrow(() => employeeProfile.applyProfileEdit(profile, { hrNote: 'Ghi chú nội bộ' }, employeeProfile.HR_ONLY_EDITABLE_FIELDS, 'ketoan1', 'Nguyễn Kế Toán', {}));
+    assert.strictEqual(profile.hrNote, 'Ghi chú nội bộ');
+  });
+
   console.log('');
   console.log(`${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;

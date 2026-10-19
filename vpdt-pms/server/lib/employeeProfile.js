@@ -1235,6 +1235,26 @@ function assertValidEducation(edu, idx) {
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 10, mục 8/14, mức TB — "PATCH by-code thiếu chặn tự sửa disciplinaryActions/
+// transfers"): PATCH /api/hr-profile/by-code/:employeeCode (route HR/admin sửa hồ sơ, routes/
+// employeeProfile.js) chỉ đòi canEditProfiles() (hrProfileManage/hrProfileEdit) — KHÔNG có chặn nào nếu
+// hồ sơ đang sửa lại CHÍNH LÀ hồ sơ đã liên kết tài khoản của NGƯỜI ĐANG THỰC HIỆN hành động. 2 field
+// disciplinaryActions/transfers (HR_ONLY_EDITABLE_FIELDS) GHI ĐÈ TOÀN BỘ mảng mỗi lần lưu (xem case
+// 'disciplinaryActions'/'transfers' bên dưới) — 1 nhân viên CÓ hrProfileEdit (để duy trì hồ sơ nhân sự
+// nói chung) có thể tự XOÁ TRẮNG lịch sử kỷ luật của chính mình (gửi `disciplinaryActions: []`), hoặc tự
+// CHÈN THÊM 1 dòng "Bổ nhiệm/Điều động" giả cho chính mình (VD tự "bổ nhiệm" lên 1 đơn vị/chức danh khác
+// trong lịch sử — dù KHÔNG đổi positionKey/jobTitle hiện tại, dữ liệu lịch sử này vẫn dùng để tra soát/
+// đối chiếu báo cáo nhân sự). Cùng tinh thần "không ai tự xử lý được thứ liên quan tới chính mình" đã áp
+// dụng cho assertNotSelfAssigningPosition() ở trên — chặn CỨNG, không phân biệt actor có admin hay
+// không (giống khuôn mọi assertNotSelfDecidingXxx() khác, quyết định 11/2026).
+const SELF_EDIT_RESTRICTED_FIELDS = new Set(['disciplinaryActions', 'transfers']);
+function assertNotSelfEditingDisciplinaryOrTransfers(profile, actorUsername, touchedFields) {
+  if (!profile?.username || profile.username !== actorUsername) return;
+  if ((touchedFields || []).some((f) => SELF_EDIT_RESTRICTED_FIELDS.has(f))) {
+    throw new HttpError(403, 'Không được tự ghi nhận Kỷ luật/Bổ nhiệm-Điều động cho chính mình — cần HR/Admin khác thực hiện');
+  }
+}
+
 // Áp dụng payload sửa lên profile TẠI CHỖ (mutate) — chỉ nhận field nằm trong allowedFields, validate
 // từng loại field cụ thể. Không cho sửa employeeCode/username/status/processId/createdAt/createdBy qua
 // đường này (username chỉ đổi qua linkAccount(), status chỉ đổi qua applyProcessCompletion()/
@@ -1249,6 +1269,7 @@ function applyProfileEdit(profile, payload, allowedFields, actorUsername, actorN
   const body = payload || {};
   const skipHistory = !!(options && options.skipHistory);
   const touchedFields = allowedFields.filter(f => f in body);
+  assertNotSelfEditingDisciplinaryOrTransfers(profile, actorUsername, touchedFields);
   const before = {};
   if (!skipHistory) {
     for (const f of touchedFields) before[f] = profile[f];
