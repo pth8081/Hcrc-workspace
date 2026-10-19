@@ -382,6 +382,45 @@ async function runPartA(run) {
     const keys = computeMyPendingApprovalKeys(SIEUTHI_APPROVER, appData);
     assert(!keys.includes('shiftSwapRequest:224'), 'PHẢI KHÔNG nhận shiftSwapRequest:224 — roster thuộc siêu thị khác, quanly.sieuthi không có quyền trên siêu thị đó');
   });
+
+  // LỖI ĐÃ VÁ (re-audit lần 10, mức Thấp — "Approval Hub thiếu loại trừ tự-liên-quan cho Đào Tạo-huỷ"):
+  // khối trainingCancel trước đây CHỈ kiểm quyền PHẲNG (admin/trainingManage), không loại trừ chính
+  // người gửi yêu cầu huỷ (r.creator) — mirror đúng assertNotSelfInTrainingAction() (lib/recordActions.js,
+  // server ÁP DỤNG THẬT ở approveCancelTrainingRegistration()/rejectCancelTrainingRegistration() — chặn
+  // CỨNG, không có ngoại lệ admin).
+  const TRAINING_MANAGER = {
+    username: 'daotao.quanly', name: 'Quản Lý Đào Tạo', dept: 'Nhân Sự',
+    perms: { trainingManage: true }
+  };
+  await run.run('computeMyPendingApprovalKeys(): tự gửi yêu cầu huỷ đăng ký lớp học (creator) KHÔNG được tính dù có trainingManage — tránh thông báo giả dẫn tới bấm Duyệt Huỷ bị 403', async () => {
+    const appData = buildFixtureAppData();
+    appData.trainingRegistrations = [
+      { id: 231, creator: 'daotao.quanly', creatorName: 'Quản Lý Đào Tạo', pendingCancellation: { requestedAt: '2026-01-01' } },
+      { id: 232, creator: 'nguoi.khac', creatorName: 'Người Khác', pendingCancellation: { requestedAt: '2026-01-01' } }
+    ];
+    const keys = computeMyPendingApprovalKeys(TRAINING_MANAGER, appData);
+    assert(!keys.includes('trainingCancel:231'), 'PHẢI KHÔNG nhận trainingCancel:231 — daotao.quanly chính là người gửi yêu cầu huỷ này');
+    assert(keys.includes('trainingCancel:232'), 'đối chứng: trainingCancel:232 (người gửi khác) vẫn phải nhận bình thường');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): tự gửi yêu cầu huỷ đăng ký lớp học (creator) KHÔNG được tính dù LÀ ADMIN — khớp đúng assertNotSelfInTrainingAction() không có ngoại lệ admin', async () => {
+    const appData = buildFixtureAppData();
+    appData.trainingRegistrations = [
+      { id: 233, creator: 'admin1', creatorName: 'Admin', pendingCancellation: { requestedAt: '2026-01-01' } }
+    ];
+    const adminUser = { username: 'admin1', name: 'Admin', dept: 'Nhân Sự', perms: { admin: true } };
+    const keys = computeMyPendingApprovalKeys(adminUser, appData);
+    assert(!keys.includes('trainingCancel:233'), 'PHẢI KHÔNG nhận trainingCancel:233 — admin1 chính là người gửi yêu cầu huỷ này, không có ngoại lệ admin');
+  });
+
+  await run.run('computeMyPendingApprovalKeys(): trainingManage, KHÔNG phải creator -> vẫn nhận bình thường (đối chứng, không chặn nhầm)', async () => {
+    const appData = buildFixtureAppData();
+    appData.trainingRegistrations = [
+      { id: 234, creator: 'nguoi.khac', creatorName: 'Người Khác', pendingCancellation: { requestedAt: '2026-01-01' } }
+    ];
+    const keys = computeMyPendingApprovalKeys(TRAINING_MANAGER, appData);
+    assert(keys.includes('trainingCancel:234'), 'daotao.quanly không phải creator -> vẫn phải nhận khoá bình thường');
+  });
 }
 
 // ==========================================================================

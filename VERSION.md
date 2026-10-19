@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.71** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.72 (2026-11): [Thấp] Re-audit lần 10 — mục 12/14: Approval Hub thiếu loại trừ tự-liên-quan cho Đào Tạo-huỷ
+
+Mục thứ mười hai (12/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** khối tổng hợp "Đào Tạo - Huỷ Đăng Ký" (`trainingCancel:<id>`) ở CẢ 2 nơi —
+`computeMyPendingApprovalKeys()` (lib/approvalAggregator.js, server, dùng để khoá polling "Hộp Thư Phê
+Duyệt") VÀ `getMyPendingApprovals()` (public/js/core-approvalhub.js, client) — trước đây chỉ kiểm quyền
+PHẲNG (`admin`/`trainingManage`), KHÔNG loại trừ chính người gửi yêu cầu huỷ (`r.creator`). Trong khi
+đó, route xử lý THẬT (`approveCancelTrainingRegistration()`/`rejectCancelTrainingRegistration()`,
+lib/recordActions.js, vá ở re-audit lần 7) đã chặn CỨNG `assertNotSelfInTrainingAction()`, KHÔNG có
+ngoại lệ admin. Hậu quả: 1 nhân viên có `trainingManage` tự gửi yêu cầu huỷ đăng ký lớp học của chính
+mình vẫn thấy mục đó xuất hiện trong Hộp Thư Phê Duyệt (badge đếm dư + mục "ma" trong danh sách) — bấm
+"Duyệt Huỷ"/"Từ chối" chắc chắn nhận 403, cùng lớp lỗi "mirror lệch" đã vá cho Uniform/Shift-Swap
+(re-audit lần 9).
+
+**Bản vá:** thêm điều kiện `r.creator !== user.username` vào CẢ 2 nơi (server + client), mirror đúng
+`assertNotSelfInTrainingAction()` — không có ngoại lệ admin, khớp quyết định 11/2026 "Chặn admin tự
+duyệt ở TẤT CẢ module".
+
+**Test:** mở rộng `tests/test-approval-polling.js` (Phần A, test thuần `computeMyPendingApprovalKeys()`)
+thêm 3 scenario mới: tự gửi yêu cầu huỷ (creator) không được tính dù có trainingManage; tự gửi yêu cầu
+huỷ không được tính dù LÀ ADMIN (không có ngoại lệ); trainingManage không phải creator vẫn nhận bình
+thường (đối chứng). Xác nhận 2/25 scenario mới FAIL đúng trên code cũ (23/25 tổng), 25/25 PASS trên code
+mới. Chạy lại regression `tests/test-approval-hub.js` (58/58, bao gồm scenario "Đào Tạo - yêu cầu huỷ
+đăng ký (961) được tính" — fixture vốn dùng creator KHÁC viewer nên không bị ảnh hưởng) — tất cả PASS,
+không regression. Tự kiểm cú pháp (`node -c`) + CSP (`on[a-z]+="`/` style="`, không khớp) cả 2 file.
+
+**Ảnh hưởng deploy:** chỉ sửa `lib/approvalAggregator.js`/`public/js/core-approvalhub.js`, không đổi
+`schema.sql`/`.env.example`/dependencies — copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.71 (2026-11): [TB] Re-audit lần 10 — mục 11/14: operationStoreOpenings/operationRepairs estimateItems[].assignedToUsernames không cascade
 
