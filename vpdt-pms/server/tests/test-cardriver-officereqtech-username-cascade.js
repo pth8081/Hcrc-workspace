@@ -57,6 +57,13 @@ function resetState() {
       { id: 40, status: 'SCHEDULED', instructorUsername: 'nv_old', instructor: 'Nguyễn Văn Old' },
       { id: 41, status: 'SCHEDULED', instructorUsername: null }, // chưa gán giảng viên — không liên quan
       { id: 42, status: 'SCHEDULED', instructorUsername: 'nv_khac', instructor: 'Khác' } // không liên quan
+    ],
+    // LỖI ĐÃ VÁ (re-audit lần 10, mục 10/14, mức TB/Thấp — "careerPathConfirmations.username/.confirmedBy
+    // không cascade username"): username = nhân viên ĐƯỢC xác nhận (điều kiện tự xem mốc xác nhận của
+    // chính mình); confirmedBy = người HR đã xác nhận (chỉ hiển thị/kiểm toán).
+    careerPathConfirmations: [
+      { id: 50, pathId: 1, stageIndex: 0, username: 'nv_old', name: 'Nguyễn Văn Old', confirmedBy: 'nv_old', confirmedByName: 'Nguyễn Văn Old (HR)' },
+      { id: 51, pathId: 1, stageIndex: 1, username: 'nv_khac', name: 'Khác', confirmedBy: 'nv_khac', confirmedByName: 'Khác (HR)' } // không liên quan
     ]
   };
 }
@@ -125,6 +132,26 @@ async function main() {
     await cascadeUsernameChangesToCarDriverAndOfficeReqTech([], ['nv_old']);
     assert.strictEqual(STORE.trainingClasses.find(r => r.id === 40).instructorUsername, null);
     assert.strictEqual(STORE.trainingClasses.find(r => r.id === 42).instructorUsername, 'nv_khac', 'Bản ghi không liên quan phải giữ nguyên');
+  });
+
+  await test('LỖI ĐÃ VÁ (re-audit lần 10, mục 10/14): đổi tên "nv_old" -> "nv_new" cascade đúng CẢ 2 field careerPathConfirmations.username/.confirmedBy, giữ nguyên field hiển thị name/confirmedByName', async () => {
+    resetState();
+    await cascadeUsernameChangesToCarDriverAndOfficeReqTech([{ oldValue: 'nv_old', newValue: 'nv_new' }], []);
+    const conf = STORE.careerPathConfirmations.find(r => r.id === 50);
+    assert.strictEqual(conf.username, 'nv_new');
+    assert.strictEqual(conf.confirmedBy, 'nv_new');
+    assert.strictEqual(conf.name, 'Nguyễn Văn Old', 'KHÔNG đổi tên hiển thị (name) — chỉ field username');
+    assert.strictEqual(conf.confirmedByName, 'Nguyễn Văn Old (HR)', 'KHÔNG đổi tên hiển thị (confirmedByName) — chỉ field username');
+    assert.strictEqual(STORE.careerPathConfirmations.find(r => r.id === 51).username, 'nv_khac', 'Bản ghi không liên quan phải giữ nguyên');
+  });
+
+  await test('LỖI ĐÃ VÁ (re-audit lần 10, mục 10/14): xoá vĩnh viễn "nv_old": null hoá careerPathConfirmations.username/.confirmedBy (không suy đoán ai thay thế)', async () => {
+    resetState();
+    await cascadeUsernameChangesToCarDriverAndOfficeReqTech([], ['nv_old']);
+    const conf = STORE.careerPathConfirmations.find(r => r.id === 50);
+    assert.strictEqual(conf.username, null);
+    assert.strictEqual(conf.confirmedBy, null);
+    assert.strictEqual(STORE.careerPathConfirmations.find(r => r.id === 51).username, 'nv_khac', 'Bản ghi không liên quan phải giữ nguyên');
   });
 
   await test('LỖI ĐÃ VÁ (re-audit lần 10): xoá vĩnh viễn "nv_old": null hoá cả 5 field itPriceApprovals/itSupportTickets', async () => {

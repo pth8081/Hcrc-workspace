@@ -1313,7 +1313,20 @@ const SINGLE_USERNAME_ASSIGNMENT_FIELDS = [
   // trainingInstruct (canManageTrainingClass(), lib/recordActions.js — so trực tiếp
   // cls.instructorUsername === user.username) — chưa từng được cascade khi đổi tên/xoá username, cùng
   // lớp lỗi với carRegs.assignedDriverUsername/officeReqs.techAssignedTo đã vá.
-  { collection: 'trainingClasses', field: 'instructorUsername' }
+  { collection: 'trainingClasses', field: 'instructorUsername' },
+  // LỖI ĐÃ VÁ (re-audit lần 10, mục 10/14, mức TB/Thấp — "careerPathConfirmations.username/.confirmedBy
+  // không cascade username"): `username` (nhân viên ĐƯỢC xác nhận hoàn thành cấp bậc) là điều kiện DUY
+  // NHẤT cấp quyền tự xem mốc xác nhận của chính mình (canViewCareerPathConfirmation(),
+  // lib/recordViewScope.js — so trực tiếp `item.username === user.username`) VÀ điều kiện duy nhất xác
+  // định "đã xác nhận cấp này cho người này chưa" (confirmCareerPathForEmployee()/
+  // assertCanRevokeCareerPathConfirmation(), lib/recordActions.js — so `c.username === targetUsername`)
+  // — chưa từng được cascade. Đổi tên đăng nhập -> MẤT NGAY quyền tự xem lịch sử thăng tiến của chính
+  // mình; xoá vĩnh viễn rồi cấp lại username cho nhân viên MỚI -> nhân viên đó THỪA KẾ mốc xác nhận của
+  // người CŨ + bị chặn SAI khi "Xác nhận" lại từ đầu (hệ thống coi nhầm là "đã xác nhận rồi"). `confirmedBy`
+  // (người HR/quản lý đã xác nhận) chỉ phục vụ hiển thị/kiểm toán (KHÔNG gate quyền gì), cascade cho
+  // nhất quán dữ liệu lịch sử.
+  { collection: 'careerPathConfirmations', field: 'username' },
+  { collection: 'careerPathConfirmations', field: 'confirmedBy' }
 ];
 async function cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, deletedUsernames) {
   if (!(renamed || []).length && !(deletedUsernames || []).length) return;

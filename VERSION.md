@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.70** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.70 (2026-11): [TB/Thấp] Re-audit lần 10 — mục 10/14: careerPathConfirmations.username/.confirmedBy không cascade username
+
+Mục thứ mười (10/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** `username` (nhân viên ĐƯỢC xác nhận hoàn thành 1 cấp bậc Lộ Trình Thăng Tiến) là điều
+kiện DUY NHẤT cấp quyền tự xem mốc xác nhận của chính mình (`canViewCareerPathConfirmation()`,
+lib/recordViewScope.js — so trực tiếp `item.username === user.username`) VÀ điều kiện duy nhất xác
+định "đã xác nhận cấp này cho người này chưa" (`confirmCareerPathForEmployee()`/
+`assertCanRevokeCareerPathConfirmation()`, lib/recordActions.js) — chưa từng được cascade khi đổi tên/
+xoá username. Hậu quả: đổi tên đăng nhập -> MẤT NGAY quyền tự xem lịch sử thăng tiến của chính mình;
+xoá vĩnh viễn rồi cấp lại username cho nhân viên MỚI -> nhân viên đó THỪA KẾ mốc xác nhận của người CŨ
++ bị chặn SAI khi "Xác nhận" lại từ đầu (hệ thống coi nhầm là "đã xác nhận rồi"). `confirmedBy` (người
+HR/quản lý đã xác nhận) chỉ phục vụ hiển thị/kiểm toán, không gate quyền gì, cascade theo cho nhất quán
+dữ liệu lịch sử.
+
+**Bản vá:** thêm `{ collection: 'careerPathConfirmations', field: 'username' }` và
+`{ collection: 'careerPathConfirmations', field: 'confirmedBy' }` vào `SINGLE_USERNAME_ASSIGNMENT_FIELDS`
+(lib/catalogRename.js) — cascade đã được wire sẵn vào `routes/data.js`, không cần sửa thêm gì khác.
+
+**Test:** mở rộng `tests/test-cardriver-officereqtech-username-cascade.js` (có sẵn) thêm fixture
+`careerPathConfirmations` + 2 scenario mới: đổi tên cascade đúng CẢ 2 field (giữ nguyên `name`/
+`confirmedByName`); xoá vĩnh viễn null hoá cả 2 field. Xác nhận 2/11 scenario mới FAIL đúng trên code cũ
+(9/11 tổng), 11/11 PASS trên code mới. Chạy lại regression `test-career-paths.js` (32/32),
+`test-managerusername-rename-delete-cascade.js` (3/3), `test-operationworkitem-assignment-username-cascade.js`
+(5/5) — tất cả PASS, không regression. Tự kiểm cú pháp (`node -c lib/catalogRename.js`) — không đụng
+HTML/JS client ở bản vá này.
+
+**Ảnh hưởng deploy:** chỉ sửa `lib/catalogRename.js`, không đổi `schema.sql`/`.env.example`/
+dependencies — copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.69 (2026-11): [TB] Re-audit lần 10 — mục 9/14: trainingClasses.instructorUsername không cascade username rename/xoá
 
