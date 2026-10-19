@@ -300,10 +300,13 @@ h1, h2, h3, h4 { letter-spacing: -0.01em !important; }
    Cùng nguyên tắc Đợt B ở trên: chỉ ĐỊNH NGHĨA LẠI diện mạo của class/thẻ HTML ĐÃ DÙNG SẴN khắp file,
    không đổi 1 className hay cấu trúc HTML nào — rủi ro rất thấp, áp dụng toàn cục ngay lập tức. */
 
-/* A1 — Font tiếng Việt riêng (Be Vietnam Pro, xem <link> Google Fonts ở đầu <head>) thay cho font hệ
-   thống mặc định trước đây, tạo phân cấp tiêu đề/nhãn rõ hơn qua letter-spacing đã có ở Đợt B. */
+/* A1 — Font tiếng Việt riêng (từ 11/2026 đổi sang Inter — phong cách enterprise kiểu SAP Fiori theo yêu
+   cầu người dùng, thay cho Be Vietnam Pro trước đó; xem <link> Google Fonts ở đầu <head>), tạo phân cấp
+   tiêu đề/nhãn rõ hơn qua letter-spacing đã có ở Đợt B. KHÔNG áp dụng cho .approval-slip/.minutes-doc/
+   .task-doc (văn bản in trang trọng, cố ý giữ Times New Roman) hay các màn xuất PDF/ảnh qua canvas
+   (chứng chỉ, báo cáo trình chiếu, sơ đồ tổ chức — cố ý dùng Arial, xem OC_DIAGRAM_FONT). */
 body, input, select, textarea, button {
-  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 h1, h2, h3 { font-weight: 800 !important; }
 

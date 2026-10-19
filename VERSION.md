@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**27.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.74 (2026-11): Đổi font chữ giao diện — Be Vietnam Pro → Inter (phong cách enterprise kiểu SAP Fiori)
+
+Theo yêu cầu người dùng, sau khi xem demo so sánh trực tiếp trên 2 màn hình thật (Đăng Nhập + Phê
+Duyệt) bằng Playwright.
+
+**Thay đổi:** `public/index.html` (link Google Fonts) + `public/app.css` (khai báo
+`font-family` trên `body, input, select, textarea, button`, có `!important`) — đổi từ `'Be Vietnam
+Pro'` sang `'Inter'` (cùng bộ weight 400/500/600/700/800). Đây là NƠI DUY NHẤT kiểm soát font chính
+của toàn hệ thống — mọi phần tử con kế thừa qua `body`, nên chỉ cần sửa đúng 2 chỗ này là áp dụng cho
+toàn bộ màn hình thao tác (Dashboard, mọi module nghiệp vụ, form, bảng, modal...).
+
+**Cố ý KHÔNG đổi** (đã xác nhận với người dùng, chọn phương án giữ nguyên):
+- `.approval-slip`/`.minutes-doc`/`.task-doc` (phiếu duyệt in, biên bản họp, văn bản công việc in) —
+  vẫn giữ Times New Roman, theo quy ước văn bản hành chính giấy truyền thống.
+- Các màn xuất PDF/ảnh qua canvas (chứng chỉ đào tạo, báo cáo trình chiếu, sơ đồ tổ chức) — vẫn giữ
+  Arial/Helvetica (xem `OC_DIAGRAM_FONT` ở `module-orgchart.js`, đã có chú thích "KHÔNG dùng web font
+  — canvas" từ trước) vì html2canvas/xuất PDF cần font tải xong đồng bộ ngay lúc chụp, web font tải
+  bất đồng bộ dễ gây lỗi hiển thị lúc xuất file — rủi ro kỹ thuật thật, không phải sơ suất.
+
+**Kiểm tra:** chỉ là đổi CSS font-family thuần (không đổi JS/logic/route nào) — rà lại hệ component
+dùng chung (`.badge-*`, `.btn-*`, `.stat-card`) xác nhận đều `inline-flex`/padding tự co giãn theo nội
+dung, không có phần tử nào ấn định chiều rộng cố định có thể bị tràn chữ khi đổi font. Render thật qua
+Playwright (dùng đúng `app.css`+`tailwind.css` thật + markup thật của màn Đăng Nhập và bảng Phê Duyệt)
+xác nhận không vỡ layout, không tràn badge/nút.
 
 ## v27.73 (2026-11): [Thấp] Re-audit lần 10 — mục 13/14: opinionResponses không được invalidate nhất quán ở submitSubmissionDraft/RESOLVE_FILE_PROPOSAL
 
