@@ -7,7 +7,7 @@
 //   đọc DB, gọi TRỰC TIẾP (không mock gì) với fixture dựng tay, phủ ĐỦ 17 nguồn hồ sơ mà hàm này tổng
 //   hợp (khớp 1:1 public/js/core-approvalhub.js::getMyPendingApprovals(), xem cross-reference ở đầu
 //   lib/approvalAggregator.js): 7 module theo BƯỚC quy trình phòng ban (docs, submissions, carRegs,
-//   officeReqs x2 subType, vppRegistrations, itPriceApprovals, budgetEntries, contracts x2 luồng,
+//   officeReqs x2 subType, vppRegistrations, itPriceApprovals, contracts x2 luồng,
 //   operationOrders) + module theo QUYỀN PHẲNG (meetings, internalPosts SHARE + bình luận bị gắn cờ,
 //   licenses, paymentRequests, itPrice "Từ chối khẩn cấp", operationOrders AWAITING_RECEIPT).
 //   operationStoreOpenings/operationRepairs "Dự toán" ĐÃ XOÁ KHỎI ĐÂY — Vận Hành > Siêu Thị không còn
@@ -87,6 +87,10 @@ function buildFixtureAppData() {
       { id: 52, dept: 'Kế Toán', status: 'APPROVED', currentStep: 1, history: [], priceType: 'RETAIL',
         emergencyRejectStatus: 'PENDING' }
     ],
+    // LỖI ĐÃ VÁ (re-audit lần 8, mức Thấp-TB — "approvalAggregator vẫn giữ budgetEntries đã bị gỡ khỏi
+    // Approval Hub client"): GIỮ LẠI fixture này (có 1 bản PENDING) đúng để chứng minh phần ÂM — dù còn
+    // dữ liệu lịch sử PENDING, computeMyPendingApprovalKeys() KHÔNG còn tạo khoá 'budget:*' nào cho nó
+    // nữa (xem assertion 'budget:61' bị lật lại thành PHẢI KHÔNG có, ngay dưới trong bài test).
     budgetEntries: [
       { id: 61, dept: 'Kế Toán', status: 'PENDING', currentStep: 1, history: [] }
     ],
@@ -172,7 +176,13 @@ async function runPartA(run) {
     assert(keys.includes('officeFix:32'), 'phải gồm officeFix:32 (subType SUA_CHUA)');
     assert(keys.includes('vpp:41'), 'phải gồm vpp:41');
     assert(keys.includes('itPrice:51'), 'phải gồm itPrice:51');
-    assert(keys.includes('budget:61'), 'phải gồm budget:61');
+    // LỖI ĐÃ VÁ (re-audit lần 8, mức Thấp-TB — "approvalAggregator vẫn giữ budgetEntries đã bị gỡ khỏi
+    // Approval Hub client"): mục "📊 Ngân Sách" (budgetEntries) đã bị BỎ khỏi getMyPendingApprovals()
+    // (core-approvalhub.js, dòng ~145, từ v23.0 "Ngân Sách 2.0") nhưng pushDeptWorkflowKeys('budgetEntries',
+    // ...) vẫn còn ở computeMyPendingApprovalKeys() — endpoint polling báo "có hồ sơ cần duyệt" (khoá
+    // 'budget:61') cho 1 module KHÔNG CÒN màn xử lý nào đọc lại, 1 thông báo hoàn toàn vô dụng (bấm vào
+    // Hub không thấy gì để xử lý). Đã gỡ lời gọi đó — budget:61 KHÔNG còn xuất hiện dù vẫn PENDING.
+    assert(!keys.includes('budget:61'), 'KHÔNG được còn khoá budget:* — module đã bị gỡ khỏi Approval Hub client, mirror server phải khớp');
     assert(keys.includes('contract:71'), 'phải gồm contract:71 (luồng Phê Duyệt)');
     assert(keys.includes('contractSigned:71'), 'phải gồm contractSigned:71 (luồng Tài liệu ký, field riêng)');
     assert(!keys.includes('contract:72') && !keys.includes('contractSigned:72'), 'PHẢI loại phụ lục (isAddendum:true) khỏi CẢ 2 luồng hợp đồng');
@@ -185,7 +195,7 @@ async function runPartA(run) {
 
   // LỖI ĐÃ VÁ (re-audit lần 6, mức TB — "approvalAggregator pushDeptWorkflowKeys thiếu check tự duyệt"):
   // pushDeptWorkflowKeys() (dùng cho 7+ module dept-workflow: docs/submissions/carRegs/officeReqs/
-  // vppRegistrations/itPriceApprovals/budgetEntries/contracts/operationOrders/paymentRequests) trước
+  // vppRegistrations/itPriceApprovals/contracts/operationOrders/paymentRequests) trước
   // đây CHỈ gọi canApproveStep() — thiếu nửa điều kiện enforcement thật
   // (assertNotSelfDecidingWorkflowItem(), applyWorkflowAction() luôn gọi CẢ 2) — khiến chính người
   // tạo/trình hồ sơ (nếu tình cờ cũng nằm trong danh sách approver bước hiện tại) vẫn nhận khoá "có hồ
@@ -412,9 +422,12 @@ stubModule('lib/appData', {
 });
 
 stubModule('lib/recordStore', {
+  // budgetEntries vẫn thật sự là MIGRATED_COLLECTIONS ở production (dữ liệu lịch sử, chưa xoá khỏi
+  // dbo.Records) — bỏ khỏi Set này CHỈ vì routes/approvals.js (RECORD_COLLECTIONS_NEEDED) không còn cần
+  // đọc nó nữa sau bản vá này, không liên quan gì tới việc nó đã migrate hay chưa ở tầng lưu trữ thật.
   MIGRATED_COLLECTIONS: new Set([
     'docs', 'submissions', 'carRegs', 'officeReqs', 'vppRegistrations', 'itPriceApprovals',
-    'budgetEntries', 'contracts', 'meetings', 'internalPosts', 'licenses', 'paymentRequests',
+    'contracts', 'meetings', 'internalPosts', 'licenses', 'paymentRequests',
     'operationOrders', 'operationStoreOpenings', 'operationRepairs'
   ]),
   getAllForCollectionCached: async (collection) => APP_DATA_STATE[collection] || []
