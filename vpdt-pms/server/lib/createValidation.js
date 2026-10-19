@@ -4438,6 +4438,20 @@ const CREATE_MODULE_CONFIGS = {
         throw new CreateError(403, 'Bạn không có quyền lập lịch phân ca');
       }
       const valid = attendance.assertValidRosterAssignment(payload);
+      // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "shiftRoster tạo mới thiếu chặn đúng siêu thị
+      // (store-spoofing)"): storeCode trước đây nhận THÔ từ payload, không đối chiếu với user.dept khi
+      // actor CHỈ có hrShiftRosterManage — khác hẳn canViewShiftRoster() (lib/recordViewScope.js,
+      // canSeeHacRosterManageAll() yêu cầu item.storeCode === user.dept) và route POST
+      // /shiftRoster/:id/cancel (routes/records.js) đã đúng `hrShiftRosterManage && item.storeCode ===
+      // freshUser.dept`. 1 Quản Lý Siêu Thị A (chỉ hrShiftRosterManage) có thể tạo dòng phân ca "ma" cho
+      // Siêu Thị B (storeCode tuỳ ý) — Siêu Thị B không tạo lại được lịch THẬT cho đúng nhân viên/ngày đó
+      // (assertNoRosterConflict() chặn nhầm) + dòng storeCode sai còn ảnh hưởng quyền duyệt đổi ca
+      // (assertShiftSwapApprover() dùng roster.storeCode). Admin/hrAttendanceManage vẫn được chọn
+      // storeCode bất kỳ (quản lý toàn công ty), chỉ hrShiftRosterManage đơn thuần bị ép đúng siêu thị
+      // của chính mình — mirror đúng quy mô quyền ở canSeeHacRosterManageAll()/route cancel.
+      if (!user.perms?.admin && !user.perms?.hrAttendanceManage && valid.storeCode !== user.dept) {
+        throw new CreateError(403, 'Bạn chỉ được lập lịch phân ca cho đúng siêu thị của mình');
+      }
       attendance.assertNoRosterConflict(collection, valid.employeeCode, valid.workDate, null);
       Object.assign(payload, valid, { status: 'SCHEDULED' });
       delete payload.creatorName;

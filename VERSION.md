@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.41 (2026-11): [Cao] Re-audit lần 8 — mục 3/10: shiftRoster tạo mới thiếu chặn đúng siêu thị (store-spoofing)
+
+Mục thứ ba (3/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** `CREATE_MODULE_CONFIGS.shiftRoster.extraValidate` (`lib/createValidation.js`) chỉ kiểm
+có 1 trong 3 quyền `admin`/`hrShiftRosterManage`/`hrAttendanceManage`, không đối chiếu `storeCode` (đọc
+THÔ từ payload qua `attendance.assertValidRosterAssignment()`) với `user.dept` khi actor CHỈ có
+`hrShiftRosterManage` — khác hẳn `canViewShiftRoster()` (`lib/recordViewScope.js`,
+`canSeeHacRosterManageAll()` yêu cầu `item.storeCode === user.dept`) và route `POST
+/shiftRoster/:id/cancel` (`routes/records.js`) đã đúng `hrShiftRosterManage && item.storeCode ===
+freshUser.dept`. 1 Quản Lý Siêu Thị A (chỉ `hrShiftRosterManage`) có thể tạo dòng phân ca "ma" cho Siêu
+Thị B — Siêu Thị B không tạo lại được lịch THẬT cho đúng nhân viên/ngày đó
+(`assertNoRosterConflict()` chặn nhầm), và dòng `storeCode` sai còn ảnh hưởng quyền duyệt đổi ca
+(`assertShiftSwapApprover()` dùng `roster.storeCode`).
+
+**Vá:** khi actor KHÔNG phải `admin`/`hrAttendanceManage` (chỉ `hrShiftRosterManage`), bắt buộc
+`valid.storeCode === user.dept` (403 nếu khác) — mirror đúng quy mô quyền ở
+`canSeeHacRosterManageAll()`/route `cancel`.
+
+**Test:** file mới `tests/test-shiftroster-create-store-spoofing.js` (4 scenario, HTTP thật qua
+`routes/create.js`): Quản Lý Siêu Thị A tạo lịch cho Siêu Thị B -> 403, đối chứng tạo cho đúng Siêu Thị
+A -> vẫn thành công, đối chứng `hrAttendanceManage`/admin tạo cho siêu thị bất kỳ -> không bị ép dept.
+Xác nhận FAIL trên code CŨ (`git stash`, 1/4 scenario FAIL — khai thác thành công), PASS trên code đã
+vá (4/4). Regression: `tests/test-shiftroster-cancel-swap-cleanup.js` (5/5),
+`tests/test-shifttemplates-generic-route-inuse-check.js` (5/5),
+`tests/test-audit-nhansu-congphep-luong.js` (21/21), `tests/test-attendance-leave.js` (74/74),
+`tests/test-selfapprove-leave-shiftswap-meeting.js` (15/15),
+`tests/test-khoi0-checklist-contract-attendance-internalpost-gate.js` (24/24) — toàn bộ PASS, không
+regression (fixture `storeMgr1` ở `test-audit-nhansu-congphep-luong.js` đã luôn tạo đúng `storeCode`
+khớp `user.dept` nên không bị ảnh hưởng).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.40 (2026-11): [Cao] Re-audit lần 8 — mục 2/10: laborContracts HR Contract Manager tự sửa/kích hoạt/chấm dứt HĐLĐ của chính mình
 
