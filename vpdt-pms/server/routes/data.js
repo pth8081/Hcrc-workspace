@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2393,6 +2393,10 @@ router.post('/:key', async (req, res) => {
       // người xem") — LỖI ĐÃ VÁ, re-audit lần 9, mức TB — xem chú thích đầy đủ tại
       // cascadeUsernameChangesToDeptViewScopeExtraViewers() (lib/catalogRename.js).
       await cascadeUsernameChangesToDeptViewScopeExtraViewers(renamed, deletedUsernames);
+      // carRegs.assignedDriverUsername (tài xế được phân công) + officeReqs.techAssignedTo (kỹ thuật
+      // viên độc lập xác nhận) — LỖI ĐÃ VÁ, re-audit lần 9, mức TB — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToCarDriverAndOfficeReqTech() (lib/catalogRename.js).
+      await cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi

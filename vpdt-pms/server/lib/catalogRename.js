@@ -1257,6 +1257,47 @@ async function cascadeUsernameChangesToDeptViewScopeExtraViewers(renamed, delete
   });
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Cascade rename thiếu carRegs.assignedDriverUsername +
+// officeReqs.techAssignedTo(Name)"): 2 field username "chỉ định 1 người cụ thể" sau — `carRegs.
+// assignedDriverUsername` (tài xế được phân công, gán lúc duyệt — xem canConfirmCarDriverAssignment()/
+// canEndCarTrip(), lib/recordActions.js:8275,8330-8334) và `officeReqs.techAssignedTo` (người kỹ thuật
+// độc lập xác nhận, chốt NGAY LÚC TẠO/SỬA hồ sơ SUA_CHUA — xem lib/workflowEngine.js:462,
+// `approvers[2] = [item.techAssignedTo]`) — chưa từng được cascade khi đổi tên/xoá username, dù CÙNG
+// bản chất "so khớp username thô" như creator/approver đã vá ở các cascade khác trong file này. Hậu
+// quả: (1) đổi tên đăng nhập -> tài xế/kỹ thuật viên đó tự MẤT quyền xác nhận hồ sơ của chính mình
+// (canConfirmCarDriverAssignment()/canEndCarTrip() so `user.username === carReg.assignedDriverUsername`;
+// bước duyệt "Kỹ Thuật Xác Nhận" mất hẳn approver hợp lệ, chỉ admin còn duyệt được); (2) xoá vĩnh viễn
+// rồi cấp LẠI đúng username cho người khác -> người MỚI thừa kế nhầm quyền xác nhận hồ sơ CŨ. CHỈ
+// cascade field USERNAME (assignedDriverUsername/techAssignedTo) — KHÔNG đụng field tên hiển thị song
+// hành (`carRegs.assignedDriver`/`officeReqs.techAssignedToName`, chỉ lưu TÊN người, không phải
+// username, không cần đồng bộ theo đổi username) — cùng nguyên tắc `creatorField` (không đụng
+// `creatorNameField`) ở cascadeUsernameChangesToRecordCreatorFields() phía trên. Xoá vĩnh viễn -> null
+// hoá (gỡ "người được phân công", không suy đoán ai thay thế), cùng khuôn mọi cascade field 1-giá-trị
+// khác trong file này.
+const SINGLE_USERNAME_ASSIGNMENT_FIELDS = [
+  { collection: 'carRegs', field: 'assignedDriverUsername' },
+  { collection: 'officeReqs', field: 'techAssignedTo' }
+];
+async function cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  for (const { collection, field } of SINGLE_USERNAME_ASSIGNMENT_FIELDS) {
+    await renameFieldValueInCollection(collection, (item) => {
+      const current = item[field];
+      if (current == null) return item;
+      let next = current;
+      for (const { oldValue, newValue } of renamed || []) {
+        if (current === oldValue) { next = newValue; break; }
+      }
+      if (next === current) {
+        for (const deletedUsername of deletedUsernames || []) {
+          if (current === deletedUsername) { next = null; break; }
+        }
+      }
+      return next === current ? item : { ...item, [field]: next };
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1267,5 +1308,6 @@ module.exports = {
   cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
   cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
-  cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers
+  cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers,
+  cascadeUsernameChangesToCarDriverAndOfficeReqTech
 };
