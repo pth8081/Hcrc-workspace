@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.57** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.57 (2026-11): [TB] Re-audit lần 9 — mục 9/12: core.js #meetingDept khoá sai cho meetingCancel non-admin khi sửa phòng ban khác
+
+Mục thứ chín (9/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `#meetingDept` (select "Phòng Ban Đặt Lịch" dùng chung cho cả form Tạo Mới và Sửa lịch
+họp) chỉ được đổ options theo `getScopedDepts(currentUser, {})` lúc đăng nhập/mở module — chỉ ĐÚNG
+phòng ban của CHÍNH NGƯỜI ĐANG ĐĂNG NHẬP (`admin` mới có nhánh "đổ full danh mục"). Tính năng "Sửa"
+cross-department dành cho "Người quản lý phòng họp" (`meetingCancel`, KHÔNG phải admin —
+`canEditMeeting()`/`canCancelMeeting()`, `core.js:4219-4233`) cho phép họ sửa lịch của BẤT KỲ phòng ban
+nào, nhưng `editMeeting()` (`module-phonghop.js`) gán thẳng `document.getElementById('meetingDept').
+value = m.dept` — nếu `m.dept` khác phòng ban của người quản lý, select không có option khớp, gán thất
+bại thầm lặng (đọc lại ra `""`), server (`meetingActions.js:212-217`, đối chiếu danh mục dept) trả 400.
+
+**Bản vá:** trong `editMeeting()`, khi người đang sửa KHÔNG phải chính `creator` của lịch (đã vượt
+`canEditMeeting()` qua nhánh quản lý/admin), đổ lại ĐẦY ĐỦ `DB.depts` vào `#meetingDept` + mở khoá
+(`disabled = false`) TRƯỚC khi gán `.value = m.dept` — cùng trải nghiệm admin đã có sẵn
+(`getScopedDepts()` trả full danh mục + `applyOwnDeptAutoSelect()` không khoá do `_isBroadScope`).
+Trường hợp người sửa CHÍNH LÀ creator (hành vi cũ, đa số trường hợp) không bị đụng tới.
+
+**Test:** thêm 1 kịch bản mới vào `tests/test-meeting-edit-ui.js` (Playwright thật) — "Người quản lý
+phòng họp" (`meetingCancel`, phòng ban khác với lịch đang sửa) gọi `editMeeting()`, xác nhận `#meetingDept.
+value` đúng giá trị của lịch (không rơi về rỗng), không bị khoá, và có đủ option. Xác nhận test FAIL
+trên code cũ (`got ""`) và PASS trên code mới (8/8). Chạy lại regression: 6 file test khác có nạp
+`module-phonghop.js` (`test-audit-round5-ui-meeting-car.js`/`test-car-report-week-month.js`/
+`test-catalog-rename-locked-accounts.js`/`test-meeting-report.js`/
+`test-meeting-room-rename-cascade.js`/`test-stuck-subtab-fallback-fix.js`) — tất cả PASS, không có
+regression. Tự kiểm CSP — không khớp gì.
+
+**Ảnh hưởng deploy:** chỉ code `server/public/js/module-phonghop.js`, không đổi `schema.sql`/biến môi
+trường/`package.json` dependencies — copy code + `pm2 restart` là đủ (file JS phía client, trình duyệt
+tự tải lại bản mới ở lượt truy cập kế tiếp).
 
 ## v27.56 (2026-11): [Thấp] Re-audit lần 9 — mục 8/12: openBosungEditModal() docs không khoá Dept/Phân Loại khi sửa version
 

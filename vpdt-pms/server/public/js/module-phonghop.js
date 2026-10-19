@@ -936,6 +936,23 @@ function editMeeting(id) {
   openMeetingForm();
 
   document.getElementById('meetingCode').value = m.code;
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "core.js #meetingDept khoá sai cho meetingCancel non-admin khi
+  // sửa phòng ban khác"): #meetingDept lúc mở FORM TẠO MỚI chỉ đổ đúng phòng ban của NGƯỜI ĐANG ĐĂNG
+  // NHẬP (getScopedDepts(currentUser, {}), core.js — admin mới có nhánh "đổ full danh mục"). Khi "Người
+  // quản lý phòng họp" (meetingCancel, KHÔNG phải admin, KHÔNG phải creator — đã vượt canEditMeeting()
+  // qua nhánh quản lý) sửa lịch của 1 phòng ban KHÁC phòng ban mình, m.dept không nằm trong option nào
+  // của select đó -> gán `.value = m.dept` thất bại thầm lặng (đọc lại ra ""), server (meetingActions.js,
+  // đối chiếu danh mục dept) trả 400 — tính năng "Sửa lịch phòng ban khác" cho meetingCancel coi như
+  // không dùng được. Khi người sửa KHÔNG phải chính người tạo, đổ lại ĐẦY ĐỦ danh mục phòng ban + mở
+  // khoá trước khi gán value — cùng khuôn trải nghiệm admin đã có sẵn (getScopedDepts() trả full danh
+  // mục + applyOwnDeptAutoSelect() không khoá do _isBroadScope).
+  if (m.creator !== currentUser.username) {
+    const meetingDeptSel = document.getElementById('meetingDept');
+    if (meetingDeptSel) {
+      meetingDeptSel.innerHTML = (DB.depts || []).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      meetingDeptSel.disabled = false;
+    }
+  }
   document.getElementById('meetingDept').value = m.dept;
   document.getElementById('meetingRoom').value = m.room;
   document.getElementById('meetingTitle').value = m.title || '';
