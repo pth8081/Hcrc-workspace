@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.50** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.50 (2026-11): [Cao] Re-audit lần 9 — mục 2/12: computeEmployeePayslip() bỏ qua probationSalaryRate
+
+Mục thứ hai (2/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `contract.probationSalaryRate` ("Tỷ lệ hưởng lương trong thời gian thử việc", 85 hoặc
+100 — chỉ có ý nghĩa khi `contractType='PROBATION'`, do HR tự cấu hình RÕ RÀNG trên hợp đồng, xem
+`lib/laborContract.js`) hoàn toàn không được đọc ở `computeEmployeePayslip()` (`lib/payroll.js`) — mọi
+nhân viên thử việc cấu hình 85% vẫn bị tính dòng `BASIC_SALARY` đủ 100% lương cơ bản, trả dư âm thầm
+cho MỌI nhân viên mới (hầu hết hợp đồng bắt đầu bằng `PROBATION`), không có cảnh báo nào cho kế toán.
+
+**Vá:** khác các cảnh báo `BASIC_SALARY` khác trong hàm (nghỉ/vào làm giữa kỳ... — cố tình CHỈ cảnh báo
+vì chưa có công thức chia-tỷ-lệ-theo-ngày đáng tin), `probationSalaryRate` là 1 giá trị ĐÃ CÓ NGUỒN DỮ
+LIỆU XÁC NHẬN THẬT (HR chọn rõ 85 hoặc 100), nên ÁP DỤNG TRỰC TIẾP: `baseSalary = rawBaseSalary *
+probationSalaryRate / 100` khi `contractType==='PROBATION'` và `probationSalaryRate` khác null/100.
+Giá trị `baseSalary` đã điều chỉnh này chảy xuống cả `dailyRate`/`hourlyRate` (OT, trừ lương nghỉ không
+lương) để nhất quán. Dòng `BASIC_SALARY` được nối thêm ghi chú nêu rõ tỷ lệ đã áp + mức lương gốc, để
+kế toán đối chiếu lại hợp đồng.
+
+**Test:** `tests/test-payroll-probation-salary-rate.js` (5 scenario) — 85% tính đúng 17.000.000/
+20.000.000; 100% là no-op; hợp đồng đã chuyển loại khác `PROBATION` (dù còn sót field cũ) KHÔNG áp dụng;
+`probationSalaryRate=null` giữ hành vi cũ (không suy đoán); kết hợp đồng thời với cảnh báo "vào làm giữa
+kỳ" đã có từ trước — cả 2 cùng áp dụng đúng. Xác nhận FAIL trên code CŨ (3/5, đúng 2 scenario áp dụng tỷ
+lệ sai), PASS trên code đã vá (5/5). Regression: `tests/test-payroll-basesalary-midperiod.js` (6/6,
+không đổi hành vi cũ khi probationSalaryRate không set) + `test-attendance-leave.js`/
+`test-audit-nhansu-congphep-luong.js`/`test-mucO-payroll-payment-hrprofile-bypass.js`/
+`test-payroll-adjust-amount-format.js`/`test-payroll-period-delete.js`/`test-payroll.js` — toàn bộ PASS.
+
+**Deploy-impact:** không đổi route/API/schema — chỉ copy code + `pm2 restart`. **Lưu ý nghiệp vụ**: từ
+sau khi deploy, payslip MỚI tính cho nhân viên thử việc có `probationSalaryRate` khác 100 sẽ tự động
+giảm đúng tỷ lệ — kế toán cần biết đây là thay đổi hành vi tính lương (sửa lỗi tính dư trước đây), không
+phải lỗi phát sinh mới.
 
 ## v27.49 (2026-11): [Cao] Re-audit lần 9 — mục 1/12: Cascade username rename/xoá không phủ creator/uploader/assignedBy
 

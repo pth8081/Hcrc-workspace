@@ -287,7 +287,19 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   const { start, end: periodEnd } = periodDateRange(period);
   const end = offboardingLastWorkingDate && offboardingLastWorkingDate < periodEnd ? offboardingLastWorkingDate : periodEnd;
   const records = (appData.attendanceRecords || []).filter(r => r.employeeCode === employeeCode && r.workDate >= start && r.workDate <= end);
-  const baseSalary = Number(contract.baseSalary);
+  const rawBaseSalary = Number(contract.baseSalary);
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức Cao — "computeEmployeePayslip() bỏ qua probationSalaryRate"):
+  // contract.probationSalaryRate ("Tỷ lệ hưởng lương trong thời gian thử việc", 85 hoặc 100 — xem
+  // lib/laborContract.js) chỉ có ý nghĩa khi contractType='PROBATION', do HR tự cấu hình RÕ RÀNG (không
+  // phải suy đoán/chia tỷ lệ theo ngày công như các cảnh báo BASIC_SALARY khác ở trên — đây là 1 công
+  // thức ĐÃ CÓ NGUỒN DỮ LIỆU XÁC NHẬN THẬT, đúng nguyên tắc đầu file, nên ÁP DỤNG TRỰC TIẾP thay vì chỉ
+  // cảnh báo). Trước đây hàm này hoàn toàn không đọc field này — nhân viên thử việc cấu hình 85% vẫn bị
+  // tính lương CƠ BẢN đủ 100%, trả dư âm thầm cho MỌI nhân viên mới (hầu hết bắt đầu bằng hợp đồng
+  // PROBATION).
+  const probationRate = contract.contractType === 'PROBATION' && contract.probationSalaryRate != null
+    ? Number(contract.probationSalaryRate) : null;
+  const probationRateApplies = probationRate != null && Number.isFinite(probationRate) && probationRate > 0 && probationRate !== 100;
+  const baseSalary = probationRateApplies ? rawBaseSalary * probationRate / 100 : rawBaseSalary;
   const standardDays = workModelInfo.workModel === 'SHIFT_BASED' ? Number(rateConfig.standardWorkDaysStore) || 26 : Number(rateConfig.standardWorkDaysHo) || 22;
   const dailyRate = standardDays > 0 ? baseSalary / standardDays : 0;
   const hourlyRate = dailyRate / (Number(rateConfig.standardHoursPerDay) || 8);
@@ -307,9 +319,12 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
   const contractExpiredInPeriod = contract.status === 'ACTIVE' && contract.contractType !== 'INDEFINITE'
     && contract.endDate && contract.endDate < periodEnd;
 
+  const probationNote = probationRateApplies
+    ? ` (đã áp dụng ${probationRate}% lương thử việc theo hợp đồng — mức lương cơ bản gốc ${rawBaseSalary.toLocaleString('vi-VN')}đ)`
+    : '';
   const details = [];
   addDetail(details, 'BASIC_SALARY', baseSalary,
-    offboardingLastWorkingDate
+    (offboardingLastWorkingDate
       ? `Theo hợp đồng lao động — nghỉ việc ngày ${offboardingLastWorkingDate} giữa kỳ, CHƯA trừ tương ứng số ngày không làm việc, kế toán cần rà soát + Điều chỉnh dòng lương`
       : hireDateInPeriod
         ? `Theo hợp đồng lao động — vào làm ngày ${hireDateInPeriod} giữa kỳ, CHƯA trừ tương ứng số ngày chưa vào làm trước đó, kế toán cần rà soát + Điều chỉnh dòng lương`
@@ -317,7 +332,7 @@ function computeEmployeePayslip(employeeCode, period, appData, rateConfig) {
           ? `Theo hợp đồng lao động — lương cơ bản được cập nhật ngày ${baseSalaryChangedDateInPeriod} giữa kỳ (mức ${baseSalary.toLocaleString('vi-VN')}đ hiện tại là mức SAU khi đổi), CHƯA chia tỷ lệ theo ngày hiệu lực thật, kế toán cần rà soát + Điều chỉnh dòng lương`
           : contractExpiredInPeriod
             ? `Theo hợp đồng lao động — CẢNH BÁO: hợp đồng đã hết hạn ngày ${contract.endDate} nhưng vẫn đang ở trạng thái "Đang hiệu lực" (hệ thống KHÔNG tự chuyển "Hết hạn"), vẫn tính đủ lương theo hợp đồng này — HR/kế toán cần rà soát: gia hạn hợp đồng, ký hợp đồng mới, hoặc khởi tạo Offboarding nếu nhân viên đã thực sự nghỉ việc`
-            : 'Theo hợp đồng lao động đang hiệu lực',
+            : 'Theo hợp đồng lao động đang hiệu lực') + probationNote,
     false);
 
   let ot150 = 0, ot200 = 0, ot300 = 0;
