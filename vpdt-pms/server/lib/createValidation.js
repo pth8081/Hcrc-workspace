@@ -4027,6 +4027,15 @@ const CREATE_MODULE_CONFIGS = {
         if (!employeeUsername) throw new CreateError(400, 'Vui lòng chọn nhân viên (Mã nhân viên/Tên đăng nhập)');
         const employee = (appData?.users || []).find(u => u.username === employeeUsername && u.active !== false);
         if (!employee) throw new CreateError(400, 'Không tìm thấy tài khoản nhân viên này (hoặc đã bị khoá)');
+        // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "hrProcesses OFFBOARDING: tự tạo + tự xử lý quy trình nghỉ
+        // việc của chính mình"): trước đây employeeUsername được chọn tự do, không chặn === chính người
+        // gọi API — người có hrOffboardingManage tự tạo quy trình Offboarding cho chính mình rồi (do
+        // canManageHrProcess()/canActOnHrTask() cho creator toàn quyền) tự hoàn thành/bỏ qua task, tự chỉ
+        // định người kế nhiệm, tự huỷ quy trình — không ai xác nhận độc lập. Chặn NGAY TỪ LÚC TẠO, cùng
+        // chặn ở canManageHrProcess()/canActOnHrTask() (lib/recordActions.js) cho mọi đường khác.
+        if (employee.username === user.username) {
+          throw new CreateError(403, 'Không thể tự tạo quy trình Offboarding cho chính mình');
+        }
         payload.employeeUsername = employee.username;
         payload.fullName = employee.name || '';
         payload.employeeDept = employee.dept || '';

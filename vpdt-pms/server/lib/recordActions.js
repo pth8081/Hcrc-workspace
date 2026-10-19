@@ -6718,6 +6718,12 @@ function markHrFeedbackRead(user, item) {
 // user đang có hrViewAll — an toàn hơn theo đúng nhãn "chỉ xem" hiện tại).
 function canActOnHrTask(user, item, task) {
   if (!user || !task) return false;
+  // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "hrProcesses OFFBOARDING: tự tạo + tự xử lý quy trình nghỉ
+  // việc của chính mình"): item.employeeUsername (CHỈ có ở OFFBOARDING, luôn null ở ONBOARDING — xem
+  // lib/createValidation.js) là chính người đang bị xử lý nghỉ việc. Chặn TUYỆT ĐỐI, kể cả
+  // hrProcessManage/admin (đúng quyết định 11/2026 "chặn tự duyệt ở TẤT CẢ module, không ngoại lệ") —
+  // không ai được tự hoàn thành/bỏ qua task trong chính quy trình nghỉ việc của mình.
+  if (item?.processType === 'OFFBOARDING' && item.employeeUsername && item.employeeUsername === user.username) return false;
   // hrProcessManage KHÔNG còn admin bypass (11/2026, cùng đợt mở rộng "Nhân Sự" — xem chú thích
   // canManageHrFeedback() ở trên).
   if (user.perms?.hrProcessManage) return true;
@@ -6744,6 +6750,13 @@ function canCreateHrProcess(user, processType) {
 }
 function canManageHrProcess(user, item) {
   if (!user || !item) return false;
+  // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "hrProcesses OFFBOARDING: tự tạo + tự xử lý quy trình nghỉ
+  // việc của chính mình"): chặn TUYỆT ĐỐI tự quản lý (huỷ quy trình/chỉ định người kế nhiệm/giao lại
+  // task) quy trình Offboarding của CHÍNH MÌNH, kể cả hrProcessManage/admin hoặc chính là creator —
+  // cùng khuôn chặn tuyệt đối ở canActOnHrTask() ngay trên. (Tạo mới đã chặn từ gốc ở
+  // lib/createValidation.js nên item.creator === item.employeeUsername không xảy ra ở dữ liệu mới, chỉ
+  // kiểm employeeUsername để chặn cả dữ liệu cũ/mọi đường gọi khác.)
+  if (item.processType === 'OFFBOARDING' && item.employeeUsername && item.employeeUsername === user.username) return false;
   if (user.perms?.hrProcessManage) return true;
   if (item.creator === user.username) return true;
   return !!(item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
