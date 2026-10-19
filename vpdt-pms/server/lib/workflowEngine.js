@@ -1217,6 +1217,13 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
       item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_ACCEPTED', comment, time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl });
       item[statusField] = 'PENDING';
       item[currentStepField] = 1;
+      // LỖI ĐÃ VÁ (re-audit lần 10, mục 13/14, mức Thấp — "opinionResponses không được invalidate nhất
+      // quán ở submitSubmissionDraft/RESOLVE_FILE_PROPOSAL"): tệp tờ trình vừa được THAY THẾ HẲN
+      // (item.fileUrl mới) + gửi lại từ bước 1 — ý kiến đã góp trước đó (opinionResponses) là cho nội
+      // dung tệp CŨ, không còn phản ánh đúng tệp MỚI. Cùng tinh thần editSubmissionDraft()
+      // (lib/recordActions.js) đã dọn khi nội dung đổi, chỉ áp dụng ở nhánh "Đồng ý" (agree) vì nhánh
+      // "Không đồng ý" bên dưới KHÔNG đổi file/không gửi lại ngay (về DRAFT, chưa có vòng duyệt mới).
+      item.opinionResponses = [];
     } else {
       item[historyField].push({ step: proposal.step, approver: user.name, username: user.username, action: 'FILE_PROPOSAL_DECLINED', comment: comment || '', time: nowVN(), fileName: proposal.fileName, fileUrl: proposal.fileUrl });
       item[statusField] = 'DRAFT';

@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**27.72** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.73** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.73 (2026-11): [Thấp] Re-audit lần 10 — mục 13/14: opinionResponses không được invalidate nhất quán ở submitSubmissionDraft/RESOLVE_FILE_PROPOSAL
+
+Mục thứ mười ba (13/14), ĐÂY LÀ MỤC CUỐI CÙNG của đợt re-audit lần 10 (5/5, đợt CUỐI theo yêu cầu
+người dùng "làm rà soát 4-5 đợt nữa thì dừng").
+
+**Nguyên nhân:** `editSubmissionDraft()` (lib/recordActions.js) đã dọn `item.opinionResponses = []`
+khi nội dung tờ trình đổi (sửa lại sau khi bị "Yêu Cầu Bổ Sung") — ý kiến góp cho nội dung CŨ không còn
+phản ánh đúng nội dung MỚI, cùng tinh thần "vô hiệu hoá dữ liệu vòng cũ" đã áp dụng cho lịch sử
+APPROVED. Nhưng 2 đường khác CŨNG gửi tờ trình vào 1 vòng duyệt MỚI lại bị sót: (1)
+`submitSubmissionDraft()` — "Gửi Lại" KHÔNG sửa gì thêm, chỉ gọi `resetForResubmit()` (hàm dùng CHUNG
+với docs/contracts, các module đó không có khái niệm `opinionResponses` nên hàm chung không xử lý
+field này); (2) `RESOLVE_FILE_PROPOSAL` nhánh "Đồng ý" (lib/workflowEngine.js) — tệp bị THAY THẾ HẲN +
+gửi lại từ bước 1, nhưng không dọn `opinionResponses` dù nội dung tệp đã đổi hoàn toàn. Hậu quả: người
+xem hồ sơ (effectiveApprovers/forwardThreads participant) thấy lẫn ý kiến góp cho bản NỘI DUNG CŨ như
+thể đang góp ý cho vòng duyệt hiện tại — gây hiểu nhầm, không ảnh hưởng tới quyền truy cập/phê duyệt
+thật (mức Thấp).
+
+**Bản vá:** thêm `item.opinionResponses = [];` ngay sau khi khôi phục PENDING/bước 1 ở CẢ 2 nơi:
+`submitSubmissionDraft()` (sau `resetForResubmit()`) và nhánh "Đồng ý" của `RESOLVE_FILE_PROPOSAL`
+(ngay sau khi set `status`/`currentStep`) — KHÔNG đụng `resetForResubmit()` dùng chung (docs/contracts
+không có field này) và KHÔNG đụng nhánh "Không đồng ý" của RESOLVE_FILE_PROPOSAL (tệp không đổi, chưa
+gửi lại vòng mới, ý kiến cũ vẫn hợp lệ).
+
+**Test:** mở rộng `tests/test-audit-round2-vbt-hd-gp-tt-tl.js` (thêm scenario 9h, gọi thẳng
+`submitSubmissionDraft()`) và `tests/test-audit-cluster-vbt-hd-gp-tt-tl.js` (thêm scenario 17a/17b, gọi
+thẳng `applyWorkflowAction({action:'RESOLVE_FILE_PROPOSAL', ...})`) — 17a xác nhận nhánh "Đồng ý" dọn
+sạch opinionResponses, 17b xác nhận nhánh "Không đồng ý" GIỮ NGUYÊN (đối chứng, không chặn oan). Xác
+nhận cả 3 scenario mới FAIL đúng trên code cũ, PASS trên code mới (44/44 + 44/44). Chạy lại regression
+`test-submission.js` (23/23), `test-forward-opinion-workflow.js` (16/16),
+`test-approval-extension-routes.js` (21/21), `test-forwardthreads-username-cascade.js` (6/6) — tất cả
+PASS, không regression. Tự kiểm cú pháp (`node -c`) cả 2 file — không đụng HTML/JS client ở bản vá này.
+
+**Ảnh hưởng deploy:** chỉ sửa `lib/recordActions.js`/`lib/workflowEngine.js`, không đổi
+`schema.sql`/`.env.example`/dependencies — copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.72 (2026-11): [Thấp] Re-audit lần 10 — mục 12/14: Approval Hub thiếu loại trừ tự-liên-quan cho Đào Tạo-huỷ
 
