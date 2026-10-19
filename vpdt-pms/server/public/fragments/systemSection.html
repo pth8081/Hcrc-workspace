@@ -2730,6 +2730,13 @@
                 <input type="checkbox" id="pItPriceEmergencyRejectApproveWholesale"> 🚨 Phê duyệt từ chối khẩn cấp Bán Buôn
               </label>
             </div>
+            <!-- Ghi chú dẫn chiếu (11/2026, theo phản hồi người dùng xem demo — "chưa thấy tự duyệt giá
+                 Bán Buôn ở đây?"): checkbox pItPriceAllowSelfApprove (1 quyền DUY NHẤT, áp dụng CẢ Bán
+                 Buôn lẫn Bán Lẻ — xem lib/workflowEngine.js) đặt vật lý ở mục "26. Mua Hàng — Phê Duyệt
+                 Giá" bên dưới (gần vị trí quyền Bán Lẻ), KHÔNG lặp lại checkbox ở đây để tránh 2 checkbox
+                 cùng ghi 1 field dễ lệch trạng thái — chỉ thêm dòng ghi chú dẫn chiếu cho admin đang xem
+                 mục Vận Hành (nơi 2 quyền Bán Buôn ở trên nằm) không bỏ sót. -->
+            <p class="text-[11px] text-amber-700 italic bg-amber-50/60 rounded px-2 py-1">⚠️ Quyền "Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá" (áp dụng CẢ Bán Buôn lẫn Bán Lẻ) nằm ở mục <b>"26. Mua Hàng — Phê Duyệt Giá"</b> bên dưới, không lặp lại checkbox ở đây.</p>
           </div>
         </details>
 
