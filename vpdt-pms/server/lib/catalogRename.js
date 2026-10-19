@@ -427,6 +427,24 @@ async function cascadeEmployeeProfilesJobTitle(oldValue, newValue, isStore) {
   }));
 }
 
+// hrProcesses.employeeJobTitle (re-audit lần 8, mức Thấp — "hrProcesses.employeeJobTitle không cascade
+// khi đổi tên Chức Danh"): snapshot HIỂN THỊ "Chức Danh" của nhân viên tại thời điểm tạo quy trình
+// Onboarding/Offboarding (lib/createValidation.js CREATE_MODULE_CONFIGS.hrProcesses.extraValidate) — chỉ
+// dùng để hiện trong hàng đợi Onboarding/lịch sử (lib/recordActions.js, mô tả task), KHÔNG dùng cho bất
+// kỳ kiểm tra quyền nào (khác employeeProfiles.jobTitle). Đổi tên 1 chức danh để lại hồ sơ hrProcesses cũ
+// hiện tên CHỨC DANH ĐÃ KHÔNG CÒN TỒN TẠI trong danh mục, gây hiểu lầm khi tra lại lịch sử.
+//
+// KHÔNG phân biệt theo employeePosType (HO/STORE) như cascadeEmployeeProfilesJobTitle() ở trên — nhánh
+// OFFBOARDING cố ý gán employeePosType = null (snapshot NGAY LÚC TẠO, không còn khái niệm "vị trí hiện
+// tại" rõ ràng như Onboarding, xem createValidation.js) nên không có cơ sở đáng tin để lọc theo nguồn
+// danh mục HO/Siêu Thị. Cùng khuôn cascadePositionPairs('jobTitle', ...)/cascadeMixedApprovalRuleJobTitle()
+// đã gọi GIỐNG NHAU từ CẢ cascadeJobTitleRename() VÀ cascadeStoreJobTitleRename() — field hiển thị thuần,
+// không phân biệt nguồn, chấp nhận rủi ro trùng tên hiếm giữa 2 danh mục (đã là hành vi đã có từ trước).
+async function cascadeHrProcessEmployeeJobTitleRename(oldValue, newValue) {
+  await renameFieldValueInCollection('hrProcesses', (item) =>
+    (item.employeeJobTitle === oldValue ? { ...item, employeeJobTitle: newValue } : item));
+}
+
 // vppPeriods.deptHeadcounts/deptBudgetRates: CẢ 2 ĐỀU là map {dept: number} KHOÁ THEO TÊN PHÒNG BAN
 // (đặt 1 lần lúc tạo kỳ, xem CREATE_MODULE_CONFIGS.vppPeriods ở lib/createValidation.js) — KHÁC
 // uniformPeriods.allocations[]/reportPeriods.deptScope ngay trên/dưới (mảng phần tử có FIELD .dept),
@@ -669,6 +687,7 @@ async function cascadeJobTitleRename(oldValue, newValue) {
   ));
   await withLockedAppDataValue('vppExcludedJobTitles', (list) => (list || []).map(jt => (jt === oldValue ? newValue : jt)));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, false);
+  await cascadeHrProcessEmployeeJobTitleRename(oldValue, newValue);
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
   await cascadePositionPairs('jobTitle', oldValue, newValue);
   await cascadeJobTitleGradeDefaultRename(oldValue, newValue);
@@ -684,6 +703,7 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
     (u.jobTitle === oldValue && u.posType === 'STORE') ? { ...u, jobTitle: newValue } : u
   ));
   await cascadeEmployeeProfilesJobTitle(oldValue, newValue, true);
+  await cascadeHrProcessEmployeeJobTitleRename(oldValue, newValue);
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
   await cascadeJobTitleGradeDefaultRename(oldValue, newValue);
   // Cặp "Theo vị trí" lưu jobTitle THUẦN (không phân biệt nguồn HO/Siêu Thị, cùng lý do

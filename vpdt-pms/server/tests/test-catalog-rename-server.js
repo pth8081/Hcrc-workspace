@@ -107,6 +107,16 @@ function resetState() {
       { id: 1, dept: 'Phòng IT', type: 'Hợp đồng kinh tế', isAddendum: false },
       { id: 2, dept: 'Phòng IT', type: 'Hợp đồng kinh tế', isAddendum: true, rootContractId: 1 },
       { id: 3, dept: 'Phòng IT', type: 'Hợp đồng lao động', isAddendum: false }
+    ],
+    // hrProcesses.employeeJobTitle — LỖI ĐÃ VÁ (re-audit lần 8, mức Thấp — "hrProcesses.employeeJobTitle
+    // không cascade khi đổi tên Chức Danh"): snapshot hiển thị thuần (Onboarding dòng 1, Offboarding
+    // dòng 2 — employeePosType=null cố ý, xem createValidation.js) trước đây hoàn toàn KHÔNG được
+    // cascade khi đổi tên jobTitles/storeJobTitles, để lại tên CHỨC DANH ĐÃ KHÔNG CÒN TỒN TẠI trong
+    // hàng đợi Onboarding/lịch sử. Dòng 3 không liên quan (chức danh khác) để xác nhận không đụng nhầm.
+    hrProcesses: [
+      { id: 1, processType: 'ONBOARDING', employeePosType: 'HO', employeeJobTitle: 'Trưởng phòng' },
+      { id: 2, processType: 'OFFBOARDING', employeePosType: null, employeeJobTitle: 'Giám Đốc Siêu Thị' },
+      { id: 3, processType: 'ONBOARDING', employeePosType: 'HO', employeeJobTitle: 'Chức danh khác' }
     ]
   };
   renameFieldCalls = [];
@@ -350,6 +360,29 @@ async function run(name, fn) {
     const rows = APP_DATA.jobTitleGradeDefaults.filter(r => r.jobTitle === 'Giám Đốc Siêu Thị');
     assert.strictEqual(rows.length, 1, 'KHÔNG được tạo 2 dòng trùng jobTitle (vi phạm UNIQUE theo jobTitle)');
     assert.strictEqual(rows[0].jobGrade, 'Cấp 5', 'Giữ dòng đã có sẵn (Cấp 5), bỏ dòng cũ (Cấp 3) thay vì ghi đè lộn xộn');
+  });
+
+  // LỖI ĐÃ VÁ (re-audit lần 8, mức Thấp — "hrProcesses.employeeJobTitle không cascade khi đổi tên Chức
+  // Danh"): 2 test dưới đây xác nhận CẢ cascadeJobTitleRename() (jobTitles, nguồn HO) LẪN
+  // cascadeStoreJobTitleRename() (storeJobTitles, nguồn Siêu Thị) đều cascade đúng vào
+  // hrProcesses.employeeJobTitle — KHÔNG phân biệt theo employeePosType (dòng Offboarding posType=null
+  // vẫn phải được cascade, xem chú thích cascadeHrProcessEmployeeJobTitleRename() ở lib/catalogRename.js).
+  await run('jobTitles: đổi tên -> cascade hrProcesses.employeeJobTitle (LỖI ĐÃ VÁ, nguồn HO, kể cả dòng Offboarding posType=null)', async () => {
+    resetState();
+    const res = await renameApi('jobTitles', 'Trưởng phòng', 'Trưởng Phòng Ban');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.ok(renameFieldCalls.includes('hrProcesses'), 'phải gọi renameFieldValueInCollection cho hrProcesses');
+    assert.strictEqual(RECORDS.hrProcesses.find(r => r.id === 1).employeeJobTitle, 'Trưởng Phòng Ban', 'Onboarding (posType HO) phải cascade đúng tên mới');
+    assert.strictEqual(RECORDS.hrProcesses.find(r => r.id === 2).employeeJobTitle, 'Giám Đốc Siêu Thị', 'Dòng KHÁC chức danh không bị đụng tới');
+    assert.strictEqual(RECORDS.hrProcesses.find(r => r.id === 3).employeeJobTitle, 'Chức danh khác', 'Dòng KHÁC chức danh không bị đụng tới');
+  });
+
+  await run('storeJobTitles: đổi tên -> cascade hrProcesses.employeeJobTitle (LỖI ĐÃ VÁ, nguồn Siêu Thị, dòng Offboarding posType=null vẫn cascade đúng)', async () => {
+    resetState();
+    const res = await renameApi('storeJobTitles', 'Giám Đốc Siêu Thị', 'Giám Đốc Siêu Thị (Mới)');
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    assert.strictEqual(RECORDS.hrProcesses.find(r => r.id === 2).employeeJobTitle, 'Giám Đốc Siêu Thị (Mới)', 'Offboarding (posType null) vẫn phải cascade đúng tên mới');
+    assert.strictEqual(RECORDS.hrProcesses.find(r => r.id === 1).employeeJobTitle, 'Trưởng phòng', 'Dòng KHÁC chức danh (nguồn HO) không bị đụng tới');
   });
 
   await run('stores: đổi tên -> cascade operationOrderStoreMixedApprovalRules[].stores[] (danh sách ngoại lệ)', async () => {
