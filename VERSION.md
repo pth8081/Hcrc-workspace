@@ -1,9 +1,33 @@
 # Phiên bản hiện tại
 
-**27.74** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.75** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.75 (2026-11): Font Inter tự lưu trên server — không còn phụ thuộc Google Fonts CDN (chạy offline/mạng nội bộ được)
+
+Người dùng hỏi lại "dùng offline đúng không?" ngay sau khi v27.74 đổi font sang Inter — phát hiện bản
+v27.74 vẫn tải font qua `<link>` Google Fonts CDN (`fonts.googleapis.com`/`fonts.gstatic.com`), giống
+hệt vấn đề Tailwind CDN mà hệ thống đã từng gặp và chuyển sang build tĩnh trước đây: mạng nội bộ/tường
+lửa công ty chặn 2 domain này sẽ khiến font rớt về font hệ thống mặc định, mất tác dụng toàn bộ việc
+đổi font — dù vẫn chạy được, không phải lỗi nghiêm trọng nhưng lệch mục tiêu người dùng đã xác nhận.
+
+**Bản vá:** tự lưu Inter trên server, không còn `<link>` nào ra ngoài:
+- `public/fonts/inter/*.woff2` (3 file, ~143KB): `inter-vietnamese.woff2`/`inter-latin-ext.woff2`/
+  `inter-latin.woff2` — chỉ tải 3 subset THẬT SỰ cần dùng trong app tiếng Việt (bỏ cyrillic/greek).
+  Phát hiện Google Fonts v20 phục vụ Inter dạng **variable font**: xác nhận qua `curl` CSS thật, cả 5
+  weight 400/500/600/700/800 trỏ CÙNG 1 URL file cho mỗi subset — nên mỗi subset chỉ cần 1 file DUY
+  NHẤT phủ toàn trục weight 100-900, không phải 15 file rời (5 weight × 3 subset).
+- `public/app.css`: thêm 3 khối `@font-face` (`font-weight: 100 900`, `unicode-range` giữ nguyên gốc từ
+  Google Fonts để trình duyệt tự chọn đúng subset) trỏ tới 3 file trên qua đường dẫn nội bộ `/fonts/...`.
+- `public/index.html`: bỏ 3 dòng `<link rel="preconnect">`/`<link rel="stylesheet">` trỏ Google Fonts.
+
+**Kiểm tra (quan trọng nhất của bản vá này):** dựng server tĩnh thật từ đúng `public/` + Playwright
+CHẶN CỨNG mọi request tới `fonts.googleapis.com`/`fonts.gstatic.com` (mô phỏng đúng kịch bản mạng nội
+bộ/tường lửa chặn) — xác nhận: (1) không có request nào bắn ra 2 domain này nữa (0 lần, không chỉ "thất
+bại rồi fallback" mà hoàn toàn không gọi), (2) màn Đăng Nhập render đúng 100% font Inter + đầy đủ dấu
+tiếng Việt dù "mất mạng ra ngoài" hoàn toàn.
 
 ## v27.74 (2026-11): Đổi font chữ giao diện — Be Vietnam Pro → Inter (phong cách enterprise kiểu SAP Fiori)
 
