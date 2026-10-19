@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2389,6 +2389,10 @@ router.post('/:key', async (req, res) => {
       // cascadeUsernameChangesToTaskAssignedBy() (lib/taskStore.js).
       await cascadeUsernameChangesToRecordCreatorFields(renamed, deletedUsernames);
       await cascadeUsernameChangesToTaskAssignedBy(renamed, deletedUsernames);
+      // deptViewScopeConfig[moduleKey].extraViewers (whitelist username DÙNG CHUNG TOÀN CÔNG TY, "3. Chọn
+      // người xem") — LỖI ĐÃ VÁ, re-audit lần 9, mức TB — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToDeptViewScopeExtraViewers() (lib/catalogRename.js).
+      await cascadeUsernameChangesToDeptViewScopeExtraViewers(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
