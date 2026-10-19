@@ -30,7 +30,8 @@ const APPROVER = { username: 'gd1', name: 'Giám Đốc', dept: 'Phòng A', perm
 const FORWARDED_TO = { username: 'nv2', name: 'Nhân Viên 2', dept: 'Phòng B', perms: {}, active: true };
 const OUTSIDER = { username: 'nv4', name: 'Người Ngoài Cuộc', dept: 'Phòng C', perms: {}, active: true };
 const CREATOR = { username: 'nv1', name: 'Người Trình', dept: 'Phòng A', perms: {}, active: true };
-const USERS = [APPROVER, FORWARDED_TO, OUTSIDER, CREATOR];
+const ADMIN_SELF = { username: 'admin1', name: 'Admin', dept: 'Phòng A', perms: { admin: true }, active: true };
+const USERS = [APPROVER, FORWARDED_TO, OUTSIDER, CREATOR, ADMIN_SELF];
 
 let CURRENT_USERNAME = APPROVER.username;
 stubModule('lib/auth', {
@@ -281,6 +282,59 @@ async function main() {
       resetRecords();
       const r = await api('POST', '/api/workflow/contracts/2/extend-approval-deadline',
         { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, APPROVER);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+      assert.strictEqual(r.body.item.desiredApprovalDate, '2026-12-31');
+    });
+
+    // LỖI ĐÃ VÁ (re-audit lần 10, mục 7/14, mức Cao): 3 route extend/confirm/reject-approval-extension
+    // chỉ gác qua canApproveStep() (TỰ ĐỘNG true với admin) mà KHÔNG gọi assertNotSelfDecidingWorkflowItem()
+    // như mọi hành động APPROVE/REJECT thật khác trong applyWorkflowAction() — admin tự trình hồ sơ
+    // (hoặc 1 approver KHÔNG-admin vô tình trùng với creator) vẫn tự gia hạn/tự xác nhận/tự từ chối đề
+    // nghị gia hạn trên hồ sơ CHÍNH MÌNH tạo được, trái với quyết định "chặn admin tự duyệt ở TẤT CẢ
+    // module" (CLAUDE.md, mục 11/2026).
+    await test('[Vá #216] Admin là NGƯỜI TẠO hồ sơ tự gia hạn TRỰC TIẾP hồ sơ của chính mình -> 403 (không còn bypass qua canApproveStep)', async () => {
+      resetRecords();
+      RECORDS.submissions[0].creator = ADMIN_SELF.username;
+      const r = await api('POST', '/api/workflow/submissions/1/extend-approval-deadline',
+        { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, ADMIN_SELF);
+      assert.strictEqual(r.status, 403, JSON.stringify(r.body));
+      assert.strictEqual(RECORDS.submissions[0].desiredApprovalDate, null, 'không được áp dụng gia hạn');
+    });
+
+    await test('[Vá #216] Approver KHÔNG-admin trùng với người tạo hồ sơ tự gia hạn -> 403', async () => {
+      resetRecords();
+      RECORDS.submissions[0].creator = APPROVER.username;
+      const r = await api('POST', '/api/workflow/submissions/1/extend-approval-deadline',
+        { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, APPROVER);
+      assert.strictEqual(r.status, 403, JSON.stringify(r.body));
+    });
+
+    await test('[Vá #216] Admin là người tạo hồ sơ tự XÁC NHẬN (confirm) đề nghị gia hạn trên hồ sơ của chính mình -> 403', async () => {
+      resetRecords();
+      RECORDS.submissions[0].creator = ADMIN_SELF.username;
+      await api('POST', '/api/workflow/submissions/1/forward', { targetUsernames: [FORWARDED_TO.username] }, APPROVER);
+      await api('POST', '/api/workflow/submissions/1/request-approval-extension',
+        { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, FORWARDED_TO);
+      const r = await api('POST', '/api/workflow/submissions/1/confirm-approval-extension', {}, ADMIN_SELF);
+      assert.strictEqual(r.status, 403, JSON.stringify(r.body));
+      assert.ok(RECORDS.submissions[0].pendingApprovalExtension, 'đề nghị vẫn còn nguyên, chưa bị tự áp dụng');
+    });
+
+    await test('[Vá #216] Admin là người tạo hồ sơ tự TỪ CHỐI (reject) đề nghị gia hạn trên hồ sơ của chính mình -> 403', async () => {
+      resetRecords();
+      RECORDS.submissions[0].creator = ADMIN_SELF.username;
+      await api('POST', '/api/workflow/submissions/1/forward', { targetUsernames: [FORWARDED_TO.username] }, APPROVER);
+      await api('POST', '/api/workflow/submissions/1/request-approval-extension',
+        { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, FORWARDED_TO);
+      const r = await api('POST', '/api/workflow/submissions/1/reject-approval-extension', { reason: 'x' }, ADMIN_SELF);
+      assert.strictEqual(r.status, 403, JSON.stringify(r.body));
+      assert.ok(RECORDS.submissions[0].pendingApprovalExtension, 'đề nghị vẫn còn nguyên, chưa bị tự xử lý');
+    });
+
+    await test('[Vá #216] Admin KHÔNG phải người tạo hồ sơ vẫn gia hạn được bình thường (không chặn oan)', async () => {
+      resetRecords();
+      const r = await api('POST', '/api/workflow/submissions/1/extend-approval-deadline',
+        { newDesiredApprovalDate: '2026-12-31', reason: 'Lý do' }, ADMIN_SELF);
       assert.strictEqual(r.status, 200, JSON.stringify(r.body));
       assert.strictEqual(r.body.item.desiredApprovalDate, '2026-12-31');
     });
