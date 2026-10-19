@@ -1,9 +1,57 @@
 # Phiên bản hiện tại
 
-**27.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.43 (2026-11): [Cao] Re-audit lần 8 — mục 5/10 (HẾT phần Cao): Cascade rename username không chạm snapshot approver đông cứng (effectiveApprovers/extraApprovalLayers)
+
+Mục thứ năm (5/10) của đợt re-audit lần 8 — hoàn tất toàn bộ 5 finding mức Cao của đợt này.
+
+**Nguyên nhân:** `cascadeUsernameChangesToWorkflowApprovers()` (`lib/catalogRename.js`, vá re-audit lần
+7) chỉ cascade `approvers[]`/`rule.username` trong các MAP CẤU HÌNH (`*DeptWorkflows`/`*TierWorkflows`/
+`MixedApprovalRules`) — nơi quyết định người duyệt cho hồ sơ SẼ TẠO SAU NÀY. Nhưng `submissions`/
+`contracts` (quy trình "Phê Duyệt") SNAPSHOT `effectiveApprovers` (cùng hình dạng `{stepOrder:
+[username,...]}` — xem `buildEffectiveSubmissionWorkflowServer()`/`buildEffectiveContractApprovalWorkflow
+Server()`, `lib/createValidation.js`) NGAY LÚC TẠO, đông cứng vào TỪNG BẢN GHI, không bao giờ tính lại —
+và 7 module khác (`docs`/`carRegs`/`officeReqs`/`vppRegistrations`/`paymentRequests`/`itPriceApprovals`/
+`operationOrders`, qua `prepareExtraApprovalSelectionForCreate()`) cũng snapshot tương tự vào
+`extraApprovalLayers[].approvers` (mảng `{layerKey, label, approvers: [username,...]}`). Đổi tên/xoá
+username không cascade tới các snapshot này khiến chính người được chỉ định duyệt (chỉ đổi tên đăng
+nhập, vẫn là cùng 1 người) không còn tự duyệt được hồ sơ ĐANG PENDING của luồng mình phụ trách — bước
+duyệt treo tới khi admin tự sửa tay, hoặc (xoá vĩnh viễn) không ai duyệt được nữa ngoài admin.
+
+**Vá:** thêm `lib/catalogRename.js::cascadeUsernameChangesToRecordApproverSnapshots(renamed,
+deletedUsernames)` — quét `submissions`/`contracts.effectiveApprovers` (tái dùng
+`renameApproversUsernamesMap()` đã có) và `extraApprovalLayers[].approvers` của 7 module còn lại (hàm
+mới `renameApproversUsernamesArray()`/`renameExtraApprovalLayersApprovers()`), qua
+`renameFieldValueInCollection()` (`lib/recordStore.js`, cùng khuôn `cascadeSubmissionTypeRename()`/
+`cascadeNganhHangCodeRename()`). Gọi NGAY SAU `cascadeUsernameChangesToWorkflowApprovers()` ở
+`routes/data.js` (cùng điểm, cùng dữ liệu `renamed`/`deletedUsernames` đã tính sẵn). Có early-return khi
+không có username nào thực sự đổi/xoá (lưu `users` vì lý do khác — tạo mới, đổi mật khẩu/PIN...) để
+tránh quét lại 9 collection vô ích mỗi lần lưu `users`.
+
+**Test:** file mới `tests/test-record-approver-snapshot-username-cascade.js` (7 scenario, thuần — stub
+`renameFieldValueInCollection()` bằng mảng in-memory thật): đổi tên cascade đúng vào
+`submissions`/`contracts.effectiveApprovers` + cả 7 module `extraApprovalLayers[].approvers`; xoá vĩnh
+viễn gỡ đúng khỏi cả 2 loại snapshot; bản ghi không liên quan/không có field này giữ nguyên. Xác nhận
+FAIL trên code CŨ (hàm chưa tồn tại, 0/7), PASS trên code đã vá (7/7). Regression:
+`tests/test-workflowapprover-username-cascade.js` (9/9), `tests/test-approvalgroup-username-cascade.js`
+(4/4) không đổi. Phát hiện 9 file test khác (gọi thật `POST /api/data/users` qua `routes/data.js`,
+stub `lib/recordStore` KHÔNG có `renameFieldValueInCollection`) bị vỡ bởi lệnh gọi mới — sửa đúng theo
+CLAUDE.md "sửa fixture cho đúng chứ không bỏ qua hay nới lỏng chặn mới": 6/9 file tự hết lỗi nhờ
+early-return (không có rename/delete thật trong kịch bản của chúng —
+`tests/test-user-import-login-e2e.js` 7/7, `tests/test-user-password-reset-bulk.js`,
+`tests/test-user-save-autolink-profile.js`, `tests/test-user-username-uniqueness.js` 2/2,
+`tests/test-username-case-insensitive.js` 9/9, `tests/test-users-session-version-strip.js` 4/4); 3 file
+còn lại CÓ exercise rename/delete thật nên bổ sung thêm `renameFieldValueInCollection: async () => {}`
+vào stub (`tests/test-managerusername-rename-delete-cascade.js` 3/3,
+`tests/test-audit-hethong-cluster-server.js` 22/22, `tests/test-permgroup-dangling-groupids.js` 4/4) —
+toàn bộ PASS sau khi sửa, không còn regression. Đã `grep` lại diff xác nhận không có `onclick=`/
+` style="` nội tuyến (chỉ sửa logic server, không đổi HTML).
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.42 (2026-11): [Cao] Re-audit lần 8 — mục 4/10: resolvePendingTaskAction tự duyệt gia hạn Công Việc do chính mình gửi (admin bypass qua requestExtension)
 

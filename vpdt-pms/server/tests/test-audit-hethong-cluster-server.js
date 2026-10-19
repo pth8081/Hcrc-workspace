@@ -142,6 +142,10 @@ stubModule('lib/recordStore', {
   getForCollectionByDeptCached: async () => [],
   getForCollectionByUsernameCached: async () => [],
   getForCollectionByColumnCached: async () => [],
+  // cascadeUsernameChangesToRecordApproverSnapshots() (re-audit lần 8, lib/catalogRename.js) gọi hàm
+  // này khi lưu 'users' có đổi tên/xoá username — không liên quan tới các bài test ở file này, no-op
+  // để không vỡ route thật.
+  renameFieldValueInCollection: async () => {},
   getTrashItems: async () => [],
   getTrashItemCollection: async () => 'docs',
   restoreTrashItemWithFamily: async () => ({
