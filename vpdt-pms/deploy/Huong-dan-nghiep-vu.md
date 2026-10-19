@@ -2473,6 +2473,41 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     mới. Mục đích: cho phép giao việc "nhận hàng thực tế tại kho/siêu thị" cho
     1 nhóm người khác hẳn nhóm phê duyệt ngân sách đơn hàng (VD thủ kho xác
     nhận nhập hàng, không cần và không nên có quyền duyệt chi tiêu).
+  - **⚠️ "Cho Phép Tự Duyệt/Tự Xác Nhận ... Do Chính Mình Tạo" (11/2026, quyền
+    đặc biệt, THEO YÊU CẦU TRỰC TIẾP của người dùng)**: mặc định HỆ THỐNG chặn
+    cứng người TẠO 1 hồ sơ (đơn hàng/đề xuất giá) tự duyệt/tự xử lý CHÍNH hồ
+    sơ đó ở TẤT CẢ các bước (duyệt chi tiêu theo mức giá trị, duyệt khẩn cấp,
+    xác nhận/hủy nhập hàng) — kể cả tài khoản admin. Quy tắc này ĐÚNG cho đa số
+    trường hợp (tách biệt người tạo/người duyệt để kiểm soát chéo), nhưng có
+    thể gây "treo" ở đơn vị chỉ có **1 người** vừa tạo vừa là người duyệt hợp
+    lệ duy nhất (VD 1 siêu thị nhỏ chỉ có 1 quản lý). Để xử lý đúng trường hợp
+    này mà KHÔNG mở toang an toàn cho toàn hệ thống, admin có thể bật **4
+    quyền ĐẶC BIỆT, ĐỘC LẬP HOÀN TOÀN với nhau** (tắt mặc định, phải tick tay
+    từng tài khoản cần dùng, ở "Hệ Thống → Phân Quyền → Cây Phân Quyền"):
+    - **"Cho Phép Tự Duyệt/Tự Xác Nhận Đơn Hàng HO Do Chính Mình Tạo"**
+      (`operationOrderAllowSelfApproveHO`, mục "22. Vận Hành") — áp dụng cho
+      CẢ bước duyệt chi tiêu lẫn bước xác nhận/hủy nhập hàng của đơn **Đặt
+      Hàng Tại HO**.
+    - **"Cho Phép Tự Duyệt/Tự Xác Nhận Đơn Hàng Siêu Thị Do Chính Mình Tạo"**
+      (`operationOrderAllowSelfApproveStore`, mục "22. Vận Hành") — tương tự
+      nhưng cho đơn **Đặt Hàng Tại Siêu Thị**. **KHÔNG liên quan gì tới quyền
+      HO ở trên** — bật 1 trong 2 không ảnh hưởng quyền còn lại.
+    - **"Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Bán Buôn Do Chính Mình Tạo"**
+      (`itPriceAllowSelfApproveWholesale`, mục "22. Vận Hành") — áp dụng cho
+      bước duyệt chính, bước nhận xử lý áp giá, và bước duyệt từ chối khẩn
+      cấp của đề xuất **Phê Duyệt Giá Bán Buôn**.
+    - **"Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Bán Lẻ Do Chính Mình Tạo"**
+      (`itPriceAllowSelfApproveRetail`, mục "26. Mua Hàng — Phê Duyệt Giá") —
+      tương tự nhưng cho đề xuất **Phê Duyệt Giá Bán Lẻ**.
+
+    **Lưu ý quan trọng**: quyền này CHỈ gỡ đúng lớp chặn "bạn là người tạo hồ
+    sơ này" — KHÔNG tự cấp thêm bất kỳ quyền xử lý/duyệt nào khác (VD vẫn phải
+    có `operationOrderReceiptManageHO`/`Store` mới xác nhận nhập hàng được,
+    vẫn phải nằm trong danh sách approver hợp lệ của bước mới duyệt được).
+    Người dùng đã xác nhận rõ ràng CHỈ mở 4 quyền này (nhóm nghiệp vụ "người
+    tạo/duyệt có thể hợp lý là cùng 1 người do đặc thù nhân sự ít") — các
+    module rủi ro cao hơn (lương, kỷ luật, hợp đồng lao động, ngân sách, giấy
+    phép...) VẪN giữ nguyên chặn cứng tuyệt đối, không có quyền bypass nào.
 - **Cấu Hình API (đồng bộ đơn hàng ra hệ thống dsmart16)** — Hệ Thống → Quản
   Trị (admin), sub-tab **"🔌 Cấu Hình API"**: bật/tắt đồng bộ, Base URL hệ
   thống dsmart16, tên + giá trị header xác thực (giá trị nhập 1 lần, sau đó ẩn
