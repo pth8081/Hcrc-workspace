@@ -756,7 +756,11 @@ function resetContractForm() {
 function openEditContract(contractId) {
   const c = DB.contracts.find(x => x.id === contractId);
   if (!c) return;
-  if (c.creator !== currentUser.username) {
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — cùng đợt với guard nút "✏️ Sửa" ở bảng danh sách phía trên):
+  // mirror ĐÚNG lối thoát admin của editContract() (lib/recordActions.js:65-68) — admin sửa được hồ sơ
+  // NHÁP/BỊ TỪ CHỐI/CẦN BỔ SUNG dù không phải người tạo, KHÔNG mở rộng cho PENDING.
+  const isAdminEscapeStatus = c.approvalStatus === 'DRAFT' || c.approvalStatus === 'REJECTED' || c.approvalStatus === 'NEEDS_SUPPLEMENT';
+  if (c.creator !== currentUser.username && !(currentUser.perms?.admin && isAdminEscapeStatus)) {
     return alert('⛔ Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
   }
   if (c.approvalStatus === 'APPROVED') {
@@ -830,7 +834,11 @@ function cancelEditContract() {
 async function updateContractReq(e) {
   const c = DB.contracts.find(x => x.id === editingContractId);
   if (!c) { cancelEditContract(); return; }
-  if (c.creator !== currentUser.username) {
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — cùng đợt với openEditContract()/nút "✏️ Sửa" ở trên): đây là
+  // guard THẬT trước khi POST lên server — openEditContract() chỉ mở được MODAL, nếu guard Ở ĐÂY không
+  // sửa theo thì admin bấm "✏️ Sửa" xong, sửa xong, bấm Lưu vẫn bị client tự chặn trước khi gọi server.
+  const isAdminEscapeStatus = c.approvalStatus === 'DRAFT' || c.approvalStatus === 'REJECTED' || c.approvalStatus === 'NEEDS_SUPPLEMENT';
+  if (c.creator !== currentUser.username && !(currentUser.perms?.admin && isAdminEscapeStatus)) {
     cancelEditContract();
     return alert('⛔ Bạn chỉ có thể sửa hồ sơ hợp đồng do chính mình tạo!');
   }
@@ -1168,7 +1176,13 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   }
   // "Sửa" (các trường ở tab Phê Duyệt, kể cả Đợt Thanh Toán) áp dụng cho CẢ hợp đồng gốc lẫn phụ lục khi
   // còn chưa được duyệt xong — trước đây chặn cứng phụ lục dù editContract() (server) vẫn cho sửa được.
-  if (c.creator === currentUser.username && c.approvalStatus !== 'APPROVED') {
+  // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "module-hopdong.js: nút Sửa không hiện cho admin khi recovery
+  // DRAFT/REJECTED/NEEDS_SUPPLEMENT"): editContract() (lib/recordActions.js:65-68) đã mở lối thoát cho
+  // ADMIN sửa hồ sơ NHÁP/BỊ TỪ CHỐI/CẦN BỔ SUNG của người tạo đã nghỉ việc — nhưng mirror client ở đây
+  // chưa từng theo kịp, khiến tính năng đó KHÔNG THỂ bấm được qua UI (admin không thấy nút "✏️ Sửa").
+  // Cùng khuôn `isAdminEscapeStatus` phía server — CHỈ 3 trạng thái này, KHÔNG mở rộng cho PENDING.
+  const isAdminEscapeStatus = c.approvalStatus === 'DRAFT' || c.approvalStatus === 'REJECTED' || c.approvalStatus === 'NEEDS_SUPPLEMENT';
+  if ((c.creator === currentUser.username || (currentUser.perms?.admin && isAdminEscapeStatus)) && c.approvalStatus !== 'APPROVED') {
     secondaryOptions.push({ value: 'edit', label: '✏️ Sửa' });
   }
   if (!isChild && c.approvalStatus === 'PENDING' && canApproveContractStep(currentUser, c)) {

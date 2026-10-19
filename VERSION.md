@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.53 (2026-11): [TB] Re-audit lần 9 — mục 5/12: module-hopdong.js nút Sửa không hiện cho admin khi recovery DRAFT/REJECTED/NEEDS_SUPPLEMENT
+
+Mục thứ năm (5/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `editContract()` (`lib/recordActions.js:65-68`) đã mở lối thoát cho ADMIN sửa hồ sơ
+Hợp Đồng ở trạng thái NHÁP/BỊ TỪ CHỐI/CẦN BỔ SUNG (`isAdminEscapeStatus` = DRAFT || REJECTED ||
+NEEDS_SUPPLEMENT, KHÔNG mở rộng cho PENDING) khi người tạo đã nghỉ việc/bị khoá tài khoản — nhưng CẢ 3
+nơi mirror ở client (`public/js/module-hopdong.js`) chưa từng theo kịp quy tắc này, khiến tính năng
+hoàn toàn KHÔNG DÙNG ĐƯỢC qua UI: (1) nút "✏️ Sửa" trong dropdown hành động của `buildContractRowHTML()`
+chỉ hiện cho đúng `creator`; (2) `openEditContract()` chặn mở modal Sửa trước khi tới được #1; (3)
+`updateContractReq()` — guard THẬT ngay trước khi gọi `callRecordAction('contracts', ..., 'edit', ...)`
+— cũng chặn tương tự, nghĩa là dù có bypass tay #1/#2 qua devtools, request vẫn bị client tự chặn
+trước khi chạm server.
+
+**Bản vá:** thêm đúng 1 điều kiện `isAdminEscapeStatus` (khớp chính xác điều kiện phía server) vào cả
+3 nơi — `currentUser.perms?.admin && isAdminEscapeStatus` như một lối thoát BỔ SUNG cạnh điều kiện
+`creator === currentUser.username` cũ, không thay đổi hành vi cho người dùng thường.
+
+**Test:** `tests/test-hopdong-admin-edit-recovery.js` (11 kịch bản, nạp `module-hopdong.js` qua
+`vm.runInContext()` với stub tối giản cho các hàm render nặng/hàm `core.js` không liên quan tới guard
+đang test) — phủ cả 3 vị trí, cả 3 trạng thái admin-escape, xác nhận PENDING KHÔNG được mở rộng, và
+hành vi cũ của chính creator/người không liên quan giữ nguyên không đổi. Xác nhận test FAIL trên code
+cũ (5/11 scenario) và PASS trên code mới (11/11). Chạy lại regression: toàn bộ 6 file test hiện có có
+nạp `module-hopdong.js`/liên quan tới Hợp Đồng (`test-actionlabel-xss.js`,
+`test-collapse-contract-budget-doc-forms.js`, `test-form-reset-file-remove.js`,
+`test-hr-contract-amendment-ui.js`, `test-stuck-subtab-fallback-fix.js`, `test-labor-contract-excel.js`)
+— tất cả PASS giống hệt trước khi vá (`test-form-reset-file-remove.js` có 14/34 FAIL từ trước, xác nhận
+bằng `git stash` so sánh 2 lần chạy — không liên quan tới bản vá này, không phải regression mới).
+
+**Ảnh hưởng deploy:** chỉ code `server/public/js/module-hopdong.js`, không đổi `schema.sql`/biến môi
+trường/`package.json` dependencies — copy code + `pm2 restart` là đủ (file JS phía client, trình duyệt
+tự tải lại bản mới ở lượt truy cập kế tiếp).
 
 ## v27.52 (2026-11): [TB] Re-audit lần 9 — mục 4/12: Khối 0 thiếu ở routes/laborContractImport.js + hrProcessImport.js
 
