@@ -559,12 +559,18 @@ async function scenario(name, fn) {
     const r = await page.evaluate(() => {
       // --- Đồng Phục: canApproveUniformClient() (uniformApprove/uniformManage/admin). 1 kỳ cấp phát
       // PENDING_APPROVAL phải được tính, 1 kỳ đã APPROVED thì không. ---
+      // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "Approval Hub client thiếu loại trừ tự-liên-quan cho
+      // Uniform/Shift-Swap"): id 903/912 do CHÍNH duyet2 tạo (creator/requestedBy === 'duyet2') —
+      // trước đây vẫn hiện ra với nút Duyệt dù bấm sẽ luôn 403 (mirror assertNotSelfDecidingUniform-
+      // Period()/assertNotSelfDecidingUniformTransfer(), lib/recordActions.js).
       DB.uniformPeriods = [
         { id: 901, dept: 'Kế Toán', approvalStatus: 'PENDING_APPROVAL', name: 'Kỳ cấp phát Q4', createdAt: '2026-08-26' },
         { id: 902, dept: 'Kế Toán', approvalStatus: 'APPROVED', name: 'Kỳ đã duyệt xong (không được tính)', createdAt: '2026-08-10' },
+        { id: 903, dept: 'Kế Toán', approvalStatus: 'PENDING_APPROVAL', name: 'Kỳ do chính duyet2 tạo (loại trừ)', createdAt: '2026-08-26', creator: 'duyet2' },
       ];
       DB.uniformTransfers = [
         { id: 911, sourceDept: 'Kế Toán', targetDept: 'Kinh Doanh', itemName: 'Áo sơ mi size M', status: 'PENDING_APPROVAL', requestedAt: '2026-08-26' },
+        { id: 912, sourceDept: 'Kế Toán', targetDept: 'Kinh Doanh', itemName: 'Yêu cầu do chính duyet2 tạo (loại trừ)', status: 'PENDING_APPROVAL', requestedAt: '2026-08-26', requestedBy: 'duyet2' },
       ];
 
       // --- Nghỉ Phép: canApproveHacLeave() (hrAttendanceManage/hrLeaveApprove/admin) — PHẢI loại trừ
@@ -576,8 +582,13 @@ async function scenario(name, fn) {
 
       // --- Đổi Ca: canApproveHacSwap() (hrAttendanceManage/hrShiftSwapApprove/admin). ---
       DB.shiftRoster = [{ id: 931, employeeCode: 'NV-KHAC-LEAVE', workDate: '2026-09-05', shiftTemplateId: 1, storeCode: 'Siêu Thị A', status: 'ACTIVE' }];
+      // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — cùng mục trên): 942 do CHÍNH duyet2 xin đổi ca (creator),
+      // 943 CHÍNH duyet2 là người NHẬN ca (targetEmployeeCode === DB.myEmployeeCode) — cả 2 trước đây
+      // vẫn hiện ra với nút Duyệt dù bấm sẽ luôn 403 (mirror assertShiftSwapApprover(), lib/attendance.js).
       DB.shiftSwapRequests = [
         { id: 941, requesterRosterId: 931, requesterEmployeeCode: 'NV-SWAP-REQ', targetEmployeeCode: 'NV-SWAP-TARGET', status: 'PENDING', dept: 'Kế Toán', createdAt: '2026-08-26' },
+        { id: 942, requesterRosterId: 931, requesterEmployeeCode: 'NV-DUYET2', targetEmployeeCode: 'NV-SWAP-TARGET', status: 'PENDING', dept: 'Kế Toán', createdAt: '2026-08-26', creator: 'duyet2' },
+        { id: 943, requesterRosterId: 931, requesterEmployeeCode: 'NV-SWAP-REQ', targetEmployeeCode: 'NV-DUYET2', status: 'PENDING', dept: 'Kế Toán', createdAt: '2026-08-26' },
       ];
 
       // --- Đào Tạo - Huỷ Đăng Ký: user.perms.admin || trainingManage, đọc r.pendingCancellation. ---
@@ -621,6 +632,12 @@ async function scenario(name, fn) {
         approverCount: itemsForApprover.length,
         approverTypesSorted: itemsForApprover.map(it => it.type).sort(),
         approverCodesSorted: itemsForApprover.map(it => String(it.code)).sort(),
+        // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — cùng mục trên): "code" của shiftSwapRequest là
+        // requesterEmployeeCode (không phải id bản ghi), nên 941/943 trùng code "NV-SWAP-REQ" —
+        // phải đếm SỐ LƯỢNG item type shiftSwapRequest (phải còn đúng 1, là 941) thay vì so trực
+        // tiếp approverCodesSorted.includes('942'/'943') (luôn đúng vô nghĩa, không phản ánh đúng
+        // id bản ghi nào đã bị loại).
+        swapTypeCount: itemsForApprover.filter(it => it.type === 'shiftSwapRequest').length,
         uniformPeriodItem: findByCode(901),
         uniformTransferItem: findByCode(911),
         leaveItem: findByCode('NV-KHAC-LEAVE'),
@@ -643,6 +660,10 @@ async function scenario(name, fn) {
       JSON.stringify(r.uniformTransferItem));
     record('Đồng Phục - kỳ đã APPROVED (902) KHÔNG xuất hiện trong danh sách',
       !r.approverCodesSorted.includes('902'), JSON.stringify(r));
+    record('Đồng Phục - kỳ cấp phát do CHÍNH duyet2 tạo (903) KHÔNG xuất hiện (không tự duyệt)',
+      !r.approverCodesSorted.includes('903'), JSON.stringify(r));
+    record('Đồng Phục - điều chuyển kho do CHÍNH duyet2 tạo (912) KHÔNG xuất hiện (không tự duyệt)',
+      !r.approverCodesSorted.includes('912'), JSON.stringify(r));
     record('Nghỉ Phép - đơn của người KHÁC (NV-KHAC-LEAVE) được tính, có nút Duyệt/Từ chối đúng action',
       !!r.leaveItem && r.leaveItem.actions.some(a => a.fn === 'approveHacLeaveRequest' && a.args[0] === 922),
       JSON.stringify(r.leaveItem));
@@ -651,6 +672,8 @@ async function scenario(name, fn) {
     record('Đổi Ca - yêu cầu PENDING (NV-SWAP-REQ) được tính, có nút Duyệt/Từ chối đúng action',
       !!r.swapItem && r.swapItem.actions.some(a => a.fn === 'approveHacSwapRequest' && a.args[0] === 941),
       JSON.stringify(r.swapItem));
+    record('Đổi Ca - chỉ còn ĐÚNG 1 yêu cầu đổi ca (941) được tính; 942 (duyet2 tự xin) và 943 (duyet2 là người nhận) bị loại',
+      r.swapTypeCount === 1, JSON.stringify(r));
     record('Đào Tạo - yêu cầu huỷ đăng ký (961) được tính, có nút Duyệt Huỷ đúng action',
       !!r.trainingCancelItem && r.trainingCancelItem.actions.some(a => a.fn === 'approveCancelTrainingRegAction' && a.args[0] === 961),
       JSON.stringify(r.trainingCancelItem));
