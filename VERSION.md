@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.61 (2026-11): [Cao] Re-audit lần 10 — mục 1/14: PATCH payslips/:id/details thiếu chặn tự duyệt/tự chỉnh lương
+
+Mục đầu tiên (1/14) của đợt re-audit lần 10 (đợt 5/5, đợt CUỐI theo yêu cầu người dùng).
+
+**Nguyên nhân:** `POST /periods/:id/calculate` tự sinh payslip cho MỌI nhân viên ACTIVE/ON_LEAVE,
+không loại trừ người giữ quyền `hrPayrollManage` (họ cũng là 1 nhân viên bình thường, có thể có hồ sơ
+`employeeProfiles` liên kết). `applyApprove()` (lib/payroll.js) đã so `period.creator` với actor để
+chặn tự duyệt CẢ KỲ lương, nhưng điều chỉnh TỪNG DÒNG lương nhập tay (thưởng/phạt/tạm ứng/phụ cấp) qua
+`applyAdjustPayslipDetail()` chưa hề so `payslip.employeeCode` với employeeCode của CHÍNH actor. Hậu
+quả: 1 tài khoản có `hrPayrollManage` (đồng thời là nhân viên có hồ sơ liên kết) có thể, trong lúc kỳ
+còn DRAFT, tự thêm dòng thưởng hoặc tự xoá dòng phạt/tạm ứng TRÊN PHIẾU LƯƠNG CỦA CHÍNH MÌNH, rồi gửi
+duyệt — người duyệt khác (`hrPayrollApprove`) chỉ xem tổng số, không có gì đánh dấu dòng đó do chính
+người quản lý tự thêm trên phiếu của họ.
+
+**Bản vá:** thêm `assertNotSelfAdjustingPayslip(payslip, actorOwnEmployeeCode)` (lib/payroll.js), gọi
+ngay đầu `applyAdjustPayslipDetail()` — so `payslip.employeeCode` với `actorOwnEmployeeCode` (tham số
+tuỳ chọn mới ở cuối, không phá vỡ các lời gọi test cũ chưa truyền). CỐ Ý KHÔNG có ngoại lệ admin, đúng
+nguyên tắc đã áp dụng cho `applyApprove()` cùng file (Lương là 1 trong 3 mảng dữ liệu nhạy cảm nhất,
+admin không tự động có quyền quản lý/duyệt module này). `routes/payroll.js` tự tra
+`actorOwnEmployeeCode` qua `findProfileByUsername(appData.employeeProfiles, req.freshUser.username)`
+rồi truyền vào.
+
+**Test:** `tests/test-audit-nhansu-congphep-luong.js` — thêm 3 scenario mới: (1) unit test
+`applyAdjustPayslipDetail()` ném 403 khi `actorOwnEmployeeCode === payslip.employeeCode`, payslip
+không bị mutate; (2) đối chứng vẫn chạy bình thường khi employeeCode khác hoặc actor chưa liên kết hồ
+sơ (`null`); (3) test HTTP đầy đủ qua `PATCH /payslips/:id/details` — `ketoan1` (hrPayrollManage, có hồ
+sơ liên kết `NV-KT1`) tự điều chỉnh phiếu của chính mình → 403, phiếu không đổi gì; điều chỉnh phiếu
+người khác (`NV1`) vẫn → 200 (không bị chặn nhầm). Xác nhận 2/24 FAIL trên code cũ (đúng 2 scenario
+mới liên quan trực tiếp — unit throw + HTTP 403; scenario đối chứng "vẫn chạy bình thường" PASS trên cả
+2 bản vì nó không phụ thuộc bản vá), 24/24 PASS trên code mới. Chạy lại regression 6 file payroll liên
+quan: `test-payroll.js` (28/28), `test-payroll-adjust-amount-format.js` (6/6),
+`test-payroll-basesalary-midperiod.js` (6/6), `test-payroll-period-delete.js` (4/4),
+`test-payroll-probation-salary-rate.js` (5/5), `test-mucO-payroll-payment-hrprofile-bypass.js`
+(11/11) — tất cả PASS, không có regression. Tự kiểm cú pháp (`node -c`) + CSP grep — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/payroll.js` + `routes/payroll.js`), không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.60 (2026-11): [Thấp] Re-audit lần 9 — mục 12/12 (hoàn tất đợt 4/5): submissions[].opinionRequestees không cascade username
 

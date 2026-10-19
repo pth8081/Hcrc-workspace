@@ -245,11 +245,15 @@ router.patch('/payslips/:id/details', requireManage, async (req, res) => {
     // lib/payroll.js — trước đây thu nhập nhập tay thoát thuế hoàn toàn).
     const appData = await getAllAppData();
     const rateConfig = Object.assign(payroll.defaultRateConfig(), appData.payrollRateConfig || {});
+    // LỖI ĐÃ VÁ (re-audit lần 10, mức Cao): tra employeeCode của CHÍNH actor (nếu có hồ sơ liên kết) để
+    // applyAdjustPayslipDetail() chặn tự điều chỉnh dòng lương trên phiếu của chính mình — xem
+    // assertNotSelfAdjustingPayslip() (lib/payroll.js).
+    const actorOwnEmployeeCode = findProfileByUsername(appData.employeeProfiles, req.freshUser.username)?.employeeCode || null;
     const result = await withLockedRecordById('payslips', payslipId, (payslip) => {
       const period = periods.find(p => p.id === payslip.periodId);
       if (!period || period.status !== 'DRAFT') throw new HttpError(409, 'Chỉ điều chỉnh được khi kỳ lương đang ở trạng thái Nháp');
       const dependentCount = ((appData.employeeProfiles || []).find(p => p.employeeCode === payslip.employeeCode)?.dependents || []).length;
-      return payroll.applyAdjustPayslipDetail(payslip, req.body || {}, req.freshUser.username, { rateConfig, dependentCount });
+      return payroll.applyAdjustPayslipDetail(payslip, req.body || {}, req.freshUser.username, { rateConfig, dependentCount }, actorOwnEmployeeCode);
     });
     logPayrollAction(req, 'ADJUST_PAYSLIP', String(payslipId), 'Điều chỉnh dòng lương nhập tay của phiếu lương');
     res.json({ ok: true, item: result });
