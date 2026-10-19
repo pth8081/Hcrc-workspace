@@ -37,9 +37,15 @@ router.use(requireAuth, blockIfMustChangePassword);
 // shiftSwapRequests/trainingRegistrations) + shiftRoster (tra storeCode để kiểm quyền hrShiftSwapApprove
 // đúng siêu thị). ('tasks' KHÔNG cần thêm — vẫn còn ở dbo.AppData, đã có sẵn trong cachedAppData.data;
 // employeeProfiles/users cũng vậy.)
+// LỖI ĐÃ VÁ (re-audit lần 8, mức Thấp-TB — "approvalAggregator vẫn giữ budgetEntries đã bị gỡ khỏi
+// Approval Hub client"): bỏ 'budgetEntries' khỏi danh sách này — computeMyPendingApprovalKeys()
+// (lib/approvalAggregator.js) không còn đọc appData.budgetEntries nữa (mục "📊 Ngân Sách" đã bị gỡ khỏi
+// Approval Hub từ v23.0), nên tiếp tục tải collection này ở đây chỉ là 1 lượt đọc DB thừa mỗi lần poll,
+// không phục vụ gì. budgetEntries vẫn là MIGRATED_COLLECTIONS thật ở lib/recordStore.js (dữ liệu lịch
+// sử, không xoá) — chỉ riêng endpoint polling này không còn cần nó.
 const RECORD_COLLECTIONS_NEEDED = [
   'docs', 'submissions', 'carRegs', 'officeReqs', 'vppRegistrations', 'itPriceApprovals',
-  'budgetEntries', 'contracts', 'meetings', 'internalPosts', 'licenses', 'paymentRequests',
+  'contracts', 'meetings', 'internalPosts', 'licenses', 'paymentRequests',
   'operationOrders', 'operationStoreOpenings', 'operationRepairs',
   'uniformPeriods', 'uniformTransfers', 'leaveRequests', 'shiftSwapRequests', 'shiftRoster', 'trainingRegistrations'
 ];

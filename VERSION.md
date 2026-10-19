@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**27.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.47 (2026-11): [Thấp-TB] Re-audit lần 8 — mục 9/10: approvalAggregator vẫn giữ budgetEntries đã bị gỡ khỏi Approval Hub client (mirror lệch)
+
+Mục thứ chín (9/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** `getMyPendingApprovals()` (`public/js/core-approvalhub.js`, ~dòng 145) đã BỎ HOÀN TOÀN
+mục "📊 Ngân Sách" (`budgetEntries`) khỏi Approval Hub từ v23.0, khi module Ngân Sách được thiết kế lại
+("Ngân Sách 2.0" — không còn `workflowEngine.js`/dept-workflow nào cho Ngân Sách, chỉ còn 1 cấp gác
+quyền phẳng `budgetCreate`/`budgetManage`; dòng mới `budgetLines` đã có nút Duyệt/Từ chối riêng ngay
+trong module Ngân Sách). Nhưng `computeMyPendingApprovalKeys()` (`lib/approvalAggregator.js:92`, SERVER
+mirror của hàm trên) vẫn gọi `pushDeptWorkflowKeys(keys, 'budgetEntries', ...)` — mirror LỆCH khiến
+endpoint polling (`GET /api/approvals/pending-signature`, dùng cho tính năng Hộp Thư Phê Duyệt tự làm
+mới) vẫn báo "có hồ sơ cần duyệt" (khoá `budget:<id>`) cho dữ liệu `budgetEntries` LỊCH SỬ (không xoá,
+giữ nguyên ở server) dù Approval Hub không còn màn nào đọc lại/xử lý được nó — 1 thông báo giả vô hại
+nhưng vô dụng (không có gì để bấm vào xử lý).
+
+**Vá:** gỡ lời gọi `pushDeptWorkflowKeys(keys, 'budgetEntries', ...)` ở `lib/approvalAggregator.js`,
+khớp đúng client. Bỏ `'budgetEntries'` khỏi `RECORD_COLLECTIONS_NEEDED` (`routes/approvals.js`) — tránh
+1 lượt đọc DB thừa mỗi lần poll (không còn ai dùng tới collection này ở endpoint này nữa). `budgetEntries`
+vẫn còn nguyên trong `MIGRATED_COLLECTIONS` thật ở `lib/recordStore.js` và các route submit/update/
+manager-edit cũ (`routes/records.js`) — chỉ riêng mirror Approval Hub này không còn cần đọc nó.
+
+**Test:** `tests/test-approval-polling.js` — lật assertion cũ `keys.includes('budget:61')` thành
+`!keys.includes('budget:61')` (vẫn giữ fixture có 1 bản `budgetEntries` PENDING để chứng minh phần ÂM:
+dù còn dữ liệu lịch sử PENDING, khoá `budget:*` KHÔNG còn xuất hiện nữa). Xác nhận FAIL trên code CŨ
+(21/22, đúng 1 assertion budget:61 sai), PASS trên code đã vá (22/22). Regression:
+`test-permission-batch-oct2026.js`/`test-shiftroster-cancel-swap-cleanup.js` (2 file khác cũng
+`require` `lib/approvalAggregator.js`) + `test-csp-deep-interaction.js`/`test-csp-full-audit.js` — toàn
+bộ PASS.
+
+**Deploy-impact:** không đổi route/API contract, không cần migrate dữ liệu — chỉ copy code +
+`pm2 restart`.
 
 ## v27.46 (2026-11): [TB] Re-audit lần 8 — mục 8/10: Mirror lệch — nút "Sửa & Gửi Lại" không hiện cho Admin ở Tài Liệu/Văn Bản Trình
 

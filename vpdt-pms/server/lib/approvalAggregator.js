@@ -89,7 +89,18 @@ function computeMyPendingApprovalKeys(user, appData) {
   pushDeptWorkflowKeys(keys, 'officeReqs', officeFixReqs, appData, user, 'officeFix');
   pushDeptWorkflowKeys(keys, 'vppRegistrations', appData.vppRegistrations, appData, user, 'vpp');
   pushDeptWorkflowKeys(keys, 'itPriceApprovals', appData.itPriceApprovals, appData, user, 'itPrice');
-  pushDeptWorkflowKeys(keys, 'budgetEntries', appData.budgetEntries, appData, user, 'budget');
+  // LỖI ĐÃ VÁ (re-audit lần 8, mức Thấp-TB — "approvalAggregator vẫn giữ budgetEntries đã bị gỡ khỏi
+  // Approval Hub client"): mục "📊 Ngân Sách" (budgetEntries) đã bị BỎ HOÀN TOÀN khỏi
+  // getMyPendingApprovals() (core-approvalhub.js, ~dòng 145) từ v23.0 khi module Ngân Sách được thiết kế
+  // lại ("Ngân Sách 2.0" — không còn workflowEngine.js/dept-workflow nào cho Ngân Sách, chỉ còn 1 cấp gác
+  // quyền phẳng budgetCreate/budgetManage; dòng mới budgetLines đã có nút Duyệt/Từ chối riêng ngay trong
+  // module Ngân Sách, không cần qua Approval Hub). Lời gọi pushDeptWorkflowKeys('budgetEntries', ...) ở
+  // đây KHÔNG được gỡ theo — mirror lệch khiến endpoint polling (GET /api/approvals/pending-signature)
+  // vẫn báo "có hồ sơ cần duyệt" (khoá 'budget:<id>') cho dữ liệu budgetEntries LỊCH SỬ (không xoá,
+  // GIỮ NGUYÊN ở server) dù Approval Hub không còn màn nào hiển thị/xử lý được nó — 1 thông báo giả vô
+  // hại nhưng vô dụng. Gỡ bỏ lời gọi, khớp đúng client. budgetEntries vẫn còn trong appData ở nơi khác
+  // (routes/records.js vẫn phục vụ submit/update/manager-edit cho dữ liệu lịch sử) — chỉ riêng mirror
+  // Approval Hub này không còn cần đọc nó.
   // Hợp đồng — 2 quy trình TÁCH RIÊNG trên CÙNG 1 bản ghi (contracts:approvalStatus + contractsSigned:
   // signedFileStatus), y hệt 2 lời gọi addDeptWorkflowItems() ở client.
   const contractsNonAddendum = (appData.contracts || []).filter(c => !c.isAddendum);
