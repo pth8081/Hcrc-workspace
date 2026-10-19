@@ -84,18 +84,40 @@ function renderPermGroupsList() {
     return;
   }
   tbody.innerHTML = DB.permGroups.map(g => {
-    const memberCount = DB.users.filter(u => (u.groupIds || []).includes(g.id)).length;
+    // "Phân quyền theo chức danh" (11/2026): số thành viên giờ gồm CẢ gán tay (u.groupIds) LẪN khớp tự
+    // động theo chức danh (g.jobTitles) — hợp (union), không đếm trùng 1 người vào cả 2 nhóm con. Đây
+    // CHỈ là số liệu hiển thị tham khảo (client tự ước lượng lại từ DB.users hiện có) — quyền hiệu lực
+    // THẬT luôn do server tính (recomputeEffectivePerms(), routes/data.js).
+    const explicitMembers = DB.users.filter(u => (u.groupIds || []).includes(g.id));
+    const jobTitleMembers = (g.jobTitles && g.jobTitles.length)
+      ? DB.users.filter(u => !(u.groupIds || []).includes(g.id) && userMatchesPermGroupJobTitles(u, g.jobTitles))
+      : [];
+    const memberCount = explicitMembers.length + jobTitleMembers.length;
+    const breakdown = (g.jobTitles && g.jobTitles.length)
+      ? ` <span class="text-gray-400 font-normal" title="Gán tay: ${explicitMembers.length} · Theo chức danh: ${jobTitleMembers.length}">(🏷️ ${jobTitleMembers.length})</span>`
+      : '';
     return `
     <tr class="border-b hover:bg-gray-50">
       <td class="border p-2 font-bold text-gray-800">${escapeHtml(g.name)}</td>
       <td class="border p-2 text-gray-600">${escapeHtml(g.description || '-')}</td>
-      <td class="border p-2 text-center">${memberCount}</td>
+      <td class="border p-2 text-center">${memberCount}${breakdown}</td>
       <td class="border p-2 text-center">
         <button data-op="editPermGroup" data-arg0="${g.id}" class="text-blue-600 font-bold hover:underline mr-2">Sửa</button>
         <button data-op="deletePermGroup" data-arg0="${g.id}" class="text-red-600 font-bold hover:underline">Xóa</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+// Picker "Tự Động Thêm Thành Viên Theo Chức Danh" (g.jobTitles[], mảng chuỗi) — tái dùng
+// renderMultiSelectDropdown()/getMultiSelectValues() dùng chung (cùng widget đã dùng cho
+// pgReportExtraKeysMultiSelect ngay dưới), nguồn danh sách là getAllJobTitlesFlat() (core.js, gộp mọi
+// Vị Trí Làm Việc HO/Siêu Thị/tự thêm, khử trùng lặp).
+function renderGroupJobTitlesPicker(initialSelected) {
+  renderMultiSelectDropdown('pgJobTitlesMultiSelect', getAllJobTitlesFlat(), initialSelected || [], {
+    placeholder: '🔍 Tìm chức danh để thêm (VD Trưởng Phòng, Giám Đốc...)...',
+    emptyText: 'Chưa chọn chức danh nào — nhóm này sẽ không tự động thêm ai theo chức danh.'
+  });
 }
 
 // Khối chọn nhiều thành viên cho 1 nhóm phân quyền, cùng khuôn multi-select đang dùng cho Nhóm Phê
@@ -143,6 +165,7 @@ function startCreateGroup() {
   document.getElementById('gGroupName').value = '';
   document.getElementById('gGroupDesc').value = '';
   renderGroupMembersPicker([]);
+  renderGroupJobTitlesPicker([]);
   renderGroupReportExtraKeysWidget(null);
   document.getElementById('userPermFormWrap').classList.remove('hidden');
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -158,6 +181,7 @@ function editPermGroup(id) {
   populatePermsForm(group.perms);
   const currentMembers = DB.users.filter(u => (u.groupIds || []).includes(id)).map(u => u.username);
   renderGroupMembersPicker(currentMembers);
+  renderGroupJobTitlesPicker(group.jobTitles || []);
   renderGroupReportExtraKeysWidget(group);
   document.getElementById('userPermFormWrap').classList.remove('hidden');
   document.getElementById('gGroupName').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -187,6 +211,7 @@ async function savePermGroup(e) {
   if (!name) return alert('Vui lòng nhập Tên Nhóm Phân Quyền!');
   const perms = collectPermsFromForm();
   const reportExtraKeys = getMultiSelectValues('pgReportExtraKeysMultiSelect');
+  const jobTitles = getMultiSelectValues('pgJobTitlesMultiSelect');
   const selectedMembers = new Set([...document.querySelectorAll('input.group-member-toggle:checked')].map(cb => cb.value));
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
@@ -202,13 +227,15 @@ async function savePermGroup(e) {
     group.description = document.getElementById('gGroupDesc').value.trim();
     group.perms = perms;
     group.reportExtraKeys = reportExtraKeys;
+    group.jobTitles = jobTitles;
   } else {
     group = {
       id: 'grp_' + Date.now(),
       name,
       description: document.getElementById('gGroupDesc').value.trim(),
       perms,
-      reportExtraKeys
+      reportExtraKeys,
+      jobTitles
     };
     DB.permGroups.push(group);
   }
@@ -223,10 +250,17 @@ async function savePermGroup(e) {
   // deletePermGroup() hiện có).
   let membersUpdated = 0;
   DB.users.forEach(u => {
+    if (u.username === 'admin') return; // admin luôn toàn quyền, không đụng tới ở đây.
     const shouldBeMember = selectedMembers.has(u.username);
     const currentGroupIds = u.groupIds || [];
     const wasMember = currentGroupIds.includes(group.id);
-    if (!shouldBeMember && !wasMember) return;
+    // "Phân quyền theo chức danh" (11/2026): user có thể liên quan tới nhóm đang sửa qua CÁCH THỨ 2 —
+    // khớp jobTitles (TỰ ĐỘNG, không qua u.groupIds) — xét CẢ khớp ngay bây giờ LẪN đã khớp trước khi
+    // sửa (u.jobTitleGroupIds, cache phía client mirror field cùng tên server trả về) để không bỏ sót
+    // trường hợp "vừa gỡ chức danh khỏi tiêu chí -> user đó phải MẤT quyền ngay trên preview".
+    const matchesJobTitleNow = userMatchesPermGroupJobTitles(u, group.jobTitles);
+    const matchedJobTitleBefore = (u.jobTitleGroupIds || []).includes(group.id);
+    if (!shouldBeMember && !wasMember && !matchesJobTitleNow && !matchedJobTitleBefore) return; // không liên quan gì tới nhóm đang sửa.
 
     if (shouldBeMember && !wasMember) {
       u.groupIds = [...currentGroupIds, group.id];
@@ -235,7 +269,10 @@ async function savePermGroup(e) {
       u.groupIds = currentGroupIds.filter(gid => gid !== group.id);
       u.permOverrides = null;
     }
-    const userGroups = (u.groupIds || []).map(gid => gid === group.id ? group : DB.permGroups.find(x => x.id === gid)).filter(Boolean);
+    const autoGroupIds = DB.permGroups.filter(g => userMatchesPermGroupJobTitles(u, g.jobTitles)).map(g => g.id);
+    u.jobTitleGroupIds = autoGroupIds;
+    const allGroupIds = [...new Set([...(u.groupIds || []), ...autoGroupIds])];
+    const userGroups = allGroupIds.map(gid => gid === group.id ? group : DB.permGroups.find(x => x.id === gid)).filter(Boolean);
     u.perms = userGroups.length ? mergePerms(mergeGroupsBasePerms(userGroups.map(g => g.perms)), u.permOverrides) : u.perms;
     membersUpdated++;
   });
@@ -264,23 +301,37 @@ async function savePermGroup(e) {
 async function deletePermGroup(id) {
   const group = DB.permGroups.find(g => g.id === id);
   if (!group) return;
-  const memberCount = DB.users.filter(u => (u.groupIds || []).includes(id)).length;
+  const explicitCount = DB.users.filter(u => (u.groupIds || []).includes(id)).length;
+  const jobTitleCount = (group.jobTitles && group.jobTitles.length)
+    ? DB.users.filter(u => !(u.groupIds || []).includes(id) && userMatchesPermGroupJobTitles(u, group.jobTitles)).length
+    : 0;
+  const memberCount = explicitCount + jobTitleCount;
   const msg = memberCount > 0
-    ? `Nhóm "${group.name}" đang có ${memberCount} thành viên. Xóa nhóm sẽ gỡ các thành viên này khỏi nhóm (những nhóm khác họ đang có không bị ảnh hưởng; quyền hiện tại từ các nhóm còn lại trở thành quyền riêng, không còn tự động cập nhật theo nhóm này nữa). Tiếp tục xóa?`
+    ? `Nhóm "${group.name}" đang có ${memberCount} thành viên${jobTitleCount ? ` (gồm ${jobTitleCount} người khớp tự động theo chức danh)` : ''}. Xóa nhóm sẽ gỡ các thành viên này khỏi nhóm (những nhóm khác họ đang có không bị ảnh hưởng; quyền hiện tại từ các nhóm còn lại trở thành quyền riêng, không còn tự động cập nhật theo nhóm này nữa). Tiếp tục xóa?`
     : `Bạn có chắc chắn muốn xóa nhóm phân quyền "${group.name}"?`;
   if (!confirm(msg)) return;
 
   const permGroupsSnapshot = JSON.parse(JSON.stringify(DB.permGroups));
   const usersSnapshot = JSON.parse(JSON.stringify(DB.users));
+  const remainingGroupsList = DB.permGroups.filter(g => g.id !== id);
   DB.users.forEach(u => {
-    if ((u.groupIds || []).includes(id)) {
-      u.groupIds = u.groupIds.filter(gid => gid !== id);
+    if (u.username === 'admin') return;
+    const wasExplicitMember = (u.groupIds || []).includes(id);
+    const matchedJobTitleBefore = (u.jobTitleGroupIds || []).includes(id);
+    if (!wasExplicitMember && !matchedJobTitleBefore) return;
+    if (wasExplicitMember) {
+      u.groupIds = (u.groupIds || []).filter(gid => gid !== id);
       u.permOverrides = null;
-      const remainingGroups = u.groupIds.map(gid => DB.permGroups.find(g => g.id === gid)).filter(Boolean);
-      u.perms = remainingGroups.length ? mergeGroupsBasePerms(remainingGroups.map(g => g.perms)) : u.perms;
     }
+    // Nhóm bị xoá hẳn khỏi permGroups -> không còn ai khớp jobTitles của nhóm đó nữa, tính lại theo các
+    // nhóm CÒN LẠI (remainingGroupsList).
+    const autoGroupIds = remainingGroupsList.filter(g => userMatchesPermGroupJobTitles(u, g.jobTitles)).map(g => g.id);
+    u.jobTitleGroupIds = autoGroupIds;
+    const allGroupIds = [...new Set([...(u.groupIds || []), ...autoGroupIds])];
+    const remainingGroups = allGroupIds.map(gid => remainingGroupsList.find(g => g.id === gid)).filter(Boolean);
+    u.perms = remainingGroups.length ? mergeGroupsBasePerms(remainingGroups.map(g => g.perms)) : u.perms;
   });
-  DB.permGroups = DB.permGroups.filter(g => g.id !== id);
+  DB.permGroups = remainingGroupsList;
 
   const savedGroups = await syncStorage('permGroups', { baseline: permGroupsSnapshot });
   const savedUsers = memberCount > 0 ? await syncStorage('users', { usersBaseline: usersSnapshot }) : true;

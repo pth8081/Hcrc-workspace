@@ -676,6 +676,20 @@ async function cascadeJobTitleGradeDefaultRename(oldValue, newValue) {
   });
 }
 
+// permGroups[].jobTitles[] ("Phân quyền theo chức danh", 11/2026, theo yêu cầu TRỰC TIẾP của người
+// dùng) — mảng chuỗi chức danh THÔ admin tự chọn ở Nhóm Phân Quyền (module-admin-permgroups.js), KHÔNG
+// phân biệt nguồn HO/Siêu Thị/Vị Trí Làm Việc tự thêm nào (xem userMatchesPermGroupJobTitles(),
+// lib/permGroupMerge.js) — cùng lý do cascadeMixedApprovalRuleJobTitle()/cascadePositionPairs() ở trên,
+// gọi CHUNG 1 hàm từ CẢ 3 nguồn đổi tên chức danh (jobTitles/storeJobTitles/Vị Trí Làm Việc tự thêm).
+// Đổi tên mà không cascade: tiêu chí của nhóm vẫn ghi TÊN CŨ -> không còn ai khớp được chức danh đó nữa
+// (mọi người đã đổi sang tên mới "rơi" khỏi nhóm), dù màn Quản Lý Danh Mục chỉ đơn giản đổi tên hiển thị.
+async function cascadePermGroupJobTitleRename(oldValue, newValue) {
+  await withLockedAppDataValue('permGroups', (list) => (Array.isArray(list) ? list : []).map(g => {
+    if (!g || !Array.isArray(g.jobTitles) || !g.jobTitles.includes(oldValue)) return g;
+    return { ...g, jobTitles: [...new Set(g.jobTitles.map(jt => (jt === oldValue ? newValue : jt)))] };
+  }));
+}
+
 // jobTitles (Khối Văn Phòng/HO): cascade users[].jobTitle CHỈ cho user KHÔNG phải posType STORE
 // (posType STORE dùng danh mục storeJobTitles riêng, xem cascadeStoreJobTitleRename() bên dưới) +
 // vppExcludedJobTitles[] (mảng chuỗi phẳng, so khớp chuỗi thô, xem isUserVppExcluded() ở index.html).
@@ -691,6 +705,7 @@ async function cascadeJobTitleRename(oldValue, newValue) {
   await cascadeMixedApprovalRuleJobTitle(oldValue, newValue);
   await cascadePositionPairs('jobTitle', oldValue, newValue);
   await cascadeJobTitleGradeDefaultRename(oldValue, newValue);
+  await cascadePermGroupJobTitleRename(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, false);
@@ -709,6 +724,7 @@ async function cascadeStoreJobTitleRename(oldValue, newValue) {
   // Cặp "Theo vị trí" lưu jobTitle THUẦN (không phân biệt nguồn HO/Siêu Thị, cùng lý do
   // cascadeMixedApprovalRuleJobTitle() ở trên) — dùng chung 1 hàm cho cả 2 danh mục chức danh.
   await cascadePositionPairs('jobTitle', oldValue, newValue);
+  await cascadePermGroupJobTitleRename(oldValue, newValue);
   await withLockedAppDataValue('orgChartVersions', (list) => {
     const { renameJobTitleInAllVersions } = require('./orgChart');
     return renameJobTitleInAllVersions(list, oldValue, newValue, true);
@@ -727,6 +743,7 @@ async function cascadeCustomPosTypeJobTitleRename(posTypeKey, oldValue, newValue
     (u.jobTitle === oldValue && u.posType === posTypeKey) ? { ...u, jobTitle: newValue } : u
   ));
   await cascadePositionPairs('jobTitle', oldValue, newValue);
+  await cascadePermGroupJobTitleRename(oldValue, newValue);
 }
 
 // deptAbbrs/docCatAbbrs: 2 map {tên -> viết tắt} khoá theo ĐÚNG tên phòng ban/loại tài liệu (xem

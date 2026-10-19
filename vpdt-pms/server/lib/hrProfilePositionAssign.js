@@ -11,6 +11,7 @@ const { getAppDataValue, withLockedAppDataValue } = require('./appData');
 const { assertPayloadFileUrlsOwnedByUser } = require('./uploadedFiles');
 const employeeProfile = require('./employeeProfile');
 const orgChart = require('./orgChart');
+const { recomputeEffectivePerms } = require('./permGroupMerge');
 
 // assignPositionToProfile(employeeCode, positionKey, freshUser, {effectiveDate, note, fileUrl, fileName})
 // — gán/đổi chức vụ cho 1 hồ sơ ĐÃ CÓ (theo employeeCode), đồng bộ ghi đè dept/jobTitle/posType xuống
@@ -31,9 +32,20 @@ async function assignPositionToProfile(employeeCode, positionKey, freshUser, opt
     return list;
   });
   if (syncTarget) {
-    await withLockedAppDataValue('users', (list) => (list || []).map(u =>
-      u.username === syncTarget.username ? { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) } : u
-    ));
+    // "Phân quyền theo chức danh" (11/2026, theo yêu cầu người dùng): điểm ghi TRỰC TIẾP collection
+    // "users" DUY NHẤT bỏ qua prepareUsersForSave() (xem chú thích đầu file) — nếu không tự tính lại
+    // perms ngay tại đây, đổi chức danh qua "Gán Chức Vụ"/Nhập Excel hàng loạt sẽ KHÔNG BAO GIỜ tự khớp
+    // lại permGroup.jobTitles[] (quyền theo chức danh "đứng yên" cho tới lần sau tài khoản đó được lưu
+    // qua đường "users" thường, nếu có) — gọi ĐÚNG 1 hàm dùng chung với prepareUsersForSave(), không viết
+    // lại logic. Tài khoản "admin" không đi qua đây (profile Nhân Sự không gắn với tài khoản admin).
+    const permGroups = (await getAppDataValue('permGroups')) || [];
+    await withLockedAppDataValue('users', (list) => (list || []).map(u => {
+      if (u.username !== syncTarget.username) return u;
+      const next = { ...u, jobTitle: syncTarget.jobTitle, dept: syncTarget.dept, ...(syncTarget.posType ? { posType: syncTarget.posType } : {}) };
+      if (next.username === 'admin') return next;
+      const { groupIds, jobTitleGroupIds, perms } = recomputeEffectivePerms(next, permGroups);
+      return { ...next, groupIds, jobTitleGroupIds, perms };
+    }));
   }
   return updated;
 }

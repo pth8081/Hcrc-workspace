@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**27.76** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.77 (2026-11): Nhóm Phân Quyền — tự động thêm thành viên theo Chức Danh
+
+Theo yêu cầu TRỰC TIẾP của người dùng: "có thể phân quyền theo chức danh không? ... gom tất cả trưởng
+phòng, giám đốc, phó giám đốc, tổng giám đốc... để tôi đỡ phải gắn từng tên một". Trước đây Nhóm Phân
+Quyền 100% gán theo TÊN (admin phải tick tay từng tài khoản vào `groupIds`) — không có cách nào gán theo
+vai trò/chức danh, và người mới được bổ nhiệm sau này KHÔNG tự động nhận quyền.
+
+**Tính năng mới:** mỗi Nhóm Phân Quyền có thêm field `jobTitles[]` (mảng chuỗi chức danh, admin chọn qua
+picker mới "🏷️ Tự Động Thêm Thành Viên Theo Chức Danh") — **ĐỘC LẬP HOÀN TOÀN** với khối "👥 Thành Viên
+Nhóm" gán tay đã có (1 người có thể vào nhóm qua CẢ 2 cách cùng lúc). Mọi tài khoản đang giữ ĐÚNG 1 trong
+các chức danh đã chọn (jobTitle chính HOẶC "Vị Trí Kiêm Nhiệm") tự động nhận quyền nền của nhóm — kể cả
+người **sau này** mới được gán/đổi sang đúng chức danh đó, và tự động MẤT quyền khi không còn giữ chức
+danh đó nữa. Server luôn tự tính lại quyền hiệu lực tại MỌI điểm ghi liên quan — không có cách nào quyền
+"theo chức danh" bị lệch khỏi dữ liệu thật:
+- `prepareUsersForSave()` (routes/data.js) — mọi lượt lưu "users".
+- `syncUsersWithPermGroupsChange()` (routes/data.js) — mọi lượt lưu "permGroups" (sửa tiêu chí chức danh
+  của 1 nhóm áp dụng NGAY cho mọi người khớp, kể cả người chưa từng được gán nhóm nào).
+- `assignPositionToProfile()` (lib/hrProfilePositionAssign.js, "Gán Chức Vụ"/Nhập Excel hàng loạt) — điểm
+  ghi TRỰC TIẾP "users" DUY NHẤT bỏ qua `prepareUsersForSave()`, nay cũng gọi đúng 1 bộ hàm dùng chung
+  (`lib/permGroupMerge.js`, file MỚI) để không bỏ sót.
+
+**Thay đổi code:**
+- `lib/permGroupMerge.js` (MỚI): tách `mergePermsServer()`/`mergeGroupsBasePermsServer()` từ
+  routes/data.js (hành vi KHÔNG đổi, chỉ dời chỗ) + thêm `userMatchesPermGroupJobTitles()`,
+  `computeAutoMatchedGroupIds()`, `recomputeEffectivePerms()`, `sanitizePermGroupJobTitles()`.
+  `recomputeEffectivePerms()` trả thêm `jobTitleGroupIds` (cache server-managed — id các nhóm user ĐANG
+  khớp theo chức danh tại lần tính này) để phân biệt đúng "chưa từng liên quan nhóm nào" (giữ nguyên quyền
+  riêng, hành vi CŨ) với "vừa mất khớp chức danh" (phải reset quyền về đúng quyền nền mới + permOverrides).
+- `lib/catalogRename.js`: thêm `cascadePermGroupJobTitleRename()` — đổi tên 1 chức danh (HO/Siêu Thị/Vị
+  Trí Làm Việc tự thêm) cũng đổi đúng chuỗi đó trong `permGroups[].jobTitles[]`.
+- `public/fragments/systemSection.html` + `module-admin-permgroups.js` + `core.js`: picker mới (tái dùng
+  `renderMultiSelectDropdown()` đã có), số thành viên ở bảng Nhóm Phân Quyền hiện kèm số người khớp tự
+  động (🏷️), `getAllJobTitlesFlat()` (core.js, gộp mọi Vị Trí Làm Việc khử trùng lặp).
+- `public/js/module-nghiepvu.js`: cập nhật tài liệu Hướng Dẫn (mục "🔑 Phân Quyền").
+
+**Kiểm tra:** `tests/test-permgroup-jobtitle-match.js` (MỚI, 13 kịch bản — unit các hàm mới + tích hợp
+HTTP thật cho cả 3 điểm ghi trên, bao gồm "mất quyền ngay khi gỡ chức danh khỏi tiêu chí nhóm"); git-stash
+fail-on-old xác nhận 6/13 kịch bản FAIL đúng trên code cũ rồi pass lại trên code mới; regression 48 file
+test liên quan tới `routes/data.js`/Nhóm Phân Quyền/catalog rename chức danh đều pass; CSP sạch.
 
 ## v27.76 (2026-11): 4 quyền "Cho Phép Tự Duyệt Do Chính Mình Tạo" — độc lập hoàn toàn (Đặt Hàng HO/Siêu Thị, Giá Bán Buôn/Bán Lẻ)
 

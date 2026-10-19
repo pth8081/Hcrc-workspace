@@ -4765,6 +4765,36 @@ function mergeGroupsBasePerms(groupsPerms) {
   return result;
 }
 
+// "Phân quyền theo chức danh" (11/2026, theo yêu cầu TRỰC TIẾP của người dùng) — khớp Y HỆT
+// userMatchesPermGroupJobTitles() ở lib/permGroupMerge.js (2 cài đặt độc lập, PHẢI giữ giống hệt nếu
+// sửa 1 bên). So khớp CHUỖI THÔ với jobTitle CHÍNH (u.jobTitle) HOẶC bất kỳ "Vị Trí Kiêm Nhiệm"
+// (u.secondaryPositions[].jobTitle), KHÔNG phân biệt phòng ban/siêu thị — dùng để đếm/hiển thị số
+// thành viên TỰ ĐỘNG khớp chức danh ở renderPermGroupsList() (module-admin-permgroups.js); quyền hiệu
+// lực THẬT luôn do server tính lại (recomputeEffectivePerms(), routes/data.js), hàm này phía client CHỈ
+// phục vụ hiển thị ước lượng, không tự cấp quyền gì.
+function userMatchesPermGroupJobTitles(user, jobTitles) {
+  if (!user || !Array.isArray(jobTitles) || !jobTitles.length) return false;
+  const set = new Set(jobTitles);
+  if (user.jobTitle && set.has(user.jobTitle)) return true;
+  return (user.secondaryPositions || []).some(p => p && set.has(p.jobTitle));
+}
+
+// Danh sách "Chức Danh" PHẲNG, gộp TẤT CẢ Vị Trí Làm Việc (HO/Siêu Thị + mọi positionTypes tự thêm),
+// khử trùng lặp — dùng cho picker "Tự Động Thêm Thành Viên Theo Chức Danh" ở Nhóm Phân Quyền
+// (module-admin-permgroups.js), nơi KHÔNG cần phân biệt chức danh đó thuộc Vị Trí Làm Việc nào (1 chức
+// danh trùng tên ở nhiều Vị Trí Làm Việc khác nhau chỉ cần hiện/chọn 1 lần).
+function getAllJobTitlesFlat() {
+  const types = (DB.positionTypes && DB.positionTypes.length) ? DB.positionTypes.map(t => t.key) : ['HO', 'STORE'];
+  const seen = new Set();
+  const out = [];
+  types.forEach(posType => {
+    (getPosTypeJobTitles(posType) || []).forEach(jt => {
+      if (jt && !seen.has(jt)) { seen.add(jt); out.push(jt); }
+    });
+  });
+  return out;
+}
+
 // Ma Trận Phân Quyền (10/2026) — Nhóm Phân Quyền (DB.permGroups) giờ CŨNG có thể mang
 // reportExtraKeys riêng (mở thêm tab Báo Cáo cho MỌI thành viên nhóm, xem
 // module-admin-permgroups.js), không còn CHỈ gán được từng người một qua uReportExtraKeysMultiSelect.

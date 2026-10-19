@@ -1874,6 +1874,11 @@
             <p class="text-[11px] text-gray-500 italic mt-1">Gõ tên/username để tìm và thêm người vào nhóm. Khi bấm Lưu: người được thêm sẽ nhận quyền của nhóm này (nếu đang ở nhóm khác sẽ được CHUYỂN sang nhóm này); người bị bỏ chọn sẽ ra khỏi nhóm nhưng vẫn giữ nguyên quyền hiện tại làm quyền riêng.</p>
           </div>
           <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">🏷️ Tự Động Thêm Thành Viên Theo Chức Danh (tuỳ chọn)</label>
+            <div id="pgJobTitlesMultiSelect"></div>
+            <p class="text-[11px] text-gray-500 italic mt-1">Chọn 1-nhiều chức danh (VD "Trưởng Phòng", "Giám Đốc", "Giám Đốc Siêu Thị"): <b>MỌI tài khoản</b> đang giữ ĐÚNG chức danh đó (hoặc đang kiêm nhiệm chức danh đó) sẽ TỰ ĐỘNG nhận quyền nền của nhóm này, không cần thêm tay từng người ở khối "Thành Viên Nhóm" ở trên — kể cả người SAU NÀY mới được gán/đổi sang đúng chức danh này. Độc lập hoàn toàn với "Thành Viên Nhóm": 1 người có thể vào nhóm qua CẢ 2 cách cùng lúc.</p>
+          </div>
+          <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-600 mb-1">📊 Mở Thêm Tab Báo Cáo Cho Cả Nhóm (tuỳ chọn)</label>
             <div id="pgReportExtraKeysMultiSelect"></div>
             <p class="text-[11px] text-gray-500 italic mt-1">Mọi thành viên nhóm này sẽ thấy thêm các tab Báo Cáo được chọn ở đây, CỘNG với các tab họ đã được mở riêng (nếu có) — xem getEffectiveReportExtraKeys().</p>

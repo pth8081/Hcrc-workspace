@@ -5390,6 +5390,28 @@ Việt gom chung vào 1 sheet "Khác (chưa có nhãn)".
   nhóm họ thuộc (`getEffectiveReportExtraKeys()`), đúng yêu cầu tách quyền
   xem Báo Cáo theo TỪNG module con (mỗi tab trong `REPORT_NAV_TREE` là 1
   khoá riêng biệt, xem mục 5).
+- **🏷️ Tự Động Thêm Thành Viên Theo Chức Danh (11/2026, theo yêu cầu TRỰC
+  TIẾP của người dùng — "phân quyền theo chức danh, gom tất cả Trưởng Phòng/
+  Giám Đốc/Phó Giám Đốc/Tổng Giám Đốc/Giám Đốc Siêu Thị mà không phải gắn tay
+  từng người")**: mỗi Nhóm Phân Quyền giờ có thêm 1 khối chọn **"Chức Danh"**
+  (field `jobTitles[]`, màn Sửa/Tạo Nhóm — picker tìm-kiếm-gõ-chọn-nhiều,
+  nguồn là TOÀN BỘ chức danh của mọi Vị Trí Làm Việc HO/Siêu Thị/tự thêm,
+  khử trùng lặp) — **ĐỘC LẬP HOÀN TOÀN** với khối "👥 Thành Viên Nhóm" gán
+  tay đã có từ trước (1 người có thể vào nhóm qua CẢ 2 cách cùng lúc, không
+  loại trừ nhau). Chọn 1-nhiều chức danh ở đây: **MỌI tài khoản** đang giữ
+  ĐÚNG chức danh đó (jobTitle chính HOẶC bất kỳ "Vị Trí Kiêm Nhiệm") sẽ TỰ
+  ĐỘNG nhận quyền nền của nhóm — kể cả người **sau này** mới được gán/đổi
+  sang đúng chức danh đó (qua "Gán Chức Vụ"/Nhập Excel Gán Chức Vụ hàng loạt,
+  hoặc sửa tay ở màn Người Dùng), không cần admin quay lại tick thêm tay —
+  và tự động MẤT quyền ngay khi không còn giữ đúng chức danh đó nữa (đổi
+  chức vụ khác, hoặc admin gỡ chức danh khỏi tiêu chí nhóm). Server luôn tự
+  tính lại quyền hiệu lực tại mọi điểm ghi liên quan (lưu Người Dùng/Nhóm
+  Phân Quyền/Gán Chức Vụ) — không có cách nào để quyền "theo chức danh" bị
+  lệch khỏi dữ liệu thật. Màn Nhóm Phân Quyền cũng hiện kèm số người khớp
+  tự động (🏷️) bên cạnh tổng số thành viên, để admin biết ngay tiêu chí chức
+  danh đang áp dụng cho bao nhiêu người mà không cần dò tay. **Không ảnh
+  hưởng** tới cách tính quyền của người ĐÃ gán tay (groupIds) — hành vi đó
+  giữ nguyên 100% như trước.
 - **Nhập lại**: chọn đúng file (Người Dùng/Nhóm Phân Quyền tương ứng nút đã
   bấm), hệ thống hiện bảng xem trước — chỉ liệt kê dòng THỰC SỰ có thay đổi
   so với dữ liệu hiện tại; dòng không tìm thấy username/tên nhóm hoặc trùng

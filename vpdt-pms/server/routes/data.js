@@ -535,85 +535,17 @@ function sanitizeOperationOrderApiConfig(config, isAdmin) {
 // routes/adminCatalog.js, routes/storeCatalogImport.js) — xem chú thích đầy đủ ở đó. Re-fetch fresh từ
 // DB (không tin JWT cache), khớp đúng cách routes/workflow.js, routes/create.js, routes/records.js đã làm.
 
-// Áp phần quyền tuỳ chỉnh riêng (overrides) lên trên nền quyền của nhóm -> quyền hiệu lực thực tế —
-// khớp Y HỆT mergePerms() ở public/index.html (2 cài đặt độc lập, client không import chung được với
-// server). PHẢI giữ giống hệt nếu sửa 1 bên.
-function mergePermsServer(basePerms, overrides) {
-  return { ...(basePerms || {}), ...(overrides || {}) };
-}
-
-const APPROVER_AUTH_LEVEL_RANK_SERVER = { NONE: 0, PASSWORD: 1, PIN: 2, WEBAUTHN: 3 };
-
-// Gộp quyền NỀN của NHIỀU nhóm phân quyền — khớp Y HỆT mergeGroupsBasePerms() ở public/index.html
-// (2 cài đặt độc lập, PHẢI giữ giống hệt nếu sửa 1 bên). Kết hợp theo kiểu dữ liệu từng trường: boolean
-// OR, scope {all,depts} hợp (union), approverAuthLevel lấy mức CAO NHẤT trong các nhóm.
-// LỖI ĐÃ VÁ (mức Thấp, đợt rà soát v24.74→v24.81): "Làm gọn phân quyền Xem Văn Bản Trình/Hợp Đồng" (Việc
-// D) bỏ hẳn 2 quyền phẳng CŨ submissionView/contractView khỏi cây quyền (collectPermsFromForm() không
-// còn ghi 2 field này) VÀ khỏi logic đọc (canViewSubmission()/canViewContract() đã bỏ hẳn, xem lib/
-// recordViewScope.js) — NHƯNG 1 permGroup chưa từng được admin mở lại để Lưu sau đợt này vẫn còn giữ
-// NGUYÊN 2 field cũ trong `perms` lưu trên DB. Hàm gộp dưới đây union mọi KEY có mặt ở BẤT KỲ nhóm nào
-// user đang thuộc — nên lưu lại 1 nhóm KHÁC (không phải nhóm còn field cũ) của 1 user cũng thuộc CẢ 2
-// nhóm vẫn vô tình "hồi sinh" field chết này vào u.perms. Loại khỏi vòng lặp ngay từ đầu để dù dữ liệu cũ
-// còn sót ở permGroups nào, nó không bao giờ lọt ngược vào perms hiệu lực của user nữa (field này không
-// còn được canView* nào đọc nên không có tác động an toàn, nhưng vẫn gây nhiễu Ma Trận Phân Quyền).
-// carView/officeView (10/2026, "Việc D" mở rộng sang Đăng Ký Xe/Văn Phòng) ĐÃ BỎ cùng lý do
-// submissionView/contractView ở trên — xem canViewCarReg()/canViewOfficeReq() (lib/recordViewScope.js).
-const DEPRECATED_PERM_KEYS = new Set(['submissionView', 'contractView', 'carView', 'officeView']);
-function mergeGroupsBasePermsServer(groupsPerms) {
-  const list = (groupsPerms || []).filter(Boolean);
-  if (!list.length) return {};
-  const keys = new Set();
-  list.forEach(p => Object.keys(p || {}).forEach(k => keys.add(k)));
-  DEPRECATED_PERM_KEYS.forEach(k => keys.delete(k));
-  const result = {};
-  keys.forEach(key => {
-    const values = list.map(p => p?.[key]);
-    if (key === 'approverAuthLevel') {
-      result[key] = values.reduce((best, v) =>
-        (APPROVER_AUTH_LEVEL_RANK_SERVER[v] || 0) > (APPROVER_AUTH_LEVEL_RANK_SERVER[best] || 0) ? v : best, 'NONE');
-      return;
-    }
-    // PQ-02b (đợt audit chuyên sâu cụm "Hệ Thống/Admin/Cấu Hình", mức Cao): moduleAccess là object LỒNG
-    // {moduleKey: boolean} (xem defaultModuleAccess()/hasModuleAccess() ở public/js/core.js) — không
-    // phải boolean, không phải {all,depts}, không phải mảng — nên TRƯỚC ĐÂY rơi xuống nhánh else cuối
-    // cùng và lấy nguyên object của NHÓM CUỐI (last-write-wins): 1 người thuộc 2 nhóm, nhóm A mở module
-    // X còn nhóm B tắt X, thì chỉ cần thứ tự tick khác đi là mất/được quyền vào module X — đúng lớp lỗi
-    // đã vá cho uploadDepts/viewDraftDepts ở nhánh mảng bên dưới nhưng bỏ sót key này. Gộp theo đúng
-    // nguyên tắc "nhóm quyền là OVERLAY cộng thêm": OR TỪNG KEY con — module bị chặn CHỈ KHI MỌI nhóm
-    // đều chặn. Nhóm không khai moduleAccess (undefined) = mở hết (khớp hasModuleAccess(): !ma -> true),
-    // key con thiếu trong 1 nhóm cũng là mở (ma[k] !== false).
-    if (key === 'moduleAccess') {
-      const subKeys = new Set();
-      values.forEach(v => { if (v && typeof v === 'object') Object.keys(v).forEach(k => subKeys.add(k)); });
-      const merged = {};
-      subKeys.forEach(k => {
-        merged[k] = values.some(v => (v && typeof v === 'object') ? v[k] !== false : true);
-      });
-      result[key] = merged;
-      return;
-    }
-    const sample = values.find(v => v !== undefined && v !== null);
-    if (typeof sample === 'boolean') {
-      result[key] = values.some(v => v === true);
-    } else if (sample && typeof sample === 'object' && !Array.isArray(sample) && ('all' in sample || 'depts' in sample)) {
-      result[key] = { all: values.some(v => v?.all === true), depts: [...new Set(values.flatMap(v => v?.depts || []))] };
-    } else if (Array.isArray(sample)) {
-      // PQ-02 (đợt test chuyên sâu 9/2026): uploadDepts là trường "kiểu cũ" còn lại — mảng phòng ban
-      // TRẦN, không phải object {all,depts} như phần còn lại của hệ thống (chưa migrate sang khuôn
-      // chung, xem đối chiếu boolean uploadAll đi kèm đã OR đúng ở nhánh boolean trên). 3 quyền phẳng
-      // Tài Liệu cùng khuôn này (viewDraftAll/viewDraftDepts/viewApprovedAll/viewApprovedDepts) đã BỎ
-      // HẲN ở v24.75 (làm gọn phân quyền Tài Liệu) — nhánh này giờ chỉ còn phục vụ uploadDepts, nhưng
-      // vẫn giữ nguyên dạng UNION chung (không riêng theo tên khoá) để không cần sửa nếu sau này có
-      // thêm trường mảng trần khác. TRƯỚC ĐÂY rơi vào nhánh else -> lấy giá trị NHÓM CUỐI CÙNG
-      // (last-write-wins), làm mất phòng ban của các nhóm khác — vi phạm đúng nguyên tắc PQ-02 "nhóm
-      // quyền là OVERLAY cộng thêm". Hợp nhất (union, khử trùng lặp) giống hệt nhánh {all,depts}.
-      result[key] = [...new Set(values.flatMap(v => Array.isArray(v) ? v : []))];
-    } else {
-      result[key] = values[values.length - 1];
-    }
-  });
-  return result;
-}
+// mergePermsServer()/mergeGroupsBasePermsServer() ĐÃ DỜI sang lib/permGroupMerge.js (11/2026, theo yêu
+// cầu người dùng: "phân quyền theo chức danh") — để lib/hrProfilePositionAssign.js (điểm ghi "users"
+// DUY NHẤT bỏ qua prepareUsersForSave() bên dưới, xem chú thích ở đó) cũng gọi được ĐÚNG 1 bộ hàm, không
+// chép lại logic. Cùng file đó có thêm computeAutoMatchedGroupIds()/recomputeEffectivePerms() (khớp
+// permGroup.jobTitles[] — chức năng MỚI) và sanitizePermGroupJobTitles(). Hành vi mergePermsServer()/
+// mergeGroupsBasePermsServer() giữ NGUYÊN VẸN, chỉ đổi chỗ ở — PHẢI vẫn giữ giống hệt mergePerms()/
+// mergeGroupsBasePerms() ở public/js/core.js nếu sửa 1 bên.
+const {
+  mergePermsServer, mergeGroupsBasePermsServer, computeAutoMatchedGroupIds, recomputeEffectivePerms,
+  sanitizePermGroupJobTitles
+} = require('../lib/permGroupMerge');
 
 // Bắt buộc còn ít nhất 1 tài khoản perms.admin=true sau khi ghi — trước đây không có ràng buộc này ở
 // bất kỳ đâu: xoá tài khoản "admin" mặc định khỏi mảng, hoặc chính 1 admin tự bỏ tick quyền admin của
@@ -691,7 +623,6 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
   // gửi thẳng "perms" khác với quyền hiệu lực mà Nhóm/permOverrides của user đó lẽ ra phải ra (giao
   // diện luôn tự tính đúng nên hành vi sai này chỉ lộ ra khi gọi thẳng API).
   const permGroups = (await getAppDataValue('permGroups')) || [];
-  const permGroupsById = new Map(permGroups.map(g => [g.id, g.perms]));
   // Validate "dept" khi THAY ĐỔI/GÁN MỚI (LỖI ĐÃ VÁ, đợt rà soát chuyên sâu lần 2, Đợt 5, mức Thấp) —
   // validateImportedUserRow() (module-admin-userstaging.js) đã đối chiếu dept với DB.depts/DB.stores
   // TRƯỚC khi gọi syncStorage('users') cho luồng Nhập Excel, nhưng đó là validate CLIENT-SIDE — điểm ghi
@@ -772,24 +703,25 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
       record.username = 'admin';
       record.perms = { admin: true };
       record.groupIds = [];
+      record.jobTitleGroupIds = [];
       record.permOverrides = null;
     } else {
-      // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
-      const groupIds = record.groupIds || (record.groupId ? [record.groupId] : []);
-      const groupsPerms = groupIds.map(id => permGroupsById.get(id)).filter(Boolean);
       // LỖI ĐÃ VÁ (re-audit lần 4, mức Cao): điều kiện CŨ `if (groupsPerms.length)` bỏ qua tái tính nếu
       // TOÀN BỘ groupIds đều "treo" (nhóm đã bị xoá khỏi permGroups nhưng user chưa được gỡ khỏi nhóm đó
       // — VD admin xoá nhóm trong lúc user vẫn đang thuộc nhóm) — groupsPerms rỗng khiến nhánh if không
       // chạy, record.perms RƠI THẲNG về nguyên "u.perms" client gửi lên (hành vi chỉ dành ĐÚNG cho user
       // KHÔNG groupId, xem nhánh else thiếu ở trên) — vi phạm bất biến "quyền hiệu lực của user CÓ
       // groupId PHẢI LUÔN tính từ server, không bao giờ tin client" đã nêu ở chú thích đầu hàm này. 1
-      // request tự soạn groupIds:[<id không tồn tại>] kèm perms:{admin:true} sẽ được ghi thẳng. Xét theo
-      // groupIds.length (không phải groupsPerms.length) — vẫn LUÔN server tự tính dù base rỗng khi không
-      // còn nhóm hợp lệ nào (mergeGroupsBasePermsServer([]) = {}), permOverrides vẫn áp đúng như cũ.
-      if (groupIds.length) {
-        record.groupIds = groupIds;
-        record.perms = mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), record.permOverrides);
-      }
+      // request tự soạn groupIds:[<id không tồn tại>] kèm perms:{admin:true} sẽ được ghi thẳng.
+      // recomputeEffectivePerms() (lib/permGroupMerge.js, 11/2026 — "phân quyền theo chức danh") HỢP
+      // (union) thêm groupIds khớp permGroup.jobTitles[] (TỰ ĐỘNG, không ghi ngược vào record.groupIds —
+      // field đó giữ nguyên nghĩa "gán tay tường minh") vào groupIds tường minh TRƯỚC khi tính quyền nền
+      // — nên vẫn LUÔN server tự tính dù base rỗng khi không còn nhóm hợp lệ/khớp chức danh nào
+      // (mergeGroupsBasePermsServer([]) = {}), permOverrides vẫn áp đúng như cũ.
+      const result = recomputeEffectivePerms(record, permGroups);
+      record.groupIds = result.groupIds;
+      record.jobTitleGroupIds = result.jobTitleGroupIds;
+      record.perms = result.perms;
     }
 
     if (u.pin) {
@@ -896,22 +828,32 @@ async function prepareUsersForSave(incomingUsers, currentUsername) {
 // lượt ghi "users" đi kèm bị lỗi/409) để lại quyền CŨ tồn tại vô thời hạn ở các thành viên dù màn Nhóm
 // đã hiển thị đúng quyền mới. Nay server tự tính lại NGAY trong CÙNG request ghi permGroups — khoá đúng
 // dòng "users" (withLockedAppDataValue) để tránh mất đồng thời 1 admin khác đang sửa user khác.
+// "Phân quyền theo chức danh" (11/2026, theo yêu cầu TRỰC TIẾP của người dùng): từ đợt này, 1 user có
+// thể thuộc hiệu lực 1 nhóm theo 2 CÁCH ĐỘC LẬP — gán tay tường minh (u.groupIds, không đổi) HOẶC khớp
+// permGroup.jobTitles[] (MỚI, xem lib/permGroupMerge.js) — nên hàm này giờ phải chạy cho MỌI user (kể cả
+// user KHÔNG có groupIds tường minh nào), không chỉ user đã có existingGroupIds như trước — nếu không,
+// sửa tiêu chí chức danh của 1 nhóm (VD thêm "Giám Đốc Siêu Thị") sẽ KHÔNG BAO GIỜ tự áp dụng cho những
+// người giữ đúng chức danh đó nhưng chưa từng được gán nhóm nào trước đây.
 async function syncUsersWithPermGroupsChange(newGroups) {
   const groupPermsById = new Map((newGroups || []).map(g => [g.id, g.perms]));
   await withLockedAppDataValue('users', (currentUsers) => {
     const updated = (currentUsers || []).map(u => {
-      if (u.username === 'admin') return { ...u, perms: { admin: true } };
+      if (u.username === 'admin') return { ...u, perms: { admin: true }, groupIds: [], jobTitleGroupIds: [] };
       // Tương thích ngược: user cũ chỉ có "groupId" (số ít) trước khi hỗ trợ multi-select nhóm quyền.
       const existingGroupIds = u.groupIds || (u.groupId ? [u.groupId] : []);
-      if (!existingGroupIds.length) return u;
       const survivingGroupIds = existingGroupIds.filter(id => groupPermsById.has(id));
-      if (!survivingGroupIds.length) {
-        // TẤT CẢ nhóm đang gán đều đã bị xoá khỏi mảng mới lưu -> gỡ liên kết, giữ nguyên quyền hiện
-        // tại làm quyền riêng (khớp đúng hành vi deletePermGroup() ở index.html).
-        return { ...u, groupIds: [], permOverrides: null };
+      const autoGroupIds = computeAutoMatchedGroupIds(u, newGroups);
+      if (existingGroupIds.length && !survivingGroupIds.length && !autoGroupIds.length) {
+        // TẤT CẢ nhóm đang gán tay đều đã bị xoá khỏi mảng mới lưu, VÀ không khớp chức danh nhóm nào
+        // còn lại -> gỡ liên kết, giữ nguyên quyền hiện tại làm quyền riêng (khớp đúng hành vi
+        // deletePermGroup() ở module-admin-permgroups.js).
+        return { ...u, groupIds: [], jobTitleGroupIds: [], permOverrides: null };
       }
-      const groupsPerms = survivingGroupIds.map(id => groupPermsById.get(id));
-      return { ...u, groupIds: survivingGroupIds, perms: mergePermsServer(mergeGroupsBasePermsServer(groupsPerms), u.permOverrides) };
+      // recomputeEffectivePerms() (lib/permGroupMerge.js) tự HỢP thêm autoGroupIds + tự xử lý đúng
+      // trường hợp "trước đây khớp chức danh nhóm nào đó (u.jobTitleGroupIds), giờ không còn khớp nhóm
+      // nào nữa" (phải reset perms về {} + permOverrides, không giữ quyền "thừa kế" từ nhóm cũ).
+      const result = recomputeEffectivePerms({ ...u, groupIds: survivingGroupIds }, newGroups);
+      return { ...u, groupIds: result.groupIds, jobTitleGroupIds: result.jobTitleGroupIds, perms: result.perms };
     });
     assertAtLeastOneAdmin(updated);
     return updated;
@@ -2294,6 +2236,13 @@ router.post('/:key', async (req, res) => {
       oldUsersForProfileCascade = (await getAppDataValue('users')) || [];
     }
     if (key === 'users') value = await prepareUsersForSave(value, req.user.username);
+    // permGroups.jobTitles[] (11/2026, "phân quyền theo chức danh") — sanitize NHẸ hình dạng (mảng
+    // chuỗi, cùng mức sanitizeSecondaryPositions()/sanitizeExtraKeys() ở trên) tại điểm ghi DUY NHẤT,
+    // không cần đối chiếu whitelist đúng chức danh thật đang có trong danh mục (chức danh lạ/đã đổi tên
+    // chỉ đơn giản không khớp ai, không mở ra rủi ro gì).
+    if (key === 'permGroups' && Array.isArray(value)) {
+      value = value.map(g => (g && typeof g === 'object') ? { ...g, jobTitles: sanitizePermGroupJobTitles(g.jobTitles) } : g);
+    }
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
     // Lọc lại đúng subset SENSITIVE_FIELDS hợp lệ — xem chú thích đầy đủ tại entry NON_ADMIN_GATED_KEYS
