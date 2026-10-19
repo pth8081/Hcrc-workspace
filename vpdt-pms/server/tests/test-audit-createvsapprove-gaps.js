@@ -136,6 +136,33 @@ function test(name, fn) {
       /403|tự duyệt/
     );
   });
+
+  // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "resolvePendingTaskAction tự duyệt gia hạn Công Việc do chính
+  // mình gửi (admin bypass qua requestExtension)"): requestExtension() cho phép admin tự gửi yêu cầu
+  // gia hạn cho task của NGƯỜI KHÁC (`task.assignedTo === user.username || user.perms?.admin`) — khác
+  // hẳn scenario #4 ngay trên (tự GIAO việc cho bản thân, assignedBy===assignedTo===admin). Ở đây
+  // task.assignedTo là NGƯỜI KHÁC (không phải admin) nên check cũ (chỉ so task.assignedTo) không bắt
+  // được — phải so thêm pending.requestedBy.
+  test('#4b Công Việc: LỖI ĐÃ VÁ — admin tự GỬI yêu cầu gia hạn cho task của NGƯỜI KHÁC rồi tự DUYỆT luôn yêu cầu đó -> 403', () => {
+    const task = {
+      assignedBy: 'qly2', assignedTo: 'nv1', status: 'IN_PROGRESS',
+      pendingExtension: { newDeadline: '2026-12-31', reason: 'bận', requestedBy: 'admin1', requestedByName: 'Admin' }
+    };
+    assert.throws(
+      () => recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task),
+      /403|tự duyệt/
+    );
+  });
+
+  test('#4b Công Việc: đối chứng — admin duyệt yêu cầu gia hạn do NGƯỜI KHÁC gửi (không phải chính mình) vẫn thành công bình thường', () => {
+    const task = {
+      assignedBy: 'qly2', assignedTo: 'nv1', status: 'IN_PROGRESS',
+      pendingExtension: { newDeadline: '2026-12-31', reason: 'bận', requestedBy: 'nv1', requestedByName: 'Nhân Viên 1' }
+    };
+    const result = recordActions.resolvePendingTaskAction('extension', 'approve', ADMIN, task);
+    assert.strictEqual(result.deadline, '2026-12-31');
+    assert.strictEqual(result.pendingExtension, null);
+  });
 }
 
 // ===================== #5: Ngân Sách (budgetLines) — Đề Xuất theo cấu hình phòng ban =====================

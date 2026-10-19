@@ -4142,7 +4142,16 @@ function resolvePendingTaskAction(kind, verb, user, task) {
   // task nào (nhánh `|| user.perms?.admin`) — 1 tài khoản admin có thể tự gửi yêu cầu RỒI tự duyệt luôn
   // yêu cầu đó bằng ĐÚNG tài khoản đó, không ai kiểm soát độc lập. Bỏ hẳn admin-bypass ở đây, khớp đúng
   // khuôn các assertNotSelfDecidingXxx() khác.
-  if (task.assignedTo === user.username) {
+  // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "resolvePendingTaskAction tự duyệt gia hạn Công Việc do chính
+  // mình gửi (admin bypass qua requestExtension)"): điều kiện CHỈ so `task.assignedTo === user.username`
+  // — đúng cho trường hợp "tự giao cho bản thân" (assignedBy===assignedTo) nêu ở chú thích trên, NHƯNG
+  // requestExtension() còn có nhánh RIÊNG cho phép admin tự gửi yêu cầu gia hạn cho BẤT KỲ task người
+  // khác (`task.assignedTo === user.username || user.perms?.admin`) — khi đó `pending.requestedBy` là
+  // CHÍNH admin, nhưng `task.assignedTo` vẫn là người nhận việc gốc (KHÁC admin), nên điều kiện cũ
+  // không bắt được: admin tự gửi yêu cầu RỒI tự duyệt luôn yêu cầu CHÍNH MÌNH đã gửi, dời hạn/tăng
+  // extensionCount mà không qua bất kỳ xét duyệt độc lập của người giao việc (assignedBy) nào. So thêm
+  // với `pending.requestedBy` (người THỰC SỰ gửi yêu cầu đang xét) — bắt đúng cả 2 trường hợp.
+  if (task.assignedTo === user.username || pending.requestedBy === user.username) {
     throw new HttpError(403, 'Bạn không thể tự duyệt/từ chối yêu cầu do chính mình gửi (việc tự giao cho bản thân)');
   }
   // Công việc có thể đã bị huỷ trực tiếp (isAssignerOrAdmin, xem cancelOrRequestCancelTask()) SAU khi
