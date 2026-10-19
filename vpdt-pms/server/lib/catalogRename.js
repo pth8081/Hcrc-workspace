@@ -1306,7 +1306,14 @@ const SINGLE_USERNAME_ASSIGNMENT_FIELDS = [
   { collection: 'itPriceApprovals', field: 'applyClaimedBy' },
   { collection: 'itPriceApprovals', field: 'appliedBy' },
   { collection: 'itSupportTickets', field: 'escalatedBy' },
-  { collection: 'itSupportTickets', field: 'approvalApprover' }
+  { collection: 'itSupportTickets', field: 'approvalApprover' },
+  // LỖI ĐÃ VÁ (re-audit lần 10, mục 9/14, mức TB — "trainingClasses.instructorUsername không cascade
+  // username rename/xoá"): username THÔ gán giảng viên (resolveTrainingInstructorUsername(),
+  // lib/createValidation.js/lib/recordActions.js) là điều kiện DUY NHẤT cấp quyền quản lý lớp học qua
+  // trainingInstruct (canManageTrainingClass(), lib/recordActions.js — so trực tiếp
+  // cls.instructorUsername === user.username) — chưa từng được cascade khi đổi tên/xoá username, cùng
+  // lớp lỗi với carRegs.assignedDriverUsername/officeReqs.techAssignedTo đã vá.
+  { collection: 'trainingClasses', field: 'instructorUsername' }
 ];
 async function cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, deletedUsernames) {
   if (!(renamed || []).length && !(deletedUsernames || []).length) return;

@@ -1,9 +1,39 @@
 # Phiên bản hiện tại
 
-**27.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.69** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.69 (2026-11): [TB] Re-audit lần 10 — mục 9/14: trainingClasses.instructorUsername không cascade username rename/xoá
+
+Mục thứ chín (9/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** username THÔ gán giảng viên (`trainingClasses.instructorUsername`, resolved qua
+`resolveTrainingInstructorUsername()` lúc tạo/sửa lớp — lib/createValidation.js/lib/recordActions.js)
+là điều kiện DUY NHẤT cấp quyền `trainingInstruct` quản lý lớp học
+(`canManageTrainingClass()`/`cls.instructorUsername === user.username`, lib/recordActions.js) — chưa
+từng được cascade khi đổi tên/xoá username, cùng lớp lỗi với `carRegs.assignedDriverUsername`/
+`officeReqs.techAssignedTo` đã vá ở re-audit lần 9. Hậu quả: đổi tên đăng nhập giảng viên đang phụ
+trách 1 lớp -> MẤT NGAY quyền quản lý lớp đó của chính mình; xoá vĩnh viễn rồi cấp lại username cho
+nhân viên MỚI -> nhân viên đó THỪA KẾ quyền quản lý lớp của giảng viên CŨ.
+
+**Bản vá:** thêm `{ collection: 'trainingClasses', field: 'instructorUsername' }` vào
+`SINGLE_USERNAME_ASSIGNMENT_FIELDS` (lib/catalogRename.js) — hàm `cascadeUsernameChangesToCarDriverAndOfficeReqTech()`
+đã lặp generic qua mảng này và đã được wire sẵn vào `routes/data.js`, không cần sửa thêm gì khác.
+
+**Test:** mở rộng `tests/test-cardriver-officereqtech-username-cascade.js` (có sẵn, test thuần không
+cần SQL Server) thêm fixture `trainingClasses` + 3 scenario mới: đổi tên cascade đúng
+`instructorUsername` (giữ nguyên field hiển thị `instructor`); xoá vĩnh viễn null hoá
+`instructorUsername`; bản ghi chưa gán giảng viên không đổi gì. Xác nhận 2/9 scenario mới FAIL đúng
+trên code cũ (7/9 tổng), 9/9 PASS trên code mới. Chạy lại regression 5 file cascade username liên quan
+(`test-managerusername-rename-delete-cascade.js`, `test-uniformtransfer-requestedby-username-cascade.js`,
+`test-operationworkitem-assignment-username-cascade.js`, `test-forwardthreads-username-cascade.js`,
+`test-submission-opinion-requestees-username-cascade.js`) — tất cả PASS, không regression. Tự kiểm cú
+pháp (`node -c lib/catalogRename.js`) — không đụng HTML/JS client ở bản vá này.
+
+**Ảnh hưởng deploy:** chỉ sửa `lib/catalogRename.js`, không đổi `schema.sql`/`.env.example`/
+dependencies — copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.68 (2026-11): [TB] Re-audit lần 10 — mục 8/14: PATCH by-code thiếu chặn tự sửa disciplinaryActions/transfers
 
