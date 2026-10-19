@@ -7,7 +7,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { getAllAppData } = require('../lib/appData');
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
-const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction, resolveWorkflowStepApprovers, canApproveStep } = require('../lib/workflowEngine');
+const { MODULE_CONFIGS, WorkflowError, applyWorkflowAction, resolveWorkflowStepApprovers, canApproveStep, assertNotSelfDecidingWorkflowItem } = require('../lib/workflowEngine');
 const { assertUploadedFileUrl } = require('../lib/createValidation');
 const recordActions = require('../lib/recordActions');
 const { insertTask } = require('../lib/taskStore');
@@ -415,6 +415,7 @@ router.post('/:module/:id/extend-approval-deadline', async (req, res) => {
       if (!canApproveStep(freshUser, approvers, item.history, step)) {
         throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể gia hạn');
       }
+      assertNotSelfDecidingWorkflowItem(moduleKey, item, freshUser);
       const oldDate = item.desiredApprovalDate || null;
       if (oldDate && !(new Date(newDate).getTime() > new Date(oldDate).getTime())) {
         throw new WorkflowError(400, 'Ngày mong muốn phê duyệt mới phải sau ngày đã đặt trước đó');
@@ -532,6 +533,7 @@ router.post('/:module/:id/confirm-approval-extension', async (req, res) => {
       if (!canApproveStep(freshUser, approvers, item.history, step)) {
         throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể xác nhận gia hạn');
       }
+      assertNotSelfDecidingWorkflowItem(moduleKey, item, freshUser);
       const oldDate = item.desiredApprovalDate || null;
       item.desiredApprovalDate = pending.newDesiredApprovalDate;
       if (!Array.isArray(item.approvalDeadlineExtensions)) item.approvalDeadlineExtensions = [];
@@ -594,6 +596,7 @@ router.post('/:module/:id/reject-approval-extension', async (req, res) => {
       if (!canApproveStep(freshUser, approvers, item.history, step)) {
         throw new WorkflowError(403, 'Bạn không phải người phê duyệt bước hiện tại nên không thể từ chối gia hạn');
       }
+      assertNotSelfDecidingWorkflowItem(moduleKey, item, freshUser);
       item.pendingApprovalExtension = null;
       item._justRejectedExtension = { requestedBy: pending.requestedBy, rejectReason: rsn };
       return item;

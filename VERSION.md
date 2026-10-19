@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**27.66** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.67 (2026-11): [Cao] Re-audit lần 10 — mục 7/14: routes/workflow.js 3 route Gia Hạn Phê Duyệt thiếu chặn tự xử lý
+
+Mục thứ bảy (7/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** 3 route `POST /:module/:id/extend-approval-deadline`, `/confirm-approval-extension`,
+`/reject-approval-extension` (routes/workflow.js, chỉ áp dụng submissions/contracts — tính năng "Gia Hạn
+Ngày Mong Muốn Phê Duyệt") chỉ gác qua `canApproveStep()` — hàm này TỰ ĐỘNG trả `true` cho
+`user.perms?.admin` (đặc quyền vượt cấu hình approver, không liên quan gì tới việc có phải người
+tạo/trình hồ sơ hay không). Mọi hành động XỬ LÝ THẬT khác (APPROVE/REJECT/REQUEST_INFO/
+REQUEST_CHANGES/PROPOSE_FILE_REPLACEMENT) đều đi qua `applyWorkflowAction()`, hàm này gọi THÊM
+`assertNotSelfDecidingWorkflowItem()` ngay sau `canApproveStep()` để chặn CẢ admin tự xử lý hồ sơ do
+chính mình tạo/trình (quyết định "chặn admin tự duyệt ở TẤT CẢ module", CLAUDE.md 11/2026) — 3 route gia
+hạn này được thêm SAU quyết định đó nhưng bị sót, không gọi hàm chặn này. Hậu quả: admin tự trình 1 Văn
+Bản Trình/Hợp Đồng rồi tự gia hạn ngày mong muốn phê duyệt TRỰC TIẾP, hoặc tự xác nhận/từ chối đề nghị
+gia hạn do người khác (được chuyển tiếp xin ý kiến) gửi lên — trên hồ sơ CHÍNH MÌNH tạo, không ai khác
+giám sát/xác nhận lại.
+
+**Bản vá:** import thêm `assertNotSelfDecidingWorkflowItem` từ `lib/workflowEngine`, gọi
+`assertNotSelfDecidingWorkflowItem(moduleKey, item, freshUser)` ngay sau nhánh `canApproveStep()` ở cả 3
+route (đúng vị trí `applyWorkflowAction()` gọi), KHÔNG đụng route `request-approval-extension` (route
+này gác theo `forwardedTo`, không dùng `canApproveStep()`/admin-bypass nên không thuộc lớp lỗi này).
+
+**Test:** mở rộng `tests/test-approval-extension-routes.js` (có sẵn, mount `routes/workflow.js` thật qua
+HTTP) thêm 5 scenario mới (`[Vá #216]`): admin là người tạo hồ sơ tự gia hạn trực tiếp -> 403; approver
+KHÔNG-admin trùng với người tạo hồ sơ tự gia hạn -> 403; admin là người tạo tự confirm/reject đề nghị
+gia hạn của chính mình -> 403 (cả 2); admin KHÔNG phải người tạo vẫn gia hạn được bình thường (không
+chặn oan) -> 200. Xác nhận 4/5 scenario mới FAIL đúng trên code cũ (17/21 tổng), 21/21 PASS trên code
+mới. Chạy lại regression: `test-approval-extension-create-validation.js` (7/7),
+`test-forward-opinion-workflow.js` (16/16), `test-approval-email-config.js` (85/85),
+`test-approval-needed-email-template.js` (6/6) — tất cả PASS, không regression. Tự kiểm cú pháp
+(`node -c routes/workflow.js`) — không đụng HTML/JS client ở bản vá này.
+
+**Ảnh hưởng deploy:** chỉ sửa `routes/workflow.js`, không đổi `schema.sql`/`.env.example`/dependencies —
+copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.66 (2026-11): [Cao] Re-audit lần 10 — mục 6/14: Khối-0 zero-out loop xoá luôn dữ liệu Nhóm Phê Duyệt Cuối cho 5 module
 
