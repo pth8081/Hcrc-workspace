@@ -20,6 +20,10 @@ const CREATOR = { username: 'nv_kd', name: 'Nhân Viên KD', dept: 'Phòng Kinh 
   phone: '0900000001', email: 'nv_kd@company.com', jobTitle: 'Nhân viên', perms: { meetingBook: true }, active: true };
 const OUTSIDER = { username: 'nv_khac', name: 'Nhân Viên Khác', dept: 'Phòng Kỹ Thuật', role: 'STAFF',
   phone: '0900000002', email: 'nv_khac@company.com', jobTitle: 'Nhân viên', perms: { meetingBook: true }, active: true };
+// "Người quản lý phòng họp" (meetingCancel, KHÔNG phải admin) — phòng ban KHÁC với MEETING_PENDING
+// (Phòng Kinh Doanh), đúng kịch bản tái hiện lỗi #meetingDept bị khoá sai (re-audit lần 9, mức TB).
+const MEETING_MANAGER = { username: 'ql_phonghop', name: 'Quản Lý Phòng Họp', dept: 'Phòng Kỹ Thuật', role: 'STAFF',
+  phone: '0900000003', email: 'ql_phonghop@company.com', jobTitle: 'Nhân viên', perms: { meetingCancel: true }, active: true };
 
 const MEETING_PENDING = {
   id: 1, code: 'PH-001', dept: 'Phòng Kinh Doanh', room: 'Phòng Họp Lớn A', title: 'Họp KD tuần',
@@ -35,7 +39,7 @@ const MEETING_CANCELLED = {
 async function main() {
   const state = createMockState({
     depts: ['Phòng Kinh Doanh', 'Phòng Kỹ Thuật'],
-    users: [CREATOR, OUTSIDER],
+    users: [CREATOR, OUTSIDER, MEETING_MANAGER],
     meetings: [MEETING_PENDING, MEETING_CANCELLED],
     meetingRooms: [{ id: 1, name: 'Phòng Họp Lớn A', short: 'A' }, { id: 2, name: 'Phòng Họp Nhỏ B', short: 'B' }]
   });
@@ -123,6 +127,35 @@ async function main() {
       assertEqual(result.editingId, null);
       assertEqual(result.putCalls, 0, 'Hủy Sửa không được gọi API nào');
       assertEqual(result.bannerHidden, true);
+    });
+
+    // LỖI ĐÃ VÁ (re-audit lần 9, mức TB — "core.js #meetingDept khoá sai cho meetingCancel non-admin
+    // khi sửa phòng ban khác"): #meetingDept lúc mở FORM (populate ở login) chỉ đổ đúng phòng ban của
+    // NGƯỜI ĐANG ĐĂNG NHẬP — "Người quản lý phòng họp" (meetingCancel, KHÔNG phải admin/creator) sửa
+    // lịch của 1 phòng ban KHÁC thì m.dept không nằm trong option nào, gán .value thất bại thầm lặng
+    // (đọc lại ra ""). editMeeting() giờ phải đổ lại ĐẦY ĐỦ danh mục trước khi gán value khi người sửa
+    // không phải chính creator.
+    await run.run('editMeeting(): "Người quản lý phòng họp" (meetingCancel, phòng ban KHÁC) sửa lịch của phòng ban khác -> #meetingDept đọc lại ĐÚNG giá trị (không bị rơi về rỗng)', async () => {
+      await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, MEETING_MANAGER);
+      await page.evaluate(() => switchTab('meeting'));
+      await page.waitForTimeout(100);
+      await page.evaluate(() => editMeeting(1));
+      await page.waitForTimeout(50);
+      const result = await page.evaluate(() => ({
+        editingId: editingMeetingId,
+        deptValue: document.getElementById('meetingDept').value,
+        deptDisabled: document.getElementById('meetingDept').disabled,
+        deptOptionCount: document.getElementById('meetingDept').options.length
+      }));
+      assertEqual(result.editingId, 1);
+      assertEqual(result.deptValue, 'Phòng Kinh Doanh', 'Phải giữ đúng giá trị phòng ban của lịch đang sửa, KHÔNG rơi về rỗng');
+      assertEqual(result.deptDisabled, false, 'KHÔNG được khoá select khi người sửa không phải chính creator');
+      assert(result.deptOptionCount >= 2, `Phải đổ đủ danh mục (>= 2 phòng ban), got ${result.deptOptionCount}`);
+      // Dọn lại trạng thái + đăng nhập lại CREATOR cho các scenario phía sau (vốn giả định currentUser = CREATOR).
+      await page.evaluate(() => cancelEditMeeting());
+      await page.evaluate(async (u) => { window.__resetCapture(); await proceedAfterAuth(u); }, CREATOR);
+      await page.evaluate(() => switchTab('meeting'));
+      await page.waitForTimeout(100);
     });
 
     await run.run('renderMeetings(): creator thấy nút "✏️ Sửa" trong dropdown "Khác ▾" của lịch PENDING của chính mình', async () => {
