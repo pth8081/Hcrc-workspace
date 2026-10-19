@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**27.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.56** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.56 (2026-11): [Thấp] Re-audit lần 9 — mục 8/12: openBosungEditModal() docs không khoá Dept/Phân Loại khi sửa version
+
+Mục thứ tám (8/12) của đợt re-audit lần 9.
+
+**Nguyên nhân:** `editDocDraft()` (`lib/recordActions.js:482-488`) chặn hẳn đổi Phòng Ban/Phân Loại cho
+PHIÊN BẢN của 1 tài liệu đã có (`item.rootDocId != null`, ép giữ nguyên theo tài liệu gốc — vì docs
+KHÔNG snapshot quy trình duyệt, đổi dept lúc "Sửa & Gửi Lại" sẽ né được chính người vừa yêu cầu bổ
+sung). Nhưng `openBosungEditModal()` (`public/js/core.js`, nhánh `docs`, dòng ~7835-7849) luôn render
+`#bsDept`/`#bsCat` ở dạng select BẬT bất kể `item.rootDocId` — người dùng chọn 1 giá trị khác rồi bấm
+Lưu mới nhận lỗi 409 khó hiểu, thay vì được chặn rõ ràng ngay từ UI.
+
+**Bản vá:** khoá hẳn (`disabled`) 2 select này khi `item.rootDocId != null`, kèm 1 dòng chú thích giải
+thích lý do. `.value` đọc qua JS (`confirmBosungResubmit()`) không đổi khi select bị `disabled` (vẫn
+preselect đúng giá trị hiện tại), nên không ảnh hưởng gì tới payload gửi lên — tài liệu GỐC
+(`rootDocId == null`) giữ nguyên hành vi cũ, không bị khoá oan.
+
+**Test:** thêm Scenario 6b vào `tests/test-doc.js` (Playwright thật, 3 kịch bản — phiên bản bị khoá cả
+2 select, value vẫn đúng khi bị khoá, tài liệu gốc KHÔNG bị khoá oan). Xác nhận 1/24 scenario FAIL trên
+code cũ, 24/24 PASS trên code mới. Chạy lại regression: `test-meeting-car.js` (104/104),
+`test-office-budget.js` (27/27), `test-submission.js` (23/23), `test-operation-store-lifecycle.js`
+(100/100) — tất cả PASS, không có regression. Tự kiểm CSP (grep `on[a-z]+=`/` style=`/`javascript:`/
+`eval(`) trên đoạn HTML sửa — không khớp gì.
+
+**Ảnh hưởng deploy:** chỉ code `server/public/js/core.js`, không đổi `schema.sql`/biến môi trường/
+`package.json` dependencies — copy code + `pm2 restart` là đủ (file JS phía client, trình duyệt tự tải
+lại bản mới ở lượt truy cập kế tiếp).
 
 ## v27.55 (2026-11): [TB] Re-audit lần 9 — mục 7/12: Thiếu chặn tự duyệt ở receiveOperationOrderGoods/cancelOperationOrderReceipt
 

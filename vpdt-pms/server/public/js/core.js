@@ -7834,12 +7834,26 @@ function openBosungEditModal(moduleKey, id) {
   let bodyHTML = '';
   if (moduleKey === 'docs') {
     const catOptionsHTML = (DB.cats || []).map(c => `<option value="${escapeHtml(c)}" ${c === item.cat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+    // LỖI ĐÃ VÁ (re-audit lần 9, mức Thấp — "openBosungEditModal() docs không khoá Dept/Phân Loại khi
+    // sửa version"): editDocDraft() (lib/recordActions.js:482-488) chặn đổi dept/cat cho PHIÊN BẢN
+    // (item.rootDocId != null, ép giữ nguyên theo tài liệu gốc), nhưng UI vẫn luôn render 2 select này
+    // ở dạng BẬT — người dùng chọn 1 giá trị khác rồi bấm Lưu mới nhận lỗi 409 khó hiểu ("Phiên bản của
+    // 1 tài liệu đã có không được đổi Phòng Ban/Phân Loại khác với tài liệu gốc"), thay vì được chặn rõ
+    // ràng ngay từ UI. Khoá hẳn (disabled) 2 select này khi là PHIÊN BẢN — value vẫn đúng item.dept/cat
+    // (preselected), .value đọc qua JS (confirmBosungResubmit()) không đổi khi select bị disabled, nên
+    // không ảnh hưởng gì tới payload gửi lên. Tài liệu GỐC (rootDocId == null) giữ nguyên hành vi cũ.
+    const isVersion = item.rootDocId != null;
+    const deptCatDisabledAttr = isVersion ? 'disabled' : '';
+    const deptCatNote = isVersion
+      ? '<p class="text-gray-500 italic text-xs mt-1">Phiên bản của 1 tài liệu đã có — Phòng ban/Phân loại phải giữ nguyên theo tài liệu gốc, không sửa được ở đây.</p>'
+      : '';
     bodyHTML = `
       <div><label class="block font-semibold mb-1">Tiêu đề</label><input id="bsTitle" class="w-full border p-2 rounded" value="${escapeHtml(item.title || '')}"></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="block font-semibold mb-1">Phòng ban trình</label><select id="bsDept" class="w-full border p-2 rounded bg-white">${deptOptionsHTML}</select></div>
-        <div><label class="block font-semibold mb-1">Phân loại</label><select id="bsCat" class="w-full border p-2 rounded bg-white">${catOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Phòng ban trình</label><select id="bsDept" class="w-full border p-2 rounded bg-white" ${deptCatDisabledAttr}>${deptOptionsHTML}</select></div>
+        <div><label class="block font-semibold mb-1">Phân loại</label><select id="bsCat" class="w-full border p-2 rounded bg-white" ${deptCatDisabledAttr}>${catOptionsHTML}</select></div>
       </div>
+      ${deptCatNote}
       <div><label class="block font-semibold mb-1">Phiên bản</label><input id="bsVer" class="w-full border p-2 rounded" value="${escapeHtml(item.ver || '')}"></div>
       <div><label class="block font-semibold mb-1">Trích lục / Tóm tắt</label><textarea id="bsSummary" class="w-full border p-2 rounded h-20">${escapeHtml(item.summary || '')}</textarea></div>
       <div>
