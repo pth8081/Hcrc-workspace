@@ -1175,6 +1175,51 @@ async function cascadeUsernameChangesToRecordApproverSnapshots(renamed, deletedU
   }
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 9, mức Cao — "Cascade username rename/xoá không phủ creator/uploader/
+// assignedBy"): 3 cascade username ở trên (cascadeUsernameChangesToApprovalGroups/WorkflowApprovers/
+// RecordApproverSnapshots) chỉ phủ field QUYẾT ĐỊNH NGƯỜI DUYỆT — hoàn toàn không chạm field "ai TẠO/
+// TẢI LÊN hồ sơ" (creator/uploader/author/createdBy/uploaderUsername/referrerUsername tuỳ module — xem
+// `creatorField` đã khai sẵn ở từng entry CREATE_MODULE_CONFIGS, lib/createValidation.js), là field
+// QUYẾT ĐỊNH QUYỀN XEM ở rất nhiều hàm canView*() (lib/recordViewScope.js — canViewDoc()/
+// canViewItSupportTicket()/canViewItPriceApproval()/canViewVppRegistration()/... so khớp
+// `item.<creatorField> === user.username`). Hậu quả 2 chiều: (1) đổi username -> MẤT quyền xem hồ sơ
+// CHÍNH MÌNH đã tạo (ảnh hưởng rộng nhất ở các module mặc định CREATOR_ONLY — Tài Liệu/Hỗ Trợ IT/Phê
+// Duyệt Giá/VPP/Văn Bản Trình...); (2) xoá vĩnh viễn rồi CẤP LẠI đúng username đó cho 1 nhân viên khác
+// -> nhân viên MỚI "thừa kế" nhầm quyền xem hồ sơ CREATOR_ONLY của người CŨ (so khớp chuỗi creator
+// trùng). Dùng LẠI chính metadata `creatorField`/`dbKey` đã có sẵn (require trễ — createValidation.js
+// KHÔNG require catalogRename.js nên không có vòng lặp) — KHÔNG hard-code lại danh sách field/collection
+// tay, tự động khớp mọi module hiện có VÀ module mới thêm sau này miễn có khai `creatorField`. Đổi tên
+// -> giữ đúng người (an toàn); xoá vĩnh viễn -> null hoá (gỡ "người tạo", không suy đoán ai thay thế),
+// cùng khuôn cascadeUsernameChangesToProfiles() (lib/employeeProfile.js) đã làm cho employeeProfiles.
+// username. "tasks" (Công Việc) KHÔNG nằm trong CREATE_MODULE_CONFIGS (tầng lưu trữ riêng, dbo.Tasks) —
+// xử lý riêng ở cascadeUsernameChangesToTaskAssignedBy() (lib/taskStore.js), gọi cùng chỗ ở routes/data.js.
+async function cascadeUsernameChangesToRecordCreatorFields(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  const { CREATE_MODULE_CONFIGS } = require('./createValidation');
+  const fieldByCollection = new Map();
+  for (const config of Object.values(CREATE_MODULE_CONFIGS)) {
+    if (config?.dbKey && config.creatorField && !fieldByCollection.has(config.dbKey)) {
+      fieldByCollection.set(config.dbKey, config.creatorField);
+    }
+  }
+  for (const [collection, field] of fieldByCollection) {
+    await renameFieldValueInCollection(collection, (item) => {
+      const current = item[field];
+      if (current == null) return item;
+      let next = current;
+      for (const { oldValue, newValue } of renamed || []) {
+        if (current === oldValue) { next = newValue; break; }
+      }
+      if (next === current) {
+        for (const deletedUsername of deletedUsernames || []) {
+          if (current === deletedUsername) { next = null; break; }
+        }
+      }
+      return next === current ? item : { ...item, [field]: next };
+    });
+  }
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1184,5 +1229,6 @@ module.exports = {
   renameCatalogEntry, cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeStoreRename, cascadeCustomPosTypeJobTitleRename,
   cascadeNganhHangCodeRename, diffNganhHangCatalogRenames,
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
-  cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots
+  cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
+  cascadeUsernameChangesToRecordCreatorFields
 };

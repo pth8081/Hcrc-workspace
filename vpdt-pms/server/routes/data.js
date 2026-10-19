@@ -11,7 +11,7 @@ const { encryptSecret } = require('../lib/emailCrypto');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
-const { getAllTasksCached } = require('../lib/taskStore');
+const { getAllTasksCached, cascadeUsernameChangesToTaskAssignedBy } = require('../lib/taskStore');
 const { getAllWorkItemsCached } = require('../lib/operationWorkItemStore');
 const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2382,6 +2382,13 @@ router.post('/:key', async (req, res) => {
       // VÁ, re-audit lần 8, mức Cao — xem chú thích đầy đủ tại
       // cascadeUsernameChangesToRecordApproverSnapshots() (lib/catalogRename.js).
       await cascadeUsernameChangesToRecordApproverSnapshots(renamed, deletedUsernames);
+      // creator/uploader/author/createdBy/... (ai TẠO hồ sơ — field quyết định quyền XEM ở rất nhiều
+      // canView*() CREATOR_ONLY, lib/recordViewScope.js) + Công Việc.assignedBy (tầng lưu trữ riêng,
+      // dbo.Tasks) — LỖI ĐÃ VÁ, re-audit lần 9, mức Cao — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToRecordCreatorFields() (lib/catalogRename.js) và
+      // cascadeUsernameChangesToTaskAssignedBy() (lib/taskStore.js).
+      await cascadeUsernameChangesToRecordCreatorFields(renamed, deletedUsernames);
+      await cascadeUsernameChangesToTaskAssignedBy(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
