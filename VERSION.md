@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**27.67** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.68** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.68 (2026-11): [TB] Re-audit lần 10 — mục 8/14: PATCH by-code thiếu chặn tự sửa disciplinaryActions/transfers
+
+Mục thứ tám (8/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** `PATCH /api/hr-profile/by-code/:employeeCode` (route HR/admin sửa hồ sơ,
+routes/employeeProfile.js) chỉ đòi `canEditProfiles()` (hrProfileManage/hrProfileEdit) — KHÔNG có chặn
+nào nếu hồ sơ đang sửa lại CHÍNH LÀ hồ sơ đã liên kết tài khoản của NGƯỜI ĐANG THỰC HIỆN hành động.
+2 field `disciplinaryActions`/`transfers` (HR_ONLY_EDITABLE_FIELDS) GHI ĐÈ TOÀN BỘ mảng mỗi lần lưu
+(`applyProfileEdit()`, lib/employeeProfile.js) — 1 nhân viên có `hrProfileEdit` (để duy trì hồ sơ nhân
+sự nói chung, KHÔNG cần admin) có thể tự XOÁ TRẮNG lịch sử kỷ luật của chính mình (gửi
+`disciplinaryActions: []`), hoặc tự CHÈN THÊM 1 dòng "Bổ nhiệm/Điều động" giả cho chính mình — cùng lớp
+lỗi với `assertNotSelfAssigningPosition()` (re-audit lần 5, "hrProfileEdit tự gán chức vụ cho chính
+mình") nhưng bị sót vì đó chỉ chặn field vị trí chính thức/kiêm nhiệm, không chặn 2 field này.
+
+**Bản vá:** thêm `assertNotSelfEditingDisciplinaryOrTransfers(profile, actorUsername, touchedFields)`
+(lib/employeeProfile.js), gọi NGAY ĐẦU `applyProfileEdit()` (trước khi mutate bất kỳ field nào) — chặn
+CỨNG (403) khi `profile.username === actorUsername` VÀ payload có đụng tới `disciplinaryActions` hoặc
+`transfers`, không phân biệt actor có admin hay không (cùng khuôn mọi `assertNotSelfDecidingXxx()`
+khác, quyết định 11/2026 "Chặn admin tự duyệt ở TẤT CẢ module"). Actor chỉ có `hrOnboardingManage`
+(đường onboarding queue) đã bị loại 2 field này khỏi `ONBOARDING_QUEUE_EDITABLE_FIELDS` từ trước, không
+bị ảnh hưởng thêm.
+
+**Test:** mở rộng `tests/test-hrprofile-self-position-assign.js` (có sẵn, gọi thẳng hàm lib — cùng khuôn
+test `assertNotSelfAssigningPosition()`) thêm 5 scenario mới: actor tự xoá trắng kỷ luật của chính mình
+-> 403; actor tự thêm 1 dòng Bổ nhiệm/Điều động cho chính mình -> 403; HR khác ghi nhận cho hồ sơ người
+khác vẫn hoạt động bình thường; hồ sơ chưa liên kết tài khoản (username null) không có khái niệm "tự
+sửa"; actor sửa field KHÁC trên hồ sơ của chính mình không bị chặn oan. Xác nhận 2/10 scenario mới FAIL
+đúng trên code cũ (8/10 tổng), 10/10 PASS trên code mới. Chạy lại regression 17 file test Hồ Sơ Nhân Sự
+liên quan (test-hr-profile*.js, test-hr-onboarding-*.js, test-audit-nhansu-hoso.js,
+test-edit-file-ownership-batch2.js, test-hr-reports-weekly-monthly-transfers.js) — tất cả PASS, không
+regression (1 file `test-hr-discipline-jobgrade-resignation.js` crash ở 1 lỗi KHÔNG liên quan —
+`collection.find is not a function` ở `lib/createValidation.js` nhánh offboarding — đã xác nhận crash
+GIỐNG HỆT trên cả code cũ, không phải do bản vá này gây ra). Tự kiểm cú pháp (`node -c`) cả 2 file.
+
+**Ảnh hưởng deploy:** chỉ sửa `lib/employeeProfile.js`, không đổi `schema.sql`/`.env.example`/
+dependencies — copy code + `pm2 restart` là đủ, không cần thao tác gì thêm.
 
 ## v27.67 (2026-11): [Cao] Re-audit lần 10 — mục 7/14: routes/workflow.js 3 route Gia Hạn Phê Duyệt thiếu chặn tự xử lý
 
