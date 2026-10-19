@@ -14,9 +14,9 @@
 <meta name="apple-mobile-web-app-title" content="HCRC WS">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="icon" href="/icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Font "Inter": TỰ LƯU TRÊN SERVER qua @font-face trong app.css (public/fonts/inter/*.woff2), KHÔNG
+     còn tải qua Google Fonts CDN (11/2026, cùng lý do với Tailwind ngay dưới đây — mạng nội bộ/tường
+     lửa công ty có thể chặn fonts.googleapis.com/fonts.gstatic.com) — không còn <link> nào ở đây nữa. -->
 <!-- Tailwind: file build TĨNH tự lưu trên server (KHÔNG còn tải qua cdn.tailwindcss.com lúc chạy) — xem
      server/tailwind.config.js + npm script "build:css" ở server/package.json. Lý do đổi: mạng nội bộ/tường
      lửa công ty chặn cdn.tailwindcss.com sẽ khiến TOÀN BỘ class Tailwind mất tác dụng ngay lập tức (các
