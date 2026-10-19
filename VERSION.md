@@ -1,9 +1,50 @@
 # Phiên bản hiện tại
 
-**27.59** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.60** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.60 (2026-11): [Thấp] Re-audit lần 9 — mục 12/12 (hoàn tất đợt 4/5): submissions[].opinionRequestees không cascade username
+
+Mục thứ mười hai (12/12), HOÀN TẤT đợt re-audit lần 9 (đợt 4/5 theo yêu cầu rà soát 5 đợt liên tiếp).
+
+**Nguyên nhân:** `submissions[].opinionRequestees` (mảng username admin gán tay, mời "Xin Ý Kiến" — lớp
+KHÔNG chặn quy trình, `blocking:false`, chỉ là kênh tham khảo song song — xem
+`canViewSubmissionWithoutForward()`/`canViewSubmission()`, `lib/recordViewScope.js`) so khớp RAW
+username (`sub.opinionRequestees.includes(user.username)`) nhưng hoàn toàn chưa được cascade khi đổi
+tên/xoá tài khoản — cùng lớp lỗi với `effectiveApprovers`/`extraApprovalLayers` (đã vá ở re-audit lần 8,
+`cascadeUsernameChangesToRecordApproverSnapshots()`) nhưng bị sót vì `opinionRequestees` không nằm
+trong 2 danh sách collection mà cascade đó quét (không phải field "quyết định ai duyệt", chỉ là mời xem
+tham khảo, nhưng vẫn so khớp username thô giống hệt). Hậu quả 2 chiều: (1) đổi tên đăng nhập -> mất
+quyền xem/cho ý kiến tờ trình ĐANG PENDING đã được mời (vẫn là cùng 1 người); (2) xoá vĩnh viễn rồi cấp
+LẠI đúng username cho 1 nhân viên khác -> nhân viên MỚI thừa kế nhầm quyền xem tờ trình đó.
+
+**Bản vá:** thêm `cascadeUsernameChangesToSubmissionOpinionRequestees()` (`lib/catalogRename.js`) — dùng
+lại `renameApproversUsernamesArray()` đã có sẵn (cùng khuôn mảng whitelist phẳng như
+`deptViewScopeConfig.extraViewers`), quét `submissions` qua `renameFieldValueInCollection()`: đổi tên ->
+giữ đúng vị trí trong mảng; xoá vĩnh viễn -> gỡ hẳn khỏi mảng (không có khái niệm null hoá như field
+1-giá-trị). Wire vào `routes/data.js`, gọi ngay sau `cascadeUsernameChangesToCarDriverAndOfficeReqTech()`
+trong cùng khối xử lý đổi tên/xoá `users`.
+
+**Test:** `tests/test-submission-opinion-requestees-username-cascade.js` (mới, 5 scenario, test thuần
+không cần SQL Server — stub `renameFieldValueInCollection()` bằng mảng in-memory, cùng khuôn
+`test-cardriver-officereqtech-username-cascade.js`) — xác nhận cascade đúng vị trí khi đổi tên, gỡ đúng
+khi xoá vĩnh viễn, bỏ qua an toàn với mảng rỗng/bản ghi cũ chưa có field này, không đổi gì khi username
+không liên quan. Xác nhận 5/5 FAIL trên code cũ (`... is not a function`), 5/5 PASS trên code mới. Chạy
+lại regression 7 file liên quan: `test-record-approver-snapshot-username-cascade.js` (7/7),
+`test-deptviewscope-extraviewers-username-cascade.js` (6/6), `test-cardriver-officereqtech-username-cascade.js`
+(5/5), `test-workflowapprover-username-cascade.js` (9/9), `test-approvalgroup-username-cascade.js` (4/4),
+`test-record-creator-field-username-cascade.js` (9/9), `test-submissions-scope.js` (7/7) — tất cả PASS,
+không có regression. Tự kiểm cú pháp (`node -c`) cả 2 file sửa + file test mới — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/catalogRename.js` + `routes/data.js`), không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
+
+**Tổng kết đợt re-audit lần 9 (đợt 4/5)**: đã vá đủ 12/12 lỗi phát hiện từ 6 agent song song rà soát
+toàn diện — 2 mức Cao (#191, #192), 7 mức Trung Bình (#193-197, #199-201), 3 mức Thấp (#198, #202, và
+mục đã gộp). Còn lại đúng 1 đợt rà soát cuối (lần 10, đợt 5/5) theo yêu cầu "rà soát 4-5 lần nữa rồi
+dừng, gửi báo cáo DOCX thống kê" trước khi tổng hợp báo cáo cuối.
 
 ## v27.59 (2026-11): [TB] Re-audit lần 9 — mục 11/12: Approval Hub client thiếu loại trừ tự-liên-quan cho Uniform/Shift-Swap
 

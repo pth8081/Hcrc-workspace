@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2397,6 +2397,10 @@ router.post('/:key', async (req, res) => {
       // viên độc lập xác nhận) — LỖI ĐÃ VÁ, re-audit lần 9, mức TB — xem chú thích đầy đủ tại
       // cascadeUsernameChangesToCarDriverAndOfficeReqTech() (lib/catalogRename.js).
       await cascadeUsernameChangesToCarDriverAndOfficeReqTech(renamed, deletedUsernames);
+      // submissions[].opinionRequestees (mảng username được mời "Xin Ý Kiến", lớp KHÔNG chặn quy
+      // trình) — LỖI ĐÃ VÁ, re-audit lần 9, mức Thấp — xem chú thích đầy đủ tại
+      // cascadeUsernameChangesToSubmissionOpinionRequestees() (lib/catalogRename.js).
+      await cascadeUsernameChangesToSubmissionOpinionRequestees(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
