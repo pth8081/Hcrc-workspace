@@ -1325,6 +1325,38 @@ async function cascadeUsernameChangesToSubmissionOpinionRequestees(renamed, dele
   });
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 10, mức Cao — "uniformTransfers.requestedBy không cascade username rename/
+// xoá"): uniformTransfers (điều chuyển kho Đồng Phục giữa 2 siêu thị) được tạo qua route RIÊNG
+// (POST /api/records/uniformTransfers/create, routes/records.js -> buildUniformTransfer(),
+// lib/recordActions.js) — KHÔNG nằm trong CREATE_MODULE_CONFIGS nên
+// cascadeUsernameChangesToRecordCreatorFields() ở trên (suy diễn field từ creatorField khai trong
+// CREATE_MODULE_CONFIGS) không phủ tới field `requestedBy` (ai xin điều chuyển). Hậu quả: field này là
+// đúng điều kiện duy nhất assertNotSelfDecidingUniformTransfer() (lib/recordActions.js) dùng để chặn
+// tự duyệt yêu cầu của chính mình (`transfer.requestedBy === user?.username`) — đổi tên đăng nhập
+// người yêu cầu khiến field cũ KHÔNG khớp username mới nữa, chặn tự duyệt mất tác dụng (người đó giờ tự
+// duyệt được yêu cầu của chính mình nếu có quyền uniformApprove/uniformManage); xoá vĩnh viễn rồi cấp
+// lại username cho nhân viên khác -> nhân viên MỚI bị hiểu nhầm là "chính người xin chuyển" (dù chỉ ảnh
+// hưởng theo hướng CHẶN thêm, không mở quyền). Đổi tên giữ nguyên; xoá vĩnh viễn null hoá (gỡ "người xin
+// điều chuyển", không suy đoán ai thay thế) — cùng khuôn 1-giá-trị như
+// cascadeUsernameChangesToCarDriverAndOfficeReqTech() ở trên.
+async function cascadeUsernameChangesToUniformTransferRequestedBy(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return;
+  await renameFieldValueInCollection('uniformTransfers', (item) => {
+    const current = item.requestedBy;
+    if (current == null) return item;
+    let next = current;
+    for (const { oldValue, newValue } of renamed || []) {
+      if (current === oldValue) { next = newValue; break; }
+    }
+    if (next === current) {
+      for (const deletedUsername of deletedUsernames || []) {
+        if (current === deletedUsername) { next = null; break; }
+      }
+    }
+    return next === current ? item : { ...item, requestedBy: next };
+  });
+}
+
 // cascadeStoreRename/cascadeCustomPosTypeJobTitleRename export riêng (ngoài renameCatalogEntry()) cho
 // routes/positionTypes.js tái dùng khi đổi tên 1 "địa điểm"/"chức danh" bên trong 1 Vị Trí Làm Việc TỰ
 // THÊM (không phải HO/STORE builtin) — giá trị đó KHÔNG nằm trong danh mục "stores"/"jobTitles" nên
@@ -1336,5 +1368,6 @@ module.exports = {
   cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames,
   cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots,
   cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers,
-  cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees
+  cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees,
+  cascadeUsernameChangesToUniformTransferRequestedBy
 };

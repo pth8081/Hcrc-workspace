@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**27.61** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.62** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.62 (2026-11): [Cao] Re-audit lần 10 — mục 2/14: uniformTransfers.requestedBy không cascade username rename/xoá
+
+Mục thứ hai (2/14) của đợt re-audit lần 10.
+
+**Nguyên nhân:** `uniformTransfers` (điều chuyển kho Đồng Phục giữa 2 siêu thị) được tạo qua route
+riêng (`POST /api/records/uniformTransfers/create` → `buildUniformTransfer()`, lib/recordActions.js),
+KHÔNG nằm trong `CREATE_MODULE_CONFIGS` nên `cascadeUsernameChangesToRecordCreatorFields()` (suy diễn
+field từ `creatorField` khai trong `CREATE_MODULE_CONFIGS`) không phủ tới field `requestedBy` (ai xin
+điều chuyển). Đây lại chính là điều kiện DUY NHẤT `assertNotSelfDecidingUniformTransfer()`
+(lib/recordActions.js) dùng để chặn tự duyệt (`transfer.requestedBy === user?.username`) — đổi tên
+đăng nhập người yêu cầu khiến field cũ KHÔNG khớp username mới, chặn tự duyệt mất tác dụng.
+
+**Bản vá:** thêm `cascadeUsernameChangesToUniformTransferRequestedBy()` (lib/catalogRename.js), quét
+`uniformTransfers` qua `renameFieldValueInCollection()`: đổi tên giữ nguyên; xoá vĩnh viễn null hoá
+(gỡ "người xin điều chuyển", không suy đoán ai thay thế) — cùng khuôn field 1-giá-trị như
+`cascadeUsernameChangesToCarDriverAndOfficeReqTech()`. Wire vào `routes/data.js`, gọi ngay sau
+`cascadeUsernameChangesToSubmissionOpinionRequestees()`.
+
+**Test:** `tests/test-uniformtransfer-requestedby-username-cascade.js` (mới, 5 scenario, test thuần
+không cần SQL Server). Xác nhận 5/5 FAIL trên code cũ (`... is not a function`), 5/5 PASS trên code
+mới. Chạy lại regression 5 file liên quan: `test-cardriver-officereqtech-username-cascade.js` (5/5),
+`test-record-creator-field-username-cascade.js` (9/9), `test-uniform-transfer-cancel.js` (8/8),
+`test-uniform.js` (38/38), `test-uniform-phase2.js` (28/28) — tất cả PASS, không có regression. Tự
+kiểm cú pháp (`node -c`) + CSP grep — OK.
+
+**Ảnh hưởng deploy:** chỉ code `server/` (`lib/catalogRename.js` + `routes/data.js`), không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies — copy code + `pm2 restart` là đủ.
 
 ## v27.61 (2026-11): [Cao] Re-audit lần 10 — mục 1/14: PATCH payslips/:id/details thiếu chặn tự duyệt/tự chỉnh lương
 
