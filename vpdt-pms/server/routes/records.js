@@ -1083,7 +1083,12 @@ async function deleteWithGuard(req, res, collection, guardFn) {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    await deleteRecordForCollection(collection, itemId, () => guardFn(freshUser), { username: freshUser.username, name: freshUser.name });
+    // LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "laborContracts: HR Contract Manager tự sửa/kích hoạt/chấm
+    // dứt HĐLĐ của chính mình"): trước đây guardFn chỉ nhận freshUser, không nhận item — route xoá
+    // laborContracts không thể tự kiểm assertNotSelfDecidingLaborContract(freshUser, item). Truyền thêm
+    // `item` cho guardFn (tham số thứ 2) — vô hại với các guardFn khác hiện có (chỉ nhận freshUser, bỏ
+    // qua tham số thừa).
+    await deleteRecordForCollection(collection, itemId, (item) => guardFn(freshUser, item), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `${collection}/${req.params.id}/delete`, err);
@@ -5375,6 +5380,7 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
       // đồng lao động của người khác. exemptFileUrls giữ nguyên fileUrl ĐANG CÓ trước khi sửa (không bắt
       // xác minh lại tệp cũ đã qua đúng bước duyệt hồ sơ này rồi) — chỉ chặn khi gắn tệp MỚI thuộc về ai
       // khác.
+      laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
       const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
       laborContract.applyManualEdit(item, req.body, freshUser.username, freshUser.name);
       await assertPayloadFileUrlsOwnedByUser({ fileUrl: item.fileUrl }, freshUser, { exemptFileUrls });
@@ -5425,6 +5431,7 @@ router.post('/laborContracts/apply-import', async (req, res) => {
           if (item.status !== 'ACTIVE' || String(item.employeeCode || '').trim().toLowerCase() !== employeeCode.toLowerCase()) {
             throw new HttpError(409, 'Hợp đồng không còn ở trạng thái ĐANG HIỆU LỰC (ACTIVE) — có thể đã bị đóng giữa lúc xem trước và lúc xác nhận, vui lòng tải lại và thử lại');
           }
+          laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
           laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
           return item;
         });
@@ -5495,6 +5502,7 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
             if (item.status !== 'ACTIVE' || String(item.employeeCode || '').trim().toLowerCase() !== employeeCode.toLowerCase()) {
               throw new HttpError(409, 'Hợp đồng không còn ở trạng thái ĐANG HIỆU LỰC (ACTIVE) — có thể đã bị đóng giữa lúc xem trước và lúc xác nhận, vui lòng tải lại và thử lại');
             }
+            laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
             laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
             return item;
           });
@@ -5611,8 +5619,10 @@ router.post('/laborContracts/:id/activate', async (req, res) => {
     const peekTarget = peekList.find(c => c.id === itemId);
     if (!peekTarget) throw new HttpError(404, 'Không tìm thấy hợp đồng lao động');
     const result = await withAppLock(`labor_contract_activate:${peekTarget.employeeCode}`, async () => {
-      const activated = await withLockedRecordForCollection('laborContracts', itemId, (item) =>
-        laborContract.applyActivateManual(item, freshUser.username));
+      const activated = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+        laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
+        return laborContract.applyActivateManual(item, freshUser.username);
+      });
       // Đóng hợp đồng ACTIVE KHÁC (nếu có, VD hợp đồng tạo tay hoàn toàn ngoài luồng Onboarding) của CÙNG
       // nhân viên thành SUPERSEDED — đảm bảo bất biến "chỉ 1 hợp đồng ACTIVE/nhân viên" cho cron cảnh báo
       // hết hạn (jobs/laborContractExpiryReminder.js) không bị nhầm lẫn nhiều hợp đồng active cùng lúc.
@@ -5643,6 +5653,7 @@ router.post('/laborContracts/:id/add-amendment', async (req, res) => {
     assertContractManage(freshUser);
     let amendment = null;
     const result = await withLockedRecordForCollection('laborContracts', itemId, async (item) => {
+      laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
       amendment = laborContract.addAmendment(item, req.body, freshUser.username, freshUser.name);
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu upload 10/2026, mức Trung bình — "giả mạo quyền sở hữu file"):
       // mỗi phụ lục là 1 "Tệp quyết định" MỚI hoàn toàn (không có tệp cũ để giữ nguyên/exempt).
@@ -5663,6 +5674,7 @@ router.post('/laborContracts/:id/status', async (req, res) => {
     const { freshUser } = await getFreshUser(req);
     assertContractManage(freshUser);
     const result = await withLockedRecordForCollection('laborContracts', itemId, (item) => {
+      laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
       laborContract.assertValidManualStatusTransition(item.status, req.body?.status);
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu cụm Nhân Sự, 10/2026, mức Thấp): terminationDate trước đây
       // nhận NGUYÊN chuỗi client gửi, không validate gì — lưu được "abc"/"9999-12-31"/ngày TRƯỚC cả
@@ -5688,7 +5700,10 @@ router.post('/laborContracts/:id/status', async (req, res) => {
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao): trước đây dùng deleteAdminOnly() (gác bằng cờ
 // admin chung) — giờ gác bằng ĐÚNG assertContractManage()/hrContractManage như mọi route thao tác khác
 // của laborContracts ở trên (edit/activate/add-amendment/status), xem chú thích đầy đủ ở deleteWithGuard().
-router.post('/laborContracts/:id/delete', (req, res) => deleteWithGuard(req, res, 'laborContracts', assertContractManage));
+router.post('/laborContracts/:id/delete', (req, res) => deleteWithGuard(req, res, 'laborContracts', (freshUser, item) => {
+  assertContractManage(freshUser);
+  laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
+}));
 
 // ===================== NHÂN SỰ > Công & Phép (Đợt 3/4 — xem lib/attendance.js) =====================
 

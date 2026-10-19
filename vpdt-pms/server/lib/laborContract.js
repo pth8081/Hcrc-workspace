@@ -56,6 +56,24 @@ function canManageContracts(user) {
   return !!user?.perms?.hrContractManage;
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 8, mức Cao — "laborContracts: HR Contract Manager tự sửa/kích hoạt/chấm dứt
+// HĐLĐ của chính mình"): 7 route hành động (edit/apply-import/apply-create-import 'overwrite'/activate/
+// add-amendment/status/delete, routes/records.js) trước đây CHỈ gọi canManageContracts() (quyền phẳng)
+// — không có khái niệm "không tự xử lý hồ sơ của chính mình" như mọi module nhạy cảm khác trong hệ
+// thống (Đào tạo, Tuyển dụng, Lộ trình thăng tiến, Onboarding đều đã có assertNotSelfXxx() tương ứng).
+// 1 người có hrContractManage có hợp đồng của chính mình trong hệ thống (employeeUsername khớp —
+// field DUY NHẤT quyết định "tự xem được", đã vá ở re-audit cụm Nhân Sự 10/2026, xem
+// lib/createValidation.js) có thể tự tăng lương/phụ cấp, tự đổi loại hợp đồng, tự kích hoạt hợp đồng
+// nháp có lợi, tự thêm phụ lục tăng lương, hoặc tự đổi trạng thái — không ai khác xác nhận. Chặn TUYỆT
+// ĐỐI (không có ngoại lệ admin — đúng khuôn assertNotSelfDecidingRecruitmentReferral()), chỉ áp dụng khi
+// employeeUsername đã được gán (hợp đồng "ngoài hệ thống"/chưa liên kết tài khoản luôn null, không ai
+// tự xem được nên không có rủi ro này).
+function assertNotSelfDecidingLaborContract(user, item) {
+  if (item?.employeeUsername && user?.username && item.employeeUsername === user.username) {
+    throw new HttpError(403, 'Bạn không thể tự sửa/kích hoạt/thay đổi hợp đồng lao động của chính mình');
+  }
+}
+
 // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Thấp) — xem chú thích đầy đủ tại
 // lib/employeeProfile.js::findProfile(): employeeCode không bắt buộc chữ hoa/thường khi HR gõ tay, nên
 // 2 hàm tra cứu theo employeeCode dưới đây cũng phải so khớp KHÔNG phân biệt hoa/thường như findProfile()
@@ -475,7 +493,7 @@ function assertValidManualStatusTransition(currentStatus, nextStatus) {
 module.exports = {
   CONTRACT_TYPES, STATUSES, POST_PROBATION_DECISIONS, MANUAL_EDITABLE_FIELDS, ALLOWANCE_FIELDS, ALLOWANCE_FIELD_LABELS,
   INCOME_FIELDS, INCOME_FIELD_LABELS, PROBATION_SALARY_RATES,
-  canManageContracts, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
+  canManageContracts, assertNotSelfDecidingLaborContract, findContractsByEmployeeCode, findActiveContractByEmployeeCode, findLatestContractForProcess,
   generateContractCode, defaultContract,
   buildProbationDraftPayload, applyActivateProbation, applyPostProbationDecision, applyOffboardingTermination,
   applyOnboardingCancelTermination,

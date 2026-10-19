@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.40 (2026-11): [Cao] Re-audit lần 8 — mục 2/10: laborContracts HR Contract Manager tự sửa/kích hoạt/chấm dứt HĐLĐ của chính mình
+
+Mục thứ hai (2/10) của đợt re-audit lần 8.
+
+**Nguyên nhân:** 7 route hành động của `laborContracts` (`edit`/`apply-import`/`apply-create-import`
+nhánh 'overwrite'/`activate`/`add-amendment`/`status`/`delete`, `routes/records.js`) chỉ gọi
+`assertContractManage()` (quyền phẳng `hrContractManage`) — không có khái niệm "không tự xử lý hồ sơ
+của chính mình" như mọi module nhạy cảm khác (Đào tạo, Tuyển dụng, Lộ trình thăng tiến, Onboarding đều
+đã có `assertNotSelfXxx()` tương ứng). 1 người có `hrContractManage` có hợp đồng của chính mình trong
+hệ thống (`employeeUsername` khớp — field DUY NHẤT quyết định "tự xem được", đã vá ở re-audit cụm Nhân
+Sự 10/2026) có thể tự tăng lương/phụ cấp, tự đổi loại hợp đồng, tự kích hoạt hợp đồng nháp có lợi, tự
+thêm phụ lục tăng lương, hoặc tự đổi trạng thái (kể cả tự "chấm dứt" để hưởng trợ cấp) — không ai khác
+xác nhận.
+
+**Vá:** thêm `lib/laborContract.js::assertNotSelfDecidingLaborContract(user, item)` (chặn TUYỆT ĐỐI,
+không có ngoại lệ admin — cùng khuôn `assertNotSelfDecidingRecruitmentReferral()`), gọi ở cả 7 route
+trên. Route `delete` dùng chung `deleteWithGuard()` — hàm này trước đây chỉ truyền `freshUser` cho
+`guardFn`, không truyền `item`; sửa để truyền thêm `item` (tham số thứ 2, vô hại với các `guardFn` khác
+hiện có vì chúng chỉ nhận 1 tham số, bỏ qua tham số thừa) để route xoá `laborContracts` tự kiểm được.
+
+**Test:** file mới `tests/test-labor-contract-self-processing.js` (16 scenario, Phần A gọi trực tiếp
+`assertNotSelfDecidingLaborContract()`, Phần B dựng Express app thật qua `routes/create.js`+
+`routes/records.js`, in-memory recordStore): tự sửa/kích hoạt/thêm phụ lục/đổi trạng thái/xoá/sửa qua
+Excel hàng loạt hợp đồng của CHÍNH MÌNH đều bị chặn 403 (hoặc skip rõ ràng ở `apply-import`), đối chứng
+cùng hành động trên hợp đồng NGƯỜI KHÁC vẫn thành công bình thường, đối chứng `employeeUsername` null
+(hợp đồng ngoài hệ thống/chưa liên kết) không bị chặn nhầm. Xác nhận FAIL trên code CŨ (`git stash`,
+9/16 scenario FAIL), PASS trên code đã vá (16/16). Regression: 10 file test `laborContracts` hiện có
+(`test-labor-contract.js` 27/27, `test-labor-contract-allowances.js` 10/10,
+`test-labor-contract-code-after-delete.js` 6/6, `test-labor-contract-code-race.js` 4/4,
+`test-labor-contract-create-import.js` 19/19, `test-labor-contract-employeecode-case-insensitive.js`
+7/7, `test-labor-contract-expiry-reminder-recipients.js` 2/2,
+`test-labor-contract-import-race-active-check.js` 3/3, `test-labor-contract-income-fields.js` 13/13,
+`test-onboarding-cancel-labor-contract-cleanup.js` 5/5) + 1 file xác nhận `deleteWithGuard()` dùng
+chung (`internalPosts`/...) không bị ảnh hưởng bởi thay đổi chữ ký (`test-audit-round2-internalcomms-
+training-routes.js` 21/21) — toàn bộ PASS, không regression.
+
+**Deploy-impact:** không cần thao tác gì ngoài copy code + `pm2 restart`.
 
 ## v27.39 (2026-11): [Cao] Re-audit lần 8 — mục 1/10: hrProcesses OFFBOARDING tự tạo + tự xử lý quy trình nghỉ việc của chính mình
 
