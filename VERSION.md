@@ -1,9 +1,49 @@
 # Phiên bản hiện tại
 
-**27.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.48 (2026-11): [Thấp] Re-audit lần 8 — mục 10/10 (HẾT đợt 3/5): hrProcesses.employeeJobTitle không cascade khi đổi tên Chức Danh
+
+Mục thứ mười (10/10, HẾT toàn bộ) của đợt re-audit lần 8 (3/5 của yêu cầu "rà soát 4-5 lần").
+
+**Nguyên nhân:** `hrProcesses.employeeJobTitle` (`lib/createValidation.js`, snapshot "Chức Danh" của
+nhân viên tại thời điểm tạo quy trình Onboarding/Offboarding, chỉ dùng hiển thị ở hàng đợi Onboarding/
+lịch sử — KHÔNG dùng cho bất kỳ kiểm tra quyền nào) hoàn toàn không nằm trong bất kỳ cascade nào khi đổi
+tên danh mục Chức Danh (`jobTitles`/`storeJobTitles`) — khác `employeeProfiles.jobTitle` đã được
+`cascadeEmployeeProfilesJobTitle()` xử lý từ lâu. Đổi tên 1 chức danh để lại hồ sơ hrProcesses cũ hiện
+tên CHỨC DANH ĐÃ KHÔNG CÒN TỒN TẠI trong danh mục.
+
+**Vá:** thêm `lib/catalogRename.js::cascadeHrProcessEmployeeJobTitleRename(oldValue, newValue)` (dùng
+`renameFieldValueInCollection('hrProcesses', ...)` — hrProcesses đã thuộc `MIGRATED_COLLECTIONS`), gọi
+GIỐNG NHAU từ CẢ `cascadeJobTitleRename()` (jobTitles, nguồn HO) LẪN `cascadeStoreJobTitleRename()`
+(storeJobTitles, nguồn Siêu Thị) — KHÔNG phân biệt theo `employeePosType` như
+`cascadeEmployeeProfilesJobTitle()`, vì nhánh OFFBOARDING cố ý gán `employeePosType = null` (snapshot
+lúc tạo, không có khái niệm "vị trí hiện tại" rõ ràng) nên không có cơ sở lọc theo nguồn danh mục — cùng
+khuôn `cascadePositionPairs('jobTitle', ...)`/`cascadeMixedApprovalRuleJobTitle()` đã gọi giống nhau từ
+cả 2 hàm từ trước (field hiển thị thuần, không phân biệt nguồn).
+
+**Test:** `tests/test-catalog-rename-server.js` — thêm fixture `hrProcesses` (1 dòng Onboarding
+posType=HO, 1 dòng Offboarding posType=null, 1 dòng không liên quan) + 2 scenario mới: đổi tên
+`jobTitles`/`storeJobTitles` phải cascade đúng vào `employeeJobTitle` (kể cả dòng Offboarding
+posType=null), dòng không liên quan giữ nguyên. Xác nhận FAIL trên code CŨ (30/32, đúng 2 scenario mới
+sai), PASS trên code đã vá (32/32). Regression: `test-congphep-checklist-structure-validate.js`/
+`test-position-types.js`/`test-job-title-grade-default.js`/`test-mixed-approval-jobtitle-dept.js`/
+`test-mixed-approval-jobtitle-mix.js`/`test-hr-profile-identity-jobtitle-source.js`/
+`test-catalog-rename-locked-accounts.js`/`test-catalog-rename-position-pairs.js`/
+`test-catalog-rename-round2-extras.js`/`test-hrprocess-offboarding-self-process.js` — toàn bộ PASS.
+
+**Deploy-impact:** không đổi route/API contract, không cần migrate dữ liệu — chỉ copy code +
+`pm2 restart`.
+
+---
+
+**Tổng kết đợt re-audit lần 8 (6 agent song song, đợt 3/5 của yêu cầu "rà soát 4-5 lần rồi gửi báo
+cáo"):** 10/10 finding đã vá xong (v27.39→v27.48) — 5 mức Cao (#180-184), 3 mức Trung Bình (#185-187),
+1 mức Thấp-TB (#188), 1 mức Thấp (#189). Còn 2/5 đợt re-audit nữa (lần 9, lần 10) theo đúng yêu cầu
+trước khi dừng lại và gửi báo cáo tổng hợp dạng file DOCX.
 
 ## v27.47 (2026-11): [Thấp-TB] Re-audit lần 8 — mục 9/10: approvalAggregator vẫn giữ budgetEntries đã bị gỡ khỏi Approval Hub client (mirror lệch)
 
