@@ -41,7 +41,7 @@ const {
   canAccessItPriceApprovalModuleServer, moduleViewConfig
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
-const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees } = require('../lib/catalogRename');
+const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees, cascadeUsernameChangesToUniformTransferRequestedBy } = require('../lib/catalogRename');
 
 const VALID_KEYS = new Set(Object.keys(DEFAULTS));
 
@@ -2401,6 +2401,10 @@ router.post('/:key', async (req, res) => {
       // trình) — LỖI ĐÃ VÁ, re-audit lần 9, mức Thấp — xem chú thích đầy đủ tại
       // cascadeUsernameChangesToSubmissionOpinionRequestees() (lib/catalogRename.js).
       await cascadeUsernameChangesToSubmissionOpinionRequestees(renamed, deletedUsernames);
+      // uniformTransfers.requestedBy (ai xin điều chuyển kho Đồng Phục — điều kiện duy nhất chặn tự
+      // duyệt ở assertNotSelfDecidingUniformTransfer()) — LỖI ĐÃ VÁ, re-audit lần 10, mức Cao — xem chú
+      // thích đầy đủ tại cascadeUsernameChangesToUniformTransferRequestedBy() (lib/catalogRename.js).
+      await cascadeUsernameChangesToUniformTransferRequestedBy(renamed, deletedUsernames);
     }
 
     // meetingRooms — cascade cho từng cặp (tên cũ -> tên mới) phát hiện được ở trên, CHỈ SAU KHI ghi
