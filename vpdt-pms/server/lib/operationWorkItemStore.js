@@ -251,9 +251,73 @@ async function deleteWorkItemsByIds(ids) {
   invalidateWorkItemsCache();
 }
 
+// LỖI ĐÃ VÁ (re-audit lần 10, mức Cao — "operationWorkItems.assignedTo[]/acceptorUsername không
+// cascade username (bảng riêng dbo.OperationWorkItems)"): bảng này nằm NGOÀI cơ chế
+// renameFieldValueInCollection() (dbo.Records, dùng cho mọi collection JSON-blob thường) mà toàn bộ
+// cascade username trong lib/catalogRename.js đang dựa vào — CÙNG tình trạng với dbo.Tasks (đã có cascade
+// riêng cascadeUsernameChangesToTaskAssignedBy(), lib/taskStore.js) nhưng operationWorkItems chưa từng
+// được vá tương tự. 2 field username quyết định quyền trên 1 work item: `assignedTo[]` (mảng username
+// được phân công — isWorkItemAssignee() cấp quyền tự cập nhật tiến độ, xem
+// updateOperationWorkItemProgress(), lib/recordActions.js) và `acceptorUsername` (1 username — cấp
+// quyền "nghiệm thu"/accept, xem acceptOperationWorkItem(), lib/recordActions.js). Đổi tên đăng nhập ->
+// 2 field này giữ giá trị CŨ -> người đó MẤT quyền tự cập nhật/nghiệm thu việc mình phụ trách; xoá vĩnh
+// viễn rồi cấp LẠI đúng username cho nhân viên khác -> nhân viên MỚI THỪA KẾ quyền cập nhật/tự nghiệm
+// thu công việc vận hành của người CŨ (không liên quan). CHỈ 2 field này nằm trong Payload JSON (KHÔNG
+// phải cột SQL riêng — xem extractColumns() ở trên, chỉ trích status/parentWorkItemId/sourceType/
+// sourceId ra cột), nên CHỈ cần ghi lại Payload, không cần UPDATE thêm cột nào khác. Đổi tên giữ
+// nguyên vị trí trong assignedTo[]; xoá vĩnh viễn gỡ khỏi assignedTo[] + null hoá acceptorUsername
+// (không suy đoán ai thay thế) — cùng khuôn mọi cascade field username khác trong hệ thống. Dùng
+// UPDLOCK/HOLDLOCK + 1 transaction duy nhất, cùng khuôn cascadeUsernameChangesToTaskAssignedBy().
+async function cascadeUsernameChangesToWorkItemAssignment(renamed, deletedUsernames) {
+  if (!(renamed || []).length && !(deletedUsernames || []).length) return 0;
+  const renameMap = new Map((renamed || []).map(r => [r.oldValue, r.newValue]));
+  const deletedSet = new Set(deletedUsernames || []);
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    const readReq = new sql.Request(tx);
+    const readResult = await readReq.query('SELECT Id, Payload FROM dbo.OperationWorkItems WITH (UPDLOCK, HOLDLOCK)');
+    let changedCount = 0;
+    for (const row of readResult.recordset) {
+      const item = toWorkItem(row);
+      let changed = false;
+      let nextAssignedTo = item.assignedTo;
+      if (Array.isArray(nextAssignedTo) && nextAssignedTo.length) {
+        const mapped = nextAssignedTo
+          .map(u => (renameMap.has(u) ? renameMap.get(u) : u))
+          .filter(u => !deletedSet.has(u));
+        if (mapped.length !== nextAssignedTo.length || mapped.some((u, i) => u !== nextAssignedTo[i])) {
+          nextAssignedTo = mapped;
+          changed = true;
+        }
+      }
+      let nextAcceptor = item.acceptorUsername;
+      if (nextAcceptor != null) {
+        if (renameMap.has(nextAcceptor)) { nextAcceptor = renameMap.get(nextAcceptor); changed = true; }
+        else if (deletedSet.has(nextAcceptor)) { nextAcceptor = null; changed = true; }
+      }
+      if (!changed) continue;
+      changedCount++;
+      const updated = { ...item, assignedTo: nextAssignedTo, acceptorUsername: nextAcceptor };
+      const writeReq = new sql.Request(tx);
+      writeReq.input('id', sql.BigInt, row.Id);
+      writeReq.input('payload', sql.NVarChar(sql.MAX), JSON.stringify(updated));
+      await writeReq.query('UPDATE dbo.OperationWorkItems SET Payload = @payload WHERE Id = @id');
+    }
+    await tx.commit();
+    if (changedCount) invalidateWorkItemsCache();
+    return changedCount;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
+}
+
 module.exports = {
   getAllWorkItems, getAllWorkItemsCached, getWorkItemsBySource,
   insertWorkItem, withLockedWorkItemById, withLockedWorkItemByIdForDelete, deleteWorkItemById, deleteWorkItemsByIds, invalidateWorkItemsCache,
+  cascadeUsernameChangesToWorkItemAssignment,
   // Export riêng cho seedDefaults.js gọi 1 LẦN lúc khởi động — in cảnh báo RÕ RÀNG ra console ngay khi
   // server bật lên (cùng khuôn cảnh báo DB_ENCRYPT/LOG_ENCRYPTION_KEY ở db.js) thay vì phải đợi 1 người
   // dùng thật bấm "Lưu Công Việc" rồi mới lộ ra qua toast lỗi.
