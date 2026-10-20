@@ -811,6 +811,27 @@ async function cascadeContractTypeRename(oldValue, newValue) {
   await renameAbbrMapKey('contractTypeAbbrs', oldValue, newValue);
 }
 
+// employmentTypes/workSchedules ("Hình Thức Làm Việc"/"Thời Gian Làm Việc" — Onboarding/Hồ Sơ Nhân Sự):
+// LỖI ĐÃ VÁ (người dùng báo "nhập xong rồi lại bị mất" sau khi sửa danh mục) — 2 danh mục này trước đây
+// CHỈ sửa được qua màn Biểu Mẫu (ô nhập tay danh sách lựa chọn, saveCoreFieldOptionsList() ở core.js) —
+// màn đó GHI ĐÈ THẲNG cả mảng mỗi lần lưu (không có khái niệm "đổi tên 1 phần tử", kể cả gõ lại y hệt
+// trừ 1 ký tự cũng coi là xoá cũ + thêm mới), và employeeProfiles.employmentType/workSchedule lưu
+// NGUYÊN CHUỖI hiển thị (không phải key ổn định) — sửa/gõ lại danh sách ở Biểu Mẫu làm "mồ côi" NGAY mọi
+// hồ sơ đang giữ giá trị cũ (dropdown hiện trống, lưu lại hồ sơ đó sau này sẽ xoá hẳn giá trị). Cùng
+// khuôn cascadeContractTypeRename() ở trên: thêm hẳn 1 cặp "✏️ Sửa" có cascade thật ở màn Quản Lý Danh
+// Mục (POST /api/admin/renameCatalogEntry) để đổi tên AN TOÀN — Onboarding/Hồ Sơ Nhân Sự đã đọc thẳng
+// DB.employmentTypes/DB.workSchedules nên tự nhận danh sách mới, không cần sửa gì ở 2 màn đó. Cascade cả
+// employeeProfiles (hồ sơ đã lưu) LẪN hrProcesses (hồ sơ Onboarding — ghi nhận employmentType/workSchedule
+// ngay lúc tạo, xem lib/hrProcessOnboardingCreate.js, vẫn giữ nguyên chuỗi sau khi Onboarding hoàn tất).
+async function cascadeEmploymentTypeRename(oldValue, newValue) {
+  await renameFieldValueInCollection('employeeProfiles', (item) => renameSimpleFields(item, ['employmentType'], oldValue, newValue));
+  await renameFieldValueInCollection('hrProcesses', (item) => renameSimpleFields(item, ['employmentType'], oldValue, newValue));
+}
+async function cascadeWorkScheduleRename(oldValue, newValue) {
+  await renameFieldValueInCollection('employeeProfiles', (item) => renameSimpleFields(item, ['workSchedule'], oldValue, newValue));
+  await renameFieldValueInCollection('hrProcesses', (item) => renameSimpleFields(item, ['workSchedule'], oldValue, newValue));
+}
+
 // Factory cho các danh mục CHUỖI PHẲNG đơn giản KHÔNG cần cascade — giá trị hiển thị (KHÔNG phải khoá
 // định danh/FK bắt buộc khớp) có thể được tham chiếu bởi 1-2 collection khác (VD carRegs.assignedTaxiCompany,
 // itPriceApprovals.priceZone) nhưng hồ sơ ĐÃ TẠO trước đó chỉ đơn giản giữ nguyên chuỗi cũ làm nhãn hiển
@@ -934,6 +955,30 @@ const CATALOG_HANDLERS = {
       });
     },
     cascade: cascadeContractTypeRename
+  },
+  // employmentTypes/workSchedules: mảng chuỗi phẳng — cùng khuôn contractTypes ở trên (CẦN cascade, khác
+  // simpleArrayCatalogHandler() vì employeeProfiles/hrProcesses lưu nguyên chuỗi hiển thị).
+  employmentTypes: {
+    async renameInCatalog(oldValue, newValue) {
+      return withLockedAppDataValue('employmentTypes', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        if (!arr.includes(oldValue)) throw new HttpError(404, `Không tìm thấy "${oldValue}" trong Danh Mục Hình Thức Làm Việc`);
+        if (arr.includes(newValue)) throw new HttpError(400, `"${newValue}" đã có trong Danh Mục Hình Thức Làm Việc`);
+        return arr.map(v => (v === oldValue ? newValue : v));
+      });
+    },
+    cascade: cascadeEmploymentTypeRename
+  },
+  workSchedules: {
+    async renameInCatalog(oldValue, newValue) {
+      return withLockedAppDataValue('workSchedules', (list) => {
+        const arr = Array.isArray(list) ? list : [];
+        if (!arr.includes(oldValue)) throw new HttpError(404, `Không tìm thấy "${oldValue}" trong Danh Mục Thời Gian Làm Việc`);
+        if (arr.includes(newValue)) throw new HttpError(400, `"${newValue}" đã có trong Danh Mục Thời Gian Làm Việc`);
+        return arr.map(v => (v === oldValue ? newValue : v));
+      });
+    },
+    cascade: cascadeWorkScheduleRename
   }
 };
 

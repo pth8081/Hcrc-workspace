@@ -5715,7 +5715,11 @@ const SIMPLE_CATALOG_EXCEL_CONFIG = {
   contractAmendmentTypes: { label: 'Loại Thay Đổi Hợp Đồng', colLabel: 'Tên Loại Thay Đổi', sample: 'Tăng lương', renderFn: 'renderContractAmendmentTypeList' },
   contractTerminationReasons: { label: 'Lý Do Chấm Dứt Hợp Đồng', colLabel: 'Lý Do', sample: 'Hết hạn hợp đồng', renderFn: 'renderContractTerminationReasonList' },
   // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn các danh mục trên.
-  maritalStatuses: { label: 'Tình Trạng Hôn Nhân', colLabel: 'Tên Tình Trạng', sample: 'Độc thân', renderFn: 'renderMaritalStatusList' }
+  maritalStatuses: { label: 'Tình Trạng Hôn Nhân', colLabel: 'Tên Tình Trạng', sample: 'Độc thân', renderFn: 'renderMaritalStatusList' },
+  // employmentTypes/workSchedules (11/2026, LỖI ĐÃ VÁ — đưa vào Quản Lý Danh Mục để "Sửa" có cascade an
+  // toàn, xem CATALOG_HANDLERS ở lib/catalogRename.js) — cùng khuôn các danh mục trên.
+  employmentTypes: { label: 'Hình Thức Làm Việc', colLabel: 'Tên Hình Thức', sample: 'Chính thức', renderFn: 'renderEmploymentTypeList' },
+  workSchedules: { label: 'Thời Gian Làm Việc', colLabel: 'Tên Khung Giờ', sample: 'Giờ hành chính', renderFn: 'renderWorkScheduleList' }
 };
 
 function renderSimpleCatalogExcelToolsHtml(catalogKey) {

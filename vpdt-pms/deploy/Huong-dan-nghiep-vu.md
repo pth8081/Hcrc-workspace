@@ -4824,10 +4824,17 @@ làm được nay bị chặn:
     **Ngày/Nơi cấp CCCD** + **Hình Thức Làm Việc** + **Thời Gian Làm Việc**
     ngay lúc tạo (trước đây 2 ô CCCD chỉ sửa được sau ở màn Chi tiết).
   - **Hình Thức Làm Việc**/**Thời Gian Làm Việc** là 2 **danh mục admin tự
-    sửa được** (không phải danh sách cố định trong code) — vào **Hệ Thống →
-    Biểu Mẫu**, chọn đúng trường (ở tab Onboarding hoặc Hồ Sơ Nhân Sự), bấm
-    nút Sửa để thêm/bớt/đổi lựa chọn trong ô "Tùy Chọn" — áp dụng ngay cho cả
-    2 màn (dùng chung 1 danh mục).
+    sửa được** (không phải danh sách cố định trong code) — áp dụng ngay cho
+    cả 2 màn Onboarding/Hồ Sơ Nhân Sự (dùng chung 1 danh mục).
+    - **Thêm/Bớt lựa chọn**: vào **Hệ Thống → Biểu Mẫu**, chọn đúng trường
+      (tab Onboarding hoặc Hồ Sơ Nhân Sự), bấm nút Sửa ô "Tùy Chọn".
+    - **Đổi tên 1 lựa chọn đã có** (LỖI ĐÃ VÁ 11/2026 — trước đây đổi ở Biểu
+      Mẫu làm "mồ côi" mọi hồ sơ đang giữ giá trị cũ, dropdown hiện trống và
+      có thể bị xoá hẳn nếu hồ sơ đó được lưu lại): PHẢI vào **Hệ Thống →
+      Quản Trị → Quản Lý Danh Mục → "🕐 Danh Mục Hình Thức Làm Việc"/"⏰ Danh
+      Mục Thời Gian Làm Việc"**, bấm **"✏️ Sửa"** — nút này tự cập nhật mọi
+      hồ sơ Hồ Sơ Nhân Sự/Onboarding đang giữ giá trị cũ sang giá trị mới,
+      không mất dữ liệu. KHÔNG gõ lại/đổi tên qua ô "Tùy Chọn" ở Biểu Mẫu.
 
 **Tuyển Dụng**
 - Thêm trường **Thu Nhập** (nhập tự do, VD "8-10 triệu"/"Thoả thuận").

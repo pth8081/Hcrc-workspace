@@ -556,7 +556,14 @@ const GENERIC_SIMPLE_CATALOGS = {
   contractAmendmentTypes: { listId: 'contractAmendmentTypeList', inputId: 'txtContractAmendmentTypeName', label: 'loại thay đổi hợp đồng', logPrefix: 'CONTRACT_AMENDMENT_TYPE' },
   contractTerminationReasons: { listId: 'contractTerminationReasonList', inputId: 'txtContractTerminationReasonName', label: 'lý do chấm dứt hợp đồng', logPrefix: 'CONTRACT_TERMINATION_REASON' },
   // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn các danh mục trên.
-  maritalStatuses: { listId: 'maritalStatusList', inputId: 'txtMaritalStatusName', label: 'tình trạng hôn nhân', logPrefix: 'MARITAL_STATUS' }
+  maritalStatuses: { listId: 'maritalStatusList', inputId: 'txtMaritalStatusName', label: 'tình trạng hôn nhân', logPrefix: 'MARITAL_STATUS' },
+  // employmentTypes/workSchedules (11/2026, LỖI ĐÃ VÁ — người dùng báo "nhập xong rồi lại bị mất" vì
+  // trước đây 2 danh mục này CHỈ sửa được qua Biểu Mẫu, ghi đè thẳng cả mảng, không "Sửa tên" an toàn):
+  // dùng chung widget Thêm/Sửa/Xoá này như các danh mục khác, KHÁC các danh mục còn lại trong map này ở
+  // chỗ "✏️ Sửa" của 2 khoá này CÓ cascade thật (xem CATALOG_HANDLERS ở lib/catalogRename.js, không phải
+  // simpleArrayCatalogHandler) vì employeeProfiles/hrProcesses lưu nguyên chuỗi hiển thị.
+  employmentTypes: { listId: 'employmentTypeList', inputId: 'txtEmploymentTypeName', label: 'hình thức làm việc', logPrefix: 'EMPLOYMENT_TYPE' },
+  workSchedules: { listId: 'workScheduleList', inputId: 'txtWorkScheduleName', label: 'thời gian làm việc', logPrefix: 'WORK_SCHEDULE' }
 };
 // LỖI ĐÃ VÁ (10/2026, người dùng báo "Cấp Bậc/Lý Do Nghỉ Việc/Loại Kỷ Luật — không add được thông tin
 // vào đâu"): 3 form này dùng data-op-submit="saveGenericSimpleCatalogEntry" data-arg0="'<key>'" (quy ước
@@ -636,6 +643,9 @@ function renderContractAmendmentTypeList() { renderGenericSimpleCatalogList('con
 function renderContractTerminationReasonList() { renderGenericSimpleCatalogList('contractTerminationReasons'); }
 // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn các wrapper trên.
 function renderMaritalStatusList() { renderGenericSimpleCatalogList('maritalStatuses'); }
+// employmentTypes/workSchedules (11/2026, LỖI ĐÃ VÁ) — cùng khuôn các wrapper trên.
+function renderEmploymentTypeList() { renderGenericSimpleCatalogList('employmentTypes'); }
+function renderWorkScheduleList() { renderGenericSimpleCatalogList('workSchedules'); }
 
 // ===== Danh Sách Chức Danh (Siêu Thị) — DB.storeJobTitles, {label}[] (mục 4a) — TÁCH khỏi DB.jobTitles
 // (Khối Văn Phòng/HO), dùng cho field "Chức danh" của user posType==='STORE' ở form Người Dùng đầy đủ.

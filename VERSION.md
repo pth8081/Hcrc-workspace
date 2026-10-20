@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**27.77** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.78 (2026-11): Vá lỗi mất dữ liệu "Hình Thức Làm Việc"/"Thời Gian Làm Việc" khi sửa danh mục
+
+**Lỗi người dùng báo cáo trực tiếp**: "nhập hình thức làm việc và thời gian làm việc xong rồi lại bị
+mất" ở cả Onboarding lẫn Hồ Sơ Nhân Sự.
+
+**Nguyên nhân thật**: 2 danh mục `employmentTypes`/`workSchedules` trước đây CHỈ sửa được qua màn
+**Biểu Mẫu** (ô nhập tay danh sách lựa chọn) — màn đó ghi đè THẲNG cả mảng mỗi lần lưu, không có khái
+niệm "đổi tên 1 phần tử". `employeeProfiles.employmentType`/`.workSchedule` lưu NGUYÊN CHUỖI hiển thị
+(không phải khoá ổn định), nên chỉ cần gõ lại danh sách ở Biểu Mẫu (dù chỉ sửa 1 ký tự, sắp xếp lại thứ
+tự...) là mọi hồ sơ đang giữ giá trị cũ bị "mồ côi" ngay — dropdown hiện trống, và nếu hồ sơ đó được lưu
+lại sau này (vì bất kỳ lý do gì) sẽ xoá hẳn giá trị. Đây đúng là lỗ hổng "catalog rename không cascade"
+đã từng vá cho `contractTypes` (10/2026) nhưng chưa áp dụng cho 2 danh mục này khi chúng được thêm sau.
+
+**Đã sửa**: đưa `employmentTypes`/`workSchedules` vào màn **Quản Lý Danh Mục** (Hệ Thống → Quản Trị →
+Quản Lý Danh Mục) với nút "✏️ Sửa" CÓ cascade thật — đổi tên 1 giá trị sẽ tự động cập nhật mọi hồ sơ
+Hồ Sơ Nhân Sự (`employeeProfiles`) VÀ hồ sơ Onboarding (`hrProcesses`) đang giữ giá trị đó, không còn
+"mồ côi". Onboarding/Hồ Sơ Nhân Sự đã đọc thẳng 2 danh mục này từ trước nên tự nhận danh sách mới ngay,
+không cần sửa gì thêm ở 2 màn đó. Màn Biểu Mẫu vẫn dùng được để THÊM/BỚT lựa chọn như cũ — chỉ RENAME
+(sửa tên 1 giá trị đã có) mới cần dùng nút "✏️ Sửa" mới ở Quản Lý Danh Mục.
 
 ## v27.77 (2026-11): Nhóm Phân Quyền — tự động thêm thành viên theo Chức Danh
 

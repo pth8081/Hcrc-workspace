@@ -33,7 +33,12 @@ const VALID_CATALOG_KEYS = new Set([
   // "trường có nút select nhưng đang để nhập tay") — cùng khuôn simpleArrayCatalogHandler, không cascade.
   'relationshipTypes', 'nationalities', 'contractAmendmentTypes', 'contractTerminationReasons',
   // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng khuôn ngay trên.
-  'maritalStatuses'
+  'maritalStatuses',
+  // employmentTypes/workSchedules (11/2026, người dùng báo "nhập Hình Thức Làm Việc/Thời Gian Làm Việc
+  // xong rồi lại bị mất" — trước đây CHỈ sửa được qua Biểu Mẫu, ghi đè thẳng cả mảng không cascade, làm
+  // mồ côi mọi hồ sơ đang giữ giá trị cũ): CÓ cascade riêng (xem CATALOG_HANDLERS ở lib/catalogRename.js),
+  // cùng khuôn contractTypes.
+  'employmentTypes', 'workSchedules'
 ]);
 
 // POST /api/admin/renameCatalogEntry — body { catalogKey, oldValue, newValue }. Chỉ Quản Trị Viên (khớp
