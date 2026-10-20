@@ -1,9 +1,29 @@
 # Phiên bản hiện tại
 
-**27.78** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.79 (2026-11): Vá lỗi menu "⋯" (Tải Mẫu/Import/Export) tràn ra ngoài màn hình trên mobile
+
+**Lỗi người dùng báo cáo trực tiếp kèm ảnh chụp điện thoại thật**: bấm nút "⋯" cạnh "Danh Sách Người
+Dùng & Quyền Hạn" trên mobile, menu xổ ra bị cắt gần hết (tràn ra ngoài mép trái màn hình), chỉ còn thấy
+1 dải trắng hẹp — nhìn như tính năng Tải File Mẫu/Import/Export Excel người dùng "biến mất" so với các
+bản cũ (26.45-26.51).
+
+**Xác nhận trước khi sửa**: đối chiếu `systemSection.html`/`module-admin-userstaging.js`/`core.js` giữa
+bản v26.51 và code hiện tại — **0 khác biệt**, toàn bộ hàm `downloadUserTemplate()`/`exportUsersExcel()`/
+`onUsersImportFileChange()` vẫn nguyên vẹn. Tính năng KHÔNG hề bị xoá — vấn đề thật là CSS định vị menu
+"⋯" (`.action-menu-panel`, dùng chung cho cả "Danh Sách Người Dùng" lẫn "Ma Trận Phân Quyền") dùng cố
+định `right: 0` (neo mép phải menu vào mép phải nút bấm) — đúng trên desktop (nút nằm ở mép phải 1 hàng
+rộng), nhưng trên mobile layout đổi sang xếp dọc khiến nút "⋯" nằm sát mép TRÁI màn hình, `right: 0` lúc
+đó đẩy menu (rộng 230px) tràn hẳn ra ngoài bên trái, không bấm được các mục bên dưới.
+
+**Đã sửa**: thêm `@media (max-width: 640px)` cho `.action-menu-panel` — dưới mốc này neo lại từ mép
+TRÁI (`left: 0`) thay vì phải, menu luôn nằm gọn trong màn hình. Chỉ sửa đúng 1 khối CSS, không đụng gì
+tới HTML/JS hiện có — không ảnh hưởng hành vi desktop (đã test lại ảnh demo desktop vẫn y hệt trước) lẫn
+các màn khác đang dùng chung `.action-menu-panel` (Ma Trận Phân Quyền).
 
 ## v27.78 (2026-11): Vá lỗi mất dữ liệu "Hình Thức Làm Việc"/"Thời Gian Làm Việc" khi sửa danh mục
 
