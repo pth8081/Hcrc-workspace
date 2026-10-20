@@ -1,9 +1,32 @@
 # Phiên bản hiện tại
 
-**27.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.84 (2026-11): Khối ảo "Nhóm Phân Quyền (Thành Viên)" vào Ma Trận Phân Quyền
+
+**Yêu cầu người dùng**: "chỗ ma trận phân quyền này thêm phần người dùng thì chọn được nhóm phân quyền
+đã được định nghĩa rồi vừa làm bằng web, import và export bằng file excel để tôi gán nhiều người vào các
+nhóm đã tạo." Demo đã gửi và được xác nhận trước khi merge.
+
+**Đã làm** (`module-admin-permgroups.js`, "Ma Trận Phân Quyền" → "🖊️ Sửa Nhanh Trên Web"):
+- Khối ảo mới **"Nhóm Phân Quyền (Thành Viên)"** — xuất hiện ĐẦU danh sách "Khối quyền" (chỉ ở chế độ
+  Người Dùng, vì 1 Nhóm Phân Quyền không thể là thành viên của Nhóm Phân Quyền khác) — mỗi cột là 1 Nhóm
+  Phân Quyền ĐÃ TẠO (không phải 1 quyền boolean thường): tick/bỏ tick = thêm/gỡ người đó khỏi đúng nhóm
+  đó, cascade quyền nền ngay lập tức giống hệt đường Excel hiện có.
+- Sheet Excel riêng cùng tên khi "📤 Xuất Excel Người Dùng" — 1 cột Y/N riêng cho MỖI Nhóm Phân Quyền
+  (tiền tố `Nhóm: `), rõ ràng/khó gõ sai hơn hẳn so với gõ đúng chính tả tên nhóm vào 1 ô danh sách cách
+  nhau bằng dấu `;` (cột `NhomPhanQuyen` cũ — vẫn giữ nguyên, không đổi gì, 2 cách tồn tại song song).
+  "📥 Import Người Dùng" đọc đúng cột mới này, ưu tiên hơn cột cũ nếu file có cả 2.
+- Vá kèm phát hiện khi viết test: `savePmQuickEdit()` trước đây không bao giờ ghi lại `groupIds`/
+  `reportExtraKeys` đã tính trong diff khi lưu — lỗi tồn tại từ trước nhưng chưa từng lộ ra vì Sửa Nhanh
+  Trên Web chưa từng đổi Nhóm Phân Quyền qua đường này; nay vá đúng, khớp hành vi đường Excel.
+
+Test: `server/tests/test-perm-matrix-group-membership.js` (23 kịch bản). Đã chạy lại toàn bộ test Ma
+Trận Phân Quyền/Nhóm Phân Quyền hiện có (quickedit, client parse, multisheet, dangling groupIds, job
+title match, import permgroups) — không regression.
 
 ## v27.83 (2026-11): Vá lỗi 409 "vừa bị người khác thay đổi" GIẢ ở nhiều màn cấu hình quy trình
 

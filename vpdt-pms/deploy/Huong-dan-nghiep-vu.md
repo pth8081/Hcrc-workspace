@@ -5458,6 +5458,17 @@ trong bảng chỉ bằng 1 click (vẫn phải bấm "💾 Lưu Thay Đổi" sa
 thật xuống hệ thống). Tài khoản `admin` gốc không nằm trong ô chọn và ô
 tick của tài khoản này luôn bị khoá (không sửa được qua đây).
 
+**Khối "Nhóm Phân Quyền (Thành Viên)" (từ 11/2026)**: ở chế độ "Người
+Dùng", chọn "Khối quyền" = "Nhóm Phân Quyền (Thành Viên)" (luôn đứng ĐẦU
+danh sách khi đã có ít nhất 1 Nhóm Phân Quyền) — mỗi cột lúc này là 1 Nhóm
+Phân Quyền ĐÃ TẠO (không phải 1 quyền bật/tắt thường), tick/bỏ tick = thêm/
+gỡ người đó khỏi đúng nhóm, quyền nền của nhóm được áp dụng NGAY sau khi
+bấm "💾 Lưu Thay Đổi" — dùng cho việc gán nhiều người vào nhóm vừa tạo mà
+không cần mở form Sửa Người Dùng từng người. Cùng cơ chế này cũng hoạt
+động qua Excel: "📤 Xuất Excel Người Dùng" có thêm 1 sheet riêng cùng tên,
+mỗi Nhóm Phân Quyền 1 cột Y/N (tiền tố `Nhóm: `) — tick hàng loạt trên
+Excel rồi "📥 Import Người Dùng" lại để áp dụng cho nhiều người cùng lúc.
+
 **Gán/Gỡ Nhóm Phân Quyền hàng loạt — ô tìm-kiếm-gõ-chọn-nhiều-người (từ
 v24.59)**: ngay dưới khối "Sửa Nhanh Trên Web" ở cùng tab, có 1 ô riêng để
 chọn NHIỀU người dùng rồi gán/gỡ 1 Nhóm Phân Quyền cho tất cả cùng lúc —
