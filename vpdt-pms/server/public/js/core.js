@@ -13654,10 +13654,11 @@ function renderPeopleMultiSelect(containerId, candidates, initialSelected, check
   container.innerHTML = `
     <div data-pms-chips class="flex flex-wrap gap-1 mb-1"></div>
     <div class="relative">
-      <input type="text" data-pms-search placeholder="Tìm theo tên/username/phòng ban để thêm..." class="w-full border p-1.5 rounded text-[11px]"
+      <input type="text" data-pms-search placeholder="Tìm theo tên/username/phòng ban để thêm (dán nhiều Mã Nhân Viên/Username để thêm hàng loạt)..." class="w-full border p-1.5 rounded text-[11px]"
         data-op-input="pmsFilter" data-arg0="${escapeHtml(containerId)}" data-arg-value="1">
       <div data-pms-dropdown class="hidden absolute z-20 bg-white border rounded shadow max-h-40 overflow-y-auto w-full mt-0.5"></div>
     </div>
+    <div data-pms-paste-status class="text-[11px] mt-1"></div>
     <div data-pms-hidden></div>
   `;
   container._pmsCandidates = candidates;
@@ -13688,6 +13689,119 @@ function pmsClear(containerId) {
   if (!container || !container._pmsSelected) return;
   container._pmsSelected.clear();
   container._pmsRenderChips();
+}
+
+// DÁN NHIỀU MÃ NHÂN VIÊN/USERNAME ĐỂ THÊM HÀNG LOẠT (11/2026, theo yêu cầu người dùng: "copy nhiều Mã
+// Nhân Viên từ Excel, dán vào ô 'Thành Viên Nhóm', tự nhận diện và thêm hết vào danh sách đã chọn" —
+// chụp ảnh thật từ màn Nhóm Phân Quyền). CHỈ áp dụng cho renderPeopleMultiSelect() (ô CHỌN NGƯỜI —
+// nhận diện qua container._pmsCandidates/_pmsSelected), KHÔNG đụng renderMultiSelectDropdown() (ô chọn
+// NHÃN/GIÁ TRỊ bất kỳ dùng chung "data-pms-search" — VD Chức Danh/Tab Báo Cáo — dán nhiều dòng vào đó
+// vẫn giữ nguyên hành vi lọc-tìm cũ, không có khái niệm "Mã Nhân Viên").
+//
+// 2 nguồn khớp, ưu tiên THEO THỨ TỰ (không cần gọi server nếu khớp được bằng username):
+//   1. username — khớp THẲNG với container._pmsCandidates (ứng viên hợp lệ để thêm, đã lọc đúng theo
+//      từng picker — VD renderGroupMembersPicker() loại tài khoản "admin"/đã khoá) — không cần gọi API.
+//   2. Mã Nhân Viên (employeeCode, định dạng "BL" + số, xem EMPLOYEE_CODE_PREFIX ở lib/employeeProfile.js)
+//      — tra qua cache employeeCode->username nạp lười từ GET /api/hr-profile/employee-directory (thêm
+//      field "username" ở route đó, 11/2026 — xem routes/employeeProfile.js), CHỈ gọi 1 LẦN/trang rồi
+//      dùng lại cho mọi lượt dán sau. Route này gác quyền canFullViewProfiles()/canManageContracts()
+//      (KHÔNG tự động cho admin thường — xem chú thích tại route, đúng tinh thần "admin khác quyền xem
+//      Hồ Sơ Nhân Sự" đã áp dụng xuyên suốt hệ thống) — nếu người dùng hiện tại không có quyền này, cache
+//      trả rỗng (không lỗi/crash), chỉ username khớp THẲNG vẫn hoạt động bình thường.
+// employeeCode TRA RA được username vẫn phải khớp lại với candidates picker đang mở (vd sẽ bị loại nếu
+// trỏ tới tài khoản "admin"/đã khoá/không có VPDT) — không bỏ qua các luật lọc riêng của từng picker.
+let _employeeCodeDirectoryCache = null;
+async function loadEmployeeCodeDirectoryCache() {
+  if (_employeeCodeDirectoryCache) return _employeeCodeDirectoryCache;
+  try {
+    const res = await fetch('/api/hr-profile/employee-directory');
+    if (!res.ok) { _employeeCodeDirectoryCache = new Map(); return _employeeCodeDirectoryCache; }
+    const data = await res.json();
+    const byCode = new Map();
+    (data.directory || []).forEach(d => { if (d.employeeCode && d.username) byCode.set(String(d.employeeCode).toUpperCase(), d.username); });
+    _employeeCodeDirectoryCache = byCode;
+  } catch (e) { _employeeCodeDirectoryCache = new Map(); }
+  return _employeeCodeDirectoryCache;
+}
+
+function renderPmsPasteStatus(containerId, html) {
+  const container = document.getElementById(containerId);
+  const el = container && container.querySelector('[data-pms-paste-status]');
+  if (el) el.innerHTML = html || '';
+}
+
+async function handlePeopleMultiSelectBulkPaste(container, tokens) {
+  const containerId = container.id;
+  const byUsername = new Map(container._pmsCandidates.map(u => [u.username.toLowerCase(), u.username]));
+  const addedNames = []; const unresolved = [];
+  const needCodeLookup = [];
+  tokens.forEach(tok => {
+    const t = tok.trim();
+    if (!t) return;
+    const uname = byUsername.get(t.toLowerCase());
+    if (uname) { addedNames.push(uname); return; }
+    needCodeLookup.push(t);
+  });
+  if (needCodeLookup.length) {
+    const codeMap = await loadEmployeeCodeDirectoryCache();
+    needCodeLookup.forEach(code => {
+      const uname = codeMap.get(code.toUpperCase());
+      const resolvedUname = uname && byUsername.get(uname.toLowerCase());
+      if (resolvedUname) addedNames.push(resolvedUname); else unresolved.push(code);
+    });
+  }
+  if (!addedNames.length) return false; // không khớp gì -> để hành vi paste bình thường (lọc-tìm) xử lý
+  const uniqueAdded = [...new Set(addedNames)];
+  uniqueAdded.forEach(uname => container._pmsSelected.add(uname));
+  container._pmsRenderChips();
+  const parts = [`<span class="text-emerald-700 font-semibold">✅ Đã thêm ${uniqueAdded.length} người từ danh sách dán.</span>`];
+  if (unresolved.length) parts.push(`<span class="text-amber-700 font-semibold">⚠️ Không tìm thấy ${unresolved.length}: ${escapeHtml(unresolved.join(', '))}</span>`);
+  renderPmsPasteStatus(containerId, parts.join(' '));
+  return true;
+}
+
+// 1 token "giống" username/Mã Nhân Viên (ASCII, không dấu, dạng "nv.an"/"BL0001"...) — KHÔNG phải tên
+// người có dấu tiếng Việt (VD "Nguyễn"). Dùng để quyết định có nên coi 1 cụm cách-nhau-bằng-khoảng-trắng
+// là "danh sách nhiều mã dán vào" hay vẫn là 1 cụm tìm kiếm thường (tên người gõ/dán có khoảng trắng).
+function looksLikeCodeOrUsernameToken(t) {
+  return /^[A-Za-z][A-Za-z0-9._-]*$/.test(t);
+}
+
+// Gắn đúng 1 lần cho toàn trang (capture phase, cùng khuôn bindMultiPasteSearchInputs() ở trên) — đọc
+// clipboard THÔ trước khi trình duyệt tự nối nhiều dòng thành 1 dòng cách nhau bằng dấu CÁCH (xem chú
+// thích splitMultiKeyword()). Chỉ 1 dòng/1 cụm (tokens.length<=1) -> KHÔNG can thiệp, giữ nguyên hành vi
+// gõ-tìm-1-cụm cũ của renderPeopleMultiSelect() (paste 1 tên/mã đơn lẻ vẫn chỉ lọc dropdown như trước).
+//
+// QUAN TRỌNG (phát hiện lúc tự viết test trước khi merge — xem chú thích splitMultiKeyword() ở trên về
+// đúng rủi ro này): nhánh dự phòng tách theo khoảng trắng (wsTokens, cho trường hợp dán 1 DÒNG mã cách
+// nhau bằng dấu cách như ảnh người dùng gửi "BL1307 BL325 BL001...") TUYỆT ĐỐI không được áp dụng cho 1
+// cụm tên người gõ/dán có khoảng trắng (VD tìm "Nguyễn Văn An" sẽ bị tách nhầm thành 3 "mã" rồi phá hỏng
+// giá trị ô tìm kiếm) — chỉ coi là danh sách mã khi TẤT CẢ các từ tách ra đều có hình dạng mã/username
+// (ASCII, không dấu — xem looksLikeCodeOrUsernameToken()); ngược lại bỏ qua, giữ nguyên hành vi cũ.
+function bindPeopleMultiSelectBulkPaste() {
+  document.addEventListener('paste', (e) => {
+    const el = e.target;
+    if (!el || !(el instanceof HTMLInputElement) || !el.hasAttribute('data-pms-search')) return;
+    const container = el.closest('[data-pms-root]');
+    if (!container || !container._pmsCandidates || !container._pmsSelected) return;
+    const raw = (e.clipboardData || window.clipboardData || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+    let tokens = splitMultiKeyword(raw);
+    if (tokens.length <= 1) {
+      const wsTokens = String(raw || '').trim().split(/\s+/).filter(Boolean);
+      if (wsTokens.length <= 1 || !wsTokens.every(looksLikeCodeOrUsernameToken)) return;
+      tokens = wsTokens;
+    }
+    e.preventDefault();
+    handlePeopleMultiSelectBulkPaste(container, tokens).then((handled) => {
+      if (!handled) { el.value = tokens.join(', '); container._pmsRenderDropdown(el.value); return; }
+      // Thêm hàng loạt thành công: xoá ô tìm kiếm và ĐÓNG hẳn dropdown gợi ý (không gọi _pmsRenderDropdown()
+      // — hàm đó LUÔN hiện lại dropdown kể cả khi rỗng/"Không tìm thấy", dòng chữ đó sẽ đè lên đúng vị trí
+      // dòng trạng thái dán vừa render ở trên vì dropdown dùng position:absolute — xác nhận bằng ảnh chụp
+      // thật trước khi merge, không chỉ suy luận CSS). Đóng hẳn dropdown để dòng trạng thái luôn hiện rõ.
+      el.value = '';
+      container.querySelector('[data-pms-dropdown]')?.classList.add('hidden');
+    });
+  }, true);
 }
 
 // Card chọn ĐÚNG 1 người — dùng cho vai trò phê duyệt BẮT BUỘC (locked) của Văn Bản Trình/Hợp Đồng khi
@@ -14336,4 +14450,7 @@ document.getElementById('copyrightYear').textContent = new Date().getFullYear();
 // Gắn đúng 1 lần cho toàn trang — xem chú thích đầy đủ tại định nghĩa bindMultiPasteSearchInputs() ở
 // trên (tính năng dán nhiều mã cùng lúc vào ô tìm kiếm, 10/2026).
 bindMultiPasteSearchInputs();
+// Gắn đúng 1 lần cho toàn trang — xem chú thích đầy đủ tại định nghĩa bindPeopleMultiSelectBulkPaste()
+// ở trên (tính năng dán nhiều Mã Nhân Viên/Username để thêm hàng loạt vào ô chọn người, 11/2026).
+bindPeopleMultiSelectBulkPaste();
 

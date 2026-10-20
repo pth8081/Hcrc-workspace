@@ -338,7 +338,12 @@ router.get('/employee-directory', async (req, res) => {
     const list = (appData.employeeProfiles || []).filter(p => p.status !== 'INACTIVE');
     const directory = list.map(p => ({
       employeeCode: p.employeeCode,
-      fullName: employeeProfile.resolveProfileDisplayName(p, appData.users, appData.hrProcesses)
+      fullName: employeeProfile.resolveProfileDisplayName(p, appData.users, appData.hrProcesses),
+      // username (11/2026, theo yêu cầu người dùng "dán nhiều Mã Nhân Viên để tự động thêm vào ô chọn
+      // người" — xem bindPeopleMultiSelectBulkPaste(), core.js): CHỈ thêm field này, KHÔNG đổi gì field
+      // cũ — 2 nơi tiêu thụ hiện có (module-conghop.js/module-hopdonglaodong.js) chỉ đọc employeeCode/
+      // fullName nên không bị ảnh hưởng. null nếu hồ sơ chưa liên kết tài khoản VPDT nào.
+      username: p.username || null
     }));
     res.json({ directory });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile/employee-directory'); }
