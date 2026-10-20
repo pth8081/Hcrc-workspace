@@ -1516,7 +1516,7 @@ async function confirmMixedApprovalImport(kind) {
   if (!confirm(`Xác nhận lưu Nhập Excel "${cfg.label}" — thêm ${report.created.length} dòng mới, cập nhật ${report.updated.length} dòng đã có?`)) return;
   const snapshot = JSON.parse(JSON.stringify(before));
   DB[cfg.dataKey] = rules;
-  const ok = await syncStorage(cfg.dataKey);
+  const ok = await syncStorage(cfg.dataKey, { baseline: snapshot });
   if (!ok) {
     DB[cfg.dataKey] = snapshot;
     if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.';
