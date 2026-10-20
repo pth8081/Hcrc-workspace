@@ -368,6 +368,20 @@ async function deletePermGroup(id) {
 // file cũng rõ ràng hơn cho người dùng (2 khái niệm khác hẳn nhau: 1 dòng = 1 người vs 1 dòng = 1 nhóm).
 const PERM_MATRIX_MULTI_SEP = ';'; // phân cách nhiều giá trị trong 1 ô (Nhóm Phân Quyền/Báo Cáo - Mục Bổ Sung)
 const PERM_MATRIX_COL_PREFIX = 'Q_';
+// Khối ẢO "Nhóm Phân Quyền (Thành Viên)" (11/2026, theo yêu cầu người dùng kèm ảnh chụp Sửa Nhanh Trên
+// Web: "chỗ ma trận phân quyền này thêm phần người dùng thì chọn được nhóm phân quyền đã được định nghĩa
+// rồi... import và export bằng file excel để gán nhiều người vào các nhóm đã tạo") — xuất hiện ĐẦU danh
+// sách "Khối quyền" (chỉ ở chế độ Người Dùng, xem pmQuickEditAllGroupNames()) giống hệt 1 khối quyền
+// thật, nhưng mỗi "cột" ở đây là 1 Nhóm Phân Quyền ĐÃ TẠO (không phải 1 quyền boolean) — tick/bỏ tick =
+// thêm/gỡ người đó khỏi đúng nhóm đó. Tên KHÔNG trùng bất kỳ khối quyền thật nào (PERM_KEY_VN_LABELS chỉ
+// sinh khối từ phần trước " — ", không có khối nào tên y hệt chuỗi này).
+const PM_QUICK_EDIT_GROUPS_BLOCK = 'Nhóm Phân Quyền (Thành Viên)';
+const PM_GROUP_PSEUDO_PREFIX = '__pmgroup__'; // tiền tố khoá cột ảo, KHÔNG thể trùng bất kỳ dot-path quyền thật nào
+// Tiền tố cột Excel cho sheet "Nhóm Phân Quyền (Thành Viên)" (1 cột Y/N riêng/nhóm, dễ tick hàng loạt hơn
+// hẳn so với gõ đúng chính tả tên nhóm vào 1 ô danh sách cách nhau bằng ';' như cột NhomPhanQuyen cũ —
+// cột đó VẪN GIỮ NGUYÊN không đổi gì ở các sheet khối-quyền khác, 2 cách tồn tại song song, xem
+// buildPermMatrixRowChanges()).
+const PERM_MATRIX_GROUP_COL_PREFIX = 'Nhóm: ';
 
 // Nhãn tiếng Việt cho cột Ma Trận Phân Quyền (theo yêu cầu người dùng 10/2026: "đổi tên cột thành tiếng
 // Việt ứng với hệ thống đang hiển thị") — trích XUẤT MÁY (không gõ tay) từ đúng nhãn checkbox thật ở cây
@@ -732,6 +746,27 @@ function buildPermMatrixSheets(cols, identityColumns, entities, identityRowFn, e
   });
 }
 
+// Sheet riêng "Nhóm Phân Quyền (Thành Viên)" — 1 cột Y/N/nhóm đã tạo, đẩy lên ĐẦU workbook (thao tác hay
+// dùng nhất ngay sau khi tạo xong 1 Nhóm Phân Quyền mới bằng web). Không có thì KHÔNG xuất sheet này
+// (tránh workbook có 1 sheet rỗng vô nghĩa khi hệ thống chưa tạo Nhóm Phân Quyền nào).
+function buildPermMatrixGroupMembershipSheet() {
+  if (!DB.permGroups.length) return null;
+  const sortedGroups = [...DB.permGroups].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  const columns = [
+    { header: 'Username', key: 'Username', width: 16 },
+    { header: 'HoTen', key: 'HoTen', width: 22 },
+    { header: 'PhongBan', key: 'PhongBan', width: 20 },
+    ...sortedGroups.map(g => ({ header: PERM_MATRIX_GROUP_COL_PREFIX + g.name, key: PERM_MATRIX_GROUP_COL_PREFIX + g.name, width: 22 }))
+  ];
+  const rows = DB.users.map(u => {
+    const row = { Username: u.username, HoTen: u.name || '', PhongBan: u.dept || '' };
+    const gids = new Set((u.groupIds || []).map(String));
+    sortedGroups.forEach(g => { row[PERM_MATRIX_GROUP_COL_PREFIX + g.name] = gids.has(String(g.id)) ? 'Y' : 'N'; });
+    return row;
+  });
+  return { sheetName: PM_QUICK_EDIT_GROUPS_BLOCK, columns, rows };
+}
+
 function downloadPermMatrixUsers() {
   const cols = collectPermMatrixColumns(DB.users.map(u => u.perms || {}));
   const identityColumns = [
@@ -749,6 +784,8 @@ function downloadPermMatrixUsers() {
     BaoCao_MucBoSung: (u.reportExtraKeys || []).join(PERM_MATRIX_MULTI_SEP)
   });
   const sheets = buildPermMatrixSheets(cols, identityColumns, DB.users, identityRow, u => u.perms);
+  const membershipSheet = buildPermMatrixGroupMembershipSheet();
+  if (membershipSheet) sheets.unshift(membershipSheet);
   downloadMultiSheetXlsxFromServer('ma_tran_phan_quyen_nguoi_dung.xlsx', sheets);
 }
 
@@ -781,14 +818,33 @@ function buildPermMatrixRowChanges(kind, target, row) {
   // tick thêm đúng mọi cột Q_ mà nhóm mới đó cấp sẽ khiến người được gán nhóm KHÔNG thực sự có đủ quyền
   // của nhóm — sai lệch nghiêm trọng vì đây là màn phân quyền).
   let newGroupIds = target.groupIds || [];
-  if (kind === 'users' && row.NhomPhanQuyen !== undefined) {
-    const names = (row.NhomPhanQuyen || '').split(PERM_MATRIX_MULTI_SEP).map(s => s.trim()).filter(Boolean);
-    const ids = names.map(n => DB.permGroups.find(g => g.name === n)?.id).filter(Boolean);
-    const oldNames = (target.groupIds || []).map(gid => DB.permGroups.find(g => g.id === gid)?.name).filter(Boolean);
-    if (JSON.stringify([...oldNames].sort()) !== JSON.stringify([...names].sort())) {
-      changes.push({ label: 'Nhóm Phân Quyền', oldValue: oldNames.join(', ') || '(không có)', newValue: names.join(', ') || '(không có)' });
+  if (kind === 'users') {
+    // 2 nguồn đọc Nhóm Phân Quyền MỚI, ưu tiên nguồn (1) nếu có mặt trong dòng:
+    //   (1) Sheet "Nhóm Phân Quyền (Thành Viên)" MỚI (11/2026) — mỗi nhóm 1 cột Y/N riêng (tiền tố
+    //       "Nhóm: "), rõ ràng/khó gõ sai hơn hẳn khi tick hàng loạt trên Excel cho nhiều người. Đây LUÔN
+    //       là đặc tả ĐẦY ĐỦ (sheet xuất ra có đủ cột cho MỌI Nhóm Phân Quyền hiện có), không phải cập
+    //       nhật từng phần — cột nào thiếu (vì admin tự xoá khỏi file trước khi nhập lại) coi như "N".
+    //   (2) Cột "NhomPhanQuyen" cũ (danh sách tên cách nhau bằng ';' trong 1 ô, lặp lại ở MỌI sheet khối-
+    //       quyền khác, xem downloadPermMatrixUsers()) — GIỮ NGUYÊN không đổi gì, vẫn hoạt động y hệt
+    //       trước đây khi sheet mới ở trên không có mặt trong file đang đọc.
+    const groupColHeaders = Object.keys(row).filter(h => h.startsWith(PERM_MATRIX_GROUP_COL_PREFIX));
+    let names = null;
+    if (groupColHeaders.length) {
+      names = groupColHeaders.filter(h => {
+        const raw = String(row[h] || '').trim().toUpperCase();
+        return raw === 'Y' || raw === 'TRUE';
+      }).map(h => h.slice(PERM_MATRIX_GROUP_COL_PREFIX.length));
+    } else if (row.NhomPhanQuyen !== undefined) {
+      names = (row.NhomPhanQuyen || '').split(PERM_MATRIX_MULTI_SEP).map(s => s.trim()).filter(Boolean);
     }
-    newGroupIds = ids;
+    if (names !== null) {
+      const ids = names.map(n => DB.permGroups.find(g => g.name === n)?.id).filter(Boolean);
+      const oldNames = (target.groupIds || []).map(gid => DB.permGroups.find(g => g.id === gid)?.name).filter(Boolean);
+      if (JSON.stringify([...oldNames].sort()) !== JSON.stringify([...names].sort())) {
+        changes.push({ label: 'Nhóm Phân Quyền', oldValue: oldNames.join(', ') || '(không có)', newValue: names.join(', ') || '(không có)' });
+      }
+      newGroupIds = ids;
+    }
   }
 
   // formPerms: bản nháp phản ánh ĐÚNG literal từng cột Q_ trong dòng Excel (đè lên nền quyền hiện có,
@@ -1018,11 +1074,16 @@ function pmQuickEditAllGroupNames() {
   const cols = collectPermMatrixColumns(entities.map(e => e.perms || {}));
   const names = new Set();
   cols.forEach(c => names.add(permMatrixColumnGroup(c)));
-  return [...names].sort((a, b) => {
+  const sorted = [...names].sort((a, b) => {
     if (a === PERM_MATRIX_UNLABELED_SHEET) return 1;
     if (b === PERM_MATRIX_UNLABELED_SHEET) return -1;
     return a.localeCompare(b, 'vi');
   });
+  // Khối ảo "Nhóm Phân Quyền (Thành Viên)" — CHỈ áp dụng cho Người Dùng (1 Nhóm Phân Quyền không thể là
+  // thành viên của Nhóm Phân Quyền khác), luôn đẩy lên ĐẦU danh sách (thao tác hay dùng nhất ngay sau khi
+  // tạo xong 1 nhóm mới). Không hiện nếu hệ thống chưa có Nhóm Phân Quyền nào.
+  if (pmQuickEditKind === 'users' && DB.permGroups.length) sorted.unshift(PM_QUICK_EDIT_GROUPS_BLOCK);
+  return sorted;
 }
 
 function togglePermMatrixQuickEdit() {
@@ -1089,13 +1150,33 @@ function onPmQuickEditGroupChange() {
   renderPmQuickEditTable();
 }
 
-// Cột quyền thuộc ĐÚNG khối đang chọn, sắp theo bảng chữ cái nhãn để dễ dò.
+// Cột quyền thuộc ĐÚNG khối đang chọn, sắp theo bảng chữ cái nhãn để dễ dò. Khối ảo "Nhóm Phân Quyền
+// (Thành Viên)" trả về 1 "cột" ảo/Nhóm Phân Quyền đã tạo (khoá PM_GROUP_PSEUDO_PREFIX+id) thay vì cột
+// quyền boolean thật — xem pmQuickEditCellChecked()/pmQuickEditColumnShortLabel() ngay dưới.
 function pmQuickEditColumnsForGroup() {
   if (!pmQuickEditGroupKey) return [];
+  if (pmQuickEditGroupKey === PM_QUICK_EDIT_GROUPS_BLOCK) {
+    return [...DB.permGroups].sort((a, b) => a.name.localeCompare(b.name, 'vi')).map(g => PM_GROUP_PSEUDO_PREFIX + g.id);
+  }
   const entities = pmQuickEditEntities();
   const cols = collectPermMatrixColumns(entities.map(e => e.perms || {}));
   return cols.filter(c => permMatrixColumnGroup(c) === pmQuickEditGroupKey)
     .sort((a, b) => permMatrixColumnHeader(a).localeCompare(permMatrixColumnHeader(b), 'vi'));
+}
+
+// Nhóm Phân Quyền tương ứng 1 "cột ảo" (PM_GROUP_PSEUDO_PREFIX+id) — null nếu key không phải cột ảo.
+function pmQuickEditGroupFromPseudoKey(key) {
+  if (!key.startsWith(PM_GROUP_PSEUDO_PREFIX)) return null;
+  const gid = key.slice(PM_GROUP_PSEUDO_PREFIX.length);
+  return DB.permGroups.find(g => String(g.id) === gid) || null;
+}
+
+// Trạng thái tick của 1 ô — cột ảo Nhóm Phân Quyền đọc theo entity.groupIds, cột quyền thật đọc theo
+// perms đã flatten (flat) như trước.
+function pmQuickEditCellChecked(entity, key, flat) {
+  const g = pmQuickEditGroupFromPseudoKey(key);
+  if (g) return (entity.groupIds || []).some(gid => String(gid) === String(g.id));
+  return flat[key] === true;
 }
 
 // Header NGANG (10/2026, theo yêu cầu người dùng "quy ngang cho dễ nhìn" thay vì xoay dọc
@@ -1104,6 +1185,8 @@ function pmQuickEditColumnsForGroup() {
 // đáng kể (VD "Báo Cáo Định Kỳ — Tổng hợp báo cáo..." -> chỉ còn "Tổng hợp báo cáo..."), giúp cột
 // đủ hẹp để hiện ngang mà vẫn đọc được, không cần xoay chữ.
 function pmQuickEditColumnShortLabel(key) {
+  const g = pmQuickEditGroupFromPseudoKey(key);
+  if (g) return g.name;
   const full = permMatrixColumnHeader(key);
   const prefix = `${pmQuickEditGroupKey} — `;
   return full.startsWith(prefix) ? full.slice(prefix.length) : full;
@@ -1153,11 +1236,12 @@ function renderPmQuickEditTable() {
         : `<span class="font-bold">${escapeHtml(e.name)}</span>`;
       return `<tr class="border-t hover:bg-gray-50${isProtectedAdmin ? ' bg-gray-50 opacity-50' : ''}">
         <td class="border p-1.5 sticky left-0 bg-white whitespace-nowrap">${label}${isProtectedAdmin ? '<br><span class="text-[10px] text-gray-400">⛔ Luôn toàn quyền</span>' : ''}</td>
-        ${cols.map(c => `<td class="border p-1 text-center"><input type="checkbox" data-pm-quick-cell data-entity="${escapeHtml(entityKey)}" data-key="${escapeHtml(c)}" ${flatByEntity[idx][c] === true ? 'checked' : ''} ${isProtectedAdmin ? 'disabled' : ''}></td>`).join('')}
+        ${cols.map(c => `<td class="border p-1 text-center"><input type="checkbox" data-pm-quick-cell data-entity="${escapeHtml(entityKey)}" data-key="${escapeHtml(c)}" ${pmQuickEditCellChecked(e, c, flatByEntity[idx]) ? 'checked' : ''} ${isProtectedAdmin ? 'disabled' : ''}></td>`).join('')}
       </tr>`;
     }).join('');
   }
-  if (status) status.innerText = `${entities.length} ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} × ${cols.length} quyền trong khối "${pmQuickEditGroupKey}"` +
+  const colsNoun = pmQuickEditGroupKey === PM_QUICK_EDIT_GROUPS_BLOCK ? 'Nhóm Phân Quyền' : 'quyền';
+  if (status) status.innerText = `${entities.length} ${pmQuickEditKind === 'users' ? 'người dùng' : 'nhóm'} × ${cols.length} ${colsNoun} trong khối "${pmQuickEditGroupKey}"` +
     (selectedKeys.length ? ` — đang thu hẹp theo ${selectedKeys.length} lựa chọn.` : ' (chưa chọn ai = hiện tất cả).');
 }
 
@@ -1186,12 +1270,32 @@ async function savePmQuickEdit() {
   if (!wrap) return;
   const cells = [...wrap.querySelectorAll('input[data-pm-quick-cell]')];
   const byEntity = new Map();
+  const isGroupsBlock = pmQuickEditGroupKey === PM_QUICK_EDIT_GROUPS_BLOCK;
   cells.forEach(cb => {
     const entityKey = cb.getAttribute('data-entity');
     const permKey = cb.getAttribute('data-key');
     if (!byEntity.has(entityKey)) byEntity.set(entityKey, {});
-    byEntity.get(entityKey)[permMatrixColumnHeader(permKey)] = cb.checked ? 'Y' : 'N';
+    if (isGroupsBlock) {
+      // Khối ảo "Nhóm Phân Quyền (Thành Viên)" — dựng lại đúng cột "NhomPhanQuyen" (danh sách tên nhóm
+      // cách nhau bằng ';') mà buildPermMatrixRowChanges() đã hiểu sẵn từ TÊN các Nhóm Phân Quyền đang
+      // tick, thay vì build 1 bộ cột quyền boolean — tái dùng NGUYÊN logic cascade/diff đã có, không viết
+      // lại 1 lần nữa ở đây (cùng tinh thần tái dùng của toàn bộ savePmQuickEdit()).
+      const row = byEntity.get(entityKey);
+      if (!row._checkedGroupNames) row._checkedGroupNames = [];
+      if (cb.checked) {
+        const g = pmQuickEditGroupFromPseudoKey(permKey);
+        if (g) row._checkedGroupNames.push(g.name);
+      }
+    } else {
+      byEntity.get(entityKey)[permMatrixColumnHeader(permKey)] = cb.checked ? 'Y' : 'N';
+    }
   });
+  if (isGroupsBlock) {
+    byEntity.forEach(row => {
+      row.NhomPhanQuyen = (row._checkedGroupNames || []).join(PERM_MATRIX_MULTI_SEP);
+      delete row._checkedGroupNames;
+    });
+  }
 
   const kind = pmQuickEditKind;
   const entries = [];
@@ -1214,6 +1318,14 @@ async function savePmQuickEdit() {
     entries.forEach(({ target, diff }) => {
       target.perms = diff.newPerms;
       target.permOverrides = diff.newPermOverrides;
+      // LỖI VÁ KÈM (11/2026, phát hiện khi viết test cho khối ảo "Nhóm Phân Quyền (Thành Viên)" MỚI —
+      // trước đây savePmQuickEdit() KHÔNG BAO GIỜ tạo ra newGroupIds/newReportExtraKeys khác target hiện
+      // có (quick-edit chỉ từng sửa cột quyền Q_ thường, không sửa NhomPhanQuyen/BaoCao_MucBoSung), nên
+      // thiếu 2 dòng gán này chưa bao giờ gây sai lệch quan sát được — khối ảo MỚI là lần ĐẦU TIÊN
+      // savePmQuickEdit() thực sự đổi newGroupIds, mới lộ ra thiếu sót này). Khớp ĐÚNG những gì
+      // confirmPermMatrixImport() (đường Excel) đã làm cho cùng 1 kết quả diff — xem đó làm mẫu.
+      target.groupIds = diff.newGroupIds;
+      target.reportExtraKeys = diff.newReportExtraKeys;
       usersTouched = true;
     });
   } else {
