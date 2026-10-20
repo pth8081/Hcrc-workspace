@@ -21,6 +21,12 @@
 //       TẠI ĐÚNG toạ độ mục cuối cùng của menu ("📥 Import Nhóm Phân Quyền") phải CHÍNH LÀ mục đó (hoặc
 //       con của nó), không phải select/table đè lên.
 //
+// (D) LỖI/PHẢN ÁNH TIẾP THEO (người dùng vẫn thấy menu che lên ô tìm kiếm bên dưới dù đúng z-order —
+//     ĐÚNG ý đồ menu nổi, không phải lỗi, nhưng chưa đủ rõ): thêm backdrop mờ toàn màn hình
+//     (toggleActionMenuBackdrop(), core.js) mỗi khi có 1 menu "⋯" đang mở, làm rõ đây là lớp nổi tạm
+//     thời. Test: mở menu -> backdrop hiện (display != none); đóng menu (chọn mục/click ra ngoài) ->
+//     backdrop ẩn lại; mở menu A rồi mở menu B (A tự đóng) -> backdrop vẫn hiện (còn B đang mở).
+//
 // Chạy: node server/tests/test-action-menu-position-fixed.js
 'use strict';
 const { startStaticServer, createMockState, launchPage, createRunner, assertEqual } = require('./testHarness');
@@ -79,6 +85,28 @@ async function main() {
         return { onTop: topEl === lastItem || (lastItem.contains && lastItem.contains(topEl)), text: lastItem.textContent.trim() };
       });
       assertEqual(result.onTop, true, `mục cuối menu ("${result.text}") phải ở TRÊN CÙNG, không bị bảng/select đè lên`);
+      await page.evaluate(() => closeActionMenu('permMatrixActionsMenu'));
+    });
+
+    await run.run('(D) Mở menu -> backdrop mờ hiện ra; đóng menu -> backdrop ẩn lại', async () => {
+      await page.evaluate(() => toggleActionMenu('userListActionsMenu', null));
+      await page.waitForTimeout(80);
+      const afterOpen = await page.evaluate(() => getComputedStyle(document.getElementById('actionMenuBackdrop')).display);
+      assertEqual(afterOpen, 'block', 'Sau khi mở menu: backdrop phải hiện (display:block)');
+      await page.evaluate(() => closeActionMenu('userListActionsMenu'));
+      await page.waitForTimeout(80);
+      const afterClose = await page.evaluate(() => getComputedStyle(document.getElementById('actionMenuBackdrop')).display);
+      assertEqual(afterClose, 'none', 'Sau khi đóng menu: backdrop phải ẩn lại (display:none)');
+    });
+
+    await run.run('(D2) Mở menu A rồi mở menu B (A tự đóng) -> backdrop VẪN hiện (còn B đang mở)', async () => {
+      await page.evaluate(() => toggleActionMenu('userListActionsMenu', null));
+      await page.waitForTimeout(80);
+      await page.evaluate(() => { if (typeof togglePermMatrixQuickEdit === 'function') togglePermMatrixQuickEdit(); });
+      await page.evaluate(() => toggleActionMenu('permMatrixActionsMenu', null));
+      await page.waitForTimeout(80);
+      const stillShown = await page.evaluate(() => getComputedStyle(document.getElementById('actionMenuBackdrop')).display);
+      assertEqual(stillShown, 'block', 'Chuyển từ menu A sang menu B: backdrop vẫn phải hiện liên tục');
       await page.evaluate(() => closeActionMenu('permMatrixActionsMenu'));
     });
   } finally {

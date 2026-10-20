@@ -10361,7 +10361,26 @@ function toggleActionMenu(id, e) {
   const willOpen = panel.classList.contains('hidden');
   document.querySelectorAll('.action-menu-panel').forEach(p => { if (p !== panel) p.classList.add('hidden'); });
   panel.classList.toggle('hidden', !willOpen);
+  toggleActionMenuBackdrop(willOpen);
   if (willOpen) positionActionMenuPanel(panel);
+}
+// toggleActionMenuBackdrop() — người dùng phản ánh menu "⋯" (dropdown nổi) che lên ô tìm kiếm/nội dung
+// ngay bên dưới khi mở — ĐÚNG ý đồ (menu nổi LUÔN che tạm nội dung bên dưới nó khi đang mở, giống mọi
+// menu thả xuống khác, không phải lỗi xếp lớp), nhưng chưa đủ RÕ là đang ở trạng thái "nổi tạm thời" nên
+// dễ hiểu nhầm. Thêm 1 lớp phủ mờ toàn màn hình (z-index thấp hơn panel 1 bậc, cao hơn mọi nội dung
+// khác — xem .action-menu-backdrop, app.css) mỗi khi có ít nhất 1 menu "⋯" đang mở, tạo (1 lần, dùng lại)
+// qua JS thay vì đặt sẵn trong từng fragment HTML — không cần sửa HTML ở bất kỳ màn nào đang/sẽ dùng
+// chung widget này. Bấm vào backdrop vẫn đóng menu như cũ (đã khớp sẵn điều kiện "click ra ngoài panel"
+// ở listener click bên dưới, không cần thêm xử lý riêng cho backdrop).
+function toggleActionMenuBackdrop(show) {
+  let backdrop = document.getElementById('actionMenuBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'actionMenuBackdrop';
+    backdrop.className = 'action-menu-backdrop hidden';
+    document.body.appendChild(backdrop);
+  }
+  backdrop.classList.toggle('hidden', !show);
 }
 // positionActionMenuPanel() — LỖI ĐÃ VÁ (người dùng chụp ảnh thật trên điện thoại: menu "⋯" ở cụm "Ma
 // Trận Phân Quyền" bị khối "Khối quyền" (select)/bảng Sửa Nhanh Trên Web ngay bên dưới đè lên, dù CSS
@@ -10389,12 +10408,17 @@ function positionActionMenuPanel(panel) {
 }
 function closeActionMenu(id) {
   document.getElementById(id)?.classList.add('hidden');
+  toggleActionMenuBackdrop(false);
 }
 document.addEventListener('click', (ev) => {
-  document.querySelectorAll('.action-menu-panel:not(.hidden)').forEach((panel) => {
+  let anyStillOpen = false;
+  document.querySelectorAll('.action-menu-panel').forEach((panel) => {
+    if (panel.classList.contains('hidden')) return;
     const trigger = document.querySelector(`[data-op="toggleActionMenu"][data-arg0="${panel.id}"]`);
     if (!panel.contains(ev.target) && ev.target !== trigger && !trigger?.contains(ev.target)) panel.classList.add('hidden');
+    else anyStillOpen = true;
   });
+  toggleActionMenuBackdrop(anyStillOpen);
 });
 
 // "Hợp Đồng" — cùng khuôn Điều Hành/Hành Chính, bọc 2 sub-tab Phê Duyệt/Quản Lý HĐ & Giấy Phép (module

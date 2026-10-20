@@ -1,9 +1,22 @@
 # Phiên bản hiện tại
 
-**27.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.81 (2026-11): Thêm lớp phủ mờ khi mở menu "⋯" — làm rõ đây là lớp nổi tạm thời
+
+**Phản ánh tiếp theo của người dùng** (sau khi v27.80 đã sửa đúng z-order): dù đúng kỹ thuật, menu "⋯"
+(Ma Trận Phân Quyền) vẫn hiện ra che lên ô tìm kiếm "Danh Sách Người Dùng" ngay bên dưới, khiến người
+dùng nghĩ vẫn còn lỗi — đây thực ra là hành vi ĐÚNG của mọi menu nổi (dropdown), chỉ là chưa đủ rõ ràng
+đang ở trạng thái "nổi tạm thời" trên trang.
+
+**Đã bổ sung**: 1 lớp phủ mờ toàn màn hình (`.action-menu-backdrop`, nền đen 15% trong suốt) tự hiện ra
+ngay khi có bất kỳ menu "⋯" nào đang mở (tạo 1 lần qua JS, dùng lại cho mọi menu — không cần sửa HTML ở
+từng màn), và tự ẩn lại khi đóng menu (chọn mục, bấm ra ngoài, hay chuyển sang menu khác). Giúp người
+dùng nhận ra ngay đây là lớp nổi tạm thời trên nội dung trang, không phải lỗi hiển thị. Không đổi gì
+hành vi đóng/mở/click-ra-ngoài sẵn có — đã test lại đầy đủ (6/6 kịch bản, gồm cả 2 đợt vá trước).
 
 ## v27.80 (2026-11): Vá tiếp menu "⋯" (Ma Trận Phân Quyền) bị bảng/select đè lên
 

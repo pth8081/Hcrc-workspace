@@ -846,6 +846,13 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
   max-width: calc(100vw - 24px); background: #fff; border: 1px solid var(--hcrc-border); border-radius: 10px;
   box-shadow: var(--hcrc-shadow); padding: 6px; flex-direction: column; gap: 2px;
 }
+/* .action-menu-backdrop (người dùng phản ánh menu "⋯" che lên ô tìm kiếm/nội dung bên dưới — ĐÚNG ý đồ
+   của mọi menu nổi, không phải lỗi xếp lớp, nhưng chưa đủ rõ ràng) — lớp phủ mờ toàn màn hình, tạo/tắt
+   qua toggleActionMenuBackdrop() (core.js) mỗi khi có 1 menu "⋯" đang mở, làm rõ đây là lớp NỔI TẠM
+   THỜI trên nội dung trang. z-index thấp hơn .action-menu-panel (30) đúng 1 bậc — luôn nằm GIỮA panel
+   và phần còn lại của trang, không che chính panel. */
+.action-menu-backdrop { display: none; position: fixed; inset: 0; z-index: 29; background: rgba(15, 23, 42, .15); }
+.action-menu-backdrop:not(.hidden) { display: block; }
 .action-menu-panel:not(.hidden) { display: flex; }
 .action-menu-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
