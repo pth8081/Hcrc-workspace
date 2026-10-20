@@ -1,9 +1,35 @@
 # Phiên bản hiện tại
 
-**27.81** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.82 (2026-11): Dán nhiều Mã Nhân Viên/Username để tự thêm hàng loạt vào ô "chọn người"
+
+**Yêu cầu người dùng** (kèm ảnh chụp ô "Thành Viên Nhóm" đang bị dán 1 cụm mã nhân viên thô, không được
+xử lý gì): cho phép copy nhiều Mã Nhân Viên/Username (từ Excel hay gõ tay) rồi dán thẳng vào ô tìm-chọn-
+người, tự động nhận diện và thêm hàng loạt vào danh sách đã chọn, thay vì phải tìm-chọn từng người.
+
+**Đã làm** (`renderPeopleMultiSelect()`, dùng chung cho mọi ô "chọn NGƯỜI" trong hệ thống — Thành Viên
+Nhóm Phân Quyền, Nhóm Phê Duyệt...):
+- Dán nhiều dòng (xuống dòng thật, kiểu copy 1 cột Excel) hoặc nhiều mã cách nhau bằng dấu phẩy/chấm
+  phẩy/dấu cách đều tự tách đúng và khớp lần lượt: **username** khớp thẳng với danh sách ứng viên của
+  đúng ô đó (không cần gọi server); **Mã Nhân Viên** (`BL`+số) tra qua
+  `GET /api/hr-profile/employee-directory` (route có sẵn, chỉ thêm field `username`) để quy đổi ra
+  username rồi khớp lại — **gác đúng quyền xem Hồ Sơ Nhân Sự hiện có** (`hrProfileManage`/
+  `hrProfileFullView`/`hrProfileEdit`/quản lý hợp đồng), KHÔNG tự động cho admin thường (đúng tinh thần
+  bảo mật đã áp dụng xuyên suốt hệ thống) — tài khoản thiếu quyền này vẫn dán Username bình thường,
+  riêng Mã Nhân Viên sẽ báo "Không tìm thấy" (không lỗi/crash).
+- Dòng trạng thái ngay dưới ô tìm kiếm báo rõ "✅ Đã thêm N người" / "⚠️ Không tìm thấy: ...".
+- Dán 1 cụm tìm kiếm bình thường (VD gõ/dán tên người có khoảng trắng như "Nguyễn Văn An") **giữ nguyên
+  hành vi lọc-dropdown cũ** — chỉ coi là "danh sách mã" khi mọi từ tách ra đều có hình dạng mã/username
+  (ASCII, không dấu tiếng Việt), tránh hiểu nhầm 1 cái tên thành nhiều mã.
+
+Test: `server/tests/test-people-multiselect-bulk-paste.js` (11 kịch bản — dán nhiều username, dán nhiều
+Mã Nhân Viên có lẫn mã không tồn tại, dán 1 cụm thường không bị can thiệp, và trường hợp tài khoản thiếu
+quyền xem Hồ Sơ Nhân Sự). Đã demo ảnh thật cho người dùng xác nhận trước khi merge (gồm cả 2 định dạng
+dán: cách nhau bằng dấu cách và xuống dòng thật từ Excel).
 
 ## v27.81 (2026-11): Thêm lớp phủ mờ khi mở menu "⋯" — làm rõ đây là lớp nổi tạm thời
 

@@ -5471,6 +5471,22 @@ phân trang). Chọn xong, chọn 1 Nhóm Phân Quyền ở ô bên cạnh rồi
 Vào Nhóm"/"➖ Gỡ Khỏi Nhóm". Tài khoản `admin` gốc không nằm trong danh
 sách chọn được (giữ nguyên quy tắc khoá cứng ở mục 6.1).
 
+**Dán nhiều Mã Nhân Viên/Username để thêm hàng loạt (từ 11/2026)**: mọi ô
+tìm-kiếm-gõ-chọn-nhiều-người trong hệ thống (khối "👥 Thành Viên Nhóm" của
+Nhóm Phân Quyền, ô "Gán/Gỡ Nhóm Phân Quyền hàng loạt" ở trên, các khối chọn
+Nhóm Phê Duyệt...) hỗ trợ **dán thẳng 1 danh sách Mã Nhân Viên hoặc Username**
+copy từ Excel/chat vào ô tìm kiếm — hệ thống tự tách từng dòng (hoặc cách
+nhau bằng dấu phẩy/chấm phẩy/dấu cách) và tự thêm hàng loạt người khớp được
+vào danh sách đã chọn, không cần tìm-chọn từng người. Dòng chữ ngay dưới ô
+tìm kiếm báo rõ số người đã thêm và liệt kê mã nào không tìm thấy (sai mã,
+đã nghỉ việc, hoặc không thuộc nhóm ứng viên hợp lệ của đúng ô đó). Dán 1
+tên người bình thường (có khoảng trắng, VD "Nguyễn Văn An") vẫn chỉ lọc gợi
+ý như trước, không bị hiểu nhầm thành nhiều mã. **Lưu ý quyền hạn**: tra theo
+Username luôn hoạt động; tra theo **Mã Nhân Viên** cần tài khoản đang dùng có
+quyền xem Hồ Sơ Nhân Sự (Quản Lý/Toàn Quyền Xem Hồ Sơ hoặc Quản Lý Hợp Đồng)
+— tài khoản admin thường không tự động có quyền này, nếu thiếu thì dán Mã
+Nhân Viên sẽ báo "Không tìm thấy" (dán Username vẫn bình thường).
+
 ### 6.3. 7 quyền "Xem Báo Cáo" riêng theo module (10/2026)
 
 Theo yêu cầu người dùng, tiếp nối đợt Checklist ở mục 6.2: rà soát toàn hệ
