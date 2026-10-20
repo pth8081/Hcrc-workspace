@@ -64,7 +64,7 @@ async function deleteDept(name) {
   const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.dept === name);
   if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.dept !== name);
   const [savedDepts, savedAbbrs, savedGroups, savedWfGroups, savedWfPositions] = await Promise.all([
-    syncStorage('depts'), syncStorage('deptAbbrs'), affectedGroups.length ? syncStorage('deptGroups') : Promise.resolve(true),
+    syncStorage('depts'), syncStorage('deptAbbrs'), affectedGroups.length ? syncStorage('deptGroups', { baseline: prevDeptGroups }) : Promise.resolve(true),
     affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups') : Promise.resolve(true),
     wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
   ]);
@@ -131,7 +131,7 @@ async function saveDeptGroup(e) {
   const prevGroups = DB.deptGroups.map(g => ({ ...g, depts: [...g.depts] }));
   const nextId = DB.deptGroups.reduce((max, g) => Math.max(max, g.id || 0), 0) + 1;
   DB.deptGroups.push({ id: nextId, name, depts: [] });
-  const saved = await syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups', { baseline: prevGroups });
   if (!saved) { DB.deptGroups = prevGroups; return; }
   logSystemAction('USER_MGM', 'ADD_DEPT_GROUP', `Thêm Khối/Ban mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtDeptGroupName').value = '';
@@ -147,8 +147,9 @@ async function renameDeptGroup(id) {
   if (!newName || newName === g.name) return;
   if (DB.deptGroups.some(x => x.id !== id && x.name === newName)) return alert('Tên Khối/Ban đã tồn tại!');
   const prevName = g.name;
+  const prevGroups = DB.deptGroups.map(x => ({ ...x, depts: [...x.depts] }));
   g.name = newName;
-  const saved = await syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups', { baseline: prevGroups });
   if (!saved) { g.name = prevName; renderDeptGroupList(); return; }
   logSystemAction('USER_MGM', 'RENAME_DEPT_GROUP', `Đổi tên Khối/Ban → [${newName}]`, 'SUCCESS', newName);
   renderDeptGroupList();
@@ -162,7 +163,7 @@ async function deleteDeptGroup(id) {
   if (!confirm(`Xoá Khối/Ban "${g.name}"?\n\nNgười dùng/màn Phân Quyền đang lọc theo Khối này sẽ tự coi như "để trống" (hiện lại toàn bộ Phòng Ban) — KHÔNG xoá Phòng Ban con, chỉ mất liên kết nhóm.`)) return;
   const prevGroups = DB.deptGroups.map(x => ({ ...x, depts: [...x.depts] }));
   DB.deptGroups = DB.deptGroups.filter(x => x.id !== id);
-  const saved = await syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups', { baseline: prevGroups });
   if (!saved) { DB.deptGroups = prevGroups; renderDeptGroupList(); return; }
   logSystemAction('USER_MGM', 'DELETE_DEPT_GROUP', `Xóa Khối/Ban [${g.name}]`, 'SUCCESS', g.name);
   renderDeptGroupList();
@@ -179,8 +180,9 @@ async function saveDeptGroupChildren(id) {
   const g = DB.deptGroups.find(x => x.id === id);
   if (!g) return;
   const prevDepts = [...g.depts];
+  const prevGroups = DB.deptGroups.map(x => ({ ...x, depts: [...x.depts] }));
   g.depts = getMultiSelectValues(`deptGroupChildren_${id}`);
-  const saved = await syncStorage('deptGroups');
+  const saved = await syncStorage('deptGroups', { baseline: prevGroups });
   if (!saved) { g.depts = prevDepts; return; }
   logSystemAction('USER_MGM', 'UPDATE_DEPT_GROUP_CHILDREN', `Cập nhật Phòng Ban con của Khối/Ban [${g.name}]: ${g.depts.join(', ') || '(rỗng)'}`, 'SUCCESS', g.name);
   populateDropdowns();

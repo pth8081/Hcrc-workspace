@@ -577,7 +577,7 @@ async function saveQuickApplyConfig(e) {
     configId = Math.max(0, ...(DB.quickApplyConfigs || []).map(c => c.id)) + 1;
     DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules, approverMode, approversByPosition }];
   }
-  if (!await syncStorage('quickApplyConfigs')) {
+  if (!await syncStorage('quickApplyConfigs', { baseline: snapshot })) {
     DB.quickApplyConfigs = snapshot;
     renderQuickApplyConfigList();
     return;
@@ -640,7 +640,7 @@ async function deleteQuickApplyConfig(configId) {
   if (!confirm('Xoá cấu hình Áp Dụng Nhanh này? (Không ảnh hưởng gì tới các mục ĐÃ được áp dụng trước đó — chỉ xoá cấu hình để dùng áp dụng tiếp trong tương lai.)')) return;
   const snapshot = JSON.parse(JSON.stringify(DB.quickApplyConfigs || []));
   DB.quickApplyConfigs = (DB.quickApplyConfigs || []).filter(c => c.id !== configId);
-  if (!await syncStorage('quickApplyConfigs')) {
+  if (!await syncStorage('quickApplyConfigs', { baseline: snapshot })) {
     DB.quickApplyConfigs = snapshot;
     renderQuickApplyConfigList();
     return;
@@ -976,7 +976,7 @@ async function addMixedApprovalRule() {
   DB.operationOrderStoreMixedApprovalRules = isEdit
     ? (DB.operationOrderStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier: effectiveTier, step, mode, jobTitle, jobTitleDept, username, stores } : r)
     : [...(DB.operationOrderStoreMixedApprovalRules || []), { id, tier: effectiveTier, step, mode, jobTitle, jobTitleDept, username, stores }];
-  if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
+  if (!await syncStorage('operationOrderStoreMixedApprovalRules', { baseline: snapshot })) {
     DB.operationOrderStoreMixedApprovalRules = snapshot;
     renderMixedApprovalSection();
     return;
@@ -1050,7 +1050,7 @@ async function deleteMixedApprovalRule(id) {
   // đã xoá thành công. Nay snapshot trước, chỉ log SUCCESS + render lại SAU KHI xác nhận lưu thành công.
   const snapshot = JSON.parse(JSON.stringify(rules));
   DB.operationOrderStoreMixedApprovalRules = rules.filter(r => r.id !== id);
-  if (!await syncStorage('operationOrderStoreMixedApprovalRules')) {
+  if (!await syncStorage('operationOrderStoreMixedApprovalRules', { baseline: snapshot })) {
     DB.operationOrderStoreMixedApprovalRules = snapshot;
     renderMixedApprovalSection();
     return;
@@ -1292,7 +1292,7 @@ async function addItPriceWholesaleMixedApprovalRule() {
   DB.itPriceWholesaleStoreMixedApprovalRules = isEdit
     ? (DB.itPriceWholesaleStoreMixedApprovalRules || []).map(r => r.id === id ? { id, tier, step, mode, jobTitle, jobTitleDept, username, stores, nganhHang } : r)
     : [...(DB.itPriceWholesaleStoreMixedApprovalRules || []), { id, tier, step, mode, jobTitle, jobTitleDept, username, stores, nganhHang }];
-  if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules')) {
+  if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules', { baseline: snapshot })) {
     DB.itPriceWholesaleStoreMixedApprovalRules = snapshot;
     renderItPriceWholesaleMixedApprovalSection();
     return;
@@ -1326,7 +1326,7 @@ async function deleteItPriceWholesaleMixedApprovalRule(id) {
   if (!confirm(message)) return;
   const snapshot = JSON.parse(JSON.stringify(rules));
   DB.itPriceWholesaleStoreMixedApprovalRules = rules.filter(r => r.id !== id);
-  if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules')) {
+  if (!await syncStorage('itPriceWholesaleStoreMixedApprovalRules', { baseline: snapshot })) {
     DB.itPriceWholesaleStoreMixedApprovalRules = snapshot;
     renderItPriceWholesaleMixedApprovalSection();
     return;

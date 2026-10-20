@@ -646,7 +646,7 @@ async function confirmWorkflowStepsImport() {
   });
   DB.workflows = next;
 
-  if (!await syncStorage('workflows')) {
+  if (!await syncStorage('workflows', { baseline: snapshot })) {
     DB.workflows = snapshot;
     if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.';
     return;
@@ -763,7 +763,7 @@ async function saveWorkflowTemplate(e) {
     DB.workflows.push({ id: code, name: name, steps: steps });
   }
 
-  if (!await syncStorage('workflows')) {
+  if (!await syncStorage('workflows', { baseline: snapshot })) {
     DB.workflows = snapshot;
     return;
   }
@@ -860,7 +860,7 @@ async function deleteWorkflowTemplate(code) {
   if (!confirm('Bạn có chắc chắn muốn xóa mẫu quy trình này?')) return;
   const snapshot = JSON.parse(JSON.stringify(DB.workflows));
   DB.workflows = DB.workflows.filter(w => w.id !== code);
-  if (!await syncStorage('workflows')) {
+  if (!await syncStorage('workflows', { baseline: snapshot })) {
     DB.workflows = snapshot;
     renderWorkflowTab();
     return;

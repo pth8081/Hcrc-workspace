@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**27.82** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.83** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.83 (2026-11): Vá lỗi 409 "vừa bị người khác thay đổi" GIẢ ở nhiều màn cấu hình quy trình
+
+**Người dùng báo lỗi** (kèm ảnh chụp thật) khi cấu hình "QT Giá Bán Buôn (Siêu Thị)"/"QT Vận Hành - Đặt
+Hàng Tại Siêu Thị": hộp thoại lỗi `Dữ liệu "itPriceWholesaleStoreMixedApprovalRules"/
+"operationOrderStoreMixedApprovalRules" vừa bị người khác thay đổi — vui lòng tải lại trang rồi thử
+lại` hiện ra dù không có ai khác đang sửa cùng lúc.
+
+**Nguyên nhân**: `syncStorage(key, opts)` chỉ kích hoạt được cơ chế "tự tải lại bản mới nhất, áp lại
+đúng phần vừa thêm/sửa/xoá của mình rồi thử lưu lại 1 lần" (đã có sẵn, dùng cho `users`/`permGroups`)
+khi `opts.baseline` được truyền vào — nếu thiếu, MỌI lỗi 409 từ server đều rơi thẳng vào cảnh báo chặn
+màn hình, kể cả trường hợp hoàn toàn vô hại (chính admin đó bấm "+ Thêm Dòng" liên tiếp quá nhanh,
+dữ liệu chưa kịp cập nhật version giữa 2 lượt lưu). 2 màn trên gọi lưu mà quên truyền tham số này.
+
+**Rà soát rộng hơn theo yêu cầu người dùng** ("có thể một vài chỗ khác đang bị") — phát hiện cùng lỗi ở
+thêm **5 nơi khác** đã có sẵn snapshot để rollback nhưng chưa từng nối vào cơ chế thử-lại: "Áp Dụng
+Nhanh" (`quickApplyConfigs`), Nhập Excel/Lưu/Xoá Mẫu Quy Trình (`workflows`), và Thêm/Đổi Tên/Xoá/Sửa
+Phòng Ban Con của Khối/Ban (`deptGroups`). Đã vá cả 5 — chỉ áp dụng cho đúng các collection dạng mảng
+object có trường `id` ổn định (điều kiện bắt buộc của cơ chế dùng chung), không đụng tới các danh mục
+dạng mảng chuỗi thuần (VD `depts`) hay object phẳng (VD `deptAbbrs`) vì cơ chế này không áp dụng đúng
+cho 2 dạng đó.
+
+Test: `server/tests/test-syncstorage-missing-baseline-fix.js` (13 kịch bản — xác nhận cả 5 key giờ tự
+lưu lại êm khi 409 vô hại, VẪN báo lỗi đúng khi là xung đột thật). Đã chạy lại toàn bộ test liên quan
+(Mixed Approval/Quick Apply/Workflow Templates/Dept Groups), không có regression.
 
 ## v27.82 (2026-11): Dán nhiều Mã Nhân Viên/Username để tự thêm hàng loạt vào ô "chọn người"
 
