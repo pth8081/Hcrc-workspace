@@ -183,6 +183,28 @@ async function scenario(name, fn) {
     record('  -> khối không liên quan (id 99) vẫn còn', r.finalClientState.some(x => x.id === 99), JSON.stringify(r.finalClientState));
   });
 
+  // confirmApprovalGroupsImport() (module-admin-submissiongroups.js) — Nhập Excel Nhóm/Cấp Phê Duyệt đã
+  // chụp sẵn `snapshot` nhưng không truyền baseline vào 2 lệnh syncStorage(groupsKey)/syncStorage(levelsKey)
+  // (sửa 11/2026) — dùng key "submissionApprovalGroups" làm đại diện (cùng khuôn {id, label, order,
+  // singleApprover, members} cho mọi groupsKey/levelsKey khác trong APPROVAL_GROUPS_ADMIN_CONFIG).
+  await scenario('submissionApprovalGroups (Nhập Excel Nhóm Phê Duyệt): 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, label: 'Nhóm A', order: 1, singleApprover: false, members: ['u1'] }];
+    const desired = [{ id: 1, label: 'Nhóm A (đổi tên qua Excel)', order: 1, singleApprover: false, members: ['u1', 'u2'] }];
+    const unrelatedServerState = [...baseline, { id: 99, label: 'Nhóm do nơi khác thêm', order: 2, singleApprover: true, members: [] }];
+    const r = await runKeyScenario('submissionApprovalGroups', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+    record('  -> nhóm không liên quan (id 99) vẫn còn', r.finalClientState.some(x => x.id === 99), JSON.stringify(r.finalClientState));
+  });
+
+  await scenario('submissionApprovalLevels (Nhập Excel Cấp Phê Duyệt): 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, label: 'Cấp 1', order: 1, visibleGroupIds: null, lockedGroupIds: [] }];
+    const desired = [{ id: 1, label: 'Cấp 1 (đổi tên qua Excel)', order: 1, visibleGroupIds: [1], lockedGroupIds: [1] }];
+    const unrelatedServerState = [...baseline, { id: 99, label: 'Cấp do nơi khác thêm', order: 2, visibleGroupIds: null, lockedGroupIds: [] }];
+    const r = await runKeyScenario('submissionApprovalLevels', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+    record('  -> cấp không liên quan (id 99) vẫn còn', r.finalClientState.some(x => x.id === 99), JSON.stringify(r.finalClientState));
+  });
+
   await browser.close();
   await server.close();
 

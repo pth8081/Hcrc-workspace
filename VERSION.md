@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**27.84** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.85 (2026-11): Rà soát nốt lỗi 409 giả — vá confirmApprovalGroupsImport() thiếu baseline
+
+Người dùng yêu cầu rà soát lại TẤT CẢ màn "Xác Nhận Nhập Excel" khác có cùng triệu chứng 409 giả (sau
+khi phát hiện `confirmMixedApprovalImport()` ở v27.83 vẫn còn sót, đã vá riêng). Rà soát toàn bộ các hàm
+`confirm*Import()` còn lại trong hệ thống (Hồ Sơ Nhân Sự, Siêu Thị, Sơ Đồ Tổ Chức, Ngân Sách, Đào Tạo,
+Hợp Đồng Lao Động, Danh Mục Đối Tượng, Checklist...).
+
+**Tìm thấy đúng 1 chỗ còn sót**: `confirmApprovalGroupsImport()` (module-admin-submissiongroups.js, màn
+"Nhập Excel Nhóm/Cấp Phê Duyệt" — Văn Bản Trình/Hợp Đồng/10 module EXTRA_APPROVAL như Tài Liệu/Đăng Ký
+Xe/Phòng Họp/VPP/Thanh Toán...) đã chụp sẵn `snapshot` để rollback nhưng KHÔNG truyền vào
+`syncStorage(groupsKey)`/`syncStorage(levelsKey)` — mọi 409 (kể cả vô hại) rơi thẳng vào alert chặn màn
+hình thay vì tự thử lưu lại. Đã thêm `{ baseline: snapshot[...] }` vào cả 2 lệnh gọi.
+
+**Các hàm còn lại đã rà soát** (không cần sửa, lý do khác nhau):
+- `confirmUsersImport`/`confirmWorkflowStepsImport`/`confirmObjectCatalogImport` — ĐÃ đúng từ trước
+  (đã truyền baseline sẵn).
+- `confirmHrpfImport`/`confirmHrpfPositionAssignImport`/`confirmHrpOnbCreateImport`/
+  `confirmOrgChartImport`/`confirmBudgetLineImport`/`confirmTrainingPlanImport`/`confirmHrContractImport`/
+  `confirmHrContractCreateImport` — gọi route REST riêng (`/api/records/.../apply-import`,
+  `callCreateAction()`, `callRecordAction()`...), không đi qua `syncStorage()` nên không áp dụng cơ chế
+  này.
+- `confirmOperationEstimateImport`/`confirmOperationWorkItemImport` — tương tự, lưu qua
+  `callRecordAction()`/`callRecordCreate()`.
+- `confirmStoreImport`/`confirmPositionTypesImport`/`confirmWfPositionImport` — collection không có
+  field `id` ổn định (`stores`/`storeTypes` là mảng chuỗi/object map phẳng, `positionTypes` khoá theo
+  `key`, `workflowParticipatingPositions` là cặp `{jobTitle, dept}` không có định danh riêng) — ngoài
+  phạm vi cơ chế `retryArraySaveAfterConflict()` (chỉ tổng quát hoá cho mảng object có `id`, không mở
+  rộng thêm ở đợt này).
+- `confirmChecklistImport`/`confirmTrainingTestImport` — chỉ nạp vào mảng bộ nhớ tạm (builder đang soạn),
+  lưu thật ở 1 nút riêng ("💾 Lưu Mẫu"/"Tạo Bài Test") không liên quan tới hàm `confirm*Import` này.
+
+Test: thêm 2 kịch bản mới vào `server/tests/test-syncstorage-missing-baseline-fix.js`
+(`submissionApprovalGroups`/`submissionApprovalLevels`, 17/17 kịch bản qua) + chạy lại toàn bộ test Nhóm/
+Cấp Phê Duyệt hiện có (`test-approval-groups-excel.js`, `test-approval-groups-excel-dedupe.js`,
+`test-approvalgroup-username-cascade.js`, `test-extra-approval-groups.js`) — không regression.
 
 ## v27.84 (2026-11): Khối ảo "Nhóm Phân Quyền (Thành Viên)" vào Ma Trận Phân Quyền
 

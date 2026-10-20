@@ -812,14 +812,14 @@ async function confirmApprovalGroupsImport(kind) {
   for (const m of perModule) {
     const snapshot = { [m.gKey]: JSON.parse(JSON.stringify(DB[m.gKey] || [])), [m.lKey]: JSON.parse(JSON.stringify(DB[m.lKey] || [])) };
     DB[m.gKey] = m.groups;
-    const savedGroups = await syncStorage(m.gKey);
+    const savedGroups = await syncStorage(m.gKey, { baseline: snapshot[m.gKey] });
     if (!savedGroups) {
       DB[m.gKey] = snapshot[m.gKey]; DB[m.lKey] = snapshot[m.lKey];
       failedModules.push(m.moduleKey);
       continue;
     }
     DB[m.lKey] = m.levels;
-    const savedLevels = await syncStorage(m.lKey);
+    const savedLevels = await syncStorage(m.lKey, { baseline: snapshot[m.lKey] });
     if (!savedLevels) {
       // Nhóm ĐÃ lưu thành công trên server ở bước trên — chỉ phục hồi Cấp cục bộ (xem chú thích hàm).
       DB[m.lKey] = snapshot[m.lKey];
