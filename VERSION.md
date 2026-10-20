@@ -1,9 +1,27 @@
 # Phiên bản hiện tại
 
-**27.79** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.80** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.80 (2026-11): Vá tiếp menu "⋯" (Ma Trận Phân Quyền) bị bảng/select đè lên
+
+**Lỗi người dùng báo cáo trực tiếp kèm ảnh chụp**: ngay sau khi vá menu "⋯" tràn mép trên mobile
+(v27.79), menu "⋯" ở cụm "Ma Trận Phân Quyền" (Xuất/Import Excel Người Dùng, Import Nhóm Phân Quyền)
+lại bị khối "Khối quyền" (select)/bảng "Sửa Nhanh Trên Web" ngay bên dưới đè lên khi mở cả 2 cùng lúc.
+
+**Nguyên nhân thật**: dù `.action-menu-panel` (z-index 30) cao hơn bảng (sticky thead z-20/z-10),
+`.action-menu-trigger-wrap` (`position: relative`, KHÔNG có z-index riêng) không tự tạo stacking
+context mới — z-index của panel vẫn phải "tranh" đúng ngữ cảnh xếp lớp của 1 ancestor xa hơn, dễ bị
+ảnh hưởng bởi `overflow: auto` + `position: sticky` của bảng cạnh đó trên một số trình duyệt di động.
+
+**Đã sửa triệt để cả 2 lỗi (mobile tràn mép + bị đè) bằng 1 cách chung**: `.action-menu-panel` đổi hẳn
+từ `position: absolute` sang `position: fixed`, tự tính toạ độ top/left bằng JS
+(`positionActionMenuPanel()`, core.js) ngay khi mở — `position: fixed` luôn nằm ở stacking context GỐC
+của trang, không phụ thuộc vào ngữ cảnh xếp lớp cục bộ quanh nút bấm nữa. Áp dụng cho cả 2 menu "⋯"
+hiện có trong hệ thống (Danh Sách Người Dùng/Ma Trận Phân Quyền) — test lại cả 2 kịch bản (mobile hẹp +
+mở đồng thời "Sửa Nhanh Trên Web") đều đúng, không ảnh hưởng hành vi toggle/đóng-ngoài-click sẵn có.
 
 ## v27.79 (2026-11): Vá lỗi menu "⋯" (Tải Mẫu/Import/Export) tràn ra ngoài màn hình trên mobile
 

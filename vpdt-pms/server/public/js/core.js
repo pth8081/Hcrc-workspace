@@ -10361,6 +10361,31 @@ function toggleActionMenu(id, e) {
   const willOpen = panel.classList.contains('hidden');
   document.querySelectorAll('.action-menu-panel').forEach(p => { if (p !== panel) p.classList.add('hidden'); });
   panel.classList.toggle('hidden', !willOpen);
+  if (willOpen) positionActionMenuPanel(panel);
+}
+// positionActionMenuPanel() — LỖI ĐÃ VÁ (người dùng chụp ảnh thật trên điện thoại: menu "⋯" ở cụm "Ma
+// Trận Phân Quyền" bị khối "Khối quyền" (select)/bảng Sửa Nhanh Trên Web ngay bên dưới đè lên, dù CSS
+// z-index của menu (30) CAO HƠN bảng (sticky thead z-20/z-10) — đúng ý đồ stacking context nhưng vẫn bị
+// đè trên trình duyệt di động thật. `.action-menu-panel` TRƯỚC ĐÂY dùng `position: absolute` lồng trong
+// `.action-menu-trigger-wrap` (`position: relative`, KHÔNG có z-index riêng) — bản thân wrapper đó
+// KHÔNG tự tạo stacking context mới, nên z-index của menu vẫn phải "tranh" đúng stacking context của
+// 1 ancestor xa hơn (dễ bị ảnh hưởng bởi `overflow: auto` + `position: sticky` của bảng ngay cạnh, nhất
+// là trên 1 số trình duyệt di động). Đổi hẳn sang `position: fixed` (xem app.css) + tự tính toạ độ
+// top/left NGAY TẠI ĐÂY bằng JS — `position: fixed` luôn nằm ở stacking context GỐC của trang (không lồng
+// trong bất kỳ ancestor nào), loại bỏ hoàn toàn rủi ro bị ảnh hưởng bởi ngữ cảnh xếp lớp cục bộ xung
+// quanh nút bấm, bất kể màn nào dùng chung widget "⋯" này sau này.
+function positionActionMenuPanel(panel) {
+  const trigger = document.querySelector(`[data-op="toggleActionMenu"][data-arg0="${panel.id}"]`);
+  if (!trigger) return;
+  const r = trigger.getBoundingClientRect();
+  const panelWidth = panel.offsetWidth || 230;
+  // Mặc định neo mép phải panel vào mép phải nút (khớp hành vi cũ trên desktop — nút thường nằm ở mép
+  // phải 1 hàng rộng), rồi kẹp lại trong khoảng [12, viewportWidth-panelWidth-12] để không bao giờ tràn
+  // ra ngoài 2 bên màn hình (nút nằm sát mép trái trên mobile vẫn hiện đủ, xem chú thích ở trên).
+  let left = r.right - panelWidth;
+  left = Math.max(12, Math.min(left, window.innerWidth - panelWidth - 12));
+  panel.style.top = (r.bottom + 6) + 'px';
+  panel.style.left = left + 'px';
 }
 function closeActionMenu(id) {
   document.getElementById(id)?.classList.add('hidden');

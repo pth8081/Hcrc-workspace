@@ -831,22 +831,22 @@ button:disabled { opacity: .55; filter: grayscale(.25); cursor: not-allowed; }
    (khớp đúng ý `.hidden`) rồi CHỈ bật `display: flex` qua `:not(.hidden)` — độ ưu tiên cao hơn 1 bậc
    (pseudo-class) nên LUÔN thắng `.hidden` dù thứ tự nạp file nào, đảm bảo đúng ý đồ ẩn/hiện qua JS. */
 .action-menu-trigger-wrap { position: relative; display: inline-block; }
+/* LỖI ĐÃ VÁ 2 ĐỢT (chụp ảnh thật trên điện thoại): (1) "trên mobile ấn bị mất khung" — `position:
+   absolute; right: 0` lồng trong `.action-menu-trigger-wrap` neo mép phải panel vào mép phải nút "⋯",
+   đúng khi nút nằm ở mép phải 1 hàng rộng (desktop) nhưng tràn hẳn ra ngoài khi nút nằm sát mép trái
+   (mobile, layout đổi flex-col); (2) menu bị khối "Khối quyền" (select)/bảng "Sửa Nhanh Trên Web" ngay
+   bên dưới đè lên dù z-index menu (30) CAO HƠN bảng (sticky thead z-20/z-10) — `.action-menu-trigger-wrap`
+   không tự tạo stacking context mới (position:relative KHÔNG kèm z-index) nên z-index của panel vẫn
+   phải "tranh" đúng stacking context của 1 ancestor xa hơn, dễ bị ảnh hưởng bởi overflow:auto +
+   position:sticky của bảng cạnh đó trên 1 số trình duyệt di động. Đổi hẳn sang `position: fixed` + tự
+   tính top/left bằng JS (positionActionMenuPanel(), core.js) khi mở — fixed LUÔN nằm ở stacking context
+   GỐC của trang, loại bỏ hoàn toàn phụ thuộc vào ngữ cảnh xếp lớp cục bộ quanh nút bấm. */
 .action-menu-panel {
-  display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 230px;
+  display: none; position: fixed; z-index: 30; min-width: 230px;
   max-width: calc(100vw - 24px); background: #fff; border: 1px solid var(--hcrc-border); border-radius: 10px;
   box-shadow: var(--hcrc-shadow); padding: 6px; flex-direction: column; gap: 2px;
 }
 .action-menu-panel:not(.hidden) { display: flex; }
-/* LỖI ĐÃ VÁ (người dùng báo "trên mobile ấn bị mất khung" — chụp ảnh thật trên điện thoại): `right: 0`
-   neo mép PHẢI của panel vào mép phải nút "⋯" — đúng ý đồ khi nút nằm ở mép PHẢI 1 hàng rộng (desktop,
-   `sm:flex-row justify-between`), nhưng ở màn hẹp (mobile) layout đổi sang `flex-col`/`items-start`
-   khiến nút "⋯" nằm sát mép TRÁI màn hình — `right: 0` lúc đó đẩy panel (min-width 230px) tràn hẳn ra
-   NGOÀI bên trái viewport, chỉ còn thấy 1 dải trắng hẹp cắt ngang (không bấm được các mục bên dưới).
-   Dưới breakpoint `sm` (640px, khớp đúng điểm layout đổi flex-col ở HTML), neo lại từ mép TRÁI thay vì
-   phải — panel mở RỘNG SANG PHẢI từ đúng vị trí nút, luôn nằm trong màn hình trên mobile. */
-@media (max-width: 640px) {
-  .action-menu-panel { right: auto; left: 0; }
-}
 .action-menu-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 8px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: #334155;
