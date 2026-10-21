@@ -641,17 +641,38 @@ function assertShiftTemplatesSafeToSave(value, oldValue, shiftRoster) {
 // thể chỉ định sửa field KHÁC như nhãn/bắt buộc, không để ý ô Options đang trống), toàn bộ danh mục bị
 // XOÁ TRẮNG VĨNH VIỄN trên server mà không có cảnh báo gì — ĐÚNG NGUYÊN NHÂN THẬT gây mất dữ liệu người
 // dùng báo cáo (không phải do bản vá F5 ở trên, bản vá đó chỉ ngăn HIỂN THỊ sai, không ngăn được đường
-// ghi đè mù này). Áp dụng CHUNG cho TOÀN BỘ 15 key (không chỉ riêng 5 key có đường ghi thứ 2 — phòng xa
-// cho mọi lỗi/đường ghi khác trong tương lai, cùng tinh thần "chặn hẳn rẻ hơn debug lại sau khi mất dữ
-// liệu thật") — PHẢI giữ đúng khớp danh sách GENERIC_SIMPLE_CATALOGS ở module-admin.js, thêm 1 key mới
-// vào đó thì cũng thêm vào đây luôn.
+// ghi đè mù này). Áp dụng CHUNG cho 19 key (15 key GENERIC_SIMPLE_CATALOGS + 4 key rà soát mở rộng
+// licenseTypes/trainingCategories/cats/contractTypes — không chỉ riêng mấy key có đường ghi thứ 2 đã
+// xác nhận — phòng xa cho mọi lỗi/đường ghi khác trong tương lai, cùng tinh thần "chặn hẳn rẻ hơn debug
+// lại sau khi mất dữ liệu thật") — PHẢI giữ đúng khớp danh sách GENERIC_SIMPLE_CATALOGS ở module-admin.js,
+// thêm 1 key mới vào đó thì cũng thêm vào đây luôn.
 const SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE = new Map([
   ['jobGrades', 'Cấp Bậc'], ['resignationReasons', 'Lý Do Nghỉ Việc'], ['disciplinaryTypes', 'Loại Kỷ Luật'],
   ['legalEntities', 'Đơn Vị (Pháp Nhân)'], ['specialLaborStatuses', 'Đối Tượng Lao Động Đặc Biệt'],
   ['currentWorkStatusDetails', 'Tình Trạng Làm Việc Hiện Tại'], ['nationalIdIssuePlaces', 'Nơi Cấp CCCD/CMND'],
   ['educationDegrees', 'Bằng Cấp'], ['relationshipTypes', 'Quan Hệ'], ['nationalities', 'Quốc Tịch'],
   ['contractAmendmentTypes', 'Loại Thay Đổi Hợp Đồng'], ['contractTerminationReasons', 'Lý Do Chấm Dứt Hợp Đồng'],
-  ['maritalStatuses', 'Tình Trạng Hôn Nhân'], ['employmentTypes', 'Hình Thức Làm Việc'], ['workSchedules', 'Thời Gian Làm Việc']
+  ['maritalStatuses', 'Tình Trạng Hôn Nhân'], ['employmentTypes', 'Hình Thức Làm Việc'], ['workSchedules', 'Thời Gian Làm Việc'],
+  // 4 key THÊM (rà soát mở rộng theo yêu cầu người dùng "rà soát xem danh mục khác có lỗi tương tự
+  // không" — KHÔNG thuộc GENERIC_SIMPLE_CATALOGS/module-admin.js, mỗi key có panel Thêm/Sửa/Xoá RIÊNG
+  // của chính module đó, nhưng CÙNG hình dạng mảng chuỗi phẳng + CÙNG lỗ hổng Biểu Mẫu ghi đè mù):
+  // licenseTypes (saveLicenseType()/deleteLicenseType() ở module-tailieu.js), trainingCategories
+  // (saveTrainingCategory()/deleteTrainingCategory() ở module-admin.js), cats (saveCat()/deleteCat() ở
+  // module-admin.js) — cả 3 đã tắt hẳn lối sửa song song ở Biểu Mẫu (optionsManagedByCatalog: true, xem
+  // core.js). contractTypes KHÁC 3 key trên: Biểu Mẫu vẫn là lối DUY NHẤT để Thêm/Bớt (không có nút
+  // Thêm/Xóa riêng, chỉ "✏️ Sửa" đổi tên qua renameContractType() — xem chú thích tại
+  // updateContractTypeAbbr() ở module-admin.js) nên KHÔNG tắt được ở client, nhưng vẫn cùng nguy cơ ghi
+  // đè mù xoá trắng nên vẫn cần chặn ở đây.
+  ['licenseTypes', 'Các Loại Giấy Phép'], ['trainingCategories', 'Loại Đào Tạo'],
+  ['cats', 'Phân Loại Tài Liệu']
+]);
+
+// contractTypes KHÔNG có nút Xoá riêng ở Hệ Thống → Quản Lý Danh Mục (xem chú thích tại
+// updateContractTypeAbbr() ở module-admin.js — Biểu Mẫu vẫn là lối DUY NHẤT để Thêm/Bớt, chỉ "✏️ Sửa"
+// đổi tên có route cascade riêng) — tách riêng khỏi Map ở trên để thông báo lỗi không trỏ sai tới 1 nút
+// không tồn tại, nhưng vẫn áp dụng CÙNG lớp chặn vì cùng nguy cơ ghi đè mù xoá trắng.
+const SIMPLE_ARRAY_CATALOG_KEYS_FORM_ONLY_NO_DELETE_BUTTON = new Map([
+  ['contractTypes', 'Loại Pháp Lý HĐ']
 ]);
 
 // Chặn CỨNG (400) khi 1 lượt ghi POST /api/data/:key định GHI ĐÈ 1 danh mục mảng chuỗi phẳng đang có ít
@@ -660,11 +681,15 @@ const SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE = new Map([
 // hẳn) — bớt vài giá trị (rename/xoá có chủ đích qua đúng widget Xoá) vẫn đi qua bình thường, không bị
 // ảnh hưởng gì (chỉ cần oldValue có ít nhất 1 phần tử, không phân biệt bớt bao nhiêu).
 function assertSimpleArrayCatalogNotBlindlyEmptied(key, value, oldValue) {
-  const label = SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE.get(key);
+  const label = SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE.get(key)
+    || SIMPLE_ARRAY_CATALOG_KEYS_FORM_ONLY_NO_DELETE_BUTTON.get(key);
   if (!label) return; // không thuộc danh sách này — không áp dụng
   if (!Array.isArray(value) || value.length > 0) return; // vẫn còn giá trị, hoặc không phải mảng (shape đã bị chặn riêng)
   if (!Array.isArray(oldValue) || oldValue.length === 0) return; // trước đó vốn đã rỗng — không có gì để "mất"
-  throw new CreateError(400, `Không thể lưu: thao tác này sẽ xoá TRẮNG toàn bộ ${oldValue.length} giá trị đang có trong danh mục "${label}" — nếu thật sự muốn xoá từng giá trị, dùng nút "Xoá" ở đúng dòng đó trong Hệ Thống → Quản Lý Danh Mục thay vì ghi đè cả danh sách.`);
+  const howToFix = SIMPLE_ARRAY_CATALOG_KEYS_FORM_ONLY_NO_DELETE_BUTTON.has(key)
+    ? 'nếu thật sự muốn bớt giá trị, sửa lại đúng danh sách ở màn Biểu Mẫu (giữ ít nhất 1 giá trị) thay vì xoá trắng hết'
+    : 'nếu thật sự muốn xoá từng giá trị, dùng nút "Xoá" ở đúng dòng đó trong Hệ Thống → Quản Lý Danh Mục thay vì ghi đè cả danh sách';
+  throw new CreateError(400, `Không thể lưu: thao tác này sẽ xoá TRẮNG toàn bộ ${oldValue.length} giá trị đang có trong danh mục "${label}" — ${howToFix}.`);
 }
 
 // laborContractTypes ("Loại HĐLĐ", 11/2026 — danh mục dùng CHUNG cho hrProcesses.plannedContractType

@@ -1,9 +1,57 @@
 # Phiên bản hiện tại
 
-**27.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.91 (2026-11): Rà soát toàn hệ thống + tắt hẳn đường ghi đè mù còn sót ở Biểu Mẫu cho các danh mục đã có widget riêng
+
+Theo yêu cầu người dùng, sau v27.90 (chặn phía server): (1) tắt hẳn đường "Sửa Tùy Chọn" song song ở màn
+Biểu Mẫu cho MỌI danh mục đã có widget Thêm/Sửa/Xoá riêng, và (2) rà soát toàn hệ thống xem danh mục nào
+khác cũng có cùng lỗ hổng.
+
+**Rà soát xác nhận**: trong 16 trường `CORE_FIELD_MANIFEST` có `optionsKey`, có **8 trường trỏ tới 8
+danh mục ĐÃ có widget Thêm/Sửa/Xoá an toàn riêng** (dual-write risk giống hệt employmentTypes/
+workSchedules):
+- `employmentTypes`/`workSchedules`/`nationalIdIssuePlaces`/`educationDegrees`/`relationshipTypes`
+  (widget `GENERIC_SIMPLE_CATALOGS`, đã tắt ở v27.90 cùng đợt server guard).
+- **MỚI phát hiện ở đợt rà soát này**: `cats` (Phân Loại Tài Liệu — `saveCat()`/`deleteCat()`),
+  `licenseTypes` (Các Loại Giấy Phép — `saveLicenseType()`/`deleteLicenseType()`), `trainingCategories`
+  (Loại Đào Tạo — `saveTrainingCategory()`/`deleteTrainingCategory()`, dùng ở 5 field khác nhau:
+  `tcCategory`/`ttCategory`/`tccCategory`/`tdCategory`/`teCategory`).
+
+**1 danh mục NGOẠI LỆ, không tắt được**: `contractTypes` (Loại Pháp Lý HĐ) — Biểu Mẫu vẫn là lối DUY
+NHẤT để Thêm/Bớt giá trị (không có nút Thêm/Xóa riêng ở Quản Lý Danh Mục, chỉ có "✏️ Sửa" đổi tên qua
+route cascade riêng) — giữ nguyên UI, chỉ thêm vào lớp chặn phía server (không có widget thay thế để
+tắt). 8 trường còn lại có `optionsKey` (`submissionTypes`/`submissionPriorities`/`carTypes`/`carPurposes`/
+`itTicketCategories`/`hrFeedbackCategories`/`internalNewsCategories`/`internalShareCategories`) — rà
+soát xác nhận KHÔNG có widget thay thế nào khác, Biểu Mẫu vẫn là lối quản lý DUY NHẤT & HỢP LỆ cho các
+danh mục này, không phải lỗi — giữ nguyên, không đụng tới.
+
+**Bản vá client** (`core.js`, `module-formbuilder-nav.js`, `systemSection.html`): thêm cờ
+`optionsManagedByCatalog: true` cho 8 trường kể trên — `editCoreField()` giờ ẩn hẳn ô "Danh Sách Lựa
+Chọn", hiện 1 dòng ghi chú trỏ đúng chỗ sửa thay vào đó; `addCustomField()` bỏ qua hẳn việc lưu options
+từ đây cho các trường này — xoá tận gốc đường ghi đè mù, không chỉ chặn ở server nữa. Biểu Mẫu vẫn hoạt
+động đầy đủ cho mọi việc khác (sửa Nhãn/Bắt buộc mọi trường, thêm/sửa/xoá trường bổ sung, sửa Options
+của các trường KHÔNG có cờ này).
+
+**Bản vá server** (`lib/createValidation.js`): mở rộng `assertSimpleArrayCatalogNotBlindlyEmptied()` từ
+15 lên 19 key — thêm `cats`/`licenseTypes`/`trainingCategories`/`contractTypes`. Thông báo lỗi phân biệt
+2 nhóm: nhóm có nút Xoá riêng ở Quản Lý Danh Mục (trỏ đúng chỗ) và nhóm chỉ có Biểu Mẫu (`contractTypes`
+— trỏ về chính Biểu Mẫu thay vì 1 nút không tồn tại).
+
+**Test**: cập nhật `tests/test-forms-batch1.js` (kịch bản LICENSE cũ kiểm tra hành vi GHI ĐÈ cũ — nay
+đổi thành kiểm tra ô Options bị ẩn + `addCustomField()` không đụng tới `DB.licenseTypes` nữa). Chạy lại
+toàn bộ regression liên quan: `test-forms-batch1-4.js` (36+41+44+43), `test-generic-simple-catalog-add-
+submit.js` (16/16), `test-catalog-rename-employment-worksched.js` (14/14),
+`test-catalog-rename-hr-suggestion-catalogs.js` (25/25), `test-catalog-rename-round2-extras.js` (8/8),
+`test-position-types.js` (10/10), `test-catalog-rename-server.js` (32/32),
+`test-labor-contract-types-catalog.js` (16/16), `test-login-cache-first-render.js` (7/7) — 285 kịch bản,
+không regression.
+
+**Lưu ý quan trọng**: dữ liệu đã mất trước đây (employmentTypes/workSchedules) vẫn KHÔNG tự phục hồi
+được — người dùng cần tự nhập lại qua widget mới, nay đã an toàn tuyệt đối.
 
 ## v27.90 (2026-11): TÌM RA NGUYÊN NHÂN THẬT gây mất dữ liệu danh mục — chặn đường ghi đè mù còn sót lại + chặn CHUNG cho mọi danh mục dạng mảng chuỗi
 

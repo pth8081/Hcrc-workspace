@@ -168,15 +168,28 @@ async function main() {
         opModeLabel ? opModeLabel.textContent : 'NO LABEL FOUND');
     }
 
-    // ---------- 4) LICENSE: sửa optionsKey 'licenseTypes' (danh sách lựa chọn) ----------
+    // ---------- 4) LICENSE: licenseType giờ optionsManagedByCatalog: true (11/2026, LỖI ĐÃ VÁ — xem
+    // assertSimpleArrayCatalogNotBlindlyEmptied() ở lib/createValidation.js) — ô "Danh Sách Lựa Chọn" ở
+    // Biểu Mẫu PHẢI ẩn đi (thay bằng #optionsManagedNote), và addCustomField() PHẢI bỏ qua hẳn việc lưu
+    // DB.licenseTypes từ đây (đường ghi đè mù song song với saveLicenseType()/deleteLicenseType() ở
+    // module-tailieu.js — nguyên nhân thật gây mất trắng employmentTypes/workSchedules trước đây).
     {
       activeFormTab = 'LICENSE';
       switchFormTab('LICENSE');
+      const prevLicenseTypes = DB.licenseTypes.slice();
       editCoreField('LICENSE', 'licenseType');
+      check('LICENSE: ô "Danh Sách Lựa Chọn" bị ẨN (quản lý qua Quản Lý Danh Mục, không phải Biểu Mẫu nữa)',
+        document.getElementById('optionsGroup').classList.contains('hidden'),
+        'optionsGroup hidden=' + document.getElementById('optionsGroup').classList.contains('hidden'));
+      check('LICENSE: ghi chú "quản lý qua Quản Lý Danh Mục" hiện đúng chỗ',
+        !document.getElementById('optionsManagedNote').classList.contains('hidden'),
+        'optionsManagedNote hidden=' + document.getElementById('optionsManagedNote').classList.contains('hidden'));
+      // Dù input #fldOptions (ẩn) vẫn còn giá trị cũ từ lần dùng trước trong DOM, addCustomField() phải
+      // bỏ qua hẳn nhánh lưu options cho field này — DB.licenseTypes không được đụng tới.
       document.getElementById('fldOptions').value = 'Giấy phép kinh doanh, Giấy phép PCCC, Giấy phép ATTP mới';
       await addCustomField({ preventDefault() {} });
-      check('LICENSE: saveCoreFieldOptionsList() cập nhật đúng DB.licenseTypes (thêm giá trị mới)',
-        DB.licenseTypes.length === 3 && DB.licenseTypes.includes('Giấy phép ATTP mới'),
+      check('LICENSE: addCustomField() KHÔNG đụng tới DB.licenseTypes (đường ghi đè mù đã bị tắt hẳn)',
+        JSON.stringify(DB.licenseTypes) === JSON.stringify(prevLicenseTypes),
         JSON.stringify(DB.licenseTypes));
     }
 

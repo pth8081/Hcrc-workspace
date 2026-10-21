@@ -716,7 +716,9 @@ const CORE_FIELD_MANIFEST = {
     { id: 'docTitle', label: 'Tên / Tiêu Đề Tài Liệu', required: true },
     { id: 'docVer', label: 'Phiên Bản', required: true },
     { id: 'selDept', label: 'Phòng Ban Trình', required: true },
-    { id: 'selCat', label: 'Phân Loại', required: true, optionsKey: 'cats' },
+    // optionsManagedByCatalog (11/2026) — cats có widget Thêm/Sửa/Xoá riêng (saveCat()/deleteCat() ở
+    // module-admin.js) — xem chú thích đầy đủ tại hrpOnbNationalIdIssuePlace (CORE_FIELD_MANIFEST.HR_ONBOARDING).
+    { id: 'selCat', label: 'Phân Loại', required: true, optionsKey: 'cats', optionsManagedByCatalog: true },
     { id: 'docFile', label: 'Tệp Tài Liệu', required: true },
     { id: 'docSummary', label: 'Trích Lục / Tóm Tắt Nội Dung', required: true }
   ],
@@ -787,7 +789,9 @@ const CORE_FIELD_MANIFEST = {
     { id: 'licenseCompanyName', label: 'Tên Công Ty Chủ Quản', required: true },
     { id: 'licenseLocationName', label: 'Tên Địa Điểm', required: true },
     { id: 'licenseOperatingStatus', label: 'Tình Trạng Hoạt Động', required: true },
-    { id: 'licenseType', label: 'Tên Giấy Phép / Loại Giấy Phép', required: true, optionsKey: 'licenseTypes' },
+    // optionsManagedByCatalog (11/2026, LỖI ĐÃ VÁ — xem chú thích "2 lối sửa song song" ngay trên): tắt
+    // hẳn lối sửa THỨ 2 này ở Biểu Mẫu, chỉ còn lại 2 lối AN TOÀN (Quản Lý Danh Mục + tự học khi upload).
+    { id: 'licenseType', label: 'Tên Giấy Phép / Loại Giấy Phép', required: true, optionsKey: 'licenseTypes', optionsManagedByCatalog: true },
     { id: 'licenseNumber', label: 'Số Giấy Phép', required: true },
     { id: 'licenseIssueDate', label: 'Ngày Cấp', required: true },
     { id: 'licenseExpiryDate', label: 'Ngày Hết Hạn', required: true },
@@ -1013,15 +1017,19 @@ const CORE_FIELD_MANIFEST = {
   ],
   // TRAINING_CLASS: #trainingClassForm (Đào Tạo > Lớp Học > Tạo Lớp Học Mới). tcCategory optionsKey trỏ
   // DB.trainingCategories — danh sách NÀY ĐÃ admin-editable qua màn Quản Lý Danh Mục riêng (khối "Loại
-  // Đào Tạo" trong module Đào Tạo) VÀ optionsKey ở đây chỉ THÊM 1 lối sửa song song, cùng khuôn
-  // licenseType/contractType ở Đợt 1. tcMode (Online/Offline) KHÔNG có optionsKey — cùng lý do
+  // Đào Tạo" trong module Đào Tạo). optionsManagedByCatalog: true (11/2026, LỖI ĐÃ VÁ — xem
+  // assertSimpleArrayCatalogNotBlindlyEmptied() ở lib/createValidation.js) đã TẮT HẲN lối sửa song song
+  // từng có ở Biểu Mẫu (trước đây "chỉ THÊM 1 lối sửa song song, cùng khuôn licenseType/contractType ở
+  // Đợt 1" — chính lớp 2-lối-ghi-đè này là nguyên nhân thật gây mất trắng employmentTypes/workSchedules,
+  // nên dọn luôn ở đây dù chưa có báo lỗi thật xảy ra với trainingCategories). tcMode (Online/Offline)
+  // KHÔNG có optionsKey — cùng lý do
   // licenseOperatingStatus. tcDocumentIds (Giáo Trình) KHÔNG đưa vào — nhãn của field này được
   // onTrainingClassModeChange() TỰ ĐỘNG đổi qua lại theo #tcMode (2 câu chữ khác nhau tùy Online/Offline,
   // xem hàm đó) MỖI LẦN vào lại module/đổi sub-tab (renderTrainingLms() gọi onTrainingClassModeChange()
   // không điều kiện) — nếu đưa vào manifest, nhãn admin tùy biến sẽ liên tục bị hàm này ghi đè lại ngay
   // sau khi tải trang, khác hẳn mọi field khác trong hệ thống (chỉ đổi 1 lần lúc tải, không đổi lại sau).
   TRAINING_CLASS: [
-    { id: 'tcCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'tcCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories', optionsManagedByCatalog: true },
     { id: 'tcTitle', label: 'Tên Lớp Học', required: true },
     { id: 'tcMode', label: 'Kiểu Lớp Học', required: false },
     { id: 'tcInstructor', label: 'Giảng Viên / Người Phụ Trách', required: false },
@@ -1042,7 +1050,7 @@ const CORE_FIELD_MANIFEST = {
   // nên không xung đột/không cần đưa vào đây — cùng tinh thần loại trừ BUDGET_PERIOD.budgetEntries.
   TRAINING_TEST: [
     { id: 'ttTitle', label: 'Tên Bài Test', required: true },
-    { id: 'ttCategory', label: 'Loại Đào Tạo', required: false, optionsKey: 'trainingCategories' },
+    { id: 'ttCategory', label: 'Loại Đào Tạo', required: false, optionsKey: 'trainingCategories', optionsManagedByCatalog: true },
     { id: 'ttPassScore', label: 'Điểm Đạt Yêu Cầu Gợi Ý (%)', required: false }
   ],
   // RECRUITMENT_JOB: #recruitmentJobForm (Tuyển Dụng > Tin Tuyển Dụng > Đăng Tin Mới). rjDept (chọn đơn
@@ -1112,7 +1120,7 @@ const CORE_FIELD_MANIFEST = {
   // ['tcCategory','tdCategory','tccCategory'].forEach ở renderTrainingLms()) — optionsKey ở đây chỉ
   // THÊM 1 lối sửa song song, cùng khuôn tcCategory ở Đợt 3.
   TRAINING_COURSE: [
-    { id: 'tccCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'tccCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories', optionsManagedByCatalog: true },
     { id: 'tccName', label: 'Tên Chương Trình', required: true },
     { id: 'tccThumbnailFile', label: 'Ảnh Minh Hoạ', required: false },
     { id: 'tccDescription', label: 'Mô Tả (tuỳ chọn)', required: false }
@@ -1154,7 +1162,7 @@ const CORE_FIELD_MANIFEST = {
   // contractFile/offQty/offAmount/paymentSourceRecord (đã có sẵn trong manifest từ Đợt 1/2, cũng bị JS
   // khác toggle .required tương tự), không phải trường hợp ngoại lệ mới.
   TRAINING_DOC: [
-    { id: 'tdCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'tdCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories', optionsManagedByCatalog: true },
     { id: 'tdTitle', label: 'Tên Tài Liệu', required: true },
     { id: 'tdDocType', label: 'Loại Tài Liệu', required: false },
     { id: 'tdCourseId', label: 'Chương Trình (tuỳ chọn)', required: false },
@@ -1201,7 +1209,7 @@ const CORE_FIELD_MANIFEST = {
   // ĐƯỢC (khác tcDocumentIds bị loại ở Đợt 3) — nhãn field này CỐ ĐỊNH ở form Sửa, không có hàm nào tự
   // đổi qua lại theo mode (mode đã khoá, không đổi được sau khi tạo).
   TRAINING_CLASS_EDIT: [
-    { id: 'teCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories' },
+    { id: 'teCategory', label: 'Loại Đào Tạo', required: true, optionsKey: 'trainingCategories', optionsManagedByCatalog: true },
     { id: 'teTitle', label: 'Tên Lớp Học', required: true },
     { id: 'teInstructor', label: 'Giảng Viên / Người Phụ Trách', required: false },
     { id: 'teCourseId', label: 'Chương Trình (tuỳ chọn)', required: false },
@@ -1248,15 +1256,24 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpOnbNationalIdIssueDate', label: 'Ngày Cấp CCCD (tuỳ chọn)', required: false },
     // nationalIdIssuePlace CÓ optionsKey (10/2026, mẫu Excel 90 trường — CHUYỂN từ gõ tự do sang <select>,
     // cùng lý do employmentType/workSchedule ngay dưới) — trỏ DB.nationalIdIssuePlaces.
-    { id: 'hrpOnbNationalIdIssuePlace', label: 'Nơi Cấp CCCD (tuỳ chọn)', required: false, optionsKey: 'nationalIdIssuePlaces' },
+    // optionsManagedByCatalog (11/2026, LỖI ĐÃ VÁ — xem assertSimpleArrayCatalogNotBlindlyEmptied() ở
+    // lib/createValidation.js): danh mục này giờ có widget Thêm/Sửa/Xoá AN TOÀN riêng (Hệ Thống → Quản
+    // Lý Danh Mục) — tắt hẳn đường "Sửa Tùy Chọn" ở màn Biểu Mẫu (editCoreField()/addCustomField() ở
+    // module-formbuilder-nav.js tự bỏ qua field này nhờ cờ này), tránh 2 đường ghi song song từng là
+    // NGUYÊN NHÂN THẬT gây mất trắng employmentTypes/workSchedules (ghi đè mù, không đối chiếu phần tử
+    // bị mất). optionsKey VẪN giữ nguyên — vẫn cần để populateDropdowns() tự nạp đúng <select> thật ở
+    // form Onboarding, chỉ tắt đường SỬA DANH SÁCH qua Biểu Mẫu.
+    { id: 'hrpOnbNationalIdIssuePlace', label: 'Nơi Cấp CCCD (tuỳ chọn)', required: false, optionsKey: 'nationalIdIssuePlaces', optionsManagedByCatalog: true },
     // employmentType/workSchedule CÓ optionsKey (10/2026, theo yêu cầu người dùng "để sau này tôi có thể
-    // sửa, thêm thông tin") — trỏ DB.employmentTypes/DB.workSchedules (admin tự thêm/bớt lựa chọn qua
-    // nút Sửa trường mặc định ở màn Biểu Mẫu, cùng khuôn contractType/carType — xem defaults.js).
-    { id: 'hrpOnbEmploymentType', label: 'Hình Thức Làm Việc (tuỳ chọn)', required: false, optionsKey: 'employmentTypes' },
-    { id: 'hrpOnbWorkSchedule', label: 'Thời Gian Làm Việc (tuỳ chọn)', required: false, optionsKey: 'workSchedules' },
+    // sửa, thêm thông tin") — trỏ DB.employmentTypes/DB.workSchedules. optionsManagedByCatalog: xem chú
+    // thích đầy đủ ở hrpOnbNationalIdIssuePlace ngay trên — ĐÚNG 2 danh mục này là nơi lỗi mất dữ liệu
+    // thật sự xảy ra (người dùng báo cáo trực tiếp).
+    { id: 'hrpOnbEmploymentType', label: 'Hình Thức Làm Việc (tuỳ chọn)', required: false, optionsKey: 'employmentTypes', optionsManagedByCatalog: true },
+    { id: 'hrpOnbWorkSchedule', label: 'Thời Gian Làm Việc (tuỳ chọn)', required: false, optionsKey: 'workSchedules', optionsManagedByCatalog: true },
     // eduDegree CÓ optionsKey (11/2026, đồng bộ cùng khuôn "Trình độ" đã dùng <select> ở Hồ Sơ Nhân Sự
     // — rà soát "trường có nút select nhưng đang để nhập tay") — trỏ DB.educationDegrees.
-    { id: 'hrpOnbEduDegree', label: 'Học Vấn - Trình Độ (tuỳ chọn)', required: false, optionsKey: 'educationDegrees' },
+    // optionsManagedByCatalog: xem chú thích đầy đủ ở hrpOnbNationalIdIssuePlace ngay trên.
+    { id: 'hrpOnbEduDegree', label: 'Học Vấn - Trình Độ (tuỳ chọn)', required: false, optionsKey: 'educationDegrees', optionsManagedByCatalog: true },
     { id: 'hrpOnbEduSchool', label: 'Học Vấn - Trường (tuỳ chọn)', required: false },
     { id: 'hrpOnbEduMajor', label: 'Học Vấn - Chuyên Ngành (tuỳ chọn)', required: false },
     { id: 'hrpOnbPlannedContractType', label: 'Loại HĐLĐ Dự Kiến (tuỳ chọn)', required: false },
@@ -1356,15 +1373,19 @@ const CORE_FIELD_MANIFEST = {
     { id: 'hrpfCF_gender', label: 'Giới Tính', required: false },
     { id: 'hrpfCF_nationalId', label: 'Số CCCD/CMND', required: false },
     { id: 'hrpfCF_nationalIdIssueDate', label: 'Ngày Cấp CCCD/CMND', required: false },
-    { id: 'hrpfCF_nationalIdIssuePlace', label: 'Nơi Cấp CCCD/CMND', required: false, optionsKey: 'nationalIdIssuePlaces' },
-    { id: 'hrpfCF_employmentType', label: 'Hình Thức Làm Việc', required: false, optionsKey: 'employmentTypes' },
-    { id: 'hrpfCF_workSchedule', label: 'Thời Gian Làm Việc', required: false, optionsKey: 'workSchedules' },
+    // optionsManagedByCatalog (11/2026) — xem chú thích đầy đủ tại hrpOnbNationalIdIssuePlace ở
+    // CORE_FIELD_MANIFEST.HR_ONBOARDING: danh mục này quản lý qua Hệ Thống → Quản Lý Danh Mục, tắt đường
+    // "Sửa Tùy Chọn" song song ở màn Biểu Mẫu (nguyên nhân thật gây mất trắng employmentTypes/workSchedules).
+    { id: 'hrpfCF_nationalIdIssuePlace', label: 'Nơi Cấp CCCD/CMND', required: false, optionsKey: 'nationalIdIssuePlaces', optionsManagedByCatalog: true },
+    { id: 'hrpfCF_employmentType', label: 'Hình Thức Làm Việc', required: false, optionsKey: 'employmentTypes', optionsManagedByCatalog: true },
+    { id: 'hrpfCF_workSchedule', label: 'Thời Gian Làm Việc', required: false, optionsKey: 'workSchedules', optionsManagedByCatalog: true },
     { id: 'hrpfCF_permanentAddress', label: 'Địa Chỉ Thường Trú', required: false },
     { id: 'hrpfCF_currentAddress', label: 'Địa Chỉ Hiện Tại', required: false },
     { id: 'hrpfCF_personalEmail', label: 'Email Cá Nhân', required: false },
     { id: 'hrpfCF_emergencyContactName', label: 'Người Liên Hệ Khẩn Cấp', required: false },
     { id: 'hrpfCF_emergencyContactPhone', label: 'SĐT Liên Hệ Khẩn Cấp', required: false },
-    { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false, optionsKey: 'relationshipTypes' },
+    // optionsManagedByCatalog (11/2026) — cùng lý do như hrpfCF_employmentType ngay trên.
+    { id: 'hrpfCF_emergencyContactRelationship', label: 'Quan Hệ', required: false, optionsKey: 'relationshipTypes', optionsManagedByCatalog: true },
     { id: 'hrpfCF_bankAccountNo', label: 'Số Tài Khoản Ngân Hàng', required: false },
     { id: 'hrpfCF_bankName', label: 'Ngân Hàng', required: false },
     { id: 'hrpfCF_bankAccountHolderName', label: 'Tên Chủ Tài Khoản Ngân Hàng', required: false },

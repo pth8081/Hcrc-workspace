@@ -73,7 +73,11 @@ async function addCustomField(e) {
     if (!fieldDef) { cancelEditCustomField(); return; }
     await updateCoreFieldOverride(coreKey, fieldId, 'label', label || fieldDef.label);
     await updateCoreFieldOverride(coreKey, fieldId, 'required', required);
-    if (fieldDef.optionsKey) {
+    // optionsManagedByCatalog (11/2026) — bỏ qua hẳn việc lưu Options ở đây cho field đã có widget Thêm/
+    // Sửa/Xoá riêng (Hệ Thống → Quản Lý Danh Mục); #optionsGroup cũng đã bị editCoreField() ẩn đi cho
+    // field này nên #fldOptions không hề được điền giá trị thật — lưu từ đây chỉ có thể là RỖNG, đúng
+    // đường ghi đè mù là NGUYÊN NHÂN THẬT đã gây mất trắng employmentTypes/workSchedules trước đây.
+    if (fieldDef.optionsKey && !fieldDef.optionsManagedByCatalog) {
       const newLabels = document.getElementById('fldOptions').value.trim().split(',').map(s => s.trim()).filter(Boolean);
       if (newLabels.length === 0) return alert('⛔ Danh sách lựa chọn không được để trống!');
       const optsSaved = await saveCoreFieldOptionsList(fieldDef, newLabels);
@@ -143,6 +147,11 @@ function editCustomField(fieldId) {
 // Mở form phía trên (dùng chung với trường bổ sung) ở chế độ sửa 1 trường MẶC ĐỊNH — chỉ hiện Nhãn
 // hiển thị + Bắt buộc (ẩn hẳn Kiểu Dữ Liệu — không được đổi ở trường mặc định, xem CORE_FIELD_MANIFEST),
 // riêng trường có optionsKey (subType/contractType/carType) hiện thêm ô Tùy Chọn để thêm/bớt lựa chọn.
+// optionsManagedByCatalog (11/2026, LỖI ĐÃ VÁ — nguyên nhân thật gây mất trắng employmentTypes/
+// workSchedules): trường có cờ này (danh mục đã có widget Thêm/Sửa/Xoá AN TOÀN riêng ở Hệ Thống → Quản
+// Lý Danh Mục) KHÔNG hiện ô Tùy Chọn ở đây nữa — hiện 1 dòng ghi chú trỏ đúng chỗ sửa thay vào đó, loại
+// bỏ hẳn đường ghi đè mù song song (xem assertSimpleArrayCatalogNotBlindlyEmptied() ở
+// lib/createValidation.js cho lớp chặn phía server, và addCustomField() ngay dưới cho phần bỏ qua lưu).
 function editCoreField(coreKey, fieldId) {
   const fieldDef = (CORE_FIELD_MANIFEST[coreKey] || []).find(f => f.id === fieldId);
   if (!fieldDef) return;
@@ -158,9 +167,10 @@ function editCoreField(coreKey, fieldId) {
   document.getElementById('fldLabel').value = label;
   document.getElementById('fldRequired').checked = required;
   document.getElementById('fldTypeGroup').classList.add('hidden');
-  const hasOptions = !!fieldDef.optionsKey;
+  const hasOptions = !!fieldDef.optionsKey && !fieldDef.optionsManagedByCatalog;
   document.getElementById('optionsGroup').classList.toggle('hidden', !hasOptions);
   document.getElementById('fldOptions').value = hasOptions ? getCoreFieldOptionsList(fieldDef).join(', ') : '';
+  document.getElementById('optionsManagedNote')?.classList.toggle('hidden', !fieldDef.optionsManagedByCatalog);
 
   document.getElementById('lblFormFieldFormMode').innerText = '✏️ Đang Sửa Trường Mặc Định Của:';
   document.getElementById('btnSubmitCustomField').innerText = 'Cập Nhật Trường Mặc Định';
@@ -174,6 +184,7 @@ function cancelEditCustomField() {
   const form = document.getElementById('btnSubmitCustomField')?.closest('form');
   if (form) form.reset();
   document.getElementById('optionsGroup')?.classList.add('hidden');
+  document.getElementById('optionsManagedNote')?.classList.add('hidden');
   document.getElementById('fldTypeGroup')?.classList.remove('hidden');
   const modeLbl = document.getElementById('lblFormFieldFormMode');
   if (modeLbl) modeLbl.innerText = '➕ Thêm Trường Dữ Liệu Bổ Sung Cho:';

@@ -77,6 +77,10 @@
             <label class="block font-semibold text-gray-600 mb-1">CÁC TÙY CHỌN (Phân cách dấu phẩy)</label>
             <input id="fldOptions" placeholder="Toàn tập đoàn, Nội bộ phòng..." class="w-full border p-1.5 rounded">
           </div>
+          <!-- optionsManagedNote (11/2026, xem optionsManagedByCatalog ở CORE_FIELD_MANIFEST/
+               editCoreField() ở module-formbuilder-nav.js) — hiện thay cho #optionsGroup khi trường đã có
+               widget Thêm/Sửa/Xoá riêng ở Hệ Thống → Quản Lý Danh Mục, tránh đường ghi đè mù song song. -->
+          <p id="optionsManagedNote" class="hidden text-xs text-gray-500 italic">Danh sách lựa chọn của trường này được quản lý tại <strong>Hệ Thống → Quản Lý Danh Mục</strong> (đúng khối danh mục tương ứng) — không sửa được ở đây.</p>
           <div class="flex items-center pt-5 gap-2">
             <label class="flex items-center gap-1.5 font-bold text-gray-700 cursor-pointer">
               <input id="fldRequired" type="checkbox" class="w-4 h-4 text-rose-600 rounded">
