@@ -1,9 +1,37 @@
 # Phiên bản hiện tại
 
-**27.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.96 (2026-11): Điều tra + vá bài test "⚡ Áp Dụng Nhanh" chạy không ổn định (test-adv-workflow-tab-deep.js) — xác nhận KHÔNG phải lỗi sản phẩm
+
+Theo yêu cầu người dùng "xử luôn lỗi áp dụng nhanh đi" — bài test `tests/test-adv-workflow-tab-deep.js`
+(mục B, "⚡ Áp Dụng Nhanh") thỉnh thoảng crash ngay sau B5b với 1 trong 2 lỗi khác nhau tuỳ lần chạy:
+`TypeError: Cannot read properties of undefined (reading 'approvers')` hoặc Playwright `TimeoutError` vì
+`#qaTplSelect` "not visible". Điều tra kỹ (đọc lại `editQuickApplyConfig()`/`applyQuickApplyConfig()` ở
+`module-workflow.js` — cả 2 đều ĐÚNG, không có lỗi gì) rồi dùng `git stash` xác nhận code sản phẩm không
+đổi gì liên quan.
+
+**Nguyên nhân THẬT (của bài test, không phải sản phẩm)**: `finishLogin()` tự khởi động
+`startApprovalPolling()` — nhịp poll thật mỗi 3 giây gọi `initDatabase()` khi chữ ký hồ sơ chờ ký đổi (xem
+chú thích v27.94). `window.fetch` mock riêng của bài test này trả `[]` (MẢNG rỗng) cho MỌI `GET /api/*` —
+đủ cho các lượt đọc 1 lần của từng module, nhưng khi nhịp poll thật rơi vào GIỮA lúc bài test đang chạy
+(file test đã dài ra nhiều qua các đợt bổ sung mục A-D, tổng thời gian thật nay thường vượt 3 giây), poll
+gọi `GET /api/data` → mock trả `[]` → `initDatabase()` gán `DB[key] = data[key] || []` cho MỌI key (vì
+`data` là mảng nên `data[key]` luôn `undefined`) → TOÀN BỘ `DB.*` (workflows/deptWorkflows/users/
+quickApplyConfigs/...) bị xoá về rỗng ngay giữa bài test, không báo lỗi gì — đúng khớp 2 kiểu lỗi quan sát
+được (đọc `.approvers` của 1 object đã biến mất, hoặc `#qaTplSelect` mất hết option vì `DB.workflows` cũng
+rỗng), chỉ khác nhau ở thời điểm chính xác nhịp poll rơi vào.
+
+**Bản vá**: thêm 1 dòng `stopApprovalPolling();` ngay sau `finishLogin(adminUser)` ở phần seed của chính
+bài test này — tắt hẳn nhịp poll nền không liên quan tới phạm vi đang test (bài test không kiểm tra
+Approval Hub/badge số đếm nên không mất coverage gì). Chạy lại bài test 5 lần liên tiếp sau khi vá: 56/56
+PASS mỗi lần (trước đó crash không ổn định). Không đổi bất kỳ dòng code sản phẩm nào (`core.js`/
+`module-workflow.js` giữ nguyên) — chỉ sửa đúng 1 file test.
+
+**Deploy**: không cần làm gì (chỉ đổi file test, không ảnh hưởng code chạy production).
 
 ## v27.95 (2026-11): Vá nốt lỗi đã biết trước — laborContractTypes mất sau F5 (thiếu dòng đọc lại ở initDatabase())
 

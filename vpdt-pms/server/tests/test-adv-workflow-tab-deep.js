@@ -140,6 +140,23 @@ async function main() {
     };
     DB.users.push(adminUser, approverUser, storeGdUser);
     finishLogin(adminUser);
+    // LỖI THẬT CỦA BÀI TEST này đã bắt được (11/2026, điều tra theo yêu cầu người dùng "xử lỗi áp dụng
+    // nhanh"): finishLogin() tự khởi động startApprovalPolling() (setInterval thật mỗi 3s, xem
+    // APPROVAL_POLL_INTERVAL_MS/runApprovalPollTick() ở core.js). window.fetch mock của CHÍNH bài test
+    // này (ngay trên) trả `[]` (MẢNG rỗng) cho MỌI GET /api/* — đủ cho các lượt đọc 1-lần của từng
+    // module, nhưng nếu nhịp poll đó rơi vào GIỮA lúc bài test đang chạy (file test đã dài ra nhiều qua
+    // các đợt bổ sung A-D, tổng thời gian thật thường vượt quá 3 giây), poll gọi initDatabase() ->
+    // GET /api/data -> mock trả `[]` -> initDatabase() gán `DB[key] = data[key] || []` cho MỌI key, mà
+    // `data` là MẢNG nên `data[key]` luôn undefined -> TOÀN BỘ DB.* (depts/workflows/deptWorkflows/
+    // users/quickApplyConfigs/...) bị XOÁ VỀ RỖNG ngay giữa bài test, không báo lỗi gì — đúng nguyên nhân
+    // gây crash KHÔNG ỔN ĐỊNH đã quan sát được ở các bước B5b/B6 (TypeError đọc `.approvers` của
+    // DB.deptWorkflows['Phòng CNTT'] khi nó đã biến thành mảng rỗng, hoặc TimeoutError vì #qaTplSelect
+    // mất hết option do DB.workflows cũng bị xoá) — KHÔNG phải lỗi ở code sản phẩm (editQuickApplyConfig()/
+    // applyQuickApplyConfig() ở module-workflow.js đều đúng), chỉ là bài test thiếu cô lập nhịp poll nền
+    // không liên quan tới phạm vi đang test. Tắt hẳn nhịp poll này ngay sau khi đăng nhập test — bài test
+    // không kiểm tra Approval Hub/badge số đếm nên không mất coverage gì, chỉ loại bỏ đúng nguồn gây race
+    // không mong muốn.
+    if (typeof stopApprovalPolling === 'function') stopApprovalPolling();
     return {
       loginOk: document.getElementById('loginSection').classList.contains('hidden'),
       headerShown: !document.getElementById('userHeader').classList.contains('hidden')
