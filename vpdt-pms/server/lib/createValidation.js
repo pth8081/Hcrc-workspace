@@ -627,6 +627,46 @@ function assertShiftTemplatesSafeToSave(value, oldValue, shiftRoster) {
   }
 }
 
+// SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE (11/2026, "người dùng báo F5 mất dữ liệu danh
+// mục Hình Thức Làm Việc/Thời Gian Làm Việc, lo sợ danh mục khác cũng bị" — rà soát chuyên sâu sau khi
+// vá xong lỗi hiển thị F5): đây là mảng chuỗi phẳng, quản lý qua Hệ Thống → Quản Lý Danh Mục (widget
+// Thêm/Sửa/Xoá AN TOÀN — saveGenericSimpleCatalogEntry()/deleteGenericSimpleCatalogEntry() ở
+// module-admin.js, CHỈ nối thêm/lọc bớt ĐÚNG 1 phần tử mỗi lần, không bao giờ tự ý gửi mảng rỗng).
+// NHƯNG 5 trong số 15 key này (employmentTypes/workSchedules/nationalIdIssuePlaces/educationDegrees/
+// relationshipTypes) CÒN 1 ĐƯỜNG GHI THỨ 2 song song chưa gỡ bỏ: màn Biểu Mẫu cũ (CORE_FIELD_MANIFEST
+// optionsKey, editCoreField()/saveCoreFieldOptionsList() ở core.js) — editor này đọc TOÀN BỘ danh sách
+// hiện có vào 1 ô nhập text (phân tách dấu phẩy) rồi GHI ĐÈ THẲNG mảng khi lưu, KHÔNG có bước đối chiếu
+// "phần tử nào bị bớt". Nếu admin mở đúng lúc trình duyệt đang hiện 1 bản DB.<key> TẠM THỜI rỗng (VD do
+// lỗi hiển thị F5 đã vá — xem loadFreshDataInBackground()/activeTopTabName ở core.js) rồi bấm Lưu (có
+// thể chỉ định sửa field KHÁC như nhãn/bắt buộc, không để ý ô Options đang trống), toàn bộ danh mục bị
+// XOÁ TRẮNG VĨNH VIỄN trên server mà không có cảnh báo gì — ĐÚNG NGUYÊN NHÂN THẬT gây mất dữ liệu người
+// dùng báo cáo (không phải do bản vá F5 ở trên, bản vá đó chỉ ngăn HIỂN THỊ sai, không ngăn được đường
+// ghi đè mù này). Áp dụng CHUNG cho TOÀN BỘ 15 key (không chỉ riêng 5 key có đường ghi thứ 2 — phòng xa
+// cho mọi lỗi/đường ghi khác trong tương lai, cùng tinh thần "chặn hẳn rẻ hơn debug lại sau khi mất dữ
+// liệu thật") — PHẢI giữ đúng khớp danh sách GENERIC_SIMPLE_CATALOGS ở module-admin.js, thêm 1 key mới
+// vào đó thì cũng thêm vào đây luôn.
+const SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE = new Map([
+  ['jobGrades', 'Cấp Bậc'], ['resignationReasons', 'Lý Do Nghỉ Việc'], ['disciplinaryTypes', 'Loại Kỷ Luật'],
+  ['legalEntities', 'Đơn Vị (Pháp Nhân)'], ['specialLaborStatuses', 'Đối Tượng Lao Động Đặc Biệt'],
+  ['currentWorkStatusDetails', 'Tình Trạng Làm Việc Hiện Tại'], ['nationalIdIssuePlaces', 'Nơi Cấp CCCD/CMND'],
+  ['educationDegrees', 'Bằng Cấp'], ['relationshipTypes', 'Quan Hệ'], ['nationalities', 'Quốc Tịch'],
+  ['contractAmendmentTypes', 'Loại Thay Đổi Hợp Đồng'], ['contractTerminationReasons', 'Lý Do Chấm Dứt Hợp Đồng'],
+  ['maritalStatuses', 'Tình Trạng Hôn Nhân'], ['employmentTypes', 'Hình Thức Làm Việc'], ['workSchedules', 'Thời Gian Làm Việc']
+]);
+
+// Chặn CỨNG (400) khi 1 lượt ghi POST /api/data/:key định GHI ĐÈ 1 danh mục mảng chuỗi phẳng đang có ít
+// nhất 1 giá trị xuống còn RỖNG HOÀN TOÀN — xem chú thích đầy đủ ở khai báo
+// SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE ngay trên. Chỉ chặn trường hợp "mất SẠCH" (rỗng
+// hẳn) — bớt vài giá trị (rename/xoá có chủ đích qua đúng widget Xoá) vẫn đi qua bình thường, không bị
+// ảnh hưởng gì (chỉ cần oldValue có ít nhất 1 phần tử, không phân biệt bớt bao nhiêu).
+function assertSimpleArrayCatalogNotBlindlyEmptied(key, value, oldValue) {
+  const label = SIMPLE_ARRAY_CATALOG_KEYS_AT_RISK_OF_BLIND_OVERWRITE.get(key);
+  if (!label) return; // không thuộc danh sách này — không áp dụng
+  if (!Array.isArray(value) || value.length > 0) return; // vẫn còn giá trị, hoặc không phải mảng (shape đã bị chặn riêng)
+  if (!Array.isArray(oldValue) || oldValue.length === 0) return; // trước đó vốn đã rỗng — không có gì để "mất"
+  throw new CreateError(400, `Không thể lưu: thao tác này sẽ xoá TRẮNG toàn bộ ${oldValue.length} giá trị đang có trong danh mục "${label}" — nếu thật sự muốn xoá từng giá trị, dùng nút "Xoá" ở đúng dòng đó trong Hệ Thống → Quản Lý Danh Mục thay vì ghi đè cả danh sách.`);
+}
+
 // laborContractTypes ("Loại HĐLĐ", 11/2026 — danh mục dùng CHUNG cho hrProcesses.plannedContractType
 // (Onboarding, "dự kiến") VÀ laborContracts.contractType (hợp đồng thật), xem defaults.js): chặn CỨNG 2
 // trường hợp nguy hiểm, theo đúng khuyến nghị rà soát (dữ liệu lương/pháp lý — rủi ro cao hơn hẳn 1 danh
@@ -5329,6 +5369,9 @@ module.exports = {
   // Export cho routes/data.js POST /api/data/:key — chặn xoá mã hệ thống/loại đang dùng của
   // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình).
   assertLaborContractTypesSafeToSave,
+  // Export cho routes/data.js POST /api/data/:key — chặn ghi đè 1 danh mục mảng chuỗi phẳng đang có dữ
+  // liệu xuống còn rỗng hoàn toàn (11/2026, nguyên nhân thật gây mất dữ liệu employmentTypes/workSchedules).
+  assertSimpleArrayCatalogNotBlindlyEmptied,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

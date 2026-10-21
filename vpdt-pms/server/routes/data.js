@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached, cascadeUsernameChangesToTaskAssignedBy } = require('../lib/taskStore');
 const { getAllWorkItemsCached, cascadeUsernameChangesToWorkItemAssignment } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave, assertSimpleArrayCatalogNotBlindlyEmptied } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -2181,6 +2181,14 @@ router.post('/:key', async (req, res) => {
     // tầng" {modKey: [{label,type,required,...}, ...]} riêng, khác hẳn 4 khuôn trên — xem chú thích đầy
     // đủ tại assertFormTemplatesShape() ở lib/workflowEngine.js.
     assertFormTemplatesShape(key, value);
+    // Chặn ghi đè 1 danh mục mảng chuỗi phẳng (Cấp Bậc/Hình Thức Làm Việc/...) đang có dữ liệu xuống còn
+    // RỖNG HOÀN TOÀN (11/2026, nguyên nhân thật gây mất dữ liệu employmentTypes/workSchedules qua đường
+    // ghi mù của màn Biểu Mẫu cũ — xem chú thích đầy đủ tại assertSimpleArrayCatalogNotBlindlyEmptied() ở
+    // lib/createValidation.js). Chỉ đọc lại oldValue khi payload mới ĐÚNG LÀ mảng rỗng (trường hợp hiếm,
+    // không thêm round-trip CSDL cho mọi lượt lưu bình thường khác).
+    if (Array.isArray(value) && value.length === 0) {
+      assertSimpleArrayCatalogNotBlindlyEmptied(key, value, await getAppDataValue(key));
+    }
 
     // meetingRooms: LỖI ĐÃ VÁ (rà soát chuyên sâu 2, cụm "Hành Chính") — đổi tên 1 phòng họp ở đây
     // (editMeetingRoomCatalogItem(), module-phonghop.js) trước đây KHÔNG cascade sang meetings.room (lưu

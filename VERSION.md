@@ -1,9 +1,62 @@
 # Phiên bản hiện tại
 
-**27.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.90** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.90 (2026-11): TÌM RA NGUYÊN NHÂN THẬT gây mất dữ liệu danh mục — chặn đường ghi đè mù còn sót lại + chặn CHUNG cho mọi danh mục dạng mảng chuỗi
+
+Sau khi merge v27.89 (vá lỗi HIỂN THỊ "F5 thấy mất dữ liệu"), người dùng xác nhận đã deploy + restart
+nhưng Danh Mục Hình Thức Làm Việc/Thời Gian Làm Việc **vẫn trống thật** (không phải hiển thị sai nữa —
+xác nhận qua `GET /api/data/employmentTypes` trực tiếp, dữ liệu thật sự KHÔNG CÒN trên server) — đúng
+như người dùng lo ngại ("nguy hiểm quá, không biết danh mục nào khác cũng bị không, sắp golive").
+
+**NGUYÊN NHÂN THẬT đã tìm ra**: `employmentTypes`/`workSchedules` (và 3 danh mục khác cùng cảnh ngộ —
+`nationalIdIssuePlaces`/`educationDegrees`/`relationshipTypes`) có **2 đường ghi song song** cho CÙNG 1
+dữ liệu:
+1. Widget "Thêm/Sửa/Xoá" MỚI (Hệ Thống → Quản Lý Danh Mục) — AN TOÀN, chỉ nối thêm/lọc bớt ĐÚNG 1 phần
+   tử mỗi lần (`saveGenericSimpleCatalogEntry()`/`deleteGenericSimpleCatalogEntry()`).
+2. Màn Biểu Mẫu CŨ (`CORE_FIELD_MANIFEST` `optionsKey`, `editCoreField()`/`saveCoreFieldOptionsList()`
+   ở `core.js`) — vẫn còn sống song song, đọc TOÀN BỘ danh sách vào 1 ô nhập text rồi **GHI ĐÈ THẲNG**
+   mảng khi lưu, KHÔNG đối chiếu "phần tử nào bị bớt đi".
+
+Nếu admin mở đúng lúc trình duyệt đang hiện 1 bản `DB.employmentTypes` TẠM THỜI rỗng (chính là lỗi hiển
+thị F5 vừa vá ở v27.89 — xảy ra TRƯỚC khi có bản vá đó) rồi bấm "Lưu" ở màn Biểu Mẫu (dù chỉ định sửa
+field khác như nhãn/bắt buộc, không để ý ô Options đang trống), toàn bộ danh mục bị **XOÁ TRẮNG VĨNH
+VIỄN** trên server, không có cảnh báo gì. Bản vá v27.89 chỉ ngăn được lỗi HIỂN THỊ (nguyên nhân tạo ra
+tình huống rủi ro), KHÔNG ngăn được chính đường ghi đè mù này — đây mới là nguyên nhân THẬT khiến dữ
+liệu biến mất vĩnh viễn.
+
+**Bản vá (phòng xa CHO CẢ 15 danh mục mảng chuỗi phẳng, không chỉ riêng 5 danh mục có đường ghi thứ 2)**:
+thêm `assertSimpleArrayCatalogNotBlindlyEmptied()` (`lib/createValidation.js`) — chặn CỨNG (400) bất kỳ
+lượt `POST /api/data/:key` nào định ghi đè 1 trong 15 danh mục này (`jobGrades`, `resignationReasons`,
+`disciplinaryTypes`, `legalEntities`, `specialLaborStatuses`, `currentWorkStatusDetails`,
+`nationalIdIssuePlaces`, `educationDegrees`, `relationshipTypes`, `nationalities`,
+`contractAmendmentTypes`, `contractTerminationReasons`, `maritalStatuses`, `employmentTypes`,
+`workSchedules`) đang có ÍT NHẤT 1 giá trị xuống còn **RỖNG HOÀN TOÀN** — chỉ chặn trường hợp "mất SẠCH",
+xoá/bớt vài giá trị có chủ đích qua đúng nút "Xoá" vẫn hoạt động bình thường, không ảnh hưởng gì. Đã
+test trực tiếp qua route thật (routes/data.js): ghi đè mù bị chặn 400 + dữ liệu giữ nguyên, thêm mới hợp
+lệ vẫn thành công bình thường, danh mục vốn đã rỗng (chưa từng có dữ liệu) vẫn lưu rỗng được bình thường
+(không bị khoá cứng mãi mãi).
+
+**QUAN TRỌNG — dữ liệu đã mất KHÔNG tự phục hồi được**: bản vá này chỉ NGĂN mất thêm trong tương lai,
+không khôi phục lại "Full-Time"/"Part-Time" (hay bất kỳ giá trị tuỳ biến nào khác đã lỡ bị xoá trắng
+trước đó) — người dùng cần **tự nhập lại** các giá trị đó qua đúng widget MỚI (Hệ Thống → Quản Lý Danh
+Mục → 🕐/⏰ Danh Mục Hình Thức Làm Việc/Thời Gian Làm Việc), nay đã an toàn tuyệt đối trước rủi ro này.
+
+**Rà soát xác nhận PHẠM VI**: CHỈ 5/15 danh mục có đường ghi thứ 2 nguy hiểm này (còn optionsKey ở
+Biểu Mẫu) — 10 danh mục còn lại (bao gồm `laborContractTypes` làm ở v27.88, vốn đã có validator riêng
+chặt chẽ hơn) KHÔNG có đường ghi song song, chỉ bản vá chung này là thêm 1 lớp phòng xa, không phải vá 1
+lỗi THẬT đang xảy ra ở 10 danh mục đó.
+
+**Test**: viết diagnostic E2E thật (mount `routes/data.js` thật qua Express + stub `lib/appData`/
+`lib/auth`, không mock) xác nhận: (1) ghi đè mù `employmentTypes` xuống rỗng bị chặn 400 + dữ liệu giữ
+nguyên, (2) thêm mới hợp lệ vẫn `200 ok`, (3) danh mục vốn rỗng (`jobGrades` mặc định) vẫn lưu rỗng bình
+thường. Chạy lại toàn bộ regression liên quan: `test-generic-simple-catalog-add-submit.js` (16/16),
+`test-catalog-rename-employment-worksched.js` (14/14), `test-labor-contract-types-catalog.js` (16/16),
+`test-catalog-rename-hr-suggestion-catalogs.js` (25/25), `test-catalog-rename-round2-extras.js` (8/8),
+`test-position-types.js` (10/10), `test-catalog-rename-server.js` (32/32) — không có regression.
 
 ## v27.89 (2026-11): Vá lỗi "F5 mất dữ liệu danh mục vừa thêm" — tự vẽ lại ĐÚNG tab đang đứng sau khi tải ngầm xong, không riêng Dashboard
 
