@@ -1610,9 +1610,14 @@ async function updateCoreFieldOverride(coreKey, fieldId, prop, value) {
   const overrides = getCoreFieldOverrides(coreKey);
   const prevOverride = { ...(overrides[fieldId] || {}) };
   const hadOverride = fieldId in overrides;
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 11/2026, "Item 7" đợt go-live): `prevOverride` chỉ chụp 1 field lồng
+  // 2 cấp (overrides[fieldId]) — syncStorage('formTemplates', {baseline}) cần bản chụp TOÀN BỘ
+  // DB.formTemplates (object-map theo khoá CẤP 1 — tabKey/`__core__`+coreKey/`__order__`+tabKey) để
+  // retryObjectMapSaveAfterConflict() đối chiếu đúng, không phải 1 field lồng sâu bên trong 1 khoá.
+  const formTemplatesSnapshot = JSON.parse(JSON.stringify(DB.formTemplates || {}));
   if (!overrides[fieldId]) overrides[fieldId] = {};
   overrides[fieldId][prop] = value;
-  const saved = await syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates', { baseline: formTemplatesSnapshot });
   if (!saved) {
     if (hadOverride) overrides[fieldId] = prevOverride; else delete overrides[fieldId];
     applyCoreFieldCustomizations(coreKey);
@@ -1694,7 +1699,10 @@ async function saveCoreFieldOptionsList(fieldDef, newLabels) {
   } else {
     DB[fieldDef.optionsKey] = newLabels.slice();
   }
-  const saved = await syncStorage(fieldDef.optionsKey);
+  // arrayKeyFn: optionsIsKeyLabel:true -> mảng {key,label} khoá theo `.key` (KHÔNG phải `.id`, mặc định
+  // defaultArrayItemKey() sẽ trả undefined cho mọi phần tử nếu không truyền riêng); còn lại -> mảng chuỗi
+  // phẳng, dùng được NGAY mặc định (trả chính giá trị) nên keyFn ở đây xử lý đúng CẢ 2 dạng.
+  const saved = await syncStorage(fieldDef.optionsKey, { baseline: prevList, arrayKeyFn: (x) => (x && typeof x === 'object') ? x.key : x });
   if (!saved) { DB[fieldDef.optionsKey] = prevList; return false; }
   populateDropdowns();
   return true;
@@ -1728,8 +1736,11 @@ function getUnifiedFieldOrder(tabKey) {
 
 async function setUnifiedFieldOrder(tabKey, orderArr) {
   const prevOrder = DB.formTemplates['__order__' + tabKey];
+  // Cùng lý do baseline ở updateCoreFieldOverride() — phải chụp TOÀN BỘ DB.formTemplates, không chỉ 1
+  // khoá `__order__`+tabKey, để retryObjectMapSaveAfterConflict() đối chiếu đúng theo khoá CẤP 1.
+  const formTemplatesSnapshot = JSON.parse(JSON.stringify(DB.formTemplates || {}));
   DB.formTemplates['__order__' + tabKey] = orderArr;
-  const saved = await syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates', { baseline: formTemplatesSnapshot });
   if (!saved) {
     if (prevOrder === undefined) delete DB.formTemplates['__order__' + tabKey];
     else DB.formTemplates['__order__' + tabKey] = prevOrder;
@@ -5806,7 +5817,7 @@ async function onSimpleCatalogImportFileChange(catalogKey, event) {
   if (!toAdd.length) { if (statusEl) statusEl.innerText = `ℹ️ Không có mục mới nào (tất cả ${(values || []).length} dòng đã có sẵn trong danh mục).`; return; }
   const before = DB[catalogKey] || [];
   DB[catalogKey] = [...before, ...toAdd];
-  const ok = await syncStorage(catalogKey);
+  const ok = await syncStorage(catalogKey, { baseline: before });
   if (!ok) { DB[catalogKey] = before; if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.'; return; }
   logSystemAction('USER_MGM', 'IMPORT_CATALOG', `Nhập Excel thêm ${toAdd.length} mục mới vào danh mục "${cfg.label}"`, 'SUCCESS', catalogKey);
   if (statusEl) statusEl.innerText = `✅ Đã thêm ${toAdd.length}/${(values || []).length} mục mới.`;
@@ -6352,7 +6363,8 @@ async function bulkDeleteCatalogItems(catalogKey) {
     syncKeys.push(cfg.extraDbKey);
   }
 
-  const results = await Promise.all(syncKeys.map(k => syncStorage(k)));
+  const baselineByKey = { [cfg.dbKey]: prevMain, deptAbbrs: prevDeptAbbrs, deptGroups: prevDeptGroups, ...(cfg.extraDbKey ? { [cfg.extraDbKey]: prevExtraMap } : {}) };
+  const results = await Promise.all(syncKeys.map(k => syncStorage(k, { baseline: baselineByKey[k] })));
   if (results.some(ok => !ok)) {
     DB[cfg.dbKey] = prevMain;
     if (prevDeptAbbrs) DB.deptAbbrs = prevDeptAbbrs;
@@ -6490,8 +6502,11 @@ async function bulkDeleteObjectCatalogItems(catalogKey) {
   DB[cfg.dbKey] = (DB[cfg.dbKey] || []).filter(it => !idSet.has(it[cfg.idField]));
   // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — nút "☑ Chọn nhiều để xoá" thiếu baseline, gây 409 giả
   // giống hệt syncApprovalAdminKey() (module-admin-submissiongroups.js). prevMain là bản chụp TRƯỚC khi
-  // lọc, đúng khuôn baseline cần cho retryArraySaveAfterConflict().
-  const saved = await syncStorage(cfg.dbKey, { baseline: prevMain });
+  // lọc, đúng khuôn baseline cần cho retryArraySaveAfterConflict(). `arrayKeyFn: cfg.idField` BẮT BUỘC
+  // (rà soát toàn hệ thống 11/2026, "Item 7" go-live) — cfg.idField không phải lúc nào cũng là `.id`
+  // (storeJobTitles khoá `label`, jobTitleGradeDefaults khoá `jobTitle`); không truyền sẽ rơi về
+  // defaultArrayItemKey() trả `.id` -> undefined cho MỌI phần tử của 2 danh mục đó, merge sai lệch.
+  const saved = await syncStorage(cfg.dbKey, { baseline: prevMain, arrayKeyFn: (x) => x[cfg.idField] });
   if (!saved) { DB[cfg.dbKey] = prevMain; rerenderObjectCatalogBulkList(catalogKey); return; }
   logSystemAction('USER_MGM', 'BULK_DELETE_OBJECT_CATALOG', `Xoá ${items.length} ${cfg.kindLabel}: ${labels.join(', ')}`, 'SUCCESS', String(items.length));
   objectCatalogBulkSelectedSet(catalogKey).clear();
@@ -6746,18 +6761,31 @@ function deepEqualJson(a, b) {
   return keysA.every(k => Object.prototype.hasOwnProperty.call(b, k) && deepEqualJson(a[k], b[k]));
 }
 
-// So khớp theo "id" giữa bản ĐÃ ĐỌC trước khi sửa (baseline) và bản admin MUỐN lưu (desired, chính là
-// DB.<key> tại thời điểm gọi) -> phân loại thêm mới/sửa/xoá — CHỈ dựa trên id, không quan tâm field nào
-// đổi (đơn vị "1 thay đổi" luôn là NGUYÊN 1 bản ghi, khớp đúng cách saveUser()/savePermGroup() ghi đè cả
-// object chứ không sửa từng field rời). DÙNG CHUNG cho mọi collection dạng mảng object có field `id`
-// (users, permGroups...) — xem khối chú thích "TỔNG QUÁT HOÁ" phía trên.
-function diffArrayForConflictRetry(baseline, desired) {
-  const baseById = new Map((baseline || []).map(x => [x.id, x]));
-  const desiredById = new Map((desired || []).map(x => [x.id, x]));
-  const added = (desired || []).filter(x => !baseById.has(x.id));
-  const removedIds = [...baseById.keys()].filter(id => !desiredById.has(id));
-  const modified = (desired || []).filter(x => baseById.has(x.id) && !deepEqualJson(x, baseById.get(x.id)));
-  return { added, removedIds, modified };
+// Khoá MẶC ĐỊNH để so khớp 1 phần tử mảng: object có `.id` (users, permGroups...) -> dùng `.id`; còn lại
+// (chuỗi/số thuần — depts, stores, jobTitles, cats, licenseTypes, 15 danh mục GENERIC_SIMPLE_CATALOGS...)
+// -> dùng CHÍNH giá trị đó làm khoá (mỗi giá trị vốn đã PHẢI duy nhất trong 1 danh mục đơn giản). KHÔNG
+// áp dụng được cho mảng object KHÔNG có `.id` (VD workflowParticipatingPositions khoá jobTitle+dept,
+// storeJobTitles khoá label, jobTitleGradeDefaults khoá jobTitle, positionTypes khoá `.key`) — các
+// collection này PHẢI tự truyền `opts.keyFn` riêng khi gọi retryArraySaveAfterConflict()/syncStorage()
+// (xem rà soát toàn hệ thống 11/2026, "Item 7" đợt chuẩn bị go-live).
+function defaultArrayItemKey(x) {
+  return (x !== null && typeof x === 'object' && !Array.isArray(x)) ? x.id : x;
+}
+
+// So khớp theo KHOÁ (mặc định `.id`, hoặc `keyFn` tuỳ chỉnh) giữa bản ĐÃ ĐỌC trước khi sửa (baseline) và
+// bản admin MUỐN lưu (desired, chính là DB.<key> tại thời điểm gọi) -> phân loại thêm mới/sửa/xoá — CHỈ
+// dựa trên khoá, không quan tâm field nào đổi (đơn vị "1 thay đổi" luôn là NGUYÊN 1 phần tử, khớp đúng
+// cách saveUser()/savePermGroup() ghi đè cả object chứ không sửa từng field rời). DÙNG CHUNG cho mọi
+// collection dạng MẢNG (object có `.id`, mảng chuỗi phẳng, hoặc mảng object khoá theo field khác qua
+// `keyFn`) — xem khối chú thích "TỔNG QUÁT HOÁ" phía trên.
+function diffArrayForConflictRetry(baseline, desired, keyFn) {
+  const kf = keyFn || defaultArrayItemKey;
+  const baseByKey = new Map((baseline || []).map(x => [kf(x), x]));
+  const desiredByKey = new Map((desired || []).map(x => [kf(x), x]));
+  const added = (desired || []).filter(x => !baseByKey.has(kf(x)));
+  const removedKeys = [...baseByKey.keys()].filter(k => !desiredByKey.has(k));
+  const modified = (desired || []).filter(x => baseByKey.has(kf(x)) && !deepEqualJson(x, baseByKey.get(kf(x))));
+  return { added, removedKeys, modified };
 }
 
 // Thực hiện đúng bước (1)+(2) mô tả ở khối chú thích trên — trả {retried:true, merged, freshVersion}
@@ -6766,13 +6794,16 @@ function diffArrayForConflictRetry(baseline, desired) {
 // hoặc {retried:false} đơn thuần nếu không tải lại được (mất mạng...) -> nơi gọi rơi về thông báo 409
 // mặc định như cũ. `opts.extraConflictCheck(freshArray, added)` (tuỳ chọn): ràng buộc riêng của từng
 // collection ngoài "đúng bản ghi mình đụng vào có đổi không" (VD "users" cần kiểm thêm trùng username
-// với người MỚI ai đó vừa tạo — xem retryUsersSaveAfterConflict() ngay dưới).
+// với người MỚI ai đó vừa tạo — xem retryUsersSaveAfterConflict() ngay dưới). `opts.keyFn` (tuỳ chọn):
+// hàm tính khoá 1 phần tử, mặc định `defaultArrayItemKey` (object -> `.id`, còn lại -> chính giá trị) —
+// truyền riêng cho collection khoá theo field KHÁC (VD `x => x.jobTitle + '||' + (x.dept || '')`).
 async function retryArraySaveAfterConflict(key, baseline, desired, opts) {
   const extraConflictCheck = opts?.extraConflictCheck || null;
-  const { added, removedIds, modified } = diffArrayForConflictRetry(baseline, desired);
-  const touchedIds = new Set([...removedIds, ...modified.map(x => x.id)]);
+  const keyFn = opts?.keyFn || defaultArrayItemKey;
+  const { added, removedKeys, modified } = diffArrayForConflictRetry(baseline, desired, keyFn);
+  const touchedKeys = new Set([...removedKeys, ...modified.map(keyFn)]);
   // Không có gì để áp lại (lý thuyết không nên xảy ra — 409 nghĩa là mình VỪA gửi 1 thay đổi nào đó).
-  if (touchedIds.size === 0 && added.length === 0) return { retried: false };
+  if (touchedKeys.size === 0 && added.length === 0) return { retried: false };
 
   let res;
   try {
@@ -6785,13 +6816,13 @@ async function retryArraySaveAfterConflict(key, baseline, desired, opts) {
   const freshArray = await res.json().catch(() => null);
   if (!freshVersion || !Array.isArray(freshArray)) return { retried: false };
 
-  const freshById = new Map(freshArray.map(x => [x.id, x]));
-  const baseById = new Map(baseline.map(x => [x.id, x]));
+  const freshByKey = new Map(freshArray.map(x => [keyFn(x), x]));
+  const baseByKey = new Map((baseline || []).map(x => [keyFn(x), x]));
 
-  // Conflict THẬT: đúng bản ghi mình vừa sửa/xoá đã khác so với lúc mình đọc trước khi sửa (ai đó khác
-  // đổi/xoá ĐÚNG bản ghi này) — không tự ý chọn "ai thắng", rơi về báo lỗi cho người dùng tự quyết định.
-  for (const id of touchedIds) {
-    if (!deepEqualJson(freshById.get(id) || null, baseById.get(id) || null)) {
+  // Conflict THẬT: đúng phần tử mình vừa sửa/xoá đã khác so với lúc mình đọc trước khi sửa (ai đó khác
+  // đổi/xoá ĐÚNG phần tử này) — không tự ý chọn "ai thắng", rơi về báo lỗi cho người dùng tự quyết định.
+  for (const k of touchedKeys) {
+    if (!deepEqualJson(freshByKey.get(k) || null, baseByKey.get(k) || null)) {
       return { retried: false, genuineConflict: true };
     }
   }
@@ -6799,13 +6830,13 @@ async function retryArraySaveAfterConflict(key, baseline, desired, opts) {
     return { retried: false, genuineConflict: true };
   }
 
-  // Không đụng đúng bản ghi nào của mình -> áp lại đúng phần thêm/sửa/xoá lên bản MỚI NHẤT từ server
-  // (giữ nguyên mọi thay đổi KHÔNG LIÊN QUAN mà nơi khác vừa ghi, VD bản ghi khác vừa bị admin khác sửa).
-  const removedSet = new Set(removedIds);
-  const modifiedById = new Map(modified.map(x => [x.id, x]));
+  // Không đụng đúng phần tử nào của mình -> áp lại đúng phần thêm/sửa/xoá lên bản MỚI NHẤT từ server
+  // (giữ nguyên mọi thay đổi KHÔNG LIÊN QUAN mà nơi khác vừa ghi, VD phần tử khác vừa bị admin khác sửa).
+  const removedSet = new Set(removedKeys);
+  const modifiedByKey = new Map(modified.map(x => [keyFn(x), x]));
   const merged = freshArray
-    .filter(x => !removedSet.has(x.id))
-    .map(x => modifiedById.has(x.id) ? modifiedById.get(x.id) : x)
+    .filter(x => !removedSet.has(keyFn(x)))
+    .map(x => modifiedByKey.has(keyFn(x)) ? modifiedByKey.get(keyFn(x)) : x)
     .concat(added);
 
   return { retried: true, merged, freshVersion };
@@ -6879,7 +6910,7 @@ async function retryObjectMapSaveAfterConflict(key, baseline, desired) {
   return { retried: true, merged, freshVersion };
 }
 
-async function syncStorageOnce(key, silent, baseline) {
+async function syncStorageOnce(key, silent, baseline, retryOpts) {
   // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
   // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
   // Lần đầu (chưa từng có version, vd. vừa tạo collection mới) thì bỏ qua, ghi vô điều kiện như cũ.
@@ -6921,27 +6952,39 @@ async function syncStorageOnce(key, silent, baseline) {
       // vừa thêm/sửa/xoá lên bản mới nhất rồi lưu lại 1 lần — xem giải thích đầy đủ ở khối chú thích
       // "TỔNG QUÁT HOÁ" trên đầu file (retryArraySaveAfterConflict()/retryUsersSaveAfterConflict()).
       // Nhánh này chạy cho MỌI key miễn nơi gọi có truyền `baseline` (bản chụp TRƯỚC khi sửa, xem
-      // syncStorage()) — KHÔNG còn giới hạn riêng "users" như trước 10/2026. silent=true (lưu ngầm tự
-      // động, không phải người dùng chủ động bấm nút) KHÔNG áp dụng nhánh này — giữ nguyên "im lặng bỏ
-      // qua" như trước, không nên tự ý ghi thêm 1 lượt nữa mà người dùng không biết.
-      if (baseline && !silent) {
-        // key === 'users' -> lớp mỏng riêng; mảng {id,...} (permGroups, workflows, các *MixedApprovalRules,
-        // nganhHangCatalog...) -> retryArraySaveAfterConflict(); còn lại (OBJECT MAP {dept/tier: config} —
-        // *DeptWorkflows/*TierWorkflows/quickApplyConfigs theo dbKey tương ứng) -> retryObjectMapSaveAfterConflict()
-        // (xem chú thích đầy đủ tại hàm đó, ngay trên retryUsersSaveAfterConflict()).
-        const retryResult = key === 'users'
+      // syncStorage()) — KHÔNG còn giới hạn riêng "users" như trước 10/2026.
+      //
+      // LỖI ĐÃ VÁ (11/2026, rà soát toàn hệ thống trước go-live, "Item 7"): trước đây `silent=true` (lưu
+      // ngầm tự động) tắt HẲN nhánh retry này dù có baseline (VD saveDeptViewScopeConfig()/
+      // savePwaShortcutModules() — tự lưu ngầm + tự alert riêng khi lỗi) — khiến các nơi gọi ĐÓ không bao
+      // giờ được hưởng cơ chế thử lại thông minh, dù có snapshot sẵn. Sửa: retry vẫn CHẠY khi silent=true,
+      // chỉ khác ở bước BÁO LỖI khi conflict THẬT — silent thì console.warn (im lặng, để nơi gọi tự xử lý
+      // theo ý họ) thay vì alert() chặn màn hình thay họ.
+      if (baseline) {
+        // key === 'users' -> lớp mỏng riêng; mảng (object có `.id`, mảng chuỗi phẳng, hoặc mảng object
+        // khoá theo field khác qua `retryOpts.arrayKeyFn`) -> retryArraySaveAfterConflict(); còn lại
+        // (OBJECT MAP {khoá: cấu hình/giá trị} — *DeptWorkflows/*TierWorkflows/quickApplyConfigs... VÀ
+        // CẢ object cấu hình ĐƠN dạng phẳng như emailConfig/operationOrderApiConfig, vì cơ chế đối chiếu
+        // theo KHOÁ cấp 1 tổng quát hoá đúng cho cả 2: mỗi trường cấu hình độc lập cũng là 1 "khoá" hợp
+        // lệ để merge — admin sửa field A, 1 nơi khác (job nền/admin khác) ghi field B KHÔNG LIÊN QUAN
+        // thì vẫn gộp được, chỉ báo conflict thật khi ĐÚNG field mình sửa bị đổi) ->
+        // retryObjectMapSaveAfterConflict() (xem chú thích đầy đủ tại hàm đó, ngay trên
+        // retryUsersSaveAfterConflict()).
+        const mode = key === 'users' ? 'users' : (Array.isArray(DB[key]) ? 'array' : 'object-map');
+        const retryResult = mode === 'users'
           ? await retryUsersSaveAfterConflict(baseline, DB.users)
-          : Array.isArray(DB[key])
-            ? await retryArraySaveAfterConflict(key, baseline, DB[key])
+          : mode === 'array'
+            ? await retryArraySaveAfterConflict(key, baseline, DB[key], { keyFn: retryOpts?.arrayKeyFn, extraConflictCheck: retryOpts?.extraConflictCheck })
             : await retryObjectMapSaveAfterConflict(key, baseline, DB[key]);
         if (retryResult.retried) {
           DB[key] = retryResult.merged;
           DB._versions[key] = retryResult.freshVersion;
           // baseline=null ở lượt gọi lại -> KHÔNG retry thêm lần 2 nếu vẫn tiếp tục 409 (rất hiếm, nghĩa
           // là "${key}" đang bị ghi liên tục dồn dập) — đúng 1 lần thử lại như đã hứa ở comment trên.
-          return syncStorageOnce(key, silent, null);
+          return syncStorageOnce(key, silent, null, retryOpts);
         }
         if (retryResult.genuineConflict) {
+          if (silent) { console.warn(`Bỏ qua lưu ngầm "${key}" — xung đột thật ở đúng phần mình vừa đổi:`, body.error); return false; }
           alert(key === 'users'
             ? '⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác (1 admin khác, hoặc chính người đó vừa tự đổi mật khẩu/thiết bị đăng nhập) — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.'
             : `⚠️ Đúng bản ghi bạn đang sửa trong "${key}" vừa bị thay đổi/xoá ở nơi khác — vui lòng tải lại trang để lấy dữ liệu mới nhất rồi sửa lại.`);
@@ -6994,14 +7037,21 @@ async function syncStorageOnce(key, silent, baseline) {
 // opts.usersBaseline: tên THAM SỐ CŨ (trước 10/2026, khi cơ chế này chỉ áp dụng cho "users") — vẫn nhận
 // y hệt `opts.baseline` để KHÔNG phải sửa lại 7 nơi gọi hiện có (module-admin-userstaging.js/
 // module-admin-submissiongroups.js), chỉ 1 alias, không phải 2 cơ chế song song.
+// opts.arrayKeyFn (tuỳ chọn, 11/2026): CHỈ cần khi key là mảng OBJECT nhưng khoá theo field KHÁC `.id`
+// (VD workflowParticipatingPositions khoá jobTitle+dept, storeJobTitles khoá label, positionTypes khoá
+// `.key`) — xem defaultArrayItemKey()/diffArrayForConflictRetry(). Mảng object có `.id`, mảng chuỗi
+// phẳng (depts/stores/jobTitles/cats/...), VÀ object cấu hình đơn dạng phẳng (emailConfig,
+// operationOrderApiConfig — mỗi field cấu hình tự nhiên là 1 "khoá" hợp lệ để
+// retryObjectMapSaveAfterConflict() merge độc lập) đều dùng được NGAY, không cần truyền gì thêm.
 function syncStorage(key, opts) {
   const silent = !!opts?.silent;
   const baseline = opts?.baseline || opts?.usersBaseline || null;
+  const retryOpts = { arrayKeyFn: opts?.arrayKeyFn, extraConflictCheck: opts?.extraConflictCheck };
   try {
     const previous = syncStorageQueues[key] || Promise.resolve();
     // .then(fn, fn): chạy lượt kế tiếp dù lượt trước lỗi/bị 409 — 1 lần lỗi không được phép chặn mãi
     // mãi các lượt lưu sau của cùng key.
-    const next = previous.then(() => syncStorageOnce(key, silent, baseline), () => syncStorageOnce(key, silent, baseline));
+    const next = previous.then(() => syncStorageOnce(key, silent, baseline, retryOpts), () => syncStorageOnce(key, silent, baseline, retryOpts));
     syncStorageQueues[key] = next;
     return next;
   } catch (e) {
@@ -8640,7 +8690,7 @@ async function saveEmailConfig(e) {
     contractOverdueDays: parseDaysListInput(document.getElementById('cfgContractOverdueDays').value),
     contractOverdueCcEmails: parseEmailListInput(document.getElementById('cfgContractOverdueCc').value)
   };
-  const saved = await syncStorage('emailConfig');
+  const saved = await syncStorage('emailConfig', { baseline: prevEmailConfig });
   if (!saved) { DB.emailConfig = prevEmailConfig; return; }
   document.getElementById('cfgSmtpPassPlain').value = ''; // không giữ mật khẩu vừa gõ hiển thị lại trên form
   document.getElementById('cfgGraphClientSecretPlain').value = ''; // cùng quy ước write-only
@@ -8792,7 +8842,7 @@ async function saveApprovalEmailConfig(e) {
     next[mod.configModule] = modOut;
   });
   DB.approvalEmailConfig = next;
-  const saved = await syncStorage('approvalEmailConfig');
+  const saved = await syncStorage('approvalEmailConfig', { baseline: prevConfig });
   if (!saved) { DB.approvalEmailConfig = prevConfig; return; }
   logSystemAction('CONFIG', 'UPDATE_APPROVAL_EMAIL_CONFIG', 'Cập nhật cấu hình bật/tắt email thông báo phê duyệt theo phân hệ.', 'SUCCESS', 'APPROVAL_EMAIL_CONFIG');
   alert('✅ Đã lưu cấu hình Thông Báo Email Phê Duyệt thành công!');
@@ -8946,7 +8996,7 @@ async function saveContractExpiryDeptContacts() {
     if (rows.length) cleaned[dept] = rows;
   }
   DB.contractExpiryDeptContacts = cleaned;
-  const saved = await syncStorage('contractExpiryDeptContacts');
+  const saved = await syncStorage('contractExpiryDeptContacts', { baseline: prevContacts });
   if (!saved) {
     DB.contractExpiryDeptContacts = prevContacts;
     contractExpiryDeptContactsDraft = JSON.parse(JSON.stringify(prevContacts || {}));
@@ -11866,9 +11916,10 @@ async function quickAddPriceZoneFromItPriceForm() {
   const name = (prompt('Nhập tên Vùng Giá Áp Dụng mới (VD: Miền Bắc):') || '').trim();
   if (!name) return;
   if ((DB.priceZones || []).includes(name)) return alert('Vùng giá đã tồn tại!');
+  const prevPriceZones = [...(DB.priceZones || [])];
   DB.priceZones.push(name);
-  const ok = await syncStorage('priceZones');
-  if (!ok) { DB.priceZones = DB.priceZones.filter(x => x !== name); return; }
+  const ok = await syncStorage('priceZones', { baseline: prevPriceZones });
+  if (!ok) { DB.priceZones = prevPriceZones; return; }
   logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}] (từ form Phê Duyệt Giá Bán Lẻ)`, 'SUCCESS', name);
   if (typeof renderPriceZoneList === 'function') renderPriceZoneList();
   populateMhItPriceRetailZoneSelect();

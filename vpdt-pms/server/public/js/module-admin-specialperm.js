@@ -258,7 +258,7 @@ async function savePwaShortcutModules() {
   const checked = [...document.querySelectorAll('.pwa-shortcut-cb:checked')].map(cb => cb.value);
   const snapshot = [...(DB.pwaShortcutModules || [])];
   DB.pwaShortcutModules = checked;
-  const saved = await syncStorage('pwaShortcutModules', { silent: true });
+  const saved = await syncStorage('pwaShortcutModules', { silent: true, baseline: snapshot });
   if (!saved) {
     DB.pwaShortcutModules = snapshot;
     renderPwaShortcutCheckboxes();
@@ -291,7 +291,7 @@ async function saveVppExcludedJobTitles() {
   const next = getMultiSelectValues('vppExcludedJobTitlesMultiSelect');
   const snapshot = [...(DB.vppExcludedJobTitles || [])];
   DB.vppExcludedJobTitles = next;
-  const saved = await syncStorage('vppExcludedJobTitles');
+  const saved = await syncStorage('vppExcludedJobTitles', { baseline: snapshot });
   if (!saved) {
     DB.vppExcludedJobTitles = snapshot;
     renderVppExcludedJobTitlesWidget();
@@ -444,7 +444,7 @@ async function saveWorkflowParticipatingPositions() {
   const next = [...(container?._wfposSelected || [])].map(decodeWfPositionPair).filter(Boolean);
   const snapshot = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.workflowParticipatingPositions = next;
-  const saved = await syncStorage('workflowParticipatingPositions');
+  const saved = await syncStorage('workflowParticipatingPositions', { baseline: snapshot, arrayKeyFn: encodeWfPositionPair });
   if (!saved) {
     DB.workflowParticipatingPositions = snapshot;
     renderWorkflowParticipatingPositionsWidget();
@@ -574,7 +574,7 @@ async function confirmWfPositionImport() {
   if (!state || !state.deduped.length) return;
   const snapshot = (DB.workflowParticipatingPositions || []).map(p => ({ ...p }));
   DB.workflowParticipatingPositions = state.deduped;
-  const saved = await syncStorage('workflowParticipatingPositions');
+  const saved = await syncStorage('workflowParticipatingPositions', { baseline: snapshot, arrayKeyFn: encodeWfPositionPair });
   if (!saved) {
     DB.workflowParticipatingPositions = snapshot;
     if (statusEl) statusEl.innerText = '⛔ Lưu lên máy chủ thất bại, vui lòng thử lại.';

@@ -790,6 +790,9 @@ function renderHacHoConfigForm() {
 
 async function submitHacHoConfig(e) {
   e.preventDefault();
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 11/2026, "Item 7" go-live): trước đây KHÔNG chụp snapshot/rollback
+  // khi lưu thất bại (409/mất mạng) — UI vẫn hiện cấu hình MỚI dù chưa hề lưu được, F5 mới lộ ra mất.
+  const prevConfig = { ...(DB.attendanceHoConfig || {}) };
   DB.attendanceHoConfig = {
     startTime: document.getElementById('hacCfgStartTime').value || '08:00',
     endTime: document.getElementById('hacCfgEndTime').value || '17:00',
@@ -797,8 +800,9 @@ async function submitHacHoConfig(e) {
     standardHoursPerDay: DB.attendanceHoConfig?.standardHoursPerDay || 8,
     lateGraceMinutes: Number(document.getElementById('hacCfgLateGrace').value) || 0
   };
-  const ok = await syncStorage('attendanceHoConfig');
-  if (ok) alert('✅ Đã lưu cấu hình giờ hành chính.');
+  const ok = await syncStorage('attendanceHoConfig', { baseline: prevConfig });
+  if (!ok) { DB.attendanceHoConfig = prevConfig; return; }
+  alert('✅ Đã lưu cấu hình giờ hành chính.');
 }
 
 function renderHacHolidayTable() {
@@ -860,6 +864,11 @@ async function submitHacHoliday(e) {
   if ((DB.publicHolidays || []).some(h => h.date === date && h.date !== editingHacHolidayDate)) {
     return alert('⛔ Ngày này đã có trong danh mục.');
   }
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 11/2026, "Item 7" go-live): trước đây KHÔNG chụp snapshot/rollback
+  // khi lưu thất bại + thiếu baseline cho syncStorage() — publicHolidays khoá theo `.date` (KHÔNG phải
+  // `.id`), bắt buộc truyền `arrayKeyFn` riêng, nếu không defaultArrayItemKey() sẽ coi MỌI phần tử cùng
+  // 1 khoá `undefined`, merge sai lệch khi gặp 409.
+  const prevHolidays = (DB.publicHolidays || []).map(h => ({ ...h }));
   if (isEdit) {
     const idx = (DB.publicHolidays || []).findIndex(h => h.date === editingHacHolidayDate);
     if (idx === -1) {
@@ -875,15 +884,18 @@ async function submitHacHoliday(e) {
   } else {
     DB.publicHolidays = [...(DB.publicHolidays || []), { date, name }];
   }
-  const ok = await syncStorage('publicHolidays');
-  if (ok) { editingHacHolidayDate = null; closeHacHolidayModal(); renderHacHolidayTable(); }
+  const ok = await syncStorage('publicHolidays', { baseline: prevHolidays, arrayKeyFn: (h) => h.date });
+  if (!ok) { DB.publicHolidays = prevHolidays; return; }
+  editingHacHolidayDate = null; closeHacHolidayModal(); renderHacHolidayTable();
 }
 
 async function deleteHacHoliday(date) {
   if (!confirm('Xoá ngày lễ này?')) return;
+  const prevHolidays = (DB.publicHolidays || []).map(h => ({ ...h }));
   DB.publicHolidays = (DB.publicHolidays || []).filter(h => h.date !== date);
-  const ok = await syncStorage('publicHolidays');
-  if (ok) renderHacHolidayTable();
+  const ok = await syncStorage('publicHolidays', { baseline: prevHolidays, arrayKeyFn: (h) => h.date });
+  if (!ok) { DB.publicHolidays = prevHolidays; return; }
+  renderHacHolidayTable();
 }
 
 function renderHacShiftTemplateTable() {

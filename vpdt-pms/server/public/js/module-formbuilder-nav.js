@@ -96,6 +96,11 @@ async function addCustomField(e) {
 
   if (!DB.formTemplates[activeFormTab]) DB.formTemplates[activeFormTab] = [];
   const prevList = DB.formTemplates[activeFormTab].map(f => ({ ...f }));
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 11/2026, "Item 7" go-live): `prevList` chỉ chụp 1 tab
+  // (DB.formTemplates[activeFormTab]) — syncStorage('formTemplates', {baseline}) cần bản chụp TOÀN BỘ
+  // DB.formTemplates (object-map theo khoá CẤP 1 — tabKey/`__core__`+coreKey/`__order__`+tabKey) để
+  // retryObjectMapSaveAfterConflict() đối chiếu đúng, không phải 1 tab lồng bên trong 1 khoá.
+  const formTemplatesSnapshot = JSON.parse(JSON.stringify(DB.formTemplates || {}));
 
   if (editingCustomFieldId) {
     const field = DB.formTemplates[activeFormTab].find(f => f.id === editingCustomFieldId);
@@ -105,7 +110,7 @@ async function addCustomField(e) {
       field.options = optionsArr;
       field.required = required;
     }
-    const saved = await syncStorage('formTemplates');
+    const saved = await syncStorage('formTemplates', { baseline: formTemplatesSnapshot });
     if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
     logSystemAction('CONFIG', 'EDIT_CUSTOM_FIELD', `Sửa trường [${label}] của biểu mẫu ${activeFormTab}`, 'SUCCESS', editingCustomFieldId);
     alert('✅ Đã cập nhật trường dữ liệu thành công!');
@@ -113,7 +118,7 @@ async function addCustomField(e) {
   } else {
     const fieldId = 'f_cust_' + Date.now();
     DB.formTemplates[activeFormTab].push({ id: fieldId, label, type, options: optionsArr, required, isDefault: false });
-    const saved = await syncStorage('formTemplates');
+    const saved = await syncStorage('formTemplates', { baseline: formTemplatesSnapshot });
     if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
     logSystemAction('CONFIG', 'ADD_CUSTOM_FIELD', `Thêm trường [${label}] cho biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
     alert('✅ Đã thêm trường dữ liệu bổ sung thành công!');
@@ -213,8 +218,9 @@ async function deleteCustomField(fieldId) {
   if (!DB.formTemplates[activeFormTab]) return;
 
   const prevList = DB.formTemplates[activeFormTab].map(f => ({ ...f }));
+  const formTemplatesSnapshot = JSON.parse(JSON.stringify(DB.formTemplates || {}));
   DB.formTemplates[activeFormTab] = DB.formTemplates[activeFormTab].filter(f => f.id !== fieldId);
-  const saved = await syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates', { baseline: formTemplatesSnapshot });
   if (!saved) { DB.formTemplates[activeFormTab] = prevList; renderFormFieldsTable(); return; }
   logSystemAction('CONFIG', 'DELETE_CUSTOM_FIELD', `Xóa trường [${fieldId}] khỏi biểu mẫu ${activeFormTab}`, 'SUCCESS', fieldId);
   if (editingCustomFieldId === fieldId) cancelEditCustomField();
@@ -228,8 +234,9 @@ async function moveCustomField(fieldId, direction) {
   const swapWith = idx + direction;
   if (idx < 0 || swapWith < 0 || swapWith >= arr.length) return;
   const prevList = arr.map(f => ({ ...f }));
+  const formTemplatesSnapshot = JSON.parse(JSON.stringify(DB.formTemplates || {}));
   [arr[idx], arr[swapWith]] = [arr[swapWith], arr[idx]];
-  const saved = await syncStorage('formTemplates');
+  const saved = await syncStorage('formTemplates', { baseline: formTemplatesSnapshot });
   if (!saved) { DB.formTemplates[activeFormTab] = prevList; }
   renderFormFieldsTable();
 }

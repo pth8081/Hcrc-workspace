@@ -1,9 +1,71 @@
 # Phiên bản hiện tại
 
-**27.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.93 (2026-11): Rà soát toàn hệ thống lỗi 409 giả — vá thêm ~50 điểm trên 11 file, tổng quát hoá cơ chế thử lại
+
+Theo yêu cầu người dùng sau v27.92 ("Bạn rà soát lại một lần nữa các chức năng bên trong modules hệ
+thống xem có bị lỗi tương tự không? Tôi đang cấu hình để chuẩn bị go live"): rà soát TOÀN BỘ 19 file có
+gọi `syncStorage()` bằng 4 agent song song (core.js + 18 module khác), xác nhận ngoài 7 chỗ đã vá ở
+v27.92, còn ~50 lệnh gọi khác trên toàn hệ thống thiếu `baseline` dù đã có sẵn snapshot — rơi vào 2 hình
+dạng dữ liệu mà cơ chế retry cũ (chỉ xử lý mảng object có `.id`, hoặc object-map) KHÔNG xử lý đúng nếu
+truyền thẳng baseline:
+
+1. **MẢNG CHUỖI PHẲNG** — `depts`/`stores`/`jobTitles`/`cats`/`trainingCategories`/`licenseTypes`/
+   `priceZones`/`itRenewalCategories`/`carTaxiCompanies`/`carEvaluationIssues` và CẢ 15 danh mục trong
+   `GENERIC_SIMPLE_CATALOGS` (jobGrades, resignationReasons, disciplinaryTypes, legalEntities,
+   specialLaborStatuses, currentWorkStatusDetails, nationalIdIssuePlaces, educationDegrees,
+   relationshipTypes, nationalities, contractAmendmentTypes, contractTerminationReasons,
+   maritalStatuses, employmentTypes, workSchedules) — phần tử là string thuần, không có `.id`.
+2. **MẢNG OBJECT khoá theo field KHÁC `.id`** — `workflowParticipatingPositions` (khoá
+   jobTitle+dept), `storeJobTitles` (khoá `label`), `jobTitleGradeDefaults` (khoá `jobTitle`),
+   `positionTypes` (khoá `.key`), `publicHolidays` (khoá `.date`).
+
+(Phát hiện thêm: **object cấu hình đơn dạng phẳng** như `emailConfig`/`operationOrderApiConfig` HOÁ RA
+dùng được NGAY cơ chế OBJECT MAP có sẵn — mỗi field cấu hình tự nhiên là 1 "khoá" hợp lệ để merge độc
+lập, không cần thêm chế độ riêng.)
+
+**Bản vá cơ chế lõi** (`core.js`): thêm `defaultArrayItemKey()` (object có `.id` → dùng `.id`, còn lại →
+dùng CHÍNH giá trị — tự động xử lý đúng dạng 1 mà không cần sửa gì thêm ở nơi gọi); `diffArrayForConflictRetry()`/
+`retryArraySaveAfterConflict()` nhận thêm `opts.keyFn` cho dạng 2 (nơi gọi tự truyền qua
+`syncStorage(key, {baseline, arrayKeyFn})`). Đồng thời vá lỗi `silent:true` + baseline trước đây TẮT hẳn
+nhánh thử lại thông minh (`saveDeptViewScopeConfig()`/`savePwaShortcutModules()` — tự lưu ngầm + tự alert
+riêng) — giờ retry vẫn chạy khi silent, chỉ khác ở bước báo lỗi khi conflict thật: `console.warn` (im
+lặng) thay vì `alert()` chặn màn hình.
+
+**Phát hiện thêm 1 lỗi tiềm ẩn** ở `bulkDeleteObjectCatalogItems()` (core.js, "☑ Chọn nhiều để xoá" — vá
+từ đợt 10/2026 trước): đã có `baseline` nhưng THIẾU `arrayKeyFn` theo đúng `cfg.idField` của từng danh
+mục — `storeJobTitles`/`jobTitleGradeDefaults` khoá theo `label`/`jobTitle` chứ không phải `.id`, nếu gặp
+409 thật sẽ merge sai lệch (coi mọi phần tử cùng 1 khoá `undefined`). Đã vá cùng đợt.
+
+**Vá 11 file**: `core.js` (13 lệnh gọi — bao gồm `formTemplates` x3 nơi snapshot cũ chỉ chụp 1 phần lồng
+bên trong, nay chụp lại TOÀN BỘ `DB.formTemplates` trước khi sửa; `emailConfig`/`approvalEmailConfig`/
+`contractExpiryDeptContacts`/`priceZones`/`fieldDef.optionsKey`/`SIMPLE_CATALOG_EXCEL_CONFIG`/
+`SIMPLE_CATALOG_BULK_CONFIG`), `module-admin.js` (~25 lệnh gọi — depts/stores/storeTypes/jobTitles/
+storeJobTitles/jobTitleGradeDefaults/positionTypes/trainingCategories/cats/docCatAbbrs/
+contractTypeAbbrs/15 danh mục GENERIC_SIMPLE_CATALOGS qua 1 điểm sửa chung), `module-admin-specialperm.js`
+(pwaShortcutModules/vppExcludedJobTitles/workflowParticipatingPositions x2), `module-admin-deptviewscope.js`
+(deptViewScopeConfig), `module-dangkyxe.js` (carTaxiCompanies/carEvaluationIssues), `module-itsupport-price.js`
+(priceZones), `module-itsupport-renewal.js` (itRenewalCategories), `module-tailieu.js` (licenseTypes/
+uploadSizeLimitConfig/uploadFileTypeConfig), `module-hethong-tabs.js` (operationOrderApiConfig),
+`module-formbuilder-nav.js` (formTemplates x4, cùng lỗi snapshot-1-phần như core.js), `module-conghop.js`
+(attendanceHoConfig/publicHolidays x2 — trước đây còn thiếu CẢ rollback khi lưu thất bại, đã vá luôn).
+
+**Test**: viết mới `tests/test-syncstorage-generalized-conflict-retry.js` (7 kịch bản xác nhận ĐÚNG cơ
+chế mới cho mảng chuỗi phẳng, mảng khoá tuỳ chỉnh, object cấu hình đơn dạng phẳng, và silent+baseline —
+cả trường hợp gộp êm lẫn conflict thật) — PASS 7/7. Chạy lại ~23 bộ test liên quan hiện có (tổng ~550+
+kịch bản — syncstorage/catalog-rename/job-title-grade/workflow-participating-positions/quick-apply/
+object-catalog-bulk-delete/object-catalog-excel/generic-simple-catalog/it-support/car-regs/congphep...)
+— TOÀN BỘ PASS, không regression. 2 lỗi KHÔNG liên quan đã xác nhận TỒN TẠI SẴN trên `main` từ trước
+(đối chiếu lại, không phải do đợt vá này): `test-initdatabase-key-coverage.js` (thiếu `laborContractTypes`
+trong `initDatabase()`) và `test-adv-workflow-tab-deep.js` (lỗi "⚡ Áp Dụng" ở `DB.deptWorkflows`) — ngoài
+phạm vi yêu cầu lần này.
+
+**Deploy**: chỉ copy code (10 file `public/js/*.js` vừa liệt kê) + `pm2 restart`, không đổi
+`schema.sql`/biến môi trường/`package.json` dependencies.
 
 ## v27.92 (2026-11): Vá lỗi 409 giả ở TOÀN BỘ màn Cấu Hình Quy Trình Theo Phòng Ban/Mức + "⚡ Áp Dụng Nhanh"
 

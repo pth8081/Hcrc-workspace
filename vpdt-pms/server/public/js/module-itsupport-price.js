@@ -778,9 +778,10 @@ async function savePriceZone(e) {
   const name = document.getElementById('txtPriceZoneName').value.trim();
   if (!name) return;
   if (DB.priceZones.includes(name)) return alert('Vùng giá đã tồn tại!');
+  const prevPriceZonesAdd = [...DB.priceZones];
   DB.priceZones.push(name);
-  const saved = await syncStorage('priceZones');
-  if (!saved) { DB.priceZones = DB.priceZones.filter(x => x !== name); return; }
+  const saved = await syncStorage('priceZones', { baseline: prevPriceZonesAdd });
+  if (!saved) { DB.priceZones = prevPriceZonesAdd; return; }
   logSystemAction('USER_MGM', 'ADD_PRICE_ZONE', `Thêm vùng giá áp dụng mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtPriceZoneName').value = '';
   renderPriceZoneList();
@@ -791,7 +792,7 @@ async function deletePriceZone(name) {
   if (!confirm(`Xóa vùng giá "${name}"?`)) return;
   const prevList = [...DB.priceZones];
   DB.priceZones = DB.priceZones.filter(x => x !== name);
-  const saved = await syncStorage('priceZones');
+  const saved = await syncStorage('priceZones', { baseline: prevList });
   if (!saved) { DB.priceZones = prevList; renderPriceZoneList(); return; }
   logSystemAction('USER_MGM', 'DELETE_PRICE_ZONE', `Xóa vùng giá áp dụng [${name}]`, 'SUCCESS', name);
   renderPriceZoneList();

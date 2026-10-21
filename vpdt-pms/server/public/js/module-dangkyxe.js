@@ -827,9 +827,10 @@ async function saveCarTaxiCompany(e) {
   const name = document.getElementById('txtCarTaxiCompanyName').value.trim();
   if (!name) return;
   if (DB.carTaxiCompanies.includes(name)) return alert('Hãng taxi đã tồn tại!');
+  const prevCarTaxiCompaniesAdd = [...DB.carTaxiCompanies];
   DB.carTaxiCompanies.push(name);
-  const saved = await syncStorage('carTaxiCompanies');
-  if (!saved) { DB.carTaxiCompanies = DB.carTaxiCompanies.filter(x => x !== name); return; }
+  const saved = await syncStorage('carTaxiCompanies', { baseline: prevCarTaxiCompaniesAdd });
+  if (!saved) { DB.carTaxiCompanies = prevCarTaxiCompaniesAdd; return; }
   logSystemAction('USER_MGM', 'ADD_CAR_TAXI_COMPANY', `Thêm hãng taxi mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCarTaxiCompanyName').value = '';
   renderCarTaxiCompanyList();
@@ -840,7 +841,7 @@ async function deleteCarTaxiCompany(name) {
   if (!confirm(`Xóa hãng taxi "${name}"?`)) return;
   const prevList = [...DB.carTaxiCompanies];
   DB.carTaxiCompanies = DB.carTaxiCompanies.filter(x => x !== name);
-  const saved = await syncStorage('carTaxiCompanies');
+  const saved = await syncStorage('carTaxiCompanies', { baseline: prevList });
   if (!saved) { DB.carTaxiCompanies = prevList; renderCarTaxiCompanyList(); return; }
   logSystemAction('USER_MGM', 'DELETE_CAR_TAXI_COMPANY', `Xóa hãng taxi [${name}]`, 'SUCCESS', name);
   renderCarTaxiCompanyList();
@@ -871,9 +872,10 @@ async function saveCarEvaluationIssue(e) {
   const name = document.getElementById('txtCarEvaluationIssueName').value.trim();
   if (!name) return;
   if (DB.carEvaluationIssues.includes(name)) return alert('Lý do này đã tồn tại!');
+  const prevCarEvaluationIssuesAdd = [...DB.carEvaluationIssues];
   DB.carEvaluationIssues.push(name);
-  const saved = await syncStorage('carEvaluationIssues');
-  if (!saved) { DB.carEvaluationIssues = DB.carEvaluationIssues.filter(x => x !== name); return; }
+  const saved = await syncStorage('carEvaluationIssues', { baseline: prevCarEvaluationIssuesAdd });
+  if (!saved) { DB.carEvaluationIssues = prevCarEvaluationIssuesAdd; return; }
   logSystemAction('USER_MGM', 'ADD_CAR_EVALUATION_ISSUE', `Thêm lý do đánh giá chuyến mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCarEvaluationIssueName').value = '';
   renderCarEvaluationIssueList();
@@ -883,7 +885,7 @@ async function deleteCarEvaluationIssue(name) {
   if (!confirm(`Xóa lý do "${name}"?`)) return;
   const prevList = [...DB.carEvaluationIssues];
   DB.carEvaluationIssues = DB.carEvaluationIssues.filter(x => x !== name);
-  const saved = await syncStorage('carEvaluationIssues');
+  const saved = await syncStorage('carEvaluationIssues', { baseline: prevList });
   if (!saved) { DB.carEvaluationIssues = prevList; renderCarEvaluationIssueList(); return; }
   logSystemAction('USER_MGM', 'DELETE_CAR_EVALUATION_ISSUE', `Xóa lý do đánh giá chuyến [${name}]`, 'SUCCESS', name);
   renderCarEvaluationIssueList();

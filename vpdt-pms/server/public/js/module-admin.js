@@ -32,9 +32,10 @@ async function saveDept(e) {
   e.preventDefault();
   const name = document.getElementById('txtDeptName').value.trim();
   if (DB.depts.includes(name)) return alert('Phòng ban đã tồn tại!');
+  const prevDepts = [...DB.depts];
   DB.depts.push(name);
-  const saved = await syncStorage('depts');
-  if (!saved) { DB.depts = DB.depts.filter(d => d !== name); return; }
+  const saved = await syncStorage('depts', { baseline: prevDepts });
+  if (!saved) { DB.depts = prevDepts; return; }
   logSystemAction('USER_MGM', 'ADD_DEPT', `Thêm phòng ban mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtDeptName').value = '';
   renderDeptList();
@@ -64,9 +65,9 @@ async function deleteDept(name) {
   const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.dept === name);
   if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.dept !== name);
   const [savedDepts, savedAbbrs, savedGroups, savedWfGroups, savedWfPositions] = await Promise.all([
-    syncStorage('depts'), syncStorage('deptAbbrs'), affectedGroups.length ? syncStorage('deptGroups', { baseline: prevDeptGroups }) : Promise.resolve(true),
-    affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups') : Promise.resolve(true),
-    wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+    syncStorage('depts', { baseline: prevDepts }), syncStorage('deptAbbrs', { baseline: prevDeptAbbrs }), affectedGroups.length ? syncStorage('deptGroups', { baseline: prevDeptGroups }) : Promise.resolve(true),
+    affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups', { baseline: prevWfDeptGroups }) : Promise.resolve(true),
+    wfPositionsChanged ? syncStorage('workflowParticipatingPositions', { baseline: prevWfPositions, arrayKeyFn: encodeWfPositionPair }) : Promise.resolve(true)
   ]);
   if (!savedDepts || !savedAbbrs || !savedGroups || !savedWfGroups || !savedWfPositions) {
     DB.depts = prevDepts; DB.deptAbbrs = prevDeptAbbrs; DB.deptGroups = prevDeptGroups;
@@ -87,7 +88,7 @@ async function updateDeptAbbr(name, value) {
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.deptAbbrs[name];
   else DB.deptAbbrs[name] = abbr;
-  const saved = await syncStorage('deptAbbrs');
+  const saved = await syncStorage('deptAbbrs', { baseline: prevAbbrs });
   if (!saved) { DB.deptAbbrs = prevAbbrs; renderDeptList(); return; }
   logSystemAction('USER_MGM', 'UPDATE_DEPT_ABBR', `Cập nhật viết tắt phòng ban [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
@@ -301,9 +302,10 @@ function renderLaborContractTypeList() {
 async function addStoreToCatalog(name) {
   if (!name) return false;
   if (DB.stores.includes(name)) { alert('Siêu thị đã tồn tại!'); return false; }
+  const prevStores = [...DB.stores];
   DB.stores.push(name);
-  const saved = await syncStorage('stores');
-  if (!saved) { DB.stores = DB.stores.filter(s => s !== name); return false; }
+  const saved = await syncStorage('stores', { baseline: prevStores });
+  if (!saved) { DB.stores = prevStores; return false; }
   logSystemAction('USER_MGM', 'ADD_STORE', `Thêm siêu thị mới [${name}]`, 'SUCCESS', name);
   return true;
 }
@@ -348,9 +350,9 @@ async function deleteStore(name) {
   const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.dept === name);
   if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.dept !== name);
   const [saved, savedWfGroups, savedWfPositions] = await Promise.all([
-    syncStorage('stores'),
-    affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups') : Promise.resolve(true),
-    wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+    syncStorage('stores', { baseline: prevStores }),
+    affectedWfGroups.length ? syncStorage('workflowParticipatingDeptGroups', { baseline: prevWfDeptGroups }) : Promise.resolve(true),
+    wfPositionsChanged ? syncStorage('workflowParticipatingPositions', { baseline: prevWfPositions, arrayKeyFn: encodeWfPositionPair }) : Promise.resolve(true)
   ]);
   if (!saved || !savedWfGroups || !savedWfPositions) {
     DB.stores = prevStores; DB.workflowParticipatingDeptGroups = prevWfDeptGroups; DB.workflowParticipatingPositions = prevWfPositions;
@@ -391,7 +393,7 @@ async function setStoreType(name, type) {
   const next = { ...(DB.storeTypes || {}) };
   if (type) next[name] = type; else delete next[name];
   DB.storeTypes = next;
-  const saved = await syncStorage('storeTypes');
+  const saved = await syncStorage('storeTypes', { baseline: prev });
   if (!saved) { DB.storeTypes = prev; renderStoreList(); return; }
   logSystemAction('USER_MGM', 'SET_STORE_TYPE', `Phân loại siêu thị [${name}] → [${type || 'Chưa phân loại'}]`, 'SUCCESS', name);
 }
@@ -501,10 +503,11 @@ async function confirmStoreImport() {
     typeChanges.forEach(it => { nextTypes[it.name] = it.type; });
     DB.storeTypes = nextTypes;
   }
+  const baselineByKey = { stores: prevStores, storeTypes: prevTypes };
   const syncKeys = [];
   if (newNames.length) syncKeys.push('stores');
   if (typeChanges.length) syncKeys.push('storeTypes');
-  const results = await Promise.all(syncKeys.map(k => syncStorage(k)));
+  const results = await Promise.all(syncKeys.map(k => syncStorage(k, { baseline: baselineByKey[k] })));
   if (results.some(ok => !ok)) { DB.stores = prevStores; DB.storeTypes = prevTypes; return; }
   logSystemAction('USER_MGM', 'IMPORT_STORES', `Import Excel: thêm ${newNames.length} siêu thị mới, cập nhật Loại cho ${typeChanges.length} dòng`, 'SUCCESS', String(newNames.length));
   alert(`✅ Đã thêm ${newNames.length} siêu thị mới` + (typeChanges.length ? `, cập nhật "Loại" cho ${typeChanges.length} dòng` : '') + ' vào Danh Mục Siêu Thị.');
@@ -531,7 +534,7 @@ async function moveDeptToStore(name) {
   // thất bại (409/mất mạng) sau khi "depts" đã lưu thành công, tên đó BIẾN MẤT khỏi cả 2 danh mục sau
   // F5 (đã xoá khỏi DB.depts thật, nhưng chưa hề thêm vào DB.stores thật). Await CẢ 2 + rollback ĐỦ CẢ
   // HAI về đúng trạng thái ban đầu nếu BẤT KỲ lượt nào thất bại, không để dở dang giữa chừng.
-  const [savedDepts, savedStores] = await Promise.all([syncStorage('depts'), syncStorage('stores')]);
+  const [savedDepts, savedStores] = await Promise.all([syncStorage('depts', { baseline: prevDepts }), syncStorage('stores', { baseline: prevStores })]);
   if (!savedDepts || !savedStores) {
     DB.depts = prevDepts; DB.stores = prevStores;
     renderDeptList(); renderStoreList();
@@ -551,9 +554,10 @@ async function saveJobTitle(e) {
   e.preventDefault();
   const name = document.getElementById('txtJobTitleName').value.trim();
   if (DB.jobTitles.includes(name)) return alert('Chức danh đã tồn tại!');
+  const prevJobTitlesAdd = [...DB.jobTitles];
   DB.jobTitles.push(name);
-  const saved = await syncStorage('jobTitles');
-  if (!saved) { DB.jobTitles = DB.jobTitles.filter(t => t !== name); return; }
+  const saved = await syncStorage('jobTitles', { baseline: prevJobTitlesAdd });
+  if (!saved) { DB.jobTitles = prevJobTitlesAdd; return; }
   logSystemAction('USER_MGM', 'ADD_JOB_TITLE', `Thêm chức danh mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtJobTitleName').value = '';
   renderJobTitleList();
@@ -572,7 +576,7 @@ async function deleteJobTitle(name) {
   const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.jobTitle === name);
   if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.jobTitle !== name);
   const [saved, savedWfPositions] = await Promise.all([
-    syncStorage('jobTitles'), wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+    syncStorage('jobTitles', { baseline: prevJobTitles }), wfPositionsChanged ? syncStorage('workflowParticipatingPositions', { baseline: prevWfPositions, arrayKeyFn: encodeWfPositionPair }) : Promise.resolve(true)
   ]);
   if (!saved || !savedWfPositions) {
     DB.jobTitles = prevJobTitles; DB.workflowParticipatingPositions = prevWfPositions;
@@ -657,7 +661,7 @@ async function saveGenericSimpleCatalogEntry(e) {
   if ((DB[key] || []).includes(name)) return alert(`Giá trị "${name}" đã tồn tại trong danh mục ${cfg.label}!`);
   const prev = [...(DB[key] || [])];
   DB[key] = [...prev, name];
-  const saved = await syncStorage(key);
+  const saved = await syncStorage(key, { baseline: prev });
   if (!saved) { DB[key] = prev; return; }
   logSystemAction('USER_MGM', `ADD_${cfg.logPrefix}`, `Thêm ${cfg.label} mới [${name}]`, 'SUCCESS', name);
   input.value = '';
@@ -669,7 +673,7 @@ async function deleteGenericSimpleCatalogEntry(key, name) {
   if (!confirmCatalogValueDeletion(cfg.label, name)) return;
   const prev = [...(DB[key] || [])];
   DB[key] = prev.filter(v => v !== name);
-  const saved = await syncStorage(key);
+  const saved = await syncStorage(key, { baseline: prev });
   if (!saved) { DB[key] = prev; renderGenericSimpleCatalogList(key); return; }
   logSystemAction('USER_MGM', `DELETE_${cfg.logPrefix}`, `Xóa ${cfg.label} [${name}]`, 'SUCCESS', name);
   renderGenericSimpleCatalogList(key);
@@ -728,9 +732,10 @@ async function saveStoreJobTitle(e) {
   const label = document.getElementById('txtStoreJobTitleName').value.trim();
   if (!label) return;
   if (DB.storeJobTitles.some(t => t.label === label)) return alert('Chức danh đã tồn tại!');
+  const prevStoreJobTitlesAdd = DB.storeJobTitles.map(t => ({ ...t }));
   DB.storeJobTitles.push({ label });
-  const saved = await syncStorage('storeJobTitles');
-  if (!saved) { DB.storeJobTitles = DB.storeJobTitles.filter(t => t.label !== label); return; }
+  const saved = await syncStorage('storeJobTitles', { baseline: prevStoreJobTitlesAdd, arrayKeyFn: (t) => t.label });
+  if (!saved) { DB.storeJobTitles = prevStoreJobTitlesAdd; return; }
   logSystemAction('USER_MGM', 'ADD_STORE_JOB_TITLE', `Thêm chức danh siêu thị mới [${label}]`, 'SUCCESS', label);
   document.getElementById('txtStoreJobTitleName').value = '';
   renderStoreJobTitleList();
@@ -750,7 +755,7 @@ async function deleteStoreJobTitle(label) {
   const wfPositionsChanged = (DB.workflowParticipatingPositions || []).some(p => p.jobTitle === label);
   if (wfPositionsChanged) DB.workflowParticipatingPositions = (DB.workflowParticipatingPositions || []).filter(p => p.jobTitle !== label);
   const [saved, savedWfPositions] = await Promise.all([
-    syncStorage('storeJobTitles'), wfPositionsChanged ? syncStorage('workflowParticipatingPositions') : Promise.resolve(true)
+    syncStorage('storeJobTitles', { baseline: prevList, arrayKeyFn: (t) => t.label }), wfPositionsChanged ? syncStorage('workflowParticipatingPositions', { baseline: prevWfPositions, arrayKeyFn: encodeWfPositionPair }) : Promise.resolve(true)
   ]);
   if (!saved || !savedWfPositions) {
     DB.storeJobTitles = prevList; DB.workflowParticipatingPositions = prevWfPositions;
@@ -843,16 +848,17 @@ async function saveJobTitleGradeDefault(e) {
     }
     const snapshot = list.map(r => ({ ...r }));
     list[idx] = { jobTitle, jobGrade };
-    const saved = await syncStorage('jobTitleGradeDefaults');
+    const saved = await syncStorage('jobTitleGradeDefaults', { baseline: snapshot, arrayKeyFn: (r) => r.jobTitle });
     if (!saved) { DB.jobTitleGradeDefaults = snapshot; return; }
     logSystemAction('USER_MGM', 'UPDATE_JOB_TITLE_GRADE_DEFAULT', `Sửa cấp bậc mặc định [${jobTitle}] -> "${jobGrade}"`, 'SUCCESS', jobTitle);
   } else {
     if (list.some(r => r.jobTitle === jobTitle)) {
       return alert(`Chức danh "${jobTitle}" đã có cấp bậc mặc định — bấm "✏️ Sửa" ở dòng đó để đổi, không thêm trùng.`);
     }
+    const prevJtgdAdd = list.map(r => ({ ...r }));
     list.push({ jobTitle, jobGrade });
-    const saved = await syncStorage('jobTitleGradeDefaults');
-    if (!saved) { DB.jobTitleGradeDefaults = list.filter(r => r.jobTitle !== jobTitle); return; }
+    const saved = await syncStorage('jobTitleGradeDefaults', { baseline: prevJtgdAdd, arrayKeyFn: (r) => r.jobTitle });
+    if (!saved) { DB.jobTitleGradeDefaults = prevJtgdAdd; return; }
     logSystemAction('USER_MGM', 'ADD_JOB_TITLE_GRADE_DEFAULT', `Thêm cấp bậc mặc định [${jobTitle}] = "${jobGrade}"`, 'SUCCESS', jobTitle);
   }
   cancelEditJobTitleGradeDefault();
@@ -863,7 +869,7 @@ async function deleteJobTitleGradeDefault(jobTitle) {
   if (!confirm(`Xoá cấp bậc mặc định của chức danh "${jobTitle}"? (Chỉ xoá gợi ý tự điền — KHÔNG đổi cấp bậc đã lưu sẵn ở các vị trí Cơ Cấu Tổ Chức hiện có.)`)) return;
   const prevList = (DB.jobTitleGradeDefaults || []).map(r => ({ ...r }));
   DB.jobTitleGradeDefaults = prevList.filter(r => r.jobTitle !== jobTitle);
-  const saved = await syncStorage('jobTitleGradeDefaults');
+  const saved = await syncStorage('jobTitleGradeDefaults', { baseline: prevList, arrayKeyFn: (r) => r.jobTitle });
   if (!saved) { DB.jobTitleGradeDefaults = prevList; renderJobTitleGradeDefaultList(); return; }
   logSystemAction('USER_MGM', 'DELETE_JOB_TITLE_GRADE_DEFAULT', `Xoá cấp bậc mặc định [${jobTitle}]`, 'SUCCESS', jobTitle);
   if (editingJobTitleGradeDefaultOriginal === jobTitle) cancelEditJobTitleGradeDefault();
@@ -963,8 +969,9 @@ async function addPositionTypeEntry(e) {
   if (!t) return;
   const list = t[field] || (t[field] = []);
   if (list.includes(value)) return alert('Giá trị đã tồn tại!');
+  const prevPositionTypes = DB.positionTypes.map(x => ({ ...x, locations: [...(x.locations || [])], jobTitles: [...(x.jobTitles || [])] }));
   list.push(value);
-  const saved = await syncStorage('positionTypes');
+  const saved = await syncStorage('positionTypes', { baseline: prevPositionTypes, arrayKeyFn: (x) => x.key });
   if (!saved) { t[field] = list.filter(v => v !== value); return; }
   logSystemAction('USER_MGM', 'ADD_POSITION_TYPE_ENTRY', `Thêm ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${value}] vào Vị Trí Làm Việc [${t.label}]`, 'SUCCESS', value);
   input.value = '';
@@ -976,8 +983,9 @@ async function deletePositionTypeEntry(key, field, value) {
   const t = DB.positionTypes.find(x => x.key === key);
   if (!t) return;
   const prevList = [...(t[field] || [])];
+  const prevPositionTypes = DB.positionTypes.map(x => ({ ...x, locations: [...(x.locations || [])], jobTitles: [...(x.jobTitles || [])] }));
   t[field] = prevList.filter(v => v !== value);
-  const saved = await syncStorage('positionTypes');
+  const saved = await syncStorage('positionTypes', { baseline: prevPositionTypes, arrayKeyFn: (x) => x.key });
   if (!saved) { t[field] = prevList; renderPositionTypeList(); return; }
   logSystemAction('USER_MGM', 'DELETE_POSITION_TYPE_ENTRY', `Xóa ${field === 'locations' ? 'địa điểm' : 'chức danh'} [${value}] khỏi Vị Trí Làm Việc [${t.label}]`, 'SUCCESS', value);
   renderPositionTypeList();
@@ -1300,7 +1308,7 @@ async function confirmPositionTypesImport() {
   });
   if (addedEntries) {
     DB.positionTypes = next;
-    const ok = await syncStorage('positionTypes');
+    const ok = await syncStorage('positionTypes', { baseline: prev, arrayKeyFn: (x) => x.key });
     if (!ok) { DB.positionTypes = prev; failures.push('Lưu Địa Điểm/Chức Danh mới thất bại'); addedEntries = 0; }
   }
   logSystemAction('USER_MGM', 'IMPORT_POSITION_TYPES', `Nhập Excel Vị Trí Làm Việc: tạo ${created}, đổi tên ${renamed}, thêm ${addedEntries} địa điểm/chức danh${failures.length ? `, ${failures.length} lỗi` : ''}`, failures.length ? 'WARNING' : 'SUCCESS', String(created));
@@ -1333,9 +1341,10 @@ async function saveTrainingCategory(e) {
   e.preventDefault();
   const name = document.getElementById('txtTrainingCategoryName').value.trim();
   if (DB.trainingCategories.includes(name)) return alert('Loại đào tạo đã tồn tại!');
+  const prevTrainingCategoriesAdd = [...DB.trainingCategories];
   DB.trainingCategories.push(name);
-  const saved = await syncStorage('trainingCategories');
-  if (!saved) { DB.trainingCategories = DB.trainingCategories.filter(t => t !== name); return; }
+  const saved = await syncStorage('trainingCategories', { baseline: prevTrainingCategoriesAdd });
+  if (!saved) { DB.trainingCategories = prevTrainingCategoriesAdd; return; }
   logSystemAction('USER_MGM', 'ADD_TRAINING_CATEGORY', `Thêm loại đào tạo mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtTrainingCategoryName').value = '';
   renderTrainingCategoryList();
@@ -1346,7 +1355,7 @@ async function deleteTrainingCategory(name) {
   if (!confirmCatalogValueDeletion('loại đào tạo', name)) return;
   const prevList = [...DB.trainingCategories];
   DB.trainingCategories = DB.trainingCategories.filter(t => t !== name);
-  const saved = await syncStorage('trainingCategories');
+  const saved = await syncStorage('trainingCategories', { baseline: prevList });
   if (!saved) { DB.trainingCategories = prevList; renderTrainingCategoryList(); return; }
   logSystemAction('USER_MGM', 'DELETE_TRAINING_CATEGORY', `Xóa loại đào tạo [${name}]`, 'SUCCESS', name);
   renderTrainingCategoryList();
@@ -1457,9 +1466,10 @@ async function saveCat(e) {
   e.preventDefault();
   const name = document.getElementById('txtCatName').value.trim();
   if (DB.cats.includes(name)) return alert('Loại tài liệu đã tồn tại!');
+  const prevCatsAdd = [...DB.cats];
   DB.cats.push(name);
-  const saved = await syncStorage('cats');
-  if (!saved) { DB.cats = DB.cats.filter(c => c !== name); return; }
+  const saved = await syncStorage('cats', { baseline: prevCatsAdd });
+  if (!saved) { DB.cats = prevCatsAdd; return; }
   logSystemAction('USER_MGM', 'ADD_CAT', `Thêm loại tài liệu mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCatName').value = '';
   renderCatList();
@@ -1472,7 +1482,7 @@ async function deleteCat(name) {
   const prevAbbrs = { ...DB.docCatAbbrs };
   DB.cats = DB.cats.filter(c => c !== name);
   delete DB.docCatAbbrs[name];
-  const [savedCats, savedAbbrs] = await Promise.all([syncStorage('cats'), syncStorage('docCatAbbrs')]);
+  const [savedCats, savedAbbrs] = await Promise.all([syncStorage('cats', { baseline: prevCats }), syncStorage('docCatAbbrs', { baseline: prevAbbrs })]);
   if (!savedCats || !savedAbbrs) {
     DB.cats = prevCats; DB.docCatAbbrs = prevAbbrs;
     renderCatList();
@@ -1490,7 +1500,7 @@ async function updateCatAbbr(name, value) {
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.docCatAbbrs[name];
   else DB.docCatAbbrs[name] = abbr;
-  const saved = await syncStorage('docCatAbbrs');
+  const saved = await syncStorage('docCatAbbrs', { baseline: prevAbbrs });
   if (!saved) { DB.docCatAbbrs = prevAbbrs; renderCatList(); return; }
   logSystemAction('USER_MGM', 'UPDATE_CAT_ABBR', `Cập nhật viết tắt phân loại tài liệu [${name}] = "${abbr}"`, 'SUCCESS', name);
 }
@@ -1527,7 +1537,7 @@ async function updateContractTypeAbbr(name, value) {
   const abbr = (value || '').trim().toUpperCase();
   if (!abbr) delete DB.contractTypeAbbrs[name];
   else DB.contractTypeAbbrs[name] = abbr;
-  const saved = await syncStorage('contractTypeAbbrs');
+  const saved = await syncStorage('contractTypeAbbrs', { baseline: prevAbbrs });
   if (!saved) { DB.contractTypeAbbrs = prevAbbrs; renderContractTypeAbbrList(); return; }
   logSystemAction('USER_MGM', 'UPDATE_CONTRACT_TYPE_ABBR', `Cập nhật viết tắt loại hợp đồng [${name}] = "${abbr}"`, 'SUCCESS', name);
 }

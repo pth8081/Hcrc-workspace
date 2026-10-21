@@ -93,7 +93,7 @@ async function saveDeptViewScopeConfig() {
   });
   DB.deptViewScopeConfig = next;
   renderDeptViewScopeAdminSection();
-  const saved = await syncStorage('deptViewScopeConfig', { silent: true });
+  const saved = await syncStorage('deptViewScopeConfig', { silent: true, baseline: snapshot });
   if (!saved) {
     DB.deptViewScopeConfig = snapshot;
     renderDeptViewScopeAdminSection();

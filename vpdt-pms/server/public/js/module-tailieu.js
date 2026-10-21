@@ -1449,7 +1449,7 @@ async function saveLicenseType(e) {
   if ((DB.licenseTypes || []).includes(name)) return alert('Loại giấy phép đã tồn tại!');
   const prevList = [...(DB.licenseTypes || [])];
   DB.licenseTypes = [...(DB.licenseTypes || []), name];
-  const saved = await syncStorage('licenseTypes');
+  const saved = await syncStorage('licenseTypes', { baseline: prevList });
   if (!saved) { DB.licenseTypes = prevList; return; }
   logSystemAction('LICENSE', 'ADD_LICENSE_TYPE', `Thêm loại giấy phép mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtLicenseTypeName').value = '';
@@ -1466,7 +1466,7 @@ async function deleteLicenseType(name) {
   if (!confirm(`Xóa loại giấy phép "${name}" khỏi danh mục?`)) return;
   const prevList = [...(DB.licenseTypes || [])];
   DB.licenseTypes = (DB.licenseTypes || []).filter(t => t !== name);
-  const saved = await syncStorage('licenseTypes');
+  const saved = await syncStorage('licenseTypes', { baseline: prevList });
   if (!saved) { DB.licenseTypes = prevList; renderLicenseTypeList(); return; }
   logSystemAction('LICENSE', 'DELETE_LICENSE_TYPE', `Xóa loại giấy phép [${name}]`, 'SUCCESS', name);
   renderLicenseTypeList();
@@ -1662,7 +1662,7 @@ async function updateUploadSizeLimit(moduleKey, rawValue) {
   const hadKey = moduleKey in DB.uploadSizeLimitConfig;
   if (value > 0) DB.uploadSizeLimitConfig[moduleKey] = value;
   else delete DB.uploadSizeLimitConfig[moduleKey];
-  const saved = await syncStorage('uploadSizeLimitConfig');
+  const saved = await syncStorage('uploadSizeLimitConfig', { baseline: prevConfig });
   if (!saved) {
     if (hadKey) DB.uploadSizeLimitConfig[moduleKey] = prevConfig[moduleKey]; else delete DB.uploadSizeLimitConfig[moduleKey];
     return;
@@ -1682,7 +1682,7 @@ async function toggleUploadTypeExt(moduleKey, ext, checked) {
   const current = Array.isArray(DB.uploadFileTypeConfig[moduleKey]) && DB.uploadFileTypeConfig[moduleKey].length
     ? DB.uploadFileTypeConfig[moduleKey] : extUniverse.slice();
   DB.uploadFileTypeConfig[moduleKey] = checked ? [...new Set([...current, ext])] : current.filter(e => e !== ext);
-  const saved = await syncStorage('uploadFileTypeConfig');
+  const saved = await syncStorage('uploadFileTypeConfig', { baseline: prevConfig });
   if (!saved) {
     if (hadKey) DB.uploadFileTypeConfig[moduleKey] = prevConfig[moduleKey]; else delete DB.uploadFileTypeConfig[moduleKey];
     renderUploadTypeConfig();

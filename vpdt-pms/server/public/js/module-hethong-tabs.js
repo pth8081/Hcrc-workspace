@@ -252,7 +252,7 @@ async function saveOperationOrderApiConfig(e) {
     headerValuePlain: document.getElementById('opApiHeaderValuePlain').value,
     matchingKey
   };
-  const saved = await syncStorage('operationOrderApiConfig');
+  const saved = await syncStorage('operationOrderApiConfig', { baseline: prevConfig });
   if (!saved) { DB.operationOrderApiConfig = prevConfig; return; }
   document.getElementById('opApiHeaderValuePlain').value = '';
   logSystemAction('CONFIG', 'UPDATE_OPERATION_ORDER_API_CONFIG', 'Cập nhật cấu hình đồng bộ Đơn Hàng ra dsmart16.', 'SUCCESS', 'OPERATION_ORDER_API_CONFIG');

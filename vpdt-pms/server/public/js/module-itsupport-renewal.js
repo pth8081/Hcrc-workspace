@@ -98,7 +98,7 @@ async function saveItRenewalCategory(e) {
   if ((DB.itRenewalCategories || []).includes(name)) return alert('Loại dịch vụ đã tồn tại!');
   const prevList = [...(DB.itRenewalCategories || [])];
   DB.itRenewalCategories = [...(DB.itRenewalCategories || []), name];
-  const saved = await syncStorage('itRenewalCategories');
+  const saved = await syncStorage('itRenewalCategories', { baseline: prevList });
   if (!saved) { DB.itRenewalCategories = prevList; return; }
   logSystemAction('IT_SUPPORT', 'ADD_IT_RENEWAL_CATEGORY', `Thêm loại dịch vụ Gia Hạn CNTT mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtItRenewalCategoryName').value = '';
@@ -109,7 +109,7 @@ async function deleteItRenewalCategory(name) {
   if (!confirm(`Xóa loại dịch vụ "${name}" khỏi danh mục?`)) return;
   const prevList = [...(DB.itRenewalCategories || [])];
   DB.itRenewalCategories = (DB.itRenewalCategories || []).filter(c => c !== name);
-  const saved = await syncStorage('itRenewalCategories');
+  const saved = await syncStorage('itRenewalCategories', { baseline: prevList });
   if (!saved) { DB.itRenewalCategories = prevList; renderItRenewalCategoryList(); return; }
   logSystemAction('IT_SUPPORT', 'DELETE_IT_RENEWAL_CATEGORY', `Xóa loại dịch vụ Gia Hạn CNTT [${name}]`, 'SUCCESS', name);
   renderItRenewalCategoryList();
