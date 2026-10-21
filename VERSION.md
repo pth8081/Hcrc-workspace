@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**27.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.87 (2026-11): Rà soát toàn hệ thống lỗi 409 giả — vá 11 chỗ còn sót
+
+Người dùng gửi ảnh chụp lỗi thật nút "💾 Lưu Thành Viên" ở màn Nhóm Phê Duyệt (`Dữ liệu
+"submissionApprovalGroups" vừa bị người khác thay đổi — vui lòng tải lại trang rồi thử lại.`) và yêu cầu
+rà soát lại TOÀN BỘ hệ thống xem còn module nào bị cùng triệu chứng 409 giả (thiếu `baseline` khi gọi
+`syncStorage()` dù đã có sẵn `snapshot`/`prevList` để rollback) — không chỉ riêng chỗ vừa báo lỗi.
+
+**Nguyên nhân đúng chỗ người dùng báo**: `syncApprovalAdminKey()` (module-admin-submissiongroups.js) —
+hàm dùng CHUNG cho mọi thao tác Thêm/Xoá/Di chuyển/**Lưu Thành Viên** của CẢ 12 màn Nhóm/Cấp Phê Duyệt
+(Văn Bản Trình/Hợp Đồng + 10 module `EXTRA_APPROVAL_MODULE_LABELS`: Tài Liệu/Đăng Ký Xe/Mua VPP/Sửa Chữa
+VP/Mua Sắm VP/Thanh Toán/Giá Bán Lẻ-Bán Buôn IT/Đặt Hàng Siêu Thị-HO) — không truyền `baseline`.
+
+**Rà soát toàn hệ thống (grep mọi lệnh gọi `syncStorage()` thiếu baseline dù đã có sẵn snapshot, đối
+chiếu điều kiện áp dụng được của `retryArraySaveAfterConflict()`: mảng object có `.id` ổn định) tìm thêm
+10 chỗ khác cùng lớp lỗi**, đều đã vá thêm `{ baseline: ... }`:
+
+- `core.js`: `bulkDeleteObjectCatalogItems()` (nút "☑ Chọn nhiều để xoá" dùng chung cho 5 danh mục).
+- `module-admin-specialperm.js`: `workflowParticipatingDeptGroups` ("Đơn Vị Tham Gia Quy Trình").
+- `module-admin.js`: `sensitiveKeywords` (3 thao tác: thêm/sửa/xoá).
+- `module-dongphuc.js`: `uniformCatalog` (3 thao tác).
+- `module-bienbanhop.js`: `meetingAttendeeTemplates` (4 thao tác).
+- `module-dangkyxe.js`: `carVehicleTypes` (3 thao tác).
+- `module-itsupport-price.js`: `itPriceMasterLists` (5 thao tác).
+- `module-phonghop.js`: `meetingRooms` (3 thao tác).
+- `module-workflow.js`: `nganhHangCatalog` (3 thao tác).
+- `module-conghop.js`: `shiftTemplates` (2 thao tác).
+
+**Đã kiểm và loại trừ đúng** các collection KHÔNG áp dụng được cơ chế này (khoá theo field khác `.id`,
+hoặc không phải mảng object — VD `storeJobTitles` khoá `label`, `jobTitleGradeDefaults` khoá `jobTitle`)
+— không thêm `baseline` sai cho các chỗ này.
+
+Viết thêm 10 scenario mới vào `tests/test-syncstorage-missing-baseline-fix.js` (đúng khuôn các scenario
+đã có — mock `window.fetch` giả lập "server" để tạo 409 vô hại, xác nhận KHÔNG còn báo lỗi chặn màn hình
+và dữ liệu không liên quan vẫn được giữ nguyên); chạy lại full 28/28 scenario + các bộ test liên quan của
+11 module đã sửa (Nhóm Phê Duyệt/Công & Phép/Phòng Họp/Ngành Hàng/Giá IT...) — không có regression.
 
 ## v27.86 (2026-11): Kế Hoạch Đào Tạo — Giảng Viên/Ghi Nhận Thực Tế + Dashboard chia 2 phần + Chương Trình gán tay
 

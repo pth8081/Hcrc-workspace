@@ -234,14 +234,15 @@ async function saveUniformCatalogItem() {
     item.sizes = sizes;
     item.codesBySize = keptCodes;
     DB.uniformCatalog = [...DB.uniformCatalog];
-    const saved = await syncStorage('uniformCatalog');
+    // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả, prevCatalog đã chụp sẵn ở trên.
+    const saved = await syncStorage('uniformCatalog', { baseline: prevCatalog });
     if (!saved) { DB.uniformCatalog = prevCatalog; renderUniformCatalogList(); return; }
     logSystemAction('UNIFORM', 'UPDATE_UNIFORM_CATALOG', `Cập nhật mặt hàng Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
     editingUniformCatalogId = null;
   } else {
     const nextId = (Math.max(0, ...(DB.uniformCatalog || []).map(c => c.id)) || 0) + 1;
     DB.uniformCatalog = [...(DB.uniformCatalog || []), { id: nextId, name, sizes, codesBySize: {} }];
-    const saved = await syncStorage('uniformCatalog');
+    const saved = await syncStorage('uniformCatalog', { baseline: prevCatalog });
     if (!saved) { DB.uniformCatalog = prevCatalog; renderUniformCatalogList(); return; }
     logSystemAction('UNIFORM', 'ADD_UNIFORM_CATALOG', `Thêm mặt hàng vào Danh Mục Đồng Phục [${name}]`, 'SUCCESS', name);
   }
@@ -257,7 +258,8 @@ async function deleteUniformCatalogItem(id) {
   if (!confirm(`Xóa mặt hàng "${item.name}" khỏi Danh Mục Đồng Phục? Các kỳ cấp phát đã tạo trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mặt hàng này cho kỳ mới.`)) return;
   const prevCatalog = (DB.uniformCatalog || []).map(c => ({ ...c, sizes: [...(c.sizes || [])], codesBySize: { ...(c.codesBySize || {}) } }));
   DB.uniformCatalog = (DB.uniformCatalog || []).filter(c => c.id !== id);
-  const saved = await syncStorage('uniformCatalog');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('uniformCatalog', { baseline: prevCatalog });
   if (!saved) { DB.uniformCatalog = prevCatalog; renderUniformCatalogList(); return; }
   logSystemAction('UNIFORM', 'DELETE_UNIFORM_CATALOG', `Xóa mặt hàng khỏi Danh Mục Đồng Phục [${item.name}]`, 'SUCCESS', item.name);
   renderUniformCatalogList();

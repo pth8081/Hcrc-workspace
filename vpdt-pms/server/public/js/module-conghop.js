@@ -975,16 +975,20 @@ async function submitHacShiftTemplate(e) {
     const nextId = (prevList.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0)) + 1;
     DB.shiftTemplates = [...prevList, { id: nextId, shiftCode, shiftName, startTime, endTime, breakMinutes, isNightShift, standardHours, isActive: true }];
   }
-  const ok = await syncStorage('shiftTemplates');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const ok = await syncStorage('shiftTemplates', { baseline: prevList });
   if (!ok) { DB.shiftTemplates = prevList; return; }
   closeHacShiftTemplateModal();
   renderHacShiftTemplateTable();
 }
 
 async function toggleHacShiftTemplateActive(id) {
-  DB.shiftTemplates = (DB.shiftTemplates || []).map(t => t.id === Number(id) ? { ...t, isActive: t.isActive === false } : t);
-  const ok = await syncStorage('shiftTemplates');
-  if (ok) renderHacShiftTemplateTable();
+  const prevList = DB.shiftTemplates || [];
+  DB.shiftTemplates = prevList.map(t => t.id === Number(id) ? { ...t, isActive: t.isActive === false } : t);
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const ok = await syncStorage('shiftTemplates', { baseline: prevList });
+  if (!ok) { DB.shiftTemplates = prevList; return; }
+  renderHacShiftTemplateTable();
 }
 
 // ---------- API Key Máy Chấm Công (routes/attendanceClockAdmin.js) — mirror ĐÚNG khuôn API Xác Thực

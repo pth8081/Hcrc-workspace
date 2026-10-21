@@ -295,7 +295,8 @@ async function setItPriceMasterListMarginColumn(id) {
   const { marginColumnKey, discountColumnKey } = await pickMarginColumnKey(list.columns);
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? { ...m, marginColumnKey, discountColumnKey } : m);
-  const saved = await syncStorage('itPriceMasterLists');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('itPriceMasterLists', { baseline: snapshot });
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
   logSystemAction('IT_SUPPORT', 'SET_IT_PRICE_MARGIN_COLUMN', `Gán cột Margin/Chiết Khấu cho Mẫu Giá "${list.name}"${(marginColumnKey || discountColumnKey) ? '' : ' (bỏ gán)'}`, 'SUCCESS');
   renderItPriceMasterListAdmin();
@@ -385,7 +386,8 @@ async function addItPriceMasterList() {
   };
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = [...snapshot, entry];
-  const saved = await syncStorage('itPriceMasterLists');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('itPriceMasterLists', { baseline: snapshot });
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
   logSystemAction('IT_SUPPORT', 'ADD_IT_PRICE_MASTER_LIST', `Thêm Mẫu Giá "${entry.name}" (${entry.columns.length} cột)`, 'SUCCESS');
   alert(`✅ Đã thêm Mẫu Giá "${entry.name}" (${entry.columns.length} cột).`);
@@ -415,7 +417,8 @@ async function replaceItPriceMasterListFile(id) {
     ...m, fileUrl: parsed.fileUrl, fileName: parsed.fileName, columns: parsed.columns, marginColumnKey, discountColumnKey,
     uploadedBy: currentUser.username, uploadedByName: currentUser.name, uploadedAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
   } : m);
-  const saved = await syncStorage('itPriceMasterLists');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('itPriceMasterLists', { baseline: snapshot });
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
   logSystemAction('IT_SUPPORT', 'REPLACE_IT_PRICE_MASTER_LIST', `Thay mẫu Mẫu Giá "${list.name}" (${parsed.columns.length} cột)`, 'SUCCESS');
   alert(`✅ Đã cập nhật "${list.name}" (${parsed.columns.length} cột).`);
@@ -431,7 +434,8 @@ async function renameItPriceMasterList(id) {
   if (!name.trim()) return alert('Vui lòng nhập tên mẫu giá.');
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.map(m => m.id === id ? { ...m, name: name.trim() } : m);
-  const saved = await syncStorage('itPriceMasterLists');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('itPriceMasterLists', { baseline: snapshot });
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
   renderItPriceMasterListAdmin();
   renderItPriceMasterListSelect(); // Xem chú thích ở addItPriceMasterList() — cùng lỗi thiếu vẽ lại dropdown.
@@ -443,7 +447,8 @@ async function deleteItPriceMasterList(id) {
   if (!confirm(`Xoá Mẫu Giá "${list.name}"? Các đề xuất đã nộp trước đây theo mẫu này vẫn giữ nguyên (đã lưu sẵn tên cột lúc nộp) — chỉ những đề xuất MỚI sau này không còn chọn được mẫu này nữa.`)) return;
   const snapshot = [...(DB.itPriceMasterLists || [])];
   DB.itPriceMasterLists = snapshot.filter(m => m.id !== id);
-  const saved = await syncStorage('itPriceMasterLists');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('itPriceMasterLists', { baseline: snapshot });
   if (!saved) { DB.itPriceMasterLists = snapshot; return; }
   logSystemAction('IT_SUPPORT', 'DELETE_IT_PRICE_MASTER_LIST', `Xoá Mẫu Giá "${list.name}"`, 'SUCCESS');
   renderItPriceMasterListAdmin();

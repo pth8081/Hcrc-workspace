@@ -6467,7 +6467,10 @@ async function bulkDeleteObjectCatalogItems(catalogKey) {
 
   const prevMain = [...(DB[cfg.dbKey] || [])];
   DB[cfg.dbKey] = (DB[cfg.dbKey] || []).filter(it => !idSet.has(it[cfg.idField]));
-  const saved = await syncStorage(cfg.dbKey);
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — nút "☑ Chọn nhiều để xoá" thiếu baseline, gây 409 giả
+  // giống hệt syncApprovalAdminKey() (module-admin-submissiongroups.js). prevMain là bản chụp TRƯỚC khi
+  // lọc, đúng khuôn baseline cần cho retryArraySaveAfterConflict().
+  const saved = await syncStorage(cfg.dbKey, { baseline: prevMain });
   if (!saved) { DB[cfg.dbKey] = prevMain; rerenderObjectCatalogBulkList(catalogKey); return; }
   logSystemAction('USER_MGM', 'BULK_DELETE_OBJECT_CATALOG', `Xoá ${items.length} ${cfg.kindLabel}: ${labels.join(', ')}`, 'SUCCESS', String(items.length));
   objectCatalogBulkSelectedSet(catalogKey).clear();

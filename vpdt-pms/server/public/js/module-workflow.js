@@ -1573,7 +1573,8 @@ async function saveNganhHangCatalogItem() {
   const prevList = (DB.nganhHangCatalog || []).map(n => ({ ...n }));
   const nextId = (Math.max(0, ...(DB.nganhHangCatalog || []).map(n => n.id)) || 0) + 1;
   DB.nganhHangCatalog = [...(DB.nganhHangCatalog || []), { id: nextId, code, name, dept }];
-  const saved = await syncStorage('nganhHangCatalog');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('nganhHangCatalog', { baseline: prevList });
   if (!saved) { DB.nganhHangCatalog = prevList; return; }
   logSystemAction('CONFIG', 'ADD_NGANH_HANG', `Thêm ngành hàng vào Danh Mục Ngành Hàng [${code} — ${name}]`, 'SUCCESS', code);
   document.getElementById('nganhHangCatalogCode').value = '';
@@ -1601,7 +1602,8 @@ async function editNganhHangCatalogItem(id) {
 
   const snapshot = DB.nganhHangCatalog.map(x => ({ ...x }));
   DB.nganhHangCatalog = DB.nganhHangCatalog.map(x => (x.id === id ? { ...x, code: trimmedCode, name: trimmedName, dept: trimmedDept } : x));
-  const saved = await syncStorage('nganhHangCatalog');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('nganhHangCatalog', { baseline: snapshot });
   if (!saved) { DB.nganhHangCatalog = snapshot; renderNganhHangCatalogList(); return; }
   logSystemAction('CONFIG', 'EDIT_NGANH_HANG', `Sửa ngành hàng [${n.code}] → [${trimmedCode} — ${trimmedName}]`, 'SUCCESS', trimmedCode);
   renderNganhHangCatalogList();
@@ -1638,7 +1640,8 @@ async function deleteNganhHangCatalogItem(id) {
   if (!confirm(`Xoá ngành hàng "${item.code} — ${item.name}" khỏi Danh Mục Ngành Hàng? Đề xuất/dòng cấu hình đã chọn mã này trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được mã này nữa.${usageWarning}`)) return;
   const prevList = (DB.nganhHangCatalog || []).map(n => ({ ...n }));
   DB.nganhHangCatalog = (DB.nganhHangCatalog || []).filter(n => n.id !== id);
-  const saved = await syncStorage('nganhHangCatalog');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('nganhHangCatalog', { baseline: prevList });
   if (!saved) { DB.nganhHangCatalog = prevList; return; }
   logSystemAction('CONFIG', 'DELETE_NGANH_HANG', `Xoá ngành hàng [${item.code} — ${item.name}]`, 'SUCCESS', item.code);
   renderNganhHangCatalogList();

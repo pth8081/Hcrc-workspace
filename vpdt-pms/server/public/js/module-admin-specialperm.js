@@ -198,7 +198,8 @@ async function saveWorkflowParticipatingDeptGroups() {
 
   const snapshot = JSON.parse(JSON.stringify(DB.workflowParticipatingDeptGroups || []));
   DB.workflowParticipatingDeptGroups = next;
-  const saved = await syncStorage('workflowParticipatingDeptGroups');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả, snapshot đã có sẵn ở trên.
+  const saved = await syncStorage('workflowParticipatingDeptGroups', { baseline: snapshot });
   if (!saved) {
     DB.workflowParticipatingDeptGroups = snapshot;
     renderWorkflowParticipatingDeptGroupsWidget();

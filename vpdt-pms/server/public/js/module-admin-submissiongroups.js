@@ -90,7 +90,12 @@ function snapshotApprovalAdminState(cfg) {
 }
 
 async function syncApprovalAdminKey(moduleKind, key, snapshot) {
-  const saved = await syncStorage(key);
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026, phản ánh người dùng — nút "💾 Lưu Thành Viên" báo 409 giả):
+  // hàm dùng CHUNG cho mọi thao tác Thêm/Xoá/Di chuyển/Lưu Thành Viên của CẢ 12 màn Nhóm/Cấp Phê Duyệt
+  // (submission/contract + 10 EXTRA_APPROVAL_MODULE_LABELS) trước đây KHÔNG truyền baseline vào
+  // syncStorage() — mọi 409 (kể cả vô hại) rơi thẳng vào alert chặn màn hình thay vì tự thử lưu lại.
+  // snapshot[key] (đã chụp sẵn trước khi sửa, xem snapshotApprovalAdminState()) chính là baseline cần.
+  const saved = await syncStorage(key, { baseline: snapshot[key] });
   if (!saved) {
     Object.entries(snapshot).forEach(([k, v]) => { DB[k] = v; });
     renderApprovalGroupsTable(moduleKind);

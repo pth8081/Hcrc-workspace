@@ -749,7 +749,8 @@ async function saveCarVehicleType(e) {
   const prevList = DB.carVehicleTypes.map(t => ({ ...t }));
   const nextId = DB.carVehicleTypes.reduce((max, t) => Math.max(max, t.id || 0), 0) + 1;
   DB.carVehicleTypes.push({ id: nextId, name, bienSo: isTaxi ? '' : bienSo, isTaxi });
-  const saved = await syncStorage('carVehicleTypes');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('carVehicleTypes', { baseline: prevList });
   if (!saved) { DB.carVehicleTypes = prevList; return; }
   logSystemAction('USER_MGM', 'ADD_CAR_VEHICLE_TYPE', `Thêm loại xe cụ thể mới [${name}]`, 'SUCCESS', name);
   document.getElementById('txtCarVehicleTypeName').value = '';
@@ -765,7 +766,8 @@ async function deleteCarVehicleType(id) {
   if (!confirm(`Xóa loại xe "${t.name}"?`)) return;
   const prevList = DB.carVehicleTypes.map(x => ({ ...x }));
   DB.carVehicleTypes = DB.carVehicleTypes.filter(x => x.id !== id);
-  const saved = await syncStorage('carVehicleTypes');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('carVehicleTypes', { baseline: prevList });
   if (!saved) { DB.carVehicleTypes = prevList; renderCarVehicleTypeList(); return; }
   logSystemAction('USER_MGM', 'DELETE_CAR_VEHICLE_TYPE', `Xóa loại xe cụ thể [${t.name}]`, 'SUCCESS', t.name);
   renderCarVehicleTypeList();
@@ -810,7 +812,8 @@ async function editCarVehicleType(id) {
   if (trimmedName === t.name && isTaxi === t.isTaxi && bienSo === (t.bienSo || '')) return;
   const snapshot = DB.carVehicleTypes.map(x => ({ ...x }));
   DB.carVehicleTypes = DB.carVehicleTypes.map(x => (x.id === id ? { ...x, name: trimmedName, isTaxi, bienSo } : x));
-  const saved = await syncStorage('carVehicleTypes');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('carVehicleTypes', { baseline: snapshot });
   if (!saved) { DB.carVehicleTypes = snapshot; renderCarVehicleTypeList(); return; }
   logSystemAction('USER_MGM', 'EDIT_CAR_VEHICLE_TYPE', `Sửa loại xe cụ thể [${t.name}] → [${trimmedName}]`, 'SUCCESS', trimmedName);
   renderCarVehicleTypeList();

@@ -125,7 +125,8 @@ async function saveMeetingAttendeeTemplate() {
     DB.meetingAttendeeTemplates.push({ id: 'mtpl_' + Date.now(), name: trimmedName, attendees: attendeesSnapshot });
   }
 
-  const saved = await syncStorage('meetingAttendeeTemplates');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả, prevTemplates đã chụp sẵn.
+  const saved = await syncStorage('meetingAttendeeTemplates', { baseline: prevTemplates });
   if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', 'SAVE_ATTENDEE_TEMPLATE', `Lưu mẫu danh sách tham gia [${trimmedName}] (${attendeesSnapshot.length} người)`, 'SUCCESS', trimmedName);
@@ -142,7 +143,8 @@ async function deleteMeetingAttendeeTemplate() {
 
   const prevTemplates = DB.meetingAttendeeTemplates.map(t => ({ ...t }));
   DB.meetingAttendeeTemplates = DB.meetingAttendeeTemplates.filter(t => t.id !== templateId);
-  const saved = await syncStorage('meetingAttendeeTemplates');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('meetingAttendeeTemplates', { baseline: prevTemplates });
   if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', 'DELETE_ATTENDEE_TEMPLATE', `Xóa mẫu danh sách tham gia [${tpl.name}]`, 'SUCCESS', tpl.name);
@@ -350,7 +352,8 @@ async function saveAttendeeTemplateFromEditor() {
     DB.meetingAttendeeTemplates.push({ id: 'mtpl_' + Date.now(), name, attendees: attendeesSnapshot });
   }
 
-  const saved = await syncStorage('meetingAttendeeTemplates');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('meetingAttendeeTemplates', { baseline: prevTemplates });
   if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', tplEditingId ? 'EDIT_ATTENDEE_TEMPLATE' : 'SAVE_ATTENDEE_TEMPLATE',
@@ -366,7 +369,8 @@ async function deleteAttendeeTemplateFromManager(templateId) {
 
   const prevTemplates = DB.meetingAttendeeTemplates.map(t => ({ ...t }));
   DB.meetingAttendeeTemplates = DB.meetingAttendeeTemplates.filter(t => t.id !== templateId);
-  const saved = await syncStorage('meetingAttendeeTemplates');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('meetingAttendeeTemplates', { baseline: prevTemplates });
   if (!saved) { DB.meetingAttendeeTemplates = prevTemplates; return; }
   renderMeetingAttendeeTemplateSelect();
   logSystemAction('MEETING_MINUTES', 'DELETE_ATTENDEE_TEMPLATE', `Xóa mẫu danh sách tham gia [${tpl.name}]`, 'SUCCESS', tpl.name);

@@ -205,6 +205,102 @@ async function scenario(name, fn) {
     record('  -> cấp không liên quan (id 99) vẫn còn', r.finalClientState.some(x => x.id === 99), JSON.stringify(r.finalClientState));
   });
 
+  // ------------------------------------------------------------------------
+  // Đợt vá 2 (10/2026, theo ảnh chụp lỗi thật "💾 Lưu Thành Viên" ở Nhóm Phê
+  // Duyệt): rà soát toàn hệ thống phát hiện thêm 9 collection khác cùng lớp
+  // lỗi (thiếu baseline dù đã có sẵn snapshot/prevList) —
+  // module-admin-submissiongroups.js (syncApprovalAdminKey, dùng chung cho
+  // CẢ 12 màn Nhóm/Cấp Phê Duyệt), core.js (bulkDeleteObjectCatalogItems),
+  // module-admin-specialperm.js (workflowParticipatingDeptGroups),
+  // module-admin.js (sensitiveKeywords), module-dongphuc.js (uniformCatalog),
+  // module-bienbanhop.js (meetingAttendeeTemplates), module-dangkyxe.js
+  // (carVehicleTypes), module-itsupport-price.js (itPriceMasterLists),
+  // module-phonghop.js (meetingRooms), module-workflow.js (nganhHangCatalog),
+  // module-conghop.js (shiftTemplates). Test cùng khuôn runKeyScenario() ở
+  // trên — chỉ cần xác nhận ĐÚNG key đó không còn báo 409 giả khi xung đột
+  // là vô hại.
+  // ------------------------------------------------------------------------
+  await scenario('submissionApprovalGroups (syncApprovalAdminKey — nút "Lưu Thành Viên"): 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, label: 'Tổng Giám Đốc', order: 1, singleApprover: true, members: ['tgd'] }];
+    const desired = [{ id: 1, label: 'Tổng Giám Đốc', order: 1, singleApprover: true, members: ['tgd', 'photgd'] }];
+    const unrelatedServerState = [...baseline, { id: 99, label: 'Nhóm do nơi khác thêm', order: 2, singleApprover: false, members: [] }];
+    const r = await runKeyScenario('submissionApprovalGroups', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+    record('  -> nhóm không liên quan (id 99) vẫn còn', r.finalClientState.some(x => x.id === 99), JSON.stringify(r.finalClientState));
+  });
+
+  await scenario('sensitiveKeywords: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, keyword: 'mật khẩu', note: '' }];
+    const desired = [{ id: 1, keyword: 'mật khẩu', note: 'nhạy cảm' }];
+    const unrelatedServerState = [...baseline, { id: 99, keyword: 'khác', note: '' }];
+    const r = await runKeyScenario('sensitiveKeywords', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('uniformCatalog: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, name: 'Áo sơ mi', sizes: ['M'] }];
+    const desired = [{ id: 1, name: 'Áo sơ mi', sizes: ['M', 'L'] }];
+    const unrelatedServerState = [...baseline, { id: 99, name: 'Khác', sizes: [] }];
+    const r = await runKeyScenario('uniformCatalog', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('meetingAttendeeTemplates: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, name: 'Mẫu A', usernames: ['u1'] }];
+    const desired = [{ id: 1, name: 'Mẫu A', usernames: ['u1', 'u2'] }];
+    const unrelatedServerState = [...baseline, { id: 99, name: 'Mẫu khác', usernames: [] }];
+    const r = await runKeyScenario('meetingAttendeeTemplates', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('carVehicleTypes: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, name: 'Xe 4 chỗ' }];
+    const desired = [{ id: 1, name: 'Xe 4 chỗ (đổi tên)' }];
+    const unrelatedServerState = [...baseline, { id: 99, name: 'Xe khác' }];
+    const r = await runKeyScenario('carVehicleTypes', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('itPriceMasterLists: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, name: 'Bảng giá A', marginColumn: 'margin1' }];
+    const desired = [{ id: 1, name: 'Bảng giá A (sửa)', marginColumn: 'margin1' }];
+    const unrelatedServerState = [...baseline, { id: 99, name: 'Bảng khác', marginColumn: 'margin2' }];
+    const r = await runKeyScenario('itPriceMasterLists', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('meetingRooms: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, name: 'Phòng họp 1', short: 'PH1' }];
+    const desired = [{ id: 1, name: 'Phòng họp 1 (sửa)', short: 'PH1' }];
+    const unrelatedServerState = [...baseline, { id: 99, name: 'Phòng khác', short: 'PHK' }];
+    const r = await runKeyScenario('meetingRooms', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('nganhHangCatalog: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, code: 'NH1', name: 'Ngành hàng 1', dept: '' }];
+    const desired = [{ id: 1, code: 'NH1', name: 'Ngành hàng 1 (sửa)', dept: '' }];
+    const unrelatedServerState = [...baseline, { id: 99, code: 'NH9', name: 'Khác', dept: '' }];
+    const r = await runKeyScenario('nganhHangCatalog', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('shiftTemplates: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, shiftCode: 'CA1', shiftName: 'Ca Sáng', startTime: '08:00', endTime: '17:00', breakMinutes: 60, isNightShift: false, standardHours: 8, isActive: true }];
+    const desired = [{ ...baseline[0], shiftName: 'Ca Sáng (sửa)' }];
+    const unrelatedServerState = [...baseline, { id: 99, shiftCode: 'CA9', shiftName: 'Khác', startTime: '20:00', endTime: '05:00', breakMinutes: 0, isNightShift: true, standardHours: 8, isActive: true }];
+    const r = await runKeyScenario('shiftTemplates', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
+  await scenario('workflowParticipatingDeptGroups: 409 do hoạt động KHÔNG liên quan -> tự lưu lại thành công', async () => {
+    const baseline = [{ id: 1, name: 'Khối A', depts: ['Kế Toán'] }];
+    const desired = [{ id: 1, name: 'Khối A', depts: ['Kế Toán', 'Kinh Doanh'] }];
+    const unrelatedServerState = [...baseline, { id: 99, name: 'Khối khác', depts: [] }];
+    const r = await runKeyScenario('workflowParticipatingDeptGroups', { baseline, desired, unrelatedServerState });
+    record('  -> saved=true, không alert', r.saved === true && !r.alerts.some(a => a.includes('vừa bị người khác thay đổi')), JSON.stringify(r));
+  });
+
   await browser.close();
   await server.close();
 

@@ -232,7 +232,8 @@ async function saveMeetingRoomCatalogItem() {
   const prevList = (DB.meetingRooms || []).map(r => ({ ...r }));
   const nextId = (Math.max(0, ...(DB.meetingRooms || []).map(r => r.id)) || 0) + 1;
   DB.meetingRooms = [...(DB.meetingRooms || []), { id: nextId, name, short }];
-  const saved = await syncStorage('meetingRooms');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('meetingRooms', { baseline: prevList });
   if (!saved) { DB.meetingRooms = prevList; return; }
   logSystemAction('MEETING', 'ADD_MEETING_ROOM', `Thêm phòng họp vào Danh Mục Phòng Họp [${name}]`, 'SUCCESS', name);
   document.getElementById('meetingRoomCatalogName').value = '';
@@ -257,7 +258,8 @@ async function editMeetingRoomCatalogItem(id) {
 
   const snapshot = DB.meetingRooms.map(x => ({ ...x }));
   DB.meetingRooms = DB.meetingRooms.map(x => (x.id === id ? { ...x, name: trimmedName, short: trimmedShort } : x));
-  const saved = await syncStorage('meetingRooms');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('meetingRooms', { baseline: snapshot });
   if (!saved) { DB.meetingRooms = snapshot; renderMeetingRoomCatalogList(); return; }
   logSystemAction('MEETING', 'EDIT_MEETING_ROOM', `Sửa phòng họp [${r.name}] → [${trimmedName}]`, 'SUCCESS', trimmedName);
   renderMeetingRoomCatalogList();
@@ -292,7 +294,8 @@ async function deleteMeetingRoomCatalogItem(id) {
   if (!confirm(`${warning}Xóa phòng họp "${item.name}" khỏi Danh Mục Phòng Họp? Các lịch đã đặt trước đó vẫn giữ nguyên dữ liệu, chỉ không còn chọn được phòng này cho lịch mới.`)) return;
   const prevList = (DB.meetingRooms || []).map(r => ({ ...r }));
   DB.meetingRooms = (DB.meetingRooms || []).filter(r => r.id !== id);
-  const saved = await syncStorage('meetingRooms');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('meetingRooms', { baseline: prevList });
   if (!saved) { DB.meetingRooms = prevList; renderMeetingRoomCatalogList(); return; }
   logSystemAction('MEETING', 'DELETE_MEETING_ROOM', `Xóa phòng họp khỏi Danh Mục Phòng Họp [${item.name}]`, 'SUCCESS', item.name);
   renderMeetingRoomCatalogList();

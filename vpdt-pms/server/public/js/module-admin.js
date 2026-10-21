@@ -1313,8 +1313,10 @@ async function saveSensitiveKeyword(e) {
     return alert('Từ khoá này đã có trong danh sách!');
   }
   const nextId = (Math.max(0, ...DB.sensitiveKeywords.map(k => k.id)) || 0) + 1;
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả, chụp lại TRƯỚC khi push.
+  const prevAdd = DB.sensitiveKeywords.map(k => ({ ...k }));
   DB.sensitiveKeywords.push({ id: nextId, term, category });
-  const saved = await syncStorage('sensitiveKeywords');
+  const saved = await syncStorage('sensitiveKeywords', { baseline: prevAdd });
   if (!saved) { DB.sensitiveKeywords = DB.sensitiveKeywords.filter(k => k.id !== nextId); return; }
   logSystemAction('USER_MGM', 'ADD_SENSITIVE_KEYWORD', `Thêm từ khoá nhạy cảm [${term}] (${SENSITIVE_CATEGORY_LABELS[category]})`, 'SUCCESS', term);
   document.getElementById('txtSensitiveKeywordTerm').value = '';
@@ -1326,7 +1328,8 @@ async function deleteSensitiveKeyword(id) {
   if (!kw || !confirm(`Xóa từ khoá "${kw.term}"?`)) return;
   const prevList = DB.sensitiveKeywords.map(k => ({ ...k }));
   DB.sensitiveKeywords = DB.sensitiveKeywords.filter(k => k.id !== id);
-  const saved = await syncStorage('sensitiveKeywords');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('sensitiveKeywords', { baseline: prevList });
   if (!saved) { DB.sensitiveKeywords = prevList; renderSensitiveKeywordList(); return; }
   logSystemAction('USER_MGM', 'DELETE_SENSITIVE_KEYWORD', `Xóa từ khoá nhạy cảm [${kw.term}]`, 'SUCCESS', kw.term);
   renderSensitiveKeywordList();
@@ -1374,7 +1377,8 @@ async function editSensitiveKeyword(id) {
   }
   const snapshot = DB.sensitiveKeywords.map(k => ({ ...k }));
   DB.sensitiveKeywords = DB.sensitiveKeywords.map(k => (k.id === id ? { ...k, term: trimmedTerm, category: newCategory } : k));
-  const saved = await syncStorage('sensitiveKeywords');
+  // LỖI ĐÃ VÁ (rà soát toàn hệ thống 10/2026) — thiếu baseline gây 409 giả.
+  const saved = await syncStorage('sensitiveKeywords', { baseline: snapshot });
   if (!saved) { DB.sensitiveKeywords = snapshot; renderSensitiveKeywordList(); return; }
   logSystemAction('USER_MGM', 'EDIT_SENSITIVE_KEYWORD', `Sửa từ khoá nhạy cảm [${kw.term}] → [${trimmedTerm}] (${SENSITIVE_CATEGORY_LABELS[newCategory]})`, 'SUCCESS', trimmedTerm);
   renderSensitiveKeywordList();
