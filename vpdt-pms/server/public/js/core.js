@@ -5188,6 +5188,13 @@ async function initDatabase(loggingInUser, opts) {
     // dòng đọc lại đây khiến F5 xong mất phân loại ST/CH, và sửa tiếp sau đó ghi đè xoá sạch dữ liệu cũ
     // (setStoreType() ở module-admin.js dùng DB.storeTypes||{} làm nền rồi POST đè toàn bộ object).
     DB.storeTypes = data.storeTypes || {};
+    // BUG THẬT đã vá (rà soát theo yêu cầu người dùng "rà soát lại các lỗi mất dữ liệu khi cấu hình",
+    // 11/2026, cùng khuôn storeTypes ngay trên): server lưu laborContractTypes đúng (xem
+    // test-initdatabase-key-coverage.js), nhưng initDatabase() CHƯA từng đọc lại field này — F5 xong
+    // DB.laborContractTypes rỗng (JS undefined, mọi nơi đọc `DB.laborContractTypes || []` ra mảng rỗng),
+    // Danh Mục "Loại HĐLĐ" biến mất khỏi màn Quản Lý Danh Mục VÀ mọi dropdown chọn loại hợp đồng, cho tới
+    // khi thêm/sửa 1 giá trị mới (ghi đè DB.laborContractTypes tạm thời trong bộ nhớ) rồi F5 lại mất tiếp.
+    DB.laborContractTypes = data.laborContractTypes || [];
     DB.cats = data.cats || [];
     DB.deptAbbrs = data.deptAbbrs || {};
     // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, xem defaults.js.

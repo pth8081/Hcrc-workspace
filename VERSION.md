@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**27.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.95** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.95 (2026-11): Vá nốt lỗi đã biết trước — laborContractTypes mất sau F5 (thiếu dòng đọc lại ở initDatabase())
+
+Theo người dùng hỏi "xong hết chưa" sau v27.94 — rà soát lại, phát hiện 1 lỗi ĐÃ BIẾT TỪ TRƯỚC (hiện ra
+qua `test-initdatabase-key-coverage.js`, từng nêu trong báo cáo v27.92) nhưng chưa vá vì ngoài phạm vi
+yêu cầu lúc đó — nay vá nốt vì đúng nhóm "mất dữ liệu khi cấu hình" người dùng đang lo.
+
+**Nguyên nhân**: `initDatabase()` (core.js) chưa từng có dòng đọc lại `data.laborContractTypes` — cùng
+lớp lỗi đã vá cho `storeTypes`/`operationOrderStoreMixedApprovalRules` trước đây (server lưu đúng, nhưng
+client không đọc lại sau F5). Hậu quả: F5 xong Danh Mục "Loại HĐLĐ" biến mất khỏi màn Quản Lý Danh Mục và
+mọi dropdown chọn loại hợp đồng (Onboarding/Hợp Đồng Lao Động), cho tới khi thêm/sửa 1 giá trị (ghi đè
+tạm trong bộ nhớ) rồi F5 lại mất tiếp.
+
+**Bản vá**: thêm `DB.laborContractTypes = data.laborContractTypes || [];` ngay cạnh `storeTypes` trong
+`initDatabase()`. Test: `test-initdatabase-key-coverage.js` (từng FAIL) nay PASS 4/4; chạy lại
+`test-labor-contract-types-catalog.js` (16/16), `test-hr-lifecycle.js` (39/39),
+`test-onboarding-nationalid-race.js` (13/13), `test-attendance-leave.js` (74/74) — không regression. 1
+FAIL không liên quan ở `test-hr-profile.js` (route `/employee-directory`, cần kết nối SQL Server thật
+không có trong môi trường test) xác nhận tồn tại sẵn trước bản vá này (đối chiếu bằng `git stash`).
+
+**Deploy**: chỉ copy `public/js/core.js` + `pm2 restart`.
 
 ## v27.94 (2026-11): LỖI NGHIÊM TRỌNG KHÁC đã tìm ra + vá — lưu THÀNH CÔNG (không hề báo lỗi) nhưng dữ liệu "biến mất" do nhịp poll Hộp Thư Phê Duyệt ghi đè
 
