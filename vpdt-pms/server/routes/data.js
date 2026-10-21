@@ -290,11 +290,6 @@ const ADMIN_ONLY_KEYS = new Set([
   // (lib/createValidation.js) chặn thêm việc xoá mã hệ thống/loại đang dùng dù admin ghi trực tiếp qua
   // route generic.
   'laborContractTypes',
-  // laborContractTypes ("Loại HĐLĐ", 11/2026 — dùng CHUNG cho Loại HĐLĐ Dự Kiến (Onboarding) + Loại Hợp
-  // Đồng thật, xem defaults.js) — cùng lý do khoá ghi như các danh mục trên: panel CRUD chỉ hiện cho
-  // admin (tab "🗂️ Quản Lý Danh Mục"). Rủi ro cao hơn các danh mục khác (ảnh hưởng lương/pháp lý) nên còn
-  // có thêm assertLaborContractTypesSafeToSave() chặn xoá mã hệ thống/mã đang dùng — xem ngay dưới.
-  'laborContractTypes',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',
