@@ -1127,7 +1127,15 @@ const CORE_FIELD_MANIFEST = {
     { id: 'tpAudience', label: 'Đối Tượng', required: false },
     { id: 'tpPlannedClasses', label: 'Số Lớp (kế hoạch)', required: false },
     { id: 'tpPlannedTrainees', label: 'Số Học Viên (kế hoạch)', required: false },
-    { id: 'tpPlannedHours', label: 'Thời Lượng Đào Tạo (giờ, kế hoạch)', required: false }
+    { id: 'tpPlannedHours', label: 'Thời Lượng Đào Tạo (giờ, kế hoạch)', required: false },
+    // Ghi Nhận Thực Tế (10/2026, theo yêu cầu BP Đào Tạo) — 6 field điền tay SAU khi đã tổ chức, xem
+    // normalizeTrainingPlanFields() ở lib/createValidation.js.
+    { id: 'tpInstructor', label: 'Giảng Viên Đào Tạo', required: false },
+    { id: 'tpJobTitle', label: 'Chức Danh Giảng Viên', required: false },
+    { id: 'tpActualTrainingDate', label: 'Ngày Tổ Chức Đào Tạo (thực tế)', required: false },
+    { id: 'tpActualDuration', label: 'Thời Gian Đào Tạo (thực tế)', required: false },
+    { id: 'tpActualParticipants', label: 'Số Lượng Tham Gia Thực Tế', required: false },
+    { id: 'tpInstructorRating', label: 'Đánh Giá Giảng Viên (Điểm, thang 10)', required: false }
   ],
   // TRAINING_DOC: #trainingDocForm (Đào Tạo > Kho Tài Liệu > Thêm Tài Liệu Vào Kho). tdCategory optionsKey
   // trỏ DB.trainingCategories (cùng nguồn tcCategory/tccCategory ở trên). tdMandatory (checkbox "⚠️ Bắt

@@ -27,23 +27,46 @@
         <button type="button" data-op="setTrainingLmsTab" data-arg0="TESTS" id="btnTrainingLmsTests" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🧪 Ngân Hàng Câu Hỏi</button>
       </div>
 
-      <!-- DASHBOARD -->
-      <div id="trainingLmsDashboardPanel" class="hidden space-y-4">
-        <div id="trainingDashboardCards"></div>
-        <div class="bg-white rounded border overflow-x-auto">
-          <h4 class="font-bold text-gray-700 p-3 border-b text-sm">🏆 Top Điểm Cao Nhất (Bài Test)</h4>
-          <table class="w-full border-collapse text-xs">
-            <thead>
-              <tr class="bg-gray-100 text-left">
-                <th class="border p-2">Hạng</th>
-                <th class="border p-2">Học Viên</th>
-                <th class="border p-2">Bài Test</th>
-                <th class="border p-2">Lớp Học</th>
-                <th class="border p-2">Điểm</th>
-              </tr>
-            </thead>
-            <tbody id="trainingTopScoresBody"></tbody>
-          </table>
+      <!-- DASHBOARD — chia 2 phần (10/2026, theo yêu cầu BP Đào Tạo): "Theo Kế Hoạch Tháng" (tái dùng
+           computeTrainingPlanDashboard() đã có, đối chiếu kế hoạch/thực tế đúng 1 tháng) + "Tổng Hợp Năm"
+           (bộ thẻ tổng quan + Top Điểm Cao Nhất cũ, nay lọc theo NĂM đang chọn thay vì toàn bộ thời gian
+           — xem computeTrainingDashboard(year)/renderTrainingDashboard() ở module-internalcomms-daotao.js). -->
+      <div id="trainingLmsDashboardPanel" class="hidden space-y-5">
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h4 class="font-bold text-emerald-900 text-sm flex items-center gap-2">📅 Theo Kế Hoạch Tháng</h4>
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-gray-600">Tháng</label>
+              <input type="month" id="tdPlanMonth" data-op-change="renderTrainingDashboardMonthSection" class="border p-1.5 rounded text-xs bg-white">
+            </div>
+          </div>
+          <div id="trainingDashboardMonthCards"></div>
+        </div>
+
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h4 class="font-bold text-gray-800 text-sm flex items-center gap-2">📈 Tổng Hợp Năm</h4>
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-gray-600">Năm</label>
+              <select id="tdYear" data-op-change="renderTrainingDashboard" class="border p-1.5 rounded text-xs bg-white"></select>
+            </div>
+          </div>
+          <div id="trainingDashboardCards"></div>
+          <div class="bg-white rounded border overflow-x-auto">
+            <h4 class="font-bold text-gray-700 p-3 border-b text-sm">🏆 Top Điểm Cao Nhất (Bài Test)</h4>
+            <table class="w-full border-collapse text-xs">
+              <thead>
+                <tr class="bg-gray-100 text-left">
+                  <th class="border p-2">Hạng</th>
+                  <th class="border p-2">Học Viên</th>
+                  <th class="border p-2">Bài Test</th>
+                  <th class="border p-2">Lớp Học</th>
+                  <th class="border p-2">Điểm</th>
+                </tr>
+              </thead>
+              <tbody id="trainingTopScoresBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -265,6 +288,40 @@
               <input id="tpPlannedHours" type="number" min="0" step="0.5" class="w-full border p-1.5 rounded">
             </div>
           </div>
+          <!-- Ghi Nhận Thực Tế (10/2026, theo yêu cầu BP Đào Tạo) — 6 field điền TAY SAU khi đã tổ chức
+               đào tạo (tuỳ chọn, để trống khi chưa tổ chức). KHÔNG đụng tới actualClasses/actualTrainees/
+               actualHours (vẫn tính SỐNG từ trainingClasses/trainingRegistrations như cũ, xem
+               getTrainingPlanActualStats()) — đây chỉ là ghi chú bổ sung hiển thị ở Danh Sách Kế Hoạch +
+               khối Theo Dõi Thực Hiện (breakdown "Theo Giảng Viên"). -->
+          <div class="border-t pt-3">
+            <h5 class="font-semibold text-gray-600 mb-2">📝 Ghi Nhận Thực Tế (điền sau khi đã tổ chức đào tạo)</h5>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Giảng Viên Đào Tạo</label>
+                <input id="tpInstructor" placeholder="VD: Nguyễn Thị A" class="w-full border p-1.5 rounded">
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Chức Danh</label>
+                <input id="tpJobTitle" placeholder="VD: Chuyên viên Đào tạo" class="w-full border p-1.5 rounded">
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Ngày Tổ Chức Đào Tạo</label>
+                <input id="tpActualTrainingDate" type="date" class="w-full border p-1.5 rounded">
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Thời Gian Đào Tạo</label>
+                <input id="tpActualDuration" placeholder="VD: 3 giờ, 1 buổi..." class="w-full border p-1.5 rounded">
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Số Lượng Tham Gia Thực Tế</label>
+                <input id="tpActualParticipants" type="number" min="0" class="w-full border p-1.5 rounded">
+              </div>
+              <div>
+                <label class="block font-semibold text-gray-600 mb-1">Đánh Giá Giảng Viên (điểm, thang 10)</label>
+                <input id="tpInstructorRating" type="number" min="0" max="10" step="0.1" class="w-full border p-1.5 rounded">
+              </div>
+            </div>
+          </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_TRAINING_PLAN" class="contents"></div>
           <div class="flex justify-end gap-2">
@@ -292,10 +349,10 @@
               <tbody id="tpImportPreviewBody"></tbody>
             </table>
           </div>
-          <label id="tpImportAutoCreateCoursesWrap" class="hidden flex items-center gap-1.5 text-xs text-gray-700">
-            <input type="checkbox" id="tpImportAutoCreateCourses" checked>
-            ☑ Tự động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có
-          </label>
+          <!-- Tuỳ chọn "Tự động thêm vào danh mục Chương Trình nếu tên chưa có" ĐÃ BỊ BỎ (10/2026, theo
+               yêu cầu BP Đào Tạo) — Chương Trình giờ do BP Đào Tạo tạo/gán THỦ CÔNG (xem renderTrainingCourses()),
+               không còn tự sinh từ Excel nữa; dòng import nào gõ tên Chương Trình không khớp danh mục có
+               sẵn thì courseId để trống (courseMatched=false), không tự tạo gì thêm. -->
           <button type="button" id="tpImportConfirmBtn" data-op="confirmTrainingPlanImport" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold">✅ Xác Nhận Nhập Các Dòng Hợp Lệ</button>
         </div>
 
@@ -304,7 +361,7 @@
           <div class="overflow-x-auto">
             <table class="w-full border-collapse border text-xs bg-white">
               <thead><tr class="bg-gray-100 text-left text-gray-700">
-                <th class="border p-2">Tháng</th><th class="border p-2">Chương Trình</th><th class="border p-2">Đơn Vị</th><th class="border p-2">Đối Tượng</th>
+                <th class="border p-2">Tháng</th><th class="border p-2">Chương Trình</th><th class="border p-2">Giảng Viên Đào Tạo</th><th class="border p-2">Đối Tượng</th>
                 <th class="border p-2 text-center">Số Lớp KH</th><th class="border p-2 text-center">Số HV KH</th><th class="border p-2 text-center">Giờ KH</th>
                 <th class="border p-2 text-center">% Hoàn Thành</th><th class="border p-2 text-center min-w-[120px]">Thao Tác</th>
               </tr></thead>
@@ -1115,6 +1172,20 @@
           <button data-op="closeTrainingJoinClassModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
         </div>
         <div id="trainingJoinClassBody" class="p-4 space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- Modal "Xem Tài Liệu" của 1 Chương Trình (10/2026, theo yêu cầu BP Đào Tạo) — bấm vào thẻ Chương
+         Trình để xem nhanh các trainingDocuments đã gắn courseId = chương trình đó (field courseId trên
+         trainingDocuments đã có sẵn từ trước, chỉ thêm UI xem — không đổi dữ liệu). Cùng khuôn modal
+         trainingJoinClassModal ở trên. -->
+    <div id="trainingCourseDocsModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+          <h3 id="trainingCourseDocsTitle" class="font-bold text-gray-800">📄 Tài Liệu Đào Tạo</h3>
+          <button data-op="closeTrainingCourseDocsModal" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <div id="trainingCourseDocsBody" class="p-4 space-y-2"></div>
       </div>
     </div>
 

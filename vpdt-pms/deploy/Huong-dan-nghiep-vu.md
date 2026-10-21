@@ -5539,6 +5539,63 @@ thêm nếu muốn giao vai trò "chỉ xem báo cáo" cho ai đó.
 
 ---
 
+## 5i. Đợt cập nhật 10/2026: Kế Hoạch Đào Tạo — Giảng Viên/Ghi Nhận Thực Tế + Dashboard chia 2 phần + Chương Trình gán tay
+
+Theo yêu cầu BP Đào Tạo (file requirements gửi test), 4 thay đổi trong module
+**🏫 Đào Tạo** (Truyền Thông Nội Bộ):
+
+**Danh Sách Kế Hoạch Đào Tạo — cột "Đơn Vị" đổi thành "Giảng Viên Đào Tạo"**
+- Thêm 1 field mới **Giảng Viên Đào Tạo** (nhập tay tự do, không bắt buộc
+  gắn tài khoản hệ thống — khác `instructor`/`instructorUsername` của Lớp
+  Học) vào form Lập/Sửa Kế Hoạch. Cột đầu của bảng Danh Sách Kế Hoạch Đào
+  Tạo nay hiện tên giảng viên này thay vì Đơn Vị — Đơn Vị đã chọn lúc lập kế
+  hoạch (`targetDept`) KHÔNG mất, chỉ lùi xuống hiện như 1 dòng ghi chú phụ
+  nhỏ bên dưới tên giảng viên (vẫn dùng để lọc Theo Dõi Thực Hiện/Dashboard
+  như cũ).
+
+**Theo Dõi Thực Hiện & Dashboard — khối "📝 Ghi Nhận Thực Tế" + đổi "Theo Đơn Vị" thành "Theo Giảng Viên"**
+- Mỗi dòng Kế Hoạch Đào Tạo (Sửa) nay có thêm khối **"📝 Ghi Nhận Thực Tế"**
+  (6 field, toàn bộ tuỳ chọn, điền SAU khi đã tổ chức xong): **Giảng Viên
+  Đào Tạo**, **Chức Danh**, **Ngày Tổ Chức Đào Tạo**, **Thời Gian Đào Tạo**
+  (văn bản tự do, VD "3 giờ"/"1 buổi"), **Số Lượng Tham Gia Thực Tế**,
+  **Đánh Giá Giảng Viên** (điểm, thang 0-10, server tự chặn trần nếu lỡ
+  nhập quá 10). 6 field này THUẦN ghi chú thủ công — KHÔNG đụng tới
+  `actualClasses`/`actualTrainees`/`actualHours` vẫn tính SỐNG từ Lớp Học/
+  Đăng Ký như trước.
+- Khối breakdown **"Theo Đơn Vị"** cũ ở phần Theo Dõi Thực Hiện đổi thành
+  **"Theo Giảng Viên / Chức Danh / Đơn Vị"** — nhóm theo đúng 3 field trên,
+  kèm 2 cột cộng dồn riêng: **SL Tham Gia Thực Tế** (tổng) và **Điểm Đánh
+  Giá Giảng Viên** (trung bình, bỏ qua các dòng chưa chấm điểm).
+
+**Dashboard — chia 2 phần: Theo Kế Hoạch Tháng + Tổng Hợp Năm**
+- Tab **📊 Dashboard** (đầu thanh LMS Đào Tạo) nay tách thành 2 khối: **"📅
+  Theo Kế Hoạch Tháng"** (đổi được ô Tháng, tái dùng đúng số liệu Theo Dõi
+  Thực Hiện của tab Kế Hoạch Đào Tạo — Số Lớp/CBNV Được Đào Tạo/Tỷ Lệ Hoàn
+  Thành Thực Tế/Kế Hoạch) và **"📈 Tổng Hợp Năm"** (đổi được ô Năm — 5 chỉ số
+  tổng quan + 🏆 Top Điểm Cao Nhất cũ, nay CHỈ tính các lớp có Thời Gian Bắt
+  Đầu rơi vào đúng năm đang chọn, không còn gộp mọi năm như trước).
+
+**Chương Trình Đào Tạo — bỏ tự liên kết từ Excel, gán tay + xem tài liệu nhanh**
+- Bỏ HẲN checkbox **"☑ Tự động thêm vào danh mục Chương Trình Đào Tạo nếu
+  tên chưa có"** từng có ở màn Nhập Kế Hoạch Từ Excel — dòng nào gõ tên
+  Chương Trình không khớp danh mục có sẵn thì liên kết Chương Trình để
+  trống, KHÔNG còn tự tạo thêm Chương Trình mới nữa. BP Đào Tạo tự tạo
+  Chương Trình THỦ CÔNG ở tab **🎓 Chương Trình** trước, rồi tự chọn gán vào
+  ô "Chương Trình (tuỳ chọn)" của từng dòng Kế Hoạch Đào Tạo (cơ chế gán tay
+  này đã có sẵn từ trước, không đổi gì).
+- Mỗi thẻ Chương Trình nay có thêm nút **"📄 Xem Tài Liệu (n)"** (chỉ hiện
+  khi đã có ≥1 tài liệu gắn đúng Chương Trình đó) — bấm vào mở modal liệt kê
+  nhanh các tài liệu đã gắn (dùng lại field `trainingDocuments.courseId` đã
+  có sẵn), không cần sang hẳn tab Kho Tài Liệu rồi tự lọc theo Chương Trình.
+
+**Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường/dependency
+nào — 6 field "Ghi Nhận Thực Tế" lưu trực tiếp trong bản ghi `trainingPlans`
+JSON đã có sẵn (cùng cơ chế lưu trữ `plannedClasses`/`targetDept`...), không
+cần migrate dữ liệu cũ (các dòng kế hoạch đã lập trước đây tự hiện field
+trống, điền thêm lúc nào cũng được).
+
+---
+
 ## 7. Hệ Thống / Quản Trị
 
 Nhóm màn cấu hình **chỉ admin dùng** — không phải "module nghiệp vụ" theo

@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**27.85** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.86** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.86 (2026-11): Kế Hoạch Đào Tạo — Giảng Viên/Ghi Nhận Thực Tế + Dashboard chia 2 phần + Chương Trình gán tay
+
+Theo yêu cầu BP Đào Tạo (file requirements gửi test, đã gửi demo/mockup trước khi người dùng xác nhận
+thực hiện), 4 thay đổi trong module **🏫 Đào Tạo** (Truyền Thông Nội Bộ):
+
+1. **Danh Sách Kế Hoạch Đào Tạo**: thêm field `instructor` (Giảng Viên Đào Tạo, nhập tay) — cột đầu bảng
+   đổi từ "Đơn Vị" sang hiện tên giảng viên này; Đơn Vị (`targetDept`) vẫn giữ nguyên, lùi xuống thành ghi
+   chú phụ dưới tên giảng viên (vẫn dùng để lọc Theo Dõi Thực Hiện/Dashboard như cũ).
+2. **Theo Dõi Thực Hiện & Dashboard**: thêm khối "📝 Ghi Nhận Thực Tế" (6 field điền tay SAU khi tổ chức —
+   Giảng Viên, Chức Danh, Ngày Tổ Chức, Thời Gian Đào Tạo, SL Tham Gia Thực Tế, Điểm Đánh Giá Giảng Viên
+   thang 0-10) trên form Sửa Kế Hoạch; breakdown "Theo Đơn Vị" cũ đổi thành "Theo Giảng Viên / Chức Danh /
+   Đơn Vị" kèm 2 cột cộng dồn SL Tham Gia Thực Tế + Điểm Đánh Giá trung bình.
+3. **Dashboard** (tab 📊 đầu thanh LMS): chia 2 khối — "📅 Theo Kế Hoạch Tháng" (đổi Tháng, tái dùng số
+   liệu Theo Dõi Thực Hiện) và "📈 Tổng Hợp Năm" (đổi Năm, 5 chỉ số + Top Điểm Cao Nhất lọc theo đúng năm
+   đang chọn thay vì gộp mọi năm như trước).
+4. **Chương Trình Đào Tạo**: bỏ hẳn checkbox "Tự động thêm vào danh mục Chương Trình nếu tên chưa có" ở
+   màn Nhập Kế Hoạch Từ Excel — Chương Trình giờ do BP Đào Tạo tạo/gán THỦ CÔNG hoàn toàn; mỗi thẻ Chương
+   Trình thêm nút "📄 Xem Tài Liệu (n)" mở modal liệt kê nhanh tài liệu đã gắn `courseId` đó.
+
+Server: `normalizeTrainingPlanFields()` (lib/createValidation.js) chuẩn hoá 6 field Ghi Nhận Thực Tế mới
+(instructorRating tự chặn trần thang 0-10, null khi để trống thay vì 0 để breakdown tính trung bình đúng);
+`TRAINING_PLAN_EDITABLE_FIELDS` (lib/recordActions.js) mở whitelist cho phép Sửa cả 6 field. Không đổi
+`schema.sql`/biến môi trường/dependency nào — lưu trực tiếp trong JSON `trainingPlans` đã có sẵn, dòng kế
+hoạch cũ tự hiện field trống, điền thêm lúc nào cũng được.
+
+Test: mở rộng `server/tests/test-training-plans.js` (20→24 kịch bản — round-trip 6 field Ghi Nhận Thực
+Tế qua form Sửa, breakdown `byInstructor` của `computeTrainingPlanDashboard()`, nút/modal "Xem Tài Liệu",
+2 kịch bản Nhập Excel cập nhật theo hành vi KHÔNG còn tự tạo Chương Trình) + đồng bộ `tests/_mock-backend.js`
+theo đúng `normalizeTrainingPlanFields()`/`TRAINING_PLAN_EDITABLE_FIELDS` mới + chạy lại toàn bộ
+`test-internal-training.js` (53/53), `test-checklisttemplate-trainingplan-race.js` (8/8),
+`test-collapse-internalcomms-training-forms.js` (11/11), `test-nghiepvu.js` (160/160),
+`test-nghiepvu-csp.js` (6/6) — không regression. Ghi nhận 2 lỗi FLAKY TIỀN SỬ không liên quan tới đợt này
+(xác nhận giống hệt trên `main` chưa sửa gì qua `git stash`): 2 kịch bản "Nhập Kế Hoạch Từ Excel" trong
+`test-training-plans.js` timeout ở `page.waitForFunction` (nghi vấn `page.setInputFiles` không bắn sự
+kiện `change` ổn định trong sandbox này) và 1 kịch bản upload thumbnail Chương Trình trong
+`test-training-course-card-thumbnail.js` — cả 2 đã tồn tại SẴN trước đợt việc này, không phải do thay đổi
+lần này gây ra.
 
 ## v27.85 (2026-11): Rà soát nốt lỗi 409 giả — vá confirmApprovalGroupsImport() thiếu baseline
 

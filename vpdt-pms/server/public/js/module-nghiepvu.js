@@ -1963,19 +1963,21 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
     ] },
   },
   dashboard: {
-    desc: 'Màn tổng quan số liệu Đào Tạo — 5 chỉ số nhanh (Tổng Số Lớp Học/Số Lượt Đăng Ký/Lớp Đang Học/Lớp Đã Kết Thúc/Người Đã Hoàn Thành) và bảng xếp hạng điểm bài test cao nhất, KHÔNG có thao tác tạo/sửa gì — chỉ để xem nhanh tình hình chung trước khi vào các khu vực chi tiết khác.',
+    desc: 'Màn tổng quan số liệu Đào Tạo, chia 2 phần (10/2026, theo yêu cầu BP Đào Tạo): "📅 Theo Kế Hoạch Tháng" (đối chiếu kế hoạch/thực tế đúng 1 tháng đang chọn, tái dùng số liệu của tab Kế Hoạch Đào Tạo) và "📈 Tổng Hợp Năm" (5 chỉ số nhanh + bảng xếp hạng điểm bài test cao nhất, lọc theo NĂM đang chọn) — KHÔNG có thao tác tạo/sửa gì, chỉ để xem nhanh tình hình chung trước khi vào các khu vực chi tiết khác.',
     flow: { ariaLabel: 'Dashboard Đào Tạo', chain: [
-      { label: 'Lớp Học / Đăng Ký / Bài Test', sub: 'Dữ liệu nguồn từ các khu vực khác' },
-      { label: 'Tự tổng hợp', sub: 'Mỗi lần mở tab, không cần bấm nút' },
-      { label: 'Xem 5 chỉ số + Top Điểm Cao', sub: 'Thuần xem, không sửa được ở đây', kind: 'approved' },
+      { label: 'Kế Hoạch / Lớp Học / Đăng Ký / Bài Test', sub: 'Dữ liệu nguồn từ các khu vực khác' },
+      { label: 'Tự tổng hợp theo Tháng/Năm chọn', sub: 'Đổi Tháng hoặc Năm là tính lại ngay' },
+      { label: 'Xem 2 khối: Theo Tháng + Theo Năm', sub: 'Thuần xem, không sửa được ở đây', kind: 'approved' },
     ] },
     steps: [
-      { text: 'vào tab <b>📊 Dashboard</b> (tab đầu tiên trên thanh LMS Đào Tạo) — số liệu tự tính lại mỗi lần mở tab, không cần bấm nút làm mới.' },
+      { text: 'vào tab <b>📊 Dashboard</b> (tab đầu tiên trên thanh LMS Đào Tạo) — số liệu tự tính lại mỗi lần mở tab hoặc đổi Tháng/Năm, không cần bấm nút làm mới.' },
+      { text: 'khối "📅 Theo Kế Hoạch Tháng": đổi ô Tháng ở góc khối để xem đúng tháng cần — mặc định mở sẵn tháng hiện tại.' },
+      { text: 'khối "📈 Tổng Hợp Năm": đổi ô Năm để xem đúng năm cần — mặc định mở sẵn năm hiện tại, danh sách năm tự gồm mọi năm đã có Lớp Học.' },
     ],
     footer: { left: [
-      { label: '5 chỉ số nhanh', text: 'Tổng Số Lớp Học, Số Lượt Đăng Ký, Lớp Đang Học, Lớp Đã Kết Thúc, Người Đã Hoàn Thành — tính trên TOÀN BỘ lớp học người xem có quyền thấy, không lọc theo khoảng thời gian.' },
+      { label: '📅 Theo Kế Hoạch Tháng', text: 'Số Lớp/CBNV Được Đào Tạo/Tỷ Lệ Hoàn Thành (Thực Tế/Kế Hoạch) của đúng 1 tháng đang chọn — cùng cách tính với khối "🎯 Theo Dõi Thực Hiện" ở tab Kế Hoạch Đào Tạo.' },
     ], right: [
-      { label: '🏆 Top Điểm Cao Nhất', text: 'bảng xếp hạng học viên theo % điểm bài test (kèm tên bài test + lớp học), gộp chung mọi lớp — chưa có bài làm nào thì hiện "Chưa có bài làm test nào." thay vì bảng trống.' },
+      { label: '📈 Tổng Hợp Năm', text: '5 chỉ số (Tổng Số Lớp Học, Số Lượt Đăng Ký, Lớp Đang Học, Lớp Đã Kết Thúc, Người Đã Hoàn Thành) + 🏆 Top Điểm Cao Nhất bài test — chỉ tính các lớp có Thời Gian Bắt Đầu rơi vào đúng năm đang chọn, không gộp mọi năm như trước 10/2026 nữa.' },
     ] },
   },
   classes: {
@@ -2016,26 +2018,34 @@ const NGHIEP_VU_DAOTAO_CONTENT = {
       { label: 'Mở lớp theo chương trình', sub: 'Tái sử dụng nhiều lần', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản lý đào tạo', text: 'vào tab <b>🎓 Chương Trình</b> → điền Tên Chương Trình + mục tiêu/nội dung khung → lưu.' },
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>🎓 Chương Trình</b> → điền Tên Chương Trình + mục tiêu/nội dung khung → lưu. Từ 10/2026 (theo yêu cầu BP Đào Tạo), Chương Trình LUÔN do BP Đào Tạo tự tạo thủ công ở đây — Nhập Kế Hoạch Đào Tạo từ Excel KHÔNG còn tự tạo thêm Chương Trình nữa (xem mục "📋 Kế Hoạch Đào Tạo").' },
       { text: 'Gõ sai tên/loại đào tạo? Bấm <b>"Sửa"</b> ngay trên dòng chương trình đó (10/2026) — sửa tại chỗ, KHÔNG cần xoá tạo lại (xoá-tạo-lại sẽ đổi id, phá liên kết với mọi Lớp Học/Tài Liệu/Kế Hoạch đã gắn chương trình này).' },
       { text: 'Gắn tài liệu và câu hỏi có sẵn vào Chương Trình khi tạo Tài Liệu (tab Kho Tài Liệu) hoặc tạo Lớp Học (tab Lớp Học) — chọn đúng Chương Trình này ở ô "Chương Trình".' },
+      { text: 'Xem nhanh tài liệu đã gắn: bấm <b>"📄 Xem Tài Liệu"</b> ngay trên thẻ Chương Trình (10/2026, chỉ hiện khi đã có ít nhất 1 tài liệu gắn đúng chương trình đó) — mở modal liệt kê, không cần sang hẳn tab Kho Tài Liệu rồi tự lọc.' },
       { text: 'Mở nhiều lớp tái sử dụng cùng 1 Chương Trình: tạo Lớp Học mới, chọn lại đúng Chương Trình đã có ở ô "Chương Trình" thay vì để trống.' },
+      { role: 'Quản lý đào tạo', text: 'gán Chương Trình vào Kế Hoạch Đào Tạo theo tháng: ở tab <b>📋 Kế Hoạch Đào Tạo</b>, chọn Chương Trình đã tạo ở đây vào ô "Chương Trình (tuỳ chọn)" của từng dòng kế hoạch — hoàn toàn thủ công, không còn tự gán khi nhập Excel.' },
     ],
     footer: { left: [], right: [] },
   },
   plans: {
-    desc: 'Kế hoạch đào tạo theo năm/quý — liệt kê các chương trình dự kiến mở, có thể import từ file có sẵn thay vì nhập tay từng dòng.',
+    desc: 'Kế hoạch đào tạo theo năm/quý — liệt kê các chương trình dự kiến mở, có thể import từ file có sẵn thay vì nhập tay từng dòng. Từ 10/2026 (theo yêu cầu BP Đào Tạo), mỗi dòng kế hoạch còn có thêm khối "📝 Ghi Nhận Thực Tế" (điền tay SAU khi đã tổ chức đào tạo) để lưu lại Giảng Viên/Chức Danh/Ngày Tổ Chức/Thời Gian Đào Tạo/Số Người Tham Gia Thực Tế/Điểm Đánh Giá Giảng Viên.',
     flow: { ariaLabel: 'Quy trình Kế Hoạch Đào Tạo', chain: [
       { label: 'Lập kế hoạch', sub: 'Theo năm/quý' },
       { label: 'Import / nhập tay', sub: 'Danh sách chương trình dự kiến' },
+      { label: 'Tổ chức xong → Ghi Nhận Thực Tế', sub: 'Giảng viên/Ngày/Thời gian/SL tham gia/Điểm đánh giá' },
       { label: 'Theo dõi thực hiện', sub: 'Đối chiếu lớp đã mở thực tế', kind: 'approved' },
     ] },
     steps: [
-      { role: 'Quản lý đào tạo', text: 'vào tab <b>📋 Kế Hoạch Đào Tạo</b> → điền Tháng, Đơn Vị/Đối Tượng, Số Lớp/Số Học Viên/Số Giờ Dự Kiến → lưu; hoặc nhập hàng loạt từ file có sẵn thay vì gõ tay từng dòng.' },
-      { text: 'Nhập hàng loạt từ Excel: bấm <b>"⬇️ Tải Mẫu Excel"</b>, điền cột "Chương Trình" bằng đúng TÊN đã có trong danh mục (không bắt buộc) rồi chọn file ở ô nhập — dòng nào tên Chương Trình chưa có trong danh mục vẫn hiện <b>"✅ Hợp lệ"</b> (chỉ ghi chú <b>"ℹ️ Chưa có trong danh mục — vẫn nhập được"</b>, KHÔNG bị chặn nhập). Tick sẵn checkbox <b>"☑ Tự động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có"</b> (mặc định BẬT) để hệ thống TỰ tạo thêm các Chương Trình còn thiếu đó (nhiều dòng trùng tên chỉ tạo 1 lần) và tự gắn liên kết — bỏ tick nếu chỉ muốn nhập kế hoạch, để trống liên kết Chương Trình như trước.' },
-      { text: 'Đối chiếu thực tế: xem danh sách Lớp Học đã mở thực sự (tab Lớp Học) so với kế hoạch đã lập.' },
+      { role: 'Quản lý đào tạo', text: 'vào tab <b>📋 Kế Hoạch Đào Tạo</b> → điền Tháng, Chương Trình/Đơn Vị/Đối Tượng, Số Lớp/Số Học Viên/Số Giờ Dự Kiến → lưu; hoặc nhập hàng loạt từ file có sẵn thay vì gõ tay từng dòng.' },
+      { text: 'Nhập hàng loạt từ Excel: bấm <b>"⬇️ Tải Mẫu Excel"</b>, điền cột "Chương Trình" bằng đúng TÊN đã có trong danh mục (không bắt buộc) rồi chọn file ở ô nhập — dòng nào tên Chương Trình chưa có trong danh mục vẫn hiện <b>"✅ Hợp lệ"</b> (chỉ ghi chú <b>"ℹ️ Chưa có trong danh mục — vẫn nhập được"</b>, KHÔNG bị chặn nhập), chỉ courseId để trống chứ KHÔNG còn tự tạo thêm Chương Trình mới nữa (10/2026 — BP Đào Tạo tự tạo Chương Trình trước ở tab Chương Trình rồi gán tay).' },
+      { role: 'Quản lý đào tạo', text: 'SAU KHI đã tổ chức xong 1 đợt đào tạo: bấm <b>"Sửa"</b> trên đúng dòng kế hoạch đó → điền khối <b>"📝 Ghi Nhận Thực Tế"</b> (Giảng Viên Đào Tạo, Chức Danh, Ngày Tổ Chức Đào Tạo, Thời Gian Đào Tạo, Số Lượng Tham Gia Thực Tế, Đánh Giá Giảng Viên theo thang điểm 10) → lưu lại — toàn bộ 6 field này đều tuỳ chọn, điền được bất cứ lúc nào.' },
+      { text: 'Đối chiếu thực tế: xem danh sách Lớp Học đã mở thực sự (tab Lớp Học) so với kế hoạch đã lập, hoặc xem khối "🎯 Theo Dõi Thực Hiện" ngay bên dưới danh sách kế hoạch.' },
     ],
-    footer: { left: [], right: [] },
+    footer: { left: [
+      { label: 'Cột "Giảng Viên Đào Tạo" thay cho "Đơn Vị" (10/2026)', text: 'Danh Sách Kế Hoạch Đào Tạo giờ hiện tên Giảng Viên ở cột đầu (điền ở khối Ghi Nhận Thực Tế) — Đơn Vị đã chọn lúc lập kế hoạch vẫn giữ nguyên, chỉ lùi xuống hiện như ghi chú phụ dưới tên giảng viên.' },
+    ], right: [
+      { label: 'Khối "Theo Giảng Viên / Chức Danh / Đơn Vị" (10/2026)', text: 'thay cho khối "Theo Đơn Vị" cũ ở phần Theo Dõi Thực Hiện — gộp theo đúng 3 field Giảng Viên+Chức Danh+Đơn Vị, kèm 2 cột riêng SL Tham Gia Thực Tế (cộng dồn) và Điểm Đánh Giá Giảng Viên (trung bình, bỏ qua dòng chưa chấm).' },
+    ] },
   },
   docs: {
     desc: 'Kho tài liệu đào tạo dùng chung — tài liệu được gắn vào Chương Trình/Lớp Học, có theo dõi tiến độ đọc/xem của từng học viên.',

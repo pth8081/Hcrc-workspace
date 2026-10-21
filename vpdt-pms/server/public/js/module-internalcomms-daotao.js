@@ -477,16 +477,21 @@ function resetTrainingClassForm() {
 // trainingRegistrations/trainingTestSubmissions đã tải sẵn, đúng quy ước "live-compute, không cache"
 // dùng xuyên suốt module này (cùng khuôn computeTrainingPlanDashboard()). Không có chiều bấm-để-lọc
 // (khác các dashboard phê duyệt khác) vì đây là thống kê tổng quan, không phải hàng chờ xử lý.
-function computeTrainingDashboard() {
-  const classes = DB.trainingClasses || [];
-  const regs = (DB.trainingRegistrations || []).filter(r => r.result !== 'CANCELLED');
+// LỌC THEO NĂM (10/2026, theo yêu cầu BP Đào Tạo — chia Dashboard thành "Theo Kế Hoạch Tháng" +
+// "Tổng Hợp Năm"): `year` tuỳ chọn, lọc classes theo NĂM của cls.startTime (mọi lớp đều có startTime,
+// xem ghi chú createValidation.js) — không truyền year = giữ nguyên hành vi CŨ (toàn bộ thời gian).
+function computeTrainingDashboard(year) {
+  let classes = DB.trainingClasses || [];
+  if (year) classes = classes.filter(c => c.startTime && new Date(c.startTime).getFullYear() === year);
+  const classIds = new Set(classes.map(c => c.id));
+  let regs = (DB.trainingRegistrations || []).filter(r => r.result !== 'CANCELLED');
+  if (year) regs = regs.filter(r => classIds.has(r.classId));
   const ongoingClasses = classes.filter(c => getTrainingClassSessionState(c) === 'ONGOING').length;
   const endedClasses = classes.filter(c => getTrainingClassSessionState(c) === 'ENDED').length;
   const completedPeople = new Set(regs.filter(r => r.result === 'PASSED').map(r => r.creator)).size;
-  const topScores = (DB.trainingTestSubmissions || [])
-    .slice()
-    .sort((a, b) => (b.percentage || 0) - (a.percentage || 0))
-    .slice(0, 10);
+  let topScores = (DB.trainingTestSubmissions || []).slice();
+  if (year) topScores = topScores.filter(s => classIds.has(s.classId));
+  topScores = topScores.sort((a, b) => (b.percentage || 0) - (a.percentage || 0)).slice(0, 10);
   return {
     totalClasses: classes.length,
     totalRegistrations: regs.length,
@@ -497,8 +502,24 @@ function computeTrainingDashboard() {
   };
 }
 
+// Danh sách năm để chọn ở ô "tdYear" — mọi năm có ít nhất 1 trainingClasses.startTime, cộng năm hiện tại
+// (luôn có mặt dù chưa có lớp nào, để chọn được ngay cả khi mới triển khai module).
+function trainingDashboardYearOptions() {
+  const years = new Set([new Date().getFullYear()]);
+  (DB.trainingClasses || []).forEach(c => { if (c.startTime) years.add(new Date(c.startTime).getFullYear()); });
+  return [...years].sort((a, b) => b - a);
+}
+
 function renderTrainingDashboard() {
-  const stats = computeTrainingDashboard();
+  const yearSel = document.getElementById('tdYear');
+  if (yearSel && !yearSel.options.length) {
+    yearSel.innerHTML = trainingDashboardYearOptions().map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+  const monthInput = document.getElementById('tdPlanMonth');
+  if (monthInput && !monthInput.value) monthInput.value = new Date().toISOString().slice(0, 7);
+
+  const year = Number(yearSel?.value) || new Date().getFullYear();
+  const stats = computeTrainingDashboard(year);
   const cardsEl = document.getElementById('trainingDashboardCards');
   if (cardsEl) {
     cardsEl.innerHTML = `
@@ -530,7 +551,7 @@ function renderTrainingDashboard() {
   const topBody = document.getElementById('trainingTopScoresBody');
   if (topBody) {
     if (!stats.topScores.length) {
-      topBody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có bài làm test nào.</td></tr>`;
+      topBody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có bài làm test nào trong năm ${year}.</td></tr>`;
     } else {
       topBody.innerHTML = stats.topScores.map((s, idx) => `
         <tr class="hover:bg-gray-50 border-b">
@@ -543,6 +564,27 @@ function renderTrainingDashboard() {
       `).join('');
     }
   }
+  renderTrainingDashboardMonthSection();
+}
+
+// Khối "📅 Theo Kế Hoạch Tháng" của Dashboard (10/2026, theo yêu cầu BP Đào Tạo) — tái dùng NGUYÊN
+// computeTrainingPlanDashboard() đã có (cùng hàm dùng cho khối "Theo Dõi Thực Hiện" ở tab Kế Hoạch Đào
+// Tạo), chỉ lọc theo đúng 1 tháng đang chọn ở #tdPlanMonth — không tính lại gì khác.
+function renderTrainingDashboardMonthSection() {
+  const cardsEl = document.getElementById('trainingDashboardMonthCards');
+  if (!cardsEl) return;
+  const month = document.getElementById('tdPlanMonth')?.value || new Date().toISOString().slice(0, 7);
+  const data = computeTrainingPlanDashboard({ month });
+  const fmtHours = (h) => (Math.round(h * 10) / 10).toLocaleString('vi-VN');
+  cardsEl.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-center">
+      <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">Số Lớp (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${data.totalActualClasses}/${data.totalPlannedClasses}</div></div>
+      <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">CBNV Được Đào Tạo (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${data.totalActualTrainees}/${data.totalPlannedTrainees}</div></div>
+      <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">Giờ Đào Tạo (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${fmtHours(data.totalActualHours)}/${fmtHours(data.totalPlannedHours)}</div></div>
+      <div class="bg-white border border-violet-200 rounded p-3"><div class="text-xs text-gray-600">Tỷ Lệ Hoàn Thành</div><div class="font-bold text-lg text-violet-800">${data.pct == null ? '—' : data.pct + '%'}</div></div>
+      <div class="bg-white border border-gray-200 rounded p-3"><div class="text-xs text-gray-600">Số Kế Hoạch Tháng Này</div><div class="font-bold text-lg text-gray-700">${data.plans.length}</div></div>
+    </div>
+  `;
 }
 
 function renderTrainingClasses() {
@@ -1006,6 +1048,9 @@ function renderTrainingCourses() {
     const thumbHTML = c.thumbnailUrl
       ? `<img src="${escapeHtml(c.thumbnailUrl)}" alt="${escapeHtml(c.name || '')}" loading="lazy" class="w-full h-full object-contain">`
       : `<div class="w-full h-full flex items-center justify-center text-3xl text-gray-300">🎓</div>`;
+    // "Xem Tài Liệu" (10/2026, theo yêu cầu BP Đào Tạo) — đếm trainingDocuments.courseId trùng NGAY ở
+    // đây để quyết định hiện/ẩn nút (ẩn khi chương trình chưa gắn tài liệu nào, tránh mở modal rỗng vô ích).
+    const docCount = DB.trainingDocuments.filter(d => d.courseId === c.id).length;
     return `
     <div class="bg-white border rounded-lg shadow-sm overflow-hidden flex flex-col" data-course-id="${c.id}">
       <div class="w-full h-32 bg-gray-50 border-b flex items-center justify-center flex-shrink-0">${thumbHTML}</div>
@@ -1014,12 +1059,49 @@ function renderTrainingCourses() {
         <p class="text-xs text-gray-500">${escapeHtml(c.category)}</p>
         ${c.description ? `<p class="text-xs text-gray-600 mt-1">${escapeHtml(c.description)}</p>` : ''}
         <div class="mt-auto pt-2 flex justify-end gap-2">
+          ${docCount ? `<button data-op="openTrainingCourseDocsModal" data-arg0="${c.id}" class="text-emerald-700 font-bold hover:underline text-xs">📄 Xem Tài Liệu (${docCount})</button>` : ''}
           ${canManage ? `<button data-op="editTrainingCourse" data-arg0="${c.id}" class="text-indigo-600 font-bold hover:underline text-xs">Sửa</button>` : ''}
           ${currentUser.perms?.admin ? `<button data-op="deleteTrainingCourse" data-arg0="${c.id}" class="text-red-500 font-bold hover:underline text-xs">Xóa</button>` : ''}
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+// Modal "Xem Tài Liệu" của 1 Chương Trình (10/2026, theo yêu cầu BP Đào Tạo — thay cho auto-link từ Kế
+// Hoạch Đào Tạo đã bỏ: BP Đào Tạo giờ gán tay trainingDocuments.courseId khi thêm tài liệu, rồi xem lại
+// nhanh ở đây thay vì phải sang hẳn tab Kho Tài Liệu và tự lọc). Chỉ ĐỌC — không có action Sửa/Xoá ở
+// modal này (đã có đủ ở tab Kho Tài Liệu), cùng khuôn modal trainingJoinClassModal (đọc-only phần giáo trình).
+function openTrainingCourseDocsModal(courseId) {
+  const course = DB.trainingCourses.find(c => c.id === courseId);
+  if (!course) return;
+  document.getElementById('trainingCourseDocsTitle').innerText = `📄 Tài Liệu — ${course.name}`;
+  const docs = DB.trainingDocuments.filter(d => d.courseId === courseId).sort((a, b) => b.id - a.id);
+  const body = document.getElementById('trainingCourseDocsBody');
+  body.innerHTML = docs.length ? docs.map(d => {
+    const mandatoryBadge = d.mandatory ? ' <span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold align-middle">⚠️ Bắt buộc</span>' : '';
+    let actionHTML;
+    if (d.docType === 'VIDEO' || isPdfTrainingDoc(d)) {
+      actionHTML = trainingDocOpenLinkHTML(d);
+    } else if (d.docType === 'IMAGE') {
+      actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(d.fileUrl)}" class="w-16 h-16 object-cover rounded border" alt="${escapeHtml(d.title)}"></a>`;
+    } else {
+      actionHTML = `<a href="${escapeHtml(d.fileUrl)}" target="_blank" rel="noopener" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700 text-center">⬇️ Tải</a>`;
+    }
+    return `
+    <div class="flex justify-between items-start gap-2 border rounded p-2">
+      <div class="min-w-0">
+        <div class="font-bold text-gray-800 text-sm">${escapeHtml(d.title)}${mandatoryBadge}</div>
+        <div class="text-xs text-gray-500">${escapeHtml(d.category)}</div>
+        ${d.description ? `<div class="text-xs text-gray-600 mt-1">${escapeHtml(d.description)}</div>` : ''}
+      </div>
+      <div class="flex-shrink-0">${actionHTML}</div>
+    </div>`;
+  }).join('') : `<p class="text-center text-gray-400 italic p-4">Chương trình này chưa gắn tài liệu nào.</p>`;
+  document.getElementById('trainingCourseDocsModal').classList.remove('hidden');
+}
+function closeTrainingCourseDocsModal() {
+  document.getElementById('trainingCourseDocsModal').classList.add('hidden');
 }
 
 // editingTrainingCourseId — id chương trình đang SỬA qua form phía trên (10/2026, thêm nút "✏️ Sửa" —
@@ -1082,6 +1164,13 @@ async function submitTrainingPlan(e) {
     plannedClasses: document.getElementById('tpPlannedClasses').value,
     plannedTrainees: document.getElementById('tpPlannedTrainees').value,
     plannedHours: document.getElementById('tpPlannedHours').value,
+    // Ghi Nhận Thực Tế (10/2026) — xem chú thích đầy đủ tại khối "📝 Ghi Nhận Thực Tế" ở internalSection.html.
+    instructor: document.getElementById('tpInstructor').value,
+    jobTitle: document.getElementById('tpJobTitle').value,
+    actualTrainingDate: document.getElementById('tpActualTrainingDate').value,
+    actualDuration: document.getElementById('tpActualDuration').value,
+    actualParticipants: document.getElementById('tpActualParticipants').value,
+    instructorRating: document.getElementById('tpInstructorRating').value,
     customData
   };
   let saved;
@@ -1127,6 +1216,12 @@ function openEditTrainingPlan(id) {
   document.getElementById('tpPlannedClasses').value = plan.plannedClasses || 0;
   document.getElementById('tpPlannedTrainees').value = plan.plannedTrainees || 0;
   document.getElementById('tpPlannedHours').value = plan.plannedHours || 0;
+  document.getElementById('tpInstructor').value = plan.instructor || '';
+  document.getElementById('tpJobTitle').value = plan.jobTitle || '';
+  document.getElementById('tpActualTrainingDate').value = plan.actualTrainingDate || '';
+  document.getElementById('tpActualDuration').value = plan.actualDuration || '';
+  document.getElementById('tpActualParticipants').value = plan.actualParticipants || '';
+  document.getElementById('tpInstructorRating').value = plan.instructorRating ?? '';
   document.getElementById('tpCancelEditBtn').classList.remove('hidden');
   document.getElementById('tpSubmitBtn').innerText = 'Lưu Thay Đổi';
   document.getElementById('trainingPlanFormTitle').innerText = `✏️ Sửa Kế Hoạch — Tháng ${plan.month}`;
@@ -1159,7 +1254,7 @@ function renderTrainingPlans() {
     <tr class="hover:bg-gray-50">
       <td class="border p-2 font-bold text-gray-800">${escapeHtml(p.month)}${overdue ? ' <span class="text-red-600 text-[10px] font-bold">⚠️ Quá hạn</span>' : ''}</td>
       <td class="border p-2">${course ? escapeHtml(course.name) : '<span class="text-gray-400 italic">—</span>'}</td>
-      <td class="border p-2">${escapeHtml(p.targetDept || '')}</td>
+      <td class="border p-2">${p.instructor ? escapeHtml(p.instructor) : '<span class="text-gray-400 italic">—</span>'}${p.targetDept ? `<br><span class="text-xs text-gray-400">${escapeHtml(p.targetDept)}</span>` : ''}</td>
       <td class="border p-2">${escapeHtml(p.audience || '')}</td>
       <td class="border p-2 text-center">${p.plannedClasses || 0}</td>
       <td class="border p-2 text-center">${p.plannedTrainees || 0}</td>
@@ -1250,7 +1345,7 @@ function computeTrainingPlanDashboard(filters) {
   let totalPlannedClasses = 0, totalPlannedTrainees = 0, totalPlannedHours = 0, totalActualClasses = 0, totalActualHours = 0;
   const distinctTrainees = new Set();
   const overdue = [];
-  const byMonth = new Map(), byDept = new Map(), byCourse = new Map();
+  const byMonth = new Map(), byInstructor = new Map(), byCourse = new Map();
   const bump = (map, key, plan, stats) => {
     const row = map.get(key) || { key, plannedClasses: 0, plannedTrainees: 0, plannedHours: 0, actualClasses: 0, actualHours: 0, traineeSet: new Set() };
     row.plannedClasses += plan.plannedClasses || 0;
@@ -1260,6 +1355,29 @@ function computeTrainingPlanDashboard(filters) {
     row.actualHours += stats.actualHours;
     stats.regs.forEach(r => row.traineeSet.add(r.creator));
     map.set(key, row);
+  };
+  // Theo Giảng Viên / Chức Danh / Đơn Vị (10/2026, theo yêu cầu BP Đào Tạo — thay cho "Theo Đơn Vị" cũ) —
+  // khoá nhóm = giảng viên+chức danh+đơn vị (3 field điền tay ở "Ghi Nhận Thực Tế"), cộng dồn thêm 2 chỉ
+  // số KHÔNG tính sống được (actualParticipants/instructorRating do BP Đào Tạo điền tay, không có trong
+  // getTrainingPlanActualStats()): participantsSum cộng dồn bình thường, ratingSum/ratingCount để tính
+  // điểm trung bình (bỏ qua dòng chưa chấm điểm — instructorRating null, xem normalizeTrainingPlanFields()).
+  const bumpInstructor = (plan, stats) => {
+    const instructor = plan.instructor || '(Chưa gán giảng viên)';
+    const key = `${instructor}||${plan.jobTitle || ''}||${plan.targetDept || ''}`;
+    const row = byInstructor.get(key) || {
+      key, instructor, jobTitle: plan.jobTitle || '', targetDept: plan.targetDept || '',
+      plannedClasses: 0, plannedTrainees: 0, plannedHours: 0, actualClasses: 0, actualHours: 0,
+      traineeSet: new Set(), participantsSum: 0, ratingSum: 0, ratingCount: 0
+    };
+    row.plannedClasses += plan.plannedClasses || 0;
+    row.plannedTrainees += plan.plannedTrainees || 0;
+    row.plannedHours += plan.plannedHours || 0;
+    row.actualClasses += stats.actualClasses;
+    row.actualHours += stats.actualHours;
+    stats.regs.forEach(r => row.traineeSet.add(r.creator));
+    row.participantsSum += plan.actualParticipants || 0;
+    if (plan.instructorRating != null) { row.ratingSum += plan.instructorRating; row.ratingCount++; }
+    byInstructor.set(key, row);
   };
 
   plans.forEach(plan => {
@@ -1273,7 +1391,7 @@ function computeTrainingPlanDashboard(filters) {
     if (isTrainingPlanOverdue(plan)) overdue.push({ plan, stats });
 
     bump(byMonth, plan.month, plan, stats);
-    bump(byDept, plan.targetDept || '(Chưa gán đơn vị)', plan, stats);
+    bumpInstructor(plan, stats);
     const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
     bump(byCourse, course ? course.name : '(Không gắn chương trình)', plan, stats);
   });
@@ -1281,6 +1399,9 @@ function computeTrainingPlanDashboard(filters) {
   const finalizeRows = (map) => [...map.values()]
     .map(r => ({ ...r, actualTrainees: r.traineeSet.size }))
     .sort((a, b) => String(a.key).localeCompare(String(b.key)));
+  const finalizeInstructorRows = () => [...byInstructor.values()]
+    .map(r => ({ ...r, actualTrainees: r.traineeSet.size, avgRating: r.ratingCount ? Math.round((r.ratingSum / r.ratingCount) * 10) / 10 : null }))
+    .sort((a, b) => a.instructor.localeCompare(b.instructor));
 
   const ratios = [];
   if (totalPlannedClasses > 0) ratios.push(Math.min(totalActualClasses / totalPlannedClasses, 1));
@@ -1292,7 +1413,7 @@ function computeTrainingPlanDashboard(filters) {
     plans, totalPlannedClasses, totalPlannedTrainees, totalPlannedHours,
     totalActualClasses, totalActualTrainees: distinctTrainees.size, totalActualHours,
     pct, overdue,
-    byMonth: finalizeRows(byMonth), byDept: finalizeRows(byDept), byCourse: finalizeRows(byCourse)
+    byMonth: finalizeRows(byMonth), byInstructor: finalizeInstructorRows(), byCourse: finalizeRows(byCourse)
   };
 }
 
@@ -1332,6 +1453,39 @@ function renderTrainingPlanDashboard() {
       </div>
     </div>`;
 
+  // Theo Giảng Viên / Chức Danh / Đơn Vị (10/2026, thay cho "Theo Đơn Vị" cũ, theo yêu cầu BP Đào Tạo) —
+  // 2 cột cuối (SL Tham Gia TT/Điểm Đánh Giá GV) đến từ "Ghi Nhận Thực Tế" điền tay, KHÔNG tính sống như
+  // các cột TT/KH khác, nên hiện riêng thay vì gộp chung khuôn breakdownTable() ở trên.
+  const instructorTable = `
+    <div class="mt-3">
+      <h4 class="font-bold text-xs text-gray-700 mb-1">Theo Giảng Viên / Chức Danh / Đơn Vị</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-xs bg-white">
+          <thead><tr class="bg-gray-100 text-left">
+            <th class="border p-1.5">Giảng Viên</th>
+            <th class="border p-1.5">Chức Danh</th>
+            <th class="border p-1.5">Đơn Vị/Phòng Ban</th>
+            <th class="border p-1.5 text-center">Số Lớp (TT/KH)</th>
+            <th class="border p-1.5 text-center">Học Viên (TT/KH)</th>
+            <th class="border p-1.5 text-center">Giờ (TT/KH)</th>
+            <th class="border p-1.5 text-center">SL Tham Gia TT</th>
+            <th class="border p-1.5 text-center">Điểm Đánh Giá GV</th>
+          </tr></thead>
+          <tbody>${data.byInstructor.length ? data.byInstructor.map(r => `
+            <tr>
+              <td class="border p-1.5">${escapeHtml(r.instructor)}</td>
+              <td class="border p-1.5">${r.jobTitle ? escapeHtml(r.jobTitle) : '<span class="text-gray-400 italic">—</span>'}</td>
+              <td class="border p-1.5">${r.targetDept ? escapeHtml(r.targetDept) : '<span class="text-gray-400 italic">—</span>'}</td>
+              <td class="border p-1.5 text-center">${r.actualClasses}/${r.plannedClasses}</td>
+              <td class="border p-1.5 text-center">${r.actualTrainees}/${r.plannedTrainees}</td>
+              <td class="border p-1.5 text-center">${fmtHours(r.actualHours)}/${fmtHours(r.plannedHours)}</td>
+              <td class="border p-1.5 text-center">${r.participantsSum || '<span class="text-gray-400 italic">—</span>'}</td>
+              <td class="border p-1.5 text-center">${r.avgRating == null ? '<span class="text-gray-400 italic">—</span>' : r.avgRating}</td>
+            </tr>`).join('') : `<tr><td colspan="8" class="text-center p-2 text-gray-400 italic">Không có dữ liệu.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+
   const overdueRows = data.overdue.map(({ plan, stats }) => {
     const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
     return `<tr>
@@ -1353,7 +1507,7 @@ function renderTrainingPlanDashboard() {
       <div class="bg-white border border-gray-200 rounded p-3"><div class="text-xs text-gray-600">Số Kế Hoạch Đang Xem</div><div class="font-bold text-lg text-gray-700">${data.plans.length}</div></div>
     </div>
     ${breakdownTable('Theo Tháng', data.byMonth, 'Tháng')}
-    ${breakdownTable('Theo Đơn Vị', data.byDept, 'Đơn Vị')}
+    ${instructorTable}
     ${breakdownTable('Theo Chương Trình', data.byCourse, 'Chương Trình')}
     <div class="mt-3">
       <h4 class="font-bold text-xs text-gray-700 mb-1">⚠️ Quá Hạn / Chưa Thực Hiện</h4>
@@ -1375,6 +1529,8 @@ function exportTrainingPlanDashboardExcel() {
   const columns = [
     { header: 'Tháng', key: 'month', width: 12 },
     { header: 'Chương Trình', key: 'course', width: 28 },
+    { header: 'Giảng Viên Đào Tạo', key: 'instructor', width: 20 },
+    { header: 'Chức Danh', key: 'jobTitle', width: 18 },
     { header: 'Đơn Vị', key: 'dept', width: 20 },
     { header: 'Đối Tượng', key: 'audience', width: 20 },
     { header: 'Số Lớp KH', key: 'plannedClasses', width: 12 },
@@ -1383,17 +1539,24 @@ function exportTrainingPlanDashboardExcel() {
     { header: 'Học Viên TT', key: 'actualTrainees', width: 12 },
     { header: 'Giờ KH', key: 'plannedHours', width: 10 },
     { header: 'Giờ TT', key: 'actualHours', width: 10 },
-    { header: '% Hoàn Thành', key: 'pct', width: 12 }
+    { header: '% Hoàn Thành', key: 'pct', width: 12 },
+    { header: 'Ngày Tổ Chức Đào Tạo', key: 'actualTrainingDate', width: 16 },
+    { header: 'Thời Gian Đào Tạo', key: 'actualDuration', width: 16 },
+    { header: 'SL Tham Gia Thực Tế', key: 'actualParticipants', width: 14 },
+    { header: 'Điểm Đánh Giá GV', key: 'instructorRating', width: 14 }
   ];
   const rows = data.plans.map(plan => {
     const course = plan.courseId != null ? DB.trainingCourses.find(c => c.id === plan.courseId) : null;
     const stats = getTrainingPlanActualStats(plan);
     return {
-      month: plan.month, course: course ? course.name : '', dept: plan.targetDept || '', audience: plan.audience || '',
+      month: plan.month, course: course ? course.name : '', instructor: plan.instructor || '', jobTitle: plan.jobTitle || '',
+      dept: plan.targetDept || '', audience: plan.audience || '',
       plannedClasses: plan.plannedClasses || 0, actualClasses: stats.actualClasses,
       plannedTrainees: plan.plannedTrainees || 0, actualTrainees: stats.actualTrainees,
       plannedHours: plan.plannedHours || 0, actualHours: Math.round(stats.actualHours * 10) / 10,
-      pct: getTrainingPlanCompletionPct(plan) ?? ''
+      pct: getTrainingPlanCompletionPct(plan) ?? '',
+      actualTrainingDate: plan.actualTrainingDate || '', actualDuration: plan.actualDuration || '',
+      actualParticipants: plan.actualParticipants || '', instructorRating: plan.instructorRating ?? ''
     };
   });
   downloadXlsxFromServer('theo_doi_ke_hoach_dao_tao.xlsx', 'Theo Dõi Kế Hoạch Đào Tạo', columns, rows);
@@ -1410,7 +1573,6 @@ async function onTrainingPlanImportFileChange(event) {
   trainingPlanImportPreviewItems = [];
   document.getElementById('tpImportPreviewWrap').classList.add('hidden');
   document.getElementById('tpImportConfirmBtn').classList.add('hidden');
-  document.getElementById('tpImportAutoCreateCoursesWrap').classList.add('hidden');
   const statusEl = document.getElementById('tpImportStatus');
   if (!file) { statusEl.innerText = ''; return; }
 
@@ -1451,13 +1613,6 @@ async function onTrainingPlanImportFileChange(event) {
     document.getElementById('tpImportPreviewWrap').classList.remove('hidden');
     if (validCount > 0) {
       document.getElementById('tpImportConfirmBtn').classList.remove('hidden');
-      // Chỉ hiện checkbox "tự thêm danh mục" khi có ít nhất 1 dòng ĐANG chọn nhập mà courseName chưa
-      // khớp Chương Trình nào có sẵn (không có gì để tự thêm thì không cần hiện) — mặc định TICK sẵn mỗi
-      // lần đọc file mới, người dùng tự bỏ nếu không muốn.
-      const hasUnmatchedCourse = data.items.some(it => it.monthValid && it.courseName && !it.courseMatched);
-      const autoCreateWrap = document.getElementById('tpImportAutoCreateCoursesWrap');
-      autoCreateWrap.classList.toggle('hidden', !hasUnmatchedCourse);
-      document.getElementById('tpImportAutoCreateCourses').checked = true;
     }
   } catch (err) {
     statusEl.innerText = `⛔ ${err.message}`;
@@ -1477,36 +1632,10 @@ async function confirmTrainingPlanImport() {
   const validItems = trainingPlanImportPreviewItems.filter(it => it.monthValid && it.include);
   if (!validItems.length) return alert('Chưa chọn dòng nào để nhập.');
 
-  // Tuỳ chọn "Tự động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có" (mặc định TICK sẵn) — với
-  // MỌI dòng ĐANG được chọn nhập mà courseName gõ trong file KHÔNG khớp Chương Trình có sẵn nào
-  // (courseMatched=false, courseId vẫn null từ lúc xem trước), tự tạo thêm 1 bản ghi trainingCourses mới
-  // đúng tên đó TRƯỚC khi tạo trainingPlans — dedupe theo tên NGUYÊN VĂN trong CÙNG lượt nhập này (nhiều
-  // dòng gõ cùng 1 tên chưa có chỉ tạo 1 lần), rồi gắn courseId mới vừa tạo cho MỌI dòng cùng tên đó.
-  // Bỏ tick giữ NGUYÊN hành vi cũ (để trống liên kết courseId). category đặt cố định "Nhập từ Excel" (KHÔNG
-  // phụ thuộc danh mục Loại Đào Tạo đã cấu hình sẵn hay chưa — normalizeTrainingCourseFields() chỉ đòi
-  // non-empty, không đối chiếu catalog) để admin dễ nhận ra và tự phân loại lại sau nếu cần.
-  const autoCreateCourses = !!document.getElementById('tpImportAutoCreateCourses')?.checked;
-  const courseCreateFailed = [];
-  if (autoCreateCourses) {
-    const missingNames = [...new Set(validItems.filter(it => it.courseName && !it.courseMatched).map(it => it.courseName))];
-    for (let i = 0; i < missingNames.length; i++) {
-      const name = missingNames[i];
-      try {
-        const result = await callCreateAction('trainingCourses', {
-          code: `CT-${Date.now()}-${i}`,
-          name,
-          category: 'Nhập từ Excel',
-          description: 'Tự động tạo khi nhập Kế Hoạch Đào Tạo từ Excel (chưa có trong danh mục lúc nhập).'
-        });
-        DB.trainingCourses.unshift(result.item);
-        validItems.forEach(it => { if (it.courseName === name && !it.courseMatched) it.courseId = result.item.id; });
-      } catch (err) {
-        courseCreateFailed.push({ name, error: err.message });
-      }
-    }
-    if (missingNames.length) populateTrainingCourseSelects();
-  }
-
+  // Tuỳ chọn "Tự động thêm vào danh mục Chương Trình Đào Tạo nếu tên chưa có" ĐÃ BỊ BỎ (10/2026, theo
+  // yêu cầu BP Đào Tạo — Chương Trình giờ do BP Đào Tạo tạo/gán THỦ CÔNG, xem renderTrainingCourses()).
+  // Dòng nào gõ tên Chương Trình không khớp danh mục có sẵn (courseMatched=false) thì courseId giữ
+  // nguyên null từ lúc xem trước — không còn tự tạo trainingCourses mới nữa.
   let successCount = 0;
   const failed = [];
   for (const it of validItems) {
@@ -1523,9 +1652,6 @@ async function confirmTrainingPlanImport() {
   }
   logSystemAction('INTERNAL', 'IMPORT_TRAINING_PLAN', `Nhập ${successCount} dòng kế hoạch đào tạo từ Excel`, 'SUCCESS');
   let msg = `✅ Đã nhập ${successCount}/${validItems.length} dòng kế hoạch.`;
-  if (courseCreateFailed.length) {
-    msg += `\n\n⚠️ ${courseCreateFailed.length} Chương Trình không tự thêm được vào danh mục:\n` + courseCreateFailed.map(f => `- "${f.name}": ${f.error}`).join('\n');
-  }
   if (failed.length) {
     msg += `\n\n⛔ ${failed.length} dòng lỗi:\n` + failed.map(f => `- Tháng ${f.month}: ${f.error}`).join('\n');
   }
@@ -1533,7 +1659,6 @@ async function confirmTrainingPlanImport() {
   document.getElementById('tpImportFileInput').value = '';
   document.getElementById('tpImportPreviewWrap').classList.add('hidden');
   document.getElementById('tpImportConfirmBtn').classList.add('hidden');
-  document.getElementById('tpImportAutoCreateCoursesWrap').classList.add('hidden');
   document.getElementById('tpImportStatus').innerText = '';
   trainingPlanImportPreviewItems = [];
   renderTrainingLms();

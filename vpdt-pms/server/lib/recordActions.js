@@ -5474,7 +5474,9 @@ function editTrainingTest(payload, user, test, appData, hasSubmissions) {
 // normalizeTrainingPlanFields() ở lib/createValidation.js) nhưng gác quyền đơn giản hơn — không có khái
 // niệm "giảng viên phụ trách đúng lớp mình" ở đây, trainingManage quản lý được MỌI kế hoạch (đúng tinh
 // thần "kế hoạch đào tạo là cấu hình toàn công ty" đã nêu ở createValidation.js).
-const TRAINING_PLAN_EDITABLE_FIELDS = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours'];
+// 6 field cuối (instructor...instructorRating) — "Ghi Nhận Thực Tế" điền tay sau khi tổ chức đào tạo
+// (10/2026, theo yêu cầu BP Đào Tạo), xem normalizeTrainingPlanFields() ở lib/createValidation.js.
+const TRAINING_PLAN_EDITABLE_FIELDS = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours', 'instructor', 'jobTitle', 'actualTrainingDate', 'actualDuration', 'actualParticipants', 'instructorRating'];
 function editTrainingPlan(payload, user, plan, appData) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');

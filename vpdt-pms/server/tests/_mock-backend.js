@@ -349,6 +349,20 @@ function __mockNormalizeTrainingPlanFields(payload) {
   payload.plannedClasses = toNonNegInt(payload.plannedClasses);
   payload.plannedTrainees = toNonNegInt(payload.plannedTrainees);
   payload.plannedHours = toNonNegNum(payload.plannedHours);
+
+  // Ghi Nhận Thực Tế (10/2026, theo yêu cầu BP Đào Tạo) — mirrors the 6-field block added at the end of
+  // normalizeTrainingPlanFields() in lib/createValidation.js.
+  payload.instructor = payload.instructor ? String(payload.instructor).trim().slice(0, 200) : '';
+  payload.jobTitle = payload.jobTitle ? String(payload.jobTitle).trim().slice(0, 150) : '';
+  payload.actualTrainingDate = payload.actualTrainingDate ? String(payload.actualTrainingDate).trim().slice(0, 10) : '';
+  payload.actualDuration = payload.actualDuration ? String(payload.actualDuration).trim().slice(0, 100) : '';
+  payload.actualParticipants = toNonNegInt(payload.actualParticipants);
+  if (payload.instructorRating === '' || payload.instructorRating == null) {
+    payload.instructorRating = null;
+  } else {
+    const rating = Number(payload.instructorRating);
+    payload.instructorRating = Number.isFinite(rating) ? Math.max(0, Math.min(10, Math.round(rating * 10) / 10)) : null;
+  }
 }
 function __mockValidateTrainingPlanCreate(payload, user) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền lập kế hoạch đào tạo');
@@ -356,7 +370,7 @@ function __mockValidateTrainingPlanCreate(payload, user) {
 }
 function __mockEditTrainingPlan(payload, user, plan) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
-  const fields = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours'];
+  const fields = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours', 'instructor', 'jobTitle', 'actualTrainingDate', 'actualDuration', 'actualParticipants', 'instructorRating'];
   fields.forEach((f) => { if (payload[f] !== undefined) plan[f] = payload[f]; });
   __mockNormalizeTrainingPlanFields(plan);
   return plan;

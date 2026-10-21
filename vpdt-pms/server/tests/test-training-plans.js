@@ -177,6 +177,32 @@ async function main() {
       await page.evaluate(() => setTrainingLmsTab('PLANS'));
     });
 
+    await run('Chương Trình: thẻ không hiện nút "Xem Tài Liệu" khi chưa có tài liệu nào gắn courseId; hiện đúng số lượng + modal liệt kê sau khi gắn 1 tài liệu (10/2026, theo yêu cầu BP Đào Tạo)', async () => {
+      await page.evaluate(() => setTrainingLmsTab('COURSES'));
+      const htmlBefore = await page.evaluate(() => { renderTrainingCourses(); return document.getElementById('trainingCoursesContainer').innerHTML; });
+      assert(!htmlBefore.includes('openTrainingCourseDocsModal'), 'no "Xem Tài Liệu" button should render while the course has 0 linked documents');
+
+      // Seed trực tiếp DB.trainingDocuments (đã gắn courseId) — chỉ kiểm tra RENDER/modal ở đây, luồng tạo
+      // tài liệu thật (upload file) đã có bộ test riêng (test-trainingdocuments-encrypted-pdf-pagecount.js...).
+      await page.evaluate((cid) => {
+        DB.trainingDocuments.push({ id: 80001, title: 'Tài Liệu Giới Thiệu Sản Phẩm', category: 'Nghiệp vụ', docType: 'DOCUMENT', fileUrl: '/uploads/fake.pdf', courseId: cid, mandatory: true, description: 'Mô tả thử' });
+      }, courseId);
+      const htmlAfter = await page.evaluate(() => { renderTrainingCourses(); return document.getElementById('trainingCoursesContainer').innerHTML; });
+      assert(htmlAfter.includes('Xem Tài Liệu (1)'), `expected the course card to show exactly 1 linked document, got: ${htmlAfter}`);
+
+      await page.evaluate((cid) => openTrainingCourseDocsModal(cid), courseId);
+      const modalVisible = await page.evaluate(() => !document.getElementById('trainingCourseDocsModal').classList.contains('hidden'));
+      assert(modalVisible, 'the course-docs modal should be visible after opening it');
+      const modalHTML = await page.evaluate(() => document.getElementById('trainingCourseDocsBody').innerHTML);
+      assert(modalHTML.includes('Tài Liệu Giới Thiệu Sản Phẩm'), 'the modal should list the linked document title');
+      assert(modalHTML.includes('⚠️ Bắt buộc'), 'the mandatory badge should render in the modal');
+
+      await page.evaluate(() => closeTrainingCourseDocsModal());
+      const modalHidden = await page.evaluate(() => document.getElementById('trainingCourseDocsModal').classList.contains('hidden'));
+      assert(modalHidden, 'the course-docs modal should be hidden again after closing it');
+      await page.evaluate(() => setTrainingLmsTab('PLANS'));
+    });
+
     await run('invalid month format is rejected server-side even bypassing the <input type=month> picker', async () => {
       let errMsg = null;
       await page.evaluate(async () => {
@@ -243,6 +269,49 @@ async function main() {
       assertEqual(plan.month, '2026-06', 'unrelated fields should be preserved after a partial edit');
     });
 
+    await run('Ghi Nhận Thực Tế: 6 field điền tay (Giảng Viên/Chức Danh/Ngày Tổ Chức/Thời Gian/SL Tham Gia TT/Điểm Đánh Giá) round-trip đúng qua form Sửa, server chuẩn hoá điểm về thang 0-10', async () => {
+      await page.evaluate((id) => openEditTrainingPlan(id), planId);
+      await page.evaluate(() => {
+        document.getElementById('tpInstructor').value = 'Nguyễn Thị A';
+        document.getElementById('tpJobTitle').value = 'Chuyên viên Đào tạo';
+        document.getElementById('tpActualTrainingDate').value = '2026-06-15';
+        document.getElementById('tpActualDuration').value = '3 giờ';
+        document.getElementById('tpActualParticipants').value = '9';
+        document.getElementById('tpInstructorRating').value = '12'; // cố tình vượt thang 10 — server phải tự chặn trần
+      });
+      await page.evaluate(() => submitTrainingPlan({ preventDefault() {} }));
+      const plan = await page.evaluate((id) => DB.trainingPlans.find((p) => p.id === id), planId);
+      assertEqual(plan.instructor, 'Nguyễn Thị A', 'instructor mismatch');
+      assertEqual(plan.jobTitle, 'Chuyên viên Đào tạo', 'jobTitle mismatch');
+      assertEqual(plan.actualTrainingDate, '2026-06-15', 'actualTrainingDate mismatch');
+      assertEqual(plan.actualDuration, '3 giờ', 'actualDuration mismatch');
+      assertEqual(plan.actualParticipants, 9, 'actualParticipants mismatch');
+      assertEqual(plan.instructorRating, 10, 'instructorRating must be clamped to the 0-10 scale server-side even if the client sent 12');
+
+      // Mở lại form Sửa — tất cả 6 field phải nạp lại đúng giá trị đã lưu (không bị bỏ sót như targetDept/audience).
+      await page.evaluate((id) => openEditTrainingPlan(id), planId);
+      const reloaded = await page.evaluate(() => ({
+        instructor: document.getElementById('tpInstructor').value,
+        jobTitle: document.getElementById('tpJobTitle').value,
+        actualTrainingDate: document.getElementById('tpActualTrainingDate').value,
+        actualDuration: document.getElementById('tpActualDuration').value,
+        actualParticipants: document.getElementById('tpActualParticipants').value,
+        instructorRating: document.getElementById('tpInstructorRating').value
+      }));
+      assertEqual(reloaded.instructor, 'Nguyễn Thị A', 'instructor should reload into the edit form');
+      assertEqual(reloaded.jobTitle, 'Chuyên viên Đào tạo', 'jobTitle should reload into the edit form');
+      assertEqual(reloaded.actualTrainingDate, '2026-06-15', 'actualTrainingDate should reload into the edit form');
+      assertEqual(reloaded.actualDuration, '3 giờ', 'actualDuration should reload into the edit form');
+      assertEqual(reloaded.actualParticipants, '9', 'actualParticipants should reload into the edit form');
+      assertEqual(reloaded.instructorRating, '10', 'instructorRating should reload the clamped value into the edit form');
+
+      // Danh Sách Kế Hoạch Đào Tạo: cột đầu giờ hiện Giảng Viên (thay vì Đơn Vị), Đơn Vị lùi xuống làm phụ chú.
+      const listHTML = await page.evaluate(() => { renderTrainingPlans(); return document.getElementById('trainingPlansTableBody').innerHTML; });
+      assert(listHTML.includes('Nguyễn Thị A'), 'the plan list should now show the instructor name');
+      assert(listHTML.includes('Phòng CNTT'), 'targetDept should still render as a sub-note, not lost');
+      await page.evaluate(() => cancelEditTrainingPlan());
+    });
+
     await run('only Admin sees the "Xóa" button in the plan list, not a trainingManage-only user', async () => {
       const htmlAsTrainer = await page.evaluate(() => { renderTrainingPlans(); return document.getElementById('trainingPlansTableBody').innerHTML; });
       assert(!htmlAsTrainer.includes('deleteTrainingPlanAction'), 'trainingManage (non-admin) should not see a delete button');
@@ -274,14 +343,10 @@ async function main() {
       assert(!previewHTML.includes('⚠️ không khớp'), 'the old alarming wording must be gone');
       assert(previewHTML.includes('⛔ Tháng không hợp lệ'), 'the invalid-month row should be flagged in the preview');
 
-      // Checkbox "tự động thêm vào danh mục" phải TỰ HIỆN (có dòng courseMatched=false) và TICK SẴN.
-      const autoCreateVisible = await page.evaluate(() => !document.getElementById('tpImportAutoCreateCoursesWrap').classList.contains('hidden'));
-      assert(autoCreateVisible, 'the auto-create-course checkbox should be visible when a row has an unmatched course name');
-      const autoCreateChecked = await page.evaluate(() => document.getElementById('tpImportAutoCreateCourses').checked);
-      assert(autoCreateChecked, 'the auto-create-course checkbox should be checked by default');
-      // Tắt cho kịch bản NÀY — kiểm tra ĐÚNG hành vi CŨ (bỏ tick = để trống liên kết) trước, kịch bản kế
-      // tiếp mới kiểm hành vi tự tạo (mặc định tick).
-      await page.evaluate(() => { document.getElementById('tpImportAutoCreateCourses').checked = false; });
+      // "Tự động thêm vào danh mục Chương Trình" ĐÃ BỊ BỎ HẲN (10/2026, theo yêu cầu BP Đào Tạo — Chương
+      // Trình giờ do BP Đào Tạo tạo/gán THỦ CÔNG, không còn tự sinh từ Excel) — checkbox đó không còn tồn
+      // tại trong DOM nữa.
+      assertEqual(await page.evaluate(() => document.getElementById('tpImportAutoCreateCoursesWrap')), null, 'the removed auto-create-course checkbox wrapper must no longer exist in the DOM');
 
       const countBefore = await page.evaluate(() => DB.trainingPlans.length);
       const coursesCountBefore = await page.evaluate(() => DB.trainingCourses.length);
@@ -293,15 +358,15 @@ async function main() {
       assert(nov, 'expected the November row to be imported');
       assert(dec, 'expected the December row to be imported');
       assertEqual(nov.courseId, courseId, 'matched course should carry its courseId through the confirm step');
-      assertEqual(dec.courseId, null, 'unmatched course name should import with courseId left null when the auto-create checkbox is UNCHECKED, not blocked');
+      assertEqual(dec.courseId, null, 'unmatched course name always imports with courseId left null now — no auto-create path exists anymore');
       assert(!plansAfter.some((p) => p.month === 'sai-dinh-dang'), 'the invalid-month row must never reach the server');
       const coursesCountAfter = await page.evaluate(() => DB.trainingCourses.length);
-      assertEqual(coursesCountAfter, coursesCountBefore, 'no new trainingCourses should be auto-created while the checkbox is unchecked');
+      assertEqual(coursesCountAfter, coursesCountBefore, 'no new trainingCourses should ever be auto-created by the import confirm step anymore');
       const alerts = await page.evaluate(() => window.__alerts.slice());
       assert(alerts.some((a) => a.includes('Đã nhập 2/2 dòng kế hoạch')), `expected an import summary alert, got ${JSON.stringify(alerts)}`);
     });
 
-    await run('Nhập Kế Hoạch Từ Excel: checkbox "Tự động thêm vào danh mục" (mặc định TICK) tự tạo Chương Trình còn thiếu, dedupe theo tên trùng trong cùng lượt nhập, rồi gắn courseId mới', async () => {
+    await run('Nhập Kế Hoạch Từ Excel: nhiều dòng CÙNG tên Chương Trình chưa khớp danh mục vẫn nhập được, courseId để trống cho CẢ hai, KHÔNG tự tạo Chương Trình nào (hành vi auto-create cũ đã bị bỏ hẳn)', async () => {
       await page.evaluate((cid) => {
         window.__planImportParsePreset = [
           { month: '2027-01', monthValid: true, courseName: 'Kỹ Năng Bán Hàng Cơ Bản', courseId: cid, courseMatched: true, targetDept: '', audience: '', plannedClasses: 1, plannedTrainees: 10, plannedHours: 4 },
@@ -313,26 +378,21 @@ async function main() {
       fs.writeFileSync(tmpPath, 'dummy');
       await page.setInputFiles('#tpImportFileInput', tmpPath);
       await page.waitForFunction(() => document.getElementById('tpImportStatus').innerText.includes('Đọc file'));
-      const autoCreateChecked = await page.evaluate(() => document.getElementById('tpImportAutoCreateCourses').checked);
-      assert(autoCreateChecked, 'checkbox should default back to checked on a fresh file read');
 
       const coursesCountBefore = await page.evaluate(() => DB.trainingCourses.length);
       await page.evaluate(() => confirmTrainingPlanImport());
 
       const coursesAfter = await page.evaluate(() => DB.trainingCourses);
-      assertEqual(coursesAfter.length, coursesCountBefore + 1, 'exactly 1 new course should be created — 2 rows shared the same unmatched name, deduped to 1 create call');
-      const newCourse = coursesAfter.find((c) => c.name === 'Chương Trình Mới Chưa Có');
-      assert(newCourse, 'expected the new course to be auto-created with the exact name typed in the file');
-      assertEqual(newCourse.category, 'Nhập từ Excel', 'auto-created courses get a recognizable placeholder category');
+      assertEqual(coursesAfter.length, coursesCountBefore, 'no new trainingCourses should be created — the auto-create-on-import path has been removed entirely');
 
       const plansAfter = await page.evaluate(() => DB.trainingPlans);
       const feb = plansAfter.find((p) => p.month === '2027-02');
       const mar = plansAfter.find((p) => p.month === '2027-03');
-      assert(feb && mar, 'both rows sharing the new course name should have been imported');
-      assertEqual(feb.courseId, newCourse.id, 'row should be linked to the newly auto-created course');
-      assertEqual(mar.courseId, newCourse.id, 'the OTHER row with the same unmatched name should link to the SAME auto-created course (deduped), not a second one');
+      assert(feb && mar, 'both rows sharing the unmatched course name should still have been imported');
+      assertEqual(feb.courseId, null, 'unmatched row keeps courseId null — BP Đào Tạo gán tay sau nếu cần');
+      assertEqual(mar.courseId, null, 'the OTHER row with the same unmatched name should also keep courseId null');
       const jan = plansAfter.find((p) => p.month === '2027-01');
-      assertEqual(jan.courseId, courseId, 'an already-matched row must keep going through its real matched courseId, untouched by the auto-create step');
+      assertEqual(jan.courseId, courseId, 'an already-matched row must keep going through its real matched courseId');
     });
 
     // ===================== Theo Dõi Thực Hiện & Dashboard (kế hoạch vs số thật) =====================
@@ -409,6 +469,19 @@ async function main() {
       const dashByCourse = await page.evaluate((cid) => computeTrainingPlanDashboard({ month: '2026-06', courseId: cid, targetDept: '', audience: '' }), courseId);
       assertEqual(dashByCourse.plans.length, 1, 'filtering by courseId should only keep the course-linked plan');
       assertEqual(dashByCourse.overdue.length, 1, 'the course-linked June plan should be reported overdue (under-delivered, month already past)');
+
+      // byInstructor (10/2026, thay cho byDept cũ) — 2 kế hoạch tháng 6 phải tách thành 2 dòng khác nhau:
+      // 1 dòng "Nguyễn Thị A / Chuyên viên Đào tạo / Phòng CNTT" (kế hoạch gốc, đã điền "Ghi Nhận Thực
+      // Tế" ở kịch bản trước) + 1 dòng "(Chưa gán giảng viên)" (kế hoạch mới vừa thêm, không điền gì).
+      const named = dashAll.byInstructor.find((r) => r.instructor === 'Nguyễn Thị A');
+      assert(named, `expected a byInstructor row for "Nguyễn Thị A", got keys: ${dashAll.byInstructor.map((r) => r.instructor).join(', ')}`);
+      assertEqual(named.jobTitle, 'Chuyên viên Đào tạo', 'byInstructor row should carry the jobTitle of that group');
+      assertEqual(named.targetDept, 'Phòng CNTT', 'byInstructor row should carry the targetDept of that group');
+      assertEqual(named.participantsSum, 9, 'byInstructor row should sum actualParticipants across its plans');
+      assertEqual(named.avgRating, 10, 'byInstructor row should average instructorRating across its plans (only this 1 plan has a rating)');
+      const unnamed = dashAll.byInstructor.find((r) => r.instructor === '(Chưa gán giảng viên)');
+      assert(unnamed, 'expected a fallback byInstructor row for the plan with no instructor filled in');
+      assertEqual(unnamed.avgRating, null, 'a plan with no instructorRating filled in should average to null, not 0');
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);

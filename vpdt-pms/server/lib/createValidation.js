@@ -5058,6 +5058,23 @@ function normalizeTrainingPlanFields(payload, appData) {
   payload.plannedClasses = toNonNegInt(payload.plannedClasses);
   payload.plannedTrainees = toNonNegInt(payload.plannedTrainees);
   payload.plannedHours = toNonNegNum(payload.plannedHours);
+
+  // Ghi Nhận Thực Tế (10/2026, theo yêu cầu BP Đào Tạo) — 6 field điền TAY sau khi đã tổ chức đào tạo,
+  // thuần ghi chú bổ sung, KHÔNG đối chiếu/thay thế actualClasses/actualTrainees/actualHours (vẫn tính
+  // SỐNG từ trainingClasses/trainingRegistrations như cũ, xem getTrainingPlanActualStats() ở
+  // module-internalcomms-daotao.js). instructorRating để null (không phải 0) khi bỏ trống — phân biệt
+  // "chưa chấm điểm" với "chấm 0 điểm" khi tính điểm trung bình ở breakdown Theo Giảng Viên.
+  payload.instructor = payload.instructor ? String(payload.instructor).trim().slice(0, 200) : '';
+  payload.jobTitle = payload.jobTitle ? String(payload.jobTitle).trim().slice(0, 150) : '';
+  payload.actualTrainingDate = payload.actualTrainingDate ? String(payload.actualTrainingDate).trim().slice(0, 10) : '';
+  payload.actualDuration = payload.actualDuration ? String(payload.actualDuration).trim().slice(0, 100) : '';
+  payload.actualParticipants = toNonNegInt(payload.actualParticipants);
+  if (payload.instructorRating === '' || payload.instructorRating == null) {
+    payload.instructorRating = null;
+  } else {
+    const rating = Number(payload.instructorRating);
+    payload.instructorRating = Number.isFinite(rating) ? Math.max(0, Math.min(10, Math.round(rating * 10) / 10)) : null;
+  }
 }
 
 // Khoá so trùng 1 dòng Kế Hoạch Đào Tạo = Tháng + Chương Trình + Đơn Vị — CÙNG ý nghĩa nghiệp vụ với
