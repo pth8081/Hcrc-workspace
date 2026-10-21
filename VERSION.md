@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**27.96** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.97 (2026-11): Vá LỚP LỖI 409 GIẢ KHÁC — dbKey lồng 2 cấp (Phê Duyệt Giá Bán Lẻ/Bán Buôn, Văn Bản Trình theo loại) báo xung đột sai khi 2 thay đổi thật ra KHÁC nhánh lồng
+
+Theo yêu cầu người dùng "rà soát một lượt các module xem còn lỗi như ảnh nữa không" (ảnh chụp đúng cảnh
+báo "⚠️ Dữ liệu 'itPriceDeptWorkflows' vừa bị người khác thay đổi" ở màn "Cấu Hình Quy Trình Phê Duyệt
+Giá Bán Lẻ Theo Phòng Ban") — quét lại TOÀN BỘ 195 điểm gọi `syncStorage()` trong hệ thống bằng script
+đối chiếu tự động: xác nhận lớp lỗi "thiếu baseline" (đã vá các đợt trước, task "Rà soát toàn hệ thống
+lỗi 409 giả") nay **sạch hoàn toàn** — không còn điểm nào thiếu `baseline` (2 trường hợp còn lại,
+`syncStorage('users'/'deptViewScopeConfig', {silent:true})` ở `initDatabase()`, là lưu NGẦM 1 lần cho di
+trú dữ liệu cũ, đã có lý do rõ ràng, không phải lỗi).
+
+**Nhưng phát hiện 1 LỚP LỖI 409 GIẢ KHÁC, chưa từng rà soát**: với các `dbKey` LỒNG ĐÚNG 2 CẤP khoá
+object (`WF_MODULE_CONFIG[...].hasTypes`, module-workflow.js — VD `submissionTypeDeptWorkflows` =
+`{loại tờ trình: {phòng ban: config}}`, hoặc `itPriceDeptWorkflows` = `{phòng ban: {RETAIL/WHOLESALE:
+config}}` với `priceTypeNested`), cơ chế đối chiếu xung đột cũ (`retryObjectMapSaveAfterConflict()`) chỉ
+so sánh ĐÚNG 1 CẤP khoá (cấp 1) — admin A sửa "Phòng Mua hàng FMCG" ở tab Bán Lẻ trong khi admin B (hoặc
+"⚡ Áp Dụng Nhanh") sửa CÙNG "Phòng Mua hàng FMCG" nhưng ở tab Bán Buôn (2 nhánh HOÀN TOÀN ĐỘC LẬP) — hệ
+thống so sánh nguyên khối cấp 1 (`{RETAIL,WHOLESALE}`) thấy khác nhau, báo "xung đột thật" SAI dù 2 thay
+đổi không hề đụng nhau. Cùng lỗi y hệt cho `submissionTypeDeptWorkflows`: 2 phòng ban KHÁC nhau cùng 1
+loại tờ trình cũng bị báo nhầm là xung đột.
+
+**Bản vá**: thêm `retryNestedObjectMapSaveAfterConflict()`/`diffNestedObjectMapForConflictRetry()`
+(core.js) — đối chiếu/merge ĐÚNG ở cấp lồng thứ 2 (cặp `[cấp1,cấp2]`) thay vì nguyên khối cấp 1, khi nơi
+gọi truyền `syncStorage(key, {nestedMap: true})`. Wire vào 5 điểm biết chắc dbKey lồng đúng 2 cấp:
+`saveDeptWorkflowConfig()`/`saveAllDeptWorkflowConfigs()`/`resetDeptWorkflowConfig()`/
+`resetAllDeptWorkflowConfigs()` (module-itsupport-tier.js) và `applyQuickApplyConfig()`
+(module-workflow.js) — cả 5 đều truyền `nestedMap: !!WF_MODULE_CONFIG[...].hasTypes`. Xung đột THẬT
+(đúng cặp [phòng ban, nhánh] mình vừa sửa bị đổi ở nơi khác) vẫn báo lỗi đúng như cũ, không bị nới lỏng.
+
+**Test**: `test-syncstorage-nested-map-conflict-retry.js` (mới, 3 kịch bản) — xác nhận BẰNG `git stash`
+rằng 2/3 kịch bản THẬT SỰ fail trước bản vá (tái hiện đúng lỗi), PASS sau khi vá; kịch bản xung đột thật
+vẫn đúng cả 2 bên. Chạy lại toàn bộ test liên quan workflow/quick-apply/itprice/submission/meeting/budget
++ 2 bộ test poll-overwrite/generalized-conflict-retry hiện có — không regression.
+
+**Deploy**: chỉ copy `public/js/core.js` + `public/js/module-itsupport-tier.js` +
+`public/js/module-workflow.js` + `pm2 restart`.
 
 ## v27.96 (2026-11): Điều tra + vá bài test "⚡ Áp Dụng Nhanh" chạy không ổn định (test-adv-workflow-tab-deep.js) — xác nhận KHÔNG phải lỗi sản phẩm
 

@@ -118,6 +118,13 @@ const WF_MODULE_CONFIG = {
   // OPERATION_REPAIR_ESTIMATE đã xoá khỏi đây.
 };
 
+// dbKey nào LỒNG ĐÚNG 2 CẤP khoá object (cfg.hasTypes — type/dept thường, hoặc dept/loại giá với
+// priceTypeNested) — dùng để quyết định có cần `syncStorage(key, {nestedMap: true})` hay không ở MỌI nơi
+// ghi vào các dbKey này (xem chú thích đầy đủ tại retryNestedObjectMapSaveAfterConflict(), core.js; nơi
+// gọi: saveDeptWorkflowConfig()/saveAllDeptWorkflowConfigs()/resetDeptWorkflowConfig()/
+// resetAllDeptWorkflowConfigs() ở module-itsupport-tier.js, VÀ applyQuickApplyConfig() ngay dưới).
+const WF_NESTED_MAP_DB_KEYS = new Set(Object.values(WF_MODULE_CONFIG).filter(c => c.hasTypes).map(c => c.dbKey));
+
 // ===== "⚡ Áp Dụng Nhanh" (sub-tab riêng "Hệ Thống > Áp Dụng Nhanh") — set NHANH cùng 1 mẫu quy trình
 // (workflowId, tức số bước) cho MỌI phòng ban/mức CHƯA từng được admin cấu hình riêng, trong ĐÚNG phạm
 // vi các module admin chọn cho TỪNG cấu hình (DB.quickApplyConfigs — nhiều cấu hình độc lập, mỗi cấu
@@ -534,7 +541,9 @@ async function applyQuickApplyConfig(configId) {
     // baseline (11/2026, LỖI ĐÃ VÁ — người dùng báo lỗi 409 giả xảy ra nhiều ở các màn Cấu Hình Quy
     // Trình & "⚡ Áp Dụng Nhanh"): snapshot[key] vốn đã chụp sẵn ở trên nhưng trước đây KHÔNG truyền cho
     // syncStorage() — xem chú thích đầy đủ tại retryObjectMapSaveAfterConflict() ở core.js cho lý do.
-    const saved = await syncStorage(key, { baseline: snapshot[key] });
+    // nestedMap (11/2026, LỖI ĐÃ VÁ KHÁC cùng đợt): key thuộc WF_NESTED_MAP_DB_KEYS (hasTypes) cần đối
+    // chiếu xung đột ĐÚNG cấp lồng thứ 2 — xem chú thích đầy đủ tại retryNestedObjectMapSaveAfterConflict().
+    const saved = await syncStorage(key, { baseline: snapshot[key], nestedMap: WF_NESTED_MAP_DB_KEYS.has(key) });
     if (saved) {
       savedKeys.push(key);
     } else {

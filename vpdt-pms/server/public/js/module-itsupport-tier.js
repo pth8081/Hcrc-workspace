@@ -381,7 +381,8 @@ async function resetDeptWorkflowConfig(dept) {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   clearDeptWorkflowConfig(dbKey, dept);
-  if (!await syncStorage(dbKey, { baseline: snapshot })) {
+  // nestedMap: xem chú thích đầy đủ ở saveAllDeptWorkflowConfigs() (cùng lý do/khuôn).
+  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!WF_MODULE_CONFIG[activeWfMod].hasTypes })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -406,7 +407,8 @@ async function resetAllDeptWorkflowConfigs() {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   targetDepts.forEach(dept => clearDeptWorkflowConfig(dbKey, dept));
-  if (!await syncStorage(dbKey, { baseline: snapshot })) {
+  // nestedMap: xem chú thích đầy đủ ở saveAllDeptWorkflowConfigs() (cùng lý do/khuôn).
+  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!WF_MODULE_CONFIG[activeWfMod].hasTypes })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -435,7 +437,8 @@ async function saveDeptWorkflowConfig(dept) {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   writeDeptWorkflowConfig(dbKey, dept, result.config);
-  if (!await syncStorage(dbKey, { baseline: snapshot })) {
+  // nestedMap: xem chú thích đầy đủ ở saveAllDeptWorkflowConfigs() ngay dưới (cùng lý do/khuôn).
+  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!WF_MODULE_CONFIG[activeWfMod].hasTypes })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -468,7 +471,11 @@ async function saveAllDeptWorkflowConfigs() {
 
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   collected.forEach(r => writeDeptWorkflowConfig(dbKey, r.dept, r.config));
-  if (!await syncStorage(dbKey, { baseline: snapshot })) {
+  // nestedMap (xem chú thích đầy đủ tại retryNestedObjectMapSaveAfterConflict(), core.js): dbKey LỒNG 2
+  // CẤP (hasTypes — type/dept hoặc priceTypeNested — dept/loại giá) cần đối chiếu xung đột ĐÚNG cấp lồng
+  // thứ 2, không phải nguyên khối cấp 1 (tránh báo xung đột SAI giữa 2 nhánh lồng độc lập của CÙNG 1 khoá
+  // cấp 1, VD 2 phòng ban khác nhau CÙNG 1 loại tờ trình, hoặc CÙNG 1 phòng ban khác nhánh RETAIL/WHOLESALE).
+  if (!await syncStorage(dbKey, { baseline: snapshot, nestedMap: !!WF_MODULE_CONFIG[activeWfMod].hasTypes })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;

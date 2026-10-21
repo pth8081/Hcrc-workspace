@@ -6917,6 +6917,81 @@ async function retryObjectMapSaveAfterConflict(key, baseline, desired) {
   return { retried: true, merged, freshVersion };
 }
 
+// LỖI THẬT đã vá (11/2026, người dùng báo lại đúng cảnh báo 409 ở màn "Cấu Hình Quy Trình Phê Duyệt Giá
+// Bán Lẻ/Bán Buôn Theo Phòng Ban" — xác nhận đây là 1 lớp lỗi 409 giả KHÁC, chưa từng rà soát trước đây):
+// retryObjectMapSaveAfterConflict() ở trên chỉ đối chiếu đúng 1 CẤP khoá — với các dbKey LỒNG 2 CẤP
+// (WF_MODULE_CONFIG[...].hasTypes, VD submissionTypeDeptWorkflows = {loại: {phòng ban: config}},
+// itPriceDeptWorkflows = {phòng ban: {RETAIL/WHOLESALE: config}} — xem priceTypeNested), "khoá" đối chiếu
+// đúng nghĩa phải là CẶP (cấp 1, cấp 2), không phải chỉ cấp 1: admin A sửa "Phòng Mua hàng FMCG" ở tab
+// "Bán Lẻ" trong khi admin B (hoặc "⚡ Áp Dụng Nhanh") sửa "Phòng Mua hàng FMCG" ở tab "Bán Buôn" — 2 thay
+// đổi này HOÀN TOÀN ĐỘC LẬP (khác nhánh RETAIL/WHOLESALE), nhưng retryObjectMapSaveAfterConflict() đối
+// chiếu nguyên khối `desired['Phòng Mua hàng FMCG']` ({RETAIL:...,WHOLESALE:...}) với bản server mới nhất
+// -> thấy KHÁC (vì nhánh WHOLESALE vừa bị admin B đổi) -> báo "genuineConflict" SAI, dù admin A chỉ đụng
+// đúng nhánh RETAIL, không hề xung đột thật với admin B. Cùng lỗi y hệt cho MỌI dbKey có `hasTypes`
+// (submissionTypeDeptWorkflows: 2 phòng ban khác nhau CÙNG 1 loại tờ trình cũng bị báo nhầm là xung đột).
+// Hàm này mirror retryObjectMapSaveAfterConflict() nhưng đối chiếu/merge ĐÚNG ở cấp lồng thứ 2 (cặp khoá
+// [cấp1, cấp2]) thay vì cấp 1 — CHỈ dùng khi nơi gọi biết chắc dbKey đó LỒNG ĐÚNG 2 CẤP (truyền
+// `retryOpts.nestedMap: true` ở syncStorage(), xem saveDeptWorkflowConfig()/applyQuickApplyConfig()).
+function diffNestedObjectMapForConflictRetry(baseline, desired) {
+  const base = baseline || {};
+  const des = desired || {};
+  const outerKeys = new Set([...Object.keys(base), ...Object.keys(des)]);
+  const addedPaths = [];
+  const removedPaths = [];
+  const modifiedPaths = [];
+  outerKeys.forEach((outer) => {
+    const baseInner = (base[outer] && typeof base[outer] === 'object' && !Array.isArray(base[outer])) ? base[outer] : {};
+    const desInner = (des[outer] && typeof des[outer] === 'object' && !Array.isArray(des[outer])) ? des[outer] : {};
+    const innerKeys = new Set([...Object.keys(baseInner), ...Object.keys(desInner)]);
+    innerKeys.forEach((inner) => {
+      const hasBase = Object.prototype.hasOwnProperty.call(baseInner, inner);
+      const hasDes = Object.prototype.hasOwnProperty.call(desInner, inner);
+      if (hasDes && !hasBase) addedPaths.push([outer, inner]);
+      else if (hasBase && !hasDes) removedPaths.push([outer, inner]);
+      else if (hasBase && hasDes && !deepEqualJson(baseInner[inner], desInner[inner])) modifiedPaths.push([outer, inner]);
+    });
+  });
+  return { addedPaths, removedPaths, modifiedPaths };
+}
+async function retryNestedObjectMapSaveAfterConflict(key, baseline, desired) {
+  const { addedPaths, removedPaths, modifiedPaths } = diffNestedObjectMapForConflictRetry(baseline, desired);
+  const touchedPaths = [...removedPaths, ...modifiedPaths];
+  if (touchedPaths.length === 0 && addedPaths.length === 0) return { retried: false };
+
+  let res;
+  try {
+    res = await fetch(`/api/data/${key}`);
+  } catch (e) {
+    return { retried: false };
+  }
+  if (!res.ok) return { retried: false };
+  const freshVersion = res.headers.get('ETag');
+  const freshObj = await res.json().catch(() => null);
+  if (!freshVersion || !freshObj || typeof freshObj !== 'object' || Array.isArray(freshObj)) return { retried: false };
+
+  const base = baseline || {};
+  for (const [outer, inner] of touchedPaths) {
+    const freshInner = (freshObj[outer] && typeof freshObj[outer] === 'object' && !Array.isArray(freshObj[outer])) ? freshObj[outer] : {};
+    const baseInner = (base[outer] && typeof base[outer] === 'object' && !Array.isArray(base[outer])) ? base[outer] : {};
+    if (!deepEqualJson(freshInner[inner] ?? null, (inner in baseInner) ? baseInner[inner] : null)) {
+      return { retried: false, genuineConflict: true };
+    }
+  }
+
+  // Không đụng đúng cặp [cấp1,cấp2] nào của mình -> áp lại đúng phần thêm/sửa/xoá lên bản MỚI NHẤT từ
+  // server (giữ nguyên mọi cặp KHÔNG LIÊN QUAN mà nơi khác vừa ghi, kể cả cặp khác trong CÙNG cấp 1).
+  const merged = JSON.parse(JSON.stringify(freshObj));
+  removedPaths.forEach(([outer, inner]) => { if (merged[outer]) delete merged[outer][inner]; });
+  [...modifiedPaths, ...addedPaths].forEach(([outer, inner]) => {
+    if (!merged[outer] || typeof merged[outer] !== 'object' || Array.isArray(merged[outer])) merged[outer] = {};
+    merged[outer][inner] = desired[outer][inner];
+  });
+  // Dọn gọn nhánh cấp 1 rỗng hẳn sau khi xoá (mirror đúng cleanup của clearDeptWorkflowConfig()).
+  removedPaths.forEach(([outer]) => { if (merged[outer] && Object.keys(merged[outer]).length === 0) delete merged[outer]; });
+
+  return { retried: true, merged, freshVersion };
+}
+
 async function syncStorageOnce(key, silent, baseline, retryOpts) {
   // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
   // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
@@ -6977,12 +7052,14 @@ async function syncStorageOnce(key, silent, baseline, retryOpts) {
         // thì vẫn gộp được, chỉ báo conflict thật khi ĐÚNG field mình sửa bị đổi) ->
         // retryObjectMapSaveAfterConflict() (xem chú thích đầy đủ tại hàm đó, ngay trên
         // retryUsersSaveAfterConflict()).
-        const mode = key === 'users' ? 'users' : (Array.isArray(DB[key]) ? 'array' : 'object-map');
+        const mode = key === 'users' ? 'users' : (Array.isArray(DB[key]) ? 'array' : (retryOpts?.nestedMap ? 'nested-object-map' : 'object-map'));
         const retryResult = mode === 'users'
           ? await retryUsersSaveAfterConflict(baseline, DB.users)
           : mode === 'array'
             ? await retryArraySaveAfterConflict(key, baseline, DB[key], { keyFn: retryOpts?.arrayKeyFn, extraConflictCheck: retryOpts?.extraConflictCheck })
-            : await retryObjectMapSaveAfterConflict(key, baseline, DB[key]);
+            : mode === 'nested-object-map'
+              ? await retryNestedObjectMapSaveAfterConflict(key, baseline, DB[key])
+              : await retryObjectMapSaveAfterConflict(key, baseline, DB[key]);
         if (retryResult.retried) {
           DB[key] = retryResult.merged;
           DB._versions[key] = retryResult.freshVersion;
@@ -7072,10 +7149,16 @@ async function syncStorageOnce(key, silent, baseline, retryOpts) {
 // phẳng (depts/stores/jobTitles/cats/...), VÀ object cấu hình đơn dạng phẳng (emailConfig,
 // operationOrderApiConfig — mỗi field cấu hình tự nhiên là 1 "khoá" hợp lệ để
 // retryObjectMapSaveAfterConflict() merge độc lập) đều dùng được NGAY, không cần truyền gì thêm.
+// opts.nestedMap (tuỳ chọn, 11/2026): CHỈ cần khi key LỒNG ĐÚNG 2 CẤP khoá object (VD
+// submissionTypeDeptWorkflows = {loại: {phòng ban: config}}, itPriceDeptWorkflows = {phòng ban:
+// {RETAIL/WHOLESALE: config}}, xem WF_MODULE_CONFIG[...].hasTypes) — đối chiếu/merge xung đột ĐÚNG ở cấp
+// lồng thứ 2 (cặp [cấp1,cấp2]) qua retryNestedObjectMapSaveAfterConflict() thay vì nguyên khối cấp 1,
+// tránh báo xung đột SAI khi 2 thay đổi thật ra KHÁC nhánh lồng của CÙNG 1 khoá cấp 1 (VD admin A sửa
+// phòng ban X ở nhánh RETAIL, admin B/⚡ Áp Dụng Nhanh sửa CÙNG phòng ban X nhưng nhánh WHOLESALE).
 function syncStorage(key, opts) {
   const silent = !!opts?.silent;
   const baseline = opts?.baseline || opts?.usersBaseline || null;
-  const retryOpts = { arrayKeyFn: opts?.arrayKeyFn, extraConflictCheck: opts?.extraConflictCheck };
+  const retryOpts = { arrayKeyFn: opts?.arrayKeyFn, extraConflictCheck: opts?.extraConflictCheck, nestedMap: !!opts?.nestedMap };
   try {
     const previous = syncStorageQueues[key] || Promise.resolve();
     // .then(fn, fn): chạy lượt kế tiếp dù lượt trước lỗi/bị 409 — 1 lần lỗi không được phép chặn mãi
