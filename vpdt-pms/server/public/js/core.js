@@ -7003,6 +7003,28 @@ async function syncStorageOnce(key, silent, baseline, retryOpts) {
     // thất bại. Đọc đúng body.error server đã trả (route luôn trả {error: "..."} cho lỗi nghiệp vụ, xem
     // routes/data.js) trước khi rơi về thông báo mặc định.
     if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    // LỖI NGHIÊM TRỌNG ĐÃ VÁ (11/2026, người dùng báo "hôm nay phát sinh rất nhiều lỗi không lưu được
+    // khi cấu hình" sau đợt vá 409 giả — xác nhận qua repro thật, KHÔNG phải 409): nhịp poll Hộp Thư Phê
+    // Duyệt (initDatabase() gọi lại MỖI 3 GIÂY, xem APPROVAL_POLL_INTERVAL_MS/runApprovalPollTick()) tự
+    // GET /api/data rồi GÁN THẲNG `DB[key] = data[key] || []` cho MỌI key không thuộc nhóm lazy — nếu
+    // nhịp poll đó rơi ĐÚNG vào khoảng đang gửi POST này (giữa lúc gửi và lúc nhận phản hồi, network có
+    // độ trễ thật), GET của poll đọc được bản server TỪ TRƯỚC KHI POST này kịp tới nơi, poll ghi đè
+    // DB[key] bằng bản CŨ đó — khi POST này sau đó ĐƯỢC SERVER CHẤP NHẬN (saved=true, không hề có lỗi
+    // 409 hay bất kỳ alert nào), DB[key] trong bộ nhớ trình duyệt vẫn giữ bản CŨ poll vừa ghi đè, "mất"
+    // đúng phần admin vừa thêm/sửa dù ĐÃ lưu đúng trên server (F5 lại thấy đúng, chỉ sai hiển thị TRONG
+    // PHIÊN hiện tại) — đã có 1 đợt vá RIÊNG LẺ cho đúng 1 trường hợp (learnLicenseType() ở
+    // module-tailieu.js, dời cập nhật cục bộ xuống SAU mọi await) nhưng đó không phải cách tổng quát,
+    // mọi hàm lưu catalog/cấu hình khác (saveDept()/addStoreToCatalog()/saveGenericSimpleCatalogEntry()/
+    // ...) đều mở theo đúng khuôn same race này. Vá TẠI ĐÚNG 1 ĐIỂM HẸP NHẤT thay vì sửa từng nơi gọi:
+    // sau khi XÁC NHẬN server đã lưu đúng `payload` (biến đã chụp SẴN ở trên, chính là nội dung gửi đi),
+    // GÁN LẠI `DB[key] = payload` — bất kể poll có ghi đè gì ở giữa, kết quả CUỐI CÙNG vẫn luôn khớp
+    // ĐÚNG những gì vừa xác nhận lưu thành công. KHÔNG áp dụng cho "users" (payload đã CỐ Ý bỏ field
+    // mustChangePassword — gán thẳng sẽ xoá nhầm cờ "chưa đổi mật khẩu tạm" đang hiển thị đúng của MỌI
+    // user khác, xem chú thích `payload` ở trên) — nhánh "users" giữ nguyên hành vi cũ (rủi ro tương tự
+    // vẫn còn ở đó, nhưng hẹp hơn nhiều vì màn Quản Lý Người Dùng ít khi để mở dở >3s so với các màn danh
+    // mục/cấu hình đơn giản, và việc khôi phục đúng theo từng user cần hẳn 1 lượt merge riêng — để lại
+    // nếu người dùng báo thêm).
+    if (key !== 'users') DB[key] = payload;
     if (body.version) DB._versions[key] = body.version;
     // Lưu "permGroups" đồng bộ lại "users" như tác dụng phụ ở server (xem routes/data.js) — server trả
     // kèm version MỚI của "users" sau khi đồng bộ, cập nhật ngay để lượt lưu "users" kế tiếp không bị

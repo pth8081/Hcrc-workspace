@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**27.93** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.94** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.94 (2026-11): LỖI NGHIÊM TRỌNG KHÁC đã tìm ra + vá — lưu THÀNH CÔNG (không hề báo lỗi) nhưng dữ liệu "biến mất" do nhịp poll Hộp Thư Phê Duyệt ghi đè
+
+Theo phản hồi người dùng sau v27.93 ("hôm nay phát sinh rất nhiều lỗi kiểu vậy, không biết là do hệ
+thống sửa gì mà bị như thế, tôi nghĩ là lỗi nghiêm trọng") — rà soát lại sâu hơn thay vì chỉ khẳng định
+lại kết quả cũ, và tìm ra MỘT LỚP LỖI HOÀN TOÀN KHÁC với lớp "409 giả" đã vá ở v27.92/v27.93 — nghiêm
+trọng hơn vì **không hề có bất kỳ thông báo lỗi nào**, admin tưởng đã lưu xong nhưng dữ liệu lại mất.
+
+**Nguyên nhân gốc (xác nhận bằng kịch bản tái hiện thật, không suy đoán)**: Hộp Thư Phê Duyệt chạy 1
+nhịp poll ngầm **mỗi 3 giây** (`APPROVAL_POLL_INTERVAL_MS`, `runApprovalPollTick()` ở core.js) — mỗi khi
+danh sách chờ ký đổi (rất dễ xảy ra trong 1 hệ thống đang hoạt động, bất kỳ ai gửi/duyệt 1 hồ sơ bất kỳ ở
+module khác cũng đổi) và không có modal nào đang mở, nhịp poll gọi `initDatabase()` — tự tải lại
+`/api/data` rồi **gán thẳng** `DB[key] = data[key] || []` cho MỌI danh mục/cấu hình không thuộc nhóm tải
+lười (depts/stores/jobTitles/formTemplates/emailConfig/... — đúng các key vừa được vá baseline ở 2 đợt
+trước). Nếu nhịp poll đó rơi ĐÚNG vào khoảng đang gửi 1 lệnh lưu khác (giữa lúc gửi POST và lúc nhận
+phản hồi — có độ trễ mạng thật), GET của poll đọc được bản server TỪ TRƯỚC KHI POST đó kịp tới nơi, poll
+ghi đè DB[key] bằng bản CŨ — khi POST đó sau đó ĐƯỢC SERVER CHẤP NHẬN HOÀN TOÀN BÌNH THƯỜNG (không hề có
+409, không hề có alert nào), DB[key] trong bộ nhớ trình duyệt vẫn giữ bản CŨ poll vừa ghi đè, "mất" đúng
+phần admin vừa thêm/sửa dù ĐÃ lưu đúng trên server (F5 lại thấy đúng ngay — chỉ sai hiển thị TRONG PHIÊN
+hiện tại). Đã có 1 đợt vá RIÊNG LẺ cho đúng 1 trường hợp trước đây (`learnLicenseType()` ở
+module-tailieu.js, dời cập nhật cục bộ xuống SAU mọi await) nhưng không tổng quát — MỌI hàm lưu
+catalog/cấu hình khác trong hệ thống đều mở theo đúng khuôn race này.
+
+**Bản vá** (`core.js`, `syncStorageOnce()`): vá tại ĐÚNG 1 điểm hẹp nhất thay vì sửa từng nơi gọi — sau
+khi xác nhận server đã lưu đúng, **gán lại `DB[key] = payload`** (payload = chính nội dung vừa gửi đi và
+được server xác nhận lưu) — bất kể poll có ghi đè gì ở giữa, kết quả cuối cùng vẫn luôn khớp đúng những
+gì vừa lưu thành công. **Không áp dụng cho `"users"`** (payload cố ý thiếu field `mustChangePassword` do
+server tự quản lý riêng — gán thẳng sẽ xoá nhầm cờ "chưa đổi mật khẩu tạm" đang hiển thị đúng của MỌI
+user khác; giữ nguyên hành vi cũ cho key này).
+
+**Test**: viết mới `tests/test-syncstorage-poll-overwrite-race.js` — tái hiện ĐÚNG race (fetch giả lập có
+độ trễ mạng, mô phỏng poll ghi đè DB[key] giữa lúc lưu đang "bay") cho cả mảng chuỗi phẳng lẫn object map,
+xác nhận trước khi vá lỗi THẬT SỰ xảy ra (DB[key] mất dữ liệu dù lưu thành công), sau khi vá thì không
+còn — PASS 3/3 (gồm 1 kịch bản xác nhận "users" vẫn giữ nguyên hành vi cũ, không bị ảnh hưởng). Chạy lại
+~25 bộ test liên quan hiện có (hơn 600 kịch bản: syncstorage/catalog-rename/workflow/quick-apply/
+object-catalog/approval-polling/approval-hub/license/prefetch/lazy-load/doc-upload...) — TOÀN BỘ PASS.
+Phát hiện thêm: 1 test đã biết trước có lỗi (`test-adv-workflow-tab-deep.js`, bước "Áp Dụng Nhanh") trước
+đây thất bại SỚM HƠN (bước B4) — xác nhận bằng cách tắt tạm bản vá rồi chạy lại, lỗi B4 vẫn còn y nguyên
+KHÔNG LIÊN QUAN gì tới bản vá hôm nay — bản vá này thực ra giúp test tiến xa hơn (B4 giờ PASS), chỉ còn
+lộ ra 1 lỗi KHÁC sâu hơn ở bước B5 (logic riêng "Xem Trước không tự ghi đè cấu hình đã có" của Áp Dụng
+Nhanh, không liên quan tới việc lưu dữ liệu) — nêu rõ để người dùng quyết định có cần vá tiếp hay không,
+không tự ý mở rộng phạm vi sửa ngoài yêu cầu hiện tại.
+
+**Deploy**: chỉ copy `public/js/core.js` + `pm2 restart`, không đổi `schema.sql`/biến môi trường/
+`package.json` dependencies.
 
 ## v27.93 (2026-11): Rà soát toàn hệ thống lỗi 409 giả — vá thêm ~50 điểm trên 11 file, tổng quát hoá cơ chế thử lại
 
