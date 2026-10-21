@@ -216,6 +216,75 @@ function renderDeptGroupList() {
   });
 }
 
+// ===== laborContractTypes ("Loại HĐLĐ", 11/2026 — xem defaults.js) — mảng OBJECT {id,label,
+// isSystemDefault,order} dùng CHUNG cho "Loại HĐLĐ Dự Kiến" (hrpOnbPlannedContractType, Onboarding) +
+// "Loại Hợp Đồng" thật (hrcNewContractType, Hợp Đồng Lao Động). 3 mã HỆ THỐNG (PROBATION/FIXED_TERM/
+// INDEFINITE, isSystemDefault:true) khoá XOÁ (🔒, mirror isSystemDefault ở
+// module-admin-submissiongroups.js) — CHỈ đổi được label, id giữ cố định vì lib/laborContract.js dùng
+// CHÍNH các mã này (literal) để tính tiến trình thử việc + áp giới hạn pháp luật. Loại TUỲ BIẾN admin
+// tự thêm: Thêm/Sửa tên/Xoá tự do, KHÔNG áp giới hạn gia hạn nào (theo yêu cầu người dùng — "không cần,
+// để tự do"); server (assertLaborContractTypesSafeToSave(), lib/createValidation.js) vẫn chặn xoá nếu
+// đang được hrProcesses/laborContracts tham chiếu. =====
+async function saveLaborContractType(e) {
+  e.preventDefault();
+  const label = document.getElementById('txtLaborContractTypeName').value.trim();
+  if (!label) return;
+  const list = DB.laborContractTypes || (DB.laborContractTypes = []);
+  if (list.some(t => t.label === label)) return alert('Loại HĐLĐ này đã có trong danh mục!');
+  const prevList = list.map(t => ({ ...t }));
+  const newId = 'CUSTOM_' + Date.now().toString(36).toUpperCase();
+  const order = Math.max(-1, ...list.map(t => t.order ?? 0)) + 1;
+  DB.laborContractTypes = [...list, { id: newId, label, isSystemDefault: false, order }];
+  const saved = await syncStorage('laborContractTypes', { baseline: prevList });
+  if (!saved) { DB.laborContractTypes = prevList; return; }
+  logSystemAction('CONFIG', 'ADD_LABOR_CONTRACT_TYPE', `Thêm loại HĐLĐ mới [${label}]`, 'SUCCESS', newId);
+  document.getElementById('txtLaborContractTypeName').value = '';
+  renderLaborContractTypeList();
+}
+
+async function renameLaborContractType(id) {
+  const t = (DB.laborContractTypes || []).find(x => x.id === id);
+  if (!t) return;
+  const newLabel = String(prompt('Tên hiển thị mới:', t.label) || '').trim();
+  if (!newLabel || newLabel === t.label) return;
+  if ((DB.laborContractTypes || []).some(x => x.id !== id && x.label === newLabel)) return alert('Tên này đã có trong danh mục!');
+  const prevLabel = t.label;
+  const prevList = DB.laborContractTypes.map(x => ({ ...x }));
+  t.label = newLabel;
+  const saved = await syncStorage('laborContractTypes', { baseline: prevList });
+  if (!saved) { t.label = prevLabel; renderLaborContractTypeList(); return; }
+  logSystemAction('CONFIG', 'RENAME_LABOR_CONTRACT_TYPE', `Đổi tên loại HĐLĐ [${id}] -> [${newLabel}]`, 'SUCCESS', id);
+  renderLaborContractTypeList();
+}
+
+async function deleteLaborContractType(id) {
+  const t = (DB.laborContractTypes || []).find(x => x.id === id);
+  if (!t) return;
+  if (t.isSystemDefault) return alert('Đây là loại mặc định hệ thống — không xoá được (chỉ đổi tên hiển thị).');
+  if (!confirm(`Xoá loại HĐLĐ "${t.label}"? Chỉ xoá được nếu KHÔNG còn hồ sơ nào đang dùng loại này (server sẽ tự kiểm tra lại).`)) return;
+  const prevList = (DB.laborContractTypes || []).map(x => ({ ...x }));
+  DB.laborContractTypes = (DB.laborContractTypes || []).filter(x => x.id !== id);
+  const saved = await syncStorage('laborContractTypes', { baseline: prevList });
+  if (!saved) { DB.laborContractTypes = prevList; renderLaborContractTypeList(); return; }
+  logSystemAction('CONFIG', 'DELETE_LABOR_CONTRACT_TYPE', `Xoá loại HĐLĐ [${t.label}]`, 'SUCCESS', id);
+  renderLaborContractTypeList();
+}
+
+function renderLaborContractTypeList() {
+  const wrap = document.getElementById('laborContractTypeListWrap');
+  if (!wrap) return;
+  const list = [...(DB.laborContractTypes || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  wrap.innerHTML = list.map(t => `
+    <div class="bg-white rounded border p-2 flex items-center justify-between gap-2">
+      <span class="font-semibold text-xs">${escapeHtml(t.label)}${t.isSystemDefault ? ' <span class="text-[10px] text-fuchsia-600">🔒 Mặc định hệ thống</span>' : ''}</span>
+      <div class="space-x-2 whitespace-nowrap">
+        <button type="button" data-op="renameLaborContractType" data-arg0="${escapeHtml(t.id)}" class="text-blue-600 hover:text-blue-800 text-xs font-bold">✏️ Sửa tên</button>
+        ${t.isSystemDefault ? '' : `<button type="button" data-op="deleteLaborContractType" data-arg0="${escapeHtml(t.id)}" class="text-red-600 hover:text-red-800 text-xs font-bold">🗑️ Xoá</button>`}
+      </div>
+    </div>
+  `).join('') || '<p class="text-[11px] text-gray-400 italic">Chưa có loại HĐLĐ nào.</p>';
+}
+
 // ===== Danh Mục Siêu Thị (DB.stores) — TÁCH RIÊNG khỏi DB.depts (xem defaults.js), cùng khuôn CRUD
 // đơn giản với Phòng Ban ở trên (không kiểm tra usage trước khi xóa) — dùng cho Vị Trí "Siêu Thị" ở
 // form Người Dùng và module Đồng Phục (xem renderUniformAllocationBlocks()). =====

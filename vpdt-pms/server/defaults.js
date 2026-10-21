@@ -237,6 +237,21 @@ const DEFAULTS = {
   // đúng Set hằng cũ MARITAL_STATUSES ở lib/employeeProfile.js (giờ chỉ còn là fallback).
   maritalStatuses: ['Độc thân', 'Đã kết hôn', 'Đã ly hôn'],
 
+  // laborContractTypes (11/2026, theo yêu cầu người dùng "loại hợp đồng Dự kiến đang chưa có trong danh
+  // mục, cho vào danh mục cho chuẩn" — xác nhận dùng CHUNG 1 danh mục cho CẢ "Loại HĐLĐ Dự Kiến"
+  // (hrProcesses.plannedContractType, Onboarding) lẫn "Loại Hợp Đồng" thật (laborContracts.contractType))
+  // — KHÁC khuôn flat-array ở trên: mảng OBJECT {id, label, isSystemDefault, order} vì cần phân biệt 3
+  // mã HỆ THỐNG khoá cứng (`id` CHÍNH LÀ mã nghiệp vụ PROBATION/FIXED_TERM/INDEFINITE mà
+  // lib/laborContract.js dùng để tính tiến trình thử việc -> chính thức + áp giới hạn pháp luật "tối đa
+  // 2 lần gia hạn Xác Định Thời Hạn" — xem CONTRACT_TYPES ở đó, KHÔNG đổi) với loại TUỲ BIẾN admin tự
+  // thêm (id tự sinh dạng chuỗi, KHÔNG áp giới hạn gia hạn nào — người dùng xác nhận "để tự do"). Đổi
+  // NHÃN (label) của 3 mã hệ thống không cần cascade gì (mọi nơi lưu `id` bất biến, không lưu label).
+  laborContractTypes: [
+    { id: 'PROBATION', label: 'Thử việc', isSystemDefault: true, order: 0 },
+    { id: 'FIXED_TERM', label: 'Xác định thời hạn', isSystemDefault: true, order: 1 },
+    { id: 'INDEFINITE', label: 'Vô thời hạn', isSystemDefault: true, order: 2 }
+  ],
+
   // deptCodeMap (10/2026, báo cáo rà soát mẫu Excel mới — "Mã bộ phận") — object {<tên bộ phận>: <mã>},
   // tự gán MỚI khi gặp tên bộ phận lần đầu (xem ensureDeptCode() ở routes/employeeProfile.js,
   // generateDeptCode() ở lib/employeeProfile.js) — KHÔNG seed tay trước, bắt đầu rỗng.

@@ -503,6 +503,15 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
   const employeeProfile = require('./employeeProfile');
   const usersByUsername = new Map((users || []).map(u => [u.username, u]));
   const processesById = new Map((hrProcesses || []).map(p => [p.id, p]));
+  // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem defaults.js): đọc trực tiếp qua
+  // getAppDataValue() (KHÔNG thêm tham số mới cho hàm này — tránh phải sửa lại toàn bộ lệnh gọi test ở
+  // trên đã cố định đúng 4-6 tham số) để cột "Loại HĐLĐ" (CHỈ XEM) hiển thị đúng nhãn cả cho loại TUỲ
+  // BIẾN admin tự thêm, không chỉ 3 mã hệ thống trong CONTRACT_TYPE_LABELS cố định. Bọc try/catch —
+  // nhiều test thuần (không DB) gọi thẳng hàm này, rơi về đúng CONTRACT_TYPE_LABELS cũ nếu không có DB.
+  let catalogContractTypeLabels = {};
+  try {
+    catalogContractTypeLabels = Object.fromEntries(((await getAppDataValue('laborContractTypes')) || []).map(t => [t.id, t.label]));
+  } catch (_) { /* không có DB (test thuần)/lỗi đọc — rơi về CONTRACT_TYPE_LABELS cố định bên dưới */ }
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet('Hồ Sơ Nhân Sự');
   sheet.columns = [
@@ -614,7 +623,7 @@ async function buildExportWorkbook(profiles, users, hrProcesses, contracts, dept
       managerUsername: wired.managerUsername || '', managerName: wired.managerName || '',
       managerManagerUsername: wired.managerManagerUsername || '', managerManagerName: wired.managerManagerName || '',
       resignationReason: wired.resignationReason || '', actualEndDateDisplay: toDisplayDateVN(wired.actualEndDate || wired.lastWorkingDate),
-      contractCode: c?.code || '', contractTypeLabel: c ? (CONTRACT_TYPE_LABELS[c.contractType] || c.contractType) : '',
+      contractCode: c?.code || '', contractTypeLabel: c ? (catalogContractTypeLabels[c.contractType] || CONTRACT_TYPE_LABELS[c.contractType] || c.contractType) : '',
       contractStatusLabel: c ? (CONTRACT_STATUS_LABELS[c.status] || c.status) : '',
       contractStartDate: toDisplayDateVN(c?.startDate), contractEndDate: toDisplayDateVN(c?.endDate),
       baseSalary: c?.baseSalary ?? '', responsibilityAllowance: c?.responsibilityAllowance ?? '',

@@ -211,8 +211,10 @@ function detectColumns(headerCells) {
 
 // Validate 1 giá trị theo ĐÚNG khuôn applyManualEdit() (lib/laborContract.js) nhưng KHÔNG mutate gì —
 // chỉ dùng để xem trước, server ghi thật ở bước confirm vẫn gọi lại applyManualEdit() y hệt (Zero-Trust,
-// không tin giá trị đã "xem trước" này).
-function validateEditableField(field, rawValue) {
+// không tin giá trị đã "xem trước" này). catalogTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem
+// defaults.js): mảng {id,label} đọc từ appData.laborContractTypes, cho phép gõ CẢ nhãn/mã của loại TUỲ
+// BIẾN admin tự thêm (không chỉ 3 mã hệ thống như trước).
+function validateEditableField(field, rawValue, catalogTypes) {
   if (field === 'startDate' || field === 'endDate') {
     const val = parseDateCell(rawValue);
     if (!val) return { present: false };
@@ -223,8 +225,10 @@ function validateEditableField(field, rawValue) {
   if (val === '' || val == null) return { present: false };
   switch (field) {
     case 'contractType': {
-      const code = CONTRACT_TYPE_LABEL_TO_CODE[val] || val;
-      if (!laborContract.CONTRACT_TYPES.has(code)) return { present: true, error: 'Loại HĐLĐ không hợp lệ (phải là Thử việc/Xác định thời hạn/Vô thời hạn, hoặc mã PROBATION/FIXED_TERM/INDEFINITE)' };
+      const catalogLabelToCode = Object.fromEntries((catalogTypes || []).map(t => [t.label, t.id]));
+      const catalogIds = new Set((catalogTypes || []).map(t => t.id));
+      const code = CONTRACT_TYPE_LABEL_TO_CODE[val] || catalogLabelToCode[val] || val;
+      if (!laborContract.CONTRACT_TYPES.has(code) && !catalogIds.has(code)) return { present: true, error: 'Loại HĐLĐ không hợp lệ (phải đúng tên/mã trong Danh Mục Loại HĐLĐ)' };
       return { present: true, value: code };
     }
     case 'baseSalary':
@@ -247,7 +251,7 @@ function validateEditableField(field, rawValue) {
 
 // 1 dòng file -> 1 dòng preview, hoặc null nếu coi như dòng trống (không có Mã NV) — cùng khuôn
 // rowToPreviewItem() ở lib/employeeProfileImport.js.
-function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile) {
+function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile, catalogTypes) {
   const get = (field) => (cols[field] !== undefined ? cells[cols[field]] : undefined);
   const employeeCode = toTrimmedString(get('employeeCode'));
   if (!employeeCode) return null;
@@ -263,7 +267,7 @@ function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, 
 
   const fields = {};
   for (const field of EDITABLE_FIELD_KEYS) {
-    const result = validateEditableField(field, get(field));
+    const result = validateEditableField(field, get(field), catalogTypes);
     if (result.present) {
       if (result.error) errors.push(result.error); else fields[field] = result.value;
     }
@@ -286,6 +290,7 @@ async function parseImportFile(buffer, appData) {
   const profiles = appData?.employeeProfiles || [];
   const users = appData?.users || [];
   const hrProcesses = appData?.hrProcesses || [];
+  const catalogTypes = appData?.laborContractTypes || [];
   const employeeProfile = require('./employeeProfile');
 
   let cols = null;
@@ -302,7 +307,7 @@ async function parseImportFile(buffer, appData) {
       }
       return true;
     }
-    const item = rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile);
+    const item = rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile, catalogTypes);
     if (item) items.push(item);
     if (items.length > MAX_ROWS_PER_IMPORT) { overLimit = true; return false; }
     return true;

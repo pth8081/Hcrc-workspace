@@ -5373,6 +5373,10 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
   try {
     const { freshUser } = await getFreshUser(req);
     assertContractManage(freshUser);
+    // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình): đọc 1 lần, truyền id các loại TUỲ
+    // BIẾN (không phải 3 mã hệ thống) vào applyManualEdit() để nó cũng chấp nhận — xem chú thích đầy đủ ở
+    // đó.
+    const laborContractTypesForEdit = await getAppDataValue('laborContractTypes');
     const result = await withLockedRecordForCollection('laborContracts', itemId, async (item) => {
       // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 10/2026, mức Cao — "giả mạo quyền sở hữu file"): trước đây
       // route này KHÔNG xác minh người sửa có thật sự là người vừa tải "Tệp hợp đồng" mới lên hay không
@@ -5382,7 +5386,7 @@ router.post('/laborContracts/:id/edit', async (req, res) => {
       // khác.
       laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
       const exemptFileUrls = item.fileUrl ? [item.fileUrl] : [];
-      laborContract.applyManualEdit(item, req.body, freshUser.username, freshUser.name);
+      laborContract.applyManualEdit(item, req.body, freshUser.username, freshUser.name, (laborContractTypesForEdit || []).map(t => t.id));
       await assertPayloadFileUrlsOwnedByUser({ fileUrl: item.fileUrl }, freshUser, { exemptFileUrls });
       return item;
     });
@@ -5409,6 +5413,7 @@ router.post('/laborContracts/apply-import', async (req, res) => {
     if (items.length > laborContractImport.MAX_ROWS_PER_IMPORT) {
       return res.status(400).json({ error: `Vượt quá ${laborContractImport.MAX_ROWS_PER_IMPORT} dòng/lần — vui lòng chia nhỏ.` });
     }
+    const laborContractTypesForImport = ((await getAppDataValue('laborContractTypes')) || []).map(t => t.id);
     const updated = [];
     const skipped = [];
     for (const row of items) {
@@ -5432,7 +5437,7 @@ router.post('/laborContracts/apply-import', async (req, res) => {
             throw new HttpError(409, 'Hợp đồng không còn ở trạng thái ĐANG HIỆU LỰC (ACTIVE) — có thể đã bị đóng giữa lúc xem trước và lúc xác nhận, vui lòng tải lại và thử lại');
           }
           laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
-          laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
+          laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name, laborContractTypesForImport);
           return item;
         });
         logLaborContractAction(req, freshUser, 'EDIT', result.code || String(target.id), `Sửa hợp đồng lao động [${result.code || target.id}] qua Nhập Excel hàng loạt`);
@@ -5469,6 +5474,7 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
     if (items.length > laborContractCreateImport.MAX_ROWS_PER_IMPORT) {
       return res.status(400).json({ error: `Vượt quá ${laborContractCreateImport.MAX_ROWS_PER_IMPORT} dòng/lần — vui lòng chia nhỏ.` });
     }
+    const laborContractTypesForCreateImport = ((await getAppDataValue('laborContractTypes')) || []).map(t => t.id);
     const created = [];
     const updated = [];
     const skipped = [];
@@ -5503,7 +5509,7 @@ router.post('/laborContracts/apply-create-import', async (req, res) => {
               throw new HttpError(409, 'Hợp đồng không còn ở trạng thái ĐANG HIỆU LỰC (ACTIVE) — có thể đã bị đóng giữa lúc xem trước và lúc xác nhận, vui lòng tải lại và thử lại');
             }
             laborContract.assertNotSelfDecidingLaborContract(freshUser, item);
-            laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name);
+            laborContract.applyManualEdit(item, row?.fields || {}, freshUser.username, freshUser.name, laborContractTypesForCreateImport);
             return item;
           });
           logLaborContractAction(req, freshUser, 'EDIT', result.code || String(target.id), `Ghi đè hợp đồng lao động [${result.code || target.id}] qua Nhập Excel TẠO MỚI hàng loạt`);

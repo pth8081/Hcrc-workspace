@@ -3,7 +3,10 @@
 // Đi qua đường CHUNG (POST /api/create/laborContracts, POST /api/records/laborContracts/:id/<action>)
 // — KHÁC module-hrprofile.js (dedicated router riêng /api/hr-profile/*) vì laborContracts KHÔNG cần
 // strip field theo vai trò người xem (chỉ 1 vai trò duy nhất được vào màn: hrContractManage/admin).
-const HRC_CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
+// HRC_CONTRACT_TYPE_LABELS ĐÃ GỘP vào laborContractTypeLabel() dùng chung (core.js, 11/2026 — danh mục
+// "Loại HĐLĐ" tự cấu hình, xem defaults.js::laborContractTypes) — không định nghĩa lại map riêng ở đây
+// nữa, tránh lệch nhãn với module-hrprofile.js (đã xảy ra thật: INDEFINITE lệch "Vô thời hạn"/"Không
+// xác định thời hạn" giữa 2 màn trước khi gộp).
 const HRC_STATUS_LABELS = {
   DRAFT: '📝 Nháp', ACTIVE: '✅ Đang hiệu lực', EXPIRED: '⌛ Hết hạn',
   TERMINATED: '⛔ Đã chấm dứt', SUPERSEDED: '🔄 Đã thay thế'
@@ -80,7 +83,7 @@ function renderHrContractTable() {
     <tr class="border-b hover:bg-gray-50">
       <td class="p-2 font-mono">${escapeHtml(c.code || '')}</td>
       <td class="p-2">${escapeHtml(c.employeeCode || '')}</td>
-      <td class="p-2">${escapeHtml(HRC_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType)}</td>
+      <td class="p-2">${escapeHtml(laborContractTypeLabel(c.contractType))}</td>
       <td class="p-2">${escapeHtml(HRC_STATUS_LABELS[c.status] || c.status)}</td>
       <td class="p-2">${escapeHtml(c.startDate || '')}</td>
       <td class="p-2 whitespace-nowrap">${escapeHtml(c.endDate || '(Vô thời hạn)')}${hrcExpiryBadgeHtml(c)}</td>
@@ -123,7 +126,7 @@ async function exportHrContractExcel() {
   ];
   const rows = list.map(c => ({
     employeeCode: c.employeeCode || '', fullName: nameByCode[c.employeeCode] || '',
-    contractTypeLabel: HRC_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType || '',
+    contractTypeLabel: laborContractTypeLabel(c.contractType),
     startDate: c.startDate || '', endDate: c.endDate || '(Vô thời hạn)', baseSalary: c.baseSalary,
     responsibilityAllowance: c.responsibilityAllowance, concurrentAllowance: c.concurrentAllowance,
     hazardAllowance: c.hazardAllowance, lunchAllowance: c.lunchAllowance,
@@ -198,6 +201,9 @@ function openHrContractCreateModal() {
   document.getElementById('hrContractCreateForm').reset();
   document.getElementById('hrcNewEmployeePickerWrap').classList.remove('hidden');
   document.getElementById('hrcNewEmployeeCodeManual').classList.add('hidden');
+  // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình) — dựng lại <option> mỗi lần mở modal
+  // (thay vì 3 <option> cố định trong HTML) để hiện cả loại tự thêm, xem populateLaborContractTypeSelect() ở core.js.
+  populateLaborContractTypeSelect('hrcNewContractType');
   renderDynamicInputsForModule('LABOR_CONTRACT', 'dynamicFieldsContainer_LABOR_CONTRACT');
   document.getElementById('hrContractCreateModal').classList.remove('hidden');
   loadHrcEmployeeDirectory();
@@ -385,7 +391,7 @@ function buildHrContractDetailHTML(c) {
     <div class="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded">
       <div><span class="text-gray-500">Mã HĐ:</span> <span class="font-mono font-semibold">${escapeHtml(c.code || '')}</span></div>
       <div><span class="text-gray-500">Mã NV:</span> <span class="font-semibold">${escapeHtml(c.employeeCode || '')}</span></div>
-      <div><span class="text-gray-500">Loại HĐ:</span> ${escapeHtml(HRC_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType)}</div>
+      <div><span class="text-gray-500">Loại HĐ:</span> ${escapeHtml(laborContractTypeLabel(c.contractType))}</div>
       <div><span class="text-gray-500">Trạng thái:</span> ${escapeHtml(HRC_STATUS_LABELS[c.status] || c.status)}</div>
       <div><span class="text-gray-500">Ngày hiệu lực:</span> ${escapeHtml(c.startDate || '')}</div>
       <div><span class="text-gray-500">Ngày hết hạn:</span> ${escapeHtml(c.endDate || '(Vô thời hạn)')}${hrcExpiryBadgeHtml(c)}</div>
@@ -743,7 +749,7 @@ function renderHrContractCreateImportPreviewBody() {
     return `<tr class="${!it.valid || it.hasActiveContract || it.duplicateInFile ? 'bg-amber-50' : ''}">
       <td class="p-1 font-mono">${escapeHtml(it.employeeCode)}</td>
       <td class="p-1">${escapeHtml(it.fullName || '')}</td>
-      <td class="p-1">${it.valid ? escapeHtml(HRC_CONTRACT_TYPE_LABELS[it.fields.contractType] || it.fields.contractType || '') : '-'}</td>
+      <td class="p-1">${it.valid ? escapeHtml(laborContractTypeLabel(it.fields.contractType)) : '-'}</td>
       <td class="p-1">${actionCell}</td>
       <td class="p-1">${statusCell}</td>
     </tr>`;
@@ -893,7 +899,7 @@ function renderHrContractBulkActivateBody() {
       <td class="p-1 font-mono">${escapeHtml(r.employeeCode)}</td>
       <td class="p-1">${escapeHtml(r.fullName)}</td>
       <td class="p-1 font-mono">${escapeHtml(r.code)}</td>
-      <td class="p-1">${escapeHtml(HRC_CONTRACT_TYPE_LABELS[r.contractType] || r.contractType || '')}</td>
+      <td class="p-1">${escapeHtml(laborContractTypeLabel(r.contractType))}</td>
       <td class="p-1">${escapeHtml(r.startDate || '')}</td>
       <td class="p-1">${escapeHtml(r.endDate || '(Vô thời hạn)')}</td>
       <td class="p-1">${noteCell}</td>

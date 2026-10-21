@@ -338,16 +338,21 @@ const MANUAL_EDIT_FIELD_LABELS = {
   probationSalaryRate: 'Tỷ lệ hưởng lương thử việc',
   fileUrl: 'Tệp hợp đồng', fileName: 'Tên tệp', dept: 'Phòng ban'
 };
-function applyManualEdit(contract, payload, actorUsername, actorName) {
+// extraValidTypeIds (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem defaults.js::laborContractTypes):
+// optional — mảng/Set id các loại hợp đồng admin đã tự thêm (ngoài 3 mã hệ thống PROBATION/FIXED_TERM/
+// INDEFINITE luôn được chấp nhận). Để mặc định (không truyền) giữ ĐÚNG hành vi cũ (chỉ 3 mã hệ thống) —
+// không phá vỡ các lệnh gọi/test hiện có đang gọi applyManualEdit() với đúng 4 tham số.
+function applyManualEdit(contract, payload, actorUsername, actorName, extraValidTypeIds) {
   const body = payload || {};
   const changes = [];
+  const extraIds = extraValidTypeIds ? new Set(extraValidTypeIds) : null;
   for (const field of MANUAL_EDITABLE_FIELDS) {
     if (!(field in body)) continue;
     const val = body[field];
     let newVal;
     switch (field) {
       case 'contractType':
-        if (!CONTRACT_TYPES.has(val)) throw new HttpError(400, 'Loại hợp đồng không hợp lệ');
+        if (!CONTRACT_TYPES.has(val) && !(extraIds && extraIds.has(val))) throw new HttpError(400, 'Loại hợp đồng không hợp lệ');
         newVal = val;
         break;
       case 'baseSalary':

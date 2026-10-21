@@ -213,7 +213,8 @@ const HRPF_CONTRACT_ALLOWANCE_LABELS = {
   hazardAllowance: 'Phụ cấp độc hại nặng nhọc', lunchAllowance: 'Phụ cấp ăn trưa',
   transportAllowance: 'Hỗ trợ đi lại', phoneAllowance: 'Hỗ trợ điện thoại', otherAllowance: 'Phụ cấp/Hỗ trợ khác'
 };
-const HRPF_CONTRACT_TYPE_LABELS = { PROBATION: 'Thử việc', FIXED_TERM: 'Xác định thời hạn', INDEFINITE: 'Vô thời hạn' };
+// HRPF_CONTRACT_TYPE_LABELS ĐÃ GỘP vào laborContractTypeLabel() dùng chung (core.js) — xem chú thích
+// đầy đủ ở module-hopdonglaodong.js (cùng đợt gộp danh mục "Loại HĐLĐ" tự cấu hình, 11/2026).
 const HRPF_CONTRACT_STATUS_LABELS = {
   DRAFT: '📝 Nháp', ACTIVE: '✅ Đang hiệu lực', EXPIRED: '⌛ Hết hạn',
   TERMINATED: '⛔ Đã chấm dứt', SUPERSEDED: '🔄 Đã thay thế'
@@ -229,7 +230,7 @@ function renderHrpfContractBoxHtml(currentContract) {
     .map(([f, label]) => row(label, formatMoneyDisplay ? formatMoneyDisplay(String(c[f])) : c[f]));
   return `<div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
     ${row('Mã hợp đồng', c.code)}
-    ${row('Loại HĐLĐ', HRPF_CONTRACT_TYPE_LABELS[c.contractType] || c.contractType)}
+    ${row('Loại HĐLĐ', laborContractTypeLabel(c.contractType))}
     ${row('Trạng thái', HRPF_CONTRACT_STATUS_LABELS[c.status] || c.status)}
     ${row('Ngày bắt đầu', c.startDate)}
     ${row('Ngày kết thúc', c.endDate || 'Vô thời hạn')}

@@ -293,6 +293,9 @@ function resetHrpOnboardingForm() {
   document.getElementById('hrpOnbPosType').value = 'HO';
   document.getElementById('hrpOnbDirectManagerUsername').value = '';
   document.getElementById('hrpOnbExtraPanel')?.classList.add('hidden');
+  // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình) — xem chú thích đầy đủ ở
+  // openHrContractCreateModal() (module-hopdonglaodong.js, CÙNG danh mục dùng chung).
+  populateLaborContractTypeSelect('hrpOnbPlannedContractType', '', { includeEmpty: true });
   onHrpOnbPlannedContractTypeChange();
   onHrpOnboardingPosTypeChange();
 }

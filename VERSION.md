@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.87** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.88 (2026-11): Danh Mục "Loại HĐLĐ" tự cấu hình — dùng chung Onboarding (dự kiến) + Hợp Đồng Lao Động thật
+
+Theo yêu cầu người dùng ("loại hợp đồng Dự kiến đang chưa có trong danh mục, cho vào danh mục cho
+chuẩn") — xác nhận dùng CHUNG 1 danh mục cho CẢ "Loại HĐLĐ Dự Kiến" (Onboarding,
+`hrProcesses.plannedContractType`) lẫn "Loại Hợp Đồng" thật (Hợp Đồng Lao Động,
+`laborContracts.contractType`).
+
+**Thiết kế**: danh mục mới `laborContractTypes` (mảng `{id, label, isSystemDefault, order}`) — 3 mã HỆ
+THỐNG (`PROBATION`/`FIXED_TERM`/`INDEFINITE`) giữ nguyên `id` bất biến (không cần migrate dữ liệu cũ),
+khoá XOÁ (🔒, chỉ đổi được nhãn hiển thị) vì `lib/laborContract.js` dùng chính các mã này để tính tiến
+trình thử việc → chính thức + áp đúng giới hạn pháp luật "tối đa 2 lần gia hạn Xác Định Thời Hạn". Admin
+tự Thêm/Sửa tên/Xoá loại TUỲ BIẾN qua **Hệ Thống → Quản Lý Danh Mục → 📄 Danh Mục Loại HĐLĐ** — loại tự
+thêm theo đúng xác nhận của người dùng ("không cần, để tự do") **KHÔNG** áp giới hạn gia hạn nào.
+
+**Chặn an toàn khi xoá** (`assertLaborContractTypesSafeToSave()`, `lib/createValidation.js`): không cho
+xoá mã hệ thống; không cho xoá loại tuỳ biến đang được bất kỳ `hrProcesses`/`laborContracts` nào tham
+chiếu (đếm cả 2, báo rõ số lượng).
+
+**Gộp 6 bản sao nhãn rải rác** (`HRC_CONTRACT_TYPE_LABELS`/`HRPF_CONTRACT_TYPE_LABELS` phía client,
+`CONTRACT_TYPE_LABELS` ở `lib/laborContractImport.js`/`lib/laborContractCreateImport.js`/
+`lib/employeeProfileImport.js`) thành 1 hàm dùng chung `laborContractTypeLabel()` (core.js) — tiện thể
+sửa luôn lỗi lệch nhãn INDEFINITE phát hiện qua đợt rà soát này ("Vô thời hạn" ở Hợp Đồng Lao Động vs
+"Không xác định thời hạn" ở Onboarding, nay dùng chung 1 nhãn).
+
+Server: `routes/create.js`/`routes/records.js` (qua `lib/createValidation.js` + `applyManualEdit()` tham
+số tuỳ chọn mới `extraValidTypeIds`) chấp nhận loại tuỳ biến khi tạo/sửa hợp đồng + quy trình Onboarding;
+`routes/data.js` thêm `laborContractTypes` vào `ADMIN_SENSITIVE_KEYS` + validate cấu trúc + gọi
+`assertLaborContractTypesSafeToSave()`. Không đổi `schema.sql`/biến môi trường/dependency nào — lưu trực
+tiếp trong JSON AppData đã có sẵn cơ chế, không cần thao tác triển khai gì thêm ngoài copy code.
+
+16 scenario test mới (`test-labor-contract-types-catalog.js`) + chạy lại 20 file test liên quan Hợp Đồng
+Lao Động/Hồ Sơ Nhân Sự/Onboarding hiện có — không có regression.
 
 ## v27.87 (2026-11): Rà soát toàn hệ thống lỗi 409 giả — vá 11 chỗ còn sót
 

@@ -824,7 +824,12 @@ function isPlainWorkflowMapObject(v) {
 const PLAIN_OBJECT_ARRAY_KEYS = new Set([
   'workflows', 'operationOrderStoreMixedApprovalRules', 'itPriceWholesaleStoreMixedApprovalRules',
   'shiftTemplates', 'publicHolidays', 'attendanceClockApiKeys', 'hrTaskTemplates', 'deptGroups',
-  'sensitiveKeywords'
+  'sensitiveKeywords',
+  // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — {id,label,isSystemDefault,order}[],
+  // xem defaults.js) — cùng lớp lỗi với các key ở trên: nhiều nơi đọc `(appData?.laborContractTypes ||
+  // []).map/find(...)` (client lẫn lib/createValidation.js) sẽ throw nếu lưu sai thành object/giá trị
+  // khác.
+  'laborContractTypes'
 ]);
 function assertPlainObjectArrayShape(key, value) {
   if (!PLAIN_OBJECT_ARRAY_KEYS.has(key)) return;

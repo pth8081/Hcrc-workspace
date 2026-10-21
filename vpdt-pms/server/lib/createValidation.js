@@ -627,6 +627,38 @@ function assertShiftTemplatesSafeToSave(value, oldValue, shiftRoster) {
   }
 }
 
+// laborContractTypes ("Loại HĐLĐ", 11/2026 — danh mục dùng CHUNG cho hrProcesses.plannedContractType
+// (Onboarding, "dự kiến") VÀ laborContracts.contractType (hợp đồng thật), xem defaults.js): chặn CỨNG 2
+// trường hợp nguy hiểm, theo đúng khuyến nghị rà soát (dữ liệu lương/pháp lý — rủi ro cao hơn hẳn 1 danh
+// mục catalog thường, nên KHÔNG chỉ cảnh báo số lượng như nganhHangCatalog mà chặn hẳn):
+//  1) Xoá/đổi id 1 trong 3 mã HỆ THỐNG (PROBATION/FIXED_TERM/INDEFINITE) — lib/laborContract.js dùng
+//     CHÍNH các mã này (literal) để tính tiến trình thử việc -> chính thức, áp giới hạn pháp luật "tối đa
+//     2 lần gia hạn Xác Định Thời Hạn" (lib/createValidation.js dòng ~4242), và lib/payroll.js dùng để
+//     giảm lương thử việc/bỏ qua cảnh báo hết hạn hợp đồng Vô Thời Hạn — mất 1 trong 3 mã này làm hỏng cả
+//     3 nơi đó ngay lập tức cho MỌI hợp đồng đang có.
+//  2) Xoá 1 loại TUỲ BIẾN (admin tự thêm) đang được hrProcesses/laborContracts THẬT tham chiếu — khác
+//     shiftTemplates (chỉ loại trừ bản ghi CANCELLED) vì ở đây KHÔNG có trạng thái "đã huỷ" tương đương
+//     để loại trừ an toàn, nên đếm MỌI bản ghi bất kể trạng thái.
+// Đổi LABEL (không đổi id) không cần validate gì thêm — không cascade, vì mọi nơi lưu `id` bất biến.
+function assertLaborContractTypesSafeToSave(value, oldValue, hrProcesses, laborContracts) {
+  if (!Array.isArray(value)) return; // shape đã bị assertPlainObjectArrayShape() chặn riêng (nếu đăng ký)
+  const newIds = new Set(value.filter(t => t && t.id != null).map(t => t.id));
+  const SYSTEM_IDS = ['PROBATION', 'FIXED_TERM', 'INDEFINITE'];
+  for (const sysId of SYSTEM_IDS) {
+    if (!newIds.has(sysId)) throw new CreateError(400, `Không thể xoá loại hợp đồng mặc định hệ thống (mã "${sysId}") — đây là 3 loại pháp luật quy định, chỉ đổi được nhãn hiển thị.`);
+  }
+  const removed = (Array.isArray(oldValue) ? oldValue : []).filter(t => t && t.id != null && !newIds.has(t.id));
+  if (!removed.length) return;
+  for (const t of removed) {
+    const hrCount = (hrProcesses || []).filter(p => p.plannedContractType === t.id).length;
+    const contractCount = (laborContracts || []).filter(c => c.contractType === t.id).length;
+    const total = hrCount + contractCount;
+    if (total > 0) {
+      throw new CreateError(400, `Không thể xoá "${t.label || t.id}": đang có ${contractCount} hợp đồng lao động + ${hrCount} hồ sơ Onboarding (dự kiến) tham chiếu loại này.`);
+    }
+  }
+}
+
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
 // ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
 // (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
@@ -4014,8 +4046,15 @@ const CREATE_MODULE_CONFIGS = {
         // lib/laborContract.js (CONTRACT_TYPES/ALLOWANCE_FIELDS, TÁI DÙNG nguyên khuôn field/nhãn đã có,
         // không phát minh field thu nhập mới để tránh 2 khái niệm khác nhau cho cùng 1 khoản tiền).
         const { CONTRACT_TYPES, ALLOWANCE_FIELDS } = require('./laborContract');
+        // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem defaults.js) — chấp nhận
+        // CẢ 3 mã hệ thống (CONTRACT_TYPES) LẪN loại tuỳ biến admin tự thêm (id trong danh mục), không
+        // chỉ 3 mã cố định như trước. Danh mục LUÔN chứa sẵn 3 mã hệ thống (defaults.js seed sẵn) nên
+        // rơi về đúng hành vi cũ khi appData.laborContractTypes rỗng/chưa tải (phòng thủ).
+        const validPlannedContractTypeIds = new Set((appData?.laborContractTypes || []).map(t => t.id));
         payload.plannedContractType = payload.plannedContractType ? String(payload.plannedContractType).trim() : '';
-        if (payload.plannedContractType && !CONTRACT_TYPES.has(payload.plannedContractType)) throw new CreateError(400, 'Loại HĐLĐ dự kiến không hợp lệ');
+        if (payload.plannedContractType && !CONTRACT_TYPES.has(payload.plannedContractType) && !validPlannedContractTypeIds.has(payload.plannedContractType)) {
+          throw new CreateError(400, 'Loại HĐLĐ dự kiến không hợp lệ');
+        }
         if (payload.plannedContractEndDate && Number.isNaN(new Date(payload.plannedContractEndDate).getTime())) throw new CreateError(400, 'Ngày kết thúc HĐ dự kiến không hợp lệ');
         payload.plannedContractEndDate = (payload.plannedContractType && payload.plannedContractType !== 'INDEFINITE' && payload.plannedContractEndDate)
           ? String(payload.plannedContractEndDate).trim() : '';
@@ -4194,7 +4233,12 @@ const CREATE_MODULE_CONFIGS = {
       // gán bù ngay khi HR liên kết/đổi tài khoản, xem syncLaborContractsEmployeeUsername() ở
       // routes/employeeProfile.js.
       payload.employeeUsername = linkedProfile?.username || null;
-      if (!CONTRACT_TYPES.has(payload.contractType)) throw new CreateError(400, 'Vui lòng chọn Loại hợp đồng hợp lệ');
+      // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình) — xem chú thích đầy đủ ở
+      // hrProcesses.extraValidate ngay trên (field plannedContractType, CÙNG danh mục dùng chung).
+      const validContractTypeIds = new Set((appData?.laborContractTypes || []).map(t => t.id));
+      if (!CONTRACT_TYPES.has(payload.contractType) && !validContractTypeIds.has(payload.contractType)) {
+        throw new CreateError(400, 'Vui lòng chọn Loại hợp đồng hợp lệ');
+      }
       if (!payload.startDate || Number.isNaN(new Date(payload.startDate).getTime())) throw new CreateError(400, 'Vui lòng nhập Ngày hiệu lực hợp lệ');
       payload.startDate = String(payload.startDate).trim();
       if (payload.contractType === 'INDEFINITE') {
@@ -5282,6 +5326,9 @@ module.exports = {
   // Export cho routes/data.js POST /api/data/:key — chặn xoá builtin/đang-dùng của positionTypes qua
   // route generic (re-audit lần 5, mức TB).
   assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave,
+  // Export cho routes/data.js POST /api/data/:key — chặn xoá mã hệ thống/loại đang dùng của
+  // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình).
+  assertLaborContractTypesSafeToSave,
   sanitizeUniformItems,
   BUDGET_TYPE_OPTIONS, BUDGET_FIELD_TYPES, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields,
   resolveTrainingInstructorUsername, normalizeInviteList,

@@ -3257,6 +3257,15 @@ khác của module này — 1 tài khoản Quản Trị Viên KHÔNG được c�
 này (đúng nguyên tắc 3 ngoại lệ dữ liệu nhân sự nhạy cảm, xem mục 6) sẽ KHÔNG
 còn tự động xoá được hợp đồng lao động nữa.
 
+- **"Loại HĐLĐ" là danh mục tự cấu hình** (11/2026) — ô "Loại Hợp Đồng" ở đây
+  VÀ ô "Loại HĐLĐ Dự Kiến" ở Onboarding (mục 4.5.2) dùng CHUNG 1 danh mục,
+  quản lý tại **Hệ Thống → Quản Trị → 🗂️ Quản Lý Danh Mục → 📄 Danh Mục Loại
+  HĐLĐ**. 3 loại mặc định (Thử việc/Xác định thời hạn/Vô thời hạn) có khoá 🔒
+  — không xoá được (áp đúng luật "tối đa 2 lần gia hạn Xác Định Thời Hạn" nêu
+  trên), chỉ đổi được tên hiển thị. Admin tự thêm loại mới tuỳ nhu cầu (VD
+  "Hợp đồng thời vụ") — loại tự thêm **KHÔNG** áp giới hạn gia hạn nào, chỉ
+  xoá được khi không còn hồ sơ Onboarding/Hợp Đồng nào đang dùng loại đó.
+
 - **Đa số hợp đồng do hệ thống TỰ TẠO** theo đúng 3 mốc trong checklist
   Onboarding (mục 4.5.2), HR không cần tạo tay:
   - Việc **"Gửi thư mời nhận việc & hợp đồng lao động"** hoàn thành → tự tạo

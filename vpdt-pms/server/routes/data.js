@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached, cascadeUsernameChangesToTaskAssignedBy } = require('../lib/taskStore');
 const { getAllWorkItemsCached, cascadeUsernameChangesToWorkItemAssignment } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -284,6 +284,17 @@ const ADMIN_ONLY_KEYS = new Set([
   // maritalStatuses (11/2026, "đưa luôn Tình trạng hôn nhân vào danh mục") — cùng lý do khoá ghi như
   // các danh mục ngay trên.
   'maritalStatuses',
+  // laborContractTypes (11/2026, "Loại HĐLĐ" tự cấu hình, dùng chung hrProcesses.plannedContractType +
+  // laborContracts.contractType — xem defaults.js) — cùng lý do khoá ghi như các danh mục ngay trên:
+  // panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục"). assertLaborContractTypesSafeToSave()
+  // (lib/createValidation.js) chặn thêm việc xoá mã hệ thống/loại đang dùng dù admin ghi trực tiếp qua
+  // route generic.
+  'laborContractTypes',
+  // laborContractTypes ("Loại HĐLĐ", 11/2026 — dùng CHUNG cho Loại HĐLĐ Dự Kiến (Onboarding) + Loại Hợp
+  // Đồng thật, xem defaults.js) — cùng lý do khoá ghi như các danh mục trên: panel CRUD chỉ hiện cho
+  // admin (tab "🗂️ Quản Lý Danh Mục"). Rủi ro cao hơn các danh mục khác (ảnh hưởng lương/pháp lý) nên còn
+  // có thêm assertLaborContractTypesSafeToSave() chặn xoá mã hệ thống/mã đang dùng — xem ngay dưới.
+  'laborContractTypes',
   // deptGroups (10/2026, "Khối/Ban") — nhóm cha của Phòng Ban, cùng lý do khoá ghi như depts/stores ở
   // trên: panel CRUD chỉ hiện cho admin (tab "🗂️ Quản Lý Danh Mục").
   'deptGroups',
@@ -2224,6 +2235,17 @@ router.post('/:key', async (req, res) => {
         getAppDataValue('shiftTemplates'), getAllForCollectionCached('shiftRoster')
       ]);
       assertShiftTemplatesSafeToSave(value, oldShiftTemplates, allShiftRoster);
+    }
+    // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem defaults.js): chặn xoá mã hệ
+    // thống/loại đang dùng qua route generic — xem chú thích đầy đủ tại
+    // assertLaborContractTypesSafeToSave() ở lib/createValidation.js. hrProcesses là AppData (đọc qua
+    // getAppDataValue), laborContracts là collection đã migrate (dbo.Records, đọc qua
+    // getAllForCollectionCached cùng khuôn shiftRoster ở trên).
+    if (key === 'laborContractTypes' && Array.isArray(value)) {
+      const [oldLaborContractTypes, allHrProcesses, allLaborContracts] = await Promise.all([
+        getAppDataValue('laborContractTypes'), getAppDataValue('hrProcesses'), getAllForCollectionCached('laborContracts')
+      ]);
+      assertLaborContractTypesSafeToSave(value, oldLaborContractTypes, allHrProcesses, allLaborContracts);
     }
     // employeeProfile.username desync (đợt rà soát chuyên sâu lần 2 trước go-live, mức Cao — Agent
     // "bảng liên kết" — xem diffUserRenamesAndDeletions()/cascadeUsernameChangesToProfiles() ở

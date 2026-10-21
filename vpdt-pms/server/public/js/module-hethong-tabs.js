@@ -59,6 +59,9 @@ function setSystemSubTab(subTab) {
     // dòng (mới trigger renderGenericSimpleCatalogList() qua saveGenericSimpleCatalogEntry()/
     // deleteGenericSimpleCatalogEntry()) — bổ sung đủ 4 hàm đó + maritalStatuses (MỚI) vào đây.
     renderRelationshipTypeList(); renderNationalityList(); renderContractAmendmentTypeList(); renderContractTerminationReasonList(); renderMaritalStatusList();
+    // laborContractTypes (11/2026, "Loại HĐLĐ" tự cấu hình) — thêm vào đúng dòng gọi render này ngay từ
+    // đầu, tránh lặp lại lỗi "bỏ sót khỏi dòng gọi render" đã vá ở trên cho 4+1 danh mục trước đó.
+    renderLaborContractTypeList();
     // employmentTypes/workSchedules (11/2026, LỖI ĐÃ VÁ) — thêm vào đúng dòng gọi render này ngay từ đầu,
     // tránh lặp lại lỗi "bỏ sót khỏi dòng gọi render" đã vá ở trên cho 4+1 danh mục trước đó.
     renderEmploymentTypeList(); renderWorkScheduleList();

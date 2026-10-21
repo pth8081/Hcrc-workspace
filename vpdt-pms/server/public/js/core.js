@@ -14458,6 +14458,29 @@ function getMultiSelectValues(containerId) {
 // thẻ <script src="/js/core.js"> trong index.html, phân tích HTML tuần tự từ trên xuống).
 document.getElementById('copyrightYear').textContent = new Date().getFullYear();
 
+// ===== laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem defaults.js): 2 hàm DÙNG
+// CHUNG cho CẢ "Loại HĐLĐ Dự Kiến" (hrpOnbPlannedContractType, Onboarding) lẫn "Loại Hợp Đồng" thật
+// (hrcNewContractType, Hợp Đồng Lao Động) + mọi nơi hiển thị nhãn (module-hopdonglaodong.js/
+// module-hrprofile.js) — THAY cho 6 bản sao HRC_CONTRACT_TYPE_LABELS/HRPF_CONTRACT_TYPE_LABELS/
+// CONTRACT_TYPE_LABELS (client lẫn server) từng tự định nghĩa lại {PROBATION,FIXED_TERM,INDEFINITE}
+// rải rác — vừa KHÔNG hiện được loại tự thêm, vừa từng lệch nhãn INDEFINITE giữa 2 màn ("Vô thời hạn"
+// vs "Không xác định thời hạn", đã phát hiện qua đợt rà soát 11/2026 làm căn cứ gộp lại thành 1 nguồn). =====
+function laborContractTypeLabel(id) {
+  if (!id) return '';
+  const t = (DB.laborContractTypes || []).find(x => x.id === id);
+  return t ? t.label : id;
+}
+function populateLaborContractTypeSelect(selectId, selectedValue, opts) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const includeEmpty = !!(opts && opts.includeEmpty);
+  const list = [...(DB.laborContractTypes || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  sel.innerHTML = (includeEmpty ? '<option value="">-- Chọn --</option>' : '')
+    + list.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}</option>`).join('');
+  const toSelect = selectedValue != null ? String(selectedValue) : '';
+  if (toSelect && list.some(t => t.id === toSelect)) sel.value = toSelect;
+}
+
 // Gắn đúng 1 lần cho toàn trang — xem chú thích đầy đủ tại định nghĩa bindMultiPasteSearchInputs() ở
 // trên (tính năng dán nhiều mã cùng lúc vào ô tìm kiếm, 10/2026).
 bindMultiPasteSearchInputs();

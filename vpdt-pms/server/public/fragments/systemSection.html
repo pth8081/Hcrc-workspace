@@ -1501,6 +1501,24 @@
         </div>
       </details>
 
+      <!-- laborContractTypes ("Loại HĐLĐ", 11/2026, theo yêu cầu người dùng "loại hợp đồng Dự kiến đang
+           chưa có trong danh mục, cho vào danh mục cho chuẩn") — dùng CHUNG cho "Loại HĐLĐ Dự Kiến"
+           (Onboarding, hrpOnbPlannedContractType) VÀ "Loại Hợp Đồng" thật (Hợp Đồng Lao Động,
+           hrcNewContractType) — KHÁC khuôn GENERIC_SIMPLE_CATALOGS ngay trên (mảng chuỗi phẳng): mảng
+           OBJECT {id,label,isSystemDefault,order}, cùng khuôn Add/Sửa tên/Xoá + khoá 🔒 mặc định hệ
+           thống như deptGroups/Nhóm Phê Duyệt (module-admin.js::renderLaborContractTypeList()). -->
+      <details class="filter-box-details bg-fuchsia-50 p-4 rounded border border-fuchsia-200 space-y-3">
+        <summary class="font-bold text-fuchsia-900 text-sm flex items-center gap-1"><span class="filter-box-chevron text-fuchsia-400">▸</span><span>📄 Danh Mục Loại HĐLĐ</span></summary>
+        <div class="p-0 pt-2 space-y-3">
+          <p class="text-[11px] text-fuchsia-700">Dùng CHUNG cho "Loại HĐLĐ Dự Kiến" (Onboarding) và "Loại Hợp Đồng" (Hợp Đồng Lao Động thật). 3 loại 🔒 là mặc định hệ thống (áp đúng quy định pháp luật "tối đa 2 lần gia hạn Xác Định Thời Hạn") — chỉ đổi được tên hiển thị, không xoá được. Loại tự thêm KHÔNG áp giới hạn gia hạn nào, chỉ xoá được khi không còn hồ sơ nào đang dùng.</p>
+          <form data-op-submit="saveLaborContractType" class="flex gap-2">
+            <input id="txtLaborContractTypeName" placeholder="Tên loại mới, VD: Hợp đồng thời vụ..." class="border p-1.5 rounded text-xs flex-1" required>
+            <button type="submit" class="bg-fuchsia-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-fuchsia-700">Thêm</button>
+          </form>
+          <div id="laborContractTypeListWrap" class="max-h-72 overflow-y-auto space-y-1.5"></div>
+        </div>
+      </details>
+
       <!-- employmentTypes/workSchedules (11/2026, LỖI ĐÃ VÁ — người dùng báo "nhập Hình Thức Làm Việc/
            Thời Gian Làm Việc xong rồi lại bị mất"): trước đây 2 trường này CHỈ sửa được qua màn Biểu Mẫu
            (ô nhập tay danh sách lựa chọn — ghi đè thẳng cả mảng mỗi lần lưu, không có "Sửa tên" an toàn),

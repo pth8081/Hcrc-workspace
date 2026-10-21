@@ -145,7 +145,10 @@ function detectColumns(headerCells) {
 // Validate NHẸ ở bước xem trước (format/kiểu dữ liệu) — validateAndPrepareCreate()/applyManualEdit() ở
 // bước xác nhận thật vẫn tự validate lại toàn bộ từ đầu (Zero-Trust), bao gồm cả luật renewalIndex/
 // employeeCode có thật trong Hồ Sơ Nhân Sự — đọc kỹ chú thích đầu file.
-function validateField(field, rawValue) {
+// catalogTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình — xem defaults.js): mảng {id,label} đọc từ
+// appData.laborContractTypes, cho phép gõ CẢ nhãn/mã của loại TUỲ BIẾN admin tự thêm (không chỉ 3 mã hệ
+// thống như trước) — xem chú thích đầy đủ ở validateEditableField() tương ứng, lib/laborContractImport.js.
+function validateField(field, rawValue, catalogTypes) {
   if (field === 'startDate' || field === 'endDate') {
     const val = parseDateCell(rawValue);
     if (!val) return { present: false };
@@ -156,8 +159,10 @@ function validateField(field, rawValue) {
   if (val === '' || val == null) return { present: false };
   switch (field) {
     case 'contractType': {
-      const code = CONTRACT_TYPE_LABEL_TO_CODE[val] || val;
-      if (!laborContract.CONTRACT_TYPES.has(code)) return { present: true, error: 'Loại HĐLĐ không hợp lệ (phải là Thử việc/Xác định thời hạn/Vô thời hạn, hoặc mã PROBATION/FIXED_TERM/INDEFINITE)' };
+      const catalogLabelToCode = Object.fromEntries((catalogTypes || []).map(t => [t.label, t.id]));
+      const catalogIds = new Set((catalogTypes || []).map(t => t.id));
+      const code = CONTRACT_TYPE_LABEL_TO_CODE[val] || catalogLabelToCode[val] || val;
+      if (!laborContract.CONTRACT_TYPES.has(code) && !catalogIds.has(code)) return { present: true, error: 'Loại HĐLĐ không hợp lệ (phải đúng tên/mã trong Danh Mục Loại HĐLĐ)' };
       return { present: true, value: code };
     }
     case 'renewalIndex': {
@@ -184,7 +189,7 @@ function validateField(field, rawValue) {
 }
 
 // 1 dòng file -> 1 dòng preview, hoặc null nếu coi như dòng trống (không có Mã NV).
-function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile) {
+function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile, catalogTypes) {
   const get = (field) => (cols[field] !== undefined ? cells[cols[field]] : undefined);
   const employeeCode = toTrimmedString(get('employeeCode'));
   if (!employeeCode) return null;
@@ -200,7 +205,7 @@ function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, 
 
   const fields = {};
   if (!errors.length) {
-    const typeResult = validateField('contractType', get('contractType'));
+    const typeResult = validateField('contractType', get('contractType'), catalogTypes);
     if (!typeResult.present || typeResult.error) errors.push(typeResult.error || 'Vui lòng chọn Loại HĐLĐ');
     else fields.contractType = typeResult.value;
 
@@ -220,7 +225,7 @@ function rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, 
 
     for (const field of CREATE_FIELD_KEYS) {
       if (field === 'contractType' || field === 'startDate' || field === 'endDate') continue;
-      const result = validateField(field, get(field));
+      const result = validateField(field, get(field), catalogTypes);
       if (result.present) {
         if (result.error) errors.push(result.error); else fields[field] = result.value;
       }
@@ -245,6 +250,7 @@ async function parseCreateImportBuffer(buffer, appData) {
   const profiles = appData?.employeeProfiles || [];
   const users = appData?.users || [];
   const hrProcesses = appData?.hrProcesses || [];
+  const catalogTypes = appData?.laborContractTypes || [];
   const employeeProfile = require('./employeeProfile');
 
   let cols = null;
@@ -261,7 +267,7 @@ async function parseCreateImportBuffer(buffer, appData) {
       }
       return true;
     }
-    const item = rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile);
+    const item = rowToPreviewItem(cells, cols, contracts, profiles, users, hrProcesses, employeeProfile, catalogTypes);
     if (item) items.push(item);
     if (items.length > MAX_ROWS_PER_IMPORT) { overLimit = true; return false; }
     return true;
