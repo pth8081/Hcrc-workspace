@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**27.91** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.92** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.92 (2026-11): Vá lỗi 409 giả ở TOÀN BỘ màn Cấu Hình Quy Trình Theo Phòng Ban/Mức + "⚡ Áp Dụng Nhanh"
+
+Theo báo cáo người dùng (ảnh chụp lỗi "Dữ liệu 'itPriceDeptWorkflows' vừa bị người khác thay đổi — vui
+lòng tải lại trang rồi thử lại" khi bấm "Lưu Cấu Hình [Phòng Mua hàng FMCG]") kèm yêu cầu rà soát toàn hệ
+thống xem còn màn nào khác bị cùng lỗi, kể cả "⚡ Áp Dụng Nhanh".
+
+**Nguyên nhân gốc (xác nhận qua đọc code, không suy đoán)**: v27.x trở về trước đã vá lỗi 409 giả này cho
+các collection DẠNG MẢNG (`users`/`permGroups`/`workflows`/`*MixedApprovalRules`/`nganhHangCatalog`...)
+bằng cách truyền `{baseline: snapshot}` cho `syncStorage()`, kích hoạt cơ chế tự đọc lại bản mới nhất +
+áp lại đúng phần mình sửa + thử lưu lại 1 lần (`retryArraySaveAfterConflict()`). Nhưng **6 hàm lưu/xoá
+cấu hình "cốt lõi" cho các màn `*DeptWorkflows`/`*TierWorkflows`** (`saveDeptWorkflowConfig`/
+`saveAllDeptWorkflowConfigs`/`resetDeptWorkflowConfig`/`resetAllDeptWorkflowConfigs`/
+`saveItPriceTierWorkflowConfig`/`resetTierWorkflowConfig`, `module-itsupport-tier.js`) cùng
+`applyQuickApplyConfig()` ("⚡ Áp Dụng Nhanh", `module-workflow.js`) tuy ĐÃ chụp sẵn `snapshot` (để tự
+phục hồi khi lưu hỏng) nhưng KHÔNG truyền baseline cho `syncStorage()` — lý do: dữ liệu các key này là
+OBJECT MAP `{tên phòng ban/mức: cấu hình}`, không phải MẢNG, mà `retryArraySaveAfterConflict()` giả định
+cứng mảng có `.id` (`baseline.map(x => x.id)`) — nếu truyền thẳng baseline dạng object vào đó sẽ throw
+`TypeError: baseline.map is not a function`. Vì vậy mọi 409 ở các màn này (kể cả hoàn toàn vô hại — 2
+admin sửa 2 phòng ban khác nhau cùng lúc) đều rơi thẳng vào alert chặn màn hình bắt tải lại trang.
+
+**Phạm vi ảnh hưởng xác nhận**: lỗi lớp này áp dụng cho MỌI màn Cấu Hình Quy Trình Theo Phòng Ban/Mức
+trong `WF_MODULE_CONFIG` (DOC, SUBMISSION, CAR, OFFICE_BUY, OFFICE_FIX, VPP, CONTRACT_APPROVAL,
+CONTRACT_MANAGE, PAYMENT, MEETING, BUDGET, BUDGET_APPROVE, ITPRICE_RETAIL, cùng các cấu hình theo mức
+Giá Bán Buôn/Vận Hành dùng `saveItPriceTierWorkflowConfig`/`resetTierWorkflowConfig`), cộng "⚡ Áp Dụng
+Nhanh" — không riêng màn Giá Bán Lẻ Theo Phòng Ban mà người dùng chụp ảnh báo lỗi.
+
+**Bản vá** (`public/js/core.js`): thêm cặp hàm `diffObjectMapForConflictRetry()`/
+`retryObjectMapSaveAfterConflict()` — mirror đúng tinh thần cơ chế retry-mảng đã có nhưng đối chiếu theo
+KHOÁ object (tên phòng ban/mức) thay vì `.id`; `syncStorageOnce()` tự chọn đúng cơ chế theo
+`Array.isArray(DB[key])` (mảng dùng cơ chế cũ, object map dùng cơ chế mới) — không cần sửa thêm bất kỳ
+nơi gọi nào khác ngoài việc truyền baseline. Đã truyền `{baseline: snapshot}` cho đúng 6 lệnh gọi
+`syncStorage()` ở `module-itsupport-tier.js` và 1 lệnh gọi trong vòng lặp lưu của `applyQuickApplyConfig()`
+ở `module-workflow.js`.
+
+**Test**: viết mới `tests/test-dept-workflow-config-false-409.js` (2 kịch bản qua Chromium thật + core.js
+thật — 2 admin sửa 2 phòng ban KHÁC nhau gần như đồng thời phải tự lưu êm không báo lỗi + gộp đúng cả 2
+thay đổi; xung đột THẬT trên ĐÚNG phòng ban mình sửa vẫn phải báo lỗi rõ ràng, không âm thầm ghi đè) —
+PASS 2/2. Chạy lại các bộ test liên quan hiện có: `test-syncstorage-missing-baseline-fix.js` (28/28),
+`test-workflow-reset-dept-config.js` (12/12), `test-quick-apply-auto-dept-position.js` (15/15),
+`test-quick-apply-workflow-steps.js` (44/44), `test-quickapply-configs-initdatabase-load.js` (3/3),
+`test-deptworkflow-structure-validate.js` (18/18), `test-workflowarray-structure-validate.js` (5/5),
+`test-meeting-dept-workflow.js` (9/9), `test-budget-meeting-dept-workflow-ui.js` (7/7),
+`test-migrate-workflow-dept-groups.js` (5/5), `test-admin-users-permgroups.js` (120/120) — toàn bộ PASS.
+2 lỗi KHÔNG liên quan đã xác nhận TỒN TẠI SẴN trên `main` trước bản vá này (đối chiếu bằng `git stash`):
+`test-initdatabase-key-coverage.js` (thiếu `laborContractTypes` trong `initDatabase()` — lỗi khác hẳn,
+không nằm trong phạm vi yêu cầu lần này) và `test-adv-workflow-tab-deep.js` (lỗi "⚡ Áp Dụng" riêng ở
+`DB.deptWorkflows`, khác collection với các `*DeptWorkflows` theo module đang vá) — không fix trong đợt
+này, nêu rõ để người dùng quyết định có cần vá tiếp không.
+
+**Deploy**: chỉ copy code (`core.js`/`module-itsupport-tier.js`/`module-workflow.js`) + `pm2 restart`,
+không đổi `schema.sql`/biến môi trường/`package.json` dependencies.
 
 ## v27.91 (2026-11): Rà soát toàn hệ thống + tắt hẳn đường ghi đè mù còn sót ở Biểu Mẫu cho các danh mục đã có widget riêng
 

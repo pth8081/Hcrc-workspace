@@ -6822,6 +6822,63 @@ async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
   });
 }
 
+// retryObjectMapSaveAfterConflict() — mirror retryArraySaveAfterConflict() CHO danh mục dạng OBJECT MAP
+// {khoá: cấu hình} (VD itPriceDeptWorkflows/carDeptWorkflows/budgetDeptWorkflows/.../*TierWorkflows —
+// khoá là tên PHÒNG BAN hoặc MỨC, KHÔNG phải mảng {id,...}). LỖI ĐÃ VÁ (11/2026, người dùng báo "lỗi 409
+// giả xảy ra nhiều lần" ở đúng các màn Cấu Hình Quy Trình & "⚡ Áp Dụng Nhanh"): saveDeptWorkflowConfig()/
+// saveAllDeptWorkflowConfigs()/resetDeptWorkflowConfig()/resetAllDeptWorkflowConfigs()/
+// saveItPriceTierWorkflowConfig()/resetTierWorkflowConfig() (module-itsupport-tier.js) và
+// applyQuickApplyConfig() (module-workflow.js, "⚡ Áp Dụng Nhanh") tuy ĐÃ chụp sẵn snapshot trong tay
+// nhưng KHÔNG truyền baseline cho syncStorage() — một phần vì retryArraySaveAfterConflict() ở trên giả
+// định CỨNG mảng {id,...} (baseline.map(x=>x.id)), gọi thẳng với baseline dạng OBJECT sẽ throw ngay
+// (object không có .map), rơi về catch() ngoài cùng ở syncStorageOnce() hiện nhầm thông báo lỗi chung
+// thay vì thử lại thông minh — ĐÚNG LÝ DO các hàm đó trước giờ bỏ qua baseline dù đã có snapshot sẵn.
+// Hàm này mirror ĐÚNG tinh thần retryArraySaveAfterConflict() (đối chiếu đúng phần mình vừa đụng vào,
+// áp lại lên bản MỚI NHẤT từ server nếu KHÔNG ai khác đụng đúng đó) nhưng đối chiếu theo KHOÁ object
+// (dept/tier) thay vì `.id` — xem syncStorageOnce() tự chọn đúng hàm retry theo Array.isArray(DB[key]).
+function diffObjectMapForConflictRetry(baseline, desired) {
+  const base = baseline || {};
+  const des = desired || {};
+  const addedKeys = Object.keys(des).filter(k => !(k in base));
+  const removedKeys = Object.keys(base).filter(k => !(k in des));
+  const modifiedKeys = Object.keys(des).filter(k => (k in base) && !deepEqualJson(des[k], base[k]));
+  return { addedKeys, removedKeys, modifiedKeys };
+}
+async function retryObjectMapSaveAfterConflict(key, baseline, desired) {
+  const { addedKeys, removedKeys, modifiedKeys } = diffObjectMapForConflictRetry(baseline, desired);
+  const touchedKeys = new Set([...removedKeys, ...modifiedKeys]);
+  // Không có gì để áp lại (lý thuyết không nên xảy ra — 409 nghĩa là mình VỪA gửi 1 thay đổi nào đó).
+  if (touchedKeys.size === 0 && addedKeys.length === 0) return { retried: false };
+
+  let res;
+  try {
+    res = await fetch(`/api/data/${key}`);
+  } catch (e) {
+    return { retried: false }; // mất mạng lúc tải lại — rơi về thông báo 409 mặc định
+  }
+  if (!res.ok) return { retried: false };
+  const freshVersion = res.headers.get('ETag');
+  const freshObj = await res.json().catch(() => null);
+  if (!freshVersion || !freshObj || typeof freshObj !== 'object' || Array.isArray(freshObj)) return { retried: false };
+
+  // Conflict THẬT: đúng khoá (dept/tier) mình vừa sửa/xoá đã khác so với lúc mình đọc trước khi sửa (ai
+  // đó khác đổi/xoá ĐÚNG khoá này) — không tự ý chọn "ai thắng", rơi về báo lỗi cho người dùng tự quyết.
+  const base = baseline || {};
+  for (const k of touchedKeys) {
+    if (!deepEqualJson(freshObj[k] ?? null, (k in base) ? base[k] : null)) {
+      return { retried: false, genuineConflict: true };
+    }
+  }
+
+  // Không đụng đúng khoá nào của mình -> áp lại đúng phần thêm/sửa/xoá lên bản MỚI NHẤT từ server (giữ
+  // nguyên mọi khoá KHÔNG LIÊN QUAN mà nơi khác vừa ghi, VD phòng ban khác vừa bị admin khác cấu hình).
+  const merged = { ...freshObj };
+  removedKeys.forEach(k => { delete merged[k]; });
+  [...modifiedKeys, ...addedKeys].forEach(k => { merged[k] = desired[k]; });
+
+  return { retried: true, merged, freshVersion };
+}
+
 async function syncStorageOnce(key, silent, baseline) {
   // If-Match: version đọc gần nhất (nếu có) — cho server biết "tôi đang ghi dựa trên bản đã đọc
   // này", để phát hiện nếu người khác ghi đè "${key}" ở nơi khác sau đó (xem routes/data.js).
@@ -6868,9 +6925,15 @@ async function syncStorageOnce(key, silent, baseline) {
       // động, không phải người dùng chủ động bấm nút) KHÔNG áp dụng nhánh này — giữ nguyên "im lặng bỏ
       // qua" như trước, không nên tự ý ghi thêm 1 lượt nữa mà người dùng không biết.
       if (baseline && !silent) {
+        // key === 'users' -> lớp mỏng riêng; mảng {id,...} (permGroups, workflows, các *MixedApprovalRules,
+        // nganhHangCatalog...) -> retryArraySaveAfterConflict(); còn lại (OBJECT MAP {dept/tier: config} —
+        // *DeptWorkflows/*TierWorkflows/quickApplyConfigs theo dbKey tương ứng) -> retryObjectMapSaveAfterConflict()
+        // (xem chú thích đầy đủ tại hàm đó, ngay trên retryUsersSaveAfterConflict()).
         const retryResult = key === 'users'
           ? await retryUsersSaveAfterConflict(baseline, DB.users)
-          : await retryArraySaveAfterConflict(key, baseline, DB[key]);
+          : Array.isArray(DB[key])
+            ? await retryArraySaveAfterConflict(key, baseline, DB[key])
+            : await retryObjectMapSaveAfterConflict(key, baseline, DB[key]);
         if (retryResult.retried) {
           DB[key] = retryResult.merged;
           DB._versions[key] = retryResult.freshVersion;

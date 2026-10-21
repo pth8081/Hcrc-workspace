@@ -236,7 +236,7 @@ async function saveItPriceTierWorkflowConfig(tierKey) {
   if (!DB[tierDbKey]) DB[tierDbKey] = {};
   const snapshot = JSON.parse(JSON.stringify(DB[tierDbKey]));
   DB[tierDbKey][tierKey] = result.config;
-  if (!await syncStorage(tierDbKey)) {
+  if (!await syncStorage(tierDbKey, { baseline: snapshot })) {
     DB[tierDbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -261,7 +261,7 @@ async function resetTierWorkflowConfig(tierKey) {
 
   const snapshot = JSON.parse(JSON.stringify(DB[tierDbKey] || {}));
   delete DB[tierDbKey][tierKey];
-  if (!await syncStorage(tierDbKey)) {
+  if (!await syncStorage(tierDbKey, { baseline: snapshot })) {
     DB[tierDbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -381,7 +381,7 @@ async function resetDeptWorkflowConfig(dept) {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   clearDeptWorkflowConfig(dbKey, dept);
-  if (!await syncStorage(dbKey)) {
+  if (!await syncStorage(dbKey, { baseline: snapshot })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -406,7 +406,7 @@ async function resetAllDeptWorkflowConfigs() {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   targetDepts.forEach(dept => clearDeptWorkflowConfig(dbKey, dept));
-  if (!await syncStorage(dbKey)) {
+  if (!await syncStorage(dbKey, { baseline: snapshot })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -435,7 +435,7 @@ async function saveDeptWorkflowConfig(dept) {
   const dbKey = WF_MODULE_CONFIG[activeWfMod].dbKey;
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   writeDeptWorkflowConfig(dbKey, dept, result.config);
-  if (!await syncStorage(dbKey)) {
+  if (!await syncStorage(dbKey, { baseline: snapshot })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;
@@ -468,7 +468,7 @@ async function saveAllDeptWorkflowConfigs() {
 
   const snapshot = JSON.parse(JSON.stringify(DB[dbKey] || {}));
   collected.forEach(r => writeDeptWorkflowConfig(dbKey, r.dept, r.config));
-  if (!await syncStorage(dbKey)) {
+  if (!await syncStorage(dbKey, { baseline: snapshot })) {
     DB[dbKey] = snapshot;
     renderWorkflowTab();
     return;

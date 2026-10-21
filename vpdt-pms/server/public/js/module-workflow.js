@@ -531,7 +531,10 @@ async function applyQuickApplyConfig(configId) {
   const savedKeys = [];
   const failedKeys = [];
   for (const key of dirtyKeys) {
-    const saved = await syncStorage(key);
+    // baseline (11/2026, LỖI ĐÃ VÁ — người dùng báo lỗi 409 giả xảy ra nhiều ở các màn Cấu Hình Quy
+    // Trình & "⚡ Áp Dụng Nhanh"): snapshot[key] vốn đã chụp sẵn ở trên nhưng trước đây KHÔNG truyền cho
+    // syncStorage() — xem chú thích đầy đủ tại retryObjectMapSaveAfterConflict() ở core.js cho lý do.
+    const saved = await syncStorage(key, { baseline: snapshot[key] });
     if (saved) {
       savedKeys.push(key);
     } else {
