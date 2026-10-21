@@ -184,6 +184,46 @@ async function main() {
       await page.evaluate(() => window.__pa5);
     });
 
+    await run.run('LỖI ĐÃ VÁ (11/2026, "Thêm Hình Thức Làm Việc/Thời Gian Làm Việc xong, F5 lại mất dữ liệu"): đứng ở tab KHÁC Dashboard lúc tải ngầm xong -> phải tự vẽ lại ĐÚNG tab đó (không chỉ Dashboard, không bị đẩy về Dashboard)', async () => {
+      await page.evaluate(() => { logout(); });
+      // Kịch bản TRƯỚC (#5, đổi phạm vi quyền) đã GHI ĐÈ cache 'u.cache' trên localStorage bằng fingerprint
+      // của `upgradedUser` (dept khác) — nếu không mồi lại, proceedAfterAuth(user) ở đây sẽ coi cache là
+      // KHÔNG hợp lệ (sai phạm vi quyền) và rơi vào nhánh CHẬM (chờ initDatabase() xong rồi mới
+      // finishLogin() -> switchTab('dashboard'), ĐÈ MẤT activeTopTabName='doc' sau khi test tự điều hướng
+      // ở dưới) — không phải lỗi của bản vá, chỉ là cache bị lệch fingerprint từ kịch bản trước. Đăng nhập
+      // lại 1 lượt BÌNH THƯỜNG (chờ xong hẳn) bằng ĐÚNG `user` gốc để tự ghi lại cache đúng fingerprint
+      // trước khi vào kịch bản thật.
+      const seedPrime = { ...baseCatalogSeed(), depts: ['Phòng Mồi Lại Cache'] };
+      await routeApiDataOnce(page, { delayMs: 10, body: seedPrime });
+      await page.evaluate((u) => proceedAfterAuth(u), user);
+      await page.evaluate(() => { logout(); });
+
+      const seed7 = { ...baseCatalogSeed(), depts: ['Phòng Sau Khi Tải Ngầm (tab khác Dashboard)'] };
+      await routeApiDataOnce(page, { delayMs: 400, body: seed7 });
+
+      await page.evaluate((u) => { window.__pa7 = proceedAfterAuth(u); }, user);
+      await page.waitForTimeout(50); // vào giao diện ngay bằng cache (Dashboard, do finishLogin() luôn switchTab('dashboard'))
+      // Người dùng điều hướng sang 1 tab KHÁC Dashboard ngay trong lúc tải ngầm vẫn đang chạy (còn ~350ms nữa mới xong).
+      await page.evaluate(() => { switchTab('doc'); });
+      const midState = await page.evaluate(() => ({
+        activeTopTabName,
+        docHidden: document.getElementById('docSection').classList.contains('hidden'),
+        dashboardHidden: document.getElementById('dashboardSection').classList.contains('hidden')
+      }));
+      assertEqual(midState.activeTopTabName, 'doc', 'activeTopTabName phải cập nhật theo đúng tab vừa điều hướng tới');
+      assert(midState.docHidden === false && midState.dashboardHidden === true, 'đang đứng đúng tab "doc", không phải Dashboard');
+
+      await page.waitForFunction(() => dataFresh === true, { timeout: 3000 });
+      const finalState = await page.evaluate(() => ({
+        depts: DB.depts.slice(),
+        docHidden: document.getElementById('docSection').classList.contains('hidden'),
+        dashboardHidden: document.getElementById('dashboardSection').classList.contains('hidden')
+      }));
+      assertEqual(finalState.depts.join(','), 'Phòng Sau Khi Tải Ngầm (tab khác Dashboard)', 'sau khi tải ngầm xong, DB.* phải là dữ liệu MỚI (xác nhận dữ liệu không hề mất ở tầng DB.*)');
+      assert(finalState.docHidden === false, 'BUG ĐÃ VÁ: tab "doc" phải được TỰ VẼ LẠI sau khi tải ngầm xong (trước đây CHỈ tự vẽ lại nếu đang ở Dashboard, các tab khác bị bỏ quên, màn vẫn hiện nguyên dữ liệu CACHE CŨ dù DB.* trong bộ nhớ đã đúng)');
+      assert(finalState.dashboardHidden === true, 'không bị TỰ Ý đẩy về Dashboard — vẫn đứng đúng tab người dùng đang thao tác');
+    });
+
     run.summarize('test-login-cache-first-render');
   } finally {
     await teardown({ server, browser });

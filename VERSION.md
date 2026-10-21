@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**27.88** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.89** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.89 (2026-11): Vá lỗi "F5 mất dữ liệu danh mục vừa thêm" — tự vẽ lại ĐÚNG tab đang đứng sau khi tải ngầm xong, không riêng Dashboard
+
+Người dùng báo: thêm giá trị mới vào Danh Mục Hình Thức Làm Việc/Thời Gian Làm Việc (và các danh mục
+tương tự) xong, F5 lại thấy mất dữ liệu vừa thêm — lỗi này đã từng báo trước đây.
+
+**Nguyên nhân thật (xác nhận qua test trực tiếp `routes/data.js`, KHÔNG phải mất dữ liệu phía server)**:
+cơ chế "Lớp 1" (task #133, tối ưu tốc độ sau đăng nhập) khiến F5 hiện NGAY 1 bản chụp `DB.*` đã cache
+trong `localStorage` từ lượt tải ngầm TRƯỚC ĐÓ, trong khi dữ liệu THẬT mới nhất (đã có đủ giá trị vừa
+thêm) tải ngầm phía sau. Trước bản vá, sau khi tải ngầm xong (`DB.*` trong bộ nhớ đã đúng), code CHỈ tự
+vẽ lại màn hình nếu đang đứng Ở DASHBOARD (`loadFreshDataInBackground()`, `public/js/core.js`) — đứng ở
+BẤT KỲ tab nào khác (VD Quản Lý Danh Mục) thì màn vẫn giữ nguyên bản cache cũ, trông như "mất dữ liệu"
+dù `DB.*` đã đúng trong bộ nhớ.
+
+**Đã kiểm tra, KHÔNG phải nguyên nhân**: `GENERIC_SIMPLE_CATALOGS`/`saveGenericSimpleCatalogEntry()`
+(flat-string-array catalog, có `employmentTypes`/`workSchedules`) gọi `syncStorage()` không có baseline,
+nhưng lỗi 409 ở đây sẽ alert + không tự vẽ lại, không khớp triệu chứng; cũng không phải do
+`CORE_FIELD_MANIFEST`/màn Biểu Mẫu cũ (`optionsKey: 'employmentTypes'/'workSchedules'`) — đọc fresh mỗi
+lần mở modal, không có write-back cũ.
+
+**Bản vá**: thêm biến `activeTopTabName` theo dõi ĐÚNG tab cấp 1 đang đứng (gán trong `switchTab()`,
+ngay sau `setActiveSidebarTab()`). `loadFreshDataInBackground()` giờ tự `switchTab(activeTopTabName ||
+'dashboard')` sau khi tải ngầm xong — tự vẽ lại ĐÚNG tab đang đứng (không riêng Dashboard như trước), dữ
+liệu mới luôn hiện ra ngay, không cần người dùng tự điều hướng ra vào lại. Đánh đổi chấp nhận được: nếu
+đang ở sâu 1 sub-tab cụ thể, màn có thể lùi về mặc định của tab cấp 1 đó.
+
+**Rà soát**: lỗi này áp dụng CHUNG cho MỌI danh mục/màn hình — không riêng 2 danh mục người dùng báo,
+bao gồm cả danh mục "Loại HĐLĐ" vừa làm ở v27.88 (đã xác nhận được vá chung bởi cơ chế này, không cần
+sửa riêng). Test mới (`tests/test-login-cache-first-render.js`, thêm kịch bản 7) + chạy lại toàn bộ 6
+kịch bản cũ cùng file (7/7 pass) + các bộ test liên quan điều hướng tab/tải lười
+(`test-lazy-load-all-tabs.js` 46/46, `test-lazy-data-groups.js` 9/9, `test-bugfix-batch-nav-ui.js`
+15/15, `test-stuck-subtab-fallback-fix.js` 14/14, `test-forms-nav-groups.js` 282/282,
+`test-notif-click-navigate.js` 3/3) — không có regression.
 
 ## v27.88 (2026-11): Danh Mục "Loại HĐLĐ" tự cấu hình — dùng chung Onboarding (dự kiến) + Hợp Đồng Lao Động thật
 

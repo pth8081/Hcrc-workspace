@@ -6934,6 +6934,12 @@ let dataReady = false;
 // hiện có tại thời điểm bấm — cache chỉ tồn tại vài giây trước khi được thay bằng dữ liệu thật).
 let dataFresh = false;
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo "Thêm Hình Thức Làm Việc/Thời Gian Làm Việc xong, F5 lại mất dữ
+// liệu" — xem chú thích đầy đủ tại loadFreshDataInBackground() bên dưới): theo dõi tab CẤP 1 đang đứng
+// (gán ở switchTab(), ngay sau setActiveSidebarTab()) để sau khi tải ngầm xong có thể tự vẽ lại ĐÚNG tab
+// đang đứng, không riêng Dashboard như trước.
+let activeTopTabName = null;
+
 // Ẩn màn chờ #bootSplash đi — xem chú thích đầy đủ tại chỗ khai báo #bootSplash (đầu <body>). Gọi từ
 // CẢ 2 nhánh thoát của tryRestoreSession() (không còn phiên hợp lệ → lộ màn Đăng Nhập thật) VÀ
 // proceedAfterAuth() (còn phiên hợp lệ → chuyển hẳn sang giao diện chính/hộp thoại bắt đổi mật khẩu) —
@@ -9597,11 +9603,9 @@ async function proceedAfterAuth(user) {
   finishLogin(user);
 }
 
-// LỚP 1: tải dữ liệu THẬT trong nền sau khi đã hiện giao diện tạm bằng cache — cập nhật DB.* rồi làm
-// mới nhẹ nhàng đúng những gì AN TOÀN để vẽ lại (không đụng form đang nhập dở ở tab khác): số badge
-// thông báo luôn, và Dashboard (tab mặc định sau đăng nhập, THUẦN đọc — không có ô nhập nào) NẾU người
-// dùng vẫn đang đứng đúng đó. Mọi tab khác chỉ cần DB.* đã mới sẵn cho lần điều hướng/thao tác kế tiếp,
-// không tự ý vẽ lại đè lên màn người dùng đang thao tác.
+// LỚP 1: tải dữ liệu THẬT trong nền sau khi đã hiện giao diện tạm bằng cache — cập nhật DB.* rồi tự vẽ
+// lại ĐÚNG tab cấp 1 đang đứng (xem chú thích đầy đủ tại switchTab(activeTopTabName...) bên dưới) để dữ
+// liệu mới luôn hiện ra ngay, không cần người dùng tự điều hướng ra vào lại.
 async function loadFreshDataInBackground(user) {
   showDataSyncIndicator();
   try {
@@ -9615,7 +9619,20 @@ async function loadFreshDataInBackground(user) {
   // Đã đăng xuất/đăng nhập tài khoản khác giữa chừng lúc đang tải ngầm -> bỏ qua, không vẽ lại gì cả.
   if (!currentUser || currentUser.username !== user.username) return;
   dataFresh = true;
-  if (!document.getElementById('dashboardSection').classList.contains('hidden')) switchTab('dashboard');
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "Thêm Hình Thức Làm Việc/Thời Gian Làm Việc xong, F5 lại mất dữ
+  // liệu" — dữ liệu VẪN CÒN ĐỦ trên server, xác nhận qua test trực tiếp routes/data.js, đây là lỗi HIỂN
+  // THỊ ở client): F5 trước tiên hiện NGAY 1 bản chụp DB.* đã cache trong localStorage từ lượt tải ngầm
+  // TRƯỚC ĐÓ (Lớp 1, xem loadDbSnapshotFromCache()/saveDbSnapshotToCache()) — nếu admin vừa thêm 1 giá
+  // trị catalog rồi F5 ngay, bản chụp đó chưa kịp có giá trị mới này. Trước đây, sau khi tải ngầm XONG
+  // (DB.* trong bộ nhớ đã đúng), code CHỈ tự vẽ lại màn hình nếu đang đứng Ở DASHBOARD — đứng ở bất kỳ
+  // màn nào khác (VD Quản Lý Danh Mục) thì màn đã lỡ vẽ từ bản cache cũ vẫn giữ nguyên, trông như "mất
+  // dữ liệu" dù DB.* đã đúng trong bộ nhớ. Tự vẽ lại ĐÚNG tab cấp 1 đang đứng (switchTab() lại chính tab
+  // đó — cùng cơ chế đã an toàn cho nhánh Dashboard, không chỉ giới hạn tab đó nữa) để dữ liệu mới luôn
+  // hiện ra ngay khi tải ngầm xong, không cần người dùng tự điều hướng ra vào lại. Đánh đổi chấp nhận
+  // được: nếu đang ở sâu 1 tab con/sub-tab cụ thể, màn có thể lùi về mặc định của tab cấp 1 đó (người
+  // dùng bấm lại 1-2 cái là vào đúng chỗ, với dữ liệu đã đúng) — vẫn tốt hơn hẳn hiện sai dữ liệu vô thời
+  // hạn tới khi tự điều hướng ra vào lại.
+  switchTab(activeTopTabName || 'dashboard');
   refreshNotifBadge();
 }
 
@@ -10681,6 +10698,7 @@ async function switchTab(tabName) {
   }
 
   setActiveSidebarTab(tabName); // Tô sáng đúng nút sidebar trái vừa chuyển tới — xem chú thích hàm.
+  activeTopTabName = tabName; // xem chú thích activeTopTabName/loadFreshDataInBackground() ở trên.
 
   // Cuộn về đầu trang mỗi khi đổi MODULE — cùng lý do như setSystemSubTab()/các setXXXSubTab() khác:
   // tránh giữ nguyên vị trí cuộn cũ (đang ở giữa/cuối 1 màn dài) khi module mới ngắn hơn nhiều, trình
