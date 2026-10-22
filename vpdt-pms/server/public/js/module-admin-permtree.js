@@ -139,6 +139,7 @@ function collectPermsFromForm() {
     canViewReports: document.getElementById('pCanViewReports').checked,
     internalNewsCreate: document.getElementById('pInternalNewsCreate').checked,
     internalRecruitmentCreate: document.getElementById('pInternalRecruitmentCreate').checked,
+    internalNewsManage: document.getElementById('pInternalNewsManage').checked,
     trainingManage: document.getElementById('pTrainingManage').checked,
     trainingInstruct: document.getElementById('pTrainingInstruct').checked,
     onboardingEvaluate: document.getElementById('pOnboardingEvaluate').checked,
@@ -340,6 +341,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pCanViewReports').checked = !!perms.canViewReports;
   document.getElementById('pInternalNewsCreate').checked = !!perms.internalNewsCreate;
   document.getElementById('pInternalRecruitmentCreate').checked = !!perms.internalRecruitmentCreate;
+  document.getElementById('pInternalNewsManage').checked = !!perms.internalNewsManage;
   document.getElementById('pTrainingManage').checked = !!perms.trainingManage;
   document.getElementById('pTrainingInstruct').checked = !!perms.trainingInstruct;
   document.getElementById('pOnboardingEvaluate').checked = !!perms.onboardingEvaluate;

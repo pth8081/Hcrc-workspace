@@ -172,7 +172,10 @@ function __mockRequestInternalPostInfo(payload, user, post) {
 // Sửa bài Nháp/NEED_INFO rồi gửi lại — mirrors editInternalPost() ở lib/recordActions.js.
 const __MOCK_INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'contentFormat', 'attachment', 'images', 'coverImage', 'videos', 'postCategory', 'publishAt', 'training'];
 function __mockEditInternalPost(payload, user, post) {
-  if (post.author !== user.username && !user.perms?.admin) throw __mockHttpError(403, 'Bạn không có quyền sửa bài đăng này');
+  // internalNewsManage (quyền MỚI, 11/2026) — mirror editInternalPost() ở lib/recordActions.js: cho sửa
+  // bài type NEWS của người khác, không mở rộng trần trạng thái (vẫn chỉ DRAFT/NEED_INFO sửa được).
+  const canManageNews = post.type === 'NEWS' && !!user.perms?.internalNewsManage;
+  if (post.author !== user.username && !user.perms?.admin && !canManageNews) throw __mockHttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw __mockHttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
   __MOCK_INTERNAL_POST_EDITABLE_FIELDS.forEach((field) => { if (payload[field] !== undefined) post[field] = payload[field]; });
   __mockNormalizeInternalPostContentAndMedia(post);

@@ -10,10 +10,14 @@
 // chung (VD IT/Sys admin không có bất kỳ quyền Nhân Sự nào) tự ý xoá + kéo theo chấm dứt hợp đồng lao
 // động của người khác.
 //
-// Đã vá: assertHrProcessDeletePermission() (routes/records.js) gác THÊM đúng quyền Nhân Sự phù hợp
-// (hrProcessManage, hoặc hrOnboardingManage/hrOffboardingManage theo processType) CỘNG THÊM
-// assertAdminForDelete() — không thay hẳn (vẫn cần admin như mọi collection khác, chỉ siết CHẶT hơn
-// riêng cho module Nhân Sự nhạy cảm).
+// Đã vá: assertHrProcessDeletePermission() (routes/records.js) gác đúng quyền Nhân Sự phù hợp
+// (hrProcessManage, hoặc hrOnboardingManage/hrOffboardingManage theo processType) — admin chung KHÔNG
+// có quyền Nhân Sự nào vẫn bị chặn tuyệt đối (giữ nguyên bản vá gốc).
+//
+// ĐỔI TIẾP (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền riêng,
+// không cần thêm Admin mới xoá được"): bỏ HẲN yêu cầu CỘNG THÊM assertAdminForDelete() — có ĐỦ quyền
+// Nhân Sự phù hợp là xoá được ngay, không cần thêm admin hệ thống nữa. Scenario "CHỈ có hrOnboardingManage,
+// KHÔNG có admin" bên dưới đã đổi từ "vẫn bị chặn 403" (hành vi CŨ) sang "xoá thành công" (hành vi MỚI).
 //
 // Chạy: node server/tests/test-hrprocess-delete-permission.js
 'use strict';
@@ -172,11 +176,18 @@ async function main() {
       assertEqual(HR_PROCESSES.some(p => p.id === 2), false, 'bản ghi phải được xoá thành công');
     });
 
-    await run.run('CHỈ có hrOnboardingManage, KHÔNG có admin -> vẫn bị chặn 403 (vẫn cần admin như mọi collection khác)', async () => {
+    await run.run('ĐỔI HÀNH VI (11/2026): CHỈ có hrOnboardingManage, KHÔNG có admin -> xoá ONBOARDING thành công (không cần thêm admin nữa)', async () => {
       resetData();
       const res = await api('POST', '/api/records/hrProcesses/1/delete', {}, HR_ONBOARDING_NO_ADMIN);
-      assertEqual(res.status, 403, 'phải trả 403: thiếu quyền Quản Trị Viên chung, dù có hrOnboardingManage');
-      assertEqual(HR_PROCESSES.some(p => p.id === 1), true, 'bản ghi KHÔNG được xoá khi bị chặn');
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(HR_PROCESSES.some(p => p.id === 1), false, 'bản ghi phải được xoá thành công');
+    });
+
+    await run.run('CHỈ có hrOnboardingManage (không hrOffboardingManage), KHÔNG có admin -> xoá OFFBOARDING vẫn bị chặn 403 (đúng theo processType)', async () => {
+      resetData();
+      const res = await api('POST', '/api/records/hrProcesses/2/delete', {}, HR_ONBOARDING_NO_ADMIN);
+      assertEqual(res.status, 403, 'phải trả 403: processType OFFBOARDING cần hrOffboardingManage, không phải hrOnboardingManage');
+      assertEqual(HR_PROCESSES.some(p => p.id === 2), true, 'bản ghi KHÔNG được xoá khi bị chặn');
     });
 
     run.summary();

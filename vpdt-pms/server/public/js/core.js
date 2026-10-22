@@ -4552,7 +4552,7 @@ function defaultNewUserPerms() {
     moduleAccess: defaultModuleAccess(),
     canBeApprover: false,
     canViewReports: false,
-    internalNewsCreate: false, internalRecruitmentCreate: false,
+    internalNewsCreate: false, internalRecruitmentCreate: false, internalNewsManage: false,
     trainingManage: false, trainingInstruct: false, onboardingEvaluate: false,
     internalPostApprove: false,
     // uploadAll (10/2026, "6-module"): bỏ uploadDepts (mảng), chỉ còn 1 cờ phẳng, tự khoá đúng phòng

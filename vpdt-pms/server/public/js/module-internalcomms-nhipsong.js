@@ -729,8 +729,11 @@ async function submitInternalPost(e) {
 // Sửa bài Nháp/"Yêu cầu bổ sung" (NEED_INFO) — mở lại chính #internalPostForm, điền sẵn dữ liệu cũ rồi
 // chuyển submitInternalPost() sang nhánh gọi POST .../edit thay vì tạo mới. Điều kiện hiện nút PHẢI khớp
 // Y HỆT editInternalPost() (lib/recordActions.js) để không hiện nút rồi vẫn bị server từ chối.
+// internalNewsManage (quyền MỚI, 11/2026) — cho sửa bài NEWS của người khác (chỉ DRAFT/NEED_INFO, giữ
+// nguyên trần cũ), KHÔNG áp dụng SHARE/TRAINING. Mirror đúng editInternalPost() (lib/recordActions.js).
 function canEditInternalPostUI(p) {
-  return !!p && (p.status === 'DRAFT' || p.status === 'NEED_INFO') && (p.author === currentUser.username || currentUser.perms?.admin);
+  return !!p && (p.status === 'DRAFT' || p.status === 'NEED_INFO') &&
+    (p.author === currentUser.username || currentUser.perms?.admin || (p.type === 'NEWS' && currentUser.perms?.internalNewsManage));
 }
 
 async function editInternalPostUI(id) {
@@ -1331,7 +1334,7 @@ function renderRecruitmentJobs() {
           ${canManage && isOpen ? `<button data-op="confirmRecruitmentJobFilledUi" data-arg0="${j.id}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-bold">✅ Xác Nhận Đã Tuyển Đủ</button>` : ''}
           ${canManage ? `<button data-op="openEditRecruitmentJob" data-arg0="${j.id}" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded text-xs font-bold">✏️ Sửa</button>` : ''}
           ${canClose ? `<button data-op="closeRecruitmentJobUi" data-arg0="${j.id}" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-xs font-bold">Đóng Tin</button>` : ''}
-          ${currentUser.perms?.admin ? `<button data-op="deleteRecruitmentJob" data-arg0="${j.id}" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
+          ${canManage ? `<button data-op="deleteRecruitmentJob" data-arg0="${j.id}" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-xs font-bold">Xoá</button>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -1626,9 +1629,11 @@ function internalPostUnpinActionHTML(p) {
   return `<button data-op="unpinInternalPostAction" data-arg0="${p.id}" class="bg-amber-600 text-white px-3 py-1 rounded text-xs font-bold hover:bg-amber-700">📌 Gỡ Ghim</button>`;
 }
 
-// Xoá bài (phát hiện #12) — CHỈ Admin, khớp POST internalPosts/:id/delete (admin-only) ở routes/records.js.
+// Xoá bài (phát hiện #12) — Admin, HOẶC internalNewsManage (quyền MỚI, 11/2026) nếu bài là NEWS, khớp
+// POST internalPosts/:id/delete ở routes/records.js.
 function internalPostDeleteActionHTML(p) {
-  if (!currentUser.perms?.admin) return '';
+  const canDelete = !!(currentUser.perms?.admin || (p.type === 'NEWS' && currentUser.perms?.internalNewsManage));
+  if (!canDelete) return '';
   return `<button data-op="deleteInternalPostAction" data-arg0="${p.id}" class="text-red-500 font-bold hover:underline text-xs px-1">Xóa</button>`;
 }
 

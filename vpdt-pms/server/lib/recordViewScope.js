@@ -292,7 +292,11 @@ function filterSubmissionsForUser(submissions, user, appData) {
 // tác giả/người duyệt xem được cho tới khi tới giờ.
 function canViewInternalPost(user, post) {
   if (!user) return false;
-  const isAuthorOrApprover = post.author === user.username || !!(user.perms?.admin || user.perms?.internalPostApprove);
+  // internalNewsManage (quyền MỚI, 11/2026) — cho xem bài NEWS của người khác dù CHƯA APPROVED (DRAFT/
+  // NEED_INFO...), cần thiết để quyền "sửa bài NEWS của người khác" (editInternalPost(),
+  // lib/recordActions.js) thực sự dùng được — CHỈ áp dụng type NEWS, không mở rộng cho SHARE/TRAINING.
+  const isAuthorOrApprover = post.author === user.username || !!(user.perms?.admin || user.perms?.internalPostApprove ||
+    (post.type === 'NEWS' && user.perms?.internalNewsManage));
   if (post.status !== 'APPROVED') return isAuthorOrApprover;
   if (post.publishAt && new Date(post.publishAt).getTime() > Date.now()) return isAuthorOrApprover;
   return true;

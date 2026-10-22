@@ -1,9 +1,62 @@
 # Phiên bản hiện tại
 
-**28.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.2 (2026-11): Truyền Thông Nội Bộ — quyền "Quản Lý Nhịp Sống HCRC" mới (sửa/xoá bài người khác) + mở rộng "Đăng Tuyển dụng" sang xoá; Nhân Sự — Onboarding/Offboarding tự xoá được không cần thêm Admin
+
+Theo 2 yêu cầu người dùng (kèm 2 ảnh chụp cây phân quyền "8. Truyền Thông Nội Bộ" và khối "Onboarding/
+Offboarding" của mục Nhân Sự): "thêm quyền sửa xóa đăng tin tuyển dụng và sửa xóa đăng bài trong nhịp
+sống để người quản lý có thể có quyền thay đổi", và "tách Onboarding/Offboarding thành hai nhóm quyền
+riêng, người có quyền được toàn quyền sửa/xoá quy trình/hồ sơ của đúng loại mình quản lý (không cần
+thêm Admin)".
+
+**1. Truyền Thông Nội Bộ:**
+
+- **Quyền MỚI `internalNewsManage`** ("📝 Quản Lý Nhịp Sống HCRC (sửa/xoá bài của người khác)",
+  checkbox `pInternalNewsManage` cùng khối "Đăng Nhịp Sống HCRC"/"Đăng Tuyển dụng") — cho **sửa** bài
+  type `NEWS` của người khác (vẫn giữ nguyên trần cũ chỉ sửa được khi còn `DRAFT`/`NEED_INFO`, đúng mức
+  admin hiện có — không mở rộng sang bài đã công khai) và **xoá** bài `NEWS` ở BẤT KỲ trạng thái nào mà
+  KHÔNG cần thêm quyền Admin hệ thống. CHỈ áp dụng type `NEWS` — không đụng "Góc chia sẻ" (đã có
+  `internalPostApprove` riêng) hay bài Đào Tạo (đã tách ở mục 19).
+  - Server: `editInternalPost()`/`canViewInternalPost()` (`lib/recordActions.js`/`lib/recordViewScope.js`)
+    cho phép xem + sửa bài NEWS của người khác; route `POST /internalPosts/:id/delete` đổi từ
+    `deleteAdminOnly` sang guard riêng (NEWS + `internalNewsManage` → xoá được ngay, còn lại vẫn rơi về
+    admin-only như cũ).
+  - Client: nút "✏️ Sửa"/"Xóa" ở Nhịp Sống HCRC (`module-internalcomms-nhipsong.js`) hiện đúng theo quyền
+    mới, khớp y hệt luật server.
+- **Mở rộng phạm vi quyền ĐÃ CÓ `internalRecruitmentCreate`** (không phải quyền mới, không thêm
+  checkbox) — quyền này từ trước đã cho sửa/đóng/ghim MỌI tin tuyển dụng không giới hạn người tạo
+  ("hộp thư chung" của đội Tuyển Dụng), nay XOÁ tin tuyển dụng cũng dùng chung đúng quyền này, không cần
+  thêm Admin nữa (route `POST /recruitmentJobs/:id/delete`, nút "Xoá" ở `module-internalcomms-
+  nhipsong.js`).
+
+**2. Nhân Sự — Onboarding/Offboarding:** `hrOnboardingManage`/`hrOffboardingManage` (2 checkbox đã có
+sẵn từ trước) vốn đã cho toàn quyền thao tác task/quy trình không cần Admin (`canManageHrProcess()`/
+`canActOnHrTask()`) — riêng **XOÁ** hẳn 1 quy trình (`assertHrProcessDeletePermission()`,
+`routes/records.js`) trước đây vẫn bắt buộc CẢ quyền Nhân Sự phù hợp LẪN Admin hệ thống (AND), mâu thuẫn
+với chủ đích "tách quyền cho đúng bộ phận". Đổi: có ĐỦ quyền Nhân Sự phù hợp (`hrProcessManage`, hoặc
+đúng `hrOnboardingManage`/`hrOffboardingManage` theo loại quy trình) là xoá được ngay — **KHÔNG còn rơi
+về Admin như 1 lối thoát dự phòng**: 1 admin hệ thống chung hoàn toàn không có quyền Nhân Sự nào vẫn bị
+chặn tuyệt đối (giữ nguyên bản vá gốc re-audit lần 5, chỉ đảo logic kết hợp — xem comment chi tiết tại
+hàm này giải thích vì sao KHÔNG được coi admin là lối thoát, tránh mở lại đúng lỗ hổng đã vá).
+
+**Lưu ý quan trọng**: cả 2 thay đổi "xóa không cần Admin" ở trên là quyết định **CÓ CHỦ Ý, CHỈ áp dụng
+riêng cho 3 trường hợp cụ thể này** theo đúng yêu cầu người dùng — KHÔNG áp dụng chung nguyên tắc "xóa =
+quyền tối cao" cho các collection khác trong hệ thống (mọi collection khác vẫn giữ nguyên admin-only).
+
+**Test**: viết mới `tests/test-internal-news-manage-and-recruitment-delete.js` (11/11 pass), cập nhật
+`tests/test-hrprocess-delete-permission.js` (8/8 pass, đổi 1 kịch bản theo hành vi mới + thêm 1 kịch bản
+đối chứng processType), cập nhật mirror `tests/_mock-backend.js`. Chạy lại toàn bộ test liên quan Truyền
+Thông Nội Bộ/Tuyển Dụng/Nhân Sự Onboarding-Offboarding — không có regression (2 lỗi tiền tồn tại không
+liên quan đã xác nhận qua `git stash`: `test-audit-nhansu-onboarding-contract.js` 2/29 và
+`test-recruitment-worktime-filter.js` 1/6, cả 2 giống hệt trên `main` sạch).
+
+**Deploy-impact**: không đổi `schema.sql`/biến môi trường/dependency — chỉ copy code + `pm2 restart`.
+Admin cần vào Phân Quyền → cây phân quyền để CẤP MỚI quyền `internalNewsManage` cho người quản lý Truyền
+Thông Nội Bộ nếu muốn dùng — quyền này mặc định `false` cho mọi tài khoản hiện có.
 
 ## v28.1 (2026-11): Kế Hoạch Đào Tạo — Tháng/Năm chọn riêng + Loại Đào Tạo lọc Chương Trình + khoảng Ngày Tổ Chức có giờ; Ngân Hàng Câu Hỏi — Thời Gian Làm Bài tổng
 

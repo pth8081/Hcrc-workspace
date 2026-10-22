@@ -3442,7 +3442,8 @@ function unpinInternalPost(user, post) {
   return post;
 }
 
-// Sửa bài Nháp/bài bị "Yêu cầu bổ sung" (NEED_INFO) — chỉ tác giả (hoặc admin) sửa được, chỉ 2 trạng
+// Sửa bài Nháp/bài bị "Yêu cầu bổ sung" (NEED_INFO) — tác giả, admin, hoặc internalNewsManage (quyền
+// MỚI, chỉ áp dụng bài type NEWS, xem chú thích ở editInternalPost() ngay dưới) sửa được, chỉ 2 trạng
 // thái này sửa được (bài đã APPROVED/PENDING/REJECTED/HIDDEN đã qua giai đoạn soạn thảo). Gửi lại y hệt
 // luật gán status lúc TẠO (xem createValidation.js internalPosts.extraValidate) — giữ isDraft để tác
 // giả có thể lưu nháp nhiều lần trước khi thật sự gửi.
@@ -3450,8 +3451,14 @@ function unpinInternalPost(user, post) {
 // dạng Bold/Danh sách) — chuẩn hoá lại NGAY SAU vòng gộp field bên dưới bằng ĐÚNG 2 hàm đường TẠO dùng
 // (normalizeInternalPostContent()/normalizeInternalPostMedia(), lib/createValidation.js).
 const INTERNAL_POST_EDITABLE_FIELDS = ['title', 'content', 'contentFormat', 'attachment', 'images', 'coverImage', 'videos', 'postCategory', 'publishAt', 'training', 'customData'];
+// internalNewsManage (quyền MỚI, 11/2026, theo yêu cầu người dùng "thêm quyền sửa xóa bài đăng Nhịp Sống
+// HCRC cho người quản lý") — cho sửa bài type NEWS của NGƯỜI KHÁC, KHÔNG mở rộng gì thêm ngoài tác giả:
+// vẫn giữ nguyên trần "chỉ DRAFT/NEED_INFO sửa được" ngay dưới (admin hiện tại CŨNG không sửa được bài đã
+// APPROVED — không cấp cho internalNewsManage quyền vượt quá cả admin). CHỈ áp dụng type NEWS — SHARE/
+// TRAINING không đụng tới (2 loại đó có cơ chế quyền riêng, xem canCreateInternalPostType()).
 function editInternalPost(payload, user, post, appData) {
-  if (post.author !== user.username && !user.perms?.admin) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
+  const canManageNews = post.type === 'NEWS' && !!user.perms?.internalNewsManage;
+  if (post.author !== user.username && !user.perms?.admin && !canManageNews) throw new HttpError(403, 'Bạn không có quyền sửa bài đăng này');
   if (post.status !== 'DRAFT' && post.status !== 'NEED_INFO') throw new HttpError(409, 'Bài đăng không còn ở trạng thái được sửa');
   // "attachment" nằm trong INTERNAL_POST_EDITABLE_FIELDS nên đi thẳng từ payload client vào bản ghi —
   // phải kiểm tra ĐÚNG luật URL như lúc TẠO (createValidation.js internalPosts.extraValidate), nếu
@@ -3538,7 +3545,10 @@ function editInternalPost(payload, user, post, appData) {
     // APPROVED — nếu người sửa hiện KHÔNG còn đủ quyền loại bài này (VD quyền trainingManage đã bị thu
     // hồi sau khi lưu Nháp), chặn publish, giữ nguyên NEED_INFO (không tự rơi về DRAFT — tác giả không
     // chủ động chọn Lưu Nháp) để họ biết cần liên hệ người có quyền xử lý tiếp thay vì mất dấu bài viết.
-    if (!canCreateInternalPostType(user, post.type)) {
+    // canManageNews (internalNewsManage, quyền MỚI) được đi tiếp dù KHÔNG có internalNewsCreate — người
+    // "quản lý" bài NEWS của người khác không nhất thiết phải tự có quyền "đăng" riêng mới gửi lại được
+    // bài đang sửa hộ, khác hẳn canCreateInternalPostType() (gác đường TẠO MỚI, CỐ Ý không đổi).
+    if (!canCreateInternalPostType(user, post.type) && !canManageNews) {
       throw new HttpError(403, 'Bạn không còn đủ quyền đăng bài ở phân hệ này — không thể gửi lại. Vui lòng liên hệ người quản trị.');
     }
     post.status = (post.type === 'SHARE' && !user.perms?.admin && !user.perms?.internalPostApprove)

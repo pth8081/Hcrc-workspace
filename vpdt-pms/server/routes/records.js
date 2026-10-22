@@ -890,7 +890,17 @@ router.post('/internalPosts/:id/edit', async (req, res) => {
 // dọn khỏi hệ thống ngoài để mãi. Cùng khuôn "xóa = quyền tối cao, chỉ Admin" của mọi collection khác
 // (deleteAdminOnly() — vào Thùng Rác, khôi phục được), không giới hạn theo status (Admin được xoá bất kỳ
 // bài nào, kể cả APPROVED, nếu cần — cùng quyền admin đã có ở hideInternalPost()/canApproveInternalPost()).
-router.post('/internalPosts/:id/delete', (req, res) => deleteAdminOnly(req, res, 'internalPosts'));
+//
+// MỞ RỘNG CÓ CHỦ Ý (11/2026, theo yêu cầu người dùng "thêm quyền sửa xóa bài đăng Nhịp Sống HCRC cho
+// người quản lý"): quyền MỚI internalNewsManage (xem checkbox pInternalNewsManage, systemSection.html)
+// cho xoá bài type NEWS bất kỳ trạng thái mà KHÔNG cần thêm admin — CHỈ áp dụng cho NEWS (Nhịp Sống
+// HCRC), KHÔNG áp dụng cho SHARE (Góc Chia Sẻ, đã có cơ chế quyền riêng qua internalPostApprove) hay
+// TRAINING (đã tách riêng ở mục Đào Tạo, trainingManage) — người không có internalNewsManage hoặc bài
+// không phải NEWS vẫn rơi về đúng assertAdminForDelete() như cũ.
+router.post('/internalPosts/:id/delete', (req, res) => deleteWithGuard(req, res, 'internalPosts', (freshUser, item) => {
+  if (item?.type === 'NEWS' && freshUser.perms?.internalNewsManage) return;
+  assertAdminForDelete(freshUser);
+}));
 
 // Bước 3 — Công việc có nhiều action cùng khuôn "tìm việc trong collection, khoá, gọi hàm xác minh +
 // mutate ở lib/recordActions.js, trả về bản ghi mới" — gom vào 1 helper dùng chung thay vì lặp lại
@@ -1043,16 +1053,37 @@ function assertAdminForDelete(user) {
 // comment "KHÔNG còn admin bypass") — chỉ riêng route XOÁ này bị bỏ sót, vẫn cho 1 admin hệ thống chung
 // (VD IT/Sys admin không có bất kỳ quyền Nhân Sự nào) tự ý xoá + kéo theo chấm dứt hợp đồng lao động
 // của người khác. Gác THÊM đúng quyền Nhân Sự phù hợp (hrProcessManage/hrOnboardingManage/
-// hrOffboardingManage theo processType, mirror canManageHrProcess()) — CỘNG THÊM assertAdminForDelete()
-// chứ không thay hẳn (giữ đúng khuôn "quyền tối cao" admin-only đã áp dụng nhất quán cho mọi collection
-// khác ở file này, chỉ siết CHẶT hơn riêng cho module Nhân Sự nhạy cảm).
+// hrOffboardingManage theo processType, mirror canManageHrProcess()).
+//
+// ĐỔI (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền riêng, người có
+// quyền được toàn quyền sửa xóa quy trình/hồ sơ của ĐÚNG loại mình quản lý"): bỏ HẲN yêu cầu
+// assertAdminForDelete() — có ĐỦ quyền Nhân Sự phù hợp (hrProcessManage HOẶC đúng hrOnboardingManage/
+// hrOffboardingManage theo processType) là XOÁ ĐƯỢC NGAY, không cần thêm admin hệ thống (trước đây dù
+// được cấp hrOnboardingManage/hrOffboardingManage riêng, bộ phận Tuyển Dụng/Nhân Sự vẫn không tự xoá được
+// hồ sơ của chính mảng mình phụ trách nếu không có thêm quyền Admin chung — mâu thuẫn với chủ đích tách
+// quyền). QUAN TRỌNG: KHÔNG rơi về assertAdminForDelete() như 1 lối thoát dự phòng khi thiếu quyền Nhân
+// Sự — nếu làm vậy sẽ MỞ LẠI đúng lỗ hổng gốc (re-audit lần 5) mà bản vá này từng chặn: 1 admin hệ thống
+// chung (VD IT/Sys admin, KHÔNG có bất kỳ quyền Nhân Sự nào) phải tiếp tục bị chặn tuyệt đối, không có
+// đường vòng nào khác. LƯU Ý: đây là quyết định CÓ CHỦ Ý CHỈ áp dụng cho riêng hrProcesses theo đúng yêu
+// cầu người dùng — KHÔNG áp dụng chung "xóa = quyền tối cao" cho các collection khác trong file này (vẫn
+// giữ nguyên admin-only như trước, xem assertAdminForDelete() ở trên).
 function assertHrProcessDeletePermission(user, item) {
-  assertAdminForDelete(user);
   const hasHrAuthority = !!(user.perms?.hrProcessManage ||
     (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage));
   if (!hasHrAuthority) {
     throw new HttpError(403, 'Cần có quyền Nhân Sự phù hợp (hrOnboardingManage/hrOffboardingManage/hrProcessManage) mới được xoá quy trình này — quyền Quản Trị Viên chung không đủ');
   }
+}
+// MỞ RỘNG CÓ CHỦ Ý (11/2026, theo yêu cầu người dùng "thêm quyền sửa xóa tin tuyển dụng cho người quản
+// lý"): internalRecruitmentCreate đã là 1 "hộp thư chung" toàn quyền của đội Tuyển Dụng từ trước — sửa/
+// đóng/ghim MỌI tin đăng không giới hạn theo người tạo (xem canManageRecruitment(), lib/recordActions.js)
+// — chỉ riêng route XOÁ còn sót lại đòi thêm quyền Admin hệ thống, không nhất quán với phần còn lại của
+// quyền này. Cho phép internalRecruitmentCreate tự xoá được luôn, không cần thêm admin; vẫn rơi về
+// assertAdminForDelete() nếu KHÔNG có quyền này (giữ đúng khuôn "quyền tối cao" cho người không thuộc
+// đội Tuyển Dụng).
+function assertRecruitmentJobDeletePermission(user) {
+  if (user.perms?.internalRecruitmentCreate) return;
+  assertAdminForDelete(user);
 }
 // Chặn xoá Hợp đồng/Mua Bán-Sửa Chữa-Đầu Tư nếu còn Đề nghị thanh toán tham chiếu tới hồ sơ này (xem
 // startContractPayment()/startOfficePayment() ở lib/recordActions.js, gắn sourceModule/sourceId khi
@@ -2431,13 +2462,13 @@ router.post('/recruitmentJobs/:id/delete', async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
   try {
     const { freshUser } = await getFreshUser(req);
-    assertAdminForDelete(freshUser);
+    assertRecruitmentJobDeletePermission(freshUser);
     const referrals = await getAllForCollection('recruitmentReferrals');
     const referencing = referrals.filter(r => r.jobId === itemId);
     if (referencing.length) {
       throw new HttpError(409, `Không thể xóa tin tuyển dụng này vì còn ${referencing.length} lượt giới thiệu ứng viên đang gắn với nó. Vui lòng xử lý/xoá các lượt giới thiệu đó trước.`);
     }
-    await deleteRecordForCollection('recruitmentJobs', itemId, () => assertAdminForDelete(freshUser), { username: freshUser.username, name: freshUser.name });
+    await deleteRecordForCollection('recruitmentJobs', itemId, () => assertRecruitmentJobDeletePermission(freshUser), { username: freshUser.username, name: freshUser.name });
     res.json({ ok: true });
   } catch (err) {
     handleError(res, `recruitmentJobs/${req.params.id}/delete`, err);

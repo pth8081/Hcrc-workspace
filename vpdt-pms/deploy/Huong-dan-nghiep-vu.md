@@ -1204,6 +1204,14 @@ Nhóm module **mọi nhân viên** đều đụng tới gần như mỗi ngày.
       thiệu ứng viên mở cho mọi người có `internalRecruitmentCreate`, nên
       người TỰ giới thiệu 1 ứng viên KHÔNG được tự xử lý luôn trạng thái ứng
       viên đó — phải nhờ đồng nghiệp khác cùng giữ quyền xử lý hộ.
+    - **Xoá tin tuyển dụng (11/2026)**: `internalRecruitmentCreate` tự xoá
+      được tin (không cần thêm quyền Admin nữa) — đúng tinh thần "hộp thư
+      chung" như sửa/đóng/ghim đã có từ trước.
+  - **📝 Quản Lý Nhịp Sống HCRC** (`internalNewsManage`, 11/2026) — quyền
+    RIÊNG cho sửa (khi bài còn Nháp/Yêu cầu bổ sung) + xoá (mọi trạng thái)
+    bài đăng Nhịp Sống HCRC của NGƯỜI KHÁC, dành cho người quản lý đội Truyền
+    Thông — không đụng tới "Góc chia sẻ"/bài Đào Tạo. Cấp ở Phân Quyền → cây
+    phân quyền → mục "8. Truyền Thông Nội Bộ".
 
 ### 4.2. Yêu Cầu Hành Chính Tự Phục Vụ
 
@@ -2935,7 +2943,10 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   đã snapshot vào từng quy trình lúc tạo).
 - **Phân quyền** (khối 21 cây phân quyền) — 5 cờ phẳng: **"🆕 Quản Lý
   Onboarding"**/**"🚪 Quản Lý Offboarding"** (tạo + quản lý quy trình đúng
-  loại), **"📋 Quản Lý Checklist Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự động
+  loại — **từ 11/2026, 2 quyền này còn tự XOÁ được hẳn quy trình đúng loại
+  mình quản lý, KHÔNG cần thêm quyền Admin hệ thống nữa**, theo đúng chủ đích
+  "tách quyền cho đúng bộ phận Tuyển Dụng/Nhân Sự"), **"📋 Quản Lý Checklist
+  Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự động
   có quyền tạo/quản lý quy trình), **"✅ Toàn Quyền Thao Tác Mọi Quy Trình"**
   (10/2026, rà soát chuyên sâu — quyền GHI mới: hoàn thành/bỏ qua BẤT KỲ task
   nào + huỷ/giao lại/chỉ định người kế nhiệm của MỌI quy trình, kể cả task
