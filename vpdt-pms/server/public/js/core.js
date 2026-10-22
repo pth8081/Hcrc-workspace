@@ -10187,29 +10187,44 @@ async function openTakeTestFromQueryParam() {
 // đang soạn 1 văn bản dài, đọc lâu 1 hồ sơ) — trước đây cơ chế "trượt hạn theo hoạt động" ở
 // requireAuth() (lib/auth.js) chỉ cấp lại token mới khi có SẴN 1 request nào đó tới server, mà toàn bộ
 // trang không hề có request định kỳ nào cả (không setInterval nào gọi API) nên nếu người dùng im lặng
-// quá ~44 phút, token chạm mốc hết hạn tuyệt đối (1h) và request tiếp theo (vd bấm "Lưu") bị 401, văng
-// ra ngay giữa chừng, có thể mất nội dung đang nhập dở — đúng triệu chứng "hay bị văng khi đang làm
-// việc". Ping nhẹ (chỉ đọc lại /api/auth/me, không tải dữ liệu gì nặng) mỗi 10 phút là đủ dày để token
-// luôn được làm mới trước khi chạm ngưỡng, miễn tab còn mở và còn mạng.
+// quá ngưỡng renew (xem TOKEN_RENEW_THRESHOLD_MS, lib/auth.js), token chạm mốc hết hạn tuyệt đối
+// (TOKEN_TTL, hiện 8h) và request tiếp theo (vd bấm "Lưu") bị 401, văng ra ngay giữa chừng, có thể mất
+// nội dung đang nhập dở — đúng triệu chứng "hay bị văng khi đang làm việc". Ping nhẹ (chỉ đọc lại
+// /api/auth/me, không tải dữ liệu gì nặng) mỗi 10 phút là đủ dày để token luôn được làm mới trước khi
+// chạm ngưỡng, miễn tab còn mở và còn mạng.
+//
+// LỖI ĐÃ VÁ (10/2026, người dùng báo "cứ bị văng hết phiên nhiều lần" trên điện thoại): setInterval ở
+// trên chỉ chạy khi tab đang ở FOREGROUND — trình duyệt mobile tạm dừng hẳn mọi JS chạy ngầm (kể cả
+// timer này) khi người dùng chuyển sang app khác/khóa màn hình, nên nhịp ping 10 phút không gửi được
+// request nào trong suốt thời gian đó. Thêm `visibilitychange`: ping ngay lập tức mỗi khi tab quay lại
+// foreground (thay vì phải chờ tới nhịp 10 phút kế tiếp) — nếu lúc rời đi chưa vượt quá TOKEN_TTL thì
+// token vẫn còn hợp lệ, ping này sẽ làm mới lại ngay (nếu đã dưới ngưỡng renew) thay vì để treo tới lúc
+// người dùng thao tác tiếp mới phát hiện đã hết hạn.
 let sessionKeepAliveTimer = null;
 const SESSION_KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000;
+async function sessionKeepAlivePing() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.status === 401) {
+      stopSessionKeepAlive();
+      handleSessionExpired();
+    }
+  } catch (e) { /* mất mạng tạm thời — bỏ qua, thử lại ở lượt ping kế tiếp */ }
+}
+function handleSessionKeepAliveVisibilityChange() {
+  if (!document.hidden && sessionKeepAliveTimer) sessionKeepAlivePing();
+}
 function startSessionKeepAlive() {
   stopSessionKeepAlive();
-  sessionKeepAliveTimer = setInterval(async () => {
-    try {
-      const res = await fetch('/api/auth/me');
-      if (res.status === 401) {
-        stopSessionKeepAlive();
-        handleSessionExpired();
-      }
-    } catch (e) { /* mất mạng tạm thời — bỏ qua, thử lại ở lượt ping kế tiếp */ }
-  }, SESSION_KEEPALIVE_INTERVAL_MS);
+  sessionKeepAliveTimer = setInterval(sessionKeepAlivePing, SESSION_KEEPALIVE_INTERVAL_MS);
+  document.addEventListener('visibilitychange', handleSessionKeepAliveVisibilityChange);
 }
 function stopSessionKeepAlive() {
   if (sessionKeepAliveTimer) {
     clearInterval(sessionKeepAliveTimer);
     sessionKeepAliveTimer = null;
   }
+  document.removeEventListener('visibilitychange', handleSessionKeepAliveVisibilityChange);
 }
 
 // ==========================================================================

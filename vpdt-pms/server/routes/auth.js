@@ -214,7 +214,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
     // chỉ lúc đổi mật khẩu. Token vừa ký bên dưới dùng ĐÚNG giá trị sv MỚI này (không phải `user` gốc đã
     // đọc trước đó ở đầu route) nên tự nó vẫn hợp lệ; mọi token khác đã ký trước đó (ở thiết bị/trình
     // duyệt khác) sẽ có sv CŨ, lập tức bị requireAuth() từ chối (401 "Mật khẩu/PIN vừa được thay đổi...")
-    // ngay ở request kế tiếp của họ — không cần đợi hết hạn JWT (tối đa 1h, có thể lâu hơn do trượt hạn
+    // ngay ở request kế tiếp của họ — không cần đợi hết hạn JWT (tối đa 8h, có thể lâu hơn do trượt hạn
     // theo hoạt động).
     let sessionUser = user;
     await withLockedAppDataValue('users', (collection) => {
@@ -334,7 +334,7 @@ router.post('/verify-totp-login', loginRateLimiter, async (req, res) => {
 
 // Trước đây logout CHỈ xoá cookie phía trình duyệt gọi request này — nếu token đã bị lộ (XSS, thiết bị
 // dùng chung, cache/lịch sử proxy...), kẻ có token đó vẫn dùng được BÌNH THƯỜNG sau khi chủ tài khoản
-// bấm "Đăng xuất" ở máy của họ, cho tới khi token tự hết hạn (tối đa 1h, có thể lâu hơn do trượt hạn
+// bấm "Đăng xuất" ở máy của họ, cho tới khi token tự hết hạn (tối đa 8h, có thể lâu hơn do trượt hạn
 // theo hoạt động — xem lib/auth.js) — rà soát bảo mật trước golive (9/2026, mức Trung bình). Vá bằng
 // CÙNG cơ chế sessionVersion đã dùng cho đổi mật khẩu/PIN/gỡ TOTP (lib/auth.js requireAuth() so payload.sv
 // với DB): tăng sessionVersion của CHÍNH người vừa đăng xuất -> mọi token đã ký trước đó (kể cả token bị
@@ -632,7 +632,7 @@ router.patch('/me', requireAuth, async (req, res) => {
         delete updated.mustChangePassword;
         // Vô hiệu hóa mọi phiên JWT KHÁC đang mở của chính người này (xem lib/auth.js signToken/
         // requireAuth) — mất mật khẩu/thiết bị cũ vẫn đăng nhập được vô thời hạn cho tới khi token hết
-        // hạn (tối đa 1h, có thể lâu hơn do trượt hạn theo hoạt động) trước khi có sessionVersion này.
+        // hạn (tối đa 8h, có thể lâu hơn do trượt hạn theo hoạt động) trước khi có sessionVersion này.
         updated.sessionVersion = (updated.sessionVersion || 0) + 1;
       }
 

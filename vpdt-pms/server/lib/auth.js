@@ -7,12 +7,23 @@ const jwt = require('jsonwebtoken');
 const { getAppDataValueCached } = require('./appData');
 
 const COOKIE_NAME = 'vpdt_token';
-const TOKEN_TTL_MS = 60 * 60 * 1000; // 1h — xem cơ chế "trượt hạn theo hoạt động" ở requireAuth() bên dưới
-const TOKEN_TTL = '1h';
-// Còn lại dưới mốc này (tính từ token hiện tại) thì requireAuth() tự cấp lại token mới đủ 1h — người
+// LỖI ĐÃ VÁ (10/2026, người dùng báo "cứ bị văng hết phiên nhiều lần" khi dùng trên điện thoại): hạn 1h
+// cũ quá ngắn so với cách dùng thực tế trên mobile — trình duyệt di động TẠM DỪNG hẳn JS chạy ngầm (kể
+// cả nhịp "giữ phiên" mỗi 10 phút ở startSessionKeepAlive(), core.js) khi người dùng chuyển sang app
+// khác/khóa màn hình, nên chỉ cần rời app liên tục hơn 1h (rất dễ xảy ra giữa ngày làm việc) là token hết
+// hạn THẬT, không có request nào kịp tự làm mới. Tăng lên 8h (đủ 1 ca hành chính) theo xác nhận người
+// dùng — KHÔNG làm giảm an toàn đáng kể vì requireAuth() bên dưới vẫn tự tra lại trạng thái tài khoản
+// THẬT (active/sessionVersion) ở MỌI request bất kể tuổi token — khóa tài khoản/đổi mật khẩu vẫn mất
+// quyền ngay lập tức, không phụ thuộc hạn token; token dài hơn chỉ ảnh hưởng tới trường hợp hiếm là cookie
+// httpOnly bị đánh cắp.
+const TOKEN_TTL_MS = 8 * 60 * 60 * 1000; // 8h — xem cơ chế "trượt hạn theo hoạt động" ở requireAuth() bên dưới
+const TOKEN_TTL = '8h';
+// Còn lại dưới mốc này (tính từ token hiện tại) thì requireAuth() tự cấp lại token mới đủ 8h — người
 // dùng còn đang thao tác (còn gửi request) sẽ không bao giờ bị văng ra giữa chừng; chỉ thật sự hết hạn
-// khi ngừng hoạt động liên tục quá 1h (không request nào trong suốt thời gian đó).
-const TOKEN_RENEW_THRESHOLD_MS = 45 * 60 * 1000;
+// khi ngừng hoạt động liên tục quá 8h (không request nào trong suốt thời gian đó). Giữ nguyên 1h (không
+// nhân tỉ lệ theo TTL) — đủ rộng hơn nhịp "giữ phiên" 10 phút để không bao giờ lỡ mốc, không cần renew
+// gần như mọi request lúc token còn mới.
+const TOKEN_RENEW_THRESHOLD_MS = 60 * 60 * 1000;
 const BCRYPT_ROUNDS = 10;
 
 function getJwtSecret() {

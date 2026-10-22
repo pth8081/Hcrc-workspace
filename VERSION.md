@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**27.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
-`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
-`27.0` theo đúng quy tắc — MINOR lại vừa chạm `99`, lần merge kế tiếp cuộn sang `28.0`.)
+`1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
+`28.0` theo đúng quy tắc.)
+
+## v28.0 (2026-10): Tăng hạn mức phiên đăng nhập 1h → 8h — hết triệu chứng "cứ bị văng hết phiên nhiều lần" trên điện thoại
+
+Người dùng báo (kèm ảnh chụp màn hình "Phiên đăng nhập đã hết hạn" trên điện thoại, bị văng nhiều lần dù
+vừa đăng nhập): điều tra ra nguyên nhân THẬT — token JWT (`lib/auth.js`, cookie `vpdt_token`) có hạn
+tuyệt đối 1h (`TOKEN_TTL`), tự làm mới ("trượt hạn theo hoạt động") mỗi khi có request tới server hoặc
+qua nhịp "giữ phiên" ngầm mỗi 10 phút (`startSessionKeepAlive()`, `core.js`). NHƯNG trình duyệt di động
+TẠM DỪNG hẳn mọi JS chạy ngầm (kể cả timer giữ phiên này) khi người dùng chuyển sang app khác/khóa màn
+hình — nên chỉ cần rời app liên tục hơn 1h (rất dễ xảy ra giữa ngày làm việc thực tế trên mobile) là
+token hết hạn THẬT, không có request nào kịp tự làm mới trong lúc đó. Đây không phải lỗi phần mềm mà do
+hạn mức 1h đang quá ngắn so với cách dùng thực tế trên di động.
+
+Đã xác nhận hướng xử lý với người dùng (hỏi 3 mốc 8h/12h/24h, chọn **8h** — đủ 1 ca hành chính) trước khi
+làm, theo đúng quy trình "phân tích → xác nhận → làm + merge luôn":
+
+- `lib/auth.js`: `TOKEN_TTL`/`TOKEN_TTL_MS` 1h → 8h; `TOKEN_RENEW_THRESHOLD_MS` giữ nguyên tuyệt đối 1h
+  (không nhân tỉ lệ theo TTL mới) — vẫn đủ rộng hơn nhịp giữ phiên 10 phút, không cần renew gần như mọi
+  request lúc token còn mới. **Không làm giảm an toàn đáng kể**: `requireAuth()` vẫn tự tra lại trạng
+  thái tài khoản THẬT (active/sessionVersion) ở MỌI request bất kể tuổi token — khóa tài khoản/đổi mật
+  khẩu vẫn mất quyền ngay lập tức, không phụ thuộc hạn token; token dài hơn chỉ ảnh hưởng tới trường hợp
+  hiếm là cookie `httpOnly` bị đánh cắp.
+- `public/js/core.js` (`startSessionKeepAlive()`): thêm lắng nghe `visibilitychange` — ping
+  `/api/auth/me` NGAY khi tab quay lại foreground (thay vì chỉ chờ nhịp 10 phút kế tiếp), giúp token
+  được làm mới sớm hơn ngay khi người dùng vừa quay lại app sau khi rời đi (miễn còn trong hạn 8h).
+- `routes/auth.js`: cập nhật 3 chỗ comment "tối đa 1h" thành "tối đa 8h" cho đúng hành vi mới (không đổi
+  logic). `lib/adminAuth.js` có sẵn comment ghi "8h" từ trước (lúc đó là sai, đã từng bị gắn cờ ở đợt vá
+  trước) — nay lại đúng, không cần sửa thêm.
+- Test: chạy lại `test-auth-login.js` (18/18), `test-auth-single-session.js` (5/5),
+  `test-login-cache-first-render.js` (7/7), `test-prefetch-after-login.js` (11/11) — không có
+  regression liên quan tới đăng nhập/phiên.
+
+**Không cần thao tác gì thêm ngoài deploy code mới** — không đổi `schema.sql`, không thêm biến môi
+trường mới, không đổi `package.json` dependencies. Người dùng đang đăng nhập lúc deploy sẽ vẫn dùng token
+cũ (1h) cho tới khi hết hạn hoặc đăng nhập lại — token mới cấp sau khi deploy mới có hạn 8h.
 
 ## v27.99 (2026-10): Kế Hoạch Đào Tạo — ô "Tháng" đổi sang lịch đầy đủ ngày/tháng/năm (hết lỗi hiển thị), "Đơn Vị" cho nhập tự do, Dashboard lọc theo KHOẢNG tháng/năm
 
