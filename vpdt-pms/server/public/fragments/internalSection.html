@@ -28,16 +28,27 @@
       </div>
 
       <!-- DASHBOARD — chia 2 phần (10/2026, theo yêu cầu BP Đào Tạo): "Theo Kế Hoạch Tháng" (tái dùng
-           computeTrainingPlanDashboard() đã có, đối chiếu kế hoạch/thực tế đúng 1 tháng) + "Tổng Hợp Năm"
-           (bộ thẻ tổng quan + Top Điểm Cao Nhất cũ, nay lọc theo NĂM đang chọn thay vì toàn bộ thời gian
-           — xem computeTrainingDashboard(year)/renderTrainingDashboard() ở module-internalcomms-daotao.js). -->
+           computeTrainingPlanDashboard() đã có, đối chiếu kế hoạch/thực tế theo 1 KHOẢNG tháng) + "Tổng
+           Hợp Năm" (bộ thẻ tổng quan + Top Điểm Cao Nhất cũ, nay lọc theo 1 KHOẢNG năm thay vì toàn bộ
+           thời gian — xem computeTrainingDashboard(yearFrom,yearTo)/renderTrainingDashboard() ở
+           module-internalcomms-daotao.js).
+           LỌC THEO KHOẢNG (11/2026, theo yêu cầu người dùng "cho phép từ ngày đến ngày ở chỗ tháng và từ
+           năm đến năm ở chỗ năm để báo cáo chính xác hơn" — trước đây chỉ lọc đúng 1 tháng/1 năm): mỗi ô
+           lọc nay tách THÀNH 2 ô "Từ"/"Đến" — để trống ô "Đến" = không giới hạn đầu kia (mở tới hiện tại/
+           hết dữ liệu), để trống CẢ HAI = không lọc gì (giữ đúng hành vi "để trống = tất cả" đã có).
+           tdPlanMonthFrom/tdPlanMonthTo (type="date", KHÔNG phải type="month" — xem chú thích đầy đủ tại
+           readMonthFromDateInput() ở module-internalcomms-daotao.js: input "chỉ chọn tháng" của trình
+           duyệt hiển thị lỗi trên nhiều thiết bị, đổi sang input ngày đáng tin cậy hơn nhưng vẫn LUÔN quy
+           về đúng "YYYY-MM" trước khi lọc/lưu, không đổi ý nghĩa nghiệp vụ "theo tháng"). -->
       <div id="trainingLmsDashboardPanel" class="hidden space-y-5">
         <div class="bg-emerald-50 border border-emerald-200 rounded p-4 space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h4 class="font-bold text-emerald-900 text-sm flex items-center gap-2">📅 Theo Kế Hoạch Tháng</h4>
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-semibold text-gray-600">Tháng</label>
-              <input type="month" id="tdPlanMonth" data-op-change="renderTrainingDashboardMonthSection" class="border p-1.5 rounded text-xs bg-white">
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-xs font-semibold text-gray-600">Từ Tháng</label>
+              <input type="date" id="tdPlanMonthFrom" data-op-change="renderTrainingDashboardMonthSection" class="border p-1.5 rounded text-xs bg-white">
+              <label class="text-xs font-semibold text-gray-600">Đến Tháng</label>
+              <input type="date" id="tdPlanMonthTo" data-op-change="renderTrainingDashboardMonthSection" class="border p-1.5 rounded text-xs bg-white">
             </div>
           </div>
           <div id="trainingDashboardMonthCards"></div>
@@ -46,9 +57,11 @@
         <div class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h4 class="font-bold text-gray-800 text-sm flex items-center gap-2">📈 Tổng Hợp Năm</h4>
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-semibold text-gray-600">Năm</label>
-              <select id="tdYear" data-op-change="renderTrainingDashboard" class="border p-1.5 rounded text-xs bg-white"></select>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-xs font-semibold text-gray-600">Từ Năm</label>
+              <select id="tdYearFrom" data-op-change="renderTrainingDashboard" class="border p-1.5 rounded text-xs bg-white"></select>
+              <label class="text-xs font-semibold text-gray-600">Đến Năm</label>
+              <select id="tdYearTo" data-op-change="renderTrainingDashboard" class="border p-1.5 rounded text-xs bg-white"></select>
             </div>
           </div>
           <div id="trainingDashboardCards"></div>
@@ -256,7 +269,12 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Tháng</label>
-              <input id="tpMonth" type="month" class="w-full border p-1.5 rounded" required>
+              <!-- type="date" chứ không phải type="month" (11/2026, theo yêu cầu người dùng — ô "chỉ chọn
+                   tháng" hiển thị lỗi dạng gạch ngang trên nhiều trình duyệt/thiết bị, khác hẳn các ô ngày
+                   khác đang chạy tốt trong form này): ngày chọn chỉ để nhập cho dễ, LUÔN quy về đúng
+                   "YYYY-MM" trước khi lưu — xem readMonthFromDateInput()/setDateInputFromMonth() ở
+                   module-internalcomms-daotao.js, KHÔNG đổi ý nghĩa nghiệp vụ "theo tháng" hiện có. -->
+              <input id="tpMonth" type="date" class="w-full border p-1.5 rounded" required>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Chương Trình (tuỳ chọn)</label>
@@ -266,9 +284,11 @@
               <label class="block font-semibold text-gray-600 mb-1">Đơn Vị (tuỳ chọn)</label>
               <!-- tpTargetDept (11/2026, theo yêu cầu người dùng — rà soát <select> danh mục dài) — nâng
                    cấp sang ô tìm-kiếm-gõ-chọn "sdd*", xem populateTrainingPlanDeptSelects() ở
-                   module-internalcomms-daotao.js. Server vẫn đối chiếu ĐÚNG catalog thật (targetDept,
-                   lib/createValidation.js). -->
-              <input id="tpTargetDept" data-sdd-list="tpTargetDeptDatalist" autocomplete="off" placeholder="Gõ để tìm đơn vị (để trống nếu không nhắm 1 đơn vị cụ thể)..." class="w-full border p-1.5 rounded bg-white">
+                   module-internalcomms-daotao.js. NHẬP TỰ DO HOÀN TOÀN (11/2026, theo yêu cầu người dùng
+                   khác — server KHÔNG còn ép khớp đúng tên trong danh mục Phòng Ban/Siêu Thị, xem
+                   normalizeTrainingPlanFields() ở lib/createValidation.js): danh sách gợi ý khi gõ CHỈ để
+                   tiện chọn nhanh, không bắt buộc chọn đúng 1 gợi ý mới lưu được. -->
+              <input id="tpTargetDept" data-sdd-list="tpTargetDeptDatalist" autocomplete="off" placeholder="Gõ tên đơn vị (tự do, để trống nếu không nhắm 1 đơn vị cụ thể)..." class="w-full border p-1.5 rounded bg-white">
               <div id="tpTargetDeptDatalist" class="hidden sdd-dropdown" data-sdd-dropdown></div>
             </div>
             <div>
@@ -379,7 +399,8 @@
           <div class="flex flex-wrap items-end gap-3">
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Tháng (để trống = tất cả)</label>
-              <input type="month" id="tpDashMonth" data-op-change="renderTrainingPlanDashboard" class="border p-2 rounded text-sm bg-white">
+              <!-- type="date" — cùng lý do đã nêu ở ô tpMonth phía trên (form Lập Kế Hoạch). -->
+              <input type="date" id="tpDashMonth" data-op-change="renderTrainingPlanDashboard" class="border p-2 rounded text-sm bg-white">
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Chương Trình</label>

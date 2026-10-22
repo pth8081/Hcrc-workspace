@@ -5153,12 +5153,16 @@ function normalizeTrainingPlanFields(payload, appData) {
   }
   payload.courseId = courseId;
 
-  const targetDept = payload.targetDept ? String(payload.targetDept).trim() : '';
-  if (targetDept) {
-    const validDepts = new Set([...(appData?.depts || []), ...(appData?.stores || [])]);
-    if (!validDepts.has(targetDept)) throw new CreateError(400, `Đơn vị không hợp lệ: ${targetDept}`);
-  }
-  payload.targetDept = targetDept;
+  // targetDept: nhập TỰ DO, KHÔNG còn bắt buộc khớp đúng Danh Mục Phòng Ban/Siêu Thị (11/2026, theo yêu
+  // cầu người dùng — ô "Đơn Vị (tuỳ chọn)" vốn đã là ô gõ-tự-do trên giao diện (tpTargetDept, searchable
+  // picker chỉ GỢI Ý, không ép chọn), nhưng server trước đây vẫn chặn cứng nếu gõ khác đúng 1 tên có sẵn
+  // trong danh mục, báo "Đơn vị không hợp lệ" — mâu thuẫn với giao diện cho gõ tự do. Đánh đổi đã người
+  // dùng xác nhận: thống kê "thực tế" (getTrainingPlanActualStats(), đối chiếu targetDept với
+  // trainingRegistrations.dept của người đăng ký — luôn là tên THẬT trong danh mục) sẽ không tự khớp
+  // được cho các dòng dùng tên KHÔNG đúng y hệt danh mục; dòng dùng đúng tên trong danh mục vẫn khớp bình
+  // thường như cũ. Giữ nguyên trim + giới hạn độ dài (cùng khuôn `audience` ngay dưới) để tránh dữ liệu
+  // rác quá dài, không giới hạn nội dung.
+  payload.targetDept = payload.targetDept ? String(payload.targetDept).trim().slice(0, 200) : '';
 
   payload.audience = payload.audience ? String(payload.audience).trim().slice(0, 300) : '';
 

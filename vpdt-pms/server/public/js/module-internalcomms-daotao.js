@@ -477,20 +477,23 @@ function resetTrainingClassForm() {
 // trainingRegistrations/trainingTestSubmissions đã tải sẵn, đúng quy ước "live-compute, không cache"
 // dùng xuyên suốt module này (cùng khuôn computeTrainingPlanDashboard()). Không có chiều bấm-để-lọc
 // (khác các dashboard phê duyệt khác) vì đây là thống kê tổng quan, không phải hàng chờ xử lý.
-// LỌC THEO NĂM (10/2026, theo yêu cầu BP Đào Tạo — chia Dashboard thành "Theo Kế Hoạch Tháng" +
-// "Tổng Hợp Năm"): `year` tuỳ chọn, lọc classes theo NĂM của cls.startTime (mọi lớp đều có startTime,
-// xem ghi chú createValidation.js) — không truyền year = giữ nguyên hành vi CŨ (toàn bộ thời gian).
-function computeTrainingDashboard(year) {
+// LỌC THEO KHOẢNG NĂM (10/2026, theo yêu cầu BP Đào Tạo — chia Dashboard thành "Theo Kế Hoạch Tháng" +
+// "Tổng Hợp Năm"; mở rộng sang KHOẢNG năm 11/2026, theo yêu cầu người dùng "từ năm đến năm để báo cáo
+// chính xác hơn"): `yearFrom`/`yearTo` tuỳ chọn, lọc classes theo NĂM của cls.startTime nằm trong
+// [yearFrom, yearTo] (mọi lớp đều có startTime, xem ghi chú createValidation.js) — không truyền cả 2 =
+// giữ nguyên hành vi CŨ (toàn bộ thời gian). `yearFrom === yearTo` = lọc đúng 1 năm như hành vi gốc.
+function computeTrainingDashboard(yearFrom, yearTo) {
+  const inRange = (y) => (!yearFrom || y >= yearFrom) && (!yearTo || y <= yearTo);
   let classes = DB.trainingClasses || [];
-  if (year) classes = classes.filter(c => c.startTime && new Date(c.startTime).getFullYear() === year);
+  if (yearFrom || yearTo) classes = classes.filter(c => c.startTime && inRange(new Date(c.startTime).getFullYear()));
   const classIds = new Set(classes.map(c => c.id));
   let regs = (DB.trainingRegistrations || []).filter(r => r.result !== 'CANCELLED');
-  if (year) regs = regs.filter(r => classIds.has(r.classId));
+  if (yearFrom || yearTo) regs = regs.filter(r => classIds.has(r.classId));
   const ongoingClasses = classes.filter(c => getTrainingClassSessionState(c) === 'ONGOING').length;
   const endedClasses = classes.filter(c => getTrainingClassSessionState(c) === 'ENDED').length;
   const completedPeople = new Set(regs.filter(r => r.result === 'PASSED').map(r => r.creator)).size;
   let topScores = (DB.trainingTestSubmissions || []).slice();
-  if (year) topScores = topScores.filter(s => classIds.has(s.classId));
+  if (yearFrom || yearTo) topScores = topScores.filter(s => classIds.has(s.classId));
   topScores = topScores.sort((a, b) => (b.percentage || 0) - (a.percentage || 0)).slice(0, 10);
   return {
     totalClasses: classes.length,
@@ -511,15 +514,27 @@ function trainingDashboardYearOptions() {
 }
 
 function renderTrainingDashboard() {
-  const yearSel = document.getElementById('tdYear');
-  if (yearSel && !yearSel.options.length) {
-    yearSel.innerHTML = trainingDashboardYearOptions().map(y => `<option value="${y}">${y}</option>`).join('');
-  }
-  const monthInput = document.getElementById('tdPlanMonth');
-  if (monthInput && !monthInput.value) monthInput.value = new Date().toISOString().slice(0, 7);
+  // tdYearFrom/tdYearTo (11/2026, theo yêu cầu người dùng — đổi từ chọn ĐÚNG 1 năm sang chọn 1 KHOẢNG
+  // năm): populate CẢ 2 ô cùng danh sách năm, mặc định CẢ 2 = năm hiện tại ở lần vẽ đầu (giữ đúng hành
+  // vi "xem 1 năm" cũ cho tới khi người dùng chủ động đổi).
+  const yearOptsHtml = trainingDashboardYearOptions().map(y => `<option value="${y}">${y}</option>`).join('');
+  const yearFromSel = document.getElementById('tdYearFrom');
+  const yearToSel = document.getElementById('tdYearTo');
+  const curYear = new Date().getFullYear();
+  if (yearFromSel && !yearFromSel.options.length) { yearFromSel.innerHTML = yearOptsHtml; yearFromSel.value = String(curYear); }
+  if (yearToSel && !yearToSel.options.length) { yearToSel.innerHTML = yearOptsHtml; yearToSel.value = String(curYear); }
+  // tdPlanMonthFrom/tdPlanMonthTo: mặc định CẢ 2 = tháng hiện tại (first-of-month) ở lần vẽ đầu — giữ
+  // đúng hành vi "xem 1 tháng" cũ cho tới khi người dùng chủ động đổi.
+  const curMonthFirstDay = `${new Date().toISOString().slice(0, 7)}-01`;
+  const monthFromInput = document.getElementById('tdPlanMonthFrom');
+  const monthToInput = document.getElementById('tdPlanMonthTo');
+  if (monthFromInput && !monthFromInput.value) monthFromInput.value = curMonthFirstDay;
+  if (monthToInput && !monthToInput.value) monthToInput.value = curMonthFirstDay;
 
-  const year = Number(yearSel?.value) || new Date().getFullYear();
-  const stats = computeTrainingDashboard(year);
+  let yearFrom = Number(yearFromSel?.value) || curYear;
+  let yearTo = Number(yearToSel?.value) || curYear;
+  if (yearFrom > yearTo) { const t = yearFrom; yearFrom = yearTo; yearTo = t; } // đảo ngược vô tình -> tự sửa lại thứ tự, không báo lỗi
+  const stats = computeTrainingDashboard(yearFrom, yearTo);
   const cardsEl = document.getElementById('trainingDashboardCards');
   if (cardsEl) {
     cardsEl.innerHTML = `
@@ -551,7 +566,8 @@ function renderTrainingDashboard() {
   const topBody = document.getElementById('trainingTopScoresBody');
   if (topBody) {
     if (!stats.topScores.length) {
-      topBody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có bài làm test nào trong năm ${year}.</td></tr>`;
+      const yearRangeLabel = yearFrom === yearTo ? `năm ${yearFrom}` : `từ năm ${yearFrom} đến năm ${yearTo}`;
+      topBody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500 italic">Chưa có bài làm test nào trong ${yearRangeLabel}.</td></tr>`;
     } else {
       topBody.innerHTML = stats.topScores.map((s, idx) => `
         <tr class="hover:bg-gray-50 border-b">
@@ -569,12 +585,15 @@ function renderTrainingDashboard() {
 
 // Khối "📅 Theo Kế Hoạch Tháng" của Dashboard (10/2026, theo yêu cầu BP Đào Tạo) — tái dùng NGUYÊN
 // computeTrainingPlanDashboard() đã có (cùng hàm dùng cho khối "Theo Dõi Thực Hiện" ở tab Kế Hoạch Đào
-// Tạo), chỉ lọc theo đúng 1 tháng đang chọn ở #tdPlanMonth — không tính lại gì khác.
+// Tạo). Lọc theo KHOẢNG tháng #tdPlanMonthFrom/#tdPlanMonthTo (11/2026, theo yêu cầu người dùng "từ
+// tháng đến tháng để báo cáo chính xác hơn" — trước đây chỉ lọc đúng 1 tháng) — không tính lại gì khác.
 function renderTrainingDashboardMonthSection() {
   const cardsEl = document.getElementById('trainingDashboardMonthCards');
   if (!cardsEl) return;
-  const month = document.getElementById('tdPlanMonth')?.value || new Date().toISOString().slice(0, 7);
-  const data = computeTrainingPlanDashboard({ month });
+  const curMonth = new Date().toISOString().slice(0, 7);
+  const monthFrom = readMonthFromDateInput('tdPlanMonthFrom') || curMonth;
+  const monthTo = readMonthFromDateInput('tdPlanMonthTo') || curMonth;
+  const data = computeTrainingPlanDashboard(monthFrom > monthTo ? { monthFrom: monthTo, monthTo: monthFrom } : { monthFrom, monthTo });
   const fmtHours = (h) => (Math.round(h * 10) / 10).toLocaleString('vi-VN');
   cardsEl.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-center">
@@ -582,7 +601,7 @@ function renderTrainingDashboardMonthSection() {
       <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">CBNV Được Đào Tạo (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${data.totalActualTrainees}/${data.totalPlannedTrainees}</div></div>
       <div class="bg-white border border-emerald-200 rounded p-3"><div class="text-xs text-gray-600">Giờ Đào Tạo (Thực Tế/Kế Hoạch)</div><div class="font-bold text-lg text-emerald-800">${fmtHours(data.totalActualHours)}/${fmtHours(data.totalPlannedHours)}</div></div>
       <div class="bg-white border border-violet-200 rounded p-3"><div class="text-xs text-gray-600">Tỷ Lệ Hoàn Thành</div><div class="font-bold text-lg text-violet-800">${data.pct == null ? '—' : data.pct + '%'}</div></div>
-      <div class="bg-white border border-gray-200 rounded p-3"><div class="text-xs text-gray-600">Số Kế Hoạch Tháng Này</div><div class="font-bold text-lg text-gray-700">${data.plans.length}</div></div>
+      <div class="bg-white border border-gray-200 rounded p-3"><div class="text-xs text-gray-600">Số Kế Hoạch Trong Khoảng</div><div class="font-bold text-lg text-gray-700">${data.plans.length}</div></div>
     </div>
   `;
 }
@@ -1142,13 +1161,27 @@ function deleteTrainingCourse(id) {
 }
 
 // ---------- KẾ HOẠCH ĐÀO TẠO (trainingPlans, Đợt 5) ----------
+// readMonthFromDateInput()/setDateInputFromMonth() (11/2026, theo yêu cầu người dùng): tpMonth/tpDashMonth/
+// tdPlanMonthFrom/tdPlanMonthTo đều dùng type="date" (KHÔNG phải type="month" — input "chỉ chọn tháng"
+// của trình duyệt hiển thị lỗi dạng gạch ngang trên nhiều trình duyệt/thiết bị, trong khi type="date"
+// đáng tin cậy hơn nhiều và đã chạy tốt ở các ô ngày khác trong cùng module). Ngày chọn chỉ để nhập cho
+// dễ — ý nghĩa nghiệp vụ "theo tháng" (lưu trữ/lọc/báo cáo/mẫu Excel) giữ NGUYÊN 100%, luôn quy về đúng
+// "YYYY-MM" (bỏ phần ngày) trước khi lưu/lọc.
+function readMonthFromDateInput(id) {
+  const v = document.getElementById(id)?.value || '';
+  return v ? v.slice(0, 7) : '';
+}
+function setDateInputFromMonth(id, month) {
+  const el = document.getElementById(id);
+  if (el) el.value = month ? `${month}-01` : '';
+}
 // Quản lý (lập/sửa) CHỈ trainingManage (cùng gác quyền như Chương Trình ở trên) — XOÁ chỉ Admin (cùng
 // khuôn "xóa = quyền tối cao" của mọi collection Đào Tạo khác, xem deleteTrainingCourse() ở trên).
 let editingTrainingPlanId = null;
 async function submitTrainingPlan(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền lập kế hoạch đào tạo!');
-  const month = document.getElementById('tpMonth').value;
+  const month = readMonthFromDateInput('tpMonth');
   if (!month) return alert('Vui lòng chọn Tháng!');
   let customData;
   try {
@@ -1209,7 +1242,7 @@ function openEditTrainingPlan(id) {
   const plan = DB.trainingPlans.find(p => p.id === id);
   if (!plan) return;
   editingTrainingPlanId = id;
-  document.getElementById('tpMonth').value = plan.month || '';
+  setDateInputFromMonth('tpMonth', plan.month);
   document.getElementById('tpCourseId').value = plan.courseId != null ? String(plan.courseId) : '';
   document.getElementById('tpTargetDept').value = plan.targetDept || '';
   document.getElementById('tpAudience').value = plan.audience || '';
@@ -1337,6 +1370,13 @@ function isTrainingPlanOverdue(plan) {
 function computeTrainingPlanDashboard(filters) {
   let plans = DB.trainingPlans.slice();
   if (filters.month) plans = plans.filter(p => p.month === filters.month);
+  // monthFrom/monthTo (11/2026, theo yêu cầu người dùng "cho phép từ tháng đến tháng để báo cáo chính
+  // xác hơn" — dùng cho khối "📅 Theo Kế Hoạch Tháng" ở Dashboard, renderTrainingDashboardMonthSection())
+  // — so sánh chuỗi "YYYY-MM" ĐÚNG theo thứ tự thời gian (định dạng cố định, so sánh chuỗi = so sánh
+  // ngày). Độc lập với `filters.month` (khớp CHÍNH XÁC 1 tháng, dùng ở khối "Theo Dõi Thực Hiện") — 2
+  // nơi gọi dùng 1 trong 2 kiểu lọc, không dùng chung 1 lúc.
+  if (filters.monthFrom) plans = plans.filter(p => p.month >= filters.monthFrom);
+  if (filters.monthTo) plans = plans.filter(p => p.month <= filters.monthTo);
   if (filters.courseId) plans = plans.filter(p => p.courseId === filters.courseId);
   if (filters.targetDept) plans = plans.filter(p => p.targetDept === filters.targetDept);
   const audienceNeedle = (filters.audience || '').trim().toLowerCase();
@@ -1422,7 +1462,7 @@ function renderTrainingPlanDashboard() {
   const wrap = document.getElementById('tpDashResultWrap');
   if (!wrap) return;
   const filters = {
-    month: document.getElementById('tpDashMonth')?.value || '',
+    month: readMonthFromDateInput('tpDashMonth'),
     courseId: Number(document.getElementById('tpDashCourseId')?.value) || null,
     targetDept: document.getElementById('tpDashTargetDept')?.value || '',
     audience: document.getElementById('tpDashAudience')?.value || ''

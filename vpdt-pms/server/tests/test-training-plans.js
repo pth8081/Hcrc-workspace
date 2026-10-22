@@ -223,21 +223,31 @@ async function main() {
       assert(errMsg && errMsg.includes('Chương trình được chọn không hợp lệ'), `expected an invalid-course error, got: ${errMsg}`);
     });
 
-    await run('an invalid targetDept is rejected server-side', async () => {
-      let errMsg = null;
+    // LỖI ĐÃ VÁ (11/2026, theo yêu cầu người dùng — "Đơn Vị (tuỳ chọn)" hiển thị như ô gõ-tự-do trên giao
+    // diện (tpTargetDept) nhưng server trước đây vẫn chặn cứng nếu gõ khác đúng 1 tên có sẵn trong Danh
+    // Mục Phòng Ban/Siêu Thị, mâu thuẫn với giao diện): server KHÔNG còn ép khớp danh mục nữa — xác nhận
+    // targetDept tự do được CHẤP NHẬN và lưu nguyên văn. Dùng tháng 2026-05 (KHÁC "2026-06") + dọn ngay
+    // sau khi tạo — tránh ảnh hưởng tới các phép đếm "2 kế hoạch tháng 6" ở các kịch bản phía sau.
+    await run('targetDept tự do (không có trong Danh Mục) KHÔNG còn bị chặn — server chấp nhận và lưu nguyên văn', async () => {
       await page.evaluate(async () => {
-        try { await callCreateAction('trainingPlans', { month: '2026-06', targetDept: 'Phòng Không Tồn Tại' }); }
-        catch (err) { window.__lastCreateErr = err.message; }
+        window.__freeTextDeptErr = null;
+        window.__freeTextDeptPlan = null;
+        try { window.__freeTextDeptPlan = await callCreateAction('trainingPlans', { month: '2026-05', targetDept: 'Phòng Không Tồn Tại' }); }
+        catch (err) { window.__freeTextDeptErr = err.message; }
       });
-      errMsg = await page.evaluate(() => window.__lastCreateErr);
-      assert(errMsg && errMsg.includes('Đơn vị không hợp lệ'), `expected an invalid-dept error, got: ${errMsg}`);
+      const errMsg = await page.evaluate(() => window.__freeTextDeptErr);
+      assert(!errMsg, `expected free-text targetDept to be accepted, got error: ${errMsg}`);
+      const created = await page.evaluate(() => window.__freeTextDeptPlan);
+      assert(created && created.item, 'expected a created training plan in the response');
+      assertEqual(created.item.targetDept, 'Phòng Không Tồn Tại', 'targetDept should be saved verbatim, no catalog restriction');
+      await page.evaluate((id) => { DB.trainingPlans = DB.trainingPlans.filter((p) => p.id !== id); }, created.item.id);
     });
 
     let planId = null;
     await run('trainer lập kế hoạch tháng 6/2026: 2 lớp / 40 học viên / 16 giờ, gắn Chương Trình + Đơn Vị', async () => {
       await page.evaluate((cid) => {
         window.__alerts.length = 0;
-        document.getElementById('tpMonth').value = '2026-06';
+        document.getElementById('tpMonth').value = '2026-06-01'; // type="date" nay (11/2026), KHÔNG phải type="month" — cần đủ ngày để input nhận giá trị
         document.getElementById('tpCourseId').value = String(cid);
         document.getElementById('tpTargetDept').value = 'Phòng CNTT';
         document.getElementById('tpAudience').value = 'Nhân viên mới';
@@ -451,7 +461,7 @@ async function main() {
       // Thêm 1 kế hoạch KHÔNG gắn chương trình/đơn vị cho tháng 6 để kiểm tra tổng hợp không lọc.
       await page.evaluate(() => {
         window.__alerts.length = 0;
-        document.getElementById('tpMonth').value = '2026-06';
+        document.getElementById('tpMonth').value = '2026-06-01'; // type="date" nay (11/2026), KHÔNG phải type="month" — cần đủ ngày để input nhận giá trị
         document.getElementById('tpCourseId').value = '';
         document.getElementById('tpTargetDept').value = '';
         document.getElementById('tpAudience').value = '';

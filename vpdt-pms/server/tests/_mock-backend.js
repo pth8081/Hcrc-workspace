@@ -337,12 +337,9 @@ function __mockNormalizeTrainingPlanFields(payload) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw __mockHttpError(400, 'Tháng kế hoạch không hợp lệ (định dạng YYYY-MM, vd 2026-09)');
   payload.month = month;
   __mockValidateCourseId(payload);
-  const targetDept = payload.targetDept ? String(payload.targetDept).trim() : '';
-  if (targetDept) {
-    const validDepts = new Set([...(DB.depts || []), ...(DB.stores || [])]);
-    if (!validDepts.has(targetDept)) throw __mockHttpError(400, `Đơn vị không hợp lệ: ${targetDept}`);
-  }
-  payload.targetDept = targetDept;
+  // targetDept: nhập TỰ DO (11/2026, mirror đúng normalizeTrainingPlanFields() ở lib/createValidation.js —
+  // xem chú thích đầy đủ tại đó) — KHÔNG còn ép khớp Danh Mục Phòng Ban/Siêu Thị.
+  payload.targetDept = payload.targetDept ? String(payload.targetDept).trim().slice(0, 200) : '';
   payload.audience = payload.audience ? String(payload.audience).trim().slice(0, 300) : '';
   const toNonNegInt = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
   const toNonNegNum = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };

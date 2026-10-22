@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**27.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.99** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
-`27.0` theo đúng quy tắc.)
+`27.0` theo đúng quy tắc — MINOR lại vừa chạm `99`, lần merge kế tiếp cuộn sang `28.0`.)
+
+## v27.99 (2026-10): Kế Hoạch Đào Tạo — ô "Tháng" đổi sang lịch đầy đủ ngày/tháng/năm (hết lỗi hiển thị), "Đơn Vị" cho nhập tự do, Dashboard lọc theo KHOẢNG tháng/năm
+
+Theo yêu cầu người dùng (kèm ảnh chụp màn hình "⚙️ Kế Hoạch Đào Tạo"): ô "Tháng \*" hiển thị lỗi (dạng
+gạch ngang) trên thiết bị của người dùng, "Đơn Vị (tuỳ chọn)" không nhập tự do được dù giao diện trông như
+ô gõ-tự-do, và màn Dashboard (📅 Theo Kế Hoạch Tháng / 📈 Tổng Hợp Năm) chỉ lọc được đúng 1 tháng/1 năm
+thay vì 1 khoảng — xác nhận hướng xử lý qua 2 câu hỏi trước khi làm (theo đúng quy trình "phân tích → xác
+nhận → làm + merge luôn").
+
+**1) Ô "Tháng" hiển thị lỗi**: nguyên nhân là `<input type="month">` — loại input "chỉ chọn tháng" của
+trình duyệt, hỗ trợ kém trên nhiều trình duyệt/thiết bị (khác hẳn `<input type="date">` dùng ở các ô ngày
+khác trong cùng form, vẫn hiển thị bình thường). Giữ nguyên ý nghĩa nghiệp vụ "theo tháng" (không đổi báo
+cáo/mẫu Excel/cách gộp trùng dữ liệu) — chỉ đổi 3 ô `tpMonth` (form Lập Kế Hoạch)/`tpDashMonth` (lọc "Theo
+Dõi Thực Hiện")/`tdPlanMonthFrom`+`tdPlanMonthTo` (Dashboard, xem mục 3) sang `type="date"`, luôn quy về
+đúng "YYYY-MM" (bỏ phần ngày) trước khi lưu/lọc — `readMonthFromDateInput()`/`setDateInputFromMonth()` mới
+ở `module-internalcomms-daotao.js`.
+
+**2) "Đơn Vị (tuỳ chọn)" không nhập tự do được**: ô `tpTargetDept` vốn đã là ô gõ-tự-do trên giao diện,
+nhưng server (`normalizeTrainingPlanFields()`, `lib/createValidation.js`) vẫn chặn cứng nếu tên gõ vào
+không khớp đúng y hệt 1 tên có sẵn trong Danh Mục Phòng Ban/Siêu Thị, báo "Đơn vị không hợp lệ" — mâu
+thuẫn với giao diện. Theo xác nhận của người dùng: bỏ hẳn chặn này, cho nhập tự do hoàn toàn (chỉ còn
+trim + giới hạn 200 ký tự). **Đánh đổi đã nêu rõ và người dùng chấp nhận**: thống kê "thực tế"
+(`getTrainingPlanActualStats()`, đối chiếu `targetDept` với `trainingRegistrations.dept` của người đăng
+ký — luôn là tên THẬT trong danh mục) sẽ không tự khớp được cho các dòng dùng tên khác đúng tên trong danh
+mục; dòng dùng đúng tên trong danh mục vẫn khớp bình thường như cũ.
+
+**3) Dashboard lọc theo KHOẢNG** (theo yêu cầu bổ sung giữa chừng, gửi kèm ảnh màn Dashboard): khối "📅
+Theo Kế Hoạch Tháng" (`tdPlanMonth` → `tdPlanMonthFrom`/`tdPlanMonthTo`) và "📈 Tổng Hợp Năm" (`tdYear` →
+`tdYearFrom`/`tdYearTo`) đổi từ lọc đúng 1 tháng/1 năm sang lọc theo 1 KHOẢNG — `computeTrainingDashboard(yearFrom,
+yearTo)` và `computeTrainingPlanDashboard({monthFrom, monthTo})` (hàm cũ `filters.month` khớp chính xác 1
+tháng vẫn giữ nguyên, dùng riêng cho khối "Theo Dõi Thực Hiện" ở tab Kế Hoạch Đào Tạo — không đổi). Mặc
+định cả 2 đầu khoảng = tháng/năm hiện tại ở lần vẽ đầu (giữ đúng hành vi "xem 1 kỳ" cũ cho tới khi người
+dùng chủ động đổi); đảo ngược vô tình (Từ > Đến) tự sửa lại thứ tự, không báo lỗi.
+
+**Test**: chạy lại `test-training-plans.js` — phát hiện 1 kịch bản test cũ ("an invalid targetDept is
+rejected server-side") TRỰC TIẾP mâu thuẫn với thay đổi #2, đã viết lại đúng theo hành vi mới (xác nhận
+chấp nhận + lưu nguyên văn); 2 chỗ `#tpMonth.value = '2026-06'` (định dạng cũ cho `type="month"`) cập nhật
+sang `'2026-06-01'` cho `type="date"`; `tests/_mock-backend.js` (bản mirror validate phía test, KHÔNG phải
+server thật) cũng được đồng bộ bỏ chặn targetDept — xác nhận BẰNG `git stash` rằng các lỗi còn lại
+(2/24, luồng Nhập Kế Hoạch Từ Excel timeout) đã tồn tại SẴN trên `main` trước đợt này, không liên quan.
+Chạy lại toàn bộ 6 bộ test Đào Tạo liên quan khác + `test-initdatabase-key-coverage.js` — không regression.
+
+**Deploy**: copy `public/js/core.js` không cần (không đổi) — chỉ cần `public/js/module-internalcomms-daotao.js`
++ `public/fragments/internalSection.html` + `lib/createValidation.js` + `pm2 restart`.
 
 ## v27.98 (2026-10): Vá "Hình Thức Làm Việc"/"Thời Gian Làm Việc" mất sau F5 — VÀ vá luôn lỗ hổng trong chính bài test tổng quát đã lỡ cho qua
 
