@@ -5462,6 +5462,7 @@ function editTrainingTest(payload, user, test, appData, hasSubmissions) {
   test.title = payload.title;
   test.category = payload.category;
   test.passScore = payload.passScore;
+  test.timeLimitMinutes = payload.timeLimitMinutes;
   test.questions = payload.questions;
   test.customData = payload.customData;
   normalizeTrainingTestFields(test, appData);
@@ -5476,7 +5477,7 @@ function editTrainingTest(payload, user, test, appData, hasSubmissions) {
 // thần "kế hoạch đào tạo là cấu hình toàn công ty" đã nêu ở createValidation.js).
 // 6 field cuối (instructor...instructorRating) — "Ghi Nhận Thực Tế" điền tay sau khi tổ chức đào tạo
 // (10/2026, theo yêu cầu BP Đào Tạo), xem normalizeTrainingPlanFields() ở lib/createValidation.js.
-const TRAINING_PLAN_EDITABLE_FIELDS = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours', 'instructor', 'jobTitle', 'actualTrainingDate', 'actualDuration', 'actualParticipants', 'instructorRating'];
+const TRAINING_PLAN_EDITABLE_FIELDS = ['month', 'category', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours', 'instructor', 'jobTitle', 'actualTrainingDateFrom', 'actualTrainingDateTo', 'actualDuration', 'actualParticipants', 'instructorRating'];
 function editTrainingPlan(payload, user, plan, appData) {
   if (!canManageTraining(user)) throw new HttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
   if (!payload || typeof payload !== 'object') throw new HttpError(400, 'Thiếu dữ liệu cập nhật');

@@ -5093,6 +5093,15 @@ function normalizeTrainingTestFields(payload, appData) {
   const suggestedPassScore = Number(payload.passScore);
   payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100
     ? suggestedPassScore : null;
+
+  // timeLimitMinutes (11/2026, theo yêu cầu người dùng — "set thời gian làm bài, vào bài sẽ tự đếm
+  // ngược") — giới hạn TỔNG thời gian làm cả bài, CỘNG THÊM (không thay thế) cơ chế đếm-ngược-theo-câu
+  // đã có sẵn ở cấp Lớp Học (trainingClasses.testSecondsPerQuestion, không đụng tới ở đây). 0 = không
+  // giới hạn (mặc định, giữ nguyên hành vi cũ cho mọi bài test chưa từng đặt field này). Đồng hồ tổng này
+  // CÙNG MỨC TIN CẬY client-only như đồng hồ theo-câu đã có từ trước — không có cơ chế xác thực phía
+  // server nào khác ngoài mốc "start-test" đã có (evaluateTrainingTestTiming()).
+  const timeLimitMinutes = Number(payload.timeLimitMinutes);
+  payload.timeLimitMinutes = Number.isFinite(timeLimitMinutes) && timeLimitMinutes > 0 ? Math.floor(timeLimitMinutes) : 0;
 }
 
 // So sánh cấu trúc CHẤM ĐIỂM (không phải nội dung chữ) giữa bộ câu hỏi CŨ (đã lưu, đã có ≥1 bài nộp
@@ -5153,6 +5162,17 @@ function normalizeTrainingPlanFields(payload, appData) {
   }
   payload.courseId = courseId;
 
+  // category (11/2026, theo yêu cầu người dùng — "Loại Đào Tạo" ở form Lập Kế Hoạch, lọc riêng Chương
+  // Trình hiển thị phía client, xem filterTrainingPlanCourseOptions() ở module-internalcomms-daotao.js):
+  // tuỳ chọn, nếu có PHẢI khớp 1 phần tử trong appData.trainingCategories. CỐ Ý KHÔNG ép category phải
+  // khớp với category của courseId đã chọn — 2 field độc lập, category chỉ là tiện ích lọc UI, không phải
+  // ràng buộc toàn vẹn dữ liệu.
+  const category = payload.category ? String(payload.category).trim() : '';
+  if (category && !(appData?.trainingCategories || []).includes(category)) {
+    throw new CreateError(400, `Loại đào tạo không hợp lệ: ${category}`);
+  }
+  payload.category = category;
+
   // targetDept: nhập TỰ DO, KHÔNG còn bắt buộc khớp đúng Danh Mục Phòng Ban/Siêu Thị (11/2026, theo yêu
   // cầu người dùng — ô "Đơn Vị (tuỳ chọn)" vốn đã là ô gõ-tự-do trên giao diện (tpTargetDept, searchable
   // picker chỉ GỢI Ý, không ép chọn), nhưng server trước đây vẫn chặn cứng nếu gõ khác đúng 1 tên có sẵn
@@ -5179,7 +5199,14 @@ function normalizeTrainingPlanFields(payload, appData) {
   // "chưa chấm điểm" với "chấm 0 điểm" khi tính điểm trung bình ở breakdown Theo Giảng Viên.
   payload.instructor = payload.instructor ? String(payload.instructor).trim().slice(0, 200) : '';
   payload.jobTitle = payload.jobTitle ? String(payload.jobTitle).trim().slice(0, 150) : '';
-  payload.actualTrainingDate = payload.actualTrainingDate ? String(payload.actualTrainingDate).trim().slice(0, 10) : '';
+  // actualTrainingDateFrom/actualTrainingDateTo (11/2026, theo yêu cầu người dùng — khoảng Từ-Đến CÓ GIỜ,
+  // thay cho actualTrainingDate cũ chỉ 1 ngày không giờ) — THUẦN ghi chú bổ sung như actualDuration cạnh
+  // đó, không validate format chặt (client gửi "YYYY-MM-DDTHH:mm" từ input datetime-local, nhưng đây chỉ
+  // là ghi chú hiển thị, không dùng để tính toán gì). Bản ghi CŨ (actualTrainingDate) KHÔNG bị đụng tới ở
+  // đây — field đó không còn trong TRAINING_PLAN_EDITABLE_FIELDS (lib/recordActions.js) nên tự nhiên giữ
+  // nguyên trên các bản ghi cũ, client tự fallback hiển thị (xem openEditTrainingPlan()).
+  payload.actualTrainingDateFrom = payload.actualTrainingDateFrom ? String(payload.actualTrainingDateFrom).trim().slice(0, 20) : '';
+  payload.actualTrainingDateTo = payload.actualTrainingDateTo ? String(payload.actualTrainingDateTo).trim().slice(0, 20) : '';
   payload.actualDuration = payload.actualDuration ? String(payload.actualDuration).trim().slice(0, 100) : '';
   payload.actualParticipants = toNonNegInt(payload.actualParticipants);
   if (payload.instructorRating === '' || payload.instructorRating == null) {

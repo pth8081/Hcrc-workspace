@@ -337,6 +337,13 @@ function __mockNormalizeTrainingPlanFields(payload) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw __mockHttpError(400, 'Tháng kế hoạch không hợp lệ (định dạng YYYY-MM, vd 2026-09)');
   payload.month = month;
   __mockValidateCourseId(payload);
+  // category (11/2026, mirror normalizeTrainingPlanFields() ở lib/createValidation.js) — tuỳ chọn, nếu có
+  // phải khớp 1 phần tử trong DB.trainingCategories. KHÔNG ép phải khớp category của courseId đã chọn.
+  const category = payload.category ? String(payload.category).trim() : '';
+  if (category && !(DB.trainingCategories || []).includes(category)) {
+    throw __mockHttpError(400, `Loại đào tạo không hợp lệ: ${category}`);
+  }
+  payload.category = category;
   // targetDept: nhập TỰ DO (11/2026, mirror đúng normalizeTrainingPlanFields() ở lib/createValidation.js —
   // xem chú thích đầy đủ tại đó) — KHÔNG còn ép khớp Danh Mục Phòng Ban/Siêu Thị.
   payload.targetDept = payload.targetDept ? String(payload.targetDept).trim().slice(0, 200) : '';
@@ -351,7 +358,10 @@ function __mockNormalizeTrainingPlanFields(payload) {
   // normalizeTrainingPlanFields() in lib/createValidation.js.
   payload.instructor = payload.instructor ? String(payload.instructor).trim().slice(0, 200) : '';
   payload.jobTitle = payload.jobTitle ? String(payload.jobTitle).trim().slice(0, 150) : '';
-  payload.actualTrainingDate = payload.actualTrainingDate ? String(payload.actualTrainingDate).trim().slice(0, 10) : '';
+  // actualTrainingDateFrom/actualTrainingDateTo (11/2026, mirror normalizeTrainingPlanFields() ở
+  // lib/createValidation.js — khoảng Từ-Đến CÓ GIỜ, thay cho actualTrainingDate cũ).
+  payload.actualTrainingDateFrom = payload.actualTrainingDateFrom ? String(payload.actualTrainingDateFrom).trim().slice(0, 20) : '';
+  payload.actualTrainingDateTo = payload.actualTrainingDateTo ? String(payload.actualTrainingDateTo).trim().slice(0, 20) : '';
   payload.actualDuration = payload.actualDuration ? String(payload.actualDuration).trim().slice(0, 100) : '';
   payload.actualParticipants = toNonNegInt(payload.actualParticipants);
   if (payload.instructorRating === '' || payload.instructorRating == null) {
@@ -367,7 +377,7 @@ function __mockValidateTrainingPlanCreate(payload, user) {
 }
 function __mockEditTrainingPlan(payload, user, plan) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa kế hoạch đào tạo');
-  const fields = ['month', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours', 'instructor', 'jobTitle', 'actualTrainingDate', 'actualDuration', 'actualParticipants', 'instructorRating'];
+  const fields = ['month', 'category', 'courseId', 'targetDept', 'audience', 'plannedClasses', 'plannedTrainees', 'plannedHours', 'instructor', 'jobTitle', 'actualTrainingDateFrom', 'actualTrainingDateTo', 'actualDuration', 'actualParticipants', 'instructorRating'];
   fields.forEach((f) => { if (payload[f] !== undefined) plan[f] = payload[f]; });
   __mockNormalizeTrainingPlanFields(plan);
   return plan;
@@ -617,15 +627,20 @@ function __mockNormalizeTrainingTestFields(payload) {
   // vẫn là nguồn quyết định duy nhất khi chấm điểm (mirrors createValidation.js).
   const suggestedPassScore = Number(payload.passScore);
   payload.passScore = Number.isFinite(suggestedPassScore) && suggestedPassScore > 0 && suggestedPassScore <= 100 ? suggestedPassScore : null;
+  // timeLimitMinutes (11/2026, mirror normalizeTrainingTestFields() ở lib/createValidation.js) — giới hạn
+  // TỔNG thời gian làm bài, 0 = không giới hạn.
+  const timeLimitMinutes = Number(payload.timeLimitMinutes);
+  payload.timeLimitMinutes = Number.isFinite(timeLimitMinutes) && timeLimitMinutes > 0 ? Math.floor(timeLimitMinutes) : 0;
 }
 // __mockEditTrainingTest() — 10/2026, thêm nút "✏️ Sửa" cho Ngân Hàng Câu Hỏi. Ghi đè NGUYÊN title/
-// category/passScore/questions vào bản ghi cũ rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng chung với lúc TẠO
-// (mirrors editTrainingTest() ở lib/recordActions.js).
+// category/passScore/timeLimitMinutes/questions vào bản ghi cũ rồi chạy lại ĐÚNG 1 luật chuẩn hoá dùng
+// chung với lúc TẠO (mirrors editTrainingTest() ở lib/recordActions.js).
 function __mockEditTrainingTest(payload, user, test) {
   if (!(user.perms?.admin || user.perms?.trainingManage)) throw __mockHttpError(403, 'Bạn không có quyền sửa bài test');
   test.title = payload.title;
   test.category = payload.category;
   test.passScore = payload.passScore;
+  test.timeLimitMinutes = payload.timeLimitMinutes;
   test.questions = payload.questions;
   __mockNormalizeTrainingTestFields(test);
   return test;

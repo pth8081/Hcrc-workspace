@@ -702,7 +702,12 @@ async function main() {
       'Đào Tạo > Kế Hoạch: "Làm Mới" trắng form + thoát Sửa dở dang (nhãn/nút về lại mặc định, gọi lại cancelEditTrainingPlan() có sẵn)',
       async () => {
         await page.evaluate(() => { switchTab('internal'); setInternalSubTab('TRAINING'); setTrainingLmsTab('PLANS'); });
-        await page.fill('#tpMonth', '2026-05');
+        // tpMonth cũ (type="date") đã đổi sang cặp select Tháng/Năm (11/2026) — xem
+        // setSelectPairFromMonth() ở module-internalcomms-daotao.js. confirmAndResetForm() chỉ xét
+        // <input>/<textarea> (không xét <select>, xem chú thích hàm đó ở core.js) nên việc đổi select
+        // KHÔNG tự tính là "đã nhập" — test này vẫn dựa vào tpAudience/tpPlannedClasses để kích hoạt
+        // isDirty, đúng như trước.
+        await page.evaluate(() => setSelectPairFromMonth('tpMonthNum', 'tpMonthYear', '2026-05'));
         await page.fill('#tpAudience', 'Nhân viên mới');
         await page.fill('#tpPlannedClasses', '3');
         // Giả lập đang giữa chừng Sửa 1 kế hoạch có sẵn (openEditTrainingPlan()).
@@ -716,7 +721,7 @@ async function main() {
         await page.evaluate(() => { window.__confirmCalls = []; });
         await page.click('#trainingPlanForm button[data-arg1="resetTrainingPlanForm"]');
         const state = await page.evaluate(() => ({
-          tpMonth: document.getElementById('tpMonth').value,
+          tpMonth: readMonthFromSelectPair('tpMonthNum', 'tpMonthYear'),
           tpAudience: document.getElementById('tpAudience').value,
           editingId: editingTrainingPlanId,
           cancelBtnHidden: document.getElementById('tpCancelEditBtn').classList.contains('hidden'),

@@ -80,7 +80,9 @@ async function main() {
     await run('1) Người quản lý đào tạo tạo Kế Hoạch Đào Tạo tháng 10/2026 (điền form + bấm THẬT)', async () => {
       await page.evaluate(() => { setTrainingLmsTab('PLANS'); });
       await page.evaluate(() => {
-        document.getElementById('tpMonth').value = '2026-10';
+        // tpMonth cũ (type="date") đã đổi sang cặp select Tháng/Năm (11/2026) — xem
+        // setSelectPairFromMonth() ở module-internalcomms-daotao.js.
+        setSelectPairFromMonth('tpMonthNum', 'tpMonthYear', '2026-10');
         document.getElementById('tpTargetDept').value = 'Siêu Thị A';
         document.getElementById('tpAudience').value = 'Nhân viên Siêu Thị A';
         document.getElementById('tpPlannedClasses').value = '1';

@@ -93,6 +93,11 @@ function populateTrainingCategorySelects() {
   if (filterSel) filterSel.innerHTML = `<option value="">-- Tất cả loại đào tạo --</option>` + opts;
   const ttSel = document.getElementById('ttCategory');
   if (ttSel) ttSel.innerHTML = `<option value="">-- Không thuộc loại nào --</option>` + opts;
+  // tpCategory (11/2026, theo yêu cầu người dùng) — tuỳ chọn lọc Chương Trình ở form Lập Kế Hoạch Đào
+  // Tạo, cùng khuôn "-- Tất cả loại đào tạo --" như trainingDocFilterCategory/ttCategory ở trên (KHÔNG
+  // bắt buộc chọn, khác hẳn tcCategory/tccCategory).
+  const tpCategorySel = document.getElementById('tpCategory');
+  if (tpCategorySel) tpCategorySel.innerHTML = `<option value="">-- Tất cả loại đào tạo --</option>` + opts;
 }
 
 // Chương Trình (trainingCourses, Đợt 4) — populate dropdown chọn chương trình (tuỳ chọn) ở form tạo
@@ -116,6 +121,26 @@ function populateTrainingCourseSelects() {
     dashSel.innerHTML = `<option value="">-- Tất cả chương trình --</option>` + opts;
     if (prevValue && DB.trainingCourses.some(c => String(c.id) === prevValue)) dashSel.value = prevValue;
   }
+  // tpCourseId vừa được gán NGUYÊN danh sách (không lọc) ở vòng lặp trên — lọc lại ngay theo tpCategory
+  // đang chọn (nếu có), xem filterTrainingPlanCourseOptions().
+  filterTrainingPlanCourseOptions();
+}
+
+// filterTrainingPlanCourseOptions() (11/2026, theo yêu cầu người dùng "chọn Loại Đào Tạo chỉ hiện Chương
+// Trình tương ứng") — lọc lại riêng tpCourseId (form Lập Kế Hoạch Đào Tạo) theo tpCategory đang chọn. Gọi
+// SAU populateTrainingCourseSelects() (đã dựng option đầy đủ) hoặc qua data-op-change trên tpCategory lúc
+// người dùng đổi lựa chọn. Để trống tpCategory = không lọc (hiện mọi chương trình, giữ đúng hành vi cũ).
+function filterTrainingPlanCourseOptions() {
+  const categorySel = document.getElementById('tpCategory');
+  const courseSel = document.getElementById('tpCourseId');
+  if (!courseSel) return;
+  const category = categorySel ? categorySel.value : '';
+  const prevValue = courseSel.value;
+  const courses = DB.trainingCourses.slice().sort((a, b) => b.id - a.id)
+    .filter(c => !category || c.category === category);
+  const opts = courses.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.category)})</option>`).join('');
+  courseSel.innerHTML = `<option value="">-- Không thuộc chương trình nào --</option>` + opts;
+  if (prevValue && courses.some(c => String(c.id) === prevValue)) courseSel.value = prevValue;
 }
 
 // Đơn Vị (targetDept, trainingPlans Đợt 5) — cùng khuôn rjDept/rjFilterDept (recruitmentJobs): gộp
@@ -235,6 +260,10 @@ function renderTrainingLms() {
   populateTrainingClassMultiSelects();
   populateTrainingCourseSelects();
   populateTrainingPlanDeptSelects();
+  // tpMonthNum/tpMonthYear (form Lập Kế Hoạch) + tpDashMonthNum/tpDashMonthYear (filter Theo Dõi Thực
+  // Hiện) — xem populateMonthYearSelectPair() (tự guard không nạp lại nếu đã có option).
+  populateMonthYearSelectPair('tpMonthNum', 'tpMonthYear');
+  populateMonthYearSelectPair('tpDashMonthNum', 'tpDashMonthYear');
   // Trường bổ sung (Biểu Mẫu) của 7 form Đào Tạo/Đào Tạo Tân Binh — vẽ lại mỗi lần renderTrainingLms()
   // chạy (vào module + mỗi lần đổi sub-tab), cùng khuôn DOC/SUBMISSION ở core.js.
   renderDynamicInputsForModule('TRAINING_CLASS', 'dynamicFieldsContainer_TRAINING_CLASS');
@@ -1161,12 +1190,11 @@ function deleteTrainingCourse(id) {
 }
 
 // ---------- KẾ HOẠCH ĐÀO TẠO (trainingPlans, Đợt 5) ----------
-// readMonthFromDateInput()/setDateInputFromMonth() (11/2026, theo yêu cầu người dùng): tpMonth/tpDashMonth/
-// tdPlanMonthFrom/tdPlanMonthTo đều dùng type="date" (KHÔNG phải type="month" — input "chỉ chọn tháng"
-// của trình duyệt hiển thị lỗi dạng gạch ngang trên nhiều trình duyệt/thiết bị, trong khi type="date"
-// đáng tin cậy hơn nhiều và đã chạy tốt ở các ô ngày khác trong cùng module). Ngày chọn chỉ để nhập cho
-// dễ — ý nghĩa nghiệp vụ "theo tháng" (lưu trữ/lọc/báo cáo/mẫu Excel) giữ NGUYÊN 100%, luôn quy về đúng
-// "YYYY-MM" (bỏ phần ngày) trước khi lưu/lọc.
+// readMonthFromDateInput()/setDateInputFromMonth() — dùng cho tdPlanMonthFrom/tdPlanMonthTo (Dashboard
+// chính, tab 📊) vốn dùng type="date" (KHÔNG phải type="month" — input "chỉ chọn tháng" của trình duyệt
+// hiển thị lỗi dạng gạch ngang trên nhiều trình duyệt/thiết bị, trong khi type="date" đáng tin cậy hơn
+// nhiều). Ngày chọn chỉ để nhập cho dễ — ý nghĩa nghiệp vụ "theo tháng" (lưu trữ/lọc/báo cáo/mẫu Excel)
+// giữ NGUYÊN 100%, luôn quy về đúng "YYYY-MM" (bỏ phần ngày) trước khi lưu/lọc.
 function readMonthFromDateInput(id) {
   const v = document.getElementById(id)?.value || '';
   return v ? v.slice(0, 7) : '';
@@ -1175,13 +1203,55 @@ function setDateInputFromMonth(id, month) {
   const el = document.getElementById(id);
   if (el) el.value = month ? `${month}-01` : '';
 }
+
+// populateMonthYearSelectPair()/readMonthFromSelectPair()/setSelectPairFromMonth() (11/2026, theo yêu cầu
+// người dùng — quay lại đúng "tháng/năm" ở tpMonth/tpDashMonth thay vì ô ngày đầy đủ như trên, nhưng
+// KHÔNG quay lại type="month" native vốn đã xác nhận hiển thị lỗi dạng gạch ngang trên nhiều trình
+// duyệt/thiết bị ở đợt trước) — cặp <select> Tháng(1-12)/Năm tự dựng, đáng tin cậy trên mọi trình duyệt
+// (cùng tinh thần "không dùng cơ chế native không đáng tin cậy" như sdd*/datalist ở CLAUDE.md).
+// allowEmpty=true: thêm "-- Tháng --" cho phép để trống (dùng cho tpDashMonth, bộ lọc "để trống = tất
+// cả"); false: không có lựa chọn trống (dùng cho tpMonth, form Lập Kế Hoạch — bắt buộc chọn tháng).
+function populateMonthYearSelectPair(numId, yearId) {
+  const numSel = document.getElementById(numId);
+  const yearSel = document.getElementById(yearId);
+  if (numSel && !numSel.querySelector('option[value="1"]')) {
+    for (let m = 1; m <= 12; m++) numSel.insertAdjacentHTML('beforeend', `<option value="${m}">Tháng ${m}</option>`);
+  }
+  if (yearSel && !yearSel.options.length) {
+    const curYear = new Date().getFullYear();
+    for (let y = curYear + 1; y >= curYear - 5; y--) yearSel.insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`);
+  }
+}
+function readMonthFromSelectPair(numId, yearId) {
+  const m = document.getElementById(numId)?.value || '';
+  const y = document.getElementById(yearId)?.value || '';
+  if (!m || !y) return '';
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+function setSelectPairFromMonth(numId, yearId, month) {
+  const numSel = document.getElementById(numId);
+  const yearSel = document.getElementById(yearId);
+  if (!month) {
+    if (numSel) numSel.value = '';
+    if (yearSel) yearSel.value = '';
+    return;
+  }
+  const [y, m] = month.split('-');
+  if (numSel) numSel.value = String(Number(m));
+  if (yearSel) {
+    // Năm của bản ghi cũ có thể nằm ngoài khoảng mặc định (curYear-5..curYear+1) — tự thêm option nếu
+    // thiếu, không âm thầm rơi về rỗng/sai năm khi mở Sửa 1 kế hoạch quá cũ/quá xa tương lai.
+    if (!yearSel.querySelector(`option[value="${y}"]`)) yearSel.insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`);
+    yearSel.value = y;
+  }
+}
 // Quản lý (lập/sửa) CHỈ trainingManage (cùng gác quyền như Chương Trình ở trên) — XOÁ chỉ Admin (cùng
 // khuôn "xóa = quyền tối cao" của mọi collection Đào Tạo khác, xem deleteTrainingCourse() ở trên).
 let editingTrainingPlanId = null;
 async function submitTrainingPlan(e) {
   e.preventDefault();
   if (!canManageTrainingLocal(currentUser)) return alert('⛔ Bạn không có quyền lập kế hoạch đào tạo!');
-  const month = readMonthFromDateInput('tpMonth');
+  const month = readMonthFromSelectPair('tpMonthNum', 'tpMonthYear');
   if (!month) return alert('Vui lòng chọn Tháng!');
   let customData;
   try {
@@ -1191,6 +1261,7 @@ async function submitTrainingPlan(e) {
   }
   const payload = {
     month,
+    category: document.getElementById('tpCategory').value || '',
     courseId: document.getElementById('tpCourseId').value || null,
     targetDept: document.getElementById('tpTargetDept').value || '',
     audience: document.getElementById('tpAudience').value.trim(),
@@ -1200,7 +1271,8 @@ async function submitTrainingPlan(e) {
     // Ghi Nhận Thực Tế (10/2026) — xem chú thích đầy đủ tại khối "📝 Ghi Nhận Thực Tế" ở internalSection.html.
     instructor: document.getElementById('tpInstructor').value,
     jobTitle: document.getElementById('tpJobTitle').value,
-    actualTrainingDate: document.getElementById('tpActualTrainingDate').value,
+    actualTrainingDateFrom: document.getElementById('tpActualTrainingDateFrom').value,
+    actualTrainingDateTo: document.getElementById('tpActualTrainingDateTo').value,
     actualDuration: document.getElementById('tpActualDuration').value,
     actualParticipants: document.getElementById('tpActualParticipants').value,
     instructorRating: document.getElementById('tpInstructorRating').value,
@@ -1230,6 +1302,9 @@ function cancelEditTrainingPlan() {
   document.getElementById('tpSubmitBtn').innerText = 'Lập Kế Hoạch';
   document.getElementById('trainingPlanFormTitle').innerText = '➕ Lập Kế Hoạch Đào Tạo Mới';
   document.getElementById('trainingPlanForm').reset();
+  // form.reset() không tự bắn sự kiện change trên tpCategory -> tpCourseId cần lọc lại thủ công (về
+  // trạng thái "không lọc" vì tpCategory vừa reset về rỗng).
+  filterTrainingPlanCourseOptions();
 }
 // resetTrainingPlanForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg1=
 // "resetTrainingPlanForm", xem core.js). Hành vi cần có GIỐNG HỆT cancelEditTrainingPlan() ở trên (thoát
@@ -1242,7 +1317,11 @@ function openEditTrainingPlan(id) {
   const plan = DB.trainingPlans.find(p => p.id === id);
   if (!plan) return;
   editingTrainingPlanId = id;
-  setDateInputFromMonth('tpMonth', plan.month);
+  setSelectPairFromMonth('tpMonthNum', 'tpMonthYear', plan.month);
+  // tpCategory PHẢI set + lọc lại tpCourseId TRƯỚC khi set value đã lưu — lọc SAU khi set value có thể
+  // làm mất lựa chọn đã lưu (nếu chương trình đó không khớp category hiện chọn).
+  document.getElementById('tpCategory').value = plan.category || '';
+  filterTrainingPlanCourseOptions();
   document.getElementById('tpCourseId').value = plan.courseId != null ? String(plan.courseId) : '';
   document.getElementById('tpTargetDept').value = plan.targetDept || '';
   document.getElementById('tpAudience').value = plan.audience || '';
@@ -1251,7 +1330,11 @@ function openEditTrainingPlan(id) {
   document.getElementById('tpPlannedHours').value = plan.plannedHours || 0;
   document.getElementById('tpInstructor').value = plan.instructor || '';
   document.getElementById('tpJobTitle').value = plan.jobTitle || '';
-  document.getElementById('tpActualTrainingDate').value = plan.actualTrainingDate || '';
+  // Fallback hiển thị dữ liệu CŨ (actualTrainingDate, 1 ngày không giờ) vào ô "Từ" nếu kế hoạch này chưa
+  // từng được lưu theo khuôn mới (actualTrainingDateFrom/To) — không làm mất hiển thị dữ liệu lịch sử.
+  document.getElementById('tpActualTrainingDateFrom').value = plan.actualTrainingDateFrom
+    || (plan.actualTrainingDate ? `${plan.actualTrainingDate}T00:00` : '');
+  document.getElementById('tpActualTrainingDateTo').value = plan.actualTrainingDateTo || '';
   document.getElementById('tpActualDuration').value = plan.actualDuration || '';
   document.getElementById('tpActualParticipants').value = plan.actualParticipants || '';
   document.getElementById('tpInstructorRating').value = plan.instructorRating ?? '';
@@ -1462,7 +1545,7 @@ function renderTrainingPlanDashboard() {
   const wrap = document.getElementById('tpDashResultWrap');
   if (!wrap) return;
   const filters = {
-    month: readMonthFromDateInput('tpDashMonth'),
+    month: readMonthFromSelectPair('tpDashMonthNum', 'tpDashMonthYear'),
     courseId: Number(document.getElementById('tpDashCourseId')?.value) || null,
     targetDept: document.getElementById('tpDashTargetDept')?.value || '',
     audience: document.getElementById('tpDashAudience')?.value || ''
@@ -1580,7 +1663,8 @@ function exportTrainingPlanDashboardExcel() {
     { header: 'Giờ KH', key: 'plannedHours', width: 10 },
     { header: 'Giờ TT', key: 'actualHours', width: 10 },
     { header: '% Hoàn Thành', key: 'pct', width: 12 },
-    { header: 'Ngày Tổ Chức Đào Tạo', key: 'actualTrainingDate', width: 16 },
+    { header: 'Từ Ngày Giờ Tổ Chức', key: 'actualTrainingDateFrom', width: 18 },
+    { header: 'Đến Ngày Giờ Tổ Chức', key: 'actualTrainingDateTo', width: 18 },
     { header: 'Thời Gian Đào Tạo', key: 'actualDuration', width: 16 },
     { header: 'SL Tham Gia Thực Tế', key: 'actualParticipants', width: 14 },
     { header: 'Điểm Đánh Giá GV', key: 'instructorRating', width: 14 }
@@ -1595,7 +1679,9 @@ function exportTrainingPlanDashboardExcel() {
       plannedTrainees: plan.plannedTrainees || 0, actualTrainees: stats.actualTrainees,
       plannedHours: plan.plannedHours || 0, actualHours: Math.round(stats.actualHours * 10) / 10,
       pct: getTrainingPlanCompletionPct(plan) ?? '',
-      actualTrainingDate: plan.actualTrainingDate || '', actualDuration: plan.actualDuration || '',
+      // Fallback cho kế hoạch cũ chưa từng lưu theo khuôn mới — xem openEditTrainingPlan().
+      actualTrainingDateFrom: plan.actualTrainingDateFrom || plan.actualTrainingDate || '',
+      actualTrainingDateTo: plan.actualTrainingDateTo || '', actualDuration: plan.actualDuration || '',
       actualParticipants: plan.actualParticipants || '', instructorRating: plan.instructorRating ?? ''
     };
   });
@@ -2283,6 +2369,7 @@ async function submitTrainingTest(e) {
     title,
     category: document.getElementById('ttCategory').value,
     passScore: document.getElementById('ttPassScore').value,
+    timeLimitMinutes: document.getElementById('ttTimeLimitMinutes').value,
     customData,
     questions: tbQuestions.map(q => {
       if (q.type === 'ESSAY') {
@@ -2327,6 +2414,7 @@ function editTrainingTest(id) {
   document.getElementById('ttTitle').value = t.title;
   document.getElementById('ttCategory').value = t.category || '';
   document.getElementById('ttPassScore').value = t.passScore != null ? t.passScore : '';
+  document.getElementById('ttTimeLimitMinutes').value = t.timeLimitMinutes > 0 ? t.timeLimitMinutes : '';
   // Đảo NGƯỢC đúng khuôn dữ liệu server (options[].id + correctOptionIds[]) về khuôn Test Builder
   // (options[].correct boolean) — xem tbQuestions ở trên cho hình dạng đích.
   tbQuestions = (t.questions || []).map(q => ({
@@ -2958,6 +3046,20 @@ let ttTakeIndex = 0;
 let ttTakeSecondsPerQuestion = 120;
 let ttTakeSecondsLeft = 0;
 let ttTakeTimerHandle = null;
+// Đồng hồ đếm ngược TỔNG CẢ BÀI (11/2026, theo yêu cầu người dùng "set thời gian làm bài, vào bài sẽ tự
+// đếm ngược") — CỘNG THÊM, tách biệt hoàn toàn khỏi đồng hồ theo-từng-câu ở trên (ttTakeSecondsPerQuestion,
+// cấu hình ở Lớp Học, giữ nguyên 100%). Chỉ chạy khi test.timeLimitMinutes > 0, xem openTakeTestModal().
+let ttTakeOverallSecondsLeft = 0;
+let ttTakeOverallTimerHandle = null;
+// 2 hàm THUẦN tách riêng khỏi setInterval thật — test được trực tiếp (xem
+// tests/test-training-test-overall-timer.js), cùng tinh thần clampYoutubePlaybackRate()/
+// computeYoutubeSeekSnapback() ở phần Video Đào Tạo.
+function computeOverallTimerTick(secondsLeft) {
+  return Math.max(0, secondsLeft - 1);
+}
+function isOverallTimeUp(secondsLeft) {
+  return secondsLeft <= 0;
+}
 
 // Đảo câu hỏi + đáp án (Đợt 4) — trả về 1 BẢN SAO đã xáo trộn thứ tự phần tử (Fisher-Yates), KHÔNG bao
 // giờ sửa mảng gốc truyền vào (test.questions/q.options vẫn nguyên vẹn thứ tự lưu ở DB.trainingTests).
@@ -3000,12 +3102,49 @@ function openTakeTestModal(classId) {
   document.getElementById('ttTakeModalTitle').innerText = `🧪 ${test.title}`;
   document.getElementById('ttTakeModalSubtitle').innerText = `Lớp: ${cls.title}`;
   document.getElementById('trainingTakeTestModal').classList.remove('hidden');
+
+  // Đồng hồ TỔNG (tuỳ chọn, xem chú thích ttTakeOverallSecondsLeft ở trên) — chỉ khởi động khi bài test
+  // có đặt timeLimitMinutes > 0, ẩn hẳn khối hiển thị + KHÔNG chạy interval nào nếu không đặt (hành vi
+  // y hệt trước đây cho mọi bài test chưa cấu hình field mới này).
+  clearInterval(ttTakeOverallTimerHandle);
+  ttTakeOverallTimerHandle = null; // clearInterval() không tự đưa biến về null — phải gán tay, không để
+  // sót "handle ma" từ lượt mở modal TRƯỚC còn sống trong biến (test-training-test-timelimit.js bắt được).
+  const overallWrap = document.getElementById('ttTakeOverallTimerWrap');
+  if (test.timeLimitMinutes > 0) {
+    ttTakeOverallSecondsLeft = test.timeLimitMinutes * 60;
+    overallWrap.classList.remove('hidden');
+    ttTakeUpdateOverallTimerDisplay();
+    ttTakeOverallTimerHandle = setInterval(() => {
+      ttTakeOverallSecondsLeft = computeOverallTimerTick(ttTakeOverallSecondsLeft);
+      ttTakeUpdateOverallTimerDisplay();
+      if (isOverallTimeUp(ttTakeOverallSecondsLeft)) {
+        clearInterval(ttTakeOverallTimerHandle);
+        ttTakeOverallTimerHandle = null;
+        clearInterval(ttTakeTimerHandle);
+        ttTakeSubmit();
+      }
+    }, 1000);
+  } else {
+    overallWrap.classList.add('hidden');
+  }
+
   ttTakeRenderQuestion();
+}
+
+function ttTakeUpdateOverallTimerDisplay() {
+  const secs = Math.max(0, ttTakeOverallSecondsLeft);
+  const h = Math.floor(secs / 3600);
+  const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  const el = document.getElementById('ttTakeOverallTimer');
+  if (el) el.innerText = h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
 function ttTakeExit() {
   if (!confirm('Thoát khỏi bài test? Câu trả lời chưa nộp sẽ không được lưu — bạn có thể vào làm lại từ đầu (miễn là chưa nộp bài lần nào cho lớp này).')) return;
   clearInterval(ttTakeTimerHandle);
+  clearInterval(ttTakeOverallTimerHandle);
+  ttTakeOverallTimerHandle = null;
   document.getElementById('trainingTakeTestModal').classList.add('hidden');
 }
 

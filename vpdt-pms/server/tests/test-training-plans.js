@@ -247,7 +247,9 @@ async function main() {
     await run('trainer lập kế hoạch tháng 6/2026: 2 lớp / 40 học viên / 16 giờ, gắn Chương Trình + Đơn Vị', async () => {
       await page.evaluate((cid) => {
         window.__alerts.length = 0;
-        document.getElementById('tpMonth').value = '2026-06-01'; // type="date" nay (11/2026), KHÔNG phải type="month" — cần đủ ngày để input nhận giá trị
+        // tpMonth cũ (type="date") đã đổi sang cặp select Tháng/Năm (11/2026) — xem
+        // setSelectPairFromMonth() ở module-internalcomms-daotao.js.
+        setSelectPairFromMonth('tpMonthNum', 'tpMonthYear', '2026-06');
         document.getElementById('tpCourseId').value = String(cid);
         document.getElementById('tpTargetDept').value = 'Phòng CNTT';
         document.getElementById('tpAudience').value = 'Nhân viên mới';
@@ -284,7 +286,10 @@ async function main() {
       await page.evaluate(() => {
         document.getElementById('tpInstructor').value = 'Nguyễn Thị A';
         document.getElementById('tpJobTitle').value = 'Chuyên viên Đào tạo';
-        document.getElementById('tpActualTrainingDate').value = '2026-06-15';
+        // tpActualTrainingDate cũ (1 ngày, type="date") đã đổi sang khoảng Từ-Đến CÓ GIỜ (11/2026,
+        // type="datetime-local") — xem tpActualTrainingDateFrom/tpActualTrainingDateTo.
+        document.getElementById('tpActualTrainingDateFrom').value = '2026-06-15T08:00';
+        document.getElementById('tpActualTrainingDateTo').value = '2026-06-15T11:00';
         document.getElementById('tpActualDuration').value = '3 giờ';
         document.getElementById('tpActualParticipants').value = '9';
         document.getElementById('tpInstructorRating').value = '12'; // cố tình vượt thang 10 — server phải tự chặn trần
@@ -293,7 +298,8 @@ async function main() {
       const plan = await page.evaluate((id) => DB.trainingPlans.find((p) => p.id === id), planId);
       assertEqual(plan.instructor, 'Nguyễn Thị A', 'instructor mismatch');
       assertEqual(plan.jobTitle, 'Chuyên viên Đào tạo', 'jobTitle mismatch');
-      assertEqual(plan.actualTrainingDate, '2026-06-15', 'actualTrainingDate mismatch');
+      assertEqual(plan.actualTrainingDateFrom, '2026-06-15T08:00', 'actualTrainingDateFrom mismatch');
+      assertEqual(plan.actualTrainingDateTo, '2026-06-15T11:00', 'actualTrainingDateTo mismatch');
       assertEqual(plan.actualDuration, '3 giờ', 'actualDuration mismatch');
       assertEqual(plan.actualParticipants, 9, 'actualParticipants mismatch');
       assertEqual(plan.instructorRating, 10, 'instructorRating must be clamped to the 0-10 scale server-side even if the client sent 12');
@@ -303,14 +309,16 @@ async function main() {
       const reloaded = await page.evaluate(() => ({
         instructor: document.getElementById('tpInstructor').value,
         jobTitle: document.getElementById('tpJobTitle').value,
-        actualTrainingDate: document.getElementById('tpActualTrainingDate').value,
+        actualTrainingDateFrom: document.getElementById('tpActualTrainingDateFrom').value,
+        actualTrainingDateTo: document.getElementById('tpActualTrainingDateTo').value,
         actualDuration: document.getElementById('tpActualDuration').value,
         actualParticipants: document.getElementById('tpActualParticipants').value,
         instructorRating: document.getElementById('tpInstructorRating').value
       }));
       assertEqual(reloaded.instructor, 'Nguyễn Thị A', 'instructor should reload into the edit form');
       assertEqual(reloaded.jobTitle, 'Chuyên viên Đào tạo', 'jobTitle should reload into the edit form');
-      assertEqual(reloaded.actualTrainingDate, '2026-06-15', 'actualTrainingDate should reload into the edit form');
+      assertEqual(reloaded.actualTrainingDateFrom, '2026-06-15T08:00', 'actualTrainingDateFrom should reload into the edit form');
+      assertEqual(reloaded.actualTrainingDateTo, '2026-06-15T11:00', 'actualTrainingDateTo should reload into the edit form');
       assertEqual(reloaded.actualDuration, '3 giờ', 'actualDuration should reload into the edit form');
       assertEqual(reloaded.actualParticipants, '9', 'actualParticipants should reload into the edit form');
       assertEqual(reloaded.instructorRating, '10', 'instructorRating should reload the clamped value into the edit form');
@@ -461,7 +469,7 @@ async function main() {
       // Thêm 1 kế hoạch KHÔNG gắn chương trình/đơn vị cho tháng 6 để kiểm tra tổng hợp không lọc.
       await page.evaluate(() => {
         window.__alerts.length = 0;
-        document.getElementById('tpMonth').value = '2026-06-01'; // type="date" nay (11/2026), KHÔNG phải type="month" — cần đủ ngày để input nhận giá trị
+        setSelectPairFromMonth('tpMonthNum', 'tpMonthYear', '2026-06');
         document.getElementById('tpCourseId').value = '';
         document.getElementById('tpTargetDept').value = '';
         document.getElementById('tpAudience').value = '';
@@ -492,6 +500,73 @@ async function main() {
       const unnamed = dashAll.byInstructor.find((r) => r.instructor === '(Chưa gán giảng viên)');
       assert(unnamed, 'expected a fallback byInstructor row for the plan with no instructor filled in');
       assertEqual(unnamed.avgRating, null, 'a plan with no instructorRating filled in should average to null, not 0');
+    });
+
+    await run('tpCategory lọc tpCourseId theo Loại Đào Tạo + category lưu đúng trên bản ghi khi lập kế hoạch', async () => {
+      // LỖI ĐÃ XÁC NHẬN PRE-EXISTING KHÔNG LIÊN QUAN (cùng cụm "Nhập Kế Hoạch Từ Excel" đã bị timeout ở
+      // 2 kịch bản phía trên — xác nhận qua git stash, không phải do đợt sửa 11/2026 này): luồng parse
+      // Excel bị lỗi trong sandbox này để lại tác dụng phụ xoá trắng DB.trainingCategories giữa chừng.
+      // Tự nạp lại danh mục ở ĐÂY cho chắc (không phụ thuộc trạng thái còn nguyên vẹn từ baseCatalogSeed())
+      // để kịch bản MỚI này không bị ăn theo lỗi môi trường không liên quan.
+      await page.evaluate(() => {
+        window.__alerts.length = 0;
+        if (!(DB.trainingCategories || []).includes('Kỹ năng mềm')) DB.trainingCategories = ['Kỹ năng mềm', 'Nghiệp vụ'];
+        setTrainingLmsTab('COURSES');
+        populateTrainingCategorySelects();
+        document.getElementById('tccCategory').value = 'Kỹ năng mềm';
+        document.getElementById('tccName').value = 'Giao Tiếp Hiệu Quả';
+      });
+      await page.evaluate(() => submitTrainingCourse({ preventDefault() {}, target: { reset() {} } }));
+      const softSkillCourseId = await page.evaluate(() => DB.trainingCourses.find((c) => c.name === 'Giao Tiếp Hiệu Quả').id);
+      await page.evaluate(() => setTrainingLmsTab('PLANS'));
+
+      await page.evaluate(() => { populateTrainingCategorySelects(); document.getElementById('tpCategory').value = 'Kỹ năng mềm'; filterTrainingPlanCourseOptions(); });
+      const optionsFiltered = await page.evaluate(() => [...document.getElementById('tpCourseId').options].map((o) => o.value));
+      assert(optionsFiltered.includes(String(softSkillCourseId)), 'lọc theo "Kỹ năng mềm" phải giữ lại chương trình cùng loại');
+      assert(!optionsFiltered.includes(String(courseId)), 'lọc theo "Kỹ năng mềm" phải bỏ chương trình "Nghiệp vụ" khác loại');
+
+      await page.evaluate(() => { document.getElementById('tpCategory').value = ''; filterTrainingPlanCourseOptions(); });
+      const optionsAll = await page.evaluate(() => [...document.getElementById('tpCourseId').options].map((o) => o.value));
+      assert(optionsAll.includes(String(softSkillCourseId)) && optionsAll.includes(String(courseId)), 'để trống Loại Đào Tạo phải hiện lại đủ mọi chương trình');
+
+      await page.evaluate(() => {
+        setSelectPairFromMonth('tpMonthNum', 'tpMonthYear', '2026-08');
+        document.getElementById('tpCategory').value = 'Kỹ năng mềm';
+        document.getElementById('tpCourseId').value = '';
+        document.getElementById('tpTargetDept').value = '';
+        document.getElementById('tpAudience').value = '';
+        document.getElementById('tpPlannedClasses').value = '1';
+        document.getElementById('tpPlannedTrainees').value = '1';
+        document.getElementById('tpPlannedHours').value = '1';
+      });
+      await page.evaluate(() => submitTrainingPlan({ preventDefault() {} }));
+      const augPlan = await page.evaluate(() => DB.trainingPlans.find((p) => p.month === '2026-08'));
+      assert(augPlan, 'expected the August plan to be created');
+      assertEqual(augPlan.category, 'Kỹ năng mềm', 'category phải được lưu đúng trên bản ghi');
+      // Dọn lại, tránh ảnh hưởng các kịch bản đếm số liệu phía sau (chỉ còn giữ 2 kế hoạch tháng 6 như cũ).
+      await page.evaluate((id) => { DB.trainingPlans = DB.trainingPlans.filter((p) => p.id !== id); }, augPlan.id);
+      await page.evaluate(() => cancelEditTrainingPlan());
+    });
+
+    await run('openEditTrainingPlan(): dữ liệu actualTrainingDate CŨ (chưa có actualTrainingDateFrom) vẫn fallback đúng vào ô "Từ"', async () => {
+      const legacyId = await page.evaluate(() => {
+        const legacy = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          month: '2026-03', category: '', courseId: null, targetDept: '', audience: '',
+          plannedClasses: 0, plannedTrainees: 0, plannedHours: 0,
+          instructor: '', jobTitle: '', actualTrainingDate: '2026-03-10', actualDuration: '', actualParticipants: 0,
+          instructorRating: null, customData: {}, dept: 'Phòng Nhân Sự', creator: 'gv.linh', creatorName: 'Trần Thị Linh'
+        };
+        DB.trainingPlans.push(legacy);
+        return legacy.id;
+      });
+      await page.evaluate((id) => openEditTrainingPlan(id), legacyId);
+      const fromValue = await page.evaluate(() => document.getElementById('tpActualTrainingDateFrom').value);
+      const toValue = await page.evaluate(() => document.getElementById('tpActualTrainingDateTo').value);
+      assertEqual(fromValue, '2026-03-10T00:00', 'dữ liệu actualTrainingDate cũ phải fallback vào ô "Từ" kèm giờ 00:00');
+      assertEqual(toValue, '', 'ô "Đến" phải để trống cho bản ghi cũ không có dữ liệu khoảng');
+      await page.evaluate((id) => { DB.trainingPlans = DB.trainingPlans.filter((p) => p.id !== id); }, legacyId);
+      await page.evaluate(() => cancelEditTrainingPlan());
     });
 
     assertEqual(pageErrors.length, 0, `unexpected uncaught page errors: ${pageErrors.map((e) => e.message).join(' | ')}`);

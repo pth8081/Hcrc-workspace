@@ -1,9 +1,61 @@
 # Phiên bản hiện tại
 
-**28.0** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.1** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.1 (2026-11): Kế Hoạch Đào Tạo — Tháng/Năm chọn riêng + Loại Đào Tạo lọc Chương Trình + khoảng Ngày Tổ Chức có giờ; Ngân Hàng Câu Hỏi — Thời Gian Làm Bài tổng
+
+Theo 3 yêu cầu người dùng (kèm 3 ảnh chụp màn hình Kế Hoạch Đào Tạo/Ngân Hàng Câu Hỏi):
+
+**1) Form "Lập Kế Hoạch Đào Tạo Mới" — ô "Tháng" quay lại đúng tháng/năm, "Ngày Tổ Chức Đào Tạo" thành
+khoảng Từ-Đến CÓ GIỜ:**
+- `tpMonth` (`type="date"`, đổi từ đợt trước) → thay bằng cặp `<select>` Tháng(1-12)/Năm tự dựng
+  (`tpMonthNum`/`tpMonthYear`) — vẫn quy về đúng "YYYY-MM" khi lưu, KHÔNG quay lại `type="month"` native
+  (đã xác nhận hiển thị lỗi dạng gạch ngang ở nhiều trình duyệt/thiết bị từ đợt trước). Áp dụng đồng bộ
+  luôn cho bộ lọc "Theo Dõi Thực Hiện" (`tpDashMonthNum`/`tpDashMonthYear`) cùng panel — không để 1 ô
+  kiểu cũ 1 ô kiểu mới.
+- "Ngày Tổ Chức Đào Tạo" (1 ngày, không giờ) → khoảng **Từ-Đến CÓ GIỜ** (`tpActualTrainingDateFrom`/
+  `tpActualTrainingDateTo`, `type="datetime-local"`). Dữ liệu CŨ (`actualTrainingDate`) vẫn hiển thị
+  fallback vào ô "Từ" khi mở Sửa 1 kế hoạch chưa từng lưu theo khuôn mới — không mất dữ liệu lịch sử.
+  Excel xuất "Theo Dõi Thực Hiện" đổi 1 cột "Ngày Tổ Chức Đào Tạo" thành 2 cột Từ/Đến, cùng fallback.
+- Thêm "Loại Đào Tạo (tuỳ chọn)" (`tpCategory`) — chọn xong tự lọc riêng "Chương Trình" (`tpCourseId`)
+  chỉ còn các chương trình cùng loại (để trống = không lọc, hiện mọi chương trình như cũ).
+
+**2) Ngân Hàng Câu Hỏi — "Thời Gian Làm Bài (phút, tuỳ chọn)" (`ttTimeLimitMinutes`):** giới hạn TỔNG
+thời gian làm cả bài, **cộng thêm** (không thay thế) cơ chế đếm-ngược-theo-từng-câu đã có sẵn ở cấp Lớp
+Học (`testSecondsPerQuestion`) — 2 đồng hồ chạy song song độc lập, ghi rõ nhãn phân biệt trong modal "Vào
+Làm Bài Test". Để trống/0 = không giới hạn (hành vi y hệt trước đây). Hết giờ tổng → tự động nộp bài với
+những gì đã trả lời, đóng modal — cùng mức tin cậy client-only như đồng hồ theo-câu đã có (không có xác
+thực thời gian phía server mới nào ngoài mốc "start-test" sẵn có).
+
+**Thay đổi code:**
+- `public/fragments/internalSection.html`: các field/select trên.
+- `public/js/module-internalcomms-daotao.js`: `populateMonthYearSelectPair()`/`readMonthFromSelectPair()`/
+  `setSelectPairFromMonth()` (mới); `filterTrainingPlanCourseOptions()` (mới); cập nhật
+  `submitTrainingPlan()`/`openEditTrainingPlan()`/`cancelEditTrainingPlan()`/`renderTrainingPlanDashboard()`/
+  Excel export cho Kế Hoạch; `computeOverallTimerTick()`/`isOverallTimeUp()` (hàm thuần, mới) +
+  `openTakeTestModal()`/`ttTakeExit()`/`submitTrainingTest()`/`editTrainingTest()` cho Ngân Hàng Câu Hỏi.
+- `lib/createValidation.js`: `normalizeTrainingPlanFields()` thêm validate `category` (tuỳ chọn, khớp
+  `appData.trainingCategories`) + đổi `actualTrainingDate` → `actualTrainingDateFrom`/`actualTrainingDateTo`
+  (ghi chú thuần, không validate format chặt); `normalizeTrainingTestFields()` thêm `timeLimitMinutes`.
+- `lib/recordActions.js`: `TRAINING_PLAN_EDITABLE_FIELDS` thêm `category`/`actualTrainingDateFrom`/
+  `actualTrainingDateTo`, bỏ `actualTrainingDate` cũ (dữ liệu cũ KHÔNG bị xoá — chỉ không còn ghi đè qua
+  Sửa nữa, client tự fallback hiển thị); `editTrainingTest()` gán thêm `timeLimitMinutes`.
+- `tests/_mock-backend.js`: mirror toàn bộ các thay đổi trên (category/actualTrainingDateFrom-To/
+  timeLimitMinutes) — hầu hết Playwright test không gọi server thật mà qua lớp mock riêng này.
+- Test: cập nhật `test-training-plans.js`/`test-training-scenario-roleplay.js`/
+  `test-form-reset-file-remove.js` cho các id/hàm đã đổi + thêm 2 kịch bản mới (lọc Chương Trình theo
+  Loại Đào Tạo, fallback hiển thị dữ liệu cũ); thêm file mới `test-training-test-timelimit.js` (8 kịch
+  bản: hàm thuần đếm ngược, round-trip tạo/sửa, hiện/ẩn đồng hồ tổng, tự nộp khi hết giờ). Trong lúc viết
+  test mới bắt được 1 lỗi thật nhỏ trong chính code vừa viết (`ttTakeOverallTimerHandle` không được reset
+  về `null` sau `clearInterval()` ở nhánh không có giới hạn giờ) — đã vá luôn.
+- Đã dùng `git stash` xác nhận 2 lỗi "Nhập Kế Hoạch Từ Excel" timeout trong `test-training-plans.js` là
+  PRE-EXISTING (có sẵn trên `main` từ trước, không liên quan đợt này) — không phải do thay đổi lần này.
+
+**Không cần thao tác gì thêm ngoài deploy code mới** — không đổi `schema.sql`, không thêm biến môi
+trường mới, không đổi `package.json` dependencies.
 
 ## v28.0 (2026-10): Tăng hạn mức phiên đăng nhập 1h → 8h — hết triệu chứng "cứ bị văng hết phiên nhiều lần" trên điện thoại
 

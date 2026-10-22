@@ -5565,8 +5565,9 @@ Theo yêu cầu BP Đào Tạo (file requirements gửi test), 4 thay đổi tro
 **Theo Dõi Thực Hiện & Dashboard — khối "📝 Ghi Nhận Thực Tế" + đổi "Theo Đơn Vị" thành "Theo Giảng Viên"**
 - Mỗi dòng Kế Hoạch Đào Tạo (Sửa) nay có thêm khối **"📝 Ghi Nhận Thực Tế"**
   (6 field, toàn bộ tuỳ chọn, điền SAU khi đã tổ chức xong): **Giảng Viên
-  Đào Tạo**, **Chức Danh**, **Ngày Tổ Chức Đào Tạo**, **Thời Gian Đào Tạo**
-  (văn bản tự do, VD "3 giờ"/"1 buổi"), **Số Lượng Tham Gia Thực Tế**,
+  Đào Tạo**, **Chức Danh**, **Ngày Tổ Chức Đào Tạo** (xem 5j — từ 11/2026 đổi
+  thành khoảng Từ ngày - Đến ngày kèm giờ, không còn 1 mốc ngày đơn), **Thời
+  Gian Đào Tạo** (văn bản tự do, VD "3 giờ"/"1 buổi"), **Số Lượng Tham Gia Thực Tế**,
   **Đánh Giá Giảng Viên** (điểm, thang 0-10, server tự chặn trần nếu lỡ
   nhập quá 10). 6 field này THUẦN ghi chú thủ công — KHÔNG đụng tới
   `actualClasses`/`actualTrainees`/`actualHours` vẫn tính SỐNG từ Lớp Học/
@@ -5602,6 +5603,52 @@ nào — 6 field "Ghi Nhận Thực Tế" lưu trực tiếp trong bản ghi `tr
 JSON đã có sẵn (cùng cơ chế lưu trữ `plannedClasses`/`targetDept`...), không
 cần migrate dữ liệu cũ (các dòng kế hoạch đã lập trước đây tự hiện field
 trống, điền thêm lúc nào cũng được).
+
+## 5j. Đợt cập nhật 11/2026: Tháng/Năm dạng chọn, Ngày Tổ Chức có khoảng+giờ, Loại Đào Tạo lọc Chương Trình, giới hạn giờ làm Test
+
+Theo yêu cầu người dùng (3 ảnh màn hình gửi kèm), 3 thay đổi trong module
+**🏫 Đào Tạo**:
+
+**Lập/Sửa Kế Hoạch — ô "Tháng" quay lại dạng chọn Tháng/Năm riêng**
+- Ô **Tháng** của form Lập/Sửa Kế Hoạch Đào Tạo (và ô lọc **Tháng** ở
+  Dashboard "📅 Theo Kế Hoạch Tháng") dùng lại 2 ô `<select>` riêng — **Tháng
+  (1-12)** + **Năm** — thay cho input ngày đầy đủ. KHÔNG dùng input
+  `type="month"` gốc của trình duyệt (đã xác nhận hiển thị/thao tác không ổn
+  định trên nhiều trình duyệt/thiết bị, cùng lý do đã bỏ `<datalist>` — xem
+  mục tương ứng ở `CLAUDE.md`) — đây là 1 cặp `<select>` JS tự dựng, hành vi
+  giống nhau trên mọi trình duyệt.
+
+**Ghi Nhận Thực Tế — "Ngày Tổ Chức Đào Tạo" đổi thành khoảng Từ ngày - Đến ngày, có giờ**
+- Field **Ngày Tổ Chức Đào Tạo** trong khối "📝 Ghi Nhận Thực Tế" (xem 5i)
+  tách thành 2 ô **Từ ngày - giờ** / **Đến ngày - giờ** (`datetime-local`)
+  thay cho 1 ô ngày đơn — phục vụ các lớp tổ chức nhiều ngày hoặc cần ghi rõ
+  giờ bắt đầu/kết thúc thực tế. Dữ liệu cũ đã lưu theo field ngày đơn
+  (`actualTrainingDate`) KHÔNG bị mất/migrate — các dòng kế hoạch đã có ngày
+  tổ chức từ trước 11/2026 vẫn tự hiện lại đúng giá trị cũ ở phần hiển thị
+  (không cho sửa tiếp theo field cũ, phải điền lại theo khoảng mới nếu cần
+  cập nhật).
+
+**Lập Kế Hoạch — thêm "Loại Đào Tạo", lọc "Chương Trình" theo đúng loại đã chọn**
+- Thêm field mới **Loại Đào Tạo** (dùng chung danh mục `trainingCategories`
+  đã có sẵn cho Ngân Hàng Câu Hỏi/Chương Trình — không tạo danh mục riêng)
+  vào form Lập/Sửa Kế Hoạch, đặt ngay trước ô **Chương Trình**. Chọn Loại
+  Đào Tạo nào thì ô Chương Trình CHỈ hiện các Chương Trình cùng loại đó
+  (field `category` sẵn có trên mỗi Chương Trình); chưa chọn Loại Đào Tạo
+  thì Chương Trình hiện đầy đủ như trước (không bắt buộc, không phá hành vi
+  cũ của các kế hoạch đã lập không có Loại Đào Tạo).
+
+**Ngân Hàng Câu Hỏi — đặt giới hạn TỔNG thời gian làm bài, tự đếm ngược**
+- Thêm field tuỳ chọn **"Thời Gian Làm Bài (phút, tuỳ chọn)"** khi Tạo/Sửa
+  bài test (Ngân Hàng Câu Hỏi). Để trống = không giới hạn (hành vi giống hệt
+  trước đây). Đặt số phút thì khi học viên bấm "Vào Làm Bài Test", màn làm
+  bài hiện thêm 1 đồng hồ đếm ngược TỔNG (định dạng mm:ss, tách biệt với
+  đồng hồ đếm-ngược-theo-từng-câu `testSecondsPerQuestion` đã có sẵn ở cấp
+  Lớp Học — 2 cơ chế CỘNG THÊM nhau, không thay thế) — hết giờ TỔNG thì hệ
+  thống tự nộp bài ngay (giống hành vi hết giờ theo câu đã có).
+
+**Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường/dependency
+nào — `category` (Kế Hoạch Đào Tạo) và `timeLimitMinutes` (bài Test) lưu
+trực tiếp trong bản ghi JSON đã có sẵn, không cần migrate dữ liệu cũ.
 
 ---
 
