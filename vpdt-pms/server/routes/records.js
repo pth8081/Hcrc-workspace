@@ -1057,21 +1057,27 @@ function assertAdminForDelete(user) {
 //
 // ĐỔI (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền riêng, người có
 // quyền được toàn quyền sửa xóa quy trình/hồ sơ của ĐÚNG loại mình quản lý"): bỏ HẲN yêu cầu
-// assertAdminForDelete() — có ĐỦ quyền Nhân Sự phù hợp (hrProcessManage HOẶC đúng hrOnboardingManage/
-// hrOffboardingManage theo processType) là XOÁ ĐƯỢC NGAY, không cần thêm admin hệ thống (trước đây dù
-// được cấp hrOnboardingManage/hrOffboardingManage riêng, bộ phận Tuyển Dụng/Nhân Sự vẫn không tự xoá được
-// hồ sơ của chính mảng mình phụ trách nếu không có thêm quyền Admin chung — mâu thuẫn với chủ đích tách
-// quyền). QUAN TRỌNG: KHÔNG rơi về assertAdminForDelete() như 1 lối thoát dự phòng khi thiếu quyền Nhân
-// Sự — nếu làm vậy sẽ MỞ LẠI đúng lỗ hổng gốc (re-audit lần 5) mà bản vá này từng chặn: 1 admin hệ thống
-// chung (VD IT/Sys admin, KHÔNG có bất kỳ quyền Nhân Sự nào) phải tiếp tục bị chặn tuyệt đối, không có
-// đường vòng nào khác. LƯU Ý: đây là quyết định CÓ CHỦ Ý CHỈ áp dụng cho riêng hrProcesses theo đúng yêu
-// cầu người dùng — KHÔNG áp dụng chung "xóa = quyền tối cao" cho các collection khác trong file này (vẫn
-// giữ nguyên admin-only như trước, xem assertAdminForDelete() ở trên).
+// assertAdminForDelete() — có ĐỦ quyền Nhân Sự phù hợp (đúng hrOnboardingManage/hrOffboardingManage/
+// hrOnboardingProcessManage/hrOffboardingProcessManage theo processType) là XOÁ ĐƯỢC NGAY, không cần
+// thêm admin hệ thống (trước đây dù được cấp hrOnboardingManage/hrOffboardingManage riêng, bộ phận Tuyển
+// Dụng/Nhân Sự vẫn không tự xoá được hồ sơ của chính mảng mình phụ trách nếu không có thêm quyền Admin
+// chung — mâu thuẫn với chủ đích tách quyền). QUAN TRỌNG: KHÔNG rơi về assertAdminForDelete() như 1 lối
+// thoát dự phòng khi thiếu quyền Nhân Sự — nếu làm vậy sẽ MỞ LẠI đúng lỗ hổng gốc (re-audit lần 5) mà
+// bản vá này từng chặn: 1 admin hệ thống chung (VD IT/Sys admin, KHÔNG có bất kỳ quyền Nhân Sự nào) phải
+// tiếp tục bị chặn tuyệt đối, không có đường vòng nào khác. LƯU Ý: đây là quyết định CÓ CHỦ Ý CHỈ áp
+// dụng cho riêng hrProcesses theo đúng yêu cầu người dùng — KHÔNG áp dụng chung "xóa = quyền tối cao"
+// cho các collection khác trong file này (vẫn giữ nguyên admin-only như trước, xem assertAdminForDelete()
+// ở trên).
+// ĐỔI TIẾP (11/2026, lượt phản hồi 2): hrProcessManage (gộp cả 2 loại) đã XOÁ HẲN — thay bằng
+// hrOnboardingProcessManage/hrOffboardingProcessManage TÁCH RIÊNG theo processType, mirror ĐÚNG
+// canManageHrProcess()/canActOnHrTask() (lib/recordActions.js).
 function assertHrProcessDeletePermission(user, item) {
-  const hasHrAuthority = !!(user.perms?.hrProcessManage ||
-    (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage));
+  const hasHrAuthority = !!(
+    (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingProcessManage : user.perms?.hrOffboardingProcessManage) ||
+    (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage)
+  );
   if (!hasHrAuthority) {
-    throw new HttpError(403, 'Cần có quyền Nhân Sự phù hợp (hrOnboardingManage/hrOffboardingManage/hrProcessManage) mới được xoá quy trình này — quyền Quản Trị Viên chung không đủ');
+    throw new HttpError(403, 'Cần có quyền Nhân Sự phù hợp (hrOnboardingManage/hrOffboardingManage/hrOnboardingProcessManage/hrOffboardingProcessManage) mới được xoá quy trình này — quyền Quản Trị Viên chung không đủ');
   }
 }
 // MỞ RỘNG CÓ CHỦ Ý (11/2026, theo yêu cầu người dùng "thêm quyền sửa xóa tin tuyển dụng cho người quản

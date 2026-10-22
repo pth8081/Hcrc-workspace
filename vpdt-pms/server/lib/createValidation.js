@@ -4043,7 +4043,7 @@ const CREATE_MODULE_CONFIGS = {
           // hrProfileManage — tier NÀY cũng đủ quyền tra "Kiểm Tra Nhân Sự Cũ" (GET /api/hr-profile/
           // search-inactive, requireProfileCreateOrEdit), nên lộ thêm employeeCode qua lỗi 409 ở đó
           // không phải lỗ hổng mới. Lối tạo Onboarding này lại gác bằng 1 tier HOÀN TOÀN KHÁC
-          // (canCreateHrProcess() — hrOnboardingManage/hrProcessManage/admin, KHÔNG đòi hrProfileCreate/
+          // (canCreateHrProcess() — hrOnboardingManage/hrOnboardingProcessManage, KHÔNG đòi hrProfileCreate/
           // hrProfileEdit/hrProfileManage) — 1 actor CHỈ có hrOnboardingManage có thể dò CCCD bất kỳ qua
           // form tạo Onboarding để biết employeeCode + tình trạng nghỉ việc của 1 nhân viên CŨ dù không
           // có quyền xem/tra cứu hồ sơ nhân sự. Chỉ cho thấy chi tiết khi actor THẬT SỰ cũng thuộc tier
@@ -4190,8 +4190,8 @@ const CREATE_MODULE_CONFIGS = {
 
       // Quản lý trực tiếp (tuỳ chọn cả 2 loại) — chủ nhân của các task nhãn "MANAGER" (xem canActOnHrTask()
       // ở lib/recordActions.js). Không bắt buộc: nếu để trống, task MANAGER chỉ hrOnboardingManage/
-      // hrOffboardingManage/hrProcessManage/admin mới thao tác được (hrViewAll KHÔNG còn bypass — xem
-      // chú thích LỖI ĐÃ VÁ tại canActOnHrTask()).
+      // hrOffboardingManage/hrOnboardingProcessManage/hrOffboardingProcessManage mới thao tác được
+      // (hrViewAll KHÔNG còn bypass — xem chú thích LỖI ĐÃ VÁ tại canActOnHrTask()).
       const directManagerUsername = String(payload.directManagerUsername || '').trim();
       if (directManagerUsername) {
         const mgr = (appData?.users || []).find(u => u.username === directManagerUsername && u.active !== false);

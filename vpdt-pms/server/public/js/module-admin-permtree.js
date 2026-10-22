@@ -243,7 +243,8 @@ function collectPermsFromForm() {
     hrOnboardingManage: document.getElementById('pHrOnboardingManage').checked,
     hrOffboardingManage: document.getElementById('pHrOffboardingManage').checked,
     hrTaskTemplateManage: document.getElementById('pHrTaskTemplateManage').checked,
-    hrProcessManage: document.getElementById('pHrProcessManage').checked,
+    hrOnboardingProcessManage: document.getElementById('pHrOnboardingProcessManage').checked,
+    hrOffboardingProcessManage: document.getElementById('pHrOffboardingProcessManage').checked,
     hrViewAll: document.getElementById('pHrViewAll').checked,
     hrProfileView: document.getElementById('pHrProfileView').checked,
     hrProfileManage: document.getElementById('pHrProfileManage').checked,
@@ -386,7 +387,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pHrOnboardingManage').checked = !!perms.hrOnboardingManage;
   document.getElementById('pHrOffboardingManage').checked = !!perms.hrOffboardingManage;
   document.getElementById('pHrTaskTemplateManage').checked = !!perms.hrTaskTemplateManage;
-  document.getElementById('pHrProcessManage').checked = !!perms.hrProcessManage;
+  document.getElementById('pHrOnboardingProcessManage').checked = !!perms.hrOnboardingProcessManage;
+  document.getElementById('pHrOffboardingProcessManage').checked = !!perms.hrOffboardingProcessManage;
   document.getElementById('pHrViewAll').checked = !!perms.hrViewAll;
   document.getElementById('pHrProfileView').checked = !!perms.hrProfileView;
   document.getElementById('pHrProfileManage').checked = !!perms.hrProfileManage;

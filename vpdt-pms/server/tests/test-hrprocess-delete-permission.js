@@ -11,8 +11,8 @@
 // động của người khác.
 //
 // Đã vá: assertHrProcessDeletePermission() (routes/records.js) gác đúng quyền Nhân Sự phù hợp
-// (hrProcessManage, hoặc hrOnboardingManage/hrOffboardingManage theo processType) — admin chung KHÔNG
-// có quyền Nhân Sự nào vẫn bị chặn tuyệt đối (giữ nguyên bản vá gốc).
+// (hrOnboardingProcessManage/hrOffboardingProcessManage, hoặc hrOnboardingManage/hrOffboardingManage
+// theo processType) — admin chung KHÔNG có quyền Nhân Sự nào vẫn bị chặn tuyệt đối (giữ nguyên bản vá gốc).
 //
 // ĐỔI TIẾP (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền riêng,
 // không cần thêm Admin mới xoá được"): bỏ HẲN yêu cầu CỘNG THÊM assertAdminForDelete() — có ĐỦ quyền
@@ -41,7 +41,12 @@ const HR_ONBOARDING_NO_ADMIN = { username: 'hr1', name: 'HR Onboarding (không a
 // Chỉ có hrOffboardingManage (KHÔNG có hrOnboardingManage) — để xác nhận xử lý ĐÚNG theo processType,
 // không phải 1 OR mơ hồ luôn cho qua bất kể loại quy trình nào.
 const ADMIN_OFFBOARDING_ONLY = { username: 'admin3', name: 'Admin + chỉ Offboarding', dept: 'Phòng Nhân Sự', perms: { admin: true, hrOffboardingManage: true }, active: true };
-const ALL_USERS_LIST = [ADMIN_ONLY, ADMIN_WITH_ONBOARDING, HR_ONBOARDING_NO_ADMIN, ADMIN_OFFBOARDING_ONLY];
+// hrOnboardingProcessManage/hrOffboardingProcessManage (11/2026, thay thế hrProcessManage gộp cũ) — xác
+// nhận 2 quyền "Toàn Quyền Thao Tác" TÁCH RIÊNG theo processType cũng đủ xoá được, KHÔNG cần admin,
+// KHÔNG cần thêm hrOnboardingManage/hrOffboardingManage.
+const HR_ONBOARDING_PROCESS_MANAGER_NO_ADMIN = { username: 'hr4', name: 'Toàn Quyền Onboarding (không admin)', dept: 'Phòng Nhân Sự', perms: { hrOnboardingProcessManage: true }, active: true };
+const HR_OFFBOARDING_PROCESS_MANAGER_NO_ADMIN = { username: 'hr5', name: 'Toàn Quyền Offboarding (không admin)', dept: 'Phòng Nhân Sự', perms: { hrOffboardingProcessManage: true }, active: true };
+const ALL_USERS_LIST = [ADMIN_ONLY, ADMIN_WITH_ONBOARDING, HR_ONBOARDING_NO_ADMIN, ADMIN_OFFBOARDING_ONLY, HR_ONBOARDING_PROCESS_MANAGER_NO_ADMIN, HR_OFFBOARDING_PROCESS_MANAGER_NO_ADMIN];
 
 let HR_PROCESSES = [];
 function resetData() {
@@ -134,7 +139,7 @@ async function main() {
   const run = createRunner();
 
   try {
-    await run.run('LỖI ĐÃ VÁ: admin CHUNG (không có hrOnboardingManage/hrOffboardingManage/hrProcessManage) -> xoá ONBOARDING bị chặn 403', async () => {
+    await run.run('LỖI ĐÃ VÁ: admin CHUNG (không có hrOnboardingManage/hrOffboardingManage/hrOnboardingProcessManage/hrOffboardingProcessManage) -> xoá ONBOARDING bị chặn 403', async () => {
       resetData();
       const res = await api('POST', '/api/records/hrProcesses/1/delete', {}, ADMIN_ONLY);
       assertEqual(res.status, 403, 'phải trả 403: admin chung không đủ quyền Nhân Sự');
@@ -188,6 +193,30 @@ async function main() {
       const res = await api('POST', '/api/records/hrProcesses/2/delete', {}, HR_ONBOARDING_NO_ADMIN);
       assertEqual(res.status, 403, 'phải trả 403: processType OFFBOARDING cần hrOffboardingManage, không phải hrOnboardingManage');
       assertEqual(HR_PROCESSES.some(p => p.id === 2), true, 'bản ghi KHÔNG được xoá khi bị chặn');
+    });
+
+    await run.run('CHỈ có hrOnboardingProcessManage, KHÔNG có admin -> xoá ONBOARDING thành công (quyền MỚI thay hrProcessManage cũ)', async () => {
+      resetData();
+      const res = await api('POST', '/api/records/hrProcesses/1/delete', {}, HR_ONBOARDING_PROCESS_MANAGER_NO_ADMIN);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(HR_PROCESSES.some(p => p.id === 1), false, 'bản ghi phải được xoá thành công');
+    });
+
+    await run.run('CHỈ có hrOnboardingProcessManage -> xoá OFFBOARDING vẫn bị chặn 403 (CÁCH LY đúng theo processType — phép thử then chốt của đợt tách quyền)', async () => {
+      resetData();
+      const res = await api('POST', '/api/records/hrProcesses/2/delete', {}, HR_ONBOARDING_PROCESS_MANAGER_NO_ADMIN);
+      assertEqual(res.status, 403, 'phải trả 403: hrOnboardingProcessManage KHÔNG được bypass sang processType OFFBOARDING');
+      assertEqual(HR_PROCESSES.some(p => p.id === 2), true, 'bản ghi KHÔNG được xoá khi bị chặn');
+    });
+
+    await run.run('CHỈ có hrOffboardingProcessManage, KHÔNG có admin -> xoá OFFBOARDING thành công, nhưng KHÔNG xoá được ONBOARDING (cách ly cả 2 chiều)', async () => {
+      resetData();
+      const resOff = await api('POST', '/api/records/hrProcesses/2/delete', {}, HR_OFFBOARDING_PROCESS_MANAGER_NO_ADMIN);
+      assertEqual(resOff.status, 200, JSON.stringify(resOff.body));
+      assertEqual(HR_PROCESSES.some(p => p.id === 2), false, 'bản ghi OFFBOARDING phải được xoá thành công');
+      const resOn = await api('POST', '/api/records/hrProcesses/1/delete', {}, HR_OFFBOARDING_PROCESS_MANAGER_NO_ADMIN);
+      assertEqual(resOn.status, 403, 'phải trả 403: hrOffboardingProcessManage KHÔNG được bypass sang processType ONBOARDING');
+      assertEqual(HR_PROCESSES.some(p => p.id === 1), true, 'bản ghi ONBOARDING KHÔNG được xoá khi bị chặn');
     });
 
     run.summary();

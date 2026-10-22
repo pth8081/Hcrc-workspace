@@ -31,10 +31,14 @@ const HR_PROCESS_STATUS_BADGES = {
 // tách ra hrProcessManage riêng, khớp đúng canManageHrProcess()/canActOnHrTask() ở lib/recordActions.js.
 // hrProcessManage KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback() ở
 // lib/recordActions.js).
+// ĐỔI (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền riêng"):
+// hrProcessManage (gộp cả 2 loại) đã XOÁ HẲN — thay bằng hrOnboardingProcessManage/
+// hrOffboardingProcessManage TÁCH RIÊNG theo processType, mirror ĐÚNG canManageHrProcess()
+// (lib/recordActions.js).
 function canManageHrLifecycleClient(processType) {
   if (!currentUser) return false;
-  if (currentUser.perms?.hrProcessManage) return true;
-  return !!(processType === 'ONBOARDING' ? currentUser.perms?.hrOnboardingManage : currentUser.perms?.hrOffboardingManage);
+  if (processType === 'ONBOARDING') return !!(currentUser.perms?.hrOnboardingProcessManage || currentUser.perms?.hrOnboardingManage);
+  return !!(currentUser.perms?.hrOffboardingProcessManage || currentUser.perms?.hrOffboardingManage);
 }
 
 function setHrLifecycleView(view) {
@@ -592,7 +596,11 @@ function renderHrProcessDetailBody(item) {
     const overdue = t.status === 'PENDING' && t.dueDate < today;
     // hrProcessManage KHÔNG còn admin bypass (11/2026, mở rộng "Nhân Sự" — xem canManageHrFeedback()
     // ở lib/recordActions.js) — itManage/paymentManage dưới đây GIỮ NGUYÊN (quyền module khác).
-    const canActThis = !!currentUser && (currentUser.perms?.hrProcessManage ||
+    // ĐỔI (11/2026): hrProcessManage (gộp cả 2 loại) đã XOÁ HẲN — thay bằng hrOnboardingProcessManage/
+    // hrOffboardingProcessManage TÁCH RIÊNG theo item.processType, mirror ĐÚNG canActOnHrTask()
+    // (lib/recordActions.js).
+    const canActThis = !!currentUser && (
+      (item.processType === 'ONBOARDING' ? currentUser.perms?.hrOnboardingProcessManage : currentUser.perms?.hrOffboardingProcessManage) ||
       t.assignedToUsername === currentUser.username ||
       (!t.assignedToUsername && (
         ((t.department === 'HR' || t.department === 'ADMIN') && canManageHrLifecycleClient(item.processType)) ||

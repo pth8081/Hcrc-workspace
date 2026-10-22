@@ -6798,7 +6798,12 @@ function canActOnHrTask(user, item, task) {
   if (item?.processType === 'OFFBOARDING' && item.employeeUsername && item.employeeUsername === user.username) return false;
   // hrProcessManage KHÔNG còn admin bypass (11/2026, cùng đợt mở rộng "Nhân Sự" — xem chú thích
   // canManageHrFeedback() ở trên).
-  if (user.perms?.hrProcessManage) return true;
+  // ĐỔI (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền riêng vì
+  // người dùng khác nhau là bộ phận Tuyển Dụng và bộ phận Nhân Sự"): hrProcessManage (gộp CẢ 2 loại,
+  // bypass BẤT KỲ task nào bất kể assignedToUsername/department) đã XOÁ HẲN khỏi hệ thống — thay bằng
+  // hrOnboardingProcessManage/hrOffboardingProcessManage TÁCH RIÊNG theo đúng item.processType. Ai đang
+  // có hrProcessManage được migrateLegacyPerms() (core.js) tự động quy đổi sang có CẢ 2 quyền mới.
+  if (item?.processType === 'ONBOARDING' ? user.perms?.hrOnboardingProcessManage : user.perms?.hrOffboardingProcessManage) return true;
   if (task.assignedToUsername) return task.assignedToUsername === user.username;
   switch (task.department) {
     case 'HR':
@@ -6829,7 +6834,9 @@ function canManageHrProcess(user, item) {
   // lib/createValidation.js nên item.creator === item.employeeUsername không xảy ra ở dữ liệu mới, chỉ
   // kiểm employeeUsername để chặn cả dữ liệu cũ/mọi đường gọi khác.)
   if (item.processType === 'OFFBOARDING' && item.employeeUsername && item.employeeUsername === user.username) return false;
-  if (user.perms?.hrProcessManage) return true;
+  // ĐỔI (11/2026): hrProcessManage (gộp cả 2 loại) đã XOÁ HẲN — thay bằng hrOnboardingProcessManage/
+  // hrOffboardingProcessManage TÁCH RIÊNG theo processType (xem chú thích đầy đủ ở canActOnHrTask()).
+  if (item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingProcessManage : user.perms?.hrOffboardingProcessManage) return true;
   if (item.creator === user.username) return true;
   return !!(item.processType === 'ONBOARDING' ? user.perms?.hrOnboardingManage : user.perms?.hrOffboardingManage);
 }

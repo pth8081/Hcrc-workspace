@@ -4,12 +4,12 @@
 // của chính mình"): trước đây employeeUsername được chọn tự do khi tạo quy trình OFFBOARDING, không
 // chặn === chính người gọi API (lib/createValidation.js, CREATE_MODULE_CONFIGS.hrProcesses.extraValidate).
 // Vì canManageHrProcess()/canActOnHrTask() (lib/recordActions.js) cho creator toàn quyền quản lý quy
-// trình (huỷ/chỉ định người kế nhiệm/giao lại task) VÀ cho hrOffboardingManage/hrProcessManage toàn
-// quyền xử lý task — 1 người có hrOffboardingManage tự tạo quy trình Offboarding cho chính mình rồi tự
-// hoàn thành/bỏ qua mọi task, tự huỷ quy trình, tự chỉ định người kế nhiệm — không ai xác nhận độc lập.
+// trình (huỷ/chỉ định người kế nhiệm/giao lại task) VÀ cho hrOffboardingManage/hrOffboardingProcessManage
+// toàn quyền xử lý task — 1 người có hrOffboardingManage tự tạo quy trình Offboarding cho chính mình rồi
+// tự hoàn thành/bỏ qua mọi task, tự huỷ quy trình, tự chỉ định người kế nhiệm — không ai xác nhận độc lập.
 //
 // Đã vá: (1) chặn tạo ngay tại extraValidate() nếu employeeUsername === user.username; (2) chặn TUYỆT
-// ĐỐI (không cho hrProcessManage/admin/creator bypass) ở canManageHrProcess()/canActOnHrTask() khi
+// ĐỐI (không cho hrOffboardingProcessManage/admin/creator bypass) ở canManageHrProcess()/canActOnHrTask() khi
 // item.processType === 'OFFBOARDING' && item.employeeUsername === user.username — phòng cả dữ liệu cũ/
 // đường gọi khác không đi qua extraValidate.
 //
@@ -155,11 +155,13 @@ function runPartB_permissionFunctions() {
   const otherOffboarding = { id: 2, processType: 'OFFBOARDING', employeeUsername: 'nv.a', creator: 'hr1', status: 'IN_PROGRESS', tasks: [] };
   const selfTask = { id: 101, department: 'HR', stage: 'ASSET_RETURN', status: 'PENDING' };
 
-  const HR1_ADMIN = { username: 'hr1', perms: { hrOffboardingManage: true, hrProcessManage: true, admin: true } };
+  // ĐỔI (11/2026): hrProcessManage (gộp cả 2 loại) đã XOÁ HẲN — thay bằng hrOffboardingProcessManage
+  // (TÁCH RIÊNG theo processType, đúng loại OFFBOARDING của selfOffboarding/otherOffboarding ở trên).
+  const HR1_ADMIN = { username: 'hr1', perms: { hrOffboardingManage: true, hrOffboardingProcessManage: true, admin: true } };
 
-  check('LỖI ĐÃ VÁ: canManageHrProcess() chặn TUYỆT ĐỐI dù là creator + có hrProcessManage + admin, khi employeeUsername === chính mình',
+  check('LỖI ĐÃ VÁ: canManageHrProcess() chặn TUYỆT ĐỐI dù là creator + có hrOffboardingProcessManage + admin, khi employeeUsername === chính mình',
     canManageHrProcess(HR1_ADMIN, selfOffboarding) === false);
-  check('LỖI ĐÃ VÁ: canActOnHrTask() chặn TUYỆT ĐỐI dù có hrProcessManage + admin, khi employeeUsername === chính mình',
+  check('LỖI ĐÃ VÁ: canActOnHrTask() chặn TUYỆT ĐỐI dù có hrOffboardingProcessManage + admin, khi employeeUsername === chính mình',
     canActOnHrTask(HR1_ADMIN, selfOffboarding, selfTask) === false);
 
   check('đối chứng: canManageHrProcess() vẫn cho phép xử lý quy trình Offboarding của NGƯỜI KHÁC (creator)',

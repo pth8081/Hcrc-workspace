@@ -76,7 +76,7 @@ stubModule('lib/systemLogStore', {
 });
 
 const USERS = [
-  { username: 'admin', name: 'Quản Trị Viên', dept: 'Nhân Sự', perms: { admin: true, hrProcessManage: true }, active: true },
+  { username: 'admin', name: 'Quản Trị Viên', dept: 'Nhân Sự', perms: { admin: true, hrOnboardingProcessManage: true, hrOffboardingProcessManage: true }, active: true },
   { username: 'onb1', name: 'Phụ Trách Onboarding', dept: 'Nhân Sự', perms: { hrOnboardingManage: true }, active: true },
   { username: 'off1', name: 'Phụ Trách Offboarding', dept: 'Nhân Sự', perms: { hrOffboardingManage: true }, active: true },
   { username: 'it1', name: 'Nhân Viên IT', dept: 'IT', perms: { itManage: true }, active: true },
@@ -187,7 +187,7 @@ async function main() {
       assert.strictEqual(rclaim.status, 200, JSON.stringify(rclaim.json));
       assert.strictEqual(STORE.itSupportTickets.find(t => t.id === ticketId).status, 'DOING');
 
-      // admin có hrProcessManage: true -> thoả canManageHrProcess() (bắt buộc để bỏ qua task bắt buộc)
+      // admin có hrOnboardingProcessManage/hrOffboardingProcessManage: true -> thoả canManageHrProcess() (bắt buộc để bỏ qua task bắt buộc)
       // VÀ canActOnHrTask() (bắt buộc để hành động trên task nhãn IT).
       const rs = await call('admin', 'POST', `/api/records/hrProcesses/${processId}/skip-task`, { taskId: itTask.taskId, reason: 'Nhân viên tự chuẩn bị máy cá nhân, không cần IT cấp' });
       assert.strictEqual(rs.status, 200, JSON.stringify(rs.json));

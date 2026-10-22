@@ -1,9 +1,58 @@
 # Phiên bản hiện tại
 
-**28.2** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.3 (2026-11): Nhân Sự — xoá hẳn quyền gộp "Toàn Quyền Thao Tác Mọi Quy Trình" (hrProcessManage), thay bằng 2 quyền TÁCH RIÊNG theo Onboarding/Offboarding
+
+Người dùng phản hồi lại ngay sau đợt v28.2: vẫn còn ĐÚNG 1 ô quyền gộp chung Onboarding+Offboarding
+trong cây phân quyền — "✅ Toàn Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding" (`hrProcessManage`)
+— quyền này mạnh hơn hẳn `hrOnboardingManage`/`hrOffboardingManage` đã tách từ trước (ép hoàn thành/bỏ
+qua được BẤT KỲ task nào dù đã giao cho người khác hoặc thuộc phòng ban IT/Tài Chính/Quản Lý Trực Tiếp,
+không chỉ phòng ban Nhân Sự/Hành Chính) nhưng lại hoạt động trên CẢ 2 loại processType cùng lúc — đúng
+điều người dùng muốn tách ("người dùng khác nhau là bộ phận Tuyển Dụng và bộ phận Nhân Sự"). Đã hỏi lại
+và được xác nhận: **thay hẳn bằng 2 quyền riêng**, ai đang có quyền gộp cũ được tự động quy đổi sang có
+CẢ 2 quyền mới (không mất năng lực đang có).
+
+- **Xoá hẳn** `hrProcessManage` khỏi hệ thống (checkbox `pHrProcessManage`, mọi chỗ đọc
+  `user.perms?.hrProcessManage`).
+- **Thêm 2 quyền MỚI** `hrOnboardingProcessManage`/`hrOffboardingProcessManage` ("✅ Toàn Quyền Thao Tác
+  Quy Trình Onboarding"/"...Offboarding") — checkbox mới trong `systemSection.html`, nhãn mới trong
+  `PERM_KEY_VN_LABELS` (`module-admin-permgroups.js`), collect/populate mới (`module-admin-permtree.js`)
+  — đúng quy trình CLAUDE.md "Quyền MỚI".
+- **Quy đổi tự động**: `migrateLegacyPerms()` (`public/js/core.js`) — ai đang có `hrProcessManage: true`
+  được tự động cấp CẢ `hrOnboardingProcessManage` LẪN `hrOffboardingProcessManage`, rồi xoá field cũ.
+  Chạy cả cho `DB.users` (tự lưu ngầm lần đăng nhập admin kế tiếp, `silent:true`) LẪN `DB.permGroups`
+  (tính lại mỗi lần `diffPerms()` so sánh — không cần ghi lại DB, đúng khuôn 5 quyền đã tự di trú tương tự
+  ở đợt "re-audit lần 4" trước đó, xem comment tại `migrateLegacyPerms()`).
+- **Server**: `canActOnHrTask()`/`canManageHrProcess()` (`lib/recordActions.js`) và
+  `assertHrProcessDeletePermission()` (`routes/records.js`) đổi điều kiện `user.perms?.hrProcessManage`
+  thành kiểm tra ĐÚNG theo `item.processType` (`hrOnboardingProcessManage` cho ONBOARDING,
+  `hrOffboardingProcessManage` cho OFFBOARDING).
+- **Client**: `canManageHrLifecycleClient()` + luồng hiển thị nút thao tác task (`module-hrlifecycle.js`)
+  cùng đổi theo processType, khớp đúng luật server.
+
+**Test**: cập nhật 7 file test đang dùng `hrProcessManage` trong fixture — `test-hr-lifecycle.js` (40/40
+pass, thêm 2 kịch bản mới xác nhận CÁCH LY đúng theo processType — phép thử then chốt của đợt tách này),
+`test-hrprocess-delete-permission.js` (11/11 pass, thêm 4 kịch bản mới cho 2 quyền mới + cách ly 2
+chiều), `test-hrprocess-offboarding-self-process.js` (8/8 pass), `test-onboarding-cancel-labor-contract-
+cleanup.js`/`test-hrprocess-cancel-itticket-cleanup.js`/`test-audit-nhansu-onboarding-contract.js`/
+`test-hrprocess-task-settle-itticket-cleanup.js` (đổi fixture `admin` sang cấp CẢ 2 quyền mới, giữ nguyên
+năng lực test cũ). Chạy lại toàn bộ — không regression (2 lỗi tiền tồn tại không liên quan đã xác nhận
+qua `git stash`: `test-audit-nhansu-onboarding-contract.js` 2/29 và `test-hr-onboarding-queue-export.js`
+timeout, giống hệt trên `main` sạch trước đợt này). CSP sạch (grep `onclick=`/`style=`/`eval(`).
+
+**Lưu ý quan trọng** (nhắc lại từ v28.2): quyết định "xoá quy trình không cần Admin" vẫn CHỈ áp dụng
+riêng cho `hrProcesses` theo đúng yêu cầu người dùng — KHÔNG áp dụng chung "xóa = quyền tối cao" cho các
+collection khác.
+
+**Deploy-impact**: không đổi schema/biến môi trường/dependency — chỉ copy code + `pm2 restart`. Admin cần
+vào Phân Quyền kiểm tra lại các tài khoản/nhóm trước đây có tick "Toàn Quyền Thao Tác Mọi Quy Trình" —
+sau khi deploy, lần đăng nhập admin kế tiếp hệ thống TỰ ĐỘNG cấp cả 2 quyền mới cho các tài khoản đó
+(không cần thao tác tay), nhưng nếu muốn CHỈ giữ đúng 1 loại (VD tách hẳn theo đúng bộ phận), admin cần tự
+vào Phân Quyền bỏ tick quyền còn thừa sau khi deploy.
 
 ## v28.2 (2026-11): Truyền Thông Nội Bộ — quyền "Quản Lý Nhịp Sống HCRC" mới (sửa/xoá bài người khác) + mở rộng "Đăng Tuyển dụng" sang xoá; Nhân Sự — Onboarding/Offboarding tự xoá được không cần thêm Admin
 

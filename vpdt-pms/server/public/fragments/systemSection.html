@@ -2627,7 +2627,7 @@
             <span id="permTreeBadge_hr" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">0/0</span>
           </summary>
           <div class="p-3 pt-0 space-y-2">
-            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến; "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức v2 (sửa cây/áp dụng phiên bản); "Cấu Hình Luồng Đánh Giá KPI" tách riêng cho việc tinh chỉnh luồng đánh giá (Tab "Cấu Hình Đánh Giá KPI") — có thể giao cho vai trò khác không cần đụng tới cây tổ chức; 5 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn — "Quản Lý Onboarding"/"Quản Lý Offboarding" TÁCH RIÊNG theo đúng loại quy trình, mỗi quyền cho TOÀN QUYỀN thao tác quy trình/task của ĐÚNG loại đó (hoàn thành/bỏ qua task, huỷ/giao lại quy trình, XOÁ hẳn quy trình nếu tạo nhầm — không cần thêm quyền Admin hệ thống), "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn, "Toàn Quyền Thao Tác Mọi Quy Trình" (hrProcessManage) để thao tác được CẢ 2 loại cùng lúc (dành cho vai trò quản lý chung, khác hẳn "Xem Toàn Bộ" chỉ xem), "Xem Toàn Bộ" CHỈ xem tiến độ mọi quy trình để theo dõi, KHÔNG thao tác được gì — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
+            <p class="text-[11px] text-gray-500 italic">Còn quyền vào module "Nhân Sự" ở mục 0 mới thấy được màn dưới đây. Module có nhiều tab/module con, mỗi tab gác quyền riêng: "Quản lý Nhân Sự" cho tab Phản Hồi Ý Kiến; "Quản Lý Cơ Cấu Tổ Chức" cho tab Cơ Cấu Tổ Chức v2 (sửa cây/áp dụng phiên bản); "Cấu Hình Luồng Đánh Giá KPI" tách riêng cho việc tinh chỉnh luồng đánh giá (Tab "Cấu Hình Đánh Giá KPI") — có thể giao cho vai trò khác không cần đụng tới cây tổ chức; 6 quyền dưới đây cho module con "Onboarding / Offboarding" (checklist theo giai đoạn): "Quản Lý Onboarding"/"Quản Lý Offboarding" cho TẠO MỚI + thao tác task thuộc phòng ban Nhân Sự/Hành Chính của ĐÚNG loại quy trình đó, cộng thêm XOÁ hẳn quy trình nếu tạo nhầm (không cần thêm quyền Admin hệ thống); "Toàn Quyền Thao Tác Onboarding"/"Toàn Quyền Thao Tác Offboarding" (TÁCH RIÊNG theo đúng loại — 11/2026, theo yêu cầu người dùng) mạnh hơn hẳn 2 quyền trên: ép hoàn thành/bỏ qua được BẤT KỲ task nào của ĐÚNG loại quy trình đó dù đã giao cho người khác/thuộc phòng ban IT-Tài Chính-Quản Lý Trực Tiếp, huỷ/giao lại quy trình của người khác (kể cả task quyết định thử việc/chấm dứt hợp đồng); "Quản Lý Checklist Mẫu" để sửa danh mục việc cần làm chuẩn dùng chung cả 2 loại; "Xem Toàn Bộ" CHỈ xem tiến độ mọi quy trình để theo dõi, KHÔNG thao tác được gì — giữ quyền nào cũng vào được module, người chỉ được giao 1 việc cụ thể trong 1 quy trình cũng tự vào được dù không có quyền nào ở đây). Tab "HCRC Đồng Hành" bên Truyền Thông (nơi nhân viên GỬI câu hỏi) mở sẵn cho mọi người, không cần quyền nào.</p>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pNhanSuManage"> 🤝 Quản lý Nhân Sự (quản lý &amp; phản hồi ý kiến)
             </label>
@@ -2649,9 +2649,17 @@
             <!-- LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): "Xem Toàn Bộ" (hrViewAll)
                  TRƯỚC ĐÂY thực chất là quyền GHI đầy đủ (bypass canActOnHrTask()/canManageHrProcess() ở
                  lib/recordActions.js) dù nhãn UI chỉ nói "xem" — tách quyền GHI ra hrProcessManage riêng,
-                 hrViewAll giờ CHỈ còn đúng nghĩa xem như nhãn đã nói. -->
+                 hrViewAll giờ CHỈ còn đúng nghĩa xem như nhãn đã nói.
+                 ĐỔI (11/2026, theo yêu cầu người dùng "tách Onboarding/Offboarding thành 2 nhóm quyền
+                 riêng vì người dùng khác nhau là bộ phận Tuyển Dụng và bộ phận Nhân Sự"): hrProcessManage
+                 (gộp CẢ 2 loại) đã XOÁ HẲN khỏi đây, thay bằng 2 quyền TÁCH RIÊNG theo processType ngay
+                 dưới — ai đang có hrProcessManage được migrateLegacyPerms() (core.js) tự động quy đổi
+                 sang có CẢ 2 quyền mới, không mất năng lực đang có. -->
             <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
-              <input type="checkbox" id="pHrProcessManage"> ✅ Toàn Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding (hoàn thành/bỏ qua task, huỷ/giao lại quy trình của người khác — kể cả task quyết định thử việc/chấm dứt hợp đồng)
+              <input type="checkbox" id="pHrOnboardingProcessManage"> ✅ Toàn Quyền Thao Tác Quy Trình Onboarding (hoàn thành/bỏ qua BẤT KỲ task Onboarding nào — kể cả giao người khác/phòng ban khác — huỷ/giao lại quy trình của người khác)
+            </label>
+            <label class="flex items-center gap-2 text-red-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="pHrOffboardingProcessManage"> ✅ Toàn Quyền Thao Tác Quy Trình Offboarding (hoàn thành/bỏ qua BẤT KỲ task Offboarding nào — kể cả giao người khác/phòng ban khác — huỷ/giao lại quy trình của người khác, kể cả task quyết định chấm dứt hợp đồng)
             </label>
             <label class="flex items-center gap-2 text-teal-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pHrViewAll"> 👁️ Xem Toàn Bộ Quy Trình Onboarding/Offboarding (CHỈ xem tiến độ, KHÔNG thao tác được task/quy trình — cần thêm "Toàn Quyền Thao Tác" ở trên nếu muốn ghi)

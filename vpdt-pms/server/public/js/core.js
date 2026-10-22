@@ -4632,6 +4632,7 @@ function defaultNewUserPerms() {
     // là "đây là toàn bộ shape perms mặc định" trong khi thực ra thiếu 11 field — khai đủ ở đây để
     // đúng là nguồn "sự thật" duy nhất cho 1 user/nhóm mới hoàn toàn không có quyền gì.
     hrOnboardingManage: false, hrOffboardingManage: false, hrTaskTemplateManage: false, hrViewAll: false,
+    hrOnboardingProcessManage: false, hrOffboardingProcessManage: false,
     hrProfileView: false, hrProfileManage: false, hrContractManage: false,
     // hrReportView (10/2026, cùng đợt trên): quyền CHỈ XEM route thống kê GET /api/hr-profile/reports,
     // KHÔNG kèm hrProfileManage/hrContractManage — bypass CỘNG THÊM song song combo AND hiện có
@@ -5059,6 +5060,24 @@ function migrateLegacyPerms(perms) {
     changed = true;
   }
   if (p.operationOrderReceiptManage !== undefined) { delete p.operationOrderReceiptManage; changed = true; }
+
+  // Tách "Toàn Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding" (hrProcessManage, gộp cả 2 loại)
+  // thành 2 quyền RIÊNG theo processType (11/2026, theo yêu cầu người dùng — người quản lý Onboarding là
+  // bộ phận Tuyển Dụng, Offboarding là bộ phận Nhân Sự, 2 bộ phận khác nhau không nên dùng chung 1
+  // checkbox): ai ĐANG CÓ hrProcessManage=true được quy đổi giữ nguyên sang CẢ 2 quyền mới
+  // hrOnboardingProcessManage/hrOffboardingProcessManage, không mất năng lực đang có (đúng khuôn
+  // internalRewardCreate -> internalRecruitmentCreate ở trên — chạy qua ĐÚNG hàm này nên basePerms tính
+  // lại cho permGroups qua migrateLegacyPerms(g.perms) ở diffPerms()/populatePermsForm() cũng thấy field
+  // mới tường minh, không bị đóng băng sai override như mô tả ở khối "5 quyền Re-audit lần 4" phía trên).
+  if (p.hrOnboardingProcessManage === undefined && p.hrProcessManage === true) {
+    p.hrOnboardingProcessManage = true;
+    changed = true;
+  }
+  if (p.hrOffboardingProcessManage === undefined && p.hrProcessManage === true) {
+    p.hrOffboardingProcessManage = true;
+    changed = true;
+  }
+  if (p.hrProcessManage !== undefined) { delete p.hrProcessManage; changed = true; }
 
   return { perms: p, changed };
 }

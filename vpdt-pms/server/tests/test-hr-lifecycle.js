@@ -31,10 +31,19 @@ const HR_NOPERM = { username: 'hr2', name: 'Nhân Viên Nhân Sự Khác', dept:
 // trình (LỖI ĐÃ VÁ, rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao: TRƯỚC ĐÂY hrViewAll bypass CẢ thao
 // tác ghi y hệt admin — đã tách ra hrProcessManage riêng, xem HR_PROCESS_MANAGER bên dưới).
 const HR_VIEWER = { username: 'hr.viewer', name: 'Trưởng Phòng Nhân Sự (chỉ xem)', dept: 'Phòng Nhân Sự', perms: { hrViewAll: true }, active: true };
-// hrProcessManage: true — Toàn Quyền Thao Tác Mọi Quy Trình (quyền GHI mới, tách ra khỏi hrViewAll ở
-// đợt vá lỗi trên) — hoàn thành/bỏ qua BẤT KỲ task nào + huỷ/giao lại/chỉ định người kế nhiệm của MỌI
-// quy trình, không cần đúng hrOnboardingManage/hrOffboardingManage theo processType.
-const HR_PROCESS_MANAGER = { username: 'hr.procmgr', name: 'Điều Phối Toàn Quyền Quy Trình', dept: 'Phòng Nhân Sự', perms: { hrProcessManage: true }, active: true };
+// hrOnboardingProcessManage/hrOffboardingProcessManage: true — Toàn Quyền Thao Tác Quy Trình (quyền GHI
+// mới, tách ra khỏi hrViewAll ở đợt vá lỗi trên) — hoàn thành/bỏ qua BẤT KỲ task nào + huỷ/giao lại/chỉ
+// định người kế nhiệm của MỌI quy trình ĐÚNG LOẠI processType của mình, không cần đúng
+// hrOnboardingManage/hrOffboardingManage. ĐỔI (11/2026, lượt phản hồi 2 — theo yêu cầu người dùng "tách
+// Onboarding/Offboarding thành 2 nhóm quyền riêng vì người dùng khác nhau là bộ phận Tuyển Dụng và bộ
+// phận Nhân Sự"): hrProcessManage CŨ (gộp cả 2 loại) đã XOÁ HẲN — thay bằng 2 fixture TÁCH RIÊNG dưới
+// đây, mỗi cái chỉ hiệu lực ĐÚNG 1 loại processType (xem 2 test mới "...TÁCH ĐÚNG theo processType" xác
+// nhận cách ly, không còn rơi về hành vi gộp cũ).
+const HR_ONBOARDING_PROCESS_MANAGER = { username: 'hr.procmgr.on', name: 'Điều Phối Toàn Quyền Quy Trình Onboarding', dept: 'Phòng Nhân Sự', perms: { hrOnboardingProcessManage: true }, active: true };
+const HR_OFFBOARDING_PROCESS_MANAGER = { username: 'hr.procmgr.off', name: 'Điều Phối Toàn Quyền Quy Trình Offboarding', dept: 'Phòng Nhân Sự', perms: { hrOffboardingProcessManage: true }, active: true };
+// Nhân viên RIÊNG cho 2 test cách ly processType ngay dưới (không dùng chung EMP/offboardId — tránh đụng
+// state mà các test khác ở dưới còn phụ thuộc vào offboardId).
+const EMP_ISO = { username: 'nv.cachly', name: 'Đỗ Thị Cách Ly', dept: 'Phòng Kế Toán', jobTitle: 'Nhân viên', perms: {}, active: true };
 // hrTaskTemplateManage: true — chỉ được sửa danh mục checklist chuẩn, KHÔNG được tạo/quản lý quy trình.
 const HR_TEMPLATE_ADMIN = { username: 'hr.tpl', name: 'Quản Lý Checklist Mẫu', dept: 'Phòng Nhân Sự', perms: { hrTaskTemplateManage: true }, active: true };
 const IT1 = { username: 'it1', name: 'Nhân Viên IT', dept: 'Phòng CNTT', perms: { itManage: true }, active: true };
@@ -81,7 +90,7 @@ const state = createMockState({
   stores: ['Siêu Thị A'],
   jobTitles: ['Nhân viên', 'Chuyên viên'],
   storeJobTitles: [{ label: 'Nhân viên bán hàng' }],
-  users: [HR1, HR_NOPERM, HR_VIEWER, HR_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, ADMIN, HR_PROFILE_VIEWER, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
+  users: [HR1, HR_NOPERM, HR_VIEWER, HR_ONBOARDING_PROCESS_MANAGER, HR_OFFBOARDING_PROCESS_MANAGER, HR_TEMPLATE_ADMIN, IT1, FIN1, MANAGER1, EMP, EMP_ISO, ADMIN, HR_PROFILE_VIEWER, SUP_MGR, SUP_REPORT, SUP_SUCCESSOR],
   hrTaskTemplates: [...ONB_TEMPLATES, ...OFFB_TEMPLATES]
 });
 
@@ -288,17 +297,39 @@ async function main() {
       await loginAs(page, HR1);
     });
 
-    await run.run('hrProcessManage bỏ qua được task bắt buộc nhãn IT dù KHÔNG có itManage/hrOnboardingManage (quyền GHI mới, thay cho hành vi cũ của hrViewAll)', async () => {
+    await run.run('hrOnboardingProcessManage bỏ qua được task ONBOARDING bắt buộc nhãn IT dù KHÔNG có itManage/hrOnboardingManage (quyền GHI mới, thay cho hành vi cũ của hrProcessManage/hrViewAll)', async () => {
       // HR1 (có hrOnboardingManage) tạo quy trình — canCreateHrProcess() KHÔNG đổi (vẫn đòi đúng
-      // hrOnboardingManage/hrOffboardingManage, hrProcessManage KHÔNG cấp thêm quyền TẠO mới, chỉ cấp
-      // quyền THAO TÁC quy trình/task đã có — xem chú thích tại canCreateHrProcess()).
+      // hrOnboardingManage/hrOffboardingManage, hrOnboardingProcessManage KHÔNG cấp thêm quyền TẠO mới,
+      // chỉ cấp quyền THAO TÁC quy trình/task đã có — xem chú thích tại canCreateHrProcess()).
       const itemMgr = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item,
         onboardHoPayload({ employeeCode: 'NV0002C', fullName: 'Bùi Văn Toàn Quyền' }));
       const itTaskMgr = itemMgr.tasks.find(t => t.taskName === 'Chuẩn bị máy tính');
-      await loginAs(page, HR_PROCESS_MANAGER);
-      const result = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Test hrProcessManage' }), { id: itemMgr.id, taskId: itTaskMgr.taskId });
+      await loginAs(page, HR_ONBOARDING_PROCESS_MANAGER);
+      const result = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Test hrOnboardingProcessManage' }), { id: itemMgr.id, taskId: itTaskMgr.taskId });
       const skipped = result.item.tasks.find(t => t.taskId === itTaskMgr.taskId);
-      assertEqual(skipped.status, 'SKIPPED', 'hrProcessManage phải bypass cả canManageHrProcess() lẫn canActOnHrTask(), y hệt admin, dù không có itManage/hrOnboardingManage');
+      assertEqual(skipped.status, 'SKIPPED', 'hrOnboardingProcessManage phải bypass cả canManageHrProcess() lẫn canActOnHrTask() cho quy trình ONBOARDING, y hệt hành vi cũ của hrProcessManage, dù không có itManage/hrOnboardingManage');
+      await loginAs(page, HR1);
+    });
+
+    // LỖI ĐÃ VÁ (11/2026, lượt phản hồi 2): xác nhận hrOnboardingProcessManage/hrOffboardingProcessManage
+    // CÁCH LY ĐÚNG theo processType — không còn rơi về hành vi gộp cũ của hrProcessManage (bypass CẢ 2
+    // loại). Tạo 1 quy trình OFFBOARDING RIÊNG (EMP_ISO, không đụng offboardId mà các test khác còn phụ
+    // thuộc) có task nhãn IT bắt buộc ("Thu hồi thiết bị + khoá tài khoản") để đối chứng.
+    await run.run('hrOnboardingProcessManage KHÔNG bỏ qua được task OFFBOARDING (cách ly đúng theo processType — ĐÂY CHÍNH LÀ PHÉP THỬ THEN CHỐT của đợt tách quyền)', async () => {
+      const itemOff = await page.evaluate(async (payload) => (await callCreateAction('hrProcesses', payload)).item, {
+        processType: 'OFFBOARDING', employeeUsername: 'nv.cachly', lastWorkingDate: '2026-11-30', reason: 'Test cách ly processType'
+      });
+      const itOffTaskIso = itemOff.tasks.find(t => t.taskName === 'Thu hồi thiết bị + khoá tài khoản');
+      await loginAs(page, HR_ONBOARDING_PROCESS_MANAGER);
+      const err = await page.evaluate(async (args) => {
+        try { await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Không được phép' }); return null; }
+        catch (e) { return e.message; }
+      }, { id: itemOff.id, taskId: itOffTaskIso.taskId });
+      assertIncludes(err, 'Chỉ người quản lý quy trình', 'hrOnboardingProcessManage KHÔNG được bypass canManageHrProcess() của quy trình OFFBOARDING — tách quyền phải cách ly đúng theo processType');
+      await loginAs(page, HR_OFFBOARDING_PROCESS_MANAGER);
+      const result = await page.evaluate(async (args) => await callRecordAction('hrProcesses', args.id, 'skip-task', { taskId: args.taskId, reason: 'Test hrOffboardingProcessManage' }), { id: itemOff.id, taskId: itOffTaskIso.taskId });
+      const skipped = result.item.tasks.find(t => t.taskId === itOffTaskIso.taskId);
+      assertEqual(skipped.status, 'SKIPPED', 'hrOffboardingProcessManage ĐÚNG LOẠI processType phải bypass bình thường, y hệt hrOnboardingProcessManage làm được ở quy trình ONBOARDING trên');
       await loginAs(page, HR1);
     });
 
@@ -485,7 +516,7 @@ async function main() {
       assertEqual(item.pendingSuccessor, true, 'pendingSuccessor phải true — đây chính là lý do duy nhất còn chặn Hoàn Tất');
     });
 
-    await run.run('Chỉ định người kế nhiệm: người KHÔNG quản lý quy trình (không phải creator/hrOffboardingManage/admin/hrProcessManage) -> 403; hrViewAll (chỉ xem) CŨNG bị chặn (LỖI ĐÃ VÁ)', async () => {
+    await run.run('Chỉ định người kế nhiệm: người KHÔNG quản lý quy trình (không phải creator/hrOffboardingManage/hrOffboardingProcessManage) -> 403; hrViewAll (chỉ xem) CŨNG bị chặn (LỖI ĐÃ VÁ)', async () => {
       // LỖI ĐÃ VÁ (rà soát chuyên sâu cụm Nhân Sự vòng 2, mức Cao): canManageHrProcess() TRƯỚC ĐÂY coi
       // hrViewAll ngang admin (bypass toàn bộ) — nay hrViewAll CHỈ còn xem, phải bị chặn y hệt HR_NOPERM.
       await loginAs(page, HR_NOPERM);
@@ -499,7 +530,7 @@ async function main() {
         try { await callRecordAction('hrProcesses', id, 'assign-successor', { successorUsername: 'nv.kenhiem' }); return null; }
         catch (e) { return e.message; }
       }, supOffboardId);
-      assertIncludes(errViewer, 'không có quyền chỉ định người kế nhiệm', 'hrViewAll (chỉ xem, KHÔNG có hrProcessManage) phải bị chặn — trước đây bypass được y hệt admin, đây chính là lỗi vừa vá');
+      assertIncludes(errViewer, 'không có quyền chỉ định người kế nhiệm', 'hrViewAll (chỉ xem, KHÔNG có hrOffboardingProcessManage) phải bị chặn — trước đây bypass được y hệt admin, đây chính là lỗi vừa vá');
       await loginAs(page, HR1);
     });
 

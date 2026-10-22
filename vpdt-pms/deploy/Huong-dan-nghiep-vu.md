@@ -2941,23 +2941,30 @@ ticket Hỗ Trợ IT cấp/khoá tài khoản"). Tạo quy trình:
   Mẫu"**/admin) — thêm/sửa/xoá/bật-tắt từng việc trong danh mục chuẩn. Đổi
   danh mục **không ảnh hưởng ngược** các quy trình đã tạo trước đó (checklist
   đã snapshot vào từng quy trình lúc tạo).
-- **Phân quyền** (khối 21 cây phân quyền) — 5 cờ phẳng: **"🆕 Quản Lý
+- **Phân quyền** (khối 21 cây phân quyền) — 6 cờ phẳng: **"🆕 Quản Lý
   Onboarding"**/**"🚪 Quản Lý Offboarding"** (tạo + quản lý quy trình đúng
   loại — **từ 11/2026, 2 quyền này còn tự XOÁ được hẳn quy trình đúng loại
   mình quản lý, KHÔNG cần thêm quyền Admin hệ thống nữa**, theo đúng chủ đích
   "tách quyền cho đúng bộ phận Tuyển Dụng/Nhân Sự"), **"📋 Quản Lý Checklist
   Mẫu"** (chỉ sửa danh mục chuẩn, KHÔNG tự động
-  có quyền tạo/quản lý quy trình), **"✅ Toàn Quyền Thao Tác Mọi Quy Trình"**
-  (10/2026, rà soát chuyên sâu — quyền GHI mới: hoàn thành/bỏ qua BẤT KỲ task
-  nào + huỷ/giao lại/chỉ định người kế nhiệm của MỌI quy trình, kể cả task
-  quyết định thử việc/chấm dứt hợp đồng — cấp thận trọng), **"👁️ Xem Toàn Bộ
-  Quy Trình"** (chỉ xem, KHÔNG thao tác được — **LỖI ĐÃ VÁ 10/2026**: trước
-  đây quyền này thực chất bypass được CẢ thao tác ghi y hệt admin dù nhãn chỉ
-  nói "xem"; nay đã tách đúng quyền ghi ra "Toàn Quyền Thao Tác" ở trên, tài
-  khoản chỉ có "Xem Toàn Bộ" không còn tự động ghi được nữa — cần admin cấp
-  thêm "Toàn Quyền Thao Tác" nếu thực sự cần ghi thay Nhân Sự). Người tạo/
-  quản lý trực tiếp/được giao riêng 1 việc luôn xem được đúng quy trình liên
-  quan dù không có cờ nào ở trên.
+  có quyền tạo/quản lý quy trình), **"✅ Toàn Quyền Thao Tác Quy Trình
+  Onboarding"**/**"✅ Toàn Quyền Thao Tác Quy Trình Offboarding"** (quyền GHI
+  mạnh nhất — hoàn thành/bỏ qua BẤT KỲ task nào (kể cả giao người khác/thuộc
+  phòng ban IT-Tài Chính-Quản Lý Trực Tiếp, không chỉ Nhân Sự) + huỷ/giao
+  lại/chỉ định người kế nhiệm của MỌI quy trình ĐÚNG LOẠI đó, kể cả task
+  quyết định thử việc/chấm dứt hợp đồng — cấp thận trọng. **ĐỔI 11/2026
+  (lượt phản hồi 2 — theo yêu cầu người dùng "vẫn còn 1 ô gộp chung 2 loại,
+  cần tách tiếp cho đúng bộ phận Tuyển Dụng/Nhân Sự")**: quyền gộp cũ "Toàn
+  Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding" (hrProcessManage) đã
+  XOÁ HẲN, thay bằng 2 quyền TÁCH RIÊNG này — ai đang có quyền gộp cũ được tự
+  động quy đổi sang có CẢ 2 quyền mới, không mất năng lực đang có), **"👁️ Xem
+  Toàn Bộ Quy Trình"** (chỉ xem, KHÔNG thao tác được — **LỖI ĐÃ VÁ 10/2026**:
+  trước đây quyền này thực chất bypass được CẢ thao tác ghi y hệt admin dù
+  nhãn chỉ nói "xem"; nay đã tách đúng quyền ghi ra 2 quyền "Toàn Quyền Thao
+  Tác" ở trên, tài khoản chỉ có "Xem Toàn Bộ" không còn tự động ghi được nữa
+  — cần admin cấp thêm đúng quyền "Toàn Quyền Thao Tác" theo loại nếu thực sự
+  cần ghi thay Nhân Sự). Người tạo/quản lý trực tiếp/được giao riêng 1 việc
+  luôn xem được đúng quy trình liên quan dù không có cờ nào ở trên.
 
 #### 4.5.3. Hồ Sơ Nhân Sự
 
