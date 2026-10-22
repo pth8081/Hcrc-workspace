@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**27.97** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**27.98** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v26.99, cuộn sang MAJOR mới
 `27.0` theo đúng quy tắc.)
+
+## v27.98 (2026-10): Vá "Hình Thức Làm Việc"/"Thời Gian Làm Việc" mất sau F5 — VÀ vá luôn lỗ hổng trong chính bài test tổng quát đã lỡ cho qua
+
+Người dùng báo lại (kèm ảnh chụp màn hình) đúng lớp lỗi "F5 mất dữ liệu danh mục" cho 2 màn "Danh Mục
+Hình Thức Làm Việc" và "Danh Mục Thời Gian Làm Việc" (Quản Lý Danh Mục) — thêm/sửa xong vẫn thấy ngay
+trên màn, nhưng F5 lại mất, y hệt lớp lỗi đã vá cho `laborContractTypes` ở v27.95.
+
+**Nguyên nhân**: `initDatabase()` (core.js) chưa từng có dòng đọc lại `data.employmentTypes`/
+`data.workSchedules` — server lưu đúng (có cả route riêng + baseline chống 409 giả từ v27.93), chỉ là
+trình duyệt không đọc lại sau khi tải trang, `DB.employmentTypes`/`DB.workSchedules` mãi mãi giữ giá trị
+khởi tạo tĩnh (mảng rỗng) khai báo sẵn ở đầu file.
+
+**Vì sao lọt qua bài test tổng quát `test-initdatabase-key-coverage.js` (từng báo PASS)**: bài test có 1
+nhánh dự phòng coi là "đã nạp lười" (`lazyGroupRef`) kiểm tra LỎNG — chỉ cần tên key xuất hiện DẠNG CHUỖI
+ở ĐÂU ĐÓ trong `core.js` (có, ở `CORE_FIELD_MANIFEST`/cấu hình `renderFn`) VÀ `assignLazyGroupField`/
+`TAB_DATA_GROUPS` tồn tại Ở ĐÂU ĐÓ trong file (luôn đúng, vì phục vụ các key KHÁC) — 2 điều kiện RỜI RẠC
+gần như luôn đúng cho MỌI key, không hề xác nhận ĐÚNG key đó thật sự được nạp lười. Đã vá CHÍNH bài test
+này: chỉ chấp nhận lời gọi `assignLazyGroupField('<key>', ...)` cho ĐÚNG key, hoặc tên key nằm BÊN TRONG
+khối `TAB_DATA_GROUPS` (trích theo ngoặc nhọn cân bằng, không suy đoán cả file).
+
+**Bản vá sản phẩm**: thêm `DB.employmentTypes = data.employmentTypes || [];` và
+`DB.workSchedules = data.workSchedules || [];` vào `initDatabase()` (core.js).
+
+**Test**: xác nhận BẰNG `git stash` rằng bài test (sau khi đã siết lại) báo FAIL đúng 2 key này trên code
+cũ, PASS sau khi vá. Chạy lại `test-catalog-rename-employment-worksched.js` (14/14) và
+`test-generic-simple-catalog-add-submit.js` — không regression.
+
+**Lưu ý quan trọng**: vì bài test tổng quát trước đây có lỗ hổng vừa nêu, đợt rà soát "sạch hoàn toàn" đã
+báo cáo ở v27.97 CHỈ đúng với lớp lỗi "409 giả" (được sweep bằng script riêng, không phụ thuộc bài test
+này) — lớp lỗi "F5 mất dữ liệu" (kiểm bằng chính bài test có lỗ hổng) KHÔNG đáng tin cậy 100% như đã báo.
+Sau khi siết lại bài test, chạy lại xác nhận KHÔNG còn key nào khác bị bỏ sót (ngoài employmentTypes/
+workSchedules vừa vá) — nay độ tin cậy của phép sweep này mới thực sự đúng như đã báo cáo.
+
+**Deploy**: chỉ copy `public/js/core.js` + `pm2 restart`.
 
 ## v27.97 (2026-11): Vá LỚP LỖI 409 GIẢ KHÁC — dbKey lồng 2 cấp (Phê Duyệt Giá Bán Lẻ/Bán Buôn, Văn Bản Trình theo loại) báo xung đột sai khi 2 thay đổi thật ra KHÁC nhánh lồng
 

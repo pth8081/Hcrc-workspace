@@ -5236,6 +5236,17 @@ async function initDatabase(loggingInUser, opts) {
     DB.contractAmendmentTypes = data.contractAmendmentTypes || [];
     DB.contractTerminationReasons = data.contractTerminationReasons || [];
     DB.maritalStatuses = data.maritalStatuses || [];
+    // BUG THẬT đã vá (11/2026, người dùng báo lại đúng cảnh báo "Hình Thức Làm Việc"/"Thời Gian Làm Việc"
+    // KHÔNG lưu được sau F5 — cùng khuôn "F5 mất dữ liệu" đã vá cho các key phía trên, nhưng đúng 2 key
+    // này lại bị SÓT khỏi initDatabase() dù đã có cả route riêng (ADMIN_SENSITIVE_KEYS, routes/data.js)
+    // lẫn baseline chống 409 giả (v27.93) từ trước — server lưu đúng, chỉ là trình duyệt chưa từng đọc
+    // lại: F5 xong DB.employmentTypes/DB.workSchedules luôn là mảng RỖNG (vẫn còn giá trị khởi tạo tĩnh ở
+    // khai báo `const DB = {...}` đầu file, KHÔNG PHẢI từ server), khiến "Danh Mục Hình Thức Làm Việc"/
+    // "Danh Mục Thời Gian Làm Việc" ở Quản Lý Danh Mục VÀ 2 dropdown "Hình Thức Làm Việc"/"Thời Gian Làm
+    // Việc" (Onboarding/Hồ Sơ Nhân Sự) trống trơn, tới khi thêm/sửa 1 giá trị (ghi đè tạm trong bộ nhớ)
+    // rồi F5 lại mất tiếp — đúng vòng lặp người dùng đã gặp nhiều lần.
+    DB.employmentTypes = data.employmentTypes || [];
+    DB.workSchedules = data.workSchedules || [];
     // checklistTemplates/checklistSubmissions: thuộc LAZY_DATA_GROUPS (Lớp 3a) — xem assignLazyGroupField()
     // ngay phía trên initDatabase() cho lý do dùng hàm này thay vì gán thẳng `data.x || []`.
     assignLazyGroupField('checklistTemplates', data);

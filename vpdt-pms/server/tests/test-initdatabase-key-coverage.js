@@ -40,14 +40,39 @@ const INTENTIONALLY_EXEMPT = new Set([
                  // vào response GET /by-code dưới tên "deptCode" — không qua DB.* blob client.
 ]);
 
+// LỖI ĐÃ VÁ (11/2026, người dùng báo lại đúng lớp lỗi "F5 mất dữ liệu" cho employmentTypes/workSchedules
+// — bài test này đã PASS nhầm, không bắt được): `lazyGroupRef` cũ chỉ kiểm tra "chuỗi tên key xuất hiện
+// Ở ĐÂU ĐÓ trong core.js" VÀ "assignLazyGroupField/TAB_DATA_GROUPS xuất hiện Ở ĐÂU ĐÓ trong core.js" —
+// 2 điều kiện RỜI RẠC, gần như luôn đúng cho MỌI key (vì assignLazyGroupField/TAB_DATA_GROUPS tồn tại
+// sẵn trong file cho CÁC key khác, và employmentTypes/workSchedules có xuất hiện dạng chuỗi ở nơi khác —
+// CORE_FIELD_MANIFEST optionsKey, GENERIC_SIMPLE_CATALOGS-kiểu renderFn config — không liên quan gì tới
+// việc có được nạp lười hay không) — không hề xác nhận key đó THẬT SỰ là tham số của
+// assignLazyGroupField() hay THẬT SỰ nằm trong khối TAB_DATA_GROUPS. Nay bắt ĐÚNG 2 trường hợp cụ thể:
+// (a) lời gọi `assignLazyGroupField('<key>', ...)` cho CHÍNH key đó, (b) chuỗi `'<key>'` nằm BÊN TRONG
+// khối `const TAB_DATA_GROUPS = {...}` (trích đúng theo ngoặc nhọn cân bằng, không suy đoán cả file).
+function extractBalancedBlock(src, startMarker) {
+  const start = src.indexOf(startMarker);
+  if (start === -1) return '';
+  const braceStart = src.indexOf('{', start);
+  if (braceStart === -1) return '';
+  let depth = 0;
+  for (let i = braceStart; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth === 0) return src.slice(braceStart, i + 1); }
+  }
+  return '';
+}
+const tabDataGroupsBlock = extractBalancedBlock(coreSrc, 'const TAB_DATA_GROUPS');
+
 const missing = [];
 for (const key of allKeys) {
   if (INTENTIONALLY_EXEMPT.has(key)) continue;
   // Chấp nhận 2 khuôn: gán trực tiếp `DB.<key> =` trong initDatabase(), hoặc nạp qua nhóm lazy-load
-  // (assignLazyGroupField('<key>', ...) hoặc chuỗi '<key>' xuất hiện trong TAB_DATA_GROUPS/tương đương).
+  // (assignLazyGroupField('<key>', ...) ĐÚNG key đó, hoặc chuỗi '<key>' nằm TRONG khối TAB_DATA_GROUPS).
   const directAssign = new RegExp(`DB\\.${key}\\s*=`).test(coreSrc);
-  const lazyGroupRef = new RegExp(`['"\`]${key}['"\`]`).test(coreSrc) && /assignLazyGroupField|TAB_DATA_GROUPS/.test(coreSrc);
-  if (!directAssign && !lazyGroupRef) missing.push(key);
+  const lazyAssignCall = new RegExp(`assignLazyGroupField\\(\\s*['"\`]${key}['"\`]`).test(coreSrc);
+  const inTabDataGroups = new RegExp(`['"\`]${key}['"\`]`).test(tabDataGroupsBlock);
+  if (!directAssign && !lazyAssignCall && !inTabDataGroups) missing.push(key);
 }
 
 ok('mọi key trong defaults.js (trừ danh sách exempt có lý do rõ ràng) đều được initDatabase() đọc lại',
