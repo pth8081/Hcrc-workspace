@@ -292,6 +292,16 @@ function createMockApi(state) {
         const item = findOr404(all, id);
         return { item: recordActions.rejectBudgetLine(user, item, payload, state.appData) };
       }
+      // "Chuyển sang Phê Duyệt" (11/2026) — mirror ĐÚNG 3 bước orchestration thật ở routes/records.js
+      // (khoá dòng gốc kiểm quyền -> tạo dòng Phê Duyệt mới -> ghi promotedToApprovedId lên dòng gốc).
+      if (action === 'promote-to-approved') {
+        const item = findOr404(all, id);
+        const source = recordActions.promoteBudgetLineProposalToApproved(user, item);
+        const newItem = Object.assign(recordActions.buildPromotedBudgetLineApprovedRow(user, source), { id: Date.now() });
+        state.collections.budgetLines.unshift(newItem);
+        source.promotedToApprovedId = newItem.id;
+        return { item: source, newItem };
+      }
       if (action === 'used-parent-update') {
         const item = findOr404(all, id);
         const hasChildren = all.some(l => l.parentId === id);

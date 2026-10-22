@@ -14,6 +14,9 @@
           <!-- Pattern "thu gọn form nhập" (10/2026): #blProposeFormWrap mặc định ẩn, nút này ẩn/hiện theo
                ĐÚNG điều kiện cũ từng gác form — xem canOpenBudgetLineFormClient()/renderBudgetLineList(). -->
           <button type="button" data-op="openBudgetLineForm" data-arg0="Propose" id="blProposeNewBtn" class="bg-violet-700 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-violet-800">+ Thêm Đề Xuất</button>
+          <!-- "Chuyển Hàng Loạt" (11/2026) — ẩn mặc định, chỉ hiện khi có ≥1 dòng đã tick "Chọn" (xem
+               updateBudgetLinePromoteBulkBtn()/promoteSelectedBudgetLinesToApproved() ở module-ngansach.js). -->
+          <button type="button" data-op="promoteSelectedBudgetLinesToApproved" id="blProposeBulkPromoteBtn" class="hidden bg-indigo-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">➡️ Chuyển Hàng Loạt</button>
         </div>
         <p id="blProposeNoCreatePermNote" class="hidden text-xs text-gray-500 italic">Bạn không có quyền lập ngân sách — chỉ xem được danh sách bên dưới.</p>
         <div id="blProposeExcelWrap" class="border rounded p-3 bg-gray-50 space-y-1.5">

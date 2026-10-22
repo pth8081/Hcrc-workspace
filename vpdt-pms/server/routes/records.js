@@ -3298,6 +3298,29 @@ router.post('/budgetLines/:id/approve', async (req, res) => {
     res.json({ ok: true, item: approved, usedItem });
   } catch (err) { handleError(res, `budgetLines/${req.params.id}/approve`, err); }
 });
+// POST /api/records/budgetLines/:id/promote-to-approved — "Chuyển sang Phê Duyệt" (11/2026, theo yêu cầu
+// người dùng): tạo 1 dòng Phê Duyệt MỚI từ 1 dòng Đề Xuất ĐÃ DUYỆT, sao chép dữ liệu, KHÔNG bỏ qua bước
+// duyệt cuối (dòng mới vẫn SUBMITTED) — xem promoteBudgetLineProposalToApproved()/
+// buildPromotedBudgetLineApprovedRow() (lib/recordActions.js). 3 bước tách rời (khoá dòng gốc kiểm quyền
+// -> tạo dòng mới -> khoá dòng gốc lần 2 để đánh dấu đã chuyển) cùng tinh thần route /approve ngay trên
+// (withLockedRecordForCollection() chỉ mutate ĐÚNG 1 bản ghi/lần, không có transaction xuyên nhiều bước).
+router.post('/budgetLines/:id/promote-to-approved', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (!Number.isFinite(itemId)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    const { freshUser } = await getFreshUser(req);
+    const source = await withLockedRecordForCollection('budgetLines', itemId, (item) =>
+      recordActions.promoteBudgetLineProposalToApproved(freshUser, item));
+    const newItem = await createForCollection('budgetLines', () => ({
+      ...recordActions.buildPromotedBudgetLineApprovedRow(freshUser, source), id: Date.now()
+    }));
+    const updatedSource = await withLockedRecordForCollection('budgetLines', itemId, (item) => {
+      item.promotedToApprovedId = newItem.id;
+      return item;
+    });
+    res.json({ ok: true, item: updatedSource, newItem });
+  } catch (err) { handleError(res, `budgetLines/${req.params.id}/promote-to-approved`, err); }
+});
 // POST /api/records/budgetLines/:id/reject
 router.post('/budgetLines/:id/reject', async (req, res) => {
   const itemId = Number(req.params.id);

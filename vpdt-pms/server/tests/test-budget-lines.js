@@ -323,6 +323,94 @@ async function run() {
     });
     check('Đổi lại Vị trí = HO -> ô Khối Phòng Ban hiện lại, ô Siêu Thị ẩn lại', !uiBackToHo.deptHidden && uiBackToHo.storeHidden, uiBackToHo);
 
+    // ============ Kịch bản 18 (11/2026, theo yêu cầu người dùng — thiếu liên kết Đề Xuất đã duyệt ->
+    // Phê Duyệt, trước đây phải gõ tay lại từ đầu): "Chuyển sang Phê Duyệt" — tạo 1 dòng Phê Duyệt MỚI
+    // sao chép dữ liệu từ 1 Đề Xuất ĐÃ DUYỆT, KHÔNG bỏ qua bước duyệt cuối. propose1 (kịch bản 2-4) đã ở
+    // status='APPROVED', stage='PROPOSED', chưa từng bị đụng tới từ đó tới giờ — dùng lại đúng dòng này.
+    // ============
+    await loginAs('kd1'); // chỉ budgetCreate (không budgetManage/admin) -> KHÔNG được bấm "Chuyển"
+    const kd1TryPromote = await recordAction(propose1.item.id, 'promote-to-approved');
+    check('budgetCreate (không budgetManage/admin) KHÔNG chuyển được Đề Xuất sang Phê Duyệt', !kd1TryPromote.ok && kd1TryPromote.message.includes('quyền quản lý Ngân Sách'), kd1TryPromote);
+
+    await loginAs('kd1');
+    const notYetApproved = await createBudgetLine(baseLine({ content: 'Đề xuất chưa duyệt — không chuyển được' }));
+    check('Tạo Đề Xuất thứ 4 (chưa duyệt) thành công', notYetApproved.ok, notYetApproved);
+    await loginAs('budgetmgr1');
+    const promoteNotApproved = await recordAction(notYetApproved.item.id, 'promote-to-approved');
+    check('KHÔNG chuyển được Đề Xuất CHƯA DUYỆT (status SUBMITTED) sang Phê Duyệt', !promoteNotApproved.ok && promoteNotApproved.message.includes('ĐÃ DUYỆT'), promoteNotApproved);
+
+    const promote1 = await recordAction(propose1.item.id, 'promote-to-approved');
+    check('budgetmgr1 chuyển được Đề Xuất ĐÃ DUYỆT sang Phê Duyệt', promote1.ok, promote1);
+    check('Dòng Phê Duyệt mới sinh ở stage=APPROVED, status=SUBMITTED (vẫn cần duyệt cuối, KHÔNG bỏ qua bước duyệt)', promote1.ok && promote1.newItem?.stage === 'APPROVED' && promote1.newItem?.status === 'SUBMITTED', promote1.newItem);
+    check('Dòng Phê Duyệt mới sao chép ĐÚNG Nội dung/Thành tiền/Kỳ NS từ Đề Xuất gốc', promote1.ok
+      && promote1.newItem.content === propose1.item.content
+      && promote1.newItem.totalAmount === propose1.item.totalAmount
+      && promote1.newItem.budgetYear === propose1.item.budgetYear
+      && promote1.newItem.budgetMonth === propose1.item.budgetMonth
+      && promote1.newItem.dept === propose1.item.dept, { newItem: promote1.newItem, source: propose1.item });
+    check('Dòng Đề Xuất gốc được đánh dấu promotedToApprovedId = id dòng Phê Duyệt mới', promote1.ok && promote1.item.promotedToApprovedId === promote1.newItem.id, promote1.item);
+
+    const promote1Again = await recordAction(propose1.item.id, 'promote-to-approved');
+    check('KHÔNG chuyển được 2 LẦN (đã có promotedToApprovedId)', !promote1Again.ok && promote1Again.message.includes('đã được chuyển'), promote1Again);
+
+    // Luồng cũ Phê Duyệt -> tự sinh Sử Dụng KHÔNG bị ảnh hưởng — duyệt cuối dòng vừa chuyển, xác nhận vẫn
+    // tự sinh đúng 1 dòng Sử Dụng như mọi dòng Phê Duyệt khác (xem Kịch bản 7-11 ở trên).
+    await loginAs('admin');
+    const approvePromoted = await recordAction(promote1.newItem.id, 'approve');
+    check('Duyệt cuối dòng Phê Duyệt vừa chuyển -> vẫn tự sinh đúng 1 dòng Sử Dụng (luồng cũ không bị ảnh hưởng)', approvePromoted.ok && !!approvePromoted.usedItem && approvePromoted.usedItem.sourceLineId === promote1.newItem.id, approvePromoted);
+
+    // ============ Kịch bản 19: "Chuyển Hàng Loạt" qua UI thật — tick chọn nhiều dòng Đề Xuất đã duyệt
+    // rồi bấm 1 nút chuyển hết ============
+    await loginAs('kd1');
+    const bulkCandidate = await createBudgetLine(baseLine({ content: 'Đề xuất chuyển hàng loạt #2' }));
+    await loginAs('tp_kd');
+    await recordAction(bulkCandidate.item.id, 'approve-proposal'); // duyệt để đủ điều kiện chuyển
+    // propose2 (kịch bản 5) cũng đã ở status='APPROVED', chưa từng được chuyển — dùng cùng lúc với
+    // bulkCandidate vừa tạo để có ĐÚNG 2 dòng tick chọn.
+    await loginAs('budgetmgr1');
+    await goToBudget('PROPOSE');
+    // budgetLines thuộc nhóm dữ liệu "lazy" (GET /api/data/lazy/budget, xem core.js loadDataGroup()) —
+    // harness contract-test này (tests/_mockBackend.js) KHÔNG mô phỏng route lazy đó, nên DB.budgetLines
+    // phía client không tự đồng bộ qua switchTab('budget') như trên server thật. Đồng bộ TAY từ
+    // h.state.collections.budgetLines (nguồn dữ liệu THẬT server-side, luôn đúng sau mọi recordAction()
+    // ở trên) rồi vẽ lại đúng 1 lần — cùng tinh thần `DB.stores = stores` ở Kịch bản 16 phía trên.
+    await page.evaluate((lines) => { DB.budgetLines = lines; renderBudgetLineList('PROPOSED'); }, h.state.collections.budgetLines);
+    const bulkUiBefore = await page.evaluate(({ id1, id2 }) => ({
+      btn1: !!document.querySelector(`[data-op="promoteBudgetLineToApproved"][data-arg0="${id1}"]`),
+      btn2: !!document.querySelector(`[data-op="promoteBudgetLineToApproved"][data-arg0="${id2}"]`),
+      bulkBtnHiddenBefore: document.getElementById('blProposeBulkPromoteBtn').classList.contains('hidden')
+    }), { id1: propose2.item.id, id2: bulkCandidate.item.id });
+    check('Nút "➡️ Chuyển" hiện đúng cho dòng Đề Xuất đã duyệt, chưa chuyển (budgetmgr1 có quyền)', bulkUiBefore.btn1 && bulkUiBefore.btn2, bulkUiBefore);
+    check('Nút "Chuyển Hàng Loạt" mặc định ẨN khi chưa tick dòng nào', bulkUiBefore.bulkBtnHiddenBefore, bulkUiBefore);
+
+    const bulkUiAfterCheck = await page.evaluate(({ id1, id2 }) => {
+      [id1, id2].forEach((id) => {
+        const cb = document.querySelector(`[data-bl-promote-checkbox][value="${id}"]`);
+        cb.checked = true;
+        updateBudgetLinePromoteBulkBtn();
+      });
+      const btn = document.getElementById('blProposeBulkPromoteBtn');
+      return { hidden: btn.classList.contains('hidden'), text: btn.innerText };
+    }, { id1: propose2.item.id, id2: bulkCandidate.item.id });
+    check('Tick 2 checkbox -> nút "Chuyển Hàng Loạt" hiện ra, đếm đúng "(2 đã chọn)"', !bulkUiAfterCheck.hidden && bulkUiAfterCheck.text.includes('2 đã chọn'), bulkUiAfterCheck);
+
+    await page.evaluate(() => promoteSelectedBudgetLinesToApproved());
+    await confirmPending();
+    await page.waitForTimeout(150);
+    const bulkResultAlerts = await alerts();
+    check('Chuyển Hàng Loạt báo đúng "Đã chuyển 2/2 dòng"', bulkResultAlerts.some((a) => a.includes('2/2')), bulkResultAlerts);
+    await clearAlerts();
+
+    const bulkSource1 = h.state.collections.budgetLines.find((l) => l.id === propose2.item.id);
+    const bulkSource2 = h.state.collections.budgetLines.find((l) => l.id === bulkCandidate.item.id);
+    check('Cả 2 dòng Đề Xuất đã chọn đều được đánh dấu promotedToApprovedId sau Chuyển Hàng Loạt', !!bulkSource1?.promotedToApprovedId && !!bulkSource2?.promotedToApprovedId, { bulkSource1, bulkSource2 });
+    const bulkNew1 = h.state.collections.budgetLines.find((l) => l.id === bulkSource1.promotedToApprovedId);
+    const bulkNew2 = h.state.collections.budgetLines.find((l) => l.id === bulkSource2.promotedToApprovedId);
+    check('Cả 2 dòng Phê Duyệt mới sinh đều đúng stage=APPROVED, status=SUBMITTED, nội dung khớp dòng gốc', !!bulkNew1 && !!bulkNew2
+      && bulkNew1.stage === 'APPROVED' && bulkNew1.status === 'SUBMITTED' && bulkNew1.content === bulkSource1.content
+      && bulkNew2.stage === 'APPROVED' && bulkNew2.status === 'SUBMITTED' && bulkNew2.content === bulkSource2.content,
+      { bulkNew1, bulkNew2 });
+
     check('Không có ngoại lệ JS chưa bắt (pageerror) nào phát sinh trong suốt bộ test', jsExceptions.length === 0, jsExceptions);
   } catch (err) {
     fail++;

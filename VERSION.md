@@ -1,9 +1,53 @@
 # Phiên bản hiện tại
 
-**28.3** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.4 (2026-11): Ngân Sách — nút "➡️ Chuyển sang Phê Duyệt" từ Đề Xuất đã duyệt, bỏ công đoạn gõ tay lại toàn bộ
+
+Người dùng phát hiện khoảng trống trong module Ngân Sách 2.0: khi 1 dòng Đề
+Xuất đã được duyệt (`status='APPROVED'`, tab 📝 Đề Xuất), KHÔNG có cách nào
+chuyển sang tab ✅ Phê Duyệt ngoài việc tự gõ tay lại TOÀN BỘ field vào form
+"+ Thêm Phê Duyệt". Đã hỏi lại và xác nhận phương án: thêm 1 nút tạo dòng
+Phê Duyệt mới sao chép dữ liệu, hỗ trợ chọn 1 hoặc nhiều dòng cùng lúc,
+**không bỏ qua bước duyệt cuối**, và đánh dấu dòng gốc để không chuyển trùng.
+
+- **Server** (`lib/recordActions.js`): `promoteBudgetLineProposalToApproved()`
+  kiểm quyền (`canManageBudget()` — CHỈ `budgetManage`/admin, khớp đúng mức
+  quyền đang mở form "+Thêm Phê Duyệt" trực tiếp) + điều kiện (phải đang
+  `stage='PROPOSED'`, `status='APPROVED'`, chưa từng chuyển —
+  `promotedToApprovedId` còn trống). `buildPromotedBudgetLineApprovedRow()`
+  dựng dòng Phê Duyệt mới (`stage='APPROVED'`, `status='SUBMITTED'` — vẫn
+  cần duyệt cuối) sao chép Nội dung/Thành tiền/VAT/Năm-Tháng NS/Vị Trí/Khối
+  Phòng Ban từ dòng Đề Xuất gốc.
+- **Route mới** `POST /api/records/budgetLines/:id/promote-to-approved`
+  (`routes/records.js`) — tách 3 bước (khoá dòng gốc kiểm quyền → tạo dòng
+  Phê Duyệt mới qua `createForCollection()` → khoá dòng gốc lần 2 ghi
+  `promotedToApprovedId`), cùng tinh thần route `/approve` đã có sẵn vì
+  `withLockedRecordForCollection()` chỉ mutate đúng 1 bản ghi/lần.
+- **Client** (`public/js/module-ngansach.js` + `budgetSection.html`): nút
+  **"➡️ Chuyển"** (1 dòng) ở mỗi dòng Đề Xuất đã duyệt chưa chuyển, cộng
+  checkbox "Chọn" + nút **"➡️ Chuyển Hàng Loạt"** (ẩn mặc định, chỉ hiện khi
+  tick ≥1 dòng) để chuyển nhiều dòng 1 lượt. Dòng đã chuyển hiện rõ "✅ Đã
+  chuyển sang Phê Duyệt (#id)" để không bấm trùng.
+- Luồng cũ Phê Duyệt → tự sinh Sử Dụng khi duyệt cuối **không bị ảnh hưởng**
+  — dòng Phê Duyệt sinh ra từ "Chuyển" đi qua đúng y hệt cơ chế duyệt cuối
+  như mọi dòng Phê Duyệt khác.
+
+**Test**: `test-budget-lines.js` thêm 2 kịch bản mới (18, 19 — đơn lẻ +
+Chuyển Hàng Loạt qua UI thật, cộng các điều kiện chặn: thiếu quyền, chưa
+duyệt, chuyển trùng 2 lần), 77/77 pass. Chạy lại toàn bộ 8 file test liên
+quan khác (test-audit-budgetlines-race, test-budget-entries-scope,
+test-budget-lines-dept-scope, test-budget-lines-excel,
+test-budget-meeting-dept-workflow-ui, test-budgetperiods-dept-rename-cascade,
+test-collapse-contract-budget-doc-forms, test-office-budget) — 94/94 pass,
+không regression. CSP sạch (grep `onclick=`/`style=`/`eval(`/`new Function(`
+trên mọi file đã sửa).
+
+**Deploy-impact**: không đổi schema/biến môi trường/dependency — chỉ copy
+code + `pm2 restart`.
 
 ## v28.3 (2026-11): Nhân Sự — xoá hẳn quyền gộp "Toàn Quyền Thao Tác Mọi Quy Trình" (hrProcessManage), thay bằng 2 quyền TÁCH RIÊNG theo Onboarding/Offboarding
 

@@ -8196,6 +8196,41 @@ function buildBudgetLineUsedRow(user, sourceApprovedLine) {
   };
 }
 
+// "Chuyển sang Phê Duyệt" (11/2026, theo yêu cầu người dùng — thiếu liên kết giữa Đề Xuất đã duyệt và
+// Phê Duyệt, trước đây phải gõ tay lại TOÀN BỘ field vào "+ Thêm Phê Duyệt"): tạo 1 dòng MỚI stage=
+// APPROVED từ 1 dòng Đề Xuất (stage=PROPOSED) ĐÃ được duyệt (status='APPROVED'), sao chép NGUYÊN VẸN dữ
+// liệu nghiệp vụ — KHÔNG bỏ qua bước duyệt cuối ở Phê Duyệt (dòng mới vẫn ở status='SUBMITTED', phải qua
+// canDecideBudgetLineFinal() như mọi dòng Phê Duyệt khác mới tự sinh được dòng Sử Dụng, xem approveBudgetLine()
+// ở trên) — chỉ bỏ công đoạn gõ tay. CHỈ budgetManage/admin được bấm (khớp đúng quyền đang mở form "+Thêm
+// Phê Duyệt" trực tiếp hiện có, xem canOpenBudgetLineFormClient() ở module-ngansach.js) — KHÔNG mở cho
+// budgetCreate vì đây về bản chất là "tạo 1 dòng Phê Duyệt mới", cùng mức quyền route tạo trực tiếp đòi hỏi
+// (lib/createValidation.js budgetLines.extraValidate: stage==='APPROVED' && !canManage -> 403).
+// Route (routes/records.js) tự gọi TIẾP buildPromotedBudgetLineApprovedRow() + createForCollection() rồi
+// ghi `promotedToApprovedId` lên dòng gốc ở LƯỢT KHOÁ THỨ 2 — tách 3 bước vì withLockedRecordForCollection()
+// chỉ mutate ĐÚNG 1 bản ghi đã khoá/lần, cùng tinh thần approveBudgetLine() ở trên (chấp nhận rủi ro cực
+// hiếm server crash giữa các bước, không có transaction xuyên nhiều lần ghi).
+function promoteBudgetLineProposalToApproved(user, item) {
+  if (!canManageBudget(user)) throw new HttpError(403, 'Chỉ người có quyền quản lý Ngân Sách mới được chuyển Đề Xuất sang Phê Duyệt');
+  if (item.stage !== 'PROPOSED') throw new HttpError(409, 'Dòng này không phải Đề Xuất');
+  if (item.status !== 'APPROVED') throw new HttpError(409, 'Chỉ chuyển được đề xuất ĐÃ DUYỆT');
+  if (item.promotedToApprovedId) throw new HttpError(409, 'Đề xuất này đã được chuyển sang Phê Duyệt rồi');
+  return item;
+}
+function buildPromotedBudgetLineApprovedRow(user, sourceProposedLine) {
+  return {
+    stage: 'APPROVED', dept: sourceProposedLine.dept, location: sourceProposedLine.location, status: 'SUBMITTED',
+    parentId: null, sourceLineId: null, promotedFromProposalId: sourceProposedLine.id,
+    content: sourceProposedLine.content, description: sourceProposedLine.description,
+    quantity: sourceProposedLine.quantity, unitPrice: sourceProposedLine.unitPrice,
+    vatPercent: sourceProposedLine.vatPercent, totalAmount: sourceProposedLine.totalAmount,
+    budgetType: sourceProposedLine.budgetType, itemCategory: sourceProposedLine.itemCategory,
+    usageStatus: null, reallocationReason: '', note: '', purchaseMonth: null,
+    budgetYear: sourceProposedLine.budgetYear, budgetMonth: sourceProposedLine.budgetMonth,
+    createdBy: user.username, createdByName: user.name, createdAt: nowVN(),
+    decidedBy: null, decidedByName: null, decidedAt: null
+  };
+}
+
 // Sửa dòng cha Sử Dụng — CHỈ Vị trí/Khối Phòng Ban/Ghi chú (Nội dung/Mô tả/Số tiền/Loại/Danh Mục khoá
 // cứng theo dòng Phê Duyệt gốc — mục 3.3 tài liệu gốc), bất kể client cố gửi giá trị khác cho các field
 // khoá (server chỉ đọc payload.location/dept/note, hoàn toàn bỏ qua mọi field khác trong payload).
@@ -9087,7 +9122,8 @@ module.exports = {
   canCreateBudgetLine, canDecideBudgetLineProposal, approveBudgetLineProposal, rejectBudgetLineProposal,
   canDecideBudgetLineFinal, approveBudgetLine, rejectBudgetLine,
   updateBudgetLineDraft, assertCanDeleteBudgetLineDraft,
-  buildBudgetLineUsedRow, updateBudgetLineUsedParent, addBudgetLineChild, updateBudgetLineChild,
+  buildBudgetLineUsedRow, promoteBudgetLineProposalToApproved, buildPromotedBudgetLineApprovedRow,
+  updateBudgetLineUsedParent, addBudgetLineChild, updateBudgetLineChild,
   recomputeBudgetLineUsageStatus, assertCanDeleteBudgetLineUsedParent, assertCanDeleteBudgetLineChild,
   reopenBudgetLineAfterUsedParentDeleted,
   canConfirmCarDriverAssignment, confirmCarDriverAssignment,

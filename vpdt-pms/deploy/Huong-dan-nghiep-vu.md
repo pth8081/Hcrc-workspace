@@ -2179,6 +2179,19 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
       dòng ✅ Phê Duyệt** tương ứng. Dòng bị **Từ chối** (từ 9/2026) sửa được
       và tự chuyển lại về Chờ duyệt ngay khi lưu (nút "Sửa & gửi lại", xoá lý
       do từ chối cũ) — không còn kẹt vĩnh viễn phải tạo dòng mới.
+      **➡️ Chuyển sang Phê Duyệt (11/2026, MỚI)** — người dùng phát hiện
+      thiếu liên kết giữa Đề Xuất đã duyệt và Phê Duyệt: trước đây phải gõ
+      tay lại TOÀN BỘ field vào "+ Thêm Phê Duyệt". Nay với dòng Đề Xuất
+      **ĐÃ DUYỆT** (status Chờ duyệt/Từ chối thì KHÔNG hiện nút này), CHỈ
+      người có `budgetManage`/admin thấy nút **"➡️ Chuyển"** (chọn 1 dòng)
+      hoặc tick nhiều dòng rồi bấm **"➡️ Chuyển Hàng Loạt"** — tạo ngay 1
+      dòng Phê Duyệt MỚI sao chép nguyên vẹn Nội dung/Thành tiền/Năm-Tháng
+      NS/Vị Trí/Khối Phòng Ban từ Đề Xuất gốc, chỉ bỏ công đoạn gõ tay —
+      **KHÔNG bỏ qua bước duyệt cuối** (dòng mới vẫn ở trạng thái Chờ duyệt
+      ở tab Phê Duyệt, vẫn phải qua đúng người có quyền duyệt cuối xác nhận
+      mới tự sinh dòng Sử Dụng, y hệt mọi dòng Phê Duyệt khác). Dòng Đề Xuất
+      gốc sau khi chuyển hiện **"✅ Đã chuyển sang Phê Duyệt"** để không
+      chuyển trùng 2 lần.
     - **✅ Phê Duyệt** (`APPROVED`) — người có `budgetManage` nhập trực tiếp
       (không cần qua Đề Xuất trước) hoặc duyệt/từ chối dòng chuyển từ Đề
       Xuất lên. Khi 1 dòng Phê Duyệt được duyệt, hệ thống **tự sinh 1 dòng

@@ -277,6 +277,19 @@ function renderBudgetLineList(stage) {
       actionsHTML = `<span class="text-gray-400 italic text-[11px]" title="${escapeHtml(item.rejectReason || '')}">Bị từ chối bởi ${escapeHtml(item.decidedByName || '')}${item.rejectReason ? ` — ${escapeHtml(item.rejectReason)}` : ''}</span>`;
     } else {
       actionsHTML = `<span class="text-gray-400 italic text-[11px]">Đã xử lý bởi ${escapeHtml(item.decidedByName || '')}</span>`;
+      // "Chuyển sang Phê Duyệt" (11/2026, theo yêu cầu người dùng) — CHỈ ở tab Đề Xuất (stage===
+      // 'PROPOSED', không phải tab Phê Duyệt dù cũng rơi vào nhánh status==='APPROVED' này), CHỈ
+      // budgetManage/admin (canManage, khớp đúng quyền đang mở form "+Thêm Phê Duyệt" trực tiếp), và
+      // CHƯA từng chuyển (promotedToApprovedId null) — xem promoteBudgetLineToApproved()/
+      // promoteSelectedBudgetLinesToApproved() bên dưới.
+      if (stage === 'PROPOSED') {
+        if (item.promotedToApprovedId) {
+          actionsHTML += ` <span class="text-emerald-600 text-[11px] font-semibold">✅ Đã chuyển sang Phê Duyệt (#${item.promotedToApprovedId})</span>`;
+        } else if (canManage) {
+          actionsHTML += ` <label class="inline-flex items-center gap-1 text-[11px] cursor-pointer"><input type="checkbox" data-bl-promote-checkbox value="${item.id}" data-op-change="updateBudgetLinePromoteBulkBtn">Chọn</label>` +
+            ` <button data-op="promoteBudgetLineToApproved" data-arg0="${item.id}" class="px-2 py-0.5 bg-indigo-600 text-white rounded text-xs font-bold">➡️ Chuyển</button>`;
+        }
+      }
     }
     if (canEdit) {
       actionsHTML += ` <button data-op="editBudgetLineDraft" data-arg0="${item.id}" data-arg1="${stage}" class="px-2 py-0.5 bg-gray-600 text-white rounded text-xs font-bold" title="${item.status === 'REJECTED' ? 'Sửa & gửi lại' : 'Sửa'}">✏️</button>` +
@@ -294,6 +307,78 @@ function renderBudgetLineList(stage) {
       <td class="border p-2 text-center space-x-1 whitespace-nowrap">${actionsHTML}</td>
     </tr>`;
   }).join('');
+}
+
+// "Chuyển sang Phê Duyệt" (11/2026, theo yêu cầu người dùng — thiếu liên kết Đề Xuất đã duyệt -> Phê
+// Duyệt, trước đây phải gõ tay lại từ đầu, xem renderBudgetLineList() ở trên) — tạo 1 dòng Phê Duyệt MỚI
+// (stage=APPROVED, status=SUBMITTED) sao chép dữ liệu, KHÔNG bỏ qua bước duyệt cuối. `silent` (dùng bởi
+// promoteSelectedBudgetLinesToApproved() bên dưới): bỏ qua showConfirmModal/alert riêng từng dòng + tự
+// NÉM LẠI lỗi (thay vì tự alert) để nơi gọi gom kết quả thành 1 alert tổng kết cho cả loạt.
+async function promoteBudgetLineToApproved(id, silent) {
+  const doPromote = async () => {
+    const result = await callRecordAction('budgetLines', id, 'promote-to-approved', {});
+    const idx = DB.budgetLines.findIndex(l => l.id === id);
+    if (idx !== -1) DB.budgetLines[idx] = result.item; else DB.budgetLines.unshift(result.item);
+    DB.budgetLines.unshift(result.newItem);
+    logSystemAction('BUDGET', 'PROMOTE_BUDGET_LINE', `Chuyển Đề Xuất ngân sách sang Phê Duyệt [${result.item.content}]`, 'SUCCESS', String(id));
+    if (!silent) {
+      alert('✅ Đã chuyển sang Phê Duyệt!');
+      renderBudgetLineList('PROPOSED');
+      renderBudgetLineList('APPROVED');
+    }
+    return result;
+  };
+  if (silent) return doPromote();
+  try {
+    await new Promise((resolve, reject) => {
+      showConfirmModal({
+        title: '➡️ Chuyển Sang Phê Duyệt',
+        bodyHTML: `<p>Tạo 1 dòng Phê Duyệt mới từ đề xuất này? Dòng mới vẫn cần người có quyền duyệt cuối xác nhận trước khi sinh dòng Sử Dụng.</p>`,
+        confirmLabel: 'Chuyển',
+        onConfirm: () => doPromote().then(resolve, reject)
+      });
+    });
+  } catch (err) { alert(`⛔ ${err.message}`); }
+}
+
+// Checkbox "Chọn" ở mỗi dòng Đề Xuất đã duyệt (xem renderBudgetLineList()) gọi hàm này mỗi lần tick/bỏ
+// tick — chỉ cập nhật hiện/ẩn + đếm số đã chọn trên nút "Chuyển Hàng Loạt", không đọc lại DB.
+function updateBudgetLinePromoteBulkBtn() {
+  const btn = document.getElementById('blProposeBulkPromoteBtn');
+  if (!btn) return;
+  const n = document.querySelectorAll('[data-bl-promote-checkbox]:checked').length;
+  btn.classList.toggle('hidden', n === 0);
+  btn.innerText = `➡️ Chuyển Hàng Loạt (${n} đã chọn)`;
+}
+
+// "Chuyển Hàng Loạt" — gọi promoteBudgetLineToApproved(id, true) TUẦN TỰ cho từng dòng đã chọn (không
+// song song, tránh nhiều request cùng khoá ghi đụng nhau) — 1 dòng có thể lỗi giữa chừng (VD vừa bị
+// người khác chuyển/xử lý trước đó trong lúc đang chọn), gom lại thành 1 alert tổng kết rõ ràng thay vì
+// dừng cả loạt ở lỗi đầu tiên.
+async function promoteSelectedBudgetLinesToApproved() {
+  const ids = [...document.querySelectorAll('[data-bl-promote-checkbox]:checked')].map(el => Number(el.value));
+  if (!ids.length) return;
+  showConfirmModal({
+    title: '➡️ Chuyển Hàng Loạt Sang Phê Duyệt',
+    bodyHTML: `<p>Chuyển ${ids.length} dòng Đề Xuất đã chọn sang Phê Duyệt?</p>`,
+    confirmLabel: 'Chuyển Tất Cả',
+    onConfirm: async () => {
+      let okCount = 0;
+      const errors = [];
+      for (const id of ids) {
+        try { await promoteBudgetLineToApproved(id, true); okCount++; }
+        catch (err) {
+          const item = (DB.budgetLines || []).find(l => l.id === id);
+          errors.push(`${item ? item.content : '#' + id}: ${err.message}`);
+        }
+      }
+      alert(okCount === ids.length
+        ? `✅ Đã chuyển ${okCount}/${ids.length} dòng!`
+        : `⚠️ Đã chuyển ${okCount}/${ids.length} dòng thành công. Lỗi:\n${errors.join('\n')}`);
+      renderBudgetLineList('PROPOSED');
+      renderBudgetLineList('APPROVED');
+    }
+  });
 }
 
 function approveBudgetLineDraft(id, stage) {
