@@ -871,10 +871,6 @@ function renderPaymentRequests() {
           ${canConfirm && pr.status === 'APPROVED' && isOneTime ? `<button data-op="confirmPaymentRequestLumpSumAction" data-arg0="${pr.id}" class="block w-full bg-cyan-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-cyan-700">💰 Xác Nhận Toàn Bộ</button>` : ''}
           ${canManage && pr.status === 'APPROVED' && !(pr.installments || []).some(it => it.confirmed === true) ? `<button data-op="requestPaymentInfoAction" data-arg0="${pr.id}" class="block w-full bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-orange-600">📝 Yêu Cầu Bổ Sung</button>` : ''}
           ${pr.status !== 'APPROVED' ? '<span class="text-[11px] text-gray-400 italic">Không có thao tác</span>' : ''}
-          ${isPaymentRequestPostApproval(pr) && canAccessPaymentRequestApprovalSlip(currentUser, pr) ? `
-            <button data-op="viewPaymentRequestApprovalSlip" data-arg0="${pr.id}" class="block w-full bg-sky-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-sky-700">👁️ Xem Phiếu</button>
-            <button data-op="downloadPaymentRequestApprovalSlip" data-arg0="${pr.id}" class="block w-full bg-sky-100 text-sky-800 border border-sky-600 px-2 py-1 rounded text-xs font-bold hover:bg-sky-200">⬇️ Tải Phiếu</button>
-          ` : ''}
         </td>
       </tr>
     `;
@@ -960,99 +956,6 @@ function requestPaymentInfoAction(id) {
       renderPaymentManageTab();
     }
   });
-}
-
-// isPaymentRequestPostApproval: 'APPROVED' (đã duyệt xong, chờ xác nhận thanh toán từng đợt) VÀ 'PAID'
-// (đã thanh toán xong) đều là trạng thái SAU khi được phê duyệt hoàn tất — mirror khuôn
-// isOperationOrderPostApproval() (module-vanhanh.js, status không dừng ở đúng 1 giá trị sau duyệt).
-function isPaymentRequestPostApproval(pr) {
-  return pr.status === 'APPROVED' || pr.status === 'PAID';
-}
-
-// canAccessPaymentRequestApprovalSlip: mirror ĐÚNG canAccessVppRegistrationApprovalSlip()/
-// canAccessOperationOrderApprovalSlip() — admin, người tạo đề nghị (pr.createdBy), hoặc người có vai
-// trò duyệt tại bất kỳ bước nào của quy trình theo phòng ban (resolvePaymentApprovalWorkflow()).
-function canAccessPaymentRequestApprovalSlip(user, pr) {
-  if (!user || !pr) return false;
-  if (user.perms?.admin) return true;
-  if (pr.createdBy === user.username) return true;
-  return isApproverForDeptWorkflow(resolvePaymentApprovalWorkflow(pr), user.username);
-}
-
-// buildPaymentRequestApprovalSlipHTML: paymentRequests KHÔNG có field `code` riêng (hasCode: false ở
-// lib/recordStore.js, không sinh mã client như vppRegistrations.code) — dùng "PT-<id>" làm formCode/mã
-// phiếu hiển thị, đủ để tra cứu lại đúng 1 đề nghị (id là Date.now(), duy nhất).
-function buildPaymentRequestApprovalSlipHTML(pr) {
-  const formCode = `PT-${pr.id}`;
-  const { steps } = resolvePaymentApprovalWorkflow(pr);
-  const wf = { steps: steps && steps.length ? steps : [{ order: 1, name: 'Duyệt' }] };
-  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, pr.history)).join('');
-
-  const installmentsRows = (pr.installments || []).map((it, idx) => `
-    <tr>
-      <td class="as-items-center">${idx + 1}</td>
-      <td>${escapeHtml(it.description || '')}</td>
-      <td class="as-items-right">${(it.amount || 0).toLocaleString('vi-VN')}</td>
-      <td class="as-items-center">${it.confirmed ? '✅ Đã thanh toán' : '⬜ Chưa thanh toán'}</td>
-    </tr>`).join('');
-
-  const bodyHTML = `
-    <table class="as-field-table">
-      <tr><td class="as-label">Nội dung đề nghị:</td><td>${escapeHtml(pr.title || '')}</td></tr>
-      <tr><td class="as-label">Phòng ban:</td><td>${escapeHtml(pr.dept || '')}</td></tr>
-      <tr><td class="as-label">Nguồn:</td><td>${escapeHtml(PAYMENT_SOURCE_LABELS[pr.sourceModule] || pr.sourceModule || '')}${pr.sourceCode ? ` — ${escapeHtml(pr.sourceCode)}` : ''}</td></tr>
-      <tr><td class="as-label">Tổng tiền đề nghị:</td><td>${(pr.amount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
-    </table>
-    <div class="as-section-title">Các Đợt Thanh Toán</div>
-    <table class="as-items-table">
-      <thead><tr><th>STT</th><th>Mô tả</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
-      <tbody>${installmentsRows}</tbody>
-    </table>
-  `;
-
-  return buildApprovalSlipShellHTML({
-    formCode,
-    title: 'Phiếu Phê Duyệt Đề Nghị Thanh Toán',
-    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(formCode)}`,
-    bodyHTML,
-    requesterRoleLabel: 'Người đề nghị',
-    requesterName: pr.createdByName,
-    requesterUsername: pr.createdBy,
-    requesterTime: pr.createdAt ? `Tạo lúc: ${escapeHtml(pr.createdAt)}` : '',
-    signatureColumnsHTML,
-    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
-  });
-}
-
-function viewPaymentRequestApprovalSlip(id) {
-  const pr = DB.paymentRequests.find(x => x.id === id);
-  if (!pr) return;
-  if (!isPaymentRequestPostApproval(pr)) return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đề nghị thanh toán đã được phê duyệt.');
-  if (!canAccessPaymentRequestApprovalSlip(currentUser, pr)) return alert('⛔ Bạn không có quyền xem Phiếu Phê Duyệt của đề nghị này (chỉ người tạo đề nghị, người duyệt hoặc admin).');
-
-  document.getElementById('viewModalTitle').innerText = `🖨️ Phiếu Phê Duyệt Đề Nghị Thanh Toán (PT-${pr.id})`;
-  document.getElementById('viewModalSub').innerText = `Phòng ban: ${pr.dept} | Người đề nghị: ${pr.createdByName || ''}`;
-  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt';
-
-  document.getElementById('viewModalContent').innerHTML = buildPaymentRequestApprovalSlipHTML(pr);
-  document.getElementById('viewDocModal').classList.remove('hidden');
-}
-
-function downloadPaymentRequestApprovalSlip(id) {
-  const pr = DB.paymentRequests.find(x => x.id === id);
-  if (!pr) return;
-  if (!isPaymentRequestPostApproval(pr)) return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đề nghị thanh toán đã được phê duyệt.');
-  if (!canAccessPaymentRequestApprovalSlip(currentUser, pr)) return alert('⛔ Bạn không có quyền tải Phiếu Phê Duyệt của đề nghị này (chỉ người tạo đề nghị, người duyệt hoặc admin).');
-
-  const formCode = `PT-${pr.id}`;
-  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Thanh Toán - ${escapeHtml(formCode)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildPaymentRequestApprovalSlipHTML(pr)}</body></html>`);
-  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `PhieuPheDuyet_${formCode}.html`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function deletePaymentRequestAction(id) {

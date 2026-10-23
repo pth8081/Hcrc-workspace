@@ -1,65 +1,9 @@
 # Phiên bản hiện tại
 
-**28.6** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
-
-## v28.6 (2026-10): Văn Phòng Phẩm + Đề Nghị Thanh Toán — "🖨️ Xem/Tải Phiếu Phê Duyệt" (tiếp nối đợt Đặt Hàng NCC)
-
-**BƯỚC 2** của loạt bổ sung "Phiếu Phê Duyệt" cho mọi màn có luồng duyệt
-(bước 1 là `operationOrders` ở v28.5) — người dùng chỉ định rõ 2 module cho
-đợt này: Văn Phòng Phẩm (`vppRegistrations`) và Đề Nghị Thanh Toán
-(`paymentRequests`), cùng yêu cầu "căn chỉnh cân đối" như khung chung đã có.
-
-- **`public/js/module-vpp.js`** (cạnh cụm `openVppRegModal`/
-  `renderVppRegistrations`): 5 hàm mới — `isVppRegistrationPostApproval(r)`
-  (chỉ `status === 'APPROVED'`, KHÁC `operationOrders` vì `vppRegistrations`
-  không có trạng thái "sau duyệt" nào khác), `canAccessVppRegistrationApprovalSlip(user, r)`
-  (admin/người đăng ký/người duyệt đúng quy trình — mirror
-  `canAccessOperationOrderApprovalSlip()`), `buildVppRegistrationApprovalSlipHTML(r)`
-  (ghép vào ĐÚNG khung chung `buildApprovalSlipShellHTML()`/`APPROVAL_SLIP_CSS`/
-  `buildApprovalSignatureColumnHTML()` ở `core.js`), `viewVppRegistrationApprovalSlip(id)`/
-  `downloadVppRegistrationApprovalSlip(id)`. Giao diện: 2 nút "👁️ Xem Phiếu
-  Phê Duyệt"/"⬇️ Tải Phiếu Phê Duyệt" THÊM VÀO khối nút của modal "Xử Lý
-  Đăng Ký Văn Phòng Phẩm" (cả 2 nhánh đang chờ duyệt/chỉ xem), cộng 2 tuỳ
-  chọn tương ứng ở dropdown "Khác ▾" của từng dòng danh sách — chỉ hiện khi
-  đăng ký ĐÃ phê duyệt và đúng người được xem.
-- **`public/js/module-thanhtoan.js`** (cạnh cụm `approvePaymentRequestAction`/
-  `renderPaymentRequests`): 5 hàm mới — `isPaymentRequestPostApproval(pr)`
-  (`status === 'APPROVED' || 'PAID'` — 2 trạng thái sau khi duyệt xong, vì
-  đợt xác nhận thanh toán từng đợt diễn ra SAU khi hết quy trình duyệt),
-  `canAccessPaymentRequestApprovalSlip(user, pr)` (admin/người tạo đề nghị
-  `pr.createdBy`/người duyệt đúng quy trình), `buildPaymentRequestApprovalSlipHTML(pr)`,
-  `viewPaymentRequestApprovalSlip(id)`/`downloadPaymentRequestApprovalSlip(id)`.
-  **Khác 2 module trên**: `paymentRequests` KHÔNG có field `code` riêng
-  (`hasCode: false`, không sinh mã client như `vppRegistrations.code`) —
-  dùng `"PT-<id>"` làm mã phiếu hiển thị; module này cũng KHÔNG có modal chi
-  tiết riêng (duyệt qua dialog xác nhận ngay trên dòng bảng) nên 2 nút Xem/
-  Tải Phiếu được thêm NGAY TRONG cell hành động của mỗi dòng (`renderPaymentRequests()`),
-  không tạo modal mới.
-- Không cần permission key mới cho cả 2 module — tái dùng đúng logic
-  "admin OR người tạo/đăng ký OR người duyệt đúng bước" đã có sẵn, giống
-  khuôn `operationOrders`/`carRegs`.
-
-**Còn lại trong loạt rà soát** (chưa làm, chờ người dùng xác nhận phạm vi
-từng module trước khi làm tiếp): Kho Tài Liệu, Hợp Đồng (2 loại phiếu độc
-lập — gốc + tài liệu ký), Phê Duyệt Giá IT, Ngân Sách, Giấy Phép, Điều
-Chuyển Kho Đồng Phục, và Đổi Ca (chưa xác nhận có cần phiếu hay không).
-
-**Test**: 2 file mới — `tests/test-vpp-registrations-approval-slip.js` (13
-kịch bản) và `tests/test-payment-requests-approval-slip.js` (14 kịch bản),
-cùng khuôn `test-operation-order-approval-slip.js` (Playwright thật — ma
-trận status, ma trận quyền truy cập, nội dung phiếu + chân ký/ý kiến, chặn
-xem/tải khi chưa phê duyệt hoặc không có quyền, giao diện dropdown/cell
-hành động). Chạy lại toàn bộ test hiện có liên quan đến 2 module (VPP:
-`test-vpp.js`, `test-vpp-registrations-scope.js`, `test-collapse-vpp-uniform-forms.js`,
-`test-office-vpp-cancel-step1.js`, `test-khoi0-carregs-vppregistrations-gate.js`,
-`test-vpp-dept-headcount-missing-block.js`, `test-vppregistrations-deadline-utc.js`;
-Thanh Toán: `test-payment.js`, `test-payment-requests-dept-scope.js`,
-`test-khoi0-payment-office-gate.js`, `test-contract-payment-type-change.js`)
-cộng `test-operation-order-approval-slip.js` — không có regression. Tự
-kiểm tra CSP chuẩn (`data-op`, không inline onclick/style) — sạch.
 
 ## v28.5 (2026-10): Đặt Hàng NCC — "🖨️ Xem/Tải Phiếu Phê Duyệt" (chân ký, format giống Đăng Ký Xe/Văn Bản Trình)
 
