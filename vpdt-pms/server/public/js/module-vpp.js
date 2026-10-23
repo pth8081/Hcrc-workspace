@@ -619,6 +619,13 @@ function renderVppRegistrations() {
       secondaryOptions.push({ value: 'cancelReg', label: '🚫 Hủy Đăng Ký' });
     }
     if (currentUser.perms?.admin) secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+    // "🖨️ Xem/Tải Phiếu Phê Duyệt" — chỉ hiện sau khi đăng ký đã phê duyệt hoàn tất
+    // (isVppRegistrationPostApproval) và đúng người được xem (người đăng ký, người duyệt hoặc admin —
+    // canAccessVppRegistrationApprovalSlip()), mirror đúng khuôn operationOrders (module-vanhanh.js).
+    if (isVppRegistrationPostApproval(r) && canAccessVppRegistrationApprovalSlip(currentUser, r)) {
+      secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
+      secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải Phiếu' });
+    }
     return `
       <tr class="hover:bg-gray-50 border-b">
         <td class="border p-2">${escapeHtml(r.periodName || '')}</td>
@@ -646,6 +653,8 @@ function runVppRegAction(id, action) {
     case 'submit': submitVppRegDraftAction(id, false); break;
     case 'cancelReg': openCancelVppRegModal(id); break;
     case 'delete': deleteVppRegAction(id); break;
+    case 'viewSlip': viewVppRegistrationApprovalSlip(id); break;
+    case 'downloadSlip': downloadVppRegistrationApprovalSlip(id); break;
   }
 }
 
@@ -749,12 +758,115 @@ function openVppRegModal(regId) {
     actionBtns.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin đăng ký này.</span>`;
   }
 
+  // "🖨️ Xem/Tải Phiếu Phê Duyệt" trong modal chi tiết — THÊM VÀO (không thay thế) khối actionBtns ở
+  // trên, ở cả 2 nhánh canApprove/view-only, CHỈ hiện sau khi đã phê duyệt hoàn tất và đúng người xem.
+  if (isVppRegistrationPostApproval(r) && canAccessVppRegistrationApprovalSlip(currentUser, r)) {
+    actionBtns.innerHTML += `
+      <div class="w-full flex justify-end gap-2 mt-2 pt-2 border-t">
+        <button data-op="viewVppRegistrationApprovalSlip" data-arg0="${r.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700 text-xs">👁️ Xem Phiếu Phê Duyệt</button>
+        <button data-op="downloadVppRegistrationApprovalSlip" data-arg0="${r.id}" class="bg-sky-100 text-sky-800 border border-sky-600 px-3 py-1.5 rounded font-bold hover:bg-sky-200 text-xs">⬇️ Tải Phiếu Phê Duyệt</button>
+      </div>
+    `;
+  }
+
   document.getElementById('vppRegModal').classList.remove('hidden');
 }
 
 function closeVppRegModal() {
   document.getElementById('vppRegModal').classList.add('hidden');
   currentProcessingVppRegId = null;
+}
+
+// isVppRegistrationPostApproval: KHÁC operationOrders/carRegs — vppRegistrations KHÔNG có trạng thái
+// nào sau 'APPROVED' (không qua bước "Nhập Hàng" riêng), xem đủ enum ở vppRegStatusBadge() ngay trên
+// (DRAFT/PENDING ngầm định/APPROVED/REJECTED/CANCELLED) — chỉ 'APPROVED' là trạng thái phê duyệt
+// hoàn tất duy nhất.
+function isVppRegistrationPostApproval(r) {
+  return r.status === 'APPROVED';
+}
+
+// canAccessVppRegistrationApprovalSlip: mirror ĐÚNG canAccessCarApprovalSlip()/
+// canAccessOperationOrderApprovalSlip() (core.js/module-vanhanh.js) — admin, người đăng ký, hoặc người
+// có vai trò duyệt tại bất kỳ bước nào của quy trình (đã/đang duyệt theo đúng phòng ban của hồ sơ này).
+function canAccessVppRegistrationApprovalSlip(user, r) {
+  if (!user || !r) return false;
+  if (user.perms?.admin) return true;
+  if (r.creator === user.username) return true;
+  return isApproverForDeptWorkflow(resolveVppWorkflowConfigForItemClient(r), user.username);
+}
+
+function buildVppRegistrationApprovalSlipHTML(r) {
+  const wfConfig = resolveVppWorkflowConfigForItemClient(r) || {};
+  const wf = { steps: wfConfig.steps || [{ order: 1, name: 'Sếp duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, r.history)).join('');
+
+  const itemsTotal = (r.items || []).reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+  const itemsRows = (r.items || []).map((it, idx) => `
+    <tr>
+      <td class="as-items-center">${idx + 1}</td>
+      <td>${escapeHtml(it.name)}</td>
+      <td class="as-items-center">${escapeHtml(it.code || '')}</td>
+      <td class="as-items-center">${escapeHtml(it.unit || '')}</td>
+      <td class="as-items-right">${it.qty}</td>
+      <td class="as-items-right">${it.price != null ? Number(it.price).toLocaleString('vi-VN') : ''}</td>
+      <td class="as-items-right">${it.price != null ? (it.price * it.qty).toLocaleString('vi-VN') : ''}</td>
+    </tr>`).join('');
+
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Kỳ đăng ký:</td><td>${escapeHtml(r.periodName || '')}</td></tr>
+      <tr><td class="as-label">Phòng ban:</td><td>${escapeHtml(r.dept || '')}</td></tr>
+      ${itemsTotal ? `<tr><td class="as-label">Tổng giá trị:</td><td>${itemsTotal.toLocaleString('vi-VN')} VNĐ</td></tr>` : ''}
+    </table>
+    <div class="as-section-title">Danh Sách Mặt Hàng Đăng Ký</div>
+    <table class="as-items-table">
+      <thead><tr><th>STT</th><th>Mặt hàng</th><th>Mã hàng</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+      <tbody>${itemsRows}</tbody>
+    </table>
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: r.code,
+    title: 'Phiếu Phê Duyệt Đăng Ký Văn Phòng Phẩm',
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(r.code)}`,
+    bodyHTML,
+    requesterRoleLabel: 'Người đăng ký',
+    requesterName: r.creatorName,
+    requesterUsername: r.creator,
+    requesterTime: `Tạo lúc: ${escapeHtml(r.createdAt || '')}`,
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
+}
+
+function viewVppRegistrationApprovalSlip(id) {
+  const r = DB.vppRegistrations.find(item => item.id === id);
+  if (!r) return;
+  if (!isVppRegistrationPostApproval(r)) return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+  if (!canAccessVppRegistrationApprovalSlip(currentUser, r)) return alert('⛔ Bạn không có quyền xem Phiếu Phê Duyệt của đăng ký này (chỉ người đăng ký, người duyệt hoặc admin).');
+
+  document.getElementById('viewModalTitle').innerText = `🖨️ Phiếu Phê Duyệt Đăng Ký Văn Phòng Phẩm (${r.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${r.dept} | Người đăng ký: ${r.creatorName}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildVppRegistrationApprovalSlipHTML(r);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadVppRegistrationApprovalSlip(id) {
+  const r = DB.vppRegistrations.find(item => item.id === id);
+  if (!r) return;
+  if (!isVppRegistrationPostApproval(r)) return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đăng ký đã được phê duyệt hoàn tất.');
+  if (!canAccessVppRegistrationApprovalSlip(currentUser, r)) return alert('⛔ Bạn không có quyền tải Phiếu Phê Duyệt của đăng ký này (chỉ người đăng ký, người duyệt hoặc admin).');
+
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt VPP - ${escapeHtml(r.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildVppRegistrationApprovalSlipHTML(r)}</body></html>`);
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyet_VPP_${r.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function confirmProcessVppReg(actionType) {
