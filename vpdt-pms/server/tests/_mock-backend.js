@@ -521,7 +521,8 @@ function __mockEditTrainingDocument(payload, user, doc) {
 // chuẩn hoá với lúc tạo lớp ở trên.
 const __MOCK_TRAINING_CLASS_EDITABLE_FIELDS = [
   'title', 'category', 'description', 'startTime', 'endTime', 'location',
-  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId'
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId',
+  'participantGroup'
 ];
 function __mockEditTrainingClass(payload, user, cls) {
   if (!__mockCanManageTrainingClass(user, cls)) throw __mockHttpError(403, 'Bạn không có quyền sửa lớp học này');

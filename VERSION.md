@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**28.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.12 (2026-11): Báo Cáo Đào Tạo Tổng Hợp — 5 sheet đúng mẫu Excel BP Đào Tạo
+
+Theo yêu cầu người dùng: "làm cái báo cáo theo đúng báo cáo này nhé, ở bên
+đào tạo ấy" — gửi kèm 1 file Excel mẫu BP Đào Tạo đang dùng thủ công hàng
+tháng/năm (5 sheet). Đã phân tích gap, đề xuất phương án, gửi demo (file
+Excel mẫu + ảnh giao diện) và được người dùng xác nhận 4/4 quyết định trước
+khi code thật (đúng quy trình "phân tích → xác nhận → làm + merge").
+
+Thêm khối **"📑 Báo Cáo Đào Tạo Tổng Hợp (Theo Năm)"** ở cuối tab Kế Hoạch
+Đào Tạo (Đào Tạo > Kế Hoạch Đào Tạo) — chọn Năm, xuất 1 file `.xlsx` gồm
+đúng 5 sheet theo thứ tự mẫu: **Data chi tiết** (1 dòng/lớp), **Báo cáo**
+(gộp theo Tên lớp+Tháng), **Báo cáo Tân binh** (đổi đơn vị báo cáo từ
+tuần/lớp sang **NGƯỜI/giai đoạn**, map vào Lộ Trình Tân Binh đã có — quyết
+định đã chốt với người dùng), **Báo cáo tổng hợp** (theo tháng, tách 2
+biến thể có/không tính Tân Binh + tỉ lệ hoàn thành mục tiêu so kế hoạch),
+**Báo cáo Giảng viên nội bộ** (nguồn Kế Hoạch Đào Tạo, gộp theo Giảng
+Viên+Tháng). Toàn bộ 5 sheet tính giá trị thật bằng JS phía client, KHÔNG
+dùng công thức Excel sống — đúng khuôn `exportTrainingPlanDashboardExcel()`
+(báo cáo 1-sheet cũ, GIỮ NGUYÊN không đổi, 2 tính năng độc lập).
+
+3 quyết định gap nhỏ khác (đã xác nhận với người dùng): "Đối Tượng Tham
+Gia" (từng lớp) → thêm field mới `trainingClasses.participantGroup` (tuỳ
+chọn); "Số lượng học viên dự kiến" → dùng tạm `capacity`; "Hình thức đánh
+giá sau Đào tạo" → tự lấy tên bài test gắn lớp (nếu có).
+
+**Test**: 8 kịch bản mới (`tests/test-training-report-full.js`) — xác nhận
+đúng số liệu tính toán từng sheet (không chỉ "không lỗi"), đúng field mới
+lưu/sửa qua form thật. Chạy lại toàn bộ test Đào Tạo/Onboarding liên quan —
+không regression (2 lỗi môi trường Playwright có sẵn từ trước, xác nhận qua
+`git stash`, không liên quan đợt này).
+
+**Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường/dependency
+nào — `participantGroup` lưu trực tiếp trong bản ghi JSON đã có sẵn, 5 sheet
+tính hoàn toàn từ dữ liệu đang có, không thêm collection mới.
 
 ## v28.11 (2026-11): Onboarding — tách "Lưu" khỏi "Kích Hoạt" + nút Kích Hoạt riêng ở Quản Lý Hồ Sơ
 

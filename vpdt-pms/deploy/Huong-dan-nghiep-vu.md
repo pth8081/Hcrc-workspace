@@ -5718,6 +5718,51 @@ trực tiếp trong bản ghi JSON đã có sẵn, không cần migrate dữ li�
 
 ---
 
+## 5k. Đợt cập nhật 11/2026: Báo Cáo Đào Tạo Tổng Hợp (5 sheet, theo mẫu Excel BP Đào Tạo)
+
+Theo yêu cầu BP Đào Tạo: cần 1 báo cáo Excel đúng format file mẫu đang dùng
+thủ công hàng tháng/năm, thay vì tự tổng hợp tay từ nhiều nguồn. Thêm khối
+**"📑 Báo Cáo Đào Tạo Tổng Hợp (Theo Năm)"** ở cuối tab **📋 Kế Hoạch Đào
+Tạo** (Đào Tạo > Kế Hoạch Đào Tạo) — chọn Năm → bấm **"📑 Xuất Báo Cáo Đào
+Tạo (5 Sheet)"** → tải về 1 file `.xlsx` gồm đúng 5 sheet theo thứ tự:
+
+1. **Data chi tiết** — 1 dòng/Lớp Học năm đã chọn: Tên Lớp, Bắt Đầu/Kết
+   Thúc, Ngày/Tháng Tổ Chức, Thời Lượng, Đối Tượng Tham Gia, Giảng Viên, SL
+   Dự Kiến/Tham Gia/Đạt, Tỉ Lệ Tham Gia/Đạt, Hình Thức Đánh Giá.
+2. **Báo cáo** — gộp Data chi tiết theo (Tên Lớp + Tháng).
+3. **Báo cáo Tân binh** — **khác hẳn file mẫu gốc (tính theo tuần/lớp)**:
+   đổi sang tính theo **NGƯỜI/giai đoạn**, 1 dòng/nhân viên mới (từ **🆕 Đào
+   Tạo Tân Binh**) với trạng thái Giai Đoạn 1/2/3 + ngày xác nhận/đánh giá +
+   chứng chỉ, kèm dòng thống kê tổng cuối sheet. Đây là quyết định nghiệp vụ
+   đã xác nhận với người dùng — hệ thống chưa mô hình hoá khái niệm "tuần/
+   giai đoạn gắn với lớp học" như file mẫu gốc, map sang đơn vị NGƯỜI đã có
+   sẵn (Lộ Trình Tân Binh) thay vì xây mới.
+4. **Báo cáo tổng hợp** — theo THÁNG (12 dòng + dòng Tổng Năm): Số Lớp Dự
+   Kiến Theo Kế Hoạch (lấy tổng `trainingPlans.plannedClasses` tháng đó),
+   Tổng Số Lớp/Giờ Thực Hiện, SL Dự Kiến/Tham Gia/Đạt (2 biến thể — có và
+   không tính lớp "Tân Binh", nhận diện qua `category` chứa "Tân binh"), Tỉ
+   Lệ Tham Gia/Đạt Trung Bình, Tỉ Lệ Hoàn Thành Mục Tiêu.
+5. **Báo cáo Giảng viên nội bộ** — nguồn **Kế Hoạch Đào Tạo** (khối "Ghi
+   Nhận Thực Tế" đã có từ Đợt 5i), gộp theo (Giảng Viên + Tháng): Thời Lượng
+   Đào Tạo, Ngày Tổ Chức, Điểm Đánh Giá, Số Lượng Học Viên.
+
+**Field mới "Đối Tượng Tham Gia"** — thêm vào form Tạo/Sửa **Lớp Học**
+(tuỳ chọn, VD "CBNV mới"), chỉ phục vụ hiển thị đúng cột "Đối Tượng" ở báo
+cáo trên, không ảnh hưởng quyền đăng ký/Danh Sách Được Mời.
+
+**Khác với báo cáo cũ**: tính năng này **RIÊNG**, không thay thế khối
+"🎯 Theo Dõi Thực Hiện & Dashboard" hay nút "📊 Xuất Excel" (1 sheet) đã có ở
+ngay phía trên cùng tab — báo cáo cũ đọc nguồn `trainingPlans` (kế hoạch),
+báo cáo mới đọc trực tiếp `trainingClasses`/`trainingRegistrations` (LMS
+thật) cho 4/5 sheet.
+
+**Deploy-impact**: không có thay đổi `schema.sql`/biến môi trường/dependency
+nào — `participantGroup` (Lớp Học) lưu trực tiếp trong bản ghi JSON đã có
+sẵn, không cần migrate dữ liệu cũ; 5 sheet tính hoàn toàn từ dữ liệu đang có,
+không thêm collection mới.
+
+---
+
 ## 7. Hệ Thống / Quản Trị
 
 Nhóm màn cấu hình **chỉ admin dùng** — không phải "module nghiệp vụ" theo

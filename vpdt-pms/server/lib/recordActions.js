@@ -5291,7 +5291,8 @@ function bulkRegisterTrainingClass(payload, user, cls, existingRegs, users) {
 // (2 field này chỉ đổi qua đúng action riêng của chúng, không phải qua /edit chung).
 const TRAINING_CLASS_EDITABLE_FIELDS = [
   'title', 'category', 'description', 'startTime', 'endTime', 'location',
-  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId'
+  'registerDeadline', 'capacity', 'passScore', 'testId', 'testSecondsPerQuestion', 'documentIds', 'courseId',
+  'participantGroup'
 ];
 function editTrainingClass(payload, user, cls, tests, users, courses, existingRegs) {
   if (!canManageTrainingClass(user, cls)) {

@@ -120,6 +120,10 @@
               <select id="tcCourseId" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không thuộc chương trình nào --</option></select>
             </div>
             <div>
+              <label class="block font-semibold text-gray-600 mb-1">Đối Tượng Tham Gia (tuỳ chọn, vd "CBNV mới")</label>
+              <input id="tcParticipantGroup" maxlength="200" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>
               <input id="tcStart" type="datetime-local" class="w-full border p-1.5 rounded" required>
             </div>
@@ -446,6 +450,21 @@
             </div>
           </div>
           <div id="tpDashResultWrap"></div>
+        </div>
+
+        <!-- Báo Cáo Đào Tạo Tổng Hợp (5 sheet, theo mẫu Excel BP Đào Tạo, 11/2026) — RIÊNG với Dashboard
+             Theo Dõi Thực Hiện ở trên, nguồn chính là trainingClasses/trainingRegistrations thật (không
+             phải kế hoạch nhập tay) — xem computeTrainingReportFull()/exportTrainingReportFullExcel(). -->
+        <div class="bg-indigo-50 border border-indigo-200 rounded p-4 space-y-3">
+          <h3 class="font-bold text-indigo-900 text-base flex items-center gap-2">📑 Báo Cáo Đào Tạo Tổng Hợp (Theo Năm)</h3>
+          <p class="text-xs text-indigo-700">Xuất 1 file Excel 5 sheet (Data chi tiết/Báo cáo/Báo cáo Tân binh/Báo cáo tổng hợp/Báo cáo Giảng viên nội bộ) theo đúng mẫu BP Đào Tạo đang dùng — tính trực tiếp từ Lớp Học/Đăng Ký thật trong năm đã chọn.</p>
+          <div class="flex flex-wrap items-end gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Năm</label>
+              <select id="trYearSelect" class="border p-2 rounded text-sm bg-white"></select>
+            </div>
+            <button type="button" data-op="exportTrainingReportFullExcel" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-indigo-700">📑 Xuất Báo Cáo Đào Tạo (5 Sheet)</button>
+          </div>
         </div>
       </div>
 
@@ -1054,6 +1073,10 @@
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Chương Trình (tuỳ chọn)</label>
               <select id="teCourseId" class="w-full border p-1.5 rounded bg-white"><option value="">-- Không thuộc chương trình nào --</option></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Đối Tượng Tham Gia (tuỳ chọn, vd "CBNV mới")</label>
+              <input id="teParticipantGroup" maxlength="200" class="w-full border p-1.5 rounded">
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Thời Gian Bắt Đầu</label>

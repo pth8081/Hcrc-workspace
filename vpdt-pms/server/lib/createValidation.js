@@ -2942,6 +2942,9 @@ const CREATE_MODULE_CONFIGS = {
       }
       payload.category = String(payload.category).trim();
       payload.title = String(payload.title).trim();
+      // Đối Tượng Tham Gia (tuỳ chọn, vd "CBNV mới") — phục vụ Báo Cáo Đào Tạo tổng hợp theo mẫu Excel,
+      // KHÔNG ảnh hưởng gì tới quyền đăng ký/inviteList (đây chỉ là field mô tả, không phải điều kiện lọc).
+      payload.participantGroup = payload.participantGroup ? String(payload.participantGroup).trim().slice(0, 200) : '';
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'TRAINING_CLASS');
       payload.capacity = Number(payload.capacity) > 0 ? Math.floor(Number(payload.capacity)) : 0;
       payload.documentIds = Array.isArray(payload.documentIds) ? payload.documentIds.map(Number).filter(Number.isFinite) : [];

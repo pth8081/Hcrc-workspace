@@ -321,7 +321,7 @@ function renderTrainingLms() {
   if (activeTrainingLmsTab === 'DASHBOARD') renderTrainingDashboard();
   else if (activeTrainingLmsTab === 'CLASSES') renderTrainingClasses();
   else if (activeTrainingLmsTab === 'COURSES') renderTrainingCourses();
-  else if (activeTrainingLmsTab === 'PLANS') { renderTrainingPlans(); renderTrainingPlanDashboard(); }
+  else if (activeTrainingLmsTab === 'PLANS') { renderTrainingPlans(); renderTrainingPlanDashboard(); populateTrainingReportYearSelect(); }
   else if (activeTrainingLmsTab === 'MY_REGS') renderTrainingMyRegs();
   else if (activeTrainingLmsTab === 'DOCS') renderTrainingDocuments();
   else if (activeTrainingLmsTab === 'PATHS') renderCareerPaths();
@@ -445,6 +445,7 @@ async function submitTrainingClass(e) {
     description: document.getElementById('tcDescription').value.trim(),
     inviteList: tcInviteListStaged.map(p => p.username),
     courseId: document.getElementById('tcCourseId').value,
+    participantGroup: document.getElementById('tcParticipantGroup').value.trim(),
     customData
   };
   if (!payload.category) return alert('Vui lòng chọn Loại Đào Tạo (thêm ở Quản Trị &gt; Quản Lý Danh Mục nếu chưa có)!');
@@ -914,6 +915,7 @@ function openEditTrainingClassModal(classId) {
     .map(co => `<option value="${co.id}">${escapeHtml(co.name)} (${escapeHtml(co.category)})</option>`).join('');
   document.getElementById('teCourseId').innerHTML = `<option value="">-- Không thuộc chương trình nào --</option>` + courseOpts;
   document.getElementById('teCourseId').value = c.courseId != null ? String(c.courseId) : '';
+  document.getElementById('teParticipantGroup').value = c.participantGroup || '';
   const docOpts = DB.trainingDocuments.slice().sort((a, b) => b.id - a.id)
     .map(d => `<option value="${d.id}">${escapeHtml(d.category)} — ${escapeHtml(d.title)}</option>`).join('');
   const teDoc = document.getElementById('teDocumentIds');
@@ -962,7 +964,8 @@ async function submitEditTrainingClass(e) {
     documentIds,
     description: document.getElementById('teDescription').value.trim(),
     inviteList: teInviteListStaged.map(p => p.username),
-    courseId: document.getElementById('teCourseId').value
+    courseId: document.getElementById('teCourseId').value,
+    participantGroup: document.getElementById('teParticipantGroup').value.trim()
   };
   if (payload.testId) {
     const ps = Number(payload.passScore);
@@ -1686,6 +1689,248 @@ function exportTrainingPlanDashboardExcel() {
     };
   });
   downloadXlsxFromServer('theo_doi_ke_hoach_dao_tao.xlsx', 'Theo Dõi Kế Hoạch Đào Tạo', columns, rows);
+}
+
+// ---------- Báo Cáo Đào Tạo Tổng Hợp (5 sheet, theo mẫu Excel BP Đào Tạo đang dùng thủ công, 11/2026)
+// ----------
+// Khác hẳn exportTrainingPlanDashboardExcel() ở trên (1 sheet, nguồn trainingPlans — kế hoạch + "Ghi Nhận
+// Thực Tế" nhập tay): đây là báo cáo MỚI, RIÊNG, nguồn CHÍNH là trainingClasses/trainingRegistrations
+// (dữ liệu LMS thật, chi tiết từng lớp/học viên) + trainingPlans (chỉ dùng cho 2 việc: "Số lớp dự kiến
+// theo kế hoạch" ở sheet tổng hợp, và toàn bộ sheet Giảng Viên Nội Bộ — xem phân tích gap đã thống nhất
+// với người dùng). KHÔNG đụng/thay thế gì ở hàm cũ.
+//
+// 4 quyết định đã chốt với người dùng (11/2026):
+// 1. "Đối tượng tham gia đào tạo" → field MỚI trainingClasses.participantGroup (xem createValidation.js).
+// 2. "Số lượng học viên dự kiến" (từng lớp) → dùng TẠM trainingClasses.capacity.
+// 3. "Hình thức đánh giá sau Đào tạo" → tên trainingTests.title của bài test gắn lớp (nếu có).
+// 4. Sheet "Báo cáo Tân Binh" → đổi đơn vị báo cáo từ "theo tuần/lớp" (mẫu gốc) sang "theo NGƯỜI/giai
+//    đoạn" (map đúng onboardingPaths/onboardingProgress đã có sẵn 3 giai đoạn GĐ1/GĐ2/GĐ3) — mẫu gốc tổ
+//    chức theo tuần/lớp là 1 khái niệm trainingClasses CHƯA mô hình hoá (gap lớn, người dùng chọn map
+//    sang cơ chế theo người đã có thay vì xây mới).
+//
+// "Lớp Tân Binh" (loại khỏi 2 biến thể "không tính Tân Binh" ở sheet Báo cáo tổng hợp) nhận diện qua
+// trainingClasses.category chứa "tân binh" (không phân biệt hoa/thường) — khớp đúng cách BP Đào Tạo đặt
+// Loại Đào Tạo cho các lớp hội nhập CBNV mới (xem danh mục trainingCategories), không có cách nhận diện
+// nào chuẩn hơn qua trainingCourses (courseId là tuỳ chọn, nhiều lớp Tân Binh không gắn Chương Trình).
+function isTanBinhTrainingClass(cls) {
+  return String(cls.category || '').trim().toLowerCase().includes('tân binh');
+}
+function trainingReportTestTitleForClass(cls) {
+  if (cls.testId == null) return '';
+  const test = DB.trainingTests.find(t => t.id === cls.testId);
+  return test ? test.title : '';
+}
+function computeTrainingReportFull(year) {
+  const classes = DB.trainingClasses.filter(c => c.startTime && new Date(c.startTime).getFullYear() === year);
+
+  // ---- Sheet 1: Data chi tiết (1 dòng / lớp) ----
+  const detail = classes.map(c => {
+    const regs = DB.trainingRegistrations.filter(r => r.classId === c.id && r.result !== 'CANCELLED');
+    const participated = regs.length;
+    const passed = regs.filter(r => r.result === 'PASSED').length;
+    const expected = c.capacity || 0;
+    const start = new Date(c.startTime);
+    return {
+      className: c.title,
+      startTime: c.startTime, endTime: c.endTime,
+      trainingDay: start.getDate(), trainingMonth: start.getMonth() + 1,
+      durationHours: Math.round(trainingClassDurationHours(c) * 10) / 10,
+      participantGroup: c.participantGroup || '', instructor: c.instructor || '',
+      expected, participated, passed,
+      participationRate: expected ? Math.round((participated / expected) * 1000) / 1000 : '',
+      passRate: participated ? Math.round((passed / participated) * 1000) / 1000 : '',
+      evaluationMethod: trainingReportTestTitleForClass(c),
+      isTanBinh: isTanBinhTrainingClass(c)
+    };
+  }).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+  // ---- Sheet 2: Báo cáo (gộp theo Tên lớp + Tháng) ----
+  const byClassMonth = new Map();
+  detail.forEach(r => {
+    const key = `${r.className}||${r.trainingMonth}`;
+    const row = byClassMonth.get(key) || {
+      className: r.className, month: r.trainingMonth, participantGroup: r.participantGroup,
+      classCount: 0, hoursPerClass: r.durationHours, days: [], expectedSum: 0, participatedSum: 0,
+      passRatioSum: 0, passRatioCount: 0
+    };
+    row.classCount++;
+    row.days.push(r.trainingDay);
+    row.expectedSum += r.expected;
+    row.participatedSum += r.participated;
+    if (r.participated) { row.passRatioSum += r.passed / r.participated; row.passRatioCount++; }
+    byClassMonth.set(key, row);
+  });
+  const summary = [...byClassMonth.values()].sort((a, b) => a.month - b.month || a.className.localeCompare(b.className))
+    .map(r => ({
+      className: r.className, classCount: r.classCount, hoursPerClass: r.hoursPerClass,
+      totalHours: Math.round(r.classCount * r.hoursPerClass * 10) / 10,
+      organizedDays: r.days.sort((a, b) => a - b).join(','), month: r.month, participantGroup: r.participantGroup,
+      expected: r.expectedSum, participated: r.participatedSum,
+      passRate: r.passRatioCount ? Math.round((r.passRatioSum / r.passRatioCount) * 1000) / 1000 : ''
+    }));
+
+  // ---- Sheet 4: Báo cáo tổng hợp (12 tháng + dòng Tổng năm) ----
+  const plansOfYear = DB.trainingPlans.filter(p => p.month && p.month.startsWith(String(year)));
+  const monthRows = [];
+  for (let m = 1; m <= 12; m++) {
+    const monthDetail = detail.filter(r => r.trainingMonth === m);
+    const monthDetailExTanBinh = monthDetail.filter(r => !r.isTanBinh);
+    const plannedClasses = plansOfYear.filter(p => Number(p.month.split('-')[1]) === m)
+      .reduce((s, p) => s + (p.plannedClasses || 0), 0);
+    const sum = (arr, f) => arr.reduce((s, r) => s + f(r), 0);
+    const avgRate = (arr, f) => { const v = arr.filter(r => f(r) !== '').map(f); return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 1000) / 1000 : ''; };
+    monthRows.push({
+      month: m,
+      plannedClasses,
+      totalClasses: monthDetail.length,
+      totalHours: Math.round(sum(monthDetail, r => r.durationHours) * 10) / 10,
+      expectedExTanBinh: sum(monthDetailExTanBinh, r => r.expected),
+      expected: sum(monthDetail, r => r.expected),
+      participatedExTanBinh: sum(monthDetailExTanBinh, r => r.participated),
+      participated: sum(monthDetail, r => r.participated),
+      passedExTanBinh: sum(monthDetailExTanBinh, r => r.passed),
+      passed: sum(monthDetail, r => r.passed),
+      avgParticipationRate: avgRate(monthDetail, r => r.participationRate),
+      avgParticipationRateExTanBinh: avgRate(monthDetailExTanBinh, r => r.participationRate),
+      avgPassRate: avgRate(monthDetail, r => r.passRate),
+      completionRate: plannedClasses ? Math.round((monthDetail.length / plannedClasses) * 1000) / 1000 : ''
+    });
+  }
+  const yearTotal = {
+    month: `Năm ${year}`,
+    plannedClasses: sumField(monthRows, 'plannedClasses'), totalClasses: sumField(monthRows, 'totalClasses'),
+    totalHours: Math.round(sumField(monthRows, 'totalHours') * 10) / 10,
+    expectedExTanBinh: sumField(monthRows, 'expectedExTanBinh'), expected: sumField(monthRows, 'expected'),
+    participatedExTanBinh: sumField(monthRows, 'participatedExTanBinh'), participated: sumField(monthRows, 'participated'),
+    passedExTanBinh: sumField(monthRows, 'passedExTanBinh'), passed: sumField(monthRows, 'passed'),
+    avgParticipationRate: avgField(monthRows, 'avgParticipationRate'),
+    avgParticipationRateExTanBinh: avgField(monthRows, 'avgParticipationRateExTanBinh'),
+    avgPassRate: avgField(monthRows, 'avgPassRate'),
+    completionRate: avgField(monthRows, 'completionRate')
+  };
+
+  // ---- Sheet 3: Báo cáo Tân Binh (theo NGƯỜI/giai đoạn — quyết định #4) ----
+  const tanBinhRows = DB.onboardingProgress.filter(p => p.startDate && new Date(p.startDate).getFullYear() === year)
+    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+    .map(p => ({
+      employeeName: p.employeeName, pathName: p.pathName, startDate: p.startDate,
+      stage1: p.stage1Result === 'CONFIRMED' ? `✅ Đã xác nhận (${p.stage1ConfirmedAt || ''})` : '⏳ Chưa xác nhận',
+      stage2: p.stage2Result === 'CONFIRMED' ? `✅ Đã xác nhận (${p.stage2ConfirmedAt || ''})` : '⏳ Chưa xác nhận',
+      stage3: p.stage3Evaluation === 'PASSED' ? `✅ Đạt (${p.stage3EvaluatedAt || ''})`
+        : p.stage3Evaluation === 'FAILED' ? `❌ Không đạt (${p.stage3EvaluatedAt || ''})` : '⏳ Chưa đánh giá',
+      certificate: p.certificateIssued ? `✅ Đã cấp (${p.certificateIssuedAt || ''})` : ''
+    }));
+  const tanBinhSummary = {
+    total: tanBinhRows.length,
+    stage1Done: DB.onboardingProgress.filter(p => p.startDate && new Date(p.startDate).getFullYear() === year && p.stage1Result === 'CONFIRMED').length,
+    stage2Done: DB.onboardingProgress.filter(p => p.startDate && new Date(p.startDate).getFullYear() === year && p.stage2Result === 'CONFIRMED').length,
+    stage3Done: DB.onboardingProgress.filter(p => p.startDate && new Date(p.startDate).getFullYear() === year && p.stage3Evaluation === 'PASSED').length
+  };
+
+  // ---- Sheet 5: Báo cáo Giảng viên nội bộ (nguồn trainingPlans — gần như có sẵn, đóng gói lại layout) ----
+  const byInstructorMonth = new Map();
+  plansOfYear.forEach(plan => {
+    if (!plan.instructor) return;
+    const key = `${plan.instructor}||${plan.month}`;
+    const stats = getTrainingPlanActualStats(plan);
+    const row = byInstructorMonth.get(key) || {
+      instructor: plan.instructor, month: Number(plan.month.split('-')[1]),
+      hours: 0, days: new Set(), ratingSum: 0, ratingCount: 0, participants: 0
+    };
+    row.hours += stats.actualHours;
+    if (plan.actualTrainingDateFrom) row.days.add(new Date(plan.actualTrainingDateFrom).getDate());
+    if (plan.instructorRating != null) { row.ratingSum += plan.instructorRating; row.ratingCount++; }
+    row.participants += plan.actualParticipants || 0;
+    byInstructorMonth.set(key, row);
+  });
+  const instructorRows = [...byInstructorMonth.values()].sort((a, b) => a.instructor.localeCompare(b.instructor) || a.month - b.month)
+    .map(r => ({
+      instructor: r.instructor, hours: Math.round(r.hours * 10) / 10, month: r.month,
+      days: [...r.days].sort((a, b) => a - b).join(','),
+      rating: r.ratingCount ? Math.round((r.ratingSum / r.ratingCount) * 100) / 100 : '',
+      participants: r.participants
+    }));
+
+  return { year, detail, summary, monthRows, yearTotal, tanBinhRows, tanBinhSummary, instructorRows };
+}
+function sumField(rows, key) { return rows.reduce((s, r) => s + (Number(r[key]) || 0), 0); }
+function avgField(rows, key) {
+  const v = rows.map(r => r[key]).filter(x => x !== '' && x != null);
+  return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 1000) / 1000 : '';
+}
+
+// Dựng lại #trYearSelect mỗi lần vào tab PLANS (cùng danh sách năm như Dashboard tdYear ở trên) — giữ
+// nguyên lựa chọn hiện tại của người dùng nếu năm đó vẫn còn trong danh sách (tránh nhảy về mặc định mỗi
+// lần render lại do gõ ô lọc khác trong cùng panel).
+function populateTrainingReportYearSelect() {
+  const sel = document.getElementById('trYearSelect');
+  if (!sel) return;
+  const prev = sel.value;
+  const years = trainingDashboardYearOptions();
+  sel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  sel.value = years.includes(Number(prev)) ? prev : String(new Date().getFullYear());
+}
+function exportTrainingReportFullExcel() {
+  const yearInput = document.getElementById('trYearSelect');
+  const year = Number(yearInput?.value) || new Date().getFullYear();
+  const data = computeTrainingReportFull(year);
+
+  const detailSheet = {
+    sheetName: 'Data chi tiết',
+    columns: [
+      { header: 'Tên Lớp', key: 'className', width: 24 }, { header: 'Bắt Đầu', key: 'startTime', width: 18 },
+      { header: 'Kết Thúc', key: 'endTime', width: 18 }, { header: 'Ngày Tổ Chức', key: 'trainingDay', width: 12 },
+      { header: 'Tháng', key: 'trainingMonth', width: 8 }, { header: 'Thời Lượng (giờ)', key: 'durationHours', width: 14 },
+      { header: 'Đối Tượng Tham Gia', key: 'participantGroup', width: 20 }, { header: 'Giảng Viên', key: 'instructor', width: 20 },
+      { header: 'SL Dự Kiến', key: 'expected', width: 12 }, { header: 'SL Tham Gia', key: 'participated', width: 12 },
+      { header: 'SL Đạt', key: 'passed', width: 10 }, { header: 'Tỉ Lệ Tham Gia', key: 'participationRate', width: 14 },
+      { header: 'Tỉ Lệ Đạt', key: 'passRate', width: 12 }, { header: 'Hình Thức Đánh Giá', key: 'evaluationMethod', width: 28 }
+    ],
+    rows: data.detail
+  };
+  const summarySheet = {
+    sheetName: 'Báo cáo',
+    columns: [
+      { header: 'Tên Lớp', key: 'className', width: 24 }, { header: 'Số Lớp', key: 'classCount', width: 10 },
+      { header: 'Thời Lượng (giờ)', key: 'hoursPerClass', width: 14 }, { header: 'Tổng Số Giờ', key: 'totalHours', width: 12 },
+      { header: 'Ngày Tổ Chức', key: 'organizedDays', width: 18 }, { header: 'Tháng', key: 'month', width: 8 },
+      { header: 'Đối Tượng', key: 'participantGroup', width: 20 }, { header: 'SL Dự Kiến', key: 'expected', width: 12 },
+      { header: 'SL Tham Gia', key: 'participated', width: 12 }, { header: 'Tỉ Lệ Đạt', key: 'passRate', width: 12 }
+    ],
+    rows: data.summary
+  };
+  const monthColumns = [
+    { header: 'Tháng', key: 'month', width: 10 }, { header: 'Số Lớp Dự Kiến Theo Kế Hoạch', key: 'plannedClasses', width: 16 },
+    { header: 'Tổng Số Lớp Thực Hiện', key: 'totalClasses', width: 16 }, { header: 'Tổng Số Giờ Đào Tạo', key: 'totalHours', width: 14 },
+    { header: 'SL Dự Kiến (không tính Tân Binh)', key: 'expectedExTanBinh', width: 18 }, { header: 'SL Dự Kiến', key: 'expected', width: 12 },
+    { header: 'SL Tham Gia (không tính Tân Binh)', key: 'participatedExTanBinh', width: 18 }, { header: 'SL Tham Gia', key: 'participated', width: 12 },
+    { header: 'SL Đạt (không tính Tân Binh)', key: 'passedExTanBinh', width: 18 }, { header: 'SL Đạt', key: 'passed', width: 10 },
+    { header: 'Tỉ Lệ Tham Gia TB', key: 'avgParticipationRate', width: 14 }, { header: 'Tỉ Lệ Tham Gia TB (có Tân Binh)', key: 'avgParticipationRateExTanBinh', width: 18 },
+    { header: 'Tỉ Lệ Đạt TB', key: 'avgPassRate', width: 12 }, { header: 'Tỉ Lệ Hoàn Thành Mục Tiêu', key: 'completionRate', width: 16 }
+  ];
+  const monthTotalSheet = { sheetName: 'Báo cáo tổng hợp', columns: monthColumns, rows: [...data.monthRows, data.yearTotal] };
+  const tanBinhSheet = {
+    sheetName: 'Báo cáo Tân binh',
+    columns: [
+      { header: 'Nhân Viên', key: 'employeeName', width: 22 }, { header: 'Lộ Trình', key: 'pathName', width: 24 },
+      { header: 'Ngày Vào Làm', key: 'startDate', width: 16 }, { header: 'Giai Đoạn 1', key: 'stage1', width: 26 },
+      { header: 'Giai Đoạn 2', key: 'stage2', width: 26 }, { header: 'Giai Đoạn 3', key: 'stage3', width: 26 },
+      { header: 'Chứng Chỉ', key: 'certificate', width: 24 }
+    ],
+    rows: [...data.tanBinhRows,
+      { employeeName: '', pathName: '', startDate: '', stage1: `Tổng: ${data.tanBinhSummary.total}`, stage2: `Đã GĐ1: ${data.tanBinhSummary.stage1Done}`, stage3: `Đã GĐ2: ${data.tanBinhSummary.stage2Done}`, certificate: `Hoàn thành GĐ3: ${data.tanBinhSummary.stage3Done}` }]
+  };
+  const instructorSheet = {
+    sheetName: 'Báo cáo Giảng viên nội bộ',
+    columns: [
+      { header: 'Giảng Viên', key: 'instructor', width: 22 }, { header: 'Thời Lượng Đào Tạo (giờ)', key: 'hours', width: 16 },
+      { header: 'Tháng', key: 'month', width: 8 }, { header: 'Ngày Đào Tạo', key: 'days', width: 18 },
+      { header: 'Điểm Đánh Giá', key: 'rating', width: 12 }, { header: 'Số Lượng Học Viên', key: 'participants', width: 14 }
+    ],
+    rows: data.instructorRows
+  };
+
+  downloadMultiSheetXlsxFromServer(`bao_cao_dao_tao_${data.year}.xlsx`, [detailSheet, summarySheet, tanBinhSheet, monthTotalSheet, instructorSheet]);
 }
 
 // ---------- Nhập Kế Hoạch Từ Excel (theo tháng) ----------
