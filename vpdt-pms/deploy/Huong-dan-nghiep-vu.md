@@ -3009,15 +3009,33 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
 - **Sub-tab "🕐 Hồ Sơ Onboarding" — hàng đợi chờ xác nhận (từ 10/2026, theo
   yêu cầu người dùng)** — hồ sơ Nháp vừa đặt chỗ ở trên KHÔNG hiện ngay ở
   "Quản Lý Hồ Sơ" nữa mà vào 1 **hàng đợi riêng**, gác quyền `hrOnboardingManage`
-  (TÁCH BIỆT hẳn khỏi `hrProfileManage`/`hrProfileEdit`/`hrProfileFullView` —
-  người chỉ phụ trách Onboarding không cần xin thêm quyền Hồ Sơ Nhân Sự để
-  xử lý bước này), luôn hiện **mới tạo trước** (theo ngày tạo). Mỗi dòng có 2
-  nút:
+  **HOẶC** `hrOnboardingProcessManage` (quyền "Toàn Quyền Thao Tác Quy Trình
+  Onboarding", mở từ 11/2026 — xem bên dưới; cả 2 TÁCH BIỆT hẳn khỏi
+  `hrProfileManage`/`hrProfileEdit`/`hrProfileFullView` — người chỉ phụ trách
+  Onboarding không cần xin thêm quyền Hồ Sơ Nhân Sự để xử lý bước này), luôn
+  hiện **mới tạo trước** (theo ngày tạo). Mỗi dòng có 2 nút:
   - **"✅ Xác Nhận"** — mở hồ sơ (form y hệt "Quản Lý Hồ Sơ") để điền tiếp
     thông tin ứng viên; lưu thành công thì hồ sơ tự "tốt nghiệp" khỏi hàng
     đợi, biến mất khỏi tab này và chuyển hẳn sang "Quản Lý Hồ Sơ" — người chỉ
-    có `hrOnboardingManage` được LƯU đúng hồ sơ đang ở hàng đợi này (ngoại lệ
-    duy nhất, không mở rộng ra sửa được hồ sơ khác).
+    có `hrOnboardingManage`/`hrOnboardingProcessManage` được LƯU đúng hồ sơ
+    đang ở hàng đợi này (ngoại lệ duy nhất, không mở rộng ra sửa được hồ sơ
+    khác đã active). **Phạm vi field sửa được KHÁC NHAU theo quyền** (11/2026,
+    theo yêu cầu người dùng "tuyển dụng cần sửa CCCD/MST/BHXH/tài khoản ngân
+    hàng trước khi active"):
+    - Chỉ `hrOnboardingManage` (tầng cũ): sửa được field cơ bản (ngày sinh,
+      địa chỉ, học vấn, người phụ thuộc...) — KHÔNG sửa được CCCD/CMND, Số
+      BHXH, Mã số thuế, tài khoản ngân hàng, kỷ luật, bổ nhiệm/điều động, vị
+      trí kiêm nhiệm.
+    - Có `hrOnboardingProcessManage` (tầng mới, không cần có thêm
+      `hrOnboardingManage`): sửa ĐƯỢC THÊM CCCD/CMND, Số BHXH, Mã số thuế,
+      Số tài khoản/Tên ngân hàng/Tên chủ tài khoản — giấy tờ onboarding cơ
+      bản. VẪN KHÔNG sửa được kỷ luật/bổ nhiệm-điều động/vị trí kiêm nhiệm
+      (field mô tả vòng đời nhân sự đã chính thức, không áp dụng cho người
+      chưa active).
+    - Dù dùng quyền nào, bấm "Lưu" lúc hồ sơ còn đang chờ xác nhận LUÔN kèm
+      theo hành động "Xác Nhận" (chuyển trạng thái active ngay) — nghĩa là
+      chỉ sửa được **1 lần** trước khi hồ sơ active; sau đó chỉ Quản Lý Nhân
+      Sự thật (ở "Quản Lý Hồ Sơ") sửa tiếp được.
   - **"✖ Hủy"** — coi như KHÔNG tuyển ứng viên này (bắt buộc nhập lý do): hồ
     sơ **VẪN Ở LẠI** hàng đợi với trạng thái "🚫 Đã hủy" (phục vụ báo cáo
     "không nhận việc" sau này, KHÔNG xoá), đồng thời tự huỷ luôn quy trình

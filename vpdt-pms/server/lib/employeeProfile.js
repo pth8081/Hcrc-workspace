@@ -824,13 +824,43 @@ function reactivateForRehire(list, employeeCode, newStartDate, actorUsername, ac
 // được file đính kèm hồ sơ, ở đó self access là ĐÚNG ý — chính chủ tải được file CCCD/bằng cấp của mình),
 // còn getProfileForViewer() dưới đây cần phân biệt RÕ 2 trường hợp vì tự xem chính mình phải đi qua lớp
 // lọc selfVisibleFields (GET /me), không phải trả nguyên profile như admin thật.
+// classifyOnboardingQueueBypassActor() (11/2026, theo yêu cầu người dùng "tuyển dụng sửa được hồ sơ
+// Onboarding trước khi active, CCCD/BHXH/MST/tài khoản ngân hàng"): tách RIÊNG khỏi hasAdminProfileAccess()
+// để dùng lại được CHO CẢ đường ĐỌC (GET /by-code, /by-username) lẫn đường SỬA (PATCH /by-code) mà không
+// trộn lẫn với khái niệm "có quyền Hồ Sơ Nhân Sự thật" (hrProfileManage/FullView/Edit) — PATCH cần phân
+// biệt hrProfileFullView (CHỈ xem, không được sửa) khỏi hrProfileEdit/hrProfileManage (sửa được), trong khi
+// GET coi cả 3 quyền đó là "đã có đủ, không cần bypass". Vì vậy hàm này CHỈ xét đúng 2 điều kiện: hồ sơ còn
+// đang PENDING (chưa "Xác Nhận"/active) + user có 1 trong 2 quyền Onboarding — KHÔNG tự xét "đã có quyền
+// Hồ Sơ Nhân Sự thật chưa", để nguyên trách nhiệm đó cho nơi gọi (routes/employeeProfile.js).
+// 2 tầng: 'PROCESS_MANAGER' (quyền MỚI hrOnboardingProcessManage, "Toàn Quyền Thao Tác Quy Trình
+// Onboarding") sửa/xem được RỘNG hơn (thêm CCCD/BHXH/MST/tài khoản ngân hàng — giấy tờ onboarding cơ bản),
+// 'BASE' (hrOnboardingManage cũ) giữ NGUYÊN phạm vi hẹp đã audit trước đây (re-audit lần 7) — KHÔNG mở
+// rộng thêm cho actor chỉ có BASE, tránh âm thầm nới quyền cho những người chỉ được cấp hrOnboardingManage
+// với kỳ vọng cũ. Ưu tiên PROCESS_MANAGER nếu user có cả 2 (quyền mạnh hơn quyết định phạm vi field).
+function classifyOnboardingQueueBypassActor(user, profile) {
+  if (profile?.onboardingQueueStatus !== 'PENDING') return null;
+  if (user?.perms?.hrOnboardingProcessManage) return 'PROCESS_MANAGER';
+  if (user?.perms?.hrOnboardingManage) return 'BASE';
+  return null;
+}
+// resolveOnboardingQueueBypassTier() — biến thể DÀNH RIÊNG cho đường ĐỌC: chỉ trả về tier khi user THỰC SỰ
+// cần đến đường bypass này (chưa có sẵn quyền Hồ Sơ Nhân Sự thật nào khác đã đủ để xem toàn bộ) — dùng để
+// GET /by-code, /by-username quyết định có cần redactFieldsForOnboardingQueueActor() lại response hay
+// không. KHÔNG dùng hàm này cho PATCH (xem chú thích classifyOnboardingQueueBypassActor() ở trên).
+function resolveOnboardingQueueBypassTier(user, profile) {
+  const hasRealFullAccess = !!(((user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit)
+    && hasModuleAccessServer(user, 'hrProfileManageTab')));
+  if (hasRealFullAccess) return null;
+  return classifyOnboardingQueueBypassActor(user, profile);
+}
 function hasAdminProfileAccess(user, profile) {
   return !!(((user?.perms?.hrProfileManage || user?.perms?.hrProfileFullView || user?.perms?.hrProfileEdit)
       && hasModuleAccessServer(user, 'hrProfileManageTab'))
     // Ảnh 2 (9/2026): người chỉ có hrOnboardingManage (KHÔNG có bất kỳ quyền Hồ Sơ Nhân Sự nào) vẫn cần mở
     // được ĐÚNG hồ sơ đang ở hàng đợi (PENDING) để bấm "Xác Nhận" -> sửa tiếp thông tin ứng viên — KHÔNG
     // mở rộng thêm cho hồ sơ đã tốt nghiệp khỏi hàng đợi (onboardingQueueStatus null) hay đã CANCELLED.
-    || (profile.onboardingQueueStatus === 'PENDING' && !!user?.perms?.hrOnboardingManage));
+    // (11/2026) Nay CŨNG đúng cho hrOnboardingProcessManage — xem classifyOnboardingQueueBypassActor().
+    || !!classifyOnboardingQueueBypassActor(user, profile));
 }
 function canViewFullProfile(user, profile) {
   return !!(hasAdminProfileAccess(user, profile) || (profile.username && user.username === profile.username));
@@ -1114,10 +1144,30 @@ const ONBOARDING_QUEUE_RESTRICTED_FIELDS_SET = new Set(ONBOARDING_QUEUE_RESTRICT
 // các field ở ONBOARDING_QUEUE_RESTRICTED_FIELDS khỏi danh sách đầy đủ HR thật được sửa.
 const ONBOARDING_QUEUE_EDITABLE_FIELDS = [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS]
   .filter((f) => !ONBOARDING_QUEUE_RESTRICTED_FIELDS_SET.has(f));
-function redactFieldsForOnboardingQueueActor(profile) {
+// ONBOARDING_QUEUE_RESTRICTED_FIELDS_PROCESS_MANAGER (11/2026, theo yêu cầu người dùng — xem
+// classifyOnboardingQueueBypassActor() ở trên): tầng PROCESS_MANAGER (hrOnboardingProcessManage) được sửa
+// RỘNG hơn tầng BASE — bỏ nationalId/socialInsuranceNo/taxCode/bankAccountNo/bankName/
+// bankAccountHolderName ra khỏi danh sách bị chặn (giấy tờ onboarding cơ bản: CCCD, BHXH, MST, tài khoản
+// lương — cần thiết để nhập liệu ứng viên mới). VẪN GIỮ chặn disciplinaryActions/transfers/
+// secondaryPositions (field quản lý VÒNG ĐỜI nhân sự, không áp dụng được cho người CHƯA active — chưa là
+// nhân viên chính thức, chưa có kỷ luật/bổ nhiệm/vị trí kiêm nhiệm nào để ghi nhận) và
+// profileEditHistory/rehireHistory (lịch sử nội bộ, có thể gián tiếp lộ lịch sử làm việc trước đó của hồ
+// sơ TÁI TUYỂN — không cần cho nghiệp vụ nhập liệu onboarding).
+const ONBOARDING_QUEUE_RESTRICTED_FIELDS_PROCESS_MANAGER = [
+  'disciplinaryActions', 'transfers', 'secondaryPositions',
+  'profileEditHistory', 'rehireHistory'
+];
+const ONBOARDING_QUEUE_RESTRICTED_FIELDS_PROCESS_MANAGER_SET = new Set(ONBOARDING_QUEUE_RESTRICTED_FIELDS_PROCESS_MANAGER);
+const ONBOARDING_QUEUE_EDITABLE_FIELDS_PROCESS_MANAGER = [...SELF_EDITABLE_FIELDS, ...HR_ONLY_EDITABLE_FIELDS]
+  .filter((f) => !ONBOARDING_QUEUE_RESTRICTED_FIELDS_PROCESS_MANAGER_SET.has(f));
+// redactFieldsForOnboardingQueueActor(profile, tier) — tham số `tier` MỚI (11/2026, mặc định undefined ->
+// coi như 'BASE' để KHÔNG đổi hành vi bất kỳ lời gọi cũ nào chưa truyền tham số này): 'PROCESS_MANAGER'
+// dùng danh sách hẹp hơn ở trên (ít field bị xoá hơn), còn lại (kể cả undefined) dùng danh sách BASE cũ.
+function redactFieldsForOnboardingQueueActor(profile, tier) {
   if (!profile) return profile;
   const result = Object.assign({}, profile);
-  for (const f of ONBOARDING_QUEUE_RESTRICTED_FIELDS) delete result[f];
+  const fieldsToRedact = tier === 'PROCESS_MANAGER' ? ONBOARDING_QUEUE_RESTRICTED_FIELDS_PROCESS_MANAGER : ONBOARDING_QUEUE_RESTRICTED_FIELDS;
+  for (const f of fieldsToRedact) delete result[f];
   return result;
 }
 
@@ -1891,7 +1941,8 @@ function computeHrDashboardSummary(profiles, contracts, hrProcesses, storeTypes)
 
 module.exports = {
   STATUSES, GENDERS, EMPLOYMENT_TYPES, WORK_SCHEDULES, MARITAL_STATUSES, SENSITIVE_FIELDS, SENSITIVE_FIELD_LABELS, SELF_EDITABLE_FIELDS, HR_ONLY_EDITABLE_FIELDS, PROFILE_FIELD_LABELS,
-  ONBOARDING_QUEUE_EDITABLE_FIELDS, redactFieldsForOnboardingQueueActor,
+  ONBOARDING_QUEUE_EDITABLE_FIELDS, ONBOARDING_QUEUE_EDITABLE_FIELDS_PROCESS_MANAGER, redactFieldsForOnboardingQueueActor,
+  classifyOnboardingQueueBypassActor, resolveOnboardingQueueBypassTier,
   TRANSFER_TYPES, TRANSFER_TYPE_LABELS, TRANSFER_STATUSES, TRANSFER_STATUS_LABELS,
   computeMonthlyHrReport, computeWeeklyHeadcountFlow, computeSalaryAdjustmentHistory, computeTransfersReport, computeDependentsReport, computeSecondaryPositionsReport, computeHrDashboardSummary,
   CURRENT_WORK_STATUS_DETAILS, NATIONAL_ID_ISSUE_PLACES, LEGAL_ENTITIES,

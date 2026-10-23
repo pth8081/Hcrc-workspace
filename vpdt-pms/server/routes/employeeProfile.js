@@ -275,10 +275,15 @@ router.get('/', async (req, res) => {
 // tự động qua), phục vụ báo cáo đầy đủ 3 trạng thái hàng đợi tại đúng 1 nơi). Luôn sắp xếp MỚI TẠO TRƯỚC
 // (createdAt giảm dần, đúng yêu cầu người dùng). Gác RIÊNG hrOnboardingManage — KHÔNG dùng
 // hrProfileManage/hrProfileFullView (đã xác nhận với người dùng: tab mới này tách biệt hẳn khỏi quyền Hồ
-// Sơ Nhân Sự, dùng đúng quyền quản lý Onboarding đã có sẵn).
+// Sơ Nhân Sự, dùng đúng quyền quản lý Onboarding đã có sẵn). (11/2026) hrOnboardingProcessManage GIỜ
+// CŨNG mở được — người CHỈ có quyền mới (không kèm hrOnboardingManage) vẫn cần thấy hàng đợi để mở hồ sơ
+// ra sửa (xem classifyOnboardingQueueBypassActor()/PATCH /by-code bên dưới), mirror đúng
+// hrpfCanManageOnboarding() (module-hrprofile.js).
 router.get('/onboarding-queue', async (req, res) => {
   try {
-    if (!req.freshUser?.perms?.hrOnboardingManage) return res.status(403).json({ error: 'Bạn không có quyền quản lý Onboarding' });
+    if (!req.freshUser?.perms?.hrOnboardingManage && !req.freshUser?.perms?.hrOnboardingProcessManage) {
+      return res.status(403).json({ error: 'Bạn không có quyền quản lý Onboarding' });
+    }
     const list = (await getAppDataValue('employeeProfiles')) || [];
     const queue = list
       .filter(p => p.onboardingQueueStatus === 'PENDING' || p.onboardingQueueStatus === 'CANCELLED' || p.onboardingQueueStatus === 'CONFIRMED')
@@ -770,10 +775,21 @@ router.get('/by-code/:employeeCode', async (req, res) => {
     // getProfileForViewer() lọc ĐÚNG field nhạy cảm khi chính chủ tự gọi thẳng route này (trước đây trả
     // nguyên hồ sơ không lọc gì, bỏ qua hẳn cấu hình "Trường Xem Của Tôi" — xem chú thích đầy đủ tại
     // getProfileForViewer()/lib/employeeProfile.js).
-    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields);
+    let viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const isSelf = !!(profile.username && req.freshUser.username === profile.username);
     const viewMode = employeeProfile.hasAdminProfileAccess(req.freshUser, profile) ? 'FULL' : (isSelf ? 'SELF' : 'LIMITED');
+    // LỖI ĐÃ VÁ (11/2026, cùng đợt mở rộng hrOnboardingProcessManage sửa hồ sơ Onboarding): route này
+    // trước đây trả NGUYÊN `profile` (getProfileForViewer() không tự lọc gì cho nhánh FULL) cho BẤT KỲ ai
+    // qua được hasAdminProfileAccess() — kể cả actor CHỈ có hrOnboardingManage/hrOnboardingProcessManage
+    // (không có quyền Hồ Sơ Nhân Sự thật), lộ qua ĐỌC cả field mà PATCH /by-code đã chặn SỬA từ trước
+    // (kỷ luật, bổ nhiệm, CCCD, BHXH, MST, ngân hàng, lịch sử sửa/tái tuyển — xem redactFieldsForOnboardingQueueActor()).
+    // Dùng resolveOnboardingQueueBypassTier() (coi hrProfileFullView là "đã có quyền thật", ĐÚNG cho đường
+    // ĐỌC — khác PATCH) để lọc lại đúng tầng BASE/PROCESS_MANAGER trước khi trả về.
+    const onboardingReadBypassTier = employeeProfile.resolveOnboardingQueueBypassTier(req.freshUser, profile);
+    if (onboardingReadBypassTier) {
+      viewable = employeeProfile.redactFieldsForOnboardingQueueActor(viewable, onboardingReadBypassTier);
+    }
     // wiredFields (10/2026, báo cáo rà soát mẫu Excel mới) — 8 cột đọc LIVE từ users/hrProcesses, xem
     // chú thích đầy đủ tại resolveWiredReadOnlyFields() (lib/employeeProfile.js). CHỈ-XEM, không qua
     // applyProfileEdit() — gộp thẳng vào response để client hiển thị cùng hồ sơ.
@@ -801,10 +817,15 @@ router.get('/by-username/:username', async (req, res) => {
     const profile = employeeProfile.findProfileByUsername(list, req.params.username);
     if (!profile) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     // LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở route /by-code phía trên.
-    const viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields);
+    let viewable = employeeProfile.getProfileForViewer(profile, req.freshUser, appData.users || [], appData.hrProfileManagerVisibleFields, appData.hrProfileSelfVisibleFields);
     if (!viewable) return res.status(404).json({ error: 'Không tìm thấy hồ sơ' });
     const isSelf = !!(profile.username && req.freshUser.username === profile.username);
     const viewMode = employeeProfile.hasAdminProfileAccess(req.freshUser, profile) ? 'FULL' : (isSelf ? 'SELF' : 'LIMITED');
+    // LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở route /by-code phía trên.
+    const onboardingReadBypassTier = employeeProfile.resolveOnboardingQueueBypassTier(req.freshUser, profile);
+    if (onboardingReadBypassTier) {
+      viewable = employeeProfile.redactFieldsForOnboardingQueueActor(viewable, onboardingReadBypassTier);
+    }
     // LỖI ĐÃ VÁ (đợt rà soát v25.1→v25.70) — xem chú thích đầy đủ ở route /by-code phía trên.
     const wiredFields = employeeProfile.filterWiredFieldsForViewer(
       employeeProfile.resolveWiredReadOnlyFields(profile, appData.users || [], appData.hrProcesses || []),
@@ -825,7 +846,7 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     // orgChartAppliedVersion (11/2026, cho case 'secondaryPositions') — cùng cách set-position đọc bản
     // Cơ Cấu Tổ Chức đang áp dụng, đọc 1 LẦN ở đây (đỡ phải đọc lại bên trong khối khoá).
     const applied = orgChart.getAppliedVersion(catalogAppData.orgChartVersions || []);
-    let updated, syncSecondaryPositions = null, isOnboardingQueueOnlyActor = false;
+    let updated, syncSecondaryPositions = null, isOnboardingQueueOnlyActor = false, onboardingQueueBypassTier = null;
     await withLockedAppDataValue('employeeProfiles', (list) => {
       const profile = employeeProfile.findProfile(list, req.params.employeeCode);
       if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
@@ -834,9 +855,16 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       // đợi (PENDING) — đây chính là hành động "Xác Nhận" (mở hồ sơ, cập nhật tiếp thông tin ứng viên, lưu
       // lại). KHÔNG mở rộng thêm cho hồ sơ đã tốt nghiệp khỏi hàng đợi hay hồ sơ CANCELLED — người này vẫn
       // không sửa được hồ sơ ACTIVE/ON_LEAVE/INACTIVE thông thường nếu không có hrProfileManage/hrProfileEdit.
+      // (11/2026, theo yêu cầu người dùng "tuyển dụng sửa được CCCD/BHXH/MST/tài khoản ngân hàng trước khi
+      // active") — hrOnboardingProcessManage (quyền MỚI, "Toàn Quyền Thao Tác Quy Trình Onboarding") GIỜ
+      // CŨNG đi qua đúng cánh cửa này, nhưng với allowed-list RỘNG hơn — xem
+      // classifyOnboardingQueueBypassActor() (lib/employeeProfile.js) cho cách phân tầng BASE/
+      // PROCESS_MANAGER. KHÔNG dùng resolveOnboardingQueueBypassTier() ở đây (biến thể đó coi
+      // hrProfileFullView là "đã có quyền thật" — ĐÚNG cho đường ĐỌC, nhưng SAI cho đường SỬA này vì
+      // hrProfileFullView KHÔNG cấp quyền sửa, chỉ canEditProfiles() mới đúng nghĩa "đã có quyền sửa thật").
       const hasFullEditAccess = employeeProfile.canEditProfiles(req.freshUser);
-      const canEditViaOnboardingQueue = profile.onboardingQueueStatus === 'PENDING' && !!req.freshUser?.perms?.hrOnboardingManage;
-      if (!hasFullEditAccess && !canEditViaOnboardingQueue) {
+      onboardingQueueBypassTier = hasFullEditAccess ? null : employeeProfile.classifyOnboardingQueueBypassActor(req.freshUser, profile);
+      if (!hasFullEditAccess && !onboardingQueueBypassTier) {
         throw new HttpError(403, 'Chỉ HR/Admin mới sửa được hồ sơ người khác');
       }
       isOnboardingQueueOnlyActor = !hasFullEditAccess;
@@ -853,10 +881,14 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       // bất kỳ quyền Hồ Sơ Nhân Sự thật nào) trước đây dùng CHUNG allowed-list đầy đủ như HR thật — ghi
       // đè được cả kỷ luật/bổ nhiệm/vị trí kiêm nhiệm/CCCD/BHXH/MST/ngân hàng của hồ sơ (kể cả hồ sơ TÁI
       // TUYỂN mang theo toàn bộ lịch sử cũ). Dùng allowed-list RIÊNG, hẹp hơn, cho actor này — xem
-      // ONBOARDING_QUEUE_EDITABLE_FIELDS (lib/employeeProfile.js).
-      const allowed = isOnboardingQueueOnlyActor
-        ? employeeProfile.ONBOARDING_QUEUE_EDITABLE_FIELDS
-        : [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS];
+      // ONBOARDING_QUEUE_EDITABLE_FIELDS (lib/employeeProfile.js). (11/2026) Tầng PROCESS_MANAGER dùng
+      // ONBOARDING_QUEUE_EDITABLE_FIELDS_PROCESS_MANAGER — rộng hơn (thêm CCCD/BHXH/MST/ngân hàng), vẫn
+      // chặn kỷ luật/bổ nhiệm/vị trí kiêm nhiệm/lịch sử sửa/tái tuyển.
+      const allowed = !isOnboardingQueueOnlyActor
+        ? [...employeeProfile.SELF_EDITABLE_FIELDS, ...employeeProfile.HR_ONLY_EDITABLE_FIELDS]
+        : onboardingQueueBypassTier === 'PROCESS_MANAGER'
+          ? employeeProfile.ONBOARDING_QUEUE_EDITABLE_FIELDS_PROCESS_MANAGER
+          : employeeProfile.ONBOARDING_QUEUE_EDITABLE_FIELDS;
       employeeProfile.applyProfileEdit(profile, req.body, allowed, req.freshUser.username, req.freshUser.name, {
         employmentTypes: catalogAppData.employmentTypes, workSchedules: catalogAppData.workSchedules,
         // 4 catalog MỚI (10/2026, mẫu Excel 90 trường) — xem chú thích case 'legalEntity'/
@@ -903,7 +935,7 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
     // applyProfileEdit() ở trên đã không cho họ SỬA các field này — vẫn lộ qua READ. Lọc lại bằng
     // redactFieldsForOnboardingQueueActor() cho đúng actor này (HR thật vẫn nhận nguyên profile như cũ).
     const responseProfile = isOnboardingQueueOnlyActor
-      ? employeeProfile.redactFieldsForOnboardingQueueActor(updated)
+      ? employeeProfile.redactFieldsForOnboardingQueueActor(updated, onboardingQueueBypassTier)
       : updated;
     res.json({ ok: true, profile: responseProfile });
   } catch (err) { sendCatchError(res, err, `PATCH /api/hr-profile/by-code/${req.params.employeeCode}`); }

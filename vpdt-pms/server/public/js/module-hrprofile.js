@@ -111,7 +111,12 @@ function hrpfCanFullView() { return !!(currentUser.perms?.hrProfileManage || cur
 // Ảnh 2 (9/2026, theo yêu cầu người dùng "dùng hrOnboardingManage cho tab mới") — tab "🕐 Hồ Sơ
 // Onboarding" gác RIÊNG quyền quản lý Onboarding, TÁCH BIỆT hẳn khỏi 3 quyền Hồ Sơ Nhân Sự ở trên (1
 // người có thể có quyền này mà KHÔNG có bất kỳ quyền nào phía trên, hoặc ngược lại).
-function hrpfCanManageOnboarding() { return !!currentUser.perms?.hrOnboardingManage; }
+// (11/2026, theo yêu cầu người dùng "tuyển dụng sửa hồ sơ Onboarding") — hrOnboardingProcessManage
+// ("Toàn Quyền Thao Tác Quy Trình Onboarding") GIỜ CŨNG mở được tab này, mirror đúng
+// classifyOnboardingQueueBypassActor() (lib/employeeProfile.js) + gate GET /onboarding-queue (routes/
+// employeeProfile.js) — người CHỈ có quyền mới (không kèm hrOnboardingManage) vẫn cần thấy được tab để
+// mở hồ sơ ra sửa.
+function hrpfCanManageOnboarding() { return !!(currentUser.perms?.hrOnboardingManage || currentUser.perms?.hrOnboardingProcessManage); }
 
 // hrpfCanViewReports() ĐÃ DỜI sang core.js (9/2026, cùng đợt dời "Báo Cáo" ra module con riêng
 // "hrReport" — xem chú thích tại đó): finishLogin() cần gọi hàm này để hiện/ẩn nút điều hướng NGAY LÚC

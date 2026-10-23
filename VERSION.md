@@ -1,9 +1,81 @@
 # Phiên bản hiện tại
 
-**28.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.10 (2026-11): Onboarding — tuyển dụng sửa được CCCD/BHXH/MST/Tài khoản ngân hàng trước khi "Xác Nhận"
+
+Theo yêu cầu TRỰC TIẾP của người dùng (quản lý tuyển dụng đã tích quyền
+`hrOnboardingProcessManage`, "Toàn Quyền Thao Tác Quy Trình Onboarding", cho
+nhóm phân quyền Tuyển Dụng nhưng vẫn bị chặn sửa CCCD/Mã số thuế khi bấm
+"✅ Xác Nhận" 1 ứng viên trong tab "🕐 Hồ Sơ Onboarding"): mở rộng cơ chế
+"actor chỉ có quyền Onboarding (không có quyền Hồ Sơ Nhân Sự thật) vẫn sửa
+được hồ sơ đang PENDING" (đã có từ trước, xem v27.x "re-audit lần 7") thêm
+1 **tầng mới rộng hơn**, tách biệt hẳn khỏi tầng cũ:
+
+- **Tầng BASE** (`hrOnboardingManage`, như trước — KHÔNG đổi hành vi): vẫn
+  chỉ sửa được field cơ bản (ngày sinh, địa chỉ, học vấn, người phụ
+  thuộc...), vẫn bị chặn CCCD/BHXH/MST/tài khoản ngân hàng/kỷ luật/bổ
+  nhiệm/vị trí kiêm nhiệm/lịch sử sửa-tái tuyển — đúng y hệt bản vá bảo mật
+  trước đây, không bị nới lỏng theo đợt này.
+- **Tầng PROCESS_MANAGER** (`hrOnboardingProcessManage`, quyền mới từ đợt
+  trước — người có quyền này KHÔNG cần thêm `hrOnboardingManage`): sửa
+  ĐƯỢC thêm CCCD/CMND, Số BHXH, Mã số thuế, Số tài khoản/Tên ngân hàng/Tên
+  chủ tài khoản — giấy tờ onboarding cơ bản, cần thiết để nhập liệu ứng
+  viên mới trước khi "Xác Nhận". VẪN bị chặn Kỷ luật/Bổ nhiệm-Điều
+  động/Vị trí kiêm nhiệm/lịch sử sửa-tái tuyển — các field này mô tả
+  **vòng đời nhân sự ĐÃ chính thức**, không áp dụng được cho người CHƯA
+  active (chưa có kỷ luật/bổ nhiệm nào để ghi nhận).
+- Bấm "Lưu" (PATCH) khi hồ sơ còn PENDING vẫn giữ nguyên ý nghĩa "Xác
+  Nhận" như trước (chuyển `onboardingQueueStatus` → `CONFIRMED` +
+  `status` → `ACTIVE` ngay lúc đó, KHÔNG đổi) — nghĩa là actor chỉ sửa
+  được **1 lần duy nhất** trước khi hồ sơ tự chuyển active; sau đó chỉ
+  Quản Lý Nhân Sự thật (`hrProfileManage`/`hrProfileEdit`) sửa tiếp được,
+  đúng yêu cầu "trước khi active tuyển dụng sửa, sau khi active chỉ ql
+  nhân sự sửa". *Lưu ý đã báo riêng cho người dùng: nếu cần SỬA NHIỀU LẦN
+  trước khi active (không tự động Xác Nhận ngay từ lần lưu đầu), đây là
+  thay đổi nghiệp vụ khác, CHƯA làm trong đợt này.*
+- **Lỗ hổng đọc đã vá kèm theo** (phát hiện trong lúc rà soát, không nằm
+  trong yêu cầu gốc nhưng bắt buộc phải vá cùng lúc vì đợt này mở rộng
+  đúng nhóm actor này): `GET /api/hr-profile/by-code` và `/by-username`
+  trước đây trả NGUYÊN hồ sơ không lọc gì cho actor chỉ có
+  `hrOnboardingManage`/`hrOnboardingProcessManage` (chỉ riêng PATCH mới
+  lọc, từ "re-audit lần 7") — nay dùng chung
+  `resolveOnboardingQueueBypassTier()`/`redactFieldsForOnboardingQueueActor()`
+  để lọc đúng tầng ở CẢ đường đọc lẫn ghi.
+- Tab "🕐 Hồ Sơ Onboarding" (`hrpfCanManageOnboarding()`,
+  `GET /api/hr-profile/onboarding-queue`) nay cũng mở được cho người CHỈ
+  có `hrOnboardingProcessManage` (trước đây gác cứng riêng
+  `hrOnboardingManage`, chặn luôn cả lối vào tab nếu thiếu đúng quyền đó).
+
+**File sửa**: `lib/employeeProfile.js` (thêm
+`classifyOnboardingQueueBypassActor()`/`resolveOnboardingQueueBypassTier()`/
+`ONBOARDING_QUEUE_EDITABLE_FIELDS_PROCESS_MANAGER`, mở rộng
+`hasAdminProfileAccess()`/`redactFieldsForOnboardingQueueActor()`),
+`routes/employeeProfile.js` (PATCH `/by-code` dùng tier mới, GET `/by-code`
++ `/by-username` redact theo tier, GET `/onboarding-queue` thêm điều kiện
+quyền), `public/js/module-hrprofile.js` (`hrpfCanManageOnboarding()` mở
+rộng điều kiện).
+
+**Test**: file mới
+`tests/test-hr-onboarding-profile-edit-process-manager.js` (9 kịch bản: cả
+2 tầng, đối chứng HR thật, đối chứng người có cả 2 quyền, cả đường GET lẫn
+PATCH) — PASS toàn bộ; `tests/test-hr-onboarding-queue.js` (bộ test gốc
+của tầng BASE) chạy lại — PASS nguyên vẹn, không regression; các bộ test
+liên quan Nhân Sự/Onboarding khác (`test-hr-lifecycle.js`,
+`test-onboarding-nationalid-race.js`, `test-security-audit-round3.js`,
+`test-trash-sensitive-collections.js`...) chạy lại sạch. 2 lỗi không liên
+quan ở `test-audit-nhansu-onboarding-contract.js` (luồng Tái Tuyển) đã xác
+nhận qua `git stash` là lỗi CŨ có từ trước đợt này, không phải regression.
+
+**Hạn chế đã biết**: không chụp được ảnh demo UI trình duyệt thật cho đợt
+này — kịch bản Playwright dùng chung pattern với
+`tests/test-hr-onboarding-queue-export.js` gặp timeout môi trường (xác
+nhận qua `git stash`: LỖI NÀY CÓ SẴN TRÊN `main` TRƯỚC đợt này, không liên
+quan tới thay đổi — cùng 1 timeout y hệt khi chạy trên code gốc chưa sửa
+gì). Tính năng đã được xác nhận đúng qua bộ test HTTP đầy đủ ở trên.
 
 ## v28.9 (2026-10): Đặt Hàng NCC (Siêu Thị/HO) — tạm vô hiệu hoá luồng Nhập Hàng/Hủy Nhập
 
