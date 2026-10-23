@@ -1,9 +1,75 @@
 # Phiên bản hiện tại
 
-**28.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.8 (2026-10): Hợp Đồng — "🖨️ Xem/Tải Phiếu Phê Duyệt" ở tab Quản Lý Hợp Đồng
+
+**BƯỚC 3** của loạt bổ sung "Phiếu Phê Duyệt" cho mọi màn có luồng duyệt
+(bước 1: `operationOrders` v28.5, bước 2: `vppRegistrations` v28.6) — người
+dùng chỉ định module Hợp Đồng (`contracts`) cho đợt này, dùng để kẹp cùng
+bản in hợp đồng gốc (có watermark, in từ Khung Xem Bảo Vệ — tính năng khác,
+không đụng tới) khi trình ký, chứng minh hợp đồng đã được duyệt nội bộ
+trước khi ký. Trước khi code thật, đã dựng 1 bản demo preview-only (không
+commit) gửi người dùng xem layout trước — người dùng xác nhận ổn rồi mới
+triển khai thật ở đợt này. 2 quyết định QUAN TRỌNG người dùng xác nhận rõ
+ràng, khác hẳn 2 module trước:
+
+- **Vị trí nút**: CHỈ hiện ở tab "📋 Quản Lý Hợp Đồng" (`activeContractSubTab
+  === 'MANAGE'`), KHÔNG hiện ở tab "📋 Phê Duyệt Hợp Đồng" — vì ngay khi
+  `approvalStatus` chuyển `APPROVED`, hồ sơ biến khỏi tab Phê Duyệt và CHỈ
+  còn hiện ở tab Quản Lý (xem `renderContracts()`), nên không có chỗ nào ở
+  tab Phê Duyệt để gắn nút này.
+- **Loại trừ hồ sơ "📥 Nhập Hợp Đồng/Phụ Lục Đã Ký"** (`isSignedImport` —
+  xem `lib/createValidation.js`): hồ sơ này được `approvalStatus = 'APPROVED'`
+  NGAY LÚC TẠO, hoàn toàn KHÔNG qua bước duyệt nào (không có
+  `currentStep`/`history`/`effectiveSteps`/`effectiveApprovers`) — khác hẳn
+  nhánh tạo mới thường đi qua quy trình thật (có đủ các field này). In Phiếu
+  Phê Duyệt cho loại hồ sơ này sẽ sai hoàn toàn (không có gì để chứng minh
+  đã qua duyệt), nên `isContractPostApproval()` gate thêm điều kiện
+  `Array.isArray(c.effectiveSteps) && c.effectiveSteps.length > 0`, không
+  chỉ `approvalStatus === 'APPROVED'` như 2 module trước.
+
+- **`public/js/module-hopdong.js`** (cạnh cụm `buildContractRowHTML`/
+  `runContractAction`): 5 hàm mới — `isContractPostApproval(c)` (xem gate ở
+  trên), `canAccessContractApprovalSlip(user, c)` (admin/người tạo hồ
+  sơ/người duyệt đúng quy trình — dùng `resolveContractApprovalWorkflow(c)`
+  + `isApproverForDeptWorkflow()`, mirror `canApproveContractStep()` đã có),
+  `buildContractApprovalSlipHTML(c)` (ghép vào ĐÚNG khung chung
+  `buildApprovalSlipShellHTML()`/`APPROVAL_SLIP_CSS`/
+  `buildApprovalSignatureColumnHTML()` ở `core.js`; tra tên người tạo qua
+  `DB.users` vì `contracts` không có field `creatorName` riêng),
+  `viewContractApprovalSlip(id)`/`downloadContractApprovalSlip(id)`. Giao
+  diện: 2 tuỳ chọn "👁️ Xem Phiếu Phê Duyệt"/"⬇️ Tải Phiếu Phê Duyệt" THÊM
+  VÀO dropdown "Khác ▾" của từng dòng danh sách ở tab Quản Lý Hợp Đồng —
+  chỉ hiện khi hồ sơ đã phê duyệt hoàn tất qua quy trình thật + đúng người
+  được xem.
+- Không cần permission key mới — tái dùng đúng logic "admin OR người tạo OR
+  người duyệt đúng bước" đã có sẵn, giống khuôn `operationOrders`/`vppRegistrations`.
+
+**Còn lại trong loạt rà soát** (chưa làm, chờ người dùng xác nhận phạm vi
+từng module trước khi làm tiếp): Kho Tài Liệu, Phê Duyệt Giá IT, Đề Nghị
+Thanh Toán (người dùng chủ động dừng ở v28.7, chưa yêu cầu làm lại), Ngân
+Sách, Giấy Phép, Điều Chuyển Kho Đồng Phục, Dự Toán Vận Hành
+(`operationEstimates`, sibling của `operationOrders`), và Đổi Ca (chưa xác
+nhận có cần phiếu hay không).
+
+**Test**: `tests/test-contract-approval-slip.js` (mới, 15 kịch bản) —
+ma trận trạng thái (PENDING/REJECTED/DRAFT/NEEDS_SUPPLEMENT → không hiện;
+APPROVED qua quy trình thật → hiện; APPROVED kiểu "Nhập Đã Ký" → KHÔNG
+hiện), ma trận quyền truy cập, nội dung phiếu đúng (mã hợp đồng, đối tác,
+chân ký kèm ý kiến), view/download đúng/chặn đúng, và xác nhận nút CHỈ hiện
+ở tab Quản Lý (không hiện ở tab Phê Duyệt dù cùng 1 hồ sơ APPROVED) — tất cả
+PASS. Chạy lại toàn bộ test hiện có liên quan Hợp Đồng (`test-contract.js`
+75/75, `test-contract-import-mode-ui-clarity.js`, `test-contract-payment-type-change.js`,
+`test-contract-signed-file-no-approver-block.js`, `test-collapse-contract-budget-doc-forms.js`,
+`test-hr-contract-amendment-ui.js`, `test-audit-nhansu-onboarding-contract.js`)
+— không có regression nào; 2 lỗi trong `test-audit-nhansu-onboarding-contract.js`
+(luồng Tái Tuyển dùng lại mã cũ) đã xác nhận bằng `git stash` là lỗi CŨ, có
+sẵn từ trước, không liên quan tới đợt này. Tự kiểm tra CSP chuẩn ở
+`module-hopdong.js` — sạch, không có `onclick=`/`style="..."` nội tuyến.
 
 ## v28.7 (2026-10): Gỡ bỏ Phiếu Phê Duyệt khỏi Đề Nghị Thanh Toán theo yêu cầu dừng của người dùng
 

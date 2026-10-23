@@ -1193,6 +1193,17 @@ function buildContractRowHTML(c, { addendumCount = 0, isExpanded = false, isChil
   if (c.signedFileUrl && canDownloadContractFile()) {
     secondaryOptions.push({ value: 'viewSigned', label: `👁️ Xem ${signedDocNoun}` });
   }
+  // "🖨️ Xem/Tải Phiếu Phê Duyệt" (10/2026, theo yêu cầu người dùng — kẹp cùng bản in hợp đồng có watermark
+  // khi trình ký để chứng minh đã duyệt nội bộ) — CHỈ hiện ở tab "Quản Lý Hợp Đồng" (activeContractSubTab
+  // === 'MANAGE', xác nhận RÕ với người dùng: hồ sơ biến khỏi tab "Phê Duyệt Hợp Đồng" ngay khi
+  // approvalStatus chuyển APPROVED nên không có chỗ nào ở tab đó để gắn nút này), chỉ khi hồ sơ THỰC SỰ
+  // đi qua quy trình Phê Duyệt (isContractPostApproval loại trừ hồ sơ "📥 Nhập Hợp Đồng/Phụ Lục Đã Ký" —
+  // isSignedImport APPROVED ngay, không qua bước duyệt nào, không có gì để in phiếu) + đúng người được
+  // xem (canAccessContractApprovalSlip: admin/người tạo/người duyệt).
+  if (activeContractSubTab === 'MANAGE' && isContractPostApproval(c) && canAccessContractApprovalSlip(currentUser, c)) {
+    secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu Phê Duyệt' });
+    secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải Phiếu Phê Duyệt' });
+  }
   // "Tải Lại Tài liệu ký" cũng phải mở lại khi signedFileStatus DRAFT (do requestSignedChanges — xem
   // lib/workflowEngine.js contractsSignedFile.supportsRequestChanges), khác REJECTED chỉ ở nhãn nút.
   if (activeContractSubTab === 'MANAGE' && (!c.signedFileUrl || c.signedFileStatus === 'REJECTED' || c.signedFileStatus === 'DRAFT') && canManageContractPaymentClient(currentUser, c)) {
@@ -1292,6 +1303,8 @@ function runContractAction(id, action) {
     case 'approvePaymentTypeChange': approveContractPaymentTypeChangeAction(id); break;
     case 'rejectPaymentTypeChange': rejectContractPaymentTypeChangeAction(id); break;
     case 'startPayment': startContractPaymentAction(id); break;
+    case 'viewSlip': viewContractApprovalSlip(id); break;
+    case 'downloadSlip': downloadContractApprovalSlip(id); break;
     case 'download': {
       const c = DB.contracts.find(x => x.id === id);
       if (!c) return;
@@ -1305,6 +1318,108 @@ function runContractAction(id, action) {
     }
     case 'delete': deleteContractAction(id); break;
   }
+}
+
+// "Phiếu Phê Duyệt" Hợp Đồng (10/2026) — mirror ĐÚNG khuôn isOperationOrderPostApproval()/
+// canAccessOperationOrderApprovalSlip()/buildOperationOrderApprovalSlipHTML() (module-vanhanh.js) và
+// isVppRegistrationPostApproval()/... (module-vpp.js). Mục đích: người dùng kẹp phiếu này CÙNG bản in
+// hợp đồng gốc (có watermark, in từ Khung Xem Bảo Vệ — tính năng khác, không đụng tới) khi trình ký, để
+// chứng minh hợp đồng đã được duyệt nội bộ trước khi ký — vì vậy CHỈ áp dụng cho hồ sơ thực sự đi qua
+// quy trình Phê Duyệt (currentStep/history/effectiveSteps được gán ở nhánh "else" của
+// lib/createValidation.js contracts.extraValidate), KHÔNG áp dụng cho hồ sơ "📥 Nhập Hợp Đồng/Phụ Lục Đã
+// Ký" (isSignedImport — set approvalStatus=APPROVED NGAY LÚC TẠO, KHÔNG set effectiveSteps/history, xem
+// chú thích chi tiết tại nhánh isSignedImport trong file đó) vì hồ sơ đó chưa từng đi qua bước duyệt nào
+// để có gì mà in phiếu. Dùng Array.isArray(c.effectiveSteps) && c.effectiveSteps.length > 0 làm tín hiệu
+// phân biệt — hồ sơ isSignedImport sẽ KHÔNG BAO GIỜ có field này.
+function isContractPostApproval(c) {
+  return c.approvalStatus === 'APPROVED' && Array.isArray(c.effectiveSteps) && c.effectiveSteps.length > 0;
+}
+
+// canAccessContractApprovalSlip: mirror canAccessOperationOrderApprovalSlip()/
+// canAccessVppRegistrationApprovalSlip() — admin, người tạo hồ sơ, hoặc người có vai trò duyệt ở bất kỳ
+// bước nào của quy trình. resolveContractApprovalWorkflow(c) (core.js) đã tự ưu tiên snapshot
+// effectiveSteps/effectiveApprovers của CHÍNH hồ sơ này (nếu có) trước khi rơi về cấu hình theo phòng
+// ban hiện tại — dùng thẳng kết quả đó với isApproverForDeptWorkflow() là ĐÚNG người duyệt thật của hồ
+// sơ này, khớp cách canApproveContractStep() ở core.js đã làm cho nút Duyệt/Từ chối.
+function canAccessContractApprovalSlip(user, c) {
+  if (!user || !c) return false;
+  if (user.perms?.admin) return true;
+  if (c.creator === user.username) return true;
+  return isApproverForDeptWorkflow(resolveContractApprovalWorkflow(c), user.username);
+}
+
+function buildContractApprovalSlipHTML(c) {
+  const wfConfig = resolveContractApprovalWorkflow(c);
+  const wf = { steps: wfConfig.steps || [{ order: 1, name: 'Duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, c.history)).join('');
+
+  // contracts KHÔNG có field creatorName riêng (creatorNameField: null, xem lib/createValidation.js) —
+  // tra tên qua DB.users theo username, khớp đúng cách approveContractAction() đã làm ở trên.
+  const creatorUser = DB.users.find(u => u.username === c.creator);
+
+  const custodianRow = (c.custodianDept && c.custodianDept !== c.dept)
+    ? `<tr><td class="as-label">Đơn vị tiếp nhận &amp; thanh toán:</td><td>${escapeHtml(c.custodianDept)}</td></tr>` : '';
+  const rootContract = c.isAddendum ? DB.contracts.find(r => r.id === c.rootContractId) : null;
+  const addendumRow = c.isAddendum
+    ? `<tr><td class="as-label">Loại hồ sơ:</td><td>Phụ lục hợp đồng${rootContract ? ` — thuộc hợp đồng gốc ${escapeHtml(rootContract.code)}` : ''}</td></tr>`
+    : '';
+
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Tiêu đề:</td><td>${escapeHtml(c.title || '')}</td></tr>
+      <tr><td class="as-label">Đối tác:</td><td>${escapeHtml(c.partner || '')}</td></tr>
+      <tr><td class="as-label">Loại hợp đồng:</td><td>${escapeHtml(c.type || '')}</td></tr>
+      <tr><td class="as-label">Phòng ban đề xuất:</td><td>${escapeHtml(c.dept || '')}</td></tr>
+      ${custodianRow}
+      <tr><td class="as-label">Giá trị hợp đồng:</td><td>${(c.amount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+      <tr><td class="as-label">Thời hạn:</td><td>${escapeHtml(c.startDate || '')} ➔ ${escapeHtml(c.endDate || '')}</td></tr>
+      ${addendumRow}
+    </table>
+    ${c.content ? `<div class="as-section-title">Nội Dung Hợp Đồng</div><table class="as-field-table"><tr><td>${escapeHtml(c.content)}</td></tr></table>` : ''}
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: c.code,
+    title: `Phiếu Phê Duyệt ${c.isAddendum ? 'Phụ Lục Hợp Đồng' : 'Hợp Đồng'}`,
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã ${c.isAddendum ? 'phụ lục' : 'hợp đồng'}: ${escapeHtml(c.code)}`,
+    bodyHTML,
+    requesterRoleLabel: 'Người tạo hồ sơ',
+    requesterName: creatorUser?.name || c.creator,
+    requesterUsername: c.creator,
+    requesterTime: `Tạo lúc: ${escapeHtml(c.createdAt || '')}`,
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — kẹp cùng bản in hợp đồng (có watermark, in từ Khung Xem Bảo Vệ) khi trình ký, để xác nhận hợp đồng đã được phê duyệt nội bộ trước khi ký. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
+}
+
+function viewContractApprovalSlip(id) {
+  const c = DB.contracts.find(item => item.id === id);
+  if (!c) return;
+  if (!isContractPostApproval(c)) return alert('Chỉ xem được Phiếu Phê Duyệt sau khi hợp đồng đã được phê duyệt hoàn tất qua quy trình Phê Duyệt (không áp dụng cho hồ sơ "Nhập Hợp Đồng/Phụ Lục Đã Ký").');
+  if (!canAccessContractApprovalSlip(currentUser, c)) return alert('⛔ Bạn không có quyền xem Phiếu Phê Duyệt của hợp đồng này (chỉ người tạo hồ sơ, người duyệt hoặc admin).');
+
+  document.getElementById('viewModalTitle').innerText = `🖨️ Phiếu Phê Duyệt ${c.isAddendum ? 'Phụ Lục ' : ''}Hợp Đồng (${c.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${c.dept} | Đối tác: ${c.partner}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildContractApprovalSlipHTML(c);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadContractApprovalSlip(id) {
+  const c = DB.contracts.find(item => item.id === id);
+  if (!c) return;
+  if (!isContractPostApproval(c)) return alert('Chỉ tải được Phiếu Phê Duyệt sau khi hợp đồng đã được phê duyệt hoàn tất qua quy trình Phê Duyệt (không áp dụng cho hồ sơ "Nhập Hợp Đồng/Phụ Lục Đã Ký").');
+  if (!canAccessContractApprovalSlip(currentUser, c)) return alert('⛔ Bạn không có quyền tải Phiếu Phê Duyệt của hợp đồng này (chỉ người tạo hồ sơ, người duyệt hoặc admin).');
+
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Hợp Đồng - ${escapeHtml(c.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildContractApprovalSlipHTML(c)}</body></html>`);
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyet_HopDong_${c.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function deleteContractAction(id) {
