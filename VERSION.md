@@ -1,9 +1,82 @@
 # Phiên bản hiện tại
 
-**28.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.7** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.7 (2026-10): Gỡ bỏ Phiếu Phê Duyệt khỏi Đề Nghị Thanh Toán theo yêu cầu dừng của người dùng
+
+Sau khi xem ảnh demo "Phiếu Phê Duyệt" ở v28.6, người dùng quyết định GIỮ
+NGUYÊN phần Văn Phòng Phẩm (`vppRegistrations`) nhưng yêu cầu DỪNG LẠI và
+gỡ hẳn phần Đề Nghị Thanh Toán (`paymentRequests`) ra khỏi `main` để xem
+lại sau — **đây KHÔNG phải lỗi kỹ thuật**, chỉ là quyết định tạm dừng của
+người dùng để cân nhắc thêm trước khi triển khai phần này.
+
+- **`public/js/module-thanhtoan.js`**: gỡ sạch 5 hàm đã thêm ở v28.6 —
+  `isPaymentRequestPostApproval()`, `canAccessPaymentRequestApprovalSlip()`,
+  `buildPaymentRequestApprovalSlipHTML()`, `viewPaymentRequestApprovalSlip()`,
+  `downloadPaymentRequestApprovalSlip()` — cùng phần wiring 2 nút "👁️ Xem
+  Phiếu"/"⬇️ Tải Phiếu" trong cell hành động của `renderPaymentRequests()`.
+  Module trở lại ĐÚNG hành vi trước v28.6, không còn dấu vết nào của tính
+  năng này.
+- Xoá file `tests/test-payment-requests-approval-slip.js` (test riêng cho
+  tính năng vừa gỡ).
+- **Phần Văn Phòng Phẩm (`vppRegistrations`) ở v28.6 bên dưới GIỮ NGUYÊN
+  KHÔNG đổi** — người dùng đã xem ảnh demo và đồng ý giữ lại.
+- Khi nào người dùng xác nhận muốn làm lại Phiếu Phê Duyệt cho Đề Nghị
+  Thanh Toán, sẽ làm ở 1 đợt merge riêng (tái dùng đúng thiết kế đã có ở
+  v28.6, không cần thiết kế lại).
+
+**Test**: chạy lại toàn bộ test hiện có của `module-thanhtoan.js` (không
+còn file approval-slip vừa xoá) — không có regression. Chạy lại toàn bộ
+test của `module-vpp.js` (`test-vpp-registrations-approval-slip.js` +
+8 file test VPP khác) — vẫn pass đầy đủ, xác nhận việc gỡ payment không
+ảnh hưởng gì tới VPP. Tự kiểm tra lại CSP chuẩn ở `module-thanhtoan.js`
+sau khi gỡ — sạch, không còn đoạn code treo/dở dang nào.
+
+## v28.6 (2026-10): Văn Phòng Phẩm — "🖨️ Xem/Tải Phiếu Phê Duyệt" (tiếp nối đợt Đặt Hàng NCC)
+
+**BƯỚC 2** của loạt bổ sung "Phiếu Phê Duyệt" cho mọi màn có luồng duyệt
+(bước 1 là `operationOrders` ở v28.5) — người dùng chỉ định module Văn
+Phòng Phẩm (`vppRegistrations`) cho đợt này, cùng yêu cầu "căn chỉnh cân
+đối" như khung chung đã có. (Đợt này ban đầu cũng làm cùng lúc Đề Nghị
+Thanh Toán — đã gỡ lại ở v28.7 ngay trên theo yêu cầu dừng của người dùng,
+xem mục đó để biết lý do.)
+
+- **`public/js/module-vpp.js`** (cạnh cụm `openVppRegModal`/
+  `renderVppRegistrations`): 5 hàm mới — `isVppRegistrationPostApproval(r)`
+  (chỉ `status === 'APPROVED'`, KHÁC `operationOrders` vì `vppRegistrations`
+  không có trạng thái "sau duyệt" nào khác), `canAccessVppRegistrationApprovalSlip(user, r)`
+  (admin/người đăng ký/người duyệt đúng quy trình — mirror
+  `canAccessOperationOrderApprovalSlip()`), `buildVppRegistrationApprovalSlipHTML(r)`
+  (ghép vào ĐÚNG khung chung `buildApprovalSlipShellHTML()`/`APPROVAL_SLIP_CSS`/
+  `buildApprovalSignatureColumnHTML()` ở `core.js`), `viewVppRegistrationApprovalSlip(id)`/
+  `downloadVppRegistrationApprovalSlip(id)`. Giao diện: 2 nút "👁️ Xem Phiếu
+  Phê Duyệt"/"⬇️ Tải Phiếu Phê Duyệt" THÊM VÀO khối nút của modal "Xử Lý
+  Đăng Ký Văn Phòng Phẩm" (cả 2 nhánh đang chờ duyệt/chỉ xem), cộng 2 tuỳ
+  chọn tương ứng ở dropdown "Khác ▾" của từng dòng danh sách — chỉ hiện khi
+  đăng ký ĐÃ phê duyệt và đúng người được xem.
+- Không cần permission key mới — tái dùng đúng logic "admin OR người đăng
+  ký OR người duyệt đúng bước" đã có sẵn, giống khuôn `operationOrders`/
+  `carRegs`.
+
+**Còn lại trong loạt rà soát** (chưa làm, chờ người dùng xác nhận phạm vi
+từng module trước khi làm tiếp): Kho Tài Liệu, Hợp Đồng (2 loại phiếu độc
+lập — gốc + tài liệu ký), Phê Duyệt Giá IT, Đề Nghị Thanh Toán (xem v28.7),
+Ngân Sách, Giấy Phép, Điều Chuyển Kho Đồng Phục, và Đổi Ca (chưa xác nhận
+có cần phiếu hay không).
+
+**Test**: `tests/test-vpp-registrations-approval-slip.js` (mới, 13 kịch
+bản qua Playwright thật — ma trận status, ma trận quyền truy cập, nội
+dung phiếu + chân ký/ý kiến, chặn xem/tải khi chưa phê duyệt hoặc không có
+quyền, giao diện dropdown + modal), cùng khuôn `test-operation-order-approval-slip.js`.
+Chạy lại toàn bộ test hiện có liên quan đến VPP (`test-vpp.js`,
+`test-vpp-registrations-scope.js`, `test-collapse-vpp-uniform-forms.js`,
+`test-office-vpp-cancel-step1.js`, `test-khoi0-carregs-vppregistrations-gate.js`,
+`test-vpp-dept-headcount-missing-block.js`, `test-vppregistrations-deadline-utc.js`)
+cộng `test-operation-order-approval-slip.js` — không có regression. Tự
+kiểm tra CSP chuẩn (`data-op`, không inline onclick/style) — sạch.
 
 ## v28.5 (2026-10): Đặt Hàng NCC — "🖨️ Xem/Tải Phiếu Phê Duyệt" (chân ký, format giống Đăng Ký Xe/Văn Bản Trình)
 
