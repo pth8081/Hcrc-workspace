@@ -17,6 +17,11 @@ let _hrpfMySelfVisibleFields = []; // cache tín hiệu field nhạy cảm đư�
   // lib/employeeProfile.js) — mặc định [] (opt-in, 9/2026, xem renderHrpfProfileForm() canSee()).
 let _hrpfManageList = [];  // cache danh sách nhẹ (employeeCode/username/status/updatedAt) của GET /
 let _hrpfManageDetailCode = null; // employeeCode đang mở trong #hrpfDetailModal
+// (11/2026) hồ sơ ĐẦY ĐỦ vừa tải về khi mở #hrpfDetailModal — dùng để biết `onboardingQueueStatus` của
+// hồ sơ đang mở (quyết định có hỏi "Kích hoạt ngay hay chỉ Lưu" ở saveHrpfManageProfile() hay không) mà
+// KHÔNG phụ thuộc _hrpfManageList (actor chỉ có hrOnboardingProcessManage/hrOnboardingManage không gọi
+// được GET /api/hr-profile chung nên danh sách đó rỗng với họ — xem chú thích ở saveHrpfManageProfile()).
+let _hrpfManageDetailProfile = null;
 let _hrpfManageDetailReadOnly = false; // true = đang mở #hrpfDetailModal ở chế độ "👁️ Xem" (chỉ đọc,
   // KHÔNG phải 1 tầng quyền mới — cùng quyền hrProfileManage như "✏️ Sửa", chỉ khác cách hiển thị)
 
@@ -549,6 +554,7 @@ function renderHrProfileManageList() {
       <td class="p-2 space-x-1 whitespace-nowrap">
         <button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="true" class="px-2 py-1 rounded text-[11px] font-bold bg-gray-500 text-white hover:bg-gray-600">👁️ Xem</button>
         ${hrpfCanEdit() ? `<button type="button" data-op="openHrpfDetailModal" data-arg0="${escapeHtml(p.employeeCode)}" data-arg1="false" class="px-2 py-1 rounded text-[11px] font-bold bg-teal-700 text-white hover:bg-teal-800">✏️ Sửa</button>` : ''}
+        ${hrpfCanEdit() && p.onboardingQueueStatus === 'PENDING' ? `<button type="button" data-op="activateHrpfOnboardingProfile" data-arg0="${escapeHtml(p.employeeCode)}" class="px-2 py-1 rounded text-[11px] font-bold bg-indigo-600 text-white hover:bg-indigo-700">🚀 Kích Hoạt</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -567,6 +573,7 @@ async function openHrpfDetailModal(employeeCode, readOnlyArg) {
   _hrpfManageDetailReadOnly = (readOnlyArg === true || readOnlyArg === 'true');
   try {
     const data = await hrProfileApiCall('GET', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}`);
+    _hrpfManageDetailProfile = data.profile;
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     hrpfPopulateDisciplinaryTypeDatalists();
     document.getElementById('hrpfDetailModalTitle').textContent = _hrpfManageDetailReadOnly ? '👁️ Hồ Sơ Nhân Sự (chỉ xem)' : '✏️ Hồ Sơ Nhân Sự (đang sửa)';
@@ -580,20 +587,54 @@ function closeHrpfDetailModal() {
   document.getElementById('hrpfDetailModal').classList.add('hidden');
   _hrpfManageDetailReadOnly = false;
   _hrpfManageDetailCode = null;
+  _hrpfManageDetailProfile = null;
 }
 
 async function saveHrpfManageProfile() {
   if (!_hrpfManageDetailCode) return;
   const payload = collectHrpfProfileFormValues('MANAGE');
+  // (11/2026, theo yêu cầu người dùng — "khi sửa hiện lên có active hồ sơ không, nếu ấn không active thì
+  // chỉ lưu hồ sơ, chờ đến khi active, nhân sự có thể tự active ở danh sách quản lý hồ sơ"): hồ sơ đang
+  // PENDING (chưa qua "Xác Nhận" Onboarding) — Lưu thành công TỪ TRƯỚC TỚI NAY luôn tự Kích Hoạt (chuyển
+  // CONFIRMED+ACTIVE) ngay trong cùng request (xem routes/employeeProfile.js PATCH /by-code). Giờ hỏi rõ
+  // actor muốn Kích Hoạt NGAY hay CHỈ LƯU (giữ PENDING, sửa tiếp được sau, HR tự Kích Hoạt sau ở danh sách
+  // Quản Lý Hồ Sơ — xem activateHrpfOnboardingProfile()) — dùng confirm() nhị phân, cùng khuôn
+  // toggleHrpfManualStatus() ngay phía trên đang dùng cho 1 quyết định nhị phân tương tự trong chính file
+  // này. Hồ sơ KHÔNG PENDING thì không hỏi gì, lưu bình thường như cũ.
+  if (_hrpfManageDetailProfile && _hrpfManageDetailProfile.onboardingQueueStatus === 'PENDING') {
+    const activateNow = confirm(
+      'Hồ sơ này đang ở trạng thái CHỜ KÍCH HOẠT (Onboarding).\n\n' +
+      'Nhấn OK để LƯU & KÍCH HOẠT NGAY — hồ sơ chuyển sang Quản Lý Hồ Sơ chính thức, SẼ KHÔNG sửa tiếp được qua đây nữa (chỉ Nhân Sự có quyền Hồ Sơ Nhân Sự mới sửa tiếp được).\n\n' +
+      'Nhấn Hủy để CHỈ LƯU (chưa Kích Hoạt) — hồ sơ vẫn ở hàng đợi, sửa tiếp được sau, chờ Nhân Sự tự Kích Hoạt khi sẵn sàng.'
+    );
+    payload.activateOnboarding = activateNow;
+  }
   try {
     const data = await hrProfileApiCall('PATCH', `/api/hr-profile/by-code/${encodeURIComponent(_hrpfManageDetailCode)}`, payload);
     alert('✅ Đã lưu Hồ Sơ Nhân Sự.');
+    _hrpfManageDetailProfile = data.profile;
     document.getElementById('hrpfDetailBody').innerHTML = renderHrpfProfileForm(data.profile, { scope: 'MANAGE', readOnly: _hrpfManageDetailReadOnly });
     hrpfPopulateDisciplinaryTypeDatalists();
     // Ảnh 2: lưu thành công có thể chính là hành động "Xác Nhận" (hồ sơ vừa tốt nghiệp khỏi hàng đợi
     // Onboarding) — chỉ gọi ĐÚNG list mà actor thật sự có quyền gọi (người CHỈ có hrOnboardingManage KHÔNG
     // gọi được GET /api/hr-profile chung, 403), tránh alert lỗi giả sau 1 lượt lưu vừa thành công.
     if (hrpfCanFullView()) loadHrProfileManageList();
+    if (hrpfCanManageOnboarding()) loadHrpfOnboardingQueue();
+  } catch (err) {
+    alert('⛔ ' + err.message);
+  }
+}
+
+// activateHrpfOnboardingProfile() — (11/2026, theo yêu cầu người dùng) nút "🚀 Kích Hoạt" ở danh sách
+// Quản Lý Hồ Sơ chính, CHỈ hiện cho HR thật (hrpfCanEdit(), mirror đúng canEditProfiles() server) — kích
+// hoạt NGAY 1 hồ sơ PENDING (đã Lưu-nhưng-chưa-Kích-Hoạt) mà KHÔNG cần mở đúng tab "🕐 Hồ Sơ Onboarding".
+async function activateHrpfOnboardingProfile(employeeCode) {
+  employeeCode = String(employeeCode);
+  if (!confirm('Kích hoạt (Active) hồ sơ nhân viên này? Sau khi Kích Hoạt, hồ sơ chuyển hẳn sang Quản Lý Hồ Sơ chính thức.')) return;
+  try {
+    await hrProfileApiCall('POST', `/api/hr-profile/by-code/${encodeURIComponent(employeeCode)}/activate-onboarding`, {});
+    alert('✅ Đã kích hoạt hồ sơ!');
+    loadHrProfileManageList();
     if (hrpfCanManageOnboarding()) loadHrpfOnboardingQueue();
   } catch (err) {
     alert('⛔ ' + err.message);

@@ -1,9 +1,70 @@
 # Phiên bản hiện tại
 
-**28.10** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.11** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.11 (2026-11): Onboarding — tách "Lưu" khỏi "Kích Hoạt" + nút Kích Hoạt riêng ở Quản Lý Hồ Sơ
+
+Tiếp nối trực tiếp v28.10 ngay bên dưới — đóng đúng khoảng trống đã ghi chú
+ở đó ("*nếu cần SỬA NHIỀU LẦN trước khi active... CHƯA làm trong đợt
+này*"). Theo yêu cầu TRỰC TIẾP của người dùng, sau khi được báo phát hiện
+"bấm Lưu hồ sơ PENDING = tự động Xác Nhận NGAY, chỉ sửa được 1 lần":
+
+- **Khi Lưu 1 hồ sơ đang PENDING** (ở màn "Hồ Sơ Nhân Sự" — scope MANAGE),
+  client giờ hỏi rõ: "✅ Lưu & Kích Hoạt Ngay" hay "💾 Chỉ Lưu (Chưa Kích
+  Hoạt)" — chọn vế sau thì field vừa sửa vẫn được lưu đúng, nhưng
+  `onboardingQueueStatus` giữ nguyên `PENDING` (không tự chuyển
+  `CONFIRMED`/`ACTIVE`) — sửa tiếp được bao nhiêu lần tuỳ ý cho tới khi
+  thật sự Kích Hoạt. Hồ sơ không PENDING thì không hỏi gì, Lưu bình
+  thường như trước.
+- Server (`PATCH /api/hr-profile/by-code/:code`) nhận thêm field tạm
+  `activateOnboarding` trong payload (không lưu vào hồ sơ) — **mặc định
+  (field vắng mặt) vẫn Kích Hoạt luôn như hành vi CŨ**, tương thích ngược
+  100% với mọi lối gọi API khác (import, script, test cũ) — chỉ actor
+  CHỦ ĐỘNG gửi `activateOnboarding: false` mới giữ PENDING.
+- **Nút "🚀 Kích Hoạt" MỚI** ở danh sách "Quản Lý Hồ Sơ" chính — chỉ hiện
+  cho HR thật (`hrProfileManage`/`hrProfileEdit`) trên dòng hồ sơ đang
+  PENDING — Kích Hoạt ngay 1 hồ sơ Lưu-chưa-Kích-Hoạt mà KHÔNG bắt buộc
+  phải mở đúng tab "🕐 Hồ Sơ Onboarding", đúng yêu cầu "nhân sự có thể tự
+  active ở danh sách quản lý hồ sơ". Route mới
+  `POST /api/hr-profile/by-code/:code/activate-onboarding`, gác ĐÚNG HR
+  thật (KHÔNG mở cho `hrOnboardingProcessManage`/`hrOnboardingManage` —
+  mục đích route này là "nhân sự tự kích hoạt", không phải thêm 1 đường
+  kích hoạt nữa cho tuyển dụng).
+- **Thay đổi hiển thị kèm theo** (cần thiết để nút "Kích Hoạt" có chỗ bấm):
+  danh sách "Quản Lý Hồ Sơ" (`GET /api/hr-profile`) nay cũng hiện hồ sơ
+  PENDING cho HR thật (`canEditProfiles()`) — trước đây PENDING luôn ẩn
+  hẳn khỏi màn này, chỉ thấy qua tab Onboarding. Actor KHÔNG phải HR thật
+  (kể cả chỉ có `hrProfileFullView`, hoặc chỉ có quyền Onboarding) vẫn
+  KHÔNG thấy gì thêm ở đây — giữ nguyên phạm vi cũ. Hồ sơ `CANCELLED` vẫn
+  luôn ẩn khỏi danh sách này với MỌI actor, không đổi.
+
+**File sửa**: `routes/employeeProfile.js` (GET `/` thêm điều kiện hiện
+PENDING cho HR thật; PATCH `/by-code` đọc `activateOnboarding`; route mới
+`POST /by-code/:code/activate-onboarding`), `public/js/module-hrprofile.js`
+(`saveHrpfManageProfile()` hỏi Active/Chỉ Lưu khi PENDING, hàm mới
+`activateHrpfOnboardingProfile()`, nút "🚀 Kích Hoạt" ở danh sách chính).
+
+**Test**: mở rộng `tests/test-hr-onboarding-profile-edit-process-manager.js`
+(+9 kịch bản: mặc định vẫn Kích Hoạt, `activateOnboarding:false` giữ
+PENDING, sửa tiếp lần 2, route Kích Hoạt mới — HR thật thành công/actor
+khác 403/hồ sơ sai trạng thái 400/hồ sơ không tồn tại 404, GET / hiện
+PENDING cho HR thật/không hiện cho chỉ-xem, CANCELLED luôn ẩn) — 19/19
+PASS; `tests/test-hr-onboarding-queue.js` cập nhật 1 assertion theo đúng
+hành vi mới đã xác nhận (PENDING nay HIỆN ở Quản Lý Hồ Sơ cho HR thật) —
+9/9 PASS; chạy lại 20 file test liên quan Hồ Sơ Nhân Sự/Onboarding khác —
+không regression (1 lỗi không liên quan ở `test-hr-profile.js` route
+`/employee-directory` và 2 timeout Playwright pre-existing ở
+`test-hr-profile-legacy-fields.js`/`test-hr-onboarding-queue-export.js` —
+cả 3 đã xác nhận qua `git stash` là lỗi CŨ có sẵn trên `main` trước đợt
+này).
+
+**Hạn chế đã biết**: không chụp được ảnh demo UI trình duyệt thật (cùng 1
+vấn đề môi trường Playwright pre-existing đã ghi ở v28.10) — thay bằng
+transcript HTTP đầy đủ gọi thật qua từng route mới, lưu kèm trong phiên
+làm việc.
 
 ## v28.10 (2026-11): Onboarding — tuyển dụng sửa được CCCD/BHXH/MST/Tài khoản ngân hàng trước khi "Xác Nhận"
 

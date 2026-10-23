@@ -2,8 +2,14 @@
 //
 // Regression test cho "Ảnh 2" (9/2026, theo yêu cầu người dùng) — tab "🕐 Hồ Sơ Onboarding"
 // (module-hrprofile.js) hoạt động như hàng đợi cho hồ sơ nháp vừa đặt chỗ lúc tạo Onboarding:
-//   - onboardingQueueStatus='PENDING' -> KHÔNG hiện ở "Quản Lý Hồ Sơ" (GET /api/hr-profile), CHỈ hiện ở
-//     GET /api/hr-profile/onboarding-queue (gác riêng hrOnboardingManage, KHÔNG dùng hrProfileManage).
+//   - onboardingQueueStatus='PENDING' -> hiện ở GET /api/hr-profile/onboarding-queue (gác riêng
+//     hrOnboardingManage/hrOnboardingProcessManage, KHÔNG dùng hrProfileManage). (11/2026, theo yêu cầu
+//     người dùng — "nhân sự có thể tự active ở danh sách quản lý hồ sơ mà không cần vào quản lý hồ sơ
+//     onboarding") HR THẬT (canEditProfiles() — hrProfileManage/hrProfileEdit) GIỜ CŨNG thấy hồ sơ PENDING
+//     ở "Quản Lý Hồ Sơ" (GET /api/hr-profile) để có thể bấm "🚀 Kích Hoạt" ngay tại đó — xem
+//     test-hr-onboarding-profile-edit-process-manager.js cho bộ test đầy đủ của thay đổi này. Actor KHÔNG
+//     có canEditProfiles() thật (vd chỉ hrProfileFullView, hoặc chỉ hrOnboardingManage/
+//     hrOnboardingProcessManage) vẫn KHÔNG thấy gì thêm ở GET /api/hr-profile — giữ nguyên phạm vi cũ.
 //   - "Hủy" (POST .../onboarding-queue/cancel): bắt buộc lý do, chuyển CANCELLED — hồ sơ VẪN Ở LẠI hàng
 //     đợi (không xoá) + cascade huỷ hrProcesses ONBOARDING liên kết (nếu còn IN_PROGRESS).
 //   - "Xác Nhận" (PATCH /api/hr-profile/by-code/:code lúc đang PENDING): người CHỈ có hrOnboardingManage
@@ -119,12 +125,16 @@ async function main() {
   const run = createRunner();
 
   try {
-    await run.run('Sau khi tạo Onboarding: hồ sơ PENDING KHÔNG hiện ở GET /api/hr-profile (Quản Lý Hồ Sơ)', async () => {
+    // (11/2026, theo yêu cầu người dùng — xem chú thích đầu file) HR THẬT giờ THẤY hồ sơ PENDING ngay ở
+    // Quản Lý Hồ Sơ (để tự Kích Hoạt tại đó, không bắt buộc qua tab Onboarding) — assertion đổi từ `false`
+    // (trước đây luôn ẩn) sang `true`, đúng hành vi mới đã xác nhận với người dùng. Bộ test đầy đủ hơn
+    // (actor KHÔNG phải HR thật vẫn không thấy gì thêm) nằm ở test-hr-onboarding-profile-edit-process-manager.js.
+    await run.run('Sau khi tạo Onboarding: hồ sơ PENDING nay HIỆN ở GET /api/hr-profile (Quản Lý Hồ Sơ) cho HR thật', async () => {
       resetAppData();
       seedQueuedProfile('NV001', 1);
       const res = await api('GET', '/api/hr-profile', undefined, HR_MGR);
       assertEqual(res.status, 200, 'HR_MGR gọi GET / thành công');
-      assertEqual(res.body.profiles.some(p => p.employeeCode === 'NV001'), false, 'Hồ sơ PENDING phải bị lọc khỏi Quản Lý Hồ Sơ');
+      assertEqual(res.body.profiles.some(p => p.employeeCode === 'NV001'), true, 'HR thật (canEditProfiles) phải thấy hồ sơ PENDING ở Quản Lý Hồ Sơ (11/2026)');
     });
 
     await run.run('GET /onboarding-queue — 403 nếu không có hrOnboardingManage (kể cả hrProfileManage)', async () => {

@@ -3032,10 +3032,16 @@ thuộc, học vấn), TÁCH RIÊNG khỏi hồ sơ tài khoản đăng nhập (
       bản. VẪN KHÔNG sửa được kỷ luật/bổ nhiệm-điều động/vị trí kiêm nhiệm
       (field mô tả vòng đời nhân sự đã chính thức, không áp dụng cho người
       chưa active).
-    - Dù dùng quyền nào, bấm "Lưu" lúc hồ sơ còn đang chờ xác nhận LUÔN kèm
-      theo hành động "Xác Nhận" (chuyển trạng thái active ngay) — nghĩa là
-      chỉ sửa được **1 lần** trước khi hồ sơ active; sau đó chỉ Quản Lý Nhân
-      Sự thật (ở "Quản Lý Hồ Sơ") sửa tiếp được.
+    - **Bấm "Lưu" lúc hồ sơ còn đang chờ xác nhận (11/2026, theo yêu cầu
+      người dùng)** — hệ thống hỏi rõ: "✅ Lưu & Kích Hoạt Ngay" (giữ
+      nguyên hành động "Xác Nhận" cũ, chuyển trạng thái active ngay) hay
+      "💾 Chỉ Lưu (Chưa Kích Hoạt)" (field vừa sửa vẫn được lưu, hồ sơ VẪN
+      ở hàng đợi, sửa tiếp được bao nhiêu lần tuỳ ý cho tới khi thật sự
+      Kích Hoạt) — không còn bắt buộc chỉ sửa được 1 lần như trước. Khi
+      sẵn sàng, Nhân Sự thật có thể tự bấm nút **"🚀 Kích Hoạt"** MỚI ngay
+      ở "Quản Lý Hồ Sơ" (hồ sơ Lưu-chưa-Kích-Hoạt nay cũng hiện tại đây
+      cho Nhân Sự thật, kèm badge "🕓 Chuẩn bị") — không bắt buộc phải mở
+      lại đúng tab "🕐 Hồ Sơ Onboarding" này.
   - **"✖ Hủy"** — coi như KHÔNG tuyển ứng viên này (bắt buộc nhập lý do): hồ
     sơ **VẪN Ở LẠI** hàng đợi với trạng thái "🚫 Đã hủy" (phục vụ báo cáo
     "không nhận việc" sau này, KHÔNG xoá), đồng thời tự huỷ luôn quy trình

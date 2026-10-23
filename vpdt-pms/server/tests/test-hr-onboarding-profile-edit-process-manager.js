@@ -36,7 +36,11 @@ const HR_ONBOARD_BASE = { username: 'hronb1', name: 'Phụ Trách Onboarding (Ba
 // quyền mạnh hơn ĐỦ để tự nó mở ra đường bypass, không cần cả 2 quyền cùng lúc.
 const RECRUIT_PM = { username: 'tuyendung1', name: 'Tuyển Dụng (Process Manager)', dept: 'Phòng Nhân Sự', perms: { hrOnboardingProcessManage: true }, active: true };
 const EMP1 = { username: 'emp1', name: 'Nhân Viên Một', dept: 'Phòng Kinh Doanh', perms: {}, active: true };
-let USERS = [ADMIN, HR_MGR, HR_ONBOARD_BASE, RECRUIT_PM, EMP1];
+// HR chỉ có quyền XEM đầy đủ (hrProfileFullView), KHÔNG có hrProfileManage/hrProfileEdit — dùng để xác
+// nhận "danh sách Quản Lý Hồ Sơ hiện PENDING cho HR thật" chỉ áp dụng đúng canEditProfiles(), không phải
+// bất kỳ ai qua được canFullViewProfiles() (xem test GET / bên dưới, 11/2026).
+const HR_VIEW_ONLY = { username: 'hrview1', name: 'HR Chỉ Xem', dept: 'Phòng Nhân Sự', perms: { hrProfileFullView: true }, active: true };
+let USERS = [ADMIN, HR_MGR, HR_ONBOARD_BASE, RECRUIT_PM, EMP1, HR_VIEW_ONLY];
 
 let APP_DATA;
 function resetAppData() {
@@ -241,6 +245,96 @@ async function main() {
       assertEqual(res.status, 200, JSON.stringify(res.body));
       assertEqual('taxCode' in res.body.profile, true, 'Có cả 2 quyền -> dùng phạm vi RỘNG của PROCESS_MANAGER, không bị thu hẹp lại BASE');
       assertEqual(res.body.profile.taxCode, 'MST-BOTH', 'taxCode được ghi đè đúng');
+    });
+
+    // ===== 11/2026, đợt tiếp nối: "khi sửa hiện lên có active hồ sơ không" + nút "Kích Hoạt" ở Quản Lý Hồ Sơ =====
+
+    await run.run('PATCH PENDING KHÔNG gửi activateOnboarding -> vẫn Kích Hoạt luôn (tương thích ngược, hành vi CŨ)', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const res = await api('PATCH', '/api/hr-profile/by-code/NV001', { dateOfBirth: '1995-05-05' }, RECRUIT_PM);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profile.onboardingQueueStatus, 'CONFIRMED', 'Mặc định (thiếu field) vẫn Kích Hoạt như cũ');
+      assertEqual(res.body.profile.status, 'ACTIVE', 'Mặc định (thiếu field) vẫn ACTIVE như cũ');
+    });
+
+    await run.run('PATCH PENDING với activateOnboarding:false -> CHỈ LƯU, giữ nguyên PENDING, field vẫn được ghi đúng', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const res = await api('PATCH', '/api/hr-profile/by-code/NV001', {
+        taxCode: 'MST-SAVE-ONLY', activateOnboarding: false
+      }, RECRUIT_PM);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profile.onboardingQueueStatus, 'PENDING', 'activateOnboarding:false -> giữ nguyên PENDING');
+      assertEqual(res.body.profile.status, 'DRAFT', 'activateOnboarding:false -> status vẫn DRAFT (chưa active)');
+      assertEqual(res.body.profile.taxCode, 'MST-SAVE-ONLY', 'Field vừa sửa vẫn được lưu dù chưa Kích Hoạt');
+    });
+
+    await run.run('Hồ sơ Lưu-chưa-Kích-Hoạt (vẫn PENDING) sửa tiếp được lần 2 qua đúng tầng cũ, không bị khoá thêm', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const first = await api('PATCH', '/api/hr-profile/by-code/NV001', { taxCode: 'MST-1', activateOnboarding: false }, RECRUIT_PM);
+      assertEqual(first.status, 200, JSON.stringify(first.body));
+      assertEqual(first.body.profile.onboardingQueueStatus, 'PENDING', 'Vẫn PENDING sau lần Lưu đầu');
+      const second = await api('PATCH', '/api/hr-profile/by-code/NV001', { taxCode: 'MST-2' }, RECRUIT_PM);
+      assertEqual(second.status, 200, JSON.stringify(second.body));
+      assertEqual(second.body.profile.taxCode, 'MST-2', 'Sửa tiếp lần 2 vẫn thành công (không bị khoá vì đã lưu 1 lần)');
+      assertEqual(second.body.profile.onboardingQueueStatus, 'CONFIRMED', 'Lần 2 không gửi activateOnboarding:false -> Kích Hoạt như bình thường');
+    });
+
+    await run.run('POST /activate-onboarding: HR thật Kích Hoạt thành công hồ sơ PENDING', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const res = await api('POST', '/api/hr-profile/by-code/NV001/activate-onboarding', {}, HR_MGR);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profile.onboardingQueueStatus, 'CONFIRMED', 'HR thật Kích Hoạt -> CONFIRMED');
+      assertEqual(res.body.profile.status, 'ACTIVE', 'HR thật Kích Hoạt -> ACTIVE');
+    });
+
+    await run.run('POST /activate-onboarding: actor KHÔNG phải HR thật (kể cả hrOnboardingProcessManage) bị 403', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const res = await api('POST', '/api/hr-profile/by-code/NV001/activate-onboarding', {}, RECRUIT_PM);
+      assertEqual(res.status, 403, 'Chỉ HR thật (canEditProfiles) mới Kích Hoạt được qua route này, không mở cho hrOnboardingProcessManage');
+      const resAdminless = await api('POST', '/api/hr-profile/by-code/NV001/activate-onboarding', {}, HR_ONBOARD_BASE);
+      assertEqual(resAdminless.status, 403, 'hrOnboardingManage (BASE) cũng không Kích Hoạt được qua route này');
+    });
+
+    await run.run('POST /activate-onboarding: hồ sơ KHÔNG ở PENDING -> lỗi rõ ràng, không áp dụng nhầm', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001', { onboardingQueueStatus: 'CONFIRMED', status: 'ACTIVE' });
+      const res = await api('POST', '/api/hr-profile/by-code/NV001/activate-onboarding', {}, HR_MGR);
+      assertEqual(res.status, 400, JSON.stringify(res.body));
+    });
+
+    await run.run('POST /activate-onboarding: hồ sơ không tồn tại -> 404', async () => {
+      resetAppData();
+      const res = await api('POST', '/api/hr-profile/by-code/NOPE/activate-onboarding', {}, HR_MGR);
+      assertEqual(res.status, 404, JSON.stringify(res.body));
+    });
+
+    await run.run('GET / (danh sách Quản Lý Hồ Sơ): HR thật (canEditProfiles) THẤY hồ sơ PENDING', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const res = await api('GET', '/api/hr-profile', undefined, HR_MGR);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profiles.some(p => p.employeeCode === 'NV001' && p.onboardingQueueStatus === 'PENDING'), true, 'HR thật phải thấy hồ sơ PENDING ở danh sách chính');
+    });
+
+    await run.run('GET / (danh sách Quản Lý Hồ Sơ): HR chỉ-xem (hrProfileFullView, KHÔNG canEditProfiles) KHÔNG thấy PENDING', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001');
+      const res = await api('GET', '/api/hr-profile', undefined, HR_VIEW_ONLY);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profiles.some(p => p.employeeCode === 'NV001'), false, 'HR chỉ-xem vẫn KHÔNG thấy PENDING ở danh sách chính (giữ nguyên phạm vi cũ)');
+    });
+
+    await run.run('GET / (danh sách Quản Lý Hồ Sơ): CANCELLED vẫn luôn bị ẩn với MỌI actor (kể cả HR thật)', async () => {
+      resetAppData();
+      seedQueuedProfile('NV001', { onboardingQueueStatus: 'CANCELLED' });
+      const res = await api('GET', '/api/hr-profile', undefined, HR_MGR);
+      assertEqual(res.status, 200, JSON.stringify(res.body));
+      assertEqual(res.body.profiles.some(p => p.employeeCode === 'NV001'), false, 'CANCELLED vẫn ẩn khỏi danh sách chính như cũ, kể cả với HR thật');
     });
   } finally {
     server.close();

@@ -261,7 +261,15 @@ router.get('/', async (req, res) => {
     // filter này một cách tự nhiên (không phải PENDING/CANCELLED) nên tự hiện ở đây — đúng yêu cầu người
     // dùng "xác nhận thì chuyển vào quản lý hồ sơ" — ĐỒNG THỜI vẫn hiện ở tab hàng đợi Onboarding (không
     // loại trừ lẫn nhau, xem GET .../onboarding-queue) để phục vụ báo cáo đầy đủ tại đúng chỗ đó.
-    const managed = list.filter(p => p.onboardingQueueStatus !== 'PENDING' && p.onboardingQueueStatus !== 'CANCELLED');
+    // (11/2026, theo yêu cầu người dùng — "nhân sự có thể tự active ở danh sách quản lý hồ sơ mà không cần
+    // vào quản lý hồ sơ onboarding"): HR thật (canEditProfiles() — hrProfileManage/hrProfileEdit) GIỜ CŨNG
+    // thấy hồ sơ PENDING ngay tại đây (kèm badge rõ ràng ở client, xem renderHrProfileList()/
+    // module-hrprofile.js) để có thể bấm "🚀 Kích Hoạt" (POST .../by-code/:code/activate-onboarding) mà
+    // không bắt buộc phải mở đúng tab Onboarding. Người dùng KHÔNG có canEditProfiles() (vd actor chỉ có
+    // hrOnboardingProcessManage/hrOnboardingManage) vẫn KHÔNG thấy gì thêm ở đây — giữ nguyên phạm vi cũ,
+    // chỉ xem/sửa qua tab Onboarding như trước.
+    const isRealHrEditor = employeeProfile.canEditProfiles(req.freshUser);
+    const managed = list.filter(p => p.onboardingQueueStatus !== 'CANCELLED' && (p.onboardingQueueStatus !== 'PENDING' || isRealHrEditor));
     res.json({ profiles: managed.map(stripForList) });
   } catch (err) { sendCatchError(res, err, 'GET /api/hr-profile'); }
 });
@@ -916,7 +924,14 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       // quy trình checklist Onboarding (hrProcesses) hoàn tất mới chuyển như applyProcessCompletion() vẫn
       // làm (hàm đó vẫn tự chạy sau, gán lại ACTIVE lần nữa — vô hại, idempotent). Hồ sơ vẫn graduate khỏi
       // hàng đợi PENDING/CANCELLED để hiện ở "Quản Lý Hồ Sơ" (xem GET / ở trên — CONFIRMED lọt qua filter).
-      if (profile.onboardingQueueStatus === 'PENDING') {
+      // (11/2026, theo yêu cầu người dùng — "khi sửa hiện lên có active hồ sơ không, nếu ấn không active
+      // thì chỉ lưu hồ sơ, chờ đến khi active"): client GIỜ hỏi actor có muốn Kích Hoạt NGAY hay không mỗi
+      // khi Lưu 1 hồ sơ đang PENDING (xem hrpfSaveProfile()/module-hrprofile.js) — gửi kèm
+      // `activateOnboarding: false` nếu chọn "Chỉ Lưu". Mặc định (field vắng mặt, VD import/script/test cũ
+      // CHƯA cập nhật) vẫn giữ NGUYÊN hành vi cũ = activate luôn, tương thích ngược hoàn toàn. Field này
+      // KHÔNG nằm trong bất kỳ allowed-list nào ở trên nên applyProfileEdit() tự bỏ qua, không lưu nhầm
+      // vào hồ sơ.
+      if (profile.onboardingQueueStatus === 'PENDING' && req.body?.activateOnboarding !== false) {
         profile.onboardingQueueStatus = 'CONFIRMED';
         profile.status = 'ACTIVE';
       }
@@ -939,6 +954,40 @@ router.patch('/by-code/:employeeCode', async (req, res) => {
       : updated;
     res.json({ ok: true, profile: responseProfile });
   } catch (err) { sendCatchError(res, err, `PATCH /api/hr-profile/by-code/${req.params.employeeCode}`); }
+});
+
+// POST /api/hr-profile/by-code/:employeeCode/activate-onboarding — (11/2026, theo yêu cầu người dùng)
+// HR thật tự Kích Hoạt 1 hồ sơ đang PENDING (đã được tuyển dụng Lưu-nhưng-chưa-Kích-Hoạt, xem
+// `activateOnboarding: false` ở PATCH .../by-code/:code phía trên) NGAY TẠI danh sách "Quản Lý Hồ Sơ"
+// chính — không bắt buộc phải mở đúng tab "🕐 Hồ Sơ Onboarding". CỐ Ý KHÔNG tái dùng PATCH .../status
+// (route đó `assertValidManualStatusTransition()` chặn CỨNG currentStatus === 'DRAFT', đúng mục đích gốc
+// là ngăn HR lỡ tay set DRAFT/ACTIVE qua lại ngoài quy trình Onboarding/Offboarding — DRAFT→ACTIVE qua
+// Onboarding luôn phải đi qua đúng 1 trong 2 cửa: PATCH .../by-code (Lưu+Kích Hoạt) hoặc route MỚI này).
+// Gác ĐÚNG canEditProfiles() (HR thật — hrProfileManage/hrProfileEdit) — KHÔNG mở cho
+// hrOnboardingProcessManage/hrOnboardingManage, vì mục đích tính năng là "nhân sự TỰ kích hoạt" (đối
+// trọng với "tuyển dụng lưu-nhưng-chưa-active"), không phải thêm 1 đường kích hoạt nữa cho tuyển dụng.
+router.post('/by-code/:employeeCode/activate-onboarding', async (req, res) => {
+  try {
+    if (!employeeProfile.canEditProfiles(req.freshUser)) {
+      return res.status(403).json({ error: 'Chỉ HR/Admin mới kích hoạt được hồ sơ' });
+    }
+    let updated;
+    await withLockedAppDataValue('employeeProfiles', (list) => {
+      const profile = employeeProfile.findProfile(list, req.params.employeeCode);
+      if (!profile) throw new HttpError(404, 'Không tìm thấy hồ sơ');
+      if (profile.onboardingQueueStatus !== 'PENDING') {
+        throw new HttpError(400, 'Hồ sơ không ở trạng thái chờ kích hoạt (chỉ áp dụng cho hồ sơ Onboarding đang PENDING)');
+      }
+      profile.onboardingQueueStatus = 'CONFIRMED';
+      profile.status = 'ACTIVE';
+      profile.updatedAt = new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      profile.updatedBy = req.freshUser.username;
+      updated = profile;
+      return list;
+    });
+    logHrProfileAction(req, 'ACTIVATE_ONBOARDING', req.params.employeeCode, `Kích hoạt hồ sơ Onboarding [${req.params.employeeCode}] từ danh sách Quản Lý Hồ Sơ`);
+    res.json({ ok: true, profile: updated });
+  } catch (err) { sendCatchError(res, err, `POST /api/hr-profile/by-code/${req.params.employeeCode}/activate-onboarding`); }
 });
 
 // PATCH /api/hr-profile/by-code/:employeeCode/status — HR/admin đổi tay ACTIVE<->ON_LEAVE.
