@@ -1363,6 +1363,13 @@ function buildOperationRowHTML(kind, o) {
   // (Đơn Hàng, không thuộc phạm vi thay đổi này). Server (routes/records.js) cũng chặn cứng route xoá
   // của 2 collection này rồi — ẩn nút ở đây chỉ là UX, không phải lớp bảo vệ duy nhất.
   if (currentUser.perms?.admin && kind === 'operationOrders') secondaryOptions.push({ value: 'delete', label: '🗑️ Xóa' });
+  // "🖨️ Xem/Tải Phiếu Phê Duyệt" — CHỈ operationOrders (2 kind kia không qua phê duyệt, Mục H), chỉ hiện
+  // sau khi đã phê duyệt hoàn tất (isOperationOrderPostApproval) và đúng người được xem (người tạo đơn,
+  // người duyệt hoặc admin — canAccessOperationOrderApprovalSlip()).
+  if (kind === 'operationOrders' && isOperationOrderPostApproval(o) && canAccessOperationOrderApprovalSlip(currentUser, o)) {
+    secondaryOptions.push({ value: 'viewSlip', label: '👁️ Xem Phiếu' });
+    secondaryOptions.push({ value: 'downloadSlip', label: '⬇️ Tải Phiếu' });
+  }
   // "📥 Nhập Hàng"/"🚫 Hủy Nhập" — ĐÃ GỠ khỏi dropdown thao tác từng dòng ở đây (đợt "Duyệt Nhập/Hủy Đơn
   // Hàng tập trung"): 2 hành động này giờ CHỈ thực hiện được ở sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" riêng
   // (renderOperationOrderReceiptApprovalTab()), có phân quyền theo HO/Siêu Thị (operationOrderReceiptManage
@@ -1413,6 +1420,8 @@ function runOperationAction(kind, id, action) {
     case 'delete': deleteOperationAction(kind, id); break;
     case 'receive-goods': openOperationOrderReceiptActionModal(id, 'RECEIVE'); break;
     case 'cancel-receipt': openOperationOrderReceiptActionModal(id, 'CANCEL'); break;
+    case 'viewSlip': if (kind === 'operationOrders') viewOperationOrderApprovalSlip(id); break;
+    case 'downloadSlip': if (kind === 'operationOrders') downloadOperationOrderApprovalSlip(id); break;
   }
 }
 function runOperationOrderAction(id, action) { runOperationAction('operationOrders', id, action); }
@@ -1516,6 +1525,142 @@ function buildOperationDetailsHTML(kind, o) {
       <div class="col-span-2"><b>Mô tả hiện trạng &amp; lý do:</b> <p class="bg-white p-2 rounded border mt-1">${escapeHtml(o.description || '')}</p></div>
       ${o.fileUrl ? `<div class="col-span-2"><a href="#" data-op="viewOperationAttachment" data-kind="${kind}" data-id="${o.id}" class="text-blue-600 underline">📎 ${escapeHtml(o.fileName || 'Xem tệp đính kèm')}</a></div>` : ''}
     </div>`;
+}
+
+// --- "🖨️ Xem/Tải Phiếu Phê Duyệt" (Đặt Hàng NCC — Siêu Thị + HO, 1 collection chung operationOrders,
+// tách nhau qua item.orderLocationType) — yêu cầu người dùng (10/2026): "cần in cái phiếu mà có chân ký
+// ở cái đơn hàng ấy, và làm cái format khi in ký nó phải đẹp như... đăng ký xe ấy. Cân đối đẹp." — ghép
+// vào ĐÚNG khung dùng chung buildApprovalSlipShellHTML()/APPROVAL_SLIP_CSS/buildApprovalSignatureColumnHTML()
+// (core.js) như Đăng Ký Xe/Văn Bản Trình/VPP-Văn Phòng, KHÔNG tự vẽ CSS riêng. Chỉ operationOrders có
+// phiếu này (operationStoreOpenings/operationRepairs KHÔNG qua phê duyệt nữa — Mục H — nên không có
+// "Phiếu Phê Duyệt" đúng nghĩa; estimateItems của 2 luồng đó cũng không thuộc phạm vi đợt này).
+
+// isOperationOrderPostApproval: status KHÔNG dừng ở 'APPROVED' sau khi duyệt bước cuối — applyWorkflowAction()
+// (lib/workflowEngine.js) tự chuyển NGAY thành 'AWAITING_RECEIPT' + approvedAt riêng cho operationOrders
+// (chờ Nhập Hàng), rồi tiếp tục sang 'RECEIVED'/'RECEIPT_CANCELLED' qua luồng Nhập/Hủy riêng (KHÔNG qua
+// applyWorkflowAction() nữa) — xem receiveOperationOrderGoods()/cancelOperationOrderReceipt()
+// (lib/recordActions.js). 'APPROVED' chỉ còn ở hồ sơ CŨ trước đợt migrate 1 lần
+// (migrateApprovedOperationOrdersToAwaitingReceipt(), seedDefaults.js) — giữ lại để không chặn nhầm.
+function isOperationOrderPostApproval(o) {
+  return o.status === 'APPROVED' || o.status === 'AWAITING_RECEIPT' || o.status === 'RECEIVED' || o.status === 'RECEIPT_CANCELLED';
+}
+
+// canAccessOperationOrderApprovalSlip: mirror ĐÚNG canView() của renderOperationOrderReportTab()/
+// renderOperationList() (dòng ~1269/~3542) — admin, người tạo đơn, hoặc người có vai trò duyệt (đã/đang
+// duyệt theo đúng quy trình MỨC+Siêu Thị/HO của hồ sơ này qua isApproverForDeptWorkflow()).
+function canAccessOperationOrderApprovalSlip(user, o) {
+  if (!user || !o) return false;
+  if (user.perms?.admin) return true;
+  if (o.creator === user.username) return true;
+  return isApproverForDeptWorkflow(resolveOperationOrderWorkflowConfigForItemClient(o), user.username, operationOrderStoreApproverFilterFor(o));
+}
+
+function buildOperationOrderApprovalSlipHTML(o) {
+  const wfConfig = resolveOperationOrderWorkflowConfigForItemClient(o) || { workflowId: 'WF_1STEP' };
+  const wf = DB.workflows.find(w => w.id === wfConfig.workflowId) || { steps: [{ order: 1, name: 'Duyệt' }] };
+  const signatureColumnsHTML = wf.steps.map(step => buildApprovalSignatureColumnHTML(step, o.history)).join('');
+
+  const itemsRows = (o.items || []).map((it, idx) => `
+    <tr>
+      <td class="as-items-center">${idx + 1}</td>
+      <td>${escapeHtml(it.name)}</td>
+      <td class="as-items-center">${escapeHtml(it.productCode || '')}</td>
+      <td class="as-items-center">${escapeHtml(it.unit || '')}</td>
+      <td class="as-items-right">${it.qty}</td>
+      <td class="as-items-right">${(it.unitPrice || 0).toLocaleString('vi-VN')}</td>
+      <td class="as-items-right">${(it.amount || 0).toLocaleString('vi-VN')}</td>
+    </tr>`).join('');
+
+  // Khối "Thông tin từ phiếu đặt hàng NCC" — y hệt điều kiện hiện của buildOperationDetailsHTML() ở
+  // trên (đợt "Đọc PDF Đơn Hàng tự động điền form"), chỉ hiện khi có ít nhất 1 field trong nhóm này.
+  const poFieldsPresent = [o.poNumber, o.orderDate, o.deliveryDate, o.ordererName, o.receivingLocationName, o.deliveryAddress].some(v => v);
+  const poBlock = poFieldsPresent ? `
+    <div class="as-section-title">Thông Tin Từ Phiếu Đặt Hàng NCC</div>
+    <table class="as-field-table">
+      ${o.poNumber ? `<tr><td class="as-label">Số đơn (NCC):</td><td>${escapeHtml(o.poNumber)}</td></tr>` : ''}
+      ${o.orderDate ? `<tr><td class="as-label">Ngày đặt:</td><td>${escapeHtml(new Date(o.orderDate).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }))}</td></tr>` : ''}
+      ${o.deliveryDate ? `<tr><td class="as-label">Ngày giao:</td><td>${escapeHtml(new Date(o.deliveryDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }))}</td></tr>` : ''}
+      ${o.ordererName ? `<tr><td class="as-label">Người đặt:</td><td>${escapeHtml(o.ordererName)}</td></tr>` : ''}
+      ${o.receivingLocationName ? `<tr><td class="as-label">Nơi nhận:</td><td>${escapeHtml(o.receivingLocationName)}</td></tr>` : ''}
+      ${o.deliveryAddress ? `<tr><td class="as-label">Địa chỉ giao hàng:</td><td>${escapeHtml(o.deliveryAddress)}</td></tr>` : ''}
+    </table>` : '';
+
+  const hasTotalsBreakdown = o.discountAmount || o.vatAmount || o.afterDiscountAmount || o.paymentTotalAmount;
+  const totalsBlock = hasTotalsBreakdown ? `
+    <table class="as-field-table">
+      <tr><td class="as-label">Giá trị chiết khấu:</td><td>${(o.discountAmount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+      <tr><td class="as-label">Thành tiền sau CK:</td><td>${(o.afterDiscountAmount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+      <tr><td class="as-label">VAT:</td><td>${(o.vatAmount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+      <tr><td class="as-label">Tổng giá trị thanh toán:</td><td>${(o.paymentTotalAmount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+    </table>` : '';
+
+  const receiptNote = o.status === 'RECEIVED'
+    ? `<div class="as-section-title">Nhập Hàng</div><table class="as-field-table"><tr><td class="as-label">Trạng thái:</td><td>✅ Đã nhập hàng${o.receivedAt ? ` lúc ${escapeHtml(o.receivedAt)}` : ''}</td></tr></table>`
+    : o.status === 'RECEIPT_CANCELLED'
+      ? `<div class="as-section-title">Nhập Hàng</div><table class="as-field-table"><tr><td class="as-label">Trạng thái:</td><td>🚫 Đã hủy nhập hàng</td></tr></table>`
+      : '';
+
+  const bodyHTML = `
+    <table class="as-field-table">
+      <tr><td class="as-label">Đơn hàng:</td><td>${escapeHtml(o.title || '')}</td></tr>
+      <tr><td class="as-label">Phòng ban:</td><td>${escapeHtml(o.dept || '')}</td></tr>
+      <tr><td class="as-label">Loại đơn hàng:</td><td>${escapeHtml(o.orderLocationType === 'STORE' ? 'Đặt Hàng Tại Siêu Thị' : 'Đặt Hàng Tại HO')}</td></tr>
+      <tr><td class="as-label">Nhà cung cấp:</td><td>${escapeHtml(o.supplier || '')}</td></tr>
+      <tr><td class="as-label">Tổng tiền (hạng mục):</td><td>${(o.amount || 0).toLocaleString('vi-VN')} VNĐ</td></tr>
+      ${o.note ? `<tr><td class="as-label">Ghi chú:</td><td>${escapeHtml(o.note)}</td></tr>` : ''}
+    </table>
+    ${totalsBlock}
+    ${poBlock}
+    <div class="as-section-title">Danh Sách Hạng Mục Đặt Hàng</div>
+    <table class="as-items-table">
+      <thead><tr><th>STT</th><th>Tên hàng</th><th>Mã hàng</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+      <tbody>${itemsRows}</tbody>
+    </table>
+    ${receiptNote}
+  `;
+
+  return buildApprovalSlipShellHTML({
+    formCode: 'Đặt Hàng NCC',
+    title: 'Phiếu Phê Duyệt Đặt Hàng NCC',
+    approvedNote: `✅ Đã phê duyệt hoàn tất trên Hệ thống Văn phòng điện tử — Mã phiếu: ${escapeHtml(o.code)}`,
+    bodyHTML,
+    requesterRoleLabel: 'Người tạo đơn',
+    requesterName: o.creatorName,
+    requesterUsername: o.creator,
+    requesterTime: `Tạo lúc: ${escapeHtml(o.createdAt || '')}`,
+    signatureColumnsHTML,
+    footerNote: 'Phiếu được lập và phê duyệt điện tử trên Hệ thống Văn phòng điện tử (VPĐT) — không cần chữ ký tay/con dấu bản cứng. Thông tin phê duyệt có thể tra cứu lại trên hệ thống.'
+  });
+}
+
+function viewOperationOrderApprovalSlip(id) {
+  const o = DB.operationOrders.find(item => item.id === id);
+  if (!o) return;
+  if (!isOperationOrderPostApproval(o)) return alert('Chỉ xem được Phiếu Phê Duyệt sau khi đơn hàng đã được phê duyệt hoàn tất.');
+  if (!canAccessOperationOrderApprovalSlip(currentUser, o)) return alert('⛔ Bạn không có quyền xem Phiếu Phê Duyệt của đơn hàng này (chỉ người tạo đơn, người duyệt hoặc admin).');
+
+  document.getElementById('viewModalTitle').innerText = `🖨️ Phiếu Phê Duyệt Đặt Hàng NCC (${o.code})`;
+  document.getElementById('viewModalSub').innerText = `Phòng ban: ${o.dept} | Người tạo: ${o.creatorName}`;
+  document.getElementById('viewModalFooterInfo').innerText = 'Trạng thái: Đã phê duyệt hoàn tất';
+
+  document.getElementById('viewModalContent').innerHTML = buildOperationOrderApprovalSlipHTML(o);
+  document.getElementById('viewDocModal').classList.remove('hidden');
+}
+
+function downloadOperationOrderApprovalSlip(id) {
+  const o = DB.operationOrders.find(item => item.id === id);
+  if (!o) return;
+  if (!isOperationOrderPostApproval(o)) return alert('Chỉ tải được Phiếu Phê Duyệt sau khi đơn hàng đã được phê duyệt hoàn tất.');
+  if (!canAccessOperationOrderApprovalSlip(currentUser, o)) return alert('⛔ Bạn không có quyền tải Phiếu Phê Duyệt của đơn hàng này (chỉ người tạo đơn, người duyệt hoặc admin).');
+
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Phiếu Phê Duyệt Đặt Hàng NCC - ${escapeHtml(o.code)}</title><style>${APPROVAL_SLIP_CSS}</style></head><body>${buildOperationOrderApprovalSlipHTML(o)}</body></html>`);
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `PhieuPheDuyet_${o.code}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function viewOperationAttachment(kind, id) {
@@ -1648,6 +1793,17 @@ function openOperationProcessModal(kind, id) {
     `;
   } else {
     controls.innerHTML = `<span class="text-gray-500 italic text-xs">Bạn chỉ có quyền xem thông tin hồ sơ này.</span>`;
+  }
+
+  // "🖨️ Xem/Tải Phiếu Phê Duyệt" trong modal chi tiết — THÊM VÀO (không thay thế) khối controls ở trên,
+  // ở cả 2 nhánh canApprove/view-only, CHỈ operationOrders đã phê duyệt hoàn tất và đúng người xem.
+  if (kind === 'operationOrders' && isOperationOrderPostApproval(o) && canAccessOperationOrderApprovalSlip(currentUser, o)) {
+    controls.innerHTML += `
+      <div class="flex justify-end gap-2 mt-2 pt-2 border-t">
+        <button data-op="viewOperationOrderApprovalSlip" data-arg0="${o.id}" class="bg-sky-600 text-white px-3 py-1.5 rounded font-bold hover:bg-sky-700 text-xs">👁️ Xem Phiếu Phê Duyệt</button>
+        <button data-op="downloadOperationOrderApprovalSlip" data-arg0="${o.id}" class="bg-sky-100 text-sky-800 border border-sky-600 px-3 py-1.5 rounded font-bold hover:bg-sky-200 text-xs">⬇️ Tải Phiếu Phê Duyệt</button>
+      </div>
+    `;
   }
 
   document.getElementById('operationProcessModal').classList.remove('hidden');

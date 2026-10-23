@@ -1,9 +1,59 @@
 # Phiên bản hiện tại
 
-**28.4** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.5** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.5 (2026-10): Đặt Hàng NCC — "🖨️ Xem/Tải Phiếu Phê Duyệt" (chân ký, format giống Đăng Ký Xe/Văn Bản Trình)
+
+Người dùng phát hiện module Đặt Hàng NCC (`operationOrders` — cả "Đặt Hàng
+Tại Siêu Thị" lẫn "Đặt Hàng Tại HO", cùng 1 collection) thiếu hẳn chức năng
+in "Phiếu Phê Duyệt" như các module khác (Đăng Ký Xe, Văn Bản Trình...), và
+yêu cầu làm TRƯỚC trong loạt rà soát rộng hơn ("đi in được phiếu phê duyệt"
+ở mọi màn có luồng duyệt nội bộ) — format in phải "đẹp, cân đối" giống hệt
+2 phiếu đã có.
+
+- **`public/js/module-vanhanh.js`** (đặt cạnh cụm `buildOperationDetailsHTML`/
+  `openOperationProcessModal`): 5 hàm mới —
+  `isOperationOrderPostApproval(o)` (status đã phê duyệt hoàn tất: `APPROVED`
+  hoặc 3 trạng thái sau Nhập Hàng — `AWAITING_RECEIPT`/`RECEIVED`/
+  `RECEIPT_CANCELLED`, KHÔNG phải chỉ `APPROVED` như các module khác vì
+  `applyWorkflowAction()` tự chuyển ngay `APPROVED` → `AWAITING_RECEIPT` cho
+  riêng `operationOrders`), `canAccessOperationOrderApprovalSlip(user, o)`
+  (admin/người tạo đơn/người duyệt đúng quy trình — mirror `canView()` của
+  danh sách/Báo Cáo đã có), `buildOperationOrderApprovalSlipHTML(o)` (ghép
+  vào ĐÚNG khung dùng chung `buildApprovalSlipShellHTML()`/
+  `APPROVAL_SLIP_CSS`/`buildApprovalSignatureColumnHTML()` ở `core.js` —
+  khung Đăng Ký Xe/Văn Bản Trình/VPP-Văn Phòng đang dùng, KHÔNG tự vẽ CSS
+  riêng), `viewOperationOrderApprovalSlip(id)`/
+  `downloadOperationOrderApprovalSlip(id)` (mirror đúng khuôn
+  `viewCarApprovalSlip()`/`downloadCarApprovalSlip()`).
+- **Giao diện**: nút "👁️ Xem Phiếu Phê Duyệt"/"⬇️ Tải Phiếu Phê Duyệt" được
+  THÊM VÀO (không thay thế) khối nút của modal "Xử Lý/Duyệt Đơn Hàng" (cả 2
+  nhánh — đang chờ duyệt lẫn chỉ xem), cộng 2 tuỳ chọn tương ứng ở dropdown
+  "Khác ▾" của từng dòng trong danh sách — chỉ hiện khi đơn ĐÃ phê duyệt
+  hoàn tất và đúng người được xem.
+- Chỉ áp dụng cho `operationOrders` — 2 luồng còn lại trong Vận Hành
+  (`operationStoreOpenings`/`operationRepairs`) không còn qua phê duyệt nội
+  bộ nữa (Mục H từ trước) nên không có "Phiếu Phê Duyệt" đúng nghĩa.
+
+**Đây là BƯỚC ĐẦU TIÊN** trong loạt bổ sung "Phiếu Phê Duyệt" cho mọi màn có
+luồng duyệt — các module còn lại (Kho Tài Liệu, VPP, Hợp Đồng — 2 loại
+phiếu độc lập, Phê Duyệt Giá IT, Đề Nghị Thanh Toán, Ngân Sách, Giấy Phép,
+Điều Chuyển Kho Đồng Phục, và Đổi Ca — cần xác nhận lại phạm vi trước) sẽ
+làm ở các đợt merge kế tiếp, không nằm trong đợt này.
+
+**Test**: `tests/test-operation-order-approval-slip.js` (mới, 13 kịch bản
+qua Playwright thật — ma trận status, ma trận quyền truy cập, nội dung
+phiếu + chân ký/ý kiến, chặn xem/tải khi chưa phê duyệt hoặc không có
+quyền, giao diện dropdown + modal) — chạy lại TOÀN BỘ 19 file test hiện có
+của `operationOrders` (không chỉ test mới), không có regression (1 file
+`test-operation-order-multifile-batch.js` fail từ trước do thiếu file PDF
+mẫu trong sandbox — xác nhận bằng `git stash`, không liên quan đợt này). Tự
+kiểm tra CSP chuẩn (`data-op`, không inline onclick/style) — sạch. Demo ảnh
+chụp phiếu đã render (Playwright) xác nhận layout cân đối, đúng như yêu
+cầu "đẹp, cân đối" — không commit ảnh vào repo.
 
 ## v28.4 (2026-11): Ngân Sách — nút "➡️ Chuyển sang Phê Duyệt" từ Đề Xuất đã duyệt, bỏ công đoạn gõ tay lại toàn bộ
 
