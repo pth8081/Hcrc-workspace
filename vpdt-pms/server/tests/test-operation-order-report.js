@@ -8,13 +8,18 @@
 //   1. Sub-tab "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO"/"📊 Báo Cáo" (đợt "Tách Đơn Hàng Siêu
 //      Thị/HO" — thay cho 2 sub-tab "Danh Sách"/"Báo Cáo" cũ).
 //   2. Quy trình duyệt theo MỨC GIÁ TRỊ (HO, tier LT100M — thay cho quy trình theo phòng ban cũ):
-//      PENDING -> APPROVE bởi đúng approver vẫn hoạt động y hệt trước — chỉ khác 1 điểm: duyệt xong
-//      bước cuối giờ tự động chuyển AWAITING_RECEIPT (không dừng ở APPROVED).
-//   3. 2 nút MỚI "📥 Nhập Hàng"/"🚫 Hủy Nhập": chỉ hiện + chỉ gọi được khi AWAITING_RECEIPT, chỉ đúng
-//      quần thể approver/admin mới thao tác được (chặn 403 với người ngoài quyền).
+//      PENDING -> APPROVE bởi đúng approver vẫn hoạt động y hệt trước, duyệt xong bước cuối DỪNG HẲN ở
+//      APPROVED (CẬP NHẬT, đợt "tạm vô hiệu hoá Nhập/Hủy Hàng" theo yêu cầu người dùng — KHÔNG còn tự
+//      động chuyển AWAITING_RECEIPT như trước nữa, xem lib/workflowEngine.js).
+//   3. Sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" + 2 nút "📥 Nhập Hàng"/"🚫 Hủy Nhập" — TẠM VÔ HIỆU HOÁ, ép
+//      ẩn khỏi UI bất kể quyền operationOrderReceiptManage (chỉ ẩn lối vào, hàm/route xử lý vẫn còn —
+//      unit-test đầy đủ ở tests/test-operation-order-receiving.js). File này chỉ còn xác nhận sub-tab
+//      không mở được + Báo Cáo vẫn hiển thị đúng dữ liệu LỊCH SỬ (mô phỏng bằng cách gán thẳng DB) cho
+//      các hồ sơ CŨ từng ở AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED.
 //   4. Báo cáo (luôn gộp CẢ Siêu Thị lẫn HO — "Tổng Chuỗi"): đếm đúng Tổng/Đã phê duyệt/Chưa phê
 //      duyệt/Bị từ chối/Chờ nhập hàng/Đã nhập hàng/Đã hủy nhập + tổng giá trị đã duyệt/đã nhập hàng +
-//      nhóm đúng theo tháng (approvedAt/receivedAt).
+//      nhóm đúng theo tháng (approvedAt/receivedAt) — vẫn đúng cho dữ liệu LỊCH SỬ dù không còn đường
+//      tạo mới các trạng thái Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy Nhập qua UI.
 //   5. Lọc "Siêu Thị (Nơi Nhận)" thu hẹp đúng cả Danh Sách lẫn Báo Cáo.
 //
 // Chạy: node server/tests/test-operation-order-report.js
@@ -135,11 +140,13 @@ async function main() {
     });
 
     // ===== 2) Quy trình duyệt phòng ban CŨ vẫn hoạt động — regression cao nhất =====
-    await run.run('Trưởng phòng duyệt đơn A/B/E (đúng approver dept-workflow) -> tự động AWAITING_RECEIPT (KHÔNG dừng ở APPROVED)', async () => {
+    // CẬP NHẬT (đợt "tạm vô hiệu hoá Nhập/Hủy Hàng", theo yêu cầu TRỰC TIẾP người dùng): duyệt xong bước
+    // cuối giờ DỪNG HẲN ở APPROVED (như mọi module khác), KHÔNG còn tự động chuyển AWAITING_RECEIPT nữa.
+    await run.run('Trưởng phòng duyệt đơn A/B/E (đúng approver dept-workflow) -> dừng hẳn ở APPROVED (không còn tự chuyển AWAITING_RECEIPT)', async () => {
       await loginAs(page, APPROVER);
       for (const id of [idA, idB, idE]) {
         const updated = await approveOrder(page, id);
-        assertEqual(updated.status, 'AWAITING_RECEIPT', `Đơn #${id} duyệt xong bước cuối phải tự chuyển AWAITING_RECEIPT`);
+        assertEqual(updated.status, 'APPROVED', `Đơn #${id} duyệt xong bước cuối phải dừng ở APPROVED`);
         assert(updated.approvedAt, `Đơn #${id} phải có approvedAt sau khi duyệt`);
       }
     });
@@ -169,53 +176,59 @@ async function main() {
       assertEqual(result.item.status, 'PENDING', 'Đơn C không được đổi trạng thái khi bị chặn quyền');
     });
 
-    // ===== 3) Nút "Nhập Hàng"/"Hủy Nhập" — đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung" đã CHUYỂN 2 nút này
-    // khỏi dòng ở Danh Sách STORE/HO sang HẲN 1 sub-tab riêng "🧾 Duyệt Nhập/Hủy Đơn Hàng"
-    // (renderOperationOrderReceiptApprovalTab() -> #opOrderReceiptTableBody), gated bởi quyền RIÊNG
-    // operationOrderReceiptManage — KHÔNG còn nằm trong dropdown "Khác" của bảng Danh Sách nữa. =====
-    await run.run('Sub-tab "Duyệt Nhập/Hủy Đơn Hàng": chỉ hiện đúng các đơn AWAITING_RECEIPT mà mình có quyền', async () => {
+    // ===== 3) Nút "Nhập Hàng"/"Hủy Nhập" — TẠM VÔ HIỆU HOÁ (đợt tiếp nối "Phiếu Phê Duyệt" operationOrders,
+    // theo yêu cầu TRỰC TIẾP người dùng: "sau phê duyệt ko còn trạng thái chờ nhập hàng, hủy và nhập hàng
+    // nữa"). Sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" giờ ép ẩn khỏi UI (không còn ai bấm vào được, kể cả
+    // người có quyền operationOrderReceiptManage — xem setOperationOrderSubTab() ở module-vanhanh.js).
+    // Hàm renderOperationOrderReceiptApprovalTab()/receiveOperationOrderGoods()/cancelOperationOrderReceipt()
+    // KHÔNG bị xoá (chỉ mất lối vào UI) — phần unit-test đầy đủ cho các hàm đó (ma trận quyền/trạng thái)
+    // đã có sẵn ở tests/test-operation-order-receiving.js, KHÔNG lặp lại ở đây. Phần còn lại của file này
+    // chỉ cần xác nhận: (a) sub-tab RECEIPT không còn mở được dù đúng quyền, (b) Báo Cáo vẫn hiển thị
+    // ĐÚNG dữ liệu LỊCH SỬ cho các hồ sơ đã từng ở AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED (mô phỏng
+    // bằng cách gán thẳng DB, giống dữ liệu cũ trước đợt tắt tính năng — không còn đường tạo MỚI qua UI). =====
+    await run.run('Sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" giờ LUÔN bị ẩn, kể cả với người có đủ quyền operationOrderReceiptManage', async () => {
       await loginAs(page, APPROVER);
-      const html = await page.evaluate(() => { renderOperationOrderReceiptApprovalTab(); return document.getElementById('opOrderReceiptTableBody').innerHTML; });
-      const countReceive = (html.match(/📥 Nhập Hàng/g) || []).length;
-      const countCancel = (html.match(/🚫 Hủy Nhập/g) || []).length;
-      // AWAITING_RECEIPT ngay lúc này: A, B, E (idA/idB sẽ được xử lý ở kịch bản dưới, nhưng thứ tự
-      // chạy tới đây A/B vẫn còn AWAITING_RECEIPT -> tổng cộng 3 dòng đủ điều kiện).
-      assertEqual(countReceive, 3, 'Phải có đúng 3 nút Nhập Hàng (A, B, E đang AWAITING_RECEIPT)');
-      assertEqual(countCancel, 3, 'Phải có đúng 3 nút Hủy Nhập (A, B, E đang AWAITING_RECEIPT)');
+      const hidden = await page.evaluate(() => {
+        setOperationOrderSubTab('RECEIPT');
+        // Bị ép fallback về STORE/HO (xem opOrderTabOrder trong setOperationOrderSubTab()) vì RECEIPT
+        // luôn allowed=false bây giờ — panel Receipt phải ẩn, panel Danh Sách phải hiện thay thế.
+        return {
+          receiptPanelHidden: document.getElementById('opOrderReceiptPanel').classList.contains('hidden'),
+          btnHidden: document.getElementById('btnOpOrderSubRECEIPT').classList.contains('hidden'),
+          fellBackToList: !document.getElementById('opOrderListPanel').classList.contains('hidden')
+        };
+      });
+      assert(hidden.receiptPanelHidden, 'Panel Duyệt Nhập/Hủy Đơn Hàng phải luôn ẩn');
+      assert(hidden.btnHidden, 'Nút sub-tab RECEIPT phải luôn ẩn (kể cả người có quyền operationOrderReceiptManage)');
+      assert(hidden.fellBackToList, 'Phải tự fallback về 1 sub-tab còn cho phép (STORE/HO) khi xin mở RECEIPT');
+      // Fallback ở trên rơi về sub-tab ĐẦU TIÊN được phép trong opOrderTabOrder ('STORE'), KHÔNG phải 'HO'
+      // — trả lại đúng 'HO' cho các kịch bản lọc Danh Sách phía sau (toàn bộ 5 đơn test này đều tạo ở HO).
+      await page.evaluate(() => setOperationOrderSubTab('HO'));
     });
-    await run.run('Người NGOÀI quyền operationOrderReceiptManage KHÔNG thấy đơn nào ở sub-tab Duyệt Nhập/Hủy Đơn Hàng', async () => {
-      await loginAs(page, OUTSIDER);
-      const html = await page.evaluate(() => { renderOperationOrderReceiptApprovalTab(); return document.getElementById('opOrderReceiptTableBody').innerHTML; });
-      assert(!html.includes('📥 Nhập Hàng'), 'Người ngoài quyền không được thấy nút Nhập Hàng');
-      assert(!html.includes('🚫 Hủy Nhập'), 'Người ngoài quyền không được thấy nút Hủy Nhập');
-    });
-    await run.run('Người NGOÀI quyền gọi thẳng API Nhập Hàng (bỏ qua UI) vẫn bị chặn 403, KHÔNG đổi trạng thái', async () => {
-      const result = await receiveGoods(page, idE); // vẫn đăng nhập OUTSIDER từ bước trên
-      assertIncludes(result.alerts, 'không có quyền', 'Phải báo lỗi không có quyền xác nhận nhập hàng');
-      assertEqual(result.item.status, 'AWAITING_RECEIPT', 'Trạng thái không được đổi khi bị chặn quyền');
-    });
-    await run.run('cancelOperationOrderReceipt qua UI thật: thiếu lý do -> chặn lại, KHÔNG gọi API (validate phía client)', async () => {
-      await loginAs(page, APPROVER);
-      const result = await cancelReceipt(page, idB, ''); // để trống lý do
-      assertIncludes(result.alerts, 'Vui lòng nhập lý do hủy nhập', 'Phải chặn ngay ở client khi thiếu lý do, không gọi API');
-      assertEqual(result.item.status, 'AWAITING_RECEIPT', 'Chưa đổi gì vì bị chặn validate trước khi gọi API');
-    });
-    await run.run('Trưởng phòng (approver) xác nhận Nhập Hàng cho đơn A -> RECEIVED + receivedAt', async () => {
-      const result = await receiveGoods(page, idA);
-      assertEqual(result.item.status, 'RECEIVED');
-      assert(result.item.receivedAt, 'Phải có receivedAt');
-      assertIncludes(result.alerts, 'Đã xác nhận nhập hàng', 'Phải thông báo thành công');
-    });
-    await run.run('Trưởng phòng Hủy Nhập cho đơn B (có lý do) -> RECEIPT_CANCELLED + receiptCancelledAt', async () => {
-      const result = await cancelReceipt(page, idB, 'NCC báo hết hàng, không giao được');
-      assertEqual(result.item.status, 'RECEIPT_CANCELLED');
-      assert(result.item.receiptCancelledAt, 'Phải có receiptCancelledAt');
-      assertIncludes(result.alerts, 'Đã hủy nhập đơn hàng', 'Phải thông báo thành công');
-    });
-    await run.run('Không thể Nhập Hàng/Hủy Nhập LẦN NỮA cho đơn đã RECEIVED (sai trạng thái nguồn) — chặn 409', async () => {
-      const result = await receiveGoods(page, idA);
-      assertIncludes(result.alerts, 'chờ nhập hàng', 'Phải báo lỗi sai trạng thái (đã RECEIVED rồi, không còn AWAITING_RECEIPT)');
-      assertEqual(result.item.status, 'RECEIVED', 'Trạng thái không được đổi thêm lần nữa');
+    await run.run('Mô phỏng dữ liệu LỊCH SỬ (như trước đợt tắt tính năng): đơn A->RECEIVED, đơn B->RECEIPT_CANCELLED, đơn E->AWAITING_RECEIPT (giả lập đơn CŨ còn kẹt từ trước khi tắt)', async () => {
+      // KHÔNG còn đi qua UI thật (RECEIPT tab đã ẩn) — gán thẳng DB, đúng hình dạng receiveOperationOrderGoods()/
+      // cancelOperationOrderReceipt() (lib/recordActions.js) từng tạo ra, để kiểm Báo Cáo vẫn đọc đúng
+      // dữ liệu cũ dạng này (các hàm đó vẫn hoạt động y hệt, chỉ mất lối vào UI — xem test-operation-
+      // order-receiving.js cho phần unit-test đầy đủ của chính 2 hàm này). Đơn E vừa duyệt xong ở bước
+      // trước giờ dừng ở APPROVED thật (hành vi MỚI) — ở đây ép nó về AWAITING_RECEIPT để giả lập 1 đơn
+      // CŨ (tạo trước đợt tắt tính năng) vẫn còn kẹt ở bước chờ nhập hàng, xác nhận Báo Cáo vẫn đếm/hiện
+      // đúng dữ liệu lịch sử dạng này (không bị xoá/vỡ bởi thay đổi lần này).
+      await page.evaluate(({ idA, idB, idE }) => {
+        const a = DB.operationOrders.find(o => o.id === idA);
+        a.status = 'RECEIVED';
+        a.receivedAt = new Date().toISOString();
+        a.history.push({ step: 0, action: 'RECEIVED', approver: 'Trưởng Phòng Vận Hành', username: 'tp.vanhanh', time: new Date().toLocaleString('vi-VN'), comment: '' });
+        const b = DB.operationOrders.find(o => o.id === idB);
+        b.status = 'RECEIPT_CANCELLED';
+        b.receiptCancelledAt = new Date().toISOString();
+        b.history.push({ step: 0, action: 'RECEIPT_CANCELLED', approver: 'Trưởng Phòng Vận Hành', username: 'tp.vanhanh', time: new Date().toLocaleString('vi-VN'), comment: 'NCC báo hết hàng, không giao được' });
+        const e = DB.operationOrders.find(o => o.id === idE);
+        e.status = 'AWAITING_RECEIPT';
+      }, { idA, idB, idE });
+      const [a, b, e] = await page.evaluate(({ idA, idB, idE }) => [idA, idB, idE].map(id => DB.operationOrders.find(o => o.id === id)), { idA, idB, idE });
+      assertEqual(a.status, 'RECEIVED');
+      assertEqual(b.status, 'RECEIPT_CANCELLED');
+      assertEqual(e.status, 'AWAITING_RECEIPT', 'Giả lập đơn CŨ còn kẹt ở Chờ Nhập Hàng (dữ liệu lịch sử, không còn đường tạo mới qua UI)');
     });
 
     // ===== 4) Báo Cáo — đếm đúng + nhóm đúng theo tháng =====

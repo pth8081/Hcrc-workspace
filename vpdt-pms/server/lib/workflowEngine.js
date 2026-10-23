@@ -1484,20 +1484,24 @@ function applyWorkflowAction({ moduleKey, item, action, user, comment, extraFiel
   if (moduleKey === 'itPriceApprovals' && Array.isArray(item.files) && item.files.length) {
     item.approvedFileId = item.files[item.files.length - 1].id;
   }
-  // operationOrders (đợt "Báo Cáo + Nhập Hàng") — duyệt xong bước cuối KHÔNG dừng ở APPROVED như mọi
-  // module khác nữa: tự động sang thêm 1 giai đoạn "Chờ nhập hàng" (AWAITING_RECEIPT) để chờ người phụ
-  // trách xác nhận NHẬP HÀNG (RECEIVED, "kết thúc" đơn) hoặc HỦY NHẬP (RECEIPT_CANCELLED, hàng không về
-  // thực tế) — 2 hành động MỚI này đi qua route riêng POST /api/records/operationOrders/:id/receive-goods
+  // operationOrders (đợt "Báo Cáo + Nhập Hàng") — TỪNG tự động sang thêm 1 giai đoạn "Chờ nhập hàng"
+  // (AWAITING_RECEIPT) sau khi duyệt xong bước cuối, chờ người phụ trách xác nhận NHẬP HÀNG (RECEIVED)
+  // hoặc HỦY NHẬP (RECEIPT_CANCELLED) qua route riêng POST /api/records/operationOrders/:id/receive-goods
   // |cancel-receipt (routes/records.js + lib/recordActions.js receiveOperationOrderGoods()/
-  // cancelOperationOrderReceipt()), KHÔNG qua applyWorkflowAction() này (chỉ nhận PENDING ở đầu hàm,
-  // xem dòng ~339) — giữ ĐÚNG quy trình duyệt phòng ban cũ nguyên vẹn, đây chỉ là 1 giai đoạn TIẾP THEO
-  // sau khi đã duyệt xong. approvedAt (ISO, khác history[].time dạng vi-VN không tiện sort/group) ghi lại
-  // đúng thời điểm này — dùng để nhóm "Giá trị đã duyệt theo tháng" ở tab Báo Cáo (module-vanhanh.js
-  // renderOperationOrderReport()) mà không phải tự parse ngược history mỗi lần vẽ báo cáo. Hồ sơ CŨ đã ở
-  // APPROVED TRƯỚC đợt này được di trú 1 lần sang AWAITING_RECEIPT bởi
-  // migrateApprovedOperationOrdersToAwaitingReceipt() (seedDefaults.js) — xem chú thích ở đó.
+  // cancelOperationOrderReceipt()). Hồ sơ CŨ đã ở APPROVED trước đợt đó từng được di trú 1 lần sang
+  // AWAITING_RECEIPT bởi migrateApprovedOperationOrdersToAwaitingReceipt() (seedDefaults.js, giữ nguyên,
+  // không đụng vào — chỉ là script migrate 1 lần cho dữ liệu cũ thời điểm đó).
+  // TẠM VÔ HIỆU HOÁ (theo yêu cầu người dùng, đợt tiếp nối "Phiếu Phê Duyệt" operationOrders): người dùng
+  // muốn quy trình dừng hẳn ở "Đã phê duyệt", không tự chuyển "Chờ nhập hàng" nữa — 2 nút Nhập Hàng/Hủy
+  // Nhập cũng đã ẩn khỏi UI (sub-tab "🧾 Duyệt Nhập/Hủy Đơn Hàng" ẩn ở module-vanhanh.js). Đây là tạm dừng
+  // tính năng, KHÔNG xoá hẳn — người dùng nói rõ "nếu cần tôi sẽ báo sau" — nên chỉ bỏ đúng 1 dòng gán
+  // status bên dưới, giữ nguyên code route/hàm receive-goods/cancel-receipt + toàn bộ phần hiển thị dữ
+  // liệu LỊCH SỬ (badge/báo cáo) của 3 trạng thái AWAITING_RECEIPT/RECEIVED/RECEIPT_CANCELLED, để bật lại
+  // dễ dàng chỉ bằng cách thêm lại dòng `item.status = 'AWAITING_RECEIPT';` nếu sau này được yêu cầu.
+  // approvedAt (ISO, khác history[].time dạng vi-VN không tiện sort/group) vẫn giữ — dùng để nhóm "Giá trị
+  // đã duyệt theo tháng" ở tab Báo Cáo (module-vanhanh.js renderOperationOrderReport()), không liên quan
+  // gì tới luồng nhập/hủy hàng đã tạm tắt.
   if (moduleKey === 'operationOrders') {
-    item.status = 'AWAITING_RECEIPT';
     item.approvedAt = new Date().toISOString();
   }
   // paymentRequests — giữ lại đúng 3 field approvedBy/approvedByName/approvedAt mà approvePaymentRequest()

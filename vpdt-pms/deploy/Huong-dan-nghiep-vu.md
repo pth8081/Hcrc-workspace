@@ -2461,6 +2461,17 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     hàng riêng** (không gộp chung 1 đơn). Kết quả trả về theo từng file: đơn
     tạo thành công lẫn file lỗi (đọc PDF thất bại/trùng Số Đơn NCC) đều hiện rõ
     trong 1 bảng tổng kết cuối cùng — 1 file lỗi không chặn các file còn lại.
+  - **⚠️ TẠM VÔ HIỆU HOÁ (10/2026, theo yêu cầu TRỰC TIẾP của người dùng, không
+    phải lỗi)**: toàn bộ mục "Duyệt Nhập Hàng/Hủy Đơn" mô tả ngay dưới đây
+    hiện **KHÔNG còn hoạt động trên UI** — sub-tab "📦 Duyệt Nhập/Hủy Đơn
+    Hàng" bị ép ẩn, và đơn hàng duyệt xong bước cuối giờ **dừng hẳn ở "✅ Đã
+    phê duyệt"**, không còn tự động chuyển "Chờ Nhập Hàng" nữa (xem
+    `lib/workflowEngine.js`). Mô tả nghiệp vụ dưới đây GIỮ LẠI làm tư liệu
+    (hàm/route xử lý vẫn còn nguyên, có thể bật lại khi người dùng yêu cầu) —
+    KHÔNG áp dụng cho dữ liệu/thao tác MỚI tạo từ 10/2026 trở đi, CHỈ còn
+    đúng với dữ liệu lịch sử (đơn hàng đã ở Chờ Nhập Hàng/Đã Nhập Hàng/Đã Hủy
+    Nhập từ trước đợt tắt) — các badge/báo cáo liên quan vẫn hiển thị đúng
+    cho dữ liệu cũ này, chỉ không còn đường tạo mới.
   - **Duyệt Nhập Hàng/Hủy Đơn — sub-tab riêng + quyền riêng, tách khỏi luồng
     duyệt nội bộ**: 2 nút "✅ Xác nhận nhập hàng"/"❌ Hủy đơn" (áp dụng khi đơn
     đã ở trạng thái **Chờ Nhập Hàng** — tức đã qua đủ các bước duyệt nội bộ

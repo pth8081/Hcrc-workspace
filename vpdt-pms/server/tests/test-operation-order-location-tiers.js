@@ -151,7 +151,7 @@ test('Đơn STORE (5tr, tier LT10M): approver Siêu Thị duyệt được', () 
   const item = freshOrder({ orderLocationType: 'STORE' });
   const { item: result, transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(STORE_APPROVER), comment: '', appData });
   assert.strictEqual(transition.type, 'COMPLETED');
-  assert.strictEqual(result.status, 'AWAITING_RECEIPT');
+  assert.strictEqual(result.status, 'APPROVED');
 });
 test('Đơn STORE (5tr, tier LT10M): approver HO (dù cấu hình đúng mức tương ứng bên HO) KHÔNG được quyền duyệt — 403', () => {
   const item = freshOrder({ orderLocationType: 'STORE' });
@@ -164,7 +164,7 @@ test('Đơn HO (5tr, tier LT100M): approver HO duyệt được', () => {
   const item = freshOrder({ orderLocationType: 'HO' });
   const { item: result, transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: makeUser(HO_APPROVER), comment: '', appData });
   assert.strictEqual(transition.type, 'COMPLETED');
-  assert.strictEqual(result.status, 'AWAITING_RECEIPT');
+  assert.strictEqual(result.status, 'APPROVED');
 });
 test('Đơn HO (5tr, tier LT100M): approver Siêu Thị KHÔNG được quyền duyệt — 403 (2 quy trình hoàn toàn tách biệt)', () => {
   const item = freshOrder({ orderLocationType: 'HO' });

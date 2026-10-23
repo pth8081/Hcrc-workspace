@@ -1,9 +1,55 @@
 # Phiên bản hiện tại
 
-**28.8** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.9** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.9 (2026-10): Đặt Hàng NCC (Siêu Thị/HO) — tạm vô hiệu hoá luồng Nhập Hàng/Hủy Nhập
+
+Theo yêu cầu TRỰC TIẾP của người dùng (không phải lỗi kỹ thuật): quy trình
+`operationOrders` (2 sub-tab "🏬 Đặt Hàng Tại Siêu Thị"/"🏢 Đặt Hàng Tại HO")
+giờ **dừng hẳn ở "✅ Đã phê duyệt"** sau khi duyệt xong bước cuối — KHÔNG
+còn tự động chuyển sang "📥 Chờ nhập hàng" (`AWAITING_RECEIPT`) như trước
+(đợt "Báo Cáo + Nhập Hàng"). Người dùng xác nhận rõ qua 2 vòng hỏi lại: chỉ
+cần disable 2 nút "📥 Nhập Hàng"/"🚫 Hủy Nhập", và xác nhận luôn muốn trạng
+thái dừng hẳn ở "Đã phê duyệt" (không chỉ ẩn nút, còn phải tắt luôn bước tự
+động chuyển trạng thái) — "nếu người dùng cần tôi sẽ báo sau" nên đây là
+**tạm vô hiệu hoá, không xoá hẳn tính năng**:
+
+- **`lib/workflowEngine.js`** (hàm xử lý duyệt xong bước cuối, nhánh
+  `moduleKey === 'operationOrders'`): bỏ đúng 1 dòng
+  `item.status = 'AWAITING_RECEIPT';`, giữ nguyên `item.approvedAt` (vẫn cần
+  cho báo cáo "Giá trị đã duyệt theo tháng") — `item.status` giờ giữ nguyên
+  `'APPROVED'` đã gán chung ở trên, y hệt mọi module khác.
+- **`public/js/module-vanhanh.js`** (`setOperationOrderSubTab()`): sub-tab
+  "🧾 Duyệt Nhập/Hủy Đơn Hàng" (`'RECEIPT'`) ép `allowed = false` bất kể
+  quyền `vanHanhOrdersReceipt` của từng user — nút sub-tab luôn ẩn, không
+  ai mở được nữa (kể cả cố tình gọi `setOperationOrderSubTab('RECEIPT')`
+  trực tiếp, sẽ tự fallback về STORE/HO/REPORT).
+- **KHÔNG xoá** hàm/route xử lý (`receiveOperationOrderGoods()`/
+  `cancelOperationOrderReceipt()` ở `lib/recordActions.js`, 2 route
+  `POST /api/records/operationOrders/:id/receive-goods|cancel-receipt`),
+  **KHÔNG xoá** hiển thị dữ liệu LỊCH SỬ (badge trạng thái, các thẻ/báo cáo
+  "Chờ Nhập Hàng"/"Đã Nhập Hàng"/"Đã Hủy Nhập" ở tab Báo Cáo) — hồ sơ CŨ đã
+  từng ở 3 trạng thái này (tạo trước đợt tắt) vẫn hiển thị/đếm đúng bình
+  thường, chỉ không còn đường tạo MỚI qua UI. Bật lại dễ dàng sau này: thêm
+  lại đúng 1 dòng `item.status = 'AWAITING_RECEIPT';` + bỏ điều kiện ép
+  `false` ở sub-tab RECEIPT.
+- Phiếu Phê Duyệt của `operationOrders` (v28.5, `isOperationOrderPostApproval()`)
+  KHÔNG bị ảnh hưởng — vẫn xem/in được bình thường ngay khi đơn vừa
+  `APPROVED` (tập hợp "post-approval" vốn đã gồm cả APPROVED từ trước).
+
+**Test**: cập nhật 3 kịch bản cũ ở `tests/test-operation-order-receiving.js`
++ `tests/test-operation-order-location-tiers.js` (kỳ vọng `APPROVED` thay vì
+`AWAITING_RECEIPT` sau duyệt xong — đây là cập nhật fixture theo đúng thay
+đổi nghiệp vụ, không phải regression); viết lại phần "Nhập/Hủy Hàng qua UI"
+ở `tests/test-operation-order-report.js` thành mô phỏng dữ liệu lịch sử
+(gán thẳng DB, không còn đi qua UI đã ẩn) + 1 kịch bản mới xác nhận sub-tab
+RECEIPT luôn ẩn; xoá `tests/demo-operation-order-report-receiving.js` (demo
+thuần cho tính năng nay đã tắt, không nằm trong bộ hồi quy). Toàn bộ test
+liên quan `operationOrders`/`workflowEngine` (60+ file) chạy lại sạch,
+không regression. CSP self-check `module-vanhanh.js` sạch.
 
 ## v28.8 (2026-10): Hợp Đồng — "🖨️ Xem/Tải Phiếu Phê Duyệt" ở tab Quản Lý Hợp Đồng
 

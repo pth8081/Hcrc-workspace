@@ -72,7 +72,12 @@ const OPERATION_ORDER_SUBTAB_LABELS = { STORE: '🏬 Đặt Hàng Tại Siêu Th
 function setOperationOrderSubTab(tab) {
   // Mục 0 (10/2026): AND thêm checkbox vanHanhOrdersStore/Ho/Report/Receipt.
   const opOrderKeyMap = { STORE: 'vanHanhOrdersStore', HO: 'vanHanhOrdersHo', REPORT: 'vanHanhOrdersReport', RECEIPT: 'vanHanhOrdersReceipt' };
-  const opOrderTabOrder = ['STORE', 'HO', 'REPORT', 'RECEIPT'].map(k => [k, hasModuleAccess(currentUser, opOrderKeyMap[k])]);
+  // TẠM ẨN sub-tab RECEIPT (theo yêu cầu người dùng, đợt tiếp nối "Phiếu Phê Duyệt" operationOrders —
+  // quy trình giờ dừng hẳn ở "Đã phê duyệt", không còn tự động chuyển "Chờ nhập hàng" nữa, xem
+  // lib/workflowEngine.js) — ép `false` bất kể quyền `vanHanhOrdersReceipt` của từng user, KHÔNG xoá
+  // checkbox/hàm render — chỉ cần bỏ dòng ép `false` này (trả lại `hasModuleAccess(...)` như cũ) để bật
+  // lại nếu người dùng yêu cầu sau này.
+  const opOrderTabOrder = ['STORE', 'HO', 'REPORT', 'RECEIPT'].map(k => [k, k === 'RECEIPT' ? false : hasModuleAccess(currentUser, opOrderKeyMap[k])]);
   const curOpOrderTab = opOrderTabOrder.find(([k]) => k === tab);
   if (!curOpOrderTab || !curOpOrderTab[1]) {
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở

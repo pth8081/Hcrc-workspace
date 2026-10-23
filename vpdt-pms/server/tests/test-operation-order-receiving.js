@@ -1,25 +1,34 @@
 // server/tests/test-operation-order-receiving.js
 //
-// Test THUẦN (không cần Playwright/SQL Server) cho đợt "Vận Hành > Đơn Hàng: Báo Cáo + Nhập Hàng":
+// Test THUẦN (không cần Playwright/SQL Server) cho đợt "Vận Hành > Đơn Hàng: Báo Cáo + Nhập Hàng".
+//
+// CẬP NHẬT (đợt "tạm vô hiệu hoá Nhập/Hủy Hàng", theo yêu cầu TRỰC TIẾP người dùng — operationOrders
+// giờ DỪNG HẲN ở APPROVED sau khi duyệt xong bước cuối, KHÔNG còn tự động chuyển AWAITING_RECEIPT nữa,
+// xem lib/workflowEngine.js). Phần 1 bên dưới đã sửa lại kỳ vọng cho đúng — Phần 2/3 GIỮ NGUYÊN vì vẫn
+// còn hữu ích: route/hàm receive-goods/cancel-receipt và script migrate dữ liệu cũ KHÔNG bị xoá (chỉ ẩn
+// lối vào trên UI), nên vẫn cần test đúng cho dữ liệu LỊCH SỬ và khả năng bật lại sau này.
 //   1. lib/workflowEngine.js applyWorkflowAction() — operationOrders:
-//      - Duyệt xong bước CUỐI tự động chuyển status APPROVED -> AWAITING_RECEIPT (KHÔNG dừng ở APPROVED
-//        như trước) + ghi approvedAt (ISO). Bước GIỮA (chưa phải bước cuối) vẫn PENDING/ADVANCED như cũ,
-//        KHÔNG bị đụng.
+//      - Duyệt xong bước CUỐI dừng hẳn ở APPROVED (như mọi module khác) + ghi approvedAt (ISO). Bước
+//        GIỮA (chưa phải bước cuối) vẫn PENDING/ADVANCED như cũ, KHÔNG bị đụng.
 //      - Từ chối (REJECT) vẫn y hệt hành vi cũ (REJECTED, không có approvedAt) — regression cho quy
 //        trình duyệt phòng ban gốc, đây là phần rủi ro cao nhất theo yêu cầu.
 //      - Chặn đúng quyền (canApproveStep) y hệt trước — không nới lỏng gì thêm.
-//      - Module KHÁC (carRegs) hoàn toàn KHÔNG bị ảnh hưởng bởi nhánh operationOrders mới thêm — vẫn
-//        dừng ở APPROVED như trước (đúng phạm vi if (moduleKey === 'operationOrders') tường minh).
-//   2. lib/recordActions.js receiveOperationOrderGoods()/cancelOperationOrderReceipt():
+//      - Module KHÁC (carRegs) hoàn toàn KHÔNG bị ảnh hưởng — vẫn dừng ở APPROVED như trước (đúng phạm
+//        vi if (moduleKey === 'operationOrders') tường minh).
+//   2. lib/recordActions.js receiveOperationOrderGoods()/cancelOperationOrderReceipt() — GIỮ NGUYÊN, lối
+//      vào UI đã ẩn (sub-tab RECEIPT) nhưng hàm vẫn hoạt động đúng cho dữ liệu AWAITING_RECEIPT còn sót
+//      lại từ trước, hoặc nếu tính năng được bật lại:
 //      - Chỉ nhận từ AWAITING_RECEIPT, từ chối rõ ràng (409) nếu sai trạng thái nguồn.
 //      - Chỉ đúng quần thể được phép mới gọi được (403) — admin hoặc quyền RIÊNG
 //        operationOrderReceiptManage ({all,depts[]}, 'HO' là sentinel) — KHÔNG còn mirror approvers
 //        dept-workflow của quy trình Duyệt/Từ chối như trước (đợt "Duyệt Nhập/Hủy Đơn Hàng tập trung").
 //      - cancelOperationOrderReceipt() bắt buộc có lý do (400 nếu thiếu).
 //      - Thành công: đúng status đích + timestamp ISO tương ứng + 1 dòng lịch sử mới.
-//   3. seedDefaults.migrateApprovedOperationOrdersToAwaitingReceipt() — hồ sơ CŨ kẹt APPROVED (từ trước
-//      đợt này) tự động chuyển sang AWAITING_RECEIPT, approvedAt lấy lại từ lịch sử APPROVED cuối cùng
-//      nếu parse được; idempotent; KHÔNG đụng hồ sơ đã ở trạng thái khác hoặc đã đúng AWAITING_RECEIPT.
+//   3. seedDefaults.migrateApprovedOperationOrdersToAwaitingReceipt() — vẫn giữ nguyên (script migrate 1
+//      lần cho dữ liệu cũ thời điểm tính năng ra đời, không liên quan tới việc tạm tắt lần này): hồ sơ CŨ
+//      kẹt APPROVED (từ trước đợt "Báo Cáo + Nhập Hàng") tự động chuyển sang AWAITING_RECEIPT, approvedAt
+//      lấy lại từ lịch sử APPROVED cuối cùng nếu parse được; idempotent; KHÔNG đụng hồ sơ đã ở trạng thái
+//      khác hoặc đã đúng AWAITING_RECEIPT.
 //
 // Chạy: node server/tests/test-operation-order-receiving.js
 const assert = require('assert');
@@ -97,32 +106,36 @@ function freshOrder(overrides) {
 function makeUser(username, extra) { return Object.assign({ username, name: username, perms: {} }, extra); }
 
 // ===================== 1) applyWorkflowAction — operationOrders =====================
-test('applyWorkflowAction operationOrders APPROVE (bước duy nhất, đúng approver) -> AWAITING_RECEIPT + approvedAt ISO hợp lệ, KHÔNG còn dừng ở APPROVED', () => {
+// LƯU Ý (đợt "tạm vô hiệu hoá Nhập/Hủy Hàng", theo yêu cầu TRỰC TIẾP người dùng — quy trình operationOrders
+// giờ dừng hẳn ở APPROVED, KHÔNG còn tự động chuyển AWAITING_RECEIPT nữa, xem lib/workflowEngine.js). 3
+// test bên dưới đã CẬP NHẬT LẠI kỳ vọng cho đúng hành vi mới — đây KHÔNG phải regression, là cập nhật
+// fixture/assertion theo đúng thay đổi nghiệp vụ (CLAUDE.md, mục "không làm treo nút thao tác").
+test('applyWorkflowAction operationOrders APPROVE (bước duy nhất, đúng approver) -> dừng ở APPROVED + approvedAt ISO hợp lệ (KHÔNG còn tự chuyển AWAITING_RECEIPT)', () => {
   const item = freshOrder();
   const user = makeUser(APPROVER_STEP1);
   const { item: result, transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user, comment: '', appData });
   assert.strictEqual(transition.type, 'COMPLETED');
-  assert.strictEqual(result.status, 'AWAITING_RECEIPT');
+  assert.strictEqual(result.status, 'APPROVED');
   assert(result.approvedAt, 'approvedAt phải được gán');
   assert(!isNaN(new Date(result.approvedAt).getTime()), 'approvedAt phải là chuỗi ISO hợp lệ');
   const lastHist = result.history[result.history.length - 1];
   assert.strictEqual(lastHist.action, 'APPROVED', 'history vẫn ghi đúng hành động APPROVED (không đổi format lịch sử cũ)');
 });
 
-test('applyWorkflowAction operationOrders: bước GIỮA (2 bước, mới duyệt bước 1) -> vẫn PENDING/ADVANCED, KHÔNG tự chuyển AWAITING_RECEIPT (chỉ bước CUỐI mới chuyển)', () => {
+test('applyWorkflowAction operationOrders: bước GIỮA (2 bước, mới duyệt bước 1) -> vẫn PENDING/ADVANCED; bước CUỐI dừng ở APPROVED (không tự chuyển AWAITING_RECEIPT)', () => {
   const item = freshOrder();
   const user = makeUser(APPROVER_STEP1);
   const { item: result, transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user, comment: '', appData: appData2Step });
   assert.strictEqual(transition.type, 'ADVANCED');
-  assert.strictEqual(result.status, 'PENDING', 'bước giữa vẫn phải PENDING (chờ bước 2), không phải AWAITING_RECEIPT');
+  assert.strictEqual(result.status, 'PENDING', 'bước giữa vẫn phải PENDING (chờ bước 2)');
   assert.strictEqual(result.currentStep, 2);
   assert(!result.approvedAt, 'approvedAt KHÔNG được gán ở bước giữa, chỉ gán khi hoàn tất bước cuối');
 
-  // Bước 2 (bước cuối) duyệt xong -> mới thực sự chuyển AWAITING_RECEIPT.
+  // Bước 2 (bước cuối) duyệt xong -> dừng hẳn ở APPROVED.
   const user2 = makeUser(APPROVER_STEP2);
   const { item: result2, transition: transition2 } = applyWorkflowAction({ moduleKey: 'operationOrders', item: result, action: 'APPROVE', user: user2, comment: '', appData: appData2Step });
   assert.strictEqual(transition2.type, 'COMPLETED');
-  assert.strictEqual(result2.status, 'AWAITING_RECEIPT');
+  assert.strictEqual(result2.status, 'APPROVED');
   assert(result2.approvedAt);
 });
 
@@ -167,7 +180,7 @@ test('applyWorkflowAction operationOrders — operationOrderAllowSelfApproveHO=t
   const selfApproverAllowed = makeUser(APPROVER_STEP1, { perms: { operationOrderAllowSelfApproveHO: true } });
   const { item: result, transition } = applyWorkflowAction({ moduleKey: 'operationOrders', item, action: 'APPROVE', user: selfApproverAllowed, comment: '', appData });
   assert.strictEqual(transition.type, 'COMPLETED');
-  assert.strictEqual(result.status, 'AWAITING_RECEIPT', 'tự duyệt thành công khi có quyền operationOrderAllowSelfApproveHO');
+  assert.strictEqual(result.status, 'APPROVED', 'tự duyệt thành công khi có quyền operationOrderAllowSelfApproveHO (dừng ở APPROVED, không còn tự chuyển AWAITING_RECEIPT)');
 });
 
 test('applyWorkflowAction operationOrders — operationOrderAllowSelfApproveStore=true (quyền KHÁC, không phải HO) KHÔNG áp dụng cho đơn HO -> vẫn 403 (2 quyền độc lập)', () => {
