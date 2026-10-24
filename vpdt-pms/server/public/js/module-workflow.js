@@ -159,9 +159,10 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
   // duyệt theo đúng chức danh đó (không còn approvers rỗng như trước) — bước KHÔNG bật "Theo Chức Danh"
   // vẫn giữ nguyên approvers rỗng như hành vi cũ.
   //
-  // dept (tham số 4, MỚI — tính năng "🏢 Tự động khớp đúng phòng ban của từng mục", CHỈ Bước 1): phòng
+  // dept (tham số 4, tính năng "🏢 Tự động khớp đúng phòng ban của từng mục", áp dụng cho MỌI bước từ
+  // 10/2026 — trước đó chỉ giới hạn Bước 1): phòng
   // ban/siêu thị CỦA CHÍNH target đang xét (rỗng/null với 2 luồng pureTier không có khái niệm phòng ban).
-  // approverMode[step]==='POSITION_AUTO_DEPT' (chỉ có thể xảy ra ở Bước 1, xem
+  // approverMode[step]==='POSITION_AUTO_DEPT' (có thể xảy ra ở BẤT KỲ bước nào, xem
   // renderQuickApplyPositionSteps()/collectQaStepModesAndPositions()) nghĩa là admin đã chọn CHỨC DANH
   // THÔI (không ghép phòng ban) cho bước đó — ở ĐÚNG đây, lúc ghi vào TỪNG target riêng lẻ, tự thay dept
   // rỗng của mỗi pair bằng dept THẬT của target này, rồi hạ approverMode về 'POSITION' bình thường trước
@@ -323,8 +324,9 @@ function renderQuickApplySection() {
 // "1 người cụ thể" áp cho nhiều phòng ban cùng lúc, chỉ có 2 lựa chọn mỗi bước: để trống (giữ nguyên
 // hành vi cũ, admin tự gán tay sau) hoặc bật "🧭 Gán theo Chức Danh".
 //
-// "🏢 Tự động khớp đúng phòng ban của từng mục" (MỚI — theo yêu cầu người dùng, CHỈ Bước 1): tuỳ chọn
-// PHỤ, chỉ hiện khi step.order===1 và "🧭 Gán theo Chức Danh" đang bật. Khi bật, thay ô chọn cặp
+// "🏢 Tự động khớp đúng phòng ban của từng mục" (áp dụng cho MỌI bước từ 10/2026 — theo yêu cầu người
+// dùng, trước đó bản đầu chỉ giới hạn Bước 1): tuỳ chọn PHỤ, hiện ở MỌI bước khi "🧭 Gán theo Chức Danh"
+// đang bật. Khi bật, thay ô chọn cặp
 // {Chức danh, Phòng ban} thường bằng 1 ô chọn CHỨC DANH THUẦN (dùng chung wfPosBuilderJobTitleOptions() —
 // gộp cả DB.jobTitles/DB.storeJobTitles, module-admin-specialperm.js) — không chọn phòng ban ở đây vì
 // phòng ban sẽ được TỰ ĐỘNG thay đúng bằng phòng ban/siêu thị của TỪNG mục lúc bấm "⚡ Áp Dụng" (xem
@@ -332,9 +334,11 @@ function renderQuickApplySection() {
 // cũ: trước đây 1 danh sách cặp {Chức danh, Phòng ban} DUY NHẤT bị copy Y HỆT vào MỌI phòng ban trong
 // phạm vi áp dụng — để trống Phòng ban thì khớp chức danh đó CẢ CÔNG TY (VD Trưởng Phòng A duyệt được cả
 // hồ sơ Phòng B), điền cụ thể 1 phòng ban thì cũng bị copy chéo sang các phòng ban khác không liên quan
-// nếu admin thêm nhiều cặp để cố phủ nhiều phòng ban cùng lúc. CHỈ giới hạn ở Bước 1 (không phải cơ chế
-// resolveStepApproverUsernames() không cho phép — mà vì nhu cầu thực tế của người dùng chỉ có ở bước
-// đầu, các bước sau thường là cấp quản lý cao hơn/cố định, không theo phòng ban của người đăng ký).
+// nếu admin thêm nhiều cặp để cố phủ nhiều phòng ban cùng lúc. Bản đầu (10/2026) từng CHỈ giới hạn ở
+// Bước 1 (không phải cơ chế resolveStepApproverUsernames() không cho phép — mà vì khi đó nhu cầu thực tế
+// chỉ có ở bước đầu) — người dùng xác nhận các bước sau (VD "Trưởng phòng" ở Bước 2) CŨNG cần tự khớp
+// đúng phòng ban của người đăng ký thay vì gộp chung TẤT CẢ người giữ chức danh đó toàn công ty, nên mở
+// rộng ra MỌI bước, không còn giới hạn Bước 1 nữa.
 function renderQuickApplyPositionSteps() {
   const wrap = document.getElementById('qaPositionStepsWrap');
   if (!wrap) return;
@@ -345,14 +349,14 @@ function renderQuickApplyPositionSteps() {
   const autoDeptPickersToRender = [];
   wrap.innerHTML = wf.steps.map(step => {
     const stepKey = `qa_${step.order}`;
-    const isAutoDeptMode = step.order === 1 && qaEditingApproverMode[step.order] === 'POSITION_AUTO_DEPT';
+    const isAutoDeptMode = qaEditingApproverMode[step.order] === 'POSITION_AUTO_DEPT';
     const isPositionMode = qaEditingApproverMode[step.order] === 'POSITION' || isAutoDeptMode;
     const currentPositions = qaEditingApproversByPosition[step.order] || [];
     const positionPickerId = `qaPositionPicker_${stepKey}`;
     const autoDeptPickerId = `qaAutoDeptPicker_${stepKey}`;
     const positionPreviewId = `qaPositionPreview_${stepKey}`;
     positionPickersToRender.push({ positionPickerId, positionPreviewId, currentPositions });
-    if (step.order === 1) autoDeptPickersToRender.push({ autoDeptPickerId, positionPreviewId, currentPositions });
+    autoDeptPickersToRender.push({ autoDeptPickerId, positionPreviewId, currentPositions });
     return `
       <div class="bg-gray-100 p-2 rounded text-xs space-y-1.5 border">
         <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -362,16 +366,15 @@ function renderQuickApplyPositionSteps() {
               <input type="checkbox" id="qaPosModeToggle_${stepKey}" data-op-change="onQaStepPositionToggle" data-arg0="${stepKey}" data-arg-el="1" ${isPositionMode ? 'checked' : ''}>
               🧭 Gán theo Chức Danh
             </label>
-            ${step.order === 1 ? `
-            <label id="qaAutoDeptLabel_${stepKey}" class="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 cursor-pointer whitespace-nowrap${isPositionMode ? '' : ' hidden'}" title="Chỉ dùng được ở Bước 1 — mỗi phòng ban/mức đang áp dụng tự ra ĐÚNG người giữ chức danh này CỦA RIÊNG phòng ban/mức đó (không dùng chung 1 danh sách cho mọi nơi, tránh lộ chéo phòng ban)">
+            <label id="qaAutoDeptLabel_${stepKey}" class="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 cursor-pointer whitespace-nowrap${isPositionMode ? '' : ' hidden'}" title="Mỗi phòng ban/mức đang áp dụng tự ra ĐÚNG người giữ chức danh này CỦA RIÊNG phòng ban/mức đó (không dùng chung 1 danh sách cho mọi nơi, tránh lộ chéo phòng ban)">
               <input type="checkbox" id="qaAutoDeptToggle_${stepKey}" data-op-change="onQaAutoDeptToggle" data-arg0="${stepKey}" data-arg-el="1" ${isAutoDeptMode ? 'checked' : ''}>
               🏢 Tự động khớp đúng phòng ban của từng mục
-            </label>` : ''}
+            </label>
           </div>
         </div>
         <div id="qaPositionBlock_${stepKey}" class="${isPositionMode ? '' : 'hidden'} space-y-1">
           <div id="${positionPickerId}" class="${isAutoDeptMode ? 'hidden' : ''}"></div>
-          ${step.order === 1 ? `<div id="${autoDeptPickerId}" class="${isAutoDeptMode ? '' : 'hidden'}"></div>` : ''}
+          <div id="${autoDeptPickerId}" class="${isAutoDeptMode ? '' : 'hidden'}"></div>
           <div id="${positionPreviewId}"></div>
         </div>
       </div>
@@ -438,7 +441,7 @@ function collectQaStepModesAndPositions(wf) {
     const stepKey = `qa_${step.order}`;
     const toggle = document.getElementById(`qaPosModeToggle_${stepKey}`);
     if (!toggle || !toggle.checked) return;
-    const autoDeptToggle = step.order === 1 ? document.getElementById(`qaAutoDeptToggle_${stepKey}`) : null;
+    const autoDeptToggle = document.getElementById(`qaAutoDeptToggle_${stepKey}`);
     if (autoDeptToggle && autoDeptToggle.checked) {
       approverMode[step.order] = 'POSITION_AUTO_DEPT';
       approversByPosition[step.order] = getMultiSelectValues(`qaAutoDeptPicker_${stepKey}`).map(jobTitle => ({ jobTitle, dept: '' }));
@@ -462,7 +465,7 @@ function renderQuickApplyConfigList() {
     const wf = DB.workflows.find(w => w.id === cfg.workflowId);
     const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k);
     const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
-    const hasAutoDeptStep = cfg.approverMode?.[1] === 'POSITION_AUTO_DEPT';
+    const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
     return `
       <div class="bg-gray-50 border rounded-lg p-3 space-y-2">
         <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -471,7 +474,7 @@ function renderQuickApplyConfigList() {
               ? `<span class="bg-blue-50 border border-blue-200 text-blue-700 font-bold px-2 py-1 rounded-full">${escapeHtml(wf.name)}</span>`
               : `<span class="bg-red-50 border border-red-200 text-red-700 font-bold px-2 py-1 rounded-full">⚠️ Mẫu quy trình đã bị xoá</span>`}
             ${positionStepCount ? `<span class="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-full">🧭 ${positionStepCount} bước theo Chức Danh</span>` : ''}
-            ${hasAutoDeptStep ? `<span class="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-full">🏢 Tự động khớp phòng ban (Bước 1)</span>` : ''}
+            ${autoDeptStepCount ? `<span class="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-full">🏢 Tự động khớp phòng ban (${autoDeptStepCount} bước)</span>` : ''}
             <span class="text-gray-400">→ gắn cho:</span>
             ${modLabels.map(l => `<span class="bg-white border rounded-full px-2 py-0.5">${escapeHtml(l)}</span>`).join('')}
           </div>
@@ -521,9 +524,9 @@ async function applyQuickApplyConfig(configId) {
 
   const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k).join(', ');
   const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
-  const hasAutoDeptStep = cfg.approverMode?.[1] === 'POSITION_AUTO_DEPT';
+  const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
   const positionNote = positionStepCount
-    ? `Lưu ý: ${positionStepCount} bước đã gán "Theo Chức Danh" sẽ có người duyệt NGAY theo đúng chức danh đó — các bước còn lại vẫn để trống, bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán tay.${hasAutoDeptStep ? ' Bước 1 đã bật "🏢 Tự động khớp đúng phòng ban" — mỗi mục sẽ tự ra đúng người giữ chức danh đó CỦA RIÊNG phòng ban/mức tương ứng, không dùng chung 1 danh sách.' : ''}`
+    ? `Lưu ý: ${positionStepCount} bước đã gán "Theo Chức Danh" sẽ có người duyệt NGAY theo đúng chức danh đó — các bước còn lại vẫn để trống, bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán tay.${autoDeptStepCount ? ` ${autoDeptStepCount} bước đã bật "🏢 Tự động khớp đúng phòng ban" — mỗi mục sẽ tự ra đúng người giữ chức danh đó CỦA RIÊNG phòng ban/mức tương ứng, không dùng chung 1 danh sách.` : ''}`
     : `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước sau khi áp dụng.`;
   const proceed = confirm(
     `Sẽ áp dụng mẫu "${wf.name}" (${wf.steps.length} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình, trong phạm vi module: ${modLabels} — KHÔNG đụng tới module ngoài phạm vi này, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.\n\n` +

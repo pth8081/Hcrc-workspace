@@ -730,6 +730,19 @@ Nguyên tắc quan trọng cần biết trước khi dùng:
   Cơ chế "Theo vị trí" bên dưới hoạt động y hệt khi cấu hình tay ở từng module
   (chỉ người ĐANG giữ đúng chức danh/phòng ban VÀ đã được cấp quyền "Người
   duyệt" mới thật sự duyệt được — xem mục 3.2/3.5).
+- **"🏢 Tự động khớp đúng phòng ban của từng mục" (checkbox phụ, hiện cạnh
+  "🧭 Gán theo Chức Danh" khi bật, áp dụng cho MỌI bước từ 10/2026)** — bật
+  thêm checkbox này khi KHÔNG muốn 1 chức danh được chọn (VD "Trưởng Phòng")
+  khớp CẢ CÔNG TY (tức mọi Trưởng Phòng của mọi phòng ban đều thành người
+  duyệt), mà muốn MỖI phòng ban/mức đang áp dụng tự ra ĐÚNG người giữ chức
+  danh đó CỦA RIÊNG phòng ban/mức đó (VD Phòng A gửi đề xuất thì chỉ Trưởng
+  Phòng A duyệt, Phòng B gửi thì chỉ Trưởng Phòng B duyệt — không lộ chéo
+  sang phòng ban khác). Khi bật, ô chọn đổi từ cặp "Chức danh — Phòng ban"
+  sang CHỈ chọn chức danh (không chọn phòng ban ở đây nữa — phòng ban sẽ tự
+  khớp đúng từng mục lúc bấm "⚡ Áp Dụng"). Bản đầu (10/2026) từng CHỈ dùng
+  được ở Bước 1 — theo phản hồi người dùng (chọn "Trưởng phòng" ở Bước 2 vẫn
+  ra tất cả Trưởng Phòng toàn công ty), nay mở rộng ra MỌI bước, không còn
+  giới hạn Bước 1 nữa.
 - **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình, trong ĐÚNG phạm
   vi module của cấu hình đó** — bất kỳ phòng ban/mức nào ĐÃ được admin cấu
   hình từ trước (kể cả chỉ mới chọn số bước mà chưa gán người duyệt) đều

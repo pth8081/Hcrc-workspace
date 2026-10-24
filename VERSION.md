@@ -1,9 +1,40 @@
 # Phiên bản hiện tại
 
-**28.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.14 (2026-10): "⚡ Áp Dụng Nhanh" — mở "🏢 Tự động khớp đúng phòng ban" ra MỌI bước (không còn giới hạn Bước 1)
+
+Người dùng báo: ở "Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → ⚡ Áp Dụng Nhanh",
+khối "3. Gán người duyệt theo Chức Danh cho từng bước" chỉ có Bước 1 là có
+checkbox "🏢 Tự động khớp đúng phòng ban của từng mục" — các bước sau (VD
+Bước 2 "Trưởng phòng") không có, nên chọn "Trưởng phòng" ở Bước 2 thì ra
+TẤT CẢ Trưởng Phòng của mọi phòng ban (8 người) thay vì chỉ đúng Trưởng
+Phòng của phòng ban gửi đề xuất. Người dùng muốn MỌI bước đều có cả 2 tuỳ
+chọn (gán theo Chức Danh + tự động khớp phòng ban), không riêng Bước 1.
+
+- Nguyên nhân: tính năng "🏢 Tự động khớp đúng phòng ban" (ra mắt cùng đợt
+  với contract/VPP Phiếu Phê Duyệt trước đó) chỉ giới hạn thuần UI ở Bước 1
+  — cơ chế đọc/ghi phía dưới (`collectQuickApplyUnconfiguredTargets()`,
+  `resolveStepApproverUsernames()`) vốn đã tổng quát cho mọi bước, không
+  cần sửa gì.
+- Đã bỏ điều kiện `step.order === 1` ở `renderQuickApplyPositionSteps()` +
+  `collectQaStepModesAndPositions()` (`public/js/module-workflow.js`) —
+  checkbox "🏢 Tự động khớp đúng phòng ban" nay hiện ở MỌI bước của mẫu quy
+  trình đã chọn, hoạt động giống hệt Bước 1 trước đây (chọn chức danh, KHÔNG
+  ghép phòng ban — phòng ban tự khớp đúng từng mục lúc bấm "⚡ Áp Dụng").
+- Badge hiển thị trên danh sách cấu hình đã lưu đổi từ "🏢 Tự động khớp
+  phòng ban (Bước 1)" sang đếm đúng số bước đang bật (VD "🏢 Tự động khớp
+  phòng ban (2 bước)").
+- Mở rộng `tests/test-quick-apply-auto-dept-position.js` kiểm tra thêm kịch
+  bản Bước 2 (đúng kịch bản người dùng báo) — bật auto-dept ở Bước 2, Lưu,
+  Áp Dụng, xác nhận mỗi phòng ban tự ra đúng Trưởng Phòng của phòng ban đó
+  (không lộ chéo), `editQuickApplyConfig()` nạp lại đúng state cho cả 2
+  bước — 24/24 kịch bản pass. Chạy lại `test-quick-apply-workflow-steps.js`
+  (44/44), `test-adv-workflow-tab-deep.js` (56/56),
+  `test-workflow-position-approvers.js` (22/22) — không regression.
 
 ## v28.13 (2026-10): Nhúng file PDF "Hướng Dẫn Sử Dụng" vào trong ứng dụng
 
