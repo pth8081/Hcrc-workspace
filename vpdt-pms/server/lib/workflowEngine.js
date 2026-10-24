@@ -930,12 +930,51 @@ function assertDeptOrTierWorkflowMapShape(key, value) {
 // bên trong `.map()`/`forEach()` cũng throw ("Cannot read properties of null"). CHỈ validate CẤU TRÚC
 // (object 2 tầng, phần tử trong mảng phải là object) — KHÔNG validate sâu xuống field `label`/`type`/
 // `required`/`options` bên trong mỗi field-def, cùng triết lý các Set validate khác ở trên.
+//
+// LỖI ĐÃ VÁ (10/2026, người dùng báo "Lỗi lưu dữ liệu formTemplates... danh sách trường của module
+// __core__SUBMISSION phải là 1 mảng" khi sửa "Loại Tờ Trình" ở 📋 Biểu Mẫu → "✏️ Đang Sửa Trường Mặc
+// Định"): bản vá trên COI formTemplates CHỈ có 1 khuôn duy nhất (mọi modKey -> mảng field-def) — nhưng
+// `DB.formTemplates` ở client (xem chú thích tại getCoreFieldOverrides()/setUnifiedFieldOrder(),
+// public/js/core.js) thực ra có 3 khuôn khoá CẤP 1 khác nhau, CHỈ 1 trong 3 là mảng:
+//   - tabKey thường (VD "SUBMISSION", "CAR", "DOC"...) -> MẢNG field-def (khuôn gốc assert ở trên).
+//   - `__core__`+coreKey (VD "__core__SUBMISSION") -> OBJECT {fieldId: {label, required}} — override
+//     nhãn/bắt buộc của TRƯỜNG MẶC ĐỊNH (updateCoreFieldOverride()) — KHÔNG BAO GIỜ là mảng.
+//   - `__order__`+tabKey (VD "__order__SUBMISSION") -> MẢNG chuỗi id (thứ tự hiển thị trường,
+//     setUnifiedFieldOrder()) — là mảng, nhưng PHẦN TỬ là chuỗi id chứ KHÔNG phải object field-def.
+// Trước bản vá này, assert cũ bắt CẢ 3 khuôn phải "mảng các object" giống hệt tabKey thường — nên MỌI
+// lượt sửa "Trường Mặc Định" (ghi `__core__`+coreKey, 1 object) bị chặn 400 ngay từ server dù UI đã áp
+// dụng override tạm trên trình duyệt (khiến F5 lại mất, đúng phản ánh của người dùng). Nay rẽ nhánh theo
+// tiền tố khoá CẤP 1 — mỗi nhánh validate ĐÚNG khuôn thật của nó, không áp 1 khuôn chung cho cả 3 nữa.
 function assertFormTemplatesShape(key, value) {
   if (key !== 'formTemplates') return;
   if (!isPlainWorkflowMapObject(value)) {
     throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là object {tên module: danh sách trường}`);
   }
   for (const [modKey, fields] of Object.entries(value)) {
+    if (modKey.startsWith('__core__')) {
+      // Override trường mặc định — object {fieldId: {label, required}}, KHÔNG phải mảng.
+      if (!isPlainWorkflowMapObject(fields)) {
+        throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — override trường mặc định của "${modKey}" phải là object {mã trường: {label, required}}`);
+      }
+      for (const [fieldId, override] of Object.entries(fields)) {
+        if (!isPlainWorkflowMapObject(override)) {
+          throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — override trường "${fieldId}" của "${modKey}" phải là object`);
+        }
+      }
+      continue;
+    }
+    if (modKey.startsWith('__order__')) {
+      // Thứ tự hiển thị trường — mảng chuỗi id, KHÔNG phải mảng object field-def.
+      if (!Array.isArray(fields)) {
+        throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — thứ tự trường của "${modKey}" phải là 1 mảng`);
+      }
+      fields.forEach((id, idx) => {
+        if (typeof id !== 'string') {
+          throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phần tử thứ ${idx + 1} trong thứ tự trường của "${modKey}" phải là chuỗi (mã trường)`);
+        }
+      });
+      continue;
+    }
     if (!Array.isArray(fields)) {
       throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — danh sách trường của module "${modKey}" phải là 1 mảng`);
     }

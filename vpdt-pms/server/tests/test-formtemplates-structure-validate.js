@@ -78,6 +78,43 @@ test('key KHÔNG phải "formTemplates" (VD paymentDeptWorkflows) -> không thro
   assertFormTemplatesShape('paymentDeptWorkflows', { TRAINING_DOC: { label: 'Ghi chú' } });
 });
 
+// ===== LỖI ĐÃ VÁ (10/2026, người dùng báo lỗi khi sửa "Loại Tờ Trình" ở 📋 Biểu Mẫu → "✏️ Đang Sửa
+// Trường Mặc Định"): bản vá TRÊN (Phần A ở trên) coi MỌI modKey đều phải là mảng — nhưng khoá
+// `__core__`+coreKey (override trường MẶC ĐỊNH, getCoreFieldOverrides()/updateCoreFieldOverride() ở
+// public/js/core.js) và `__order__`+tabKey (thứ tự hiển thị, setUnifiedFieldOrder()) là 2 khuôn KHÁC,
+// không phải mảng field-def như tabKey thường — xem chú thích đầy đủ tại assertFormTemplatesShape().
+
+test('LỖI ĐÃ VÁ: formTemplates["__core__SUBMISSION"] là OBJECT {fieldId: {label, required}} -> KHÔNG throw (đúng khuôn override trường mặc định, không phải mảng field-def)', () => {
+  assertFormTemplatesShape('formTemplates', {
+    __core__SUBMISSION: { subType: { label: 'Loại Tờ Trình', required: true } }
+  });
+});
+test('__core__ key rỗng ({}) -> không throw', () => {
+  assertFormTemplatesShape('formTemplates', { __core__SUBMISSION: {} });
+});
+test('LỖI ĐÃ VÁ (trước đây sẽ throw sai vì coi là mảng): __core__ key LÀ MẢNG -> vẫn throw 400 (sai khuôn, phải là object)', () => {
+  expectThrows400(() => assertFormTemplatesShape('formTemplates', { __core__SUBMISSION: [{ label: 'x' }] }));
+});
+test('__core__ key có giá trị field override KHÔNG phải object (VD chuỗi) -> throw 400', () => {
+  expectThrows400(() => assertFormTemplatesShape('formTemplates', { __core__SUBMISSION: { subType: 'hack' } }));
+});
+test('LỖI ĐÃ VÁ: formTemplates["__order__SUBMISSION"] là MẢNG CHUỖI id -> không throw (đúng khuôn thứ tự hiển thị)', () => {
+  assertFormTemplatesShape('formTemplates', { __order__SUBMISSION: ['subType', 'subDept', 'subTitle'] });
+});
+test('__order__ key LÀ OBJECT (không phải mảng) -> throw 400', () => {
+  expectThrows400(() => assertFormTemplatesShape('formTemplates', { __order__SUBMISSION: { x: 1 } }));
+});
+test('__order__ key có phần tử KHÔNG phải chuỗi -> throw 400', () => {
+  expectThrows400(() => assertFormTemplatesShape('formTemplates', { __order__SUBMISSION: [{ id: 'subType' }] }));
+});
+test('Cả 3 khuôn tabKey thường + __core__ + __order__ trộn lẫn trong CÙNG 1 lượt lưu -> không throw (đúng kịch bản thật DB.formTemplates lưu)', () => {
+  assertFormTemplatesShape('formTemplates', {
+    SUBMISSION: [{ label: 'Ghi chú thêm', type: 'text', required: false }],
+    __core__SUBMISSION: { subType: { label: 'Loại Tờ Trình', required: true } },
+    __order__SUBMISSION: ['subType', 'subDept']
+  });
+});
+
 console.log(`\n${passed}/${passed + failed} scenario(s) passed (Phần A).`);
 
 // ===== PHẦN B: HTTP thật qua POST /api/data/formTemplates + validateRequiredCustomData() thật =====
@@ -188,6 +225,29 @@ async function main() {
       const res = await api('POST', '/api/data/formTemplates', { TRAINING_DOC: [{ label: 'Ghi chú', type: 'text', required: false }] });
       assertEqual(res.status, 200, 'phải lưu được');
       assertEqual(APP_DATA.formTemplates.TRAINING_DOC.length, 1, 'phải lưu đúng 1 field-def');
+    });
+
+    // LỖI ĐÃ VÁ (10/2026, đúng kịch bản người dùng báo): sửa "Loại Tờ Trình" ở "✏️ Đang Sửa Trường Mặc
+    // Định" của Văn Bản Trình/Tờ Trình -> client ghi `__core__SUBMISSION` (OBJECT override) trong CÙNG
+    // request với các khoá tabKey/`__order__` khác đã có trong DB.formTemplates -> trước bản vá, route
+    // trả 400 NGAY ("danh sách trường của module __core__SUBMISSION phải là 1 mảng"), lưu KHÔNG được.
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/formTemplates ghi __core__SUBMISSION (override trường mặc định) trộn cùng SUBMISSION (mảng field-def) -> 200, lưu đúng CẢ 2', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/formTemplates', {
+        SUBMISSION: [{ label: 'Ghi chú thêm', type: 'text', required: false }],
+        __core__SUBMISSION: { subType: { label: 'Loại Tờ Trình', required: true } },
+        __order__SUBMISSION: ['subType', 'subDept']
+      });
+      assertEqual(res.status, 200, `phải lưu được (đúng kịch bản người dùng báo lỗi 400 sai) — nhận status=${res.status}, body=${JSON.stringify(res.body)}`);
+      assertEqual(JSON.stringify(APP_DATA.formTemplates.__core__SUBMISSION), JSON.stringify({ subType: { label: 'Loại Tờ Trình', required: true } }), 'phải lưu đúng override trường mặc định');
+      assertEqual(APP_DATA.formTemplates.SUBMISSION.length, 1, 'không ảnh hưởng tới khoá SUBMISSION (mảng field-def) đã lưu cùng request');
+      assertEqual(JSON.stringify(APP_DATA.formTemplates.__order__SUBMISSION), JSON.stringify(['subType', 'subDept']), 'không ảnh hưởng tới khoá __order__SUBMISSION đã lưu cùng request');
+    });
+
+    await run.run('LỖI ĐÃ VÁ: POST /api/data/formTemplates với __core__SUBMISSION là MẢNG (sai khuôn, phải là object) -> vẫn 400 (không nới lỏng quá tay)', async () => {
+      resetData();
+      const res = await api('POST', '/api/data/formTemplates', { __core__SUBMISSION: [{ label: 'x' }] });
+      assertEqual(res.status, 400, `phải trả 400 — nhận status=${res.status}`);
     });
 
     // Xác nhận route CHẶN SỚM ở lúc LƯU — validateRequiredCustomData() THẬT (lib/createValidation.js,

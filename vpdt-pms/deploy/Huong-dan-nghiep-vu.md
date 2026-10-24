@@ -6019,6 +6019,23 @@ Bổ Sung"/nhãn field mặc định thấy khi bấm vào từng tab con) — c
 lưu trước đó tự động copy sang cả 2 tab con khi tải lại, admin xoá bớt ở
 tab không cần nếu thấy trùng lặp thừa.
 
+**LỖI ĐÃ VÁ (10/2026, người dùng báo lỗi "Lỗi lưu dữ liệu formTemplates...
+phải là 1 mảng" khi sửa nhãn/bắt buộc 1 trường MẶC ĐỊNH, VD "Loại Tờ
+Trình")**: bản vá validate cấu trúc `formTemplates` ở server (đợt re-audit
+trước đó) coi MỌI khoá trong `formTemplates` đều phải là MẢNG — đúng cho
+"Trường Bổ Sung" (field admin tự thêm) nhưng SAI cho 2 thao tác khác ở
+đúng màn này: **sửa nhãn/bắt buộc 1 trường mặc định** (bảng "Cấu Trúc Tất
+Cả Các Trường Đang Áp Dụng", nút "Sửa") và **kéo sắp xếp lại thứ tự hiển
+thị trường** — cả 2 lưu vào 2 dạng khoá nội bộ khác (object cho trường mặc
+định, mảng chuỗi id cho thứ tự), không phải mảng field-def. Server trả về
+lỗi 400 ngay lúc lưu nên **KHÔNG hề mất dữ liệu cũ** (đã lưu trước đó vẫn
+nguyên), nhưng chặn admin lưu MỌI thay đổi mới ở CẢ 2 thao tác này, trên
+**TẤT CẢ ~40 module/nhóm field** (không riêng Văn Bản Trình). Đã sửa
+validate server phân biệt đúng 3 khuôn dữ liệu — sửa nhãn/bắt buộc trường
+mặc định và sắp xếp thứ tự trường nay lưu được bình thường, F5 lại vẫn giữ
+đúng thay đổi đã lưu (như "Thêm Trường Bổ Sung" vốn hoạt động đúng từ
+trước, không bị ảnh hưởng bởi lỗi này).
+
 ### 7.4. Quản Lý Tệp File
 
 **📎 Quản Lý Tệp File** — cấu hình 2 việc riêng theo TỪNG module có upload tệp:

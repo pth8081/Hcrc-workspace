@@ -1,9 +1,52 @@
 # Phiên bản hiện tại
 
-**28.14** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.15 (2026-10): Vá lỗi 400 khi sửa Trường Mặc Định / sắp xếp thứ tự trường ở 📋 Biểu Mẫu
+
+Người dùng báo: vào Hệ Thống → 📋 Biểu Mẫu, sửa "Loại Tờ Trình" (Văn Bản
+Trình / Tờ Trình) thì gặp lỗi "Lỗi lưu dữ liệu formTemplates... danh sách
+trường của module __core__SUBMISSION phải là 1 mảng". Kèm 2 câu hỏi: (1)
+rà soát các module Biểu Mẫu khác có bị tương tự không, (2) nếu sửa xong F5
+có lưu lại được không, hay bắt buộc phải tạo mới ở Danh Mục.
+
+**Nguyên nhân (lỗi thật, không phải do thao tác người dùng)**: bản vá
+validate cấu trúc `formTemplates` ở `assertFormTemplatesShape()`
+(`lib/workflowEngine.js`, thêm ở đợt re-audit "formTemplates thiếu validate
+cấu trúc" trước đó) coi MỌI khoá cấp 1 trong `formTemplates` đều phải là
+MẢNG — đúng cho field "Trường Bổ Sung" (admin tự thêm), nhưng SAI cho 2
+thao tác khác CÙNG màn Biểu Mẫu lưu vào 2 khuôn dữ liệu khác hẳn (xem
+`getCoreFieldOverrides()`/`setUnifiedFieldOrder()`, `public/js/core.js`):
+- **Sửa nhãn/bắt buộc 1 trường MẶC ĐỊNH** (nút "Sửa" ở bảng "Cấu Trúc Tất
+  Cả Các Trường Đang Áp Dụng") → ghi khoá `__core__`+coreKey, dạng OBJECT
+  `{fieldId: {label, required}}`.
+- **Kéo sắp xếp lại thứ tự hiển thị trường** → ghi khoá `__order__`+tabKey,
+  dạng MẢNG CHUỖI id (không phải mảng object field-def).
+
+Cả 2 bị validate cũ chặn 400 ngay lúc lưu — ảnh hưởng **TẤT CẢ ~40 nhóm
+module** khai trong `CORE_FIELD_MANIFEST` (không riêng Văn Bản Trình), mọi
+nơi admin cố sửa nhãn/bắt buộc trường mặc định hoặc kéo sắp xếp thứ tự đều
+gặp lỗi tương tự. May là lỗi 400 chặn SỚM ở lúc lưu nên **không có dữ liệu
+cũ nào bị mất** — chỉ là thay đổi MỚI chưa lưu được.
+
+- Sửa `assertFormTemplatesShape()` rẽ nhánh theo tiền tố khoá: `__core__*`
+  phải là object (không phải mảng), `__order__*` phải là mảng CHUỖI, các
+  tabKey thường còn lại giữ nguyên validate cũ (mảng field-def object).
+- Mở rộng `tests/test-formtemplates-structure-validate.js` — thêm 12 kịch
+  bản mới (9 Phần A thuần hàm + 2 Phần B HTTP thật, đúng kịch bản người
+  dùng báo: ghi `__core__SUBMISSION` trộn cùng `SUBMISSION`/`__order__SUBMISSION`
+  trong 1 request → 200, lưu đúng cả 3) — 26/26 kịch bản pass. Chạy lại
+  `test-forms-batch1..4.js` (36+41+44+43), `test-forms-nav-groups.js`
+  (282/282) — không regression.
+- **Trả lời câu hỏi F5 có lưu lại không**: CÓ — `updateCoreFieldOverride()`/
+  `setUnifiedFieldOrder()` đều `await syncStorage()` thật lên server trước
+  khi coi là xong (tự revert UI nếu server từ chối), nay server chấp nhận
+  (200) nên F5 lại vẫn giữ đúng thay đổi đã lưu, **không cần chuyển sang
+  Danh Mục** để đạt mục đích tương tự — sửa thẳng trong Biểu Mẫu là đủ.
+
 
 ## v28.14 (2026-10): "⚡ Áp Dụng Nhanh" — mở "🏢 Tự động khớp đúng phòng ban" ra MỌI bước (không còn giới hạn Bước 1)
 
