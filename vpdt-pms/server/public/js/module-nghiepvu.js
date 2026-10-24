@@ -2259,8 +2259,19 @@ function renderNghiepVuModule() {
     </div>
   ` : '';
 
+  const pdfBannerHtml = nvActiveSection === 'business' ? `
+    <div class="nv-pdf-banner">
+      <div>
+        <div class="nv-pdf-banner-title">📘 Hướng Dẫn Sử Dụng (PDF)</div>
+        <div class="nv-pdf-banner-sub">Xem trực quan toàn bộ hướng dẫn dạng sách — có ảnh chụp màn hình thật cho từng module.</div>
+      </div>
+      <a href="/templates/huong-dan-su-dung.pdf" target="_blank" rel="noopener" class="nv-pdf-banner-btn">⬇️ Mở PDF</a>
+    </div>
+  ` : '';
+
   root.innerHTML = `
     ${tabsHtml}
+    ${pdfBannerHtml}
     <div class="nv-app">
       <div class="nv-sidebar">${navHtml}</div>
       <div class="nv-main" id="nghiepVuMain"></div>

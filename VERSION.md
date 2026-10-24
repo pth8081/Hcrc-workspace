@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**28.12** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.13** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.13 (2026-10): Nhúng file PDF "Hướng Dẫn Sử Dụng" vào trong ứng dụng
+
+Theo yêu cầu người dùng: đưa file PDF "Hướng Dẫn Sử Dụng" (bản tổng hợp
+trực quan 11 chương/32 module, có ảnh chụp màn hình thật, xuất ở đợt trước)
+vào thẳng trong ứng dụng để người dùng mở xem ngay, không cần tìm file
+rời. Đã gửi ảnh demo vị trí đặt banner, người dùng xác nhận trước khi
+code thật (đúng quy trình "phân tích → xác nhận → làm + merge").
+
+- File PDF đặt tại `public/templates/huong-dan-su-dung.pdf` (đúng khuôn
+  file tĩnh tải xuống có sẵn `mau-bao-cao-dinh-ky.pptx` — phục vụ qua
+  `express.static(public)`, không cần route riêng).
+- Thêm banner **"📘 Hướng Dẫn Sử Dụng (PDF)"** ở ngay đầu trang, tab
+  **📘 Nghiệp Vụ** (`renderNghiepVuModule()`, `public/js/module-nghiepvu.js`)
+  — trước danh sách các nhóm module, có nút "⬇️ Mở PDF" mở file trực tiếp
+  trên trình duyệt (tab mới). CHỈ hiện ở tab Nghiệp Vụ (không hiện ở tab
+  Hệ Thống — đúng phạm vi file PDF chỉ bao phủ module người dùng, không có
+  Quản Trị Hệ Thống).
+- **Lưu ý vận hành**: đây là **bản PDF tĩnh** (snapshot tại thời điểm xuất)
+  — khi nghiệp vụ thay đổi sau này, nội dung PDF KHÔNG tự cập nhật theo
+  (khác tab Nghiệp Vụ dạng chữ luôn live). Người dùng đã xác nhận chấp
+  nhận đánh đổi này, tự nhớ yêu cầu xuất lại PDF khi cần — không cần làm
+  gì thêm phía hệ thống.
+- CSS banner thêm vào `public/app.css` (`.nv-pdf-banner*`, tông màu navy
+  `#1F4E79`/vàng đồng `#DFB156` khớp bộ nhận diện HCRC Workspace đã dùng
+  cho tài liệu truyền thông go-live).
+- Test: chạy lại `test-nghiepvu.js` (160/160), `test-nghiepvu-click.js`
+  (9/9), `test-nghiepvu-csp.js` (6/6) — không regression. Tự kiểm tra CSP
+  (không onclick/style nội tuyến).
 
 ## v28.12 (2026-11): Báo Cáo Đào Tạo Tổng Hợp — 5 sheet đúng mẫu Excel BP Đào Tạo
 

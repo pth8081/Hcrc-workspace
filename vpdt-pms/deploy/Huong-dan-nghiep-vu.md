@@ -182,6 +182,17 @@ trong chia **2 tab** (`.nv-section-tabs`, `setNVActiveSection()` ở
   là màn tài liệu tham khảo, không có API riêng) — tab bar hoàn toàn không
   render nếu không phải admin, không phải chỉ ẩn bằng CSS.
 
+**Banner "📘 Hướng Dẫn Sử Dụng (PDF)" (từ v28.13)**: đặt ngay đầu trang, CHỈ
+hiện ở tab Nghiệp Vụ (không hiện ở tab Hệ Thống, vì file PDF chỉ bao phủ
+module người dùng, không có phần Quản Trị Hệ Thống) — nút "⬇️ Mở PDF" mở
+file `public/templates/huong-dan-su-dung.pdf` (86 trang, có ảnh chụp màn
+hình thật cho từng module, phục vụ tĩnh qua `express.static`, không có route
+riêng — giống khuôn file `mau-bao-cao-dinh-ky.pptx` đã có). **Đây là bản PDF
+TĨNH** (snapshot tại thời điểm xuất) — khi nghiệp vụ thay đổi sau này, nội
+dung PDF KHÔNG tự cập nhật theo (khác nội dung tab Nghiệp Vụ dạng chữ/sơ đồ
+luôn live); người dùng xuất lại file PDF thủ công khi cần, không có cơ chế
+tự sinh lại.
+
 Nav trái của tab Nghiệp Vụ nhóm theo 11 nhóm đúng cách người dùng vận hành
 thực tế (**Bắt Đầu Sử Dụng** — mục "⚙️ Hồ Sơ Cá Nhân & Bảo Mật Tài Khoản" đặt
 LÊN ĐẦU từ **v24.12** theo yêu cầu người dùng, gom cả cài PWA/đổi mật khẩu/

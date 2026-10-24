@@ -646,6 +646,14 @@ input[data-sdd-list] {
 #nghiepVuRoot .nv-section-tab.active { color:#4c1d95; border-bottom-color:#7c3aed; }
 #nghiepVuRoot .nv-section-tab:hover:not(.active) { color:#374151; }
 
+/* Banner "Hướng Dẫn Sử Dụng (PDF)" (10/2026) — chỉ hiện ở tab Nghiệp Vụ (business), đặt trước .nv-app.
+   Tông màu navy/vàng đồng khớp bộ nhận diện HCRC Workspace đã dùng cho tài liệu truyền thông go-live. */
+#nghiepVuRoot .nv-pdf-banner { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; background:#1F4E79; color:#fff; border-radius:10px; padding:14px 20px; margin-bottom:16px; }
+#nghiepVuRoot .nv-pdf-banner-title { font-size:15px; font-weight:800; }
+#nghiepVuRoot .nv-pdf-banner-sub { font-size:12.5px; color:#dce6f1; margin-top:2px; }
+#nghiepVuRoot .nv-pdf-banner-btn { flex-shrink:0; background:#DFB156; color:#1F4E79; font-weight:800; font-size:13px; padding:9px 18px; border-radius:999px; text-decoration:none; white-space:nowrap; }
+#nghiepVuRoot .nv-pdf-banner-btn:hover { background:#eccb86; }
+
 @media (max-width: 720px) {
   #nghiepVuRoot .nv-footer-grid { grid-template-columns:1fr; }
   #nghiepVuRoot .nv-app { flex-direction:column; }
