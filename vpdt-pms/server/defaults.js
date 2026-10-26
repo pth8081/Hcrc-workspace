@@ -877,6 +877,12 @@ const DEFAULTS = {
   // kiến" của Văn Bản Trình, mọi nhóm đều là 1 bước duyệt); "Quản Lý HĐ" (contractManageDeptWorkflows)
   // đơn giản theo phòng ban, không có lớp.
   contractApprovalDeptWorkflows: DEFAULT_MAP,
+  // contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng — tách
+  // quy trình Phê Duyệt HĐ/Phụ lục mới theo "Loại Pháp Lý"): {loại: {phòng ban: cfg}}, cùng khuôn
+  // submissionTypeDeptWorkflows — khi RỖNG (mặc định), buildEffectiveContractApprovalWorkflowServer()/
+  // resolveContractApprovalWorkflow() luôn fallback về contractApprovalDeptWorkflows cũ, hành vi KHÔNG
+  // đổi gì cho tới khi admin chủ động cấu hình riêng cho 1 loại nào đó.
+  contractTypeApprovalDeptWorkflows: {},
   contractApprovalGroups: [
     { id: 'GD_PGD', label: 'Giám Đốc/Phó Giám Đốc', order: 1, singleApprover: false, members: [] },
     { id: 'PTGD', label: 'Phó Tổng Giám Đốc', order: 2, singleApprover: false, members: [] },

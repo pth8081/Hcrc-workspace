@@ -413,12 +413,24 @@ function resolveOperationOrderWorkflow(item, appData) {
 //    riêng signedFileStatus/signedFileCurrentStep/signedFileHistory): quy trình ĐƠN GIẢN theo phòng ban
 //    (giống Xe/Mua Bán/VPP — không snapshot, tra cấu hình admin MỚI NHẤT mỗi lần duyệt), độc lập hoàn
 //    toàn với quy trình Phê Duyệt ở trên.
+// getContractApprovalDeptWorkflowConfig() — mirror getSubmissionDeptWorkflowConfig() phía trên: dò
+// contractTypeApprovalDeptWorkflows[contractType][dept] (11/2026, "làm giống Văn Bản Trình") trước, fallback
+// contractApprovalDeptWorkflows[dept] cũ. contractTypes là chuỗi phẳng (không có key ổn định) nên dùng
+// THẲNG contractType làm khoá tra, không cần dịch như submissionTypes. LƯU Ý BẢO TRÌ — phải khớp logic
+// với buildEffectiveContractApprovalWorkflowServer() (lib/createValidation.js, 2 hàm snapshot/preview
+// phải cho CÙNG kết quả với cùng input).
+function getContractApprovalDeptWorkflowConfig(contractType, dept, appData) {
+  const typeMap = appData.contractTypeApprovalDeptWorkflows || {};
+  const fromType = contractType ? typeMap[contractType]?.[dept] : null;
+  if (fromType) return fromType;
+  return appData.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+}
+
 function resolveContractApprovalWorkflow(item, appData) {
   if (item.effectiveSteps && item.effectiveApprovers) {
     return { steps: item.effectiveSteps, approvers: item.effectiveApprovers };
   }
-  const deptMap = appData.contractApprovalDeptWorkflows || {};
-  const baseConfig = deptMap[item.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const baseConfig = getContractApprovalDeptWorkflowConfig(item.type, item.dept, appData);
   return flatWorkflowConfigToSteps(baseConfig, appData);
 }
 
@@ -761,9 +773,12 @@ const DEPT_OR_TIER_WORKFLOW_MAP_KEYS = new Set([
   'itPriceDeptWorkflows', 'budgetDeptWorkflows', 'budgetApprovedDeptWorkflows', 'paymentDeptWorkflows',
   'meetingDeptWorkflows', 'itPriceTierWorkflows', 'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows'
 ]);
-// submissionTypeDeptWorkflows: LỒNG SÂU HƠN 1 CẤP ({typeKey: {dept: cfg}}, xem NESTED_DEPT_WORKFLOW_MAP_KEYS
-// ở lib/catalogRename.js) — validate riêng cả 2 cấp bên dưới, không dùng chung Set ở trên.
-const NESTED_DEPT_WORKFLOW_MAP_KEY = 'submissionTypeDeptWorkflows';
+// submissionTypeDeptWorkflows/contractTypeApprovalDeptWorkflows: LỒNG SÂU HƠN 1 CẤP ({loại: {dept: cfg}},
+// xem NESTED_DEPT_WORKFLOW_MAP_KEYS ở lib/catalogRename.js) — validate riêng cả 2 cấp bên dưới, không
+// dùng chung Set ở trên. contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình" theo yêu
+// cầu người dùng) thêm vào đây cùng khuôn, chỉ khác khoá "loại" là chuỗi contractTypes thô thay vì key ổn
+// định — không ảnh hưởng gì tới validate CẤU TRÚC (chỉ kiểm object lồng 2 cấp, không quan tâm khoá là gì).
+const NESTED_DEPT_WORKFLOW_MAP_KEYS = new Set(['submissionTypeDeptWorkflows', 'contractTypeApprovalDeptWorkflows']);
 
 function isPlainWorkflowMapObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
@@ -896,9 +911,9 @@ function assertDeptOrTierWorkflowMapShape(key, value) {
         throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — cấu hình của "${subKey}" phải là object`);
       }
     }
-  } else if (key === NESTED_DEPT_WORKFLOW_MAP_KEY) {
+  } else if (NESTED_DEPT_WORKFLOW_MAP_KEYS.has(key)) {
     if (!isPlainWorkflowMapObject(value)) {
-      throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là object {loại tờ trình: {phòng ban: cấu hình}}`);
+      throw new WorkflowError(400, `Dữ liệu "${key}" không hợp lệ — phải là object {loại: {phòng ban: cấu hình}}`);
     }
     for (const [typeKey, deptMap] of Object.entries(value)) {
       if (!isPlainWorkflowMapObject(deptMap)) {

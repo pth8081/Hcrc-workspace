@@ -351,7 +351,14 @@ function buildEffectiveSubmissionWorkflowServer(type, dept, selectedLayerKeys, s
 // selectedLayerKeys đúng luật visible/locked -> mỗi nhóm chọn phải là tập con của thành viên đã gán
 // trong appData.contractApprovalGroups) nhưng KHÔNG có nhánh "Xin ý kiến" (mọi nhóm đều chặn quy trình,
 // không có opinionRequestees).
-function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, selectedLayerMembers, appData, approvalLevel) {
+// contractType (tham số 1, 11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng — tách quy trình
+// Phê Duyệt HĐ/Phụ lục mới theo "Loại Pháp Lý"): cùng khuôn `type` ở buildEffectiveSubmissionWorkflowServer()
+// phía trên, NHƯNG contractTypes là mảng CHUỖI PHẲNG (không có {key,label} ổn định như submissionTypes)
+// nên dùng THẲNG giá trị này làm khoá tra contractTypeApprovalDeptWorkflows, không cần dịch qua typeKey.
+// Rỗng/không khớp loại nào đã cấu hình riêng -> fallback contractApprovalDeptWorkflows cũ (dept-only),
+// giữ ĐÚNG hành vi trước khi có tính năng này. LƯU Ý BẢO TRÌ — phải khớp logic với
+// resolveContractApprovalWorkflow() (lib/workflowEngine.js).
+function buildEffectiveContractApprovalWorkflowServer(contractType, dept, selectedLayerKeys, selectedLayerMembers, appData, approvalLevel) {
   const groups = (appData.contractApprovalGroups || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const levels = appData.contractApprovalLevels || [];
   const rule = resolveApprovalLevelRule(levels, approvalLevel, groups);
@@ -368,8 +375,9 @@ function buildEffectiveContractApprovalWorkflowServer(dept, selectedLayerKeys, s
     throw new CreateError(400, `Thiếu nhóm phê duyệt bắt buộc theo cấp "${approvalLevel}": ${missingLocked.join(', ')}`);
   }
 
+  const typeMap = appData.contractTypeApprovalDeptWorkflows || {};
   const deptMap = appData.contractApprovalDeptWorkflows || {};
-  const baseConfig = deptMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const baseConfig = (contractType && typeMap[contractType]?.[dept]) || deptMap[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
   const workflows = appData.workflows || [];
   const baseWf = workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
@@ -1294,7 +1302,7 @@ const CREATE_MODULE_CONFIGS = {
         // isAddendum đã ép payload.type=root.type nhưng KHÔNG đụng payload.dept, nên vẫn đi qua đúng
         // đoạn code này).
         const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
-          user.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
+          payload.type, user.dept, payload.selectedApprovalLayers, payload.selectedLayerMembers, appData || {}, payload.approvalLevel
         );
         payload.approvalStatus = 'PENDING';
         payload.currentStep = 1;

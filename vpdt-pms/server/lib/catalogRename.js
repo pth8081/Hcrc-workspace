@@ -809,6 +809,12 @@ async function cascadeCatRename(oldValue, newValue) {
 async function cascadeContractTypeRename(oldValue, newValue) {
   await renameFieldValueInCollection('contracts', (item) => renameSimpleFields(item, ['type'], oldValue, newValue));
   await renameAbbrMapKey('contractTypeAbbrs', oldValue, newValue);
+  // contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng — tách
+  // quy trình Phê Duyệt HĐ/Phụ lục mới theo "Loại Pháp Lý"): {loại: {phòng ban: cfg}} — khoá CẤP 1 chính
+  // là chuỗi contractTypes thô (khác submissionTypeDeptWorkflows dùng key ổn định riêng, không cần
+  // cascade) — renameAbbrMapKey() đủ tổng quát để dời nguyên object {phòng ban: cfg} từ khoá cũ sang khoá
+  // mới, không cần hàm riêng.
+  await renameAbbrMapKey('contractTypeApprovalDeptWorkflows', oldValue, newValue);
 }
 
 // employmentTypes/workSchedules ("Hình Thức Làm Việc"/"Thời Gian Làm Việc" — Onboarding/Hồ Sơ Nhân Sự):

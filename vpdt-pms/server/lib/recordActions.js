@@ -242,7 +242,7 @@ function editContract(payload, user, contract, hasAddenda, rootDept, appData, ro
   }
   if (deptChanged && appData) {
     const effectiveWf = buildEffectiveContractApprovalWorkflowServer(
-      contract.dept, contract.selectedApprovalLayers, contract.selectedLayerMembers, appData, contract.approvalLevel
+      contract.type, contract.dept, contract.selectedApprovalLayers, contract.selectedLayerMembers, appData, contract.approvalLevel
     );
     contract.effectiveSteps = effectiveWf.steps;
     contract.effectiveApprovers = effectiveWf.approvers;

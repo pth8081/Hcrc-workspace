@@ -262,7 +262,7 @@ async function main() {
       contractApprovalDeptWorkflows: { 'Phòng IT': positionConfig() }, contractApprovalGroups: [],
       contractApprovalLevels: [{ id: 'KHAC', label: 'Phê duyệt khác', order: 1, visibleGroupIds: null, lockedGroupIds: [], isSystemDefault: true }]
     };
-    const wf = buildEffectiveContractApprovalWorkflowServer('Phòng IT', [], {}, appData, 'KHAC');
+    const wf = buildEffectiveContractApprovalWorkflowServer('Bất kỳ', 'Phòng IT', [], {}, appData, 'KHAC');
     assertEqual(JSON.stringify(wf.approvers[1]), JSON.stringify(['pos_ok']), 'effectiveApprovers[1] phải là username đã resolve (pos_ok)');
   });
 

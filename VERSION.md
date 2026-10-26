@@ -1,9 +1,52 @@
 # Phiên bản hiện tại
 
-**28.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.19 (2026-11): Hợp Đồng theo Loại Pháp Lý — RELEASE 1/3: nền tảng server (chưa đổi UI)
+
+Người dùng yêu cầu: tách quy trình "Phê Duyệt" Hợp Đồng/Phụ lục MỚI theo "Loại Pháp Lý", làm giống đúng
+cơ chế đã có ở Văn Bản Trình (xem v28.18) — chỉ áp dụng cho quy trình "Phê Duyệt" (KHÔNG đụng "Quản Lý
+HĐ"/Tài liệu ký, theo đúng phạm vi người dùng xác nhận). Triển khai theo 3 release nhỏ, kiểm tra từng
+bước — đây là **Release 1/3: nền tảng server, HOÀN TOÀN VÔ HÌNH với người dùng** (chưa có UI cấu hình
+theo loại, `hasTypes` vẫn tắt ở `WF_MODULE_CONFIG.CONTRACT_APPROVAL` — admin chưa cấu hình gì mới được
+thì hành vi THỰC TẾ không đổi 1 bit so với trước).
+
+- `defaults.js`: thêm `contractTypeApprovalDeptWorkflows: {}` — map lồng `{loại: {phòng ban: cfg}}`,
+  cùng khuôn `submissionTypeDeptWorkflows` của Văn Bản Trình. Mặc định RỖNG.
+- `lib/createValidation.js`: `buildEffectiveContractApprovalWorkflowServer()` (dựng snapshot
+  effectiveSteps/effectiveApprovers lúc TẠO hợp đồng/phụ lục) nhận thêm tham số đầu `contractType` — tra
+  map mới TRƯỚC (khớp đúng loại + phòng ban), fallback `contractApprovalDeptWorkflows` phẳng cũ SAU. 2
+  điểm gọi (tạo mới + `lib/recordActions.js` dựng lại snapshot khi đổi phòng ban hợp đồng gốc) đã cập
+  nhật truyền `payload.type`/`contract.type`.
+- `lib/workflowEngine.js`: `resolveContractApprovalWorkflow()` (dùng cho hồ sơ CŨ chưa có snapshot) thêm
+  hàm `getContractApprovalDeptWorkflowConfig()` cùng luật ưu tiên y hệt (LƯU Ý BẢO TRÌ: 2 hàm phải khớp
+  logic, cùng nguyên tắc với cặp Văn Bản Trình). `NESTED_DEPT_WORKFLOW_MAP_KEY` (số ít) đổi thành
+  `NESTED_DEPT_WORKFLOW_MAP_KEYS` (Set) để `assertDeptOrTierWorkflowMapShape()` validate CẤU TRÚC lồng 2
+  cấp cho CẢ `submissionTypeDeptWorkflows` lẫn `contractTypeApprovalDeptWorkflows`, chặn 400 nếu admin
+  lưu sai khuôn qua `POST /api/data/:key` (không để âm thầm hỏng, cùng triết lý các map *DeptWorkflows
+  khác).
+- `lib/catalogRename.js`: `cascadeContractTypeRename()` (đổi tên "Loại Pháp Lý" qua `POST
+  /api/admin/renameCatalogEntry`) mở rộng thêm 1 dòng `renameAbbrMapKey('contractTypeApprovalDeptWorkflows', ...)`
+  — dời ĐÚNG khoá cấp 1 (chuỗi contractTypes thô, không có key ổn định riêng như submissionTypes) sang
+  tên mới, giữ nguyên object `{phòng ban: cfg}` bên trong; không phá 2 cascade cũ đã có (`contracts.type`
+  + `contractTypeAbbrs`).
+- `routes/data.js`: `contractTypeApprovalDeptWorkflows` thêm vào `ADMIN_ONLY_KEYS`/`ADMIN_SENSITIVE_KEYS`
+  — cùng mức bảo mật với `contractApprovalDeptWorkflows`.
+- `public/js/core.js`: `initDatabase()` đọc lại `DB.contractTypeApprovalDeptWorkflows` (chỉ ĐỌC — các
+  hàm client xây/preview quy trình Phê Duyệt HĐ CHƯA đụng tới map mới này, để dành Release 2 khi có UI
+  cấu hình thật, tránh lệch giữa server/client trong lúc chưa thể cấu hình gì).
+- Test mới: `tests/test-contract-type-approval-workflow-foundation.js` (16 kịch bản) — ưu tiên map mới
+  trước map cũ, fallback đúng khi chưa cấu hình/map rỗng (trạng thái mặc định), validate cấu trúc, cascade
+  đổi tên dời đúng khoá + không phá cascade cũ. Sửa `tests/test-workflow-position-approvers.js` (lệch
+  tham số do thêm `contractType` ở vị trí đầu — không phải lỗi nghiệp vụ, chỉ cập nhật lời gọi test khớp
+  chữ ký hàm mới). Chạy lại toàn bộ test liên quan Hợp Đồng/đổi tên danh mục — không regression.
+
+**Release tiếp theo**: Release 2 (UI cấu hình theo loại ở "🔄 Quy Trình & Phê Duyệt" — bật `hasTypes` cho
+module Hợp Đồng, mở form tạo hợp đồng + modal "Xem Trước Quy Trình" đọc đúng map mới) và Release 3 (thêm
+bộ lọc "Loại Pháp Lý áp dụng" vào "⚡ Áp Dụng Nhanh", y hệt Văn Bản Trình ở v28.18).
 
 ## v28.18 (2026-10): "⚡ Áp Dụng Nhanh" — thêm lọc "Loại tờ trình áp dụng" cho Văn Bản Trình
 

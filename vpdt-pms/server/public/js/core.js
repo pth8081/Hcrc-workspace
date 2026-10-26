@@ -550,7 +550,7 @@ const DB = {
   workflows: [], deptWorkflows: {},
   submissions: [], submissionDeptWorkflows: {},
   submissionTypeDeptWorkflows: {}, submissionApprovalGroups: [], submissionApprovalLevels: [],
-  contracts: [], contractApprovalGroups: [], contractApprovalLevels: [], contractApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
+  contracts: [], contractApprovalGroups: [], contractApprovalLevels: [], contractApprovalDeptWorkflows: {}, contractTypeApprovalDeptWorkflows: {}, contractManageDeptWorkflows: {},
   meetings: [], meetingDeptWorkflows: {}, deptViewScopeConfig: {},
   carRegs: [], carDeptWorkflows: {},
   officeReqs: [],
@@ -5486,6 +5486,11 @@ async function initDatabase(loggingInUser, opts) {
     DB.contractApprovalGroups = Array.isArray(data.contractApprovalGroups) ? data.contractApprovalGroups : [];
     DB.contractApprovalLevels = Array.isArray(data.contractApprovalLevels) ? data.contractApprovalLevels : [];
     DB.contractApprovalDeptWorkflows = data.contractApprovalDeptWorkflows || {};
+    // contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình") — xem chú thích đầy đủ ở
+    // defaults.js. Chỉ ĐỌC ở đây (Phase 1 — nền tảng); UI cấu hình theo loại + wiring vào preview quy
+    // trình (buildEffectiveContractApprovalWorkflow()/resolveContractApprovalWorkflow() ở trên) để SAU
+    // (Phase 2), tránh đổi hành vi hiển thị trước khi admin có chỗ cấu hình thật.
+    DB.contractTypeApprovalDeptWorkflows = data.contractTypeApprovalDeptWorkflows || {};
     DB.contractManageDeptWorkflows = data.contractManageDeptWorkflows || {};
     // "Nhóm Phê Duyệt Cuối" (10/2026) — 10 cặp key PHẲNG (xem defaults.js), cùng khuôn
     // contractApprovalGroups/Levels ở trên — viết tường minh từng dòng (thay vì vòng lặp DB[`...`]) để

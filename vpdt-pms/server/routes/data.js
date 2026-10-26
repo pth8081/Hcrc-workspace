@@ -117,6 +117,12 @@ const ADMIN_ONLY_KEYS = new Set([
   // qua POST /api/data/operationOrderApiConfig và tự đổi Base URL/header trỏ tới máy chủ khác).
   'operationOrderApiConfig',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractApprovalLevels', 'contractManageDeptWorkflows',
+  // contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng — tách
+  // quy trình Phê Duyệt HĐ/Phụ lục mới theo "Loại Pháp Lý"): cùng khuôn submissionTypeDeptWorkflows
+  // ({loại: {phòng ban: cfg}}) nhưng khoá loại là CHUỖI contractTypes thô (không có key ổn định riêng như
+  // submissionTypes — xem cascadeContractTypeRename() ở lib/catalogRename.js, đã cascade đổi tên khoá
+  // này). Cùng lý do bảo mật với contractApprovalDeptWorkflows ở trên.
+  'contractTypeApprovalDeptWorkflows',
   // extraApprovalGroups_<moduleKey>/extraApprovalLevels_<moduleKey> ("Nhóm Phê Duyệt Cuối", 10/2026 — 10
   // quy trình × 2 key, xem defaults.js/EXTRA_APPROVAL_MODULE_KEYS): cùng lý do bảo mật với
   // contractApprovalGroups/contractApprovalLevels ở trên — không cho user thường tự ghi thẳng qua POST
@@ -341,7 +347,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   // Cấu hình quy trình duyệt (mẫu bước + gán người duyệt theo phòng ban/loại/mức)
   'workflows', 'quickApplyConfigs', 'deptWorkflows', 'submissionDeptWorkflows', 'submissionTypeDeptWorkflows',
   'carDeptWorkflows', 'officeBuyDeptWorkflows', 'officeFixDeptWorkflows', 'vppDeptWorkflows',
-  'contractApprovalDeptWorkflows', 'contractManageDeptWorkflows', 'paymentDeptWorkflows', 'budgetDeptWorkflows',
+  'contractApprovalDeptWorkflows', 'contractTypeApprovalDeptWorkflows', 'contractManageDeptWorkflows', 'paymentDeptWorkflows', 'budgetDeptWorkflows',
   'budgetApprovedDeptWorkflows', 'meetingDeptWorkflows', 'deptViewScopeConfig',
   'itPriceDeptWorkflows', 'itPriceTierWorkflows',
   'operationOrderStoreTierWorkflows', 'operationOrderHOTierWorkflows', 'operationOrderStoreMixedApprovalRules',
