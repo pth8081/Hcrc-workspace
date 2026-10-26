@@ -313,6 +313,24 @@ let qaEditingApproversByPosition = {};
 // DB.workflows đổi (renderWorkflowTemplatesTable() gọi lại) để luôn khớp mẫu mới nhất, tránh chọn nhầm
 // mẫu vừa bị admin xoá — nạp lại cả ô chọn mẫu của form thêm/sửa lẫn danh sách cấu hình đã lưu (tên mẫu
 // hiển thị trong mỗi thẻ cấu hình cũng cần cập nhật theo).
+// qaTypePickerItems(checkedModuleKeys) (11/2026, "Hợp Đồng theo Loại Pháp Lý" Release 3/3 — mở rộng
+// khối "2b. Loại áp dụng", trước đây CHỈ đọc DB.submissionTypes/CHỈ hiện cho module SUBMISSION) — hợp
+// nhất danh sách "loại" của MỌI module có `cfg.hasTypes` đang được tick ở khối 2 (SUBMISSION ->
+// DB.submissionTypes, CONTRACT_APPROVAL -> DB.contractTypes — xem getWfModuleTypes(), đã tự đọc đúng
+// nguồn theo từng module từ Release 2). Dedup theo key: 2 không gian khoá khác hẳn nhau trong thực tế
+// (submissionTypes là hằng số dạng 'KINH_PHI', contractTypes là chuỗi tiếng Việt tự do) nên khó trùng
+// tình cờ, nhưng vẫn dedup cho chắc nếu admin tick CẢ 2 module cùng lúc trong 1 cấu hình.
+function qaTypePickerItems(checkedModuleKeys) {
+  const seen = new Map();
+  (checkedModuleKeys || []).forEach(modKey => {
+    if (!WF_MODULE_CONFIG[modKey]?.hasTypes) return;
+    (getWfModuleTypes(modKey) || []).forEach(t => { if (!seen.has(t.key)) seen.set(t.key, t.label); });
+  });
+  return [...seen.entries()].map(([value, label]) => ({ value, label }));
+}
+const QA_TYPE_PICKER_PLACEHOLDER = '🔍 Tìm loại (tờ trình/pháp lý...)... (để trống = áp dụng mẫu này cho TẤT CẢ loại)';
+const QA_TYPE_PICKER_EMPTY_TEXT = 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại của (các) module đã tick ở trên (giữ đúng hành vi hiện tại).';
+
 function renderQuickApplySection() {
   const sel = document.getElementById('qaTplSelect');
   if (sel) {
@@ -321,33 +339,37 @@ function renderQuickApplySection() {
     if (current && DB.workflows.some(w => w.id === current)) sel.value = current;
   }
   const grid = document.getElementById('qaModuleGrid');
+  const checkedModules = grid ? Array.from(grid.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value) : [];
   if (grid) {
-    const checked = new Set(Array.from(grid.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value));
     grid.innerHTML = Object.entries(WF_MODULE_CONFIG)
       .map(([modKey, cfg]) => `
         <label class="flex items-center gap-1.5 text-xs bg-white border rounded px-2 py-1.5 cursor-pointer hover:bg-gray-50">
-          <input type="checkbox" value="${modKey}" class="qaModuleCheck w-3.5 h-3.5" data-op-change="onQaModuleCheckChange"${checked.has(modKey) ? ' checked' : ''}>
+          <input type="checkbox" value="${modKey}" class="qaModuleCheck w-3.5 h-3.5" data-op-change="onQaModuleCheckChange"${checkedModules.includes(modKey) ? ' checked' : ''}>
           <span>${escapeHtml(cfg.label)}</span>
         </label>
       `).join('');
   }
-  // "Loại tờ trình áp dụng" (xem chú thích đầy đủ tại collectQuickApplyUnconfiguredTargets()) — nạp lại
-  // items từ DB.submissionTypes mỗi lần vào sub-tab để luôn khớp danh mục mới nhất (admin có thể vừa
-  // thêm/xoá loại ở Biểu Mẫu → "Loại Tờ Trình"), GIỮ nguyên các giá trị đang chọn trong picker hiện tại.
-  renderMultiSelectDropdown('qaSubmissionTypesPicker', (DB.submissionTypes || []).map(t => ({ value: t.key, label: t.label })), getMultiSelectValues('qaSubmissionTypesPicker'), {
-    placeholder: '🔍 Tìm loại tờ trình... (để trống = áp dụng mẫu này cho TẤT CẢ loại)',
-    emptyText: 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành vi hiện tại).'
+  // "Loại áp dụng" (xem chú thích đầy đủ tại collectQuickApplyUnconfiguredTargets()/qaTypePickerItems())
+  // — nạp lại items từ MỌI module hasTypes đang tick mỗi lần vào sub-tab để luôn khớp danh mục mới nhất
+  // (admin có thể vừa thêm/xoá loại ở Biểu Mẫu), GIỮ nguyên các giá trị đang chọn trong picker hiện tại.
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', qaTypePickerItems(checkedModules), getMultiSelectValues('qaSubmissionTypesPicker'), {
+    placeholder: QA_TYPE_PICKER_PLACEHOLDER,
+    emptyText: QA_TYPE_PICKER_EMPTY_TEXT
   });
   updateQaSubmissionTypesVisibility();
   renderQuickApplyPositionSteps();
   renderQuickApplyConfigList();
 }
 
-// onQaModuleCheckChange: bật/tắt khối "Loại tờ trình áp dụng" theo đúng checkbox module "Văn bản trình"
-// (SUBMISSION) — chỉ module này có cfg.hasTypes (xem WF_MODULE_CONFIG), các module khác không có khái
-// niệm "loại tờ trình" nên khối này vô nghĩa và phải ẩn đi, tránh admin hiểu nhầm là lọc được cho module
-// khác.
+// onQaModuleCheckChange: bật/tắt + nạp lại nội dung khối "Loại áp dụng" theo ĐÚNG tập module hasTypes
+// đang được tick (SUBMISSION/CONTRACT_APPROVAL, từ Release 3 — trước đó CHỈ xét SUBMISSION) — module
+// KHÔNG có cfg.hasTypes thì khái niệm "loại" vô nghĩa, không đóng góp gì vào danh sách này.
 function onQaModuleCheckChange() {
+  const checkedModules = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', qaTypePickerItems(checkedModules), getMultiSelectValues('qaSubmissionTypesPicker'), {
+    placeholder: QA_TYPE_PICKER_PLACEHOLDER,
+    emptyText: QA_TYPE_PICKER_EMPTY_TEXT
+  });
   updateQaSubmissionTypesVisibility();
 }
 
@@ -355,7 +377,7 @@ function updateQaSubmissionTypesVisibility() {
   const wrap = document.getElementById('qaSubmissionTypesWrap');
   if (!wrap) return;
   const checked = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
-  wrap.classList.toggle('hidden', !checked.includes('SUBMISSION'));
+  wrap.classList.toggle('hidden', !checked.some(k => WF_MODULE_CONFIG[k]?.hasTypes));
 }
 
 // "3. (Tuỳ chọn) Gán người duyệt theo Chức Danh cho từng bước" — vẽ lại mỗi khi đổi mẫu quy trình
@@ -507,10 +529,17 @@ function renderQuickApplyConfigList() {
     const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k);
     const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
     const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
-    // submissionTypeLabels: nhãn hiện tại của các loại tờ trình đã chọn lọc (xem cfg.submissionTypeKeys ở
-    // saveQuickApplyConfig()) — fallback hiện nguyên key nếu loại đó đã bị xoá khỏi DB.submissionTypes
-    // sau khi cấu hình này được lưu (không crash, chỉ hiện thô).
-    const submissionTypeLabels = (cfg.submissionTypeKeys || []).map(key => DB.submissionTypes?.find(t => t.key === key)?.label || key);
+    // submissionTypeLabels: nhãn hiện tại của các loại đã chọn lọc (xem cfg.submissionTypeKeys ở
+    // saveQuickApplyConfig() — tên field giữ nguyên vì lý do tương thích ngược dữ liệu đã lưu, nhưng từ
+    // Release 3/3 chứa CẢ khoá loại tờ trình lẫn khoá Loại Pháp Lý, tuỳ cfg.modules đã chọn gì). Tra theo
+    // thứ tự: danh mục loại tờ trình (DB.submissionTypes, {key,label}) TRƯỚC, danh mục Loại Pháp Lý
+    // (DB.contractTypes, mảng chuỗi phẳng — key CHÍNH LÀ label) SAU, fallback hiện nguyên khoá thô nếu
+    // loại đó đã bị xoá khỏi CẢ 2 danh mục sau khi cấu hình này được lưu (không crash).
+    const submissionTypeLabels = (cfg.submissionTypeKeys || []).map(key =>
+      DB.submissionTypes?.find(t => t.key === key)?.label
+      || (DB.contractTypes || []).find(t => t === key)
+      || key
+    );
     return `
       <div class="bg-gray-50 border rounded-lg p-3 space-y-2">
         <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -569,8 +598,12 @@ async function applyQuickApplyConfig(configId) {
   if (!targets.length) return alert('✅ Không có phòng ban/mức nào đang thiếu cấu hình trong phạm vi các module đã chọn — không có gì để áp dụng.');
 
   const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k).join(', ');
-  const submissionTypeLabels = (cfg.submissionTypeKeys || []).map(key => DB.submissionTypes?.find(t => t.key === key)?.label || key);
-  const submissionTypeNote = submissionTypeLabels.length ? ` CHỈ áp dụng cho loại tờ trình: ${submissionTypeLabels.join(', ')} (loại khác không bị đụng tới).` : '';
+  const submissionTypeLabels = (cfg.submissionTypeKeys || []).map(key =>
+    DB.submissionTypes?.find(t => t.key === key)?.label
+    || (DB.contractTypes || []).find(t => t === key)
+    || key
+  );
+  const submissionTypeNote = submissionTypeLabels.length ? ` CHỈ áp dụng cho loại: ${submissionTypeLabels.join(', ')} (loại khác không bị đụng tới).` : '';
   const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
   const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
   const positionNote = positionStepCount
@@ -628,11 +661,14 @@ async function saveQuickApplyConfig(e) {
   if (!modules.length) return alert('Chọn ít nhất 1 module để gắn cấu hình này.');
   const wf = DB.workflows.find(w => w.id === workflowId);
   const { approverMode, approversByPosition } = wf ? collectQaStepModesAndPositions(wf) : { approverMode: {}, approversByPosition: {} };
-  // submissionTypeKeys: chỉ có ý nghĩa khi module SUBMISSION được chọn (xem updateQaSubmissionTypesVisibility()
-  // ẩn khối này nếu không), nhưng đọc vô điều kiện cũng vô hại — rỗng thì collectQuickApplyUnconfiguredTargets()
-  // coi như "áp dụng mọi loại" như cũ. Lưu rỗng (không phải thiếu field) để editQuickApplyConfig()/
-  // renderQuickApplyConfigList() luôn có field này để đọc, không cần kiểm tra `|| []` ở nhiều nơi khác... thực
-  // ra vẫn giữ `|| []` ở các nơi đọc cho chắc (tương thích ngược với cấu hình đã lưu TRƯỚC tính năng này).
+  // submissionTypeKeys (tên field giữ nguyên để tương thích ngược dữ liệu đã lưu TRƯỚC Release 3 — từ
+  // Release 3/3 thực chất là "danh sách khoá LOẠI đã chọn lọc", gộp CẢ khoá loại tờ trình (SUBMISSION)
+  // lẫn khoá Loại Pháp Lý (CONTRACT_APPROVAL), xem qaTypePickerItems()/updateQaSubmissionTypesVisibility()):
+  // chỉ có ý nghĩa khi ÍT NHẤT 1 module hasTypes được chọn, nhưng đọc vô điều kiện cũng vô hại — rỗng thì
+  // collectQuickApplyUnconfiguredTargets() coi như "áp dụng mọi loại" như cũ. Lưu rỗng (không phải thiếu
+  // field) để editQuickApplyConfig()/renderQuickApplyConfigList() luôn có field này để đọc, không cần
+  // kiểm tra `|| []` ở nhiều nơi khác... thực ra vẫn giữ `|| []` ở các nơi đọc cho chắc (tương thích
+  // ngược với cấu hình đã lưu TRƯỚC tính năng này).
   const submissionTypeKeys = getMultiSelectValues('qaSubmissionTypesPicker');
 
   // Chụp lại TRƯỚC khi sửa DB — phục hồi nếu server từ chối (xem khuôn saveUser() ở
@@ -666,9 +702,9 @@ function editQuickApplyConfig(configId) {
   const sel = document.getElementById('qaTplSelect');
   if (sel) sel.value = cfg.workflowId;
   document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = (cfg.modules || []).includes(el.value); });
-  renderMultiSelectDropdown('qaSubmissionTypesPicker', (DB.submissionTypes || []).map(t => ({ value: t.key, label: t.label })), cfg.submissionTypeKeys || [], {
-    placeholder: '🔍 Tìm loại tờ trình... (để trống = áp dụng mẫu này cho TẤT CẢ loại)',
-    emptyText: 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành vi hiện tại).'
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', qaTypePickerItems(cfg.modules || []), cfg.submissionTypeKeys || [], {
+    placeholder: QA_TYPE_PICKER_PLACEHOLDER,
+    emptyText: QA_TYPE_PICKER_EMPTY_TEXT
   });
   updateQaSubmissionTypesVisibility();
   qaEditingApproverMode = JSON.parse(JSON.stringify(cfg.approverMode || {}));
@@ -683,9 +719,9 @@ function editQuickApplyConfig(configId) {
 function resetQuickApplyConfigForm() {
   editingQuickApplyConfigId = null;
   document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = false; });
-  renderMultiSelectDropdown('qaSubmissionTypesPicker', (DB.submissionTypes || []).map(t => ({ value: t.key, label: t.label })), [], {
-    placeholder: '🔍 Tìm loại tờ trình... (để trống = áp dụng mẫu này cho TẤT CẢ loại)',
-    emptyText: 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành vi hiện tại).'
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', [], [], {
+    placeholder: QA_TYPE_PICKER_PLACEHOLDER,
+    emptyText: QA_TYPE_PICKER_EMPTY_TEXT
   });
   updateQaSubmissionTypesVisibility();
   qaEditingApproverMode = {};

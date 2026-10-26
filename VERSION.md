@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**28.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.22 (2026-11): Hợp Đồng theo Loại Pháp Lý — RELEASE 3/3 (CUỐI): lọc theo loại ở "⚡ Áp Dụng Nhanh"
+
+Hoàn tất cả 3 release của "Hợp Đồng theo Loại Pháp Lý" (Release 1: v28.19 nền tảng server, Release 2:
+v28.21 UI cấu hình + preview + Phê Duyệt). Release 3/3 mở rộng khối "2b. Loại áp dụng" của "⚡ Áp Dụng
+Nhanh" (Hệ Thống → 🔀 Nghiệp Vụ Nâng Cao → Áp Dụng Nhanh) — trước đây CHỈ hiện/hoạt động cho module
+"Văn bản trình" (SUBMISSION, xem v28.18) — sang module "Hợp đồng - Phê duyệt" (CONTRACT_APPROVAL), đúng
+khuôn mirror Văn Bản Trình. `collectQuickApplyUnconfiguredTargets()` (hàm lọc cốt lõi) vốn đã chạy
+GENERIC theo `cfg.hasTypes` từ trước — CONTRACT_APPROVAL tự động được hỗ trợ đúng từ khi Release 2 bật
+cờ này, Release 3 chỉ cần tổng quát hoá phần UI.
+
+- `module-workflow.js`:
+  - Hàm mới `qaTypePickerItems(checkedModuleKeys)` — hợp nhất danh sách "loại" của MỌI module có
+    `cfg.hasTypes` đang được tick ở khối 2 (SUBMISSION → `DB.submissionTypes`, CONTRACT_APPROVAL →
+    `DB.contractTypes` qua `getWfModuleTypes()`, đã tự đọc đúng nguồn theo từng module từ Release 2),
+    dedup theo khoá nếu admin tick CẢ 2 module cùng lúc.
+  - `renderQuickApplySection()`/`onQaModuleCheckChange()`/`editQuickApplyConfig()`/
+    `resetQuickApplyConfigForm()`: nạp picker qua `qaTypePickerItems()` thay vì luôn đọc cứng
+    `DB.submissionTypes`.
+  - `updateQaSubmissionTypesVisibility()`: hiện khối "2b" khi BẤT KỲ module hasTypes nào được tick
+    (trước đây hardcode `checked.includes('SUBMISSION')`).
+  - `renderQuickApplyConfigList()`/`applyQuickApplyConfig()`: tra nhãn hiển thị theo thứ tự
+    `DB.submissionTypes` trước, `DB.contractTypes` sau, fallback khoá thô — badge "📑 Chỉ loại: ..."
+    hiện đúng tên "Loại Pháp Lý" khi cấu hình thuộc CONTRACT_APPROVAL.
+  - `DB.quickApplyConfigs[].submissionTypeKeys` (tên field giữ nguyên để tương thích ngược dữ liệu đã
+    lưu) nay chứa khoá của BẤT KỲ module hasTypes nào trong phạm vi cấu hình đó, không chỉ loại tờ trình.
+- `systemSection.html`: đổi nhãn/mô tả khối "2b" từ "Loại tờ trình áp dụng (chỉ áp dụng cho module Văn
+  bản trình)" sang "Loại áp dụng (chỉ áp dụng cho module có "loại" riêng — hiện tại: "Văn bản trình",
+  "Hợp đồng - Phê duyệt")" — không đổi id/cấu trúc DOM, chỉ đổi chữ hiển thị.
+- Test mới: `tests/test-quick-apply-contract-type-filter.js` (18 kịch bản) — mirror đúng khuôn
+  `test-quick-apply-submission-type-filter.js` cho CONTRACT_APPROVAL, cộng thêm kịch bản tick CẢ 2
+  module cùng lúc xác nhận picker hợp nhất đúng cả 2 loại, không mất bên nào. Chạy lại
+  `test-quick-apply-submission-type-filter.js` (19), `test-quick-apply-workflow-steps.js` (44),
+  `test-adv-workflow-tab-deep.js` (56), `test-contract-type-approval-workflow-client.js` (15),
+  `test-contract-type-approval-workflow-foundation.js` (16), `test-workflow-position-approvers.js` (22),
+  `test-csp-full-audit.js` — toàn bộ PASS, không regression (xác nhận hành vi cũ của SUBMISSION giữ
+  nguyên 100% sau khi tổng quát hoá).
 
 ## v28.21 (2026-11): Hợp Đồng theo Loại Pháp Lý — RELEASE 2/3: UI cấu hình theo loại + preview + Phê Duyệt
 

@@ -753,19 +753,23 @@ Nguyên tắc quan trọng cần biết trước khi dùng:
   được ở Bước 1 — theo phản hồi người dùng (chọn "Trưởng phòng" ở Bước 2 vẫn
   ra tất cả Trưởng Phòng toàn công ty), nay mở rộng ra MỌI bước, không còn
   giới hạn Bước 1 nữa.
-- **"2b. Loại tờ trình áp dụng" (mới, 10/2026) — CHỈ hiện khi module "Văn
-  bản trình" được tick ở khối 2** — giải quyết bài toán Văn Bản Trình có
-  nhiều loại tờ trình ("Tờ trình duyệt kinh phí", "Tờ trình nhân sự / bổ
-  nhiệm", "Tờ trình ban hành Quy chế / Quy định", "Tờ trình khác"...), mỗi
-  loại có thể cần mẫu quy trình (số bước) KHÁC nhau. Để trống (mặc định) =
-  mẫu quy trình đang chọn áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành
-  vi cũ); tick cụ thể 1/nhiều loại = mẫu đó CHỈ áp dụng cho các loại đã
-  chọn, các loại còn lại KHÔNG bị đụng tới dù đang thiếu cấu hình — tạo
-  thêm 1 cấu hình Áp Dụng Nhanh khác (chọn mẫu khác) riêng cho các loại còn
-  lại nếu cần. Danh mục "Loại Tờ Trình" (Biểu Mẫu → "Loại Tờ Trình") vẫn tự
-  thêm/bớt loại tự do như trước, không ảnh hưởng gì tới cách dùng bộ lọc
-  này. Mỗi thẻ cấu hình đã lưu có bộ lọc này hiện thêm badge "📑 Chỉ loại:
-  ..." để admin dễ nhận biết cấu hình nào đang bị giới hạn phạm vi loại.
+- **"2b. Loại áp dụng" (10/2026, ban đầu CHỈ cho "Văn bản trình"; mở rộng
+  11/2026 sang "Hợp đồng - Phê duyệt") — CHỈ hiện khi ÍT NHẤT 1 module có
+  khái niệm "loại" riêng được tick ở khối 2** — giải quyết bài toán Văn Bản
+  Trình có nhiều loại tờ trình ("Tờ trình duyệt kinh phí", "Tờ trình nhân
+  sự / bổ nhiệm", "Tờ trình ban hành Quy chế / Quy định", "Tờ trình
+  khác"...) hoặc Hợp Đồng có nhiều "Loại Pháp Lý", mỗi loại có thể cần mẫu
+  quy trình (số bước) KHÁC nhau. Để trống (mặc định) = mẫu quy trình đang
+  chọn áp dụng cho TẤT CẢ loại; tick cụ thể 1/nhiều loại = mẫu đó CHỈ áp
+  dụng cho các loại đã chọn, các loại còn lại KHÔNG bị đụng tới dù đang
+  thiếu cấu hình — tạo thêm 1 cấu hình Áp Dụng Nhanh khác (chọn mẫu khác)
+  riêng cho các loại còn lại nếu cần. Danh mục "Loại Tờ Trình"/"Loại Pháp
+  Lý" (Biểu Mẫu) vẫn tự thêm/bớt loại tự do như trước, không ảnh hưởng gì
+  tới cách dùng bộ lọc này. Tick CẢ 2 module (Văn Bản Trình + Hợp Đồng)
+  cùng lúc trong 1 cấu hình — ô chọn loại hiện HỢP NHẤT loại của cả 2 module
+  để chọn chung. Mỗi thẻ cấu hình đã lưu có bộ lọc này hiện thêm badge "📑
+  Chỉ loại: ..." để admin dễ nhận biết cấu hình nào đang bị giới hạn phạm
+  vi loại.
 - **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình, trong ĐÚNG phạm
   vi module của cấu hình đó** — bất kỳ phòng ban/mức nào ĐÃ được admin cấu
   hình từ trước (kể cả chỉ mới chọn số bước mà chưa gán người duyệt) đều
@@ -1959,7 +1963,10 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     đang chọn trên form để xem trước đúng người duyệt sẽ gặp. Người CHỈ được
     cấu hình làm người duyệt riêng theo 1 loại cụ thể (không có trong cấu
     hình chung, không thuộc Nhóm Phê Duyệt Trình/HĐ) vẫn thấy đúng tab "Hợp
-    Đồng" và hộp thư "✅ Phê Duyệt" như người duyệt bình thường.
+    Đồng" và hộp thư "✅ Phê Duyệt" như người duyệt bình thường. "⚡ Áp Dụng
+    Nhanh" (mục 3.6) cũng hỗ trợ lọc theo Loại Pháp Lý cho module này — set
+    nhanh số bước mặc định riêng cho 1/nhiều loại cụ thể thay vì phải vào
+    từng tab loại gán tay.
   - **🔀 Chuyển Tiếp Xin Ý Kiến / ⏰ Quá Hạn Xử Lý / ⏱️ Gia Hạn (11/2026)** — 3
     tính năng dùng CHUNG cơ chế với Văn Bản Trình (xem mô tả đầy đủ ở mục 4.1
     ngay trên): người duyệt bước hiện tại chuyển tiếp hồ sơ cho nhiều người
