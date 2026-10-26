@@ -743,6 +743,19 @@ Nguyên tắc quan trọng cần biết trước khi dùng:
   được ở Bước 1 — theo phản hồi người dùng (chọn "Trưởng phòng" ở Bước 2 vẫn
   ra tất cả Trưởng Phòng toàn công ty), nay mở rộng ra MỌI bước, không còn
   giới hạn Bước 1 nữa.
+- **"2b. Loại tờ trình áp dụng" (mới, 10/2026) — CHỈ hiện khi module "Văn
+  bản trình" được tick ở khối 2** — giải quyết bài toán Văn Bản Trình có
+  nhiều loại tờ trình ("Tờ trình duyệt kinh phí", "Tờ trình nhân sự / bổ
+  nhiệm", "Tờ trình ban hành Quy chế / Quy định", "Tờ trình khác"...), mỗi
+  loại có thể cần mẫu quy trình (số bước) KHÁC nhau. Để trống (mặc định) =
+  mẫu quy trình đang chọn áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành
+  vi cũ); tick cụ thể 1/nhiều loại = mẫu đó CHỈ áp dụng cho các loại đã
+  chọn, các loại còn lại KHÔNG bị đụng tới dù đang thiếu cấu hình — tạo
+  thêm 1 cấu hình Áp Dụng Nhanh khác (chọn mẫu khác) riêng cho các loại còn
+  lại nếu cần. Danh mục "Loại Tờ Trình" (Biểu Mẫu → "Loại Tờ Trình") vẫn tự
+  thêm/bớt loại tự do như trước, không ảnh hưởng gì tới cách dùng bộ lọc
+  này. Mỗi thẻ cấu hình đã lưu có bộ lọc này hiện thêm badge "📑 Chỉ loại:
+  ..." để admin dễ nhận biết cấu hình nào đang bị giới hạn phạm vi loại.
 - **CHỈ áp dụng cho phòng ban/mức nào đang THIẾU cấu hình, trong ĐÚNG phạm
   vi module của cấu hình đó** — bất kỳ phòng ban/mức nào ĐÃ được admin cấu
   hình từ trước (kể cả chỉ mới chọn số bước mà chưa gán người duyệt) đều

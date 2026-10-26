@@ -146,7 +146,12 @@ const WF_NESTED_MAP_DB_KEYS = new Set(Object.values(WF_MODULE_CONFIG).filter(c =
 // `moduleKeys` (mảng WF_MODULE_CONFIG key, tuỳ chọn): giới hạn quét ĐÚNG các module này — dùng cho 1 cấu
 // hình Áp Dụng Nhanh cụ thể (cfg.modules). Bỏ trống/không truyền = quét TOÀN BỘ WF_MODULE_CONFIG (vẫn
 // giữ để nơi khác/test có thể xem tổng số mục thiếu cấu hình trên cả hệ thống nếu cần).
-function collectQuickApplyUnconfiguredTargets(moduleKeys) {
+// submissionTypeKeys (tham số 2, tính năng "Loại tờ trình áp dụng", 10/2026 — xem cfg.submissionTypeKeys
+// ở saveQuickApplyConfig()): CHỈ lọc trong nhánh cfg.hasTypes (hiện tại DUY NHẤT là SUBMISSION, xem
+// WF_MODULE_CONFIG) — rỗng/không truyền = giữ ĐÚNG hành vi cũ (áp dụng cho TẤT CẢ loại tờ trình), có giá
+// trị = CHỈ áp dụng cho các loại đã chọn, loại khác không bị đụng tới dù vẫn đang thiếu cấu hình. Không
+// ảnh hưởng gì tới các modKey khác (pureTier/priceTypeNested/phẳng) — tham số này vô nghĩa với chúng.
+function collectQuickApplyUnconfiguredTargets(moduleKeys, submissionTypeKeys) {
   const targets = [];
   // depts KHÔNG còn tính 1 LẦN DUY NHẤT ở đây nữa (10/2026, "Đơn Vị Tham Gia Quy Trình" đổi sang NHIỀU
   // NHÓM — mỗi nhóm tự chọn "Quy Trình Áp Dụng" riêng, xem getWorkflowParticipatingDepts(moduleKey) ở
@@ -245,7 +250,12 @@ function collectQuickApplyUnconfiguredTargets(moduleKeys) {
       // legacyDbKey, giữ đúng ý "chỉ điền chỗ trống", không đổi cách cấu hình cũ đang hoạt động.
       const typeMap = DB[cfg.dbKey] || (DB[cfg.dbKey] = {});
       const legacyMap = cfg.legacyDbKey ? (DB[cfg.legacyDbKey] || {}) : {};
-      const types = getWfModuleTypes(modKey) || [];
+      let types = getWfModuleTypes(modKey) || [];
+      // submissionTypeKeys (xem chú thích đầy đủ ở khai báo tham số hàm) — rỗng = giữ nguyên TẤT CẢ types.
+      if (submissionTypeKeys && submissionTypeKeys.length) {
+        const keepKeys = new Set(submissionTypeKeys);
+        types = types.filter(type => keepKeys.has(type.key));
+      }
       types.forEach(type => {
         depts.forEach(dept => {
           if ((typeMap[type.key] && typeMap[type.key][dept]) || legacyMap[dept]) return;
@@ -308,13 +318,36 @@ function renderQuickApplySection() {
     grid.innerHTML = Object.entries(WF_MODULE_CONFIG)
       .map(([modKey, cfg]) => `
         <label class="flex items-center gap-1.5 text-xs bg-white border rounded px-2 py-1.5 cursor-pointer hover:bg-gray-50">
-          <input type="checkbox" value="${modKey}" class="qaModuleCheck w-3.5 h-3.5"${checked.has(modKey) ? ' checked' : ''}>
+          <input type="checkbox" value="${modKey}" class="qaModuleCheck w-3.5 h-3.5" data-op-change="onQaModuleCheckChange"${checked.has(modKey) ? ' checked' : ''}>
           <span>${escapeHtml(cfg.label)}</span>
         </label>
       `).join('');
   }
+  // "Loại tờ trình áp dụng" (xem chú thích đầy đủ tại collectQuickApplyUnconfiguredTargets()) — nạp lại
+  // items từ DB.submissionTypes mỗi lần vào sub-tab để luôn khớp danh mục mới nhất (admin có thể vừa
+  // thêm/xoá loại ở Biểu Mẫu → "Loại Tờ Trình"), GIỮ nguyên các giá trị đang chọn trong picker hiện tại.
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', (DB.submissionTypes || []).map(t => ({ value: t.key, label: t.label })), getMultiSelectValues('qaSubmissionTypesPicker'), {
+    placeholder: '🔍 Tìm loại tờ trình... (để trống = áp dụng mẫu này cho TẤT CẢ loại)',
+    emptyText: 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành vi hiện tại).'
+  });
+  updateQaSubmissionTypesVisibility();
   renderQuickApplyPositionSteps();
   renderQuickApplyConfigList();
+}
+
+// onQaModuleCheckChange: bật/tắt khối "Loại tờ trình áp dụng" theo đúng checkbox module "Văn bản trình"
+// (SUBMISSION) — chỉ module này có cfg.hasTypes (xem WF_MODULE_CONFIG), các module khác không có khái
+// niệm "loại tờ trình" nên khối này vô nghĩa và phải ẩn đi, tránh admin hiểu nhầm là lọc được cho module
+// khác.
+function onQaModuleCheckChange() {
+  updateQaSubmissionTypesVisibility();
+}
+
+function updateQaSubmissionTypesVisibility() {
+  const wrap = document.getElementById('qaSubmissionTypesWrap');
+  if (!wrap) return;
+  const checked = Array.from(document.querySelectorAll('.qaModuleCheck:checked')).map(el => el.value);
+  wrap.classList.toggle('hidden', !checked.includes('SUBMISSION'));
 }
 
 // "3. (Tuỳ chọn) Gán người duyệt theo Chức Danh cho từng bước" — vẽ lại mỗi khi đổi mẫu quy trình
@@ -466,6 +499,10 @@ function renderQuickApplyConfigList() {
     const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k);
     const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
     const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
+    // submissionTypeLabels: nhãn hiện tại của các loại tờ trình đã chọn lọc (xem cfg.submissionTypeKeys ở
+    // saveQuickApplyConfig()) — fallback hiện nguyên key nếu loại đó đã bị xoá khỏi DB.submissionTypes
+    // sau khi cấu hình này được lưu (không crash, chỉ hiện thô).
+    const submissionTypeLabels = (cfg.submissionTypeKeys || []).map(key => DB.submissionTypes?.find(t => t.key === key)?.label || key);
     return `
       <div class="bg-gray-50 border rounded-lg p-3 space-y-2">
         <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -475,6 +512,7 @@ function renderQuickApplyConfigList() {
               : `<span class="bg-red-50 border border-red-200 text-red-700 font-bold px-2 py-1 rounded-full">⚠️ Mẫu quy trình đã bị xoá</span>`}
             ${positionStepCount ? `<span class="bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-1 rounded-full">🧭 ${positionStepCount} bước theo Chức Danh</span>` : ''}
             ${autoDeptStepCount ? `<span class="bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-1 rounded-full">🏢 Tự động khớp phòng ban (${autoDeptStepCount} bước)</span>` : ''}
+            ${submissionTypeLabels.length ? `<span class="bg-rose-50 border border-rose-200 text-rose-700 font-bold px-2 py-1 rounded-full">📑 Chỉ loại: ${submissionTypeLabels.map(escapeHtml).join(', ')}</span>` : ''}
             <span class="text-gray-400">→ gắn cho:</span>
             ${modLabels.map(l => `<span class="bg-white border rounded-full px-2 py-0.5">${escapeHtml(l)}</span>`).join('')}
           </div>
@@ -496,7 +534,7 @@ function showQuickApplyConfigImpact(configId) {
   const box = document.getElementById(`qaImpact_${configId}`);
   if (!cfg || !box) return;
   box.classList.remove('hidden');
-  const targets = collectQuickApplyUnconfiguredTargets(cfg.modules);
+  const targets = collectQuickApplyUnconfiguredTargets(cfg.modules, cfg.submissionTypeKeys);
   if (!targets.length) {
     box.innerHTML = `<div class="text-emerald-700 font-semibold">✅ Không còn mục nào thiếu cấu hình trong phạm vi các module đã chọn.</div>`;
     return;
@@ -519,17 +557,19 @@ async function applyQuickApplyConfig(configId) {
   const wf = DB.workflows.find(w => w.id === cfg.workflowId);
   if (!wf) return alert('⚠️ Mẫu quy trình của cấu hình này đã bị xoá — bấm "✏️ Sửa" để chọn lại mẫu khác trước khi áp dụng.');
 
-  const targets = collectQuickApplyUnconfiguredTargets(cfg.modules);
+  const targets = collectQuickApplyUnconfiguredTargets(cfg.modules, cfg.submissionTypeKeys);
   if (!targets.length) return alert('✅ Không có phòng ban/mức nào đang thiếu cấu hình trong phạm vi các module đã chọn — không có gì để áp dụng.');
 
   const modLabels = (cfg.modules || []).map(k => WF_MODULE_CONFIG[k]?.label || k).join(', ');
+  const submissionTypeLabels = (cfg.submissionTypeKeys || []).map(key => DB.submissionTypes?.find(t => t.key === key)?.label || key);
+  const submissionTypeNote = submissionTypeLabels.length ? ` CHỈ áp dụng cho loại tờ trình: ${submissionTypeLabels.join(', ')} (loại khác không bị đụng tới).` : '';
   const positionStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION' || cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
   const autoDeptStepCount = Object.keys(cfg.approverMode || {}).filter(k => cfg.approverMode[k] === 'POSITION_AUTO_DEPT').length;
   const positionNote = positionStepCount
     ? `Lưu ý: ${positionStepCount} bước đã gán "Theo Chức Danh" sẽ có người duyệt NGAY theo đúng chức danh đó — các bước còn lại vẫn để trống, bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán tay.${autoDeptStepCount ? ` ${autoDeptStepCount} bước đã bật "🏢 Tự động khớp đúng phòng ban" — mỗi mục sẽ tự ra đúng người giữ chức danh đó CỦA RIÊNG phòng ban/mức tương ứng, không dùng chung 1 danh sách.` : ''}`
     : `Lưu ý: chỉ set số bước, KHÔNG tự gán người duyệt — bạn vẫn cần vào "🔄 Quy Trình & Phê Duyệt" để gán người duyệt cho từng bước sau khi áp dụng.`;
   const proceed = confirm(
-    `Sẽ áp dụng mẫu "${wf.name}" (${wf.steps.length} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình, trong phạm vi module: ${modLabels} — KHÔNG đụng tới module ngoài phạm vi này, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.\n\n` +
+    `Sẽ áp dụng mẫu "${wf.name}" (${wf.steps.length} bước) cho ${targets.length} mục ĐANG THIẾU cấu hình, trong phạm vi module: ${modLabels} — KHÔNG đụng tới module ngoài phạm vi này, KHÔNG đụng tới bất kỳ mục nào đã có sẵn cấu hình.${submissionTypeNote}\n\n` +
     `${positionNote}\n\nTiếp tục?`
   );
   if (!proceed) return;
@@ -580,6 +620,12 @@ async function saveQuickApplyConfig(e) {
   if (!modules.length) return alert('Chọn ít nhất 1 module để gắn cấu hình này.');
   const wf = DB.workflows.find(w => w.id === workflowId);
   const { approverMode, approversByPosition } = wf ? collectQaStepModesAndPositions(wf) : { approverMode: {}, approversByPosition: {} };
+  // submissionTypeKeys: chỉ có ý nghĩa khi module SUBMISSION được chọn (xem updateQaSubmissionTypesVisibility()
+  // ẩn khối này nếu không), nhưng đọc vô điều kiện cũng vô hại — rỗng thì collectQuickApplyUnconfiguredTargets()
+  // coi như "áp dụng mọi loại" như cũ. Lưu rỗng (không phải thiếu field) để editQuickApplyConfig()/
+  // renderQuickApplyConfigList() luôn có field này để đọc, không cần kiểm tra `|| []` ở nhiều nơi khác... thực
+  // ra vẫn giữ `|| []` ở các nơi đọc cho chắc (tương thích ngược với cấu hình đã lưu TRƯỚC tính năng này).
+  const submissionTypeKeys = getMultiSelectValues('qaSubmissionTypesPicker');
 
   // Chụp lại TRƯỚC khi sửa DB — phục hồi nếu server từ chối (xem khuôn saveUser() ở
   // module-admin-submissiongroups.js), không báo thành công/ghi log khi chưa chắc đã lưu.
@@ -587,10 +633,10 @@ async function saveQuickApplyConfig(e) {
   let configId = editingQuickApplyConfigId;
   if (configId) {
     const cfg = (DB.quickApplyConfigs || []).find(c => c.id === configId);
-    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; cfg.approverMode = approverMode; cfg.approversByPosition = approversByPosition; }
+    if (cfg) { cfg.workflowId = workflowId; cfg.modules = modules; cfg.approverMode = approverMode; cfg.approversByPosition = approversByPosition; cfg.submissionTypeKeys = submissionTypeKeys; }
   } else {
     configId = Math.max(0, ...(DB.quickApplyConfigs || []).map(c => c.id)) + 1;
-    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules, approverMode, approversByPosition }];
+    DB.quickApplyConfigs = [...(DB.quickApplyConfigs || []), { id: configId, workflowId, modules, approverMode, approversByPosition, submissionTypeKeys }];
   }
   if (!await syncStorage('quickApplyConfigs', { baseline: snapshot })) {
     DB.quickApplyConfigs = snapshot;
@@ -612,6 +658,11 @@ function editQuickApplyConfig(configId) {
   const sel = document.getElementById('qaTplSelect');
   if (sel) sel.value = cfg.workflowId;
   document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = (cfg.modules || []).includes(el.value); });
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', (DB.submissionTypes || []).map(t => ({ value: t.key, label: t.label })), cfg.submissionTypeKeys || [], {
+    placeholder: '🔍 Tìm loại tờ trình... (để trống = áp dụng mẫu này cho TẤT CẢ loại)',
+    emptyText: 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành vi hiện tại).'
+  });
+  updateQaSubmissionTypesVisibility();
   qaEditingApproverMode = JSON.parse(JSON.stringify(cfg.approverMode || {}));
   qaEditingApproversByPosition = JSON.parse(JSON.stringify(cfg.approversByPosition || {}));
   renderQuickApplyPositionSteps();
@@ -624,6 +675,11 @@ function editQuickApplyConfig(configId) {
 function resetQuickApplyConfigForm() {
   editingQuickApplyConfigId = null;
   document.querySelectorAll('.qaModuleCheck').forEach(el => { el.checked = false; });
+  renderMultiSelectDropdown('qaSubmissionTypesPicker', (DB.submissionTypes || []).map(t => ({ value: t.key, label: t.label })), [], {
+    placeholder: '🔍 Tìm loại tờ trình... (để trống = áp dụng mẫu này cho TẤT CẢ loại)',
+    emptyText: 'Chưa chọn loại nào — mẫu này sẽ áp dụng cho TẤT CẢ loại tờ trình (giữ đúng hành vi hiện tại).'
+  });
+  updateQaSubmissionTypesVisibility();
   qaEditingApproverMode = {};
   qaEditingApproversByPosition = {};
   renderQuickApplyPositionSteps();

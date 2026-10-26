@@ -1,9 +1,58 @@
 # Phiên bản hiện tại
 
-**28.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.18** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.18 (2026-10): "⚡ Áp Dụng Nhanh" — thêm lọc "Loại tờ trình áp dụng" cho Văn Bản Trình
+
+Người dùng nêu bài toán nghiệp vụ: Văn Bản Trình có nhiều loại tờ trình
+("Tờ trình duyệt kinh phí", "Tờ trình nhân sự / bổ nhiệm", "Tờ trình ban
+hành Quy chế / Quy định", "Tờ trình khác"...), mỗi loại có thể cần 1 mẫu
+quy trình (số bước) KHÁC nhau — nhưng "⚡ Áp Dụng Nhanh" trước đây chỉ có 1
+lượt chọn 1 mẫu áp dụng cho TẤT CẢ loại tờ trình cùng lúc trong phạm vi
+module "Văn bản trình", không tách riêng được theo loại.
+
+**Giải pháp**: thêm 1 bộ lọc TUỲ CHỌN mới "2b. Loại tờ trình áp dụng" vào
+form "➕ Thêm / Sửa Cấu Hình Áp Dụng Nhanh" — CHỈ hiện khi module "Văn bản
+trình" (SUBMISSION) được tick ở khối 2 (các loại tờ trình khác không có
+khái niệm "loại" nên không cần lọc này). Để trống (hành vi mặc định) =
+giữ ĐÚNG hành vi cũ, áp dụng mẫu cho TẤT CẢ loại tờ trình; chọn cụ thể =
+mẫu đó CHỈ áp dụng cho các loại đã chọn, các loại còn lại không bị đụng
+tới dù đang thiếu cấu hình — admin tạo thêm 1 cấu hình Áp Dụng Nhanh khác
+riêng (mẫu khác) cho các loại còn lại nếu cần. Danh mục "Loại Tờ Trình"
+(Biểu Mẫu → "Loại Tờ Trình", `DB.submissionTypes`) đã sẵn tự thêm/bớt
+được từ trước, không cần thêm việc gì ở đây.
+
+- `public/js/module-workflow.js`: `collectQuickApplyUnconfiguredTargets()`
+  nhận thêm tham số `submissionTypeKeys` (tuỳ chọn) — chỉ có ý nghĩa ở
+  nhánh `cfg.hasTypes` (hiện tại DUY NHẤT là SUBMISSION), lọc danh sách
+  loại tờ trình cần quét trước khi liệt kê target; rỗng/không truyền giữ
+  nguyên hành vi cũ (quét đủ mọi loại). `showQuickApplyConfigImpact()`/
+  `applyQuickApplyConfig()` truyền `cfg.submissionTypeKeys` vào đúng tham
+  số này. `renderQuickApplySection()` vẽ thêm widget chọn nhiều
+  (`renderMultiSelectDropdown()`, tái dùng đúng pattern đã có) cho
+  `#qaSubmissionTypesPicker`, cùng hàm `onQaModuleCheckChange()`/
+  `updateQaSubmissionTypesVisibility()` tự hiện/ẩn khối 2b theo checkbox
+  module SUBMISSION. `saveQuickApplyConfig()` đọc giá trị qua
+  `getMultiSelectValues()` lưu vào `cfg.submissionTypeKeys`.
+  `editQuickApplyConfig()`/`resetQuickApplyConfigForm()` nạp lại/dọn sạch
+  đúng widget này. `renderQuickApplyConfigList()` thêm badge "📑 Chỉ loại:
+  ..." khi cấu hình có lọc.
+- `public/fragments/systemSection.html`: khối HTML mới `#qaSubmissionTypesWrap`
+  (ẩn mặc định) chèn giữa khối 2 (chọn module) và khối 3 (gán người duyệt).
+- Không cần thay đổi gì ở server: `quickApplyConfigs` đã admin-gated sẵn ở
+  cả `ADMIN_ONLY_KEYS`/`ADMIN_SENSITIVE_KEYS` (`routes/data.js`) và vốn đã
+  bị loại khỏi validator cấu trúc dept/tier chung (`lib/workflowEngine.js`,
+  "khuôn khác hẳn") — field mới `submissionTypeKeys` chỉ là dữ liệu thêm
+  trong đúng cấu trúc đã được admin-gate, không cần validator riêng.
+- Test mới: `tests/test-quick-apply-submission-type-filter.js` (19 kịch
+  bản) — hành vi cũ giữ nguyên khi không lọc, lọc đúng loại đã chọn, toggle
+  hiện/ẩn khối 2b theo module, lưu/áp dụng/sửa/reset đều đúng. Chạy lại
+  `test-quick-apply-auto-dept-position.js`/`test-quick-apply-workflow-steps.js`/
+  `test-quickapply-configs-initdatabase-load.js`/`test-initdatabase-key-coverage.js`
+  cùng 1 loạt test module-workflow.js khác liên quan — không regression.
 
 ## v28.17 (2026-10): Vá lỗi 409 giả "vừa bị thay đổi ở nơi khác" khi Sửa Người Dùng
 
