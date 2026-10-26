@@ -7,11 +7,21 @@
 // (isStepApprovalComplete() yêu cầu TẤT CẢ approver trong danh sách phải duyệt), đề xuất của 1 siêu thị bị
 // treo chờ GĐST của MỌI siêu thị khác cùng duyệt. Nay tra 100% từ
 // appData.itPriceWholesaleStoreMixedApprovalRules (CÙNG KHUÔN operationOrderStoreMixedApprovalRules, xem
-// test-operation-order-store-approver-scope.js) — tự khớp ĐÚNG siêu thị của đề xuất qua item.dept.
+// test-operation-order-store-approver-scope.js) — tự khớp ĐÚNG (các) siêu thị đã chọn ở ô "🏬 Siêu Thị Đề
+// Xuất" trên đề xuất (item.storeScope.stores[]).
+//
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp "Xem Trước Quy Trình..." bước 1 "chưa có người
+// duyệt"): bản ĐẦU của tính năng này (10/2026) dùng NHẦM `item.dept` (phòng ban của NGƯỜI TẠO đề xuất,
+// forceOwnDept) làm "siêu thị" để so khớp GĐST — ĐÚNG với operationOrders/STORE (requester LUÔN là nhân
+// viên của chính siêu thị đó) nhưng SAI với Bán Buôn: người tạo đề xuất Bán Buôn có thể ở HO (dept khi đó
+// KHÔNG phải tên 1 siêu thị nào), và 1 đề xuất có thể áp dụng cho NHIỀU siêu thị cùng lúc
+// (storeScope.stores[]). Đổi sang dùng đúng `item.storeScope.stores` (mảng) — xem
+// resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores() (lib/workflowEngine.js).
 //
 // Phủ:
 //   1. JOBTITLE mode, stores RỖNG (mặc định): tự khớp theo dept của từng người giữ đúng chức danh với
-//      ĐÚNG siêu thị trên đề xuất — kịch bản chính người dùng mô tả (GĐST chỉ duyệt đề xuất siêu thị mình).
+//      ĐÚNG (các) siêu thị trên đề xuất — kịch bản chính người dùng mô tả (GĐST chỉ duyệt đề xuất siêu thị
+//      mình), KỂ CẢ khi người tạo đề xuất ở HO (dept không liên quan gì tới siêu thị đã chọn).
 //   2. GĐST siêu thị KHÁC (không khớp dept) bị chặn 403 — xác nhận lỗi cũ ("khớp toàn công ty") đã hết.
 //   3. PERSON mode, stores CÓ giá trị (ngoại lệ) — không phụ thuộc dept của chính người đó.
 //   4. LỖI ĐÃ VÁ ngay trong đợt triển khai: khớp theo CẢ tier LẪN step — 1 dòng cấu hình cho 1 MỨC
@@ -20,6 +30,8 @@
 //   5. admin vẫn duyệt được mọi đề xuất WHOLESALE bất kể dept/tier (nhánh admin bypass, không đi qua cơ
 //      chế mixed rules).
 //   6. RETAIL (itPriceDeptWorkflows) không bị ảnh hưởng gì bởi thay đổi này — vẫn hành vi cũ 100%.
+//   8. ĐỀ XUẤT CHỌN NHIỀU SIÊU THỊ cùng lúc: GĐST của BẤT KỲ siêu thị nào trong danh sách đã chọn đều
+//      duyệt được (UNION) — GĐST của siêu thị KHÔNG nằm trong danh sách vẫn bị chặn.
 //
 // Chạy: node server/tests/test-itprice-wholesale-mixed-approval.js
 'use strict';
@@ -40,15 +52,21 @@ function assertThrows(fn, statusExpected, messageContains, label) {
   }
   throw new Error(`${label}: đáng lẽ phải ném lỗi nhưng không`);
 }
+// `dept` mặc định cố ý để "Phòng Vận Hành (HO)" — KHÔNG phải tên 1 siêu thị nào (mô phỏng đúng báo cáo
+// người dùng: người tạo đề xuất Bán Buôn thường ở HO) — chứng minh approver KHÔNG còn phụ thuộc field
+// này nữa, CHỈ phụ thuộc `storeScope.stores[]` (siêu thị đã chọn ở ô "🏬 Siêu Thị Đề Xuất").
 function wholesaleItem(overrides) {
   return Object.assign({
-    id: 1, priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', dept: 'Siêu Thị A', creator: 'proposer',
+    id: 1, priceType: 'WHOLESALE', priceTier: 'MARGIN_LT5', dept: 'Phòng Vận Hành (HO)',
+    storeScope: { mode: 'OTHER', stores: ['Siêu Thị A'] }, creator: 'proposer',
     creatorName: 'Người Đề Xuất', status: 'PENDING', currentStep: 1, history: [], files: [], applied: false
   }, overrides);
 }
 const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
 
-// ===================== 1+2) JOBTITLE mode, stores rỗng: tự khớp đúng siêu thị qua dept =====================
+// ===================== 1+2) JOBTITLE mode, stores rỗng: tự khớp đúng siêu thị qua storeScope.stores,
+// KỂ CẢ khi người tạo đề xuất ở HO (dept mặc định của wholesaleItem() đã cố ý là "Phòng Vận Hành (HO)")
+// =====================
 {
   const gdA = { username: 'gd.a', name: 'Giám Đốc Siêu Thị A', dept: 'Siêu Thị A', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
   const gdB = { username: 'gd.b', name: 'Giám Đốc Siêu Thị B', dept: 'Siêu Thị B', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
@@ -62,18 +80,18 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     ]
   };
 
-  test('JOBTITLE mode, stores rỗng: GĐST ĐÚNG siêu thị của đề xuất (gd.a, Siêu Thị A) duyệt được', () => {
-    const item = wholesaleItem({ dept: 'Siêu Thị A' });
+  test('LỖI ĐÃ VÁ (11/2026): người tạo đề xuất ở HO (dept KHÔNG phải tên siêu thị nào) + chọn "Siêu Thị A" ở storeScope -> GĐST ĐÚNG siêu thị đó (gd.a) vẫn duyệt được', () => {
+    const item = wholesaleItem();
     const { transition } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: gdA, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');
   });
-  test('LỖI ĐÃ VÁ (10/2026): GĐST siêu thị KHÁC (gd.b, dept không khớp) KHÔNG còn được duyệt đề xuất của Siêu Thị A nữa (403) — trước đây "Theo vị trí" khớp toàn công ty', () => {
-    const item = wholesaleItem({ dept: 'Siêu Thị A' });
+  test('LỖI ĐÃ VÁ (10/2026): GĐST siêu thị KHÁC (gd.b, không nằm trong storeScope.stores của đề xuất) KHÔNG còn được duyệt đề xuất của Siêu Thị A nữa (403) — trước đây "Theo vị trí" khớp toàn công ty', () => {
+    const item = wholesaleItem();
     assertThrows(() => applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: gdB, comment: '', appData }),
       403, null, 'GĐST khác siêu thị');
   });
   test('admin vẫn duyệt được đề xuất WHOLESALE bất kỳ dù không nằm trong bất kỳ dòng cấu hình nào', () => {
-    const item = wholesaleItem({ dept: 'Siêu Thị A' });
+    const item = wholesaleItem();
     const { transition } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: admin, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');
   });
@@ -91,12 +109,12 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     ]
   };
   test('PERSON mode, stores có giá trị: Quản Lý Vùng (dept khác hẳn) vẫn duyệt được đề xuất Siêu Thị A (nằm trong danh sách phụ trách)', () => {
-    const item = wholesaleItem({ dept: 'Siêu Thị A' });
+    const item = wholesaleItem();
     const { transition } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: qlVung, comment: '', appData });
     assert.strictEqual(transition.type, 'COMPLETED');
   });
   test('PERSON mode, stores có giá trị: Quản Lý Vùng KHÔNG duyệt được đề xuất Siêu Thị C (ngoài danh sách phụ trách) -> 403', () => {
-    const item = wholesaleItem({ dept: 'Siêu Thị C' });
+    const item = wholesaleItem({ storeScope: { mode: 'OTHER', stores: ['Siêu Thị C'] } });
     assertThrows(() => applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: qlVung, comment: '', appData }),
       403, null, 'Quản Lý Vùng ngoài phạm vi');
   });
@@ -187,6 +205,37 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     const approvers2 = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', 'Siêu Thị A', ['NH-KHAC'], [nguoiDuyetMacDinh], [1]);
     assert.deepStrictEqual(approvers1[1], [nguoiDuyetMacDinh.username]);
     assert.deepStrictEqual(approvers2[1], [nguoiDuyetMacDinh.username]);
+  });
+}
+
+// ===================== 8) LỖI ĐÃ VÁ: đề xuất chọn NHIỀU siêu thị cùng lúc (storeScope.stores có >1 phần
+// tử) -> GĐST của BẤT KỲ siêu thị nào trong danh sách đã chọn đều duyệt được (UNION) =====================
+{
+  const gdA = { username: 'gd.a', name: 'Giám Đốc Siêu Thị A', dept: 'Siêu Thị A', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
+  const gdB = { username: 'gd.b', name: 'Giám Đốc Siêu Thị B', dept: 'Siêu Thị B', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
+  const gdC = { username: 'gd.c', name: 'Giám Đốc Siêu Thị C', dept: 'Siêu Thị C', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
+  const rules = [{ id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', stores: [] }];
+  const appData = {
+    workflows: [WF_1STEP], users: [gdA, gdB, gdC],
+    itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP' } },
+    itPriceWholesaleStoreMixedApprovalRules: rules
+  };
+
+  test('resolveItPriceWholesaleStoreMixedApprovers(): đề xuất chọn CẢ Siêu Thị A lẫn B -> CẢ 2 GĐST (gd.a, gd.b) là approver, GĐST Siêu Thị C (gd.c) KHÔNG nằm trong đó', () => {
+    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', ['Siêu Thị A', 'Siêu Thị B'], [], [gdA, gdB, gdC], [1]);
+    assert.deepStrictEqual(new Set(approvers[1]), new Set([gdA.username, gdB.username]));
+  });
+  test('Đề xuất chọn CẢ Siêu Thị A lẫn B: GĐST Siêu Thị C (gd.c, KHÔNG nằm trong danh sách đã chọn) bị chặn 403 — xác nhận KHÔNG khớp nhầm ngoài phạm vi', () => {
+    const item = wholesaleItem({ storeScope: { mode: 'OTHER', stores: ['Siêu Thị A', 'Siêu Thị B'] } });
+    assertThrows(() => applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: gdC, comment: '', appData }),
+      403, null, 'GĐST ngoài danh sách siêu thị đã chọn');
+  });
+  test('Đề xuất chọn CẢ Siêu Thị A lẫn B: GĐST Siêu Thị A (gd.a) duyệt trước -> chưa đủ hoàn tất bước (bước đồng duyệt — cả 2 GĐST đã khớp đều phải duyệt, AND, giống hệt cơ chế "Ngành Hàng" ở trên)', () => {
+    const item = wholesaleItem({ storeScope: { mode: 'OTHER', stores: ['Siêu Thị A', 'Siêu Thị B'] } });
+    const { transition, item: afterFirst } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: gdA, comment: '', appData });
+    assert.strictEqual(transition.type, 'PARTIAL_APPROVE', 'còn thiếu gd.b nên bước chưa thể hoàn tất');
+    const { transition: transition2 } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item: afterFirst, action: 'APPROVE', user: gdB, comment: '', appData });
+    assert.strictEqual(transition2.type, 'COMPLETED', 'đủ cả 2 GĐST (A và B) mới hoàn tất bước');
   });
 }
 

@@ -3495,7 +3495,11 @@ function resolveItPriceWorkflowConfigForItemClient(p) {
       workflowId: tierCfg ? tierCfg.workflowId : null,
       tierConfigMissing: !tierCfg,
       steps: baseWf.steps,
-      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.dept, p.nganhHang, baseWf.steps.map(s => s.order))
+      // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng): trước đây truyền `p.dept` (phòng ban của NGƯỜI TẠO đề
+      // xuất, có thể ở HO — không phải tên siêu thị) làm "siêu thị" để so khớp GĐST. Đổi sang
+      // `p.storeScope?.stores` (mảng siêu thị đã chọn ở ô "🏬 Siêu Thị Đề Xuất" trên form) — mirror ĐÚNG
+      // bản server đã vá (lib/workflowEngine.js, MODULE_CONFIGS.itPriceApprovals.resolveWfConfig).
+      approvers: computeItPriceWholesaleStoreMixedApproversClient(p.priceTier, p.storeScope?.stores, p.nganhHang, baseWf.steps.map(s => s.order))
     }, p);
   }
   const raw = resolveItPriceDeptWorkflowConfigClient(p.dept, 'RETAIL');
@@ -3595,11 +3599,10 @@ function computeOperationOrderStoreMixedApproversClient(storeDept, stepOrders, t
   return approvers;
 }
 // Hỗ Trợ IT > Phê Duyệt Giá — Bán Buôn, MIRROR ĐÚNG resolveItPriceWholesaleStoreMixedApprovers() phía
-// server (lib/workflowEngine.js) — tái dùng ĐÚNG resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()
-// ở trên (logic khớp rule/storeDept hoàn toàn generic). KHÁC computeOperationOrderStoreMixedApproversClient()
-// 1 điểm DUY NHẤT: lọc rule thêm theo ĐÚNG `priceTier` (Bán Buôn có 4 MỨC Margin/Chiết Khấu cố định, MỖI
-// MỨC quy trình/người duyệt riêng — nếu chỉ khớp theo số bước thì rule của 1 mức sẽ bị áp dụng nhầm sang
-// mức khác có cùng số thứ tự bước, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
+// server (lib/workflowEngine.js). KHÁC computeOperationOrderStoreMixedApproversClient() 1 điểm DUY NHẤT:
+// lọc rule thêm theo ĐÚNG `priceTier` (Bán Buôn có 4 MỨC Margin/Chiết Khấu cố định, MỖI MỨC quy trình/
+// người duyệt riêng — nếu chỉ khớp theo số bước thì rule của 1 mức sẽ bị áp dụng nhầm sang mức khác có
+// cùng số thứ tự bước, xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules).
 //
 // "Ngành Hàng" (10/2026) — MIRROR ĐÚNG ruleMatchesItPriceWholesaleNganhHang()/
 // resolveItPriceWholesaleMixedApprovalRuleUsernames() phía server (lib/workflowEngine.js) — chiều lọc
@@ -3611,18 +3614,45 @@ function ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang) {
   const selected = Array.isArray(itemNganhHang) ? itemNganhHang : [];
   return declared.some(code => selected.includes(code));
 }
-function resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(rule, storeDept, itemNganhHang) {
-  if (!ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang)) return [];
-  return resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept);
+// LỖI ĐÃ VÁ (11/2026, theo báo cáo người dùng — xem chú thích đầy đủ ở bản server
+// resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(), lib/workflowEngine.js, sửa 1 bên PHẢI sửa
+// cả 2 bên): resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() ở trên chỉ nhận ĐÚNG 1
+// storeDept (operationOrders/STORE luôn đúng 1 siêu thị = dept người tạo). itPriceApprovals WHOLESALE
+// KHÁC HẲN: người tạo đề xuất có thể ở HO, và 1 đề xuất có thể áp dụng NHIỀU siêu thị cùng lúc
+// (storeScope.stores[], ô "🏬 Siêu Thị Đề Xuất" trên form) — nên hàm này nhân bản lại ĐÚNG logic so khớp
+// nhưng nhận 1 MẢNG siêu thị, trả về HỢP (UNION) người duyệt khớp BẤT KỲ siêu thị nào trong danh sách đã
+// chọn. KHÔNG sửa resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() dùng chung với
+// operationOrders.
+function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient(rule, stores) {
+  const storeList = Array.isArray(stores) ? stores : (stores ? [stores] : []);
+  const hasExplicitStores = !!(rule.stores && rule.stores.length);
+  if (hasExplicitStores && !rule.stores.some(s => storeList.includes(s))) return [];
+  const isActiveUsername = (username) => (DB.users || []).some(u => u && u.username === username && u.active !== false);
+  if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
+  const matchesDeptCondition = (u) => {
+    if (rule.jobTitleDept) {
+      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
+    }
+    return hasExplicitStores || storeList.includes(u.dept) || (u.secondaryPositions || []).some(sp => storeList.includes(sp.dept));
+  };
+  return (DB.users || [])
+    .filter(u => u && u.active !== false)
+    .filter(u => u.jobTitle === rule.jobTitle)
+    .filter(matchesDeptCondition)
+    .map(u => u.username);
 }
-function computeItPriceWholesaleStoreMixedApproversClient(priceTier, storeDept, itemNganhHang, stepOrders) {
+function resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(rule, stores, itemNganhHang) {
+  if (!ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang)) return [];
+  return resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient(rule, stores);
+}
+function computeItPriceWholesaleStoreMixedApproversClient(priceTier, stores, itemNganhHang, stepOrders) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (DB.itPriceWholesaleStoreMixedApprovalRules || [])
       .filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder))
       .forEach(r => {
-        resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(r, storeDept, itemNganhHang).forEach(u => usernames.add(u));
+        resolveItPriceWholesaleMixedApprovalRuleUsernamesClient(r, stores, itemNganhHang).forEach(u => usernames.add(u));
       });
     approvers[stepOrder] = [...usernames];
   });

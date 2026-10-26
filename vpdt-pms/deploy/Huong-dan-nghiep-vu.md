@@ -1828,6 +1828,17 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
     B/C không còn bị kéo vào nữa). RETAIL (Phê Duyệt Giá Bán Lẻ, theo phòng
     ban ở `itPriceDeptWorkflows`) KHÔNG đụng tới gì — vẫn hành vi cũ 100%, chỉ
     WHOLESALE đổi cơ chế người duyệt.
+    - **[Nghiêm trọng] LỖI ĐÃ VÁ (11/2026, người dùng báo lại)**: "ĐÚNG siêu
+      thị của đề xuất" ở trên trước đây lấy NHẦM theo **phòng ban của người
+      TẠO đề xuất** — nếu người tạo ở **HO** (không thuộc riêng 1 siêu thị
+      nào), hệ thống không khớp được GĐST nào cả, bước 1 "treo" vĩnh viễn
+      (chỉ admin can thiệp được). Nay khớp đúng theo **ô "🏬 Siêu Thị Đề
+      Xuất"** đã chọn trên form (không phải phòng ban người tạo) — đúng tinh
+      thần ban đầu của tính năng này, áp dụng được cả khi người tạo đề xuất
+      ở HO. Đề xuất chọn **nhiều siêu thị cùng lúc**: GĐST của **bất kỳ**
+      siêu thị nào trong danh sách đã chọn đều được tính vào bước đó (nhưng
+      vẫn cần **đủ cả** những GĐST đã khớp bấm Duyệt — đồng duyệt, giống hệt
+      cơ chế "Ngành Hàng" ngay dưới).
   - **"Ngành Hàng" cho Phê Duyệt Giá Bán Buôn (đợt sau 10/2026)** — thêm 1
     chiều lọc người duyệt THỨ 2, **HOÀN TOÀN ĐỘC LẬP** với "Siêu Thị Phụ
     Trách" ở trên (cơ chế Siêu Thị/Phòng Ban giữ nguyên 100%, không đụng gì,

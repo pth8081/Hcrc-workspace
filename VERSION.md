@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**28.22** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.23 (2026-11): [Nghiêm trọng] Phê Duyệt Giá Bán Buôn — GĐST không khớp được siêu thị khi người tạo đề xuất ở HO
+
+Người dùng báo lỗi (kèm ảnh chụp "Xem Trước Quy Trình Phê Duyệt Giá Bán Buôn"): bước 1 (Giám Đốc Siêu
+Thị) hiện "chưa có người duyệt" dù đã chọn đúng siêu thị đề xuất. Xác nhận đây là lỗi THẬT ở ngay
+đường duyệt thật (không chỉ bản xem trước) — một đề xuất Bán Buôn gửi thật từ người tạo ở HO sẽ KHÔNG
+có ai duyệt được bước 1, hồ sơ treo vĩnh viễn (chỉ admin bypass được).
+
+**Nguyên nhân**: cơ chế so khớp GĐST (từ đợt "🏪 QT Giá Bán Buôn (Siêu Thị)", 10/2026) dùng
+`item.dept` (phòng ban của NGƯỜI TẠO đề xuất, bị ép cứng về đúng phòng ban của người đó — forceOwnDept)
+làm "siêu thị" để tìm GĐST khớp — ĐÚNG với operationOrders/STORE (requester luôn chính là nhân viên của
+1 siêu thị duy nhất) nhưng SAI với Bán Buôn: người tạo đề xuất có thể ở HO (dept khi đó không phải tên
+1 siêu thị nào), và 1 đề xuất có thể áp dụng cho NHIỀU siêu thị cùng lúc (ô "🏬 Siêu Thị Đề Xuất",
+`storeScope.stores[]`) — hoàn toàn khác giả định ban đầu.
+
+- `lib/workflowEngine.js`: `MODULE_CONFIGS.itPriceApprovals.resolveWfConfig` (nhánh WHOLESALE) đổi sang
+  dùng `item.storeScope?.stores` (mảng) thay vì `item.dept`. Thêm hàm mới
+  `resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users)` — nhân bản logic so
+  khớp của `resolveOperationOrderStoreMixedApprovalRuleUsernames()` nhưng nhận 1 MẢNG siêu thị, trả về
+  HỢP (UNION) người duyệt khớp BẤT KỲ siêu thị nào trong danh sách đã chọn trên đề xuất. KHÔNG sửa hàm
+  dùng chung với operationOrders (vẫn đúng 1 siêu thị = dept, không đổi gì — operationOrders không có
+  khái niệm "nhiều siêu thị trên 1 đơn").
+- `public/js/core.js`: mirror đúng bản server — `resolveItPriceWorkflowConfigForItemClient()` đổi sang
+  đọc `p.storeScope?.stores`; thêm `resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient()`.
+- `public/js/module-itsupport-price.js`: `previewItPriceWorkflow()` (nút "🔍 Xem Trước Quy Trình Phê
+  Duyệt Giá Bán Buôn") trước đây dựng bản nháp với `dept: currentUser.dept` — sửa sang đọc đúng giá trị
+  đang chọn ở ô "🏬 Siêu Thị Đề Xuất" (`itPriceStoreScopeStoresMultiSelect`), để bản xem trước khớp đúng
+  hành vi thật.
+- Test `tests/test-itprice-wholesale-mixed-approval.js`: cập nhật fixture `wholesaleItem()` — `dept` mặc
+  định đổi thành "Phòng Vận Hành (HO)" (mô phỏng đúng báo cáo người dùng) + thêm `storeScope.stores`;
+  thêm 3 kịch bản mới xác nhận GĐST khớp đúng theo storeScope bất kể dept người tạo, và 1 đề xuất chọn
+  NHIỀU siêu thị thì GĐST của BẤT KỲ siêu thị nào trong đó đều duyệt được (nhưng vẫn cần ĐỦ CẢ các GĐST
+  đã khớp — cùng cơ chế đồng duyệt AND như "Ngành Hàng"). 17/17 kịch bản PASS. Chạy lại toàn bộ test
+  Phê Duyệt Giá/Vận Hành liên quan (itprice-approval-and-emergency, itprice-download,
+  itprice-file-format-reject, itprice-form-split, itprice-mastertlist-channel-split, itprice-permtree-move,
+  itprice-scope-dates, itprice-supplement-invalidate, operation-order-store-approver-scope,
+  vanhanh-itprice-chitiet-csp, workflow-position-approvers, csp-full-audit) — toàn bộ PASS, không
+  regression (xác nhận `test-preview-workflow-buttons.js` có 3/16 fail NHƯNG là lỗi CŨ có sẵn từ trước,
+  không liên quan gì tới đợt vá này — kiểm qua `git stash` thấy giống hệt cả trước lẫn sau).
 
 ## v28.22 (2026-11): Hợp Đồng theo Loại Pháp Lý — RELEASE 3/3 (CUỐI): lọc theo loại ở "⚡ Áp Dụng Nhanh"
 

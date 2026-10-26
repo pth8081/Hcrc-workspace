@@ -349,12 +349,13 @@ function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepO
   return approvers;
 }
 // Hỗ Trợ IT > Phê Duyệt Giá — Bán Buôn, "🏪 QT Giá Bán Buôn (Siêu Thị)" (theo yêu cầu người dùng,
-// 10/2026) — CÙNG KHUÔN resolveOperationOrderStoreMixedApprovers() ở trên (tái dùng ĐÚNG
-// resolveOperationOrderStoreMixedApprovalRuleUsernames() bên trong, logic khớp rule/storeDept/users hoàn
-// toàn generic, không có gì riêng cho operationOrders), chỉ khác nguồn dữ liệu rules[] — xem chú thích
-// đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules cho LÝ DO cần tách riêng khỏi
-// itPriceTierWorkflows[...].approvers/approversByPosition cũ (khớp TOÀN CÔNG TY theo chức danh, không
-// phân biệt đúng siêu thị của đề xuất).
+// 10/2026) — CÙNG KHUÔN resolveOperationOrderStoreMixedApprovers() ở trên, chỉ khác nguồn dữ liệu
+// rules[] — xem chú thích đầy đủ ở defaults.js::itPriceWholesaleStoreMixedApprovalRules cho LÝ DO cần
+// tách riêng khỏi itPriceTierWorkflows[...].approvers/approversByPosition cũ (khớp TOÀN CÔNG TY theo
+// chức danh, không phân biệt đúng siêu thị của đề xuất). KHÁC operationOrders 1 điểm QUAN TRỌNG (11/2026,
+// LỖI ĐÃ VÁ — xem resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores() ngay dưới): người tạo đề
+// xuất có thể ở HO và 1 đề xuất có thể áp dụng NHIỀU siêu thị cùng lúc, nên KHÔNG tái dùng thẳng
+// resolveOperationOrderStoreMixedApprovalRuleUsernames() (chỉ nhận đúng 1 storeDept = dept người tạo).
 // CÙNG CHIỀU "Mức" với resolveOperationOrderStoreMixedApprovers() ở trên (đợt sau cũng đã thêm `tier`
 // cho operationOrders STORE) — itPriceApprovals WHOLESALE có 4 MỨC cố định (MARGIN_LT5/MARGIN_GTE5/
 // DISCOUNT_LTE5/DISCOUNT_GT5, itPriceTierWorkflows) thay vì 3 mức LT10M/FROM10M_TO100M/GTE100M của
@@ -375,16 +376,49 @@ function ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang) {
   const selected = Array.isArray(itemNganhHang) ? itemNganhHang : [];
   return declared.some(code => selected.includes(code));
 }
-function resolveItPriceWholesaleMixedApprovalRuleUsernames(rule, storeDept, itemNganhHang, users) {
-  if (!ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang)) return [];
-  return resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, users);
+// LỖI ĐÃ VÁ (11/2026, theo báo cáo người dùng — xem chú thích đầy đủ tại nơi gọi,
+// MODULE_CONFIGS.itPriceApprovals.resolveWfConfig): resolveOperationOrderStoreMixedApprovalRuleUsernames()
+// ở trên nhận ĐÚNG 1 `storeDept` vì operationOrders/STORE chỉ có 1 siêu thị duy nhất = CHÍNH dept của
+// người tạo đơn (forceOwnDept, requester LUÔN là nhân viên của siêu thị đó). itPriceApprovals WHOLESALE
+// KHÁC HẲN 2 điểm: (1) người tạo đề xuất có thể ở HO (dept khi đó KHÔNG phải tên 1 siêu thị nào), (2) 1 đề
+// xuất có thể áp dụng cho NHIỀU siêu thị cùng lúc (storeScope.stores[]) — nên KHÔNG thể tái dùng thẳng hàm
+// trên (chỉ nhận 1 storeDept). Hàm này nhân bản lại ĐÚNG logic so khớp (PERSON/JOBTITLE/jobTitleDept, lọc
+// active) nhưng nhận 1 MẢNG siêu thị, trả về HỢP (UNION) người duyệt khớp BẤT KỲ siêu thị nào trong danh
+// sách đã chọn trên đề xuất — mirror ĐÚNG bản client
+// resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient() (public/js/core.js), sửa 1 bên PHẢI
+// sửa cả 2 bên. KHÔNG sửa resolveOperationOrderStoreMixedApprovalRuleUsernames() dùng chung với
+// operationOrders (vẫn đúng 1 siêu thị = dept, không đổi gì — người dùng chốt rõ ở đợt "Ngành Hàng":
+// "bước khoá theo siêu thị và phòng ban vẫn để nguyên").
+function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users) {
+  const storeList = Array.isArray(stores) ? stores : (stores ? [stores] : []);
+  const hasExplicitStores = !!(rule.stores && rule.stores.length);
+  // Dòng KHÔNG khai "Siêu Thị Phụ Trách" (mặc định) áp dụng cho MỌI siêu thị; dòng CÓ khai (ngoại lệ) chỉ
+  // áp dụng khi GIAO ít nhất 1 siêu thị của rule với danh sách siêu thị đã chọn trên đề xuất.
+  if (hasExplicitStores && !rule.stores.some(s => storeList.includes(s))) return [];
+  const isActiveUsername = (username) => (users || []).some(u => u && u.username === username && u.active !== false);
+  if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
+  const matchesDeptCondition = (u) => {
+    if (rule.jobTitleDept) {
+      return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
+    }
+    return hasExplicitStores || storeList.includes(u.dept) || (u.secondaryPositions || []).some(sp => storeList.includes(sp.dept));
+  };
+  return (users || [])
+    .filter(u => u && u.active !== false)
+    .filter(u => u.jobTitle === rule.jobTitle)
+    .filter(matchesDeptCondition)
+    .map(u => u.username);
 }
-function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, storeDept, itemNganhHang, users, stepOrders) {
+function resolveItPriceWholesaleMixedApprovalRuleUsernames(rule, stores, itemNganhHang, users) {
+  if (!ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang)) return [];
+  return resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users);
+}
+function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, stores, itemNganhHang, users, stepOrders) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (rules || []).filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder)).forEach(r => {
-      resolveItPriceWholesaleMixedApprovalRuleUsernames(r, storeDept, itemNganhHang, users).forEach(u => usernames.add(u));
+      resolveItPriceWholesaleMixedApprovalRuleUsernames(r, stores, itemNganhHang, users).forEach(u => usernames.add(u));
     });
     approvers[stepOrder] = [...usernames];
   });
@@ -601,15 +635,23 @@ const MODULE_CONFIGS = {
         // sách). Nay mirror ĐÚNG cơ chế đã chạy ổn định của operationOrders/STORE
         // (resolveOperationOrderWorkflow() ở trên): SỐ BƯỚC vẫn lấy nguyên từ itPriceTierWorkflows (màn
         // "Quy Trình & Phê Duyệt" không đổi), nhưng NGƯỜI DUYỆT tra hoàn toàn từ
-        // itPriceWholesaleStoreMixedApprovalRules (màn "🏪 QT Giá Bán Buôn (Siêu Thị)" mới) theo đúng
-        // item.dept (= siêu thị/phòng ban của người đề xuất, forceOwnDept — xem lib/createValidation.js).
+        // itPriceWholesaleStoreMixedApprovalRules (màn "🏪 QT Giá Bán Buôn (Siêu Thị)" mới).
         // approvers/approversByPosition cũ trên itPriceTierWorkflows giờ CHỈ còn tác dụng hiển thị tham
         // khảo ở màn cũ, không còn đọc ở đây nữa (đúng tinh thần đã áp dụng cho operationOrders/STORE).
+        //
+        // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp "Xem Trước Quy Trình..." bước 1 "chưa có
+        // người duyệt"): trước đây dùng `item.dept` (= phòng ban của NGƯỜI TẠO đề xuất, forceOwnDept — xem
+        // lib/createValidation.js) làm "siêu thị" để so khớp GĐST — SAI, vì người tạo đề xuất Bán Buôn có
+        // thể ở HO (phòng ban KHÔNG phải tên 1 siêu thị nào), còn siêu thị thật sự cần GĐST duyệt là danh
+        // sách đã chọn ở ô "🏬 Siêu Thị Đề Xuất" trên form (`item.storeScope.stores[]`, có thể NHIỀU siêu
+        // thị cùng lúc — khác hẳn operationOrders/STORE chỉ có đúng 1 siêu thị = chính dept người tạo).
+        // Đổi sang dùng `item.storeScope?.stores` (mảng) + resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores()
+        // (khớp UNION — bất kỳ siêu thị nào trong danh sách đã chọn).
         const resolved = flatWorkflowConfigToSteps(
           resolveItPriceTierWorkflowConfig(appData.itPriceTierWorkflows, item.priceTier), appData
         );
         const stepOrders = resolved.steps.map(s => s.order);
-        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.dept, item.nganhHang, appData.users, stepOrders);
+        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.storeScope?.stores, item.nganhHang, appData.users, stepOrders);
         return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
       }
       return appendExtraApprovalLayers(flatWorkflowConfigToSteps(

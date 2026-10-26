@@ -684,10 +684,19 @@ function previewItPriceWorkflow() {
     // thời, chỉ còn giữ workflowId để biết SỐ BƯỚC kể từ khi chuyển sang Quy Trình Hỗn Hợp, xem
     // resolveItPriceWorkflowConfigForItemClient() nhánh WHOLESALE) — modal xem trước LUÔN hiện "chưa có
     // người duyệt" dù người duyệt thật (mixed-rules) đã cấu hình đúng và luồng duyệt thật vẫn chạy bình
-    // thường. Mirror ĐÚNG previewOperationOrderWorkflow() (module-vanhanh.js): dựng 1 bản nháp với
-    // dept=currentUser.dept (đơn Bán Buôn luôn forceOwnDept, xem lib/createValidation.js) rồi gọi THẲNG
-    // resolveItPriceWorkflowConfigForItemClient() — cùng hàm mà luồng duyệt thật đang dùng.
-    const draft = { priceType: 'WHOLESALE', priceTier: tier, dept: currentUser.dept, nganhHang: getMultiSelectValues('itPriceNganhHangMultiSelect') };
+    // thường. Mirror ĐÚNG previewOperationOrderWorkflow() (module-vanhanh.js): dựng 1 bản nháp rồi gọi
+    // THẲNG resolveItPriceWorkflowConfigForItemClient() — cùng hàm mà luồng duyệt thật đang dùng.
+    //
+    // LỖI ĐÃ VÁ KHÁC (11/2026, báo cáo người dùng): bản nháp trước đây dùng `dept: currentUser.dept` làm
+    // "siêu thị" — SAI với Bán Buôn vì người tạo đề xuất có thể ở HO (không phải tên 1 siêu thị nào) và
+    // GĐST thật sự cần duyệt là của (các) siêu thị đã chọn ở ô "🏬 Siêu Thị Đề Xuất", KHÔNG phải phòng ban
+    // của người xem bản xem trước. Đổi sang đọc đúng `storeScope.stores` từ picker đó (cùng field tên sẽ
+    // gửi lên server lúc submit thật, xem submitItPriceApproval()).
+    const draft = {
+      priceType: 'WHOLESALE', priceTier: tier,
+      storeScope: { stores: getMultiSelectValues('itPriceStoreScopeStoresMultiSelect') },
+      nganhHang: getMultiSelectValues('itPriceNganhHangMultiSelect')
+    };
     // "Nhóm Phê Duyệt Cuối" (10/2026) — nối thêm các bước đã chọn trên form (nếu có) vào bản xem trước.
     const wfConfig = appendExtraApprovalLayersForPreview(resolveItPriceWorkflowConfigForItemClient(draft), 'ITPRICE_WHOLESALE');
     return openGenericWorkflowPreviewModal(
