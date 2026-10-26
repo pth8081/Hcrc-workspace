@@ -2842,6 +2842,26 @@ theo đúng vị trí trong cây**.
   nút **"🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này"** khi đang xem 1 bản Lưu Trữ — bấm
   vào phải xác nhận 2 lớp (cảnh báo + gõ lại đúng tên phiên bản). Vẫn KHÔNG
   BAO GIỜ xoá được bản đang Áp Dụng.
+- **Sửa định biên TRONG kỳ hiện tại, không bắt đầu kỳ mới (11/2026, theo yêu
+  cầu người dùng)** — phân biệt rõ 2 tình huống: (1) trong năm/kỳ hiện tại chỉ
+  cần CHỈNH LẠI định biên đang áp dụng (VD sửa 1 lỗi nhỏ), muốn giữ nguyên
+  ngày "Áp dụng từ" của kỳ, không coi là bắt đầu kỳ mới; (2) sang năm/kỳ khác,
+  áp dụng 1 định biên THẬT MỚI để so sánh năm này với năm khác — tình huống
+  này vẫn đóng dấu ngày mới như trước giờ. Đang xem bản **Đang áp dụng** →
+  bấm nút **"✏️ Sửa Bản Đang Áp Dụng"** (cạnh nút "+ Tạo Bản Nháp Mới") — tự
+  tạo 1 bản Nháp nhân bản từ đúng bản đang áp dụng (đặt tên gợi ý "Chỉnh sửa –
+  <tên bản gốc>"), sửa cây xong thì bấm **"Kiểm tra hợp lệ"** như thường. Lúc
+  "Áp dụng", nếu bản nháp này VẪN đang bắt nguồn trực tiếp từ đúng bản đang
+  áp dụng hiện tại (chưa có ai khác áp dụng 1 bản khác chen vào giữa lúc đó),
+  sẽ thấy THÊM nút **"✅ Áp Dụng (Giữ Nguyên Ngày — Sửa Trong Kỳ)"** cạnh nút
+  "✅ Áp Dụng Phiên Bản Này" thường — bấm nút này thì "Áp dụng từ" giữ ĐÚNG
+  ngày cũ của kỳ hiện tại; vẫn bấm nút Áp Dụng thường như mọi khi nếu thật sự
+  muốn bắt đầu 1 kỳ mới (đóng dấu ngày hôm nay). Nếu dữ liệu đã đổi khác giữa
+  lúc tạo nháp và lúc áp dụng (người khác vừa áp dụng 1 bản khác), hệ thống
+  tự ẨN nút Giữ Nguyên Ngày (hoặc báo lỗi rõ nếu cố gọi) để tránh gán nhầm
+  ngày — tải lại trang, kiểm tra lại rồi làm lại từ bước Sửa Bản Đang Áp Dụng.
+  **Vẫn KHÔNG cho sửa trực tiếp cây đang Áp Dụng** — 2 nút trên chỉ là lối tắt
+  tiện lợi trên cơ chế Nháp → Áp Dụng sẵn có, không đổi quy tắc bất biến này.
 - **Tải Mẫu/Nhập/Xuất Excel (10/2026, theo yêu cầu người dùng)** — bên cạnh
   cách dựng cây bằng tay (Thêm/Sửa từng node), HR có thể chuẩn bị cả cây
   trong 1 file Excel rồi nhập 1 lần: bấm **"📤 Nhập Excel (Bản Nháp Mới)"**

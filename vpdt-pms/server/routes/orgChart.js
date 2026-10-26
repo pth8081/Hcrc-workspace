@@ -454,8 +454,12 @@ router.post('/versions/:id/apply', async (req, res) => {
   try {
     const usersSnapshot = (await getAppDataValue('users')) || []; // chỉ để validate — bước ghi managerUsername thật ở dưới tự đọc lại bản mới nhất trong khoá riêng
     const employeeProfilesSnapshot = (await getAppDataValue('employeeProfiles')) || []; // LỖI ĐÃ VÁ #9
+    // keepEffectiveDate (11/2026, theo yêu cầu người dùng — "sửa định biên TRONG kỳ hiện tại") — xem
+    // chú thích đầy đủ ở applyVersionInPlace() (lib/orgChart.js) cho điều kiện CHỈ cho phép khi bản nháp
+    // này bắt nguồn TRỰC TIẾP từ đúng bản đang áp dụng (server tự kiểm tra lại, không tin cờ client gửi).
+    const keepEffectiveDate = req.body?.keepEffectiveDate === true;
     await withLockedAppDataValue('orgChartVersions', (list) => {
-      appliedVersion = orgChart.applyVersionInPlace(list, Number(req.params.id), usersSnapshot, req.freshUser.username, employeeProfilesSnapshot);
+      appliedVersion = orgChart.applyVersionInPlace(list, Number(req.params.id), usersSnapshot, req.freshUser.username, employeeProfilesSnapshot, { keepEffectiveDate });
       return list;
     });
   } catch (err) {

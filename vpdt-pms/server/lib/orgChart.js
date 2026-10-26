@@ -464,15 +464,31 @@ function deleteArchivedVersion(list, versionId) {
 // liệu users/version có thể đã đổi giữa 2 lượt gọi), lưu trữ version đang APPLIED (nếu có) -> ARCHIVED,
 // version này -> APPLIED, seed kpiFlow còn thiếu. KHÔNG tính lại managerUsername ở đây (cần khoá riêng
 // bảng "users" — xem computeManagerUsernameUpdates() + route gọi 2 bước ở routes/orgChart.js).
-function applyVersionInPlace(list, versionId, users, actingUsername, employeeProfiles) {
+// `options.keepEffectiveDate` (11/2026, theo yêu cầu người dùng — "sửa định biên TRONG kỳ hiện tại,
+// không phải áp dụng kỳ mới"): mặc định (false/không truyền) giữ NGUYÊN hành vi cũ — "Áp dụng từ" luôn
+// đóng dấu ngày hôm nay, đúng cho trường hợp cố ý áp dụng 1 kỳ/định biên MỚI (VD sang năm sau) để so
+// sánh với kỳ cũ. Khi `true` — CHỈ cho phép nếu bản nháp này bắt nguồn TRỰC TIẾP từ ĐÚNG bản đang áp
+// dụng hiện tại (`version.clonedFromVersionId === applied.id`, chưa có bản nào khác chen vào áp dụng ở
+// giữa — nếu có, tức dữ liệu đã đổi khác lúc tạo bản nháp, không còn an toàn để coi là "sửa trong kỳ"
+// nữa) — giữ nguyên `effectiveDate` của bản đang áp dụng (bị thay thế) thay vì đóng dấu ngày mới, đúng ý
+// "sửa 1 lỗi/điều chỉnh nhỏ trong CÙNG kỳ, không phải bắt đầu kỳ mới". Validate hành vi gốc
+// (computeValidationIssues/managerUsername/kpiFlow...) KHÔNG đổi gì — chỉ khác đúng 1 dòng
+// `version.effectiveDate`.
+function applyVersionInPlace(list, versionId, users, actingUsername, employeeProfiles, options) {
   const version = requireVersion(list, versionId);
   requireDraft(version);
   const applied = getAppliedVersion(list);
   const issues = computeValidationIssues(version, applied, users, employeeProfiles);
   if (issues.length) throw new HttpError(400, `Không thể áp dụng — còn lỗi cần xử lý: ${issues.join(' | ')}`);
+  const wantsKeepEffectiveDate = !!(options && options.keepEffectiveDate);
+  const canKeepEffectiveDate = !!(applied && version.clonedFromVersionId === applied.id && applied.effectiveDate);
+  if (wantsKeepEffectiveDate && !canKeepEffectiveDate) {
+    throw new HttpError(400, 'Không thể giữ nguyên "Áp dụng từ" của kỳ hiện tại — bản đang áp dụng đã đổi khác so với lúc bạn tạo bản nháp này (có thể người khác vừa áp dụng 1 bản khác). Vui lòng tải lại trang và kiểm tra lại trước khi áp dụng.');
+  }
+  const effectiveDateToUse = wantsKeepEffectiveDate ? applied.effectiveDate : new Date().toISOString().slice(0, 10);
   if (applied) applied.status = 'ARCHIVED';
   version.status = 'APPLIED';
-  version.effectiveDate = new Date().toISOString().slice(0, 10);
+  version.effectiveDate = effectiveDateToUse;
   version.appliedBy = actingUsername;
   version.appliedAt = new Date().toISOString();
   seedKpiFlowGaps(version);

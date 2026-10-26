@@ -17,12 +17,24 @@
         <span id="orgChartVersionStatusBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full"></span>
         <span class="flex-1"></span>
         <button type="button" id="btnOrgChartCreateDraft" data-op="cloneOrgChartVersionClick" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700">+ Tạo Bản Nháp Mới</button>
+        <!-- "✏️ Sửa Bản Đang Áp Dụng" (11/2026, theo yêu cầu người dùng — sửa định biên TRONG kỳ hiện
+             tại, không phải tạo kỳ mới) — CHỈ hiện khi đang xem ĐÚNG bản đang áp dụng (toggle ở
+             loadOrgChartCurrentVersion(), module-orgchart.js). Bấm vào tạo 1 bản nháp (nhân bản toàn bộ
+             cây hiện tại, giống "+ Tạo Bản Nháp Mới") rồi tự nhảy vào sửa ngay — xem
+             editAppliedOrgChartVersionClick(). -->
+        <button type="button" id="btnOrgChartEditApplied" data-op="editAppliedOrgChartVersionClick" class="hidden bg-amber-600 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-amber-700">✏️ Sửa Bản Đang Áp Dụng</button>
         <button type="button" id="btnOrgChartImportExcel" data-op="openOrgChartImportModal" class="bg-indigo-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">📤 Nhập Excel (Bản Nháp Mới)</button>
         <a id="btnOrgChartExportXlsx" href="#" class="bg-gray-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-700 inline-block">📊 Xuất Excel (Bản Đang Xem)</a>
         <button type="button" id="btnOrgChartHeadcountReport" data-op="openOrgChartHeadcountModal" class="bg-teal-700 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-teal-800">📋 Báo Cáo Định Biên Nhân Sự</button>
         <button type="button" id="btnOrgChartRenameVersion" data-op="renameOrgChartVersionClick" class="hidden bg-gray-200 text-gray-700 px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-gray-300">✏️ Đổi Tên</button>
         <button type="button" id="btnOrgChartValidateVersion" data-op="validateOrgChartVersionClick" class="hidden bg-blue-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-blue-700">🔍 Kiểm Tra Hợp Lệ</button>
         <button type="button" id="btnOrgChartApplyVersion" data-op="applyOrgChartVersionClick" class="hidden bg-emerald-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-emerald-800">✅ Áp Dụng Phiên Bản Này</button>
+        <!-- "✅ Áp Dụng (Giữ Nguyên Ngày — Sửa Trong Kỳ)" (11/2026) — CHỈ hiện khi bản nháp đang xem
+             bắt nguồn TRỰC TIẾP từ ĐÚNG bản đang áp dụng hiện tại (xem loadOrgChartCurrentVersion(),
+             module-orgchart.js) — giữ nguyên "Áp dụng từ" của kỳ hiện tại thay vì đóng dấu ngày hôm nay,
+             đúng ý "sửa 1 điều chỉnh nhỏ trong CÙNG kỳ" (VD định biên), không phải bắt đầu kỳ mới. Nút
+             "Áp Dụng Phiên Bản Này" ở trên vẫn luôn hiện song song cho trường hợp CỐ Ý áp dụng kỳ mới. -->
+        <button type="button" id="btnOrgChartApplyVersionKeepDate" data-op="applyOrgChartVersionClick" data-arg0="1" class="hidden bg-amber-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-amber-800">✅ Áp Dụng (Giữ Nguyên Ngày — Sửa Trong Kỳ)</button>
         <button type="button" id="btnOrgChartDeleteVersion" data-op="deleteOrgChartVersionClick" class="hidden bg-red-100 text-red-700 px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-red-200">🗑️ Xoá Bản Nháp Này</button>
         <button type="button" id="btnOrgChartDeleteArchivedVersion" data-op="deleteArchivedOrgChartVersionClick" class="hidden bg-red-700 text-white px-2.5 py-1.5 rounded text-xs font-bold hover:bg-red-800">🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này</button>
         <button type="button" id="btnOrgChartCompareVersion" data-op="compareOrgChartVersionClick" class="hidden bg-indigo-600 text-white px-2.5 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700">🔀 So Sánh Với Bản Đang Áp Dụng</button>
@@ -40,7 +52,7 @@
     </div>
 
     <div id="orgChartTreeView" class="hidden space-y-2">
-      <p class="text-[11px] text-gray-500 italic">Mỗi node "Vị Trí" là tổ hợp Chức Danh + Phòng Ban chứa nó (VD "Trưởng phòng CNTT" khác "Trưởng phòng Kế Toán" dù cùng chức danh). "Ai đang giữ vị trí này" tự tra theo đúng Phòng Ban + Chức Danh hiện tại của từng tài khoản — không cần gán tay. Chỉ sửa được cây khi đang xem 1 bản NHÁP.</p>
+      <p class="text-[11px] text-gray-500 italic">Mỗi node "Vị Trí" là tổ hợp Chức Danh + Phòng Ban chứa nó (VD "Trưởng phòng CNTT" khác "Trưởng phòng Kế Toán" dù cùng chức danh). "Ai đang giữ vị trí này" tự tra theo đúng Phòng Ban + Chức Danh hiện tại của từng tài khoản — không cần gán tay. Chỉ sửa được cây khi đang xem 1 bản NHÁP — đang xem bản "Đang áp dụng" thì bấm "✏️ Sửa Bản Đang Áp Dụng" để tạo nháp sửa lại, xong bấm "Áp Dụng (Giữ Nguyên Ngày)" nếu đây chỉ là điều chỉnh trong cùng kỳ (không phải bắt đầu kỳ/định biên mới).</p>
       <div id="orgChartTreeContainer" class="bg-white border rounded p-3 space-y-1 text-sm"></div>
     </div>
 

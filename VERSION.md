@@ -1,9 +1,44 @@
 # Phiên bản hiện tại
 
-**28.23** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.24 (2026-11): Sơ Đồ Tổ Chức — sửa định biên TRONG kỳ hiện tại mà không bị coi là kỳ mới
+
+Người dùng yêu cầu: khi cần chỉnh lại định biên của bản Cơ Cấu Tổ Chức ĐANG áp dụng (VD sửa 1 lỗi nhỏ
+trong năm), muốn có nút Sửa + Áp Dụng lại mà KHÔNG bị đổi "Áp dụng từ" sang ngày mới — vì đây là chỉnh
+sửa TRONG kỳ, không phải áp dụng 1 định biên MỚI để so sánh năm này với năm khác (trường hợp đó vẫn cần
+đóng dấu ngày mới như cũ).
+
+- `lib/orgChart.js`: `applyVersionInPlace()` nhận thêm `options.keepEffectiveDate` (mặc định `false` —
+  giữ đúng hành vi cũ, luôn đóng dấu ngày hôm nay). Khi `true`: CHỈ chấp nhận nếu bản nháp đang áp dụng
+  bắt nguồn TRỰC TIẾP từ ĐÚNG bản đang APPLIED hiện tại (`version.clonedFromVersionId === applied.id`) —
+  nếu dữ liệu đã đổi khác (người khác vừa áp dụng 1 bản khác chen giữa) thì từ chối (400), không coi là
+  "sửa trong kỳ" nữa; khi hợp lệ, giữ nguyên `effectiveDate` của bản bị thay thế thay vì đóng dấu mới.
+  Toàn bộ logic validate/managerUsername/kpiFlow khác giữ nguyên, không đổi gì.
+- `routes/orgChart.js`: route `POST /versions/:id/apply` đọc thêm `req.body.keepEffectiveDate` (boolean)
+  và truyền qua `applyVersionInPlace()`.
+- `public/fragments/orgChartSection.html`: thêm nút "✏️ Sửa Bản Đang Áp Dụng" (lối tắt tạo bản nháp từ
+  đúng bản APPLIED hiện tại, chỉ hiện khi đang xem version APPLIED) và nút "✅ Áp Dụng (Giữ Nguyên Ngày —
+  Sửa Trong Kỳ)" cạnh nút Áp Dụng thường (chỉ hiện khi bản nháp đang xem được clone trực tiếp từ đúng
+  bản APPLIED hiện tại).
+- `public/js/module-orgchart.js`: hàm mới `editAppliedOrgChartVersionClick()` (gọi API clone có sẵn, tự
+  đặt tên gợi ý "Chỉnh sửa – <tên bản gốc>", tự chuyển sang bản nháp mới tạo); `applyOrgChartVersionClick()`
+  nhận thêm tham số `keepEffectiveDate` (từ `data-arg0="1"` của nút mới), đổi nội dung xác nhận cho đúng
+  ngữ cảnh, truyền `keepEffectiveDate` vào body API; `loadOrgChartCurrentVersion()` thêm logic hiện/ẩn 2
+  nút mới theo đúng điều kiện trên.
+- **Vẫn giữ nguyên bất biến "chỉ sửa được khi DRAFT"** (không cho sửa trực tiếp cây đang APPLIED) — nút
+  mới chỉ là lối tắt tiện lợi trên cơ chế Sao Chép sang Nháp đã có từ trước, không phá quy ước chung của
+  hệ thống (Checklist Mẫu cũng theo quy ước này).
+- Test mới `tests/test-orgchart-edit-applied-reapply.js` (8 kịch bản, PASS cả 8): giữ hành vi cũ khi
+  không truyền/`false`, giữ đúng `effectiveDate` cũ khi hợp lệ, từ chối khi bản nháp không clone từ đúng
+  bản APPLIED hiện tại, từ chối khi gặp race condition (bản APPLIED đã đổi khác). Chạy lại toàn bộ test
+  Cơ Cấu Tổ Chức hiện có (orgchart-v2, delete-draft-version, delete-archived-version, khoi0-orgchart-gate,
+  orgchartversions-leak-main-data, orgchart-import-export, orgchart-kpiflow-prune, orgchart-headcount-report,
+  orgchart-diagram-tab, orgchart-node-headcount-selfonly-ui, orgchart-import-modal-binding,
+  orgchart-headcount-modal-binding) + `test-csp-full-audit.js` — toàn bộ PASS, không regression.
 
 ## v28.23 (2026-11): [Nghiêm trọng] Phê Duyệt Giá Bán Buôn — GĐST không khớp được siêu thị khi người tạo đề xuất ở HO
 

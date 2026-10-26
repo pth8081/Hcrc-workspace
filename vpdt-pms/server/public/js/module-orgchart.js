@@ -123,6 +123,14 @@ async function loadOrgChartCurrentVersion(id) {
   document.getElementById('btnOrgChartRenameVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartValidateVersion').classList.toggle('hidden', !(isDraft && canManageTree));
   document.getElementById('btnOrgChartApplyVersion').classList.toggle('hidden', !(isDraft && canManageTree));
+  // Nút "✏️ Sửa Bản Đang Áp Dụng" + "✅ Áp Dụng (Giữ Nguyên Ngày)" (10/2026) — xem editAppliedOrgChartVersionClick()/
+  // applyOrgChartVersionClick() + lib/orgChart.js::applyVersionInPlace() cho đầy đủ ngữ cảnh. Nút Sửa chỉ hiện khi
+  // ĐANG XEM đúng version APPLIED (lối tắt tạo nháp từ đó); nút Áp Dụng Giữ Nguyên Ngày chỉ hiện khi bản nháp đang
+  // xem được clone TRỰC TIẾP từ đúng version APPLIED hiện tại (clonedFromVersionId khớp) — nháp tạo kiểu khác (VD
+  // nháp mới từ đầu, hoặc nháp đã lỡ clone từ 1 bản cũ hơn) vẫn chỉ thấy nút Áp Dụng thường (luôn đóng dấu ngày mới).
+  const appliedMeta = _ocVersions.find(v => v.status === 'APPLIED');
+  document.getElementById('btnOrgChartEditApplied').classList.toggle('hidden', !(_ocCurrentVersion.status === 'APPLIED' && canManageTree));
+  document.getElementById('btnOrgChartApplyVersionKeepDate').classList.toggle('hidden', !(isDraft && canManageTree && appliedMeta && _ocCurrentVersion.clonedFromVersionId === appliedMeta.id));
   // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây không có cách nào xoá bản nháp không dùng
   // nữa — chỉ hiện với DRAFT (khớp deleteVersion() ở lib/orgChart.js, APPLIED/ARCHIVED phải giữ lịch sử).
   document.getElementById('btnOrgChartDeleteVersion').classList.toggle('hidden', !(isDraft && canManageTree));
@@ -519,6 +527,24 @@ async function cloneOrgChartVersionClick() {
   document.getElementById('orgChartVersionSelect').value = String(result.version.id);
   await onOrgChartVersionSelectChange();
 }
+// Nút "✏️ Sửa Bản Đang Áp Dụng" (10/2026, theo yêu cầu người dùng "trong kỳ chỉ cần chỉnh lại định biên,
+// không phải sang kỳ mới") — chỉ là 1 lối tắt tiện lợi trên cloneOrgChartVersionClick() ở trên, KHÔNG
+// cho sửa trực tiếp cây đang APPLIED (giữ nguyên bất biến DRAFT-mới-sửa-được). Luôn tự đặt tên gợi ý +
+// tự chuyển sang bản nháp mới tạo, để người dùng sửa cây rồi dùng nút "Áp Dụng (Giữ Nguyên Ngày)" bên
+// cạnh nút Áp Dụng thường — xem applyOrgChartVersionClick() và lib/orgChart.js::applyVersionInPlace().
+async function editAppliedOrgChartVersionClick() {
+  const appliedMeta = _ocVersions.find(v => v.status === 'APPLIED');
+  if (!appliedMeta) return alert('⛔ Chưa có phiên bản nào đang áp dụng để sửa.');
+  if (!confirm(`Tạo bản nháp từ phiên bản đang áp dụng "${appliedMeta.versionName}" để chỉnh sửa (giữ nguyên toàn bộ cây hiện tại)?`)) return;
+  const name = `Chỉnh sửa – ${appliedMeta.versionName}`;
+  let result;
+  try {
+    result = await orgChartApiCall('POST', `/api/org-chart/versions/${appliedMeta.id}/clone`, { versionName: name });
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  await renderOrgChartModule();
+  document.getElementById('orgChartVersionSelect').value = String(result.version.id);
+  await onOrgChartVersionSelectChange();
+}
 // ===== Nhập Excel (10/2026, theo yêu cầu người dùng) — LUÔN tạo 1 bản Nháp MỚI, xem
 // lib/orgChartImport.js đầu file cho lý do "tất-cả-hoặc-không-gì" khác hẳn các Excel Nhập khác. =====
 let _ocImportParsed = null; // { items, fileErrors, valid } — kết quả /parse-import gần nhất
@@ -639,12 +665,20 @@ async function validateOrgChartVersionClick() {
   if (result.valid) alert('✅ Phiên bản hợp lệ, có thể áp dụng.');
   else alert(`⚠️ Còn ${result.issues.length} lỗi cần xử lý trước khi áp dụng:\n\n- ${result.issues.join('\n- ')}`);
 }
-async function applyOrgChartVersionClick() {
+// Tham số keepEffectiveDate: đến từ nút "✅ Áp Dụng (Giữ Nguyên Ngày — Sửa Trong Kỳ)"
+// (data-arg0="1" ở orgChartSection.html → cspCoerceArg() ép thành Number 1) — nút Áp Dụng thường gọi
+// hàm này KHÔNG truyền gì (undefined), giữ đúng hành vi cũ (luôn đóng dấu ngày hôm nay). Server
+// (lib/orgChart.js::applyVersionInPlace()) tự kiểm tra lại điều kiện an toàn clonedFromVersionId —
+// chỉ cần đổi nội dung confirm() ở đây cho đúng ngữ cảnh, không cần tự kiểm tra điều kiện phía client.
+async function applyOrgChartVersionClick(keepEffectiveDate) {
   if (!_ocCurrentVersion) return;
-  if (!confirm(`Áp dụng phiên bản "${_ocCurrentVersion.versionName}"? Phiên bản đang áp dụng hiện tại (nếu có) sẽ chuyển sang Lưu Trữ.`)) return;
+  const confirmMsg = keepEffectiveDate
+    ? `Áp dụng bản nháp "${_ocCurrentVersion.versionName}" và GIỮ NGUYÊN ngày "Áp dụng từ" của kỳ hiện tại (coi như chỉnh sửa trong kỳ, không phải kỳ mới)?`
+    : `Áp dụng phiên bản "${_ocCurrentVersion.versionName}"? Phiên bản đang áp dụng hiện tại (nếu có) sẽ chuyển sang Lưu Trữ.`;
+  if (!confirm(confirmMsg)) return;
   let result;
   try {
-    result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, {});
+    result = await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/apply`, { keepEffectiveDate: !!keepEffectiveDate });
   } catch (err) { return alert(`⛔ ${err.message}`); }
   // Yêu cầu nghiệp vụ (10/2026): Áp Dụng xong tự chuyển sang sub-tab "🖼️ Sơ Đồ Trực Quan" để thấy ngay
   // sơ đồ cấp Phòng Ban vừa cập nhật, không phải tự bấm qua — đặt TRƯỚC renderOrgChartModule() vì hàm đó
