@@ -21,7 +21,15 @@ const WF_MODULE_CONFIG = {
   // cho sub-tab "Phê Duyệt" (còn có thêm 4 lớp bổ sung tuỳ chọn cấu hình riêng ở "Nhóm Phê Duyệt HĐ",
   // khối Phân Quyền — không thuộc màn này); CONTRACT_MANAGE là quy trình đơn giản theo phòng ban cho
   // bước duyệt "Tài liệu ký" ở sub-tab "Quản Lý HĐ" — độc lập hoàn toàn, không liên quan CONTRACT_APPROVAL.
-  CONTRACT_APPROVAL: { dbKey: 'contractApprovalDeptWorkflows', label: 'Hợp đồng - Phê duyệt', title: '📄 Cấu Hình Quy Trình GỐC Phê Duyệt Hợp Đồng Theo Phòng Ban' },
+  // hasTypes (11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng, Release 2/3) — CHỈ áp dụng cho
+  // quy trình "Phê Duyệt" (hợp đồng/phụ lục MỚI), KHÔNG đụng CONTRACT_MANAGE ("Quản Lý HĐ"/Tài liệu ký —
+  // giữ nguyên phẳng theo phòng ban như cũ, ngoài phạm vi yêu cầu). dbKey trỏ tới cấu trúc LỒNG
+  // {loại: {phòng ban: config}}, legacyDbKey là cấu hình chung cũ (chỉ theo phòng ban, trước khi có tính
+  // năng này) — dùng làm phương án dự phòng khi loại đang chọn CHƯA được admin cấu hình riêng, cùng khuôn
+  // SUBMISSION ở trên. typesFromContractCatalog: true (khác SUBMISSION không đặt cờ này, mặc định đọc
+  // DB.submissionTypes) báo cho getWfModuleTypes() đọc DB.contractTypes (mảng chuỗi phẳng — "Loại Pháp
+  // Lý", Biểu Mẫu) thay vì DB.submissionTypes — xem getWfModuleTypes() ở module-ngansach.js.
+  CONTRACT_APPROVAL: { dbKey: 'contractTypeApprovalDeptWorkflows', legacyDbKey: 'contractApprovalDeptWorkflows', hasTypes: true, typesFromContractCatalog: true, label: 'Hợp đồng - Phê duyệt', title: '📄 Cấu Hình Quy Trình GỐC Phê Duyệt Hợp Đồng Theo Phòng Ban' },
   CONTRACT_MANAGE: { dbKey: 'contractManageDeptWorkflows', label: 'Hợp đồng - Quản Lý HĐ', title: '📋 Cấu Hình Quy Trình Duyệt Tài Liệu Ký (Quản Lý HĐ) Theo Phòng Ban' },
   // Thanh Toán — "Chuyển Xác Nhận Thanh Toán" (PENDING -> APPROVED) đi qua quy trình duyệt theo bước/
   // phòng ban (paymentDeptWorkflows) — cùng khuôn đơn giản CONTRACT_MANAGE/BUDGET ở trên (không snapshot,

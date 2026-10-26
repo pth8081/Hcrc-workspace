@@ -1944,6 +1944,22 @@ khác nhóm 4.2 ở chỗ luôn cần ít nhất 1 bước duyệt tài chính r
     người** (không bật "Chỉ 1 người") → hiện thêm 1 hộp chọn bắt buộc chọn
     **đúng 1 người cụ thể** trong nhóm duyệt bước đó. Nhóm chưa gán ai (0
     người) thì không tạo được hồ sơ cho tới khi admin gán thành viên.
+  - **Cấu hình quy trình Phê Duyệt RIÊNG theo "Loại Pháp Lý" (11/2026)** — cùng
+    khuôn Văn Bản Trình theo Loại Tờ Trình (mục 4.1): tại **Hệ Thống → 🔄 Quy
+    Trình & Phê Duyệt → Hợp đồng - Phê duyệt**, màn hiện thêm 1 hàng tab chọn
+    đúng "Loại Pháp Lý" (danh mục Biểu Mẫu → "Loại Pháp Lý") NGAY TRÊN khối
+    cấu hình theo phòng ban — chọn 1 loại rồi cấu hình số bước/người duyệt
+    riêng cho ĐÚNG loại đó, các loại khác không bị đụng tới. Loại CHƯA từng
+    được cấu hình riêng tự rơi về cấu hình chung cũ (hành vi 100% như trước
+    11/2026, không phá vỡ gì) — chỉ khi admin chủ động chọn 1 loại rồi "Lưu
+    Cấu Hình" mới tách riêng loại đó ra. **CHỈ áp dụng cho sub-tab "Phê
+    Duyệt"** — sub-tab "Quản Lý HĐ" (Tài liệu ký) KHÔNG có khái niệm theo
+    loại, vẫn 1 quy trình chung theo phòng ban như trước. Nút "🔍 Xem Quy
+    Trình" trên form tạo hợp đồng/phụ lục mới cũng tự đọc đúng Loại Pháp Lý
+    đang chọn trên form để xem trước đúng người duyệt sẽ gặp. Người CHỈ được
+    cấu hình làm người duyệt riêng theo 1 loại cụ thể (không có trong cấu
+    hình chung, không thuộc Nhóm Phê Duyệt Trình/HĐ) vẫn thấy đúng tab "Hợp
+    Đồng" và hộp thư "✅ Phê Duyệt" như người duyệt bình thường.
   - **🔀 Chuyển Tiếp Xin Ý Kiến / ⏰ Quá Hạn Xử Lý / ⏱️ Gia Hạn (11/2026)** — 3
     tính năng dùng CHUNG cơ chế với Văn Bản Trình (xem mô tả đầy đủ ở mục 4.1
     ngay trên): người duyệt bước hiện tại chuyển tiếp hồ sơ cho nhiều người

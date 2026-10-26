@@ -3783,11 +3783,24 @@ function resolveSubmissionWorkflow(sub) {
 // resolveSubmissionWorkflow() ở trên) và "Quản Lý HĐ"/Tài liệu ký (signedFileStatus/
 // signedFileCurrentStep/signedFileHistory, KHÔNG snapshot — luôn tra DB.contractManageDeptWorkflows
 // mới nhất, cùng khuôn Xe/Mua Bán/VPP).
+// getContractApprovalDeptWorkflowConfig() (11/2026, "làm giống Văn Bản Trình") — mirror
+// getSubmissionDeptWorkflowConfig() ở trên: tra contractTypeApprovalDeptWorkflows[contractType][dept]
+// (cấu hình RIÊNG của loại, nếu admin đã thiết lập) TRƯỚC, rơi về contractApprovalDeptWorkflows[dept]
+// (cấu hình chung cũ) SAU — chưa cấu hình gì thêm thì hành vi giữ nguyên như cũ. contractTypes là chuỗi
+// phẳng (không có key ổn định như submissionTypes) nên dùng THẲNG contractType làm khoá tra, không cần
+// dịch qua typeKey. LƯU Ý BẢO TRÌ: phải khớp đúng logic với getContractApprovalDeptWorkflowConfig() ở
+// lib/workflowEngine.js (server).
+function getContractApprovalDeptWorkflowConfig(contractType, dept) {
+  const fromType = contractType ? DB.contractTypeApprovalDeptWorkflows?.[contractType]?.[dept] : null;
+  if (fromType) return fromType;
+  return DB.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+}
+
 function resolveContractApprovalWorkflow(contract) {
   if (contract.effectiveSteps && contract.effectiveApprovers) {
     return { steps: contract.effectiveSteps, approvers: contract.effectiveApprovers };
   }
-  const baseConfig = DB.contractApprovalDeptWorkflows?.[contract.dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const baseConfig = getContractApprovalDeptWorkflowConfig(contract.type, contract.dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
   const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
   const approvers = {};
@@ -3835,8 +3848,8 @@ function canApprovePaymentRequestStepClient(user, pr) {
 // người -> dùng thẳng, nhóm nhiều người -> dùng đúng 1 người người tạo đã chọn ở card riêng" (xem
 // renderContractApprovalLayerCheckboxes() ở module-vanbantrinh.js) — KHÁC lớp tuỳ chọn (không locked,
 // vẫn cho chọn nhiều người cùng duyệt như trước).
-function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
-  const baseConfig = DB.contractApprovalDeptWorkflows?.[dept] || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+function buildEffectiveContractApprovalWorkflow(contractType, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
+  const baseConfig = getContractApprovalDeptWorkflowConfig(contractType, dept);
   const baseWf = DB.workflows.find(w => w.id === baseConfig.workflowId) || { steps: [{ order: 1, name: 'Sếp duyệt' }] };
 
   const steps = baseWf.steps.map(s => ({ order: s.order, name: s.name, actionLabel: s.actionLabel || null }));
@@ -3865,7 +3878,7 @@ function buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selecte
 
 // Xem trước quy trình Phê Duyệt HĐ — cùng khuôn buildSubmissionWorkflowPreviewHTML(), không có khối
 // "Xin ý kiến" (không tồn tại trong quy trình này).
-function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
+function buildContractApprovalWorkflowPreviewHTML(contractType, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel) {
   if (!dept) {
     return '<div class="text-amber-600 italic">Vui lòng chọn Phòng Ban Quản Lý để xem quy trình.</div>';
   }
@@ -3873,7 +3886,7 @@ function buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selec
     const u = DB.users.find(x => x.username === username);
     return escapeHtml(u ? u.name : username);
   };
-  const wf = buildEffectiveContractApprovalWorkflow(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
+  const wf = buildEffectiveContractApprovalWorkflow(contractType, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   const stepsHTML = wf.steps.map(s => {
     const names = (wf.approvers[s.order] || []).map(userLabel).join(', ') ||
       '<span class="text-amber-600 italic">(chưa có người duyệt — kiểm tra lại cấu hình quy trình phòng ban)</span>';
@@ -4176,6 +4189,7 @@ function canAccessContractModule(user) {
   // LÀM GỌN (11/2026, "Việc D"): bỏ hẳn contractView — cùng lý do canAccessSubmissionModule() ở trên.
   if (user.dept) return true;
   if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
+  if (Object.values(DB.contractTypeApprovalDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
   if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
   // LỖI ĐÃ VÁ (đợt rà soát chuyên sâu 9/2026, mức Nghiêm trọng): trước đây hàm này CHỈ dựa vào
   // contractView — hoàn toàn không tính người đang là approver theo 2 quy trình Phê Duyệt gốc/Quản Lý
@@ -4393,6 +4407,7 @@ function canAccessApprovalHub(user) {
   if (isApproverInWorkflowMap(DB.officeFixDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.vppDeptWorkflows, user.username)) return true;
   if (isApproverInWorkflowMap(DB.contractApprovalDeptWorkflows, user.username)) return true;
+  if (Object.values(DB.contractTypeApprovalDeptWorkflows || {}).some(typeMap => isApproverInWorkflowMap(typeMap, user.username))) return true;
   if (isApproverInWorkflowMap(DB.contractManageDeptWorkflows, user.username)) return true;
   if (isMemberOfApprovalGroupsArray(DB.contractApprovalGroups, user.username)) return true;
   if (isApproverInItPriceWorkflowMap(DB.itPriceDeptWorkflows, user.username)) return true;

@@ -431,13 +431,14 @@ function onContractApprovalLayerToggle(layerKey) {
 function previewContractApprovalWorkflow() {
   const dept = document.getElementById('contractDept').value;
   if (!dept) return alert('Vui lòng chọn Phòng Ban Quản Lý trước khi xem quy trình!');
+  const contractType = document.getElementById('contractType')?.value || '';
   const approvalLevel = document.getElementById('contractApprovalLevel')?.value || 'KHAC';
   const { selectedLayerKeys, selectedLayerMembers } = readSelectedContractLayers();
 
   document.getElementById('viewModalTitle').innerText = '🔍 Xem Trước Quy Trình Phê Duyệt Hợp Đồng';
   document.getElementById('viewModalSub').innerText = `Phòng ban: ${dept}`;
   document.getElementById('viewModalFooterInfo').innerText = 'Chỉ mang tính tham khảo — quy trình thật sự do server xác minh lại khi bạn bấm Gửi phê duyệt.';
-  document.getElementById('viewModalContent').innerHTML = buildContractApprovalWorkflowPreviewHTML(dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
+  document.getElementById('viewModalContent').innerHTML = buildContractApprovalWorkflowPreviewHTML(contractType, dept, selectedLayerKeys, selectedLayerMembers, approvalLevel);
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
 

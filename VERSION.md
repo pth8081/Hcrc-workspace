@@ -1,9 +1,57 @@
 # Phiên bản hiện tại
 
-**28.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.21** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.21 (2026-11): Hợp Đồng theo Loại Pháp Lý — RELEASE 2/3: UI cấu hình theo loại + preview + Phê Duyệt
+
+Tiếp Release 1 (v28.19, nền tảng server, hoàn toàn vô hình). Release 2/3 BẬT UI cấu hình theo loại cho
+admin + sửa đúng các điểm phía client còn đọc thẳng map phẳng cũ — vẫn CHỈ phạm vi "Phê Duyệt" (KHÔNG
+đụng "Quản Lý HĐ"/`contractManageDeptWorkflows`, đúng xác nhận của người dùng). Tận dụng TOÀN BỘ engine
+UI "Quy Trình & Phê Duyệt" đã tổng quát hoá sẵn (chạy generic theo `WF_MODULE_CONFIG`) — không viết UI
+mới, giảm tối đa rủi ro ảnh hưởng module khác.
+
+- `module-workflow.js`: `WF_MODULE_CONFIG.CONTRACT_APPROVAL` bật `hasTypes: true`, `dbKey:
+  'contractTypeApprovalDeptWorkflows'` (map lồng mới), `legacyDbKey: 'contractApprovalDeptWorkflows'`
+  (map phẳng cũ, vẫn dùng làm fallback hiển thị khi loại chưa cấu hình riêng), `typesFromContractCatalog:
+  true` (cờ MỚI, chỉ module này dùng). `CONTRACT_MANAGE` giữ nguyên 100%, không đổi gì.
+- `module-ngansach.js`: `getWfModuleTypes()` thêm nhánh đọc `DB.contractTypes` (mảng chuỗi phẳng, khác
+  `submissionTypes` dạng `{key,label}`) khi gặp cờ `typesFromContractCatalog`, map mỗi chuỗi thành
+  `{key: chuỗi, label: chuỗi}` — nhờ vậy TOÀN BỘ màn admin "Quy Trình & Phê Duyệt" (tab chọn loại, lưu/xoá
+  cấu hình theo phòng ban, Lưu Tất Cả...) tự kích hoạt đúng cho Hợp Đồng mà KHÔNG cần sửa thêm bất kỳ hàm
+  render/save/reset nào (đã xác nhận qua code `renderWorkflowTab()`/`saveDeptWorkflowConfig()`/
+  `writeDeptWorkflowConfig()`/`isDeptWorkflowConfigured()` ở `module-itsupport-tier.js` đều chạy GENERIC
+  theo `WF_MODULE_CONFIG[activeWfMod].hasTypes`/`dbKey`, không có code riêng cho từng module).
+- `core.js`:
+  - Hàm mới `getContractApprovalDeptWorkflowConfig(contractType, dept)` — mirror
+    `getSubmissionDeptWorkflowConfig()`: tra map lồng theo ĐÚNG loại+phòng ban TRƯỚC, fallback map phẳng
+    cũ SAU (LƯU Ý BẢO TRÌ: phải khớp logic với hàm cùng tên ở `lib/workflowEngine.js` phía server).
+  - `resolveContractApprovalWorkflow(contract)` (hồ sơ CŨ chưa có snapshot) chuyển qua dùng hàm trên thay
+    vì tra thẳng map phẳng.
+  - `buildEffectiveContractApprovalWorkflow()` thêm tham số đầu `contractType` (dựng quy trình HIỆU LỰC
+    lúc TẠO MỚI hợp đồng/phụ lục — đọc đúng Loại Pháp Lý đang chọn trên form thay vì luôn theo map phẳng).
+  - `buildContractApprovalWorkflowPreviewHTML()` (nút "🔍 Xem Trước Quy Trình Phê Duyệt Hợp Đồng" ở form
+    tạo mới) thêm tham số đầu `contractType`, truyền tiếp xuống hàm trên — preview nay phản ánh đúng cấu
+    hình riêng theo loại nếu admin đã thiết lập.
+  - `canAccessContractModule()`/`canAccessApprovalHub()` (cổng vào tab "Hợp Đồng"/hộp thư "✅ Phê Duyệt")
+    thêm nhánh kiểm approver qua map lồng `contractTypeApprovalDeptWorkflows` (mirror đúng nhánh đã có cho
+    `submissionTypeDeptWorkflows`) — LỖI ĐÃ VÁ: trước Release 2, người CHỈ được cấu hình làm approver
+    riêng theo 1 Loại Pháp Lý cụ thể (không có trong map phẳng, không thuộc Nhóm Phê Duyệt HĐ) bị chặn
+    nhầm khỏi cả tab Hợp Đồng lẫn Hộp Thư Phê Duyệt dù server đã chấp nhận họ duyệt từ Release 1.
+- `module-vanbantrinh.js`: `previewContractApprovalWorkflow()` đọc thêm `#contractType` trên form, truyền
+  vào `buildContractApprovalWorkflowPreviewHTML()` ở trên.
+- Test mới: `tests/test-contract-type-approval-workflow-client.js` (15 kịch bản) — `getWfModuleTypes()`
+  đọc đúng danh mục Hợp Đồng, tab loại hiện/ẩn đúng trên màn admin, lưu cấu hình qua UI thật (gõ-tìm-chọn
+  người duyệt) ghi đúng vào map lồng KHÔNG đụng map phẳng, đổi tab loại không lẫn dữ liệu, preview phản
+  ánh đúng loại đang chọn, `canAccessContractModule()`/`canAccessApprovalHub()` nhận diện đúng approver
+  chỉ cấu hình riêng theo loại (cả 2 chiều: phải vào được khi hợp lệ, vẫn bị chặn khi không liên quan gì).
+  Chạy lại `test-contract-type-approval-workflow-foundation.js` (Release 1, 16 kịch bản),
+  `test-workflow-position-approvers.js` (22), `test-contract.js` (75), `test-contract-approval-slip.js`
+  (15), `test-contract-signed-file-no-approver-block.js`, `test-dept-workflow-config-false-409.js`,
+  `test-budget-meeting-dept-workflow-ui.js`, `test-quick-apply-submission-type-filter.js`,
+  `test-adv-workflow-tab-deep.js` (56), `test-csp-full-audit.js` — toàn bộ PASS, không regression.
 
 ## v28.20 (2026-11): Khoá tạm đăng nhập sai — hạ xuống 5 phút + nút admin mở khoá khẩn cấp
 

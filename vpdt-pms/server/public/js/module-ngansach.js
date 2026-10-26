@@ -741,10 +741,17 @@ function renderBudgetLineReport() {
 // cache tham chiếu tĩnh vào WF_MODULE_CONFIG) vì admin có thể sửa danh sách này bất kỳ lúc nào ở màn
 // Biểu Mẫu, cần luôn thấy đúng dữ liệu mới nhất. Hỗ Trợ IT (ITPRICE) dùng `fixedTypes` cố định
 // (RETAIL/WHOLESALE, không phải danh sách admin tự sửa được) — xem WF_MODULE_CONFIG.ITPRICE.
+// Hợp đồng - Phê duyệt (CONTRACT_APPROVAL, typesFromContractCatalog — 11/2026) đọc DB.contractTypes
+// ("Loại Pháp Lý", Biểu Mẫu) — mảng CHUỖI PHẲNG (khác DB.submissionTypes đã sẵn {key,label}), nên quy
+// đổi mỗi chuỗi thành {key,label} CÙNG GIÁ TRỊ (contractTypes không có khoá ổn định riêng — xem
+// cascadeContractTypeRename() ở lib/catalogRename.js, server cũng dùng thẳng chuỗi làm khoá tra, không
+// dịch qua typeKey như submissionTypes).
 function getWfModuleTypes(mod) {
   const cfg = WF_MODULE_CONFIG[mod];
   if (!cfg?.hasTypes) return null;
-  return cfg.fixedTypes || DB.submissionTypes;
+  if (cfg.fixedTypes) return cfg.fixedTypes;
+  if (cfg.typesFromContractCatalog) return (DB.contractTypes || []).map(t => ({ key: t, label: t }));
+  return DB.submissionTypes;
 }
 
 function switchWfModule(mod) {
