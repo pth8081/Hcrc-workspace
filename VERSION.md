@@ -1,9 +1,46 @@
 # Phiên bản hiện tại
 
-**28.15** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.16 (2026-10): Cơ Cấu Tổ Chức — xoá vĩnh viễn phiên bản Lưu Trữ (quyền riêng)
+
+Người dùng báo: lỡ bấm "Áp Dụng" nhầm 1 phiên bản Cơ Cấu Tổ Chức không
+mong muốn (bản đúng bị đẩy xuống 🗄️ Lưu Trữ), hỏi cách khôi phục + muốn có
+cách xoá hẳn để tránh rác dữ liệu, xin "phân quyền khẩn".
+
+**Khôi phục (không cần code gì, cách dùng sẵn có)**: chọn lại bản ĐÚNG đang
+ở 🗄️ Lưu Trữ → "+ Tạo Bản Nháp Mới" (sao chép y nguyên) → "✅ Áp Dụng Phiên
+Bản Này" trên bản nháp đó — bản đúng trở lại Đang Áp Dụng, bản bấm nhầm bị
+đẩy xuống Lưu Trữ.
+
+**Tính năng mới**: thêm quyền riêng **"🗑️ Xoá Vĩnh Viễn Phiên Bản Lưu Trữ
+(Cơ Cấu Tổ Chức)"** (`orgChartDeleteArchived`, Hệ Thống → Phân Quyền → Nhân
+Sự — mặc định KHÔNG ai có, admin phải gán tay, tách riêng khỏi quyền Quản
+Lý Cơ Cấu Tổ Chức thường vì đây là hành động không hoàn tác, mất lịch sử).
+Người có quyền này thấy nút **"🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này"** khi đang
+xem 1 bản ở trạng thái Lưu Trữ — bấm vào phải xác nhận 2 lớp: `confirm()`
+cảnh báo không hoàn tác, rồi gõ lại ĐÚNG tên phiên bản để xác nhận lần 2
+(server cũng tự đối chiếu lại tên, không chỉ tin client). KHÔNG BAO GIỜ
+xoá được bản đang Áp Dụng hay bản Nháp (2 trạng thái đó đã có nút xoá/sửa
+riêng từ trước).
+
+- `lib/orgChart.js`: thêm `deleteArchivedVersion()` — chỉ chấp nhận status
+  `ARCHIVED`, chặn `DRAFT`/`APPLIED` (dùng nhầm hàm sẽ báo lỗi rõ).
+- `routes/orgChart.js`: quyền `canDeleteArchived()` riêng + route
+  `POST /versions/:id/delete-archived` (bắt `confirmVersionName` khớp tên
+  thật, ghi System Log `ORGCHART_DELETE_ARCHIVED_VERSION`).
+- `public/js/module-admin-permtree.js` + `public/fragments/systemSection.html`:
+  thêm checkbox quyền mới. `public/js/module-admin-permgroups.js`: thêm nhãn
+  Ma Trận Phân Quyền.
+- `public/js/module-orgchart.js` + `public/fragments/orgChartSection.html`:
+  nút mới, chỉ hiện khi đang xem bản ARCHIVED và có quyền.
+- Test mới: `tests/test-orgchart-delete-archived-version.js` (8 kịch bản:
+  xoá ARCHIVED thành công, chặn DRAFT/APPLIED/không tồn tại, 403 thiếu
+  quyền, 400 gõ sai tên xác nhận, 200 gõ đúng, không bao giờ xoá được bản
+  đang APPLIED dù đủ quyền).
 
 ## v28.15 (2026-10): Vá lỗi 400 khi sửa Trường Mặc Định / sắp xếp thứ tự trường ở 📋 Biểu Mẫu
 

@@ -55,6 +55,13 @@ function canManageTree(perms) {
 function canManageKpiFlow(perms) {
   return !!(perms?.orgChartManage || perms?.kpiFlowConfigManage);
 }
+// Quyền RIÊNG (10/2026, theo yêu cầu người dùng "lỡ Áp Dụng nhầm, muốn xoá hẳn bản Lưu Trữ để tránh rác
+// dữ liệu") — KHÔNG gộp chung với orgChartManage: xoá vĩnh viễn 1 bản ARCHIVED là hành động không hoàn
+// tác được (mất lịch sử), nặng hơn hẳn sửa/áp dụng cây, nên tách thành permission riêng admin phải gán
+// tay, mặc định không ai có.
+function canDeleteArchived(perms) {
+  return !!(perms?.orgChartDeleteArchived);
+}
 function requireView(req, res) {
   if (!canView(req.freshUser.perms)) { res.status(403).json({ error: 'Bạn không có quyền xem Cơ Cấu Tổ Chức' }); return false; }
   return true;
@@ -65,6 +72,10 @@ function requireManageTree(req, res) {
 }
 function requireManageKpiFlow(req, res) {
   if (!canManageKpiFlow(req.freshUser.perms)) { res.status(403).json({ error: 'Chỉ người có quyền Quản Lý Cơ Cấu Tổ Chức/Cấu Hình KPI mới thao tác được' }); return false; }
+  return true;
+}
+function requireDeleteArchived(req, res) {
+  if (!canDeleteArchived(req.freshUser.perms)) { res.status(403).json({ error: 'Chỉ người có quyền Xoá Vĩnh Viễn Phiên Bản Lưu Trữ mới thao tác được' }); return false; }
   return true;
 }
 function stripHeavy(v) {
@@ -132,6 +143,38 @@ router.post('/versions/:id/delete', async (req, res) => {
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/delete', 'Không thể xoá phiên bản');
+  }
+});
+
+// POST /api/org-chart/versions/:id/delete-archived (10/2026, theo yêu cầu người dùng) — xoá VĨNH VIỄN 1
+// bản đang ở trạng thái LƯU TRỮ (ARCHIVED), VD bản bị "Áp Dụng" nhầm rồi bị thay thế lại bởi bản đúng,
+// giờ chỉ còn nằm rác trong danh sách phiên bản. Khác hẳn /delete ở trên (chỉ DRAFT) — gác quyền RIÊNG
+// orgChartDeleteArchived (xem canDeleteArchived() đầu file), bắt gõ lại ĐÚNG tên phiên bản trong body làm
+// lớp xác nhận thứ 2 (phòng bấm nhầm ở client — client đã có confirm() + prompt() riêng, đây là chốt lại
+// ở server, không tin tưởng tuyệt đối client). orgChart.deleteArchivedVersion() tự chặn APPLIED/DRAFT.
+router.post('/versions/:id/delete-archived', async (req, res) => {
+  if (!requireDeleteArchived(req, res)) return;
+  try {
+    let deletedName;
+    await withLockedAppDataValue('orgChartVersions', (list) => {
+      const version = orgChart.requireVersion(list, Number(req.params.id));
+      if ((req.body?.confirmVersionName || '').trim() !== version.versionName) {
+        throw new HttpError(400, 'Tên phiên bản xác nhận không khớp — huỷ thao tác xoá để an toàn');
+      }
+      deletedName = version.versionName;
+      return orgChart.deleteArchivedVersion(list, Number(req.params.id));
+    });
+    insertSystemLog({
+      username: req.freshUser?.username || req.user?.username, fullName: req.freshUser?.name || req.user?.username, ipAddress: req.ip,
+      module: 'SYSTEM', actionType: 'ORGCHART_DELETE_ARCHIVED_VERSION',
+      targetObject: `orgChartVersions#${req.params.id}`,
+      description: `Xoá vĩnh viễn bản Lưu Trữ Cơ Cấu Tổ Chức [${req.params.id}] "${deletedName}"`,
+      status: 'SUCCESS'
+    }).catch(e => console.error('Lỗi ghi nhật ký hệ thống (xoá bản Lưu Trữ Cơ Cấu Tổ Chức):', e.message));
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    sendServerError(res, 500, err, 'POST /api/org-chart/versions/:id/delete-archived', 'Không thể xoá vĩnh viễn phiên bản');
   }
 });
 

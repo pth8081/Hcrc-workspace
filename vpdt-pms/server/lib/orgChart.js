@@ -444,6 +444,22 @@ function deleteVersion(list, versionId) {
   return (list || []).filter(v => v.id !== versionId);
 }
 
+// Xoá VĨNH VIỄN 1 bản LƯU TRỮ (ARCHIVED) — khác hẳn deleteVersion() ở trên (chỉ DRAFT): dùng cho trường
+// hợp người dùng lỡ "Áp Dụng" nhầm 1 bản không mong muốn, bản đúng bị đẩy xuống ARCHIVED rồi lại được
+// áp dụng lại (khôi phục qua "Tạo Bản Nháp Mới" từ chính bản ARCHIVED đó + Áp Dụng lại) — bản ARCHIVED
+// "nhầm" kia sau đó chỉ còn nằm rác trong danh sách phiên bản, không còn giá trị lịch sử thật (10/2026,
+// theo yêu cầu người dùng "tránh rác dữ liệu"). KHÔNG BAO GIỜ cho xoá bản đang APPLIED (bắt buộc phải
+// chuyển ARCHIVED trước — tức đã có bản khác thay thế) hay DRAFT (dùng deleteVersion() ở trên). Gác
+// quyền RIÊNG orgChartDeleteArchived ở route (routes/orgChart.js) — orgChartManage thường KHÔNG đủ, vì
+// đây là xoá-không-hoàn-tác lịch sử, nặng hơn hẳn sửa/áp dụng cây.
+function deleteArchivedVersion(list, versionId) {
+  const version = requireVersion(list, versionId);
+  if (version.status !== 'ARCHIVED') {
+    throw new HttpError(400, 'Chỉ xoá vĩnh viễn được bản đang ở trạng thái Lưu Trữ (ARCHIVED)');
+  }
+  return (list || []).filter(v => v.id !== versionId);
+}
+
 // Áp dụng 1 version DRAFT: validate lại LẦN CUỐI (phòng thủ — client đã gọi /validate trước, nhưng dữ
 // liệu users/version có thể đã đổi giữa 2 lượt gọi), lưu trữ version đang APPLIED (nếu có) -> ARCHIVED,
 // version này -> APPLIED, seed kpiFlow còn thiếu. KHÔNG tính lại managerUsername ở đây (cần khoá riêng
@@ -607,7 +623,7 @@ module.exports = {
   normalizeHeadcountQuota,
   addNode, editNode, deleteNodeCascade,
   computeValidationIssues, seedKpiFlowGaps, pruneStaleAutoKpiFlow,
-  bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion,
+  bootstrapFirstVersion, cloneVersion, applyVersionInPlace, deleteVersion, deleteArchivedVersion,
   computeManagerUsernameUpdates, applyManagerUsernameUpdates,
   addKpiFlowRow, removeKpiFlowRow, resolveKpiEvaluatorsForUser, diffVersions,
   renameDepartmentRefInAllVersions, renameJobTitleInAllVersions

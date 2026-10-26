@@ -126,6 +126,10 @@ async function loadOrgChartCurrentVersion(id) {
   // LỖI ĐÃ VÁ (rà soát chuyên sâu đợt 4, 9/2026): trước đây không có cách nào xoá bản nháp không dùng
   // nữa — chỉ hiện với DRAFT (khớp deleteVersion() ở lib/orgChart.js, APPLIED/ARCHIVED phải giữ lịch sử).
   document.getElementById('btnOrgChartDeleteVersion').classList.toggle('hidden', !(isDraft && canManageTree));
+  // Xoá VĨNH VIỄN bản Lưu Trữ (10/2026, theo yêu cầu người dùng "lỡ Áp Dụng nhầm, muốn xoá hẳn tránh rác
+  // dữ liệu") — quyền RIÊNG orgChartDeleteArchived, KHÔNG dùng canManageTree (xem lib/orgChart.js::
+  // deleteArchivedVersion() + routes/orgChart.js::canDeleteArchived() phía server, đã gác lại đúng y hệt).
+  document.getElementById('btnOrgChartDeleteArchivedVersion').classList.toggle('hidden', !(isArchived && currentUser.perms?.orgChartDeleteArchived));
   // Xuất Excel (10/2026) — luôn hiện cho ai xem được version (requireView() phía server), xuất ĐÚNG
   // version đang mở ở dropdown (không chỉ APPLIED). Nhập Excel chỉ HR/admin quản lý cây (canManageTree).
   document.getElementById('btnOrgChartExportXlsx').href = `/api/org-chart/versions/${id}/export-xlsx`;
@@ -596,6 +600,23 @@ async function deleteOrgChartVersionClick() {
   if (!confirm(`Xoá hẳn bản nháp "${_ocCurrentVersion.versionName}"? Không thể hoàn tác.`)) return;
   try {
     await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/delete`, {});
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  document.getElementById('orgChartVersionSelect').value = '';
+  await renderOrgChartModule();
+}
+// Xoá VĨNH VIỄN 1 bản Lưu Trữ (ARCHIVED) — khác hẳn deleteOrgChartVersionClick() ở trên (chỉ DRAFT, 1
+// lớp confirm()): đây là hành động KHÔNG HOÀN TÁC mất lịch sử, nên thêm hẳn lớp xác nhận thứ 2 — bắt gõ
+// lại ĐÚNG tên phiên bản (không chỉ bấm OK) trước khi gọi API, server cũng đối chiếu lại y hệt (phòng khi
+// có người tự gọi thẳng API bỏ qua UI — xem POST /versions/:id/delete-archived, routes/orgChart.js).
+async function deleteArchivedOrgChartVersionClick() {
+  if (!_ocCurrentVersion || _ocCurrentVersion.status !== 'ARCHIVED') return;
+  const name = _ocCurrentVersion.versionName;
+  if (!confirm(`⚠️ Xoá VĨNH VIỄN bản Lưu Trữ "${name}"? KHÔNG THỂ HOÀN TÁC — mất hẳn lịch sử phiên bản này (chỉ nên xoá bản bị áp dụng nhầm, không còn giá trị tham khảo).`)) return;
+  const typed = prompt(`Để xác nhận, gõ lại ĐÚNG tên phiên bản: "${name}"`);
+  if (typed === null) return;
+  if (typed.trim() !== name) return alert('⛔ Tên gõ lại không khớp — đã huỷ thao tác xoá.');
+  try {
+    await orgChartApiCall('POST', `/api/org-chart/versions/${_ocCurrentVersion.id}/delete-archived`, { confirmVersionName: typed.trim() });
   } catch (err) { return alert(`⛔ ${err.message}`); }
   document.getElementById('orgChartVersionSelect').value = '';
   await renderOrgChartModule();

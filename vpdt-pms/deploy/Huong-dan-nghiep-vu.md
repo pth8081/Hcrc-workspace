@@ -2773,7 +2773,18 @@ theo đúng vị trí trong cây**.
   không dùng nữa (9/2026)**: tạo thử/nhân bản nhầm 1 bản Nháp muốn dọn đi thì
   chọn đúng bản đó ở dropdown Phiên bản → bấm "🗑️ Xoá Bản Nháp Này" — CHỈ
   xoá được bản đang ở trạng thái Nháp (khôi phục được qua Thùng Rác nếu cần),
-  bản Đã áp dụng/Lưu trữ không xoá được.
+  bản Đã áp dụng không bao giờ xoá được. **Xoá vĩnh viễn bản Lưu Trữ
+  (10/2026, theo yêu cầu người dùng "lỡ Áp Dụng nhầm, muốn xoá tránh rác dữ
+  liệu")**: lỡ bấm "Áp dụng" nhầm bản không mong muốn thì KHÔNG mất dữ liệu —
+  bản đúng chỉ bị đẩy xuống Lưu Trữ, khôi phục bằng cách chọn lại bản đúng đó
+  ở dropdown → "Tạo Bản Nháp Mới" → "Áp Dụng Phiên Bản Này" lại. Bản bị áp
+  dụng nhầm sau đó chỉ còn nằm "rác" trong danh sách — người có quyền RIÊNG
+  **"Xoá Vĩnh Viễn Phiên Bản Lưu Trữ"** (`orgChartDeleteArchived`, Hệ Thống →
+  Phân Quyền → Nhân Sự, mặc định KHÔNG ai có, admin phải gán tay — TÁCH RIÊNG
+  khỏi quyền Quản Lý Cơ Cấu Tổ Chức thường vì không hoàn tác được) mới thấy
+  nút **"🗑️ Xoá Vĩnh Viễn Bản Lưu Trữ Này"** khi đang xem 1 bản Lưu Trữ — bấm
+  vào phải xác nhận 2 lớp (cảnh báo + gõ lại đúng tên phiên bản). Vẫn KHÔNG
+  BAO GIỜ xoá được bản đang Áp Dụng.
 - **Tải Mẫu/Nhập/Xuất Excel (10/2026, theo yêu cầu người dùng)** — bên cạnh
   cách dựng cây bằng tay (Thêm/Sửa từng node), HR có thể chuẩn bị cả cây
   trong 1 file Excel rồi nhập 1 lần: bấm **"📤 Nhập Excel (Bản Nháp Mới)"**

@@ -240,6 +240,7 @@ function collectPermsFromForm() {
     nhanSuManage: document.getElementById('pNhanSuManage').checked,
     orgChartManage: document.getElementById('pOrgChartManage').checked,
     kpiFlowConfigManage: document.getElementById('pKpiFlowConfigManage').checked,
+    orgChartDeleteArchived: document.getElementById('pOrgChartDeleteArchived').checked,
     hrOnboardingManage: document.getElementById('pHrOnboardingManage').checked,
     hrOffboardingManage: document.getElementById('pHrOffboardingManage').checked,
     hrTaskTemplateManage: document.getElementById('pHrTaskTemplateManage').checked,
@@ -384,6 +385,7 @@ function populatePermsForm(permsInput) {
   document.getElementById('pNhanSuManage').checked = !!perms.nhanSuManage;
   document.getElementById('pOrgChartManage').checked = !!perms.orgChartManage;
   document.getElementById('pKpiFlowConfigManage').checked = !!perms.kpiFlowConfigManage;
+  document.getElementById('pOrgChartDeleteArchived').checked = !!perms.orgChartDeleteArchived;
   document.getElementById('pHrOnboardingManage').checked = !!perms.hrOnboardingManage;
   document.getElementById('pHrOffboardingManage').checked = !!perms.hrOffboardingManage;
   document.getElementById('pHrTaskTemplateManage').checked = !!perms.hrTaskTemplateManage;
