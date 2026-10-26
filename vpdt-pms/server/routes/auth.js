@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, findUserByUsernameCI } = require('../lib/auth');
-const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes } = require('../lib/loginAttempts');
+const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
 const { HttpError } = require('../lib/httpErrors');
 const { issueApprovalGrant, issueApprovalOtp, verifyApprovalOtp } = require('../lib/approvalAuth');
@@ -166,7 +166,7 @@ router.post('/login', loginRateLimiter, async (req, res) => {
           username, fullName: user.name,
           actionType: justLocked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED',
           description: justLocked
-            ? 'Tài khoản bị khoá tạm thời 15 phút do đăng nhập sai quá 5 lần liên tiếp'
+            ? `Tài khoản bị khoá tạm thời ${LOCKOUT_MINUTES} phút do đăng nhập sai quá ${MAX_FAILED_ATTEMPTS} lần liên tiếp`
             : 'Đăng nhập sai mật khẩu'
         });
       } else {
@@ -1015,6 +1015,65 @@ router.delete('/totp/:username', requireAuth, async (req, res) => {
 });
 
 // ==========================================
+// ADMIN MỞ KHOÁ KHẨN CẤP — "khoá tạm đăng nhập sai" (failedLoginAttempts/lockedUntil,
+// lib/loginAttempts.js) KHÁC HẲN "khoá tài khoản" (user.active=false, toggleUserActive() ở
+// module-admin-userstaging.js) — khoá này tự động sinh ra sau MAX_FAILED_ATTEMPTS lần đăng nhập SAI
+// LIÊN TIẾP, tự hết hạn sau LOCKOUT_MINUTES phút (5 phút, lib/loginAttempts.js), KHÔNG có công tắc
+// bật/tắt nào ở màn Sửa Người Dùng để admin chủ động bật/tắt như "Khoá Tài Khoản". Theo phản hồi người
+// dùng (11/2026, "nút khóa đang không khóa" — thực ra KHÔNG có lỗi, chỉ là 2 cơ chế khác nhau hoàn toàn
+// và trước đây KHÔNG có cách nào admin can thiệp được khoá tạm này ngoài việc đợi hết giờ): thêm route
+// khẩn cấp cho admin GỠ NGAY khoá tạm của 1 tài khoản cụ thể, không cần đợi hết giờ.
+//
+// GET /login-lockout/status/:username trả về RIÊNG trạng thái của 1 username named cụ thể (không phải
+// GET /api/data trả nguyên mảng users — failedLoginAttempts/lockedUntil bị stripPasswords() lọc khỏi MỌI
+// response đó CÓ CHỦ Ý, vì response đó đi tới MỌI người đã đăng nhập chứ không riêng admin, xem chú
+// thích tại stripPasswords() ở routes/data.js — lộ trạng thái "ai đang bị khoá/bị dò mật khẩu" cho đồng
+// nghiệp là rò rỉ thông tin không cần thiết). Route RIÊNG, admin-only, chỉ trả đúng 1 username được hỏi.
+router.get('/login-lockout/status/:username', requireAuth, async (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới xem được trạng thái khoá đăng nhập của người khác' });
+  }
+  try {
+    const users = (await getAppDataValue('users')) || [];
+    const target = users.find(u => u.username === req.params.username);
+    if (!target) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
+    const remainingMinutes = getLockoutRemainingMinutes(target);
+    res.json({ locked: remainingMinutes !== null, remainingMinutes, failedLoginAttempts: target.failedLoginAttempts || 0 });
+  } catch (err) {
+    console.error('GET /api/auth/login-lockout/status/:username lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể tải trạng thái khoá đăng nhập' });
+  }
+});
+
+// POST /login-lockout/reset/:username — xoá sạch failedLoginAttempts/lockedUntil ngay lập tức (cùng
+// đúng resetLoginAttempts() mà đăng nhập ĐÚNG mật khẩu vẫn gọi — không phải logic riêng/mới nào khác).
+// An toàn khi gọi trên tài khoản KHÔNG hề bị khoá (no-op êm, trả wasLocked=false) — admin không cần tự
+// kiểm tra trạng thái trước, bấm thẳng nút khẩn cấp là xong.
+router.post('/login-lockout/reset/:username', requireAuth, async (req, res) => {
+  if (!req.freshUser.perms?.admin) {
+    return res.status(403).json({ error: 'Chỉ Quản Trị Viên mới có quyền mở khoá đăng nhập của người khác' });
+  }
+  try {
+    let wasLocked = false;
+    await withLockedAppDataValue('users', (collection) => {
+      const list = Array.isArray(collection) ? collection : [];
+      const idx = list.findIndex(u => u.username === req.params.username);
+      if (idx === -1) throw new HttpError(404, 'Không tìm thấy tài khoản');
+      wasLocked = getLockoutRemainingMinutes(list[idx]) !== null;
+      const updated = { ...list[idx] };
+      resetLoginAttempts(updated);
+      list[idx] = updated;
+      return list;
+    });
+    res.json({ ok: true, wasLocked });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    console.error('POST /api/auth/login-lockout/reset/:username lỗi:', err.message);
+    res.status(500).json({ error: 'Không thể mở khoá đăng nhập' });
+  }
+});
+
+// ==========================================
 // ĐĂNG NHẬP / XÁC THỰC LẠI KHI DUYỆT BẰNG VÂN TAY, FACE ID (WebAuthn/FIDO2) — xem lib/webauthn.js.
 // 4 nhóm route: (1) đăng ký thiết bị mới [requireAuth — chỉ làm được từ phiên đã đăng nhập mật khẩu
 // trước đó] + liệt kê/gỡ thiết bị; (2) đăng nhập bằng vân tay [public, thay /login]; (3) xác thực lại
@@ -1227,7 +1286,7 @@ router.post('/webauthn/login-verify', loginRateLimiter, async (req, res) => {
           username, fullName: user.name,
           actionType: justLocked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED',
           description: justLocked
-            ? 'Tài khoản bị khoá tạm thời 15 phút do đăng nhập sai quá 5 lần liên tiếp'
+            ? `Tài khoản bị khoá tạm thời ${LOCKOUT_MINUTES} phút do đăng nhập sai quá ${MAX_FAILED_ATTEMPTS} lần liên tiếp`
             : 'Đăng nhập bằng vân tay thất bại'
         });
       } else {

@@ -139,6 +139,16 @@ nơi mỗi người tự quản lý thông tin và cách đăng nhập của ch�
   hồi TOTP của các tài khoản **admin khác** — không có thao tác "bắt buộc bật
   TOTP" cho 1 tài khoản thường bất kỳ, quy tắc bắt buộc chỉ áp dụng tự động cho
   `admin`.
+- **"🔓 Khoá Tạm Đăng Nhập Sai" (11/2026) — KHÁC HẲN "Khoá Tài Khoản"**: gõ sai
+  mật khẩu 5 lần liên tiếp sẽ tự khoá tài khoản đó **5 phút** (trước đây 15
+  phút — hạ xuống theo phản hồi người dùng, tránh gây rắc rối thật cho CBNV gõ
+  sai), tự hết khi hết giờ, không cần ai can thiệp. Cơ chế này **hoàn toàn
+  độc lập** với nút "Khóa"/"Mở" ở bảng danh sách Người Dùng (vô hiệu hóa hẳn
+  tài khoản, `active=false`, admin tự bật/tắt) — 2 loại khoá không liên quan
+  gì tới nhau, tắt/bật cái này không ảnh hưởng cái kia. Ở form Sửa Người Dùng
+  (chỉ hiện với tài khoản đã có thật), admin thấy ngay trạng thái và bấm
+  **"🔓 Mở Khoá Ngay"** để gỡ khoá tạm NGAY LẬP TỨC cho người đang gọi điện
+  báo không đăng nhập được, không cần đợi hết 5 phút.
 
 ### 2.4. Cài Đặt Ứng Dụng (PWA)
 

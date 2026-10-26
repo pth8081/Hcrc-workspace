@@ -187,6 +187,8 @@ function editPendingNewUser(idx) {
   document.getElementById('uWebauthnListWrap').innerHTML = '';
   document.getElementById('uTotpWrap').classList.add('hidden');
   document.getElementById('uTotpStatusWrap').innerHTML = '';
+  document.getElementById('uLoginLockoutWrap').classList.add('hidden');
+  document.getElementById('uLoginLockoutStatusWrap').innerHTML = '';
   updatePermGroupNote((u.groupIds || []).length > 0);
   document.getElementById('uUsername').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -259,6 +261,8 @@ function resetUserForm() {
   document.getElementById('uWebauthnListWrap').innerHTML = '';
   document.getElementById('uTotpWrap').classList.add('hidden');
   document.getElementById('uTotpStatusWrap').innerHTML = '';
+  document.getElementById('uLoginLockoutWrap').classList.add('hidden');
+  document.getElementById('uLoginLockoutStatusWrap').innerHTML = '';
 }
 
 // Tài khoản "admin" mặc định (id=1, xem defaults.js) LUÔN toàn quyền và KHÔNG cho sửa quyền qua form
@@ -339,6 +343,11 @@ function editUser(id) {
   // editPendingNewUser() (tạo mới/sửa hàng chờ) ẩn lại khối này vì chưa có tài khoản nào cả.
   document.getElementById('uWebauthnWrap').classList.remove('hidden');
   renderAdminWebauthnDeviceList(user.username);
+
+  // "Khoá tạm đăng nhập sai" (khác hẳn "Khoá Tài Khoản") — cùng điều kiện khối vân tay ở trên (chỉ hiện
+  // khi SỬA user đã tồn tại, có tài khoản thật để tra trạng thái).
+  document.getElementById('uLoginLockoutWrap').classList.remove('hidden');
+  renderAdminLoginLockoutStatus(user.username);
 
   // TOTP chỉ áp dụng cho tài khoản ĐANG có quyền admin (xem lib/totp.js) — khác khối vân tay ở trên,
   // không hiện cho user thường dù cũng là "sửa user đã tồn tại".

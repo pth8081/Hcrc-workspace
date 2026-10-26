@@ -1,9 +1,42 @@
 # Phiên bản hiện tại
 
-**28.19** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.20** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.20 (2026-11): Khoá tạm đăng nhập sai — hạ xuống 5 phút + nút admin mở khoá khẩn cấp
+
+Người dùng phản hồi (kèm ảnh chụp màn hình "Tài khoản tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng
+thử lại sau 6 phút"): khoá tạm 15 phút sau 5 lần đăng nhập sai gây rắc rối thật cho CBNV gõ sai mật khẩu,
+và nhấn mạnh rõ "khoá này hoàn toàn khác với khóa tài khoản" (nút "Khóa"/"Mở" ở bảng Người Dùng —
+`user.active=false`, vô hiệu hoá hẳn tài khoản) — trước đây KHÔNG có cách nào admin can thiệp vào khoá
+tạm đăng nhập sai ngoài việc đợi hết giờ.
+
+- `lib/loginAttempts.js`: `LOCKOUT_MINUTES` hạ từ 15 xuống **5 phút** (`MAX_FAILED_ATTEMPTS` giữ nguyên
+  5 lần sai liên tiếp).
+- `routes/auth.js`: thêm 2 route admin-only mới (mirror đúng khuôn `GET/DELETE /api/auth/totp/:username`
+  đã có cho TOTP — admin gỡ hộ xác thực 2 lớp của người khác):
+  - `GET /api/auth/login-lockout/status/:username` — trả `{locked, remainingMinutes, failedLoginAttempts}`
+    cho ĐÚNG 1 username được hỏi (KHÔNG lộ qua `GET /api/data` như mọi field user khác — 2 field này vẫn
+    tiếp tục bị `stripPasswords()` lọc khỏi response đó vì đi tới MỌI người đã đăng nhập, không riêng
+    admin, xem chú thích tại `stripPasswords()` ở `routes/data.js`).
+  - `POST /api/auth/login-lockout/reset/:username` — xoá sạch `failedLoginAttempts`/`lockedUntil` ngay
+    lập tức, dùng LẠI đúng `resetLoginAttempts()` (hàm đã có, đăng nhập đúng mật khẩu cũng gọi hàm này) —
+    không phải logic mới/riêng. An toàn khi gọi trên tài khoản vốn không bị khoá (no-op êm, trả
+    `wasLocked: false`).
+- Màn "Sửa Người Dùng" (Nhân Sự → Phân Quyền → sửa 1 người dùng): thêm khối "🔓 Khoá Tạm Đăng Nhập Sai"
+  mới (`#uLoginLockoutWrap`, ngay dưới ô Mật khẩu) — hiện trạng thái hiện tại + nút "🔓 Mở Khoá Ngay"
+  (chỉ hiện khi đang khoá) hoặc "↺ Đặt Lại Bộ Đếm" (khi chưa khoá, tiện dọn bộ đếm nếu cần). CHỈ hiện khi
+  sửa user ĐÃ có tài khoản thật (cùng điều kiện khối thiết bị vân tay đã có) — tạo mới/sửa hàng chờ chưa
+  có tài khoản để tra. **Khác hẳn** nút "Khóa"/"Mở" ở bảng danh sách — giữ nguyên, không đụng gì.
+- Test mới: `tests/test-login-lockout-admin-reset.js` (14 kịch bản) — người thường bị chặn 403, 5 lần
+  sai liên tiếp khoá đúng ~5 phút (không còn 15), đang khoá vẫn chặn đăng nhập đúng mật khẩu (429, hành
+  vi cũ giữ nguyên), admin reset xong đăng nhập đúng mật khẩu được NGAY (không cần đợi hết giờ — bài test
+  thật cho đúng yêu cầu "nút khẩn cấp"), reset tài khoản vốn không khoá không throw, username không tồn
+  tại trả 404. Chạy lại `test-auth-login.js`/`test-external-auth.js`/`test-purchasing-sync-lock-and-items.js`
+  — không regression (xác nhận riêng `test-admin-totp.js` có 4/26 fail nhưng là lỗi CŨ có sẵn từ trước,
+  không liên quan đợt này — `resolveGraphOption is not a function`, không đụng gì tới khoá đăng nhập).
 
 ## v28.19 (2026-11): Hợp Đồng theo Loại Pháp Lý — RELEASE 1/3: nền tảng server (chưa đổi UI)
 

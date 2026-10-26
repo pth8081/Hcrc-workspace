@@ -1794,6 +1794,18 @@
                  người khác dù chỉ định sửa thông tin liên hệ. -->
             <input id="uPassword" type="password" placeholder="Để trống = giữ nguyên mật khẩu hiện tại" autocomplete="new-password" class="w-full border p-1.5 rounded text-xs">
           </div>
+          <!-- "Khoá tạm đăng nhập sai" (failedLoginAttempts/lockedUntil, lib/loginAttempts.js) — HOÀN
+               TOÀN KHÁC "Khoá Tài Khoản" (nút Khóa/Mở ở bảng danh sách, user.active=false): khoá này tự
+               sinh ra sau 5 lần đăng nhập SAI liên tiếp, tự hết hạn sau 5 phút, KHÔNG có công tắc nào
+               khác để admin can thiệp ngoài nút khẩn cấp này — xem renderAdminLoginLockoutStatus()/
+               resetAdminLoginLockout() (core-devicesecurity.js). CHỈ hiện khi sửa user ĐÃ có tài khoản
+               thật (editUser() hiện lại, resetUserForm()/editPendingNewUser() ẩn đi — chưa có tài khoản
+               thật thì chưa thể bị khoá). -->
+          <div id="uLoginLockoutWrap" class="hidden md:col-span-2 xl:col-span-3">
+            <label class="block text-xs font-semibold text-gray-600 mb-1">🔓 Khoá Tạm Đăng Nhập Sai (khác "Khoá Tài Khoản")</label>
+            <div id="uLoginLockoutStatusWrap" class="text-xs"></div>
+            <p class="text-[11px] text-gray-500 italic mt-1">Tự khoá 5 phút sau 5 lần đăng nhập sai liên tiếp, tự hết khi hết giờ — KHÔNG liên quan tới nút "Khóa"/"Mở" ở bảng danh sách (đó là vô hiệu hóa hẳn tài khoản). Dùng nút này khi nhân viên báo không đăng nhập được do gõ sai mật khẩu nhiều lần, cần mở ngay không đợi hết giờ.</p>
+          </div>
           <div>
             <label class="block text-xs font-semibold text-gray-600 mb-1">Họ và Tên</label>
             <input id="uFullName" placeholder="Nguyễn Văn A" class="w-full border p-1.5 rounded text-xs" required>

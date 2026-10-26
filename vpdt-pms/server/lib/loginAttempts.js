@@ -5,7 +5,11 @@
 // Trạng thái lưu ngay trên bản ghi user (failedLoginAttempts, lockedUntil) trong collection "users"
 // đã có sẵn, không cần bảng/collection mới.
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
+// LOCKOUT_MINUTES (11/2026, theo phản hồi người dùng — khoá 15 phút gây rắc rối thật cho CBNV gõ sai
+// mật khẩu, trong khi mục tiêu chỉ là làm chậm dò mật khẩu chứ không cần khoá lâu): hạ xuống 5 phút. Đi
+// kèm với route admin "mở khoá khẩn cấp" (GET/POST /api/auth/login-lockout/:username ở routes/auth.js)
+// cho trường hợp admin cần mở ngay lập tức, không đợi hết 5 phút.
+const LOCKOUT_MINUTES = 5;
 
 // Ghi nhận 1 lần đăng nhập sai — mutate trực tiếp user (gọi bên trong withLockedAppDataValue, nơi đã
 // đảm bảo có bản ghi mới nhất + khoá dòng an toàn trước các request đăng nhập đồng thời khác).

@@ -195,6 +195,57 @@ async function deleteAdminTotp(username) {
 }
 
 // ==========================================
+// ADMIN MỞ KHOÁ KHẨN CẤP "khoá tạm đăng nhập sai" (#uLoginLockoutWrap trong màn Sửa Người Dùng) — KHÁC
+// HẲN "Khoá Tài Khoản" (nút Khóa/Mở ở bảng danh sách, user.active=false, toggleUserActive() ở module-
+// admin-userstaging.js). Khoá này tự sinh ra sau 5 lần đăng nhập SAI liên tiếp (lib/loginAttempts.js),
+// tự hết hạn sau 5 phút — trước đây KHÔNG có cách nào admin can thiệp ngoài đợi hết giờ (theo phản hồi
+// người dùng 11/2026 "nút khóa đang không khóa" — không phải lỗi, chỉ là 2 cơ chế khác nhau hoàn toàn và
+// chưa từng có UI cho cơ chế này). CHỈ hiện khi sửa user ĐÃ có tài khoản thật, cùng điều kiện khối vân
+// tay (xem editUser()/resetUserForm() ở module-admin-userstaging.js) — chưa có tài khoản thì chưa thể bị
+// khoá.
+// ==========================================
+async function renderAdminLoginLockoutStatus(username) {
+  const wrap = document.getElementById('uLoginLockoutStatusWrap');
+  wrap.innerHTML = '<p class="text-gray-400 italic">Đang tải...</p>';
+  try {
+    const res = await fetch(`/api/auth/login-lockout/status/${encodeURIComponent(username)}`);
+    if (!res.ok) { wrap.innerHTML = '<p class="text-red-600 italic">Không tải được trạng thái.</p>'; return; }
+    const data = await res.json();
+    if (data.locked) {
+      wrap.innerHTML = `
+        <div class="flex justify-between items-center bg-amber-50 border border-amber-300 rounded p-2">
+          <span class="text-amber-700 font-semibold">🔒 Đang bị khoá tạm — còn ${data.remainingMinutes} phút</span>
+          <button type="button" data-op="resetAdminLoginLockout" data-arg0="${escapeHtml(username)}" class="text-red-600 font-bold hover:underline">🔓 Mở Khoá Ngay</button>
+        </div>`;
+    } else {
+      wrap.innerHTML = `
+        <div class="flex justify-between items-center bg-gray-50 border rounded p-2">
+          <span class="text-emerald-700 font-semibold">✅ Không bị khoá${data.failedLoginAttempts ? ` (đã sai ${data.failedLoginAttempts} lần gần nhất, chưa đủ ngưỡng khoá)` : ''}</span>
+          <button type="button" data-op="resetAdminLoginLockout" data-arg0="${escapeHtml(username)}" class="text-gray-500 font-bold hover:underline">↺ Đặt Lại Bộ Đếm</button>
+        </div>`;
+    }
+  } catch (err) {
+    wrap.innerHTML = '<p class="text-red-600 italic">Không tải được trạng thái.</p>';
+  }
+}
+
+async function resetAdminLoginLockout(username) {
+  if (!confirm(`Mở khoá đăng nhập tạm thời cho "${username}" ngay bây giờ? (Đặt lại bộ đếm đăng nhập sai về 0 — không ảnh hưởng gì tới mật khẩu, quyền hay "Khoá Tài Khoản".)`)) return;
+  try {
+    const res = await fetch(`/api/auth/login-lockout/reset/${encodeURIComponent(username)}`, { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return alert(`⛔ ${body.error || 'Không thể mở khoá đăng nhập'}`);
+    }
+    const data = await res.json();
+    await renderAdminLoginLockoutStatus(username);
+    logSystemAction('USER_MGM', 'RESET_LOGIN_LOCKOUT', `Mở khoá tạm đăng nhập sai cho người dùng [${username}]${data.wasLocked ? '' : ' (tài khoản vốn không bị khoá, chỉ đặt lại bộ đếm)'}`, 'SUCCESS', username);
+  } catch (err) {
+    alert('⛔ Không thể kết nối tới máy chủ: ' + err.message);
+  }
+}
+
+// ==========================================
 // MÀN BẮT BUỘC THIẾT LẬP TOTP CHO ADMIN (xem #totpSetupWallModal + lib/totp.js) — gọi từ
 // proceedAfterAuth() khi user.perms.admin && !user.totpEnabled. Cùng khuôn 2 bước với thiết lập TOTP tự
 // chọn ở Hồ Sơ Cá Nhân (setProfileSubTab('TOTP')) nhưng KHÔNG có nút đóng ngang — bắt buộc hoàn tất.
