@@ -6881,15 +6881,105 @@ async function retryArraySaveAfterConflict(key, baseline, desired, opts) {
   return { retried: true, merged, freshVersion };
 }
 
-// Lớp mỏng riêng cho "users" — giữ NGUYÊN hành vi cũ (đã có test bao phủ, xem
-// tests/test-admin-users-permgroups.js kịch bản (i)/(j)): thêm đúng 1 ràng buộc riêng ngoài phần chung —
-// trùng username với người MỚI ai đó vừa tạo ở nơi khác cũng là conflict thật (2 người cùng đăng ký 1
-// username gần như đồng thời), chỉ cần kiểm cho bản ghi MỚI THÊM (bản sửa/xoá đã kiểm ở phần chung).
+// LỖI THẬT đã vá (10/2026, người dùng báo lại ĐÚNG cảnh báo 409 "users" dù đợt trước đã vá xong lớp
+// "thiếu baseline" — hoá ra đây là 1 lỗi KHÁC, sâu hơn, chưa từng được phát hiện): retryArraySaveAfterConflict()
+// dùng chung ở trên so sánh NGUYÊN 1 bản ghi (deepEqualJson cả object) để quyết định "có ai đụng đúng bản
+// ghi này không" — hợp lý cho hầu hết collection (1 hồ sơ chỉ đổi khi có người CHỦ ĐỘNG sửa nó), nhưng
+// "users" là NGOẠI LỆ: server TỰ âm thầm đổi vài field NỀN trên CHÍNH bản ghi, hoàn toàn không do ai chủ
+// động sửa hồ sơ — `sessionVersion` (tăng ở MỌI lượt đăng nhập THÀNH CÔNG, xem routes/auth.js),
+// `failedLoginAttempts`/`lockedUntil` (tăng/xoá ở MỌI lượt đăng nhập sai/đúng, xem lib/loginAttempts.js),
+// và ĐÚNG NGUYÊN NHÂN THẬT đã xác nhận được (10/2026, người dùng báo lại alert này khi reset mật khẩu cho
+// 1 user khác) — `mustChangePassword`: server tự GỠ cờ này khi CHÍNH người dùng đó tự đổi mật khẩu thành
+// công (PATCH /api/auth/me), hoàn toàn độc lập với bất kỳ admin nào đang sửa hồ sơ họ cùng lúc — xem chú
+// thích tại syncStorageOnce() (chỗ build `payload` cho POST /api/data/users) giải thích ĐÚNG lý do này và
+// đã CHỦ ĐỘNG loại field này khỏi payload gửi lên, nhưng lại BỎ SÓT không loại khỏi phần so sánh conflict
+// ở retryUsersSaveAfterConflict() — khiến đúng trường hợp "chính người đó vừa tự đổi mật khẩu" (y hệt câu
+// chữ cảnh báo vẫn hiển thị ra cho admin) lại bị chính cơ chế retry này báo NHẦM là conflict thật. Chỉ
+// cần người đang được admin sửa tự đổi mật khẩu (hoặc đăng nhập/đăng nhập sai) ĐÚNG 1 lần trong lúc admin
+// mở form sửa (không hiếm), bản ghi coi như "đã đổi" dù admin không hề đụng field nào trong số đó -> báo
+// "genuineConflict" SAI, admin mất hết nội dung vừa gõ; tải lại trang sửa lại vẫn có thể dính y hệt lần
+// nữa nếu người đó tiếp tục thao tác (đúng triệu chứng người dùng mô tả "vẫn báo thông tin này" dù đã thử
+// lại nhiều lần).
+//
+// Sửa: BỎ QUA đúng 3 field nền này khi so sánh (cả lúc phân loại "có gì cần áp lại" lẫn lúc đối chiếu
+// conflict thật) — MỌI field nghiệp vụ khác (tên/email/dept/perms/pass/pin...) vẫn giữ NGUYÊN triết lý cũ
+// "so khớp cả bản ghi, không tự ý chọn ai thắng" (xem chú thích retryArraySaveAfterConflict() ở trên) —
+// CỐ Ý không đổi sang so khớp-theo-từng-field cho MỌI field (rủi ro hơn: sẽ âm thầm merge cả những thay
+// đổi nghiệp vụ KHÔNG LIÊN QUAN của người khác vào đúng bản ghi admin đang xem mà không hề báo cho admin
+// biết — khác hẳn mục tiêu vá ở đây, vốn CHỈ nhắm đúng 3 field tự động của hệ thống). Khi áp lại, lấy
+// NGUYÊN bản ghi `desired` (ý định đầy đủ của admin) rồi ghi đè lại đúng 3 field nền bằng giá trị MỚI
+// NHẤT từ server — không bao giờ ghi đè lùi sessionVersion/failedLoginAttempts/lockedUntil về giá trị cũ
+// trong baseline (tránh vô tình "mở khoá"/hạ sessionVersion của người khác — 2 field bảo mật, hạ nhầm
+// tương đương vô hiệu hoá tác dụng "đăng xuất phiên cũ" vừa mới có hiệu lực).
+const USER_BACKGROUND_ONLY_FIELDS = ['sessionVersion', 'failedLoginAttempts', 'lockedUntil', 'mustChangePassword'];
+function stripUserBackgroundFields(user) {
+  if (!user) return user;
+  const copy = { ...user };
+  USER_BACKGROUND_ONLY_FIELDS.forEach(f => { delete copy[f]; });
+  return copy;
+}
 async function retryUsersSaveAfterConflict(usersBaseline, desiredUsers) {
-  return retryArraySaveAfterConflict('users', usersBaseline, desiredUsers, {
-    extraConflictCheck: (freshUsers, added) =>
-      added.some(u => freshUsers.some(x => x.username === u.username && x.id !== u.id))
-  });
+  const baseline = usersBaseline || [];
+  const desired = desiredUsers || [];
+  const baseById = new Map(baseline.map(u => [u.id, u]));
+  const desiredById = new Map(desired.map(u => [u.id, u]));
+  const added = desired.filter(u => !baseById.has(u.id));
+  const removedIds = baseline.filter(u => !desiredById.has(u.id)).map(u => u.id);
+  const modifiedIds = desired
+    .filter(u => baseById.has(u.id) && !deepEqualJson(stripUserBackgroundFields(u), stripUserBackgroundFields(baseById.get(u.id))))
+    .map(u => u.id);
+  // Không có gì để áp lại (lý thuyết không nên xảy ra — 409 nghĩa là mình VỪA gửi 1 thay đổi nào đó).
+  if (modifiedIds.length === 0 && removedIds.length === 0 && added.length === 0) return { retried: false };
+
+  let res;
+  try {
+    res = await fetch('/api/data/users');
+  } catch (e) {
+    return { retried: false }; // mất mạng lúc tải lại — rơi về thông báo 409 mặc định
+  }
+  if (!res.ok) return { retried: false };
+  const freshVersion = res.headers.get('ETag');
+  const freshUsers = await res.json().catch(() => null);
+  if (!freshVersion || !Array.isArray(freshUsers)) return { retried: false };
+  const freshById = new Map(freshUsers.map(u => [u.id, u]));
+
+  // Trùng username với người MỚI ai đó vừa tạo ở nơi khác -> conflict thật.
+  if (added.some(u => freshUsers.some(x => x.username === u.username && x.id !== u.id))) {
+    return { retried: false, genuineConflict: true };
+  }
+
+  // Xoá: đối chiếu cả bản ghi (TRỪ 3 field nền) — xoá hẳn 1 người vẫn cần chắc chắn không ai vừa đổi THẬT
+  // SỰ field nào khác của họ, chỉ riêng việc họ vừa đăng nhập không cản việc xoá.
+  for (const id of removedIds) {
+    if (!deepEqualJson(stripUserBackgroundFields(freshById.get(id)) || null, stripUserBackgroundFields(baseById.get(id)) || null)) {
+      return { retried: false, genuineConflict: true };
+    }
+  }
+
+  // Sửa: đối chiếu cả bản ghi (TRỪ 3 field nền) — xem chú thích đầu hàm.
+  const mergedUsersById = new Map();
+  for (const id of modifiedIds) {
+    const base = baseById.get(id);
+    const des = desiredById.get(id);
+    const fresh = freshById.get(id);
+    if (!fresh) return { retried: false, genuineConflict: true }; // bị ai đó xoá mất giữa chừng
+    if (!deepEqualJson(stripUserBackgroundFields(fresh), stripUserBackgroundFields(base))) {
+      return { retried: false, genuineConflict: true };
+    }
+    // Giữ NGUYÊN ý định đầy đủ của admin (des), chỉ cập nhật lại đúng 3 field nền theo giá trị MỚI NHẤT
+    // từ server — không lấy từ `base` (đã cũ, có thể vô tình hạ sessionVersion vừa tăng do đăng nhập).
+    const merged = { ...des };
+    USER_BACKGROUND_ONLY_FIELDS.forEach(f => { merged[f] = fresh[f]; });
+    mergedUsersById.set(id, merged);
+  }
+
+  const removedSet = new Set(removedIds);
+  const merged = freshUsers
+    .filter(u => !removedSet.has(u.id))
+    .map(u => mergedUsersById.has(u.id) ? mergedUsersById.get(u.id) : u)
+    .concat(added);
+
+  return { retried: true, merged, freshVersion };
 }
 
 // retryObjectMapSaveAfterConflict() — mirror retryArraySaveAfterConflict() CHO danh mục dạng OBJECT MAP

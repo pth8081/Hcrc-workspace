@@ -856,6 +856,146 @@ async function scenario(name, fn) {
   });
 
   // ==========================================================================
+  // (j1b) LỖI THẬT đã vá (10/2026, người dùng báo lại ĐÚNG cảnh báo 409 "users" dù (i)/(j) ở trên đã có
+  //     cơ chế retry từ trước — hoá ra 1 lỗi KHÁC, sâu hơn): retryUsersSaveAfterConflict() TRƯỚC ĐÂY so
+  //     sánh NGUYÊN bản ghi (deepEqualJson cả object), trong khi server TỰ âm thầm đổi field
+  //     `sessionVersion` ở MỌI lượt đăng nhập THÀNH CÔNG (routes/auth.js) — hoàn toàn không do ai chủ
+  //     động sửa hồ sơ. Chỉ cần người đang được admin sửa đăng nhập ĐÚNG 1 lần trong lúc admin mở form là
+  //     báo "genuineConflict" SAI dù admin không hề đụng field đó. Kịch bản: "server" chỉ đổi
+  //     `sessionVersion` của ĐÚNG người admin đang sửa (mô phỏng người đó vừa đăng nhập lại) — mong đợi: 1)
+  //     KHÔNG báo conflict, tự retry lưu được bình thường; 2) sessionVersion LƯU LẠI đúng giá trị MỚI NHẤT
+  //     từ server (không bị ghi đè lùi về giá trị cũ từ lúc admin mở form — nếu bị lùi sẽ vô hiệu hoá tác
+  //     dụng bảo mật "đăng xuất phiên cũ" vừa có hiệu lực).
+  // ==========================================================================
+  await scenario('(j1b) 409 do CHỈ sessionVersion tự đổi (người đó vừa đăng nhập, không phải ai sửa hồ sơ) -> KHÔNG phải conflict thật, tự lưu lại thành công, giữ đúng sessionVersion mới nhất', async () => {
+    const r = await page.evaluate(async () => {
+      let serverUsers = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true, sessionVersion: 1 },
+        { id: 8004, username: 'nv.editor.409c', name: 'Người Được Sửa 3', email: 'ed409c@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true, sessionVersion: 1 },
+      ];
+      let serverVersion = 7000;
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/users' && method === 'GET') {
+          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          const ifMatch = opts.headers['If-Match'];
+          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
+            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
+          }
+          serverUsers = JSON.parse(opts.body);
+          serverVersion++;
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      DB.users = JSON.parse(JSON.stringify(serverUsers));
+      DB._versions.users = String(serverVersion);
+
+      // "Đăng nhập" — CHỈ sessionVersion của ĐÚNG người admin sắp sửa tăng lên, không có ai đụng field nào
+      // khác (mirror routes/auth.js: `list[idx].sessionVersion = (list[idx].sessionVersion || 0) + 1`).
+      serverUsers = serverUsers.map(u => u.id === 8004 ? { ...u, sessionVersion: u.sessionVersion + 1 } : u);
+      serverVersion++;
+
+      editUser(8004);
+      document.getElementById('uPhone').value = '091-ADMIN-DANG-SUA';
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault(){} });
+
+      const result = {
+        alerts: window.__alerts.slice(),
+        editorPhoneOnClient: DB.users.find(u => u.id === 8004)?.phone,
+        serverSessionVersion: serverUsers.find(u => u.id === 8004)?.sessionVersion,
+        clientVersionSynced: DB._versions.users === String(serverVersion),
+      };
+      window.fetch = savedFetch;
+      DB.users = DB.users.filter(u => u.id !== 8004); // dọn lại cho scenario sau
+      return result;
+    });
+    record('(j1b) KHÔNG có alert lỗi/409 nào (chỉ có alert "Đã lưu" bình thường) — field nền KHÔNG bị coi là conflict',
+      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)),
+      JSON.stringify(r));
+    record('(j1b) thay đổi CỦA ADMIN (phone) được lưu thành công sau khi tự retry',
+      r.editorPhoneOnClient === '091-ADMIN-DANG-SUA', JSON.stringify(r));
+    record('(j1b) sessionVersion trên server giữ ĐÚNG giá trị MỚI NHẤT (2, do vừa đăng nhập) — KHÔNG bị admin ghi đè lùi về giá trị cũ (1) lúc mở form',
+      r.serverSessionVersion === 2, JSON.stringify(r));
+    record('(j1b) DB._versions.users được đồng bộ đúng version mới nhất sau retry',
+      r.clientVersionSynced, JSON.stringify(r));
+  });
+
+  // ==========================================================================
+  // (j1c) LỖI THẬT đã vá — ĐÚNG NGUYÊN NHÂN người dùng báo lại (10/2026, reset mật khẩu cho 1 user rồi
+  //     "Lưu Người Dùng & Phân Quyền" vẫn báo "vừa bị thay đổi ở nơi khác ... hoặc chính người đó vừa tự
+  //     đổi mật khẩu"): server tự GỠ `mustChangePassword` khi CHÍNH người đang được admin sửa tự đổi mật
+  //     khẩu thành công ở nơi khác (PATCH /api/auth/me) — hoàn toàn độc lập với admin. Kịch bản: "server"
+  //     chỉ đổi `mustChangePassword` (true -> false) của ĐÚNG người admin đang sửa, mô phỏng đúng tình
+  //     huống người dùng báo lại. Mong đợi: 1) KHÔNG báo conflict, tự retry lưu được; 2) admin reset mật
+  //     khẩu mới -> mustChangePassword server set lại true theo đúng logic chuẩn (prepareUsersForSave()),
+  //     không bị admin vô tình "khoá cứng" theo giá trị false đã lỗi thời từ lúc mở form.
+  // ==========================================================================
+  await scenario('(j1c) 409 do CHỈ mustChangePassword tự đổi (người đó vừa tự đổi mật khẩu, không phải ai sửa hồ sơ) -> KHÔNG phải conflict thật, tự lưu lại thành công', async () => {
+    const r = await page.evaluate(async () => {
+      let serverUsers = [
+        { id: 1, username: 'admin', name: 'Quản Trị Viên', email: 'admin@hcrc.local', phone: '090', posType: 'HO', dept: 'Ban Giám Đốc', jobTitle: null, perms: { admin: true }, groupIds: [], permOverrides: null, active: true },
+        { id: 8005, username: 'nv.editor.409d', name: 'Người Được Sửa 4', email: 'ed409d@hcrc.local', phone: '091', posType: 'HO', dept: 'Kế Toán', jobTitle: 'Nhân viên', perms: { ...defaultNewUserPerms() }, groupIds: [], permOverrides: null, active: true, mustChangePassword: true },
+      ];
+      let serverVersion = 7100;
+      const savedFetch = window.fetch;
+      window.fetch = async (url, opts) => {
+        const method = (opts && opts.method) || 'GET';
+        if (url === '/api/data/users' && method === 'GET') {
+          return { ok: true, status: 200, headers: { get: (h) => h === 'ETag' ? String(serverVersion) : null }, json: async () => JSON.parse(JSON.stringify(serverUsers)) };
+        }
+        if (url === '/api/data/users' && method === 'POST') {
+          const ifMatch = opts.headers['If-Match'];
+          if (ifMatch && parseInt(ifMatch, 10) !== serverVersion) {
+            return { ok: false, status: 409, json: async () => ({ error: 'conflict', conflict: true }) };
+          }
+          // Mirror prepareUsersForSave() (routes/data.js): admin gõ mật khẩu mới -> server tự set
+          // mustChangePassword=true, KHÔNG đọc gì từ payload (payload vốn đã bị syncStorageOnce() lọc
+          // bỏ hẳn field này, xem chú thích tại đó).
+          serverUsers = JSON.parse(opts.body).map(u => u.id === 8005 ? { ...u, mustChangePassword: true } : u);
+          serverVersion++;
+          return { ok: true, status: 200, json: async () => ({ ok: true, version: String(serverVersion) }) };
+        }
+        return savedFetch(url, opts);
+      };
+
+      DB.users = JSON.parse(JSON.stringify(serverUsers));
+      DB._versions.users = String(serverVersion);
+
+      // "Tự đổi mật khẩu" — CHỈ mustChangePassword của ĐÚNG người admin sắp sửa chuyển true -> false,
+      // không có ai đụng field nào khác (mirror PATCH /api/auth/me khi chính user đó tự đổi mật khẩu).
+      serverUsers = serverUsers.map(u => u.id === 8005 ? { ...u, mustChangePassword: false } : u);
+      serverVersion++;
+
+      editUser(8005);
+      document.getElementById('uPassword').value = 'MatKhauMoiDoAdminDat123!';
+      window.__alerts.length = 0;
+      await saveUser({ preventDefault(){} });
+
+      const result = {
+        alerts: window.__alerts.slice(),
+        clientVersionSynced: DB._versions.users === String(serverVersion),
+        serverMustChangePassword: serverUsers.find(u => u.id === 8005)?.mustChangePassword,
+      };
+      window.fetch = savedFetch;
+      DB.users = DB.users.filter(u => u.id !== 8005); // dọn lại cho scenario sau
+      return result;
+    });
+    record('(j1c) KHÔNG có alert lỗi/409 nào (chỉ có alert "Đã lưu" bình thường) — mustChangePassword KHÔNG bị coi là conflict',
+      !r.alerts.some(a => a.includes('⚠️') || a.includes('⛔')) && r.alerts.some(a => /Đã lưu/.test(a)),
+      JSON.stringify(r));
+    record('(j1c) DB._versions.users được đồng bộ đúng version mới nhất sau retry',
+      r.clientVersionSynced, JSON.stringify(r));
+    record('(j1c) mustChangePassword trên server đúng theo logic chuẩn (true, do admin vừa đặt mật khẩu mới) — không bị client ghi đè theo giá trị cũ',
+      r.serverMustChangePassword === true, JSON.stringify(r));
+  });
+
+  // ==========================================================================
   // (j2)/(j3) TỔNG QUÁT HOÁ (10/2026, "Item 6" đợt golive): cơ chế thử-lại-1-lần-sau-409 ở (i)/(j) trên
   //     TRƯỚC ĐÂY chỉ áp dụng riêng cho "users" (retryUsersSaveAfterConflict()) — nay tách lõi dùng
   //     chung retryArraySaveAfterConflict()/syncStorageOnce() cho MỌI collection dạng mảng object có

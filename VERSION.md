@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**28.16** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.17** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.17 (2026-10): Vá lỗi 409 giả "vừa bị thay đổi ở nơi khác" khi Sửa Người Dùng
+
+Người dùng báo: reset mật khẩu cho 1 tài khoản rồi bấm "Lưu Người Dùng &
+Phân Quyền" vẫn báo "⚠️ Đúng bản ghi người dùng bạn đang sửa vừa bị thay
+đổi ở nơi khác... hoặc chính người đó vừa tự đổi mật khẩu/thiết bị đăng
+nhập" dù không có ai khác thật sự sửa hồ sơ đó cùng lúc — đúng y chang câu
+chữ cảnh báo tự nói ra, lặp lại nhiều lần kể cả thử lại.
+
+**Nguyên nhân (lỗi thật)**: `retryUsersSaveAfterConflict()` (core.js) — cơ
+chế tự động thử lưu lại 1 lần khi gặp 409 — so sánh NGUYÊN cả bản ghi
+người dùng để quyết định "có ai đụng đúng bản ghi này không". Nhưng
+`mustChangePassword` là field do SERVER tự quản lý hoàn toàn: tự GỠ khi
+CHÍNH người đó tự đổi mật khẩu thành công ở nơi khác (`PATCH
+/api/auth/me`), tự SET lại khi admin đặt mật khẩu tạm mới cho họ — hoàn
+toàn độc lập với bất kỳ admin nào đang mở form sửa. `syncStorageOnce()` đã
+biết loại field này khỏi payload gửi lên (xem chú thích tại đó, đã có từ
+trước), nhưng lại BỎ SÓT không loại khỏi bước SO SÁNH conflict của cơ chế
+thử-lại — nên đúng lúc người dùng vừa tự đổi mật khẩu (rất hay gặp khi
+admin đang xử lý tài khoản của họ) là bị báo nhầm "conflict thật", admin
+mất nội dung vừa gõ.
+
+Nhân tiện rà soát thêm 2 field khác CÙNG LỚP lỗi (server tự đổi hoàn toàn
+độc lập với admin, dù hiện tại luôn bị `stripPasswords()` lọc khỏi mọi
+response `GET /api/data*` nên chưa từng thực sự gây lỗi qua đường này —
+vẫn thêm vào để tránh tái phát nếu sau này có chỗ nào lộ ra): `sessionVersion`
+(tăng ở mọi lượt đăng nhập thành công) và `failedLoginAttempts`/
+`lockedUntil` (tăng/xoá ở mọi lượt đăng nhập sai/đúng).
+
+- `public/js/core.js`: `retryUsersSaveAfterConflict()` viết lại — loại
+  đúng 3 field nền (`sessionVersion`, `failedLoginAttempts`, `lockedUntil`,
+  `mustChangePassword`) khỏi SO SÁNH (cả lúc xác định "có gì cần áp lại"
+  lẫn lúc đối chiếu conflict thật), còn MỌI field nghiệp vụ khác (tên/
+  email/dept/perms/pass/pin...) vẫn giữ nguyên triết lý cũ "so khớp cả bản
+  ghi, không tự ý chọn ai thắng" — cố ý KHÔNG đổi sang so khớp-theo-từng-
+  field cho mọi field (rủi ro âm thầm gộp cả thay đổi nghiệp vụ không liên
+  quan của người khác). Khi áp lại, 3 field nền luôn lấy giá trị MỚI NHẤT
+  từ server, không bao giờ ghi đè lùi (tránh vô tình hạ sessionVersion/mở
+  khoá tài khoản của người khác).
+- Test mới: `tests/test-admin-users-permgroups.js` kịch bản (j1b) — chỉ
+  `sessionVersion` đổi (mô phỏng đăng nhập lại) không còn bị báo conflict;
+  (j1c) — ĐÚNG kịch bản người dùng báo (chỉ `mustChangePassword` đổi do
+  người đó tự đổi mật khẩu) không còn bị báo conflict, lưu thành công, và
+  `mustChangePassword` vẫn được server tính lại đúng chuẩn (không bị client
+  ghi đè theo giá trị cũ).
 
 ## v28.16 (2026-10): Cơ Cấu Tổ Chức — xoá vĩnh viễn phiên bản Lưu Trữ (quyền riêng)
 
