@@ -289,8 +289,8 @@ function renderChecklistSubmissionForm() {
         ${selectedFailingNoPhoto ? '<p class="text-[11px] text-amber-700 font-semibold">💡 Nên đính kèm ảnh minh chứng cho câu trả lời bị đánh giá lỗi (không bắt buộc).</p>' : ''}
         <div class="flex items-center gap-2 flex-wrap">
           ${(ans.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
-          <input type="file" accept="image/*" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${q.id}" data-arg-el="1" class="text-[11px]">
-          <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; có thể chụp ảnh trực tiếp hoặc chọn từ thư viện ảnh)</span>
+          <input type="file" accept="image/*" capture="environment" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${q.id}" data-arg-el="1" class="text-[11px]">
+          <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; mở camera chụp trực tiếp)</span>
         </div>
       </div>`;
     }).join('')}
@@ -346,8 +346,8 @@ function renderChecklistDeductionSubmissionForm() {
                 <input value="${escapeHtml(d.note || '')}" placeholder="Ghi chú (không bắt buộc)" data-op-input="updateChecklistDeductionField" data-arg0="${c.id}" data-arg1="note" data-arg-value="2" class="w-full border p-1.5 rounded text-[11px]">
                 <div class="flex items-center gap-2 flex-wrap">
                   ${(d.attachments || []).map(a => `<a href="${attachmentDownloadUrl(a.fileUrl, null, a.fileName)}" target="_blank" class="text-[11px] text-sky-600 hover:underline">📎 ${escapeHtml(a.fileName || 'ảnh')}</a>`).join('')}
-                  <input type="file" accept="image/*" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${c.id}" data-arg-el="1" class="text-[11px]">
-                  <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc)</span>
+                  <input type="file" accept="image/*" capture="environment" data-op-change="onChecklistAnswerPhotoChosen" data-arg0="${c.id}" data-arg-el="1" class="text-[11px]">
+                  <span class="text-[11px] text-gray-400">(ảnh minh chứng — không bắt buộc; mở camera chụp trực tiếp)</span>
                 </div>
               </div>`;
             }).join('')}

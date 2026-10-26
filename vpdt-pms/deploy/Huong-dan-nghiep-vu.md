@@ -4059,7 +4059,14 @@ kiểm tra lại đúng tại bước gắn ảnh vào bài làm (`.jpg/.jpeg/.p
 đúng danh sách admin cấu hình riêng cho mục "Ảnh minh chứng Checklist" ở **Hệ
 Thống → Quản Lý Tệp File**), không còn phụ thuộc vào thông tin "thuộc mục nào"
 do trình duyệt khai lúc tải tệp lên — trước đây có thể lách để đính kèm tệp
-.pdf/.docx làm "ảnh" minh chứng.
+.pdf/.docx làm "ảnh" minh chứng. **Mở thẳng camera chụp tại chỗ (11/2026)** —
+cả ô ảnh minh chứng ở Checklist Thường (câu trả lời bị đánh giá lỗi) và ô ở
+Checklist Kiểm Soát/VSATTP ("Trừ điểm theo hạng mục", tiêu chí bị trừ điểm)
+đều có `capture="environment"`: trên điện thoại (Android Chrome/iOS Safari),
+bấm vào ô này sẽ mở THẲNG camera chụp ảnh, không hiện lựa chọn "Chọn ảnh từ
+thư viện" — đảm bảo ảnh đính kèm là ảnh chụp thật tại hiện trường lúc đánh
+giá, không phải ảnh cũ chọn lại từ máy. Trên máy tính/thiết bị không có
+camera, ô vẫn hoạt động bình thường như chọn file thường (không ảnh hưởng).
 
 **Chấm điểm & kết luận** — khi hoàn tất (Kết Thúc & Nộp), hệ thống tự tính
 `scorePercent` (tỉ lệ lựa chọn `isPassing`/tổng số câu bắt buộc) và

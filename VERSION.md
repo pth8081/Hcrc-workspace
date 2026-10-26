@@ -1,9 +1,31 @@
 # Phiên bản hiện tại
 
-**28.24** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.25 (2026-11): Checklist/VSATTP — ảnh minh chứng lỗi mở thẳng camera chụp tại chỗ
+
+Người dùng hỏi kiểm tra: ô "ảnh minh chứng" khi phát hiện lỗi/vi phạm ở Checklist (cả form QA thường và
+form VSATTP/"Trừ điểm theo hạng mục") có cho chụp ảnh trực tiếp không. Rà soát: cả 2 input chỉ có
+`accept="image/*"`, KHÔNG có thuộc tính `capture` — nên việc mở thẳng camera hay không phụ thuộc hoàn
+toàn vào trình duyệt/thiết bị (không đảm bảo), có thể vẫn cho chọn ảnh cũ từ thư viện thay vì ảnh chụp
+tại hiện trường.
+
+- `public/js/module-checklist.js`: thêm `capture="environment"` vào 2 input ảnh minh chứng —
+  dòng trong `renderChecklistQaSubmissionForm()` (ảnh minh chứng câu trả lời bị đánh giá lỗi) và dòng
+  trong `renderChecklistDeductionSubmissionForm()` (ảnh minh chứng tiêu chí VSATTP bị trừ điểm). Trên
+  điện thoại (Android Chrome/iOS Safari) sẽ mở thẳng camera sau sau, không hiện lựa chọn thư viện ảnh —
+  đảm bảo ảnh đính kèm là ảnh chụp thật tại chỗ. Trên máy tính không có camera, input tự rơi về chọn file
+  bình thường (không ảnh hưởng gì, `capture` chỉ là gợi ý cho thiết bị có camera).
+  Cập nhật câu chú thích cạnh 2 input cho đúng hành vi mới ("mở camera chụp trực tiếp").
+- Không đổi gì ở phía server (`lib/checklist.js`/`routes/checklist.js`) — chỉ là thuộc tính HTML phía
+  client, không ảnh hưởng tới validate/logic nộp bài.
+- Chạy lại toàn bộ test liên quan: `test-audit-round5-checklist.js`, `test-checklist-attachment-ownership.js`,
+  `test-checklist.js`, `test-upload-type-config-modules.js`, `test-uploads-file-authz.js`,
+  `test-csp-full-audit.js` — toàn bộ PASS, không regression (không cần viết test mới — thay đổi chỉ là 1
+  thuộc tính HTML tĩnh, không có logic mới để test).
 
 ## v28.24 (2026-11): Sơ Đồ Tổ Chức — sửa định biên TRONG kỳ hiện tại mà không bị coi là kỳ mới
 
