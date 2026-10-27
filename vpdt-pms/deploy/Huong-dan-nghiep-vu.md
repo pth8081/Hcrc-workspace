@@ -4051,10 +4051,17 @@ vào dữ liệu thật của siêu thị đó.
 dấu `isPassing`/`isCriticalFail`, và có thể **chỉ hiện khi** 1 lựa chọn cụ
 thể của câu hỏi TRƯỚC ĐÓ được chọn (`showIfOptionId`, đánh số ID lựa chọn
 LIÊN TỤC xuyên suốt toàn bộ mẫu chứ không reset theo từng câu, để chọn được
-lựa chọn của bất kỳ câu nào trước đó, không chỉ câu liền trước). Câu/lựa
-chọn đánh dấu **"Bắt buộc"** hoặc **"Lỗi nghiêm trọng" (Critical Fail)** thì
-khi chọn lựa chọn Critical Fail bắt buộc phải đính kèm ảnh minh chứng mới
-hoàn tất được bài đánh giá. **Ảnh minh chứng chỉ nhận TỆP ẢNH (từ 10/2026)** —
+lựa chọn của bất kỳ câu nào trước đó, không chỉ câu liền trước). **Ảnh minh
+chứng KHÔNG BẮT BUỘC theo mặc định (từ 9/2026, theo yêu cầu người dùng "bỏ
+bắt buộc up ảnh khi không đạt")** — trước đây chọn 1 lựa chọn "Không đạt"
+hoặc "Lỗi nghiêm trọng" (Critical Fail) mà chưa đính ảnh thì CHẶN CỨNG không
+cho "Kết Thúc & Nộp" (lỗi 400); nay chỉ còn là **gợi ý MỀM**: khi có câu trả
+lời "Không đạt"/Critical Fail chưa đính ảnh, màn hiện dòng chữ hổ phách "💡
+Nên đính kèm ảnh minh chứng cho câu trả lời bị đánh giá lỗi (không bắt
+buộc)" — KHÔNG cản việc bấm "Nộp Bài" nếu vì lý do gì đó không chụp được
+ảnh ngay lúc đó. Checklist Kiểm Soát/VSATTP ("Trừ điểm theo hạng mục") thì
+ảnh minh chứng luôn không bắt buộc, không có gợi ý nhắc riêng nào dù trừ
+điểm nhiều hay ít. **Ảnh minh chứng chỉ nhận TỆP ẢNH (từ 10/2026)** —
 kiểm tra lại đúng tại bước gắn ảnh vào bài làm (`.jpg/.jpeg/.png/.webp`, hoặc
 đúng danh sách admin cấu hình riêng cho mục "Ảnh minh chứng Checklist" ở **Hệ
 Thống → Quản Lý Tệp File**), không còn phụ thuộc vào thông tin "thuộc mục nào"
