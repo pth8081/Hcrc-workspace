@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**28.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.29 (2026-11): [TB] Cảnh báo khi để trống "Ngành Hàng Phụ Trách" ở QT Giá Bán Buôn (Siêu Thị)
+
+Người dùng báo lỗi "ngành hàng UltraFresh của Đại lại hiện Thủy duyệt" — sau khi điều tra cùng người
+dùng (xem lại code `ruleMatchesItPriceWholesaleNganhHang()`, `lib/workflowEngine.js`), xác nhận KHÔNG
+phải lỗi code: nguyên nhân là 1 dòng cấu hình khác (của Thủy, mức Chiết Khấu >5%) để TRỐNG "Ngành Hàng
+Phụ Trách" — theo đúng thiết kế, để trống = "Mặc định" = áp dụng cho MỌI ngành hàng (không phải "không
+ngành hàng nào" như người dùng hiểu nhầm lúc cấu hình), cộng dồn (UNION) vào mọi dòng khác cùng bước.
+
+- `public/js/module-workflow.js`: `addItPriceWholesaleMixedApprovalRule()` (hàm Lưu dòng cấu hình "🏪 QT
+  Giá Bán Buôn (Siêu Thị)") thêm `confirm()` cảnh báo rõ ý nghĩa "để trống = áp dụng mọi ngành hàng"
+  trước khi lưu, nếu người dùng để trống "Ngành Hàng Phụ Trách" — huỷ bấm "Không" thì không lưu, tránh
+  lặp lại nhầm lẫn tương tự về sau. Chỉ áp dụng cho ngành hàng (không đụng "Siêu Thị Phụ Trách" — trường
+  đó không phải nguồn gây nhầm lẫn ở đợt báo cáo này).
+- Test: chạy lại `test-csp-full-audit.js` (PASS), `test-itprice-wholesale-mixed-approval.js` (20/20),
+  `test-mixed-approval-excel.js` (15/15), `test-mixed-approval-delete-warning-ui.js` (19/19),
+  `test-operationorder-store-tier-mixed-approval.js` (4/4) — toàn bộ PASS. `demo-itprice-wholesale-
+  mixed-approval.js` (testHarness tự stub `window.confirm = true` nên không bị chặn) vẫn chạy qua được
+  bước Thêm dòng qua UI; 1 lỗi KHÔNG liên quan ở bước 05b (GĐST siêu thị khác không bị chặn 403) xác
+  nhận lỗi CŨ có từ trước qua `git stash`, không phải do đợt sửa này. `test-preview-workflow-buttons.js`
+  giữ nguyên 13/16 (3 lỗi cũ không liên quan, cũng xác nhận qua `git stash`).
 
 ## v28.28 (2026-11): [Cao] Lỗi 409 giả sau khi admin gỡ hộ TOTP/vân tay/mở khoá đăng nhập của người khác
 

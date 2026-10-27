@@ -1393,6 +1393,15 @@ async function addItPriceWholesaleMixedApprovalRule() {
     username = u.username;
   }
 
+  // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng — "ngành hàng UltraFresh của Đại lại hiện Thủy duyệt"): nguyên
+  // nhân thật là 1 dòng khác (của Thủy, mức Chiết Khấu >5%) để trống "Ngành Hàng Phụ Trách" tưởng là
+  // "không áp dụng ngành hàng nào" nhưng thực ra nghĩa NGƯỢC LẠI — "Mặc định" = áp dụng cho MỌI ngành
+  // hàng (xem ruleMatchesItPriceWholesaleNganhHang(), lib/workflowEngine.js), cộng dồn (UNION) vào mọi
+  // dòng khác cùng bước. Cảnh báo rõ ngay lúc Lưu thay vì để admin tự hiểu nhầm như đợt vừa rồi.
+  if (!nganhHang.length && !confirm('⚠️ Bạn đang để TRỐNG "Ngành Hàng Phụ Trách" — dòng này sẽ ÁP DỤNG CHO MỌI NGÀNH HÀNG (kể cả ngành hàng đã gán riêng cho người/chức danh khác ở dòng khác), KHÔNG PHẢI "không ngành hàng nào".\n\nBạn có chắc chắn muốn để trống (áp dụng mọi ngành hàng) không?')) {
+    return;
+  }
+
   const isEdit = editingItPriceWholesaleMixedApprovalRuleId != null;
   // Phòng trường hợp hiếm (xem addMixedApprovalRule() ở trên để biết lý do đầy đủ): dòng đang sửa dở bị
   // xoá ở thao tác khác -> báo rõ và tự thoát về chế độ Thêm Mới, không âm thầm coi như thành công.
