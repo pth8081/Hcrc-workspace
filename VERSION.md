@@ -1,9 +1,23 @@
 # Phiên bản hiện tại
 
-**28.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.31 (2026-11): Nâng trần số dòng File Bảng Giá (Phê Duyệt Giá) từ 1000 lên 10000 dòng/tệp
+
+Theo yêu cầu người dùng (màn "Phê Duyệt Giá Bán Buôn", tải lên bảng giá nhiều mặt hàng hơn mức cũ cho
+phép). Giới hạn này tồn tại để chặn file nén độc hại ("zip bomb") bung hết vào bộ nhớ — `lib/
+priceFileParser.js` đọc file THEO TỪNG DÒNG (không nạp cả sheet vào RAM) và dừng đọc NGAY khi vượt
+trần, nên nâng trần chỉ là đổi 1 con số, không đổi cơ chế an toàn.
+
+- `lib/priceFileParser.js`: `parsePriceFile()` nâng trần `1000` → `10000` dòng/tệp (thông báo lỗi cập
+  nhật theo).
+- Test: cập nhật `test-audit-fixes-batch2-zipbomb.js` (kịch bản "đúng cap/vượt cap") theo trần mới —
+  PASS 22/22. Chạy lại `test-pricefile-formula-cell.js`, `test-pricefile-percent-format.js`,
+  `test-it-support.js` (24/24), `test-itprice-download.js` (19/19),
+  `test-itprice-wholesale-mixed-approval.js` (20/20) — không regression.
 
 ## v28.30 (2026-11): [Nghiêm trọng] Chọn Ngành Hàng/Siêu Thị toàn chữ số trên form Vận Hành bị ép sai kiểu, không bao giờ khớp được người duyệt
 

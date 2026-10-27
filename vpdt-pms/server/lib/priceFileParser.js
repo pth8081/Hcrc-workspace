@@ -112,7 +112,7 @@ function rowToPriceItem(cells, columnLabels, idxByKey, numFmts) {
 // vì bộ từ khoá chung. Trả về { items, columnLabels } — columnLabels đi kèm mỗi tệp lưu vào item.files[]
 // để hiển thị lại đúng tên cột ngay cả khi mẫu sau này bị sửa/xoá.
 //
-// Đọc theo DÒNG (lib/xlsxSafeRead.js) chứ không nạp cả sheet vào RAM: giới hạn 1000 dòng bên dưới nay
+// Đọc theo DÒNG (lib/xlsxSafeRead.js) chứ không nạp cả sheet vào RAM: giới hạn 10000 dòng bên dưới nay
 // chặn NGAY trong lúc đọc, không để file nén độc hại bung hết vào bộ nhớ rồi mới bị từ chối.
 async function parsePriceFile(buffer, template) {
   let columnLabels = null;
@@ -129,13 +129,13 @@ async function parsePriceFile(buffer, template) {
     }
     const item = rowToPriceItem(cells, columnLabels, idxByKey, numFmts);
     if (item) items.push(item);
-    if (items.length > 1000) { overLimit = true; return false; }
+    if (items.length > 10000) { overLimit = true; return false; }
     return true;
   }, { raw: true, withNumFmt: true });
 
   if (!sawAnyRow) throw new HttpError(400, 'File bảng giá trống, không có dữ liệu');
   // Vượt trần thì items chắc chắn không rỗng, nên thứ tự 2 lỗi dưới đây cho ra đúng thông báo như cũ.
-  if (overLimit) throw new HttpError(400, 'File bảng giá quá nhiều dòng (tối đa 1000 dòng/tệp)');
+  if (overLimit) throw new HttpError(400, 'File bảng giá quá nhiều dòng (tối đa 10000 dòng/tệp)');
   if (!items.length) throw new HttpError(400, 'Không đọc được dòng dữ liệu nào hợp lệ từ file (mọi dòng đều trống)');
   return { items, columnLabels };
 }

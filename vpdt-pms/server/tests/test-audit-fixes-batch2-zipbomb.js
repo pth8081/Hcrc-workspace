@@ -264,16 +264,16 @@ async function main() {
     await expectError(() => parsePlanImportFile(tooManyBuf, '.xlsx', []), 'tối đa 500 dòng kế hoạch', 'plan cap');
   });
 
-  await run('[priceFileParser] đúng 1000 dòng giá đọc được, 1050 dòng bị từ chối (tối đa 1000)', async () => {
+  await run('[priceFileParser] đúng 10000 dòng giá đọc được, 10050 dòng bị từ chối (tối đa 10000)', async () => {
     const header = ['Tên mặt hàng', 'Đơn giá'];
-    const ok = [header, ...Array.from({ length: 1000 }, (_, i) => [`Hàng ${i}`, '1.000'])];
+    const ok = [header, ...Array.from({ length: 10000 }, (_, i) => [`Hàng ${i}`, '1.000'])];
     const { items } = await parsePriceFile(await buildXlsx(ok), null);
-    assertEqual(items.length, 1000, 'exactly-at-cap price file must still parse fully');
-    assertEqual(items[999].values.c0, 'Hàng 999', 'last row content mismatch');
+    assertEqual(items.length, 10000, 'exactly-at-cap price file must still parse fully');
+    assertEqual(items[9999].values.c0, 'Hàng 9999', 'last row content mismatch');
 
-    const tooMany = [header, ...Array.from({ length: 1050 }, (_, i) => [`Hàng ${i}`, '1.000'])];
+    const tooMany = [header, ...Array.from({ length: 10050 }, (_, i) => [`Hàng ${i}`, '1.000'])];
     const tooManyBuf = await buildXlsx(tooMany);
-    await expectError(() => parsePriceFile(tooManyBuf, null), 'tối đa 1000 dòng', 'price cap');
+    await expectError(() => parsePriceFile(tooManyBuf, null), 'tối đa 10000 dòng', 'price cap');
   });
 
   await run('[budgetTemplateImport] quá 30 cột tuỳ biến vẫn ÂM THẦM cắt còn 30 (không ném lỗi, đúng như cũ)', async () => {
