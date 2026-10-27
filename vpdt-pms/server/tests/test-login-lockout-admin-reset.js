@@ -48,16 +48,21 @@ function seedUsers() {
   return [JSON.parse(JSON.stringify(ADMIN)), JSON.parse(JSON.stringify(PLAIN))];
 }
 let APP_DATA = { users: seedUsers() };
-function resetAppData() { APP_DATA = { users: seedUsers() }; }
+let APP_DATA_VERSION_COUNTER = {}; // key -> số đếm, dùng cho getAppDataValueWithVersion() stub phía dưới
+function resetAppData() { APP_DATA = { users: seedUsers() }; APP_DATA_VERSION_COUNTER = {}; }
 
 stubModule('lib/mailer', { sendMail: async () => ({ ok: true }), resolveEncryption: () => 'NONE', hasAuthConfigured: () => false });
 stubModule('lib/emailCrypto', { encryptSecret: (p) => `ENC(${p})`, decryptSecret: (p) => (p || '').replace(/^ENC\(|\)$/g, '') });
 
 stubModule('lib/appData', {
   getAppDataValue: async (key) => (key in APP_DATA ? APP_DATA[key] : null),
+  // getAppDataValueWithVersion (11/2026, LỖI ĐÃ VÁ "409 giả sau khi mở khoá hộ") — route thật giờ gọi
+  // hàm này để trả usersVersion lại cho client, xem routes/auth.js.
+  getAppDataValueWithVersion: async (key) => ({ value: (key in APP_DATA ? APP_DATA[key] : null), version: `v${APP_DATA_VERSION_COUNTER[key] = (APP_DATA_VERSION_COUNTER[key] || 0) + 1}` }),
   withLockedAppDataValue: async (key, fn) => {
     const updated = await fn(APP_DATA[key]);
     APP_DATA[key] = updated;
+    APP_DATA_VERSION_COUNTER[key] = (APP_DATA_VERSION_COUNTER[key] || 0) + 1;
     return updated;
   }
 });

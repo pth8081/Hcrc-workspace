@@ -49,15 +49,20 @@ function seedUsers() {
   return [ADMIN, PLAIN, JSON.parse(JSON.stringify(VICTIM)), JSON.parse(JSON.stringify(OTHER))];
 }
 let APP_DATA = { users: seedUsers() };
-function resetAppData() { APP_DATA = { users: seedUsers() }; }
+let APP_DATA_VERSION_COUNTER = {}; // key -> số đếm, dùng cho getAppDataValueWithVersion() stub phía dưới
+function resetAppData() { APP_DATA = { users: seedUsers() }; APP_DATA_VERSION_COUNTER = {}; }
 
 let CURRENT_USERNAME = ADMIN.username;
 
 stubModule('lib/appData', {
   getAppDataValue: async (key) => (key in APP_DATA ? APP_DATA[key] : null),
+  // getAppDataValueWithVersion (11/2026, LỖI ĐÃ VÁ "409 giả sau khi gỡ TOTP/mở khoá hộ") — route thật
+  // giờ gọi hàm này để trả usersVersion lại cho client, xem routes/auth.js.
+  getAppDataValueWithVersion: async (key) => ({ value: (key in APP_DATA ? APP_DATA[key] : null), version: `v${APP_DATA_VERSION_COUNTER[key] = (APP_DATA_VERSION_COUNTER[key] || 0) + 1}` }),
   withLockedAppDataValue: async (key, fn) => {
     const updated = await fn(APP_DATA[key]);
     APP_DATA[key] = updated;
+    APP_DATA_VERSION_COUNTER[key] = (APP_DATA_VERSION_COUNTER[key] || 0) + 1;
     return updated;
   }
 });

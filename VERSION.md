@@ -1,9 +1,36 @@
 # Phiên bản hiện tại
 
-**28.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.28** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.28 (2026-11): [Cao] Lỗi 409 giả sau khi admin gỡ hộ TOTP/vân tay/mở khoá đăng nhập của người khác
+
+Người dùng báo (kèm ảnh chụp): bấm "↺ Đặt Lại Bộ Đếm" cho 1 tài khoản test ĐANG KHÔNG đăng nhập và
+không ai khác đang sửa, vẫn bị báo "Đúng bản ghi người dùng bạn đang sửa vừa bị thay đổi ở nơi khác...".
+Đây là 1 trường hợp CHƯA được vá của lớp lỗi "409 giả do thiếu baseline syncStorage" đã rà soát ở #225:
+3 route admin-thao-tác-hộ (`POST /api/auth/login-lockout/reset/:username`, `DELETE /api/auth/totp/:username`,
+`DELETE /api/auth/webauthn/credentials/:username/:id`) đều ghi vào collection "users" (tăng `UpdatedAt`
+dùng làm ETag CHUNG cho cả collection) nhưng không báo lại version mới cho client, và client gọi `fetch()`
+trần (không qua `syncStorage()`) nên `DB._versions.users` bị lệch ngay sau khi bấm — khiến lượt Lưu KẾ
+TIẾP ở form Sửa Người Dùng (cho BẤT KỲ user nào, không chỉ người vừa bấm) mang `If-Match` cũ và bị chặn
+nhầm là "vừa bị thay đổi ở nơi khác".
+
+- `routes/auth.js`: cả 3 route trên dùng `getAppDataValueWithVersion('users')` ngay sau khi ghi, trả thêm
+  `usersVersion` trong response JSON — theo đúng mẫu đã dùng ở `routes/data.js` cho các route cascade-write
+  khác.
+- `public/js/core-devicesecurity.js`: `resetAdminLoginLockout()`, `deleteAdminTotp()`,
+  `deleteAdminBiometricDevice()` đọc `data.usersVersion` từ response và tự cập nhật `DB._versions.users`
+  ngay (route KHÔNG đi qua `syncStorageOnce()` nên phải tự làm bước này).
+- Test: cập nhật stub `lib/appData` ở `test-admin-totp.js`/`test-admin-webauthn-reset.js`/
+  `test-login-lockout-admin-reset.js` (thêm `getAppDataValueWithVersion`) — 2 file sau PASS 100%
+  (8/8, 14/14); `test-admin-totp.js` còn 4/26 lỗi KHÔNG liên quan (`resolveGraphOption is not a function`,
+  lỗ hổng mock email có từ trước, xác nhận qua `git stash` vẫn lỗi giống nhau khi chưa có bản vá này).
+  Chạy lại thêm 9 test liên quan auth/user-management (auth-login, auth-single-session, external-auth,
+  user-edit-username-guard, user-save-autolink-profile, users-session-version-strip,
+  user-password-reset-bulk, action-menu-admin-users, admin-users-permgroups) — toàn bộ PASS. CSP full
+  audit (`test-csp-full-audit.js`) PASS, grep CSP 2 file sửa không có vi phạm.
 
 ## v28.27 (2026-11): [Nghiêm trọng] Đặt Hàng Siêu Thị — cùng lỗi chức danh cấp công ty không khớp được người duyệt (như QT Giá Bán Buôn v28.26)
 

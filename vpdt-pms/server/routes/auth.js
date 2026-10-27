@@ -3,7 +3,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
-const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
+const { getAppDataValue, getAppDataValueWithVersion, withLockedAppDataValue } = require('../lib/appData');
 const { verifyPassword, hashPassword, validatePin, signToken, verifyToken, setAuthCookie, clearAuthCookie, requireAuth, COOKIE_NAME, findUserByUsernameCI } = require('../lib/auth');
 const { recordFailedLogin, resetLoginAttempts, getLockoutRemainingMinutes, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES } = require('../lib/loginAttempts');
 const { validatePasswordStrength } = require('../lib/passwordPolicy');
@@ -1006,7 +1006,12 @@ router.delete('/totp/:username', requireAuth, async (req, res) => {
       return list;
     });
     notifyTotpChange(updated, `Xác thực 2 lớp (TOTP) trên tài khoản của bạn (${req.params.username}) VỪA BỊ QUẢN TRỊ VIÊN (${req.freshUser.username}) GỠ BỎ để hỗ trợ khắc phục mất thiết bị trên hệ thống VPDT. Vui lòng thiết lập lại ngay ở lần đăng nhập tiếp theo.`).catch(e => console.error('Lỗi gửi email báo admin gỡ TOTP hộ:', e.message));
-    res.json({ ok: true });
+    // usersVersion (11/2026, LỖI ĐÃ VÁ "409 giả sau khi gỡ TOTP/mở khoá hộ") — route này ghi vào
+    // collection "users" nên tự làm lệch version phía client (DB._versions.users) nếu không báo lại
+    // ngay, khiến lượt Lưu KẾ TIẾP ở form Sửa Người Dùng (cho BẤT KỲ user nào, không chỉ người vừa gỡ)
+    // bị 409 giả — xem chú thích đầy đủ tại resetAdminLoginLockout() (core-devicesecurity.js).
+    const { version: usersVersion } = await getAppDataValueWithVersion('users');
+    res.json({ ok: true, usersVersion });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('DELETE /api/auth/totp/:username lỗi:', err.message);
@@ -1065,7 +1070,12 @@ router.post('/login-lockout/reset/:username', requireAuth, async (req, res) => {
       list[idx] = updated;
       return list;
     });
-    res.json({ ok: true, wasLocked });
+    // usersVersion (11/2026, LỖI ĐÃ VÁ — xem chú thích đầy đủ tại resetAdminLoginLockout() ở
+    // core-devicesecurity.js): route này LUÔN ghi vào "users" (kể cả no-op trên tài khoản vốn không bị
+    // khoá), tự làm lệch version phía client nếu không báo lại ngay -> lượt Lưu kế tiếp ở form Sửa Người
+    // Dùng (cho bất kỳ user nào) bị chặn nhầm "vừa bị thay đổi ở nơi khác".
+    const { version: usersVersion } = await getAppDataValueWithVersion('users');
+    res.json({ ok: true, wasLocked, usersVersion });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('POST /api/auth/login-lockout/reset/:username lỗi:', err.message);
@@ -1208,7 +1218,10 @@ router.delete('/webauthn/credentials/:username/:id', requireAuth, async (req, re
       };
       return list;
     });
-    res.json({ ok: true });
+    // usersVersion (11/2026, LỖI ĐÃ VÁ — xem chú thích đầy đủ tại resetAdminLoginLockout() ở
+    // core-devicesecurity.js) — cùng lớp lỗi 409 giả, route này cũng ghi vào "users".
+    const { version: usersVersion } = await getAppDataValueWithVersion('users');
+    res.json({ ok: true, usersVersion });
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
     console.error('DELETE /api/auth/webauthn/credentials/:username lỗi:', err.message);

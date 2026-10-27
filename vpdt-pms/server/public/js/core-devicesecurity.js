@@ -145,6 +145,13 @@ async function deleteAdminBiometricDevice(username, id) {
       const body = await res.json().catch(() => ({}));
       return alert(`⛔ ${body.error || 'Không thể gỡ thiết bị'}`);
     }
+    // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng "reset user báo 409 giả dù không ai đang sửa"): route này
+    // ghi vào "users" (tăng sessionVersion của người bị gỡ) nên tự làm lệch DB._versions.users phía
+    // client nếu không cập nhật lại ngay — lượt Lưu KẾ TIẾP ở form Sửa Người Dùng (bất kỳ user nào) sẽ
+    // mang If-Match CŨ và bị 409 giả. Gọi fetch() trần (không qua syncStorage()) nên phải tự cập nhật ở
+    // đây, mirror đúng cách routes/data.js trả usersVersion cho các route ghi "users" khác.
+    const data = await res.json().catch(() => ({}));
+    if (data.usersVersion) DB._versions.users = data.usersVersion;
     await renderAdminWebauthnDeviceList(username);
     logSystemAction('USER_MGM', 'REMOVE_WEBAUTHN_DEVICE', `Gỡ hộ thiết bị vân tay/Face ID của người dùng [${username}]`, 'SUCCESS', username);
   } catch (err) {
@@ -187,6 +194,10 @@ async function deleteAdminTotp(username) {
       const body = await res.json().catch(() => ({}));
       return alert(`⛔ ${body.error || 'Không thể gỡ xác thực 2 lớp'}`);
     }
+    // LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ tại deleteAdminBiometricDevice() ở trên: route này cũng
+    // ghi vào "users" nên phải tự cập nhật lại DB._versions.users ngay để tránh 409 giả ở lượt Lưu kế tiếp.
+    const data = await res.json().catch(() => ({}));
+    if (data.usersVersion) DB._versions.users = data.usersVersion;
     await renderAdminTotpStatus(username);
     logSystemAction('USER_MGM', 'REMOVE_TOTP', `Gỡ hộ xác thực 2 lớp (TOTP) của người dùng [${username}]`, 'SUCCESS', username);
   } catch (err) {
@@ -238,6 +249,12 @@ async function resetAdminLoginLockout(username) {
       return alert(`⛔ ${body.error || 'Không thể mở khoá đăng nhập'}`);
     }
     const data = await res.json();
+    // LỖI ĐÃ VÁ (11/2026, báo cáo người dùng "reset user báo 409 giả dù không ai đang sửa"): route này
+    // LUÔN ghi vào "users" (kể cả no-op trên tài khoản vốn không bị khoá) nên tự làm lệch
+    // DB._versions.users phía client nếu không cập nhật lại ngay — lượt Lưu KẾ TIẾP ở form Sửa Người
+    // Dùng (bất kỳ user nào, không chỉ người vừa bấm) sẽ mang If-Match CŨ và bị chặn nhầm "vừa bị thay
+    // đổi ở nơi khác". Gọi fetch() trần (không qua syncStorage()) nên phải tự cập nhật ở đây.
+    if (data.usersVersion) DB._versions.users = data.usersVersion;
     await renderAdminLoginLockoutStatus(username);
     logSystemAction('USER_MGM', 'RESET_LOGIN_LOCKOUT', `Mở khoá tạm đăng nhập sai cho người dùng [${username}]${data.wasLocked ? '' : ' (tài khoản vốn không bị khoá, chỉ đặt lại bộ đếm)'}`, 'SUCCESS', username);
   } catch (err) {
