@@ -1839,6 +1839,21 @@ môn hằng ngày mà là các yêu cầu hậu cần phát sinh không đều �
       siêu thị nào trong danh sách đã chọn đều được tính vào bước đó (nhưng
       vẫn cần **đủ cả** những GĐST đã khớp bấm Duyệt — đồng duyệt, giống hệt
       cơ chế "Ngành Hàng" ngay dưới).
+    - **[Nghiêm trọng] LỖI ĐÃ VÁ (11/2026, người dùng báo "cấu hình Phó Tổng
+      Giám Đốc mà Xem Trước báo chưa có người duyệt")**: dòng "Chức danh" chọn
+      1 **chức danh CẤP CÔNG TY** (VD "Phó Tổng Giám Đốc", "Tổng Giám Đốc" —
+      không ghép phòng ban, khác hẳn "Giám Đốc Siêu Thị" gắn liền 1 siêu thị
+      cụ thể) để "Siêu Thị Phụ Trách" = Mặc định trước đây **KHÔNG BAO GIỜ**
+      khớp được người duyệt — hệ thống nhầm đòi hỏi phòng ban thật của người
+      đó (VD "Ban Giám Đốc") phải trùng tên 1 siêu thị trên đề xuất, điều
+      KHÔNG THỂ xảy ra với 1 vị trí cấp công ty. Màn cấu hình vẫn hiện đúng
+      "👤 N người" (không lộ ra lỗi này), chỉ thấy khi bấm "Xem Trước Quy
+      Trình" hoặc gửi đề xuất thật (hồ sơ treo vĩnh viễn ở bước đó). Nay: chức
+      danh CẤP CÔNG TY (không thuộc danh mục "Siêu Thị") khớp **MỌI người
+      đang giữ đúng chức danh đó trên toàn công ty**, không đòi hỏi gì về
+      siêu thị/phòng ban — đúng tinh thần "Mặc định = không giới hạn". Chức
+      danh gắn với Siêu Thị (VD "Giám Đốc Siêu Thị") **giữ nguyên 100%** hành
+      vi khớp theo đúng siêu thị như trước, không bị ảnh hưởng.
   - **"Ngành Hàng" cho Phê Duyệt Giá Bán Buôn (đợt sau 10/2026)** — thêm 1
     chiều lọc người duyệt THỨ 2, **HOÀN TOÀN ĐỘC LẬP** với "Siêu Thị Phụ
     Trách" ở trên (cơ chế Siêu Thị/Phòng Ban giữ nguyên 100%, không đụng gì,

@@ -3623,16 +3623,25 @@ function ruleMatchesItPriceWholesaleNganhHangClient(rule, itemNganhHang) {
 // nhưng nhận 1 MẢNG siêu thị, trả về HỢP (UNION) người duyệt khớp BẤT KỲ siêu thị nào trong danh sách đã
 // chọn. KHÔNG sửa resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() dùng chung với
 // operationOrders.
+// LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở bản server
+// resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores() (lib/workflowEngine.js): chức danh CẤP
+// CÔNG TY (VD "Phó Tổng Giám Đốc", KHÔNG nằm trong DB.storeJobTitles, dept thật là tên phòng/ban HO chứ
+// không phải tên 1 siêu thị) để "Siêu Thị Phụ Trách = Mặc định" trước đây KHÔNG BAO GIỜ khớp được (đòi
+// hỏi sai dept của người đó phải trùng tên siêu thị). Nay: jobTitle KHÔNG thuộc DB.storeJobTitles -> khớp
+// mọi người giữ đúng chức danh đó, không đòi hỏi gì về siêu thị. Chức danh THUỘC DB.storeJobTitles (VD
+// "Giám Đốc Siêu Thị") giữ NGUYÊN 100% hành vi cũ — không đụng gì cơ chế GĐST đã vá ở v28.23.
 function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient(rule, stores) {
   const storeList = Array.isArray(stores) ? stores : (stores ? [stores] : []);
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   if (hasExplicitStores && !rule.stores.some(s => storeList.includes(s))) return [];
   const isActiveUsername = (username) => (DB.users || []).some(u => u && u.username === username && u.active !== false);
   if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
+  const isStoreFlatJobTitle = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
   const matchesDeptCondition = (u) => {
     if (rule.jobTitleDept) {
       return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
     }
+    if (!isStoreFlatJobTitle) return true;
     return hasExplicitStores || storeList.includes(u.dept) || (u.secondaryPositions || []).some(sp => storeList.includes(sp.dept));
   };
   return (DB.users || [])

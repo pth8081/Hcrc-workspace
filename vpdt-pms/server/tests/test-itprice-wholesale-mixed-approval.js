@@ -77,7 +77,12 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP' } },
     itPriceWholesaleStoreMixedApprovalRules: [
       { id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', stores: [] }
-    ]
+    ],
+    // storeJobTitles (11/2026, LỖI ĐÃ VÁ "Phó Tổng Giám Đốc không hiện người duyệt") — "Giám Đốc Siêu
+    // Thị" PHẢI nằm trong danh mục này để resolveWfConfig() biết đây là chức danh GẮN VỚI 1 siêu thị cụ
+    // thể (so khớp theo dept = tên siêu thị), KHÁC chức danh cấp công ty (khớp mọi người giữ chức danh,
+    // không phụ thuộc siêu thị) — xem resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores().
+    storeJobTitles: [{ label: 'Giám Đốc Siêu Thị' }]
   };
 
   test('LỖI ĐÃ VÁ (11/2026): người tạo đề xuất ở HO (dept KHÔNG phải tên siêu thị nào) + chọn "Siêu Thị A" ở storeScope -> GĐST ĐÚNG siêu thị đó (gd.a) vẫn duyệt được', () => {
@@ -215,14 +220,16 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
   const gdB = { username: 'gd.b', name: 'Giám Đốc Siêu Thị B', dept: 'Siêu Thị B', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
   const gdC = { username: 'gd.c', name: 'Giám Đốc Siêu Thị C', dept: 'Siêu Thị C', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
   const rules = [{ id: 1, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', stores: [] }];
+  const STORE_JOB_TITLE_LABELS = ['Giám Đốc Siêu Thị']; // xem chú thích storeJobTitles ở appData phần 1+2 phía trên
   const appData = {
     workflows: [WF_1STEP], users: [gdA, gdB, gdC],
     itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_1STEP' } },
-    itPriceWholesaleStoreMixedApprovalRules: rules
+    itPriceWholesaleStoreMixedApprovalRules: rules,
+    storeJobTitles: [{ label: 'Giám Đốc Siêu Thị' }]
   };
 
   test('resolveItPriceWholesaleStoreMixedApprovers(): đề xuất chọn CẢ Siêu Thị A lẫn B -> CẢ 2 GĐST (gd.a, gd.b) là approver, GĐST Siêu Thị C (gd.c) KHÔNG nằm trong đó', () => {
-    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', ['Siêu Thị A', 'Siêu Thị B'], [], [gdA, gdB, gdC], [1]);
+    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', ['Siêu Thị A', 'Siêu Thị B'], [], [gdA, gdB, gdC], [1], STORE_JOB_TITLE_LABELS);
     assert.deepStrictEqual(new Set(approvers[1]), new Set([gdA.username, gdB.username]));
   });
   test('Đề xuất chọn CẢ Siêu Thị A lẫn B: GĐST Siêu Thị C (gd.c, KHÔNG nằm trong danh sách đã chọn) bị chặn 403 — xác nhận KHÔNG khớp nhầm ngoài phạm vi', () => {
@@ -236,6 +243,42 @@ const WF_1STEP = { id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] };
     assert.strictEqual(transition.type, 'PARTIAL_APPROVE', 'còn thiếu gd.b nên bước chưa thể hoàn tất');
     const { transition: transition2 } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item: afterFirst, action: 'APPROVE', user: gdB, comment: '', appData });
     assert.strictEqual(transition2.type, 'COMPLETED', 'đủ cả 2 GĐST (A và B) mới hoàn tất bước');
+  });
+}
+
+// ===================== 9) LỖI ĐÃ VÁ (11/2026, báo cáo người dùng "cấu hình Phó Tổng Giám Đốc ở Bước 2
+// mà Xem Trước báo chưa có người duyệt"): chức danh CẤP CÔNG TY (KHÔNG thuộc danh mục storeJobTitles,
+// KHÔNG ghép jobTitleDept) để "Siêu Thị Phụ Trách" = Mặc định (stores: []) PHẢI khớp MỌI người giữ đúng
+// chức danh đó, KHÔNG đòi hỏi gì về dept/siêu thị (trước đây đòi hỏi dept của chính người đó phải trùng
+// tên 1 siêu thị trên đề xuất — PTGĐ/TGĐ có dept là tên phòng/ban HO nên KHÔNG BAO GIỜ khớp được). =====
+{
+  const ptgd = { username: 'ptgd.a', name: 'Phó Tổng Giám Đốc A', dept: 'Ban Giám Đốc', jobTitle: 'Phó Tổng Giám Đốc', perms: {}, active: true };
+  const gdA = { username: 'gd.a', name: 'Giám Đốc Siêu Thị A', dept: 'Siêu Thị A', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
+  const rules = [{ id: 1, tier: 'MARGIN_LT5', step: 2, mode: 'JOBTITLE', jobTitle: 'Phó Tổng Giám Đốc', jobTitleDept: null, stores: [] }];
+  const appData = {
+    workflows: [{ id: 'WF_2STEP', steps: [{ order: 1, name: 'Bước 1' }, { order: 2, name: 'Bước 2' }] }],
+    users: [ptgd, gdA],
+    itPriceTierWorkflows: { MARGIN_LT5: { workflowId: 'WF_2STEP' } },
+    itPriceWholesaleStoreMixedApprovalRules: rules,
+    // "Giám Đốc Siêu Thị" CÓ trong danh mục, "Phó Tổng Giám Đốc" THÌ KHÔNG — đúng thực tế (PTGĐ không
+    // phải chức danh Siêu Thị).
+    storeJobTitles: [{ label: 'Giám Đốc Siêu Thị' }]
+  };
+
+  test('resolveItPriceWholesaleStoreMixedApprovers(): chức danh HO phẳng ("Phó Tổng Giám Đốc", Siêu Thị Phụ Trách = Mặc định) khớp đúng người giữ chức danh dù dept là phòng ban HO, không phải tên siêu thị nào', () => {
+    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rules, 'MARGIN_LT5', ['Siêu Thị A'], [], [ptgd, gdA], [1, 2]);
+    assert.deepStrictEqual(approvers[2], [ptgd.username]);
+  });
+  test('Phó Tổng Giám Đốc duyệt được Bước 2 (chức danh HO phẳng, Mặc định) dù đề xuất chọn Siêu Thị A (không liên quan dept của PTGĐ)', () => {
+    const item = wholesaleItem({ currentStep: 2, history: [{ step: 1, action: 'APPROVE', username: 'ai.do', timestamp: new Date().toISOString() }] });
+    const { transition } = applyWorkflowAction({ moduleKey: 'itPriceApprovals', item, action: 'APPROVE', user: ptgd, comment: '', appData });
+    assert.strictEqual(transition.type, 'COMPLETED');
+  });
+  test('REGRESSION: "Giám Đốc Siêu Thị" (chức danh THUỘC storeJobTitles) vẫn giữ nguyên hành vi cũ — KHÔNG bị ảnh hưởng bởi vá chức danh HO phẳng', () => {
+    const rulesGdst = [{ id: 2, tier: 'MARGIN_LT5', step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', stores: [] }];
+    const gdB = { username: 'gd.b', name: 'Giám Đốc Siêu Thị B', dept: 'Siêu Thị B', jobTitle: 'Giám Đốc Siêu Thị', perms: {}, active: true };
+    const approvers = resolveItPriceWholesaleStoreMixedApprovers(rulesGdst, 'MARGIN_LT5', ['Siêu Thị A'], [], [gdA, gdB], [1], ['Giám Đốc Siêu Thị']);
+    assert.deepStrictEqual(approvers[1], [gdA.username], 'CHỈ GĐST đúng siêu thị (gd.a), KHÔNG kéo theo gd.b');
   });
 }
 

@@ -389,7 +389,26 @@ function ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang) {
 // sửa cả 2 bên. KHÔNG sửa resolveOperationOrderStoreMixedApprovalRuleUsernames() dùng chung với
 // operationOrders (vẫn đúng 1 siêu thị = dept, không đổi gì — người dùng chốt rõ ở đợt "Ngành Hàng":
 // "bước khoá theo siêu thị và phòng ban vẫn để nguyên").
-function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users) {
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng "cấu hình Phó Tổng Giám Đốc ở Bước 2 mà Xem Trước báo chưa có
+// người duyệt"): tham số MỚI `storeJobTitleLabels` (mảng nhãn chức danh thuộc danh mục "Siêu Thị" —
+// DB.storeJobTitles, VD "Giám Đốc Siêu Thị") — trước đây KHÔNG có cách phân biệt 2 loại "chức danh phẳng
+// không ghép phòng ban" (rule.jobTitleDept rỗng) hoàn toàn khác bản chất nhau:
+//   - Chức danh THUỘC 1 siêu thị (VD "Giám Đốc Siêu Thị" — dept THẬT của mỗi người giữ chức danh này
+//     CHÍNH LÀ tên 1 siêu thị) -> nhánh so khớp storeList.includes(u.dept) là ĐÚNG, dùng để chọn đúng
+//     GĐST của ĐÚNG (các) siêu thị trên đề xuất.
+//   - Chức danh CẤP CÔNG TY (VD "Phó Tổng Giám Đốc" — dept THẬT là tên 1 phòng/ban HO như "Ban Giám
+//     Đốc", KHÔNG BAO GIỜ là tên 1 siêu thị, vì vị trí này không thuộc riêng 1 siêu thị nào) -> áp cùng
+//     điều kiện storeList.includes(u.dept) khiến "Siêu Thị Phụ Trách = Mặc định" (ý định: áp dụng mọi
+//     siêu thị, không giới hạn) lại khiến dòng KHÔNG BAO GIỜ khớp được — PTGĐ/TGĐ không bao giờ là
+//     approver dù cấu hình đúng, hồ sơ treo vĩnh viễn ở bước đó.
+// Nay phân biệt rõ: jobTitle KHÔNG nằm trong storeJobTitleLabels (chức danh cấp công ty, không ghép
+// phòng ban) -> khớp MỌI người đang giữ đúng chức danh đó trên toàn công ty, KHÔNG đòi hỏi gì về
+// dept/siêu thị (gate storeList chỉ còn áp dụng cho rule.stores — xem đoạn `hasExplicitStores` phía
+// trên, vẫn giữ nguyên). jobTitle THUỘC storeJobTitleLabels (chức danh Siêu Thị) -> giữ NGUYÊN 100% hành
+// vi cũ (storeList.includes(u.dept)), KHÔNG đụng gì tới cơ chế GĐST đã vá ở v28.23. Mirror ĐÚNG bản
+// client resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient() (public/js/core.js), sửa 1
+// bên PHẢI sửa cả 2 bên.
+function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users, storeJobTitleLabels) {
   const storeList = Array.isArray(stores) ? stores : (stores ? [stores] : []);
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   // Dòng KHÔNG khai "Siêu Thị Phụ Trách" (mặc định) áp dụng cho MỌI siêu thị; dòng CÓ khai (ngoại lệ) chỉ
@@ -397,10 +416,12 @@ function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores
   if (hasExplicitStores && !rule.stores.some(s => storeList.includes(s))) return [];
   const isActiveUsername = (username) => (users || []).some(u => u && u.username === username && u.active !== false);
   if (rule.mode === 'PERSON') return (rule.username && isActiveUsername(rule.username)) ? [rule.username] : [];
+  const isStoreFlatJobTitle = (storeJobTitleLabels || []).includes(rule.jobTitle);
   const matchesDeptCondition = (u) => {
     if (rule.jobTitleDept) {
       return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
     }
+    if (!isStoreFlatJobTitle) return true; // chức danh cấp công ty — khớp mọi người giữ chức danh, không phụ thuộc siêu thị
     return hasExplicitStores || storeList.includes(u.dept) || (u.secondaryPositions || []).some(sp => storeList.includes(sp.dept));
   };
   return (users || [])
@@ -409,16 +430,16 @@ function resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores
     .filter(matchesDeptCondition)
     .map(u => u.username);
 }
-function resolveItPriceWholesaleMixedApprovalRuleUsernames(rule, stores, itemNganhHang, users) {
+function resolveItPriceWholesaleMixedApprovalRuleUsernames(rule, stores, itemNganhHang, users, storeJobTitleLabels) {
   if (!ruleMatchesItPriceWholesaleNganhHang(rule, itemNganhHang)) return [];
-  return resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users);
+  return resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores(rule, stores, users, storeJobTitleLabels);
 }
-function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, stores, itemNganhHang, users, stepOrders) {
+function resolveItPriceWholesaleStoreMixedApprovers(rules, priceTier, stores, itemNganhHang, users, stepOrders, storeJobTitleLabels) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (rules || []).filter(r => r.tier === priceTier && Number(r.step) === Number(stepOrder)).forEach(r => {
-      resolveItPriceWholesaleMixedApprovalRuleUsernames(r, stores, itemNganhHang, users).forEach(u => usernames.add(u));
+      resolveItPriceWholesaleMixedApprovalRuleUsernames(r, stores, itemNganhHang, users, storeJobTitleLabels).forEach(u => usernames.add(u));
     });
     approvers[stepOrder] = [...usernames];
   });
@@ -651,7 +672,9 @@ const MODULE_CONFIGS = {
           resolveItPriceTierWorkflowConfig(appData.itPriceTierWorkflows, item.priceTier), appData
         );
         const stepOrders = resolved.steps.map(s => s.order);
-        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.storeScope?.stores, item.nganhHang, appData.users, stepOrders);
+        // storeJobTitleLabels (11/2026) — xem LỖI ĐÃ VÁ tại resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores().
+        const storeJobTitleLabels = (appData.storeJobTitles || []).map(j => j.label);
+        const approvers = resolveItPriceWholesaleStoreMixedApprovers(appData.itPriceWholesaleStoreMixedApprovalRules, item.priceTier, item.storeScope?.stores, item.nganhHang, appData.users, stepOrders, storeJobTitleLabels);
         return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
       }
       return appendExtraApprovalLayers(flatWorkflowConfigToSteps(

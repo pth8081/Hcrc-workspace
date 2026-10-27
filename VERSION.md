@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**28.25** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.26 (2026-11): [Nghiêm trọng] QT Giá Bán Buôn — chức danh cấp công ty (Phó TGĐ, TGĐ...) không bao giờ khớp được người duyệt
+
+Người dùng báo lỗi (kèm ảnh chụp): cấu hình Bước 2 là "Chức danh" = "Phó Tổng Giám Đốc" (chức danh cấp
+công ty, không ghép phòng ban — badge "🏢 HO"), "Siêu Thị Phụ Trách" để Mặc định — nhưng "Xem Trước Quy
+Trình Phê Duyệt" báo Bước 2 "(chưa có người duyệt)". Xác nhận đây là lỗi THẬT ở ngay đường duyệt thật
+(không chỉ bản xem trước) — hồ sơ gửi thật sẽ treo vĩnh viễn ở bước đó (chỉ admin bypass được).
+
+**Nguyên nhân**: cơ chế so khớp "Chức danh" không ghép phòng ban (`jobTitleDept` rỗng) dùng CHUNG 1 nhánh
+code cho 2 loại chức danh có bản chất khác hẳn nhau: (1) chức danh GẮN VỚI 1 siêu thị cụ thể (VD "Giám
+Đốc Siêu Thị" — dept thật của người giữ chức danh CHÍNH LÀ tên 1 siêu thị, nhánh so khớp
+`storeList.includes(u.dept)` là đúng); (2) chức danh CẤP CÔNG TY (VD "Phó Tổng Giám Đốc", "Tổng Giám
+Đốc" — dept thật là tên 1 phòng/ban HO như "Ban Giám Đốc", KHÔNG BAO GIỜ là tên 1 siêu thị, vì vị trí
+này không thuộc riêng 1 siêu thị nào). Khi "Siêu Thị Phụ Trách" để Mặc định (ý định: áp dụng mọi siêu
+thị, không giới hạn), code lại bắt dept thật của approver phải trùng tên 1 siêu thị trên đề xuất —
+đúng cho loại (1), nhưng loại (2) KHÔNG BAO GIỜ khớp được. Màn cấu hình vẫn hiện đúng "👤 1 người" (hàm
+đếm không mô phỏng điều kiện này), khiến admin tưởng cấu hình đã đúng.
+
+- `lib/workflowEngine.js`: `resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores()` nhận thêm
+  tham số `storeJobTitleLabels` (mảng nhãn chức danh thuộc danh mục "Siêu Thị" —
+  `appData.storeJobTitles`). Chức danh KHÔNG nằm trong danh mục này (chức danh cấp công ty) nay khớp
+  MỌI người đang giữ đúng chức danh đó trên toàn công ty, không đòi hỏi gì về dept/siêu thị. Chức danh
+  THUỘC danh mục Siêu Thị giữ NGUYÊN 100% hành vi cũ (không đụng gì cơ chế GĐST đã vá ở v28.23). Truyền
+  qua `resolveItPriceWholesaleMixedApprovalRuleUsernames()`/`resolveItPriceWholesaleStoreMixedApprovers()`;
+  điểm gọi duy nhất (`MODULE_CONFIGS.itPriceApprovals.resolveWfConfig`) tự tính từ `appData.storeJobTitles`.
+- `public/js/core.js`: mirror đúng bản server —
+  `resolveItPriceWholesaleMixedApprovalRuleUsernamesForStoresClient()` đọc trực tiếp `DB.storeJobTitles`
+  (không cần tham số riêng, theo đúng quy ước client đọc thẳng `DB.*`).
+- Test `tests/test-itprice-wholesale-mixed-approval.js`: cập nhật fixture thêm `storeJobTitles:
+  [{label:'Giám Đốc Siêu Thị'}]` vào các `appData` dùng JOBTITLE mode (để phân biệt đúng với chức danh
+  HO), thêm 3 kịch bản MỚI xác nhận "Phó Tổng Giám Đốc" (chức danh HO phẳng) khớp đúng dù dept là phòng
+  ban HO + xác nhận "Giám Đốc Siêu Thị" (chức danh Siêu Thị) không bị ảnh hưởng. 20/20 kịch bản PASS.
+  Chạy lại toàn bộ test Phê Duyệt Giá/Vận Hành liên quan (itprice-approval-and-emergency, itprice-download,
+  itprice-file-format-reject, itprice-form-split, itprice-mastertlist-channel-split, itprice-permtree-move,
+  itprice-scope-dates, itprice-supplement-invalidate, operation-order-store-approver-scope,
+  vanhanh-itprice-chitiet-csp, workflow-position-approvers, csp-full-audit) — toàn bộ PASS, không
+  regression (xác nhận lại `test-preview-workflow-buttons.js` 3/16 fail là lỗi CŨ có sẵn từ trước qua
+  `git stash`, không liên quan đợt vá này).
 
 ## v28.25 (2026-11): Checklist/VSATTP — ảnh minh chứng lỗi mở thẳng camera chụp tại chỗ
 
