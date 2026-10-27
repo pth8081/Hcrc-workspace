@@ -119,7 +119,11 @@ function freshOrder(overrides) {
     operationOrderHOTierWorkflows: {},
     operationOrderStoreMixedApprovalRules: [
       { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc', stores: [] }
-    ]
+    ],
+    // storeJobTitles (11/2026, LỖI ĐÃ VÁ "chức danh cấp công ty không khớp được người duyệt") — "Giám
+    // Đốc" PHẢI nằm trong danh mục này để resolveOperationOrderWorkflow() biết đây là chức danh GẮN VỚI
+    // 1 siêu thị cụ thể (so khớp theo dept = tên siêu thị), xem resolveOperationOrderStoreMixedApprovalRuleUsernames().
+    storeJobTitles: [{ label: 'Giám Đốc' }]
   };
   test('JOBTITLE mặc định + secondaryPositions: gd.vung (dept chính = Siêu Thị A, kiêm nhiệm Siêu Thị B) duyệt được CẢ 2 siêu thị', () => {
     const itemA = freshOrder({ dept: 'Siêu Thị A' });
@@ -150,7 +154,8 @@ function freshOrder(overrides) {
     operationOrderHOTierWorkflows: {},
     operationOrderStoreMixedApprovalRules: [
       { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc', stores: [] }
-    ]
+    ],
+    storeJobTitles: [{ label: 'Giám Đốc' }]
   };
 
   test('JOBTITLE mặc định "Giám Đốc": nv siêu thị A lập đơn -> gd.a2 mặc định được duyệt, gd.b2/gd.c2 bị chặn dù cùng chức danh', () => {
@@ -192,7 +197,8 @@ function freshOrder(overrides) {
       { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc siêu thị', stores: [] },
       // Ngoại lệ: RIÊNG "Siêu Thị Q3" thêm Phó Giám Đốc siêu thị cũng được duyệt (KHÔNG thay thế dòng trên).
       { id: 2, step: 1, mode: 'JOBTITLE', jobTitle: 'Phó Giám Đốc siêu thị', stores: ['Siêu Thị Q3'] }
-    ]
+    ],
+    storeJobTitles: [{ label: 'Giám Đốc siêu thị' }, { label: 'Phó Giám Đốc siêu thị' }]
   };
   test('Phương án B: đơn Siêu Thị Q3 -> CẢ gd.st (mặc định) LẪN pgd.st (ngoại lệ) đều duyệt được', () => {
     const resolved = resolveOperationOrderWorkflow(freshOrder({ dept: 'Siêu Thị Q3' }), appData);

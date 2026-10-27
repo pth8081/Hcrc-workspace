@@ -14,6 +14,11 @@
 // `jobTitleDept` sửa cả 2: khi có giá trị, so CHÍNH XÁC user.dept === jobTitleDept (hoặc secondaryPositions
 // cùng cặp jobTitle+dept), HOÀN TOÀN ĐỘC LẬP với storeDept/`stores`.
 //
+// LỖI ĐÃ VÁ TIẾP (11/2026, báo cáo người dùng — xem mục 4a bên dưới): nhánh "stores RỖNG" ở trên vẫn còn
+// lỗi với chức danh KHÔNG ghép `jobTitleDept` VÀ không thuộc danh mục storeJobTitles — tham số
+// `storeJobTitleLabels` mới phân biệt rõ chức danh cấp công ty (khớp mọi người) với chức danh Siêu Thị
+// (vẫn so dept = tên siêu thị như cũ).
+//
 // Xem lib/workflowEngine.js::resolveOperationOrderStoreMixedApprovalRuleUsernames() (matchesDeptCondition())
 // cho cơ chế đầy đủ. Cùng hạ tầng/kiểu test với tests/test-operation-order-store-approver-scope.js.
 //
@@ -139,8 +144,14 @@ function freshOrder(overrides) {
 
 // ===================== 4) Tương thích ngược: dòng KHÔNG có jobTitleDept giữ nguyên 100% hành vi cũ =====================
 {
-  // 4a) stores rỗng ("mặc định") KHÔNG jobTitleDept, chức danh HO: hành vi CŨ (lỗi gốc, cố ý giữ nguyên để
-  //     không đổi dữ liệu admin đã cấu hình trước đợt này — admin PHẢI tự thêm jobTitleDept cho dòng cần sửa).
+  // 4a) LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp "Xem Trước Quy Trình..." nhiều bước "chưa có
+  //     người duyệt" ở Đặt Hàng Siêu Thị): dòng mặc định (stores rỗng) KHÔNG jobTitleDept + chức danh HO
+  //     KHÔNG thuộc danh mục storeJobTitles (chức danh cấp công ty, VD "Trưởng phòng" HO ở đây) trước đây
+  //     LUÔN trả 0 approver (coi là "lỗi gốc giữ nguyên có chủ đích", admin phải tự gán jobTitleDept) — nay
+  //     ĐÃ SỬA: khớp MỌI người giữ đúng chức danh đó, không đòi hỏi gì về dept/siêu thị (xem
+  //     resolveOperationOrderStoreMixedApprovalRuleUsernames(), tham số storeJobTitleLabels). Chức danh
+  //     THUỘC danh mục storeJobTitles (VD "Giám Đốc Siêu Thị") vẫn giữ nguyên 0 approver ở đúng kịch bản
+  //     này (dept không khớp storeDept nào) — xác nhận KHÔNG đụng gì cơ chế GĐST.
   {
     const tpCntt = { username: 'tp.cntt3', name: 'Trưởng Phòng CNTT', jobTitle: 'Trưởng phòng', dept: 'Phòng CNTT', perms: {} };
     const appData = {
@@ -150,9 +161,29 @@ function freshOrder(overrides) {
       operationOrderHOTierWorkflows: {},
       operationOrderStoreMixedApprovalRules: [
         { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Trưởng phòng', stores: [] } // KHÔNG có jobTitleDept
-      ]
+      ],
+      storeJobTitles: [] // "Trưởng phòng" KHÔNG thuộc danh mục Siêu Thị -> chức danh cấp công ty
     };
-    test('Tương thích ngược: dòng mặc định KHÔNG jobTitleDept + chức danh HO -> 0 approver (hành vi lỗi gốc GIỮ NGUYÊN, không tự sửa ngầm)', () => {
+    test('LỖI ĐÃ VÁ: dòng mặc định KHÔNG jobTitleDept + chức danh HO (không thuộc storeJobTitles) -> khớp đúng người giữ chức danh, không còn 0 approver', () => {
+      const resolved = resolveOperationOrderWorkflow(freshOrder({ dept: 'Siêu Thị A' }), appData);
+      assert.deepStrictEqual(resolved.approvers[1], [tpCntt.username]);
+    });
+  }
+  // 4a-2) REGRESSION: chức danh THUỘC danh mục storeJobTitles vẫn giữ nguyên 0 approver khi dept không
+  //       khớp storeDept nào (hành vi GĐST cũ KHÔNG bị ảnh hưởng bởi bản vá chức danh cấp công ty).
+  {
+    const gdSt = { username: 'gd.st4a2', name: 'Giám Đốc Siêu Thị X', jobTitle: 'Giám Đốc Siêu Thị', dept: 'Siêu Thị X', perms: {} };
+    const appData = {
+      workflows: [{ id: 'WF_1STEP', steps: [{ order: 1, name: 'Duyệt' }] }],
+      users: [gdSt],
+      operationOrderStoreTierWorkflows: { LT10M: { workflowId: 'WF_1STEP' } },
+      operationOrderHOTierWorkflows: {},
+      operationOrderStoreMixedApprovalRules: [
+        { id: 1, step: 1, mode: 'JOBTITLE', jobTitle: 'Giám Đốc Siêu Thị', stores: [] }
+      ],
+      storeJobTitles: [{ label: 'Giám Đốc Siêu Thị' }]
+    };
+    test('REGRESSION: chức danh THUỘC storeJobTitles ("Giám Đốc Siêu Thị") vẫn 0 approver khi dept không khớp storeDept đơn (hành vi GĐST giữ nguyên)', () => {
       const resolved = resolveOperationOrderWorkflow(freshOrder({ dept: 'Siêu Thị A' }), appData);
       assert.deepStrictEqual(resolved.approvers[1], []);
     });

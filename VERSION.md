@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**28.26** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.27** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.27 (2026-11): [Nghiêm trọng] Đặt Hàng Siêu Thị — cùng lỗi chức danh cấp công ty không khớp được người duyệt (như QT Giá Bán Buôn v28.26)
+
+Người dùng báo tiếp (kèm ảnh chụp "Xem Trước Quy Trình..." nhiều bước "chưa có người duyệt" ở màn "🏬 Quy
+Trình Đặt Hàng Siêu Thị") — đúng dự đoán: CÙNG LỚP LỖI vừa vá ở QT Giá Bán Buôn (v28.26), xảy ra ở
+`resolveOperationOrderStoreMixedApprovalRuleUsernames()` (hàm RIÊNG, không dùng chung với itPriceApprovals
+dù cùng khuôn thiết kế). Khi chọn "Chức danh" cấp công ty (VD "Phó Tổng Giám Đốc") không ghép phòng ban
+với "Siêu Thị Phụ Trách" để Mặc định, code đòi hỏi dept thật của người đó phải trùng tên 1 siêu thị trên
+đơn — không thể xảy ra với vị trí cấp công ty, nên 0 người duyệt, đơn treo vĩnh viễn. Đã xác nhận qua
+rà soát: **"Đặt Hàng HO" KHÔNG bị lỗi này** — dùng cơ chế hoàn toàn khác (`resolvePositionApprovers()`,
+`lib/positionApprovers.js`) vốn đã khớp đúng chỉ theo chức danh từ đầu, không có khái niệm "siêu thị" để
+so sai.
+
+- `lib/workflowEngine.js`: `resolveOperationOrderStoreMixedApprovalRuleUsernames()` nhận thêm tham số
+  `storeJobTitleLabels` (mảng nhãn chức danh thuộc danh mục "Siêu Thị" — `appData.storeJobTitles`), cùng
+  cách sửa đã áp dụng cho `resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores()` ở v28.26: chức
+  danh KHÔNG thuộc danh mục này (cấp công ty) khớp mọi người giữ chức danh, không đòi hỏi gì về dept/siêu
+  thị; chức danh THUỘC danh mục giữ nguyên 100% hành vi cũ. Truyền qua
+  `resolveOperationOrderStoreMixedApprovers()`; điểm gọi duy nhất (`resolveOperationOrderWorkflow()`) tự
+  tính từ `appData.storeJobTitles`.
+- `public/js/core.js`: mirror đúng bản server —
+  `resolveOperationOrderStoreMixedApprovalRuleUsernamesClient()` đọc trực tiếp `DB.storeJobTitles`.
+- Test: cập nhật fixture `tests/test-operation-order-store-approver-scope.js` (thêm `storeJobTitles` cho
+  các `appData` dùng JOBTITLE mode với chức danh Siêu Thị) + `tests/test-mixed-approval-jobtitle-dept.js`
+  (mục 4a — đổi kỳ vọng từ "0 approver" lỗi gốc cố ý giữ nguyên sang khớp đúng người giữ chức danh, thêm
+  kịch bản REGRESSION xác nhận chức danh Siêu Thị không bị ảnh hưởng). Chạy lại toàn bộ test liên quan
+  (operation-order-store-approver-scope 15/15, operationorder-store-tier-mixed-approval, mixed-approval-
+  jobtitle-dept 10/10, mixed-approval-jobtitle-mix, mixed-approval-inactive-user, mixed-approval-edit-ui,
+  mixed-approval-delete-warning-ui, mixed-approval-excel, operation-order-mixed-approver-preload,
+  operation-order-noapprover-warning, operation-order-items-and-dates, operation-order-po-fields,
+  operation-order-location-tiers, operation-orders-dept-scope, operation-order-approval-slip,
+  operation-order-receiving, csp-full-audit) — toàn bộ PASS, không regression.
 
 ## v28.26 (2026-11): [Nghiêm trọng] QT Giá Bán Buôn — chức danh cấp công ty (Phó TGĐ, TGĐ...) không bao giờ khớp được người duyệt
 

@@ -3561,6 +3561,12 @@ function operationOrderTierLabel(locationType, tier) {
 // duyệt của đơn "Đặt Hàng Tại Siêu Thị" giờ tra HOÀN TOÀN từ DB.operationOrderStoreMixedApprovalRules,
 // KHÔNG còn đọc approvers/approverMode/approversByPosition của tierMap nữa (tierMap chỉ còn dùng lấy
 // workflowId để biết SỐ BƯỚC, xem resolveOperationOrderWorkflowConfigForItemClient() bên dưới).
+// LỖI ĐÃ VÁ (11/2026) — xem chú thích đầy đủ ở bản server
+// resolveOperationOrderStoreMixedApprovalRuleUsernames() (lib/workflowEngine.js): chức danh CẤP CÔNG TY
+// (VD "Phó Tổng Giám Đốc", KHÔNG nằm trong DB.storeJobTitles, dept thật là tên phòng/ban HO chứ không
+// phải tên 1 siêu thị) để "Siêu Thị Phụ Trách" = Mặc định trước đây KHÔNG BAO GIỜ khớp được. Nay: jobTitle
+// KHÔNG thuộc DB.storeJobTitles -> khớp mọi người giữ đúng chức danh đó. Chức danh THUỘC DB.storeJobTitles
+// giữ NGUYÊN 100% hành vi cũ — không đụng gì cơ chế GĐST đã có từ trước.
 function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeDept) {
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   if (hasExplicitStores && !rule.stores.includes(storeDept)) return [];
@@ -3572,10 +3578,12 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernamesClient(rule, storeD
   // `jobTitleDept` (10/2026, mirror ĐÚNG bản vá server resolveOperationOrderStoreMixedApprovalRuleUsernames()
   // — lib/workflowEngine.js, xem chú thích đầy đủ ở đó): dòng gán cố định 1 cặp (chức danh, phòng ban) từ
   // "Vị Trí Tham Gia Quy Trình" khớp ĐÚNG phòng ban đó, độc lập hoàn toàn với storeDept của đơn.
+  const isStoreFlatJobTitle = (DB.storeJobTitles || []).some(j => j.label === rule.jobTitle);
   const matchesDeptCondition = (u) => {
     if (rule.jobTitleDept) {
       return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
     }
+    if (!isStoreFlatJobTitle) return true;
     return hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept);
   };
   return (DB.users || [])

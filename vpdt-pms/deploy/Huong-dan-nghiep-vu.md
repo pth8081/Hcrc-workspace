@@ -2433,6 +2433,21 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     Thị, nếu siêu thị cần gán chưa có trong danh mục, bấm nút **"+"** ngay
     cạnh ô Siêu Thị để thêm nhanh vào danh mục mà không cần rời form (Hệ
     Thống → Quản Lý Người Dùng → Danh Mục cũng thêm được).
+  - **[Nghiêm trọng] LỖI ĐÃ VÁ (11/2026, người dùng báo kèm ảnh chụp "Xem Trước
+    Quy Trình..." nhiều bước "chưa có người duyệt")**: đúng kịch bản "Phó TGĐ ở
+    HO duyệt" nêu ở ví dụ trên — dòng "Chức danh" chọn 1 chức danh **CẤP CÔNG
+    TY** (VD "Phó Tổng Giám Đốc", "Tổng Giám Đốc" — không ghép phòng ban) để
+    "Siêu Thị Phụ Trách" = Mặc định trước đây **KHÔNG BAO GIỜ** khớp được
+    người duyệt — hệ thống nhầm đòi hỏi phòng ban thật của người đó (VD "Ban
+    Giám Đốc") phải trùng tên 1 siêu thị trên đơn, điều KHÔNG THỂ xảy ra với 1
+    vị trí cấp công ty. Nay: chức danh CẤP CÔNG TY (không thuộc danh mục
+    "Chức Danh Siêu Thị") khớp **MỌI người đang giữ đúng chức danh đó trên
+    toàn công ty**, không đòi hỏi gì về siêu thị/phòng ban — đúng tinh thần
+    "Mặc định = không giới hạn". Chức danh gắn với Siêu Thị (VD "Giám Đốc Siêu
+    Thị") **giữ nguyên 100%** hành vi khớp theo đúng siêu thị như trước, không
+    bị ảnh hưởng. **Đặt Hàng Tại HO không bị lỗi này** — cơ chế duyệt theo
+    chức danh ở đó vốn đã khớp đúng từ đầu, không có khái niệm "siêu thị" để
+    so sai.
   - **Chọn kèm Phòng Ban cho chức danh HO — ghép đúng người (10/2026, theo yêu
     cầu người dùng "trưởng phòng HO thì có nhiều Tp lắm, tôi muốn ghép đúng
     người")**: khi chọn **Kiểu = "Chức danh"** và gõ 1 chức danh **HO**, ô gợi

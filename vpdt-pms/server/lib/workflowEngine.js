@@ -288,7 +288,19 @@ function computeOperationOrderTier(locationType, amount) {
 //   cho các module KHÁC — Văn Phòng Phẩm/Thanh Toán/Xe/Giá IT/Hợp Đồng, xem yêu cầu người dùng nguyên văn
 //   "sẽ ko lọc ở mục 17 quyền đặc biết trong admin").
 // HO KHÔNG áp dụng cơ chế này (giữ nguyên như cũ — thuần theo mức giá trị, không có khái niệm "siêu thị").
-function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, users) {
+// LỖI ĐÃ VÁ (11/2026, báo cáo người dùng kèm ảnh chụp "Xem Trước Quy Trình..." nhiều bước "chưa có người
+// duyệt" — CÙNG LỚP LỖI đã vá ở itPriceApprovals WHOLESALE, xem chú thích đầy đủ tại
+// resolveItPriceWholesaleMixedApprovalRuleUsernamesForStores()): tham số MỚI `storeJobTitleLabels` (mảng
+// nhãn chức danh thuộc danh mục "Siêu Thị" — DB.storeJobTitles) — trước đây KHÔNG có cách phân biệt chức
+// danh GẮN VỚI 1 siêu thị cụ thể (VD "Giám Đốc Siêu Thị" — dept THẬT là tên 1 siêu thị, nhánh
+// `u.dept === storeDept` đúng) với chức danh CẤP CÔNG TY (VD "Phó Tổng Giám Đốc" — dept THẬT là tên 1
+// phòng/ban HO, KHÔNG BAO GIỜ bằng storeDept của đơn) khi để "Siêu Thị Phụ Trách" = Mặc định — khiến chức
+// danh cấp công ty KHÔNG BAO GIỜ khớp được người duyệt, đơn treo vĩnh viễn. Nay: jobTitle KHÔNG nằm trong
+// storeJobTitleLabels -> khớp MỌI người giữ đúng chức danh đó, không đòi hỏi gì về dept/siêu thị. jobTitle
+// THUỘC storeJobTitleLabels giữ NGUYÊN 100% hành vi cũ. Mirror ĐÚNG bản client
+// resolveOperationOrderStoreMixedApprovalRuleUsernamesClient() (public/js/core.js), sửa 1 bên PHẢI sửa cả
+// 2 bên.
+function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, users, storeJobTitleLabels) {
   const hasExplicitStores = !!(rule.stores && rule.stores.length);
   // Dòng KHÔNG khai "Siêu Thị Phụ Trách" (mặc định) áp dụng cho MỌI siêu thị; dòng CÓ khai (ngoại lệ) chỉ
   // áp dụng đúng những siêu thị liệt kê. Cả 2 loại có thể cùng khớp 1 (bước, siêu thị) — không loại trừ
@@ -319,10 +331,12 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
   // mixedApprovalJobTitlePairs() ở module-workflow.js), khớp ĐÚNG người giữ chức danh đó ở ĐÚNG phòng ban
   // đã gán — HOÀN TOÀN ĐỘC LẬP với storeDept của đơn (phòng ban HO không liên quan gì tới siêu thị lập
   // đơn). Dòng cũ không có `jobTitleDept` (undefined) giữ NGUYÊN 2 nhánh hành vi gốc ở trên, không đổi gì.
+  const isStoreFlatJobTitle = (storeJobTitleLabels || []).includes(rule.jobTitle);
   const matchesDeptCondition = (u) => {
     if (rule.jobTitleDept) {
       return u.dept === rule.jobTitleDept || (u.secondaryPositions || []).some(sp => sp.jobTitle === rule.jobTitle && sp.dept === rule.jobTitleDept);
     }
+    if (!isStoreFlatJobTitle) return true; // chức danh cấp công ty — khớp mọi người giữ chức danh, không phụ thuộc siêu thị
     return hasExplicitStores || u.dept === storeDept || (u.secondaryPositions || []).some(sp => sp.dept === storeDept);
   };
   return (users || [])
@@ -337,12 +351,12 @@ function resolveOperationOrderStoreMixedApprovalRuleUsernames(rule, storeDept, u
 // trước đợt này) vẫn phải tiếp tục áp dụng cho CẢ 3 mức như hành vi gốc — không có migrate dữ liệu, chỉ
 // coi `!r.tier` là "mọi mức" (wildcard), KHÔNG BAO GIỜ đổi hành vi của dòng đã cấu hình từ trước. Dòng MỚI
 // thêm qua màn admin (module-workflow.js) luôn được gán `tier` tường minh theo đúng Mức đang xem.
-function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepOrders, tier) {
+function resolveOperationOrderStoreMixedApprovers(rules, storeDept, users, stepOrders, tier, storeJobTitleLabels) {
   const approvers = {};
   (stepOrders || []).forEach(stepOrder => {
     const usernames = new Set();
     (rules || []).filter(r => (!r.tier || r.tier === tier) && Number(r.step) === Number(stepOrder)).forEach(r => {
-      resolveOperationOrderStoreMixedApprovalRuleUsernames(r, storeDept, users).forEach(u => usernames.add(u));
+      resolveOperationOrderStoreMixedApprovalRuleUsernames(r, storeDept, users, storeJobTitleLabels).forEach(u => usernames.add(u));
     });
     approvers[stepOrder] = [...usernames];
   });
@@ -452,7 +466,9 @@ function resolveOperationOrderWorkflow(item, appData) {
   const resolved = flatWorkflowConfigToSteps(tierMap?.[tier] || null, appData);
   if (locationType === 'STORE') {
     const stepOrders = resolved.steps.map(s => s.order);
-    const approvers = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, item.dept, appData.users, stepOrders, tier);
+    // storeJobTitleLabels (11/2026) — xem LỖI ĐÃ VÁ tại resolveOperationOrderStoreMixedApprovalRuleUsernames().
+    const storeJobTitleLabels = (appData.storeJobTitles || []).map(j => j.label);
+    const approvers = resolveOperationOrderStoreMixedApprovers(appData.operationOrderStoreMixedApprovalRules, item.dept, appData.users, stepOrders, tier, storeJobTitleLabels);
     return appendExtraApprovalLayers({ steps: resolved.steps, approvers }, item);
   }
   return appendExtraApprovalLayers(resolved, item);
