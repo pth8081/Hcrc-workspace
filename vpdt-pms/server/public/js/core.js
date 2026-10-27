@@ -12874,6 +12874,19 @@ function cspCoerceArg(raw) {
   if (/^'(.*)'$/.test(raw)) return raw.slice(1, -1);
   return /^-?\d+$/.test(raw) ? Number(raw) : raw;
 }
+// cspArgLiteral(value) — CHIỀU NGƯỢC LẠI của cspCoerceArg() ngay trên: mã hoá 1 giá trị JS thành chuỗi
+// để đặt vào thuộc tính data-argN sao cho đọc lại ĐÚNG KIỂU GỐC. number giữ nguyên (cspCoerceArg tự ép
+// lại đúng Number). string LUÔN bọc nháy đơn (kể cả khi nội dung toàn chữ số, VD mã danh mục "1001") để
+// cspCoerceArg KHÔNG ép nhầm thành Number — thiếu bước này là NGUYÊN NHÂN THẬT của lỗi "chọn Ngành Hàng
+// Phụ Trách xong vẫn báo đỏ 'đã xoá khỏi danh mục'" (11/2026, người dùng báo cáo): renderMultiSelectDropdown()
+// trước đây đặt thẳng `data-arg1="${escapeHtml(it.value)}"` không bọc nháy — mọi mã ngành hàng toàn chữ
+// số (VD "1001") bị cspCoerceArg() ép thành Number 1001 khi người dùng CHỌN, lưu vào rule.nganhHang
+// dưới dạng number, trong khi DB.nganhHangCatalog[].code luôn là STRING (gõ tay từ ô nhập liệu) — so
+// sánh `x.code === code` (number vs string) luôn SAI dù mã vẫn tồn tại, hiện nhầm "đã xoá khỏi danh
+// mục". Cùng lớp lỗi đã vá cho danh mục Siêu Thị đặt tên toàn chữ số (xem chú thích cspCoerceArg() trên).
+function cspArgLiteral(value) {
+  return typeof value === 'number' ? value : `'${escapeHtml(String(value))}'`;
+}
 function cspReadArgSlot(el, i, evt) {
   if (el.dataset.argValue !== undefined && Number(el.dataset.argValue) === i) return el.value;
   if (el.dataset.argEl !== undefined && Number(el.dataset.argEl) === i) return el;
@@ -14846,7 +14859,7 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
       return `
         <span class="inline-flex items-center gap-1 ${chipClass} rounded-full px-2 py-0.5 text-[11px]">
           ${escapeHtml(lbl)}
-          <button type="button" data-op="gmsRemove" data-arg0="${escapeHtml(containerId)}" data-arg1="${escapeHtml(value)}" class="font-bold hover:opacity-70">×</button>
+          <button type="button" data-op="gmsRemove" data-arg0="${escapeHtml(containerId)}" data-arg1="${cspArgLiteral(value)}" class="font-bold hover:opacity-70">×</button>
         </span>
       `;
     }).join('') || `<span class="text-gray-400 italic text-[11px]">${escapeHtml(emptyText)}</span>`;
@@ -14867,7 +14880,7 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
     const q = stripVnDiacritics((query || '').trim().toLowerCase());
     const matches = normItems.filter(it => !selected.has(it.value) && (!q || stripVnDiacritics(it.label.toLowerCase()).includes(q))).slice(0, 30);
     ddEl.innerHTML = matches.length
-      ? matches.map(it => `<div class="px-2 py-1 text-[11px] ${hoverClass} cursor-pointer" data-op="gmsAdd" data-arg0="${escapeHtml(containerId)}" data-arg1="${escapeHtml(it.value)}">${escapeHtml(it.label)}</div>`).join('')
+      ? matches.map(it => `<div class="px-2 py-1 text-[11px] ${hoverClass} cursor-pointer" data-op="gmsAdd" data-arg0="${escapeHtml(containerId)}" data-arg1="${cspArgLiteral(it.value)}">${escapeHtml(it.label)}</div>`).join('')
       : '<div class="px-2 py-1 text-[11px] text-gray-400 italic">Không tìm thấy.</div>';
     ddEl.classList.remove('hidden');
   }

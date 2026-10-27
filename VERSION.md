@@ -1,9 +1,48 @@
 # Phiên bản hiện tại
 
-**28.29** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.30** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.30 (2026-11): [Nghiêm trọng] Chọn Ngành Hàng/Siêu Thị toàn chữ số trên form Vận Hành bị ép sai kiểu, không bao giờ khớp được người duyệt
+
+Người dùng kiên trì báo đi báo lại "chọn đúng Fresh/UltraFresh cho Đại nhưng Xem Trước vẫn không hiện
+Đại" qua nhiều vòng sửa cấu hình — cuối cùng lần ra ĐÂY MỚI LÀ LỖI CODE THẬT (không phải cấu hình như
+các lần trước): hệ thống đóng gói mọi `data-argN` thành chuỗi HTML rồi tự "đoán kiểu" lúc đọc lại
+(`cspCoerceArg()`, core.js — chuỗi toàn chữ số tự ép thành `Number`, trừ khi được bọc nháy đơn
+`'...'`). `renderMultiSelectDropdown()` (ô tìm-kiếm-gõ-chọn-nhiều dùng chung cho "Ngành Hàng Phụ
+Trách"/"Siêu Thị Phụ Trách"/"Ngành Hàng Áp Dụng"...) trước đây KHÔNG bọc nháy — mọi mã toàn chữ số
+(VD "1001"/"1002", đúng kiểu mã Ngành Hàng hay dùng) khi CHỌN qua ô cấu hình người duyệt (đi qua
+`cspDispatchOp()` dùng chung) bị ép thành SỐ, trong khi `DB.nganhHangCatalog[].code` luôn là CHUỖI (gõ
+tay từ ô nhập liệu) — so `===` số với chuỗi luôn SAI dù mã vẫn tồn tại, hiện nhầm "đã xoá khỏi danh
+mục" và không bao giờ khớp được người duyệt.
+
+- `public/js/core.js`: thêm `cspArgLiteral(value)` (chiều ngược của `cspCoerceArg()`) — number giữ
+  nguyên, string LUÔN bọc nháy đơn (kể cả toàn chữ số) để đọc lại đúng kiểu string. Áp dụng ở 2 điểm
+  sinh `data-arg1` của `renderMultiSelectDropdown()` (chip gỡ + gợi ý thêm mới).
+- `public/js/module-vanhanh.js`: phát hiện thêm 1 lớp lỗi THỨ 2 cùng gốc — registry điều phối click
+  RIÊNG của module Vận Hành (`OP_CLICK_ACTIONS`, nơi sống ô "Ngành Hàng Áp Dụng"/"Siêu Thị Đề Xuất" của
+  chính FORM TẠO ĐỀ XUẤT) đọc thẳng `el.dataset.arg1`, KHÔNG qua `cspCoerceArg()` như đường điều phối
+  dùng chung — khiến giá trị chọn trên form đề xuất mang NGUYÊN cặp dấu nháy đơn literal (VD "'1001'")
+  sau khi vá `cspArgLiteral()` ở core.js, không bao giờ khớp lại được với mã sạch đã cấu hình phía
+  người duyệt. Sửa `gmsAdd`/`gmsRemove` trong registry này gọi qua `cspCoerceArg()`, mirror đúng đường
+  điều phối chung.
+- Test: viết lại kịch bản tái hiện trực tiếp qua Playwright (gõ/chọn thật trên ô "Ngành Hàng Áp Dụng"
+  của form đề xuất, không giả lập) xác nhận `nganhHang` lưu đúng mã sạch `["NH-TP","NH-HMP"]`. Chạy lại
+  toàn bộ `demo-itprice-nganhhang-multi-approve.js` (2 người mỗi người 1 ngành hàng, đề xuất chọn cả 2
+  → cả 2 phải cùng duyệt — PASS hết), `test-itprice-wholesale-mixed-approval.js` (20/20),
+  `test-mixed-approval-excel.js` (15/15), `test-mixed-approval-delete-warning-ui.js` (19/19),
+  `test-operationorder-store-tier-mixed-approval.js` (4/4), `test-nganhhang-catalog-rename-cascade.js`
+  (8/8), `test-admin-users-permgroups.js` (127/127), `test-position-preview-sanitized-perms.js`,
+  `test-collapse-operation-forms.js` (10/10), `test-it-support.js` (24/24),
+  `test-itprice-approval-and-emergency.js` (17/17), `test-operation-order-mixed-approver-preload.js`
+  (6/6), `test-operation-order-store-approver-scope.js` (15/15),
+  `test-operation-order-items-and-dates.js` (8/8), `test-operation-order-location-tiers.js` (34/34),
+  `test-vanhanh-itprice-chitiet-csp.js`, `test-operation-estimate-owner-scope.js`,
+  `test-operation-workitem-dependencies.js` (25/25) — toàn bộ PASS, không regression. CSP full audit
+  PASS, grep CSP cả 2 file sửa không có vi phạm. `test-preview-workflow-buttons.js` giữ nguyên 13/16 (3
+  lỗi cũ không liên quan, xác nhận qua `git stash`).
 
 ## v28.29 (2026-11): [TB] Cảnh báo khi để trống "Ngành Hàng Phụ Trách" ở QT Giá Bán Buôn (Siêu Thị)
 

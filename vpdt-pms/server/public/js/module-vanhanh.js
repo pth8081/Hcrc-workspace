@@ -4206,8 +4206,18 @@ const OP_CLICK_ACTIONS = {
   // widget tìm-kiếm-gõ-chọn đa lựa chọn dùng chung gmsAdd/gmsRemove/gmsFilter (core.js, khuôn generic
   // multi-select — khác pmsAdd/pmsRemove ở trên vốn dành riêng cho renderPeopleMultiSelect()) — cùng lý
   // do phải khai tường minh ở đây, nếu không ô tìm siêu thị sẽ IM LẶNG không gợi ý/thêm được gì.
-  gmsAdd: el => gmsAdd(el.dataset.arg0, el.dataset.arg1),
-  gmsRemove: el => gmsRemove(el.dataset.arg0, el.dataset.arg1),
+  // LỖI ĐÃ VÁ (11/2026, người dùng báo "chọn Ngành Hàng Áp Dụng xong vẫn không khớp được người duyệt"):
+  // registry riêng này đọc "arg1" TRỰC TIẾP từ el.dataset, KHÔNG qua cspCoerceArg() như đường dispatch
+  // chung (cspReadArgSlot(), core.js) — nên bản vá cspArgLiteral() (bọc nháy đơn quanh mã ngành hàng
+  // toàn chữ số để renderMultiSelectDropdown() giữ đúng kiểu string, xem chú thích đầy đủ tại
+  // cspArgLiteral()) chỉ có tác dụng ở đường dispatch chung, KHÔNG tới registry này — khiến giá trị thêm
+  // vào "Ngành Hàng Áp Dụng"/"Siêu Thị Đề Xuất" của Form Vận Hành mang NGUYÊN cặp dấu nháy đơn literal
+  // (VD "'1001'" thay vì "1001"), không bao giờ khớp lại được với mã sạch đã lưu ở cấu hình người duyệt
+  // (DB.nganhHangCatalog[].code/DB.itPriceWholesaleStoreMixedApprovalRules[].nganhHang, luôn là string
+  // sạch). Đọc qua cspCoerceArg() y hệt đường dispatch chung để bỏ cặp nháy bọc ngoài (nếu có)/ép lại
+  // đúng Number (nếu value vốn là id số không bọc nháy) — mirror đúng cspReadArgSlot().
+  gmsAdd: el => gmsAdd(el.dataset.arg0, cspCoerceArg(el.dataset.arg1)),
+  gmsRemove: el => gmsRemove(el.dataset.arg0, cspCoerceArg(el.dataset.arg1)),
   // Đợt E (UX rollout — nút "↺ Làm Mới"/chip "✕ Xoá file" cho 3 form Tạo Mới của module này) — cùng lý
   // do pmsAdd/pmsRemove ở trên: 2 hạ tầng dùng chung ở core.js (confirmAndResetForm()/clearSingleFileInput(),
   // vốn giả định bindCspDelegation() dùng chung window[fnName]) PHẢI khai báo tường minh ở đây, nếu
