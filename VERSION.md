@@ -1,9 +1,30 @@
 # Phiên bản hiện tại
 
-**28.31** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.32 (2026-11): Biên Bản Họp — đổi ô "Người Phối Hợp" từ `<select multiple>` sang widget chip+tìm-gõ-chọn
+
+Người dùng phản ánh ô "Người Phối Hợp" trong bảng "Ý Kiến Chỉ Đạo" (phải giữ Ctrl/Cmd để chọn nhiều
+người) khó dùng trên thực tế — đổi sang widget `renderMultiSelectDropdown()` dùng chung đã dùng cho mọi
+ô chọn-nhiều khác trong hệ thống (gõ để tìm + click để thêm, chip + nút × để gỡ, không cần giữ phím).
+
+- `public/js/module-bienbanhop.js`: `renderMinutesDirectivesTable()` — cột "Người Phối Hợp" đổi từ
+  `<select multiple size="3">` sang `<div id="minutesCollabPicker_${idx}">` + gọi
+  `renderMultiSelectDropdown()` cho từng dòng SAU khi gán `.innerHTML` (đúng khuôn "1 widget/dòng bảng
+  lặp" như `renderApprovalLevelsTable()` ở `module-admin-submissiongroups.js`). Xoá wrapper
+  `updateMinutesDirectiveFieldMultiSelect()` không còn cần (widget tự gọi `updateMinutesDirectiveField()`
+  qua `onChange`).
+- `public/js/core.js`: dọn 2 chú thích còn tham chiếu tên hàm đã xoá + 1 dòng đăng ký thừa trong
+  `MODULE_FN_GROUP`.
+- Test: thêm 3 kịch bản MỚI vào `test-minutes.js` đi qua ĐÚNG luồng DOM thật (gõ vào ô tìm, click gợi ý
+  để thêm, click nút × trên chip để gỡ — không gọi thẳng hàm JS) — xác nhận không còn `<select
+  multiple>` gốc, thêm/gỡ đúng người, chip hiện đúng tên. Chạy toàn bộ `test-minutes.js` (25/25),
+  `test-collapse-car-meeting-minutes-forms.js` (10/10), `test-minutes-reassign-pending-directive.js`
+  (4/4), `test-minutes-task-file-ownership.js` (10/10), `test-meeting-dept-workflow.js` (9/9) — không
+  regression. CSP self-check (`on*=`, `style="`, `javascript:`, `eval(`) trên file đã sửa: sạch.
 
 ## v28.31 (2026-11): Nâng trần số dòng File Bảng Giá (Phê Duyệt Giá) từ 1000 lên 10000 dòng/tệp
 

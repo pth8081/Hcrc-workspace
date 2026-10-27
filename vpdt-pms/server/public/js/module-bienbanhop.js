@@ -538,13 +538,6 @@ function updateMinutesDirectiveField(idx, field, value) {
   minutesDirectives[idx][field] = value;
 }
 
-// Wrapper CSP data-op-change — <select multiple> "Người phối hợp" cần
-// Array.from(this.selectedOptions).map(o => o.value), không phải this.value đơn giản, nên không map
-// được vào 1 data-arg-value — đọc lại danh sách option đã chọn từ el (data-arg-el) trong wrapper.
-function updateMinutesDirectiveFieldMultiSelect(idx, field, el) {
-  updateMinutesDirectiveField(idx, field, Array.from(el.selectedOptions).map(o => o.value));
-}
-
 function renderMinutesDirectivesTable() {
   const tbody = document.getElementById('minutesDirectivesTableBody');
   if (!tbody) return;
@@ -569,16 +562,26 @@ function renderMinutesDirectivesTable() {
         ${namedAttendees.length === 0 ? '<div class="text-[10px] text-amber-600 mt-0.5">Chưa nhập Thành phần tham dự</div>' : ''}
       </td>
       <td class="border p-1">
-        <select multiple size="3" data-op-change="updateMinutesDirectiveFieldMultiSelect" data-arg0="${idx}" data-arg1="collaboratorAttendeeIds" data-arg-el="2" class="w-full border-0 p-0.5 text-xs bg-white focus:outline-none">
-          ${namedAttendees.map(a => `<option value="${escapeHtml(a.id)}" ${collaboratorIds.includes(String(a.id)) ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
-        </select>
-        <div class="text-[10px] text-gray-400 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều</div>
+        <div id="minutesCollabPicker_${idx}"></div>
       </td>
       <td class="border p-1"><input type="date" value="${escapeHtml(d.deadline)}" data-op-change="updateMinutesDirectiveField" data-arg0="${idx}" data-arg1="deadline" data-arg-value="2" class="w-full border-0 p-0.5 text-xs focus:outline-none"></td>
       <td class="border p-1 text-center"><button type="button" data-op="removeMinutesDirectiveRow" data-arg0="${idx}" class="text-red-600 font-bold hover:text-red-800" title="Xoá dòng">✕</button></td>
     </tr>
   `;
   }).join('');
+
+  // Đổi từ <select multiple> (phải giữ Ctrl/Cmd để chọn nhiều — người dùng phản ánh khó dùng, 11/2026)
+  // sang widget renderMultiSelectDropdown() dùng chung (chip + tìm-gõ-chọn), cùng khuôn với các picker
+  // multi-select khác trong hệ thống. Phải gọi SAU khi gán .innerHTML (widget tự dựng lại nội dung bên
+  // trong div#minutesCollabPicker_${idx} vừa chèn ở trên) — xem renderApprovalLevelsTable() ở
+  // module-admin-submissiongroups.js làm mẫu cho đúng khuôn "1 widget/dòng bảng lặp".
+  minutesDirectives.forEach((d, idx) => {
+    const collaboratorIds = (Array.isArray(d.collaboratorAttendeeIds) ? d.collaboratorAttendeeIds : []).map(String);
+    renderMultiSelectDropdown(`minutesCollabPicker_${idx}`, namedAttendees.map(a => ({ value: String(a.id), label: a.name })), collaboratorIds, {
+      placeholder: '🔍 Tìm người để thêm...', emptyText: 'Chưa chọn người phối hợp.',
+      onChange: vals => updateMinutesDirectiveField(idx, 'collaboratorAttendeeIds', vals)
+    });
+  });
 }
 
 // Áp kết quả tạo Công việc (server tự suy ra từ chỉ đạo đã gán người thực hiện, xem

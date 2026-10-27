@@ -694,6 +694,82 @@ async function main() {
     JSON.stringify(switchAccountBug)
   );
 
+  // ===================== "Người Phối Hợp" đổi từ <select multiple> (phải giữ Ctrl/Cmd — người dùng
+  // phản ánh khó dùng, 11/2026) sang widget renderMultiSelectDropdown() dùng chung (chip + tìm-gõ-chọn).
+  // Test đi qua ĐÚNG luồng sự kiện DOM thật (gõ vào ô tìm, click gợi ý để thêm, click nút × trên chip để
+  // gỡ) qua bindCspDelegation('minutesSection') thật — không gọi thẳng updateMinutesDirectiveField().
+  const collabPicker = await page.evaluate(({ directorName, secretaryName }) => {
+    minutesAttendeesRows = [];
+    addAttendeeRow();
+    addAttendeeRow();
+    addAttendeeRow();
+    updateAttendeeField(0, 'name', directorName);
+    updateAttendeeField(1, 'name', secretaryName);
+    updateAttendeeField(2, 'name', 'Khách Mời Ngoài Công Ty');
+
+    minutesDirectives = [];
+    addMinutesDirectiveRow(); // renderMinutesDirectivesTable() tự chạy, tự dựng widget trong row 0
+
+    const noNativeMultiSelect = !document.querySelector('#minutesDirectivesTableBody select[multiple]');
+
+    const picker = document.getElementById('minutesCollabPicker_0');
+    const searchInput = picker.querySelector('[data-pms-search]');
+
+    // Gõ "gi" để lọc còn 1 gợi ý (director), click để thêm.
+    searchInput.value = 'gi';
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    picker.querySelector('[data-pms-dropdown] div').click();
+
+    // Gõ tiếp để lọc ra secretary, click để thêm người thứ 2.
+    searchInput.value = secretaryName;
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    picker.querySelector('[data-pms-dropdown] div').click();
+
+    const afterTwoPicks = {
+      collaboratorAttendeeIds: [...minutesDirectives[0].collaboratorAttendeeIds],
+      chipsText: picker.querySelector('[data-pms-chips]').textContent
+    };
+
+    // Gỡ người đầu (director) bằng nút × trên chip — chip đầu tiên tương ứng người được thêm trước.
+    picker.querySelector('[data-pms-chips] button').click();
+
+    const afterRemoveOne = {
+      collaboratorAttendeeIds: [...minutesDirectives[0].collaboratorAttendeeIds],
+      chipsText: picker.querySelector('[data-pms-chips]').textContent
+    };
+
+    return {
+      noNativeMultiSelect,
+      directorId: minutesAttendeesRows[0].id,
+      secretaryId: minutesAttendeesRows[1].id,
+      afterTwoPicks,
+      afterRemoveOne
+    };
+  }, { directorName: directorUser.name, secretaryName: secretaryUser.name });
+
+  record(
+    '"Người Phối Hợp" (Ý Kiến Chỉ Đạo): không còn <select multiple> gốc trình duyệt, đã đổi hẳn sang widget chip+tìm-gõ-chọn',
+    collabPicker.noNativeMultiSelect,
+    JSON.stringify({ noNativeMultiSelect: collabPicker.noNativeMultiSelect })
+  );
+  record(
+    '"Người Phối Hợp": gõ-tìm + click gợi ý (KHÔNG cần giữ Ctrl/Cmd) thêm đúng 2 người vào collaboratorAttendeeIds, chip hiện đúng tên',
+    collabPicker.afterTwoPicks.collaboratorAttendeeIds.length === 2 &&
+      collabPicker.afterTwoPicks.collaboratorAttendeeIds.includes(collabPicker.directorId) &&
+      collabPicker.afterTwoPicks.collaboratorAttendeeIds.includes(collabPicker.secretaryId) &&
+      collabPicker.afterTwoPicks.chipsText.includes(directorUser.name) &&
+      collabPicker.afterTwoPicks.chipsText.includes(secretaryUser.name),
+    JSON.stringify(collabPicker.afterTwoPicks)
+  );
+  record(
+    '"Người Phối Hợp": click nút × trên chip gỡ đúng người đó khỏi collaboratorAttendeeIds, giữ nguyên người còn lại',
+    collabPicker.afterRemoveOne.collaboratorAttendeeIds.length === 1 &&
+      collabPicker.afterRemoveOne.collaboratorAttendeeIds[0] === collabPicker.secretaryId &&
+      !collabPicker.afterRemoveOne.chipsText.includes(directorUser.name) &&
+      collabPicker.afterRemoveOne.chipsText.includes(secretaryUser.name),
+    JSON.stringify(collabPicker.afterRemoveOne)
+  );
+
   await browser.close();
   server.close();
 
