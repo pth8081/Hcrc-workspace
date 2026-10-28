@@ -10,7 +10,7 @@
 // chỉ Admin; Công việc theo NGƯỜI (assignedBy/assignee), hoàn toàn không có khái niệm phòng ban.
 const { randomUUID } = require('crypto');
 const { HttpError } = require('./httpErrors');
-const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl } = require('./createValidation');
+const { scopeAllows, OFFICE_SUBTYPE_TO_PERM_FLAG, normalizeReportEntryPayload, buildEffectiveContractApprovalWorkflowServer, sanitizeUniformItems, sanitizeBudgetLines, getBudgetTemplateCustomFields, sanitizeBudgetCustomFields, resolveTrainingInstructorUsername, normalizeInviteList, normalizeTrainingCourseFields, normalizeTrainingTestFields, assertTrainingTestGradingStructureUnchanged, normalizeTrainingPlanFields, normalizeOnboardingPathFields, normalizeCareerPathFields, normalizeRecruitmentJobFields, isValidYoutubeUrl, extractYoutubeVideoIdForThumbnail, buildEffectiveSubmissionWorkflowServer, resolveApprovalLevelRule, normalizeSubmissionCoreFields, validateRequiredCustomData, assertUploadedFileUrl, assertUploadedFileUrlList, canManageOperationRecord, HR_ONBOARDING_STAGES, HR_OFFBOARDING_STAGES, normalizeBudgetLineCoreFields, canCreateInternalPostType, prepareExtraApprovalSelectionForCreate, normalizeInternalPostContent, normalizeInternalPostMedia, isInternalPostImageAttachmentUrl, normalizeMeetingMinutesContent } = require('./createValidation');
 const { validateRegistrationItems: validateVppRegItems, calcItemsTotal: calcVppItemsTotal, resolveVppDeptBudget } = require('./vppCatalog');
 const { sanitizePriceFileItems, sanitizeColumnLabels } = require('./priceFileParser');
 const { resolveStepApproverUsernames } = require('./positionApprovers');
@@ -2808,7 +2808,9 @@ function canDeleteMinutes(user) {
   return !!user.perms?.admin;
 }
 
-const MINUTES_EDITABLE_FIELDS = ['linkedMeetingId', 'title', 'time', 'location', 'chair', 'secretary', 'attendees', 'content', 'directives', 'customData'];
+// contentFormat (11/2026) — khung soạn "Nội Dung Trao Đổi / Kết Luận" đổi sang contenteditable có định
+// dạng (đậm/nghiêng/gạch chân/danh sách), xem normalizeMeetingMinutesContent() ở lib/createValidation.js.
+const MINUTES_EDITABLE_FIELDS = ['linkedMeetingId', 'title', 'time', 'location', 'chair', 'secretary', 'attendees', 'content', 'contentFormat', 'directives', 'customData'];
 // Field được phép nhận TỪ CLIENT lúc TẠO MỚI (createMinutes() cuối file này) = đúng các field người lập
 // biên bản nhập ở form (submitMeetingMinutes(), public/js/module-bienbanhop.js) + `code`/`createdAt`.
 // MỌI field khác (nhất là tasksAssigned/directives[].taskCreated — 2 cờ KHOÁ vòng đời biên bản) do
@@ -2876,6 +2878,7 @@ function editMinutes(payload, user, minutes) {
   for (const field of MINUTES_EDITABLE_FIELDS) {
     if (payload[field] !== undefined) minutes[field] = payload[field];
   }
+  normalizeMeetingMinutesContent(minutes);
   // taskCreated là cờ do SERVER sinh ra ở bước "Giao việc" (assignMinutesTasks()) — KHÔNG nhận từ
   // payload (cùng lớp lỗi đã vá ở createMinutes(): client tự đặt taskCreated=true cho 1 dòng chỉ đạo
   // CHƯA từng sinh Công Việc nào sẽ khoá vĩnh viễn dòng đó — không giao việc được nữa vì
@@ -2942,6 +2945,7 @@ function createMinutes(payload, user, existingCollection, formTemplates) {
   for (const field of MINUTES_CREATE_ALLOWED_FIELDS) {
     if (payload[field] !== undefined) record[field] = payload[field];
   }
+  normalizeMeetingMinutesContent(record);
   record.id = Date.now();
   record.creator = user.username;
   record.creatorName = user.name;

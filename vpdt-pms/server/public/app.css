@@ -97,6 +97,12 @@
 .minutes-doc .md-label { font-weight: bold; width: 160px; white-space: nowrap; }
 .minutes-doc .md-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
 .minutes-doc .md-body-text { white-space: pre-wrap; }
+/* Nội Dung Biên Bản định dạng (11/2026) — Tailwind preflight reset list-style về "none" cho MỌI ul/ol
+   trong trang, kể cả .md-body-text (nội dung HTML người dùng tự gõ qua khung soạn #minutesContent) —
+   không bù lại thì danh sách gạch đầu dòng/đánh số không hiện dấu khi hiển thị, dù dữ liệu đã đúng
+   <ul>/<ol>/<li>. Mirror ĐÚNG override đã áp cho khung soạn (xem #minutesContent, minutesSection.html). */
+.minutes-doc .md-body-text ul { list-style: disc; padding-left: 20px; }
+.minutes-doc .md-body-text ol { list-style: decimal; padding-left: 20px; }
 .minutes-doc table.md-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
 .minutes-doc table.md-items-table th, .minutes-doc table.md-items-table td { border: 1px solid #999; padding: 4px 6px; }
 .minutes-doc table.md-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }

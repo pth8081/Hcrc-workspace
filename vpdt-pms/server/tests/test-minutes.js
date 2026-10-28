@@ -227,7 +227,7 @@ async function main() {
     document.getElementById('minutesLocation').value = 'Phòng họp A';
     document.getElementById('minutesChair').value = 'Nguyễn Văn Giám Đốc';
     document.getElementById('minutesSecretary').value = 'Đặng Thị Ký';
-    document.getElementById('minutesContent').value = 'Rà soát tiến độ các dự án đang triển khai.';
+    document.getElementById('minutesContent').innerHTML = 'Rà soát tiến độ các dự án đang triển khai.';
 
     addAttendeeRow(); // attendee 0 — sẽ gắn tài khoản hệ thống qua datalist
     addAttendeeRow(); // attendee 1 — khách mời ngoài, không có tài khoản
@@ -351,7 +351,7 @@ async function main() {
     document.getElementById('minutesTimeOfDay').value = '09:00';
     document.getElementById('minutesChair').value = 'Ai đó';
     document.getElementById('minutesSecretary').value = 'Ai đó';
-    document.getElementById('minutesContent').value = 'Nội dung bất kỳ';
+    document.getElementById('minutesContent').innerHTML = 'Nội dung bất kỳ';
     minutesAttendeesRows = [];
     minutesDirectives = [];
     renderAttendeesTable();
@@ -428,7 +428,7 @@ async function main() {
     document.getElementById('minutesLocation').value = 'Phòng họp B';
     document.getElementById('minutesChair').value = 'Nguyễn Văn Giám Đốc';
     document.getElementById('minutesSecretary').value = 'Đặng Thị Ký';
-    document.getElementById('minutesContent').value = 'Xét duyệt ngân sách quý 4.';
+    document.getElementById('minutesContent').innerHTML = 'Xét duyệt ngân sách quý 4.';
 
     minutesAttendeesRows = [];
     minutesDirectives = [];

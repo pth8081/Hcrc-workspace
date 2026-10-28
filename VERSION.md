@@ -1,9 +1,58 @@
 # Phiên bản hiện tại
 
-**28.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.36 (2026-11): Biên Bản Họp — khung soạn "Nội Dung Trao Đổi / Kết Luận" có định dạng (đậm/nghiêng/gạch chân/danh sách)
+
+Theo yêu cầu người dùng: "muốn chỗ soạn biên bản có chức năng chỉnh sửa format như Word để tạo được biên
+bản đẹp hơn". Đã gửi demo trực quan (Artifact) cho người dùng xem trước bộ nút + kết quả hiển thị, được
+xác nhận "merge đi". TÁI DÙNG ĐÚNG cơ chế đã có sẵn cho Nhịp Sống HCRC (`contenteditable` +
+`document.execCommand`, KHÔNG thêm thư viện ngoài, đã qua rà soát bảo mật 2 lớp từ trước) — mở rộng từ 2
+nút (Đậm + Danh sách) lên 6 nút phù hợp văn bản chính thức hơn: Đậm, Nghiêng, Gạch chân, Danh sách gạch
+đầu dòng, Danh sách đánh số, Xoá định dạng.
+
+- `public/fragments/minutesSection.html`: `#minutesContent` đổi từ `<textarea>` sang
+  `<div contenteditable="true">` + toolbar 6 nút (`data-op="minutesEditorExec"` + `data-arg0`, CSP-safe).
+- `public/js/module-bienbanhop.js`: thêm `initMinutesContentEditor()`/`minutesEditorExec()`/
+  `getMinutesEditorHtml()`/`setMinutesEditorContent()`/`sanitizeMinutesRichHtml()` (mirror ĐÚNG khuôn
+  Nhịp Sống, `module-internalcomms-nhipsong.js`) + `minutesSafeBodyHtml()` (mới — chọn render rich-HTML
+  đã lọc DOMPurify cho biên bản MỚI hay escapeHtml+pre-wrap cho biên bản CŨ không có `contentFormat`).
+  Nối vào 6 điểm đọc/ghi nội dung: `submitMeetingMinutes()`/`updateMeetingMinutes()` (Lưu — kiểm rỗng thủ
+  công vì `contenteditable` không tham gia constraint validation HTML5 như `<textarea required>` cũ),
+  `openEditMeetingMinutes()` (mở Sửa — nay là `async`), `viewMeetingMinutesDetails()`/
+  `buildMeetingMinutesDocumentHTML()`/`downloadMeetingMinutes()` (Xem/Tải — nay là `async`, dùng chung
+  `minutesSafeBodyHtml()`), `cancelEditMeetingMinutes()` (Làm Mới — tự dọn khung soạn, `form.reset()`
+  không đụng tới `contenteditable`).
+- `lib/createValidation.js`: `normalizeMeetingMinutesContent()` (mới) — sanitize bằng `sanitize-html`
+  với allowlist `b/strong/i/em/u/ul/ol/li/br/p` (thêm `<u>` so với Nhịp Sống do có nút Gạch chân), trần
+  20.000 ký tự. CHỈ áp luật mới khi `contentFormat==='html'` — biên bản cũ/caller ngoài UI giữ nguyên
+  hành vi cũ (trường này trước đây không có ràng buộc "bắt buộc" nào ở server).
+- `lib/recordActions.js`: `MINUTES_EDITABLE_FIELDS` thêm `contentFormat`; `createMinutes()`/
+  `editMinutes()` gọi `normalizeMeetingMinutesContent()` sau bước whitelist field.
+- `public/js/core.js`: **lỗi tự phát hiện khi nối dây** — `applyCoreFieldCustomizations()` (Biểu Mẫu,
+  đổi nhãn/bắt buộc field) tra `<label>` qua `input.closest('div')?.querySelector('label')`; với field
+  MỚI này, bản thân `input` CHÍNH LÀ 1 `<div>` (`closest()` tự khớp chính nó trước khi tìm cha theo spec
+  DOM) nên tìm NHẦM `<label>` bên TRONG khung soạn (luôn rỗng) thay vì `<label>` anh em ngoài — đổi
+  `input.parentElement.closest('div')` (cho kết quả Y HỆT với mọi field `input`/`select`/`textarea` hiện
+  có, chỉ sửa đúng trường hợp field tự thân là `div`).
+- `public/app.css` + khối `<style>` nội tuyến trong `buildMeetingMinutesDocumentHTML()` (phải giữ y hệt
+  nhau, xem chú thích tại chỗ) — **lỗi tự phát hiện qua demo trực quan**: Tailwind preflight reset
+  `list-style: none` cho MỌI `ul`/`ol`, khiến danh sách gạch đầu dòng/đánh số không hiện dấu khi hiển thị
+  ở "Xem"/"Tải — In" dù dữ liệu đã đúng `<ul>`/`<li>` — thêm `.minutes-doc .md-body-text ul/ol` mirror
+  đúng override đã áp cho khung soạn.
+- Test: `test-minutes.js` (25/25, cập nhật 3 chỗ set nội dung demo từ `.value=` sang `.innerHTML=` do đổi
+  textarea->contenteditable) + `test-collapse-car-meeting-minutes-forms.js` (10/10) +
+  `test-khoi0-meetingminutes-gate.js` (10/10) + `test-minutes-reassign-pending-directive.js` (4/4) +
+  `test-minutes-task-file-ownership.js` (10/10) + `test-audit-round5-minutes-task-vpp.js` (15/15) —
+  không regression. Vì sửa hàm DÙNG CHUNG `applyCoreFieldCustomizations()`, chạy thêm toàn bộ test Biểu
+  Mẫu liên quan (`test-forms-batch1..4.js`, `test-forms-nav-groups.js`,
+  `test-formsplit-internalpost-office.js` — tổng 456/456) xác nhận KHÔNG đổi hành vi cho bất kỳ field
+  nào khác. Demo trực quan qua Playwright thật (gõ, bôi đen, bấm Đậm/Danh sách qua ĐÚNG luồng DOM thật,
+  Lưu qua ĐÚNG `lib/recordActions.js`, mở "Xem" qua ĐÚNG DOMPurify thật phục vụ từ `/vendor/` tĩnh) —
+  phát hiện VÀ vá luôn lỗi thiếu `list-style` ở trên trước khi báo hoàn tất. CSP self-check sạch.
 
 ## v28.35 (2026-11): Fix TIẾP Biên Bản Họp không Lưu được — ô "Giờ Họp" vẫn lỗi "incomplete" sau v28.33
 

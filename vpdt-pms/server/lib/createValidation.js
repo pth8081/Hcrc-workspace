@@ -882,6 +882,35 @@ function normalizeInternalPostContent(target) {
   }
 }
 
+const MEETING_MINUTES_CONTENT_MAX_LEN = 20000;
+const MEETING_MINUTES_CONTENT_ALLOWED_TAGS = ['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'br', 'p'];
+
+// Khung soạn "Nội Dung Trao Đổi / Kết Luận" (Lập Biên Bản Họp, 11/2026 — theo yêu cầu người dùng "muốn có
+// chức năng chỉnh sửa format như Word") — TÁI DÙNG đúng cơ chế đã có cho Nhịp Sống HCRC
+// (sanitizeInternalPostHtml() ở trên), chỉ khác allowlist thêm thẻ <u> (gạch chân — có trong bộ nút Biên
+// Bản nhưng Nhịp Sống không có) và độ dài tối đa riêng. target = payload (TẠO) hoặc bản ghi đã gộp field
+// sửa (SỬA). Chuẩn hoá tại chỗ content — CHỈ áp luật mới khi contentFormat==='html' (khung soạn mới);
+// caller nào KHÔNG gửi cờ này (biên bản cũ hiển thị lại là văn bản thuần, hoặc 1 request tự soạn ngoài UI)
+// giữ NGUYÊN hành vi cũ — field này trước đây KHÔNG có ràng buộc "bắt buộc" nào ở server (chỉ có `required`
+// phía client), không thêm ràng buộc mới ngoài đúng phạm vi khung soạn định dạng mới.
+function normalizeMeetingMinutesContent(target) {
+  if (target.contentFormat !== 'html') return;
+  const clean = sanitizeHtmlLib(String(target.content || ''), {
+    allowedTags: MEETING_MINUTES_CONTENT_ALLOWED_TAGS,
+    allowedAttributes: {},
+    allowedSchemes: [],
+    allowProtocolRelative: false,
+    transformTags: { div: 'p' },
+    disallowedTagsMode: 'discard',
+    nonTextTags: ['script', 'style', 'textarea', 'option', 'noscript', 'iframe', 'object', 'embed', 'template', 'title', 'head', 'svg', 'math']
+  }).trim();
+  if (!internalPostHtmlToPlainText(clean)) throw new CreateError(400, 'Vui lòng nhập nội dung trao đổi / kết luận');
+  if (clean.length > MEETING_MINUTES_CONTENT_MAX_LEN) {
+    throw new CreateError(400, `Nội dung quá dài (tối đa ${MEETING_MINUTES_CONTENT_MAX_LEN} ký tự kể cả định dạng)`);
+  }
+  target.content = clean;
+}
+
 // Danh sách tệp ảnh/video của bài — mỗi phần tử PHẢI đúng dạng {fileUrl:string, fileName:string}, fileUrl là
 // tệp đã tải lên hệ thống (assertUploadedFileUrl, chặn "javascript:"/URL ngoài) VÀ đúng nhóm đuôi (ảnh chỉ
 // .jpg/.jpeg/.png/.webp, video chỉ .mp4/.webm — tên tệp lưu trên đĩa do routes/upload.js sinh giữ nguyên đuôi
@@ -5401,7 +5430,7 @@ module.exports = {
   // chuyển sang APPROVED, xem giải thích ở phát hiện #13 ngay phía trên hàm này.
   canCreateInternalPostType,
   // Export cho editInternalPost() (lib/recordActions.js) + test — nội dung HTML (sanitize) + ảnh/video bài viết.
-  normalizeInternalPostContent, normalizeInternalPostMedia, sanitizeInternalPostHtml,
+  normalizeInternalPostContent, normalizeInternalPostMedia, sanitizeInternalPostHtml, normalizeMeetingMinutesContent,
   // Export cho editInternalPost() (lib/recordActions.js) — chặn ảnh-only NEWS/SHARE dựa vào ĐUÔI FILE
   // THẬT trong fileUrl (đã qua verifyFileSignature() lúc upload), không tin fileType client tự khai —
   // xem chú thích đầy đủ ở định nghĩa hàm, "Việc E" (v24.79) + rà soát v24.74→v24.81 (11/2026, mức Cao).

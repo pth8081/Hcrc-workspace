@@ -1595,7 +1595,14 @@ function applyCoreFieldCustomizations(coreKey) {
     const label = (typeof override.label === 'string' && override.label.trim()) ? override.label.trim() : f.label;
     const required = ('required' in override) ? !!override.required : f.required;
     input.required = required;
-    const labelEl = input.closest('div')?.querySelector('label');
+    // input.parentElement.closest('div') thay vì input.closest('div') (11/2026) — 1 field MỚI
+    // (#minutesContent, Biên Bản Họp) chính BẢN THÂN nó là 1 <div contenteditable> (khung soạn có định
+    // dạng, không còn là <textarea>): closest() tự khớp CHÍNH NÓ trước khi đi lên cha (spec DOM), khiến
+    // querySelector('label') tìm NHẦM bên TRONG khung soạn (luôn rỗng) thay vì <label> anh em ngoài cùng
+    // 1 div bọc. Đi từ parentElement trước khi .closest('div') cho KẾT QUẢ Y HỆT với mọi field input/
+    // select/textarea hiện có (parentElement của chúng CHÍNH LÀ div bọc, .closest('div') trên đó tự khớp
+    // chính nó) — không đổi hành vi cho bất kỳ field nào khác, chỉ sửa đúng trường hợp field tự thân là div.
+    const labelEl = input.parentElement?.closest('div')?.querySelector('label');
     if (labelEl) {
       labelEl.innerHTML = escapeHtml(label) + (required ? ' <span class="text-red-500">*</span>' : '');
     } else if ('placeholder' in input) {

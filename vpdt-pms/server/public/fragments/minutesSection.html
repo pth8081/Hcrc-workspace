@@ -63,9 +63,26 @@
             <label class="block font-semibold text-gray-600 mb-1">Thư Ký</label>
             <input id="minutesSecretary" placeholder="Họ tên người ghi biên bản" class="w-full border p-1.5 rounded" required>
           </div>
+          <!-- Khung soạn thảo contenteditable có định dạng (11/2026, theo yêu cầu người dùng "muốn chỉnh sửa
+               format như Word") — TÁI DÙNG đúng cơ chế đã dùng cho Nhịp Sống HCRC (document.execCommand,
+               KHÔNG thư viện ngoài), mở rộng bộ nút cho văn bản chính thức: Đậm/Nghiêng/Gạch chân/2 kiểu
+               Danh sách/Xoá định dạng. Nội dung là HTML nên SERVER sanitize allowlist (b/strong/i/em/u/ul/
+               ol/li/br/p, bỏ mọi thuộc tính — lib/createValidation.js normalizeMeetingMinutesContent()),
+               client lọc thêm DOMPurify lúc hiển thị (xem sanitizeMinutesRichHtml(), module-bienbanhop.js).
+               Dán (paste) luôn chèn CHỮ THUẦN (initMinutesContentEditor()) để không mang theo định dạng lạ
+               từ Word/web. Không có thuộc tính required (div không tham gia constraint validation) — kiểm
+               rỗng ở submitMeetingMinutes()/updateMeetingMinutes(). -->
           <div class="md:col-span-3">
             <label class="block font-semibold text-gray-600 mb-1">Nội Dung Biên Bản</label>
-            <textarea id="minutesContent" placeholder="Ghi nội dung trao đổi, kết luận từng phần trong cuộc họp..." class="w-full border p-1.5 rounded h-28" required></textarea>
+            <div class="flex gap-1 mb-1 flex-wrap">
+              <button type="button" data-op="minutesEditorExec" data-arg0="bold" title="Đậm (Ctrl+B)" class="minutes-editor-btn px-2.5 py-1 rounded border bg-white font-bold hover:bg-gray-100">B</button>
+              <button type="button" data-op="minutesEditorExec" data-arg0="italic" title="Nghiêng (Ctrl+I)" class="minutes-editor-btn px-2.5 py-1 rounded border bg-white italic hover:bg-gray-100">I</button>
+              <button type="button" data-op="minutesEditorExec" data-arg0="underline" title="Gạch chân (Ctrl+U)" class="minutes-editor-btn px-2.5 py-1 rounded border bg-white underline hover:bg-gray-100">U</button>
+              <button type="button" data-op="minutesEditorExec" data-arg0="insertUnorderedList" title="Danh sách gạch đầu dòng" class="minutes-editor-btn px-2.5 py-1 rounded border bg-white hover:bg-gray-100">• Danh sách</button>
+              <button type="button" data-op="minutesEditorExec" data-arg0="insertOrderedList" title="Danh sách đánh số" class="minutes-editor-btn px-2.5 py-1 rounded border bg-white hover:bg-gray-100">1. Danh sách</button>
+              <button type="button" data-op="minutesEditorExec" data-arg0="removeFormat" title="Xoá định dạng" class="minutes-editor-btn px-2.5 py-1 rounded border bg-white hover:bg-gray-100">Tẩy</button>
+            </div>
+            <div id="minutesContent" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Ghi nội dung trao đổi, kết luận từng phần trong cuộc họp..." class="minutes-rich-content w-full border p-1.5 rounded min-h-[7rem] max-h-96 overflow-y-auto bg-white text-sm focus:outline-none focus:ring-1 focus:ring-rose-400 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-1"></div>
           </div>
           <!-- class "contents" — cùng khuôn dynamicFieldsContainer_SUBMISSION, xem chú thích ở đó. -->
           <div id="dynamicFieldsContainer_MEETING_MINUTES" class="contents"></div>

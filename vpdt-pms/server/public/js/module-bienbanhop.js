@@ -29,8 +29,73 @@ function readMinutesDateTimeInputs() {
   return (date && time) ? `${date}T${time}` : '';
 }
 
+// ---- Khung soạn thảo "Nội Dung Trao Đổi / Kết Luận" contenteditable có định dạng (11/2026) — TÁI DÙNG
+// ĐÚNG cơ chế initInternalContentEditor()/internalEditorExec()/getInternalEditorHtml() đã có cho Nhịp
+// Sống HCRC (module-internalcomms-nhipsong.js), chỉ đổi tên hàm/id + mở rộng từ 2 nút lên 6 nút phù hợp
+// văn bản chính thức hơn (Đậm/Nghiêng/Gạch chân/2 kiểu Danh sách/Xoá định dạng). Xem chú thích đầy đủ tại
+// <div id="minutesContent">, minutesSection.html. ----
+let minutesEditorSavedRange = null;
+function initMinutesContentEditor() {
+  const ed = document.getElementById('minutesContent');
+  if (!ed || ed.dataset.editorReady === '1') return;
+  ed.dataset.editorReady = '1';
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (_) { /* không hỗ trợ -> bỏ qua */ }
+  ed.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData)?.getData('text/plain') || '';
+    document.execCommand('insertText', false, text);
+  });
+  document.addEventListener('selectionchange', () => {
+    const sel = document.getSelection();
+    if (sel && sel.rangeCount && ed.contains(sel.anchorNode)) minutesEditorSavedRange = sel.getRangeAt(0).cloneRange();
+  });
+}
+
+function minutesEditorExec(cmd) {
+  if (!['bold', 'italic', 'underline', 'insertUnorderedList', 'insertOrderedList', 'removeFormat'].includes(cmd)) return;
+  const ed = document.getElementById('minutesContent');
+  if (!ed) return;
+  ed.focus();
+  if (minutesEditorSavedRange && ed.contains(minutesEditorSavedRange.startContainer)) {
+    const sel = document.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(minutesEditorSavedRange);
+  }
+  document.execCommand(cmd, false, null);
+}
+
+function getMinutesEditorHtml() {
+  const ed = document.getElementById('minutesContent');
+  if (!ed) return '';
+  const text = (ed.textContent || '').replace(/ /g, ' ').trim();
+  return text ? ed.innerHTML.trim() : '';
+}
+
+// Lọc HTML trước khi gán lại vào innerHTML (lớp phòng thủ thứ 2 — server đã sanitize allowlist ở
+// normalizeMeetingMinutesContent(), lib/createValidation.js) — tái dùng ĐÚNG thư viện DOMPurify tự lưu đã
+// dùng cho Nhịp Sống HCRC (loadVendorScript(), core.js), chỉ khác allowlist thêm thẻ <u>.
+async function sanitizeMinutesRichHtml(html) {
+  await loadVendorScript('/vendor/dompurify/purify.min.js');
+  return DOMPurify.sanitize(String(html || ''), { ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'br', 'p'], ALLOWED_ATTR: [] });
+}
+
+// m=null (biên bản mới) -> xoá trắng khung soạn. m có content: biên bản MỚI (contentFormat='html') ->
+// lọc DOMPurify rồi gán innerHTML; biên bản CŨ (văn bản thuần, không có contentFormat) -> gán qua
+// innerText để trình duyệt tự đổi xuống dòng thành <br>, giữ đúng tinh thần bản gốc khi mở lại Sửa.
+async function setMinutesEditorContent(m) {
+  const ed = document.getElementById('minutesContent');
+  if (!ed) return;
+  if (!m || !m.content) { ed.innerHTML = ''; return; }
+  if (m.contentFormat === 'html') {
+    try { ed.innerHTML = await sanitizeMinutesRichHtml(m.content); } catch (_) { ed.textContent = m.content; }
+  } else {
+    ed.innerText = m.content;
+  }
+}
+
 function openMinutesForm() {
   document.getElementById('minutesForm').classList.remove('hidden');
+  initMinutesContentEditor();
 }
 function closeMinutesForm() {
   resetMeetingMinutesForm();
@@ -704,7 +769,8 @@ async function submitMeetingMinutes(e) {
   const location = document.getElementById('minutesLocation').value.trim();
   const chair = document.getElementById('minutesChair').value.trim();
   const secretary = document.getElementById('minutesSecretary').value.trim();
-  const content = document.getElementById('minutesContent').value.trim();
+  const content = getMinutesEditorHtml();
+  if (!content) return alert('⛔ Vui lòng nhập nội dung trao đổi / kết luận!');
 
   if (DB.meetingMinutes.some(m => m.code === code)) {
     return alert('Mã biên bản đã tồn tại!');
@@ -725,7 +791,7 @@ async function submitMeetingMinutes(e) {
     linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
     title, time, location, chair, secretary,
     attendees: validAttendees,
-    content,
+    content, contentFormat: 'html',
     directives: validDirectives,
     customData,
     createdAt: new Date().toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -751,7 +817,7 @@ async function submitMeetingMinutes(e) {
   openMinutesEmailComposeModal(attendeeRecipients, newMinutes.code, newMinutes.title, false);
 }
 
-function openEditMeetingMinutes(id) {
+async function openEditMeetingMinutes(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
   if (!canEditMeetingMinutesRecord(currentUser, m)) {
@@ -775,7 +841,7 @@ function openEditMeetingMinutes(id) {
   document.getElementById('minutesLocation').value = m.location || '';
   document.getElementById('minutesChair').value = m.chair;
   document.getElementById('minutesSecretary').value = m.secretary;
-  document.getElementById('minutesContent').value = m.content;
+  await setMinutesEditorContent(m);
 
   // Bù id ổn định + cột Tài khoản cho biên bản cũ lưu trước khi có 2 trường này: thử khớp tên với 1
   // tài khoản hệ thống DUY NHẤT (giống cách hệ thống từng làm ngầm trước đây) làm mặc định ban đầu —
@@ -816,6 +882,10 @@ function resetMeetingMinutesForm() {
 function cancelEditMeetingMinutes() {
   editingMinutesId = null;
   document.getElementById('minutesForm').reset();
+  // form.reset() không đụng tới div contenteditable (không phải form control thật) — tự dọn, cùng khuôn
+  // #internalContent ở module-internalcomms-nhipsong.js.
+  const contentEd = document.getElementById('minutesContent');
+  if (contentEd) contentEd.innerHTML = '';
   document.getElementById('minutesCode').value = generateMinutesCode(); // mã tự sinh cho lần lập MỚI tiếp theo (ô luôn readonly, không mở khoá nữa)
   minutesDirectives = [];
   minutesAttendeesRows = [];
@@ -861,6 +931,9 @@ async function updateMeetingMinutes(e) {
     return { ...d, taskCreated: old ? !!old.taskCreated : false };
   });
 
+  const editContent = getMinutesEditorHtml();
+  if (!editContent) return alert('⛔ Vui lòng nhập nội dung trao đổi / kết luận!');
+
   const editPayload = {
     linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
     title: document.getElementById('minutesTitle').value.trim(),
@@ -868,7 +941,7 @@ async function updateMeetingMinutes(e) {
     location: document.getElementById('minutesLocation').value.trim(),
     chair: document.getElementById('minutesChair').value.trim(),
     secretary: document.getElementById('minutesSecretary').value.trim(),
-    attendees, content: document.getElementById('minutesContent').value.trim(),
+    attendees, content: editContent, contentFormat: 'html',
     directives, customData
   };
 
@@ -1031,7 +1104,20 @@ function deleteMeetingMinutes(id) {
 // bố cục .as-sign-row/.as-sign-col — flex căn giữa, cân đối — theo yêu cầu người dùng, KHÔNG dùng bảng
 // 2 cột cứng 50/50 như cũ) — chân ký chỉ có ý nghĩa trên bản chính thức, không cần hiện khi đang Xem
 // tạm trong app.
-function buildMeetingMinutesCoreHTML(m, { interactive }) {
+// "Nội Dung Trao Đổi / Kết Luận" an toàn để gán vào .md-body-text (11/2026) — biên bản MỚI
+// (contentFormat='html') đã được SERVER sanitize allowlist (normalizeMeetingMinutesContent(),
+// lib/createValidation.js) khi lưu; lọc THÊM 1 lần DOMPurify ở đây trước khi gán innerHTML (lớp phòng thủ
+// thứ 2, cùng khuôn hydrateInternalRichBody() ở module-internalcomms-nhipsong.js) rồi chèn THẲNG (không
+// escapeHtml — đã an toàn qua 2 lớp lọc). Biên bản CŨ (không có contentFormat, văn bản thuần) giữ NGUYÊN
+// cách hiển thị cũ: escapeHtml() + .md-body-text{white-space:pre-wrap} (app.css) tự xuống dòng theo \n.
+async function minutesSafeBodyHtml(m) {
+  if (m.contentFormat === 'html') {
+    try { return await sanitizeMinutesRichHtml(m.content); } catch (_) { return escapeHtml(m.content); }
+  }
+  return escapeHtml(m.content);
+}
+
+function buildMeetingMinutesCoreHTML(m, { interactive, bodyHtml }) {
   const attendeesRows = Array.isArray(m.attendees) ? m.attendees : [];
   const attendeeRowsHTML = attendeesRows.map((a, idx) => `
     <tr><td>${idx + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.title || '')}</td><td>${escapeHtml(a.dept || '')}</td><td>${escapeHtml(a.phone || '')}</td></tr>
@@ -1109,7 +1195,7 @@ function buildMeetingMinutesCoreHTML(m, { interactive }) {
         </table>
 
         <div class="md-section-title">Nội Dung Biên Bản</div>
-        <div class="md-body-text">${escapeHtml(m.content)}</div>
+        <div class="md-body-text">${bodyHtml != null ? bodyHtml : escapeHtml(m.content)}</div>
 
         <div class="md-section-title">Ý Kiến Chỉ Đạo</div>
         <table class="md-items-table">
@@ -1127,7 +1213,7 @@ function buildMeetingMinutesCoreHTML(m, { interactive }) {
   `;
 }
 
-function viewMeetingMinutesDetails(id) {
+async function viewMeetingMinutesDetails(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
   if (!canViewMeetingMinutesRecord(currentUser, m)) {
@@ -1138,7 +1224,8 @@ function viewMeetingMinutesDetails(id) {
   document.getElementById('viewModalSub').innerText = `Chủ trì: ${m.chair} | Thư ký: ${m.secretary}`;
   document.getElementById('viewModalFooterInfo').innerText = `Người lập: ${m.creator}${m.lastEditedBy ? ` | Sửa lần cuối bởi: ${m.lastEditedBy} lúc ${m.lastEditedAt}` : ''}`;
 
-  document.getElementById('viewModalContent').innerHTML = buildMeetingMinutesCoreHTML(m, { interactive: true });
+  const bodyHtml = await minutesSafeBodyHtml(m);
+  document.getElementById('viewModalContent').innerHTML = buildMeetingMinutesCoreHTML(m, { interactive: true, bodyHtml });
   document.getElementById('viewDocModal').classList.remove('hidden');
 }
 
@@ -1146,7 +1233,7 @@ function viewMeetingMinutesDetails(id) {
 // vì file tải về/khung in không load được app.css, theo đúng cách đã làm cho Phiếu Phê Duyệt
 // (APPROVAL_SLIP_CSS ở core.js). Nội dung lõi dùng CHUNG buildMeetingMinutesCoreHTML() ở trên — CSS
 // .minutes-doc/.md-* ở đây PHẢI giữ nguyên y hệt bản trong app.css (xem chú thích ở app.css).
-function buildMeetingMinutesDocumentHTML(m) {
+function buildMeetingMinutesDocumentHTML(m, bodyHtml) {
   const css = `
         .minutes-doc { font-family: 'Times New Roman', Georgia, serif; color: #111; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; position: relative; font-size: 13px; line-height: 1.6; }
         .minutes-doc .md-watermark { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 28px; font-weight: bold; color: rgba(0,0,0,0.06); white-space: nowrap; pointer-events: none; z-index: 0; text-transform: uppercase; text-align: center; }
@@ -1159,6 +1246,8 @@ function buildMeetingMinutesDocumentHTML(m) {
         .minutes-doc .md-label { font-weight: bold; width: 160px; white-space: nowrap; }
         .minutes-doc .md-section-title { font-weight: bold; margin-top: 14px; margin-bottom: 4px; background: #f0f0f0; padding: 4px 6px; }
         .minutes-doc .md-body-text { white-space: pre-wrap; }
+        .minutes-doc .md-body-text ul { list-style: disc; padding-left: 20px; }
+        .minutes-doc .md-body-text ol { list-style: decimal; padding-left: 20px; }
         .minutes-doc table.md-items-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
         .minutes-doc table.md-items-table th, .minutes-doc table.md-items-table td { border: 1px solid #999; padding: 4px 6px; }
         .minutes-doc table.md-items-table th { background: #f0f0f0; font-weight: bold; text-align: center; }
@@ -1177,16 +1266,17 @@ function buildMeetingMinutesDocumentHTML(m) {
         .minutes-doc .md-footer-note { margin-top: 16px; font-size: 11px; color: #444; border-top: 1px solid #ccc; padding-top: 6px; }
         @media print { .minutes-doc { padding: 0; } }
   `;
-  return `<style>${css}</style>${buildMeetingMinutesCoreHTML(m, { interactive: false })}`;
+  return `<style>${css}</style>${buildMeetingMinutesCoreHTML(m, { interactive: false, bodyHtml })}`;
 }
 
-function downloadMeetingMinutes(id) {
+async function downloadMeetingMinutes(id) {
   const m = DB.meetingMinutes.find(x => x.id === id);
   if (!m) return;
   if (!canDownloadMeetingMinutesRecord(currentUser, m)) {
     return alert('⛔ Bạn không có quyền tải biên bản họp này!');
   }
-  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bien Ban Hop - ${escapeHtml(m.code)}</title></head><body>${buildMeetingMinutesDocumentHTML(m)}</body></html>`);
+  const bodyHtml = await minutesSafeBodyHtml(m);
+  const fullHtml = standaloneHtmlRestoreStyles(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bien Ban Hop - ${escapeHtml(m.code)}</title></head><body>${buildMeetingMinutesDocumentHTML(m, bodyHtml)}</body></html>`);
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
