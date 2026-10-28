@@ -187,7 +187,10 @@ function buildTransporter({ host, port, encryption, user, pass, allowSelfSigned 
 // bại). Trả về { sent, failed, simulated, host, port } — có kèm host/port THỰC đã dùng để gửi (chỉ
 // khi simulated:false) để nơi gọi (Nhật ký hệ thống) ghi rõ đã xác nhận gửi tới máy chủ nào, phục vụ
 // việc kiểm tra/xác minh thay vì chỉ tin vào việc "đã thử gửi".
-async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned, graph, ews }) {
+// attachments (11/2026, đính kèm .docx Biên Bản Họp — xem routes/email.js): mảng tuỳ chọn
+// [{filename, content: Buffer, contentType}], KHÔNG truyền hoặc mảng rỗng = hành vi CŨ 100% ở cả 3
+// phương thức gửi (không nơi gọi nào khác truyền tham số này nên không đổi gì luồng hiện có).
+async function sendMail({ to, subject, text, html, host, port, encryption, user, pass, from, allowSelfSigned, graph, ews, attachments }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   if (recipients.length === 0) return { sent: [], failed: [], simulated: false };
 
@@ -205,7 +208,7 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
     }
     const { sent, failed, lastErrorMessage } = await sendMailViaGraph({
       tenantId: graph.tenantId, clientId: graph.clientId, clientSecret: graph.clientSecret,
-      senderMailbox: graph.senderMailbox, to: recipients, subject, text, html
+      senderMailbox: graph.senderMailbox, to: recipients, subject, text, html, attachments
     });
     return { sent, failed, simulated: false, host: 'graph.microsoft.com (Microsoft Graph API)', port: 443, errorMessage: lastErrorMessage };
   }
@@ -222,7 +225,7 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
     }
     const { sent, failed, lastErrorMessage } = await sendMailViaEws({
       ewsUrl: ews.ewsUrl, mailboxUser: ews.mailboxUser, mailboxPass: ews.mailboxPass,
-      allowSelfSigned: ews.allowSelfSigned, to: recipients, subject, text, html
+      allowSelfSigned: ews.allowSelfSigned, to: recipients, subject, text, html, attachments
     });
     return { sent, failed, simulated: false, host: `${ews.ewsUrl} (Exchange Web Services)`, port: 443, errorMessage: lastErrorMessage };
   }
@@ -246,9 +249,12 @@ async function sendMail({ to, subject, text, html, host, port, encryption, user,
   // trả thẳng ra UI, giúp admin tự thấy ngay lý do thật (VD "Greeting never received" khi gửi STARTTLS
   // tới cổng chờ sẵn TLS như 465, hoặc "self signed certificate" khi Postfix dùng chứng chỉ tự ký).
   let lastErrorMessage = null;
+  // nodemailer nhận "attachments" NGUYÊN DẠNG [{filename, content: Buffer, contentType}] — hỗ trợ sẵn,
+  // không cần chuyển đổi gì thêm (khác Graph API/EWS bên trên cần tự encode base64, xem
+  // graphMailer.js/ewsMailer.js).
   for (const addr of recipients) {
     try {
-      await transporter.sendMail({ from: fromAddr, to: addr, subject, text, html: html || undefined });
+      await transporter.sendMail({ from: fromAddr, to: addr, subject, text, html: html || undefined, attachments: (attachments && attachments.length) ? attachments : undefined });
       sent.push(addr);
     } catch (err) {
       console.error(`⛔ Gửi email tới ${addr} thất bại:`, err.message);

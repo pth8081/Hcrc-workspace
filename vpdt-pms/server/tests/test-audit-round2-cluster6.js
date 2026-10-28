@@ -558,7 +558,12 @@ async function main() {
   stubModule('../lib/mailer', {
     sendMail: async ({ to }) => { SENT_MAILS.push(to); return { sent: to, failed: [], simulated: false, host: 'smtp.test', port: 587 }; },
     hasAuthConfigured: () => false,
-    resolveEncryption: () => 'STARTTLS'
+    resolveEncryption: () => 'STARTTLS',
+    // LỖI ĐÃ VÁ (tự phát hiện 11/2026, đợt thêm resolveGraphOption/resolveEwsOption vào routes/email.js
+    // TRƯỚC đây đã làm stub này lệch — 2 khoá này cần CÓ MẶT vì routes/email.js destructure cả 2 từ
+    // lib/mailer ngay khi require, thiếu 1 trong 2 khiến `resolveGraphOption is not a function` lúc gọi).
+    resolveGraphOption: () => null,
+    resolveEwsOption: () => null
   });
   stubModule('../lib/emailCrypto', { decryptSecret: (v) => v, encryptSecret: (v) => v });
 

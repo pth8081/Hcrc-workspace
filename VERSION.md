@@ -1,9 +1,76 @@
 # Phiên bản hiện tại
 
-**28.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.38 (2026-11): Email Biên Bản Họp — gắn link truy cập trực tiếp + đính kèm file .docx
+
+Người dùng gửi ảnh chụp 1 email thông báo Biên Bản Họp THẬT đã nhận (qua Outlook) — nội dung chỉ có câu
+"vui lòng đăng nhập hệ thống để xem chi tiết", KHÔNG có link nào — kèm yêu cầu 3 phần: (1) gắn link truy
+cập THẲNG đúng biên bản vào email, (2) người có mặt trong cuộc họp (tham dự viên) đăng nhập đúng tài
+khoản khớp biên bản thì tự xem được, (3) đính kèm file `.docx` để đối tác bên ngoài KHÔNG có tài khoản hệ
+thống cũng đọc được nội dung.
+
+**Điều tra trước khi sửa**: phần (2) đã hoạt động đúng từ trước — `canViewMeetingMinutes()`/
+`filterMeetingMinutesForUser()` (`lib/recordViewScope.js`) đã khớp theo `username` (tham dự viên có tài
+khoản) hoặc tên hiển thị (khách mời ngoài), và đã gác đúng Khối 0 (`MODULE_ACCESS_GATED_COLLECTIONS.minutes`)
+ở `GET /api/data` — không cần sửa gì. Phần (1): module `MINUTES` trước đây CỐ Ý nằm ngoài khung "link
+email phê duyệt" dùng chung (`APPROVAL_EMAIL_EVENTS`/`LINKABLE_EMAIL_FAMILIES`/`APPROVAL_EMAIL_LINK_TAB`/
+`APPROVAL_EMAIL_RECORD_OPENER` ở `public/js/core.js`) — chỉ cần đăng ký đúng khuôn các module đã có.
+
+- **Phần 1 — link email** (`public/js/core.js`): đăng ký `MINUTES` vào cả 4 cấu trúc của khung link email
+  dùng chung — family `created` (actionType `NOTIFY_MINUTES_CREATED`, đúng actionType
+  `confirmSendMinutesEmail()` ở `module-bienbanhop.js` đã dùng sẵn, KHÔNG cần sửa call site đó), tab
+  `minutes`, opener `(r) => viewMeetingMinutesDetails(r.id)` (tự kiểm lại quyền xem khi mở). Email thông
+  báo Biên Bản Họp (cả lập mới lẫn cập nhật) giờ tự kèm link `?gotoModule=minutes&code=<mã>`, bấm vào mở
+  thẳng đúng biên bản — không cần tự tìm trong danh sách.
+- **Phần 3 — đính kèm .docx** (3 file mới/sửa):
+  - `lib/minutesDocx.js` (MỚI): sinh file `.docx` từ 1 bản ghi biên bản (tiêu đề/mã/thời gian/địa điểm/
+    chủ trì/thư ký/thành phần tham dự + nội dung), dùng thư viện `docx` (npm, dependency MỚI DUY NHẤT của
+    tính năng này). Nội dung rich-text (`contentFormat='html'`) chỉ gồm đúng 10 tag không thuộc tính
+    (`b/strong/i/em/u/ul/ol/li/br/p`, xem `normalizeMeetingMinutesContent()`) nên tự viết 1 parser nhỏ
+    thay vì thêm dependency HTML parser ngoài; hồ sơ CŨ (trước v28.36, không có `contentFormat`, nội dung
+    văn bản thường) tách dòng riêng, không chạy qua parser HTML (tránh hiểu nhầm ký tự `<`/`>` gõ tay).
+  - `lib/mailer.js`/`lib/graphMailer.js`/`lib/ewsMailer.js`: thêm tham số `attachments` (mảng
+    `[{filename, content: Buffer, contentType}]`) cho CẢ 3 cơ chế gửi — SMTP (nodemailer nhận thẳng
+    Buffer), Graph API (tự encode `contentBytes` base64), EWS (chèn `<t:Attachments><t:FileAttachment>`
+    base64 NGAY TRONG `<t:Message>` của CreateItem). Máy chủ thật của người dùng dùng EWS (Exchange
+    on-premise, xem chú thích ở đầu `lib/ewsMailer.js`) nên bắt buộc phải làm đủ cả 3, không chỉ SMTP.
+    Không truyền/mảng rỗng = hành vi CŨ 100% ở cả 3 (field attachments vắng mặt hoàn toàn).
+  - `routes/email.js`: `buildMinutesEmailAttachment()` (mới) — CHỈ đính kèm khi body có
+    `module==='MINUTES'` + `targetCode` khớp 1 bản ghi `meetingMinutes` THẬT + **tự kiểm lại**
+    `canViewMeetingMinutes(req.freshUser, record)` (ĐÚNG hàm server đã dùng để lọc `GET /api/data`) —
+    không tin `targetCode` client gửi lên là hồ sơ người đó thực sự được xem, tránh 1 tài khoản mượn
+    route gửi-email-chung này để làm lộ nội dung biên bản KHÁC (không tham dự) ra ngoài qua file đính
+    kèm. Không khớp/không đủ quyền/lỗi sinh file -> gửi email BÌNH THƯỜNG, chỉ không có file đính kèm
+    (không chặn gửi). `public/js/core.js` `dispatchRealEmail()` gửi kèm `module`/`targetCode` trong body
+    `POST /api/send-email` (trước đây chỉ dùng để ghi log phía client) — mọi lời gọi khác (không phải
+    MINUTES) không bị ảnh hưởng gì.
+- **Lỗi tự phát hiện khi nối dây, đã vá cùng đợt** (`defaults.js`, `DB.approvalEmailConfig`): object này
+  trước đây chỉ có đúng 12 khoá dù `APPROVAL_EMAIL_EVENTS` (core.js) đã có `UNIFORM`/`HR_LEAVE`/
+  `HR_SWAP`/`TRAINING` từ đợt rà soát trước go-live mà KHÔNG được thêm vào — khiến riêng ở màn "Hồ Sơ Cá
+  Nhân > Thông Báo Email" (opt-out cá nhân), bấm tắt nhận "Cần phê duyệt" của 4 module này vẫn hiện
+  checkbox + Lưu không báo lỗi, nhưng `PATCH /api/auth/me` (routes/auth.js, `NOTIFY_EMAIL_MODULE_KEYS`
+  suy ra từ chính object này) ÂM THẦM loại bỏ 4 khoá lạ đó — tắt không có tác dụng. Bổ sung đủ 4 khoá này
+  + `MINUTES` (module mới đăng ký cùng đợt) vào `defaults.js` — thuần sửa code (đọc trực tiếp từ
+  `DEFAULTS`, không phụ thuộc dữ liệu đã seed trong DB), không cần migration.
+- Test: `tests/test-minutes-email-docx-attachment.js` (MỚI, 15/15 — sinh .docx hợp lệ cho cả nội dung
+  HTML/văn bản thường/rỗng; forward `attachments` đúng ở cả 3 mailer; **xác nhận chặn đúng** lỗ hổng lộ
+  nội dung biên bản khác qua targetCode giả mạo) + `tests/test-approval-email-config.js` (85/85, cập
+  nhật số dòng bảng chính 16→17) + `tests/test-notify-email-modules.js` (10/10, cập nhật số phân hệ
+  12→17 — phát hiện VÀ vá luôn gap `defaults.js` nói trên) + `tests/test-audit-round2-cluster6.js`
+  (39/39, vá 1 stub `lib/mailer` cũ thiếu `resolveGraphOption`/`resolveEwsOption` — lỗi cũ, không liên
+  quan đợt này nhưng phát hiện khi chạy lại) + `tests/test-ews-mailer.js` (13/13) +
+  `tests/test-khoi0-meetingminutes-gate.js`/`test-minutes.js`/`test-minutes-reassign-pending-directive.js`/
+  `test-minutes-task-file-ownership.js`/`test-collapse-car-meeting-minutes-forms.js`/
+  `test-notification-email-html.js`/`test-approvalneeded-email-uniform-leave-swap-training.js`/
+  `test-approval-email-config-admin-gate.js` — toàn bộ pass, không regression.
+
+**Deploy impact**: `server/package.json` thêm dependency MỚI `docx` — **bắt buộc chạy `npm install` lại**
+sau khi copy code lần này (khác các lần merge gần đây, không chỉ copy code + `pm2 restart`). Không đổi
+`server/sql/schema.sql`, không thêm biến môi trường mới.
 
 ## v28.37 (2026-11): Fix email nhắc hạn Onboarding/Offboarding gửi nhầm lên cả Tổng Giám Đốc
 

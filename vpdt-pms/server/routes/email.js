@@ -1,7 +1,8 @@
 // routes/email.js — POST /api/send-email: gửi email THẬT (qua lib/mailer.js), được gọi từ frontend
 // (notifyUsersByEmail/notifyMinutesDirectiveRecipients/sendApprovalOtp) song song với việc ghi log
 // mô phỏng như trước — không đổi hành vi các hàm gọi, chỉ thêm bước gửi thật nếu đã cấu hình đủ
-// Host SMTP (xem lib/mailer.js).
+// Host SMTP (xem lib/mailer.js). 11/2026: tự đính kèm .docx Biên Bản Họp khi body có module='MINUTES'
+// + targetCode hợp lệ (xem buildMinutesEmailAttachment() ngay dưới) — mọi module khác không đổi gì.
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
@@ -10,6 +11,10 @@ const { sendMail, hasAuthConfigured, resolveEncryption, resolveGraphOption, reso
 const { decryptSecret } = require('../lib/emailCrypto');
 const { sendServerError } = require('../lib/errorResponse');
 const { getAllForCollection } = require('../lib/recordStore');
+// Đính kèm .docx Biên Bản Họp (11/2026, yêu cầu người dùng "đối tác bên ngoài không có tài khoản sẽ
+// xem được bằng file đính kèm" — xem buildMinutesEmailAttachment() ngay dưới).
+const { buildMeetingMinutesDocxBuffer } = require('../lib/minutesDocx');
+const { canViewMeetingMinutes } = require('../lib/recordViewScope');
 
 // Giới hạn riêng cho gửi email (đụng tới máy chủ SMTP thật, có thể bị lợi dụng làm relay spam) — chặt
 // hơn giới hạn chung toàn /api (xem server.js).
@@ -122,8 +127,35 @@ async function findDisallowedRecipients(recipients, users) {
   return unknown;
 }
 
+// Đính kèm .docx Biên Bản Họp khi email này là thông báo MINUTES (module/targetCode do
+// dispatchRealEmail() ở core.js gửi kèm — xem notifyRecipientsByEmail()). TỰ KIỂM LẠI quyền xem của
+// CHÍNH người gửi request (req.freshUser, canViewMeetingMinutes() — ĐÚNG hàm server đã dùng để lọc
+// GET /api/data, xem routes/data.js) trước khi sinh file — không tin "targetCode" client gửi lên là
+// hồ sơ người đó THỰC SỰ được xem, tránh 1 tài khoản dùng targetCode của biên bản KHÁC (phòng ban
+// khác, không tham dự) để mượn route gửi-email-chung này làm lộ nội dung ra ngoài qua file đính kèm.
+// Không tìm thấy hồ sơ / không đủ quyền / lỗi sinh file -> trả về [] (KHÔNG chặn gửi email, email vẫn
+// đi bình thường chỉ là không có đính kèm) — đúng tinh thần "đính kèm là tiện ích thêm", không phải
+// điều kiện bắt buộc để gửi được thông báo.
+async function buildMinutesEmailAttachment(module, targetCode, user) {
+  if (module !== 'MINUTES' || !targetCode || !user) return [];
+  try {
+    const minutes = (await getAllForCollection('meetingMinutes')) || [];
+    const record = minutes.find(m => m && m.code === targetCode);
+    if (!record || !canViewMeetingMinutes(user, record)) return [];
+    const buffer = await buildMeetingMinutesDocxBuffer(record);
+    return [{
+      filename: `BienBanHop_${record.code}.docx`,
+      content: buffer,
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    }];
+  } catch (err) {
+    console.error('⛔ Không sinh được file .docx đính kèm Biên Bản Họp (vẫn gửi email không kèm file):', err.message);
+    return [];
+  }
+}
+
 router.post('/', sendEmailRateLimiter, async (req, res) => {
-  const { to, subject, text, html } = req.body || {};
+  const { to, subject, text, html, module, targetCode } = req.body || {};
   if (!to || !subject) return res.status(400).json({ error: 'Thiếu "to" hoặc "subject"' });
 
   const recipients = (Array.isArray(to) ? to : [to]).map(a => String(a || '').trim()).filter(Boolean);
@@ -146,6 +178,7 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
 
   try {
     const { user, pass } = resolveSmtpAccount(emailConfig);
+    const attachments = await buildMinutesEmailAttachment(module, targetCode, req.freshUser);
     const result = await sendMail({
       to: recipients, subject, text, html,
       host: emailConfig.smtpHost,
@@ -155,7 +188,8 @@ router.post('/', sendEmailRateLimiter, async (req, res) => {
       from: emailConfig.senderEmail,
       allowSelfSigned: !!emailConfig.smtpAllowSelfSigned,
       graph: resolveGraphOption(emailConfig),
-      ews: resolveEwsOption(emailConfig)
+      ews: resolveEwsOption(emailConfig),
+      attachments
     });
     res.json(result);
   } catch (err) {

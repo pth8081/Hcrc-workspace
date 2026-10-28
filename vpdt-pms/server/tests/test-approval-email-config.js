@@ -316,8 +316,11 @@ async function scenario(name, fn) {
     record('SUBMISSION "Xin ý kiến" (đặc thù) mặc định CÓ tích', r.submissionOpinionRequested === true, JSON.stringify({ submissionOpinionRequested: r.submissionOpinionRequested }));
     record('IT_SUPPORT "Ticket hoàn tất" (đặc thù) mặc định CÓ tích', r.itSupportTicketDone === true, JSON.stringify({ itSupportTicketDone: r.itSupportTicketDone }));
     // Gap-fill (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình): thêm 4 module mới
-    // (UNIFORM/HR_LEAVE/HR_SWAP/TRAINING) — trước đây 12, giờ 16.
-    record('bảng chính vẽ đủ 1 dòng / module (16 module có email phê duyệt)', r.rowCount === 16, JSON.stringify({ rowCount: r.rowCount }));
+    // (UNIFORM/HR_LEAVE/HR_SWAP/TRAINING) — trước đây 12, lên 16. 11/2026: thêm MINUTES (đăng ký vào
+    // khung link email, xem APPROVAL_EMAIL_EVENTS.MINUTES) — lên 17. MINUTES không có family
+    // approvalNeeded/result nên vẫn có 1 dòng (chỉ tên module, 0 cột) ở bảng chính, cùng khuôn mọi
+    // module khác (mainRows.push() không điều kiện theo mainFamilies.length, xem renderApprovalEmailConfigForm()).
+    record('bảng chính vẽ đủ 1 dòng / module (17 module có email phê duyệt)', r.rowCount === 17, JSON.stringify({ rowCount: r.rowCount }));
     record('khối "Sự kiện đặc thù" thật sự có nội dung (SUBMISSION/IT_SUPPORT)', /Văn Bản Trình/.test(r.specialsHTML) && /Hỗ Trợ IT/.test(r.specialsHTML), 'rendered');
   });
 

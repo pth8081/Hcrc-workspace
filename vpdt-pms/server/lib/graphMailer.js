@@ -41,13 +41,26 @@ async function getGraphAccessToken({ tenantId, clientId, clientSecret }) {
 // Gửi 1 email tới 1 người nhận qua Graph API, nhân danh "senderMailbox" (mailbox đã cấp quyền
 // Mail.Send cho app) — KHÔNG dùng SMTP, gọi thẳng REST API qua HTTPS (dùng fetch có sẵn từ Node 18+,
 // không cần thêm thư viện http client ngoài — đồng bộ với các điểm gọi API ngoài khác trong hệ thống).
-async function sendOneViaGraph({ accessToken, senderMailbox, to, subject, text, html }) {
+// attachments (11/2026, đính kèm .docx Biên Bản Họp — xem routes/email.js): Graph API sendMail nhận
+// attachment qua field "attachments" trên "message", mỗi phần tử {"@odata.type": "#microsoft.graph.
+// fileAttachment", name, contentType, contentBytes} — contentBytes BẮT BUỘC base64 (khác nodemailer
+// nhận thẳng Buffer). Không truyền/mảng rỗng -> field "attachments" vắng mặt hoàn toàn trên message,
+// hành vi CŨ 100% (Graph API coi message không có field này y hệt không đính kèm gì).
+async function sendOneViaGraph({ accessToken, senderMailbox, to, subject, text, html, attachments }) {
   const url = `${GRAPH_BASE}/users/${encodeURIComponent(senderMailbox)}/sendMail`;
   const message = {
     subject,
     body: html ? { contentType: 'HTML', content: html } : { contentType: 'Text', content: text || '' },
     toRecipients: [{ emailAddress: { address: to } }]
   };
+  if (attachments && attachments.length) {
+    message.attachments = attachments.map(a => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: a.filename,
+      contentType: a.contentType || 'application/octet-stream',
+      contentBytes: Buffer.isBuffer(a.content) ? a.content.toString('base64') : Buffer.from(a.content || '').toString('base64')
+    }));
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -62,7 +75,7 @@ async function sendOneViaGraph({ accessToken, senderMailbox, to, subject, text, 
 // Gửi tới NHIỀU người nhận — gửi RIÊNG từng người (khớp đúng ngữ nghĩa sent/failed của
 // lib/mailer.js#sendMail() ở luồng SMTP, để 1 địa chỉ sai không làm rớt cả loạt người nhận hợp lệ khác
 // trong cùng 1 lượt gửi thông báo).
-async function sendMailViaGraph({ tenantId, clientId, clientSecret, senderMailbox, to, subject, text, html }) {
+async function sendMailViaGraph({ tenantId, clientId, clientSecret, senderMailbox, to, subject, text, html, attachments }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   const sent = [];
   const failed = [];
@@ -80,7 +93,7 @@ async function sendMailViaGraph({ tenantId, clientId, clientSecret, senderMailbo
   }
   for (const addr of recipients) {
     try {
-      await sendOneViaGraph({ accessToken, senderMailbox, to: addr, subject, text, html });
+      await sendOneViaGraph({ accessToken, senderMailbox, to: addr, subject, text, html, attachments });
       sent.push(addr);
     } catch (err) {
       console.error(`⛔ Gửi email (Graph API) tới ${addr} thất bại:`, err.message);

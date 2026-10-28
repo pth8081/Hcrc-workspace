@@ -456,9 +456,20 @@ const DEFAULTS = {
   //
   // Phân loại (module, actionType) -> {configModule, family} dùng để CHẶN gửi nằm ở
   // APPROVAL_EMAIL_EVENTS/classifyApprovalEmailEvent() (public/js/core.js) — cổng DUY NHẤT nằm trong
-  // notifyRecipientsByEmail() (chọn gọi trước dispatchRealEmail(), 88 điểm gọi trong ~13 module KHÔNG
-  // đổi gì). Sự kiện KHÔNG nhận diện được (TASK/MINUTES, hoặc actionType tương lai chưa liệt kê) LUÔN
-  // gửi (fail-open) — không bao giờ để 1 sự kiện chưa phân loại bị âm thầm chặn.
+  // notifyRecipientsByEmail() (chọn gọi trước dispatchRealEmail()). Sự kiện KHÔNG nhận diện được (TASK,
+  // hoặc actionType tương lai chưa liệt kê) LUÔN gửi (fail-open) — không bao giờ để 1 sự kiện chưa phân
+  // loại bị âm thầm chặn.
+  //
+  // LỖI ĐÃ VÁ (11/2026, tự phát hiện khi thêm MINUTES — xem test-notify-email-modules.js): object này
+  // trước đây chỉ có ĐÚNG 12 khoá dù APPROVAL_EMAIL_EVENTS (core.js) đã có UNIFORM/HR_LEAVE/HR_SWAP/
+  // TRAINING từ đợt rà soát trước go-live mà KHÔNG được thêm vào đây — khoá đó vẫn hiện checkbox ở màn
+  // admin (renderApprovalEmailConfigForm() đọc thẳng APPROVAL_EMAIL_EVENTS, không phụ thuộc object này)
+  // NHƯNG routes/auth.js NOTIFY_EMAIL_MODULE_KEYS (Object.keys(DEFAULTS.approvalEmailConfig)) lại suy ra
+  // TỪ object này — nên riêng Ở MÀN "Hồ Sơ Cá Nhân > 🔔 Thông Báo Email" (opt-out cá nhân), người dùng
+  // bấm tắt nhận "Cần phê duyệt" của 4 module này vẫn hiện checkbox + bấm Lưu không báo lỗi, nhưng
+  // PATCH /api/auth/me ÂM THẦM loại bỏ 4 khoá lạ đó (không nằm trong NOTIFY_EMAIL_MODULE_KEYS) — tắt
+  // không có tác dụng, người dùng tưởng đã lưu. Bổ sung đủ 4 khoá này + MINUTES (module mới đăng ký
+  // cùng đợt, xem APPROVAL_EMAIL_EVENTS.MINUTES) vào đây để đồng bộ lại đúng 100% với core.js.
   //
   // seedDefaults() (xem seedDefaults.js) chỉ ghi TOÀN BỘ key này 1 LẦN nếu dbo.AppData CHƯA TỪNG có
   // dòng "approvalEmailConfig" — không tự thêm sub-key mới vào 1 CSDL đã có sẵn key này (cùng quy ước
@@ -491,7 +502,16 @@ const DEFAULTS = {
     },
     // OPERATION: gộp chung 3 module con thật (OPERATION_ORDER/OPERATION_STORE_OPEN/OPERATION_REPAIR,
     // xem OPERATION_KIND_META ở module-vanhanh.js) — cùng 1 khối cấu hình cho cả 3.
-    OPERATION: { approvalNeeded: false, result: true }
+    OPERATION: { approvalNeeded: false, result: true },
+    // UNIFORM/HR_LEAVE/HR_SWAP/TRAINING: KHÔNG có "result" — Duyệt/Từ chối của cả 4 module này hiện
+    // không gửi email ở bất kỳ điểm nào (cùng khuôn LICENSE ở trên).
+    UNIFORM: { approvalNeeded: false },
+    HR_LEAVE: { approvalNeeded: false },
+    HR_SWAP: { approvalNeeded: false },
+    TRAINING: { approvalNeeded: false },
+    // MINUTES (11/2026): không phải luồng phê duyệt (không approvalNeeded/result), chỉ 1 sự kiện
+    // "created" — mặc định BẬT (true), khớp hành vi trước khi đăng ký module này (luôn gửi).
+    MINUTES: { created: true }
   },
 
   // Trạng thái đã cảnh báo ổ đĩa gần nhất ({lastAlertAt, lastAlertPercent}) — dùng để tránh dội email

@@ -3,15 +3,15 @@
 // Regression test cho "🔔 Thông Báo Email" (Hồ Sơ Cá Nhân, 10/2026, yêu cầu người dùng): cho phép TỪNG
 // người tự bật/tắt nhận email "Cần phê duyệt" theo từng phân hệ — KHÁC hẳn màn admin "Quản Trị > Thông
 // Báo Email Phê Duyệt" (DB.approvalEmailConfig, TOÀN CỤC cho mọi người, đã có test riêng ở
-// test-approval-email-config.js). Phương án "đơn giản" người dùng đã chọn: LUÔN hiện đủ 12 phân hệ cho
+// test-approval-email-config.js). Phương án "đơn giản" người dùng đã chọn: LUÔN hiện đủ 17 phân hệ cho
 // MỌI tài khoản (không lọc theo quyền phê duyệt thật của từng người).
 //
 // Bao phủ:
-//  (A) Client (Playwright, core.js thật): renderNotifyEmailModulesForm() hiện đủ 12 dòng, mặc định tick
+//  (A) Client (Playwright, core.js thật): renderNotifyEmailModulesForm() hiện đủ 17 dòng, mặc định tick
 //      sẵn trừ khi đã lưu false; saveNotifyEmailModules() gửi đúng PATCH /api/auth/me + cập nhật
 //      currentUser/DB.users; notifyRecipientsByEmail() CHỈ chặn family 'approvalNeeded' của ĐÚNG người đã
 //      tắt, KHÔNG ảnh hưởng người khác cũng trong danh sách nhận, và KHÔNG ảnh hưởng family 'result'.
-//  (B) Server (routes/auth.js PATCH /api/auth/me, Express thật + stub lưu trữ): chỉ nhận đúng 12 khoá
+//  (B) Server (routes/auth.js PATCH /api/auth/me, Express thật + stub lưu trữ): chỉ nhận đúng 17 khoá
 //      configModule hợp lệ (loại khoá lạ), ép kiểu boolean (bỏ qua giá trị không phải boolean), KHÔNG cho
 //      client tự ý gửi field khác (perms/admin...) qua field này.
 //
@@ -56,10 +56,10 @@ async function runClientScenarios(run) {
   try {
     await page.evaluate(async (u) => { await proceedAfterAuth(u); }, REPORTER);
 
-    await run.run('openProfileModal() + renderNotifyEmailModulesForm() hiện đủ 12 dòng phân hệ, mặc định TẤT CẢ tick sẵn', async () => {
+    await run.run('openProfileModal() + renderNotifyEmailModulesForm() hiện đủ 17 dòng phân hệ, mặc định TẤT CẢ tick sẵn', async () => {
       await page.evaluate(() => openProfileModal());
       const count = await page.evaluate(() => document.querySelectorAll('#pfNotifyEmailListWrap .pf-notify-email-module').length);
-      assertEqual(count, 12, 'Phải luôn hiện đủ 12 phân hệ (phương án đơn giản, không lọc theo quyền)');
+      assertEqual(count, 17, 'Phải luôn hiện đủ 17 phân hệ (phương án đơn giản, không lọc theo quyền)');
       const allChecked = await page.evaluate(() => [...document.querySelectorAll('#pfNotifyEmailListWrap .pf-notify-email-module')].every(cb => cb.checked));
       assertEqual(allChecked, true, 'Mặc định phải tick sẵn hết khi currentUser.notifyEmailModules chưa có gì');
     });
@@ -75,7 +75,7 @@ async function runClientScenarios(run) {
       assertEqual(docChecked, true, 'Các phân hệ khác (chưa lưu gì) phải vẫn mặc định tick');
     });
 
-    await run.run('saveNotifyEmailModules() gửi đúng PATCH /api/auth/me với toàn bộ 12 trạng thái checkbox hiện tại', async () => {
+    await run.run('saveNotifyEmailModules() gửi đúng PATCH /api/auth/me với toàn bộ 17 trạng thái checkbox hiện tại', async () => {
       await page.evaluate((u) => { currentUser = { ...u, notifyEmailModules: {} }; openProfileModal(); }, REPORTER);
       await page.evaluate(() => { document.querySelector('#pfNotifyEmailListWrap input[data-config-module="MEETING"]').checked = false; });
       await page.evaluate(() => saveNotifyEmailModules());
@@ -211,7 +211,7 @@ async function runServerScenarios(run) {
       assertEqual(res.body.notifyEmailModules.MEETING, false);
     });
 
-    await run.run('PATCH /api/auth/me notifyEmailModules: loại bỏ khoá KHÔNG hợp lệ (không phải 1 trong 12 configModule)', async () => {
+    await run.run('PATCH /api/auth/me notifyEmailModules: loại bỏ khoá KHÔNG hợp lệ (không phải 1 trong 17 configModule)', async () => {
       const res = await call('PATCH', '/api/auth/me', { notifyEmailModules: { CAR: false, HACKED_MODULE: true, admin: true } });
       assertEqual(res.status, 200);
       assertEqual('HACKED_MODULE' in res.body.notifyEmailModules, false, 'Khoá lạ phải bị loại bỏ, không được lưu nguyên văn');

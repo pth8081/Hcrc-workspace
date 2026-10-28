@@ -7479,10 +7479,14 @@ function dispatchRealEmail(recipients, subject, bodyText, context, html) {
   // buildNotificationEmailHtml()/notifyRecipientsByEmail(). routes/email.js + lib/mailer.js +
   // graphMailer.js/ewsMailer.js/nodemailer ĐÃ hỗ trợ sẵn field này từ trước (không cần sửa gì phía
   // server) — gateway nào không có html thì tự fallback gửi text thuần như hành vi gốc.
+  // module/targetCode (11/2026, đính kèm .docx Biên Bản Họp): gửi kèm để routes/email.js TỰ quyết định
+  // có cần đính kèm file .docx hay không (hiện CHỈ module 'MINUTES' dùng tới — mọi module khác server
+  // bỏ qua 2 field này, không đổi hành vi gửi email cũ). Đặt tên cùng field đã dùng ở
+  // logEmailDeliveryResult() ngay dưới (ctxModule/ctxTarget), không bịa thêm khái niệm mới.
   fetch('/api/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: addresses, subject, text: bodyText, html })
+    body: JSON.stringify({ to: addresses, subject, text: bodyText, html, module: ctxModule, targetCode: ctxTarget })
   })
     .then(res => res.json())
     .then(result => logEmailDeliveryResult(ctxModule, ctxTarget, addresses, result))
@@ -7646,6 +7650,15 @@ const APPROVAL_EMAIL_EVENTS = [
     { key: 'approvalNeeded', label: 'Cần phê duyệt huỷ đăng ký', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
     { key: 'result', label: 'Kết quả duyệt huỷ (Duyệt / Từ chối)', actionTypes: [],
       note: 'Chưa có email cho sự kiện này — Duyệt/Từ chối huỷ đăng ký hiện không gửi email ở bất kỳ đâu.' }
+  ] },
+  // MINUTES (Biên Bản Họp — đăng ký thêm 11/2026, yêu cầu người dùng "gắn link truy cập đúng biên bản
+  // vào email"): KHÔNG phải luồng phê duyệt (không có approvalNeeded/result), chỉ 1 sự kiện "đã lập/cập
+  // nhật" gửi người tham dự (confirmSendMinutesEmail() ở module-bienbanhop.js, actionType dùng CHUNG cho
+  // cả tạo mới và cập nhật). Trước đây module này CỐ Ý ngoài phạm vi khung link email (xem comment ở
+  // classifyApprovalEmailEvent()) — nay thêm vào để notifyRecipientsByEmail() tự gắn link + đính kèm
+  // đúng file .docx (xem buildApprovalEmailLink()/dispatchRealEmail() ở dưới).
+  { configModule: 'MINUTES', label: '📝 Biên Bản Họp', families: [
+    { key: 'created', label: 'Biên bản đã lập / cập nhật (gửi người tham dự)', actionTypes: ['NOTIFY_MINUTES_CREATED'] }
   ] }
 ];
 
@@ -7665,9 +7678,10 @@ const APPROVAL_EMAIL_CLASSIFY_MAP = (() => {
 })();
 
 // classifyApprovalEmailEvent(): trả {configModule, family} nếu (module, actionType) khớp 1 sự kiện đã
-// biết ở APPROVAL_EMAIL_EVENTS, hoặc null nếu KHÔNG nhận diện được (module TASK/MINUTES — cố ý ngoài
-// phạm vi tính năng này, xem defaults.js — hoặc bất kỳ actionType nào trong tương lai chưa được liệt kê
-// ở trên). null LUÔN đồng nghĩa "gửi bình thường" (fail-open) ở isApprovalEmailSuppressed() bên dưới.
+// biết ở APPROVAL_EMAIL_EVENTS, hoặc null nếu KHÔNG nhận diện được (module TASK — cố ý ngoài phạm vi
+// tính năng này, xem defaults.js — MINUTES đã đăng ký từ 11/2026, không còn ở nhóm này — hoặc bất kỳ
+// actionType nào trong tương lai chưa được liệt kê ở trên). null LUÔN đồng nghĩa "gửi bình thường"
+// (fail-open) ở isApprovalEmailSuppressed() bên dưới.
 function classifyApprovalEmailEvent(module, actionType) {
   return APPROVAL_EMAIL_CLASSIFY_MAP[`${module}|${actionType}`] || null;
 }
@@ -7867,8 +7881,8 @@ function renderApprovalNeededEmailBodyHtml(greeting, opts) {
 // hệ thống. Dựng bằng <table> + style NỘI TUYẾN (bắt buộc cho email — CSS ngoài/style tag KHÔNG đáng tin
 // cậy ở nhiều email client, đặc biệt Outlook desktop) — KHÁC hẳn khuôn CSP data-op/data-style dùng cho
 // giao diện ứng dụng (HTML này render trong hộp thư người nhận, không qua CSP của app). ctaUrl rỗng (gia
-// đình không có link, VD module TASK/MINUTES chưa đăng ký LINKABLE_EMAIL_FAMILIES) -> ẩn hẳn nút, không
-// hiện nút trỏ tới "#" vô nghĩa.
+// đình không có link, VD module TASK chưa đăng ký LINKABLE_EMAIL_FAMILIES) -> ẩn hẳn nút, không hiện
+// nút trỏ tới "#" vô nghĩa.
 function buildNotificationEmailHtml({ status, badge, bodyRowsHtml, ctaUrl, ctaText }) {
   const theme = EMAIL_STATUS_THEME[status] || EMAIL_STATUS_THEME.info;
   const ctaHtml = ctaUrl ? `
@@ -7954,7 +7968,9 @@ const APPROVAL_EMAIL_LINK_TAB = {
   // module-internalcomms-daotao.js), cần có mặt để gắn link đúng tab. Không có APPROVAL_EMAIL_RECORD_OPENER
   // tương ứng (chỉ chuyển tab, không tự mở thẳng đúng hồ sơ) — cùng mức "chưa xây màn xem chi tiết qua
   // link" như MEETING/BUDGET đã ghi chú ở dưới, không phải thiếu sót riêng của 4 module này.
-  UNIFORM: 'uniform', HR_LEAVE: 'hrAttendance', HR_SWAP: 'hrAttendance', TRAINING: 'internal'
+  UNIFORM: 'uniform', HR_LEAVE: 'hrAttendance', HR_SWAP: 'hrAttendance', TRAINING: 'internal',
+  // MINUTES (11/2026): xem chú thích tại APPROVAL_EMAIL_EVENTS — tab 'minutes' (Biên Bản Họp).
+  MINUTES: 'minutes'
 };
 // APPROVAL_EMAIL_RECORD_OPENER: configModule -> cách MỞ THẲNG đúng hồ sơ sau khi đã chuyển đúng tab
 // (xem openLinkedApprovalRecordByCode() ngay dưới) — dbKeys: các collection DB.<key> cần dò theo
@@ -8027,7 +8043,11 @@ const APPROVAL_EMAIL_RECORD_OPENER = {
     }
   },
   // hrProcesses KHÔNG có field `code` (chỉ có id) -> dò theo `id` qua nhánh fallback.
-  HR_LIFECYCLE: { dbKeys: ['hrProcesses'], open: (r) => openHrProcessDetail(r.id) }
+  HR_LIFECYCLE: { dbKeys: ['hrProcesses'], open: (r) => openHrProcessDetail(r.id) },
+  // MINUTES (11/2026): meetingMinutes CÓ field `code` (newMinutes.code, xem module-bienbanhop.js) -> dò
+  // bình thường, không cần nhánh fallback theo id. viewMeetingMinutesDetails() tự kiểm lại quyền xem
+  // (canViewMeetingMinutesRecord()) — người tham dự bấm link trong email tự xem được đúng biên bản.
+  MINUTES: { dbKeys: ['meetingMinutes'], open: (r) => viewMeetingMinutesDetails(r.id) }
 };
 
 // Tìm đúng module (configModule) khớp tab + mở thẳng hồ sơ theo code — LỖI ĐÃ VÁ (11/2026, yêu cầu
@@ -8078,7 +8098,9 @@ const LINKABLE_EMAIL_FAMILIES = new Set([
   'result', 'approvalNeeded',
   'opinionRequested', 'fileProposal', 'fileProposalAccepted', 'fileProposalDeclined', 'forwardRequested', 'forwardReplied',
   'applied', 'requestInfo', 'emergencyRejectRequest', 'emergencyRejectApproved', 'emergencyRejectDenied',
-  'ticketApprovalNeeded', 'ticketEscalationApproved', 'ticketEscalationDenied', 'ticketDone'
+  'ticketApprovalNeeded', 'ticketEscalationApproved', 'ticketEscalationDenied', 'ticketDone',
+  // 'created' (MINUTES — 11/2026): xem chú thích tại APPROVAL_EMAIL_EVENTS.
+  'created'
 ]);
 
 // buildApprovalEmailUrl(): tách riêng phần dựng URL TRẦN (11/2026, phục vụ nút CTA HTML ở

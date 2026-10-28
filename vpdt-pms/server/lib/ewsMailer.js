@@ -37,10 +37,28 @@ function escapeXml(str) {
   return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 }
 
+// attachments (11/2026, đính kèm .docx Biên Bản Họp — xem routes/email.js): EWS CreateItem cho phép
+// khai <t:Attachments> NGAY BÊN TRONG <t:Message> (schema Item cha của Message có field Attachments) —
+// MỘT lượt CreateItem vừa tạo vừa gửi vừa đính kèm, không cần round-trip CreateAttachment riêng như khi
+// sửa 1 item đã tồn tại. Nhận "content" dạng Buffer (cùng khuôn routes/email.js truyền cho cả 3 gateway)
+// — tự encode base64 ở đây, giống graphMailer.js (<t:Content> của EWS cũng yêu cầu base64).
+function buildAttachmentsXml(attachments) {
+  if (!attachments || !attachments.length) return '';
+  const items = attachments.map(a => {
+    const base64 = Buffer.isBuffer(a.content) ? a.content.toString('base64') : Buffer.from(a.content || '').toString('base64');
+    return `<t:FileAttachment>
+      <t:Name>${escapeXml(a.filename)}</t:Name>
+      <t:ContentType>${escapeXml(a.contentType || 'application/octet-stream')}</t:ContentType>
+      <t:Content>${base64}</t:Content>
+    </t:FileAttachment>`;
+  }).join('');
+  return `<t:Attachments>${items}</t:Attachments>`;
+}
+
 // CreateItem với MessageDisposition="SendAndSaveCopy" = vừa gửi vừa lưu bản sao vào Sent Items của chính
 // mailbox đang xác thực — đúng hành vi người dùng mong đợi khi gửi qua 1 mailbox thật (khác Graph API
 // sendMail cũng tự lưu Sent Items qua tham số saveToSentItems, cùng hành vi).
-function buildCreateItemXml({ subject, text, html, to }) {
+function buildCreateItemXml({ subject, text, html, to, attachments }) {
   const bodyType = html ? 'HTML' : 'Text';
   const bodyContent = escapeXml(html || text || '');
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -54,6 +72,7 @@ function buildCreateItemXml({ subject, text, html, to }) {
           <t:Subject>${escapeXml(subject)}</t:Subject>
           <t:Body BodyType="${bodyType}">${bodyContent}</t:Body>
           <t:ToRecipients><t:Mailbox><t:EmailAddress>${escapeXml(to)}</t:EmailAddress></t:Mailbox></t:ToRecipients>
+          ${buildAttachmentsXml(attachments)}
         </t:Message>
       </Items>
     </CreateItem>
@@ -105,9 +124,9 @@ function postEwsRequest(ewsUrl, authHeader, bodyXml, allowSelfSigned) {
 
 // Gửi 1 email tới 1 người nhận qua EWS — xác thực bằng HTTP Basic Auth (base64 "mailboxUser:mailboxPass")
 // — KHÔNG dùng SMTP, KHÔNG cần OAuth/app riêng như Graph API.
-async function sendOneViaEws({ ewsUrl, mailboxUser, mailboxPass, to, subject, text, html, allowSelfSigned }) {
+async function sendOneViaEws({ ewsUrl, mailboxUser, mailboxPass, to, subject, text, html, allowSelfSigned, attachments }) {
   const auth = Buffer.from(`${mailboxUser}:${mailboxPass}`).toString('base64');
-  const res = await postEwsRequest(ewsUrl, `Basic ${auth}`, buildCreateItemXml({ subject, text, html, to }), allowSelfSigned);
+  const res = await postEwsRequest(ewsUrl, `Basic ${auth}`, buildCreateItemXml({ subject, text, html, to, attachments }), allowSelfSigned);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     // HTTP 401 (sai tài khoản/mật khẩu mailbox), 404 (sai EWS URL)... đủ rõ để admin tự chẩn đoán, không
     // cần parse tiếp phần XML (thường rỗng hoặc trang lỗi HTML của IIS, không phải SOAP fault).
@@ -122,14 +141,14 @@ async function sendOneViaEws({ ewsUrl, mailboxUser, mailboxPass, to, subject, te
 
 // Gửi tới NHIỀU người nhận — gửi RIÊNG từng người (khớp đúng ngữ nghĩa sent/failed của lib/mailer.js ở
 // luồng SMTP/Graph API, để 1 địa chỉ sai không làm rớt cả loạt người nhận hợp lệ khác).
-async function sendMailViaEws({ ewsUrl, mailboxUser, mailboxPass, to, subject, text, html, allowSelfSigned }) {
+async function sendMailViaEws({ ewsUrl, mailboxUser, mailboxPass, to, subject, text, html, allowSelfSigned, attachments }) {
   const recipients = (Array.isArray(to) ? to : [to]).map(a => (a || '').trim()).filter(Boolean);
   const sent = [];
   const failed = [];
   let lastErrorMessage = null;
   for (const addr of recipients) {
     try {
-      await sendOneViaEws({ ewsUrl, mailboxUser, mailboxPass, to: addr, subject, text, html, allowSelfSigned });
+      await sendOneViaEws({ ewsUrl, mailboxUser, mailboxPass, to: addr, subject, text, html, allowSelfSigned, attachments });
       sent.push(addr);
     } catch (err) {
       console.error(`⛔ Gửi email (EWS) tới ${addr} thất bại:`, err.message);
