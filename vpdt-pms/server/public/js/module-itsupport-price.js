@@ -73,8 +73,36 @@ let itPricePendingFile = null; // { items, fileUrl, fileName } — kết quả �
 // generic (key = key cột, value = nội dung ô nguyên văn dạng chuỗi), KHÔNG còn khái niệm cột nào là
 // "tên"/"giá" (đã bỏ hẳn — xem ghi chú đầu lib/priceFileParser.js). Khi chưa chọn Mẫu Giá nào, columnLabels
 // là bộ nhãn mặc định (DEFAULT_COLUMN_LABELS ở server).
+// LỖI ĐÃ VÁ (11/2026, phản hồi người dùng kèm ảnh chụp — cột "Margin bán lẻ" hiện "0.252054..." thay vì
+// "25.21%"): lib/priceFileParser.js chỉ tự nhân 100 khi Ô GỐC trong file Excel được chính người tải lên
+// định dạng "%" (đọc number format của ô, xem isPercentNumFmt()) — cột Margin/Chiết Khấu rất hay là kết
+// quả 1 công thức (=(Giá bán-Giá vốn)/Giá bán) mà người lập bảng KHÔNG định dạng lại ô là "%", nên bị đọc
+// nguyên dạng phân số. KHÔNG sửa gì ở khâu đọc/lưu file (đúng yêu cầu người dùng "file người ta up lên
+// như nào thì để nguyên như vậy") — chỉ thêm bước ĐỊNH DẠNG LẠI KHI HIỂN THỊ cho các cột có nhãn chứa
+// "Margin"/"Chiết Khấu" (nhãn cột do chính Mẫu Giá admin đặt tên, không đoán theo nội dung ô): giá trị
+// ≤ 1 coi là phân số (nhân 100), giá trị > 1 coi là đã sẵn dạng số phần trăm (trường hợp ô gốc ĐÃ được
+// định dạng "%", lib/priceFileParser.js đã nhân 100 nhưng chưa làm tròn/thêm dấu %) — cả 2 trường hợp
+// đều làm tròn 2 số thập phân + thêm "%". Áp dụng chung cho Margin/Chiết Khấu Bán Lẻ LẪN Bán Buôn vì 2
+// luồng này dùng chung đúng 1 hàm render (xem renderItPriceFilePreview()/renderItPriceModal() bên dưới).
+// LOẠI TRỪ cột "Hình Thức Chiết Khấu" (giá trị PHÂN LOẠI kiểu "1"/"2", KHÔNG phải số %, xem screenshot
+// người dùng gửi — cột cuối toàn giá trị "2") — nhãn này VẪN chứa chữ "chiết khấu" nên phải loại trừ
+// riêng bằng cụm "hình thức", không chỉ dựa 1 từ khoá "chiết khấu"/"margin" là đủ.
+const IT_PRICE_PERCENT_LABEL_RE = /margin|chiet ?khau/;
+const IT_PRICE_NON_PERCENT_LABEL_RE = /hinh ?thuc/;
+function isItPricePercentColumn(col) {
+  const norm = stripVnDiacritics(String(col?.label || '')).toLowerCase();
+  return IT_PRICE_PERCENT_LABEL_RE.test(norm) && !IT_PRICE_NON_PERCENT_LABEL_RE.test(norm);
+}
+function formatItPriceCellValue(col, rawValue) {
+  const raw = rawValue == null ? '' : String(rawValue);
+  if (!raw || !isItPricePercentColumn(col)) return raw;
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return raw;
+  const pct = Math.abs(num) <= 1 ? num * 100 : num;
+  return `${pct.toFixed(2)}%`;
+}
 function itPriceCellHTML(it, col) {
-  return escapeHtml(it.values?.[col.key] || '');
+  return escapeHtml(formatItPriceCellValue(col, it.values?.[col.key]));
 }
 
 function renderItPriceFilePreview(data) {
@@ -1635,7 +1663,7 @@ function renderItPriceModal() {
       const rowClass = ROW_CLASS[d.kind] || '';
       return `<tr class="${rowClass}"><td class="border p-1 whitespace-nowrap">${KIND_LABEL[d.kind] || ''}</td>${latestColumnLabels.map(col => {
         const cellClass = (d.kind === 'changed' && d.changedKeys.includes(col.key)) ? ' bg-amber-200 border-amber-500 font-semibold text-amber-900' : '';
-        return `<td class="border p-1${cellClass}">${escapeHtml(d.values?.[col.key] || '')}</td>`;
+        return `<td class="border p-1${cellClass}">${escapeHtml(formatItPriceCellValue(col, d.values?.[col.key]))}</td>`;
       }).join('')}</tr>`;
     }).join('');
 

@@ -1,9 +1,43 @@
 # Phiên bản hiện tại
 
-**28.38** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.39 (2026-11): Phê Duyệt Giá — hiện đúng % cho cột Margin/Chiết Khấu ở bảng xem trước file Excel
+
+Người dùng gửi ảnh chụp bảng xem trước khi tải file Excel lên Phê Duyệt Giá — cột "Margin bán lẻ" hiện
+"0.25205479452054796" thay vì "25.21%". Yêu cầu rõ: chỉ sửa HIỂN THỊ, **không đụng tới dữ liệu đã đọc từ
+file** ("file người ta up lên như nào thì để nguyên như vậy").
+
+**Nguyên nhân**: `lib/priceFileParser.js` chỉ tự nhân 100 khi Ô GỐC trong file Excel được chính người
+tải lên định dạng kiểu "%" (đọc number format của ô) — cột Margin/Chiết Khấu rất hay là kết quả 1 công
+thức (`=(Giá bán-Giá vốn)/Giá bán`) mà người lập bảng không định dạng lại ô là "%", nên bị đọc nguyên
+dạng phân số. `itPriceCellHTML()` (`public/js/module-itsupport-price.js`) trước đó hiển thị NGUYÊN VĂN
+giá trị đã đọc, không có bước định dạng % nào — dùng chung cho cả 3 chỗ hiển thị (bảng xem trước trước
+khi xác nhận import, modal "Chi tiết" file viewer, bảng "So Sánh Thay Đổi") và cả 2 kênh Bán Lẻ/Bán
+Buôn.
+
+- `public/js/module-itsupport-price.js`: thêm `isItPricePercentColumn()`/`formatItPriceCellValue()` —
+  nhận diện cột theo NHÃN cột (do chính Mẫu Giá admin đặt tên) chứa "Margin"/"Chiết Khấu" nhưng LOẠI
+  TRỪ nhãn chứa "Hình Thức..." (cột phân loại kiểu "1"/"2", KHÔNG phải số % — cũng xuất hiện trong ảnh
+  chụp người dùng gửi, cột cuối toàn giá trị "2", bị bắt nhầm ở bản nháp đầu tiên, đã tự phát hiện và vá
+  trước khi báo cáo). Giá trị số ≤ 1 coi là phân số (nhân 100), > 1 coi là đã sẵn dạng số % (trường hợp ô
+  gốc ĐÃ định dạng "%", `lib/priceFileParser.js` đã nhân 100 sẵn nhưng chưa làm tròn/thêm dấu %) — cả 2
+  trường hợp đều làm tròn 2 số thập phân + thêm "%". `itPriceCellHTML()` + bảng "So Sánh Thay Đổi" (diff
+  table) đều gọi qua hàm này. CHỈ sửa ở điểm RENDER HTML — không đổi `lib/priceFileParser.js`, không đổi
+  dữ liệu đã lưu trong `itPriceApprovals`, không đổi file tải lên/tải xuống.
+- Test: `tests/test-itprice-margin-percent-display.js` (MỚI, Playwright, 6/6) — dựng đúng fixture khớp
+  ảnh chụp người dùng gửi, xác nhận Margin hiện đúng %, Giá bán lẻ giữ nguyên số tiền, "Hình Thức Chiết
+  Khấu" KHÔNG bị bắt nhầm thành %, cột Chiết Khấu Bán Buôn cũng nhận diện đúng, giá trị rỗng/không phải
+  số không crash/không ra "NaN%", và giá trị đã-sẵn-dạng-% không bị nhân đúp lần nữa. Chạy lại đầy đủ 6
+  file test Phê Duyệt Giá liên quan khác (`test-itprice-download.js`, `test-itprice-file-format-reject.js`,
+  `test-it-price-master-list-add.js`, `test-itprice-mastertlist-channel-split.js`,
+  `test-vanhanh-itprice-chitiet-csp.js`, `test-itprice-wholesale-mixed-approval.js`) — không regression.
+
+**Deploy impact**: chỉ sửa code hiển thị phía client, không đổi `server/sql/schema.sql`, không thêm biến
+môi trường, không thêm/đổi `dependencies` — chỉ copy code + `pm2 restart` như bình thường.
 
 ## v28.38 (2026-11): Email Biên Bản Họp — gắn link truy cập trực tiếp + đính kèm file .docx
 
