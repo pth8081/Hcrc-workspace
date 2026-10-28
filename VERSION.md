@@ -1,9 +1,41 @@
 # Phiên bản hiện tại
 
-**28.36** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.37** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.37 (2026-11): Fix email nhắc hạn Onboarding/Offboarding gửi nhầm lên cả Tổng Giám Đốc
+
+Người dùng phản ánh (kèm ảnh danh sách quy trình Onboarding đang 0/15, 1/15...): "sao quy trình
+onboarding này lại gửi email lên tận tổng giám đốc?" — yêu cầu rà soát luôn cả Onboarding lẫn Offboarding
+xem gửi email cho ai khi 1 công việc trong quy trình CHƯA được gán riêng cho ai.
+
+**Nguyên nhân**: `jobs/hrTaskOverdueReminder.js` (job quét công việc quá hạn, chạy định kỳ) — khi 1 công
+việc (`hrProcesses.tasks[]`) chưa có `assignedToUsername` riêng và đã quá hạn, hàm
+`resolveTaskRecipients()` chọn người nhận theo nhãn phòng ban (`department`: HR/ADMIN/IT/FINANCE), nhưng
+điều kiện khớp luôn `u.perms?.admin || u.perms?.<quyền chuyên môn phòng ban>` — **bất kỳ tài khoản nào
+bật cờ "Admin - Toàn quyền quản trị"** (thường để phục vụ mục đích khác hẳn, ở đây là tài khoản Tổng
+Giám Đốc) **đều tự động trở thành người nhận**, bất kể có quyền chuyên môn `hrOnboardingManage`/
+`hrOffboardingManage`/`itManage`/`paymentManage` đúng hay không. Vì mọi công việc mới tạo luôn bắt đầu
+`assignedToUsername: null` (phải gán tay từng việc), và quy trình trong ảnh đang ở 0/15 tới 3/15 (hầu hết
+chưa gán + đã có việc quá hạn), tài khoản TGĐ (admin:true) nhận riêng 1 email cho MỖI việc quá hạn chưa
+gán ở MỌI quy trình Onboarding/Offboarding của cả công ty.
+
+- `jobs/hrTaskOverdueReminder.js`: `resolveTaskRecipients()` — bỏ hẳn `u.perms?.admin ||` khỏi điều kiện
+  khớp cho cả 3 nhánh HR/ADMIN, IT, FINANCE — chỉ còn đúng người có quyền chuyên môn phòng ban tương ứng.
+  Nhánh MANAGER (đi theo `directManagerUsername` cố định) vốn đã không có đường lùi admin, giữ nguyên.
+  Admin vẫn xem/thao tác được TOÀN BỘ trong app như cũ (`canActOnHrTask()`/`canManageHrProcess()` ở
+  `lib/recordActions.js` không đổi, 2 hàm đó vẫn cho admin bypass đầy đủ) — chỉ không còn TỰ ĐỘNG nhận
+  email khi không có quyền chuyên môn đúng.
+- Test: `tests/test-hr-task-overdue-reminder.js` (MỚI, 10/10 — giả lập db/recordStore/mailer, xác nhận cả
+  2 processType (ONBOARDING/OFFBOARDING) × cả 3 nhãn phòng ban (HR/IT/FINANCE): tài khoản chỉ có
+  `perms.admin` KHÔNG còn nhận email, tài khoản có đúng quyền chuyên môn vẫn nhận như cũ; đồng thời xác
+  nhận KHÔNG đổi hành vi ở 2 nhánh không liên quan — `assignedToUsername` riêng và nhãn MANAGER (cả 2
+  trường hợp có/không `directManagerUsername`) — cùng việc chuyển trạng thái `OVERDUE` sau khi gửi.
+- **Phạm vi**: đây là job DUY NHẤT gửi email cho Onboarding/Offboarding (đã xác nhận — không có đường gửi
+  email nào khác trong `lib/recordActions.js`/`routes/create.js`/`routes/records.js` cho `hrProcesses`),
+  nên bản vá này khép kín toàn bộ yêu cầu rà soát của người dùng.
 
 ## v28.36 (2026-11): Biên Bản Họp — khung soạn "Nội Dung Trao Đổi / Kết Luận" có định dạng (đậm/nghiêng/gạch chân/danh sách)
 

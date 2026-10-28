@@ -42,6 +42,14 @@ function isPastDue(dateStr) {
 // Người nhận email cho 1 task quá hạn — đúng người được giao riêng (assignedToUsername) nếu có, không
 // thì theo nhãn trách nhiệm (department), cùng logic canActOnHrTask() ở lib/recordActions.js nhưng chỉ
 // cần DANH SÁCH người có quyền (không cần biết AI đang gọi).
+// LỖI ĐÃ VÁ (11/2026, người dùng phản ánh "sao Onboarding lại gửi email lên tận Tổng Giám Đốc"): trước
+// đây matchesPerm luôn OR thêm `u.perms?.admin` — bất kỳ tài khoản nào bật cờ "Admin - Toàn quyền quản
+// trị" (phục vụ mục đích hoàn toàn khác, VD tài khoản TGĐ) đều tự động nhận email cho MỌI việc chưa gán
+// quá hạn ở MỌI quy trình Onboarding/Offboarding toàn công ty, dù không có quyền chuyên môn phù hợp. Chỉ
+// giữ đúng người có quyền quản lý phòng ban tương ứng (hrOnboardingManage/hrOffboardingManage/itManage/
+// paymentManage) — Admin vẫn xem/thao tác được TOÀN BỘ trong app như cũ (canActOnHrTask()/
+// canManageHrProcess() ở lib/recordActions.js không đổi, admin luôn bypass ở đó), chỉ không còn tự động
+// nhận email khi không có quyền chuyên môn đúng.
 function resolveTaskRecipients(users, item, task) {
   if (task.assignedToUsername) {
     const u = users.find(x => x.username === task.assignedToUsername && x.active !== false);
@@ -50,11 +58,11 @@ function resolveTaskRecipients(users, item, task) {
   let matchesPerm;
   if (task.department === 'HR' || task.department === 'ADMIN') {
     const manageFlag = item.processType === 'ONBOARDING' ? 'hrOnboardingManage' : 'hrOffboardingManage';
-    matchesPerm = (u) => u.perms?.admin || u.perms?.[manageFlag];
+    matchesPerm = (u) => !!u.perms?.[manageFlag];
   } else if (task.department === 'IT') {
-    matchesPerm = (u) => u.perms?.admin || u.perms?.itManage;
+    matchesPerm = (u) => !!u.perms?.itManage;
   } else if (task.department === 'FINANCE') {
-    matchesPerm = (u) => u.perms?.admin || u.perms?.paymentManage;
+    matchesPerm = (u) => !!u.perms?.paymentManage;
   } else if (task.department === 'MANAGER') {
     if (!item.directManagerUsername) return [];
     const u = users.find(x => x.username === item.directManagerUsername && x.active !== false);
