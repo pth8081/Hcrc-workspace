@@ -39,7 +39,17 @@
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Giờ Họp</label>
-            <input id="minutesTimeOfDay" type="time" class="w-full border p-1.5 rounded" required>
+            <!-- LỖI TÁI PHÁT (11/2026, sau khi tách datetime-local ở trên): input type="time" VẪN gặp
+                 ĐÚNG lớp lỗi y hệt trên cùng trình duyệt (Edge trên máy người dùng) — widget time vẫn tự
+                 thêm phân đoạn AM/PM nội bộ không hiện trong .value (vẫn đọc/ghi đúng "HH:mm" 24h qua
+                 JS), ghi .value bằng JS không điền được phân đoạn AM/PM đó -> vẫn báo "incomplete". Đổi
+                 hẳn sang input text thuần + pattern HH:mm (giữ ĐÚNG định dạng lưu/đọc "HH:mm" không đổi)
+                 để né HẲN mọi widget giờ/ngày ghép phân đoạn của trình duyệt — validate bằng regex thật
+                 sự (khớp/không khớp), không còn khái niệm "phân đoạn chưa điền" nữa. -->
+            <input id="minutesTimeOfDay" type="text" inputmode="numeric" placeholder="HH:MM, VD: 09:00"
+              pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$" maxlength="5"
+              title="Nhập giờ theo định dạng HH:MM (24 giờ), VD: 09:00"
+              class="w-full border p-1.5 rounded" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Địa Điểm</label>

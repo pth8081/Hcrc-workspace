@@ -1,9 +1,38 @@
 # Phiên bản hiện tại
 
-**28.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.35** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.35 (2026-11): Fix TIẾP Biên Bản Họp không Lưu được — ô "Giờ Họp" vẫn lỗi "incomplete" sau v28.33
+
+Người dùng xác nhận đã deploy v28.34 lên server thật nhưng ô "Giờ Họp" (sau khi tách khỏi
+`datetime-local` ở v28.33 thành `<input type="time">` riêng) **vẫn** hiện "09:00 --" và báo đúng y hệt
+lỗi native cũ "Please enter a valid value. The field is incomplete or has an invalid date." — xác nhận
+qua ảnh chụp: `type="time"` trên trình duyệt của người dùng (Edge) VẪN tự thêm 1 phân đoạn AM/PM nội bộ
+không hiện trong `.value` (đọc/ghi JS vẫn đúng "HH:mm" 24h bình thường), nên gán `.value` bằng JS vẫn để
+lại đúng lớp lỗi "phân đoạn chưa điền" như `datetime-local` trước đó — tách date/time ở v28.33 chỉ giải
+quyết được phần NGÀY, chưa giải quyết triệt để phần GIỜ. Theo đúng yêu cầu người dùng ("chỉ cần đến phút
+thôi chứ") — bỏ HẲN mọi widget giờ/ngày ghép phân đoạn của trình duyệt cho ô này, đổi sang input text
+thuần + `pattern` HH:mm, validate bằng regex thật (khớp/không khớp — không còn khái niệm "phân đoạn chưa
+điền" nữa, nên KHÔNG còn lớp lỗi này nữa dù chạy trên trình duyệt/thiết bị nào).
+
+- `public/fragments/minutesSection.html`: `#minutesTimeOfDay` đổi từ `type="time"` sang
+  `type="text" inputmode="numeric" pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$" placeholder="HH:MM, VD:
+  09:00"` (giữ nguyên `required`, giữ nguyên định dạng lưu/đọc "HH:mm" — không đổi gì ở
+  `module-bienbanhop.js`, vì `.value` của input text hoạt động y hệt input time cho mục đích đọc/ghi
+  chuỗi "HH:mm").
+- Xác nhận bằng kiểm tra trực tiếp `checkValidity()`/`validationMessage` qua Playwright thật (không phải
+  suy luận): giá trị hợp lệ "09:00" → valid; giá trị sai định dạng "9:0" → invalid, thông báo chuẩn
+  "Please match the requested format." (không còn "incomplete" mơ hồ); giá trị rỗng → invalid đúng do
+  `required`.
+- Test: chạy lại `test-minutes.js` (25/25), `test-collapse-car-meeting-minutes-forms.js` (10/10),
+  `test-khoi0-meetingminutes-gate.js` (10/10), `test-minutes-reassign-pending-directive.js` (4/4),
+  `test-minutes-task-file-ownership.js` (10/10), `test-audit-round5-minutes-task-vpp.js` (15/15) — không
+  regression. CSP self-check trên `minutesSection.html`: sạch.
+- **Không cần deploy thêm gì ngoài copy code + `pm2 restart`** (không đổi schema/env/dependency, giống
+  v28.33/v28.34).
 
 ## v28.34 (2026-11): Phê Duyệt Giá — nhân rộng "Chuyển Tiếp Xin Ý Kiến" từ Văn Bản Trình/Hợp Đồng
 
