@@ -943,7 +943,13 @@ function canViewItPriceApproval(user, p) {
   if (emergencyPerm && (p.emergencyRejectStatus === 'PENDING' || p.emergencyRejectDecidedBy === user.username)) {
     return true;
   }
-  return isApproverForDeptWorkflow(resolveItPriceWorkflowConfigForItemClient(p), user.username);
+  if (isApproverForDeptWorkflow(resolveItPriceWorkflowConfigForItemClient(p), user.username)) return true;
+  // Chuyển Tiếp Xin Ý Kiến (forwardThreads[], 11/2026 — nhân rộng mô hình submissions/contracts theo
+  // yêu cầu người dùng) — người chuyển tiếp/được chuyển tiếp ở BẤT KỲ cạnh nào cũng xem được, khớp
+  // canViewItPriceApproval() ở lib/recordViewScope.js (server) — xem isForwardThreadParticipant() ở
+  // core.js (mirror riêng phía client vì hàm này tự gác CẢ modal lẫn danh sách ngay ở client, không chỉ
+  // tin dữ liệu server đã lọc sẵn như canViewSubmission()/canViewContract() đang làm).
+  return isForwardThreadParticipant(user, p);
 }
 
 // Còn ít nhất 1 yêu cầu bổ sung CHƯA được người đề xuất phản hồi (chưa tải tệp bổ sung) — dùng chung
@@ -1665,6 +1671,28 @@ function renderItPriceModal() {
   }
 
   renderItPriceModalControls(p);
+  renderItPriceModalForward(p);
+}
+
+// "Chuyển Tiếp Xin Ý Kiến" (forwardThreads[], 11/2026 — nhân rộng mô hình Văn Bản Trình/Hợp Đồng theo
+// yêu cầu người dùng: "chuyển tiếp để lấy ý kiến chuyên viên, chuyên viên xem file áp giá rồi cho ý
+// kiến, sau đó trưởng phòng phê duyệt") — tự xác định lại canForwardRoot NGAY TẠI ĐÂY (không nhận tham
+// số từ renderItPriceModal()) để hàm tự đứng độc lập, gọi lại được từ refreshForwardHostUI() (core.js)
+// sau mỗi forward/forward-reply thành công — mirror ĐÚNG khuôn renderSubModalForward() (module-
+// vanbantrinh.js). `canForwardRoot` CHỈ true ở context='APPROVAL' (2 tab Mua Hàng/Vận Hành) — đúng quy
+// tắc nghiệp vụ hiện có "Duyệt/Từ chối/Bổ Sung/Khẩn chỉ thao tác được tại 2 tab Phê Duyệt Giá" (xem
+// renderItPriceModalControls()), Chuyển Tiếp là 1 hành động của người PHÊ DUYỆT nên theo đúng quy tắc
+// đó — khối hiển thị nhánh/trả lời (renderForwardBranchHTML()) vẫn hiện ở MỌI context, không bị giới
+// hạn (người được chuyển tiếp mở qua Hộp Thư "📨 Được Nhờ Cho Ý Kiến" vẫn luôn mở với context='APPROVAL',
+// xem openForwardInboxEntry() ở core.js).
+function renderItPriceModalForward(p) {
+  const container = document.getElementById('itPriceModalForward');
+  if (!container) return;
+  const wfConfig = resolveItPriceWorkflowConfigForItemClient(p) || { workflowId: 'WF_1STEP', approvers: { 1: ['admin'] } };
+  const currentStepApprovers = resolveEffectiveStepApprovers(wfConfig, p.currentStep);
+  const canForwardRoot = currentItPriceModalContext === 'APPROVAL' && p.status === 'PENDING' &&
+    canApproveStep(currentUser, currentStepApprovers, p.history, p.currentStep);
+  container.innerHTML = renderForwardBranchHTML('itPriceApprovals', p, p.currentStep, canForwardRoot);
 }
 
 // "Đánh dấu cột trước khi tải" (mục 4 kế hoạch) — mở/đóng box checkbox liệt kê columnLabels của file

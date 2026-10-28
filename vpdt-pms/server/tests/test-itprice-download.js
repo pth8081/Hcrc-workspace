@@ -152,6 +152,35 @@ async function main() {
     assert.strictEqual(await authorizeFileAccess(OUTSIDER, '/uploads/file-duyet.xlsx', 'download'), false, 'canViewItPriceApproval() phải chặn trước khi tới bước kiểm file đã duyệt');
   });
 
+  // Chuyển Tiếp Xin Ý Kiến (forwardThreads[], 11/2026 — nhân rộng mô hình submissions/contracts sang
+  // itPriceApprovals, theo yêu cầu người dùng "chuyên viên có thể nhìn thấy file áp giá để kiểm tra").
+  await run('[1] Chuyển Tiếp: người ngoài phạm vi NHƯNG là forwardThreads participant (forwardedTo) -> XEM được hồ sơ (mode view)', async () => {
+    ITEMS = [baseItem({ status: 'PENDING', forwardThreads: [{ id: 'n1', step: 1, parentNodeId: null, forwardedBy: APPROVER.username, forwardedTo: OUTSIDER.username, reply: null }] })];
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, '/uploads/file-goc.xlsx', 'view'), true, 'canViewItPriceApproval() phải OR isForwardThreadParticipant()');
+  });
+  await run('[1] Chuyển Tiếp: người được chuyển tiếp tải được ĐÚNG file mới nhất đang chờ duyệt (PENDING), dù không phải approver bước hiện tại', async () => {
+    ITEMS = [baseItem({ status: 'PENDING', forwardThreads: [{ id: 'n1', step: 1, parentNodeId: null, forwardedBy: APPROVER.username, forwardedTo: OUTSIDER.username, reply: null }] })];
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, '/uploads/file-goc.xlsx', 'download'), true, 'người được chuyển tiếp phải tải được file đang chờ duyệt để kiểm tra trước khi cho ý kiến');
+  });
+  await run('[1] Chuyển Tiếp: forwardedBy (người chủ động chuyển tiếp) cũng được xem+tải như forwardedTo (cả 2 phía của 1 cạnh đều là participant)', async () => {
+    ITEMS = [baseItem({ status: 'PENDING', currentStep: 2, forwardThreads: [{ id: 'n1', step: 1, parentNodeId: null, forwardedBy: OUTSIDER.username, forwardedTo: CREATOR.username, reply: null }] })];
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, '/uploads/file-goc.xlsx', 'download'), true, 'OUTSIDER ở đây là forwardedBy của cạnh — vẫn là participant');
+  });
+  await run('[1] Chuyển Tiếp: hồ sơ KHÔNG còn PENDING (đã APPROVED, file này không phải file đã duyệt) -> người được chuyển tiếp KHÔNG tải được (ngoại lệ chỉ áp dụng khi còn PENDING)', async () => {
+    ITEMS = [baseItem({
+      status: 'APPROVED', approvedFileId: 200,
+      files: [{ id: 100, fileUrl: '/uploads/file-goc.xlsx', fileName: 'a', columnLabels: [] }, { id: 200, fileUrl: '/uploads/file-duyet.xlsx', fileName: 'b', columnLabels: [] }],
+      forwardThreads: [{ id: 'n1', step: 1, parentNodeId: null, forwardedBy: APPROVER.username, forwardedTo: OUTSIDER.username, reply: null }]
+    })];
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, '/uploads/file-goc.xlsx', 'download'), false, 'file-goc không phải file đã duyệt, hồ sơ không còn PENDING -> ngoại lệ forward không áp dụng');
+    assert.strictEqual(await authorizeFileAccess(OUTSIDER, '/uploads/file-duyet.xlsx', 'download'), true, 'nhưng file ĐÃ DUYỆT thì ai xem được hồ sơ cũng tải được như bình thường (không cần ngoại lệ forward)');
+  });
+  await run('[1] Người hoàn toàn KHÔNG liên quan (không phải forwardedBy/forwardedTo của BẤT KỲ cạnh nào) vẫn bị chặn như cũ', async () => {
+    const thirdParty = { username: 'khong_lien_quan', name: 'Không Liên Quan', dept: 'Marketing', perms: {} };
+    ITEMS = [baseItem({ status: 'PENDING', forwardThreads: [{ id: 'n1', step: 1, parentNodeId: null, forwardedBy: APPROVER.username, forwardedTo: OUTSIDER.username, reply: null }] })];
+    assert.strictEqual(await authorizeFileAccess(thirdParty, '/uploads/file-goc.xlsx', 'view'), false, 'không phải participant của cạnh forward nào -> vẫn bị chặn');
+  });
+
   await run('[1] Hồ sơ cũ APPROVED, KHÔNG có approvedFileId, CHƯA từng có yêu cầu bổ sung từ IT -> fallback file cuối cùng tải được', async () => {
     ITEMS = [baseItem({
       status: 'APPROVED', approvedFileId: undefined, infoRequests: [],

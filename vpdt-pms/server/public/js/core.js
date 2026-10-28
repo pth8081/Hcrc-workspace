@@ -7606,7 +7606,11 @@ const APPROVAL_EMAIL_EVENTS = [
     { key: 'ticketApprovalNeeded', label: 'Ticket cần phê duyệt', actionTypes: ['NOTIFY_TICKET_APPROVAL_NEEDED'] },
     { key: 'ticketEscalationApproved', label: 'Ticket leo thang được duyệt', actionTypes: ['NOTIFY_TICKET_ESCALATION_APPROVED'] },
     { key: 'ticketEscalationDenied', label: 'Ticket leo thang bị từ chối', actionTypes: ['NOTIFY_TICKET_ESCALATION_DENIED'] },
-    { key: 'ticketDone', label: 'Ticket hoàn tất', actionTypes: ['NOTIFY_TICKET_DONE'] }
+    { key: 'ticketDone', label: 'Ticket hoàn tất', actionTypes: ['NOTIFY_TICKET_DONE'] },
+    // Chuyển Tiếp Xin Ý Kiến (forwardThreads[], 11/2026 — nhân rộng sang Phê Duyệt Giá theo yêu cầu
+    // người dùng) — 2 sự kiện độc lập hẳn với luồng duyệt chính, cùng khuôn SUBMISSION/CONTRACT ở trên.
+    { key: 'forwardRequested', label: 'Chuyển tiếp xin ý kiến (được nhờ cho ý kiến)', actionTypes: ['NOTIFY_FORWARD_REQUESTED'] },
+    { key: 'forwardReplied', label: 'Đã có phản hồi ý kiến (báo lại người chuyển tiếp)', actionTypes: ['NOTIFY_FORWARD_REPLIED'] }
   ] },
   { configModule: 'OPERATION', label: '🏬 Vận Hành (Đơn Hàng / Mở Mới / Sửa Chữa Siêu Thị)', families: [
     { key: 'approvalNeeded', label: 'Cần phê duyệt', defaultOn: false, actionTypes: ['NOTIFY_APPROVAL_NEEDED'] },
@@ -14325,16 +14329,26 @@ function renderLockedLayerSingleApproverCard(containerId, layerKey, layerLabel, 
 }
 
 // ============================================================
-// CHUYỂN TIẾP XIN Ý KIẾN (forwardThreads[]) — dùng chung cho Văn Bản Trình (submissions) và Hợp Đồng
-// (contracts), xem routes/workflow.js POST /:module/:id/forward|/forward-reply + lib/recordViewScope.js
+// CHUYỂN TIẾP XIN Ý KIẾN (forwardThreads[]) — dùng chung cho Văn Bản Trình (submissions), Hợp Đồng
+// (contracts) và Phê Duyệt Giá (itPriceApprovals, 11/2026 — nhân rộng theo yêu cầu người dùng), xem
+// routes/workflow.js POST /:module/:id/forward|/forward-reply + lib/recordViewScope.js
 // ::isForwardThreadParticipant(). Mô hình: mảng PHẲNG các "cạnh" (node) — mỗi cạnh chỉ hiện cho ĐÚNG 2
 // người forwardedBy/forwardedTo của chính nó (mirror đúng check phía server), nên hỗ trợ TỰ NHIÊN việc
 // chuyển tiếp lồng nhiều cấp mà không cần biết trước độ sâu. Hỗ trợ CHỌN NHIỀU NGƯỜI 1 lúc (mỗi người
 // tạo 1 cạnh riêng, trả lời độc lập) qua renderPeopleMultiSelect() dùng chung đã có.
 // ============================================================
-const FORWARD_DB_KEY = { submissions: 'submissions', contracts: 'contracts' };
-const FORWARD_EMAIL_MODULE = { submissions: 'SUBMISSION', contracts: 'CONTRACT' };
-const FORWARD_NOUN = { submissions: 'tờ trình', contracts: 'hợp đồng' };
+const FORWARD_DB_KEY = { submissions: 'submissions', contracts: 'contracts', itPriceApprovals: 'itPriceApprovals' };
+const FORWARD_EMAIL_MODULE = { submissions: 'SUBMISSION', contracts: 'CONTRACT', itPriceApprovals: 'IT_SUPPORT' };
+const FORWARD_NOUN = { submissions: 'tờ trình', contracts: 'hợp đồng', itPriceApprovals: 'đề xuất giá' };
+
+// isForwardThreadParticipant(user, item) — mirror ĐÚNG lib/recordViewScope.js::isForwardThreadParticipant()
+// (server) — cần bản mirror riêng ở client vì canViewItPriceApproval() (module-itsupport-price.js) tự
+// kiểm quyền xem NGAY Ở CLIENT trước khi mở modal/hiện trong danh sách (khác submissions/contracts,
+// hoàn toàn tin dữ liệu server đã lọc sẵn trong DB.submissions/DB.contracts, không tự kiểm lại).
+function isForwardThreadParticipant(user, item) {
+  if (!user || !Array.isArray(item?.forwardThreads)) return false;
+  return item.forwardThreads.some(n => n.forwardedBy === user.username || n.forwardedTo === user.username);
+}
 
 // isForwardRecordPending(moduleKey, item) — true nếu hồ sơ gốc CÒN ở trạng thái PENDING (mirror
 // MODULE_CONFIGS[moduleKey].statusField ở lib/workflowEngine.js qua APPROVAL_OVERDUE_CONFIG đã có sẵn).
@@ -14360,6 +14374,7 @@ function forwardReplaceItem(moduleKey, updated) {
 function refreshForwardHostUI(moduleKey, item) {
   if (moduleKey === 'submissions' && typeof renderSubModalForward === 'function') renderSubModalForward(item);
   if (moduleKey === 'contracts' && typeof renderContractModalForward === 'function') renderContractModalForward(item);
+  if (moduleKey === 'itPriceApprovals' && typeof renderItPriceModalForward === 'function') renderItPriceModalForward(item);
   if (typeof renderForwardInbox === 'function') renderForwardInbox();
 }
 
@@ -14814,6 +14829,10 @@ function openForwardInboxEntry(moduleKey, itemId) {
   closeForwardInboxModal();
   if (moduleKey === 'submissions' && typeof openProcessSubmissionModal === 'function') openProcessSubmissionModal(itemId);
   else if (moduleKey === 'contracts' && typeof viewContractDetails === 'function') viewContractDetails(itemId);
+  // itPriceApprovals: mở với context 'APPROVAL' (giống 2 tab Mua Hàng/Vận Hành) — người được chuyển
+  // tiếp thường KHÔNG phải approver chính thức, nhưng khối "🔀 Chuyển Tiếp Xin Ý Kiến" hiện bất kể
+  // context, chỉ nút "+ Chuyển Tiếp" gốc mới cần isApprovalContext (xem renderItPriceModalForward()).
+  else if (moduleKey === 'itPriceApprovals' && typeof openItPriceModal === 'function') openItPriceModal(itemId, 'APPROVAL');
 }
 // Đóng dropdown đang mở khi click ra ngoài — gắn 1 LẦN DUY NHẤT ở top-level (không gắn lại mỗi lần
 // render, tránh chồng listener) — tự áp dụng cho MỌI khối renderPeopleMultiSelect đang có trên trang

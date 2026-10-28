@@ -699,7 +699,10 @@ function filterOfficeReqsForUser(officeReqs, user, appData) {
 // Khớp canViewItPriceApproval() (public/js/module-itsupport-price.js): admin/itPriceSupport (đội hỗ trợ
 // giá, 10/2026 tách khỏi itManage) xem hết, người đề xuất xem đề xuất của mình, người duyệt xem hồ sơ
 // nằm trong đúng luồng duyệt phòng ban của họ.
-function canViewItPriceApproval(user, item, appData) {
+// Tách riêng "...WithoutForward" (11/2026, mirror canViewSubmissionWithoutForward()/canViewContractWithoutForward()
+// ở trên) để filterItPriceApprovalsForUser() biết khi nào CHỈ được xem nhờ đang là participant của 1
+// cạnh Chuyển Tiếp Xin Ý Kiến — cần ẩn bớt các cạnh khác (sanitizeForwardThreadsForUser()).
+function canViewItPriceApprovalWithoutForward(user, item, appData) {
   if (!user) return false;
   if (user.perms?.admin || user.perms?.itPriceSupport) return true;
   if (item.creator === user.username) return true;
@@ -720,9 +723,17 @@ function canViewItPriceApproval(user, item, appData) {
   if (extraViewScopeAllows(user, appData, 'itPriceApproval', item.creator)) return true;
   return isApproverForApproversMap(MODULE_CONFIGS.itPriceApprovals.resolveWfConfig(item, appData).approvers, user.username);
 }
+// Chuyển Tiếp Xin Ý Kiến (forwardThreads[], 11/2026 — nhân rộng mô hình submissions/contracts sang
+// itPriceApprovals theo yêu cầu người dùng): người chuyển tiếp/được chuyển tiếp ở BẤT KỲ cạnh nào được
+// xem hồ sơ, cùng khuôn canViewSubmission()/canViewContract() ở trên.
+function canViewItPriceApproval(user, item, appData) {
+  return canViewItPriceApprovalWithoutForward(user, item, appData) || isForwardThreadParticipant(user, item);
+}
 
 function filterItPriceApprovalsForUser(items, user, appData) {
-  return (items || []).filter(p => canViewItPriceApproval(user, p, appData));
+  return (items || [])
+    .filter(p => canViewItPriceApproval(user, p, appData))
+    .map(p => sanitizeForwardThreadsForUser(p, user, canViewItPriceApprovalWithoutForward(user, p, appData)));
 }
 
 // Khớp khối lọc trong renderVppRegistrations() (public/index.html): canManageVpp (admin/vppManage) xem

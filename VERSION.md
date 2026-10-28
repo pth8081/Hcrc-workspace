@@ -1,9 +1,75 @@
 # Phiên bản hiện tại
 
-**28.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.34** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.34 (2026-11): Phê Duyệt Giá — nhân rộng "Chuyển Tiếp Xin Ý Kiến" từ Văn Bản Trình/Hợp Đồng
+
+Theo yêu cầu người dùng: "phê duyệt giá bán buôn" (và bán lẻ — cùng module `itPriceApprovals`) cần chức
+năng chuyển tiếp xin ý kiến chuyên viên giống Văn Bản Trình — người duyệt bước hiện tại chuyển tiếp hồ
+sơ cho 1-nhiều chuyên viên (trong/ngoài phòng ban), chuyên viên xem được file bảng giá để kiểm tra rồi
+cho ý kiến, sau đó người duyệt mới quyết định. Áp dụng ĐÚNG mô hình `forwardThreads[]` dùng chung đã có
+sẵn cho submissions/contracts (`routes/workflow.js` `POST /:module/:id/forward`+`/forward-reply`,
+`lib/recordViewScope.js::isForwardThreadParticipant()`, `core.js` `renderForwardBranchHTML()`+
+`openForwardModal()` dùng chung) — không xây lại từ đầu.
+
+- `routes/workflow.js`: thêm `'itPriceApprovals'` vào `FORWARD_SUPPORTED_MODULES`. **2 lỗi tiềm ẩn tự
+  phát hiện khi nối dây** (module này gác quyền khác hẳn các module kia — theo `priceType`, không phải 1
+  `moduleAccess` cố định): (1) `POST /forward` gọi `assertWorkflowModuleAccess()` SỚM (trước khi tải
+  được `item.priceType`) sẽ luôn coi `priceType=undefined`, **chặn NHẦM** người chỉ có
+  `moduleAccess.vanHanh` (duyệt Bán Buôn) dù đủ quyền — dời kiểm tra riêng cho `itPriceApprovals` xuống
+  SAU khi khoá bản ghi (đã biết `item.priceType`), cùng khuôn route Duyệt/Từ Chối chính đã làm trước đó.
+  (2) `POST /forward-reply` phải **KHÔNG** áp gate `moduleAccess` cho `itPriceApprovals` (khác các module
+  kia) — người trả lời chính là chuyên viên NGOÀI luồng duyệt (thường không có `moduleAccess.itSupport`/
+  `muaHang`/`vanHanh`), áp gate sẽ chặn nhầm đúng đối tượng tính năng sinh ra để phục vụ; xác thực bằng
+  `node.forwardedTo` bên trong khoá bản ghi là đủ.
+- `lib/recordViewScope.js`: `canViewItPriceApproval()` OR thêm `isForwardThreadParticipant()`;
+  `filterItPriceApprovalsForUser()` gọi thêm `sanitizeForwardThreadsForUser()` (ẩn nhánh người xem không
+  thuộc về, cùng khuôn submissions/contracts).
+- `routes/data.js`: (3) **lỗi tiềm ẩn #3** — `loadItPriceApprovalsScoped()` tải SQL theo dept/creator/
+  canSeeAll, hồ sơ chuyên viên được mời KHÔNG rơi vào nhánh nào -> không bao giờ tới được tầng lọc fine-
+  grained ở trên; thêm nhánh tải THÊM mọi hồ sơ CÒN PENDING company-wide (mirror đúng nhánh tương tự đã
+  có ở `loadSubmissionsScoped()`), lớp lọc fine-grained vẫn chốt đúng phạm vi xem thật. (4) **lỗi tiềm ẩn
+  #4** — "Khối 0" (zero-out theo module access cơ bản, chạy SAU tầng lọc trên, 2 nơi trong file) vẫn xoá
+  lại hồ sơ của chuyên viên không có `moduleAccess` liên quan; thêm ngoại lệ `isForwardThreadParticipant()`
+  ở cả 2 nơi.
+- `lib/fileAuthz.js`: nhánh `itPriceApprovals` + `mode==='download'` + hồ sơ còn PENDING + file mới nhất
+  — thêm ngoại lệ `isForwardThreadParticipant()` cạnh ngoại lệ "approver bước hiện tại" đã có, để chuyên
+  viên được mời tải được đúng file bảng giá đang chờ duyệt để kiểm tra.
+- `public/js/core.js`: `FORWARD_DB_KEY`/`FORWARD_EMAIL_MODULE`/`FORWARD_NOUN` thêm entry
+  `itPriceApprovals`; thêm `isForwardThreadParticipant()` (mirror client, cần riêng vì
+  `canViewItPriceApproval()` phía client tự gác NGAY cả modal/danh sách, khác submissions/contracts vốn
+  tin hẳn dữ liệu server đã lọc); `refreshForwardHostUI()`/`openForwardInboxEntry()` nối thêm nhánh
+  `itPriceApprovals`; `APPROVAL_EMAIL_EVENTS` (khối `IT_SUPPORT`) thêm 2 family `forwardRequested`/
+  `forwardReplied` để admin bật/tắt + link "🔗 Xem trực tiếp hồ sơ" trong email hoạt động.
+- `public/js/module-itsupport-price.js`: `canViewItPriceApproval()` OR thêm `isForwardThreadParticipant()`;
+  `renderItPriceModal()` gọi thêm `renderItPriceModalForward()` (mới) — `canForwardRoot` chỉ true ở
+  context `'APPROVAL'` (2 tab Mua Hàng/Vận Hành) + hồ sơ PENDING + đúng approver bước hiện tại, cùng quy
+  tắc nghiệp vụ "Duyệt/Từ chối/Bổ Sung chỉ thao tác được ở 2 tab Phê Duyệt Giá" đã có; khối hiển thị
+  nhánh/trả lời hiện ở MỌI context.
+- `public/index.html`: thêm `<div id="itPriceModalForward">` trong modal chi tiết (đã có
+  `bindCspDelegation('itPriceModal')`, không cần đăng ký CSP root mới).
+- **Phạm vi có chủ đích**: để nguyên 4 route "Gia Hạn Ngày Mong Muốn Phê Duyệt" (dùng chung cổng với
+  forward) — chưa có UI nào lộ ra cho itPriceApprovals nên chưa vá cùng lỗi gác quyền sớm ở đó, không có
+  tác động thực tế hiện tại. Mô hình tương tự cho "phê duyệt hợp đồng" người dùng cũng hỏi tới — hợp đồng
+  (`contracts`) đã có sẵn tính năng này từ trước (cùng `FORWARD_SUPPORTED_MODULES`), không cần làm thêm.
+  Chuyển tiếp ra NGOÀI công ty (người dùng xác nhận bỏ qua, chỉ cần xác nhận chọn-nhiều-người nội bộ) —
+  không làm.
+- Test: `tests/test-itprice-forward-opinion.js` (MỚI, 11 kịch bản — gồm riêng 2 kịch bản xác nhận trực
+  tiếp 2 lỗi tiềm ẩn #1/#2 đã vá) — 11/11 PASS. `tests/test-itprice-download.js` thêm 5 kịch bản xác
+  nhận quyền xem/tải file theo `isForwardThreadParticipant()` — 24/24 PASS. Chạy lại không regression:
+  `test-forward-opinion-workflow.js` (16/16), `test-forwardthreads-username-cascade.js` (6/6),
+  `test-approval-extension-routes.js` (21/21), `test-approval-email-config.js` (85/85),
+  `test-it-support.js` (24/24), `test-itprice-wholesale-mixed-approval.js` (20/20),
+  `test-it-price-approvals-scope.js` (9/9), `test-khoi0-extraapprovallayer-5modules-gate.js` (7/7),
+  `test-audit-round2-cluster2.js` (59/59), `test-audit-round4-formapproval.js` (20/20). Demo trực quan
+  qua Playwright thật (serve đúng `public/index.html`+JS, mount đúng `routes/workflow.js`) — Trưởng
+  Phòng Kinh Doanh bấm "+ Chuyển Tiếp", chọn phạm vi "🌐 Toàn công ty", tìm-chọn 1 chuyên viên khác phòng
+  ban (Phòng Kế Toán), gửi — nhánh chuyển tiếp hiện đúng ngay trong modal với tên người gửi/nhận, ghi
+  chú, trạng thái "⏳ Chưa phản hồi". CSP self-check (`on*=`, `style="`, `javascript:`, `eval(`) trên
+  `index.html`/`module-itsupport-price.js`: sạch.
 
 ## v28.33 (2026-11): Fix Biên Bản Họp không Lưu được — lỗi "incomplete" ở ô Thời Gian Họp
 

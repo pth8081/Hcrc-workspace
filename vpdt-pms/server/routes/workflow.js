@@ -152,14 +152,18 @@ router.post('/submissions/:id/give-opinion', async (req, res) => {
   }
 });
 
-// ====== Chuyển Tiếp Xin Ý Kiến (submissions/contracts) ======================================
+// ====== Chuyển Tiếp Xin Ý Kiến (submissions/contracts/itPriceApprovals) ======================
 // Nhánh "song song" độc lập với luồng duyệt chạy ngang chính (status/currentStep/history) — cùng
 // triết lý với route give-opinion ở trên: KHÔNG đi qua applyWorkflowAction(), không đụng tới
 // status/currentStep/history của hồ sơ. Lưu vào mảng phẳng item.forwardThreads[], mỗi phần tử là
 // 1 "cạnh" (edge) chuyển tiếp riêng — CHỈ 2 người forwardedBy/forwardedTo của đúng cạnh đó nhìn
 // thấy được (lib/recordViewScope.js sẽ dựa vào đúng 2 field này để cấp quyền xem bổ sung, xem task
 // #441) — tự nhiên đáp ứng đúng yêu cầu "không xem được chéo cấp" mà không cần duyệt cây đệ quy.
-const FORWARD_SUPPORTED_MODULES = new Set(['submissions', 'contracts']);
+// itPriceApprovals (11/2026, theo yêu cầu người dùng: nhân rộng mô hình Văn Bản Trình/Hợp Đồng sang
+// "Phê Duyệt Giá Bán Buôn" — người duyệt chuyển tiếp xin ý kiến chuyên viên trước khi quyết) — xem 2
+// chú thích "itPriceApprovals: ..." tại route /forward và /forward-reply ngay dưới cho phần module
+// access RIÊNG (module này không khớp khuôn 1-key như submissions/contracts).
+const FORWARD_SUPPORTED_MODULES = new Set(['submissions', 'contracts', 'itPriceApprovals']);
 const MAX_FORWARD_TARGETS = 20;
 const MAX_FORWARD_MESSAGE_LEN = 1000;
 const MAX_FORWARD_REPLY_LEN = 2000;
@@ -190,7 +194,11 @@ router.post('/:module/:id/forward', async (req, res) => {
   try {
     assertForwardModuleSupported(moduleKey);
     const freshUser = req.freshUser;
-    assertWorkflowModuleAccess(freshUser, moduleKey);
+    // itPriceApprovals: kiểm SAU KHI đã tải được item (cần item.priceType) — xem chú thích đầy đủ tại
+    // assertWorkflowModuleAccess() (đầu file, nhánh "if (moduleKey !== 'itPriceApprovals')" ở route Duyệt/
+    // Từ chối chính đã làm y hệt) — gọi sớm ở đây như mọi module khác sẽ luôn coi priceType là undefined,
+    // chặn NHẦM người chỉ có moduleAccess.vanHanh (duyệt Bán Buôn) dù đủ quyền phê duyệt bước hiện tại.
+    if (moduleKey !== 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey);
 
     const targets = Array.from(new Set((Array.isArray(targetUsernames) ? targetUsernames : [])
       .map(u => String(u || '').trim()).filter(Boolean)));
@@ -227,6 +235,9 @@ router.post('/:module/:id/forward', async (req, res) => {
       if (item[statusField] !== 'PENDING') {
         throw new WorkflowError(409, 'Hồ sơ không còn ở trạng thái chờ xử lý, không thể chuyển tiếp xin ý kiến nữa');
       }
+      // itPriceApprovals: lượt kiểm module access ĐÚNG priceType, hoãn tới đây (đã có item.priceType) —
+      // xem chú thích đầy đủ ở nhánh "if (moduleKey !== 'itPriceApprovals')" phía trên.
+      if (moduleKey === 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey, item.priceType, appData);
       if (!Array.isArray(item.forwardThreads)) item.forwardThreads = [];
       let step;
       if (parentId) {
@@ -311,7 +322,11 @@ router.post('/:module/:id/forward-reply', async (req, res) => {
   try {
     assertForwardModuleSupported(moduleKey);
     const freshUser = req.freshUser;
-    assertWorkflowModuleAccess(freshUser, moduleKey);
+    // itPriceApprovals: KHÔNG áp gate module access ở đây (khác /forward phía trên) — người TRẢ LỜI là
+    // người ĐƯỢC MỜI cho ý kiến (node.forwardedTo, xác minh bên trong khoá dưới), đúng mục đích hỏi ý
+    // kiến người NGOÀI luồng duyệt thường (thường KHÔNG có moduleAccess.itSupport/muaHang/vanHanh) — gán
+    // thêm điều kiện module access ở đây sẽ chặn nhầm chính đối tượng tính năng này sinh ra để phục vụ.
+    if (moduleKey !== 'itPriceApprovals') assertWorkflowModuleAccess(freshUser, moduleKey);
     if (fileUrl) assertUploadedFileUrl(fileUrl, 'File ý kiến trả lời');
 
     const resultItem = await withLockedRecordForCollection(MODULE_CONFIGS[moduleKey].dbKey, itemId, (item) => {

@@ -38,7 +38,7 @@ const {
   filterPayrollPeriodsForUser, filterPayslipsForUser,
   filterChecklistTemplatesForUser, filterChecklistSubmissionsForUser,
   hasModuleAccessServer, MODULE_ACCESS_GATED_COLLECTIONS, canAccessHrFeedbackModuleServer,
-  canAccessItPriceApprovalModuleServer, moduleViewConfig
+  canAccessItPriceApprovalModuleServer, moduleViewConfig, isForwardThreadParticipant
 } = require('../lib/recordViewScope');
 const { insertSystemLog } = require('../lib/systemLogStore');
 const { cascadeMeetingRoomRename, diffMeetingRoomRenames, cascadeNganhHangCodeRename, diffNganhHangCatalogRenames, cascadeSubmissionTypeRename, diffSubmissionTypeCatalogRenames, cascadeUsernameChangesToApprovalGroups, cascadeUsernameChangesToWorkflowApprovers, cascadeUsernameChangesToRecordApproverSnapshots, cascadeUsernameChangesToRecordCreatorFields, cascadeUsernameChangesToDeptViewScopeExtraViewers, cascadeUsernameChangesToCarDriverAndOfficeReqTech, cascadeUsernameChangesToSubmissionOpinionRequestees, cascadeUsernameChangesToUniformTransferRequestedBy, cascadeUsernameChangesToForwardThreads, cascadeUsernameChangesToOperationEstimateAssignees } = require('../lib/catalogRename');
@@ -1330,6 +1330,16 @@ async function loadItPriceApprovalsScoped(user, data) {
   }));
   const ownCreatedItems = await getForCollectionByColumnCached('itPriceApprovals', 'Creator', user?.username);
   for (const r of ownCreatedItems) byId.set(r.id, r);
+  // Chuyển Tiếp Xin Ý Kiến (11/2026, "nhân rộng mô hình submissions/contracts sang itPriceApprovals" —
+  // theo yêu cầu người dùng) — người được chuyển tiếp (forwardedTo) thường KHÔNG rơi vào bất kỳ nhánh
+  // nào ở trên (không phải phòng ban/approver/Creator của hồ sơ), nên hồ sơ sẽ KHÔNG BAO GIỜ được tải về
+  // từ SQL cho họ nếu dừng ở đây — filterItPriceApprovalsForUser() (lớp lọc thứ 2, đã tính đúng
+  // isForwardThreadParticipant()) không có cơ hội áp dụng vì hồ sơ chưa từng tới tay nó. Mirror ĐÚNG
+  // nhánh "pendingItems" của loadSubmissionsScoped() ngay dưới: tải THÊM mọi hồ sơ CÒN PENDING company-
+  // wide cho MỌI người (forwardThreads chỉ tạo được khi hồ sơ còn PENDING, xem routes/workflow.js
+  // POST /forward) — lớp lọc thứ 2 vẫn chốt đúng phạm vi xem thật sự, nhánh này chỉ nới COARSE LOAD.
+  const pendingItems = await getForCollectionByColumnCached('itPriceApprovals', 'Status', 'PENDING');
+  for (const r of pendingItems) byId.set(r.id, r);
   return [...byId.values()];
 }
 
@@ -1873,9 +1883,15 @@ router.get('/', async (req, res) => {
         // đi qua 'muaHang', WHOLESALE đi qua 'vanHanh', xem canAccessItPriceApprovalModuleServer() ở
         // lib/recordViewScope.js) — zero CẢ MẢNG khi chỉ tắt 'itSupport' xoá nhầm cả phần hồ sơ mà user
         // vẫn đủ quyền xem qua 'muaHang'/'vanHanh'. Lọc THEO TỪNG PHẦN TỬ thay vì zero vô điều kiện.
+        // Chuyển Tiếp Xin Ý Kiến (11/2026) — thêm OR isForwardThreadParticipant(): đúng mục đích tính
+        // năng là nhờ Ý KIẾN CHUYÊN VIÊN NGOÀI luồng duyệt thường (thường KHÔNG có moduleAccess.itSupport/
+        // muaHang/vanHanh nào) — thiếu nhánh này thì vòng lặp Khối 0 xoá sạch NGAY hồ sơ vừa được chuyển
+        // tiếp cho họ trước khi filterItPriceApprovalsForUser() (đã tính đúng isForwardThreadParticipant())
+        // kịp áp dụng, tính năng coi như không hoạt động cho đúng nhóm người nó được xây ra để phục vụ.
         if (col === 'itPriceApprovals') {
           if (Array.isArray(data.itPriceApprovals)) {
-            data.itPriceApprovals = data.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, data));
+            data.itPriceApprovals = data.itPriceApprovals.filter(p =>
+              canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, data) || isForwardThreadParticipant(req.freshUser, p));
           }
           continue;
         }
@@ -2080,10 +2096,12 @@ router.get('/lazy/:groupKey', async (req, res) => {
           }
           continue;
         }
-        // itPriceApprovals — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên.
+        // itPriceApprovals — xem chú thích đầy đủ ở vòng lặp tương ứng trong GET /api/data chính phía trên
+        // (gồm cả nhánh Chuyển Tiếp Xin Ý Kiến, OR isForwardThreadParticipant()).
         if (col === 'itPriceApprovals') {
           if (Array.isArray(result.itPriceApprovals)) {
-            result.itPriceApprovals = result.itPriceApprovals.filter(p => canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, groupAppData));
+            result.itPriceApprovals = result.itPriceApprovals.filter(p =>
+              canAccessItPriceApprovalModuleServer(req.freshUser, p.priceType, groupAppData) || isForwardThreadParticipant(req.freshUser, p));
           }
           continue;
         }

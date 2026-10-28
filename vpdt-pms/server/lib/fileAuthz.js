@@ -502,6 +502,13 @@ async function authorizeFileAccess(user, fileUrl, mode) {
         if (isLatestFile && owning.item.status === 'PENDING') {
           const stepApprovers = resolveWorkflowStepApprovers('itPriceApprovals', owning.item, appData, owning.item.currentStep);
           if (canApproveStep(user, stepApprovers, owning.item.history, owning.item.currentStep)) return true;
+          // Chuyển Tiếp Xin Ý Kiến (11/2026, theo yêu cầu người dùng: "chuyên viên có thể nhìn thấy
+          // những cái file mà áp giá lên để kiểm tra") — người được/đang chuyển tiếp cũng cần tải được
+          // ĐÚNG file mới nhất đang chờ duyệt để kiểm tra trước khi cho ý kiến, dù không phải approver
+          // chính thức bước này — mirror đúng tinh thần ngoại lệ "người duyệt" ngay trên, mở rộng thêm
+          // cho người được mời xem (allowedByForward ở nhóm 5 module theo phòng ban, ngay dưới, cũng
+          // cùng nguyên tắc này cho submission/contract).
+          if (isForwardThreadParticipant(user, owning.item)) return true;
         }
         return false;
       }
