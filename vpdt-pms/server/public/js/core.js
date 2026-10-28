@@ -725,7 +725,10 @@ const CORE_FIELD_MANIFEST = {
   MEETING_MINUTES: [
     { id: 'minutesCode', label: 'Mã Biên Bản Họp', required: true },
     { id: 'minutesTitle', label: 'Chủ Đề Cuộc Họp', required: true },
-    { id: 'minutesTime', label: 'Thời Gian Họp', required: true },
+    // Tách từ 1 field 'minutesTime' (datetime-local) thành 2 field riêng (11/2026, lỗi "không set được
+    // ngày" — xem chú thích đầy đủ tại <input id="minutesDate"> ở minutesSection.html).
+    { id: 'minutesDate', label: 'Ngày Họp', required: true },
+    { id: 'minutesTimeOfDay', label: 'Giờ Họp', required: true },
     { id: 'minutesChair', label: 'Người Chủ Trì', required: true },
     { id: 'minutesSecretary', label: 'Người Ghi Biên Bản', required: true },
     { id: 'minutesContent', label: 'Nội Dung Trao Đổi / Kết Luận', required: true }

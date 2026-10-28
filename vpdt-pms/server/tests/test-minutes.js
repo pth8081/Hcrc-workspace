@@ -222,7 +222,8 @@ async function main() {
   const s1 = await page.evaluate(async ({ directorUsername, directorFullLabel }) => {
     window.__alerts = [];
     document.getElementById('minutesTitle').value = 'Họp giao ban tuần 34';
-    document.getElementById('minutesTime').value = '2026-08-25T09:00';
+    document.getElementById('minutesDate').value = '2026-08-25';
+    document.getElementById('minutesTimeOfDay').value = '09:00';
     document.getElementById('minutesLocation').value = 'Phòng họp A';
     document.getElementById('minutesChair').value = 'Nguyễn Văn Giám Đốc';
     document.getElementById('minutesSecretary').value = 'Đặng Thị Ký';
@@ -346,7 +347,8 @@ async function main() {
     document.getElementById('minutesCode').readOnly = false; // mô phỏng 1 request/áp lực trùng mã bất thường
     document.getElementById('minutesCode').value = existingCode;
     document.getElementById('minutesTitle').value = 'Họp trùng mã (phải bị từ chối)';
-    document.getElementById('minutesTime').value = '2026-08-26T09:00';
+    document.getElementById('minutesDate').value = '2026-08-26';
+    document.getElementById('minutesTimeOfDay').value = '09:00';
     document.getElementById('minutesChair').value = 'Ai đó';
     document.getElementById('minutesSecretary').value = 'Ai đó';
     document.getElementById('minutesContent').value = 'Nội dung bất kỳ';
@@ -421,7 +423,8 @@ async function main() {
     document.getElementById('minutesCode').value = generateMinutesCode();
     document.getElementById('minutesCode').readOnly = true;
     document.getElementById('minutesTitle').value = 'Họp xét duyệt ngân sách quý 4';
-    document.getElementById('minutesTime').value = '2026-09-01T09:00';
+    document.getElementById('minutesDate').value = '2026-09-01';
+    document.getElementById('minutesTimeOfDay').value = '09:00';
     document.getElementById('minutesLocation').value = 'Phòng họp B';
     document.getElementById('minutesChair').value = 'Nguyễn Văn Giám Đốc';
     document.getElementById('minutesSecretary').value = 'Đặng Thị Ký';

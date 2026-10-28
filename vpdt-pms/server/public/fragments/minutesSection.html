@@ -27,8 +27,19 @@
             <input id="minutesTitle" placeholder="Họp giao ban tuần / Họp triển khai dự án..." class="w-full border p-1.5 rounded" required>
           </div>
           <div>
-            <label class="block font-semibold text-gray-600 mb-1">Thời Gian Họp</label>
-            <input id="minutesTime" type="datetime-local" class="w-full border p-1.5 rounded" required>
+            <label class="block font-semibold text-gray-600 mb-1">Ngày Họp</label>
+            <!-- Tách riêng 2 input date/time thay vì 1 input datetime-local (11/2026, "lập biên bản
+                 không set được ngày") — ghi .value bằng JS (onMinutesLinkedMeetingChange()/mở lại để
+                 sửa) vào input datetime-local gộp có thể khiến 1 số trình duyệt (xác nhận thực tế: Edge)
+                 không điền đủ phân đoạn nội bộ của widget (hiện "--" chưa resolve), validate native báo
+                 "incomplete" dù giá trị gán vào nhìn hợp lệ -> không Lưu được. input date/time tách riêng
+                 không có phân đoạn ghép nên không gặp lỗi lớp này (cùng tinh thần bỏ <datalist> gốc đã
+                 áp dụng cho ô tìm-kiếm-gõ-chọn, xem CLAUDE.md). -->
+            <input id="minutesDate" type="date" class="w-full border p-1.5 rounded" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-gray-600 mb-1">Giờ Họp</label>
+            <input id="minutesTimeOfDay" type="time" class="w-full border p-1.5 rounded" required>
           </div>
           <div>
             <label class="block font-semibold text-gray-600 mb-1">Địa Điểm</label>

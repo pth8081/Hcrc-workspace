@@ -1,9 +1,45 @@
 # Phiên bản hiện tại
 
-**28.32** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.33** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.33 (2026-11): Fix Biên Bản Họp không Lưu được — lỗi "incomplete" ở ô Thời Gian Họp
+
+Người dùng phản ánh (kèm ảnh chụp) ô "Thời Gian Họp" trong form Lập Biên Bản hiện "28-Oct-2026 09:00 --"
+và trình duyệt chặn Lưu với lỗi gốc "Please enter a valid value. The field is incomplete or has an
+invalid date." — xác nhận gốc là widget `<input type="datetime-local">` gộp 1 ô: `onMinutesLinkedMeetingChange()`
+(chọn 1 Lịch Đặt Phòng Họp liên kết) gán `.value` bằng JS vào ô này, và trên 1 số trình duyệt (xác nhận
+qua ảnh người dùng: Edge) việc gán `.value` bằng JS vào widget gộp nhiều phân đoạn (ngày/giờ/AM-PM) có
+thể không điền đủ TẤT CẢ phân đoạn nội bộ, để lại 1 phân đoạn hiện "--" chưa resolve — giá trị NHÌN hợp
+lệ nhưng trạng thái nội bộ của widget vẫn "incomplete", khiến validate native khi Lưu luôn thất bại (kể
+cả khi người dùng đã bỏ chọn lại "-- Không liên kết --", ô vẫn giữ giá trị hỏng vì `onMinutesLinkedMeetingChange()`
+không xoá ô khi bỏ liên kết). Cùng lớp lỗi với `<datalist>` gốc đã bỏ hẳn trước đây (xem CLAUDE.md) —
+không tin cậy widget gộp phức tạp của trình duyệt, tách thành 2 input đơn giản hơn để né hẳn lớp lỗi này
+thay vì chỉ vá triệu chứng.
+
+- `public/fragments/minutesSection.html`: tách `<input id="minutesTime" type="datetime-local">` thành 2
+  input riêng `#minutesDate` (type="date") + `#minutesTimeOfDay` (type="time") — mỗi input chỉ 1 phân
+  đoạn, không có trạng thái nội bộ ghép nhiều phần nên JS gán `.value` luôn đủ/hợp lệ.
+- `public/js/module-bienbanhop.js`: thêm 2 hàm `splitMinutesDateTime()`/`setMinutesDateTimeInputs()` (ISO
+  "YYYY-MM-DDTHH:mm" -> điền 2 input) và `readMinutesDateTimeInputs()` (đọc ngược lại đúng khuôn ISO cũ
+  để KHÔNG đổi định dạng lưu `m.time` — mọi chỗ đọc lại `m.time` hiện có (danh sách, bản Xem/Tải PDF)
+  không cần sửa gì). Áp dụng ở cả 4 chỗ từng đọc/ghi `#minutesTime`: `onMinutesLinkedMeetingChange()`
+  (điền từ lịch liên kết), `submitMeetingMinutes()` (đọc khi Lưu mới), `openEditMeetingMinutes()` (điền
+  khi mở Sửa), `updateMeetingMinutes()` (đọc khi Lưu sửa).
+- `public/js/core.js`: `CORE_FIELD_MANIFEST.MEETING_MINUTES` — tách entry `minutesTime` thành 2 entry
+  `minutesDate`/`minutesTimeOfDay` (Biểu Mẫu vẫn đổi được nhãn/bắt buộc cho từng ô riêng).
+- Test: cập nhật `test-minutes.js` (3 chỗ set `#minutesTime` cũ -> set riêng `#minutesDate`/
+  `#minutesTimeOfDay`) — chạy lại qua Playwright thật, 25/25 PASS. Chạy thêm
+  `test-collapse-car-meeting-minutes-forms.js` (10/10), `test-khoi0-meetingminutes-gate.js` (10/10),
+  `test-minutes-reassign-pending-directive.js` (4/4), `test-minutes-task-file-ownership.js` (10/10),
+  `test-audit-round5-minutes-task-vpp.js` (15/15) — không regression. CSP self-check trên
+  `minutesSection.html` đã sửa: sạch.
+- **Phạm vi**: chỉ sửa đúng ô `minutesTime` theo đúng báo cáo của người dùng — `datetime-local` còn dùng
+  ở hàng chục ô khác trong hệ thống (Phòng Họp, Đăng Ký Xe, Đào Tạo...) có thể gặp lỗi cùng lớp trên
+  trình duyệt/thiết bị tương tự nhưng CHƯA được báo, chưa đổi — nếu người dùng gặp lại lỗi "incomplete"
+  tương tự ở ô khác, áp dụng đúng cách tách 2 input này cho ô đó.
 
 ## v28.32 (2026-11): Biên Bản Họp — đổi ô "Người Phối Hợp" từ `<select multiple>` sang widget chip+tìm-gõ-chọn
 

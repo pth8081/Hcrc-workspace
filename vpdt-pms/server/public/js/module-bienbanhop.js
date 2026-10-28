@@ -9,6 +9,26 @@
 // — gọi luôn resetMeetingMinutesForm() để thoát hẳn chế độ Sửa (nếu có), tránh giữ editingMinutesId dở
 // dang trong lúc form đang ẩn (2 bảng con "Thành Phần Tham Dự"/"Ý Kiến Chỉ Đạo" không có hàng mặc định —
 // hành vi gốc vốn đã vậy, chỉ render khi có hàng thêm/sửa/reset, không phải lỗi mới do đổi ẩn/hiện này).
+// "YYYY-MM-DDTHH:mm" (định dạng lưu/trường m.time cũ) -> {date:"YYYY-MM-DD", time:"HH:mm"}, điền vào 2
+// input #minutesDate/#minutesTimeOfDay tách riêng (xem chú thích đầy đủ ở <input id="minutesDate">,
+// minutesSection.html). Trả {date:'', time:''} nếu chuỗi rỗng/không đúng khuôn.
+function splitMinutesDateTime(iso) {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(String(iso || ''));
+  return m ? { date: m[1], time: m[2] } : { date: '', time: '' };
+}
+function setMinutesDateTimeInputs(iso) {
+  const { date, time } = splitMinutesDateTime(iso);
+  document.getElementById('minutesDate').value = date;
+  document.getElementById('minutesTimeOfDay').value = time;
+}
+// Ngược lại: đọc 2 input ghép về đúng khuôn "YYYY-MM-DDTHH:mm" để lưu vào m.time (giữ nguyên định dạng
+// cũ cho mọi chỗ đọc lại m.time hiện có — hiển thị danh sách/PDF, không cần sửa gì thêm).
+function readMinutesDateTimeInputs() {
+  const date = document.getElementById('minutesDate').value;
+  const time = document.getElementById('minutesTimeOfDay').value;
+  return (date && time) ? `${date}T${time}` : '';
+}
+
 function openMinutesForm() {
   document.getElementById('minutesForm').classList.remove('hidden');
 }
@@ -47,7 +67,7 @@ function onMinutesLinkedMeetingChange() {
   const m = DB.meetings.find(x => x.id === parseInt(id, 10));
   if (!m) return;
   document.getElementById('minutesTitle').value = m.title;
-  document.getElementById('minutesTime').value = m.startTime;
+  setMinutesDateTimeInputs(m.startTime);
   document.getElementById('minutesLocation').value = m.room || '';
 }
 
@@ -680,7 +700,7 @@ async function submitMeetingMinutes(e) {
   const code = document.getElementById('minutesCode').value.trim();
   const linkedMeetingRaw = document.getElementById('minutesLinkedMeeting').value;
   const title = document.getElementById('minutesTitle').value.trim();
-  const time = document.getElementById('minutesTime').value;
+  const time = readMinutesDateTimeInputs();
   const location = document.getElementById('minutesLocation').value.trim();
   const chair = document.getElementById('minutesChair').value.trim();
   const secretary = document.getElementById('minutesSecretary').value.trim();
@@ -751,7 +771,7 @@ function openEditMeetingMinutes(id) {
   populateMinutesLinkSelect();
   document.getElementById('minutesLinkedMeeting').value = m.linkedMeetingId || '';
   document.getElementById('minutesTitle').value = m.title;
-  document.getElementById('minutesTime').value = m.time;
+  setMinutesDateTimeInputs(m.time);
   document.getElementById('minutesLocation').value = m.location || '';
   document.getElementById('minutesChair').value = m.chair;
   document.getElementById('minutesSecretary').value = m.secretary;
@@ -844,7 +864,7 @@ async function updateMeetingMinutes(e) {
   const editPayload = {
     linkedMeetingId: linkedMeetingRaw ? parseInt(linkedMeetingRaw, 10) : null,
     title: document.getElementById('minutesTitle').value.trim(),
-    time: document.getElementById('minutesTime').value,
+    time: readMinutesDateTimeInputs(),
     location: document.getElementById('minutesLocation').value.trim(),
     chair: document.getElementById('minutesChair').value.trim(),
     secretary: document.getElementById('minutesSecretary').value.trim(),
