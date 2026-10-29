@@ -14,11 +14,11 @@
 //      sai liên tiếp -> khoá tạm, mật khẩu đúng lúc đang khoá vẫn báo success:false); không cấp cookie
 //      phiên (không phải "đăng nhập hộ"); cập nhật lastUsedAt trên API key sau khi dùng.
 //   3. Đồng bộ danh bạ (routes/externalAuthVerify.js): GET /api/external/users — cùng API key, trả toàn
-//      bộ hoặc 1 hồ sơ (?account=) ĐÚNG 6 field đối tác yêu cầu: vị trí (position, "Văn phòng"/"Siêu
+//      bộ hoặc 1 hồ sơ (?account=) ĐÚNG 7 field đối tác yêu cầu: vị trí (position, "Văn phòng"/"Siêu
 //      Thị" suy từ posType — kể cả user cũ chưa có posType tường minh), mã nhân viên (username), tên
-//      nhân viên (name), điện thoại (phone), phòng (dept), chức danh (jobTitle) — KHÔNG BAO GIỜ kèm mật
-//      khẩu (và không kèm email/active vì không nằm trong yêu cầu); API key thiếu/sai/đã thu hồi -> 401;
-//      account không tồn tại -> 404.
+//      nhân viên (name), điện thoại (phone), email (11/2026, bổ sung theo yêu cầu người dùng), phòng
+//      (dept), chức danh (jobTitle) — KHÔNG BAO GIỜ kèm mật khẩu (và không kèm active vì không nằm
+//      trong yêu cầu); API key thiếu/sai/đã thu hồi -> 401; account không tồn tại -> 404.
 //   4. Lớp bảo mật thứ 2 — chặn IP theo từng key (lib/externalAuth.js isIpAllowed/parseAllowedIpsInput):
 //      hàm thuần (khớp IPv4/CIDR, từ chối rule sai định dạng); key có allowedIps -> chặn IP lạ (403), cho
 //      qua IP đúng; key KHÔNG cấu hình allowedIps (mặc định) -> không hạn chế; sửa allowedIps của key đang
@@ -333,7 +333,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(wrong.status, 401);
   });
 
-  await run('GET /api/external/users: key đúng -> trả ĐÚNG 6 field yêu cầu (vị trí/mã NV/tên/sđt/phòng/chức danh), KHÔNG có mật khẩu', async () => {
+  await run('GET /api/external/users: key đúng -> trả ĐÚNG 7 field yêu cầu (vị trí/mã NV/tên/sđt/email/phòng/chức danh), KHÔNG có mật khẩu', async () => {
     resetAppData();
     const created = await createKeyAsAdmin('App Đồng Bộ Danh Bạ');
     const res = await directoryApi(created.body.apiKey);
@@ -341,14 +341,17 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(res.body.length, 4);
     const nv1 = res.body.find(u => u.username === EMP.username);
     assert.deepStrictEqual(nv1, {
-      position: 'Văn phòng', username: 'nv1', name: 'Nhân Viên Kinh Doanh', phone: '0901234567',
+      position: 'Văn phòng', username: 'nv1', name: 'Nhân Viên Kinh Doanh', phone: '0901234567', email: 'nv1@company.com',
       dept: 'Kinh Doanh', jobTitle: 'Chuyên viên'
-    }, 'Đúng 6 field: position/username(mã NV)/name/phone/dept/jobTitle — không có email/active/mật khẩu');
+    }, 'Đúng 7 field: position/username(mã NV)/name/phone/email/dept/jobTitle — không có active/mật khẩu');
+    // STORE_EMP không khai email trong fixture -> phải trả chuỗi rỗng (không phải undefined/null), cùng
+    // khuôn các field text khác (name/phone/dept/jobTitle) đã dùng `|| ''` từ trước.
+    const nv3 = res.body.find(u => u.username === STORE_EMP.username);
+    assert.strictEqual(nv3.email, '', 'User chưa có email -> trả chuỗi rỗng, không phải undefined');
     res.body.forEach(u => {
       assert.strictEqual(u.pass, undefined);
       assert.strictEqual(u.password, undefined);
-      assert.strictEqual(u.email, undefined, 'Không nằm trong 6 field yêu cầu, không trả kèm');
-      assert.strictEqual(u.active, undefined, 'Không nằm trong 6 field yêu cầu, không trả kèm');
+      assert.strictEqual(u.active, undefined, 'Không nằm trong 7 field yêu cầu, không trả kèm');
     });
   });
 

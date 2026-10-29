@@ -1,9 +1,34 @@
 # Phiên bản hiện tại
 
-**28.39** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.40 (2026-11): API Đối Tác (ExtAuth) — thêm field "email" vào danh bạ đồng bộ
+
+Yêu cầu người dùng: "muốn API cung cấp cho đối tác thêm trường email". API đồng bộ danh bạ nhân sự cho
+ứng dụng ngoài (`GET /api/external/users`, xác thực bằng API key riêng — xem mục 7.9
+`deploy/Huong-dan-nghiep-vu.md`) trước đây CHỈ trả đúng 6 field (vị trí/mã nhân viên/tên/điện thoại/
+phòng/chức danh), cố ý KHÔNG có email theo đúng yêu cầu ban đầu lúc xây tính năng.
+
+- `routes/externalAuthVerify.js`: `toDirectoryProfile()` thêm field `email: u.email || ''` (chuỗi rỗng
+  nếu tài khoản chưa có email, cùng khuôn các field text khác name/phone/dept/jobTitle) — nay trả ĐỦ 7
+  field. Vẫn TUYỆT ĐỐI không kèm mật khẩu/PIN/trạng thái active hay bất kỳ field bí mật nào khác.
+- Cập nhật mô tả API ở màn Hệ Thống → Quản Trị (`public/fragments/systemSection.html`) +
+  `deploy/Huong-dan-nghiep-vu.md` mục 7.9 cho khớp field mới.
+- Test: `tests/test-external-auth.js` (31/31) — cập nhật đúng kỳ vọng 7 field (trước đây có dòng test
+  CHẶN email không được trả về, nay đổi lại thành assert field email trả đúng giá trị/chuỗi rỗng khi
+  chưa có).
+
+**Trả lời câu hỏi "trường email trả cho đối tác là gì"**: field tên `email`, lấy thẳng từ
+`DB.users[].email` (chính là email đã khai trong Hồ Sơ/Người Dùng của hệ thống) — trả chuỗi rỗng `""`
+nếu tài khoản đó chưa có email, không phải `null`/thiếu field.
+
+**Deploy impact**: chỉ sửa code — không đổi `server/sql/schema.sql`, không thêm biến môi trường, không
+thêm/đổi `dependencies`. Field mới chỉ ảnh hưởng tới các key API đối tác đang gọi `GET /api/external/
+users` — phía tích hợp (nếu parse JSON nghiêm ngặt theo schema cố định) có thể cần cập nhật để đọc thêm
+field `email`, nhưng field cũ không đổi tên/đổi kiểu nên không phá vỡ tích hợp hiện có.
 
 ## v28.39 (2026-11): Phê Duyệt Giá — hiện đúng % cho cột Margin/Chiết Khấu ở bảng xem trước file Excel
 

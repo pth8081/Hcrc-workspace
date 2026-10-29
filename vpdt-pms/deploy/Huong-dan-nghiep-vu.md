@@ -6644,8 +6644,8 @@ Workspace mà không cần tự lưu mật khẩu người dùng:
   cookie/JWT) — chỉ trả lời có đúng mật khẩu hay không, dùng cho ứng dụng khác
   muốn "đăng nhập hộ" bằng đúng tài khoản HCRC.
 - `GET /api/external/users` — đồng bộ danh bạ nhân sự cơ bản (username/tên/
-  điện thoại/phòng ban/chức danh) — chỉ trả field công khai nội bộ, **không
-  bao giờ** kèm mật khẩu/PIN dù đã hash.
+  điện thoại/email/phòng ban/chức danh) — chỉ trả field công khai nội bộ,
+  **không bao giờ** kèm mật khẩu/PIN dù đã hash.
 
 **Cấp/thu hồi key (admin)**: vào màn quản lý API key (Hệ Thống → Quản Trị) —
 tạo key mới sinh 1 chuỗi ngẫu nhiên dạng `hcrc_` + 64 ký tự hex, **chỉ hiển thị

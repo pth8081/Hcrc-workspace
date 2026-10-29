@@ -159,15 +159,15 @@ function resolvePosType(u, storeNames) {
   return u.posType || (storeNames.has(u.dept) ? 'STORE' : 'HO');
 }
 
-// Field công khai nội bộ duy nhất trả ra ngoài cho mục đích đồng bộ danh bạ — ĐÚNG 6 field đối tác yêu
-// cầu (vị trí/mã nhân viên/tên nhân viên/điện thoại/phòng/chức danh), TUYỆT ĐỐI không có pass/password/
-// pinHash/failedLoginAttempts/lockedUntil hay bất kỳ field bí mật nào khác của users. "username" đóng
-// vai trò "mã nhân viên" (không có field mã nhân viên riêng trong hệ thống — username LÀ định danh duy
-// nhất/không đổi của mỗi nhân sự, dùng để đăng nhập).
+// Field công khai nội bộ duy nhất trả ra ngoài cho mục đích đồng bộ danh bạ — ĐÚNG 7 field đối tác yêu
+// cầu (vị trí/mã nhân viên/tên nhân viên/điện thoại/email/phòng/chức danh — "email" thêm 11/2026, yêu
+// cầu người dùng), TUYỆT ĐỐI không có pass/password/pinHash/failedLoginAttempts/lockedUntil hay bất kỳ
+// field bí mật nào khác của users. "username" đóng vai trò "mã nhân viên" (không có field mã nhân viên
+// riêng trong hệ thống — username LÀ định danh duy nhất/không đổi của mỗi nhân sự, dùng để đăng nhập).
 function toDirectoryProfile(u, storeNames) {
   return {
     position: posTypeLabel(resolvePosType(u, storeNames)),
-    username: u.username, name: u.name || '', phone: u.phone || '',
+    username: u.username, name: u.name || '', phone: u.phone || '', email: u.email || '',
     dept: u.dept || '', jobTitle: u.jobTitle || ''
   };
 }
