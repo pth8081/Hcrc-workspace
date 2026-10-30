@@ -368,6 +368,7 @@ function renderStoreList() {
   const ul = document.getElementById('storeList');
   if (!ul) return;
   const types = DB.storeTypes || {};
+  const externalCodes = DB.storeExternalCodes || {};
   ul.innerHTML = renderCatalogBulkBarHtml('stores') + DB.stores.map(s => `
     <li class="p-2 flex justify-between items-center gap-2 hover:bg-gray-50">
       ${renderCatalogBulkCheckboxHtml('stores', s)}
@@ -378,6 +379,9 @@ function renderStoreList() {
         <option value="CH" ${types[s] === 'CH' ? 'selected' : ''}>Cửa Hàng</option>
         <option value="WH" ${types[s] === 'WH' ? 'selected' : ''}>Kho</option>
       </select>
+      <input type="text" value="${escapeHtml(externalCodes[s] || '')}" placeholder="Mã Điểm API Tồn Kho"
+        data-op-change="setStoreExternalCode" data-arg0="'${escapeHtml(s)}'" data-arg-value="1"
+        class="border rounded text-[11px] p-0.5 w-32" title="Mã Điểm (API Tồn Kho đối tác) — dùng cho Đối Chiếu Kệ &amp; Tồn Kho ở Kiểm Soát Hàng Hóa">
       <button data-op="renameStore" data-arg0="'${escapeHtml(s)}'" class="text-blue-600 font-bold hover:underline whitespace-nowrap">✏️ Sửa</button>
       <button data-op="deleteStore" data-arg0="'${escapeHtml(s)}'" class="text-red-500 font-bold hover:underline">Xóa</button>
     </li>
@@ -396,6 +400,22 @@ async function setStoreType(name, type) {
   const saved = await syncStorage('storeTypes', { baseline: prev });
   if (!saved) { DB.storeTypes = prev; renderStoreList(); return; }
   logSystemAction('USER_MGM', 'SET_STORE_TYPE', `Phân loại siêu thị [${name}] → [${type || 'Chưa phân loại'}]`, 'SUCCESS', name);
+}
+
+// setStoreExternalCode() — gán "Mã Điểm" (API Tồn Kho đối tác BRGMART, tài liệu v1.1 10/2026) cho 1 tên
+// trong Danh Mục Siêu Thị, dùng cho Đối Chiếu Kệ & Tồn Kho (Kiểm Soát Hàng Hóa) — server tự tra map này
+// theo dept người đăng nhập (routes/shelfStock.js), KHÔNG BAO GIỜ nhận mã này từ client. Admin tự nhập
+// tay (không tự động đoán/khớp) — cùng khuôn setStoreType() ở trên, storeExternalCodes là 1 catalog map
+// RIÊNG { [tên]: '<maDiem>' }.
+async function setStoreExternalCode(name, maDiem) {
+  const prev = { ...(DB.storeExternalCodes || {}) };
+  const next = { ...(DB.storeExternalCodes || {}) };
+  const trimmed = String(maDiem || '').trim();
+  if (trimmed) next[name] = trimmed; else delete next[name];
+  DB.storeExternalCodes = next;
+  const saved = await syncStorage('storeExternalCodes', { baseline: prev });
+  if (!saved) { DB.storeExternalCodes = prev; renderStoreList(); return; }
+  logSystemAction('USER_MGM', 'SET_STORE_EXTERNAL_CODE', `Cấu hình Mã Điểm API Tồn Kho [${name}] → [${trimmed || '(xoá)'}]`, 'SUCCESS', name);
 }
 
 // Sửa (rename, CÓ CASCADE) 1 giá trị trong danh mục "stores"/"jobTitles"/"storeJobTitles" — gọi route

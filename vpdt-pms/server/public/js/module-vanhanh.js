@@ -203,7 +203,12 @@ function setVanHanhShelfSubTab(tab) {
     ['RECORD', 'vanHanhShelfRecordWrap', 'btnVhShelfSubRecord', () => true],
     ['LOCATIONS', 'vanHanhShelfLocationsWrap', 'btnVhShelfSubLocations', canManageShelfLocationsClient],
     ['EXPIRY', 'vanHanhShelfExpiryWrap', 'btnVhShelfSubExpiry', () => true],
-    ['THRESHOLD', 'vanHanhShelfThresholdWrap', 'btnVhShelfSubThreshold', canManageShelfLocationsClient]
+    ['THRESHOLD', 'vanHanhShelfThresholdWrap', 'btnVhShelfSubThreshold', canManageShelfLocationsClient],
+    // "📊 Đối Chiếu" (bổ sung sau khi có tài liệu API Tồn Kho BRGMART v1.1, 11/2026) — mở cho MỌI người
+    // có quyền vào tab (vanHanhShelfTab, đã gác ở setVanHanhSubTab() cấp cha), KHÔNG cần quyền riêng
+    // (chỉ XEM, không sửa gì) — xem canManageShelfLocationsClient() dùng cho LOCATIONS/THRESHOLD khác hẳn
+    // vì 2 tab đó CÓ form ghi.
+    ['RECON', 'vanHanhShelfReconWrap', 'btnVhShelfSubRecon', () => true]
   ];
   const found = tabs.find(([key]) => key === tab);
   const stillAllowed = found && found[3](currentUser);
@@ -234,6 +239,7 @@ function setVanHanhShelfSubTab(tab) {
       trySyncPendingShelfRecords();
     })();
     renderDynamicInputsForModule('SHELF_RECORD', 'dynamicFieldsContainer_SHELF_RECORD');
+    loadShelfSystemInventoryForRecordPicker();
   } else if (tab === 'LOCATIONS') {
     editingShelfLocationId = null;
     renderShelfLocationsList();
@@ -242,6 +248,8 @@ function setVanHanhShelfSubTab(tab) {
   } else if (tab === 'THRESHOLD') {
     editingShelfStockThresholdId = null;
     renderShelfStockThresholdsList();
+  } else if (tab === 'RECON') {
+    loadShelfReconciliation();
   }
 }
 
@@ -262,6 +270,93 @@ function resolveShelfLocationInput() {
   const text = document.getElementById('srShelfLocationInput').value.trim();
   const match = effectiveShelfLocations().find(s => s.active !== false && `${s.code} — ${s.name}` === text);
   document.getElementById('srShelfLocationId').value = match ? match.id : '';
+}
+
+// ===== "🔎 Chọn Từ Tồn Kho Hệ Thống" + "📊 Đối Chiếu Kệ & Tồn Kho" (bổ sung sau khi có tài liệu API Tồn
+// Kho BRGMART v1.1, 11/2026, xem lib/inventoryApiClient.js/jobs/inventorySync.js). "maHang" (mã 10 số
+// nội bộ BRGMART, KHÔNG phải mã vạch) CHỈ được gán cho shelfRecords khi chọn đúng sản phẩm từ danh sách
+// tồn kho hệ thống — ghi nhận qua gõ tay tự do/quét camera (srSku) KHÔNG có maHang, nên KHÔNG tham gia
+// Đối Chiếu (đúng thiết kế đã thống nhất, vì mã vạch thật ≠ mã nội bộ BRGMART). =====
+let shelfSystemInventoryCache = [];
+// Gọi 1 lần mỗi khi vào tab "📷 Ghi Nhận" — 503 (chưa cấu hình API)/404 (siêu thị chưa có Mã Điểm/chưa
+// có dữ liệu) thì ẨN HẲN khối chọn này, KHÔNG báo lỗi gây rối (ghi nhận tay/camera vẫn hoạt động y cũ).
+async function loadShelfSystemInventoryForRecordPicker() {
+  const wrap = document.getElementById('srSystemInventoryPickerWrap');
+  if (!wrap) return;
+  try {
+    const res = await fetch('/api/shelf-stock/system-inventory');
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) { wrap.classList.add('hidden'); shelfSystemInventoryCache = []; return; }
+    const data = await res.json();
+    shelfSystemInventoryCache = Array.isArray(data.rows) ? data.rows : [];
+    wrap.classList.remove('hidden');
+    sddSetOptions('srSystemInventoryDropdown', shelfSystemInventoryCache.map(r => ({
+      value: `${r.maHang} — ${r.tenHang}`, label: `${r.maHang} — ${r.tenHang} (tồn hệ thống ${r.soLuongTon})`
+    })));
+  } catch (err) {
+    wrap.classList.add('hidden');
+    shelfSystemInventoryCache = [];
+  }
+}
+// Chọn xong tự điền Tên Sản Phẩm + gán maHang ẩn — người dùng vẫn sửa lại Tên Sản Phẩm/Số Lượng tay bình
+// thường sau khi chọn (maHang không đổi theo, vẫn đúng sản phẩm đã chọn).
+function resolveShelfSystemInventoryInput() {
+  const text = document.getElementById('srSystemInventoryInput').value.trim();
+  const match = shelfSystemInventoryCache.find(r => `${r.maHang} — ${r.tenHang}` === text);
+  document.getElementById('srMaHang').value = match ? match.maHang : '';
+  if (match) document.getElementById('srProductName').value = match.tenHang;
+}
+function isShelfRecordCreatedToday(createdAt) {
+  if (!createdAt) return false;
+  const d = new Date(createdAt);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+// QUYẾT ĐỊNH THIẾT KẾ (chưa có đặc tả chính thức): "trên kệ hôm nay" của 1 mã hàng = TỔNG quantity của
+// mọi shelfRecords tạo HÔM NAY có ĐÚNG maHang đó — CÙNG công thức "tổng hôm nay" đã dùng cho Ngưỡng Tồn
+// (jobs/shelfStockThresholdAlert.js), để nhất quán trong toàn tính năng. Mã hàng hệ thống nào không có
+// ghi nhận hôm nay -> trên kệ = 0 (Lệch), không ẩn dòng (người quản lý cần thấy rõ SKU nào CHƯA kiểm).
+async function loadShelfReconciliation() {
+  const tbody = document.getElementById('vhShelfReconBody');
+  const noteEl = document.getElementById('shelfReconNote');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-gray-400">Đang tải...</td></tr>`;
+  if (noteEl) noteEl.textContent = '';
+  try {
+    const res = await fetch('/api/shelf-stock/system-inventory');
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">${escapeHtml(body.error || 'Không tải được dữ liệu tồn kho hệ thống')}</td></tr>`;
+      return;
+    }
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    const todayByMaHang = {};
+    (DB.shelfRecords || []).forEach(r => {
+      if (!r.maHang || !isShelfRecordCreatedToday(r.createdAt)) return;
+      todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+    });
+    tbody.innerHTML = rows.length ? rows.map(r => {
+      const shelfTotal = todayByMaHang[r.maHang] || 0;
+      const diff = shelfTotal - Number(r.soLuongTon || 0);
+      const badge = diff === 0
+        ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Khớp</span>`
+        : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">Lệch ${diff > 0 ? '+' : ''}${diff}</span>`;
+      return `
+      <tr class="border-b">
+        <td class="p-2">${escapeHtml(r.maHang || '')}</td>
+        <td class="p-2">${escapeHtml(r.tenHang || '')}</td>
+        <td class="p-2 text-right">${escapeHtml(String(r.soLuongTon ?? ''))}</td>
+        <td class="p-2 text-right">${escapeHtml(String(shelfTotal))}</td>
+        <td class="p-2">${badge}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có dữ liệu tồn kho hệ thống cho siêu thị này</td></tr>`;
+    if (noteEl && body.capNhatLuc) {
+      noteEl.textContent = `Tồn kho hệ thống cập nhật lúc ${new Date(body.capNhatLuc).toLocaleString('vi-VN')}. "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có chọn từ "🔎 Chọn Từ Tồn Kho Hệ Thống" ở tab Ghi Nhận (không tính ghi nhận gõ tay/quét camera tự do).`;
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
+  }
 }
 async function submitShelfRecord(e) {
   e.preventDefault();
@@ -289,7 +384,11 @@ async function submitShelfRecord(e) {
   const matchedLocation = effectiveShelfLocations().find(s => s.id === Number(shelfLocationId));
   const clientRecordId = (window.crypto?.randomUUID ? window.crypto.randomUUID()
     : `cr_${Date.now()}_${Math.random().toString(36).slice(2)}`);
-  const payload = { shelfLocationId: Number(shelfLocationId), productName, sku, quantity, expiryDate, note, customData, clientRecordId };
+  // maHang (bổ sung sau khi có tài liệu API Tồn Kho, 11/2026) — CHỈ có giá trị khi đã chọn đúng sản phẩm
+  // từ "🔎 Chọn Từ Tồn Kho Hệ Thống" (resolveShelfSystemInventoryInput()), rỗng nếu ghi nhận qua gõ
+  // tay/quét camera tự do — xem chú thích đầy đủ tại đó.
+  const maHang = document.getElementById('srMaHang').value.trim();
+  const payload = { shelfLocationId: Number(shelfLocationId), productName, sku, quantity, expiryDate, note, customData, clientRecordId, maHang };
 
   if (navigator.onLine) {
     try {

@@ -86,6 +86,7 @@ const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
 const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
+const { syncSystemInventory } = require('./jobs/inventorySync');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
@@ -522,6 +523,11 @@ async function start() {
       // (bao gồm quyết định "tổng quantity hôm nay" thay cho tồn kho hệ thống thật) ở jobs/shelfStockThresholdAlert.js.
       checkShelfStockThresholdAlerts();
       setInterval(checkShelfStockThresholdAlerts, 24 * 60 * 60 * 1000);
+      // Đối Chiếu Tồn Kho Hệ Thống (API BRGMART, tài liệu v1.1 10/2026) — chu kỳ 20 phút (trong khoảng
+      // 15-30 phút tài liệu khuyến nghị, khớp đúng độ trễ đồng bộ 15 phút của chính API nguồn). Tự vô
+      // hiệu hoá có log rõ ràng nếu thiếu BRGMART_INVENTORY_API_KEY — xem jobs/inventorySync.js.
+      syncSystemInventory();
+      setInterval(syncSystemInventory, 20 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc

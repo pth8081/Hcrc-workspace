@@ -1,5 +1,6 @@
 // routes/shelfStock.js — "Kiểm Soát Hàng Hóa" (Vận Hành), bổ sung sau Phase 1 MVP (11/2026): Sửa/Ngừng
-// dùng Quầy Kệ + Nhập Excel Quầy Kệ + Sửa/Ngừng dùng Ngưỡng Tồn. TẠO MỚI (shelfLocations/shelfRecords/
+// dùng Quầy Kệ + Nhập Excel Quầy Kệ + Sửa/Ngừng dùng Ngưỡng Tồn + Đối Chiếu Tồn Kho Hệ Thống (API
+// BRGMART, GET /system-inventory — xem jobs/inventorySync.js). TẠO MỚI (shelfLocations/shelfRecords/
 // shelfStockThresholds) vẫn đi qua POST /api/create/:module chung (lib/createValidation.js) — file này
 // CHỈ có các hành động route chung không hỗ trợ: sửa 1 bản ghi theo id (withLockedRecordForCollection,
 // tự đối chiếu dept NGAY TRONG LOCK — không tin dept/code bất biến từ client) + đọc/xem-trước file Excel
@@ -22,6 +23,8 @@ const { canManageShelfStock, applyShelfLocationEdit, applyShelfStockThresholdEdi
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
+const { getAppDataValue } = require('../lib/appData');
+const { getSystemInventoryForMaDiem, isInventoryApiConfigured } = require('../jobs/inventorySync');
 
 router.use(requireAuth, blockIfMustChangePassword);
 
@@ -52,6 +55,32 @@ router.patch('/thresholds/:id', async (req, res) => {
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/thresholds/:id');
+  }
+});
+
+// ===================== ĐỐI CHIẾU KỆ & TỒN KHO: đọc tồn kho hệ thống ĐÚNG siêu thị người gọi =====================
+// Server TỰ tra maDiem theo req.freshUser.dept (qua DB.storeExternalCodes, admin cấu hình tay ở màn
+// "🏬 Quản Lý Danh Mục Siêu Thị") — route này KHÔNG BAO GIỜ nhận maDiem/mã siêu thị từ query/body
+// client, chặn store-spoofing cùng nguyên tắc mọi route Kiểm Soát Hàng Hóa khác. Dữ liệu đọc từ cache
+// trong tiến trình (jobs/inventorySync.js, tự đồng bộ nền mỗi 20 phút) — route này KHÔNG tự gọi API đối
+// tác (tránh người dùng bấm đi bấm lại làm dội lượt gọi vượt giới hạn tần suất của đối tác).
+router.get('/system-inventory', async (req, res) => {
+  try {
+    if (!isInventoryApiConfigured()) {
+      return res.status(503).json({ error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác (liên hệ quản trị hệ thống)' });
+    }
+    const storeExternalCodes = await getAppDataValue('storeExternalCodes') || {};
+    const maDiem = storeExternalCodes[req.freshUser.dept];
+    if (!maDiem) {
+      return res.status(404).json({ error: `Siêu thị "${req.freshUser.dept || ''}" chưa cấu hình Mã Điểm API Tồn Kho — liên hệ quản trị hệ thống để cấu hình ở Danh Mục Siêu Thị` });
+    }
+    const cached = getSystemInventoryForMaDiem(maDiem);
+    if (!cached) {
+      return res.status(404).json({ error: 'Chưa có dữ liệu tồn kho hệ thống cho siêu thị này (có thể hệ thống vừa khởi động, hoặc Mã Điểm không khớp dữ liệu từ đối tác) — vui lòng thử lại sau vài phút' });
+    }
+    res.json({ rows: cached.rows, capNhatLuc: cached.capNhatLuc, fetchedAt: cached.fetchedAt });
+  } catch (err) {
+    sendCatchError(res, err, 'GET /api/shelf-stock/system-inventory');
   }
 });
 

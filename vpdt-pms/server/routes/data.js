@@ -250,6 +250,11 @@ const ADMIN_ONLY_KEYS = new Set([
   // storeTypes (10/2026): map phân loại Siêu Thị/Cửa Hàng cho từng tên trong 'stores' — panel gán ngay
   // trong màn Quản Lý Danh Mục Siêu Thị (chỉ admin), cùng lý do khoá ghi như 'stores' ở trên.
   'storeTypes',
+  // storeExternalCodes (bổ sung sau Phase 1 MVP Kiểm Soát Hàng Hóa, 11/2026): map "Mã Điểm" API Tồn Kho
+  // BRGMART cho từng tên trong 'stores' — cùng khuôn/lý do khoá ghi như 'storeTypes' ở trên (gán tay ở
+  // màn Quản Lý Danh Mục Siêu Thị, chỉ admin). routes/shelfStock.js (GET /system-inventory) đọc map này
+  // qua getAppDataValue() (đọc trực tiếp, KHÔNG qua route này) để tự tra maDiem theo dept người gọi.
+  'storeExternalCodes',
   // nganhHangCatalog (10/2026, đợt "Ngành Hàng"): danh mục nguồn cho ô "🏷️ Ngành Hàng Áp Dụng" (form đề
   // xuất Bán Buôn) + cột "🏷️ Ngành Hàng Phụ Trách" (màn cấu hình người duyệt) — panel CRUD/Excel chỉ hiện
   // cho admin (Hệ Thống > ⚙️ Quản Trị > 🗂️ Quản Lý Danh Mục), cùng lý do khoá ghi như 'stores' ở trên.

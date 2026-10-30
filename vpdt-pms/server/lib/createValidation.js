@@ -2012,6 +2012,12 @@ const CREATE_MODULE_CONFIGS = {
         payload.expiryDate = '';
       }
       payload.note = String(payload.note || '').trim();
+      // maHang (bổ sung sau Phase 1 MVP, 11/2026 — Đối Chiếu Tồn Kho Hệ Thống): mã 10 số nội bộ BRGMART
+      // (API /api/v1/reports/ton-kho/run, maHang — KHÔNG phải mã vạch) — CHỈ gán được khi người dùng
+      // chọn sản phẩm từ picker "🔎 Chọn Từ Tồn Kho Hệ Thống" (dữ liệu đến từ chính đối tác qua
+      // GET /api/shelf-stock/system-inventory, không phải do người dùng tự bịa), optional — ghi nhận
+      // qua gõ tay tự do/quét camera KHÔNG có field này, nên KHÔNG tham gia Đối Chiếu (đúng thiết kế).
+      payload.maHang = String(payload.maHang || '').trim().slice(0, 20);
     }
   },
   // shelfStockThresholds (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026) — ngưỡng tồn tối thiểu

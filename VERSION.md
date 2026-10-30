@@ -1,9 +1,77 @@
 # Phiên bản hiện tại
 
-**28.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.44 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Đối Chiếu Kệ & Tồn Kho Hệ Thống (API BRGMART)
+
+Hoàn tất khối CUỐI CÙNG còn thiếu của toàn bộ tính năng "📋 Kiểm Soát Hàng Hóa" (sau v28.41-v28.43), sau
+khi người dùng gửi tài liệu API chính thức ("Tài liệu API — Tồn kho toàn hệ thống (dành cho đối tác)"
+v1.1, 10/2026) + xác nhận "Mã hàng" 10 số là mã NỘI BỘ BRGMART (không phải mã vạch sản phẩm).
+
+**Phát hiện quan trọng ảnh hưởng thiết kế**: API không có mã vạch/mã nhà sản xuất — chỉ có `maHang` (mã
+nội bộ BRGMART). Camera quét mã vạch (v28.43) đọc mã vạch THẬT trên sản phẩm, KHÔNG khớp được với
+`maHang` — nên Ghi Nhận Trên Kệ có thêm 1 cách chọn sản phẩm MỚI, TÁCH RIÊNG với gõ tay/quét camera:
+
+- **"🔎 Chọn Từ Tồn Kho Hệ Thống"** (ô tìm-kiếm-gõ-chọn mới trong "📷 Ghi Nhận") — chọn đúng sản phẩm từ
+  danh sách tồn kho hệ thống (của đúng siêu thị mình) mới gán được `maHang`, tự điền Tên Sản Phẩm. Ẩn
+  hẳn nếu siêu thị chưa cấu hình Mã Điểm hoặc chưa có dữ liệu — ghi nhận tay/camera vẫn hoạt động y cũ.
+- Ghi nhận qua gõ tay tự do/quét camera (Mã SKU) **KHÔNG có `maHang`** — không tham gia Đối Chiếu, đúng
+  thiết kế đã thống nhất với người dùng.
+
+**Cấu hình "Mã Điểm" ↔ siêu thị** (🏬 Quản Lý Danh Mục Siêu Thị, chỉ admin): thêm 1 ô nhập tay "Mã Điểm
+API Tồn Kho" cho từng siêu thị trong danh mục (`setStoreExternalCode()`, map mới `DB.storeExternalCodes`
+— cùng khuôn `storeTypes` đã có). Admin tự nhập/khớp tay, KHÔNG tự động đoán.
+
+**Đồng bộ nền** (`jobs/inventorySync.js` + `lib/inventoryApiClient.js`, mới): gọi
+`GET /api/v1/reports/ton-kho/run` (header `X-API-Key`), tự phân trang tới khi hết dữ liệu (dừng khi số
+dòng trả về < `pageSize`, có trần `MAX_PAGES=1000` chống treo vô hạn — cùng khuôn `lib/dsmartApiClient.js`
+đã có), tôn trọng `Retry-After` khi gặp 429, KHÔNG retry khi 401/403 (sai key/IP chưa đăng ký — tự thử
+lại ở chu kỳ kế tiếp), retry có backoff khi 500. Chu kỳ **20 phút/lần** (trong khoảng 15-30 phút tài liệu
+khuyến nghị, khớp đúng độ trễ đồng bộ 15 phút của chính API nguồn) + chạy 1 lần ngay lúc server khởi
+động. Kết quả cache **trong tiến trình Node** (Map theo `maDiem`, KHÔNG lưu DB lâu dài — dữ liệu chỉ có
+giá trị tức thời). Thiếu `BRGMART_INVENTORY_API_KEY`: tính năng tự vô hiệu hoá có log rõ, KHÔNG crash
+server khi khởi động.
+
+**Route mới** `GET /api/shelf-stock/system-inventory` (`routes/shelfStock.js`): server **TỰ** tra
+`maDiem` theo `req.freshUser.dept` (qua `DB.storeExternalCodes`) — **KHÔNG BAO GIỜ** nhận `maDiem`/mã
+siêu thị từ query/body client (chặn store-spoofing, có test guard riêng chặn regression — xem mục Test).
+
+**Màn mới "📊 Đối Chiếu"** (sub-tab thứ 5 trong tab Kiểm Soát Hàng Hóa, mở cho mọi người có quyền vào
+tab, CHỈ XEM): so khớp từng `maHang` giữa tồn kho hệ thống (`soLuongTon`) và tổng `quantity` các
+`shelfRecords` tạo **HÔM NAY** có đúng `maHang` đó (cùng công thức "tổng hôm nay" đã dùng cho Ngưỡng Tồn
+v28.42, để nhất quán) → badge Khớp/Lệch (+/-), hiện dòng "cập nhật lúc HH:mm" (từ `capNhatLuc`).
+
+**File mới**: `lib/inventoryApiClient.js`, `jobs/inventorySync.js`, `tests/test-inventory-recon.js`.
+**File sửa chính**: `routes/shelfStock.js`, `lib/createValidation.js` (thêm field optional `maHang` cho
+`shelfRecords`), `routes/data.js` (`storeExternalCodes` vào `ADMIN_ONLY_KEYS`), `public/js/module-admin.js`
+(cấu hình Mã Điểm), `public/js/module-vanhanh.js` + `public/fragments/vanHanhSection.html` (picker + màn
+Đối Chiếu), `server.js` (đăng ký job), `.env.example`.
+
+**Test**: `tests/test-inventory-recon.js` (mới) 10/10 pass — phân trang 3 trang, trần MAX_PAGES, 429 tôn
+trọng Retry-After, 401 không retry, 500 retry-rồi-thành-công, job tự vô hiệu hoá khi thiếu key, cache
+đúng theo `maDiem` (2 siêu thị không lẫn dữ liệu), `maHang` optional trong `createValidation`, dept luôn
+= `user.dept` dù payload giả mạo, và 1 test "guard" chặn regression đảm bảo route không đọc mã siêu
+thị/`maDiem` từ `req.query`/`req.body`. Regression 13 file liên quan các đợt trước (`test-shelf-kehang*`,
+`test-perm-matrix-client`, `test-muc0-module-access-tree`, `test-khoi0-license-uniform-gate`,
+`test-permission-batch-oct2026`, `test-operation-store-report-overview`, `test-operation-order-report`,
+`test-collapse-operation-forms`, `test-bugfix-batch-nav-ui`, `test-vanhanh-itprice-chitiet-csp`,
+`test-stuck-subtab-fallback-fix`) đều PASS. CSP self-check sạch trên mọi file mới/sửa.
+
+**Deploy impact**: thêm 2 biến môi trường MỚI, cả 2 **KHÔNG BẮT BUỘC** để server khởi động được —
+`BRGMART_INVENTORY_API_KEY` (bắt buộc ĐỂ DÙNG được tính năng Đối Chiếu, bỏ trống thì màn "📊 Đối Chiếu"
+báo lỗi 503 rõ ràng, phần còn lại của Kiểm Soát Hàng Hóa vẫn hoạt động bình thường) +
+`BRGMART_INVENTORY_API_BASE_URL` (tuỳ chọn, mặc định `https://api.brgmart.vn`) — xem chú thích đầy đủ
+trong `.env.example` (KHÔNG thêm riêng vào 2 file hướng dẫn triển khai PM2/PM2-Nginx — cùng cách xử lý
+đã áp dụng cho biến `DSMART_API_*` tương tự trước đây, 2 file đó chỉ hướng dẫn copy `.env.example` rồi
+đọc chú thích tại chỗ cho các tính năng tuỳ chọn). Không sửa `sql/schema.sql`
+(cache tồn kho hệ thống chỉ ở RAM tiến trình Node, không lưu DB), không thêm dependency npm mới.
+
+**Còn lại của toàn bộ tính năng "Kiểm Soát Hàng Hóa"** (không bắt buộc, có thể làm sau nếu cần): admin
+cấu hình tay "Mã Điểm" qua UI từng dòng (chưa hỗ trợ Nhập/Xuất Excel riêng cho cột này — nếu danh sách
+siêu thị lớn, nên bổ sung sau).
 
 ## v28.43 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Phần D (Quét Mã Vạch Camera) + Phần E (Offline-First)
 

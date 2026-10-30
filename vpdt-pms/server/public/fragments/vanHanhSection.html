@@ -815,6 +815,7 @@
         <button data-op="setVanHanhShelfSubTab" data-tab="LOCATIONS" id="btnVhShelfSubLocations" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗄️ Quầy Kệ</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="EXPIRY" id="btnVhShelfSubExpiry" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">⏰ Hạn Sử Dụng</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="THRESHOLD" id="btnVhShelfSubThreshold" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Ngưỡng Tồn</button>
+        <button data-op="setVanHanhShelfSubTab" data-tab="RECON" id="btnVhShelfSubRecon" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📊 Đối Chiếu</button>
       </div>
 
       <!-- Sub-tab 1: Ghi Nhận Trên Kệ -->
@@ -823,6 +824,16 @@
              được, xem updateShelfOfflineQueueBanner()/module-vanhanh.js. -->
         <div id="shelfOfflineQueueBanner" class="hidden bg-amber-50 border border-amber-200 text-amber-700 rounded p-2 text-[11px] font-semibold"></div>
         <form id="srForm" data-op-submit="submitShelfRecord" class="bg-white p-3 rounded border text-xs space-y-3">
+          <input type="hidden" id="srMaHang">
+          <!-- "🔎 Chọn Từ Tồn Kho Hệ Thống" (bổ sung sau khi có tài liệu API Tồn Kho BRGMART v1.1,
+               11/2026) — ẨN mặc định, chỉ hiện khi siêu thị đã cấu hình Mã Điểm + có dữ liệu (xem
+               loadShelfSystemInventoryForRecordPicker()/module-vanhanh.js). Chọn ở đây mới gán được
+               maHang (tham gia Đối Chiếu) — gõ tay Tên Sản Phẩm/Mã SKU bên dưới KHÔNG có maHang. -->
+          <div id="srSystemInventoryPickerWrap" class="hidden relative">
+            <label class="block font-semibold text-gray-600 mb-1">🔎 Chọn Từ Tồn Kho Hệ Thống (để đối chiếu được)</label>
+            <input id="srSystemInventoryInput" data-sdd-list="srSystemInventoryDropdown" data-op-change="resolveShelfSystemInventoryInput" autocomplete="off" placeholder="Gõ mã hàng hoặc tên sản phẩm..." class="w-full border p-1.5 rounded">
+            <div id="srSystemInventoryDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+          </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div class="relative">
               <label class="block font-semibold text-gray-600 mb-1">Quầy Kệ *</label>
@@ -997,6 +1008,26 @@
           </table>
         </div>
         <p class="text-gray-400 text-[11px]">Phạm vi áp dụng không đổi được sau khi tạo. Hệ thống tự kiểm hằng ngày, gửi email cảnh báo nếu tổng số lượng ghi nhận trên kệ hôm nay dưới ngưỡng — tính trên dữ liệu "Ghi Nhận Trên Kệ", chưa phải tồn kho hệ thống thật (đang chờ API đối tác).</p>
+      </div>
+
+      <!-- Sub-tab 5: Đối Chiếu Kệ & Tồn Kho (bổ sung sau khi có tài liệu API Tồn Kho BRGMART v1.1,
+           11/2026) — CHỈ XEM, mở cho mọi người có quyền vào tab Kiểm Soát Hàng Hóa. -->
+      <div id="vanHanhShelfReconWrap" class="hidden space-y-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border p-2">Mã Hàng</th>
+                <th class="border p-2">Tên Hàng</th>
+                <th class="border p-2">Tồn Kho Hệ Thống</th>
+                <th class="border p-2">Trên Kệ Hôm Nay</th>
+                <th class="border p-2">Kết Quả</th>
+              </tr>
+            </thead>
+            <tbody id="vhShelfReconBody"></tbody>
+          </table>
+        </div>
+        <p id="shelfReconNote" class="text-gray-400 text-[11px]"></p>
       </div>
 
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem
