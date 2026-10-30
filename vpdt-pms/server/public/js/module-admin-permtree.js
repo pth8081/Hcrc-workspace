@@ -265,7 +265,10 @@ function collectPermsFromForm() {
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
     shelfRecordCreate: document.getElementById('pShelfRecordCreate').checked,
     shelfLocationManage: document.getElementById('pShelfLocationManage').checked,
-    shelfReportViewAll: document.getElementById('pShelfReportViewAll').checked,
+    // shelfReportView {all, depts[]} (12/2026) — thay cho shelfReportViewAll boolean cũ, cho phép nhiều
+    // Quản lý vùng độc lập mỗi người 1 danh sách siêu thị riêng, xem chú thích đầy đủ ở
+    // renderShelfReportViewScopeCheckboxes() (module-admin.js).
+    shelfReportView: scopeFromMultiSelectDropdown('pShelfReportViewAll', 'pShelfReportViewDeptContainer'),
     // Overhaul quyền Vận Hành > Siêu Thị: 4 quyền tách riêng cũ (operationEstimateCreate/
     // operationExecutionManage/operationAcceptanceManage/operationUseConfirm) đã RÚT GỌN, không còn là
     // checkbox admin gán riêng được nữa — gộp vào luật "toàn quyền quản lý hồ sơ" của 2 quyền
@@ -413,7 +416,8 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
   document.getElementById('pShelfRecordCreate').checked = !!perms.shelfRecordCreate;
   document.getElementById('pShelfLocationManage').checked = !!perms.shelfLocationManage;
-  document.getElementById('pShelfReportViewAll').checked = !!perms.shelfReportViewAll;
+  document.getElementById('pShelfReportViewAll').checked = !!perms.shelfReportView?.all;
+  setShelfReportViewScopeCheckboxes(perms.shelfReportView?.depts);
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
   document.getElementById('pOperationRecordViewAll').checked = !!perms.operationRecordViewAll;
   document.getElementById('pOperationOrderReportView').checked = !!perms.operationOrderReportView;

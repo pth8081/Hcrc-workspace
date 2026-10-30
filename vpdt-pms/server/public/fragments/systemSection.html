@@ -2852,19 +2852,32 @@
             <!-- "📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — 3 quyền độc lập, cùng tinh thần 3 quyền
                  tạo đầu mục Đơn Hàng/Mở Mới/Sửa Chữa ở trên: ghi nhận trên kệ (nhân viên quầy kệ), quản
                  lý danh mục quầy kệ (Cửa hàng trưởng/Tổ trưởng — chỉ của ĐÚNG siêu thị mình, ép bằng
-                 forceOwnDept ở server), xem báo cáo TẤT CẢ siêu thị (Quản lý vùng/Ban điều hành — không
-                 có quyền này thì báo cáo tự lọc đúng 1 siêu thị của mình). -->
+                 forceOwnDept ở server), xem báo cáo theo danh sách siêu thị được gán (Quản lý vùng/Ban
+                 điều hành — không có quyền này thì báo cáo tự lọc đúng 1 siêu thị của mình). -->
             <p class="text-[11px] text-gray-500 italic pt-1 border-t">📋 Kiểm Soát Hàng Hóa (Phase 1 MVP) — ghi nhận/quản lý quầy kệ/xem báo cáo của siêu thị.</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <label class="flex items-center gap-2 text-cyan-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pShelfRecordCreate"> 📷 Ghi Nhận Trên Kệ
               </label>
               <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
                 <input type="checkbox" id="pShelfLocationManage"> 🗄️ Quản Lý Danh Mục Quầy Kệ (Siêu Thị Của Mình)
               </label>
-              <label class="flex items-center gap-2 text-purple-500 font-semibold cursor-pointer">
-                <input type="checkbox" id="pShelfReportViewAll"> 👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)
+            </div>
+            <!-- shelfReportView {all, depts[]} (12/2026, nâng cấp từ shelfReportViewAll boolean cũ — theo
+                 yêu cầu người dùng "nhiều Quản lý vùng độc lập, mỗi người phụ trách 1 tập siêu thị riêng,
+                 không trùng nhau") — mirror ĐÚNG khuôn operationOrderReceiptManageStore ở mục "🧾 Duyệt
+                 Nhập/Hủy Đơn Hàng" phía trên (renderMultiSelectDropdown()/DB.stores), KHÔNG dùng lưới
+                 checkbox kiểu docDownload cũ (tên siêu thị dài bị cắt, đã có bài học từ trước). Server đọc
+                 field này ở lib/recordViewScope.js (canViewShelfLocation/canViewShelfRecord/
+                 canViewShelfStockThreshold) — vẫn còn fallback đọc field shelfReportViewAll cũ cho user
+                 CHƯA được admin re-save qua UI mới (tương thích ngược, cùng tinh thần
+                 isApproverForOperationOrderReceipt() ở lib/recordActions.js). -->
+            <div class="pt-1 border-t">
+              <label class="flex items-center gap-2 text-purple-700 font-semibold cursor-pointer mb-1">
+                <input type="checkbox" id="pShelfReportViewAll" data-op-change="toggleShelfReportViewScopeGroup"> 👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa — Tất Cả Siêu Thị
               </label>
+              <div id="pShelfReportViewDeptContainer" class="pl-1"></div>
+              <p class="text-[11px] text-gray-500 italic">Tắt "Tất Cả Siêu Thị" rồi chọn đúng danh sách siêu thị người này được xem báo cáo (VD Quản lý vùng — mỗi người 1 danh sách riêng) — để trống = chỉ xem đúng siêu thị của chính mình.</p>
             </div>
           </div>
         </details>

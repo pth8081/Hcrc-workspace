@@ -1796,6 +1796,9 @@ function renderDeptCheckboxes() {
   // checklistExecuteScope (Checklist Đánh Giá Siêu Thị, 11/2026 LÀM GỌN) — cùng lý do gọi kèm tại đây,
   // nguồn là DB.stores (siêu thị), KHÔNG phải DB.depts, và KHÔNG có mục 'HO' đặc biệt.
   renderChecklistExecuteScopeCheckboxes();
+  // shelfReportView (Kiểm Soát Hàng Hóa > Xem Báo Cáo, 12/2026) — cùng lý do gọi kèm tại đây, nguồn là
+  // DB.stores (siêu thị).
+  renderShelfReportViewScopeCheckboxes();
   // Khối/Ban → lọc bảng checkbox Phòng Ban (10/2026) — nạp lại danh sách Khối/Ban cho ô lọc dùng CHUNG
   // cho cả 6 bảng PERM_DEPT_TABLES rồi áp lại đúng bộ lọc đang chọn (nếu có) lên các dòng vừa render lại
   // ở trên (giữ nguyên trạng thái ẩn/hiện qua mỗi lần renderDeptCheckboxes() chạy lại).
@@ -1926,6 +1929,31 @@ function setChecklistExecuteScopeCheckboxes(scopeKeyList) {
     emptyText: 'Chưa chọn siêu thị nào (tick "ALL" nếu thực hiện được mọi siêu thị).',
     chipClass: 'bg-rose-100 text-rose-700', hoverClass: 'hover:bg-rose-50',
     // Xem chú thích đầy đủ ở setOperationOrderReceiptScopeCheckboxes() (đợt rà soát chuyên sâu 9/2026, mức Thấp).
+    resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
+  });
+}
+
+// shelfReportView {all, depts[]} (12/2026) — "📋 Kiểm Soát Hàng Hóa > Xem Báo Cáo", mirror ĐÚNG 3 hàm
+// renderOperationOrderReceiptScopeCheckboxes()/toggleOperationOrderReceiptScopeGroup()/
+// setOperationOrderReceiptScopeCheckboxes() ở trên — cho phép NHIỀU Quản lý vùng ĐỘC LẬP, mỗi người 1
+// danh sách siêu thị riêng (không giới hạn còn lại "tất cả hoặc chỉ 1 siêu thị" của field
+// shelfReportViewAll boolean cũ). Đọc/ghi qua collectPermsFromForm()/populatePermsForm()
+// (module-admin-permtree.js) bằng scopeFromMultiSelectDropdown('pShelfReportViewAll', 'pShelfReportViewDeptContainer').
+function renderShelfReportViewScopeCheckboxes() {
+  renderMultiSelectDropdown('pShelfReportViewDeptContainer', DB.stores || [], [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi xem báo cáo...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xem được mọi siêu thị).'
+  });
+}
+function toggleShelfReportViewScopeGroup() {
+  const isAll = document.getElementById('pShelfReportViewAll').checked;
+  document.getElementById('pShelfReportViewDeptContainer')?.classList.toggle('opacity-40', isAll);
+  document.getElementById('pShelfReportViewDeptContainer')?.classList.toggle('pointer-events-none', isAll);
+}
+function setShelfReportViewScopeCheckboxes(scopeKeyList) {
+  renderMultiSelectDropdown('pShelfReportViewDeptContainer', DB.stores || [], Array.isArray(scopeKeyList) ? scopeKeyList : [], {
+    placeholder: '🔍 Tìm siêu thị để thêm vào phạm vi xem báo cáo...',
+    emptyText: 'Chưa chọn siêu thị nào (tick "Tất Cả Siêu Thị" nếu xem được mọi siêu thị).',
     resolveMissingLabel: (v) => `⛔ ${v} (đã xoá khỏi danh mục)`
   });
 }

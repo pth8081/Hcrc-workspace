@@ -2919,9 +2919,15 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   Tồn dùng lại "🗄️ Quản Lý Danh Mục Quầy Kệ" vì cùng vai trò Cửa hàng
   trưởng/Tổ trưởng): "📷 Ghi Nhận Trên Kệ" (ghi nhận), "🗄️ Quản
   Lý Danh Mục Quầy Kệ" (khai báo/sửa/nhập Excel quầy kệ + Ngưỡng Tồn, chỉ
-  của siêu thị mình), "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)"
-  (Quản lý vùng/Ban điều hành — không có quyền này thì Báo Cáo tự lọc đúng 1
-  siêu thị của mình).
+  của siêu thị mình), "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa" — **nâng cấp
+  12/2026** từ công tắc bật/tắt đơn giản (chỉ "tất cả hoặc chỉ 1 siêu thị")
+  sang chọn đúng **danh sách siêu thị** (ô tìm-kiếm-gõ-chọn, cùng khuôn
+  "🧾 Duyệt Nhập/Hủy Đơn Hàng Siêu Thị"): bật "Tất Cả Siêu Thị" = xem hết;
+  tắt rồi chọn tay danh sách = chỉ xem đúng các siêu thị đó — cho phép
+  **nhiều Quản lý vùng độc lập cùng lúc**, mỗi người được admin gán 1 danh
+  sách siêu thị riêng không chồng lấn (VD vùng Bắc 3 siêu thị, vùng Nam 5
+  siêu thị khác); không có quyền này (hoặc để trống danh sách) thì Báo Cáo
+  tự lọc đúng 1 siêu thị của chính người đó.
 - **Báo cáo**: 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Soát Hàng Hóa" — xuất Excel
   dùng nút có sẵn trong màn Báo Cáo.
 - **Offline-first**: khi máy mất mạng, mỗi lượt "Lưu Ghi Nhận" lưu tạm trên

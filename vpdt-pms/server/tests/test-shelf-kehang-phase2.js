@@ -150,8 +150,10 @@ async function main() {
     const items = [{ id: 1, dept: 'Siêu thị Quận 1' }, { id: 2, dept: 'Siêu thị Quận 7' }];
     const user1 = userOf('Siêu thị Quận 1', {});
     assertEqual(filterShelfStockThresholdsForUser(items, user1).length, 1, 'chỉ thấy đúng siêu thị mình');
-    const userAll = userOf('Siêu thị Quận 1', { shelfReportViewAll: true });
-    assertEqual(filterShelfStockThresholdsForUser(items, userAll).length, 2, 'shelfReportViewAll thấy tất cả');
+    const userAll = userOf('Siêu thị Quận 1', { shelfReportView: { all: true, depts: [] } });
+    assertEqual(filterShelfStockThresholdsForUser(items, userAll).length, 2, 'shelfReportView.all thấy tất cả');
+    const userScoped = userOf('Phòng Vận Hành', { shelfReportView: { all: false, depts: ['Siêu thị Quận 7'] } });
+    assertEqual(filterShelfStockThresholdsForUser(items, userScoped).length, 1, 'shelfReportView.depts chỉ thấy đúng siêu thị được gán');
   });
 
   // ===== jobs/shelfStockThresholdAlert.js (db/mailer giả, cùng khuôn test-hr-task-overdue-reminder.js) =====

@@ -1761,7 +1761,8 @@ router.get('/', async (req, res) => {
     if (data.operationStoreOpenings) data.operationStoreOpenings = filterOperationStoreOpeningsForUser(data.operationStoreOpenings, req.freshUser, data);
     if (data.operationRepairs) data.operationRepairs = filterOperationRepairsForUser(data.operationRepairs, req.freshUser, data);
     // shelfLocations/shelfRecords (Kiểm Soát Hàng Hóa, Phase 1 MVP 11/2026) — cùng khuôn 3 collection
-    // Vận Hành ở trên: mặc định mỗi siêu thị chỉ xem đúng dept mình, shelfReportViewAll xem tất cả.
+    // Vận Hành ở trên: mặc định mỗi siêu thị chỉ xem đúng dept mình, shelfReportView {all,depts[]}
+    // (12/2026) xem theo danh sách siêu thị được gán (nhiều Quản lý vùng độc lập).
     if (data.shelfLocations) data.shelfLocations = filterShelfLocationsForUser(data.shelfLocations, req.freshUser);
     if (data.shelfRecords) data.shelfRecords = filterShelfRecordsForUser(data.shelfRecords, req.freshUser);
     if (data.shelfStockThresholds) data.shelfStockThresholds = filterShelfStockThresholdsForUser(data.shelfStockThresholds, req.freshUser);

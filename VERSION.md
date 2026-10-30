@@ -1,9 +1,72 @@
 # Phiên bản hiện tại
 
-**28.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.47 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Quyền Xem Báo Cáo nâng từ bật/tắt sang chọn danh sách siêu thị (nhiều quản lý vùng độc lập)
+
+Theo yêu cầu người dùng: "Nhưng nếu tôi có 2 quản lý vùng phụ trách các siêu
+thị độc lập thì tôi cần 1 quyền xem báo cáo và chọn được siêu thị mình quản
+lý". Quyền `shelfReportViewAll` (boolean, chỉ 2 mức: CHỈ siêu thị mình HOẶC
+TẤT CẢ siêu thị) không đủ cho nhu cầu "nhiều quản lý vùng, mỗi người 1 danh
+sách siêu thị riêng, không trùng nhau". Nâng cấp sang quyền dạng
+`shelfReportView: {all, depts[]}` — đúng khuôn `{all,depts}` đã dùng cho
+`docDownload`/`operationOrderReceiptManageStore`/`checklistExecuteScope`...,
+dùng dropdown multi-select tìm-kiếm-gõ-chọn (`renderMultiSelectDropdown`) —
+đúng pattern đã áp dụng riêng cho danh sách SIÊU THỊ (tránh lỗi hiện thiếu/
+cắt chữ tên dài của lưới checkbox cũ, xem tiền lệ `operationOrderReceiptManageStore`).
+
+**File sửa**: `public/fragments/systemSection.html` (khối quyền 👁️ Xem Báo
+Cáo đổi từ 1 checkbox đơn sang toggle "Tất Cả" + dropdown multi-select danh
+sách siêu thị), `public/js/module-admin.js` (3 hàm mới
+`renderShelfReportViewScopeCheckboxes`/`toggleShelfReportViewScopeGroup`/
+`setShelfReportViewScopeCheckboxes`, mirror đúng khuôn
+`operationOrderReceiptManageStore`), `public/js/module-admin-permtree.js`
+(`collectPermsFromForm`/`populatePermsForm` đọc/ghi `shelfReportView
+{all,depts}` thay cho boolean cũ), `public/js/core.js` (`migrateLegacyPerms()`
+tự chuyển `shelfReportViewAll` boolean cũ sang `shelfReportView {all,depts:[]}`
+qua `scopeFromFlag()` — TƯƠNG THÍCH NGƯỢC tự động cho user đã lưu từ trước;
+2 điều kiện hiện/ẩn menu điều hướng cập nhật theo field mới, giữ thêm điều
+kiện field cũ làm lưới an toàn), `lib/recordViewScope.js` (3 hàm
+`canViewShelfLocation`/`canViewShelfRecord`/`canViewShelfStockThreshold` gộp
+chung qua 1 helper `canViewShelfScopedItem()` mới + `resolveShelfReportViewScope()`
+tự fallback đọc field cũ phía server — phòng user chưa đăng nhập lại qua UI
+mới), `public/js/module-admin-permgroups.js` (đổi nhãn Ma Trận
+`shelfReportViewAll` → `shelfReportView.all`), `routes/reports.js` +
+`routes/data.js` (chỉ cập nhật chú thích mô tả field mới).
+
+**Cách hoạt động**: admin bật "Tất Cả" → xem được báo cáo mọi siêu thị (như
+cũ). Tắt "Tất Cả" → hiện dropdown chọn nhiều siêu thị — gán cho quản lý vùng
+A danh sách siêu thị A1-A5, quản lý vùng B danh sách B1-B4 (độc lập, không
+cần trùng với `dept` chính của user) → mỗi người chỉ thấy đúng báo cáo Kiểm
+Soát Hàng Hóa của các siêu thị trong danh sách được gán. Không chọn siêu thị
+nào (và tắt "Tất Cả") → fallback xem đúng siêu thị `dept` của chính mình (như
+hành vi mặc định cũ). `admin:true` luôn xem được tất cả, không phụ thuộc
+quyền này. Phạm vi áp dụng: 3 loại dữ liệu báo cáo Kiểm Soát Hàng Hóa
+(`shelfLocations`/`shelfRecords`/`shelfStockThresholds`) — màn Đối Chiếu Tồn
+Kho Hệ Thống (`routes/shelfStock.js`, dùng `maDiem`) KHÔNG liên quan, không
+đổi gì.
+
+**Deploy impact**: không sửa `sql/schema.sql`, không thêm biến môi trường/
+dependency mới — chỉ `git pull` + `pm2 restart`. User đã gán quyền
+`shelfReportViewAll` từ trước tự động giữ đúng hành vi cũ ngay lần đăng nhập
+kế tiếp (migration tự chạy), không cần admin làm gì thêm trừ khi muốn tách
+quyền cho nhiều quản lý vùng.
+
+**Test**: `test-shelf-kehang.js` thêm 4 case mới (field mới `all:true` xem
+hết; 2 quản lý vùng độc lập chỉ xem đúng danh sách siêu thị riêng không
+trùng nhau — đúng yêu cầu gốc; `all:false`+`depts` rỗng fallback về đúng
+`dept` của mình; `admin:true` luôn ưu tiên) — 17/17 pass.
+`test-shelf-kehang-phase2.js` cập nhật test `shelfStockThresholds` theo field
+mới — 18/18 pass. Regression 9 file liên quan (`test-shelf-kehang`,
+`test-shelf-kehang-phase2`, `test-shelf-kehang-offline`, `test-inventory-recon`,
+`test-shelf-mavach-match`, `test-shelf-mobile-and-offline-inventory`,
+`test-perm-matrix-client`, `test-muc0-module-access-tree`,
+`test-stuck-subtab-fallback-fix`) đều PASS (145/145 scenario). CSP sạch (grep
+`on[a-z]+="`/`style="`/`javascript:`/`eval(`/`new Function(` trên các file
+sửa không khớp gì).
 
 ## v28.46 (2026-11): "📋 Kiểm Soát Hàng Hóa" — API Tồn Kho bổ sung mã vạch (maVach) + thiết kế lại 2 ô Mã Hàng/Mã Vạch
 

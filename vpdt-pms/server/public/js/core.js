@@ -5162,6 +5162,17 @@ function migrateLegacyPerms(perms) {
   }
   if (p.operationOrderReceiptManage !== undefined) { delete p.operationOrderReceiptManage; changed = true; }
 
+  // shelfReportView {all, depts[]} (12/2026) — thay cho shelfReportViewAll boolean cũ (Kiểm Soát Hàng
+  // Hóa > Xem Báo Cáo), theo yêu cầu người dùng "nhiều Quản lý vùng độc lập, mỗi người phụ trách 1 danh
+  // sách siêu thị riêng" — TƯƠNG THÍCH NGƯỢC: user chưa được admin re-save qua UI mới vẫn tự quy đổi
+  // đúng (true → xem tất cả, false/chưa set → chưa xem được siêu thị nào ngoài dept mình, cùng khuôn
+  // scopeFromFlag() đã dùng cho submissionCreate/contractCreate/carCreate/officeCreate ở trên).
+  if (p.shelfReportView === undefined && p.shelfReportViewAll !== undefined) {
+    p.shelfReportView = scopeFromFlag(p.shelfReportViewAll);
+    changed = true;
+  }
+  if (p.shelfReportViewAll !== undefined) { delete p.shelfReportViewAll; changed = true; }
+
   // Tách "Toàn Quyền Thao Tác Mọi Quy Trình Onboarding/Offboarding" (hrProcessManage, gộp cả 2 loại)
   // thành 2 quyền RIÊNG theo processType (11/2026, theo yêu cầu người dùng — người quản lý Onboarding là
   // bộ phận Tuyển Dụng, Offboarding là bộ phận Nhân Sự, 2 bộ phận khác nhau không nên dùng chung 1
@@ -10291,7 +10302,8 @@ function applyNavVisibility(user) {
   // nếu có ÍT NHẤT 1 trong 3 quyền chi tiết của tính năng này (không cần hasModuleAccess('vanHanhShelfTab')
   // riêng — setVanHanhSubTab() đã tự gác lại đúng Khối 0 khi bấm vào).
   document.getElementById('btnVanHanhShelfNav').classList.toggle('hidden',
-    !(user.perms?.admin || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage || user.perms?.shelfReportViewAll));
+    !(user.perms?.admin || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
+      || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll));
   updateVanHanhNavVisibility();
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
@@ -11936,7 +11948,8 @@ function canAccessOperationModule(user) {
     // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — người chỉ có quyền ghi nhận/quản lý quầy kệ/xem báo
     // cáo (VD nhân viên quầy kệ, KHÔNG có bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa/Giá Buôn nào) vẫn phải
     // vào được tab Vận Hành để thấy sub-tab "Kiểm Soát Hàng Hóa".
-    || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage || user.perms?.shelfReportViewAll) return true;
+    || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage
+    || user.perms?.shelfReportView?.all || (user.perms?.shelfReportView?.depts || []).length || user.perms?.shelfReportViewAll) return true;
   // LỖI ĐÃ VÁ (10/2026, đối xứng bản vá canAccessPurchasingModule() ở trên cho Bán Buôn): người CHỈ là
   // approver theo mức Margin/Chiết Khấu (itPriceTierWorkflows) hoặc người có quyền xét Từ Chối Khẩn
   // Wholesale, không giữ bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị nào, vẫn phải vào được tab để

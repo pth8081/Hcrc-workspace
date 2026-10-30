@@ -95,8 +95,9 @@ const REPORT_QUERY_CONFIGS = {
   operationOrders: { filterFn: filterOperationOrdersForUser, needsAppData: true },
   operationStoreOpenings: { filterFn: filterOperationStoreOpeningsForUser, needsAppData: true },
   operationRepairs: { filterFn: filterOperationRepairsForUser, needsAppData: true },
-  // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — shelfReportViewAll xem tất cả siêu thị, mặc định chỉ
-  // xem đúng dept mình (filterShelfRecordsForUser không cần appData).
+  // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — shelfReportView {all,depts[]} (12/2026) xem theo danh
+  // sách siêu thị được gán (nhiều Quản lý vùng độc lập), mặc định chỉ xem đúng dept mình
+  // (filterShelfRecordsForUser không cần appData).
   shelfRecords: { filterFn: filterShelfRecordsForUser },
   contracts: { filterFn: filterContractsForUser, needsAppData: true },
   carRegs: { filterFn: filterCarRegsForUser, needsAppData: true },

@@ -116,14 +116,51 @@ async function main() {
     assertEqual(JSON.stringify(visibleRec.map(i => i.id)), JSON.stringify([1]), 'chỉ thấy đúng id=1 (cùng dept)');
   });
 
-  await run.run('filterShelfRecordsForUser: shelfReportViewAll xem được TẤT CẢ siêu thị', async () => {
+  await run.run('filterShelfRecordsForUser: shelfReportViewAll (field CŨ, tương thích ngược) xem được TẤT CẢ siêu thị', async () => {
     const user = userOf('Siêu thị Quận 1', { shelfReportViewAll: true });
     const items = [
       { id: 1, dept: 'Siêu thị Quận 1' },
       { id: 2, dept: 'Siêu thị Quận 7' }
     ];
     const visible = filterShelfRecordsForUser(items, user);
-    assertEqual(JSON.stringify(visible.map(i => i.id)), JSON.stringify([1, 2]), 'shelfReportViewAll phải thấy cả 2 siêu thị');
+    assertEqual(JSON.stringify(visible.map(i => i.id)), JSON.stringify([1, 2]), 'shelfReportViewAll (cũ) phải thấy cả 2 siêu thị');
+  });
+
+  await run.run('filterShelfRecordsForUser: shelfReportView.all=true (field MỚI) xem được TẤT CẢ siêu thị', async () => {
+    const user = userOf('Siêu thị Quận 1', { shelfReportView: { all: true, depts: [] } });
+    const items = [
+      { id: 1, dept: 'Siêu thị Quận 1' },
+      { id: 2, dept: 'Siêu thị Quận 7' }
+    ];
+    const visible = filterShelfRecordsForUser(items, user);
+    assertEqual(JSON.stringify(visible.map(i => i.id)), JSON.stringify([1, 2]), 'shelfReportView.all phải thấy cả 2 siêu thị');
+  });
+
+  await run.run('filterShelfRecordsForUser: 2 Quản lý vùng ĐỘC LẬP chỉ thấy đúng tập siêu thị được gán, không lẫn nhau', async () => {
+    const items = [
+      { id: 1, dept: 'Siêu thị Quận 1' },
+      { id: 2, dept: 'Siêu thị Quận 7' },
+      { id: 3, dept: 'Siêu thị Hải Phòng' },
+      { id: 4, dept: 'Siêu thị Đà Nẵng' }
+    ];
+    const vungBac = userOf('Phòng Vận Hành', { shelfReportView: { all: false, depts: ['Siêu thị Quận 1', 'Siêu thị Quận 7'] } });
+    const vungNam = userOf('Phòng Vận Hành', { shelfReportView: { all: false, depts: ['Siêu thị Hải Phòng', 'Siêu thị Đà Nẵng'] } });
+    assertEqual(JSON.stringify(filterShelfRecordsForUser(items, vungBac).map(i => i.id)), JSON.stringify([1, 2]), 'Quản lý vùng Bắc chỉ thấy đúng 2 siêu thị được gán');
+    assertEqual(JSON.stringify(filterShelfRecordsForUser(items, vungNam).map(i => i.id)), JSON.stringify([3, 4]), 'Quản lý vùng Nam chỉ thấy đúng 2 siêu thị được gán, không lẫn vùng Bắc');
+  });
+
+  await run.run('filterShelfRecordsForUser: shelfReportView.all=false + depts rỗng = không xem thêm gì ngoài dept mình', async () => {
+    const user = userOf('Siêu thị Quận 1', { shelfReportView: { all: false, depts: [] } });
+    const items = [
+      { id: 1, dept: 'Siêu thị Quận 1' },
+      { id: 2, dept: 'Siêu thị Quận 7' }
+    ];
+    assertEqual(JSON.stringify(filterShelfRecordsForUser(items, user).map(i => i.id)), JSON.stringify([1]), 'depts rỗng chỉ thấy đúng dept của chính mình');
+  });
+
+  await run.run('canViewShelfRecord: admin:true luôn xem hết bất kể shelfReportView', async () => {
+    const admin = userOf('Siêu thị Quận 1', { admin: true, shelfReportView: { all: false, depts: [] } });
+    assert(canViewShelfRecord(admin, { dept: 'Siêu thị Quận 7' }) === true, 'admin:true phải luôn xem được mọi siêu thị dù shelfReportView giới hạn');
   });
 
   await run.run('canViewShelfLocation/canViewShelfRecord: admin luôn xem được, user rỗng luôn bị chặn', async () => {

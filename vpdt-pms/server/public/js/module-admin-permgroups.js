@@ -628,7 +628,7 @@ const PERM_KEY_VN_LABELS = {
   "reportViewAll": "Nghiệp Vụ & Báo Cáo — 👁️ Xem Toàn Bộ Tab Báo Cáo (bỏ qua giới hạn theo quyền module)",
   "shelfLocationManage": "Vận Hành — 🗄️ Quản Lý Danh Mục Quầy Kệ (Siêu Thị Của Mình, Kiểm Soát Hàng Hóa)",
   "shelfRecordCreate": "Vận Hành — 📷 Ghi Nhận Trên Kệ (Kiểm Soát Hàng Hóa)",
-  "shelfReportViewAll": "Vận Hành — 👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)",
+  "shelfReportView.all": "Vận Hành — 👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)",
   "submissionCreate": "Văn Bản Trình — Tạo mới (tự khoá đúng phòng ban)",
   "submissionDownload.all": "Văn Bản Trình — Tải xuống",
   "taskDelete": "Biên Bản Họp & 📋 Công Việc — 🗑️ Xóa tất cả công việc",

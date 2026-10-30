@@ -951,31 +951,36 @@ function filterOperationRepairsForUser(items, user, appData) {
 // Kiểm Soát Hàng Hóa (Vận Hành, Phase 1 MVP, 11/2026) — shelfLocations (danh mục quầy kệ)/shelfRecords
 // (ghi nhận trên kệ) đều dept-scoped THEO ĐÚNG SIÊU THỊ (dept = tên siêu thị, forceOwnDept:true ở
 // lib/createValidation.js nên record.dept luôn = user.dept lúc tạo, không tin client gửi lên). Mặc định
-// chỉ xem được đúng siêu thị mình — shelfReportViewAll (Quản lý vùng/Ban điều hành) xem được TẤT CẢ,
-// cùng khuôn operationStoreReportView ở canViewOperationStoreOpening() phía trên.
-function canViewShelfLocation(user, item) {
-  if (!user) return false;
-  if (user.perms?.admin || user.perms?.shelfReportViewAll) return true;
+// chỉ xem được đúng siêu thị mình — shelfReportView {all, depts[]} (Quản lý vùng/Ban điều hành, 12/2026,
+// NÂNG CẤP từ shelfReportViewAll boolean cũ) cho xem thêm: all=true → TẤT CẢ siêu thị, depts=[...] →
+// ĐÚNG danh sách siêu thị được gán (ĐỘC LẬP với dept của chính người đó — 1 Quản lý vùng có thể không
+// thuộc dept nào trong các siêu thị mình phụ trách), cho phép NHIỀU Quản lý vùng cùng lúc, mỗi người 1
+// danh sách riêng không chồng lấn. TƯƠNG THÍCH NGƯỢC: user CHƯA được admin re-save qua UI mới (xem
+// module-admin-permtree.js) vẫn còn field shelfReportViewAll cũ — resolveShelfReportViewScope() tự quy
+// đổi, cùng tinh thần isApproverForOperationOrderReceipt() ở lib/recordActions.js.
+function resolveShelfReportViewScope(user) {
+  if (user.perms?.shelfReportView !== undefined) return user.perms.shelfReportView;
+  if (user.perms?.shelfReportViewAll !== undefined) return { all: !!user.perms.shelfReportViewAll, depts: [] };
+  return undefined;
+}
+function canViewShelfScopedItem(user, item) {
+  if (!user || !item) return false;
+  if (user.perms?.admin) return true;
+  const scope = resolveShelfReportViewScope(user);
+  if (scope?.all) return true;
+  if (Array.isArray(scope?.depts) && scope.depts.includes(item.dept)) return true;
   return item.dept === user.dept;
 }
+function canViewShelfLocation(user, item) { return canViewShelfScopedItem(user, item); }
 function filterShelfLocationsForUser(items, user) {
   return (items || []).filter(o => canViewShelfLocation(user, o));
 }
-function canViewShelfRecord(user, item) {
-  if (!user) return false;
-  if (user.perms?.admin || user.perms?.shelfReportViewAll) return true;
-  return item.dept === user.dept;
-}
+function canViewShelfRecord(user, item) { return canViewShelfScopedItem(user, item); }
 function filterShelfRecordsForUser(items, user) {
   return (items || []).filter(o => canViewShelfRecord(user, o));
 }
-// shelfStockThresholds (bổ sung sau Phase 1 MVP, 11/2026) — mirror ĐÚNG shelfLocations/shelfRecords ở
-// trên (cùng forceOwnDept:true, cùng quyền shelfReportViewAll cho xem-tất-cả).
-function canViewShelfStockThreshold(user, item) {
-  if (!user) return false;
-  if (user.perms?.admin || user.perms?.shelfReportViewAll) return true;
-  return item.dept === user.dept;
-}
+// shelfStockThresholds (bổ sung sau Phase 1 MVP, 11/2026) — mirror ĐÚNG shelfLocations/shelfRecords ở trên.
+function canViewShelfStockThreshold(user, item) { return canViewShelfScopedItem(user, item); }
 function filterShelfStockThresholdsForUser(items, user) {
   return (items || []).filter(o => canViewShelfStockThreshold(user, o));
 }
