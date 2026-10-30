@@ -31,7 +31,11 @@ const ASSETS = [
   { from: 'html2canvas/dist/html2canvas.min.js', to: 'html2canvas/html2canvas.min.js' },
   { from: 'pdf-lib/dist/pdf-lib.min.js', to: 'pdf-lib/pdf-lib.min.js' },
   { from: 'dompurify/dist/purify.min.js', to: 'dompurify/purify.min.js' },
-  { from: '@simplewebauthn/browser/dist/bundle/index.umd.min.js', to: 'simplewebauthn/browser.min.js' }
+  { from: '@simplewebauthn/browser/dist/bundle/index.umd.min.js', to: 'simplewebauthn/browser.min.js' },
+  // ZXing (11/2026, "Kiểm Soát Hàng Hóa" > Ghi Nhận Trên Kệ — quét mã vạch camera) — fallback cho trình
+  // duyệt KHÔNG hỗ trợ `BarcodeDetector` native (Safari iOS...), nạp LƯỜI qua <script src="/vendor/..."
+  // chèn động lúc mở modal quét (xem loadZxingScript() ở module-vanhanh.js), không chặn tải trang chính.
+  { from: '@zxing/library/umd/index.min.js', to: 'zxing/zxing.min.js' }
 ];
 
 let missing = 0;

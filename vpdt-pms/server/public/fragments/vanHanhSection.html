@@ -819,6 +819,9 @@
 
       <!-- Sub-tab 1: Ghi Nhận Trên Kệ -->
       <div id="vanHanhShelfRecordWrap" class="space-y-4">
+        <!-- Phần E (offline-first, 11/2026) — chỉ hiện khi hàng đợi IndexedDB có bản ghi chưa gửi lên
+             được, xem updateShelfOfflineQueueBanner()/module-vanhanh.js. -->
+        <div id="shelfOfflineQueueBanner" class="hidden bg-amber-50 border border-amber-200 text-amber-700 rounded p-2 text-[11px] font-semibold"></div>
         <form id="srForm" data-op-submit="submitShelfRecord" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div class="relative">
@@ -829,7 +832,10 @@
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Mã SKU</label>
-              <input id="srSku" class="w-full border p-1.5 rounded">
+              <div class="flex gap-1">
+                <input id="srSku" class="w-full border p-1.5 rounded">
+                <button type="button" data-op="openShelfBarcodeModal" title="Quét mã vạch bằng camera" class="shrink-0 bg-white border px-2.5 rounded hover:bg-gray-50">📷</button>
+              </div>
             </div>
             <div>
               <label class="block font-semibold text-gray-600 mb-1">Tên Sản Phẩm *</label>
@@ -991,5 +997,16 @@
           </table>
         </div>
         <p class="text-gray-400 text-[11px]">Phạm vi áp dụng không đổi được sau khi tạo. Hệ thống tự kiểm hằng ngày, gửi email cảnh báo nếu tổng số lượng ghi nhận trên kệ hôm nay dưới ngưỡng — tính trên dữ liệu "Ghi Nhận Trên Kệ", chưa phải tồn kho hệ thống thật (đang chờ API đối tác).</p>
+      </div>
+
+      <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem
+           openShelfBarcodeModal()/module-vanhanh.js. Tắt camera NGAY khi đóng modal (closeShelfBarcodeModal). -->
+      <div id="shelfBarcodeModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-md w-full p-4 text-xs space-y-3">
+          <div class="font-bold text-sm">📷 Quét Mã Vạch</div>
+          <video id="shelfBarcodeVideo" class="w-full rounded bg-black" playsinline muted></video>
+          <p id="shelfBarcodeStatus" class="text-gray-500">Đang mở camera...</p>
+          <button type="button" data-op="closeShelfBarcodeModal" class="text-gray-500 hover:underline">Đóng</button>
+        </div>
       </div>
     </div>

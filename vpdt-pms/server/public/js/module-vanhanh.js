@@ -223,9 +223,17 @@ function setVanHanhShelfSubTab(tab) {
   });
   if (!tab) return;
   if (tab === 'RECORD') {
-    populateShelfLocationPicker();
+    // Phần E (offline-first): nạp/đồng bộ cache IndexedDB TRƯỚC khi vẽ picker/danh sách — populateShelfLocationPicker()/
+    // renderShelfRecordRecentList() đọc đồng bộ 2 biến shelfOfflineLocationsCache/shelfOfflinePendingCache nên phải
+    // await xong ensureShelfOfflineReady() rồi mới gọi (IIFE async để không phải đổi setVanHanhShelfSubTab() thành async).
+    (async () => {
+      await ensureShelfOfflineReady();
+      await cacheShelfLocationsOffline();
+      populateShelfLocationPicker();
+      renderShelfRecordRecentList();
+      trySyncPendingShelfRecords();
+    })();
     renderDynamicInputsForModule('SHELF_RECORD', 'dynamicFieldsContainer_SHELF_RECORD');
-    renderShelfRecordRecentList();
   } else if (tab === 'LOCATIONS') {
     editingShelfLocationId = null;
     renderShelfLocationsList();
@@ -239,15 +247,20 @@ function setVanHanhShelfSubTab(tab) {
 
 // sdd* picker (xem CLAUDE.md "Ô tìm-kiếm-gõ-chọn") — CHỈ chọn từ DB.shelfLocations ĐÃ khai báo (không
 // ghi tay tên quầy mới ở màn Ghi Nhận), để báo cáo tiến độ kiểm hằng ngày (pha sau) đếm đúng trên tổng
-// số quầy cố định.
+// số quầy cố định. Offline-first (Phần E, 11/2026): khi KHÔNG có DB.shelfLocations trong tay (mở lại
+// app lúc mất mạng, trước khi tải được dữ liệu online) thì lấy bản đã cache trong IndexedDB (xem
+// shelfOfflineGetCachedLocations() bên dưới) — vẫn chỉ chọn được quầy ĐÃ khai báo, không gõ tay được.
+function effectiveShelfLocations() {
+  return (DB.shelfLocations && DB.shelfLocations.length) ? DB.shelfLocations : (shelfOfflineLocationsCache || []);
+}
 function populateShelfLocationPicker() {
-  sddSetOptions('vhShelfLocationDropdown', (DB.shelfLocations || [])
+  sddSetOptions('vhShelfLocationDropdown', effectiveShelfLocations()
     .filter(s => s.active !== false)
     .map(s => ({ value: `${s.code} — ${s.name}`, label: `${s.code} — ${s.name}` })));
 }
 function resolveShelfLocationInput() {
   const text = document.getElementById('srShelfLocationInput').value.trim();
-  const match = (DB.shelfLocations || []).find(s => s.active !== false && `${s.code} — ${s.name}` === text);
+  const match = effectiveShelfLocations().find(s => s.active !== false && `${s.code} — ${s.name}` === text);
   document.getElementById('srShelfLocationId').value = match ? match.id : '';
 }
 async function submitShelfRecord(e) {
@@ -270,26 +283,59 @@ async function submitShelfRecord(e) {
     return alert(`⛔ ${err.message}`);
   }
 
-  const payload = { shelfLocationId: Number(shelfLocationId), productName, sku, quantity, expiryDate, note, customData };
-  let newItem;
-  try {
-    const result = await callCreateAction('shelfRecords', payload);
-    newItem = result.item;
-  } catch (err) { return alert(`⛔ ${err.message}`); }
-  DB.shelfRecords.unshift(newItem);
-  logSystemAction('SHELF_RECORD', 'CREATE', `Ghi nhận trên kệ [${newItem.shelfLocationCode} - ${productName}, SL ${quantity}]`, 'SUCCESS', '');
-  alert('✅ Đã lưu ghi nhận trên kệ!');
+  // Phần E (offline-first, 11/2026): shelfLocationCode/Name lấy sẵn từ effectiveShelfLocations() (có
+  // thể là bản cache offline) để hiện NGAY trong danh sách dù chưa gửi lên được server — server vẫn tự
+  // tra lại/ghi đè đúng giá trị thật của NÓ khi đồng bộ thành công (xem extraValidate shelfRecords).
+  const matchedLocation = effectiveShelfLocations().find(s => s.id === Number(shelfLocationId));
+  const clientRecordId = (window.crypto?.randomUUID ? window.crypto.randomUUID()
+    : `cr_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+  const payload = { shelfLocationId: Number(shelfLocationId), productName, sku, quantity, expiryDate, note, customData, clientRecordId };
+
+  if (navigator.onLine) {
+    try {
+      const result = await callCreateAction('shelfRecords', payload);
+      DB.shelfRecords.unshift(result.item);
+      logSystemAction('SHELF_RECORD', 'CREATE', `Ghi nhận trên kệ [${result.item.shelfLocationCode} - ${productName}, SL ${quantity}]`, 'SUCCESS', '');
+      alert('✅ Đã lưu ghi nhận trên kệ!');
+      document.getElementById('srForm').reset();
+      document.getElementById('srShelfLocationId').value = '';
+      renderShelfRecordRecentList();
+      return;
+    } catch (err) {
+      // Lỗi THẬT từ server (validate/quyền...) — KHÔNG lưu offline, báo lỗi rõ như cũ. Chỉ lỗi MẠNG
+      // (fetch tự throw TypeError "Failed to fetch"/"NetworkError", không phải lỗi server trả về) mới
+      // rơi xuống nhánh lưu offline bên dưới — phân biệt bằng callCreateAction() luôn throw Error có
+      // .message LẤY TỪ body.error khi server CÓ trả lời (dù lỗi), chỉ throw lỗi fetch gốc khi KHÔNG
+      // kết nối được. TypeError là loại duy nhất fetch() tự ném khi mất mạng/DNS lỗi.
+      if (!(err instanceof TypeError)) return alert(`⛔ ${err.message}`);
+      // rơi tiếp xuống nhánh lưu offline.
+    }
+  }
+  await queueShelfRecordOffline(payload, matchedLocation);
+  alert('🔌 Đang offline — đã lưu tạm trên máy, sẽ tự đồng bộ khi có mạng lại.');
   document.getElementById('srForm').reset();
   document.getElementById('srShelfLocationId').value = '';
   renderShelfRecordRecentList();
 }
 // Danh sách ghi nhận gần đây CỦA ĐÚNG siêu thị mình (DB.shelfRecords đã được server lọc đúng dept —
 // xem lib/recordViewScope.js) — sắp theo id giảm dần (id = Date.now() lúc tạo, tương đương thời gian).
+// Phần E (offline-first): gộp thêm các bản ghi CÒN TRONG HÀNG ĐỢI offline (shelfOfflinePendingCache,
+// chưa có `id` thật) lên ĐẦU danh sách kèm badge "Chưa đồng bộ" — refreshShelfOfflineUi() giữ biến này
+// luôn khớp với IndexedDB.
 function renderShelfRecordRecentList() {
   const tbody = document.getElementById('vhShelfRecordRecentBody');
   if (!tbody) return;
+  const pendingRows = (shelfOfflinePendingCache || []).map(rec => `
+    <tr class="border-b bg-amber-50">
+      <td class="p-2">${escapeHtml(rec.shelfLocationLabel || '')}</td>
+      <td class="p-2">${escapeHtml(rec.payload.productName || '')}</td>
+      <td class="p-2">${escapeHtml(rec.payload.sku || '')}</td>
+      <td class="p-2 text-right">${escapeHtml(String(rec.payload.quantity ?? ''))}</td>
+      <td class="p-2">${escapeHtml(rec.payload.expiryDate ? new Date(rec.payload.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
+      <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🔌 Chưa đồng bộ</span></td>
+    </tr>`).join('');
   const items = [...(DB.shelfRecords || [])].sort((a, b) => b.id - a.id).slice(0, 20);
-  tbody.innerHTML = items.length ? items.map(r => `
+  const rows = items.map(r => `
     <tr class="border-b">
       <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
@@ -297,7 +343,18 @@ function renderShelfRecordRecentList() {
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
-    </tr>`).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+    </tr>`).join('');
+  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+  updateShelfOfflineQueueBanner();
+}
+// Banner "🔌 N bản ghi đang chờ đồng bộ" phía trên form Ghi Nhận — chỉ hiện khi hàng đợi offline
+// (shelfOfflinePendingCache) KHÔNG rỗng, đếm THẬT từ IndexedDB (không phải số tĩnh).
+function updateShelfOfflineQueueBanner() {
+  const el = document.getElementById('shelfOfflineQueueBanner');
+  if (!el) return;
+  const n = (shelfOfflinePendingCache || []).length;
+  el.classList.toggle('hidden', n === 0);
+  if (n > 0) el.textContent = `🔌 ${n} bản ghi đang chờ đồng bộ — sẽ tự gửi lên khi có mạng lại.`;
 }
 
 // ===== "🗄️ Quầy Kệ" — danh mục quầy kệ CỦA ĐÚNG siêu thị mình. Bổ sung sau Phase 1 MVP (11/2026): Sửa
@@ -323,6 +380,7 @@ async function submitShelfLocation(e) {
   document.getElementById('slForm').reset();
   renderShelfLocationsList();
   populateShelfLocationPicker();
+  cacheShelfLocationsOffline(); // Phần E — giữ cache offline khớp ngay khi vừa thêm quầy kệ lúc còn mạng.
 }
 let editingShelfLocationId = null;
 function enterShelfLocationEditMode(id) {
@@ -354,6 +412,7 @@ async function saveShelfLocationEdit(id) {
   editingShelfLocationId = null;
   renderShelfLocationsList();
   populateShelfLocationPicker();
+  cacheShelfLocationsOffline(); // Phần E — giữ cache offline khớp ngay khi vừa sửa quầy kệ lúc còn mạng.
 }
 function renderShelfLocationsList() {
   const tbody = document.getElementById('vhShelfLocationsBody');
@@ -451,6 +510,7 @@ async function confirmShelfLocationImport() {
   closeShelfLocationImportModal();
   renderShelfLocationsList();
   populateShelfLocationPicker();
+  cacheShelfLocationsOffline(); // Phần E — giữ cache offline khớp ngay sau khi nhập Excel lúc còn mạng.
 }
 
 // ===== "⏰ Hạn Sử Dụng" — lọc DB.shelfRecords (đã có hạn sử dụng) thành 3 nhóm, tính phía client từ dữ
@@ -477,6 +537,223 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
       <td class="p-2">${badge}</td>
     </tr>`).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+}
+
+// ===== Phần E — Offline-first cho "📷 Ghi Nhận" (11/2026) =====
+// IndexedDB riêng cho module này (KHÔNG đụng gì tới dữ liệu khác) — 3 object store:
+//  - meta            {key, value}        — chỉ 1 dòng {key:'dept', value:'<dept lúc cache>'} để tự phát
+//                                           hiện đổi siêu thị (đổi tài khoản/chuyển ca) và XOÁ SẠCH cache
+//                                           cũ trước khi dùng (không cho thấy nhầm dữ liệu siêu thị khác).
+//  - cachedLocations {id, ...}            — bản sao DB.shelfLocations lúc gần nhất còn online, dùng làm
+//                                           nguồn cho picker lúc offline (effectiveShelfLocations()).
+//  - pendingRecords  {clientRecordId,...} — hàng đợi payload CHƯA gửi lên được (mất mạng lúc Lưu Ghi
+//                                           Nhận) — mỗi dòng {clientRecordId, payload, shelfLocationLabel,
+//                                           queuedAt}, gửi lại khi có mạng (trySyncPendingShelfRecords()).
+// shelfOfflineLocationsCache/shelfOfflinePendingCache là BẢN SAO trong JS (đồng bộ lại sau mỗi lần đọc/
+// ghi IndexedDB) — populateShelfLocationPicker()/renderShelfRecordRecentList() đọc trực tiếp 2 biến này
+// (đồng bộ, không await) thay vì phải await IndexedDB mỗi lần vẽ lại danh sách.
+const SHELF_OFFLINE_DB_NAME = 'hcrcShelfOfflineDb';
+const SHELF_OFFLINE_DB_VERSION = 1;
+let shelfOfflineDbPromise = null;
+let shelfOfflineLocationsCache = [];
+let shelfOfflinePendingCache = [];
+function openShelfOfflineDb() {
+  if (!window.indexedDB) return Promise.reject(new Error('Trình duyệt không hỗ trợ IndexedDB'));
+  if (shelfOfflineDbPromise) return shelfOfflineDbPromise;
+  shelfOfflineDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(SHELF_OFFLINE_DB_NAME, SHELF_OFFLINE_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('cachedLocations')) db.createObjectStore('cachedLocations', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('pendingRecords')) db.createObjectStore('pendingRecords', { keyPath: 'clientRecordId' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return shelfOfflineDbPromise;
+}
+// Promisify 1 thao tác IndexedDB đơn giản (get/getAll/put/delete/clear) trên 1 object store.
+function shelfOfflineTx(db, storeName, mode, fn) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, mode);
+    const store = tx.objectStore(storeName);
+    const req = fn(store);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+// Gọi 1 LẦN mỗi khi vào tab "📷 Ghi Nhận"/mở lại module — so `dept` hiện tại với dept đã gắn trên cache
+// IndexedDB cũ, LỆCH (đổi tài khoản siêu thị khác trên cùng máy) thì xoá sạch 2 store dữ liệu trước khi
+// nạp lại — rồi đồng bộ lại 2 biến cache JS từ IndexedDB.
+async function ensureShelfOfflineReady() {
+  try {
+    const db = await openShelfOfflineDb();
+    const storedDept = await shelfOfflineTx(db, 'meta', 'readonly', s => s.get('dept'));
+    if (storedDept && storedDept.value !== currentUser.dept) {
+      await shelfOfflineTx(db, 'cachedLocations', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.clear());
+    }
+    await shelfOfflineTx(db, 'meta', 'readwrite', s => s.put({ key: 'dept', value: currentUser.dept }));
+    shelfOfflineLocationsCache = await shelfOfflineTx(db, 'cachedLocations', 'readonly', s => s.getAll()) || [];
+    shelfOfflinePendingCache = await shelfOfflineTx(db, 'pendingRecords', 'readonly', s => s.getAll()) || [];
+  } catch (err) {
+    // IndexedDB không dùng được (trình duyệt cũ/chế độ ẩn danh chặn...) — bỏ qua, màn vẫn hoạt động
+    // ONLINE bình thường, chỉ mất khả năng offline (không chặn luồng chính).
+    console.warn('ensureShelfOfflineReady: IndexedDB không dùng được —', err.message);
+  }
+}
+// Cache lại DB.shelfLocations mới nhất (gọi SAU MỖI LẦN tải/thêm/sửa quầy kệ lúc còn online) để dùng
+// được lúc offline sau này.
+async function cacheShelfLocationsOffline() {
+  if (!DB.shelfLocations || !DB.shelfLocations.length) return;
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'cachedLocations', 'readwrite', s => s.clear());
+    const tx = db.transaction('cachedLocations', 'readwrite');
+    const store = tx.objectStore('cachedLocations');
+    DB.shelfLocations.forEach(s => store.put(s));
+    shelfOfflineLocationsCache = DB.shelfLocations.slice();
+  } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
+}
+// Lưu tạm 1 ghi nhận vào hàng đợi offline (mất mạng lúc bấm "Lưu Ghi Nhận") — shelfLocationLabel chỉ để
+// HIỆN cho người dùng thấy ngay (tên quầy kệ), KHÔNG phải dữ liệu gửi lên server (server tự tra lại từ
+// payload.shelfLocationId khi đồng bộ, xem extraValidate shelfRecords).
+async function queueShelfRecordOffline(payload, matchedLocation) {
+  const rec = {
+    clientRecordId: payload.clientRecordId, payload,
+    shelfLocationLabel: matchedLocation ? `${matchedLocation.code} — ${matchedLocation.name}` : '',
+    queuedAt: new Date().toISOString()
+  };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.put(rec));
+  } catch (err) { console.warn('queueShelfRecordOffline: không lưu được vào IndexedDB —', err.message); }
+  shelfOfflinePendingCache.push(rec);
+}
+// Gửi lần lượt các bản ghi đang chờ trong hàng đợi lên server khi có mạng lại. Gặp đúng 1 lỗi MẠNG
+// (không phải lỗi server trả về) thì DỪNG NGAY cả lượt (vẫn đang offline, thử tiếp sau cũng vậy) — gặp
+// lỗi SERVER (validate thật, VD quầy kệ đã bị ngừng dùng từ lúc queue tới giờ) thì bỏ qua đúng dòng đó,
+// KHÔNG xoá khỏi hàng đợi (giữ lại để người dùng tự xử lý, tránh mất dữ liệu đã nhập), đi tiếp dòng khác.
+// Message 'DUPLICATE_OFFLINE_SYNC' (xem lib/createValidation.js) = server ĐÃ nhận dòng này từ 1 lần gửi
+// trước (response bị rớt) — coi là THÀNH CÔNG, xoá khỏi hàng đợi như gửi thành công thật.
+let shelfOfflineSyncInFlight = false;
+async function trySyncPendingShelfRecords() {
+  if (shelfOfflineSyncInFlight || !navigator.onLine || !shelfOfflinePendingCache.length) return;
+  shelfOfflineSyncInFlight = true;
+  try {
+    const db = await openShelfOfflineDb();
+    const queue = shelfOfflinePendingCache.slice();
+    for (const rec of queue) {
+      try {
+        const result = await callCreateAction('shelfRecords', rec.payload);
+        await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.delete(rec.clientRecordId));
+        shelfOfflinePendingCache = shelfOfflinePendingCache.filter(p => p.clientRecordId !== rec.clientRecordId);
+        DB.shelfRecords.unshift(result.item);
+      } catch (err) {
+        if (err.message === 'DUPLICATE_OFFLINE_SYNC') {
+          await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.delete(rec.clientRecordId));
+          shelfOfflinePendingCache = shelfOfflinePendingCache.filter(p => p.clientRecordId !== rec.clientRecordId);
+          continue;
+        }
+        if (err instanceof TypeError) break; // lỗi mạng thật — dừng cả lượt, thử lại lần sau.
+        // Lỗi server thật (hiếm) — bỏ qua dòng này, giữ trong hàng đợi, thử dòng tiếp theo.
+      }
+    }
+  } finally {
+    shelfOfflineSyncInFlight = false;
+    renderShelfRecordRecentList();
+  }
+}
+// Đăng ký 1 LẦN DUY NHẤT lúc module này được nạp lần đầu (lazy-load theo cụm Vận Hành) — tự gọi lại khi
+// trình duyệt báo "có mạng trở lại", không cần người dùng tự bấm nút nào để đồng bộ.
+if (!window.__shelfOfflineOnlineListenerAdded) {
+  window.__shelfOfflineOnlineListenerAdded = true;
+  window.addEventListener('online', () => { trySyncPendingShelfRecords(); });
+}
+
+// ===== Phần D — Quét mã vạch bằng camera ở "📷 Ghi Nhận" (11/2026) =====
+// Ưu tiên BarcodeDetector native (Android/Chrome) — không cần tải gì thêm. Trình duyệt KHÔNG hỗ trợ
+// (Safari iOS...) thì tải LƯỜI thư viện ZXing từ /vendor/zxing/zxing.min.js (CHỈ lúc mở modal quét, xem
+// scripts/copy-vendor-assets.js — tuân CSP script-src 'self', không gọi CDN ngoài).
+let shelfBarcodeStream = null;
+let shelfBarcodeRafId = null;
+let shelfBarcodeZxingReader = null;
+async function openShelfBarcodeModal() {
+  document.getElementById('shelfBarcodeModal').classList.remove('hidden');
+  const statusEl = document.getElementById('shelfBarcodeStatus');
+  statusEl.textContent = 'Đang mở camera...';
+  if (!navigator.mediaDevices?.getUserMedia) {
+    statusEl.textContent = '⛔ Thiết bị/trình duyệt không hỗ trợ camera — vui lòng nhập tay Mã SKU.';
+    return;
+  }
+  try {
+    shelfBarcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (err) {
+    statusEl.textContent = `⛔ Không mở được camera (${err.message}) — vui lòng nhập tay Mã SKU.`;
+    return;
+  }
+  const video = document.getElementById('shelfBarcodeVideo');
+  video.srcObject = shelfBarcodeStream;
+  try { await video.play(); } catch (err) { /* vài trình duyệt tự play khi có srcObject, bỏ qua lỗi autoplay */ }
+  if (window.BarcodeDetector) {
+    statusEl.textContent = 'Đưa mã vạch vào khung hình...';
+    runShelfBarcodeDetectorLoop(video);
+  } else {
+    statusEl.textContent = 'Đang tải thư viện quét (trình duyệt không hỗ trợ quét sẵn)...';
+    try {
+      await loadZxingScript();
+    } catch (err) {
+      statusEl.textContent = `⛔ ${err.message} — vui lòng nhập tay Mã SKU.`;
+      return;
+    }
+    statusEl.textContent = 'Đưa mã vạch vào khung hình...';
+    runShelfBarcodeZxingLoop(video, statusEl);
+  }
+}
+function closeShelfBarcodeModal() {
+  document.getElementById('shelfBarcodeModal').classList.add('hidden');
+  if (shelfBarcodeRafId) { cancelAnimationFrame(shelfBarcodeRafId); shelfBarcodeRafId = null; }
+  if (shelfBarcodeZxingReader) { try { shelfBarcodeZxingReader.reset(); } catch (err) { /* reader đã đóng */ } shelfBarcodeZxingReader = null; }
+  // LUÔN tắt track camera khi đóng modal (CHỦ ĐỘNG, không chờ GC) — tránh giữ camera/đèn báo quyền
+  // truy cập camera mở vô thời hạn sau khi người dùng đã xong, tốn pin + gây khó chịu trên di động.
+  if (shelfBarcodeStream) { shelfBarcodeStream.getTracks().forEach(t => t.stop()); shelfBarcodeStream = null; }
+}
+function onShelfBarcodeDecoded(text) {
+  document.getElementById('srSku').value = text;
+  closeShelfBarcodeModal();
+}
+function runShelfBarcodeDetectorLoop(video) {
+  const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'qr_code'] });
+  const tick = async () => {
+    if (!shelfBarcodeStream) return; // modal đã đóng — dừng loop.
+    try {
+      const codes = await detector.detect(video);
+      if (codes && codes.length) { onShelfBarcodeDecoded(codes[0].rawValue); return; }
+    } catch (err) { /* lỗi decode 1 frame (video chưa kịp sẵn sàng...) — bỏ qua, thử frame tiếp theo */ }
+    shelfBarcodeRafId = requestAnimationFrame(tick);
+  };
+  shelfBarcodeRafId = requestAnimationFrame(tick);
+}
+function loadZxingScript() {
+  if (window.ZXing) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = '/vendor/zxing/zxing.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Không tải được thư viện quét mã vạch'));
+    document.head.appendChild(s);
+  });
+}
+function runShelfBarcodeZxingLoop(video, statusEl) {
+  try {
+    shelfBarcodeZxingReader = new window.ZXing.BrowserMultiFormatReader();
+    shelfBarcodeZxingReader.decodeFromVideoElement(video, (result) => {
+      if (result) onShelfBarcodeDecoded(result.getText());
+    });
+  } catch (err) {
+    statusEl.textContent = `⛔ Không khởi tạo được bộ quét (${err.message}) — vui lòng nhập tay Mã SKU.`;
+  }
 }
 
 // ===== "🔔 Ngưỡng Tồn" — bổ sung sau Phase 1 MVP (11/2026). Ngưỡng tồn tối thiểu + email cảnh báo, tính

@@ -1970,6 +1970,21 @@ const CREATE_MODULE_CONFIGS = {
       if (!user.perms?.admin && !user.perms?.shelfRecordCreate) {
         throw new CreateError(403, 'Bạn không có quyền ghi nhận trên kệ');
       }
+      // clientRecordId (11/2026, Phần E offline-first) — ID duy nhất SINH Ở CLIENT (crypto.randomUUID())
+      // lúc lưu tạm vào IndexedDB khi mất mạng, gửi kèm payload khi đồng bộ lại để chống TẠO TRÙNG nếu
+      // request trước đó đã thành công nhưng response bị rớt (client không biết, tự thử gửi lại). CHỈ
+      // dùng để dedupe — KHÔNG phải khoá chính (`id` vẫn do server tự tăng như mọi module khác qua
+      // insertRecord(), xem lib/recordStore.js — không đụng pipeline tạo mới dùng chung cho ~45 module).
+      // Dup-check CHỈ trong CÙNG dept (forceOwnDept đã ép record.dept = user.dept) — không có rủi ro dò
+      // trùng ID qua siêu thị khác. Trả 409 với message cố định 'DUPLICATE_OFFLINE_SYNC' để client phân
+      // biệt được với lỗi thật (xem trySyncPendingShelfRecords() ở module-vanhanh.js — nhận đúng message
+      // này thì coi là ĐÃ ĐỒNG BỘ THÀNH CÔNG từ trước, xoá khỏi hàng đợi, KHÔNG báo lỗi cho người dùng).
+      const clientRecordId = payload.clientRecordId ? String(payload.clientRecordId).trim().slice(0, 100) : '';
+      if (clientRecordId) {
+        const isDupClientId = (collection || []).some(it => it.dept === user.dept && it.clientRecordId === clientRecordId);
+        if (isDupClientId) throw new CreateError(409, 'DUPLICATE_OFFLINE_SYNC');
+      }
+      payload.clientRecordId = clientRecordId;
       const shelfLocationId = Number(payload.shelfLocationId);
       const shelfLocation = (appData?.shelfLocations || []).find(s => s.id === shelfLocationId);
       // Chặn tham chiếu quầy kệ của SIÊU THỊ KHÁC (client có thể gửi shelfLocationId bất kỳ) — chỉ nhận

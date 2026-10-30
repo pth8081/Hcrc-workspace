@@ -1,9 +1,89 @@
 # Phiên bản hiện tại
 
-**28.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.43** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.43 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Phần D (Quét Mã Vạch Camera) + Phần E (Offline-First)
+
+Tiếp nối v28.42. Yêu cầu người dùng: làm luôn 2 phần D/E còn lại (không phụ thuộc API đối tác), sau đó
+**rà soát lại toàn bộ 4 đợt** (Phase 1 + A/B/C + D/E) xem có ảnh hưởng module khác không + CSP có sạch
+không — đặc biệt phần HTML mới. Phạm vi đợt này, CHỈ ở màn "📷 Ghi Nhận":
+
+- **Phần D — Quét mã vạch camera**: nút "📷" cạnh ô Mã SKU mở modal `getUserMedia` (camera sau,
+  `facingMode: 'environment'`). Ưu tiên `BarcodeDetector` native (Android/Chrome, không tải gì thêm);
+  trình duyệt không hỗ trợ (Safari iOS...) thì nạp LƯỜI (chỉ lúc mở modal, không chặn tải trang chính)
+  `@zxing/library` (thêm dependency mới — xem Deploy Impact) qua `<script src="/vendor/zxing/zxing.min.js">`
+  (tuân CSP `script-src 'self'`, KHÔNG gọi CDN ngoài — thêm entry vào `scripts/copy-vendor-assets.js`
+  cùng khuôn 9 thư viện vendor khác đã có). Camera LUÔN tắt track ngay khi đóng modal (không chờ GC) —
+  tránh giữ quyền camera/tốn pin ngoài ý muốn. Vẫn giữ nguyên nhập tay Mã SKU như cũ (nút Quét là tuỳ
+  chọn, không bắt buộc).
+- **Phần E — Offline-first** (quan trọng/rủi ro nhất, không cần API đối tác): IndexedDB riêng
+  (`hcrcShelfOfflineDb`, 3 store `meta`/`cachedLocations`/`pendingRecords`) ở `module-vanhanh.js`:
+  - `ensureShelfOfflineReady()` so `dept` hiện tại với `dept` đã gắn trên cache cũ — LỆCH (đổi
+    tài khoản/đổi ca sang siêu thị khác trên CÙNG máy) thì XOÁ SẠCH cache + hàng đợi cũ trước khi dùng,
+    không để lộ nhầm dữ liệu siêu thị trước.
+  - `cacheShelfLocationsOffline()`/`effectiveShelfLocations()`: cache lại `DB.shelfLocations` mỗi lần có
+    thay đổi lúc còn mạng, dùng làm nguồn cho picker Quầy Kệ khi `DB.shelfLocations` rỗng (mở lại app lúc
+    mất mạng) — vẫn CHỈ chọn được quầy đã khai báo, không ghi tay tên quầy mới dù offline.
+  - `queueShelfRecordOffline()`/`trySyncPendingShelfRecords()`: `submitShelfRecord()` thử gọi server khi
+    `navigator.onLine`; gặp lỗi MẠNG thật (`TypeError`, KHÁC lỗi server trả về có message rõ) hoặc đang
+    offline từ đầu thì lưu tạm vào hàng đợi IndexedDB kèm `clientRecordId` (`crypto.randomUUID()`, sinh ở
+    CLIENT) — hiện badge "🔌 Chưa đồng bộ" ngay trong danh sách + banner "N bản ghi đang chờ đồng bộ".
+    Đăng ký `window.addEventListener('online', ...)` 1 lần lúc module nạp — tự gửi lại hàng đợi khi có
+    mạng, KHÔNG cần người dùng tự bấm nút nào.
+  - **Chống tạo trùng khi đồng bộ lại** (request trước đó có thể đã thành công nhưng response bị rớt,
+    client không biết, tự gửi lại): `lib/createValidation.js` (`shelfRecords.extraValidate`) nhận thêm
+    `clientRecordId` (tuỳ chọn, không bắt buộc với client cũ) — trùng clientRecordId TRONG CÙNG dept thì
+    trả 409 `'DUPLICATE_OFFLINE_SYNC'` (KHÔNG tạo bản ghi mới) thay vì lỗi dup thường; client coi message
+    này là ĐÃ ĐỒNG BỘ THÀNH CÔNG, xoá khỏi hàng đợi, không báo lỗi. Dedupe CHỈ trong cùng dept (không rò
+    rỉ chéo siêu thị) — KHÔNG đụng pipeline tạo mới dùng chung cho ~45 module khác
+    (`validateAndPrepareCreate()`/`id` vẫn do server tự tăng như cũ, chỉ thêm 1 field dùng để dedupe).
+
+**File đã sửa/tạo**: `lib/createValidation.js` (thêm xử lý `clientRecordId`), `public/js/module-vanhanh.js`
+(IndexedDB offline-first + quét mã vạch — ~230 dòng mới), `public/fragments/vanHanhSection.html` (nút
+Quét + modal camera + banner hàng đợi offline), `scripts/copy-vendor-assets.js` (+ entry zxing),
+`package.json`/`package-lock.json` (+ dependency `@zxing/library`), `public/vendor/zxing/zxing.min.js`
+(mới, copy từ `node_modules`), `tests/test-shelf-kehang-offline.js` (mới, 10 scenario — 5 Node trực tiếp
++ 5 Playwright IndexedDB thật).
+
+**Test**: `tests/test-shelf-kehang-offline.js` 10/10 pass (dedupe `clientRecordId` trong/ngoài dept, vẫn
+chặn store-spoofing `shelfLocationId` như cũ dù có `clientRecordId`, `ensureShelfOfflineReady()` xoá cache
+khi đổi dept, `effectiveShelfLocations()` fallback đúng lúc offline, hàng đợi xoá đúng khi đồng bộ
+thành công/`DUPLICATE_OFFLINE_SYNC`, GIỮ LẠI khi lỗi mạng thật). Regression rà soát rộng (14 file, tất cả
+PASS, không file nào thuộc 4 đợt tính năng này bị ảnh hưởng): `test-shelf-kehang.js` 13/13,
+`test-shelf-kehang-phase2.js` 18/18, `test-perm-matrix-client.js` 46/46,
+`test-muc0-module-access-tree.js` 17/17, `test-module-access-gate.js` 4/4,
+`test-module-access-gate-create.js` 3/3, `test-csp-full-audit.js` 3/3, `test-csp-deep-interaction.js`
+19/19, `test-vanhanh-itprice-chitiet-csp.js` 1/1, `test-nghiepvu-csp.js` 6/6,
+`test-operation-order-report.js` 16/16, `test-operation-store-report-overview.js` 6/6,
+`test-collapse-operation-forms.js` 10/10, `test-permission-batch-oct2026.js` 17/17,
+`test-stuck-subtab-fallback-fix.js` 14/14, `test-bugfix-batch-nav-ui.js` 15/15,
+`test-khoi0-license-uniform-gate.js` 9/9, `test-csp-nested-root-double-dispatch.js` 3/3,
+`test-csp-submit-double-submit-lock.js` 5/5, `test-asset-version-csp.js` 5/5,
+`test-muahang-permtree.js` 14/14, `test-itprice-permtree-move.js` 6/6, `test-merge-groups-perms.js` 7/7,
+`test-perm-tree-store-scope-widget.js` 9/9, `test-report-permission-rollout.js` 20/20,
+`test-operation-orders-dept-scope.js` 7/7. **1 lỗi PHÁT HIỆN nhưng KHÔNG LIÊN QUAN** đến đợt này: xác
+nhận bằng `git stash` (chạy lại đúng baseline trước khi có bất kỳ sửa đổi nào của đợt D/E) —
+`test-collapse-permform.js` kịch bản (10) "bấm nút thật Sửa (bảng Nhóm Phân Quyền) -> form mở qua CSP
+delegation" đã FAIL SẴN từ trước, không phải do thay đổi lần này gây ra — nêu rõ để người dùng biết, chưa
+sửa (ngoài phạm vi đợt D/E).
+
+**CSP self-check** (grep `on[a-z]+="`/` style="` trừ `data-style`/`javascript:`/`eval(`/`new Function(`)
+trên TOÀN BỘ file đã sửa/tạo ở CẢ 4 đợt tính năng này (Phase 1 + A/B/C + D/E): `public/js/module-vanhanh.js`,
+`public/fragments/vanHanhSection.html`, `lib/createValidation.js`, `lib/shelfStockEdit.js`,
+`lib/shelfLocationImport.js`, `routes/shelfStock.js`, `jobs/shelfStockThresholdAlert.js`,
+`public/js/core.js` — SẠCH, không có vi phạm nào.
+
+**Deploy impact**: **CÓ dependency mới** — `@zxing/library` (fallback quét mã vạch cho trình duyệt không
+hỗ trợ `BarcodeDetector` native). Phải chạy `npm install` lại (tự động chạy `scripts/copy-vendor-assets.js`
+qua `postinstall`, sinh `public/vendor/zxing/zxing.min.js` — file này ĐÃ commit sẵn vào git nên chỉ
+`git pull` + `pm2 restart` (không chạy `npm install`) vẫn đủ, chạy `npm install` chỉ cần khi muốn tự đồng
+bộ lại nếu nâng version `@zxing/library` sau này). Không sửa `sql/schema.sql`, không thêm biến môi
+trường mới. Quét mã vạch camera CẦN HTTPS (hoặc `localhost`) — trình duyệt chặn `getUserMedia` trên HTTP
+thường, đã có từ trước (không phải thay đổi mới của đợt này, chỉ nêu lại để người dùng lưu ý khi deploy
+production).
 
 ## v28.42 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Phần A (Sửa/Nhập Excel Quầy Kệ) + Phần B (Ngưỡng Tồn & Email)
 

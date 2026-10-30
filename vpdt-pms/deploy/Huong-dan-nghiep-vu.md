@@ -2836,14 +2836,22 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     của 1 hồ sơ.
 
 **"📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP 11/2026, bổ sung Sửa/Nhập Excel/Ngưỡng
-Tồn 11/2026)** — tab con thứ 4 trong Vận Hành (cùng cấp Đơn Hàng/QLDA/Phê
-Duyệt Giá Bán Buôn). Mỗi siêu thị tự ghi nhận số lượng hàng thực tế trên kệ
-hàng ngày + theo dõi hạn sử dụng, dùng chung tài khoản đăng nhập hiện có
-(KHÔNG có đăng nhập riêng cho siêu thị).
+Tồn 11/2026, bổ sung Quét Mã Vạch Camera/Offline-First 11/2026)** — tab con
+thứ 4 trong Vận Hành (cùng cấp Đơn Hàng/QLDA/Phê Duyệt Giá Bán Buôn). Mỗi
+siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn
+sử dụng, dùng chung tài khoản đăng nhập hiện có (KHÔNG có đăng nhập riêng
+cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offline-first" dưới
+đây).
 
 - **4 sub-tab**:
   - "📷 Ghi Nhận" — nhân viên quầy kệ gõ/chọn Quầy Kệ từ danh mục đã khai
-    báo + nhập Tên Sản Phẩm/Mã SKU/Số Lượng/Hạn Sử Dụng.
+    báo + nhập Tên Sản Phẩm/Mã SKU (có thể **bấm nút 📷 quét bằng camera**
+    thay gõ tay — ưu tiên quét sẵn trên Android/Chrome, các trình duyệt
+    khác tự tải thêm bộ quét khi bấm nút, chỉ cần camera + HTTPS)/Số
+    Lượng/Hạn Sử Dụng. **Mất mạng vẫn bấm "Lưu Ghi Nhận" được bình thường**
+    — máy tự lưu tạm (hiện badge "🔌 Chưa đồng bộ" + dòng thông báo số bản
+    ghi đang chờ), tự gửi lên lại ngay khi có mạng trở lại, không cần làm gì
+    thêm, không mất dữ liệu đã nhập.
   - "🗄️ Quầy Kệ" — Cửa hàng trưởng/Tổ trưởng khai báo danh mục quầy kệ của
     ĐÚNG siêu thị mình: Thêm tay, **Sửa** (tên/ngành hàng/trạng thái — mã
     quầy kệ và siêu thị không đổi được sau khi tạo), **Ngừng dùng** (ẩn
@@ -2875,10 +2883,17 @@ hàng ngày + theo dõi hạn sử dụng, dùng chung tài khoản đăng nhậ
   siêu thị của mình).
 - **Báo cáo**: 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Soát Hàng Hóa" — xuất Excel
   dùng nút có sẵn trong màn Báo Cáo.
+- **Offline-first**: khi máy mất mạng, mỗi lượt "Lưu Ghi Nhận" lưu tạm trên
+  chính máy đó (không gửi lên server được), gắn theo đúng siêu thị của tài
+  khoản đang đăng nhập — đổi sang tài khoản siêu thị KHÁC trên CÙNG máy sẽ
+  tự xoá sạch dữ liệu tạm của siêu thị trước, không hiện nhầm. Có mạng lại
+  thì tự gửi lên lần lượt, không cần bấm nút nào; nếu 1 bản ghi vì lý do nào
+  đó đã gửi thành công trước đó mà máy không biết (mất kết nối ngay lúc
+  server vừa nhận xong), hệ thống tự nhận ra và KHÔNG tạo trùng.
 - **Chưa có** (chờ xác nhận nguồn dữ liệu tồn kho hệ thống + mẫu response
   API thật trước khi làm tiếp ở pha sau): Đối Chiếu Tồn Kho Hệ Thống (qua
-  API đối tác + Mã SDK từng siêu thị), quét mã vạch camera, offline-first
-  (ghi nhận khi mất mạng).
+  API đối tác + Mã SDK từng siêu thị) — đây là hạng mục DUY NHẤT còn thiếu
+  của toàn bộ tính năng "Kiểm Soát Hàng Hóa".
 
 ### 4.5. Nhân Sự
 
