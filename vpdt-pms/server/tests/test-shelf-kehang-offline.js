@@ -127,7 +127,7 @@ async function playwrightTests(run) {
     await run.run('queueShelfRecordOffline()/trySyncPendingShelfRecords(): hàng đợi được xoá khi đồng bộ THÀNH CÔNG', async () => {
       await page.evaluate(async () => {
         await queueShelfRecordOffline(
-          { shelfLocationId: 1, productName: 'Coca-Cola', sku: '', quantity: 10, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-sync-ok' },
+          { shelfLocationId: 1, productName: 'Coca-Cola', maVach: '', quantity: 10, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-sync-ok' },
           { code: 'A1', name: 'Nước giải khát' });
       });
       const queuedLen = await page.evaluate(() => shelfOfflinePendingCache.length);
@@ -147,7 +147,7 @@ async function playwrightTests(run) {
     await run.run('trySyncPendingShelfRecords(): nhận DUPLICATE_OFFLINE_SYNC vẫn coi là THÀNH CÔNG (xoá khỏi hàng đợi, không lặp vô hạn/không báo lỗi)', async () => {
       await page.evaluate(async () => {
         await queueShelfRecordOffline(
-          { shelfLocationId: 1, productName: 'Sting', sku: '', quantity: 5, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-dup-case' },
+          { shelfLocationId: 1, productName: 'Sting', maVach: '', quantity: 5, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-dup-case' },
           { code: 'A1', name: 'Nước giải khát' });
         window.callCreateAction = async () => { throw new Error('DUPLICATE_OFFLINE_SYNC'); };
       });
@@ -159,7 +159,7 @@ async function playwrightTests(run) {
     await run.run('trySyncPendingShelfRecords(): lỗi MẠNG thật (TypeError) -> GIỮ LẠI trong hàng đợi, không mất dữ liệu', async () => {
       await page.evaluate(async () => {
         await queueShelfRecordOffline(
-          { shelfLocationId: 1, productName: 'Mì Hảo Hảo', sku: '', quantity: 8, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-still-offline' },
+          { shelfLocationId: 1, productName: 'Mì Hảo Hảo', maVach: '', quantity: 8, expiryDate: '', note: '', customData: {}, clientRecordId: 'cr-still-offline' },
           { code: 'A1', name: 'Nước giải khát' });
         window.callCreateAction = async () => { throw new TypeError('Failed to fetch'); };
       });

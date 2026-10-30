@@ -1998,7 +1998,6 @@ const CREATE_MODULE_CONFIGS = {
       const productName = String(payload.productName || '').trim();
       if (!productName) throw new CreateError(400, 'Vui lòng nhập Tên Sản Phẩm');
       payload.productName = productName;
-      payload.sku = String(payload.sku || '').trim();
       const quantity = Number(payload.quantity);
       if (!Number.isFinite(quantity) || quantity < 0) {
         throw new CreateError(400, 'Số lượng không hợp lệ (phải là số không âm)');
@@ -2012,12 +2011,14 @@ const CREATE_MODULE_CONFIGS = {
         payload.expiryDate = '';
       }
       payload.note = String(payload.note || '').trim();
-      // maHang (bổ sung sau Phase 1 MVP, 11/2026 — Đối Chiếu Tồn Kho Hệ Thống): mã 10 số nội bộ BRGMART
-      // (API /api/v1/reports/ton-kho/run, maHang — KHÔNG phải mã vạch) — CHỈ gán được khi người dùng
-      // chọn sản phẩm từ picker "🔎 Chọn Từ Tồn Kho Hệ Thống" (dữ liệu đến từ chính đối tác qua
-      // GET /api/shelf-stock/system-inventory, không phải do người dùng tự bịa), optional — ghi nhận
-      // qua gõ tay tự do/quét camera KHÔNG có field này, nên KHÔNG tham gia Đối Chiếu (đúng thiết kế).
+      // maHang/maVach (bổ sung sau Phase 1 MVP, 11/2026 — Đối Chiếu Tồn Kho Hệ Thống, mở rộng lại khi API
+      // đối tác bổ sung field maVach ở bản 1.3): CẢ 2 optional, KHÔNG ràng buộc field nào bắt buộc field
+      // kia, và KHÔNG giới hạn chỉ gán được qua picker "🔎 Chọn Từ Tồn Kho Hệ Thống" nữa — nhân viên có
+      // thể tự gõ tay maHang (biết mã nội bộ từ nhãn kệ...) ngay cả khi camera quét mã vạch mờ/không khớp
+      // được, đây chính là đường dự phòng theo yêu cầu người dùng. Đối Chiếu chỉ cần maHang có giá trị
+      // (bất kể gõ tay/picker/camera tự khớp), xem renderShelfReconciliationTable() (module-vanhanh.js).
       payload.maHang = String(payload.maHang || '').trim().slice(0, 20);
+      payload.maVach = String(payload.maVach || '').trim().slice(0, 20);
     }
   },
   // shelfStockThresholds (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026) — ngưỡng tồn tối thiểu

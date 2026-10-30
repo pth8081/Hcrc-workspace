@@ -8,8 +8,10 @@
 // QUYẾT ĐỊNH THIẾT KẾ (ghi rõ vì chưa có đặc tả chính thức — chờ người dùng góp ý thêm nếu cần đổi):
 // "Tồn trên kệ hôm nay" của 1 ngưỡng = TỔNG `quantity` của mọi shelfRecords tạo HÔM NAY (theo giờ máy
 // chủ), CÙNG dept với ngưỡng, khớp scope:
-//   - scope SKU: r.sku === threshold.scopeValue (so khớp CHÍNH XÁC, không phân biệt hoa/thường bị bỏ vì
-//     SKU thường có ký tự số/gạch, giữ nguyên dạng người dùng nhập).
+//   - scope SKU (nhãn hiển thị đổi thành "Mã Vạch", 11/2026, API đối tác bổ sung maVach ở bản 1.3 — GIỮ
+//     NGUYÊN key `scope: 'SKU'` nội bộ, chỉ đổi field so khớp từ r.sku SANG r.maVach, không cần sửa dữ
+//     liệu threshold đã lưu): r.maVach === threshold.scopeValue (so khớp CHÍNH XÁC, không phân biệt
+//     hoa/thường bị bỏ vì mã vạch thường có ký tự số/gạch, giữ nguyên dạng người dùng nhập).
 //   - scope CATEGORY: tra category của ĐÚNG quầy kệ (r.shelfLocationId -> shelfLocations.category, vì
 //     shelfRecords không lưu trực tiếp category) rồi so case-insensitive với threshold.scopeValue.
 // Đây là phép CỘNG DỒN nhiều lượt ghi nhận trong ngày (có thể nhiều quầy/nhiều SKU cùng ngành hàng) —
@@ -50,7 +52,7 @@ function sumTodayQuantityForThreshold(threshold, shelfRecords, shelfLocationCate
   for (const r of shelfRecords) {
     if (!r || r.dept !== threshold.dept || !isToday(r.createdAt)) continue;
     if (threshold.scope === 'SKU') {
-      if (r.sku === threshold.scopeValue) sum += Number(r.quantity) || 0;
+      if (r.maVach === threshold.scopeValue) sum += Number(r.quantity) || 0;
     } else {
       const category = shelfLocationCategoryById.get(r.shelfLocationId) || '';
       if (category.toLowerCase() === String(threshold.scopeValue).toLowerCase()) sum += Number(r.quantity) || 0;

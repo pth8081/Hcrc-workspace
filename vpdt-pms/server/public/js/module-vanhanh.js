@@ -274,10 +274,44 @@ function resolveShelfLocationInput() {
 
 // ===== "🔎 Chọn Từ Tồn Kho Hệ Thống" + "📊 Đối Chiếu Kệ & Tồn Kho" (bổ sung sau khi có tài liệu API Tồn
 // Kho BRGMART v1.1, 11/2026, xem lib/inventoryApiClient.js/jobs/inventorySync.js). "maHang" (mã 10 số
-// nội bộ BRGMART, KHÔNG phải mã vạch) CHỈ được gán cho shelfRecords khi chọn đúng sản phẩm từ danh sách
-// tồn kho hệ thống — ghi nhận qua gõ tay tự do/quét camera (srSku) KHÔNG có maHang, nên KHÔNG tham gia
-// Đối Chiếu (đúng thiết kế đã thống nhất, vì mã vạch thật ≠ mã nội bộ BRGMART). =====
+// nội bộ BRGMART) là khoá Đối Chiếu — "maVach" (mã vạch thật EAN-13, API bổ sung ở bản 1.3) là field
+// ĐỘC LẬP, chỉ để tham chiếu/hiển thị, KHÔNG dùng để đối chiếu (đối chiếu luôn theo maHang).
+//
+// THIẾT KẾ LẠI (11/2026, theo yêu cầu người dùng — mã vạch in trên sản phẩm có lúc mờ/quét sai/không có
+// trong hệ thống nguồn): form Ghi Nhận có 2 Ô RIÊNG, CẢ 2 SỬA TAY ĐỘC LẬP được (không khoá sau khi tự
+// điền) — "Mã Vạch" (#srSku) và "Mã Hàng (nội bộ)" (#srMaHang):
+//   - Camera quét / gõ tay vào ô Mã Vạch -> LUÔN điền vào #srSku (dù khớp tồn kho hệ thống hay không,
+//     lưu lại để tham chiếu sau này) -> thử so khớp với maVach trong shelfSystemInventoryCache, khớp
+//     được thì TỰ điền thêm #srMaHang + Tên Sản Phẩm (xem matchShelfSystemInventoryByMaVach()).
+//   - KHÔNG khớp (mã vạch mờ/sai/mặt hàng chưa khai mã vạch trong hệ thống nguồn): #srMaHang để trống,
+//     nhân viên tự bấm picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng và TỰ gõ/chọn đúng
+//     Mã Hàng bằng tay — đây chính là đường dự phòng khi mã vạch không dùng được.
+//   - Chọn qua picker -> điền CẢ 2 ô (Mã Hàng chắc chắn có; Mã Vạch theo đúng dòng đã chọn, để trống nếu
+//     dòng đó maVach null).
+// Kết quả: shelfRecords.maHang CÓ GIÁ TRỊ dù gõ tay/picker/camera-tự-khớp (Đối Chiếu chỉ cần maHang
+// không rỗng, không quan tâm nguồn gốc) — khác hẳn thiết kế CŨ trước 11/2026 (chỉ gán được qua picker). =====
 let shelfSystemInventoryCache = [];
+// So khớp 1 mã vạch đã quét/gõ tay với tồn kho hệ thống ĐÃ TẢI (đúng siêu thị người dùng, cùng tập dữ
+// liệu picker đang dùng — KHÔNG gọi thêm route nào). code rỗng hoặc không khớp -> null.
+function matchShelfSystemInventoryByMaVach(code) {
+  if (!code) return null;
+  return shelfSystemInventoryCache.find(r => r.maVach && r.maVach === code) || null;
+}
+function setShelfMaHangMatchNote(text, ok) {
+  const el = document.getElementById('srMaHangMatchNote');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = `text-[11px] mt-1 ${ok ? 'text-green-600' : 'text-gray-400'}`;
+}
+// LỖI THẬT tự phát hiện (có từ bản trước, 11/2026, không phải do đợt sửa này gây ra): sddSetOptions()
+// chỉ lưu {value, label}, nhưng lúc bấm chọn 1 dòng gợi ý, core.js lại gán `input.value = item.label`
+// (xem listener click [data-sdd-idx] ở core.js) — KHÔNG phải item.value. resolveShelfSystemInventoryInput()
+// bản cũ so khớp theo đúng chuỗi "value" (không có "(tồn hệ thống N)") nên KHÔNG BAO GIỜ khớp được sau
+// khi bấm chọn thật (chỉ khớp nếu người dùng tự gõ tay chính xác chuỗi đó, rất hiếm). Dùng 1 hàm DUY
+// NHẤT dựng label để sddSetOptions() lẫn hàm so khớp lại luôn dùng CHUNG 1 công thức, không lệch nhau.
+function buildShelfSystemInventoryLabel(r) {
+  return `${r.maHang} — ${r.tenHang} (tồn hệ thống ${r.soLuongTon})${r.maVach ? ` [${r.maVach}]` : ''}`;
+}
 // Gọi 1 lần mỗi khi vào tab "📷 Ghi Nhận" — 503 (chưa cấu hình API)/404 (siêu thị chưa có Mã Điểm/chưa
 // có dữ liệu) thì ẨN HẲN khối chọn này, KHÔNG báo lỗi gây rối (ghi nhận tay/camera vẫn hoạt động y cũ).
 function renderShelfSystemInventoryPicker(rows, offlineCapNhatLuc) {
@@ -286,7 +320,7 @@ function renderShelfSystemInventoryPicker(rows, offlineCapNhatLuc) {
   shelfSystemInventoryCache = rows;
   wrap.classList.remove('hidden');
   sddSetOptions('srSystemInventoryDropdown', rows.map(r => ({
-    value: `${r.maHang} — ${r.tenHang}`, label: `${r.maHang} — ${r.tenHang} (tồn hệ thống ${r.soLuongTon})`
+    value: buildShelfSystemInventoryLabel(r), label: buildShelfSystemInventoryLabel(r)
   })));
   if (noteEl) {
     noteEl.textContent = offlineCapNhatLuc
@@ -318,13 +352,37 @@ async function loadShelfSystemInventoryForRecordPicker() {
     }
   }
 }
-// Chọn xong tự điền Tên Sản Phẩm + gán maHang ẩn — người dùng vẫn sửa lại Tên Sản Phẩm/Số Lượng tay bình
-// thường sau khi chọn (maHang không đổi theo, vẫn đúng sản phẩm đã chọn).
+// Chọn xong tự điền CẢ Mã Hàng + Mã Vạch (có thể rỗng nếu dòng đó maVach null) + Tên Sản Phẩm — người
+// dùng vẫn sửa lại tay bất kỳ ô nào sau khi chọn (kể cả Mã Hàng/Mã Vạch — không khoá).
 function resolveShelfSystemInventoryInput() {
   const text = document.getElementById('srSystemInventoryInput').value.trim();
-  const match = shelfSystemInventoryCache.find(r => `${r.maHang} — ${r.tenHang}` === text);
+  const match = shelfSystemInventoryCache.find(r => buildShelfSystemInventoryLabel(r) === text);
   document.getElementById('srMaHang').value = match ? match.maHang : '';
-  if (match) document.getElementById('srProductName').value = match.tenHang;
+  document.getElementById('srSku').value = match ? (match.maVach || '') : '';
+  if (match) {
+    document.getElementById('srProductName').value = match.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã chọn từ tồn kho hệ thống: ${match.tenHang}`, true);
+  } else {
+    setShelfMaHangMatchNote('', false);
+  }
+}
+// Camera quét (onShelfBarcodeDecoded) HOẶC gõ tay trực tiếp vào ô Mã Vạch (data-op-input) đều gọi hàm
+// này — LUÔN giữ nguyên giá trị đã điền vào #srSku (dù khớp hay không, lưu lại để tham chiếu), chỉ khác
+// nhau ở việc có TỰ điền thêm #srMaHang/Tên Sản Phẩm hay không.
+function applyShelfBarcodeMatch(code) {
+  const match = matchShelfSystemInventoryByMaVach(code);
+  if (match) {
+    document.getElementById('srMaHang').value = match.maHang;
+    document.getElementById('srProductName').value = match.tenHang;
+    setShelfMaHangMatchNote(`✅ Đã khớp tồn kho hệ thống: ${match.tenHang}`, true);
+  } else {
+    // KHÔNG khớp — mã vạch mờ/sai/mặt hàng chưa khai mã vạch trong hệ thống nguồn. KHÔNG xoá Mã Hàng đã
+    // có (phòng trường hợp người dùng đã tự gõ/chọn trước đó) — chỉ báo rõ để họ biết cần tự bấm picker.
+    setShelfMaHangMatchNote('⚠️ Không khớp tồn kho hệ thống — dùng picker "🔎 Chọn Từ Tồn Kho Hệ Thống" để tìm theo tên/mã hàng.', false);
+  }
+}
+function onShelfMaVachTyped() {
+  applyShelfBarcodeMatch(document.getElementById('srSku').value.trim());
 }
 function isShelfRecordCreatedToday(createdAt) {
   if (!createdAt) return false;
@@ -362,7 +420,7 @@ function renderShelfReconciliationTable(rows, capNhatLuc, isOffline) {
   if (noteEl) {
     const asOf = capNhatLuc ? `Tồn kho hệ thống cập nhật lúc ${new Date(capNhatLuc).toLocaleString('vi-VN')}.` : '';
     const offlinePrefix = isOffline ? '🔌 Offline — dữ liệu có thể chưa phải số mới nhất. ' : '';
-    noteEl.textContent = `${offlinePrefix}${asOf} "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có chọn từ "🔎 Chọn Từ Tồn Kho Hệ Thống" ở tab Ghi Nhận (không tính ghi nhận gõ tay/quét camera tự do).`;
+    noteEl.textContent = `${offlinePrefix}${asOf} "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có điền Mã Hàng (nội bộ) — qua picker, camera tự khớp mã vạch, hoặc gõ tay trực tiếp đều tính; ghi nhận bỏ trống Mã Hàng không tham gia đối chiếu.`;
   }
 }
 async function loadShelfReconciliation() {
@@ -401,7 +459,7 @@ async function submitShelfRecord(e) {
   if (!shelfLocationId) return alert('Vui lòng chọn đúng quầy kệ từ danh sách gợi ý (gõ mã hoặc tên để tìm)!');
   const productName = document.getElementById('srProductName').value.trim();
   if (!productName) return alert('Vui lòng nhập Tên Sản Phẩm!');
-  const sku = document.getElementById('srSku').value.trim();
+  const maVach = document.getElementById('srSku').value.trim();
   const quantity = Number(document.getElementById('srQuantity').value);
   if (!Number.isFinite(quantity) || quantity < 0) return alert('Số lượng không hợp lệ (phải là số không âm)!');
   const expiryDate = document.getElementById('srExpiryDate').value;
@@ -420,11 +478,11 @@ async function submitShelfRecord(e) {
   const matchedLocation = effectiveShelfLocations().find(s => s.id === Number(shelfLocationId));
   const clientRecordId = (window.crypto?.randomUUID ? window.crypto.randomUUID()
     : `cr_${Date.now()}_${Math.random().toString(36).slice(2)}`);
-  // maHang (bổ sung sau khi có tài liệu API Tồn Kho, 11/2026) — CHỈ có giá trị khi đã chọn đúng sản phẩm
-  // từ "🔎 Chọn Từ Tồn Kho Hệ Thống" (resolveShelfSystemInventoryInput()), rỗng nếu ghi nhận qua gõ
-  // tay/quét camera tự do — xem chú thích đầy đủ tại đó.
+  // maHang/maVach (bổ sung sau khi có tài liệu API Tồn Kho, 11/2026, thiết kế lại khi API bổ sung maVach
+  // ở bản 1.3) — CẢ 2 optional, độc lập, gõ tay/picker/camera-tự-khớp đều hợp lệ — xem chú thích đầy đủ
+  // tại matchShelfSystemInventoryByMaVach()/applyShelfBarcodeMatch() phía trên.
   const maHang = document.getElementById('srMaHang').value.trim();
-  const payload = { shelfLocationId: Number(shelfLocationId), productName, sku, quantity, expiryDate, note, customData, clientRecordId, maHang };
+  const payload = { shelfLocationId: Number(shelfLocationId), productName, maVach, quantity, expiryDate, note, customData, clientRecordId, maHang };
 
   if (navigator.onLine) {
     try {
@@ -434,6 +492,7 @@ async function submitShelfRecord(e) {
       alert('✅ Đã lưu ghi nhận trên kệ!');
       document.getElementById('srForm').reset();
       document.getElementById('srShelfLocationId').value = '';
+      setShelfMaHangMatchNote('', false);
       renderShelfRecordRecentList();
       return;
     } catch (err) {
@@ -450,6 +509,7 @@ async function submitShelfRecord(e) {
   alert('🔌 Đang offline — đã lưu tạm trên máy, sẽ tự đồng bộ khi có mạng lại.');
   document.getElementById('srForm').reset();
   document.getElementById('srShelfLocationId').value = '';
+  setShelfMaHangMatchNote('', false);
   renderShelfRecordRecentList();
 }
 // Danh sách ghi nhận gần đây CỦA ĐÚNG siêu thị mình (DB.shelfRecords đã được server lọc đúng dept —
@@ -464,7 +524,8 @@ function renderShelfRecordRecentList() {
     <tr class="border-b bg-amber-50">
       <td class="p-2">${escapeHtml(rec.shelfLocationLabel || '')}</td>
       <td class="p-2">${escapeHtml(rec.payload.productName || '')}</td>
-      <td class="p-2">${escapeHtml(rec.payload.sku || '')}</td>
+      <td class="p-2">${escapeHtml(rec.payload.maVach || '')}</td>
+      <td class="p-2">${escapeHtml(rec.payload.maHang || '')}</td>
       <td class="p-2 text-right">${escapeHtml(String(rec.payload.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(rec.payload.expiryDate ? new Date(rec.payload.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🔌 Chưa đồng bộ</span></td>
@@ -474,12 +535,13 @@ function renderShelfRecordRecentList() {
     <tr class="border-b">
       <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
-      <td class="p-2">${escapeHtml(r.sku || '')}</td>
+      <td class="p-2">${escapeHtml(r.maVach || '')}</td>
+      <td class="p-2">${escapeHtml(r.maHang || '')}</td>
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
     </tr>`).join('');
-  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="7" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
   updateShelfOfflineQueueBanner();
 }
 // Banner "🔌 N bản ghi đang chờ đồng bộ" phía trên form Ghi Nhận — chỉ hiện khi hàng đợi offline
@@ -887,6 +949,7 @@ function closeShelfBarcodeModal() {
 }
 function onShelfBarcodeDecoded(text) {
   document.getElementById('srSku').value = text;
+  applyShelfBarcodeMatch(text);
   closeShelfBarcodeModal();
 }
 function runShelfBarcodeDetectorLoop(video) {

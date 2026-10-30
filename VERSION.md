@@ -1,9 +1,54 @@
 # Phiên bản hiện tại
 
-**28.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.46** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.46 (2026-11): "📋 Kiểm Soát Hàng Hóa" — API Tồn Kho bổ sung mã vạch (maVach) + thiết kế lại 2 ô Mã Hàng/Mã Vạch
+
+Đối tác BRGMART cập nhật tài liệu API Tồn Kho lên bản 1.3 (bổ sung field `maVach` — mã vạch EAN-13
+thật, có thể `null` nếu mặt hàng chưa khai mã vạch trong hệ thống nguồn; `maHang` 10 số vẫn là khoá định
+danh chính, không đổi). Theo yêu cầu người dùng, THIẾT KẾ LẠI màn Ghi Nhận Trên Kệ để lưu/hiện RÕ cả 2
+mã (không chỉ gán ngầm) — lý do: mã vạch in trên sản phẩm có lúc mờ/quét sai/mặt hàng chưa khai mã
+vạch, cần đường dự phòng xác định đúng mặt hàng qua tên/mã hàng.
+
+**File sửa**: `lib/inventoryApiClient.js` (không cần sửa — đã tự nhận `maVach` khi không giới hạn
+`fields`), `routes/shelfStock.js` (không cần sửa — route trả thẳng `cached.rows`), `lib/createValidation.js`
+(thêm sanitize `maVach`, bỏ field `sku` cũ không còn dùng), `jobs/shelfStockThresholdAlert.js` (ngưỡng
+scope "SKU" đổi field so khớp `r.sku` → `r.maVach`, giữ nguyên key `scope:'SKU'` nội bộ — dữ liệu
+threshold đã lưu KHÔNG cần sửa), `public/fragments/vanHanhSection.html`, `public/js/module-vanhanh.js`,
+`public/js/core.js` (Biểu Mẫu). **File mới**: `tests/test-shelf-mavach-match.js`.
+
+**Thiết kế lại form Ghi Nhận — 2 ô RIÊNG, CẢ 2 sửa tay độc lập được (không khoá sau khi tự điền)**:
+- **"Mã Vạch"** (ô cũ "Mã SKU", đổi tên — camera quét HOẶC gõ tay đều điền vào đây): LUÔN lưu lại giá
+  trị (dù khớp tồn kho hệ thống hay không, để tham chiếu sau này) — rồi tự so khớp với `maVach` trong
+  tồn kho hệ thống đã tải. Khớp được → tự điền thêm "Mã Hàng (nội bộ)" + Tên Sản Phẩm, hiện "✅ Đã khớp
+  tồn kho hệ thống: &lt;tên hàng&gt;". KHÔNG khớp (mã mờ/sai/mặt hàng chưa khai mã vạch) → "Mã Hàng" để
+  trống (hoặc GIỮ NGUYÊN giá trị cũ nếu đã có từ trước, không xoá), hiện "⚠️ Không khớp... dùng picker...".
+- **"Mã Hàng (nội bộ)"** (ô cũ ẨN, giờ HIỆN + sửa tay được): nhân viên có thể tự gõ tay nếu biết mã nội
+  bộ (nhãn kệ...) — đây chính là đường dự phòng khi mã vạch không dùng được. Đối Chiếu chỉ cần ô này
+  KHÔNG RỖNG, không quan tâm nguồn gốc (gõ tay/picker/camera-tự-khớp đều tính).
+- Picker "🔎 Chọn Từ Tồn Kho Hệ Thống" chọn 1 dòng → điền CẢ 2 ô (Mã Hàng chắc chắn có; Mã Vạch theo
+  đúng dòng, để trống nếu dòng đó `maVach` null) — tìm được cả theo mã vạch (gộp vào label tìm kiếm).
+  Nút quét camera đổi từ CHỈ-icon sang "📷 Quét Mã" (icon + chữ, đúng chuẩn chung các nút khác trong app).
+
+**LỖI THẬT tự phát hiện (có từ v28.44, không phải do đợt này gây ra) — đã vá luôn**: `resolveShelfSystemInventoryInput()`
+so khớp theo chuỗi KHÔNG có hậu tố `(tồn hệ thống N)`, nhưng lúc bấm chọn 1 dòng gợi ý, cơ chế
+`sdd*` dùng chung lại gán `input.value = item.label` (CÓ hậu tố) — nên bấm chọn trước đây KHÔNG BAO
+GIỜ khớp được thật. Vá bằng 1 hàm `buildShelfSystemInventoryLabel()` duy nhất dùng chung cho cả dựng
+dropdown lẫn so khớp lại, không lệch nhau nữa.
+
+**Deploy impact**: không sửa `sql/schema.sql`, không thêm biến môi trường/dependency mới — chỉ `git
+pull` + `pm2 restart`.
+
+**Test**: `test-shelf-mavach-match.js` (mới) 5/5 pass (Playwright thật — camera khớp/không khớp, picker
+2 trường hợp có/không `maVach`, gõ tay trực tiếp). Regression 15 file liên quan (`test-shelf-kehang`,
+`test-shelf-kehang-phase2`, `test-shelf-kehang-offline`, `test-inventory-recon`,
+`test-shelf-mobile-and-offline-inventory`, `test-perm-matrix-client`, `test-muc0-module-access-tree`,
+`test-khoi0-license-uniform-gate`, `test-permission-batch-oct2026`, `test-operation-store-report-overview`,
+`test-operation-order-report`, `test-collapse-operation-forms`, `test-bugfix-batch-nav-ui`,
+`test-vanhanh-itprice-chitiet-csp`, `test-stuck-subtab-fallback-fix`) đều PASS. CSP sạch.
 
 ## v28.45 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Responsive camera mobile + offline cho tồn kho hệ thống
 

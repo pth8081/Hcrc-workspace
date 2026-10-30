@@ -2837,7 +2837,8 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
 
 **"📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP 11/2026, bổ sung Sửa/Nhập Excel/Ngưỡng
 Tồn 11/2026, bổ sung Quét Mã Vạch Camera/Offline-First 11/2026, bổ sung Đối
-Chiếu Kệ & Tồn Kho Hệ Thống 11/2026 — ĐỦ cả 5 khối nghiệp vụ gốc)** — tab con
+Chiếu Kệ & Tồn Kho Hệ Thống 11/2026, bổ sung mã vạch thật (API v1.3) + thiết
+kế lại 2 ô Mã Hàng/Mã Vạch 11/2026 — ĐỦ cả 5 khối nghiệp vụ gốc)** — tab con
 thứ 4 trong Vận Hành (cùng cấp Đơn Hàng/QLDA/Phê Duyệt Giá Bán Buôn). Mỗi
 siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn
 sử dụng, dùng chung tài khoản đăng nhập hiện có (KHÔNG có đăng nhập riêng
@@ -2846,18 +2847,32 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
 
 - **5 sub-tab**:
   - "📷 Ghi Nhận" — nhân viên quầy kệ gõ/chọn Quầy Kệ từ danh mục đã khai
-    báo + nhập Tên Sản Phẩm/Mã SKU (có thể **bấm nút 📷 quét bằng camera**
-    thay gõ tay — ưu tiên quét sẵn trên Android/Chrome, các trình duyệt
-    khác tự tải thêm bộ quét khi bấm nút, chỉ cần camera + HTTPS)/Số
-    Lượng/Hạn Sử Dụng. **Mất mạng vẫn bấm "Lưu Ghi Nhận" được bình thường**
-    — máy tự lưu tạm (hiện badge "🔌 Chưa đồng bộ" + dòng thông báo số bản
-    ghi đang chờ), tự gửi lên lại ngay khi có mạng trở lại, không cần làm gì
-    thêm, không mất dữ liệu đã nhập. Nếu siêu thị đã cấu hình "Mã Điểm" (xem
-    dưới) và có dữ liệu, thêm được 1 cách chọn sản phẩm MỚI **"🔎 Chọn Từ
-    Tồn Kho Hệ Thống"** (tìm theo mã hàng/tên) — CHỈ cách này mới tham gia
-    được Đối Chiếu (xem sub-tab "📊 Đối Chiếu" dưới); gõ tay/quét camera vẫn
-    ghi nhận bình thường nhưng KHÔNG đối chiếu được (mã vạch thật khác mã
-    nội bộ hệ thống đối tác).
+    báo + nhập Tên Sản Phẩm/Số Lượng/Hạn Sử Dụng, cùng **2 ô mã RIÊNG, độc
+    lập, sửa tay được cả 2** (API Tồn Kho đối tác BRGMART bản 1.3, 11/2026,
+    bổ sung mã vạch thật EAN-13 bên cạnh mã nội bộ cũ):
+    - **"Mã Vạch"** — gõ tay HOẶC **bấm nút "📷 Quét Mã" quét bằng camera**
+      (ưu tiên quét sẵn trên Android/Chrome, các trình duyệt khác tự tải
+      thêm bộ quét khi bấm nút, chỉ cần camera + HTTPS). LUÔN lưu lại giá
+      trị quét/gõ được (dù khớp tồn kho hệ thống hay không, để tham chiếu
+      sau này). Nếu siêu thị đã cấu hình "Mã Điểm" (xem dưới) và có dữ
+      liệu, mã vạch vừa nhập tự so khớp với tồn kho hệ thống đã tải —
+      khớp được thì tự điền thêm ô "Mã Hàng" + Tên Sản Phẩm (hiện ghi chú
+      "✅ Đã khớp..."); không khớp (mã vạch mờ/in sai/mặt hàng chưa khai
+      báo mã vạch trong hệ thống đối tác) thì chỉ báo "⚠️ Không khớp...",
+      KHÔNG xoá Mã Hàng đã có.
+    - **"Mã Hàng (nội bộ)"** — gõ tay trực tiếp HOẶC dùng picker **"🔎 Chọn
+      Từ Tồn Kho Hệ Thống"** (tìm theo mã hàng/tên/mã vạch, điền cả 2 ô
+      cùng lúc) — đây là **đường dự phòng** khi mã vạch không quét/khớp
+      được: nhân viên tự tìm đúng mặt hàng theo tên/mã hàng để vẫn xác
+      định đúng sản phẩm cần theo dõi.
+    - Đối Chiếu (xem sub-tab "📊 Đối Chiếu" dưới) chỉ cần ô "Mã Hàng" không
+      rỗng — không quan tâm điền bằng cách nào (gõ tay/picker/camera tự
+      khớp đều tính). `shelfRecords` lưu CẢ 2 field `maHang` và `maVach`,
+      cả 2 đều optional, không field nào bắt buộc field kia.
+    - **Mất mạng vẫn bấm "💾 Lưu Ghi Nhận" được bình thường** — máy tự lưu
+      tạm (hiện badge "🔌 Chưa đồng bộ" + dòng thông báo số bản ghi đang
+      chờ), tự gửi lên lại ngay khi có mạng trở lại, không cần làm gì
+      thêm, không mất dữ liệu đã nhập.
   - "🗄️ Quầy Kệ" — Cửa hàng trưởng/Tổ trưởng khai báo danh mục quầy kệ của
     ĐÚNG siêu thị mình: Thêm tay, **Sửa** (tên/ngành hàng/trạng thái — mã
     quầy kệ và siêu thị không đổi được sau khi tạo), **Ngừng dùng** (ẩn
@@ -2866,19 +2881,22 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
     thêm, dòng trùng mã trong siêu thị bị bỏ qua).
   - "⏰ Hạn Sử Dụng" — tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn.
   - "🔔 Ngưỡng Tồn" (MỚI) — Cửa hàng trưởng/Tổ trưởng khai báo ngưỡng tồn
-    tối thiểu theo Ngành Hàng hoặc Mã SKU + danh sách email nhận cảnh báo
-    (phạm vi áp dụng không đổi được sau khi tạo, chỉ sửa được ngưỡng/email/
-    trạng thái). Hệ thống tự kiểm **hằng ngày** (job chạy mỗi 24h kể từ lúc
-    server khởi động — KHÔNG ghim đúng 07:00 sáng), tính TỔNG số lượng các
-    "Ghi Nhận Trên Kệ" tạo trong ngày cùng siêu thị khớp phạm vi (Ngành
-    Hàng tra qua quầy kệ, hoặc Mã SKU so khớp trực tiếp); nếu dưới ngưỡng
-    (kể cả khi chưa có ghi nhận nào hôm nay, tổng=0) sẽ tự gửi email cảnh
-    báo tới danh sách người nhận đã khai báo. **Đây tính trên dữ liệu "Ghi
-    Nhận Trên Kệ" đã có, CHƯA phải tồn kho hệ thống thật.**
+    tối thiểu theo Ngành Hàng hoặc Mã Vạch (tên cũ "Mã SKU", đổi nhãn khi
+    bổ sung mã vạch thật 11/2026, giá trị lưu `scope:'SKU'` không đổi) +
+    danh sách email nhận cảnh báo (phạm vi áp dụng không đổi được sau khi
+    tạo, chỉ sửa được ngưỡng/email/trạng thái). Hệ thống tự kiểm **hằng
+    ngày** (job chạy mỗi 24h kể từ lúc server khởi động — KHÔNG ghim đúng
+    07:00 sáng), tính TỔNG số lượng các "Ghi Nhận Trên Kệ" tạo trong ngày
+    cùng siêu thị khớp phạm vi (Ngành Hàng tra qua quầy kệ, hoặc Mã Vạch so
+    khớp trực tiếp); nếu dưới ngưỡng (kể cả khi chưa có ghi nhận nào hôm
+    nay, tổng=0) sẽ tự gửi email cảnh báo tới danh sách người nhận đã khai
+    báo. **Đây tính trên dữ liệu "Ghi Nhận Trên Kệ" đã có, CHƯA phải tồn
+    kho hệ thống thật.**
   - "📊 Đối Chiếu" (MỚI, 11/2026) — so khớp tồn kho hệ thống (API BRGMART,
-    đồng bộ nền mỗi 20 phút) với tổng số lượng ghi nhận HÔM NAY có chọn từ
-    "🔎 Chọn Từ Tồn Kho Hệ Thống" (xem sub-tab Ghi Nhận), theo đúng mã hàng
-    — hiện badge Khớp/Lệch (+/-) cho từng mã hàng + dòng "cập nhật lúc"
+    đồng bộ nền mỗi 20 phút) với tổng số lượng ghi nhận HÔM NAY có Mã Hàng
+    (xem sub-tab Ghi Nhận — gõ tay/picker/camera tự khớp đều tính, chỉ cần
+    ô "Mã Hàng" không rỗng), theo đúng mã hàng — hiện badge Khớp/Lệch (+/-)
+    cho từng mã hàng + dòng "cập nhật lúc"
     (theo đúng độ trễ 15 phút của API nguồn). CHỈ XEM, mở cho mọi người có
     quyền vào tab. Nếu siêu thị chưa cấu hình "Mã Điểm" hoặc hệ thống chưa
     cấu hình kết nối API, màn này báo lỗi rõ ràng thay vì hiện trống/lỗi vỡ
@@ -2917,7 +2935,9 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn & Email/Đối Chiếu Tồn Kho Hệ Thống).
   Phần còn lại có thể làm thêm nếu cần (không bắt buộc): Nhập/Xuất Excel
   riêng cho cột "Mã Điểm" ở Danh Mục Siêu Thị (hiện chỉ nhập tay từng dòng).
-- **Quét mã vạch trên điện thoại** (11/2026): nút 📷 cạnh ô Mã SKU + 2 nút
+- **Quét mã vạch trên điện thoại** (11/2026, đổi nhãn nút 11/2026 sau khi
+  bổ sung mã vạch thật): nút **"📷 Quét Mã"** (icon + chữ, đúng chuẩn chung
+  các nút khác trong app — trước đó chỉ có icon) cạnh ô "Mã Vạch" + 2 nút
   "Đóng"/"✏️ Nhập Tay" trong khung quét đều đủ lớn để bấm tay, có khung ngắm
   giữa hình để biết đưa mã vạch vào đâu, camera xin độ phân giải cao hơn và
   quét nhanh hơn trên các máy không hỗ trợ quét sẵn (Safari iOS).

@@ -199,10 +199,10 @@ async function main() {
     ];
     STORE.shelfLocations = [{ id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' }];
     STORE.shelfRecords = [
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, sku: 'SKU001', quantity: 3, createdAt: todayIso() },
-      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 100, sku: 'SKU002', quantity: 8, createdAt: todayIso() },
+      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maVach: 'SKU001', quantity: 3, createdAt: todayIso() },
+      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maVach: 'SKU002', quantity: 8, createdAt: todayIso() },
       // Siêu thị khác, cùng SKU001 — KHÔNG được cộng vào tổng của Siêu thị Quận 1.
-      { id: 3, dept: 'Siêu thị Quận 7', shelfLocationId: 200, sku: 'SKU001', quantity: 100, createdAt: todayIso() }
+      { id: 3, dept: 'Siêu thị Quận 7', shelfLocationId: 200, maVach: 'SKU001', quantity: 100, createdAt: todayIso() }
     ];
     await checkShelfStockThresholdAlerts();
     assertEqual(sentMails.length, 1, `phải gửi đúng 1 email (SKU001 thiếu), thực tế: ${JSON.stringify(sentMails)}`);
@@ -219,8 +219,8 @@ async function main() {
       { id: 101, dept: 'Siêu thị Quận 1', code: 'A2', category: 'Bánh kẹo' }
     ];
     STORE.shelfRecords = [
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, sku: 'X1', quantity: 5, createdAt: todayIso() },
-      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 101, sku: 'X2', quantity: 50, createdAt: todayIso() } // ngành hàng khác, không tính
+      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maVach: 'X1', quantity: 5, createdAt: todayIso() },
+      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 101, maVach: 'X2', quantity: 50, createdAt: todayIso() } // ngành hàng khác, không tính
     ];
     await checkShelfStockThresholdAlerts();
     assertEqual(sentMails.length, 1, `tổng Đồ uống = 5 < 20 -> phải cảnh báo, thực tế: ${JSON.stringify(sentMails)}`);

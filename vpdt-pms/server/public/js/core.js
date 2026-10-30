@@ -1012,7 +1012,8 @@ const CORE_FIELD_MANIFEST = {
   // srShelfLocationId).
   SHELF_RECORD: [
     { id: 'srProductName', label: 'Tên Sản Phẩm', required: true },
-    { id: 'srSku', label: 'Mã SKU', required: false },
+    { id: 'srSku', label: 'Mã Vạch', required: false },
+    { id: 'srMaHang', label: 'Mã Hàng (nội bộ)', required: false },
     { id: 'srQuantity', label: 'Số Lượng Trên Kệ', required: true },
     { id: 'srExpiryDate', label: 'Hạn Sử Dụng', required: false },
     { id: 'srNote', label: 'Ghi Chú', required: false }
@@ -1022,7 +1023,7 @@ const CORE_FIELD_MANIFEST = {
   // tay THẬT lúc tạo, cùng diện Biểu Mẫu như code quầy kệ (slCode) đã có.
   SHELF_STOCK_THRESHOLD: [
     { id: 'stScope', label: 'Phạm Vi Áp Dụng', required: true },
-    { id: 'stScopeValue', label: 'Ngành Hàng / Mã SKU', required: true },
+    { id: 'stScopeValue', label: 'Ngành Hàng / Mã Vạch', required: true },
     { id: 'stMinQuantity', label: 'Ngưỡng Tối Thiểu', required: true },
     { id: 'stRecipientEmails', label: 'Email Người Nhận Cảnh Báo', required: true }
   ],

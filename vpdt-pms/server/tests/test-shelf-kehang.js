@@ -87,7 +87,7 @@ async function main() {
   await run.run('shelfRecords: hợp lệ -> tạo OK, snapshot đúng mã/tên quầy kệ, dept = user.dept', async () => {
     const user = userOf('Siêu thị Quận 1', { shelfRecordCreate: true });
     const appData = { shelfLocations: [{ id: 1, dept: 'Siêu thị Quận 1', code: 'A1', name: 'Nước giải khát', active: true }] };
-    const record = validateAndPrepareCreate('shelfRecords', { shelfLocationId: 1, productName: 'Coca-Cola lon 330ml', sku: '893458', quantity: 24, expiryDate: '2027-03-12' }, user, [], appData);
+    const record = validateAndPrepareCreate('shelfRecords', { shelfLocationId: 1, productName: 'Coca-Cola lon 330ml', maVach: '893458', quantity: 24, expiryDate: '2027-03-12' }, user, [], appData);
     assertEqual(record.dept, 'Siêu thị Quận 1', 'dept phải = user.dept');
     assertEqual(record.shelfLocationCode, 'A1', 'phải snapshot đúng mã quầy kệ');
     assertEqual(record.shelfLocationName, 'Nước giải khát', 'phải snapshot đúng tên quầy kệ');
