@@ -193,7 +193,11 @@ const REPORT_NAV_TREE = [
       // Hành ▾" (thuần UI, xem mục 4.7 tài liệu). Quyền hiện tab MẶC ĐỊNH = checklistReportView (xem
       // REPORT_KEY_ACCESS_FN ở isReportKeyVisible() trên), KHÔNG PHẢI hasModuleAccess() phẳng như 3 leaf
       // còn lại — cố tình chặt hơn vì đây là dữ liệu đánh giá/VSATTP của siêu thị.
-      { key: 'checklist', label: '✅ Checklist Đánh Giá Siêu Thị' }
+      { key: 'checklist', label: '✅ Checklist Đánh Giá Siêu Thị' },
+      // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — cùng khuôn checklist ngay trên: key KHÔNG có trong
+      // BUSINESS_MODULES (không cần hasModuleAccess('vanHanhShelfTab') riêng ở đây — dữ liệu client nhận
+      // được đã lọc đúng phạm vi thật qua filterShelfRecordsForUser(), xem routes/reports.js).
+      { key: 'shelfRecords', label: '📋 Kiểm Soát Hàng Hóa' }
     ]
   },
   // Mua Hàng > BAS (v23.30) — module TOP-LEVEL riêng (không nằm dưới dropdown nào, xem BUSINESS_MODULES
@@ -771,6 +775,14 @@ const REPORT_MODULE_CONFIGS = {
       const failed = submitted.filter(r => r.isPassed === false).length;
       return [['Đã nộp — Đạt', passed], ['Đã nộp — Chưa đạt', failed]];
     }
+  },
+  // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — dùng field "dept" chuẩn (= tên siêu thị, forceOwnDept
+  // ở server) như vanHanh/operationStoreOpen ngay trên, không phải "storeCode" như checklist. Không có
+  // statusOf/statusBuckets (ghi nhận không có vòng đời trạng thái phê duyệt ở Phase 1 MVP này).
+  shelfRecords: {
+    title: '📋 Báo Cáo Kiểm Soát Hàng Hóa',
+    getRecords: (dept, from, to) => fetchReportRecords('shelfRecords', dept, from, to,
+      () => DB.shelfRecords.filter(r => (!dept || r.dept === dept) && isInDateRange(r.createdAt, from, to)))
   },
   // Mua Hàng > BAS (v23.30) — CÙNG khuôn "checklist" ngay trên: "xem chéo" thấy TOÀN BỘ (dept='' luôn),
   // RebateCalculations không có field Dept/status (mỗi bản ghi là 1 lần TÍNH XONG, không có vòng đời

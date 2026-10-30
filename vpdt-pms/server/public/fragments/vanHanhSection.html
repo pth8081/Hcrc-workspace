@@ -5,6 +5,8 @@
            xuất, ids/logic GIỮ NGUYÊN 100% từ module-itsupport-price.js (chỉ đổi nơi sống trong DOM), luôn
            khoá 'WHOLESALE' (xem enterVanHanhItPriceForm()). Danh sách/duyệt/xử lý vẫn ở Hỗ Trợ IT. -->
       <button data-op="setVanHanhSubTab" data-tab="ITPRICE" id="btnVanHanhSubItPrice" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">💲 Phê Duyệt Giá Bán Buôn</button>
+      <!-- "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — xem vanHanhShelfWrap cuối file. -->
+      <button data-op="setVanHanhSubTab" data-tab="SHELF" id="btnVanHanhSubShelf" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">📋 Kiểm Soát Hàng Hóa</button>
     </div>
 
     <!-- ===== TAB 1: ĐƠN HÀNG (operationOrders) — 3 sub-tab lồng bên trong (đợt "Tách Đơn Hàng Siêu
@@ -801,5 +803,122 @@
         </div>
         <div id="paginationContainer_vanHanhItPrice"></div>
         <p class="text-gray-400 text-[11px]">Duyệt/Từ chối/Yêu Cầu Bổ Sung/Từ Chối Khẩn thao tác ngay tại danh sách này. Đội Hỗ Trợ IT chỉ hỗ trợ và áp giá sau khi hồ sơ đã được duyệt (xem tại <b>Hỗ Trợ IT &gt; Phê Duyệt Giá</b>).</p>
+      </div>
+    </div>
+
+    <!-- "📋 Kiểm Soát Hàng Hóa" — Phase 1 MVP (11/2026): Ghi Nhận Trên Kệ + Quầy Kệ (danh mục) + Hạn Sử
+         Dụng. CHƯA có Đối Chiếu Tồn Kho/Ngưỡng Tồn & Email/quét mã vạch camera (chờ xác nhận nguồn tồn
+         kho + mẫu API thật, xem Claude Doc "Kiểm Soát Hàng Hóa — Mô tả nghiệp vụ"). -->
+    <div id="vanHanhShelfWrap" class="hidden space-y-4">
+      <div class="flex gap-2 flex-wrap border-b pb-2">
+        <button data-op="setVanHanhShelfSubTab" data-tab="RECORD" id="btnVhShelfSubRecord" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📷 Ghi Nhận</button>
+        <button data-op="setVanHanhShelfSubTab" data-tab="LOCATIONS" id="btnVhShelfSubLocations" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗄️ Quầy Kệ</button>
+        <button data-op="setVanHanhShelfSubTab" data-tab="EXPIRY" id="btnVhShelfSubExpiry" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">⏰ Hạn Sử Dụng</button>
+      </div>
+
+      <!-- Sub-tab 1: Ghi Nhận Trên Kệ -->
+      <div id="vanHanhShelfRecordWrap" class="space-y-4">
+        <form id="srForm" data-op-submit="submitShelfRecord" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="relative">
+              <label class="block font-semibold text-gray-600 mb-1">Quầy Kệ *</label>
+              <input id="srShelfLocationInput" data-sdd-list="vhShelfLocationDropdown" data-op-change="resolveShelfLocationInput" autocomplete="off" placeholder="Gõ mã hoặc tên quầy kệ..." class="w-full border p-1.5 rounded" required>
+              <input type="hidden" id="srShelfLocationId">
+              <div id="vhShelfLocationDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã SKU</label>
+              <input id="srSku" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tên Sản Phẩm *</label>
+              <input id="srProductName" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Số Lượng Trên Kệ *</label>
+              <input id="srQuantity" type="number" min="0" step="1" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Hạn Sử Dụng</label>
+              <input id="srExpiryDate" type="date" class="w-full border p-1.5 rounded">
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Ghi Chú</label>
+              <input id="srNote" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <div id="dynamicFieldsContainer_SHELF_RECORD"></div>
+          <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">💾 Lưu Ghi Nhận</button>
+        </form>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border p-2">Quầy Kệ</th>
+                <th class="border p-2">Sản Phẩm</th>
+                <th class="border p-2">SKU</th>
+                <th class="border p-2">Số Lượng</th>
+                <th class="border p-2">Hạn Sử Dụng</th>
+                <th class="border p-2">Thời Gian Ghi Nhận</th>
+              </tr>
+            </thead>
+            <tbody id="vhShelfRecordRecentBody"></tbody>
+          </table>
+        </div>
+        <p class="text-gray-400 text-[11px]">20 ghi nhận gần nhất của siêu thị bạn. Quầy kệ phải chọn từ danh mục đã khai báo ở tab "🗄️ Quầy Kệ" — không gõ tay tên quầy mới ở đây.</p>
+      </div>
+
+      <!-- Sub-tab 2: Quầy Kệ (danh mục) — CHỈ shelfLocationManage/admin thấy được form thêm. -->
+      <div id="vanHanhShelfLocationsWrap" class="hidden space-y-4">
+        <form id="slForm" data-op-submit="submitShelfLocation" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Mã Quầy Kệ *</label>
+              <input id="slCode" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Tên Quầy Kệ *</label>
+              <input id="slName" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Ngành Hàng</label>
+              <input id="slCategory" class="w-full border p-1.5 rounded">
+            </div>
+          </div>
+          <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Quầy Kệ</button>
+        </form>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border p-2">Mã Quầy Kệ</th>
+                <th class="border p-2">Tên Quầy Kệ</th>
+                <th class="border p-2">Ngành Hàng</th>
+                <th class="border p-2">Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="vhShelfLocationsBody"></tbody>
+          </table>
+        </div>
+        <p class="text-gray-400 text-[11px]">Phase 1 MVP: chỉ thêm quầy kệ mới (sửa/ngừng dùng/nhập Excel hàng loạt sẽ bổ sung ở pha sau). Mỗi siêu thị chỉ quản lý được quầy kệ của chính mình.</p>
+      </div>
+
+      <!-- Sub-tab 3: Hạn Sử Dụng -->
+      <div id="vanHanhShelfExpiryWrap" class="hidden space-y-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border p-2">Quầy Kệ</th>
+                <th class="border p-2">Sản Phẩm</th>
+                <th class="border p-2">Số Lượng</th>
+                <th class="border p-2">Hạn Sử Dụng</th>
+                <th class="border p-2">Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="vhShelfExpiryBody"></tbody>
+          </table>
+        </div>
+        <p class="text-gray-400 text-[11px]">Chỉ hiện sản phẩm đã ghi nhận có nhập Hạn Sử Dụng, sắp theo hạn gần nhất lên đầu.</p>
       </div>
     </div>

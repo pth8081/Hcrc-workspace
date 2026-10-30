@@ -1006,6 +1006,17 @@ const CORE_FIELD_MANIFEST = {
     { id: 'vrDescription', label: 'Mô Tả Chi Tiết Hiện Trạng & Lý Do Sửa Chữa', required: false },
     { id: 'vrFile', label: 'Tài Liệu Đính Kèm', required: false }
   ],
+  // SHELF_RECORD: #srForm (Vận Hành > Kiểm Soát Hàng Hóa > Ghi Nhận, Phase 1 MVP 11/2026). srShelfLocationInput
+  // (ô tìm-kiếm-gõ-chọn "sdd*") KHÔNG đưa vào — cùng lý do mọi picker sdd* khác (vsoPersonInChargeInput...)
+  // chưa từng vào diện Biểu Mẫu (ô hiển thị, không phải field lưu trực tiếp — giá trị thật nằm ở hidden
+  // srShelfLocationId).
+  SHELF_RECORD: [
+    { id: 'srProductName', label: 'Tên Sản Phẩm', required: true },
+    { id: 'srSku', label: 'Mã SKU', required: false },
+    { id: 'srQuantity', label: 'Số Lượng Trên Kệ', required: true },
+    { id: 'srExpiryDate', label: 'Hạn Sử Dụng', required: false },
+    { id: 'srNote', label: 'Ghi Chú', required: false }
+  ],
   // OPERATION_WORK_ITEM: #operationWorkItemFormModal (Vận Hành > Siêu Thị > Thực hiện/Nghiệm thu > Thêm
   // Công Việc, dùng CHUNG cho tạo mới lẫn sửa). owiAssignedToPicker (renderPeopleMultiSelect(), div
   // container không phải input/không có <label> RIÊNG bên trong) KHÔNG đưa vào — cùng lý do mọi picker
@@ -1478,6 +1489,7 @@ const FORM_TABS = [
   { key: 'OPERATION_STORE_OPEN', coreKey: 'OPERATION_STORE_OPEN', group: 'OPERATION', label: 'QLDA - Mở Mới Siêu Thị', icon: '🏬', short: 'QLDA - Mở Mới' },
   { key: 'OPERATION_REPAIR', coreKey: 'OPERATION_REPAIR', group: 'OPERATION', label: 'QLDA - Sửa Chữa Siêu Thị', icon: '🔧', short: 'QLDA - Sửa Chữa' },
   { key: 'OPERATION_WORK_ITEM', coreKey: 'OPERATION_WORK_ITEM', group: 'OPERATION', label: 'QLDA - Thêm Công Việc (Thực Hiện/Nghiệm Thu)', icon: '🛠️', short: 'QLDA - Công Việc' },
+  { key: 'SHELF_RECORD', coreKey: 'SHELF_RECORD', group: 'OPERATION', label: 'Vận Hành - Kiểm Soát Hàng Hóa (Ghi Nhận)', icon: '📋', short: 'Kiểm Soát Hàng Hóa' },
   { key: 'TRAINING_CLASS', coreKey: 'TRAINING_CLASS', group: 'TRAINING', label: 'Đào Tạo - Tạo Lớp Học', icon: '🎓', short: 'ĐT - Lớp Học' },
   { key: 'TRAINING_TEST', coreKey: 'TRAINING_TEST', group: 'TRAINING', label: 'Đào Tạo - Ngân Hàng Câu Hỏi', icon: '🧪', short: 'ĐT - Bài Test' },
   { key: 'RECRUITMENT_JOB', coreKey: 'RECRUITMENT_JOB', group: 'RECRUITMENT', label: 'Tuyển Dụng - Đăng Tin', icon: '💼', short: 'TD - Đăng Tin' },
@@ -2588,6 +2600,10 @@ const BUSINESS_MODULES = [
   { key: 'vanHanhOrdersReceipt', label: 'Vận Hành — Đơn Hàng > Duyệt Nhập/Hủy', parent: 'vanHanhOrders' },
   { key: 'vanHanhStoreGroup', label: 'Vận Hành — Siêu Thị', parent: 'vanHanh' },
   { key: 'vanHanhItpriceTab', label: 'Vận Hành — Phê Duyệt Giá Bán Buôn', parent: 'vanHanh' },
+  // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — tab con thứ 4 của Vận Hành (setVanHanhSubTab(), xem
+  // module-vanhanh.js) — chỉ ẩn/hiện sub-tab, KHÔNG liên quan MODULE_ACCESS_GATED_COLLECTIONS phía
+  // server (đó vẫn gác chung ở key 'vanHanh', xem lib/recordViewScope.js).
+  { key: 'vanHanhShelfTab', label: 'Vận Hành — Kiểm Soát Hàng Hóa', parent: 'vanHanh' },
   // CẤP 3 "tab cháu" (4 tab lồng trong "🏬 Siêu Thị" KHÔNG có checkbox module-access riêng nào trước
   // đây — ESTIMATE/EXECUTION/ACCEPTANCE/REPORT, xem setOperationStoreSubTab() ở module-vanhanh.js). ĐÂY
   // LÀ FIX TRỰC TIẾP cho lỗi người dùng báo cáo 10/2026: user chỉ được cấp quyền "Công Việc" (EXECUTION)/
@@ -5668,6 +5684,10 @@ async function initDatabase(loggingInUser, opts) {
     DB.operationWorkItems = data.operationWorkItems || [];
     // Kỳ Thực Hiện — mỗi hồ sơ Mở mới/Sửa chữa có danh sách kỳ riêng (dbo.Records, qua engine chung).
     DB.operationExecutionPeriods = data.operationExecutionPeriods || [];
+    // Kiểm Soát Hàng Hóa (Vận Hành, Phase 1 MVP, 11/2026) — danh mục quầy kệ + ghi nhận trên kệ, cả 2
+    // đều dept-scoped (đã lọc đúng phạm vi ở server, xem lib/recordViewScope.js).
+    DB.shelfLocations = data.shelfLocations || [];
+    DB.shelfRecords = data.shelfRecords || [];
 
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];
@@ -10254,6 +10274,11 @@ function applyNavVisibility(user) {
   document.getElementById('btnOperationStoreNav').classList.toggle('hidden', !canAccessOperationSubTab(user, 'STORE'));
   document.getElementById('btnChecklistNav').classList.toggle('hidden', !canAccessChecklistModule(user));
   document.getElementById('btnVanHanhItPriceNav').classList.toggle('hidden', !canAccessVanHanhItPriceNav(user));
+  // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — cùng khuôn 3 nút Vận Hành ngay trên: hiện nút shortcut
+  // nếu có ÍT NHẤT 1 trong 3 quyền chi tiết của tính năng này (không cần hasModuleAccess('vanHanhShelfTab')
+  // riêng — setVanHanhSubTab() đã tự gác lại đúng Khối 0 khi bấm vào).
+  document.getElementById('btnVanHanhShelfNav').classList.toggle('hidden',
+    !(user.perms?.admin || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage || user.perms?.shelfReportViewAll));
   updateVanHanhNavVisibility();
   document.getElementById('muaHangNavWrap').classList.toggle('hidden', !canAccessPurchasingModule(user));
   document.getElementById('btnMuaHangItPriceNav').classList.toggle('hidden', !canAccessMuaHangItPriceNav(user));
@@ -10796,7 +10821,8 @@ function updateVanHanhNavVisibility() {
   const storeVisible = !document.getElementById('btnOperationStoreNav').classList.contains('hidden');
   const checklistVisible = !document.getElementById('btnChecklistNav').classList.contains('hidden');
   const itPriceVisible = !document.getElementById('btnVanHanhItPriceNav').classList.contains('hidden');
-  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible);
+  const shelfVisible = !document.getElementById('btnVanHanhShelfNav').classList.contains('hidden');
+  document.getElementById('vanHanhNavWrap').classList.toggle('hidden', !orderVisible && !storeVisible && !checklistVisible && !itPriceVisible && !shelfVisible);
 }
 function toggleVanHanhDropdown(e) {
   e.stopPropagation();
@@ -11893,7 +11919,11 @@ function canAccessOperationModule(user) {
     // itPriceProposeCreateWholesale (10/2026, đợt tách Phê Duyệt Giá Bán Buôn sang Vận Hành) — người chỉ
     // có quyền đề xuất giá bán buôn (VD nhân viên Marketing, KHÔNG có bất kỳ quyền Đơn Hàng/Mở Mới/Sửa
     // Chữa Siêu Thị nào) vẫn phải vào được tab để thấy sub-tab "Phê Duyệt Giá Bán Buôn".
-    || user.perms?.itPriceProposeCreateWholesale) return true;
+    || user.perms?.itPriceProposeCreateWholesale
+    // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — người chỉ có quyền ghi nhận/quản lý quầy kệ/xem báo
+    // cáo (VD nhân viên quầy kệ, KHÔNG có bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa/Giá Buôn nào) vẫn phải
+    // vào được tab Vận Hành để thấy sub-tab "Kiểm Soát Hàng Hóa".
+    || user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage || user.perms?.shelfReportViewAll) return true;
   // LỖI ĐÃ VÁ (10/2026, đối xứng bản vá canAccessPurchasingModule() ở trên cho Bán Buôn): người CHỈ là
   // approver theo mức Margin/Chiết Khấu (itPriceTierWorkflows) hoặc người có quyền xét Từ Chối Khẩn
   // Wholesale, không giữ bất kỳ quyền Đơn Hàng/Mở Mới/Sửa Chữa Siêu Thị nào, vẫn phải vào được tab để

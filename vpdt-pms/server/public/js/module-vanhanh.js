@@ -128,9 +128,10 @@ let activeVanHanhSubTab = 'ORDERS';
 const VAN_HANH_SUBTAB_TO_KIND = { ORDERS: 'operationOrders' };
 
 function setVanHanhSubTab(subTab) {
-  // Mục 0 (10/2026): AND thêm checkbox vanHanhOrders/vanHanhStoreGroup/vanHanhItpriceTab.
-  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab' };
-  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
+  // Mục 0 (10/2026): AND thêm checkbox vanHanhOrders/vanHanhStoreGroup/vanHanhItpriceTab. SHELF (Kiểm
+  // Soát Hàng Hóa, Phase 1 MVP 11/2026) thêm vanHanhShelfTab, cùng khuôn.
+  const vhKeyMap = { ORDERS: 'vanHanhOrders', STORE: 'vanHanhStoreGroup', ITPRICE: 'vanHanhItpriceTab', SHELF: 'vanHanhShelfTab' };
+  const vhTabOrder = ['ORDERS', 'STORE', 'ITPRICE', 'SHELF'].map(k => [k, hasModuleAccess(currentUser, vhKeyMap[k])]);
   const curVhTab = vhTabOrder.find(([k]) => k === subTab);
   if (!curVhTab || !curVhTab[1]) {
     // LỖI ĐÃ VÁ (rà soát v24.74→v24.81, 11/2026, mức Cao — cùng lớp "stuck-fallback" đã vá ở
@@ -147,7 +148,9 @@ function setVanHanhSubTab(subTab) {
     ['ORDERS', 'vanHanhOrdersWrap', 'btnVanHanhSubOrders'],
     ['STORE', 'vanHanhStoreWrap', 'btnVanHanhSubStore'],
     // "Phê Duyệt Giá Bán Buôn" (10/2026) — chỉ form tạo đề xuất, xem chú thích ở vanHanhItPriceWrap.
-    ['ITPRICE', 'vanHanhItPriceWrap', 'btnVanHanhSubItPrice']
+    ['ITPRICE', 'vanHanhItPriceWrap', 'btnVanHanhSubItPrice'],
+    // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — xem setVanHanhShelfSubTab() bên dưới.
+    ['SHELF', 'vanHanhShelfWrap', 'btnVanHanhSubShelf']
   ];
   const vhAllowedMap = Object.fromEntries(vhTabOrder);
   tabs.forEach(([key, wrapId, btnId]) => {
@@ -177,7 +180,180 @@ function setVanHanhSubTab(subTab) {
     setOperationStoreSubTab(activeOperationStoreSubTab);
   } else if (subTab === 'ITPRICE') {
     enterVanHanhItPriceForm();
+  } else if (subTab === 'SHELF') {
+    setVanHanhShelfSubTab(activeVanHanhShelfSubTab);
   }
+}
+
+// ===== "📋 Kiểm Soát Hàng Hóa" — Phase 1 MVP (11/2026). 3 sub-tab cấp 2: Ghi Nhận (mọi người có
+// shelfRecordCreate)/Quầy Kệ (CHỈ shelfLocationManage — quản lý danh mục quầy kệ)/Hạn Sử Dụng (mọi
+// người). CHƯA có ở Phase 1 (để pha sau, chờ xác nhận nguồn tồn kho hệ thống + mẫu response API):
+// Đối Chiếu Tồn Kho, Ngưỡng Tồn & Email, quét mã vạch camera, sửa/ngừng dùng quầy kệ (chỉ Thêm+Xem ở
+// MVP này), nhập Excel danh mục quầy kệ (chỉ thêm tay từng dòng ở MVP này). =====
+let activeVanHanhShelfSubTab = 'RECORD';
+function canManageShelfLocationsClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
+}
+function canCreateShelfRecordClient(user) {
+  return !!(user?.perms?.admin || user?.perms?.shelfRecordCreate);
+}
+function setVanHanhShelfSubTab(tab) {
+  const tabs = [
+    ['RECORD', 'vanHanhShelfRecordWrap', 'btnVhShelfSubRecord', () => true],
+    ['LOCATIONS', 'vanHanhShelfLocationsWrap', 'btnVhShelfSubLocations', canManageShelfLocationsClient],
+    ['EXPIRY', 'vanHanhShelfExpiryWrap', 'btnVhShelfSubExpiry', () => true]
+  ];
+  const found = tabs.find(([key]) => key === tab);
+  const stillAllowed = found && found[3](currentUser);
+  if (!stillAllowed) {
+    // Cùng khuôn setOperationStoreSubTab()/setVanHanhSubTab() — không còn sibling nào được phép thì
+    // dừng hẳn (null), không tự ý giữ nguyên tab cũ.
+    const fallback = tabs.find(([, , , allowFn]) => allowFn(currentUser));
+    tab = fallback ? fallback[0] : null;
+  }
+  activeVanHanhShelfSubTab = tab;
+  tabs.forEach(([key, wrapId, btnId, allowFn]) => {
+    const isActive = key === tab;
+    document.getElementById(wrapId).classList.toggle('hidden', !isActive);
+    const btn = document.getElementById(btnId);
+    const visible = allowFn(currentUser);
+    btn.className = `px-3 py-1 rounded text-xs font-bold ${isActive ? 'bg-cyan-700 text-white' : 'bg-gray-200 text-gray-700'}` + (visible ? '' : ' hidden');
+  });
+  if (!tab) return;
+  if (tab === 'RECORD') {
+    populateShelfLocationPicker();
+    renderDynamicInputsForModule('SHELF_RECORD', 'dynamicFieldsContainer_SHELF_RECORD');
+    renderShelfRecordRecentList();
+  } else if (tab === 'LOCATIONS') {
+    renderShelfLocationsList();
+  } else if (tab === 'EXPIRY') {
+    renderShelfExpiryGroups();
+  }
+}
+
+// sdd* picker (xem CLAUDE.md "Ô tìm-kiếm-gõ-chọn") — CHỈ chọn từ DB.shelfLocations ĐÃ khai báo (không
+// ghi tay tên quầy mới ở màn Ghi Nhận), để báo cáo tiến độ kiểm hằng ngày (pha sau) đếm đúng trên tổng
+// số quầy cố định.
+function populateShelfLocationPicker() {
+  sddSetOptions('vhShelfLocationDropdown', (DB.shelfLocations || [])
+    .filter(s => s.active !== false)
+    .map(s => ({ value: `${s.code} — ${s.name}`, label: `${s.code} — ${s.name}` })));
+}
+function resolveShelfLocationInput() {
+  const text = document.getElementById('srShelfLocationInput').value.trim();
+  const match = (DB.shelfLocations || []).find(s => s.active !== false && `${s.code} — ${s.name}` === text);
+  document.getElementById('srShelfLocationId').value = match ? match.id : '';
+}
+async function submitShelfRecord(e) {
+  e.preventDefault();
+  if (!canCreateShelfRecordClient(currentUser)) return alert('⛔ Bạn không có quyền ghi nhận trên kệ!');
+  const shelfLocationId = document.getElementById('srShelfLocationId').value;
+  if (!shelfLocationId) return alert('Vui lòng chọn đúng quầy kệ từ danh sách gợi ý (gõ mã hoặc tên để tìm)!');
+  const productName = document.getElementById('srProductName').value.trim();
+  if (!productName) return alert('Vui lòng nhập Tên Sản Phẩm!');
+  const sku = document.getElementById('srSku').value.trim();
+  const quantity = Number(document.getElementById('srQuantity').value);
+  if (!Number.isFinite(quantity) || quantity < 0) return alert('Số lượng không hợp lệ (phải là số không âm)!');
+  const expiryDate = document.getElementById('srExpiryDate').value;
+  const note = document.getElementById('srNote').value.trim();
+
+  let customData;
+  try {
+    customData = await collectDynamicFieldsData('SHELF_RECORD');
+  } catch (err) {
+    return alert(`⛔ ${err.message}`);
+  }
+
+  const payload = { shelfLocationId: Number(shelfLocationId), productName, sku, quantity, expiryDate, note, customData };
+  let newItem;
+  try {
+    const result = await callCreateAction('shelfRecords', payload);
+    newItem = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.shelfRecords.unshift(newItem);
+  logSystemAction('SHELF_RECORD', 'CREATE', `Ghi nhận trên kệ [${newItem.shelfLocationCode} - ${productName}, SL ${quantity}]`, 'SUCCESS', '');
+  alert('✅ Đã lưu ghi nhận trên kệ!');
+  document.getElementById('srForm').reset();
+  document.getElementById('srShelfLocationId').value = '';
+  renderShelfRecordRecentList();
+}
+// Danh sách ghi nhận gần đây CỦA ĐÚNG siêu thị mình (DB.shelfRecords đã được server lọc đúng dept —
+// xem lib/recordViewScope.js) — sắp theo id giảm dần (id = Date.now() lúc tạo, tương đương thời gian).
+function renderShelfRecordRecentList() {
+  const tbody = document.getElementById('vhShelfRecordRecentBody');
+  if (!tbody) return;
+  const items = [...(DB.shelfRecords || [])].sort((a, b) => b.id - a.id).slice(0, 20);
+  tbody.innerHTML = items.length ? items.map(r => `
+    <tr class="border-b">
+      <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
+      <td class="p-2">${escapeHtml(r.productName || '')}</td>
+      <td class="p-2">${escapeHtml(r.sku || '')}</td>
+      <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
+      <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
+      <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
+    </tr>`).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+}
+
+// ===== "🗄️ Quầy Kệ" — danh mục quầy kệ CỦA ĐÚNG siêu thị mình. Phase 1 MVP: CHỈ Thêm + Xem (sửa/ngừng
+// dùng/nhập Excel để pha sau). =====
+async function submitShelfLocation(e) {
+  e.preventDefault();
+  if (!canManageShelfLocationsClient(currentUser)) return alert('⛔ Bạn không có quyền quản lý Danh Mục Quầy Kệ!');
+  const shelfCode = document.getElementById('slCode').value.trim();
+  if (!shelfCode) return alert('Vui lòng nhập Mã Quầy Kệ!');
+  const name = document.getElementById('slName').value.trim();
+  if (!name) return alert('Vui lòng nhập Tên Quầy Kệ!');
+  const category = document.getElementById('slCategory').value.trim();
+  const payload = { shelfCode, name, category };
+  let newItem;
+  try {
+    const result = await callCreateAction('shelfLocations', payload);
+    newItem = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.shelfLocations.unshift(newItem);
+  logSystemAction('SHELF_LOCATION', 'CREATE', `Thêm quầy kệ [${newItem.code} - ${name}]`, 'SUCCESS', newItem.code);
+  alert('✅ Đã thêm quầy kệ!');
+  document.getElementById('slForm').reset();
+  renderShelfLocationsList();
+  populateShelfLocationPicker();
+}
+function renderShelfLocationsList() {
+  const tbody = document.getElementById('vhShelfLocationsBody');
+  if (!tbody) return;
+  const items = [...(DB.shelfLocations || [])].sort((a, b) => a.code.localeCompare(b.code));
+  tbody.innerHTML = items.length ? items.map(s => `
+    <tr class="border-b">
+      <td class="p-2 font-semibold">${escapeHtml(s.code)}</td>
+      <td class="p-2">${escapeHtml(s.name)}</td>
+      <td class="p-2 text-gray-500">${escapeHtml(s.category || '')}</td>
+      <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Đang dùng</span></td>
+    </tr>`).join('') : `<tr><td colspan="4" class="p-3 text-center text-gray-400">Chưa khai báo quầy kệ nào</td></tr>`;
+}
+
+// ===== "⏰ Hạn Sử Dụng" — lọc DB.shelfRecords (đã có hạn sử dụng) thành 3 nhóm, tính phía client từ dữ
+// liệu đã tải (không cần route riêng ở Phase 1 MVP). =====
+function renderShelfExpiryGroups() {
+  const tbody = document.getElementById('vhShelfExpiryBody');
+  if (!tbody) return;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const items = (DB.shelfRecords || []).filter(r => r.expiryDate);
+  const rows = items.map(r => {
+    const exp = new Date(r.expiryDate); exp.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((exp - now) / 86400000);
+    let badge;
+    if (diffDays < 0) badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">Đã hết hạn</span>`;
+    else if (diffDays <= 7) badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">Còn ${diffDays} ngày</span>`;
+    else badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Còn hạn</span>`;
+    return { r, diffDays, badge };
+  }).sort((a, b) => a.diffDays - b.diffDays);
+  tbody.innerHTML = rows.length ? rows.map(({ r, badge }) => `
+    <tr class="border-b">
+      <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
+      <td class="p-2">${escapeHtml(r.productName || '')}</td>
+      <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
+      <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
+      <td class="p-2">${badge}</td>
+    </tr>`).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
 }
 
 // ===== Cấp lồng thứ 2 trong tab "🏬 Siêu Thị" — Mở mới/Sửa chữa (đổi tên, giữ nguyên logic hiện có) +

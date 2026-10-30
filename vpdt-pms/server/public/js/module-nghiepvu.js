@@ -49,6 +49,7 @@ const NGHIEP_VU_NAV = [
   { group: 'Vận Hành', items: [
     { key: 'vanHanh', icon: '⚙️', label: 'Đơn Hàng & Mở Mới/Sửa Chữa Siêu Thị' },
     { key: 'checklist', icon: '✅', label: 'Checklist Đánh Giá Siêu Thị' },
+    { key: 'vanHanhShelf', icon: '📋', label: 'Kiểm Soát Hàng Hóa' },
   ]},
   { group: 'Nhân Sự', items: [
     { key: 'orgChart', icon: '🌳', label: 'Cơ Cấu Tổ Chức' },
@@ -1112,6 +1113,30 @@ const NGHIEP_VU_DOCS = {
       { label: '🗑️ Xoá — chỉ Quản Trị Viên', text: 'nút Xoá chỉ Quản Trị Viên (quyền cao nhất) mới thấy được, ở mọi trạng thái — nếu mẫu đã có người nộp bài thì nút này sẽ bị khoá kèm gợi ý dùng "⏸️ Dừng" thay thế, để không làm mất dữ liệu báo cáo cũ.' },
       { label: 'Sửa lại phản hồi/giải trình (9/2026)', text: 'siêu thị (checklist Kiểm Soát) gõ nhầm hoặc muốn bổ sung phản hồi đã gửi thì bấm "✏️ Sửa" ngay cạnh phản hồi cũ ở tab "📣 Kết Quả & Phản Hồi" — nội dung mới GHI ĐÈ nội dung cũ, không lưu lịch sử các lần sửa trước.' },
       { label: 'Admin test mẫu (11/2026)', text: 'admin KHÔNG tự động là "Kiểm Soát Viên thật" nữa — nếu chưa được cấp quyền tường minh, admin thấy riêng 1 khối "🧪 Test Checklist" ở tab Thực Hiện để tự chọn bất kỳ siêu thị nào test mẫu vừa tạo (tạo dữ liệu THẬT, nên xoá sau khi test xong).' },
+    ] },
+  },
+  // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — nội dung 2 quy trình (vận hành hàng ngày + khai báo/
+  // cấu hình) chuyển thể từ mục "Quy trình nghiệp vụ" trong Claude Doc "Kiểm Soát Hàng Hóa — Mô tả
+  // nghiệp vụ" đã trình người dùng xác nhận trước khi code.
+  vanHanhShelf: {
+    icon: '📋', title: 'Kiểm Soát Hàng Hóa', badge: 'Phase 1 MVP',
+    desc: 'Mỗi siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn sử dụng, dùng chung tài khoản đăng nhập hiện có. Phase 1 MVP: CHƯA có Đối Chiếu Tồn Kho Hệ Thống/Ngưỡng Tồn & Email/quét mã vạch camera (chờ xác nhận nguồn tồn kho hệ thống) — để pha sau.',
+    flow: { ariaLabel: 'Quy trình Kiểm Soát Hàng Hóa', chain: [
+      { label: 'Khai báo quầy kệ', sub: 'Cửa hàng trưởng (1 lần/khi có thay đổi)' },
+      { label: 'Ghi nhận trên kệ', sub: 'Chọn quầy kệ đã khai báo, nhập SL + hạn SD', kind: 'approved' },
+      { label: 'Theo dõi hạn sử dụng', sub: 'Tự chia 3 nhóm: hết hạn/cận hạn/còn hạn' },
+      { label: 'Báo cáo', sub: 'Cửa hàng trưởng/Quản lý vùng xem, xuất Excel' },
+    ] },
+    steps: [
+      { role: 'Cửa hàng trưởng/Tổ trưởng', text: 'vào <b>⚙️ Vận Hành</b> (sidebar) → tab <b>"📋 Kiểm Soát Hàng Hóa"</b> → sub-tab "🗄️ Quầy Kệ" → điền Mã + Tên Quầy Kệ → "➕ Thêm Quầy Kệ" (làm 1 lần, hoặc khi siêu thị thay đổi mặt bằng). Chỉ thấy/quản lý được quầy kệ của ĐÚNG siêu thị mình.' },
+      { role: 'Nhân viên quầy kệ', text: 'sub-tab "📷 Ghi Nhận" → gõ mã/tên để chọn Quầy Kệ từ danh sách đã khai báo (không gõ tay tên quầy mới) → nhập Tên Sản Phẩm + Số Lượng + Hạn Sử Dụng (nếu có) → "💾 Lưu Ghi Nhận". Lặp lại cho từng sản phẩm/quầy kệ trong ca.' },
+      { text: 'sub-tab "⏰ Hạn Sử Dụng" — tự liệt kê mọi sản phẩm đã ghi nhận có hạn sử dụng, chia 3 nhóm (Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn), sắp theo hạn gần nhất lên đầu — không cần route riêng, tính ngay từ dữ liệu đã tải.' },
+      { role: 'Quản lý vùng/Ban điều hành', text: 'vào <b>📊 Báo Cáo → ⚙️ Vận Hành → 📋 Kiểm Soát Hàng Hóa</b> — có quyền "Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)" thì chọn được bộ lọc mọi siêu thị; không có quyền này thì tự lọc đúng 1 siêu thị của mình. Xuất Excel bằng nút có sẵn trong màn Báo Cáo.' },
+    ],
+    footer: { left: [
+      { label: 'Chưa có ở Phase 1 MVP', text: 'Đối Chiếu Tồn Kho Hệ Thống (qua API đối tác, cần Mã SDK từng siêu thị), Ngưỡng Tồn & Email cảnh báo tự động, quét mã vạch camera, sửa/ngừng dùng quầy kệ, nhập Excel hàng loạt danh mục quầy kệ — các phần này để pha sau, sau khi xác nhận nguồn dữ liệu tồn kho hệ thống.' },
+    ], right: [
+      { label: 'Offline', text: 'Phase 1 MVP CHƯA hỗ trợ ghi nhận offline (cần có mạng để lưu) — offline-first (lưu tạm trên máy, tự đồng bộ khi có mạng lại) dự kiến bổ sung ở pha sau.' },
     ] },
   },
   orgChart: {

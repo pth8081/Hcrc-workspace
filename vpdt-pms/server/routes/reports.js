@@ -24,6 +24,7 @@ const { sendServerError } = require('../lib/errorResponse');
 const {
   filterDocsForUser, filterSubmissionsForUser, filterPaymentRequestsForUser,
   filterOperationOrdersForUser, filterOperationStoreOpeningsForUser, filterOperationRepairsForUser,
+  filterShelfRecordsForUser,
   filterContractsForUser, filterCarRegsForUser, filterOfficeReqsForUser,
   filterMeetingsForUser, filterMeetingMinutesForUser, filterInternalPostsForUser,
   filterItSupportTicketsForUser, filterLicensesForUser, filterHrFeedbackForUser,
@@ -94,6 +95,9 @@ const REPORT_QUERY_CONFIGS = {
   operationOrders: { filterFn: filterOperationOrdersForUser, needsAppData: true },
   operationStoreOpenings: { filterFn: filterOperationStoreOpeningsForUser, needsAppData: true },
   operationRepairs: { filterFn: filterOperationRepairsForUser, needsAppData: true },
+  // Kiểm Soát Hàng Hóa (Phase 1 MVP, 11/2026) — shelfReportViewAll xem tất cả siêu thị, mặc định chỉ
+  // xem đúng dept mình (filterShelfRecordsForUser không cần appData).
+  shelfRecords: { filterFn: filterShelfRecordsForUser },
   contracts: { filterFn: filterContractsForUser, needsAppData: true },
   carRegs: { filterFn: filterCarRegsForUser, needsAppData: true },
   officeReqs: { filterFn: filterOfficeReqsForUser, needsAppData: true },

@@ -35,7 +35,10 @@ const MEETING_USER = { username: 'meeting1', name: 'NV Phòng Họp', dept: 'V�
 // vanHanhOrders (cha của 4 checkbox Store/Ho/Report/Receipt) giữ MỞ — chỉ khoá 4 checkbox cháu, để vào
 // được tab ORDERS và gọi đúng setOperationOrderSubTab() (không bị chặn sớm hơn ở setVanHanhSubTab()).
 const OPORDER_USER = { username: 'oporder1', name: 'NV Đơn Hàng', dept: 'Vận Hành', perms: { operationOrderReportView: true, moduleAccess: { vanHanhOrdersStore: false, vanHanhOrdersHo: false, vanHanhOrdersReport: false, vanHanhOrdersReceipt: false } } };
-const VANHANH_USER = { username: 'vanhanh1', name: 'NV Vận Hành', dept: 'Vận Hành', perms: { operationOrderReportView: true, moduleAccess: { vanHanhOrders: false, vanHanhStoreGroup: false, vanHanhItpriceTab: false } } };
+// vanHanhShelfTab: false (11/2026, đợt thêm "Kiểm Soát Hàng Hóa" — sub-tab thứ 4 của Vận Hành) — PHẢI
+// tắt luôn cùng 3 checkbox cũ, nếu không setVanHanhSubTab() sẽ fallback sang tab SHELF vẫn còn mở thay
+// vì về null, không còn đúng kịch bản "cả 4 checkbox con đều tắt" mà test này mô tả.
+const VANHANH_USER = { username: 'vanhanh1', name: 'NV Vận Hành', dept: 'Vận Hành', perms: { operationOrderReportView: true, moduleAccess: { vanHanhOrders: false, vanHanhStoreGroup: false, vanHanhItpriceTab: false, vanHanhShelfTab: false } } };
 const PERIODIC_USER = { username: 'periodic1', name: 'NV Báo Cáo Định Kỳ', dept: 'Vận Hành', perms: { reportEntryCreate: true, moduleAccess: { periodicReportEntry: false, periodicReportPeriods: false, periodicReportAggregate: false, periodicReportPublished: false } } };
 const UNIFORM_USER = { username: 'uniform1', name: 'NV Đồng Phục', dept: 'Vận Hành', perms: { uniformManage: true, moduleAccess: { uniformPeriods: false, uniformStore: false, uniformStock: false, uniformDashboard: false } } };
 const MUAHANG_USER = { username: 'muahang1', name: 'NV Mua Hàng', dept: 'Vận Hành', perms: { rebateTermManage: true, moduleAccess: { muaHangBas: false, muaHangReport: false, muaHangItprice: false } } };
@@ -115,7 +118,7 @@ async function main() {
       assert(state2.listHidden && state2.reportHidden && state2.receiptHidden, 'Mọi panel con Đơn Hàng phải ẩn');
     });
 
-    await run.run('setVanHanhSubTab(): activeVanHanhSubTab=null khi cả 3 checkbox con đều tắt, mọi panel ẩn', async () => {
+    await run.run('setVanHanhSubTab(): activeVanHanhSubTab=null khi cả 4 checkbox con đều tắt, mọi panel ẩn', async () => {
       await loginAs(page, VANHANH_USER);
       await page.evaluate(() => { switchTab('vanHanh'); });
       const state2 = await page.evaluate(() => {

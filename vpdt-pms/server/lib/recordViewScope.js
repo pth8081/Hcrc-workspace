@@ -948,6 +948,27 @@ function filterOperationRepairsForUser(items, user, appData) {
     .filter(o => canViewOperationRepair(user, o, appData))
     .map(o => redactOperationEstimateItemsToOwnedScope(user, 'OPERATION_REPAIR', o, appData));
 }
+// Kiểm Soát Hàng Hóa (Vận Hành, Phase 1 MVP, 11/2026) — shelfLocations (danh mục quầy kệ)/shelfRecords
+// (ghi nhận trên kệ) đều dept-scoped THEO ĐÚNG SIÊU THỊ (dept = tên siêu thị, forceOwnDept:true ở
+// lib/createValidation.js nên record.dept luôn = user.dept lúc tạo, không tin client gửi lên). Mặc định
+// chỉ xem được đúng siêu thị mình — shelfReportViewAll (Quản lý vùng/Ban điều hành) xem được TẤT CẢ,
+// cùng khuôn operationStoreReportView ở canViewOperationStoreOpening() phía trên.
+function canViewShelfLocation(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.shelfReportViewAll) return true;
+  return item.dept === user.dept;
+}
+function filterShelfLocationsForUser(items, user) {
+  return (items || []).filter(o => canViewShelfLocation(user, o));
+}
+function canViewShelfRecord(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.shelfReportViewAll) return true;
+  return item.dept === user.dept;
+}
+function filterShelfRecordsForUser(items, user) {
+  return (items || []).filter(o => canViewShelfRecord(user, o));
+}
 // operationExecutionPeriods: mirror ĐÚNG phạm vi xem của hồ sơ NGUỒN (operationStoreOpenings/
 // operationRepairs) — 1 kỳ chỉ nên lộ cho đúng người xem được hồ sơ mà kỳ đó thuộc về.
 function canViewOperationExecutionPeriod(user, item, appData) {
@@ -1657,7 +1678,11 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // route TẠO MỚI + GET /api/data zero-out đúng (đã dời thứ tự lọc operationWorkItems/
   // operationExecutionPeriods sang SAU vòng lặp Khối 0 ở routes/data.js để không dùng nhầm
   // operationStoreOpenings/operationRepairs snapshot CHƯA bị zero).
-  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods'],
+  // shelfLocations/shelfRecords (Kiểm Soát Hàng Hóa, Phase 1 MVP 11/2026) — thêm vào ĐÚNG key 'vanHanh'
+  // (không phải key con 'vanHanhShelfTab', đó chỉ là checkbox Khối 0 ẩn/hiện sub-tab, KHÔNG có trong
+  // MODULE_ACCESS_GATED_COLLECTIONS) để tắt moduleAccess.vanHanh zero-out đúng 2 collection này + tự gác
+  // route TẠO MỚI qua COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js), cùng khuôn operationOrders...
+  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'shelfLocations', 'shelfRecords'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -1880,6 +1905,7 @@ module.exports = {
   canViewOperationOrder, filterOperationOrdersForUser,
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
+  canViewShelfLocation, filterShelfLocationsForUser, canViewShelfRecord, filterShelfRecordsForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,
   canViewOnboardingProgress, filterOnboardingProgressForUser,

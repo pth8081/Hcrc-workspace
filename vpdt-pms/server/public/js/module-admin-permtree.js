@@ -263,6 +263,9 @@ function collectPermsFromForm() {
     operationOrderCreate: document.getElementById('pOperationOrderCreate').checked,
     operationStoreOpenCreate: document.getElementById('pOperationStoreOpenCreate').checked,
     operationRepairCreate: document.getElementById('pOperationRepairCreate').checked,
+    shelfRecordCreate: document.getElementById('pShelfRecordCreate').checked,
+    shelfLocationManage: document.getElementById('pShelfLocationManage').checked,
+    shelfReportViewAll: document.getElementById('pShelfReportViewAll').checked,
     // Overhaul quyền Vận Hành > Siêu Thị: 4 quyền tách riêng cũ (operationEstimateCreate/
     // operationExecutionManage/operationAcceptanceManage/operationUseConfirm) đã RÚT GỌN, không còn là
     // checkbox admin gán riêng được nữa — gộp vào luật "toàn quyền quản lý hồ sơ" của 2 quyền
@@ -408,6 +411,9 @@ function populatePermsForm(permsInput) {
   document.getElementById('pOperationOrderCreate').checked = !!perms.operationOrderCreate;
   document.getElementById('pOperationStoreOpenCreate').checked = !!perms.operationStoreOpenCreate;
   document.getElementById('pOperationRepairCreate').checked = !!perms.operationRepairCreate;
+  document.getElementById('pShelfRecordCreate').checked = !!perms.shelfRecordCreate;
+  document.getElementById('pShelfLocationManage').checked = !!perms.shelfLocationManage;
+  document.getElementById('pShelfReportViewAll').checked = !!perms.shelfReportViewAll;
   document.getElementById('pOperationRecordManageAll').checked = !!perms.operationRecordManageAll;
   document.getElementById('pOperationRecordViewAll').checked = !!perms.operationRecordViewAll;
   document.getElementById('pOperationOrderReportView').checked = !!perms.operationOrderReportView;

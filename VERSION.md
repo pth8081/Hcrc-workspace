@@ -1,9 +1,71 @@
 # Phiên bản hiện tại
 
-**28.40** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.41 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Phase 1 MVP (module mới trong Vận Hành)
+
+Yêu cầu người dùng (xem Claude Doc "Kiểm Soát Hàng Hóa — Mô tả nghiệp vụ" đã trình bày + xác nhận trước
+khi code): mỗi siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn sử dụng,
+dùng chung tài khoản đăng nhập hiện có, báo cáo lên cấp vùng/điều hành. Đây là **Phase 1 MVP** — phạm
+vi đã thu hẹp lại, KHÔNG làm ở đợt này (để pha sau, lý do nêu rõ bên dưới):
+
+- **Đối Chiếu Tồn Kho Hệ Thống** (qua API đối tác + Mã SDK từng siêu thị) — chưa có mẫu response API
+  thật để map field, cần người dùng xác nhận trước khi code phần gọi API ngoài.
+- **Ngưỡng Tồn & Email cảnh báo tự động** — phụ thuộc trực tiếp vào Đối Chiếu Tồn Kho ở trên.
+- Quét mã vạch camera (`BarcodeDetector`) — form Ghi Nhận ở MVP này chỉ nhập tay.
+- Offline-first (lưu tạm khi mất mạng, tự đồng bộ lại) — MVP yêu cầu có mạng để ghi nhận.
+- Sửa/ngừng dùng quầy kệ + nhập Excel hàng loạt danh mục quầy kệ — MVP chỉ hỗ trợ Thêm + Xem tay từng
+  dòng; danh mục nhỏ (vài chục quầy/siêu thị) nên chưa cần nhập hàng loạt ngay.
+
+**Đã làm ở Phase 1 MVP này:**
+
+- Tab con thứ 4 "📋 Kiểm Soát Hàng Hóa" trong module Vận Hành (cùng cấp 📦 Đơn Hàng/🏬 QLDA/💲 Phê Duyệt
+  Giá Bán Buôn), 3 sub-tab: 📷 Ghi Nhận (nhập tay SKU/SL/hạn SD, chọn quầy kệ qua ô tìm-kiếm-gõ-chọn
+  "sdd*" — không gõ tay tên quầy mới), 🗄️ Quầy Kệ (danh mục, chỉ Thêm+Xem ở MVP này), ⏰ Hạn Sử Dụng
+  (tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn, tính phía client từ dữ liệu đã tải).
+- 2 collection mới `shelfLocations`/`shelfRecords`, sống trong AppData JSON blob chung (KHÔNG cần sửa
+  `sql/schema.sql` — xem mục Deploy Impact), gác theo key `vanHanh` có sẵn trong
+  `MODULE_ACCESS_GATED_COLLECTIONS` (`lib/recordViewScope.js`).
+- **Chặn store-spoofing**: cả 2 collection đều `forceOwnDept:true` (`lib/createValidation.js`) — dept
+  LUÔN = `user.dept`, không tin `payload.dept` client gửi. `shelfRecords.extraValidate` còn đối chiếu
+  `shelfLocationId` phải thuộc ĐÚNG siêu thị người tạo (chặn tham chiếu quầy kệ siêu thị khác) + phải
+  đang "Đang dùng" (`active !== false`).
+- 3 quyền chi tiết mới: `shelfRecordCreate` (ghi nhận), `shelfLocationManage` (quản lý danh mục quầy
+  kệ siêu thị mình), `shelfReportViewAll` (xem Báo Cáo Kiểm Soát Hàng Hóa TẤT CẢ siêu thị — không có
+  quyền này tự lọc đúng 1 siêu thị của mình) + checkbox Khối 0 `vanHanhShelfTab` (ẩn/hiện sub-tab).
+- 📊 Báo Cáo: entry mới dưới node "Vận Hành" (`REPORT_NAV_TREE`/`REPORT_MODULE_CONFIGS`,
+  `routes/reports.js` REPORT_QUERY_CONFIGS.shelfRecords), xuất Excel dùng route chung
+  `POST /api/admin/export-xlsx`.
+- 📋 Biểu Mẫu: entry `SHELF_RECORD` (`CORE_FIELD_MANIFEST`/`FORM_TABS`, group "Vận Hành" có sẵn).
+- 📘 Hướng Dẫn (tab Nghiệp Vụ, nhóm "Vận Hành"): entry `vanHanhShelf` có `flow` + `steps` click-by-click.
+- Mục 7.x mới trong `deploy/Huong-dan-nghiep-vu.md`.
+
+**File đã sửa/tạo**: `lib/recordViewScope.js`, `lib/createValidation.js`, `routes/data.js`,
+`routes/reports.js`, `public/js/core.js`, `public/js/module-vanhanh.js`, `public/js/module-baocaoquantri.js`,
+`public/js/module-nghiepvu.js`, `public/js/module-admin-permtree.js`, `public/js/module-admin-permgroups.js`,
+`public/fragments/vanHanhSection.html`, `public/fragments/systemSection.html`, `public/index.html`,
+`deploy/Huong-dan-nghiep-vu.md`, `tests/test-shelf-kehang.js` (mới, 13 scenario), sửa 1 fixture lỗi thời
+ở `tests/test-stuck-subtab-fallback-fix.js` (user test Vận Hành thiếu checkbox `vanHanhShelfTab` mới).
+
+**Test**: `tests/test-shelf-kehang.js` 13/13 pass (store-spoofing dept + shelfLocationId, dup-code theo
+đúng phạm vi siêu thị, phân quyền 3 checkbox, filter theo dept/shelfReportViewAll). Regression:
+`test-perm-matrix-client.js` 46/46, `test-muc0-module-access-tree.js` 17/17,
+`test-stuck-subtab-fallback-fix.js` 14/14 (sau khi vá fixture), `test-khoi0-license-uniform-gate.js`
+9/9, `test-permission-batch-oct2026.js` 17/17, `test-operation-store-report-overview.js` 6/6,
+`test-operation-order-report.js` 16/16, `test-collapse-operation-forms.js` 10/10,
+`test-bugfix-batch-nav-ui.js` 15/15, `test-vanhanh-itprice-chitiet-csp.js` 1/1 — tất cả PASS. CSP
+self-check (grep `on[a-z]+=`/` style=`/`javascript:`/`eval(`/`new Function(`) sạch trên toàn bộ file
+mới/sửa. **Không chạy hết 632 file test trong `tests/`** do giới hạn thời gian — đã chạy đủ mọi file
+đụng trực tiếp tới các file dùng chung bị sửa (module-vanhanh.js/canAccessOperationModule/
+MODULE_ACCESS_GATED_COLLECTIONS/PERM_KEY_VN_LABELS).
+
+**Deploy impact**: KHÔNG cần sửa `sql/schema.sql` (2 collection mới sống trong `dbo.AppData` JSON blob
+chung, không có bảng riêng — xác nhận qua `lib/recordStore.js` DEDICATED_TABLES, 2 collection này
+KHÔNG có trong danh sách đó nên tự rơi về đường AppData cũ). KHÔNG thêm biến môi trường/dependency
+mới. Chỉ cần copy code + `pm2 restart` như bình thường.
 
 ## v28.40 (2026-11): API Đối Tác (ExtAuth) — thêm field "email" vào danh bạ đồng bộ
 

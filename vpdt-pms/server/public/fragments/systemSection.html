@@ -2849,6 +2849,23 @@
             <label class="flex items-center gap-2 text-amber-700 font-semibold cursor-pointer">
               <input type="checkbox" id="pItPriceAllowSelfApproveWholesale"> ⚠️ Cho Phép Tự Duyệt/Tự Xử Lý Đề Xuất Giá Bán Buôn Do Chính Mình Tạo
             </label>
+            <!-- "📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — 3 quyền độc lập, cùng tinh thần 3 quyền
+                 tạo đầu mục Đơn Hàng/Mở Mới/Sửa Chữa ở trên: ghi nhận trên kệ (nhân viên quầy kệ), quản
+                 lý danh mục quầy kệ (Cửa hàng trưởng/Tổ trưởng — chỉ của ĐÚNG siêu thị mình, ép bằng
+                 forceOwnDept ở server), xem báo cáo TẤT CẢ siêu thị (Quản lý vùng/Ban điều hành — không
+                 có quyền này thì báo cáo tự lọc đúng 1 siêu thị của mình). -->
+            <p class="text-[11px] text-gray-500 italic pt-1 border-t">📋 Kiểm Soát Hàng Hóa (Phase 1 MVP) — ghi nhận/quản lý quầy kệ/xem báo cáo của siêu thị.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <label class="flex items-center gap-2 text-cyan-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pShelfRecordCreate"> 📷 Ghi Nhận Trên Kệ
+              </label>
+              <label class="flex items-center gap-2 text-emerald-700 font-semibold cursor-pointer">
+                <input type="checkbox" id="pShelfLocationManage"> 🗄️ Quản Lý Danh Mục Quầy Kệ (Siêu Thị Của Mình)
+              </label>
+              <label class="flex items-center gap-2 text-purple-500 font-semibold cursor-pointer">
+                <input type="checkbox" id="pShelfReportViewAll"> 👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)
+              </label>
+            </div>
           </div>
         </details>
 

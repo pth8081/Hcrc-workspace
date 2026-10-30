@@ -1925,6 +1925,80 @@ const CREATE_MODULE_CONFIGS = {
       validateRequiredCustomData(payload.customData, appData?.formTemplates, 'OPERATION_REPAIR');
     }
   },
+  // Kiểm Soát Hàng Hóa (Vận Hành, Phase 1 MVP, 11/2026) — shelfLocations: danh mục quầy kệ CỦA ĐÚNG
+  // siêu thị người tạo (forceOwnDept:true, record.dept luôn = user.dept, không tin dept client gửi —
+  // chặn store-spoofing cùng khuôn operationStoreOpenings/operationRepairs ở trên). Mã quầy kệ chỉ cần
+  // DUY NHẤT trong CÙNG siêu thị (không phải toàn hệ thống như operationOrders.code) — CỐ Ý nhận field
+  // thô từ client là `shelfCode` (KHÔNG phải `code`) để tránh rơi vào khối dup-check TOÀN CỤC của
+  // validateAndPrepareCreate() (chạy TRƯỚC extraValidate, chỉ kiểm `payload.code`) — payload.code chỉ
+  // được GÁN ở cuối extraValidate này (sau khi tự kiểm trùng đúng phạm vi dept), nên không bao giờ bị
+  // khối global đó chặn nhầm 2 siêu thị khác nhau dùng cùng 1 mã quầy kệ.
+  shelfLocations: {
+    dbKey: 'shelfLocations',
+    getScope: () => ({}),
+    forceOwnDept: true,
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.shelfLocationManage) {
+        throw new CreateError(403, 'Bạn không có quyền quản lý Danh Mục Quầy Kệ');
+      }
+      const code = String(payload.shelfCode || '').trim();
+      if (!code) throw new CreateError(400, 'Vui lòng nhập Mã Quầy Kệ');
+      const name = String(payload.name || '').trim();
+      if (!name) throw new CreateError(400, 'Vui lòng nhập Tên Quầy Kệ');
+      payload.name = name;
+      payload.category = String(payload.category || '').trim();
+      // Trùng mã CHỈ chặn trong CÙNG siêu thị (user.dept, vì forceOwnDept ép record.dept = user.dept) —
+      // 2 siêu thị khác nhau được dùng lại cùng mã quầy kệ, không cần unique toàn hệ thống.
+      const isDup = (collection || []).some(it => it.dept === user.dept && it.code === code);
+      if (isDup) throw new CreateError(409, `Mã quầy kệ "${code}" đã tồn tại ở siêu thị của bạn`);
+      payload.code = code;
+      delete payload.shelfCode;
+      payload.active = payload.active !== false;
+    }
+  },
+  // shelfRecords: ghi nhận số lượng + hạn sử dụng thực tế trên 1 quầy kệ — CHỈ được chọn shelfLocationId
+  // từ danh mục ĐÃ khai báo (shelfLocations) CỦA ĐÚNG siêu thị mình (không ghi tay tên quầy mới ở đây),
+  // để báo cáo "Tiến độ kiểm hằng ngày" sau này đếm đúng trên tổng số quầy cố định. forceOwnDept:true
+  // mirror shelfLocations — chặn store-spoofing.
+  shelfRecords: {
+    dbKey: 'shelfRecords',
+    getScope: () => ({}),
+    forceOwnDept: true,
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user, appData) => {
+      if (!user.perms?.admin && !user.perms?.shelfRecordCreate) {
+        throw new CreateError(403, 'Bạn không có quyền ghi nhận trên kệ');
+      }
+      const shelfLocationId = Number(payload.shelfLocationId);
+      const shelfLocation = (appData?.shelfLocations || []).find(s => s.id === shelfLocationId);
+      // Chặn tham chiếu quầy kệ của SIÊU THỊ KHÁC (client có thể gửi shelfLocationId bất kỳ) — chỉ nhận
+      // quầy kệ ĐANG DÙNG (active !== false) thuộc ĐÚNG dept của người tạo (= user.dept, forceOwnDept).
+      if (!shelfLocation || shelfLocation.dept !== user.dept || shelfLocation.active === false) {
+        throw new CreateError(400, 'Quầy kệ không hợp lệ hoặc không thuộc siêu thị của bạn');
+      }
+      payload.shelfLocationId = shelfLocationId;
+      payload.shelfLocationCode = shelfLocation.code;
+      payload.shelfLocationName = shelfLocation.name;
+      const productName = String(payload.productName || '').trim();
+      if (!productName) throw new CreateError(400, 'Vui lòng nhập Tên Sản Phẩm');
+      payload.productName = productName;
+      payload.sku = String(payload.sku || '').trim();
+      const quantity = Number(payload.quantity);
+      if (!Number.isFinite(quantity) || quantity < 0) {
+        throw new CreateError(400, 'Số lượng không hợp lệ (phải là số không âm)');
+      }
+      payload.quantity = quantity;
+      if (payload.expiryDate) {
+        const d = new Date(payload.expiryDate);
+        if (Number.isNaN(d.getTime())) throw new CreateError(400, 'Hạn sử dụng không hợp lệ');
+        payload.expiryDate = d.toISOString();
+      } else {
+        payload.expiryDate = '';
+      }
+      payload.note = String(payload.note || '').trim();
+    }
+  },
   // Vận Hành > "Siêu Thị" > "Thực hiện" — "Kỳ Thực Hiện": mỗi hồ sơ Mở mới/Sửa chữa có DANH SÁCH kỳ
   // RIÊNG (không dùng chung toàn hệ thống như vppPeriods/budgetPeriods), để tách bạch nhiều đợt thi công
   // theo thời gian trên cùng 1 hồ sơ. 2 trạng thái: CHUA_BAT_DAU (mặc định lúc tạo) -> DANG_THUC_HIEN
