@@ -280,6 +280,20 @@ function resolveShelfLocationInput() {
 let shelfSystemInventoryCache = [];
 // Gọi 1 lần mỗi khi vào tab "📷 Ghi Nhận" — 503 (chưa cấu hình API)/404 (siêu thị chưa có Mã Điểm/chưa
 // có dữ liệu) thì ẨN HẲN khối chọn này, KHÔNG báo lỗi gây rối (ghi nhận tay/camera vẫn hoạt động y cũ).
+function renderShelfSystemInventoryPicker(rows, offlineCapNhatLuc) {
+  const wrap = document.getElementById('srSystemInventoryPickerWrap');
+  const noteEl = document.getElementById('srSystemInventoryOfflineNote');
+  shelfSystemInventoryCache = rows;
+  wrap.classList.remove('hidden');
+  sddSetOptions('srSystemInventoryDropdown', rows.map(r => ({
+    value: `${r.maHang} — ${r.tenHang}`, label: `${r.maHang} — ${r.tenHang} (tồn hệ thống ${r.soLuongTon})`
+  })));
+  if (noteEl) {
+    noteEl.textContent = offlineCapNhatLuc
+      ? `🔌 Offline — dữ liệu tồn kho hệ thống cập nhật lúc ${new Date(offlineCapNhatLuc).toLocaleString('vi-VN')}, có thể chưa phải số mới nhất.`
+      : '';
+  }
+}
 async function loadShelfSystemInventoryForRecordPicker() {
   const wrap = document.getElementById('srSystemInventoryPickerWrap');
   if (!wrap) return;
@@ -288,14 +302,20 @@ async function loadShelfSystemInventoryForRecordPicker() {
     if (res.status === 401) return handleSessionExpired();
     if (!res.ok) { wrap.classList.add('hidden'); shelfSystemInventoryCache = []; return; }
     const data = await res.json();
-    shelfSystemInventoryCache = Array.isArray(data.rows) ? data.rows : [];
-    wrap.classList.remove('hidden');
-    sddSetOptions('srSystemInventoryDropdown', shelfSystemInventoryCache.map(r => ({
-      value: `${r.maHang} — ${r.tenHang}`, label: `${r.maHang} — ${r.tenHang} (tồn hệ thống ${r.soLuongTon})`
-    })));
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    renderShelfSystemInventoryPicker(rows, null);
+    cacheShelfSystemInventoryOffline(rows, data.capNhatLuc);
   } catch (err) {
-    wrap.classList.add('hidden');
-    shelfSystemInventoryCache = [];
+    // fetch() throw (không phải response lỗi 503/404 ở trên) = LỖI MẠNG THẬT (cùng cách phân biệt
+    // err instanceof TypeError đã dùng ở trySyncPendingShelfRecords()) — thử dùng bản cache offline gần
+    // nhất trước khi ẩn hẳn khối chọn này.
+    const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
+    if (cached) {
+      renderShelfSystemInventoryPicker(cached.rows, cached.capNhatLuc);
+    } else {
+      wrap.classList.add('hidden');
+      shelfSystemInventoryCache = [];
+    }
   }
 }
 // Chọn xong tự điền Tên Sản Phẩm + gán maHang ẩn — người dùng vẫn sửa lại Tên Sản Phẩm/Số Lượng tay bình
@@ -316,6 +336,35 @@ function isShelfRecordCreatedToday(createdAt) {
 // mọi shelfRecords tạo HÔM NAY có ĐÚNG maHang đó — CÙNG công thức "tổng hôm nay" đã dùng cho Ngưỡng Tồn
 // (jobs/shelfStockThresholdAlert.js), để nhất quán trong toàn tính năng. Mã hàng hệ thống nào không có
 // ghi nhận hôm nay -> trên kệ = 0 (Lệch), không ẩn dòng (người quản lý cần thấy rõ SKU nào CHƯA kiểm).
+function renderShelfReconciliationTable(rows, capNhatLuc, isOffline) {
+  const tbody = document.getElementById('vhShelfReconBody');
+  const noteEl = document.getElementById('shelfReconNote');
+  const todayByMaHang = {};
+  (DB.shelfRecords || []).forEach(r => {
+    if (!r.maHang || !isShelfRecordCreatedToday(r.createdAt)) return;
+    todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
+  });
+  tbody.innerHTML = rows.length ? rows.map(r => {
+    const shelfTotal = todayByMaHang[r.maHang] || 0;
+    const diff = shelfTotal - Number(r.soLuongTon || 0);
+    const badge = diff === 0
+      ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Khớp</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">Lệch ${diff > 0 ? '+' : ''}${diff}</span>`;
+    return `
+    <tr class="border-b">
+      <td class="p-2">${escapeHtml(r.maHang || '')}</td>
+      <td class="p-2">${escapeHtml(r.tenHang || '')}</td>
+      <td class="p-2 text-right">${escapeHtml(String(r.soLuongTon ?? ''))}</td>
+      <td class="p-2 text-right">${escapeHtml(String(shelfTotal))}</td>
+      <td class="p-2">${badge}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có dữ liệu tồn kho hệ thống cho siêu thị này</td></tr>`;
+  if (noteEl) {
+    const asOf = capNhatLuc ? `Tồn kho hệ thống cập nhật lúc ${new Date(capNhatLuc).toLocaleString('vi-VN')}.` : '';
+    const offlinePrefix = isOffline ? '🔌 Offline — dữ liệu có thể chưa phải số mới nhất. ' : '';
+    noteEl.textContent = `${offlinePrefix}${asOf} "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có chọn từ "🔎 Chọn Từ Tồn Kho Hệ Thống" ở tab Ghi Nhận (không tính ghi nhận gõ tay/quét camera tự do).`;
+  }
+}
 async function loadShelfReconciliation() {
   const tbody = document.getElementById('vhShelfReconBody');
   const noteEl = document.getElementById('shelfReconNote');
@@ -331,31 +380,18 @@ async function loadShelfReconciliation() {
       return;
     }
     const rows = Array.isArray(body.rows) ? body.rows : [];
-    const todayByMaHang = {};
-    (DB.shelfRecords || []).forEach(r => {
-      if (!r.maHang || !isShelfRecordCreatedToday(r.createdAt)) return;
-      todayByMaHang[r.maHang] = (todayByMaHang[r.maHang] || 0) + Number(r.quantity || 0);
-    });
-    tbody.innerHTML = rows.length ? rows.map(r => {
-      const shelfTotal = todayByMaHang[r.maHang] || 0;
-      const diff = shelfTotal - Number(r.soLuongTon || 0);
-      const badge = diff === 0
-        ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Khớp</span>`
-        : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">Lệch ${diff > 0 ? '+' : ''}${diff}</span>`;
-      return `
-      <tr class="border-b">
-        <td class="p-2">${escapeHtml(r.maHang || '')}</td>
-        <td class="p-2">${escapeHtml(r.tenHang || '')}</td>
-        <td class="p-2 text-right">${escapeHtml(String(r.soLuongTon ?? ''))}</td>
-        <td class="p-2 text-right">${escapeHtml(String(shelfTotal))}</td>
-        <td class="p-2">${badge}</td>
-      </tr>`;
-    }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có dữ liệu tồn kho hệ thống cho siêu thị này</td></tr>`;
-    if (noteEl && body.capNhatLuc) {
-      noteEl.textContent = `Tồn kho hệ thống cập nhật lúc ${new Date(body.capNhatLuc).toLocaleString('vi-VN')}. "Trên kệ hôm nay" chỉ tính các ghi nhận HÔM NAY có chọn từ "🔎 Chọn Từ Tồn Kho Hệ Thống" ở tab Ghi Nhận (không tính ghi nhận gõ tay/quét camera tự do).`;
-    }
+    renderShelfReconciliationTable(rows, body.capNhatLuc, false);
+    cacheShelfSystemInventoryOffline(rows, body.capNhatLuc);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
+    // fetch() throw = LỖI MẠNG THẬT (không phải response lỗi 503/404 ở trên, đã xử lý riêng) — cùng cách
+    // phân biệt err instanceof TypeError đã dùng ở trySyncPendingShelfRecords(). Lỗi nghiệp vụ (chưa cấu
+    // hình Mã Điểm...) KHÔNG rơi vào đây, luôn hiện đúng thông báo server trả về ở nhánh !res.ok trên.
+    const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
+    if (cached) {
+      renderShelfReconciliationTable(cached.rows, cached.capNhatLuc, true);
+    } else {
+      tbody.innerHTML = `<tr><td colspan="5" class="p-3 text-center text-red-500">Không thể kết nối tới máy chủ</td></tr>`;
+    }
   }
 }
 async function submitShelfRecord(e) {
@@ -652,10 +688,15 @@ function renderShelfExpiryGroups() {
 // ghi IndexedDB) — populateShelfLocationPicker()/renderShelfRecordRecentList() đọc trực tiếp 2 biến này
 // (đồng bộ, không await) thay vì phải await IndexedDB mỗi lần vẽ lại danh sách.
 const SHELF_OFFLINE_DB_NAME = 'hcrcShelfOfflineDb';
-const SHELF_OFFLINE_DB_VERSION = 1;
+// Version 2 (11/2026) — thêm store 'systemInventory' (cache kết quả GET /system-inventory lúc còn
+// online, dùng khi mất mạng cho cả picker "🔎 Chọn Từ Tồn Kho Hệ Thống" và màn "📊 Đối Chiếu") — nâng
+// version để onupgradeneeded chạy lại trên DB v1 đã có từ trước, bổ sung thêm store mới mà KHÔNG mất dữ
+// liệu 2 store cũ (mỗi dòng tạo store đều tự guard bằng objectStoreNames.contains()).
+const SHELF_OFFLINE_DB_VERSION = 2;
 let shelfOfflineDbPromise = null;
 let shelfOfflineLocationsCache = [];
 let shelfOfflinePendingCache = [];
+let shelfOfflineSystemInventoryCache = null; // {rows, capNhatLuc, cachedAt} hoặc null (chưa cache lần nào)
 function openShelfOfflineDb() {
   if (!window.indexedDB) return Promise.reject(new Error('Trình duyệt không hỗ trợ IndexedDB'));
   if (shelfOfflineDbPromise) return shelfOfflineDbPromise;
@@ -666,6 +707,7 @@ function openShelfOfflineDb() {
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
       if (!db.objectStoreNames.contains('cachedLocations')) db.createObjectStore('cachedLocations', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pendingRecords')) db.createObjectStore('pendingRecords', { keyPath: 'clientRecordId' });
+      if (!db.objectStoreNames.contains('systemInventory')) db.createObjectStore('systemInventory', { keyPath: 'key' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -692,10 +734,12 @@ async function ensureShelfOfflineReady() {
     if (storedDept && storedDept.value !== currentUser.dept) {
       await shelfOfflineTx(db, 'cachedLocations', 'readwrite', s => s.clear());
       await shelfOfflineTx(db, 'pendingRecords', 'readwrite', s => s.clear());
+      await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.clear());
     }
     await shelfOfflineTx(db, 'meta', 'readwrite', s => s.put({ key: 'dept', value: currentUser.dept }));
     shelfOfflineLocationsCache = await shelfOfflineTx(db, 'cachedLocations', 'readonly', s => s.getAll()) || [];
     shelfOfflinePendingCache = await shelfOfflineTx(db, 'pendingRecords', 'readonly', s => s.getAll()) || [];
+    shelfOfflineSystemInventoryCache = await shelfOfflineTx(db, 'systemInventory', 'readonly', s => s.get('cache')) || null;
   } catch (err) {
     // IndexedDB không dùng được (trình duyệt cũ/chế độ ẩn danh chặn...) — bỏ qua, màn vẫn hoạt động
     // ONLINE bình thường, chỉ mất khả năng offline (không chặn luồng chính).
@@ -714,6 +758,25 @@ async function cacheShelfLocationsOffline() {
     DB.shelfLocations.forEach(s => store.put(s));
     shelfOfflineLocationsCache = DB.shelfLocations.slice();
   } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
+}
+// Cache lại kết quả GET /system-inventory MỖI LẦN gọi thành công lúc còn online (gọi từ cả
+// loadShelfSystemInventoryForRecordPicker()/loadShelfReconciliation()) — dùng khi mất mạng sau đó, xem
+// getShelfSystemInventoryOfflineFallback(). Chỉ lưu đúng dept hiện tại (ensureShelfOfflineReady() tự xoá
+// khi đổi dept), KHÔNG lẫn dữ liệu siêu thị khác.
+async function cacheShelfSystemInventoryOffline(rows, capNhatLuc) {
+  const entry = { key: 'cache', rows, capNhatLuc, cachedAt: new Date().toISOString() };
+  try {
+    const db = await openShelfOfflineDb();
+    await shelfOfflineTx(db, 'systemInventory', 'readwrite', s => s.put(entry));
+  } catch (err) { /* không chặn luồng chính nếu IndexedDB lỗi — xem ensureShelfOfflineReady() */ }
+  shelfOfflineSystemInventoryCache = entry;
+}
+// Trả về bản cache gần nhất (hoặc null nếu chưa cache lần nào) — CHỈ gọi khi fetch thật sự lỗi MẠNG
+// (navigator.onLine === false hoặc fetch() throw TypeError, cùng cách phân biệt đã dùng ở
+// trySyncPendingShelfRecords()), KHÔNG dùng để che lỗi nghiệp vụ thật (503 chưa cấu hình API/404 chưa có
+// Mã Điểm) — 2 lỗi đó phải hiện ĐÚNG thông báo server trả về, không phải dữ liệu cũ gây hiểu nhầm.
+function getShelfSystemInventoryOfflineFallback() {
+  return shelfOfflineSystemInventoryCache;
 }
 // Lưu tạm 1 ghi nhận vào hàng đợi offline (mất mạng lúc bấm "Lưu Ghi Nhận") — shelfLocationLabel chỉ để
 // HIỆN cho người dùng thấy ngay (tên quầy kệ), KHÔNG phải dữ liệu gửi lên server (server tự tra lại từ
@@ -787,7 +850,11 @@ async function openShelfBarcodeModal() {
     return;
   }
   try {
-    shelfBarcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    // width/height dùng "ideal" (không "exact") — xin độ phân giải cao hơn để đọc mã vạch rõ hơn, nhưng
+    // trình duyệt/thiết bị tự hạ xuống mức hỗ trợ thật nếu camera yếu, không báo lỗi/treo như "exact".
+    shelfBarcodeStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
   } catch (err) {
     statusEl.textContent = `⛔ Không mở được camera (${err.message}) — vui lòng nhập tay Mã SKU.`;
     return;
@@ -847,6 +914,10 @@ function loadZxingScript() {
 function runShelfBarcodeZxingLoop(video, statusEl) {
   try {
     shelfBarcodeZxingReader = new window.ZXing.BrowserMultiFormatReader();
+    // Mặc định ZXing quét cách nhau 500ms/lần (timeBetweenScansMillis) — rút xuống 150ms để bắt mã vạch
+    // nhanh hơn trên Safari iOS/trình duyệt không có BarcodeDetector native (vẫn đủ nhẹ, không treo UI,
+    // vì mỗi lần quét 1 frame ảnh tĩnh, không phải xử lý nặng liên tục).
+    shelfBarcodeZxingReader.timeBetweenScansMillis = 150;
     shelfBarcodeZxingReader.decodeFromVideoElement(video, (result) => {
       if (result) onShelfBarcodeDecoded(result.getText());
     });

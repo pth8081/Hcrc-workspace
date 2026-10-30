@@ -2917,6 +2917,14 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
   Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn & Email/Đối Chiếu Tồn Kho Hệ Thống).
   Phần còn lại có thể làm thêm nếu cần (không bắt buộc): Nhập/Xuất Excel
   riêng cho cột "Mã Điểm" ở Danh Mục Siêu Thị (hiện chỉ nhập tay từng dòng).
+- **Quét mã vạch trên điện thoại** (11/2026): nút 📷 cạnh ô Mã SKU + 2 nút
+  "Đóng"/"✏️ Nhập Tay" trong khung quét đều đủ lớn để bấm tay, có khung ngắm
+  giữa hình để biết đưa mã vạch vào đâu, camera xin độ phân giải cao hơn và
+  quét nhanh hơn trên các máy không hỗ trợ quét sẵn (Safari iOS).
+- **Đối Chiếu/Chọn Từ Tồn Kho Hệ Thống cũng dùng được khi mất mạng** (11/2026):
+  dữ liệu tồn kho hệ thống lấy lần gần nhất lúc còn mạng được lưu tạm trên
+  máy — mất mạng vẫn xem được (có dòng "🔌 Offline — cập nhật lúc..." báo rõ
+  không phải số mới nhất), không phải chờ có mạng mới dùng được 2 màn này.
 
 ### 4.5. Nhân Sự
 

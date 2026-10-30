@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**28.44** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.45** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.45 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Responsive camera mobile + offline cho tồn kho hệ thống
+
+Theo yêu cầu người dùng sau khi dùng thử v28.44: (1) modal quét mã vạch camera chưa thân thiện trên
+điện thoại (nút quá nhỏ, chưa tối ưu độ nhạy quét), (2) màn Đối Chiếu/picker "🔎 Chọn Từ Tồn Kho Hệ
+Thống" không dùng được khi mất mạng dù đã có hạ tầng offline-first cho Ghi Nhận/Quầy Kệ (v28.43).
+
+**File sửa**: `public/js/module-vanhanh.js`, `public/fragments/vanHanhSection.html`,
+`public/tailwind.css` (build lại — bắt buộc mỗi lần thêm class Tailwind mới chưa từng dùng trong repo,
+xem `npm run build:css`). **File mới**: `tests/test-shelf-mobile-and-offline-inventory.js`.
+
+**1) Responsive + độ nhạy camera quét mã vạch**:
+- Nút 📷 (cạnh ô Mã SKU) + 2 nút "Đóng"/"✏️ Nhập Tay" (nút mới, bỏ qua camera) trong modal đều đạt tối
+  thiểu 44x44px (chuẩn touch target) — xác nhận bằng Playwright ở viewport 360x740/414x896.
+- Khung video thêm `max-h-[60vh] object-cover` + khung ngắm (reticle) tĩnh ở giữa, khung modal thêm
+  `max-h-[92vh] overflow-y-auto` — không còn tràn ngang/tràn dọc màn hình điện thoại.
+- `getUserMedia`: thêm `width/height: {ideal: 1920x1080}` (dùng "ideal" không "exact" — thiết bị yếu tự
+  hạ xuống, không lỗi) để đọc mã vạch rõ hơn.
+- ZXing fallback (Safari iOS): `timeBetweenScansMillis` 500ms (mặc định) → 150ms, quét nhanh hơn.
+  BarcodeDetector native đã dùng `requestAnimationFrame` (tối đa tốc độ khung hình sẵn), không cần sửa.
+
+**2) Offline cho dữ liệu tồn kho hệ thống** (IndexedDB `hcrcShelfOfflineDb`, nâng version 1→2, thêm
+store `systemInventory`, cùng cơ chế tự xoá cache khi đổi `dept` đã có): mỗi lần `GET
+/api/shelf-stock/system-inventory` thành công lúc online, cache lại `rows`/`capNhatLuc`. Khi gọi lỗi
+MẠNG THẬT (`fetch()` throw `TypeError`, cùng cách phân biệt đã dùng ở Phần E v28.43) — fallback đọc cache,
+hiện banner "🔌 Offline — dữ liệu cập nhật lúc HH:mm..." ở cả màn Đối Chiếu và picker Ghi Nhận. Lỗi
+NGHIỆP VỤ (503 chưa cấu hình API/404 chưa có Mã Điểm) KHÔNG rơi vào nhánh này — vẫn hiện đúng thông báo
+server trả về, không bị che bởi dữ liệu cũ.
+
+**Test**: `test-shelf-mobile-and-offline-inventory.js` (mới) 8/8 pass. Regression 7 file liên quan
+(`test-shelf-kehang`, `test-shelf-kehang-phase2`, `test-shelf-kehang-offline`, `test-inventory-recon`,
+`test-perm-matrix-client`, `test-muc0-module-access-tree`, `test-stuck-subtab-fallback-fix`) đều PASS.
+CSP sạch.
+
+**Deploy impact**: **PHẢI chạy lại `npm run build:css`** (đã chạy + commit sẵn `public/tailwind.css`
+trong đợt này, nhưng nêu rõ để nhớ quy tắc — thêm class Tailwind MỚI chưa từng dùng mà không build lại
+CSS thì style không áp dụng, dù code đúng). Không sửa `sql/schema.sql`, không thêm biến môi trường/
+dependency mới.
 
 ## v28.44 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Đối Chiếu Kệ & Tồn Kho Hệ Thống (API BRGMART)
 

@@ -833,6 +833,7 @@
             <label class="block font-semibold text-gray-600 mb-1">🔎 Chọn Từ Tồn Kho Hệ Thống (để đối chiếu được)</label>
             <input id="srSystemInventoryInput" data-sdd-list="srSystemInventoryDropdown" data-op-change="resolveShelfSystemInventoryInput" autocomplete="off" placeholder="Gõ mã hàng hoặc tên sản phẩm..." class="w-full border p-1.5 rounded">
             <div id="srSystemInventoryDropdown" class="hidden sdd-dropdown" data-sdd-dropdown></div>
+            <p id="srSystemInventoryOfflineNote" class="text-amber-600 text-[11px] mt-1"></p>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div class="relative">
@@ -845,7 +846,7 @@
               <label class="block font-semibold text-gray-600 mb-1">Mã SKU</label>
               <div class="flex gap-1">
                 <input id="srSku" class="w-full border p-1.5 rounded">
-                <button type="button" data-op="openShelfBarcodeModal" title="Quét mã vạch bằng camera" class="shrink-0 bg-white border px-2.5 rounded hover:bg-gray-50">📷</button>
+                <button type="button" data-op="openShelfBarcodeModal" title="Quét mã vạch bằng camera" class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-white border rounded hover:bg-gray-50 text-base">📷</button>
               </div>
             </div>
             <div>
@@ -1033,11 +1034,21 @@
       <!-- Modal Quét Mã Vạch (Phần D, 11/2026) — BarcodeDetector native hoặc ZXing nạp lười, xem
            openShelfBarcodeModal()/module-vanhanh.js. Tắt camera NGAY khi đóng modal (closeShelfBarcodeModal). -->
       <div id="shelfBarcodeModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg max-w-md w-full p-4 text-xs space-y-3">
+        <div class="bg-white rounded-lg max-w-md w-full max-h-[92vh] overflow-y-auto p-4 text-xs space-y-3">
           <div class="font-bold text-sm">📷 Quét Mã Vạch</div>
-          <video id="shelfBarcodeVideo" class="w-full rounded bg-black" playsinline muted></video>
+          <!-- Khung ngắm (reticle) tĩnh, chỉ để gợi ý vị trí đưa mã vạch vào — không có giá trị động nào
+               nên dùng thẳng class Tailwind tĩnh, không cần data-style/applyDataStyles(). -->
+          <div class="relative rounded overflow-hidden bg-black">
+            <video id="shelfBarcodeVideo" class="w-full max-h-[60vh] object-cover" playsinline muted></video>
+            <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div class="w-[72%] aspect-[3/1] border-2 border-white/90 rounded-lg"></div>
+            </div>
+          </div>
           <p id="shelfBarcodeStatus" class="text-gray-500">Đang mở camera...</p>
-          <button type="button" data-op="closeShelfBarcodeModal" class="text-gray-500 hover:underline">Đóng</button>
+          <div class="flex gap-2">
+            <button type="button" data-op="closeShelfBarcodeModal" class="flex-1 min-h-[44px] border rounded text-gray-700 hover:bg-gray-50">Đóng</button>
+            <button type="button" data-op="closeShelfBarcodeModal" class="flex-1 min-h-[44px] border rounded text-gray-700 hover:bg-gray-50">✏️ Nhập Tay</button>
+          </div>
         </div>
       </div>
     </div>
