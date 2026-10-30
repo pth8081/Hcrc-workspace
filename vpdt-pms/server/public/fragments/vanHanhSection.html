@@ -814,6 +814,7 @@
         <button data-op="setVanHanhShelfSubTab" data-tab="RECORD" id="btnVhShelfSubRecord" class="px-3 py-1 rounded text-xs font-bold bg-cyan-700 text-white">📷 Ghi Nhận</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="LOCATIONS" id="btnVhShelfSubLocations" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🗄️ Quầy Kệ</button>
         <button data-op="setVanHanhShelfSubTab" data-tab="EXPIRY" id="btnVhShelfSubExpiry" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">⏰ Hạn Sử Dụng</button>
+        <button data-op="setVanHanhShelfSubTab" data-tab="THRESHOLD" id="btnVhShelfSubThreshold" class="px-3 py-1 rounded text-xs font-bold bg-gray-200 text-gray-700">🔔 Ngưỡng Tồn</button>
       </div>
 
       <!-- Sub-tab 1: Ghi Nhận Trên Kệ -->
@@ -868,7 +869,7 @@
         <p class="text-gray-400 text-[11px]">20 ghi nhận gần nhất của siêu thị bạn. Quầy kệ phải chọn từ danh mục đã khai báo ở tab "🗄️ Quầy Kệ" — không gõ tay tên quầy mới ở đây.</p>
       </div>
 
-      <!-- Sub-tab 2: Quầy Kệ (danh mục) — CHỈ shelfLocationManage/admin thấy được form thêm. -->
+      <!-- Sub-tab 2: Quầy Kệ (danh mục) — CHỈ shelfLocationManage/admin thấy được form thêm/sửa/nhập Excel. -->
       <div id="vanHanhShelfLocationsWrap" class="hidden space-y-4">
         <form id="slForm" data-op-submit="submitShelfLocation" class="bg-white p-3 rounded border text-xs space-y-3">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -885,7 +886,12 @@
               <input id="slCategory" class="w-full border p-1.5 rounded">
             </div>
           </div>
-          <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Quầy Kệ</button>
+          <div class="flex gap-2">
+            <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Quầy Kệ</button>
+            <button type="button" data-op="openShelfLocationImportModal" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">⬆️ Nhập Excel</button>
+            <a href="/api/shelf-stock/locations/import-template" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50 inline-block">⬇️ Tải Mẫu Excel</a>
+            <button type="button" data-op="exportShelfLocationsExcel" class="bg-white border px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-50">📥 Xuất Excel</button>
+          </div>
         </form>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border">
@@ -895,12 +901,34 @@
                 <th class="border p-2">Tên Quầy Kệ</th>
                 <th class="border p-2">Ngành Hàng</th>
                 <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2"></th>
               </tr>
             </thead>
             <tbody id="vhShelfLocationsBody"></tbody>
           </table>
         </div>
-        <p class="text-gray-400 text-[11px]">Phase 1 MVP: chỉ thêm quầy kệ mới (sửa/ngừng dùng/nhập Excel hàng loạt sẽ bổ sung ở pha sau). Mỗi siêu thị chỉ quản lý được quầy kệ của chính mình.</p>
+        <p class="text-gray-400 text-[11px]">Mỗi siêu thị chỉ quản lý được quầy kệ của chính mình. Mã/Siêu thị không đổi được sau khi tạo — "Ngừng dùng" chỉ ẩn quầy khỏi danh sách chọn ở "Ghi Nhận", không xoá lịch sử đã ghi nhận.</p>
+      </div>
+
+      <!-- Modal Nhập Excel Quầy Kệ -->
+      <div id="slImportModal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-2xl w-full p-4 text-xs space-y-3 max-h-[85vh] overflow-y-auto">
+          <div class="font-bold text-sm">⬆️ Nhập Excel Danh Sách Quầy Kệ</div>
+          <p class="text-gray-500">Tải mẫu Excel (nút "⬇️ Tải Mẫu Excel" ở trên), điền Mã + Tên Quầy Kệ (+ Ngành Hàng tuỳ chọn), rồi chọn file đã điền ở đây để xem trước.</p>
+          <input type="file" id="slImportFile" accept=".xlsx,.xls,.csv" class="w-full border p-1.5 rounded">
+          <button type="button" data-op="parseShelfLocationImportFile" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">Xem Trước</button>
+          <div id="slImportPreviewWrap" class="hidden space-y-2">
+            <div class="overflow-x-auto max-h-64 overflow-y-auto border rounded">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-100"><tr><th class="p-1.5 text-left">Mã</th><th class="p-1.5 text-left">Tên</th><th class="p-1.5 text-left">Ngành Hàng</th><th class="p-1.5 text-left">Trạng Thái</th></tr></thead>
+                <tbody id="slImportPreviewBody"></tbody>
+              </table>
+            </div>
+            <p class="text-gray-400">Chỉ các dòng "Mới" sẽ được thêm — dòng "Đã có" (trùng mã trong siêu thị bạn) sẽ bị bỏ qua.</p>
+            <button type="button" data-op="confirmShelfLocationImport" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">✅ Xác Nhận Thêm</button>
+          </div>
+          <button type="button" data-op="closeShelfLocationImportModal" class="text-gray-500 hover:underline">Đóng</button>
+        </div>
       </div>
 
       <!-- Sub-tab 3: Hạn Sử Dụng -->
@@ -920,5 +948,48 @@
           </table>
         </div>
         <p class="text-gray-400 text-[11px]">Chỉ hiện sản phẩm đã ghi nhận có nhập Hạn Sử Dụng, sắp theo hạn gần nhất lên đầu.</p>
+      </div>
+
+      <!-- Sub-tab 4: Ngưỡng Tồn — bổ sung sau Phase 1 MVP. CHỈ shelfLocationManage/admin thấy được. -->
+      <div id="vanHanhShelfThresholdWrap" class="hidden space-y-4">
+        <form id="stForm" data-op-submit="submitShelfStockThreshold" class="bg-white p-3 rounded border text-xs space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Phạm Vi Áp Dụng *</label>
+              <select id="stScope" class="w-full border p-1.5 rounded">
+                <option value="CATEGORY">Ngành Hàng</option>
+                <option value="SKU">Mã SKU</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Ngành Hàng / Mã SKU *</label>
+              <input id="stScopeValue" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Ngưỡng Tối Thiểu *</label>
+              <input id="stMinQuantity" type="number" min="0" step="1" class="w-full border p-1.5 rounded" required>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-600 mb-1">Email Người Nhận * (phân cách bằng dấu phẩy)</label>
+              <input id="stRecipientEmails" class="w-full border p-1.5 rounded" placeholder="a@hcrc.vn, b@hcrc.vn" required>
+            </div>
+          </div>
+          <button type="submit" class="bg-cyan-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-cyan-700">➕ Thêm Ngưỡng</button>
+        </form>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border p-2">Phạm Vi</th>
+                <th class="border p-2">Ngưỡng Tối Thiểu</th>
+                <th class="border p-2">Email Người Nhận</th>
+                <th class="border p-2">Trạng Thái</th>
+                <th class="border p-2"></th>
+              </tr>
+            </thead>
+            <tbody id="vhShelfThresholdBody"></tbody>
+          </table>
+        </div>
+        <p class="text-gray-400 text-[11px]">Phạm vi áp dụng không đổi được sau khi tạo. Hệ thống tự kiểm hằng ngày, gửi email cảnh báo nếu tổng số lượng ghi nhận trên kệ hôm nay dưới ngưỡng — tính trên dữ liệu "Ghi Nhận Trên Kệ", chưa phải tồn kho hệ thống thật (đang chờ API đối tác).</p>
       </div>
     </div>

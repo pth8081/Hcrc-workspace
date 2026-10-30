@@ -185,11 +185,12 @@ function setVanHanhSubTab(subTab) {
   }
 }
 
-// ===== "📋 Kiểm Soát Hàng Hóa" — Phase 1 MVP (11/2026). 3 sub-tab cấp 2: Ghi Nhận (mọi người có
-// shelfRecordCreate)/Quầy Kệ (CHỈ shelfLocationManage — quản lý danh mục quầy kệ)/Hạn Sử Dụng (mọi
-// người). CHƯA có ở Phase 1 (để pha sau, chờ xác nhận nguồn tồn kho hệ thống + mẫu response API):
-// Đối Chiếu Tồn Kho, Ngưỡng Tồn & Email, quét mã vạch camera, sửa/ngừng dùng quầy kệ (chỉ Thêm+Xem ở
-// MVP này), nhập Excel danh mục quầy kệ (chỉ thêm tay từng dòng ở MVP này). =====
+// ===== "📋 Kiểm Soát Hàng Hóa" — Phase 1 MVP (11/2026) + bổ sung Phần A/B (11/2026, sau khi Phase 1 đã
+// merge): 4 sub-tab cấp 2: Ghi Nhận (mọi người có shelfRecordCreate)/Quầy Kệ (CHỈ shelfLocationManage —
+// quản lý danh mục quầy kệ, giờ có Sửa/Ngừng dùng + Nhập/Xuất Excel)/Hạn Sử Dụng (mọi người)/Ngưỡng Tồn
+// (CHỈ shelfLocationManage — DÙNG LẠI quyền này, không tách quyền riêng, xem lib/createValidation.js).
+// CHƯA có (để pha sau, chờ xác nhận nguồn tồn kho hệ thống + mẫu response API): Đối Chiếu Tồn Kho,
+// quét mã vạch camera, offline-first. =====
 let activeVanHanhShelfSubTab = 'RECORD';
 function canManageShelfLocationsClient(user) {
   return !!(user?.perms?.admin || user?.perms?.shelfLocationManage);
@@ -201,7 +202,8 @@ function setVanHanhShelfSubTab(tab) {
   const tabs = [
     ['RECORD', 'vanHanhShelfRecordWrap', 'btnVhShelfSubRecord', () => true],
     ['LOCATIONS', 'vanHanhShelfLocationsWrap', 'btnVhShelfSubLocations', canManageShelfLocationsClient],
-    ['EXPIRY', 'vanHanhShelfExpiryWrap', 'btnVhShelfSubExpiry', () => true]
+    ['EXPIRY', 'vanHanhShelfExpiryWrap', 'btnVhShelfSubExpiry', () => true],
+    ['THRESHOLD', 'vanHanhShelfThresholdWrap', 'btnVhShelfSubThreshold', canManageShelfLocationsClient]
   ];
   const found = tabs.find(([key]) => key === tab);
   const stillAllowed = found && found[3](currentUser);
@@ -225,9 +227,13 @@ function setVanHanhShelfSubTab(tab) {
     renderDynamicInputsForModule('SHELF_RECORD', 'dynamicFieldsContainer_SHELF_RECORD');
     renderShelfRecordRecentList();
   } else if (tab === 'LOCATIONS') {
+    editingShelfLocationId = null;
     renderShelfLocationsList();
   } else if (tab === 'EXPIRY') {
     renderShelfExpiryGroups();
+  } else if (tab === 'THRESHOLD') {
+    editingShelfStockThresholdId = null;
+    renderShelfStockThresholdsList();
   }
 }
 
@@ -294,8 +300,9 @@ function renderShelfRecordRecentList() {
     </tr>`).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
 }
 
-// ===== "🗄️ Quầy Kệ" — danh mục quầy kệ CỦA ĐÚNG siêu thị mình. Phase 1 MVP: CHỈ Thêm + Xem (sửa/ngừng
-// dùng/nhập Excel để pha sau). =====
+// ===== "🗄️ Quầy Kệ" — danh mục quầy kệ CỦA ĐÚNG siêu thị mình. Bổ sung sau Phase 1 MVP (11/2026): Sửa
+// (name/category/active) qua PATCH /api/shelf-stock/locations/:id (code/dept bất biến) + Nhập/Xuất
+// Excel. =====
 async function submitShelfLocation(e) {
   e.preventDefault();
   if (!canManageShelfLocationsClient(currentUser)) return alert('⛔ Bạn không có quyền quản lý Danh Mục Quầy Kệ!');
@@ -317,17 +324,133 @@ async function submitShelfLocation(e) {
   renderShelfLocationsList();
   populateShelfLocationPicker();
 }
+let editingShelfLocationId = null;
+function enterShelfLocationEditMode(id) {
+  editingShelfLocationId = Number(id);
+  renderShelfLocationsList();
+}
+function cancelShelfLocationEdit() {
+  editingShelfLocationId = null;
+  renderShelfLocationsList();
+}
+async function saveShelfLocationEdit(id) {
+  const numId = Number(id);
+  const name = document.getElementById(`slEditName_${numId}`).value.trim();
+  if (!name) return alert('Vui lòng nhập Tên Quầy Kệ!');
+  const category = document.getElementById(`slEditCategory_${numId}`).value.trim();
+  const active = document.getElementById(`slEditActive_${numId}`).checked;
+  try {
+    const res = await fetch(`/api/shelf-stock/locations/${numId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, category, active })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể lưu thay đổi'}`);
+    const idx = DB.shelfLocations.findIndex(s => s.id === numId);
+    if (idx !== -1) DB.shelfLocations[idx] = body.item;
+    logSystemAction('SHELF_LOCATION', 'UPDATE', `Sửa quầy kệ [${body.item.code} - ${name}]`, 'SUCCESS', body.item.code);
+  } catch (err) { return alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
+  editingShelfLocationId = null;
+  renderShelfLocationsList();
+  populateShelfLocationPicker();
+}
 function renderShelfLocationsList() {
   const tbody = document.getElementById('vhShelfLocationsBody');
   if (!tbody) return;
+  const canManage = canManageShelfLocationsClient(currentUser);
   const items = [...(DB.shelfLocations || [])].sort((a, b) => a.code.localeCompare(b.code));
-  tbody.innerHTML = items.length ? items.map(s => `
+  tbody.innerHTML = items.length ? items.map(s => {
+    if (canManage && editingShelfLocationId === s.id) {
+      return `
+    <tr class="border-b bg-cyan-50">
+      <td class="p-2 font-semibold">${escapeHtml(s.code)}</td>
+      <td class="p-2"><input id="slEditName_${s.id}" value="${escapeHtml(s.name)}" class="w-full border p-1 rounded"></td>
+      <td class="p-2"><input id="slEditCategory_${s.id}" value="${escapeHtml(s.category || '')}" class="w-full border p-1 rounded"></td>
+      <td class="p-2"><label class="inline-flex items-center gap-1"><input type="checkbox" id="slEditActive_${s.id}" ${s.active !== false ? 'checked' : ''}> Đang dùng</label></td>
+      <td class="p-2 whitespace-nowrap">
+        <button type="button" data-op="saveShelfLocationEdit" data-arg0="${s.id}" class="text-cyan-700 font-bold hover:underline mr-2">💾 Lưu</button>
+        <button type="button" data-op="cancelShelfLocationEdit" class="text-gray-500 hover:underline">Hủy</button>
+      </td>
+    </tr>`;
+    }
+    const badge = s.active !== false
+      ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Đang dùng</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Ngừng dùng</span>`;
+    return `
     <tr class="border-b">
       <td class="p-2 font-semibold">${escapeHtml(s.code)}</td>
       <td class="p-2">${escapeHtml(s.name)}</td>
       <td class="p-2 text-gray-500">${escapeHtml(s.category || '')}</td>
-      <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Đang dùng</span></td>
-    </tr>`).join('') : `<tr><td colspan="4" class="p-3 text-center text-gray-400">Chưa khai báo quầy kệ nào</td></tr>`;
+      <td class="p-2">${badge}</td>
+      <td class="p-2">${canManage ? `<button type="button" data-op="enterShelfLocationEditMode" data-arg0="${s.id}" class="text-gray-500 hover:underline">Sửa</button>` : ''}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo quầy kệ nào</td></tr>`;
+}
+function exportShelfLocationsExcel() {
+  const items = [...(DB.shelfLocations || [])].sort((a, b) => a.code.localeCompare(b.code));
+  if (!items.length) return alert('Chưa có quầy kệ nào để xuất.');
+  const columns = [
+    { header: 'Mã Quầy Kệ', key: 'code', width: 20 }, { header: 'Tên Quầy Kệ', key: 'name', width: 32 },
+    { header: 'Ngành Hàng', key: 'category', width: 24 }, { header: 'Trạng Thái', key: 'statusLabel', width: 16 }
+  ];
+  const rows = items.map(s => ({ code: s.code, name: s.name, category: s.category || '', statusLabel: s.active !== false ? 'Đang dùng' : 'Ngừng dùng' }));
+  downloadXlsxFromServer('Danh_Sach_Quay_Ke.xlsx', 'Danh Sách Quầy Kệ', columns, rows);
+}
+
+// ===== Nhập Excel Quầy Kệ — đọc/xem trước qua routes/shelfStock.js (chỉ đọc, KHÔNG ghi), client tự lọc
+// dòng "isNew" rồi gọi callCreateAction('shelfLocations', ...) cho TỪNG dòng (tái dùng dup-check/
+// forceOwnDept đã có ở lib/createValidation.js) — KHÔNG có route "confirm add hàng loạt" riêng. =====
+let shelfLocationImportPreviewItems = [];
+async function openShelfLocationImportModal() {
+  document.getElementById('slImportFile').value = '';
+  document.getElementById('slImportPreviewWrap').classList.add('hidden');
+  shelfLocationImportPreviewItems = [];
+  document.getElementById('slImportModal').classList.remove('hidden');
+}
+function closeShelfLocationImportModal() {
+  document.getElementById('slImportModal').classList.add('hidden');
+}
+async function parseShelfLocationImportFile() {
+  const fileInput = document.getElementById('slImportFile');
+  if (!fileInput.files.length) return alert('Vui lòng chọn file Excel/CSV!');
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  try {
+    const res = await fetch('/api/shelf-stock/locations/parse-import', { method: 'POST', body: formData });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không đọc được file'}`);
+    shelfLocationImportPreviewItems = body.items || [];
+    const tbody = document.getElementById('slImportPreviewBody');
+    tbody.innerHTML = shelfLocationImportPreviewItems.map((it, idx) => `
+      <tr class="border-b">
+        <td class="p-1.5">${escapeHtml(it.code)}</td>
+        <td class="p-1.5">${escapeHtml(it.name)}</td>
+        <td class="p-1.5 text-gray-500">${escapeHtml(it.category || '')}</td>
+        <td class="p-1.5">${it.isNew
+          ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Mới</span>`
+          : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Đã có — bỏ qua</span>`}</td>
+      </tr>`).join('') || `<tr><td colspan="4" class="p-3 text-center text-gray-400">Không có dòng nào</td></tr>`;
+    document.getElementById('slImportPreviewWrap').classList.remove('hidden');
+  } catch (err) { alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
+}
+async function confirmShelfLocationImport() {
+  const newItems = shelfLocationImportPreviewItems.filter(it => it.isNew);
+  if (!newItems.length) return alert('Không có dòng mới nào để thêm.');
+  let added = 0, failed = 0;
+  for (const it of newItems) {
+    try {
+      const result = await callCreateAction('shelfLocations', { shelfCode: it.code, name: it.name, category: it.category });
+      DB.shelfLocations.unshift(result.item);
+      added++;
+    } catch (err) { failed++; }
+  }
+  logSystemAction('SHELF_LOCATION', 'IMPORT', `Nhập Excel quầy kệ — thêm ${added}/${newItems.length} dòng`, failed ? 'WARNING' : 'SUCCESS', '');
+  alert(failed ? `✅ Đã thêm ${added} quầy kệ, ${failed} dòng lỗi (có thể do trùng mã).` : `✅ Đã thêm ${added} quầy kệ!`);
+  closeShelfLocationImportModal();
+  renderShelfLocationsList();
+  populateShelfLocationPicker();
 }
 
 // ===== "⏰ Hạn Sử Dụng" — lọc DB.shelfRecords (đã có hạn sử dụng) thành 3 nhóm, tính phía client từ dữ
@@ -354,6 +477,96 @@ function renderShelfExpiryGroups() {
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
       <td class="p-2">${badge}</td>
     </tr>`).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+}
+
+// ===== "🔔 Ngưỡng Tồn" — bổ sung sau Phase 1 MVP (11/2026). Ngưỡng tồn tối thiểu + email cảnh báo, tính
+// trên shelfRecords đã ghi nhận (KHÔNG cần API tồn kho đối tác — xem jobs/shelfStockThresholdAlert.js).
+// scope/scopeValue BẤT BIẾN sau khi tạo — chỉ Sửa được minQuantity/recipientEmails/active (PATCH
+// /api/shelf-stock/thresholds/:id). DÙNG LẠI quyền shelfLocationManage (canManageShelfLocationsClient). =====
+async function submitShelfStockThreshold(e) {
+  e.preventDefault();
+  if (!canManageShelfLocationsClient(currentUser)) return alert('⛔ Bạn không có quyền quản lý Ngưỡng Tồn!');
+  const scope = document.getElementById('stScope').value;
+  const scopeValue = document.getElementById('stScopeValue').value.trim();
+  if (!scopeValue) return alert(scope === 'SKU' ? 'Vui lòng nhập Mã SKU!' : 'Vui lòng nhập Ngành Hàng!');
+  const minQuantity = Number(document.getElementById('stMinQuantity').value);
+  if (!Number.isFinite(minQuantity) || minQuantity < 0) return alert('Ngưỡng tối thiểu không hợp lệ!');
+  const recipientEmails = document.getElementById('stRecipientEmails').value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!recipientEmails.length) return alert('Vui lòng nhập ít nhất 1 email người nhận (phân cách bằng dấu phẩy)!');
+  const payload = { scope, scopeValue, minQuantity, recipientEmails };
+  let newItem;
+  try {
+    const result = await callCreateAction('shelfStockThresholds', payload);
+    newItem = result.item;
+  } catch (err) { return alert(`⛔ ${err.message}`); }
+  DB.shelfStockThresholds.unshift(newItem);
+  logSystemAction('SHELF_STOCK_THRESHOLD', 'CREATE', `Thêm ngưỡng tồn [${scope === 'SKU' ? 'SKU' : 'Ngành hàng'} ${scopeValue}, min ${minQuantity}]`, 'SUCCESS', '');
+  alert('✅ Đã thêm ngưỡng tồn!');
+  document.getElementById('stForm').reset();
+  renderShelfStockThresholdsList();
+}
+let editingShelfStockThresholdId = null;
+function enterShelfStockThresholdEditMode(id) {
+  editingShelfStockThresholdId = Number(id);
+  renderShelfStockThresholdsList();
+}
+function cancelShelfStockThresholdEdit() {
+  editingShelfStockThresholdId = null;
+  renderShelfStockThresholdsList();
+}
+async function saveShelfStockThresholdEdit(id) {
+  const numId = Number(id);
+  const minQuantity = Number(document.getElementById(`stEditMinQuantity_${numId}`).value);
+  if (!Number.isFinite(minQuantity) || minQuantity < 0) return alert('Ngưỡng tối thiểu không hợp lệ!');
+  const recipientEmails = document.getElementById(`stEditRecipientEmails_${numId}`).value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!recipientEmails.length) return alert('Vui lòng nhập ít nhất 1 email người nhận!');
+  const active = document.getElementById(`stEditActive_${numId}`).checked;
+  try {
+    const res = await fetch(`/api/shelf-stock/thresholds/${numId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ minQuantity, recipientEmails, active })
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể lưu thay đổi'}`);
+    const idx = DB.shelfStockThresholds.findIndex(t => t.id === numId);
+    if (idx !== -1) DB.shelfStockThresholds[idx] = body.item;
+    logSystemAction('SHELF_STOCK_THRESHOLD', 'UPDATE', `Sửa ngưỡng tồn id=${numId}`, 'SUCCESS', '');
+  } catch (err) { return alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
+  editingShelfStockThresholdId = null;
+  renderShelfStockThresholdsList();
+}
+function renderShelfStockThresholdsList() {
+  const tbody = document.getElementById('vhShelfThresholdBody');
+  if (!tbody) return;
+  const items = [...(DB.shelfStockThresholds || [])].sort((a, b) => b.id - a.id);
+  tbody.innerHTML = items.length ? items.map(t => {
+    const scopeLabel = t.scope === 'SKU' ? `SKU: ${t.scopeValue}` : `Ngành hàng: ${t.scopeValue}`;
+    if (editingShelfStockThresholdId === t.id) {
+      return `
+    <tr class="border-b bg-cyan-50">
+      <td class="p-2 font-semibold">${escapeHtml(scopeLabel)}</td>
+      <td class="p-2"><input id="stEditMinQuantity_${t.id}" type="number" min="0" value="${escapeHtml(String(t.minQuantity))}" class="w-24 border p-1 rounded"></td>
+      <td class="p-2"><input id="stEditRecipientEmails_${t.id}" value="${escapeHtml((t.recipientEmails || []).join(', '))}" class="w-full border p-1 rounded"></td>
+      <td class="p-2"><label class="inline-flex items-center gap-1"><input type="checkbox" id="stEditActive_${t.id}" ${t.active !== false ? 'checked' : ''}> Đang áp dụng</label></td>
+      <td class="p-2 whitespace-nowrap">
+        <button type="button" data-op="saveShelfStockThresholdEdit" data-arg0="${t.id}" class="text-cyan-700 font-bold hover:underline mr-2">💾 Lưu</button>
+        <button type="button" data-op="cancelShelfStockThresholdEdit" class="text-gray-500 hover:underline">Hủy</button>
+      </td>
+    </tr>`;
+    }
+    const badge = t.active !== false
+      ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">Đang áp dụng</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Ngừng dùng</span>`;
+    return `
+    <tr class="border-b">
+      <td class="p-2 font-semibold">${escapeHtml(scopeLabel)}</td>
+      <td class="p-2 text-right">${escapeHtml(String(t.minQuantity))}</td>
+      <td class="p-2">${escapeHtml((t.recipientEmails || []).join(', '))}</td>
+      <td class="p-2">${badge}</td>
+      <td class="p-2"><button type="button" data-op="enterShelfStockThresholdEditMode" data-arg0="${t.id}" class="text-gray-500 hover:underline">Sửa</button></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo ngưỡng tồn nào</td></tr>`;
 }
 
 // ===== Cấp lồng thứ 2 trong tab "🏬 Siêu Thị" — Mở mới/Sửa chữa (đổi tên, giữ nguyên logic hiện có) +

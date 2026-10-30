@@ -2835,31 +2835,50 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
     cần mở "Xem/Lập Danh Mục Đầu Tư" đầy đủ chỉ để xem nhanh 1 nhóm công việc
     của 1 hồ sơ.
 
-**"📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026)** — tab con thứ 4 trong Vận
-Hành (cùng cấp Đơn Hàng/QLDA/Phê Duyệt Giá Bán Buôn). Mỗi siêu thị tự ghi
-nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn sử dụng, dùng
-chung tài khoản đăng nhập hiện có (KHÔNG có đăng nhập riêng cho siêu thị).
+**"📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP 11/2026, bổ sung Sửa/Nhập Excel/Ngưỡng
+Tồn 11/2026)** — tab con thứ 4 trong Vận Hành (cùng cấp Đơn Hàng/QLDA/Phê
+Duyệt Giá Bán Buôn). Mỗi siêu thị tự ghi nhận số lượng hàng thực tế trên kệ
+hàng ngày + theo dõi hạn sử dụng, dùng chung tài khoản đăng nhập hiện có
+(KHÔNG có đăng nhập riêng cho siêu thị).
 
-- **3 sub-tab**: "📷 Ghi Nhận" (nhân viên quầy kệ gõ/chọn Quầy Kệ từ danh mục
-  đã khai báo + nhập Tên Sản Phẩm/Mã SKU/Số Lượng/Hạn Sử Dụng), "🗄️ Quầy Kệ"
-  (Cửa hàng trưởng/Tổ trưởng khai báo danh mục quầy kệ của ĐÚNG siêu thị
-  mình — Phase 1 MVP chỉ Thêm + Xem, chưa có Sửa/Ngừng dùng/Nhập Excel hàng
-  loạt), "⏰ Hạn Sử Dụng" (tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn).
+- **4 sub-tab**:
+  - "📷 Ghi Nhận" — nhân viên quầy kệ gõ/chọn Quầy Kệ từ danh mục đã khai
+    báo + nhập Tên Sản Phẩm/Mã SKU/Số Lượng/Hạn Sử Dụng.
+  - "🗄️ Quầy Kệ" — Cửa hàng trưởng/Tổ trưởng khai báo danh mục quầy kệ của
+    ĐÚNG siêu thị mình: Thêm tay, **Sửa** (tên/ngành hàng/trạng thái — mã
+    quầy kệ và siêu thị không đổi được sau khi tạo), **Ngừng dùng** (ẩn
+    khỏi danh sách chọn ở "Ghi Nhận", KHÔNG xoá lịch sử đã ghi nhận), và
+    **Nhập/Xuất Excel** (tải mẫu → điền → xem trước → chỉ dòng "Mới" được
+    thêm, dòng trùng mã trong siêu thị bị bỏ qua).
+  - "⏰ Hạn Sử Dụng" — tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn.
+  - "🔔 Ngưỡng Tồn" (MỚI) — Cửa hàng trưởng/Tổ trưởng khai báo ngưỡng tồn
+    tối thiểu theo Ngành Hàng hoặc Mã SKU + danh sách email nhận cảnh báo
+    (phạm vi áp dụng không đổi được sau khi tạo, chỉ sửa được ngưỡng/email/
+    trạng thái). Hệ thống tự kiểm **hằng ngày** (job chạy mỗi 24h kể từ lúc
+    server khởi động — KHÔNG ghim đúng 07:00 sáng), tính TỔNG số lượng các
+    "Ghi Nhận Trên Kệ" tạo trong ngày cùng siêu thị khớp phạm vi (Ngành
+    Hàng tra qua quầy kệ, hoặc Mã SKU so khớp trực tiếp); nếu dưới ngưỡng
+    (kể cả khi chưa có ghi nhận nào hôm nay, tổng=0) sẽ tự gửi email cảnh
+    báo tới danh sách người nhận đã khai báo. **Đây tính trên dữ liệu "Ghi
+    Nhận Trên Kệ" đã có, CHƯA phải tồn kho hệ thống thật** (phần Đối Chiếu
+    Tồn Kho qua API đối tác vẫn chưa làm, xem bên dưới).
 - **An toàn dữ liệu**: server luôn tự lấy siêu thị (`dept`) từ tài khoản
   đăng nhập, KHÔNG tin bất kỳ mã siêu thị nào client gửi lên — nhân viên 1
-  siêu thị không thể ghi nhận/khai báo quầy kệ cho siêu thị khác, kể cả khi
-  cố ý sửa dữ liệu gửi lên.
-- **3 quyền mới** (Hệ Thống → Phân Quyền → mục "22. Vận Hành"): "📷 Ghi Nhận
-  Trên Kệ" (ghi nhận), "🗄️ Quản Lý Danh Mục Quầy Kệ" (khai báo quầy kệ, chỉ
+  siêu thị không thể ghi nhận/khai báo/sửa quầy kệ hay ngưỡng tồn cho siêu
+  thị khác, kể cả khi cố ý sửa dữ liệu gửi lên.
+- **3 quyền** (Hệ Thống → Phân Quyền → mục "22. Vận Hành", không thêm quyền
+  mới cho Ngưỡng Tồn — dùng lại "🗄️ Quản Lý Danh Mục Quầy Kệ" vì cùng vai
+  trò Cửa hàng trưởng/Tổ trưởng): "📷 Ghi Nhận Trên Kệ" (ghi nhận), "🗄️ Quản
+  Lý Danh Mục Quầy Kệ" (khai báo/sửa/nhập Excel quầy kệ + Ngưỡng Tồn, chỉ
   của siêu thị mình), "👁️ Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)"
   (Quản lý vùng/Ban điều hành — không có quyền này thì Báo Cáo tự lọc đúng 1
   siêu thị của mình).
 - **Báo cáo**: 📊 Báo Cáo → ⚙️ Vận Hành → "📋 Kiểm Soát Hàng Hóa" — xuất Excel
   dùng nút có sẵn trong màn Báo Cáo.
-- **Chưa có ở Phase 1 MVP** (chờ xác nhận nguồn dữ liệu tồn kho hệ thống +
-  mẫu response API thật trước khi làm tiếp ở pha sau): Đối Chiếu Tồn Kho Hệ
-  Thống (qua API đối tác + Mã SDK từng siêu thị), Ngưỡng Tồn & Email cảnh
-  báo tự động, quét mã vạch camera, offline-first (ghi nhận khi mất mạng).
+- **Chưa có** (chờ xác nhận nguồn dữ liệu tồn kho hệ thống + mẫu response
+  API thật trước khi làm tiếp ở pha sau): Đối Chiếu Tồn Kho Hệ Thống (qua
+  API đối tác + Mã SDK từng siêu thị), quét mã vạch camera, offline-first
+  (ghi nhận khi mất mạng).
 
 ### 4.5. Nhân Sự
 

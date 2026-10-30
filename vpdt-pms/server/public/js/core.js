@@ -1017,6 +1017,15 @@ const CORE_FIELD_MANIFEST = {
     { id: 'srExpiryDate', label: 'Hạn Sử Dụng', required: false },
     { id: 'srNote', label: 'Ghi Chú', required: false }
   ],
+  // SHELF_STOCK_THRESHOLD: #stForm (Vận Hành > Kiểm Soát Hàng Hóa > Ngưỡng Tồn, bổ sung sau Phase 1 MVP
+  // 11/2026). scope/scopeValue BẤT BIẾN sau khi tạo (xem lib/createValidation.js) nhưng vẫn là field nhập
+  // tay THẬT lúc tạo, cùng diện Biểu Mẫu như code quầy kệ (slCode) đã có.
+  SHELF_STOCK_THRESHOLD: [
+    { id: 'stScope', label: 'Phạm Vi Áp Dụng', required: true },
+    { id: 'stScopeValue', label: 'Ngành Hàng / Mã SKU', required: true },
+    { id: 'stMinQuantity', label: 'Ngưỡng Tối Thiểu', required: true },
+    { id: 'stRecipientEmails', label: 'Email Người Nhận Cảnh Báo', required: true }
+  ],
   // OPERATION_WORK_ITEM: #operationWorkItemFormModal (Vận Hành > Siêu Thị > Thực hiện/Nghiệm thu > Thêm
   // Công Việc, dùng CHUNG cho tạo mới lẫn sửa). owiAssignedToPicker (renderPeopleMultiSelect(), div
   // container không phải input/không có <label> RIÊNG bên trong) KHÔNG đưa vào — cùng lý do mọi picker
@@ -1490,6 +1499,7 @@ const FORM_TABS = [
   { key: 'OPERATION_REPAIR', coreKey: 'OPERATION_REPAIR', group: 'OPERATION', label: 'QLDA - Sửa Chữa Siêu Thị', icon: '🔧', short: 'QLDA - Sửa Chữa' },
   { key: 'OPERATION_WORK_ITEM', coreKey: 'OPERATION_WORK_ITEM', group: 'OPERATION', label: 'QLDA - Thêm Công Việc (Thực Hiện/Nghiệm Thu)', icon: '🛠️', short: 'QLDA - Công Việc' },
   { key: 'SHELF_RECORD', coreKey: 'SHELF_RECORD', group: 'OPERATION', label: 'Vận Hành - Kiểm Soát Hàng Hóa (Ghi Nhận)', icon: '📋', short: 'Kiểm Soát Hàng Hóa' },
+  { key: 'SHELF_STOCK_THRESHOLD', coreKey: 'SHELF_STOCK_THRESHOLD', group: 'OPERATION', label: 'Vận Hành - Kiểm Soát Hàng Hóa (Ngưỡng Tồn)', icon: '🔔', short: 'Ngưỡng Tồn KSHH' },
   { key: 'TRAINING_CLASS', coreKey: 'TRAINING_CLASS', group: 'TRAINING', label: 'Đào Tạo - Tạo Lớp Học', icon: '🎓', short: 'ĐT - Lớp Học' },
   { key: 'TRAINING_TEST', coreKey: 'TRAINING_TEST', group: 'TRAINING', label: 'Đào Tạo - Ngân Hàng Câu Hỏi', icon: '🧪', short: 'ĐT - Bài Test' },
   { key: 'RECRUITMENT_JOB', coreKey: 'RECRUITMENT_JOB', group: 'RECRUITMENT', label: 'Tuyển Dụng - Đăng Tin', icon: '💼', short: 'TD - Đăng Tin' },
@@ -5688,6 +5698,8 @@ async function initDatabase(loggingInUser, opts) {
     // đều dept-scoped (đã lọc đúng phạm vi ở server, xem lib/recordViewScope.js).
     DB.shelfLocations = data.shelfLocations || [];
     DB.shelfRecords = data.shelfRecords || [];
+    // shelfStockThresholds (bổ sung sau Phase 1 MVP, 11/2026) — mirror 2 dòng trên.
+    DB.shelfStockThresholds = data.shelfStockThresholds || [];
 
     DB.licenses = data.licenses || [];
     DB.licenseTypes = data.licenseTypes || [];

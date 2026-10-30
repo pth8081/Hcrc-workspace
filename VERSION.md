@@ -1,9 +1,69 @@
 # Phiên bản hiện tại
 
-**28.41** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.42** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.42 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Phần A (Sửa/Nhập Excel Quầy Kệ) + Phần B (Ngưỡng Tồn & Email)
+
+Tiếp nối v28.41 (Phase 1 MVP). Yêu cầu người dùng: "làm các phần không liên quan tới API đi" — tức mọi
+phần Phase 1 đã nêu "để pha sau" NGOẠI TRỪ Đối Chiếu Tồn Kho Hệ Thống (vẫn phụ thuộc API đối tác). Phạm
+vi đợt này:
+
+- **Phần A — Quản Lý Quầy Kệ**: thêm nút "Sửa" (tên/ngành hàng/trạng thái Đang dùng↔Ngừng dùng — mã
+  quầy kệ + siêu thị BẤT BIẾN sau khi tạo) qua `PATCH /api/shelf-stock/locations/:id`
+  (`withLockedRecordForCollection`, tự đối chiếu quyền + dept TRONG LOCK, không chỉ ẩn nút ở UI). Thêm
+  Nhập/Xuất Excel: `lib/shelfLocationImport.js`/`routes/shelfLocationImport...` (gộp vào
+  `routes/shelfStock.js`) đọc file THEO DÒNG (`lib/xlsxSafeRead.js`, cùng khuôn
+  `lib/storeCatalogImport.js`) chỉ trả XEM TRƯỚC (so khớp "Mới"/"Đã có" ĐÚNG phạm vi siêu thị người gọi,
+  không đối chiếu toàn hệ thống) — client tự gọi `callCreateAction('shelfLocations', ...)` cho từng dòng
+  "Mới" (tái dùng dup-check/forceOwnDept đã có, không cần route "confirm add hàng loạt" riêng). Xuất
+  Excel dùng route chung `POST /api/admin/export-xlsx`.
+- **Phần B — Ngưỡng Tồn & Email cảnh báo** (hoàn toàn mới, KHÔNG cần API đối tác): collection mới
+  `shelfStockThresholds` (`scope` CATEGORY/SKU + `scopeValue` BẤT BIẾN sau khi tạo, `minQuantity`,
+  `recipientEmails[]`, `active`), tạo qua `POST /api/create/shelfStockThresholds` (entry mới
+  `lib/createValidation.js`, `forceOwnDept:true`, validate email bằng regex, dup-check `scope+scopeValue`
+  CHỈ trong CÙNG siêu thị), sửa (`minQuantity`/`recipientEmails`/`active`) qua
+  `PATCH /api/shelf-stock/thresholds/:id`. **Quyết định phân quyền**: DÙNG LẠI `shelfLocationManage`
+  (không tách quyền riêng) — cùng vai trò Cửa hàng trưởng/Tổ trưởng quản lý cả quầy kệ lẫn ngưỡng tồn là
+  hợp lý, tránh phân mảnh quyền không cần thiết.
+  - Job mới `jobs/shelfStockThresholdAlert.js` (chạy 1 lần/24h kể từ lúc server khởi động — KHÔNG ghim
+    đúng 07:00 như tài liệu nghiệp vụ gốc, vì codebase này không có cơ chế cron-giờ-cụ-thể nào đang
+    dùng). **Quyết định thiết kế quan trọng** (chưa có đặc tả chính thức, ghi rõ để người dùng góp ý
+    thêm nếu cần đổi): "tồn trên kệ hôm nay" = TỔNG `quantity` của mọi `shelfRecords` tạo HÔM NAY, cùng
+    `dept`, khớp `scope` (SKU so khớp `r.sku`; CATEGORY tra category của quầy kệ qua `r.shelfLocationId`
+    vì `shelfRecords` không lưu category trực tiếp). Không có ghi nhận nào hôm nay → tổng = 0 → LUÔN bị
+    coi là dưới ngưỡng (cảnh báo) — hợp lý vì có thể nhân viên quên kiểm. Dùng lại
+    `buildNotificationEmailHtml()`/`lib/mailer.js` có sẵn, KHÔNG viết HTML email mới.
+  - 📋 Biểu Mẫu: entry `SHELF_STOCK_THRESHOLD` mới (field `stScope`/`stScopeValue`/`stMinQuantity`/
+    `stRecipientEmails`).
+- **Phần C — Báo Cáo Tổng**: rà soát lại entry `shelfRecords` đã có ở Phase 1 — đã đúng hướng (dept
+  filter + `shelfReportViewAll` xem tất cả + xuất Excel qua route chung), không cần sửa thêm.
+
+**File đã sửa/tạo**: `lib/shelfStockEdit.js` (mới — tách logic sửa 2 collection ra khỏi route để test
+không cần dựng Express), `lib/shelfLocationImport.js` (mới), `routes/shelfStock.js` (mới, mount
+`/api/shelf-stock`), `lib/createValidation.js`, `lib/recordViewScope.js`, `routes/data.js`, `server.js`
+(mount route + đăng ký job), `jobs/shelfStockThresholdAlert.js` (mới), `public/js/core.js`,
+`public/js/module-vanhanh.js`, `public/fragments/vanHanhSection.html`, `deploy/Huong-dan-nghiep-vu.md`,
+`tests/test-shelf-kehang-phase2.js` (mới, 18 scenario).
+
+**Test**: `tests/test-shelf-kehang-phase2.js` 18/18 pass (sửa quầy kệ/ngưỡng tồn đúng quyền+dept, code/
+scope bất biến, tạo ngưỡng tồn validate đủ, job tính đúng SKU/CATEGORY/dept-scoping/ngưỡng ngừng dùng/
+không có ghi nhận hôm nay). Regression: `tests/test-shelf-kehang.js` 13/13,
+`test-perm-matrix-client.js` 46/46, `test-muc0-module-access-tree.js` 17/17,
+`test-khoi0-license-uniform-gate.js` 9/9, `test-permission-batch-oct2026.js` 17/17,
+`test-operation-store-report-overview.js` 6/6, `test-operation-order-report.js` 16/16,
+`test-collapse-operation-forms.js` 10/10, `test-bugfix-batch-nav-ui.js` 15/15,
+`test-vanhanh-itprice-chitiet-csp.js` 1/1, `test-stuck-subtab-fallback-fix.js` 14/14 — tất cả PASS. CSP
+self-check sạch trên toàn bộ file mới/sửa.
+
+**Vẫn CHƯA làm** (không thuộc yêu cầu đợt này, vẫn chờ xác nhận): Đối Chiếu Tồn Kho Hệ Thống (API đối
+tác + Mã SDK), quét mã vạch camera, offline-first.
+
+**Deploy impact**: KHÔNG cần sửa `sql/schema.sql` (`shelfStockThresholds` cũng sống trong `dbo.AppData`
+JSON blob chung — xác nhận qua `lib/recordStore.js` DEDICATED_TABLES, không có trong danh sách đó).
+KHÔNG thêm biến môi trường/dependency mới. Chỉ cần copy code + `pm2 restart`.
 
 ## v28.41 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Phase 1 MVP (module mới trong Vận Hành)
 

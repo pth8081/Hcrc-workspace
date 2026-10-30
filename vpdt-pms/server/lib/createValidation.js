@@ -1999,6 +1999,47 @@ const CREATE_MODULE_CONFIGS = {
       payload.note = String(payload.note || '').trim();
     }
   },
+  // shelfStockThresholds (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026) — ngưỡng tồn tối thiểu
+  // + danh sách email cảnh báo, tính TRÊN SỐ LIỆU shelfRecords đã ghi nhận (KHÔNG cần API tồn kho đối
+  // tác — xem jobs/shelfStockThresholdAlert.js). forceOwnDept:true mirror shelfLocations/shelfRecords —
+  // chặn store-spoofing. Quyết định (xác nhận với người dùng): DÙNG LẠI quyền `shelfLocationManage`
+  // (không tách quyền riêng cho Ngưỡng Tồn) — cùng vai trò Cửa hàng trưởng/Tổ trưởng quản lý cả Quầy Kệ
+  // lẫn Ngưỡng Tồn của siêu thị mình là hợp lý, tránh phân mảnh quyền không cần thiết ở MVP này.
+  shelfStockThresholds: {
+    dbKey: 'shelfStockThresholds',
+    getScope: () => ({}),
+    forceOwnDept: true,
+    creatorField: 'creator', creatorNameField: 'creatorName',
+    extraValidate: (payload, collection, user) => {
+      if (!user.perms?.admin && !user.perms?.shelfLocationManage) {
+        throw new CreateError(403, 'Bạn không có quyền quản lý Ngưỡng Tồn Kiểm Soát Hàng Hóa');
+      }
+      const scope = payload.scope === 'SKU' ? 'SKU' : (payload.scope === 'CATEGORY' ? 'CATEGORY' : null);
+      if (!scope) throw new CreateError(400, 'Phạm vi áp dụng không hợp lệ (phải là Ngành Hàng hoặc SKU)');
+      const scopeValue = String(payload.scopeValue || '').trim();
+      if (!scopeValue) throw new CreateError(400, scope === 'SKU' ? 'Vui lòng nhập Mã SKU' : 'Vui lòng nhập Ngành Hàng');
+      const minQuantity = Number(payload.minQuantity);
+      if (!Number.isFinite(minQuantity) || minQuantity < 0) {
+        throw new CreateError(400, 'Ngưỡng tối thiểu không hợp lệ (phải là số không âm)');
+      }
+      const emails = (Array.isArray(payload.recipientEmails) ? payload.recipientEmails : [])
+        .map(e => String(e || '').trim()).filter(Boolean);
+      if (!emails.length) throw new CreateError(400, 'Vui lòng nhập ít nhất 1 email người nhận cảnh báo');
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalid = emails.find(e => !EMAIL_RE.test(e));
+      if (invalid) throw new CreateError(400, `Email không hợp lệ: ${invalid}`);
+      // Trùng phạm vi áp dụng (scope+scopeValue) CHỈ chặn trong CÙNG siêu thị — 2 siêu thị khác nhau được
+      // đặt ngưỡng độc lập cho cùng 1 ngành hàng/SKU.
+      const isDup = (collection || []).some(it => it.dept === user.dept && it.scope === scope
+        && String(it.scopeValue || '').toLowerCase() === scopeValue.toLowerCase() && it.active !== false);
+      if (isDup) throw new CreateError(409, `Đã có ngưỡng tồn đang áp dụng cho "${scopeValue}" ở siêu thị của bạn`);
+      payload.scope = scope;
+      payload.scopeValue = scopeValue;
+      payload.minQuantity = minQuantity;
+      payload.recipientEmails = emails;
+      payload.active = payload.active !== false;
+    }
+  },
   // Vận Hành > "Siêu Thị" > "Thực hiện" — "Kỳ Thực Hiện": mỗi hồ sơ Mở mới/Sửa chữa có DANH SÁCH kỳ
   // RIÊNG (không dùng chung toàn hệ thống như vppPeriods/budgetPeriods), để tách bạch nhiều đợt thi công
   // theo thời gian trên cùng 1 hồ sơ. 2 trạng thái: CHUA_BAT_DAU (mặc định lúc tạo) -> DANG_THUC_HIEN

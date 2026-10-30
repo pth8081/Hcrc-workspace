@@ -57,6 +57,7 @@ const mixedApprovalExcelImportRoutes = require('./routes/mixedApprovalExcelImpor
 const workflowExcelImportRoutes = require('./routes/workflowExcelImport');
 const approvalGroupsExcelImportRoutes = require('./routes/approvalGroupsExcelImport');
 const storeCatalogImportRoutes = require('./routes/storeCatalogImport');
+const shelfStockRoutes = require('./routes/shelfStock');
 const operationImportRoutes = require('./routes/operationImport');
 const operationOrderApiSyncRoutes = require('./routes/operationOrderApiSync');
 const pwaManifestRoutes = require('./routes/pwaManifest');
@@ -84,6 +85,7 @@ const { checkItServiceRenewalReminders } = require('./jobs/itServiceRenewalRemin
 const { checkDiskSpace } = require('./jobs/diskSpaceMonitor');
 const { cleanupOrphanedUploads } = require('./jobs/orphanedUploadsCleanup');
 const { checkHrTaskOverdueReminders } = require('./jobs/hrTaskOverdueReminder');
+const { checkShelfStockThresholdAlerts } = require('./jobs/shelfStockThresholdAlert');
 const { syncOperationOrdersToDsmart16 } = require('./jobs/operationOrderApiSync');
 const { ensureLeaveBalancesForCurrentYear } = require('./jobs/leaveBalanceYearRollover');
 const { checkReportPeriodDeadlineReminders } = require('./jobs/reportPeriodDeadlineReminder');
@@ -218,6 +220,9 @@ app.use('/api/admin', workflowExcelImportRoutes);
 app.use('/api/admin', approvalGroupsExcelImportRoutes);
 app.use('/api/admin/position-types', positionTypesRoutes);
 app.use('/api/stores', storeCatalogImportRoutes);
+// Kiểm Soát Hàng Hóa (Vận Hành, bổ sung sau Phase 1 MVP, 11/2026) — sửa/ngừng dùng Quầy Kệ + Ngưỡng Tồn
+// (withLockedRecordForCollection, tự đối chiếu dept trong lock) + nhập Excel Quầy Kệ (chỉ xem trước).
+app.use('/api/shelf-stock', shelfStockRoutes);
 app.use('/api/operation', operationImportRoutes);
 app.use('/api/operation', operationOrderApiSyncRoutes);
 app.use('/api/budget', budgetTemplateImportRoutes);
@@ -513,6 +518,10 @@ async function start() {
       setInterval(checkItServiceRenewalReminders, 24 * 60 * 60 * 1000);
       checkHrTaskOverdueReminders();
       setInterval(checkHrTaskOverdueReminders, 24 * 60 * 60 * 1000);
+      // "🔔 Ngưỡng Tồn" (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026) — xem chú thích đầy đủ
+      // (bao gồm quyết định "tổng quantity hôm nay" thay cho tồn kho hệ thống thật) ở jobs/shelfStockThresholdAlert.js.
+      checkShelfStockThresholdAlerts();
+      setInterval(checkShelfStockThresholdAlerts, 24 * 60 * 60 * 1000);
       checkLaborContractExpiryReminders();
       setInterval(checkLaborContractExpiryReminders, 24 * 60 * 60 * 1000);
       // Tự tạo quỹ Phép Năm cho năm hiện tại (vá lỗ hổng thật — trước đây chỉ tạo đúng 1 lần lúc

@@ -969,6 +969,16 @@ function canViewShelfRecord(user, item) {
 function filterShelfRecordsForUser(items, user) {
   return (items || []).filter(o => canViewShelfRecord(user, o));
 }
+// shelfStockThresholds (bổ sung sau Phase 1 MVP, 11/2026) — mirror ĐÚNG shelfLocations/shelfRecords ở
+// trên (cùng forceOwnDept:true, cùng quyền shelfReportViewAll cho xem-tất-cả).
+function canViewShelfStockThreshold(user, item) {
+  if (!user) return false;
+  if (user.perms?.admin || user.perms?.shelfReportViewAll) return true;
+  return item.dept === user.dept;
+}
+function filterShelfStockThresholdsForUser(items, user) {
+  return (items || []).filter(o => canViewShelfStockThreshold(user, o));
+}
 // operationExecutionPeriods: mirror ĐÚNG phạm vi xem của hồ sơ NGUỒN (operationStoreOpenings/
 // operationRepairs) — 1 kỳ chỉ nên lộ cho đúng người xem được hồ sơ mà kỳ đó thuộc về.
 function canViewOperationExecutionPeriod(user, item, appData) {
@@ -1682,7 +1692,7 @@ const MODULE_ACCESS_GATED_COLLECTIONS = {
   // (không phải key con 'vanHanhShelfTab', đó chỉ là checkbox Khối 0 ẩn/hiện sub-tab, KHÔNG có trong
   // MODULE_ACCESS_GATED_COLLECTIONS) để tắt moduleAccess.vanHanh zero-out đúng 2 collection này + tự gác
   // route TẠO MỚI qua COLLECTION_TO_MODULE_ACCESS_KEY (routes/create.js), cùng khuôn operationOrders...
-  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'shelfLocations', 'shelfRecords'],
+  vanHanh: ['operationOrders', 'operationStoreOpenings', 'operationRepairs', 'operationExecutionPeriods', 'shelfLocations', 'shelfRecords', 'shelfStockThresholds'],
   // LỖI ĐÃ VÁ (đợt audit chuyên sâu mới, mức Cao): module "budget" hoàn toàn vắng mặt khỏi danh sách này
   // — canViewBudgetEntry()/canViewBudgetLine()/canViewBudgetPeriod() ở trên đều cho xem KHÔNG CẦN quyền
   // chi tiết nào (chỉ cần item.dept === user.dept, đúng khuôn "hồ sơ của CẢ ĐƠN VỊ" như hrAttendance/
@@ -1906,6 +1916,7 @@ module.exports = {
   canViewOperationStoreOpening, filterOperationStoreOpeningsForUser,
   canViewOperationRepair, filterOperationRepairsForUser,
   canViewShelfLocation, filterShelfLocationsForUser, canViewShelfRecord, filterShelfRecordsForUser,
+  canViewShelfStockThreshold, filterShelfStockThresholdsForUser,
   redactOperationEstimateItemsToOwnedScope,
   canViewOperationExecutionPeriod, filterOperationExecutionPeriodsForUser, canViewOperationWorkItem,
   canViewOnboardingProgress, filterOnboardingProgressForUser,
