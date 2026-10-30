@@ -1,9 +1,77 @@
 # Phiên bản hiện tại
 
-**28.47** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.48 (2026-12): Dán nhiều tên siêu thị tự nhận diện ở picker Xem Báo Cáo + vá gate nav "📋 Kiểm Soát Hàng Hóa" hiện tràn
+
+Theo yêu cầu người dùng: "Phần tìm kiếm này cho phép tôi copy và paste nhiều
+siêu thị để tự động detect ra giống mục phân quyền đã làm rồi được không" —
+picker chọn siêu thị ở quyền 👁️ Xem Báo Cáo (`shelfReportView`, v28.47) cần
+dán nhiều dòng tên siêu thị cùng lúc, tự nhận diện và tick hết, giống cơ chế
+dán hàng loạt đã có ở ô "Thành Viên Nhóm". Đồng thời vá kèm (phát hiện trong
+cùng đợt rà soát): mục "📋 Kiểm Soát Hàng Hóa" trong Báo Cáo hiện cho MỌI tài
+khoản đã đăng nhập bất kể có liên quan gì tới module hay không (chỉ thấy báo
+cáo rỗng, không đúng chuẩn đối xứng với "checklist"/"muaHang" đã gác đúng).
+
+**File sửa**:
+- `public/js/core.js` — thêm cơ chế dán-nhận-diện-hàng-loạt MỚI cho
+  `renderMultiSelectDropdown()` (dropdown dùng chung cho dữ liệu label/value
+  như siêu thị, KHÔNG dùng `renderPeopleMultiSelect()` vì đó là picker chọn
+  NGƯỜI, khớp theo username/Mã Nhân Viên — không phù hợp ngữ nghĩa cho siêu
+  thị): `renderGmsPasteStatus()`/`handleGenericMultiSelectBulkPaste()`/
+  `bindMultiSelectDropdownBulkPaste()` (khớp theo NHÃN đã chuẩn hoá bỏ dấu/
+  hoa-thường qua `stripVnDiacritics()`, dán ≤1 dòng vẫn giữ hành vi gõ-tìm
+  cũ, không có nhánh tách theo khoảng trắng vì tên siêu thị có khoảng trắng
+  thật) + thêm `<div data-pms-paste-status>` vào template
+  `renderMultiSelectDropdown()`. Thêm `canViewShelfReportClient(user)` gác
+  mục nav Báo Cáo.
+- `public/js/module-baocaoquantri.js` — wire `shelfRecords:
+  'canViewShelfReportClient'` vào `REPORT_KEY_ACCESS_FN` (cùng khuôn
+  `checklist`/`muaHang`), cập nhật lại chú thích cũ đã lỗi thời tại entry
+  `shelfRecords`.
+- `tests/test-reports.js` — sửa 1 assertion lỗi thời (thiếu `shelfRecords`
+  trong danh sách con mong đợi của node "vanHanh", lỗi thời từ lúc thêm key
+  đó vào `REPORT_NAV_TREE` ở Phase 1 MVP 11/2026, không liên quan bản vá
+  này nhưng phát hiện khi chạy lại test liên quan).
+
+**Quyết định kỹ thuật đáng chú ý — KHÔNG dùng `hasModuleAccess(user,
+'vanHanhShelfTab')`**: `hasModuleAccess()` mặc định trả `true` khi
+`user.perms.moduleAccess` chưa cấu hình riêng khoá đó ("mặc định BẬT trừ khi
+admin tắt riêng" — xem chú thích hàm). Dùng nó làm điều kiện gác sẽ lại hiện
+mục cho hầu hết mọi người như lỗi cũ, không giải quyết được gì. Thay vào đó
+`canViewShelfReportClient()` dùng đúng cặp quyền tham gia THẬT đã chứng minh
+đúng ở nút tắt Vận Hành thật (`btnVanHanhShelfNav`, `applyPermsToUI()`,
+core.js ~10304) — `shelfRecordCreate`/`shelfLocationManage` — làm tín hiệu
+"có liên quan tới module", cộng thêm `shelfReportView` có giá trị ý nghĩa
+(`all:true` hoặc `depts` không rỗng) hoặc `admin:true`.
+
+**Deploy impact**: không sửa `sql/schema.sql`, không thêm biến môi trường/
+dependency mới — chỉ `git pull` + `pm2 restart`.
+
+**Test**: 2 file test mới —
+`tests/test-shelf-report-view-bulk-paste.js` (6/6 pass: render đúng widget
+có ô dán + dòng trạng thái; dán nhiều dòng tên đúng hoa/thường khác nhau ->
+thêm hết; dán lẫn 1 tên sai -> tên đúng vẫn thêm, tên sai báo "Không tìm
+thấy", không chặn gì; dán đúng 1 cụm có khoảng trắng -> KHÔNG tự thêm,
+KHÔNG preventDefault, giữ hành vi gõ-tìm cũ; listener mới không đụng
+`renderPeopleMultiSelect()` thật; không phát sinh lỗi JS) và
+`tests/test-shelf-report-nav-gate.js` (10/10 pass: ẩn khi không đủ 3 điều
+kiện; hiện khi có `shelfRecordCreate`/`shelfLocationManage`; hiện khi
+`shelfReportView.depts` non-empty dù `all:false`; hiện khi `all:true`; ẩn
+khi `shelfReportView` rỗng vô nghĩa; hiện qua fallback field cũ
+`shelfReportViewAll`; luôn hiện khi `admin:true`; vẫn override được qua
+`reportViewAll`/`reportExtraKeys`; không phát sinh lỗi JS). Regression đầy
+đủ: `test-shelf-kehang` (17/17), `test-shelf-kehang-offline` (10/10),
+`test-shelf-kehang-phase2` (18/18), `test-inventory-recon` (10/10),
+`test-shelf-mavach-match` (5/5), `test-shelf-mobile-and-offline-inventory`
+(8/8), `test-perm-matrix-client` (46/46), `test-muc0-module-access-tree`
+(17/17), `test-stuck-subtab-fallback-fix` (14/14), `test-reports.js`
+(24/24, sau khi sửa assertion lỗi thời) — tất cả PASS, không regression.
+CSP sạch (grep `on[a-z]+="`/`style="` (trừ `data-style`)/`javascript:`/
+`eval(`/`new Function(` trên 2 file sửa không khớp gì mới).
 
 ## v28.47 (2026-11): "📋 Kiểm Soát Hàng Hóa" — Quyền Xem Báo Cáo nâng từ bật/tắt sang chọn danh sách siêu thị (nhiều quản lý vùng độc lập)
 

@@ -11973,6 +11973,33 @@ function canAccessOperationModule(user) {
   return (DB.operationWorkItems || []).some(w => isWorkItemAssignee(w, user.username) || w.acceptorUsername === user.username
     || workItemAssignees(w).some(u => isManagerOf(user.username, u, DB.users)) || isManagerOf(user.username, w.acceptorUsername, DB.users));
 }
+// canViewShelfReportClient() (12/2026) — gác mục "📋 Kiểm Soát Hàng Hóa" trong REPORT_NAV_TREE
+// (module-baocaoquantri.js, REPORT_KEY_ACCESS_FN), cùng khuôn canViewChecklistReportsClient(): quyền
+// hiện mục MẶC ĐỊNH không phải hasModuleAccess() phẳng trên key Báo Cáo mà là "có liên quan gì tới
+// Kiểm Soát Hàng Hóa không" — hoặc đã vào được tab (nhân viên siêu thị, tự xem đúng siêu thị mình, xem
+// filterShelfRecordsForUser() ở lib/recordViewScope.js) hoặc được cấp thêm phạm vi xem báo cáo (Quản lý
+// vùng/Ban điều hành qua shelfReportView). Trước bản vá này mục luôn hiện cho MỌI tài khoản đã đăng
+// nhập dù không liên quan gì — chỉ thấy báo cáo rỗng nhưng mục menu vẫn hiện, không đúng chuẩn các
+// module khác (đối xứng checklist/muaHang đã gác đúng).
+//
+// CHỦ Ý KHÔNG dùng hasModuleAccess(user, 'vanHanhShelfTab') — hàm đó mặc định trả về TRUE khi
+// user.perms.moduleAccess chưa có/chưa set riêng khoá này ("mặc định BẬT trừ khi admin tắt riêng", xem
+// chú thích hasModuleAccess() phía trên) nên sẽ lại hiện cho MỌI người như lỗi cũ, không giải quyết
+// được gì. Dùng đúng cặp quyền tham gia THẬT đã chứng minh đúng ở nút tắt Vận Hành thật
+// (document.getElementById('btnVanHanhShelfNav') ở applyPermsToUI(), core.js ~10304) —
+// shelfRecordCreate/shelfLocationManage — làm tín hiệu "có liên quan tới module" thay cho module-access
+// phẳng. resolveShelfReportViewScope() MIRROR đúng hàm cùng tên ở lib/recordViewScope.js (bản server) —
+// 2 nơi phải sửa cùng lúc nếu đổi logic quy đổi shelfReportViewAll cũ -> shelfReportView mới.
+function canViewShelfReportClient(user) {
+  if (!user) return false;
+  if (user.perms?.admin) return true;
+  if (user.perms?.shelfRecordCreate || user.perms?.shelfLocationManage) return true;
+  const scope = user.perms?.shelfReportView !== undefined ? user.perms.shelfReportView
+    : (user.perms?.shelfReportViewAll !== undefined ? { all: !!user.perms.shelfReportViewAll, depts: [] } : undefined);
+  if (scope?.all) return true;
+  if (Array.isArray(scope?.depts) && scope.depts.length > 0) return true;
+  return false;
+}
 function canAccessOperationSubTab(user, kind) {
   if (!user) return false;
   if (user.perms?.admin) return true;
@@ -15000,6 +15027,7 @@ function renderMultiSelectDropdown(containerId, items, initialSelected, opts) {
         data-op-input="gmsFilter" data-arg0="${escapeHtml(containerId)}" data-arg-value="1">
       <div data-pms-dropdown class="hidden absolute z-20 bg-white border rounded shadow max-h-40 overflow-y-auto w-full mt-0.5"></div>
     </div>
+    <div data-pms-paste-status class="text-[11px] mt-1"></div>
     <div data-pms-hidden></div>
   `;
   container._gmsItems = normItems;
@@ -15039,6 +15067,61 @@ function getMultiSelectValues(containerId) {
   const c = document.getElementById(containerId);
   return (c && c._gmsSelected) ? [...c._gmsSelected] : [];
 }
+
+// DÁN NHIỀU NHÃN/GIÁ TRỊ ĐỂ THÊM HÀNG LOẠT vào renderMultiSelectDropdown() (12/2026, theo yêu cầu người
+// dùng — "picker chọn siêu thị ở quyền Xem Báo Cáo Kiểm Soát Hàng Hóa cũng dán nhiều tên tự nhận diện
+// được như Thành Viên Nhóm"). Đối xứng handlePeopleMultiSelectBulkPaste()/bindPeopleMultiSelectBulkPaste()
+// ở trên nhưng khớp theo NHÃN (label) chuẩn hoá bỏ dấu/hoa-thường thay vì username/Mã Nhân Viên — picker
+// này không chọn người nên không có khái niệm tra employeeCode, chỉ so khớp THẲNG với container._gmsItems.
+// Nhận diện đúng container renderMultiSelectDropdown() qua _gmsItems/_gmsSelected (khác _pmsCandidates/
+// _pmsSelected của renderPeopleMultiSelect()) — 2 listener paste gắn cùng [data-pms-search] KHÔNG giẫm
+// lên nhau vì mỗi container chỉ mang ĐÚNG 1 trong 2 cặp thuộc tính này, nhánh kia tự return sớm.
+//
+// CHỦ Ý không thêm nhánh dự phòng "tách theo khoảng trắng" (wsTokens) như bindPeopleMultiSelectBulkPaste()
+// — nhãn ở đây (VD tên siêu thị "Siêu thị Quận 1") THƯỜNG CÓ khoảng trắng, tách theo khoảng trắng sẽ phá
+// hỏng y hệt rủi ro đã nêu ở splitMultiKeyword()/looksLikeCodeOrUsernameToken(). Chỉ kích hoạt khi dán
+// THẬT NHIỀU DÒNG (xuống dòng/phẩy/chấm phẩy, đúng kiểu copy nhiều hàng từ Excel) — dán 1 dòng/1 cụm vẫn
+// giữ nguyên hành vi gõ-tìm cũ.
+function renderGmsPasteStatus(containerId, html) {
+  const container = document.getElementById(containerId);
+  const el = container && container.querySelector('[data-pms-paste-status]');
+  if (el) el.innerHTML = html || '';
+}
+function handleGenericMultiSelectBulkPaste(container, tokens) {
+  const byNormLabel = new Map(container._gmsItems.map(it => [stripVnDiacritics(it.label.toLowerCase().trim()), it.value]));
+  const addedValues = []; const unresolved = [];
+  tokens.forEach(tok => {
+    const t = tok.trim();
+    if (!t) return;
+    const value = byNormLabel.get(stripVnDiacritics(t.toLowerCase()));
+    if (value !== undefined) addedValues.push(value); else unresolved.push(t);
+  });
+  if (!addedValues.length) return false; // không khớp gì -> để hành vi paste bình thường (lọc-tìm) xử lý
+  const uniqueAdded = [...new Set(addedValues)];
+  uniqueAdded.forEach(v => container._gmsSelected.add(v));
+  container._gmsRenderChips();
+  const parts = [`<span class="text-emerald-700 font-semibold">✅ Đã thêm ${uniqueAdded.length} mục từ danh sách dán.</span>`];
+  if (unresolved.length) parts.push(`<span class="text-amber-700 font-semibold">⚠️ Không tìm thấy ${unresolved.length}: ${escapeHtml(unresolved.join(', '))}</span>`);
+  renderGmsPasteStatus(container.id, parts.join(' '));
+  return true;
+}
+// Gắn đúng 1 lần cho toàn trang (capture phase, cùng khuôn bindPeopleMultiSelectBulkPaste() ở trên).
+function bindMultiSelectDropdownBulkPaste() {
+  document.addEventListener('paste', (e) => {
+    const el = e.target;
+    if (!el || !(el instanceof HTMLInputElement) || !el.hasAttribute('data-pms-search')) return;
+    const container = el.closest('[data-pms-root]');
+    if (!container || !container._gmsItems || !container._gmsSelected) return;
+    const raw = (e.clipboardData || window.clipboardData || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+    const tokens = splitMultiKeyword(raw);
+    if (tokens.length <= 1) return; // 1 dòng/1 cụm -> giữ nguyên hành vi gõ-tìm-1-cụm cũ
+    e.preventDefault();
+    const handled = handleGenericMultiSelectBulkPaste(container, tokens);
+    if (!handled) { el.value = tokens.join(', '); container._gmsRenderDropdown(el.value); return; }
+    el.value = '';
+    container.querySelector('[data-pms-dropdown]')?.classList.add('hidden');
+  }, true);
+}
 // ==========================================
 
 // Set năm bản quyền ở góc màn hình (#appCopyright) — CHUYỂN từ 1 dòng <script> inline cuối
@@ -15076,4 +15159,8 @@ bindMultiPasteSearchInputs();
 // Gắn đúng 1 lần cho toàn trang — xem chú thích đầy đủ tại định nghĩa bindPeopleMultiSelectBulkPaste()
 // ở trên (tính năng dán nhiều Mã Nhân Viên/Username để thêm hàng loạt vào ô chọn người, 11/2026).
 bindPeopleMultiSelectBulkPaste();
+// Gắn đúng 1 lần cho toàn trang — xem chú thích đầy đủ tại định nghĩa bindMultiSelectDropdownBulkPaste()
+// ở trên (tính năng dán nhiều nhãn/giá trị để thêm hàng loạt vào renderMultiSelectDropdown(), 12/2026 —
+// VD dán nhiều tên siêu thị vào picker "Xem Báo Cáo Kiểm Soát Hàng Hóa").
+bindMultiSelectDropdownBulkPaste();
 

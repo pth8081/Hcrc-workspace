@@ -194,9 +194,10 @@ const REPORT_NAV_TREE = [
       // REPORT_KEY_ACCESS_FN ở isReportKeyVisible() trên), KHÔNG PHẢI hasModuleAccess() phẳng như 3 leaf
       // còn lại — cố tình chặt hơn vì đây là dữ liệu đánh giá/VSATTP của siêu thị.
       { key: 'checklist', label: '✅ Checklist Đánh Giá Siêu Thị' },
-      // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — cùng khuôn checklist ngay trên: key KHÔNG có trong
-      // BUSINESS_MODULES (không cần hasModuleAccess('vanHanhShelfTab') riêng ở đây — dữ liệu client nhận
-      // được đã lọc đúng phạm vi thật qua filterShelfRecordsForUser(), xem routes/reports.js).
+      // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — cùng khuôn checklist ngay trên: dữ liệu client nhận
+      // được đã lọc đúng phạm vi thật qua filterShelfRecordsForUser() (xem routes/reports.js) nên vô hại
+      // dù lỡ hiện sai; nhưng quyền HIỆN MỤC NAV (12/2026, vá lỗi hiện tràn cho mọi tài khoản đã đăng
+      // nhập) vẫn cần gác riêng qua canViewShelfReportClient() — xem REPORT_KEY_ACCESS_FN ở dưới.
       { key: 'shelfRecords', label: '📋 Kiểm Soát Hàng Hóa' }
     ]
   },
@@ -222,7 +223,7 @@ const REPORT_NAV_TREE = [
 // quyền thật là checklistReportView (KHÔNG PHẢI quyền "vào module" phẳng như đa số module khác) — tái
 // dùng canViewChecklistReportsClient() để mặc định (chưa có reportViewAll/reportExtraKeys) chỉ hiện cho
 // đúng người có quyền xem báo cáo checklist thật, không mở tràn cho mọi người có quyền module 0.
-const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient', muaHang: 'canViewPurchasingReportClient' };
+const REPORT_KEY_ACCESS_FN = { checklist: 'canViewChecklistReportsClient', muaHang: 'canViewPurchasingReportClient', shelfRecords: 'canViewShelfReportClient' };
 function isReportKeyVisible(key) {
   if (currentUser?.perms?.reportViewAll) return true;
   if (getEffectiveReportExtraKeys(currentUser).includes(key)) return true;

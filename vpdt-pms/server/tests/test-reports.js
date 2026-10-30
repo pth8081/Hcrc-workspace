@@ -308,7 +308,9 @@ async function main() {
       // Gap-fill (đợt rà soát chuyên sâu lần 2 trước go-live, mức Trung Bình — Agent 6): thêm 2 con
       // "leaveRequest"/"shiftSwapRequest" (Nghỉ Phép/Đổi Ca) — trước đây chỉ có đúng 2 con.
       assert(hrNode && JSON.stringify(hrNode.children) === JSON.stringify(['hr', 'hrLifecycle', 'leaveRequest', 'shiftSwapRequest']), `node "hr" phải có đúng 4 con [hr, hrLifecycle, leaveRequest, shiftSwapRequest], got: ${JSON.stringify(hrNode)}`);
-      assert(vanHanhNode && JSON.stringify(vanHanhNode.children) === JSON.stringify(['vanHanh', 'operationStoreOpen', 'operationRepair', 'checklist']), `node "vanHanh" phải có đúng 4 con (thêm "checklist" từ v23.29), got: ${JSON.stringify(vanHanhNode)}`);
+      // "shelfRecords" (📋 Kiểm Soát Hàng Hóa, Phase 1 MVP 11/2026) thêm con thứ 5 — assertion này đã lỗi
+      // thời (stale) từ lúc thêm key đó vào REPORT_NAV_TREE, không liên quan gì tới bản vá gate 12/2026.
+      assert(vanHanhNode && JSON.stringify(vanHanhNode.children) === JSON.stringify(['vanHanh', 'operationStoreOpen', 'operationRepair', 'checklist', 'shelfRecords']), `node "vanHanh" phải có đúng 5 con (thêm "checklist" từ v23.29 + "shelfRecords" từ 11/2026), got: ${JSON.stringify(vanHanhNode)}`);
     });
 
     await run('Báo Cáo HCRC Đồng Hành: đếm đúng PENDING/ANSWERED, không lộ nội dung câu hỏi ngoài phạm vi', async () => {
