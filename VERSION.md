@@ -1,9 +1,89 @@
 # Phiên bản hiện tại
 
-**28.48** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.49** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.49 (2026-12): Vá lỗi kẹt sub-tab "📋 Kiểm Soát Hàng Hóa" (không chuyển được 4/5 sub-tab) + nút "↺ Làm Mới" form Ghi Nhận
+
+**Báo lỗi thật từ người dùng** (đã deploy v28.48 lên server thật, dùng trên
+điện thoại): trong tab "📋 Kiểm Soát Hàng Hóa" (Vận Hành), bấm sang các
+sub-tab khác (🗄️ Quầy Kệ/⏰ Hạn Sử Dụng/🔔 Ngưỡng Tồn/📊 Đối Chiếu) từ
+sub-tab "📷 Ghi Nhận" đang mở — KHÔNG chuyển được, màn vẫn giữ nguyên nội
+dung + nút active của "Ghi Nhận". Người dùng cũng hỏi thẳng có phải do CSP.
+
+**Root cause (đã xác nhận bằng Playwright bấm THẬT vào nút `<button>` trên
+DOM qua `page.click()`, không gọi hàm trực tiếp qua `page.evaluate()` — mọi
+test cũ của tính năng này đều gọi hàm trực tiếp nên chưa từng phát hiện
+được)**: `setVanHanhShelfSubTab()` CHƯA TỪNG được khai ở registry
+`OP_CLICK_ACTIONS` riêng của `module-vanhanh.js`
+(`bindOperationDelegation('vanHanhSection')`) — khác 3 hàm anh em cùng
+khuôn `data-op="setXxxSubTab" data-tab="..."` (`setVanHanhSubTab`/
+`setOperationStoreSubTab`/`setOperationOrderSubTab`) đã được khai tường
+minh từ trước. Thiếu đăng ký khiến dispatch rơi vào nhánh fallback
+`cspDispatchOp()` CHUNG (`core.js`), mà `cspCollectArgs()` chỉ đọc
+`data-arg0`/`data-argN`/`data-argValue`/`data-argEl`/`data-argEvent` —
+KHÔNG đọc `data-tab` — nên `setVanHanhShelfSubTab()` luôn nhận
+`tab=undefined`. Logic fallback NỘI BỘ của hàm (chọn lại tab đầu tiên còn
+được phép khi tab yêu cầu không hợp lệ) luôn trả về `'RECORD'` (đứng đầu
+mảng `tabs`, điều kiện hiển thị luôn `true`) -> màn luôn bật lại "Ghi Nhận"
+dù bấm nút nào trong 5 nút.
+
+**CSP: KHÔNG phải lỗi CSP.** Xác nhận bằng 2 cách: (1) bắt
+`console.error`/`pageerror` xuyên suốt lúc tái hiện lỗi bằng Playwright —
+không có lỗi JS/CSP nào bị ném ra, chỉ đơn giản là hàm luôn nhận
+`tab=undefined` một cách "im lặng" (không throw); (2) grep theo đúng chuẩn
+CLAUDE.md (`on[a-z]+="`, ` style="` trừ `data-style`, `javascript:`,
+`eval(`, `new Function(`) trên `public/js/module-vanhanh.js` +
+`public/fragments/vanHanhSection.html` — 0 kết quả khớp ở cả 2 file.
+
+**File sửa**:
+- `public/js/module-vanhanh.js` — thêm 1 dòng
+  `setVanHanhShelfSubTab: el => setVanHanhShelfSubTab(el.dataset.tab),` vào
+  `OP_CLICK_ACTIONS` (fix DUY NHẤT cho bug kẹt sub-tab — đã rà soát lại
+  toàn bộ `vanHanhSection.html` xác nhận không còn `data-op="setXxxSubTab"`
+  nào khác bị bỏ sót tương tự). Thêm mới `resetShelfRecordForm()` cho yêu
+  cầu "↺ Làm Mới" (xem dưới).
+- `public/fragments/vanHanhSection.html` — thêm nút "↺ Làm Mới" cạnh
+  "💾 Lưu Ghi Nhận" ở form "📷 Ghi Nhận", dùng ĐÚNG cơ chế dùng chung
+  `confirmAndResetForm(formId, resetFnName)` (đã có sẵn 10+ chỗ khác trong
+  hệ thống) qua `data-op="confirmAndResetForm" data-arg0="srForm"
+  data-arg1="resetShelfRecordForm"` — không viết cơ chế reset mới.
+- `tests/test-shelf-subtab-real-click.js` (MỚI) — 8 test Playwright dùng
+  `page.click()` lên đúng nút `<button>` thật cho cả 5 sub-tab (không
+  `page.evaluate()` gọi hàm), xác nhận không còn kẹt ở RECORD + nút active
+  đúng sub-tab đang mở + không phát sinh lỗi JS/console nào; cộng 2 test
+  cho "↺ Làm Mới" (xoá sạch mọi field + ghi chú khớp picker
+  `srMaHangMatchNote` — state nằm NGOÀI `<form>.reset()` nên phải tự xoá
+  tay; không hỏi xác nhận khi form đang trống).
+
+**Vì sao chỉ sửa đúng 1 dòng mà hết cả 4 sub-tab bị kẹt**: cả 4 nút
+LOCATIONS/EXPIRY/THRESHOLD/RECON đều dispatch qua ĐÚNG 1 hàm
+`setVanHanhShelfSubTab()` và đều thiếu đăng ký ở CÙNG 1 registry — không
+phải lỗi riêng trong từng nhánh `if/else` xử lý dữ liệu của hàm (đã rà
+soát lại toàn bộ 5 nhánh: RECORD/LOCATIONS/EXPIRY/THRESHOLD/RECON đều
+KHÔNG có lỗi logic riêng — `loadShelfReconciliation()` đã có try/catch +
+fallback offline đầy đủ từ trước, 3 nhánh còn lại chỉ render đồng bộ từ dữ
+liệu đã tải sẵn, không gọi mạng). Khối `tabs.forEach(...)` ẩn/hiện panel
+trong `setVanHanhShelfSubTab()` LUÔN chạy đồng bộ TRƯỚC mọi nhánh xử lý dữ
+liệu riêng của từng tab — 1 lỗi tải dữ liệu ở nhánh nào cũng không thể
+chặn việc chuyển panel của các lần bấm SAU, vì mỗi click là 1 lượt dispatch
+sự kiện độc lập (đã kiểm chứng kiến trúc này đúng như thiết kế, không cần
+thêm try/catch nào mới).
+
+**Deploy impact**: không sửa `sql/schema.sql`, không thêm biến môi trường/
+dependency mới — chỉ `git pull` + `pm2 restart`.
+
+**Test**: file mới `tests/test-shelf-subtab-real-click.js` (8/8 pass) +
+chạy lại TOÀN BỘ bộ test liên quan tính năng Kiểm Soát Hàng Hóa/CSP sub-tab:
+`test-shelf-kehang.js` (17/17), `test-shelf-kehang-offline.js` (10/10),
+`test-shelf-kehang-phase2.js` (18/18), `test-inventory-recon.js` (10/10),
+`test-shelf-mavach-match.js` (5/5), `test-shelf-mobile-and-offline-inventory.js`
+(8/8), `test-shelf-report-view-bulk-paste.js` (6/6),
+`test-shelf-report-nav-gate.js` (10/10), `test-perm-matrix-client.js`
+(46/46), `test-muc0-module-access-tree.js` (17/17),
+`test-stuck-subtab-fallback-fix.js` (14/14) — tất cả PASS, 0 regression.
 
 ## v28.48 (2026-12): Dán nhiều tên siêu thị tự nhận diện ở picker Xem Báo Cáo + vá gate nav "📋 Kiểm Soát Hàng Hóa" hiện tràn
 

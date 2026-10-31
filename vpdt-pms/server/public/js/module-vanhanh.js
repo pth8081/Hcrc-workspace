@@ -384,6 +384,21 @@ function applyShelfBarcodeMatch(code) {
 function onShelfMaVachTyped() {
   applyShelfBarcodeMatch(document.getElementById('srSku').value.trim());
 }
+// resetShelfRecordForm() — nút "↺ Làm Mới" (data-op="confirmAndResetForm" data-arg0="srForm"
+// data-arg1="resetShelfRecordForm", vanHanhSection.html) chỉ xoá trắng form đang nhập dở, KHÔNG đụng tới
+// danh sách ghi nhận gần nhất/hàng đợi offline đã lưu. form.reset() tự đưa mọi input/hidden-input bên
+// trong #srForm (kể cả #srShelfLocationId + dynamicFieldsContainer_SHELF_RECORD) về rỗng — chỉ còn
+// #srMaHangMatchNote (1 thẻ <p>, không phải input nên form.reset() không chạm tới) là state hiển thị
+// "đã khớp/chưa khớp picker" phải tự xoá riêng, nếu không sẽ còn sót lại ghi chú của lượt gõ trước dù
+// mọi ô đã về rỗng.
+function resetShelfRecordForm() {
+  document.getElementById('srForm').reset();
+  // form.reset() không đáng tin cậy cho <input type="hidden"> được GÁN GIÁ TRỊ BẰNG JS (không qua thuộc
+  // tính value="..." tĩnh trong HTML) ở 1 số trình duyệt — tự xoá tay cho chắc, tránh lưu nhầm đúng
+  // shelfLocationId CŨ dù ô "Quầy Kệ" hiển thị đã về rỗng.
+  document.getElementById('srShelfLocationId').value = '';
+  setShelfMaHangMatchNote('', false);
+}
 function isShelfRecordCreatedToday(createdAt) {
   if (!createdAt) return false;
   const d = new Date(createdAt);
@@ -5041,6 +5056,15 @@ async function exportOperationStoreReportOverview() {
 const OP_CLICK_ACTIONS = {
   setVanHanhSubTab: el => setVanHanhSubTab(el.dataset.tab),
   setOperationStoreSubTab: el => setOperationStoreSubTab(el.dataset.tab),
+  // Bug thật phát hiện qua phản hồi người dùng thật (deploy v28.48): 5 nút sub-tab "Kiểm Soát Hàng Hóa"
+  // (Ghi Nhận/Quầy Kệ/Hạn Sử Dụng/Ngưỡng Tồn/Đối Chiếu) dùng data-op="setVanHanhShelfSubTab" + data-tab,
+  // nhưng hàm này CHƯA TỪNG được khai ở registry OP_CLICK_ACTIONS này (khác 3 anh em cùng khuôn ở trên) —
+  // rơi vào nhánh fallback cspDispatchOp() chung (core.js), mà cspCollectArgs() chỉ đọc data-arg0/argN,
+  // KHÔNG đọc data-tab, nên setVanHanhShelfSubTab() luôn nhận tab=undefined -> logic fallback nội bộ của
+  // hàm tự chọn lại tab ĐẦU TIÊN được phép (RECORD) -> màn luôn bật về "Ghi Nhận" dù bấm nút nào. Xác nhận
+  // lại bằng Playwright bấm THẬT vào nút (không gọi hàm trực tiếp) trước khi vá — không có lỗi CSP/JS nào
+  // bị ném ra, chỉ là thiếu đăng ký. Đúng loại lỗi đã tự cảnh báo ở chú thích phía trên (OP_CLICK_ACTIONS).
+  setVanHanhShelfSubTab: el => setVanHanhShelfSubTab(el.dataset.tab),
   addOperationOrderItemRow: () => addOperationOrderItemRow(),
   removeOperationOrderItemRow: el => removeOperationOrderItemRow(Number(el.dataset.idx)),
   toggleOperationOrderPoDetailsBox: el => toggleOperationOrderPoDetailsBox(el),
