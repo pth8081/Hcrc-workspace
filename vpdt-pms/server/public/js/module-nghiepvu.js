@@ -1115,28 +1115,38 @@ const NGHIEP_VU_DOCS = {
       { label: 'Admin test mẫu (11/2026)', text: 'admin KHÔNG tự động là "Kiểm Soát Viên thật" nữa — nếu chưa được cấp quyền tường minh, admin thấy riêng 1 khối "🧪 Test Checklist" ở tab Thực Hiện để tự chọn bất kỳ siêu thị nào test mẫu vừa tạo (tạo dữ liệu THẬT, nên xoá sau khi test xong).' },
     ] },
   },
-  // "Kiểm Soát Hàng Hóa" (Phase 1 MVP, 11/2026) — nội dung 2 quy trình (vận hành hàng ngày + khai báo/
-  // cấu hình) chuyển thể từ mục "Quy trình nghiệp vụ" trong Claude Doc "Kiểm Soát Hàng Hóa — Mô tả
-  // nghiệp vụ" đã trình người dùng xác nhận trước khi code.
+  // "Kiểm Soát Hàng Hóa" — nội dung ban đầu (Phase 1 MVP) chuyển thể từ Claude Doc "Kiểm Soát Hàng Hóa —
+  // Mô tả nghiệp vụ" đã trình người dùng xác nhận trước khi code. CẬP NHẬT TOÀN DIỆN (11/2026, "Ghi Nhận
+  // Theo Lô" + người dùng nhắc "chưa cập nhật hướng dẫn đâu nhé") — entry này đã lỗi thời từ nhiều đợt
+  // trước (vẫn ghi "CHƯA có Đối Chiếu/Ngưỡng Tồn/quét mã vạch" dù cả 3 đã code xong từ lâu) nên viết lại
+  // TOÀN BỘ cho khớp đúng 5 sub-tab hiện có, không chỉ thêm phần mới của đợt này.
   vanHanhShelf: {
-    icon: '📋', title: 'Kiểm Soát Hàng Hóa', badge: 'Phase 1 MVP',
-    desc: 'Mỗi siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn sử dụng, dùng chung tài khoản đăng nhập hiện có. Phase 1 MVP: CHƯA có Đối Chiếu Tồn Kho Hệ Thống/Ngưỡng Tồn & Email/quét mã vạch camera (chờ xác nhận nguồn tồn kho hệ thống) — để pha sau.',
+    icon: '📋', title: 'Kiểm Soát Hàng Hóa',
+    desc: 'Mỗi siêu thị tự ghi nhận số lượng hàng thực tế trên kệ theo từng LÔ (phân biệt theo Hạn Sử Dụng) + theo dõi hạn sử dụng + đối chiếu với tồn kho hệ thống thật (qua API đối tác BRGMART, cần cấu hình Mã Điểm từng siêu thị) + cảnh báo khi tồn thấp dưới ngưỡng tự khai — dùng chung tài khoản đăng nhập hiện có, 5 sub-tab: 🗄️ Quầy Kệ / 📷 Ghi Nhận / ⏰ Hạn Sử Dụng / 🔔 Ngưỡng Tồn / 📊 Đối Chiếu.',
     flow: { ariaLabel: 'Quy trình Kiểm Soát Hàng Hóa', chain: [
       { label: 'Khai báo quầy kệ', sub: 'Cửa hàng trưởng (1 lần/khi có thay đổi)' },
-      { label: 'Ghi nhận trên kệ', sub: 'Chọn quầy kệ đã khai báo, nhập SL + hạn SD', kind: 'approved' },
-      { label: 'Theo dõi hạn sử dụng', sub: 'Tự chia 3 nhóm: hết hạn/cận hạn/còn hạn' },
-      { label: 'Báo cáo', sub: 'Cửa hàng trưởng/Quản lý vùng xem, xuất Excel' },
+      { label: 'Ghi nhận trên kệ (theo lô)', sub: 'Scan lại cùng lô -> cập nhật; hạn khác -> lô mới', kind: 'approved' },
+      { label: 'Theo dõi hạn SD + Ngưỡng Tồn', sub: 'Cảnh báo khi hết hạn/cận hạn/dưới ngưỡng/lệch tồn hệ thống' },
+      { label: 'Báo cáo / Đối chiếu', sub: 'Cửa hàng trưởng/Quản lý vùng xem, xuất Excel' },
     ] },
     steps: [
-      { role: 'Cửa hàng trưởng/Tổ trưởng', text: 'vào <b>⚙️ Vận Hành</b> (sidebar) → tab <b>"📋 Kiểm Soát Hàng Hóa"</b> → sub-tab "🗄️ Quầy Kệ" → điền Mã + Tên Quầy Kệ → "➕ Thêm Quầy Kệ" (làm 1 lần, hoặc khi siêu thị thay đổi mặt bằng). Chỉ thấy/quản lý được quầy kệ của ĐÚNG siêu thị mình.' },
-      { role: 'Nhân viên quầy kệ', text: 'sub-tab "📷 Ghi Nhận" → gõ mã/tên để chọn Quầy Kệ từ danh sách đã khai báo (không gõ tay tên quầy mới) → nhập Tên Sản Phẩm + Số Lượng + Hạn Sử Dụng (nếu có) → "💾 Lưu Ghi Nhận". Lặp lại cho từng sản phẩm/quầy kệ trong ca.' },
-      { text: 'sub-tab "⏰ Hạn Sử Dụng" — tự liệt kê mọi sản phẩm đã ghi nhận có hạn sử dụng, chia 3 nhóm (Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn), sắp theo hạn gần nhất lên đầu — không cần route riêng, tính ngay từ dữ liệu đã tải.' },
+      { role: 'Cửa hàng trưởng/Tổ trưởng', text: 'vào <b>⚙️ Vận Hành</b> (sidebar) → tab <b>"📋 Kiểm Soát Hàng Hóa"</b> → sub-tab "🗄️ Quầy Kệ" → điền Mã + Tên Quầy Kệ (+ Ngành Hàng tuỳ chọn) → "➕ Thêm Quầy Kệ" (làm 1 lần, hoặc khi siêu thị thay đổi mặt bằng) — có thể "✏️ Sửa" (tên/ngành hàng/ngừng dùng, Mã/Siêu thị bất biến) hoặc nhập/xuất Excel hàng loạt. Chỉ thấy/quản lý được quầy kệ của ĐÚNG siêu thị mình.' },
+      { role: 'Nhân viên quầy kệ', text: 'sub-tab "📷 Ghi Nhận" → gõ mã/tên để chọn Quầy Kệ từ danh sách đã khai báo (không gõ tay tên quầy mới) → quét camera ("📷 Quét Mã") hoặc gõ tay Mã Vạch/Mã Hàng (nếu siêu thị đã cấu hình API Tồn Kho, có thể chọn thẳng từ gợi ý "🔎 Chọn Từ Tồn Kho Hệ Thống" để tự điền sẵn) → nhập Tên Sản Phẩm + Số Lượng + Hạn Sử Dụng (nếu có) → "💾 Lưu Ghi Nhận".' },
+      { text: '<b>"Ghi Nhận Theo Lô" (11/2026)</b>: scan LẠI đúng cùng Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng của 1 dòng ĐANG theo dõi (Số Lượng &gt; 0) sẽ CẬP NHẬT số lượng dòng đó (ghi đè, không cộng dồn) — ví dụ sáng scan 9, chiều kiểm lại còn 2 thì scan lại nhập 2 sẽ tự sửa về 2, không cần tự xoá/trừ tay. Hạn Sử Dụng KHÁC (hoặc 1 bên có/1 bên không có hạn) luôn tạo ra 1 LÔ MỚI (dòng riêng) — không gộp nhầm 2 lô khác đát với nhau.' },
+      { text: 'Mỗi dòng ghi nhận ở bảng "Ghi Nhận Gần Đây" hoặc "⏰ Hạn Sử Dụng" đều có cột <b>"Thao Tác"</b>: <b>"✏️ Sửa"</b> (đổi Số Lượng/Hạn Sử Dụng/Ghi Chú tại chỗ), <b>"🗑️ Xóa"</b> (xoá vĩnh viễn, không khôi phục lại được), ô <b>"SL đã bán" + "➖ Trừ"</b> (trừ đúng số đã bán vào số đang theo dõi, không âm), và <b>"✅ Bán Hết"</b> (đưa thẳng Số Lượng về 0). Số Lượng về 0 = "dừng theo dõi lô này" (vẫn giữ lại để tra lịch sử) — lô mới nhập sau (dù cùng Mã Hàng/Quầy Kệ) LUÔN là 1 dòng MỚI tinh, KHÔNG tự "hồi sinh" dòng đã về 0.' },
+      { text: 'sub-tab "⏰ Hạn Sử Dụng" — tự liệt kê mọi lô đã ghi nhận có hạn sử dụng VÀ còn đang theo dõi (Số Lượng &gt; 0), chia 3 nhóm (Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn), sắp theo hạn gần nhất lên đầu. Tick "Hiện cả dòng đã bán hết (ngừng theo dõi)" để xem lại cả các lô đã về 0 (phục vụ tra lịch sử).' },
+      { text: 'Cột <b>"Tồn Kho Hệ Thống"</b> (cùng tab Hạn Sử Dụng, cần đã cấu hình API Tồn Kho đối tác): so TỔNG số lượng đang theo dõi của CÙNG 1 mã hàng (cộng dồn mọi lô/hạn sử dụng khác nhau — không so riêng từng dòng lẻ, vì 1 lô luôn nhỏ hơn tổng nên so riêng sẽ gần như luôn "an toàn" giả) với tồn kho thật từ hệ thống đối tác — tô 🔴 đỏ khi tồn hệ thống thấp hơn tổng theo dõi &gt;10% (lệch nặng, có thể quên ghi nhận bớt hàng đã bán), 🟡 vàng khi lệch trong khoảng 10%, không tô khi an toàn. "—" nghĩa là mã hàng đó chưa khớp được với dữ liệu tồn kho hệ thống (chưa cấu hình API/API không có mã này).' },
+      { role: 'Cửa hàng trưởng/Tổ trưởng', text: 'sub-tab "🔔 Ngưỡng Tồn" → khai báo mức tồn tối thiểu cho 1 Mã Hàng/Mã Vạch/Ngành Hàng (hoặc cả 3 cùng lúc để kiểm nhiều điều kiện độc lập) → hệ thống TỰ gửi email cảnh báo (kèm báo cáo Excel tô màu) theo lịch cấu hình khi "Tồn Hôm Nay" (tổng Ghi Nhận hôm nay, KHÔNG phải tồn kho hệ thống — tách bạch hoàn toàn với cột "Tồn Kho Hệ Thống" ở tab Hạn Sử Dụng) rơi dưới ngưỡng hoặc còn &lt;10% nữa là chạm ngưỡng. Người nhận mặc định: Cửa hàng trưởng/Tổ trưởng siêu thị đó + Quản lý vùng phụ trách + người được cấp xem toàn hệ thống — có thể "➕ Thêm người nhận khác" (chỉ chọn được nhân viên cùng siêu thị).' },
+      { role: 'Mọi người có quyền vào tab', text: 'sub-tab "📊 Đối Chiếu" (chỉ xem) — liệt kê từng mã hàng: Tồn Kho Hệ Thống / Trên Kệ Hôm Nay / Kết Quả, giúp đối chiếu nhanh toàn bộ danh mục cùng lúc (khác cột "Tồn Kho Hệ Thống" ở tab Hạn Sử Dụng — tab đó CHỈ hiện với lô có khai Hạn Sử Dụng, còn Đối Chiếu liệt kê MỌI mã hàng đã ghi nhận hôm nay).' },
       { role: 'Quản lý vùng/Ban điều hành', text: 'vào <b>📊 Báo Cáo → ⚙️ Vận Hành → 📋 Kiểm Soát Hàng Hóa</b> — có quyền "Xem Báo Cáo Kiểm Soát Hàng Hóa (Tất Cả Siêu Thị)" thì chọn được bộ lọc mọi siêu thị; không có quyền này thì tự lọc đúng 1 siêu thị của mình. Xuất Excel bằng nút có sẵn trong màn Báo Cáo.' },
     ],
     footer: { left: [
-      { label: 'Chưa có ở Phase 1 MVP', text: 'Đối Chiếu Tồn Kho Hệ Thống (qua API đối tác, cần Mã SDK từng siêu thị), Ngưỡng Tồn & Email cảnh báo tự động, quét mã vạch camera, sửa/ngừng dùng quầy kệ, nhập Excel hàng loạt danh mục quầy kệ — các phần này để pha sau, sau khi xác nhận nguồn dữ liệu tồn kho hệ thống.' },
+      { label: 'Tồn Hôm Nay (Ngưỡng Tồn) KHÁC Tồn Kho Hệ Thống (Hạn Sử Dụng/Đối Chiếu)', text: '"🔔 Ngưỡng Tồn" tự tính trên dữ liệu Ghi Nhận TRONG NGÀY (không liên quan tồn kho hệ thống thật, không cần cấu hình API đối tác) — còn cột "Tồn Kho Hệ Thống" ở "⏰ Hạn Sử Dụng" và cả tab "📊 Đối Chiếu" đọc tồn kho THẬT từ API đối tác (BRGMART, cần siêu thị đã cấu hình Mã Điểm). 2 cơ chế HOÀN TOÀN TÁCH BẠCH theo đúng yêu cầu người dùng, không chia sẻ logic/dữ liệu với nhau.' },
+      { label: 'Quyền ghi nhận (shelfRecordCreate) KHÁC quyền quản lý Quầy Kệ/Ngưỡng Tồn (shelfLocationManage)', text: 'Sửa/Xóa/Bán Hết/Trừ ở "📷 Ghi Nhận" và "⏰ Hạn Sử Dụng" chỉ cần quyền ghi nhận (nhân viên quét kệ bình thường cũng tự sửa được đúng ghi nhận của siêu thị mình) — còn thêm/sửa Quầy Kệ và khai báo Ngưỡng Tồn cần quyền quản lý riêng (thường chỉ Cửa hàng trưởng/Tổ trưởng).' },
+      { label: 'Xoá ghi nhận là XOÁ VĨNH VIỄN', text: '"🗑️ Xóa" ở Ghi Nhận không đi qua Thùng Rác (khác đa số dữ liệu khác trong hệ thống) — không khôi phục lại được, chỉ dùng khi chắc chắn đó là dòng ghi nhận sai/thừa.' },
     ], right: [
-      { label: 'Offline', text: 'Phase 1 MVP CHƯA hỗ trợ ghi nhận offline (cần có mạng để lưu) — offline-first (lưu tạm trên máy, tự đồng bộ khi có mạng lại) dự kiến bổ sung ở pha sau.' },
+      { label: 'Offline', text: 'Ghi nhận hỗ trợ offline-first — mất mạng vẫn "💾 Lưu Ghi Nhận" được (lưu tạm trên máy, hiện badge "🔌 Chưa đồng bộ"), tự động gửi lên server ngay khi có mạng lại mà không cần làm gì thêm. Chỉ áp dụng cho Ghi Nhận mới — Sửa/Xóa/Bán Hết/Trừ CẦN có mạng (thao tác trên dòng đã tồn tại trên server).' },
+      { label: 'Quét mã vạch bằng camera', text: 'nút "📷 Quét Mã" ở form Ghi Nhận mở camera điện thoại/máy tính quét trực tiếp vào ô Mã Vạch — vẫn gõ tay được song song nếu mã mờ/máy không hỗ trợ camera.' },
     ] },
   },
   orgChart: {

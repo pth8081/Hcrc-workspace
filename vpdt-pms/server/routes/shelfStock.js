@@ -17,14 +17,15 @@ const router = express.Router();
 const { requireAuth, blockIfMustChangePassword } = require('../lib/auth');
 const { HttpError } = require('../lib/httpErrors');
 const { sendCatchError } = require('../lib/errorResponse');
-const { withLockedRecordForCollection, getAllForCollection } = require('../lib/recordStore');
+const { withLockedRecordForCollection, getAllForCollection, deleteRecordForCollection } = require('../lib/recordStore');
 const { buildShelfLocationTemplateWorkbook, parseShelfLocationFile } = require('../lib/shelfLocationImport');
 const { buildShelfThresholdTemplateWorkbook, parseShelfThresholdFile } = require('../lib/shelfThresholdImport');
-const { canManageShelfStock, applyShelfLocationEdit, applyShelfStockThresholdEdit } = require('../lib/shelfStockEdit');
+const { canManageShelfStock, canManageShelfRecords, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit } = require('../lib/shelfStockEdit');
+const { normalizeShelfRecordPayload, findMatchingActiveShelfRecord, formatCreatedAt } = require('../lib/shelfRecordUpsert');
 const uploadRateLimiter = require('../lib/uploadRateLimiter');
 const { verifyFileSignature } = require('../lib/fileSignature');
 const { fixUploadedFilename } = require('../lib/uploadFilename');
-const { getAppDataValue } = require('../lib/appData');
+const { getAppDataValue, withLockedAppDataValue } = require('../lib/appData');
 const { getSystemInventoryForMaDiem, isInventoryApiConfigured } = require('../jobs/inventorySync');
 
 router.use(requireAuth, blockIfMustChangePassword);
@@ -57,6 +58,93 @@ router.patch('/thresholds/:id', async (req, res) => {
     res.json({ item: updated });
   } catch (err) {
     sendCatchError(res, err, 'PATCH /api/shelf-stock/thresholds/:id');
+  }
+});
+
+// ===================== GHI NHẬN TRÊN KỆ: scan-để-cập-nhật THEO LÔ (11/2026, THIẾT KẾ LẠI theo yêu cầu
+// người dùng) =====================
+// Khác hẳn POST /api/create/shelfRecords (generic, LUÔN CHÈN bản ghi mới — vẫn GIỮ NGUYÊN, dùng cho hàng
+// đợi đồng bộ offline dựa trên clientRecordId dedupe, xem chú thích đầu lib/shelfRecordUpsert.js): route
+// này CHỈ dùng cho lượt Ghi Nhận THẬT SỰ ONLINE — cùng Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng NGUYÊN VĂN
+// với 1 dòng ĐANG theo dõi (quantity>0) thì GHI ĐÈ số lượng dòng đó (không cộng dồn); khác Hạn Sử Dụng =
+// lô mới, tạo dòng mới. withLockedAppDataValue('shelfRecords', ...) khoá + đọc + quyết định CHÈN hay SỬA
+// trong CÙNG 1 lượt ghi — không có khoảng hở giữa lúc kiểm tra trùng và lúc ghi (race 2 lượt scan gần như
+// đồng thời vẫn chỉ 1 lượt thắng ghi đè, lượt kia tự xếp SAU nó trong cùng transaction).
+router.post('/records/upsert', async (req, res) => {
+  if (!canManageShelfRecords(req.freshUser)) {
+    return res.status(403).json({ error: 'Bạn không có quyền ghi nhận trên kệ' });
+  }
+  try {
+    const shelfLocations = await getAllForCollection('shelfLocations');
+    const normalized = normalizeShelfRecordPayload(req.body, req.freshUser, { shelfLocations });
+    let resultItem = null;
+    let wasUpdate = false;
+    await withLockedAppDataValue('shelfRecords', (list) => {
+      const arr = Array.isArray(list) ? list : [];
+      const existing = findMatchingActiveShelfRecord(arr, {
+        dept: req.freshUser.dept, shelfLocationId: normalized.shelfLocationId,
+        maHang: normalized.maHang, maVach: normalized.maVach, expiryDate: normalized.expiryDate
+      });
+      if (existing) {
+        existing.quantity = normalized.quantity;
+        existing.productName = normalized.productName;
+        existing.note = normalized.note;
+        if (normalized.customData !== undefined) existing.customData = normalized.customData;
+        resultItem = existing;
+        wasUpdate = true;
+      } else {
+        const rec = {
+          ...normalized, dept: req.freshUser.dept, id: Date.now(),
+          createdAt: formatCreatedAt(new Date()),
+          creator: req.freshUser.username, creatorName: req.freshUser.name,
+          clientRecordId: ''
+        };
+        arr.unshift(rec);
+        resultItem = rec;
+        wasUpdate = false;
+      }
+      return arr;
+    });
+    res.json({ item: resultItem, wasUpdate });
+  } catch (err) {
+    sendCatchError(res, err, 'POST /api/shelf-stock/records/upsert');
+  }
+});
+
+// ===================== GHI NHẬN TRÊN KỆ: sửa (quantity/expiryDate/note) — dùng CHUNG cho cả "✏️ Sửa" lẫn
+// nút "✅ Bán Hết"/"➖ Trừ" (client tự tính quantity mới rồi gọi route này, xem module-vanhanh.js) =====
+router.patch('/records/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    // Chỉ cần đọc trước toàn bộ danh sách khi THẬT SỰ đổi expiryDate (dup-check "cùng lô" — xem
+    // applyShelfRecordEdit()) — các lượt Bán Hết/Trừ/Sửa số lượng thuần không đổi expiryDate nên bỏ qua
+    // được bước đọc thêm này, đỡ tốn 1 lượt đọc AppData cho thao tác phổ biến nhất.
+    const allRecords = req.body?.expiryDate !== undefined ? await getAllForCollection('shelfRecords') : null;
+    const updated = await withLockedRecordForCollection('shelfRecords', id, (item) => applyShelfRecordEdit(item, req.body, req.freshUser, allRecords));
+    res.json({ item: updated });
+  } catch (err) {
+    sendCatchError(res, err, 'PATCH /api/shelf-stock/records/:id');
+  }
+});
+
+// ===================== GHI NHẬN TRÊN KỆ: xóa =====================
+// shelfRecords là collection AppData thuần (chưa "tốt nghiệp" bảng riêng, xem lib/recordStore.js) — xoá ở
+// đây là XOÁ VĨNH VIỄN theo đúng quy ước đã có cho mọi collection AppData khác (KHÔNG qua Thùng Rác, xem
+// deleteRecordForCollection() nhánh else) — vẫn tự ghi Nhật Ký Hệ Thống qua logRecordDelete() bên trong.
+router.delete('/records/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'id không hợp lệ' });
+  try {
+    await deleteRecordForCollection('shelfRecords', id, (item) => {
+      if (!canManageShelfRecords(req.freshUser)) throw new HttpError(403, 'Bạn không có quyền ghi nhận trên kệ');
+      if (!req.freshUser.perms?.admin && item.dept !== req.freshUser.dept) {
+        throw new HttpError(403, 'Ghi nhận này không thuộc siêu thị của bạn');
+      }
+    }, { username: req.freshUser.username, name: req.freshUser.name });
+    res.json({ success: true });
+  } catch (err) {
+    sendCatchError(res, err, 'DELETE /api/shelf-stock/records/:id');
   }
 });
 

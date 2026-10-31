@@ -2838,7 +2838,9 @@ Chữa Siêu Thị; phần Đơn Hàng dùng nhãn "Vận Hành - ...".
 **"📋 Kiểm Soát Hàng Hóa" (Phase 1 MVP 11/2026, bổ sung Sửa/Nhập Excel/Ngưỡng
 Tồn 11/2026, bổ sung Quét Mã Vạch Camera/Offline-First 11/2026, bổ sung Đối
 Chiếu Kệ & Tồn Kho Hệ Thống 11/2026, bổ sung mã vạch thật (API v1.3) + thiết
-kế lại 2 ô Mã Hàng/Mã Vạch 11/2026 — ĐỦ cả 5 khối nghiệp vụ gốc)** — tab con
+kế lại 2 ô Mã Hàng/Mã Vạch 11/2026, THIẾT KẾ LẠI "Ghi Nhận Theo Lô" +
+Sửa/Xóa/Bán Hết/Trừ + cảnh báo lệch Tồn Kho Hệ Thống theo nhóm mã hàng
+11/2026 — ĐỦ cả 5 khối nghiệp vụ gốc)** — tab con
 thứ 4 trong Vận Hành (cùng cấp Đơn Hàng/QLDA/Phê Duyệt Giá Bán Buôn). Mỗi
 siêu thị tự ghi nhận số lượng hàng thực tế trên kệ hàng ngày + theo dõi hạn
 sử dụng, dùng chung tài khoản đăng nhập hiện có (KHÔNG có đăng nhập riêng
@@ -2873,13 +2875,57 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
       tạm (hiện badge "🔌 Chưa đồng bộ" + dòng thông báo số bản ghi đang
       chờ), tự gửi lên lại ngay khi có mạng trở lại, không cần làm gì
       thêm, không mất dữ liệu đã nhập.
+    - **"Ghi Nhận Theo Lô" (THIẾT KẾ LẠI 11/2026, theo yêu cầu người dùng —
+      trước đó MỖI LẦN SCAN LÀ 1 DÒNG MỚI MÃI MÃI, không có cách sửa/xoá/
+      biết hàng đã bán hết hay chưa)**: scan LẠI đúng cùng Quầy Kệ + Mã
+      Hàng/Mã Vạch (khớp 1 trong 2) + Hạn Sử Dụng (kể cả cùng KHÔNG có hạn)
+      của 1 dòng ĐANG theo dõi (Số Lượng > 0) sẽ **CẬP NHẬT (ghi đè) số
+      lượng dòng đó**, KHÔNG cộng dồn — VD sáng scan 9, trưa kiểm lại còn
+      2 thì scan lại nhập 2 sẽ tự sửa về 2. Hạn Sử Dụng KHÁC (hoặc 1 bên
+      có/1 bên không hạn) luôn tạo **LÔ MỚI** (dòng riêng), không gộp nhầm
+      2 lô khác đát. Route riêng `POST /api/shelf-stock/records/upsert`
+      (khác hẳn `POST /api/create/shelfRecords` cũ — route cũ vẫn giữ
+      nguyên, CHỈ dùng cho hàng đợi đồng bộ offline ở trên, luôn tạo dòng
+      mới vì phụ thuộc cơ chế chống trùng theo `clientRecordId`).
+    - **Sửa/Xóa/Bán Hết/Trừ (MỚI 11/2026)** — mỗi dòng ở bảng "Ghi Nhận Gần
+      Đây" (tab này) và bảng "⏰ Hạn Sử Dụng" đều có cột "Thao Tác":
+      **"✏️ Sửa"** (đổi Số Lượng/Hạn Sử Dụng/Ghi Chú ngay tại dòng),
+      **"🗑️ Xóa"** (xoá **VĨNH VIỄN**, KHÔNG qua Thùng Rác — không khôi
+      phục lại được, chỉ ghi 1 dòng Nhật Ký Hệ Thống), ô **"SL đã bán" +
+      nút "➖ Trừ"** (nhập số đã bán, tự trừ vào Số Lượng đang theo dõi,
+      không về âm), và **"✅ Bán Hết"** (đưa thẳng Số Lượng về 0). Số
+      Lượng = 0 nghĩa là "**dừng theo dõi lô này**" (ẩn khỏi "⏰ Hạn Sử
+      Dụng" mặc định, vẫn giữ lại dòng để tra lịch sử — không xoá) — lần
+      nhập lô mới sau (dù cùng Quầy Kệ/Mã Hàng) LUÔN tạo dòng MỚI tinh,
+      KHÔNG "hồi sinh" lại dòng đã về 0 (tránh gộp nhầm 2 đợt nhập hàng
+      khác thời điểm vào chung 1 dòng). Thao tác này dùng quyền "📷 Ghi
+      Nhận Trên Kệ" (nhân viên quét kệ bình thường cũng tự sửa được đúng
+      ghi nhận của siêu thị mình) — KHÔNG cần quyền "🗄️ Quản Lý Danh Mục
+      Quầy Kệ".
   - "🗄️ Quầy Kệ" — Cửa hàng trưởng/Tổ trưởng khai báo danh mục quầy kệ của
     ĐÚNG siêu thị mình: Thêm tay, **Sửa** (tên/ngành hàng/trạng thái — mã
     quầy kệ và siêu thị không đổi được sau khi tạo), **Ngừng dùng** (ẩn
     khỏi danh sách chọn ở "Ghi Nhận", KHÔNG xoá lịch sử đã ghi nhận), và
     **Nhập/Xuất Excel** (tải mẫu → điền → xem trước → chỉ dòng "Mới" được
     thêm, dòng trùng mã trong siêu thị bị bỏ qua).
-  - "⏰ Hạn Sử Dụng" — tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn hạn.
+  - "⏰ Hạn Sử Dụng" — mặc định CHỈ hiện các lô ĐANG theo dõi (Số Lượng > 0,
+    có khai Hạn Sử Dụng), tự chia 3 nhóm Đã hết hạn/Cận hạn ≤7 ngày/Còn
+    hạn — tick checkbox **"Hiện cả dòng đã bán hết (ngừng theo dõi)"** để
+    xem lại cả các lô đã về 0 (phục vụ tra lịch sử, không tính vào 3 nhóm
+    hạn trên). Mỗi dòng cũng có cột "Thao Tác" (Sửa/Xóa/Bán Hết/Trừ) y hệt
+    tab "📷 Ghi Nhận".
+    - **Cột "Tồn Kho Hệ Thống" (MỚI 11/2026, gộp theo NHÓM mã hàng, không
+      so riêng từng dòng lô)**: so **TỔNG** Số Lượng đang theo dõi của
+      TẤT CẢ lô cùng 1 mã hàng (cộng dồn mọi Hạn Sử Dụng khác nhau — 1 mã
+      hàng có thể có nhiều lô do nhập nhiều đợt khác đát) với tồn kho THẬT
+      từ API đối tác (cần siêu thị đã cấu hình "Mã Điểm", xem mục dưới) —
+      tô 🔴 **đỏ** khi tồn hệ thống thấp hơn tổng theo dõi quá 10% (dấu
+      hiệu quên ghi nhận bớt hàng đã bán ở 1 lô khác), 🟡 **vàng** khi lệch
+      trong khoảng 10%, không tô khi an toàn, "—" khi mã hàng chưa khớp
+      được dữ liệu API (chưa cấu hình/API không có mã này). **KHÔNG liên
+      quan/không đổi gì cách tính "Tồn Hôm Nay" của "🔔 Ngưỡng Tồn"** (mục
+      dưới) — 2 cơ chế cảnh báo tồn HOÀN TOÀN TÁCH BẠCH theo đúng yêu cầu
+      người dùng.
   - "🔔 Ngưỡng Tồn" (MỚI, THIẾT KẾ LẠI 11/2026) — Cửa hàng trưởng/Tổ trưởng
     tự khai báo ngưỡng tồn tối thiểu của ĐÚNG siêu thị mình, qua form nhập
     tay hoặc **Nhập Excel** (⬆️ Nhập Excel / ⬇️ Tải Mẫu Excel, cùng khuôn

@@ -63,4 +63,49 @@ function applyShelfStockThresholdEdit(item, body, user, allUsers) {
   return next;
 }
 
-module.exports = { canManageShelfStock, applyShelfLocationEdit, applyShelfStockThresholdEdit };
+// Ghi Nhận Trên Kệ (shelfRecords) dùng quyền shelfRecordCreate — KHÁC canManageShelfStock() ở trên
+// (shelfLocationManage, dành cho Cửa Hàng Trưởng quản lý Quầy Kệ/Ngưỡng Tồn). Nhân viên bình thường có
+// shelfRecordCreate (không nhất thiết có shelfLocationManage) vẫn phải Sửa/Xóa được đúng ghi nhận của
+// chính siêu thị mình — mirror đúng quyền TẠO đã có ở lib/createValidation.js shelfRecords.extraValidate.
+function canManageShelfRecords(user) {
+  return !!(user?.perms?.admin || user?.perms?.shelfRecordCreate);
+}
+
+// quantity/expiryDate/note sửa được; shelfLocationId/maHang/maVach/dept BẤT BIẾN (đổi định danh sản phẩm
+// coi như ghi nhận lô khác, không phải sửa — cùng nguyên tắc code quầy kệ/ngưỡng tồn bất biến ở trên).
+// allRecords (tuỳ chọn, route truyền vào khi body có đổi expiryDate) — để chặn tạo trùng "cùng lô" với 1
+// dòng ĐANG active khác sau khi sửa (xem findMatchingActiveShelfRecord() ở lib/shelfRecordUpsert.js).
+function applyShelfRecordEdit(item, body, user, allRecords) {
+  if (!canManageShelfRecords(user)) throw new HttpError(403, 'Bạn không có quyền ghi nhận trên kệ');
+  if (!user.perms?.admin && item.dept !== user.dept) {
+    throw new HttpError(403, 'Ghi nhận này không thuộc siêu thị của bạn');
+  }
+  const next = { ...item };
+  if (body.quantity !== undefined) {
+    const quantity = Number(body.quantity);
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      throw new HttpError(400, 'Số lượng không hợp lệ (phải là số không âm)');
+    }
+    next.quantity = quantity;
+  }
+  if (body.expiryDate !== undefined) {
+    let expiryDate = '';
+    if (body.expiryDate) {
+      const d = new Date(body.expiryDate);
+      if (Number.isNaN(d.getTime())) throw new HttpError(400, 'Hạn sử dụng không hợp lệ');
+      expiryDate = d.toISOString();
+    }
+    if (expiryDate !== item.expiryDate && Number(next.quantity) > 0) {
+      const { findMatchingActiveShelfRecord } = require('./shelfRecordUpsert');
+      const dup = findMatchingActiveShelfRecord((allRecords || []).filter(r => r.id !== item.id), {
+        dept: item.dept, shelfLocationId: item.shelfLocationId, maHang: item.maHang, maVach: item.maVach, expiryDate
+      });
+      if (dup) throw new HttpError(409, 'Đã có 1 dòng đang theo dõi khác cùng Quầy Kệ/Mã Hàng/Hạn Sử Dụng này — không thể đổi trùng');
+    }
+    next.expiryDate = expiryDate;
+  }
+  if (body.note !== undefined) next.note = String(body.note || '').trim();
+  return next;
+}
+
+module.exports = { canManageShelfStock, canManageShelfRecords, applyShelfLocationEdit, applyShelfStockThresholdEdit, applyShelfRecordEdit };

@@ -799,6 +799,57 @@ function createDispatcher(state) {
         return { status: 200, body: { ok: true, item: updated } };
       }
 
+      // ===== Ghi Nhận Theo Lô (Kiểm Soát Hàng Hóa, 11/2026) — mirror ĐÚNG routes/shelfStock.js
+      // (POST /records/upsert, PATCH/DELETE /records/:id) bằng CHÍNH các hàm thật lib/shelfRecordUpsert.js/
+      // lib/shelfStockEdit.js, không tự đoán lại logic nghiệp vụ — cùng triết lý mọi nhánh khác ở trên. =====
+      if (pathName === '/api/shelf-stock/records/upsert' && method === 'POST') {
+        const { normalizeShelfRecordPayload, findMatchingActiveShelfRecord, formatCreatedAt } = require('../lib/shelfRecordUpsert');
+        const { canManageShelfRecords } = require('../lib/shelfStockEdit');
+        if (!canManageShelfRecords(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền ghi nhận trên kệ' } };
+        const normalized = normalizeShelfRecordPayload(body, freshUser, { shelfLocations: state.shelfLocations || [] });
+        if (!state.shelfRecords) state.shelfRecords = [];
+        const existing = findMatchingActiveShelfRecord(state.shelfRecords, {
+          dept: freshUser.dept, shelfLocationId: normalized.shelfLocationId, maHang: normalized.maHang, maVach: normalized.maVach, expiryDate: normalized.expiryDate
+        });
+        let item, wasUpdate;
+        if (existing) {
+          existing.quantity = normalized.quantity; existing.productName = normalized.productName; existing.note = normalized.note;
+          item = existing; wasUpdate = true;
+        } else {
+          item = { ...normalized, dept: freshUser.dept, id: Date.now() + Math.floor(Math.random() * 1000), createdAt: formatCreatedAt(new Date()), creator: freshUser.username, creatorName: freshUser.name, clientRecordId: '' };
+          state.shelfRecords.unshift(item); wasUpdate = false;
+        }
+        return { status: 200, body: { item, wasUpdate } };
+      }
+      if ((m = pathName.match(/^\/api\/shelf-stock\/records\/(\d+)$/)) && method === 'PATCH') {
+        const { applyShelfRecordEdit } = require('../lib/shelfStockEdit');
+        const id = Number(m[1]);
+        const list = state.shelfRecords || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        const updated = applyShelfRecordEdit(list[idx], body, freshUser, list);
+        list[idx] = updated;
+        return { status: 200, body: { item: updated } };
+      }
+      if ((m = pathName.match(/^\/api\/shelf-stock\/records\/(\d+)$/)) && method === 'DELETE') {
+        const { canManageShelfRecords } = require('../lib/shelfStockEdit');
+        const id = Number(m[1]);
+        const list = state.shelfRecords || [];
+        const idx = list.findIndex(x => x.id === id);
+        if (idx === -1) return { status: 404, body: { error: 'Không tìm thấy hồ sơ' } };
+        if (!canManageShelfRecords(freshUser)) return { status: 403, body: { error: 'Bạn không có quyền ghi nhận trên kệ' } };
+        if (!freshUser.perms?.admin && list[idx].dept !== freshUser.dept) return { status: 403, body: { error: 'Ghi nhận này không thuộc siêu thị của bạn' } };
+        list.splice(idx, 1);
+        return { status: 200, body: { success: true } };
+      }
+      // GET /api/shelf-stock/system-inventory — mock ĐƠN GIẢN HOÁ (state.__mockSystemInventoryRows, test tự
+      // seed khi cần) vì store-scoping thật của route này (storeExternalCodes -> maDiem -> cache đối tác) đã
+      // được kiểm riêng ở routes test khác — ở đây chỉ cần dữ liệu để test cột "Tồn Kho Hệ Thống" (Hạn Sử Dụng).
+      if (pathName === '/api/shelf-stock/system-inventory' && method === 'GET') {
+        if (!state.__mockSystemInventoryRows) return { status: 503, body: { error: 'Hệ thống chưa cấu hình kết nối API Tồn Kho đối tác' } };
+        return { status: 200, body: { rows: state.__mockSystemInventoryRows, capNhatLuc: new Date().toISOString() } };
+      }
+
       return { status: 404, body: { error: `Mock chưa hỗ trợ route: ${method} ${pathName}` } };
     } catch (err) {
       if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };

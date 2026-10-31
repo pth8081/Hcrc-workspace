@@ -1,9 +1,47 @@
 # Phiên bản hiện tại
 
-**28.54** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.55** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.55 (2026-11): "Ghi Nhận Theo Lô" — scan cập nhật/cộng lô mới + Sửa/Xóa/Bán Hết/Trừ + cảnh báo lệch Tồn Kho Hệ Thống theo nhóm mã hàng
+
+Theo yêu cầu người dùng (hỏi về việc dữ liệu "Ghi Nhận Trên Kệ" lưu mãi mãi không có cách sửa/biết hàng
+đã bán hết) — xác nhận đúng: trước đây MỖI LẦN SCAN LÀ 1 DÒNG MỚI VĨNH VIỄN, không có update/edit/delete
+nào cho `shelfRecords`. Thiết kế lại theo đúng 2 hướng người dùng chọn:
+
+1. **"Ghi Nhận Theo Lô" (lib/shelfRecordUpsert.js mới + `POST /api/shelf-stock/records/upsert` mới)** —
+   scan lại ĐÚNG cùng Quầy Kệ + Mã Hàng/Mã Vạch (khớp 1 trong 2) + Hạn Sử Dụng (kể cả cùng không có hạn)
+   của 1 dòng ĐANG theo dõi (Số Lượng > 0) → **CẬP NHẬT (ghi đè) số lượng**, không cộng dồn. Hạn Sử Dụng
+   KHÁC → luôn tạo **LÔ MỚI**. Route cũ `POST /api/create/shelfRecords` GIỮ NGUYÊN không đổi (CHỈ còn
+   dùng cho hàng đợi đồng bộ offline, vì phụ thuộc chống trùng theo `clientRecordId` — đổi thành upsert
+   ở đây sẽ phá cơ chế đó).
+2. **Sửa/Xóa/Bán Hết/Trừ** (`lib/shelfStockEdit.js` +`applyShelfRecordEdit()`/`canManageShelfRecords()`
+   mới, `PATCH`/`DELETE /api/shelf-stock/records/:id` mới) — mỗi dòng ở "📷 Ghi Nhận" và "⏰ Hạn Sử Dụng"
+   có nút ✏️ Sửa, 🗑️ Xóa (xoá VĨNH VIỄN, không qua Thùng Rác — đúng quy ước có sẵn của collection
+   `shelfRecords`, 1 collection AppData thuần), ô "SL đã bán" + nút ➖ Trừ, và nút ✅ Bán Hết (đưa Số
+   Lượng về 0 = dừng theo dõi lô này, vẫn giữ lại để tra lịch sử — lô mới nhập sau LUÔN là dòng mới
+   tinh, không "hồi sinh" dòng đã về 0).
+3. **Cảnh báo lệch "Tồn Kho Hệ Thống" theo NHÓM mã hàng (không so riêng từng dòng lô)** — theo yêu cầu
+   người dùng "sẽ là trên số tổng cùng mã nhưng nhiều dòng do không trùng hạn sử dụng... thế mới chính
+   xác": cột mới ở tab "⏰ Hạn Sử Dụng" so TỔNG Số Lượng mọi lô active cùng 1 mã hàng (cộng dồn qua mọi
+   Hạn Sử Dụng khác nhau) với tồn kho thật từ API đối tác (route `GET /api/shelf-stock/system-inventory`
+   có sẵn) — 🔴 đỏ khi lệch >10%, 🟡 vàng khi lệch trong 10%, dùng chung khuôn dung sai `1e-9` đã vá ở
+   "Ngưỡng Tồn" v28.54 (bù sai số dấu phẩy động JS tại đúng biên %). **Hoàn toàn tách bạch** với "Tồn
+   Hôm Nay" của "🔔 Ngưỡng Tồn" (vẫn tính trên Ghi Nhận trong ngày, không đổi gì) — đúng yêu cầu người
+   dùng giữ 2 cơ chế tách biệt.
+
+Cập nhật đầy đủ `NGHIEP_VU_DOCS.vanHanhShelf` (`module-nghiepvu.js`, entry này đã lỗi thời từ nhiều đợt
+trước — vẫn ghi "CHƯA có Đối Chiếu/Ngưỡng Tồn/quét mã vạch" dù cả 3 đã code xong từ lâu, viết lại toàn
+bộ cho khớp đúng 5 sub-tab hiện có) + `deploy/Huong-dan-nghiep-vu.md`. Test mới
+`tests/test-shelf-record-lo-real-click.js` (12 kịch bản, Playwright click/fill thật) + mở rộng
+`tests/testHarness.js` (dispatcher chưa hỗ trợ bất kỳ route `/api/shelf-stock/*` nào, kể cả 2 route PATCH
+có từ trước — bổ sung mirror cho cả route mới và route cũ liên quan). Không đổi gì
+`jobs/shelfStockThresholdAlert.js` (Ngưỡng Tồn) theo đúng yêu cầu giữ 2 tính năng tách biệt.
+
+**Deploy**: chỉ copy code + `pm2 restart` — không đổi `schema.sql`/`.env.example`/`package.json`
+dependencies, không cần thao tác tay nào khác.
 
 ## v28.54 (2026-11): Vá 5 lỗi thật phát hiện qua rà soát chéo độc lập (báo cáo Ngưỡng Tồn v28.53)
 

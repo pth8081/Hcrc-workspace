@@ -244,7 +244,8 @@ function setVanHanhShelfSubTab(tab) {
     editingShelfLocationId = null;
     renderShelfLocationsList();
   } else if (tab === 'EXPIRY') {
-    renderShelfExpiryGroups();
+    editingShelfRecordId = null;
+    (async () => { await ensureShelfSystemInventoryForExpiry(); renderShelfExpiryGroups(); })();
   } else if (tab === 'THRESHOLD') {
     editingShelfStockThresholdId = null;
     populateShelfThresholdExtraRecipientsPicker('stExtraRecipientsPicker', []);
@@ -502,10 +503,25 @@ async function submitShelfRecord(e) {
 
   if (navigator.onLine) {
     try {
-      const result = await callCreateAction('shelfRecords', payload);
-      DB.shelfRecords.unshift(result.item);
-      logSystemAction('SHELF_RECORD', 'CREATE', `Ghi nhận trên kệ [${result.item.shelfLocationCode} - ${productName}, SL ${quantity}]`, 'SUCCESS', '');
-      alert('✅ Đã lưu ghi nhận trên kệ!');
+      // POST /records/upsert (KHÔNG phải callCreateAction('shelfRecords',...) nữa, 11/2026 — "Ghi Nhận
+      // Theo Lô": cùng Quầy Kệ + Mã Hàng/Mã Vạch + Hạn Sử Dụng với 1 dòng ĐANG theo dõi -> ghi đè số
+      // lượng, không cộng dồn; khác Hạn Sử Dụng -> lô mới. clientRecordId KHÔNG cần ở đây (chỉ hàng đợi
+      // offline mới cần dedupe theo nó — xem lib/shelfRecordUpsert.js).
+      const res = await fetch('/api/shelf-stock/records/upsert', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      if (res.status === 401) return handleSessionExpired();
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || 'Không thể lưu ghi nhận');
+      if (result.wasUpdate) {
+        const idx = DB.shelfRecords.findIndex(r => r.id === result.item.id);
+        if (idx !== -1) DB.shelfRecords[idx] = result.item; else DB.shelfRecords.unshift(result.item);
+      } else {
+        DB.shelfRecords.unshift(result.item);
+      }
+      logSystemAction('SHELF_RECORD', result.wasUpdate ? 'UPDATE' : 'CREATE',
+        `${result.wasUpdate ? 'Cập nhật' : 'Ghi nhận'} trên kệ [${result.item.shelfLocationCode} - ${productName}, SL ${quantity}]`, 'SUCCESS', '');
+      alert(result.wasUpdate ? '✅ Đã CẬP NHẬT số lượng lô đang theo dõi (cùng Quầy Kệ/Mã Hàng/Hạn Sử Dụng)!' : '✅ Đã lưu ghi nhận trên kệ (lô mới)!');
       document.getElementById('srForm').reset();
       document.getElementById('srShelfLocationId').value = '';
       setShelfMaHangMatchNote('', false);
@@ -533,6 +549,113 @@ async function submitShelfRecord(e) {
 // Phần E (offline-first): gộp thêm các bản ghi CÒN TRONG HÀNG ĐỢI offline (shelfOfflinePendingCache,
 // chưa có `id` thật) lên ĐẦU danh sách kèm badge "Chưa đồng bộ" — refreshShelfOfflineUi() giữ biến này
 // luôn khớp với IndexedDB.
+let editingShelfRecordId = null;
+function enterShelfRecordEditMode(id) {
+  editingShelfRecordId = Number(id);
+  renderShelfRecordRecentList();
+  renderShelfExpiryGroups();
+}
+function cancelShelfRecordEdit() {
+  editingShelfRecordId = null;
+  renderShelfRecordRecentList();
+  renderShelfExpiryGroups();
+}
+// Dùng CHUNG cho Sửa / Bán Hết / Trừ — cả 3 đều chỉ PATCH field quantity/expiryDate/note qua ĐÚNG 1 route
+// (routes/shelfStock.js). Tự cập nhật DB.shelfRecords + render lại CẢ 2 bảng (Ghi Nhận gần đây + Hạn Sử
+// Dụng, vì cùng 1 nguồn dữ liệu) sau khi lưu thành công.
+async function patchShelfRecordCore(id, body, successMsg) {
+  try {
+    const res = await fetch(`/api/shelf-stock/records/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (res.status === 401) return handleSessionExpired();
+    const resBody = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(`⛔ ${resBody.error || 'Không thể lưu thay đổi'}`); return false; }
+    const idx = DB.shelfRecords.findIndex(r => r.id === id);
+    if (idx !== -1) DB.shelfRecords[idx] = resBody.item;
+    logSystemAction('SHELF_RECORD', 'UPDATE', `${successMsg} [${resBody.item.shelfLocationCode} - ${resBody.item.productName}]`, 'SUCCESS', '');
+    return true;
+  } catch (err) { alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); return false; }
+}
+async function saveShelfRecordEdit(id) {
+  const numId = Number(id);
+  const quantity = Number(document.getElementById(`srEditQuantity_${numId}`).value);
+  if (!Number.isFinite(quantity) || quantity < 0) return alert('Số lượng không hợp lệ (phải là số không âm)!');
+  const expiryDate = document.getElementById(`srEditExpiryDate_${numId}`).value;
+  const note = document.getElementById(`srEditNote_${numId}`).value.trim();
+  const ok = await patchShelfRecordCore(numId, { quantity, expiryDate, note }, 'Sửa ghi nhận trên kệ');
+  if (!ok) return;
+  editingShelfRecordId = null;
+  renderShelfRecordRecentList();
+  renderShelfExpiryGroups();
+}
+async function deleteShelfRecordClient(id) {
+  if (!confirm('Xóa hẳn dòng ghi nhận này? Không khôi phục lại được.')) return;
+  const numId = Number(id);
+  try {
+    const res = await fetch(`/api/shelf-stock/records/${numId}`, { method: 'DELETE' });
+    if (res.status === 401) return handleSessionExpired();
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(`⛔ ${body.error || 'Không thể xóa'}`);
+    const idx = DB.shelfRecords.findIndex(r => r.id === numId);
+    const removed = idx !== -1 ? DB.shelfRecords[idx] : null;
+    if (idx !== -1) DB.shelfRecords.splice(idx, 1);
+    logSystemAction('SHELF_RECORD', 'DELETE', `Xóa ghi nhận trên kệ [${removed?.shelfLocationCode || ''} - ${removed?.productName || ''}]`, 'SUCCESS', '');
+  } catch (err) { return alert(`⛔ Không thể kết nối tới máy chủ: ${err.message}`); }
+  renderShelfRecordRecentList();
+  renderShelfExpiryGroups();
+}
+// "✅ Bán Hết" — set quantity=0 thẳng, dòng chuyển "Ngừng theo dõi" (vẫn lưu lịch sử, chỉ ẩn khỏi Hạn Sử
+// Dụng mặc định — xem renderShelfExpiryGroups()). Nhập lô mới sau này (dù cùng Mã Hàng/Quầy Kệ) sẽ tạo
+// dòng MỚI tinh (không "hồi sinh" dòng đã về 0 — xem findMatchingActiveShelfRecord() lib/shelfRecordUpsert.js).
+async function markShelfRecordSoldOut(id) {
+  if (!confirm('Đánh dấu ĐÃ BÁN HẾT? Số lượng sẽ về 0 và dòng này dừng theo dõi (vẫn giữ lại lịch sử).')) return;
+  const ok = await patchShelfRecordCore(Number(id), { quantity: 0 }, 'Bán hết — dừng theo dõi');
+  if (ok) { renderShelfRecordRecentList(); renderShelfExpiryGroups(); }
+}
+// Ô "SL đã bán" + nút "➖ Trừ" — trừ vào đúng số lượng đang theo dõi của dòng này, không âm (floor 0).
+async function deductShelfRecordSold(id) {
+  const numId = Number(id);
+  const input = document.getElementById(`srDeduct_${numId}`);
+  const sold = Number(input?.value);
+  if (!Number.isFinite(sold) || sold <= 0) return alert('Vui lòng nhập số lượng đã bán (lớn hơn 0)!');
+  const current = (DB.shelfRecords || []).find(r => r.id === numId);
+  if (!current) return;
+  const newQuantity = Math.max(0, Number(current.quantity) - sold);
+  const ok = await patchShelfRecordCore(numId, { quantity: newQuantity }, `Trừ ${sold} đã bán`);
+  if (ok) { if (input) input.value = ''; renderShelfRecordRecentList(); renderShelfExpiryGroups(); }
+}
+// Cụm nút Thao Tác dùng CHUNG cho cả 2 bảng (Ghi Nhận gần đây + Hạn Sử Dụng) — tách riêng để không lặp
+// HTML 2 nơi. r.quantity<=0 (đã bán hết) chỉ còn Xóa (không còn gì để Sửa/Bán Hết/Trừ thêm nữa).
+function renderShelfRecordActionsCell(r) {
+  if (!canCreateShelfRecordClient(currentUser)) return '';
+  if (Number(r.quantity) <= 0) {
+    return `<button type="button" data-op="deleteShelfRecordClient" data-arg0="${r.id}" class="text-red-600 hover:underline">🗑️ Xóa</button>`;
+  }
+  return `
+    <div class="flex flex-wrap items-center gap-1">
+      <button type="button" data-op="enterShelfRecordEditMode" data-arg0="${r.id}" class="text-blue-600 hover:underline">✏️ Sửa</button>
+      <button type="button" data-op="deleteShelfRecordClient" data-arg0="${r.id}" class="text-red-600 hover:underline">🗑️ Xóa</button>
+      <span class="inline-flex items-center gap-1 border rounded px-1 py-0.5 bg-gray-50">
+        <input type="number" min="0" id="srDeduct_${r.id}" placeholder="SL đã bán" class="w-16 border rounded px-1 py-0.5 text-[11px]">
+        <button type="button" data-op="deductShelfRecordSold" data-arg0="${r.id}" class="text-amber-700 font-bold text-[11px]">➖ Trừ</button>
+      </span>
+      <button type="button" data-op="markShelfRecordSoldOut" data-arg0="${r.id}" class="text-gray-600 font-bold text-[11px] border rounded px-1.5 py-0.5 bg-gray-50 hover:bg-gray-100">✅ Bán Hết</button>
+    </div>`;
+}
+function renderShelfRecordEditRow(r, colspanBefore, colspanAfter) {
+  return `
+    <tr class="border-b bg-cyan-50">
+      <td class="p-2 font-semibold" colspan="${colspanBefore}">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.productName || '')}</td>
+      <td class="p-2"><input type="number" min="0" id="srEditQuantity_${r.id}" value="${escapeHtml(String(r.quantity ?? 0))}" class="w-20 border p-1 rounded"></td>
+      <td class="p-2"><input type="date" id="srEditExpiryDate_${r.id}" value="${r.expiryDate ? escapeHtml(new Date(r.expiryDate).toISOString().slice(0, 10)) : ''}" class="w-full border p-1 rounded"></td>
+      <td class="p-2" colspan="${colspanAfter}">
+        <input id="srEditNote_${r.id}" value="${escapeHtml(r.note || '')}" placeholder="Ghi chú" class="w-full border p-1 rounded mb-1">
+        <button type="button" data-op="saveShelfRecordEdit" data-arg0="${r.id}" class="text-cyan-700 font-bold hover:underline mr-2">💾 Lưu</button>
+        <button type="button" data-op="cancelShelfRecordEdit" class="text-gray-500 hover:underline">Hủy</button>
+      </td>
+    </tr>`;
+}
 function renderShelfRecordRecentList() {
   const tbody = document.getElementById('vhShelfRecordRecentBody');
   if (!tbody) return;
@@ -545,19 +668,25 @@ function renderShelfRecordRecentList() {
       <td class="p-2 text-right">${escapeHtml(String(rec.payload.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(rec.payload.expiryDate ? new Date(rec.payload.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🔌 Chưa đồng bộ</span></td>
+      <td class="p-2 text-gray-400 italic">—</td>
     </tr>`).join('');
   const items = [...(DB.shelfRecords || [])].sort((a, b) => b.id - a.id).slice(0, 20);
-  const rows = items.map(r => `
-    <tr class="border-b">
+  const rows = items.map(r => {
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 4, 2);
+    const soldOutBadge = Number(r.quantity) <= 0 ? ' <span class="text-[10px] text-gray-400 italic">(đã bán hết)</span>' : '';
+    return `
+    <tr class="border-b ${Number(r.quantity) <= 0 ? 'opacity-60' : ''}">
       <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
       <td class="p-2">${escapeHtml(r.maVach || '')}</td>
       <td class="p-2">${escapeHtml(r.maHang || '')}</td>
-      <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
+      <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}${soldOutBadge}</td>
       <td class="p-2">${escapeHtml(r.expiryDate ? new Date(r.expiryDate).toLocaleDateString('vi-VN') : '')}</td>
       <td class="p-2 text-gray-500">${escapeHtml(r.createdAt || '')}</td>
-    </tr>`).join('');
-  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="7" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
+      <td class="p-2">${renderShelfRecordActionsCell(r)}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = (pendingRows + rows) || `<tr><td colspan="8" class="p-3 text-center text-gray-400">Chưa có ghi nhận nào</td></tr>`;
   updateShelfOfflineQueueBanner();
 }
 // Banner "🔌 N bản ghi đang chờ đồng bộ" phía trên form Ghi Nhận — chỉ hiện khi hàng đợi offline
@@ -726,13 +855,59 @@ async function confirmShelfLocationImport() {
   cacheShelfLocationsOffline(); // Phần E — giữ cache offline khớp ngay sau khi nhập Excel lúc còn mạng.
 }
 
-// ===== "⏰ Hạn Sử Dụng" — lọc DB.shelfRecords (đã có hạn sử dụng) thành 3 nhóm, tính phía client từ dữ
-// liệu đã tải (không cần route riêng ở Phase 1 MVP). =====
+// ===== "⏰ Hạn Sử Dụng" — lọc DB.shelfRecords (đã có hạn sử dụng) thành 3 nhóm theo hạn, tính phía
+// client từ dữ liệu đã tải. Mặc định CHỈ hiện dòng còn theo dõi (quantity>0) — "Ngừng theo dõi" (đã bán
+// hết) chỉ hiện khi tick "Hiện cả dòng đã bán hết" (#vhShelfExpiryShowSoldOut). Bổ sung 11/2026: cột
+// "Tồn Kho Hệ Thống" đối chiếu TỔNG số lượng đang theo dõi CỦA CÙNG 1 MÃ HÀNG (gộp mọi lô/hạn sử dụng
+// khác nhau — KHÔNG so riêng từng dòng, vì 1 dòng lô luôn ít hơn tổng tồn kho nên so riêng sẽ gần như
+// luôn "an toàn" giả, không phát hiện được lệch thật) với tồn kho thật từ API đối tác (shelfSystemInventoryCache).
+// KHÔNG liên quan/không đổi gì logic Ngưỡng Tồn (jobs/shelfStockThresholdAlert.js) — 2 tính năng tách
+// bạch hoàn toàn theo đúng yêu cầu người dùng. =====
+const SHELF_DISCREPANCY_FP_EPSILON = 1e-9; // PHẢI giống SHELF_THRESHOLD_FP_EPSILON — cùng lý do bù sai số JS tại biên %
+function classifyShelfSystemStockDiscrepancy(systemStock, trackedTotal) {
+  const s = Number(systemStock), t = Number(trackedTotal);
+  if (!Number.isFinite(s) || !Number.isFinite(t) || t <= 0) return null; // không đủ dữ liệu để so sánh
+  if (s < t * 0.9 - SHELF_DISCREPANCY_FP_EPSILON) return 'RED';
+  if (s < t - SHELF_DISCREPANCY_FP_EPSILON) return 'YELLOW';
+  return 'SAFE';
+}
+// Tra tồn kho hệ thống theo mã hàng/mã vạch (khớp 1 trong 2 — cùng dung nạp như mọi nơi khác). null nếu
+// chưa tải được dữ liệu API đối tác (chưa cấu hình/chưa có Mã Điểm) — KHÔNG phải 0 (0 nghĩa là CÓ dữ
+// liệu và tồn kho thật = 0, khác hẳn ý nghĩa "không biết").
+function findSystemInventoryQtyForProduct(maHang, maVach) {
+  if (!shelfSystemInventoryCache || !shelfSystemInventoryCache.length) return null;
+  const row = shelfSystemInventoryCache.find(r => (maHang && r.maHang === maHang) || (maVach && r.maVach === maVach));
+  return row ? Number(row.soLuongTon) || 0 : null;
+}
+async function ensureShelfSystemInventoryForExpiry() {
+  if (shelfSystemInventoryCache && shelfSystemInventoryCache.length) return;
+  try {
+    const res = await fetch('/api/shelf-stock/system-inventory');
+    if (res.status === 401) return handleSessionExpired();
+    if (!res.ok) return; // chưa cấu hình API đối tác/chưa có Mã Điểm -> giữ cache rỗng, cột hiện "—"
+    const data = await res.json();
+    shelfSystemInventoryCache = Array.isArray(data.rows) ? data.rows : [];
+    cacheShelfSystemInventoryOffline(shelfSystemInventoryCache, data.capNhatLuc);
+  } catch (err) {
+    const cached = err instanceof TypeError ? getShelfSystemInventoryOfflineFallback() : null;
+    if (cached) shelfSystemInventoryCache = cached.rows || [];
+  }
+}
 function renderShelfExpiryGroups() {
   const tbody = document.getElementById('vhShelfExpiryBody');
   if (!tbody) return;
+  const showSoldOut = !!document.getElementById('vhShelfExpiryShowSoldOut')?.checked;
   const now = new Date(); now.setHours(0, 0, 0, 0);
-  const items = (DB.shelfRecords || []).filter(r => r.expiryDate);
+  const allTracked = (DB.shelfRecords || []).filter(r => r.expiryDate && Number(r.quantity) > 0);
+  // Tổng theo NHÓM mã hàng (dept+maHang-hoặc-maVach) — dùng để so với tồn kho hệ thống Ở MỨC SẢN PHẨM,
+  // không phải từng dòng lô riêng lẻ (xem chú thích đầu khối).
+  const groupKeyOf = (r) => `${r.dept}|${r.maHang || ''}|${r.maVach || ''}`;
+  const groupTotals = new Map();
+  allTracked.forEach(r => {
+    const key = groupKeyOf(r);
+    groupTotals.set(key, (groupTotals.get(key) || 0) + (Number(r.quantity) || 0));
+  });
+  const items = showSoldOut ? (DB.shelfRecords || []).filter(r => r.expiryDate) : allTracked;
   const rows = items.map(r => {
     const exp = new Date(r.expiryDate); exp.setHours(0, 0, 0, 0);
     const diffDays = Math.round((exp - now) / 86400000);
@@ -742,14 +917,33 @@ function renderShelfExpiryGroups() {
     else badge = `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600">Còn hạn</span>`;
     return { r, diffDays, badge };
   }).sort((a, b) => a.diffDays - b.diffDays);
-  tbody.innerHTML = rows.length ? rows.map(({ r, badge }) => `
-    <tr class="border-b">
+  tbody.innerHTML = rows.length ? rows.map(({ r, badge }) => {
+    if (editingShelfRecordId === r.id) return renderShelfRecordEditRow(r, 2, 3);
+    const soldOut = Number(r.quantity) <= 0;
+    let rowClass = 'border-b';
+    let stockCell = '<span class="text-gray-400 italic">—</span>';
+    if (!soldOut) {
+      const groupTotal = groupTotals.get(groupKeyOf(r)) || Number(r.quantity) || 0;
+      const systemQty = findSystemInventoryQtyForProduct(r.maHang, r.maVach);
+      if (systemQty !== null) {
+        const status = classifyShelfSystemStockDiscrepancy(systemQty, groupTotal);
+        const groupNote = groupTotal !== Number(r.quantity) ? ` <span class="text-[10px] text-gray-400">(tổng theo dõi mã này: ${groupTotal})</span>` : '';
+        if (status === 'RED') { rowClass += ' bg-red-50'; stockCell = `<span class="font-bold text-red-700">${systemQty}</span>${groupNote}`; }
+        else if (status === 'YELLOW') { rowClass += ' bg-amber-50'; stockCell = `<span class="font-bold text-amber-700">${systemQty}</span>${groupNote}`; }
+        else { stockCell = `<span class="text-gray-700">${systemQty}</span>${groupNote}`; }
+      }
+    }
+    return `
+    <tr class="${rowClass} ${soldOut ? 'opacity-60' : ''}">
       <td class="p-2">${escapeHtml(r.shelfLocationCode || '')} — ${escapeHtml(r.shelfLocationName || '')}</td>
       <td class="p-2">${escapeHtml(r.productName || '')}</td>
       <td class="p-2 text-right">${escapeHtml(String(r.quantity ?? ''))}</td>
       <td class="p-2">${escapeHtml(new Date(r.expiryDate).toLocaleDateString('vi-VN'))}</td>
-      <td class="p-2">${badge}</td>
-    </tr>`).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
+      <td class="p-2">${soldOut ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-200 text-gray-600">⚪ Đã bán hết — ngừng theo dõi</span>' : badge}</td>
+      <td class="p-2">${stockCell}</td>
+      <td class="p-2">${renderShelfRecordActionsCell(r)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7" class="p-3 text-center text-gray-400">Chưa có sản phẩm nào có hạn sử dụng</td></tr>`;
 }
 
 // ===== Phần E — Offline-first cho "📷 Ghi Nhận" (11/2026) =====
