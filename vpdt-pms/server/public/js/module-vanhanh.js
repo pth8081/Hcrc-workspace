@@ -1071,6 +1071,60 @@ async function saveShelfStockThresholdEdit(id) {
   editingShelfStockThresholdId = null;
   renderShelfStockThresholdsList();
 }
+// classifyShelfThresholdStatus()/computeShelfThresholdTodayTotals() — PHẢI giữ ĐÚNG CÙNG logic với bản
+// server (jobs/shelfStockThresholdAlert.js::sumTodaySkuQuantity/sumTodayCategoryQuantity,
+// lib/shelfThresholdDigestExcel.js::classifyThresholdStatus, 11/2026 "bôi dòng đấy màu đỏ... bôi dòng
+// đấy màu vàng" theo đúng yêu cầu người dùng) — codebase này KHÔNG có module dùng chung giữa client JS
+// và server jobs/*.js, nên đây là BẢN SAO có chủ đích tính NGAY trên dữ liệu đã có sẵn ở DB (không gọi
+// API riêng) để bảng Ngưỡng Tồn tô màu ngay khi mở màn, không cần đợi email định kỳ. SỬA 1 BÊN NHỚ SỬA
+// CẢ 2 BÊN.
+function isShelfRecordCreatedToday(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+function computeShelfThresholdTodayTotals(threshold) {
+  const records = DB.shelfRecords || [];
+  const locCategoryById = new Map((DB.shelfLocations || []).map(l => [l.id, l.category || '']));
+  let skuTotal = null, categoryTotal = null;
+  if (threshold.maHang || threshold.maVach) {
+    skuTotal = 0;
+    for (const r of records) {
+      if (!r || r.dept !== threshold.dept || !isShelfRecordCreatedToday(r.createdAt)) continue;
+      const matchesMaHang = threshold.maHang && r.maHang === threshold.maHang;
+      const matchesMaVach = threshold.maVach && r.maVach === threshold.maVach;
+      if (matchesMaHang || matchesMaVach) skuTotal += Number(r.quantity) || 0;
+    }
+  }
+  if (threshold.category) {
+    categoryTotal = 0;
+    const wanted = String(threshold.category).trim().toLowerCase();
+    for (const r of records) {
+      if (!r || r.dept !== threshold.dept || !isShelfRecordCreatedToday(r.createdAt)) continue;
+      const category = (locCategoryById.get(r.shelfLocationId) || '').toLowerCase();
+      if (category === wanted) categoryTotal += Number(r.quantity) || 0;
+    }
+  }
+  return { skuTotal, categoryTotal };
+}
+// total < minQuantity -> RED; minQuantity <= total < minQuantity*1.1 -> YELLOW ("còn chưa tới 10% nữa
+// là chạm ngưỡng", nguyên văn người dùng); còn lại -> GREEN (an toàn, đã có ≥10% đệm).
+function classifyShelfThresholdStatus(total, minQuantity) {
+  const min = Number(minQuantity) || 0;
+  const t = Number(total) || 0;
+  if (t < min) return 'RED';
+  if (t < min * 1.1) return 'YELLOW';
+  return 'GREEN';
+}
+const SHELF_THRESHOLD_STATUS_BADGE = {
+  RED: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700">🔴 Dưới ngưỡng</span>',
+  YELLOW: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">🟡 Gần ngưỡng (&lt;10%)</span>',
+  GREEN: '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">🟢 An toàn</span>'
+};
+const SHELF_THRESHOLD_ROW_BG = { RED: ' bg-red-50', YELLOW: ' bg-amber-50', GREEN: '' };
+const SHELF_THRESHOLD_SEVERITY = { RED: 2, YELLOW: 1, GREEN: 0 };
+
 function renderShelfStockThresholdsList() {
   const tbody = document.getElementById('vhShelfThresholdBody');
   if (!tbody) return;
@@ -1082,6 +1136,7 @@ function renderShelfStockThresholdsList() {
     <tr class="border-b bg-cyan-50">
       <td class="p-2 font-semibold">${escapeHtml(idLabel(t))}</td>
       <td class="p-2"><input id="stEditMinQuantity_${t.id}" type="number" min="0" value="${escapeHtml(String(t.minQuantity))}" class="w-24 border p-1 rounded"></td>
+      <td class="p-2 text-gray-400 italic text-[11px]">Lưu để cập nhật</td>
       <td class="p-2"><div id="stEditExtraRecipientsPicker_${t.id}" class="border rounded p-1 bg-white"></div></td>
       <td class="p-2"><label class="inline-flex items-center gap-1"><input type="checkbox" id="stEditActive_${t.id}" ${t.active !== false ? 'checked' : ''}> Đang áp dụng</label></td>
       <td class="p-2 whitespace-nowrap">
@@ -1099,15 +1154,30 @@ function renderShelfStockThresholdsList() {
     }).join(', ');
     const unmigrated = (t.unmigratedExternalEmails || []).length
       ? `<div class="text-amber-600 mt-1">⚠️ Email cũ chưa gắn tài khoản: ${escapeHtml(t.unmigratedExternalEmails.join(', '))}</div>` : '';
+
+    // Tồn Hôm Nay + tô màu dòng (11/2026, "thấp hơn ngưỡng thì bôi đỏ, gần ngưỡng <10% thì bôi vàng") —
+    // 1 ngưỡng có thể có CẢ 2 điều kiện (SKU + Ngành Hàng) cùng lúc, mỗi điều kiện hiện riêng 1 dòng nhỏ
+    // trong cùng 1 ô; màu NỀN của cả hàng lấy theo điều kiện NẶNG NHẤT (đỏ > vàng > xanh) để không "giấu"
+    // 1 điều kiện đang vi phạm chỉ vì điều kiện còn lại an toàn.
+    const { skuTotal, categoryTotal } = computeShelfThresholdTodayTotals(t);
+    const conditions = [];
+    if (skuTotal !== null) conditions.push({ label: 'SKU', total: skuTotal, status: classifyShelfThresholdStatus(skuTotal, t.minQuantity) });
+    if (categoryTotal !== null) conditions.push({ label: 'Ngành Hàng', total: categoryTotal, status: classifyShelfThresholdStatus(categoryTotal, t.minQuantity) });
+    const worstStatus = conditions.reduce((acc, c) => (SHELF_THRESHOLD_SEVERITY[c.status] > SHELF_THRESHOLD_SEVERITY[acc] ? c.status : acc), 'GREEN');
+    const todayCellHtml = conditions.length
+      ? conditions.map(c => `<div class="flex items-center gap-1 whitespace-nowrap">${conditions.length > 1 ? `<span class="text-gray-400">${c.label}:</span>` : ''}<b>${escapeHtml(String(c.total))}</b>${SHELF_THRESHOLD_STATUS_BADGE[c.status]}</div>`).join('')
+      : '<span class="text-gray-400 italic">—</span>';
+
     return `
-    <tr class="border-b">
+    <tr class="border-b${SHELF_THRESHOLD_ROW_BG[worstStatus]}">
       <td class="p-2 font-semibold">${escapeHtml(idLabel(t))}</td>
       <td class="p-2 text-right">${escapeHtml(String(t.minQuantity))}</td>
+      <td class="p-2">${todayCellHtml}</td>
       <td class="p-2">${extraNames ? escapeHtml(extraNames) : '<span class="text-gray-400 italic">Không có</span>'}${unmigrated}</td>
       <td class="p-2">${badge}</td>
       <td class="p-2"><button type="button" data-op="enterShelfStockThresholdEditMode" data-arg0="${t.id}" class="text-gray-500 hover:underline">Sửa</button></td>
     </tr>`;
-  }).join('') : `<tr><td colspan="5" class="p-3 text-center text-gray-400">Chưa khai báo ngưỡng tồn nào</td></tr>`;
+  }).join('') : `<tr><td colspan="6" class="p-3 text-center text-gray-400">Chưa khai báo ngưỡng tồn nào</td></tr>`;
   // renderPeopleMultiSelect() GÁN LẠI innerHTML của container đích — phải gọi SAU khi tbody.innerHTML đã
   // dựng xong khung div rỗng ở trên (đúng khuôn 2 bước mọi nơi khác trong app dùng widget này).
   if (editingShelfStockThresholdId !== null) {

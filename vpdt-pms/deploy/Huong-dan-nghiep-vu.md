@@ -2888,16 +2888,32 @@ cho siêu thị). Hoạt động được **cả khi mất mạng** (xem "Offlin
       bộ)", "Mã Vạch", "Ngành Hàng" — không ép chọn "Phạm Vi" như trước
       nữa. Mã Hàng/Mã Vạch/Ngành Hàng KHÔNG đổi được sau khi tạo (chỉ sửa
       được Ngưỡng Tối Thiểu/Người Nhận Thêm/Trạng Thái).
-    - **Cảnh báo theo từng ô đã điền, độc lập**: điền 1 ô thì chỉ 1 điều
-      kiện, điền nhiều ô (VD cả Mã Hàng lẫn Ngành Hàng) thì CẢ 2 điều kiện
-      đều được kiểm riêng — 1 ngưỡng có thể bắn ra 2 email độc lập/lượt
-      chạy nếu cả 2 đều dưới ngưỡng. Hệ thống tự kiểm **hằng ngày** (job
-      chạy mỗi 24h kể từ lúc server khởi động — KHÔNG ghim đúng 07:00
-      sáng), tính TỔNG số lượng các "Ghi Nhận Trên Kệ" tạo trong ngày cùng
-      siêu thị khớp điều kiện (Ngành Hàng tra qua quầy kệ; Mã Hàng/Mã Vạch
-      so khớp trực tiếp, khớp 1 trong 2 là đủ); dưới ngưỡng (kể cả tổng=0
-      khi chưa có ghi nhận nào hôm nay) thì gửi cảnh báo. **Đây tính trên
-      dữ liệu "Ghi Nhận Trên Kệ" đã có, CHƯA phải tồn kho hệ thống thật.**
+    - **Màu trạng thái theo từng ô đã điền, độc lập** (THIẾT KẾ LẠI LẦN 2,
+      11/2026): điền 1 ô thì chỉ 1 điều kiện, điền nhiều ô (VD cả Mã Hàng
+      lẫn Ngành Hàng) thì CẢ 2 điều kiện đều được tính riêng, dòng tương
+      ứng trên bảng web và trong file Excel báo cáo tự tô: 🔴 **Đỏ** (tồn
+      hôm nay ĐÃ DƯỚI ngưỡng tối thiểu), 🟡 **Vàng** (tồn hôm nay còn CHƯA
+      ĐẾN 10% nữa là chạm ngưỡng — tức `ngưỡng ≤ tồn < ngưỡng × 1.1`), 🟢
+      **không tô** (an toàn, còn ≥10% đệm). Bảng "🔔 Ngưỡng Tồn" trên web có
+      thêm cột "Tồn Hôm Nay" hiện ngay số liệu + màu này mà KHÔNG cần đợi
+      báo cáo email, tính TỔNG số lượng các "Ghi Nhận Trên Kệ" tạo trong
+      ngày cùng siêu thị khớp điều kiện (Ngành Hàng tra qua quầy kệ; Mã
+      Hàng/Mã Vạch so khớp trực tiếp, khớp 1 trong 2 là đủ). **Đây tính
+      trên dữ liệu "Ghi Nhận Trên Kệ" đã có, CHƯA phải tồn kho hệ thống
+      thật.**
+    - **Báo cáo tổng hợp định kỳ, gửi theo lịch TỰ CHỌN** (THIẾT KẾ LẠI LẦN
+      2, 11/2026 — thay hẳn mô hình cũ "1 email/điều kiện vi phạm, chạy
+      mỗi 24h cố định"): mỗi người nhận chỉ nhận **ĐÚNG 1 email/lượt gửi**,
+      đính kèm **file Excel** liệt kê TOÀN BỘ ngưỡng trong phạm vi họ được
+      xem (kể cả dòng an toàn, không chỉ dòng vi phạm), tô màu đỏ/vàng
+      đúng quy tắc trên. Admin tự cấu hình **chu kỳ gửi** ở 🔑 Hệ Thống →
+      ⚙️ Quản Trị → "⏰ Lịch Báo Cáo Ngưỡng Tồn": chọn **Hàng ngày / Hàng
+      tuần / Hàng tháng** + giờ gửi cụ thể (0-23h); Hàng tuần thêm chọn
+      Thứ, Hàng tháng thêm chọn Ngày trong tháng (1-28, tránh lỗi tháng
+      thiếu ngày). Mặc định nếu chưa cấu hình: Hàng tuần, Thứ 2, 07:00.
+      **Chỉ áp dụng cho báo cáo Ngưỡng Tồn này** — 9 job nhắc hạn khác của
+      hệ thống (hạn hợp đồng, hạn giấy phép...) vẫn giữ nguyên "mỗi 24h kể
+      từ lúc server khởi động" như trước, không đổi.
     - **Người nhận cảnh báo — 4 tầng, KHÔNG còn gõ email tự do**:
       1. **Cửa hàng trưởng/Tổ trưởng** — tự động, mọi tài khoản đang có
          quyền "🗄️ Quản Lý Danh Mục Quầy Kệ" của ĐÚNG siêu thị đó.

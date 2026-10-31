@@ -1020,6 +1020,7 @@
               <tr>
                 <th class="border p-2">Mã Hàng / Mã Vạch / Ngành Hàng</th>
                 <th class="border p-2">Ngưỡng Tối Thiểu</th>
+                <th class="border p-2">Tồn Hôm Nay</th>
                 <th class="border p-2">Người Nhận Thêm</th>
                 <th class="border p-2">Trạng Thái</th>
                 <th class="border p-2"></th>
@@ -1028,7 +1029,12 @@
             <tbody id="vhShelfThresholdBody"></tbody>
           </table>
         </div>
-        <p class="text-gray-400 text-[11px]">Mã Hàng/Mã Vạch/Ngành Hàng không đổi được sau khi tạo. Hệ thống tự kiểm hằng ngày, gửi email cảnh báo nếu tổng số lượng ghi nhận trên kệ hôm nay dưới ngưỡng — tính trên dữ liệu "Ghi Nhận Trên Kệ", chưa phải tồn kho hệ thống thật (đang chờ API đối tác).</p>
+        <div class="flex gap-3 text-[11px] text-gray-500">
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-red-100 border border-red-300 inline-block"></span> Dưới ngưỡng</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-100 border border-amber-300 inline-block"></span> Còn &lt;10% nữa chạm ngưỡng</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-green-100 border border-green-300 inline-block"></span> An toàn</span>
+        </div>
+        <p class="text-gray-400 text-[11px]">Mã Hàng/Mã Vạch/Ngành Hàng không đổi được sau khi tạo. "Tồn Hôm Nay" tính trên dữ liệu "Ghi Nhận Trên Kệ" hôm nay, chưa phải tồn kho hệ thống thật (đang chờ API đối tác). Báo cáo tổng hợp (file Excel, tô màu như trên) tự gửi email theo lịch cấu hình ở 🔑 Hệ Thống → ⚙️ Quản Trị → ⏰ Lịch Báo Cáo Ngưỡng Tồn.</p>
       </div>
 
       <!-- Modal Nhập Excel Ngưỡng Tồn -->

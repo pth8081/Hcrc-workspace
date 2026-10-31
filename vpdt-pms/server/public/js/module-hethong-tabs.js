@@ -188,6 +188,7 @@ function setAdminSubTab(subTab) {
   document.getElementById('adminSubOpApi').classList.toggle('hidden', subTab !== 'OPAPI');
   document.getElementById('adminSubTlsCert').classList.toggle('hidden', subTab !== 'TLSCERT');
   document.getElementById('adminSubTrustedCa').classList.toggle('hidden', subTab !== 'TRUSTEDCA');
+  document.getElementById('adminSubShelfDigest').classList.toggle('hidden', subTab !== 'SHELFDIGEST');
 
   const activeCls = 'px-3 py-1.5 rounded text-xs font-bold bg-amber-700 text-white';
   const inactiveCls = 'px-3 py-1.5 rounded text-xs font-bold bg-gray-200 text-gray-700';
@@ -199,11 +200,54 @@ function setAdminSubTab(subTab) {
   document.getElementById('btnAdminSubOpApi').className = subTab === 'OPAPI' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTlsCert').className = subTab === 'TLSCERT' ? activeCls : inactiveCls;
   document.getElementById('btnAdminSubTrustedCa').className = subTab === 'TRUSTEDCA' ? activeCls : inactiveCls;
+  document.getElementById('btnAdminSubShelfDigest').className = subTab === 'SHELFDIGEST' ? activeCls : inactiveCls;
   if (subTab === 'EXTAUTH') renderExternalApiKeysTable();
   if (subTab === 'APPREMAIL') renderApprovalEmailConfigForm();
   if (subTab === 'OPAPI') loadOperationOrderApiConfigToForm();
   if (subTab === 'TLSCERT') loadTlsCertStatus();
   if (subTab === 'TRUSTEDCA') loadTrustedCaList();
+  if (subTab === 'SHELFDIGEST') loadShelfThresholdDigestScheduleToForm();
+}
+
+// ---------- Lịch Gửi Báo Cáo Ngưỡng Tồn (Kiểm Soát Hàng Hóa, thiết kế lại 11/2026) ----------
+// DB.shelfThresholdDigestSchedule đã có sẵn từ GET /api/data (không có field nhạy cảm nào cần lọc, khác
+// operationOrderApiConfig) — admin chỉ sửa 4 field hiển thị (frequency/hour/dayOfWeek/dayOfMonth),
+// "lastSentPeriodKey" là bookkeeping nội bộ của job, LUÔN giữ nguyên nguyên vẹn khi lưu (spread từ
+// DB hiện có, không đọc từ form) để không vô tình xoá dấu vết "đã gửi kỳ này chưa" làm job gửi trùng.
+function showShelfDigestFrequencyFields() {
+  const freq = document.getElementById('stDigestFrequency').value;
+  document.getElementById('stDigestDayOfWeekWrap').classList.toggle('hidden', freq !== 'WEEKLY');
+  document.getElementById('stDigestDayOfMonthWrap').classList.toggle('hidden', freq !== 'MONTHLY');
+}
+
+function loadShelfThresholdDigestScheduleToForm() {
+  const cfg = DB.shelfThresholdDigestSchedule || {};
+  document.getElementById('stDigestFrequency').value = cfg.frequency || 'WEEKLY';
+  document.getElementById('stDigestDayOfWeek').value = (cfg.dayOfWeek ?? 1);
+  document.getElementById('stDigestDayOfMonth').value = cfg.dayOfMonth || 1;
+  document.getElementById('stDigestHour').value = (cfg.hour ?? 7);
+  showShelfDigestFrequencyFields();
+
+  const statusEl = document.getElementById('stDigestLastSentStatus');
+  statusEl.textContent = cfg.lastSentPeriodKey
+    ? `✅ Lần gửi gần nhất thuộc kỳ: ${cfg.lastSentPeriodKey}`
+    : '⚠️ Chưa từng gửi báo cáo tổng hợp Ngưỡng Tồn lần nào.';
+}
+
+async function saveShelfThresholdDigestSchedule(e) {
+  e.preventDefault();
+  const prevConfig = { ...(DB.shelfThresholdDigestSchedule || {}) };
+  DB.shelfThresholdDigestSchedule = {
+    ...(DB.shelfThresholdDigestSchedule || {}),
+    frequency: document.getElementById('stDigestFrequency').value,
+    hour: parseInt(document.getElementById('stDigestHour').value, 10) || 0,
+    dayOfWeek: parseInt(document.getElementById('stDigestDayOfWeek').value, 10) || 0,
+    dayOfMonth: Math.min(28, Math.max(1, parseInt(document.getElementById('stDigestDayOfMonth').value, 10) || 1))
+  };
+  const saved = await syncStorage('shelfThresholdDigestSchedule', { baseline: prevConfig });
+  if (!saved) { DB.shelfThresholdDigestSchedule = prevConfig; return; }
+  logSystemAction('CONFIG', 'UPDATE_SHELF_THRESHOLD_DIGEST_SCHEDULE', 'Cập nhật lịch gửi báo cáo tổng hợp Ngưỡng Tồn.', 'SUCCESS', 'SHELF_THRESHOLD_DIGEST_SCHEDULE');
+  alert('✅ Đã lưu Lịch Gửi thành công!');
 }
 
 // ---------- Cấu Hình API — đồng bộ Đơn Hàng (Vận Hành) ra dsmart16 (jobs/operationOrderApiSync.js) ----------

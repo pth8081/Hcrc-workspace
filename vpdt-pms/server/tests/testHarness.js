@@ -590,6 +590,18 @@ function createDispatcher(state) {
         return { status: 200, body: {} };
       }
 
+      // POST /api/data/shelfThresholdDigestSchedule (Báo Cáo Ngưỡng Tồn, thiết kế lại lần 2, 11/2026) —
+      // mirror ĐÚNG gate ADMIN_ONLY_KEYS + assertShelfThresholdDigestScheduleSafeToSave() ở routes/data.js
+      // (chỉ Admin mới sửa lịch gửi) — cùng lý do KHÔNG mô phỏng toàn bộ generic POST /api/data/:key như
+      // các nhánh uniformCatalog/hrTaskTemplates ở trên.
+      if (pathName === '/api/data/shelfThresholdDigestSchedule' && method === 'POST') {
+        if (!freshUser.perms?.admin) {
+          return { status: 403, body: { error: 'Chỉ Quản Trị Viên mới có quyền sửa dữ liệu này' } };
+        }
+        state.shelfThresholdDigestSchedule = body;
+        return { status: 200, body: {} };
+      }
+
       // POST /api/data/priceZones — mirror ĐÚNG gate ADMIN_ONLY_KEYS ở routes/data.js (priceZones chỉ
       // Admin mới ghi được, xem chú thích tại đó) — cùng lý do KHÔNG mô phỏng toàn bộ generic
       // POST /api/data/:key như 2 nhánh uniformCatalog/hrTaskTemplates ở trên.

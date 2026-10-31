@@ -901,6 +901,21 @@ const DEFAULTS = {
     lastSyncStatus: null,
     lastSyncMessage: null
   },
+  // shelfThresholdDigestSchedule (Kiểm Soát Hàng Hóa > Ngưỡng Tồn, thiết kế lại 11/2026 theo yêu cầu
+  // người dùng "tôi có thể gửi trong ngày, gửi theo tuần, gửi theo tháng") — chu kỳ gửi báo cáo tổng hợp
+  // (Excel đính kèm, tô màu đỏ/vàng theo ngưỡng) do ADMIN tự cấu hình, KHÔNG áp dụng cho 9 job nhắc hạn
+  // khác (những job đó vẫn "mỗi 24h kể từ lúc khởi động", hardcode, không đổi — người dùng xác nhận rõ
+  // "chỉ áp dụng cho ngưỡng tồn thôi"). dayOfWeek theo đúng quy ước Date.getDay() (0=Chủ Nhật..6=Thứ 7)
+  // để job so khớp trực tiếp không cần quy đổi; dayOfMonth chặn trần 28 để tránh lỗi tháng thiếu ngày
+  // (2, 4, 6, 9, 11 có ít hơn 31 ngày). Mặc định: Hàng tuần, Thứ 2, 07:00 — xem
+  // jobs/shelfStockThresholdAlert.js::shouldSendDigestNow() cho logic so khớp + chống gửi trùng.
+  shelfThresholdDigestSchedule: {
+    frequency: 'WEEKLY', // 'DAILY' | 'WEEKLY' | 'MONTHLY'
+    hour: 7,
+    dayOfWeek: 1, // Thứ 2 (Date.getDay(): 0=CN,1=T2,...,6=T7)
+    dayOfMonth: 1,
+    lastSentPeriodKey: null // chống gửi trùng trong CÙNG 1 kỳ dù hourly tick chạy nhiều lần/server restart
+  },
   // Vận Hành > "Siêu Thị" > Giai đoạn Dự toán — ĐÃ BỎ HẲN phê duyệt (chủ ứng dụng xác nhận: không có bước
   // duyệt nào ở Vận Hành > Siêu Thị, kể cả Dự toán, để trưởng phòng tự lập/lưu) — 2 map cấu hình
   // operationStoreOpenEstimateDeptWorkflows/operationRepairEstimateDeptWorkflows đã xoá khỏi đây.

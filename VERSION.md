@@ -1,9 +1,57 @@
 # Phiên bản hiện tại
 
-**28.52** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
+**28.53** (nguồn: `server/package.json`, field `version`, cũng là số hiển thị ở badge góc màn hình +
 `/api/health`). Từ v2.0 trở đi đổi sang định dạng `MAJOR.MINOR` (không còn semver 3 phần kiểu
 `1.100.0`) — xem quy tắc đánh version trong `CLAUDE.md`. (MINOR chạm `99` ở v27.99, cuộn sang MAJOR mới
 `28.0` theo đúng quy tắc.)
+
+## v28.53 (2026-11): Ngưỡng Tồn — báo cáo tổng hợp Excel tô màu đỏ/vàng, gửi theo lịch tự chọn (ngày/tuần/tháng)
+
+Theo yêu cầu người dùng cụ thể: *"nếu hàng tồn mà bị thấp hơn cái ngưỡng
+set ấy, thì nó phải bôi dòng đấy màu đỏ. Còn gần đến ngưỡng... còn 10% nữa
+về ngưỡng... thì bôi dòng đấy màu vàng. Cho ra Excel gửi mail ấy... Tôi có
+thể gửi trong ngày, gửi theo tuần, gửi theo tháng đấy... chỉ áp dụng cho
+ngưỡng tồn thôi, còn cái kia [9 job nhắc hạn khác] là email báo tự động
+theo action thì thôi."*
+
+**1. Quy tắc màu (dùng CHUNG cho cả web lẫn Excel, 1 hàm duy nhất
+`classifyThresholdStatus()`, `lib/shelfThresholdDigestExcel.js`)**:
+🔴 Đỏ — tồn hôm nay < ngưỡng tối thiểu. 🟡 Vàng — tồn hôm nay còn CHƯA ĐẾN
+10% nữa là chạm ngưỡng (`ngưỡng ≤ tồn < ngưỡng × 1.1`). 🟢 Không tô — an
+toàn, còn ≥10% đệm.
+
+**2. Đổi hẳn mô hình gửi email** — từ "1 email/điều kiện vi phạm, chạy mỗi
+24h kể từ lúc server khởi động" sang **báo cáo tổng hợp (digest)**: mỗi
+người nhận (4 tầng đã có từ bản thiết kế trước) chỉ nhận ĐÚNG 1 email/lượt
+gửi, đính kèm file Excel (`lib/shelfThresholdDigestExcel.js`, dùng ExcelJS
+— đúng thư viện chuẩn hệ thống) liệt kê TOÀN BỘ ngưỡng trong phạm vi họ
+được xem (kể cả dòng an toàn, không chỉ dòng vi phạm), tô màu theo quy tắc
+trên. Quản lý vùng phụ trách nhiều siêu thị nhận ĐÚNG 1 email gộp tất cả
+siêu thị của mình, không bị tách thành nhiều email riêng.
+
+**3. Lịch gửi tự cấu hình được (MỚI hoàn toàn)** — 🔑 Hệ Thống → ⚙️ Quản
+Trị → "⏰ Lịch Báo Cáo Ngưỡng Tồn": chọn Hàng ngày / Hàng tuần / Hàng tháng
++ giờ gửi (0-23h); Hàng tuần thêm chọn Thứ, Hàng tháng thêm chọn Ngày
+trong tháng (1-28). Lưu vào AppData `shelfThresholdDigestSchedule`
+(admin-only, `ADMIN_ONLY_KEYS`/`ADMIN_SENSITIVE_KEYS`, validate cấu trúc
+qua `assertShelfThresholdDigestScheduleSafeToSave()`). Job
+(`jobs/shelfStockThresholdAlert.js`) đổi từ `setInterval` mỗi 24h (gọi
+ngay lúc khởi động) sang tick **mỗi giờ**, tự so khớp giờ/thứ/ngày cấu
+hình + `lastSentPeriodKey` (chống gửi trùng dù server restart nhiều lần
+đúng trong giờ khớp lịch) — **chỉ áp dụng cho báo cáo Ngưỡng Tồn này**, 9
+job nhắc hạn khác (hạn hợp đồng, hạn giấy phép...) giữ nguyên hoàn toàn
+không đổi, đúng yêu cầu người dùng.
+
+**4. Bảng "🔔 Ngưỡng Tồn" trên web** — thêm cột "Tồn Hôm Nay" + tô màu
+dòng ngay khi mở màn (không cần đợi email), tính CÙNG logic với job
+(client tự tính lại từ `DB.shelfRecords`/`DB.shelfLocations` đã có sẵn,
+không gọi API riêng).
+
+**Test**: 7 test UI thật (Playwright click/selectOption — bảng web tô màu
+đúng 3 trường hợp đỏ/vàng/xanh + panel lịch ẩn/hiện field đúng theo chu kỳ
++ lưu round-trip) + 28 test logic (phân loại màu đúng biên 10%, khớp lịch
+DAILY/WEEKLY/MONTHLY, gom đúng người nhận theo nhiều siêu thị, nội dung +
+màu Excel đính kèm đọc lại bằng ExcelJS, chống gửi trùng).
 
 ## v28.52 (2026-11): Đổi nhãn + thêm chú thích ô "Mã Khoá Đối Chiếu" (Cấu Hình API dsmart16) tránh nhầm với mật khẩu
 

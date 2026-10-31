@@ -732,6 +732,31 @@ function assertLaborContractTypesSafeToSave(value, oldValue, hrProcesses, laborC
   }
 }
 
+// assertShelfThresholdDigestScheduleSafeToSave() — validate cấu trúc cấu hình chu kỳ gửi báo cáo tổng
+// hợp Ngưỡng Tồn (Kiểm Soát Hàng Hóa, thiết kế lại 11/2026) trước khi ghi qua POST /api/data/
+// shelfThresholdDigestSchedule — chặn admin (hoặc request tự soạn bỏ qua UI) lưu 1 cấu hình sai hình
+// dạng khiến jobs/shelfStockThresholdAlert.js::shouldSendDigestNow() crash mỗi giờ. Chỉ validate field
+// admin thực sự sửa qua form (frequency/hour/dayOfWeek/dayOfMonth) — "lastSentPeriodKey" là bookkeeping
+// nội bộ của job, không phải input, nên bỏ qua không validate (string hoặc null đều hợp lệ).
+function assertShelfThresholdDigestScheduleSafeToSave(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new CreateError(400, 'Cấu hình lịch gửi báo cáo Ngưỡng Tồn không hợp lệ');
+  }
+  const { frequency, hour, dayOfWeek, dayOfMonth } = value;
+  if (!['DAILY', 'WEEKLY', 'MONTHLY'].includes(frequency)) {
+    throw new CreateError(400, 'Chu kỳ gửi không hợp lệ (phải là Hàng ngày/Hàng tuần/Hàng tháng)');
+  }
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+    throw new CreateError(400, 'Giờ gửi không hợp lệ (phải từ 0 đến 23)');
+  }
+  if (frequency === 'WEEKLY' && (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
+    throw new CreateError(400, 'Thứ gửi không hợp lệ');
+  }
+  if (frequency === 'MONTHLY' && (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 28)) {
+    throw new CreateError(400, 'Ngày trong tháng không hợp lệ (phải từ 1 đến 28)');
+  }
+}
+
 // Đối chiếu lại "required" của trường tuỳ biến (renderDynamicInputsForModule()/collectDynamicFieldsData()
 // ở index.html) — trước đây ràng buộc này CHỈ có hiệu lực qua constraint-validation của trình duyệt
 // (thuộc tính HTML "required" trên input), không nơi nào ở server đọc lại DB.formTemplates để xác
@@ -5641,6 +5666,9 @@ module.exports = {
   // Export cho routes/data.js POST /api/data/:key — chặn xoá mã hệ thống/loại đang dùng của
   // laborContractTypes (11/2026, danh mục "Loại HĐLĐ" tự cấu hình).
   assertLaborContractTypesSafeToSave,
+  // Export cho routes/data.js POST /api/data/:key — chặn ghi cấu hình chu kỳ gửi báo cáo Ngưỡng Tồn sai
+  // hình dạng (Kiểm Soát Hàng Hóa, thiết kế lại 11/2026).
+  assertShelfThresholdDigestScheduleSafeToSave,
   // Export cho routes/data.js POST /api/data/:key — chặn ghi đè 1 danh mục mảng chuỗi phẳng đang có dữ
   // liệu xuống còn rỗng hoàn toàn (11/2026, nguyên nhân thật gây mất dữ liệu employmentTypes/workSchedules).
   assertSimpleArrayCatalogNotBlindlyEmptied,

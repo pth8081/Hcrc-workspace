@@ -13,7 +13,7 @@ const { HttpError } = require('../lib/httpErrors');
 const { isCurrentlyAdmin, isCurrentlyAdminOrUniformManage } = require('../lib/adminAuth');
 const { getAllTasksCached, cascadeUsernameChangesToTaskAssignedBy } = require('../lib/taskStore');
 const { getAllWorkItemsCached, cascadeUsernameChangesToWorkItemAssignment } = require('../lib/operationWorkItemStore');
-const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave, assertSimpleArrayCatalogNotBlindlyEmptied } = require('../lib/createValidation');
+const { assertApprovalGroupsSingleApproverCaps, assertApprovalGroupsMembersCanBeApprover, assertPositionTypesSafeToSave, assertShiftTemplatesSafeToSave, assertLaborContractTypesSafeToSave, assertSimpleArrayCatalogNotBlindlyEmptied, assertShelfThresholdDigestScheduleSafeToSave } = require('../lib/createValidation');
 const { getAllForCollectionCached, getForCollectionByColumnCached, getForCollectionByDeptCached, getForCollectionByUsernameCached, MIGRATED_COLLECTIONS } = require('../lib/recordStore');
 const { flatWorkflowConfigToSteps, resolveItPriceDeptWorkflowConfig, assertDeptOrTierWorkflowMapShape, assertPlainObjectArrayShape, assertPlainObjectShape, assertPlainArrayShape, assertFormTemplatesShape } = require('../lib/workflowEngine');
 const { sendServerError } = require('../lib/errorResponse');
@@ -117,6 +117,10 @@ const ADMIN_ONLY_KEYS = new Set([
   // nên phải admin-only ghi, cùng lý do bảo mật với emailConfig (không cho user thường tự ghi thẳng
   // qua POST /api/data/operationOrderApiConfig và tự đổi Base URL/header trỏ tới máy chủ khác).
   'operationOrderApiConfig',
+  // shelfThresholdDigestSchedule: chu kỳ gửi báo cáo tổng hợp Ngưỡng Tồn (Kiểm Soát Hàng Hóa) — không
+  // chứa bí mật, nhưng vẫn admin-only vì đổi lịch gửi ảnh hưởng TOÀN BỘ siêu thị (không phải cấu hình
+  // riêng của 1 cửa hàng trưởng) — cùng mức "cấu hình vận hành toàn hệ thống" với operationOrderApiConfig.
+  'shelfThresholdDigestSchedule',
   'contractApprovalDeptWorkflows', 'contractApprovalGroups', 'contractApprovalLevels', 'contractManageDeptWorkflows',
   // contractTypeApprovalDeptWorkflows (11/2026, "làm giống Văn Bản Trình" theo yêu cầu người dùng — tách
   // quy trình Phê Duyệt HĐ/Phụ lục mới theo "Loại Pháp Lý"): cùng khuôn submissionTypeDeptWorkflows
@@ -363,7 +367,7 @@ const ADMIN_SENSITIVE_KEYS = new Set([
   // đây không để lại dòng nhật ký hệ thống nào nếu gọi thẳng API (bỏ qua giao diện).
   'itPriceWholesaleStoreMixedApprovalRules',
   // Tích hợp/bí mật + nhóm quyền đặc biệt
-  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'externalApiKeys', 'attendanceClockApiKeys',
+  'emailConfig', 'approvalEmailConfig', 'operationOrderApiConfig', 'shelfThresholdDigestSchedule', 'externalApiKeys', 'attendanceClockApiKeys',
   'vppExcludedJobTitles', 'workflowParticipatingDepts', 'workflowParticipatingPositions', 'workflowParticipatingDeptGroups',
   // Cấu hình ảnh hưởng toàn hệ thống (tệp tải lên/lương/chính sách kiểm duyệt)
   'uploadFileTypeConfig', 'uploadSizeLimitConfig', 'payrollRateConfig', 'sensitiveKeywords'
@@ -2306,6 +2310,7 @@ router.post('/:key', async (req, res) => {
     }
     if (key === 'emailConfig') value = await prepareEmailConfigForSave(value);
     if (key === 'operationOrderApiConfig') value = await prepareOperationOrderApiConfigForSave(value);
+    if (key === 'shelfThresholdDigestSchedule') assertShelfThresholdDigestScheduleSafeToSave(value);
     // Lọc lại đúng subset SENSITIVE_FIELDS hợp lệ — xem chú thích đầy đủ tại entry NON_ADMIN_GATED_KEYS
     // tương ứng ở trên (LỖI ĐÃ VÁ, rà soát bảo mật chuyên sâu lần 2, mức Cao).
     if (key === 'hrProfileManagerVisibleFields') value = sanitizeManagerVisibleFields(value);

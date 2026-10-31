@@ -5700,6 +5700,7 @@ async function initDatabase(loggingInUser, opts) {
     // jobs/operationOrderApiSync.js). headerValueEnc đã bị server strip (sanitizeOperationOrderApiConfig()
     // ở routes/data.js), chỉ còn cờ "hasHeaderValue" — xem loadOperationOrderApiConfigToForm().
     DB.operationOrderApiConfig = data.operationOrderApiConfig || {};
+    DB.shelfThresholdDigestSchedule = data.shelfThresholdDigestSchedule || {};
     DB.operationOrders = data.operationOrders || [];
     DB.operationStoreOpenings = data.operationStoreOpenings || [];
     DB.operationRepairs = data.operationRepairs || [];

@@ -524,10 +524,16 @@ async function start() {
       setInterval(checkItServiceRenewalReminders, 24 * 60 * 60 * 1000);
       checkHrTaskOverdueReminders();
       setInterval(checkHrTaskOverdueReminders, 24 * 60 * 60 * 1000);
-      // "🔔 Ngưỡng Tồn" (Kiểm Soát Hàng Hóa, bổ sung sau Phase 1 MVP, 11/2026) — xem chú thích đầy đủ
-      // (bao gồm quyết định "tổng quantity hôm nay" thay cho tồn kho hệ thống thật) ở jobs/shelfStockThresholdAlert.js.
-      checkShelfStockThresholdAlerts();
-      setInterval(checkShelfStockThresholdAlerts, 24 * 60 * 60 * 1000);
+      // "📊 Báo Cáo Ngưỡng Tồn" (Kiểm Soát Hàng Hóa, THIẾT KẾ LẠI LẦN 2, 11/2026) — KHÁC HẲN 9 job nhắc
+      // hạn phía trên/dưới (những job đó CỐ Ý giữ nguyên "mỗi 24h kể từ lúc khởi động", không đổi, theo
+      // đúng yêu cầu người dùng "chỉ áp dụng cho ngưỡng tồn thôi, còn cái kia là email báo tự động theo
+      // action thì thôi"): job này giờ là 1 BÁO CÁO TỔNG HỢP gửi theo LỊCH ADMIN TỰ CẤU HÌNH (Hàng ngày/
+      // Hàng tuần/Hàng tháng + giờ — DB.shelfThresholdDigestSchedule, #adminSubShelfDigest), KHÔNG CÒN
+      // gọi ngay lúc khởi động (gọi ngay sẽ gửi email mỗi lần restart server, không phù hợp với 1 báo
+      // cáo ĐỊNH KỲ có lịch cụ thể) — thay vào đó tick MỖI GIỜ, hàm tự kiểm tra bên trong (shouldSendDigestNow()
+      // + periodKey chống gửi trùng) xem có đúng thời điểm cấu hình chưa trước khi thực sự tính + gửi.
+      // Xem đầy đủ lý do thiết kế ở đầu file jobs/shelfStockThresholdAlert.js.
+      setInterval(checkShelfStockThresholdAlerts, 60 * 60 * 1000);
       // Đối Chiếu Tồn Kho Hệ Thống (API BRGMART, tài liệu v1.1 10/2026) — chu kỳ 20 phút (trong khoảng
       // 15-30 phút tài liệu khuyến nghị, khớp đúng độ trễ đồng bộ 15 phút của chính API nguồn). Tự vô
       // hiệu hoá có log rõ ràng nếu thiếu BRGMART_INVENTORY_API_KEY — xem jobs/inventorySync.js.

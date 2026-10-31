@@ -200,12 +200,17 @@ async function main() {
   });
 
   // ===== jobs/shelfStockThresholdAlert.js (db/mailer giả, cùng khuôn test-hr-task-overdue-reminder.js)
-  // — model mới: 4 tầng người nhận tự động/thủ công + nhiều điều kiện cảnh báo độc lập/ngưỡng =====
+  // — THIẾT KẾ LẠI LẦN 2 (11/2026): báo cáo TỔNG HỢP (digest) gửi theo LỊCH cấu hình được
+  // (DAILY/WEEKLY/MONTHLY), 1 email/người nhận (không còn 1 email/điều kiện vi phạm như bản cũ), đính
+  // kèm Excel tô màu đỏ/vàng/an toàn theo classifyThresholdStatus() =====
+  const ExcelJS = require('exceljs');
+  const { classifyThresholdStatus } = require('../lib/shelfThresholdDigestExcel');
   const STORE = {
     shelfStockThresholds: [],
     shelfRecords: [],
     shelfLocations: [],
-    users: []
+    users: [],
+    shelfThresholdDigestSchedule: {}
   };
   const APP_DATA = {
     emailConfig: { enabled: true, smtpHost: 'smtp.test', smtpPort: 587, senderEmail: 'system@test.vn' }
@@ -224,19 +229,26 @@ async function main() {
         return req;
       }
     }),
-    sql: { NVarChar: () => 'NVARCHAR' }
+    sql: { NVarChar: () => 'NVARCHAR', MAX: 'MAX' }
   });
   stubModule('lib/systemLogStore', { insertSystemLog: async () => {} });
   stubModule('lib/emailCrypto', { decryptSecret: (s) => s });
   stubModule('lib/emailTemplate', { buildNotificationEmailHtml: () => '<html></html>' });
   let sentMails = [];
   stubModule('lib/mailer', {
-    sendMail: async ({ to, subject }) => { sentMails.push({ to, subject }); return { sent: to, failed: [], simulated: false }; },
+    sendMail: async ({ to, subject, attachments }) => { sentMails.push({ to, subject, attachments }); return { sent: to, failed: [], simulated: false }; },
     resolveEncryption: () => 'STARTTLS',
     resolveGraphOption: () => null,
     resolveEwsOption: () => null
   });
-  const { checkShelfStockThresholdAlerts } = require('../jobs/shelfStockThresholdAlert');
+  const { checkShelfStockThresholdAlerts, shouldSendDigestNow, getPeriodKey, buildDigestRowsForDept, groupDigestRowsByRecipient } = require('../jobs/shelfStockThresholdAlert');
+
+  // scheduleMatchingNow(): cấu hình lịch LUÔN khớp đúng thời điểm test đang chạy (tránh phải mock Date)
+  // — mặc định DAILY ở ĐÚNG giờ hiện tại, lastSentPeriodKey=null (chưa gửi kỳ nào) để job THỰC SỰ chạy.
+  function scheduleMatchingNow(overrides) {
+    const now = new Date();
+    return { frequency: 'DAILY', hour: now.getHours(), dayOfWeek: now.getDay(), dayOfMonth: Math.min(28, now.getDate()), lastSentPeriodKey: null, ...(overrides || {}) };
+  }
 
   function baseUsers() {
     return [
@@ -253,9 +265,68 @@ async function main() {
     ];
   }
 
-  await run.run('job: SKU dưới ngưỡng -> gửi đúng 3 tầng tự động; SKU đủ ngưỡng -> không gửi; siêu thị khác không bị tính nhầm', async () => {
+  // ----- Unit test thuần (không mock db/mailer) cho 3 hàm lõi -----
+  await run.run('classifyThresholdStatus: đúng biên RED/YELLOW/GREEN (10%)', async () => {
+    assertEqual(classifyThresholdStatus(9, 10), 'RED', '9 < 10 -> RED');
+    assertEqual(classifyThresholdStatus(10, 10), 'YELLOW', '10 == minQuantity -> YELLOW (chưa phải RED)');
+    assertEqual(classifyThresholdStatus(10.999, 10), 'YELLOW', '10.999 < 11 (10*1.1) -> YELLOW');
+    assertEqual(classifyThresholdStatus(11, 10), 'GREEN', '11 == 10*1.1 chẵn -> GREEN (biên trên KHÔNG tính vàng)');
+    assertEqual(classifyThresholdStatus(20, 10), 'GREEN', '20 >= 11 -> GREEN');
+    assertEqual(classifyThresholdStatus(0, 0), 'GREEN', 'ngưỡng=0, tồn=0 -> GREEN (không có minQuantity dương để so)');
+  });
+
+  await run.run('shouldSendDigestNow: khớp đúng DAILY/WEEKLY/MONTHLY theo giờ/thứ/ngày cấu hình', async () => {
+    const now = new Date(2026, 10, 9, 7, 0, 0); // giả định 1 thời điểm cố định để test độc lập giờ chạy thật
+    assert(shouldSendDigestNow({ frequency: 'DAILY', hour: 7 }, now), 'DAILY đúng giờ 7h -> true');
+    assert(!shouldSendDigestNow({ frequency: 'DAILY', hour: 8 }, now), 'DAILY sai giờ -> false');
+    assert(shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: now.getDay() }, now), 'WEEKLY đúng thứ+giờ -> true');
+    assert(!shouldSendDigestNow({ frequency: 'WEEKLY', hour: 7, dayOfWeek: (now.getDay() + 1) % 7 }, now), 'WEEKLY sai thứ -> false');
+    assert(shouldSendDigestNow({ frequency: 'MONTHLY', hour: 7, dayOfMonth: now.getDate() }, now), 'MONTHLY đúng ngày+giờ -> true');
+    assert(!shouldSendDigestNow({ frequency: 'MONTHLY', hour: 7, dayOfMonth: now.getDate() + 1 }, now), 'MONTHLY sai ngày -> false');
+  });
+
+  await run.run('groupDigestRowsByRecipient: quản lý vùng phụ trách 2 siêu thị nhận ĐÚNG 1 email gộp cả 2, không phải 2 email riêng', async () => {
+    const users = [
+      { username: 'qlv', name: 'QLV 2 Vùng', dept: 'Phòng Vận Hành', active: true, email: 'qlv@hcrc.vn', perms: { shelfReportView: { all: false, depts: ['Siêu thị A', 'Siêu thị B'] } } }
+    ];
+    const thresholds = [
+      { id: 1, dept: 'Siêu thị A', maHang: 'SKUA', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true },
+      { id: 2, dept: 'Siêu thị B', maHang: 'SKUB', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
+    ];
+    const groups = groupDigestRowsByRecipient(thresholds, users, [], new Map());
+    assertEqual(groups.length, 1, `phải đúng 1 nhóm (1 email) cho qlv, thực tế: ${JSON.stringify(groups)}`);
+    assertEqual(groups[0].email, 'qlv@hcrc.vn');
+    assertEqual(groups[0].rows.length, 2, 'phải có đủ 2 dòng (cả Siêu thị A lẫn B) trong CÙNG 1 email');
+  });
+
+  await run.run('buildDigestRowsForDept: liệt kê CẢ dòng an toàn (GREEN), không chỉ dòng vi phạm (khác bản alert tức thời cũ)', async () => {
+    const thresholds = [
+      { id: 1, dept: 'Siêu thị A', maHang: 'SKU_OK', maVach: '', category: '', minQuantity: 10, active: true }
+    ];
+    const records = [{ id: 1, dept: 'Siêu thị A', shelfLocationId: 1, maHang: 'SKU_OK', maVach: '', quantity: 50, createdAt: todayIso() }];
+    const rows = buildDigestRowsForDept('Siêu thị A', thresholds, records, new Map());
+    assertEqual(rows.length, 1, 'phải có dòng dù an toàn (không bị lọc bỏ)');
+    assertEqual(rows[0].status, 'GREEN');
+  });
+
+  // ----- Integration test đầy đủ job (mock db/mailer) -----
+  await run.run('job: lịch CHƯA tới giờ cấu hình -> không tính toán, không gửi gì cả', async () => {
     sentMails = [];
     STORE.users = baseUsers();
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow({ hour: (new Date().getHours() + 2) % 24 }); // cố tình lệch giờ
+    STORE.shelfStockThresholds = [
+      { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
+    ];
+    STORE.shelfLocations = [];
+    STORE.shelfRecords = [{ id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 1, createdAt: todayIso() }];
+    await checkShelfStockThresholdAlerts();
+    assertEqual(sentMails.length, 0, 'chưa tới giờ cấu hình thì tuyệt đối không gửi');
+  });
+
+  await run.run('job: đúng giờ cấu hình -> gửi digest, mỗi người nhận ĐÚNG 1 email (3 tầng tự động)', async () => {
+    sentMails = [];
+    STORE.users = baseUsers();
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
     STORE.shelfStockThresholds = [
       { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true },
       { id: 2, dept: 'Siêu thị Quận 1', maHang: 'SKU002', maVach: '', category: '', minQuantity: 5, extraRecipientUsernames: [], active: true }
@@ -264,98 +335,75 @@ async function main() {
     STORE.shelfRecords = [
       { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() },
       { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU002', maVach: '', quantity: 8, createdAt: todayIso() },
-      // Siêu thị khác, cùng SKU001 — KHÔNG được cộng vào tổng của Siêu thị Quận 1.
+      // Siêu thị khác, cùng SKU001 — KHÔNG được cộng vào tổng của Siêu thị Quận 1, cht7 cũng KHÔNG nhận vì không có ngưỡng nào ở Quận 7.
       { id: 3, dept: 'Siêu thị Quận 7', shelfLocationId: 200, maHang: 'SKU001', maVach: '', quantity: 100, createdAt: todayIso() }
     ];
     await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1, `phải gửi đúng 1 email (SKU001 thiếu), thực tế: ${JSON.stringify(sentMails)}`);
-    const got = [...sentMails[0].to].sort();
-    assertEqual(JSON.stringify(got), JSON.stringify(['bgd@hcrc.vn', 'cht1@hcrc.vn', 'qlv1@hcrc.vn']), `phải đúng 3 tầng tự động (không có cht7/khac), thực tế: ${JSON.stringify(got)}`);
+    assertEqual(sentMails.length, 3, `phải gửi đúng 3 email RIÊNG (1/người, không gộp) — cht1/qlv1/bgd, thực tế: ${JSON.stringify(sentMails.map(m => m.to))}`);
+    const recipients = sentMails.map(m => m.to[0]).sort();
+    assertEqual(JSON.stringify(recipients), JSON.stringify(['bgd@hcrc.vn', 'cht1@hcrc.vn', 'qlv1@hcrc.vn']), `đúng 3 tầng tự động (không có cht7/khac), thực tế: ${JSON.stringify(recipients)}`);
+    sentMails.forEach(m => assert(m.attachments && m.attachments.length === 1 && m.attachments[0].filename === 'BaoCaoNguongTon.xlsx', `mỗi email phải có đúng 1 file đính kèm .xlsx, thực tế: ${JSON.stringify(m.attachments)}`));
   });
 
-  await run.run('job: maVach khớp đủ (không cần maHang khớp) vẫn tính vào tổng SKU', async () => {
+  await run.run('job: file Excel đính kèm có đúng 2 dòng (SKU001 đỏ, SKU002 an toàn) và tô màu đúng', async () => {
     sentMails = [];
-    STORE.users = baseUsers();
+    STORE.users = [baseUsers()[0]]; // chỉ cht1 để test đơn giản 1 email
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
     STORE.shelfStockThresholds = [
-      { id: 1, dept: 'Siêu thị Quận 1', maHang: '', maVach: '8934696001589', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
+      { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }, // 3 < 10 -> RED
+      { id: 2, dept: 'Siêu thị Quận 1', maHang: 'SKU002', maVach: '', category: '', minQuantity: 5, extraRecipientUsernames: [], active: true }   // 50 >= 5.5 -> GREEN
     ];
-    STORE.shelfLocations = [{ id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' }];
+    STORE.shelfLocations = [];
     STORE.shelfRecords = [
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: '', maVach: '8934696001589', quantity: 3, createdAt: todayIso() }
+      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() },
+      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU002', maVach: '', quantity: 50, createdAt: todayIso() }
     ];
     await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1, 'khớp maVach (không cần maHang) vẫn phải tính vào tổng và cảnh báo');
+    assertEqual(sentMails.length, 1);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(sentMails[0].attachments[0].content);
+    const sheet = wb.getWorksheet('Ngưỡng Tồn');
+    assertEqual(sheet.getRow(2).getCell(2).value, 'SKU001');
+    assertEqual(sheet.getRow(2).getCell(6).value, 3, 'cột Tồn Hôm Nay dòng SKU001 phải = 3');
+    assertEqual(sheet.getRow(2).getCell(1).fill.fgColor.argb, 'FFFFC7CE', 'dòng SKU001 (dưới ngưỡng) phải tô ĐỎ');
+    assertEqual(sheet.getRow(3).getCell(2).value, 'SKU002');
+    assert(!sheet.getRow(3).getCell(1).fill, 'dòng SKU002 (an toàn) KHÔNG được tô màu');
   });
 
-  await run.run('job: CATEGORY tra category qua shelfLocationId (shelfRecords không lưu category trực tiếp)', async () => {
+  await run.run('job: "nhập 1 là đủ, nhập nhiều thì check nhiều điều kiện" — ngưỡng điền cả SKU lẫn ngành hàng ra 2 dòng độc lập trong CÙNG 1 email', async () => {
     sentMails = [];
-    STORE.users = baseUsers();
-    STORE.shelfStockThresholds = [
-      { id: 1, dept: 'Siêu thị Quận 1', maHang: '', maVach: '', category: 'Đồ uống', minQuantity: 20, extraRecipientUsernames: [], active: true }
-    ];
-    STORE.shelfLocations = [
-      { id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' },
-      { id: 101, dept: 'Siêu thị Quận 1', code: 'A2', category: 'Bánh kẹo' }
-    ];
-    STORE.shelfRecords = [
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'X1', maVach: '', quantity: 5, createdAt: todayIso() },
-      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 101, maHang: 'X2', maVach: '', quantity: 50, createdAt: todayIso() } // ngành hàng khác, không tính
-    ];
-    await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1, `tổng Đồ uống = 5 < 20 -> phải cảnh báo, thực tế: ${JSON.stringify(sentMails)}`);
-  });
-
-  await run.run('job: "nhập 1 là đủ, nhập nhiều thì check nhiều điều kiện" — cả SKU lẫn ngành hàng đều dưới ngưỡng -> bắn 2 email độc lập', async () => {
-    sentMails = [];
-    STORE.users = baseUsers();
+    STORE.users = [baseUsers()[0]];
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
     STORE.shelfStockThresholds = [
       { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: 'Đồ uống', minQuantity: 10, extraRecipientUsernames: [], active: true }
     ];
     STORE.shelfLocations = [{ id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' }];
     STORE.shelfRecords = [
-      // SKU001 = 3 (< 10) VÀ tổng ngành "Đồ uống" cũng chỉ 3 (< 10) -> CẢ 2 điều kiện cùng vi phạm.
       { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() }
     ];
     await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 2, `phải bắn 2 email độc lập (1 SKU + 1 ngành hàng), thực tế: ${JSON.stringify(sentMails)}`);
+    assertEqual(sentMails.length, 1, 'vẫn chỉ 1 email (không tách theo điều kiện như bản cũ)');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(sentMails[0].attachments[0].content);
+    const sheet = wb.getWorksheet('Ngưỡng Tồn');
+    assertEqual(sheet.rowCount >= 3, true, 'phải có >= 2 dòng dữ liệu (1 SKU + 1 Ngành Hàng) + 1 dòng tiêu đề');
   });
 
-  await run.run('job: điền cả SKU lẫn ngành hàng nhưng CHỈ 1 điều kiện vi phạm -> chỉ 1 email', async () => {
-    sentMails = [];
-    STORE.users = baseUsers();
-    STORE.shelfStockThresholds = [
-      { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: 'Đồ uống', minQuantity: 10, extraRecipientUsernames: [], active: true }
-    ];
-    STORE.shelfLocations = [
-      { id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' },
-      { id: 101, dept: 'Siêu thị Quận 1', code: 'A2', category: 'Đồ uống' }
-    ];
-    STORE.shelfRecords = [
-      // SKU001 = 3 (< 10, vi phạm). Ngành "Đồ uống" cộng thêm SKU khác tại quầy A2 = 3 + 20 = 23 (>= 10, đủ).
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() },
-      { id: 2, dept: 'Siêu thị Quận 1', shelfLocationId: 101, maHang: 'SKU999', maVach: '', quantity: 20, createdAt: todayIso() }
-    ];
-    await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1, `chỉ điều kiện SKU vi phạm -> đúng 1 email, thực tế: ${JSON.stringify(sentMails)}`);
-  });
-
-  await run.run('job: Tầng 4 (extraRecipientUsernames) được cộng thêm vào danh sách tự động, dedup đúng', async () => {
+  await run.run('job: Tầng 4 (extraRecipientUsernames) được cộng thêm vào danh sách tự động, dedup đúng (không gửi trùng)', async () => {
     sentMails = [];
     const users = baseUsers();
     users.push({ username: 'extra1', name: 'Nhân Viên Thêm', dept: 'Siêu thị Quận 1', active: true, email: 'extra1@hcrc.vn', perms: {} });
     STORE.users = users;
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
     STORE.shelfStockThresholds = [
-      // cht1 vừa thuộc Tầng 1 (tự động) vừa bị thêm lại ở Tầng 4 -> không gửi trùng.
+      // cht1 vừa thuộc Tầng 1 (tự động) vừa bị thêm lại ở Tầng 4 -> không gửi trùng (1 email, không phải 2).
       { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: ['extra1', 'cht1'], active: true }
     ];
-    STORE.shelfLocations = [{ id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' }];
-    STORE.shelfRecords = [
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() }
-    ];
+    STORE.shelfLocations = [];
+    STORE.shelfRecords = [{ id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() }];
     await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1);
-    const got = [...sentMails[0].to].sort();
-    assertEqual(JSON.stringify(got), JSON.stringify(['bgd@hcrc.vn', 'cht1@hcrc.vn', 'extra1@hcrc.vn', 'qlv1@hcrc.vn']), `phải cộng thêm extra1, cht1 không trùng lặp, thực tế: ${JSON.stringify(got)}`);
+    const recipients = sentMails.map(m => m.to[0]).sort();
+    assertEqual(JSON.stringify(recipients), JSON.stringify(['bgd@hcrc.vn', 'cht1@hcrc.vn', 'extra1@hcrc.vn', 'qlv1@hcrc.vn']), `phải cộng thêm extra1, cht1 không gửi trùng, thực tế: ${JSON.stringify(recipients)}`);
   });
 
   await run.run('job: user đã tự tắt notifyEmailModules.SHELF_THRESHOLD=false -> bị loại khỏi người nhận', async () => {
@@ -363,23 +411,22 @@ async function main() {
     const users = baseUsers();
     users[0].notifyEmailModules = { SHELF_THRESHOLD: false }; // cht1 tự tắt
     STORE.users = users;
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
     STORE.shelfStockThresholds = [
       { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
     ];
-    STORE.shelfLocations = [{ id: 100, dept: 'Siêu thị Quận 1', code: 'A1', category: 'Đồ uống' }];
-    STORE.shelfRecords = [
-      { id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() }
-    ];
+    STORE.shelfLocations = [];
+    STORE.shelfRecords = [{ id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 3, createdAt: todayIso() }];
     await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1);
-    const got = [...sentMails[0].to].sort();
-    assert(!got.includes('cht1@hcrc.vn'), `cht1 đã tắt nhận email, KHÔNG được có trong danh sách, thực tế: ${JSON.stringify(got)}`);
-    assertEqual(JSON.stringify(got), JSON.stringify(['bgd@hcrc.vn', 'qlv1@hcrc.vn']));
+    const recipients = sentMails.map(m => m.to[0]).sort();
+    assert(!recipients.includes('cht1@hcrc.vn'), `cht1 đã tắt nhận email, KHÔNG được có trong danh sách, thực tế: ${JSON.stringify(recipients)}`);
+    assertEqual(JSON.stringify(recipients), JSON.stringify(['bgd@hcrc.vn', 'qlv1@hcrc.vn']));
   });
 
-  await run.run('job: ngưỡng active=false -> bỏ qua hoàn toàn', async () => {
+  await run.run('job: ngưỡng active=false -> bỏ qua hoàn toàn (không ai nhận gì)', async () => {
     sentMails = [];
     STORE.users = baseUsers();
+    STORE.shelfThresholdDigestSchedule = scheduleMatchingNow();
     STORE.shelfStockThresholds = [
       { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU999', maVach: '', category: '', minQuantity: 100, extraRecipientUsernames: [], active: false }
     ];
@@ -389,16 +436,20 @@ async function main() {
     assertEqual(sentMails.length, 0, 'ngưỡng ngừng dùng không được gửi email');
   });
 
-  await run.run('job: không có ghi nhận hôm nay -> tổng = 0, LUÔN dưới ngưỡng -> cảnh báo', async () => {
+  await run.run('job: kỳ này ĐÃ gửi rồi (lastSentPeriodKey khớp) -> không gửi trùng dù vẫn đúng giờ cấu hình', async () => {
     sentMails = [];
     STORE.users = baseUsers();
+    const now = new Date();
+    const schedule = scheduleMatchingNow();
+    schedule.lastSentPeriodKey = getPeriodKey(now, schedule.frequency); // giả lập "đã gửi kỳ này rồi"
+    STORE.shelfThresholdDigestSchedule = schedule;
     STORE.shelfStockThresholds = [
-      { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU777', maVach: '', category: '', minQuantity: 1, extraRecipientUsernames: [], active: true }
+      { id: 1, dept: 'Siêu thị Quận 1', maHang: 'SKU001', maVach: '', category: '', minQuantity: 10, extraRecipientUsernames: [], active: true }
     ];
     STORE.shelfLocations = [];
-    STORE.shelfRecords = [];
+    STORE.shelfRecords = [{ id: 1, dept: 'Siêu thị Quận 1', shelfLocationId: 100, maHang: 'SKU001', maVach: '', quantity: 1, createdAt: todayIso() }];
     await checkShelfStockThresholdAlerts();
-    assertEqual(sentMails.length, 1, 'không có bản ghi hôm nay vẫn phải cảnh báo (tổng=0 < ngưỡng)');
+    assertEqual(sentMails.length, 0, 'kỳ đã gửi rồi (chống trùng khi server restart/tick chạy lại đúng giờ khớp lịch) -> không gửi lại');
   });
 
   run.summary();
